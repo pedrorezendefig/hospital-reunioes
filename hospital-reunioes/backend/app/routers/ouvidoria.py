@@ -202,8 +202,21 @@ _CAMPOS_INDICE_TUPLA = _CAMPOS_PROTOCOLO_TUPLA + (
     # indicador de resposta conclusiva, e o indicador vive na linha da fila, ao
     # lado do de resolução. É um carimbo de tempo, não dado do manifestante.
     "encerramento_sem_contato_em",
+    # A tela de validação abre também pela fila, e o texto de ajuda do Extrato
+    # para o setor diz o que vai à área conforme o caso (issue #769): no
+    # anônimo, o nome de quem manifestou não vai. Sem a marca aqui, a tela
+    # aberta pela fila descreveria o anônimo como caso comum.
+    "anonimo",
 )
 _CAMPOS_INDICE = ", ".join(_CAMPOS_INDICE_TUPLA)
+# O índice de quem está fora da Ouvidoria: o mesmo, menos o resumo (issue
+# #753) e a marca de anônimo (issue #769). O resumo é recorte literal do
+# relato, a marca só serve a quem valida, e protocolo, setor, situação e prazo
+# bastam para quem só acompanha a fila.
+_SO_DA_OUVIDORIA_NO_INDICE = frozenset({"resumo", "anonimo"})
+_CAMPOS_INDICE_FORA_DA_OUVIDORIA = tuple(
+    campo for campo in _CAMPOS_INDICE_TUPLA if campo not in _SO_DA_OUVIDORIA_NO_INDICE
+)
 
 # O que a fila LÊ, que é maior do que o que ela devolve. O carimbo do visto
 # (issue #484) entra no select porque a flag de novidade sai da comparação
@@ -474,9 +487,13 @@ async def listar_protocolos(
     ultimos, degradado_da_trilha = (
         ouvidoria_novidade.ultimo_movimento_ou_degradado(supabase) if da_ouvidoria else ({}, [])
     )
+    # O resumo é um recorte literal do relato (issue #753): no formulário
+    # público são as primeiras letras do que a pessoa escreveu. O caso aberto
+    # chega a quem está fora da Ouvidoria, e o resumo não vai junto.
+    campos = _CAMPOS_INDICE_TUPLA if da_ouvidoria else _CAMPOS_INDICE_FORA_DA_OUVIDORIA
     return {
         "protocolos": [
-            {campo: row.get(campo) for campo in _CAMPOS_INDICE_TUPLA}
+            {campo: row.get(campo) for campo in campos}
             | _projetar_prazo(row, agora, feriados)
             | {
                 # Caso arquivado nunca acende o ponto (issue #592, ADR 0047):
@@ -864,10 +881,13 @@ class RegistroManual(BaseModel):
     @field_validator("manifestante_nome", "manifestante_contato")
     @classmethod
     def identificacao_limpa(cls, valor: str | None) -> str | None:
-        if valor is None:
-            return None
-        valor = sanitizar_travessao(valor).strip()
-        return valor or None
+        """A régua do paciente vale para quem manifesta (issue #800).
+
+        `dados_incompletos` é calculado sobre estes dois valores na gravação:
+        um hífen digitado em Contato para dizer "não deixou" faria o caso
+        parecer completo, e o aviso de identificação pela metade no Dossiê
+        deixaria de acender."""
+        return texto_ou_nulo(valor)
 
     @field_validator("paciente_nome", "paciente_referencia")
     @classmethod
@@ -881,10 +901,8 @@ class RegistroManual(BaseModel):
         dizer "não perguntei" apagaria esse aviso e faria o caso parecer
         resolvido: aqui ele vira ausência, como já vira no canal público.
 
-        Ela é mais estrita que a de `manifestante_nome` e `manifestante_contato`
-        logo acima, que só apara. Essa diferença é herdada, não escolhida nesta
-        fatia: quem escreve o nome do manifestante é o mesmo ouvidor, e mudar a
-        régua dele não é assunto do Paciente do caso.
+        Desde a issue #800 é também a régua de `manifestante_nome` e
+        `manifestante_contato`, logo acima.
         """
         return texto_ou_nulo(valor)
 
@@ -2896,14 +2914,19 @@ def extrato_do_acionamento(escrito_pelo_ouvidor: str | None) -> str:
     gerado a partir da conversa com ele), e o responsável do setor é gente de
     fora da Ouvidoria, sem login no app. Uma regra só, sem caso especial para
     alguém lembrar: todo email que sai da Ouvidoria leva texto escrito pela
-    Ouvidoria (ADR 0034, decisão 8)."""
+    Ouvidoria (ADR 0034, decisão 8).
+
+    A recusa diz por que o extrato é exigido, e não o que viaja junto dele: a
+    frase é a mesma para o caso comum, o anônimo e o sigiloso, e só no
+    sigiloso o relato fica na Ouvidoria (issue #769). Quem descreve o que vai
+    à área em cada caso é o texto de ajuda do campo, na tela de validação."""
     if escrito_pelo_ouvidor:
         return escrito_pelo_ouvidor
     raise HTTPException(
         status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
         detail=(
-            "O acionamento exige o extrato para o setor. "
-            "Escreva com as suas palavras o que a área precisa resolver: o relato original não sai da Ouvidoria."
+            "O acionamento exige o extrato para o setor. Escreva com as suas palavras o que a área "
+            "precisa resolver: o setor precisa do que a Ouvidoria pede, escrito pela Ouvidoria."
         ),
     )
 

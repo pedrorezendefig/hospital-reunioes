@@ -1,6 +1,7 @@
 ---
-status: accepted
+status: superseded
 amended_by: 0049
+superseded_by: 0068
 ---
 
 # Skills locais são o kit completo do workflow, duplicata com as globais é intencional

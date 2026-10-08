@@ -35,18 +35,21 @@ def _fora_do_root():
 # ---------- navegação e branding ----------
 
 
-def test_navegacao_tem_exatamente_7_abas_sem_grupos():
+def test_navegacao_tem_exatamente_4_abas_sem_grupos():
+    # ADR 0062, decisão 3: Plano, Pendências e Guia saem; Issues é a home.
+    # Mapa e Domínio viraram sub-pills de Documentação (PR da aba Documentação).
     abas = re.findall(r'data-tab="([^"]+)"', INDEX)
-    assert abas == ["plano", "issues", "producao", "pendencias", "mapa", "dominio", "guia"]
+    assert abas == ["issues", "prs", "producao", "documentacao"]
     assert "tabgroup" not in INDEX  # sem rótulos nem separadores de grupo
 
 
-def test_titulo_do_painel_e_aplicativo_hospital():
-    assert re.search(r"<title>Aplicativo Hospital", INDEX)
+def test_titulo_do_painel_e_hospital_os():
+    # ADR 0062, decisão 1: o painel se chama Hospital OS (issue #947)
+    assert re.search(r"<title>Hospital OS</title>", INDEX)
     m = re.search(r'<h1 class="hero-title">(.*?)</h1>', INDEX, re.S)
     assert m, "hero sem h1.hero-title"
     texto = re.sub(r"<[^>]+>", "", m.group(1))  # só o texto, sem markup decorativo
-    assert "Aplicativo Hospital" in texto
+    assert texto.strip() == "Hospital OS"
 
 
 # ---------- tokens de design (bloco único) ----------
@@ -130,7 +133,7 @@ def test_hero_navy_compacto_com_titulo_em_caixa_normal():
     titulo = re.search(r"\.hero-title\{[^}]*\}", CSS)
     assert titulo, ".hero-title sumiu"
     assert "text-transform:uppercase" not in titulo.group(0), "título não pode forçar caixa alta (corta o til)"
-    assert "Aplicativo" in INDEX, "título perdeu o texto"
+    assert "Hospital OS" in INDEX, "título perdeu o texto"
 
 
 def test_clip_protege_diacriticos_em_cima_e_embaixo():
@@ -271,11 +274,10 @@ def test_index_so_carrega_script_local():
         assert not src.startswith(("http:", "https:", "//")), f"script de CDN: {src}"
 
 
-def test_aba_pendencias_le_a_fila_humana_com_rastro_de_prd():
-    """A aba Pendências agrega as issues abertas ready-for-human (fonte GitHub,
-    sem doc de estado paralelo) e cada card carrega o rastro do PRD pai."""
-    assert "renderPendencias" in APP_JS
-    assert "ready-for-human" in APP_JS
-    assert "pendPrdChip" in APP_JS
-    assert "next_actions" in APP_JS  # avisos do último deploy (state.json) na mesma aba
-    assert ".pend-card" in CSS
+def test_fila_humana_virou_card_da_aba_issues():
+    """Pendências saiu (ADR 0062, decisão 3): as issues abertas ready-for-human
+    são o card Humana do funil da aba Issues, lidas do GitHub como o resto."""
+    assert "renderPendencias" not in APP_JS
+    assert "['humana', 'Humana'" in APP_JS
+    assert "fhumana" not in APP_JS
+    assert ".pend-card" not in CSS

@@ -12,41 +12,32 @@ _logger = logging.getLogger("app.health")
 _DB_CHECK_TIMEOUT_SECONDS = 2.0
 
 
-async def _check_db() -> bool:
-    """Ping mínimo no Supabase via PostgREST. True se respondeu dentro do timeout."""
-
-    def _ping() -> bool:
-        client = get_supabase_client()
-        client.table("participantes").select("id").limit(1).execute()
-        return True
-
+def _ler_estado_do_banco() -> tuple[bool, int | None]:
+    """Uma leitura só, numa thread só: ping no PostgREST e maior número em
+    `migracoes_aplicadas` (issue #969), em sequência pelo mesmo cliente.
+    O cliente Supabase é singleton (HTTP/2) e não aguenta duas threads ao
+    mesmo tempo: em produção isso derrubava o backend por minutos."""
+    client = get_supabase_client()
+    client.table("participantes").select("id").limit(1).execute()
     try:
-        return await asyncio.wait_for(asyncio.to_thread(_ping), timeout=_DB_CHECK_TIMEOUT_SECONDS)
-    except Exception:
-        _logger.exception("health: db check failed")
-        return False
-
-
-async def _ultima_migracao() -> int | None:
-    """Maior número em `migracoes_aplicadas`, a tabela em que toda migration
-    termina gravando o próprio número (issue #969). O rabo espera esse número
-    antes do merge. None se a tabela está vazia ou ainda não existe."""
-
-    def _ler() -> int | None:
-        client = get_supabase_client()
         linhas = client.table("migracoes_aplicadas").select("numero").order("numero", desc=True).limit(1).execute().data
-        return linhas[0]["numero"] if linhas else None
-
-    try:
-        return await asyncio.wait_for(asyncio.to_thread(_ler), timeout=_DB_CHECK_TIMEOUT_SECONDS)
     except Exception as exc:
         _logger.warning("health: migracoes_aplicadas indisponivel: %s", exc)
-        return None
+        return True, None
+    return True, (linhas[0]["numero"] if linhas else None)
+
+
+async def _estado_do_banco() -> tuple[bool, int | None]:
+    try:
+        return await asyncio.wait_for(asyncio.to_thread(_ler_estado_do_banco), timeout=_DB_CHECK_TIMEOUT_SECONDS)
+    except Exception:
+        _logger.exception("health: db check failed")
+        return False, None
 
 
 @router.get("/health")
 async def health_check(response: Response):
-    db_ok, migracao = await asyncio.gather(_check_db(), _ultima_migracao())
+    db_ok, migracao = await _estado_do_banco()
     status_value = "healthy" if db_ok else "degraded"
     if not db_ok:
         response.status_code = 503

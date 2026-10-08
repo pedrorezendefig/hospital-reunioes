@@ -22,6 +22,7 @@ import { AlertCircle, Save } from "lucide-react";
 import { AdminModal } from "@/components/admin/AdminModal";
 import { Select } from "@/components/ui/Select";
 
+import { AnexosDaDemanda } from "./AnexosDaDemanda";
 import { ConversaDaDemanda } from "./ConversaDaDemanda";
 import { CopiarDaDemanda } from "./CopiarDaDemanda";
 import { OQueMudaDaDemanda } from "./OQueMudaDaDemanda";
@@ -58,6 +59,18 @@ type Props = {
   eu: EuNaAba;
   onFechar: () => void;
   onMudou: () => void | Promise<void>;
+};
+
+/**
+ * Encerrar é ação, e não destino (issue #1058, PRD #1056).
+ *
+ * Concluída e Cancelada deixaram de ser coluna do Quadro, então o botão diz o
+ * que se faz ("Concluir"), e não para onde o card iria. A rota é a mesma de
+ * mover: os cinco estados continuam no banco.
+ */
+const ACAO_DE_ENCERRAR: Partial<Record<EstadoDemanda, string>> = {
+  concluida: "Concluir",
+  cancelada: "Cancelar",
 };
 
 function camposDa(demanda: Demanda) {
@@ -283,6 +296,12 @@ export function DemandaModal({ demanda, produtos, pessoas, token, eu, onFechar, 
           </label>
         </div>
 
+        {/* Os prints do pedido, logo depois dos campos que eles ilustram
+            (issue #1061). A chave pelo estado pede a lista de novo quando a
+            Demanda é Concluída ou Cancelada aqui mesmo: o card passa a dizer
+            "apagado" sem precisar fechar e abrir. */}
+        <AnexosDaDemanda key={demanda.estado} demandaId={demanda.id} token={token} />
+
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-4 border-t border-border">
           <div>
             <Select
@@ -297,17 +316,20 @@ export function DemandaModal({ demanda, produtos, pessoas, token, eu, onFechar, 
             </p>
           </div>
 
-          <div>
-            <span className="text-xs font-medium text-text-secondary">Mover para</span>
+          <div role="group" aria-label="Mover">
+            <span className="text-xs font-medium text-text-secondary">Mover</span>
             <div className="mt-1 flex flex-wrap gap-2">
               {destinosDe(demanda.estado).map((destino) => (
                 <button
                   key={destino}
                   type="button"
+                  // "Cancelar" sozinho tem homônimo no mesmo card (o de desistir
+                  // da correção na Conversa): o nome diz o que se cancela.
+                  aria-label={ACAO_DE_ENCERRAR[destino] ? `${ACAO_DE_ENCERRAR[destino]} a Demanda` : undefined}
                   onClick={() => mover(destino)}
                   className="px-3 py-1.5 rounded-lg border border-border text-sm text-text hover:border-primary hover:text-primary transition-colors"
                 >
-                  {ESTADO_ROTULO[destino]}
+                  {ACAO_DE_ENCERRAR[destino] ?? ESTADO_ROTULO[destino]}
                 </button>
               ))}
             </div>

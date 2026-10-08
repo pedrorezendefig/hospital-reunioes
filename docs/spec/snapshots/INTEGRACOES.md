@@ -1,6 +1,6 @@
 # INTEGRACOES.md
 <!-- gerado automaticamente por /snapshot — não editar -->
-<!-- last_update: 2026-10-06T01:41-0300 -->
+<!-- last_update: 2026-10-06T22:52+0000 -->
 
 Serviços externos usados pelo Hospital Reuniões. Secrets configurados no Coolify (não no git).
 
@@ -11,13 +11,13 @@ Serviços externos usados pelo Hospital Reuniões. Secrets configurados no Cooli
 
 ## ClickSign
 **Pra que serve:** Assinatura digital de atas (sandbox em dev, app em prod)
-**Onde aparece no código:** `app/routers/pops/assinatura.py`, `app/routers/pops/revisao.py`, `app/routers/admin/legacy.py`
+**Onde aparece no código:** `app/routers/reunioes.py`, `app/routers/webhooks.py`, `app/routers/admin/legacy.py`
 **Secret/env primária:** `CLICKSIGN_API_KEY`
 **Variáveis relacionadas:** `CLICKSIGN_BASE_URL`, `CLICKSIGN_WEBHOOK_SECRET`
 
 ## Resend
 **Pra que serve:** Emails transacionais e SMTP do Supabase Auth
-**Onde aparece no código:** `app/config.py`, `app/services/email_service.py`, `app/services/tecnologia_email.py`
+**Onde aparece no código:** `app/services/email_service.py`, `app/services/tecnologia_email.py`, `app/config.py`
 **Secret/env primária:** `RESEND_API_KEY`
 **Variáveis relacionadas:** `RESEND_FROM_EMAIL`, `RESEND_INBOUND_API_KEY`, `RESEND_INBOUND_BASE_URL`, `RESEND_WEBHOOK_SECRET`
 

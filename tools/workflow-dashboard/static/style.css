@@ -30,7 +30,6 @@
   --paper:var(--bg); --paper-2:var(--surface); --card:#ffffff;
   --indigo:var(--brand); --indigo-2:var(--brand-light); --indigo-wash:var(--brand-wash);
   --line:var(--hairline); --line-2:var(--ghost);
-  --code-bg:#0f2f63; --code-line:rgba(255,255,255,.16); --code-ink:#e8eefb;
   --shadow:0 1px 0 rgba(15,47,99,.04), 0 18px 40px -28px rgba(15,47,99,.35);
   --shadow-up:0 1px 0 rgba(15,47,99,.05), 0 24px 48px -26px rgba(15,47,99,.4);
   --shadow-modal:0 30px 80px -20px rgba(15,47,99,.55);
@@ -84,6 +83,7 @@ h1,h2,h3{font-family:var(--sans); font-weight:500; letter-spacing:-.018em; line-
 main .capsule{background:var(--card); border-color:var(--ghost); color:var(--ink-soft)}
 main .capsule b{color:var(--ink)}
 .ago{font-family:var(--mono); font-size:11.5px; color:var(--w55)}
+.ago.main-atras.warn{color:var(--amber)}
 .iconbtn{width:34px; height:34px; border-radius:var(--r-pill); border:1px solid var(--w25);
   background:var(--w10); color:var(--on-navy); cursor:pointer; font-size:15px; line-height:1;
   display:inline-flex; align-items:center; justify-content:center; transition:all .2s ease}
@@ -118,11 +118,6 @@ main .btn-pill.outline{border-color:var(--ghost); color:var(--ink)}
 /* ---------- scaffolding ---------- */
 main.wrap{background:var(--surface); border-radius:var(--r-card-lg);
   padding:30px 28px 26px; min-height:55vh}
-.sec{margin:36px 0 16px; display:flex; align-items:baseline; gap:14px}
-.sec:first-child{margin-top:24px}
-.sec .n{font-family:var(--mono); font-size:12.5px; color:var(--brand); font-weight:500}
-.sec h2{font-size:clamp(21px,3vw,28px)}
-.sec .hint{font-family:var(--mono); font-size:11.5px; color:var(--ink-soft); margin-left:auto}
 
 .card{background:var(--card); border:1px solid var(--line-2); border-radius:var(--r-card);
   padding:20px 22px; box-shadow:var(--shadow)}
@@ -131,7 +126,7 @@ main.wrap{background:var(--surface); border-radius:var(--r-card-lg);
 
 .grid{display:grid; gap:16px}
 .g12{grid-template-columns:repeat(12,1fr)}
-.sp3{grid-column:span 3}.sp6{grid-column:span 6}
+.sp6{grid-column:span 6}
 
 .stat .k, .k-label{font-family:var(--mono); font-size:11px; font-weight:500; letter-spacing:.14em;
   text-transform:uppercase; color:var(--ink-soft)}
@@ -153,14 +148,13 @@ main.wrap{background:var(--surface); border-radius:var(--r-card-lg);
 
 .dot{display:inline-block; width:8px; height:8px; border-radius:var(--r-pill); flex:none}
 .dot.ok{background:var(--green)}
+.dot.warn{background:var(--amber)}
 .dot.bad{background:var(--red)}
 .dot.pulse{animation:pulse 2.6s ease-in-out infinite}
 @keyframes pulse{0%,100%{box-shadow:0 0 0 0 color-mix(in srgb, var(--green) 35%, transparent)} 50%{box-shadow:0 0 0 6px transparent}}
 
 .chip{display:inline-flex; align-items:center; gap:6px; font-family:var(--mono); font-size:11.5px;
   background:var(--paper-2); border:1px solid var(--line); border-radius:8px; padding:3px 9px; color:var(--ink-soft)}
-.cmdpill{font-family:var(--mono); font-size:12.5px; font-weight:500; color:var(--on-navy);
-  background:var(--indigo); padding:3px 11px; border-radius:8px; letter-spacing:.01em; white-space:nowrap}
 
 /* ---------- controles ---------- */
 .controls{display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin:14px 0 18px}
@@ -174,9 +168,6 @@ main.wrap{background:var(--surface); border-radius:var(--r-card-lg);
   color:var(--ink); outline:none; transition:border .15s ease}
 .search:focus{border-color:var(--indigo)}
 .search::placeholder{color:var(--ink-soft); opacity:.6}
-select.fsel{font-family:var(--mono); font-size:11.5px; background:var(--card);
-  border:1px solid var(--line-2); border-radius:var(--r-pill); padding:6px 13px; color:var(--ink-soft);
-  cursor:pointer; outline:none}
 
 /* ---------- banner de erro ---------- */
 .banner{margin-top:18px; background:var(--red-wash); border:1px solid color-mix(in srgb, var(--red) 35%, transparent);
@@ -198,23 +189,6 @@ select.fsel{font-family:var(--mono); font-size:11.5px; background:var(--card);
   border:6px solid transparent; border-top-color:var(--ink)}
 .tip:hover .tip-pop,.tip:focus-visible .tip-pop,.tip.open .tip-pop{opacity:1; visibility:visible; transform:translateX(-50%)}
 
-.cmd{position:relative; margin:9px 0}
-.cmd-label{font-family:var(--mono); font-size:11px; font-weight:500; letter-spacing:.1em;
-  text-transform:uppercase; color:var(--ink-soft); margin:13px 0 5px}
-.cmd-code{margin:0; background:var(--code-bg); border:1px solid var(--code-line); border-radius:var(--r-inner);
-  padding:14px 16px; overflow-x:auto; font:500 12.5px/1.65 var(--mono); color:var(--code-ink);
-  white-space:pre; tab-size:2}
-.cmd-code code{background:none; border:0; padding:0; color:inherit; font-size:inherit}
-.cmd-copy{position:absolute; top:8px; right:8px; display:inline-flex; align-items:center; gap:6px;
-  font:500 11px/1 var(--mono); letter-spacing:.04em; color:var(--indigo); background:var(--card);
-  border:1px solid var(--line-2); border-radius:8px; padding:6px 10px; cursor:pointer;
-  opacity:.9; transition:all .15s ease}
-.cmd:hover .cmd-copy{opacity:1}
-.cmd-copy:hover{border-color:var(--indigo); background:var(--indigo-wash)}
-.cmd-copy:active{transform:scale(.96)}
-.cmd-copy.ok{color:var(--green); border-color:var(--green); background:var(--green-wash)}
-.cmd-note{font-size:12.5px; color:var(--ink-soft); margin:6px 2px 0; line-height:1.5}
-
 .techbox{margin-top:12px; border-top:1px dashed var(--line)}
 .techbox > summary{list-style:none; cursor:pointer; font-family:var(--mono); font-size:11px;
   font-weight:500; letter-spacing:.1em; text-transform:uppercase; color:var(--ink-soft);
@@ -225,70 +199,10 @@ select.fsel{font-family:var(--mono); font-size:11.5px; background:var(--card);
 .techbox > summary:hover{color:var(--indigo)}
 .techbox-body{padding:11px 0 2px}
 
-/* ---------- lead de abertura das abas ---------- */
-.lead{font-size:15.5px; color:var(--ink-soft); max-width:64ch; margin:0 0 18px; line-height:1.6}
-.lead b{color:var(--ink); font-weight:500}
-
-/* ---------- PLANO (home) ---------- */
-.leva{margin:6px 0 38px}
-.leva-head{display:flex; align-items:center; gap:12px; flex-wrap:wrap; margin-bottom:16px}
-.leva-title{font-family:var(--sans); font-weight:500; font-size:clamp(17px,2.4vw,22px);
-  color:var(--ink); text-decoration:none; line-height:1.25}
-.leva-title:hover{color:var(--indigo)}
-.leva-chips{display:flex; gap:8px; flex-wrap:wrap; margin-left:auto}
-.plano-aviso{margin:0 0 16px}
-
-/* ondas: tronco vertical à esquerda; nó coral marca cada onda */
-.ondas{display:flex; flex-direction:column}
-.onda{position:relative; padding:0 0 28px 28px}
-.onda::before{content:""; position:absolute; left:7px; top:14px; bottom:-8px; width:2px;
-  background:var(--line-2)}
-.onda:last-child::before{display:none}
-.onda::after{content:""; position:absolute; left:2px; top:4px; width:12px; height:12px;
-  border-radius:var(--r-pill); background:var(--brand); box-shadow:0 0 0 4px var(--brand-wash)}
-.onda-rotulo{display:flex; align-items:baseline; gap:10px; flex-wrap:wrap; margin-bottom:11px}
-.onda-n{font-family:var(--mono); font-size:11px; font-weight:500; letter-spacing:.16em;
-  text-transform:uppercase; color:var(--brand)}
-.onda-hint{font-family:var(--mono); font-size:11px; color:var(--ink-soft)}
-.fhead{display:flex; align-items:baseline; gap:9px}
-.fnum{font-family:var(--mono); font-size:13px; font-weight:500; color:var(--indigo);
-  text-decoration:none; flex:none}
-.ftitle{font-weight:500; font-size:14.5px; color:var(--ink); text-decoration:none; line-height:1.4}
-.fnum:hover,.ftitle:hover{color:var(--indigo); text-decoration:underline}
-.fmeta{display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin-top:9px}
-.ftempo{font-family:var(--mono); font-size:11.5px; color:var(--ink-soft); display:inline-flex; align-items:center; gap:4px}
-.ftempo.vazio{opacity:.7}
-.ftempo-fonte{font-style:italic; color:var(--amber)}
-.fbloq{font-family:var(--mono); font-size:11.5px; color:var(--coral)}
-.ftriage{font-family:var(--mono); font-size:11.5px; color:var(--blue)}
-.ftriage code{background:var(--blue-wash); border:1px solid var(--line); border-radius:5px; padding:0 5px}
-.fexp{margin:9px 0 0; font-size:13.5px; color:var(--ink-soft); line-height:1.5}
-.fcopia{margin-top:4px}
-.fcopia .cmd{margin-bottom:6px}
-.fslash{display:inline-block; font-family:var(--mono); font-size:11.5px; color:var(--indigo);
-  cursor:pointer; text-decoration:none}
-.fslash:hover{text-decoration:underline}
-.fslash.ok{color:var(--green)}
-.fslash code{background:var(--paper-2); border:1px solid var(--line); border-radius:5px; padding:0 5px}
-
-/* entregues: faixa compacta no fim da leva */
-.feitas{padding-left:28px; margin-top:2px}
-.feitas-row{display:flex; gap:8px; flex-wrap:wrap; margin-top:8px}
-.feita-chip{display:inline-block; font-family:var(--mono); font-size:11.5px;
-  background:var(--green-wash); color:var(--green); border:1px solid color-mix(in srgb, var(--green) 25%, transparent);
-  border-radius:8px; padding:4px 11px; text-decoration:none; max-width:440px;
-  overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
-.feita-chip:hover{border-color:var(--green)}
-
-.plano-vazio{max-width:600px; padding:26px 28px}
-.plano-vazio h3{font-size:20px; margin:0 0 8px}
-.plano-vazio p{color:var(--ink-soft); font-size:14px; line-height:1.55; margin:0 0 6px}
-
 /* ---------- ISSUES ---------- */
 .prd-group{margin-bottom:26px}
 .prd-tag{font-family:var(--mono); font-size:10px; font-weight:500; letter-spacing:.14em;
   background:var(--indigo); color:var(--on-navy); border-radius:6px; padding:2.5px 8px}
-.prd-tag.avulsa-tag{background:var(--purple)}
 .children{margin:12px 0 0 24px; padding-left:20px; border-left:2px solid var(--line); display:flex;
   flex-direction:column; gap:10px}
 .fatias-toggle{appearance:none; cursor:pointer; font-family:var(--mono); font-size:11.5px; letter-spacing:.04em;
@@ -300,18 +214,6 @@ select.fsel{font-family:var(--mono); font-size:11.5px; background:var(--card);
 .iss-head:hover{background:color-mix(in srgb, var(--paper-2) 45%, transparent)}
 .inum{font-family:var(--mono); font-size:13px; font-weight:500; color:var(--indigo); flex:none}
 .ititle{font-weight:500; font-size:14.5px; flex:1; min-width:200px}
-.istate{font-family:var(--mono); font-size:11px; display:inline-flex; gap:6px; align-items:center; color:var(--ink-soft)}
-.iss-meta{display:flex; gap:14px; flex-wrap:wrap; padding:0 18px 12px; font-family:var(--mono);
-  font-size:11.5px; color:var(--ink-soft)}
-.iss-meta .blocked{color:var(--brand)}
-.chain{display:flex; align-items:center; gap:8px; flex-wrap:wrap; padding:0 18px 14px;
-  font-family:var(--mono); font-size:11.5px}
-.chain .node{display:inline-flex; gap:6px; align-items:center; background:var(--paper-2);
-  border:1px solid var(--line); padding:3px 10px; border-radius:8px; color:var(--ink-soft)}
-.chain .node.deploy{background:var(--green-wash); color:var(--green); border-color:color-mix(in srgb, var(--green) 25%, transparent)}
-.chain .node.rolled{background:var(--red-wash); color:var(--red)}
-.chain .arrow{color:var(--line-2)}
-.chain a{text-decoration:none}
 .iss-body{border-top:1px solid var(--line); padding:18px; background:color-mix(in srgb, var(--paper) 35%, var(--card))}
 .iss-body .ghlink{font-family:var(--mono); font-size:11.5px}
 .comments{margin-top:16px}
@@ -475,8 +377,6 @@ select.fsel{font-family:var(--mono); font-size:11.5px; background:var(--card);
 /* respiro mínimo entre o corpo e o rodapé (o auto acima alinha rodapés no grid) */
 .tst > :nth-last-child(2){margin-bottom:16px}
 .tst-ref{font-family:var(--mono); font-size:11px; color:var(--ink-soft); margin-right:auto}
-.adr{cursor:pointer}
-.adr-body{margin-top:14px; border-top:1px dashed var(--line); padding-top:14px; align-self:stretch}
 
 /* ---------- markdown ---------- */
 .md{font-size:14.5px; line-height:1.65; color:var(--ink)}
@@ -534,7 +434,7 @@ select.fsel{font-family:var(--mono); font-size:11.5px; background:var(--card);
 .hero-title .clip-inner{transform:none; animation:clipUp .95s var(--ease-expo) .06s backwards}
 
 /* micro-interação de toque */
-.fchip:active,.iconbtn:active,.tabs-row button:active,.tip:active,.cmd-copy:active{transform:scale(.96)}
+.fchip:active,.iconbtn:active,.tabs-row button:active,.tip:active{transform:scale(.96)}
 
 /* hovers de efeito só acima de 768px (e nada de hover em toque) */
 @media (min-width:769px){
@@ -561,160 +461,6 @@ select.fsel{font-family:var(--mono); font-size:11.5px; background:var(--card);
   .g12 > *{grid-column:span 12 !important}
   .hero-title{font-size:clamp(24px,6vw,34px)}
   .children{margin-left:8px; padding-left:14px}
-  .leva-chips{margin-left:0}
-}
-
-/* ---------- Guia: o fluxo desenhado ---------- */
-/* card único de largura cheia; overflow visível pros tooltips de respaldo escaparem.
-   Re-tipografado na issue 262: eyebrow em tinta suave + título Onest 500. */
-.guia-flow-card{overflow:visible; padding:26px 26px 32px}
-.guia-flow-head{display:flex; flex-direction:column; gap:7px; margin:2px 0 14px}
-.guia-flow-head .eyebrow{color:var(--ink-soft)}
-.guia-flow-head .eyebrow::before{background:var(--brand)}
-.guia-flow-title{font-family:var(--sans); font-weight:500; font-size:clamp(20px,2.6vw,24px);
-  letter-spacing:-.015em; color:var(--ink); margin:0}
-
-.flx{display:flex; flex-direction:column; align-items:center; margin-top:6px; --fl:var(--indigo)}
-@keyframes flxRise{from{opacity:0; transform:translateY(16px)} to{opacity:1; transform:none}}
-.flx-phase,.flx-conn,.flx-node,.flx-fila{
-  animation:flxRise .5s cubic-bezier(.16,.8,.3,1) backwards; animation-delay:calc(var(--d,0)*55ms)}
-
-/* marcadores de fase */
-.flx-phase{display:flex; align-items:center; gap:10px; align-self:stretch; margin:14px 2px 12px;
-  font-family:var(--mono); font-size:11px; font-weight:500; letter-spacing:.14em; text-transform:uppercase; color:var(--brand)}
-.flx-phase::after{content:""; flex:1; height:1px; background:linear-gradient(90deg,var(--line-2),transparent)}
-.flx-phase-n{display:inline-grid; place-items:center; width:19px; height:19px; border-radius:50%;
-  background:var(--brand); color:var(--on-navy); font-size:10px; letter-spacing:0}
-
-.flx-entries{display:grid; grid-template-columns:1fr 1fr; gap:28px; width:100%}
-.flx-lane{display:flex; flex-direction:column; align-items:center}
-.flx-left{align-items:stretch}
-
-/* nó genérico */
-.flx-node{position:relative; background:var(--card); border:2px solid var(--indigo); border-radius:var(--r-inner);
-  padding:14px 18px 14px 40px; text-align:center; transition:transform .16s ease, box-shadow .16s ease, border-color .16s ease}
-.flx-node[data-tip]{cursor:help}
-.flx-node[data-tip]:hover,.flx-node[data-tip]:focus-visible{transform:translateY(-3px);
-  box-shadow:var(--shadow-up); border-color:var(--brand); outline:none}
-.flx-node .cmdpill{font-size:13px}
-.flx-nbody{display:flex; flex-direction:column; gap:6px}
-.flx-nd{font-family:var(--mono); font-size:11px; color:var(--ink-soft); line-height:1.45}
-.flx-wide{width:100%}
-.flx-et{font-family:var(--sans); font-weight:500; font-size:16px; color:var(--ink)}
-.flx-es{font-family:var(--mono); font-size:11.5px; color:var(--ink-soft); margin-top:5px}
-.flx-is-entry{padding:17px 24px 17px 46px; border-radius:var(--r-card)}
-.flx-is-entry .flx-nd{font-size:11.5px; margin-top:2px}
-
-/* ícone-badge */
-.flx-ic{width:16px; height:16px; flex:none}
-.flx-node > .flx-ic,.flx-fila > .flx-ic{position:absolute; top:13px; left:14px; width:18px; height:18px;
-  color:var(--indigo-2); opacity:.9; transition:color .16s ease, transform .16s ease}
-.flx-is-entry > .flx-ic{top:16px; left:16px}
-.flx-node[data-tip]:hover > .flx-ic{color:var(--brand); transform:scale(1.12)}
-
-/* conectores + dot viajando (fluxo) */
-.flx-conn{display:flex; flex-direction:column; align-items:center; height:42px; position:relative}
-.flx-conn i{width:2.5px; flex:1; background:var(--fl); border-radius:2px}
-.flx-conn b{width:0; height:0; border-left:7px solid transparent; border-right:7px solid transparent; border-top:9px solid var(--fl)}
-.flx-conn::after{content:""; position:absolute; left:50%; top:2px; width:6px; height:6px; margin-left:-3px;
-  border-radius:50%; background:var(--brand); box-shadow:0 0 6px var(--brand);
-  animation:flxTravel 2.6s cubic-bezier(.5,0,.5,1) infinite; animation-delay:calc(var(--d,0)*120ms)}
-@keyframes flxTravel{0%{top:2px; opacity:0} 12%{opacity:1} 80%{opacity:1} 100%{top:calc(100% - 10px); opacity:0}}
-.flx-conn.flx-tall{height:auto; flex:1; min-height:42px}
-.flx-conn.flx-dash i{width:0; background:none; border-left:2.5px dashed var(--fl)}
-.flx-conn em{position:absolute; left:calc(50% + 16px); top:9px; white-space:nowrap; font-family:var(--mono);
-  font-style:normal; font-size:11px; color:var(--ink-soft)}
-
-/* fila */
-.flx-fila{position:relative; background:var(--indigo-wash); border:2px solid var(--indigo); border-radius:var(--r-card);
-  padding:16px 22px 16px 44px; text-align:center; width:100%; transition:transform .16s ease, box-shadow .16s ease}
-.flx-fila[data-tip]{cursor:help}
-.flx-fila[data-tip]:hover,.flx-fila[data-tip]:focus-visible{transform:translateY(-2px); box-shadow:var(--shadow-up); outline:none}
-.flx-ft{font-family:var(--sans); font-weight:500; font-size:16px; color:var(--ink)}
-.flx-ft code{font-family:var(--mono); font-size:.9em; color:var(--indigo); font-weight:500}
-
-/* grupo de desenvolvimento */
-.flx-group{width:100%; background:var(--paper-2); border:2px solid var(--indigo); border-radius:var(--r-card);
-  padding:20px 20px 22px; box-shadow:var(--shadow)}
-.flx-cap{text-align:center; font-family:var(--mono); font-size:12px; color:var(--ink-soft); margin-bottom:16px}
-.flx-em{color:var(--brand); font-weight:500}
-.flx-row{display:flex; align-items:stretch; justify-content:center; flex-wrap:wrap; gap:2px}
-.flx-row .flx-node{flex:1; min-width:160px; background:var(--card)}
-.flx-chev{display:flex; align-items:center; padding:0 10px; font-family:var(--mono); font-size:22px;
-  color:var(--indigo-2); font-weight:500}
-.flx-chev-sm{font-size:16px; padding:0 7px}
-
-/* os 3 gates, agora como steps */
-.flx-subcap{text-align:center; font-family:var(--mono); font-size:11px; color:var(--ink-soft); margin:18px 0 12px}
-.flx-subcap code{color:var(--indigo); font-weight:500}
-.flx-gaterow{display:flex; align-items:stretch; justify-content:center; flex-wrap:wrap; gap:2px}
-.flx-gate-step{background:var(--paper); padding:11px 15px 11px 36px; min-width:140px; border-width:2px}
-.flx-gate-step .cmdpill{font-size:12px}
-.flx-gate-step .flx-nd{font-size:10.5px}
-.flx-gate-step > .flx-ic{top:11px; left:12px; width:16px; height:16px}
-.flx-gate-hot{border-color:var(--brand)}
-.cmdpill-hot{background:var(--brand)}
-.flx-gate-hot > .flx-ic{color:var(--brand); opacity:1}
-.flx-gate-ci .cmdpill{background:var(--green)}
-.flx-gate-ci{border-color:var(--green)}
-.flx-gate-ci > .flx-ic{color:var(--green); opacity:1}
-
-/* gate humano */
-.flx-humangate{position:relative; width:100%; border:2px dashed var(--indigo); border-radius:var(--r-card);
-  padding:15px 22px 15px 46px; text-align:center; background:var(--brand-wash)}
-.flx-humangate .flx-et .flx-em{color:var(--brand)}
-.flx-humangate > .flx-ic{color:var(--brand); opacity:1; top:16px}
-
-/* deploy → desfechos */
-.flx-fork{display:grid; grid-template-columns:1fr 1fr; gap:22px; width:100%}
-.flx-out{border-radius:var(--r-inner); padding:15px 18px 15px 42px}
-.flx-ok{border-color:var(--green); background:var(--green-wash)}
-.flx-bad{border-color:var(--red); background:var(--red-wash)}
-.flx-ok .flx-et{color:var(--green)}
-.flx-bad .flx-et{color:var(--red)}
-.flx-ok > .flx-ic{color:var(--green); opacity:1; animation:flxPulse 2.4s ease-in-out infinite}
-.flx-bad > .flx-ic{color:var(--red); opacity:1}
-@keyframes flxPulse{0%,100%{transform:scale(1); opacity:1} 50%{transform:scale(1.18); opacity:.65}}
-
-/* tooltip de respaldo */
-.flx-pop{position:absolute; left:50%; top:calc(100% + 12px); transform:translate(-50%,6px);
-  width:min(340px,78vw); z-index:40; background:var(--card); border:1.5px solid var(--indigo);
-  border-radius:var(--r-inner); padding:13px 15px; box-shadow:var(--shadow-up); text-align:left;
-  opacity:0; visibility:hidden; pointer-events:none; transition:opacity .18s ease, transform .18s ease, visibility .18s}
-.flx-pop-up{top:auto; bottom:calc(100% + 12px)}
-.flx-pop::before{content:""; position:absolute; left:50%; margin-left:-7px; width:12px; height:12px;
-  background:var(--card); border-left:1.5px solid var(--indigo); border-top:1.5px solid var(--indigo)}
-.flx-pop:not(.flx-pop-up)::before{top:-7px; transform:rotate(45deg)}
-.flx-pop-up::before{bottom:-7px; transform:rotate(225deg)}
-[data-tip]:hover > .flx-pop,[data-tip]:focus-visible > .flx-pop,[data-tip]:focus-within > .flx-pop{
-  opacity:1; visibility:visible; transform:translate(-50%,0)}
-.flx-pop-h{display:flex; align-items:center; gap:8px; font-family:var(--mono); font-weight:500; font-size:13px;
-  color:var(--indigo); margin-bottom:7px}
-.flx-pop-h .flx-ic{color:var(--brand)}
-.flx-pop p{margin:0; font-family:var(--sans); font-size:12.5px; line-height:1.55; color:var(--ink-soft)}
-.flx-pop-src{margin-top:9px; padding-top:8px; border-top:1px dashed var(--line-2);
-  font-family:var(--mono); font-size:10.5px; color:var(--ink-soft)}
-.flx-pop-src code{color:var(--indigo); font-weight:500}
-.flx-pop-rule{color:var(--brand)}
-
-/* empilhamento: o nó em hover (e seus contêineres) sobe acima das caixas vizinhas,
-   senão o tooltip fica atrás dos nós irmãos que vêm depois no DOM */
-.flx-entries,.flx-lane,.flx-group,.flx-row,.flx-gaterow,.flx-fork{position:relative}
-.flx-entries:has([data-tip]:is(:hover,:focus-within)),
-.flx-lane:has([data-tip]:is(:hover,:focus-within)),
-.flx-group:has([data-tip]:is(:hover,:focus-within)),
-.flx-row:has([data-tip]:is(:hover,:focus-within)),
-.flx-gaterow:has([data-tip]:is(:hover,:focus-within)),
-.flx-fork:has([data-tip]:is(:hover,:focus-within)){z-index:50}
-.flx-node[data-tip]:hover,.flx-node[data-tip]:focus-within,
-.flx-fila[data-tip]:hover,.flx-fila[data-tip]:focus-within{z-index:60}
-
-@media (max-width:768px){
-  .flx-entries{grid-template-columns:1fr; gap:6px}
-  .flx-conn.flx-tall{height:42px; flex:0 0 auto}
-  .flx-fork{grid-template-columns:1fr}
-  .flx-row .flx-node,.flx-gate-step{flex:1 1 100%}
-  .flx-chev{transform:rotate(90deg); padding:6px 0}
 }
 
 /* ============ MAPA visual-first (redesenho) ============ */
@@ -901,15 +647,42 @@ body.er-lock main{z-index:130}
 .prod-spark{margin-top:16px; padding:18px 22px}
 .spark{display:block; margin-top:10px}
 
-/* --- timeline nova: cartões claros com hairlines sobre a superfície --- */
-.pd-timeline{position:relative; padding-left:30px; margin-top:24px}
-.pd-timeline::before{content:""; position:absolute; left:9px; top:8px; bottom:8px;
-  width:2px; background:var(--hairline)}
-.pd-item{position:relative; margin-bottom:14px}
-.pd-item::before{content:""; position:absolute; left:-26px; top:24px; width:11px; height:11px;
-  border-radius:var(--r-pill); background:var(--green); border:2.5px solid var(--surface)}
-.pd-item.bad::before{background:var(--red)}
+/* --- linha do tempo do repositório: trilha vertical, deploy como cartão claro
+   com hairlines e merge sem deploy como nó tracejado na cor da pessoa --- */
+.lt-cab{display:flex; align-items:baseline; gap:12px; flex-wrap:wrap; margin:28px 0 12px}
+.lt-fonte{font-family:var(--mono); font-size:11px; color:var(--ink-soft)}
+.lt-filtros{flex-direction:row; align-items:center; gap:8px; flex-wrap:wrap; margin:0 0 14px}
+.lt{list-style:none; margin:0; padding:0 0 0 30px; position:relative}
+.lt::before{content:""; position:absolute; left:9px; top:8px; bottom:8px; width:2px; background:var(--hairline)}
+.lt-no{position:relative; margin-bottom:14px}
+.lt-no::before{content:""; position:absolute; left:-26px; top:24px; width:11px; height:11px;
+  border-radius:var(--r-pill); background:var(--brand); border:2.5px solid var(--surface)}
+.lt-deploy.bad::before{background:var(--red)}
+.lt-merge{margin-bottom:8px}
+.lt-merge::before{top:10px; width:9px; height:9px; background:var(--card); border:2px solid var(--pessoa)}
+.lt-merge-corpo{display:flex; align-items:center; gap:8px; flex-wrap:wrap; padding:5px 12px;
+  font-size:12.5px; color:var(--ink-soft); border:1px dashed color-mix(in srgb, var(--pessoa) 55%, transparent);
+  border-radius:var(--r-inner); background:color-mix(in srgb, var(--pessoa) 4%, var(--card))}
+.lt-merge-corpo .chip{text-decoration:none; padding:1px 7px; font-size:10.5px}
+.lt-merge-corpo a.chip:hover{border-color:var(--brand); color:var(--brand)}
+.lt-merge-tit{flex:1; min-width:180px; color:var(--ink); line-height:1.35}
+.lt-etiqueta{color:var(--ink-soft); border-style:dashed}
+.lt-merge-corpo .pd-when{margin-left:auto}
+.chip-pr{color:var(--indigo); font-weight:500}
+.pd-chips a.chip{text-decoration:none}
+.pd-chips a.chip:hover{border-color:var(--brand); color:var(--brand)}
+/* barra empilhada das etapas: aberto (cinza claro), fila (cinza), merge (azul claro), build (azul), health (verde) */
+.etapas{display:flex; gap:2px; margin:0 20px 16px; height:18px; border-radius:var(--r-pill); overflow:hidden}
+.etapa{display:flex; align-items:center; justify-content:center; min-width:3px; overflow:hidden; background:var(--brand)}
+.etapa-aberto{background:var(--ghost)}
+.etapa-fila{background:var(--ink-soft)}
+.etapa-merge{background:var(--brand-light)}
+.etapa-build,.etapa-total{background:var(--brand)}
+.etapa-health{background:var(--green)}
+.etapa-rot{font-family:var(--mono); font-size:10px; letter-spacing:.02em; white-space:nowrap; color:var(--on-navy)}
+.etapa-aberto .etapa-rot{color:var(--ink)}
 .pd-card{cursor:pointer; padding:0; overflow:hidden; border-color:var(--hairline)}
+.pd-card[aria-current="true"]{border-color:var(--brand); box-shadow:0 0 0 2px var(--brand)}
 .pd-head{display:flex; align-items:baseline; gap:14px; padding:15px 20px; flex-wrap:wrap}
 .pd-head:hover{background:color-mix(in srgb, var(--surface) 45%, transparent)}
 .pd-ver{font-family:var(--sans); font-weight:500; font-size:21px; color:var(--ink); flex:none}
@@ -917,15 +690,13 @@ body.er-lock main{z-index:130}
 .pd-subject{font-weight:500; font-size:14px; flex:1; min-width:220px}
 .pd-when{font-family:var(--mono); font-size:11.5px; color:var(--ink-soft)}
 .pd-chips{display:flex; gap:8px; flex-wrap:wrap; align-items:center; padding:0 20px 14px}
-.pd-durbar{display:flex; align-items:center; gap:8px; padding:0 20px 16px}
-.pd-durbar .rail{flex:1; max-width:280px; height:6px; border-radius:var(--r-pill);
-  background:var(--brand-wash); overflow:hidden}
-.pd-durbar .fill{display:block; height:100%; border-radius:var(--r-pill);
-  background:linear-gradient(90deg,var(--brand),var(--brand-light))}
-.pd-durbar .t{font-family:var(--mono); font-size:11px; color:var(--ink-soft)}
 .pd-body{border-top:1px solid var(--hairline); padding:18px 20px;
   background:color-mix(in srgb, var(--surface) 35%, var(--card))}
 .pd-notes{font-size:13.5px; color:var(--ink-soft); line-height:1.55; margin:0 0 6px}
+.pd-notes.mono{font-size:12px}
+/* cada deploy da versão aberta (issue 945) */
+.pd-dep .pd-chips{padding:0 0 10px}
+.pd-dep + .pd-dep{border-top:1px dashed var(--hairline); margin-top:12px; padding-top:14px}
 
 @media (max-width:768px){
   .prod-stats{grid-template-columns:1fr 1fr; gap:18px}
@@ -960,37 +731,15 @@ body.er-lock main{z-index:130}
   color:var(--ink); opacity:.55; transition:opacity .2s ease, border-color .2s ease}
 .nrow-arrow{display:inline-block; font-size:14px; line-height:1; transition:transform .2s var(--ease-quart)}
 
-/* estados da fatia: as badges seguem com a semântica; a linha só modula */
-.nrow-pronta .nrow-idx{color:var(--green)}
-.nrow-andamento .nrow-idx{color:var(--amber)}
-.nrow-bloq{opacity:.72}
-.nrow-triage{opacity:.85}
-.nrow-feita .ftitle{color:var(--ink-soft)}
-
-/* PLANO: as ondas listam linhas, não cards */
-.onda .nrows{margin-top:2px}
-.tab-plano .fcopia{margin-top:8px}
-.tab-plano .cmd-code{background:var(--surface); border-color:var(--hairline); color:var(--ink)}
-.tab-plano .cmd-code code{color:var(--ink)}
-.tab-plano .cmd-copy{border-radius:var(--r-pill); background:transparent; border-color:var(--ghost); color:var(--ink-soft)}
-.tab-plano .cmd-copy:hover{border-color:var(--brand); color:var(--brand); background:transparent}
-.tab-plano .cmd-copy.ok{color:var(--green); border-color:var(--green); background:transparent}
-
 /* ISSUES: árvore PRD → fatias em linhas */
 .tab-issues .prd-group{margin-bottom:0; padding:6px 0}
 .tab-issues .prd-group + .prd-group{border-top:1px solid var(--hairline)}
 .nrow.prd-row .nrow-idx{color:var(--brand)}
-.nrow-lead{margin-left:auto}
 .nrow .iss-head{padding:0; cursor:pointer}
 .nrow .iss-head:hover{background:none}
-.nrow .iss-meta{padding:6px 0 0}
-.nrow .chain{padding:8px 0 0}
 .nrow .iss-body{border-top:1px dashed var(--hairline); background:none; margin-top:12px; padding:12px 0 0}
 .tab-issues .children{gap:0; margin:8px 0 0 30px; padding-left:16px; border-left:1px solid var(--hairline)}
 .tab-issues .fatias-toggle{margin:8px 0 4px 40px}
-/* ISSUES: visor do responsável filtrado */
-.visor-resp{margin:18px 0 10px; color:var(--brand)}
-.prd-dono{font-family:var(--mono); font-size:11.5px; color:var(--ink-soft)}
 .tab-issues .comment{border-left:2px solid var(--hairline); padding:8px 14px; margin:10px 0}
 .tab-issues .comment .who{font-family:var(--mono); font-size:11.5px; color:var(--brand); font-weight:500}
 .tab-issues .comment .md{font-family:var(--sans); font-size:13.5px; line-height:1.65; color:var(--ink)}
@@ -1039,18 +788,382 @@ body.er-lock main{z-index:130}
 .children{border-left:0; padding-left:0}
 /* ============ fim ajustes (issue 268) ============ */
 
-/* ---------- aba Pendências (fila humana) ---------- */
-.tab-count{display:inline-flex; align-items:center; justify-content:center; min-width:18px; height:18px;
-  padding:0 5px; margin-left:6px; border-radius:9px; font-family:var(--mono); font-size:11px; font-weight:500;
-  background:var(--coral); color:var(--card); line-height:1}
-.pend-lista{display:flex; flex-direction:column; gap:14px; margin-top:18px}
-.pend-card{background:var(--card); border:1px solid var(--line); border-left:3px solid var(--coral);
-  border-radius:12px; padding:18px 20px}
-.pend-card .fmeta{margin-top:8px; display:flex; flex-wrap:wrap; align-items:center; gap:8px}
-.pend-ago{font-family:var(--mono); font-size:11.5px; color:var(--ink-soft)}
-.pend-rastro{margin-top:10px}
-.pend-prd{display:inline-flex; align-items:center; gap:8px; font-family:var(--mono); font-size:12px;
-  color:var(--ink); text-decoration:none; border:1px solid var(--line); border-radius:var(--r-pill); padding:4px 12px}
-.pend-prd:hover{border-color:var(--coral); color:var(--coral)}
-.pend-body{margin-top:12px; padding-top:12px; border-top:1px dashed var(--line)}
-.pend-avisos{margin-top:26px; display:flex; flex-direction:column; gap:8px}
+/* card que o hash aponta (#issues/930, #producao/v0.161.0; issue 944): fundo
+   lavado e filete brand. Depois do bloco 268 para vencer o fundo da fatia. */
+.nrow[aria-current="true"]{background:var(--brand-wash); border-radius:14px; box-shadow:inset 3px 0 0 var(--brand)}
+.pd-card[aria-current="true"]{border-color:var(--brand); box-shadow:0 0 0 1px var(--brand)}
+/* o GitHub é o link secundário de cada card: no deploy, o ↗ do commit */
+.pd-gh{font-size:14px; line-height:1; color:var(--ink-soft); text-decoration:none; padding:2px 6px}
+.pd-gh:hover{color:var(--brand)}
+
+/* ============ aba Issues: funil, chips por pessoa e linha do tempo (issue 942) ============ */
+/* Só tokens do :root. A cor da pessoa chega como --pessoa no style do chip,
+   vinda de pessoas.js (corDaPessoa), que devolve sempre um var(--token). */
+/* card grande = tudo que está pendente (contorno forte); os oito ao lado destrincham por fase */
+.funil{display:grid; grid-template-columns:minmax(200px,1.4fr) repeat(4,minmax(0,1fr)); gap:8px; margin:0 0 22px}
+.funil-total{grid-row:span 2; appearance:none; cursor:pointer; display:flex; flex-direction:column; align-items:flex-start;
+  justify-content:flex-end; gap:6px; min-width:0; text-align:left; background:var(--card); border:2px solid var(--ink);
+  border-radius:var(--r-inner); padding:18px 18px 16px; color:var(--ink); transition:background .15s ease, color .15s ease}
+.funil-total:hover{border-color:var(--brand)}
+.funil-total.on{background:var(--ink); color:var(--paper)}
+.funil-total.on:hover{border-color:var(--ink)}
+.funil-total-n{font-family:var(--sans); font-weight:500; font-size:52px; line-height:1; letter-spacing:-.03em}
+.funil-total-nome{font-family:var(--sans); font-weight:500; font-size:15px; line-height:1.25; overflow-wrap:anywhere}
+.funil-total-sub{font-family:var(--mono); font-size:10.5px; letter-spacing:.03em; opacity:.7}
+.funil-passo{appearance:none; cursor:pointer; display:flex; flex-direction:column; align-items:flex-start; gap:6px;
+  min-width:0; text-align:left; background:var(--card); border:1px solid var(--line-2); border-radius:var(--r-inner);
+  padding:11px 12px; color:var(--ink); transition:border-color .15s ease}
+.funil-passo:hover{border-color:var(--brand)}
+.funil-passo.zero{color:var(--ink-soft)}
+.funil-passo.on{background:var(--ink); border-color:var(--ink); color:var(--paper)}
+.funil-n{font-family:var(--sans); font-weight:500; font-size:22px; line-height:1}
+.funil-nome{font-family:var(--mono); font-size:10.5px; letter-spacing:.03em; line-height:1.3; opacity:.8}
+.funil-vazio{margin:4px 0 18px}
+
+/* filtros: uma linha de dropdowns do próprio painel (nada de popup do sistema) */
+.tab-issues .filtros{display:flex; flex-direction:row; align-items:center; gap:8px; flex-wrap:wrap; margin:0 0 16px}
+.tab-issues .filtros .search{max-width:none; min-width:160px; padding:7px 15px}
+.dd{position:relative}
+.dd-btn{appearance:none; cursor:pointer; display:inline-flex; align-items:baseline; gap:8px; font-family:var(--mono);
+  font-size:11.5px; background:var(--card); border:1px solid var(--line-2); border-radius:var(--r-pill);
+  padding:7px 14px; color:var(--ink); transition:border-color .15s ease}
+.dd-btn:hover,.dd.open .dd-btn{border-color:var(--ink)}
+.dd-rot{font-size:10px; letter-spacing:.14em; text-transform:uppercase; color:var(--ink-soft)}
+.dd-val{color:var(--ink-soft); max-width:22ch; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+.dd-btn.on{background:var(--ink); border-color:var(--ink)}
+.dd-btn.on .dd-rot{color:var(--w65)}
+.dd-btn.on .dd-val{color:var(--paper)}
+.dd-menu{display:none; position:absolute; top:calc(100% + 6px); left:0; z-index:30; min-width:240px; max-width:380px;
+  max-height:340px; overflow-y:auto; padding:6px; background:var(--card); border:1px solid var(--hairline);
+  border-radius:var(--r-inner); box-shadow:var(--shadow-up)}
+.dd.open .dd-menu{display:block; animation:dd-in .14s var(--ease-quart)}
+@keyframes dd-in{from{opacity:0; transform:translateY(-4px)}to{opacity:1; transform:none}}
+.dd-opt{appearance:none; cursor:pointer; display:flex; align-items:center; gap:8px; width:100%; text-align:left;
+  font-family:var(--mono); font-size:12px; background:transparent; border:0; border-radius:8px; padding:8px 10px; color:var(--ink)}
+.dd-opt:hover{background:var(--surface)}
+.dd-opt.on{background:var(--brand-wash); color:var(--brand)}
+.dd-opt .pessoa-dot{margin-right:0}
+.dd-txt{flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+.dd-num{color:var(--ink-soft)}
+.dd-n{color:var(--ink-soft); font-size:11px}
+.dd-opt[data-zero]{opacity:.45}
+.dd-opt[data-zero]:hover,.dd-opt[data-zero].on{opacity:1}
+.fchip.limpar{color:var(--ink-soft); border-style:dashed}
+.fchip.limpar:hover{color:var(--red); border-color:var(--red)}
+
+/* linhas de chips da aba PRs (prs.js) */
+.filtros{display:flex; flex-direction:column; gap:8px; margin:0 0 20px}
+.filtro{display:flex; align-items:center; gap:10px; flex-wrap:wrap}
+.filtro-rot{font-family:var(--mono); font-size:10.5px; letter-spacing:.14em; text-transform:uppercase;
+  color:var(--ink-soft); min-width:104px}
+.filtro-chips{display:flex; gap:6px; flex-wrap:wrap; flex:1; min-width:0}
+
+.pessoa-dot{display:inline-block; width:8px; height:8px; border-radius:var(--r-pill); background:var(--pessoa);
+  margin-right:7px; flex:none}
+.fpessoa{display:inline-flex; align-items:center; border-color:color-mix(in srgb, var(--pessoa) 45%, transparent)}
+.fpessoa:hover{border-color:var(--pessoa); color:var(--ink)}
+.fpessoa.on{background:var(--pessoa); border-color:var(--pessoa); color:var(--card)}
+.fpessoa.on .pessoa-dot{background:var(--card)}
+
+.iss-chips{display:flex; align-items:center; gap:6px; flex-wrap:wrap; margin-top:8px}
+.iss-chips a.chip{text-decoration:none}
+.iss-chips a.chip:hover{border-color:var(--brand); color:var(--brand)}
+.pessoa{display:inline-flex; align-items:center; font-family:var(--mono); font-size:11.5px; color:var(--ink);
+  background:var(--card); border:1px solid color-mix(in srgb, var(--pessoa) 45%, transparent);
+  border-radius:var(--r-pill); padding:2px 10px}
+.chip-demanda{color:var(--brand); border-color:color-mix(in srgb, var(--brand) 35%, transparent)}
+.chip-versao{color:var(--green); background:var(--green-wash); border-color:color-mix(in srgb, var(--green) 25%, transparent)}
+.iss-labels{display:flex; gap:6px; flex-wrap:wrap; margin:0 0 12px}
+
+.linha-tempo{margin:0 0 14px}
+.eventos{list-style:none; margin:8px 0 0; padding:0 0 0 14px; border-left:1px solid var(--hairline)}
+.evento{display:flex; align-items:baseline; gap:12px; padding:4px 0; font-size:13px; color:var(--ink)}
+.evento-quando{font-family:var(--mono); font-size:11.5px; color:var(--ink-soft); min-width:104px; flex:none}
+
+@media (max-width:1024px){
+  .funil{grid-template-columns:repeat(4,minmax(0,1fr))}
+  .funil-total{grid-row:auto; grid-column:1 / -1}
+}
+@media (max-width:640px){
+  .funil{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .tab-issues .filtros .search{min-width:0; flex-basis:100%}
+  .dd-menu{max-width:calc(100vw - 48px)}
+  .filtro-rot{min-width:0; width:100%}
+}
+/* ============ fim aba Issues (issue 942) ============ */
+
+/* ============ desenho das ondas no card do PRD (issue 943) ============ */
+/* Só tokens do :root. A cor da pessoa chega como --pessoa no style do nó
+   (corDaPessoa) e pinta a bolinha; a da fase chega como --fase pela classe
+   onda-f-<fase> e pinta a borda (o anel). O PR leva a cor da fase dele pela
+   classe onda-p-<fase>. Animação e transição só existem sob .onda-anima,
+   que o ondas.js não põe quando reduceMotion() é verdadeiro. */
+.ondas{margin:12px 0 2px}
+.ondas-canvas{overflow-x:auto; margin-top:8px}
+.onda-svg{display:block; max-width:100%; height:auto}
+.onda-col{font:500 10.5px var(--mono); letter-spacing:.08em; fill:var(--ink-soft); text-transform:uppercase}
+.onda-faixa{stroke:var(--hairline); stroke-width:1}
+.onda-seta path{fill:none; stroke:var(--red); stroke-width:1.5; opacity:.8}
+.onda-seta .onda-ponta{fill:var(--red); stroke:none}
+.onda-fluxo path{fill:none; stroke:var(--ghost); stroke-width:1.6}
+.onda-fluxo .onda-ponta{fill:var(--ghost); stroke:none}
+.onda-no{cursor:pointer}
+.onda-anel{fill:var(--card); stroke:var(--fase); stroke-width:2.5}
+.onda-dot{fill:var(--pessoa)}
+.onda-num{font:500 12px var(--mono); fill:var(--ink)}
+.onda-tit{font:400 10.5px var(--mono); fill:var(--ink-soft)}
+.onda-f-triagem{--fase:var(--ink-soft)}
+.onda-f-fila{--fase:var(--brand)}
+.onda-f-bloqueada{--fase:var(--red)}
+.onda-f-em_andamento{--fase:var(--amber)}
+.onda-f-pr_aberto{--fase:var(--blue)}
+.onda-f-mergeada{--fase:var(--purple)}
+.onda-f-em_producao{--fase:var(--green)}
+.onda-f-humana{--fase:var(--coral)}
+.onda-f-encerrada_sem_pr{--fase:var(--ghost)}
+/* PR e versão: links de hash; a borda do PR é a fase dele no quadro da aba PRs */
+.onda-pr,.onda-ver{cursor:pointer; text-decoration:none}
+.onda-pr-corpo{fill:var(--card); stroke:var(--fase-pr, var(--ghost)); stroke-width:2; stroke-dasharray:none}
+.onda-p-aberto_sem_ci{--fase-pr:var(--ghost)}
+.onda-p-ci_vermelho{--fase-pr:var(--red)}
+.onda-p-esperando_revisor{--fase-pr:var(--blue)}
+.onda-p-verde_esperando_merge{--fase-pr:var(--brand)}
+.onda-p-mergeado_sem_deploy{--fase-pr:var(--purple)}
+.onda-p-em_producao{--fase-pr:var(--green)}
+.onda-p-fechado_sem_merge{--fase-pr:var(--ink-soft)}
+.onda-p-fechado_sem_merge .onda-pr-corpo{stroke-dasharray:4 3}
+.onda-ver-corpo{fill:var(--green-wash); stroke:var(--green); stroke-width:1.5}
+.onda-ver .onda-num{fill:var(--green)}
+.ondas-legenda{display:flex; gap:6px; flex-wrap:wrap; margin-top:8px}
+.onda-leg{display:inline-flex; align-items:center; font-family:var(--mono); font-size:11.5px; color:var(--ink);
+  border:2px solid var(--fase); border-radius:var(--r-pill); padding:1px 10px}
+.onda-anima .onda-no,.onda-anima .onda-pr,.onda-anima .onda-ver{animation:erIn .45s var(--ease-expo) backwards; animation-delay:calc(var(--i,0)*40ms)}
+.onda-anima .onda-seta,.onda-anima .onda-fluxo{animation:ondaSeta .5s ease .25s backwards}
+@keyframes ondaSeta{from{opacity:0}}
+@media (min-width:769px){
+  .onda-no:hover .onda-anel,.onda-pr:hover .onda-pr-corpo,.onda-ver:hover .onda-ver-corpo{stroke-width:4}
+  .onda-anima .onda-anel,.onda-anima .onda-pr-corpo,.onda-anima .onda-ver-corpo{transition:stroke-width .15s ease}
+}
+/* ============ fim desenho das ondas (issue 943) ============ */
+
+/* ============ aba PRs: quadro por fase, raias por pessoa (issue 946) ============ */
+/* Só tokens do :root. A cor da pessoa chega como --pessoa no style da raia
+   (corDaPessoa). As colunas têm largura mínima: em tela estreita o
+   quadro rola na horizontal em vez de espremer os cards. */
+.pr-quadro-rolagem{overflow-x:auto; margin:0 0 22px; padding-bottom:4px}
+.pr-quadro{display:flex; flex-direction:column; gap:8px; min-width:1120px}
+.pr-linha{display:grid; grid-template-columns:140px repeat(5,minmax(0,1fr)) 210px 136px; gap:8px}
+.pr-col-cab{display:flex; align-items:baseline; justify-content:space-between; gap:6px; padding:8px 10px;
+  font-family:var(--mono); font-size:10.5px; letter-spacing:.05em; text-transform:uppercase; color:var(--ink-soft);
+  background:var(--card); border:1px solid var(--line-2); border-radius:var(--r-inner)}
+.pr-col-n{font-family:var(--sans); font-size:16px; font-weight:500; letter-spacing:0; color:var(--ink)}
+.pr-raia{border-left:3px solid var(--pessoa); border-radius:var(--r-inner); padding:8px 8px 8px 0;
+  background:color-mix(in srgb, var(--pessoa) 6%, var(--card))}
+.pr-raia-nome{display:flex; align-items:center; align-self:start; padding:6px 0 0 12px; min-width:0;
+  font-family:var(--mono); font-size:11.5px; color:var(--ink); overflow-wrap:anywhere}
+.pr-celula{display:flex; flex-direction:column; gap:6px; min-width:0; min-height:40px; padding:3px;
+  border-radius:var(--r-inner)}
+.pr-card{display:flex; flex-direction:column; gap:5px; min-width:0; cursor:pointer; padding:9px 10px;
+  font-size:12.5px; background:var(--card); border:1px solid var(--line-2); border-radius:var(--r-inner)}
+.pr-card-topo{display:flex; align-items:center; justify-content:space-between; gap:6px}
+.pr-num{font-family:var(--mono); font-size:12px; font-weight:500; color:var(--indigo)}
+.pr-gh{font-size:13px; line-height:1; color:var(--ink-soft); text-decoration:none; padding:2px 4px}
+.pr-gh:hover{color:var(--brand)}
+.pr-tit{color:var(--ink); line-height:1.35; overflow:hidden; display:-webkit-box;
+  -webkit-line-clamp:2; -webkit-box-orient:vertical}
+.pr-chips{display:flex; gap:4px; flex-wrap:wrap}
+.pr-chips .chip{font-size:10.5px; padding:1px 7px; text-decoration:none}
+.pr-chips a.chip:hover{border-color:var(--brand); color:var(--brand)}
+.pr-meta{display:flex; flex-direction:column; gap:1px; font-family:var(--mono); font-size:10.5px; color:var(--ink-soft)}
+.pr-branch{overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+/* Em produção compacta: uma linha por PR, só número, issue, versão e hora do merge */
+.pr-mini{flex-direction:row; align-items:center; flex-wrap:wrap; gap:4px 6px; padding:5px 8px}
+.pr-mini .pr-num{font-size:11px}
+.pr-mini .chip{font-size:10.5px; padding:1px 7px; text-decoration:none}
+.pr-mini a.chip:hover{border-color:var(--brand); color:var(--brand)}
+.pr-mini .pr-quando{font-size:10.5px; font-family:var(--mono); color:var(--ink-soft); white-space:nowrap}
+.pr-mini .pr-gh{margin-left:auto}
+.pr-celula[data-col="em_producao"]{gap:3px}
+/* Entregue (ferramenta, sem versão): o mais compacto, PRs por dia do merge, só o número, lado a lado */
+.pr-entregue-dia{display:flex; flex-wrap:wrap; align-items:baseline; gap:3px}
+.pr-entregue-data{flex-basis:100%; font-family:var(--mono); font-size:10px; letter-spacing:.04em; color:var(--ink-soft)}
+.pr-card.pr-entregue{display:inline-flex; flex-direction:row; align-items:center; white-space:nowrap; gap:2px; padding:1px 2px 1px 6px; font-family:var(--mono); font-size:10.5px; color:var(--ink-soft);
+  border-radius:var(--r-pill)}
+.pr-card.pr-entregue:hover{border-color:var(--brand); color:var(--brand)}
+.pr-entregue .pr-gh{font-size:10px; padding:0 3px}
+/* gargalo: a coluna mais cheia (cabeçalho e células) e o card parado além do limite */
+.pr-col-cab.pr-col-cheia{background:var(--amber-wash); border-color:var(--amber); color:var(--amber)}
+.pr-col-cab.pr-col-cheia .pr-col-n{color:var(--amber)}
+.pr-celula.pr-col-cheia{background:color-mix(in srgb, var(--amber) 10%, transparent)}
+.pr-card.pr-velho{border-color:var(--red); box-shadow:inset 3px 0 0 var(--red)}
+.pr-velho .pr-dias{color:var(--red); font-weight:500}
+/* o resumo do PR (hover) e o fixo do clicado, que aceita clique nos links */
+.tab-prs{position:relative}
+/* claro e suave, na cor do card (o .st-pop escuro fica para os fluxogramas) */
+.pr-pop{width:360px; font-size:12.5px; line-height:1.45; background:var(--card); color:var(--ink); border:1px solid var(--line-2); box-shadow:var(--shadow-up)}
+.pr-pop b{color:var(--indigo)}
+.pr-pop .fx-k{color:var(--ink-soft); margin-top:6px}
+.pr-pop p{margin:0 0 5px}
+.pr-pop em{font-style:normal; font-weight:500; color:var(--ink-soft)}
+.pr-pop .pr-pop-tit{color:var(--ink-soft); font-size:11.5px; margin-bottom:2px}
+.pr-pop .pr-pop-rodape{margin:8px 0 0; padding-top:6px; border-top:1px solid var(--line-2); font:400 10.5px var(--mono); color:var(--ink-soft)}
+.pr-pop-fixo{pointer-events:auto}
+.pr-pop a{color:var(--brand)}
+.pr-pop .pr-pop-gh{display:inline-block; margin-top:6px; font:500 11px var(--mono)}
+/* faixa cinza das tentativas (PRs fechados sem merge): histórico, fora das colunas */
+.pr-tentativas{margin:0 0 18px; padding:12px 14px; border:1px dashed var(--ghost); border-radius:var(--r-inner);
+  background:color-mix(in srgb, var(--ink-soft) 8%, var(--surface))}
+.pr-tentativas-lista{display:flex; flex-direction:column; margin-top:6px}
+.pr-tentativa{display:flex; align-items:center; gap:8px; flex-wrap:wrap; cursor:pointer; padding:6px 8px;
+  font-size:12.5px; color:var(--ink-soft); border:1px solid transparent; border-radius:var(--r-inner)}
+.pr-tentativa + .pr-tentativa{border-top-color:var(--hairline)}
+.pr-tentativa .pr-num{color:var(--ink-soft)}
+.pr-tentativa .pr-tit{flex:1; min-width:160px; display:block}
+.pr-tentativa .chip{font-size:10.5px; padding:1px 7px; text-decoration:none}
+.pr-tentativa a.chip:hover{border-color:var(--brand); color:var(--brand)}
+/* o PR que o hash aponta (#prs/930) */
+.pr-card[aria-current="true"],.pr-tentativa[aria-current="true"]{border-color:var(--brand); box-shadow:0 0 0 2px var(--brand)}
+.pr-nota{margin:-12px 0 18px; font-family:var(--mono); font-size:11.5px; color:var(--ink-soft)}
+.pr-fora{display:flex; align-items:center; gap:8px; margin:0 0 14px; padding:10px 14px; font-size:13px;
+  background:var(--brand-wash); border:1px solid var(--brand); border-radius:var(--r-inner)}
+@media (min-width:769px){
+  .pr-card:hover{border-color:var(--brand)}
+}
+/* ============ fim aba PRs (issue 946) ============ */
+
+/* ============ aba Documentação (fluxo · mapa · decisões · glossário) ============ */
+.doc-subs{margin:18px 0 0}
+
+/* o fluxo de trabalho (static/fluxo.json, renderer próprio): grade desenhada
+   à mão, raias, nós por classe (azul automático, âmbar humano, cinza decisão)
+   e arestas ortogonais com rótulo. Só animação de CSS; prefers-reduced-motion
+   zera tudo pela regra global. */
+.fx-capa{padding:18px 20px 14px}
+.fx-hint{margin-bottom:12px}
+.fx-svg{display:block; width:100%; height:auto}
+.fx-raia > rect{fill:color-mix(in srgb, var(--paper-2) 55%, transparent); stroke:var(--line-2); stroke-width:1.2; stroke-dasharray:5 4}
+.fx-raia-chip rect{fill:var(--card); stroke:var(--line-2); stroke-width:1}
+.fx-raia-chip text{font:500 11px var(--mono); letter-spacing:.06em; fill:var(--ink-soft)}
+.fx-no{cursor:pointer; outline:none; animation:erIn .5s cubic-bezier(.16,.8,.3,1) backwards; animation-delay:calc(var(--i,0)*22ms)}
+.fx-no rect{fill:var(--card); stroke:var(--line-2); stroke-width:1.2; transition:stroke-width .18s ease}
+.fx-auto rect{stroke:var(--brand); fill:color-mix(in srgb, var(--brand) 6%, var(--card))}
+.fx-humano rect{stroke:var(--amber); stroke-width:1.6; fill:var(--amber-wash)}
+.fx-decisao rect{stroke:var(--ink-soft); fill:var(--paper-2)}
+.fx-decisao rect + rect{fill:none}
+.fx-fim rect{fill:var(--brand); stroke:var(--brand)}
+.fx-no.fx-fim .fx-t,.fx-no.fx-fim .fx-s{fill:var(--on-navy)}
+.fx-no .fx-t{font:500 12px var(--sans); fill:var(--ink); text-anchor:middle}
+.fx-no .fx-s{font:400 10px var(--mono); fill:var(--ink-soft); text-anchor:middle}
+.fx-no.esq .fx-t,.fx-no.esq .fx-s{text-anchor:start}
+.fx-mao path{fill:none; stroke:var(--amber); stroke-width:1.6; stroke-linecap:round; stroke-linejoin:round}
+.fx-no:hover rect:first-child,.fx-no:focus-visible rect:first-child,.fx-no.on rect:first-child{stroke-width:2.4}
+.fx-no.on rect:first-child{filter:drop-shadow(0 4px 10px color-mix(in srgb, var(--navy) 18%, transparent))}
+.fx-edge{fill:none; stroke:var(--ink-soft); stroke-width:1.4; opacity:.7}
+.fx-edge.fx-tracejada{stroke-dasharray:5 4}
+.fx-seta{fill:var(--ink-soft)}
+.fx-rotulo{font:500 10.5px var(--mono); fill:var(--brand);
+  paint-order:stroke; stroke:var(--card); stroke-width:3.5px; pointer-events:none}
+.fx-capa{position:relative}
+.fx-pop{max-width:380px; pointer-events:auto}
+.fx-pop p{margin:0 0 8px}
+.fx-pop p:last-child{margin-bottom:0}
+.fx-k{display:block; font:500 10px var(--mono); letter-spacing:.08em; text-transform:uppercase; color:var(--ink-soft); margin-bottom:2px}
+.fx-pop .fx-k{color:var(--brand-wash); opacity:.75}
+/* termo do glossário no texto do fluxo: sublinhado discreto, definição no hover */
+.gl-termo{position:relative; text-decoration:underline dotted; text-decoration-color:color-mix(in srgb, currentColor 45%, transparent);
+  text-underline-offset:3px; cursor:help; outline:none}
+.gl-def{position:absolute; bottom:calc(100% + 6px); left:0; z-index:80; width:max-content; max-width:262px;
+  background:var(--ink); color:var(--paper); font:400 12px/1.5 var(--sans); padding:8px 11px;
+  border-radius:var(--r-inner); box-shadow:var(--shadow-up); opacity:0; visibility:hidden; pointer-events:none;
+  transition:opacity .14s ease}
+.gl-def b{display:block; font:500 10.5px var(--mono); letter-spacing:.06em; color:var(--brand-wash); margin-bottom:2px}
+.fx-pop .gl-def{background:var(--paper); color:var(--ink)}
+.fx-pop .gl-def b{color:var(--brand)}
+.gl-termo:hover .gl-def,.gl-termo:focus-visible .gl-def{opacity:1; visibility:visible}
+.fx-painel{margin-top:14px}
+.fx-painel-head{display:flex; align-items:center; gap:10px; flex-wrap:wrap}
+.fx-painel h3{font-size:18px; margin:10px 0 8px}
+.fx-painel p{margin:0 0 12px; font-size:14.5px; line-height:1.6}
+.fx-legenda{display:flex; gap:18px; flex-wrap:wrap; margin:16px 2px; font-family:var(--mono); font-size:11.5px; color:var(--ink-soft)}
+.fx-legenda .sw{display:inline-block; width:12px; height:12px; border-radius:3px; border:1.4px solid; vertical-align:-2px; margin-right:6px}
+.fx-legenda .sw-auto{border-color:var(--brand); background:color-mix(in srgb, var(--brand) 6%, var(--card))}
+.fx-legenda .sw-humano{border-color:var(--amber); background:var(--amber-wash)}
+.fx-legenda .sw-decisao{border-color:var(--ink-soft); background:var(--paper-2)}
+.fx-portas td:first-child{white-space:nowrap}
+
+/* Decisões: mapa de miniaturas por tema (issue 1082). Tema recolhível com
+   contador; miniatura densa (número, título em 3 linhas, ponto de status);
+   setas do frontmatter num svg por cima da grade; hover acende a miniatura,
+   as setas dela e as ligadas, e apaga o resto (o padrão do mapa ER). */
+.adr-tools{display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin:14px 0 18px}
+.adr-legenda{font:400 11px var(--mono); color:var(--ink-soft); display:flex; align-items:center; gap:6px; margin-left:auto}
+.adr-seta-ex{display:inline-block; width:22px; border-top:1.6px solid var(--brand); margin-left:6px}
+.adr-seta-ex-sub{border-top:1.6px dashed var(--ink-soft)}
+.adr-tema{margin:10px 0; border:1px solid var(--line-2); border-radius:var(--r-inner); background:var(--card)}
+.adr-tema > summary{display:flex; align-items:center; gap:10px; padding:11px 16px; cursor:pointer; list-style:none}
+.adr-tema > summary::-webkit-details-marker{display:none}
+.adr-tema > summary::before{content:"+"; font:500 13px var(--mono); color:var(--ink-soft); width:10px}
+.adr-tema[open] > summary::before{content:"-"}
+.adr-conta{font:500 11px var(--mono); color:var(--ink-soft); background:var(--paper-2); border:1px solid var(--line);
+  border-radius:var(--r-pill); padding:1px 8px}
+.adr-mapa{position:relative; padding:4px 16px 16px}
+.adr-setas{position:absolute; inset:0; width:100%; height:100%; pointer-events:none; z-index:2; overflow:visible}
+.adr-grade{display:grid; grid-template-columns:repeat(auto-fill, minmax(150px, 1fr)); gap:22px 20px}
+.adr-mini{position:relative; display:flex; flex-direction:column; gap:5px; min-height:88px; min-width:0; padding:9px 11px;
+  background:var(--card); border:1px solid var(--line-2); border-radius:10px; cursor:pointer;
+  transition:opacity .18s ease, border-color .18s ease, box-shadow .18s ease}
+.adr-mini:hover,.adr-mini:focus-visible{border-color:var(--brand); outline:none}
+.adr-mini.on{border-color:var(--brand); box-shadow:0 0 0 2px var(--brand-wash)}
+.adr-mini-head{display:flex; align-items:center; justify-content:space-between}
+.adr-mini-n{font:500 11px var(--mono); letter-spacing:.06em; color:var(--brand)}
+.adr-mini-t{font:500 12.5px/1.32 var(--sans); color:var(--ink); display:-webkit-box; -webkit-line-clamp:3;
+  -webkit-box-orient:vertical; overflow:hidden}
+.adr-ponto{width:8px; height:8px; border-radius:var(--r-pill); background:var(--red)}
+.adr-ponto.p-ok{background:var(--green)}
+.adr-ponto.p-hist{background:var(--ghost)}
+.adr-ponto.p-novo{background:var(--blue)}
+.adr-mini-chips{display:flex; flex-wrap:wrap; gap:4px; margin-top:auto}
+.adr-fora{font:400 10px var(--mono); color:var(--ink-soft); background:var(--paper-2); border:1px solid var(--line);
+  border-radius:var(--r-pill); padding:0 6px; max-width:100%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+.adr-fora[data-act]:hover{color:var(--brand); border-color:var(--brand)}
+.adr-hist{opacity:.5; border-style:dashed}
+.adr-seta{fill:none; stroke:var(--brand); stroke-width:1.3; opacity:.45; transition:opacity .18s ease, stroke-width .18s ease}
+.adr-seta-substitui{stroke:var(--ink-soft); stroke-dasharray:5 4}
+.adr-setas marker path{fill:var(--ink-soft)}
+.adr-foco .adr-mini{opacity:.22}
+.adr-foco .adr-mini.acesa{opacity:1}
+.adr-foco .adr-mini.acesa:not(:hover){border-color:var(--brand-light)}
+.adr-foco .adr-seta{opacity:.08}
+.adr-foco .adr-seta.on{opacity:1; stroke-width:2}
+.adr-pop{max-width:360px; z-index:80}
+.adr-pop p{margin:0 0 7px}
+.adr-pop .fx-k{color:var(--brand-wash); opacity:.75}
+.adr-pop-arq{display:block; font:400 10.5px var(--mono); opacity:.7}
+.adr-painel{position:fixed; top:12px; right:12px; bottom:12px; width:min(560px, calc(100vw - 24px)); z-index:90;
+  overflow-y:auto; box-shadow:var(--shadow-modal); padding:20px 22px}
+.adr-painel[hidden]{display:none}
+.adr-painel h3{font-size:20px; line-height:1.25; margin:10px 0 12px}
+.adr-painel-head{display:flex; align-items:center; gap:8px}
+.adr-fechar{border:1px solid var(--line-2); background:var(--card); border-radius:var(--r-pill); width:30px; height:30px;
+  font-size:18px; line-height:1; cursor:pointer; color:var(--ink-soft)}
+.adr-fechar:hover{color:var(--ink); border-color:var(--ink-soft)}
+.adr-rel{display:flex; flex-wrap:wrap; align-items:center; gap:6px; margin:0 0 8px}
+.adr-rel .fx-k{width:100%}
+.adr-rel .chip{cursor:pointer; max-width:100%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+.adr-rel .chip:hover{color:var(--brand); border-color:var(--brand)}
+.adr-body{margin-top:14px; border-top:1px dashed var(--line); padding-top:14px}
+@media (max-width:640px){
+  .adr-grade{grid-template-columns:repeat(auto-fill, minmax(118px, 1fr)); gap:16px 12px}
+  .adr-mapa{padding:4px 10px 12px}
+  .adr-legenda{margin-left:0}
+}
+
+/* Glossário: índice de termos em chips e o termo alvo da rota em destaque */
+.g-indice{margin-bottom:16px}
+.g-secao{display:flex; flex-direction:column; gap:7px; margin:4px 0 14px}
+.g-secao:last-child{margin-bottom:0}
+.g-chips{display:flex; flex-wrap:wrap; gap:6px}
+.g-chips .chip{text-decoration:none; color:var(--ink)}
+.g-chips .chip:hover{border-color:var(--indigo); color:var(--indigo)}
+.g-termo{scroll-margin-top:90px}
+.md p.g-alvo{background:var(--brand-wash); border-radius:var(--r-inner); padding:6px 10px; margin-left:-10px; margin-right:-10px}

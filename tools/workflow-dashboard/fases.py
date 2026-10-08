@@ -25,7 +25,7 @@ FASES_ISSUE = (
 # Mesmo valor do SEM_RESP do app.js: o filtro "ninguém assumiu" da aba Issues.
 SEM_RESPONSAVEL = "(sem)"
 MARCADOR_AUTOMACAO = "<!-- automacao -->"
-# Última linha do comentário dos agentes hr-revisor e hr-revisor-seguranca.
+# Última linha do comentário dos agente hr-revisor.
 _VEREDITO = re.compile(r"(?m)^VEREDITO( SEGURANCA)?:\s*(LIMPO|MUST-FIX)\b")
 # Conclusões de check que deixam o CI vermelho (CheckRun e StatusContext).
 _FALHAS = {"FAILURE", "ERROR", "TIMED_OUT", "CANCELLED", "ACTION_REQUIRED", "STARTUP_FAILURE"}
@@ -133,21 +133,30 @@ def _ondas(prd: dict, por_numero: dict[int, dict], abertas: set[int]) -> list[li
     return colunas
 
 
-def _funil(issues: list[dict], fases_issue: dict[int, dict]) -> dict:
-    """Contagem por fase, no total e por responsável.
+def responsaveis(issue: dict) -> list[str]:
+    """Quem tem a issue na fila: os assignees; sem nenhum, quem criou."""
+    if issue["assignees"]:
+        return list(issue["assignees"])
+    return [issue["author"]] if issue.get("author") else []
 
-    Responsável segue a aba Issues: quem assumiu; sem assignee, quem criou
-    (emenda de 05/10 da ADR 0061). SEM_RESPONSAVEL junta as sem assignee.
+
+def _funil(issues: list[dict], fases_issue: dict[int, dict]) -> dict:
+    """Contagem por fase das issues ABERTAS (o que está pendente), no total e por pessoa.
+
+    Quem assumiu (assignee) manda; o autor só conta quando ninguém assumiu
+    (ADR 0062, emenda de 06/10/2026). SEM_RESPONSAVEL junta as sem assignee,
+    então a issue sem assignee conta para o autor e para SEM_RESPONSAVEL.
+    Issue fechada não é pendência e fica fora.
     """
     total = dict.fromkeys(FASES_ISSUE, 0)
     por_responsavel: dict[str, dict[str, int]] = {}
     for i in issues:
+        if i["state"] != "OPEN":
+            continue
         fase = fases_issue[i["number"]]["fase"]
         total[fase] += 1
-        pessoas = list(i["assignees"]) or ([i["author"]] if i.get("author") else [])
-        if not i["assignees"]:
-            pessoas.append(SEM_RESPONSAVEL)
-        for p in pessoas:
+        pessoas = set(responsaveis(i)) | (set() if i["assignees"] else {SEM_RESPONSAVEL})
+        for p in pessoas - {None}:
             por_responsavel.setdefault(p, dict.fromkeys(FASES_ISSUE, 0))[fase] += 1
     return {"total": total, "por_responsavel": por_responsavel}
 
@@ -183,7 +192,7 @@ def _dt(s: str | None) -> datetime | None:
 class _Producao:
     """Em que deploy do history.json cada PR subiu.
 
-    O rabo escreve os PRs no texto do deploy ("PR #896", "PRs #874 #875 #876");
+    A subida escreve os PRs no texto do deploy ("PR #896", "PRs #874 #875 #876");
     número de issue e de PR não colidem no GitHub. Citar não basta: as notes
     falam de PRs futuros como contexto ("#729 (PR #751, que rebaseia por cima"),
     então o deploy só conta se não for anterior ao merge (com a tolerância do registro).
@@ -201,6 +210,16 @@ class _Producao:
             self.deploys.append((at, build, d, citados))
         self.deploys.sort(key=lambda t: t[0])
 
+    def cita(self, pr: dict) -> dict | None:
+        """O primeiro deploy, não anterior ao merge, que cita o PR ou a issue dele."""
+        merge = _dt(pr.get("merged_at"))
+        issues = set(pr.get("closes") or [])
+        for at, _, d, citados in self.deploys:
+            # O /ship antigo citava só a issue ("Objetivos (#820)"); issue reaberta já foi citada antes.
+            if (not merge or at >= merge - _TOLERANCIA_REGISTRO) and (pr["number"] in citados or issues & citados):
+                return d
+        return None
+
     def do_pr(self, pr: dict) -> tuple[bool, dict | None]:
         """(em produção?, deploy) do PR mergeado, nesta ordem:
 
@@ -208,16 +227,14 @@ class _Producao:
         2. merge anterior ao build mais antigo do history.json: está no ar, versão
            desconhecida (o history.json guardou só os 50 últimos deploys até a ADR 0062);
         3. o primeiro deploy cujo build começou depois do merge: PR só de docs e PR de
-           registro do rabo não ganham deploy próprio, e todo deploy sobe a main inteira.
+           registro da subida não ganham deploy próprio, e todo deploy sobe a main inteira.
         """
         if pr["state"] != "MERGED":
             return False, None
         merge = _dt(pr.get("merged_at"))
-        issues = set(pr.get("closes") or [])
-        for at, _, d, citados in self.deploys:
-            # O /ship antigo citava só a issue ("Objetivos (#820)"); issue reaberta já foi citada antes.
-            if (not merge or at >= merge - _TOLERANCIA_REGISTRO) and (pr["number"] in citados or issues & citados):
-                return True, d
+        citou = self.cita(pr)
+        if citou:
+            return True, citou
         if not merge or not self.deploys:
             return False, None
         if merge < self.deploys[0][1]:
@@ -279,7 +296,10 @@ def _fase_pr(pr: dict, producao: _Producao, agora: datetime) -> dict:
     versao = None
     if pr["state"] == "MERGED":
         no_ar, deploy = producao.do_pr(pr)
-        if no_ar:
+        if pr.get("classe") == "ferramenta" and not producao.cita(pr):
+            # a subida não builda ferramenta (#965): o merge é a entrega, sem versão
+            fase, desde = "entregue", pr.get("merged_at")
+        elif no_ar:
             fase, desde = "em_producao", deploy["at"] if deploy else None
             versao = deploy.get("app_version") if deploy else None
         else:

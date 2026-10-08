@@ -48,6 +48,12 @@ from app.dependencies import get_current_user, get_supabase_client  # noqa: E402
 from app.routers import reunioes as reunioes_router  # noqa: E402
 from app.services import transcricao_extractor as extrator  # noqa: E402
 
+# O isolamento é coisa de Unix: o filho é limitado por `RLIMIT_AS` (módulo
+# `resource`), o vigia lê o RSS por `/proc` ou `ps`, a colheita é conferida por
+# `pgrep` e a morte de fora é `SIGKILL`. No Windows nada disso existe, e o
+# arquivo inteiro falhava ou oscilava ali (issue #844). No Linux roda inteiro.
+pytestmark = pytest.mark.so_unix("o isolamento da extração usa RLIMIT_AS, ps, pgrep e SIGKILL")
+
 # ─── Harness mínimo da rota ──────────────────────────────────────────────────
 
 
@@ -520,7 +526,8 @@ class TestOsDoisAtaquesMedidos:
             "while True:\n"
             "    sys.stdout.buffer.write(bloco)\n"
             "    sys.stdout.buffer.flush()\n"
-            "    time.sleep(0.1)\n"
+            "    time.sleep(0.1)\n",
+            encoding="utf-8",
         )
         monkeypatch.setattr(extrator, "_CAMINHO_DO_FILHO", str(tagarela))
 
@@ -553,7 +560,9 @@ class TestOsDoisAtaquesMedidos:
         ninguém, e por isso não existe.
         """
         apressado = tmp_path / "filho_que_despeja_e_sai.py"
-        apressado.write_text("import sys\nsys.stdout.buffer.write(b'OK\\n' + b'x' * (40 * 1024 * 1024))\n")
+        apressado.write_text(
+            "import sys\nsys.stdout.buffer.write(b'OK\\n' + b'x' * (40 * 1024 * 1024))\n", encoding="utf-8"
+        )
         monkeypatch.setattr(extrator, "_CAMINHO_DO_FILHO", str(apressado))
 
         r, crescimento = _pico_do_worker_durante(lambda: _enviar(client, "ata.docx", b"tanto faz"))
@@ -572,7 +581,7 @@ class TestOsDoisAtaquesMedidos:
         """
         quase_no_teto = extrator.TETO_DA_SAIDA_DO_FILHO - 4096
         farto = tmp_path / "filho_que_fala_muito_mas_cabe.py"
-        farto.write_text(f"import sys\nsys.stdout.buffer.write(b'OK\\n' + b'x' * {quase_no_teto})\n")
+        farto.write_text(f"import sys\nsys.stdout.buffer.write(b'OK\\n' + b'x' * {quase_no_teto})\n", encoding="utf-8")
         monkeypatch.setattr(extrator, "_CAMINHO_DO_FILHO", str(farto))
 
         r = _enviar(client, "ata.docx", b"tanto faz")
@@ -836,7 +845,7 @@ class TestAFraseQueAPessoaVe:
         testado continua sendo o da rota e o do pai de verdade.
         """
         suicida = tmp_path / "filho_morto_por_sinal.py"
-        suicida.write_text("import os, signal\nos.kill(os.getpid(), signal.SIGKILL)\n")
+        suicida.write_text("import os, signal\nos.kill(os.getpid(), signal.SIGKILL)\n", encoding="utf-8")
         monkeypatch.setattr(extrator, "_CAMINHO_DO_FILHO", str(suicida))
 
         r = _enviar(client, "ata.docx", _docx_honesto(50))
@@ -998,7 +1007,8 @@ class TestAsGuardasDoIsolamento:
 
         dedo_duro = tmp_path / "filho_que_devolve_o_ambiente.py"
         dedo_duro.write_text(
-            "import os, sys\nsys.stdout.buffer.write(b'OK\\n' + ' '.join(sorted(os.environ)).encode())\n"
+            "import os, sys\nsys.stdout.buffer.write(b'OK\\n' + ' '.join(sorted(os.environ)).encode())\n",
+            encoding="utf-8",
         )
         monkeypatch.setattr(extrator, "_CAMINHO_DO_FILHO", str(dedo_duro))
 

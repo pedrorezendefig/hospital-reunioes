@@ -347,7 +347,7 @@ def _dockerfile_em_prosa() -> str:
     substring no arquivo cru é detector cego: passa verde com a frase inteira
     ainda lá. Aqui o `# ` de cada linha sai e o espaço em branco colapsa antes
     de comparar."""
-    cru = _DOCKERFILE.read_text()
+    cru = _DOCKERFILE.read_text(encoding="utf-8")
     sem_marca = " ".join(linha.strip().lstrip("#").strip() for linha in cru.splitlines())
     return " ".join(sem_marca.split()).lower()
 
@@ -396,6 +396,10 @@ SEM_ANONIMATO_A_PROTEGER = {
     # infraestrutura deles, provada pelo HMAC, e não uma pessoa. Não há
     # anonimato de manifestante a proteger no IP de origem.
     "POST /api/webhooks/github",
+    # O aviso de deploy da Action pós-merge (issue #1065), provado pelo HMAC do
+    # `TECNOLOGIA_DEPLOY_WEBHOOK_SECRET`. Quem chega aqui é um runner do GitHub
+    # Actions, e não uma pessoa: não há anonimato a proteger no IP de origem.
+    "POST /api/webhooks/deploy",
     # Callback servidor a servidor do Resend Inbound (issue #648, ADR 0051),
     # provado pela assinatura svix. Quem chega aqui é a infraestrutura do
     # Resend, e não a pessoa que escreveu o e-mail: o IP de origem não é o de
@@ -409,6 +413,10 @@ SEM_ANONIMATO_A_PROTEGER = {
     "GET /api/ana/exames",
     "GET /api/ana/ouvidoria/protocolos/{protocolo}",
     "POST /api/ana/ouvidoria/protocolos",
+    # A ponte com o desenvolvimento (issue #1063) pede `X-API-Key` contra
+    # `TECNOLOGIA_AUTOMACAO_API_KEY`, credencial de máquina no molde da Ana:
+    # quem chega é o script do sócio, não um visitante anônimo.
+    "GET /api/automacao/tecnologia/demandas/{demanda_id}/anexos",
     # O conector MCP da Central (ADR 0058, decisões 3 e 4). O transporte exige o
     # token OAuth do WorkOS (Super admin), não o login do app, então o schema não
     # o marca com `security`; e o metadata é documento público de descoberta

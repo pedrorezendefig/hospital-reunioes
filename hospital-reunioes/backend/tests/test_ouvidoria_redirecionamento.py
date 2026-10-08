@@ -533,23 +533,20 @@ class TestCasoApagadoPelaRetencao:
 
 
 class TestCasoProtegido:
-    """Quarto critério: sigiloso e anônimo saem com a MESMA guarda do
-    acionamento, porque o redirecionamento chega à mesma função (RN-79)."""
+    """Quarto critério: o sigiloso sai com a MESMA guarda do acionamento,
+    porque o redirecionamento chega à mesma função (RN-79). O anônimo saiu
+    desta guarda na issue #1051 (emenda de 07/10/2026 da ADR 0041): a área nova
+    lê o relato dele como lê o do caso comum."""
 
     def _protegido(self, **overrides) -> _SupabaseFake:
         return _banco(resumo=RELATO_CRU, relato_integral=RELATO_CRU, **overrides)
 
-    @pytest.mark.parametrize(
-        "protecao",
-        [
-            {"sigilo_reforcado": True},
-            {"anonimo": True, "manifestante_nome": None},
-        ],
-    )
     def test_o_email_da_area_nova_nao_leva_o_relato_cru_nem_a_identificacao(
-        self, monkeypatch, protecao, _nunca_envia_email_de_verdade
+        self, monkeypatch, _nunca_envia_email_de_verdade
     ):
-        client, _ = _com_o_caso_na_recepcao(monkeypatch, _nunca_envia_email_de_verdade, self._protegido(**protecao))
+        client, _ = _com_o_caso_na_recepcao(
+            monkeypatch, _nunca_envia_email_de_verdade, self._protegido(sigilo_reforcado=True)
+        )
 
         resposta = _redirecionar(client)
 

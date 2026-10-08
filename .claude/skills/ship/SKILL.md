@@ -1,510 +1,102 @@
 ---
 name: ship
-description: Leva uma mudança até o PR verde (branch, commit, PR, 3 gates) e imprime o comando do rabo, o fechar_onda.py. Sintaxe `/ship "<descrição>" [--issue N] [--type ...] [--skip-review]`.
+description: Leva uma mudança até o PR verde (branch, commit, PR, gates da ADR 0068) e roda a subida, o fechar_onda.py, sem parar. Sintaxe `/ship "<descrição>" [--issue N] [--type ...] [--skip-review]`.
 ---
 
-# ship — orquestrar mudança end-to-end
+# ship
 
-Uma skill, um comando. Do plano ao PR verde, com PR + review automatizada + CI. Merge, bump, `APP_VERSION`, push, build, health e registro são do rabo único, o `fechar_onda.py` (ADR 0061): o `/ship` imprime o comando e para. Usado por time de 3 pessoas (Pedro + 2 contratados), todos com Claude Code e permissão de write no repo.
+Do código ao PR verde e, com os gates verdes, a subida (`fechar_onda.py`), sem esperar mensagem (ADR 0068). Merge, versão, `APP_VERSION`, build, health e registro são só da subida (ADR 0068); o `/ship` nunca faz nenhum deles. Config em `docs/spec/deploy/project.json`.
 
 ## Sintaxe
 
 ```bash
-/ship "<descrição curta da mudança>" [opções]
+/ship "<descrição curta>" [--issue N] [--type fix|feature|chore|refactor|docs|test|spec] [--skip-review] [--hotfix] [--draft] [--from-diff] [--resume]
 ```
 
-### Opções
+| Flag | Efeito |
+|---|---|
+| `--issue N` | Vincula a issue: `Closes #N` no PR, critérios de aceite como checklist. |
+| `--type` | Prefixo de branch e commit. Sem ele: "bug/corrigir/fix" → `fix`, "nova/adicionar" → `feature`, "refactor/limpar" → `refactor`, "doc/readme" → `docs`, senão `chore`. |
+| `--skip-review` | Pula Gates 1 e 2 e termina no PR aberto, sem a subida. Modo do `hr-implementador` da onda. |
+| `--hotfix` | Roda Gate 2 e CI e termina no PR verde, sem a subida. |
+| `--draft` | PR como draft. |
+| `--from-diff` | O código já está no working tree: vai direto ao commit. |
+| `--resume` | Retoma pelo estado do git e do PR (tabela no fim). |
 
-| Flag | Default | Efeito |
-|---|---|---|
-| `--issue <N>` | nenhuma | Vincula GitHub Issue #N. Adiciona `Closes #N` no PR. |
-| `--type <t>` | inferido | Tipo conventional. Um de: `fix`, `feature`, `chore`, `refactor`, `docs`, `test`, `spec`. Define prefixo de branch e commit. |
-| `--skip-review` | false | Pula `/code-review` e `/security-review`. Só pra emergência. |
-| `--draft` | false | Abre PR como draft (não fica passível de merge). |
-| `--target <branch>` | `main` | Branch de destino do PR (default main). |
-| `--from-diff` | false | Pula a pausa do Passo 4. Usado quando já há mudanças no working tree. Vai direto pro commit + push + PR (código já no working tree). |
-| `--resume` | false | Retoma um ciclo interrompido a partir da Issue (`gh issue view`) e do estado do git. |
+**Nunca pare para perguntar** (ADR 0068): dúvida, impasse ou revisor sem veredito é baixa, com uma linha de motivo.
 
-Não há mais opção de merge, deploy ou bump: o `/ship` nunca faz nenhum dos três (ADR 0061).
+## Passos 1 a 8: branch, código, testes, commit, PR
 
----
+1. **Pre-flight:** `git fetch origin`. Arquivo alheio no working tree fica de fora do commit, sem perguntar. Com `--issue N` fora da `main`, a branch tem que terminar em `-<N>`; senão, pare (a árvore pode ser de outra sessão).
+2. **Branch:** `<type>/<slug>[-<N>]` (slug minúsculo, ASCII, até 50 caracteres). Já na branch do `/pegar-issue`, pule.
+3. **Issue:** `gh issue view N --json title,body,labels`. "O que construir" vira o contexto do PR; os critérios de aceite, o checklist e a lista de testes do `/tdd`.
+4. **Código:** chame a Skill tool com `tdd`. Com `--from-diff`, pule.
+5. **Testes locais, o mesmo comando do CI:** PR de ferramenta roda `uv run --no-project --python ">=3.12" --with pytest --with pyyaml python -m pytest tools/ -q --ignore=tools/workflow-dashboard` (o job do `manual.yml`; o `python3` do macOS é velho e não tem `tomllib`) e, se tocou o painel, o mesmo `uv run` com `tools/workflow-dashboard/tests -q`; PR do app roda a suíte do backend ou do frontend que o diff toca. Vermelho local nunca vira PR: o CI inteiro é a prova, não a lista de arquivos que você lembrou de rodar (o #1046 caiu por trocar uma string que um teste de outro arquivo asserta).
+6. **Commit:** Conventional Commits, `git add` com lista explícita (nunca `-A` nem `.`), nada do `hard_excluded` do `project.json`. Sem versão no PR: o `package.json` do frontend fica congelado, a versão sai na subida.
+7. **Push:** `git push -u origin "$BRANCH"`. Falhou: reporte o erro bruto e pare.
+8. **PR:** `gh pr create --base main --title "$SUBJECT" --body-file <scratchpad>/pr-$BRANCH.md --label type:$TYPE --label area:<...>`. O arquivo do corpo leva o nome da branch: agentes paralelos na mesma sessão já se atropelaram num `pr.md` compartilhado (o #796 saiu com o `Closes` da issue errada). Corpo pelo `.github/PULL_REQUEST_TEMPLATE.md`: **Valor entregue** (`**Antes:**` como era e `**Depois:**` como fica, uma frase cada, em linguagem muito simples para quem não é dev, sem jargão; é a seção principal do hover do card do PR no Hospital OS), contexto (sem `--issue`, o Contexto abre com "Decisão registrada neste PR" e o porquê da mudança: é a casa da decisão de ferramenta, ADR 0068, regra 12), critérios de aceite, **Evidência** (antes e depois: o teste que falhava e passa, a saída de comando que mudou ou o print; nunca só "testes verdes"), **Perigo do merge** (porta de uma ou duas vias pela lista do template, com o motivo, e o raio) e `Closes #N`. Com migration nova, a seção `## Migration NNN (conferência por hash)` com o `sha256` do arquivo (`shasum -a 256`) e o SQL completo: a subida confere e para se faltar ou divergir. Aberto o PR com `--issue N`, apague os prints da Demanda que o `anexos.py` baixou: `rm -rf local/anexos/<N>` na raiz do clone (ADR 0069, decisão 3: print do hospital não fica parado na máquina; sem a pasta, o comando não faz nada).
 
-## Princípio arquitetural
+## Passo 8: gates
 
-**Esta skill é metodologia pura.** Lê config de `docs/spec/deploy/project.json` (compartilhada com `/deploy`). Não tem conhecimento hardcoded sobre projetos específicos.
+**PR de ferramenta** (nenhum arquivo em `hospital-reunioes/`, ADR 0068): só o CI. Verde, vá ao Passo 9.
 
-Relação com outras skills:
-- **`fechar_onda.py`** (`.claude/skills/onda-enxuta/scripts/`): o rabo único de merge, bump, `APP_VERSION`, push, build, health e registro, para um PR avulso ou para o lote de uma onda. O `/ship` não o roda: imprime o comando no Passo 10 para o autor rodar.
-- **`/deploy`**: não é chamado. Fica para `status`, `rollback` e `setup`.
-- **`/code-review`**: chamada no Passo 8 como gate.
-- **`/security-review`**: chamada no Passo 8 como gate.
+**PR do app**, na ordem:
 
----
+- **Gate 2, `sensivel.py`** (rode primeiro): `uv run --no-project --python ">=3.12" python .claude/skills/onda-enxuta/scripts/sensivel.py "$PR"`. Saída 0: o prompt do revisor leva `Sensível: <arquivos impressos>`. Saída 1: nada. Outra saída: rode de novo; na segunda falha, baixa.
+- **Gate 1, `hr-revisor`**, prompt de `.claude/skills/onda-enxuta/references/prompts.md`. Última linha do comentário: `VEREDITO: LIMPO` ou `VEREDITO: MUST-FIX (n)`. Com issue vinculada, o revisor também confere spec × diff.
+- **Gate 3, CI:** `gh pr checks "$PR" --watch`.
 
-## Bootstrap
+Correção:
+- `MUST-FIX` → `hr-corretor` motivo `revisao` com o comentário inteiro. Uma revisão, uma correção, sem re-revisão: depois do corretor, quem confere é o CI. Corretor com `pendente` é baixa.
+- CI vermelho → `hr-corretor` motivo `ci` com as últimas 60 linhas de `gh run view <id> --log-failed`; a segunda falha da fatia vai com `effort: max`. Depois, `gh pr checks --watch` de novo.
+- Cada falha conta uma tentativa; na terceira, baixa.
 
-1. **Descobrir raiz do repo:**
-   ```bash
-   REPO_ROOT=$(git -C "$PWD" rev-parse --show-toplevel)
-   ```
-   Se falhar → reportar e PARAR.
+**Baixa:** `gh issue edit N --remove-label in-progress --add-label ready-for-human`, comentário com `<!-- automacao -->` na primeira linha e o diagnóstico (gate, achado, hipótese) e `PushNotification` de uma linha. O PR fica aberto e a subida não roda.
 
-2. **Validar pré-condições**:
-   - `gh --version` retorna OK (gh CLI instalado).
-   - `gh auth status` autenticado.
-   - `docs/spec/deploy/project.json` existe (use `/deploy migrate-blueprint` se está vindo de blueprint legado).
-   - `git config user.name` e `user.email` setados (autor do commit/PR).
-   - Branch atual é `main` OU explicitamente especificada via `--from <branch>`. Se outra branch, pedir confirmação.
+Todo comentário do agente no GitHub leva `<!-- automacao -->` na primeira linha.
 
-3. **Parsear args**:
-   - Descrição obrigatória (primeiro argumento posicional, entre aspas).
-   - Inferir `--type` se não passado:
-     - Se descrição contém "bug", "corrigir", "fix" → `fix`.
-     - Se contém "nova", "adicionar", "feature" → `feature`.
-     - Se contém "refactor", "limpar", "simplificar" → `refactor`.
-     - Se contém "doc", "readme", "comentário" → `docs`.
-     - Default: `chore`.
+## Passo 9: critérios de aceite na issue
 
-4. **Gerar slug** a partir da descrição:
-   - Lowercase, ASCII, sem acentos.
-   - Replace ` ` → `-`.
-   - Truncar em 50 chars.
+Com os gates verdes e issue vinculada, marque no corpo **da issue** cada critério entregue (`- [x]`) e risque o descopado (`- [ ] ~~...~~`). Sem descope e sem checkbox fora dos critérios, basta `sed 's/^- \[ \] /- [x] /'` no corpo e `gh issue edit N --body-file`.
 
----
-
-## Passo 1 — Pre-flight
-
-Antes de criar branch:
+## Passo 10: a subida
 
 ```bash
-cd "$REPO_ROOT"
-git fetch origin
-git status --short
+python3 .claude/skills/onda-enxuta/scripts/fechar_onda.py --prs "$PR"
 ```
 
-Validar:
-- Working tree limpa OU só com mudanças relacionadas ao trabalho (perguntar se incluir).
-- `main` atualizada com origin/main (sugerir `git pull --rebase origin main` se diff).
+Em segundo plano (builds levam minutos); leia só a saída. O que fazer em cada código de saída está na docstring do script. Os dois que pedem ação de quem rodou:
+- **Saída 2 com `conflito no merge de #N em: <arquivos>`:** `hr-corretor` motivo `conflito` com os arquivos, CI de novo, subida de novo. Conta tentativa.
+- **Saídas 6, 7 e 8:** `PushNotification` com a linha que o script imprimiu. A 6 conta tentativa.
 
-Se algum check falhar → ❌ reportar e PARAR.
+**Migration nova:** a subida imprime `migration: cole no Studio <arquivo>:1` e espera o `/api/health` devolver o número dela (até 24 h). Repasse a linha por `PushNotification`. Quem aplica é o humano, no SQL Editor do Studio de produção; o `/ship` nunca aplica migration.
 
----
+**Fatia de manual** (ADR 0057): termina no PR verde, com o caminho do MP4 no corpo, e `PushNotification` "Draft do vídeo da #N no PR #P: <MP4>". Quem viu o vídeo roda a subida.
 
-## Passo 2 — Criar branch
+**Pendência só humana** (import na virada, credencial, ato externo): uma issue `ready-for-human` por pendência, ligada ao PRD pelo corpo ("Pai: #N"), nunca como sub-issue nativa.
 
-```bash
-BRANCH="$TYPE/$SLUG"
-[ -n "$ISSUE_NUMBER" ] && BRANCH="$BRANCH-$ISSUE_NUMBER"
-
-git checkout -b "$BRANCH"
-```
-
-Convenções:
-- `fix/<slug>[-<issue>]`
-- `feature/<slug>[-<issue>]`
-- `chore/<slug>[-<issue>]`
-- `refactor/<slug>[-<issue>]`
-- `docs/<slug>[-<issue>]`
-
----
-
-## Passo 3 — Carregar a Issue
-
-> No modelo Pocock o contexto do trabalho vive na **GitHub Issue**, não em chronicle/plano. Não criar arquivos em `docs/spec/chronicles/` nem `docs/planejamento/`.
-
-Se `--issue <N>` foi passado (ou a branch veio do `/pegar-issue`), carregue a issue:
-
-```bash
-gh issue view "$ISSUE" --json title,body,labels,comments --jq "{title, body, labels: [.labels[].name]}"
-```
-
-Use o corpo da issue como fonte do PR: o **O que construir** vira o contexto e os **Critérios de aceite** viram o checklist do PR + a base dos testes do `/tdd`. Sem issue associada, descreva a mudança a partir do diff — a issue é a fonte preferida, não obrigatória.
-
-## Passo 4 — Código (via `/tdd`)
-
-> O código nasce no `/tdd` (red → green → refactor) a partir dos critérios de aceite. Com os testes verdes, `/ship` segue para o commit. Com `--from-diff`, o working tree já tem as mudanças → segue direto pro Passo 5.
-
-## Passo 5 — Commit (conventional commits)
-
-```bash
-cd "$REPO_ROOT"
-git add <arquivos modificados, exceto hard_excluded>
-SUBJECT="$TYPE($SCOPE): $(echo "$DESCRIPTION" | head -c 60)"
-git commit -m "$SUBJECT" -m "$(cat <<EOF
-$BODY_DO_CHRONICLE_PLANO_RESUMIDO
-
-Closes #$ISSUE_NUMBER  # se setado
-
-Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>
-EOF
-)"
-```
-
-Regras:
-- **Nunca** `git add -A` ou `git add .`. Sempre lista explícita.
-- Hard-excluded da `/deploy` (project.json `hard_excluded`) NUNCA entram.
-- Mensagem do commit segue Conventional Commits (`fix(scope): ...`, `feat(scope): ...`).
-- Body inclui resumo da Issue e `Closes #N` se houver.
-- Sem versão no PR: `hospital-reunioes/frontend/package.json` fica congelado. A versão sobe no rabo, pelo tipo dos commits, na hora do merge, sem commit: vai no `APP_VERSION` do Coolify e na tag `vX.Y.Z` (ADR 0061, issue #967).
-
----
-
-## Passo 6 — Push da branch
-
-```bash
-git push -u origin "$BRANCH"
-```
-
-Se falhar (auth, divergência): reportar erro bruto, sugerir correção, PARAR.
-
----
-
-## Passo 7 — Abrir PR via gh CLI
-
-```bash
-PR_URL=$(gh pr create \
-  --base "$TARGET_BRANCH" \
-  --head "$BRANCH" \
-  --title "$SUBJECT" \
-  --body "$PR_BODY" \
-  --label "type:$TYPE" \
-  $(echo "$AREAS" | tr ' ' '\n' | sed 's/^/--label area:/' | tr '\n' ' ') \
-  $([ "$DRAFT" = "true" ] && echo "--draft") \
-  )
-PR_NUMBER=$(echo "$PR_URL" | grep -oE '[0-9]+$')
-```
-
-### PR body (a partir do template e da Issue)
-
-Lê `.github/PULL_REQUEST_TEMPLATE.md` e preenche 5 seções principais + closes:
-
-- `## 🎯 Contexto` ← contexto da Issue (por quê / valor pro negócio)
-- `## ✅ Critérios de aceite` ← critérios da Issue (checkboxes `[x]`/`[ ]`)
-- `## 📊 Mudanças` ← gerada por `/snapshot --diff <base>..HEAD` (rotas novas/modificadas, tabelas afetadas, migrations, integrações)
-- `## 🔗 Links` ← issue (`Closes #N`), snapshot links relativos
-- `## 🤖 Gates (3)` ← checkboxes dos 3 gates, marcadas conforme execução
-- `## Closes` ← `Closes #$ISSUE_NUMBER` se houver
-- `## Migration NNN (conferência por hash)` ← só com migration nova: o `sha256` do arquivo (`shasum -a 256 <arquivo>`) e o SQL completo. O rabo confere esse hash contra o arquivo do head e para se faltar ou divergir; mexeu na migration, atualize o hash e o SQL do corpo.
-
-A seção "Mudanças" usa o output da skill `/snapshot --diff <base>..HEAD` (ver `.claude/skills/snapshot/SKILL.md`). Se a skill falhar ou o repo não tiver mudanças relevantes pra snapshot, a seção é omitida ou contém apenas "_(sem mudanças relevantes ao snapshot)_".
-
-### Labels
-
-- `type:fix|feature|chore|refactor|docs|test|spec` (1)
-- `area:backend|frontend|infra|spec|docs|skills` (1+, derivada de `project.json` commit_inference.scope_map ↔ diff)
-
----
-
-## Passo 8 — Gates automatizados (3 gates)
-
-Cada camada faz veto independente. Roda em sequência (ou paralelo onde possível). Os 3 gates verdes são o fim do `/ship`: o PR fica pronto para o rabo.
-
-### Passo 8.0 — Detecção de diff cosmético (Corte 2 do plano de enxugamento)
-
-Antes de invocar gates, classificar o diff. Se for puramente cosmético, **pular o security-review** (o code-review já cobre mudanças triviais).
-
-**Critério de "diff cosmético"** (todos têm que bater):
-
-```bash
-DIFF_FILES=$(git diff --name-only "$TARGET_BRANCH..HEAD")
-
-# 1. Todo arquivo casa padrão permitido
-COSMETIC_OK=true
-for f in $DIFF_FILES; do
-  case "$f" in
-    *.tsx|*.jsx|*.css|*.scss|*.md) ;;
-    public/*) ;;
-    docs/adr/*|docs/agents/*|docs/spec/snapshots/*) ;;
-    hospital-reunioes/frontend/package.json)
-      # Aceita só se único campo alterado é "version"
-      if ! git diff "$TARGET_BRANCH..HEAD" -- "$f" | grep -E "^[+-]\s*\"" | grep -qvE "^[+-]\s*\"version\""; then
-        :  # OK, só version
-      else
-        COSMETIC_OK=false
-      fi
-      ;;
-    *) COSMETIC_OK=false; break ;;
-  esac
-done
-
-# 2. Nenhum arquivo proibido
-for f in $DIFF_FILES; do
-  case "$f" in
-    *routers/*|*migrations/*|*config.py|*middleware/*|*auth/*|*.env*|*Dockerfile*)
-      COSMETIC_OK=false; break ;;
-  esac
-done
-
-# 3. Nenhum import added/removed
-if git diff "$TARGET_BRANCH..HEAD" | grep -qE "^[+-]\s*(import |from .* import)"; then
-  COSMETIC_OK=false
-fi
-```
-
-**Se `COSMETIC_OK == true`:**
-
-- ✅ Pular o gate de security-review.
-- code-review e CI **continuam rodando** — só o security-review é pulado.
-- Comentar no PR: `🤖 Diff cosmético: security-review pulado; code-review + CI ativos.`
-
-**Se `COSMETIC_OK == false`:**
-
-- Os 3 gates rodam normalmente (comportamento padrão).
-
-**Override manual:** `/ship --skip-review` pula code-review e security (emergência); o CI nunca é pulado. `/ship --hotfix` mantém security-review + CI.
-
----
-
-### Gate 1 — `/code-review` (sempre)
-
-Invoca a skill `code-review:code-review` apontando pra branch atual ou PR.
-
-Captura output. Se levantar issues `must-fix` ou similar → ❌ reportar, comentar no PR via `gh pr comment`, parar (sem aprovar/mergear).
-
-### Gate 1.5: Spec × diff (quando há issue vinculada)
-
-Verifica se o diff cumpre o que a issue pediu **antes** do merge: é o que autoriza o Passo 9 a marcar os critérios de aceite (o contrato "verde ⟹ critérios cumpridos" do ADR 0020 passa a ser verificado, não assumido). Sem issue vinculada, pular com nota no PR. Não muda a contagem dos "3 gates" (code-review, security, CI): este é condicional à existência de issue.
-
-**Fail-fast antes de spawnar** (barato, evita queimar um subagent com ref quebrada):
-
-```bash
-git rev-parse "$TARGET_BRANCH" >/dev/null || { echo "ref inválida"; exit 1; }
-[ -n "$(git diff "$TARGET_BRANCH...HEAD" --name-only)" ] || { echo "diff vazio"; exit 1; }
-```
-
-Dispara um subagent **independente** (Task/general-purpose) com:
-
-- O ponto fixo, sem perguntar (não travar a `/onda-enxuta`): `git diff $TARGET_BRANCH...HEAD` (três pontos, merge-base) + `git log $TARGET_BRANCH..HEAD --oneline`.
-- O corpo da issue já carregado no Passo 3 (O que construir + Critérios de aceite).
-- O brief: "Reporte: (a) requisitos que a issue pediu e estão **faltando ou parciais** no diff; (b) comportamento no diff que **não foi pedido** (scope creep); (c) requisitos que parecem implementados mas cuja implementação **tem cara de errado**. Cite a linha da spec em cada achado. Menos de 400 palavras."
-
-Achados (a) ou (c) → ❌ reportar, comentar no PR via `gh pr comment`, parar (mesmo tratamento do Gate 1). Scope creep (b) é judgement call: reportar ao usuário sem travar, a menos que toque área sensível (aí o Gate 2 decide).
-
-### Gate 2 — `/security-review` (condicional — área sensível)
-
-Invoca a skill `security-review` na branch.
-
-Captura output. Se levantar vulnerabilidades críticas → ❌ reportar, comentar no PR, parar.
-
-### (opcional) review rigorosa: só com `--rigoroso`
-
-Com a flag, roda a review rigorosa e a verificação final com evidência (rodadas extras, checklist e critérios). Passo a passo em `references/rigoroso.md`.
-
-### Gate 3 — CI (GitHub Actions, sempre)
-
-Aguarda checks de CI:
-```bash
-gh pr checks "$PR_NUMBER" --watch
-```
-
-Jobs esperados (workflow `.github/workflows/ci.yml`):
-- `Backend Lint, Format & Tests` (ruff + pytest)
-- `Frontend Lint & Type Check` (pnpm lint + tsc)
-- `Build` (docker build dos 2 services como sanity check)
-
-Se algum check falhar, rode antes `python .claude/skills/onda-enxuta/scripts/ci_sem_runner.py "$PR_NUMBER"`. Saída 0 = o GitHub cancelou o job por falta de runner (incidente do Actions, issue #953), não é código: o script já pediu o rerun, volte ao `gh pr checks --watch` (até 3 vezes; depois, reporte "GitHub Actions sem runner, ver githubstatus.com" e pare sem mexer no código). Saída 1 = falha de verdade → ❌ reportar logs (`gh run view <id> --log`), parar.
-
-### (substituída pelo `/tdd`) verificação final com evidência: só com `--rigoroso`
-
-Ver `references/rigoroso.md` (segunda parte).
-
-### Flags de override
-
-- `--skip-review`: pula code-review e security-review. **NÃO pula** o CI. Só pra emergência.
-- `--hotfix`: mantém security-review + CI (pula o resto). Exige aprovação explícita do dono do repo.
-- Default: 3 gates (code-review + security-review condicional + CI). Review rigorosa e verificação final ficam opcionais (`--rigoroso`).
-
----
-
-## Passo 8.6: Gate de migrations (o rabo espera o recibo)
-
-Se o diff do PR inclui migrations novas em `hospital-reunioes/supabase/migrations/**`, elas são aplicadas **antes do merge**. O merge dispara o auto-build no Coolify (webhook do GitHub App): o schema precisa existir **antes** do código novo subir, senão os endpoints que dependem das tabelas novas quebram (500) até a migration rodar.
-
-Quem segura o merge é o próprio rabo (issue #969): toda migration termina gravando o próprio número em `migracoes_aplicadas` (o CI reprova a que não grava), o `/api/health` devolve o maior número gravado, e o `fechar_onda.py` imprime o caminho clicável `<arquivo>:1` de cada migration nova e só pega o semáforo e mergeia quando o health devolve o número da maior. Teto de 24 h; vencido, sai com `7` sem tocar na `main`. O rabo pode rodar já, sem esperar o humano colar.
-
-> O Postgres do Supabase self-hosted **não é exposto** e o CLI/API do Coolify **não executa SQL**: a aplicação é **manual**, pelo humano, no SQL Editor do Supabase Studio de produção. Esta skill nunca aplica migration sozinha (nada de `docker exec`/`psql` por aqui).
-
-```bash
-NEW_MIGRATIONS=$(git diff --name-only --diff-filter=A "$TARGET_BRANCH..HEAD" -- 'hospital-reunioes/supabase/migrations/**')
-```
-
-Se houver migrations novas:
-1. Conferir que o corpo do PR traz o `sha256` de cada uma (seção `## Migration NNN (conferência por hash)`, Passo 7). O rabo confere de novo nas pré-condições e para se faltar ou divergir.
-2. Para cada uma (ordem cronológica), extrair o arquivo para o scratchpad por `git show` e entregar **primeiro o caminho absoluto clicável terminado em `:1`** (abre em aba do VS Code), junto do arquivo de verificação; o bloco ` ```sql ` no chat é reforço, não o caminho principal. Regra completa em `/deploy` SKILL.md, Passo 6.3. Marcar ⚠ as DESTRUCTIVE (regex de DDL destrutivo: ver `/deploy` SKILL.md, seção "Referência: regex de DDL destrutivo").
-3. Entregar o passo a passo: **Supabase Studio de produção** (`studio.<domínio>`, ex.: `https://studio.hospitalsaomatheus.cloud`) → **SQL Editor → New query** → colar → **Run** → rodar a query de verificação e conferir a contagem de linhas esperada.
-4. Dizer no resumo final que o rabo espera a migration aparecer no `/api/health` (até 24 h) e segue sozinho depois que o humano cola.
-
-Pular se não há migration nova no diff.
-
----
-
-## Passo 9: Marcar critérios de aceite na issue
-
-> Contrato do ADR 0020 (decisão 1): os critérios **são** a lista de testes do `/tdd`, e os três gates verdes dizem "verde ⟹ critérios cumpridos". Não marcar só no PR: a issue é o que o revisor lê. Com o Gate 1.5 (spec × diff) verde, essa implicação é **verificada** contra o diff, não só assumida.
-
-Com os gates verdes, se há issue vinculada (`$ISSUE_NUMBER`) **e o Gate 1.5 passou verde**, editar o corpo da **issue**:
-
-- Critério **entregue** → `- [x] ...`
-- Critério **descopado** durante o PR → **riscar**, nunca marcar: `- [ ] ~~...~~`
-
-Caso comum (nenhum critério descopado, nenhum checkbox fora da seção de critérios):
-
-```bash
-gh issue view "$ISSUE_NUMBER" --json body --jq .body \
-  | sed 's/^- \[ \] /- [x] /' > /tmp/issue-body-$ISSUE_NUMBER.md
-gh issue edit "$ISSUE_NUMBER" --body-file /tmp/issue-body-$ISSUE_NUMBER.md
-```
-
-Se houve descope (ou o corpo tem checkboxes fora de `## Critérios de aceite`), **não** usar o sed cego: editar o corpo critério a critério, marcando os entregues e riscando os descopados. Resultado: issue fechada lê **N/N** quando tudo foi entregue; descopado fica visível riscado, não some.
-
-No `--resume` com os gates verdes, verificar se os critérios da issue já estão marcados; se não, marcar antes de seguir ao Passo 10.
-
----
-
-## Passo 10: Imprimir o comando do rabo (o /ship termina aqui)
-
-O `/ship` não faz bump, não mexe em `APP_VERSION`, não mergeia e não chama o `/deploy` (ADR 0061). Com o PR verde, imprime o comando do rabo para o autor rodar quando quiser subir para produção:
-
-```bash
-python3 .claude/skills/onda-enxuta/scripts/fechar_onda.py --prs "$PR_NUMBER" --dry-run   # o plano, sem tocar em nada
-python3 .claude/skills/onda-enxuta/scripts/fechar_onda.py --prs "$PR_NUMBER"
-```
-
-Um PR só e sem `--sessao` é o modo PR avulso (chave do semáforo `pr-<N>`). O script faz, nesta ordem: pré-condições (PR verde e mergeável, número e `sha256` das migrations), espera da migration nova no `/api/health` (Passo 8.6), semáforo, versão nova pelo tipo dos commits, sem commit (issue #967), a `origin/main` trazida por merge se a branch ficou atrás (e o CI verde nesse head novo), `APP_VERSION` no backend e no frontend do Coolify antes do merge, merge pela API do GitHub (a `main` é protegida, ADR 0061), tag `vX.Y.Z` no squash, um build, health com conferência de versão, registro (`state.json` e `history.json`) num PR só de docs mergeado do mesmo jeito, e limpeza. Snapshot e draft do Manual não são do rabo: uma Action no push da `main` cuida deles depois do registro (ADR 0062). O registro nomeia o PR e a issue. Códigos de saída e o que fazer em cada um: docstring do script.
-
-**Saída `6` (rollback feito):** o health falhou e o rabo já voltou cada app do lote à imagem anterior no Coolify e ao `APP_VERSION` antigo, conferiu o health de novo e deixou o semáforo solto; produção está boa, mas o merge ruim segue na `main`. Quem rodou o rabo faz, nesta ordem: (1) abre o PR de revert do squash que a linha `rollback:` imprime (`git revert --no-edit <sha>` numa branch `revert/pr-<N>` a partir da `origin/main`, depois `gh pr create`), sem rebuild, porque a imagem no ar já é a anterior; ele vai na frente do próximo rabo, para o próximo deploy não carregar o defeito; (2) `gh issue reopen <issue>`, `gh issue edit <issue> --remove-label in-progress --add-label ready-for-agent` e um `gh issue comment` com `<!-- automacao -->` na primeira linha e a linha `health:` do rabo (o que o health respondeu); (3) conta uma tentativa da fatia e a escreve no comentário (`tentativa k de 3`; na terceira, `ready-for-human` no lugar de `ready-for-agent`); (4) notifica pela ferramenta `PushNotification`: "rollback disparado no PR #N, versão vX.Y.Z voltou", com a versão da linha `rollback:`.
-
-Saída `4` (health) é o rollback automático que falhou: o semáforo fica preso e o caminho é o `/deploy rollback`.
-
-**Saída `7` (migration vencida):** o `/api/health` não devolveu o número da migration do lote em 24 h; nada entrou na `main`, o semáforo nem foi pego e o PR segue aberto, sem nada a reverter. Quem rodou o rabo notifica pela ferramenta `PushNotification` com a linha `migration: vencida` e roda o rabo de novo depois que o humano colar o arquivo da linha `migration: cole no Studio`. Não conta tentativa: o código não falhou.
-
----
-
-## Passo 10.5: Pendências humanas (fila `ready-for-human`)
-
-Se o ciclo terminou deixando ações que **só o humano pode fazer** (import de dado na virada, rotação de credencial, ato em sistema externo, validação manual), registrá-las antes do resumo final:
-
-- **1 issue por pendência** (ou 1 issue com checklist quando os passos são um fluxo único), com o label **`ready-for-human`**.
-- Vincular ao PRD **pelo corpo** ("Pai: #N"), **nunca como sub-issue nativa**: a Action de higiene só auto-fecha o PRD quando todas as sub-issues fecham, e uma pendência humana aberta travaria esse fechamento (e a auditoria da `/onda-enxuta`, ADR 0029).
-- Corpo em pt-BR com: o que fazer (comandos prontos quando houver), por que ficou pendente e links de rastreio (PR, deploy, ADR).
-- Nunca duplicar: se a pendência já tem issue aberta, comentar nela em vez de criar outra.
-
-Essas issues alimentam a aba **Pendências** do painel (`tools/workflow-dashboard`), que lê a fila `ready-for-human` direto do GitHub, sem nenhum arquivo de estado paralelo. Elas ficam fora do Plano por inteiro (ondas, entregues e medianas de lead time: fila humana, não de agente); ao concluir, o humano fecha a issue e a pendência some do painel.
-
-Pular se o ciclo não deixou pendência nenhuma.
-
----
-
-## Passo 11: Resumo final
-
-Imprime ao usuário o estado final do ciclo, no formato da seção "Output final" abaixo: o PR verde, os gates, a issue e o comando do rabo. Não cria commit. Não pushea. Não escreve em arquivo. É display puro.
-
-O `history.json` e o `state.json` são escritos pelo rabo, no PR de registro depois do health; o `/ship` não toca em nenhum deles.
-
----
-
-## Passo 12: Notificação (Discord opcional)
-
-**Default do time Hospital: sem Discord.** Notificação é o GitHub Mobile. Só posta se achar uma webhook URL (`project.json`, `.env` ou `~/.config/hospital/discord-webhook.url`); sem URL, loga e segue, sem erro. Fontes, payload e o caso "deploy notable" em `references/discord.md`.
-
----
-
-## Output final (Corte 4a, compacto)
-
-Bloco único de 3 linhas, com referências essenciais. Sem ruído visual de listas extensas.
+## Saída
 
 ```
-✅ ship PR #$PR_NUMBER verde · gates: $GATES_VERDES$([ -n "$ISSUE_NUMBER" ] && echo " · Issue #$ISSUE_NUMBER com critérios marcados")
-   Rabo (merge, bump, deploy): python3 .claude/skills/onda-enxuta/scripts/fechar_onda.py --prs $PR_NUMBER
-   $([ -n "$NEW_MIGRATIONS" ] && echo "Migration: o rabo espera $NEW_MIGRATIONS no /api/health antes do merge (Passo 8.6)")
+✅ ship PR #<PR> verde · gates: <lista> · Issue #<N> com critérios marcados
+   Subida: <última linha do fechar_onda.py>
 ```
 
-**Exemplo concreto** (ciclo de mudança cosmética):
-
-```
-✅ ship PR #9 verde · gates: code-review, spec×diff, CI · Issue #8 com critérios marcados
-   Rabo (merge, bump, deploy): python3 .claude/skills/onda-enxuta/scripts/fechar_onda.py --prs 9
-```
-
-Gate vermelho: emoji muda pra ❌ e a linha 2 dá o gate e o motivo em vez do comando do rabo.
-
-Notificações (Discord, etc.) reportadas separadamente como linha solta se houver, ou silenciosamente puladas.
-
----
+Baixa: `❌` e, na segunda linha, o gate e o motivo.
 
 ## Retomada (`--resume`)
 
-`/ship --resume` retoma um ciclo interrompido lendo o **estado do git + a Issue** — não um plano em arquivo.
-
-```bash
-BRANCH=$(git branch --show-current)
-PR=$(gh pr list --head "$BRANCH" --json number --jq ".[0].number // empty")
-```
-
-Mapeia o ponto de retomada pelo estado real:
-
-| Estado do git/PR | `--resume` vai pro |
+| Estado | Retoma em |
 |---|---|
-| Sem commit | Passo 5 (commit) |
-| Commit feito, sem push | Passo 6 (push) |
-| Pushado, sem PR | Passo 7 (PR) |
-| PR aberto, gates pendentes | Passo 8 (gates) |
-| Gates verdes | Passo 9 (critérios na issue) e Passo 10 (comando do rabo) |
-| PR mergeado | Nada: o rabo já rodou. Conferir no `history.json` |
-
-A Issue (`gh issue view $ISSUE`) traz o contexto; o git traz o progresso. Sem dependência de `docs/planejamento/`.
-
-## Tratamento de falhas
-
-### Falha em qualquer Passo ≤ 7
-
-- Branch local fica. A Issue continua `in-progress`.
-- Mudanças não pushed → `git stash` ou commit local.
-- Reportar passo onde falhou + mensagem específica.
-- Usuário retoma com `/ship --resume` (lê o estado do git e pula pro próximo passo).
-
-### Falha em Passo 8 (review)
-
-- PR fica aberto, com comentários da skill review.
-- Branch fica.
-- O gate que reprovou é reportado no PR; corrigir e re-shippar.
-- Usuário corrige, commita, push, e roda `/ship --resume` (recomeça do Passo 8).
-
-### Falha no rabo
-
-- Não é do `/ship`: o `fechar_onda.py` diz o que fazer pelo código de saída (1 pré-condição, 2 conflito ou push rejeitado, 3 build, 4 health com o rollback automático que falhou; o 3 e o 4 deixam o semáforo preso para o `/deploy rollback`; 6 rollback feito, com semáforo solto: revert, issue reaberta e notificação, como diz o Passo 10; 7 migration vencida, sem semáforo nem merge: notificação e o rabo de novo depois da colagem).
-
-### Falha em Passo 11 (Resumo final / Discord)
-
-- Não bloqueia. Reportar warning.
-
----
+| Sem commit | Passo 5 |
+| Commit sem push | Passo 7 |
+| Push sem PR | Passo 8 |
+| PR aberto, gates pendentes | Passo 8 |
+| Gates verdes | Passos 9 e 10 |
+| PR mergeado | Nada; a subida já rodou |
 
 ## Regras
 
-- ❌ **Nunca** `git push --force` à main. Apenas `--force-with-lease` na branch própria pra amend.
-- ❌ **Nunca** mergear, fazer bump ou mexer em `APP_VERSION` pelo `/ship`: é tudo do rabo (`fechar_onda.py`).
-- ❌ **Nunca** pular `/security-review` em mudanças que tocam `auth/`, `permissions/`, schema DB ou env vars.
-- ❌ **Nunca** rodar `/ship` em uma branch que já tem PR aberto sem `--resume` ou flag explícita.
-- ❌ **Nunca** logar token/secret em qualquer output.
-- ✅ Conventional commits sempre.
-- ✅ Toda mudança nasce de uma Issue (ou, na falta, descreve a mudança no corpo do PR). Sem chronicle nem plano.
-- ✅ Discord notificação SÓ no final, com resultado verdadeiro.
-
----
-
-## Anti-padrões
-
-- ❌ "Vou abrir o PR no browser pra editar a descrição mais bonita." — Não. Template + Issue dão estrutura suficiente. Edição livre depois do `/ship` se quiser.
-- ❌ "Vou rodar `/code-review` separado depois do merge." — Não. Review é gate ANTES do merge.
-- ❌ "Vou squash 3 commits em 1 antes de pushear.": sim, pode. Mas use `git rebase -i` cauteloso. O merge é do rabo, pela API do GitHub.
-- ❌ "Vou commitar com `git commit -am` pra agilizar." — Não. Lista explícita de arquivos.
-
----
-
-## Referências
-
-- `.github/PULL_REQUEST_TEMPLATE.md`: template do PR.
-- `references/discord.md`: Passo 12 completo (fontes da webhook URL e payload).
-- `https://cli.github.com/manual/` — manual do gh CLI.
-- `.claude/skills/onda-enxuta/scripts/fechar_onda.py`: o rabo que o Passo 10 imprime.
+- Nunca `git push --force` na `main`; `--force-with-lease` só na branch própria.
+- Nunca rodar `/ship` numa branch que já tem PR aberto sem `--resume`.
+- Nunca logar token ou segredo.

@@ -447,9 +447,10 @@ async def webhook_github(
     """A Demanda vinculada aprendendo do GitHub em segundos (ADR 0054, decisão 2).
 
     Cadastro no repositório: URL desta rota, content type JSON, segredo igual ao
-    `GITHUB_WEBHOOK_SECRET` do ambiente e **só o evento `issues`**. Os dois lados
-    do cadastro são passo humano do deploy: sem o segredo a rota responde 503, e
-    sem o webhook cadastrado o card só anda de hora em hora, pela reconciliação.
+    `GITHUB_WEBHOOK_SECRET` do ambiente e **os eventos `issues` e `pull_request`**
+    (este desde a issue #1064). Os dois lados do cadastro são passo humano do
+    deploy: sem o segredo a rota responde 503, e sem o webhook cadastrado (ou
+    sem o evento marcado) o card só anda de hora em hora, pela reconciliação.
 
     A ordem das guardas é a ordem das causas, e não é negociável:
 
@@ -460,8 +461,9 @@ async def webhook_github(
     3. **Assinatura.** Antes de olhar QUALQUER outra coisa do pedido, o header do
        evento incluído: conferir o evento primeiro deixaria qualquer um
        descobrir, sem segredo nenhum, quais eventos o app trata.
-    4. **Evento e ação.** Só `issues`, e só nas ações que mexem em label, estado
-       ou corpo. O resto sai em 2xx sem gastar cota do GitHub.
+    4. **Evento e ação.** `issues`, só nas ações que mexem em label, estado ou
+       corpo, e `pull_request`, só ao abrir, reabrir e fechar. O resto sai em
+       2xx sem gastar cota do GitHub.
     5. **Repositório**, como defesa em profundidade.
     6. **Demanda vinculada.** A esmagadora maioria das issues do repositório não
        tem Demanda nenhuma atrás, e isso não é erro.
@@ -521,7 +523,8 @@ async def webhook_github(
         logger.warning("[GitHub webhook] Assinatura inválida: entrega recusada.")
         raise HTTPException(status_code=401, detail=MOTIVO_ASSINATURA_INVALIDA)
 
-    if request.headers.get("x-github-event") != "issues":
+    evento = request.headers.get("x-github-event")
+    if evento not in ("issues", "pull_request"):
         return {"ignorado": "evento"}
 
     try:
@@ -529,17 +532,21 @@ async def webhook_github(
     except ValueError:
         raise HTTPException(status_code=400, detail="Payload JSON inválido")
 
-    if not isinstance(payload, dict) or payload.get("action") not in tecnologia_sincronizacao.ACOES_DE_ISSUE:
+    acoes = tecnologia_sincronizacao.ACOES_DE_ISSUE if evento == "issues" else tecnologia_sincronizacao.ACOES_DE_PR
+    if not isinstance(payload, dict) or payload.get("action") not in acoes:
         return {"ignorado": "acao"}
 
     if not _e_do_repositorio_configurado(payload):
         logger.warning("[GitHub webhook] Entrega de outro repositório; ignorada.")
         return {"ignorado": "outro_repositorio"}
 
+    if evento == "pull_request":
+        return await _tratar_pull_request(supabase, payload)
+
     numero = (payload.get("issue") or {}).get("number")
     # `isinstance(numero, int)` sozinho aceitaria `True`, porque em Python bool é
     # int: `{"number": true}` viraria uma consulta por `github_issue_numero=True`.
-    if isinstance(numero, bool) or not isinstance(numero, int) or numero <= 0:
+    if not _numero_utilizavel(numero):
         logger.warning("[GitHub webhook] Evento 'issues' sem número de issue utilizável; ignorado.")
         return {"ignorado": "issue"}
 
@@ -547,8 +554,23 @@ async def webhook_github(
     if demanda is None:
         return {"ignorado": "sem_vinculo"}
 
+    return await _sincronizar(
+        lambda: tecnologia_sincronizacao.sincronizar_demanda(supabase, demanda),
+        demanda,
+        numero,
+    )
+
+
+def _numero_utilizavel(numero) -> bool:
+    """Um número de issue ou de PR de verdade: inteiro, positivo e não `bool`."""
+    return not isinstance(numero, bool) and isinstance(numero, int) and numero > 0
+
+
+async def _sincronizar(sincronizar, demanda: dict, numero: int) -> dict:
+    """Roda uma sincronização fora do event loop e traduz o desfecho no corpo da
+    resposta, com a mesma frase de log para os dois eventos."""
     try:
-        mudou = await run_in_threadpool(tecnologia_sincronizacao.sincronizar_demanda, supabase, demanda)
+        mudou = await run_in_threadpool(sincronizar)
     except IssueNaoEncontradaError:
         # Condição PERMANENTE, e não indisponibilidade: a issue foi apagada ou
         # transferida. Uma linha, sem stack: repetir o traceback a cada entrega
@@ -576,6 +598,159 @@ async def webhook_github(
         return {"recebido": True, "sincronizada": False, "falhou": True}
 
     return {"recebido": True, "sincronizada": mudou}
+
+
+async def _tratar_pull_request(supabase, payload: dict) -> dict:
+    """O PR que fecha a raiz de uma Demanda (issue #1064, ADR 0069, decisão 6).
+
+    As issues que o PR fecha saem do corpo dele, pelas palavras de fechamento
+    do GitHub, sem chamada nenhuma à API: o evento chega em segundos, e a
+    resposta também. A sincronização de cada Demanda relê a issue como no evento
+    `issues` e grava na foto o fato do PR.
+
+    PR que não fecha nenhuma Demanda vinculada é a esmagadora maioria (o PR de
+    ferramenta, o de outra aba), e sai em 2xx sem escrever nada.
+    """
+    from app.services import github_client, tecnologia_sincronizacao
+
+    pr = payload.get("pull_request") or {}
+    numero_pr = pr.get("number")
+    if not _numero_utilizavel(numero_pr):
+        logger.warning("[GitHub webhook] Evento 'pull_request' sem número de PR utilizável; ignorado.")
+        return {"ignorado": "pr"}
+
+    demandas = [
+        (numero, demanda)
+        for numero in github_client.issues_que_o_corpo_fecha(pr.get("body"))
+        if (demanda := tecnologia_sincronizacao.demanda_vinculada(supabase, numero)) is not None
+    ]
+    if not demandas:
+        return {"ignorado": "sem_vinculo"}
+
+    acao = str(payload.get("action"))
+    mergeado = pr.get("merged") is True
+    resposta = {"recebido": True, "sincronizada": False}
+    for numero, demanda in demandas:
+        desfecho = await _sincronizar(
+            lambda d=demanda: tecnologia_sincronizacao.sincronizar_pelo_pr(
+                supabase, d, pr=numero_pr, acao=acao, mergeado=mergeado
+            ),
+            demanda,
+            numero,
+        )
+        resposta["sincronizada"] = resposta["sincronizada"] or desfecho["sincronizada"]
+        if desfecho.get("falhou"):
+            resposta["falhou"] = True
+    return resposta
+
+
+# ─── Webhook de deploy: a Etapa Em produção (issue #1065, ADR 0069) ──────────
+
+# O corpo é a versão, a data e os PRs de UM lote, e uma onda tem meia dúzia de
+# PRs: 64 KB é folga de sobra. O teto existe pelo mesmo motivo do webhook do
+# GitHub: a assinatura precisa dos bytes crus, e eles vão para a memória antes
+# de qualquer prova de origem.
+TETO_DO_CORPO_DO_DEPLOY = 64 * 1024
+
+# Uma chamada por subida, e a subida leva minutos. O teto é para quem martela a
+# porta sem assinatura.
+LIMITE_DO_WEBHOOK_DEPLOY = "30/minute"
+
+MOTIVO_AVISO_DE_DEPLOY_INVALIDO = "Aviso de deploy fora do formato: versao, data e prs."
+
+
+def _aviso_de_deploy(payload) -> tuple[str, str, list[int]] | None:
+    """A versão rotulada, a data e as issues que os PRs do lote fecham, ou
+    `None` quando o corpo não é o que a Action manda."""
+    from app.services.registro_do_deploy import versao_rotulada
+
+    if not isinstance(payload, dict):
+        return None
+    versao = versao_rotulada(payload.get("versao"))
+    data = payload.get("data")
+    prs = payload.get("prs")
+    if versao is None or not isinstance(data, str) or not isinstance(prs, list):
+        return None
+    try:
+        if datetime.fromisoformat(data).tzinfo is None:
+            return None
+    except ValueError:
+        return None
+    issues: list[int] = []
+    for pr in prs:
+        if not isinstance(pr, dict) or not _numero_utilizavel(pr.get("numero")):
+            return None
+        fecha = pr.get("fecha")
+        if not isinstance(fecha, list) or not all(_numero_utilizavel(n) for n in fecha):
+            return None
+        issues.extend(fecha)
+    return versao, data, issues
+
+
+@router.post("/deploy")
+@limiter.limit(LIMITE_DO_WEBHOOK_DEPLOY)
+async def webhook_deploy(
+    request: Request,
+    supabase=Depends(get_supabase_client),
+):
+    """Uma versão subiu: Em produção nas Demandas do lote (ADR 0069, decisão 4).
+
+    Quem chama é a Action pós-merge, depois do registro da subida, com o corpo
+    assinado em `X-Hub-Signature-256` (o mesmo formato do GitHub) pelo
+    `TECNOLOGIA_DEPLOY_WEBHOOK_SECRET`. Corpo:
+    `{"versao": "0.169.0", "data": "<ISO com fuso>", "prs": [{"numero": 1100,
+    "fecha": [673]}]}`.
+
+    A ordem das guardas é a do webhook do GitHub: segredo, tamanho, assinatura,
+    e só então o conteúdo. Sem o segredo a rota responde 503 e quem marca Em
+    produção é a reconciliação de hora em hora, pelo `history.json` da `main`.
+
+    Idempotente por (Demanda, versão): só a Demanda Entregue vira Em produção,
+    então a mesma chamada duas vezes não grava, não escreve linha nem avisa de
+    novo. O corpo da resposta diz quantas foram marcadas, e é o que o log da
+    Action mostra.
+    """
+    from app.services import tecnologia_sincronizacao
+
+    segredo = settings.tecnologia_deploy_webhook_secret
+    if not segredo:
+        logger.error("[Deploy webhook] TECNOLOGIA_DEPLOY_WEBHOOK_SECRET não configurado; aviso recusado.")
+        raise HTTPException(status_code=503, detail=MOTIVO_WEBHOOK_INDISPONIVEL)
+
+    anunciado = request.headers.get("content-length") or ""
+    if anunciado.isdigit() and int(anunciado) > TETO_DO_CORPO_DO_DEPLOY:
+        raise HTTPException(status_code=413, detail=MOTIVO_CORPO_GRANDE_DEMAIS)
+    acumulado = bytearray()
+    async for pedaco in request.stream():
+        acumulado.extend(pedaco)
+        if len(acumulado) > TETO_DO_CORPO_DO_DEPLOY:
+            raise HTTPException(status_code=413, detail=MOTIVO_CORPO_GRANDE_DEMAIS)
+    corpo = bytes(acumulado)
+
+    if not _assinatura_do_github_confere(corpo, request.headers.get("x-hub-signature-256"), segredo):
+        logger.warning("[Deploy webhook] Assinatura inválida: aviso recusado.")
+        raise HTTPException(status_code=401, detail=MOTIVO_ASSINATURA_INVALIDA)
+
+    try:
+        payload = json.loads(corpo)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Payload JSON inválido")
+
+    aviso = _aviso_de_deploy(payload)
+    if aviso is None:
+        raise HTTPException(status_code=422, detail=MOTIVO_AVISO_DE_DEPLOY_INVALIDO)
+    versao, data, issues = aviso
+
+    resultado = await run_in_threadpool(
+        tecnologia_sincronizacao.marcar_em_producao, supabase, versao=versao, data=data, issues=issues
+    )
+    logger.info(
+        "[Deploy webhook] %s: %s Demanda(s) em produção, %s falha(s).",
+        versao,
+        resultado["marcadas"],
+        resultado["falhas"],
+    )
+    return {"recebido": True, "versao": versao, **resultado}
 
 
 # ─── Webhook do Resend: e-mail recebido em ouvidoria@ (issue #648, ADR 0051) ──

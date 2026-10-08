@@ -1,5 +1,6 @@
 ---
-status: accepted
+status: superseded
+superseded_by: 0068
 ---
 
 # O fluxo de trabalho é exportável por um roteiro versionado no repositório, não por prompt solto

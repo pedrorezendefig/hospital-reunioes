@@ -1,7 +1,8 @@
 ---
-status: accepted
+status: superseded
 amends: 0022, 0057, 0061
-amended_by: 0064
+amended_by: 0064, 0065
+superseded_by: 0068
 ---
 
 # Hospital OS lê o GitHub ao vivo; o rabo grava só a verdade do deploy
@@ -26,9 +27,9 @@ Decisão do Pedro (05/out/2026, grilling). O painel local `tools/workflow-dashbo
 
 8. **Navegação interna por URL.** Aba, item e filtros vivem no hash (`#issues/930`, `#prs/930`, `#producao/v0.161.0`, `#issues?resp=...&fase=...`). Chip de issue, PR ou versão abre o card certo na aba certa; o GitHub é o link secundário `↗` em todo card. Produção lista versões; cada versão expande PRs, issues, migration, health e build, e cada card de issue ou PR mostra a versão em que subiu como chip de volta.
 
-9. **O rabo grava só `history.json` e `state.json`.** É a verdade que o GitHub não tem (health, duração do build, migration aplicada, env, rollback). O PR de docs por lote continua, com dois JSONs e sem script rodando antes. `history.json` perde o teto de 50 (`HISTORY_MAX`) e guarda tudo. `CHANGELOG.md` é apagado: a timeline é render do `history.json` no Hospital OS, e `CLAUDE.md`, `/ask-pedro` e as skills param de citá-lo.
+9. **O rabo grava só `history.json` e `state.json`.** É a verdade que o GitHub não tem (health, duração do build, migration aplicada, env, rollback). O PR de docs por lote continua, com dois JSONs e sem script rodando antes. `history.json` perde o teto de 50 (`HISTORY_MAX`) e guarda tudo. `CHANGELOG.md` é apagado: a timeline é render do `history.json` no Hospital OS, e `CLAUDE.md`, `/ask-pedro` e as skills param de citá-lo. *Emendada pela ADR 0064 (decisão 6b; issue #1000): o PR de docs sai. O rabo monta a entrada nova do `history.json` e o `state.json` e dispara a Action da decisão 10 na `main` por `workflow_dispatch`, com os dois no input `registro`; ela os grava na `main` pela deploy key (ADR 0065), conferidos contra o input, no mesmo run do snapshot e do draft. O rabo espera a entrada no `history.json` da `main`.*
 
-10. **Snapshot e draft do manual saem do rabo para uma Action no push da `main`.** A Action roda o `snapshot.py` (ambiente completo, sem o modo parcial do macOS) e o `tirar_draft_manual.py`, e commita direto na `main` com bypass do ruleset **só para `github-actions[bot]`**. Ela dispara no merge do PR de docs, quando o `history.json` com a versão nova já está na `main`, então o fato que o draft precisa (versão em produção) existe no momento certo. Push pelo `GITHUB_TOKEN` não redispara workflow: sem loop.
+10. **Snapshot e draft do manual saem do rabo para uma Action no push da `main`.** A Action roda o `snapshot.py` (ambiente completo, sem o modo parcial do macOS) e o `tirar_draft_manual.py`, e commita direto na `main` com bypass do ruleset **só para `github-actions[bot]`**. Ela dispara no merge do PR de docs, quando o `history.json` com a versão nova já está na `main`, então o fato que o draft precisa (versão em produção) existe no momento certo. Push pelo `GITHUB_TOKEN` não redispara workflow: sem loop. *Emendada pela ADR 0065: o bypass do `github-actions[bot]` valia para qualquer workflow de qualquer branch; o ator passa a ser uma deploy key, usada só no job da Action que não instala nada.* *Emendada também pela ADR 0064 (decisão 6b): o run que traz a versão nova ao `history.json` é o que o rabo dispara por `workflow_dispatch` com o registro, e não o merge de um PR de docs; o `history.json` e o `state.json` entram no `paths-ignore` do push, junto com o resto do que a Action escreve.*
 
 ## Emendas
 
@@ -53,3 +54,19 @@ Decisão do Pedro (05/out/2026, grilling). O painel local `tools/workflow-dashbo
 - Os testes de `tools/workflow-dashboard/tests/` que cobrem Plano, Pendências e o visor por responsável saem com o código.
 - O `lint-adr` e o grep de travessão do CI deixam de ter o CHANGELOG no escopo.
 - Quem roda o rabo deixa de precisar de venv, WeasyPrint e `DYLD` locais para o snapshot: a Action tem o ambiente.
+
+## Emenda de 06/10/2026: responsável é só quem assumiu (issue #942)
+
+A triagem do PRD #938 deixou em aberto qual regra de responsável vale no Hospital OS: a da decisão 5 desta ADR ("ninguém assumiu" = sem assignee) ou a da emenda de 05/10/2026 da ADR 0061 (sem ninguém designado, conta quem criou a issue, PR #930). O Pedro decidiu na triagem da #942 (comentário de 06/10/2026 na issue).
+
+**Decisão:** no painel, responsável é só quem está designado (assignee). O filtro de responsável, a cor da pessoa nos nós das ondas e nas raias da aba PRs e o "ninguém assumiu" leem só o assignee; issue sem assignee é "ninguém assumiu", tenha o autor que tiver. O autor pode continuar no card como informação (`✎ criada por fulano`), sem contar como responsável em lugar nenhum.
+
+Revoga a emenda de 05/10/2026 da ADR 0061 ("responsável cai em quem criou"). O visor da pessoa que separava assumidas de só criadas já tinha saído com a decisão 5 desta ADR.
+
+> **Desfeita no filtro** pela issue #1039 (decisão do Pedro de 06/10/2026, registrada no PR, ADR 0068): o chip da pessoa volta a trazer também as issues que ela criou e que ninguém assumiu, com a marca `✎ criou` no card, e o funil filtrado conta igual. Quem assumiu manda; "ninguém assumiu" segue = sem assignee; a cor dos nós das ondas e as raias da aba PRs continuam só pelo assignee.
+>
+> **Ampliada** em 06/10/2026 (decisão do Pedro, registrada no PR): a pessoa tem também o que criou e outro assumiu, e o funil conta só issues abertas (o pendente), com um card grande do total e os cards das fases somando ele. A decisão 5 muda junto: os filtros viram dropdowns do próprio painel no topo (o motivo de tirar o `<select>`, popup pintado pelo sistema, continua valendo) e o chip `ready-for-human` sai, porque o card Humana é a mesma fila.
+>
+> **Ampliação recusada** no mesmo dia (06/10/2026, grilling do Pedro): a issue que a pessoa criou e **outro assumiu** sai do filtro dela (o PRD #646, criado pelo Pedro e assumido pelo Lucas, aparecia no pendente do Pedro). Vale a regra da #1039 e só ela: quem assumiu manda; o autor conta só quando ninguém assumiu, com a marca `✎ criou`. O card grande "pendente para fulano" e o funil filtrado seguem a mesma regra. Três regras testadas num dia; esta fecha o vai-e-vem.
+>
+> **No mesmo grilling (06/10/2026), decisões 3 e 7 mudam de desenho:** (a) o desenho das ondas vira o **fluxo do PRD**: uma linha por fatia (bolinha na cor de quem assumiu, borda na cor da fase), seta para o PR dela com a borda na cor da fase do PR, e a versão quando está no ar; as ondas viram faixas, e o `blocked_by` aberto é a seta no corredor da esquerda, da bloqueadora para a bloqueada. Motivo: colunas de nós cheios na cor da pessoa viravam uma pilha de caixas quando o PRD não tinha dependência, e a ligação issue → PR → produção não aparecia em lugar nenhum. (b) Na aba PRs, a coluna Em produção fica compacta (uma linha por PR) porque é histórico e sempre a mais cheia; o filtro de pessoa aceita várias, uma raia para cada. (c) Nos dois lugares, os filtros ganham o botão `limpar`, que só existe com filtro fora do padrão, e cada opção dos dropdowns da aba Issues mostra quantas issues traria com os outros filtros como estão (faceta).

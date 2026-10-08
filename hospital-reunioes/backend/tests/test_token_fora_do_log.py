@@ -369,7 +369,7 @@ class TestOutrasPortasDoMesmoStdout:
     @staticmethod
     def _cmd_do_dockerfile() -> list[str]:
         """O `CMD [` em forma exec, não o `CMD curl` do HEALTHCHECK."""
-        for linha in _DOCKERFILE.read_text().splitlines():
+        for linha in _DOCKERFILE.read_text(encoding="utf-8").splitlines():
             if linha.strip().startswith("CMD ["):
                 return json.loads(linha.strip().removeprefix("CMD").strip())
         raise AssertionError("Dockerfile sem linha CMD em forma exec")
@@ -390,7 +390,7 @@ class TestOutrasPortasDoMesmoStdout:
         """O `command:` do compose sobrescreve o CMD do Dockerfile (por causa
         do --reload): sem repetir a flag ali, o token volta ao log do dev, que é
         onde se testa com caso de verdade."""
-        compose = (_DOCKERFILE.parents[1] / "docker-compose.yml").read_text()
+        compose = (_DOCKERFILE.parents[1] / "docker-compose.yml").read_text(encoding="utf-8")
         linha = next(ln for ln in compose.splitlines() if "uvicorn app.main:app" in ln)
 
         assert "--no-access-log" in linha
@@ -524,7 +524,7 @@ class TestVarreduraDeSegredoNoPath:
         escondidas = [
             f"{arquivo.name}:{numero}"
             for arquivo in fonte
-            for numero, linha in enumerate(arquivo.read_text().splitlines(), start=1)
+            for numero, linha in enumerate(arquivo.read_text(encoding="utf-8").splitlines(), start=1)
             if "include_in_schema=False" in linha.replace(" ", "")
         ]
 

@@ -63,7 +63,7 @@ Show counts and a one-line summary per issue. Let the maintainer pick.
 
 ## Reviewer comment loop (`revisor-comentou`)
 
-The hygiene Action labels any issue where a login from `REVIEWER_LOGINS` commented (ADR 0020, decision 5). The Action only signals — judging and acting happens here, with the maintainer in the loop. What triggers the loop is **the comment and the context it adds**, not who left it; who counts as reviewer is configuration (the `REVIEWER_LOGINS` repository variable).
+The hygiene Action labels any issue where a login from `REVIEWER_LOGINS` commented (ADR 0068). The Action only signals; judging and acting happens here, with the maintainer in the loop. What triggers the loop is **the comment and the context it adds**, not who left it; who counts as reviewer is configuration (the `REVIEWER_LOGINS` repository variable).
 
 For each labeled issue:
 
@@ -71,10 +71,10 @@ For each labeled issue:
 2. **Classify:** change request vs. praise/observation.
 3. **Act, with maintainer approval:**
    - **Open issue + change request** — propose editing the user story/acceptance criteria to absorb the context; apply once approved.
-   - **Closed issue + change request** — reopen, add the new criterion **unchecked** while keeping delivered ones checked (honest count, e.g. 6/7), and return it to the flow (`ready-for-agent` or `ready-for-human`). The redo is a follow-up ship — reopening never undoes the deploy (ADR 0020, decision 4).
+   - **Closed issue + change request**: reopen, add the new criterion **unchecked** while keeping delivered ones checked (honest count, e.g. 6/7), and return it to the flow (`ready-for-agent` or `ready-for-human`). The redo is a follow-up ship; reopening never undoes the deploy (ADR 0068).
    - **Praise/observation** — no reopening, no edits.
 
-   When editing a body, keep the **Para o diretor** block at the top intact (ADR 0020, decision 7: "não remova ao editar corpos").
+   When editing a body, keep the **Para o diretor** block at the top intact (ADR 0068).
 4. **Always finish by removing `revisor-comentou`** — the label means "curation pending", and curation just happened.
 
 Reply to the reviewer summarizing what was done with their comment. The reply carries the triage disclaimer (see top), which also keeps the Action from re-flagging it.
@@ -98,6 +98,15 @@ Reply to the reviewer summarizing what was done with their comment. The reply ca
      - **Rejected (bug)**: polite explanation, then close.
      - **Rejected (enhancement)**: write to `.out-of-scope/`, link to it from a comment, then close ([OUT-OF-SCOPE.md](OUT-OF-SCOPE.md)).
    - `needs-triage` — apply the role. Optional comment if there's partial progress.
+
+## Issue born from a Demanda (aba Tecnologia)
+
+An issue whose body carries `<!-- demanda-vitta id="..." -->` was created by the app's **Levar para desenvolvimento** button (ADR 0054). Treat it differently in two places:
+
+- **Context.** The "Para o diretor" block is the director's own words, already PII-filtered (ADR 0060); the Origem line links to the Demanda in the app, where the full Conversa lives. Say upfront "veio da Demanda, responsável @login" so the maintainer knows who owns it on the app side. Reply to the director through the Demanda's Conversa, never by GitHub comment (comments don't flow back to the app).
+- **Assignee.** The issue is born assigned to the Demanda's responsável. In `needs-triage` that assignee is **responsibility, not claim** (same reading as the PRD owner, ADR 0068). When you move it to `ready-for-agent`, **remove the assignee** (`gh issue edit <N> --remove-assignee <login>`): the pool is `no:assignee`, and a kept assignee hides the issue from `/pegar-issue` and the `/onda`. `ready-for-human` keeps it.
+
+The port (A/B/C) is still the triage's call: the button only opens the door.
 
 ## Quick state override
 

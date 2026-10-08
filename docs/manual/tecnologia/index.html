@@ -6,7 +6,7 @@
 <title>Tecnologia · Manual do Quadro de Demandas</title>
 <meta name="description" content="Manual da aba Tecnologia da Plataforma de Gestão do Hospital São Matheus: como registrar um pedido, como ele vira desenvolvimento, como o app acompanha sozinho a Etapa e o que muda, e como a entrega volta para a mão de quem pediu.">
 <meta name="manual-gerado-em" content="2026-09-11">
-<meta name="manual-versao-do-app" content="0.142.0">
+<meta name="manual-versao-do-app" content="0.169.0">
 <style>
   @font-face{font-family:"HP Simplified";src:url("HPSimplified_Rg.ttf") format("truetype");font-weight:400;font-display:swap}
   :root{
@@ -164,22 +164,14 @@
   .e-pla{background:#E0E7FF;color:#3730A3}
   .e-dev{background:#DBEAFE;color:#1D4ED8}
   .e-ent{background:#DCFCE7;color:#166534}
+  .e-pro{background:#BBF7D0;color:#14532D}
   .e-nao{background:#F1F5F9;color:#64748B;text-decoration:line-through}
   .tipos{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin:14px 0 18px}
   .tipo{display:flex;gap:12px;background:#fff;border:1px solid var(--color-border);border-radius:var(--radius-2xl);padding:12px 14px;box-shadow:var(--shadow-premium)}
   .tipo .ic{width:34px;height:34px;border-radius:var(--radius-xl);background:var(--color-surface-2);display:flex;align-items:center;justify-content:center;font-size:17px;flex-shrink:0}
   .tipo b{display:block;font-size:15px}
   .tipo span{font-size:13.5px;color:var(--color-text-secondary)}
-  .mock{background:var(--color-surface-2);border:1px solid var(--color-border);border-radius:var(--radius-3xl);padding:16px;margin:18px 0;box-shadow:var(--shadow-premium)}
-  .mock-t{font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--color-text-secondary);font-weight:700;margin:0 0 12px}
-  .colunas{display:grid;grid-template-columns:repeat(5,1fr);gap:8px}
-  .col{background:#fff;border:1px solid var(--color-border);border-radius:var(--radius-2xl);padding:10px 8px;min-height:96px}
-  .col h5{margin:0 0 8px;font-size:12px;text-transform:uppercase;letter-spacing:.06em;color:var(--color-text-secondary)}
-  .mini{background:var(--color-surface-2);border:1px solid var(--color-border);border-radius:var(--radius-xl);padding:7px 8px;font-size:12px;margin-bottom:6px;line-height:1.35}
-  .mini b{display:block;font-size:12.5px}
-  .mini i{font-style:normal;color:var(--color-text-secondary);font-size:11.5px}
   .cardmock{background:#fff;border:1px solid var(--color-border);border-radius:var(--radius-2xl);padding:14px 16px;max-width:460px;box-shadow:var(--shadow-premium)}
-  .cardmock .linha1{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--color-text-secondary)}
   .cardmock h5{margin:6px 0 8px;font-size:16px}
   .cardmock .pes{display:flex;gap:8px;flex-wrap:wrap;font-size:12px;color:var(--color-text-secondary)}
   .fio{display:grid;gap:8px;margin:14px 0}
@@ -193,7 +185,7 @@
   .dois .lado ul{margin:0;padding-left:18px;font-size:14px;color:var(--color-text-secondary)}
   .naovai{border-left:3px solid #B3261E;background:#FDF2F2;padding:12px 16px;border-radius:0 var(--radius-xl) var(--radius-xl) 0;margin:16px 0;max-width:76ch}
   .naovai p{margin:0}
-  @media (max-width:1040px){.tipos{grid-template-columns:1fr}.colunas{grid-template-columns:1fr 1fr}.dois{grid-template-columns:1fr}}
+  @media (max-width:1040px){.tipos{grid-template-columns:1fr}.dois{grid-template-columns:1fr}}
 </style>
 </head>
 <body>
@@ -203,7 +195,7 @@
     <img class="top-logo" src="logo-hsm.png" alt="Hospital São Matheus">
     <div class="top-t">Plataforma de Gestão<small>Manual do módulo · Tecnologia</small></div>
     <button class="menu-btn" id="menuBtn" type="button">Sumário</button>
-    <div class="top-s"><span class="pulse"></span> app v0.142.0 · 17/09/2026</div>
+    <div class="top-s"><span class="pulse"></span> app v0.169.0 · 07/10/2026</div>
   </div>
 </header>
 
@@ -215,17 +207,17 @@
   <a href="#onde"><span class="n">1</span>Onde fica e quem entra</a>
   <div class="sub"><a href="#produtos">Os Produtos e os donos</a><a href="#separacao">Nada disso toca as Pendências</a></div>
   <a href="#pedido"><span class="n">2</span>Registrar o pedido</a>
-  <div class="sub"><a href="#assistente">Conversar com o assistente</a><a href="#tipos">Os sete tipos</a><a href="#prioridade">Prioridade, prazo e idade</a></div>
-  <a href="#quadro"><span class="n">3</span>O Quadro e o movimento</a>
+  <div class="sub"><a href="#assistente">Conversar com o assistente</a><a href="#anexos">Os prints anexados</a><a href="#tipos">Os sete tipos</a><a href="#prioridade">Prioridade, prazo e idade</a></div>
+  <a href="#quadro"><span class="n">3</span>O Quadro e o card</a>
   <a href="#conversa"><span class="n">4</span>A Conversa dentro do card</a>
   <div class="sub"><a href="#mencao">A @menção e os dez minutos</a><a href="#copiar">Copiar para IA e Copiar link</a></div>
   <a href="#desenvolvimento"><span class="n">5</span>Do pedido ao desenvolvimento</a>
   <div class="sub"><a href="#vincular">Vincular ou levar</a><a href="#publico">O que vai para o repositório público</a></div>
   <a href="#etapa"><span class="n">6</span>A Etapa e o "O que muda"</a>
-  <div class="sub"><a href="#seisetapas">As seis Etapas</a><a href="#sincronizacao">Como o app fica sabendo</a><a href="#oquemuda">O texto que o diretor lê</a></div>
+  <div class="sub"><a href="#seisetapas">As sete Etapas</a><a href="#sincronizacao">Como o app fica sabendo</a><a href="#oquemuda">O texto que o diretor lê</a></div>
   <a href="#entrega"><span class="n">7</span>A entrega volta para quem pediu</a>
   <div class="sub"><a href="#loop">Quando não está bom</a></div>
-  <a href="#avisos"><span class="n">8</span>Minha vez, Histórico e os e-mails</a>
+  <a href="#avisos"><span class="n">8</span>O Painel e os e-mails</a>
   <a href="#limites"><span class="n">9</span>Onde o Quadro para, hoje</a>
   <a href="#videos"><span class="n">+</span>Todos os vídeos</a>
 </nav>
@@ -235,7 +227,7 @@
 
 <div class="hero" id="visao">
   <div class="eyebrow">Hospital São Matheus · Plataforma de Gestão</div>
-  <h1>Todo pedido sobre os sistemas <span class="hi">tem dono, coluna e resposta guardada</span></h1>
+  <h1>Todo pedido sobre os sistemas <span class="hi">tem dono, raia e resposta guardada</span></h1>
   <p class="dek">Este manual explica a aba Tecnologia do começo ao fim: como um pedido nasce, como ele vira desenvolvimento de verdade, como o app acompanha sozinho o que está sendo feito e como a entrega volta para a mão de quem pediu. Ele tem duas trilhas, marcadas em cada capítulo: a de quem pede e decide, e a de quem leva para o desenvolvimento.</p>
   <div class="trilhas">
     <span class="trilha dir">Trilha de quem pede e decide</span>
@@ -243,13 +235,13 @@
   </div>
   <div class="stamp">
     <span>Feito para <b>as cinco pessoas com acesso</b></span>
-    <span>App na versão <b>0.142.0</b></span>
+    <span>App na versão <b>0.169.0</b></span>
     <span>Leitura de <b>20 minutos</b></span>
     <span>Com <b>demonstrações em vídeo</b></span>
   </div>
   <div class="kpis">
     <div class="kpi"><b>7</b><span>tipos de pedido, lista fechada</span></div>
-    <div class="kpi"><b>6</b><span>Etapas lidas do desenvolvimento</span></div>
+    <div class="kpi"><b>7</b><span>Etapas lidas do desenvolvimento</span></div>
     <div class="kpi"><b>3</b><span>e-mails, e só eles</span></div>
     <div class="kpi"><b>0</b><span>pedidos que morrem no WhatsApp</span></div>
   </div>
@@ -267,15 +259,15 @@
     </div>
     <div class="card">
       <h4>Produto</h4>
-      <p>Qual sistema o pedido toca: Ana, Integração Ana x MV, Reuniões, Ouvidoria, POPs, Site, Infra. Cada Produto tem um dono do lado da Vitta, e é dele que a Demanda nasce.</p>
+      <p>Qual sistema o pedido toca: Ana, Integração Ana x MV, Reuniões, Ouvidoria, POPs, Site, Infra, Central de Comando. Cada Produto tem um dono do lado da Vitta, e é dele que a Demanda nasce.</p>
     </div>
     <div class="card">
-      <h4>Coluna</h4>
-      <p>Onde a Demanda está no Quadro: <b>Nova</b>, <b>Em andamento</b>, <b>Aguardando</b>, <b>Concluída</b> ou <b>Cancelada</b>. É o estado do pedido entre as pessoas, e quem move é gente.</p>
+      <h4>Raia</h4>
+      <p>Onde a Demanda aberta está no Quadro: <b>Nova</b>, <b>Em andamento</b> ou <b>Aguardando</b>. Quando o assunto acaba, ela é <b>Concluída</b> ou <b>Cancelada</b> e sai do Quadro para o Histórico do Painel. É o estado do pedido entre as pessoas, e quem move é gente.</p>
     </div>
     <div class="card">
       <h4>Etapa</h4>
-      <p>Em que pé está o desenvolvimento daquele pedido: Registrada, Em análise, Planejada, Em desenvolvimento, Entregue, Não será feita. Ninguém digita a Etapa. Ela é lida do desenvolvimento, sozinha, e aparece como um selo no card.</p>
+      <p>Em que pé está o desenvolvimento daquele pedido: Registrada, Em análise, Planejada, Em desenvolvimento, Entregue, Em produção, Não será feita. Ninguém digita a Etapa. Ela é lida do desenvolvimento, sozinha, e aparece como um selo no card.</p>
     </div>
     <div class="card">
       <h4>Vínculo</h4>
@@ -288,7 +280,7 @@
   </div>
 
   <div class="note">
-    <p><b>Coluna e Etapa são dois eixos diferentes, e isso é de propósito.</b> A coluna diz o que as pessoas estão fazendo com o pedido; a Etapa diz o que o desenvolvimento fez com ele. Uma Demanda pode estar em <b>Aguardando</b> com Etapa <b>Em desenvolvimento</b>: a bola não está com ninguém no app, porque o trabalho está acontecendo do outro lado.</p>
+    <p><b>Raia e Etapa são dois eixos diferentes, e isso é de propósito.</b> A raia diz o que as pessoas estão fazendo com o pedido; a Etapa diz o que o desenvolvimento fez com ele. Uma Demanda pode estar em <b>Aguardando</b> com Etapa <b>Em desenvolvimento</b>: a bola não está com ninguém no app, porque o trabalho está acontecendo do outro lado.</p>
   </div>
 </section>
 
@@ -301,13 +293,13 @@
     <div class="step">
       <div>
         <b>O pedido é registrado <span class="trilha dir">quem pede</span></b>
-        <p>Alguém abre a Demanda com título, tipo, Produto, descrição e prioridade. Ela nasce na coluna Nova, já na mão do dono do Produto, que recebe o e-mail "Demanda na sua mão".</p>
+        <p>Alguém abre a Demanda com título, tipo, Produto, descrição, prioridade e, se ajudar, prints da tela. Ela nasce na raia Nova, já na mão do dono do Produto, que recebe o e-mail "Demanda na sua mão".</p>
       </div>
     </div>
     <div class="step">
       <div>
         <b>A conversa acontece dentro do card <span class="trilha dir">quem pede</span><span class="trilha vitta">quem desenvolve</span></b>
-        <p>Pergunta, resposta, @menção. Cada movimento de coluna e troca de responsável vira uma linha automática no mesmo fio. Nada vai para o WhatsApp.</p>
+        <p>Pergunta, resposta, @menção, print. Cada movimento de raia e troca de responsável vira uma linha automática no mesmo fio. Nada vai para o WhatsApp.</p>
       </div>
     </div>
     <div class="step">
@@ -325,13 +317,13 @@
     <div class="step">
       <div>
         <b>A entrega devolve a bola <span class="trilha dir">quem pede</span></b>
-        <p>Quando a Etapa chega a Entregue, a Demanda volta sozinha para Aguardando, com quem pediu como responsável, e sai o e-mail com o recado "Entregue, confira e conclua".</p>
+        <p>Quando a entrega chega ao aplicativo, a Etapa vira <b>Em produção</b> e a Demanda volta sozinha para Aguardando, com quem pediu como responsável. Sai o e-mail com o recado "Entregue, confira e conclua", e ela aparece no <b>Com você</b> do Painel.</p>
       </div>
     </div>
     <div class="step">
       <div>
         <b>Quem pediu decide o fim <span class="trilha dir">quem pede</span></b>
-        <p>Se está bom, move para Concluída. Se não está, responde na Conversa: essa resposta chega ao desenvolvimento e reabre o trabalho, sem precisar abrir pedido novo.</p>
+        <p>Se está bom, clica em <b>Concluir</b>. Se não está, responde na Conversa: essa resposta chega ao desenvolvimento e reabre o trabalho, sem precisar abrir pedido novo.</p>
       </div>
     </div>
   </div>
@@ -357,14 +349,17 @@
     </div>
     <div class="step">
       <div>
-        <b>Quatro lugares dentro da aba</b>
-        <p><b>Quadro</b> (as cinco colunas), <b>Minha vez</b> (o que espera por você), <b>Histórico</b> (concluídas e canceladas, com busca) e <b>Produtos</b> (a lista de sistemas e seus donos).</p>
+        <b>Duas abas e uma engrenagem</b>
+        <p><b>Quadro</b> (as três raias vivas) e <b>Painel</b> (o que está com você, as entregas e o Histórico). A engrenagem ao lado de <b>Nova Demanda</b> abre a tela <b>Produtos</b>, com a lista de sistemas e seus donos.</p>
       </div>
     </div>
   </div>
 
   <h3 id="produtos">Antes do primeiro uso: dono de cada Produto</h3>
-  <p>A lista de Produtos já nasce preenchida com <b>Ana</b>, <b>Integração Ana x MV</b>, <b>Reuniões</b>, <b>Ouvidoria</b>, <b>POPs</b>, <b>Site</b> e <b>Infra</b>. Ela é sua: dá para criar, renomear e desativar. Duas regras sustentam o resto do fluxo:</p>
+  <p>A lista de Produtos já nasce preenchida com <b>Ana</b>, <b>Integração Ana x MV</b>, <b>Reuniões</b>, <b>Ouvidoria</b>, <b>POPs</b>, <b>Site</b>, <b>Infra</b> e <b>Central de Comando</b>. Ela mora numa tela própria, fora do Quadro: a engrenagem ao lado de <b>Nova Demanda</b> abre a tela <b>Produtos</b>, onde dá para criar, renomear, trocar o dono e desativar. A seta no alto volta ao Quadro. Duas regras sustentam o resto do fluxo:</p>
+  <figure>
+    <img src="img/produtos.png" alt="A tela Produtos: o campo Nome do Produto e o dono do Produto novo no alto, e embaixo a lista dos oito Produtos, cada um com o selo Ativo, o dono escolhido numa lista, o lápis de renomear e o botão de desativar.">
+  </figure>
   <ul>
     <li><b>Produto ativo sem dono não existe.</b> A tela recusa. Sem dono, a Demanda nova nasceria sem ninguém na mão.</li>
     <li><b>Desativar não apaga nada.</b> As Demandas que já existiam naquele Produto continuam inteiras no Histórico. Desativar só tira o Produto da lista de escolha.</li>
@@ -377,14 +372,13 @@
 <section class="ch" id="pedido">
   <div class="mark">Capítulo 2 <span class="trilha dir">quem pede</span></div>
   <h2>Registrar o pedido leva menos de um minuto</h2>
-  <p class="lede">Título, tipo, Produto, descrição e prioridade. A Demanda nasce na coluna <b>Nova</b>, já atribuída ao dono do Produto, e ele recebe o e-mail na hora. Ninguém precisa escolher responsável na criação.</p>
+  <p class="lede">Título, tipo, Produto, descrição e prioridade, mais os prints que ajudarem. A Demanda nasce na raia <b>Nova</b>, já atribuída ao dono do Produto, e ele recebe o e-mail na hora. Ninguém precisa escolher responsável na criação.</p>
 
   <div class="cardmock">
-    <div class="linha1"><span class="etapa e-reg">Nova</span> <span>Ana</span> <span>·</span> <span>há 3 dias</span></div>
     <h5>Decidir em quantos minutos sem resposta a Ana encerra a conversa</h5>
-    <div class="pes"><span><b>Tipo</b> Decisão</span> <span><b>Responsável</b> Diretor do Hospital</span> <span><b>Prioridade</b> Alta</span></div>
+    <div class="pes"><span>Ana</span> <span>·</span> <span>Diretor do Hospital</span></div>
   </div>
-  <p style="font-size:14px;color:var(--color-text-secondary);max-width:76ch">O card mostra, sem abrir: o símbolo do tipo, o título, o Produto, o responsável, a prioridade e a idade.</p>
+  <p style="font-size:14px;color:var(--color-text-secondary);max-width:76ch">O card fechado é curto: o símbolo do tipo, o título e, embaixo, o Produto e o responsável. O resto só aparece quando é exceção (capítulo 3).</p>
 
   <h3 id="assistente">Conversar com o assistente, em vez de preencher</h3>
   <p class="lede"><b>Nova Demanda</b> abre uma conversa, e não o formulário. Você conta o que precisa do jeito que vier, escrevendo, falando, anexando um áudio ou um documento, ou mandando um print da tela, e o <b>Rascunho da Demanda</b> se monta ao lado, à vista. Nada é criado enquanto você não clicar em <b>Criar Demanda</b>. Quem prefere o formulário de sempre tem o atalho "prefiro preencher à mão" no alto da tela.</p>
@@ -404,13 +398,36 @@
     </div>
     <div class="card">
       <h4>Avisa quando o assunto já existe</h4>
-      <p>Ele enxerga as Demandas abertas do Quadro. Quando o seu pedido é o mesmo assunto de uma delas, a faixa aparece acima do rascunho com o título, a coluna e o responsável: <b>Abrir essa</b> leva ao card, <b>Ignorar</b> some com o aviso. Criar assim mesmo continua liberado.</p>
+      <p>Ele enxerga as Demandas abertas do Quadro. Quando o seu pedido é o mesmo assunto de uma delas, a faixa aparece acima do rascunho com o título, a raia e o responsável: <b>Abrir essa</b> leva ao card, <b>Ignorar</b> some com o aviso. Criar assim mesmo continua liberado.</p>
     </div>
   </div>
-  <p>Do Quadro ele só recebe o cabeçalho de cada Demanda aberta: título, tipo, Produto, coluna e Etapa. O nome do responsável não vai junto, embora a faixa mostre: quem aparece na tela é lido do Quadro na hora. A descrição e a Conversa de dentro dos cards também não vão, e as Demandas Concluídas e Canceladas não entram. O que você escreve na caixa é lido por uma inteligência artificial, como nas atas: evite dado de paciente.</p>
+  <p>Do Quadro ele só recebe o cabeçalho de cada Demanda aberta: título, tipo, Produto, raia e Etapa. O nome do responsável não vai junto, embora a faixa mostre: quem aparece na tela é lido do Quadro na hora. A descrição e a Conversa de dentro dos cards também não vão, e as Demandas Concluídas e Canceladas não entram. O que você escreve na caixa é lido por uma inteligência artificial, como nas atas: evite dado de paciente.</p>
+
+  <h3 id="anexos">Os prints anexados: até 10 por Demanda, só dentro do app</h3>
+  <p class="lede">Um print vale mais do que um parágrafo para quem vai corrigir. A Demanda guarda até <b>10 imagens</b> (PNG, JPG ou WEBP, até 5 MB cada), e elas aparecem no card aberto, em <b>Imagens</b>, com quem anexou e quando. Clicar na miniatura abre a imagem em tamanho real.</p>
+  <div class="grid3">
+    <div class="card">
+      <h4>No formulário</h4>
+      <p>O botão <b>Anexar prints (até 10)</b> fica embaixo da descrição. As imagens entram junto com a Demanda, no <b>Abrir Demanda</b>.</p>
+    </div>
+    <div class="card">
+      <h4>No assistente</h4>
+      <p>O print que você manda na conversa vira anexo quando você clica em <b>Criar Demanda</b>. Se não clicar, ele some com a conversa.</p>
+    </div>
+    <div class="card">
+      <h4>Na Conversa</h4>
+      <p>O botão de imagem ao lado de <b>Responder</b> manda um print junto da resposta. A imagem entra na lista do card e a resposta diz qual é.</p>
+    </div>
+  </div>
+  <figure>
+    <img src="img/card.png" alt="O card aberto de uma Demanda em Aguardando: título, descrição, O que muda, Tipo, Produto e Prioridade; embaixo, o bloco Imagens com a miniatura de um print, quem anexou e quando; depois o Responsável, os botões Em andamento, Concluir e Cancelar em Mover, e a Conversa com a linha Em produção na v0.167.0.">
+  </figure>
+  <div class="note warn">
+    <p><b>Os prints nunca saem do app, e são apagados quando a Demanda encerra.</b> Um print do hospital pode ter nome de paciente ou de colaborador, e a página pública do desenvolvimento só recebe a frase "Anexos: 2 imagens na Demanda"; quem desenvolve busca as imagens pelo app. Quando a Demanda é <b>Concluída</b> ou <b>Cancelada</b>, as imagens são apagadas e o card guarda só o registro (nome, quem, quando), marcado <b>apagado</b>. Enquanto a entrega está sendo conferida, a Demanda está aberta e o print continua lá.</p>
+  </div>
 
   <h3 id="tipos">Os sete tipos, e quando cada um é o certo</h3>
-  <p class="lede">A lista é fechada de propósito: sete tipos, cada um com o seu símbolo no card. Escolher o tipo certo é o que faz o filtro valer alguma coisa depois, e é o tipo que decide como o pedido entra no desenvolvimento (capítulo 5).</p>
+  <p class="lede">A lista é fechada de propósito: sete tipos, cada um com o seu símbolo no card. Escolher o tipo certo é o que faz o card dizer, à primeira vista, do que se trata, e é o tipo que decide como o pedido entra no desenvolvimento (capítulo 5).</p>
   <div class="tipos">
         <div class="tipo">
           <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v18"/><path d="m19 8 3 8a5 5 0 0 1-6 0zV7"/><path d="M3 7h1a17 17 0 0 0 8-2 17 17 0 0 0 8 2h1"/><path d="m5 8 3 8a5 5 0 0 1-6 0zV7"/><path d="M7 21h10"/></svg></div>
@@ -446,7 +463,7 @@
   <div class="grid3">
     <div class="card">
       <h4>Prioridade</h4>
-      <p>Três níveis: <b>Baixa</b>, <b>Normal</b> e <b>Alta</b>. Serve para quem pede dizer "essa primeiro". Ordena o Minha vez.</p>
+      <p>Três níveis: <b>Baixa</b>, <b>Normal</b> e <b>Alta</b>. Serve para quem pede dizer "essa primeiro". No card fechado, só a Alta aparece.</p>
     </div>
     <div class="card">
       <h4>Prazo</h4>
@@ -454,7 +471,7 @@
     </div>
     <div class="card">
       <h4>Idade</h4>
-      <p>Quantos dias a Demanda tem ("há 3 dias"). Fica vermelha a partir de <b>14 dias</b>. Um card pode estar velho sem estar atrasado.</p>
+      <p>Quantos dias a Demanda tem ("há 16 dias"). No card fechado ela só aparece quando já é vermelha, a partir de <b>14 dias</b>, ou com o prazo vencido. Um card pode estar velho sem estar atrasado.</p>
     </div>
   </div>
   <p>Título, descrição, tipo, Produto e prioridade podem ser editados depois de criada. Corrigir não exige cancelar e abrir de novo.</p>
@@ -462,46 +479,48 @@
 
 <section class="ch" id="quadro">
   <div class="mark">Capítulo 3</div>
-  <h2>O Quadro: as cinco colunas e o que pode ir para onde</h2>
-  <p class="lede">A coluna é o estado do pedido <b>entre as pessoas</b>. Quem move é gente, sempre, com uma exceção que o capítulo 7 explica.</p>
+  <h2>O Quadro: três raias vivas e o card enxuto</h2>
+  <p class="lede">A raia é o estado do pedido <b>entre as pessoas</b>. Quem move é gente, sempre, com uma exceção que o capítulo 7 explica. O Quadro mostra só o que está aberto, em largura cheia e sem filtros.</p>
 
-  <div class="mock">
-    <p class="mock-t">O Quadro</p>
-    <div class="colunas">
-      <div class="col"><h5>Nova</h5><div class="mini"><b>Encerramento da Ana</b><i>Decisão · Ana</i></div></div>
-      <div class="col"><h5>Em andamento</h5><div class="mini"><b>Erro ao anexar ata</b><i>Defeito · Reuniões</i></div></div>
-      <div class="col"><h5>Aguardando</h5><div class="mini"><b>Acesso ao MV</b><i>Terceiro · Integração</i></div></div>
-      <div class="col"><h5>Concluída</h5><div class="mini"><i>recolhida · 12</i></div></div>
-      <div class="col"><h5>Cancelada</h5><div class="mini"><i>recolhida · 3</i></div></div>
-    </div>
-  </div>
+  <figure>
+    <img src="img/quadro.png" alt="O Quadro da aba Tecnologia: as abas Quadro e Painel no alto, a engrenagem e o botão Nova Demanda à direita, e as três raias Nova, Em andamento e Aguardando com os cards. Cada card mostra o símbolo do tipo, o título, o Produto e o responsável; alguns mostram o selo da Etapa, a prioridade Alta ou a idade em vermelho.">
+  </figure>
 
   <div class="tbl"><table>
-    <tr><th>Coluna</th><th>O que significa</th></tr>
+    <tr><th>Raia ou botão</th><th>O que significa</th></tr>
     <tr><td class="k">Nova</td><td>Acabou de ser registrada. Ninguém pegou ainda.</td></tr>
     <tr><td class="k">Em andamento</td><td>Alguém está com ela na mão agora.</td></tr>
-    <tr><td class="k">Aguardando</td><td>Parada esperando alguém: uma decisão, um terceiro, a subida de uma versão.</td></tr>
-    <tr><td class="k">Concluída</td><td>Resolvida. Carimba a data e quem fechou.</td></tr>
-    <tr><td class="k">Cancelada</td><td>Não vai acontecer. É a saída sem apagar nada.</td></tr>
+    <tr><td class="k">Aguardando</td><td>A vez não é da Vitta: uma decisão do hospital, um terceiro, ou quem pediu conferindo uma entrega. O responsável diz com quem está.</td></tr>
+    <tr><td class="k">Concluir</td><td>Botão do card aberto, em <b>Mover</b>. Resolvida: carimba a data e quem fechou, e a Demanda vai para o Histórico do Painel.</td></tr>
+    <tr><td class="k">Cancelar</td><td>Botão do card aberto, em <b>Mover</b>. Não vai acontecer: é a saída sem apagar nada, e ela também vai para o Histórico.</td></tr>
   </table></div>
 
+  <h4>O card fechado mostra o essencial, e o resto só quando é exceção</h4>
   <ul>
-    <li>De <b>Nova</b> se vai para qualquer uma das outras quatro.</li>
+    <li>Sempre: o símbolo do tipo, o título, o Produto e o responsável.</li>
+    <li>O selo da <b>Etapa</b>, quando a Demanda está ligada ao desenvolvimento ("Em produção desde v0.167.0 · 3 de 3 partes").</li>
+    <li>A prioridade, só quando é <b>Alta</b>.</li>
+    <li>A idade, só quando já está vermelha ("há 16 dias"), e o prazo, só quando venceu.</li>
+  </ul>
+  <p>Mover, Concluir, Cancelar e trocar o responsável ficam no card aberto. Clique no card para abrir.</p>
+
+  <ul>
+    <li>De <b>Nova</b> se vai para Em andamento, Aguardando, Concluir ou Cancelar.</li>
     <li><b>Em andamento</b> e <b>Aguardando</b> trocam entre si nos dois sentidos, e as duas fecham em Concluída ou Cancelada.</li>
-    <li><b>Concluída</b> e <b>Cancelada</b> voltam para Em andamento: é o reabrir, para assunto que ressuscitou. Reabrir limpa os carimbos de quem fechou e quando.</li>
-    <li><b>Nada se apaga.</b> Não existe botão de excluir Demanda nem de excluir resposta. A saída é Cancelada, e ela continua no Histórico.</li>
+    <li>Uma Demanda encerrada volta para Em andamento pelo card aberto no Histórico: é o reabrir, para assunto que ressuscitou. Reabrir limpa os carimbos de quem fechou e quando.</li>
+    <li><b>Nada se apaga.</b> Não existe botão de excluir Demanda nem de excluir resposta. A saída é Cancelar, e ela continua no Histórico.</li>
   </ul>
 
   <div class="note">
-    <p><b>Arrastar ou clicar dá exatamente no mesmo.</b> Arrastar o card entre colunas e usar o botão Mover produzem o mesmo efeito, inclusive a linha automática na Conversa. Se duas pessoas moverem o mesmo card ao mesmo tempo, a segunda recebe uma recusa em vez de sobrescrever: vale o que já estava lá, basta recarregar e mover de novo.</p>
+    <p><b>Arrastar ou clicar dá exatamente no mesmo.</b> Arrastar o card entre raias e usar o botão Mover produzem o mesmo efeito, inclusive a linha automática na Conversa. Se duas pessoas moverem o mesmo card ao mesmo tempo, a segunda recebe uma recusa em vez de sobrescrever: vale o que já estava lá, basta recarregar e mover de novo.</p>
   </div>
 
 
   <div class="video-box">
     <video controls preload="metadata" src="video-quadro.mp4"></video>
-    <div class="video-meta"><b>O Quadro de Demandas</b> · 1 min 14 s · o pedido saindo do WhatsApp, os tipos, as colunas, a conversa no card e o Copiar para IA</div>
+    <div class="video-meta"><b>O Quadro de Demandas</b> · 1 min 14 s · o pedido saindo do WhatsApp, os tipos, a conversa no card e o Copiar para IA. Gravado antes do Quadro de três raias: as colunas de Concluída e Cancelada do vídeo hoje são os botões do card.</div>
   </div>
-  <p>Concluída e Cancelada nascem recolhidas, com o contador visível, para as colunas vivas terem espaço. O Quadro se pede de novo sozinho <b>a cada 30 segundos</b> e ao voltar o foco para a janela, então a resposta do outro lado aparece sem F5.</p>
+  <p>O Quadro se pede de novo sozinho <b>a cada 30 segundos</b> e ao voltar o foco para a janela, então a resposta do outro lado aparece sem F5.</p>
 </section>
 
 <section class="ch" id="conversa">
@@ -517,13 +536,13 @@
   </div>
 
   <h3 id="mencao">A @menção conta posição, não intenção</h3>
-  <p>Mencionar alguém com <b>@</b> escolhe entre as pessoas com acesso à aba. Uma Demanda entra no <b>Minha vez</b> de quem foi mencionado quando a última menção a ele ainda não tem resposta dele depois dela. A pessoa responde, e ela sai. Mencionar a si mesmo não cria vez.</p>
+  <p>Mencionar alguém com <b>@</b> escolhe entre as pessoas com acesso à aba. Uma Demanda entra no <b>Com você</b> do Painel de quem foi mencionado quando a última menção a ele ainda não tem resposta dele depois dela. A pessoa responde, e ela sai. Mencionar a si mesmo não cria vez.</p>
 
   <h4>Dez minutos para corrigir, contados no servidor</h4>
   <p>Você pode editar a sua própria resposta por alguns minutos depois de enviar, para consertar erro de digitação sem poluir o fio. O prazo corre no servidor, então ele passa mesmo com o card aberto na tela. Linha automática de movimento nunca é editável, e <b>resposta nenhuma é apagada</b>.</p>
 
   <div class="note warn">
-    <p><b>Corrigir para acrescentar um @ não manda e-mail.</b> A menção passa a valer no Minha vez de quem foi citado, mas o aviso não sai. Se você lembrou de chamar alguém depois de enviar, escreva uma resposta nova em vez de corrigir a anterior.</p>
+    <p><b>Corrigir para acrescentar um @ não manda e-mail.</b> A menção passa a valer no Com você de quem foi citado, mas o aviso não sai. Se você lembrou de chamar alguém depois de enviar, escreva uma resposta nova em vez de corrigir a anterior.</p>
   </div>
 
   <h3 id="copiar">Copiar para IA entrega o texto pronto</h3>
@@ -552,7 +571,7 @@ Conversa:
   <p>A conversa vai cercada porque o texto sai do app e vai para uma IA de fora: a cerca e o recuo das linhas de continuação garantem que nada escrito dentro dela possa se passar por instrução. Ficam de fora identificadores internos, estado, prioridade, prazo e responsável, que não ajudam quem está respondendo ao pedido.</p>
 
   <h4>Copiar link, para o WhatsApp que sobrou</h4>
-  <p>Quando é preciso puxar alguém para fora do app, o botão copia o endereço da Demanda. Quem recebe cai no card já aberto, inclusive se ela estiver concluída. Se o filtro atual esconder aquela Demanda, a tela avisa em vez de ficar em branco, e o botão de limpar filtros está ali.</p>
+  <p>Quando é preciso puxar alguém para fora do app, o botão copia o endereço da Demanda. Quem recebe cai no card já aberto. Se ela já tiver sido concluída ou cancelada, o Quadro avisa que ela está no Painel, no bloco Histórico, em vez de ficar em branco.</p>
 </section>
 
 <section class="ch" id="desenvolvimento">
@@ -668,16 +687,17 @@ Abrir a Demanda: https://app.hospitalsaomatheus.cloud/admin/tecnologia?demanda=.
 <section class="ch" id="etapa">
   <div class="mark">Capítulo 6</div>
   <h2>A Etapa e o "O que muda" são lidos, nunca digitados</h2>
-  <p class="lede">A <b>Etapa</b> é o segundo eixo do card, ao lado da coluna. Ela não tem campo, não tem botão e ninguém a edita: o app a deriva do desenvolvimento e a mostra como um selo. Demanda sem Vínculo não tem selo, e a ausência do selo é a Etapa <b>Registrada</b>.</p>
+  <p class="lede">A <b>Etapa</b> é o segundo eixo do card, ao lado da raia. Ela não tem campo, não tem botão e ninguém a edita: o app a deriva do desenvolvimento e a mostra como um selo. Demanda sem Vínculo não tem selo, e a ausência do selo é a Etapa <b>Registrada</b>.</p>
 
-  <h3 id="seisetapas">As seis Etapas, e de onde cada uma sai</h3>
+  <h3 id="seisetapas">As sete Etapas, e de onde cada uma sai</h3>
   <div class="tbl"><table>
     <tr><th>Selo</th><th>O que significa para quem pede</th><th>De onde o app tira isso</th></tr>
     <tr><td><span class="etapa e-reg">Registrada</span></td><td>O pedido está no Quadro, mas ainda não virou trabalho.</td><td>A Demanda não tem Vínculo.</td></tr>
     <tr><td><span class="etapa e-ana">Em análise</span></td><td>Alguém ainda vai olhar e decidir o que fazer.</td><td>Trabalho aberto em triagem, aguardando informação, ou sem marcação nenhuma.</td></tr>
     <tr><td><span class="etapa e-pla">Planejada</span></td><td>Já está na fila, com o plano escrito.</td><td>Trabalho pronto para começar, ou um PRD que já tem partes e nenhuma delas começou.</td></tr>
-    <tr><td><span class="etapa e-dev">Em desenvolvimento</span></td><td>Alguém está com a mão nisso agora.</td><td>A raiz ou qualquer uma das partes está marcada como em andamento.</td></tr>
-    <tr><td><span class="etapa e-ent">Entregue</span></td><td>Está pronto. Confira e conclua.</td><td>O trabalho foi fechado como concluído.</td></tr>
+    <tr><td><span class="etapa e-dev">Em desenvolvimento</span></td><td>Alguém está com a mão nisso agora.</td><td>A raiz ou qualquer uma das partes está marcada como em andamento, ou já existe código proposto para ela.</td></tr>
+    <tr><td><span class="etapa e-ent">Entregue</span></td><td>Está pronto, mas ainda não chegou ao app que você usa.</td><td>O trabalho foi fechado como concluído.</td></tr>
+    <tr><td><span class="etapa e-pro">Em produção</span></td><td>Já está no ar: confira e conclua. O selo diz desde qual versão.</td><td>A versão do app que levou aquele trabalho subiu.</td></tr>
     <tr><td><span class="etapa e-nao">Não será feita</span></td><td>A Vitta decidiu não fazer, e explica na Conversa.</td><td>O trabalho foi fechado como não planejado, ou marcado como recusado.</td></tr>
   </table></div>
 
@@ -689,7 +709,7 @@ Abrir a Demanda: https://app.hospitalsaomatheus.cloud/admin/tecnologia?demanda=.
   <p>Quando o trabalho é um PRD com partes, o card mostra quantas já foram entregues. O número vem do próprio GitHub, que é o que a tela dele mostra, com uma exceção: se alguma parte lida foi <b>recusada</b>, a conta passa a ser a do app. Sem isso o card diria "2 de 3 partes" logo acima de uma lista em que uma das partes aparece como "Não será feita".</p>
 
   <div class="note warn">
-    <p><b>Entregue significa "o trabalho foi fechado", e não "já está no ar".</b> O fechamento acontece no merge, e a subida da versão vem logo depois. É uma escolha consciente: prender a Etapa ao deploy acoplaria o card a um estado que ele não controla. Na prática a diferença é de minutos, mas ela existe.</p>
+    <p><b>Entregue significa "o trabalho foi fechado"; Em produção significa "já está no ar".</b> O fechamento acontece primeiro, e a subida da versão vem depois. Quando a versão sobe, o card passa de Entregue para <b>Em produção desde</b> aquela versão, e a Conversa ganha a linha "Em produção na" seguida da versão. É o Em produção que devolve a Demanda a quem pediu (capítulo 7).</p>
   </div>
 
   <h3 id="sincronizacao">Como o app fica sabendo, e com que atraso</h3>
@@ -697,13 +717,19 @@ Abrir a Demanda: https://app.hospitalsaomatheus.cloud/admin/tecnologia?demanda=.
     <div class="step">
       <div>
         <b>Aviso na hora</b>
-        <p>O GitHub avisa o app assim que algo muda naquela issue. É o caminho comum, e leva segundos.</p>
+        <p>O GitHub avisa o app assim que algo muda naquela issue, ou quando aparece código proposto para ela. É o caminho comum, e leva segundos.</p>
+      </div>
+    </div>
+    <div class="step">
+      <div>
+        <b>Aviso da subida</b>
+        <p>Quando uma versão nova do app sobe, a própria subida avisa o app de quais trabalhos foram junto, e eles viram Em produção.</p>
       </div>
     </div>
     <div class="step">
       <div>
         <b>Conferência de hora em hora</b>
-        <p>Uma rotina relê todos os trabalhos vinculados abertos e corrige o que o aviso tenha perdido. O GitHub não reentrega aviso que falhou, então sem esta segunda passagem um selo poderia congelar até alguém mexer no card.</p>
+        <p>Uma rotina relê todos os trabalhos vinculados abertos e o registro das subidas, e corrige o que o aviso tenha perdido. O GitHub não reentrega aviso que falhou, então sem esta segunda passagem um selo poderia congelar até alguém mexer no card.</p>
       </div>
     </div>
     <div class="step">
@@ -732,7 +758,7 @@ Abrir a Demanda: https://app.hospitalsaomatheus.cloud/admin/tecnologia?demanda=.
 <section class="ch" id="entrega">
   <div class="mark">Capítulo 7 <span class="trilha dir">quem pede</span></div>
   <h2>A entrega devolve a bola para quem pediu</h2>
-  <p class="lede">Esta é a <b>única</b> regra automática de movimento do Quadro. Quando a Etapa chega a <b>Entregue</b>, três coisas acontecem sozinhas.</p>
+  <p class="lede">Esta é a <b>única</b> regra automática de movimento do Quadro. Quando a Etapa chega a <b>Em produção</b>, ou seja, quando a entrega já está no app que você usa, três coisas acontecem sozinhas.</p>
 
   <div class="steps">
     <div class="step">
@@ -749,16 +775,20 @@ Abrir a Demanda: https://app.hospitalsaomatheus.cloud/admin/tecnologia?demanda=.
     </div>
     <div class="step">
       <div>
-        <b>Ela cai no Minha vez de quem pediu</b>
-        <p>É ali que o pedido espera. Quem conclui é quem pediu, nunca a Vitta: é o momento em que a pessoa vê o valor do que foi feito.</p>
+        <b>Ela cai no Com você de quem pediu</b>
+        <p>No Painel, com a marca "Entregue, confira e conclua". É ali que o pedido espera. Quem conclui é quem pediu, nunca a Vitta: é o momento em que a pessoa vê o valor do que foi feito.</p>
       </div>
     </div>
   </div>
 
 
+  <div class="note">
+    <p><b>Por que esperar o Em produção, e não o Entregue.</b> Ninguém confere o que ainda não subiu: devolver no fechamento seria pedir que você testasse algo que ainda não está no app. Quando o assunto foi resolvido sem mexer no app (uma decisão, uma consultoria), não há o que subir, e a Demanda volta para você já em Entregue.</p>
+  </div>
+
   <div class="video-box">
     <video controls preload="metadata" src="video-cap7.mp4"></video>
-    <div class="video-meta"><b>A entrega volta para quem pediu</b> · 1 min 9 s · a Etapa andando sozinha, o "O que muda" parte por parte, a devolução, o e-mail e o Minha vez</div>
+    <div class="video-meta"><b>A entrega volta para quem pediu</b> · 1 min 9 s · a Etapa andando sozinha, o "O que muda" parte por parte, a devolução e o e-mail. Gravado antes do Em produção e do Painel: no vídeo a devolução acontece no Entregue e cai no antigo Minha vez.</div>
   </div>
 
   <h3 id="loop">Quando não está bom: responder é reabrir</h3>
@@ -768,7 +798,7 @@ Abrir a Demanda: https://app.hospitalsaomatheus.cloud/admin/tecnologia?demanda=.
   </div>
 
   <h4>E quando a resposta é não</h4>
-  <p>A Etapa <b>Não será feita</b> só informa. Ela não move a Demanda nem manda e-mail: a Vitta escreve o motivo na Conversa e cancela o card à mão. A recusa nunca chega como uma coluna mudando sozinha sem explicação.</p>
+  <p>A Etapa <b>Não será feita</b> só informa. Ela não move a Demanda nem manda e-mail: a Vitta escreve o motivo na Conversa e cancela o card à mão. A recusa nunca chega como uma raia mudando sozinha sem explicação.</p>
 
   <div class="note warn">
     <p><b>Demanda já fechada não recebe mais notícia.</b> A leitura do desenvolvimento sai antes de conferir quando a Demanda está Concluída ou Cancelada. Na prática: o selo de uma Demanda no Histórico congela no dia em que ela foi fechada, e continua mostrando a Etapa daquele momento, mesmo que o trabalho tenha sido entregue depois. Quem quiser o selo atualizado <b>reabre a Demanda</b>: aí a leitura volta a acontecer e a linha automática sai.</p>
@@ -777,18 +807,36 @@ Abrir a Demanda: https://app.hospitalsaomatheus.cloud/admin/tecnologia?demanda=.
 
 <section class="ch" id="avisos">
   <div class="mark">Capítulo 8</div>
-  <h2>Minha vez, Histórico e os três e-mails</h2>
+  <h2>O Painel e os três e-mails</h2>
+  <p class="lede">O <b>Painel</b> é a segunda aba, só de leitura. É onde se responde "o que está comigo?", "o que está com o hospital?" e "o que a Vitta está fazendo?" sem abrir card nenhum. Clicar numa linha abre o mesmo card do Quadro.</p>
 
-  <div class="grid2">
+  <figure>
+    <img src="img/painel.png" alt="O Painel: no topo, os quatro números Abertas, Com o hospital, Em desenvolvimento e Entregues em 30 dias; embaixo, os blocos Com você, com uma Demanda marcada Entregue, confira e conclua, Entregas, com a Etapa de cada Demanda, e Histórico, com a busca e as Demandas concluídas e canceladas.">
+  </figure>
+
+  <div class="tbl"><table>
+    <tr><th>Número do topo</th><th>O que conta</th></tr>
+    <tr><td class="k">Abertas</td><td>As Demandas em Nova, Em andamento ou Aguardando.</td></tr>
+    <tr><td class="k">Com o hospital</td><td>As que estão em Aguardando: a vez não é da Vitta.</td></tr>
+    <tr><td class="k">Em desenvolvimento</td><td>As abertas que a Vitta já planejou ou está construindo.</td></tr>
+    <tr><td class="k">Entregues em 30 dias</td><td>As que chegaram a Entregue ou Em produção no último mês, mesmo que já concluídas.</td></tr>
+  </table></div>
+
+  <div class="grid3">
     <div class="card">
-      <h4>Minha vez</h4>
-      <p>As Demandas em que você é o responsável e que não estão fechadas, mais aquelas em que você foi mencionado e ainda não respondeu depois da menção. Ordenadas por prioridade e idade. É a tela para responder rápido sem procurar no Quadro.</p>
+      <h4>Com você</h4>
+      <p>As Demandas abertas de que você é o responsável e as em que mencionaram você e você ainda não respondeu. Cada linha diz o motivo: "Você é o responsável", "Mencionaram você" ou "Entregue, confira e conclua". Vazio é boa notícia: "Nada esperando por você agora".</p>
+    </div>
+    <div class="card">
+      <h4>Entregas</h4>
+      <p>As Demandas abertas ligadas ao desenvolvimento, uma linha cada, com a Etapa e as partes, a da última mudança primeiro. É onde se vê o que a Vitta está fazendo.</p>
     </div>
     <div class="card">
       <h4>Histórico</h4>
-      <p>As concluídas e canceladas, com quem fechou e quando, e busca por texto no título, na descrição e nas conversas. A busca ignora acento e caixa: procurar "encerramento" acha "Encerramento". É como se acha uma decisão de meses atrás sem lembrar o título.</p>
+      <p>As concluídas e canceladas, com quem fechou e quando, e busca por título, descrição ou texto da Conversa. A busca ignora acento e caixa: procurar "encerramento" acha "Encerramento".</p>
     </div>
   </div>
+  <p>Os três blocos abrem e fecham com um clique no título. Os números são os mesmos para quem estiver olhando: o Painel não tem número por pessoa nem ranking de ninguém.</p>
 
   <div class="tbl"><table>
     <tr><th>Quando sai</th><th>Assunto que chega</th><th>Quem recebe</th></tr>
@@ -800,12 +848,11 @@ Abrir a Demanda: https://app.hospitalsaomatheus.cloud/admin/tecnologia?demanda=.
   <ul>
     <li>Quem age nunca é avisado da própria ação: atribuir a si mesmo, mencionar a si mesmo e responder na própria Demanda não geram e-mail.</li>
     <li>Responsável e mencionado na mesma fala recebe um e-mail só, o da menção, que é o aviso mais específico.</li>
-    <li>Mover de coluna não avisa ninguém, e não existe resumo diário.</li>
+    <li>Mover de raia não avisa ninguém, e não existe resumo diário.</li>
     <li>Todo e-mail traz o trecho que motivou o aviso e o link que abre o card.</li>
     <li>Se o aviso não sair, a tela diz. O app não afirma "avisei" quando o e-mail falhou, e a ação em si continua valendo.</li>
   </ul>
 
-  <p><b>Filtros atravessam as abas.</b> Tipo, Produto e responsável continuam valendo ao trocar de aba, e o botão Limpar filtros está sempre à mão. Isso também vale para o Minha vez, e é a fonte do susto mais comum: filtrar o Quadro por um responsável e trocar de aba deixa o recorte quase vazio. A barra avisa que a aba está filtrada.</p>
 </section>
 
 <section class="ch" id="limites">
@@ -813,11 +860,12 @@ Abrir a Demanda: https://app.hospitalsaomatheus.cloud/admin/tecnologia?demanda=.
   <h2>Onde o Quadro para, hoje</h2>
   <p class="lede">Decisões tomadas de propósito, ou pontas conhecidas. Vale saber antes de esperar.</p>
   <ul>
-    <li><b>Minha vez e Histórico não se atualizam sozinhos.</b> O relógio de 30 segundos existe só no Quadro. A aba que mais fica aberta pede F5 para trazer o que chegou.</li>
+    <li><b>O Painel não se atualiza sozinho.</b> O relógio de 30 segundos existe só no Quadro. Para trazer o que chegou, troque de aba e volte, ou recarregue a página.</li>
     <li><b>O selo de Demanda fechada congela</b> no dia do fechamento. Reabrir a Demanda volta a ler o desenvolvimento.</li>
     <li><b>Corrigir a resposta para acrescentar um @ não manda e-mail.</b> Escreva uma resposta nova.</li>
-    <li><b>Sem anexo</b>, nem no card nem na conversa. Print e documento continuam indo por outro caminho, com o link ou o nome do arquivo escrito na resposta.</li>
-    <li><b>Sem relatório, métrica ou gráfico</b> de Demandas. O Quadro é para operar e o Histórico para achar.</li>
+    <li><b>Anexo é só imagem</b>, até 10 por Demanda, e é apagado quando a Demanda encerra. Documento continua indo por outro caminho, com o link ou o nome do arquivo escrito na resposta.</li>
+    <li><b>Sem relatório nem gráfico</b> de Demandas, e sem número por pessoa. O Painel tem só os quatro números do topo.</li>
+    <li><b>Sem filtro no Quadro.</b> Com poucas Demandas abertas, o Quadro inteiro cabe na tela; para achar uma encerrada, use a busca do Histórico.</li>
     <li><b>Sem aviso por WhatsApp e sem resumo diário.</b> O canal é o e-mail, nos três gatilhos, e nada mais.</li>
     <li><b>As Demandas nascem à mão.</b> Não há importação de lista de planejamento nenhuma.</li>
     <li><b>Quem entra na aba é Super admin do app inteiro.</b> Não existe perfil só de tecnologia.</li>
@@ -831,9 +879,9 @@ Abrir a Demanda: https://app.hospitalsaomatheus.cloud/admin/tecnologia?demanda=.
   <p class="lede">Demonstrações curtas, atuadas nas telas do sistema.</p>
   <div class="tbl"><table>
     <tr><th>Capítulo</th><th>Duração</th><th>O que mostra</th></tr>
-    <tr><td class="k"><a href="#quadro">3</a></td><td>1 min 14 s</td><td><b>O Quadro de Demandas</b>: o pedido saindo do WhatsApp, os sete tipos, as cinco colunas, a conversa dentro do card, o e-mail e o Copiar para IA.</td></tr>
+    <tr><td class="k"><a href="#quadro">3</a></td><td>1 min 14 s</td><td><b>O Quadro de Demandas</b>: o pedido saindo do WhatsApp, os sete tipos, a conversa dentro do card, o e-mail e o Copiar para IA. Gravado com o Quadro de cinco colunas.</td></tr>
     <tr><td class="k"><a href="#desenvolvimento">5</a></td><td>1 min 3 s</td><td><b>Do pedido ao desenvolvimento</b>: a Demanda sem selo, os controles que só a Vitta vê, o aviso antes do clique, a issue que nasce e a resposta espelhada sem nome.</td></tr>
-    <tr><td class="k"><a href="#entrega">7</a></td><td>1 min 9 s</td><td><b>A entrega volta para quem pediu</b>: a Etapa andando sozinha, o "O que muda" parte por parte, a devolução para Aguardando, o e-mail e o Minha vez.</td></tr>
+    <tr><td class="k"><a href="#entrega">7</a></td><td>1 min 9 s</td><td><b>A entrega volta para quem pediu</b>: a Etapa andando sozinha, o "O que muda" parte por parte, a devolução para Aguardando e o e-mail. Gravado antes do Em produção e do Painel.</td></tr>
   </table></div>
 
   <div class="grid2">
@@ -843,7 +891,7 @@ Abrir a Demanda: https://app.hospitalsaomatheus.cloud/admin/tecnologia?demanda=.
 </section>
 
 <footer>
-  <p>Manual do módulo de Tecnologia · Plataforma de Gestão do Hospital São Matheus · atualizado em 17/09/2026 · mostra o sistema na versão 0.142.0. Se alguma coisa aqui não bater com o que você vê na tela, avise: o manual é atualizado junto com o sistema.</p>
+  <p>Manual do módulo de Tecnologia · Plataforma de Gestão do Hospital São Matheus · atualizado em 07/10/2026 · mostra o sistema na versão 0.169.0. Se alguma coisa aqui não bater com o que você vê na tela, avise: o manual é atualizado junto com o sistema.</p>
 </footer>
 
 </div>

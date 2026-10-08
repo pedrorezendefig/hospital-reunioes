@@ -8,14 +8,21 @@
 # Uso:
 #   semaforo.sh pegar  <chave> [descricao]   # espera até conseguir (ou até --espera segundos)
 #   semaforo.sh soltar <chave> [--forcar]    # só o dono solta; --forcar ignora o dono
+#   semaforo.sh parar  <chave> [linha]       # o dono marca a trava como parada
 #   semaforo.sh status                        # quem segura e há quanto tempo
 #
 # Chave: identificador da sessão (basename do scratchpad da sessão serve).
 # Reentrante: pegar com a mesma chave de quem já segura devolve 0 na hora.
 #
 # Saídas de `pegar`: 0 pegou (ou já era sua) · 3 ainda ocupado após --espera
-# (chame de novo) · 2 trava velha (mais que --velha minutos): confira no Coolify
-# se há build rodando e, se não houver, `soltar <chave-do-dono> --forcar`.
+# (chame de novo) · 2 trava velha (mais que --velha minutos) · 4 trava parada.
+#
+# Parada (issue #999): a subida que saiu com 3 ou 4 deixa a trava presa e marcada
+# (`parar`, arquivo `parada` dentro da pasta, com a chave e a linha do erro).
+# Quem chega, o dono inclusive, sai na hora com 4, sem esperar e sem pegar:
+# prod espera o rollback humano. Na trava velha e na parada, quem confere o
+# Coolify e solta a trava alheia é o humano (o `--forcar` é dele); o `soltar`
+# do dono, depois do rollback, apaga a marca junto com a pasta.
 #
 # Env opcionais: SEMAFORO_SLUG (default: lido de docs/spec/deploy/project.json),
 # SEMAFORO_ESPERA (segundos, default 540: cabe no timeout de 10 min do Bash),
@@ -41,10 +48,13 @@ idade_min() {
 }
 dono() { cat "$LOCK/chave" 2>/dev/null || echo "?"; }
 descricao() { cat "$LOCK/descricao" 2>/dev/null || echo ""; }
+motivo_da_parada() { sed -n 2p "$LOCK/parada" 2>/dev/null; }
 
 case "$ACAO" in
   status)
-    if [ -d "$LOCK" ]; then
+    if [ -f "$LOCK/parada" ]; then
+      echo "ocupado por $(dono) há $(idade_min) min: $(descricao) · parada: $(motivo_da_parada)"
+    elif [ -d "$LOCK" ]; then
       echo "ocupado por $(dono) há $(idade_min) min: $(descricao)"
     else
       echo "livre"
@@ -63,12 +73,16 @@ case "$ACAO" in
         echo "pegou: $CHAVE ($DESC)"
         exit 0
       fi
+      if [ -f "$LOCK/parada" ]; then
+        echo "parada: prod espera rollback humano, chave $(dono): $(motivo_da_parada)" >&2
+        exit 4
+      fi
       if [ "$(dono)" = "$CHAVE" ]; then
         echo "já é sua (reentrante): $CHAVE"
         exit 0
       fi
       if [ "$(idade_min)" -ge "$VELHA_MIN" ]; then
-        echo "trava velha: $(dono) segura há $(idade_min) min ($(descricao)). Confira o Coolify; sem build rodando, solte com: semaforo.sh soltar $(dono) --forcar" >&2
+        echo "trava velha: $(dono) segura há $(idade_min) min ($(descricao)). Prod pode estar esperando rollback humano: quem confere o Coolify e solta a trava é o humano." >&2
         exit 2
       fi
       if [ $(( $(agora) - INICIO )) -ge "$ESPERA" ]; then
@@ -90,7 +104,18 @@ case "$ACAO" in
     exit 1
     ;;
 
+  parar)
+    CHAVE="${1:-}"; LINHA="${2:-}"
+    [ -n "$CHAVE" ] || { echo "uso: semaforo.sh parar <chave> [linha]" >&2; exit 64; }
+    if [ ! -d "$LOCK" ] || [ "$(dono)" != "$CHAVE" ]; then
+      echo "recusado: a trava não é de $CHAVE" >&2
+      exit 1
+    fi
+    printf '%s\n%s\n' "$CHAVE" "$LINHA" > "$LOCK/parada"
+    echo "parada: $CHAVE ($LINHA)"
+    ;;
+
   *)
-    echo "uso: semaforo.sh pegar|soltar|status" >&2; exit 64
+    echo "uso: semaforo.sh pegar|soltar|parar|status" >&2; exit 64
     ;;
 esac

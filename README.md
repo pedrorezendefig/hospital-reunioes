@@ -27,13 +27,13 @@ Tudo que está na árvore é código, doc viva, decisão ou material de comunica
 | `CONTEXT.md` | Glossário do contexto Reuniões (e, por ora, da Ouvidoria) | O agente e o time falam a mesma língua | Termos com definição e "evitar" | Consultar antes de nomear qualquer coisa nova |
 | `CONTEXT-MAP.md` | Mapa dos contextos de domínio | Termos homônimos (Setor, Versão) mudam de sentido entre contextos | Tabela contexto x glossário | Saber qual glossário abrir |
 | `skills-lock.json` | Origem, commit (`ref`) e hash das skills importadas do Matt Pocock | Rastreabilidade, não instalação | Repo, commit e caminho de origem de cada uma | Nada a rodar; as skills já vêm no clone |
-| `.claude/skills/` | As skills do time, versionadas | Quem clona recebe o workflow inteiro (ADR 0043) | Uma pasta por skill, com `SKILL.md` e, quando precisa, `references/` e `scripts/` | `/ask-pedro` diz qual usar |
+| `.claude/skills/` | As skills do time, versionadas | Quem clona recebe o workflow inteiro (ADR 0068) | Uma pasta por skill, com `SKILL.md` e, quando precisa, `references/` e `scripts/` | `/ask-pedro` diz qual usar |
 | `.github/` | CI e templates | Gates automáticos do `/ship` | `ci.yml` (ruff, pytest, lint, tsc, build), `lint-adr.yml`, `higiene-issues.yml`, templates de issue e PR | Não se edita no dia a dia |
 | `docs/` | Documentação viva | Ver seção abaixo | | |
 | `hospital-reunioes/` | O app | Ver seção abaixo | `backend/`, `frontend/`, `supabase/` | Onde o código mora |
 | `local/` | **Fora do git.** Insumo humano | PDFs, transcrições e dumps não podem ir para o GitHub | `insumos/<assunto>/` que cada máquina cria | Colocar aqui o que o hospital manda |
 | `tokens/` | Tokens da **máquina**, não do app | O `/deploy` e o `/ship` falam com o Coolify | `.env.example` (versionado) e `.env` (fora do git, permissão 600) | Preencher uma vez por máquina |
-| `tools/` | Ferramentas de repo | Gates de ADR e do Manual no CI, painel local e exportação do fluxo | `lint_adr.py`; os conferidores do Manual (`lint_manual.py`, `inventario_manual.py`, `checar_build_manual.py`, `checar_video_manual.py`, `tirar_draft_manual.py`), com o teste de cada um ao lado; `workflow-dashboard/` (painel read-only das issues e do deploy); `instalar-fluxo/` (roteiro para instalar o fluxo em outro projeto, ADR 0053) | `python3 tools/workflow-dashboard/serve.py`; o prompt de 3 linhas está em `tools/instalar-fluxo/README.md` |
+| `tools/` | Ferramentas de repo | Gates de ADR e do Manual no CI, o Hospital OS e exportação do fluxo | `lint_adr.py`; os conferidores do Manual (`lint_manual.py`, `inventario_manual.py`, `checar_build_manual.py`, `checar_video_manual.py`, `tirar_draft_manual.py`), com o teste de cada um ao lado; `workflow-dashboard/` (o Hospital OS, painel read-only das issues e do deploy); `instalar-fluxo/` (roteiro para instalar o fluxo em outro projeto, ADR 0068) | `python3 tools/workflow-dashboard/serve.py`; o prompt de 3 linhas está em `tools/instalar-fluxo/README.md` |
 
 ## `docs/`
 
@@ -72,7 +72,7 @@ Na sua máquina só existem tokens da máquina (`tokens/.env`: Coolify) e três 
 
 ## O fluxo, em uma linha por etapa
 
-1. Ideia: `/grill-with-docs` afia contra `CONTEXT.md` e ADRs. 2. `/to-prd` e `/to-issues` viram issues. 3. `/pegar-issue N` faz o claim e abre a branch. 4. `/tdd` escreve o teste primeiro. 5. `/ship` abre o PR, roda os 3 gates e pede o OK de merge. 6. O merge dispara o build no Coolify; `/deploy ship` acompanha e registra em `docs/spec/deploy/`. 7. Testa em produção. 8. `/divulgar` conta a entrega ao diretor. 9. A Fatia de manual roda `/manual #PRD` e escreve a parte do Manual do usuário que a entrega criou; ela entra no ar no deploy seguinte, sem passo manual.
+1. Ideia: `/grill-with-docs` afia contra `CONTEXT.md` e ADRs. 2. `/to-prd` e `/to-issues` viram issues. 3. `/pegar-issue N` faz o claim e abre a branch. 4. `/tdd` escreve o teste primeiro. 5. `/ship` abre o PR, roda os gates da ADR 0068 e, com o PR verde, roda a subida (`fechar_onda.py`) sozinho. 6. A subida mergeia pela API, define a versão (`APP_VERSION` e tag, sem commit), faz um build, confere o health e registra em `docs/spec/deploy/` pela Action pós-merge. 7. Testa em produção. 8. `/divulgar` conta a entrega ao diretor. 9. A Fatia de manual roda `/manual #PRD` e escreve a parte do Manual do usuário que a entrega criou; ela entra no ar no deploy seguinte, sem passo manual.
 
 ## Cobertura (o `/setup-maquina` confere esta lista)
 

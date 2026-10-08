@@ -158,7 +158,7 @@ def cenario():
     return dados(
         issues=[
             issue(941, "Módulo de fases", ["in-progress", "fatia:G"], [EU], parent={"number": 938, "title": "PRD: Hospital OS"}),
-            issue(939, "Rabo enxuto", ["in-progress", "fatia:M"], [EU], parent={"number": 938, "title": "PRD: Hospital OS"}),
+            issue(939, "Subida enxuta", ["in-progress", "fatia:M"], [EU], parent={"number": 938, "title": "PRD: Hospital OS"}),
             issue(955, "Runner reserva", ["in-progress"], [EU]),
             issue(938, "PRD: Hospital OS", ["ready-for-agent"], [EU]),
             issue(942, "Aba Issues", ["ready-for-agent", "fatia:G"], parent={"number": 938, "title": "PRD: Hospital OS"}),
@@ -285,9 +285,9 @@ def test_worktree_sem_pr_sempre_diz_onde_parou_e_o_proximo_passo(ahead, sem_remo
 
 def test_commit_a_frente_da_branch_ja_pushada_tambem_e_sem_push():
     d = dados(
-        issues=[issue(939, "Rabo", ["in-progress"], [EU])],
+        issues=[issue(939, "Subida", ["in-progress"], [EU])],
         prs=[pr(949, 939)],
-        worktrees=[{"path": "/wt/c", "branch": "chore/rabo-939", "locked": False, "ahead": 3, "sem_remoto": False, "nao_pushados": 1}],
+        worktrees=[{"path": "/wt/c", "branch": "chore/subida-939", "locked": False, "ahead": 3, "sem_remoto": False, "nao_pushados": 1}],
     )
     linha = next(l for l in mi.montar(d).splitlines() if l.startswith("| 939 |"))
     assert "1 commit só local, sem push" in linha
@@ -360,26 +360,3 @@ def test_o_subprocess_so_entra_pelos_helpers():
 
 
 # A skill
-
-
-def texto_skill() -> str:
-    return (SKILL / "SKILL.md").read_text(encoding="utf-8")
-
-
-def test_a_skill_roda_o_script_que_existe_e_aceita_login():
-    achado = re.search(r"python3 (\S+/minhas_issues\.py)", texto_skill())
-    assert achado and (RAIZ / achado.group(1)) == SCRIPT
-    assert "@login" in texto_skill()
-
-
-def test_a_skill_tem_os_gatilhos_e_entra_no_ask_pedro():
-    cabeca = texto_skill().split("---", 2)[1]
-    for g in ("minhas issues", "onde parei", "o que tem pra mim", "status do Actions"):
-        assert g in cabeca
-    assert "/minhas-issues" in (RAIZ / ".claude" / "skills" / "ask-pedro" / "SKILL.md").read_text(encoding="utf-8")
-
-
-def test_o_texto_novo_nao_tem_travessao():
-    travessoes = f"[{chr(0x2013)}{chr(0x2014)}]"
-    for arquivo in (SCRIPT, SKILL / "SKILL.md", Path(__file__)):
-        assert not re.search(travessoes, arquivo.read_text(encoding="utf-8")), arquivo

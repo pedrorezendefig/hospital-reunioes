@@ -1,13 +1,11 @@
 ---
 name: onda-enxuta
-description: 'Executor AFK da fila de issues em ondas: sessão de fundo por onda, mapa por PRD, um push e um build por onda. Sintaxe `/onda-enxuta [#PRD | --all] [--paralelo N] [--sessao <nome>] [--onda N]`.'
+description: 'Executor AFK da fila de issues em ondas: sessão de fundo por onda, um push e um build por onda. Sintaxe `/onda-enxuta [#PRD | --all] [--paralelo N] [--sessao <nome>] [--onda N]`.'
 ---
 
 # Onda enxuta
 
-É a onda do pipeline (ADRs 0022, 0029, 0035 e 0061): esvazia uma fila de issues em ondas, para no seu OK de merge por lote, um deploy por onda, auditoria do PRD no fim. Muda **a forma do loop**, não os gates. Nasceu da medição de três ondas de setembro de 2026 (1,05 bilhão de tokens para 11 issues, 94% releitura de contexto) e das decisões em [references/decisoes.md](references/decisoes.md). Tudo o que ela precisa vive em `.claude/skills/onda-enxuta/` e `.claude/agents/hr-*.md`. A `/onda` e a `/montar-ondas` originais foram aposentadas pela ADR 0061.
-
-> **Invariantes herdados, sem exceção:** subir para produção é decisão humana por onda, citando os PR#. PR verde = CI verde + spec×diff + veredito limpo do revisor independente. Baixa em 3 tentativas. Fatia de manual para no draft do vídeo. Nada de doc de estado no repositório: o estado vive no GitHub, e o custo em `~/.claude/onda-enxuta/medicoes/`, fora do repositório.
+Esvazia uma fila de issues em ondas: implementa em paralelo, revisa uma vez, mergeia sozinha os PRs verdes e sobe um deploy por onda. Só a migration e o draft do vídeo da fatia de manual esperam o humano (ADRs 0057 e 0063). Baixa em 3 tentativas. Estado no GitHub; custo em `~/.claude/onda-enxuta/medicoes/`.
 
 ## Sintaxe
 
@@ -17,120 +15,95 @@ description: 'Executor AFK da fila de issues em ondas: sessão de fundo por onda
 
 | Argumento | Default | Efeito |
 |---|---|---|
-| `#PRD` / `--all` | `--all` | Escopo da fila. Normalmente o prompt já traz a **fila-alvo fixa** escrita pelo `/montar-ondas-enxutas`. |
+| `#PRD` / `--all` | `--all` | Escopo. Normalmente o prompt já traz a **fila-alvo fixa** do `/montar-ondas-enxutas`. |
 | `--paralelo N` | 3 | Issues por onda. |
-| `--sessao <nome>` | `onda-<letra>` | Nome da sessão (`--name` do `claude --bg`). É a chave do semáforo e o prefixo das medições. |
-| `--onda N` | 1 | Número desta onda dentro da sessão. Cresce a cada passagem. |
+| `--sessao <nome>` | `onda-<letra>` | Nome da sessão; com `-onda<N>`, a chave do semáforo da subida. |
+| `--onda N` | 1 | Número desta onda na sessão. |
 
-**Uma sessão de fundo = uma onda.** A sessão nasce pelo `scripts/lancar_sessao.sh` (ambiente limpo, zero MCP, Opus 5.5, esforço `high`), roda a onda até o checkpoint, fecha a onda depois do seu "vai", escreve a passagem e lança a sessão da onda seguinte. O caderno nunca atravessa duas ondas.
+**Uma sessão de fundo = uma onda.** Nasce pelo `scripts/lancar_sessao.sh`, roda o lote e, com os PRs verdes, lança a sessão da onda seguinte antes de rodar a própria subida. Depois do lançamento as duas só se falam pelo semáforo e pelo GitHub.
 
-## Papéis (agentes em `.claude/agents/`)
+## Papéis (`.claude/agents/`)
 
-| Agente | Esforço | Quando | Nasce com |
-|---|---|---|---|
-| `hr-mapeador` | high | 1 vez por PRD, antes da primeira onda | número do PRD |
-| `hr-implementador` | xhigh | 1 por issue, `isolation: worktree` | issue, PRD, URL do Mapa |
-| `hr-corretor` / `hr-corretor-max` | high / max | must-fix, CI vermelho, conflito, retomada | PR, issue, motivo, achado |
-| `hr-revisor` | high | todo PR, assim que abre | PR, issue |
-| `hr-revisor-seguranca` | max | PR com caminho sensível, ou pedido do revisor | PR, issue, motivo |
-| `hr-auditor-prd` | high | depois do último deploy do PRD | PRD, versão |
+| Agente | Esforço | Quando |
+|---|---|---|
+| `hr-implementador` | high (`effort: xhigh` na `fatia:G`) | 1 por issue, `isolation: worktree` |
+| `hr-revisor` | high | PR do app (toca `hospital-reunioes/`), uma vez só |
+| `hr-corretor` | high (`effort: max` na segunda falha de CI) | must-fix, CI vermelho, conflito, retomada |
 
-Você, orquestrador, **não lê código, diff, PRD nem spec**. Mantém a tabela da fila e o status por issue. Fato do código? Delegue. Os prompts de cada disparo estão em [references/prompts.md](references/prompts.md); use-os literalmente, preenchendo os campos.
+Você, orquestrador, **não lê código, diff, PRD nem spec**: mantém a tabela da fila e delega. Prompts em [references/prompts.md](references/prompts.md), literais.
+
+**Nunca pare para perguntar** (ADR 0068). Dúvida ou impasse: a fatia é baixa e o lote segue. Sem `AskUserQuestion`: numa sessão de fundo ninguém vê. Todo comentário do agente no GitHub leva `<!-- automacao -->` na primeira linha.
+
+**Baixa:** `gh issue edit <N> --remove-label in-progress --add-label ready-for-human` e comentário com branch, gate que falhou e hipótese.
 
 ## Fluxo
 
-### 0. Nascimento (toda sessão)
+### 0. Nascimento
 
-1. Registre o início: `date -u +%Y-%m-%dT%H:%M:%SZ` (vai para o `medir_onda.py`).
-2. Confira a bagagem em uma linha: esforço da sessão (`CLAUDE_EFFORT`), MCPs carregados (nenhum é o esperado). Se vier gordo, diga em uma linha e siga; não dá para desligar em pleno voo.
-3. Se o prompt trouxe uma **passagem** (bloco `## Passagem`), ela é o estado: ondas fechadas, versão de prod, o que sobrou da fila. Não releia o que ela resume.
-4. Loop do revisor (ADR 0020): `gh issue list --state open --label revisor-comentou`. Comentário de revisor humano pedindo mudança: pare e avise. Carimbo automático de comentário `<!-- automacao -->`: remova a label e siga.
+1. `date -u +%Y-%m-%dT%H:%M:%SZ` (início, vai para o `medir_onda.py`).
+2. Se o prompt traz `## Passagem`, ela é o estado; não releia o que ela resume.
+3. `gh issue list --state open --label revisor-comentou`: comentário de humano pedindo mudança, pare e avise; carimbo `<!-- automacao -->`, remova a label e siga.
 
-### 1. Fila-alvo
+### 1. Fila
 
-Com fila fixa no prompt, use-a: confira só que cada issue está `ready-for-agent`, sem dono e sem bloqueio aberto (`gh issue view <N> --json labels,assignees` e `gh api repos/{owner}/{repo}/issues/<N>/dependencies/blocked_by`). Sem fila fixa, monte (sub-issues do PRD, ou `gh issue list --label ready-for-agent --search "no:assignee -is:blocked"`), menores primeiro. Mostre a tabela desta onda em até 6 linhas e siga sem pedir confirmação: o lançamento foi o "vai".
+A onda é toda issue da fila fixa já desbloqueada (`blocked_by` todo fechado), até `--paralelo`; o único separador de ondas é a dependência (ADR 0068). A bloqueada fica para a próxima sessão. Confira em cada uma: `ready-for-agent`, sem dono, sem bloqueio aberto (`gh api repos/{owner}/{repo}/issues/<N>/dependencies/blocked_by`) e autor de dentro (`gh api repos/{owner}/{repo}/issues/<N> --jq .author_association` em `OWNER`, `MEMBER` ou `COLLABORATOR`; o repositório é público, e o mesmo filtro vale para todo comentário que um agente lê). Sem fila fixa: sub-issues do PRD, ou `gh issue list --label ready-for-agent --search "no:assignee -is:blocked"`, menores primeiro. Tabela em até 6 linhas e siga.
 
-### 2. Mapa do terreno (1 vez por PRD)
+### 2. Lote
 
-Para cada PRD das issues desta onda: `gh issue view <PRD> --json comments --jq '[.comments[] | select(.body | startswith("<!-- automacao -->\n## Mapa do terreno"))] | last | .url'`. Sem Mapa, ou com Mapa anterior ao último PR mergeado do PRD: dispare `hr-mapeador` e espere. Issue sem PRD não tem Mapa; o implementador explora sozinho e você diz isso no prompt dele.
+Dispare os implementadores **na mesma mensagem**, um por issue. Registre a hora do primeiro disparo. A cada término, **confira o GitHub**, não o relatório (`gh pr list --search "<N> in:title,body" --state open`):
 
-### 3. Lote: implementadores em paralelo
+- **PR aberto:** passo 3.
+- **Branch com commits `wip:`, sem PR:** `hr-corretor` motivo `retomar`. Conta tentativa.
+- **Nada:** implementador fresco com "tentativa k de 3". Conta tentativa.
 
-Dispare os `N` `hr-implementador` **na mesma mensagem**, um por issue, com o prompt de `references/prompts.md`. Cada um faz claim, TDD, PR (`/ship --skip-review`) e morre.
+### 3. Por PR
 
-A cada notificação de término, **confira o GitHub**, não o relatório (ADR 0029): `gh pr list --search "<N> in:title,body" --json number,url,headRefName --state open` ou `gh issue view <N> --json labels`. Estados possíveis:
+Assim que o PR abre, na mesma mensagem:
 
-- **PR aberto:** vá ao passo 4 para essa issue.
-- **Sem PR, com branch e commits `wip:`** (agente morreu no teto de turnos ou falhou): dispare `hr-corretor` com motivo `retomar`. Conta como tentativa.
-- **Sem PR nem branch:** conta como tentativa; redispare um `hr-implementador` fresco com a linha "tentativa 2 de 3: o anterior não abriu PR, motivo desconhecido".
+1. `gh pr checks <PR> --watch --fail-fast` em segundo plano.
+2. `gh pr diff <PR> --name-only | grep -q '^hospital-reunioes/'` falhou = **PR de ferramenta: só o CI**, pule 3 e 4 (ADR 0068).
+3. `uv run --no-project --python ">=3.12" python .claude/skills/onda-enxuta/scripts/sensivel.py <PR>`: saída 0 = sensível, 1 = não; outra saída, rode de novo e, na segunda falha, baixa.
+4. `hr-revisor` uma vez; se sensível, com `Sensível: <arquivos>` no prompt.
 
-### 4. Por PR: CI, revisão, correção
+Por notificação:
 
-Assim que o PR abre, **na mesma mensagem**:
+- **`VEREDITO: MUST-FIX`** → `hr-corretor` motivo `revisao` com o comentário inteiro. Sem re-revisão: depois do corretor, quem confere é o CI. Corretor com `pendente`: baixa.
+- **Revisor sem veredito:** baixa.
+- **CI vermelho:** `python .claude/skills/onda-enxuta/scripts/ci_sem_runner.py <PR>`. Saída 0 = falta de runner, o script já pediu o rerun: outro `--watch`, sem tentativa. Saída 1 = `hr-corretor` motivo `ci` com `gh run view <id> --log-failed | tail -60`; na segunda falha, `effort: max`. Depois, `--watch` de novo.
 
-1. Espera do CI em segundo plano, sem acordar por evento: `gh pr checks <PR> --watch --fail-fast` via Bash com `run_in_background: true`. Uma notificação no fim.
-2. `python .claude/skills/onda-enxuta/scripts/sensivel.py <PR>`: imprime os arquivos sensíveis tocados (lista em `revisao-sensivel.txt`); saída 0 = sensível.
-3. Dispare `hr-revisor`. Se sensível, dispare também `hr-revisor-seguranca`, em paralelo.
+PR verde = CI verde e, no app, `VEREDITO: LIMPO` ou corretor sem `pendente`. Issue que não fecha em **3 tentativas** (somadas): baixa.
 
-Depois, por notificação:
+### 4. Lote pronto: lance a onda seguinte
 
-- **Veredito** (confirme com `gh pr view <PR> --json comments` que a última linha do comentário é `VEREDITO: ...`): `MUST-FIX` → `hr-corretor` motivo `revisao` com o comentário inteiro; quando ele terminar, nova rodada de `hr-revisor` (e de segurança, se havia). **Máximo 2 rodadas.** `PEDE_REVISOR_SEGURANCA` no veredito → dispare `hr-revisor-seguranca` sem julgar.
-- **CI vermelho:** antes de tudo, `python .claude/skills/onda-enxuta/scripts/ci_sem_runner.py <PR>`. Saída 0 = o GitHub cancelou o job por falta de runner (incidente do Actions, issue #953): o script já pediu o rerun, dispare outro `gh pr checks --watch` em segundo plano, **sem corretor e sem contar tentativa**. Na terceira vez seguida na mesma fatia, pare a fatia com `ready-for-human` e "GitHub Actions sem runner, ver githubstatus.com". Saída 1 = vermelho de código: `hr-corretor` motivo `ci` com o trecho de `gh run view <id> --log-failed | tail -60`. Segunda falha de CI na mesma fatia: `hr-corretor-max`. Depois da correção, novo `gh pr checks --watch` em segundo plano.
-- **Notificação que não muda estado** (agente terminou mas você já conferiu, mensagem de progresso): responda em uma linha e não faça nada.
+Com todos os PRs verdes ou baixados, registre a hora dos PRs verdes e imprima a tabela (issue · PR · status · migration · MP4 do draft). Sobrou fila (se toda ela depende desta onda, lance só depois da subida):
 
-PR verde = `gh pr checks` verde + veredito(s) `LIMPO` + spec×diff declarado pelo implementador. Issue que não fecha em **3 tentativas** (implementação, correções e rodadas somadas): `gh issue edit <N> --remove-label in-progress --add-label ready-for-human` e comentário `<!-- automacao -->` com branch, gate que falhou e hipótese. A onda segue.
+1. `python .claude/skills/onda-enxuta/scripts/fechar_onda.py --prs <a> <b> --sessao <nome>-onda<N> --dry-run`: a linha `plano:` dá a versão esperada.
+2. Escreva a **passagem** (modelo em `references/prompts.md`) em `%TEMP%\onda-enxuta\<nome>-onda<N+1>.md` e lance: `bash .claude/skills/onda-enxuta/scripts/lancar_sessao.sh <nome>-onda<N+1> "<caminho>"`.
 
-### 5. Checkpoint em duas metades
+**Fatia de manual:** o PR fica fora da subida até o OK humano no draft. `PushNotification` "Draft do vídeo da #<N> no PR #<PR>: <MP4>"; quem viu roda `fechar_onda.py --prs <PR>`. Não conta tentativa.
 
-Quando todos os PRs do lote estão verdes ou baixados:
+### 5. Subida
 
-1. Imprima a tabela: issue · PR · status · fatia · should-fix pendentes (n) · migration (número) · MP4 do draft (fatia de manual).
-   Fatia de manual (ADR 0057): o implementador para no draft de cada Vídeo de tarefa e o caminho do MP4 entra na tabela; aprovar o vídeo é o mesmo gate humano do merge, não um segundo toque. Todo comentário do agente no PR leva `<!-- automacao -->` na primeira linha, senão a label `revisor-comentou` acusa a própria onda.
-2. Dispare a notificação push (ferramenta `PushNotification`, uma linha: "Onda <N> de <sessão> pronta: PRs #a #b. `claude attach <id>` e `vai`").
-3. Imprima as instruções e **encerre o turno**: `claude attach <id da sessão>` e depois `vai #a #b` (todos), `vai #a` (subconjunto) ou `abortar`. Condição opcional na mesma linha: `vai #a #b, corrigir o should-fix da #b e mergear se voltar limpo`.
+`python .claude/skills/onda-enxuta/scripts/fechar_onda.py --prs <a> <b> --sessao <nome>-onda<N>` em segundo plano, com os PRs verdes na ordem da tabela. A chave é a da onda, não a da sessão (a onda seguinte já roda). Leia só a saída; o que cada código significa está na docstring do script. Cabe a você:
 
-Não fique em `AskUserQuestion`: numa sessão de fundo ninguém a vê. A pergunta acontece quando você retoma a sessão, e aí a resposta chega como mensagem normal.
+- **`migration: cole no Studio <arquivo>:1`:** repasse por `PushNotification` assim que aparecer.
+- **2 com `conflito no merge de #N em: <arquivos>`:** `hr-corretor` motivo `conflito` com os arquivos, `--watch` de novo e a subida só com os de fora. Outra `de fora:` (CI vermelho, merge recusado): passo 3 ou subida de novo. Ambas contam tentativa. `de fora: #<PR> bloqueada por #<X>`: issue em `blocked`, sem tentativa.
+- **3 ou 4:** pare; imprima a chave e a linha. Rollback pelo `/deploy rollback`.
+- **6:** uma tentativa por fatia e `PushNotification` "rollback disparado no PR #N, versão vX.Y.Z voltou".
+- **7 e 8:** `PushNotification` com a linha do script; o mesmo comando de novo depois do humano. Sem tentativa.
 
-### 6. Fechamento da onda (depois do "vai")
+Depois: `python .claude/skills/onda-enxuta/scripts/medir_onda.py --onda <N> --issues <...> --prs <...> --inicio <passo 0>`.
 
-1. Leia o "vai": PRs aprovados e condição. Sem condição, should-fix fica como comentário no PR e a fatia entra como está. Com condição de correção: `hr-corretor` (motivo `revisao`, com os itens pré-autorizados), nova revisão, `gh pr checks --watch`, e só então o fechamento, **sem novo checkpoint**. A condição vale só para este lote.
-2. Migration nova no lote: o script não aplica SQL, mas espera (issue #969). Ele imprime uma linha `migration: cole no Studio <arquivo>:1` por migration e só pega o semáforo quando o `/api/health` devolve o número da maior (toda migration termina gravando o próprio número em `migracoes_aplicadas`). Assim que a linha aparecer na saída do passo 3, repasse-a ao humano por `PushNotification`.
-3. `python .claude/skills/onda-enxuta/scripts/fechar_onda.py --prs <a> <b> --sessao <nome>` via Bash **em segundo plano** (builds levam minutos). Ele pega o semáforo, cria um worktree descartável em `~/wt-<nome>` (caminho curto, MAX_PATH), faz merge local `--no-ff` em ordem na branch `onda/<nome>`, calcula a versão nova sem commit (issue #967; lote só de `docs/**`, `.claude/**` e `*.md` não muda a versão nem espera build), abre o PR de entrega e espera o CI dele, põe o `APP_VERSION` no backend e no frontend, mergeia pela API (a `main` é protegida, ADR 0061) e cria a tag `vX.Y.Z` no squash, espera **um build**, confere health com version match, grava o registro num PR só de docs com `history.json` (todos os deploys, sem teto) e `state.json`, limpa worktrees de agente já mergeados e solta o semáforo. O rabo grava só a verdade do deploy: o snapshot e o draft do Manual dos PRDs que fecharam saem numa Action no push da `main`, depois do registro (ADR 0062). Saída de 10 linhas; leia só ela.
-   - Saída `2` (conflito ou main andou): `hr-corretor` motivo `conflito` no PR citado; rode o script de novo.
-   - Saída `3` ou `4` (build, ou health com o rollback automático que falhou): pare. Semáforo fica preso com você; imprima a chave e a linha do script; o rollback segue o modo rollback da skill `/deploy` (única situação em que você lê aquele SKILL.md).
-   - Saída `6` (rollback feito): o rabo já voltou cada app do lote à imagem anterior e ao `APP_VERSION` antigo, com health verde de novo, e o semáforo está solto; o merge ruim segue na `main`. Faça: (1) o PR de revert do squash que a linha `rollback:` imprime (`git revert --no-edit <sha>` numa branch `revert/<nome>` a partir da `origin/main`, depois `gh pr create`), sem rebuild, porque a imagem no ar já é a anterior; ele vai na frente do próximo `fechar_onda.py`, para o próximo deploy não carregar o defeito; (2) para cada issue da linha `rollback:`, `gh issue reopen <N>`, `gh issue edit <N> --remove-label in-progress --add-label ready-for-agent` e um comentário `<!-- automacao -->` com a linha `health:` do rabo (o que o health respondeu); (3) conta uma tentativa de cada fatia (na terceira, `ready-for-human`, como toda baixa); (4) `PushNotification` de uma linha: "rollback disparado no PR #N, versão vX.Y.Z voltou". A onda segue para o passo 4.
-   - Saída `7` (migration vencida): o `/api/health` não devolveu o número da migration em 24 h; nada entrou na main, o semáforo nem foi pego e os PRs seguem abertos. `PushNotification` com a linha `migration: vencida` e, depois que o humano colar, o mesmo comando do passo 3 de novo. Não conta tentativa.
-4. `python .claude/skills/onda-enxuta/scripts/medir_onda.py --onda <N> --issues <...> --prs <...> --inicio <timestamp do passo 0>`: 10 linhas de conta, JSON em `~/.claude/onda-enxuta/medicoes/`.
-5. Se a última fatia aberta de um PRD fechou nesta onda: dispare `hr-auditor-prd` e espere o veredito (reopen em falha é dele).
+### 6. Fim
 
-### 7. Relatório da onda, passagem e próxima sessão
-
-Relatório de até 15 linhas: linha final do `fechar_onda.py`, tabela de issues (fechada · PR · versão), baixas, veredito do auditor se houve, as 10 linhas da medição.
-
-Fila ainda tem issue desbloqueada? Escreva a **passagem** (modelo em `references/prompts.md`, seção "Passagem"): é o prompt da próxima sessão, começando por `/onda-enxuta --sessao <nome> --onda <N+1>`, com a fila que sobrou, as ondas fechadas, a versão de prod e a chave do semáforo. Salve em `%TEMP%\onda-enxuta\<nome>-onda<N+1>.md` e lance:
-
-```bash
-bash .claude/skills/onda-enxuta/scripts/lancar_sessao.sh <nome>-onda<N+1> "<caminho da passagem>"
-```
-
-Imprima o id que ele devolve e encerre. Fila vazia: **Sinal final** (fechadas e deployadas, ready-for-human, bloqueadas, deploys da sessão, veredito do PRD, tudo ocorreu bem ou parcial).
-
-## Limites
-
-- Não revoga o gate de merge, não roda sem checkpoint, não mergeia por conta própria depois de um "vai" que não citou o PR.
-- Não modifica nada de `.claude/skills/` nem de `docs/` do repositório além do que o `fechar_onda.py` registra (`docs/spec/deploy/history.json` e `state.json`), que já era registro do `/deploy`.
-- As medições de custo vivem em `~/.claude/onda-enxuta/medicoes/`, fora do repositório.
-- Não usa Sonnet nem Haiku em papel nenhum (restrição do dono).
+Relatório de até 15 linhas (linha final da subida, issue · PR · versão, baixas, medição, intervalo entre os PRs verdes da onda anterior e o primeiro implementador desta; meta: menos de 2 min; última linha `retro: recomendada (<motivo>)` se houve baixa, rollback, conflito na subida ou corretor em `effort: max`, senão `retro: dispensável`; quem roda é o humano, com `/retro-onda <nome>-onda<N>`), comentado em cada PRD da onda (issue sem PRD: no PR) com `<!-- automacao -->` e `## Onda <nome> <N>`. Passagem que ficou para depois da subida (passo 4): lance agora. Fila vazia: **Sinal final** (fechadas, ready-for-human, bloqueadas, deploys). Encerre depois do comentário.
 
 ## Scripts
 
-| Script | Faz | Saída |
-|---|---|---|
-| `scripts/lancar_sessao.sh <nome> <prompt.md> [--dry-run]` | Lança a sessão de fundo com ambiente limpo, zero MCP (`--strict-mcp-config --no-chrome`), plugins desligados (`--settings onda-settings.json`), `--model opus --effort high` | id da sessão (`claude attach <id>`) |
-| `scripts/sensivel.py <PR>` | Cruza os arquivos do PR com `revisao-sensivel.txt` | arquivos sensíveis; exit 0 se houver |
-| `scripts/fechar_onda.py --prs ... --sessao ... [--dry-run]` | Integração da onda: um merge pela API, um build, registro só com `history.json` e `state.json` | 10 linhas; exit 0 ok, 1 pré-condição, 2 conflito, 3 build, 4 health com rollback que falhou, 6 rollback feito, 7 migration vencida |
-| `scripts/medir_onda.py --onda N --issues a,b --prs c,d [--inicio ISO] [--modelo claude-opus-5-5]` | Conta da onda a partir dos JSONL da sessão e dos sub-agentes (papel pelo prefixo `[papel: ...]` do prompt) | 10 linhas; JSON em `~/.claude/onda-enxuta/medicoes/`. Sub-agente nunca retomado sai como estimado |
-
-## Em máquina nova
-
-Vem no clone do repositório: `.claude/skills/onda-enxuta/`, `.claude/skills/montar-ondas-enxutas/` e `.claude/agents/hr-*.md`. Confira `claude --version` (2.1.280 ou mais: `--bg`, `--strict-mcp-config`, `--effort`), `gh auth status`, `coolify` no PATH e `python` 3.
+| Script | Faz |
+|---|---|
+| `scripts/lancar_sessao.sh <nome> <prompt.md>` | Sessão de fundo limpa: zero MCP, plugins desligados, Opus, `high`. |
+| `scripts/sensivel.py <PR>` | Rota sem login ou migration no PR (lista em `revisao-sensivel.txt`); exit 0 se houver. |
+| `scripts/fechar_onda.py --prs ... [--sessao ...] [--dry-run]` | A subida: merge PR a PR pela API, um build, health, rollback, registro. Códigos na docstring. |
+| `scripts/medir_onda.py --onda N --issues ... --prs ...` | Conta da onda pelos JSONL (papel pelo `[papel: ...]` do prompt). |
+| `scripts/ci_sem_runner.py <PR>` | Distingue falta de runner de CI vermelho; pede o rerun. |

@@ -31,6 +31,12 @@ linhas automaticas e o e-mail de atribuicao com o recado "Entregue, confira e
 conclua". Fica aqui, e nao no router, porque este e o caminho comum dos dois
 gatilhos: escrito la, a devolucao valeria para o webhook e nao para o lote.
 
+Desde a issue #1065 (ADR 0069, decisoes 4 e 5) a issue fechada por PR espera
+a subida: quem a leva a Em producao e o webhook de deploy que a Action
+pos-merge chama (`marcar_em_producao`), ou a passagem de hora em hora pelo
+`history.json` da `main` (`reconciliar_em_producao`), e e la que a devolucao
+acontece. A issue fechada sem PR continua devolvendo em Entregue.
+
 O I/O do GitHub e todo do `github_client`; a regra da Etapa e toda do
 `tecnologia_vinculo`. Aqui mora so a costura entre os dois e o banco.
 """
@@ -38,10 +44,12 @@ O I/O do GitHub e todo do `github_client`; a regra da Etapa e toda do
 from __future__ import annotations
 
 import logging
+from collections.abc import Callable
 from datetime import UTC, datetime
 from typing import Any
 
 from app.services import github_client
+from app.services.registro_do_deploy import subida_de_cada_issue
 from app.services.tecnologia import (
     AUTOR_DA_ENTREGA,
     ESTADO_AGUARDANDO,
@@ -61,11 +69,14 @@ from app.services.tecnologia import (
 )
 from app.services.tecnologia_email import avisar_atribuicao
 from app.services.tecnologia_vinculo import (
+    ETAPA_EM_PRODUCAO,
+    ETAPA_ENTREGUE,
     ETAPA_REGISTRADA,
     etapa_da_foto,
     o_que_muda_da_foto,
     partes_da_foto,
     partes_para_o_diretor,
+    texto_em_producao,
     texto_movimento_etapa,
 )
 
@@ -79,6 +90,31 @@ logger = logging.getLogger(__name__)
 # nem corpo, que sao os tres campos de que a Etapa e o "O que muda" vivem.
 ACOES_DE_ISSUE = ("labeled", "unlabeled", "closed", "reopened", "edited")
 
+# As acoes do evento `pull_request` que mexem no fato do PR (issue #1064, ADR
+# 0069, decisao 6). Abrir e reabrir poem o PR na foto; fechar o tira, e o merge
+# ainda grava "fechada por PR". `edited` e `synchronize` (push novo no PR) nao
+# mudam se ha PR aberto, e quem corrige a referencia editada e a reconciliacao.
+ACOES_DE_PR = ("opened", "reopened", "closed")
+
+# Os dois fatos do PR, gravados DENTRO da foto da issue (issue #1064).
+#
+# Moram na foto, e nao em coluna propria, porque sao fatos do GitHub sobre a
+# issue, e a foto e onde o app guarda o que leu de la. So entram quando dizem
+# algo: uma foto sem PR nenhum continua identica a de antes desta fatia, e a
+# guarda do cache igual nao regrava todas as Demandas na primeira passagem.
+#
+# `prs_abertos` e a LISTA dos numeros, e nao um booleano: com dois PRs abertos
+# para a mesma raiz, fechar um sem merge nao pode apagar o fato do outro.
+# `fechada_por_pr` e o numero do PR mergeado, que a fatia do deploy le para
+# decidir se a devolucao espera Em producao (ADR 0069, decisao 5).
+FATO_PRS_ABERTOS = "prs_abertos"
+FATO_FECHADA_POR_PR = "fechada_por_pr"
+
+# Quantas vezes a sincronizacao rele a Demanda e tenta de novo quando outra
+# escrita passou na frente (issue #1064). O merge manda dois eventos no mesmo
+# segundo, e com o lote de hora em hora sao, no pior caso, tres escritores.
+TENTATIVAS_DA_ESCRITA = 3
+
 # Quais Demandas o lote de hora em hora rele.
 #
 # A lista e a POSITIVA, e nao "tudo menos concluida e cancelada", porque no
@@ -88,7 +124,7 @@ ACOES_DE_ISSUE = ("labeled", "unlabeled", "closed", "reopened", "edited")
 ESTADOS_DA_RECONCILIACAO = ESTADOS_ABERTOS
 
 
-def mudanca_da_foto(foto: dict[str, Any]) -> dict[str, Any]:
+def mudanca_da_foto(foto: dict[str, Any], *, versao_em_producao: str | None = None) -> dict[str, Any]:
     """O cache da Demanda para esta foto: Etapa, partes, "O que muda" e carimbo.
 
     Um lugar so para o SHAPE do cache. Ele e escrito por tres caminhos (vincular,
@@ -97,10 +133,14 @@ def mudanca_da_foto(foto: dict[str, Any]) -> dict[str, Any]:
     o que quase aconteceu com o `o_que_muda` da issue #676, que entrou pelo
     `vincular`: sem esta funcao, o bloco que o diretor le congelaria no texto do
     dia do Vinculo e a edicao dele no GitHub nunca chegaria ao card.
+
+    `versao_em_producao` e o fato do app que segura Em producao (issue #1065):
+    quem chama passa a versao so quando a Demanda JA esta Em producao
+    (`_versao_que_segura`), e nunca a que sobrou de uma subida anterior.
     """
     entregues, total = partes_da_foto(foto)
     return {
-        "etapa": etapa_da_foto(foto),
+        "etapa": etapa_da_foto(foto, versao_em_producao=versao_em_producao, pr_aberto=bool(foto.get(FATO_PRS_ABERTOS))),
         "partes_entregues": entregues,
         "partes_total": total,
         # O texto que o diretor le, lido do GitHub e nunca digitado no app
@@ -238,7 +278,20 @@ def _avisar_a_devolucao(supabase, demanda: dict[str, Any], *, destinatario_id: s
     )
 
 
-def _devolver_a_quem_pediu(supabase, demanda: dict[str, Any], *, etapa_nova: str) -> None:
+def _por_pr(foto: dict[str, Any] | None) -> bool:
+    """Se a foto diz que a issue fecha por PR: o PR que a fechou, ou um PR
+    aberto que a fecha (ADR 0069, decisao 5).
+
+    O PR aberto conta porque, no merge, o `issues.closed` pode chegar antes do
+    `pull_request.closed`: a foto ainda diz "PR aberto" e nao tem o
+    `fechada_por_pr`, e a issue esta fechando pelo PR do mesmo jeito. Sem ele, a
+    Demanda seria devolvida em Entregue e de novo em Em producao.
+    """
+    foto = foto if isinstance(foto, dict) else {}
+    return bool(foto.get(FATO_FECHADA_POR_PR) or foto.get(FATO_PRS_ABERTOS))
+
+
+def _devolver_a_quem_pediu(supabase, demanda: dict[str, Any], *, etapa_nova: str, por_pr: bool) -> None:
     """A Entrega devolve a bola a quem pediu (issue #679, ADR 0054, decisao 6).
 
     Quem decide SE ha devolucao e o que ela faz e o servico puro
@@ -259,7 +312,7 @@ def _devolver_a_quem_pediu(supabase, demanda: dict[str, Any], *, etapa_nova: str
     o lote morre no compare-and-swap da Etapa, um degrau acima, e so a thread
     que mudou a Etapa chega ate esta funcao.
     """
-    efeito = efeito_da_etapa(demanda, etapa_nova=etapa_nova)
+    efeito = efeito_da_etapa(demanda, etapa_nova=etapa_nova, por_pr=por_pr)
     if efeito == SEM_EFEITO:
         return
 
@@ -375,8 +428,151 @@ def _devolver_a_quem_pediu(supabase, demanda: dict[str, Any], *, etapa_nova: str
     _avisar_a_devolucao(supabase, atribuida.data[0], destinatario_id=efeito.atribuir_a)
 
 
-def sincronizar_demanda(supabase, demanda: dict[str, Any]) -> bool:
+def _fatos_anteriores(demanda: dict[str, Any]) -> tuple[list[int], int | None]:
+    """Os fatos do PR que a foto guardada ja carrega.
+
+    A issue relida do GitHub nao diz nada sobre PR, entao uma sincronizacao
+    pelo evento `issues` (uma label, uma edicao do corpo) apagaria o fato que o
+    webhook `pull_request` gravou. Por isso todo caminho parte daqui e so troca
+    o que ele mesmo sabe.
+    """
+    foto = demanda.get("github_foto")
+    if not isinstance(foto, dict):
+        return [], None
+    abertos = [n for n in (foto.get(FATO_PRS_ABERTOS) or []) if isinstance(n, int)]
+    fechada = foto.get(FATO_FECHADA_POR_PR)
+    return abertos, fechada if isinstance(fechada, int) else None
+
+
+def _pr_leva_subida(pr: int) -> bool:
+    """Se o PR mergeado toca no app; "nao sei" vale "nao" (`sincronizar_pelo_pr`)."""
+    try:
+        return github_client.pr_toca_o_app(pr)
+    except Exception:
+        logger.warning(
+            "[tecnologia] Falha ao ler os arquivos do PR #%s; o fechamento conta como sem subida "
+            "e devolve em Entregue.",
+            pr,
+            exc_info=True,
+        )
+        return False
+
+
+def sincronizar_pelo_pr(supabase, demanda: dict[str, Any], *, pr: int, acao: str, mergeado: bool) -> bool:
+    """O evento `pull_request` aplicado a uma Demanda cuja raiz o PR fecha.
+
+    Abrir (ou reabrir) poe o PR entre os abertos; fechar o tira, com ou sem
+    merge. So o merge grava "fechada por PR": o PR fechado sem merge apenas
+    deixa de contar, e a Etapa volta a ser o que as labels e as partes dizem
+    (ADR 0069, decisao 6).
+
+    Vai como TROCA, e nao como a lista pronta: se outra escrita passar na
+    frente, a troca e reaplicada sobre os fatos que ela gravou.
+
+    O merge so grava "fechada por PR" quando o PR leva uma subida, isto e,
+    toca no app (revisao do PR #1100). O PR de ferramenta e so merge: sem
+    entrada no `history.json` e sem webhook de deploy, Em producao nunca
+    chegaria, e a devolucao que a esperasse nunca aconteceria. Sem o fato, a
+    issue conta como fechada sem PR e devolve em Entregue (ADR 0069, decisao
+    5). Se a leitura dos arquivos falhar, vale o mesmo: devolver no merge e o
+    comportamento de antes da fatia, e esperar uma subida que talvez nao venha
+    deixaria o card com a Vitta para sempre.
+    """
+    leva_subida = mergeado and _pr_leva_subida(pr)
+
+    def _ajustar(abertos: list[int], fechada: int | None) -> tuple[list[int], int | None]:
+        abertos = [n for n in abertos if n != pr]
+        if acao in ("opened", "reopened"):
+            abertos.append(pr)
+        elif leva_subida:
+            fechada = pr
+        return abertos, fechada
+
+    return sincronizar_demanda(supabase, demanda, ajustar_fatos=_ajustar)
+
+
+# O que um gatilho sabe dos fatos do PR, como troca sobre os fatos guardados:
+# recebe (abertos, fechada_por_pr) e devolve o par novo.
+AjusteDosFatos = Callable[[list[int], int | None], tuple[list[int], int | None]]
+
+
+def _com_os_fatos(
+    foto: dict[str, Any], demanda: dict[str, Any], ajustar_fatos: AjusteDosFatos | None
+) -> dict[str, Any]:
+    """A foto lida do GitHub com os fatos do PR desta linha da Demanda, ja
+    trocados por quem chamou. Copia nova a cada tentativa, porque cada uma parte
+    da linha que acabou de ler."""
+    abertos, fechada = _fatos_anteriores(demanda)
+    if ajustar_fatos is not None:
+        abertos, fechada = ajustar_fatos(abertos, fechada)
+    foto = dict(foto)
+    if abertos:
+        foto[FATO_PRS_ABERTOS] = sorted(set(abertos))
+    if fechada is not None:
+        foto[FATO_FECHADA_POR_PR] = fechada
+    return foto
+
+
+def _versao_que_segura(demanda: dict[str, Any]) -> str | None:
+    """A versao que mantem a Demanda Em producao enquanto a issue segue entregue.
+
+    So vale com a Etapa JA em Em producao: quem a pos la foi a subida
+    (`_carimbar_em_producao`), e a releitura da issue fechada nao tem como
+    saber disso sozinha. A coluna pode guardar a versao de uma subida anterior
+    com a Etapa que voltou atras (a issue reaberta para um ajuste), e passa-la
+    adiante faria o proximo fechamento pular direto para Em producao com a
+    versao velha, antes de a correcao subir.
+    """
+    if demanda.get("etapa") != ETAPA_EM_PRODUCAO:
+        return None
+    return demanda.get("versao_em_producao") or None
+
+
+def _deixou_de_esperar_a_subida(demanda: dict[str, Any], mudanca: dict[str, Any], *, etapa_antes: str) -> bool:
+    """A Demanda segue Entregue e o fato do PR acabou de sumir (revisao do PR #1100).
+
+    O caso: o `issues.closed` do merge chegou antes do `pull_request.closed`, a
+    foto ainda dizia "PR aberto" e a devolucao ficou esperando Em producao. O
+    `pull_request.closed` de um PR de ferramenta (ou fechado sem merge) tira o
+    PR sem gravar "fechada por PR": a Etapa nao muda, mas agora nao ha subida a
+    esperar, e a Demanda volta a quem pediu em Entregue, como se tivesse
+    fechado sem PR. Uma vez so: quem chega aqui e a escrita que trocou a foto
+    (a trava do `atualizado_em`), e a foto seguinte ja nao tem o fato.
+    """
+    return (
+        etapa_antes == ETAPA_ENTREGUE
+        and mudanca["etapa"] == ETAPA_ENTREGUE
+        and _por_pr(demanda.get("github_foto"))
+        and not _por_pr(mudanca["github_foto"])
+    )
+
+
+def _reler(supabase, demanda_id: str) -> dict[str, Any] | None:
+    result = supabase.table(TABELA_DEMANDAS).select("*").eq("id", demanda_id).execute()
+    linhas = result.data or []
+    return linhas[0] if linhas else None
+
+
+def sincronizar_demanda(
+    supabase,
+    demanda: dict[str, Any],
+    *,
+    ajustar_fatos: AjusteDosFatos | None = None,
+) -> bool:
     """Rele a issue vinculada e atualiza o cache da Demanda. `True` se mudou.
+
+    `ajustar_fatos` e o que quem chama sabe dos fatos do PR (issue #1064).
+    `None` quer dizer "nao sei", e o que vale e o que a foto guardada ja dizia:
+    e o caso do evento `issues`, que nao fala de PR.
+
+    **A escrita trava em `atualizado_em`**, que o gatilho da migration 102 troca
+    a cada UPDATE. Ao mergear um PR com `Closes #N`, o GitHub manda
+    `pull_request.closed` e `issues.closed` no mesmo segundo, e os dois leem a
+    Demanda antes das chamadas ao GitHub. Sem a trava, quem escrevesse por
+    ultimo regravaria os fatos do PR da foto que leu, e o evento `issues`
+    apagaria o `fechada_por_pr`, que o GitHub nao reentrega e a reconciliacao
+    nao recupera. Quem perde a trava rele a linha e refaz a conta sobre os fatos
+    que o outro gravou, com a MESMA leitura do GitHub.
 
     NAO trata excecao: `GithubIndisponivelError` e `IssueNaoEncontradaError` sobem
     para quem chamou, porque o desfeito e diferente nos dois gatilhos. O webhook
@@ -398,42 +594,44 @@ def sincronizar_demanda(supabase, demanda: dict[str, Any]) -> bool:
     numero = int(numero)
 
     dados = github_client.ler_issue(numero)
-    foto = github_client.montar_foto(dados, github_client.ler_sub_issues(numero))
-    mudanca = mudanca_da_foto(foto)
-    if not cache_desatualizado(demanda, mudanca):
-        return False
-
+    foto_do_github = github_client.montar_foto(dados, github_client.ler_sub_issues(numero))
     demanda_id = str(demanda["id"])
-    etapa_antes = demanda.get("etapa") or ETAPA_REGISTRADA
-    muda_a_etapa = mudanca["etapa"] != etapa_antes
 
-    consulta = supabase.table(TABELA_DEMANDAS).update(mudanca).eq("id", demanda_id)
-    if muda_a_etapa:
-        # Trava otimista, e nao enfeite: o job roda numa THREAD do
-        # `BackgroundScheduler` e o webhook roda no event loop, entao entre o
-        # `select` de um e o `insert` do outro ha uma janela sem trava. Os dois
-        # leriam `etapa_antes` igual, os dois achariam que a Etapa mudou, e o
-        # diretor leria a MESMA linha duas vezes no fio.
-        #
-        # O `.eq("etapa", ...)` transforma o UPDATE num compare-and-swap: o
-        # Postgres serializa a linha, e so um dos dois casa. Quem perde sai sem
-        # escrever a segunda linha. O cache dele se perde junto, e tudo bem: quem
-        # ganhou acabou de gravar uma foto lida do mesmo GitHub, e se ela for a
-        # mais velha das duas a reconciliacao da hora seguinte reescreve.
-        #
-        # A coluna e NOT NULL com default na migration 103, entao o `.eq` nao cai
-        # na armadilha do PostgREST de descartar linha com valor nulo.
-        consulta = consulta.eq("etapa", etapa_antes)
-    result = consulta.execute()
-
-    if not muda_a_etapa:
-        return True
-    if not result.data:
-        logger.info(
-            "[tecnologia] A Etapa da Demanda %s já tinha sido movida por outro caminho; linha não repetida.",
+    for _ in range(TENTATIVAS_DA_ESCRITA):
+        mudanca = mudanca_da_foto(
+            _com_os_fatos(foto_do_github, demanda, ajustar_fatos), versao_em_producao=_versao_que_segura(demanda)
+        )
+        if not cache_desatualizado(demanda, mudanca):
+            return False
+        etapa_antes = demanda.get("etapa") or ETAPA_REGISTRADA
+        muda_a_etapa = mudanca["etapa"] != etapa_antes
+        if _escrever(supabase, demanda, mudanca, etapa_antes=etapa_antes, muda_a_etapa=muda_a_etapa):
+            break
+        # Outra escrita passou na frente. A linha relida traz os fatos do PR que
+        # ela gravou e a Etapa que ela moveu: a proxima volta parte dali, e quem
+        # perdeu a Etapa nao repete a linha dela no fio.
+        relida = _reler(supabase, demanda_id)
+        if muda_a_etapa and relida is not None and relida.get("etapa") != etapa_antes:
+            logger.info(
+                "[tecnologia] A Etapa da Demanda %s já tinha sido movida por outro caminho; linha não repetida.",
+                demanda_id,
+            )
+        if relida is None or str(relida.get("estado") or "") in ESTADOS_FECHADOS:
+            return False
+        demanda = relida
+    else:
+        logger.warning(
+            "[tecnologia] A Demanda %s foi escrita por outro caminho %s vezes seguidas; esta sincronização "
+            "desistiu, e a reconciliação da hora seguinte relê a issue.",
             demanda_id,
+            TENTATIVAS_DA_ESCRITA,
         )
         return False
+
+    if not muda_a_etapa:
+        if _deixou_de_esperar_a_subida(demanda, mudanca, etapa_antes=etapa_antes):
+            _devolver_a_quem_pediu(supabase, demanda, etapa_nova=ETAPA_ENTREGUE, por_pr=False)
+        return True
 
     _gravar_linha(
         supabase,
@@ -453,7 +651,7 @@ def sincronizar_demanda(supabase, demanda: dict[str, Any]) -> bool:
     # sem mexer na Etapa e nao chega ate aqui, entao a Demanda nao e devolvida
     # de novo a cada webhook depois da entrega.
     try:
-        _devolver_a_quem_pediu(supabase, demanda, etapa_nova=mudanca["etapa"])
+        _devolver_a_quem_pediu(supabase, demanda, etapa_nova=mudanca["etapa"], por_pr=_por_pr(mudanca["github_foto"]))
     except Exception:
         # A excecao continua subindo (o webhook responde `falhou: true`, o lote
         # conta a falha), mas ela sai daqui com NOME. O cache e a linha da Etapa
@@ -471,6 +669,234 @@ def sincronizar_demanda(supabase, demanda: dict[str, Any]) -> bool:
         )
         raise
     return True
+
+
+def _escrever(
+    supabase, demanda: dict[str, Any], mudanca: dict[str, Any], *, etapa_antes: str, muda_a_etapa: bool
+) -> bool:
+    """O UPDATE do cache, so se ninguem escreveu na Demanda desde a leitura.
+
+    `False` quando a linha nao casou: outra escrita passou na frente, e quem
+    chamou rele e tenta de novo.
+    """
+    consulta = (
+        supabase.table(TABELA_DEMANDAS)
+        .update(mudanca)
+        .eq("id", str(demanda["id"]))
+        # A trava dos fatos do PR (issue #1064): toda escrita troca o carimbo,
+        # entao os fatos que este UPDATE regrava sao os da linha que foi lida.
+        # A coluna e NOT NULL com default na migration 102.
+        .eq("atualizado_em", demanda.get("atualizado_em"))
+    )
+    if muda_a_etapa:
+        # Trava otimista, e nao enfeite: o job roda numa THREAD do
+        # `BackgroundScheduler` e o webhook roda no event loop, entao entre o
+        # `select` de um e o `insert` do outro ha uma janela sem trava. Os dois
+        # leriam `etapa_antes` igual, os dois achariam que a Etapa mudou, e o
+        # diretor leria a MESMA linha duas vezes no fio.
+        #
+        # O `.eq("etapa", ...)` transforma o UPDATE num compare-and-swap: o
+        # Postgres serializa a linha, e so um dos dois casa. Quem perde nao
+        # escreve a segunda linha: rele a Demanda, ve a Etapa ja movida, e so
+        # regrava a foto se ainda houver o que mudar nela.
+        #
+        # A coluna e NOT NULL com default na migration 103, entao o `.eq` nao cai
+        # na armadilha do PostgREST de descartar linha com valor nulo.
+        consulta = consulta.eq("etapa", etapa_antes)
+    return bool(consulta.execute().data)
+
+
+def _prs_abertos_do_lote() -> list[dict[str, Any]] | None:
+    """Os PRs abertos do repositorio, lidos uma vez para o lote inteiro.
+
+    `None` quando a leitura falha, e nao lista vazia: "nao consegui ler" virando
+    "nao ha PR aberto" tiraria o fato de toda Demanda numa queda do GitHub, e o
+    card voltaria para tras sem ninguem ter fechado PR nenhum. Com `None`, cada
+    Demanda fica com o fato que a foto ja tinha, e o lote segue.
+    """
+    try:
+        return github_client.ler_prs_abertos()
+    except Exception:
+        logger.warning(
+            "[tecnologia] Falha ao ler os PRs abertos; a reconciliação segue com o fato de PR que cada foto já tinha.",
+            exc_info=True,
+        )
+        return None
+
+
+def marcar_em_producao(supabase, *, versao: str, data: str, issues: list[int]) -> dict[str, int]:
+    """A subida chegou: Em produção nas Demandas destas issues (issue #1065).
+
+    `versao` ja vem rotulada ("v0.169.0") e `issues` sao as que os PRs do lote
+    fecham. Cada Demanda vinculada a uma delas passa por `_carimbar_em_producao`;
+    as outras issues (a esmagadora maioria) nao tem Demanda nenhuma atras.
+
+    Falha e de UMA Demanda, como no lote de hora em hora: a seguinte ainda e
+    marcada, e a contagem diz quantas ficaram para tras.
+    """
+    marcadas = 0
+    falhas = 0
+    for numero in sorted(set(issues)):
+        demanda = None
+        try:
+            demanda = demanda_vinculada(supabase, numero)
+            if demanda is not None and _carimbar_em_producao(supabase, demanda, versao=versao, data=data):
+                marcadas += 1
+        except Exception:
+            falhas += 1
+            logger.warning(
+                "[tecnologia] Falha ao marcar Em produção na %s a Demanda %s (issue #%s).",
+                versao,
+                (demanda or {}).get("id"),
+                numero,
+                exc_info=True,
+            )
+    return {"marcadas": marcadas, "falhas": falhas}
+
+
+def _carimbar_em_producao(supabase, demanda: dict[str, Any], *, versao: str, data: str) -> bool:
+    """Em producao nesta Demanda, se ela estiver Entregue. `True` se marcou.
+
+    **So a Entregue sobe**, e e isso que faz o carimbo idempotente por
+    (Demanda, versao): a segunda chamada com a mesma versao encontra Em producao
+    e sai sem gravar, sem linha e sem e-mail. Pelo mesmo motivo uma subida
+    seguinte que liste a mesma issue nao troca a versao: "Em producao desde"
+    e a PRIMEIRA. A issue reaberta tira a Demanda de Em producao pela
+    sincronizacao, e o proximo fechamento espera a proxima subida.
+
+    O UPDATE e um compare-and-swap na Etapa, como o da sincronizacao: o webhook
+    de deploy roda no threadpool e a reconciliacao numa thread do scheduler, e
+    so quem move a Etapa escreve a linha e devolve o card.
+
+    Demanda fechada nao e tocada, pelo mesmo motivo da sincronizacao: alguem a
+    concluiu ou cancelou a mao, e o fio dela nao ganha linha nova. As duas
+    regras moram no proprio UPDATE, e nao num `if` antes dele: conferidas na
+    linha lida, deixariam passar quem mudou a Demanda entre a leitura e a
+    escrita.
+    """
+    demanda_id = str(demanda["id"])
+    marcada = (
+        supabase.table(TABELA_DEMANDAS)
+        .update({"etapa": ETAPA_EM_PRODUCAO, "versao_em_producao": versao, "entregue_em": data})
+        .eq("id", demanda_id)
+        .eq("etapa", ETAPA_ENTREGUE)
+        .in_("estado", list(ESTADOS_ABERTOS))
+        .execute()
+    )
+    if not marcada.data:
+        return False
+    _gravar_linha(
+        supabase,
+        demanda_id=demanda_id,
+        campo="etapa",
+        de=ETAPA_ENTREGUE,
+        para=ETAPA_EM_PRODUCAO,
+        texto=texto_em_producao(versao),
+    )
+    try:
+        _devolver_a_quem_pediu(
+            supabase, demanda, etapa_nova=ETAPA_EM_PRODUCAO, por_pr=_por_pr(demanda.get("github_foto"))
+        )
+    except Exception:
+        # A mesma frase da sincronizacao, pelo mesmo motivo: a Etapa ja e Em
+        # producao, e nenhuma passagem seguinte refaz a devolucao.
+        logger.error(
+            "[tecnologia] A devolução da entrega NÃO foi concluída na Demanda %s e a reconciliação "
+            "não vai refazê-la (a Etapa já é Em produção): termine à mão o movimento para Aguardando, "
+            "o responsável e o aviso.",
+            demanda_id,
+            exc_info=True,
+        )
+        raise
+    return True
+
+
+def _subiu_depois_do_fechamento(data_da_subida: str, fechada_em: object) -> bool:
+    """Se a subida e de DEPOIS do fechamento atual da issue (revisao do PR #1100).
+
+    A entrada mais nova do `history.json` que lista a issue pode ser a de um
+    fechamento ANTERIOR: a issue subiu, reabriu para um ajuste, o PR do ajuste
+    foi mergeado, e a subida dele ainda nao foi registrada (build, health e a
+    Action pos-merge; na onda, todos os merges antes de um build so). Carimbar
+    essa entrada gravaria "Em producao desde" a versao velha e devolveria o card
+    com o ajuste fora do ar, e o webhook da subida certa ja nao corrigiria nada.
+
+    O registro e gravado depois do health, e o merge fecha a issue antes do
+    build: a subida que levou o fechamento atual tem sempre data posterior ao
+    `closed_at`. Sem `closed_at` legivel nao ha como provar, e a Demanda espera
+    o webhook ou a passagem seguinte.
+    """
+    if not isinstance(fechada_em, str):
+        return False
+    try:
+        return datetime.fromisoformat(data_da_subida) > datetime.fromisoformat(fechada_em)
+    except (TypeError, ValueError):
+        return False
+
+
+def reconciliar_em_producao(supabase) -> dict[str, int]:
+    """O par do webhook de deploy no lote de hora em hora (ADR 0069, decisao 4).
+
+    A Action pode nao ter avisado: o segredo ainda nao cadastrado, o app
+    reiniciando na hora, a rede. O registro da subida esta no `history.json` da
+    `main` do mesmo jeito, e esta passagem marca Em producao cada Demanda
+    Entregue cuja issue aparece numa subida registrada, com a versao e a data
+    da mais nova que a lista (`subida_de_cada_issue`), desde que essa subida
+    seja de depois do fechamento atual da issue (`_subiu_depois_do_fechamento`,
+    que rele a issue para o `closed_at`).
+
+    Roda DEPOIS do `reconciliar_vinculos`, que pode ter acabado de levar a
+    Demanda a Entregue (o `issues.closed` que o webhook perdeu). Sem Demanda
+    Entregue aberta, o arquivo nem e lido: a cota do GitHub e uma so.
+
+    O carimbo e o mesmo do webhook (`_carimbar_em_producao`), e por isso a
+    mesma idempotencia, a mesma linha e a mesma devolucao.
+    """
+    result = (
+        supabase.table(TABELA_DEMANDAS)
+        .select("*")
+        .eq("etapa", ETAPA_ENTREGUE)
+        .in_("estado", list(ESTADOS_ABERTOS))
+        .not_.is_("github_issue_numero", "null")
+        .execute()
+    )
+    entregues = result.data or []
+    if not entregues:
+        return {"lidas": 0, "marcadas": 0, "falhas": 0}
+
+    try:
+        subidas = subida_de_cada_issue(github_client.ler_historico_de_deploys())
+    except Exception:
+        logger.warning(
+            "[tecnologia] Falha ao ler o history.json da main; Em produção fica para a próxima passagem.",
+            exc_info=True,
+        )
+        return {"lidas": len(entregues), "marcadas": 0, "falhas": len(entregues)}
+
+    marcadas = 0
+    falhas = 0
+    for demanda in entregues:
+        numero = int(demanda["github_issue_numero"])
+        subida = subidas.get(numero)
+        if subida is None:
+            continue
+        versao, data = subida
+        try:
+            if not _subiu_depois_do_fechamento(data, github_client.ler_issue(numero).get("closed_at")):
+                continue
+            if _carimbar_em_producao(supabase, demanda, versao=versao, data=data):
+                marcadas += 1
+        except Exception:
+            falhas += 1
+            logger.warning(
+                "[tecnologia] Falha ao marcar Em produção na %s a Demanda %s pela reconciliação.",
+                versao,
+                demanda.get("id"),
+                exc_info=True,
+            )
+    if marcadas or falhas:
+        logger.info("[tecnologia] Em produção pelo history.json: %s marcada(s), %s falha(s).", marcadas, falhas)
+    return {"lidas": len(entregues), "marcadas": marcadas, "falhas": falhas}
 
 
 def reconciliar_vinculos(supabase) -> dict[str, int]:
@@ -492,12 +918,19 @@ def reconciliar_vinculos(supabase) -> dict[str, int]:
         .execute()
     )
     demandas = result.data or []
+    prs_abertos = _prs_abertos_do_lote() if demandas else None
 
     mudadas = 0
     falhas = 0
     for demanda in demandas:
         try:
-            if sincronizar_demanda(supabase, demanda):
+            ajustar = None
+            if prs_abertos is not None:
+                numero = demanda.get("github_issue_numero")
+                abertos = [pr["numero"] for pr in prs_abertos if numero in pr["fecha"]]
+                # A lista do GitHub substitui a guardada; o `fechada_por_pr` fica.
+                ajustar = lambda _guardados, fechada, abertos=abertos: (abertos, fechada)  # noqa: E731
+            if sincronizar_demanda(supabase, demanda, ajustar_fatos=ajustar):
                 mudadas += 1
         except github_client.IssueNaoEncontradaError:
             # Condicao PERMANENTE: a issue foi apagada ou transferida. Uma linha,

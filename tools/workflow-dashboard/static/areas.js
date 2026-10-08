@@ -284,6 +284,19 @@ function renderSchema(_dados, ctx) {
 
 /* ---------- FLUXOGRAMAS: explicação leiga no hover dos estados ---------- */
 
+/* mostra o popover (.st-pop) logo abaixo do alvo, dentro da caixa; sem
+   espaço embaixo, sobe para cima dele */
+export function posicionarPop(pop, alvo, box) {
+  pop.hidden = false;
+  const r = alvo.getBoundingClientRect(), b = box.getBoundingClientRect();
+  let x = r.left - b.left + r.width / 2 - pop.offsetWidth / 2;
+  x = Math.max(8, Math.min(x, b.width - pop.offsetWidth - 8));
+  let y = r.bottom - b.top + 8;
+  if (y + pop.offsetHeight > b.height - 4) y = r.top - b.top - pop.offsetHeight - 8;
+  pop.style.left = `${Math.round(x)}px`;
+  pop.style.top = `${Math.round(y)}px`;
+}
+
 export function wireFluxogramas(root, dados) {
   const estados = (dados && dados.estados) || {};
   root.querySelectorAll('.diagrama-box').forEach(box => {
@@ -301,14 +314,7 @@ export function wireFluxogramas(root, dados) {
       g.setAttribute('tabindex', '0');
       const mostrar = () => {
         pop.innerHTML = `<b>${esc(nome)}</b>${esc(txt)}`;
-        pop.hidden = false;
-        const r = g.getBoundingClientRect(), b = box.getBoundingClientRect();
-        let x = r.left - b.left + r.width / 2 - pop.offsetWidth / 2;
-        x = Math.max(8, Math.min(x, b.width - pop.offsetWidth - 8));
-        let y = r.bottom - b.top + 8;
-        if (y + pop.offsetHeight > b.height - 4) y = r.top - b.top - pop.offsetHeight - 8;
-        pop.style.left = `${Math.round(x)}px`;
-        pop.style.top = `${Math.round(y)}px`;
+        posicionarPop(pop, g, box);
       };
       const esconder = () => { pop.hidden = true; };
       g.addEventListener('mouseenter', mostrar);

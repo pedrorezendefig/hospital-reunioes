@@ -15,6 +15,11 @@ falta, não toca em arquivo nenhum.
 Uso:
     python3 tools/tirar_draft_manual.py --prd 731 [--prd 740]
                                         [--dir docs/manual] [--dry-run]
+                                        [--resumo aviso.md]
+
+`--resumo` escreve, em Markdown, o aviso que a Action pós-merge deixa no run e
+no PRD (issue #951): as páginas que saíram do draft ou as que ficaram, e o
+próximo passo, que é do humano. Sem página em draft, não escreve nada.
 
 Códigos de saída:
     0  tirou o draft, ou não havia nada a tirar (o passo é silencioso)
@@ -86,6 +91,25 @@ def sem_draft(texto: str) -> str | None:
                 + linhas[i + 1 :]
             )
     return None
+
+
+# A Action tira o draft no runner, mas não publica: o MP4 do Vídeo de tarefa
+# não vem no clone e a Vercel não tem token no repositório (issue #951).
+PROXIMO_PASSO = (
+    "Próximo passo: rode `/manual publicar` da sua máquina, a que tem os MP4 "
+    "dos Vídeos de tarefa. É ele que tira o draft das páginas com vídeo e "
+    "republica o Manual em https://manual-hsm.vercel.app."
+)
+
+
+def resumo(numeros: str, paginas: list[str], impedimentos: list[str]) -> str:
+    """O aviso em Markdown. Com impedimento, nada saiu do draft."""
+    titulo = "Ficaram em draft" if impedimentos else "Saíram do draft"
+    linhas = [f"## Manual do PRD {numeros}", "", f"{titulo}:"]
+    linhas += [f"- `{pagina}`" for pagina in paginas]
+    if impedimentos:
+        linhas += ["", "Por quê:", *(f"- {i}" for i in impedimentos)]
+    return "\n".join([*linhas, "", PROXIMO_PASSO]) + "\n"
 
 
 def video_sem_mp4(raiz: Path, conteudo: Path, paginas: list[Path]) -> list[str]:
@@ -163,6 +187,7 @@ def main() -> int:
         help="número do PRD que subiu; repita para vários",
     )
     ap.add_argument("--dry-run", action="store_true")
+    ap.add_argument("--resumo", help="arquivo onde escrever o aviso em Markdown")
     args = ap.parse_args()
 
     raiz = Path(args.dir)
@@ -181,6 +206,7 @@ def main() -> int:
         print(f"Manual: nenhuma página em draft do PRD {numeros}.")
         return 0
 
+    paginas = [str(arquivo.relative_to(conteudo)) for arquivo in achadas]
     # Tudo o que impede a publicação é levantado antes da primeira escrita: ou
     # o PRD inteiro sai do draft, ou nada sai.
     impedimentos = video_sem_mp4(raiz, conteudo, achadas) + ferramentas_faltando()
@@ -201,6 +227,10 @@ def main() -> int:
             "repositório e fora do ar:\n" + "\n".join(f"  - {i}" for i in impedimentos),
             file=sys.stderr,
         )
+        if args.resumo:
+            Path(args.resumo).write_text(
+                resumo(numeros, paginas, impedimentos), encoding="utf-8"
+            )
         return 2
 
     for arquivo, novo in novos:
@@ -209,6 +239,8 @@ def main() -> int:
         print(f"Manual: {arquivo.relative_to(conteudo)} sai do draft.")
     if args.dry_run:
         print(f"(--dry-run: {len(novos)} página(s) continuam em draft.)")
+    elif args.resumo:
+        Path(args.resumo).write_text(resumo(numeros, paginas, []), encoding="utf-8")
     return 0
 
 

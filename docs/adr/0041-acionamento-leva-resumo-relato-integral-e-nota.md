@@ -18,7 +18,7 @@ O diagnóstico da Diretoria Executiva de 31/08/2026 (RN-78, RN-60) determinou o 
 
 2. **O extrato continua obrigatório.** A validação segue recusada sem ele. O que muda é a companhia: ele deixa de ser o único conteúdo.
 
-3. **Sigilo reforçado é a exceção (RN-79).** Caso sigiloso não leva identificação do manifestante em email nem na tela do token, e o relato integral é substituído pelo extrato. Vale nos dois lugares, sem exceção. **Ver a emenda de 01/09/2026 abaixo: a exceção é mais larga do que esta frase, alcança também o caso anônimo, e assim foi ratificada em 03/09/2026.**
+3. **Sigilo reforçado é a exceção (RN-79).** Caso sigiloso não leva identificação do manifestante em email nem na tela do token, e o relato integral é substituído pelo extrato. Vale nos dois lugares, sem exceção. **Ver a emenda de 01/09/2026 abaixo: a exceção chegou a alcançar também o caso anônimo, ratificada em 03/09/2026, e a emenda de 07/10/2026 a devolveu ao tamanho desta frase: só o sigilo reforçado.**
 
 4. **O reenvio manda os mesmos três blocos** gravados no caso, para provar o que a área recebeu.
 
@@ -46,10 +46,26 @@ O preço aceito é conhecido: em uma fatia grande dos casos do canal público a 
 
 A pseudonimização não foi descartada por mérito, foi adiada por falta de demanda comprovada. Se a área pedir, ela vira PRD próprio, com o critério de qualidade da remoção e o que o sistema faz quando não tem confiança suficiente definidos lá, e não aqui.
 
+## Emenda de 07/10/2026: o caso anônimo volta a levar resumo e relato integral (issue #1051)
+
+Reverte o item 1 da emenda de 01/09/2026 e a ratificação de 03/09/2026 na parte do anonimato. Os itens 2 e 3 daquela emenda seguem valendo, agora só para o sigilo reforçado.
+
+O sinal que a ratificação mandava acompanhar apareceu: a responsável de um setor recebeu o caso 2026-0079 (anônimo, sem sigilo reforçado) só com a nota da ouvidoria e o aviso de que o relato não era encaminhado, e não conseguiu trabalhar o caso. Decisão do Pedro em 07/10/2026: o setor precisa do relato integral também no caso anônimo.
+
+1. **Só o sigilo reforçado protege o relato.** `caso_protegido` deixa de olhar o anonimato. Caso anônimo sem sigilo reforçado leva RESUMO, RELATO INTEGRAL e NOTA DA OUVIDORIA, como o caso comum, no email de acionamento, no reenvio e na tela do responsável, porque a montagem é uma só (`montar_blocos`). Caso com sigilo reforçado, anônimo ou não, segue só com a nota (decisão 3, RN-79).
+
+2. **O anonimato continua tirando quem manifestou.** A linha "quem manifestou" segue "Sem identificação" no caso anônimo (ADR 0034, decisão 8): o que muda é o relato, não o nome.
+
+3. **O aviso do caso anônimo muda de assunto.** Deixa de dizer que relato e resumo não são encaminhados; só avisa que a manifestação é anônima e pede para não tentar descobrir a autoria.
+
+O risco que a ratificação de 03/09 apontava continua real e agora é aceito: o relato do canal público pode carregar nome ou leito de quem preferiu não se identificar, e esse texto passa a chegar ao setor. A mitigação é a de sempre: o ouvidor sobe o sigilo reforçado quando o relato expõe quem escreveu.
+
+Fora desta emenda: os emails de degrau, de prazo rompido e de encaminhamento a outra área continuam sem relato, por desenho; o caso anonimizado pela Retenção continua com "relato não registrado"; os casos anônimos já acionados não são reenviados de ofício (a Ouvidoria usa o reenvio que já existe, se quiser).
+
 ## Consequências
 
 - O relato do manifestante, em caso não sigiloso, passa a viajar por email, e email do sistema é entregue por processador externo com infraestrutura fora do Brasil (ADR 0039). Risco conhecido e aceito pela Diretoria; a mitigação permanente é o sigilo reforçado subir sempre que o tipo ou o ouvidor pedirem, e o aviso de privacidade do hospital (que o 0039 alimenta) deve refletir a mudança.
 - O verbete Extrato para o setor do CONTEXT.md foi reescrito nesta data.
 - A tela do responsável é reorganizada na ordem da RN-59, com o relato integral aberto por padrão.
-- Pela emenda acima, ratificada em 03/09/2026, o acionamento de caso anônimo sai só com a nota da ouvidoria. A RN-78 vale integralmente no caso comum e cede ao anonimato no caso anônimo.
-- As histórias 5 e 6 do PRD #469 (relato integral aberto por padrão, nota da ouvidoria em bloco distinto) valem para o caso comum. No caso protegido, sigiloso ou anônimo, a área lê a nota e o aviso que diz por que o resto não veio. É o resultado decidido, não uma entrega parcial.
+- De 01/09 a 07/10/2026, pela emenda ratificada em 03/09, o acionamento de caso anônimo saiu só com a nota da ouvidoria. Desde a emenda de 07/10/2026, a RN-78 vale integralmente no caso comum e no anônimo, e cede só ao sigilo reforçado.
+- As histórias 5 e 6 do PRD #469 (relato integral aberto por padrão, nota da ouvidoria em bloco distinto) valem para o caso comum e para o anônimo. No caso sob sigilo reforçado a área lê a nota e o aviso que diz por que o resto não veio. É o resultado decidido, não uma entrega parcial.

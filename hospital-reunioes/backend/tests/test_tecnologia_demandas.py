@@ -619,12 +619,15 @@ class TestCriarDemanda:
     def test_a_recusa_do_dono_sem_acesso_diz_onde_consertar(self):
         """Guarda-corpo que so diz "nao pode" vira indisponibilidade.
 
-        Quem TEM onde carimbar e o proprio Super admin, na mesma tela: a lista
-        de Produtos fica logo abaixo do Quadro, e dentro da aba todos podem
-        tudo (ADR 0050, decisao 11). A frase tem que apontar para la.
+        Quem TEM onde carimbar e o proprio Super admin, dentro da aba: a lista
+        de Produtos mora na tela da engrenagem ao lado de "Nova Demanda" desde
+        a issue #1060, e dentro da aba todos podem tudo (ADR 0050, decisao 11).
+        A frase tem que apontar para la, e nao para o rodape do Quadro, que nao
+        tem mais cadastro nenhum.
         """
         assert "dono" in MOTIVO_DONO_DO_PRODUTO_SEM_ACESSO
-        assert "lista de Produtos" in MOTIVO_DONO_DO_PRODUTO_SEM_ACESSO
+        assert "engrenagem ao lado de Nova Demanda" in MOTIVO_DONO_DO_PRODUTO_SEM_ACESSO
+        assert "abaixo do Quadro" not in MOTIVO_DONO_DO_PRODUTO_SEM_ACESSO
 
     def test_dono_desativado_tambem_e_recusado(self):
         """Perder o acesso nao e so perder o Super admin: participante
@@ -2041,7 +2044,7 @@ Tipo: Decisão
 Produto: Ana
 
 Descrição:
-A Ana precisa encerrar a conversa parada há 24 horas.
+    A Ana precisa encerrar a conversa parada há 24 horas.
 
 Conversa:
 --- início da conversa ---
@@ -2118,14 +2121,14 @@ class TestTextoParaIa:
     def test_sem_descricao_o_texto_diz_que_ela_nao_foi_preenchida(self):
         texto = texto_para_ia(demanda=_demanda_com_nomes(descricao=None), linhas=FIO_DO_EXEMPLO)
 
-        assert "Descrição:\n(sem descrição)" in texto
+        assert "Descrição:\n    (sem descrição)" in texto
         # Par de presenca: o resto do pedido esta la.
         assert "Título: Encerrar conversas da Ana" in texto
 
     def test_descricao_so_de_espacos_conta_como_sem_descricao(self):
         texto = texto_para_ia(demanda=_demanda_com_nomes(descricao="   \n  "), linhas=[])
 
-        assert "Descrição:\n(sem descrição)" in texto
+        assert "Descrição:\n    (sem descrição)" in texto
 
     @pytest.mark.parametrize(
         "tipo,rotulo",

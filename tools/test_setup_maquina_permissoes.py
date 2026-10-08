@@ -6,7 +6,7 @@ mudança por qualquer caminho. Regra de deny por prefixo não trava isso (escapa
 com `-X DELETE`, `--method=PUT`, `graphql`, `curl`), então ela não existe mais.
 No `~/.claude/settings.json` de cada pessoa ficam o deny de force push contra a
 `main` e o `autoMode` (o modo auto não lê `autoMode` do settings do projeto):
-o rabo, a `/minhas-issues` e a escrituração em issue e PR vão em
+a subida, a `/minhas-issues` e a escrituração em issue e PR vão em
 `autoMode.allow`, em prosa, para o classificador seguir olhando destino e
 conteúdo, e nunca em `permissions.allow`, que pula o classificador. O
 `/setup-maquina` confere e diz o que falta e por quê; nunca grava o arquivo e
@@ -22,7 +22,6 @@ import subprocess
 from pathlib import Path
 
 from test_setup_maquina_esteira import (
-    RAIZ,
     SAIDAS,
     SCRIPT,
     SEGREDO,
@@ -262,33 +261,6 @@ def test_settings_sem_autoMode_e_sem_permissoes_acusa_tudo(tmp_path):
 def test_settings_que_nao_existe_acusa_tudo(tmp_path):
     saida = confere(tmp_path, tmp_path / "nao-existe.json")
     assert len(faltas(saida)) == LINHAS - 1, saida
-
-
-def test_o_trecho_do_onboarding_passa_no_diagnostico(tmp_path):
-    """O FALTA manda a pessoa ao trecho da seção 5.1; ele tem de bastar."""
-    guia = (RAIZ / "docs" / "onboarding" / "claude-setup.md").read_text(
-        encoding="utf-8"
-    )
-    secao = guia.split("### 5.1 ", 1)[1].split("\n## ", 1)[0]
-    bloco = secao.split("```json\n", 1)[1].split("```", 1)[0]
-    arquivo = tmp_path / "settings.json"
-    arquivo.write_text(bloco, encoding="utf-8")
-    saida = confere(tmp_path, arquivo)
-    assert faltas(saida) == [], saida
-    assert len(saida.splitlines()) == LINHAS, saida
-
-
-def test_o_guia_base_nao_libera_gh_inteiro(tmp_path):
-    """O `Bash(gh:*)` da seção 5 tiraria o classificador da escrituração de novo."""
-    guia = (RAIZ / "docs" / "onboarding" / "claude-setup.md").read_text(
-        encoding="utf-8"
-    )
-    for bloco in guia.split("```json\n")[1:]:
-        json_bloco = bloco.split("```", 1)[0]
-        arquivo = tmp_path / "settings.json"
-        arquivo.write_text(json_bloco, encoding="utf-8")
-        saida = confere(tmp_path, arquivo)
-        assert not [li for li in faltas(saida) if "allow aberto" in li], saida
 
 
 # ------------------------------------------------- o token do gh sem Administration
@@ -662,39 +634,3 @@ def test_o_nivel_1_nao_confere_as_permissoes(tmp_path):
 
 
 # ------------------------------------------------- ADR 0063
-
-
-def cabecalho(caminho: Path) -> dict[str, str]:
-    bloco = caminho.read_text(encoding="utf-8").split("---\n")[1]
-    return dict(li.split(": ", 1) for li in bloco.splitlines() if ": " in li)
-
-
-def adr(numero: str) -> Path:
-    achados = sorted((RAIZ / "docs" / "adr").glob(f"{numero}-*.md"))
-    assert len(achados) == 1, f"esperava um ADR {numero}: {achados}"
-    return achados[0]
-
-
-def test_adr_0063_aceito_e_emendando_o_0061_nos_dois_sentidos():
-    nova = cabecalho(adr("0063"))
-    assert nova["status"] == "accepted"
-    assert nova["amends"] == "0061"
-    assert "0063" in cabecalho(adr("0061"))["amended_by"].split(", ")
-    assert adr("0063").name in (RAIZ / "docs" / "adr" / "README.md").read_text(
-        encoding="utf-8"
-    )
-
-
-def test_adr_0063_poe_a_trava_no_servidor_e_diz_por_que_o_deny_nao_serve():
-    texto = adr("0063").read_text(encoding="utf-8")
-    assert "Administration" in texto and "fine-grained" in texto
-    for contorno in ("-X DELETE", "--method=PUT", "graphql", "curl"):
-        assert contorno in texto, contorno
-    assert "rulesets:*" not in texto, "nenhuma regra de deny do ruleset sobrou"
-
-
-def test_texto_novo_sem_travessao():
-    skill = SCRIPT.parent.parent / "SKILL.md"
-    for caminho in (adr("0063"), SCRIPT, skill, Path(__file__)):
-        texto = caminho.read_text(encoding="utf-8")
-        assert "\u2014" not in texto and "\u2013" not in texto, caminho

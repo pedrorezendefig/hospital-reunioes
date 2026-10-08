@@ -18,9 +18,9 @@ Quando uma skill mencionar um papel (ex.: "aplique a label de AFK-ready"), use a
 | --- | --- |
 | `in-progress` | Uma sessão deu claim e está trabalhando — sai da fila `ready-for-agent` |
 
-> **Aposentada:** a label `blocked` (e a convenção `Bloqueada por: #X` no corpo) saiu de uso em 13/07/2026. Bloqueio entre issues agora é a **dependência nativa** do GitHub ("blocked by"); a fila filtra com `-is:blocked` e o destravamento é automático. Ver ADR 0028 e `docs/agents/issue-tracker.md`.
+> **Aposentada:** a label `blocked` (e a convenção `Bloqueada por: #X` no corpo) saiu de uso em 13/07/2026. Bloqueio entre issues agora é a **dependência nativa** do GitHub ("blocked by"); a fila filtra com `-is:blocked` e o destravamento é automático. Ver ADR 0068 e `docs/agents/issue-tracker.md`.
 
-## Label do loop do revisor (ADR 0020)
+## Label do loop do revisor (ADR 0068)
 
 | Label | Significado |
 | --- | --- |
@@ -38,7 +38,7 @@ Família **descritiva de tamanho** (não de estado), aplicada pelo `/to-issues` 
 | `fatia:M` | Média — meio período típico (fatia vertical completa, escopo conhecido) |
 | `fatia:G` | Grande — dia cheio ou mais; maior risco/incerteza (muitas camadas, UI nova, integração externa) |
 
-O dashboard usa esses labels para calcular o **tempo típico** de cada fatia: a mediana do **lead time real** (claim → fechamento; sem claim identificável, abertura → fechamento) das fatias fechadas do mesmo tamanho. Bucket com menos de 3 amostras cai na mediana geral. Nunca é estimativa a priori — o número melhora sozinho a cada fatia fechada. Não retro-rotulamos issues antigas; a amostra cresce daqui pra frente. Vocabulário do Plano (onda, caminho crítico) no README de `tools/workflow-dashboard/`.
+O Hospital OS agrupa esses labels no filtro `fatia:` da aba Issues, e a `/onda-enxuta` escolhe por eles o esforço do implementador. Tempo típico, lead time por tamanho e caminho crítico saíram com o Plano (ADR 0068). O vocabulário do painel (fase, funil, raia, tentativa) fica no README de `tools/workflow-dashboard/`.
 
 ## Labels ortogonais (mantidas do fluxo anterior)
 

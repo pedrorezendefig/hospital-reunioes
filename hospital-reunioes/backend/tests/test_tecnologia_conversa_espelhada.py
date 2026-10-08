@@ -324,6 +324,37 @@ class TestArrobaNoTextoEspelhado:
 
         assert texto == "[REDE_SOCIAL] e @ana-hsm"
 
+    def test_hifen_colado_ao_nome_mencionado_nao_vira_mencao_a_outra_conta(self):
+        """Issue #888: com "Ana Silva" (login `ana`) escolhida no autocomplete,
+        `@Ana Silva-bob` saia `@ana-bob` e notificava a conta `ana-bob`. Hifen
+        continua um login, entao nao e fronteira do nome."""
+        ana = {**DIRETOR, "id": "P3", "nome_completo": "Ana Silva", "github_login": "ana"}
+
+        texto = texto_espelhado("@Ana Silva-bob, veja", mencionados=[ana])
+
+        assert texto == "[REDE_SOCIAL] Silva-bob, veja"
+        assert _mencoes_vivas(texto) == []
+
+    def test_arroba_solto_antes_do_rotulo_neutro_nao_vira_mencao(self):
+        """Issue #888: o `@` que sobra logo antes da mencao a quem nao tem
+        login encostava no "Pessoa do hospital" e saia `@Pessoa`."""
+        texto = texto_espelhado("@@Diretor do Hospital, veja", mencionados=[DIRETOR])
+
+        assert texto == "@ Pessoa do hospital, veja"
+        assert _mencoes_vivas(texto) == []
+
+    def test_rotulo_neutro_colado_ao_login_da_mencao_anterior_nao_vira_outra_conta(self):
+        """Issue #888, revisao do PR #1041: duas mencoes coladas, a segunda sem
+        login. `@Ana Silva@Diretor do Hospital` saia `@anaPessoa do hospital`,
+        mencao viva a conta `anaPessoa`. O que encosta no rotulo e o texto ja
+        montado, nao so o trecho do autor."""
+        ana = {**DIRETOR, "id": "P3", "nome_completo": "Ana Silva", "github_login": "ana"}
+
+        texto = texto_espelhado("@Ana Silva@Diretor do Hospital, veja", mencionados=[ana, DIRETOR])
+
+        assert texto == "@ana Pessoa do hospital, veja"
+        assert _mencoes_vivas(texto, postas_pelo_app=("ana",)) == []
+
     def test_nome_de_cadastro_com_sinal_de_menor_ainda_casa(self):
         """A troca roda sobre o texto BRUTO: o funil do `texto_do_diretor`
         transforma o texto (`<` vira `&lt;`) e nao o nome do cadastro."""
@@ -401,6 +432,19 @@ class TestResponderEspelha:
         assert gh.comentarios_criados[0]["corpo"].split("\n")[-1] == "@pedrorezendefig, veja; e avisa o [REDE_SOCIAL]"
         assert "Pedro Vitta" not in gh.comentarios_criados[0]["corpo"]
 
+    def test_hifen_colado_ao_nome_mencionado_nao_chega_vivo_ao_github(self, monkeypatch):
+        """Issue #888, pela rota: `@Pedro Vitta-bob` com o Pedro mencionado
+        nao pode publicar `@pedrorezendefig-bob`."""
+        client, _, gh = _montar(logado=DIRETOR, demandas=[_vinculada()], monkeypatch=monkeypatch)
+
+        resposta = client.post(
+            f"{BASE}/demandas/d-1/conversa",
+            json={"texto": "@Pedro Vitta-bob, veja", "mencoes": ["P1"]},
+        )
+
+        assert resposta.status_code == 201
+        assert _mencoes_vivas(gh.comentarios_criados[0]["corpo"].split("\n")[-1]) == []
+
     def test_demanda_sem_vinculo_nao_chama_o_github(self, monkeypatch):
         client, sb, gh = _montar(logado=PEDRO, demandas=[_demanda("d-1")], monkeypatch=monkeypatch)
 
@@ -472,6 +516,9 @@ class TestResponderEspelha:
             "editado_em",
             "editavel_ate",
             "aviso_por_email",
+            # A imagem da resposta (issue #1062), com URL assinada, nunca o id
+            # do comentario.
+            "imagem",
         }
         assert set(enviada) == esperadas
         assert set(lida) == esperadas

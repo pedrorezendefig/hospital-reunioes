@@ -23,7 +23,10 @@ from zoneinfo import ZoneInfo
 
 from app.dependencies import is_super_admin
 from app.services.tecnologia_vinculo import (
+    ETAPA_EM_DESENVOLVIMENTO,
+    ETAPA_EM_PRODUCAO,
     ETAPA_ENTREGUE,
+    ETAPA_PLANEJADA,
     ETAPA_REGISTRADA,
     ETAPA_ROTULO,
     texto_movimento_etapa,
@@ -106,13 +109,13 @@ MOTIVO_RESPONSAVEL_SEM_ACESSO = "O responsavel precisa ser um participante ativo
 # A criacao recusa o mesmo estado que a porta de atribuir recusa: dono que
 # perdeu o acesso a aba (saiu do Super admin ou foi desativado) nao pode virar
 # responsavel, senao o card nasce com o nome de alguem que nao consegue abrir a
-# aba. A frase diz ONDE consertar, porque a acao e possivel na mesma tela: a
-# lista de Produtos fica logo abaixo do Quadro, e dentro da aba todos podem
-# tudo (ADR 0050, decisao 11). Guarda-corpo que so diz "nao pode" vira
-# indisponibilidade.
+# aba. A frase diz ONDE consertar, porque a acao e possivel dentro da aba: a
+# lista de Produtos mora na tela da engrenagem ao lado de "Nova Demanda" desde
+# a issue #1060, e dentro da aba todos podem tudo (ADR 0050, decisao 11).
+# Guarda-corpo que so diz "nao pode" vira indisponibilidade.
 MOTIVO_DONO_DO_PRODUTO_SEM_ACESSO = (
     "O dono deste Produto não tem mais acesso à aba Tecnologia, então a Demanda nasceria sem responsável. "
-    "Troque o dono na lista de Produtos, logo abaixo do Quadro, e abra a Demanda de novo."
+    "Troque o dono na lista de Produtos, na engrenagem ao lado de Nova Demanda, e abra a Demanda de novo."
 )
 
 ESTADOS: tuple[str, ...] = ("nova", "em_andamento", "aguardando", "concluida", "cancelada")
@@ -474,6 +477,11 @@ MARCA_FIM_CONVERSA = "--- fim da conversa ---"
 RECUO_DA_CONTINUACAO = "    "
 
 SEM_DESCRICAO = "(sem descrição)"
+# O que acompanha o nome do Anexo da Demanda no texto (issue #1061). O apagado
+# (Demanda encerrada) diz que a imagem ja nao existe, para a IA nao contar com
+# ela.
+ROTULO_DO_ANEXO = "(imagem anexada à Demanda)"
+ROTULO_DO_ANEXO_APAGADO = "(imagem anexada à Demanda, já apagada)"
 SEM_CONVERSA = "(sem conversa até agora)"
 SEM_PRODUTO = "(sem Produto)"
 # Resposta cujo autor nao foi resolvido. Mesma palavra que a linha de movimento
@@ -525,6 +533,17 @@ def recuar_continuacao(bloco: str) -> str:
     """
     primeira, *resto = bloco.splitlines() or [""]
     return "\n".join([primeira, *(f"{RECUO_DA_CONTINUACAO}{linha}" for linha in resto)])
+
+
+def numa_linha(valor: str) -> str:
+    r"""O campo de uma linha so do topo (Titulo, Produto) sem quebra nenhuma.
+
+    Esses campos saem como `Título: <valor>`, e a validacao so faz `strip`
+    (issue #895). Uma quebra no meio levaria o resto para a coluna zero, onde
+    ele poderia escrever a marca de inicio da Conversa. Cada quebra vira
+    espaco, pelo criterio do `splitlines()` (os dez separadores, e nao so `\n`).
+    """
+    return " ".join(valor.splitlines())
 
 
 def linha_para_ia(linha: dict[str, Any]) -> str:
@@ -613,7 +632,29 @@ def linhas_do_desenvolvimento(demanda: dict[str, Any]) -> list[str]:
     return linhas
 
 
-def texto_para_ia(*, demanda: dict[str, Any], linhas: list[dict[str, Any]]) -> str:
+def linhas_dos_anexos(anexos: list[dict[str, Any]]) -> list[str]:
+    """A secao "Anexos:" do texto, ou nenhuma linha quando nao ha anexo
+    (issue #1061, ADR 0069).
+
+    So o NOME de cada imagem, e nunca o endereco: o texto sai do app para uma
+    IA de fora, e a URL assinada, enquanto vale, abre o print para qualquer um.
+    O nome e texto de terceiro (quem batizou o arquivo nao e quem anexou), por
+    isso vai numa linha so e recuado, como a descricao: nada nele chega a
+    coluna zero, onde poderia escrever a marca da Conversa.
+    """
+    if not anexos:
+        return []
+    itens = []
+    for anexo in anexos:
+        nome = numa_linha(str(anexo.get("nome_original") or "").strip())
+        rotulo = ROTULO_DO_ANEXO_APAGADO if anexo.get("apagado_em") else ROTULO_DO_ANEXO
+        itens.append(f"{RECUO_DA_CONTINUACAO}{nome} {rotulo}")
+    return ["", "Anexos:", *itens]
+
+
+def texto_para_ia(
+    *, demanda: dict[str, Any], linhas: list[dict[str, Any]], anexos: list[dict[str, Any]] | None = None
+) -> str:
     """A Demanda inteira em texto simples, para colar numa IA (issue #640).
 
     Mora aqui, e nao na tela, para ser FONTE UNICA: o mesmo texto tem que sair
@@ -622,7 +663,8 @@ def texto_para_ia(*, demanda: dict[str, Any], linhas: list[dict[str, Any]]) -> s
 
     **O que entra**, exatamente o que a issue #640 lista: a linha de contexto,
     titulo, tipo, Produto, descricao e a Conversa inteira em ordem, com as
-    linhas de movimento no meio. A Conversa vai CERCADA por marcas, e com as
+    linhas de movimento no meio. Os Anexos da Demanda entram pelo NOME
+    (issue #1061), logo depois da descricao. A Conversa vai CERCADA por marcas, e com as
     continuacoes recuadas, para que nada escrito dentro dela possa passar por
     moldura do texto (ver `MARCA_INICIO_CONVERSA`).
 
@@ -644,15 +686,24 @@ def texto_para_ia(*, demanda: dict[str, Any], linhas: list[dict[str, Any]]) -> s
     (`LIMITE_RESPOSTA`), e a rota e de Super admin, com a Demanda pedida uma por
     vez.
     """
+    # A descricao entra RECUADA INTEIRA, primeira linha inclusive (issue #895),
+    # como o "O que muda" da raiz: ela pode nascer do print lido pelo Assistente
+    # (ADR 0056), e ai e texto de terceiro, que na coluna zero escreveria uma
+    # marca de inicio e plantaria uma Conversa inventada antes da de verdade.
+    # Linha e o que o `splitlines()` diz que e linha, e a saida so tem `\n`.
+    descricao = str(demanda.get("descricao") or "").strip() or SEM_DESCRICAO
     partes: list[str] = [
         CABECALHO_PARA_IA,
         "",
-        f"Título: {str(demanda.get('titulo') or '').strip()}",
+        f"Título: {numa_linha(str(demanda.get('titulo') or '').strip())}",
         f"Tipo: {TIPO_ROTULO.get(str(demanda.get('tipo')), str(demanda.get('tipo') or ''))}",
-        f"Produto: {demanda.get('produto_nome') or SEM_PRODUTO}",
+        f"Produto: {numa_linha(str(demanda.get('produto_nome') or SEM_PRODUTO))}",
         "",
         "Descrição:",
-        str(demanda.get("descricao") or "").strip() or SEM_DESCRICAO,
+        indent("\n".join(descricao.splitlines()), RECUO_DA_CONTINUACAO),
+        # Os prints vem logo depois da descricao, que e o pedido que eles
+        # ilustram (issue #1061).
+        *linhas_dos_anexos(anexos or []),
         # A Etapa e o "O que muda" entram AQUI, entre a descricao e a Conversa
         # (issue #676): eles contam o que a Vitta esta entregando, que e a
         # continuacao do pedido, e nao mais uma fala do fio.
@@ -722,19 +773,38 @@ class EfeitoDaEtapa(NamedTuple):
 SEM_EFEITO = EfeitoDaEtapa()
 
 
-def efeito_da_etapa(demanda: dict[str, Any], *, etapa_nova: str) -> EfeitoDaEtapa:
+def etapa_que_devolve(*, por_pr: bool) -> str:
+    """A Etapa em que a bola volta para quem pediu (ADR 0069, decisao 5).
+
+    Issue fechada por PR volta em Em producao: o diretor nao tem como conferir o
+    que ainda nao subiu, e devolver no merge seria pedir que ele testasse o que
+    nao existe. Issue fechada sem PR (decisao, consultoria, correcao fora do
+    codigo) volta em Entregue, como sempre: nao ha subida nenhuma a esperar. O
+    PR que nao toca no app (lote de ferramenta, so merge) conta como sem PR
+    pelo mesmo motivo: quem decide e a sincronizacao, que nao grava o fato do
+    PR nesse caso (`sincronizar_pelo_pr`).
+    Uma Etapa so por Demanda, e por isso nunca as duas.
+    """
+    return ETAPA_EM_PRODUCAO if por_pr else ETAPA_ENTREGUE
+
+
+def efeito_da_etapa(demanda: dict[str, Any], *, etapa_nova: str, por_pr: bool = False) -> EfeitoDaEtapa:
     """A UNICA regra automatica de movimento do Quadro (ADR 0054, decisao 6).
 
-    Quando a Etapa chega a Entregue, a bola volta para quem pediu: a Demanda vai
-    para Aguardando e o autor vira o responsavel, para o card cair na "Minha
-    vez" dele com algo para conferir. Quem conclui continua sendo gente: a
-    sincronizacao nunca escreve `concluida`, e este tipo nao tem como dizer isso
-    (o unico destino que ele sabe nomear e `ESTADO_AGUARDANDO`).
+    Quando a Etapa chega a que devolve (`etapa_que_devolve`: Em producao se a
+    issue fechou por PR, Entregue se fechou sem PR), a bola volta para quem
+    pediu: a Demanda vai para Aguardando e o autor vira o responsavel, para o
+    card cair no "Com voce" dele com algo para conferir. Quem conclui continua
+    sendo gente: a sincronizacao nunca escreve `concluida`, e este tipo nao tem
+    como dizer isso (o unico destino que ele sabe nomear e `ESTADO_AGUARDANDO`).
+
+    `por_pr` e o fato do PR na foto da issue, que quem chama le: o PR que a
+    fechou (`fechada_por_pr`) ou um PR aberto que a fecha, a caminho do merge.
 
     Tres portas fechadas, e cada uma por um motivo diferente:
 
-    - **qualquer Etapa que nao seja Entregue** nao move nada, "Nao sera feita"
-      inclusive: a Vitta explica na Conversa e cancela a mao (historia 29);
+    - **qualquer outra Etapa** nao move nada, "Nao sera feita" inclusive: a
+      Vitta explica na Conversa e cancela a mao (historia 29);
     - **Demanda fechada** nao e reaberta pela Entrega. A lista testada e a
       POSITIVA (`ESTADOS_ABERTOS`), e nao "tudo menos Concluida e Cancelada":
       um estado novo que entrasse no banco sem passar por aqui seria movido em
@@ -749,7 +819,7 @@ def efeito_da_etapa(demanda: dict[str, Any], *, etapa_nova: str) -> EfeitoDaEtap
     quem de fato mudou a Etapa. Uma segunda guarda aqui prometeria defender algo
     que esta funcao nao tem como ver.
     """
-    if etapa_nova != ETAPA_ENTREGUE:
+    if etapa_nova != etapa_que_devolve(por_pr=por_pr):
         return SEM_EFEITO
     estado = str(demanda.get("estado") or "")
     if estado not in ESTADOS_ABERTOS:
@@ -789,7 +859,9 @@ def devolvida_pela_entrega(demanda: dict[str, Any]) -> bool:
     autor_id = demanda.get("autor_id")
     return (
         bool(autor_id)
-        and str(demanda.get("etapa") or "") == ETAPA_ENTREGUE
+        # As duas Etapas que devolvem (`etapa_que_devolve`): Em producao quando
+        # a issue fechou por PR, Entregue quando fechou sem PR (issue #1065).
+        and str(demanda.get("etapa") or "") in (ETAPA_ENTREGUE, ETAPA_EM_PRODUCAO)
         and str(demanda.get("estado") or "") == ESTADO_AGUARDANDO
         and demanda.get("responsavel_id") == autor_id
     )
@@ -995,6 +1067,92 @@ def demanda_casa_a_busca(
         return True
     campos = [demanda.get("titulo"), demanda.get("descricao"), *textos_da_conversa]
     return any(alvo in normalizar_para_busca(campo) for campo in campos)
+
+
+# ─── O Painel (issue #1059, PRD #1056) ───────────────────────────────────────
+
+# As Etapas que o numero "em desenvolvimento" conta: o trabalho que a Vitta ja
+# assumiu e ainda nao entregou (issue #1059).
+ETAPAS_EM_DESENVOLVIMENTO_NO_PAINEL: tuple[str, ...] = (ETAPA_PLANEJADA, ETAPA_EM_DESENVOLVIMENTO)
+
+# A janela do "entregues nos ultimos 30 dias".
+JANELA_DAS_ENTREGUES = timedelta(days=30)
+
+
+def tem_vinculo(demanda: dict[str, Any]) -> bool:
+    """A Demanda esta ligada a uma issue-raiz (ADR 0054).
+
+    Quem diz e o numero da issue, e nao a Etapa: "Registrada" e a ausencia de
+    Vinculo na tela, mas no banco a Etapa e um cache da issue, e o numero e o
+    proprio Vinculo.
+    """
+    return bool(demanda.get("github_issue_numero"))
+
+
+def esta_aberta(demanda: dict[str, Any]) -> bool:
+    return str(demanda.get("estado") or "") in ESTADOS_ABERTOS
+
+
+def entregas_do_painel(demandas: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """O bloco Entregas: as Demandas abertas com Vinculo, a da ultima mudanca
+    primeiro (issue #1059).
+
+    "Ultima mudanca" e o `atualizado_em`, que o gatilho da migration 102 carimba
+    em todo UPDATE da Demanda. A sincronizacao com o GitHub so escreve quando o
+    cache mudou de fato (`cache_desatualizado`), entao a Etapa que andou sobe
+    para o topo, e a leitura de hora em hora sem novidade nao mexe na ordem.
+
+    Data ilegivel vai para o FIM, e nao some: e o mesmo criterio do Historico.
+    """
+    vinculadas = [d for d in demandas if esta_aberta(d) and tem_vinculo(d)]
+    minimo = datetime.min.replace(tzinfo=UTC)
+    return sorted(vinculadas, key=lambda d: instante_do_banco(d.get("atualizado_em")) or minimo, reverse=True)
+
+
+def versao_da_entrega(demanda: dict[str, Any]) -> str | None:
+    """A versao do app em que a Demanda subiu, so quando a Etapa e Em producao.
+
+    A coluna pode guardar a versao de uma subida anterior com a Etapa que voltou
+    atras (a issue reaberta para um ajuste): mostrar "v0.160.0" ao lado de
+    "Entregue" diria que ja esta no ar o que ainda nao esta.
+    """
+    if demanda.get("etapa") != ETAPA_EM_PRODUCAO:
+        return None
+    return demanda.get("versao_em_producao") or None
+
+
+def numeros_do_painel(demandas: list[dict[str, Any]], *, agora: datetime) -> dict[str, int]:
+    """Os quatro numeros do topo do Painel, derivados do que ja existe.
+
+    Nenhum deles e por pessoa (ADR 0061 recusou comparar gente): a conta e a
+    mesma para quem quer que esteja olhando, e por isso esta funcao nem recebe
+    quem esta logado.
+
+    - **abertas**: Nova, Em andamento e Aguardando;
+    - **com o hospital**: Aguardando, a unica raia em que a bola nao esta com a
+      Vitta;
+    - **em desenvolvimento**: as ABERTAS com Vinculo em Planejada ou Em
+      desenvolvimento. A cancelada no meio do caminho nao conta, porque nao esta
+      mais em desenvolvimento para quem pediu, e o numero tem que bater com as
+      linhas do bloco Entregas;
+    - **entregues nos ultimos 30 dias**: pela data em que a Etapa chegou a
+      Entregue ou Em producao (`entregue_em`, migration 115), aberta ou
+      fechada: a Demanda entregue e concluida depois continua tendo sido
+      entregue. Data ilegivel nao conta, porque nao ha como dizer que esta na
+      janela.
+    """
+    abertas = [d for d in demandas if esta_aberta(d)]
+    desde = agora - JANELA_DAS_ENTREGUES
+    return {
+        "abertas": len(abertas),
+        "com_o_hospital": sum(1 for d in abertas if d.get("estado") == ESTADO_AGUARDANDO),
+        "em_desenvolvimento": sum(
+            1 for d in abertas if tem_vinculo(d) and d.get("etapa") in ETAPAS_EM_DESENVOLVIMENTO_NO_PAINEL
+        ),
+        "entregues_30_dias": sum(
+            1 for d in demandas if (quando := instante_do_banco(d.get("entregue_em"))) and quando >= desde
+        ),
+    }
 
 
 # ─── Quem recebe o aviso por e-mail (issue #642) ─────────────────────────────

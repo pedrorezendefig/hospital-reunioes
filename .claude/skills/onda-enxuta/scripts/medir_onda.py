@@ -61,7 +61,6 @@ CHAVES = ("input_tokens", "cache_creation_input_tokens", "cache_read_input_token
 # fallback por palavra-chave para sessoes antigas (ordem importa).
 PAPEIS = [
     ("revisor-seguranca", r"revisor de seguran[cç]a|security review"),
-    ("auditor-prd", r"auditor|audit(a|e|oria)"),
     ("corretor", r"corretor|corrig[ai]|rebase"),
     ("implementador", r"implement|desenvolvimento|tdd|pr verde"),
     ("mapeador", r"mapa do terreno|mapeador"),
@@ -71,7 +70,9 @@ AGENT_ID = re.compile(r"^a[0-9a-f]{16}$")
 
 
 def slug_do_projeto(cwd: str) -> str:
-    return re.sub(r"[:\\/]", "-", cwd)
+    # Mesma regra do Claude Code ao criar ~/.claude/projects/<slug>: todo
+    # caractere fora de [A-Za-z0-9] vira hifen (espaco, ponto, til, sublinhado).
+    return re.sub(r"[^A-Za-z0-9]", "-", cwd)
 
 
 def achar_pasta_projeto(cwd: str) -> Path | None:

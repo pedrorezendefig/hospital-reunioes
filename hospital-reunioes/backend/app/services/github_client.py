@@ -9,8 +9,8 @@ Tres invariantes que o resto do app herda:
 
 - **So este repositorio.** O repositorio vem de `GITHUB_INTEGRACAO_REPO` e
   entra no caminho da URL uma vez so, aqui.
-- **Escrita minima.** Quatro verbos de escrita, e so quatro: o PATCH do corpo
-  da issue, que serve ao marcador do Vinculo; o POST que abre a issue do "Levar
+- **Escrita minima.** Quatro verbos de escrita, e so quatro: o PATCH da
+  issue, que serve ao marcador do Vinculo e a designacao do responsavel; o POST que abre a issue do "Levar
   para desenvolvimento" (issue #677); e o par POST/PATCH do comentario
   espelhado da Conversa (issue #680). Nenhum verbo de LEITURA de comentario:
   nada do GitHub volta para a Conversa (ADR 0054, decisao 5). O token
@@ -27,7 +27,11 @@ campo de terceiro espalhado por tres arquivos.
 
 from __future__ import annotations
 
+import base64
+import binascii
+import json
 import logging
+import re
 from typing import Any
 
 import httpx
@@ -140,6 +144,115 @@ def _no(dados: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+# As palavras com que um PR diz que fecha uma issue, as mesmas que o GitHub
+# reconhece (issue #1064): `Closes #673`, `fixes: #673`, `Resolved
+# dono/repo#673`. A palavra vale para UMA referencia: em "Closes #1, #2" o
+# GitHub fecha so a #1, e a regra daqui diz o mesmo.
+_FECHAMENTO = re.compile(
+    r"\b(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?)\b:?\s+([\w.-]+/[\w.-]+)?#(\d+)\b",
+    re.IGNORECASE,
+)
+
+
+def issues_que_o_corpo_fecha(corpo: str | None) -> list[int]:
+    """As issues DESTE repositorio que o corpo de um PR fecha, em ordem.
+
+    E a mesma leitura para os dois gatilhos (o webhook `pull_request` e a
+    reconciliacao), e por isso mora aqui: lida de dois jeitos, a issue que o
+    webhook chama de "fechada pelo PR" poderia ser outra na passagem de hora em
+    hora, e o fato iria e voltaria a cada hora.
+
+    Referencia a outro repositorio (`outra-pessoa/repo#673`) nao conta: o
+    numero e de la, e a issue #673 daqui nao tem nada com isso.
+    """
+    repo = (settings.github_integracao_repo or "").lower()
+    numeros: list[int] = []
+    for outro_repo, numero in _FECHAMENTO.findall(corpo or ""):
+        if outro_repo and outro_repo.lower() != repo:
+            continue
+        if int(numero) not in numeros:
+            numeros.append(int(numero))
+    return numeros
+
+
+def ler_prs_abertos() -> list[dict[str, Any]]:
+    """Os PRs abertos do repositorio, cada um com as issues que ele fecha.
+
+    Uma leitura so para o lote inteiro da reconciliacao (issue #1064), e nao
+    uma por Demanda: a lista de PRs abertos e curta e a cota do GitHub e
+    compartilhada. A primeira pagina (100) basta para o volume deste
+    repositorio; um PR alem dela so perde o fato "PR aberto" no lote, e o
+    webhook continua cobrindo.
+    """
+    dados = _chamar("GET", "/pulls?state=open&per_page=100")
+    if not isinstance(dados, list):
+        raise GithubIndisponivelError("GitHub respondeu a lista de PRs fora do formato")
+    return [
+        {"numero": pr.get("number"), "fecha": issues_que_o_corpo_fecha(pr.get("body"))}
+        for pr in dados
+        if isinstance(pr, dict) and isinstance(pr.get("number"), int)
+    ]
+
+
+# A pasta do app. O PR que nao toca nela e lote de ferramenta para a subida
+# (`classe_do_lote` no `fechar_onda.py`): so merge, sem build, sem registro no
+# `history.json` e sem webhook de deploy.
+PASTA_DO_APP = "hospital-reunioes/"
+
+# A API lista ate 3000 arquivos de um PR, 100 por pagina.
+_PAGINAS_DE_ARQUIVOS = 30
+
+
+def pr_toca_o_app(numero: int) -> bool:
+    """Se o PR mexe em algum arquivo do app, e por isso leva uma subida
+    (revisao do PR #1100, ADR 0069, decisao 5).
+
+    Para na primeira pagina que acha um arquivo do app, ou na primeira que vem
+    incompleta (a ultima). Falha de leitura sobe como `GithubIndisponivelError`:
+    quem chama decide o que "nao sei" quer dizer.
+    """
+    for pagina in range(1, _PAGINAS_DE_ARQUIVOS + 1):
+        dados = _chamar("GET", f"/pulls/{numero}/files?per_page=100&page={pagina}")
+        if not isinstance(dados, list):
+            raise GithubIndisponivelError("GitHub respondeu os arquivos do PR fora do formato")
+        if any(isinstance(a, dict) and str(a.get("filename") or "").startswith(PASTA_DO_APP) for a in dados):
+            return True
+        if len(dados) < 100:
+            return False
+    return False
+
+
+# O registro de todas as subidas, como a Action pos-merge o grava na `main`
+# (ADR 0064, decisao 6b). E o arquivo, e nao o evento: so a reconciliacao le
+# daqui (ADR 0069, decisao 4).
+CAMINHO_DO_HISTORICO = "docs/spec/deploy/history.json"
+
+
+def ler_historico_de_deploys() -> list[dict[str, Any]]:
+    """As subidas registradas no `history.json` da `main`, a mais nova primeiro.
+
+    Pela API de conteudo, que devolve o arquivo em base64 ate 1 MB (o arquivo
+    tem dezenas de KB). O repositorio e publico, e o token so le. Qualquer
+    coisa fora do formato vira indisponibilidade: quem chama nao marca nada e
+    tenta de novo na hora seguinte, em vez de ler "nenhuma subida" de um
+    arquivo que nao conseguiu ler.
+    """
+    try:
+        dados = _chamar("GET", f"/contents/{CAMINHO_DO_HISTORICO}?ref=main")
+    except IssueNaoEncontradaError as exc:
+        raise GithubIndisponivelError("O history.json nao esta na main") from exc
+    if not isinstance(dados, dict) or dados.get("encoding") != "base64" or not isinstance(dados.get("content"), str):
+        raise GithubIndisponivelError("GitHub respondeu o history.json fora do formato")
+    try:
+        historico = json.loads(base64.b64decode(dados["content"]))
+    except (ValueError, binascii.Error) as exc:
+        raise GithubIndisponivelError("O history.json da main nao e JSON") from exc
+    deploys = historico.get("deploys") if isinstance(historico, dict) else None
+    if not isinstance(deploys, list):
+        raise GithubIndisponivelError("O history.json da main nao tem a lista de deploys")
+    return deploys
+
+
 def e_pull_request(dados: dict[str, Any]) -> bool:
     """A API de issues tambem responde por PR, e o `pull_request` e o que os
     separa (o Vinculo e com a issue-raiz, ADR 0054, decisao 1)."""
@@ -171,8 +284,15 @@ def atualizar_corpo(numero: int, corpo: str) -> None:
     _chamar("PATCH", f"/issues/{numero}", json={"body": corpo})
 
 
-def criar_issue(*, titulo: str, corpo: str, labels: list[str]) -> dict[str, Any]:
+def criar_issue(*, titulo: str, corpo: str, labels: list[str], assignees: list[str] | None = None) -> dict[str, Any]:
     """Abre uma issue nova no repositorio da integracao (issue #677).
+
+    `assignees` e o login do responsavel da Demanda, quando ele tem um: a
+    issue vai para a coluna da pessoa certa do Hospital OS. Ele NAO vai no
+    POST: login que nao e assignable neste repositorio (sem acesso, digitado
+    errado) faz o GitHub recusar a criacao inteira com 422, e um campo de
+    conveniencia derrubaria o botao. A issue nasce sem ninguem e a designacao
+    vem depois, num PATCH cuja falha so loga (PR #1050).
 
     Devolve o JSON da issue criada, INTEIRO: e dele que a foto e a Etapa saem
     logo em seguida, sem uma segunda leitura que gastaria cota e ainda poderia
@@ -184,9 +304,17 @@ def criar_issue(*, titulo: str, corpo: str, labels: list[str]) -> dict[str, Any]
     que devolve 502 em vez de uma frase sobre um numero que ninguem digitou.
     """
     try:
-        return _chamar("POST", "/issues", json={"title": titulo, "body": corpo, "labels": labels})
+        dados = _chamar("POST", "/issues", json={"title": titulo, "body": corpo, "labels": labels})
     except IssueNaoEncontradaError as exc:
         raise GithubIndisponivelError("O repositorio da integracao nao aceitou a criacao da issue") from exc
+
+    numero = dados.get("number") if isinstance(dados, dict) else None
+    if assignees and isinstance(numero, int):
+        try:
+            _chamar("PATCH", f"/issues/{numero}", json={"assignees": assignees})
+        except (GithubIndisponivelError, IssueNaoEncontradaError) as exc:
+            logger.warning("[github] a issue #%s nasceu sem assignee (%s): %s", numero, assignees, exc)
+    return dados
 
 
 def criar_comentario(numero: int, corpo: str) -> int:

@@ -1,4 +1,4 @@
-"""Dono do PRD de uma fatia, para o `/pegar-issue` (issue #904, ADR 0061).
+"""Dono do PRD de uma fatia, para o `/pegar-issue` (issue #904, ADR 0068).
 
 O PRD nasce com dono: o `/to-prd` põe como assignee quem rodou. Pegar fatia de
 PRD alheio não é proibido, mas se combina antes; este script dá o aviso, sem

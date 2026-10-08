@@ -68,4 +68,5 @@ asyncio_mode = "auto"
 # falha só em paralelo entra aqui, nunca em retry.
 markers = [
     "rodar_sozinho: falha só em paralelo; o CI roda em série, num passo à parte",
+    "so_unix(motivo): depende de recurso só do Unix; no Windows vira skip com o motivo (issue #844)",
 ]

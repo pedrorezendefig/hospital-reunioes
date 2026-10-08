@@ -1081,6 +1081,7 @@ export default function CalendarioPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { participante: currentUser } = useCurrentParticipante();
+  const perfilPronto = currentUser !== null;
   const [todayKey, setTodayKey] = useState("");
   useEffect(() => { setTodayKey(formatDateKey(new Date())); }, []);
 
@@ -1194,7 +1195,10 @@ export default function CalendarioPage() {
   // Todo gesto de criar passa por aqui. O modal não pergunta quem facilita, e a
   // Secretária não conduz ata: para ela, criar é na Nova reunião, que exige o
   // Facilitador (issue #761). Ver os eventos continua igual para todos.
+  // Sem o perfil (carregando ou a busca falhou) a tela não sabe se é a
+  // Secretária, então nenhum gesto de criar responde (issue #890).
   function abrirAgendamento(date: Date, hora?: string) {
+    if (!perfilPronto) return;
     if (isSecretaria(currentUser)) {
       const params = new URLSearchParams({ data: formatDateKey(date) });
       if (hora) params.set("hora", hora);
@@ -1284,7 +1288,8 @@ export default function CalendarioPage() {
           <button
             id="btn-agendar-reuniao"
             onClick={() => abrirAgendamento(today)}
-            className="flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-indigo-600 to-indigo-700 text-white rounded-xl text-sm font-medium hover:shadow-lg transition-all cursor-pointer"
+            disabled={!perfilPronto}
+            className="flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-indigo-600 to-indigo-700 text-white rounded-xl text-sm font-medium hover:shadow-lg transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <Plus className="w-4 h-4" />
             Agendar Reunião

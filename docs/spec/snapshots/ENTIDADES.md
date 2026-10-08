@@ -1,6 +1,6 @@
 # ENTIDADES.md
 <!-- gerado automaticamente por /snapshot — não editar -->
-<!-- last_update: 2026-10-04T21:49-0300 -->
+<!-- last_update: 2026-10-07T12:17-0300 -->
 
 Modelo de dados do Hospital Reuniões. Tabelas no Postgres (via Supabase).
 
@@ -822,7 +822,7 @@ Modelo de dados do Hospital Reuniões. Tabelas no Postgres (via Supabase).
 
 ## tecnologia_demandas
 
-> Origem: `102_tecnologia_fundacao.sql` (alterada em: 103_tecnologia_vinculo.sql)
+> Origem: `102_tecnologia_fundacao.sql` (alterada em: 103_tecnologia_vinculo.sql, 115_tecnologia_anexos_e_em_producao.sql)
 
 | Campo | Tipo | Constraints | Default | FK |
 |-------|------|-------------|---------|-----|
@@ -851,6 +851,8 @@ Modelo de dados do Hospital Reuniões. Tabelas no Postgres (via Supabase).
 | `github_foto` | `JSONB` | — | — | — |
 | `github_sincronizado_em` | `TIMESTAMPTZ` | — | — | — |
 | `vinculado_por` | `VARCHAR(10)` | — | — | `participantes.id` |
+| `versao_em_producao` | `TEXT` | — | — | — |
+| `entregue_em` | `TIMESTAMPTZ` | — | — | — |
 
 **Indexes:**
 - `idx_tecnologia_demandas_estado` em `(estado)` (de `102_tecnologia_fundacao.sql`)
@@ -897,6 +899,36 @@ Modelo de dados do Hospital Reuniões. Tabelas no Postgres (via Supabase).
 | `created_at` | `TIMESTAMPTZ` | NOT NULL | `now()` | — |
 | `motivo_sem_binario` | `TEXT` | — | — | — |
 
+## migracoes_aplicadas
+
+> Origem: `114_migracoes_aplicadas.sql`
+
+| Campo | Tipo | Constraints | Default | FK |
+|-------|------|-------------|---------|-----|
+| `numero` | `INTEGER` | PK | — | — |
+| `aplicada_em` | `TIMESTAMPTZ` | NOT NULL | `now()` | — |
+
+## tecnologia_anexos
+
+> Origem: `115_tecnologia_anexos_e_em_producao.sql`
+
+| Campo | Tipo | Constraints | Default | FK |
+|-------|------|-------------|---------|-----|
+| `id` | `UUID` | PK | `gen_random_uuid()` | — |
+| `demanda_id` | `UUID` | NOT NULL | — | `tecnologia_demandas.id` |
+| `ordem` | `INTEGER` | NOT NULL | — | — |
+| `storage_path` | `TEXT` | NOT NULL | — | — |
+| `nome_original` | `TEXT` | NOT NULL | — | — |
+| `content_type` | `TEXT` | NOT NULL | — | — |
+| `tamanho_bytes` | `BIGINT` | NOT NULL | — | — |
+| `anexado_por` | `VARCHAR(10)` | — | — | `participantes.id` |
+| `criado_em` | `TIMESTAMPTZ` | NOT NULL | `now()` | — |
+| `conversa_id` | `UUID` | — | — | `tecnologia_conversas.id` |
+| `apagado_em` | `TIMESTAMPTZ` | — | — | — |
+
+**Indexes:**
+- `idx_tecnologia_anexos_conversa` em `(conversa_id)` (de `115_tecnologia_anexos_e_em_producao.sql`)
+
 ---
 
-**Resumo:** 42 tabelas vivas.
+**Resumo:** 44 tabelas vivas.

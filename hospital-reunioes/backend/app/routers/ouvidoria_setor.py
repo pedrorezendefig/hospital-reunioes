@@ -3,9 +3,9 @@
 Rotas públicas, sem login: quem chega aqui veio pelo link do email de
 acionamento, no padrão do Aceite interno. O token restringe tudo a UMA
 manifestação e UM destinatário; a página mostra os três blocos do caso
-(resumo, relato integral e a nota da ouvidoria, ADR 0041), e caso sigiloso ou
-anônimo sai sem identificação de quem manifestou, com o extrato no lugar do
-relato (RN-79).
+(resumo, relato integral e a nota da ouvidoria, ADR 0041). Caso sigiloso ou
+anônimo sai sem identificação de quem manifestou, e só o sigiloso troca o
+relato pelo extrato (RN-79; emenda de 07/10/2026, issue #1051).
 """
 
 from __future__ import annotations

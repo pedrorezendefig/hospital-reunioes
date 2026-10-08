@@ -1,13 +1,27 @@
 ---
 title: Novidades
 description: O que mudou na Ouvidoria a cada entrega, da mais nova para a mais antiga.
-prd: [287, 317, 318, 319, 467, 468, 469, 470, 471, 591, 598, 706, 720]
+prd: [287, 317, 318, 319, 467, 468, 469, 470, 471, 591, 598, 659, 706, 720]
 draft: false
 sidebar:
   order: 90
 ---
 
 Uma entrada por entrega, com o mês em que ela entrou no ar.
+
+## O acompanhante diz de quem fala e a área acha o atendimento
+
+Setembro de 2026. O formulário passou a perguntar, logo depois do relato, se ele
+é sobre quem escreve ou sobre outra pessoa. Quem fala por outra pessoa pode dar
+o nome do paciente e quando ou onde foi o atendimento, mesmo no anônimo. O
+registro manual ganhou os mesmos dois campos, o caso mostra um aviso quando o
+nome do paciente faltou, e a área recebe o paciente no email e na tela de
+resposta, fora dos casos sigilosos. Os acabamentos chegaram no começo de
+outubro.
+
+Está em [Registrar uma manifestação pelo formulário](/ouvidoria/registrar-manifestacao-pelo-formulario/),
+em [Registrar uma manifestação pela Ouvidoria](/ouvidoria/registrar-uma-manifestacao-pela-ouvidoria/)
+e em [Responder um caso pelo portal do setor](/ouvidoria/responder-um-caso-pelo-portal-do-setor/).
 
 ## O registro manual diz por onde o caso chegou
 

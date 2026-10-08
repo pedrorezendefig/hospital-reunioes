@@ -5,7 +5,7 @@ carrega no corpo, a comparacao entre a foto nova e a guardada, e os textos das
 linhas automaticas da Conversa.
 
 O I/O mora ao lado, no `github_client.py`. A separacao nao e gosto de arquivo:
-a Etapa e a regra que o diretor le na tela, e ela precisa ser testavel nas seis
+a Etapa e a regra que o diretor le na tela, e ela precisa ser testavel nas sete
 saidas e na precedencia entre elas sem depender de rede nenhuma. O cliente e
 dublado nos testes; isto aqui e chamado de verdade.
 """
@@ -33,13 +33,15 @@ from app.utils.text_sanitizer import sanitizar_travessao
 
 # ─── 1. A Etapa ──────────────────────────────────────────────────────────────
 
-# As seis, na ordem em que a entrega anda (ADR 0054, decisao 3). A mesma lista
-# do CHECK da migration 103; o teste amarra as duas pontas.
+# As sete, na ordem em que a entrega anda (ADR 0054, decisao 3; Em producao
+# entrou pela ADR 0069). A mesma lista do CHECK da migration 115; o teste
+# amarra as duas pontas.
 ETAPA_REGISTRADA = "registrada"
 ETAPA_EM_ANALISE = "em_analise"
 ETAPA_PLANEJADA = "planejada"
 ETAPA_EM_DESENVOLVIMENTO = "em_desenvolvimento"
 ETAPA_ENTREGUE = "entregue"
+ETAPA_EM_PRODUCAO = "em_producao"
 ETAPA_NAO_SERA_FEITA = "nao_sera_feita"
 
 ETAPAS = (
@@ -48,17 +50,19 @@ ETAPAS = (
     ETAPA_PLANEJADA,
     ETAPA_EM_DESENVOLVIMENTO,
     ETAPA_ENTREGUE,
+    ETAPA_EM_PRODUCAO,
     ETAPA_NAO_SERA_FEITA,
 )
 
 # O rotulo em palavras do diretor. Ele NAO ve label, numero nem estado de issue:
-# ve estas seis frases (ADR 0054, decisao 9).
+# ve estas sete frases (ADR 0054, decisao 9).
 ETAPA_ROTULO: dict[str, str] = {
     ETAPA_REGISTRADA: "Registrada",
     ETAPA_EM_ANALISE: "Em análise",
     ETAPA_PLANEJADA: "Planejada",
     ETAPA_EM_DESENVOLVIMENTO: "Em desenvolvimento",
     ETAPA_ENTREGUE: "Entregue",
+    ETAPA_EM_PRODUCAO: "Em produção",
     ETAPA_NAO_SERA_FEITA: "Não será feita",
 }
 
@@ -116,8 +120,19 @@ def _partes(foto: dict[str, Any] | None) -> list[dict[str, Any]]:
     return list((foto or {}).get("partes") or [])
 
 
-def etapa_da_foto(foto: dict[str, Any] | None) -> str:
+def etapa_da_foto(
+    foto: dict[str, Any] | None,
+    *,
+    versao_em_producao: str | None = None,
+    pr_aberto: bool = False,
+) -> str:
     """A Etapa que esta foto da issue significa (ADR 0054, decisao 3).
+
+    `versao_em_producao` e fato do APP, e nao da issue (ADR 0069, decisao 4):
+    a versao em que a Demanda subiu, gravada pela Action pos-merge. Por isso
+    entra ao lado da foto, e nao dentro dela. `pr_aberto` diz que ha um PR
+    aberto que fecha a raiz (ADR 0069, decisao 6): o evento e outro, o
+    `pull_request`, e a issue em si nao muda quando o PR abre.
 
     A ordem das regras E a regra: elas se sobrepoem de proposito, e a primeira
     que casa manda. Uma issue fechada como concluida com o `in-progress` preso
@@ -132,6 +147,15 @@ def etapa_da_foto(foto: dict[str, Any] | None) -> str:
 
     labels_raiz = _labels(foto)
     partes = _partes(foto)
+
+    # 0. Entregue E com a versao gravada: Em producao. Entregue e o fechamento
+    #    da issue (o merge); Em producao e a subida que levou esse fechamento ao
+    #    ar (ADR 0069, decisao 4). Sem a versao, a issue fechada continua
+    #    Entregue: o merge aconteceu e a subida ainda nao. A entrega e a mesma
+    #    `_entregue` da regra 1, entao a recusa (`wontfix`, `not_planned`) nunca
+    #    vira Em producao so porque uma versao foi gravada.
+    if versao_em_producao and _entregue(foto):
+        return ETAPA_EM_PRODUCAO
 
     # 1. Fechada como concluida, ou fechada sem motivo declarado: entregue,
     #    aconteca o que acontecer com as partes e com as outras labels.
@@ -161,7 +185,12 @@ def etapa_da_foto(foto: dict[str, Any] | None) -> str:
     ):
         return ETAPA_NAO_SERA_FEITA
 
-    # 3. `in-progress` na raiz ou em QUALQUER parte: alguem esta com a mao nisso.
+    # 3. `in-progress` na raiz ou em QUALQUER parte, ou um PR aberto que fecha
+    #    a raiz: alguem esta com a mao nisso. O PR conta sem label nenhuma
+    #    (ADR 0069, decisao 6): quem abre o PR ja disse que esta trabalhando, e
+    #    a Etapa nao pode esperar alguem lembrar do `in-progress`.
+    if pr_aberto:
+        return ETAPA_EM_DESENVOLVIMENTO
     if LABEL_EM_ANDAMENTO in labels_raiz:
         return ETAPA_EM_DESENVOLVIMENTO
     if any(LABEL_EM_ANDAMENTO in _labels(parte) for parte in partes):
@@ -291,7 +320,7 @@ def bloco_para_o_diretor(corpo: str | None) -> str | None:
 def situacao_da_parte(parte: dict[str, Any] | None) -> str:
     """Em que pe esta ESTA parte, no vocabulario da Etapa (ADR 0054, decisao 7).
 
-    Quatro das seis Etapas, e nao um vocabulario proprio: o diretor le o mesmo
+    Quatro das sete Etapas, e nao um vocabulario proprio: o diretor le o mesmo
     rotulo no selo do card e no selo de cada parte, e duas listas de palavras
     para a mesma ideia fariam "Entregue" significar coisas diferentes na mesma
     tela.
@@ -434,6 +463,47 @@ def corpo_com_marcador(corpo: str | None, demanda_id: str) -> str:
     return f"{limpo}\n\n{marcador}" if limpo else marcador
 
 
+# A frase dos Anexos da Demanda na issue (issue #1062, ADR 0069, decisao 1).
+# So a CONTAGEM sai para o repositorio publico: nem URL (a assinada expira e,
+# enquanto vale, abre o print para qualquer um), nem nome de arquivo (o nome
+# pode ser "prontuario do Joao.png"). Quem desenvolve busca as imagens pelo app.
+#
+# A frase entra no FIM do corpo, e o corpo que termina no bloco "Para o
+# diretor" (o formato que o `_COMENTARIO_HTML` documenta) seria lido ate o fim
+# pelo `bloco_para_o_diretor`: a frase voltaria para o card do diretor e para o
+# "Copiar para IA". Nesse caso ela vem atras de um `---`, que fecha o bloco, e
+# o separador sai junto com ela quando a contagem muda ou vai a zero.
+_FRASE_DOS_ANEXOS_RE = re.compile(
+    r"(?:^-{3,}[ \t\r]*\n\s*)?^Anexos: \d+ image(?:m|ns) na Demanda[ \t\r]*$", re.MULTILINE
+)
+
+
+def frase_dos_anexos(quantos: int) -> str | None:
+    """A frase "Anexos: N imagens na Demanda", ou `None` sem imagem guardada."""
+    if quantos <= 0:
+        return None
+    return f"Anexos: {quantos} {'imagem' if quantos == 1 else 'imagens'} na Demanda"
+
+
+def corpo_vinculado(corpo: str | None, demanda_id: str, *, anexos: int) -> str:
+    """O corpo da issue com a frase dos Anexos (se houver) e o marcador no fim.
+
+    Mesma disciplina do `corpo_com_marcador`: a frase antiga e retirada antes
+    de a nova entrar, entao rodar duas vezes com a mesma contagem deixa o corpo
+    igual, e a contagem que muda substitui em vez de acumular. Sem imagem, a
+    frase sai e nada entra no lugar.
+    """
+    limpo = _MARCADOR_RE.sub("", corpo or "")
+    limpo = _FRASE_DOS_ANEXOS_RE.sub("", limpo).rstrip()
+    frase = frase_dos_anexos(anexos)
+    if frase:
+        com_frase = f"{limpo}\n\n{frase}" if limpo else frase
+        if frase in (bloco_para_o_diretor(com_frase) or ""):
+            com_frase = f"{limpo}\n\n---\n\n{frase}"
+        limpo = com_frase
+    return corpo_com_marcador(limpo, demanda_id)
+
+
 def corpo_precisa_do_marcador(corpo: str | None, demanda_id: str) -> bool:
     """Se vale a pena escrever no GitHub.
 
@@ -562,9 +632,13 @@ def texto_do_diretor(bruto: str | None) -> str:
     nascimento, nome e o resto por marcador. Desde o #730 a descricao pode ser
     a transcricao de um print de sistema hospitalar, e o diretor tambem digita.
     A Demanda no app guarda o texto original: a peneira age so no que sai.
+
+    **E o `@` que a peneira nao pega** (o seguido de digito, issue #888) sai com
+    um espaco depois, a mesma neutralizacao do comentario espelhado
+    (`_trecho_do_autor`): `@1abc` notificaria a conta `1abc`.
     """
     texto = _QUEBRA_DE_LINHA.sub("\n", bruto or "")
-    return _escapar_para_o_github(pseudonimizar(texto))
+    return _escapar_para_o_github(_trecho_do_autor(texto))
 
 
 def titulo_da_issue(bruto: str | None) -> str:
@@ -578,7 +652,7 @@ def titulo_da_issue(bruto: str | None) -> str:
     ganha a barra la, onde ela vale.
     """
     texto = _QUEBRA_DE_LINHA.sub("\n", bruto or "")
-    return _escapar_para_o_github(pseudonimizar(texto), marcador_vira_link=False)
+    return _escapar_para_o_github(_trecho_do_autor(texto), marcador_vira_link=False)
 
 
 def _escapar_para_o_github(texto: str, *, marcador_vira_link: bool = True) -> str:
@@ -639,6 +713,7 @@ def corpo_da_issue_nova(
     produto_nome: str,
     levado_por_login: str | None,
     link: str,
+    anexos: int = 0,
 ) -> str:
     """O corpo da issue que o botao "Levar para desenvolvimento" cria.
 
@@ -669,6 +744,9 @@ def corpo_da_issue_nova(
 
     Descricao vazia usa o TITULO: uma issue cujo "O que muda" viesse em branco
     mostraria "Descrição em preparação" no card de quem acabou de pedir.
+
+    Os Anexos da Demanda entram so como contagem, na Origem (`frase_dos_anexos`,
+    issue #1062): fora do bloco do diretor, que volta para o card.
     """
     o_que_muda = texto_do_diretor(descricao) or texto_do_diretor(titulo)
     login = login_para_publicar(levado_por_login)
@@ -690,6 +768,7 @@ def corpo_da_issue_nova(
             "",
             origem,
             f"Abrir a Demanda: {link}",
+            *(["", frase] if (frase := frase_dos_anexos(anexos)) else []),
             "",
             marcador_da_demanda(demanda_id),
         ]
@@ -741,9 +820,15 @@ ROTULO_SEM_LOGIN = "Pessoa do hospital"
 # evita depender de onde o CommonMark decide abrir enfase.
 _MENCAO_DO_GITHUB = re.compile(r"(?<![A-Za-z0-9])@[A-Za-z0-9][A-Za-z0-9_-]*(?:/[A-Za-z0-9_-]+)?")
 
-# Depois do nome mencionado tem de vir algo que nao e letra (ou o fim): sem
-# isso, "Ana" mencionada casaria o comeco de "@Anastácia".
-_FIM_DO_NOME = r"(?![^\W_])"
+# Depois do nome mencionado tem de vir algo que nao continua um login: nem
+# letra, nem digito, nem hifen (ou o fim). Sem isso, "Ana" mencionada casaria
+# o comeco de "@Anastácia", e "Ana Silva" (login `ana`) em `@Ana Silva-bob`
+# sairia `@ana-bob`, mencao viva a uma conta que ninguem escolheu (issue #888).
+_FIM_DO_NOME = r"(?![^\W_]|-)"
+
+# O texto montado que termina num `@` (seguido ou nao de um login) emenda no
+# rotulo que vem depois e acende mencao a uma conta que ninguem escolheu.
+_COLA_NO_ROTULO = re.compile(r"@[A-Za-z0-9_-]*\Z")
 
 
 def rotulo_no_github(participante: dict[str, Any] | None) -> str:
@@ -783,9 +868,9 @@ def texto_espelhado(bruto: str | None, *, mencionados: list[dict[str, Any]]) -> 
     """O texto da resposta, pronto para um comentario em repositorio publico.
 
     O mesmo funil do `texto_do_diretor` (peneira de dado pessoal, `<` vira
-    `&lt;`, estrutura em coluna zero desligada, travessao sanitizado), com o
-    `@` tratado no meio, que aquele funil nao conhece porque no corpo da issue
-    nova nao ha mencao:
+    `&lt;`, estrutura em coluna zero desligada, travessao sanitizado, `@`
+    solto com espaco), com a mencao do app tratada no meio, que aquele funil
+    nao conhece porque no corpo da issue nova nao ha mencao do app:
 
     1. a **mencao do app** (o `@Nome Completo` que o autocomplete grava, com o
        id da pessoa em `mencoes`) vira o rotulo dessa pessoa: `@login` quando
@@ -821,6 +906,12 @@ def texto_espelhado(bruto: str | None, *, mencionados: list[dict[str, Any]]) -> 
     fim = 0
     for achado in padrao.finditer(texto):
         partes.append(_trecho_do_autor(texto[fim : achado.start()]))
+        # Um `@` solto, ou o `@login` da mencao anterior, colado ao rotulo
+        # neutro sairia `@Pessoa` ou `@anaPessoa`, mencao viva (issue #888).
+        # Quem decide e o texto ja montado, nao so o trecho do autor. O espaco
+        # e o mesmo do `_neutralizar_mencoes`.
+        if _COLA_NO_ROTULO.search("".join(partes)):
+            partes.append(" ")
         partes.append(rotulos[achado.group(0)[1:]])
         fim = achado.end()
     partes.append(_trecho_do_autor(texto[fim:]))
@@ -847,8 +938,13 @@ def corpo_do_comentario_espelhado(
     autor: dict[str, Any] | None,
     demanda_id: str,
     mencionados: list[dict[str, Any]] | None = None,
+    imagens: int = 0,
 ) -> str:
     """O comentario que o app publica na issue quando alguem responde no card.
+
+    A resposta que levou imagem ganha "(1 imagem na Demanda)" depois do texto
+    (issue #1062): so a contagem. A imagem fica no app, e nem a URL nem o nome
+    do arquivo saem para o repositorio publico (ADR 0069, decisao 1).
 
     O marcador vai pelo FATO de ter login (`tem_github_login`): e ele que separa
     a Vitta do hospital para a Action. O cabecalho vai pelo login PUBLICAVEL
@@ -872,6 +968,7 @@ def corpo_do_comentario_espelhado(
             f"**{rotulo_no_github(autor)}** escreveu na Demanda:",
             "",
             texto_espelhado(texto, mencionados=list(mencionados or [])),
+            *(["", f"({imagens} {'imagem' if imagens == 1 else 'imagens'} na Demanda)"] if imagens > 0 else []),
         ]
     )
 
@@ -908,6 +1005,17 @@ def texto_movimento_etapa(*, para: str, entregues: int | None = None, total: int
     rotulo = ETAPA_ROTULO.get(para, para)
     partes = texto_partes(entregues, total)
     return f"Etapa: {rotulo} ({partes})" if partes else f"Etapa: {rotulo}"
+
+
+def texto_em_producao(versao: str) -> str:
+    """A linha do fio quando a subida leva a entrega ao ar (ADR 0069, decisão 4).
+
+    Com a versão, e não "Etapa: Em produção": a versão é a resposta que o
+    diretor procura ("já posso usar?"), e é a mesma que o selo mostra. Sem nome
+    de quem agiu, como a linha da Etapa: quem subiu foi a Action, e a linha diz
+    o fato.
+    """
+    return f"{ETAPA_ROTULO[ETAPA_EM_PRODUCAO]} na {versao}"
 
 
 # As duas linhas do Vinculo, SEM o numero da issue.

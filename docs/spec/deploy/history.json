@@ -2,6 +2,630 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-10-07T16:33:35-03:00",
+      "sha": "45b55d020fd071b02b2b5203e9aac6e4a436a9f5",
+      "app_version": "0.170.1",
+      "subject": "PR #1102, issue #1066: Kit e manual da aba contam Quadro, Painel, anexos e Em produção",
+      "raw_subject": "chore(deploy): registro do PR avulso (#1102)",
+      "scope": [
+        "backend"
+      ],
+      "prds": [
+        1056
+      ],
+      "result": "healthy",
+      "duration_seconds": 70,
+      "services_touched": [
+        "backend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        },
+        {
+          "service": "frontend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "PR avulso: PR #1102, issue #1066. Merge pela API do GitHub, um build. Registro pela Action pos-merge depois do health.",
+      "etapas": {
+        "merge_s": 3,
+        "build_s": {
+          "backend": 39
+        },
+        "health_s": 10
+      },
+      "responsavel": "pedrorezendefig"
+    },
+    {
+      "at": "2026-10-07T15:54:08-03:00",
+      "sha": "896423a2e6e51aaee204db274c8510a0d0b35398",
+      "app_version": "0.170.0",
+      "subject": "Onda onda-a-onda4: Ponte com o desenvolvimento, rota de automação e script dos anexos",
+      "raw_subject": "chore(deploy): registro da onda onda-a-onda4 (#1101)",
+      "scope": [
+        "backend"
+      ],
+      "prds": [
+        1056
+      ],
+      "result": "healthy",
+      "duration_seconds": 68,
+      "services_touched": [
+        "backend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        },
+        {
+          "service": "frontend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "onda-enxuta onda-a-onda4: PR #1101 (issue #1063), mergeados PR a PR. Merge pela API do GitHub, um build. Registro pela Action pos-merge depois do health.",
+      "etapas": {
+        "merge_s": 3,
+        "build_s": {
+          "backend": 28
+        },
+        "health_s": 20
+      },
+      "responsavel": "pedrorezendefig"
+    },
+    {
+      "at": "2026-10-07T15:18:39-03:00",
+      "sha": "8c709d7b493273bb41f48d8e7cf9533ca2beb97a",
+      "app_version": "0.169.0",
+      "subject": "Onda onda-a-onda3: Produtos em tela própria, pela engrenagem; Anexo na Conversa e no Assistente, issue diz quantas imagens há; Webhook de deploy, Em produção devolve ao diretor, job da Action pós-merg",
+      "raw_subject": "chore(deploy): registro da onda onda-a-onda3 (#1098 #1099 #1100)",
+      "scope": [
+        "backend",
+        "frontend"
+      ],
+      "prds": [
+        1056
+      ],
+      "result": "healthy",
+      "duration_seconds": 329,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        },
+        {
+          "service": "frontend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "onda-enxuta onda-a-onda3: PR #1098 (issue #1060), PR #1099 (issue #1062), PR #1100 (issue #1065), mergeados PR a PR. Merge pela API do GitHub, um build. Registro pela Action pos-merge depois do health.",
+      "etapas": {
+        "merge_s": 9,
+        "build_s": {
+          "backend": 39,
+          "frontend": 254
+        },
+        "health_s": 1
+      },
+      "responsavel": "pedrorezendefig"
+    },
+    {
+      "at": "2026-10-07T14:20:45-03:00",
+      "sha": "f99092eed8f395082f86d5271743f46d54fd104d",
+      "app_version": "0.168.0",
+      "subject": "Onda onda-a-onda2: Webhook pull_request, PR aberto que fecha a raiz vira Em desenvolvimento; Anexo da Demanda no formulário e no card, apagado em Concluída ou Cancelada; Painel com Com você, Entregas ",
+      "raw_subject": "chore(deploy): registro da onda onda-a-onda2 (#1095 #1096 #1097)",
+      "scope": [
+        "backend",
+        "frontend"
+      ],
+      "prds": [
+        1056
+      ],
+      "result": "healthy",
+      "duration_seconds": 520,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        },
+        {
+          "service": "frontend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "onda-enxuta onda-a-onda2: PR #1095 (issue #1064), PR #1096 (issue #1061), PR #1097 (issue #1059), mergeados PR a PR. Merge pela API do GitHub, um build. Registro pela Action pos-merge depois do health.",
+      "etapas": {
+        "merge_s": 9,
+        "build_s": {
+          "backend": 440,
+          "frontend": 366
+        },
+        "health_s": 10
+      },
+      "responsavel": "pedrorezendefig"
+    },
+    {
+      "at": "2026-10-07T13:17:23-03:00",
+      "sha": "f142a728a0f523dd54927ddca61f4880f4460ba8",
+      "app_version": "0.167.0",
+      "subject": "Onda onda-a-onda1: Fundação do PRD #1056, migration 115 e Etapa Em produção; Quadro de três raias e card enxuto",
+      "raw_subject": "chore(deploy): registro da onda onda-a-onda1 (#1093 #1094)",
+      "scope": [
+        "backend",
+        "frontend"
+      ],
+      "prds": [
+        1056
+      ],
+      "result": "healthy",
+      "duration_seconds": 2626,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        },
+        {
+          "service": "frontend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [
+        "115_tecnologia_anexos_e_em_producao.sql"
+      ],
+      "rollback_target_sha": null,
+      "notes": "onda-enxuta onda-a-onda1: PR #1093 (issue #1057), PR #1094 (issue #1058), mergeados PR a PR. Merge pela API do GitHub, um build. Registro pela Action pos-merge depois do health.",
+      "etapas": {
+        "merge_s": 6,
+        "build_s": {
+          "backend": 196,
+          "frontend": 224
+        },
+        "health_s": 20
+      },
+      "responsavel": "pedrorezendefig"
+    },
+    {
+      "at": "2026-10-07T01:33:58-03:00",
+      "sha": "be94255e6161ec022d245e37e20f73135607ed82",
+      "app_version": "0.166.3",
+      "subject": "Onda onda-b-onda2: Acabamentos da trava de Secretária facilitadora",
+      "raw_subject": "chore(deploy): registro da onda onda-b-onda2 (#1076)",
+      "scope": [
+        "backend",
+        "frontend"
+      ],
+      "prds": [],
+      "result": "healthy",
+      "duration_seconds": 1414,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        },
+        {
+          "service": "frontend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "onda-enxuta onda-b-onda2: PR #1076 (issue #890), mergeados PR a PR. Merge pela API do GitHub, um build. Registro pela Action pos-merge depois do health.",
+      "etapas": {
+        "merge_s": 2,
+        "build_s": {
+          "backend": 160,
+          "frontend": 142
+        },
+        "health_s": 10
+      },
+      "responsavel": "pedrorezendefig"
+    },
+    {
+      "at": "2026-10-07T01:27:43-03:00",
+      "sha": "0331fcf97f5e9ae41d25507c747f5df3bb3cedaf",
+      "app_version": "0.166.2",
+      "subject": "Onda onda-a-onda2: Texto de ajuda do extrato e recusa do acionamento dizem a verdade sobre o que viaja ao setor",
+      "raw_subject": "chore(deploy): registro da onda onda-a-onda2 (#1077)",
+      "scope": [
+        "backend",
+        "frontend"
+      ],
+      "prds": [],
+      "result": "healthy",
+      "duration_seconds": 390,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        },
+        {
+          "service": "frontend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "onda-enxuta onda-a-onda2: PR #1077 (issue #769), mergeados PR a PR. Merge pela API do GitHub, um build. Registro pela Action pos-merge depois do health.",
+      "etapas": {
+        "merge_s": 2,
+        "build_s": {
+          "backend": 22,
+          "frontend": 169
+        },
+        "health_s": 0
+      },
+      "responsavel": "pedrorezendefig"
+    },
+    {
+      "at": "2026-10-07T01:21:44-03:00",
+      "sha": "f55a7e5fad4aa6f0cfe0e0e0ce184f2678c88b68",
+      "app_version": "0.166.1",
+      "subject": "Onda onda-c-onda1: Suíte do backend, snapshot.py e pnpm rodam no Windows; O kit instalar-fluxo leva a onda-enxuta e o fechar_onda.py como a subida do DESTINO; Medir_onda acha o projeto quando o caminh",
+      "raw_subject": "chore(deploy): registro da onda onda-c-onda1 (#1074 #1071 #1069)",
+      "scope": [
+        "backend"
+      ],
+      "prds": [
+        902
+      ],
+      "result": "healthy",
+      "duration_seconds": 1387,
+      "services_touched": [
+        "backend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        },
+        {
+          "service": "frontend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "onda-enxuta onda-c-onda1: PR #1074 (issue #844), PR #1071 (issue #924), PR #1069 (issue #900), mergeados PR a PR. Merge pela API do GitHub, um build. Registro pela Action pos-merge depois do health.",
+      "etapas": {
+        "merge_s": 8,
+        "build_s": {
+          "backend": 17
+        },
+        "health_s": 10
+      },
+      "responsavel": "pedrorezendefig"
+    },
+    {
+      "at": "2026-10-07T01:11:25-03:00",
+      "sha": "d7e54948b40e87b02dbb27b62eaf097bd71a39a1",
+      "app_version": "0.166.0",
+      "subject": "Onda onda-b-onda1: Atas Paradas e Aguardam Assinatura abrem lista no dashboard, status da pendência em caixa alta; Tetos de tamanho nos chats de correção, Ata Guiada e POP; Copiar para IA recua a desc",
+      "raw_subject": "chore(deploy): registro da onda onda-b-onda1 (#1068 #1073 #1067)",
+      "scope": [
+        "backend",
+        "frontend"
+      ],
+      "prds": [],
+      "result": "healthy",
+      "duration_seconds": 813,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        },
+        {
+          "service": "frontend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "onda-enxuta onda-b-onda1: PR #1068 (issue #1055), PR #1073 (issue #893), PR #1067 (issue #895), mergeados PR a PR. Merge pela API do GitHub, um build. Registro pela Action pos-merge depois do health.",
+      "etapas": {
+        "merge_s": 8,
+        "build_s": {
+          "backend": 121,
+          "frontend": 130
+        },
+        "health_s": 0
+      },
+      "responsavel": "pedrorezendefig"
+    },
+    {
+      "at": "2026-10-07T01:00:51-03:00",
+      "sha": "d1b23d238dacda17abec6024716b74c7f3ef25a2",
+      "app_version": "0.165.0",
+      "subject": "Onda onda-a-onda1: Caso anônimo sem sigilo reforçado leva resumo e relato integral ao setor; Nome e contato de quem manifesta passam pela régua do paciente nas três portas; Resumo sai do índice de que",
+      "raw_subject": "chore(deploy): registro da onda onda-a-onda1 (#1075 #1070 #1072)",
+      "scope": [
+        "backend",
+        "frontend"
+      ],
+      "prds": [],
+      "result": "healthy",
+      "duration_seconds": 283,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        },
+        {
+          "service": "frontend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "onda-enxuta onda-a-onda1: PR #1075 (issue #1051), PR #1070 (issue #800), PR #1072 (issue #753), mergeados PR a PR. Merge pela API do GitHub, um build. Registro pela Action pos-merge depois do health.",
+      "etapas": {
+        "merge_s": 8,
+        "build_s": {
+          "backend": 207,
+          "frontend": 179
+        },
+        "health_s": 10
+      },
+      "responsavel": "pedrorezendefig"
+    },
+    {
+      "at": "2026-10-06T23:40:41-03:00",
+      "sha": "85a958db9d8ac02ee784858cc422e5438f689cf0",
+      "app_version": "0.164.1",
+      "subject": "PR #1052, sem issue: O passo que leva o PR a produção se chama subida, não rabo",
+      "raw_subject": "chore(deploy): registro do PR avulso (#1052)",
+      "scope": [
+        "backend",
+        "frontend"
+      ],
+      "prds": [],
+      "result": "healthy",
+      "duration_seconds": 223,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        },
+        {
+          "service": "frontend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "PR avulso: PR #1052, sem issue. Merge pela API do GitHub, um build. Registro pela Action pos-merge depois do health.",
+      "etapas": {
+        "merge_s": 2,
+        "build_s": {
+          "backend": 20,
+          "frontend": 198
+        },
+        "health_s": 0
+      },
+      "responsavel": "pedrorezendefig"
+    },
+    {
+      "at": "2026-10-06T23:10:03-03:00",
+      "sha": "896ec2ef3f64d0d3eea633ee0a5c5f113f133f77",
+      "app_version": "0.164.0",
+      "subject": "PR #1050, sem issue: Issue da Demanda nasce designada ao responsável, triage limpa ao liberar e chip Demanda no OS",
+      "raw_subject": "chore(deploy): registro do PR avulso (#1050)",
+      "scope": [
+        "backend"
+      ],
+      "prds": [],
+      "result": "healthy",
+      "duration_seconds": 139,
+      "services_touched": [
+        "backend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        },
+        {
+          "service": "frontend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "PR avulso: PR #1050, sem issue. Merge pela API do GitHub, um build. Registro pela Action pos-merge depois do health.",
+      "etapas": {
+        "merge_s": 2,
+        "build_s": {
+          "backend": 106
+        },
+        "health_s": 10
+      },
+      "responsavel": "pedrorezendefig"
+    },
+    {
+      "at": "2026-10-06T20:40:56-03:00",
+      "sha": "48bc83ed7b7abda96fdb1fad4284715bc54b5d3e",
+      "app_version": "0.163.5",
+      "subject": "Onda medida-onda1: Menção viva não escapa mais pelo hífen depois do nome nem pelo @ com dígito na issue nova",
+      "raw_subject": "chore(deploy): registro da onda medida-onda1 (#1041)",
+      "scope": [
+        "backend"
+      ],
+      "prds": [],
+      "result": "healthy",
+      "duration_seconds": 66,
+      "services_touched": [
+        "backend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        },
+        {
+          "service": "frontend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "onda-enxuta medida-onda1: PR #1041 (issue #888), mergeados PR a PR. Merge pela API do GitHub, um build. Registro pela Action pos-merge depois do health."
+    },
+    {
+      "at": "2026-10-06T13:38:54-03:00",
+      "sha": "99259efee4be6fb8d82943d8c94cf9e8eddfe855",
+      "app_version": "0.163.4",
+      "subject": "PR #1007, issue #1006: Uma thread por tick, sem gather sobre o cliente Supabase",
+      "raw_subject": "chore(deploy): registro do PR avulso (#1007)",
+      "scope": [
+        "backend"
+      ],
+      "prds": [],
+      "result": "healthy",
+      "duration_seconds": 57,
+      "services_touched": [
+        "backend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        },
+        {
+          "service": "frontend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "PR avulso: PR #1007, issue #1006. Merge pela API do GitHub, um build. Registro num PR so de docs depois do health."
+    },
+    {
       "at": "2026-10-06T11:02:15-03:00",
       "sha": "61e6484b99f50ffca0649b5569fb8abafe847cae",
       "app_version": "0.163.3",

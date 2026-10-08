@@ -144,6 +144,10 @@ type Opcoes = {
   textoDoDocumento?: string;
   /** O que a rota do print devolve como descrição da imagem. */
   descricaoDoPrint?: string;
+  /** O identificador efêmero que a rota do print devolve junto (issue #1062). */
+  printId?: string;
+  /** A frase dos prints que não viraram Anexo na criação (issue #1062). */
+  avisoDosAnexos?: string;
   /** A recusa da rota de voz ou da de extração, com o corpo cru daquela camada. */
   recusaDoAnexo?: { status: number; corpo: unknown };
   /** Um 200 da extração cujo corpo o `JSON.parse` aceita e que não serve. */
@@ -231,7 +235,10 @@ function servidor(opcoes: Opcoes) {
       return {
         ok: true,
         status: 200,
-        json: async () => ({ texto: opcoes.descricaoDoPrint ?? "A tela de login da Ana, com erro" }),
+        json: async () => ({
+          texto: opcoes.descricaoDoPrint ?? "A tela de login da Ana, com erro",
+          ...(opcoes.printId ? { print_id: opcoes.printId } : {}),
+        }),
       } as unknown as Response;
     }
     if (url.endsWith("/assistente/chat") && opcoes.segurarAResposta) {
@@ -295,7 +302,7 @@ function servidor(opcoes: Opcoes) {
     return {
       ok: true,
       status: 201,
-      json: async () => ({ id: "d-nova", aviso_por_email: null }),
+      json: async () => ({ id: "d-nova", aviso_por_email: null, aviso_dos_anexos: opcoes.avisoDosAnexos ?? null }),
     } as unknown as Response;
   });
 }
@@ -1784,5 +1791,52 @@ describe("A faixa de Demanda parecida", () => {
 
     await waitFor(() => expect(screen.queryByText("a Ana tá estranha")).toBeNull());
     expect(screen.queryByText(DEMANDA_PARECIDA_TITULO)).toBeNull();
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// O print vira Anexo no clique (issue #1062)
+// ═══════════════════════════════════════════════════════════════════════════
+//
+// O backend devolve um identificador efêmero junto da descrição; a tela o
+// guarda com a conversa e o leva em "Criar Demanda". Sem o clique, ninguém o
+// manda a lugar nenhum.
+
+describe("O print vira Anexo no clique", () => {
+  async function descreverEPreencher(opcoes: Opcoes) {
+    montar(opcoes);
+    escolher("Arquivo de print", [arquivo("tela.png", 1000, "image/png")]);
+    await waitFor(() => expect(doChat()).toHaveLength(1));
+    await waitFor(() => expect((screen.getByLabelText("Título") as HTMLInputElement).value).not.toBe(""));
+  }
+
+  it("'Criar Demanda' leva o identificador do print descrito", async () => {
+    await descreverEPreencher({ printId: "print-1" });
+
+    fireEvent.click(screen.getByRole("button", { name: "Criar Demanda" }));
+
+    await waitFor(() => expect(criacoes()).toHaveLength(1));
+    expect(criacoes()[0].corpo?.prints).toEqual(["print-1"]);
+  });
+
+  it("o print que não virou Anexo chega como aviso a quem criou", async () => {
+    await descreverEPreencher({ printId: "print-1", avisoDosAnexos: "A Demanda foi aberta, mas um print não entrou." });
+
+    fireEvent.click(screen.getByRole("button", { name: "Criar Demanda" }));
+
+    await waitFor(() => expect(criadas).toHaveLength(1));
+    expect(criadas[0].aviso).toBe("A Demanda foi aberta, mas um print não entrou.");
+  });
+
+  it("'Descartar' esquece os prints: a conversa seguinte não os leva", async () => {
+    await descreverEPreencher({ printId: "print-1" });
+    fireEvent.click(screen.getByRole("button", { name: /Descartar/ }));
+
+    await falar("a Ana tá estranha");
+    await waitFor(() => expect((screen.getByLabelText("Título") as HTMLInputElement).value).not.toBe(""));
+    fireEvent.click(screen.getByRole("button", { name: "Criar Demanda" }));
+
+    await waitFor(() => expect(criacoes()).toHaveLength(1));
+    expect(criacoes()[0].corpo?.prints).toBeUndefined();
   });
 });

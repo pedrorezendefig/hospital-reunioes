@@ -1488,11 +1488,10 @@ class TestExtratoParaOSetor:
         assert r.status_code == 422, r.text
         assert supabase.tabelas["ouvidoria_protocolos"][0]["status"] == "em_classificacao"
 
-    @pytest.mark.parametrize("caso", ["sigiloso", "anonimo"])
-    def test_email_de_caso_protegido_nunca_leva_o_relato_cru(self, monkeypatch, caso, _nunca_envia_email_de_verdade):
-        """O que o setor lê é o extrato do ouvidor, e só ele."""
-        supabase = self._sigiloso() if caso == "sigiloso" else self._anonimo()
-        client, _ = _client(monkeypatch, OUVIDOR, supabase)
+    def test_email_de_caso_protegido_nunca_leva_o_relato_cru(self, monkeypatch, _nunca_envia_email_de_verdade):
+        """O que o setor lê é o extrato do ouvidor, e só ele. Desde a issue
+        #1051 só o sigilo reforçado protege: o anônimo leva o relato."""
+        client, _ = _client(monkeypatch, OUVIDOR, self._sigiloso())
 
         r = client.post("/api/ouvidoria/manifestacoes/uuid-7/validar", json=VALIDACAO)
 
@@ -1503,13 +1502,10 @@ class TestExtratoParaOSetor:
             assert "Maria Silva" not in corpo
             assert "leito 302" not in corpo
 
-    @pytest.mark.parametrize("caso", ["sigiloso", "anonimo"])
-    def test_reenvio_de_caso_protegido_tambem_sai_sem_o_relato_cru(
-        self, monkeypatch, caso, _nunca_envia_email_de_verdade
-    ):
+    def test_reenvio_de_caso_protegido_tambem_sai_sem_o_relato_cru(self, monkeypatch, _nunca_envia_email_de_verdade):
         """O reenvio monta o email do zero: o vazamento não pode entrar por
         esse caminho."""
-        supabase = self._sigiloso() if caso == "sigiloso" else self._anonimo()
+        supabase = self._sigiloso()
         client, _ = _client(monkeypatch, OUVIDOR, supabase)
         client.post("/api/ouvidoria/manifestacoes/uuid-7/validar", json=VALIDACAO)
         notificacao_id = supabase.tabelas["ouvidoria_notificacoes"][0]["id"]
@@ -1545,6 +1541,28 @@ class TestExtratoParaOSetor:
         assert r.status_code == 422, r.text
         assert _nunca_envia_email_de_verdade == []
         assert supabase.tabelas["ouvidoria_protocolos"][0]["status"] == "em_classificacao"
+
+    @pytest.mark.parametrize("caso", ["comum", "anonimo", "sigiloso"])
+    def test_recusa_sem_extrato_diz_por_que_ele_e_exigido_sem_mentir_o_que_viaja(self, monkeypatch, caso):
+        """Issue #769. A frase antiga dizia que o relato original não sai da
+        Ouvidoria, e no caso comum (e, desde a #1051, no anônimo) ele sai, com o
+        nome junto. A recusa vale para os três casos com a mesma frase, então
+        ela diz só por que o extrato é exigido (ADR 0034, decisão 8), sem
+        afirmar o que viaja."""
+        linhas = {
+            "comum": [_manifestacao()],
+            "anonimo": [_manifestacao(anonimo=True, manifestante_nome=None)],
+            "sigiloso": [_manifestacao(sigilo_reforcado=True)],
+        }[caso]
+        client, _ = _client(monkeypatch, OUVIDOR, _SupabaseFake(linhas))
+
+        r = client.post("/api/ouvidoria/manifestacoes/uuid-7/validar", json=SEM_EXTRATO)
+
+        assert r.status_code == 422, r.text
+        assert r.json()["detail"] == (
+            "O acionamento exige o extrato para o setor. Escreva com as suas palavras o que a área "
+            "precisa resolver: o setor precisa do que a Ouvidoria pede, escrito pela Ouvidoria."
+        )
 
     def test_extrato_do_ouvidor_acompanha_o_caso_comum_no_email(self, monkeypatch, _nunca_envia_email_de_verdade):
         """No caso comum a nota da Ouvidoria não é mais o único conteúdo: ela

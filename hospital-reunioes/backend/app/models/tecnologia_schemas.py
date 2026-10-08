@@ -156,6 +156,11 @@ class DemandaResponse(BaseModel):
     # frase; nulo NAO e o corpo tecnico da issue, que nao sai do GitHub.
     o_que_muda: str | None = None
     partes: list[ParteDaEntrega] = []
+    # A versao em que a Demanda subiu, RESOLVIDA pelo backend: vem preenchida so
+    # quando a Etapa e Em producao (`versao_da_entrega`), e o selo a mostra em
+    # todo lugar ("Em producao desde v0.165.0", issue #1065). A tela nao repete
+    # a regra.
+    versao: str | None = None
     # A frase de "isto valeu, mas o aviso por e-mail nao saiu" (issue #642), ou
     # `None` quando nao houve nada a avisar ou o aviso saiu.
     #
@@ -163,6 +168,9 @@ class DemandaResponse(BaseModel):
     # escrever essa frase sem repetir a regra de quem devia receber, e uma
     # segunda versao do texto divergiria da primeira.
     aviso_por_email: str | None = None
+    # A frase dos prints do Assistente que nao viraram Anexo na criacao (issue
+    # #1062), ou `None` quando todos entraram ou nao havia print.
+    aviso_dos_anexos: str | None = None
 
 
 class DemandaCreatePayload(BaseModel):
@@ -186,6 +194,10 @@ class DemandaCreatePayload(BaseModel):
     # Texto ISO (`2026-10-01`) ou vazio. O router normaliza e valida: `""` nao e
     # NULL, e gravado numa coluna DATE seria erro de banco, nao 422.
     prazo: str | None = None
+    # Os identificadores efemeros dos prints que o Assistente descreveu (issue
+    # #1062): viram Anexo na mesma chamada que cria a Demanda. O formulario nao
+    # manda nada aqui; ele anexa depois, uma imagem por vez.
+    prints: list[str] = []
 
 
 class DemandaUpdatePayload(BaseModel):
@@ -284,6 +296,28 @@ class ConversaLinhaResponse(BaseModel):
     # gatilhos de menção e de resposta, e quem escreveu precisa saber se eles
     # saíram. Sempre `None` na LEITURA do fio: ali ninguém acabou de agir.
     aviso_por_email: str | None = None
+    # A imagem que a resposta levou (issue #1062), com a URL assinada de vida
+    # curta, ou `None`. Movimento nunca leva imagem.
+    imagem: AnexoDaDemandaResponse | None = None
+
+
+class AnexoDaDemandaResponse(BaseModel):
+    """Um Anexo da Demanda como o card o mostra (issue #1061, ADR 0069).
+
+    Sem o caminho no storage: o acesso ao binario e so pela `url`, assinada e
+    de vida curta. Ela vem nula no anexo apagado (Demanda Concluida ou
+    Cancelada), que continua aparecendo com nome, quem e quando.
+    """
+
+    id: str
+    nome: str
+    anexado_por_nome: str | None = None
+    criado_em: str | None = None
+    apagado_em: str | None = None
+    # A resposta da Conversa que trouxe a imagem (issue #1062), ou nulo quando
+    # ela veio pelo formulario ou pelo Assistente.
+    conversa_id: str | None = None
+    url: str | None = None
 
 
 class TextoParaIaResponse(BaseModel):
@@ -313,15 +347,19 @@ class RespostaPayload(BaseModel):
 
     texto: str
     mencoes: list[str] | None = None
+    # A imagem que vai junto da resposta (issue #1062): o id do anexo que a
+    # tela acabou de subir pela porta do formulario. So vale no envio; a
+    # correcao reescreve o texto e nao troca a imagem.
+    anexo_id: str | None = None
 
 
-# ─── Minha vez e Historico (issue #641) ──────────────────────────────────────
+# ─── O Painel (issue #1059, PRD #1056; antes "Minha vez" e Historico, #641) ─
 
 
-class DemandaDaMinhaVezResponse(DemandaResponse):
-    """A Demanda como a aba "Minha vez" a le.
+class DemandaComVoceResponse(DemandaResponse):
+    """A Demanda como o bloco "Com voce" do Painel a le.
 
-    O `motivo` e o par na tela da regra do backend: a aba traz tanto o que e
+    O `motivo` e o par na tela da regra do backend: o bloco traz tanto o que e
     meu quanto o que me chamaram, e sem ele quem abre ve um card cujo
     responsavel e OUTRA pessoa e nao descobre por que ele esta ali.
     """
@@ -333,7 +371,7 @@ class DemandaDaMinhaVezResponse(DemandaResponse):
 
 
 class DemandaDoHistoricoResponse(DemandaResponse):
-    """A Demanda como a aba Historico a le.
+    """A Demanda como o bloco Historico do Painel a le.
 
     Os tres campos de desfecho sao RESOLVIDOS pelo backend, a partir do estado:
     a tela mostra "quando e por quem" numa linha so, e escolher entre
@@ -344,6 +382,37 @@ class DemandaDoHistoricoResponse(DemandaResponse):
     fechada_em: str | None = None
     fechada_por_id: str | None = None
     fechada_por_nome: str | None = None
+
+
+class DemandaDaEntregaResponse(DemandaResponse):
+    """A Demanda como o bloco Entregas do Painel a le (issue #1059).
+
+    A `versao` deixou de ser so deste bloco (issue #1065): ela vem em toda
+    Demanda (`DemandaResponse`), porque o selo a mostra no Quadro tambem.
+    """
+
+
+class NumerosDoPainel(BaseModel):
+    """Os quatro numeros do topo do Painel. Nenhum e por pessoa (ADR 0061)."""
+
+    abertas: int
+    com_o_hospital: int
+    em_desenvolvimento: int
+    entregues_30_dias: int
+
+
+class PainelResponse(BaseModel):
+    """O Painel inteiro numa resposta so (issue #1059).
+
+    Uma rota, e nao uma por bloco: os quatro numeros e os tres blocos saem da
+    MESMA leitura das Demandas, e tres leituras em tempos diferentes deixariam
+    o numero do topo discordar da lista logo abaixo dele.
+    """
+
+    numeros: NumerosDoPainel
+    com_voce: list[DemandaComVoceResponse]
+    entregas: list[DemandaDaEntregaResponse]
+    historico: list[DemandaDoHistoricoResponse]
 
 
 # ─── Assistente de Tecnologia (PRD #726, ADR 0056) ───────────────────────────
@@ -426,6 +495,10 @@ class AssistenteImagemResponse(BaseModel):
     2026-09-17 as 14.02.11.png", que nao diz nada a quem le a conversa, e a
     imagem nao e guardada em lugar nenhum para alguem querer achar depois
     (ADR 0056, decisao 4).
+
+    `print_id` e o identificador efemero do print (issue #1062): a imagem fica
+    so na memoria do backend e vira Anexo se a pessoa clicar "Criar Demanda".
     """
 
     texto: str
+    print_id: str | None = None

@@ -22,7 +22,7 @@ class Settings(BaseSettings):
 
     # App
     app_name: str = "Hospital Reuniões API"
-    # Em produção, sobrescrita por APP_VERSION, que o rabo (fechar_onda.py) grava no Coolify antes do merge.
+    # Em produção, sobrescrita por APP_VERSION, que a subida (fechar_onda.py) grava no Coolify antes do merge.
     app_version: str = "0.1.0"
     debug: bool = False
     api_prefix: str = "/api"
@@ -36,6 +36,8 @@ class Settings(BaseSettings):
     supabase_storage_bucket_pdfs_assinados: str = "pdfs-assinados"
     supabase_storage_bucket_materiais_pops: str = "materiais-pops"
     supabase_storage_bucket_anexos_ouvidoria: str = "anexos-ouvidoria"
+    # Bucket privado do Anexo da Demanda (migration 115, ADR 0069).
+    supabase_storage_bucket_anexos_tecnologia: str = "anexos-tecnologia"
 
     # LLM (OpenRouter — provedor único; sem chave configurada, cai no mock)
     openrouter_api_key: str = ""
@@ -83,6 +85,21 @@ class Settings(BaseSettings):
     # log. Nunca um default, que seria um segredo público, e nunca "sem segredo
     # aceita tudo", que é a porta aberta com aparência de guarda.
     github_webhook_secret: str = ""
+
+    # O segredo do webhook de deploy (issue #1065, ADR 0069, decisão 4). A
+    # Action pós-merge assina com ele o aviso de que uma versão subiu, e o app
+    # marca Em produção as Demandas do lote. O mesmo valor mora nos secrets do
+    # repositório (`TECNOLOGIA_DEPLOY_WEBHOOK_SECRET`), e os dois cadastros são
+    # passo humano. Vazio = a rota `/webhooks/deploy` responde 503, e quem marca
+    # Em produção é só a reconciliação de hora em hora.
+    tecnologia_deploy_webhook_secret: str = ""
+
+    # A chave da ponte com o desenvolvimento (issue #1063, ADR 0069, decisão 2).
+    # O script `pegar-issue/scripts/anexos.py` manda no `X-API-Key` para buscar
+    # os anexos de uma Demanda; o mesmo valor mora no `tokens/.env` de cada
+    # sócio. Vazio = a rota de automação responde 503: ponte desligada, e não
+    # chave errada. Cadastro humano, na tela do Coolify.
+    tecnologia_automacao_api_key: str = ""
 
     # Central de Comando (ADR 0058): os números do Site e do Instagram, só para
     # Super admin. Todas as variáveis da Central moram aqui desde a primeira

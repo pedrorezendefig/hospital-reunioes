@@ -236,7 +236,7 @@ export function respostaDoChatValida(corpo: unknown): corpo is RespostaDoChat {
 }
 
 /** O que a tela consome da Demanda recém-criada. */
-export type DemandaCriada = Demanda & { aviso_por_email?: unknown };
+export type DemandaCriada = Demanda & { aviso_por_email?: unknown; aviso_dos_anexos?: unknown };
 
 /**
  * A resposta da criação serve?
@@ -358,7 +358,12 @@ export function podeCriar(rascunho: RascunhoDaDemanda): boolean {
  */
 export const CHAVE_DA_SESSAO = "tecnologia:assistente";
 
-export type EstadoGuardado = { messages: MensagemDoChat[]; rascunho: RascunhoDaDemanda };
+/**
+ * `prints` são os identificadores efêmeros dos prints que o servidor descreveu
+ * (issue #1062): a imagem fica só na memória do backend, e vira Anexo se
+ * "Criar Demanda" levar o identificador. Ficam com a conversa porque são dela.
+ */
+export type EstadoGuardado = { messages: MensagemDoChat[]; rascunho: RascunhoDaDemanda; prints: string[] };
 
 export function lerDaSessao(): EstadoGuardado | null {
   // Navegador com storage bloqueado levanta no próprio acesso, e uma tela que
@@ -368,7 +373,9 @@ export function lerDaSessao(): EstadoGuardado | null {
     if (!bruto) return null;
     const lido = JSON.parse(bruto) as Partial<EstadoGuardado>;
     if (!Array.isArray(lido.messages) || typeof lido.rascunho !== "object" || lido.rascunho === null) return null;
-    return { messages: lido.messages, rascunho: { ...RASCUNHO_VAZIO, ...lido.rascunho } };
+    // Sessão gravada antes da issue #1062 não tem `prints`, e a conversa segue.
+    const prints = Array.isArray(lido.prints) ? lido.prints.filter((p): p is string => typeof p === "string") : [];
+    return { messages: lido.messages, rascunho: { ...RASCUNHO_VAZIO, ...lido.rascunho }, prints };
   } catch {
     return null;
   }
@@ -635,14 +642,22 @@ export function avisoDaImagem(arquivo: ArquivoEscolhido): string | null {
 }
 
 /**
- * O print vai à rota que o descreve, e o que volta é TEXTO.
- *
- * O validador é o da transcrição, e não um próprio: o que o consumidor consome
- * aqui é exatamente um `texto`, como na voz. O print não tem `filename` a
- * cobrar, porque o prefixo dele não leva nome.
+ * O que a rota do print devolve: a descrição e, desde a issue #1062, o
+ * identificador efêmero com que a imagem vira Anexo no "Criar Demanda".
+ * `print_id` ausente ou nulo não derruba a leitura: a descrição continua valendo,
+ * a imagem só não vira Anexo.
  */
-export function descreverAImagem(arquivo: File, token: string | null): Promise<LeituraDoAnexo<TextoTranscrito>> {
-  return mandarOArquivo(URL_DA_IMAGEM, "imagem", arquivo, token, transcricaoValida);
+export type PrintDescrito = TextoTranscrito & { print_id?: string | null };
+
+export function printDescritoValido(corpo: unknown): corpo is PrintDescrito {
+  if (!transcricaoValida(corpo)) return false;
+  const id = (corpo as Record<string, unknown>).print_id;
+  return id === undefined || id === null || typeof id === "string";
+}
+
+/** O print vai à rota que o descreve, e o que volta é TEXTO (e o identificador). */
+export function descreverAImagem(arquivo: File, token: string | null): Promise<LeituraDoAnexo<PrintDescrito>> {
+  return mandarOArquivo(URL_DA_IMAGEM, "imagem", arquivo, token, printDescritoValido);
 }
 
 /**

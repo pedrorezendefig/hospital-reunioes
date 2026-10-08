@@ -16,3 +16,5 @@ cp docs/comunicacao/_assets/logo-hsm.png docs/comunicacao/_assets/fonts/HPSimpli
 ```
 
 Os vídeos vêm dos projetos HyperFrames em `docs/comunicacao/tecnologia/`, renomeados para `video-<capítulo>.mp4`.
+
+Os prints de `img/` são tela real do app local, capturados por `prints.py` (receita no topo do arquivo): `--semear` cria as Demandas e as pessoas de exemplo no Supabase local, e o roteiro recusa capturar se o banco tiver Demanda fora do exemplo, porque o Quadro mostra todas.

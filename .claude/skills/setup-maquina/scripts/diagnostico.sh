@@ -73,8 +73,8 @@ checa_claude_versao() { # OK se claude --version >= CLAUDE_MIN; FALTA abaixo ou 
   if versao_min "$v" "$CLAUDE_MIN"; then ok "claude >= $CLAUDE_MIN" "$v"
   else falta "claude >= $CLAUDE_MIN" "tem $v; atualize: curl -fsSL https://claude.ai/install.sh | bash"; fi
 }
-# Fluxo automático (ADR 0063): o settings DO USUÁRIO precisa do deny de force push contra a main e
-# do autoMode (o modo auto não lê autoMode do settings do projeto). O rabo, a /minhas-issues e a
+# Fluxo automático (ADR 0068): o settings DO USUÁRIO precisa do deny de force push contra a main e
+# do autoMode (o modo auto não lê autoMode do settings do projeto). A subida, a /minhas-issues e a
 # escrituração em issue e PR vão em autoMode.allow, em prosa, para o classificador seguir olhando
 # destino e conteúdo; em permissions.allow eles pulariam o classificador, e esse allow vale também
 # no settings do projeto, então os do projeto entram na varredura. Só pergunta ao jq se a regra
@@ -151,7 +151,7 @@ AUTO
     done <<<"$abertas"
   fi
 }
-# A trava do ruleset é do servidor (ADR 0063): nenhuma credencial do GitHub que o agente alcança pode
+# A trava do ruleset é do servidor (ADR 0068): nenhuma credencial do GitHub que o agente alcança pode
 # ter Administration. Pergunta ao GitHub pelas deploy keys, que só respondem com Administration,
 # e só olha o código de saída e o HTTP do erro: nunca lê nem imprime o token.
 eh_admin() { # quem roda é admin: o papel no repo ou, com o token fine-grained, o login do dono
@@ -228,7 +228,7 @@ checa_gh() {
 }
 checa_gh
 
-# Cada sócio mergeia o próprio PR (ADR 0061): o user.email do git tem que ser um e-mail
+# Cada sócio mergeia o próprio PR (ADR 0068): o user.email do git tem que ser um e-mail
 # verificado da conta gh logada, senão o commit sai em nome de outra pessoa (setembro/2026).
 # Só lê o perfil pela API; o token do gh nunca entra.
 checa_email_git() { # email
@@ -281,7 +281,7 @@ done < "$LISTA"
 
 # ---------------------------------------------------------------- Nível 2
 if [ "$NIVEL" -ge 2 ]; then
-titulo "Nível 2: deploy (ship, rabo fechar_onda.py, /deploy, /onda-enxuta)"
+titulo "Nível 2: deploy (ship, subida fechar_onda.py, /deploy, /onda-enxuta)"
 checa_claude_versao
 # O allow do projeto também vale: o da árvore onde o script roda e o da árvore principal (worktree).
 PRINCIPAL="$(cd "$(git rev-parse --path-format=absolute --git-common-dir 2>/dev/null)/.." 2>/dev/null && pwd)"
@@ -315,7 +315,7 @@ checa_coolify() {
 }
 tem_bin coolify && checa_coolify
 
-# Quem mergeia aplica a migration no Studio de produção (ADR 0061). Só bate na porta, sem
+# Quem mergeia aplica a migration no Studio de produção (ADR 0068). Só bate na porta, sem
 # credencial: 401 é o login do Studio pedindo usuário, ou seja, alcançável.
 checa_studio() { # url
   local codigo
@@ -339,7 +339,8 @@ if [ -f "$TOK" ]; then
     chave_preenchida "$TOK" "$k" && ok "tokens/.env: $k" "preenchida" || falta "tokens/.env: $k" "ver references/chaves.md"
   done
   chave_preenchida "$TOK" ANA_API_KEY && ok "tokens/.env: ANA_API_KEY" "preenchida" || aviso "tokens/.env: ANA_API_KEY" "só para smoke test contra prod; ver references/chaves.md"
-  # PAT clássico com escopo repo: na conta de quem é admin ele administra o repositório (ADR 0063).
+  chave_preenchida "$TOK" TECNOLOGIA_AUTOMACAO_API_KEY && ok "tokens/.env: TECNOLOGIA_AUTOMACAO_API_KEY" "preenchida" || aviso "tokens/.env: TECNOLOGIA_AUTOMACAO_API_KEY" "sem ela o anexos.py não baixa os prints da Demanda; peça ao Pedro (references/chaves.md)"
+  # PAT clássico com escopo repo: na conta de quem é admin ele administra o repositório (ADR 0068).
   if chave_preenchida "$TOK" GITHUB_PERSONAL_ACCESS_TOKEN; then
     if eh_admin; then falta "tokens/.env sem PAT clássico" "apague GITHUB_PERSONAL_ACCESS_TOKEN e revogue o PAT no GitHub: na sua conta ele administra o repositório; o gh usa o GH_TOKEN (seção 5.1)"
     else aviso "tokens/.env sem PAT clássico" "GITHUB_PERSONAL_ACCESS_TOKEN não é usado pelo fluxo; pode apagar (seção 5.1)"; fi
@@ -383,7 +384,7 @@ if [ -f "$ENVF" ]; then
       || falta ".env: $k" "valor fictício basta: echo '$par' >> hospital-reunioes/.env"
   done
   if [ -x "$VENV_PY" ]; then
-    # Mesmo comando e mesmo ambiente do snapshot do rabo (fechar_onda.py) (ele injeta no filho o DYLD
+    # Mesmo comando e mesmo ambiente do snapshot da subida (fechar_onda.py) (ele injeta no filho o DYLD
     # no macOS e o WEASYPRINT_DLL_DIRECTORIES no Windows).
     if erro="$(cd "$APP/backend" && DYLD_FALLBACK_LIBRARY_PATH="${DYLD_FALLBACK_LIBRARY_PATH:-/opt/homebrew/lib}" WEASYPRINT_DLL_DIRECTORIES="$MSYS_BIN" "$VENV_PY" -c "import app.main" 2>&1 >/dev/null)"; then
       ok "app importa (snapshot vai funcionar)"
@@ -397,7 +398,7 @@ else
   falta "hospital-reunioes/.env existe" "printf '%s\\n' $ENV_MIN > hospital-reunioes/.env (três valores fictícios; nada real)"
 fi
 
-# O rabo (fechar_onda.py) publica o Manual quando o deploy tira alguma página do draft
+# A subida (fechar_onda.py) publica o Manual quando o deploy tira alguma página do draft
 # (tools/tirar_draft_manual.py): o site é Starlight, buildado por `corepack pnpm@9` com Node >=
 # 22.12, e a publicação reencoda cada vídeo com ffmpeg. Por isso os três são
 # nível 2, o mesmo do deploy, e não opcionais.
@@ -410,9 +411,16 @@ if no_path_do_shell node; then
     falta "node >= $NODE_MIN (manual)" "tem v$nodev; o site do Manual não builda: brew install node@22 e ponha no PATH do ~/.zshrc"
   fi
 else
-  falta "node >= $NODE_MIN (manual)" "brew install node@22 (o rabo publica o Manual e o site exige $NODE_MIN)"
+  falta "node >= $NODE_MIN (manual)" "brew install node@22 (a subida publica o Manual e o site exige $NODE_MIN)"
 fi
 bin_ok corepack "npm i -g corepack (o site do Manual builda com corepack pnpm@9)"
+# No Windows o `pnpm` não entra no PATH: o caminho é `corepack pnpm@9`, e sem o
+# prompt desligado o corepack para perguntando se pode baixar (issue #844).
+if PATH="$PATH_SHELL" COREPACK_ENABLE_DOWNLOAD_PROMPT=0 corepack pnpm@9 --version >/dev/null 2>&1; then
+  ok "pnpm (corepack)" "corepack pnpm@9"
+else
+  falta "pnpm (corepack)" "o corepack não entregou o pnpm: rode COREPACK_ENABLE_DOWNLOAD_PROMPT=0 corepack pnpm@9 --version e chame o pnpm sempre assim"
+fi
 bin_ok ffmpeg "brew install ffmpeg (a publicação do Manual reencoda os vídeos)"
 
 fi

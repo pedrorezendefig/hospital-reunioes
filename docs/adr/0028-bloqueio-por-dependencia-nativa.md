@@ -1,5 +1,6 @@
 ---
-status: accepted
+status: superseded
+superseded_by: 0068
 ---
 
 # Bloqueio entre issues por dependência nativa do GitHub

@@ -267,6 +267,132 @@ def test_ls_remote_falhando_devolve_lista_vazia(monkeypatch):
     assert collect._branches_remotas(DASH) == []
 
 
+def test_classe_do_pr_vem_dos_arquivos_do_squash_na_origin_main(monkeypatch):
+    chamadas = []
+    saida = (
+        "\x00feat(ouvidoria): tela nova (#90)\n\nhospital-reunioes/frontend/a.tsx\ntools/x.py\n"
+        "\x00chore(os): painel (#91)\n\ntools/workflow-dashboard/fases.py\nCONTEXT.md\n"
+        "\x00refactor: tira do app (#92)\n\nhospital-reunioes/velho.py\nscripts/novo.py\n"
+        "\x00chore: commit sem PR\n\nhospital-reunioes/b.py\n"
+    )
+
+    def run(cmd, cwd, timeout=None):
+        chamadas.append(cmd)
+        return saida
+
+    monkeypatch.setattr(collect, "_run", run)
+    assert collect._classes_dos_prs(DASH) == {90: "app", 91: "ferramenta", 92: "app"}
+    assert chamadas[0][:2] == ["git", "log"] and "origin/main" in chamadas[0] and "--no-renames" in chamadas[0]
+
+
+def test_git_log_falhando_deixa_a_classe_desconhecida(monkeypatch):
+    def run(cmd, cwd, timeout=None):
+        raise RuntimeError("sem git")
+
+    monkeypatch.setattr(collect, "_run", run)
+    assert collect._classes_dos_prs(DASH) == {}
+
+
+# ---------- resumo funcional do PR (o hover do quadro) ----------
+
+CORPO_NOVO = """## 💬 Valor entregue
+
+<!-- linguagem simples -->
+**Antes:** o secretário copiava a Ata para o Word para mandar por email.
+**Depois:** a Ata sai em PDF com um clique.
+
+## 🎯 Contexto
+
+Pedido da diretoria.
+
+## 🔎 Evidência
+
+- **Antes:** teste vermelho
+- **Depois:** teste verde
+"""
+
+CORPO_RESUMO_FUNCIONAL = """## 💬 Resumo funcional
+
+**O que é:** a Ata sai em PDF.
+**Valor:** sem copiar para o Word.
+
+## 🎯 Contexto
+
+Outro texto.
+"""
+
+CORPO_ANTIGO = """<!-- template -->
+## 🎯 Contexto
+
+Decisão registrada neste PR: o `quadro` ganha uma coluna **Entregue**.
+
+Por quê: o resto do texto longo.
+
+## ✅ Critérios de aceite
+"""
+
+
+def test_valor_entregue_le_antes_e_depois_da_secao_e_nao_da_evidencia():
+    assert collect.resumo_funcional(CORPO_NOVO) == {
+        "antes": "o secretário copiava a Ata para o Word para mandar por email.",
+        "depois": "a Ata sai em PDF com um clique.",
+        "contexto": None,
+    }
+
+
+def test_secao_resumo_funcional_do_1090_vira_texto_corrido():
+    assert collect.resumo_funcional(CORPO_RESUMO_FUNCIONAL) == {
+        "antes": None,
+        "depois": None,
+        "contexto": "a Ata sai em PDF. sem copiar para o Word.",
+    }
+
+
+def test_pr_antigo_sem_a_secao_cai_no_contexto():
+    assert collect.resumo_funcional(CORPO_ANTIGO) == {
+        "antes": None,
+        "depois": None,
+        "contexto": "Decisão registrada neste PR: o quadro ganha uma coluna Entregue.\n\nPor quê: o resto do texto longo.",
+    }
+
+
+def test_pr_antigo_traz_os_dois_primeiros_paragrafos_do_contexto():
+    corpo = "## Contexto\n\nPrimeiro **parágrafo**.\n\n- segundo\n  em duas linhas\n\nTerceiro fica fora.\n\n## Outra\n"
+    assert collect.resumo_funcional(corpo)["contexto"] == "Primeiro parágrafo.\n\n- segundo em duas linhas"
+
+
+def test_contexto_longo_e_cortado_e_corpo_vazio_nao_tem_resumo():
+    longo = collect.resumo_funcional("## Contexto\n\n" + "palavra " * 80 + "\n\n" + "outra " * 80)
+    assert len(longo["contexto"]) <= 421 and longo["contexto"].endswith("…")
+    assert collect.resumo_funcional("") is None
+    assert collect.resumo_funcional("<!-- só comentário -->") is None
+
+
+def test_resumo_vem_dos_prs_recentes_numa_chamada_so(monkeypatch):
+    chamadas = []
+
+    def run(cmd, cwd, timeout=None):
+        chamadas.append(cmd)
+        return json.dumps([{"number": 11, "body": CORPO_NOVO}, {"number": 10, "body": ""}])
+
+    monkeypatch.setattr(collect, "_run", run)
+    prs = [{"number": 10}, {"number": 11}, {"number": 3}]
+    collect._resumir_prs_recentes(DASH, prs)
+    assert prs[1]["resumo"]["depois"] == "a Ata sai em PDF com um clique."
+    assert prs[0]["resumo"] is None and "resumo" not in prs[2]
+    assert chamadas == [["gh", "pr", "list", "--state", "all", "--limit", "200", "--json", "number,body"]]
+
+
+def test_falha_no_resumo_nao_derruba_os_prs(monkeypatch):
+    def run(cmd, cwd, timeout=None):
+        raise RuntimeError("HTTP 504")
+
+    monkeypatch.setattr(collect, "_run", run)
+    prs = [{"number": 10}]
+    collect._resumir_prs_recentes(DASH, prs)
+    assert prs == [{"number": 10}]
+
+
 # ---------- coleta inteira ----------
 
 ISSUES = [
@@ -297,11 +423,13 @@ ISSUES = [
 ]
 
 
-def _fake_coleta(*, falha_gh=False, falha_timeline=False):
+def _fake_coleta(*, falha_gh=False, falha_timeline=False, git_log=None):
     def run(cmd, cwd, timeout=None):
         if cmd[0] == "git":
             if cmd[1] == "ls-remote":
                 return "abc\trefs/heads/feat/x-1\n"
+            if cmd[1] == "log" and git_log is not None:
+                return git_log
             raise RuntimeError("sem origin")
         if falha_gh:
             raise RuntimeError("gh: To get started with GitHub CLI, please run:  gh auth login")
@@ -331,8 +459,17 @@ def test_coleta_entrega_as_fases_no_payload(monkeypatch, tmp_path):
     assert fases["prs"][10]["conflito"] is True
     assert list(fases["timelines"]) == [1]
     assert fases["funil"]["total"]["pr_aberto"] == 1
-    assert data["plano"] is not None  # o Plano continua até a fatia da aba Issues
+    assert "plano" not in data  # o Plano saiu com a aba Issues nova (#942)
     json.dumps(data)  # o /api/data serializa o payload inteiro
+
+
+def test_coleta_marca_a_classe_do_pr_mergeado_e_ferramenta_fica_entregue(monkeypatch, tmp_path):
+    git_log = "\x00chore(os): painel (#11)\n\ntools/workflow-dashboard/app.js\n"
+    monkeypatch.setattr(collect, "_run", _fake_coleta(git_log=git_log))
+    data = collect.collect(tmp_path)
+    classes = {p["number"]: p.get("classe") for p in data["github"]["prs"]}
+    assert classes == {10: None, 11: "ferramenta"}
+    assert data["fases"]["prs"][11]["fase"] == "entregue"
 
 
 def test_erro_do_gh_degrada_sem_derrubar_o_payload(monkeypatch, tmp_path):

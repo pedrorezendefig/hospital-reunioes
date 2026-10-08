@@ -19,7 +19,6 @@
  * servidor é o `test_tecnologia_vinculo.py`).
  */
 
-import { useState } from "react";
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -33,8 +32,6 @@ import {
   EU_DESCONHECIDO,
   EtapaDemanda,
   EuNaAba,
-  FiltrosDoQuadro,
-  SEM_FILTRO,
   temSelo,
   textoDoSelo,
 } from "./demandas";
@@ -157,35 +154,30 @@ function montarModal(d: Demanda, eu: EuNaAba, opcoes: Parameters<typeof dublarFe
 function montarQuadro(demandas: Demanda[]) {
   dublarFetch({ demandas });
 
-  function Anfitriao() {
-    const [filtros, setFiltros] = useState<FiltrosDoQuadro>(SEM_FILTRO);
-    return (
-      <QuadroDemandas
-        token="token-de-teste"
-        carregandoAuth={false}
-        produtos={PRODUTOS}
-        pessoas={PESSOAS}
-        filtros={filtros}
-        onFiltrosChange={setFiltros}
-        eu={EU_DESCONHECIDO}
-      />
-    );
-  }
-
-  return render(<Anfitriao />);
+  return render(
+    <QuadroDemandas
+      token="token-de-teste"
+      carregandoAuth={false}
+      produtos={PRODUTOS}
+      pessoas={PESSOAS}
+      eu={EU_DESCONHECIDO}
+    />,
+  );
 }
 
 // ─── 1. Os rótulos ───────────────────────────────────────────────────────────
 
-describe("Os seis textos da Etapa", () => {
+describe("Os sete textos da Etapa", () => {
   it("cada Etapa tem o seu rótulo em pt-BR", () => {
-    expect(ETAPAS).toHaveLength(6);
+    // Em produção entrou pela ADR 0069; o Painel a mostra nas Entregas (#1059).
+    expect(ETAPAS).toHaveLength(7);
     expect(ETAPAS.map((e) => ETAPA_ROTULO[e])).toEqual([
       "Registrada",
       "Em análise",
       "Planejada",
       "Em desenvolvimento",
       "Entregue",
+      "Em produção",
       "Não será feita",
     ]);
   });
@@ -249,6 +241,18 @@ describe("O que o selo diz", () => {
     // "0 de 0 partes" é uma barra vazia onde não existe barra.
     expect(textoDoSelo(demanda({ etapa: "entregue", partes_entregues: 0, partes_total: 0 }))).toBe("Entregue");
   });
+
+  it("Em produção diz desde qual versão (issue #1065)", () => {
+    expect(textoDoSelo(demanda({ etapa: "em_producao", versao: "v0.169.0" }))).toBe("Em produção desde v0.169.0");
+    expect(
+      textoDoSelo(demanda({ etapa: "em_producao", versao: "v0.169.0", partes_entregues: 7, partes_total: 7 })),
+    ).toBe("Em produção desde v0.169.0 · 7 de 7 partes");
+  });
+
+  it("sem a versão, Em produção fica só com o rótulo", () => {
+    // Backend uma versão atrás não manda o campo: o selo não inventa número.
+    expect(textoDoSelo(demanda({ etapa: "em_producao", versao: null }))).toBe("Em produção");
+  });
 });
 
 // ─── 2. O selo no card ───────────────────────────────────────────────────────
@@ -275,6 +279,12 @@ describe("O selo no card do Quadro", () => {
     montarQuadro([{ ...VINCULADA, vinculo: null }]);
 
     expect(await screen.findByText("Em desenvolvimento · 3 de 7 partes")).toBeTruthy();
+  });
+
+  it("o card Em produção mostra desde qual versão (issue #1065)", async () => {
+    montarQuadro([demanda({ etapa: "em_producao", versao: "v0.169.0", partes_entregues: null, partes_total: null })]);
+
+    expect(await screen.findByText("Em produção desde v0.169.0")).toBeTruthy();
   });
 });
 
@@ -469,22 +479,15 @@ function montarQuadroComEu(demandas: Demanda[], eu: EuNaAba, depoisDoPost?: Dema
     }),
   );
 
-  function Anfitriao() {
-    const [filtros, setFiltros] = useState<FiltrosDoQuadro>(SEM_FILTRO);
-    return (
-      <QuadroDemandas
-        token="token-de-teste"
-        carregandoAuth={false}
-        produtos={PRODUTOS}
-        pessoas={PESSOAS}
-        filtros={filtros}
-        onFiltrosChange={setFiltros}
-        eu={eu}
-      />
-    );
-  }
-
-  return render(<Anfitriao />);
+  return render(
+    <QuadroDemandas
+      token="token-de-teste"
+      carregandoAuth={false}
+      produtos={PRODUTOS}
+      pessoas={PESSOAS}
+      eu={eu}
+    />,
+  );
 }
 
 describe("Quem vê o botão de levar para desenvolvimento", () => {

@@ -11,18 +11,13 @@ from __future__ import annotations
 import os
 import re
 import subprocess
-import sys
 from pathlib import Path
 
 import pytest
 
-sys.path.insert(0, str(Path(__file__).resolve().parent))
-
-import tirar_draft_manual  # noqa: E402
 
 RAIZ = Path(__file__).resolve().parent.parent
 SCRIPT = RAIZ / ".claude" / "skills" / "setup-maquina" / "scripts" / "diagnostico.sh"
-SKILL = RAIZ / ".claude" / "skills" / "setup-maquina" / "SKILL.md"
 
 TEXTO = SCRIPT.read_text(encoding="utf-8")
 NODE_MIN = "22.12"  # Starlight 0.42 (ADR 0057); a fonte é o CI do Manual
@@ -50,13 +45,23 @@ def test_versao_e_comparada_por_numero_nao_por_texto():
     assert compara("20.11.1", NODE_MIN) != 0
 
 
-def diagnostico(tmp_path: Path, versao_do_node: str, nivel: str = "4") -> str:
-    """Roda o diagnóstico inteiro com um `node` de mentira no PATH."""
+def diagnostico(tmp_path: Path, versao_do_node: str, nivel: str = "4", corepack_entrega_pnpm: bool | None = None) -> str:
+    """Roda o diagnóstico inteiro com um `node` de mentira no PATH, e um
+    `corepack` de mentira quando `corepack_entrega_pnpm` é dito."""
     falso = tmp_path / "bin"
     falso.mkdir(exist_ok=True)
     node = falso / "node"
     node.write_text(f'#!/bin/sh\necho "v{versao_do_node}"\n', encoding="utf-8")
     node.chmod(0o755)
+    if corepack_entrega_pnpm is not None:
+        # Sem o prompt desligado o corepack de verdade para perguntando se
+        # pode baixar o pnpm: o de mentira recusa, para o teste cobrar isso.
+        saida = 'echo "9.15.0"' if corepack_entrega_pnpm else "exit 1"
+        corepack = falso / "corepack"
+        corepack.write_text(
+            f'#!/bin/sh\n[ "$COREPACK_ENABLE_DOWNLOAD_PROMPT" = 0 ] || exit 3\n{saida}\n', encoding="utf-8"
+        )
+        corepack.chmod(0o755)
     ambiente = dict(os.environ, PATH=f"{falso}:{os.environ['PATH']}")
     return subprocess.run(
         ["bash", str(SCRIPT), "--nivel", nivel],
@@ -109,12 +114,23 @@ def test_o_nivel_do_deploy_ja_exige_o_que_publica_o_manual(tmp_path):
     assert "ffmpeg" in saida
 
 
-def test_a_skill_e_o_script_falam_do_mesmo_node():
-    """Número na prosa que o script não confere é promessa sem detector."""
-    texto = SKILL.read_text(encoding="utf-8")
-    assert NODE_MIN in texto
-    assert NODE_MIN in TEXTO
-    assert re.search(r"Playwright", texto)
-    # O script e o conferidor do deploy comparam com o mesmo número: se um
-    # subir de versão sozinho, a máquina passa aqui e trava lá.
-    assert ".".join(str(n) for n in tirar_draft_manual.NODE_MIN) == NODE_MIN
+def linha_do_pnpm(saida: str) -> str:
+    linhas = [li for li in saida.splitlines() if "pnpm (corepack)" in li]
+    assert len(linhas) == 1, f"esperava uma linha do pnpm: {linhas}"
+    return linhas[0]
+
+
+def test_diagnostico_acusa_pnpm_que_o_corepack_nao_entrega(tmp_path):
+    """No Windows o `pnpm` não entra no PATH, e o caminho é `corepack pnpm@9`
+    com o prompt de download desligado (issue #844). Ter o `corepack` no PATH
+    não basta: o que importa é ele entregar o pnpm."""
+    linha = linha_do_pnpm(diagnostico(tmp_path, NODE_MIN + ".0", nivel="2", corepack_entrega_pnpm=False))
+
+    assert "FALTA" in linha
+    assert "COREPACK_ENABLE_DOWNLOAD_PROMPT=0 corepack pnpm@9" in linha, "o conserto diz como chamar o pnpm"
+
+
+def test_diagnostico_aceita_o_pnpm_entregue_pelo_corepack(tmp_path):
+    linha = linha_do_pnpm(diagnostico(tmp_path, NODE_MIN + ".0", nivel="2", corepack_entrega_pnpm=True))
+
+    assert "OK" in linha

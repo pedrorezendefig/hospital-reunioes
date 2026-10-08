@@ -43,6 +43,10 @@ def _asset_uri(*partes: str) -> str:
 LOGO_URI = _asset_uri("images", "logo_hospital.png")
 FONTE_URI = _asset_uri("fonts", "HPSimplified_Rg.ttf")
 
+# No Windows o `abspath` vira `C:\...` e a URI `file://C:\...` não abre (o
+# `C:` vira host): o asset do PDF só tem caminho POSIX (issue #844).
+SO_UNIX_URI_DO_ASSET = pytest.mark.so_unix("a URI file:// do asset é montada com caminho POSIX")
+
 ARQUIVO_PROIBIDO = "file:///etc/passwd"
 # Porta 9 (discard) de propósito: se a guarda caísse, não haveria servidor nem
 # espera. Na prática a recusa acontece antes de qualquer socket, e o conftest
@@ -177,6 +181,7 @@ class TestGuardaCompartilhada:
         with pytest.raises(ValueError, match="host privado/loopback recusado"):
             self._fetcher().fetch(HOST_LOOPBACK)
 
+    @SO_UNIX_URI_DO_ASSET
     def test_asset_da_allowlist_carrega_de_verdade(self):
         """Contraste positivo: o que está na allowlist volta com os bytes do
         arquivo (assinatura PNG e TTF), senão a guarda seria só um `raise`."""
@@ -191,6 +196,7 @@ class TestGuardaCompartilhada:
 # ═══════════════════════════════════════════════════════════════════════════
 
 
+@SO_UNIX_URI_DO_ASSET
 class TestGuardaLigadaNaAta:
     def test_render_recusa_file_uri_e_loopback_e_carrega_o_logo(self, monkeypatch):
         from app.services import pdf_generator
@@ -211,6 +217,7 @@ class TestGuardaLigadaNaAta:
         assert LOGO_URI in espiao.buscados
 
 
+@SO_UNIX_URI_DO_ASSET
 class TestGuardaLigadaNoRelatorio:
     def test_render_recusa_file_uri_e_loopback_e_carrega_o_logo(self, monkeypatch):
         from app.services import ouvidoria_relatorio

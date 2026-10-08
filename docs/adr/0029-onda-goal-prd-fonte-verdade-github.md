@@ -1,7 +1,8 @@
 ---
-status: accepted
+status: superseded
 amends: 0022
 amended_by: 0035
+superseded_by: 0068
 ---
 
 # Onda escopada em PRD: goal de conclusão, fonte de verdade no GitHub e orquestrador magro

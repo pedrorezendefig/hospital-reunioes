@@ -9,7 +9,7 @@ Uma skill, cinco modos. Invocação por subcomando:
 
 | Comando | Modo | Quando usar |
 |---|---|---|
-| `/deploy` | **ship** (default) | Não sobe nada: imprime o comando do `fechar_onda.py`, o rabo único (ADR 0061), e sai |
+| `/deploy` | **ship** (default) | Não sobe nada: imprime o comando do `fechar_onda.py`, a subida única (ADR 0068), e sai |
 | `/deploy setup` | **setup** | 1ª vez no projeto: cria projeto, apps, env vars, DNS guia, primeiro deploy, `project.json` |
 | `/deploy status` | **status** | Só reporta estado atual, sem alterar nada |
 | `/deploy rollback` | **rollback** | Reverte para último deploy `healthy` |
@@ -25,7 +25,7 @@ Uma skill, cinco modos. Invocação por subcomando:
 **Fonte única de verdade por projeto:**
 - `<repo>/docs/spec/deploy/project.json` — **spec do projeto** (o "v0"): stack, portas, fqdn, build, env vars, secrets, gates. Lido em todos os modos. Editável manualmente; `setup`/`migrate` o gera.
 - `<repo>/docs/spec/deploy/state.json` — **snapshot do estado atual**. Reescrito pelo ship/rollback/setup. Não editar à mão.
-- `<repo>/docs/spec/deploy/history.json`: **timeline**, com todos os deploys (sem teto, ADR 0062). Reescrito pelo ship/rollback. Não editar à mão.
+- `<repo>/docs/spec/deploy/history.json`: **timeline**, com todos os deploys (sem teto, ADR 0068). Reescrito pelo ship/rollback. Não editar à mão.
 
 Schema completo do `project.json` em `.claude/skills/deploy/references/project-schema.md`.
 
@@ -74,6 +74,7 @@ Todo acesso ao Coolify passa pelo **CLI oficial** `coolify` (binário no PATH, c
 | Disparar deploy manual | `coolify deploy uuid <uuid>` (ver pegadinha 2) |
 | Imagens disponíveis para rollback | `coolify app rollback images <uuid>` |
 | Rollback para um commit | `coolify app rollback run <uuid> --commit <SHA>` (ver pegadinha 7) |
+| Rollback de app em modo imagem (`dockerimage`) | `coolify app update <uuid> --docker-tag <SHA-alvo>` e `coolify deploy uuid <uuid>` (ver pegadinha 7) |
 | Listar projetos e servidores | `coolify project list`, `coolify server list` |
 
 ### Pegadinhas (ler antes de rodar)
@@ -92,11 +93,13 @@ Todo acesso ao Coolify passa pelo **CLI oficial** `coolify` (binário no PATH, c
 4. **`--format json` imprime um banner antes do JSON.** A linha `A new version (x.y.z) is available` quebra o `jq`. Filtre sempre: `coolify app get <uuid> --format json | sed -n '/^[[{]/,$p' | jq ...`.
 5. **`env list` esconde os valores.** Sem `-s`, todo `value` volta como `********`. Para **conferir keys** isso basta; para **comparar valores** é preciso `coolify app env list <uuid> -s --format json`. O valor real fica só em memória: nunca logar, commitar ou gravar em arquivo (invariante 5).
 6. **O JSON de app traz segredo.** `coolify app list` e `coolify app get` devolvem os campos `manual_webhook_secret_*`, e `env list -s` devolve todos os secrets do service. Nunca colar a saída crua em log, commit, PR, issue ou nos JSONs de `docs/spec/deploy/`.
-7. **Rollback precisa da imagem, não do commit.** `coolify app rollback run --commit <SHA>` só funciona enquanto a imagem daquele build existir. Confira antes com `coolify app rollback images <uuid>`: o histórico de deploy pode ter o SHA e a imagem já ter sido podada.
+7. **Rollback precisa da imagem, não do commit.** `coolify app rollback run --commit <SHA>` só funciona enquanto a imagem daquele build existir. Confira antes com `coolify app rollback images <uuid>`: o histórico de deploy pode ter o SHA e a imagem já ter sido podada. App em modo imagem (`build_pack: "dockerimage"` no `project.json`, issue #1001) não tem build no Coolify: a imagem de cada deploy fica no GHCR com a tag do sha, e o rollback é por tag (`coolify app update <uuid> --docker-tag <SHA-alvo>`, depois `coolify deploy uuid <uuid>`).
 
 ### Auto-deploy por webhook é o caminho normal
 
 Desde 27/08/2026 os webhooks do GitHub estão religados (um por app, com secret próprio): **push na branch de produção rebuilda os services sozinho**. O papel desta skill no deploy é **monitorar** o build que o push disparou, não disparar build.
+
+Exceção: app em modo imagem (`build_pack: "dockerimage"`, o backend desde a issue #1001) não tem webhook nem build no Coolify. O CI publica a imagem no GHCR com a tag do sha do head do PR, e o `fechar_onda.py` dispara o workflow do `build.publish_workflow`, que dá a ela a tag do squash, e aponta o Coolify para essa tag (`coolify app update <uuid> --docker-tag <sha>`, depois `coolify deploy uuid <uuid>`).
 
 Deploy manual (`coolify deploy uuid`, rodado pelo humano com `!`) é **exceção**. Só nestes casos: o webhook não disparou (nenhum deploy novo em `coolify app deployments list` depois do push), o build precisa ser refeito sem commit novo (env var trocada), ou é rollback.
 
@@ -150,7 +153,7 @@ $S status                                # quem segura e há quanto tempo
 
 ## Modo `ship` (default, sem argumento)
 
-O caminho para produção é um só, o `fechar_onda.py` (ADR 0061): versão nova pelo tipo dos commits, sem commit (issue #967), `APP_VERSION` no backend e no frontend do Coolify antes do merge, merge pela API do GitHub (a `main` é protegida), tag `vX.Y.Z` no squash, um build, health com conferência de versão e registro num PR só de docs, para um PR avulso ou para o lote de uma onda. Este modo não executa passo nenhum: imprime o comando e sai.
+O caminho para produção é um só, o `fechar_onda.py` (ADR 0068): versão nova pelo tipo dos commits, sem commit (issue #967), `APP_VERSION` no backend e no frontend do Coolify antes do merge, merge pela API do GitHub (a `main` é protegida), tag `vX.Y.Z` no squash, um build, health com conferência de versão e registro gravado pela Action pós-merge, sem PR, para um PR avulso ou para o lote de uma onda. Este modo não executa passo nenhum: imprime o comando e sai.
 
 ```bash
 python3 .claude/skills/onda-enxuta/scripts/fechar_onda.py --prs <N>
@@ -348,7 +351,7 @@ done
 
 > Forma **posicional**: a chave vem depois do UUID, sem `--key` (ver pegadinha 1).
 
-Depois do merge, a tag `vX.Y.Z` vai no squash pela API do GitHub (`POST repos/{owner}/{repo}/git/refs`). Ela é a conferência da próxima versão de partida; se falhar, o deploy segue e o rabo imprime o comando para criá-la depois.
+Depois do merge, a tag `vX.Y.Z` vai no squash pela API do GitHub (`POST repos/{owner}/{repo}/git/refs`). Ela é a conferência da próxima versão de partida; se falhar, o deploy segue e a subida imprime o comando para criá-la depois.
 
 Salvar `expected_app_version = $NOVA` em memória: usado no Passo 7.2 pra validar match pós-deploy.
 
@@ -428,7 +431,7 @@ Apresentar ao humano e **não prosseguir** até ele confirmar que aplicou:
   5. Rodar a query de verificação e conferir a contagem de linhas esperada.
 - Pedir confirmação explícita ("apliquei / deu certo") antes de seguir.
 
-> No fluxo `/ship` este gate é **antecipado para antes do merge** (ver `/ship` Passo 8.6), pois o merge dispara o auto-build no Coolify — o schema precisa existir **antes** do código novo subir. No `/deploy` standalone, se a migration é pré-requisito do código já em produção, há uma janela curta entre o deploy e a confirmação: aplique o quanto antes.
+> No fluxo `/ship` este gate é **antecipado para antes do merge** (o `fechar_onda.py` espera a migration no `/api/health`), pois o merge dispara o auto-build no Coolify — o schema precisa existir **antes** do código novo subir. No `/deploy` standalone, se a migration é pré-requisito do código já em produção, há uma janela curta entre o deploy e a confirmação: aplique o quanto antes.
 
 #### 6.4 Verificação pós-migration
 
@@ -486,7 +489,7 @@ Se mismatch → Passo 8 (rollback). Mensagem: "APP_VERSION do Coolify não bate 
 
 ### Passo 8 — Rollback (se health falhou)
 
-> **O rabo já tenta sozinho; este passo é o que sobra.** Com health ruim, o `fechar_onda.py` volta cada app do lote à imagem anterior e ao `APP_VERSION` antigo e confere o health de novo (saída 6, semáforo solto; issue #968). Este passo é para quando isso não deu: saída 4 (o rollback automático falhou) ou 3 (build). Aqui a sessão detecta e prepara, e o disparo é humano: fora do rabo, o comando de rollback é negado pelo classifier, então a skill para, entrega o comando pronto e espera. Em modo AFK (`/onda-enxuta`), isso significa produção parada no build ruim até alguém rodar o comando: reportar isso em alto e bom som, não seguir em silêncio.
+> **A subida já tenta sozinha; este passo é o que sobra.** Com health ruim, o `fechar_onda.py` volta cada app do lote à imagem anterior e ao `APP_VERSION` antigo e confere o health de novo (saída 6, semáforo solto; issue #968). Este passo é para quando isso não deu: saída 4 (o rollback automático falhou) ou 3 (build). Aqui a sessão detecta e prepara, e o disparo é humano: fora da subida, o comando de rollback é negado pelo classifier, então a skill para, entrega o comando pronto e espera. Em modo AFK (`/onda-enxuta`), isso significa produção parada no build ruim até alguém rodar o comando: reportar isso em alto e bom som, não seguir em silêncio.
 
 Executar 1×:
 1. Ler `<repo>/docs/spec/deploy/history.json` → último deploy com `result == "healthy"` por service afetado.
@@ -524,7 +527,7 @@ Snapshot completo:
     "branch": "<project.git.branch>",
     "project_name": "<project.project.name>"
   },
-  "last_app_version": "<X.Y.Z que o rabo calculou e gravou no APP_VERSION, versão semântica humana>",
+  "last_app_version": "<X.Y.Z que a subida calculou e gravou no APP_VERSION, versão semântica humana>",
   "services": [
     {
       "id": "<service.id>", "uuid": "<service.uuid>",
@@ -533,6 +536,7 @@ Snapshot completo:
       "health_path": "<service.deploy.health_check.path>",
       "status": "healthy|warning|down",
       "last_deploy_sha": "<sha curto>",
+      "last_deploy_digest": "<sha256:...>, só app em modo imagem: o digest que foi para o ar, que o rollback confere no GHCR",
       "last_deploy_at": "<ISO>",
       "last_health_check": { "at": "<ISO>", "latency_ms": <int|null>, "http_status": <int>, "body_ok": <bool> },
       "build_duration_seconds": <int|null>,
@@ -628,7 +632,7 @@ Detalhes da skill: `.claude/skills/snapshot/SKILL.md`.
 #### 9.5 (removido) Sem cronologia em Markdown
 
 > A timeline dos deploys é o `history.json` (9.2), com todos os deploys, e o painel a
-> desenha (ADR 0062, decisão 9). Não criar arquivo de cronologia em `docs/spec/`.
+> desenha (ADR 0068). Não criar arquivo de cronologia em `docs/spec/`.
 
 #### 9.6 Manual do usuário: tirar o draft do que subiu
 
@@ -715,7 +719,7 @@ Algo down → ❌ destacado.
 
 ## Modo `rollback`
 
-Invocação: `/deploy rollback [--dry-run]`. Reverte para o último deploy `healthy` anterior, quando o rabo não voltou sozinho (saída 3 do `fechar_onda.py`, build, ou 4, rollback automático que falhou). Aqui o `rollback run` é sempre do humano (`! coolify app rollback run ...`). Passo a passo em `references/modo-rollback.md`.
+Invocação: `/deploy rollback [--dry-run]`. Reverte para o último deploy `healthy` anterior, quando a subida não voltou sozinha (saída 3 do `fechar_onda.py`, build, ou 4, rollback automático que falhou). Aqui o `rollback run` é sempre do humano (`! coolify app rollback run ...`); app em modo imagem (`dockerimage`) volta por tag, com o `deploy uuid` também do humano. Passo a passo em `references/modo-rollback.md`.
 
 ---
 

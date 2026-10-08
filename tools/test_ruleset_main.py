@@ -4,8 +4,8 @@ O ruleset vive versionado em `.github/rulesets/main.json` e é aplicado à mão
 pelo admin (`gh api`, no corpo do PR #910 e no `dev.md`). Ele exige os jobs do
 `ci.yml` pelo nome: renomear um job sem mexer no ruleset deixa todo PR em
 "Expected, waiting for status" para sempre. E workflow pulado por filtro de
-caminho não reporta check nenhum, então o PR só de docs (o registro do
-`fechar_onda.py`, ADR, skill) travaria do mesmo jeito. Estes testes amarram as
+caminho não reporta check nenhum, então o PR só de docs (ADR, skill)
+travaria do mesmo jeito. Estes testes amarram as
 duas pontas: o nome de cada check e o CI que sempre reporta.
 
 Desde a issue #966 o detector responde por pasta (backend, frontend,
@@ -83,15 +83,34 @@ def test_ruleset_exige_os_tres_jobs_do_ci_pelo_nome_vindos_do_github_actions():
     assert {c.get("integration_id") for c in checks} == {GITHUB_ACTIONS_APP}
 
 
-def test_ruleset_pr_obrigatorio_zero_aprovacoes_em_dia_com_a_base_sem_force_push_delete_nem_bypass():
+def test_ruleset_pr_obrigatorio_zero_aprovacoes_sem_force_push_nem_delete():
     r = ruleset()
     assert r["target"] == "branch" and r["enforcement"] == "active"
     assert r["conditions"]["ref_name"]["include"] == ["refs/heads/main"]
-    assert r["bypass_actors"] == [], "sem bypass, nem para admin"
     assert regra("pull_request")["parameters"]["required_approving_review_count"] == 0
-    assert regra("required_status_checks")["parameters"]["strict_required_status_checks_policy"] is True
     regra("non_fast_forward")
     regra("deletion")
+
+
+def test_ruleset_exige_o_ci_verde_no_head_sem_exigir_a_branch_em_dia_com_a_base():
+    """ADR 0064, decisão 2: o CI verde no head do PR basta. Exigir a branch em
+    dia com a base repetia 5 a 9 min de CI a cada PR que a main deixou para
+    trás; o CI do push na main é o detector tardio de dois PRs que passam
+    separados e quebram juntos."""
+    assert regra("required_status_checks")["parameters"]["strict_required_status_checks_policy"] is False
+
+
+def test_bypass_so_da_deploy_key_nenhuma_pessoa_nem_equipe():
+    """A Action pós-merge commita snapshot e draft do Manual direto na `main`
+    (issue #940, ADR 0065, que emenda a decisão 10 da ADR 0062). O bypass é da
+    deploy key, cujo secret vive num Environment restrito à `main` e só o job
+    que não instala nada lê. O GitHub Actions (integration 15368) não entra:
+    valeria para o GITHUB_TOKEN de qualquer workflow de qualquer branch. Pessoa,
+    equipe, papel ou admin da organização continuam entrando por PR, admin
+    inclusive (ADR 0061)."""
+    assert ruleset()["bypass_actors"] == [
+        {"actor_id": None, "actor_type": "DeployKey", "bypass_mode": "always"}
+    ]
 
 
 # ---------------------------------------------- CI que sempre reporta no PR
@@ -246,7 +265,7 @@ def test_cada_pasta_liga_so_os_jobs_dela(tmp_path, mudados, rodam, ferramenta):
     """A tabela do PRD #963 (decisão 4): backend roda com `backend/` ou
     `supabase/`, frontend com `frontend/`, docker build com qualquer um dos
     dois, `.github/workflows/` roda tudo. Ferramenta (fora de
-    `hospital-reunioes/`, a mesma fronteira do rabo) não liga job nenhum daqui:
+    `hospital-reunioes/`, a mesma fronteira da subida) não liga job nenhum daqui:
     os testes de `tools/` rodam no `manual.yml`."""
     proc = rodar_detector(tmp_path, mudados)
     assert proc.returncode == 0, proc.stderr

@@ -312,6 +312,48 @@ class TestIdentificacaoOpcional:
         assert r.status_code == 201
         assert banco.rows[0]["dados_incompletos"] is True
 
+    def test_hifen_no_contato_vira_nulo_e_acende_o_aviso_de_dados_incompletos(self):
+        """Issue #800: a régua do paciente vale para quem manifesta. Um hífen
+        gravado em Contato faria o caso parecer completo e o aviso do Dossiê
+        não acenderia."""
+        client, banco = _make_app()
+
+        r = client.post("/api/ouvidoria/publico/manifestacoes", json=_payload(nome="Maria Souza", contato="-"))
+
+        assert r.status_code == 201
+        assert banco.rows[0]["manifestante_contato"] is None
+        assert banco.rows[0]["dados_incompletos"] is True
+
+    def test_ponto_no_nome_vira_nulo_e_acende_o_aviso_de_dados_incompletos(self):
+        client, banco = _make_app()
+
+        r = client.post("/api/ouvidoria/publico/manifestacoes", json=_payload(nome=".", contato="maria@exemplo.com"))
+
+        assert r.status_code == 201
+        assert banco.rows[0]["manifestante_nome"] is None
+        assert banco.rows[0]["dados_incompletos"] is True
+
+    def test_nome_e_contato_legitimos_com_pontuacao_no_meio_passam_inteiros(self):
+        client, banco = _make_app()
+
+        r = client.post(
+            "/api/ouvidoria/publico/manifestacoes",
+            json=_payload(nome="Ana-Lúcia d'Ávila", contato="(11) 9999-0000"),
+        )
+
+        assert r.status_code == 201
+        assert banco.rows[0]["manifestante_nome"] == "Ana-Lúcia d'Ávila"
+        assert banco.rows[0]["manifestante_contato"] == "(11) 9999-0000"
+        assert banco.rows[0]["dados_incompletos"] is False
+
+    def test_anonimo_com_identificacao_de_pontuacao_continua_sem_aviso(self):
+        client, banco = _make_app()
+
+        r = client.post("/api/ouvidoria/publico/manifestacoes", json=_payload(anonimo=True, nome=".", contato="-"))
+
+        assert r.status_code == 201
+        assert banco.rows[0]["dados_incompletos"] is False
+
 
 class TestEnvioVazio:
     @pytest.mark.parametrize("relato", ["", "   ", "\n\t ", "—"])

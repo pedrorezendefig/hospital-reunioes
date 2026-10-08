@@ -92,7 +92,7 @@ def _check(conclusao="SUCCESS", *, status="COMPLETED", inicio="2026-10-03T10:05:
 
 
 def _deploy(versao, at, texto, duracao=None):
-    """Deploy no shape do history.json; o texto cita PRs e issues como o rabo escreve."""
+    """Deploy no shape do history.json; o texto cita PRs e issues como a subida escreve."""
     return {
         "app_version": versao,
         "at": at,
@@ -467,7 +467,7 @@ def test_notes_que_citam_pr_futuro_nao_poem_o_pr_em_producao_antes_do_merge():
 
 
 def test_pr_que_nenhum_deploy_cita_sobe_no_primeiro_build_depois_do_merge():
-    # PR de registro do rabo e PR só de docs não ganham deploy próprio: o seguinte sobe a main com eles
+    # PR de registro da subida e PR só de docs não ganham deploy próprio: o seguinte sobe a main com eles
     deploys = [
         _deploy("0.162.0", "2026-10-06T12:00:00Z", "PR #300", duracao=900),
         _deploy("0.161.3", "2026-10-05T18:41:18Z", "PR #896"),
@@ -576,16 +576,46 @@ def test_funil_conta_as_nove_fases_no_total_e_por_responsavel():
     assert funil["total"]["em_andamento"] == 1
     assert funil["total"]["humana"] == 1
     assert funil["total"]["pr_aberto"] == 0
-    # responsável é quem assumiu; sem assignee, quem criou (emenda de 05/10 da ADR 0061)
     assert funil["por_responsavel"]["bia"]["em_andamento"] == 1
     assert funil["por_responsavel"]["bia"]["humana"] == 1
     assert funil["por_responsavel"]["caio"]["em_andamento"] == 1
+    # a pessoa conta o que assumiu e, sem ninguém designado, o que criou:
+    # a 92 (criou, bia e caio assumiram) é só delas
     assert funil["por_responsavel"]["ana"]["triagem"] == 1
     assert funil["por_responsavel"]["ana"]["fila"] == 1
     assert funil["por_responsavel"]["ana"]["em_andamento"] == 0
+    assert sum(funil["por_responsavel"]["ana"].values()) == 2
     # "(sem)" é a fila sem claim, o mesmo valor do filtro "ninguém assumiu" da aba Issues
     assert funil["por_responsavel"]["(sem)"]["fila"] == 2
     assert funil["por_responsavel"]["(sem)"]["triagem"] == 1
+    assert sum(funil["por_responsavel"]["(sem)"].values()) == 3
+
+
+def test_funil_por_pessoa_soma_o_que_assumiu_e_o_que_criou_sem_dono_sem_contar_duas_vezes():
+    issues = [
+        _issue(95, labels=["in-progress"], assignees=["pedro"], author="bia"),  # assumiu
+        _issue(96, labels=["ready-for-agent"], author="pedro"),  # criou, sem assignee
+        _issue(97, labels=["in-progress"], assignees=["lucas"], author="pedro"),  # criou e outro assumiu: é do lucas
+        _issue(98, labels=["in-progress"], assignees=["pedro"], author="pedro"),  # criou e assumiu: conta uma vez
+    ]
+    por = montar_fases(issues, [], [], [], agora=AGORA)["funil"]["por_responsavel"]
+    assert por["pedro"]["em_andamento"] == 2  # a 95 e a 98
+    assert por["pedro"]["fila"] == 1  # a 96
+    assert sum(por["pedro"].values()) == 3
+    assert sum(por["lucas"].values()) == 1
+    assert "bia" not in por  # criou a 95, mas o pedro assumiu
+    assert por["(sem)"] == {**dict.fromkeys(por["pedro"], 0), "fila": 1}  # a 96 também é "ninguém assumiu"
+
+
+def test_funil_conta_so_as_abertas():
+    issues = [
+        _issue(85, labels=["ready-for-agent"], author="pedro"),
+        _issue(86, state="CLOSED", labels=["ready-for-human"], author="pedro", closed_at="2026-10-02T10:00:00Z"),
+        _issue(87, state="CLOSED", author="pedro", closed_at="2026-10-02T10:00:00Z"),
+    ]
+    funil = montar_fases(issues, [], [], [], agora=AGORA)["funil"]
+    assert sum(funil["total"].values()) == 1
+    assert funil["por_responsavel"]["pedro"] == {**dict.fromkeys(funil["total"], 0), "fila": 1}
 
 
 # ---------- timeline normalizada ----------
@@ -689,3 +719,51 @@ def test_timeline_so_sai_para_as_issues_que_vieram_com_linha():
         [_issue(320), _issue(321)], [], [], [], timelines={320: {"eventos": [], "prs": []}}, agora=AGORA
     )
     assert list(fases["timelines"]) == [320]
+
+
+# ---------- PR de ferramenta: o merge é a entrega ----------
+
+
+def _ferramenta(number, merged_at="2026-10-07T04:00:00Z"):
+    return {**_merged(number, [], merged_at=merged_at), "classe": "ferramenta"}
+
+
+def test_pr_de_ferramenta_mergeado_fica_entregue_desde_o_merge():
+    fase = _fase_pr(_ferramenta(300))
+    assert fase["fase"] == "entregue"
+    assert fase["desde"] == "2026-10-07T04:00:00Z"
+    assert fase["versao"] is None
+
+
+def test_pr_de_ferramenta_nao_pega_a_versao_do_proximo_deploy():
+    # a subida não builda ferramenta; o deploy seguinte do app não tem nada a ver com ele
+    depois = [
+        _deploy("0.166.3", "2026-10-06T22:30:00-03:00", "PR #399", duracao=300),
+        _deploy("0.167.0", "2026-10-07T09:00:00-03:00", "PR #400, issue #40", duracao=300),
+    ]
+    fase = _fase_pr(_ferramenta(301), deploys=depois)
+    assert fase["fase"] == "entregue"
+    assert fase["versao"] is None
+
+
+def test_pr_de_app_continua_pegando_o_deploy_seguinte():
+    depois = [
+        _deploy("0.166.3", "2026-10-06T22:30:00-03:00", "PR #399", duracao=300),
+        _deploy("0.167.0", "2026-10-07T09:00:00-03:00", "PR #400, issue #40", duracao=300),
+    ]
+    fase = _fase_pr({**_ferramenta(302), "classe": "app"}, deploys=depois)
+    assert fase["fase"] == "em_producao"
+    assert fase["versao"] == "0.167.0"
+
+
+def test_pr_de_ferramenta_citado_num_deploy_guarda_a_versao_dele():
+    # antes do #965 a subida buildava ferramenta e citava o PR: a versão é real
+    citou = [_deploy("0.150.0", "2026-10-07T01:05:00-03:00", "PR #303")]
+    fase = _fase_pr(_ferramenta(303), deploys=citou)
+    assert fase["fase"] == "em_producao"
+    assert fase["versao"] == "0.150.0"
+
+
+def test_pr_sem_classe_conhecida_segue_a_regra_antiga():
+    fase = _fase_pr(_merged(304, []))
+    assert fase["fase"] == "mergeado_sem_deploy"

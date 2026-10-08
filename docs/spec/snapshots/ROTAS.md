@@ -1,6 +1,6 @@
 # ROTAS.md
 <!-- gerado automaticamente por /snapshot — não editar -->
-<!-- last_update: 2026-10-06T01:37-0300 -->
+<!-- last_update: 2026-10-07T18:54+0000 -->
 
 Endpoints HTTP expostos pelo backend FastAPI do Hospital Reuniões.
 
@@ -354,6 +354,8 @@ Endpoints HTTP expostos pelo backend FastAPI do Hospital Reuniões.
 | GET | `/admin/tecnologia/demandas` | As Demandas do Quadro, com os filtros da PRD. | ✅ |
 | POST | `/admin/tecnologia/demandas` | Abre uma Demanda: ela nasce em `nova`, com o dono do Produto. | ✅ |
 | PATCH | `/admin/tecnologia/demandas/{demanda_id}` | Edita os campos do modal. Campo ausente fica como esta. | ✅ |
+| GET | `/admin/tecnologia/demandas/{demanda_id}/anexos` | Os anexos do card, com URL assinada de vida curta (ADR 0069). | ✅ |
+| POST | `/admin/tecnologia/demandas/{demanda_id}/anexos` | Guarda um print junto da Demanda (ADR 0069, decisao 1). | ✅ |
 | POST | `/admin/tecnologia/demandas/{demanda_id}/atribuir` | Troca o responsavel, entre as pessoas com acesso a aba. | ✅ |
 | GET | `/admin/tecnologia/demandas/{demanda_id}/conversa` | O fio da Demanda em ordem cronologica, respostas e movimentos juntos. | ✅ |
 | POST | `/admin/tecnologia/demandas/{demanda_id}/conversa` | Responde dentro do card: uma linha `resposta`, assinada por quem escreve. | ✅ |
@@ -364,12 +366,17 @@ Endpoints HTTP expostos pelo backend FastAPI do Hospital Reuniões.
 | GET | `/admin/tecnologia/demandas/{demanda_id}/texto-para-ia` | A Demanda inteira em texto simples, para colar numa IA (issue #640). | ✅ |
 | POST | `/admin/tecnologia/demandas/{demanda_id}/vincular` | Liga a Demanda a uma issue-raiz do GitHub pelo numero (ADR 0054, decisao 1). | ✅ |
 | GET | `/admin/tecnologia/eu` | Quem esta olhando a aba, do ponto de vista do Vinculo. | ✅ |
-| GET | `/admin/tecnologia/historico` | As Demandas Concluidas e Canceladas, com busca por texto (issue #641). | ✅ |
-| GET | `/admin/tecnologia/minha-vez` | O que espera pela pessoa LOGADA (issue #641). | ✅ |
+| GET | `/admin/tecnologia/painel` | O Painel da aba Tecnologia (issue #1059), no lugar de "Minha vez" e do | ✅ |
 | GET | `/admin/tecnologia/pessoas` | Quem tem acesso a aba: participante ativo com Super admin. | ✅ |
 | GET | `/admin/tecnologia/produtos` | Todos os Produtos, ativos e inativos, na ordem de exibicao. | ✅ |
 | POST | `/admin/tecnologia/produtos` | Cria Produto. Nasce ativo, e ativo exige dono. | ✅ |
 | PATCH | `/admin/tecnologia/produtos/{produto_id}` | Renomeia, ativa, desativa, troca o dono e a ordem. | ✅ |
+
+## automacao (`app/routers/tecnologia_automacao.py`)
+
+| Método | Rota | O que faz | Auth |
+|--------|------|-----------|------|
+| GET | `/automacao/tecnologia/demandas/{demanda_id}/anexos` | Nome, tipo e URL assinada de cada anexo não apagado da Demanda. | ✅ |
 
 ## transcricao (`app/routers/transcricao.py`)
 
@@ -402,9 +409,10 @@ Endpoints HTTP expostos pelo backend FastAPI do Hospital Reuniões.
 | Método | Rota | O que faz | Auth |
 |--------|------|-----------|------|
 | POST | `/webhooks/clicksign` | Recebe notificações da ClickSign sobre assinaturas e fechamento de documentos. | ❌ |
+| POST | `/webhooks/deploy` | Uma versão subiu: Em produção nas Demandas do lote (ADR 0069, decisão 4). | ❌ |
 | POST | `/webhooks/github` | A Demanda vinculada aprendendo do GitHub em segundos (ADR 0054, decisão 2). | ❌ |
 | POST | `/webhooks/resend` | O e-mail que chegou em ouvidoria@ entra na Triagem de e-mail (ADR 0051). | ❌ |
 
 ---
 
-**Totais:** 236 endpoints em 33 routers · 93% exigem auth.
+**Totais:** 239 endpoints em 34 routers · 93% exigem auth.

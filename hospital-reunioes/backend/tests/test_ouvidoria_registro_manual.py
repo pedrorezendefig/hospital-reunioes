@@ -997,3 +997,58 @@ class TestMigrationDosCanaisManuais:
         comentario = corpo.split("comment on column ouvidoria_protocolos.canal is", 1)[1]
         for canal in CANAIS_NOVOS:
             assert canal.replace("_", " ") in comentario
+
+
+class TestIdentificacaoDoManifestante:
+    """Nome e contato de quem manifesta passam pela mesma régua do paciente
+    (issue #800, decisão de triagem de 27/09/2026): pontuação sozinha é ausência.
+
+    O que importa é o sinal, não a coluna. `dados_incompletos` é calculado na
+    gravação, e um hífen gravado em Contato faria o caso parecer completo: o
+    aviso de identificação pela metade no Dossiê deixaria de acender justamente
+    quando a pessoa se identificou e não deixou como falar com ela."""
+
+    def test_hifen_no_contato_vira_nulo_e_acende_o_aviso_de_dados_incompletos(self, monkeypatch):
+        client, supabase = _client(monkeypatch, OUVIDOR)
+
+        r = client.post("/api/ouvidoria/manifestacoes", json={**REGISTRO, "manifestante_contato": "-"})
+
+        assert r.status_code == 201, r.text
+        gravado = supabase.tabelas["ouvidoria_protocolos"][0]
+        assert gravado["manifestante_contato"] is None
+        assert gravado["dados_incompletos"] is True
+
+    def test_ponto_no_nome_vira_nulo_e_acende_o_aviso_de_dados_incompletos(self, monkeypatch):
+        client, supabase = _client(monkeypatch, OUVIDOR)
+
+        r = client.post("/api/ouvidoria/manifestacoes", json={**REGISTRO, "manifestante_nome": "."})
+
+        assert r.status_code == 201, r.text
+        gravado = supabase.tabelas["ouvidoria_protocolos"][0]
+        assert gravado["manifestante_nome"] is None
+        assert gravado["dados_incompletos"] is True
+
+    def test_nome_e_contato_legitimos_com_pontuacao_no_meio_passam_inteiros(self, monkeypatch):
+        client, supabase = _client(monkeypatch, OUVIDOR)
+
+        r = client.post(
+            "/api/ouvidoria/manifestacoes",
+            json={**REGISTRO, "manifestante_nome": "  Ana-Lúcia d'Ávila  ", "manifestante_contato": "ana-silva@x.com"},
+        )
+
+        assert r.status_code == 201, r.text
+        gravado = supabase.tabelas["ouvidoria_protocolos"][0]
+        assert gravado["manifestante_nome"] == "Ana-Lúcia d'Ávila"
+        assert gravado["manifestante_contato"] == "ana-silva@x.com"
+        assert gravado["dados_incompletos"] is False
+
+    def test_anonimo_com_identificacao_de_pontuacao_continua_sem_aviso(self, monkeypatch):
+        client, supabase = _client(monkeypatch, OUVIDOR)
+
+        r = client.post(
+            "/api/ouvidoria/manifestacoes",
+            json={**REGISTRO, "anonimo": True, "manifestante_nome": ".", "manifestante_contato": "-"},
+        )
+
+        assert r.status_code == 201, r.text
+        assert supabase.tabelas["ouvidoria_protocolos"][0]["dados_incompletos"] is False

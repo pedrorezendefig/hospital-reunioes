@@ -7,6 +7,8 @@
  * a tela não OFERECER um caminho que ela sabe que não existe.
  */
 
+import type { AnexoDaDemanda } from "./anexos";
+
 /** O prefixo da API da aba. */
 export const BASE_TECNOLOGIA = "/api/admin/tecnologia";
 
@@ -122,6 +124,13 @@ export type Demanda = {
    */
   o_que_muda?: string | null;
   partes?: ParteDaEntrega[];
+  /**
+   * A versão em que a Demanda subiu ("v0.169.0", issue #1065).
+   *
+   * O backend a manda só quando a Etapa é Em produção: a tela mostra o que
+   * veio e não repete a regra.
+   */
+  versao?: string | null;
 };
 
 /** O que só quem é da Vitta vê do Vínculo. */
@@ -163,13 +172,19 @@ export const EU_DESCONHECIDO: EuNaAba = {
   integracao_configurada: false,
 };
 
-/** As seis Etapas, espelho da tupla do backend (`app/services/tecnologia_vinculo.py`). */
+/**
+ * As sete Etapas, espelho da tupla do backend (`app/services/tecnologia_vinculo.py`).
+ *
+ * "Em produção" entrou pela ADR 0069 (issue #1057): a subida que levou a
+ * entrega ao ar. O Painel a mostra no bloco Entregas, com a versão (#1059).
+ */
 export type EtapaDemanda =
   | "registrada"
   | "em_analise"
   | "planejada"
   | "em_desenvolvimento"
   | "entregue"
+  | "em_producao"
   | "nao_sera_feita";
 
 export const ETAPAS: EtapaDemanda[] = [
@@ -178,13 +193,14 @@ export const ETAPAS: EtapaDemanda[] = [
   "planejada",
   "em_desenvolvimento",
   "entregue",
+  "em_producao",
   "nao_sera_feita",
 ];
 
 /**
  * O rótulo em palavras do diretor.
  *
- * Ele não vê label, número nem estado de issue: vê estas seis frases
+ * Ele não vê label, número nem estado de issue: vê estas sete frases
  * (ADR 0054, decisão 9).
  */
 export const ETAPA_ROTULO: Record<EtapaDemanda, string> = {
@@ -193,6 +209,7 @@ export const ETAPA_ROTULO: Record<EtapaDemanda, string> = {
   planejada: "Planejada",
   em_desenvolvimento: "Em desenvolvimento",
   entregue: "Entregue",
+  em_producao: "Em produção",
   nao_sera_feita: "Não será feita",
 };
 
@@ -203,6 +220,7 @@ export const ETAPA_CLASSE: Record<EtapaDemanda, string> = {
   planejada: "bg-sky-50 text-sky-700",
   em_desenvolvimento: "bg-amber-50 text-amber-700",
   entregue: "bg-emerald-50 text-emerald-700",
+  em_producao: "bg-emerald-100 text-emerald-800",
   nao_sera_feita: "bg-slate-100 text-slate-500",
 };
 
@@ -236,14 +254,18 @@ export function conversaPublicada(demanda: Demanda): boolean {
 }
 
 /**
- * O texto do selo: a Etapa e, quando há partes, "X de Y partes".
+ * O texto do selo: a Etapa e, quando há partes, "X de Y partes". Em produção
+ * diz desde qual versão (issue #1065), que é o que o diretor procura.
  *
  * Sem total não há fração: "0 de 0 partes" é uma barra vazia onde não existe
  * barra, e o card precisa distinguir a issue simples do PRD que ainda não
  * entregou nada.
  */
 export function textoDoSelo(demanda: Demanda): string {
-  const rotulo = ETAPA_ROTULO[demanda.etapa as EtapaDemanda] ?? "";
+  const rotulo =
+    demanda.etapa === "em_producao" && demanda.versao
+      ? `${ETAPA_ROTULO.em_producao} desde ${demanda.versao}`
+      : (ETAPA_ROTULO[demanda.etapa as EtapaDemanda] ?? "");
   const total = demanda.partes_total;
   const entregues = demanda.partes_entregues;
   if (typeof total === "number" && total > 0 && typeof entregues === "number") {
@@ -324,9 +346,11 @@ export type LinhaDaConversa = {
    * 10 minutos correm.
    */
   editavel_ate: string | null;
+  /** A imagem que a resposta levou (issue #1062), com a URL assinada de vida curta. */
+  imagem?: AnexoDaDemanda | null;
 };
 
-/** A ordem das colunas no Quadro. */
+/** Os cinco estados da Demanda, na ordem do fluxo. */
 export const ESTADOS: EstadoDemanda[] = ["nova", "em_andamento", "aguardando", "concluida", "cancelada"];
 
 export const ESTADO_ROTULO: Record<EstadoDemanda, string> = {
@@ -338,12 +362,13 @@ export const ESTADO_ROTULO: Record<EstadoDemanda, string> = {
 };
 
 /**
- * As duas colunas que nascem recolhidas.
+ * As três raias do Quadro, na ordem (issue #1058, PRD #1056).
  *
- * O contador continua à vista: recolher é dar espaço às colunas vivas, não
- * esconder o que foi fechado (PRD #634, história 24).
+ * Concluída e Cancelada continuam sendo estados no banco, mas deixaram de ser
+ * coluna: encerrar é uma ação no card aberto, e a Demanda encerrada sai do
+ * Quadro na hora. O que já fechou mora no Histórico.
  */
-export const COLUNAS_RECOLHIDAS: EstadoDemanda[] = ["concluida", "cancelada"];
+export const RAIAS: EstadoDemanda[] = ["nova", "em_andamento", "aguardando"];
 
 /** Espelho da tabela do backend (`app/services/tecnologia.py`). */
 export const TRANSICOES: Record<EstadoDemanda, EstadoDemanda[]> = {
@@ -548,47 +573,6 @@ export function pedacosDoTexto(texto: string, nomesMencionados: string[]): Pedac
 }
 
 /**
- * O que a barra de filtros do Quadro guarda (issue #639).
- *
- * Campo vazio quer dizer "todos", e nao "sem responsavel": o filtro so estreita
- * o Quadro, e a API entende ausencia do parametro como sem filtro.
- *
- * O `estado` fica de fora de proposito: ele e o eixo das colunas, e filtrar por
- * ele deixaria o Quadro com uma coluna cheia e quatro vazias, sem dizer por que.
- */
-export type FiltrosDoQuadro = { tipo: string; produto_id: string; responsavel_id: string };
-
-/** O Quadro inteiro: nenhum filtro escolhido. */
-export const SEM_FILTRO: FiltrosDoQuadro = { tipo: "", produto_id: "", responsavel_id: "" };
-
-/**
- * A busca da listagem, com os filtros que a API ja aceita.
- *
- * Sem filtro nenhum a busca sai vazia, nem o "?" sozinho, e os valores viajam
- * escapados pelo `URLSearchParams`: e a mesma URL que a tela pediria a mao, sem
- * o risco de um id com espaco quebrar a chamada.
- */
-export function queryDeFiltros(filtros: FiltrosDoQuadro): string {
-  const busca = new URLSearchParams();
-  if (filtros.tipo) busca.set("tipo", filtros.tipo);
-  if (filtros.produto_id) busca.set("produto_id", filtros.produto_id);
-  if (filtros.responsavel_id) busca.set("responsavel_id", filtros.responsavel_id);
-  const texto = busca.toString();
-  return texto ? `?${texto}` : "";
-}
-
-/**
- * Se algum filtro esta valendo.
- *
- * A tela precisa saber para AVISAR: um Quadro filtrado e calado e
- * indistinguivel de um Quadro vazio, e quem volta a aba com o filtro de ontem
- * concluiria que as Demandas sumiram.
- */
-export function temFiltroAtivo(filtros: FiltrosDoQuadro): boolean {
-  return Boolean(filtros.tipo || filtros.produto_id || filtros.responsavel_id);
-}
-
-/**
  * O endereço da Demanda, montado e lido no mesmo lugar (issue #640).
  *
  * As duas funções abaixo são os dois lados do MESMO formato: `linkDaDemanda`
@@ -598,6 +582,9 @@ export function temFiltroAtivo(filtros: FiltrosDoQuadro): boolean {
  * aplicação não abre.
  */
 export const ROTA_TECNOLOGIA = "/admin/tecnologia";
+
+/** A tela de Produtos, atrás da engrenagem ao lado de "Nova Demanda" (issue #1060). */
+export const ROTA_PRODUTOS = `${ROTA_TECNOLOGIA}/produtos`;
 
 /** O nome do parâmetro que carrega o id da Demanda no link. */
 export const PARAM_DEMANDA = "demanda";
@@ -620,23 +607,24 @@ export function demandaIdDaUrl(busca: string): string | null {
 }
 
 /**
- * As duas abas que leem recortes da lista (issue #641).
+ * O Painel (issue #1059, PRD #1056), no lugar de "Minha vez" e do Histórico da
+ * issue #641.
  *
- * "Minha vez" e Histórico pedem à API listas com um campo a mais cada uma,
- * resolvido pelo backend: por que o card está na minha aba, e quem fechou a
- * Demanda e quando. Os dois são campos calculados lá porque a tela não tem
- * como calculá-los: ela não sabe qual participante é o usuário logado (o
- * `useAuth` carrega o id do Supabase Auth, e não o `participantes.id`), e o
- * desfecho mora em duas colunas diferentes conforme o estado.
+ * Cada bloco lê a Demanda com um campo a mais, resolvido pelo backend: por que
+ * o card está no "Com você", a versão em que a entrega subiu, e quem fechou a
+ * Demanda e quando. São campos calculados lá porque a tela não tem como
+ * calculá-los: ela não sabe qual participante é o usuário logado (o `useAuth`
+ * carrega o id do Supabase Auth, e não o `participantes.id`), e o desfecho
+ * mora em duas colunas diferentes conforme o estado.
  */
 
-/** A Demanda como a aba "Minha vez" a lê. */
-export type DemandaDaMinhaVez = Demanda & { motivo: string };
+/** A Demanda como o bloco "Com você" a lê. */
+export type DemandaComVoce = Demanda & { motivo: string };
 
 /**
  * O par na tela do `motivo` que o backend carimba.
  *
- * Sem ele, quem abre "Minha vez" vê um card cujo responsável é OUTRA pessoa e
+ * Sem ele, quem abre o "Com você" vê um card cujo responsável é OUTRA pessoa e
  * não descobre por que ele está ali.
  */
 export const MOTIVO_ROTULO: Record<string, string> = {
@@ -648,7 +636,15 @@ export const MOTIVO_ROTULO: Record<string, string> = {
   entregue: "Entregue, confira e conclua",
 };
 
-/** A Demanda como a aba Histórico a lê. */
+/**
+ * A Demanda como o bloco Entregas a lê.
+ *
+ * A `versao` deixou de ser só deste bloco (issue #1065): ela vem em toda
+ * Demanda, e o selo a mostra.
+ */
+export type DemandaDaEntrega = Demanda;
+
+/** A Demanda como o bloco Histórico a lê. */
 export type DemandaDoHistorico = Demanda & {
   fechada_em: string | null;
   fechada_por_id: string | null;
@@ -686,37 +682,23 @@ export function textoDoDesfecho(demanda: DemandaDoHistorico): string {
 }
 
 /**
- * A busca do Histórico, com os MESMOS filtros das outras abas.
- *
- * Ela sai do `queryDeFiltros` de propósito, e não de um segundo montador: os
- * três filtros são compartilhados entre as três abas (issue #639), e duas
- * montagens divergiriam na primeira mudança de parâmetro.
+ * A busca do Histórico.
  *
  * Termo só com espaços não vai: mandar `busca=%20` faria a API procurar um
  * espaço, e a tela diria "nada encontrado" para quem não buscou nada.
  */
-export function queryDoHistorico(filtros: FiltrosDoQuadro, termo: string): string {
-  const busca = new URLSearchParams(queryDeFiltros(filtros).replace(/^\?/, ""));
+export function queryDoHistorico(termo: string): string {
   const limpo = termo.trim();
-  if (limpo) busca.set("busca", limpo);
-  const texto = busca.toString();
-  return texto ? `?${texto}` : "";
+  return limpo ? `?${new URLSearchParams({ busca: limpo })}` : "";
 }
 
 /**
- * A frase de "Minha vez" vazia.
+ * A frase do "Com você" vazio.
  *
  * Vazio aqui é BOA NOTÍCIA, e a frase precisa dizer isso: "nada esperando por
- * você" não é falha de carregamento. Com filtro ligado ela muda, porque aí o
- * código não sabe se não há nada ou se o filtro escondeu, e aponta a saída.
+ * você" não é falha de carregamento.
  */
-export function fraseDaMinhaVezVazia(filtrando: boolean): string {
-  if (filtrando) {
-    return (
-      "Nada esperando por você entre as Demandas que o filtro mostra. " +
-      "Pode haver Demandas suas fora dele: limpe os filtros acima para ver todas."
-    );
-  }
+export function fraseDoComVoceVazio(): string {
   return (
     "Nada esperando por você agora. Uma Demanda aparece aqui quando você vira o responsável dela, " +
     "ou quando alguém te menciona na Conversa e você ainda não respondeu."
@@ -726,27 +708,66 @@ export function fraseDaMinhaVezVazia(filtrando: boolean): string {
 /**
  * A frase do Histórico vazio.
  *
- * Quatro casos, porque são quatro causas diferentes e o código as distingue:
- * o Histórico ainda não tem nada, o filtro estreitou, a busca não achou, ou os
- * dois juntos. Uma frase só mandaria limpar o filtro a quem não tem filtro, ou
+ * Dois casos, porque são duas causas diferentes e o código as distingue: o
+ * Histórico ainda não tem nada, ou a busca não achou. Uma frase só mandaria
  * mudar o termo a quem não buscou nada.
  */
-export function fraseDoHistoricoVazio(termo: string, filtrando: boolean): string {
-  const buscando = Boolean(termo.trim());
-  if (buscando && filtrando) {
-    return (
-      `Nenhuma Demanda concluída ou cancelada com "${termo.trim()}" entre as que o filtro mostra. ` +
-      "Tente outras palavras, ou limpe os filtros acima para buscar no Histórico inteiro."
-    );
-  }
-  if (buscando) {
+export function fraseDoHistoricoVazio(termo: string): string {
+  if (termo.trim()) {
     return `Nenhuma Demanda concluída ou cancelada com "${termo.trim()}" no título, na descrição ou na Conversa.`;
   }
-  if (filtrando) {
-    return (
-      "Nenhuma Demanda concluída ou cancelada entre as que o filtro mostra. " +
-      "Limpe os filtros acima para ver o Histórico inteiro."
-    );
-  }
   return "Nenhuma Demanda foi concluída ou cancelada ainda. Quando a primeira fechar, ela aparece aqui.";
+}
+
+/** O Painel inteiro, como a rota `/painel` o devolve (issue #1059). */
+export type PainelDaAba = {
+  numeros: NumerosDoPainel;
+  com_voce: DemandaComVoce[];
+  entregas: DemandaDaEntrega[];
+  historico: DemandaDoHistorico[];
+};
+
+/** Os quatro números do topo. Nenhum é por pessoa (ADR 0061). */
+export type NumerosDoPainel = {
+  abertas: number;
+  com_o_hospital: number;
+  em_desenvolvimento: number;
+  entregues_30_dias: number;
+};
+
+/** O rótulo de cada número, na ordem em que a faixa os mostra. */
+export const ROTULO_DOS_NUMEROS: [keyof NumerosDoPainel, string][] = [
+  ["abertas", "Abertas"],
+  ["com_o_hospital", "Com o hospital"],
+  ["em_desenvolvimento", "Em desenvolvimento"],
+  ["entregues_30_dias", "Entregues em 30 dias"],
+];
+
+/** A frase do bloco Entregas vazio: nada em desenvolvimento não é falha. */
+export function fraseDasEntregasVazias(): string {
+  return "Nenhuma Demanda aberta está com a Vitta em desenvolvimento agora.";
+}
+
+/** As duas abas da Tecnologia (issue #1059). */
+export type AbaDaTecnologia = "quadro" | "painel";
+
+/**
+ * Até onde a tela conta como celular: abaixo do `md` do Tailwind, o mesmo
+ * ponto em que o Quadro deixa de ter três colunas lado a lado.
+ */
+export const CONSULTA_DO_CELULAR = "(max-width: 767px)";
+
+/**
+ * A aba com que a Tecnologia abre (issue #1059).
+ *
+ * No celular é o Painel: três raias empilhadas numa tela estreita são uma
+ * rolagem longa, e quem abre pelo telefone quer saber o que espera por ele.
+ *
+ * O link de uma Demanda (`?demanda=`) abre sempre o Quadro, inclusive no
+ * celular: é o Quadro quem lê o link e abre o card, e abrir no Painel
+ * deixaria o link do e-mail sem card nenhum.
+ */
+export function abaInicial(celular: boolean, busca: string): AbaDaTecnologia {
+  if (demandaIdDaUrl(busca)) return "quadro";
+  return celular ? "painel" : "quadro";
 }

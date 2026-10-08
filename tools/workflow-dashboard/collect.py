@@ -11,40 +11,24 @@ import json
 import re
 import subprocess
 import sys
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 
 from areas import fundir_colunas_no_er, parse_area
 from diagramas import extrair_diagramas
 from fases import montar_fases, timeline_da_issue, vereditos_dos_comentarios
-from plano import bloqueios_do_corpo, montar_plano
 
 GH_TIMEOUT = 20
 
 ISSUE_FIELDS = "number,title,state,labels,createdAt,closedAt,assignees,author,body,url"
-PR_FIELDS = "number,title,state,mergedAt,headRefName,closingIssuesReferences,url,createdAt,closedAt,author,isDraft"
+PR_FIELDS = ("number,title,state,mergedAt,headRefName,closingIssuesReferences,url,createdAt,closedAt,author,isDraft,"
+             "mergedBy,labels")
 # Campos pesados só dos PRs abertos: pedidos para a lista inteira, o GraphQL do GitHub estoura (HTTP 504).
 PR_ABERTO_FIELDS = "number,statusCheckRollup,mergeStateStatus,reviews,comments"
 # Sem teto prático: o total de issues e o filtro por responsável contam o histórico inteiro.
 GH_LIMIT = "10000"
 
 SNAPSHOT_ORDER = ["ROTAS", "ENTIDADES", "SCHEMA", "MIGRATIONS", "INTEGRACOES", "ESTRUTURA", "FLUXOGRAMAS"]
-
-CLAIMS_QUERY = """
-query($owner:String!,$name:String!){
-  repository(owner:$owner,name:$name){
-    issues(first:100,states:[CLOSED],labels:["fatia:P","fatia:M","fatia:G"],
-           orderBy:{field:UPDATED_AT,direction:DESC}){
-      nodes{
-        number
-        timelineItems(itemTypes:[ASSIGNED_EVENT],first:1){
-          nodes{ ... on AssignedEvent { createdAt } }
-        }
-      }
-    }
-  }
-}
-"""
 
 SUBISSUES_QUERY = """
 query($owner:String!,$name:String!,$after:String){
@@ -137,7 +121,7 @@ def _read_text(path: Path):
 def _spec_json_fresh(root: Path, rel: str):
     """Lê um JSON de spec da origin/main, com fallback na working tree.
 
-    Os ships rodam em worktrees paralelos e empurram direto pra origin/main —
+    Os ships rodam em worktrees paralelos e empurram direto pra origin/main:
     a working tree local fica velha e pode até ter staging sujo de outra
     sessão. O estado fresco pós-ship vive no remoto.
     """
@@ -147,15 +131,26 @@ def _spec_json_fresh(root: Path, rel: str):
         return _read_json(root / rel)
 
 
-def _spec_text_fresh(root: Path, rel: str):
-    """Variante texto de _spec_json_fresh — mesma regra (origin/main → fallback local)."""
-    try:
-        return _run(["git", "show", f"origin/main:{rel}"], root)
-    except Exception:
-        return _read_text(root / rel)
-
-
 # ---------- GitHub ----------
+
+def bloqueios_do_corpo(body: str) -> list[int]:
+    """Números das issues bloqueadoras declaradas no corpo.
+
+    Cobre os dois formatos do pipeline: a seção "## Bloqueada por" com bullets
+    nas linhas seguintes e a forma inline "Bloqueada por: #X".
+    """
+    nums: set[int] = set()
+    m = re.search(r"(?ims)^#+\s*Bloqueada por:?\s*$(.*?)(?=^#|\Z)", body or "")
+    if m:
+        nums |= {int(n) for n in re.findall(r"#(\d+)", m.group(1))}
+    for line in (body or "").splitlines():
+        if re.search(r"[Bb]loqueada por\b[^\n]*#", line):
+            nums |= {int(n) for n in re.findall(r"#(\d+)", line)}
+    return sorted(nums)
+
+
+MARCADOR_DEMANDA = "<!-- demanda-vitta id="
+
 
 def _gh_issues(root: Path) -> list[dict]:
     items = json.loads(_run(["gh", "issue", "list", "--state", "all", "--limit", GH_LIMIT,
@@ -180,6 +175,8 @@ def _gh_issues(root: Path) -> list[dict]:
             "author": (it.get("author") or {}).get("login"),
             "url": it.get("url"),
             "body": body,
+            # nasceu do botão "Levar para desenvolvimento" da aba Tecnologia (ADR 0054)
+            "demanda": MARCADOR_DEMANDA in body,
             "blocked_by": sorted(set(blocked)),
             "parent": parent,
             "criteria": {"done": sum(1 for c in criteria if c.strip()), "total": len(criteria)},
@@ -202,6 +199,9 @@ def _gh_prs(root: Path) -> list[dict]:
         "closed_at": it.get("closedAt"),
         "author": (it.get("author") or {}).get("login"),
         "is_draft": bool(it.get("isDraft")),
+        # quem clicou (ou mandou a subida clicar) no merge: o responsável da linha do tempo
+        "mergeado_por": (it.get("mergedBy") or {}).get("login"),
+        "labels": [lb["name"] for lb in it.get("labels") or []],
         # Só os abertos ganham estes campos (_enriquecer_prs_abertos).
         "checks": [],
         "merge_state": None,
@@ -247,6 +247,61 @@ def _enriquecer_prs_abertos(root: Path, prs: list[dict]) -> None:
             comentarios=len(comentarios),
             vereditos=vereditos_dos_comentarios(comentarios),
         )
+
+
+# PRs recentes que ganham o resumo do hover: o body da lista inteira estoura o GraphQL (HTTP 504).
+RESUMO_LIMIT = "200"
+_SECAO = re.compile(r"(?m)^##\s+(.*)$")
+_COMENTARIO_HTML = re.compile(r"<!--.*?-->", re.S)
+
+
+def _secao(body: str, nome: str) -> str | None:
+    """Texto da seção `## ... <nome>` até a próxima `## `, sem comentários HTML."""
+    titulos = list(_SECAO.finditer(body))
+    for i, m in enumerate(titulos):
+        if nome in m.group(1).lower():
+            fim = titulos[i + 1].start() if i + 1 < len(titulos) else len(body)
+            return _COMENTARIO_HTML.sub("", body[m.end():fim]).strip()
+    return None
+
+
+def _texto_puro(texto: str, maximo: int = 420) -> str:
+    """Sem markdown e com espaço normalizado; a linha em branco entre parágrafos fica."""
+    texto = "\n\n".join(" ".join(p.split()) for p in re.sub(r"\*\*|`", "", texto).split("\n\n"))
+    return texto if len(texto) <= maximo else texto[: maximo - 1].rstrip() + "…"
+
+
+def resumo_funcional(body: str) -> dict | None:
+    """O resumo do hover: a seção "Valor entregue" do template (antes e depois, em
+    linguagem simples). O #1090 usou "Resumo funcional" (o que é, valor) e vira texto
+    corrido; PR antigo, sem nenhuma, cai no primeiro parágrafo do Contexto."""
+    body = body or ""
+    campo = lambda secao, rot: (re.search(rf"\*\*{rot}:\*\*\s*(.+)", secao or "") or [None, ""])[1].strip()
+    valor = _secao(body, "valor entregue")
+    antes, depois = campo(valor, "Antes"), campo(valor, "Depois")
+    if antes or depois:
+        return {"antes": antes or None, "depois": depois or None, "contexto": None}
+    funcional = _secao(body, "resumo funcional")
+    texto = " ".join(t for t in (campo(funcional, "O que é"), campo(funcional, "Valor")) if t)
+    if not texto:
+        contexto = _secao(body, "contexto")
+        # os dois primeiros parágrafos, um por linha em branco (o hover desenha um <p> por parágrafo)
+        paragrafos = [" ".join(p.split()) for p in (contexto or "").split("\n\n") if p.strip()][:2]
+        texto = "\n\n".join(paragrafos)
+    return {"antes": None, "depois": None, "contexto": _texto_puro(texto)} if texto else None
+
+
+def _resumir_prs_recentes(root: Path, prs: list[dict]) -> None:
+    """Resumo funcional dos PRs recentes, numa chamada só; falha deixa os PRs sem resumo."""
+    try:
+        items = json.loads(_run(["gh", "pr", "list", "--state", "all", "--limit", RESUMO_LIMIT,
+                                 "--json", "number,body"], root))
+    except Exception:
+        return
+    corpos = {it["number"]: it.get("body") for it in items}
+    for p in prs:
+        if p["number"] in corpos:
+            p["resumo"] = resumo_funcional(corpos[p["number"]])
 
 
 def _linha_do_no(node: dict) -> dict:
@@ -309,6 +364,26 @@ def _branches_remotas(root: Path) -> list[str]:
             for linha in saida.splitlines() if "\t" in linha]
 
 
+def _classes_dos_prs(root: Path) -> dict[int, str]:
+    """Classe de cada PR mergeado, pelos arquivos do squash na origin/main ("(#N)" no assunto).
+
+    Mesmo critério do fechar_onda.py: "app" se algum arquivo está em hospital-reunioes/,
+    senão "ferramenta". Sem renames: mover código para fora do app também conta como app.
+    """
+    try:
+        saida = _run(["git", "log", "origin/main", "--no-renames", "--name-only", "--format=%x00%s"], root)
+    except Exception:
+        return {}
+    classes = {}
+    for bloco in saida.split("\x00")[1:]:
+        assunto, _, arquivos = bloco.partition("\n")
+        m = re.search(r"\(#(\d+)\)\s*$", assunto)
+        if m:
+            app = any(a.startswith("hospital-reunioes/") for a in arquivos.split())
+            classes.setdefault(int(m.group(1)), "app" if app else "ferramenta")
+    return classes
+
+
 def _gh_subissues(root: Path, slug: str) -> dict[int, list[int]]:
     """Mapa PRD -> fatias via API nativa de sub-issues (GraphQL).
 
@@ -360,30 +435,6 @@ def _gh_blocked(root: Path, slug: str) -> dict[int, list[int]]:
             break
         cursor = page["pageInfo"]["endCursor"]
     return rel
-
-
-def _enrich_claims(root: Path, slug: str, issues: list[dict]) -> None:
-    """claimed_at nas fechadas com label fatia:* — base do lead time real do Plano.
-
-    Uma única chamada GraphQL em lote (1º evento assigned por issue), independente
-    de quantas fechadas existam. Falha degrada para "sem claim" (lead time cai no
-    fallback abertura→fechamento) sem envenenar coletas futuras.
-    """
-    try:
-        owner, name = slug.split("/", 1)
-        raw = _run(["gh", "api", "graphql", "-f", f"query={CLAIMS_QUERY}",
-                    "-F", f"owner={owner}", "-F", f"name={name}"], root)
-        nodes = json.loads(raw)["data"]["repository"]["issues"]["nodes"]
-        claims = {}
-        for node in nodes:
-            items = node["timelineItems"]["nodes"]
-            if items and items[0].get("createdAt"):
-                claims[node["number"]] = items[0]["createdAt"]
-    except Exception:
-        return
-    for i in issues:
-        if i["number"] in claims:
-            i["claimed_at"] = claims[i["number"]]
 
 
 def issue_detail(root: Path, number: int) -> dict:
@@ -453,43 +504,205 @@ def _correlate(history: list[dict], issues: list[dict], prs: list[dict]) -> None
                         for d in history if i["number"] in d.get("issue_numbers", [])]
 
 
+# ---------- Linha do tempo do repositório (aba Produção) ----------
+
+# Janela da linha do tempo: os últimos 60 dias ou os últimos 40 deploys, o que
+# for maior. Limite para o payload não pesar; o history.json inteiro continua
+# no campo `history`.
+JANELA_DIAS = 60
+JANELA_DEPLOYS = 40
+# PR mergeado que nenhum deploy incluiu e cuja label não é de código do app:
+# é PR de ferramenta (só merge, sem build). A label desempata o PR de app que
+# ainda espera deploy (heurística: o coletor não tem a lista de arquivos).
+LABELS_DO_APP = ("type:feature", "type:fix")
+
+
+def _dt(v) -> datetime | None:
+    try:
+        d = datetime.fromisoformat(str(v).replace("Z", "+00:00"))
+    except (TypeError, ValueError):
+        return None
+    return d if d.tzinfo else None
+
+
+def _segundos(de, ate) -> int | None:
+    a, b = _dt(de), _dt(ate)
+    return max(0, int((b - a).total_seconds())) if a and b else None
+
+
+def _unico_ou_lista(valores: list[str]):
+    """Um responsável vira texto; vários, lista; nenhum, None."""
+    vistos = sorted(set(v for v in valores if v))
+    return vistos[0] if len(vistos) == 1 else (vistos or None)
+
+
+def _linha_do_tempo(history: list[dict], prs: list[dict], agora: datetime | None = None) -> list[dict]:
+    """Merges (GitHub ao vivo) e deploys (history.json) numa lista só, do mais
+    recente ao mais antigo, costurados pelo número do PR (`_correlate`)."""
+    agora = agora or datetime.now().astimezone()
+    corte = agora - timedelta(days=JANELA_DIAS)
+    deploys = [d for d in history if _dt(d.get("at"))]
+    recentes = sum(1 for d in deploys if _dt(d["at"]) >= corte)
+    deploys = deploys[:max(JANELA_DEPLOYS, recentes)]
+    # merges a partir do deploy mais antigo da janela: antes dele não há deploy no
+    # history.json para costurar, e todo PR do app pareceria "sem deploy"
+    inicio = min((_dt(d["at"]) for d in deploys), default=corte)
+    prs_by = {p["number"]: p for p in prs}
+
+    deploy_do_pr: dict[int, dict] = {}  # o primeiro deploy (no tempo) que levou o PR ao ar
+    for d in history:
+        for n in d.get("pr_numbers") or []:
+            atual = deploy_do_pr.get(n)
+            if atual is None or (_dt(d.get("at")) or agora) < (_dt(atual.get("at")) or agora):
+                deploy_do_pr[n] = d
+
+    eventos = []
+    for d in deploys:
+        lote = [prs_by[n] for n in d.get("pr_numbers") or [] if n in prs_by]
+        etapas = {}
+        mais_antigo = min(lote, key=lambda p: _dt(p.get("created_at")) or agora, default=None)
+        if mais_antigo:
+            etapas["aberto_s"] = _segundos(mais_antigo.get("created_at"), mais_antigo.get("merged_at"))
+        ultimo_merge = max((p.get("merged_at") for p in lote if _dt(p.get("merged_at"))), key=_dt, default=None)
+        if ultimo_merge:
+            etapas["fila_s"] = _segundos(ultimo_merge, d["at"])
+        if isinstance(d.get("etapas"), dict):
+            etapas.update(d["etapas"])
+        eventos.append({
+            "tipo": "deploy",
+            "at": d["at"],
+            "sha": d.get("sha"),
+            "app_version": d.get("app_version"),
+            "result": d.get("result"),
+            "subject": d.get("subject") or d.get("raw_subject") or "",
+            "prs": sorted(d.get("pr_numbers") or []),
+            "issues": sorted(d.get("issue_numbers") or []),
+            "responsavel": d.get("responsavel") or _unico_ou_lista([p.get("mergeado_por") for p in lote]),
+            "etapas": etapas,
+            "duration_seconds": d.get("duration_seconds"),
+            "migrations_applied": list(d.get("migrations_applied") or []),
+            "rollback_target_sha": d.get("rollback_target_sha"),
+        })
+    shas_da_janela = {d.get("sha") for d in deploys}
+    for p in prs:
+        em = _dt(p.get("merged_at"))
+        deploy = deploy_do_pr.get(p["number"])
+        # o PR de um deploy da janela entra sempre (o do deploy mais antigo foi mergeado antes dele)
+        no_deploy_da_janela = deploy is not None and deploy.get("sha") in shas_da_janela
+        if p.get("state") != "MERGED" or not em or (em < inicio and not no_deploy_da_janela):
+            continue
+        eventos.append({
+            "tipo": "merge",
+            "at": p["merged_at"],
+            "pr": p["number"],
+            "titulo": p["title"],
+            "autor": p.get("author"),
+            "mergeado_por": p.get("mergeado_por"),
+            "issues": sorted(p.get("closes") or []),
+            "ferramenta": deploy is None and not any(l in LABELS_DO_APP for l in p.get("labels") or []),
+            "deploy_sha": deploy.get("sha") if deploy else None,
+        })
+    eventos.sort(key=lambda e: _dt(e["at"]), reverse=True)
+    return eventos
+
+
 # ---------- Arquivos do repo ----------
 
-def _parse_changelog(text: str | None) -> list[dict]:
-    if not text:
-        return []
-    entries, cur = [], None
-    for line in text.splitlines():
-        if line.startswith("## "):
-            if cur:
-                entries.append(cur)
-            header = line[3:].strip()
-            version = date = time_ = None
-            title = header
-            m = re.match(r"v(\d+\.\d+\.\d+)\s*[—\-–]+\s*(\d{4}-\d{2}-\d{2})\s*[—\-–]+\s*(.*)", header)
-            if m:
-                version, date, title = m.groups()
-            else:
-                m = re.match(r"(\d{4}-\d{2}-\d{2})[ T]?(\d{2}:\d{2})?\s*[—\-–]+\s*(.*)", header)
-                if m:
-                    date, time_, title = m.groups()
-            cur = {"version": version, "date": date, "time": time_, "title": title.strip(),
-                   "sha": None, "pr": None, "issue": None, "body_md": ""}
-        elif cur is not None:
-            cur["body_md"] += line + "\n"
-    if cur:
-        entries.append(cur)
-    for e in entries:
-        body = e["body_md"]
-        m = re.search(r"(?:SHA|Commit):\s*`?([0-9a-f]{7,40})`?", body) or \
-            re.search(r"/commit/([0-9a-f]{7,40})", body)
-        e["sha"] = m.group(1)[:7] if m else None
-        m = re.search(r"/pull/(\d+)", body)
-        e["pr"] = int(m.group(1)) if m else None
-        m = re.search(r"/issues/(\d+)", body)
-        e["issue"] = int(m.group(1)) if m else None
-        e["body_md"] = body.strip()
-    return entries
+def frase_da_decisao(body_md: str, maximo: int = 240) -> str:
+    """A frase que resume a ADR: o primeiro parágrafo depois de "## Decisão" ou,
+    sem essa seção, o primeiro parágrafo do corpo (sem títulos, listas e
+    blocos de código). Cortada em `maximo` caracteres, na palavra."""
+    texto = body_md or ""
+    m = re.search(r"(?mi)^## Decis[aã]o\s*$", texto)
+    if m:
+        texto = texto[m.end():]
+    paragrafo = []
+    em_codigo = False
+    for linha in texto.splitlines():
+        if linha.strip().startswith("```"):
+            em_codigo = not em_codigo
+            continue
+        if em_codigo:
+            continue
+        if not linha.strip():
+            if paragrafo:
+                break
+            continue
+        if re.match(r"^(#|[-*] |\d+\. |\||>|---)", linha.strip()):
+            if paragrafo:
+                break
+            continue
+        paragrafo.append(linha.strip())
+    frase = " ".join(paragrafo)
+    if len(frase) > maximo:
+        frase = frase[:maximo].rsplit(" ", 1)[0].rstrip(",;:") + "..."
+    return frase
+
+
+def parse_temas_adr(indice_md: str) -> list[dict]:
+    """Os temas do índice `docs/adr/README.md`: cada `## Tema` seguido da tabela
+    com uma linha `| [NNNN](arquivo) | status | título |` por ADR. Devolve
+    `[{"tema", "numeros"}]` na ordem do índice; ADR repetida fica no primeiro
+    tema em que aparece. Índice sem tema parseável devolve lista vazia (o front
+    agrupa por prefixo do título)."""
+    temas: list[dict] = []
+    vistos: set[int] = set()
+    atual = None
+    for linha in (indice_md or "").splitlines():
+        hm = re.match(r"^## (.+?)\s*$", linha)
+        if hm:
+            atual = {"tema": hm.group(1).strip(), "numeros": []}
+            temas.append(atual)
+            continue
+        nm = re.match(r"^\|\s*\[(\d+)\]\(", linha)
+        if nm and atual is not None:
+            n = int(nm.group(1))
+            if n not in vistos:
+                vistos.add(n)
+                atual["numeros"].append(n)
+    return [t for t in temas if t["numeros"]]
+
+
+def _temas_adr(root: Path) -> list[dict]:
+    return parse_temas_adr(_read_text(root / "docs" / "adr" / "README.md") or "")
+
+
+def numeros_adr(valor) -> list[int]:
+    """`"0029, 0061"` do frontmatter vira `[29, 61]`; vazio vira `[]`."""
+    return [int(n) for n in re.findall(r"\d+", valor or "")]
+
+
+def citacoes_adr(body_md: str, propria: int, existentes: set) -> list[int]:
+    """As ADRs que o corpo cita: `ADR 0034`, `ADRs 0057 e 0068` (lista com
+    vírgula ou "e") e o link `[0031](0031-x.md)`. Número solto não conta;
+    só entram as que existem, sem a própria."""
+    texto = body_md or ""
+    achados = set()
+    for m in re.finditer(r"\bADRs?\s+(\d{4}(?:\s*(?:,|\be\b)\s*\d{4})*)", texto):
+        achados.update(int(n) for n in re.findall(r"\d{4}", m.group(1)))
+    achados.update(int(n) for n in re.findall(r"\((\d{4})-[^)\s]*\.md\)", texto))
+    return sorted(n for n in achados if n in existentes and n != propria)
+
+
+def arestas_adr(adrs: list[dict]) -> list[dict]:
+    """As setas do mapa das Decisões, só do frontmatter (citação no corpo não
+    vira seta). A seta vai de `de` para `para`: a emenda aponta para a
+    emendada, a substituição aponta para a sucessora. O vínculo declarado dos
+    dois lados (`amends` e `amended_by`) vira uma seta só; ponta em ADR que não
+    existe cai."""
+    existentes = {a["number"] for a in adrs}
+    vistas = set()
+    for a in adrs:
+        n = a["number"]
+        vistas.update((n, x, "emenda") for x in a.get("emenda", []))
+        vistas.update((x, n, "emenda") for x in a.get("emendada_por", []))
+        vistas.update((x, n, "substitui") for x in a.get("substitui", []))
+        vistas.update((n, x, "substitui") for x in a.get("substituida_por", []))
+    return [
+        {"de": de, "para": para, "tipo": tipo}
+        for de, para, tipo in sorted(vistas)
+        if de in existentes and para in existentes
+    ]
 
 
 def _parse_adrs(root: Path) -> list[dict]:
@@ -510,18 +723,28 @@ def _parse_adrs(root: Path) -> list[dict]:
         tm = re.search(r"(?m)^# (.+)$", body)
         title = tm.group(1).strip() if tm else f.stem
         nm = re.match(r"(\d+)", f.name)
+        body_md = re.sub(r"(?m)^# .+\n", "", body, count=1).strip()
         out.append({
             "number": int(nm.group(1)) if nm else None,
             "slug": f.stem,
             "title": title,
             "status": state or "?",
+            "decisao": frase_da_decisao(body_md),
             "supersedes": meta.get("supersedes"),
             "superseded_by": meta.get("superseded_by"),
             "amends": meta.get("amends"),
             "amended_by": meta.get("amended_by"),
-            "body_md": re.sub(r"(?m)^# .+\n", "", body, count=1).strip(),
+            "emenda": numeros_adr(meta.get("amends")),
+            "substitui": numeros_adr(meta.get("supersedes")),
+            "emendada_por": numeros_adr(meta.get("amended_by")),
+            "substituida_por": numeros_adr(meta.get("superseded_by")),
+            "body_md": body_md,
             "file": str(f.relative_to(root)),
         })
+    existentes = {a["number"] for a in out}
+    for a in out:
+        ligadas = set(a["emenda"] + a["substitui"] + a["emendada_por"] + a["substituida_por"])
+        a["cita"] = [n for n in citacoes_adr(a["body_md"], a["number"], existentes) if n not in ligadas]
     return out
 
 
@@ -550,7 +773,7 @@ def _snapshots(root: Path) -> list[dict]:
 
 
 def _git_info(root: Path) -> dict:
-    info = {"branch": None, "dirty": None, "commits": []}
+    info = {"branch": None, "dirty": None, "commits": [], "main_atras": None}
     try:
         info["branch"] = _run(["git", "branch", "--show-current"], root).strip()
         info["dirty"] = len([l for l in _run(["git", "status", "--porcelain"], root).splitlines() if l.strip()])
@@ -559,6 +782,10 @@ def _git_info(root: Path) -> dict:
             info["commits"].append({"sha": sha, "subject": subject})
     except Exception as e:
         info["error"] = str(e)
+    try:  # quantos commits a main local deve à origin/main (o fetch é o do collect)
+        info["main_atras"] = int(_run(["git", "rev-list", "--count", "main..origin/main"], root).strip())
+    except Exception:
+        info["main_atras"] = None
     info["on_main"] = info["branch"] == "main"
     info["stale_hint"] = bool(info["branch"] and info["branch"] != "main") or bool(info["dirty"])
     return info
@@ -567,10 +794,10 @@ def _git_info(root: Path) -> dict:
 def _gh_failure(e: Exception) -> tuple[str, str]:
     """Classifica a falha do gh numa mensagem amigável para o painel."""
     if isinstance(e, FileNotFoundError):
-        return "missing", "gh não encontrado — instale o GitHub CLI (cli.github.com) e rode `gh auth login`."
+        return "missing", "gh não encontrado: instale o GitHub CLI (cli.github.com) e rode `gh auth login`."
     msg = str(e).lower()
     if any(t in msg for t in ("auth", "logged in", "not logged", "gh auth login")):
-        return "unauth", "gh não autenticado — rode `gh auth login` e clique em ⟳ para recarregar."
+        return "unauth", "gh não autenticado: rode `gh auth login` e clique em ⟳ para recarregar."
     return "other", str(e)
 
 
@@ -594,22 +821,12 @@ def _project_light(pj: dict | None) -> dict | None:
     }
 
 
-def _montar_plano_seguro(github: dict):
-    """Plano com a mesma degradação do resto do payload.
-
-    gh indisponível → None (a UI distingue "sem dados" de "sem PRD ativo");
-    erro inesperado no módulo → estrutura vazia com o erro, sem derrubar /api/data.
-    """
-    if github["error"]:
-        return None
-    try:
-        return montar_plano(github["issues"])
-    except Exception as e:
-        return {"levas": [], "tempos_tipicos": {}, "erro": str(e)[:300]}
-
-
 def _montar_fases_seguro(root: Path, slug: str, github: dict, history: list[dict]):
-    """Fases com a mesma degradação do Plano: gh fora → None; timeline fora → fases sem timeline."""
+    """Fases com a mesma degradação do resto do payload.
+
+    gh fora → None (a UI distingue "sem dados" de "funil zerado"); timeline fora
+    → fases sem timeline; erro inesperado no módulo → estrutura vazia com o erro.
+    """
     if github["error"]:
         return None
     try:
@@ -633,7 +850,7 @@ def _linhas_do_funil(fases: dict | None) -> list[str]:
 
 def collect(root: Path) -> dict:
     spec = root / "docs" / "spec"
-    try:  # tolera offline — segue com o que a working tree tiver
+    try:  # tolera offline: segue com o que a working tree tiver
         _run(["git", "fetch", "origin", "main", "--quiet"], root, timeout=15)
     except Exception:
         pass
@@ -673,8 +890,11 @@ def collect(root: Path) -> dict:
             i["children"] = sorted(children.get(i["number"], []))
             i["is_prd"] = i["number"] in prds
         _correlate(history, issues, prs)
-        _enrich_claims(root, slug, issues)
+        classes = _classes_dos_prs(root)
+        for p in prs:
+            p["classe"] = classes.get(p["number"]) if p["state"] == "MERGED" else None
         _enriquecer_prs_abertos(root, prs)
+        _resumir_prs_recentes(root, prs)
         github.update(issues=issues, prs=prs, prds=sorted(prds))
     except Exception as e:
         kind, friendly = _gh_failure(e)
@@ -684,18 +904,20 @@ def collect(root: Path) -> dict:
             d.setdefault("pr_numbers", [])
             d.setdefault("issue_numbers", [])
 
+    adrs = _parse_adrs(root)
     return {
         "generated_at": datetime.now().astimezone().isoformat(timespec="seconds"),
         "repo_slug": slug,
         "repo_url": f"https://github.com/{slug}",
         "github": github,
-        "plano": _montar_plano_seguro(github),
         "state": _state_public(state),
         "history": history,
+        "linha_do_tempo": _linha_do_tempo(history, github["prs"]),
         "project": project,
-        "changelog": _parse_changelog(_spec_text_fresh(root, "docs/spec/CHANGELOG.md")),
         "versioning_md": _read_text(spec / "VERSIONING.md"),
-        "adrs": _parse_adrs(root),
+        "adrs": adrs,
+        "adr_temas": _temas_adr(root),
+        "adr_arestas": arestas_adr(adrs),
         "context_md": _read_text(root / "CONTEXT.md"),
         "snapshots": _snapshots(root),
         "git": _git_info(root),
@@ -716,7 +938,6 @@ if __name__ == "__main__":
     print(f"prs         {len(gh['prs'])}")
     print(f"prds        {gh['prds']}")
     print(f"deploys     {len(data['history'])}")
-    print(f"changelog   {len(data['changelog'])} entradas")
     print(f"adrs        {len(data['adrs'])}")
     print(f"snapshots   {[s['name'] for s in data['snapshots']]}")
     print(f"git         branch={data['git'].get('branch')} dirty={data['git'].get('dirty')}")

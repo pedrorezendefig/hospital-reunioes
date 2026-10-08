@@ -68,14 +68,15 @@ sequenceDiagram
 ## 3. Rotas (API) (auto)
 
 <!-- AUTO:rotas:start -->
-**236 endpoints** em 20 áreas:
+**239 endpoints** em 21 áreas:
 
 | Área | Endpoints |
 |---|---|
 | `aceite` | 3 |
-| `admin` | 77 |
+| `admin` | 78 |
 | `ana` | 5 |
 | `auth` | 2 |
+| `automacao` | 1 |
 | `comentarios` | 4 |
 | `conector-mcp` | 2 |
 | `configuracoes` | 2 |
@@ -91,7 +92,7 @@ sequenceDiagram
 | `pops` | 24 |
 | `reunioes` | 32 |
 | `transcricao` | 1 |
-| `webhooks` | 3 |
+| `webhooks` | 4 |
 
 _Lista completa: `docs/spec/snapshots/ROTAS.md`._
 <!-- AUTO:rotas:end -->
@@ -99,7 +100,7 @@ _Lista completa: `docs/spec/snapshots/ROTAS.md`._
 ## 4. Dados (auto)
 
 <!-- AUTO:dados:start -->
-**42 tabelas:** `participantes` · `reunioes` · `reuniao_participantes` · `pendencias` · `agendamentos_email` · `tokens_validacao` · `comentarios_pendencias` · `notificacoes` · `user_preferences` · `audit_log` · `bulk_jobs` · `cargos` · `tipos_reuniao` · `pops_setores` · `pops_setores_participantes` · `pops` · `pops_versoes` · `pops_devolucoes` · `pops_materiais_referencia` · `reuniao_aceites` · `reuniao_aceite_tokens` · `consultas_particulares` · `exames` · `cirurgias_estimativas` · `ouvidoria_movimentos` · `ouvidoria_acessos` · `ouvidoria_prazos` · `ouvidoria_prazos_historico` · `ouvidoria_feriados` · `ouvidoria_anexos` · `ouvidoria_setor_responsaveis` · `ouvidoria_notificacoes` · `ouvidoria_setor_tokens` · `ouvidoria_prorrogacoes` · `ouvidoria_tentativas_contato` · `ouvidoria_relatorios` · `ouvidoria_nota_externa` · `ouvidoria_pontos` · `tecnologia_produtos` · `tecnologia_demandas` · `tecnologia_conversas` · `ouvidoria_emails_recebidos_anexos`
+**44 tabelas:** `participantes` · `reunioes` · `reuniao_participantes` · `pendencias` · `agendamentos_email` · `tokens_validacao` · `comentarios_pendencias` · `notificacoes` · `user_preferences` · `audit_log` · `bulk_jobs` · `cargos` · `tipos_reuniao` · `pops_setores` · `pops_setores_participantes` · `pops` · `pops_versoes` · `pops_devolucoes` · `pops_materiais_referencia` · `reuniao_aceites` · `reuniao_aceite_tokens` · `consultas_particulares` · `exames` · `cirurgias_estimativas` · `ouvidoria_movimentos` · `ouvidoria_acessos` · `ouvidoria_prazos` · `ouvidoria_prazos_historico` · `ouvidoria_feriados` · `ouvidoria_anexos` · `ouvidoria_setor_responsaveis` · `ouvidoria_notificacoes` · `ouvidoria_setor_tokens` · `ouvidoria_prorrogacoes` · `ouvidoria_tentativas_contato` · `ouvidoria_relatorios` · `ouvidoria_nota_externa` · `ouvidoria_pontos` · `tecnologia_produtos` · `tecnologia_demandas` · `tecnologia_conversas` · `ouvidoria_emails_recebidos_anexos` · `migracoes_aplicadas` · `tecnologia_anexos`
 
 _Colunas, FKs e diagrama ER: `docs/spec/snapshots/ENTIDADES.md` e `SCHEMA.md`._
 <!-- AUTO:dados:end -->
@@ -126,7 +127,7 @@ hospital-reunioes/
 └── supabase/  migrations/ (schema) · templates/ (e-mails do Auth) · snippets/ (SQL de diagnóstico) · seed.sql
 docs/          ARQUITETURA.md · adr/ · agents/ · spec/ · onboarding/ · pops/ · comunicacao/ · manual/
 CONTEXT.md · CONTEXT-MAP.md   glossário e mapa dos contextos (raiz)
-.claude/skills/ skills do time (workflow) · local/ insumo humano fora do git · tools/ lint de ADR e painel local
+.claude/skills/ skills do time (workflow) · local/ insumo humano fora do git · tools/ lint de ADR e Hospital OS
 ```
 
 - **`backend/pipeline/`** é o coração: transcrição → LLM (extração → resumo → estrutura → ata PT) → PDF.
@@ -135,7 +136,7 @@ CONTEXT.md · CONTEXT-MAP.md   glossário e mapa dos contextos (raiz)
 
 ## 7. Skills & Workflow (como desenvolvemos)
 
-O desenvolvimento é **GitHub-issue-centric** (modelo Matt Pocock). O guia visual completo é o painel local: `python3 tools/workflow-dashboard/serve.py` (abas "Aprender" + dados vivos de issues/deploys).
+O desenvolvimento é **GitHub-issue-centric** (modelo Matt Pocock). Issues, PRs e deploys ao vivo ficam no Hospital OS, o painel local: `python3 tools/workflow-dashboard/serve.py`. O método de trabalho vive em `docs/onboarding/`.
 
 **Fluxo:** `/grill-with-docs` → `/to-prd` → `/to-issues` → `/pegar-issue` → `/tdd` → `/ship` → `/deploy`.
 
@@ -145,7 +146,7 @@ O desenvolvimento é **GitHub-issue-centric** (modelo Matt Pocock). O guia visua
 |---|---|
 | Planejar → issues | `grill-with-docs` · `to-prd` · `to-issues` · `triage` |
 | Desenvolver | `pegar-issue` · `tdd` · `diagnose` · `prototype` · `improve-codebase-architecture` · `zoom-out` |
-| Entregar | `ship` (PR + 3 gates + merge) · `deploy` (Coolify + health + rollback) |
+| Entregar | `ship` (PR + gates + subida) · `deploy` (Coolify + health + rollback) |
 | Apoio | `snapshot` (atualiza este doc) · `atualizar-app` (dev local) |
 
 **Skills globais** (no seu Claude Code, valem em todos os projetos — não precisam de instalação por repo): `passagem` (handoff pt-BR), e os plugins `code-review`, `security-review`, `frontend-design`, `context7`, `github`.

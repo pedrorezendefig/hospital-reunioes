@@ -1,24 +1,54 @@
 'use strict';
 
-/* Fluxo vivo, SPA vanilla. Lê /api/data (agregado) e /api/issue/<n> (comentários lazy). */
+/* Fluxo vivo, SPA vanilla. Lê /api/data (agregado), /api/issue/<n> (comentários
+   lazy) e /api/issue/<n>/timeline (linha do tempo das fechadas, lazy). */
 
-import { tip, copyBlock, closeTips, reduceMotion, revealOnScroll } from './ui.js';
+import { closeTips, marcarTermos, reduceMotion, revealOnScroll, termosGlossario } from './ui.js';
+import { SUBS_DOC, abaValida, aoMudarRota, gravarRota, lerRota, montarHash } from './router.js';
 import { renderDiagrama, wireDiagramas } from './diagramas.js';
-import { renderArea, wireArea } from './areas.js';
+import { posicionarPop, renderArea, wireArea } from './areas.js';
+import { desenharSetas, mapaDecisoes, vinculosDe } from './decisoes.js';
+import { corDaPessoa } from './pessoas.js';
+import { renderOndas } from './ondas.js';
+import { alternarPessoa, filtrosPrsDaRota, filtrosPrsNaRota, filtrosPrsVazios, popDoPr, renderQuadroPrs } from './prs.js';
+
+/* a aba abre no que está pendente: só as abertas */
+const filtrosVazios = () => ({ state: 'OPEN', fase: '', resp: '', prd: null, label: '', q: '' });
+
+/* filtros da aba Issues <-> filtros da rota (texto; vazio = padrão). O
+   humana=1 dos links antigos (chip ready-for-human) vira a fase Humana. */
+const filtrosDaRota = p => ({
+  state: p.state || 'OPEN', fase: p.fase || (p.humana === '1' ? 'humana' : ''), resp: p.resp || '',
+  prd: Number(p.prd) || null, label: p.label || '', q: p.q || '',
+});
+const filtrosNaRota = f => ({
+  state: f.state === 'OPEN' ? '' : f.state, fase: f.fase, resp: f.resp, prd: f.prd ? String(f.prd) : '',
+  label: f.label, q: f.q,
+});
 
 const S = {
   data: null,
-  tab: 'plano',
-  fIssues: { state: 'all', label: '', q: '', resp: '' },
+  tab: 'issues',
+  item: null,   // item aberto que o hash aponta (#issues/930, #producao/v0.161.0)
+  fIssues: filtrosVazios(),
+  fPrs: filtrosPrsVazios(),
+  fProd: { resp: '' },   // filtro da linha do tempo da aba Produção (filtrosProdVazios)
   expIss: new Set(),
   expPrd: new Map(),
   expDep: new Set(),
-  expAdr: new Set(),
+  adrHist: false,   // Decisões: mostrar também as superseded (esmaecidas)
+  adrQ: '',
+  adrFechados: new Set(),   // temas recolhidos nas Decisões
+  fluxo: null,      // static/fluxo.json, carregado na primeira visita à sub-pill Fluxo
+  fluxoErro: null,
+  fluxoNo: null,    // passo do fluxo aberto no painel
   comments: {},
+  timelines: {},
   mapaDoc: null,
   rotasQ: '',
   entTab: null,
   erFull: false,
+  menu: null,   // dropdown de filtro aberto na aba Issues
 };
 
 const $ = (s, el = document) => el.querySelector(s);
@@ -68,16 +98,14 @@ function ago(iso) {
   if (ms < 48 * 3.6e6) return `há ${Math.round(ms / 3.6e6)} h`;
   return `há ${Math.round(ms / 86.4e6)} dias`;
 }
-function spanH(msNum) {
-  const h = msNum / 3.6e6;
-  if (h < 1) return `${Math.max(1, Math.round(msNum / 6e4))} min`;
-  if (h < 48) return `${h.toFixed(1).replace('.', ',')} h`;
-  return `${(h / 24).toFixed(1).replace('.', ',')} dias`;
-}
+/* duração humana: 45s, 1m06s, 2h05m, 3d 4h (as etapas da linha do tempo vão de segundos a dias) */
 function durS(sec) {
   if (sec == null) return '·';
-  const m = Math.floor(sec / 60), s = Math.round(sec % 60);
-  return m ? `${m}m${String(s).padStart(2, '0')}s` : `${s}s`;
+  const s = Math.round(sec);
+  const d = Math.floor(s / 86400), h = Math.floor((s % 86400) / 3600), m = Math.floor((s % 3600) / 60), r = s % 60;
+  if (d) return `${d}d ${h}h`;
+  if (h) return `${h}h${String(m).padStart(2, '0')}m`;
+  return m ? `${m}m${String(r).padStart(2, '0')}s` : `${r}s`;
 }
 
 const LABEL_CLS = {
@@ -100,21 +128,11 @@ function adrStatusBadge(status) {
   // Estado fora do conjunto canônico (inclui "?" de ADR sem frontmatter) grita em vermelho.
   return `<span class="badge ${ADR_STATUS_CLS[status] || 'b-red'}">${esc(status)}</span>`;
 }
-function adrPointerBadge(a) {
-  const ptr = a.superseded_by ? `→ ${a.superseded_by}`
-    : a.amended_by ? `± ${a.amended_by}` : '';
-  return ptr ? `<span class="badge b-ghost">${esc(ptr)}</span>` : '';
-}
 
 const issUrl = n => `${S.data.repo_url}/issues/${n}`;
-const prUrl = n => `${S.data.repo_url}/pull/${n}`;
 const shaUrl = sha => `${S.data.repo_url}/commit/${sha}`;
-
-function stateTag(i) {
-  return i.state === 'OPEN'
-    ? '<span class="istate"><span class="dot ok"></span>aberta</span>'
-    : '<span class="istate"><span class="dot" style="background:var(--purple)"></span>fechada</span>';
-}
+/* chip navega dentro do painel pelo hash; o GitHub fica no ↗ de cada card */
+const rotaDe = (aba, item) => esc(montarHash({ aba, item }));
 
 function spark(vals, w = 360, h = 46) {
   if (vals.length < 2) return '';
@@ -155,23 +173,41 @@ async function load(fresh = false, silent = false) {
 
 /* ---------- shell ---------- */
 
+/* Semáforo com três estados: verde só com todo serviço healthy e checado;
+   vermelho com algum down/unhealthy ou HTTP fora de 2xx; âmbar no resto
+   (warning, sem verificação). O supabase não tem HTTP próprio: a subida deriva
+   o status dele do health do backend, e "sem HTTP" deixou de ser vermelho. */
+const SERVICO_FORA = ['down', 'unhealthy'];
+const checado = s => s.status === 'healthy' && !!s.last_health_check;
+
+function estadoDaProducao(svcs) {
+  const fora = s => {
+    const http = (s.last_health_check || {}).http_status;
+    return SERVICO_FORA.includes(s.status) || (http != null && (http < 200 || http >= 300));
+  };
+  if (svcs.some(fora)) return 'bad';
+  return svcs.length && svcs.every(checado) ? 'ok' : 'warn';
+}
+
 function renderMast() {
   const st = S.data.state || {};
   const svcs = st.services || [];
-  const okCount = svcs.filter(s => s.status === 'healthy').length;
-  const allOk = svcs.length && okCount === svcs.length;
+  const okCount = svcs.filter(checado).length;
+  const estado = estadoDaProducao(svcs);
   $('#mast-status').innerHTML = `
-    <span class="capsule"><span class="dot ${allOk ? 'ok pulse' : 'bad'}"></span>
-      <b>v${esc(st.last_app_version || '?')}</b>&nbsp;· prod ${allOk ? 'healthy' : `${okCount}/${svcs.length} ok`}</span>
+    <span class="capsule"><span class="dot ${{ ok: 'ok pulse', warn: 'warn', bad: 'bad' }[estado]}"></span>
+      <b>v${esc(st.last_app_version || '?')}</b>&nbsp;· prod ${estado === 'ok' ? 'healthy' : `${okCount}/${svcs.length} ok`}</span>
     <span class="ago" id="ago">coletado ${ago(S.data.generated_at)}</span>
+    ${chipMainLocal((S.data.git || {}).main_atras)}
     <button class="iconbtn" id="refresh" title="recoletar agora (gh + arquivos)">⟳</button>`;
   $('#refresh').addEventListener('click', () => load(true));
-  const pbtn = document.querySelector('#tabs button[data-tab="pendencias"]');
-  if (pbtn) {
-    // gh fora do ar = "não sei", nunca "zero": o badge vira "?".
-    const n = (S.data.github && S.data.github.error) ? '?' : pendenciasHumanas().length;
-    pbtn.innerHTML = n ? `Pendências <span class="tab-count">${n}</span>` : 'Pendências';
-  }
+}
+
+/* main local atrás da origin/main: só informa, o painel não puxa nada (#1081) */
+function chipMainLocal(atras) {
+  if (atras === null || atras === undefined) return '';
+  if (atras === 0) return `<span class="ago main-atras" title="a main deste clone está igual à origin/main">main local em dia</span>`;
+  return `<span class="ago main-atras warn" title="a main deste clone está ${atras} commit(s) atrás da origin/main. Worktree novo nasce da origin/main; a árvore principal se atualiza com git pull">main local ${atras} atrás</span>`;
 }
 
 function renderBanner() {
@@ -183,7 +219,7 @@ function renderBanner() {
 
 function renderFoot() {
   $('#foot').innerHTML = `
-    <span>tools/workflow-dashboard · somente leitura · fontes: <span class="mono">gh</span> + docs/spec + git</span>
+    <span>Hospital OS · somente leitura · fontes: <span class="mono">gh</span> + docs/spec + git</span>
     <span class="foot-right">coletado às ${esc(fmtDT(S.data.generated_at))}
       <a class="btn-pill outline" href="${esc(S.data.repo_url)}" target="_blank" rel="noopener">${esc(S.data.repo_slug)} <span class="btn-arrow">↗</span></a></span>`;
 }
@@ -193,49 +229,98 @@ function tick() {
   if (el && S.data) el.textContent = `coletado ${ago(S.data.generated_at)}`;
 }
 
-const TABS = ['plano', 'issues', 'producao', 'pendencias', 'mapa', 'dominio', 'guia'];
-/* hashes da navegação antiga (bookmarks) caem na aba que herdou o conteúdo */
-const TAB_ALIAS = {
-  setup: 'guia', workflow: 'guia', fluxo: 'guia', bastidores: 'guia',
-  agora: 'producao', deploys: 'producao',
-};
+/* ---------- rota (o hash é do router.js; aqui só o estado da tela) ---------- */
 
 function setTab(t) {
-  t = TAB_ALIAS[t] || t;
-  if (!TABS.includes(t)) t = 'plano';
   S.erFull = false;   // trocar de aba sai da tela cheia; voltar ao Mapa não a reabre
-  S.tab = t;
-  if (location.hash !== '#' + t) history.replaceState(null, '', '#' + t);
-  document.querySelectorAll('#tabs button').forEach(b => b.classList.toggle('on', b.dataset.tab === t));
+  S.tab = abaValida(t);
+  S.item = null;      // o item aberto é da aba que ficou para trás
+  sincronizarHash();
+  marcarAba();
   render();
   window.scrollTo({ top: 0 });
+}
+
+function marcarAba() {
+  document.querySelectorAll('#tabs button').forEach(b => b.classList.toggle('on', b.dataset.tab === S.tab));
+}
+
+/* estado da tela -> hash; os filtros existem nas abas Issues, PRs e Produção */
+function sincronizarHash() {
+  const filtros = S.tab === 'issues' ? filtrosNaRota(S.fIssues) : S.tab === 'prs' ? filtrosPrsNaRota(S.fPrs)
+    : S.tab === 'producao' ? filtrosProdNaRota(S.fProd) : {};
+  gravarRota({ aba: S.tab, item: S.item, filtros });
+}
+
+/* hash -> estado da tela: no boot, no chip clicado e no voltar do navegador */
+function irPara(rota) {
+  S.erFull = false;
+  S.tab = rota.aba;
+  S.item = rota.item;
+  if (rota.aba === 'issues') S.fIssues = filtrosDaRota(rota.filtros);
+  if (rota.aba === 'prs') S.fPrs = filtrosPrsDaRota(rota.filtros);
+  if (rota.aba === 'producao') S.fProd = filtrosProdDaRota(rota.filtros);
+  abrirItem();
+  sincronizarHash();
+  marcarAba();
+  render();
+  const alvo = view.querySelector('[aria-current="true"]');
+  if (alvo) alvo.scrollIntoView({ block: 'center' });
+  else window.scrollTo({ top: 0 });
+}
+
+/* o card que o hash aponta fica em destaque (e é o alvo da rolagem do irPara) */
+const destaque = item => (S.item && S.item === String(item) ? ' aria-current="true"' : '');
+
+/* o item da rota abre expandido; a fatia aparece com o PRD dela aberto */
+function abrirItem() {
+  if (!S.item || !S.data) return;
+  if (S.tab === 'issues') {
+    const n = Number(S.item);
+    const i = (S.data.github.issues || []).find(x => x.number === n);
+    if (!i) return;
+    mostrarNaLista(i);
+    S.expIss.add(n);
+    ensureComments(n);
+    ensureTimeline(n);
+    if (i.parent) S.expPrd.set(i.parent, true);
+  } else if (S.tab === 'producao') {
+    const idx = S.data.history.findIndex(d => depVer(d.app_version) === S.item);
+    if (idx >= 0) S.expDep.add(idx);
+  }
 }
 
 function render() {
   if (!S.data) return;
   const fn = {
-    plano: renderPlano, issues: renderIssues, producao: renderProducao,
-    pendencias: renderPendencias, mapa: renderMapa, dominio: renderDominio, guia: renderGuia,
+    issues: renderIssues, prs: renderPrs, producao: renderProducao, documentacao: renderDocumentacao,
   }[S.tab];
   view.innerHTML = fn ? fn() : '';
   if (S.tab === 'issues') wireIssues();
-  if (S.tab === 'mapa') {
+  if (S.tab === 'prs') {
+    try { wirePrs(); } catch { /* quadro sem resumo > aba quebrada */ }
+  }
+  const sub = S.tab === 'documentacao' ? subDoc() : null;
+  if (sub === 'mapa') {
     try { desenharDiagramas(view); } catch { /* bloco fica no fallback de código cru */ }
     try { wireDiagramas(view); } catch { /* diagrama sem interação > aba quebrada */ }
     const cur = (S.data.snapshots || []).find(s => s.name === S.mapaDoc);
     try { wireArea(view, cur, areaCtx()); } catch { /* capa sem interação > aba quebrada */ }
   }
-  // tela cheia do ER só existe na aba mapa; o lock de scroll segue o estado
-  document.body.classList.toggle('er-lock', S.tab === 'mapa' && S.erFull);
+  if (sub === 'fluxo') {
+    try { wireDiagramas(view); } catch { /* fluxo sem teclado > aba quebrada */ }
+    try { wireFluxoPop(); } catch { /* fluxo sem popover > aba quebrada */ }
+    marcarNoFluxo();
+  }
+  if (sub === 'decisoes') wireDecisoes();
+  // tela cheia do ER só existe no Mapa; o lock de scroll segue o estado
+  document.body.classList.toggle('er-lock', sub === 'mapa' && S.erFull);
   if (_ioView) _ioView.disconnect();
   if (_ioList) { _ioList.disconnect(); _ioList = null; }
   _ioView = revealOnScroll(view, '.rv');
 }
 
-const sec = (n, title, hint = '') =>
-  `<div class="sec rv"><span class="n">${n}</span><h2 class="clip"><span class="clip-inner">${title}</span></h2>${hint ? `<span class="hint">${hint}</span>` : ''}</div>`;
-
-/* cabeçalho de seção com eyebrow (padrão Baseline · abas Plano e Issues, #260) */
+/* cabeçalho de seção com eyebrow (padrão Baseline, #260) */
 function cabecalho(eyebrow, titulo, hint = '') {
   return `<div class="sec-ey rv">
     <span class="eyebrow">${eyebrow}</span>
@@ -243,171 +328,62 @@ function cabecalho(eyebrow, titulo, hint = '') {
   </div>`;
 }
 
-/* ---------- PLANO (home) ---------- */
-
-const fmtHoras = h => spanH(h * 3.6e6);
-
-function tempoTipicoHtml(t) {
-  if (!t) return '<span class="ftempo vazio">⏱ sem histórico ainda</span>';
-  const marca = t.fonte === 'geral'
-    ? `<em class="ftempo-fonte">· mediana geral</em>${tip('mediana geral')}` : '';
-  return `<span class="ftempo">⏱ ~${esc(fmtHoras(t.horas))} ${marca}</span>`;
-}
-
-const ESTADO_FATIA = {
-  pronta: { cls: 'pronta', badge: '<span class="badge b-green">pronta</span>' },
-  bloqueada: { cls: 'bloq', badge: '<span class="badge b-red">bloqueada</span>' },
-  em_andamento: { cls: 'andamento', badge: '<span class="badge b-amber">● em andamento</span>' },
-  concluida: { cls: 'feita', badge: '<span class="badge b-purple">concluída ✓</span>' },
-  aguardando_triage: { cls: 'triage', badge: '<span class="badge b-blue">aguardando triage</span>' },
-};
-
-function fatiaRow(f, j) {
-  const e = ESTADO_FATIA[f.estado] || ESTADO_FATIA.pronta;
-  const bloqueio = f.estado === 'bloqueada' && f.bloqueada_por.length
-    ? `<span class="fbloq">⛔ espera ${f.bloqueada_por.map(n =>
-      `<a href="${issUrl(n)}" target="_blank" rel="noopener">#${n}</a>`).join(', ')}</span>` : '';
-  const triage = f.estado === 'aguardando_triage'
-    ? '<span class="ftriage">⏳ fora da fila, rode <code>/triage</code> para liberar</span>' : '';
-  const copia = f.estado === 'pronta' && f.copiaveis ? `
-    <div class="fcopia">
-      ${copyBlock(f.copiaveis.terminal, { lang: 'bash' })}
-      <a class="fslash" data-act="copytxt" data-txt="${esc(f.copiaveis.slash)}">copiar só o <code>${esc(f.copiaveis.slash)}</code></a>
-    </div>` : '';
-  return `
-  <article class="nrow nrow-${e.cls} rv" style="--i:${j}">
-    <span class="nrow-idx">${String(j + 1).padStart(2, '0')}</span>
-    <div class="nrow-main">
-      <div class="fhead">
-        <a class="fnum" href="${esc(f.url)}" target="_blank" rel="noopener">#${f.number}</a>
-        <a class="ftitle" href="${esc(f.url)}" target="_blank" rel="noopener">${esc(f.title)}</a>
-      </div>
-      <div class="fmeta">${e.badge}${f.tamanho ? labelBadge('fatia:' + f.tamanho) : ''}${tempoTipicoHtml(f.tempo_tipico)}${bloqueio}${triage}</div>
-      ${f.explicacao ? `<p class="fexp">${esc(f.explicacao)}</p>` : ''}
-      ${copia}
-    </div>
-    <a class="nrow-go" href="${esc(f.url)}" target="_blank" rel="noopener" aria-label="abrir a issue #${f.number} no GitHub"><span class="nrow-arrow">→</span></a>
-  </article>`;
-}
-
-function ondaHtml(onda, i) {
-  const hint = i === 0 ? 'dá para começar agora' : `destrava quando a onda ${i} fechar`;
-  const paralelo = onda.length > 1 ? ` · ${onda.length} em paralelo` : '';
-  return `
-  <div class="onda ${onda.length > 1 ? 'paralela' : 'serial'} rv" style="--i:${i + 1}">
-    <div class="onda-rotulo"><span class="onda-n">onda ${i + 1}</span><span class="onda-hint">${hint}${paralelo}</span></div>
-    <div class="nrows">${onda.map((f, j) => fatiaRow(f, j)).join('')}</div>
-  </div>`;
-}
-
-function levaHtml(leva, idx) {
-  const abertas = leva.ondas.reduce((a, o) => a + o.length, 0);
-  const cc = leva.caminho_critico_horas;
-  const chips = [
-    `<span class="capsule"><b>${abertas}</b>&nbsp;aberta${abertas === 1 ? '' : 's'}</span>`,
-    leva.concluidas.length ? `<span class="capsule">✓&nbsp;<b>${leva.concluidas.length}</b>&nbsp;entregue${leva.concluidas.length === 1 ? '' : 's'}</span>` : '',
-    cc != null ? `<span class="capsule">caminho crítico&nbsp;<b>~${esc(fmtHoras(cc))}</b>${tip('caminho crítico')}</span>` : '',
-  ].filter(Boolean).join('');
-  const avisos = (leva.avisos || []).map(a => `<div class="banner plano-aviso">⚠ ${esc(a)}</div>`).join('');
-  const feitas = leva.concluidas.length ? `
-    <div class="feitas rv">
-      <span class="k-label">já entregues</span>
-      <div class="feitas-row">${leva.concluidas.map(f =>
-        `<a class="feita-chip" href="${esc(f.url)}" target="_blank" rel="noopener">✓ #${f.number} ${esc(f.title)}</a>`).join('')}</div>
-    </div>` : '';
-  return `
-  <section class="leva">
-    <div class="leva-head rv" style="--i:${idx}">
-      <span class="prd-tag">PRD</span>
-      <a class="leva-title" href="${esc(leva.prd.url)}" target="_blank" rel="noopener">#${leva.prd.number} · ${esc(leva.prd.title)} ↗</a>
-      <div class="leva-chips">${chips}</div>
-    </div>
-    ${avisos}
-    ${leva.ondas.length ? `<div class="ondas">${leva.ondas.map(ondaHtml).join('')}</div>`
-      : '<div class="empty">todas as fatias desta leva foram entregues: feche o PRD ou abra a próxima leva</div>'}
-    ${feitas}
-  </section>`;
-}
-
-function avulsasHtml(av) {
-  if (!av || !av.ondas.length) return '';
-  const avisos = (av.avisos || []).map(a => `<div class="banner plano-aviso">⚠ ${esc(a)}</div>`).join('');
-  return `
-  <section class="leva">
-    <div class="leva-head rv">
-      <span class="prd-tag avulsa-tag">AVULSAS</span>
-      <span class="leva-title">Issues fora de PRD</span>
-    </div>
-    ${avisos}
-    <div class="ondas">${av.ondas.map(ondaHtml).join('')}</div>
-  </section>`;
-}
-
-function renderPlano() {
-  return `<div class="tab-plano">${planoBody()}</div>`;
-}
-
-function planoBody() {
-  const cab = cabecalho('planejar', 'Plano', 'a leva atual, em ondas de execução');
-  const p = S.data.plano;
-  if (!p) {
-    return `${cab}<div class="empty">O Plano lê as issues pelo <span class="mono">gh</span>, que está indisponível agora, veja o aviso no topo. As outras abas seguem com os dados locais.</div>`;
-  }
-  if (p.erro) return `${cab}<div class="banner"><b>Plano indisponível</b>: ${esc(p.erro)}</div>`;
-  const temAvulsas = p.avulsas && p.avulsas.ondas.length;
-  if (!p.levas.length && !temAvulsas) {
-    return `${cab}
-    <div class="card plano-vazio rv">
-      <h3>Nenhum PRD ativo agora.</h3>
-      <p>O plano nasce do pipeline: lapide a ideia, publique o PRD e corte em fatias: esta aba desenha o resto sozinha.</p>
-      ${copyBlock('/grill-with-docs\n/to-prd\n/to-issues', { lang: 'text', label: 'numa sessão claude, na ordem' })}
-    </div>`;
-  }
-  const lead = `<p class="lead rv">As fatias do PRD ativo, organizadas em <b>ondas</b>${tip('onda')} pela dependência:
-    o que divide uma onda anda <b>em paralelo</b>: cada sessão pega uma fatia (claim atômico${tip('claim atômico')},
-    1 worktree por issue${tip('worktree')}). Copie o comando de um card <b>pronta</b> e cole num terminal novo.</p>`;
-  return cab + lead + p.levas.map(levaHtml).join('') + avulsasHtml(p.avulsas);
-}
-
-/* ---------- PRODUÇÃO (timeline de deploys e releases) ---------- */
+/* ---------- PRODUÇÃO (versão no ar e lista de versões, ADR 0062 decisão 2) ---------- */
 
 function renderProducao() {
   return renderDeploys();
 }
 
 
-/* ---------- ISSUES ---------- */
+/* ---------- ISSUES (home: pendente por pessoa, filtros em dropdown, card compacto) ---------- */
 
-function leadAvg(iss) {
-  const closed = iss.filter(i => i.closed_at && i.created_at);
-  if (!closed.length) return null;
-  return closed.reduce((a, i) => a + (new Date(i.closed_at) - new Date(i.created_at)), 0) / closed.length;
-}
+/* Régua de nove fases do fases.py (ADR 0062, decisão 4), na ordem do funil:
+   [chave do payload, nome na tela, badge]. */
+const FASES = [
+  ['triagem', 'Triagem', 'b-ghost'],
+  ['fila', 'Fila', 'b-indigo'],
+  ['bloqueada', 'Bloqueada', 'b-red'],
+  ['em_andamento', 'Em andamento', 'b-amber'],
+  ['pr_aberto', 'PR aberto', 'b-blue'],
+  ['mergeada', 'Mergeada', 'b-purple'],
+  ['em_producao', 'Em produção', 'b-green'],
+  ['humana', 'Humana', 'b-coral'],
+  ['encerrada_sem_pr', 'Encerrada sem PR', 'b-ghost'],
+];
+/* o funil conta só as abertas; "encerrada sem PR" é sempre fechada e não entra */
+const FASES_PENDENTES = FASES.filter(([k]) => k !== 'encerrada_sem_pr');
+const PREFIXOS_LABEL = ['type', 'area', 'fatia'];
+const LABEL_HUMANA = 'ready-for-human';
 
-/* Responsável = quem está designado (assignee); sem ninguém designado, quem
-   criou a issue (author), emenda de 05/10/2026 do ADR 0061. Um só por vez no
-   filtro; SEM_RESP filtra as issues que ninguém assumiu (sem assignee). O "em
-   andamento" conta só issue com assignee (claim). */
+/* Pessoa = quem assumiu (assignee); sem ninguém, quem criou (ADR 0062,
+   emenda de 06/10/2026). O card marca "criou" quando a pessoa entrou pelo
+   autor. SEM_RESP é o "ninguém assumiu": issues sem assignee. Mesmo valor e
+   mesma regra do SEM_RESPONSAVEL e do responsaveis() do fases.py. */
 const SEM_RESP = '(sem)';
 
 function responsaveis(i) {
-  return i.assignees.length ? i.assignees : (i.author ? [i.author] : []);
+  if (i.assignees.length) return i.assignees;
+  return i.author ? [i.author] : [];
 }
 
 function doResponsavel(i, resp) {
   return resp === SEM_RESP ? i.assignees.length === 0 : responsaveis(i).includes(resp);
 }
 
-function donoHtml(i) {
-  if (i.assignees.length) return `👤 ${i.assignees.map(esc).join(', ')}`;
-  return i.author ? `✎ criada por ${esc(i.author)}` : '';
+function faseDe(i) {
+  return ((S.data.fases || {}).issues || {})[i.number] || null;
 }
 
-function matchIssue(i) {
-  const f = S.fIssues;
+/* matchIssue é passado a .filter, então o segundo parâmetro não pode ser
+   o filtro (seria o índice): a variante com filtro explícito é à parte */
+const matchIssue = i => matchIssueCom(i, S.fIssues);
+
+function matchIssueCom(i, f) {
   if (f.state !== 'all' && i.state !== f.state) return false;
-  if (f.label && !i.labels.includes(f.label)) return false;
+  if (f.fase && (faseDe(i) || {}).fase !== f.fase) return false;
   if (f.resp && !doResponsavel(i, f.resp)) return false;
+  if (f.prd && i.number !== f.prd && i.parent !== f.prd) return false;
+  if (f.label && !i.labels.includes(f.label)) return false;
   if (f.q) {
     const q = f.q.toLowerCase();
     if (!(`#${i.number} ${i.title}`.toLowerCase().includes(q))) return false;
@@ -415,20 +391,212 @@ function matchIssue(i) {
   return true;
 }
 
-function chainHtml(i) {
-  const parts = [];
-  parts.push(`<span class="node">aberta ${fmtD(i.created_at)}</span>`);
-  for (const p of i.prs) {
-    parts.push('<span class="arrow">→</span>');
-    parts.push(`<a class="node" href="${prUrl(p.number)}" target="_blank" rel="noopener">PR #${p.number}${p.merged_at ? ' ✓ merged' : ` · ${p.state.toLowerCase()}`}</a>`);
+/* contagens do payload: o total, ou as da pessoa filtrada (zeradas se ela não tem nenhuma) */
+function contagensDoFunil(funil, resp) {
+  if (!resp) return funil.total;
+  return funil.por_responsavel[resp] || {};
+}
+
+const somaDasFases = n => FASES_PENDENTES.reduce((t, [k]) => t + (n[k] || 0), 0);
+
+function nomeDoResponsavel(resp) {
+  return resp === SEM_RESP ? 'ninguém assumiu' : esc(resp);
+}
+
+function donoDoPendente(resp) {
+  if (!resp) return ['no time', 'todas as issues abertas'];
+  if (resp === SEM_RESP) return ['sem ninguém', 'abertas que ninguém assumiu'];
+  return [`para ${esc(resp)}`, 'abertas que assumiu, ou criou e ninguém assumiu'];
+}
+
+/* card grande = tudo que está pendente; os pequenos destrincham por fase e somam o grande */
+function funilHtml() {
+  const fases = S.data.fases;
+  if (!fases || !fases.funil) {
+    const motivo = fases && fases.erro
+      ? `funil indisponível: ${esc(fases.erro)}`
+      : 'o funil lê as issues pelo <span class="mono">gh</span>, que está indisponível agora, veja o aviso no topo';
+    return `<div class="empty funil-vazio rv">${motivo}</div>`;
   }
-  for (const dp of i.deploys) {
-    parts.push('<span class="arrow">→</span>');
-    const ok = dp.result === 'healthy';
-    parts.push(`<span class="node ${ok ? 'deploy' : 'rolled'}">● v${esc(dp.app_version || dp.sha)} · ${fmtD(dp.at)}</span>`);
+  const f = S.fIssues;
+  const n = contagensDoFunil(fases.funil, f.resp);
+  const tudo = f.state === 'OPEN' && !f.fase;
+  const [dono, sub] = donoDoPendente(f.resp);
+  return `
+  <div class="funil rv" role="group" aria-label="pendente por fase">
+    <button type="button" class="funil-total ${tudo ? 'on' : ''}" data-act="fpendente" aria-pressed="${tudo}">
+      <span class="funil-total-n">${somaDasFases(n)}</span>
+      <span class="funil-total-nome">pendente ${dono}</span>
+      <span class="funil-total-sub">${sub}</span>
+    </button>
+    ${FASES_PENDENTES.map(([k, nome]) => `
+    <button type="button" class="funil-passo ${f.fase === k ? 'on' : ''} ${n[k] ? '' : 'zero'}" data-act="ffase" data-v="${k}" aria-pressed="${f.fase === k}">
+      <span class="funil-n">${n[k] || 0}</span><span class="funil-nome">${nome}</span>
+    </button>`).join('')}
+  </div>`;
+}
+
+/* dropdown de filtro: o menu fica sempre no DOM e abre pela classe (S.menu) */
+function dropdown(chave, rotulo, valor, opcoes) {
+  const aberto = S.menu === chave;
+  return `
+  <div class="dd ${aberto ? 'open' : ''}" data-menu="${chave}">
+    <button type="button" class="dd-btn ${valor ? 'on' : ''}" data-act="menu" data-v="${chave}" aria-haspopup="listbox" aria-expanded="${aberto}">
+      <span class="dd-rot">${rotulo}</span><span class="dd-val">${valor || 'todos'}</span>
+    </button>
+    <div class="dd-menu" role="listbox" aria-label="${rotulo}">${opcoes.join('')}</div>
+  </div>`;
+}
+
+function opcao(act, v, on, txt, extra = '') {
+  return `<button type="button" class="dd-opt ${on ? 'on' : ''}" data-act="${act}" data-v="${esc(v)}" role="option" aria-selected="${on}"${extra}>${txt}</button>`;
+}
+
+/* faceta: quantas issues a opção mostraria com os OUTROS filtros como estão;
+   zero fica esmaecido, mas continua clicável (a escolhida nunca some) */
+function faceta(iss, chave, v) {
+  return iss.filter(i => matchIssueCom(i, { ...S.fIssues, [chave]: v })).length;
+}
+
+function opcaoContada(act, chave, v, on, txt, extra = '') {
+  const n = faceta(S.data.github.issues || [], chave, v);
+  return opcao(act, v, on, `${txt}<span class="dd-n">${n}</span>`, `${extra}${n ? '' : ' data-zero="1"'}`);
+}
+
+function opcaoPessoa(login) {
+  return opcaoContada('fresp', 'resp', login, S.fIssues.resp === login,
+    `<span class="pessoa-dot"></span><span class="dd-txt">${nomeDoResponsavel(login)}</span>`,
+    ` style="--pessoa:${corDaPessoa(login === SEM_RESP ? null : login)}"`);
+}
+
+/* algum filtro fora do padrão da aba (o botão limpar só existe nesse caso) */
+function filtroAtivo(f = S.fIssues) {
+  const z = filtrosVazios();
+  return Object.keys(z).some(k => (f[k] || '') !== (z[k] || ''));
+}
+
+const botaoLimpar = act => `<button type="button" class="fchip limpar" data-act="${act}">limpar</button>`;
+
+/* labels das issues agrupadas por prefixo (type:, area:, fatia:) e o resto;
+   ready-for-human é a fase Humana, card próprio no funil */
+function gruposDeLabels(iss) {
+  const todas = [...new Set(iss.flatMap(i => i.labels))].filter(l => l !== LABEL_HUMANA).sort();
+  const doPrefixo = p => todas.filter(l => l.startsWith(p + ':'));
+  const grupos = PREFIXOS_LABEL.map(p => [p, doPrefixo(p)]);
+  grupos.push(['outras', todas.filter(l => !PREFIXOS_LABEL.some(p => l.startsWith(p + ':')))]);
+  return grupos.filter(([, ls]) => ls.length);
+}
+
+function filtrosHtml(iss) {
+  const f = S.fIssues;
+  const pessoas = [...new Set(iss.flatMap(responsaveis))].sort();
+  const estados = [['OPEN', 'abertas'], ['CLOSED', 'fechadas'], ['all', 'todas']];
+  const prds = iss.filter(i => i.is_prd && i.state === 'OPEN').sort((a, b) => b.number - a.number);
+  const txt = t => `<span class="dd-txt">${t}</span>`;
+  const todos = (act, chave, on) => opcaoContada(act, chave, '', on, txt('todos'));
+  const menus = [
+    dropdown('resp', 'responsável', f.resp ? nomeDoResponsavel(f.resp) : '',
+      [todos('fresp', 'resp', !f.resp), ...pessoas.map(opcaoPessoa), opcaoPessoa(SEM_RESP)]),
+    dropdown('state', 'estado', (estados.find(([v]) => v === f.state) || [, ''])[1],
+      estados.map(([v, t]) => opcaoContada('fstate', 'state', v, f.state === v, txt(t)))),
+    prds.length ? dropdown('prd', 'PRD', f.prd ? `#${f.prd}` : '',
+      [todos('fprd', 'prd', !f.prd), ...prds.map(p => opcaoContada('fprd', 'prd', p.number, f.prd === p.number,
+        `<span class="dd-num">#${p.number}</span>${txt(esc(p.title))}`))]) : '',
+    ...gruposDeLabels(iss).map(([pref, ls]) => {
+      const curta = l => esc(pref === 'outras' ? l : l.slice(pref.length + 1));
+      return dropdown(pref, pref, ls.includes(f.label) ? curta(f.label) : '',
+        [todos('flabel', 'label', !ls.includes(f.label)),
+          ...ls.map(l => opcaoContada('flabel', 'label', l, f.label === l, txt(curta(l))))]);
+    }),
+  ];
+  return `
+  <div class="filtros rv">
+    ${menus.join('')}
+    <input class="search" id="fq" type="search" placeholder="buscar por título ou #número…" value="${esc(f.q)}">
+    ${filtroAtivo(f) ? botaoLimpar('flimpar') : ''}
+  </div>`;
+}
+
+/* ---------- card da issue ---------- */
+
+const SINAL_CI = { vermelho: 'CI vermelho', verde: 'CI verde', pendente: 'CI pendente', sem_ci: 'sem CI' };
+
+function detalheDaFase(fs, i) {
+  if (fs.sub === 'branch_criada') return 'branch criada';
+  if (fs.fase === 'bloqueada' && i.blocked_by.length) return `espera ${i.blocked_by.map(n => `#${n}`).join(', ')}`;
+  if (fs.fase !== 'pr_aberto' || !fs.sinal) return '';
+  const s = fs.sinal;
+  return [
+    SINAL_CI[s.ci] || '',
+    s.veredito === 'must_fix' ? 'revisor: must-fix' : s.veredito === 'limpo' ? 'revisor: limpo' : '',
+    s.conflito ? 'conflito' : '',
+    s.tentativa_anterior ? 'nova tentativa' : '',
+  ].filter(Boolean).join(' · ');
+}
+
+function faseBadge(fs, i) {
+  if (!fs) return '';
+  const [, nome, cls] = FASES.find(([k]) => k === fs.fase) || [fs.fase, fs.fase, 'b-ghost'];
+  const det = detalheDaFase(fs, i);
+  return `<span class="badge ${cls}">${esc(nome)}${det ? ` · ${esc(det)}` : ''}</span>`;
+}
+
+function pessoaHtml(login) {
+  return `<span class="pessoa" style="--pessoa:${corDaPessoa(login)}"><span class="pessoa-dot"></span>${login ? esc(login) : 'ninguém assumiu'}</span>`;
+}
+
+function pessoasDoCard(i) {
+  const quem = i.assignees.length ? i.assignees.map(pessoaHtml).join('') : pessoaHtml(null);
+  // quem criou aparece como informação; só conta como responsável quando ninguém assumiu
+  const criou = i.author && !i.assignees.includes(i.author);
+  return quem + (criou ? `<span class="chip autor">✎ criou: ${esc(i.author)}</span>` : '');
+}
+
+const idadeTxt = i => i.state === 'OPEN' ? `aberta ${ago(i.created_at)}` : `fechada ${fmtD(i.closed_at)}`;
+
+/* ---------- linha do tempo (ADR 0062, decisão 6) ---------- */
+
+const LENTE = { revisao: 'revisão', seguranca: 'segurança' };
+
+function eventoTexto(e) {
+  const pr = e.pr ? `PR #${e.pr}` : 'PR';
+  const vezes = n => `${n} ${n === 1 ? 'vez' : 'vezes'}`;
+  const txt = {
+    criada: () => 'criada',
+    designada: () => e.quem ? `designada para ${e.quem}` : 'designada',
+    branch: () => `branch ${e.branch}`,
+    pr_aberto: () => `${pr} aberto`,
+    novo_pr: () => `novo ${pr}`,
+    ci_vermelho: () => `CI vermelho ${vezes(e.vezes || 1)} no ${pr}`,
+    revisor_comentou: () => `revisor de ${LENTE[e.lente] || e.lente} comentou: ${e.veredito === 'must_fix' ? 'must-fix' : 'limpo'}`,
+    pr_fechado: () => `${pr} fechado sem merge`,
+    mergeado: () => `${pr} mergeado`,
+    em_producao: () => `em produção${e.versao ? ` na ${depVer(e.versao)}` : ''}`,
+    fechada: () => 'issue fechada',
+    reaberta: () => 'issue reaberta',
+  }[e.tipo];
+  return esc(txt ? txt() : e.tipo);
+}
+
+/* abertas: a linha vem na coleta; fechadas (ou coleta sem ela): busca ao expandir */
+function timelineDe(n) {
+  const pronta = ((S.data.fases || {}).timelines || {})[n];
+  return pronta ? { list: pronta } : S.timelines[n];
+}
+
+function linhaDoTempoHtml(n) {
+  const t = timelineDe(n);
+  const cab = '<div class="k-label">linha do tempo</div>';
+  let corpo;
+  if (!t || t.loading) corpo = '<span class="ago">carregando a linha do tempo…</span>';
+  else if (t.error) corpo = `<span class="ago">linha do tempo indisponível: ${esc(t.error)}</span>`;
+  else if (!t.list.length) corpo = '<span class="ago">sem eventos</span>';
+  else {
+    corpo = `<ol class="eventos">${t.list.map(e => `
+      <li class="evento"><span class="evento-quando">${e.em ? esc(fmtDT(e.em)) : 'sem data'}</span>
+        <span class="evento-o-que">${eventoTexto(e)}</span></li>`).join('')}</ol>`;
   }
-  if (i.prs.length === 0 && i.state === 'OPEN') parts.push('<span class="arrow">→</span><span class="node">sem PR ainda</span>');
-  return parts.join('');
+  return `<div class="linha-tempo">${cab}${corpo}</div>`;
 }
 
 function commentsHtml(n) {
@@ -445,43 +613,42 @@ function commentsHtml(n) {
       </div>`).join('') + '</div>';
 }
 
-function issueCard(i, idx, prd = false, extra = '') {
+/* card compacto (ADR 0062, decisão 6): fase, pessoa, idade, critérios, PR e
+   versão; aberto, a linha do tempo, as labels, o corpo e os comentários */
+function issueCard(i, idx, prd = false) {
   const open = S.expIss.has(i.number);
-  const lead = i.closed_at ? spanH(new Date(i.closed_at) - new Date(i.created_at)) : null;
-  const meta = [];
-  meta.push(`aberta ${fmtD(i.created_at)}`);
-  if (i.closed_at) meta.push(`fechada ${fmtD(i.closed_at)}`);
-  // no PRD o dono vai ao lado do título
-  const dono = donoHtml(i);
-  if (!prd && dono) meta.push(dono);
-  if (i.criteria.total) meta.push(`✓ ${i.criteria.done}/${i.criteria.total} critérios`);
-  const blocked = i.blocked_by.length
-    ? `<span class="blocked">⛔ bloqueada por ${i.blocked_by.map(n => `<a href="${issUrl(n)}" target="_blank" rel="noopener">#${n}</a>`).join(', ')}</span>` : '';
+  const fs = faseDe(i);
+  const chips = [
+    faseBadge(fs, i),
+    pessoasDoCard(i),
+    `<span class="chip">${idadeTxt(i)}</span>`,
+    i.demanda ? '<span class="chip chip-demanda" title="nasceu de uma Demanda da aba Tecnologia">Demanda</span>' : '',
+    i.criteria.total ? `<span class="chip" title="critérios de aceite">✓ ${i.criteria.done}/${i.criteria.total}</span>` : '',
+    fs && fs.pr ? `<a class="chip" href="${rotaDe('prs', fs.pr)}">PR #${fs.pr}</a>` : '',
+    fs && fs.versao ? `<a class="chip chip-versao" href="${rotaDe('producao', depVer(fs.versao))}">${esc(depVer(fs.versao))}</a>` : '',
+  ].filter(Boolean).join('');
 
   return `
-  <article class="nrow ${prd ? 'prd-row' : ''} rv" style="--i:${idx}">
+  <article class="nrow ${prd ? 'prd-row' : ''} rv" style="--i:${idx}"${destaque(i.number)}>
     <span class="nrow-idx">${String(idx + 1).padStart(2, '0')}</span>
     <div class="nrow-main">
       <div class="iss-head" data-act="iss" data-n="${i.number}">
         ${prd ? '<span class="prd-tag">PRD</span>' : ''}
         <span class="inum">#${i.number}</span>
         <span class="ititle">${esc(i.title)}</span>
-        ${prd ? `<span class="prd-dono">${i.assignees.length ? dono : ['sem dono', dono].filter(Boolean).join(' · ')}</span>` : ''}
-        ${i.labels.map(labelBadge).join('')}
-        ${stateTag(i)}
-        ${lead ? `<span class="chip nrow-lead">⏱ ${lead}</span>` : ''}
       </div>
-      <div class="iss-meta">${meta.map(m => `<span>${m}</span>`).join('')}${blocked}</div>
-      ${extra}
-      <div class="chain">${chainHtml(i)}</div>
+      <div class="iss-chips">${chips}</div>
+      ${prd ? renderOndas(i, S.data, FASES) : ''}
       ${open ? `
       <div class="iss-body">
+        ${linhaDoTempoHtml(i.number)}
+        ${i.labels.length ? `<div class="iss-labels">${i.labels.map(labelBadge).join('')}</div>` : ''}
         <a class="ghlink" href="${issUrl(i.number)}" target="_blank" rel="noopener">abrir no GitHub ↗</a>
         <div class="md" style="margin-top:10px">${md(i.body)}</div>
         ${commentsHtml(i.number)}
       </div>` : ''}
     </div>
-    <a class="nrow-go" href="${issUrl(i.number)}" target="_blank" rel="noopener" aria-label="abrir a issue #${i.number} no GitHub"><span class="nrow-arrow">→</span></a>
+    <a class="nrow-go" href="${issUrl(i.number)}" target="_blank" rel="noopener" aria-label="abrir a issue #${i.number} no GitHub"><span class="nrow-arrow">↗</span></a>
   </article>`;
 }
 
@@ -492,8 +659,7 @@ function issueListHtml() {
   const used = new Set();
   let idx = 0;
   const groups = [];
-  const f = S.fIssues;
-  const filtroAtivo = !!(f.q || f.label || f.resp || f.state !== 'all');
+  const comFiltro = filtroAtivo();
 
   for (const prd of prds) {
     used.add(prd.number);
@@ -505,7 +671,7 @@ function issueListHtml() {
     // escolha explícita do usuário (expPrd: numero -> bool) sempre vence (#268)
     const aberto = S.expPrd.has(prd.number)
       ? S.expPrd.get(prd.number)
-      : (filtroAtivo && kidsShown.length > 0);
+      : (comFiltro && kidsShown.length > 0);
     const fechadas = kids.filter(k => k.state === 'CLOSED').length;
     const toggle = kids.length ? `
       <button class="fatias-toggle" data-act="prd" data-n="${prd.number}" data-open="${aberto ? 1 : 0}" aria-expanded="${aberto}">
@@ -532,75 +698,48 @@ function issueListHtml() {
   return groups.join('') || '<div class="empty">nenhuma issue bate com o filtro</div>';
 }
 
-/* Visor de um responsável: aparece só com o filtro de responsável ligado. */
-function visorResponsavelHtml(iss, resp, rv) {
-  const dele = iss.filter(i => doResponsavel(i, resp));
-  const open = dele.filter(i => i.state === 'OPEN');
-  const fechadas = dele.filter(i => i.state === 'CLOSED');
-  const mes = Date.now() - 30 * 864e5;
-  const noMes = fechadas.filter(i => i.closed_at && new Date(i.closed_at) >= mes).length;
-  const lead = leadAvg(dele);
-  const s = n => n === 1 ? '' : 's';
-  const assumidas = dele.filter(i => i.assignees.length).length;
-  const criadas = dele.length - assumidas;
-  const nome = resp === SEM_RESP ? 'ninguém assumiu' : esc(resp);
-  const origem = resp === SEM_RESP ? '' : ` · ${assumidas} assumida${s(assumidas)} · ${criadas} só criada${s(criadas)}`;
-  return `
-  <div class="k-label visor-resp" ${rv()}>${nome} · ${dele.length} issue${s(dele.length)}${origem}</div>
-  <div class="grid g12" style="margin-bottom:6px">
-    <div class="card lift sp3" ${rv()}><div class="stat"><div class="k">abertas</div><div class="v" style="color:var(--green)">${open.length}</div><div class="s">${open.filter(x => x.assignees.length && x.labels.includes('in-progress')).length} em andamento</div></div></div>
-    <div class="card lift sp3" ${rv()}><div class="stat"><div class="k">entregues</div><div class="v">${fechadas.length}</div><div class="s">${noMes} nos últimos 30 dias</div></div></div>
-    <div class="card lift sp3" ${rv()}><div class="stat"><div class="k">lead time médio</div><div class="v" style="font-size:30px; padding-top:6px">${lead ? spanH(lead) : '·'}</div><div class="s">da abertura ao fechamento</div></div></div>
-    <div class="card lift sp3" ${rv()}><div class="stat"><div class="k">prontas p/ agente</div><div class="v" style="color:var(--coral)">${open.filter(x => x.labels.includes('ready-for-agent')).length}</div><div class="s">fila ready-for-agent</div></div></div>
-  </div>`;
-}
-
 function renderIssues() {
   const iss = S.data.github.issues || [];
-  const open = iss.filter(i => i.state === 'OPEN');
-  const lead = leadAvg(iss);
-  const labels = [...new Set(iss.flatMap(i => i.labels))].sort();
-  const pessoas = [...new Set(iss.flatMap(responsaveis))].sort();
-  const f = S.fIssues;
-  let i = 0;
-  const rv = () => `class="rv" style="--i:${i++}"`;
-
   return `
   <div class="tab-issues">
-  ${cabecalho('acompanhar', 'Issues, tudo que aconteceu', 'gh · PRD → fatias → PR → deploy')}
-  <div class="grid g12" style="margin-bottom:6px">
-    <div class="card lift sp3" ${rv()}><div class="stat"><div class="k">issues</div><div class="v">${iss.length}</div><div class="s">desde ${fmtD(iss[iss.length - 1] && iss[iss.length - 1].created_at)}</div></div></div>
-    <div class="card lift sp3" ${rv()}><div class="stat"><div class="k">abertas</div><div class="v" style="color:var(--green)">${open.length}</div><div class="s">${iss.length - open.length} fechadas</div></div></div>
-    <div class="card lift sp3" ${rv()}><div class="stat"><div class="k">lead time médio</div><div class="v" style="font-size:30px; padding-top:6px">${lead ? spanH(lead) : '·'}</div><div class="s">da abertura ao fechamento</div></div></div>
-    <div class="card lift sp3" ${rv()}><div class="stat"><div class="k">prontas p/ agente</div><div class="v" style="color:var(--coral)">${open.filter(x => x.labels.includes('ready-for-agent')).length}</div><div class="s">fila ready-for-agent</div></div></div>
-  </div>
-  ${f.resp ? visorResponsavelHtml(iss, f.resp, rv) : ''}
-
-  <div class="controls rv" style="--i:${i++}">
-    <button class="fchip ${f.state === 'all' ? 'on' : ''}" data-act="fstate" data-v="all">todas</button>
-    <button class="fchip ${f.state === 'OPEN' ? 'on' : ''}" data-act="fstate" data-v="OPEN">abertas</button>
-    <button class="fchip ${f.state === 'CLOSED' ? 'on' : ''}" data-act="fstate" data-v="CLOSED">fechadas</button>
-    <select class="fsel" id="fresp">
-      <option value="">responsável: todos</option>
-      <option value="${SEM_RESP}" ${f.resp === SEM_RESP ? 'selected' : ''}>ninguém assumiu</option>
-      ${pessoas.map(p => `<option value="${esc(p)}" ${f.resp === p ? 'selected' : ''}>${esc(p)}</option>`).join('')}
-    </select>
-    <select class="fsel" id="flabel">
-      <option value="">label: todas</option>
-      ${labels.map(l => `<option value="${esc(l)}" ${f.label === l ? 'selected' : ''}>${esc(l)}</option>`).join('')}
-    </select>
-    <input class="search" id="fq" type="search" placeholder="buscar por título ou #número…" value="${esc(f.q)}">
-  </div>
+  ${cabecalho('acompanhar', 'Issues', 'gh · cada issue na sua fase, do pedido à produção')}
+  ${filtrosHtml(iss)}
+  ${funilHtml()}
   <div id="ilist">${issueListHtml()}</div>
   </div>`;
 }
 
 function wireIssues() {
-  const q = $('#fq'), sel = $('#flabel'), resp = $('#fresp');
-  if (q) q.addEventListener('input', () => { S.fIssues.q = q.value; refreshIssueList(); });
-  if (sel) sel.addEventListener('change', () => { S.fIssues.label = sel.value; refreshIssueList(); });
-  // o visor do responsável fica acima dos controles: trocar a pessoa redesenha a aba
-  if (resp) resp.addEventListener('change', () => { S.fIssues.resp = resp.value; render(); });
+  const q = $('#fq');
+  if (q) q.addEventListener('input', () => { S.fIssues.q = q.value; sincronizarHash(); refreshIssueList(); });
+}
+
+/* filtro que esconderia a issue pedida sai do caminho; fechada pede "todas" */
+function mostrarNaLista(i) {
+  if (matchIssue(i)) return;
+  S.fIssues = { ...filtrosVazios(), state: i.state === 'OPEN' ? 'OPEN' : 'all' };
+}
+
+/* card de fase clicado de novo desliga o filtro */
+function alternarFiltro(chave, v) {
+  S.fIssues[chave] = S.fIssues[chave] === v ? filtrosVazios()[chave] : v;
+  render();
+}
+
+/* abre/fecha o dropdown sem redesenhar a aba */
+function marcarMenu() {
+  view.querySelectorAll('.dd').forEach(d => {
+    const on = d.dataset.menu === S.menu;
+    d.classList.toggle('open', on);
+    const b = d.querySelector('.dd-btn');
+    if (b) b.setAttribute('aria-expanded', String(on));
+  });
+}
+
+function fecharMenu() {
+  if (S.menu === null) return;
+  S.menu = null;
+  marcarMenu();
 }
 
 function refreshIssueList() {
@@ -625,91 +764,300 @@ async function ensureComments(n) {
   if (S.tab === 'issues') refreshIssueList();
 }
 
-/* ---------- DEPLOYS ---------- */
+async function ensureTimeline(n) {
+  const t = timelineDe(n);
+  if (t && !t.error) return;  // erro não fica no cache: reabrir o card tenta de novo
+  S.timelines[n] = { loading: true };
+  try {
+    const r = await fetch(`/api/issue/${n}/timeline`);
+    const j = await r.json();
+    S.timelines[n] = { loading: false, list: j.timeline || [], error: j.error };
+  } catch (e) {
+    S.timelines[n] = { loading: false, list: [], error: String(e) };
+  }
+  if (S.tab === 'issues') refreshIssueList();
+}
+
+/* nó do desenho das ondas (#943): abre o card da fatia na lista, com as
+   fatias do PRD à mostra; filtro que esconderia a fatia sai do caminho */
+function abrirFatia(n, prd) {
+  const fatia = (S.data.github.issues || []).find(i => i.number === n);
+  if (fatia) mostrarNaLista(fatia);
+  S.expPrd.set(prd, true);
+  if (!S.expIss.has(n)) { S.expIss.add(n); ensureComments(n); ensureTimeline(n); }
+  render();
+  const card = view.querySelector(`.iss-head[data-n="${n}"]`);
+  if (card) card.scrollIntoView({ block: 'center', behavior: reduceMotion() ? 'auto' : 'smooth' });
+}
+
+/* ---------- PRS (quadro por fase, uma raia por pessoa: prs.js) ---------- */
+
+function renderPrs() {
+  return `
+  <div class="tab-prs">
+  ${cabecalho('acompanhar', 'PRs', 'gh · cada PR na sua fase, uma raia por pessoa')}
+  ${renderQuadroPrs({ data: S.data, filtros: S.fPrs, item: S.item, depVer, fmtD, fmtDT })}
+  </div>`;
+}
+
+/* o resumo ao lado do card: à direita, ou à esquerda quando não cabe;
+   embaixo do topo do card, subindo só o que passar da janela */
+function posicionarPrPop(pop, card, box) {
+  pop.hidden = false;
+  const r = card.getBoundingClientRect(), b = box.getBoundingClientRect();
+  const direita = r.right + 8 + pop.offsetWidth < window.innerWidth;
+  const x = direita ? r.right - b.left + 8 : r.left - b.left - pop.offsetWidth - 8;
+  const sobra = r.top + pop.offsetHeight + 8 - window.innerHeight;
+  pop.style.left = `${Math.round(Math.max(8, x))}px`;
+  pop.style.top = `${Math.round(r.top - b.top - Math.max(0, sobra))}px`;
+}
+
+/* hover em qualquer card de PR abre o resumo; o clicado (o do hash) fica
+   com o resumo fixo e os links, e volta a aparecer quando o mouse sai */
+function wirePrs() {
+  const box = view.querySelector('.tab-prs');
+  if (!box) return;
+  const fixo = box.querySelector('.pr-pop-fixo');
+  const cardDe = n => box.querySelector(`[data-act="pr"][data-n="${n}"]`);
+  if (fixo && cardDe(fixo.dataset.n)) posicionarPrPop(fixo, cardDe(fixo.dataset.n), box);
+  const pop = document.createElement('div');
+  pop.className = 'st-pop pr-pop';
+  pop.hidden = true;
+  box.appendChild(pop);
+  box.addEventListener('mouseover', e => {
+    const card = e.target.closest('[data-act="pr"]');
+    if (!card || (fixo && fixo.dataset.n === card.dataset.n)) return;
+    pop.innerHTML = popDoPr(card.dataset.n, S.data, { fmtDT, depVer });
+    if (!pop.innerHTML) return;
+    if (fixo) fixo.hidden = true;
+    posicionarPrPop(pop, card, box);
+  });
+  box.addEventListener('mouseout', e => {
+    const card = e.target.closest('[data-act="pr"]');
+    if (!card || card.contains(e.relatedTarget)) return;
+    pop.hidden = true;
+    if (fixo) fixo.hidden = false;
+  });
+}
+
+/* ---------- PRODUÇÃO: linha do tempo do repositório (merges + deploys) ---------- */
 
 /* history.json mistura "v0.45.4" e "0.43.1"; a aba exibe sempre com um v só */
 const depVer = v => v ? 'v' + String(v).replace(/^v/, '') : '';
 
-function deployCard(dp, idx) {
-  const open = S.expDep.has(idx);
-  const ok = dp.result === 'healthy';
-  const maxDur = Math.max(...S.data.history.map(x => x.duration_seconds || 0), 1);
-  const cl = S.data.changelog.find(c =>
-    (dp.app_version && c.version === dp.app_version) || (c.sha && dp.sha && c.sha === dp.sha));
+/* filtro da aba <-> rota: só a pessoa (quem mergeou, ou o responsável do deploy) */
+const filtrosProdVazios = () => ({ resp: '' });
+const filtrosProdDaRota = p => ({ resp: p.resp || '' });
+const filtrosProdNaRota = f => ({ resp: f.resp });
 
-  const chipsResumo = [
-    `<span class="badge ${ok ? 'b-green' : 'b-red'}">${esc(dp.result || '?')}</span>`,
-    ...(dp.migrations_applied || []).map(m => `<span class="badge b-amber">⛁ ${esc(m)}</span>`),
-    ...(dp.pr_numbers || []).map(n => `<a class="chip" href="${prUrl(n)}" target="_blank" rel="noopener">PR #${n}</a>`),
-    ...(dp.issue_numbers || []).map(n => `<a class="chip" href="${issUrl(n)}" target="_blank" rel="noopener">#${n}</a>`),
-    dp.rollback_target_sha ? `<span class="badge b-amber">rollback → ${esc(dp.rollback_target_sha)}</span>` : '',
-  ].filter(Boolean).join('');
-  const chipsTech = [
-    dp.sha ? `<a class="chip" href="${shaUrl(dp.sha)}" target="_blank" rel="noopener">${esc(dp.sha)}</a>` : '',
-    ...(dp.scope || []).map(s => `<span class="chip">${esc(s)}</span>`),
-  ].filter(Boolean).join('');
+const shaCurto = sha => String(sha || '·').slice(0, 7);
+/* o responsável do deploy vem do coletor como um login, uma lista deles ou nada */
+const pessoasDe = r => (r == null ? [] : [].concat(r));
+/* as pessoas de um evento: quem mergeou o PR, ou o responsável do deploy */
+const quemFez = ev => (ev.tipo === 'deploy' ? pessoasDe(ev.responsavel) : [ev.mergeado_por].filter(Boolean));
 
+/* o deploy do evento no history.json: o índice que o clique (data-act="dep") e
+   o hash (#producao/vX, pelo abrirItem) usam para abrir o card */
+const indiceNoHistory = ev => S.data.history.findIndex(d => d.sha === ev.sha && d.at === ev.at);
+
+const passaFiltroProd = ev => !S.fProd.resp || quemFez(ev).includes(S.fProd.resp);
+
+/* o dropdown de pessoa da aba Issues, reaproveitado; a faceta conta eventos */
+function filtrosProdHtml(eventos) {
+  const f = S.fProd;
+  const pessoas = [...new Set(eventos.flatMap(quemFez))].sort();
+  const conta = login => eventos.filter(ev => !login || quemFez(ev).includes(login)).length;
+  const op = (login, txt) => opcao('lfresp', login, f.resp === login,
+    `${login ? '<span class="pessoa-dot"></span>' : ''}<span class="dd-txt">${txt}</span><span class="dd-n">${conta(login)}</span>`,
+    `${login ? ` style="--pessoa:${corDaPessoa(login)}"` : ''}${conta(login) ? '' : ' data-zero="1"'}`);
   return `
-  <div class="pd-item rv ${ok ? '' : 'bad'}" style="--i:${Math.min(idx, 12)}">
-    <article class="card pd-card lift">
-      <div class="pd-head" data-act="dep" data-i="${idx}">
-        <span class="pd-ver ${dp.app_version ? '' : 'unversioned'}">${dp.app_version ? esc(depVer(dp.app_version)) : esc(dp.sha || '·')}</span>
-        <span class="pd-subject">${esc(dp.subject || dp.raw_subject || '')}</span>
-        <span class="pd-when">${esc(fmtDT(dp.at))}</span>
-      </div>
-      <div class="pd-chips">${chipsResumo}</div>
-      ${dp.duration_seconds ? `
-      <div class="pd-durbar">
-        <span class="rail"><span class="fill" style="width:${Math.round((dp.duration_seconds / maxDur) * 100)}%"></span></span>
-        <span class="t">${durS(dp.duration_seconds)}</span>
-      </div>` : ''}
-      ${open ? `
-      <div class="pd-body">
-        ${chipsTech ? `<div class="pd-chips" style="padding:0 0 12px">${chipsTech}</div>` : ''}
-        ${dp.notes ? `<p class="pd-notes">${esc(dp.notes)}</p>` : ''}
-        ${(dp.env_changes || []).length ? `<p class="pd-notes mono" style="font-size:12px">env: ${dp.env_changes.map(e => `${esc(e.service)} ${esc(e.action)} ${e.keys.map(esc).join(', ')}`).join(' · ')}</p>` : ''}
-        ${cl && cl.body_md ? `<div class="k-label" style="margin:14px 0 6px">changelog</div><div class="md">${md(cl.body_md)}</div>` : ''}
-      </div>` : ''}
-    </article>
+  <div class="filtros lt-filtros rv">
+    ${dropdown('lresp', 'responsável', f.resp ? esc(f.resp) : '', [op('', 'todos'), ...pessoas.map(p => op(p, esc(p)))])}
+    ${f.resp ? botaoLimpar('lflimpar') : ''}
   </div>`;
+}
+
+/* etapas da barra empilhada: chave -> nome na tela. A largura é log do tempo:
+   um build de 1 min ao lado de 3 dias de PR aberto continua visível */
+const ETAPAS = { aberto: 'aberto', fila: 'fila até produção', merge: 'merge', build: 'build', health: 'health', total: 'total' };
+const LARGURA_MIN_ROTULO = 14;  // % da barra a partir da qual o segmento mostra o rótulo
+
+function segmentosDe(ev) {
+  const e = ev.etapas || {};
+  const segs = [];
+  const add = (k, s, title = '') => { if (s != null && s > 0) segs.push({ k, s, title }); };
+  add('aberto', e.aberto_s);
+  add('fila', e.fila_s);
+  const medido = e.merge_s != null || e.build_s || e.health_s != null;
+  if (medido) {
+    add('merge', e.merge_s);
+    const builds = Object.entries(e.build_s || {}).filter(([, v]) => v != null);
+    add('build', Math.max(0, ...builds.map(([, v]) => v)), builds.map(([sid, v]) => `${sid} ${durS(v)}`).join(' · '));
+    add('health', e.health_s);
+  } else {
+    add('total', ev.duration_seconds);   // entrada antiga, sem etapas: só o total da subida
+  }
+  return segs;
+}
+
+function etapasHtml(ev) {
+  const segs = segmentosDe(ev);
+  if (!segs.length) return '';
+  const pesos = segs.map(x => Math.log10(1 + x.s));
+  const soma = pesos.reduce((a, b) => a + b, 0);
+  return `<div class="etapas" role="img" aria-label="etapas do deploy">${segs.map((x, j) => {
+    const pct = (pesos[j] / soma) * 100;
+    const rot = `${ETAPAS[x.k]} ${durS(x.s)}`;
+    const title = x.title ? `${rot} (${x.title})` : rot;
+    return `<span class="etapa etapa-${x.k}" style="flex-basis:${pct.toFixed(1)}%" title="${esc(title)}">${
+      pct >= LARGURA_MIN_ROTULO ? `<span class="etapa-rot">${esc(rot)}</span>` : ''}</span>`;
+  }).join('')}</div>`;
+}
+
+/* chip de PR com a bolinha de quem mergeou (como a aba PRs faz com a issue) */
+function chipPr(n, mergePorPr) {
+  const m = mergePorPr.get(n);
+  const cor = m && m.mergeado_por ? corDaPessoa(m.mergeado_por) : null;
+  return `<a class="chip chip-pr" href="${rotaDe('prs', n)}"${m ? ` title="${esc(m.titulo)}"` : ''}${
+    cor ? ` style="--pessoa:${cor}"` : ''}>${cor ? '<span class="pessoa-dot"></span>' : ''}PR #${n}</a>`;
+}
+
+const chipIssue = n => `<a class="chip" href="${rotaDe('issues', n)}">#${n}</a>`;
+
+/* o deploy aberto: commit, escopo, duração da subida, env e notas */
+function detalheDoDeploy(dp) {
+  const env = (dp.env_changes || []).map(e => `${esc(e.service)} ${esc(e.action)} ${(e.keys || []).map(esc).join(', ')}`);
+  return `
+  <div class="pd-dep">
+    <div class="pd-chips">
+      ${dp.sha ? `<span class="chip">${esc(shaCurto(dp.sha))}</span>` : ''}
+      ${(dp.scope || []).map(s => `<span class="chip">${esc(s)}</span>`).join('')}
+      <span class="chip" title="duração da subida">${durS(dp.duration_seconds)}</span>
+    </div>
+    ${env.length ? `<p class="pd-notes mono">env: ${env.join(' · ')}</p>` : ''}
+    ${dp.notes ? `<p class="pd-notes">${esc(dp.notes)}</p>` : ''}
+  </div>`;
+}
+
+/* card cheio do deploy: versão, subject, resultado, responsável, data, PRs e
+   issues que entraram, migrations e a barra das etapas; aberto, o detalhe */
+function deployCardHtml(ev, pos, mergePorPr, alvo) {
+  const i = indiceNoHistory(ev);
+  const dp = S.data.history[i] || {};
+  const ver = depVer(ev.app_version);
+  const ok = ev.result === 'healthy';
+  const open = S.expDep.has(i);
+  const chips = [
+    `<span class="badge ${ok ? 'b-green' : 'b-red'}">${esc(ev.result || '?')}</span>`,
+    ...pessoasDe(ev.responsavel).map(pessoaHtml),
+    ...(ev.prs || []).map(n => chipPr(n, mergePorPr)),
+    ...(ev.issues || []).map(chipIssue),
+    ...(ev.migrations_applied || []).map(m => `<span class="badge b-amber">⛁ ${esc(m)}</span>`),
+    ev.rollback_target_sha ? `<span class="badge b-amber">rollback para ${esc(shaCurto(ev.rollback_target_sha))}</span>` : '',
+  ].filter(Boolean).join('');
+  return `
+  <li class="lt-no lt-deploy rv ${ok ? '' : 'bad'}" style="--i:${Math.min(pos, 12)}">
+    <article class="card pd-card lift"${alvo ? ' aria-current="true"' : ''}>
+      <div class="pd-head" data-act="dep" data-i="${i}">
+        <span class="pd-ver ${ver ? '' : 'unversioned'}">${esc(ver || shaCurto(ev.sha))}</span>
+        <span class="pd-subject">${esc(ev.subject || '')}</span>
+        <span class="pd-when">${esc(fmtDT(ev.at))}</span>
+        ${ev.sha ? `<a class="pd-gh" href="${shaUrl(esc(ev.sha))}" target="_blank" rel="noopener" aria-label="abrir o commit ${esc(ev.sha)} no GitHub">↗</a>` : ''}
+      </div>
+      <div class="pd-chips">${chips}</div>
+      ${etapasHtml(ev)}
+      ${open ? `<div class="pd-body">${detalheDoDeploy(dp)}</div>` : ''}
+    </article>
+  </li>`;
+}
+
+/* merge que não entrou em deploy nenhum: nó pequeno, contorno tracejado na cor
+   de quem mergeou. Ferramenta (nada em hospital-reunioes/) nunca entra; PR do
+   app espera o próximo deploy */
+function mergeNoHtml(ev, pos, versaoDoDeploy) {
+  const etiqueta = ev.ferramenta ? 'só merge · ferramenta'
+    : ev.deploy_sha ? `no ar na ${versaoDoDeploy(ev.deploy_sha) || shaCurto(ev.deploy_sha)}` : 'mergeado · sem deploy';
+  return `
+  <li class="lt-no lt-merge rv" style="--i:${Math.min(pos, 12)};--pessoa:${corDaPessoa(ev.mergeado_por)}">
+    <div class="lt-merge-corpo">
+      <a class="chip chip-pr" href="${rotaDe('prs', ev.pr)}">PR #${ev.pr}</a>
+      <span class="lt-merge-tit">${esc(ev.titulo)}</span>
+      <span class="chip lt-etiqueta">${esc(etiqueta)}</span>
+      ${(ev.issues || []).map(chipIssue).join('')}
+      ${ev.mergeado_por ? pessoaHtml(ev.mergeado_por) : ''}
+      <span class="pd-when">${esc(fmtDT(ev.at))}</span>
+    </div>
+  </li>`;
+}
+
+/* a trilha: deploys como cards, merges sem deploy como nós; o merge que entrou
+   num deploy visível aparece dentro do card dele, como chip de PR */
+function trilhaHtml(eventos) {
+  const mergePorPr = new Map(eventos.filter(e => e.tipo === 'merge').map(e => [e.pr, e]));
+  const visiveis = eventos.filter(passaFiltroProd);
+  if (!visiveis.length) return '<div class="empty rv">nenhum merge nem deploy na janela com este filtro</div>';
+  const deploys = visiveis.filter(e => e.tipo === 'deploy');
+  const shas = new Set(deploys.map(d => d.sha));
+  const versaoDoDeploy = sha => depVer((eventos.find(d => d.tipo === 'deploy' && d.sha === sha) || {}).app_version);
+  const alvo = deploys.find(e => depVer(e.app_version) === S.item) || null;
+  const nos = visiveis.filter(e => e.tipo === 'deploy' || !shas.has(e.deploy_sha));
+  return `<ol class="lt">${nos.map((ev, pos) => (ev.tipo === 'deploy'
+    ? deployCardHtml(ev, pos, mergePorPr, ev === alvo)
+    : mergeNoHtml(ev, pos, versaoDoDeploy))).join('')}</ol>`;
+}
+
+const STATUS_CLS = { healthy: 'prod-ok', warning: 'prod-warn' };
+
+/* health do serviço pelo último check gravado no state.json. Serviço sem HTTP
+   próprio (health_path nulo) é verificado pelo backend: "via backend" quando o
+   corpo do health do backend disse ok, "sem verificação" quando não */
+function healthTxt(s) {
+  const h = s.last_health_check || {};
+  const http = h.http_status ? `HTTP ${h.http_status}`
+    : s.health_path == null ? (h.body_ok ? 'via backend' : 'sem verificação') : 'sem HTTP';
+  return [http, h.latency_ms != null ? `${h.latency_ms} ms` : '', h.at ? fmtDT(h.at) : ''].filter(Boolean).join(' · ');
 }
 
 function renderDeploys() {
   const dep = S.data.history;
-  const healthy = dep.filter(x => x.result === 'healthy');
   const durs = dep.map(x => x.duration_seconds).filter(x => x != null);
-  const avg = durs.length ? durs.reduce((a, b) => a + b, 0) / durs.length : null;
-  const first = dep[dep.length - 1], last = dep[0];
-  const pct = dep.length ? Math.round(healthy.length / dep.length * 100) : 0;
-  const pctCls = pct === 100 ? 'prod-ok' : pct >= 80 ? 'prod-warn' : 'prod-bad';
-  const ultima = last && last.app_version ? depVer(last.app_version) : '·';
+  const st = S.data.state || {};
+  // faixa do topo: a versão no ar e cada serviço com o health, do state.json
   const cells = [
-    { k: 'deploys', v: String(dep.length), s: `${fmtD(first && first.at)} → ${fmtD(last && last.at)}` },
-    { k: 'saudáveis', v: `${pct}<small>%</small>`, s: `${dep.length - healthy.length} com problema`, cls: pctCls },
-    { k: 'build médio', v: avg ? durS(avg) : '·', s: 'duração por deploy' },
-    { k: 'última versão', v: esc(ultima), s: 'no ar em produção' },
+    { k: 'no ar', v: depVer(st.last_app_version) || '·', s: `atualizado ${fmtDT(st.updated_at)}` },
+    ...(st.services || []).map(s => ({
+      k: s.id, v: s.status || '?', s: healthTxt(s), cls: STATUS_CLS[s.status] || 'prod-bad',
+    })),
   ];
+  const eventos = S.data.linha_do_tempo || [];
 
   return `
+  <div class="tab-producao">
   <section class="prod-band rv" style="--i:0">
     <div class="prod-band-head">
-      <span class="eyebrow">produção · linha do tempo de deploys</span>
-      <span class="prod-band-src">history.json + CHANGELOG.md</span>
+      <span class="eyebrow">produção · versão no ar e serviços</span>
+      <span class="prod-band-src">history.json + state.json</span>
     </div>
     <div class="prod-stats">
       ${cells.map((c, i) => `
       <div class="prod-cell rv ${c.cls || ''}" style="--i:${i + 1}">
-        <div class="prod-v">${c.v}</div>
+        <div class="prod-v">${esc(c.v)}</div>
         <div class="prod-k">${esc(c.k)}</div>
         <div class="prod-s">${esc(c.s)}</div>
       </div>`).join('')}
     </div>
   </section>
   <div class="card prod-spark rv" style="--i:5">
-    <div class="k-label">duração dos builds (antigo → recente)</div>
+    <div class="k-label">duração dos builds (antigo ao recente)</div>
     ${spark([...durs].reverse())}
   </div>
-  <div class="pd-timeline">${dep.map((d, idx) => deployCard(d, idx)).join('')}</div>`;
+  <div class="lt-cab rv">
+    <span class="k-label">linha do tempo do repositório</span>
+    <span class="lt-fonte">merges do GitHub (gh) e deploys do history.json, costurados pelo número do PR · últimos 60 dias ou 40 deploys</span>
+  </div>
+  ${filtrosProdHtml(eventos)}
+  ${trilhaHtml(eventos)}
+  </div>`;
 }
 
 /* ---------- MAPA ---------- */
@@ -762,7 +1110,7 @@ function renderMapa() {
     : capa != null ? capa + fonte
       : `<div class="card md rv" style="--i:4" id="snapdoc">${md(cur.body_md)}</div>`;
   return `
-  ${sec('04', 'Mapa da app', 'docs/spec/snapshots · regenerado a cada deploy')}
+  ${cabecalho('mapear', 'Mapa da app', 'docs/spec/snapshots · regenerado a cada deploy')}
   ${erCapaHtml()}
   <div class="docpills rv" style="--i:2">
     ${snaps.map(s => `<button class="fchip ${s.name === S.mapaDoc ? 'on' : ''}" data-act="doc" data-doc="${esc(s.name)}">${esc(s.name)}</button>`).join('')}
@@ -792,265 +1140,341 @@ function desenharDiagramas(root) {
   });
 }
 
-/* ---------- PENDÊNCIAS (fila humana: issues ready-for-human) ---------- */
+/* ---------- DOCUMENTAÇÃO (fluxo · mapa · decisões · glossário) ---------- */
 
-function pendenciasHumanas() {
-  const issues = (S.data && S.data.github && S.data.github.issues) || [];
-  return issues
-    .filter(i => i.state === 'OPEN' && i.labels.includes('ready-for-human'))
-    .sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
+const ROTULO_SUB = { fluxo: 'Fluxo', mapa: 'Mapa', decisoes: 'Decisões', glossario: 'Glossário' };
+
+/* a sub-pill é o item da rota (#documentacao/decisoes); o Glossário leva o
+   termo depois dela (#documentacao/glossario/ata); sem item, abre no Fluxo */
+function subDoc() {
+  const sub = String(S.item || '').split('/')[0];
+  return SUBS_DOC.includes(sub) ? sub : 'fluxo';
 }
 
-function pendPrdChip(p, byN) {
-  const prd = p.parent && byN[p.parent];
-  // só rotula PRD quando o pai É um PRD: parent falso (regex frouxa do corpo)
-  // não ganha rastro mentiroso.
-  if (!prd || !prd.is_prd) return '<span class="badge b-ghost">sem PRD</span>';
-  return `<a class="pend-prd" href="${esc(prd.url)}" target="_blank" rel="noopener">
-    <span class="prd-tag">PRD</span> #${prd.number} · ${esc(prd.title)} ↗</a>`;
-}
-
-function pendCard(p, j, byN) {
-  const outras = p.labels.filter(l => l !== 'ready-for-human');
-  const prs = (p.prs || []).map(pr =>
-    `<a class="badge b-ghost" href="${esc(pr.url)}" target="_blank" rel="noopener">PR #${pr.number}</a>`).join('');
+function renderDocumentacao() {
+  const sub = subDoc();
+  const corpo = { fluxo: renderFluxo, mapa: renderMapa, decisoes: renderDecisoes, glossario: renderGlossario }[sub]();
   return `
-  <article class="pend-card rv" style="--i:${j}">
-    <div class="fhead">
-      <a class="fnum" href="${esc(p.url)}" target="_blank" rel="noopener">#${p.number}</a>
-      <a class="ftitle" href="${esc(p.url)}" target="_blank" rel="noopener">${esc(p.title)}</a>
-    </div>
-    <div class="fmeta">
-      ${labelBadge('ready-for-human')}
-      ${outras.map(labelBadge).join('')}
-      ${prs}
-      <span class="pend-ago">aberta ${ago(p.created_at)}</span>
-      ${p.criteria.total ? `<span class="capsule">${p.criteria.done}/${p.criteria.total} passos</span>` : ''}
-    </div>
-    <div class="pend-rastro">${pendPrdChip(p, byN)}</div>
-    ${p.body ? `<div class="md pend-body">${md(p.body)}</div>` : ''}
-  </article>`;
-}
-
-function renderPendencias() {
-  const cab = cabecalho('agir', 'Pendências humanas', 'o que só você pode fazer, com o rastro do PRD');
-  // Avisos do último deploy vêm do state.json (local, via git): renderizam
-  // mesmo com o gh fora do ar.
-  const avisos = (((S.data.state || {}).next_actions) || []).filter(a => a.kind && a.kind !== 'ok');
-  const painelAvisos = avisos.length ? `
-    <div class="pend-avisos rv">
-      <span class="k-label">avisos do último deploy · docs/spec/deploy/state.json</span>
-      ${avisos.map(a => `<div class="banner plano-aviso">${a.kind === 'warn' ? '⚠' : 'ℹ'}
-        <b>${esc(a.title || '')}</b> ${esc(a.text || '')}</div>`).join('')}
-    </div>` : '';
-  if (S.data.github.error) {
-    return `<div class="tab-pend">${cab}
-      <div class="empty">As pendências são as issues abertas com o label <span class="mono">ready-for-human</span>,
-      lidas pelo <span class="mono">gh</span>, que está indisponível agora, veja o aviso no topo.</div>
-      ${painelAvisos}</div>`;
-  }
-  const pend = pendenciasHumanas();
-  const byN = {};
-  (S.data.github.issues || []).forEach(i => { byN[i.number] = i; });
-  const lista = pend.length
-    ? `<div class="pend-lista">${pend.map((p, j) => pendCard(p, j, byN)).join('')}</div>`
-    : `<div class="empty">Nenhuma pendência humana aberta 🎉 &nbsp;·&nbsp; quando um ciclo de trabalho terminar
-       deixando uma ação que só você pode fazer, ela vira uma issue com o label
-       <span class="mono">ready-for-human</span> ligada ao PRD, e aparece aqui.</div>`;
-  return `<div class="tab-pend">${cab}${lista}${painelAvisos}</div>`;
-}
-
-/* ---------- DOMÍNIO ---------- */
-
-function renderDominio() {
-  const adrs = S.data.adrs;
-  return `
-  ${cabecalho('decidir', 'Decisões de arquitetura', 'docs/adr · curado por humano')}
-  <div class="grid g12">
-    ${adrs.map((a, i) => `
-      <article class="card tst adr lift sp6 rv" style="--i:${i}" data-act="adr" data-i="${i}">
-        <span class="tst-quote" aria-hidden="true">&ldquo;</span>
-        <h3 class="tst-corpo">${esc(a.title)}</h3>
-        ${S.expAdr.has(i) ? `<div class="adr-body md">${md(a.body_md)}</div>` : ''}
-        <div class="tst-foot">
-          <span class="tst-ref">ADR ${String(a.number ?? '').padStart(2, '0')} · ${esc(a.file)}</span>
-          ${adrStatusBadge(a.status)}${adrPointerBadge(a)}
-        </div>
-      </article>`).join('')}
+  <div class="docpills doc-subs rv" style="--i:0">
+    ${SUBS_DOC.map(k => `<button class="fchip ${k === sub ? 'on' : ''}" data-act="docsub" data-sub="${k}">${ROTULO_SUB[k]}</button>`).join('')}
   </div>
-  ${cabecalho('entender', 'Glossário do domínio', 'o que as palavras significam aqui')}
-  <div class="card tst rv">
+  ${corpo}`;
+}
+
+/* ----- Fluxo: static/fluxo.json desenhado pelo renderer próprio ----- */
+
+function ensureFluxo() {
+  if (S.fluxo || S.fluxoPedido) return;
+  S.fluxoPedido = true;
+  fetch('/fluxo.json').then(r => r.json()).then(j => {
+    S.fluxo = j;
+    if (S.tab === 'documentacao' && subDoc() === 'fluxo') render();
+  }).catch(e => {
+    S.fluxoErro = String(e.message || e);
+    S.fluxoPedido = false;
+    if (S.tab === 'documentacao' && subDoc() === 'fluxo') render();
+  });
+}
+
+const CLASSE_FLUXO = {
+  auto: ['b-indigo', 'automático'], humano: ['b-amber', 'parada humana'],
+  decisao: ['b-ghost', 'decisão'], fim: ['b-green', 'produção'],
+};
+
+/* como funciona (campo detalhe) e por que existe (campo porque) de um passo,
+   com os termos do glossário sublinhados; serve ao popover e ao painel */
+function explicacaoFluxoHtml(n) {
+  const termos = termosGlossario(S.data && S.data.context_md);
+  return `<span class="fx-k">como funciona</span><p>${marcarTermos(n.detalhe, termos)}</p>
+    ${n.porque ? `<span class="fx-k">por que existe</span><p>${marcarTermos(n.porque, termos)}</p>` : ''}`;
+}
+
+/* o painel do passo aberto: a regra (campo detalhe do fluxo.json), o porquê e,
+   em nó de skill, o link secundário para o SKILL.md no GitHub */
+function painelFluxoHtml() {
+  const n = S.fluxo && S.fluxoNo && (S.fluxo.nos || []).find(x => x.id === S.fluxoNo);
+  if (!n) return '<div class="empty">clique num passo do fluxo para ler a regra dele; os passos de skill levam ao SKILL.md</div>';
+  const [cls, rotulo] = CLASSE_FLUXO[n.classe] || CLASSE_FLUXO.auto;
+  const subs = Array.isArray(n.sub) ? n.sub : n.sub ? [n.sub] : [];
+  return `<div class="card fx-painel">
+    <div class="fx-painel-head"><span class="badge ${cls}">${esc(rotulo)}</span><span class="k-label">${esc(subs.join(' · '))}</span></div>
+    <h3>${esc(n.titulo)}</h3>
+    ${explicacaoFluxoHtml(n)}
+    ${n.skill ? `<a class="btn-pill outline" href="${esc(S.data.repo_url)}/blob/main/.claude/skills/${esc(n.skill)}/SKILL.md" target="_blank" rel="noopener">.claude/skills/${esc(n.skill)}/SKILL.md <span class="btn-arrow">↗</span></a>` : ''}
+  </div>`;
+}
+
+/* hover ou foco num passo abre o popover (o mesmo .st-pop dos fluxogramas
+   das Áreas); ele aceita o mouse, para o termo sublinhado mostrar a definição */
+function wireFluxoPop() {
+  const box = view.querySelector('.fx-capa');
+  if (!box || !S.fluxo) return;
+  const pop = document.createElement('div');
+  pop.className = 'st-pop fx-pop';
+  pop.hidden = true;
+  box.appendChild(pop);
+  let timer = null;
+  const esconder = () => { timer = setTimeout(() => { pop.hidden = true; }, 150); };
+  const ficar = () => clearTimeout(timer);
+  pop.addEventListener('mouseenter', ficar);
+  pop.addEventListener('mouseleave', esconder);
+  box.querySelectorAll('.fx-no').forEach(g => {
+    const n = (S.fluxo.nos || []).find(x => x.id === g.dataset.id);
+    if (!n) return;
+    const mostrar = () => {
+      ficar();
+      pop.innerHTML = `<b>${esc(n.titulo)}</b>${explicacaoFluxoHtml(n)}`;
+      posicionarPop(pop, g, box);
+    };
+    g.addEventListener('mouseenter', mostrar);
+    g.addEventListener('mouseleave', esconder);
+    g.addEventListener('focus', mostrar);
+    g.addEventListener('blur', esconder);
+  });
+}
+
+function marcarNoFluxo() {
+  view.querySelectorAll('.fx-no').forEach(g => g.classList.toggle('on', g.dataset.id === S.fluxoNo));
+  const painel = $('#fluxo-painel');
+  if (painel) painel.innerHTML = painelFluxoHtml();
+}
+
+function renderFluxo() {
+  const cab = cabecalho('trabalhar', 'Do pedido à produção', 'ADR 0068 · static/fluxo.json, mantido junto com o /ask-pedro');
+  if (!S.fluxo) {
+    ensureFluxo();
+    return `${cab}<div class="empty">${S.fluxoErro ? `fluxo.json indisponível: ${esc(S.fluxoErro)}` : 'carregando o fluxo…'}</div>`;
+  }
+  const svg = renderDiagrama(S.fluxo) || '<div class="empty">fluxo.json fora do formato que o renderer entende</div>';
+  const legenda = (S.fluxo.legenda || []).map(l =>
+    `<span><span class="sw sw-${esc(l.classe)}"></span>${esc(l.texto)}</span>`).join('');
+  const portas = (S.fluxo.portas || []).map(pt =>
+    `<tr><td><b>${esc(pt.porta)}</b></td><td>${esc(pt.quando)}</td><td class="mono">${esc(pt.caminho)}</td></tr>`).join('');
+  return `${cab}
+  <div class="card fx-capa rv" style="--i:1">
+    <div class="fx-hint glass-cap">passe o mouse num passo para ver como funciona e por que existe · clique para fixar embaixo · âmbar é onde alguém precisa agir</div>
+    ${svg}
+  </div>
+  <div id="fluxo-painel" class="rv" style="--i:2">${painelFluxoHtml()}</div>
+  <div class="fx-legenda rv" style="--i:3">${legenda}</div>
+  ${portas ? `<div class="card md rv" style="--i:4">
+    <span class="k-label">as três portas</span>
+    <table class="fx-portas"><thead><tr><th>Porta</th><th>Quando</th><th>Caminho</th></tr></thead><tbody>${portas}</tbody></table>
+  </div>` : ''}`;
+}
+
+/* ----- Decisões: mapa de miniaturas por tema do docs/adr/README.md (issue #1082) ----- */
+
+const PONTO_STATUS = { accepted: 'ok', superseded: 'hist', deprecated: 'hist', proposed: 'novo' };
+const num4 = n => String(n ?? '').padStart(4, '0');
+const adrDe = n => (S.data.adrs || []).find(a => a.number === n);
+
+/* a ADR aberta no painel vem da rota (#documentacao/decisoes/68) */
+function adrAberta() {
+  const m = /^decisoes\/(\d+)$/.exec(S.item || '');
+  return m ? Number(m[1]) : null;
+}
+
+/* vínculo com outro tema: "→ 0054 (Tecnologia)" na ponta de saída, "←" na de chegada */
+const chipOutroTema = c =>
+  `<span class="adr-fora" data-act="adr" data-n="${c.n}">${c.sai ? '→' : '←'} ${num4(c.n)} (${esc(c.tema)})</span>`;
+
+function adrMini(a, chips = []) {
+  const aberta = adrAberta() === a.number;
+  return `<div class="adr-mini${a.status === 'accepted' ? '' : ' adr-hist'}${aberta ? ' on' : ''}" role="button" tabindex="0" data-act="adr" data-n="${a.number}"${aberta ? ' aria-current="true"' : ''}>
+      <span class="adr-mini-head"><span class="adr-mini-n">${num4(a.number)}</span><span class="adr-ponto p-${PONTO_STATUS[a.status] || 'erro'}" title="${esc(a.status)}"></span></span>
+      <span class="adr-mini-t">${esc(a.title)}</span>
+      ${chips.length ? `<span class="adr-mini-chips">${chips.slice(0, 2).map(chipOutroTema).join('')}${chips.length > 2 ? `<span class="adr-fora">+${chips.length - 2}</span>` : ''}</span>` : ''}
+    </div>`;
+}
+
+function listaAdrsHtml() {
+  const grupos = mapaDecisoes(S.data.adrs || [], S.data.adr_temas, S.data.adr_arestas, { hist: S.adrHist, q: S.adrQ });
+  if (!grupos.length) return '<div class="empty">nenhuma decisão bate com a busca</div>';
+  return grupos.map((g, k) => `
+    <details class="adr-tema" data-tema="${esc(g.tema)}"${S.adrFechados.has(g.tema) ? '' : ' open'}>
+      <summary><span class="k-label">${esc(g.tema)}</span><span class="adr-conta">${g.nos.length}</span></summary>
+      <div class="adr-mapa" data-i="${k}" data-setas="${esc(g.setas.map(x => `${x.de}>${x.para}:${x.tipo}`).join(','))}">
+        <svg class="adr-setas" aria-hidden="true"></svg>
+        <div class="adr-grade">${g.nos.map(a => adrMini(a, g.chips[a.number])).join('')}</div>
+      </div>
+    </details>`).join('');
+}
+
+/* o popover do hover: a frase da decisão, os vínculos e o arquivo */
+function adrPopHtml(a) {
+  const vinc = vinculosDe(a).map(([rot, ns]) => `<span class="fx-k">${rot}</span><p>${ns.map(num4).join(', ')}</p>`).join('');
+  return `<b>${num4(a.number)} · ${esc(a.title)}</b>
+    ${a.decisao ? `<p>${esc(a.decisao.replace(/\*\*|`/g, ''))}</p>` : ''}${vinc}
+    <span class="adr-pop-arq">${esc(a.file)}</span>`;
+}
+
+/* o painel lateral da ADR aberta: corpo inteiro e as relacionadas clicáveis */
+function painelAdrHtml(a) {
+  const rel = vinculosDe(a).map(([rot, ns]) => `<div class="adr-rel"><span class="fx-k">${rot}</span>
+      ${ns.map(n => `<button class="chip" data-act="adr" data-n="${n}">${num4(n)}${adrDe(n) ? ` ${esc(adrDe(n).title)}` : ''}</button>`).join('')}
+    </div>`).join('');
+  return `<div class="adr-painel-head">
+      <span class="tst-ref">ADR ${num4(a.number)} · ${esc(a.file)}</span>${adrStatusBadge(a.status)}
+      <button class="adr-fechar" data-act="adrfechar" aria-label="Fechar a ADR">×</button>
+    </div>
+    <h3>${esc(a.title)}</h3>
+    ${rel}
+    <div class="md adr-body">${md(a.body_md)}</div>`;
+}
+
+function renderDecisoes() {
+  const hist = (S.data.adrs || []).filter(a => a.status !== 'accepted').length;
+  return `
+  ${cabecalho('decidir', 'Decisões de arquitetura', 'docs/adr · curado por humano · passe o mouse para o resumo, clique para ler')}
+  <div class="adr-tools rv">
+    <input class="search" id="adrq" type="search" placeholder="buscar no título e no corpo" value="${esc(S.adrQ)}" autocomplete="off">
+    <button class="fchip ${S.adrHist ? 'on' : ''}" data-act="adrhist" aria-pressed="${S.adrHist}">ver histórico (${hist})</button>
+    <span class="adr-legenda"><span class="adr-seta-ex"></span>emenda <span class="adr-seta-ex adr-seta-ex-sub"></span>substituída, aponta a sucessora</span>
+  </div>
+  <div id="adrlist">${listaAdrsHtml()}</div>
+  <aside id="adr-painel" class="card adr-painel" aria-label="ADR aberta" hidden></aside>`;
+}
+
+/* a miniatura da rota acesa e o painel com a ADR dela (sem redesenhar o mapa) */
+function marcarAdr() {
+  const n = adrAberta();
+  view.querySelectorAll('.adr-mini').forEach(el => {
+    const on = Number(el.dataset.n) === n;
+    el.classList.toggle('on', on);
+    if (on) el.setAttribute('aria-current', 'true'); else el.removeAttribute('aria-current');
+  });
+  const painel = $('#adr-painel');
+  if (!painel) return;
+  const a = n != null && adrDe(n);
+  painel.innerHTML = a ? painelAdrHtml(a) : '';
+  painel.hidden = !a;
+}
+
+/* o popover abre embaixo da miniatura e só sobe quando não cabe na janela
+   (o posicionarPop mede a caixa, e o tema é baixo demais para ele) */
+function posicionarAdrPop(pop, mini, box) {
+  pop.hidden = false;
+  const r = mini.getBoundingClientRect(), b = box.getBoundingClientRect();
+  const x = Math.max(8, Math.min(r.left - b.left + r.width / 2 - pop.offsetWidth / 2, b.width - pop.offsetWidth - 8));
+  const cabe = r.bottom + 8 + pop.offsetHeight < window.innerHeight;
+  pop.style.left = `${Math.round(x)}px`;
+  pop.style.top = `${Math.round(cabe ? r.bottom - b.top + 8 : r.top - b.top - pop.offsetHeight - 8)}px`;
+}
+
+/* hover ou foco na miniatura: popover com o resumo; ela, as setas dela e as
+   ligadas acendem, o resto apaga (o padrão do mapa ER) */
+function wireMapaAdr(el) {
+  desenharSetas(el);
+  el.querySelectorAll('details.adr-tema').forEach(d => d.addEventListener('toggle', () => {
+    if (d.open) { S.adrFechados.delete(d.dataset.tema); desenharSetas(d); } else S.adrFechados.add(d.dataset.tema);
+  }));
+  el.querySelectorAll('.adr-mapa').forEach(box => {
+    const pop = document.createElement('div');
+    pop.className = 'st-pop adr-pop';
+    pop.hidden = true;
+    box.appendChild(pop);
+    const apagar = () => {
+      box.classList.remove('adr-foco');
+      box.querySelectorAll('.adr-seta.on, .adr-mini.acesa').forEach(x => x.classList.remove('on', 'acesa'));
+      pop.hidden = true;
+    };
+    box.querySelectorAll('.adr-mini').forEach(mini => {
+      const a = adrDe(Number(mini.dataset.n));
+      if (!a) return;
+      const acender = () => {
+        const n = mini.dataset.n;
+        const ligadas = new Set([n]);
+        box.querySelectorAll('.adr-seta').forEach(p => {
+          const on = p.dataset.de === n || p.dataset.para === n;
+          p.classList.toggle('on', on);
+          if (on) { ligadas.add(p.dataset.de); ligadas.add(p.dataset.para); }
+        });
+        box.querySelectorAll('.adr-mini').forEach(m => m.classList.toggle('acesa', ligadas.has(m.dataset.n)));
+        box.classList.add('adr-foco');
+        pop.innerHTML = adrPopHtml(a);
+        posicionarAdrPop(pop, mini, box);
+      };
+      mini.addEventListener('mouseenter', acender);
+      mini.addEventListener('mouseleave', apagar);
+      mini.addEventListener('focus', acender);
+      mini.addEventListener('blur', apagar);
+      mini.addEventListener('keydown', e => {
+        if (e.key !== 'Enter' && e.key !== ' ') return;
+        e.preventDefault();
+        mini.click();
+      });
+    });
+  });
+}
+
+/* a busca redesenha só a lista: o campo mantém o foco e o texto */
+function wireDecisoes() {
+  const q = $('#adrq');
+  const el = $('#adrlist');
+  if (q && el) q.addEventListener('input', () => {
+    S.adrQ = q.value;
+    el.innerHTML = listaAdrsHtml();
+    wireMapaAdr(el);
+    marcarAdr();
+  });
+  if (el) wireMapaAdr(el);
+  marcarAdr();
+}
+
+/* a grade reflui com a largura: as setas se medem de novo */
+let _setasRaf = 0;
+window.addEventListener('resize', () => {
+  cancelAnimationFrame(_setasRaf);
+  _setasRaf = requestAnimationFrame(() => {
+    if (S.tab === 'documentacao' && subDoc() === 'decisoes') desenharSetas(view);
+  });
+});
+
+/* ----- Glossário: CONTEXT.md com um índice de termos e âncora por termo ----- */
+
+const slugDe = s => String(s).normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase()
+  .replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+
+/* os termos do CONTEXT.md: cada `**Termo**:` no começo de linha, agrupado
+   pela seção `## X` em que está */
+function termosDoGlossario(mdTexto) {
+  const secoes = [];
+  let atual = null;
+  String(mdTexto || '').split('\n').forEach(linha => {
+    const h = /^## (.+?)\s*$/.exec(linha);
+    if (h) { atual = { titulo: h[1], termos: [] }; secoes.push(atual); return; }
+    const t = /^\*\*(.+?)\*\*/.exec(linha);
+    if (t && atual) atual.termos.push({ nome: t[1], slug: slugDe(t[1]) });
+  });
+  return secoes.filter(s => s.termos.length);
+}
+
+function renderGlossario() {
+  const src = S.data.context_md || '';
+  const secoes = termosDoGlossario(src);
+  const alvo = String(S.item || '').startsWith('glossario/') ? S.item.slice('glossario/'.length) : '';
+  let html = md(src || '_CONTEXT.md não encontrado_');
+  secoes.forEach(sec => sec.termos.forEach(t => {
+    const abre = `<p><strong>${esc(t.nome)}</strong>`;
+    const atual = t.slug === alvo;
+    html = html.replace(abre, `<p id="g-${t.slug}" class="g-termo${atual ? ' g-alvo' : ''}"${atual ? ' aria-current="true"' : ''}><strong>${esc(t.nome)}</strong>`);
+  }));
+  const indice = secoes.map(sec => `
+    <div class="g-secao"><span class="k-label">${esc(sec.titulo)}</span>
+      <div class="g-chips">${sec.termos.map(t => `<a class="chip" href="${rotaDe('documentacao', `glossario/${t.slug}`)}">${esc(t.nome)}</a>`).join('')}</div>
+    </div>`).join('');
+  return `
+  ${cabecalho('entender', 'Glossário do domínio', 'CONTEXT.md · o que as palavras significam aqui')}
+  ${indice ? `<div class="card g-indice rv" style="--i:1">${indice}</div>` : ''}
+  <div class="card tst rv" style="--i:2">
     <span class="tst-quote" aria-hidden="true">&ldquo;</span>
-    <div class="md">${md(S.data.context_md || '_CONTEXT.md não encontrado_')}</div>
+    <div class="md">${html}</div>
     <div class="tst-foot"><span class="tst-ref">CONTEXT.md · curado por humano</span></div>
   </div>`;
 }
 
-/* ---------- GUIA (fluxograma do pipeline) ---------- */
-
-const FLX_ICONS = {
-  bulb: '<path d="M9 18h6M10 21h4"/><path d="M12 2a7 7 0 0 0-4 12c1 1 1 2 1 3h6c0-1 0-2 1-3a7 7 0 0 0-4-12z"/>',
-  list: '<path d="M8 6h12M8 12h12M8 18h12"/><circle cx="3.6" cy="6" r="1"/><circle cx="3.6" cy="12" r="1"/><circle cx="3.6" cy="18" r="1"/>',
-  target: '<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="4.5"/><circle cx="12" cy="12" r="1"/>',
-  file: '<path d="M7 2h8l4 4v16H7z"/><path d="M15 2v4h4"/><path d="M10 12h6M10 16h6"/>',
-  branch: '<circle cx="6" cy="5" r="2"/><circle cx="6" cy="19" r="2"/><circle cx="18" cy="9" r="2"/><path d="M6 7v10M6 13h6a4 4 0 0 0 4-4"/>',
-  claim: '<path d="M6 3h12v19l-6-4-6 4z"/>',
-  flask: '<path d="M9 2h6M10 2v6l-5 10a2 2 0 0 0 2 4h10a2 2 0 0 0 2-4l-5-10V2"/><path d="M7.5 15h9"/>',
-  rocket: '<path d="M12 2c3 2.5 4.5 6.5 4.5 10L14 15h-4l-2.5-3c0-3.5 1.5-7.5 4.5-10z"/><path d="M9.5 15L7 19M14.5 15L17 19"/><circle cx="12" cy="9" r="1.4"/>',
-  search: '<circle cx="11" cy="11" r="7"/><path d="M21 21l-4.5-4.5"/>',
-  shield: '<path d="M12 2l8 3v6c0 5-3.5 8.5-8 10.5C7.5 19.5 4 16 4 11V5z"/><path d="M9 11.5l2 2 4-4"/>',
-  check: '<path d="M4 12.5l5 5L20 6.5"/>',
-  usercheck: '<circle cx="9" cy="7" r="4"/><path d="M2 21c0-4 3.5-6 7-6c1.4 0 2.7.3 3.8.9"/><path d="M15.5 12l2 2 4-4"/>',
-  cloud: '<path d="M7 18a4 4 0 0 1-.5-8 6 6 0 0 1 11.5 1.5A3.5 3.5 0 0 1 18 18"/><path d="M12 21v-8M9 15l3-3 3 3"/>',
-  live: '<circle cx="12" cy="12" r="2.4"/><path d="M7.5 7.5a6 6 0 0 0 0 9M16.5 7.5a6 6 0 0 1 0 9"/>',
-  rewind: '<path d="M11 6L5 12l6 6M19 6l-6 6 6 6"/>',
-  camera: '<path d="M4 8h3l1.5-2.5h7L17 8h3v12H4z"/><circle cx="12" cy="13" r="3.4"/>',
-};
-const flxIcon = n => (n && FLX_ICONS[n])
-  ? `<svg class="flx-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${FLX_ICONS[n]}</svg>`
-  : '';
-
-/* respaldo de cada skill: resumo curto + de onde vem (SKILL.md real ou skill nativa) */
-function flxPop(o) {
-  const title = o.cmd || o.t;
-  const src = o.src
-    ? `<div class="flx-pop-src">fonte <code>${o.src}</code></div>`
-    : `<div class="flx-pop-src flx-pop-rule">${o.rule || 'regra do fluxo'}</div>`;
-  return `<div class="flx-pop ${o.up ? 'flx-pop-up' : ''}" role="tooltip">
-    <div class="flx-pop-h">${flxIcon(o.icon)}<span>${title}</span></div>
-    <p>${o.tip}</p>${src}</div>`;
-}
-function flxNode(o) {
-  const head = o.cmd
-    ? `<span class="cmdpill ${o.hot ? 'cmdpill-hot' : ''}">${o.cmd}</span>`
-    : `<span class="flx-et">${o.t}</span>`;
-  const sub = o.sub ? `<div class="flx-nd">${o.sub}</div>` : '';
-  const inter = o.tip ? 'tabindex="0" data-tip' : '';
-  return `<div class="flx-node ${o.cls || ''}" ${inter} style="--d:${o.d || 0}">
-    ${flxIcon(o.icon)}<div class="flx-nbody">${head}${sub}</div>${o.tip ? flxPop(o) : ''}</div>`;
-}
-
-function fluxoHtml() {
-  let d = 0;
-  const conn = (cls = '', label = '') =>
-    `<div class="flx-conn ${cls}" style="--d:${d++}"><i></i><b></b>${label ? `<em>${label}</em>` : ''}</div>`;
-  const phase = (n, txt) =>
-    `<div class="flx-phase" style="--d:${d++}"><span class="flx-phase-n">${n}</span>${txt}</div>`;
-  return `
-  <div class="flx">
-    ${phase('1', 'planejar')}
-    <div class="flx-entries">
-      <div class="flx-lane flx-left">
-        ${flxNode({ t: 'Tenho uma ideia nova', sub: 'feature · melhoria · mudança', icon: 'bulb', cls: 'flx-is-entry', d: d++,
-          tip: 'A porta de entrada quando o trabalho ainda não existe: uma feature, melhoria ou mudança que vira plano, PRD e issues.', rule: 'ponto de partida do fluxo' })}
-        ${conn()}
-        ${flxNode({ cmd: '/grill-with-docs', sub: 'afia a ideia contra o domínio', icon: 'target', d: d++,
-          tip: 'Sessão de grilling: te entrevista sem dó sobre cada ramo do plano, uma decisão por vez com recomendação destacada, desafiando contra o domínio. Atualiza CONTEXT.md e ADRs inline conforme as decisões fecham.', src: '.claude/skills/grill-with-docs' })}
-        ${conn()}
-        ${flxNode({ cmd: '/to-prd', sub: 'vira 1 issue PRD (ready-for-agent)', icon: 'file', d: d++,
-          tip: 'Sintetiza a conversa atual num PRD (não te entrevista de novo): problema, solução, histórias de usuário e critérios de aceite, em pt-BR com a terminologia do CONTEXT.md. Publica como 1 issue ready-for-agent no GitHub.', src: '.claude/skills/to-prd' })}
-        ${conn()}
-        ${flxNode({ cmd: '/to-issues', sub: 'corta em N fatias verticais', icon: 'branch', d: d++,
-          tip: 'Quebra o PRD em fatias verticais independentes (tracer bullets), cada uma pegável sozinha, com tamanho (P/M/G) e "Bloqueada por: #X" explícito.', src: '.claude/skills/to-issues' })}
-        ${conn()}
-      </div>
-      <div class="flx-lane">
-        ${flxNode({ t: 'Vou pegar da fila', sub: 'issue já especificada', icon: 'list', cls: 'flx-is-entry', d: 1,
-          tip: 'Atalho pra quando a issue já está especificada e triada: você entra direto na fila, sem passar pelo planejamento.', rule: 'ponto de partida do fluxo' })}
-        ${conn('flx-tall')}
-      </div>
-    </div>
-
-    <div class="flx-fila" tabindex="0" data-tip style="--d:${d++}">
-      ${flxIcon('list')}
-      <div class="flx-nbody"><div class="flx-ft">Fila de issues <code>ready-for-agent</code></div><div class="flx-es">sem dono · sem bloqueio aberto</div></div>
-      ${flxPop({ t: 'Fila ready-for-agent', icon: 'list', tip: 'Só entram issues sem dono e sem bloqueio aberto ("Bloqueada por: #X"). É daqui que cada sessão puxa trabalho, com claim atômico pra não colidir.', src: 'docs/agents/issue-tracker.md' })}
-    </div>
-    ${conn('flx-dash', 'claim + 1 worktree')}
-
-    ${phase('2', 'desenvolver · em paralelo')}
-    <div class="flx-group" style="--d:${d++}">
-      <div class="flx-cap"><span class="flx-em">×N em paralelo</span>, 1 worktree por issue</div>
-      <div class="flx-row">
-        ${flxNode({ cmd: '/pegar-issue', sub: 'claim + branch', icon: 'claim', d: d++,
-          tip: 'Entry point de desenvolvimento: pega uma issue da fila, dá claim atômico (label + assignee) pra não colidir com sessões paralelas, cria a branch e carrega a spec no contexto pro /tdd.', src: '.claude/skills/pegar-issue' })}
-        <span class="flx-chev">›</span>
-        ${flxNode({ cmd: '/tdd', sub: 'red → green → refactor', icon: 'flask', d: d++,
-          tip: 'Red-green-refactor: cada critério de aceite da issue vira um teste que falha primeiro; o código vem só pra fazê-lo passar. Nomes de teste descrevem o comportamento de domínio em pt-BR.', src: '.claude/skills/tdd' })}
-        <span class="flx-chev">›</span>
-        ${flxNode({ cmd: '/ship', sub: 'roda os 3 gates → PR', icon: 'rocket', d: d++,
-          tip: 'Leva a mudança até o PR verde: branch, commit, PR e 3 gates. Dispara /code-review e /security-review automaticamente e imprime o comando do rabo (fechar_onda.py). Trabalho ancorado na issue (Closes #N fecha no merge).', src: '.claude/skills/ship' })}
-      </div>
-
-      <div class="flx-subcap">o <code>/ship</code> dispara os 3 gates, em sequência</div>
-      <div class="flx-gaterow">
-        ${flxNode({ cmd: '/code-review', sub: 'bugs + limpezas', icon: 'search', cls: 'flx-gate-step', d: d++,
-          tip: 'Revisa o diff atual atrás de bugs de correção e limpezas de reuso, simplificação e eficiência, no nível de esforço pedido. Primeiro gate do /ship.', src: 'Claude Code (skill nativa)' })}
-        <span class="flx-chev flx-chev-sm">›</span>
-        ${flxNode({ cmd: '/security-review', sub: 'segurança do diff', icon: 'shield', cls: 'flx-gate-step flx-gate-hot', hot: true, d: d++,
-          tip: 'Revisão de segurança das mudanças pendentes da branch. Segundo gate do /ship. Atenção conhecida: em worktree lê o diff da árvore principal (incidente #112); o agente escopa o diff manualmente.', src: 'Claude Code (skill nativa)' })}
-        <span class="flx-chev flx-chev-sm">›</span>
-        ${flxNode({ cmd: 'CI verde', sub: 'testes + lint', icon: 'check', cls: 'flx-gate-step flx-gate-ci', d: d++,
-          tip: 'A suite de testes e o lint (ruff no backend, ESLint no front) precisam ficar verdes no GitHub Actions antes do merge. Terceiro gate.', src: '.github/workflows' })}
-      </div>
-    </div>
-    ${conn()}
-
-    ${phase('3', 'revisão humana & deploy')}
-    ${flxNode({ t: 'Gate humano: OK de merge', sub: 'subir é decisão humana · rabo único por PR ou lote', icon: 'usercheck', cls: 'flx-humangate', d: d++,
-      tip: 'O único toque humano obrigatório: você aprova o PR (ou o lote da onda) citando o número. Quem leva à main é o rabo, fechar_onda.py: bump na branch do PR, APP_VERSION, merge pela API, um build, health e registro (ADR 0061).', rule: 'regra: main protegida, só entra por PR' })}
-    ${conn()}
-
-    ${flxNode({ cmd: 'fechar_onda.py · Coolify', sub: 'merge pela API → um build → health com version-match', icon: 'cloud', cls: 'flx-wide', d: d++,
-      tip: 'O rabo único: bump como commit na branch do PR, CI verde, APP_VERSION no Coolify, merge pela API (a main é protegida), um build, health com conferência de versão; depois, history.json e state.json num PR só de docs. Build ou health ruim: código 3/4 e /deploy rollback.', src: '.claude/skills/onda-enxuta/scripts' })}
-    ${conn()}
-
-    <div class="flx-fork" style="--d:${d++}">
-      ${flxNode({ t: 'No ar (produção)', sub: 'health verde · /snapshot atualiza o mapa', icon: 'live', cls: 'flx-out flx-ok', up: true,
-        tip: 'Health check verde: a versão nova assume produção. Logo depois o /snapshot regenera o mapa vivo da app (rotas, entidades, schema) direto do código.', src: '.claude/skills/snapshot' })}
-      ${flxNode({ t: 'Rollback automático', sub: 'health vermelho · volta à versão anterior', icon: 'rewind', cls: 'flx-out flx-bad', up: true,
-        tip: 'Health check vermelho: o /deploy reverte sozinho pra versão anterior. Produção nunca fica quebrada esperando intervenção.', src: '.claude/skills/deploy' })}
-    </div>
-  </div>`;
-}
-
-function renderGuia() {
-  return `
-  ${cabecalho('aprender', 'Guia', 'do brainstorm ao deploy')}
-  <div class="card rv guia-flow-card">
-    <div class="guia-flow-head">
-      <span class="eyebrow">método de trabalho</span>
-      <h3 class="guia-flow-title">O fluxo inteiro, num desenho</h3>
-    </div>
-    ${fluxoHtml()}
-  </div>`;
-}
-
 /* ---------- eventos ---------- */
-
-function writeClipboard(text, done) {
-  const fallback = () => {
-    const ta = document.createElement('textarea');
-    ta.value = text; ta.style.position = 'fixed'; ta.style.opacity = '0';
-    document.body.appendChild(ta); ta.select();
-    try { document.execCommand('copy'); done(); } catch { /* sem clipboard */ }
-    ta.remove();
-  };
-  if (navigator.clipboard && window.isSecureContext) {
-    navigator.clipboard.writeText(text).then(done).catch(fallback);
-  } else fallback();
-}
-
-function copyCmd(btn) {
-  const pre = document.getElementById(btn.dataset.cp);
-  writeClipboard(pre ? pre.innerText : '', () => {
-    btn.classList.add('ok');
-    const txt = btn.querySelector('.cc-txt');
-    const prev = txt ? txt.textContent : '';
-    if (txt) txt.textContent = 'copiado ✓';
-    setTimeout(() => { btn.classList.remove('ok'); if (txt) txt.textContent = prev; }, 1400);
-  });
-}
 
 view.addEventListener('click', e => {
   const t = e.target.closest('[data-act]');
@@ -1064,36 +1488,91 @@ view.addEventListener('click', e => {
     });
     const on = t.classList.toggle('open');
     t.setAttribute('aria-expanded', on ? 'true' : 'false');
-  } else if (act === 'copy') {
-    copyCmd(t);
-  } else if (act === 'copytxt') {
-    if (t.classList.contains('ok')) return;  // clique duplo: não capturar o "copiado ✓" como prev
-    writeClipboard(t.dataset.txt || '', () => {
-      const prev = t.innerHTML;
-      t.classList.add('ok');
-      t.textContent = 'copiado ✓';
-      setTimeout(() => { t.classList.remove('ok'); t.innerHTML = prev; }, 1400);
-    });
   } else if (act === 'iss') {
     const n = Number(t.dataset.n);
-    if (S.expIss.has(n)) S.expIss.delete(n);
-    else { S.expIss.add(n); ensureComments(n); }
+    if (S.expIss.has(n)) { S.expIss.delete(n); if (S.item === String(n)) S.item = null; }
+    else { S.expIss.add(n); S.item = String(n); ensureComments(n); ensureTimeline(n); }
     refreshIssueList();
   } else if (act === 'prd') {
     const n = Number(t.dataset.n);
     S.expPrd.set(n, t.dataset.open !== '1');
     refreshIssueList();
+  } else if (act === 'onda') {
+    abrirFatia(Number(t.dataset.n), Number(t.dataset.prd));
+  } else if (act === 'pr') {
+    S.item = S.item === t.dataset.n ? null : t.dataset.n;
+    render();
+  } else if (act === 'pfresp') {
+    S.fPrs = alternarPessoa(S.fPrs, t.dataset.v);
+    render();
+  } else if (act === 'pfprd') {
+    const n = Number(t.dataset.v);
+    S.fPrs.prd = S.fPrs.prd === n ? null : n;
+    render();
+  } else if (act === 'pfabertos') {
+    S.fPrs.abertos = !S.fPrs.abertos;
+    render();
   } else if (act === 'dep') {
     const i = Number(t.dataset.i);
-    S.expDep.has(i) ? S.expDep.delete(i) : S.expDep.add(i);
+    const ver = depVer(S.data.history[i].app_version);
+    if (S.expDep.has(i)) { S.expDep.delete(i); if (S.item === ver) S.item = null; }
+    else { S.expDep.add(i); if (ver) S.item = ver; }
     render();
   } else if (act === 'adr') {
-    const i = Number(t.dataset.i);
-    S.expAdr.has(i) ? S.expAdr.delete(i) : S.expAdr.add(i);
+    // miniatura, chip de outro tema ou relacionada do painel: abre (ou fecha) e destaca
+    const n = Number(t.dataset.n);
+    S.item = adrAberta() === n ? 'decisoes' : `decisoes/${n}`;
+    marcarAdr();
+    const mini = view.querySelector(`.adr-mini[data-n="${n}"]`);
+    if (mini) mini.scrollIntoView({ block: 'nearest', behavior: reduceMotion() ? 'auto' : 'smooth' });
+  } else if (act === 'adrfechar') {
+    S.item = 'decisoes';
+    marcarAdr();
+  } else if (act === 'adrhist') {
+    S.adrHist = !S.adrHist;
     render();
-  } else if (act === 'fstate') {
-    S.fIssues.state = t.dataset.v;
+  } else if (act === 'docsub') {
+    // sub-pill de Documentação: vira o item da rota; o termo do glossário cai
+    S.item = t.dataset.sub;
+    S.erFull = false;
     render();
+    window.scrollTo({ top: 0 });
+  } else if (act === 'fluxono') {
+    // passo do fluxo: só o painel e o destaque mudam, sem redesenhar o SVG
+    S.fluxoNo = S.fluxoNo === t.dataset.id ? null : t.dataset.id;
+    marcarNoFluxo();
+  } else if (act === 'menu') {
+    S.menu = S.menu === t.dataset.v ? null : t.dataset.v;
+    marcarMenu();
+  } else if (['fstate', 'fresp', 'fprd', 'flabel'].includes(act)) {
+    // opção do dropdown: escolhe e fecha; "todos" (v vazio) limpa
+    const chave = { fstate: 'state', fresp: 'resp', fprd: 'prd', flabel: 'label' }[act];
+    S.fIssues[chave] = act === 'fprd' ? (Number(t.dataset.v) || null) : t.dataset.v;
+    S.menu = null;
+    render();
+  } else if (act === 'flimpar') {
+    S.fIssues = filtrosVazios();
+    render();
+  } else if (act === 'pflimpar') {
+    S.fPrs = filtrosPrsVazios();
+    render();
+  } else if (act === 'lfresp') {
+    // o dropdown de pessoa da linha do tempo: escolhe e fecha; "todos" (v vazio) limpa
+    S.fProd.resp = t.dataset.v;
+    S.menu = null;
+    render();
+  } else if (act === 'lflimpar') {
+    S.fProd = filtrosProdVazios();
+    render();
+  } else if (act === 'fpendente') {
+    // o card grande: tudo que está pendente, sem recorte de fase
+    S.fIssues.state = 'OPEN';
+    S.fIssues.fase = '';
+    render();
+  } else if (act === 'ffase') {
+    // a contagem do card é das abertas: a lista mostra as mesmas
+    S.fIssues.state = 'OPEN';
+    alternarFiltro('fase', t.dataset.v);
   } else if (act === 'doc') {
     S.mapaDoc = t.dataset.doc;
     render();
@@ -1110,9 +1589,10 @@ view.addEventListener('click', e => {
     S.entTab = t.dataset.t;
     render();
   } else if (act === 'gotab') {
-    S.fIssues = { state: 'all', label: t.dataset.label || '', q: '', resp: '' };
+    S.fIssues = { ...filtrosVazios(), label: t.dataset.label || '' };
     setTab(t.dataset.go);
   }
+  sincronizarHash();   // card aberto e filtro trocado vão para o hash
 });
 
 $('#tabs').addEventListener('click', e => {
@@ -1120,26 +1600,28 @@ $('#tabs').addEventListener('click', e => {
   if (b) setTab(b.dataset.tab);
 });
 
-window.addEventListener('hashchange', () => {
-  const t = location.hash.slice(1);
-  if (t && t !== S.tab) setTab(t);
-});
+aoMudarRota(irPara);
 
 /* tooltips: fecham com Escape ou clique fora; Escape também sai da tela cheia */
 document.addEventListener('keydown', e => {
   if (e.key !== 'Escape') return;
   closeTips();
+  fecharMenu();
   if (S.erFull) { S.erFull = false; render(); }
+  if (S.tab === 'documentacao' && adrAberta() != null) { S.item = 'decisoes'; marcarAdr(); sincronizarHash(); }
 });
-document.addEventListener('click', e => { if (!e.target.closest('.tip')) closeTips(); });
+document.addEventListener('click', e => {
+  if (!e.target.closest('.tip')) closeTips();
+  if (!e.target.closest('.dd')) fecharMenu();
+});
 
 /* ---------- boot ---------- */
 
 (async function init() {
-  const t = location.hash.slice(1);
-  if (t) S.tab = TAB_ALIAS[t] || (TABS.includes(t) ? t : S.tab);
-  document.querySelectorAll('#tabs button').forEach(b => b.classList.toggle('on', b.dataset.tab === S.tab));
+  S.tab = lerRota().aba;   // a aba certa já marcada enquanto coleta
+  marcarAba();
   await load(false);
+  irPara(lerRota());       // relido: uma aba clicada durante a coleta vale
   setInterval(tick, 5000);
   setInterval(() => load(false, true), 60000);
 })();

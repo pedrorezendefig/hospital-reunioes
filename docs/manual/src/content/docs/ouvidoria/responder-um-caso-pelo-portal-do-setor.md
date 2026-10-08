@@ -1,7 +1,7 @@
 ---
 title: Responder um caso pelo portal do setor
 description: Como contar o que a sua área fez, pelo link do e-mail, sem entrar no sistema.
-prd: [317, 469, 598]
+prd: [317, 469, 598, 659]
 draft: false
 papel: [Gestor do setor]
 login: false
@@ -24,7 +24,9 @@ vale para aquele caso, para você, e não abre de novo depois da resposta.
 
    ![E-mail de demanda da Ouvidoria com o botão do caso](../../../assets/ouvidoria/email-demanda.png)
 
-2. Olhe a gravidade e o **Prazo de resposta**, no alto da tela.
+2. Olhe a gravidade e o **Prazo de resposta**, no alto da tela. Abaixo de **Quem
+   manifestou** vem o **Paciente**, para achar o atendimento; sem nome ou em
+   caso sigiloso, ele não aparece.
 
    ![Tela de quem responde, no celular](../../../assets/ouvidoria/portal-setor-mobile.png)
 

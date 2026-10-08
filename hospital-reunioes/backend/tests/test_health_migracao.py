@@ -1,7 +1,7 @@
 """O número da última migration aplicada no `/api/health` (issue #969).
 
-Toda migration termina gravando o próprio número em `migracoes_aplicadas`, e o
-rabo (`fechar_onda.py`) só mergeia um lote com migration depois que o health
+Toda migration termina gravando o próprio número em `migracoes_aplicadas`, e a
+subida (`fechar_onda.py`) só mergeia um lote com migration depois que o health
 devolve esse número. A costura é a rota de verdade, montada num app mínimo com
 o mesmo prefixo, e o banco é um dublê que se comporta como o PostgREST: ordena,
 limita e responde `42P01` quando a tabela ainda não existe (a migration 114
@@ -115,8 +115,8 @@ def test_health_com_a_tabela_vazia_devolve_migracao_nula(monkeypatch):
     assert resp.json()["migracao"] is None
 
 
-def test_corpo_do_health_continua_casando_o_regex_do_rabo(monkeypatch):
-    """O rabo confere o health pelo `expected_body_regex` do project.json:
+def test_corpo_do_health_continua_casando_o_regex_da_subida(monkeypatch):
+    """A subida confere o health pelo `expected_body_regex` do project.json:
     `status` e `db` primeiro, campo novo só no fim."""
     projeto = json.loads((RAIZ / "docs/spec/deploy/project.json").read_text(encoding="utf-8"))
     backend = next(s for s in projeto["services"] if s["id"] == "backend")
@@ -135,3 +135,42 @@ def test_banco_fora_continua_503_degraded(monkeypatch, tabelas):
 
     assert resp.status_code == 503
     assert resp.json()["db"] == "degraded"
+
+
+def test_as_duas_leituras_do_health_nunca_correm_em_paralelo_no_mesmo_cliente(monkeypatch):
+    """Incidente da v0.163.3: `asyncio.gather` punha o ping e a leitura de
+    `migracoes_aplicadas` em duas threads sobre o mesmo cliente Supabase
+    (HTTP/2, singleton), e o backend travava por minutos. Aqui o dublê conta
+    quantas consultas estão dentro de `execute` ao mesmo tempo."""
+    import threading
+    import time
+
+    trava = threading.Lock()
+    estado = {"dentro": 0, "pico": 0}
+
+    class _Lenta(_Consulta):
+        def execute(self):
+            with trava:
+                estado["dentro"] += 1
+                estado["pico"] = max(estado["pico"], estado["dentro"])
+            time.sleep(0.05)
+            try:
+                return super().execute()
+            finally:
+                with trava:
+                    estado["dentro"] -= 1
+
+    class _BancoLento(_BancoFalso):
+        def table(self, nome):
+            return _Lenta(self.tabelas, nome)
+
+    monkeypatch.setattr(
+        health, "get_supabase_client", lambda: _BancoLento({**PARTICIPANTES, "migracoes_aplicadas": [{"numero": 114}]})
+    )
+    app = FastAPI()
+    app.include_router(health.router, prefix=settings.api_prefix)
+    resp = TestClient(app).get("/api/health")
+
+    assert resp.status_code == 200
+    assert resp.json()["migracao"] == 114
+    assert estado["pico"] == 1

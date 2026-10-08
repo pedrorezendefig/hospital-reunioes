@@ -19,7 +19,7 @@ errou, e o lint trava.
 | --- | --- |
 | `/manual <módulo>` | Escreve a seção inteira de um módulo: Visão geral, Páginas de tarefa, Como funciona e Novidades, com prints e Vídeos de tarefa. |
 | `/manual #PRD` | Só as páginas que aquele PRD cria ou muda, todas em `draft: true`, mais a entrada de Novidades. É a receita da Fatia de manual. Veja `references/prd-e-novidades.md`. |
-| `/manual publicar` | Roda o `publicar.sh` e registra o link. Veja `references/publicar.md`. |
+| `/manual publicar` | Tira o draft que a Action deixou (página com Vídeo de tarefa), roda o `publicar.sh` e registra o link. É do humano, depois do deploy que fecha PRD com Fatia de manual. Veja `references/publicar.md`. |
 
 Módulos: `primeiros-passos`, `reunioes`, `ouvidoria`, `pops`, `admin`. A aba
 Tecnologia fica fora de propósito (a divulgação do #634 cobre).
@@ -40,7 +40,9 @@ Tecnologia fica fora de propósito (a divulgação do #634 cobre).
 
 O manual só mostra **o que está no ar**. Funcionalidade que ainda não subiu
 nasce em `draft: true` e uma Action no push da `main` tira o draft quando ela
-sobe (ADR 0062).
+sobe (ADR 0068). A Action não publica: o site só muda com o
+`/manual publicar`, que o humano roda da máquina com os MP4 e que também tira
+o draft das páginas com Vídeo de tarefa (o MP4 não vem no clone; issue #951).
 
 ## O molde da Página de tarefa
 

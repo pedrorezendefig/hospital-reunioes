@@ -34,6 +34,15 @@ Escrita no fio (issue #638):
                                                         resposta, por 10
                                                         minutos.
 
+Anexo da Demanda (issue #1061, ADR 0069):
+
+- POST  /admin/tecnologia/demandas/{id}/anexos  guarda um print (png, jpg,
+                                                webp, ate dez por Demanda)
+                                                no bucket privado.
+- GET   /admin/tecnologia/demandas/{id}/anexos  os prints do card, com URL
+                                                assinada de vida curta; o
+                                                apagado vem sem URL.
+
 Copiar (issue #640):
 
 - GET   /admin/tecnologia/demandas/{id}/texto-para-ia   a Demanda inteira em
@@ -56,20 +65,20 @@ Vinculo com o desenvolvimento (issue #674, ADR 0054):
 As tres portas do Vinculo exigem `github_login` (403 sem ele, Super admin
 inclusive): o que e da Vitta fica atras do login, e o diretor ve so a Etapa.
 
-Minha vez e Historico (issue #641):
+O Painel (issue #1059, PRD #1056), no lugar de "Minha vez" e do Historico da
+issue #641:
 
-- GET   /admin/tecnologia/minha-vez             o que espera pela pessoa
-                                                LOGADA: as Demandas abertas em
-                                                que ela e a responsavel, mais
-                                                as em que a mencionaram e ela
-                                                ainda nao respondeu.
-- GET   /admin/tecnologia/historico             as Concluidas e Canceladas, com
-                                                busca por texto no titulo, na
-                                                descricao e nas respostas da
-                                                Conversa.
+- GET   /admin/tecnologia/painel                os quatro numeros do topo e os
+                                                blocos "Com voce" (o que espera
+                                                pela pessoa LOGADA), Entregas
+                                                (as abertas com Vinculo) e
+                                                Historico (as Concluidas e
+                                                Canceladas, com busca por texto
+                                                no titulo, na descricao e nas
+                                                respostas da Conversa).
 
-As duas sao irmas de `/demandas`, e nao caminhos sob ele, porque nao falam de
-uma Demanda: sao recortes da lista, do mesmo nivel de `/pessoas` e `/produtos`.
+E irma de `/demandas`, e nao caminho sob ele, porque nao fala de uma Demanda:
+sao recortes da lista, do mesmo nivel de `/pessoas` e `/produtos`.
 
 Nao existe DELETE: desativar (Produto) e cancelar (Demanda) sao as saidas
 (ADR 0050, decisao 11), e resposta nao se apaga nunca (PRD #634, historia 29).
@@ -91,6 +100,7 @@ from supabase import Client
 from app.dependencies import get_supabase_client, require_super_admin, selecionar_participantes
 from app.limiter import limiter
 from app.models.tecnologia_schemas import (
+    AnexoDaDemandaResponse,
     AssistenteChatPayload,
     AssistenteChatResponse,
     AssistenteDocumentoResponse,
@@ -98,12 +108,11 @@ from app.models.tecnologia_schemas import (
     AtribuirPayload,
     ConversaLinhaResponse,
     DemandaCreatePayload,
-    DemandaDaMinhaVezResponse,
-    DemandaDoHistoricoResponse,
     DemandaResponse,
     DemandaUpdatePayload,
     EuNaAbaResponse,
     MoverPayload,
+    PainelResponse,
     PessoaDaAba,
     ProdutoCreatePayload,
     ProdutoResponse,
@@ -112,11 +121,12 @@ from app.models.tecnologia_schemas import (
     TextoParaIaResponse,
     VincularPayload,
 )
-from app.services import ai_processor, assistente_tecnologia, github_client
+from app.services import ai_processor, assistente_tecnologia, github_client, tecnologia_anexos
 from app.services.conhecimento import carregar_kit
 from app.services.paginacao import ler_tudo
 from app.services.tecnologia import (
     AVISO_EMAIL_NAO_SAIU,
+    ESTADOS,
     ESTADOS_ABERTOS,
     ESTADOS_FECHADOS,
     FUSO_HOSPITAL,
@@ -139,7 +149,9 @@ from app.services.tecnologia import (
     destinatario_da_atribuicao,
     e_pessoa_da_aba,
     edicao_deixa_produto_ativo_sem_dono,
+    entregas_do_painel,
     esperando_resposta_da_pessoa,
+    esta_aberta,
     fechamento_da_demanda,
     instante_do_banco,
     limite_da_janela_de_edicao,
@@ -153,6 +165,7 @@ from app.services.tecnologia import (
     motivo_transicao_invalida,
     normalizar_mencoes,
     normalizar_para_busca,
+    numeros_do_painel,
     ordenar_historico,
     ordenar_minha_vez,
     produto_ativo_sem_dono,
@@ -161,6 +174,7 @@ from app.services.tecnologia import (
     texto_para_ia,
     textos_de_resposta,
     transicao_permitida,
+    versao_da_entrega,
 )
 from app.services.tecnologia_email import avisar_atribuicao, avisar_mencao, avisar_resposta, link_da_demanda
 from app.services.tecnologia_sincronizacao import mudanca_da_foto
@@ -174,12 +188,12 @@ from app.services.tecnologia_vinculo import (
     MOTIVO_SEM_VINCULO_PARA_DESFAZER,
     TEXTO_VINCULO_CRIADO,
     TEXTO_VINCULO_DESFEITO,
-    corpo_com_marcador,
     corpo_da_issue_nova,
     corpo_do_comentario_espelhado,
-    corpo_precisa_do_marcador,
+    corpo_vinculado,
     foto_mudou,
     labels_da_issue_nova,
+    login_para_publicar,
     motivo_demanda_ja_vinculada,
     motivo_e_pull_request,
     motivo_issue_inexistente,
@@ -441,6 +455,25 @@ def _nomes_de_participantes(supabase: Client, ids: set[str]) -> dict[str, str]:
     return {linha["id"]: linha.get("nome_completo") for linha in (result.data or [])}
 
 
+def _assignees_da_issue_nova(supabase: Client, demanda: dict) -> list[str]:
+    """O login do RESPONSAVEL da Demanda, para a issue nascer designada a ele.
+
+    E o responsavel, e nao quem clicou: assignee em `needs-triage` e
+    responsabilidade, nao claim (a mesma leitura do dono do PRD, ADR 0068), e a
+    `/triage` tira o assignee ao liberar a issue para a fila. Responsavel sem
+    `github_login` (gente do hospital) devolve lista vazia, nunca o login de
+    quem levou. Passa pelo `login_para_publicar`: so login de verdade entra no
+    JSON de um repositorio publico.
+    """
+    responsavel_id = demanda.get("responsavel_id")
+    if not responsavel_id:
+        return []
+    result = supabase.table(TABELA_PARTICIPANTES).select("id, github_login").eq("id", responsavel_id).execute()
+    linhas = result.data or []
+    login = login_para_publicar(linhas[0].get("github_login")) if linhas else None
+    return [login] if login else []
+
+
 def _com_nomes(supabase: Client, demandas: list[dict], *, ator: dict) -> list[dict]:
     """Resolve `produto_nome` e `responsavel_nome` em duas consultas, para toda
     a lista de uma vez: o card mostra os dois, e a tela nao cruza tabela.
@@ -467,6 +500,7 @@ def _com_nomes(supabase: Client, demandas: list[dict], *, ator: dict) -> list[di
             "responsavel_nome": nomes_pessoa.get(d.get("responsavel_id")),
             "vinculo": _vinculo_visivel(d) if da_vitta else None,
             "partes": _partes_visiveis(d, da_vitta=da_vitta),
+            "versao": versao_da_entrega(d),
         }
         for d in demandas
     ]
@@ -790,7 +824,9 @@ async def _aviso_da_correcao(
     return None if saiu else AVISO_EMAIL_NAO_SAIU
 
 
-def _corpo_espelhado(supabase: Client, *, demanda: dict, texto: str, mencoes: list[str], ator: dict) -> str:
+def _corpo_espelhado(
+    supabase: Client, *, demanda: dict, linha: dict, texto: str, mencoes: list[str], ator: dict
+) -> str:
     """O comentario espelhado, com o autor e os mencionados como o banco os
     conhece (nome e login): e o servico puro que decide o que de cada um pode
     sair para o repositorio publico (nunca o nome civil).
@@ -807,7 +843,13 @@ def _corpo_espelhado(supabase: Client, *, demanda: dict, texto: str, mencoes: li
             .execute()
         )
         mencionados = list(result.data or [])
-    return corpo_do_comentario_espelhado(texto=texto, autor=ator, demanda_id=demanda["id"], mencionados=mencionados)
+    return corpo_do_comentario_espelhado(
+        texto=texto,
+        autor=ator,
+        demanda_id=demanda["id"],
+        mencionados=mencionados,
+        imagens=tecnologia_anexos.quantas_da_resposta(supabase, linha["id"]),
+    )
 
 
 async def _espelhar_resposta(
@@ -841,7 +883,7 @@ async def _espelhar_resposta(
     if not numero:
         return
     try:
-        corpo = _corpo_espelhado(supabase, demanda=demanda, texto=texto, mencoes=mencoes, ator=ator)
+        corpo = _corpo_espelhado(supabase, demanda=demanda, linha=linha, texto=texto, mencoes=mencoes, ator=ator)
         comentario_id = await asyncio.to_thread(github_client.criar_comentario, numero, corpo)
     except Exception:
         logger.exception(
@@ -881,7 +923,7 @@ async def _espelhar_correcao(
     if not comentario_id:
         return
     try:
-        corpo = _corpo_espelhado(supabase, demanda=demanda, texto=texto, mencoes=mencoes, ator=ator)
+        corpo = _corpo_espelhado(supabase, demanda=demanda, linha=linha, texto=texto, mencoes=mencoes, ator=ator)
         await asyncio.to_thread(github_client.editar_comentario, comentario_id, corpo)
     except Exception:
         logger.exception(
@@ -890,6 +932,37 @@ async def _espelhar_correcao(
             linha.get("id"),
             demanda["id"],
         )
+
+
+def _reescrever_a_contagem(numero: int, demanda_id: str, anexos: int) -> None:
+    dados = github_client.ler_issue(numero)
+    corpo = dados.get("body")
+    novo_corpo = corpo_vinculado(corpo, demanda_id, anexos=anexos)
+    if novo_corpo != (corpo or ""):
+        github_client.atualizar_corpo(numero, novo_corpo)
+
+
+async def _contagem_na_issue(supabase: Client, *, demanda: dict) -> None:
+    """A issue ja vinculada acompanha a contagem dos Anexos (issue #1062).
+
+    Imagem nova e encerramento (que apaga os binarios) mudam o N da frase
+    "Anexos: N imagens na Demanda"; o corpo e reescrito por substituicao, e so
+    quando muda. Demanda sem Vinculo nao tem onde escrever.
+
+    **Falha aqui nao desfaz nada**, pelo mesmo motivo do espelho da resposta: a
+    imagem ja entrou (ou a Demanda ja foi encerrada), e o GitHub fora do ar nao
+    pode devolver erro a quem anexou. A proxima mudanca de contagem, ou um novo
+    `vincular`, reescreve a frase. Fora do loop porque o cliente e sincrono.
+    """
+    numero = demanda.get("github_issue_numero")
+    if not numero:
+        return
+    demanda_id = str(demanda["id"])
+    try:
+        anexos = tecnologia_anexos.quantos_guardados(supabase, demanda_id)
+        await asyncio.to_thread(_reescrever_a_contagem, int(numero), demanda_id, anexos)
+    except Exception:
+        logger.exception("Falha ao atualizar a contagem de anexos da Demanda %s na issue vinculada", demanda_id)
 
 
 # ─── Demanda: endpoints ──────────────────────────────────────────────────────
@@ -976,9 +1049,20 @@ async def criar_demanda(
             detail="Falha ao criar a Demanda",
         )
     criada = _com_nomes(supabase, [result.data[0]], ator=ator)[0]
+    # Os prints do Assistente viram Anexo AQUI, na mesma chamada (issue #1062):
+    # sem o clique que chega a esta rota, eles nunca saem da memoria.
+    aviso_dos_anexos = (
+        tecnologia_anexos.anexar_prints(supabase, demanda=result.data[0], print_ids=payload.prints, quem_id=ator["id"])
+        if payload.prints
+        else None
+    )
     # "Inclusive na criação" (PRD #634, história 41): a Demanda nasce na mão do
     # dono do Produto, e para ele isso é uma atribuição como qualquer outra.
-    return {**criada, "aviso_por_email": await _aviso_da_atribuicao(supabase, demanda=criada, ator=ator)}
+    return {
+        **criada,
+        "aviso_por_email": await _aviso_da_atribuicao(supabase, demanda=criada, ator=ator),
+        "aviso_dos_anexos": aviso_dos_anexos,
+    }
 
 
 @router.patch("/demandas/{demanda_id}", response_model=DemandaResponse)
@@ -1060,6 +1144,15 @@ async def mover_demanda(
             detail=("O Quadro está desatualizado e este movimento não foi feito. Recarregue o Quadro e tente de novo."),
         )
 
+    if para in ESTADOS_FECHADOS:
+        # Concluir e Cancelar apagam os prints do bucket (ADR 0069, decisao
+        # 3), e so eles: mover entre colunas abertas e mudar de Etapa nunca
+        # apagam. Antes da linha do fio, e nao depois: se ela falhar, o 500 do
+        # `_gravar_movimento` sai com a Demanda ja encerrada, e o binario de
+        # assunto encerrado nao pode ficar para tras por causa disso.
+        if tecnologia_anexos.apagar_todos(supabase, demanda_id):
+            await _contagem_na_issue(supabase, demanda=atual)
+
     _gravar_movimento(
         supabase,
         demanda_id=demanda_id,
@@ -1118,6 +1211,71 @@ async def atribuir_demanda(
     # `_gravar_movimento` sai daqui e o e-mail não chega a ser montado. Avisar
     # antes mandaria "a Demanda é sua" sobre um card cuja trilha ficou quebrada.
     return {**atribuida, "aviso_por_email": await _aviso_da_atribuicao(supabase, demanda=atribuida, ator=ator)}
+
+
+# ─── Anexo da Demanda (issue #1061, ADR 0069) ────────────────────────────────
+
+
+# Um balde so para a porta, por origem, e nao um por Demanda: o `Limiter` da
+# casa nasce com `key_style="url"`, e com `limit` cada Demanda ganharia o
+# proprio balde (o mesmo motivo do `ESCOPO_DO_GATILHO`). Sessenta por minuto
+# cabe seis Demandas de dez imagens.
+LIMITE_DO_ANEXO = "60/minute"
+ESCOPO_DO_ANEXO = "tecnologia-anexo-da-demanda"
+
+
+@router.post(
+    "/demandas/{demanda_id}/anexos",
+    response_model=AnexoDaDemandaResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+@limiter.shared_limit(LIMITE_DO_ANEXO, ESCOPO_DO_ANEXO)
+async def anexar_a_demanda(
+    request: Request,
+    demanda_id: str,
+    imagem: UploadFile = File(...),
+    ator: dict = Depends(require_super_admin),
+    supabase: Client = Depends(get_supabase_client),
+):
+    """Guarda um print junto da Demanda (ADR 0069, decisao 1).
+
+    O formulario de Nova Demanda chama esta porta uma vez por imagem, logo
+    depois de criar a Demanda. A regra (formatos, teto, ate dez) e o bucket
+    privado moram no `tecnologia_anexos`; aqui so a costura com o HTTP.
+    """
+    demanda = _buscar_demanda(supabase, demanda_id)
+    conteudo = await imagem.read()
+    try:
+        linha = tecnologia_anexos.anexar(
+            supabase,
+            demanda=demanda,
+            nome=imagem.filename or "",
+            conteudo=conteudo,
+            quem_id=ator["id"],
+        )
+    except tecnologia_anexos.AnexoRecusadoError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc
+    await _contagem_na_issue(supabase, demanda=demanda)
+    return {
+        "id": linha["id"],
+        "nome": linha["nome_original"],
+        "anexado_por_nome": ator.get("nome_completo"),
+        "criado_em": linha.get("criado_em"),
+        "apagado_em": linha.get("apagado_em"),
+        "conversa_id": None,
+        "url": None,
+    }
+
+
+@router.get("/demandas/{demanda_id}/anexos", response_model=list[AnexoDaDemandaResponse])
+async def listar_anexos_da_demanda(
+    demanda_id: str,
+    _ator: dict = Depends(require_super_admin),
+    supabase: Client = Depends(get_supabase_client),
+):
+    """Os anexos do card, com URL assinada de vida curta (ADR 0069)."""
+    _buscar_demanda(supabase, demanda_id)
+    return tecnologia_anexos.listar(supabase, demanda_id)
 
 
 # ─── Vinculo com o desenvolvimento (issue #674, ADR 0054) ────────────────────
@@ -1297,7 +1455,7 @@ async def vincular_demanda(
 
     O par e guardado dos DOIS lados: a Demanda ganha o numero, a issue ganha o
     id da Demanda num marcador oculto no fim do corpo. O marcador entra por
-    substituicao (`corpo_com_marcador`), entao vincular duas vezes o mesmo
+    substituicao (`corpo_vinculado`), entao vincular duas vezes o mesmo
     numero deixa o corpo identico e nem chega a chamar o PATCH.
 
     Sincroniza na hora: sem isso o card mostraria o selo vazio ate a
@@ -1321,14 +1479,18 @@ async def vincular_demanda(
     if outra:
         _recusar(motivo_numero_ja_usado(numero, str(outra.get("titulo") or "sem título")))
 
+    anexos = tecnologia_anexos.quantos_guardados(supabase, demanda_id)
     try:
         dados = github_client.ler_issue(numero)
         if github_client.e_pull_request(dados):
             _recusar(motivo_e_pull_request(numero))
 
+        # O marcador e, quando a Demanda guarda imagens, a frase "Anexos: N
+        # imagens na Demanda" (issue #1062): so a contagem, nunca URL nem nome.
         corpo = dados.get("body")
-        if corpo_precisa_do_marcador(corpo, demanda_id):
-            github_client.atualizar_corpo(numero, corpo_com_marcador(corpo, demanda_id))
+        novo_corpo = corpo_vinculado(corpo, demanda_id, anexos=anexos)
+        if novo_corpo != (corpo or ""):
+            github_client.atualizar_corpo(numero, novo_corpo)
 
         foto = github_client.montar_foto(dados, github_client.ler_sub_issues(numero))
     except github_client.IssueNaoEncontradaError:
@@ -1451,10 +1613,18 @@ async def levar_para_desenvolvimento(
         # que e de dentro.
         levado_por_login=ator.get("github_login"),
         link=link_da_demanda(demanda_id),
+        # So a contagem: nem URL nem nome de arquivo saem para o repositorio
+        # publico (issue #1062, ADR 0069, decisao 1).
+        anexos=tecnologia_anexos.quantos_guardados(supabase, demanda_id),
     )
 
     try:
-        dados = github_client.criar_issue(titulo=titulo, corpo=corpo, labels=labels_da_issue_nova(demanda.get("tipo")))
+        dados = github_client.criar_issue(
+            titulo=titulo,
+            corpo=corpo,
+            labels=labels_da_issue_nova(demanda.get("tipo")),
+            assignees=_assignees_da_issue_nova(supabase, demanda),
+        )
         numero = dados.get("number")
         if not isinstance(numero, int):
             # A issue pode ter nascido; o Vinculo, nao. Sem o numero nao ha par,
@@ -1630,7 +1800,7 @@ def _fio_da_demanda(supabase: Client, demanda_id: str, *, ator: dict) -> list[di
     numero (`TEXTO_VINCULO_CRIADO`); o que sobra e o de/para estruturado, que
     fica para quem e da Vitta rastrear.
 
-    A leitura de VARIAS Demandas de uma vez ("Minha vez" e a busca do Historico)
+    A leitura de VARIAS Demandas de uma vez ("Com voce" e a busca do Historico)
     mora no `_fios_por_demanda`, e nao aqui, porque tem outra forma: outro
     filtro, outras colunas e paginacao. Ela nunca DEVOLVE linha a quem chama (so
     filtra as Demandas), entao nao tem o que omitir. O que as duas nao podem
@@ -1714,8 +1884,14 @@ async def listar_conversa(
 ):
     """O fio da Demanda em ordem cronologica, respostas e movimentos juntos."""
     _buscar_demanda(supabase, demanda_id)
+    # A imagem de cada resposta vem junto da linha (issue #1062): o card a
+    # mostra ao lado do texto, pela URL assinada de vida curta.
+    imagens = tecnologia_anexos.imagens_das_respostas(supabase, demanda_id)
     return [
-        _com_janela(linha, ator_id=ator["id"], autor_nome=linha.get("autor_nome"))
+        {
+            **_com_janela(linha, ator_id=ator["id"], autor_nome=linha.get("autor_nome")),
+            "imagem": imagens.get(str(linha["id"])),
+        }
         for linha in _fio_da_demanda(supabase, demanda_id, ator=ator)
     ]
 
@@ -1737,7 +1913,13 @@ async def texto_da_demanda_para_ia(
     cada corte.
     """
     demanda = _com_nomes(supabase, [_buscar_demanda(supabase, demanda_id)], ator=ator)[0]
-    return {"texto": texto_para_ia(demanda=demanda, linhas=_fio_da_demanda(supabase, demanda_id, ator=ator))}
+    return {
+        "texto": texto_para_ia(
+            demanda=demanda,
+            linhas=_fio_da_demanda(supabase, demanda_id, ator=ator),
+            anexos=tecnologia_anexos.ler(supabase, demanda_id),
+        )
+    }
 
 
 @router.post(
@@ -1763,6 +1945,15 @@ async def responder_na_conversa(
     # o `produto_nome` não está na linha da Demanda.
     demanda = _com_nomes(supabase, [_buscar_demanda(supabase, demanda_id)], ator=ator)[0]
     texto, mencoes = _texto_e_mencoes(supabase, payload)
+    if payload.anexo_id:
+        # A imagem ja subiu pela porta do anexo, com os limites dela. Aqui so se
+        # confere que ela pode ir com ESTA resposta, antes de o texto entrar.
+        try:
+            tecnologia_anexos.imagem_para_a_resposta(
+                supabase, demanda_id=demanda_id, anexo_id=payload.anexo_id, quem_id=ator["id"]
+            )
+        except tecnologia_anexos.AnexoRecusadoError as exc:
+            _recusar(str(exc))
 
     nova = {
         "demanda_id": demanda_id,
@@ -1788,6 +1979,10 @@ async def responder_na_conversa(
         _resposta_nao_entrou()
 
     linha = _com_janela(result.data[0], ator_id=ator["id"], autor_nome=ator.get("nome_completo"))
+    if payload.anexo_id:
+        # Antes do espelho: e a ligacao que faz o comentario dizer "(1 imagem
+        # na Demanda)".
+        tecnologia_anexos.ligar_a_resposta(supabase, anexo_id=payload.anexo_id, conversa_id=linha["id"])
     # Os gatilhos 2 e 3 saem DEPOIS de a linha estar gravada: um e-mail que
     # convidasse a ler uma resposta que não entrou no fio seria pior do que
     # nenhum e-mail.
@@ -1870,60 +2065,56 @@ async def editar_resposta(
     return {**corrigida, "aviso_por_email": aviso}
 
 
-# ─── Minha vez e Historico: helpers (issue #641) ─────────────────────────────
+# ─── O Painel: helpers (issue #1059; antes "Minha vez" e Historico, #641) ───
 
 
-def _demandas_filtradas(
+def _demandas_dos_estados(
     supabase: Client,
     *,
     estados: tuple[str, ...],
-    tipo: str | None,
-    produto_id: str | None,
-    responsavel_id: str | None,
     colunas: str = "*",
 ) -> list[dict]:
-    """As Demandas de um grupo de estados, com os filtros compartilhados da aba.
+    """As Demandas de um grupo de estados, numa leitura so.
 
-    Os tres filtros sao os MESMOS do Quadro (issue #639), e valem nas tres abas
-    de proposito: uma aba que os ignorasse mostraria uma lista que contradiz os
-    campos preenchidos logo acima dela.
+    O Painel le os cinco estados de uma vez e reparte a lista em Python: os
+    quatro numeros e os blocos saem da MESMA leitura, e leituras separadas por
+    bloco deixariam o numero do topo discordar da lista logo abaixo dele quando
+    alguem mexe no Quadro no meio. Os filtros por tipo, Produto e responsavel
+    sairam com a issue #1058, e daqui junto com as duas abas antigas.
 
-    `colunas` e o que se PEDE ao banco, e o default e o `*` de sempre: as duas
-    abas de lista mostram o card inteiro. Quem le um recorte passa a lista, como
-    o `COLUNAS_DO_FIO_PARA_MENCAO` ja faz com a Conversa, e pelo mesmo motivo:
-    a descricao vai a 5000 caracteres por Demanda, e quem so precisa do
+    `colunas` e o que se PEDE ao banco, e o default e o `*` de sempre: o Painel
+    mostra o card inteiro. Quem le um recorte passa a lista, como o
+    `COLUNAS_DO_FIO_PARA_MENCAO` ja faz com a Conversa, e pelo mesmo motivo: a
+    descricao vai a 5000 caracteres por Demanda, e quem so precisa do
     cabecalho nao tem por que trazer isso para a memoria do processo.
 
     A ordem sai do banco por `criado_em` crescente, e e ela que sustenta o "mais
-    velha primeiro" das duas abas. O desempate por `id` e o que o recorte em
+    velha primeiro" do "Com voce". O desempate por `id` e o que o recorte em
     paginas exige (ver `_fio_ordenado`).
 
     A leitura e PAGINADA (`ler_tudo`, issue #430). O `PGRST_DB_MAX_ROWS` do
     `supabase/config.toml` corta em 1000 linhas com HTTP 200 e sem aviso
     nenhum, e o Historico so cresce, porque Demanda fechada nunca sai de la:
-    sem paginacao, passado o teto, a aba passaria a esconder Demandas dizendo
+    sem paginacao, passado o teto, o Painel passaria a esconder Demandas dizendo
     "nao ha nada aqui", que e afirmar um fato que a leitura nao verificou.
     """
 
     def consulta():
         query = supabase.table(TABELA_DEMANDAS).select(colunas).in_("estado", list(estados))
-        for coluna, valor in (("tipo", tipo), ("produto_id", produto_id), ("responsavel_id", responsavel_id)):
-            if valor:
-                query = query.eq(coluna, valor)
         return query.order("criado_em").order("id")
 
     return ler_tudo(consulta, rotulo="as Demandas da aba Tecnologia")
 
 
-# O que cada aba precisa LER do fio.
+# O que cada bloco do Painel precisa LER do fio.
 #
 # `select("*")` traria o `texto` (ate 5000 caracteres por resposta) de toda
-# Demanda aberta em TODA abertura de "Minha vez", que nao le o texto de nada:
+# Demanda aberta em TODA abertura do Painel, e o "Com voce" nao le texto nenhum:
 # a regra da mencao olha `autor_id`, `linha` e `mencoes`. Menos dado tambem e
 # menos chance de bater no teto de linhas do PostgREST.
 #
 # `id` nao entra na lista: o PostgREST ordena por coluna que nao foi
-# selecionada, e nenhuma das duas abas le esse campo do fio.
+# selecionada, e nenhum dos dois blocos le esse campo do fio.
 #
 # `criado_em` e `editado_em` entram so na lista da mencao, e desde a issue #670:
 # a chamada acrescentada numa correcao vale a partir do `editado_em`, e para
@@ -1942,10 +2133,10 @@ COLUNAS_DO_FIO_PARA_BUSCA = "demanda_id, linha, texto"
 def _fios_por_demanda(supabase: Client, demanda_ids: list[str], *, colunas: str) -> dict[str, list[dict]]:
     """O fio de varias Demandas de uma vez, cada um em ordem cronologica.
 
-    Uma leitura so, e nao uma por Demanda: as duas abas precisam do fio de uma
-    LISTA inteira (as mencoes em "Minha vez", o texto das respostas na busca do
-    Historico), e um `for` chamando o PostgREST por card faria a aba custar
-    tantas idas quantas Demandas houvesse.
+    Uma leitura so, e nao uma por Demanda: dois blocos do Painel precisam do
+    fio de uma LISTA inteira (as mencoes no "Com voce", o texto das respostas
+    na busca do Historico), e um `for` chamando o PostgREST por card faria o
+    Painel custar tantas idas quantas Demandas houvesse.
 
     A leitura e PAGINADA pelo mesmo motivo da de Demandas, e aqui o corte seria
     ainda mais traicoeiro: a ordem e global e CRESCENTE, entao o teto come as
@@ -1967,116 +2158,106 @@ def _fios_por_demanda(supabase: Client, demanda_ids: list[str], *, colunas: str)
     return fios
 
 
-# ─── Minha vez e Historico: endpoints ────────────────────────────────────────
+# ─── O Painel: endpoint ──────────────────────────────────────────────────────
 
 
-@router.get("/minha-vez", response_model=list[DemandaDaMinhaVezResponse])
-async def listar_minha_vez(
-    tipo: str | None = None,
-    produto_id: str | None = None,
-    responsavel_id: str | None = None,
+@router.get("/painel", response_model=PainelResponse)
+async def ler_painel(
+    busca: str | None = None,
     ator: dict = Depends(require_super_admin),
     supabase: Client = Depends(get_supabase_client),
 ):
-    """O que espera pela pessoa LOGADA (issue #641).
+    """O Painel da aba Tecnologia (issue #1059), no lugar de "Minha vez" e do
+    Historico (issue #641).
 
-    Quem diz de quem e a vez e o `ator`, e nao um parametro: a tela nao sabe
-    qual participante e o usuario logado (o `useAuth` carrega o id do Supabase
-    Auth, e nao o `participantes.id`), e um id vindo do cliente ainda deixaria
-    qualquer Super admin pedir a lista de outra pessoa.
+    Os quatro numeros do topo e os blocos, todos da mesma leitura das Demandas.
+    Nada por pessoa (ADR 0061): os numeros sao os mesmos para quem quer que
+    esteja olhando, e so o "Com voce" depende de quem esta logado, porque e a
+    pergunta dele.
 
-    Duas regras somadas, as duas da issue:
+    **Com voce.** Quem diz de quem e a vez e o `ator`, e nao um parametro: a
+    tela nao sabe qual participante e o usuario logado (o `useAuth` carrega o id
+    do Supabase Auth, e nao o `participantes.id`), e um id vindo do cliente
+    deixaria qualquer Super admin pedir a lista de outra pessoa. Duas regras
+    somadas: sou o responsavel de uma Demanda que ainda nao fechou, ou fui
+    mencionado nela e nao respondi depois da mencao. O fio so e lido para as
+    abertas em que eu NAO sou o responsavel: as minhas ja entraram pela
+    primeira regra, e ler o fio delas seria leitura paga a toa.
 
-    1. sou o responsavel de uma Demanda que ainda nao fechou;
-    2. fui mencionado nela e nao respondi depois da mencao.
-
-    O fio so e lido para as Demandas em que eu NAO sou o responsavel: as minhas
-    ja entraram pela primeira regra, e ler o fio delas seria leitura paga a
-    toa.
+    **Historico.** A busca corre em Python, e nao num `ilike` do PostgREST,
+    porque ela varre tres lugares e um deles esta em OUTRA tabela: o texto das
+    respostas da Conversa. O fio so e lido quando ha termo de busca: sem termo,
+    nada nele muda a lista. **Sem paginacao**: o Historico vem inteiro, na ordem
+    de quem fechou por ultimo; quando o volume pedir, a paginacao entra aqui.
     """
     eu = ator["id"]
-    abertas = _demandas_filtradas(
-        supabase,
-        estados=ESTADOS_ABERTOS,
-        tipo=tipo,
-        produto_id=produto_id,
-        responsavel_id=responsavel_id,
-    )
+    todas = _demandas_dos_estados(supabase, estados=ESTADOS)
+    abertas = [d for d in todas if esta_aberta(d)]
+    fechadas = [d for d in todas if str(d.get("estado") or "") in ESTADOS_FECHADOS]
+
     fios = _fios_por_demanda(
         supabase,
         [d["id"] for d in abertas if d.get("responsavel_id") != eu],
         colunas=COLUNAS_DO_FIO_PARA_MENCAO,
     )
-
-    minhas = [
-        d
-        for d in abertas
-        if d.get("responsavel_id") == eu
-        or esperando_resposta_da_pessoa(linhas=fios.get(str(d["id"]), []), pessoa_id=eu)
-    ]
-    return [
-        {**d, "motivo": motivo_da_minha_vez(demanda=d, pessoa_id=eu)}
-        for d in _com_nomes(supabase, ordenar_minha_vez(minhas), ator=ator)
-    ]
-
-
-@router.get("/historico", response_model=list[DemandaDoHistoricoResponse])
-async def listar_historico(
-    busca: str | None = None,
-    tipo: str | None = None,
-    produto_id: str | None = None,
-    responsavel_id: str | None = None,
-    ator: dict = Depends(require_super_admin),
-    supabase: Client = Depends(get_supabase_client),
-):
-    """As Demandas Concluidas e Canceladas, com busca por texto (issue #641).
-
-    A busca corre em Python, e nao num `ilike` do PostgREST, porque ela varre
-    tres lugares e um deles esta em OUTRA tabela: o texto das respostas da
-    Conversa. Um `or` de `ilike` no PostgREST cobriria titulo e descricao, e a
-    Conversa continuaria precisando desta segunda leitura, com o resultado
-    saindo de dois criterios diferentes.
-
-    O fio so e lido quando ha termo de busca: sem termo, nada nele muda a lista,
-    e ler a Conversa inteira do Historico a cada abertura da aba seria custo sem
-    resposta.
-
-    **Sem paginacao**: o Historico vem inteiro, na ordem de quem fechou por
-    ultimo. Enquanto o Quadro for de cinco pessoas isso e uma leitura pequena;
-    quando o volume pedir, a paginacao entra aqui, com o mesmo formato.
-    """
-    fechadas = _demandas_filtradas(
-        supabase,
-        estados=ESTADOS_FECHADOS,
-        tipo=tipo,
-        produto_id=produto_id,
-        responsavel_id=responsavel_id,
+    com_voce = ordenar_minha_vez(
+        [
+            d
+            for d in abertas
+            if d.get("responsavel_id") == eu
+            or esperando_resposta_da_pessoa(linhas=fios.get(str(d["id"]), []), pessoa_id=eu)
+        ]
     )
 
     if normalizar_para_busca(busca).strip():
-        fios = _fios_por_demanda(supabase, [d["id"] for d in fechadas], colunas=COLUNAS_DO_FIO_PARA_BUSCA)
+        fios_da_busca = _fios_por_demanda(supabase, [d["id"] for d in fechadas], colunas=COLUNAS_DO_FIO_PARA_BUSCA)
         fechadas = [
             d
             for d in fechadas
             if demanda_casa_a_busca(
                 demanda=d,
-                textos_da_conversa=textos_de_resposta(fios.get(str(d["id"]), [])),
+                textos_da_conversa=textos_de_resposta(fios_da_busca.get(str(d["id"]), [])),
                 termo=busca,
             )
         ]
+    historico = ordenar_historico(fechadas)
+    entregas = entregas_do_painel(todas)
 
-    fechadas = ordenar_historico(fechadas)
-    desfechos = {str(d["id"]): fechamento_da_demanda(d) for d in fechadas}
-    nomes = _nomes_de_participantes(supabase, {quem for _, quem in desfechos.values() if quem})
-    return [
-        {
-            **d,
-            "fechada_em": desfechos[str(d["id"])][0],
-            "fechada_por_id": desfechos[str(d["id"])][1],
-            "fechada_por_nome": nomes.get(desfechos[str(d["id"])][1]),
-        }
-        for d in _com_nomes(supabase, fechadas, ator=ator)
-    ]
+    # Um funil so para os blocos: `_com_nomes` le Produtos e pessoas de uma vez
+    # e decide quem ve o numero da issue (ADR 0054, decisao 9). Chamado por
+    # bloco, ele leria as mesmas tabelas tres vezes.
+    blocos = _sem_repetidas(com_voce + entregas + historico)
+    nomeadas = {str(d["id"]): d for d in _com_nomes(supabase, blocos, ator=ator)}
+
+    desfechos = {str(d["id"]): fechamento_da_demanda(d) for d in historico}
+    quem_fechou = _nomes_de_participantes(supabase, {quem for _, quem in desfechos.values() if quem})
+
+    return {
+        "numeros": numeros_do_painel(todas, agora=datetime.now(UTC)),
+        "com_voce": [
+            {**nomeadas[str(d["id"])], "motivo": motivo_da_minha_vez(demanda=d, pessoa_id=eu)} for d in com_voce
+        ],
+        "entregas": [nomeadas[str(d["id"])] for d in entregas],
+        "historico": [
+            {
+                **nomeadas[str(d["id"])],
+                "fechada_em": desfechos[str(d["id"])][0],
+                "fechada_por_id": desfechos[str(d["id"])][1],
+                "fechada_por_nome": quem_fechou.get(desfechos[str(d["id"])][1]),
+            }
+            for d in historico
+        ],
+    }
+
+
+def _sem_repetidas(demandas: list[dict]) -> list[dict]:
+    """A lista sem a mesma Demanda duas vezes: ela pode estar em mais de um
+    bloco (a minha que esta em desenvolvimento esta no "Com voce" e nas
+    Entregas), e o funil so precisa resolver o nome dela uma vez."""
+    vistas: dict[str, dict] = {}
+    for d in demandas:
+        vistas.setdefault(str(d["id"]), d)
+    return list(vistas.values())
 
 
 # ─── Assistente de Tecnologia (PRD #726, ADR 0056) ───────────────────────────
@@ -2149,12 +2330,9 @@ def _resumo_das_demandas_abertas(supabase: Client, *, nomes_de_produto: dict[str
     até a fatia anterior. Guarda-corpo que vira beco não é guarda-corpo.
     """
     try:
-        abertas = _demandas_filtradas(
+        abertas = _demandas_dos_estados(
             supabase,
             estados=ESTADOS_ABERTOS,
-            tipo=None,
-            produto_id=None,
-            responsavel_id=None,
             colunas=COLUNAS_DA_DEMANDA_PARA_O_ASSISTENTE,
         )
         # O corte é no FIM porque a ordem do banco é `criado_em` crescente: as
@@ -2341,17 +2519,12 @@ async def assistente_extrair_documento(
     return {"texto": texto, "filename": _nome_para_a_tela(nome)}
 
 
-# A lista de extensoes e o teto vem do SERVICO, que e quem manda a imagem ao
-# modelo: e ele que precisa do tipo de cada extensao, e duas copias da regra
-# divergiriam calado (o 413 recusando o que o payload saberia rotular).
-MOTIVO_IMAGEM_FORA_DA_LISTA = (
-    "Só dá para ler print .png, .jpg, .jpeg ou .webp. Salve a imagem em um desses formatos e anexe de novo."
-)
-
-MOTIVO_IMAGEM_GRANDE = (
-    f"O print passou do limite de {assistente_tecnologia.LIMITE_DA_IMAGEM // (1024 * 1024)} MB. "
-    "Anexe uma imagem menor, ou escreva o que aparece na tela."
-)
+# A lista de extensoes, o teto e as duas frases de recusa vem do SERVICO, que e
+# quem manda a imagem ao modelo: e ele que precisa do tipo de cada extensao, e
+# duas copias da regra divergiriam calado (o 413 recusando o que o payload
+# saberia rotular). O Anexo da Demanda (issue #1061) recusa pelas mesmas.
+MOTIVO_IMAGEM_FORA_DA_LISTA = assistente_tecnologia.MOTIVO_IMAGEM_FORA_DA_LISTA
+MOTIVO_IMAGEM_GRANDE = assistente_tecnologia.MOTIVO_IMAGEM_GRANDE
 
 # A frase de quando a imagem chegou inteira e a LEITURA nao aconteceu: provedor
 # fora do ar, resposta vazia.
@@ -2372,7 +2545,10 @@ async def assistente_descrever_imagem(
     """O print anexado vira descricao, e a imagem some (ADR 0056, decisao 4).
 
     A primeira chamada MULTIMODAL do app. Nao grava NADA: nem storage, nem
-    tabela, nem log com o conteudo. O que a tela faz com o que sai daqui e
+    tabela, nem log com o conteudo. Os bytes ficam so na memoria do processo,
+    com um identificador efemero que volta junto da descricao (issue #1062): o
+    print vira Anexo se "Criar Demanda" trouxer o identificador, e some sozinho
+    se nao trouxer. O que a tela faz com o que sai daqui e
     escrever uma mensagem da PESSOA com o prefixo `[print] `, que e o que a
     deixa ver o que o assistente enxergou e o que faz o material entrar cercado
     no prompt do turno seguinte.
@@ -2405,4 +2581,7 @@ async def assistente_descrever_imagem(
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=MOTIVO_PRINT_ILEGIVEL)
 
     logger.info(f"Print lido para o Assistente por {_ator['id']}: {extensao}, {len(texto)} chars")
-    return {"texto": texto}
+    # O print fica so na memoria, com um identificador efemero (issue #1062): vira
+    # Anexo se "Criar Demanda" o trouxer, e some sozinho se nao trouxer.
+    print_id = tecnologia_anexos.guardar_print(quem_id=_ator["id"], nome=imagem.filename or "", conteudo=conteudo)
+    return {"texto": texto, "print_id": print_id}
