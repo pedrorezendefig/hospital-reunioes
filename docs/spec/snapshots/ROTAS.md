@@ -1,6 +1,6 @@
 # ROTAS.md
 <!-- gerado automaticamente por /snapshot — não editar -->
-<!-- last_update: 2026-10-07T18:54+0000 -->
+<!-- last_update: 2026-10-10T00:57+0000 -->
 
 Endpoints HTTP expostos pelo backend FastAPI do Hospital Reuniões.
 
@@ -218,7 +218,9 @@ Endpoints HTTP expostos pelo backend FastAPI do Hospital Reuniões.
 | GET | `/ouvidoria/triagem-email` | Os e-mails recebidos, pendentes primeiro, na ordem de chegada. Só o | ✅ |
 | GET | `/ouvidoria/triagem-email/{email_id}` | O item aberto: cabeçalho, corpo em texto e anexos. O HTML do e-mail fica | ✅ |
 | GET | `/ouvidoria/triagem-email/{email_id}/anexos/{anexo_id}/url` | URL assinada, com expiração, para abrir o anexo do e-mail. O bucket é o | ✅ |
+| GET | `/ouvidoria/triagem-email/{email_id}/caso-para-juntar` | O caso a que o e-mail pode ser juntado, em resumo (protocolo, estado e | ✅ |
 | POST | `/ouvidoria/triagem-email/{email_id}/descarte` | Descarta o item: fica só o cabeçalho e quem descartou (issue #649, ADR | ✅ |
+| POST | `/ouvidoria/triagem-email/{email_id}/juntada` | Junta o e-mail a um caso que já existe (issue #651, ADR 0051 decisão 4): | ✅ |
 | GET | `/ouvidoria/triagem-email/{email_id}/pre-carga` | Os valores com que o modal "Nova manifestação" abre quando o e-mail vira | ✅ |
 
 ## participantes (`app/routers/participantes.py`)
@@ -415,4 +417,4 @@ Endpoints HTTP expostos pelo backend FastAPI do Hospital Reuniões.
 
 ---
 
-**Totais:** 239 endpoints em 34 routers · 93% exigem auth.
+**Totais:** 241 endpoints em 34 routers · 93% exigem auth.
