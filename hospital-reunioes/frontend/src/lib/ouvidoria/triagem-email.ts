@@ -10,6 +10,7 @@
  * de verdade é o backend (`require_perfil_ouvidoria`, 403 para os demais).
  */
 
+import type { StatusManifestacao } from "./prazo";
 import type { FormularioRegistro } from "./registro";
 
 /** Os dois perfis da Ouvidoria. Super admin fica de fora, como no Dossiê. */
@@ -63,6 +64,17 @@ export interface EmailRecebido extends Omit<EmailRecebidoResumo, "quantidade_de_
   anexos_excedentes?: number;
   /** Por que esses anexos ficaram de fora, com o lugar do original. */
   motivo_dos_excedentes?: string | null;
+}
+
+/**
+ * O caso a que o e-mail pode ser juntado (issue #651), em resumo: o que o
+ * ouvidor confere antes de confirmar.
+ */
+export interface ResumoDoCaso {
+  id: string;
+  protocolo: string;
+  status: StatusManifestacao;
+  setor: string | null;
 }
 
 /** Quem pode abrir a Triagem de e-mail. */

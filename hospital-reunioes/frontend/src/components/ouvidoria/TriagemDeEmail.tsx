@@ -9,7 +9,8 @@
  * texto e os anexos para baixar. A primeira decisão é virar manifestação
  * (issue #650): abre o modal "Nova manifestação" que já existe, pré-preenchido
  * com o e-mail. A segunda é descartar (issue #649), com a confirmação do app:
- * fica só o cabeçalho e quem descartou. Juntar a um caso chega na seguinte.
+ * fica só o cabeçalho e quem descartou. A terceira é juntar a um caso que já
+ * existe (issue #651), com o protocolo sugerido pelo assunto.
  * A lista abre nos pendentes; o filtro "Decididos" mostra o resto, só com o
  * cabeçalho.
  *
@@ -20,9 +21,10 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { AlertCircle, CheckCircle2, Loader2, Lock, Mail, Megaphone, Paperclip, Trash2 } from "lucide-react";
+import { AlertCircle, CheckCircle2, Link2, Loader2, Lock, Mail, Megaphone, Paperclip, Trash2 } from "lucide-react";
 
 import ConfirmDialog from "@/components/ConfirmDialog";
+import { JuntarACasoModal } from "@/components/ouvidoria/JuntarACasoModal";
 import { NovaManifestacaoModal, type ManifestacaoRegistrada } from "@/components/ouvidoria/NovaManifestacaoModal";
 import {
   avisoDosExcedentes,
@@ -35,6 +37,7 @@ import {
   type EmailRecebido,
   type EmailRecebidoResumo,
   type PreCargaDoEmail,
+  type ResumoDoCaso,
 } from "@/lib/ouvidoria/triagem-email";
 
 const BASE = "/api/ouvidoria/triagem-email";
@@ -86,6 +89,10 @@ export function TriagemDeEmail({ token }: { token: string }) {
   const [casosCriados, setCasosCriados] = useState<Record<string, ManifestacaoRegistrada>>({});
   const [filtro, setFiltro] = useState<Filtro>("pendentes");
   const [confirmandoDescarte, setConfirmandoDescarte] = useState(false);
+  const [juntando, setJuntando] = useState(false);
+  // O caso a que cada e-mail foi juntado nesta sessão da tela, para o painel
+  // mostrar o protocolo com o caminho do Dossiê.
+  const [casosJuntados, setCasosJuntados] = useState<Record<string, ResumoDoCaso>>({});
 
   useEffect(() => {
     let cancelado = false;
@@ -224,6 +231,26 @@ export function TriagemDeEmail({ token }: { token: string }) {
     }
   }
 
+  /** O e-mail entrou na trilha do caso: o item sai dos pendentes. */
+  function aoJuntar(item: EmailRecebido, caso: ResumoDoCaso) {
+    setJuntando(false);
+    setCasosJuntados((atuais) => ({ ...atuais, [item.id]: caso }));
+    setAberto((atual) => (atual && atual.id === item.id ? item : atual));
+    setEmails((atuais) =>
+      atuais.map((e) =>
+        e.id === item.id
+          ? {
+              ...e,
+              estado: "juntado",
+              quantidade_de_anexos: 0,
+              decidido_em: item.decidido_em,
+              decidido_por_nome: item.decidido_por_nome,
+            }
+          : e
+      )
+    );
+  }
+
   /** O caso nasceu: o item sai dos pendentes, na lista e no painel. */
   function aoRegistrar(emailId: string, criada: ManifestacaoRegistrada) {
     setCasosCriados((atuais) => ({ ...atuais, [emailId]: criada }));
@@ -262,6 +289,7 @@ export function TriagemDeEmail({ token }: { token: string }) {
   // contados, e o aviso diz quantos são e onde está o original.
   const avisoDeExcedentes = aberto ? avisoDosExcedentes(aberto) : null;
   const casoDoAberto = aberto ? casosCriados[aberto.id] : undefined;
+  const casoJuntadoDoAberto = aberto ? casosJuntados[aberto.id] : undefined;
   const visiveis = emails.filter((e) => (filtro === "pendentes" ? e.estado === "pendente" : e.estado !== "pendente"));
 
   return (
@@ -386,6 +414,14 @@ export function TriagemDeEmail({ token }: { token: string }) {
                 </button>
                 <button
                   type="button"
+                  onClick={() => setJuntando(true)}
+                  className="inline-flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-semibold border border-border text-slate-700 hover:bg-slate-50 transition-colors"
+                >
+                  <Link2 className="w-4 h-4" />
+                  Juntar a um caso
+                </button>
+                <button
+                  type="button"
                   onClick={() => setConfirmandoDescarte(true)}
                   className="inline-flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-semibold border border-border text-slate-700 hover:bg-slate-50 transition-colors"
                 >
@@ -393,6 +429,29 @@ export function TriagemDeEmail({ token }: { token: string }) {
                   Descartar
                 </button>
               </div>
+            )}
+            {aberto.estado === "juntado" && (
+              <p className="flex items-start gap-2 px-3 py-2 rounded-lg bg-emerald-50 border border-emerald-200 text-emerald-800 text-sm">
+                <Link2 className="w-4 h-4 shrink-0 mt-0.5" />
+                {casoJuntadoDoAberto ? (
+                  <span>
+                    Juntado ao caso{" "}
+                    <Link
+                      href={`/ouvidoria/m/${casoJuntadoDoAberto.protocolo}`}
+                      className="font-mono font-semibold underline"
+                    >
+                      {casoJuntadoDoAberto.protocolo}
+                    </Link>
+                    . O texto está na trilha do caso, com os anexos.
+                  </span>
+                ) : (
+                  <span>
+                    Juntado a um caso por {aberto.decidido_por_nome ?? "alguém da Ouvidoria"}
+                    {aberto.decidido_em ? ` em ${formatarChegada(aberto.decidido_em)}` : ""}. O texto está na
+                    trilha do caso.
+                  </span>
+                )}
+              </p>
             )}
             {aberto.estado === "descartado" && (
               <div className="space-y-2">
@@ -439,7 +498,9 @@ export function TriagemDeEmail({ token }: { token: string }) {
               </p>
             )}
 
-            {aberto.estado !== "descartado" && (
+            {/* Descartado e juntado guardam só o cabeçalho: o texto foi apagado
+                ou está na trilha do caso (ADR 0051, decisões 4 e 5). */}
+            {aberto.estado !== "descartado" && aberto.estado !== "juntado" && (
               <div>
                 <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-1">Corpo</h3>
                 {aberto.corpo_texto ? (
@@ -516,6 +577,14 @@ export function TriagemDeEmail({ token }: { token: string }) {
         description="O texto e os anexos são apagados. Fica só o cabeçalho (remetente, assunto e data) e quem descartou. Use para spam, propaganda e o que não é manifestação."
         confirmLabel="Descartar"
         confirmVariant="danger"
+      />
+
+      <JuntarACasoModal
+        aberto={juntando && aberto !== null}
+        token={token}
+        emailId={aberto?.id ?? null}
+        onClose={() => setJuntando(false)}
+        onJuntado={aoJuntar}
       />
 
       <NovaManifestacaoModal

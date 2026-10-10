@@ -12,7 +12,7 @@
  * virar marcação na página.
  */
 
-import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { TriagemDeEmail } from "./TriagemDeEmail";
@@ -118,17 +118,6 @@ describe("a lista da triagem", () => {
     const joana = await linhaDe("Demora na recepção do ambulatório");
     expect(within(joana).queryByText("Interno")).toBeNull();
     expect(within(joana).queryByText("Incompleto")).toBeNull();
-  });
-
-  it("juntar a um caso ainda não aparece: é fatia seguinte", async () => {
-    montar({ e1: item(JOANA) });
-
-    fireEvent.click(await linhaDe("Demora na recepção do ambulatório"));
-    await screen.findByText("Esperei três horas na recepção sem informação nenhuma.");
-
-    for (const acao of [/juntar/i]) {
-      expect(screen.queryByRole("button", { name: acao })).toBeNull();
-    }
   });
 
   it("lista vazia diz que não há e-mail, em vez de uma tela em branco", async () => {
@@ -578,5 +567,207 @@ describe("descarte que não terminou (issue #649)", () => {
     const painel = screen.getByRole("region", { name: "E-mail recebido" });
     await within(painel).findByText(/Descartado por Marta Ouvidora/);
     expect(within(painel).queryByRole("button", { name: /descart/i })).toBeNull();
+  });
+});
+
+// ─── Juntar a um caso (issue #651) ───────────────────────────────────────────
+
+const CASO_12 = { id: "caso-12", protocolo: "2026-0012", status: "aguardando_area", setor: "Recepção" };
+const CASO_30 = { id: "caso-30", protocolo: "2026-0030", status: "encerrado", setor: "Faturamento" };
+
+let juntadas: Record<string, unknown>[] = [];
+
+/** A tela com o backend dublado para a juntada: a sugestão (que pode vir
+ *  vazia), o resumo do protocolo digitado e a juntada em si. */
+function montarParaJuntar(sugestao: typeof CASO_12 | null, statusDaJuntada = 200, detalhe = "") {
+  chamadas = [];
+  juntadas = [];
+  const casos: Record<string, typeof CASO_12> = { "2026-0012": CASO_12, "2026-0030": CASO_30 };
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async (url: string, init?: RequestInit) => {
+      chamadas.push(url);
+      if (url === "/api/ouvidoria/triagem-email") return respostaJson({ emails: [JOANA] });
+      if (url === "/api/ouvidoria/triagem-email/e1/caso-para-juntar") return respostaJson({ caso: sugestao });
+      const digitado = url.match(/caso-para-juntar\?protocolo=(.+)$/);
+      if (digitado) return respostaJson({ caso: casos[decodeURIComponent(digitado[1])] ?? null });
+      if (url === "/api/ouvidoria/triagem-email/e1/juntada" && init?.method === "POST") {
+        juntadas.push(JSON.parse(String(init.body)));
+        return statusDaJuntada === 200
+          ? respostaJson(item({ ...JOANA, estado: "juntado" }, { anexos: [] }))
+          : respostaJson({ detail: detalhe }, statusDaJuntada);
+      }
+      if (url === "/api/ouvidoria/triagem-email/e1") return respostaJson(item(JOANA));
+      return respostaJson({ detail: "não encontrado" }, 404);
+    })
+  );
+  return render(<TriagemDeEmail token="token-de-teste" />);
+}
+
+async function abrirJuntar() {
+  fireEvent.click(await linhaDe("Demora na recepção do ambulatório"));
+  await screen.findByText("Esperei três horas na recepção sem informação nenhuma.");
+  fireEvent.click(screen.getByRole("button", { name: "Juntar a um caso" }));
+  return screen.findByRole("dialog");
+}
+
+describe("juntar a um caso (issue #651)", () => {
+  beforeEach(() => vi.unstubAllGlobals());
+  afterEach(() => {
+    cleanup();
+    vi.unstubAllGlobals();
+  });
+
+  it("o campo de protocolo vem com a sugestão e a confirmação mostra o resumo do caso", async () => {
+    montarParaJuntar(CASO_12);
+
+    const modal = await abrirJuntar();
+
+    const campo = (await within(modal).findByDisplayValue("2026-0012")) as HTMLInputElement;
+    expect(campo).toBeTruthy();
+    const resumo = within(modal).getByRole("region", { name: "Caso escolhido" });
+    expect(within(resumo).getByText("2026-0012")).toBeTruthy();
+    expect(within(resumo).getByText("Aguardando área")).toBeTruthy();
+    expect(within(resumo).getByText("Recepção")).toBeTruthy();
+    expect(within(modal).getByText(/sugerido pelo assunto/i)).toBeTruthy();
+  });
+
+  it("sem sugestão o campo vem vazio, e o protocolo digitado mostra o resumo antes de juntar", async () => {
+    montarParaJuntar(null);
+    const modal = await abrirJuntar();
+    const campo = within(modal).getByLabelText("Protocolo do caso") as HTMLInputElement;
+    expect(campo.value).toBe("");
+    expect(within(modal).getByRole("button", { name: "Juntar ao caso" })).toHaveProperty("disabled", true);
+
+    fireEvent.change(campo, { target: { value: "2026-0030" } });
+    fireEvent.click(within(modal).getByRole("button", { name: "Conferir" }));
+
+    const resumo = await within(modal).findByRole("region", { name: "Caso escolhido" });
+    expect(within(resumo).getByText("Encerrada")).toBeTruthy();
+    expect(within(resumo).getByText("Faturamento")).toBeTruthy();
+    fireEvent.click(within(modal).getByRole("button", { name: "Juntar ao caso" }));
+
+    await waitFor(() => expect(juntadas).toEqual([{ manifestacao_id: "caso-30" }]));
+  });
+
+  it("protocolo que não é de caso nenhum avisa e não deixa juntar", async () => {
+    montarParaJuntar(null);
+    const modal = await abrirJuntar();
+
+    fireEvent.change(within(modal).getByLabelText("Protocolo do caso"), { target: { value: "2026-0999" } });
+    fireEvent.click(within(modal).getByRole("button", { name: "Conferir" }));
+
+    expect(await within(modal).findByText(/nenhum caso com este protocolo/i)).toBeTruthy();
+    expect(within(modal).getByRole("button", { name: "Juntar ao caso" })).toHaveProperty("disabled", true);
+  });
+
+  it("trocar o protocolo depois de conferir exige conferir de novo", async () => {
+    montarParaJuntar(CASO_12);
+    const modal = await abrirJuntar();
+    await within(modal).findByRole("region", { name: "Caso escolhido" });
+
+    fireEvent.change(within(modal).getByLabelText("Protocolo do caso"), { target: { value: "2026-0030" } });
+
+    expect(within(modal).queryByRole("region", { name: "Caso escolhido" })).toBeNull();
+    expect(within(modal).getByRole("button", { name: "Juntar ao caso" })).toHaveProperty("disabled", true);
+  });
+
+  it("juntado, o item sai dos pendentes e o painel mostra o caso com link para o Dossiê", async () => {
+    montarParaJuntar(CASO_12);
+    const modal = await abrirJuntar();
+    await within(modal).findByRole("region", { name: "Caso escolhido" });
+
+    fireEvent.click(within(modal).getByRole("button", { name: "Juntar ao caso" }));
+
+    const painel = screen.getByRole("region", { name: "E-mail recebido" });
+    const link = await within(painel).findByRole("link", { name: /2026-0012/ });
+    expect(link.getAttribute("href")).toBe("/ouvidoria/m/2026-0012");
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(within(painel).queryByRole("button", { name: "Juntar a um caso" })).toBeNull();
+    const lista = screen.getByRole("region", { name: "E-mails recebidos" });
+    expect(within(lista).queryByText("Demora na recepção do ambulatório")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Decididos" }));
+    const linha = within(lista).getByText("Demora na recepção do ambulatório").closest("button") as HTMLElement;
+    expect(within(linha).getByText("Juntado a um caso")).toBeTruthy();
+  });
+
+  it("caso apagado recusado pelo servidor mostra o motivo e o e-mail continua pendente", async () => {
+    montarParaJuntar(CASO_12, 409, "Este caso foi apagado e não pode mais ser completado com um e-mail.");
+    const modal = await abrirJuntar();
+    await within(modal).findByRole("region", { name: "Caso escolhido" });
+
+    fireEvent.click(within(modal).getByRole("button", { name: "Juntar ao caso" }));
+
+    expect(await within(modal).findByText(/foi apagado e não pode mais ser completado/)).toBeTruthy();
+    const painel = screen.getByRole("region", { name: "E-mail recebido" });
+    expect(within(painel).getByRole("button", { name: "Juntar a um caso" })).toBeTruthy();
+  });
+});
+
+describe("caso arquivado na juntada (issue #651)", () => {
+  beforeEach(() => vi.unstubAllGlobals());
+  afterEach(() => {
+    cleanup();
+    vi.unstubAllGlobals();
+  });
+
+  const RECUSA = "O caso 2026-0012 está arquivado. Desarquive no Dossiê para juntar o e-mail a ele.";
+
+  function montarComArquivado() {
+    chamadas = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string) => {
+        chamadas.push(url);
+        if (url === "/api/ouvidoria/triagem-email") return respostaJson({ emails: [JOANA] });
+        if (url.includes("/caso-para-juntar")) return respostaJson({ detail: RECUSA }, 409);
+        if (url === "/api/ouvidoria/triagem-email/e1") return respostaJson(item(JOANA));
+        return respostaJson({ detail: "não encontrado" }, 404);
+      })
+    );
+    return render(<TriagemDeEmail token="token-de-teste" />);
+  }
+
+  it("a sugestão de caso arquivado mostra a recusa do servidor no modal", async () => {
+    montarComArquivado();
+
+    const modal = await abrirJuntar();
+
+    expect(await within(modal).findByText(RECUSA)).toBeTruthy();
+    expect(within(modal).getByRole("button", { name: "Juntar ao caso" })).toHaveProperty("disabled", true);
+  });
+
+  it("o protocolo digitado de caso arquivado mostra a recusa, e não a falha genérica", async () => {
+    montarComArquivado();
+    const modal = await abrirJuntar();
+    await within(modal).findByText(RECUSA);
+
+    fireEvent.change(within(modal).getByLabelText("Protocolo do caso"), { target: { value: "2026-0012" } });
+    fireEvent.click(within(modal).getByRole("button", { name: "Conferir" }));
+
+    expect(await within(modal).findByText(RECUSA)).toBeTruthy();
+    expect(within(modal).queryByText(/não foi possível procurar/i)).toBeNull();
+  });
+});
+
+describe("e-mail juntado fica só com o cabeçalho (issue #651)", () => {
+  beforeEach(() => vi.unstubAllGlobals());
+  afterEach(() => {
+    cleanup();
+    vi.unstubAllGlobals();
+  });
+
+  it("o juntado aberto diz que o texto está no caso, e não que o corpo não veio", async () => {
+    const juntado = item(
+      { ...JOANA, estado: "juntado" },
+      { corpo_texto: null, anexos: [], decidido_por_nome: "Marta Ouvidora", decidido_em: "2026-09-10T15:00:00.000Z" }
+    );
+    montar({ e1: juntado }, [{ ...JOANA, estado: "juntado" }]);
+    fireEvent.click(await screen.findByRole("button", { name: "Decididos" }));
+    fireEvent.click(await linhaDe("Demora na recepção do ambulatório"));
+
+    const painel = screen.getByRole("region", { name: "E-mail recebido" });
+    expect(await within(painel).findByText(/o texto está na trilha do caso/i)).toBeTruthy();
+    expect(within(painel).queryByText("O corpo deste e-mail não veio do provedor.")).toBeNull();
   });
 });
