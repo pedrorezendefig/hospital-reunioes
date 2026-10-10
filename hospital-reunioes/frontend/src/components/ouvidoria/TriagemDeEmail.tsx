@@ -497,10 +497,21 @@ export function TriagemDeEmail({ token }: { token: string }) {
                 </span>
               </p>
             )}
+            {aberto.estado === "virou_manifestacao" && !casoDoAberto && (
+              <p className="flex items-start gap-2 px-3 py-2 rounded-lg bg-emerald-50 border border-emerald-200 text-emerald-800 text-sm">
+                <CheckCircle2 className="w-4 h-4 shrink-0 mt-0.5" />
+                <span>
+                  Virou manifestação por {aberto.decidido_por_nome ?? "alguém da Ouvidoria"}
+                  {aberto.decidido_em ? ` em ${formatarChegada(aberto.decidido_em)}` : ""}. O texto está no caso,
+                  como relato.
+                </span>
+              </p>
+            )}
 
-            {/* Descartado e juntado guardam só o cabeçalho: o texto foi apagado
-                ou está na trilha do caso (ADR 0051, decisões 4 e 5). */}
-            {aberto.estado !== "descartado" && aberto.estado !== "juntado" && (
+            {/* Só o pendente mostra o corpo. Descartado, juntado e virado em
+                caso guardam só o cabeçalho: o texto foi apagado ou está no caso
+                (ADR 0051, decisões 2, 4 e 5; issue #1109). */}
+            {aberto.estado === "pendente" && (
               <div>
                 <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-1">Corpo</h3>
                 {aberto.corpo_texto ? (

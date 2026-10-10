@@ -591,8 +591,30 @@ def _virar(supabase, me: dict, email_id: str, caso: dict, agora: datetime) -> bo
     if not marcado.data:
         return False
     _mover_anexos_para_o_caso(supabase, me, email_id, caso["id"])
+    _deixar_so_o_cabecalho(supabase, email_id, caso["id"])
     registrar_acesso_ao_email(supabase, me, email_id, "virar_manifestacao", manifestacao_id=caso["id"])
     return True
+
+
+def _deixar_so_o_cabecalho(supabase, email_id: str, caso_id: str) -> None:
+    """O texto já está no caso como relato, e é lá que a Retenção o alcança:
+    a cópia na triagem ficaria fora dela para sempre. O item guarda só o
+    cabeçalho, como no descarte (ADR 0051, decisão 5; issue #1109).
+
+    Guarda própria: o e-mail já está ligado ao caso, e uma falha aqui não
+    pode virar "não ficou ligado" no log de quem chama."""
+    try:
+        supabase.table(TABELA).update({"corpo_texto": None, "corpo_html": None, "cabecalhos": {}}).eq(
+            "id", email_id
+        ).eq("estado", "virou_manifestacao").execute()
+    except Exception as exc:  # noqa: BLE001
+        # Só o tipo: o `details` do `APIError` traz a linha, com o corpo.
+        logger.error(
+            "Triagem de e-mail: o corpo do e-mail %s ficou na triagem depois de virar o caso %s (%s)",
+            email_id,
+            caso_id,
+            type(exc).__name__,
+        )
 
 
 def _mover_anexos_para_o_caso(supabase, me: dict, email_id: str, caso_id: str) -> None:

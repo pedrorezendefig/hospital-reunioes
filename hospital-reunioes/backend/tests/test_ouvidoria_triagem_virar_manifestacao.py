@@ -486,3 +486,54 @@ class TestFalhaDoBancoNaConferenciaNaoViraNaoEncontrado:
 
         assert r.status_code == 404
         assert banco.tabelas["ouvidoria_protocolos"] == []
+
+
+class TestDepoisDeVirarCasoFicaSoOCabecalho:
+    def test_o_corpo_sai_da_triagem_e_o_relato_fica_no_caso(self, monkeypatch, emails):
+        """O texto já está no caso como relato, que a Retenção alcança. A cópia
+        na triagem ficaria fora dela: depois de virar caso, o item guarda só o
+        cabeçalho, como no descarte (ADR 0051, decisão 5; issue #1109)."""
+        cliente, banco, email_id = _email_na_triagem(monkeypatch)
+
+        assert _virar(cliente, email_id).status_code == 201
+
+        [item] = banco.tabelas["ouvidoria_emails_recebidos"]
+        assert item["estado"] == "virou_manifestacao"
+        assert item["corpo_texto"] is None
+        assert item["corpo_html"] is None
+        assert item["cabecalhos"] == {}
+        assert item["remetente_endereco"] == "joana.silva@gmail.com"
+        assert item["assunto"] == "Demora na recepção do ambulatório"
+        [caso] = banco.tabelas["ouvidoria_protocolos"]
+        assert caso["relato_integral"] == "Esperei três horas na recepção sem informação nenhuma."
+
+    def test_falha_ao_limpar_o_corpo_nao_desfaz_o_caso_e_fica_no_log(self, monkeypatch, emails, caplog):
+        cliente, banco, email_id = _email_na_triagem(monkeypatch)
+        original = banco.table
+
+        def table(nome):
+            tabela = original(nome)
+            if nome == "ouvidoria_emails_recebidos":
+                update_original = tabela.update
+
+                def update(payload):
+                    if "corpo_texto" in payload:
+                        raise APIError({"code": "08006", "message": "conexão caiu", "details": "Failing row (Joana)"})
+                    return update_original(payload)
+
+                tabela.update = update
+            return tabela
+
+        monkeypatch.setattr(banco, "table", table)
+
+        r = _virar(cliente, email_id)
+
+        assert r.status_code == 201
+        [caso] = banco.tabelas["ouvidoria_protocolos"]
+        assert r.json()["protocolo"] == caso["protocolo"]
+        [item] = banco.tabelas["ouvidoria_emails_recebidos"]
+        assert item["estado"] == "virou_manifestacao"
+        assert item["manifestacao_id"] == caso["id"]
+        assert "ficou na triagem" in caplog.text
+        assert email_id in caplog.text
+        assert "Joana" not in caplog.text
