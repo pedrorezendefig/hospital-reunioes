@@ -2,6 +2,54 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-10-09T22:44:29-03:00",
+      "sha": "b0640ddb7e87f90324ece039e0224082cfed0dad",
+      "app_version": "0.171.1",
+      "subject": "PR #1110, issue #1109: E-mail que vira manifestação fica só com o cabeçalho na triagem",
+      "raw_subject": "chore(deploy): registro do PR avulso (#1110)",
+      "scope": [
+        "backend",
+        "frontend"
+      ],
+      "prds": [
+        646
+      ],
+      "result": "healthy",
+      "duration_seconds": 229,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        },
+        {
+          "service": "frontend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "PR avulso: PR #1110, issue #1109. Merge pela API do GitHub, um build. Registro pela Action pos-merge depois do health.",
+      "etapas": {
+        "merge_s": 2,
+        "build_s": {
+          "backend": 32,
+          "frontend": 199
+        },
+        "health_s": 0
+      },
+      "responsavel": "lucassampaioc1"
+    },
+    {
       "at": "2026-10-09T22:01:48-03:00",
       "sha": "0d91b6b38833d2925191530002e0e34be0d0492a",
       "app_version": "0.171.0",
