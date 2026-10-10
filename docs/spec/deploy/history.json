@@ -2,6 +2,54 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-10-09T22:01:48-03:00",
+      "sha": "0d91b6b38833d2925191530002e0e34be0d0492a",
+      "app_version": "0.171.0",
+      "subject": "PR #1005, issue #651: Triagem de e-mail, juntar a caso existente com sugestão de protocolo",
+      "raw_subject": "chore(deploy): registro do PR avulso (#1005)",
+      "scope": [
+        "backend",
+        "frontend"
+      ],
+      "prds": [
+        646
+      ],
+      "result": "healthy",
+      "duration_seconds": 330,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        },
+        {
+          "service": "frontend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "PR avulso: PR #1005, issue #651. Merge pela API do GitHub, um build. Registro pela Action pos-merge depois do health.",
+      "etapas": {
+        "merge_s": 3,
+        "build_s": {
+          "backend": 288,
+          "frontend": 189
+        },
+        "health_s": 10
+      },
+      "responsavel": "lucassampaioc1"
+    },
+    {
       "at": "2026-10-07T16:33:35-03:00",
       "sha": "45b55d020fd071b02b2b5203e9aac6e4a436a9f5",
       "app_version": "0.170.1",
