@@ -384,10 +384,12 @@ describe("virar manifestação (issue #650)", () => {
   });
 
   it("e-mail que já virou caso não oferece virar de novo", async () => {
-    montarParaVirar({ e1: item({ ...JOANA, estado: "virou_manifestacao" }) });
+    montarParaVirar({ e1: item({ ...JOANA, estado: "virou_manifestacao" }, { corpo_texto: null }) });
 
     fireEvent.click(await linhaDe("Demora na recepção do ambulatório"));
-    await screen.findByText("Esperei três horas na recepção sem informação nenhuma.");
+    // O item que virou caso guarda só o cabeçalho (issue #1109): o painel
+    // abriu quando o aviso aparece.
+    await screen.findByText(/o texto está no caso/i);
 
     expect(screen.queryByRole("button", { name: /virar manifestação/i })).toBeNull();
   });
@@ -768,6 +770,28 @@ describe("e-mail juntado fica só com o cabeçalho (issue #651)", () => {
 
     const painel = screen.getByRole("region", { name: "E-mail recebido" });
     expect(await within(painel).findByText(/o texto está na trilha do caso/i)).toBeTruthy();
+    expect(within(painel).queryByText("O corpo deste e-mail não veio do provedor.")).toBeNull();
+  });
+});
+
+describe("e-mail que virou caso fica só com o cabeçalho (issue #1109)", () => {
+  beforeEach(() => vi.unstubAllGlobals());
+  afterEach(() => {
+    cleanup();
+    vi.unstubAllGlobals();
+  });
+
+  it("o item que virou manifestação diz que o texto está no caso, e não que o corpo não veio", async () => {
+    const virou = item(
+      { ...JOANA, estado: "virou_manifestacao" },
+      { corpo_texto: null, anexos: [], decidido_por_nome: "Marta Ouvidora", decidido_em: "2026-09-10T15:00:00.000Z" }
+    );
+    montar({ e1: virou }, [{ ...JOANA, estado: "virou_manifestacao" }]);
+    fireEvent.click(await screen.findByRole("button", { name: "Decididos" }));
+    fireEvent.click(await linhaDe("Demora na recepção do ambulatório"));
+
+    const painel = screen.getByRole("region", { name: "E-mail recebido" });
+    expect(await within(painel).findByText(/o texto está no caso/i)).toBeTruthy();
     expect(within(painel).queryByText("O corpo deste e-mail não veio do provedor.")).toBeNull();
   });
 });
