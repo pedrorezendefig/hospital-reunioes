@@ -5,8 +5,8 @@ Resend, e o Resend chama o webhook do app. Aqui ele vira um **e-mail recebido**:
 um item da Triagem de e-mail, que só o Perfil da Ouvidoria vê, e que não é
 caso nenhum. Quem decide se vira manifestação, se junta a um caso ou se é
 descartado é o ouvidor. A fundação (#648) faz o e-mail chegar e aparecer;
-virar manifestação (#650) e descartar (#649) moram no fim deste arquivo.
-Juntar a um caso chega na fatia seguinte do PRD.
+virar manifestação (#650), descartar (#649) e juntar a um caso (#651) moram
+no fim deste arquivo.
 
 Três garantias moram aqui, e cada uma tem teste:
 
@@ -820,7 +820,34 @@ def juntar(supabase, me: dict, email_id: str, caso: dict, agora: datetime) -> st
         return JUNTADA_FALHOU
     # Os anexos passam ao caso pelo mesmo caminho do virar manifestação (#650):
     # o binário não se move, a linha do caso aponta para o mesmo arquivo.
-    _mover_anexos_para_o_caso(supabase, me, email_id, caso["id"])
+    #
+    # Daqui em diante nada levanta. O movimento já está na trilha imutável e o
+    # e-mail já está juntado: um 503 "tente de novo" seria mentira, e a nova
+    # tentativa daria 409. O anexo que não passou fica no item, com o par no log.
+    try:
+        _mover_anexos_para_o_caso(supabase, me, email_id, caso["id"])
+    except Exception as exc:  # noqa: BLE001
+        # Só o tipo: o `details` do `APIError` traz a linha, com o dado do e-mail.
+        logger.error(
+            "Triagem de e-mail: anexos do e-mail %s não passaram ao caso %s depois da juntada (%s)",
+            email_id,
+            caso["id"],
+            type(exc).__name__,
+        )
+    # O texto já está na trilha do caso, e é lá que a Retenção o alcança: a
+    # cópia na triagem ficaria fora dela para sempre. O item guarda só o
+    # cabeçalho, como no descarte (ADR 0051, decisão 5).
+    try:
+        supabase.table(TABELA).update({"corpo_texto": None, "corpo_html": None, "cabecalhos": {}}).eq(
+            "id", email_id
+        ).eq("estado", JUNTADO).execute()
+    except Exception as exc:  # noqa: BLE001
+        logger.error(
+            "Triagem de e-mail: o corpo do e-mail %s ficou na triagem depois da juntada ao caso %s (%s)",
+            email_id,
+            caso["id"],
+            type(exc).__name__,
+        )
     return JUNTADA_FEITA
 
 
@@ -840,6 +867,21 @@ LINHAS_DO_CORPO_PARA_A_SUGESTAO = 10
 CAMPOS_DO_RESUMO_DO_CASO = ("id", "protocolo", "status", "setor")
 
 
+class CasoArquivadoError(Exception):
+    """O caso que o e-mail continuaria está arquivado: fora da fila e do
+    contador de novidade, onde o e-mail juntado sumiria sem ninguém ver."""
+
+    def __init__(self, protocolo: str):
+        super().__init__(protocolo)
+        self.protocolo = protocolo
+
+
+def recusa_de_caso_arquivado(protocolo: str) -> str:
+    """A frase da recusa, uma só para a sugestão e para a juntada: diz o caso
+    e o caminho. O arquivo só muda por ato explícito do ouvidor."""
+    return f"O caso {protocolo} está arquivado. Desarquive no Dossiê para juntar o e-mail a ele."
+
+
 def protocolos_citados(texto: str) -> list[str]:
     """Os protocolos que o texto cita, na ordem, sem repetir."""
     return list(dict.fromkeys(_PROTOCOLO_NO_TEXTO.findall(texto or "")))
@@ -850,18 +892,23 @@ def resumo_do_caso(supabase, protocolo: str) -> dict | None:
     ouvidor confirmar a juntada. None quando o protocolo não é de caso nenhum.
 
     Leitura curta de propósito: abrir o Dossiê carimbaria o visto da
-    Ouvidoria num caso que ninguém leu."""
+    Ouvidoria num caso que ninguém leu.
+
+    Caso arquivado levanta `CasoArquivadoError`: ele não é opção de juntada, e
+    a tela precisa dizer por quê, e não "nenhum caso com este protocolo"."""
     protocolo = (protocolo or "").strip()
     if not _PROTOCOLO_NO_TEXTO.fullmatch(protocolo):
         return None
     resultado = (
         supabase.table("ouvidoria_protocolos")
-        .select(", ".join(CAMPOS_DO_RESUMO_DO_CASO))
+        .select(", ".join((*CAMPOS_DO_RESUMO_DO_CASO, "arquivada_em")))
         .eq("protocolo", protocolo)
         .execute()
     )
     if not resultado.data:
         return None
+    if resultado.data[0].get("arquivada_em"):
+        raise CasoArquivadoError(protocolo)
     return {campo: resultado.data[0].get(campo) for campo in CAMPOS_DO_RESUMO_DO_CASO}
 
 

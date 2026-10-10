@@ -24,6 +24,17 @@ const BASE = "/api/ouvidoria/triagem-email";
 const CAMPO =
   "w-full px-3 py-2 rounded-lg border border-slate-200 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary/40";
 
+/**
+ * A recusa que o servidor já escreveu para o ouvidor (409: caso arquivado,
+ * caso apagado, e-mail decidido em outra aba), ou null quando a resposta não
+ * é uma recusa dessas.
+ */
+async function recusaDoServidor(res: Response): Promise<string | null> {
+  if (res.status !== 409) return null;
+  const corpo = (await res.json().catch(() => null)) as { detail?: unknown } | null;
+  return typeof corpo?.detail === "string" ? corpo.detail : null;
+}
+
 interface JuntarACasoModalProps {
   aberto: boolean;
   token: string;
@@ -55,7 +66,14 @@ export function JuntarACasoModal({ aberto, token, emailId, onClose, onJuntado }:
         const res = await fetch(`${BASE}/${emailId}/caso-para-juntar`, {
           headers: { Authorization: `Bearer ${token}` },
         });
-        if (!res.ok || cancelado) return;
+        if (cancelado) return;
+        if (!res.ok) {
+          // O caso sugerido está arquivado: o ouvidor precisa saber por que
+          // o campo veio vazio, e o caminho para resolver.
+          const recusa = await recusaDoServidor(res);
+          if (recusa && !cancelado) setErro(recusa);
+          return;
+        }
         const { caso } = (await res.json()) as { caso: ResumoDoCaso | null };
         if (cancelado || !caso) return;
         setProtocolo(caso.protocolo);
@@ -90,7 +108,9 @@ export function JuntarACasoModal({ aberto, token, emailId, onClose, onJuntado }:
         { headers: { Authorization: `Bearer ${token}` } }
       );
       if (!res.ok) {
-        setErro("Não foi possível procurar o caso agora. Tente de novo em instantes.");
+        setErro(
+          (await recusaDoServidor(res)) ?? "Não foi possível procurar o caso agora. Tente de novo em instantes."
+        );
         return;
       }
       const { caso } = (await res.json()) as { caso: ResumoDoCaso | null };

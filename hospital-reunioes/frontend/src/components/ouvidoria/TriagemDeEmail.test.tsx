@@ -703,3 +703,71 @@ describe("juntar a um caso (issue #651)", () => {
     expect(within(painel).getByRole("button", { name: "Juntar a um caso" })).toBeTruthy();
   });
 });
+
+describe("caso arquivado na juntada (issue #651)", () => {
+  beforeEach(() => vi.unstubAllGlobals());
+  afterEach(() => {
+    cleanup();
+    vi.unstubAllGlobals();
+  });
+
+  const RECUSA = "O caso 2026-0012 está arquivado. Desarquive no Dossiê para juntar o e-mail a ele.";
+
+  function montarComArquivado() {
+    chamadas = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string) => {
+        chamadas.push(url);
+        if (url === "/api/ouvidoria/triagem-email") return respostaJson({ emails: [JOANA] });
+        if (url.includes("/caso-para-juntar")) return respostaJson({ detail: RECUSA }, 409);
+        if (url === "/api/ouvidoria/triagem-email/e1") return respostaJson(item(JOANA));
+        return respostaJson({ detail: "não encontrado" }, 404);
+      })
+    );
+    return render(<TriagemDeEmail token="token-de-teste" />);
+  }
+
+  it("a sugestão de caso arquivado mostra a recusa do servidor no modal", async () => {
+    montarComArquivado();
+
+    const modal = await abrirJuntar();
+
+    expect(await within(modal).findByText(RECUSA)).toBeTruthy();
+    expect(within(modal).getByRole("button", { name: "Juntar ao caso" })).toHaveProperty("disabled", true);
+  });
+
+  it("o protocolo digitado de caso arquivado mostra a recusa, e não a falha genérica", async () => {
+    montarComArquivado();
+    const modal = await abrirJuntar();
+    await within(modal).findByText(RECUSA);
+
+    fireEvent.change(within(modal).getByLabelText("Protocolo do caso"), { target: { value: "2026-0012" } });
+    fireEvent.click(within(modal).getByRole("button", { name: "Conferir" }));
+
+    expect(await within(modal).findByText(RECUSA)).toBeTruthy();
+    expect(within(modal).queryByText(/não foi possível procurar/i)).toBeNull();
+  });
+});
+
+describe("e-mail juntado fica só com o cabeçalho (issue #651)", () => {
+  beforeEach(() => vi.unstubAllGlobals());
+  afterEach(() => {
+    cleanup();
+    vi.unstubAllGlobals();
+  });
+
+  it("o juntado aberto diz que o texto está no caso, e não que o corpo não veio", async () => {
+    const juntado = item(
+      { ...JOANA, estado: "juntado" },
+      { corpo_texto: null, anexos: [], decidido_por_nome: "Marta Ouvidora", decidido_em: "2026-09-10T15:00:00.000Z" }
+    );
+    montar({ e1: juntado }, [{ ...JOANA, estado: "juntado" }]);
+    fireEvent.click(await screen.findByRole("button", { name: "Decididos" }));
+    fireEvent.click(await linhaDe("Demora na recepção do ambulatório"));
+
+    const painel = screen.getByRole("region", { name: "E-mail recebido" });
+    expect(await within(painel).findByText(/o texto está na trilha do caso/i)).toBeTruthy();
+    expect(within(painel).queryByText("O corpo deste e-mail não veio do provedor.")).toBeNull();
+  });
+});

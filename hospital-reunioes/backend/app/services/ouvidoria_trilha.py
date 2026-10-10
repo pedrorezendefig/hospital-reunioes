@@ -182,8 +182,12 @@ def _evento(movimento: dict) -> dict:
     rotulo = _rotulo(anterior, novo)
 
     if rotulo is None:
-        # Movimento sem mudança de estado: a observação É a descrição.
-        descricao, texto = (_uma_linha(observacao) if observacao else MOVIMENTO_SEM_TEXTO), None
+        # Movimento sem mudança de estado: a primeira linha da observação É a
+        # descrição, e o resto, quando há, é o texto. O e-mail juntado ao caso
+        # (issue #651) é o primeiro movimento assim com corpo: a linha
+        # padronizada descreve, e o corpo do e-mail é o que o ouvidor lê.
+        descricao = _uma_linha(observacao) if observacao else MOVIMENTO_SEM_TEXTO
+        texto = "\n".join(observacao.splitlines()[1:]).strip() or None
     else:
         descricao, texto = rotulo, (_sem_rotulo_interno(observacao) if observacao else None)
 

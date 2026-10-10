@@ -1,4 +1,4 @@
-"""Rotas da Triagem de e-mail (ADR 0051, PRD #646, issues #648, #649 e #650).
+"""Rotas da Triagem de e-mail (ADR 0051, PRD #646, issues #648 a #651).
 
 Só o Perfil da Ouvidoria entra: o gate é o mesmo do Dossiê
 (`require_perfil_ouvidoria`), e Super admin fica de fora como lá. Todo acesso ao
@@ -7,8 +7,8 @@ conteúdo de um e-mail recebido entra no log de acesso da Ouvidoria.
 O ouvidor lê a lista e o item. Das decisões, virar manifestação (#650) mora
 aqui só como a pré-carga: quem cria o caso é o registro manual
 (`POST /ouvidoria/manifestacoes` com o `email_recebido_id`). Descartar (#649)
-é a rota `descarte`, no fim deste arquivo. Juntar a um caso chega na fatia
-seguinte.
+é a rota `descarte`, e juntar a um caso que já existe (#651) são as rotas
+`caso-para-juntar` (a sugestão e o resumo) e `juntada`, no fim deste arquivo.
 """
 
 from __future__ import annotations
@@ -177,6 +177,10 @@ async def caso_para_juntar(
             if protocolo is not None
             else triagem.sugerir_caso(supabase, item)
         )
+    except triagem.CasoArquivadoError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT, detail=triagem.recusa_de_caso_arquivado(exc.protocolo)
+        ) from None
     except (HTTPError, APIError, OSError) as exc:
         logger.warning("Falha ao procurar o caso do e-mail recebido %s (%s)", email_id, type(exc).__name__)
         raise HTTPException(
@@ -198,7 +202,7 @@ class PedidoDeJuntada(BaseModel):
 
 # O que a juntada lê do caso: o estado, para o movimento, e os carimbos que a
 # guarda do caso apagado confere (`barrar_caso_apagado`).
-_CAMPOS_DO_CASO_DA_JUNTADA = "id, protocolo, status, setor, anonimizada_em, apagamento_pedido_em"
+_CAMPOS_DO_CASO_DA_JUNTADA = "id, protocolo, status, setor, anonimizada_em, apagamento_pedido_em, arquivada_em"
 
 
 def _carregar_caso(supabase, manifestacao_id: str) -> dict | None:
@@ -244,6 +248,14 @@ async def juntar_a_caso(
         # O caso cujo relato a retenção apagou não recebe texto novo: o que
         # voltar a ser trazido entra como manifestação nova (ADR 0047).
         barrar_caso_apagado(caso, "completado com um e-mail")
+        # O caso arquivado está fora da fila e do contador de novidade: o
+        # e-mail juntado a ele sumiria sem ninguém ver. Desarquivar é ato
+        # explícito do ouvidor, no Dossiê.
+        if caso.get("arquivada_em"):
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=triagem.recusa_de_caso_arquivado(caso.get("protocolo") or ""),
+            )
         desfecho = triagem.juntar(supabase, me, email_id, caso, datetime.now(UTC))
     except (HTTPError, APIError, OSError) as exc:
         logger.warning("Falha ao juntar o e-mail recebido %s (%s)", email_id, type(exc).__name__)

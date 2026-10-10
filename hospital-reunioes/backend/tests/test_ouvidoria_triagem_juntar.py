@@ -276,3 +276,125 @@ class TestAJuntadaEntraNoLogDeAcesso:
         assert acesso["email_recebido_id"] == email_id
         assert acesso["manifestacao_id"] == caso["id"]
         assert acesso["ator_id"] == OUVIDOR["id"]
+
+
+class TestOCorpoApareceNaLinhaDoTempo:
+    def test_a_linha_do_tempo_do_caso_mostra_a_linha_padrao_e_o_corpo_do_email(self, monkeypatch):
+        """O que o ouvidor lê no Dossiê é a linha do tempo, e não a tabela crua:
+        o movimento sem mudança de estado tem a linha padronizada como
+        descrição e o corpo do e-mail como texto (spec da #651, "e o corpo em
+        texto")."""
+        cliente, banco, email_id = _email_na_triagem(monkeypatch)
+        caso = _caso(banco)
+        _juntar(cliente, email_id, caso["id"])
+
+        r = cliente.get(f"/api/ouvidoria/manifestacoes/{caso['id']}/movimentos")
+
+        assert r.status_code == 200
+        [evento] = r.json()["movimentos"]
+        assert evento["descricao"] == (
+            "E-mail recebido de Joana da Silva <joana.silva@gmail.com> em 10/09/2026 11:02: "
+            "Demora na recepção do ambulatório"
+        )
+        assert evento["texto"] == CORPO
+
+
+class TestFalhaNosAnexosDepoisDoMovimento:
+    def test_falha_ao_mover_os_anexos_nao_vira_503_com_a_juntada_feita(self, monkeypatch, caplog):
+        """O movimento já está na trilha imutável e o e-mail já está juntado:
+        um 503 "tente de novo" aqui seria mentira, e a nova tentativa daria
+        409. Como no virar manifestação (#650), o passo dos anexos nunca
+        levanta, e o log leva só ids e o tipo da falha."""
+        from postgrest.exceptions import APIError
+
+        cliente, banco, email_id = _email_na_triagem(monkeypatch)
+        caso = _caso(banco)
+        original = banco.table
+        falhou = []
+
+        def table(nome):
+            tabela = original(nome)
+            if nome == "ouvidoria_emails_recebidos_anexos" and banco.tabelas["ouvidoria_movimentos"] and not falhou:
+                select_original = tabela.select
+
+                def select(*args, **kwargs):
+                    falhou.append(True)
+                    raise APIError({"code": "08006", "message": "conexão caiu", "details": "Failing row (Joana)"})
+
+                tabela.select = select
+                del select_original
+            return tabela
+
+        monkeypatch.setattr(banco, "table", table)
+
+        r = _juntar(cliente, email_id, caso["id"])
+
+        assert falhou, "o teste não chegou a quebrar a leitura dos anexos"
+        assert r.status_code == 200
+        assert len(banco.tabelas["ouvidoria_movimentos"]) == 1
+        assert banco.tabelas["ouvidoria_emails_recebidos"][0]["estado"] == "juntado"
+        assert email_id in caplog.text
+        assert "APIError" in caplog.text
+        assert "Joana" not in caplog.text
+
+
+ARQUIVADO = {"status": "encerrado", "arquivada_em": "2026-09-20T10:00:00+00:00", "arquivada_por": "P10"}
+
+
+class TestCasoArquivadoRecusaAJuntada:
+    """O caso arquivado sai da fila e do contador de novidade: o e-mail juntado
+    a ele sumiria sem ninguém ver. A recusa diz o caminho, desarquivar no
+    Dossiê, e o arquivo só muda por ato explícito do ouvidor."""
+
+    def test_juntar_a_caso_arquivado_recebe_409_e_nada_muda(self, monkeypatch):
+        cliente, banco, email_id = _email_na_triagem(monkeypatch)
+        caso = _caso(banco, **ARQUIVADO)
+
+        r = _juntar(cliente, email_id, caso["id"])
+
+        assert r.status_code == 409
+        assert "arquivado" in r.json()["detail"]
+        assert "Desarquive" in r.json()["detail"]
+        assert banco.tabelas["ouvidoria_movimentos"] == []
+        assert banco.tabelas["ouvidoria_emails_recebidos"][0]["estado"] == "pendente"
+        assert banco.tabelas["ouvidoria_protocolos"][0]["arquivada_em"] == ARQUIVADO["arquivada_em"]
+
+    def test_sugestao_de_caso_arquivado_recebe_409(self, monkeypatch):
+        cliente, banco, email_id = _com_assunto(monkeypatch, "Re: protocolo 2026-0012")
+        _caso(banco, **ARQUIVADO)
+
+        r = _sugestao(cliente, email_id)
+
+        assert r.status_code == 409
+        assert "2026-0012" in r.json()["detail"]
+        assert "arquivado" in r.json()["detail"]
+
+    def test_protocolo_digitado_de_caso_arquivado_recebe_409(self, monkeypatch):
+        cliente, banco, email_id = _com_assunto(monkeypatch, "Complemento")
+        _caso(banco, **ARQUIVADO)
+
+        r = _sugestao(cliente, email_id, protocolo="2026-0012")
+
+        assert r.status_code == 409
+        assert "arquivado" in r.json()["detail"]
+
+
+class TestDepoisDeJuntarFicaSoOCabecalho:
+    def test_o_corpo_sai_da_triagem_e_fica_so_no_caso(self, monkeypatch):
+        """O texto entrou na trilha do caso, que a Retenção alcança. A cópia na
+        triagem ficaria fora dela: depois de juntar, o item guarda só o
+        cabeçalho, como no descarte (ADR 0051, decisão 5)."""
+        cliente, banco, email_id = _email_na_triagem(monkeypatch)
+        caso = _caso(banco)
+
+        assert _juntar(cliente, email_id, caso["id"]).status_code == 200
+
+        [item] = banco.tabelas["ouvidoria_emails_recebidos"]
+        assert item["estado"] == "juntado"
+        assert item["corpo_texto"] is None
+        assert item["corpo_html"] is None
+        assert item["cabecalhos"] == {}
+        assert item["remetente_endereco"] == "joana.silva@gmail.com"
+        assert item["assunto"] == "Demora na recepção do ambulatório"
+        [movimento] = banco.tabelas["ouvidoria_movimentos"]
+        assert CORPO in movimento["observacao"]

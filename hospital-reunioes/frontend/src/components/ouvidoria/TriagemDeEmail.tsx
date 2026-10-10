@@ -442,12 +442,13 @@ export function TriagemDeEmail({ token }: { token: string }) {
                     >
                       {casoJuntadoDoAberto.protocolo}
                     </Link>
-                    . O texto e os anexos entraram na trilha do caso.
+                    . O texto está na trilha do caso, com os anexos.
                   </span>
                 ) : (
                   <span>
                     Juntado a um caso por {aberto.decidido_por_nome ?? "alguém da Ouvidoria"}
-                    {aberto.decidido_em ? ` em ${formatarChegada(aberto.decidido_em)}` : ""}.
+                    {aberto.decidido_em ? ` em ${formatarChegada(aberto.decidido_em)}` : ""}. O texto está na
+                    trilha do caso.
                   </span>
                 )}
               </p>
@@ -497,7 +498,9 @@ export function TriagemDeEmail({ token }: { token: string }) {
               </p>
             )}
 
-            {aberto.estado !== "descartado" && (
+            {/* Descartado e juntado guardam só o cabeçalho: o texto foi apagado
+                ou está na trilha do caso (ADR 0051, decisões 4 e 5). */}
+            {aberto.estado !== "descartado" && aberto.estado !== "juntado" && (
               <div>
                 <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-1">Corpo</h3>
                 {aberto.corpo_texto ? (
