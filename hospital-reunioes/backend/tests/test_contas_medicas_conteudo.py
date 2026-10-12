@@ -110,6 +110,28 @@ def test_cada_item_da_prescricao_sai_com_os_campos_lidos_da_tabela():
     assert (itens[9].nome, itens[9].pedido) == ("UREIA", "3015")
 
 
+SUSPENSO_DIA_20 = "\n                                           Suspenso dia.: 20"
+
+
+@pytest.mark.parametrize(
+    "ultima_linha_do_item, numero, obs",
+    [
+        ("   Obs.: EM CASO DE DOR OU FEBRE", 2, "EM CASO DE DOR OU FEBRE"),
+        ("   |-> SERINGA DESCARTAVEL 10ML  1 UNIDADE", 3, ""),
+    ],
+)
+def test_suspenso_depois_da_observacao_ou_do_componente_suspende_o_item(ultima_linha_do_item, numero, obs):
+    """A linha `Suspenso dia.:` depois de uma observação ou de um componente não é
+    continuação deles: o item sai suspenso e não conta no dia (cobrança a mais)."""
+    (texto, pagina_2) = paginas_da_fixture("conteudo/prescricao")
+    texto = texto.replace(ultima_linha_do_item, ultima_linha_do_item + SUSPENSO_DIA_20)
+    (prescricao_lida,) = ler([texto, pagina_2]).prescricoes
+    item = next(i for i in prescricao_lida.itens if i.numero == numero)
+
+    assert (item.suspenso, item.obs) == (True, obs)
+    assert all("Suspenso" not in c for c in item.componentes)
+
+
 def test_exames_pedidos_saem_com_nome_numero_do_pedido_data_e_pagina():
     exames = ler("prontuario/capa", "conteudo/prescricao").exames_pedidos
 
@@ -296,7 +318,8 @@ def test_movimentacoes_saem_no_formato_de_entrada_do_contador_de_diarias():
     """Entrada do contador (#1115 e `referencia-diarias.mjs`): em ordem de data e hora, a
     primeira é a INTERNACAO, a última é a saída, cada uma com o setor. O registro feito
     depois da alta (SAE em outro setor às 18:00) não vira transferência depois da saída,
-    que o contador recusa como fora de ordem."""
+    que o contador recusa como fora de ordem. O teste de integração com `contar_diarias`
+    é critério de aceite do #1115, que traz o contador."""
     movimentacoes = ler(
         "prontuario/admissao_unidade",
         prescricao(3, CLEXANE),

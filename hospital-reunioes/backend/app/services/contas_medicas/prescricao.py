@@ -147,7 +147,10 @@ def _rascunhos(paginas: Sequence[tuple[int, str]]) -> list[_Rascunho]:
                 continue
             recuo = len(bruta) - len(bruta.lstrip())
             celulas = _celulas(linha)
-            if atual.componentes and recuo > 10:
+            if _SUSPENSO.search(linha):
+                # vale para o item, nunca continuação da observação nem do componente
+                atual.celulas += celulas
+            elif atual.componentes and recuo > 10:
                 atual.componentes[-1] += " " + celulas[0]
             elif atual.obs and not re.search(r"\dHS/|\.\s\d{2}", linha):
                 atual.obs += " " + linha
