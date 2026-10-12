@@ -37,17 +37,21 @@ from typing import Literal
 from app.services.contas_medicas_extrator import ErroLeitura
 
 __all__ = [
+    "CabecalhoDaConta",
     "Conta",
     "ErroLeitura",
     "ItemConta",
+    "MENSAGEM_CABECALHO_ILEGIVEL",
     "MENSAGEM_CONTA_INCOMPLETA",
     "chave_do_plano",
     "coluna_do_plano",
     "detectar_tipo_do_arquivo",
+    "ler_cabecalho_da_conta",
     "ler_conta",
 ]
 
 MENSAGEM_CONTA_INCOMPLETA = "Não consegui ler a conta inteira"
+MENSAGEM_CABECALHO_ILEGIVEL = "Não achei o atendimento e o plano no cabeçalho da conta"
 TOLERANCIA = Decimal("0.01")
 CENTAVO = Decimal("0.01")
 
@@ -207,6 +211,39 @@ def _conferencia_da_leitura(itens: Sequence[ItemConta], total: Decimal) -> bool:
     if not itens or not _fecha(sum((i.total for i in itens), Decimal(0)), total):
         return False
     return all(_fecha((i.quantidade * i.unitario).quantize(CENTAVO, ROUND_HALF_UP), i.total) for i in itens)
+
+
+@dataclass(frozen=True)
+class CabecalhoDaConta:
+    """O que o envio precisa da Conta antes da leitura inteira: com quem parear,
+    que parcial é e de que plano."""
+
+    atendimento: str
+    conta: str | None
+    tipo: str | None
+    periodo_inicio: date | None
+    periodo_fim: date | None
+    plano: str
+
+
+def ler_cabecalho_da_conta(texto_por_pagina: Sequence[str]) -> CabecalhoDaConta | ErroLeitura:
+    """Só o cabeçalho, sem os itens e sem a conferência da leitura.
+
+    É a leitura do envio: a conta inteira é lida depois, na fila, e é lá que a
+    soma que não fecha vira Erro. Aqui basta o atendimento e o plano.
+    """
+    cab = _cabecalho("\n".join(texto_por_pagina))
+    if not {"atendimento", "plano"} <= cab.keys():
+        return ErroLeitura(MENSAGEM_CABECALHO_ILEGIVEL)
+    periodo = cab.get("periodo")
+    return CabecalhoDaConta(
+        atendimento=cab["atendimento"][0],
+        conta=cab.get("conta", (None,))[0],
+        tipo=cab.get("tipo", (None,))[0],
+        periodo_inicio=_data(periodo[0]) if periodo else None,
+        periodo_fim=_data(periodo[1]) if periodo else None,
+        plano=cab["plano"][0],
+    )
 
 
 def ler_conta(texto_por_pagina: Sequence[str]) -> Conta | ErroLeitura:

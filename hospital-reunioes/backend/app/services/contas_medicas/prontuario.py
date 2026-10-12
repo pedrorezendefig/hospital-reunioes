@@ -25,6 +25,7 @@ PR quando o MV mudar de versão (ADR 0070, decisão 7).
 
 import re
 import unicodedata
+from collections import Counter
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from datetime import date, datetime, time
@@ -675,6 +676,18 @@ def _ordenar_por_data(documentos: list[tuple[list[_Pagina], _Campos]]) -> list[t
         else:
             anterior = (campos.data, campos.hora)
     return sorted(documentos, key=lambda d: (d[1].data or date.min, d[1].hora or time.min))
+
+
+def atendimento_do_prontuario(texto_por_pagina: Sequence[str | None]) -> str | None:
+    """O Atendimento do Prontuário, para o envio parear com a Conta.
+
+    A capa não imprime o número; cada página do corpo imprime o dela. O arquivo
+    pode trazer também o pronto-socorro, que é outro Atendimento com um punhado
+    de páginas, enquanto a internação tem centenas: vale o número que aparece
+    em mais páginas. Empate fica com o que apareceu primeiro.
+    """
+    contagem = Counter(m.group(1) for texto in texto_por_pagina if texto and (m := _ATENDIMENTO.search(texto)))
+    return contagem.most_common(1)[0][0] if contagem else None
 
 
 def ler_prontuario(texto_por_pagina: Sequence[str | None], atendimento: str | int) -> Prontuario:
