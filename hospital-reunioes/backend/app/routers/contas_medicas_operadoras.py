@@ -26,6 +26,7 @@ from app.services.contas_medicas.operadoras import (
     cadastrar_plano,
     cadastrar_setor,
     importar_memoria,
+    listar_operadoras,
     listar_planos,
     listar_setores,
     texto_da_memoria_vigente,
@@ -69,6 +70,17 @@ def _recusa(exc: CadastroRecusadoError) -> HTTPException:
 # A memória da ASSIM, a maior, tem 40 KB. Um teto folgado barra o PDF enviado
 # no campo errado antes de ele ser lido inteiro para a memória do processo.
 TETO_DO_ARQUIVO_DE_MEMORIA = 1024 * 1024
+
+
+@router.get("/operadoras")
+@limiter.limit("60/minute")
+async def operadoras(
+    request: Request,
+    _me: dict = Depends(require_permissao_cm(PERMISSAO)),
+    supabase=Depends(get_supabase_client),
+) -> dict:
+    """As operadoras com a situação, a versão da memória, as regras e as tabelas carregadas."""
+    return {"operadoras": listar_operadoras(supabase)}
 
 
 @router.post("/operadoras/memoria", status_code=status.HTTP_201_CREATED)

@@ -572,3 +572,65 @@ class TestSetoresDoMv:
         assert cliente.get(ROTA_SETORES).status_code == 403
         assert cliente.post(ROTA_SETORES, json={"nome_mv": "CTI1", "acomodacao": "CTI"}).status_code == 403
         assert banco.linhas("cm_setor") == []
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 8. A lista das operadoras, que abre a tela
+# ═══════════════════════════════════════════════════════════════════════════
+
+ROTA_OPERADORAS = "/api/contas-medicas/operadoras"
+
+
+class TestListaDasOperadoras:
+    def test_cada_operadora_vem_com_situacao_versao_regras_e_tabelas(self):
+        banco = _com_operadoras("GAMA")
+        banco.tabelas["cm_operadora"][0]["situacao"] = "SEM_MEMORIA"
+        cliente, _ = _cliente(GESTAO, banco)
+        _enviar_memoria(cliente, _memoria("MEMORIA-ALFA-v1.0.md"))
+
+        resposta = cliente.get(ROTA_OPERADORAS)
+
+        assert resposta.status_code == 200
+        assert resposta.json()["operadoras"] == [
+            {
+                "sigla": "ALFA",
+                "nome": "Alfa Saúde",
+                "situacao": "PARCIAL",
+                "versao": "1.0",
+                "regras": {"vigentes": 3, "pendentes": 2},
+                "tabelas_carregadas": [],
+            },
+            {
+                "sigla": "GAMA",
+                "nome": "GAMA",
+                "situacao": "SEM_MEMORIA",
+                "versao": None,
+                "regras": {"vigentes": 0, "pendentes": 0},
+                "tabelas_carregadas": [],
+            },
+        ]
+
+    def test_quem_nao_tem_regra_contratual_e_tabelas_nao_ve_a_lista(self):
+        cliente, _ = _cliente(FATURISTA, _com_operadoras("ASSIM"))
+
+        assert cliente.get(ROTA_OPERADORAS).status_code == 403
+
+
+class TestAsRotasEstaoNoApp:
+    def test_o_app_de_verdade_registra_as_rotas_da_carga(self):
+        """O router tem `include_router` próprio no `main.py`. A fonte é o
+        schema OpenAPI, e não `app.routes` (FastAPI 0.141, issues #542 e #546)."""
+        from app.main import app
+
+        cache = app.openapi_schema
+        try:
+            caminhos = app.openapi()["paths"]
+        finally:
+            app.openapi_schema = cache
+
+        assert len(caminhos) > 50
+        assert "get" in caminhos[ROTA_OPERADORAS]
+        assert "post" in caminhos[ROTA_MEMORIA]
+        assert "get" in caminhos["/api/contas-medicas/operadoras/{sigla}/memoria"]
+        assert {"get", "post"} <= set(caminhos[ROTA_PLANOS])
+        assert {"get", "post"} <= set(caminhos[ROTA_SETORES])

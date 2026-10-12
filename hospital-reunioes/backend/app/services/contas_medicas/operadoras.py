@@ -24,6 +24,7 @@ __all__ = [
     "cadastrar_plano",
     "cadastrar_setor",
     "importar_memoria",
+    "listar_operadoras",
     "listar_planos",
     "listar_setores",
     "memoria_vigente",
@@ -108,6 +109,49 @@ def importar_memoria(supabase, memoria: MemoriaLida, texto_md: str, autor_id: st
         "regras": contagem,
         "parametros": parametros_lidos(memoria.parametros),
     }
+
+
+def listar_operadoras(supabase) -> list[dict[str, Any]]:
+    """Cada operadora com a situação, a versão vigente da memória, a contagem de
+    regras ativas e as categorias de tabela de preço já carregadas."""
+    operadoras = supabase.table("cm_operadora").select("id, sigla, nome, situacao").order("sigla").execute().data or []
+    versoes = {
+        v["operadora_id"]: v
+        for v in (
+            supabase.table("cm_memoria_versao").select("id, operadora_id, versao").eq("vigente", True).execute().data
+            or []
+        )
+    }
+    tabelas: dict[str, set[str]] = {}
+    for linha in supabase.table("cm_operadora_tabela").select("operadora_id, categoria").execute().data or []:
+        tabelas.setdefault(linha["operadora_id"], set()).add(linha["categoria"])
+
+    lista = []
+    for operadora in operadoras:
+        versao = versoes.get(operadora["id"])
+        status = []
+        if versao:
+            status = [
+                r["status"]
+                for r in supabase.table("cm_regra")
+                .select("status")
+                .eq("memoria_versao_id", versao["id"])
+                .eq("ativa", True)
+                .execute()
+                .data
+                or []
+            ]
+        lista.append(
+            {
+                "sigla": operadora["sigla"],
+                "nome": operadora["nome"],
+                "situacao": operadora["situacao"],
+                "versao": versao["versao"] if versao else None,
+                "regras": {"vigentes": status.count("VIGENTE"), "pendentes": status.count("PENDENTE")},
+                "tabelas_carregadas": sorted(tabelas.get(operadora["id"], set())),
+            }
+        )
+    return lista
 
 
 def memoria_vigente(supabase, operadora_id: str) -> dict | None:
