@@ -239,6 +239,200 @@ class TestGuardPorPermissao:
             require_permissao_cm("painel")
 
 
+# ═══════════════════════════════════════════════════════════════════════════
+# 4. A migration 116
+# ═══════════════════════════════════════════════════════════════════════════
+
+# As tabelas das decisoes de implementacao do PRD #1113, escritas a mao.
+TABELAS_DO_PRD = (
+    "cm_operadora",
+    "cm_operadora_plano",
+    "cm_memoria_versao",
+    "cm_regra",
+    "cm_tabela_preco",
+    "cm_tabela_preco_item",
+    "cm_operadora_tabela",
+    "cm_setor",
+    "cm_item_dicionario",
+    "cm_envio",
+    "cm_arquivo",
+    "cm_atendimento",
+    "cm_eventos",
+    "cm_prescricao",
+    "cm_prescricao_item",
+    "cm_cirurgia",
+    "cm_glicemia_dia",
+    "cm_conta",
+    "cm_conta_item",
+    "cm_guia_linha",
+    "cm_observacao",
+    "cm_perfil_permissao",
+)
+
+# Dado de paciente que nao pode morar em tabela nenhuma (ADR 0070, decisao 8).
+COLUNAS_PROIBIDAS = (
+    "nome_completo",
+    "nome_paciente",
+    "paciente_nome",
+    "nome_mae",
+    "cpf",
+    "rg",
+    "cns",
+    "carteira",
+    "carteirinha",
+    "data_nascimento",
+    "nascimento",
+    "endereco",
+    "telefone",
+)
+
+_PALAVRAS_DE_RESTRICAO = {"primary", "unique", "check", "foreign", "constraint", "exclude"}
+
+
+def _sql() -> str:
+    return MIGRATION.read_text(encoding="utf-8")
+
+
+def _sql_sem_comentarios() -> str:
+    return re.sub(r"--[^\n]*", "", _sql())
+
+
+def _tabelas_criadas() -> dict[str, list[str]]:
+    """Cada `CREATE TABLE cm_*` da migration com as colunas dele."""
+    tabelas: dict[str, list[str]] = {}
+    for nome, corpo in re.findall(
+        r"CREATE TABLE IF NOT EXISTS (cm_\w+)\s*\((.*?)\n\);", _sql_sem_comentarios(), flags=re.DOTALL
+    ):
+        colunas = []
+        for linha in corpo.splitlines():
+            palavra = re.match(r"\s*([a-z_][a-z0-9_]*)\s", linha)
+            if palavra and palavra.group(1).lower() not in _PALAVRAS_DE_RESTRICAO:
+                colunas.append(palavra.group(1))
+        tabelas[nome] = colunas
+    return tabelas
+
+
+class TestMigration116:
+    def test_cria_todas_as_tabelas_do_prd_e_so_elas(self):
+        """Mutante: apagar o CREATE de uma tabela."""
+        assert sorted(_tabelas_criadas()) == sorted(TABELAS_DO_PRD)
+
+    @pytest.mark.parametrize("tabela", TABELAS_DO_PRD)
+    def test_toda_tabela_tem_rls_ligado(self, tabela):
+        """Mutante: tirar o ENABLE ROW LEVEL SECURITY de uma tabela."""
+        assert re.search(rf"ALTER TABLE {tabela} ENABLE ROW LEVEL SECURITY;", _sql_sem_comentarios())
+
+    @pytest.mark.parametrize("tabela", TABELAS_DO_PRD)
+    def test_nenhuma_tabela_guarda_dado_que_identifica_o_paciente(self, tabela):
+        """Mutante: acrescentar `cpf TEXT` ao atendimento."""
+        assert [c for c in _tabelas_criadas()[tabela] if c in COLUNAS_PROIBIDAS] == []
+
+    def test_o_atendimento_guarda_rotulo_e_idade(self):
+        assert {"paciente_rotulo", "idade_anos"} <= set(_tabelas_criadas()["cm_atendimento"])
+
+    def test_o_leitor_de_colunas_enxerga_coluna(self):
+        """Piso do detector acima: se a regex de coluna parar de casar, toda
+        tabela volta sem coluna e a ausencia de CPF fica verde sobre nada."""
+        assert "numero_atendimento" in _tabelas_criadas()["cm_atendimento"]
+        assert "cpf" in COLUNAS_PROIBIDAS
+
+    def test_o_eixo_tem_check_com_os_seis_perfis(self):
+        sql = _sql_sem_comentarios()
+        bloco = re.search(r"participantes_perfil_contas_medicas_check\s+CHECK\s*\((.*?)\)\);", sql, re.DOTALL)
+        assert bloco
+        assert sorted(re.findall(r"'(\w+)'", bloco.group(1))) == sorted(ESPERADO_POR_PERFIL)
+
+    def test_o_sino_ganha_contas_medicas_sem_perder_os_tipos_de_hoje(self):
+        """O CHECK de `notificacoes.tipo` e refeito inteiro: esquecer um tipo
+        antigo derrubaria a mencao, o aceite ou o comentario."""
+        bloco = re.search(r"ADD CONSTRAINT notificacoes_tipo_check\s+CHECK \(tipo IN \((.*?)\)\);", _sql(), re.DOTALL)
+        assert bloco
+        assert sorted(re.findall(r"'(\w+)'", bloco.group(1))) == sorted(
+            [
+                "MENCAO",
+                "STATUS_ALTERADO",
+                "COMENTARIO",
+                "PRAZO_PROXIMO",
+                "RESPONSAVEL_ATRIBUIDO",
+                "ACEITE_INTERNO",
+                "CONTAS_MEDICAS",
+            ]
+        )
+
+    def test_o_bucket_e_privado_e_tem_teto_de_100_mib(self):
+        sql = _sql_sem_comentarios()
+        bloco = re.search(r"INSERT INTO storage\.buckets\s*\(([^)]*)\)\s*VALUES\s*\(([^)]*)\)", sql)
+        assert bloco
+        colunas = [c.strip() for c in bloco.group(1).split(",")]
+        valores = dict(zip(colunas, [v.strip() for v in bloco.group(2).split(",")], strict=True))
+        assert valores["id"] == "'contas-medicas'"
+        assert valores["public"] == "false"
+        assert valores["file_size_limit"] == str(100 * 1024 * 1024)
+
+    @pytest.mark.parametrize(
+        ("tabela", "colunas"),
+        [
+            ("cm_conta", "faturista_id, situacao, ordem_fila"),
+            ("cm_guia_linha", "conta_id"),
+            ("cm_tabela_preco_item", "tabela_id, codigo"),
+            ("cm_atendimento", "numero_atendimento"),
+        ],
+    )
+    def test_os_indices_do_prd_existem(self, tabela, colunas):
+        assert re.search(rf"INDEX IF NOT EXISTS \w+\s+ON {tabela}\s*\({colunas}\)", _sql_sem_comentarios())
+
+    def test_termina_com_o_recibo_da_116(self):
+        ultima = _sql_sem_comentarios().strip().splitlines()[-1]
+        assert ultima == "INSERT INTO migracoes_aplicadas (numero) VALUES (116) ON CONFLICT (numero) DO NOTHING;"
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 5. O texto do Produto no Kit de conhecimento
+# ═══════════════════════════════════════════════════════════════════════════
+
+KIT = Path(__file__).resolve().parents[1] / "app" / "conhecimento" / "contas-medicas.md"
+
+
+class TestTextoDoProduto:
+    """A sanidade geral (piso, secoes, sem rota nem tabela) mora em
+    `test_kit_conhecimento.py`; aqui, o que ESTE texto tem que dizer."""
+
+    def test_diz_o_que_o_modulo_e(self):
+        abertura = KIT.read_text(encoding="utf-8").split("\n## ")[0]
+        for termo in ("conta", "prontuário", "operadora", "Guia"):
+            assert termo in abertura, termo
+
+    def test_diz_o_que_ja_esta_no_ar(self):
+        no_ar = KIT.read_text(encoding="utf-8").split("## O que já está no ar")[1].split("\n## ")[0]
+        for termo in ("menu", "Nenhuma conta enviada ainda", "Ainda não dá para enviar"):
+            assert termo in no_ar, termo
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 6. O `pdftotext` na imagem do backend
+# ═══════════════════════════════════════════════════════════════════════════
+
+DOCKERFILE = Path(__file__).resolve().parents[1] / "Dockerfile"
+
+
+class TestPdftotextNaImagem:
+    """A leitura da conta e do prontuario roda `pdftotext -layout` (ADR 0070,
+    decisao 6). O build do Docker no CI e a prova de verdade: a linha que roda
+    o binario reprova a imagem se o pacote sumir. Este teste trava as duas
+    pontas no repositorio, para ninguem tirar uma sem ver a outra."""
+
+    def test_o_dockerfile_instala_o_poppler(self):
+        """Mutante: tirar `poppler-utils` do apt-get."""
+        instalacao = re.search(r"apt-get install[^\n]*\\\n(.*?)&& rm -rf", DOCKERFILE.read_text(encoding="utf-8"), re.S)
+        assert instalacao
+        assert "poppler-utils" in instalacao.group(1).split()
+
+    def test_o_build_reprova_a_imagem_sem_o_pdftotext(self):
+        """Mutante: tirar a linha que roda o binario no build."""
+        linhas = [linha.strip() for linha in DOCKERFILE.read_text(encoding="utf-8").splitlines()]
+        assert "RUN pdftotext -v" in linhas
+
+
 class TestARotaEstaNoApp:
     def test_o_app_de_verdade_registra_a_rota(self):
         """O router tem `include_router` proprio no `main.py`. A fonte e o
