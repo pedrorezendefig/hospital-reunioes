@@ -1,0 +1,7 @@
+HOSPITAL SÃO MATHEUS                                        Página: 1 / 1
+Admissão: 4411  Usuário: ENFCTI01
+ATENDIMENTO: 31245
+Em: 02/10/2026 23:05
+Acomodação: UTI ADULTO   Leito: CTI-04   Unid. Internação: CTI ADULTO
+Paciente admitida no CTI vinda do pronto-socorro, em maca, acompanhada da filha.
+Chegou com acesso venoso periférico em membro superior esquerdo e oxigênio por cateter nasal.

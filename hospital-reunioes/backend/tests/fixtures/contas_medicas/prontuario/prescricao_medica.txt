@@ -1,0 +1,17 @@
+HOSPITAL SÃO MATHEUS                                        Página: 1 / 2
+Prescrição.: 778812  Data: 03/10/2026 10:15
+Atendimento: 31245
+Paciente...: ANTÔNIA MELO FARIAS
+Unid. Int..: CTI ADULTO   Leito..: CTI-04   Cobertura: UTI ADULTO GERAL
+Internação.: 02/10/2026 22:40
+PRESCRIÇÃO MÉDICA
+Datas/Horários
+1  DIPIRONA 500 MG/ML SOLUÇÃO INJETÁVEL     2 ML    EV   6/6H     . 06 . 12 . 18 . 24
+2  OMEPRAZOL 40 MG PÓ LIÓFILO               40 MG   EV   1X DIA   . 06
+<<<QUEBRA DE PÁGINA>>>
+HOSPITAL SÃO MATHEUS                                        Página: 2 / 2
+Prescrição.: 778812  Data: 03/10/2026 10:15
+Unid. Int..: CTI ADULTO   Leito..: CTI-04   Cobertura: UTI ADULTO GERAL
+Datas/Horários
+3  CEFTRIAXONA 1 G PÓ PARA SOLUÇÃO          1 G     EV   12/12H   . 08 . 20
+4  ENOXAPARINA 40 MG/0,4 ML                 40 MG   SC   1X DIA   . 22

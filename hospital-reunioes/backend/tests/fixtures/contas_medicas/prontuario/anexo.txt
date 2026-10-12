@@ -1,0 +1,6 @@
+HOSPITAL SÃO MATHEUS
+Relatório de Anexo do Prontuário
+ATENDIMENTO: 31245
+Data de Referência: 03/10/2026
+Tipo do anexo: RESULTADO DE GASOMETRIA ARTERIAL
+Descrição: documento digitalizado anexado pela equipe de enfermagem ao prontuário eletrônico.

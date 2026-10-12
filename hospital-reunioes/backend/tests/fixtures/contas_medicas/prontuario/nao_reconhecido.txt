@@ -1,0 +1,6 @@
+LABORATÓRIO DE ANÁLISES CLÍNICAS FICTÍCIO
+LAUDO DE ULTRASSONOGRAFIA DE ABDOME TOTAL
+Solicitante: CARLOS EDUARDO NUNES   CPF 111.444.777-35
+Fígado de dimensões normais, contornos regulares e ecotextura homogênea.
+Vesícula biliar normodistendida, sem cálculos. Vias biliares sem dilatação.
+Conclusão: exame dentro dos limites da normalidade.

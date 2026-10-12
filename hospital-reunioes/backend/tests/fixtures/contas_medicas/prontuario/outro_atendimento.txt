@@ -1,0 +1,15 @@
+HOSPITAL SÃO MATHEUS
+Relatório de Evolução
+EVOLUÇÃO MEDICA
+Atendimento 31190   Leito: PS-02
+Data/Hora do Documento: 02/10/2026 18:30
+Atendimento no pronto-socorro por dispneia. Solicitada vaga em CTI. Iniciada antibioticoterapia empírica.
+RX de tórax com consolidação em base direita.
+<<<QUEBRA DE PÁGINA>>>
+HOSPITAL SÃO MATHEUS                                        PÁGINA 1 DE 1
+Relatório de Resumo de Alta
+ATENDIMENTO: 31190
+DATA DE ATENDIMENTO: 02/10/2026 16:05
+DATA DA ALTA - 02/10/2026 22:30:00
+MOTIVO DA ALTA: TRANSFERÊNCIA PARA INTERNAÇÃO
+Paciente transferida para o CTI após estabilização no pronto-socorro, com vaga confirmada.

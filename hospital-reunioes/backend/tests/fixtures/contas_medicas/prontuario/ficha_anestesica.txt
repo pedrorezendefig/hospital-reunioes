@@ -1,0 +1,8 @@
+HOSPITAL SÃO MATHEUS
+FICHA ANESTÉSICA
+ATENDIMENTO: 31245
+Data da Cirúrgico   Cirurgias Propostas
+04/10/2026          TRAQUEOSTOMIA
+Técnica Anestésica: ANESTESIA GERAL BALANCEADA
+Agentes: [ 2 ] Propofol 10 mg/mL  [ 1 ] Fentanil 50 mcg/mL  [ 1 ] Rocurônio 10 mg/mL
+Gases - Tempo de Utilização: Oxigênio 60 min, Ar comprimido 60 min, Sevoflurano 45 min
