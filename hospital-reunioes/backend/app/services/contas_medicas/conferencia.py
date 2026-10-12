@@ -360,6 +360,80 @@ def _sem_registro(ctx: _Contexto) -> list[_Linha]:
 
 
 # ----------------------------------------------------------------------------------
+# (5) Ficha anestésica × conta
+# ----------------------------------------------------------------------------------
+
+
+def _codigo_no_dicionario(nome: str, dicionario: Mapping[str, set[str]]) -> str | None:
+    codigos = dicionario.get(_norm(nome)) or set()
+    return min(codigos) if len(codigos) == 1 else None
+
+
+def _ficha_x_conta(ctx: _Contexto) -> list[_Linha]:
+    """Medicamento da ficha sem item no centro cirúrgico: Incluir. Lançado menor que
+    a ficha: Validar (a unidade da conta pode ser mL, e a ficha conta ampolas)."""
+    no_centro_cirurgico = [m for m in ctx.medicamentos if ctx.no_centro_cirurgico(m["item"].setor)]
+    setor = no_centro_cirurgico[0]["item"].setor if no_centro_cirurgico else None
+    linhas = []
+    for ficha in ctx.prontuario.conteudo.fichas_anestesicas:
+        for medicamento in ficha.medicamentos:
+            casamento = casar(medicamento.nome, no_centro_cirurgico, ctx.dicionario)
+            quantidade = Decimal(medicamento.quantidade)
+            trecho = (
+                f"{medicamento.nome} {medicamento.quantidade}"
+                if medicamento.anotado
+                else f"[ {medicamento.quantidade} ] {medicamento.nome}"
+            )
+            comum = {
+                "chave": "ficha_anestesica",
+                "data": ficha.data,
+                "setor": setor,
+                "nivel": "REGISTRADO",
+                "causa": "DISPENSACAO",
+                "pagina": ficha.paginas[0],
+                "trecho": trecho,
+                "quantidade_devida": quantidade,
+            }
+            if not casamento.itens:
+                codigo = _codigo_no_dicionario(medicamento.nome, ctx.dicionario)
+                data = ficha.data or ctx.conta.periodo_inicio
+                preco_lancado, preco_tabela, valor, etiqueta = (
+                    ctx.valor_de_inclusao("MEDICAMENTO", codigo, data, quantidade) if data else (None, None, None, "")
+                )
+                linhas.append(
+                    _Linha(
+                        acao="INCLUIR",
+                        codigo=codigo,
+                        descricao=medicamento.nome,
+                        motivo=f"Registrado na ficha anestésica ({medicamento.quantidade}), sem lançamento no centro "
+                        f"cirúrgico.{etiqueta}",
+                        quantidade_lancada=Decimal(0),
+                        preco_lancado=preco_lancado,
+                        preco_tabela=preco_tabela,
+                        valor=valor,
+                        **comum,
+                    )
+                )
+                continue
+            itens = [par["item"] for par in casamento.itens]
+            lancada = sum((i.quantidade for i in itens), Decimal(0))
+            if lancada < quantidade and not any(i.unidade.upper().startswith("ML") for i in itens):
+                linhas.append(
+                    _Linha(
+                        acao="VALIDAR",
+                        codigo=itens[0].codigo,
+                        descricao=itens[0].descricao,
+                        motivo=f"Ficha anestésica registra {medicamento.quantidade}, lançado {lancada:g}.",
+                        quantidade_lancada=lancada,
+                        preco_lancado=itens[0].unitario,
+                        confianca=casamento.confianca or "ALTA",
+                        **comum,
+                    )
+                )
+    return linhas
+
+
+# ----------------------------------------------------------------------------------
 # (6) Gás do centro cirúrgico
 # ----------------------------------------------------------------------------------
 
@@ -458,6 +532,30 @@ def _procedimento_do_cabecalho(ctx: _Contexto) -> list[_Linha]:
 # ----------------------------------------------------------------------------------
 # Regra citada, período e montagem
 # ----------------------------------------------------------------------------------
+
+
+def _no_periodo(ctx: _Contexto, linhas: list[_Linha], descartadas: list[dict[str, Any]]) -> list[_Linha]:
+    """Linha com data fora do período da conta cai: é de outra parcial."""
+    dentro = []
+    for linha in linhas:
+        if linha.data is None or ctx.no_periodo(linha.data):
+            dentro.append(linha)
+        else:
+            descartadas.append({"linha": _registro(linha), "motivo": "Data fora do período da conta."})
+    return dentro
+
+
+def _sem_duplicadas(linhas: list[_Linha]) -> list[_Linha]:
+    """Mesma ação, código e período: fica a primeira, na ordem das conferências."""
+    vistas: set[tuple] = set()
+    unicas = []
+    for linha in linhas:
+        chave = (linha.acao, linha.codigo, linha.data, linha.data_fim)
+        if linha.codigo is not None and chave in vistas:
+            continue
+        vistas.add(chave)
+        unicas.append(linha)
+    return unicas
 
 
 def _soma(a: Decimal | None, b: Decimal | None) -> Decimal | None:
@@ -568,10 +666,12 @@ def conferir(
         *_precos(ctx),
         *_prescricao_x_conta(ctx),
         *_sem_registro(ctx),
+        *_ficha_x_conta(ctx),
         *_gases(ctx),
         *_procedimento_do_cabecalho(ctx),
     ]
-    linhas = _diario(_com_regra(geradas, memoria, descartadas))
+    linhas = _com_regra(geradas, memoria, descartadas)
+    linhas = _diario(_sem_duplicadas(_no_periodo(ctx, linhas, descartadas)))
     registros = []
     for grupo in agrupar_por_dia_e_setor(_registro(linha) for linha in linhas):
         for registro in grupo["linhas"]:

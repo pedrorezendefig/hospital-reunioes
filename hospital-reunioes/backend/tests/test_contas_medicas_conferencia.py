@@ -24,6 +24,7 @@ from app.services.contas_medicas.cirurgia import (  # noqa: E402
     DescricaoCirurgica,
     FichaAnestesica,
     Gas,
+    MedicamentoDaFicha,
     Procedimento,
 )
 from app.services.contas_medicas.conferencia import ProntuarioLido, conferir  # noqa: E402
@@ -444,6 +445,33 @@ class TestAchadosDoDiretor:
         }
         assert "5 procedimentos" in linha["motivo"]
 
+    def test_ficha_anestesica_sem_lancamento_vira_incluir_e_lancado_a_menos_vira_validar(self):
+        # Cetoprofeno registrado e não lançado; bromoprida: ficha 2, lançado 1.
+        ficha = _ficha(
+            medicamentos=(MedicamentoDaFicha("Cetoprofeno", 1, False), MedicamentoDaFicha("Bromoprida", 2, False))
+        )
+        conta = _conta(_item("90777777", "BROMOPRIDA 10 MG/2 ML AMP", dia(4), 1, 3.20, setor=CC))
+        dicionario = {"CETOPROFENO": {"90888888"}}
+
+        resultado = conferir(
+            conta, _prontuario(fichas=[ficha], tipo_impressao=None), _memoria(), _tabela({}), dicionario=dicionario
+        )
+
+        [incluir] = _linhas(resultado, "INCLUIR")
+        assert {k: incluir[k] for k in ("codigo", "descricao", "quantidade_devida", "valor_diferenca", "regra_codigo")} == {
+            "codigo": "90888888",
+            "descricao": "Cetoprofeno",
+            "quantidade_devida": 1.0,
+            "valor_diferenca": None,
+            "regra_codigo": "ALFA-CC-07",
+        }
+        [validar] = _linhas(resultado, "VALIDAR", "90777777")
+        assert (validar["quantidade_lancada"], validar["quantidade_devida"], validar["nivel_evidencia"]) == (
+            1.0,
+            2.0,
+            "REGISTRADO",
+        )
+
 
 # ═══════════════════════════════════════════════════════════════════════════
 # 2. A regra citada
@@ -548,3 +576,38 @@ class TestLancadoSemRegistro:
         resultado = conferir(_conta_com_solucoes(), prontuario, _memoria(), _tabela({}))
 
         assert resultado.linhas == ()
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 5. Montagem: item diário, período, duplicadas
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+class TestMontagem:
+    def test_duplicadas_sao_unidas(self):
+        # A urgência do dia 4 repete o pantoprazol da prescrição médica: as duas
+        # conferências pedem o mesmo Incluir no mesmo dia, e o Guia mostra um só.
+        prescricoes = [_prescricao(dia(n), _prescrito("PANTOCAL 40MG FA", pagina=10 + n)) for n in range(1, 7)]
+        urgencia = Prescricao(dia(4), time(3, 0), "PRESCRICAO URGENCIA", "CTI ADULTO", (40,), (_prescrito("PANTOCAL 40MG FA", 40),))
+        conta = _conta(*(_item(PANTOCAL, "PANTOCAL 40 MG PO LIOF INJ FA", dia(n), 1, 239.65) for n in (1, 2, 3)))
+
+        resultado = conferir(conta, _prontuario(prescricoes=[*prescricoes, urgencia], tipo_impressao=None), _memoria(), _tabela({}))
+
+        [linha] = _linhas(resultado, "INCLUIR", PANTOCAL)
+        assert (linha["data"], linha["data_fim"], linha["quantidade_devida"], linha["valor_diferenca"]) == (
+            "2026-10-04",
+            "2026-10-06",
+            3.0,
+            718.95,
+        )
+
+    def test_linha_fora_do_periodo_da_conta_e_descartada_e_registrada(self):
+        # Ficha anestésica do dia 8 numa parcial de 1 a 6: o Incluir cai fora do período.
+        ficha = _ficha(medicamentos=(MedicamentoDaFicha("Cetoprofeno", 1, False),), data=dia(8))
+
+        resultado = conferir(_conta(), _prontuario(fichas=[ficha], tipo_impressao=None), _memoria(), _tabela({}))
+
+        assert resultado.linhas == ()
+        [descartada] = resultado.descartadas
+        assert descartada["linha"]["descricao"] == "Cetoprofeno"
+        assert "fora do período" in descartada["motivo"]
