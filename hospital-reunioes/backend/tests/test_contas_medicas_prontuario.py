@@ -306,6 +306,42 @@ def test_sem_travessao_nem_meia_risca_no_codigo_nem_nas_frases_que_a_faturista_v
     assert chr(0x2013) not in texto
 
 
+def test_so_o_texto_livre_vai_para_a_ia_e_o_resto_sai_sem_linhas():
+    # sem valor de cobrança: AVALIACAO, DIAG_ENF, CHECKLIST_CIRURGIA, ESCALA, DIAGNOSTICO,
+    # ANEXO e DIGITALIZADO; o código estrutura AFERICAO, BALANCO, FICHA_ANESTESICA,
+    # GUIA_TISS e a prescrição médica pelas páginas
+    resultado = ler_prontuario(montar(*PRONTUARIO_COMPLETO), ATENDIMENTO)
+
+    assert {d.familia for d in resultado.documentos if d.linhas} == {
+        "ADMISSAO_UNIDADE",
+        "FISIO_ADMISSAO",
+        "SAE",
+        "EVOLUCAO",
+        "DOC_EDITOR",
+        "ANOTACAO_ENF",
+        "FISIO_RESP",
+        "FISIO_MOTORA",
+        "NAO_RECONHECIDO",
+        "RESUMO_ALTA",
+    }
+
+
+@pytest.mark.parametrize(
+    ("fixture", "subtipo_que_vai", "subtipo_descartado"),
+    [
+        ("sae", "EXAME FISICO SAE GERAL", "HISTORICO DE ENFERMAGEM"),
+        ("evolucao", "EVOLUÇÃO MEDICA", "EVOLUÇÃO SERVICO SOCIAL"),
+        ("doc_editor", "ANAMNESE UTI", "RECEITUÁRIO"),
+    ],
+)
+def test_subtipo_sem_valor_de_cobranca_sai_sem_linhas(fixture, subtipo_que_vai, subtipo_descartado):
+    paginas = [p.replace(subtipo_que_vai, subtipo_descartado) for p in paginas_da_fixture(fixture)]
+
+    (documento,) = ler_prontuario(montar("capa", paginas), ATENDIMENTO).documentos
+
+    assert documento.linhas == ()
+
+
 def test_rodape_com_total_diferente_do_numero_de_paginas_e_arquivo_incompleto():
     paginas = montar("capa", "evolucao", "anotacao_enf", total_no_rodape=5)
 
