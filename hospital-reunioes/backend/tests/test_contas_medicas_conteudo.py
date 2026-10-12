@@ -110,6 +110,16 @@ def test_cada_item_da_prescricao_sai_com_os_campos_lidos_da_tabela():
     assert (itens[9].nome, itens[9].pedido) == ("UREIA", "3015")
 
 
+
+def test_exames_pedidos_saem_com_nome_numero_do_pedido_data_e_pagina():
+    exames = ler("prontuario/capa", "conteudo/prescricao").exames_pedidos
+
+    assert [(e.nome, e.pedido, e.data, e.pagina) for e in exames] == [
+        ("HEMOGRAMA COMPLETO", "3014", date(2026, 10, 20), 3),
+        ("UREIA", "3015", date(2026, 10, 20), 3),
+    ]
+
+
 CABECALHO_DA_TABELA = (
     "MEDICAMENTOS NORMAIS                       Dose Padrão     Duração   Frequência   SN   Apl   Datas/Horários"
 )
@@ -319,3 +329,10 @@ def test_ficha_anestesica_devolve_horarios_gases_com_minutos_medicamentos_com_qu
         ("sugamadex", 1, True),
     ]
     assert ficha.monitorizacao == ("Cardioscopia", "Oximetria", "PNI")
+
+
+def test_guia_tiss_devolve_o_procedimento_solicitado_e_a_acomodacao_autorizada():
+    (guia,) = ler("prontuario/guia_tiss").guias_tiss
+
+    assert (guia.procedimento_codigo, guia.procedimento_descricao) == ("10102019", "VISITA HOSPITALAR")
+    assert guia.acomodacao_autorizada == "APARTAMENTO"

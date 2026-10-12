@@ -24,7 +24,14 @@ from app.services.contas_medicas.cirurgia import (
     ler_descricao_cirurgica,
     ler_ficha_anestesica,
 )
-from app.services.contas_medicas.prescricao import ItemConsolidado, Prescricao, consolidar, ler_itens
+from app.services.contas_medicas.prescricao import (
+    ExamePedido,
+    ItemConsolidado,
+    Prescricao,
+    consolidar,
+    exames_pedidos,
+    ler_itens,
+)
 from app.services.contas_medicas.prontuario import _RODAPE_GLOBAL, Documento, Prontuario, _sem_acento
 
 # ----------------------------------------------------------------------------------
@@ -241,6 +248,35 @@ def _movimentacoes(internacao: Internacao, documentos: Sequence[Documento]) -> t
 
 
 # ----------------------------------------------------------------------------------
+# Guia TISS
+# ----------------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class GuiaTiss:
+    paginas: tuple[int, ...]
+    procedimento_codigo: str | None
+    procedimento_descricao: str | None
+    acomodacao_autorizada: str | None
+
+
+# Sem guia real no pacote do diretor: calibrar pela primeira que chegar (ADR 0070, decisão 7).
+_PROCEDIMENTO_SOLICITADO = re.compile(r"Procedimento solicitado:\s*(\d{8})\s+([^.\n]+?)\s*(?:\.|$)", re.M)
+_ACOMODACAO_AUTORIZADA = re.compile(r"Acomoda[çc][ãa]o autorizada:\s*([^.\n]+?)\s*(?:\.|$)", re.M | re.I)
+
+
+def _ler_guia_tiss(texto: str, paginas: tuple[int, ...]) -> GuiaTiss:
+    procedimento = _PROCEDIMENTO_SOLICITADO.search(texto)
+    acomodacao = _ACOMODACAO_AUTORIZADA.search(texto)
+    return GuiaTiss(
+        paginas=paginas,
+        procedimento_codigo=procedimento.group(1) if procedimento else None,
+        procedimento_descricao=procedimento.group(2) if procedimento else None,
+        acomodacao_autorizada=acomodacao.group(1) if acomodacao else None,
+    )
+
+
+# ----------------------------------------------------------------------------------
 # Leitura
 # ----------------------------------------------------------------------------------
 
@@ -252,10 +288,12 @@ class Conteudo:
     setor_por_dia: dict[date, tuple[str, ...]]
     prescricoes: tuple[Prescricao, ...]
     prescricao_consolidada: tuple[ItemConsolidado, ...]
+    exames_pedidos: tuple[ExamePedido, ...]
     balancos: tuple[Balanco, ...]
     glicemias: tuple[GlicemiasDoDia, ...]
     descricoes_cirurgicas: tuple[DescricaoCirurgica, ...]
     fichas_anestesicas: tuple[FichaAnestesica, ...]
+    guias_tiss: tuple[GuiaTiss, ...]
 
 
 def _paginas(textos: Sequence[str], documento: Documento) -> list[tuple[int, str]]:
@@ -270,6 +308,7 @@ def ler_conteudo(texto_por_pagina: Sequence[str | None], prontuario: Prontuario)
     afericoes: list[tuple[Documento, str]] = []
     descricoes: list[DescricaoCirurgica] = []
     fichas: list[FichaAnestesica] = []
+    guias: list[GuiaTiss] = []
     # Texto inteiro de cada documento, por Família, na ordem da data.
     por_familia: dict[str, list[str]] = {}
     for d in prontuario.documentos:
@@ -287,6 +326,8 @@ def ler_conteudo(texto_por_pagina: Sequence[str | None], prontuario: Prontuario)
             fichas.append(ler_ficha_anestesica(texto, d.paginas, d.data))
         elif d.familia == "DOC_EDITOR" and MARCA_DA_DESCRICAO.search(texto):
             descricoes.append(ler_descricao_cirurgica(texto, d.paginas))
+        elif d.familia == "GUIA_TISS":
+            guias.append(_ler_guia_tiss(texto, d.paginas))
     internacao = _ler_internacao(por_familia)
     return Conteudo(
         internacao=internacao,
@@ -294,8 +335,10 @@ def ler_conteudo(texto_por_pagina: Sequence[str | None], prontuario: Prontuario)
         setor_por_dia=_setor_por_dia(prontuario.documentos),
         prescricoes=tuple(prescricoes),
         prescricao_consolidada=tuple(consolidar(prescricoes)),
+        exames_pedidos=tuple(exames_pedidos(prescricoes)),
         balancos=tuple(balancos),
         glicemias=_glicemias(afericoes, balancos),
         descricoes_cirurgicas=tuple(descricoes),
         fichas_anestesicas=tuple(fichas),
+        guias_tiss=tuple(guias),
     )

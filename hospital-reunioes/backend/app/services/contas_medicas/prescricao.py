@@ -257,3 +257,21 @@ def consolidar(prescricoes: Sequence[Prescricao]) -> list[ItemConsolidado]:
             )
         )
     return sorted(registros, key=lambda r: (r.secao or "", r.nome))
+
+
+@dataclass(frozen=True)
+class ExamePedido:
+    nome: str
+    pedido: str
+    data: date | None
+    pagina: int
+
+
+def exames_pedidos(prescricoes: Sequence[Prescricao]) -> list[ExamePedido]:
+    """A solicitação é o que vale para cobrar exame (adendo v1.3, item 2): nome, número do pedido e data."""
+    return [
+        ExamePedido(item.nome, item.pedido, prescricao.data, item.pagina)
+        for prescricao in prescricoes
+        for item in prescricao.itens
+        if item.exame and item.pedido and not item.suspenso
+    ]
