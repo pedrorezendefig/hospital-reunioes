@@ -15,15 +15,34 @@ from __future__ import annotations
 import re
 
 from fastapi import APIRouter, Depends, File, HTTPException, Request, Response, UploadFile, status
+from pydantic import BaseModel, Field
 
 from app.dependencies import get_supabase_client, require_permissao_cm
 from app.limiter import limiter
 from app.services.contas_medicas.memoria import MemoriaRecusadaError, ler_memoria
-from app.services.contas_medicas.operadoras import importar_memoria, texto_da_memoria_vigente
+from app.services.contas_medicas.operadoras import (
+    CadastroRecusadoError,
+    cadastrar_plano,
+    importar_memoria,
+    listar_planos,
+    texto_da_memoria_vigente,
+)
 
 router = APIRouter(prefix="/contas-medicas", tags=["contas-medicas"])
 
 PERMISSAO = "regra_contratual_tabelas"
+
+
+class PlanoNovo(BaseModel):
+    nome_mv: str = Field(..., max_length=200)
+    operadora: str = Field(..., max_length=40)
+    coluna_preco: str | None = Field(default=None, max_length=40)
+
+
+def _recusa(exc: CadastroRecusadoError) -> HTTPException:
+    codigo = status.HTTP_409_CONFLICT if exc.conflito else status.HTTP_422_UNPROCESSABLE_CONTENT
+    return HTTPException(status_code=codigo, detail=str(exc))
+
 
 # A memória da ASSIM, a maior, tem 40 KB. Um teto folgado barra o PDF enviado
 # no campo errado antes de ele ser lido inteiro para a memória do processo.
@@ -79,3 +98,29 @@ async def exportar_memoria(
         media_type="text/markdown; charset=utf-8",
         headers={"Content-Disposition": f'attachment; filename="{nome}"'},
     )
+
+
+@router.get("/planos")
+@limiter.limit("60/minute")
+async def planos(
+    request: Request,
+    _me: dict = Depends(require_permissao_cm(PERMISSAO)),
+    supabase=Depends(get_supabase_client),
+) -> dict:
+    """Os nomes de plano que o MV imprime, cada um com a operadora e a coluna de preço."""
+    return {"planos": listar_planos(supabase)}
+
+
+@router.post("/planos", status_code=status.HTTP_201_CREATED)
+@limiter.limit("30/minute")
+async def novo_plano(
+    request: Request,
+    plano: PlanoNovo,
+    _me: dict = Depends(require_permissao_cm(PERMISSAO)),
+    supabase=Depends(get_supabase_client),
+) -> dict:
+    """Cadastra um nome de plano do MV. Sem cadastro, a conta desse plano é recusada no envio."""
+    try:
+        return cadastrar_plano(supabase, plano.nome_mv, plano.operadora, plano.coluna_preco)
+    except CadastroRecusadoError as exc:
+        raise _recusa(exc) from None

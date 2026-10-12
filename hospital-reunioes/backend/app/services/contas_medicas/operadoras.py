@@ -14,10 +14,28 @@ from __future__ import annotations
 from collections.abc import Iterable
 from typing import Any
 
+from postgrest.exceptions import APIError
+
 from app.services.contas_medicas.memoria import MemoriaLida, parametros_lidos
 from app.services.contas_medicas_conta import chave_do_plano
 
-__all__ = ["importar_memoria", "memoria_vigente", "reconhecer_plano", "texto_da_memoria_vigente"]
+__all__ = [
+    "CadastroRecusadoError",
+    "cadastrar_plano",
+    "importar_memoria",
+    "listar_planos",
+    "memoria_vigente",
+    "reconhecer_plano",
+    "texto_da_memoria_vigente",
+]
+
+
+class CadastroRecusadoError(ValueError):
+    """O cadastro não entra; `conflito` diz se é por já existir outro igual."""
+
+    def __init__(self, mensagem: str, *, conflito: bool = False):
+        super().__init__(mensagem)
+        self.conflito = conflito
 
 
 def _operadora(supabase, memoria: MemoriaLida) -> dict:
@@ -152,3 +170,60 @@ def reconhecer_plano(nome_na_conta: str, planos: Iterable[dict[str, Any]]) -> di
     """
     chave = chave_do_plano(nome_na_conta)
     return next((p for p in planos if chave_do_plano(p["nome_mv"]) == chave), None)
+
+
+def _siglas(supabase) -> dict[str, str]:
+    linhas = supabase.table("cm_operadora").select("id, sigla").execute().data or []
+    return {linha["id"]: linha["sigla"] for linha in linhas}
+
+
+def listar_planos(supabase) -> list[dict[str, Any]]:
+    """Os planos do MV cadastrados, com a sigla da operadora de cada um."""
+    siglas = _siglas(supabase)
+    linhas = (
+        supabase.table("cm_operadora_plano")
+        .select("id, nome_mv, operadora_id, coluna_preco")
+        .order("nome_mv")
+        .execute()
+        .data
+        or []
+    )
+    return [{**linha, "operadora": siglas.get(linha["operadora_id"])} for linha in linhas]
+
+
+def _sem_espacos_sobrando(texto: str | None) -> str:
+    return " ".join((texto or "").split())
+
+
+def cadastrar_plano(supabase, nome_mv: str, sigla: str, coluna_preco: str | None) -> dict[str, Any]:
+    """Liga o nome do plano como o MV imprime à operadora e à coluna de preço.
+
+    Recusa o nome que o reconhecimento já acha em outro cadastro: dois planos
+    que se confundem deixariam a conta com operadora ou coluna ao acaso.
+    """
+    nome = _sem_espacos_sobrando(nome_mv)
+    if not nome:
+        raise CadastroRecusadoError("Informe o nome do plano como o MV imprime.")
+    sigla = sigla.strip().upper()
+    operadora = next((oid for oid, s in _siglas(supabase).items() if s == sigla), None)
+    if operadora is None:
+        raise CadastroRecusadoError(f"A operadora {sigla} não está cadastrada. Envie a memória dela antes.")
+    ja_existe = reconhecer_plano(nome, listar_planos(supabase))
+    if ja_existe:
+        raise CadastroRecusadoError(
+            f"Este nome já é reconhecido como o plano {ja_existe['nome_mv']} ({ja_existe['operadora']}).",
+            conflito=True,
+        )
+    coluna = _sem_espacos_sobrando(coluna_preco).upper() or None
+    try:
+        linha = (
+            supabase.table("cm_operadora_plano")
+            .insert({"nome_mv": nome, "operadora_id": operadora, "coluna_preco": coluna})
+            .execute()
+            .data[0]
+        )
+    except APIError as exc:
+        if exc.code == "23505":
+            raise CadastroRecusadoError("Este plano já está cadastrado.", conflito=True) from None
+        raise
+    return {**linha, "operadora": sigla}

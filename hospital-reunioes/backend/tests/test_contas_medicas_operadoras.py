@@ -35,7 +35,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 from app.dependencies import get_current_user, get_supabase_client  # noqa: E402
 from app.limiter import limiter  # noqa: E402
 from app.routers import contas_medicas_operadoras as operadoras_router  # noqa: E402
-from app.services.contas_medicas.operadoras import memoria_vigente  # noqa: E402
+from app.services.contas_medicas.operadoras import memoria_vigente, reconhecer_plano  # noqa: E402
 
 MIGRATION = Path(__file__).resolve().parents[2] / "supabase" / "migrations" / "116_contas_medicas_fundacao.sql"
 FIXTURES = Path(__file__).resolve().parent / "fixtures" / "contas_medicas" / "memoria"
@@ -451,3 +451,81 @@ class TestCpfNaMemoria:
         assert banco.linhas("cm_operadora") == []
         assert banco.linhas("cm_memoria_versao") == []
         assert banco.linhas("cm_regra") == []
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 6. Planos do MV
+# ═══════════════════════════════════════════════════════════════════════════
+
+ROTA_PLANOS = "/api/contas-medicas/planos"
+
+
+def _com_operadoras(*siglas: str) -> _Banco:
+    return _Banco({"cm_operadora": [{"id": f"op-{s}", "sigla": s, "nome": s, "situacao": "PARCIAL"} for s in siglas]})
+
+
+class TestPlanosDoMv:
+    def test_plano_cadastrado_aparece_na_lista_com_a_operadora_e_a_coluna(self):
+        cliente, banco = _cliente(GESTAO, _com_operadoras("ASSIM", "UNIMED"))
+
+        criado = cliente.post(
+            ROTA_PLANOS, json={"nome_mv": "Rioserv Max Qc", "operadora": "ASSIM", "coluna_preco": "CARIOCA"}
+        )
+
+        assert criado.status_code == 201, criado.text
+        [linha] = banco.linhas("cm_operadora_plano")
+        assert (linha["nome_mv"], linha["operadora_id"], linha["coluna_preco"]) == (
+            "Rioserv Max Qc",
+            "op-ASSIM",
+            "CARIOCA",
+        )
+        lista = cliente.get(ROTA_PLANOS)
+        assert lista.status_code == 200
+        assert [{k: p[k] for k in ("nome_mv", "operadora", "coluna_preco")} for p in lista.json()["planos"]] == [
+            {"nome_mv": "Rioserv Max Qc", "operadora": "ASSIM", "coluna_preco": "CARIOCA"}
+        ]
+
+    def test_reconhecimento_acha_o_plano_com_acento_maiuscula_e_sufixo_diferentes(self):
+        cliente, _ = _cliente(GESTAO, _com_operadoras("ASSIM"))
+        cliente.post(
+            ROTA_PLANOS, json={"nome_mv": "Rioserv Intermediário Qc", "operadora": "ASSIM", "coluna_preco": "CARIOCA"}
+        )
+        cliente.post(ROTA_PLANOS, json={"nome_mv": "Rioserv Max Qc", "operadora": "ASSIM", "coluna_preco": "CARIOCA"})
+        planos = cliente.get(ROTA_PLANOS).json()["planos"]
+
+        achado = reconhecer_plano("RIOSERV INTERMEDIARIO QC ENF", planos)
+
+        assert achado is not None
+        assert (achado["nome_mv"], achado["operadora"], achado["coluna_preco"]) == (
+            "Rioserv Intermediário Qc",
+            "ASSIM",
+            "CARIOCA",
+        )
+        assert reconhecer_plano("Rioserv Top Qp", planos) is None
+
+    def test_nome_que_ja_e_reconhecido_como_outro_plano_e_recusado(self):
+        """Dois cadastros que o reconhecimento confunde deixariam a conta com
+        operadora ou coluna ao acaso."""
+        cliente, banco = _cliente(GESTAO, _com_operadoras("ASSIM", "UNIMED"))
+        cliente.post(ROTA_PLANOS, json={"nome_mv": "Rioserv Max Qc", "operadora": "ASSIM", "coluna_preco": "CARIOCA"})
+
+        repetido = cliente.post(ROTA_PLANOS, json={"nome_mv": "RIOSERV MAX QC APT", "operadora": "UNIMED"})
+
+        assert repetido.status_code == 409
+        assert "Rioserv Max Qc" in repetido.json()["detail"]
+        assert len(banco.linhas("cm_operadora_plano")) == 1
+
+    def test_plano_de_operadora_que_nao_existe_e_recusado(self):
+        cliente, banco = _cliente(GESTAO, _com_operadoras("ASSIM"))
+
+        resposta = cliente.post(ROTA_PLANOS, json={"nome_mv": "Plano X", "operadora": "GAMA"})
+
+        assert resposta.status_code == 422
+        assert banco.linhas("cm_operadora_plano") == []
+
+    def test_quem_nao_tem_regra_contratual_e_tabelas_nao_ve_nem_cadastra_plano(self):
+        cliente, banco = _cliente(FATURISTA, _com_operadoras("ASSIM"))
+
+        assert cliente.get(ROTA_PLANOS).status_code == 403
+        assert cliente.post(ROTA_PLANOS, json={"nome_mv": "Plano X", "operadora": "ASSIM"}).status_code == 403
+        assert banco.linhas("cm_operadora_plano") == []
