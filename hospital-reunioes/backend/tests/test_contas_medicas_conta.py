@@ -219,6 +219,53 @@ def test_diferenca_de_um_centavo_fica_dentro_da_tolerancia():
     assert _conta([PAGINA_1, pagina_2]).total == Decimal("1374.88")
 
 
+# Memória ASSIM, `colunas_de_preco.CARIOCA`, como o diretor escreveu.
+LISTA_CARIOCA = [
+    "Assim Max Qc",
+    "Max Individual",
+    "Rioclassico I",
+    "Rioserv Básico Qp",
+    "Rioserv Max Qc",
+    "Carioca 300",
+    "Rioclassico",
+    "Rioclassico I Ind",
+    "Rioserv Intermediário Qc",
+    "Rioserv Top Qp",
+    "Completo Plus",
+    "Rioclassico Amb",
+    "Rioclassico Ind",
+    "Rioserv Intermediário Qp",
+]
+
+
+def test_plano_com_sufixo_de_acomodacao_cai_na_coluna_carioca():
+    assert coluna_do_plano("Rioserv Max Qc ENF", LISTA_CARIOCA) == "CARIOCA"
+
+
+def test_plano_fora_da_lista_cai_na_coluna_comum():
+    assert coluna_do_plano("Clássico", LISTA_CARIOCA) == "COMUM"
+
+
+def test_coluna_do_plano_ignora_acento_e_maiuscula():
+    assert coluna_do_plano("RIOSERV BASICO QP APT", LISTA_CARIOCA) == "CARIOCA"
+    assert coluna_do_plano("rioserv intermediario qc", LISTA_CARIOCA) == "CARIOCA"
+
+
+def test_primeira_pagina_com_fatura_e_conta():
+    assert detectar_tipo_do_arquivo(PAGINA_1) == "CONTA"
+
+
+def test_primeira_pagina_com_declaracao_de_recebimento_e_prontuario():
+    capa = "Página 1 de 9\n        DECLARAÇÃO DE RECEBIMENTO DE PRONTUÁRIO\nTipo de impressão: Completa\n"
+
+    assert detectar_tipo_do_arquivo(capa) == "PRONTUARIO"
+
+
+def test_primeira_pagina_de_outra_coisa_e_desconhecido():
+    assert detectar_tipo_do_arquivo("Relatório de faturamento mensal\nCompetência 09/2026") == "DESCONHECIDO"
+    assert detectar_tipo_do_arquivo("") == "DESCONHECIDO"
+
+
 def test_conta_sem_total_devolve_erro_de_leitura():
     pagina_2 = PAGINA_2.replace("Total da Conta:", "Total geral:")
 

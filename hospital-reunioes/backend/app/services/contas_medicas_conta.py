@@ -50,6 +50,9 @@ MENSAGEM_CONTA_INCOMPLETA = "Não consegui ler a conta inteira"
 TOLERANCIA = Decimal("0.01")
 CENTAVO = Decimal("0.01")
 
+# Sufixos de acomodação no fim do nome do Plano (memória ASSIM, `comparacao_do_nome`).
+SUFIXOS_DE_ACOMODACAO = frozenset({"ENF", "APT"})
+
 GRUPOS_DA_CONTA = frozenset(
     {
         "HONORARIOS MEDICOS",
@@ -238,12 +241,42 @@ def ler_conta(texto_por_pagina: Sequence[str]) -> Conta | ErroLeitura:
     )
 
 
-def coluna_do_plano(plano: str, lista_da_memoria: Sequence[str]) -> str:
-    raise NotImplementedError
+def _normalizar(texto: str) -> str:
+    """Sem acento, em maiúscula e com espaço simples."""
+    sem_acento = "".join(c for c in unicodedata.normalize("NFD", texto) if unicodedata.category(c) != "Mn")
+    return " ".join(sem_acento.upper().split())
 
 
-def detectar_tipo_do_arquivo(primeira_pagina: str) -> str:
-    raise NotImplementedError
+def _sem_sufixo_de_acomodacao(plano: str) -> str:
+    palavras = plano.split()
+    while len(palavras) > 1 and palavras[-1] in SUFIXOS_DE_ACOMODACAO:
+        palavras.pop()
+    return " ".join(palavras)
 
 
-_ = (ROUND_HALF_UP, unicodedata, Literal)
+def coluna_do_plano(plano: str, lista_da_memoria: Sequence[str]) -> Literal["CARIOCA", "COMUM"]:
+    """Coluna de preço do Plano da Conta: CARIOCA se está na lista da memória, senão COMUM.
+
+    Compara sem acento, sem diferença de maiúscula e ignorando o sufixo de
+    acomodação (`comparacao_do_nome` da memória ASSIM).
+    """
+    lista = {_sem_sufixo_de_acomodacao(_normalizar(nome)) for nome in lista_da_memoria}
+    return "CARIOCA" if _sem_sufixo_de_acomodacao(_normalizar(plano)) in lista else "COMUM"
+
+
+TipoDoArquivo = Literal["CONTA", "PRONTUARIO", "DESCONHECIDO"]
+
+
+def detectar_tipo_do_arquivo(primeira_pagina: str) -> TipoDoArquivo:
+    """Conta ou Prontuário pela primeira página do PDF.
+
+    O Prontuário vem primeiro porque a assinatura dele é a mais específica: a
+    capa é a "Declaração de recebimento de prontuário". "Fatura" é palavra
+    inteira, para "faturamento" num relatório qualquer não virar Conta.
+    """
+    texto = _normalizar(primeira_pagina)
+    if "DECLARACAO DE RECEBIMENTO DE PRONTUARIO" in texto:
+        return "PRONTUARIO"
+    if re.search(r"\bFATURA\b", texto):
+        return "CONTA"
+    return "DESCONHECIDO"
