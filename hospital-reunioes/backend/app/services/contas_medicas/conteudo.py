@@ -14,25 +14,15 @@ não estão desidentificados: quem os mandar à IA passa por `desidentificar`.
 
 from collections.abc import Sequence
 from dataclasses import dataclass
-from datetime import date, time
 
-from app.services.contas_medicas.prescricao import ItemPrescrito, ler_itens
+from app.services.contas_medicas.prescricao import ItemConsolidado, Prescricao, consolidar, ler_itens
 from app.services.contas_medicas.prontuario import Documento, Prontuario
-
-
-@dataclass(frozen=True)
-class Prescricao:
-    data: date | None
-    hora: time | None
-    subtipo: str | None
-    setor: str | None
-    paginas: tuple[int, ...]
-    itens: tuple[ItemPrescrito, ...]
 
 
 @dataclass(frozen=True)
 class Conteudo:
     prescricoes: tuple[Prescricao, ...]
+    prescricao_consolidada: tuple[ItemConsolidado, ...]
 
 
 def _paginas(textos: Sequence[str], documento: Documento) -> list[tuple[int, str]]:
@@ -53,4 +43,4 @@ def ler_conteudo(texto_por_pagina: Sequence[str | None], prontuario: Prontuario)
         for d in prontuario.documentos
         if d.familia == "PRESCRICAO"
     )
-    return Conteudo(prescricoes=prescricoes)
+    return Conteudo(prescricoes=prescricoes, prescricao_consolidada=tuple(consolidar(prescricoes)))

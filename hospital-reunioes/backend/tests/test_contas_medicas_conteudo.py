@@ -106,3 +106,47 @@ def test_cada_item_da_prescricao_sai_com_os_campos_lidos_da_tabela():
     assert hemograma.pagina == 3
     # quem assina, na linha acima do CRM, não é continuação do último item
     assert (itens[9].nome, itens[9].pedido) == ("UREIA", "3015")
+
+
+CABECALHO_DA_TABELA = (
+    "MEDICAMENTOS NORMAIS                       Dose Padrão     Duração   Frequência   SN   Apl   Datas/Horários"
+)
+
+
+def prescricao(dia: int, *itens: str, hora: str = "10:15", unidade: str = "CTI ADULTO", leito: str = "CTI-04"):
+    """Uma prescrição médica de uma página, de outubro de 2026."""
+    return [
+        "\n".join(
+            [
+                "HOSPITAL SÃO MATHEUS                                                    Página: 1 / 1",
+                f"Prescrição.: {778800 + dia}  Data: {dia:02d}/10/2026 {hora}",
+                f"Atendimento: {ATENDIMENTO}",
+                f"Unid. Int..: {unidade}   Leito..: {leito}   Cobertura: UTI ADULTO GERAL",
+                "Internação.: 02/10/2026 22:40",
+                "PRESCRIÇÃO MÉDICA",
+                CABECALHO_DA_TABELA,
+                *itens,
+            ]
+        )
+    ]
+
+
+CEFTRIAXONA = " 1 ({}) CEFTRIAXONA 1G FR/AMP           2 FRASCO/AM     10 DIAS   {}"
+CLEXANE = " 2 CLEXANE 40MG/0,4ML SER PREENCH          1 SERINGA                 24HS/24HS          SC    . 22"
+CLEXANE_SUSPENSO = CLEXANE + "\n                                           Suspenso dia.: 04"
+
+
+def test_o_mesmo_item_em_tres_dias_vira_um_registro_com_as_doses_de_cada_dia_e_o_suspenso_fica_fora_do_dia():
+    conteudo = ler(
+        prescricao(3, CEFTRIAXONA.format("D2/10", "12HS/12HS          EV"), CLEXANE),
+        prescricao(4, CEFTRIAXONA.format("D3/10", "12HS/12HS          EV    . 08 . 20"), CLEXANE_SUSPENSO),
+        prescricao(5, CEFTRIAXONA.format("D4/10", "24HS/24HS          EV    . 10"), CLEXANE),
+    )
+    registros = {r.nome: r for r in conteudo.prescricao_consolidada}
+
+    assert sorted(registros) == ["CEFTRIAXONA 1G FR/AMP", "CLEXANE 40MG/0,4ML SER PREENCH"]
+    ceftriaxona = registros["CEFTRIAXONA 1G FR/AMP"]
+    assert ceftriaxona.doses_por_dia == {date(2026, 10, 3): 2, date(2026, 10, 4): 2, date(2026, 10, 5): 1}
+    assert (ceftriaxona.subtipo, ceftriaxona.secao) == ("PRESCRIÇÃO MÉDICA", "MEDICAMENTOS NORMAIS")
+    assert ceftriaxona.paginas == (1, 2, 3)
+    assert registros["CLEXANE 40MG/0,4ML SER PREENCH"].doses_por_dia == {date(2026, 10, 3): 1, date(2026, 10, 5): 1}

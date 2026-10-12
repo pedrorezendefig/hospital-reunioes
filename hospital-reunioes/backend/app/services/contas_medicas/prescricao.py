@@ -13,8 +13,10 @@ o texto do prontuário nunca vai para log (ADR 0070, decisão 8).
 """
 
 import re
+from collections import Counter
 from collections.abc import Sequence
 from dataclasses import dataclass, field
+from datetime import date, time
 
 _SECAO = re.compile(r"^\s*(\S.*?)\s{2,}Dose Padr[ãa]o\s+Dura[çc][ãa]o")
 _ITEM = re.compile(r"^\s{0,10}(\d{1,3})\s(\S.*)$")
@@ -190,3 +192,68 @@ def _item(rascunho: _Rascunho) -> ItemPrescrito:
 def ler_itens(paginas: Sequence[tuple[int, str]]) -> list[ItemPrescrito]:
     """`paginas`: (número da página no PDF, texto) de UMA prescrição, na ordem."""
     return [_item(rascunho) for rascunho in _rascunhos(paginas)]
+
+
+@dataclass(frozen=True)
+class Prescricao:
+    data: date | None
+    hora: time | None
+    subtipo: str | None
+    setor: str | None
+    paginas: tuple[int, ...]
+    itens: tuple[ItemPrescrito, ...]
+
+
+@dataclass(frozen=True)
+class ItemConsolidado:
+    subtipo: str
+    secao: str | None
+    nome: str
+    generico: str | None
+    # Dia prescrito → doses daquele dia; None quando a prescrição não diz quantas (ACM, contínuo).
+    doses_por_dia: dict[date, int | None]
+    se_necessario: bool
+    # As colunas, a observação e os componentes que mais se repetem entre os dias.
+    colunas: str
+    obs: str
+    componentes: tuple[str, ...]
+    pedidos: tuple[str, ...]
+    paginas: tuple[int, ...]
+
+
+def consolidar(prescricoes: Sequence[Prescricao]) -> list[ItemConsolidado]:
+    """Um registro por item (subtipo, seção, nome), com os dias em que foi prescrito.
+    Item suspenso não conta no dia da prescrição que o suspende."""
+    grupos: dict[tuple[str, str | None, str], list[tuple[date, ItemPrescrito]]] = {}
+    for prescricao in prescricoes:
+        if prescricao.data is None:
+            continue
+        for item in prescricao.itens:
+            if not item.suspenso:
+                chave = (prescricao.subtipo or "PRESCRICAO", item.secao, item.nome)
+                grupos.setdefault(chave, []).append((prescricao.data, item))
+
+    registros = []
+    for (subtipo, secao, nome), ocorrencias in grupos.items():
+        doses: dict[date, int | None] = {}
+        for dia, item in sorted(ocorrencias, key=lambda o: o[0]):
+            # duas prescrições no mesmo dia: vale a que prescreveu mais doses
+            doses[dia] = max(doses.get(dia) or 0, item.doses_por_dia or 0) or None
+        itens = [item for _, item in ocorrencias]
+        obs = Counter(item.obs for item in itens if item.obs)
+        registros.append(
+            ItemConsolidado(
+                subtipo=subtipo,
+                secao=secao,
+                nome=nome,
+                generico=next((item.generico for item in itens if item.generico), None),
+                doses_por_dia=doses,
+                se_necessario=any(item.se_necessario for item in itens),
+                colunas=Counter(item.colunas for item in itens).most_common(1)[0][0],
+                obs=obs.most_common(1)[0][0] if obs else "",
+                componentes=tuple(c for c, _ in Counter(c for item in itens for c in item.componentes).most_common()),
+                pedidos=tuple(sorted({item.pedido for item in itens if item.pedido})),
+                paginas=tuple(sorted({item.pagina for item in itens})),
+            )
+        )
+    return sorted(registros, key=lambda r: (r.secao or "", r.nome))
