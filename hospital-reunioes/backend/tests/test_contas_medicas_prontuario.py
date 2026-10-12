@@ -172,9 +172,10 @@ VALORES_PESSOAIS = {
     "última palavra do nome": "FARIAS",
     "nome da mãe": "JOSEFA RIBEIRO COSTA",
     "CPF": "529.982.247-25",
+    # sem pista no corpo e com 7 dígitos: só a troca pelo valor da capa os apaga
     "data de nascimento": "14/03/1951",
     "RG": "20.481.337-6",
-    "carteira": "0081234500098765432",
+    "carteira": "0817734",
     "CPF do médico na assinatura": "111.444.777-35",
     "telefone": "98765-4321",
 }
