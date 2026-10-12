@@ -247,3 +247,72 @@ class TestFalhaDoStorage:
         assert sb.linha("arq-1")["apagado_em"] is None
         assert sb.linha("arq-2")["apagado_em"] == AGORA.isoformat()
         assert rodada == retencao.Rodada(apagados=0, ausentes=1, falhas=1)
+
+
+class TestJobNoScheduler:
+    """A retenção roda sozinha, todo dia, no relógio do hospital."""
+
+    def test_job_registrado_com_horario_diario_no_fuso_de_sao_paulo(self):
+        from apscheduler.triggers.cron import CronTrigger
+
+        from app.cron import scheduler as cron
+
+        try:
+            cron.start_scheduler()
+            job = cron.scheduler.get_job("retencao_contas_medicas")
+            assert job is not None
+            assert job.func is cron.expurgar_arquivos_contas_medicas
+            assert isinstance(job.trigger, CronTrigger)
+            campos = {f.name: str(f) for f in job.trigger.fields}
+            assert (campos["hour"], campos["minute"]) == ("4", "30")
+            assert (campos["day"], campos["day_of_week"]) == ("*", "*")
+            assert str(job.trigger.timezone) == "America/Sao_Paulo"
+        finally:
+            cron.stop_scheduler()
+
+
+class TestLogDoJob:
+    """O log do job traz só contagens: nem chave do bucket, nem número do
+    atendimento, nem id da linha, nem mensagem de exceção."""
+
+    def _rodar_job(self, monkeypatch, caplog, sb) -> str:
+        from app.cron import scheduler as cron
+
+        monkeypatch.setattr(cron, "_supabase", lambda: sb)
+        with caplog.at_level("DEBUG"):
+            cron.expurgar_arquivos_contas_medicas()
+        return "\n".join(r.getMessage() for r in caplog.records)
+
+    def test_log_traz_as_contagens_da_rodada(self, monkeypatch, caplog):
+        sb = _SupabaseFake(
+            [
+                _arquivo(1, apagar_em=ONTEM),
+                _arquivo(2, apagar_em=ONTEM),
+                _arquivo(3, apagar_em=ONTEM, chave_bucket=None),
+                _arquivo(4, apagar_em=ONTEM),
+            ]
+        )
+        sb.storage.recusar = {"envio-1/arq-4.pdf"}
+
+        log = self._rodar_job(monkeypatch, caplog, sb)
+
+        assert "2 apagado(s), 1 já ausente(s), 1 falha(s)" in log
+        for arquivo in sb.tabelas["cm_arquivo"]:
+            assert arquivo["id"] not in log
+            assert arquivo["numero_atendimento"] not in log
+        assert "envio-1" not in log
+
+    def test_falha_inesperada_loga_so_o_tipo_do_erro(self, monkeypatch, caplog):
+        sb = _SupabaseFake([_arquivo(1, apagar_em=ONTEM)])
+
+        def _quebra(_nome):
+            raise RuntimeError("cm_arquivo envio-1/arq-1.pdf atendimento 770001")
+
+        sb.table = _quebra
+
+        log = self._rodar_job(monkeypatch, caplog, sb)
+
+        assert "RuntimeError" in log
+        assert "envio-1" not in log
+        assert "770001" not in log
+        assert all(r.exc_info is None for r in caplog.records)
