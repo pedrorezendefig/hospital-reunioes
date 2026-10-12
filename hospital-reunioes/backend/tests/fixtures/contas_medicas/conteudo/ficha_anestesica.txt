@@ -1,0 +1,14 @@
+HOSPITAL SÃO MATHEUS
+FICHA ANESTÉSICA
+ATENDIMENTO: 31245
+Data da Cirúrgico   Cirurgias Propostas
+04/10/2026          COLECISTECTOMIA COM COLANGIOGRAFIA
+Hr. Inicial Anestesia   Hr. Final Anestesia   Técnica Anestésica
+16:50                   19:20                 GERAL BALANCEADA
+Gases - Tempo de Utilização
+O2 2L/min: 150 min        AR 2L/min: 150 min
+Agente volátil   Sevorane: 2,5%
+Medicamentos
+[ 1 ] Alfentanila                              sugamadex 1
+Monitorização
+[ x ] Cardioscopia   [ x ] Oximetria   [ ] Capnografia   [ x ] PNI

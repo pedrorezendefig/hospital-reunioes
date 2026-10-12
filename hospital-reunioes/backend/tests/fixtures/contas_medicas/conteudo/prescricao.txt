@@ -1,0 +1,32 @@
+HOSPITAL SÃO MATHEUS                                                    Página: 1 / 2
+Prescrição.: 778812  Data: 20/10/2026 10:15
+Atendimento: 31245
+Paciente...: ANTÔNIA MELO FARIAS
+Unid. Int..: CTI ADULTO   Leito..: CTI-04   Cobertura: UTI ADULTO GERAL
+Internação.: 18/10/2026 22:40
+PRESCRIÇÃO MÉDICA
+MEDICAMENTOS NORMAIS                       Dose Padrão     Duração   Frequência   SN   Apl   Datas/Horários
+ 1 PANTOCAL 40MG EV FR/AMP (PANTOPRAZOL)   1 FRASCO/AM               24HS/24HS          EV    . 06
+ 2 DIPIRONA SODICA 500MG/ML SOL INJ        4 MILILITRO               6HS/6HS      S     EV
+   Obs.: EM CASO DE DOR OU FEBRE
+ 3 ONDANSETRONA 2MG/ML SOL INJ             4 MILILITRO               8HS/8HS            EV
+   |-> SERINGA DESCARTAVEL 10ML  1 UNIDADE
+ 4 METOCLOPRAMIDA 5MG/ML SOL INJ           2 MILILITRO               6HS/6HS            EV    . 06 . 14 . 22
+ 5 SORO FISIOLOGICO 0,9% 500ML             500 MILILITRO             ACM                EV
+ 6 CLEXANE 40MG/0,4ML SER PREENCH          1 SERINGA                 24HS/24HS          SC    . 22
+   (ENOXAPARINA)
+                                           Suspenso dia.: 20
+MEDICAMENTOS ANTIBIOTICOS                  Dose Padrão     Duração   Frequência   SN   Apl   Datas/Horários
+ 7 (D2/10) CEFTRIAXONA 1G FR/AMP           2 FRASCO/AM     10 DIAS   24HS/24HS          EV    . 10
+   |-> AGUA DESTILADA 10ML  1 AMPOLA
+<<<QUEBRA DE PÁGINA>>>
+HOSPITAL SÃO MATHEUS                                                    Página: 2 / 2
+Prescrição.: 778812  Data: 20/10/2026 10:15
+Unid. Int..: CTI ADULTO   Leito..: CTI-04   Cobertura: UTI ADULTO GERAL
+EXAMES LABORATORIAL                        Dose Padrão     Duração   Frequência   SN   Apl   Datas/Horários
+ 8 HEMOGRAMA COMPLETO ; Pedido: 3014                                 AGORA
+   Obs.: Preparo: JEJUM DE 4 HORAS
+   COLHER ANTES DA DIETA
+ 9 UREIA ; Pedido: 3015                                              AGORA
+   CARLOS EDUARDO NUNES
+   CRM : 52998

@@ -1,0 +1,21 @@
+PACIENTE: ANTÔNIA MELO FARIAS                        LEITO: CC-02 | UNID: CENTRO CIRURGICO
+ATENDIMENTO: 31245                        DATA ATENDIMENTO: 02/10/2026 22:40
+DESCRIÇÃO CIRÚRGICA
+Cirurgia Principal: COLECISTECTOMIA COM COLANGIOGRAFIA - 31005497
+INÍCIO DA CIRURGIA: 04/10/2026 17:40
+TÉRMINO DA CIRURGIA: 04/10/2026 20:00
+Procedimentos realizados
+Código CBHPM/TUSS   Descrição
+31005497            COLECISTECTOMIA COM COLANGIOGRAFIA
+31005519            COLANGIOGRAFIA PEROPERATORIA
+31009158            LIBERACAO DE ADERENCIAS
+30715016            BIOPSIA HEPATICA POR LAPAROTOMIA
+40813363            ULTRASSONOGRAFIA INTRAOPERATORIA
+Material enviado para anatomopatológico: SIM   Quais? VESICULA BILIAR
+Materiais consignados justificados na folha de OPME:
+   CLIPS DE TITANIO MEDIO, 2 CARTUCHOS
+CARLOS EDUARDO NUNES
+Documento assinado digitalmente
+CARLOS EDUARDO NUNES, CPF 111.444.777-35, CRM/RJ-52998, às 20:30 BRT de 04/10/2026
+Estado: Assinatura digital válida
+                                                            Página 1 de 1
