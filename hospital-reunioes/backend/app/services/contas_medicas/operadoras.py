@@ -22,8 +22,10 @@ from app.services.contas_medicas_conta import chave_do_plano
 __all__ = [
     "CadastroRecusadoError",
     "cadastrar_plano",
+    "cadastrar_setor",
     "importar_memoria",
     "listar_planos",
+    "listar_setores",
     "memoria_vigente",
     "reconhecer_plano",
     "texto_da_memoria_vigente",
@@ -227,3 +229,21 @@ def cadastrar_plano(supabase, nome_mv: str, sigla: str, coluna_preco: str | None
             raise CadastroRecusadoError("Este plano já está cadastrado.", conflito=True) from None
         raise
     return {**linha, "operadora": sigla}
+
+
+def listar_setores(supabase) -> list[dict[str, Any]]:
+    """Os setores como o MV imprime, cada um com a acomodação."""
+    return supabase.table("cm_setor").select("id, nome_mv, acomodacao").order("nome_mv").execute().data or []
+
+
+def cadastrar_setor(supabase, nome_mv: str, acomodacao: str) -> dict[str, Any]:
+    """Liga o nome do setor no MV à acomodação. Não é o Setor dos POPs nem o das Reuniões."""
+    nome = _sem_espacos_sobrando(nome_mv)
+    if not nome:
+        raise CadastroRecusadoError("Informe o nome do setor como o MV imprime.")
+    try:
+        return supabase.table("cm_setor").insert({"nome_mv": nome, "acomodacao": acomodacao}).execute().data[0]
+    except APIError as exc:
+        if exc.code == "23505":
+            raise CadastroRecusadoError(f"O setor {nome} já está cadastrado.", conflito=True) from None
+        raise

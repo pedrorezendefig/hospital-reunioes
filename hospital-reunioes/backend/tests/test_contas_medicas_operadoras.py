@@ -529,3 +529,46 @@ class TestPlanosDoMv:
         assert cliente.get(ROTA_PLANOS).status_code == 403
         assert cliente.post(ROTA_PLANOS, json={"nome_mv": "Plano X", "operadora": "ASSIM"}).status_code == 403
         assert banco.linhas("cm_operadora_plano") == []
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 7. Setores do MV
+# ═══════════════════════════════════════════════════════════════════════════
+
+ROTA_SETORES = "/api/contas-medicas/setores"
+
+
+class TestSetoresDoMv:
+    def test_setor_cadastrado_com_a_acomodacao_aparece_na_lista(self):
+        cliente, banco = _cliente(GESTAO)
+
+        criado = cliente.post(ROTA_SETORES, json={"nome_mv": "CTI1", "acomodacao": "CTI"})
+
+        assert criado.status_code == 201, criado.text
+        [linha] = banco.linhas("cm_setor")
+        assert (linha["nome_mv"], linha["acomodacao"]) == ("CTI1", "CTI")
+        lista = cliente.get(ROTA_SETORES)
+        assert lista.status_code == 200
+        assert [(s["nome_mv"], s["acomodacao"]) for s in lista.json()["setores"]] == [("CTI1", "CTI")]
+
+    def test_acomodacao_fora_da_lista_e_recusada(self):
+        cliente, banco = _cliente(GESTAO)
+
+        assert cliente.post(ROTA_SETORES, json={"nome_mv": "CTI1", "acomodacao": "UTI"}).status_code == 422
+        assert banco.linhas("cm_setor") == []
+
+    def test_setor_repetido_sem_diferenca_de_maiuscula_e_conflito(self):
+        cliente, banco = _cliente(GESTAO)
+        cliente.post(ROTA_SETORES, json={"nome_mv": "CTI1", "acomodacao": "CTI"})
+
+        repetido = cliente.post(ROTA_SETORES, json={"nome_mv": "cti1", "acomodacao": "ENFERMARIA"})
+
+        assert repetido.status_code == 409
+        assert len(banco.linhas("cm_setor")) == 1
+
+    def test_quem_nao_tem_regra_contratual_e_tabelas_nao_ve_nem_cadastra_setor(self):
+        cliente, banco = _cliente(FATURISTA)
+
+        assert cliente.get(ROTA_SETORES).status_code == 403
+        assert cliente.post(ROTA_SETORES, json={"nome_mv": "CTI1", "acomodacao": "CTI"}).status_code == 403
+        assert banco.linhas("cm_setor") == []

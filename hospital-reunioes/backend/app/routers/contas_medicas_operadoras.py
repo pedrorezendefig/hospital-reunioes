@@ -13,6 +13,7 @@ o arquivo das rotas de envio, fila e guia.
 from __future__ import annotations
 
 import re
+from typing import Literal
 
 from fastapi import APIRouter, Depends, File, HTTPException, Request, Response, UploadFile, status
 from pydantic import BaseModel, Field
@@ -23,8 +24,10 @@ from app.services.contas_medicas.memoria import MemoriaRecusadaError, ler_memori
 from app.services.contas_medicas.operadoras import (
     CadastroRecusadoError,
     cadastrar_plano,
+    cadastrar_setor,
     importar_memoria,
     listar_planos,
+    listar_setores,
     texto_da_memoria_vigente,
 )
 
@@ -37,6 +40,25 @@ class PlanoNovo(BaseModel):
     nome_mv: str = Field(..., max_length=200)
     operadora: str = Field(..., max_length=40)
     coluna_preco: str | None = Field(default=None, max_length=40)
+
+
+# As acomodações do CHECK de `cm_setor` (migration 116).
+Acomodacao = Literal[
+    "CTI",
+    "ENFERMARIA",
+    "APARTAMENTO",
+    "ISOLAMENTO",
+    "CENTRO_CIRURGICO",
+    "HOSPITAL_DIA",
+    "PEDIATRIA",
+    "UTI_PEDIATRICA",
+    "UTI_NEONATAL",
+]
+
+
+class SetorNovo(BaseModel):
+    nome_mv: str = Field(..., max_length=200)
+    acomodacao: Acomodacao
 
 
 def _recusa(exc: CadastroRecusadoError) -> HTTPException:
@@ -122,5 +144,31 @@ async def novo_plano(
     """Cadastra um nome de plano do MV. Sem cadastro, a conta desse plano é recusada no envio."""
     try:
         return cadastrar_plano(supabase, plano.nome_mv, plano.operadora, plano.coluna_preco)
+    except CadastroRecusadoError as exc:
+        raise _recusa(exc) from None
+
+
+@router.get("/setores")
+@limiter.limit("60/minute")
+async def setores(
+    request: Request,
+    _me: dict = Depends(require_permissao_cm(PERMISSAO)),
+    supabase=Depends(get_supabase_client),
+) -> dict:
+    """Os setores como o MV imprime, cada um com a acomodação."""
+    return {"setores": listar_setores(supabase)}
+
+
+@router.post("/setores", status_code=status.HTTP_201_CREATED)
+@limiter.limit("30/minute")
+async def novo_setor(
+    request: Request,
+    setor: SetorNovo,
+    _me: dict = Depends(require_permissao_cm(PERMISSAO)),
+    supabase=Depends(get_supabase_client),
+) -> dict:
+    """Cadastra um setor do MV com a acomodação, que decide a diária e o teto por dia."""
+    try:
+        return cadastrar_setor(supabase, setor.nome_mv, setor.acomodacao)
     except CadastroRecusadoError as exc:
         raise _recusa(exc) from None
