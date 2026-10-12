@@ -17,7 +17,7 @@ from typing import Any
 from app.services.contas_medicas.memoria import MemoriaLida, parametros_lidos
 from app.services.contas_medicas_conta import chave_do_plano
 
-__all__ = ["importar_memoria", "memoria_vigente", "reconhecer_plano"]
+__all__ = ["importar_memoria", "memoria_vigente", "reconhecer_plano", "texto_da_memoria_vigente"]
 
 
 def _operadora(supabase, memoria: MemoriaLida) -> dict:
@@ -123,6 +123,25 @@ def memoria_vigente(supabase, operadora_id: str) -> dict | None:
         "parametros": parametros_lidos(versao.get("parametros_json") or {}),
         "regras": regras,
     }
+
+
+def texto_da_memoria_vigente(supabase, sigla: str) -> tuple[str, str] | None:
+    """A versão e o texto Markdown da memória vigente, como foi enviado, para exportar."""
+    operadoras = supabase.table("cm_operadora").select("id").eq("sigla", sigla.strip().upper()).execute().data or []
+    if not operadoras:
+        return None
+    versoes = (
+        supabase.table("cm_memoria_versao")
+        .select("versao, texto_md")
+        .eq("operadora_id", operadoras[0]["id"])
+        .eq("vigente", True)
+        .execute()
+        .data
+        or []
+    )
+    if not versoes or not versoes[0].get("texto_md"):
+        return None
+    return versoes[0]["versao"], versoes[0]["texto_md"]
 
 
 def reconhecer_plano(nome_na_conta: str, planos: Iterable[dict[str, Any]]) -> dict[str, Any] | None:

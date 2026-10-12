@@ -35,6 +35,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 from app.dependencies import get_current_user, get_supabase_client  # noqa: E402
 from app.limiter import limiter  # noqa: E402
 from app.routers import contas_medicas_operadoras as operadoras_router  # noqa: E402
+from app.services.contas_medicas.operadoras import memoria_vigente  # noqa: E402
 
 MIGRATION = Path(__file__).resolve().parents[2] / "supabase" / "migrations" / "116_contas_medicas_fundacao.sql"
 FIXTURES = Path(__file__).resolve().parent / "fixtures" / "contas_medicas" / "memoria"
@@ -292,3 +293,52 @@ class TestEnvioDaMemoria:
         assert resposta.status_code == 403
         assert banco.linhas("cm_operadora") == []
         assert banco.linhas("cm_regra") == []
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 2. O cabeçalho inteiro em parametros_json, com padrão no que falta
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+class TestParametrosDoCabecalho:
+    def test_chave_que_o_codigo_nao_le_fica_guardada_e_volta_na_exportacao(self):
+        cliente, banco = _cliente(GESTAO)
+        _enviar_memoria(cliente, _memoria("MEMORIA-ALFA-v1.0.md"))
+
+        [versao] = banco.linhas("cm_memoria_versao")
+        assert versao["parametros_json"]["opme"] == {
+            "fornecida_por": "OPERADORA",
+            "negociacao": "direta entre o fornecedor e a operadora",
+        }
+        # O cabeçalho é guardado como veio: o padrão é de quem lê, não do banco.
+        assert "tetos_por_dia" not in versao["parametros_json"]
+
+        exportada = cliente.get("/api/contas-medicas/operadoras/ALFA/memoria")
+        assert exportada.status_code == 200
+        assert exportada.headers["content-type"].startswith("text/markdown")
+        assert 'filename="MEMORIA-ALFA-v1.0.md"' in exportada.headers["content-disposition"]
+        assert "opme:" in exportada.text
+        assert "fornecida_por: OPERADORA" in exportada.text
+
+    def test_chave_ausente_ganha_o_valor_padrao_na_leitura(self):
+        """A ALFA não traz `tetos_por_dia`, `fora_da_conta_do_hospital` nem
+        `transicao`: quem lê recebe o padrão, e as diretrizes gerais HSM valem."""
+        cliente, banco = _cliente(GESTAO)
+        resposta = _enviar_memoria(cliente, _memoria("MEMORIA-ALFA-v1.0.md"))
+        [operadora] = banco.linhas("cm_operadora")
+
+        vigente = memoria_vigente(banco, operadora["id"])
+
+        for parametros in (resposta.json()["parametros"], vigente["parametros"]):
+            assert parametros["tetos_por_dia"] == {}
+            assert parametros["fora_da_conta_do_hospital"] == []
+            assert parametros["pacote_uti_adulto"] is None
+            assert parametros["transicao"]["prescrito_vale_como_checado"] is True
+            assert parametros["opme"]["fornecida_por"] == "OPERADORA"
+            # O que a memória traz não é sobrescrito pelo padrão.
+            assert parametros["diaria"]["limite_madrugada"] == "05:00"
+
+    def test_exportar_operadora_sem_memoria_e_404(self):
+        cliente, _ = _cliente(GESTAO)
+
+        assert cliente.get("/api/contas-medicas/operadoras/ALFA/memoria").status_code == 404

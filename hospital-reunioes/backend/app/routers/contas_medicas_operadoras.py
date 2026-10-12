@@ -12,12 +12,14 @@ o arquivo das rotas de envio, fila e guia.
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile, status
+import re
+
+from fastapi import APIRouter, Depends, File, HTTPException, Request, Response, UploadFile, status
 
 from app.dependencies import get_supabase_client, require_permissao_cm
 from app.limiter import limiter
 from app.services.contas_medicas.memoria import MemoriaRecusadaError, ler_memoria
-from app.services.contas_medicas.operadoras import importar_memoria
+from app.services.contas_medicas.operadoras import importar_memoria, texto_da_memoria_vigente
 
 router = APIRouter(prefix="/contas-medicas", tags=["contas-medicas"])
 
@@ -55,3 +57,25 @@ async def enviar_memoria(
     except MemoriaRecusadaError as exc:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)) from None
     return importar_memoria(supabase, memoria, texto, me.get("id"))
+
+
+@router.get("/operadoras/{sigla}/memoria")
+@limiter.limit("60/minute")
+async def exportar_memoria(
+    request: Request,
+    sigla: str,
+    _me: dict = Depends(require_permissao_cm(PERMISSAO)),
+    supabase=Depends(get_supabase_client),
+) -> Response:
+    """A memória vigente como foi enviada, cabeçalho inteiro, para baixar."""
+    vigente = texto_da_memoria_vigente(supabase, sigla)
+    if vigente is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Operadora sem memória carregada")
+    versao, texto = vigente
+    # Sigla e versão vêm de quem enviou: só o que cabe num nome de arquivo.
+    nome = re.sub(r"[^A-Za-z0-9._-]", "", f"MEMORIA-{sigla.strip().upper()}-v{versao}.md")
+    return Response(
+        content=texto,
+        media_type="text/markdown; charset=utf-8",
+        headers={"Content-Disposition": f'attachment; filename="{nome}"'},
+    )
