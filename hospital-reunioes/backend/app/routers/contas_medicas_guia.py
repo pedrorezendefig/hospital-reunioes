@@ -11,14 +11,16 @@ completo" abre qualquer uma.
 """
 
 from datetime import UTC, datetime
+from typing import Literal
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Request
+from pydantic import BaseModel, Field, model_validator
 from supabase import Client
 
 from app.dependencies import get_supabase_client, require_permissao_cm
 from app.limiter import limiter
-from app.services.contas_medicas.guia import agrupar_por_dia_e_setor, numeros_do_topo
+from app.services.contas_medicas.guia import agrupar_por_dia_e_setor, linha_nao_conferida, numeros_do_topo
 
 router = APIRouter(prefix="/contas-medicas", tags=["contas-medicas"])
 
@@ -35,6 +37,8 @@ def _agora() -> str:
 
 
 def _primeira(supabase: Client, tabela: str, coluna: str, valor) -> dict | None:
+    if valor is None:
+        return None
     linhas = supabase.table(tabela).select("*").eq(coluna, valor).limit(1).execute().data or []
     return linhas[0] if linhas else None
 
@@ -53,6 +57,95 @@ def _conta_do_guia(supabase: Client, conta_id: UUID, me: dict) -> dict:
 
 def _linhas(supabase: Client, conta_id: str) -> list[dict]:
     return supabase.table("cm_guia_linha").select("*").eq("conta_id", conta_id).execute().data or []
+
+
+def _conta_em_correcao(supabase: Client, conta_id: UUID, me: dict) -> dict:
+    """A Conta cujo Guia ainda aceita marcação: concluída não muda mais."""
+    conta = _conta_do_guia(supabase, conta_id, me)
+    if conta.get("situacao") in CONCLUIDAS:
+        raise HTTPException(status_code=409, detail="A conta já foi concluída")
+    return conta
+
+
+def _linha_da_faturista(supabase: Client, conta: dict, linha_id: UUID) -> dict:
+    """A linha da Conta que a faturista pode marcar. Validar não tem botão."""
+    linhas = (
+        supabase.table("cm_guia_linha")
+        .select("*")
+        .eq("id", str(linha_id))
+        .eq("conta_id", conta["id"])
+        .limit(1)
+        .execute()
+        .data
+        or []
+    )
+    if not linhas:
+        raise HTTPException(status_code=404, detail="Linha não encontrada nesta conta")
+    if linhas[0].get("acao") == "VALIDAR":
+        raise HTTPException(status_code=409, detail="O item já foi para a validação")
+    return linhas[0]
+
+
+def _gravar_marcacao(supabase: Client, linha: dict, me: dict, estado: str, motivo=None, texto=None) -> dict:
+    """Toda marcação, inclusive o Desfazer, grava quem e quando."""
+    campos = {
+        "estado": estado,
+        "motivo_nao_procede": motivo,
+        "texto_nao_procede": texto,
+        "marcado_por": me.get("id"),
+        "marcado_em": _agora(),
+    }
+    gravada = supabase.table("cm_guia_linha").update(campos).eq("id", linha["id"]).execute().data or []
+    resultado = gravada[0] if gravada else {**linha, **campos}
+    return {**resultado, "nao_conferido": linha_nao_conferida(resultado)}
+
+
+class Marcacao(BaseModel):
+    estado: Literal["FEITO", "NAO_PROCEDE", "BLOQUEADO"]
+    motivo: Literal["JA_ESTA_NA_CONTA", "SEM_EVIDENCIA", "REGRA_E_OUTRA", "OUTRO"] | None = None
+    texto: str | None = Field(default=None, max_length=2000)
+
+    @model_validator(mode="after")
+    def _motivo_do_nao_procede(self):
+        self.texto = (self.texto or "").strip() or None
+        if self.estado != "NAO_PROCEDE":
+            self.motivo, self.texto = None, None
+        elif self.motivo is None:
+            raise ValueError("Escolha o motivo do Não procede")
+        elif self.motivo == "OUTRO" and not self.texto:
+            raise ValueError('Em "outro", escreva o motivo')
+        return self
+
+
+@router.post("/contas/{conta_id}/guia/linhas/{linha_id}/marcacao")
+@limiter.limit("240/minute")
+async def marcar_linha(
+    request: Request,
+    conta_id: UUID,
+    linha_id: UUID,
+    corpo: Marcacao,
+    me: dict = Depends(_PODE_CORRIGIR),
+    supabase: Client = Depends(get_supabase_client),
+) -> dict:
+    """Feito, Não procede (com motivo) ou Bloqueado numa linha do Guia."""
+    conta = _conta_em_correcao(supabase, conta_id, me)
+    linha = _linha_da_faturista(supabase, conta, linha_id)
+    return _gravar_marcacao(supabase, linha, me, corpo.estado, corpo.motivo, corpo.texto)
+
+
+@router.delete("/contas/{conta_id}/guia/linhas/{linha_id}/marcacao")
+@limiter.limit("240/minute")
+async def desfazer_marcacao(
+    request: Request,
+    conta_id: UUID,
+    linha_id: UUID,
+    me: dict = Depends(_PODE_CORRIGIR),
+    supabase: Client = Depends(get_supabase_client),
+) -> dict:
+    """Desfazer: a linha volta a aberta, enquanto a Conta não foi concluída."""
+    conta = _conta_em_correcao(supabase, conta_id, me)
+    linha = _linha_da_faturista(supabase, conta, linha_id)
+    return _gravar_marcacao(supabase, linha, me, "ABERTA")
 
 
 @router.get("/contas/{conta_id}/guia")

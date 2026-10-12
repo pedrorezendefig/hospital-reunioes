@@ -15,6 +15,7 @@ from __future__ import annotations
 import os
 import re
 import sys
+import uuid
 from decimal import Decimal
 from pathlib import Path
 from types import SimpleNamespace
@@ -199,8 +200,8 @@ class _Banco:
     def table(self, nome: str):
         return _Consulta(self, nome)
 
-    def linha(self, linha_id: str) -> dict:
-        return next(linha for linha in self.tabelas["cm_guia_linha"] if linha["id"] == linha_id)
+    def linha(self, nome: str) -> dict:
+        return next(linha for linha in self.tabelas["cm_guia_linha"] if linha["descricao"] == nome)
 
     def conta(self, conta_id: str) -> dict:
         return next(conta for conta in self.tabelas["cm_conta"] if conta["id"] == conta_id)
@@ -235,9 +236,14 @@ PESSOAS = {
 CONTA = "11111111-1111-1111-1111-111111111111"
 
 
+def _uid(nome: str) -> str:
+    """O id da linha é UUID, como no banco; o teste fala pelo nome (a descrição)."""
+    return str(uuid.uuid5(uuid.NAMESPACE_URL, f"cm-guia-linha/{nome}"))
+
+
 def _g(id_, acao, valor, data, setor, ordem, **campos) -> dict:
     return {
-        **_linha(acao, valor, id=id_),
+        **_linha(acao, valor, id=_uid(id_)),
         "conta_id": CONTA,
         "data": data,
         "data_fim": None,
@@ -365,7 +371,7 @@ class TestAbrirOGuia:
             "itens_total": 9,
             "itens_sem_marcacao": 9,
         }
-        grupos = [(g["data"], g["setor"], [linha["id"] for linha in g["linhas"]]) for g in guia["grupos"]]
+        grupos = [(g["data"], g["setor"], [linha["descricao"] for linha in g["linhas"]]) for g in guia["grupos"]]
         assert grupos == [
             ("2026-10-03", "CTI", ["luva", "lavagem", "agulha", "senha"]),
             ("2026-10-03", "ENFERMARIA", ["fita"]),
@@ -426,3 +432,155 @@ class TestAbrirMudaParaEmCorrecao:
         banco = _cenario(conta=_conta(situacao="PROCESSANDO"))
 
         assert _cliente("dona", banco).get(ROTA_GUIA).status_code == 409
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 3. Feito, Não procede, Bloqueado e Desfazer
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+def _rota_marcacao(nome: str) -> str:
+    return f"{ROTA_GUIA}/linhas/{_uid(nome)}/marcacao"
+
+
+class TestMarcarLinha:
+    def test_feito_muda_o_estado_e_grava_quem_e_quando(self):
+        banco = _cenario(conta=_conta(situacao="EM_CORRECAO"))
+
+        resposta = _cliente("dona", banco).post(_rota_marcacao("luva"), json={"estado": "FEITO"})
+
+        assert resposta.status_code == 200
+        linha = banco.linha("luva")
+        assert (linha["estado"], linha["marcado_por"]) == ("FEITO", "F1")
+        assert linha["marcado_em"] is not None
+        assert resposta.json()["estado"] == "FEITO"
+
+    def test_bloqueado_muda_o_estado_e_grava_quem_e_quando(self):
+        banco = _cenario(conta=_conta(situacao="EM_CORRECAO"))
+
+        resposta = _cliente("dona", banco).post(_rota_marcacao("agulha"), json={"estado": "BLOQUEADO"})
+
+        assert resposta.status_code == 200
+        linha = banco.linha("agulha")
+        assert (linha["estado"], linha["marcado_por"]) == ("BLOQUEADO", "F1")
+        assert linha["marcado_em"] is not None
+
+    def test_nao_procede_com_motivo_e_sem_texto(self):
+        banco = _cenario(conta=_conta(situacao="EM_CORRECAO"))
+
+        resposta = _cliente("dona", banco).post(
+            _rota_marcacao("senha"), json={"estado": "NAO_PROCEDE", "motivo": "JA_ESTA_NA_CONTA"}
+        )
+
+        assert resposta.status_code == 200
+        linha = banco.linha("senha")
+        assert (linha["estado"], linha["motivo_nao_procede"], linha["texto_nao_procede"]) == (
+            "NAO_PROCEDE",
+            "JA_ESTA_NA_CONTA",
+            None,
+        )
+        assert (linha["marcado_por"], linha["marcado_em"] is not None) == ("F1", True)
+
+    def test_nao_procede_com_motivo_e_texto(self):
+        banco = _cenario(conta=_conta(situacao="EM_CORRECAO"))
+
+        resposta = _cliente("dona", banco).post(
+            _rota_marcacao("senha"),
+            json={"estado": "NAO_PROCEDE", "motivo": "SEM_EVIDENCIA", "texto": "Não achei na evolução"},
+        )
+
+        assert resposta.status_code == 200
+        linha = banco.linha("senha")
+        assert (linha["motivo_nao_procede"], linha["texto_nao_procede"]) == ("SEM_EVIDENCIA", "Não achei na evolução")
+
+    def test_nao_procede_outro_sem_texto_e_recusado(self):
+        banco = _cenario(conta=_conta(situacao="EM_CORRECAO"))
+
+        resposta = _cliente("dona", banco).post(
+            _rota_marcacao("senha"), json={"estado": "NAO_PROCEDE", "motivo": "OUTRO", "texto": "   "}
+        )
+
+        assert resposta.status_code == 422
+        assert banco.linha("senha")["estado"] == "ABERTA"
+
+    def test_nao_procede_outro_com_texto_passa(self):
+        banco = _cenario(conta=_conta(situacao="EM_CORRECAO"))
+
+        resposta = _cliente("dona", banco).post(
+            _rota_marcacao("senha"), json={"estado": "NAO_PROCEDE", "motivo": "OUTRO", "texto": "Senha vencida"}
+        )
+
+        assert resposta.status_code == 200
+        assert banco.linha("senha")["motivo_nao_procede"] == "OUTRO"
+
+    def test_nao_procede_sem_motivo_e_recusado(self):
+        banco = _cenario(conta=_conta(situacao="EM_CORRECAO"))
+
+        resposta = _cliente("dona", banco).post(_rota_marcacao("senha"), json={"estado": "NAO_PROCEDE"})
+
+        assert resposta.status_code == 422
+
+    def test_linha_validar_nao_tem_botao(self):
+        banco = _cenario(conta=_conta(situacao="EM_CORRECAO"))
+
+        resposta = _cliente("dona", banco).post(_rota_marcacao("unidade-pendente"), json={"estado": "FEITO"})
+
+        assert resposta.status_code == 409
+        assert banco.linha("unidade-pendente")["estado"] == "EM_VALIDACAO"
+
+    def test_faturista_que_nao_e_dona_nao_marca(self):
+        banco = _cenario(conta=_conta(situacao="EM_CORRECAO"))
+
+        resposta = _cliente("outra_faturista", banco).post(_rota_marcacao("luva"), json={"estado": "FEITO"})
+
+        assert resposta.status_code == 403
+        assert banco.linha("luva")["estado"] == "ABERTA"
+
+    def test_linha_de_outra_conta_recebe_404(self):
+        outra = _g("de-outra-conta", "INCLUIR", 10.0, "2026-10-03", "CTI", 1, conta_id="outra")
+        banco = _cenario(conta=_conta(situacao="EM_CORRECAO"), linhas=[*_linhas_do_guia(), outra])
+
+        resposta = _cliente("dona", banco).post(_rota_marcacao("de-outra-conta"), json={"estado": "FEITO"})
+
+        assert resposta.status_code == 404
+        assert banco.linha("de-outra-conta")["estado"] == "ABERTA"
+
+
+class TestDesfazer:
+    def test_desfazer_volta_para_aberta_e_grava_quem_e_quando(self):
+        linhas = _linhas_do_guia()
+        senha = next(linha for linha in linhas if linha["descricao"] == "senha")
+        senha.update(
+            estado="NAO_PROCEDE",
+            motivo_nao_procede="OUTRO",
+            texto_nao_procede="x",
+            marcado_por="F1",
+            marcado_em="2026-10-08T10:00:00+00:00",
+        )
+        banco = _cenario(conta=_conta(situacao="EM_CORRECAO"), linhas=linhas)
+
+        resposta = _cliente("coordenadora", banco).delete(_rota_marcacao("senha"))
+
+        assert resposta.status_code == 200
+        linha = banco.linha("senha")
+        assert (linha["estado"], linha["motivo_nao_procede"], linha["texto_nao_procede"]) == ("ABERTA", None, None)
+        assert linha["marcado_por"] == "CO"
+        assert linha["marcado_em"] != "2026-10-08T10:00:00+00:00"
+
+    def test_desfazer_depois_de_concluida_e_recusado(self):
+        linhas = _linhas_do_guia()
+        next(linha for linha in linhas if linha["descricao"] == "luva").update(estado="FEITO", marcado_por="F1")
+        banco = _cenario(conta=_conta(situacao="CONCLUIDA_COM_PENDENCIA"), linhas=linhas)
+
+        resposta = _cliente("dona", banco).delete(_rota_marcacao("luva"))
+
+        assert resposta.status_code == 409
+        assert banco.linha("luva")["estado"] == "FEITO"
+
+    def test_marcar_depois_de_concluida_e_recusado(self):
+        banco = _cenario(conta=_conta(situacao="CONCLUIDA_COM_PENDENCIA"))
+
+        resposta = _cliente("dona", banco).post(_rota_marcacao("luva"), json={"estado": "FEITO"})
+
+        assert resposta.status_code == 409
+        assert banco.linha("luva")["estado"] == "ABERTA"
