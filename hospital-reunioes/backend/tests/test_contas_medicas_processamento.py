@@ -409,8 +409,9 @@ ITENS_DA_CONTA = [
 ]
 
 
-def _texto_da_conta(conta: str, inicio: int, fim: int, *, total_errado: bool = False) -> str:
-    """A "Fatura Individual" do MV com os itens do período (dias de outubro)."""
+def _texto_da_conta(conta: str, inicio: int, fim: int, *, total_errado: bool = False, agulha: str = "0.17") -> str:
+    """A "Fatura Individual" do MV com os itens do período (dias de outubro).
+    `agulha` é o unitário lançado da agulha (a tabela diz 0,20)."""
     linhas = [
         "HOSPITAL FICTICIO DE TESTE                                                         Página 1 de 1",
         "                                   Fatura Individual",
@@ -431,7 +432,7 @@ def _texto_da_conta(conta: str, inicio: int, fim: int, *, total_errado: bool = F
         if grupo != grupo_atual:
             linhas += [grupo, "51  CTI ADULTO", "    Grupo de Procedimento: 01 GERAL"]
             grupo_atual = grupo
-        q, u = Decimal(quantidade), Decimal(unitario)
+        q, u = Decimal(quantidade), Decimal(agulha if codigo == "70000001" else unitario)
         total += q * u
         valores = f"{_br(q):>8}  {_br(u):>10}  {_br(q * u):>10}"
         linhas.append(f"{dia:02d}/10/2026  {codigo}  {descricao:<40}{unidade:<8}100,00%  {valores}")
@@ -829,3 +830,38 @@ class TestProntuarioUmaVez:
         assert cirurgia["procedimentos_json"][0]["codigo"] == "31005497"
         (atendimento,) = banco.tabelas["cm_atendimento"]
         assert atendimento["paciente_rotulo"] == "Antônia F."
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 5. O reprocesso
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+class TestReprocesso:
+    def test_preserva_as_linhas_marcadas_e_substitui_as_abertas(self):
+        banco = _cenario()
+        _enviar(banco, _conta(), _prontuario())
+        _rodar_o_job(banco)
+        (conta,) = banco.tabelas["cm_conta"]
+        antes = _linhas_do_guia(_guia(banco, conta["id"]))
+        pacote = next(linha for linha in antes if linha["codigo"] == "98005497")
+        marcada = _cliente(banco).post(
+            f"/api/contas-medicas/contas/{conta['id']}/guia/linhas/{pacote['id']}/marcacao", json={"estado": "FEITO"}
+        )
+        assert marcada.status_code == 200, marcada.text
+        abertas_antes = {linha["id"] for linha in antes if linha["id"] != pacote["id"]}
+
+        # A faturista corrigiu o preço da agulha no MV e mandou a mesma conta de novo.
+        _enviar(banco, _conta(agulha="0.20"))
+        assert banco.conta(conta["id"])["situacao"] == "NA_FILA"
+        _rodar_o_job(banco)
+
+        assert banco.conta(conta["id"])["situacao"] == "A_FAZER"
+        depois = _linhas_do_guia(_guia(banco, conta["id"]))
+        pacotes = [linha for linha in depois if linha["codigo"] == "98005497"]
+        assert [(p["id"], p["estado"], p["marcado_por"]) for p in pacotes] == [(pacote["id"], "FEITO", "F1")]
+        assert "70000001" not in {linha["codigo"] for linha in depois}
+        abertas_depois = [linha for linha in depois if linha["estado"] == "ABERTA"]
+        assert abertas_depois
+        assert abertas_antes.isdisjoint(linha["id"] for linha in abertas_depois)
+        assert len(depois) == len(antes) - 1
