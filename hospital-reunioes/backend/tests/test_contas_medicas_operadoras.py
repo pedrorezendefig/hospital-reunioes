@@ -634,3 +634,29 @@ class TestAsRotasEstaoNoApp:
         assert "get" in caminhos["/api/contas-medicas/operadoras/{sigla}/memoria"]
         assert {"get", "post"} <= set(caminhos[ROTA_PLANOS])
         assert {"get", "post"} <= set(caminhos[ROTA_SETORES])
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 9. O texto do Produto no Kit de conhecimento
+# ═══════════════════════════════════════════════════════════════════════════
+
+KIT = Path(__file__).resolve().parents[1] / "app" / "conhecimento" / "contas-medicas.md"
+
+
+class TestTextoDoProduto:
+    """A sanidade geral (piso, seções, sem rota nem tabela) mora em
+    `test_kit_conhecimento.py`; aqui, o que ESTE texto tem que dizer da carga."""
+
+    def test_diz_que_a_memoria_entra_por_arquivo_pela_tela(self):
+        no_ar = KIT.read_text(encoding="utf-8").split("## O que já está no ar")[1].split("\n## ")[0]
+
+        for termo in (
+            "envia o arquivo de memória",
+            "tela Operadoras",
+            "versão",
+            "regras vigentes e pendentes",
+            "nomes de plano",
+            "setores",
+            "CPF",
+        ):
+            assert termo in no_ar, termo
