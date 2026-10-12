@@ -70,7 +70,8 @@ async def get_current_user(
 
 _PARTICIPANTE_FULL_FIELDS = (
     "id, nome_completo, cargo, email, role, setor, area, ativo, is_externo, "
-    "is_super_admin, access_profile, perfil_pop, perfil_ouvidoria, github_login, auth_user_id, data_cadastro"
+    "is_super_admin, access_profile, perfil_pop, perfil_ouvidoria, perfil_contas_medicas, github_login, auth_user_id, "
+    "data_cadastro"
 )
 
 
@@ -84,7 +85,7 @@ _PARTICIPANTE_FULL_FIELDS = (
 # que impede um ambiente rodar meses com a Ouvidoria invisível sem ninguém
 # saber por quê. Coluna sai desta lista quando a migration dela é passado
 # garantido em todo ambiente.
-_COLUNAS_OPCIONAIS = ("perfil_ouvidoria", "github_login")
+_COLUNAS_OPCIONAIS = ("perfil_ouvidoria", "perfil_contas_medicas", "github_login")
 
 _COLUNA_INEXISTENTE = "42703"
 
@@ -435,6 +436,89 @@ def require_super_admin_ou_perfil_pop(*perfis_permitidos: str):
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Ação restrita ao Super Admin ou a perfis do contexto POPs",
         )
+
+    return checker
+
+
+# Contexto Contas médicas (ADR 0070, decisão 10): quarto eixo de permissão,
+# ortogonal aos de Reuniões, POPs e Ouvidoria. O perfil é só o conjunto inicial;
+# o que vale é a matriz `cm_perfil_permissao`, que a Habilitação liga e desliga.
+PERFIS_CONTAS_MEDICAS = (
+    "faturista",
+    "coordenadora",
+    "gestao_contas_medicas",
+    "diretoria_medica",
+    "diretoria_executiva",
+    "credenciamento",
+)
+
+# A ordem é a da spec do diretor, e é nela que `/contas-medicas/me` responde.
+PERMISSOES_CONTAS_MEDICAS = (
+    "enviar_corrigir_contas",
+    "decidir_validacao",
+    "incluir_regra_operacional",
+    "regra_contratual_tabelas",
+    "contratos_avisos",
+    "painel_completo",
+    "habilitar_pessoas",
+    "conferencia_coordenacao",
+)
+
+
+def permissoes_contas_medicas(supabase, participante: dict[str, Any] | None) -> list[str]:
+    """As permissões ligadas para a pessoa, na ordem da spec.
+
+    Super admin do app passa em tudo, como nos outros módulos, e por isso
+    recebe as oito. Sem perfil do eixo, nenhuma.
+    """
+    if is_super_admin(participante):
+        return list(PERMISSOES_CONTAS_MEDICAS)
+    perfil = (participante or {}).get("perfil_contas_medicas")
+    if perfil not in PERFIS_CONTAS_MEDICAS:
+        return []
+    linhas = (
+        supabase.table("cm_perfil_permissao")
+        .select("permissao")
+        .eq("perfil", perfil)
+        .eq("ligada", True)
+        .execute()
+        .data
+        or []
+    )
+    ligadas = {linha["permissao"] for linha in linhas}
+    return [p for p in PERMISSOES_CONTAS_MEDICAS if p in ligadas]
+
+
+def require_permissao_cm(permissao: str | None = None):
+    """Gate das rotas de Contas médicas: 403 sem a permissão na matriz.
+
+    Sem argumento, basta ter o eixo (qualquer perfil de Contas médicas): é o
+    gate de quem só pergunta o que pode fazer. Super admin passa sempre.
+    Devolve o participante com `permissoes_cm` já resolvidas, para a rota não
+    ler a matriz de novo.
+    """
+    if permissao is not None and permissao not in PERMISSOES_CONTAS_MEDICAS:
+        raise ValueError(f"Permissão de Contas médicas desconhecida: {permissao!r}")
+
+    async def checker(
+        current_user: dict = Depends(get_current_user),
+        supabase: Client = Depends(get_supabase_client),
+    ) -> dict:
+        me = await get_participante_for_user(current_user, supabase)
+        barrar_desligado(me)
+        tem_eixo = is_super_admin(me) or (me or {}).get("perfil_contas_medicas") in PERFIS_CONTAS_MEDICAS
+        if not me or not tem_eixo:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Acesso restrito a Contas médicas",
+            )
+        permissoes = permissoes_contas_medicas(supabase, me)
+        if permissao is not None and permissao not in permissoes:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Sem permissão para esta ação em Contas médicas",
+            )
+        return {**me, "permissoes_cm": permissoes}
 
     return checker
 

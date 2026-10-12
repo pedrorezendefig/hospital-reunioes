@@ -21,6 +21,7 @@ from app.routers import (
     comentarios,
     conector_mcp,
     configuracoes,
+    contas_medicas,
     health,
     notificacoes,
     ouvidoria,
@@ -128,6 +129,8 @@ app.include_router(ouvidoria_setor.router, prefix=settings.api_prefix)
 app.include_router(ouvidoria_triagem_email.router, prefix=settings.api_prefix)
 app.include_router(perfil.router, prefix=settings.api_prefix)
 app.include_router(configuracoes.router, prefix=settings.api_prefix)
+# Contas médicas (PRD #1113, ADR 0070): router próprio, eixo próprio.
+app.include_router(contas_medicas.router, prefix=settings.api_prefix)
 app.include_router(admin.router, prefix=settings.api_prefix)
 app.include_router(admin_super_admins.router, prefix=settings.api_prefix)
 app.include_router(admin_usuarios.router, prefix=settings.api_prefix)
