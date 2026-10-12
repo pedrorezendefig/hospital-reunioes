@@ -19,6 +19,7 @@ from __future__ import annotations
 import os
 import re
 import sys
+import uuid
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from types import SimpleNamespace
@@ -214,7 +215,7 @@ class _Consulta:
                 self._banco.relogio += 1
                 gravadas.append(
                     {
-                        "id": f"{self._nome}-{len(tabela) + len(gravadas) + 1}",
+                        "id": str(uuid.uuid4()),
                         "criado_em": f"2026-10-12T10:00:00.{self._banco.relogio:06d}+00:00",
                         **nova,
                     }
@@ -584,3 +585,102 @@ class TestProntuarioNoSistema:
         )
 
         assert [linha["texto"] for linha in resposta.json()["ultimo_envio"]] == ["31302, conta e prontuário"]
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 5. Os limites do envio
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+class TestLimites:
+    def test_o_11o_atendimento_e_recusado_com_mensagem_e_os_10_primeiros_entram(self):
+        banco = _cenario()
+        contas = [_conta(str(31301 + i), str(48001 + i)) for i in range(11)]
+
+        resposta = _cliente("faturista", banco).post(ROTA_ENVIO, files=contas)
+
+        corpo = resposta.json()
+        assert len(corpo["ultimo_envio"]) == 10
+        assert corpo["recusas"] == [
+            {
+                "arquivo": "conta-48011.pdf",
+                "numero_atendimento": "31311",
+                "motivo": "O envio já tem 10 atendimentos, o limite. Mande o atendimento 31311 num próximo envio.",
+            }
+        ]
+        assert len(banco.tabelas["cm_conta"]) == 10
+
+    def test_o_limite_de_atendimentos_vale_para_o_envio_inteiro_e_nao_para_o_lote(self):
+        banco = _cenario()
+        cliente = _cliente("faturista", banco)
+        primeiro = cliente.post(ROTA_ENVIO, files=[_conta(str(31301 + i), str(48001 + i)) for i in range(10)])
+        envio_id = primeiro.json()["envio_id"]
+
+        resposta = cliente.post(
+            ROTA_ENVIO,
+            data={"envio_id": envio_id},
+            files=[_prontuario("31301"), _conta("31311", "48011")],
+        )
+
+        corpo = resposta.json()
+        assert corpo["envio_id"] == envio_id
+        assert [r["numero_atendimento"] for r in corpo["recusas"]] == ["31311"]
+        assert corpo["ultimo_envio"][0]["texto"] == "31301, conta e prontuário"
+        assert len(corpo["ultimo_envio"]) == 10
+
+    def test_o_31o_arquivo_e_recusado_com_mensagem(self):
+        banco = _cenario()
+        parciais = [_conta("31302", str(48001 + i)) for i in range(31)]
+
+        resposta = _cliente("faturista", banco).post(ROTA_ENVIO, files=parciais)
+
+        corpo = resposta.json()
+        assert corpo["recusas"] == [
+            {
+                "arquivo": "conta-48031.pdf",
+                "numero_atendimento": None,
+                "motivo": "O envio já tem 30 arquivos, o limite. Mande este num próximo envio.",
+            }
+        ]
+        assert corpo["ultimo_envio"][0]["texto"] == "31302, 30 parciais, falta o prontuário"
+        assert len(banco.tabelas["cm_arquivo"]) == 30
+
+    def test_o_lote_de_outra_pessoa_nao_entra_no_envio_dela(self):
+        banco = _cenario()
+        envio_id = _cliente("faturista", banco).post(ROTA_ENVIO, files=[_conta("31302", "48001")]).json()["envio_id"]
+
+        resposta = _cliente("outra_faturista", banco).post(
+            ROTA_ENVIO, data={"envio_id": envio_id}, files=[_prontuario("31302")]
+        )
+
+        assert resposta.status_code == 404
+        assert len(banco.tabelas["cm_arquivo"]) == 1
+
+    def test_arquivo_de_101_mb_e_recusado_pela_rota_com_o_teto_do_corpo_de_sempre(self):
+        """O app de verdade tem o teto de 100 MiB no corpo, que não muda. O arquivo
+        de 101 MB (como o computador mostra) passa por ele e é a rota que recusa,
+        com a frase dela, e não o 413 genérico do teto."""
+        from app.middleware.limite_corpo import LIMITE_CORPO_BYTES, LimiteDeCorpoMiddleware
+
+        assert LIMITE_CORPO_BYTES == 100 * 1024 * 1024
+        banco = _cenario()
+        cliente = _cliente("faturista", banco)
+        cliente.app.add_middleware(LimiteDeCorpoMiddleware)
+        grande = _texto_da_conta("31302", "48001", "01/10/2026", "05/10/2026").encode("utf-8")
+        grande += b" " * (101 * 1000 * 1000 - len(grande))
+
+        resposta = cliente.post(
+            ROTA_ENVIO,
+            files=[("arquivos", ("conta-grande.pdf", grande, "application/pdf")), _conta("31310", "48010")],
+        )
+
+        assert resposta.status_code == 200, resposta.text[:200]
+        corpo = resposta.json()
+        assert corpo["recusas"] == [
+            {
+                "arquivo": "conta-grande.pdf",
+                "numero_atendimento": None,
+                "motivo": "O arquivo passa de 100 MB, o limite por arquivo.",
+            }
+        ]
+        assert [linha["texto"] for linha in corpo["ultimo_envio"]] == ["31310, falta o prontuário"]
