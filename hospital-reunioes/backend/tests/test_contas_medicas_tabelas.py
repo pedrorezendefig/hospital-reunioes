@@ -581,6 +581,31 @@ class TestDicionario:
         assert (casamento.como, casamento.confianca) == ("NENHUM", None)
 
 
+KIT = Path(__file__).resolve().parents[1] / "app" / "conhecimento" / "contas-medicas.md"
+
+
+class TestTextoDoProduto:
+    """A sanidade geral do texto mora em `test_kit_conhecimento.py`; aqui, o
+    que ele tem que dizer das tabelas de preço e do "não conferido"."""
+
+    def test_diz_como_as_tabelas_entram_e_o_que_e_nao_conferido(self):
+        no_ar = KIT.read_text(encoding="utf-8").split("## O que já está no ar")[1].split("\n## ")[0]
+
+        for termo in (
+            "tabela de preço",
+            "vigência",
+            "data do atendimento",
+            "versão nova não apaga a anterior",
+            "dicionário de itens",
+            "Não conferido",
+            "preço zero",
+            "pacote",
+            "tabela não carregada",
+        ):
+            assert termo in no_ar, termo
+        assert "a carga delas chega na próxima entrega" not in no_ar
+
+
 class TestAsRotasEstaoNoApp:
     def test_o_app_de_verdade_registra_o_envio_de_tabela_e_de_dicionario(self):
         """Fonte: o schema OpenAPI, e não `app.routes` (FastAPI 0.141, issues #542 e #546)."""
