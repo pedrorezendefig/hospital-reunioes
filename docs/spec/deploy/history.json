@@ -2,6 +2,51 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-10-12T18:52:38-03:00",
+      "sha": "da6b480330e9b7646329b09ee1a9f6f7021cf04b",
+      "app_version": "0.176.0",
+      "subject": "Onda onda-a-onda3: Retenção de 7 dias dos PDFs e do texto; Contador de diárias portado e parametrizado pela memória da operadora",
+      "raw_subject": "chore(deploy): registro da onda onda-a-onda3 (#1156 #1157)",
+      "scope": [
+        "backend"
+      ],
+      "prds": [
+        1113
+      ],
+      "result": "healthy",
+      "duration_seconds": 135,
+      "services_touched": [
+        "backend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        },
+        {
+          "service": "frontend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "onda-enxuta onda-a-onda3: PR #1156 (issue #1125), PR #1157 (issue #1115), mergeados PR a PR. Merge pela API do GitHub, um build. Registro pela Action pos-merge depois do health.",
+      "etapas": {
+        "merge_s": 5,
+        "build_s": {
+          "backend": 33
+        },
+        "health_s": 0
+      },
+      "responsavel": "pedrorezendefig"
+    },
+    {
       "at": "2026-10-12T18:39:49-03:00",
       "sha": "bcb7f6a4c335ff975dd19a033479bf0a5c899b49",
       "app_version": "0.175.0",
