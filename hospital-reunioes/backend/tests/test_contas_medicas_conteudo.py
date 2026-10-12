@@ -354,3 +354,14 @@ def test_guia_tiss_devolve_o_procedimento_solicitado_e_a_acomodacao_autorizada()
 
     assert (guia.procedimento_codigo, guia.procedimento_descricao) == ("10102019", "VISITA HOSPITALAR")
     assert guia.acomodacao_autorizada == "APARTAMENTO"
+
+
+MODULOS = Path(__file__).parents[1] / "app" / "services" / "contas_medicas"
+
+
+@pytest.mark.parametrize("arquivo", ["conteudo.py", "prescricao.py", "cirurgia.py"])
+def test_sem_travessao_nem_meia_risca_no_codigo(arquivo):
+    texto = (MODULOS / arquivo).read_text(encoding="utf-8")
+
+    assert chr(0x2014) not in texto
+    assert chr(0x2013) not in texto
