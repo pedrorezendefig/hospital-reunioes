@@ -2,6 +2,56 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-10-12T17:13:20-03:00",
+      "sha": "46f67ad9695db3089c80b54e04b9b2c3c068e04e",
+      "app_version": "0.173.0",
+      "subject": "Onda onda-a-onda1: Fundação, migration 116, eixo de permissão, menu e esqueleto; Extrator de PDF em subprocesso e leitura da conta por código; Leitura do prontuário por código, integridade, capa, famí",
+      "raw_subject": "chore(deploy): registro da onda onda-a-onda1 (#1151 #1150 #1152)",
+      "scope": [
+        "backend",
+        "frontend"
+      ],
+      "prds": [
+        1113
+      ],
+      "result": "healthy",
+      "duration_seconds": 752,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        },
+        {
+          "service": "frontend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [
+        "116_contas_medicas_fundacao.sql"
+      ],
+      "rollback_target_sha": null,
+      "notes": "onda-enxuta onda-a-onda1: PR #1151 (issue #1114), PR #1150 (issue #1116), PR #1152 (issue #1117), mergeados PR a PR. Merge pela API do GitHub, um build. Registro pela Action pos-merge depois do health.",
+      "etapas": {
+        "merge_s": 8,
+        "build_s": {
+          "backend": 170,
+          "frontend": 257
+        },
+        "health_s": 0
+      },
+      "responsavel": "pedrorezendefig"
+    },
+    {
       "at": "2026-10-12T16:00:50-03:00",
       "sha": "26e4871e99c93a18904e6283c99259eec4c1fcca",
       "app_version": "0.172.0",
