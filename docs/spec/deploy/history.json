@@ -2,6 +2,54 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-10-12T16:00:50-03:00",
+      "sha": "26e4871e99c93a18904e6283c99259eec4c1fcca",
+      "app_version": "0.172.0",
+      "subject": "PR #1149, issue #652: E-mail pendente da triagem acende a novidade do menu",
+      "raw_subject": "chore(deploy): registro do PR avulso (#1149)",
+      "scope": [
+        "backend",
+        "frontend"
+      ],
+      "prds": [
+        646
+      ],
+      "result": "healthy",
+      "duration_seconds": 376,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        },
+        {
+          "service": "frontend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "PR avulso: PR #1149, issue #652. Merge pela API do GitHub, um build. Registro pela Action pos-merge depois do health.",
+      "etapas": {
+        "merge_s": 3,
+        "build_s": {
+          "backend": 148,
+          "frontend": 352
+        },
+        "health_s": 0
+      },
+      "responsavel": "lucassampaioc1"
+    },
+    {
       "at": "2026-10-09T22:44:29-03:00",
       "sha": "b0640ddb7e87f90324ece039e0224082cfed0dad",
       "app_version": "0.171.1",
