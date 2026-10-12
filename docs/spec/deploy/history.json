@@ -2,6 +2,54 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-10-12T18:39:49-03:00",
+      "sha": "bcb7f6a4c335ff975dd19a033479bf0a5c899b49",
+      "app_version": "0.175.0",
+      "subject": "Onda onda-a-onda2: Guia da faturista com linhas, botões, concluir e nota de entrada",
+      "raw_subject": "chore(deploy): registro da onda onda-a-onda2 (#1154)",
+      "scope": [
+        "backend",
+        "frontend"
+      ],
+      "prds": [
+        1113
+      ],
+      "result": "healthy",
+      "duration_seconds": 239,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        },
+        {
+          "service": "frontend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "onda-enxuta onda-a-onda2: PR #1154 (issue #1121), mergeados PR a PR. Merge pela API do GitHub, um build. Registro pela Action pos-merge depois do health.",
+      "etapas": {
+        "merge_s": 2,
+        "build_s": {
+          "backend": 23,
+          "frontend": 207
+        },
+        "health_s": 0
+      },
+      "responsavel": "pedrorezendefig"
+    },
+    {
       "at": "2026-10-12T18:16:29-03:00",
       "sha": "b88b55bf7e7fd43b014294b5bd9b29d082bf5f88",
       "app_version": "0.174.0",
