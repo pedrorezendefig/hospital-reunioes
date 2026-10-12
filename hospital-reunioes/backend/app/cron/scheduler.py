@@ -34,6 +34,9 @@ Jobs:
      foto igual à guardada não escreve nada. Depois, marca Em produção as Demandas
      Entregues cujas issues aparecem no history.json da main (issue #1065), a rede
      de proteção do webhook de deploy. Idempotente: só a Entregue sobe.
+ 10. expurgar_arquivos_contas_medicas: 04:30 diário, tira do bucket `contas-medicas`
+     o PDF e o texto extraído de todo arquivo com `apagar_em` vencido e carimba
+     `apagado_em` (issue #1125). Idempotente: o carimbo tira a linha da varredura.
 """
 
 import logging
@@ -292,6 +295,31 @@ def anonimizar_manifestacoes_antigas() -> None:
         logger.info(f"[Cron] {concluidos} apagamento(s) pendente(s) da Ouvidoria concluído(s).")
 
 
+def expurgar_arquivos_contas_medicas() -> None:
+    """Retenção de 7 dias dos PDFs de Contas médicas (issue #1125, PRD #1113).
+
+    Tira do bucket o PDF e o texto extraído de todo arquivo com `apagar_em`
+    vencido e carimba `apagado_em`; o que o módulo estruturou fica. Mesmo
+    padrão da retenção da Ouvidoria: a lógica vive no serviço, aqui só o
+    relógio e o log.
+
+    O log traz só contagens. Na falha inesperada, só o tipo do erro: a mensagem
+    e o traceback podem carregar a chave do bucket, e o arquivo é prontuário."""
+    from app.services import contas_medicas_retencao
+
+    agora = datetime.now(tz=ZoneInfo("UTC"))
+    try:
+        rodada = contas_medicas_retencao.apagar_arquivos_vencidos(_supabase(), agora)
+    except Exception as e:
+        logger.error(f"[Cron] Erro em expurgar_arquivos_contas_medicas: {type(e).__name__}")
+        return
+    if rodada.apagados or rodada.ausentes or rodada.falhas:
+        logger.info(
+            f"[Cron] Retenção de Contas médicas: {rodada.apagados} apagado(s), "
+            f"{rodada.ausentes} já ausente(s), {rodada.falhas} falha(s)."
+        )
+
+
 def _registrar_entrega(competencia: str, entrega, rotulo: str = "Relatório quinzenal") -> None:
     """Escreve no log o que aconteceu com uma tentativa de entrega.
 
@@ -446,6 +474,18 @@ def start_scheduler() -> None:
         id="retencao_ouvidoria",
         replace_existing=True,
     )
+    # 04:30: meia hora depois da retenção da Ouvidoria, pelo mesmo motivo
+    # (apaga em definitivo, longe do expediente) e sem disputar o Storage com
+    # ela. Disparo perdido num deploy não perde nada: o vencido continua
+    # vencido e sai no dia seguinte.
+    scheduler.add_job(
+        expurgar_arquivos_contas_medicas,
+        "cron",
+        hour=4,
+        minute=30,
+        id="retencao_contas_medicas",
+        replace_existing=True,
+    )
     # Todo dia às 07h, no fuso do scheduler (America/Sao_Paulo). A quinzena
     # fecha nos dias 1 e 16, e é neles que o email sai; os outros dias existem
     # para a edição não se perder quando o container estiver fora do ar na hora
@@ -473,6 +513,7 @@ def start_scheduler() -> None:
         "lembrete_24h_reunioes (a cada 15min), reconciliar_clicksign (05:30), "
         "notificacoes_ouvidoria (a cada 10min), cobranca_prazos_ouvidoria (a cada 10min), "
         "escalonamento_ouvidoria (a cada 10min), retencao_ouvidoria (04:00), "
+        "retencao_contas_medicas (04:30), "
         "relatorio_quinzenal_ouvidoria (07:00 diário, email nos dias 1 e 16), "
         "reconciliacao_tecnologia (de hora em hora)"
     )
