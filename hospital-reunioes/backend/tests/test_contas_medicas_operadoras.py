@@ -114,8 +114,11 @@ class _Consulta:
         self._ordem: tuple[str, bool] | None = None
         self._operacao = "select"
         self._payload: Any = None
+        self._colunas: list[str] | None = None
 
-    def select(self, *_a, **_kw):
+    def select(self, colunas: str = "*", **_kw):
+        if colunas.strip() != "*":
+            self._colunas = [c.strip() for c in colunas.split(",")]
         return self
 
     def eq(self, coluna, valor):
@@ -161,6 +164,8 @@ class _Consulta:
         if self._ordem:
             coluna, desc = self._ordem
             casam.sort(key=lambda linha: (linha.get(coluna) is None, linha.get(coluna)), reverse=desc)
+        if self._colunas:
+            casam = [{c: linha.get(c) for c in self._colunas} for linha in casam]
         return SimpleNamespace(data=casam, count=len(casam))
 
 
@@ -342,3 +347,47 @@ class TestParametrosDoCabecalho:
         cliente, _ = _cliente(GESTAO)
 
         assert cliente.get("/api/contas-medicas/operadoras/ALFA/memoria").status_code == 404
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 3. Colunas extras viram texto; Pendentes (resumo) e Histórico ficam de fora
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+class TestTabelasDaMemoria:
+    def test_tabela_de_insumos_vira_regra_com_coluna_e_valor_no_texto(self):
+        cliente, banco = _cliente(GESTAO)
+        resposta = _enviar_memoria(cliente, _memoria("MEMORIA-BETA-v1.0.md"))
+        [operadora] = banco.linhas("cm_operadora")
+
+        regras = {r["codigo"]: r for r in memoria_vigente(banco, operadora["id"])["regras"]}
+
+        assert regras["BETA-INS-01"] == {
+            "codigo": "BETA-INS-01",
+            "secao": "INS",
+            "texto": (
+                "Gatilho (terapia registrada): Acesso venoso periférico em uso\n"
+                "Insumo: Cateter periférico\n"
+                "Código: 70135266\n"
+                "Quantidade: 1 a cada 96 h, mais trocas justificadas"
+            ),
+            "tipo": None,
+            "origem": "MANUAL DA OPERADORA",
+            "status": "VIGENTE",
+        }
+        assert regras["BETA-INS-02"]["status"] == "PENDENTE"
+        assert regras["BETA-INS-02"]["texto"].endswith("Quantidade: 5 por instalação; troca diária a validar")
+        assert regras["BETA-INS-00"]["texto"] == (
+            "A operadora paga equipos, cateteres e conectores por regra de tempo, não pelo número de dispensações."
+        )
+        assert resposta.json()["regras"] == {"total": 3, "vigentes": 2, "pendentes": 1}
+
+    def test_secoes_pendentes_resumo_e_historico_nao_viram_regra(self):
+        """As duas seções repetem IDs da seção 8 e citam um que não existe
+        (BETA-PRC-09): nada delas pode entrar, nem como regra nova nem repetida."""
+        cliente, banco = _cliente(GESTAO)
+        _enviar_memoria(cliente, _memoria("MEMORIA-BETA-v1.0.md"))
+
+        codigos = sorted(r["codigo"] for r in banco.linhas("cm_regra"))
+
+        assert codigos == ["BETA-INS-00", "BETA-INS-01", "BETA-INS-02"]
