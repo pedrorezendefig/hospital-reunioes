@@ -134,6 +134,25 @@ class _Contexto:
             if i.grupo == "MEDICAMENTOS"
         ]
 
+    @property
+    def diaria_global(self) -> bool:
+        return bool(self.parametros.get("diaria_global"))
+
+    def cobravel(self, categoria: str, codigo: str, data: date) -> bool | None:
+        """Material ou medicamento cobrado à parte? Com diária global (Unimed, Leve),
+        só o que tem preço contratual a partir do corte (`precos.corte_valor_unitario`):
+        o resto entra na conta sem cobrança, de propósito. `None`: sem preço para
+        saber se passa do corte."""
+        if not self.diaria_global:
+            return True
+        corte = (self.parametros.get("precos") or {}).get("corte_valor_unitario")
+        if corte is None:
+            return False
+        tabela = self.preco(categoria, codigo, data, self.coluna)
+        if isinstance(tabela, Decimal):
+            return tabela >= Decimal(str(corte))
+        return None if tabela == NAO_CONFERIDO else False
+
     def unitario_da_conta(self, codigo: str) -> Decimal | None:
         return next((i.unitario for i in self.conta.itens if i.codigo == codigo and i.unitario > 0), None)
 
@@ -192,6 +211,9 @@ def _precos(ctx: _Contexto) -> list[_Linha]:
     for item in ctx.conta.itens:
         categoria = _CATEGORIA_DO_GRUPO.get(item.grupo or "")
         if categoria is None or item.unitario == 0:
+            continue
+        if categoria in {"MATERIAL", "MEDICAMENTO"} and ctx.cobravel(categoria, item.codigo, item.data) is not True:
+            # Com diária global, só o item cobrável tem o preço conferido (LEVE-PRI-07).
             continue
         tabela = ctx.preco(categoria, item.codigo, item.data, ctx.coluna)
         outra = ctx.preco(categoria, item.codigo, item.data, oposta) if oposta else NAO_CONFERIDO
@@ -560,14 +582,19 @@ def _prescricao_x_conta(ctx: _Contexto) -> list[_Linha]:
         for data, doses in sorted(consolidado.doses_por_dia.items()):
             if data in dias_lancados or not ctx.no_periodo(data):
                 continue
+            cobravel = ctx.cobravel("MEDICAMENTO", lancado.codigo, data)
+            if cobravel is False:
+                continue
             quantidade = Decimal(doses or 1)
             preco_lancado, preco_tabela, valor, etiqueta = ctx.valor_de_inclusao(
                 "MEDICAMENTO", lancado.codigo, data, quantidade
             )
+            if cobravel is None:
+                etiqueta += " Sem preço conferível na tabela: conferir se passa do corte."
             achado = _prescrito_no_dia(conteudo, consolidado.nome, data)
             linhas.append(
                 _Linha(
-                    acao="INCLUIR",
+                    acao="INCLUIR" if cobravel else "VALIDAR",
                     chave="prescricao",
                     data=data,
                     setor=achado[0].setor if achado else lancado.setor,
@@ -614,6 +641,9 @@ def _sem_registro(ctx: _Contexto) -> list[_Linha]:
     linhas = []
     for item in ctx.conta.itens:
         if item.grupo != "MEDICAMENTOS" or _SOLUCOES.match(_norm(item.descricao)):
+            continue
+        # Item incluso na diária global entra sem cobrança: nunca vira retirar.
+        if not ctx.cobravel("MEDICAMENTO", item.codigo, item.data):
             continue
         termos = _termos_do_item(item, ctx.dicionario)
         if any(re.search(r"(?<![A-Z])" + re.escape(termo) + r"(?![A-Z])", texto) for termo in termos):
@@ -679,12 +709,20 @@ def _ficha_x_conta(ctx: _Contexto) -> list[_Linha]:
             if not casamento.itens:
                 codigo = _codigo_no_dicionario(medicamento.nome, ctx.dicionario)
                 data = ficha.data or ctx.conta.periodo_inicio
+                if codigo and data:
+                    cobravel = ctx.cobravel("MEDICAMENTO", codigo, data)
+                else:
+                    cobravel = None if ctx.diaria_global else True
+                if cobravel is False:
+                    continue
                 preco_lancado, preco_tabela, valor, etiqueta = (
                     ctx.valor_de_inclusao("MEDICAMENTO", codigo, data, quantidade) if data else (None, None, None, "")
                 )
+                if cobravel is None:
+                    etiqueta += " Sem preço conferível na tabela: conferir se passa do corte."
                 linhas.append(
                     _Linha(
-                        acao="INCLUIR",
+                        acao="INCLUIR" if cobravel else "VALIDAR",
                         codigo=codigo,
                         descricao=medicamento.nome,
                         motivo=f"Registrado na ficha anestésica ({medicamento.quantidade}), sem lançamento no centro "

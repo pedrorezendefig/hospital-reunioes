@@ -722,6 +722,81 @@ class TestTeto:
 
 
 # ═══════════════════════════════════════════════════════════════════════════
+# 8. Diária global (Unimed, Leve): item incluso, isolamento, pacote, pernoite
+# ═══════════════════════════════════════════════════════════════════════════
+
+ENFERMARIA_GLOBAL = "60000090"
+APARTAMENTO_GLOBAL = "60034068"
+HOSPITAL_DIA = "60034424"
+UTI_CLASSE_1 = "60034599"
+TAXA_ISOLAMENTO = "60029080"
+
+# Como a Leve: diária semi-global, item cobrável a partir de R$ 400 o frasco.
+PARAMETROS_GLOBAL: dict[str, Any] = {
+    **PARAMETROS_ALFA,
+    "colunas_de_preco": {"padrao": None},
+    "diaria": {**PARAMETROS_ALFA["diaria"], "acompanhante_segue_a_regra_do_paciente": None, "codigos": {}},
+    "diaria_global": {
+        "hospital_dia": {"codigo": HOSPITAL_DIA, "valor": 480.00},
+        "enfermaria": {"codigo": ENFERMARIA_GLOBAL, "valor": 900.00},
+        "apartamento": {"codigo": APARTAMENTO_GLOBAL, "valor": 1100.00},
+        "uti_adulto_classe_1": {"codigo": UTI_CLASSE_1, "valor": 1850.00},
+        "uti_adulto_classe_2": {"codigo": "60034602", "valor": 2650.00},
+        "taxa_isolamento_dia": {"codigo": TAXA_ISOLAMENTO, "valor": 100.00},
+    },
+    "tetos_por_dia": {},
+    "precos": {"corte_valor_unitario": 400.00},
+    "regras_das_conferencias": {
+        **REGRAS_DAS_CONFERENCIAS,
+        "taxa_isolamento": "ALFA-DIA-20",
+        "hospital_dia_pernoite": "ALFA-DIA-16",
+        "pacote_pelo_tuss": "ALFA-PAC-03",
+    },
+}
+
+TABELA_GLOBAL = {
+    ("DIARIA_TAXA", ENFERMARIA_GLOBAL): 900.00,
+    ("DIARIA_TAXA", APARTAMENTO_GLOBAL): 1100.00,
+    ("DIARIA_TAXA", HOSPITAL_DIA): 480.00,
+    ("DIARIA_TAXA", UTI_CLASSE_1): 1850.00,
+    ("DIARIA_TAXA", TAXA_ISOLAMENTO): 100.00,
+}
+
+
+class TestDiariaGlobal:
+    def test_so_o_item_acima_do_corte_gera_incluir_e_o_incluso_nao_gera_retirar(self):
+        zyvox, dipirona, meronem, omeprazol = "91000001", "91000002", "91000003", "91000004"
+        nomes = ("ZYVOX 600MG BOLSA", "DIPIRONA 1G AMP", "MERONEM 1G FA")
+        prescricoes = [
+            _prescricao(dia(n), *(_prescrito(nome, pagina=10 + n) for nome in nomes)) for n in (1, 2, 3)
+        ]
+        conta = _conta(
+            _item(zyvox, "ZYVOX 600 MG BOLSA 300 ML", dia(1), 1, 520.00),
+            _item(dipirona, "DIPIRONA 1 G AMP", dia(1), 1, 2.00),
+            _item(meronem, "MERONEM 1 G FA", dia(1), 1, 380.00),
+            # Lançado sem menção no prontuário, mas incluso na diária: entra sem cobrança.
+            _item(omeprazol, "OMEPRAZOL 40 MG FA", dia(1), 1, 30.00),
+        )
+        preco = _tabela({("MEDICAMENTO", zyvox): 520.00, ("MEDICAMENTO", dipirona): 2.00, ("MEDICAMENTO", omeprazol): 30.00})
+        textos = ("Zyvox, dipirona e Meronem conforme prescrição.",)
+
+        resultado = conferir(conta, _prontuario(prescricoes=prescricoes, textos=textos), _memoria(PARAMETROS_GLOBAL), preco)
+
+        assert [(linha["acao"], linha["codigo"]) for linha in resultado.linhas] == [
+            ("INCLUIR", zyvox),
+            ("VALIDAR", meronem),
+        ]
+        incluir, validar = resultado.linhas
+        assert (incluir["data"], incluir["data_fim"], incluir["quantidade_devida"], incluir["valor_diferenca"]) == (
+            "2026-10-02",
+            "2026-10-03",
+            2.0,
+            1040.00,
+        )
+        assert "conferir se passa do corte" in validar["motivo"]
+
+
+# ═══════════════════════════════════════════════════════════════════════════
 # 5. Montagem: item diário, período, duplicadas
 # ═══════════════════════════════════════════════════════════════════════════
 
