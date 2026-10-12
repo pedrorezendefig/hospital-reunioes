@@ -150,3 +150,39 @@ def test_o_mesmo_item_em_tres_dias_vira_um_registro_com_as_doses_de_cada_dia_e_o
     assert (ceftriaxona.subtipo, ceftriaxona.secao) == ("PRESCRIÇÃO MÉDICA", "MEDICAMENTOS NORMAIS")
     assert ceftriaxona.paginas == (1, 2, 3)
     assert registros["CLEXANE 40MG/0,4ML SER PREENCH"].doses_por_dia == {date(2026, 10, 3): 1, date(2026, 10, 5): 1}
+
+
+# ----------------------------------------------------------------------------------
+# Balanço hídrico e glicemias
+# ----------------------------------------------------------------------------------
+
+
+def afericao(hora: str, *, com_glicemia: bool = True) -> list[str]:
+    """A aferição da estrutura (#1117), na hora pedida, com ou sem a linha de glicemia."""
+    (texto,) = paginas_da_fixture("prontuario/afericao")
+    texto = texto.replace("03/10/2026 06:00", f"03/10/2026 {hora}")
+    if not com_glicemia:
+        texto = "\n".join(linha for linha in texto.split("\n") if not linha.startswith("GLICEMIA"))
+    return [texto]
+
+
+def test_balanco_vira_itens_com_via_lancamentos_e_total_conta_as_glicemias_e_descarta_a_pagina_2():
+    (balanco,) = ler("conteudo/balanco").balancos
+
+    assert (balanco.data, balanco.setor, balanco.paginas) == (date(2026, 10, 3), "CTI ADULTO", (1, 2))
+    assert [(g.item, g.via, g.lancamentos, g.total) for g in balanco.ganhos] == [
+        ("SORO FISIOLOGICO 0,9%", "EV", 5, 105),
+        ("DIETA ENTERAL", "SNE", 3, 150),
+    ]
+    # os usuários da página 2 (COREN no fim da linha) não viram perda
+    assert [(p.item, p.total) for p in balanco.perdas] == [("DIURESE", 250)]
+    assert balanco.glicemias == 4
+
+
+def test_glicemias_saem_por_dia_de_cada_fonte_com_as_paginas():
+    conteudo = ler("conteudo/balanco", afericao("06:00"), afericao("12:00"), afericao("18:00", com_glicemia=False))
+
+    assert [(g.data, g.familia, g.quantidade, g.paginas) for g in conteudo.glicemias] == [
+        (date(2026, 10, 3), "AFERICAO", 2, (3, 4)),
+        (date(2026, 10, 3), "BALANCO", 4, (1,)),
+    ]

@@ -1,0 +1,22 @@
+Sistema de Gerenciamento da Unidade                                  Página 1 de 2
+BALANÇO HÍDRICO
+ATENDIMENTO: 31245
+Data de Realização do Balanço: 03/10/2026
+Leito: BOX-07
+Unidade: CTI ADULTO
+SINAIS VITAIS                   07:00  08:00  09:00  10:00  11:00
+PRESSAO ARTERIAL               120/80        130/85
+FREQUENCIA CARDIACA               88     90     92
+GLICEMIA                         142           180     96    110
+GANHOS                          07:00  08:00  09:00  10:00  11:00   Total
+SORO FISIOLOGICO 0,9% EV          21     21     21     21     21     105
+DIETA ENTERAL SNE                 50     50            50            150
+Total de ganhos                                                      255
+PERDAS
+DIURESE                          100    150                          250
+<<<QUEBRA DE PÁGINA>>>
+Sistema de Gerenciamento da Unidade                                  Página 2 de 2
+USUÁRIOS
+ENF MARINA COSTA LOPES          COREN          334455
+TEC PAULO HENRIQUE ALVES        COREN          556677
+Observações: balanço fechado às 07:00 do dia seguinte, sem pendências de registro.
