@@ -10,6 +10,7 @@ ordem pedida e põe em cada uma o rodapé global do MV, "Impressão de Prontuár
 Página N de T".
 """
 
+import logging
 import re
 import unicodedata
 from datetime import date, time
@@ -277,6 +278,32 @@ def test_mais_de_10_por_cento_das_paginas_sem_texto_da_parecer_parcial():
 
     assert resultado.paginas_sem_texto == (3, 4)
     assert resultado.parecer_parcial == ("O arquivo tem 2 de 6 páginas sem texto, mais de 10%.",)
+
+
+def test_nenhuma_linha_de_log_nem_a_mensagem_de_erro_carrega_texto_do_prontuario(caplog):
+    caplog.set_level(logging.DEBUG)
+    completo = montar(*PRONTUARIO_COMPLETO)
+    incompleto = montar(*PRONTUARIO_COMPLETO, total_no_rodape=99)
+    trechos = {linha.strip() for pagina in completo for linha in pagina.split("\n") if len(linha.strip()) >= 12}
+
+    ler_prontuario(completo, ATENDIMENTO)
+    with pytest.raises(ErroLeitura) as erro:
+        ler_prontuario(incompleto, ATENDIMENTO)
+
+    escrito = [registro.getMessage() for registro in caplog.records] + [str(erro.value)]
+    assert [t for t in trechos if any(t in mensagem for mensagem in escrito)] == []
+
+
+MODULOS = Path(__file__).parents[1] / "app" / "services" / "contas_medicas"
+
+
+@pytest.mark.parametrize("arquivo", ["prontuario.py", "desidentificacao.py"])
+def test_sem_travessao_nem_meia_risca_no_codigo_nem_nas_frases_que_a_faturista_ve(arquivo):
+    """As frases do Parecer parcial e do erro moram no código (ADR 0013)."""
+    texto = (MODULOS / arquivo).read_text(encoding="utf-8")
+
+    assert chr(0x2014) not in texto
+    assert chr(0x2013) not in texto
 
 
 def test_rodape_com_total_diferente_do_numero_de_paginas_e_arquivo_incompleto():
