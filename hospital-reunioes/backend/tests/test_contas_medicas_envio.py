@@ -915,3 +915,27 @@ class TestKitDeConhecimento:
             "Concluídas",
         ):
             assert trecho in secao, trecho
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 11. Tipografia
+# ═══════════════════════════════════════════════════════════════════════════
+
+RAIZ_DO_APP = Path(__file__).resolve().parents[2]
+
+# Os arquivos desta fatia. O de `services/contas_medicas/envio.py` não tem
+# "contas_medicas" no nome, e o glob da fundação não o alcança.
+ARQUIVOS_DA_FATIA = [
+    RAIZ_DO_APP / "backend/app/services/contas_medicas/envio.py",
+    RAIZ_DO_APP / "backend/app/routers/contas_medicas_envio.py",
+    RAIZ_DO_APP / "backend/app/conhecimento/contas-medicas.md",
+    RAIZ_DO_APP / "frontend/src/app/contas-medicas/page.tsx",
+    RAIZ_DO_APP / "frontend/src/lib/contas-medicas/envio.ts",
+]
+
+
+@pytest.mark.parametrize("arquivo", ARQUIVOS_DA_FATIA, ids=lambda a: a.name)
+def test_sem_travessao_nem_meia_risca(arquivo):
+    texto = arquivo.read_text(encoding="utf-8")
+    assert chr(0x2014) not in texto
+    assert chr(0x2013) not in texto
