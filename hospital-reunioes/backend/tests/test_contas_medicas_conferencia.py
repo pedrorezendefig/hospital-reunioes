@@ -14,12 +14,18 @@ from __future__ import annotations
 
 import os
 import sys
-from datetime import date, time
+from datetime import date, datetime, time
 from decimal import Decimal
 from typing import Any
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
+from app.services.contas_medicas.cirurgia import (  # noqa: E402
+    DescricaoCirurgica,
+    FichaAnestesica,
+    Gas,
+    Procedimento,
+)
 from app.services.contas_medicas.conferencia import ProntuarioLido, conferir  # noqa: E402
 from app.services.contas_medicas.conteudo import Conteudo, Internacao  # noqa: E402
 from app.services.contas_medicas.memoria import MemoriaLida, RegraLida  # noqa: E402
@@ -228,6 +234,20 @@ def _prescricao(data: date, *itens: ItemPrescrito, setor: str = "CTI ADULTO") ->
     return Prescricao(data, time(9, 0), "PRESCRICAO MEDICA", setor, tuple(i.pagina for i in itens), tuple(itens))
 
 
+def _ficha(*, gases=(), medicamentos=(), data: date = dia(4)) -> FichaAnestesica:
+    return FichaAnestesica(
+        paginas=(20, 21),
+        data=data,
+        inicio=time(16, 50),
+        fim=time(19, 20),
+        tecnica="GERAL BALANCEADA",
+        gases=tuple(gases),
+        volatil=None,
+        medicamentos=tuple(medicamentos),
+        monitorizacao=(),
+    )
+
+
 def _campos(linha: dict) -> dict:
     """A linha sem `ordem` (depende das outras linhas), `motivo` e `evidencia_trecho` (texto livre)."""
     return {k: v for k, v in linha.items() if k not in {"ordem", "motivo", "evidencia_trecho"}}
@@ -243,6 +263,10 @@ def _linhas(resultado, acao: str, codigo: str | None = None) -> list[dict]:
 
 AGULHA = "70000017"
 PANTOCAL = "90123456"
+TAZOCIN = "90654321"
+O2_3L_CC = "60010851"
+O2_6L_CC = "60011092"
+CC = "CENTRO CIRURGICO"
 
 
 class TestAchadosDoDiretor:
@@ -304,3 +328,107 @@ class TestAchadosDoDiretor:
             "origem": "CODIGO",
         }
         assert "preço da conta, não conferido" in linha["motivo"]
+
+    def test_piperacilina_lancada_sem_mencao_no_prontuario_vira_validar_com_sugestao_retirar(self):
+        conta = _conta(
+            _item(PANTOCAL, "PANTOCAL 40 MG PO LIOF INJ FA", dia(2), 1, 239.65),
+            _item(TAZOCIN, "TAZOCIN 4,5 G PO LIOF INJ FA (PIPERACILINA+TAZOBACTAM)", dia(2), 1, 331.99, pagina=3),
+        )
+        textos = ("EVOLUÇÃO MÉDICA\nSegue com Pantocal 40 mg EV.", "Sem intercorrências.")
+
+        resultado = conferir(conta, _prontuario(textos=textos), _memoria(), _tabela({}))
+
+        [linha] = _linhas(resultado, "VALIDAR", TAZOCIN)
+        assert _campos(linha) == {
+            "acao": "VALIDAR",
+            "data": "2026-10-02",
+            "data_fim": None,
+            "setor": "CTI ADULTO",
+            "codigo": TAZOCIN,
+            "descricao": "TAZOCIN 4,5 G PO LIOF INJ FA (PIPERACILINA+TAZOBACTAM)",
+            "quantidade_lancada": 1.0,
+            "quantidade_devida": 0.0,
+            "preco_lancado": 331.99,
+            "preco_tabela": None,
+            "valor_diferenca": -331.99,
+            "regra_codigo": "ALFA-PRI-06",
+            "evidencia_pagina": 3,
+            "nivel_evidencia": "POR_REGRA",
+            "causa_raiz": "REGISTRO_ASSISTENCIAL",
+            "confianca": "MEDIA",
+            "origem": "CODIGO",
+        }
+        assert "sugestão: retirar" in linha["motivo"].lower()
+        assert _linhas(resultado, "VALIDAR", PANTOCAL) == []
+
+    def test_oxigenio_2_l_por_150_min_lancado_como_6_l_por_3_h_vira_ajustar_para_3_l_e_3_h(self):
+        ficha = _ficha(gases=(Gas("O2", 2.0, 150), Gas("AR", 2.0, 150)))
+        conta = _conta(
+            _item(O2_6L_CC, "OXIGENIO 6 L/MIN POR HORA CC", dia(4), 3, 9.61, grupo="GASES MEDICINAIS", setor=CC, pagina=6)
+        )
+        preco = _tabela({("DIARIA_TAXA", O2_3L_CC): {"COMUM": 4.80, "CARIOCA": 4.80}, ("DIARIA_TAXA", O2_6L_CC): 9.61})
+
+        resultado = conferir(conta, _prontuario(fichas=[ficha], tipo_impressao=None), _memoria(), preco)
+
+        [linha] = _linhas(resultado, "AJUSTAR_QUANTIDADE")
+        assert _campos(linha) == {
+            "acao": "AJUSTAR_QUANTIDADE",
+            "data": "2026-10-04",
+            "data_fim": None,
+            "setor": CC,
+            "codigo": O2_3L_CC,
+            "descricao": "Oxigênio 3 L/min no centro cirúrgico, por hora",
+            "quantidade_lancada": 3.0,
+            "quantidade_devida": 3.0,
+            "preco_lancado": 9.61,
+            "preco_tabela": 4.80,
+            "valor_diferenca": -14.43,
+            "regra_codigo": "ALFA-CC-04",
+            "evidencia_pagina": 20,
+            "nivel_evidencia": "REGISTRADO",
+            "causa_raiz": "LANCAMENTO_MANUAL",
+            "confianca": "ALTA",
+            "origem": "CODIGO",
+        }
+        assert O2_6L_CC in linha["motivo"]
+
+    def test_cabecalho_com_1_procedimento_e_descricao_cirurgica_com_5_vira_validar(self):
+        descricao = DescricaoCirurgica(
+            paginas=(30, 31),
+            procedimentos=(
+                Procedimento("31005497", "COLECISTECTOMIA COM COLANGIOGRAFIA POR VIDEO", True),
+                Procedimento("31009328", "HERNIORRAFIA UMBILICAL POR VIDEO", False),
+                Procedimento("31005470", "COLANGIOGRAFIA INTRAOPERATORIA", False),
+                Procedimento("31003079", "LIBERACAO DE ADERENCIAS POR VIDEO", False),
+                Procedimento("31009166", "BIOPSIA HEPATICA POR VIDEO", False),
+            ),
+            inicio=datetime(2026, 10, 4, 17, 40),
+            fim=datetime(2026, 10, 4, 20, 0),
+            anatomopatologico=None,
+            consignados=None,
+        )
+        conta = _conta(_item(AGULHA, "AGULHA DESC 25X7", dia(4), 2, 0.20, grupo="MATERIAIS DESCARTAVEIS"), procedimento="31005462")
+
+        resultado = conferir(conta, _prontuario(descricoes=[descricao], tipo_impressao=None), _memoria(), _tabela({}))
+
+        [linha] = _linhas(resultado, "VALIDAR", "31005462")
+        assert _campos(linha) == {
+            "acao": "VALIDAR",
+            "data": "2026-10-04",
+            "data_fim": None,
+            "setor": None,
+            "codigo": "31005462",
+            "descricao": "PROCEDIMENTO SINTETICO",
+            "quantidade_lancada": None,
+            "quantidade_devida": None,
+            "preco_lancado": None,
+            "preco_tabela": None,
+            "valor_diferenca": None,
+            "regra_codigo": "ALFA-PRI-12",
+            "evidencia_pagina": 30,
+            "nivel_evidencia": "REGISTRADO",
+            "causa_raiz": "LANCAMENTO_MANUAL",
+            "confianca": "ALTA",
+            "origem": "CODIGO",
+        }
+        assert "5 procedimentos" in linha["motivo"]

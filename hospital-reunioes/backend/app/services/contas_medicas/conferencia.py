@@ -17,6 +17,8 @@ registrada. Regra pendente: a linha sai Validar, nunca ordem.
 
 from __future__ import annotations
 
+import math
+import re
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, replace
 from datetime import date, timedelta
@@ -24,7 +26,7 @@ from decimal import ROUND_HALF_UP, Decimal
 from typing import Any
 
 from app.services.contas_medicas.conteudo import Conteudo
-from app.services.contas_medicas.dicionario import casar
+from app.services.contas_medicas.dicionario import _generico, _marca, _norm, casar
 from app.services.contas_medicas.guia import NotaDeEntrada, agrupar_por_dia_e_setor, nota_de_entrada
 from app.services.contas_medicas.memoria import MemoriaLida
 from app.services.contas_medicas.prescricao import ItemPrescrito, Prescricao
@@ -109,6 +111,9 @@ class _Contexto:
     preco: BuscaDePreco
     coluna: str | None
     dicionario: Mapping[str, set[str]]
+
+    def no_centro_cirurgico(self, setor: str | None) -> bool:
+        return "CIRURG" in _norm(setor)
 
     def no_periodo(self, data: date) -> bool:
         inicio, fim = self.conta.periodo_inicio, self.conta.periodo_fim
@@ -251,6 +256,154 @@ def _prescricao_x_conta(ctx: _Contexto) -> list[_Linha]:
 
 
 # ----------------------------------------------------------------------------------
+# (4) Lançado sem registro
+# ----------------------------------------------------------------------------------
+
+# Soluções de diluição e hidratação: vêm como componente ou hidratação, com outro nome.
+_SOLUCOES = re.compile(r"^(AGUA PARA INJECAO|AGUA DESTILADA|CLORETO DE SODIO|RINGER|GLICOSE|SORO)")
+
+
+def _termos_do_item(item: ItemConta, dicionario: Mapping[str, set[str]]) -> set[str]:
+    """Os nomes pelos quais o prontuário pode citar o item: marca, genérico e dicionário."""
+    termos = {_marca(item.descricao)}
+    termos |= {parte.strip() for parte in re.split(r"[+/,]", _generico(item.descricao) or "")}
+    termos |= {termo for termo, codigos in dicionario.items() if item.codigo in codigos}
+    return {termo for termo in termos if len(termo) >= 4}
+
+
+def _sem_registro(ctx: _Contexto) -> list[_Linha]:
+    """Medicamento da conta sem menção no prontuário inteiro: Validar, sugestão retirar.
+    Só com impressão completa: na parcial, a ausência não prova nada."""
+    if not (ctx.prontuario.estrutura.tipo_impressao or "").upper().startswith("COMPLETA"):
+        return []
+    texto = _norm("\n".join(ctx.prontuario.texto_por_pagina))
+    linhas = []
+    for item in ctx.conta.itens:
+        if item.grupo != "MEDICAMENTOS" or _SOLUCOES.match(_norm(item.descricao)):
+            continue
+        termos = _termos_do_item(item, ctx.dicionario)
+        if any(re.search(r"(?<![A-Z])" + re.escape(termo) + r"(?![A-Z])", texto) for termo in termos):
+            continue
+        linhas.append(
+            _Linha(
+                acao="VALIDAR",
+                chave="sem_registro",
+                data=item.data,
+                setor=item.setor,
+                codigo=item.codigo,
+                descricao=item.descricao,
+                motivo="Lançado sem nenhuma menção no prontuário (marca, genérico ou dicionário). Sugestão: retirar.",
+                nivel="POR_REGRA",
+                causa="REGISTRO_ASSISTENCIAL",
+                pagina=item.pagina,
+                trecho=_trecho_do_item(item),
+                quantidade_lancada=item.quantidade,
+                quantidade_devida=Decimal(0),
+                preco_lancado=item.unitario,
+                valor=-item.total,
+                confianca="MEDIA",
+            )
+        )
+    return linhas
+
+
+# ----------------------------------------------------------------------------------
+# (6) Gás do centro cirúrgico
+# ----------------------------------------------------------------------------------
+
+
+def _gases(ctx: _Contexto) -> list[_Linha]:
+    """Oxigênio da ficha anestésica: vazão arredondada para a faixa da tabela e horas
+    para cima. O código de cada faixa vem da memória (`gases_centro_cirurgico`)."""
+    faixas = {
+        Decimal(str(vazao)): codigo
+        for vazao, codigo in (ctx.parametros.get("gases_centro_cirurgico") or {}).items()
+    }
+    codigos_de_oxigenio = {codigo for codigo in faixas.values() if codigo}
+    lancados = [
+        i
+        for i in ctx.conta.itens
+        if i.grupo == "GASES MEDICINAIS" and i.codigo in codigos_de_oxigenio and ctx.no_centro_cirurgico(i.setor)
+    ]
+    linhas = []
+    for ficha in ctx.prontuario.conteudo.fichas_anestesicas:
+        for gas in ficha.gases:
+            vazao = Decimal(str(gas.litros_por_minuto))
+            faixa = next((f for f in sorted(faixas) if f >= vazao), None)
+            esperado = faixas.get(faixa) if faixa is not None else None
+            if gas.gas != "O2" or not esperado or not lancados:
+                continue
+            horas = Decimal(math.ceil(gas.minutos / 60))
+            lancada = sum((i.quantidade for i in lancados), Decimal(0))
+            if all(i.codigo == esperado for i in lancados) and lancada == horas:
+                continue
+            data = ficha.data or lancados[0].data
+            tabela = ctx.preco("DIARIA_TAXA", esperado, data, ctx.coluna)
+            total = sum((i.total for i in lancados), Decimal(0))
+            linhas.append(
+                _Linha(
+                    acao="AJUSTAR_QUANTIDADE",
+                    chave="gas",
+                    data=data,
+                    setor=lancados[0].setor,
+                    codigo=esperado,
+                    descricao=f"Oxigênio {faixa:g} L/min no centro cirúrgico, por hora",
+                    motivo=(
+                        f"Ficha anestésica: O2 {vazao:g} L/min por {gas.minutos} min. Lançado "
+                        + ", ".join(f"{i.codigo} x {i.quantidade:g}" for i in lancados)
+                        + f"; devido {esperado} x {horas} h."
+                    ),
+                    nivel="REGISTRADO",
+                    causa="LANCAMENTO_MANUAL",
+                    pagina=ficha.paginas[0],
+                    trecho=f"O2 {vazao:g}L/min: {gas.minutos} min",
+                    quantidade_lancada=lancada,
+                    quantidade_devida=horas,
+                    preco_lancado=lancados[0].unitario,
+                    preco_tabela=tabela if isinstance(tabela, Decimal) else None,
+                    valor=_dinheiro(tabela * horas - total) if isinstance(tabela, Decimal) else None,
+                )
+            )
+    return linhas
+
+
+# ----------------------------------------------------------------------------------
+# (7) Procedimento do cabeçalho × descrição cirúrgica
+# ----------------------------------------------------------------------------------
+
+
+def _procedimento_do_cabecalho(ctx: _Contexto) -> list[_Linha]:
+    """Código do cabeçalho fora da descrição cirúrgica: Validar, porque muda pacote,
+    porte da taxa de sala e autorização. O cabeçalho não é lançamento (ASSIM-PRI-12)."""
+    codigo = ctx.conta.procedimento_codigo
+    linhas = []
+    for descricao in ctx.prontuario.conteudo.descricoes_cirurgicas:
+        if not codigo or not descricao.procedimentos or codigo in {p.codigo for p in descricao.procedimentos}:
+            continue
+        registrados = "; ".join(f"{p.codigo} {p.descricao}" for p in descricao.procedimentos)
+        linhas.append(
+            _Linha(
+                acao="VALIDAR",
+                chave="procedimento_do_cabecalho",
+                data=descricao.inicio.date() if descricao.inicio else None,
+                setor=None,
+                codigo=codigo,
+                descricao=ctx.conta.procedimento_descricao,
+                motivo=(
+                    f"Procedimento do cabeçalho fora da descrição cirúrgica, que registra "
+                    f"{len(descricao.procedimentos)} procedimentos: {registrados}. "
+                    "Define pacote, porte da taxa de sala e autorização."
+                ),
+                nivel="REGISTRADO",
+                causa="LANCAMENTO_MANUAL",
+                pagina=descricao.paginas[0],
+                trecho=registrados,
+            )
+        )
+    return linhas
+
+
+# ----------------------------------------------------------------------------------
 # Regra citada, período e montagem
 # ----------------------------------------------------------------------------------
 
@@ -357,7 +510,13 @@ def conferir(
         dicionario=dicionario or {},
     )
     descartadas: list[dict[str, Any]] = []
-    geradas = [*_precos(ctx), *_prescricao_x_conta(ctx)]
+    geradas = [
+        *_precos(ctx),
+        *_prescricao_x_conta(ctx),
+        *_sem_registro(ctx),
+        *_gases(ctx),
+        *_procedimento_do_cabecalho(ctx),
+    ]
     linhas = _diario(_com_regra(geradas, memoria, descartadas))
     registros = []
     for grupo in agrupar_por_dia_e_setor(_registro(linha) for linha in linhas):
