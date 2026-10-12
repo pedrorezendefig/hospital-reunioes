@@ -428,6 +428,14 @@ class TestAbrirMudaParaEmCorrecao:
 
         assert banco.conta(CONTA)["situacao"] == "CONCLUIDA"
 
+    def test_conta_concluida_mostra_a_nota_sem_as_nao_procede(self):
+        linhas = _marcadas(_linhas_do_guia(), senha="NAO_PROCEDE", **{"diaria-acompanhante": "NAO_PROCEDE"})
+        banco = _cenario(conta=_conta(situacao="CONCLUIDA_COM_PENDENCIA"), linhas=linhas)
+
+        numeros = _cliente("dona", banco).get(ROTA_GUIA).json()["numeros"]
+
+        assert (numeros["nota_entrada"], numeros["itens_feitos"]) == (84, 2)
+
     def test_conta_sem_guia_pronto_recebe_409(self):
         banco = _cenario(conta=_conta(situacao="PROCESSANDO"))
 
@@ -748,3 +756,39 @@ class TestConcluir:
 
         assert _cliente("outra_faturista", banco).post(ROTA_CONCLUIR, json={}).status_code == 403
         assert banco.conta(CONTA)["situacao"] == "EM_CORRECAO"
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 6. O app de verdade e o kit de conhecimento
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+class TestAsRotasEstaoNoApp:
+    def test_o_app_de_verdade_registra_as_rotas_do_guia(self):
+        """A fonte é o schema OpenAPI, e não `app.routes` (FastAPI 0.141)."""
+        from app.main import app
+
+        cache = app.openapi_schema
+        try:
+            caminhos = app.openapi()["paths"]
+        finally:
+            app.openapi_schema = cache
+
+        assert len(caminhos) > 50
+        base = "/api/contas-medicas/contas/{conta_id}/guia"
+        assert "get" in caminhos[base]
+        assert {"post", "delete"} <= set(caminhos[f"{base}/linhas/{{linha_id}}/marcacao"])
+        assert "post" in caminhos[f"{base}/dia/feito"]
+        assert "post" in caminhos[f"{base}/concluir"]
+
+
+KIT = Path(__file__).resolve().parents[1] / "app" / "conhecimento" / "contas-medicas.md"
+
+
+class TestKitDeConhecimento:
+    def test_o_texto_do_produto_descreve_o_guia_e_os_tres_botoes(self):
+        texto = KIT.read_text(encoding="utf-8")
+        secao = texto.split("## O Guia", 1)[1].split("\n## ", 1)[0]
+
+        for trecho in ("**Feito**", "**Não procede**", "**Bloqueado**", "Concluir e abrir a próxima", "Validar"):
+            assert trecho in secao
