@@ -20,7 +20,13 @@ from supabase import Client
 
 from app.dependencies import get_supabase_client, require_permissao_cm
 from app.limiter import limiter
-from app.services.contas_medicas.guia import agrupar_por_dia_e_setor, linha_nao_conferida, numeros_do_topo
+from app.services.contas_medicas.guia import (
+    PENDENTES,
+    agrupar_por_dia_e_setor,
+    linha_nao_conferida,
+    nota_de_entrada,
+    numeros_do_topo,
+)
 
 router = APIRouter(prefix="/contas-medicas", tags=["contas-medicas"])
 
@@ -181,6 +187,69 @@ async def marcar_o_dia_como_feito(
         supabase.table("cm_guia_linha").update(campos).in_("id", abertas).eq("estado", "ABERTA").execute().data or []
     )
     return {"marcadas": len(gravadas)}
+
+
+class Conclusao(BaseModel):
+    observacao: str | None = Field(default=None, max_length=4000)
+
+
+@router.post("/contas/{conta_id}/guia/concluir")
+@limiter.limit("60/minute")
+async def concluir_guia(
+    request: Request,
+    conta_id: UUID,
+    corpo: Conclusao,
+    me: dict = Depends(_PODE_CORRIGIR),
+    supabase: Client = Depends(get_supabase_client),
+) -> dict:
+    """Concluir é sempre possível. Sem pendência, a Conta fica Concluída; com
+    linha sem marcação, em validação ou bloqueada, Concluída com pendência.
+
+    A nota de entrada é recalculada sem as linhas Não procede; a nota bruta
+    fica como o processamento gravou. A resposta traz a próxima Conta A fazer
+    da faturista na ordem de envio, para a tela abrir em seguida.
+    """
+    conta = _conta_em_correcao(supabase, conta_id, me)
+    linhas = _linhas(supabase, conta["id"])
+    pendencias = sum(1 for linha in linhas if linha.get("estado") in PENDENTES)
+    situacao = "CONCLUIDA_COM_PENDENCIA" if pendencias else "CONCLUIDA"
+    sem_nao_procede = [linha for linha in linhas if linha.get("estado") != "NAO_PROCEDE"]
+    nota = nota_de_entrada(sem_nao_procede, conta.get("total_lancado")).nota
+
+    supabase.table("cm_conta").update({"situacao": situacao, "nota_entrada": nota, "concluida_em": _agora()}).eq(
+        "id", conta["id"]
+    ).execute()
+
+    observacao = (corpo.observacao or "").strip()
+    if observacao:
+        supabase.table("cm_observacao").insert(
+            {"conta_id": conta["id"], "autor_id": me.get("id"), "texto": observacao}
+        ).execute()
+
+    return {
+        "situacao": situacao,
+        "pendencias": pendencias,
+        "nota_entrada": nota,
+        "nota_bruta": conta.get("nota_bruta"),
+        "proxima_conta_id": _proxima_a_fazer(supabase, conta.get("faturista_id")),
+    }
+
+
+def _proxima_a_fazer(supabase: Client, faturista_id: str | None) -> str | None:
+    if not faturista_id:
+        return None
+    proximas = (
+        supabase.table("cm_conta")
+        .select("id")
+        .eq("faturista_id", faturista_id)
+        .eq("situacao", "A_FAZER")
+        .order("ordem_fila")
+        .limit(1)
+        .execute()
+        .data
+        or []
+    )
+    return proximas[0]["id"] if proximas else None
 
 
 @router.get("/contas/{conta_id}/guia")

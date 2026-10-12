@@ -639,3 +639,112 @@ class TestMarcarODiaComoFeito:
 
         assert resposta.status_code == 409
         assert banco.linha("luva")["estado"] == "ABERTA"
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 5. Concluir
+# ═══════════════════════════════════════════════════════════════════════════
+
+ROTA_CONCLUIR = f"{ROTA_GUIA}/concluir"
+NOVE = ("luva", "lavagem", "agulha", "senha", "fita", "fisioterapia", "cateter", "diaria-acompanhante", "lanceta")
+
+
+def _sem_a_validar() -> list[dict]:
+    return [linha for linha in _linhas_do_guia() if linha["acao"] != "VALIDAR"]
+
+
+def _outra_conta(id_: str, faturista: str, situacao: str, ordem: int) -> dict:
+    return _conta(id=id_, faturista_id=faturista, situacao=situacao, ordem_fila=ordem, numero_conta=id_[:4])
+
+
+class TestConcluir:
+    def test_todas_resolvidas_fica_concluida(self):
+        linhas = _marcadas(_sem_a_validar(), **{**dict.fromkeys(NOVE, "FEITO"), "senha": "NAO_PROCEDE"})
+        banco = _cenario(conta=_conta(situacao="EM_CORRECAO"), linhas=linhas)
+
+        resposta = _cliente("dona", banco).post(ROTA_CONCLUIR, json={})
+
+        assert resposta.status_code == 200
+        assert (resposta.json()["situacao"], resposta.json()["pendencias"]) == ("CONCLUIDA", 0)
+        assert banco.conta(CONTA)["situacao"] == "CONCLUIDA"
+        assert banco.conta(CONTA)["concluida_em"] is not None
+
+    def test_aberta_em_validacao_e_bloqueada_ficam_como_pendencia_com_a_contagem(self):
+        feitas = dict.fromkeys(NOVE[:7], "FEITO")
+        linhas = _marcadas(_linhas_do_guia(), **feitas, **{"diaria-acompanhante": "BLOQUEADO"})
+        banco = _cenario(conta=_conta(situacao="EM_CORRECAO"), linhas=linhas)
+
+        resposta = _cliente("dona", banco).post(ROTA_CONCLUIR, json={})
+
+        # lanceta sem marcação, diária bloqueada e a unidade em validação
+        assert (resposta.json()["situacao"], resposta.json()["pendencias"]) == ("CONCLUIDA_COM_PENDENCIA", 3)
+        assert banco.conta(CONTA)["situacao"] == "CONCLUIDA_COM_PENDENCIA"
+
+    def test_so_a_linha_em_validacao_ja_e_pendencia(self):
+        linhas = _marcadas(_linhas_do_guia(), **dict.fromkeys(NOVE, "FEITO"))
+        banco = _cenario(conta=_conta(situacao="EM_CORRECAO"), linhas=linhas)
+
+        resposta = _cliente("dona", banco).post(ROTA_CONCLUIR, json={})
+
+        assert (resposta.json()["situacao"], resposta.json()["pendencias"]) == ("CONCLUIDA_COM_PENDENCIA", 1)
+
+    def test_traz_a_proxima_a_fazer_da_faturista_na_ordem_de_envio(self):
+        outras = [
+            _outra_conta("aaaaaaaa-0000-0000-0000-000000000030", "F1", "A_FAZER", 30),
+            _outra_conta("aaaaaaaa-0000-0000-0000-000000000020", "F1", "A_FAZER", 20),
+            _outra_conta("aaaaaaaa-0000-0000-0000-000000000005", "F1", "EM_CORRECAO", 5),
+            _outra_conta("aaaaaaaa-0000-0000-0000-000000000001", "F2", "A_FAZER", 1),
+            _outra_conta("aaaaaaaa-0000-0000-0000-000000000002", "F1", "CONCLUIDA", 2),
+        ]
+        banco = _cenario(conta=_conta(situacao="EM_CORRECAO"), outras_contas=outras)
+
+        resposta = _cliente("dona", banco).post(ROTA_CONCLUIR, json={})
+
+        assert resposta.json()["proxima_conta_id"] == "aaaaaaaa-0000-0000-0000-000000000020"
+
+    def test_sem_proxima_a_fazer_vem_nulo(self):
+        outras = [_outra_conta("aaaaaaaa-0000-0000-0000-000000000001", "F2", "A_FAZER", 1)]
+        banco = _cenario(conta=_conta(situacao="EM_CORRECAO"), outras_contas=outras)
+
+        resposta = _cliente("dona", banco).post(ROTA_CONCLUIR, json={})
+
+        assert resposta.json()["proxima_conta_id"] is None
+
+    def test_nota_de_entrada_sem_as_nao_procede_e_maior_e_a_bruta_nao_muda(self):
+        """Sem a senha (-19,97) e a diária (+239,67): apontado 324,96, devido
+        2.030,30, nota 84. A bruta, 74, fica como estava."""
+        linhas = _marcadas(_linhas_do_guia(), senha="NAO_PROCEDE", **{"diaria-acompanhante": "NAO_PROCEDE"})
+        banco = _cenario(conta=_conta(situacao="EM_CORRECAO"), linhas=linhas)
+
+        resposta = _cliente("dona", banco).post(ROTA_CONCLUIR, json={})
+
+        assert (resposta.json()["nota_entrada"], resposta.json()["nota_bruta"]) == (84, 74)
+        assert (banco.conta(CONTA)["nota_entrada"], banco.conta(CONTA)["nota_bruta"]) == (84, 74)
+
+    def test_observacao_para_a_gestao_fica_gravada_com_o_autor(self):
+        banco = _cenario(conta=_conta(situacao="EM_CORRECAO"))
+
+        _cliente("dona", banco).post(ROTA_CONCLUIR, json={"observacao": "  Luva já vem no kit do CTI  "})
+
+        assert banco.tabelas["cm_observacao"] == [
+            {"id": "cm_observacao-1", "conta_id": CONTA, "autor_id": "F1", "texto": "Luva já vem no kit do CTI"}
+        ]
+
+    def test_observacao_em_branco_nao_grava_nada(self):
+        banco = _cenario(conta=_conta(situacao="EM_CORRECAO"))
+
+        resposta = _cliente("dona", banco).post(ROTA_CONCLUIR, json={"observacao": "   "})
+
+        assert resposta.status_code == 200
+        assert banco.tabelas["cm_observacao"] == []
+
+    def test_concluir_de_novo_e_recusado(self):
+        banco = _cenario(conta=_conta(situacao="CONCLUIDA"))
+
+        assert _cliente("dona", banco).post(ROTA_CONCLUIR, json={}).status_code == 409
+
+    def test_faturista_que_nao_e_dona_nao_conclui(self):
+        banco = _cenario(conta=_conta(situacao="EM_CORRECAO"))
+
+        assert _cliente("outra_faturista", banco).post(ROTA_CONCLUIR, json={}).status_code == 403
+        assert banco.conta(CONTA)["situacao"] == "EM_CORRECAO"

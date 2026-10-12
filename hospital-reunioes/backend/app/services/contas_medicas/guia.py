@@ -90,6 +90,10 @@ ORDEM_DAS_ACOES = ("INCLUIR", "AJUSTAR_QUANTIDADE", "CORRIGIR_PRECO", "RETIRAR",
 # O que a faturista marca. Em validação e Decidida não são dela.
 MARCADAS = ("FEITO", "NAO_PROCEDE", "BLOQUEADO")
 
+# O que deixa a Conta "Concluída com pendência": linha sem marcação, em
+# validação ou bloqueada (spec, item 5).
+PENDENTES = ("ABERTA", "EM_VALIDACAO", "BLOQUEADO")
+
 
 def _chave_de_ordem(linha: dict) -> tuple:
     acao = linha.get("acao")
