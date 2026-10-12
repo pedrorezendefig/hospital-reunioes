@@ -82,3 +82,51 @@ def nota_de_entrada(linhas: Iterable[dict], total_lancado) -> NotaDeEntrada:
         em_validacao=em_validacao,
         itens_apontados=itens,
     )
+
+
+# A ordem das ações dentro do grupo (spec, item 9.8).
+ORDEM_DAS_ACOES = ("INCLUIR", "AJUSTAR_QUANTIDADE", "CORRIGIR_PRECO", "RETIRAR", "VALIDAR")
+
+# O que a faturista marca. Em validação e Decidida não são dela.
+MARCADAS = ("FEITO", "NAO_PROCEDE", "BLOQUEADO")
+
+
+def _chave_de_ordem(linha: dict) -> tuple:
+    acao = linha.get("acao")
+    posicao = ORDEM_DAS_ACOES.index(acao) if acao in ORDEM_DAS_ACOES else len(ORDEM_DAS_ACOES)
+    data = linha.get("data")
+    setor = linha.get("setor")
+    ordem = linha.get("ordem")
+    return (data is None, data or "", setor is None, setor or "", posicao, ordem is None, ordem or 0)
+
+
+def agrupar_por_dia_e_setor(linhas: Iterable[dict]) -> list[dict]:
+    """As linhas em ordem de data, setor e ação, num grupo por dia e setor."""
+    grupos: list[dict] = []
+    for linha in sorted(linhas, key=_chave_de_ordem):
+        chave = (linha.get("data"), linha.get("setor"))
+        if not grupos or (grupos[-1]["data"], grupos[-1]["setor"]) != chave:
+            grupos.append({"data": chave[0], "setor": chave[1], "linhas": []})
+        grupos[-1]["linhas"].append({**linha, "nao_conferido": linha_nao_conferida(linha)})
+    return grupos
+
+
+def numeros_do_topo(linhas: list[dict], total_lancado, *, concluida: bool) -> dict:
+    """Os três números do topo do Guia.
+
+    Antes da conclusão a nota é a bruta, com todas as linhas; depois, a de
+    entrada, sem as Não procede. Itens feitos conta as linhas que a faturista
+    já marcou (Feito, Não procede ou Bloqueado), de todas as que são dela.
+    """
+    da_nota = [linha for linha in linhas if linha.get("estado") != "NAO_PROCEDE"] if concluida else linhas
+    nota = nota_de_entrada(da_nota, total_lancado)
+    dela = [linha for linha in linhas if linha.get("acao") != "VALIDAR"]
+    return {
+        "nota_entrada": nota.nota,
+        "valor_a_ajustar": float(nota.apontado),
+        "itens_a_ajustar": nota.itens_apontados,
+        "valor_em_validacao": float(nota.em_validacao),
+        "itens_feitos": sum(1 for linha in dela if linha.get("estado") in MARCADAS),
+        "itens_total": len(dela),
+        "itens_sem_marcacao": sum(1 for linha in dela if linha.get("estado") == "ABERTA"),
+    }
