@@ -681,6 +681,47 @@ class TestDiarias:
 
 
 # ═══════════════════════════════════════════════════════════════════════════
+# 7. Teto por dia
+# ═══════════════════════════════════════════════════════════════════════════
+
+LUVA = "70802726"
+
+
+class TestTeto:
+    def test_luva_com_3_diarias_de_cti_pagas_deve_no_maximo_180(self):
+        # Teto da luva no CTI: 60 por diária paga (tetos_por_dia da memória).
+        conta = _conta(
+            *_diarias_lancadas(DIARIA_CTI, 1, 2, 3),
+            _item(LUVA, "LUVA PROCEDIMENTO", dia(1), 100, 0.30, grupo="MATERIAIS DESCARTAVEIS", setor=CTI, pagina=4),
+            _item(LUVA, "LUVA PROCEDIMENTO", dia(2), 100, 0.30, grupo="MATERIAIS DESCARTAVEIS", setor=CTI, pagina=4),
+        )
+        prontuario = _prontuario(movimentacoes=_internacao(*TestDiarias.TRES_DIARIAS), tipo_impressao=None)
+
+        resultado = conferir(conta, prontuario, _memoria(), _tabela(TABELA_DE_DIARIAS), setores=SETORES)
+
+        [linha] = resultado.linhas
+        assert _campos(linha) == {
+            "acao": "AJUSTAR_QUANTIDADE",
+            "data": "2026-10-01",
+            "data_fim": "2026-10-03",
+            "setor": CTI,
+            "codigo": LUVA,
+            "descricao": "LUVA PROCEDIMENTO",
+            "quantidade_lancada": 200.0,
+            "quantidade_devida": 180.0,
+            "preco_lancado": 0.30,
+            "preco_tabela": None,
+            "valor_diferenca": -6.00,
+            "regra_codigo": "ALFA-INS-33",
+            "evidencia_pagina": 4,
+            "nivel_evidencia": "POR_REGRA",
+            "causa_raiz": "LANCAMENTO_MANUAL",
+            "confianca": "ALTA",
+            "origem": "CODIGO",
+        }
+
+
+# ═══════════════════════════════════════════════════════════════════════════
 # 5. Montagem: item diário, período, duplicadas
 # ═══════════════════════════════════════════════════════════════════════════
 

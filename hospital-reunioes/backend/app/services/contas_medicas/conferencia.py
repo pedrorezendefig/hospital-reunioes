@@ -286,6 +286,10 @@ class _Devida:
     setor: str | None
     pagina: int | None
     trecho: str
+    # A do setor (CTI, ISOLAMENTO...), mesmo quando o código é o da contratada: é a do teto.
+    acomodacao: str
+    # Diária do paciente (as que contam para o teto), não de acompanhante nem taxa.
+    do_paciente: bool = True
 
 
 def _codigo_configurado(parametros: Mapping[str, Any], nome: str) -> str | None:
@@ -360,7 +364,17 @@ def _devidas_do_segmento(ctx: _Contexto, segmento: Segmento, acomodacao: str) ->
 
     def devida(data: date, codigo: str, chave: str, descricao: str, observacao: str = "", familia=None) -> _Devida:
         return _Devida(
-            data, codigo, frozenset(familia or {codigo}), chave, descricao, observacao, segmento.setor, pagina, trecho
+            data=data,
+            codigo=codigo,
+            familia=frozenset(familia or {codigo}),
+            chave=chave,
+            descricao=descricao,
+            observacao=observacao,
+            setor=segmento.setor,
+            pagina=pagina,
+            trecho=trecho,
+            acomodacao=acomodacao,
+            do_paciente=chave not in {"acompanhante", "taxa_isolamento"},
         )
 
     dias = [d.inicio.date() for d in segmento.diarias]
@@ -389,15 +403,16 @@ def _devidas_do_segmento(ctx: _Contexto, segmento: Segmento, acomodacao: str) ->
     return devidas, pendencias
 
 
-def _diarias(ctx: _Contexto) -> list[_Linha]:
+def _diarias(ctx: _Contexto) -> tuple[list[_Linha], list[_Devida]]:
     """Diárias devidas (contador) contra lançadas: Incluir ou Retirar a diferença.
 
     A comparação é por código no período; com a mesma quantidade, o lançamento em
-    data diferente não gera linha (a IA e a faturista veem a data).
+    data diferente não gera linha (a IA e a faturista veem a data). Devolve também
+    as devidas, que são as diárias pagas do teto por dia.
     """
     segmentos = _segmentos(ctx)
     if isinstance(segmentos, str):
-        return [_validar_diaria(f"Diárias não contadas: {segmentos}", None, None)]
+        return [_validar_diaria(f"Diárias não contadas: {segmentos}", None, None)], []
     devidas: list[_Devida] = []
     linhas: list[_Linha] = []
     for segmento in segmentos:
@@ -422,7 +437,7 @@ def _diarias(ctx: _Contexto) -> list[_Linha]:
     for familia, devidas_da_familia in familias.items():
         lancados = [i for i in ctx.conta.itens if i.codigo in familia]
         linhas += _comparar_diarias(ctx, devidas_da_familia, lancados)
-    return linhas
+    return linhas, devidas
 
 
 def _validar_diaria(texto: str, data: date | None, setor: str | None) -> _Linha:
@@ -797,6 +812,67 @@ def _procedimento_do_cabecalho(ctx: _Contexto) -> list[_Linha]:
 
 
 # ----------------------------------------------------------------------------------
+# (8) Teto por dia
+# ----------------------------------------------------------------------------------
+
+# Acomodação que a memória pode juntar sob `internacao` no teto (fralda: CTI e internação).
+_INTERNACAO = frozenset({"ENFERMARIA", "APARTAMENTO", "ISOLAMENTO", "PEDIATRIA", "HOSPITAL_DIA"})
+
+
+def _teto_do_dia(teto: Mapping[str, Any], acomodacao: str) -> Decimal | None:
+    for chave in (acomodacao.lower(), "internacao" if acomodacao in _INTERNACAO else None, "por_dia"):
+        if chave and teto.get(chave) is not None:
+            return Decimal(str(teto[chave]))
+    return None
+
+
+def _tetos(ctx: _Contexto, pagas: list[_Devida]) -> list[_Linha]:
+    """Consumível com teto (`tetos_por_dia`): devida = diárias pagas × teto diário,
+    sem proporção por horário. Lançado acima do teto: Ajustar quantidade. Abaixo, a
+    condição de uso (acamado, curativo, sonda) é do Passo B, não do código."""
+    do_paciente = [d for d in pagas if d.do_paciente]
+    if not do_paciente:
+        return []
+    cirurgias = len(ctx.prontuario.conteudo.descricoes_cirurgicas)
+    linhas = []
+    for nome, teto in (ctx.parametros.get("tetos_por_dia") or {}).items():
+        if not isinstance(teto, dict) or not teto.get("codigo"):
+            continue
+        lancados = [i for i in ctx.conta.itens if i.codigo == str(teto["codigo"])]
+        por_dia = [_teto_do_dia(teto, d.acomodacao) for d in do_paciente]
+        if not lancados or any(valor is None for valor in por_dia):
+            # Diária em acomodação sem teto na memória: não dá para dizer o máximo.
+            continue
+        devida = sum(por_dia, Decimal(0)) + Decimal(str(teto.get("centro_cirurgico_por_cirurgia") or 0)) * cirurgias
+        lancada = sum((i.quantidade for i in lancados), Decimal(0))
+        if lancada <= devida:
+            continue
+        datas = sorted({d.data for d in do_paciente})
+        item = lancados[0]
+        linhas.append(
+            _Linha(
+                acao="VALIDAR" if str(teto.get("situacao") or "").upper() == "PENDENTE" else "AJUSTAR_QUANTIDADE",
+                chave="teto",
+                data=datas[0],
+                data_fim=datas[-1] if datas[-1] != datas[0] else None,
+                setor=do_paciente[0].setor,
+                codigo=item.codigo,
+                descricao=item.descricao,
+                motivo=f"Teto por dia ({nome}): {devida:g} para {len(do_paciente)} diárias pagas; lançado {lancada:g}.",
+                nivel="POR_REGRA",
+                causa="LANCAMENTO_MANUAL",
+                pagina=item.pagina,
+                trecho=_trecho_do_item(item),
+                quantidade_lancada=lancada,
+                quantidade_devida=devida,
+                preco_lancado=item.unitario,
+                valor=-_dinheiro((lancada - devida) * item.unitario),
+            )
+        )
+    return linhas
+
+
+# ----------------------------------------------------------------------------------
 # Regra citada, período e montagem
 # ----------------------------------------------------------------------------------
 
@@ -932,14 +1008,16 @@ def conferir(
         setores={_norm(nome): acomodacao for nome, acomodacao in (setores or {}).items()},
     )
     descartadas: list[dict[str, Any]] = []
+    diarias, pagas = _diarias(ctx)
     geradas = [
         *_precos(ctx),
-        *_diarias(ctx),
+        *diarias,
         *_prescricao_x_conta(ctx),
         *_sem_registro(ctx),
         *_ficha_x_conta(ctx),
         *_gases(ctx),
         *_procedimento_do_cabecalho(ctx),
+        *_tetos(ctx, pagas),
     ]
     linhas = _com_regra(geradas, memoria, descartadas)
     linhas = _diario(_sem_duplicadas(_no_periodo(ctx, linhas, descartadas)))
