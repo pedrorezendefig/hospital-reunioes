@@ -797,7 +797,10 @@ class TestContadorEmPaginas:
         _contador(client)
 
         assert supabase.ordens_de_tabela, "a leitura dos casos foi ao banco sem ORDER BY"
-        assert set(supabase.ordens_de_tabela) == {"numero"}
+        # `numero` é a ordem dos casos; `id` é a dos e-mails pendentes da
+        # Triagem de e-mail, que o contador soma desde a issue #652 e que
+        # pagina pela mesma régua.
+        assert set(supabase.ordens_de_tabela) == {"numero", "id"}
 
 
 class TestContadorNoTetoDeLinhas:

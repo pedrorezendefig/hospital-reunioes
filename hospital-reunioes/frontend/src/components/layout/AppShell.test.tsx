@@ -219,7 +219,7 @@ describe("AppShell liga o contador de novidades aos menus", () => {
     const quadro = primeiroQuadroDaCasca();
 
     expect(quadro.querySelectorAll("[role=status]")).toHaveLength(0);
-    expect(quadro.textContent).not.toContain("7 casos com novidade");
+    expect(quadro.textContent).not.toContain("7 novidades na Ouvidoria");
   });
 
   it("sem Perfil da Ouvidoria, nenhum menu ganha distintivo e nada é perguntado", async () => {

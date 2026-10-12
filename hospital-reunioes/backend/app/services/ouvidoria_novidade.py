@@ -23,6 +23,7 @@ import logging
 from httpx import HTTPError
 from postgrest.exceptions import APIError
 
+from app.services import ouvidoria_triagem_email as triagem
 from app.services.paginacao import ler_paginado
 
 logger = logging.getLogger(__name__)
@@ -58,6 +59,10 @@ ORDEM_DO_AGREGADO = "manifestacao_id"
 # do outro lado do fio.
 FALHAS_DE_LEITURA_DOS_CASOS = FALHAS_DE_LEITURA_DA_TRILHA
 LEITURA_DOS_CASOS = "casos"
+
+# A terceira leitura do contador (issue #652): os e-mails da Triagem de e-mail
+# que esperam decisão. Falha nela tem o mesmo tratamento das outras duas.
+LEITURA_DOS_EMAILS = "e-mails"
 
 # O contador lê do caso só o que a régua consome: o id, que casa com a chave do
 # agregado, e o carimbo. Nada mais sai do banco para virar um número.
@@ -187,4 +192,30 @@ def contar_novidades(supabase) -> tuple[int | None, list[str]]:
     total = sum(
         1 for linha in linhas if tem_novidade(linha.get("vista_pela_ouvidoria_em"), ultimos.get(str(linha.get("id"))))
     )
-    return total, []
+    emails = contar_emails_pendentes(supabase)
+    if emails is None:
+        return None, [LEITURA_DOS_EMAILS]
+    return total + emails, []
+
+
+def contar_emails_pendentes(supabase) -> int | None:
+    """Quantos e-mails da Triagem de e-mail esperam decisão (issue #652, ADR
+    0051 decisão 3), ou None quando a leitura falhou ou parou no teto.
+
+    Sem resposta automática na chegada, a contrapartida é a triagem diária, e
+    é por isso que o e-mail pendente sobe o mesmo distintivo dos casos: o
+    ouvidor precisa saber que há e-mail parado sem abrir a tela. Cada decisão
+    (virar caso, juntar, descartar) tira o item de `pendente`, e o número
+    baixa sozinho na próxima contagem."""
+    try:
+        linhas, completa = ler_paginado(
+            lambda: supabase.table(triagem.TABELA).select("id").eq("estado", triagem.PENDENTE).order("id"),
+            rotulo=LEITURA_DOS_EMAILS,
+        )
+    except FALHAS_DE_LEITURA_DOS_CASOS:
+        logger.warning("Falha ao ler os e-mails da triagem para o contador de novidades: o menu sai sem número")
+        return None
+    if not completa:
+        logger.warning("A leitura dos e-mails da triagem parou no teto de páginas: o contador sai sem número")
+        return None
+    return len(linhas)

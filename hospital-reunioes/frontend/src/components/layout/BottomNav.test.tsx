@@ -192,7 +192,7 @@ describe("BottomNav com o contador de novidades", () => {
 
     const distintivo = within(itemDaOuvidoria()).getByRole("status");
     expect(distintivo.textContent).toBe("3");
-    expect(distintivo.getAttribute("aria-label")).toBe("3 casos com novidade");
+    expect(distintivo.getAttribute("aria-label")).toBe("3 novidades na Ouvidoria");
   });
 
   it("sem novidade nenhuma, o item fica sem distintivo", () => {

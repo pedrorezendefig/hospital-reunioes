@@ -123,3 +123,14 @@ describe("o estado do item na lista", () => {
     expect(rotuloDoEstado("descartado")).toBe("Descartado");
   });
 });
+
+describe("o e-mail parado (issue #652)", () => {
+  it("o pendente parado há mais de 90 dias ganha a marca Atrasado", () => {
+    expect(marcasDoEmail({ interno: false, incompleto: false, atrasado: true })).toEqual(["Atrasado"]);
+  });
+
+  it("o item que não está atrasado não ganha a marca", () => {
+    expect(marcasDoEmail({ interno: false, incompleto: false, atrasado: false })).toEqual([]);
+    expect(marcasDoEmail({ interno: false, incompleto: false })).toEqual([]);
+  });
+});

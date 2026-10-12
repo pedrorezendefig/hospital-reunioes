@@ -58,9 +58,11 @@ export function distintivoDeNovidades(
       contagem.total > TETO_DO_DISTINTIVO
         ? `${TETO_DO_DISTINTIVO}+`
         : String(contagem.total),
+    // "Novidades", e não "casos": desde a issue #652 a soma inclui os e-mails
+    // da Triagem de e-mail que esperam decisão, e e-mail ainda não é caso.
     rotulo:
       contagem.total === 1
-        ? "1 caso com novidade"
-        : `${contagem.total} casos com novidade`,
+        ? "1 novidade na Ouvidoria"
+        : `${contagem.total} novidades na Ouvidoria`,
   };
 }
