@@ -29,9 +29,9 @@ from app.services.contas_medicas.cirurgia import (  # noqa: E402
     Procedimento,
 )
 from app.services.contas_medicas.conferencia import Pacote, ProntuarioLido, conferir  # noqa: E402
-from app.services.contas_medicas.conteudo import Conteudo, Internacao, Movimentacao  # noqa: E402
+from app.services.contas_medicas.conteudo import Conteudo, GlicemiasDoDia, Internacao, Movimentacao  # noqa: E402
 from app.services.contas_medicas.memoria import MemoriaLida, RegraLida  # noqa: E402
-from app.services.contas_medicas.prescricao import ItemPrescrito, Prescricao, consolidar  # noqa: E402
+from app.services.contas_medicas.prescricao import ExamePedido, ItemPrescrito, Prescricao, consolidar  # noqa: E402
 from app.services.contas_medicas.prontuario import Prontuario  # noqa: E402
 from app.services.contas_medicas.tabelas import NAO_CONFERIDO  # noqa: E402
 from app.services.contas_medicas_conta import Conta, ItemConta  # noqa: E402
@@ -58,6 +58,8 @@ REGRAS_DAS_CONFERENCIAS = {
     "gas": "ALFA-CC-04",
     "procedimento_do_cabecalho": "ALFA-PRI-12",
     "teto": "ALFA-INS-33",
+    "exame": "ALFA-SAD-01",
+    "glicemia": "ALFA-INS-18",
 }
 
 PARAMETROS_ALFA: dict[str, Any] = {
@@ -180,6 +182,8 @@ def _prontuario(
     descricoes=(),
     movimentacoes=(),
     documentos=(),
+    exames=(),
+    glicemias=(),
     textos: tuple[str, ...] = ("",),
     tipo_impressao: str | None = "Completa",
     idade: int | None = None,
@@ -201,9 +205,9 @@ def _prontuario(
         setor_por_dia={},
         prescricoes=tuple(prescricoes),
         prescricao_consolidada=tuple(consolidar(prescricoes)),
-        exames_pedidos=(),
+        exames_pedidos=tuple(exames),
         balancos=(),
-        glicemias=(),
+        glicemias=tuple(glicemias),
         descricoes_cirurgicas=tuple(descricoes),
         fichas_anestesicas=tuple(fichas),
         guias_tiss=(),
@@ -1055,6 +1059,74 @@ class TestMontagem:
         [descartada] = resultado.descartadas
         assert descartada["linha"]["descricao"] == "Cetoprofeno"
         assert "fora do período" in descartada["motivo"]
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 6. Exame solicitado × exame lançado (adendo v1.3, item 6, conferência 9)
+# ═══════════════════════════════════════════════════════════════════════════
+
+HEMOGRAMA = "40304361"
+UREIA = "40301630"
+GASOMETRIA = "40302040"
+
+
+class TestExames:
+    def test_2_exames_pedidos_e_1_lancado_vira_incluir_com_o_pedido_e_lancado_sem_pedido_vira_validar(self):
+        exames = [
+            ExamePedido("HEMOGRAMA COMPLETO", "3014", dia(2), 30),
+            ExamePedido("UREIA", "3015", dia(2), 30),
+        ]
+        conta = _conta(
+            _item(HEMOGRAMA, "HEMOGRAMA COMPLETO", dia(2), 1, 15.00, grupo="EXAMES", pagina=7),
+            _item(GASOMETRIA, "GASOMETRIA ARTERIAL", dia(3), 1, 30.00, grupo="EXAMES", pagina=7),
+        )
+
+        resultado = conferir(
+            conta, _prontuario(exames=exames), _memoria(), _tabela({}), dicionario={"UREIA": {UREIA}}
+        )
+
+        [incluir] = _linhas(resultado, "INCLUIR")
+        assert _campos(incluir) == {
+            "acao": "INCLUIR",
+            "data": "2026-10-02",
+            "data_fim": None,
+            "setor": None,
+            "codigo": UREIA,
+            "descricao": "UREIA",
+            "quantidade_lancada": 0.0,
+            "quantidade_devida": 1.0,
+            "preco_lancado": None,
+            "preco_tabela": None,
+            "valor_diferenca": None,
+            "regra_codigo": "ALFA-SAD-01",
+            "evidencia_pagina": 30,
+            "nivel_evidencia": "PRESCRITO",
+            "causa_raiz": "LANCAMENTO_MANUAL",
+            "confianca": "ALTA",
+            "origem": "CODIGO",
+        }
+        assert "pedido 3015" in incluir["motivo"]
+        [validar] = _linhas(resultado, "VALIDAR")
+        assert _campos(validar) == {
+            "acao": "VALIDAR",
+            "data": "2026-10-03",
+            "data_fim": None,
+            "setor": "CTI ADULTO",
+            "codigo": GASOMETRIA,
+            "descricao": "GASOMETRIA ARTERIAL",
+            "quantidade_lancada": 1.0,
+            "quantidade_devida": 0.0,
+            "preco_lancado": 30.00,
+            "preco_tabela": None,
+            "valor_diferenca": -30.00,
+            "regra_codigo": "ALFA-SAD-01",
+            "evidencia_pagina": 7,
+            "nivel_evidencia": "POR_REGRA",
+            "causa_raiz": "REGISTRO_ASSISTENCIAL",
+            "confianca": "ALTA",
+            "origem": "CODIGO",
+        }
+        assert len(resultado.linhas) == 2
 
 
 # ═══════════════════════════════════════════════════════════════════════════

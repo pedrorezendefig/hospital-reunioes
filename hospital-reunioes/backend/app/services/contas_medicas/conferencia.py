@@ -1053,6 +1053,99 @@ def _tetos(ctx: _Contexto, pagas: list[_Devida]) -> list[_Linha]:
 
 
 # ----------------------------------------------------------------------------------
+# (9) Exame solicitado × exame lançado
+# ----------------------------------------------------------------------------------
+
+_GRUPOS_DE_EXAME = frozenset({"EXAMES", "SADT"})
+
+
+def _contem(texto: str, termo: str) -> bool:
+    return bool(termo) and re.search(r"(?<![A-Z])" + re.escape(termo) + r"(?![A-Z])", texto) is not None
+
+
+def _mesmo_exame(nome: str, item: ItemConta, dicionario: Mapping[str, set[str]]) -> bool:
+    """O exame pedido e o lançado pelo dicionário ou pelo nome, nos dois sentidos:
+    o pedido "HEMOGRAMA COMPLETO" casa com o lançado "HEMOGRAMA COMPLETO - AUTOMATIZADO"."""
+    pedido, lancado = _norm(nome), _norm(item.descricao)
+    if item.codigo in dicionario.get(pedido, set()):
+        return True
+    marca = _marca(item.descricao)
+    return _contem(lancado, pedido) or (len(marca) >= 3 and _contem(pedido, marca))
+
+
+def _exames(ctx: _Contexto) -> list[_Linha]:
+    """Pedido na prescrição de exames sem item de exame na conta: Incluir, com o
+    número do pedido. Exame lançado sem pedido: Validar, e só com impressão
+    completa (na parcial, a falta do pedido não prova nada). A solicitação é o que
+    vale para cobrar exame (adendo v1.3, item 2)."""
+    lancados = [i for i in ctx.conta.itens if i.grupo in _GRUPOS_DE_EXAME]
+    restante = {id(i): i.quantidade for i in lancados}
+    vistos: set[tuple[str, str]] = set()
+    linhas = []
+    for exame in ctx.prontuario.conteudo.exames_pedidos:
+        # O mesmo pedido repetido na prescrição do dia seguinte é um pedido só.
+        if (exame.pedido, _norm(exame.nome)) in vistos or (exame.data and not ctx.no_periodo(exame.data)):
+            continue
+        vistos.add((exame.pedido, _norm(exame.nome)))
+        mesmos = [i for i in lancados if _mesmo_exame(exame.nome, i, ctx.dicionario)]
+        livre = next((i for i in mesmos if restante[id(i)] > 0), None)
+        if livre is not None:
+            restante[id(livre)] -= 1
+            continue
+        codigo = mesmos[0].codigo if mesmos else _codigo_no_dicionario(exame.nome, ctx.dicionario)
+        data = exame.data or ctx.conta.periodo_inicio
+        preco_lancado, preco_tabela, valor, etiqueta = (
+            ctx.valor_de_inclusao("SADT", codigo, data, Decimal(1)) if data else (None, None, None, "")
+        )
+        linhas.append(
+            _Linha(
+                acao="INCLUIR",
+                chave="exame",
+                data=exame.data,
+                setor=(ctx.prontuario.conteudo.setor_por_dia.get(exame.data) or (None,))[0] if exame.data else None,
+                codigo=codigo,
+                descricao=exame.nome,
+                motivo=f"Exame solicitado (pedido {exame.pedido}) e sem lançamento na conta.{etiqueta}",
+                nivel="PRESCRITO",
+                causa="LANCAMENTO_MANUAL",
+                pagina=exame.pagina,
+                trecho=f"{exame.nome} ; Pedido: {exame.pedido}",
+                quantidade_lancada=Decimal(0),
+                quantidade_devida=Decimal(1),
+                preco_lancado=preco_lancado,
+                preco_tabela=preco_tabela,
+                valor=valor,
+            )
+        )
+    if not (ctx.prontuario.estrutura.tipo_impressao or "").upper().startswith("COMPLETA"):
+        return linhas
+    for item in lancados:
+        sobra = restante[id(item)]
+        if sobra <= 0:
+            continue
+        linhas.append(
+            _Linha(
+                acao="VALIDAR",
+                chave="exame",
+                data=item.data,
+                setor=item.setor,
+                codigo=item.codigo,
+                descricao=item.descricao,
+                motivo="Exame lançado sem pedido na prescrição de exames. Conferir a solicitação.",
+                nivel="POR_REGRA",
+                causa="REGISTRO_ASSISTENCIAL",
+                pagina=item.pagina,
+                trecho=_trecho_do_item(item),
+                quantidade_lancada=sobra,
+                quantidade_devida=Decimal(0),
+                preco_lancado=item.unitario,
+                valor=-_dinheiro(item.unitario * sobra),
+            )
+        )
+    return linhas
+
+
+# ----------------------------------------------------------------------------------
 # Regra citada, período e montagem
 # ----------------------------------------------------------------------------------
 
@@ -1201,6 +1294,7 @@ def conferir(
         *_procedimento_do_cabecalho(ctx),
         *_pacote_pelo_tuss(ctx, pacote),
         *_tetos(ctx, pagas),
+        *_exames(ctx),
     ]
     linhas = _com_regra(geradas, memoria, descartadas)
     linhas = _diario(_sem_duplicadas(_no_periodo(ctx, linhas, descartadas)))
