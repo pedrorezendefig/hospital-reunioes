@@ -381,6 +381,21 @@ class TestAchadosDoDiretor:
         assert "sugestão: retirar" in linha["motivo"].lower()
         assert _linhas(resultado, "VALIDAR", PANTOCAL) == []
 
+    def test_marca_curta_sem_generico_nao_vira_sugestao_de_retirar_sem_ter_sido_procurada(self):
+        # AAS e KCL não dão termo de busca (menos de 4 letras, sem genérico entre
+        # parênteses): sem procurar no prontuário, a ausência não está provada.
+        aas, kcl = "90111111", "90222222"
+        conta = _conta(
+            _item(aas, "AAS 100 MG CP", dia(2), 1, 0.35),
+            _item(kcl, "KCL 19,1% AMP 10 ML", dia(2), 1, 1.20),
+        )
+        textos = ("EVOLUÇÃO MÉDICA\nMantido AAS 100 mg VO e KCl 19,1% EV.",)
+
+        resultado = conferir(conta, _prontuario(textos=textos), _memoria(), _tabela({}))
+
+        assert _linhas(resultado, "VALIDAR", aas) == []
+        assert _linhas(resultado, "VALIDAR", kcl) == []
+
     def test_oxigenio_2_l_por_150_min_lancado_como_6_l_por_3_h_vira_ajustar_para_3_l_e_3_h(self):
         ficha = _ficha(gases=(Gas("O2", 2.0, 150), Gas("AR", 2.0, 150)))
         conta = _conta(
@@ -716,6 +731,60 @@ class TestDiarias:
         resultado = conferir(conta, prontuario, _memoria(parametros), _tabela(TABELA_DE_DIARIAS), setores=SETORES)
 
         assert resultado.linhas == ()
+
+    # Sem contagem completa, a diária lançada não vira ordem: ausência de dado é Validar.
+    def test_diaria_lancada_sem_movimentacao_no_prontuario_nao_vira_retirar(self):
+        conta = _conta(*_diarias_lancadas(DIARIA_CTI, 1, 2, 3))
+
+        resultado = conferir(
+            conta, _prontuario(tipo_impressao=None), _memoria(), _tabela(TABELA_DE_DIARIAS), setores=SETORES
+        )
+
+        assert _linhas(resultado, "RETIRAR") == []
+
+    def test_diaria_lancada_em_setor_sem_acomodacao_cadastrada_vira_so_validar(self):
+        conta = _conta(*_diarias_lancadas(DIARIA_CTI, 1, 2, 3, setor="UTI NEO"))
+        prontuario = _prontuario(movimentacoes=_internacao(*self.TRES_DIARIAS, setor="UTI NEO"), tipo_impressao=None)
+
+        resultado = conferir(conta, prontuario, _memoria(), _tabela(TABELA_DE_DIARIAS), setores=SETORES)
+
+        assert [linha["acao"] for linha in resultado.linhas] == ["VALIDAR"]
+        assert "sem acomodação cadastrada" in resultado.linhas[0]["motivo"]
+
+    def test_parte_da_internacao_em_setor_sem_acomodacao_nao_retira_a_diaria_lancada_daqueles_dias(self):
+        # Dias 1 e 2 no CTI (contados); do dia 3 em diante num setor fora do cadastro,
+        # lançado com o mesmo código do CTI: a diária do dia 3 não foi conferida.
+        movimentacoes = [
+            Movimentacao("INTERNACAO", datetime(2026, 10, 1, 14, 0), CTI),
+            Movimentacao("TRANSFERENCIA_DE_SETOR", datetime(2026, 10, 3, 9, 0), "UTI NEO"),
+            Movimentacao("ALTA", datetime(2026, 10, 4, 15, 0), "UTI NEO"),
+        ]
+        conta = _conta(*_diarias_lancadas(DIARIA_CTI, 1, 2, 3))
+
+        resultado = conferir(
+            conta,
+            _prontuario(movimentacoes=movimentacoes, tipo_impressao=None),
+            _memoria(),
+            _tabela(TABELA_DE_DIARIAS),
+            setores=SETORES,
+        )
+
+        assert _linhas(resultado, "RETIRAR") == []
+        assert any("sem acomodação cadastrada" in linha["motivo"] for linha in _linhas(resultado, "VALIDAR"))
+
+    def test_diaria_lancada_sem_o_codigo_da_acomodacao_na_memoria_nao_vira_retirar(self):
+        # A memória não traz o código do CTI; a diária de enfermaria lançada nos dias do CTI não é conferível.
+        parametros = {
+            **PARAMETROS_ALFA,
+            "diaria": {**PARAMETROS_ALFA["diaria"], "codigos": {"enfermaria": "60000805"}},
+        }
+        conta = _conta(*_diarias_lancadas("60000805", 1, 2, 3))
+        prontuario = _prontuario(movimentacoes=_internacao(*self.TRES_DIARIAS), tipo_impressao=None)
+
+        resultado = conferir(conta, prontuario, _memoria(parametros), _tabela(TABELA_DE_DIARIAS), setores=SETORES)
+
+        assert _linhas(resultado, "RETIRAR") == []
+        assert any("não traz o código" in linha["motivo"] for linha in _linhas(resultado, "VALIDAR"))
 
 
 # ═══════════════════════════════════════════════════════════════════════════

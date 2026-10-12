@@ -414,8 +414,9 @@ def _segmentos(ctx: _Contexto) -> list[Segmento] | str:
     return diarias_do_periodo(segmentos, inicio, fim) if inicio and fim else segmentos
 
 
-def _devidas_do_segmento(ctx: _Contexto, segmento: Segmento, acomodacao: str) -> tuple[list[_Devida], list[str]]:
-    """As diárias devidas do segmento e as pendências (texto) que viram Validar."""
+def _devidas_do_segmento(ctx: _Contexto, segmento: Segmento, acomodacao: str) -> tuple[list[_Devida] | None, list[str]]:
+    """As diárias devidas do segmento e as pendências (texto) que viram Validar.
+    Devidas `None`: o segmento não foi contado (a memória não traz o código)."""
     pagina, trecho = _evidencia_do_segmento(ctx, segmento)
     global_ = ctx.parametros.get("diaria_global") or {}
     contratada = _contratada(ctx.conta)
@@ -463,7 +464,7 @@ def _devidas_do_segmento(ctx: _Contexto, segmento: Segmento, acomodacao: str) ->
     descricao = f"Diária de {nome}"
     if dias and codigo is None:
         pendencias.append(f"A memória não traz o código da diária de {nome}.")
-        return [], pendencias
+        return None, pendencias
     devidas = [devida(data, codigo, chave, descricao, observacao, familia) for data in dias if codigo]
 
     acompanhante = _codigo_configurado(ctx.parametros, "acompanhante")
@@ -482,22 +483,28 @@ def _diarias(ctx: _Contexto, pacote: Pacote | None) -> tuple[list[_Linha], list[
     data diferente não gera linha (a IA e a faturista veem a data). Com pacote pelo
     TUSS, as primeiras diárias do paciente estão no pacote e só as excedentes são
     cobradas. Devolve também as devidas, que são as diárias pagas do teto por dia.
+
+    Retirar só sai com a contagem completa: sem movimentação, com setor sem
+    acomodação ou sem o código na memória, a diária lançada não foi conferida.
     """
     segmentos = _segmentos(ctx)
     if isinstance(segmentos, str):
         return [_validar_diaria(f"Diárias não contadas: {segmentos}", None, None)], []
+    completa = bool(segmentos)
     devidas: list[_Devida] = []
     linhas: list[_Linha] = []
     for segmento in segmentos:
         acomodacao = ctx.acomodacao_do_setor(segmento.setor)
         if acomodacao is None:
             pendencias = [f"Setor {segmento.setor} sem acomodação cadastrada: diárias não conferidas."]
-            devidas_do_segmento: list[_Devida] = []
+            devidas_do_segmento: list[_Devida] | None = None
         elif acomodacao == "CENTRO_CIRURGICO":
             continue
         else:
             devidas_do_segmento, pendencias = _devidas_do_segmento(ctx, segmento, acomodacao)
-        devidas += devidas_do_segmento
+        if devidas_do_segmento is None:
+            completa = False
+        devidas += devidas_do_segmento or []
         if segmento.diarias or acomodacao is not None:
             linhas += [_validar_diaria(texto, segmento.inicio.date(), segmento.setor) for texto in pendencias]
 
@@ -505,12 +512,13 @@ def _diarias(ctx: _Contexto, pacote: Pacote | None) -> tuple[list[_Linha], list[
     familias: dict[frozenset[str], list[_Devida]] = {}
     for d in cobradas:
         familias.setdefault(d.familia, []).append(d)
-    conhecidos = set().union(*familias) if familias else set()
-    for codigo in _codigos_de_diaria(ctx.parametros) - conhecidos:
-        familias[frozenset({codigo})] = []
+    if completa:
+        conhecidos = set().union(*familias) if familias else set()
+        for codigo in _codigos_de_diaria(ctx.parametros) - conhecidos:
+            familias[frozenset({codigo})] = []
     for familia, devidas_da_familia in familias.items():
         lancados = [i for i in ctx.conta.itens if i.codigo in familia]
-        linhas += _comparar_diarias(ctx, devidas_da_familia, lancados)
+        linhas += _comparar_diarias(ctx, devidas_da_familia, lancados, retirar=completa)
     return linhas, devidas
 
 
@@ -543,10 +551,12 @@ def _validar_diaria(texto: str, data: date | None, setor: str | None) -> _Linha:
     )
 
 
-def _comparar_diarias(ctx: _Contexto, devidas: list[_Devida], lancados: list[ItemConta]) -> list[_Linha]:
+def _comparar_diarias(
+    ctx: _Contexto, devidas: list[_Devida], lancados: list[ItemConta], *, retirar: bool = True
+) -> list[_Linha]:
     lancada = sum((i.quantidade for i in lancados), Decimal(0))
     diferenca = len(devidas) - lancada
-    if diferenca == 0:
+    if diferenca == 0 or (diferenca < 0 and not retirar):
         return []
     por_data_devida: dict[date, int] = {}
     for d in devidas:
@@ -713,6 +723,9 @@ def _sem_registro(ctx: _Contexto) -> list[_Linha]:
         if not ctx.cobravel("MEDICAMENTO", item.codigo, item.data):
             continue
         termos = _termos_do_item(item, ctx.dicionario)
+        # Marca curta sem genérico (AAS, KCL): sem termo, o texto não foi procurado.
+        if not termos:
+            continue
         if any(re.search(r"(?<![A-Z])" + re.escape(termo) + r"(?![A-Z])", texto) for termo in termos):
             continue
         linhas.append(
