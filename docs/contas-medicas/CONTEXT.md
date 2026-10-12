@@ -115,6 +115,21 @@ Fila da diretoria e da gestão de contas médicas: Regras pendentes agrupadas po
 **Conferência da coordenação**:
 Segunda checagem que só a coordenadora de faturamento vê: cenários cadastrados pela gestão (procedimento que dispara → insumos a conferir) geram **lembretes** por Conta. A faturista não sabe que existem; o Guia, a nota e a produção dela não mudam.
 
+**Tema de validação**:
+Cartão da Validação: uma Regra pendente, um código Bloqueado, uma observação do time ou um termo proposto para o Dicionário, com as Linhas de todas as Contas que esperam a mesma decisão. É por tema, nunca por Conta.
+
+**Cenário**:
+Situação cadastrada pela gestão para a Conferência da coordenação: o procedimento que dispara (texto livre) e os insumos a conferir (código e quantidade). Pode valer para uma Operadora ou para todas.
+
+**Lembrete**:
+O que a Conferência da coordenação gera quando um Cenário ocorreu no Atendimento e falta insumo na Conta: insumos que faltam, valor pela Tabela, Evidência. Estados: aberto, Incluído, Não se aplica.
+
+**Nota de saída**:
+Nota recalculada sobre a Conta reenviada depois da correção no MV, só com as Linhas Feito que continuam na conta. O reenvio é opcional; sem ele a Conta vale igual para a Produção da faturista.
+
+**Reanalisar**:
+Reprocessar uma Conta A fazer ou Em correção com o modelo ou a Memória atuais, preservando as Linhas já marcadas. Aparece como "Reanalisar com a regra nova" depois de ensinar uma Regra.
+
 **Produção da faturista**:
 Contas concluídas, R$ incluído (diferenças positivas das Linhas Feito), R$ retirado (glosa evitada, em segundo plano) e taxa de Não procede (Linhas Não procede ÷ Linhas apontadas, sem Validar).
 
