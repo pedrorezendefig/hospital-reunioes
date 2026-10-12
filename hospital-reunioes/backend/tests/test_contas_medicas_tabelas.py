@@ -30,6 +30,7 @@ from test_contas_medicas_operadoras import (
 )
 
 from app.limiter import limiter
+from app.services.contas_medicas.dicionario import casar, dicionario_do_banco
 from app.services.contas_medicas.tabelas import NAO_CONFERIDO, PACOTE, preco
 
 FIXTURES = Path(__file__).resolve().parent / "fixtures" / "contas_medicas" / "tabelas"
@@ -62,9 +63,7 @@ def _enviar_tabela(
     dados = {"categoria": categoria, "vigencia_inicio": inicio}
     if fim:
         dados["vigencia_fim"] = fim
-    return cliente.post(
-        _rota(sigla), data=dados, files={"arquivo": (arquivo, conteudo.encode("utf-8"), "text/csv")}
-    )
+    return cliente.post(_rota(sigla), data=dados, files={"arquivo": (arquivo, conteudo.encode("utf-8"), "text/csv")})
 
 
 def _id(banco: _Banco, sigla: str) -> str:
@@ -371,9 +370,13 @@ VALIDADOS = """precos:
 # O bloco `tabelas` da memória da Leve v1.0: categorias e tipos que a ASSIM
 # e a Unimed não tinham, nenhum deles carregado.
 TABELAS_DA_LEVE = """tabelas:
-  materiais:     { tipo: SIMPRO, versao: "mais atualizada", arquivo: null, chave: null, deflator_percentual: 20, situacao: NAO_CARREGADA }
+  materiais:
+    { tipo: SIMPRO, versao: "mais atualizada", arquivo: null, chave: null, deflator_percentual: 20,
+      situacao: NAO_CARREGADA }
   diarias_taxas: { tipo: ADITIVO, versao: "Adendo 012, vigência 01/08/2026", chave: codigo, situacao: CARREGADA }
-  medicamentos:  { tipo: BRASINDICE, regra_preco: PF, restrito_hospitalar: { regra: PF_MAIS_PERCENTUAL, percentual: 20 }, situacao: NAO_CARREGADA }
+  medicamentos:
+    { tipo: BRASINDICE, regra_preco: PF, restrito_hospitalar: { regra: PF_MAIS_PERCENTUAL, percentual: 20 },
+      situacao: NAO_CARREGADA }
   honorarios:    { tipo: AMB92, ch: 0.40, situacao: NAO_CARREGADA }
   sadt:          { tipo: AMB92, ch: 0.30, situacao: NAO_CARREGADA }
   porte_anestesico: { tipo: CBHPM, versao: "5ª edição", situacao: NAO_CARREGADA }
@@ -428,9 +431,7 @@ class TestTabelasNaLista:
         cliente, banco = _cliente(GESTAO)
         _enviar_memoria(cliente, _memoria("LEVE", TABELAS_DA_LEVE))
         _enviar_tabela(cliente, "LEVE", "DIARIA_TAXA", "leve-diarias-taxas.csv", inicio="2026-08-01")
-        _enviar_tabela(
-            cliente, "LEVE", "PACOTE", "leve-pacotes.csv", inicio="2026-01-01", fim="2026-07-31"
-        )
+        _enviar_tabela(cliente, "LEVE", "PACOTE", "leve-pacotes.csv", inicio="2026-01-01", fim="2026-07-31")
         segundo = cliente.post(
             _rota("LEVE"),
             data={"categoria": "PACOTE", "vigencia_inicio": "2026-08-01", "versao": "Adendo 012"},
@@ -492,3 +493,105 @@ class TestTabelasNaLista:
             ("PACOTE", "NAO_CARREGADA"),
             ("HONORARIO", "NAO_CARREGADA"),
         ]
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 7. O dicionário de itens do hospital
+# ═══════════════════════════════════════════════════════════════════════════
+
+ROTA_DICIONARIO = "/api/contas-medicas/dicionario"
+
+# Itens da conta como o MV imprime (Brasíndice), para o casamento.
+ITENS_DA_CONTA = [
+    {"codigo": "90342100", "descricao": "ESMERON - 10 MG/ML SOL INJ CT 12 FA VD"},
+    {"codigo": "90487540", "descricao": "PANTOCAL - 40 MG PO LIOF SOL INJ CT FA VD TRANS"},
+    {"codigo": "90487559", "descricao": "PANTOCAL - 20 MG COM REV CT BL AL"},
+]
+
+
+def _enviar_dicionario(cliente: TestClient, texto: str | None = None):
+    conteudo = texto if texto is not None else (FIXTURES / "dicionario.csv").read_text(encoding="utf-8")
+    return cliente.post(ROTA_DICIONARIO, files={"arquivo": ("dicionario.csv", conteudo.encode("utf-8"), "text/csv")})
+
+
+class TestDicionario:
+    def test_sinonimos_entram_cada_um_com_o_codigo_da_conta_e_devolvem_a_contagem(self):
+        cliente, banco = _cliente(GESTAO)
+
+        resposta = _enviar_dicionario(cliente)
+
+        assert resposta.status_code == 201, resposta.text
+        assert resposta.json() == {"termos": 4, "novos": 4, "atualizados": 0}
+        termos = {t["termo"]: t for t in banco.linhas("cm_item_dicionario")}
+        assert sorted(termos) == ["DIPRIVAN", "ESMERON", "PROPOFOL", "ROCURONIO"]
+        assert (termos["ROCURONIO"]["codigo_conta"], termos["ESMERON"]["codigo_conta"]) == ("90342100", "90342100")
+        assert termos["ESMERON"]["descricao_conta"] == "ESMERON - 10 MG/ML SOL INJ"
+        assert (termos["ROCURONIO"]["situacao"], termos["PROPOFOL"]["situacao"]) == ("CONFIRMADO", "PROPOSTO")
+        assert {t["origem"] for t in termos.values()} == {"GESTAO"}
+
+    def test_reenviar_atualiza_o_termo_em_vez_de_duplicar(self):
+        cliente, banco = _cliente(GESTAO)
+        _enviar_dicionario(cliente)
+
+        resposta = _enviar_dicionario(
+            cliente, "termo;codigo;descricao_na_conta;situacao\nrocurônio;90342119;ESMERON NOVO;CONFIRMADO\n"
+        )
+
+        assert resposta.json() == {"termos": 1, "novos": 0, "atualizados": 1}
+        [rocuronio] = [t for t in banco.linhas("cm_item_dicionario") if t["termo"] == "ROCURONIO"]
+        assert rocuronio["codigo_conta"] == "90342119"
+        assert len(banco.linhas("cm_item_dicionario")) == 4
+
+    def test_cabecalho_errado_e_recusado_e_quem_nao_tem_a_permissao_recebe_403(self):
+        cliente, banco = _cliente(GESTAO)
+        errado = _enviar_dicionario(cliente, "nome;codigo\nROCURONIO;90342100\n")
+        assert errado.status_code == 422
+        assert "termo;codigo;descricao_na_conta;situacao" in errado.json()["detail"]
+
+        faturista, banco_da_faturista = _cliente(FATURISTA)
+        assert _enviar_dicionario(faturista).status_code == 403
+        assert banco.linhas("cm_item_dicionario") == banco_da_faturista.linhas("cm_item_dicionario") == []
+
+    def test_rocuronio_e_esmeron_casam_com_o_codigo_pelo_dicionario(self):
+        cliente, banco = _cliente(GESTAO)
+        _enviar_dicionario(cliente)
+        dicionario = dicionario_do_banco(banco)
+
+        for nome in ("Rocurônio", "[ 2 ] ROCURONIO 50 MG", "Esmeron"):
+            casamento = casar(nome, ITENS_DA_CONTA, dicionario)
+            assert [i["codigo"] for i in casamento.itens] == ["90342100"], nome
+            assert (casamento.como, casamento.confianca) == ("DICIONARIO", "ALTA"), nome
+
+    def test_nome_sem_par_no_dicionario_casa_por_marca_e_concentracao(self):
+        casamento = casar("PANTOCAL 40MG EV FR/AMP (PANTOPRAZOL)", ITENS_DA_CONTA, {})
+
+        assert [i["codigo"] for i in casamento.itens] == ["90487540"]
+        assert (casamento.como, casamento.confianca) == ("MARCA_E_CONCENTRACAO", "ALTA")
+
+    def test_so_a_marca_casa_com_confianca_media(self):
+        casamento = casar("PANTOCAL 80MG EV", ITENS_DA_CONTA, {})
+
+        assert [i["codigo"] for i in casamento.itens] == ["90487540", "90487559"]
+        assert (casamento.como, casamento.confianca) == ("MARCA", "MEDIA")
+
+    def test_nenhum_casamento_fica_sem_par(self):
+        casamento = casar("DIPIRONA 1G EV", ITENS_DA_CONTA, {})
+
+        assert casamento.itens == []
+        assert (casamento.como, casamento.confianca) == ("NENHUM", None)
+
+
+class TestAsRotasEstaoNoApp:
+    def test_o_app_de_verdade_registra_o_envio_de_tabela_e_de_dicionario(self):
+        """Fonte: o schema OpenAPI, e não `app.routes` (FastAPI 0.141, issues #542 e #546)."""
+        from app.main import app
+
+        cache = app.openapi_schema
+        try:
+            caminhos = app.openapi()["paths"]
+        finally:
+            app.openapi_schema = cache
+
+        assert len(caminhos) > 50
+        assert "post" in caminhos["/api/contas-medicas/operadoras/{sigla}/tabelas"]
+        assert "post" in caminhos[ROTA_DICIONARIO]

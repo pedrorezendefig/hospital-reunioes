@@ -22,6 +22,7 @@ from starlette.concurrency import run_in_threadpool
 
 from app.dependencies import get_supabase_client, require_permissao_cm
 from app.limiter import limiter
+from app.services.contas_medicas.dicionario import DicionarioRecusadoError, importar_dicionario, ler_dicionario
 from app.services.contas_medicas.memoria import MemoriaRecusadaError, ler_memoria
 from app.services.contas_medicas.operadoras import (
     CadastroRecusadoError,
@@ -197,6 +198,23 @@ async def enviar_tabela(
         autor_id=me.get("id"),
     )
     return {"operadora": sigla, **resumo}
+
+
+@router.post("/dicionario", status_code=status.HTTP_201_CREATED)
+@limiter.limit("20/minute")
+async def enviar_dicionario(
+    request: Request,
+    arquivo: UploadFile = File(...),
+    me: dict = Depends(require_permissao_cm(PERMISSAO)),
+    supabase=Depends(get_supabase_client),
+) -> dict:
+    """Carrega o dicionário de itens do hospital: termo atualizado ou novo, um por sinônimo."""
+    texto = await _texto_do_csv(arquivo)
+    try:
+        termos = ler_dicionario(texto)
+    except DicionarioRecusadoError as exc:
+        raise _422(str(exc)) from None
+    return await run_in_threadpool(importar_dicionario, supabase, termos, me.get("id"))
 
 
 @router.get("/planos")
