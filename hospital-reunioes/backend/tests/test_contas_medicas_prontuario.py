@@ -10,6 +10,8 @@ ordem pedida e põe em cada uma o rodapé global do MV, "Impressão de Prontuár
 Página N de T".
 """
 
+import re
+import unicodedata
 from datetime import date, time
 from pathlib import Path
 
@@ -144,6 +146,62 @@ def test_capa_que_bate_com_o_corpo_nao_da_parecer_parcial():
     paginas = montar(CAPA_QUE_BATE, "evolucao", "prescricao_medica", "anotacao_enf")
 
     assert ler_prontuario(paginas, ATENDIMENTO).parecer_parcial == ()
+
+
+def sem_acento(texto: str) -> str:
+    return "".join(c for c in unicodedata.normalize("NFD", texto) if unicodedata.category(c) != "Mn")
+
+
+def aparece(valor: str, texto: str) -> bool:
+    """Procura sem acento, sem caixa e com limite de palavra: "MELO" não está em "MELOXICAM"."""
+    alvo = re.escape(sem_acento(valor).upper()).replace(r"\ ", r"\s+")
+    return re.search(rf"(?<!\w){alvo}(?!\w)", sem_acento(texto).upper()) is not None
+
+
+def texto_de_saida(prontuario) -> str:
+    return "\n".join(linha for documento in prontuario.documentos for linha in documento.linhas)
+
+
+# Cada valor da capa, cada palavra do nome e o que a ouvidoria já reconhecia.
+VALORES_PESSOAIS = {
+    "nome completo": "ANTÔNIA MELO FARIAS",
+    "nome truncado": "ANTONIA MELO",
+    "primeira palavra do nome": "ANTÔNIA",
+    "segunda palavra do nome": "MELO",
+    "última palavra do nome": "FARIAS",
+    "nome da mãe": "JOSEFA RIBEIRO COSTA",
+    "CPF": "529.982.247-25",
+    "data de nascimento": "14/03/1951",
+    "RG": "20.481.337-6",
+    "carteira": "0081234500098765432",
+    "CPF do médico na assinatura": "111.444.777-35",
+    "telefone": "98765-4321",
+}
+
+
+def test_o_corpo_da_fixture_traz_cada_valor_pessoal():
+    """Guarda do teste de baixo: sem isto ele passaria sobre um texto que nunca teve o dado."""
+    entrada = "\n".join(montar(*PRONTUARIO_COMPLETO)[3:])
+    for nome, valor in VALORES_PESSOAIS.items():
+        assert aparece(valor, entrada), nome
+
+
+def test_nenhum_valor_pessoal_sobrevive_no_texto_de_saida_e_o_nome_vira_paciente():
+    resultado = ler_prontuario(montar(*PRONTUARIO_COMPLETO), ATENDIMENTO)
+    saida = texto_de_saida(resultado)
+
+    vazados = [nome for nome, valor in VALORES_PESSOAIS.items() if aparece(valor, saida)]
+    assert vazados == []
+    assert "Nome do paciente: PACIENTE" in saida
+    assert "Paciente PACIENTE, 75 anos, segue em ventilação espontânea" in saida
+    assert "acompanhou a internação de PACIENTE." in saida
+
+
+def test_da_identificacao_da_capa_sai_so_o_rotulo_e_a_idade():
+    resultado = ler_prontuario(montar(*PRONTUARIO_COMPLETO), ATENDIMENTO)
+
+    # nascida em 14/03/1951; o primeiro documento do Atendimento é de 02/10/2026
+    assert (resultado.paciente_rotulo, resultado.idade_anos) == ("Antônia F.", 75)
 
 
 def test_rodape_com_total_diferente_do_numero_de_paginas_e_arquivo_incompleto():

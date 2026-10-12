@@ -1158,3 +1158,27 @@ def pseudonimizar(texto: str | None) -> str:
     # lado de um marcador é absorvido por ele (review do PR #423).
     texto = _mascarar_pela_base(texto)
     return _repor_datas(texto, datas)
+
+
+def pseudonimizar_numeros(texto: str | None) -> str:
+    """Só a fila numérica de `pseudonimizar`: data de nascimento atrás de pista,
+    CPF, RG, CNS e telefone, na mesma ordem relativa e com as datas guardadas.
+
+    Existe para a Desidentificação do Prontuário em Contas médicas (issue #1117,
+    ADR 0070, decisão 8). As camadas de nome de `pseudonimizar` não servem a texto
+    clínico: o prontuário do MV é quase todo em caixa alta e cheio de nome de
+    remédio, e o desenho e a base de nomes apagariam o que a análise precisa ler.
+    Lá o nome sai pelos valores lidos da capa, que são exatos. Placa, CEP, email e
+    Protocolo também ficam de fora: não são dado do paciente no prontuário.
+    """
+    if not texto:
+        return ""
+    texto = _DATA_DE_NASCIMENTO.sub(lambda m: m.group("pista") + MARCADOR_DATA_NASCIMENTO, texto)
+    texto, datas = _guardar_datas(texto)
+    texto = _CPF_SEPARADO.sub(MARCADOR_CPF, texto)
+    texto = _DIGITOS_11.sub(_mascarar_cpf_cru, texto)
+    texto = _RG.sub(MARCADOR_RG, texto)
+    texto = _BLOCO_NUMERICO.sub(_mascarar_cns, texto)
+    texto = _BLOCO_NUMERICO.sub(_mascarar_cpf_pontuado, texto)
+    texto = _TELEFONE.sub(MARCADOR_TELEFONE, texto)
+    return _repor_datas(texto, datas)

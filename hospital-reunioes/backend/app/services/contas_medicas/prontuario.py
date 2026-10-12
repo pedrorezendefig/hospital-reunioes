@@ -29,6 +29,14 @@ from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from datetime import date, datetime, time
 
+from app.services.contas_medicas.desidentificacao import (
+    Identificacao,
+    desidentificar,
+    idade_em_anos,
+    ler_identificacao,
+    rotulo,
+)
+
 
 class ErroLeitura(Exception):  # noqa: N818, nome da spec, o mesmo da leitura da Conta (#1116)
     """Leitura impossível. A mensagem é a frase que a faturista vê na Situação Erro
@@ -45,6 +53,10 @@ class Documento:
     setor: str | None
     conselho: str | None
     subtipo: str | None
+    # Texto desidentificado que a IA pode ler. Vazio nas Famílias sem valor de
+    # cobrança e nas que o código estrutura sozinho (prescrição, balanço, ficha
+    # anestésica, aferição, guia TISS), que leem as páginas pelo número.
+    linhas: tuple[str, ...]
 
     @property
     def pagina_inicial(self) -> int:
@@ -61,6 +73,9 @@ class Prontuario:
     total_paginas: int
     tipo_impressao: str | None
     grupos_da_capa: dict[str, int]
+    # A única saída de identificação: "Maria S." e a idade na data do primeiro documento.
+    paciente_rotulo: str | None
+    idade_anos: int | None
     documentos: tuple[Documento, ...]
     # Uma frase por motivo; vazio quer dizer que o Guia não é parcial.
     parecer_parcial: tuple[str, ...]
@@ -100,6 +115,7 @@ class _Capa:
     paginas: int
     grupos: dict[str, int]
     tipo_impressao: str | None
+    identificacao: Identificacao
 
 
 def _ler_capa(paginas: list[str]) -> _Capa:
@@ -115,7 +131,8 @@ def _ler_capa(paginas: list[str]) -> _Capa:
             grupos[grupo] = grupos.get(grupo, 0) + int(m.group(2))
         if m := _TIPO_DE_IMPRESSAO.search(texto):
             tipo_impressao = m.group(1)
-    return _Capa(paginas=quantas, grupos=grupos, tipo_impressao=tipo_impressao)
+    identificacao = ler_identificacao("\n".join(paginas[:quantas]))
+    return _Capa(paginas=quantas, grupos=grupos, tipo_impressao=tipo_impressao, identificacao=identificacao)
 
 
 # Grupos sem os quais a análise de cobrança fica parcial: a capa lista o grupo e o
@@ -240,6 +257,103 @@ def _limpar(texto: str) -> list[str]:
         if _ASSINATURA.search(linha):
             continue
         uteis.append(re.sub(r"[ \t]{2,}", "  ", linha.strip()))
+    return uteis
+
+
+# Quem assinou ou emitiu: dado pessoal que a análise não usa.
+_PROFISSIONAL = [
+    re.compile(x)
+    for x in (
+        r"PRESTADOR RESP\. PELO DOCUMENTO\.*:\s*(.+?)\s*-\s*(?:CRM|COREN|CREFITO|CRFA|CRN)",
+        r"Respons[áa]vel:\s*(.+?)\s{2,}",
+        r"Prestador Respons[áa]vel:\s*(.+?)\s*$",
+        r"Prestador respons[áa]vel pelo documento:\s*(.+?)\s*-",
+        r"PRESTADOR( ASSISTENTE)?:\s*(.+?)(?:\s{2,}|\s*-\s*CR|$)",
+        r"^\s*(.+?)\s*\|\s*(?:CRM|COREN|CREFITO|CRFA|CRN)\s*-",
+        r"M[ée]dico\(a\) Assistente(?: / CRM)?:\s*(?:\d+\s+)?(.+?)\s*(?:/|\s{2,}|$)",
+        r"^\s*(.+?)\s*-\s*CRM:\s*\d+\s*$",
+        r"^\s*(.+?),\s*CPF [\d.\-]+",
+    )
+]
+
+# Metadados que o código já leu por campo: não vão à IA.
+_METADADO = [
+    re.compile(x, re.I)
+    for x in (
+        r"^\s*Em:\s*\d",
+        r"^\s*Prescri[çc][ãa]o\.+:",
+        r"^\s*Interna[çc][ãa]o\.+:",
+        r"^\s*Fun[çc][ãa]o:",
+        r"^\s*FUN[ÇC][ÃA]O:",
+        r"^\s*Unid\. Int",
+        r"^\s*Classifica[çc][ãa]o de Risco",
+        r"^\s*PRESTADOR",
+        r"^\s*Prestador",
+        r"^\s*Relat[óo]rio de ",
+        r"Data do Hist\.:",
+        r"^\s*(ENF|TEC) - COREN",
+        r"^\s*CRM\s*:",
+        r"^\s*Conselho / N",
+        r"^\s*Qtde Prescrita",
+        r"^\s*Qtd\s+Unidade",
+        r"^\s*Data da Emiss[ãa]o",
+        r"^\s*Assinatura e Carimbo",
+        r"^\s*USU[ÁA]RIOS",
+        r"^\s*Respons[áa]vel\s+Conselho",
+        r"^\s*Data Nasc:",
+        r"^\s*Conselho",
+        r"^\s*EVOLU[ÇC][ÃA]O:\s*\d+",
+        r"^\s*Atendimento\s+\d+",
+        r"^\s*M[ãa]e:",
+        r"^\s*CPF:",
+        r"^\s*Data de Refer[êe]ncia",
+        r"^\s*Data da Anota",
+        r"^\s*Respons[áa]vel:",
+        r"^\s*Anota[çc][ãa]o\s*$",
+        r"^\s*ANOTA[ÇC][ÃA]O DE ENFERMAGEM\s*$",
+        r"Data/Hora do Documento",
+        r"^\s*M[ée]dico Assistente",
+        r"^\s*Leito Atual",
+        r"^\s*Setor Atual",
+        r"^\s*Leito:\s*\S*\s*$",
+        r"^\s*Data:\s*\d{2}/\d{2}/\d{4}\s*$",
+        r"\|\s*(CRM|COREN|CREFITO|CRFA|CRN)\s*-\s*\d+\s*$",
+        r"-\s*(CRM|COREN|CREFITO|CRFA)\s*:?\s*\d+\s*$",
+        r"^\s*DATA CRIA[ÇC][ÃA]O",
+        r"COREN - \d+",
+    )
+]
+
+
+def _profissionais(texto: str) -> set[str]:
+    nomes = set()
+    linhas = [linha.strip() for linha in texto.split("\n") if linha.strip()]
+    for i, linha in enumerate(linhas):
+        if "Documento assinado digitalmente" in linha or linha.startswith("Assinatura e Carimbo"):
+            # quem assina vem logo acima do bloco de assinatura
+            for anterior in linhas[max(0, i - 3) : i]:
+                if re.fullmatch(r"[A-ZÁÉÍÓÚÂÊÔÃÕÇ' ]{8,}", anterior) and len(anterior.split()) >= 2:
+                    nomes.add(anterior)
+    for linha in texto.split("\n"):
+        for rx in _PROFISSIONAL:
+            if m := rx.search(linha):
+                nome = m.group(m.lastindex).strip()
+                if len(nome) >= 6 and not re.search(r"\d", nome):
+                    nomes.add(nome.upper())
+    return nomes
+
+
+def _limpar_para_ia(texto: str) -> list[str]:
+    """`_limpar`, mais os metadados já lidos e as linhas que são só nome de profissional."""
+    nomes = _profissionais(texto)
+    uteis = []
+    for linha in _limpar(texto):
+        maiuscula = linha.upper().strip()
+        if any(rx.search(linha) for rx in _METADADO):
+            continue
+        if any(maiuscula == nome or (len(maiuscula) >= 4 and maiuscula in nome) for nome in nomes):
+            continue
+        uteis.append(linha)
     return uteis
 
 
@@ -479,6 +593,44 @@ def _juntar_campos(paginas: list[_Pagina]) -> _Campos:
     return campos
 
 
+# Famílias cujo texto vai à IA (adendo v1.3, item 2). As demais saem sem linhas: ou não
+# têm valor de cobrança (avaliação, diagnóstico de enfermagem, checklist, escala,
+# diagnóstico, anexo, digitalizado), ou o código as estrutura pelas páginas
+# (aferição, balanço, ficha anestésica, guia TISS e a prescrição que não é de enfermagem).
+_FAMILIAS_DE_TEXTO = {
+    "EVOLUCAO",
+    "ANOTACAO_ENF",
+    "SAE",
+    "PRESCRICAO",
+    "RESUMO_ALTA",
+    "ADMISSAO_UNIDADE",
+    "DOC_EDITOR",
+    "FISIO_RESP",
+    "FISIO_MOTORA",
+    "FISIO_ADMISSAO",
+    "NAO_RECONHECIDO",
+}
+
+
+def _linhas_para_ia(paginas: list[_Pagina], campos: _Campos) -> list[str]:
+    familia = paginas[0].familia
+    subtipo = _sem_acento(campos.subtipo or "").upper()
+    if familia not in _FAMILIAS_DE_TEXTO:
+        return []
+    if familia == "PRESCRICAO" and "ENFERMAGEM" not in subtipo:
+        return []
+    if (familia, subtipo) in {("SAE", "HISTORICO DE ENFERMAGEM"), ("EVOLUCAO", "EVOLUCAO SERVICO SOCIAL")}:
+        return []
+    linhas = [linha for pagina in paginas for linha in _limpar_para_ia(pagina.texto)]
+    if familia == "DOC_EDITOR" and linhas and _sem_acento(linhas[0]).upper().startswith("RECEITUARIO"):
+        return []  # receita de alta
+    if familia == "PRESCRICAO":
+        # só os itens, do cabeçalho "Datas/Horários" em diante
+        inicio = next((i + 1 for i, linha in enumerate(linhas) if "Datas/Hor" in linha), 0)
+        linhas = [linha for linha in linhas[inicio:] if "Datas/Hor" not in linha]
+    return linhas
+
+
 def _ordenar_por_data(documentos: list[tuple[list[_Pagina], _Campos]]) -> list[tuple[list[_Pagina], _Campos]]:
     """Documento sem data herda a do vizinho (o anterior; no começo, o seguinte), e a
     lista sai pela data do próprio documento, não pela ordem das páginas."""
@@ -513,15 +665,19 @@ def ler_prontuario(texto_por_pagina: Sequence[str | None], atendimento: str | in
             setor=campos.setor,
             conselho=campos.conselho,
             subtipo=campos.subtipo,
+            linhas=tuple(desidentificar(_linhas_para_ia(grupo, campos), capa.identificacao)),
         )
         for grupo, campos in _ordenar_por_data(agrupados)
     )
     parecer_parcial = [_grupos_que_faltam(capa, "\n".join(textos[capa.paginas :]))]
+    primeira_data = next((d.data for d in documentos if d.data), None)
     return Prontuario(
         atendimento=str(atendimento),
         total_paginas=len(textos),
         tipo_impressao=capa.tipo_impressao,
         grupos_da_capa=capa.grupos,
+        paciente_rotulo=rotulo(capa.identificacao),
+        idade_anos=idade_em_anos(capa.identificacao, primeira_data),
         documentos=documentos,
         parecer_parcial=tuple(motivo for motivo in parecer_parcial if motivo),
     )
