@@ -46,7 +46,7 @@ type Carga = "carregando" | "pronta" | "sem_acesso" | "erro";
 
 type Filtro = "pendentes" | "decididos";
 
-function MarcasDoEmail({ email }: { email: Pick<EmailRecebidoResumo, "interno" | "incompleto"> }) {
+function MarcasDoEmail({ email }: { email: Pick<EmailRecebidoResumo, "interno" | "incompleto" | "atrasado"> }) {
   const marcas = marcasDoEmail(email);
   if (marcas.length === 0) return null;
   return (
@@ -55,7 +55,11 @@ function MarcasDoEmail({ email }: { email: Pick<EmailRecebidoResumo, "interno" |
         <span
           key={marca}
           className={`inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold uppercase tracking-wide ${
-            marca === "Interno" ? "bg-slate-200 text-slate-700" : "bg-amber-100 text-amber-800"
+            marca === "Interno"
+              ? "bg-slate-200 text-slate-700"
+              : marca === "Atrasado"
+                ? "bg-red-100 text-red-700"
+                : "bg-amber-100 text-amber-800"
           }`}
         >
           {marca}

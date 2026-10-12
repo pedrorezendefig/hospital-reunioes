@@ -27,7 +27,7 @@ import os
 import re
 import uuid
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from email.utils import parseaddr
 from zoneinfo import ZoneInfo
 
@@ -429,10 +429,31 @@ def _contar_anexos(supabase, ids: list[str]) -> dict[str, int]:
     return contagem
 
 
-def listar(supabase) -> list[dict]:
+# Quanto um e-mail pode ficar parado na triagem antes de a lista o marcar como
+# atrasado (issue #652). É marca, e não ato: nada é descartado sozinho.
+DIAS_ATE_ATRASAR = 90
+
+
+def esta_atrasado(linha: dict, agora: datetime) -> bool:
+    """Se o e-mail está parado há mais de `DIAS_ATE_ATRASAR` dias. Só o
+    pendente atrasa: o decidido não espera nada. Data ilegível não atrasa,
+    porque a marca afirma uma coisa, e sem a data não há o que afirmar."""
+    if linha.get("estado") != PENDENTE:
+        return False
+    try:
+        recebido = datetime.fromisoformat(str(linha.get("recebido_em")).replace("Z", "+00:00"))
+    except ValueError:
+        return False
+    if recebido.tzinfo is None:
+        recebido = recebido.replace(tzinfo=UTC)
+    return agora - recebido > timedelta(days=DIAS_ATE_ATRASAR)
+
+
+def listar(supabase, agora: datetime | None = None) -> list[dict]:
     """Os e-mails recebidos, pendentes primeiro e, dentro de cada grupo, na
     ordem de chegada, o mais antigo primeiro: é a ordem em que a triagem se
-    faz."""
+    faz. O pendente parado há mais de 90 dias vem com `atrasado`."""
+    agora = agora or datetime.now(UTC)
     linhas = ler_tudo(
         lambda: (
             supabase.table(TABELA)
@@ -449,7 +470,10 @@ def listar(supabase) -> list[dict]:
     # que passaram do teto de quantidade, que só têm a contagem.
     return [
         {campo: linha.get(campo) for campo in CAMPOS_DA_LISTA}
-        | {"quantidade_de_anexos": contagem.get(linha["id"], 0) + int(linha.get("anexos_excedentes") or 0)}
+        | {
+            "quantidade_de_anexos": contagem.get(linha["id"], 0) + int(linha.get("anexos_excedentes") or 0),
+            "atrasado": esta_atrasado(linha, agora),
+        }
         for linha in linhas
     ]
 

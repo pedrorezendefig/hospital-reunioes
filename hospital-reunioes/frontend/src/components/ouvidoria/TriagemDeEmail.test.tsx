@@ -795,3 +795,20 @@ describe("e-mail que virou caso fica só com o cabeçalho (issue #1109)", () => 
     expect(within(painel).queryByText("O corpo deste e-mail não veio do provedor.")).toBeNull();
   });
 });
+
+describe("e-mail parado na lista (issue #652)", () => {
+  beforeEach(() => vi.unstubAllGlobals());
+  afterEach(() => {
+    cleanup();
+    vi.unstubAllGlobals();
+  });
+
+  it("o e-mail parado há mais de 90 dias aparece marcado como atrasado, e o novo não", async () => {
+    montar({}, [{ ...JOANA, atrasado: true }, { ...FATURAMENTO, atrasado: false }]);
+
+    const joana = await linhaDe("Demora na recepção do ambulatório");
+    expect(within(joana).getByText("Atrasado")).toBeTruthy();
+    const area = await linhaDe("Re: protocolo 2026-0012");
+    expect(within(area).queryByText("Atrasado")).toBeNull();
+  });
+});

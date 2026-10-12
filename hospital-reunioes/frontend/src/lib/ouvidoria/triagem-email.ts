@@ -29,6 +29,8 @@ export interface EmailRecebidoResumo {
   incompleto: boolean;
   interno: boolean;
   quantidade_de_anexos: number;
+  /** Pendente parado há mais de 90 dias (issue #652). Marca, não ato. */
+  atrasado?: boolean;
   /** Quem decidiu e quando: null enquanto o item está pendente. */
   decidido_em?: string | null;
   decidido_por_nome?: string | null;
@@ -139,10 +141,18 @@ export function rotuloDoEstado(estado: EstadoDaTriagem): string | null {
 
 /**
  * As marcas do item. "Interno" é remetente do domínio do hospital (resposta de
- * área, colega); "Incompleto" é corpo ou anexo que não veio do Resend.
+ * área, colega); "Incompleto" é corpo ou anexo que não veio do Resend;
+ * "Atrasado" é o pendente parado há mais de 90 dias (issue #652), que quem
+ * decide é o servidor. Nada é descartado sozinho: a marca só avisa.
  */
-export function marcasDoEmail(email: Pick<EmailRecebidoResumo, "interno" | "incompleto">): string[] {
-  return [...(email.interno ? ["Interno"] : []), ...(email.incompleto ? ["Incompleto"] : [])];
+export function marcasDoEmail(
+  email: Pick<EmailRecebidoResumo, "interno" | "incompleto" | "atrasado">
+): string[] {
+  return [
+    ...(email.atrasado ? ["Atrasado"] : []),
+    ...(email.interno ? ["Interno"] : []),
+    ...(email.incompleto ? ["Incompleto"] : []),
+  ];
 }
 
 // ─── Virar manifestação (issue #650, ADR 0051 decisão 2) ────────────────────

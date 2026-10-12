@@ -33,7 +33,7 @@ describe("distintivo de novidades", () => {
 
   it("o rótulo concorda no singular", () => {
     expect(distintivoDeNovidades({ estado: "ok", total: 1 })?.rotulo).toBe(
-      "1 caso com novidade"
+      "1 novidade na Ouvidoria"
     );
   });
 
@@ -41,6 +41,6 @@ describe("distintivo de novidades", () => {
     const distintivo = distintivoDeNovidades({ estado: "ok", total: 214 });
 
     expect(distintivo?.texto).toBe("99+");
-    expect(distintivo?.rotulo).toBe("214 casos com novidade");
+    expect(distintivo?.rotulo).toBe("214 novidades na Ouvidoria");
   });
 });

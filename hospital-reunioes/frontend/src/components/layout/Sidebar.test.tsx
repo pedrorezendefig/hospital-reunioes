@@ -117,7 +117,19 @@ describe("Sidebar com o contador de novidades", () => {
 
     const distintivo = within(itemDaOuvidoria()).getByRole("status");
     expect(distintivo.textContent).toBe("5");
-    expect(distintivo.getAttribute("aria-label")).toBe("5 casos com novidade");
+    expect(distintivo.getAttribute("aria-label")).toBe("5 novidades na Ouvidoria");
+  });
+
+  it("o distintivo é a soma dos casos com novidade e dos e-mails da triagem (issue #652)", () => {
+    // O servidor soma: dois e-mails esperando decisão e um caso com novidade.
+    sessao.participante = daOuvidoria();
+
+    render(<Sidebar novidadesOuvidoria={{ estado: "ok", total: 3 }} />);
+
+    const distintivo = within(itemDaOuvidoria()).getByRole("status");
+    expect(distintivo.textContent).toBe("3");
+    // O rótulo não diz "casos": parte da soma é e-mail, e não caso.
+    expect(distintivo.getAttribute("aria-label")).toBe("3 novidades na Ouvidoria");
   });
 
   it("sem novidade nenhuma, o item fica sem distintivo", () => {
