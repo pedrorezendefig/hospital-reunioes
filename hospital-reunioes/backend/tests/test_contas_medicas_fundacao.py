@@ -450,6 +450,45 @@ class TestOMenuSabeDoEixo:
         assert resposta.json()["perfil_contas_medicas"] == "coordenadora"
 
 
+# ═══════════════════════════════════════════════════════════════════════════
+# 7. Palavra proibida e tipografia nos arquivos do modulo
+# ═══════════════════════════════════════════════════════════════════════════
+
+RAIZ_DO_APP = Path(__file__).resolve().parents[2]
+
+# Os arquivos que o modulo trouxe nesta fundacao. O glob por "contas-medicas"
+# e "contas_medicas" pega tambem o que as fatias seguintes criarem com o nome.
+ARQUIVOS_DO_MODULO = sorted(
+    arquivo
+    for arquivo in {
+        *RAIZ_DO_APP.glob("backend/app/**/*contas_medicas*"),
+        *RAIZ_DO_APP.glob("backend/app/**/*contas-medicas*"),
+        *RAIZ_DO_APP.glob("frontend/src/**/contas-medicas/**/*"),
+        *RAIZ_DO_APP.glob("supabase/migrations/*contas_medicas*"),
+    }
+    if arquivo.is_file() and arquivo.suffix in {".py", ".md", ".sql", ".ts", ".tsx"}
+)
+
+
+class TestPalavraProibida:
+    def test_o_glob_acha_os_arquivos_do_modulo(self):
+        """Piso do detector: glob vazio deixaria os testes abaixo verdes sobre nada."""
+        nomes = {arquivo.name for arquivo in ARQUIVOS_DO_MODULO}
+        assert {"contas_medicas.py", "contas-medicas.md", "116_contas_medicas_fundacao.sql", "page.tsx"} <= nomes
+
+    @pytest.mark.parametrize("arquivo", ARQUIVOS_DO_MODULO, ids=lambda a: a.name)
+    def test_sem_a_palavra_auditoria(self, arquivo):
+        """Decisao do diretor (ADR 0070, decisao 12). Mutante: escrever a
+        palavra no texto do kit."""
+        assert "auditoria" not in arquivo.read_text(encoding="utf-8").lower()
+
+    @pytest.mark.parametrize("arquivo", ARQUIVOS_DO_MODULO, ids=lambda a: a.name)
+    def test_sem_travessao_nem_meia_risca(self, arquivo):
+        texto = arquivo.read_text(encoding="utf-8")
+        assert chr(0x2014) not in texto
+        assert chr(0x2013) not in texto
+
+
 class TestARotaEstaNoApp:
     def test_o_app_de_verdade_registra_a_rota(self):
         """O router tem `include_router` proprio no `main.py`. A fonte e o

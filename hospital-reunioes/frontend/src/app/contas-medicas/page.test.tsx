@@ -25,10 +25,4 @@ describe("a tela de contas sem nenhuma conta", () => {
     const fila = screen.getByRole("region", { name: "Fila de contas" });
     expect(fila.textContent).toContain("Nenhuma conta enviada ainda");
   });
-
-  it("não usa a palavra proibida pelo diretor", () => {
-    const { container } = render(<ContasMedicasPage />);
-
-    expect(container.textContent?.toLowerCase()).not.toContain("auditoria");
-  });
 });
