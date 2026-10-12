@@ -126,6 +126,10 @@ PARAMS_SEM_SEGREDO = {
     "relatorio_id",
     "responsavel_id",
     "setor_id",
+    # Sigla da operadora de Contas médicas (issue #1119), como "ASSIM". Nao e
+    # credencial: a rota exige a permissao "regra contratual e tabelas", e a
+    # sigla sozinha nao abre porta nenhuma, como o `convenio_id`.
+    "sigla",
     "signer_id",
 }
 
