@@ -2,6 +2,54 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-10-12T19:32:16-03:00",
+      "sha": "3d1ce525eb893fb2f2d10aaa0f1596a447935840",
+      "app_version": "0.177.0",
+      "subject": "Onda onda-a-onda4: Tabelas de preço com vigência, busca de preço e dicionário de itens; Envio e fila, tela Contas com pareamento por atendimento e situações",
+      "raw_subject": "chore(deploy): registro da onda onda-a-onda4 (#1158 #1159)",
+      "scope": [
+        "backend",
+        "frontend"
+      ],
+      "prds": [
+        1113
+      ],
+      "result": "healthy",
+      "duration_seconds": 281,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        },
+        {
+          "service": "frontend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "onda-enxuta onda-a-onda4: PR #1158 (issue #1120), PR #1159 (issue #1123), mergeados PR a PR. Merge pela API do GitHub, um build. Registro pela Action pos-merge depois do health.",
+      "etapas": {
+        "merge_s": 5,
+        "build_s": {
+          "backend": 222,
+          "frontend": 201
+        },
+        "health_s": 10
+      },
+      "responsavel": "pedrorezendefig"
+    },
+    {
       "at": "2026-10-12T18:52:38-03:00",
       "sha": "da6b480330e9b7646329b09ee1a9f6f7021cf04b",
       "app_version": "0.176.0",
