@@ -655,14 +655,16 @@ class TestListaDasOperadoras:
         resposta = cliente.get(ROTA_OPERADORAS)
 
         assert resposta.status_code == 200
-        assert resposta.json()["operadoras"] == [
+        operadoras = resposta.json()["operadoras"]
+        # As tabelas de cada categoria têm teste próprio em test_contas_medicas_tabelas.py.
+        tabelas = [op.pop("tabelas") for op in operadoras]
+        assert operadoras == [
             {
                 "sigla": "ALFA",
                 "nome": "Alfa Saúde",
                 "situacao": "PARCIAL",
                 "versao": "1.0",
                 "regras": {"vigentes": 3, "pendentes": 2},
-                "tabelas_carregadas": [],
             },
             {
                 "sigla": "GAMA",
@@ -670,9 +672,9 @@ class TestListaDasOperadoras:
                 "situacao": "SEM_MEMORIA",
                 "versao": None,
                 "regras": {"vigentes": 0, "pendentes": 0},
-                "tabelas_carregadas": [],
             },
         ]
+        assert all(t["situacao"] == "NAO_CARREGADA" for lista in tabelas for t in lista)
 
     def test_quem_nao_tem_regra_contratual_e_tabelas_nao_ve_a_lista(self):
         cliente, _ = _cliente(FATURISTA, _com_operadoras("ASSIM"))

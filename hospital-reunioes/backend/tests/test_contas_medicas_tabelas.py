@@ -416,3 +416,79 @@ class TestMemoriaDaOperadora:
         assert preco(banco, leve, "DIARIA_TAXA", "60034068", DIA) == Decimal("1100.00")
         assert preco(banco, leve, "SADT", "40301010", DIA) == NAO_CONFERIDO
         assert preco(banco, leve, "PORTE_ANESTESICO", "31309062", DIA) == NAO_CONFERIDO
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 6. A lista das operadoras: cada categoria com tabela, versão, vigência e situação
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+class TestTabelasNaLista:
+    def test_cada_categoria_vem_com_as_versoes_e_a_situacao_inclusive_as_que_so_a_memoria_conhece(self):
+        cliente, banco = _cliente(GESTAO)
+        _enviar_memoria(cliente, _memoria("LEVE", TABELAS_DA_LEVE))
+        _enviar_tabela(cliente, "LEVE", "DIARIA_TAXA", "leve-diarias-taxas.csv", inicio="2026-08-01")
+        _enviar_tabela(
+            cliente, "LEVE", "PACOTE", "leve-pacotes.csv", inicio="2026-01-01", fim="2026-07-31"
+        )
+        segundo = cliente.post(
+            _rota("LEVE"),
+            data={"categoria": "PACOTE", "vigencia_inicio": "2026-08-01", "versao": "Adendo 012"},
+            files={"arquivo": ("leve-pacotes-012.csv", (FIXTURES / "leve-pacotes.csv").read_bytes(), "text/csv")},
+        )
+        assert segundo.status_code == 201, segundo.text
+
+        [leve] = cliente.get("/api/contas-medicas/operadoras").json()["operadoras"]
+
+        assert leve["tabelas"] == [
+            {"categoria": "MATERIAL", "tipo": "SIMPRO", "situacao": "NAO_CARREGADA", "versoes": []},
+            {"categoria": "MEDICAMENTO", "tipo": "BRASINDICE", "situacao": "NAO_CARREGADA", "versoes": []},
+            {
+                "categoria": "DIARIA_TAXA",
+                "tipo": "ADITIVO",
+                "situacao": "CARREGADA",
+                "versoes": [
+                    {
+                        "tabela": "leve-diarias-taxas.csv",
+                        "versao": "Adendo 012, vigência 01/08/2026",
+                        "vigencia_inicio": "2026-08-01",
+                        "vigencia_fim": None,
+                    }
+                ],
+            },
+            {
+                "categoria": "PACOTE",
+                "tipo": "PACOTES",
+                "situacao": "CARREGADA",
+                "versoes": [
+                    {
+                        "tabela": "leve-pacotes-012.csv",
+                        "versao": "Adendo 012",
+                        "vigencia_inicio": "2026-08-01",
+                        "vigencia_fim": None,
+                    },
+                    {
+                        "tabela": "leve-pacotes.csv",
+                        "versao": None,
+                        "vigencia_inicio": "2026-01-01",
+                        "vigencia_fim": "2026-07-31",
+                    },
+                ],
+            },
+            {"categoria": "HONORARIO", "tipo": "AMB92", "situacao": "NAO_CARREGADA", "versoes": []},
+            {"categoria": "SADT", "tipo": "AMB92", "situacao": "NAO_CARREGADA", "versoes": []},
+            {"categoria": "PORTE_ANESTESICO", "tipo": "CBHPM", "situacao": "NAO_CARREGADA", "versoes": []},
+        ]
+
+    def test_operadora_sem_memoria_mostra_as_cinco_categorias_nao_carregadas(self):
+        cliente, _ = _cliente(GESTAO, _com_operadoras("GAMA"))
+
+        [gama] = cliente.get("/api/contas-medicas/operadoras").json()["operadoras"]
+
+        assert [(t["categoria"], t["situacao"]) for t in gama["tabelas"]] == [
+            ("MATERIAL", "NAO_CARREGADA"),
+            ("MEDICAMENTO", "NAO_CARREGADA"),
+            ("DIARIA_TAXA", "NAO_CARREGADA"),
+            ("PACOTE", "NAO_CARREGADA"),
+            ("HONORARIO", "NAO_CARREGADA"),
+        ]

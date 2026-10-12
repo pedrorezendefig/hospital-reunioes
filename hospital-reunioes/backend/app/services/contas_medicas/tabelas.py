@@ -26,6 +26,7 @@ from decimal import Decimal, InvalidOperation
 from typing import Any
 
 __all__ = [
+    "CATEGORIAS",
     "NAO_CONFERIDO",
     "PACOTE",
     "TabelaLida",
@@ -35,6 +36,7 @@ __all__ = [
     "importar_tabela",
     "ler_tabela",
     "preco",
+    "tabelas_por_categoria",
 ]
 
 NAO_CONFERIDO = "NAO_CONFERIDO"
@@ -138,6 +140,10 @@ _CATEGORIA_DA_MEMORIA = {
     "pacotes": "PACOTE",
     "honorarios": "HONORARIO",
 }
+
+# As categorias da migration 116, na ordem da tela. HONORARIO existe desde o
+# início e fica "não carregada" até a CBHPM chegar.
+CATEGORIAS = ("MATERIAL", "MEDICAMENTO", "DIARIA_TAXA", "PACOTE", "HONORARIO")
 
 # O que o bloco diz da carga, e não da regra de preço.
 _CHAVES_DA_CARGA = frozenset({"situacao", "arquivo", "versao"})
@@ -306,6 +312,45 @@ def importar_tabela(
         "vigencia_inicio": vigencia_inicio.isoformat(),
         "vigencia_fim": vigencia_fim.isoformat() if vigencia_fim else None,
     }
+
+
+def tabelas_por_categoria(parametros: dict[str, Any], carregadas: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Cada categoria com o tipo, a situação e as versões carregadas, da mais nova à mais antiga.
+
+    As categorias são as da migration e as que a memória traz no bloco
+    `tabelas` (SADT, porte anestésico...), que aparecem "não carregadas".
+    `carregadas` são as linhas de `cm_tabela_preco` da operadora, com a categoria.
+    """
+    categorias = list(CATEGORIAS)
+    for chave in parametros.get("tabelas") or {}:
+        categoria = categoria_da_memoria(str(chave))
+        if categoria not in categorias:
+            categorias.append(categoria)
+    lista = []
+    for categoria in categorias:
+        versoes = sorted(
+            (t for t in carregadas if t["categoria"] == categoria),
+            key=lambda t: t.get("vigencia_inicio") or "",
+            reverse=True,
+        )
+        bloco = bloco_da_categoria(parametros, categoria)
+        lista.append(
+            {
+                "categoria": categoria,
+                "tipo": bloco.get("tipo") or (versoes[0].get("tipo") if versoes else None),
+                "situacao": "CARREGADA" if versoes else "NAO_CARREGADA",
+                "versoes": [
+                    {
+                        "tabela": t["nome"],
+                        "versao": t.get("versao"),
+                        "vigencia_inicio": t.get("vigencia_inicio"),
+                        "vigencia_fim": t.get("vigencia_fim"),
+                    }
+                    for t in versoes
+                ],
+            }
+        )
+    return lista
 
 
 def _versao_na_data(supabase, operadora_id: str, categoria: str, data: date) -> dict | None:

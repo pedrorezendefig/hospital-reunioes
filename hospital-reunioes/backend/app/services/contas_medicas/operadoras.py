@@ -17,6 +17,7 @@ from typing import Any
 from postgrest.exceptions import APIError
 
 from app.services.contas_medicas.memoria import MemoriaLida, parametros_lidos
+from app.services.contas_medicas.tabelas import tabelas_por_categoria
 from app.services.contas_medicas_conta import chave_do_plano
 
 __all__ = [
@@ -113,18 +114,37 @@ def importar_memoria(supabase, memoria: MemoriaLida, texto_md: str, autor_id: st
 
 def listar_operadoras(supabase) -> list[dict[str, Any]]:
     """Cada operadora com a situação, a versão vigente da memória, a contagem de
-    regras ativas e as categorias de tabela de preço já carregadas."""
+    regras ativas e cada categoria de tabela de preço com as versões carregadas."""
     operadoras = supabase.table("cm_operadora").select("id, sigla, nome, situacao").order("sigla").execute().data or []
     versoes = {
         v["operadora_id"]: v
         for v in (
-            supabase.table("cm_memoria_versao").select("id, operadora_id, versao").eq("vigente", True).execute().data
+            supabase.table("cm_memoria_versao")
+            .select("id, operadora_id, versao, parametros_json")
+            .eq("vigente", True)
+            .execute()
+            .data
             or []
         )
     }
-    tabelas: dict[str, set[str]] = {}
-    for linha in supabase.table("cm_operadora_tabela").select("operadora_id, categoria").execute().data or []:
-        tabelas.setdefault(linha["operadora_id"], set()).add(linha["categoria"])
+    ligacoes = supabase.table("cm_operadora_tabela").select("operadora_id, categoria, tabela_id").execute().data or []
+    precos = {}
+    if ligacoes:
+        precos = {
+            t["id"]: t
+            for t in supabase.table("cm_tabela_preco")
+            .select("id, nome, tipo, versao, vigencia_inicio, vigencia_fim")
+            .in_("id", [ligacao["tabela_id"] for ligacao in ligacoes])
+            .execute()
+            .data
+            or []
+        }
+    tabelas: dict[str, list[dict[str, Any]]] = {}
+    for ligacao in ligacoes:
+        if ligacao["tabela_id"] in precos:
+            tabelas.setdefault(ligacao["operadora_id"], []).append(
+                {**precos[ligacao["tabela_id"]], "categoria": ligacao["categoria"]}
+            )
 
     lista = []
     for operadora in operadoras:
@@ -148,7 +168,9 @@ def listar_operadoras(supabase) -> list[dict[str, Any]]:
                 "situacao": operadora["situacao"],
                 "versao": versao["versao"] if versao else None,
                 "regras": {"vigentes": status.count("VIGENTE"), "pendentes": status.count("PENDENTE")},
-                "tabelas_carregadas": sorted(tabelas.get(operadora["id"], set())),
+                "tabelas": tabelas_por_categoria(
+                    (versao or {}).get("parametros_json") or {}, tabelas.get(operadora["id"], [])
+                ),
             }
         )
     return lista
