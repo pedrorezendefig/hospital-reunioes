@@ -197,11 +197,35 @@ def test_nenhum_valor_pessoal_sobrevive_no_texto_de_saida_e_o_nome_vira_paciente
     assert "acompanhou a internação de PACIENTE." in saida
 
 
+def test_palavra_do_nome_que_e_prefixo_de_outra_palavra_nao_apaga_a_outra():
+    # MELO, sobrenome da paciente, é o começo de MELOXICAM, que a análise precisa ler
+    resultado = ler_prontuario(montar(*PRONTUARIO_COMPLETO), ATENDIMENTO)
+
+    assert "Iniciado MELOXICAM 15 MG por dor lombar." in texto_de_saida(resultado)
+
+
 def test_da_identificacao_da_capa_sai_so_o_rotulo_e_a_idade():
     resultado = ler_prontuario(montar(*PRONTUARIO_COMPLETO), ATENDIMENTO)
 
     # nascida em 14/03/1951; o primeiro documento do Atendimento é de 02/10/2026
     assert (resultado.paciente_rotulo, resultado.idade_anos) == ("Antônia F.", 75)
+
+
+def evolucao_em(data_e_hora: str) -> list[str]:
+    return [paginas_da_fixture("evolucao")[0].replace("03/10/2026 09:12", data_e_hora)]
+
+
+def test_documentos_saem_pela_data_de_cada_um_e_nao_pela_ordem_das_paginas():
+    # página 2 é de 05/10, página 3 de 03/10 e página 4 de 04/10
+    paginas = montar("capa", evolucao_em("05/10/2026 08:00"), "anotacao_enf", evolucao_em("04/10/2026 09:00"))
+
+    resultado = ler_prontuario(paginas, ATENDIMENTO)
+
+    assert [(d.pagina_inicial, d.data) for d in resultado.documentos] == [
+        (3, date(2026, 10, 3)),
+        (4, date(2026, 10, 4)),
+        (2, date(2026, 10, 5)),
+    ]
 
 
 def test_rodape_com_total_diferente_do_numero_de_paginas_e_arquivo_incompleto():
