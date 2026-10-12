@@ -433,6 +433,23 @@ class TestPdftotextNaImagem:
         assert "RUN pdftotext -v" in linhas
 
 
+class TestOMenuSabeDoEixo:
+    def test_participantes_me_devolve_o_perfil_de_contas_medicas(self):
+        """O menu lateral decide pelo `/participantes/me`, a fonte unica dos
+        eixos no front. Sem o campo no schema de resposta, o FastAPI o descarta
+        e o item nunca aparece."""
+        from app.routers import participantes as participantes_router
+
+        app = FastAPI()
+        app.include_router(participantes_router.router, prefix="/api")
+        cliente = _cliente(_pessoa(perfil_contas_medicas="coordenadora"), app)
+
+        resposta = cliente.get("/api/participantes/me")
+
+        assert resposta.status_code == 200
+        assert resposta.json()["perfil_contas_medicas"] == "coordenadora"
+
+
 class TestARotaEstaNoApp:
     def test_o_app_de_verdade_registra_a_rota(self):
         """O router tem `include_router` proprio no `main.py`. A fonte e o
