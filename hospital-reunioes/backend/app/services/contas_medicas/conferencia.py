@@ -19,14 +19,17 @@ from __future__ import annotations
 
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, replace
-from datetime import date
+from datetime import date, timedelta
 from decimal import ROUND_HALF_UP, Decimal
 from typing import Any
 
 from app.services.contas_medicas.conteudo import Conteudo
+from app.services.contas_medicas.dicionario import casar
 from app.services.contas_medicas.guia import NotaDeEntrada, agrupar_por_dia_e_setor, nota_de_entrada
 from app.services.contas_medicas.memoria import MemoriaLida
+from app.services.contas_medicas.prescricao import ItemPrescrito, Prescricao
 from app.services.contas_medicas.prontuario import Prontuario
+from app.services.contas_medicas.tabelas import NAO_CONFERIDO, PACOTE
 from app.services.contas_medicas_conta import Conta, ItemConta, coluna_do_plano
 
 __all__ = ["BuscaDePreco", "Conferencia", "ProntuarioLido", "conferir"]
@@ -105,6 +108,39 @@ class _Contexto:
     parametros: Mapping[str, Any]
     preco: BuscaDePreco
     coluna: str | None
+    dicionario: Mapping[str, set[str]]
+
+    def no_periodo(self, data: date) -> bool:
+        inicio, fim = self.conta.periodo_inicio, self.conta.periodo_fim
+        return (inicio is None or inicio <= data) and (fim is None or data <= fim)
+
+    @property
+    def medicamentos(self) -> list[dict[str, Any]]:
+        """Os medicamentos da conta no formato do casamento do dicionário."""
+        return [
+            {"codigo": i.codigo, "descricao": i.descricao, "item": i}
+            for i in self.conta.itens
+            if i.grupo == "MEDICAMENTOS"
+        ]
+
+    def unitario_da_conta(self, codigo: str) -> Decimal | None:
+        return next((i.unitario for i in self.conta.itens if i.codigo == codigo and i.unitario > 0), None)
+
+    def valor_de_inclusao(
+        self, categoria: str, codigo: str | None, data: date, quantidade: Decimal
+    ) -> tuple[Decimal | None, Decimal | None, Decimal | None, str]:
+        """(preço lançado, preço de tabela, valor, etiqueta) de uma linha Incluir.
+
+        Sem preço em tabela, vale o unitário que a conta já lançou para o mesmo
+        código, com a etiqueta; sem ele, a linha fica sem valor (spec, 9.5, passo 10).
+        """
+        tabela = self.preco(categoria, codigo, data, self.coluna) if codigo else NAO_CONFERIDO
+        if isinstance(tabela, Decimal):
+            return None, tabela, _dinheiro(tabela * quantidade), ""
+        unitario = self.unitario_da_conta(codigo) if codigo and tabela != PACOTE else None
+        if unitario is None:
+            return None, None, None, ""
+        return unitario, None, _dinheiro(unitario * quantidade), " Valor pelo preço da conta, não conferido."
 
 
 def _coluna(conta: Conta, parametros: Mapping[str, Any]) -> str | None:
@@ -156,8 +192,98 @@ def _precos(ctx: _Contexto) -> list[_Linha]:
 
 
 # ----------------------------------------------------------------------------------
+# (3) Prescrição × conta
+# ----------------------------------------------------------------------------------
+
+
+def _prescrito_no_dia(conteudo: Conteudo, nome: str, data: date) -> tuple[Prescricao, ItemPrescrito] | None:
+    for prescricao in conteudo.prescricoes:
+        if prescricao.data == data:
+            for item in prescricao.itens:
+                if item.nome == nome and not item.suspenso:
+                    return prescricao, item
+    return None
+
+
+def _prescricao_x_conta(ctx: _Contexto) -> list[_Linha]:
+    """Item já cobrado na conta, prescrito em dia do período sem lançamento naquele
+    dia: Incluir as doses do dia. "Se necessário" é da fatia do PRESCRITO_SN (#1134)."""
+    conteudo = ctx.prontuario.conteudo
+    linhas = []
+    for consolidado in conteudo.prescricao_consolidada:
+        if consolidado.se_necessario or not (consolidado.secao or "").upper().startswith("MEDICAMENTO"):
+            continue
+        casamento = casar(consolidado.nome, ctx.medicamentos, ctx.dicionario)
+        if not casamento.itens:
+            continue
+        lancado = casamento.itens[0]["item"]
+        dias_lancados = {par["item"].data for par in casamento.itens}
+        for data, doses in sorted(consolidado.doses_por_dia.items()):
+            if data in dias_lancados or not ctx.no_periodo(data):
+                continue
+            quantidade = Decimal(doses or 1)
+            preco_lancado, preco_tabela, valor, etiqueta = ctx.valor_de_inclusao(
+                "MEDICAMENTO", lancado.codigo, data, quantidade
+            )
+            achado = _prescrito_no_dia(conteudo, consolidado.nome, data)
+            linhas.append(
+                _Linha(
+                    acao="INCLUIR",
+                    chave="prescricao",
+                    data=data,
+                    setor=achado[0].setor if achado else lancado.setor,
+                    codigo=lancado.codigo,
+                    descricao=lancado.descricao,
+                    motivo=f"Prescrito ({consolidado.nome}) e sem lançamento no dia.{etiqueta}",
+                    nivel="PRESCRITO",
+                    causa="DISPENSACAO",
+                    pagina=achado[1].pagina if achado else consolidado.paginas[0],
+                    trecho=f"{achado[1].nome} {achado[1].colunas}" if achado else consolidado.nome,
+                    quantidade_lancada=Decimal(0),
+                    quantidade_devida=quantidade,
+                    preco_lancado=preco_lancado,
+                    preco_tabela=preco_tabela,
+                    valor=valor,
+                    confianca=casamento.confianca or "ALTA",
+                )
+            )
+    return linhas
+
+
+# ----------------------------------------------------------------------------------
 # Regra citada, período e montagem
 # ----------------------------------------------------------------------------------
+
+
+def _soma(a: Decimal | None, b: Decimal | None) -> Decimal | None:
+    return None if a is None or b is None else a + b
+
+
+def _diario(linhas: list[_Linha]) -> list[_Linha]:
+    """Item diário repetido vira uma linha com data e data fim: dias seguidos da
+    mesma ação, regra, código e setor somam quantidade e valor."""
+    unidas: list[_Linha] = []
+    for linha in sorted(linhas, key=lambda x: (x.acao, x.chave, x.codigo or "", x.setor or "", x.data or date.min)):
+        anterior = unidas[-1] if unidas else None
+        if (
+            anterior is not None
+            and linha.data is not None
+            and anterior.data is not None
+            and (anterior.acao, anterior.chave, anterior.codigo, anterior.setor)
+            == (linha.acao, linha.chave, linha.codigo, linha.setor)
+            and linha.codigo is not None
+            and (anterior.data_fim or anterior.data) + timedelta(days=1) == linha.data
+        ):
+            unidas[-1] = replace(
+                anterior,
+                data_fim=linha.data_fim or linha.data,
+                quantidade_lancada=_soma(anterior.quantidade_lancada, linha.quantidade_lancada),
+                quantidade_devida=_soma(anterior.quantidade_devida, linha.quantidade_devida),
+                valor=_soma(anterior.valor, linha.valor),
+            )
+            continue
+        unidas.append(linha)
+    return unidas
 
 
 def _com_regra(
@@ -215,17 +341,24 @@ def conferir(
     prontuario: ProntuarioLido,
     memoria: MemoriaLida,
     preco: BuscaDePreco,
+    *,
+    dicionario: Mapping[str, set[str]] | None = None,
 ) -> Conferencia:
-    """As linhas do Guia da Conta, pelas conferências por código."""
+    """As linhas do Guia da Conta, pelas conferências por código.
+
+    `dicionario` é o dicionário de itens do hospital (`dicionario_do_banco`).
+    """
     ctx = _Contexto(
         conta=conta,
         prontuario=prontuario,
         parametros=memoria.parametros,
         preco=preco,
         coluna=_coluna(conta, memoria.parametros),
+        dicionario=dicionario or {},
     )
     descartadas: list[dict[str, Any]] = []
-    linhas = _com_regra(_precos(ctx), memoria, descartadas)
+    geradas = [*_precos(ctx), *_prescricao_x_conta(ctx)]
+    linhas = _diario(_com_regra(geradas, memoria, descartadas))
     registros = []
     for grupo in agrupar_por_dia_e_setor(_registro(linha) for linha in linhas):
         for registro in grupo["linhas"]:

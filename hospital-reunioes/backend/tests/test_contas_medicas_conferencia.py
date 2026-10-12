@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import os
 import sys
-from datetime import date
+from datetime import date, time
 from decimal import Decimal
 from typing import Any
 
@@ -23,7 +23,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 from app.services.contas_medicas.conferencia import ProntuarioLido, conferir  # noqa: E402
 from app.services.contas_medicas.conteudo import Conteudo, Internacao  # noqa: E402
 from app.services.contas_medicas.memoria import MemoriaLida, RegraLida  # noqa: E402
-from app.services.contas_medicas.prescricao import consolidar  # noqa: E402
+from app.services.contas_medicas.prescricao import ItemPrescrito, Prescricao, consolidar  # noqa: E402
 from app.services.contas_medicas.prontuario import Prontuario  # noqa: E402
 from app.services.contas_medicas.tabelas import NAO_CONFERIDO  # noqa: E402
 from app.services.contas_medicas_conta import Conta, ItemConta  # noqa: E402
@@ -203,6 +203,31 @@ def _prontuario(
     return ProntuarioLido(estrutura=estrutura, conteudo=conteudo, texto_por_pagina=textos)
 
 
+def _prescrito(nome: str, pagina: int, *, colunas: str = "1 FA EV 24HS/24", doses: int | None = 1) -> ItemPrescrito:
+    return ItemPrescrito(
+        secao="MEDICAMENTOS",
+        numero=1,
+        nome=nome,
+        generico=None,
+        dose="1 FA",
+        frequencia="24HS/24",
+        via="EV",
+        horarios=(),
+        doses_por_dia=doses,
+        se_necessario=False,
+        suspenso=False,
+        obs="",
+        componentes=(),
+        pedido=None,
+        colunas=colunas,
+        pagina=pagina,
+    )
+
+
+def _prescricao(data: date, *itens: ItemPrescrito, setor: str = "CTI ADULTO") -> Prescricao:
+    return Prescricao(data, time(9, 0), "PRESCRICAO MEDICA", setor, tuple(i.pagina for i in itens), tuple(itens))
+
+
 def _campos(linha: dict) -> dict:
     """A linha sem `ordem` (depende das outras linhas), `motivo` e `evidencia_trecho` (texto livre)."""
     return {k: v for k, v in linha.items() if k not in {"ordem", "motivo", "evidencia_trecho"}}
@@ -217,6 +242,7 @@ def _linhas(resultado, acao: str, codigo: str | None = None) -> list[dict]:
 # ═══════════════════════════════════════════════════════════════════════════
 
 AGULHA = "70000017"
+PANTOCAL = "90123456"
 
 
 class TestAchadosDoDiretor:
@@ -248,3 +274,33 @@ class TestAchadosDoDiretor:
             "confianca": "ALTA",
             "origem": "CODIGO",
         }
+
+    def test_pantoprazol_prescrito_em_6_dias_e_lancado_em_3_vira_incluir_718_95(self):
+        # Medicamento sem Brasíndice carregado: a busca não confere, e o valor sai
+        # do unitário que a própria conta já lançou (spec v1.0, item 9.5, passo 10).
+        prescricoes = [_prescricao(dia(n), _prescrito("PANTOCAL 40MG FA", pagina=10 + n)) for n in range(1, 7)]
+        conta = _conta(*(_item(PANTOCAL, "PANTOCAL 40 MG PO LIOF INJ FA", dia(n), 1, 239.65) for n in (1, 2, 3)))
+
+        resultado = conferir(conta, _prontuario(prescricoes=prescricoes, textos=("PANTOCAL",)), _memoria(), _tabela({}))
+
+        [linha] = _linhas(resultado, "INCLUIR", PANTOCAL)
+        assert _campos(linha) == {
+            "acao": "INCLUIR",
+            "data": "2026-10-04",
+            "data_fim": "2026-10-06",
+            "setor": "CTI ADULTO",
+            "codigo": PANTOCAL,
+            "descricao": "PANTOCAL 40 MG PO LIOF INJ FA",
+            "quantidade_lancada": 0.0,
+            "quantidade_devida": 3.0,
+            "preco_lancado": 239.65,
+            "preco_tabela": None,
+            "valor_diferenca": 718.95,
+            "regra_codigo": "ALFA-PRI-07",
+            "evidencia_pagina": 14,
+            "nivel_evidencia": "PRESCRITO",
+            "causa_raiz": "DISPENSACAO",
+            "confianca": "ALTA",
+            "origem": "CODIGO",
+        }
+        assert "preço da conta, não conferido" in linha["motivo"]
