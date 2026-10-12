@@ -8,12 +8,15 @@ Toda Demanda sobre uma tela de Contas médicas, uma conta mal lida, um preço ou
 
 ## O que já está no ar
 
-Por enquanto, só a fundação do módulo:
+Por enquanto, a fundação do módulo e a carga das operadoras:
 
 - o item **Contas médicas** no menu lateral, que aparece só para quem tem perfil no módulo;
 - a tela de contas, que ainda abre vazia, com o aviso "Nenhuma conta enviada ainda";
 - os perfis e as permissões de cada um, já gravados no banco;
-- o lugar seguro onde os PDFs vão ficar guardados por sete dias.
+- o lugar seguro onde os PDFs vão ficar guardados por sete dias;
+- a tela Operadoras, aberta a partir da tela de contas para quem tem a permissão de regra contratual e tabelas (gestão de contas médicas e as duas diretorias).
+
+Na tela Operadoras, a gestão envia o arquivo de memória de cada convênio, o mesmo que o diretor monta, e a memória passa a valer sem programador no meio. A tela mostra a versão, quantas regras vigentes e pendentes entraram e os parâmetros lidos do cabeçalho; os números têm de bater com o arquivo. Mandar uma versão nova aposenta a anterior. Parâmetro do cabeçalho que o sistema ainda não usa fica guardado, e a memória em vigor pode ser baixada de volta inteira. Arquivo com um número no formato de CPF é recusado, porque memória não pode ter dado de paciente. Na mesma tela a gestão cadastra os nomes de plano como o MV imprime, cada um com a operadora e a coluna de preço, e os setores do MV com a acomodação de cada um. As tabelas de preço ainda aparecem como não carregadas: a carga delas chega na próxima entrega.
 
 Ainda não dá para enviar conta nem prontuário. O envio, a leitura da conta, a contagem de diárias e a conferência de preço chegam nas próximas entregas da primeira etapa, uma de cada vez. A tela do Guia já existe e é descrita abaixo; ela passa a ter linhas quando o envio e a conferência entrarem no ar.
 
@@ -59,5 +62,6 @@ O módulo não guarda nome completo, CPF, carteira nem data de nascimento de pac
 
 - Uma pessoa que deveria ver Contas médicas no menu e não vê, ou o contrário (Defeito, ou Informação se for dúvida sobre o perfil).
 - Pedido para dar ou trocar o perfil de alguém no módulo (Informação).
+- Memória recusada na tela Operadoras, ou contagem de regras que não bate com o arquivo do diretor (Defeito, ou Informação se a recusa explica o motivo, como o CPF).
 - Um botão do Guia que não marca, uma conta que não conclui ou uma nota que não bate com as linhas (Defeito).
 - Dúvida sobre quando chega o envio de contas ou alguma das próximas entregas (Informação).

@@ -23,6 +23,7 @@ from app.routers import (
     configuracoes,
     contas_medicas,
     contas_medicas_guia,
+    contas_medicas_operadoras,
     health,
     notificacoes,
     ouvidoria,
@@ -132,6 +133,7 @@ app.include_router(perfil.router, prefix=settings.api_prefix)
 app.include_router(configuracoes.router, prefix=settings.api_prefix)
 # Contas médicas (PRD #1113, ADR 0070): router próprio, eixo próprio.
 app.include_router(contas_medicas.router, prefix=settings.api_prefix)
+app.include_router(contas_medicas_operadoras.router, prefix=settings.api_prefix)
 app.include_router(contas_medicas_guia.router, prefix=settings.api_prefix)
 app.include_router(admin.router, prefix=settings.api_prefix)
 app.include_router(admin_super_admins.router, prefix=settings.api_prefix)
