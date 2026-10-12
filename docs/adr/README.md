@@ -22,6 +22,12 @@ Só `status: accepted` vale como decisão; `superseded` é histórico (CLAUDE.md
 | [0052](0052-paciente-do-caso-viaja-para-a-area-no-caso-anonimo.md) | accepted | O Paciente do caso viaja para a área, inclusive no caso anônimo |
 | [0055](0055-redirecionamento-pelo-ouvidor-e-cadastro-de-responsaveis-pelo-ouvidor.md) | accepted | O ouvidor redireciona o caso para outra área num ato só, e passa a manter o cadastro de responsáveis |
 
+## Contas médicas
+
+| ADR | Status | Título |
+|---|---|---|
+| [0070](0070-contas-medicas-aritmetica-no-codigo-ia-no-julgamento-memoria-no-banco.md) | accepted | Contas médicas: aritmética no código, IA só onde há julgamento, memória da operadora no banco, fila no banco |
+
 ## Tecnologia (Demandas Vitta x Hospital)
 
 | ADR | Status | Título |
