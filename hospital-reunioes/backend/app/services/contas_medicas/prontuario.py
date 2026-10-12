@@ -631,6 +631,27 @@ def _linhas_para_ia(paginas: list[_Pagina], campos: _Campos) -> list[str]:
     return linhas
 
 
+# Documentos que se repetem todo dia: vai à IA só o que mudou em relação ao anterior do
+# mesmo tipo (adendo v1.2, item 6.1). Mudou mais da metade: vai inteiro.
+_SO_O_QUE_MUDOU = {"SAE", "PRESCRICAO"}
+IGUAL_AO_ANTERIOR = "(igual ao documento anterior do mesmo tipo)"
+EM_RELACAO_AO_ANTERIOR = "(em relação ao anterior do mesmo tipo)"
+
+
+def _so_o_que_mudou(linhas: list[str], chave: str, anteriores: dict[str, list[str]]) -> list[str]:
+    anterior = anteriores.get(chave)
+    anteriores[chave] = linhas
+    if anterior is None:
+        return linhas
+    novas = [linha for linha in linhas if linha not in anterior]
+    saiu = [linha for linha in anterior if linha not in linhas]
+    if not novas and not saiu:
+        return [IGUAL_AO_ANTERIOR]
+    if len(novas) + len(saiu) <= len(linhas) * 0.5:
+        return [EM_RELACAO_AO_ANTERIOR] + [f"+ {linha}" for linha in novas] + [f"- {linha}" for linha in saiu]
+    return linhas
+
+
 def _ordenar_por_data(documentos: list[tuple[list[_Pagina], _Campos]]) -> list[tuple[list[_Pagina], _Campos]]:
     """Documento sem data herda a do vizinho (o anterior; no começo, o seguinte), e a
     lista sai pela data do próprio documento, não pela ordem das páginas."""
@@ -655,20 +676,26 @@ def ler_prontuario(texto_por_pagina: Sequence[str | None], atendimento: str | in
 
     do_atendimento = _paginas_do_atendimento(paginas, str(atendimento))
     agrupados = [(grupo, _juntar_campos(grupo)) for grupo in _montar_documentos(do_atendimento)]
-    documentos = tuple(
-        Documento(
-            familia=grupo[0].familia,
-            paginas=tuple(p.numero for p in grupo),
-            atendimento=campos.atendimento,
-            data=campos.data,
-            hora=campos.hora,
-            setor=campos.setor,
-            conselho=campos.conselho,
-            subtipo=campos.subtipo,
-            linhas=tuple(desidentificar(_linhas_para_ia(grupo, campos), capa.identificacao)),
+    documentos = []
+    anteriores: dict[str, list[str]] = {}
+    for grupo, campos in _ordenar_por_data(agrupados):
+        familia = grupo[0].familia
+        linhas = _linhas_para_ia(grupo, campos)
+        if linhas and familia in _SO_O_QUE_MUDOU:
+            linhas = _so_o_que_mudou(linhas, f"{familia}|{campos.subtipo or ''}", anteriores)
+        documentos.append(
+            Documento(
+                familia=familia,
+                paginas=tuple(p.numero for p in grupo),
+                atendimento=campos.atendimento,
+                data=campos.data,
+                hora=campos.hora,
+                setor=campos.setor,
+                conselho=campos.conselho,
+                subtipo=campos.subtipo,
+                linhas=tuple(desidentificar(linhas, capa.identificacao)),
+            )
         )
-        for grupo, campos in _ordenar_por_data(agrupados)
-    )
     parecer_parcial = [_grupos_que_faltam(capa, "\n".join(textos[capa.paginas :]))]
     primeira_data = next((d.data for d in documentos if d.data), None)
     return Prontuario(
@@ -678,6 +705,6 @@ def ler_prontuario(texto_por_pagina: Sequence[str | None], atendimento: str | in
         grupos_da_capa=capa.grupos,
         paciente_rotulo=rotulo(capa.identificacao),
         idade_anos=idade_em_anos(capa.identificacao, primeira_data),
-        documentos=documentos,
+        documentos=tuple(documentos),
         parecer_parcial=tuple(motivo for motivo in parecer_parcial if motivo),
     )

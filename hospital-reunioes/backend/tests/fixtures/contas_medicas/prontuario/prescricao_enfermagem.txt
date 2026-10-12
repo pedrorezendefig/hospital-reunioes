@@ -1,0 +1,11 @@
+HOSPITAL SÃO MATHEUS                                        Página: 1 / 1
+Prescrição.: 778900  Data: 03/10/2026 07:00
+Atendimento: 31245
+Unid. Int..: CTI ADULTO   Leito..: CTI-04   Cobertura: UTI ADULTO GERAL
+Internação.: 02/10/2026 22:40
+PRESCRIÇÃO DE ENFERMAGEM
+Datas/Horários
+1  ASPIRAR VIAS AÉREAS SE NECESSÁRIO                         SN
+2  MUDANÇA DE DECÚBITO A CADA 2 HORAS                        . 08 . 10 . 12 . 14
+3  MANTER COLCHÃO PNEUMÁTICO                                 CONTÍNUO
+4  CURATIVO EM REGIÃO SACRAL COM HIDROCOLOIDE                . 10

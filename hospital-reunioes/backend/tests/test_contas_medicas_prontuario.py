@@ -228,6 +228,39 @@ def test_documentos_saem_pela_data_de_cada_um_e_nao_pela_ordem_das_paginas():
     ]
 
 
+def sae_em(data_e_hora: str) -> list[str]:
+    primeira, segunda = paginas_da_fixture("sae")
+    return [primeira.replace("03/10/2026 08:00", data_e_hora), segunda]
+
+
+def test_sae_igual_ao_anterior_do_mesmo_tipo_vira_uma_linha_so():
+    # o de 04/10 vem antes no arquivo; a comparação é com a véspera, depois de ordenar
+    paginas = montar("capa", sae_em("04/10/2026 08:00"), sae_em("03/10/2026 08:00"))
+
+    primeiro, segundo = ler_prontuario(paginas, ATENDIMENTO).documentos
+
+    assert (primeiro.data, segundo.data) == (date(2026, 10, 3), date(2026, 10, 4))
+    assert "Eliminações: sonda vesical de demora com diurese clara. Lesão por pressão sacral grau 2." in primeiro.linhas
+    assert segundo.linhas == ("(igual ao documento anterior do mesmo tipo)",)
+
+
+def test_prescricao_de_enfermagem_que_mudou_um_item_manda_so_a_diferenca():
+    vespera = paginas_da_fixture("prescricao_enfermagem")
+    dia_seguinte = [
+        vespera[0]
+        .replace("03/10/2026 07:00", "04/10/2026 07:00")
+        .replace("COM HIDROCOLOIDE      ", "COM ALGINATO DE CÁLCIO")
+    ]
+
+    _, segunda = ler_prontuario(montar("capa", vespera, dia_seguinte), ATENDIMENTO).documentos
+
+    assert segunda.linhas == (
+        "(em relação ao anterior do mesmo tipo)",
+        "+ 4  CURATIVO EM REGIÃO SACRAL COM ALGINATO DE CÁLCIO  . 10",
+        "- 4  CURATIVO EM REGIÃO SACRAL COM HIDROCOLOIDE  . 10",
+    )
+
+
 def test_rodape_com_total_diferente_do_numero_de_paginas_e_arquivo_incompleto():
     paginas = montar("capa", "evolucao", "anotacao_enf", total_no_rodape=5)
 
