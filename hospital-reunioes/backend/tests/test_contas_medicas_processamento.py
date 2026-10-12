@@ -779,3 +779,53 @@ class TestPipeline:
         assert guia["cabecalho"]["faltantes"] == ["O arquivo não trouxe: evolução médica (3 na capa)."]
         assert list(estrutura.parecer_parcial) == guia["cabecalho"]["faltantes"]
         assert guia["cabecalho"]["paciente_rotulo"] == "Antônia F."
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 4. O prontuário é extraído uma vez por atendimento
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+def _duas_parciais(banco: _Banco) -> list[dict]:
+    _enviar(banco, _conta("48811", 2, 4), _conta("48812", 5, 6), _prontuario())
+    return sorted(banco.tabelas["cm_conta"], key=lambda c: c["numero_conta"])
+
+
+class TestProntuarioUmaVez:
+    def test_a_segunda_parcial_nao_extrai_o_prontuario_de_novo(self, extrator):
+        banco = _cenario()
+        _duas_parciais(banco)
+        assert extrator.chamadas.count("PRONTUARIO") == 1  # o envio, que lê o atendimento
+
+        assert _rodar_o_job(banco) == 2
+
+        assert [c["situacao"] for c in banco.tabelas["cm_conta"]] == ["A_FAZER", "A_FAZER"]
+        assert extrator.chamadas.count("PRONTUARIO") == 1
+        assert extrator.chamadas.count("CONTA") == 2
+
+    def test_sem_o_texto_guardado_a_primeira_parcial_extrai_e_a_segunda_le_o_que_ela_guardou(self, extrator):
+        """O arquivo enviado antes desta fatia não tem o texto ao lado do PDF."""
+        banco = _cenario()
+        _duas_parciais(banco)
+        banco.bucket = {chave: conteudo for chave, conteudo in banco.bucket.items() if chave[1].endswith(".pdf")}
+        extrator.chamadas.clear()
+
+        _rodar_o_job(banco)
+
+        assert [c["situacao"] for c in banco.tabelas["cm_conta"]] == ["A_FAZER", "A_FAZER"]
+        assert extrator.chamadas.count("PRONTUARIO") == 1
+
+    def test_a_estrutura_do_prontuario_e_gravada_uma_vez_com_a_data_ate_onde_ele_vai(self):
+        banco = _cenario()
+        _duas_parciais(banco)
+
+        _rodar_o_job(banco)
+
+        (eventos,) = banco.tabelas["cm_eventos"]
+        # Alta em 06/10: é até onde o prontuário vai, e o aviso do envio (#1123) compara com isso.
+        assert eventos["prontuario_ate"] == "2026-10-06"
+        assert len(banco.tabelas["cm_prescricao"]) == 4
+        (cirurgia,) = banco.tabelas["cm_cirurgia"]
+        assert cirurgia["procedimentos_json"][0]["codigo"] == "31005497"
+        (atendimento,) = banco.tabelas["cm_atendimento"]
+        assert atendimento["paciente_rotulo"] == "Antônia F."
