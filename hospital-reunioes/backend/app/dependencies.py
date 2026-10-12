@@ -477,12 +477,7 @@ def permissoes_contas_medicas(supabase, participante: dict[str, Any] | None) -> 
     if perfil not in PERFIS_CONTAS_MEDICAS:
         return []
     linhas = (
-        supabase.table("cm_perfil_permissao")
-        .select("permissao")
-        .eq("perfil", perfil)
-        .eq("ligada", True)
-        .execute()
-        .data
+        supabase.table("cm_perfil_permissao").select("permissao").eq("perfil", perfil).eq("ligada", True).execute().data
         or []
     )
     ligadas = {linha["permissao"] for linha in linhas}
