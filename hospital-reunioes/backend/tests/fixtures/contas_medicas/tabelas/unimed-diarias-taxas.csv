@@ -1,0 +1,6 @@
+secao;codigo;tabela_dominio;descricao;descricao_tuss;unidade;valor;valor_anestesista;numero_auxiliares;percentual;teto;escopo;fonte
+DIARIA;60000090;18;Diária de enfermaria - Globalizada;Diária Compacta de Enfermaria;diaria;1050.00;;;;;INTERNACAO;p.1
+DIARIA;60000260;18;Diária de UTI adulto - Classe V - Globalizada;Diária Compacta de Uti Adulto Geral;diaria;4831.55;;;;;INTERNACAO;p.1
+TAXA_SALA;60023120;18;Taxa de sala porte 3;;uso;800.74;;;;;INTERNACAO;p.1
+HONORARIO;10102019;22;Visita hospitalar e parecer do especialista;;visita;65.00;;;;;INTERNACAO;p.3
+TAXA_OPME;60033487;18;Taxa de OPME;;percentual;;;;10;1500.00;INTERNACAO;p.4

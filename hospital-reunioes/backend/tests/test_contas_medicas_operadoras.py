@@ -9,10 +9,12 @@ do diretor: as reais (ASSIM, Unimed) vivem em `local/contas-medicas/`, fora do
 git, e entram em produção pela tela.
 
 O dublê do banco guarda as restrições da migration 116 que a carga pode ferir:
-uma versão vigente por operadora, nome do MV único sem diferença de
-maiúscula, e os CHECKs de tipo, status, situação e acomodação. Violar uma
-delas estoura como o PostgREST estouraria, para o teste não ficar verde sobre
-um banco que aceitaria qualquer coisa.
+uma versão vigente por operadora, nome do MV e termo do dicionário únicos sem
+diferença de maiúscula, e os CHECKs de tipo, status, situação, acomodação e
+categoria de tabela. Violar uma delas estoura como o PostgREST estouraria, para
+o teste não ficar verde sobre um banco que aceitaria qualquer coisa. As
+tabelas de preço e o dicionário (issue #1120) usam o mesmo dublê, em
+`test_contas_medicas_tabelas.py`.
 """
 
 from __future__ import annotations
@@ -83,6 +85,9 @@ PADROES = {
     "cm_operadora": {"situacao": "SEM_MEMORIA"},
     "cm_memoria_versao": {"vigente": False, "parametros_json": {}},
     "cm_regra": {"status": "PENDENTE", "ativa": True},
+    "cm_tabela_preco_item": {"precos_json": {}, "extra_json": {}},
+    "cm_operadora_tabela": {"regra_uso_json": {}},
+    "cm_item_dicionario": {"origem": "GESTAO", "situacao": "PROPOSTO"},
 }
 
 # Os CHECKs da migration 116 (valor permitido por coluna; None = nulo aceito).
@@ -91,6 +96,9 @@ CHECKS = {
     ("cm_regra", "tipo"): {None, "CONTRATUAL", "OPERACIONAL"},
     ("cm_regra", "status"): {"VIGENTE", "PENDENTE"},
     ("cm_setor", "acomodacao"): {None, *ACOMODACOES},
+    ("cm_operadora_tabela", "categoria"): {"MEDICAMENTO", "MATERIAL", "DIARIA_TAXA", "PACOTE", "HONORARIO"},
+    ("cm_item_dicionario", "origem"): {"IA", "GESTAO"},
+    ("cm_item_dicionario", "situacao"): {"PROPOSTO", "CONFIRMADO"},
 }
 
 NAO_NULOS = {
@@ -99,6 +107,10 @@ NAO_NULOS = {
     "cm_regra": ("operadora_id", "codigo", "texto"),
     "cm_operadora_plano": ("operadora_id", "nome_mv"),
     "cm_setor": ("nome_mv",),
+    "cm_tabela_preco": ("nome",),
+    "cm_tabela_preco_item": ("tabela_id", "codigo"),
+    "cm_operadora_tabela": ("operadora_id", "categoria", "tabela_id"),
+    "cm_item_dicionario": ("termo",),
 }
 
 
@@ -128,6 +140,24 @@ class _Consulta:
     def in_(self, coluna, valores):
         valores = list(valores)
         self._filtros.append(lambda linha: linha.get(coluna) in valores)
+        return self
+
+    def contains(self, coluna, valor: dict):
+        """O `cs` do PostgREST num JSONB: cada chave do filtro está na coluna, e
+        lista contém todos os elementos pedidos."""
+
+        def contem(linha):
+            guardado = linha.get(coluna) or {}
+            for chave, esperado in valor.items():
+                atual = guardado.get(chave)
+                if isinstance(esperado, list):
+                    if not isinstance(atual, list) or not all(e in atual for e in esperado):
+                        return False
+                elif atual != esperado:
+                    return False
+            return True
+
+        self._filtros.append(contem)
         return self
 
     def order(self, coluna, desc=False):
@@ -193,6 +223,8 @@ class _Banco:
             o["nome_mv"].lower() == linha["nome_mv"].lower() for o in outras
         ):
             raise _erro("23505", f"duplicate key value violates unique constraint idx_{tabela}_nome_mv")
+        if tabela == "cm_item_dicionario" and any(o["termo"].lower() == linha["termo"].lower() for o in outras):
+            raise _erro("23505", "duplicate key value violates unique constraint idx_cm_item_dicionario_termo")
         if tabela == "cm_memoria_versao" and linha.get("vigente"):
             if any(o["operadora_id"] == linha["operadora_id"] and o.get("vigente") for o in outras):
                 raise _erro("23505", "duplicate key value violates unique constraint idx_cm_memoria_versao_vigente")

@@ -1,0 +1,7 @@
+secao;codigo;tabela_dominio;descricao;descricao_tuss;unidade;valor;valor_anestesista;numero_auxiliares;percentual;teto;escopo;fonte
+DIARIA;60034068;18;Diária compacta de apartamento standard;Diária compacta de apartamento standard;diaria;1100.00;;;;;INTERNACAO;Adendo p.1
+DIARIA;60000090;18;Diária compacta de enfermaria de 2 leitos;Diária compacta de enfermaria de 2 leitos;diaria;900.00;;;;;INTERNACAO;Adendo p.1
+DIARIA;60034424;18;Diária de hospital dia;Diária de hospital dia;diaria;480.00;;;;;INTERNACAO;Adendo p.1
+DIARIA;60034599;18;Diária de UTI Classe I;Diária de UTI Classe I;diaria;1850.00;;;;;INTERNACAO;Adendo p.1
+DIARIA;60034602;18;Diária de UTI Classe II;Diária de UTI Classe II;diaria;2650.00;;;;;INTERNACAO;Adendo p.1
+TAXA;60029080;18;Taxa de isolamento (por dia);Taxa de isolamento (por dia);dia;100.00;;;;;INTERNACAO;Adendo p.1
