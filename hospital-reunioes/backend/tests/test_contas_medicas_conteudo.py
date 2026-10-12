@@ -15,7 +15,7 @@ from pathlib import Path
 
 import pytest
 
-from app.services.contas_medicas.conteudo import ler_conteudo
+from app.services.contas_medicas.conteudo import Movimentacao, ler_conteudo
 from app.services.contas_medicas.prontuario import ler_prontuario
 
 FIXTURES = Path(__file__).parent / "fixtures" / "contas_medicas"
@@ -292,6 +292,24 @@ def test_a_saida_segue_o_motivo_da_alta(motivo, tipo):
 
     assert (saida.tipo, saida.data_hora) == (tipo, datetime(2026, 10, 6, 15, 20))
 
+
+
+def test_movimentacoes_saem_no_formato_de_entrada_do_contador_de_diarias():
+    """Entrada do contador (#1115 e `referencia-diarias.mjs`): em ordem de data e hora, a
+    primeira é a INTERNACAO, a última é a saída, cada uma com o setor. O registro feito
+    depois da alta (SAE em outro setor às 18:00) não vira transferência depois da saída,
+    que o contador recusa como fora de ordem."""
+    movimentacoes = ler(
+        "prontuario/admissao_unidade",
+        prescricao(3, CLEXANE),
+        resumo_de_alta(),
+        sae("06/10/2026 18:00", "ENFERMARIA 3"),
+    ).movimentacoes
+
+    assert movimentacoes == (
+        Movimentacao("INTERNACAO", datetime(2026, 10, 2, 22, 40), "CTI ADULTO"),
+        Movimentacao("ALTA", datetime(2026, 10, 6, 15, 20), "CTI ADULTO"),
+    )
 
 # ----------------------------------------------------------------------------------
 # Centro cirúrgico

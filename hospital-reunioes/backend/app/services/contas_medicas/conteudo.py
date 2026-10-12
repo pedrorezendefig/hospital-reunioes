@@ -230,15 +230,17 @@ def _tipo_da_saida(motivo: str | None) -> str:
 def _movimentacoes(internacao: Internacao, documentos: Sequence[Documento]) -> tuple[Movimentacao, ...]:
     if internacao.entrada is None:
         return ()
-    # Só documento com hora marca a janela: o balanço tem data sem hora.
-    linha_do_tempo = sorted(
-        (datetime.combine(d.data, d.hora), d.setor) for d in documentos if d.setor and d.data and d.hora
-    )
+    # Só documento com hora marca a janela: o balanço tem data sem hora. E só o que cabe
+    # entre a internação e a alta: registro feito depois da alta não é transferência, e
+    # o contador recusa movimentação fora de ordem.
+    datados = sorted((datetime.combine(d.data, d.hora), d.setor) for d in documentos if d.setor and d.data and d.hora)
+    fim = internacao.alta or datetime.max
+    linha_do_tempo = [(quando, setor) for quando, setor in datados if internacao.entrada <= quando <= fim]
     setor = linha_do_tempo[0][1] if linha_do_tempo else None
     movimentacoes = [Movimentacao("INTERNACAO", internacao.entrada, setor)]
-    ultimo_no_setor = None
+    ultimo_no_setor = internacao.entrada
     for quando, novo in linha_do_tempo:
-        if novo != setor and ultimo_no_setor is not None:
+        if novo != setor:
             movimentacoes.append(Movimentacao("TRANSFERENCIA_SETOR", quando, novo, (ultimo_no_setor, quando)))
             setor = novo
         ultimo_no_setor = quando
