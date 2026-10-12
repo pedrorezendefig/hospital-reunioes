@@ -24,6 +24,7 @@ PR quando o MV mudar de versão (ADR 0070, decisão 7).
 """
 
 import re
+import unicodedata
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from datetime import date, datetime, time
@@ -61,6 +62,8 @@ class Prontuario:
     tipo_impressao: str | None
     grupos_da_capa: dict[str, int]
     documentos: tuple[Documento, ...]
+    # Uma frase por motivo; vazio quer dizer que o Guia não é parcial.
+    parecer_parcial: tuple[str, ...]
 
 
 # ----------------------------------------------------------------------------------
@@ -113,6 +116,37 @@ def _ler_capa(paginas: list[str]) -> _Capa:
         if m := _TIPO_DE_IMPRESSAO.search(texto):
             tipo_impressao = m.group(1)
     return _Capa(paginas=quantas, grupos=grupos, tipo_impressao=tipo_impressao)
+
+
+# Grupos sem os quais a análise de cobrança fica parcial: a capa lista o grupo e o
+# corpo pode não trazer (o perfil de impressão das faturistas ainda não imprime tudo).
+# Grupo da capa → (como a faturista lê, como o corpo do documento escreve).
+_GRUPOS_ESSENCIAIS = {
+    "PRESCRICAO MEDICA": ("prescrição médica", r"PRESCRI[ÇC][ÃA]O\s+M[ÉE]DICA"),
+    "PRESCRICAO URGENCIA": ("prescrição de urgência", r"PRESCRI[ÇC][ÃA]O\s+(DE\s+)?URG"),
+    "PRESCRIÇÃO NUTRICIONAL": ("prescrição nutricional", r"PRESCRI[ÇC][ÃA]O\s+NUTRI"),
+    "EVOLUÇÃO MEDICA": ("evolução médica", r"EVOLU[ÇC][ÃA]O\s+M[ÉE]DICA"),
+    "EVOLUÇÃO DIA CTI": ("evolução dia do CTI", r"EVOLU[ÇC][ÃA]O\s+DIA"),
+    "EVOLUÇÃO NOITE CTI": ("evolução noite do CTI", r"EVOLU[ÇC][ÃA]O\s+NOITE"),
+    "EVOLUÇÃO ROTINA CTI": ("evolução rotina do CTI", r"EVOLU[ÇC][ÃA]O\s+ROTINA"),
+    "EVOLUÇÃO ENFERMEIRO": ("evolução do enfermeiro", r"EVOLU[ÇC][ÃA]O\s+(DO\s+)?ENFERMEIRO"),
+    "ANOTAÇÕES DE ENFERMAGEM": ("anotações de enfermagem", r"ANOTA[ÇC]([ÕO]ES|[ÃA]O)\s+DE\s+ENFERMAGEM"),
+}
+
+
+def _sem_acento(texto: str) -> str:
+    return "".join(c for c in unicodedata.normalize("NFD", texto) if unicodedata.category(c) != "Mn")
+
+
+def _grupos_que_faltam(capa: _Capa, corpo: str) -> str | None:
+    """Grupo essencial com quantidade na capa e nenhum documento no corpo. O corpo é
+    o arquivo inteiro depois da capa, como na referência, calibrada em arquivo real."""
+    faltam = []
+    for grupo, (nome, rx) in _GRUPOS_ESSENCIAIS.items():
+        quantidade = sum(q for g, q in capa.grupos.items() if _sem_acento(g).upper() == _sem_acento(grupo).upper())
+        if quantidade and not re.search(rx, corpo, re.I):
+            faltam.append(f"{nome} ({quantidade} na capa)")
+    return f"O arquivo não trouxe: {', '.join(faltam)}." if faltam else None
 
 
 # ----------------------------------------------------------------------------------
@@ -482,10 +516,12 @@ def ler_prontuario(texto_por_pagina: Sequence[str | None], atendimento: str | in
         )
         for grupo, campos in _ordenar_por_data(agrupados)
     )
+    parecer_parcial = [_grupos_que_faltam(capa, "\n".join(textos[capa.paginas :]))]
     return Prontuario(
         atendimento=str(atendimento),
         total_paginas=len(textos),
         tipo_impressao=capa.tipo_impressao,
         grupos_da_capa=capa.grupos,
         documentos=documentos,
+        parecer_parcial=tuple(motivo for motivo in parecer_parcial if motivo),
     )

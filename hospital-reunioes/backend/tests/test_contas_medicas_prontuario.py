@@ -129,6 +129,23 @@ def test_cada_familia_vira_um_documento_com_paginas_e_campos_e_o_outro_atendimen
     }
 
 
+def test_capa_que_declara_grupo_essencial_que_o_corpo_nao_traz_da_parecer_parcial_com_grupo_e_quantidade():
+    sem_prescricao_nem_evolucao = capa({"PRESCRICAO MEDICA": 40, "EVOLUÇÃO MEDICA": 12, "ANOTAÇÕES DE ENFERMAGEM": 1})
+    paginas = montar(sem_prescricao_nem_evolucao, "sae", "anotacao_enf")
+
+    resultado = ler_prontuario(paginas, ATENDIMENTO)
+
+    assert resultado.parecer_parcial == (
+        "O arquivo não trouxe: prescrição médica (40 na capa), evolução médica (12 na capa).",
+    )
+
+
+def test_capa_que_bate_com_o_corpo_nao_da_parecer_parcial():
+    paginas = montar(CAPA_QUE_BATE, "evolucao", "prescricao_medica", "anotacao_enf")
+
+    assert ler_prontuario(paginas, ATENDIMENTO).parecer_parcial == ()
+
+
 def test_rodape_com_total_diferente_do_numero_de_paginas_e_arquivo_incompleto():
     paginas = montar("capa", "evolucao", "anotacao_enf", total_no_rodape=5)
 
