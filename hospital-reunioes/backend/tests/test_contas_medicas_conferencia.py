@@ -28,7 +28,7 @@ from app.services.contas_medicas.cirurgia import (  # noqa: E402
     Procedimento,
 )
 from app.services.contas_medicas.conferencia import ProntuarioLido, conferir  # noqa: E402
-from app.services.contas_medicas.conteudo import Conteudo, Internacao  # noqa: E402
+from app.services.contas_medicas.conteudo import Conteudo, Internacao, Movimentacao  # noqa: E402
 from app.services.contas_medicas.memoria import MemoriaLida, RegraLida  # noqa: E402
 from app.services.contas_medicas.prescricao import ItemPrescrito, Prescricao, consolidar  # noqa: E402
 from app.services.contas_medicas.prontuario import Prontuario  # noqa: E402
@@ -574,6 +574,108 @@ class TestLancadoSemRegistro:
         prontuario = _prontuario(textos=("Sem menção a nada.",), tipo_impressao="Parcial")
 
         resultado = conferir(_conta_com_solucoes(), prontuario, _memoria(), _tabela({}))
+
+        assert resultado.linhas == ()
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 6. Diárias
+# ═══════════════════════════════════════════════════════════════════════════
+
+DIARIA_CTI = "60001038"
+ACOMPANHANTE = "60000473"
+CTI = "CTI ADULTO"
+SETORES = {CTI: "CTI", "ENFERMARIA 3": "ENFERMARIA", "ISOLAMENTO 2": "ISOLAMENTO", "DAY CLINIC": "HOSPITAL_DIA", CC: "CENTRO_CIRURGICO"}
+TABELA_DE_DIARIAS = {("DIARIA_TAXA", DIARIA_CTI): {"COMUM": 609.60, "CARIOCA": 609.60}, ("DIARIA_TAXA", ACOMPANHANTE): 64.04}
+
+
+def _internacao(entrada: datetime, saida: datetime, setor: str = CTI) -> list[Movimentacao]:
+    return [Movimentacao("INTERNACAO", entrada, setor), Movimentacao("ALTA", saida, setor)]
+
+
+def _diarias_lancadas(codigo: str, *dias: int, unitario: float = 609.60, setor: str = CTI) -> list[ItemConta]:
+    return [_item(codigo, "DIARIA SINTETICA", dia(n), 1, unitario, grupo="DIARIAS", setor=setor, pagina=1) for n in dias]
+
+
+class TestDiarias:
+    # Internação às 14h do dia 1 e alta às 15h do dia 4: diárias que começam nos
+    # dias 1, 2 e 3 (a alta depois das 10h não paga o dia).
+    TRES_DIARIAS = (datetime(2026, 10, 1, 14, 0), datetime(2026, 10, 4, 15, 0))
+
+    def test_3_diarias_de_cti_devidas_e_2_lancadas_vira_incluir_1(self):
+        conta = _conta(*_diarias_lancadas(DIARIA_CTI, 1, 2))
+        prontuario = _prontuario(movimentacoes=_internacao(*self.TRES_DIARIAS), tipo_impressao=None)
+
+        resultado = conferir(conta, prontuario, _memoria(), _tabela(TABELA_DE_DIARIAS), setores=SETORES)
+
+        [linha] = resultado.linhas
+        assert _campos(linha) | {"evidencia_pagina": None} == {
+            "acao": "INCLUIR",
+            "data": "2026-10-03",
+            "data_fim": None,
+            "setor": CTI,
+            "codigo": DIARIA_CTI,
+            "descricao": "Diária de CTI",
+            "quantidade_lancada": 0.0,
+            "quantidade_devida": 1.0,
+            "preco_lancado": None,
+            "preco_tabela": 609.60,
+            "valor_diferenca": 609.60,
+            "regra_codigo": "ALFA-DIA-01",
+            "evidencia_pagina": None,
+            "nivel_evidencia": "POR_REGRA",
+            "causa_raiz": "REGRA_AUTOMATICA",
+            "confianca": "ALTA",
+            "origem": "CODIGO",
+        }
+
+    def test_2_diarias_devidas_e_3_lancadas_vira_retirar_1(self):
+        conta = _conta(*_diarias_lancadas(DIARIA_CTI, 1, 2, 3))
+        prontuario = _prontuario(
+            movimentacoes=_internacao(datetime(2026, 10, 1, 14, 0), datetime(2026, 10, 3, 15, 0)), tipo_impressao=None
+        )
+
+        resultado = conferir(conta, prontuario, _memoria(), _tabela(TABELA_DE_DIARIAS), setores=SETORES)
+
+        [linha] = resultado.linhas
+        assert {k: linha[k] for k in ("acao", "data", "codigo", "quantidade_lancada", "quantidade_devida", "valor_diferenca")} == {
+            "acao": "RETIRAR",
+            "data": "2026-10-03",
+            "codigo": DIARIA_CTI,
+            "quantidade_lancada": 1.0,
+            "quantidade_devida": 0.0,
+            "valor_diferenca": -609.60,
+        }
+        assert (linha["regra_codigo"], linha["causa_raiz"]) == ("ALFA-DIA-01", "REGRA_AUTOMATICA")
+
+    def test_acompanhante_de_paciente_com_60_anos_ou_mais_tem_as_mesmas_diarias(self):
+        conta = _conta(*_diarias_lancadas(DIARIA_CTI, 1, 2, 3))
+        prontuario = _prontuario(movimentacoes=_internacao(*self.TRES_DIARIAS), idade=70, tipo_impressao=None)
+
+        resultado = conferir(conta, prontuario, _memoria(), _tabela(TABELA_DE_DIARIAS), setores=SETORES)
+
+        [linha] = resultado.linhas
+        assert {k: linha[k] for k in ("acao", "codigo", "data", "data_fim", "quantidade_devida", "valor_diferenca")} == {
+            "acao": "INCLUIR",
+            "codigo": ACOMPANHANTE,
+            "data": "2026-10-01",
+            "data_fim": "2026-10-03",
+            "quantidade_devida": 3.0,
+            "valor_diferenca": 192.12,
+        }
+        assert linha["regra_codigo"] == "ALFA-DIA-10"
+
+    def test_acompanhante_incluso_na_diaria_global_nao_gera_linha(self):
+        # Como na Unimed: diária global e acompanhante incluso (parâmetro nulo).
+        parametros = {
+            **PARAMETROS_ALFA,
+            "diaria": {**PARAMETROS_ALFA["diaria"], "acompanhante_segue_a_regra_do_paciente": None},
+            "diaria_global": {"uti_adulto_classe_1": {"codigo": DIARIA_CTI, "valor": 609.60}},
+        }
+        conta = _conta(*_diarias_lancadas(DIARIA_CTI, 1, 2, 3))
+        prontuario = _prontuario(movimentacoes=_internacao(*self.TRES_DIARIAS), idade=70, tipo_impressao=None)
+
+        resultado = conferir(conta, prontuario, _memoria(parametros), _tabela(TABELA_DE_DIARIAS), setores=SETORES)
 
         assert resultado.linhas == ()
 

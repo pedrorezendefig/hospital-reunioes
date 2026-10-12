@@ -21,11 +21,12 @@ import math
 import re
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, replace
-from datetime import date, timedelta
+from datetime import date, datetime, time, timedelta
 from decimal import ROUND_HALF_UP, Decimal
 from typing import Any
 
-from app.services.contas_medicas.conteudo import Conteudo
+from app.services.contas_medicas.conteudo import Conteudo, Movimentacao
+from app.services.contas_medicas.diarias import ParametrosDiaria, Segmento, contar_diarias, diarias_do_periodo
 from app.services.contas_medicas.dicionario import _generico, _marca, _norm, casar
 from app.services.contas_medicas.guia import NotaDeEntrada, agrupar_por_dia_e_setor, nota_de_entrada
 from app.services.contas_medicas.memoria import MemoriaLida
@@ -111,9 +112,14 @@ class _Contexto:
     preco: BuscaDePreco
     coluna: str | None
     dicionario: Mapping[str, set[str]]
+    # Nome do setor no MV, normalizado → acomodação (`cm_setor`).
+    setores: Mapping[str, str]
+
+    def acomodacao_do_setor(self, setor: str | None) -> str | None:
+        return self.setores.get(_norm(setor))
 
     def no_centro_cirurgico(self, setor: str | None) -> bool:
-        return "CIRURG" in _norm(setor)
+        return self.acomodacao_do_setor(setor) == "CENTRO_CIRURGICO" or "CIRURG" in _norm(setor)
 
     def no_periodo(self, data: date) -> bool:
         inicio, fim = self.conta.periodo_inicio, self.conta.periodo_fim
@@ -245,6 +251,267 @@ def _precos(ctx: _Contexto) -> list[_Linha]:
                 valor=_dinheiro((tabela - item.unitario) * item.quantidade),
             )
         )
+    return linhas
+
+
+# ----------------------------------------------------------------------------------
+# (2) Diárias
+# ----------------------------------------------------------------------------------
+
+_SAIDAS = frozenset({"ALTA", "OBITO", "TRANSFERENCIA_HOSPITAL"})
+
+_NOME_DA_ACOMODACAO = {
+    "CTI": "CTI",
+    "ENFERMARIA": "enfermaria",
+    "APARTAMENTO": "apartamento",
+    "ISOLAMENTO": "isolamento",
+    "HOSPITAL_DIA": "hospital-dia",
+    "PEDIATRIA": "pediatria",
+    "UTI_PEDIATRICA": "UTI pediátrica",
+    "UTI_NEONATAL": "UTI neonatal",
+}
+
+
+@dataclass(frozen=True)
+class _Devida:
+    """Uma diária (ou taxa diária) que a conta deve ter, num dia."""
+
+    data: date
+    codigo: str
+    # Códigos que valem pela mesma diária na comparação (as classes de UTI).
+    familia: frozenset[str]
+    chave: str
+    descricao: str
+    observacao: str
+    setor: str | None
+    pagina: int | None
+    trecho: str
+
+
+def _codigo_configurado(parametros: Mapping[str, Any], nome: str) -> str | None:
+    """O código pelo nome da acomodação: na `diaria_global` (Unimed, Leve) ou em
+    `diaria.codigos` (a operadora de diária por acomodação, como a ASSIM)."""
+    bloco = (parametros.get("diaria_global") or {}).get(nome)
+    if isinstance(bloco, dict) and bloco.get("codigo"):
+        return str(bloco["codigo"])
+    codigo = ((parametros.get("diaria") or {}).get("codigos") or {}).get(nome)
+    return str(codigo) if codigo else None
+
+
+def _codigos_de_diaria(parametros: Mapping[str, Any]) -> set[str]:
+    """Todo código de diária que a memória conhece, para achar o que foi lançado."""
+    codigos = {
+        str(bloco["codigo"])
+        for bloco in (parametros.get("diaria_global") or {}).values()
+        if isinstance(bloco, dict) and bloco.get("codigo")
+    }
+    return codigos | {str(c) for c in ((parametros.get("diaria") or {}).get("codigos") or {}).values() if c}
+
+
+def _contratada(conta: Conta) -> str | None:
+    """A acomodação contratada pelo cabeçalho da conta: é a cobrada (ASSIM-DIA-11)."""
+    acomodacao = _norm(conta.acomodacao)
+    if "APART" in acomodacao:
+        return "apartamento"
+    if "ENF" in acomodacao:
+        return "enfermaria"
+    return None
+
+
+def _evidencia_do_segmento(ctx: _Contexto, segmento: Segmento) -> tuple[int | None, str]:
+    documento = next(
+        (d for d in ctx.prontuario.estrutura.documentos if d.setor == segmento.setor and d.data == segmento.inicio.date()),
+        None,
+    )
+    return (
+        documento.pagina_inicial if documento else None,
+        f"Setor {segmento.setor}: de {segmento.inicio:%d/%m/%Y %H:%M} a {segmento.fim:%d/%m/%Y %H:%M}",
+    )
+
+
+def _segmentos(ctx: _Contexto) -> list[Segmento] | str:
+    """Os segmentos do contador no período da conta, ou o motivo de não contar."""
+    movimentacoes = list(ctx.prontuario.conteudo.movimentacoes)
+    if not movimentacoes:
+        return []
+    if movimentacoes[-1].tipo not in _SAIDAS:
+        if ctx.conta.periodo_fim is None:
+            return []
+        # Segue internado: a parcial fecha no fim do período, com a diária em curso.
+        fim = datetime.combine(ctx.conta.periodo_fim + timedelta(days=1), time.min)
+        ultima = movimentacoes[-1]
+        movimentacoes.append(Movimentacao("EM_CURSO", max(fim, ultima.data_hora), ultima.setor))
+    try:
+        segmentos = contar_diarias(
+            movimentacoes, ParametrosDiaria.da_memoria(ctx.parametros), ctx.prontuario.estrutura.idade_anos
+        )
+    except ValueError as erro:
+        return str(erro)
+    inicio, fim = ctx.conta.periodo_inicio, ctx.conta.periodo_fim
+    return diarias_do_periodo(segmentos, inicio, fim) if inicio and fim else segmentos
+
+
+def _devidas_do_segmento(ctx: _Contexto, segmento: Segmento, acomodacao: str) -> tuple[list[_Devida], list[str]]:
+    """As diárias devidas do segmento e as pendências (texto) que viram Validar."""
+    pagina, trecho = _evidencia_do_segmento(ctx, segmento)
+    global_ = ctx.parametros.get("diaria_global") or {}
+    contratada = _contratada(ctx.conta)
+    pendencias = [p.texto for p in segmento.validar]
+
+    def devida(data: date, codigo: str, chave: str, descricao: str, observacao: str = "", familia=None) -> _Devida:
+        return _Devida(
+            data, codigo, frozenset(familia or {codigo}), chave, descricao, observacao, segmento.setor, pagina, trecho
+        )
+
+    dias = [d.inicio.date() for d in segmento.diarias]
+    chave, observacao, familia = "diaria", "", None
+    if acomodacao == "CTI":
+        classes = sorted(nome for nome in global_ if nome.startswith("uti_adulto_classe"))
+        if classes:
+            familia = {c for c in (_codigo_configurado(ctx.parametros, n) for n in classes) if c}
+            codigo, observacao = _codigo_configurado(ctx.parametros, classes[0]), " Conferir classe de UTI."
+        else:
+            codigo = _codigo_configurado(ctx.parametros, "cti")
+    elif acomodacao in {"ENFERMARIA", "APARTAMENTO", "ISOLAMENTO"}:
+        codigo = _codigo_configurado(ctx.parametros, contratada or acomodacao.lower())
+    else:
+        codigo = _codigo_configurado(ctx.parametros, acomodacao.lower())
+
+    descricao = f"Diária de {_NOME_DA_ACOMODACAO.get(acomodacao, acomodacao.lower())}"
+    if dias and codigo is None:
+        pendencias.append(f"A memória não traz o código da diária de {_NOME_DA_ACOMODACAO.get(acomodacao, acomodacao)}.")
+        return [], pendencias
+    devidas = [devida(data, codigo, chave, descricao, observacao, familia) for data in dias if codigo]
+
+    acompanhante = _codigo_configurado(ctx.parametros, "acompanhante")
+    if segmento.acompanhante and acompanhante:
+        devidas += [devida(data, acompanhante, "acompanhante", "Diária de acompanhante") for data in dias]
+    return devidas, pendencias
+
+
+def _diarias(ctx: _Contexto) -> list[_Linha]:
+    """Diárias devidas (contador) contra lançadas: Incluir ou Retirar a diferença.
+
+    A comparação é por código no período; com a mesma quantidade, o lançamento em
+    data diferente não gera linha (a IA e a faturista veem a data).
+    """
+    segmentos = _segmentos(ctx)
+    if isinstance(segmentos, str):
+        return [_validar_diaria(f"Diárias não contadas: {segmentos}", None, None)]
+    devidas: list[_Devida] = []
+    linhas: list[_Linha] = []
+    for segmento in segmentos:
+        acomodacao = ctx.acomodacao_do_setor(segmento.setor)
+        if acomodacao is None:
+            pendencias = [f"Setor {segmento.setor} sem acomodação cadastrada: diárias não conferidas."]
+            devidas_do_segmento: list[_Devida] = []
+        elif acomodacao == "CENTRO_CIRURGICO":
+            continue
+        else:
+            devidas_do_segmento, pendencias = _devidas_do_segmento(ctx, segmento, acomodacao)
+        devidas += devidas_do_segmento
+        if segmento.diarias or acomodacao is not None:
+            linhas += [_validar_diaria(texto, segmento.inicio.date(), segmento.setor) for texto in pendencias]
+
+    familias: dict[frozenset[str], list[_Devida]] = {}
+    for d in devidas:
+        familias.setdefault(d.familia, []).append(d)
+    conhecidos = set().union(*familias) if familias else set()
+    for codigo in _codigos_de_diaria(ctx.parametros) - conhecidos:
+        familias[frozenset({codigo})] = []
+    for familia, devidas_da_familia in familias.items():
+        lancados = [i for i in ctx.conta.itens if i.codigo in familia]
+        linhas += _comparar_diarias(ctx, devidas_da_familia, lancados)
+    return linhas
+
+
+def _validar_diaria(texto: str, data: date | None, setor: str | None) -> _Linha:
+    return _Linha(
+        acao="VALIDAR",
+        chave="diaria",
+        data=data,
+        setor=setor,
+        codigo=None,
+        descricao="Diária",
+        motivo=texto,
+        nivel="POR_REGRA",
+        causa="REGRA_AUTOMATICA",
+        pagina=None,
+        trecho=None,
+    )
+
+
+def _comparar_diarias(ctx: _Contexto, devidas: list[_Devida], lancados: list[ItemConta]) -> list[_Linha]:
+    lancada = sum((i.quantidade for i in lancados), Decimal(0))
+    diferenca = len(devidas) - lancada
+    if diferenca == 0:
+        return []
+    por_data_devida: dict[date, int] = {}
+    for d in devidas:
+        por_data_devida[d.data] = por_data_devida.get(d.data, 0) + 1
+    por_data_lancada: dict[date, Decimal] = {}
+    for i in lancados:
+        por_data_lancada[i.data] = por_data_lancada.get(i.data, Decimal(0)) + i.quantidade
+    resumo = f"{len(devidas)} devidas e {lancada:g} lançadas no período."
+    linhas = []
+    if diferenca > 0:
+        faltam = diferenca
+        for d in devidas:
+            if faltam <= 0:
+                break
+            if por_data_lancada.get(d.data, Decimal(0)) > 0:
+                por_data_lancada[d.data] -= 1
+                continue
+            preco_lancado, preco_tabela, valor, etiqueta = ctx.valor_de_inclusao("DIARIA_TAXA", d.codigo, d.data, Decimal(1))
+            linhas.append(
+                _Linha(
+                    acao="INCLUIR",
+                    chave=d.chave,
+                    data=d.data,
+                    setor=d.setor,
+                    codigo=d.codigo,
+                    descricao=d.descricao,
+                    motivo=f"{d.descricao}: {resumo}{d.observacao}{etiqueta}",
+                    nivel="POR_REGRA",
+                    causa="REGRA_AUTOMATICA",
+                    pagina=d.pagina,
+                    trecho=d.trecho,
+                    quantidade_lancada=Decimal(0),
+                    quantidade_devida=Decimal(1),
+                    preco_lancado=preco_lancado,
+                    preco_tabela=preco_tabela,
+                    valor=valor,
+                )
+            )
+            faltam -= 1
+        return linhas
+    sobram = -diferenca
+    chave = devidas[0].chave if devidas else "diaria"
+    for item in sorted(lancados, key=lambda i: i.data, reverse=True):
+        excesso = min(item.quantidade, sobram, max(Decimal(0), item.quantidade - por_data_devida.get(item.data, 0)))
+        por_data_devida[item.data] = max(0, por_data_devida.get(item.data, 0) - int(item.quantidade))
+        if excesso <= 0:
+            continue
+        linhas.append(
+            _Linha(
+                acao="RETIRAR",
+                chave=chave,
+                data=item.data,
+                setor=item.setor,
+                codigo=item.codigo,
+                descricao=item.descricao,
+                motivo=f"Diária lançada a mais: {resumo}",
+                nivel="POR_REGRA",
+                causa="REGRA_AUTOMATICA",
+                pagina=item.pagina,
+                trecho=_trecho_do_item(item),
+                quantidade_lancada=excesso,
+                quantidade_devida=Decimal(0),
+                preco_lancado=item.unitario,
+                valor=-_dinheiro(item.unitario * excesso),
+            )
+        )
+        sobram -= excesso
     return linhas
 
 
@@ -647,11 +914,13 @@ def conferir(
     memoria: MemoriaLida,
     preco: BuscaDePreco,
     *,
+    setores: Mapping[str, str] | None = None,
     dicionario: Mapping[str, set[str]] | None = None,
 ) -> Conferencia:
     """As linhas do Guia da Conta, pelas conferências por código.
 
-    `dicionario` é o dicionário de itens do hospital (`dicionario_do_banco`).
+    `setores` liga o nome do setor no MV à acomodação (`cm_setor`); `dicionario` é
+    o dicionário de itens do hospital (`dicionario_do_banco`).
     """
     ctx = _Contexto(
         conta=conta,
@@ -660,10 +929,12 @@ def conferir(
         preco=preco,
         coluna=_coluna(conta, memoria.parametros),
         dicionario=dicionario or {},
+        setores={_norm(nome): acomodacao for nome, acomodacao in (setores or {}).items()},
     )
     descartadas: list[dict[str, Any]] = []
     geradas = [
         *_precos(ctx),
+        *_diarias(ctx),
         *_prescricao_x_conta(ctx),
         *_sem_registro(ctx),
         *_ficha_x_conta(ctx),
