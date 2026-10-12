@@ -945,3 +945,61 @@ class TestLeituraQueNaoFecha:
             "A análise parou na conferência. Envie de novo.",
             3,
         )
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 7. O aviso no sino
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+def _avisos(banco: _Banco) -> list[dict]:
+    return [n for n in banco.tabelas["notificacoes"] if n["tipo"] == "CONTAS_MEDICAS"]
+
+
+class TestAvisoNoSino:
+    def test_ao_fim_do_envio_a_faturista_recebe_um_aviso_com_quantas_contas_ficaram_prontas(self):
+        banco = _cenario()
+        envio = _enviar(banco, _conta("48811", 2, 4), _conta("48812", 5, 6), _prontuario())
+
+        _rodar_o_job(banco)
+
+        (aviso,) = _avisos(banco)
+        assert (aviso["destinatario_id"], aviso["titulo"], aviso["referencia_id"], aviso["lida"]) == (
+            "F1",
+            "2 contas prontas",
+            envio["envio_id"],
+            False,
+        )
+
+    def test_nada_de_aviso_enquanto_uma_conta_do_envio_esta_na_fila(self):
+        banco = _cenario()
+        _enviar(banco, _conta("48811", 2, 4), _conta("48812", 5, 6), _prontuario())
+
+        processamento.processar(banco, processamento.pegar_da_fila(banco, AGORA))
+
+        assert _avisos(banco) == []
+        processamento.processar(banco, processamento.pegar_da_fila(banco, AGORA))
+        assert [a["titulo"] for a in _avisos(banco)] == ["2 contas prontas"]
+
+    def test_o_envio_avisa_uma_vez_so(self):
+        banco = _cenario()
+        _enviar(banco, _conta(), _prontuario())
+        _rodar_o_job(banco)
+        (conta,) = banco.tabelas["cm_conta"]
+
+        # A mesma conta passa de novo pelo fim (uma vaga atrasada, por exemplo).
+        processamento._avisar_se_o_envio_terminou(banco, conta)
+
+        assert [a["titulo"] for a in _avisos(banco)] == ["1 conta pronta"]
+
+    def test_a_conta_com_erro_entra_no_aviso(self):
+        banco = _cenario()
+        _enviar(banco, _conta("48811", 2, 4), _conta("48812", 5, 6, total_errado=True), _prontuario())
+
+        _rodar_o_job(banco)
+
+        (aviso,) = _avisos(banco)
+        assert (aviso["titulo"], aviso["mensagem"]) == (
+            "1 conta pronta",
+            "O guia está na fila de Contas médicas. 1 conta com erro.",
+        )

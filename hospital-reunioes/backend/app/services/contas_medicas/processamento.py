@@ -252,26 +252,30 @@ def processar(supabase, conta: dict) -> None:
     `A_FAZER`, `ERRO` ou a volta para a fila."""
     cronometro = _Cronometro()
     try:
-        _pipeline(supabase, conta, cronometro)
-    except _Falha as falha:
-        logger.warning("[ContasMedicas] Conta %s com erro de leitura na etapa %s", conta["id"], cronometro.etapa)
-        _fechar_tentativa(supabase, conta, {"situacao": "ERRO", "erro_motivo": falha.motivo, "processando_desde": None})
-    except Exception as erro:
-        logger.error(
-            "[ContasMedicas] Conta %s falhou na etapa %s, tentativa %s: %s em %s",
-            conta["id"],
-            cronometro.etapa,
-            conta.get("tentativas"),
-            type(erro).__name__,
-            _onde(erro),
-        )
         try:
+            _pipeline(supabase, conta, cronometro)
+        except _Falha as falha:
+            logger.warning("[ContasMedicas] Conta %s com erro de leitura na etapa %s", conta["id"], cronometro.etapa)
+            _fechar_tentativa(
+                supabase, conta, {"situacao": "ERRO", "erro_motivo": falha.motivo, "processando_desde": None}
+            )
+        except Exception as erro:
+            logger.error(
+                "[ContasMedicas] Conta %s falhou na etapa %s, tentativa %s: %s em %s",
+                conta["id"],
+                cronometro.etapa,
+                conta.get("tentativas"),
+                type(erro).__name__,
+                _onde(erro),
+            )
             _devolver(supabase, conta, mensagem_da_etapa(cronometro.etapa or ""))
-        except Exception as erro_ao_devolver:
-            # Fica PROCESSANDO e volta pela devolução das presas, em 15 minutos.
-            logger.error("[ContasMedicas] Conta %s sem devolução: %s", conta["id"], type(erro_ao_devolver).__name__)
-        return
-    _avisar_se_o_envio_terminou(supabase, conta)
+            if (conta.get("tentativas") or 0) < MAXIMO_DE_TENTATIVAS:
+                return  # voltou para a fila: o envio ainda não terminou
+        _avisar_se_o_envio_terminou(supabase, conta)
+    except Exception as erro:
+        # O banco falhou no fechamento: a conta fica PROCESSANDO e volta pela
+        # devolução das presas, em 15 minutos.
+        logger.error("[ContasMedicas] Conta %s sem fechamento: %s em %s", conta["id"], type(erro).__name__, _onde(erro))
 
 
 def _primeira(consulta) -> dict | None:
@@ -659,6 +663,65 @@ def _gravar_glicemias(supabase, atendimento_id: str, conteudo: Conteudo) -> None
 # ----------------------------------------------------------------------------------
 
 
+# As duas vagas podem terminar as duas últimas contas de um envio juntas: a
+# trava do processo faz uma delas ver o aviso da outra e não repetir.
+_trava_do_aviso = threading.Lock()
+
+_ESPERANDO = ("NA_FILA", "PROCESSANDO")
+
+
+def _contas(n: int, singular: str, plural: str) -> str:
+    return f"{n} {singular if n == 1 else plural}"
+
+
 def _avisar_se_o_envio_terminou(supabase, conta: dict) -> None:
-    """Placeholder até o aviso entrar."""
-    return None
+    """Quando a última conta do envio sai da fila, um aviso CONTAS_MEDICAS para
+    a faturista no sino, um por envio. A conta à espera do prontuário não
+    segura o aviso: ela não está na fila."""
+    if not conta.get("arquivo_id") or not conta.get("faturista_id"):
+        return
+    with _trava_do_aviso:
+        arquivo = _primeira(supabase.table("cm_arquivo").select("envio_id").eq("id", conta["arquivo_id"]))
+        if arquivo is None:
+            return
+        envio_id = arquivo["envio_id"]
+        ids = [
+            a["id"]
+            for a in supabase.table("cm_arquivo").select("id").eq("envio_id", envio_id).eq("tipo", "CONTA").execute().data
+            or []
+        ]
+        situacoes = [
+            c["situacao"] for c in supabase.table("cm_conta").select("situacao").in_("arquivo_id", ids).execute().data or []
+        ]
+        if any(situacao in _ESPERANDO for situacao in situacoes):
+            return
+        erros = situacoes.count("ERRO")
+        prontas = sum(1 for situacao in situacoes if situacao not in ("ERRO", "AGUARDANDO_ARQUIVO"))
+        if not prontas and not erros:
+            return
+        ja_avisado = _primeira(
+            supabase.table("notificacoes")
+            .select("id")
+            .eq("destinatario_id", conta["faturista_id"])
+            .eq("tipo", "CONTAS_MEDICAS")
+            .eq("referencia_id", envio_id)
+        )
+        if ja_avisado:
+            return
+        com_erro = f" {_contas(erros, 'conta', 'contas')} com erro." if erros else ""
+        if prontas:
+            titulo = _contas(prontas, "conta pronta", "contas prontas")
+            guias = "O guia está" if prontas == 1 else "Os guias estão"
+            mensagem = f"{guias} na fila de Contas médicas.{com_erro}"
+        else:
+            titulo = f"{_contas(erros, 'conta', 'contas')} com erro"
+            mensagem = "Veja o motivo na fila de Contas médicas."
+        supabase.table("notificacoes").insert(
+            {
+                "destinatario_id": conta["faturista_id"],
+                "tipo": "CONTAS_MEDICAS",
+                "titulo": titulo,
+                "mensagem": mensagem,
+                "referencia_id": envio_id,
+            }
+        ).execute()
