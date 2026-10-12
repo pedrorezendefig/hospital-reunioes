@@ -1,4 +1,5 @@
 import { ReceiptText } from "lucide-react";
+import { LinkParaOperadoras } from "@/components/contas-medicas/LinkParaOperadoras";
 
 /**
  * A tela de contas de Contas médicas (PRD #1113, ADR 0070).
@@ -9,7 +10,10 @@ import { ReceiptText } from "lucide-react";
 export default function ContasMedicasPage() {
   return (
     <div>
-      <h1 className="text-2xl font-bold text-slate-900">Contas médicas</h1>
+      <div className="flex items-center justify-between gap-3">
+        <h1 className="text-2xl font-bold text-slate-900">Contas médicas</h1>
+        <LinkParaOperadoras />
+      </div>
       <p className="text-slate-500 text-sm mt-0.5 mb-6">
         Envie a conta e o prontuário do MV e receba a lista do que corrigir antes de mandar para a
         operadora.
