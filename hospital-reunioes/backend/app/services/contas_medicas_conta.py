@@ -47,6 +47,8 @@ __all__ = [
 ]
 
 MENSAGEM_CONTA_INCOMPLETA = "Não consegui ler a conta inteira"
+TOLERANCIA = Decimal("0.01")
+CENTAVO = Decimal("0.01")
 
 GRUPOS_DA_CONTA = frozenset(
     {
@@ -192,10 +194,30 @@ def _itens(texto_por_pagina: Sequence[str]) -> list[ItemConta]:
     return [ItemConta(**i) for i in itens]
 
 
+def _fecha(a: Decimal, b: Decimal) -> bool:
+    return abs(a - b) <= TOLERANCIA
+
+
+def _conferencia_da_leitura(itens: Sequence[ItemConta], total: Decimal) -> bool:
+    """Soma dos itens igual ao total e, em cada item, quantidade vezes unitário igual ao total."""
+    if not itens or not _fecha(sum((i.total for i in itens), Decimal(0)), total):
+        return False
+    return all(_fecha((i.quantidade * i.unitario).quantize(CENTAVO, ROUND_HALF_UP), i.total) for i in itens)
+
+
 def ler_conta(texto_por_pagina: Sequence[str]) -> Conta | ErroLeitura:
-    """Lê a Conta do texto do `pdftotext -layout`, uma string por página."""
+    """Lê a Conta do texto do `pdftotext -layout`, uma string por página.
+
+    Devolve `ErroLeitura` quando falta o que identifica a Conta (atendimento,
+    plano, total) ou quando a conferência da leitura não fecha.
+    """
     cab = _cabecalho("\n".join(texto_por_pagina))
+    if not {"atendimento", "plano", "total"} <= cab.keys():
+        return ErroLeitura(MENSAGEM_CONTA_INCOMPLETA)
     itens = _itens(texto_por_pagina)
+    total = _numero(cab["total"][0])
+    if not _conferencia_da_leitura(itens, total):
+        return ErroLeitura(MENSAGEM_CONTA_INCOMPLETA)
     periodo = cab.get("periodo")
     procedimento = cab.get("procedimento")
     return Conta(
@@ -211,7 +233,7 @@ def ler_conta(texto_por_pagina: Sequence[str]) -> Conta | ErroLeitura:
         procedimento_descricao=procedimento[1] if procedimento else None,
         plano=cab["plano"][0],
         guia=cab.get("guia", (None,))[0],
-        total=_numero(cab["total"][0]),
+        total=total,
         itens=tuple(itens),
     )
 

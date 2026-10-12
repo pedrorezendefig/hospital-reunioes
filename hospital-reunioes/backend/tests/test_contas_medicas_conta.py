@@ -183,3 +183,43 @@ def test_conta_fatura_individual_e_lida_com_todos_os_campos():
             "MEDICAMENTOS",
         ),
     ]
+
+
+def test_procedimento_do_cabecalho_nao_aparece_entre_os_itens():
+    conta = _conta([PAGINA_1, PAGINA_2])
+
+    assert conta.procedimento_codigo == "30602076"
+    assert "30602076" not in {i.codigo for i in conta.itens}
+    assert not any("MASTECTOMIA" in i.descricao for i in conta.itens)
+
+
+def test_total_que_nao_fecha_com_a_soma_dos_itens_devolve_erro_de_leitura():
+    # Um item que a expressão não pega: a soma fica 64,30 abaixo do total.
+    pagina_2_com_item_ilegivel = PAGINA_2.replace("FR AMP  100,00%", "FR AMP  100,00 %")
+
+    resultado = ler_conta([PAGINA_1, pagina_2_com_item_ilegivel])
+
+    assert resultado == ErroLeitura("Não consegui ler a conta inteira")
+
+
+def test_item_em_que_quantidade_vezes_unitario_nao_fecha_devolve_erro_de_leitura():
+    # 3 x 4,35 = 13,05. Lido como 13,15 e com o total da conta acompanhando,
+    # a soma fecha e só a conferência por item pega.
+    pagina_1 = PAGINA_1.replace("4,35      13,05", "4,35      13,15")
+    pagina_2 = PAGINA_2.replace("1.374,87", "1.374,97")
+
+    resultado = ler_conta([pagina_1, pagina_2])
+
+    assert resultado == ErroLeitura("Não consegui ler a conta inteira")
+
+
+def test_diferenca_de_um_centavo_fica_dentro_da_tolerancia():
+    pagina_2 = PAGINA_2.replace("1.374,87", "1.374,88")
+
+    assert _conta([PAGINA_1, pagina_2]).total == Decimal("1374.88")
+
+
+def test_conta_sem_total_devolve_erro_de_leitura():
+    pagina_2 = PAGINA_2.replace("Total da Conta:", "Total geral:")
+
+    assert ler_conta([PAGINA_1, pagina_2]) == ErroLeitura("Não consegui ler a conta inteira")
