@@ -366,3 +366,99 @@ class TestEnvio:
         assert resposta.status_code == 403
         assert banco.tabelas["cm_conta"] == []
         assert banco.bucket == {}
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 2. O tipo vem do conteúdo, não do nome
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+def _pdf_de_verdade(*paginas: str) -> bytes:
+    """PDF gerado pelo WeasyPrint do projeto, uma página por texto, em `<pre>`
+    para o `pdftotext -layout` devolver as linhas como estão."""
+    from html import escape
+
+    from weasyprint import HTML
+
+    corpo = "".join(
+        f'<pre style="page-break-before: always; font-size: 7pt">{escape(texto)}</pre>' for texto in paginas
+    )
+    return HTML(string=f"<html><body>{corpo}</body></html>").write_pdf()
+
+
+class TestTipoPeloConteudo:
+    def test_conta_com_nome_de_prontuario_entra_como_conta(self):
+        banco = _cenario()
+
+        resposta = _cliente("faturista", banco).post(
+            ROTA_ENVIO, files=[_conta("31302", "48001", nome="prontuario.pdf"), _prontuario("31302", nome="conta.pdf")]
+        )
+
+        assert resposta.status_code == 200, resposta.text
+        assert resposta.json()["ultimo_envio"][0]["texto"] == "31302, conta e prontuário"
+        conta = banco.contas_do_atendimento("31302")[0]
+        arquivo_da_conta = next(a for a in banco.tabelas["cm_arquivo"] if a["id"] == conta["arquivo_id"])
+        assert arquivo_da_conta["tipo"] == "CONTA"
+        assert conta["numero_conta"] == "48001"
+        assert sorted(a["tipo"] for a in banco.tabelas["cm_arquivo"]) == ["CONTA", "PRONTUARIO"]
+
+    def test_o_pdf_de_verdade_passa_pelo_pdftotext_e_e_lido_pelo_conteudo(self, monkeypatch):
+        """Sem o dublê: o PDF gerado aqui atravessa o extrator isolado."""
+        from app.services import contas_medicas_extrator
+
+        monkeypatch.setattr(envio_service, "extrair_paginas", contas_medicas_extrator.extrair_paginas)
+        banco = _cenario()
+        conta = _pdf_de_verdade(_texto_da_conta("31302", "48001", "01/10/2026", "05/10/2026"))
+
+        resposta = _cliente("faturista", banco).post(
+            ROTA_ENVIO, files=[("arquivos", ("prontuario.pdf", conta, "application/pdf"))]
+        )
+
+        assert resposta.status_code == 200, resposta.text
+        assert resposta.json()["ultimo_envio"][0]["texto"] == "31302, falta o prontuário"
+        assert banco.contas_do_atendimento("31302")[0]["periodo_fim"] == "2026-10-05"
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 3. Plano sem par
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+class TestPlanoSemPar:
+    def test_recusa_so_a_conta_do_plano_desconhecido_e_os_outros_atendimentos_seguem(self):
+        banco = _cenario()
+
+        resposta = _cliente("faturista", banco).post(
+            ROTA_ENVIO,
+            files=[
+                _conta("31302", "48001", nome="conta-unimed.pdf", plano="UNIMED RIO ENF"),
+                _conta("31310", "48010"),
+                _prontuario("31310"),
+            ],
+        )
+
+        assert resposta.status_code == 200, resposta.text
+        corpo = resposta.json()
+        assert corpo["recusas"] == [
+            {
+                "arquivo": "conta-unimed.pdf",
+                "numero_atendimento": "31302",
+                "motivo": "Plano UNIMED RIO ENF ainda não configurado",
+            }
+        ]
+        assert [linha["texto"] for linha in corpo["ultimo_envio"]] == ["31310, conta e prontuário"]
+        assert _situacoes(banco, "31310") == ["NA_FILA"]
+        assert [c["numero_conta"] for c in banco.tabelas["cm_conta"]] == ["48010"]
+        assert len(banco.bucket) == 2
+
+    def test_o_plano_reconhecido_leva_a_operadora_e_a_coluna_para_o_atendimento(self):
+        banco = _cenario()
+
+        _cliente("faturista", banco).post(ROTA_ENVIO, files=[_conta("31302", "48001", plano="Assim Carioca APT")])
+
+        atendimento = banco.tabelas["cm_atendimento"][0]
+        assert (atendimento["operadora_id"], atendimento["plano"], atendimento["coluna_preco"]) == (
+            "op-1",
+            "Assim Carioca APT",
+            "CARIOCA",
+        )
