@@ -1,12 +1,12 @@
 # ENTIDADES.md
 <!-- gerado automaticamente por /snapshot — não editar -->
-<!-- last_update: 2026-10-07T12:17-0300 -->
+<!-- last_update: 2026-10-12T20:03+0000 -->
 
 Modelo de dados do Hospital Reuniões. Tabelas no Postgres (via Supabase).
 
 ## participantes
 
-> Origem: `001_create_participantes.sql` (alterada em: 014_add_externo_co_responsavel.sql, 017_add_super_admin.sql, 028_add_taxonomy_fks.sql, 036_add_access_profile.sql, 045_pops_fundacao_acesso.sql, 064_ouvidoria_manifestacao.sql, 103_tecnologia_vinculo.sql)
+> Origem: `001_create_participantes.sql` (alterada em: 014_add_externo_co_responsavel.sql, 017_add_super_admin.sql, 028_add_taxonomy_fks.sql, 036_add_access_profile.sql, 045_pops_fundacao_acesso.sql, 064_ouvidoria_manifestacao.sql, 103_tecnologia_vinculo.sql, 116_contas_medicas_fundacao.sql)
 
 | Campo | Tipo | Constraints | Default | FK |
 |-------|------|-------------|---------|-----|
@@ -28,6 +28,7 @@ Modelo de dados do Hospital Reuniões. Tabelas no Postgres (via Supabase).
 | `perfil_pop` | `TEXT` | — | — | — |
 | `perfil_ouvidoria` | `TEXT` | — | — | — |
 | `github_login` | `TEXT` | — | — | — |
+| `perfil_contas_medicas` | `TEXT` | — | — | — |
 
 **Indexes:**
 - `idx_participantes_email` em `(email)` (de `001_create_participantes.sql`)
@@ -41,6 +42,7 @@ Modelo de dados do Hospital Reuniões. Tabelas no Postgres (via Supabase).
 - `idx_participantes_perfil_pop` em `(perfil_pop)` (de `045_pops_fundacao_acesso.sql`)
 - `idx_participantes_perfil_ouvidoria` em `(perfil_ouvidoria)` (de `064_ouvidoria_manifestacao.sql`)
 - `participantes_github_login_lower_idx` em `((lower(github_login)` (de `103_tecnologia_vinculo.sql`)
+- `idx_participantes_perfil_contas_medicas` em `(perfil_contas_medicas)` (de `116_contas_medicas_fundacao.sql`)
 
 ## reunioes
 
@@ -929,6 +931,429 @@ Modelo de dados do Hospital Reuniões. Tabelas no Postgres (via Supabase).
 **Indexes:**
 - `idx_tecnologia_anexos_conversa` em `(conversa_id)` (de `115_tecnologia_anexos_e_em_producao.sql`)
 
+## cm_perfil_permissao
+
+> Origem: `116_contas_medicas_fundacao.sql`
+
+| Campo | Tipo | Constraints | Default | FK |
+|-------|------|-------------|---------|-----|
+| `perfil` | `TEXT` | NOT NULL | — | — |
+| `permissao` | `TEXT` | NOT NULL | — | — |
+| `ligada` | `BOOLEAN` | NOT NULL | `false` | — |
+
+## cm_operadora
+
+> Origem: `116_contas_medicas_fundacao.sql`
+
+| Campo | Tipo | Constraints | Default | FK |
+|-------|------|-------------|---------|-----|
+| `id` | `UUID` | PK | `gen_random_uuid()` | — |
+| `sigla` | `TEXT` | UNIQUE, NOT NULL | — | — |
+| `nome` | `TEXT` | NOT NULL | — | — |
+| `situacao` | `TEXT` | NOT NULL | `'SEM_MEMORIA'` | — |
+| `criado_em` | `TIMESTAMPTZ` | NOT NULL | `now()` | — |
+
+## cm_operadora_plano
+
+> Origem: `116_contas_medicas_fundacao.sql`
+
+| Campo | Tipo | Constraints | Default | FK |
+|-------|------|-------------|---------|-----|
+| `id` | `UUID` | PK | `gen_random_uuid()` | — |
+| `operadora_id` | `UUID` | NOT NULL | — | `cm_operadora.id` |
+| `nome_mv` | `TEXT` | NOT NULL | — | — |
+| `coluna_preco` | `TEXT` | — | — | — |
+| `criado_em` | `TIMESTAMPTZ` | NOT NULL | `now()` | — |
+
+**Indexes:**
+- `idx_cm_operadora_plano_nome_mv` em `((lower(nome_mv)` (de `116_contas_medicas_fundacao.sql`)
+
+## cm_memoria_versao
+
+> Origem: `116_contas_medicas_fundacao.sql`
+
+| Campo | Tipo | Constraints | Default | FK |
+|-------|------|-------------|---------|-----|
+| `id` | `UUID` | PK | `gen_random_uuid()` | — |
+| `operadora_id` | `UUID` | NOT NULL | — | `cm_operadora.id` |
+| `versao` | `TEXT` | NOT NULL | — | — |
+| `parametros_json` | `JSONB` | NOT NULL | `'{}'::jsonb` | — |
+| `texto_md` | `TEXT` | — | — | — |
+| `vigente` | `BOOLEAN` | NOT NULL | `false` | — |
+| `autor_id` | `VARCHAR(10)` | — | — | `participantes.id` |
+| `criado_em` | `TIMESTAMPTZ` | NOT NULL | `now()` | — |
+| `resumo` | `TEXT` | — | — | — |
+
+**Indexes:**
+- `idx_cm_memoria_versao_vigente` em `(operadora_id)` (de `116_contas_medicas_fundacao.sql`)
+
+## cm_regra
+
+> Origem: `116_contas_medicas_fundacao.sql`
+
+| Campo | Tipo | Constraints | Default | FK |
+|-------|------|-------------|---------|-----|
+| `id` | `UUID` | PK | `gen_random_uuid()` | — |
+| `operadora_id` | `UUID` | NOT NULL | — | `cm_operadora.id` |
+| `memoria_versao_id` | `UUID` | — | — | `cm_memoria_versao.id` |
+| `codigo` | `TEXT` | NOT NULL | — | — |
+| `secao` | `TEXT` | — | — | — |
+| `texto` | `TEXT` | NOT NULL | — | — |
+| `tipo` | `TEXT` | — | — | — |
+| `origem` | `TEXT` | — | — | — |
+| `status` | `TEXT` | NOT NULL | `'PENDENTE'` | — |
+| `contrato_diz` | `TEXT` | — | — | — |
+| `validado_por` | `VARCHAR(10)` | — | — | `participantes.id` |
+| `validado_em` | `TIMESTAMPTZ` | — | — | — |
+| `ativa` | `BOOLEAN` | NOT NULL | `true` | — |
+| `criado_em` | `TIMESTAMPTZ` | NOT NULL | `now()` | — |
+
+**Indexes:**
+- `idx_cm_regra_operadora_codigo` em `(operadora_id, codigo)` (de `116_contas_medicas_fundacao.sql`)
+
+## cm_tabela_preco
+
+> Origem: `116_contas_medicas_fundacao.sql`
+
+| Campo | Tipo | Constraints | Default | FK |
+|-------|------|-------------|---------|-----|
+| `id` | `UUID` | PK | `gen_random_uuid()` | — |
+| `nome` | `TEXT` | NOT NULL | — | — |
+| `tipo` | `TEXT` | — | — | — |
+| `versao` | `TEXT` | — | — | — |
+| `vigencia_inicio` | `DATE` | — | — | — |
+| `vigencia_fim` | `DATE` | — | — | — |
+| `situacao` | `TEXT` | — | — | — |
+| `arquivo_nome` | `TEXT` | — | — | — |
+| `autor_id` | `VARCHAR(10)` | — | — | `participantes.id` |
+| `criado_em` | `TIMESTAMPTZ` | NOT NULL | `now()` | — |
+
+## cm_tabela_preco_item
+
+> Origem: `116_contas_medicas_fundacao.sql`
+
+| Campo | Tipo | Constraints | Default | FK |
+|-------|------|-------------|---------|-----|
+| `id` | `UUID` | PK | `gen_random_uuid()` | — |
+| `tabela_id` | `UUID` | NOT NULL | — | `cm_tabela_preco.id` |
+| `codigo` | `TEXT` | NOT NULL | — | — |
+| `codigo_alternativo` | `TEXT` | — | — | — |
+| `descricao` | `TEXT` | — | — | — |
+| `grupo` | `TEXT` | — | — | — |
+| `unidade` | `TEXT` | — | — | — |
+| `precos_json` | `JSONB` | NOT NULL | `'{}'::jsonb` | — |
+| `extra_json` | `JSONB` | NOT NULL | `'{}'::jsonb` | — |
+
+**Indexes:**
+- `idx_cm_tabela_preco_item_tabela_codigo` em `(tabela_id, codigo)` (de `116_contas_medicas_fundacao.sql`)
+
+## cm_operadora_tabela
+
+> Origem: `116_contas_medicas_fundacao.sql`
+
+| Campo | Tipo | Constraints | Default | FK |
+|-------|------|-------------|---------|-----|
+| `id` | `UUID` | PK | `gen_random_uuid()` | — |
+| `operadora_id` | `UUID` | NOT NULL | — | `cm_operadora.id` |
+| `categoria` | `TEXT` | NOT NULL | — | — |
+| `tabela_id` | `UUID` | NOT NULL | — | `cm_tabela_preco.id` |
+| `regra_uso_json` | `JSONB` | NOT NULL | `'{}'::jsonb` | — |
+| `criado_em` | `TIMESTAMPTZ` | NOT NULL | `now()` | — |
+
+**Indexes:**
+- `idx_cm_operadora_tabela_operadora` em `(operadora_id, categoria)` (de `116_contas_medicas_fundacao.sql`)
+
+## cm_setor
+
+> Origem: `116_contas_medicas_fundacao.sql`
+
+| Campo | Tipo | Constraints | Default | FK |
+|-------|------|-------------|---------|-----|
+| `id` | `UUID` | PK | `gen_random_uuid()` | — |
+| `nome_mv` | `TEXT` | NOT NULL | — | — |
+| `acomodacao` | `TEXT` | — | — | — |
+| `grupo_gases` | `TEXT` | — | — | — |
+| `criado_em` | `TIMESTAMPTZ` | NOT NULL | `now()` | — |
+
+**Indexes:**
+- `idx_cm_setor_nome_mv` em `((lower(nome_mv)` (de `116_contas_medicas_fundacao.sql`)
+
+## cm_item_dicionario
+
+> Origem: `116_contas_medicas_fundacao.sql`
+
+| Campo | Tipo | Constraints | Default | FK |
+|-------|------|-------------|---------|-----|
+| `id` | `UUID` | PK | `gen_random_uuid()` | — |
+| `termo` | `TEXT` | NOT NULL | — | — |
+| `codigo_conta` | `TEXT` | — | — | — |
+| `descricao_conta` | `TEXT` | — | — | — |
+| `unidade_cobranca` | `TEXT` | — | — | — |
+| `conteudo_por_unidade` | `TEXT` | — | — | — |
+| `origem` | `TEXT` | NOT NULL | `'GESTAO'` | — |
+| `situacao` | `TEXT` | NOT NULL | `'PROPOSTO'` | — |
+| `autor_id` | `VARCHAR(10)` | — | — | `participantes.id` |
+| `criado_em` | `TIMESTAMPTZ` | NOT NULL | `now()` | — |
+
+**Indexes:**
+- `idx_cm_item_dicionario_termo` em `((lower(termo)` (de `116_contas_medicas_fundacao.sql`)
+
+## cm_envio
+
+> Origem: `116_contas_medicas_fundacao.sql`
+
+| Campo | Tipo | Constraints | Default | FK |
+|-------|------|-------------|---------|-----|
+| `id` | `UUID` | PK | `gen_random_uuid()` | — |
+| `usuario_id` | `VARCHAR(10)` | — | — | `participantes.id` |
+| `criado_em` | `TIMESTAMPTZ` | NOT NULL | `now()` | — |
+
+## cm_atendimento
+
+> Origem: `116_contas_medicas_fundacao.sql`
+
+| Campo | Tipo | Constraints | Default | FK |
+|-------|------|-------------|---------|-----|
+| `id` | `UUID` | PK | `gen_random_uuid()` | — |
+| `numero_atendimento` | `TEXT` | NOT NULL | — | — |
+| `paciente_rotulo` | `TEXT` | — | — | — |
+| `idade_anos` | `INTEGER` | — | — | — |
+| `operadora_id` | `UUID` | — | — | `cm_operadora.id` |
+| `plano` | `TEXT` | — | — | — |
+| `coluna_preco` | `TEXT` | — | — | — |
+| `acomodacao_contratada` | `TEXT` | — | — | — |
+| `criado_em` | `TIMESTAMPTZ` | NOT NULL | `now()` | — |
+
+**Indexes:**
+- `idx_cm_atendimento_numero` em `(numero_atendimento)` (de `116_contas_medicas_fundacao.sql`)
+
+## cm_arquivo
+
+> Origem: `116_contas_medicas_fundacao.sql`
+
+| Campo | Tipo | Constraints | Default | FK |
+|-------|------|-------------|---------|-----|
+| `id` | `UUID` | PK | `gen_random_uuid()` | — |
+| `envio_id` | `UUID` | NOT NULL | — | `cm_envio.id` |
+| `tipo` | `TEXT` | NOT NULL | — | — |
+| `atendimento_id` | `UUID` | — | — | `cm_atendimento.id` |
+| `numero_atendimento` | `TEXT` | — | — | — |
+| `paginas` | `INTEGER` | — | — | — |
+| `chave_bucket` | `TEXT` | — | — | — |
+| `hash` | `TEXT` | — | — | — |
+| `apagar_em` | `TIMESTAMPTZ` | — | — | — |
+| `apagado_em` | `TIMESTAMPTZ` | — | — | — |
+| `criado_em` | `TIMESTAMPTZ` | NOT NULL | `now()` | — |
+
+**Indexes:**
+- `idx_cm_arquivo_apagar_em` em `(apagar_em)` (de `116_contas_medicas_fundacao.sql`)
+
+## cm_eventos
+
+> Origem: `116_contas_medicas_fundacao.sql`
+
+| Campo | Tipo | Constraints | Default | FK |
+|-------|------|-------------|---------|-----|
+| `id` | `UUID` | PK | `gen_random_uuid()` | — |
+| `atendimento_id` | `UUID` | NOT NULL | — | `cm_atendimento.id` |
+| `eventos_json` | `JSONB` | NOT NULL | `'{}'::jsonb` | — |
+| `prontuario_ate` | `DATE` | — | — | — |
+| `criado_em` | `TIMESTAMPTZ` | NOT NULL | `now()` | — |
+
+**Indexes:**
+- `idx_cm_eventos_atendimento` em `(atendimento_id)` (de `116_contas_medicas_fundacao.sql`)
+
+## cm_prescricao
+
+> Origem: `116_contas_medicas_fundacao.sql`
+
+| Campo | Tipo | Constraints | Default | FK |
+|-------|------|-------------|---------|-----|
+| `id` | `UUID` | PK | `gen_random_uuid()` | — |
+| `atendimento_id` | `UUID` | NOT NULL | — | `cm_atendimento.id` |
+| `data` | `DATE` | — | — | — |
+| `hora` | `TIME` | — | — | — |
+| `subtipo` | `TEXT` | — | — | — |
+| `pagina` | `INTEGER` | — | — | — |
+
+**Indexes:**
+- `idx_cm_prescricao_atendimento` em `(atendimento_id, data)` (de `116_contas_medicas_fundacao.sql`)
+
+## cm_prescricao_item
+
+> Origem: `116_contas_medicas_fundacao.sql`
+
+| Campo | Tipo | Constraints | Default | FK |
+|-------|------|-------------|---------|-----|
+| `id` | `UUID` | PK | `gen_random_uuid()` | — |
+| `prescricao_id` | `UUID` | NOT NULL | — | `cm_prescricao.id` |
+| `secao` | `TEXT` | — | — | — |
+| `n` | `INTEGER` | — | — | — |
+| `nome` | `TEXT` | — | — | — |
+| `generico` | `TEXT` | — | — | — |
+| `colunas` | `JSONB` | — | — | — |
+| `doses_por_dia` | `NUMERIC(10, 2)` | — | — | — |
+| `se_necessario` | `BOOLEAN` | NOT NULL | `false` | — |
+| `suspenso` | `BOOLEAN` | NOT NULL | `false` | — |
+| `obs` | `TEXT` | — | — | — |
+| `componentes_json` | `JSONB` | — | — | — |
+| `pedido` | `TEXT` | — | — | — |
+
+**Indexes:**
+- `idx_cm_prescricao_item_prescricao` em `(prescricao_id)` (de `116_contas_medicas_fundacao.sql`)
+
+## cm_cirurgia
+
+> Origem: `116_contas_medicas_fundacao.sql`
+
+| Campo | Tipo | Constraints | Default | FK |
+|-------|------|-------------|---------|-----|
+| `id` | `UUID` | PK | `gen_random_uuid()` | — |
+| `atendimento_id` | `UUID` | NOT NULL | — | `cm_atendimento.id` |
+| `procedimentos_json` | `JSONB` | — | — | — |
+| `inicio` | `TIMESTAMPTZ` | — | — | — |
+| `fim` | `TIMESTAMPTZ` | — | — | — |
+| `anestesia_inicio` | `TIMESTAMPTZ` | — | — | — |
+| `anestesia_fim` | `TIMESTAMPTZ` | — | — | — |
+| `tecnica` | `TEXT` | — | — | — |
+| `gases_json` | `JSONB` | — | — | — |
+| `medicamentos_ficha_json` | `JSONB` | — | — | — |
+
+**Indexes:**
+- `idx_cm_cirurgia_atendimento` em `(atendimento_id)` (de `116_contas_medicas_fundacao.sql`)
+
+## cm_glicemia_dia
+
+> Origem: `116_contas_medicas_fundacao.sql`
+
+| Campo | Tipo | Constraints | Default | FK |
+|-------|------|-------------|---------|-----|
+| `id` | `UUID` | PK | `gen_random_uuid()` | — |
+| `atendimento_id` | `UUID` | NOT NULL | — | `cm_atendimento.id` |
+| `data` | `DATE` | NOT NULL | — | — |
+| `quantidade` | `INTEGER` | NOT NULL | — | — |
+
+## cm_conta
+
+> Origem: `116_contas_medicas_fundacao.sql`
+
+| Campo | Tipo | Constraints | Default | FK |
+|-------|------|-------------|---------|-----|
+| `id` | `UUID` | PK | `gen_random_uuid()` | — |
+| `atendimento_id` | `UUID` | NOT NULL | — | `cm_atendimento.id` |
+| `arquivo_id` | `UUID` | — | — | `cm_arquivo.id` |
+| `numero_conta` | `TEXT` | — | — | — |
+| `parcial_ordem` | `INTEGER` | — | — | — |
+| `periodo_inicio` | `DATE` | — | — | — |
+| `periodo_fim` | `DATE` | — | — | — |
+| `total_lancado` | `NUMERIC(14, 2)` | — | — | — |
+| `situacao` | `TEXT` | NOT NULL | `'AGUARDANDO_ARQUIVO'` | — |
+| `erro_motivo` | `TEXT` | — | — | — |
+| `processando_desde` | `TIMESTAMPTZ` | — | — | — |
+| `tentativas` | `INTEGER` | NOT NULL | `0` | — |
+| `parecer_parcial` | `BOOLEAN` | NOT NULL | `false` | — |
+| `faltantes` | `JSONB` | — | — | — |
+| `nota_bruta` | `NUMERIC(6, 2)` | — | — | — |
+| `nota_entrada` | `NUMERIC(6, 2)` | — | — | — |
+| `valor_apontado` | `NUMERIC(14, 2)` | — | — | — |
+| `valor_em_validacao` | `NUMERIC(14, 2)` | — | — | — |
+| `faturista_id` | `VARCHAR(10)` | — | — | `participantes.id` |
+| `ordem_fila` | `BIGINT` | — | — | — |
+| `enviada_em` | `TIMESTAMPTZ` | — | — | — |
+| `pronta_em` | `TIMESTAMPTZ` | — | — | — |
+| `aberta_em` | `TIMESTAMPTZ` | — | — | — |
+| `concluida_em` | `TIMESTAMPTZ` | — | — | — |
+| `memoria_versao_id` | `UUID` | — | — | `cm_memoria_versao.id` |
+| `modelo_ia` | `TEXT` | — | — | — |
+| `tokens_entrada` | `INTEGER` | — | — | — |
+| `tokens_saida` | `INTEGER` | — | — | — |
+| `tokens_cache` | `INTEGER` | — | — | — |
+| `custo_usd` | `NUMERIC(10, 4)` | — | — | — |
+| `criado_em` | `TIMESTAMPTZ` | NOT NULL | `now()` | — |
+
+**Indexes:**
+- `idx_cm_conta_faturista_situacao_ordem` em `(faturista_id, situacao, ordem_fila)` (de `116_contas_medicas_fundacao.sql`)
+- `idx_cm_conta_atendimento` em `(atendimento_id)` (de `116_contas_medicas_fundacao.sql`)
+
+## cm_conta_item
+
+> Origem: `116_contas_medicas_fundacao.sql`
+
+| Campo | Tipo | Constraints | Default | FK |
+|-------|------|-------------|---------|-----|
+| `id` | `UUID` | PK | `gen_random_uuid()` | — |
+| `conta_id` | `UUID` | NOT NULL | — | `cm_conta.id` |
+| `ordem` | `INTEGER` | — | — | — |
+| `data` | `DATE` | — | — | — |
+| `grupo_conta` | `TEXT` | — | — | — |
+| `setor` | `TEXT` | — | — | — |
+| `grupo_procedimento` | `TEXT` | — | — | — |
+| `codigo` | `TEXT` | — | — | — |
+| `descricao` | `TEXT` | — | — | — |
+| `quantidade` | `NUMERIC(14, 4)` | — | — | — |
+| `unidade` | `TEXT` | — | — | — |
+| `valor_unitario` | `NUMERIC(14, 4)` | — | — | — |
+| `valor_total` | `NUMERIC(14, 2)` | — | — | — |
+| `percentual` | `NUMERIC(7, 2)` | — | — | — |
+| `preco_tabela` | `NUMERIC(14, 4)` | — | — | — |
+| `situacao_preco` | `TEXT` | — | — | — |
+
+**Indexes:**
+- `idx_cm_conta_item_conta` em `(conta_id)` (de `116_contas_medicas_fundacao.sql`)
+
+## cm_guia_linha
+
+> Origem: `116_contas_medicas_fundacao.sql`
+
+| Campo | Tipo | Constraints | Default | FK |
+|-------|------|-------------|---------|-----|
+| `id` | `UUID` | PK | `gen_random_uuid()` | — |
+| `conta_id` | `UUID` | NOT NULL | — | `cm_conta.id` |
+| `ordem` | `INTEGER` | — | — | — |
+| `acao` | `TEXT` | NOT NULL | — | — |
+| `data` | `DATE` | — | — | — |
+| `data_fim` | `DATE` | — | — | — |
+| `setor` | `TEXT` | — | — | — |
+| `codigo` | `TEXT` | — | — | — |
+| `descricao` | `TEXT` | — | — | — |
+| `quantidade_lancada` | `NUMERIC(14, 4)` | — | — | — |
+| `quantidade_devida` | `NUMERIC(14, 4)` | — | — | — |
+| `preco_lancado` | `NUMERIC(14, 4)` | — | — | — |
+| `preco_tabela` | `NUMERIC(14, 4)` | — | — | — |
+| `valor_diferenca` | `NUMERIC(14, 2)` | — | — | — |
+| `regra_codigo` | `TEXT` | — | — | — |
+| `motivo` | `TEXT` | — | — | — |
+| `evidencia_pagina` | `INTEGER` | — | — | — |
+| `evidencia_trecho` | `TEXT` | — | — | — |
+| `nivel_evidencia` | `TEXT` | — | — | — |
+| `causa_raiz` | `TEXT` | — | — | — |
+| `confianca` | `TEXT` | — | — | — |
+| `origem` | `TEXT` | NOT NULL | `'CODIGO'` | — |
+| `estado` | `TEXT` | NOT NULL | `'ABERTA'` | — |
+| `motivo_nao_procede` | `TEXT` | — | — | — |
+| `texto_nao_procede` | `TEXT` | — | — | — |
+| `marcado_por` | `VARCHAR(10)` | — | — | `participantes.id` |
+| `marcado_em` | `TIMESTAMPTZ` | — | — | — |
+| `criado_em` | `TIMESTAMPTZ` | NOT NULL | `now()` | — |
+
+**Indexes:**
+- `idx_cm_guia_linha_conta` em `(conta_id)` (de `116_contas_medicas_fundacao.sql`)
+
+## cm_observacao
+
+> Origem: `116_contas_medicas_fundacao.sql`
+
+| Campo | Tipo | Constraints | Default | FK |
+|-------|------|-------------|---------|-----|
+| `id` | `UUID` | PK | `gen_random_uuid()` | — |
+| `conta_id` | `UUID` | NOT NULL | — | `cm_conta.id` |
+| `autor_id` | `VARCHAR(10)` | — | — | `participantes.id` |
+| `texto` | `TEXT` | NOT NULL | — | — |
+| `criado_em` | `TIMESTAMPTZ` | NOT NULL | `now()` | — |
+
+**Indexes:**
+- `idx_cm_observacao_conta` em `(conta_id)` (de `116_contas_medicas_fundacao.sql`)
+
 ---
 
-**Resumo:** 44 tabelas vivas.
+**Resumo:** 66 tabelas vivas.

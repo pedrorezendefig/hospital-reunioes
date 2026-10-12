@@ -1,6 +1,6 @@
 # SCHEMA.md
 <!-- gerado automaticamente por /snapshot — não editar -->
-<!-- last_update: 2026-10-07T12:17-0300 -->
+<!-- last_update: 2026-10-12T20:03+0000 -->
 
 Diagrama relacional do Hospital Reuniões. Renderiza nativo no GitHub.
 
@@ -8,8 +8,37 @@ Diagrama relacional do Hospital Reuniões. Renderiza nativo no GitHub.
 
 ```mermaid
 erDiagram
+    cm_arquivo ||--o{ cm_conta : "arquivo_id"
+    cm_atendimento ||--o{ cm_arquivo : "atendimento_id"
+    cm_atendimento ||--o{ cm_cirurgia : "atendimento_id"
+    cm_atendimento ||--o{ cm_conta : "atendimento_id"
+    cm_atendimento ||--o{ cm_eventos : "atendimento_id"
+    cm_atendimento ||--o{ cm_glicemia_dia : "atendimento_id"
+    cm_atendimento ||--o{ cm_prescricao : "atendimento_id"
+    cm_conta ||--o{ cm_conta_item : "conta_id"
+    cm_conta ||--o{ cm_guia_linha : "conta_id"
+    cm_conta ||--o{ cm_observacao : "conta_id"
+    cm_envio ||--o{ cm_arquivo : "envio_id"
+    cm_memoria_versao ||--o{ cm_conta : "memoria_versao_id"
+    cm_memoria_versao ||--o{ cm_regra : "memoria_versao_id"
+    cm_operadora ||--o{ cm_atendimento : "operadora_id"
+    cm_operadora ||--o{ cm_memoria_versao : "operadora_id"
+    cm_operadora ||--o{ cm_operadora_plano : "operadora_id"
+    cm_operadora ||--o{ cm_operadora_tabela : "operadora_id"
+    cm_operadora ||--o{ cm_regra : "operadora_id"
+    cm_prescricao ||--o{ cm_prescricao_item : "prescricao_id"
+    cm_tabela_preco ||--o{ cm_operadora_tabela : "tabela_id"
+    cm_tabela_preco ||--o{ cm_tabela_preco_item : "tabela_id"
     participantes ||--o{ audit_log : "actor_id"
     participantes ||--o{ bulk_jobs : "actor_id"
+    participantes ||--o{ cm_conta : "faturista_id"
+    participantes ||--o{ cm_envio : "usuario_id"
+    participantes ||--o{ cm_guia_linha : "marcado_por"
+    participantes ||--o{ cm_item_dicionario : "autor_id"
+    participantes ||--o{ cm_memoria_versao : "autor_id"
+    participantes ||--o{ cm_observacao : "autor_id"
+    participantes ||--o{ cm_regra : "validado_por"
+    participantes ||--o{ cm_tabela_preco : "autor_id"
     participantes ||--o{ comentarios_pendencias : "autor_id"
     participantes ||--o{ notificacoes : "destinatario_id"
     participantes ||--o{ ouvidoria_acessos : "ator_id"
@@ -68,7 +97,7 @@ erDiagram
         TEXT setor
         user_role role
         BOOLEAN ativo
-        _ mais_colunas "+10"
+        _ mais_colunas "+11"
     }
     reunioes {
         VARCHAR id_reuniao PK
@@ -475,6 +504,205 @@ erDiagram
         VARCHAR anexado_por FK
         _ mais_colunas "+3"
     }
+    cm_perfil_permissao {
+        TEXT perfil
+        TEXT permissao
+        BOOLEAN ligada
+    }
+    cm_operadora {
+        UUID id PK
+        TEXT sigla
+        TEXT nome
+        TEXT situacao
+        TIMESTAMPTZ criado_em
+    }
+    cm_operadora_plano {
+        UUID id PK
+        UUID operadora_id FK
+        TEXT nome_mv
+        TEXT coluna_preco
+        TIMESTAMPTZ criado_em
+    }
+    cm_memoria_versao {
+        UUID id PK
+        UUID operadora_id FK
+        TEXT versao
+        JSONB parametros_json
+        TEXT texto_md
+        BOOLEAN vigente
+        VARCHAR autor_id FK
+        TIMESTAMPTZ criado_em
+        _ mais_colunas "+1"
+    }
+    cm_regra {
+        UUID id PK
+        UUID operadora_id FK
+        UUID memoria_versao_id FK
+        TEXT codigo
+        TEXT secao
+        TEXT texto
+        TEXT tipo
+        TEXT origem
+        _ mais_colunas "+6"
+    }
+    cm_tabela_preco {
+        UUID id PK
+        TEXT nome
+        TEXT tipo
+        TEXT versao
+        DATE vigencia_inicio
+        DATE vigencia_fim
+        TEXT situacao
+        TEXT arquivo_nome
+        _ mais_colunas "+2"
+    }
+    cm_tabela_preco_item {
+        UUID id PK
+        UUID tabela_id FK
+        TEXT codigo
+        TEXT codigo_alternativo
+        TEXT descricao
+        TEXT grupo
+        TEXT unidade
+        JSONB precos_json
+        _ mais_colunas "+1"
+    }
+    cm_operadora_tabela {
+        UUID id PK
+        UUID operadora_id FK
+        TEXT categoria
+        UUID tabela_id FK
+        JSONB regra_uso_json
+        TIMESTAMPTZ criado_em
+    }
+    cm_setor {
+        UUID id PK
+        TEXT nome_mv
+        TEXT acomodacao
+        TEXT grupo_gases
+        TIMESTAMPTZ criado_em
+    }
+    cm_item_dicionario {
+        UUID id PK
+        TEXT termo
+        TEXT codigo_conta
+        TEXT descricao_conta
+        TEXT unidade_cobranca
+        TEXT conteudo_por_unidade
+        TEXT origem
+        TEXT situacao
+        _ mais_colunas "+2"
+    }
+    cm_envio {
+        UUID id PK
+        VARCHAR usuario_id FK
+        TIMESTAMPTZ criado_em
+    }
+    cm_atendimento {
+        UUID id PK
+        TEXT numero_atendimento
+        TEXT paciente_rotulo
+        INTEGER idade_anos
+        UUID operadora_id FK
+        TEXT plano
+        TEXT coluna_preco
+        TEXT acomodacao_contratada
+        _ mais_colunas "+1"
+    }
+    cm_arquivo {
+        UUID id PK
+        UUID envio_id FK
+        TEXT tipo
+        UUID atendimento_id FK
+        TEXT numero_atendimento
+        INTEGER paginas
+        TEXT chave_bucket
+        TEXT hash
+        _ mais_colunas "+3"
+    }
+    cm_eventos {
+        UUID id PK
+        UUID atendimento_id FK
+        JSONB eventos_json
+        DATE prontuario_ate
+        TIMESTAMPTZ criado_em
+    }
+    cm_prescricao {
+        UUID id PK
+        UUID atendimento_id FK
+        DATE data
+        TIME hora
+        TEXT subtipo
+        INTEGER pagina
+    }
+    cm_prescricao_item {
+        UUID id PK
+        UUID prescricao_id FK
+        TEXT secao
+        INTEGER n
+        TEXT nome
+        TEXT generico
+        JSONB colunas
+        NUMERIC doses_por_dia
+        _ mais_colunas "+5"
+    }
+    cm_cirurgia {
+        UUID id PK
+        UUID atendimento_id FK
+        JSONB procedimentos_json
+        TIMESTAMPTZ inicio
+        TIMESTAMPTZ fim
+        TIMESTAMPTZ anestesia_inicio
+        TIMESTAMPTZ anestesia_fim
+        TEXT tecnica
+        _ mais_colunas "+2"
+    }
+    cm_glicemia_dia {
+        UUID id PK
+        UUID atendimento_id FK
+        DATE data
+        INTEGER quantidade
+    }
+    cm_conta {
+        UUID id PK
+        UUID atendimento_id FK
+        UUID arquivo_id FK
+        TEXT numero_conta
+        INTEGER parcial_ordem
+        DATE periodo_inicio
+        DATE periodo_fim
+        NUMERIC total_lancado
+        _ mais_colunas "+23"
+    }
+    cm_conta_item {
+        UUID id PK
+        UUID conta_id FK
+        INTEGER ordem
+        DATE data
+        TEXT grupo_conta
+        TEXT setor
+        TEXT grupo_procedimento
+        TEXT codigo
+        _ mais_colunas "+8"
+    }
+    cm_guia_linha {
+        UUID id PK
+        UUID conta_id FK
+        INTEGER ordem
+        TEXT acao
+        DATE data
+        DATE data_fim
+        TEXT setor
+        TEXT codigo
+        _ mais_colunas "+20"
+    }
+    cm_observacao {
+        UUID id PK
+        UUID conta_id FK
+        VARCHAR autor_id FK
+        TEXT texto
+        TIMESTAMPTZ criado_em
+    }
 ```
 
 ## Indexes principais
@@ -492,6 +720,7 @@ erDiagram
 | `participantes` | `idx_participantes_perfil_pop` | `perfil_pop` | `045_pops_fundacao_acesso.sql` |
 | `participantes` | `idx_participantes_perfil_ouvidoria` | `perfil_ouvidoria` | `064_ouvidoria_manifestacao.sql` |
 | `participantes` | `participantes_github_login_lower_idx` | `(lower(github_login` | `103_tecnologia_vinculo.sql` |
+| `participantes` | `idx_participantes_perfil_contas_medicas` | `perfil_contas_medicas` | `116_contas_medicas_fundacao.sql` |
 | `reunioes` | `idx_reunioes_status` | `status_ata` | `002_create_reunioes.sql` |
 | `reunioes` | `idx_reunioes_data` | `data DESC` | `002_create_reunioes.sql` |
 | `reunioes` | `idx_reunioes_setor` | `setor` | `002_create_reunioes.sql` |
@@ -579,6 +808,24 @@ erDiagram
 | `tecnologia_demandas` | `tecnologia_demandas_github_issue_numero_idx` | `github_issue_numero` | `103_tecnologia_vinculo.sql` |
 | `tecnologia_conversas` | `idx_tecnologia_conversas_demanda` | `demanda_id, criado_em` | `102_tecnologia_fundacao.sql` |
 | `tecnologia_anexos` | `idx_tecnologia_anexos_conversa` | `conversa_id` | `115_tecnologia_anexos_e_em_producao.sql` |
+| `cm_operadora_plano` | `idx_cm_operadora_plano_nome_mv` | `(lower(nome_mv` | `116_contas_medicas_fundacao.sql` |
+| `cm_memoria_versao` | `idx_cm_memoria_versao_vigente` | `operadora_id` | `116_contas_medicas_fundacao.sql` |
+| `cm_regra` | `idx_cm_regra_operadora_codigo` | `operadora_id, codigo` | `116_contas_medicas_fundacao.sql` |
+| `cm_tabela_preco_item` | `idx_cm_tabela_preco_item_tabela_codigo` | `tabela_id, codigo` | `116_contas_medicas_fundacao.sql` |
+| `cm_operadora_tabela` | `idx_cm_operadora_tabela_operadora` | `operadora_id, categoria` | `116_contas_medicas_fundacao.sql` |
+| `cm_setor` | `idx_cm_setor_nome_mv` | `(lower(nome_mv` | `116_contas_medicas_fundacao.sql` |
+| `cm_item_dicionario` | `idx_cm_item_dicionario_termo` | `(lower(termo` | `116_contas_medicas_fundacao.sql` |
+| `cm_atendimento` | `idx_cm_atendimento_numero` | `numero_atendimento` | `116_contas_medicas_fundacao.sql` |
+| `cm_arquivo` | `idx_cm_arquivo_apagar_em` | `apagar_em` | `116_contas_medicas_fundacao.sql` |
+| `cm_eventos` | `idx_cm_eventos_atendimento` | `atendimento_id` | `116_contas_medicas_fundacao.sql` |
+| `cm_prescricao` | `idx_cm_prescricao_atendimento` | `atendimento_id, data` | `116_contas_medicas_fundacao.sql` |
+| `cm_prescricao_item` | `idx_cm_prescricao_item_prescricao` | `prescricao_id` | `116_contas_medicas_fundacao.sql` |
+| `cm_cirurgia` | `idx_cm_cirurgia_atendimento` | `atendimento_id` | `116_contas_medicas_fundacao.sql` |
+| `cm_conta` | `idx_cm_conta_faturista_situacao_ordem` | `faturista_id, situacao, ordem_fila` | `116_contas_medicas_fundacao.sql` |
+| `cm_conta` | `idx_cm_conta_atendimento` | `atendimento_id` | `116_contas_medicas_fundacao.sql` |
+| `cm_conta_item` | `idx_cm_conta_item_conta` | `conta_id` | `116_contas_medicas_fundacao.sql` |
+| `cm_guia_linha` | `idx_cm_guia_linha_conta` | `conta_id` | `116_contas_medicas_fundacao.sql` |
+| `cm_observacao` | `idx_cm_observacao_conta` | `conta_id` | `116_contas_medicas_fundacao.sql` |
 
 ---
-**Resumo:** 44 tabelas · 50 relacionamentos FK detectados.
+**Resumo:** 66 tabelas · 79 relacionamentos FK detectados.
