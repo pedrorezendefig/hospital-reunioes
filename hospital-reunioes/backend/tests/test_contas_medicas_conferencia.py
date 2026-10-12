@@ -1000,5 +1000,5 @@ def test_motivo_e_evidencia_sem_travessao_nem_meia_risca():
         encoding="utf-8"
     )
 
-    assert "—" not in fonte
-    assert "–" not in fonte
+    assert chr(0x2014) not in fonte  # travessão
+    assert chr(0x2013) not in fonte  # meia-risca
