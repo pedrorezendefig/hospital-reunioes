@@ -258,14 +258,16 @@ class TestConferenciaDaCarga:
 
 class TestVersaoPelaData:
     def test_duas_versoes_da_lpm_a_data_escolhe_a_certa_e_sem_versao_nao_confere(self):
-        """A LPM de setembro fecha em 30/09 e a de outubro começa em 01/10. A
-        anterior continua lá: a conta de setembro usa o preço de setembro."""
+        """A LPM de setembro fecha em 30/09 e a de outubro começa em 05/10. A
+        anterior continua lá: a conta de setembro usa o preço de setembro, e
+        os dias sem versão (antes da primeira e no buraco entre as duas) não
+        são conferidos."""
         cliente, banco = _cliente(GESTAO, _com_operadoras("UNIMED"))
         setembro = _enviar_tabela(
             cliente, "UNIMED", "MEDICAMENTO", "unimed-lpm-medicamentos.csv", inicio="2026-09-01", fim="2026-09-30"
         )
         outubro = _enviar_tabela(
-            cliente, "UNIMED", "MEDICAMENTO", "unimed-lpm-medicamentos-v2.csv", inicio="2026-10-01"
+            cliente, "UNIMED", "MEDICAMENTO", "unimed-lpm-medicamentos-v2.csv", inicio="2026-10-05"
         )
         assert (setembro.status_code, outubro.status_code) == (201, 201)
         assert len(banco.linhas("cm_operadora_tabela")) == 2
@@ -273,9 +275,10 @@ class TestVersaoPelaData:
         def clexane(dia: date):
             return preco(banco, "op-UNIMED", "MEDICAMENTO", "90458125", dia)
 
-        assert clexane(date(2026, 9, 15)) == Decimal("30.96")
+        assert clexane(date(2026, 9, 1)) == Decimal("30.96")
         assert clexane(date(2026, 9, 30)) == Decimal("30.96")
-        assert clexane(date(2026, 10, 1)) == Decimal("32.50")
+        assert clexane(date(2026, 10, 2)) == NAO_CONFERIDO
+        assert clexane(date(2026, 10, 5)) == Decimal("32.50")
         assert clexane(date(2027, 3, 1)) == Decimal("32.50")
         assert clexane(date(2026, 8, 31)) == NAO_CONFERIDO
 
