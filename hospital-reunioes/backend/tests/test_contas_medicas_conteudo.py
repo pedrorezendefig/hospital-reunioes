@@ -10,7 +10,7 @@ O caminho testado é o do pipeline: `ler_prontuario` monta os documentos e
 `ler_conteudo` lê as páginas de cada um.
 """
 
-from datetime import date
+from datetime import date, datetime
 from pathlib import Path
 
 from app.services.contas_medicas.conteudo import ler_conteudo
@@ -186,3 +186,32 @@ def test_glicemias_saem_por_dia_de_cada_fonte_com_as_paginas():
         (date(2026, 10, 3), "AFERICAO", 2, (3, 4)),
         (date(2026, 10, 3), "BALANCO", 4, (1,)),
     ]
+
+
+# ----------------------------------------------------------------------------------
+# Internação e alta
+# ----------------------------------------------------------------------------------
+
+
+def resumo_de_alta(data_de_atendimento: str = "02/10/2026 22:40") -> list[str]:
+    (texto,) = paginas_da_fixture("prontuario/resumo_alta")
+    return [texto.replace("DATA DE ATENDIMENTO: 02/10/2026 22:40", f"DATA DE ATENDIMENTO: {data_de_atendimento}")]
+
+
+def test_internacao_vem_da_prescricao_e_a_alta_com_o_motivo_vem_do_resumo_de_alta():
+    # o resumo diz 21:00 só para mostrar de qual campo a internação saiu
+    internacao = ler(
+        "prontuario/admissao_unidade", prescricao(3, CLEXANE), resumo_de_alta("02/10/2026 21:00")
+    ).internacao
+
+    assert internacao.entrada == datetime(2026, 10, 2, 22, 40)
+    assert internacao.alta == datetime(2026, 10, 6, 15, 20)
+    assert internacao.motivo_alta == "MELHORADO"
+    assert (internacao.acomodacao_na_admissao, internacao.leito_na_admissao) == ("UTI ADULTO", "CTI-04")
+
+
+def test_sem_prescricao_a_internacao_vem_da_data_de_atendimento_do_resumo_de_alta():
+    internacao = ler(resumo_de_alta("02/10/2026 21:00")).internacao
+
+    assert internacao.entrada == datetime(2026, 10, 2, 21, 0)
+    assert internacao.alta == datetime(2026, 10, 6, 15, 20)

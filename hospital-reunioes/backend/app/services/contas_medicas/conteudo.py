@@ -15,7 +15,7 @@ não estão desidentificados: quem os mandar à IA passa por `desidentificar`.
 import re
 from collections.abc import Sequence
 from dataclasses import dataclass
-from datetime import date
+from datetime import date, datetime
 
 from app.services.contas_medicas.prescricao import ItemConsolidado, Prescricao, consolidar, ler_itens
 from app.services.contas_medicas.prontuario import _RODAPE_GLOBAL, Documento, Prontuario
@@ -127,12 +127,61 @@ def _glicemias(afericoes: list[tuple[Documento, str]], balancos: list[Balanco]) 
 
 
 # ----------------------------------------------------------------------------------
+# Internação e alta (adendo v1.2, item 8)
+# ----------------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class Internacao:
+    entrada: datetime | None
+    alta: datetime | None
+    motivo_alta: str | None
+    acomodacao_na_admissao: str | None
+    leito_na_admissao: str | None
+
+
+_DATA_E_HORA = r"(\d{2}/\d{2}/\d{4})\s+(\d{2}:\d{2})"
+_INTERNACAO_DA_PRESCRICAO = re.compile(r"Interna[çc][ãa]o\.+:\s*" + _DATA_E_HORA)
+_ATENDIMENTO_DO_RESUMO = re.compile(r"DATA DE ATENDIMENTO:\s*" + _DATA_E_HORA)
+_ALTA = re.compile(r"DATA DA ALTA\s*-\s*" + _DATA_E_HORA)
+_MOTIVO_DA_ALTA = re.compile(r"MOTIVO DA ALTA:\s*(\S.*?)\s*$", re.M)
+_ADMISSAO = re.compile(r"Acomoda[çc][ãa]o:\s*(.*?)\s+Leito:\s*(\S+)\s+Unid\. Interna[çc][ãa]o:")
+
+
+def _data_e_hora(rx: re.Pattern[str], textos: list[str]) -> datetime | None:
+    for texto in textos:
+        if m := rx.search(texto):
+            try:
+                return datetime.strptime(f"{m.group(1)} {m.group(2)}", "%d/%m/%Y %H:%M")
+            except ValueError:
+                continue
+    return None
+
+
+def _ler_internacao(por_familia: dict[str, list[str]]) -> Internacao:
+    """Internação: `Internação.:` da prescrição; sem prescrição, `DATA DE ATENDIMENTO:` do
+    resumo de alta. Alta e motivo: resumo de alta. Acomodação e leito: admissão na unidade."""
+    resumos = por_familia.get("RESUMO_ALTA", [])
+    entrada = _data_e_hora(_INTERNACAO_DA_PRESCRICAO, por_familia.get("PRESCRICAO", []))
+    motivo = next((m.group(1) for texto in resumos if (m := _MOTIVO_DA_ALTA.search(texto))), None)
+    admissao = next((m for texto in por_familia.get("ADMISSAO_UNIDADE", []) if (m := _ADMISSAO.search(texto))), None)
+    return Internacao(
+        entrada=entrada or _data_e_hora(_ATENDIMENTO_DO_RESUMO, resumos),
+        alta=_data_e_hora(_ALTA, resumos),
+        motivo_alta=motivo,
+        acomodacao_na_admissao=admissao.group(1).strip() if admissao else None,
+        leito_na_admissao=admissao.group(2) if admissao else None,
+    )
+
+
+# ----------------------------------------------------------------------------------
 # Leitura
 # ----------------------------------------------------------------------------------
 
 
 @dataclass(frozen=True)
 class Conteudo:
+    internacao: Internacao
     prescricoes: tuple[Prescricao, ...]
     prescricao_consolidada: tuple[ItemConsolidado, ...]
     balancos: tuple[Balanco, ...]
@@ -149,16 +198,20 @@ def ler_conteudo(texto_por_pagina: Sequence[str | None], prontuario: Prontuario)
     prescricoes: list[Prescricao] = []
     balancos: list[Balanco] = []
     afericoes: list[tuple[Documento, str]] = []
+    # Texto inteiro de cada documento, por Família, na ordem da data.
+    por_familia: dict[str, list[str]] = {}
     for d in prontuario.documentos:
         paginas = _paginas(textos, d)
+        por_familia.setdefault(d.familia, []).append("\n".join(texto for _, texto in paginas))
         if d.familia == "PRESCRICAO":
             itens = tuple(ler_itens(paginas))
             prescricoes.append(Prescricao(d.data, d.hora, d.subtipo, d.setor, d.paginas, itens))
         elif d.familia == "BALANCO":
             balancos.append(_ler_balanco(d, paginas[0][1]))
         elif d.familia == "AFERICAO":
-            afericoes.append((d, "\n".join(texto for _, texto in paginas)))
+            afericoes.append((d, por_familia["AFERICAO"][-1]))
     return Conteudo(
+        internacao=_ler_internacao(por_familia),
         prescricoes=tuple(prescricoes),
         prescricao_consolidada=tuple(consolidar(prescricoes)),
         balancos=tuple(balancos),
