@@ -15,6 +15,7 @@ from test_contas_medicas_conteudo import CLEXANE, INTERNACAO_COM_TRANSFERENCIA, 
 
 from app.services.contas_medicas.conteudo import Movimentacao
 from app.services.contas_medicas.diarias import ParametrosDiaria, contar_diarias, diarias_do_periodo
+from app.services.contas_medicas.memoria import ler_memoria, parametros_lidos
 
 DIARIA_ASSIM = {
     "hora_vencimento": "10:00",
@@ -207,6 +208,20 @@ def test_os_casos_da_unimed_saem_como_o_diretor_validou(movimentacoes, esperado)
 # ----------------------------------------------------------------------------------
 
 CASO_B = CASOS_ASSIM["b: internação 21h45 D, transferência 15h D+7, alta 12h D+9"][0]
+
+
+def test_parametros_saem_da_memoria_como_a_carga_da_operadora_le_o_cabecalho():
+    """A memória sintética ALFA (fixture da carga, #1119) traz `diaria` com setor e óbito
+    na lista de extra e sem `transferencia_antes_do_vencimento_gera_extra`."""
+    texto = (Path(__file__).parent / "fixtures" / "contas_medicas" / "memoria" / "MEMORIA-ALFA-v1.0.md").read_text(
+        encoding="utf-8"
+    )
+
+    parametros = ParametrosDiaria.da_memoria(parametros_lidos(ler_memoria(texto).parametros))
+
+    assert parametros.diaria_extra_na_origem_apos_vencimento == {"TRANSFERENCIA_SETOR", "OBITO"}
+    assert parametros.transferencia_antes_do_vencimento_gera_extra == "PENDENTE"
+    assert [len(s.diarias) for s in contar_diarias(CASO_B, parametros)] == [8, 2]
 
 
 def test_tirar_a_transferencia_de_setor_da_lista_de_extra_tira_a_extra_da_origem_no_caso_b():
