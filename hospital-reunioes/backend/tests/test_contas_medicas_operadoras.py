@@ -391,3 +391,63 @@ class TestTabelasDaMemoria:
         codigos = sorted(r["codigo"] for r in banco.linhas("cm_regra"))
 
         assert codigos == ["BETA-INS-00", "BETA-INS-01", "BETA-INS-02"]
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 4. Versão nova da mesma operadora
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+class TestVersaoNova:
+    def test_segunda_importacao_aposenta_a_anterior_e_a_vigente_e_a_nova(self):
+        cliente, banco = _cliente(GESTAO)
+        v10 = _memoria("MEMORIA-ALFA-v1.0.md")
+        v11 = v10.replace('versao_memoria: "1.0"', 'versao_memoria: "1.1"').replace(
+            "| ALFA-DIA-02 | Transferência de setor antes das 10h: gera ou não diária extra no setor de origem. "
+            "| CONTRATUAL | PRÁTICA | PENDENTE | |",
+            "| ALFA-DIA-02 | Transferência de setor antes das 10h não gera diária extra. "
+            "| CONTRATUAL | PRÁTICA | VIGENTE | 12/10/2026 |",
+        )
+        assert v11.count("1.1") == 1 and "não gera diária extra" in v11, "a fixture mudou: refazer a v1.1"
+
+        assert _enviar_memoria(cliente, v10).status_code == 201
+        resposta = _enviar_memoria(cliente, v11)
+
+        assert resposta.status_code == 201, resposta.text
+        assert resposta.json()["regras"] == {"total": 5, "vigentes": 4, "pendentes": 1}
+        [operadora] = banco.linhas("cm_operadora")
+        assert {v["versao"]: v["vigente"] for v in banco.linhas("cm_memoria_versao")} == {"1.0": False, "1.1": True}
+
+        vigente = memoria_vigente(banco, operadora["id"])
+        assert vigente["versao"] == "1.1"
+        regras = {r["codigo"]: r for r in vigente["regras"]}
+        assert len(regras) == 5
+        assert regras["ALFA-DIA-02"]["status"] == "VIGENTE"
+        assert regras["ALFA-DIA-02"]["texto"] == "Transferência de setor antes das 10h não gera diária extra."
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 5. Dado de paciente não entra
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+class TestCpfNaMemoria:
+    def test_arquivo_com_cpf_no_corpo_e_recusado_com_mensagem_clara_e_nada_e_gravado(self):
+        cliente, banco = _cliente(GESTAO)
+        com_cpf = _memoria("MEMORIA-ALFA-v1.0.md").replace(
+            "Não analisar prazo nem elegibilidade.",
+            "Não analisar prazo nem elegibilidade. Exemplo: paciente 123.456.789-00.",
+        )
+        assert "123.456.789-00" in com_cpf, "a fixture mudou: o CPF não entrou"
+
+        resposta = _enviar_memoria(cliente, com_cpf)
+
+        assert resposta.status_code == 422
+        detalhe = resposta.json()["detail"]
+        assert "CPF" in detalhe
+        assert "linha 42" in detalhe
+        # A recusa não devolve o número: a mensagem vai para tela e log.
+        assert "123.456.789-00" not in detalhe
+        assert banco.linhas("cm_operadora") == []
+        assert banco.linhas("cm_memoria_versao") == []
+        assert banco.linhas("cm_regra") == []
