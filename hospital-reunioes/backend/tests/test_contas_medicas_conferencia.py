@@ -268,15 +268,24 @@ O2_3L_CC = "60010851"
 O2_6L_CC = "60011092"
 CC = "CENTRO CIRURGICO"
 
+# Materiais com preço diferente nas duas colunas da tabela.
+MATERIAIS = [f"7010000{n}" for n in range(1, 6)]
+TABELA_DE_MATERIAIS = {("MATERIAL", codigo): {"COMUM": 1.00, "CARIOCA": 0.85} for codigo in MATERIAIS}
+# Na conta cirúrgica do diretor, a agulha estava no preço da coluna Carioca num plano Comum.
+TABELA_DA_CIRURGIA = {**TABELA_DE_MATERIAIS, ("MATERIAL", AGULHA): {"COMUM": 0.20, "CARIOCA": 0.17}}
+
+
+def _conta_cirurgica() -> Conta:
+    """Plano Comum: a agulha no preço Carioca e outros 4 materiais no preço certo."""
+    return _conta(
+        _item(AGULHA, "AGULHA DESC 25X7", dia(4), 2, 0.17, grupo="MATERIAIS DESCARTAVEIS", setor=CC, pagina=5),
+        *(_item(c, "MATERIAL SINTETICO", dia(4), 1, 1.00, grupo="MATERIAIS DESCARTAVEIS", setor=CC) for c in MATERIAIS[:4]),
+    )
+
 
 class TestAchadosDoDiretor:
     def test_agulha_lancada_a_0_17_com_tabela_0_20_vira_corrigir_preco_de_0_06(self):
-        conta = _conta(
-            _item(AGULHA, "AGULHA DESC 25X7", dia(4), 2, 0.17, grupo="MATERIAIS DESCARTAVEIS", setor="CENTRO CIRURGICO", pagina=5)
-        )
-        preco = _tabela({("MATERIAL", AGULHA): {"COMUM": 0.20, "CARIOCA": 0.18}})
-
-        resultado = conferir(conta, _prontuario(tipo_impressao=None), _memoria(), preco)
+        resultado = conferir(_conta_cirurgica(), _prontuario(tipo_impressao=None), _memoria(), _tabela(TABELA_DA_CIRURGIA))
 
         [linha] = _linhas(resultado, "CORRIGIR_PRECO", AGULHA)
         assert _campos(linha) == {
@@ -298,6 +307,8 @@ class TestAchadosDoDiretor:
             "confianca": "ALTA",
             "origem": "CODIGO",
         }
+        assert "coluna errada" in linha["motivo"]
+        assert _linhas(resultado, "CORRIGIR_PRECO") == [linha]
 
     def test_pantoprazol_prescrito_em_6_dias_e_lancado_em_3_vira_incluir_718_95(self):
         # Medicamento sem Brasíndice carregado: a busca não confere, e o valor sai
@@ -432,3 +443,62 @@ class TestAchadosDoDiretor:
             "origem": "CODIGO",
         }
         assert "5 procedimentos" in linha["motivo"]
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 2. A regra citada
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+class TestRegraCitada:
+    def test_regra_pendente_citada_faz_a_linha_sair_validar_e_nunca_ordem(self):
+        resultado = conferir(
+            _conta_cirurgica(),
+            _prontuario(tipo_impressao=None),
+            _memoria(pendentes=("ALFA-PRC-02",)),
+            _tabela(TABELA_DA_CIRURGIA),
+        )
+
+        [linha] = resultado.linhas
+        assert (linha["acao"], linha["codigo"], linha["regra_codigo"], linha["valor_diferenca"]) == (
+            "VALIDAR",
+            AGULHA,
+            "ALFA-PRC-02",
+            0.06,
+        )
+        assert "pendente" in linha["motivo"]
+
+    def test_regra_que_a_memoria_nao_tem_descarta_a_linha_e_registra_o_motivo(self):
+        parametros = {**PARAMETROS_ALFA, "regras_das_conferencias": {**REGRAS_DAS_CONFERENCIAS, "preco": "ALFA-PRC-99"}}
+        memoria = _memoria(parametros)
+        memoria = MemoriaLida(**{**memoria.__dict__, "regras": tuple(r for r in memoria.regras if r.codigo != "ALFA-PRC-99")})
+
+        resultado = conferir(_conta_cirurgica(), _prontuario(tipo_impressao=None), memoria, _tabela(TABELA_DA_CIRURGIA))
+
+        assert resultado.linhas == ()
+        [descartada] = resultado.descartadas
+        assert descartada["linha"]["codigo"] == AGULHA
+        assert "ALFA-PRC-99" in descartada["motivo"]
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 3. Preço: contraprova da coluna, não conferido e pacote
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+class TestPreco:
+    def test_80_por_cento_dos_materiais_na_outra_coluna_geram_um_validar_e_nenhuma_correcao(self):
+        # Plano Comum, e 4 dos 5 materiais lançados no preço Carioca.
+        conta = _conta(
+            *(
+                _item(codigo, "MATERIAL SINTETICO", dia(2), 1, unitario, grupo="MATERIAIS DESCARTAVEIS")
+                for codigo, unitario in zip(MATERIAIS, (0.85, 0.85, 0.85, 0.85, 1.00), strict=True)
+            )
+        )
+
+        resultado = conferir(conta, _prontuario(tipo_impressao=None), _memoria(), _tabela(TABELA_DE_MATERIAIS))
+
+        assert _linhas(resultado, "CORRIGIR_PRECO") == []
+        [linha] = resultado.linhas
+        assert (linha["acao"], linha["regra_codigo"], linha["causa_raiz"]) == ("VALIDAR", "ALFA-PRC-01", "CADASTRO_PRECO")
+        assert "plano e preços apontam colunas diferentes" in linha["motivo"].lower()

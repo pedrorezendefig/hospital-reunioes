@@ -164,15 +164,67 @@ def _trecho_do_item(item: ItemConta) -> str:
 # ----------------------------------------------------------------------------------
 
 
+_OPOSTA = {"COMUM": "CARIOCA", "CARIOCA": "COMUM"}
+
+# Contraprova da coluna (spec, 9.5, passo 2): a partir desta parte dos materiais
+# batendo com a coluna oposta, o plano é que está em dúvida, não os preços.
+_CONTRAPROVA = Decimal("0.8")
+
+
+def _bate(a: Decimal, b: Decimal | str) -> bool:
+    return isinstance(b, Decimal) and abs(a - b) <= TOLERANCIA
+
+
 def _precos(ctx: _Contexto) -> list[_Linha]:
-    linhas = []
+    """Unitário lançado contra a tabela da categoria, na coluna do plano.
+
+    Item com unitário zero entra na conta sem cobrança de propósito (honorário da
+    equipe, item incluso em diária ou pacote) e não é conferido.
+    """
+    oposta = _OPOSTA.get(ctx.coluna or "")
+    precos = []
     for item in ctx.conta.itens:
         categoria = _CATEGORIA_DO_GRUPO.get(item.grupo or "")
         if categoria is None or item.unitario == 0:
             continue
         tabela = ctx.preco(categoria, item.codigo, item.data, ctx.coluna)
-        if not isinstance(tabela, Decimal) or abs(item.unitario - tabela) <= TOLERANCIA:
+        outra = ctx.preco(categoria, item.codigo, item.data, oposta) if oposta else NAO_CONFERIDO
+        precos.append((item, categoria, tabela, outra))
+
+    # Só material com as duas colunas diferentes diz de que coluna é o preço lançado.
+    materiais = [
+        (item, outra)
+        for item, categoria, tabela, outra in precos
+        if categoria == "MATERIAL" and isinstance(tabela, Decimal) and isinstance(outra, Decimal) and tabela != outra
+    ]
+    na_oposta = sum(1 for item, outra in materiais if _bate(item.unitario, outra))
+    if materiais and Decimal(na_oposta) / len(materiais) >= _CONTRAPROVA:
+        primeiro = materiais[0][0]
+        return [
+            _Linha(
+                acao="VALIDAR",
+                chave="coluna_do_plano",
+                data=None,
+                setor=None,
+                codigo=None,
+                descricao="Coluna de preço do plano",
+                motivo=(
+                    f"Plano e preços apontam colunas diferentes: o plano {ctx.conta.plano} usa a coluna "
+                    f"{ctx.coluna}, e {na_oposta} de {len(materiais)} materiais batem com a coluna {oposta}. "
+                    "Nenhuma correção de preço por coluna até decidir."
+                ),
+                nivel="POR_REGRA",
+                causa="CADASTRO_PRECO",
+                pagina=primeiro.pagina,
+                trecho=f"Plano: {ctx.conta.plano}",
+            )
+        ]
+
+    linhas = []
+    for item, _categoria, tabela, outra in precos:
+        if not isinstance(tabela, Decimal) or _bate(item.unitario, tabela):
             continue
+        coluna_errada = f" Lançado no preço da coluna {oposta}: coluna errada." if _bate(item.unitario, outra) else ""
         linhas.append(
             _Linha(
                 acao="CORRIGIR_PRECO",
@@ -181,7 +233,7 @@ def _precos(ctx: _Contexto) -> list[_Linha]:
                 setor=item.setor,
                 codigo=item.codigo,
                 descricao=item.descricao,
-                motivo=f"Lançado a {item.unitario}, tabela {tabela} na coluna {ctx.coluna}.",
+                motivo=f"Lançado a {item.unitario}, tabela {tabela} na coluna {ctx.coluna}.{coluna_errada}",
                 nivel="POR_REGRA",
                 causa="CADASTRO_PRECO",
                 pagina=item.pagina,
@@ -457,6 +509,8 @@ def _com_regra(
             )
             descartadas.append({"linha": _registro(linha), "motivo": motivo})
             continue
+        if regra.status != "VIGENTE" and linha.acao != "VALIDAR":
+            linha = replace(linha, acao="VALIDAR", motivo=f"Regra {regra.codigo} pendente. {linha.motivo}")
         validas.append(replace(linha, regra=regra.codigo))
     return validas
 
