@@ -72,6 +72,21 @@ class MemoriaRecusadaError(ValueError):
     """O arquivo não entra; a mensagem é para quem enviou."""
 
 
+class _LeitorSemAlias(yaml.SafeLoader):
+    """O `safe_load` sem alias: cada `*nome` repete o nó da âncora, e o
+    `parametros_json` copia cada repetição, então poucas centenas de bytes
+    aninhados viram bilhões de elementos e derrubam o backend inteiro."""
+
+    def compose_node(self, parent: Any, index: Any) -> Any:
+        if self.check_event(yaml.AliasEvent):
+            linha = self.peek_event().start_mark.line + 2
+            raise MemoriaRecusadaError(
+                f"O cabeçalho da memória usa alias do YAML (*nome, linha {linha}). Escreva o valor por "
+                "extenso e envie de novo."
+            )
+        return super().compose_node(parent, index)
+
+
 @dataclass(frozen=True)
 class RegraLida:
     codigo: str
@@ -212,7 +227,7 @@ def ler_memoria(texto: str) -> MemoriaLida:
     if not bloco:
         raise MemoriaRecusadaError("O arquivo não começa pelo cabeçalho da memória, entre duas linhas com ---.")
     try:
-        cabecalho = yaml.safe_load(bloco.group(1))
+        cabecalho = yaml.load(bloco.group(1), Loader=_LeitorSemAlias)  # noqa: S506 (SafeLoader)
     except yaml.YAMLError as exc:
         marca = getattr(exc, "problem_mark", None)
         onde = f" (linha {marca.line + 2})" if marca else ""

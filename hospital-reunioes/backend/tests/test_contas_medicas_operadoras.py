@@ -452,6 +452,26 @@ class TestCpfNaMemoria:
         assert banco.linhas("cm_memoria_versao") == []
         assert banco.linhas("cm_regra") == []
 
+    def test_cabecalho_com_alias_do_yaml_e_recusado_e_nada_e_gravado(self):
+        """Âncora e alias do YAML multiplicam o cabeçalho depois da leitura: 430
+        bytes em 9 níveis viram 10^9 elementos e derrubam o backend inteiro. O
+        teste usa 2 níveis, que cabem na memória se a guarda faltar."""
+        cliente, banco = _cliente(GESTAO)
+        com_alias = _memoria("MEMORIA-ALFA-v1.0.md").replace(
+            "operadora: ALFA\n",
+            "operadora: ALFA\nbomba_a: &a [x, x, x]\nbomba_b: [*a, *a, *a]\n",
+            1,
+        )
+        assert "*a" in com_alias, "a fixture mudou: o alias não entrou"
+
+        resposta = _enviar_memoria(cliente, com_alias)
+
+        assert resposta.status_code == 422
+        assert "alias" in resposta.json()["detail"]
+        assert banco.linhas("cm_operadora") == []
+        assert banco.linhas("cm_memoria_versao") == []
+        assert banco.linhas("cm_regra") == []
+
     def test_o_modelo_enviado_sem_trocar_a_sigla_e_recusado(self):
         """O MODELO-MEMORIA-OPERADORA.md traz `operadora: <SIGLA>`: enviado por
         engano, criaria a operadora "<SIGLA>", que a tela não apaga."""
