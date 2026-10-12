@@ -120,6 +120,11 @@ def _dinheiro(valor: Decimal) -> Decimal:
     return valor.quantize(CENTAVO, rounding=ROUND_HALF_UP)
 
 
+def _reais(valor: Decimal) -> str:
+    """O valor como a faturista lê: R$ 1.234,56."""
+    return "R$ " + f"{valor:,.2f}".replace(",", "_").replace(".", ",").replace("_", ".")
+
+
 @dataclass(frozen=True)
 class _Contexto:
     conta: Conta
@@ -202,7 +207,7 @@ def _coluna(conta: Conta, parametros: Mapping[str, Any]) -> str | None:
 
 
 def _trecho_do_item(item: ItemConta) -> str:
-    return f"{item.data:%d/%m/%Y} {item.codigo} {item.descricao} {item.quantidade} x {item.unitario}"
+    return f"{item.data:%d/%m/%Y} {item.codigo} {item.descricao}: {item.quantidade:g} x {_reais(item.unitario)}"
 
 
 # ----------------------------------------------------------------------------------
@@ -247,9 +252,10 @@ def _precos(ctx: _Contexto) -> list[_Linha]:
         if categoria == "MATERIAL" and isinstance(tabela, Decimal) and isinstance(outra, Decimal) and tabela != outra
     ]
     na_oposta = sum(1 for item, outra in materiais if _bate(item.unitario, outra))
-    if materiais and Decimal(na_oposta) / len(materiais) >= _CONTRAPROVA:
-        primeiro = materiais[0][0]
-        return [
+    contraprova = bool(materiais) and Decimal(na_oposta) / len(materiais) >= _CONTRAPROVA
+    linhas = []
+    if contraprova:
+        linhas.append(
             _Linha(
                 acao="VALIDAR",
                 chave="coluna_do_plano",
@@ -264,14 +270,16 @@ def _precos(ctx: _Contexto) -> list[_Linha]:
                 ),
                 nivel="POR_REGRA",
                 causa="CADASTRO_PRECO",
-                pagina=primeiro.pagina,
+                pagina=materiais[0][0].pagina,
                 trecho=f"Plano: {ctx.conta.plano}",
             )
-        ]
+        )
 
-    linhas = []
     for item, _categoria, tabela, outra in precos:
         if not isinstance(tabela, Decimal) or _bate(item.unitario, tabela):
+            continue
+        if contraprova and isinstance(outra, Decimal) and outra != tabela:
+            # Com o plano em dúvida, nada de correção em massa pela coluna.
             continue
         coluna_errada = f" Lançado no preço da coluna {oposta}: coluna errada." if _bate(item.unitario, outra) else ""
         linhas.append(
@@ -282,7 +290,11 @@ def _precos(ctx: _Contexto) -> list[_Linha]:
                 setor=item.setor,
                 codigo=item.codigo,
                 descricao=item.descricao,
-                motivo=f"Lançado a {item.unitario}, tabela {tabela} na coluna {ctx.coluna}.{coluna_errada}",
+                motivo=(
+                    f"Lançado a {_reais(item.unitario)}, tabela {_reais(tabela)}"
+                    + (f" na coluna {ctx.coluna}." if ctx.coluna else ".")
+                    + coluna_errada
+                ),
                 nivel="POR_REGRA",
                 causa="CADASTRO_PRECO",
                 pagina=item.pagina,
@@ -592,7 +604,7 @@ def _comparar_diarias(ctx: _Contexto, devidas: list[_Devida], lancados: list[Ite
                 setor=item.setor,
                 codigo=item.codigo,
                 descricao=item.descricao,
-                motivo=f"Diária lançada a mais: {resumo}",
+                motivo=f"Lançado a mais: {resumo}",
                 nivel="POR_REGRA",
                 causa="REGRA_AUTOMATICA",
                 pagina=item.pagina,
