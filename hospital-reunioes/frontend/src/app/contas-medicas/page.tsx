@@ -1,31 +1,326 @@
-import { ReceiptText } from "lucide-react";
-import { LinkParaOperadoras } from "@/components/contas-medicas/LinkParaOperadoras";
+"use client";
 
 /**
- * A tela de contas de Contas médicas (PRD #1113, ADR 0070).
+ * A tela Contas de Contas médicas (issues #1114 e #1123, PRD #1113, ADR 0070).
  *
- * Na fundação (issue #1114) a fila só existe vazia: o envio da conta e do
- * prontuário chega numa fatia seguinte, e é ela que preenche esta lista.
+ * A faturista arrasta a conta e o prontuário do MV (ou clica em "Selecionar
+ * arquivos"), recebe na hora o "Último envio" por atendimento e acompanha a
+ * fila em ordem de envio, com a aba Concluídas ao lado. Quem pareia, recusa e
+ * ordena é o servidor; a tela só confere os limites que dá para conferir antes
+ * de subir e manda os arquivos em lotes que cabem no teto do corpo.
+ *
+ * A conta é sempre identificada pelo atendimento, com a conta como complemento.
  */
-export default function ContasMedicasPage() {
+
+import { useCallback, useEffect, useRef, useState } from "react";
+import Link from "next/link";
+import { AlertCircle, Loader2, ReceiptText, Upload } from "lucide-react";
+
+import { LinkParaOperadoras } from "@/components/contas-medicas/LinkParaOperadoras";
+import {
+  type Fila,
+  type ItemDaFila,
+  type RespostaDoEnvio,
+  ROTA_FILA,
+  detalheDaConta,
+  enviarEmLotes,
+  rotuloDaSituacao,
+  separarArquivos,
+} from "@/lib/contas-medicas/envio";
+import { dataCurta } from "@/lib/contas-medicas/guia";
+import { createClient } from "@/lib/supabase/client";
+
+const CARTAO = "bg-white rounded-2xl border border-border shadow-premium";
+
+const COR_DA_SITUACAO: Record<string, string> = {
+  AGUARDANDO_ARQUIVO: "bg-slate-100 text-slate-600",
+  NA_FILA: "bg-slate-100 text-slate-600",
+  PROCESSANDO: "bg-[#DBEAFE] text-[#1E40AF]",
+  A_FAZER: "bg-[#FEE2E2] text-[#991B1B]",
+  EM_CORRECAO: "bg-[#FEF3C7] text-[#92400E]",
+  ERRO: "bg-[#FEE2E2] text-[#991B1B]",
+  CONCLUIDA: "bg-[#DCFCE7] text-[#166534]",
+  CONCLUIDA_COM_PENDENCIA: "bg-[#FEF3C7] text-[#92400E]",
+  RETORNO: "bg-[#FEF3C7] text-[#92400E]",
+};
+
+/** Enquanto houver conta esperando a análise, a fila se relê sozinha. */
+const RELER_A_CADA_MS = 20_000;
+const ESPERANDO_ANALISE = ["NA_FILA", "PROCESSANDO"];
+
+type Aba = "fila" | "concluidas";
+
+function complemento(conta: ItemDaFila): string {
+  const periodo =
+    conta.periodo_inicio && conta.periodo_fim
+      ? `${dataCurta(conta.periodo_inicio)} a ${dataCurta(conta.periodo_fim)}`
+      : null;
+  return [conta.numero_conta ? `conta ${conta.numero_conta}` : null, periodo].filter(Boolean).join(" · ");
+}
+
+function LinhaDaFila({ conta, onEnviarDeNovo }: { conta: ItemDaFila; onEnviarDeNovo: () => void }) {
+  const detalhe = detalheDaConta(conta);
+  const guia = `/contas-medicas/guia/${conta.id}`;
+  let acao: React.ReactNode = null;
+  if (conta.situacao === "A_FAZER" || conta.situacao.startsWith("CONCLUIDA")) {
+    acao = (
+      <Link href={guia} className="text-sm font-medium text-primary hover:underline">
+        Abrir
+      </Link>
+    );
+  } else if (conta.situacao === "EM_CORRECAO") {
+    acao = (
+      <Link href={guia} className="text-sm font-medium text-primary hover:underline">
+        Continuar
+      </Link>
+    );
+  } else if (conta.situacao === "ERRO") {
+    acao = (
+      <button type="button" onClick={onEnviarDeNovo} className="text-sm font-medium text-primary hover:underline">
+        Enviar de novo
+      </button>
+    );
+  }
+
   return (
-    <div>
-      <div className="flex items-center justify-between gap-3">
-        <h1 className="text-2xl font-bold text-slate-900">Contas médicas</h1>
-        <LinkParaOperadoras />
+    <li className="flex flex-wrap items-center gap-x-4 gap-y-1 px-5 py-3">
+      <div className="min-w-0 flex-1">
+        <p className="text-sm font-semibold text-slate-900">Atendimento {conta.numero_atendimento}</p>
+        {complemento(conta) && <p className="text-xs text-slate-500">{complemento(conta)}</p>}
       </div>
-      <p className="text-slate-500 text-sm mt-0.5 mb-6">
-        Envie a conta e o prontuário do MV e receba a lista do que corrigir antes de mandar para a
-        operadora.
-      </p>
+      <span
+        className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${COR_DA_SITUACAO[conta.situacao] ?? "bg-slate-100 text-slate-600"}`}
+      >
+        {rotuloDaSituacao(conta)}
+      </span>
+      {detalhe && (
+        <span className={`text-xs ${conta.situacao === "ERRO" ? "text-red-700" : "text-slate-600"}`}>{detalhe}</span>
+      )}
+      {acao}
+    </li>
+  );
+}
+
+function UltimoEnvio({ resposta }: { resposta: RespostaDoEnvio }) {
+  return (
+    <section aria-label="Último envio" className={`${CARTAO} p-5`}>
+      <h2 className="text-sm font-semibold text-slate-900 mb-3">Último envio</h2>
+      {resposta.ultimo_envio.length > 0 ? (
+        <ul className="space-y-2">
+          {resposta.ultimo_envio.map((linha) => (
+            <li key={linha.numero_atendimento} className="text-sm text-slate-800">
+              {linha.texto}
+              {linha.aviso && <p className="mt-0.5 text-xs text-amber-700">{linha.aviso}</p>}
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p className="text-sm text-slate-500">Nenhum atendimento entrou neste envio.</p>
+      )}
+      {resposta.recusas.length > 0 && (
+        <ul aria-label="Arquivos recusados" className="mt-4 space-y-2 border-t border-border pt-3">
+          {resposta.recusas.map((recusa, i) => (
+            <li key={`${recusa.arquivo}-${i}`} className="flex gap-2 text-sm text-red-700">
+              <AlertCircle className="w-4 h-4 mt-0.5 shrink-0" aria-hidden="true" />
+              <span>
+                {recusa.motivo}
+                <span className="block text-xs text-slate-500">
+                  {[recusa.arquivo, recusa.numero_atendimento ? `atendimento ${recusa.numero_atendimento}` : null]
+                    .filter(Boolean)
+                    .join(", ")}
+                </span>
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
+  );
+}
+
+export default function ContasMedicasPage() {
+  const [token, setToken] = useState<string | null>(null);
+  const [fila, setFila] = useState<Fila | null>(null);
+  const [erroDaFila, setErroDaFila] = useState<string | null>(null);
+  const [aba, setAba] = useState<Aba>("fila");
+  const [arrastando, setArrastando] = useState(false);
+  const [enviando, setEnviando] = useState<number | null>(null);
+  const [ultimo, setUltimo] = useState<RespostaDoEnvio | null>(null);
+  const seletor = useRef<HTMLInputElement>(null);
+
+  const carregarFila = useCallback(async (tk: string) => {
+    try {
+      const resposta = await fetch(ROTA_FILA, { headers: { Authorization: `Bearer ${tk}` } });
+      if (!resposta.ok) {
+        setErroDaFila("Não consegui carregar a fila.");
+        return;
+      }
+      setErroDaFila(null);
+      setFila(await resposta.json());
+    } catch {
+      setErroDaFila("Não consegui carregar a fila.");
+    }
+  }, []);
+
+  useEffect(() => {
+    let vivo = true;
+    async function iniciar() {
+      const {
+        data: { session },
+      } = await createClient().auth.getSession();
+      const tk = session?.access_token ?? null;
+      if (!vivo) return;
+      setToken(tk);
+      if (tk) await carregarFila(tk);
+      else setErroDaFila("Sessão expirada. Entre de novo.");
+    }
+    iniciar();
+    return () => {
+      vivo = false;
+    };
+  }, [carregarFila]);
+
+  const esperandoAnalise = fila?.fila.some((conta) => ESPERANDO_ANALISE.includes(conta.situacao)) ?? false;
+  useEffect(() => {
+    if (!token || !esperandoAnalise) return;
+    const relogio = setInterval(() => carregarFila(token), RELER_A_CADA_MS);
+    return () => clearInterval(relogio);
+  }, [token, esperandoAnalise, carregarFila]);
+
+  async function enviar(lista: FileList | File[] | null) {
+    const arquivos = Array.from(lista ?? []);
+    if (!token || arquivos.length === 0 || enviando !== null) return;
+    const { aceitos, recusas } = separarArquivos(arquivos);
+    setEnviando(aceitos.length);
+    try {
+      const resposta = aceitos.length > 0 ? await enviarEmLotes(aceitos, token) : null;
+      setUltimo({
+        envio_id: resposta?.envio_id ?? null,
+        ultimo_envio: resposta?.ultimo_envio ?? [],
+        recusas: [...recusas, ...(resposta?.recusas ?? [])],
+      });
+    } finally {
+      setEnviando(null);
+      if (seletor.current) seletor.current.value = "";
+    }
+    await carregarFila(token);
+  }
+
+  const contas = aba === "fila" ? fila?.fila : fila?.concluidas;
+
+  return (
+    <div className="space-y-6">
+      <div>
+        <div className="flex items-center justify-between gap-3">
+          <h1 className="text-2xl font-bold text-slate-900">Contas médicas</h1>
+          <LinkParaOperadoras />
+        </div>
+        <p className="text-slate-500 text-sm mt-0.5">
+          Envie a conta e o prontuário do MV e receba a lista do que corrigir antes de mandar para a operadora.
+        </p>
+      </div>
 
       <section
-        aria-label="Fila de contas"
-        className="bg-white rounded-2xl border border-border shadow-premium p-10 text-center"
+        aria-label="Envio de contas"
+        onDragOver={(e) => {
+          e.preventDefault();
+          setArrastando(true);
+        }}
+        onDragLeave={() => setArrastando(false)}
+        onDrop={(e) => {
+          e.preventDefault();
+          setArrastando(false);
+          enviar(e.dataTransfer?.files ?? null);
+        }}
+        className={`rounded-2xl border-2 border-dashed p-8 text-center transition-colors ${
+          arrastando ? "border-primary bg-primary/5" : "border-slate-300 bg-white"
+        }`}
       >
-        <ReceiptText className="w-8 h-8 text-slate-300 mx-auto mb-3" aria-hidden="true" />
-        <p className="text-slate-500 text-sm">Nenhuma conta enviada ainda</p>
+        {enviando !== null ? (
+          <p className="flex items-center justify-center gap-2 text-sm text-slate-600">
+            <Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" />
+            Enviando {enviando === 1 ? "1 arquivo" : `${enviando} arquivos`} e lendo cada PDF
+          </p>
+        ) : (
+          <>
+            <Upload className="w-8 h-8 text-slate-400 mx-auto mb-3" aria-hidden="true" />
+            <p className="text-sm font-medium text-slate-800">Arraste aqui a conta e o prontuário do MV</p>
+            <p className="text-xs text-slate-500 mt-1">
+              Vários de uma vez, sem renomear: o app lê o tipo e o atendimento dentro de cada PDF. Até 10
+              atendimentos e 30 arquivos por envio, 100 MB por arquivo.
+            </p>
+            <button
+              type="button"
+              onClick={() => seletor.current?.click()}
+              className="mt-4 inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-primary text-white text-sm font-medium"
+            >
+              Selecionar arquivos
+            </button>
+          </>
+        )}
+        <input
+          ref={seletor}
+          type="file"
+          accept="application/pdf,.pdf"
+          multiple
+          hidden
+          aria-label="Arquivos da conta e do prontuário"
+          onChange={(e) => enviar(e.target.files)}
+        />
       </section>
+
+      {ultimo && <UltimoEnvio resposta={ultimo} />}
+
+      <div>
+        <div className="flex gap-2 border-b border-border" role="tablist">
+          {(
+            [
+              ["fila", `Fila (${fila?.fila.length ?? 0})`],
+              ["concluidas", `Concluídas (${fila?.concluidas.length ?? 0})`],
+            ] as [Aba, string][]
+          ).map(([id, rotulo]) => (
+            <button
+              key={id}
+              type="button"
+              role="tab"
+              aria-selected={aba === id}
+              onClick={() => setAba(id)}
+              className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
+                aba === id ? "border-primary text-primary" : "border-transparent text-text-secondary hover:text-text"
+              }`}
+            >
+              {rotulo}
+            </button>
+          ))}
+        </div>
+
+        <section aria-label="Fila de contas" className={`${CARTAO} mt-4`}>
+          <div role="tabpanel">
+            {erroDaFila ? (
+              <p role="alert" className="flex items-center gap-2 p-6 text-sm text-red-700">
+                <AlertCircle className="w-4 h-4" aria-hidden="true" /> {erroDaFila}
+              </p>
+            ) : !fila ? (
+              <p className="flex items-center gap-2 p-6 text-sm text-slate-500">
+                <Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" /> Carregando a fila
+              </p>
+            ) : contas && contas.length > 0 ? (
+              <ul className="divide-y divide-border">
+                {contas.map((conta) => (
+                  <LinhaDaFila key={conta.id} conta={conta} onEnviarDeNovo={() => seletor.current?.click()} />
+                ))}
+              </ul>
+            ) : (
+              <div className="p-10 text-center">
+                <ReceiptText className="w-8 h-8 text-slate-300 mx-auto mb-3" aria-hidden="true" />
+                <p className="text-slate-500 text-sm">
+                  {aba === "fila" ? "Nenhuma conta enviada ainda" : "Nenhuma conta concluída ainda"}
+                </p>
+              </div>
+            )}
+          </div>
+        </section>
+      </div>
     </div>
   );
 }
