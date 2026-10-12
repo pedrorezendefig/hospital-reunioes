@@ -32,7 +32,7 @@ def _pdf(*paginas: str) -> bytes:
 
 def _pdftotext_falso(pasta: Path, monkeypatch: pytest.MonkeyPatch, corpo: str) -> None:
     falso = pasta / "pdftotext"
-    falso.write_text(f"#!{sys.executable}\n{corpo}\n")
+    falso.write_text(f"#!{sys.executable}\n{corpo}\n", encoding="utf-8")
     falso.chmod(falso.stat().st_mode | stat.S_IXUSR)
     monkeypatch.setenv("PATH", f"{pasta}{os.pathsep}{os.environ['PATH']}")
 
