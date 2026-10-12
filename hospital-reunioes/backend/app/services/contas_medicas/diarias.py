@@ -193,7 +193,12 @@ def contar_diarias(
     o fim do período analisado). O setor de cada uma é o de destino."""
     if not movimentacoes or movimentacoes[0].tipo != "INTERNACAO":
         raise ValueError("A primeira movimentação deve ser INTERNACAO.")
-    acompanhante = False
+    # Acompanhante: paciente com 60 anos ou mais ou menor de 18 (ASSIM-DIA-10).
+    acompanhante = (
+        parametros.acompanhante_segue_a_regra_do_paciente is True
+        and idade_anos is not None
+        and (idade_anos >= 60 or idade_anos < 18)
+    )
     return [
         _segmento(entrada, saida, parametros, acompanhante)
         for entrada, saida in zip(movimentacoes, movimentacoes[1:], strict=False)

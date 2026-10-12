@@ -293,3 +293,43 @@ def test_saida_exatamente_as_10h_conta_como_depois_do_vencimento(hora, diarias):
     segmentos = contar_diarias([mov("INTERNACAO", 0, "21:00", "CTI"), mov("OBITO", 2, hora)], ASSIM)
 
     assert len(segmentos[0].diarias) == diarias
+
+
+# ----------------------------------------------------------------------------------
+# Conta parcial e acompanhante
+# ----------------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("divisa", range(2, 10))
+def test_a_diaria_do_dia_de_divisa_cai_em_exatamente_uma_parcial(divisa):
+    """Caso b (10 diárias, a última começa em 09/10) cortado em [01, divisa - 1] e [divisa, 10]."""
+    segmentos = contar_diarias(CASO_B, ASSIM)
+
+    primeira = diarias_do_periodo(segmentos, date(2026, 10, 1), date(2026, 10, divisa - 1))
+    segunda = diarias_do_periodo(segmentos, date(2026, 10, divisa), date(2026, 10, 10))
+
+    def inicios(parcial):
+        return [(s.setor, d.inicio) for s in parcial for d in s.diarias]
+
+    do_dia = [(setor, inicio) for setor, inicio in inicios(segmentos) if inicio.day == divisa]
+    assert do_dia
+    for diaria in do_dia:
+        assert (diaria in inicios(primeira), diaria in inicios(segunda)) == (False, True)
+    assert sorted(inicios(primeira) + inicios(segunda)) == sorted(inicios(segmentos))
+
+
+@pytest.mark.parametrize(
+    ("parametros", "idade", "acompanhante"),
+    [
+        (ASSIM, 60, True),
+        (ASSIM, 17, True),
+        (ASSIM, 59, False),
+        (ASSIM, 18, False),
+        (ASSIM, None, False),
+        (UNIMED, 80, False),
+    ],
+)
+def test_acompanhante_segue_a_regra_do_paciente_com_60_anos_ou_mais_ou_menor_de_18(parametros, idade, acompanhante):
+    segmentos = contar_diarias(CASO_B, parametros, idade_anos=idade)
+
+    assert [s.acompanhante for s in segmentos] == [acompanhante, acompanhante]
