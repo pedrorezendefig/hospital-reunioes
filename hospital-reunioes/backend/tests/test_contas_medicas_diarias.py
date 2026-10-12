@@ -8,8 +8,10 @@ LEIA-ME da Unimed, LEVE-DIA-06). D = 01/10/2026.
 """
 
 from datetime import date, datetime
+from pathlib import Path
 
 import pytest
+from test_contas_medicas_conteudo import CLEXANE, INTERNACAO_COM_TRANSFERENCIA, ler, prescricao
 
 from app.services.contas_medicas.conteudo import Movimentacao
 from app.services.contas_medicas.diarias import ParametrosDiaria, contar_diarias, diarias_do_periodo
@@ -50,7 +52,11 @@ CASOS_ASSIM = {
         None,
     ),
     "b: internação 21h45 D, transferência 15h D+7, alta 12h D+9": (
-        [mov("INTERNACAO", 0, "21:45", "CTI"), mov("TRANSFERENCIA_SETOR", 7, "15:00", "ENFERMARIA"), mov("ALTA", 9, "12:00")],
+        [
+            mov("INTERNACAO", 0, "21:45", "CTI"),
+            mov("TRANSFERENCIA_SETOR", 7, "15:00", "ENFERMARIA"),
+            mov("ALTA", 9, "12:00"),
+        ],
         [8, 2],
         None,
     ),
@@ -75,7 +81,11 @@ CASOS_ASSIM = {
         None,
     ),
     "g: CTI 14h D, transferência 17h D+6, alta do andar 14h D+7": (
-        [mov("INTERNACAO", 0, "14:00", "CTI"), mov("TRANSFERENCIA_SETOR", 6, "17:00", "ENFERMARIA"), mov("ALTA", 7, "14:00")],
+        [
+            mov("INTERNACAO", 0, "14:00", "CTI"),
+            mov("TRANSFERENCIA_SETOR", 6, "17:00", "ENFERMARIA"),
+            mov("ALTA", 7, "14:00"),
+        ],
         [7, 1],
         None,
     ),
@@ -90,7 +100,11 @@ CASOS_ASSIM = {
         None,
     ),
     "j: transferência 8h D+3, PENDENTE: sem extra e Validar": (
-        [mov("INTERNACAO", 0, "21:00", "CTI"), mov("TRANSFERENCIA_SETOR", 3, "08:00", "ENFERMARIA"), mov("ALTA", 4, "09:00")],
+        [
+            mov("INTERNACAO", 0, "21:00", "CTI"),
+            mov("TRANSFERENCIA_SETOR", 3, "08:00", "ENFERMARIA"),
+            mov("ALTA", 4, "09:00"),
+        ],
         [3, 1],
         [1, 0],
     ),
@@ -105,7 +119,11 @@ CASOS_ASSIM = {
         None,
     ),
     "m: transferência 3h D+2, madrugada no destino PENDENTE, alta 12h D+4": (
-        [mov("INTERNACAO", 0, "21:00", "CTI"), mov("TRANSFERENCIA_SETOR", 2, "03:00", "ENFERMARIA"), mov("ALTA", 4, "12:00")],
+        [
+            mov("INTERNACAO", 0, "21:00", "CTI"),
+            mov("TRANSFERENCIA_SETOR", 2, "03:00", "ENFERMARIA"),
+            mov("ALTA", 4, "12:00"),
+        ],
         [2, 2],
         [1, 1],
     ),
@@ -288,6 +306,26 @@ def test_janela_da_transferencia_que_atravessa_o_vencimento_vira_validar_e_intei
     assert [[p.motivo for p in s.validar] for s in segmentos] == motivos
 
 
+@pytest.mark.parametrize(
+    ("parametro", "valor"),
+    [
+        ("sempre_integral", False),
+        ("saida_antes_do_vencimento_paga_diaria_em_curso", False),
+        ("alta_depois_do_vencimento_paga_o_dia", True),
+        ("destino_inicia_na_hora_da_transferencia", False),
+    ],
+)
+def test_parametro_com_valor_que_nenhuma_memoria_definiu_vira_validar_em_vez_de_conta_silenciosa(parametro, valor):
+    parametros = ParametrosDiaria.da_memoria({"diaria": {**DIARIA_ASSIM, parametro: valor}})
+
+    segmentos = contar_diarias(CASO_B, parametros)
+
+    assert [[(p.motivo, parametro in p.texto) for p in s.validar] for s in segmentos] == [
+        [("PARAMETRO_NAO_SUPORTADO", True)],
+        [],
+    ]
+
+
 @pytest.mark.parametrize(("hora", "diarias"), [("10:00", 3), ("09:59", 2)])
 def test_saida_exatamente_as_10h_conta_como_depois_do_vencimento(hora, diarias):
     segmentos = contar_diarias([mov("INTERNACAO", 0, "21:00", "CTI"), mov("OBITO", 2, hora)], ASSIM)
@@ -333,3 +371,43 @@ def test_acompanhante_segue_a_regra_do_paciente_com_60_anos_ou_mais_ou_menor_de_
     segmentos = contar_diarias(CASO_B, parametros, idade_anos=idade)
 
     assert [s.acompanhante for s in segmentos] == [acompanhante, acompanhante]
+
+
+# ----------------------------------------------------------------------------------
+# Integração com a leitura do conteúdo (#1118)
+# ----------------------------------------------------------------------------------
+
+# A internação com transferência do teste do conteúdo: CTI ADULTO desde 02/10 22:40, o
+# último documento no CTI é a prescrição de 05/10 09:00, o primeiro na ENFERMARIA 3 é o
+# SAE de 05/10 16:46, alta em 06/10 15:20. Na outra versão, a prescrição de 05/10 é às
+# 10:30 e a janela fica inteira depois do vencimento.
+JANELA_ATRAVESSA = INTERNACAO_COM_TRANSFERENCIA
+JANELA_DEPOIS = [
+    prescricao(5, CLEXANE, hora="10:30") if p == prescricao(5, CLEXANE, hora="09:00") else p for p in JANELA_ATRAVESSA
+]
+
+
+@pytest.mark.parametrize(
+    ("partes", "motivos"),
+    [(JANELA_ATRAVESSA, [["JANELA_ATRAVESSA_O_VENCIMENTO"], []]), (JANELA_DEPOIS, [[], []])],
+    ids=["janela atravessa as 10h", "janela toda depois das 10h"],
+)
+def test_movimentacoes_lidas_do_prontuario_entram_no_contador_sem_conversao(partes, motivos):
+    movimentacoes = ler(*partes).movimentacoes
+
+    segmentos = contar_diarias(movimentacoes, ASSIM)
+
+    # CTI: vencimentos de 03, 04 e 05/10 e a extra na origem (transferência depois das 10h);
+    # enfermaria: da transferência ao vencimento de 06/10, alta às 15:20 sem diária no dia.
+    assert [(s.setor, len(s.diarias)) for s in segmentos] == [("CTI ADULTO", 4), ("ENFERMARIA 3", 1)]
+    assert [s.diarias[0].inicio for s in segmentos] == [datetime(2026, 10, 2, 22, 40), datetime(2026, 10, 5, 16, 46)]
+    assert [[p.motivo for p in s.validar] for s in segmentos] == motivos
+
+
+def test_sem_travessao_nem_meia_risca_no_contador_nem_nos_textos_das_pendencias():
+    texto = (Path(__file__).parents[1] / "app" / "services" / "contas_medicas" / "diarias.py").read_text(
+        encoding="utf-8"
+    )
+
+    assert chr(0x2014) not in texto
+    assert chr(0x2013) not in texto

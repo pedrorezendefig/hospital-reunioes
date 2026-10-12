@@ -29,6 +29,15 @@ _SAIDA_DA_MEMORIA = {
 }
 
 
+# Parâmetros com um só valor validado (o das memórias da ASSIM, da Unimed e da Leve).
+_VALOR_VALIDADO = {
+    "sempre_integral": True,
+    "saida_antes_do_vencimento_paga_diaria_em_curso": True,
+    "alta_depois_do_vencimento_paga_o_dia": False,
+    "destino_inicia_na_hora_da_transferencia": True,
+}
+
+
 @dataclass(frozen=True)
 class ParametrosDiaria:
     """O bloco `diaria` da memória. Sem a chave, vale a diretriz geral do HSM."""
@@ -144,14 +153,12 @@ def _segmento(entrada: Movimentacao, saida: Movimentacao, p: ParametrosDiaria, a
 
     # 3) diária extra integral na origem; antes do vencimento, só na transferência e
     # conforme `transferencia_antes_do_vencimento_gera_extra` (true, false ou PENDENTE)
-    extra = Diaria(ultimo, ultimo + UM_DIA, True, "EXTRA_NA_ORIGEM")
     tipo_com_extra = saida.tipo in p.diaria_extra_na_origem_apos_vencimento
+    transferencia = saida.tipo.startswith("TRANSFERENCIA")
     antes = p.transferencia_antes_do_vencimento_gera_extra
-    if tipo_com_extra and saiu_depois:
-        diarias.append(extra)
-    elif tipo_com_extra and saida.tipo.startswith("TRANSFERENCIA") and antes is True:
-        diarias.append(extra)
-    elif tipo_com_extra and saida.tipo.startswith("TRANSFERENCIA") and antes == "PENDENTE":
+    if tipo_com_extra and (saiu_depois or (transferencia and antes is True)):
+        diarias.append(Diaria(ultimo, ultimo + UM_DIA, True, "EXTRA_NA_ORIGEM"))
+    elif tipo_com_extra and transferencia and antes == "PENDENTE":
         validar.append(
             Pendencia(
                 "TRANSFERENCIA_ANTES_DO_VENCIMENTO",
@@ -199,10 +206,24 @@ def contar_diarias(
         and idade_anos is not None
         and (idade_anos >= 60 or idade_anos < 18)
     )
-    return [
+    segmentos = [
         _segmento(entrada, saida, parametros, acompanhante)
         for entrada, saida in zip(movimentacoes, movimentacoes[1:], strict=False)
     ]
+    # O contador só conhece o valor que as memórias validaram para estes parâmetros; o
+    # outro nenhuma memória definiu. Uma pendência por conta, no primeiro segmento.
+    fora_do_validado = [nome for nome, validado in _VALOR_VALIDADO.items() if getattr(parametros, nome) is not validado]
+    if segmentos and fora_do_validado:
+        pendencias = tuple(
+            Pendencia(
+                "PARAMETRO_NAO_SUPORTADO",
+                f"A memória traz {nome}: {getattr(parametros, nome)}, valor que o contador não sabe aplicar. "
+                "Calculado como se fosse o valor validado.",
+            )
+            for nome in fora_do_validado
+        )
+        segmentos[0] = replace(segmentos[0], validar=segmentos[0].validar + pendencias)
+    return segmentos
 
 
 def diarias_do_periodo(segmentos: Sequence[Segmento], inicio: date, fim: date) -> list[Segmento]:
