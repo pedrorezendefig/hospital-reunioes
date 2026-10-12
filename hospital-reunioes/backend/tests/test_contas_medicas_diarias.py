@@ -252,3 +252,44 @@ def test_leve_dia_06_enfermaria_ate_16h_e_cti_a_partir_das_16h_dao_uma_diaria_de
         ("CTI", [quando(2, "16:00")]),
     ]
     assert [s.validar for s in segmentos] == [(), ()]
+
+
+# ----------------------------------------------------------------------------------
+# Transferência de setor como janela e a saída exatamente no vencimento
+# ----------------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("janela", "diarias", "motivos"),
+    [
+        # toda antes das 10h: regra da transferência antes do vencimento (PENDENTE na ASSIM)
+        (("06:00", "09:30"), [7, 2], [["TRANSFERENCIA_ANTES_DO_VENCIMENTO"], []]),
+        # toda depois, começando exatamente às 10h: extra na origem, sem pendência
+        (("10:00", "15:00"), [8, 2], [[], []]),
+        # atravessa as 10h: calcula pelo fim da janela e devolve Validar
+        (("09:00", "15:00"), [8, 2], [["JANELA_ATRAVESSA_O_VENCIMENTO"], []]),
+    ],
+    ids=["toda antes", "toda depois", "atravessa"],
+)
+def test_janela_da_transferencia_que_atravessa_o_vencimento_vira_validar_e_inteira_de_um_lado_aplica_a_regra(
+    janela, diarias, motivos
+):
+    de, ate = janela
+    segmentos = contar_diarias(
+        [
+            mov("INTERNACAO", 0, "21:45", "CTI"),
+            mov("TRANSFERENCIA_SETOR", 7, ate, "ENFERMARIA", (quando(7, de), quando(7, ate))),
+            mov("ALTA", 9, "12:00"),
+        ],
+        ASSIM,
+    )
+
+    assert [len(s.diarias) for s in segmentos] == diarias
+    assert [[p.motivo for p in s.validar] for s in segmentos] == motivos
+
+
+@pytest.mark.parametrize(("hora", "diarias"), [("10:00", 3), ("09:59", 2)])
+def test_saida_exatamente_as_10h_conta_como_depois_do_vencimento(hora, diarias):
+    segmentos = contar_diarias([mov("INTERNACAO", 0, "21:00", "CTI"), mov("OBITO", 2, hora)], ASSIM)
+
+    assert len(segmentos[0].diarias) == diarias

@@ -105,6 +105,12 @@ def _vencimento(dia: date, p: ParametrosDiaria) -> datetime:
     return datetime.combine(dia, p.hora_vencimento)
 
 
+def _primeiro_vencimento_depois_de(instante: datetime, p: ParametrosDiaria) -> datetime:
+    """O instante exatamente no vencimento já é "depois" dele (decisão 8 da spec)."""
+    v = _vencimento(instante.date(), p)
+    return v if instante < v else v + UM_DIA
+
+
 def _segmento(entrada: Movimentacao, saida: Movimentacao, p: ParametrosDiaria, acompanhante: bool) -> Segmento:
     ini, fim = entrada.data_hora, saida.data_hora
     if fim < ini:
@@ -154,7 +160,19 @@ def _segmento(entrada: Movimentacao, saida: Movimentacao, p: ParametrosDiaria, a
             )
         )
 
-    # 4) permanência sem nenhum vencimento: regra não definida
+    # 4) transferência sem hora exata: a janela que atravessa um vencimento não diz de
+    # que lado a transferência caiu (o cálculo acima usou o fim da janela)
+    if saida.janela and _primeiro_vencimento_depois_de(saida.janela[0], p) <= saida.janela[1]:
+        validar.append(
+            Pendencia(
+                "JANELA_ATRAVESSA_O_VENCIMENTO",
+                f"Transferência de setor sem hora exata, entre {saida.janela[0]:%d/%m %H:%M} e "
+                f"{saida.janela[1]:%d/%m %H:%M}: a janela atravessa o vencimento. "
+                "Calculado com a transferência no fim da janela.",
+            )
+        )
+
+    # 5) permanência sem nenhum vencimento: regra não definida
     if not diarias and saida.tipo != "EM_CURSO":
         validar.append(
             Pendencia(
