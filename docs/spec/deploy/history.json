@@ -2,6 +2,51 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-10-12T20:28:24-03:00",
+      "sha": "829e0875912c5ed2549a1273b3c9bbe62659a098",
+      "app_version": "0.178.0",
+      "subject": "Onda onda-a-onda5: Conferências por código e montagem do guia",
+      "raw_subject": "chore(deploy): registro da onda onda-a-onda5 (#1160)",
+      "scope": [
+        "backend"
+      ],
+      "prds": [
+        1113
+      ],
+      "result": "healthy",
+      "duration_seconds": 65,
+      "services_touched": [
+        "backend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        },
+        {
+          "service": "frontend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "onda-enxuta onda-a-onda5: PR #1160 (issue #1122), mergeados PR a PR. Merge pela API do GitHub, um build. Registro pela Action pos-merge depois do health.",
+      "etapas": {
+        "merge_s": 2,
+        "build_s": {
+          "backend": 32
+        },
+        "health_s": 10
+      },
+      "responsavel": "pedrorezendefig"
+    },
+    {
       "at": "2026-10-12T19:32:16-03:00",
       "sha": "3d1ce525eb893fb2f2d10aaa0f1596a447935840",
       "app_version": "0.177.0",
