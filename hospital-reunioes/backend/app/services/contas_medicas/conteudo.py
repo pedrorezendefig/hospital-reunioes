@@ -18,7 +18,7 @@ from dataclasses import dataclass
 from datetime import date, datetime
 
 from app.services.contas_medicas.prescricao import ItemConsolidado, Prescricao, consolidar, ler_itens
-from app.services.contas_medicas.prontuario import _RODAPE_GLOBAL, Documento, Prontuario
+from app.services.contas_medicas.prontuario import _RODAPE_GLOBAL, Documento, Prontuario, _sem_acento
 
 # ----------------------------------------------------------------------------------
 # Balanço hídrico e glicemias
@@ -175,6 +175,65 @@ def _ler_internacao(por_familia: dict[str, list[str]]) -> Internacao:
 
 
 # ----------------------------------------------------------------------------------
+# Setor por dia e movimentações (adendo v1.2, item 8)
+# ----------------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class Movimentacao:
+    """No formato que o contador de diárias consome (#1115): em ordem, a INTERNACAO,
+    zero ou mais TRANSFERENCIA_SETOR e a saída (ALTA, OBITO ou TRANSFERENCIA_HOSPITAL),
+    cada uma com data e hora e o setor de destino. Sem resumo de alta não há saída:
+    quem tem o período da Conta fecha com EM_CURSO."""
+
+    tipo: str
+    data_hora: datetime
+    setor: str | None
+    # Transferência de setor: o prontuário não traz a hora exata, só a janela entre o
+    # último documento no setor antigo e o primeiro no novo; `data_hora` é o fim dela.
+    janela: tuple[datetime, datetime] | None = None
+
+
+def _setor_por_dia(documentos: Sequence[Documento]) -> dict[date, tuple[str, ...]]:
+    """O setor é sempre a unidade (prescrição, SAE, balanço, admissão): o leito muda sem
+    transferência e o campo `Cobertura:` da prescrição não acompanha a mudança."""
+    por_dia: dict[date, tuple[str, ...]] = {}
+    for d in documentos:
+        if d.setor and d.data and d.setor not in por_dia.get(d.data, ()):
+            por_dia[d.data] = por_dia.get(d.data, ()) + (d.setor,)
+    return por_dia
+
+
+def _tipo_da_saida(motivo: str | None) -> str:
+    motivo = _sem_acento(motivo or "").upper()
+    if "OBITO" in motivo:
+        return "OBITO"
+    if "TRANSF" in motivo:
+        return "TRANSFERENCIA_HOSPITAL"
+    return "ALTA"
+
+
+def _movimentacoes(internacao: Internacao, documentos: Sequence[Documento]) -> tuple[Movimentacao, ...]:
+    if internacao.entrada is None:
+        return ()
+    # Só documento com hora marca a janela: o balanço tem data sem hora.
+    linha_do_tempo = sorted(
+        (datetime.combine(d.data, d.hora), d.setor) for d in documentos if d.setor and d.data and d.hora
+    )
+    setor = linha_do_tempo[0][1] if linha_do_tempo else None
+    movimentacoes = [Movimentacao("INTERNACAO", internacao.entrada, setor)]
+    ultimo_no_setor = None
+    for quando, novo in linha_do_tempo:
+        if novo != setor and ultimo_no_setor is not None:
+            movimentacoes.append(Movimentacao("TRANSFERENCIA_SETOR", quando, novo, (ultimo_no_setor, quando)))
+            setor = novo
+        ultimo_no_setor = quando
+    if internacao.alta:
+        movimentacoes.append(Movimentacao(_tipo_da_saida(internacao.motivo_alta), internacao.alta, setor))
+    return tuple(movimentacoes)
+
+
+# ----------------------------------------------------------------------------------
 # Leitura
 # ----------------------------------------------------------------------------------
 
@@ -182,6 +241,8 @@ def _ler_internacao(por_familia: dict[str, list[str]]) -> Internacao:
 @dataclass(frozen=True)
 class Conteudo:
     internacao: Internacao
+    movimentacoes: tuple[Movimentacao, ...]
+    setor_por_dia: dict[date, tuple[str, ...]]
     prescricoes: tuple[Prescricao, ...]
     prescricao_consolidada: tuple[ItemConsolidado, ...]
     balancos: tuple[Balanco, ...]
@@ -210,8 +271,11 @@ def ler_conteudo(texto_por_pagina: Sequence[str | None], prontuario: Prontuario)
             balancos.append(_ler_balanco(d, paginas[0][1]))
         elif d.familia == "AFERICAO":
             afericoes.append((d, por_familia["AFERICAO"][-1]))
+    internacao = _ler_internacao(por_familia)
     return Conteudo(
-        internacao=_ler_internacao(por_familia),
+        internacao=internacao,
+        movimentacoes=_movimentacoes(internacao, prontuario.documentos),
+        setor_por_dia=_setor_por_dia(prontuario.documentos),
         prescricoes=tuple(prescricoes),
         prescricao_consolidada=tuple(consolidar(prescricoes)),
         balancos=tuple(balancos),

@@ -13,6 +13,8 @@ O caminho testado é o do pipeline: `ler_prontuario` monta os documentos e
 from datetime import date, datetime
 from pathlib import Path
 
+import pytest
+
 from app.services.contas_medicas.conteudo import ler_conteudo
 from app.services.contas_medicas.prontuario import ler_prontuario
 
@@ -215,3 +217,67 @@ def test_sem_prescricao_a_internacao_vem_da_data_de_atendimento_do_resumo_de_alt
 
     assert internacao.entrada == datetime(2026, 10, 2, 21, 0)
     assert internacao.alta == datetime(2026, 10, 6, 15, 20)
+
+
+# ----------------------------------------------------------------------------------
+# Setor por dia e movimentações
+# ----------------------------------------------------------------------------------
+
+
+def sae(data_e_hora: str, setor: str) -> list[str]:
+    paginas = paginas_da_fixture("prontuario/sae")
+    return [
+        p.replace("Data do Hist.: 03/10/2026 08:00", f"Data do Hist.: {data_e_hora}").replace(
+            "Setor: CTI ADULTO", f"Setor: {setor}"
+        )
+        for p in paginas
+    ]
+
+
+# Admissão no CTI em 02/10 23:05; o leito muda no balanço (BOX-07) e na prescrição de
+# 04/10 (CTI-06) sem mudar a unidade; o último documento no CTI é a prescrição de
+# 05/10 09:00 e o primeiro na enfermaria é o SAE de 05/10 16:46; alta em 06/10 15:20.
+INTERNACAO_COM_TRANSFERENCIA = [
+    "prontuario/admissao_unidade",
+    prescricao(3, CLEXANE, hora="10:15"),
+    "conteudo/balanco",
+    prescricao(4, CLEXANE, hora="10:20", leito="CTI-06"),
+    prescricao(5, CLEXANE, hora="09:00"),
+    sae("05/10/2026 16:46", "ENFERMARIA 3"),
+    prescricao(6, CLEXANE, hora="10:00", unidade="ENFERMARIA 3", leito="305"),
+    resumo_de_alta(),
+]
+
+
+def test_setor_de_cada_dia_vem_da_unidade_e_o_leito_que_muda_nao_e_transferencia():
+    conteudo = ler(*INTERNACAO_COM_TRANSFERENCIA)
+
+    assert conteudo.setor_por_dia == {
+        date(2026, 10, 2): ("CTI ADULTO",),
+        date(2026, 10, 3): ("CTI ADULTO",),
+        date(2026, 10, 4): ("CTI ADULTO",),
+        date(2026, 10, 5): ("CTI ADULTO", "ENFERMARIA 3"),
+        date(2026, 10, 6): ("ENFERMARIA 3",),
+    }
+    assert [m.tipo for m in conteudo.movimentacoes] == ["INTERNACAO", "TRANSFERENCIA_SETOR", "ALTA"]
+
+
+def test_mudanca_de_unidade_vira_transferencia_com_janela_do_ultimo_documento_no_setor_antigo_ao_primeiro_no_novo():
+    internacao, transferencia, alta = ler(*INTERNACAO_COM_TRANSFERENCIA).movimentacoes
+
+    assert (internacao.data_hora, internacao.setor) == (datetime(2026, 10, 2, 22, 40), "CTI ADULTO")
+    assert transferencia.janela == (datetime(2026, 10, 5, 9, 0), datetime(2026, 10, 5, 16, 46))
+    assert (transferencia.data_hora, transferencia.setor) == (datetime(2026, 10, 5, 16, 46), "ENFERMARIA 3")
+    assert (alta.data_hora, alta.setor, alta.janela) == (datetime(2026, 10, 6, 15, 20), "ENFERMARIA 3", None)
+
+
+@pytest.mark.parametrize(
+    ("motivo", "tipo"),
+    [("MELHORADO", "ALTA"), ("ÓBITO", "OBITO"), ("TRANSFERÊNCIA PARA OUTRO HOSPITAL", "TRANSFERENCIA_HOSPITAL")],
+)
+def test_a_saida_segue_o_motivo_da_alta(motivo, tipo):
+    resumo = [p.replace("MOTIVO DA ALTA: MELHORADO", f"MOTIVO DA ALTA: {motivo}") for p in resumo_de_alta()]
+
+    saida = ler(prescricao(3, CLEXANE), resumo).movimentacoes[-1]
+
+    assert (saida.tipo, saida.data_hora) == (tipo, datetime(2026, 10, 6, 15, 20))
