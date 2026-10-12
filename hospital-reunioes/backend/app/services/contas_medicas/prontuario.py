@@ -77,6 +77,9 @@ class Prontuario:
     paciente_rotulo: str | None
     idade_anos: int | None
     documentos: tuple[Documento, ...]
+    # Páginas do Atendimento digitalizadas ou sem texto: o Guia lista, a faturista
+    # confere à mão se precisar.
+    paginas_sem_texto: tuple[int, ...]
     # Uma frase por motivo; vazio quer dizer que o Guia não é parcial.
     parecer_parcial: tuple[str, ...]
 
@@ -164,6 +167,16 @@ def _grupos_que_faltam(capa: _Capa, corpo: str) -> str | None:
         if quantidade and not re.search(rx, corpo, re.I):
             faltam.append(f"{nome} ({quantidade} na capa)")
     return f"O arquivo não trouxe: {', '.join(faltam)}." if faltam else None
+
+
+_TETO_DE_PAGINAS_SEM_TEXTO = 0.10
+
+
+def _paginas_sem_texto_demais(sem_texto: int, relevantes: int) -> str | None:
+    """Relevantes são as páginas do Atendimento, sem a capa e sem as de outro Atendimento."""
+    if relevantes and sem_texto / relevantes > _TETO_DE_PAGINAS_SEM_TEXTO:
+        return f"O arquivo tem {sem_texto} de {relevantes} páginas sem texto, mais de 10%."
+    return None
 
 
 # ----------------------------------------------------------------------------------
@@ -696,7 +709,11 @@ def ler_prontuario(texto_por_pagina: Sequence[str | None], atendimento: str | in
                 linhas=tuple(desidentificar(linhas, capa.identificacao)),
             )
         )
-    parecer_parcial = [_grupos_que_faltam(capa, "\n".join(textos[capa.paginas :]))]
+    sem_texto = tuple(p.numero for p in do_atendimento if p.familia == "DIGITALIZADO")
+    parecer_parcial = [
+        _grupos_que_faltam(capa, "\n".join(textos[capa.paginas :])),
+        _paginas_sem_texto_demais(len(sem_texto), len(do_atendimento)),
+    ]
     primeira_data = next((d.data for d in documentos if d.data), None)
     return Prontuario(
         atendimento=str(atendimento),
@@ -706,5 +723,6 @@ def ler_prontuario(texto_por_pagina: Sequence[str | None], atendimento: str | in
         paciente_rotulo=rotulo(capa.identificacao),
         idade_anos=idade_em_anos(capa.identificacao, primeira_data),
         documentos=tuple(documentos),
+        paginas_sem_texto=sem_texto,
         parecer_parcial=tuple(motivo for motivo in parecer_parcial if motivo),
     )

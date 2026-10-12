@@ -261,6 +261,24 @@ def test_prescricao_de_enfermagem_que_mudou_um_item_manda_so_a_diferenca():
     )
 
 
+def test_pagina_sem_texto_e_listada_e_ate_10_por_cento_nao_da_parecer_parcial():
+    # 25 páginas do Atendimento (28 menos a capa e as 2 do pronto-socorro), 1 digitalizada
+    resultado = ler_prontuario(montar(*PRONTUARIO_COMPLETO), ATENDIMENTO)
+
+    assert resultado.paginas_sem_texto == (23,)
+    assert resultado.parecer_parcial == ()
+
+
+def test_mais_de_10_por_cento_das_paginas_sem_texto_da_parecer_parcial():
+    # página 3 é imagem pura (só o rodapé global); página 4 só tem o bloco de assinatura
+    paginas = montar(CAPA_QUE_BATE, "evolucao", [""], "digitalizado", "prescricao_medica", "anotacao_enf")
+
+    resultado = ler_prontuario(paginas, ATENDIMENTO)
+
+    assert resultado.paginas_sem_texto == (3, 4)
+    assert resultado.parecer_parcial == ("O arquivo tem 2 de 6 páginas sem texto, mais de 10%.",)
+
+
 def test_rodape_com_total_diferente_do_numero_de_paginas_e_arquivo_incompleto():
     paginas = montar("capa", "evolucao", "anotacao_enf", total_no_rodape=5)
 
