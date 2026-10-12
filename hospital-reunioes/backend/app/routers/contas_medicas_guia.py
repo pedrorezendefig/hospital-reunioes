@@ -10,7 +10,7 @@ Conta: a faturista só abre a Conta em que é `faturista_id`; quem tem "painel
 completo" abre qualquer uma.
 """
 
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from typing import Literal
 from uuid import UUID
 
@@ -146,6 +146,41 @@ async def desfazer_marcacao(
     conta = _conta_em_correcao(supabase, conta_id, me)
     linha = _linha_da_faturista(supabase, conta, linha_id)
     return _gravar_marcacao(supabase, linha, me, "ABERTA")
+
+
+class Dia(BaseModel):
+    data: date | None = None
+    setor: str | None = Field(default=None, max_length=200)
+
+
+@router.post("/contas/{conta_id}/guia/dia/feito")
+@limiter.limit("120/minute")
+async def marcar_o_dia_como_feito(
+    request: Request,
+    conta_id: UUID,
+    corpo: Dia,
+    me: dict = Depends(_PODE_CORRIGIR),
+    supabase: Client = Depends(get_supabase_client),
+) -> dict:
+    """Feito em todas as linhas abertas do grupo (dia e setor). As já marcadas
+    e as em validação ficam como estão."""
+    conta = _conta_em_correcao(supabase, conta_id, me)
+    data = corpo.data.isoformat() if corpo.data else None
+    abertas = [
+        linha["id"]
+        for linha in _linhas(supabase, conta["id"])
+        if linha.get("data") == data
+        and linha.get("setor") == corpo.setor
+        and linha.get("estado") == "ABERTA"
+        and linha.get("acao") != "VALIDAR"
+    ]
+    if not abertas:
+        return {"marcadas": 0}
+    campos = {"estado": "FEITO", "marcado_por": me.get("id"), "marcado_em": _agora()}
+    gravadas = (
+        supabase.table("cm_guia_linha").update(campos).in_("id", abertas).eq("estado", "ABERTA").execute().data or []
+    )
+    return {"marcadas": len(gravadas)}
 
 
 @router.get("/contas/{conta_id}/guia")

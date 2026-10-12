@@ -584,3 +584,58 @@ class TestDesfazer:
 
         assert resposta.status_code == 409
         assert banco.linha("luva")["estado"] == "ABERTA"
+
+
+def _marcadas(linhas: list[dict], **estados: str) -> list[dict]:
+    """As linhas do Guia com algumas já marcadas (nome=estado)."""
+    for linha in linhas:
+        if linha["descricao"] in estados:
+            linha.update(estado=estados[linha["descricao"]], marcado_por="F1", marcado_em="2026-10-08T10:00:00+00:00")
+    return linhas
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 4. Marcar o dia como feito
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+class TestMarcarODiaComoFeito:
+    def test_marca_so_as_linhas_abertas_do_grupo(self):
+        linhas = _marcadas(_linhas_do_guia(), senha="NAO_PROCEDE", agulha="BLOQUEADO")
+        banco = _cenario(conta=_conta(situacao="EM_CORRECAO"), linhas=linhas)
+
+        resposta = _cliente("dona", banco).post(f"{ROTA_GUIA}/dia/feito", json={"data": "2026-10-03", "setor": "CTI"})
+
+        assert resposta.status_code == 200
+        assert resposta.json() == {"marcadas": 2}
+        estados = {linha["descricao"]: linha["estado"] for linha in banco.tabelas["cm_guia_linha"]}
+        assert estados == {
+            "luva": "FEITO",
+            "lavagem": "FEITO",
+            "senha": "NAO_PROCEDE",
+            "agulha": "BLOQUEADO",
+            "fita": "ABERTA",
+            "fisioterapia": "ABERTA",
+            "cateter": "ABERTA",
+            "unidade-pendente": "EM_VALIDACAO",
+            "diaria-acompanhante": "ABERTA",
+            "lanceta": "ABERTA",
+        }
+        assert (banco.linha("luva")["marcado_por"], banco.linha("luva")["marcado_em"] is not None) == ("F1", True)
+        assert banco.linha("agulha")["marcado_em"] == "2026-10-08T10:00:00+00:00"
+
+    def test_dia_com_linha_validar_nao_mexe_nela(self):
+        banco = _cenario(conta=_conta(situacao="EM_CORRECAO"))
+
+        resposta = _cliente("dona", banco).post(f"{ROTA_GUIA}/dia/feito", json={"data": "2026-10-04", "setor": "CTI"})
+
+        assert resposta.json() == {"marcadas": 2}
+        assert banco.linha("unidade-pendente")["estado"] == "EM_VALIDACAO"
+
+    def test_depois_de_concluida_e_recusado(self):
+        banco = _cenario(conta=_conta(situacao="CONCLUIDA"))
+
+        resposta = _cliente("dona", banco).post(f"{ROTA_GUIA}/dia/feito", json={"data": "2026-10-03", "setor": "CTI"})
+
+        assert resposta.status_code == 409
+        assert banco.linha("luva")["estado"] == "ABERTA"
