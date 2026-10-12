@@ -18,7 +18,27 @@ Por enquanto, a fundação do módulo e a carga das operadoras:
 
 Na tela Operadoras, a gestão envia o arquivo de memória de cada convênio, o mesmo que o diretor monta, e a memória passa a valer sem programador no meio. A tela mostra a versão, quantas regras vigentes e pendentes entraram e os parâmetros lidos do cabeçalho; os números têm de bater com o arquivo. Mandar uma versão nova aposenta a anterior. Parâmetro do cabeçalho que o sistema ainda não usa fica guardado, e a memória em vigor pode ser baixada de volta inteira. Arquivo com um número no formato de CPF é recusado, porque memória não pode ter dado de paciente. Na mesma tela a gestão cadastra os nomes de plano como o MV imprime, cada um com a operadora e a coluna de preço, e os setores do MV com a acomodação de cada um. As tabelas de preço ainda aparecem como não carregadas: a carga delas chega na próxima entrega.
 
-Ainda não dá para enviar conta nem prontuário. O envio, a leitura da conta, a contagem de diárias, a conferência de preço e o Guia chegam nas próximas entregas da primeira etapa, uma de cada vez.
+Ainda não dá para enviar conta nem prontuário. O envio, a leitura da conta, a contagem de diárias e a conferência de preço chegam nas próximas entregas da primeira etapa, uma de cada vez. A tela do Guia já existe e é descrita abaixo; ela passa a ter linhas quando o envio e a conferência entrarem no ar.
+
+## O Guia
+
+O Guia é a tela de uma conta com a lista do que corrigir no MV. Foi feito para caber em meia tela, ao lado do MV, e vira lista em telas estreitas.
+
+No topo ficam o número do atendimento, o rótulo da paciente, a conta, a operadora, a coluna de preço, o período da parcial e a situação. Quando o prontuário veio incompleto, aparece a faixa "PARECER PARCIAL" com a lista do que faltou. Logo abaixo, três números: a **Nota de entrada** (de 0 a 100, quanto a conta estava certa antes da correção), o **R$ a ajustar** (com quantos itens e quanto mais está em validação) e os **Itens feitos** (quantos a faturista já marcou, de quantos).
+
+As linhas vêm agrupadas por dia e setor, como "03/10 · CTI". Cada linha começa pelo verbo (Incluir, Ajustar quantidade, Corrigir preço, Retirar ou Validar) e traz a quantidade, o período, o valor com sinal e o código, que copia com um clique. "Ver evidência" abre a página do prontuário e o trecho que sustenta a linha. A etiqueta cinza "Não conferido" marca o valor que não pôde ser conferido contra a tabela da operadora: ele fica fora da nota e do R$ a ajustar.
+
+Em cada linha, três botões:
+
+- **Feito**: a faturista corrigiu no MV. Um clique, e a linha recolhe em verde.
+- **Não procede**: a linha está errada. Pede um de quatro motivos (já está na conta, sem evidência no prontuário, a regra é outra, outro); o texto é opcional, menos em "outro". Vai para a gestão como observação.
+- **Bloqueado**: o MV não deixou lançar, por falta de cadastro ou de preço. Um clique.
+
+Enquanto a conta não foi concluída, toda marcação tem "Desfazer". "Marcar o dia como feito" marca de uma vez as linhas abertas do grupo. A linha Validar não tem botão: o item já foi para a validação da gestão, e a faturista não precisa decidir.
+
+No rodapé ficam a observação opcional para a gestão e o botão "Concluir e abrir a próxima", sempre habilitado. Com item sem marcação, o app pergunta "Concluir assim mesmo?". Concluir abre a próxima conta A fazer da faturista, na ordem de envio. A conta fica Concluída quando tudo foi resolvido, ou Concluída com pendência quando sobrou linha sem marcação, bloqueada ou em validação. Na conclusão a nota de entrada é refeita sem as linhas Não procede; a nota original fica guardada.
+
+Abrir o Guia pela primeira vez muda a conta de A fazer para Em correção. A faturista só abre as próprias contas; quem tem o Painel completo abre a de qualquer uma.
 
 ## Quem vê
 
@@ -43,4 +63,5 @@ O módulo não guarda nome completo, CPF, carteira nem data de nascimento de pac
 - Uma pessoa que deveria ver Contas médicas no menu e não vê, ou o contrário (Defeito, ou Informação se for dúvida sobre o perfil).
 - Pedido para dar ou trocar o perfil de alguém no módulo (Informação).
 - Memória recusada na tela Operadoras, ou contagem de regras que não bate com o arquivo do diretor (Defeito, ou Informação se a recusa explica o motivo, como o CPF).
+- Um botão do Guia que não marca, uma conta que não conclui ou uma nota que não bate com as linhas (Defeito).
 - Dúvida sobre quando chega o envio de contas ou alguma das próximas entregas (Informação).

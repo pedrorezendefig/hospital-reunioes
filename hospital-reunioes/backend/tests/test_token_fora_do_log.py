@@ -84,6 +84,10 @@ PARAMS_SEM_SEGREDO = {
     "anexo_id",
     "codigo",
     "comentario_id",
+    # UUID da Conta de Contas médicas (issue #1121). Nao e credencial: o Guia
+    # exige "enviar e corrigir contas" e ser a faturista da Conta (ou ter o
+    # painel completo), entao o id sozinho nao abre porta nenhuma.
+    "conta_id",
     "convenio_id",
     "data",
     # UUID da Demanda da aba Tecnologia (issue #637). Nao e credencial: quem
