@@ -1,0 +1,9 @@
+HOSPITAL SÃO MATHEUS
+AVALIAÇÃO RESPIRATÓRIA - VENTILAÇÃO
+PACIENTE:
+ATENDIMENTO:
+Emitido em: 03/10/2026
+Modo ventilatório: [ ] VM invasiva  [ ] VNI  [ ] Cateter nasal  [ ] Máscara de Venturi
+Ausculta pulmonar: murmúrio vesicular presente com estertores em base direita.
+Conduta: exercícios respiratórios, incentivador inspiratório, 2 séries de 10 repetições.
+                                                            Página 1 de 1

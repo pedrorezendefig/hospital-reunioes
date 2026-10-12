@@ -1,0 +1,11 @@
+HOSPITAL SÃO MATHEUS
+CHECKLIST DE CIRURGIA SEGURA
+ATENDIMENTO: 31245
+SING IN - ANTES DA INDUÇÃO ANESTÉSICA
+Paciente confirmou identidade, sítio cirúrgico, procedimento e consentimento: sim.
+Sítio demarcado: não se aplica. Verificação de segurança anestésica concluída: sim.
+SING OUT - ANTES DE O PACIENTE SAIR DA SALA
+Contagem de compressas e instrumentais conferida: sim.
+ROBERTA ALVES PINTO
+Documento assinado digitalmente
+ROBERTA ALVES PINTO, CPF 870.432.115-49, COREN/RJ-778899, às 11:05 BRT de 04/10/2026

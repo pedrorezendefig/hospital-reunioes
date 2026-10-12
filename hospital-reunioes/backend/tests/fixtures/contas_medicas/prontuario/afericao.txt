@@ -1,0 +1,9 @@
+HOSPITAL SÃO MATHEUS
+Relatório de Aferição
+ATENDIMENTO: 31245
+Data do Documento: 03/10/2026 06:00
+Sinal vital                         Valor      Unidade
+GLICEMIA CAPILAR                    142        mg/dL
+PRESSÃO ARTERIAL SISTÓLICA          128        mmHg
+PRESSÃO ARTERIAL DIASTÓLICA         76         mmHg
+FREQUÊNCIA CARDÍACA                 88         bpm

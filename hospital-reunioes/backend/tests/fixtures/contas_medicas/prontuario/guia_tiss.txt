@@ -1,0 +1,6 @@
+GUIA DE SOLICITAÇÃO DE INTERNAÇÃO
+1 - Registro ANS: 123456   2 - Número da Guia no Prestador: 99887766
+7 - Número da Carteira: 0817734
+ATENDIMENTO: 31245
+Caráter do atendimento: Eletiva. Tipo de internação: Clínica. Regime: Hospitalar.
+Acomodação autorizada: APARTAMENTO. Procedimento solicitado: 10102019 VISITA HOSPITALAR.

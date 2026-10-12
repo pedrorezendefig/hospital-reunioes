@@ -1,0 +1,8 @@
+HOSPITAL SÃO MATHEUS                                        PÁGINA 1 DE 1
+Relatório de Resumo de Alta
+ATENDIMENTO: 31245
+DATA DE ATENDIMENTO: 02/10/2026 22:40
+DATA DA ALTA - 06/10/2026 15:20:00
+MOTIVO DA ALTA: MELHORADO
+Paciente internada por pneumonia comunitária, tratada com ceftriaxona por 7 dias.
+Evoluiu com melhora clínica, sem oxigênio suplementar na alta. Orientada a retorno ambulatorial.
