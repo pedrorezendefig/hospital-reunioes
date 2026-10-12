@@ -16,6 +16,7 @@ import os
 import sys
 from datetime import date, datetime, time
 from decimal import Decimal
+from pathlib import Path
 from typing import Any
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
@@ -931,6 +932,22 @@ class TestDiariaGlobal:
         ]
         assert {linha["regra_codigo"] for linha in resultado.linhas} == {"ALFA-PAC-03"}
 
+    def test_diaria_de_uti_em_operadora_com_classes_sai_na_classe_mais_baixa_para_conferir(self):
+        # Lançadas 2 diárias na classe II; a classe do dia é do Passo B (PRD 2).
+        conta = _conta(*_diarias_lancadas("60034602", 1, 2, unitario=2650.00))
+        prontuario = _prontuario(movimentacoes=_internacao(*TestDiarias.TRES_DIARIAS), tipo_impressao=None)
+
+        resultado = conferir(conta, prontuario, _memoria(PARAMETROS_GLOBAL), _tabela(TABELA_GLOBAL), setores=SETORES)
+
+        [linha] = resultado.linhas
+        assert (linha["acao"], linha["codigo"], linha["data"], linha["valor_diferenca"]) == (
+            "INCLUIR",
+            UTI_CLASSE_1,
+            "2026-10-03",
+            1850.00,
+        )
+        assert "conferir classe de uti" in linha["motivo"].lower()
+
 
 # ═══════════════════════════════════════════════════════════════════════════
 # 5. Montagem: item diário, período, duplicadas
@@ -969,3 +986,19 @@ class TestMontagem:
         [descartada] = resultado.descartadas
         assert descartada["linha"]["descricao"] == "Cetoprofeno"
         assert "fora do período" in descartada["motivo"]
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 9. Tipografia (ADR 0013)
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+def test_motivo_e_evidencia_sem_travessao_nem_meia_risca():
+    """O motivo e o trecho vão para a tela da faturista: o módulo não escreve
+    travessão nem meia-risca em nenhuma frase."""
+    fonte = (Path(__file__).resolve().parents[1] / "app" / "services" / "contas_medicas" / "conferencia.py").read_text(
+        encoding="utf-8"
+    )
+
+    assert "—" not in fonte
+    assert "–" not in fonte
