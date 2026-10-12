@@ -65,6 +65,45 @@ def _linhas(supabase: Client, conta_id: str) -> list[dict]:
     return supabase.table("cm_guia_linha").select("*").eq("conta_id", conta_id).execute().data or []
 
 
+@router.get("/contas/{conta_id}/guia")
+@limiter.limit("120/minute")
+async def abrir_guia(
+    request: Request,
+    conta_id: UUID,
+    me: dict = Depends(_PODE_CORRIGIR),
+    supabase: Client = Depends(get_supabase_client),
+) -> dict:
+    """O Guia da Conta: cabeçalho, os três números e as linhas por dia e setor."""
+    conta = _conta_do_guia(supabase, conta_id, me)
+    if conta.get("situacao") == "A_FAZER":
+        # Condicional na situação: duas aberturas ao mesmo tempo carimbam uma vez.
+        supabase.table("cm_conta").update({"situacao": "EM_CORRECAO", "aberta_em": _agora()}).eq("id", conta["id"]).eq(
+            "situacao", "A_FAZER"
+        ).execute()
+        conta["situacao"] = "EM_CORRECAO"
+
+    atendimento = _primeira(supabase, "cm_atendimento", "id", conta.get("atendimento_id")) or {}
+    operadora = _primeira(supabase, "cm_operadora", "id", atendimento.get("operadora_id")) or {}
+    linhas = _linhas(supabase, conta["id"])
+    concluida = conta.get("situacao") in CONCLUIDAS
+    return {
+        "cabecalho": {
+            "numero_atendimento": atendimento.get("numero_atendimento"),
+            "paciente_rotulo": atendimento.get("paciente_rotulo"),
+            "numero_conta": conta.get("numero_conta"),
+            "operadora": operadora.get("sigla"),
+            "coluna_preco": atendimento.get("coluna_preco"),
+            "periodo_inicio": conta.get("periodo_inicio"),
+            "periodo_fim": conta.get("periodo_fim"),
+            "situacao": conta.get("situacao"),
+            "parecer_parcial": bool(conta.get("parecer_parcial")),
+            "faltantes": conta.get("faltantes") or [],
+        },
+        "numeros": numeros_do_topo(linhas, conta.get("total_lancado"), concluida=concluida),
+        "grupos": agrupar_por_dia_e_setor(linhas),
+    }
+
+
 def _conta_em_correcao(supabase: Client, conta_id: UUID, me: dict) -> dict:
     """A Conta cujo Guia ainda aceita marcação: concluída não muda mais."""
     conta = _conta_do_guia(supabase, conta_id, me)
@@ -250,42 +289,3 @@ def _proxima_a_fazer(supabase: Client, faturista_id: str | None) -> str | None:
         or []
     )
     return proximas[0]["id"] if proximas else None
-
-
-@router.get("/contas/{conta_id}/guia")
-@limiter.limit("120/minute")
-async def abrir_guia(
-    request: Request,
-    conta_id: UUID,
-    me: dict = Depends(_PODE_CORRIGIR),
-    supabase: Client = Depends(get_supabase_client),
-) -> dict:
-    """O Guia da Conta: cabeçalho, os três números e as linhas por dia e setor."""
-    conta = _conta_do_guia(supabase, conta_id, me)
-    if conta.get("situacao") == "A_FAZER":
-        # Condicional na situação: duas aberturas ao mesmo tempo carimbam uma vez.
-        supabase.table("cm_conta").update({"situacao": "EM_CORRECAO", "aberta_em": _agora()}).eq("id", conta["id"]).eq(
-            "situacao", "A_FAZER"
-        ).execute()
-        conta["situacao"] = "EM_CORRECAO"
-
-    atendimento = _primeira(supabase, "cm_atendimento", "id", conta.get("atendimento_id")) or {}
-    operadora = _primeira(supabase, "cm_operadora", "id", atendimento.get("operadora_id")) or {}
-    linhas = _linhas(supabase, conta["id"])
-    concluida = conta.get("situacao") in CONCLUIDAS
-    return {
-        "cabecalho": {
-            "numero_atendimento": atendimento.get("numero_atendimento"),
-            "paciente_rotulo": atendimento.get("paciente_rotulo"),
-            "numero_conta": conta.get("numero_conta"),
-            "operadora": operadora.get("sigla"),
-            "coluna_preco": atendimento.get("coluna_preco"),
-            "periodo_inicio": conta.get("periodo_inicio"),
-            "periodo_fim": conta.get("periodo_fim"),
-            "situacao": conta.get("situacao"),
-            "parecer_parcial": bool(conta.get("parecer_parcial")),
-            "faltantes": conta.get("faltantes") or [],
-        },
-        "numeros": numeros_do_topo(linhas, conta.get("total_lancado"), concluida=concluida),
-        "grupos": agrupar_por_dia_e_setor(linhas),
-    }
