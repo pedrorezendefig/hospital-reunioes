@@ -17,6 +17,13 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import date, datetime
 
+from app.services.contas_medicas.cirurgia import (
+    MARCA_DA_DESCRICAO,
+    DescricaoCirurgica,
+    FichaAnestesica,
+    ler_descricao_cirurgica,
+    ler_ficha_anestesica,
+)
 from app.services.contas_medicas.prescricao import ItemConsolidado, Prescricao, consolidar, ler_itens
 from app.services.contas_medicas.prontuario import _RODAPE_GLOBAL, Documento, Prontuario, _sem_acento
 
@@ -247,6 +254,8 @@ class Conteudo:
     prescricao_consolidada: tuple[ItemConsolidado, ...]
     balancos: tuple[Balanco, ...]
     glicemias: tuple[GlicemiasDoDia, ...]
+    descricoes_cirurgicas: tuple[DescricaoCirurgica, ...]
+    fichas_anestesicas: tuple[FichaAnestesica, ...]
 
 
 def _paginas(textos: Sequence[str], documento: Documento) -> list[tuple[int, str]]:
@@ -259,18 +268,25 @@ def ler_conteudo(texto_por_pagina: Sequence[str | None], prontuario: Prontuario)
     prescricoes: list[Prescricao] = []
     balancos: list[Balanco] = []
     afericoes: list[tuple[Documento, str]] = []
+    descricoes: list[DescricaoCirurgica] = []
+    fichas: list[FichaAnestesica] = []
     # Texto inteiro de cada documento, por Família, na ordem da data.
     por_familia: dict[str, list[str]] = {}
     for d in prontuario.documentos:
         paginas = _paginas(textos, d)
-        por_familia.setdefault(d.familia, []).append("\n".join(texto for _, texto in paginas))
+        texto = "\n".join(texto for _, texto in paginas)
+        por_familia.setdefault(d.familia, []).append(texto)
         if d.familia == "PRESCRICAO":
             itens = tuple(ler_itens(paginas))
             prescricoes.append(Prescricao(d.data, d.hora, d.subtipo, d.setor, d.paginas, itens))
         elif d.familia == "BALANCO":
             balancos.append(_ler_balanco(d, paginas[0][1]))
         elif d.familia == "AFERICAO":
-            afericoes.append((d, por_familia["AFERICAO"][-1]))
+            afericoes.append((d, texto))
+        elif d.familia == "FICHA_ANESTESICA":
+            fichas.append(ler_ficha_anestesica(texto, d.paginas, d.data))
+        elif d.familia == "DOC_EDITOR" and MARCA_DA_DESCRICAO.search(texto):
+            descricoes.append(ler_descricao_cirurgica(texto, d.paginas))
     internacao = _ler_internacao(por_familia)
     return Conteudo(
         internacao=internacao,
@@ -280,4 +296,6 @@ def ler_conteudo(texto_por_pagina: Sequence[str | None], prontuario: Prontuario)
         prescricao_consolidada=tuple(consolidar(prescricoes)),
         balancos=tuple(balancos),
         glicemias=_glicemias(afericoes, balancos),
+        descricoes_cirurgicas=tuple(descricoes),
+        fichas_anestesicas=tuple(fichas),
     )

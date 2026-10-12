@@ -10,7 +10,7 @@ O caminho testado é o do pipeline: `ler_prontuario` monta os documentos e
 `ler_conteudo` lê as páginas de cada um.
 """
 
-from datetime import date, datetime
+from datetime import date, datetime, time
 from pathlib import Path
 
 import pytest
@@ -281,3 +281,41 @@ def test_a_saida_segue_o_motivo_da_alta(motivo, tipo):
     saida = ler(prescricao(3, CLEXANE), resumo).movimentacoes[-1]
 
     assert (saida.tipo, saida.data_hora) == (tipo, datetime(2026, 10, 6, 15, 20))
+
+
+# ----------------------------------------------------------------------------------
+# Centro cirúrgico
+# ----------------------------------------------------------------------------------
+
+
+def test_descricao_cirurgica_devolve_a_principal_e_as_adicionais_com_codigo_horarios_peca_e_consignados():
+    (descricao,) = ler("conteudo/descricao_cirurgica").descricoes_cirurgicas
+
+    # a principal aparece também na tabela: 1 principal e 4 adicionais, 5 códigos
+    assert [(p.codigo, p.principal) for p in descricao.procedimentos] == [
+        ("31005497", True),
+        ("31005519", False),
+        ("31009158", False),
+        ("30715016", False),
+        ("40813363", False),
+    ]
+    assert descricao.procedimentos[0].descricao == "COLECISTECTOMIA COM COLANGIOGRAFIA"
+    assert (descricao.inicio, descricao.fim) == (datetime(2026, 10, 4, 17, 40), datetime(2026, 10, 4, 20, 0))
+    assert descricao.anatomopatologico == "VESICULA BILIAR"
+    assert descricao.consignados == "CLIPS DE TITANIO MEDIO, 2 CARTUCHOS"
+    assert descricao.paginas == (1,)
+
+
+def test_ficha_anestesica_devolve_horarios_gases_com_minutos_medicamentos_com_quantidade_e_monitorizacao():
+    (ficha,) = ler("conteudo/ficha_anestesica").fichas_anestesicas
+
+    assert (ficha.data, ficha.inicio, ficha.fim) == (date(2026, 10, 4), time(16, 50), time(19, 20))
+    assert ficha.tecnica == "GERAL BALANCEADA"
+    assert [(g.gas, g.litros_por_minuto, g.minutos) for g in ficha.gases] == [("O2", 2, 150), ("AR", 2, 150)]
+    assert ficha.volatil == "sevoflurano 2,5%"
+    # um marcado no campo, outro anotado ao lado pelo anestesista
+    assert [(m.nome, m.quantidade, m.anotado) for m in ficha.medicamentos] == [
+        ("Alfentanila", 1, False),
+        ("sugamadex", 1, True),
+    ]
+    assert ficha.monitorizacao == ("Cardioscopia", "Oximetria", "PNI")
