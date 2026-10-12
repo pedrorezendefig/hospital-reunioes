@@ -315,3 +315,47 @@ class TestClaim:
         banco = _Banco({"cm_conta": [_conta_na_fila("c2", 20), _conta_na_fila("c1", 10)]})
 
         assert processamento.pegar_da_fila(banco, AGORA)["id"] == "c1"
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 2. A conta presa em PROCESSANDO
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+def _ha(minutos: int) -> str:
+    return (AGORA - timedelta(minutes=minutos)).isoformat()
+
+
+def _presa(minutos: int, tentativas: int) -> dict:
+    return _conta_na_fila("c1", 1, situacao="PROCESSANDO", processando_desde=_ha(minutos), tentativas=tentativas)
+
+
+class TestContaPresa:
+    def test_processando_ha_16_minutos_volta_para_a_fila_e_o_claim_seguinte_e_a_tentativa_2(self):
+        banco = _Banco({"cm_conta": [_presa(16, tentativas=1)]})
+
+        processamento.devolver_presas(banco, AGORA)
+
+        conta = banco.conta("c1")
+        assert (conta["situacao"], conta["processando_desde"], conta["tentativas"]) == ("NA_FILA", None, 1)
+        assert processamento.pegar_da_fila(banco, AGORA)["tentativas"] == 2
+
+    def test_processando_ha_14_minutos_segue_processando(self):
+        banco = _Banco({"cm_conta": [_presa(14, tentativas=1)]})
+
+        processamento.devolver_presas(banco, AGORA)
+
+        assert banco.conta("c1") == _presa(14, tentativas=1)
+
+    def test_na_terceira_tentativa_presa_vira_erro_com_a_mensagem(self):
+        banco = _Banco({"cm_conta": [_presa(16, tentativas=3)]})
+
+        processamento.devolver_presas(banco, AGORA)
+
+        conta = banco.conta("c1")
+        assert (conta["situacao"], conta["erro_motivo"], conta["processando_desde"]) == (
+            "ERRO",
+            "A análise não terminou em três tentativas. Envie de novo.",
+            None,
+        )
+        assert processamento.pegar_da_fila(banco, AGORA) is None

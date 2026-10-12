@@ -6,11 +6,19 @@ A fila vive em `cm_conta` (ADR 0070, decisão 5): o envio deixa a conta
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timedelta
 
 # Quantas contas da cabeça da fila o claim tenta antes de desistir: perder a
 # primeira para a outra vaga não pode deixar a vaga parada até o próximo tique.
 _CANDIDATAS = 5
+
+# A conta em PROCESSANDO há mais que isto ficou para trás (restart do app no
+# meio da análise): volta para a fila. A leitura de um prontuário de 900
+# páginas tem prazo de 120 segundos, então 15 minutos não cortam análise viva.
+PRAZO_DA_ANALISE = timedelta(minutes=15)
+MAXIMO_DE_TENTATIVAS = 3
+
+MENSAGEM_TENTATIVAS_ESGOTADAS = "A análise não terminou em três tentativas. Envie de novo."
 
 
 def pegar_da_fila(supabase, agora: datetime) -> dict | None:
@@ -51,3 +59,34 @@ def pegar_da_fila(supabase, agora: datetime) -> dict | None:
         if pegas:
             return pegas[0]
     return None
+
+
+def _devolver(supabase, conta: dict, erro_motivo: str) -> None:
+    """Fim de uma tentativa que não deu certo: volta para a fila, ou, na
+    terceira, Erro com a frase. A guarda das tentativas no UPDATE deixa intacta
+    a conta que outra vaga já pegou de novo."""
+    tentativas = conta.get("tentativas") or 0
+    if tentativas >= MAXIMO_DE_TENTATIVAS:
+        campos = {"situacao": "ERRO", "erro_motivo": erro_motivo, "processando_desde": None}
+    else:
+        campos = {"situacao": "NA_FILA", "processando_desde": None}
+    supabase.table("cm_conta").update(campos).eq("id", conta["id"]).eq("situacao", "PROCESSANDO").eq(
+        "tentativas", tentativas
+    ).execute()
+
+
+def devolver_presas(supabase, agora: datetime) -> int:
+    """As contas em PROCESSANDO há mais de 15 minutos voltam para a fila; na
+    terceira tentativa, Erro. Devolve quantas foram mexidas."""
+    presas = (
+        supabase.table("cm_conta")
+        .select("id, tentativas")
+        .eq("situacao", "PROCESSANDO")
+        .lt("processando_desde", (agora - PRAZO_DA_ANALISE).isoformat())
+        .execute()
+        .data
+        or []
+    )
+    for conta in presas:
+        _devolver(supabase, conta, MENSAGEM_TENTATIVAS_ESGOTADAS)
+    return len(presas)
