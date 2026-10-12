@@ -765,3 +765,106 @@ class TestArquivoNoBucket:
         assert resposta.json()["recusas"][0]["motivo"] == "Não consegui guardar o arquivo. Envie de novo."
         assert banco.tabelas["cm_arquivo"] == []
         assert banco.tabelas["cm_conta"] == []
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 8. A fila
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+def _c(id_: str, situacao: str, ordem: int, faturista="F1", **campos) -> dict:
+    base = {
+        "id": id_,
+        "atendimento_id": f"at-{id_}",
+        "arquivo_id": f"arq-{id_}",
+        "numero_conta": f"conta-{id_}",
+        "periodo_inicio": "2026-10-01",
+        "periodo_fim": "2026-10-05",
+        "situacao": situacao,
+        "faturista_id": faturista,
+        "ordem_fila": ordem,
+        "valor_apontado": None,
+        "nota_entrada": None,
+        "nota_bruta": None,
+        "erro_motivo": None,
+    }
+    return {**base, **campos}
+
+
+def _l(conta_id: str, acao: str, estado: str) -> dict:
+    return {"id": f"{conta_id}-{acao}-{estado}-{uuid.uuid4()}", "conta_id": conta_id, "acao": acao, "estado": estado}
+
+
+def _fila_semeada() -> _Banco:
+    """Contas em todas as situações, semeadas fora de ordem. O valor apontado
+    cresce ao contrário da ordem de envio: ordenar por valor daria outra lista."""
+    contas = [
+        _c("a-fazer", "A_FAZER", 30, valor_apontado=10.0, nota_bruta=90, nota_entrada=90),
+        _c("na-fila", "NA_FILA", 10, valor_apontado=999.0),
+        _c("erro", "ERRO", 20, erro_motivo="Não consegui ler a conta inteira"),
+        _c("da-outra", "AGUARDANDO_ARQUIVO", 15, faturista="F2"),
+        _c("concluida", "CONCLUIDA_COM_PENDENCIA", 5, nota_entrada=80),
+        _c("em-correcao", "EM_CORRECAO", 25),
+        _c("falta-conta", "AGUARDANDO_ARQUIVO", 40, arquivo_id=None, numero_conta=None),
+        _c("processando", "PROCESSANDO", 35),
+        _c("falta-prontuario", "AGUARDANDO_ARQUIVO", 12),
+    ]
+    atendimentos = [{"id": c["atendimento_id"], "numero_atendimento": f"31{n:03d}"} for n, c in enumerate(contas)]
+    linhas = [
+        _l("a-fazer", "INCLUIR", "FEITO"),
+        _l("a-fazer", "RETIRAR", "ABERTA"),
+        _l("a-fazer", "CORRIGIR_PRECO", "ABERTA"),
+        _l("a-fazer", "VALIDAR", "EM_VALIDACAO"),
+        _l("concluida", "INCLUIR", "FEITO"),
+        _l("concluida", "RETIRAR", "BLOQUEADO"),
+    ]
+    return _cenario(cm_conta=contas, cm_atendimento=atendimentos, cm_guia_linha=linhas)
+
+
+class TestFila:
+    def test_a_faturista_ve_so_as_proprias_na_ordem_de_envio_e_as_concluidas_a_parte(self):
+        resposta = _cliente("faturista", _fila_semeada()).get(ROTA_FILA)
+
+        assert resposta.status_code == 200, resposta.text
+        corpo = resposta.json()
+        assert [c["id"] for c in corpo["fila"]] == [
+            "na-fila",
+            "falta-prontuario",
+            "erro",
+            "em-correcao",
+            "a-fazer",
+            "processando",
+            "falta-conta",
+        ]
+        assert [c["id"] for c in corpo["concluidas"]] == ["concluida"]
+
+    def test_painel_completo_ve_as_contas_de_todas(self):
+        corpo = _cliente("coordenadora", _fila_semeada()).get(ROTA_FILA).json()
+
+        assert [c["id"] for c in corpo["fila"]][:3] == ["na-fila", "falta-prontuario", "da-outra"]
+        assert len(corpo["fila"]) == 8
+
+    def test_a_outra_faturista_nao_ve_as_contas_da_primeira(self):
+        corpo = _cliente("outra_faturista", _fila_semeada()).get(ROTA_FILA).json()
+
+        assert [c["id"] for c in corpo["fila"]] == ["da-outra"]
+        assert corpo["concluidas"] == []
+
+    def test_cada_conta_traz_o_que_a_situacao_dela_pede(self):
+        corpo = _cliente("faturista", _fila_semeada()).get(ROTA_FILA).json()
+        por_id = {c["id"]: c for c in corpo["fila"] + corpo["concluidas"]}
+
+        a_fazer = por_id["a-fazer"]
+        assert (a_fazer["situacao"], a_fazer["nota_entrada"], a_fazer["valor_apontado"]) == ("A_FAZER", 90, 10.0)
+        assert (a_fazer["itens_feitos"], a_fazer["itens_total"]) == (1, 3)
+        assert a_fazer["numero_atendimento"] == "31000"
+        assert a_fazer["numero_conta"] == "conta-a-fazer"
+        assert por_id["erro"]["erro_motivo"] == "Não consegui ler a conta inteira"
+        assert por_id["falta-prontuario"]["falta"] == "prontuario"
+        assert por_id["falta-conta"]["falta"] == "conta"
+        assert por_id["na-fila"]["falta"] is None
+        assert por_id["concluida"]["pendencias"] == 1
+
+    @pytest.mark.parametrize("quem", ["credenciamento", "sem_eixo"])
+    def test_sem_a_permissao_de_enviar_e_corrigir_contas_recebe_403(self, quem):
+        assert _cliente(quem, _fila_semeada()).get(ROTA_FILA).status_code == 403
