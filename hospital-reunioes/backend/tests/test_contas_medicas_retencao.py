@@ -194,3 +194,56 @@ class TestArquivoVencido:
         retencao.apagar_arquivos_vencidos(sb, AGORA)
 
         assert not sb.storage.tem("contas-medicas", "envio-1/arq-1.pdf.txt")
+
+    def test_os_dados_estruturados_nao_sao_tocados(self):
+        sb = _SupabaseFake([_arquivo(1, apagar_em=ONTEM)])
+        sb.tabelas["cm_eventos"] = [{"id": "ev-1", "atendimento_id": "at-1", "eventos_json": {"dias": 3}}]
+        sb.tabelas["cm_conta_item"] = [{"id": "it-1", "conta_id": "c-1", "codigo": "123"}]
+        sb.tabelas["cm_guia_linha"] = [{"id": "gl-1", "conta_id": "c-1", "evidencia_trecho": "dipirona 1g"}]
+
+        retencao.apagar_arquivos_vencidos(sb, AGORA)
+
+        assert {t for t, _, _ in sb.escritas} == {"cm_arquivo"}
+        assert sb.tabelas["cm_eventos"] == [{"id": "ev-1", "atendimento_id": "at-1", "eventos_json": {"dias": 3}}]
+        assert sb.tabelas["cm_conta_item"] == [{"id": "it-1", "conta_id": "c-1", "codigo": "123"}]
+        assert sb.tabelas["cm_guia_linha"] == [{"id": "gl-1", "conta_id": "c-1", "evidencia_trecho": "dipirona 1g"}]
+
+
+class TestArquivoAusenteNoBucket:
+    def test_arquivo_que_ja_saiu_do_bucket_e_carimbado_sem_erro(self):
+        sb = _SupabaseFake([_arquivo(1, apagar_em=ONTEM)], no_bucket=[])
+
+        rodada = retencao.apagar_arquivos_vencidos(sb, AGORA)
+
+        assert sb.linha("arq-1")["apagado_em"] == AGORA.isoformat()
+        assert rodada == retencao.Rodada(apagados=0, ausentes=1, falhas=0)
+
+    def test_linha_sem_chave_no_bucket_e_carimbada_sem_pedir_nada_ao_storage(self):
+        sb = _SupabaseFake([_arquivo(1, apagar_em=ONTEM, chave_bucket=None)])
+
+        rodada = retencao.apagar_arquivos_vencidos(sb, AGORA)
+
+        assert sb.linha("arq-1")["apagado_em"] == AGORA.isoformat()
+        assert sb.storage.pedidos == []
+        assert rodada.ausentes == 1
+
+
+class TestFalhaDoStorage:
+    def test_recusa_do_storage_deixa_a_linha_sem_carimbo_para_a_rodada_seguinte(self):
+        sb = _SupabaseFake([_arquivo(1, apagar_em=ONTEM)])
+        sb.storage.recusar = {"envio-1/arq-1.pdf"}
+
+        rodada = retencao.apagar_arquivos_vencidos(sb, AGORA)
+
+        assert sb.linha("arq-1")["apagado_em"] is None
+        assert rodada == retencao.Rodada(apagados=0, ausentes=0, falhas=1)
+
+    def test_storage_fora_do_ar_nao_carimba_e_nao_derruba_os_demais(self):
+        sb = _SupabaseFake([_arquivo(1, apagar_em=ONTEM), _arquivo(2, apagar_em=ONTEM, chave_bucket=None)])
+        sb.storage.fora_do_ar = True
+
+        rodada = retencao.apagar_arquivos_vencidos(sb, AGORA)
+
+        assert sb.linha("arq-1")["apagado_em"] is None
+        assert sb.linha("arq-2")["apagado_em"] == AGORA.isoformat()
+        assert rodada == retencao.Rodada(apagados=0, ausentes=1, falhas=1)
