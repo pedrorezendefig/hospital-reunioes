@@ -333,3 +333,64 @@ describe("Sidebar com o item Ajuda", () => {
     expect(fecharAGaveta).toHaveBeenCalledTimes(1);
   });
 });
+
+/**
+ * O item Contas médicas (issue #1114, PRD #1113, ADR 0070).
+ *
+ * O módulo tem eixo próprio (`perfil_contas_medicas`), e o item só aparece
+ * para quem tem um perfil nele ou é super admin do app, que passa em todos os
+ * módulos. A pergunta parte da lista de links do menu, e não de um texto solto
+ * na tela.
+ */
+describe("Sidebar com o item Contas médicas", () => {
+  function linkDeContasMedicas(): HTMLElement | undefined {
+    const menu = screen.getByRole("navigation");
+    return within(menu)
+      .queryAllByRole("link")
+      .find((link) => link.textContent?.trim() === "Contas médicas");
+  }
+
+  it.each([
+    ["faturista", { access_profile: null, perfil_contas_medicas: "faturista" }],
+    [
+      "coordenadora com papel nas Reuniões",
+      { access_profile: "regular", perfil_contas_medicas: "coordenadora" },
+    ],
+    [
+      "credenciamento que também é dos POPs",
+      { access_profile: null, perfil_pop: "leitor", perfil_contas_medicas: "credenciamento" },
+    ],
+    ["super admin sem perfil no módulo", { access_profile: "super_admin" }],
+  ] as const)("aparece para %s, levando a /contas-medicas", (_nome, papeis) => {
+    sessao.participante = {
+      id: "p1",
+      nome_completo: "Fulana de Tal",
+      email: "fulana@hsm",
+      ...papeis,
+    } as CurrentParticipante;
+
+    render(<Sidebar />);
+
+    expect(linkDeContasMedicas()?.getAttribute("href")).toBe("/contas-medicas");
+  });
+
+  it.each([
+    ["quem só tem papel nas Reuniões", { access_profile: "regular" }],
+    ["a Ouvidoria", { access_profile: "regular", perfil_ouvidoria: "ouvidor" }],
+    ["quem só é dos POPs", { access_profile: null, perfil_pop: "leitor" }],
+  ] as const)("não aparece para %s", (_nome, papeis) => {
+    sessao.participante = {
+      id: "p1",
+      nome_completo: "Fulana de Tal",
+      email: "fulana@hsm",
+      ...papeis,
+    } as CurrentParticipante;
+
+    render(<Sidebar />);
+
+    // Controle positivo: o menu montou, e o item é que não está nele.
+    const menu = screen.getByRole("navigation");
+    expect(within(menu).getByRole("link", { name: "Ajuda" })).not.toBeNull();
+    expect(linkDeContasMedicas()).toBeUndefined();
+  });
+});

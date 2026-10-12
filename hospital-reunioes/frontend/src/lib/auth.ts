@@ -4,7 +4,12 @@
  * usa is_super_admin pra compatibilidade.
  */
 
-import type { AccessProfile, PerfilOuvidoria, PerfilPop } from "@/types";
+import type {
+  AccessProfile,
+  PerfilContasMedicas,
+  PerfilOuvidoria,
+  PerfilPop,
+} from "@/types";
 
 export interface AuthUser {
   id?: string;
@@ -14,6 +19,7 @@ export interface AuthUser {
   access_profile?: AccessProfile | null;
   perfil_pop?: PerfilPop | null;
   perfil_ouvidoria?: PerfilOuvidoria | null;
+  perfil_contas_medicas?: PerfilContasMedicas | null;
 }
 
 export function isSuperAdmin(user: AuthUser | null | undefined): boolean {
@@ -52,6 +58,16 @@ export function isSuperadminPops(user: AuthUser | null | undefined): boolean {
  */
 export function temPerfilOuvidoria(user: AuthUser | null | undefined): boolean {
   return Boolean(user?.perfil_ouvidoria);
+}
+
+/**
+ * Contexto Contas médicas (ADR 0070, decisão 10): `perfil_contas_medicas` é o
+ * quarto eixo. Ter um perfil nele, ou ser super admin do app (que passa em
+ * todos os módulos, como no backend), é entrar no módulo. Decide o menu; quem
+ * barra de verdade é o gate da rota no servidor.
+ */
+export function temAcessoContasMedicas(user: AuthUser | null | undefined): boolean {
+  return isSuperAdmin(user) || Boolean(user?.perfil_contas_medicas);
 }
 
 /**
