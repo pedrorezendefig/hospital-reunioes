@@ -502,3 +502,49 @@ class TestPreco:
         [linha] = resultado.linhas
         assert (linha["acao"], linha["regra_codigo"], linha["causa_raiz"]) == ("VALIDAR", "ALFA-PRC-01", "CADASTRO_PRECO")
         assert "plano e preços apontam colunas diferentes" in linha["motivo"].lower()
+
+    def test_preco_nao_conferido_leva_etiqueta_e_fica_fora_do_apontado_e_pacote_nao_gera_correcao(self):
+        dentro_do_pacote = "70200000"
+        prescricoes = [_prescricao(dia(n), _prescrito("PANTOCAL 40MG FA", pagina=10 + n)) for n in range(1, 7)]
+        conta = _conta(
+            *_conta_cirurgica().itens,
+            *(_item(PANTOCAL, "PANTOCAL 40 MG PO LIOF INJ FA", dia(n), 1, 239.65) for n in (1, 2, 3)),
+            _item(dentro_do_pacote, "KIT SINTETICO", dia(4), 1, 5.00, grupo="MATERIAIS DESCARTAVEIS", setor=CC),
+        )
+        preco = _tabela({**TABELA_DA_CIRURGIA, ("MATERIAL", dentro_do_pacote): "PACOTE"})
+
+        resultado = conferir(conta, _prontuario(prescricoes=prescricoes, tipo_impressao=None), _memoria(), preco)
+
+        [incluir] = _linhas(resultado, "INCLUIR", PANTOCAL)
+        assert (incluir["preco_tabela"], incluir["valor_diferenca"]) == (None, 718.95)
+        assert "preço da conta, não conferido" in incluir["motivo"]
+        assert _linhas(resultado, "CORRIGIR_PRECO", dentro_do_pacote) == []
+        # Só a agulha entra no R$ apontado: o Incluir sem preço de tabela fica de fora.
+        assert resultado.nota.apontado == Decimal("0.06")
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 4. Lançado sem registro
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+def _conta_com_solucoes() -> Conta:
+    return _conta(
+        _item(TAZOCIN, "TAZOCIN 4,5 G PO LIOF INJ FA (PIPERACILINA+TAZOBACTAM)", dia(2), 1, 331.99),
+        _item("90000001", "SORO FISIOLOGICO 0,9% 100 ML", dia(2), 1, 4.10),
+        _item("90000002", "AGUA DESTILADA 10 ML AMP", dia(2), 2, 0.90),
+    )
+
+
+class TestLancadoSemRegistro:
+    def test_ignora_soro_e_agua_destilada(self):
+        resultado = conferir(_conta_com_solucoes(), _prontuario(textos=("Sem menção a nada.",)), _memoria(), _tabela({}))
+
+        assert [linha["codigo"] for linha in _linhas(resultado, "VALIDAR")] == [TAZOCIN]
+
+    def test_nao_roda_com_impressao_parcial(self):
+        prontuario = _prontuario(textos=("Sem menção a nada.",), tipo_impressao="Parcial")
+
+        resultado = conferir(_conta_com_solucoes(), prontuario, _memoria(), _tabela({}))
+
+        assert resultado.linhas == ()
