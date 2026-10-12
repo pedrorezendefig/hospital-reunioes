@@ -25,6 +25,7 @@ from datetime import date, datetime, time, timedelta
 from decimal import ROUND_HALF_UP, Decimal
 from typing import Any
 
+from app.services.contas_medicas.cirurgia import DescricaoCirurgica
 from app.services.contas_medicas.conteudo import Conteudo, Movimentacao
 from app.services.contas_medicas.diarias import ParametrosDiaria, Segmento, contar_diarias, diarias_do_periodo
 from app.services.contas_medicas.dicionario import _generico, _marca, _norm, casar
@@ -35,7 +36,7 @@ from app.services.contas_medicas.prontuario import Prontuario
 from app.services.contas_medicas.tabelas import NAO_CONFERIDO, PACOTE
 from app.services.contas_medicas_conta import Conta, ItemConta, coluna_do_plano
 
-__all__ = ["BuscaDePreco", "Conferencia", "ProntuarioLido", "conferir"]
+__all__ = ["BuscaDePacote", "BuscaDePreco", "Conferencia", "Pacote", "ProntuarioLido", "conferir"]
 
 CENTAVO = Decimal("0.01")
 TOLERANCIA = Decimal("0.01")
@@ -55,6 +56,21 @@ _CATEGORIA_DO_GRUPO = {
     "PACOTES ESPECIAIS": "PACOTE",
     "HONORARIOS MEDICOS": "HONORARIO",
 }
+
+
+@dataclass(frozen=True)
+class Pacote:
+    """O pacote da tabela da operadora para um TUSS realizado."""
+
+    codigo: str
+    descricao: str | None
+    # Diárias incluídas no pacote; as além delas são excedentes (LEVE-PAC-04).
+    permanencia: int
+    valor: Decimal | None
+
+
+# A busca do pacote pelo TUSS na tabela de pacotes da operadora: (TUSS, data).
+BuscaDePacote = Callable[[str, date], Pacote | None]
 
 
 @dataclass(frozen=True)
@@ -114,6 +130,11 @@ class _Contexto:
     dicionario: Mapping[str, set[str]]
     # Nome do setor no MV, normalizado → acomodação (`cm_setor`).
     setores: Mapping[str, str]
+    # IDs das regras que a memória tem.
+    regras: frozenset[str]
+
+    def tem_regra(self, chave: str) -> bool:
+        return (self.parametros.get("regras_das_conferencias") or {}).get(chave) in self.regras
 
     def acomodacao_do_setor(self, setor: str | None) -> str | None:
         return self.setores.get(_norm(setor))
@@ -346,7 +367,11 @@ def _contratada(conta: Conta) -> str | None:
 
 def _evidencia_do_segmento(ctx: _Contexto, segmento: Segmento) -> tuple[int | None, str]:
     documento = next(
-        (d for d in ctx.prontuario.estrutura.documentos if d.setor == segmento.setor and d.data == segmento.inicio.date()),
+        (
+            d
+            for d in ctx.prontuario.estrutura.documentos
+            if d.setor == segmento.setor and d.data == segmento.inicio.date()
+        ),
         None,
     )
     return (
@@ -401,36 +426,50 @@ def _devidas_do_segmento(ctx: _Contexto, segmento: Segmento, acomodacao: str) ->
 
     dias = [d.inicio.date() for d in segmento.diarias]
     chave, observacao, familia = "diaria", "", None
-    if acomodacao == "CTI":
+    # A acomodação cobrada é a contratada, mesmo que o MV mostre outra (ASSIM-DIA-11).
+    cobrada = acomodacao.lower()
+    if acomodacao == "HOSPITAL_DIA" and dias:
+        # Pernoitou: troca para a diária da acomodação contratada (LEVE-DIA-16).
+        chave, observacao, cobrada = "hospital_dia_pernoite", " Conferir pernoite.", contratada or "contratada"
+    elif acomodacao == "HOSPITAL_DIA":
+        # Sem vencimento no hospital-dia: é uma diária de hospital-dia, não pendência.
+        pendencias = [p.texto for p in segmento.validar if p.motivo != "SEM_VENCIMENTO"]
+        dias = [segmento.inicio.date()] if ctx.no_periodo(segmento.inicio.date()) else []
+        if not _codigo_configurado(ctx.parametros, cobrada) and contratada:
+            cobrada = f"hospital_dia_{contratada}"
+    elif acomodacao == "CTI":
         classes = sorted(nome for nome in global_ if nome.startswith("uti_adulto_classe"))
         if classes:
+            # Classe do dia é do Passo B (PRD 2): sai a mais baixa, para conferir.
             familia = {c for c in (_codigo_configurado(ctx.parametros, n) for n in classes) if c}
-            codigo, observacao = _codigo_configurado(ctx.parametros, classes[0]), " Conferir classe de UTI."
-        else:
-            codigo = _codigo_configurado(ctx.parametros, "cti")
-    elif acomodacao in {"ENFERMARIA", "APARTAMENTO", "ISOLAMENTO"}:
-        codigo = _codigo_configurado(ctx.parametros, contratada or acomodacao.lower())
-    else:
-        codigo = _codigo_configurado(ctx.parametros, acomodacao.lower())
+            cobrada, observacao = classes[0], " Conferir classe de UTI."
+    elif acomodacao in {"ENFERMARIA", "APARTAMENTO", "ISOLAMENTO"} and contratada:
+        cobrada = contratada
+    codigo = _codigo_configurado(ctx.parametros, cobrada)
 
-    descricao = f"Diária de {_NOME_DA_ACOMODACAO.get(acomodacao, acomodacao.lower())}"
+    nome = _NOME_DA_ACOMODACAO.get(cobrada.upper(), cobrada.replace("_", " "))
+    descricao = f"Diária de {nome}"
     if dias and codigo is None:
-        pendencias.append(f"A memória não traz o código da diária de {_NOME_DA_ACOMODACAO.get(acomodacao, acomodacao)}.")
+        pendencias.append(f"A memória não traz o código da diária de {nome}.")
         return [], pendencias
     devidas = [devida(data, codigo, chave, descricao, observacao, familia) for data in dias if codigo]
 
     acompanhante = _codigo_configurado(ctx.parametros, "acompanhante")
     if segmento.acompanhante and acompanhante:
         devidas += [devida(data, acompanhante, "acompanhante", "Diária de acompanhante") for data in dias]
+    taxa = _codigo_configurado(ctx.parametros, "taxa_isolamento_dia")
+    if acomodacao == "ISOLAMENTO" and taxa:
+        devidas += [devida(data, taxa, "taxa_isolamento", "Taxa de isolamento") for data in dias]
     return devidas, pendencias
 
 
-def _diarias(ctx: _Contexto) -> tuple[list[_Linha], list[_Devida]]:
+def _diarias(ctx: _Contexto, pacote: Pacote | None) -> tuple[list[_Linha], list[_Devida]]:
     """Diárias devidas (contador) contra lançadas: Incluir ou Retirar a diferença.
 
     A comparação é por código no período; com a mesma quantidade, o lançamento em
-    data diferente não gera linha (a IA e a faturista veem a data). Devolve também
-    as devidas, que são as diárias pagas do teto por dia.
+    data diferente não gera linha (a IA e a faturista veem a data). Com pacote pelo
+    TUSS, as primeiras diárias do paciente estão no pacote e só as excedentes são
+    cobradas. Devolve também as devidas, que são as diárias pagas do teto por dia.
     """
     segmentos = _segmentos(ctx)
     if isinstance(segmentos, str):
@@ -450,8 +489,9 @@ def _diarias(ctx: _Contexto) -> tuple[list[_Linha], list[_Devida]]:
         if segmento.diarias or acomodacao is not None:
             linhas += [_validar_diaria(texto, segmento.inicio.date(), segmento.setor) for texto in pendencias]
 
+    cobradas = _excedentes(devidas, pacote) if pacote else devidas
     familias: dict[frozenset[str], list[_Devida]] = {}
-    for d in devidas:
+    for d in cobradas:
         familias.setdefault(d.familia, []).append(d)
     conhecidos = set().union(*familias) if familias else set()
     for codigo in _codigos_de_diaria(ctx.parametros) - conhecidos:
@@ -460,6 +500,19 @@ def _diarias(ctx: _Contexto) -> tuple[list[_Linha], list[_Devida]]:
         lancados = [i for i in ctx.conta.itens if i.codigo in familia]
         linhas += _comparar_diarias(ctx, devidas_da_familia, lancados)
     return linhas, devidas
+
+
+def _excedentes(devidas: list[_Devida], pacote: Pacote) -> list[_Devida]:
+    """As diárias do paciente além da permanência do pacote (LEVE-PAC-04)."""
+    do_paciente = [d for d in devidas if d.do_paciente]
+    no_pacote = {id(d) for d in do_paciente[: pacote.permanencia]}
+    return [
+        replace(d, chave="pacote_pelo_tuss", observacao=f" Excedente do pacote {pacote.codigo}.")
+        if d.do_paciente
+        else d
+        for d in devidas
+        if id(d) not in no_pacote
+    ]
 
 
 def _validar_diaria(texto: str, data: date | None, setor: str | None) -> _Linha:
@@ -499,7 +552,9 @@ def _comparar_diarias(ctx: _Contexto, devidas: list[_Devida], lancados: list[Ite
             if por_data_lancada.get(d.data, Decimal(0)) > 0:
                 por_data_lancada[d.data] -= 1
                 continue
-            preco_lancado, preco_tabela, valor, etiqueta = ctx.valor_de_inclusao("DIARIA_TAXA", d.codigo, d.data, Decimal(1))
+            preco_lancado, preco_tabela, valor, etiqueta = ctx.valor_de_inclusao(
+                "DIARIA_TAXA", d.codigo, d.data, Decimal(1)
+            )
             linhas.append(
                 _Linha(
                     acao="INCLUIR",
@@ -762,8 +817,7 @@ def _gases(ctx: _Contexto) -> list[_Linha]:
     """Oxigênio da ficha anestésica: vazão arredondada para a faixa da tabela e horas
     para cima. O código de cada faixa vem da memória (`gases_centro_cirurgico`)."""
     faixas = {
-        Decimal(str(vazao)): codigo
-        for vazao, codigo in (ctx.parametros.get("gases_centro_cirurgico") or {}).items()
+        Decimal(str(vazao)): codigo for vazao, codigo in (ctx.parametros.get("gases_centro_cirurgico") or {}).items()
     }
     codigos_de_oxigenio = {codigo for codigo in faixas.values() if codigo}
     lancados = [
@@ -847,6 +901,69 @@ def _procedimento_do_cabecalho(ctx: _Contexto) -> list[_Linha]:
             )
         )
     return linhas
+
+
+# ----------------------------------------------------------------------------------
+# Pacote pelo TUSS realizado
+# ----------------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class _PacoteDoAtendimento:
+    pacote: Pacote
+    tuss: str
+    procedimento: str
+    descricao: DescricaoCirurgica
+
+
+def _pacote_do_atendimento(ctx: _Contexto, pacote_do_tuss: BuscaDePacote | None) -> _PacoteDoAtendimento | None:
+    """O pacote do TUSS que a descrição cirúrgica registra, quando a memória da
+    operadora tem a regra (LEVE-PAC-03). Na ASSIM só é pacote com o código de pacote
+    lançado (ASSIM-PRI-12): a memória dela não traz a regra e nada muda."""
+    if pacote_do_tuss is None or not ctx.tem_regra("pacote_pelo_tuss"):
+        return None
+    for descricao in ctx.prontuario.conteudo.descricoes_cirurgicas:
+        data = descricao.inicio.date() if descricao.inicio else ctx.conta.periodo_inicio
+        for procedimento in descricao.procedimentos:
+            pacote = pacote_do_tuss(procedimento.codigo, data) if data else None
+            if pacote:
+                return _PacoteDoAtendimento(pacote, procedimento.codigo, procedimento.descricao, descricao)
+    return None
+
+
+def _pacote_pelo_tuss(ctx: _Contexto, achado: _PacoteDoAtendimento | None) -> list[_Linha]:
+    """TUSS realizado com pacote e o pacote fora da conta: Incluir o pacote."""
+    if achado is None or achado.pacote.codigo in {i.codigo for i in ctx.conta.itens}:
+        return []
+    pacote, descricao = achado.pacote, achado.descricao
+    data = descricao.inicio.date() if descricao.inicio else ctx.conta.periodo_inicio
+    if pacote.valor is not None:
+        preco_lancado, preco_tabela, valor, etiqueta = None, pacote.valor, pacote.valor, ""
+    else:
+        preco_lancado, preco_tabela, valor, etiqueta = ctx.valor_de_inclusao("PACOTE", pacote.codigo, data, Decimal(1))
+    return [
+        _Linha(
+            acao="INCLUIR",
+            chave="pacote_pelo_tuss",
+            data=data,
+            setor=None,
+            codigo=pacote.codigo,
+            descricao=pacote.descricao,
+            motivo=(
+                f"A descrição cirúrgica registra o TUSS {achado.tuss}, que tem pacote na tabela "
+                f"({pacote.permanencia} diárias incluídas).{etiqueta}"
+            ),
+            nivel="REGISTRADO",
+            causa="LANCAMENTO_MANUAL",
+            pagina=descricao.paginas[0],
+            trecho=f"{achado.tuss} {achado.procedimento}",
+            quantidade_lancada=Decimal(0),
+            quantidade_devida=Decimal(1),
+            preco_lancado=preco_lancado,
+            preco_tabela=preco_tabela,
+            valor=valor,
+        )
+    ]
 
 
 # ----------------------------------------------------------------------------------
@@ -970,9 +1087,7 @@ def _diario(linhas: list[_Linha]) -> list[_Linha]:
     return unidas
 
 
-def _com_regra(
-    linhas: list[_Linha], memoria: MemoriaLida, descartadas: list[dict[str, Any]]
-) -> list[_Linha]:
+def _com_regra(linhas: list[_Linha], memoria: MemoriaLida, descartadas: list[dict[str, Any]]) -> list[_Linha]:
     """A regra de cada linha pela chave; sem regra, descarta; pendente, Validar."""
     ids = memoria.parametros.get("regras_das_conferencias") or {}
     regras = {regra.codigo: regra for regra in memoria.regras}
@@ -1030,11 +1145,13 @@ def conferir(
     *,
     setores: Mapping[str, str] | None = None,
     dicionario: Mapping[str, set[str]] | None = None,
+    pacote_do_tuss: BuscaDePacote | None = None,
 ) -> Conferencia:
     """As linhas do Guia da Conta, pelas conferências por código.
 
     `setores` liga o nome do setor no MV à acomodação (`cm_setor`); `dicionario` é
-    o dicionário de itens do hospital (`dicionario_do_banco`).
+    o dicionário de itens do hospital (`dicionario_do_banco`); `pacote_do_tuss`
+    acha o pacote da tabela da operadora pelo TUSS realizado.
     """
     ctx = _Contexto(
         conta=conta,
@@ -1044,9 +1161,11 @@ def conferir(
         coluna=_coluna(conta, memoria.parametros),
         dicionario=dicionario or {},
         setores={_norm(nome): acomodacao for nome, acomodacao in (setores or {}).items()},
+        regras=frozenset(regra.codigo for regra in memoria.regras),
     )
     descartadas: list[dict[str, Any]] = []
-    diarias, pagas = _diarias(ctx)
+    pacote = _pacote_do_atendimento(ctx, pacote_do_tuss)
+    diarias, pagas = _diarias(ctx, pacote.pacote if pacote else None)
     geradas = [
         *_precos(ctx),
         *diarias,
@@ -1055,6 +1174,7 @@ def conferir(
         *_ficha_x_conta(ctx),
         *_gases(ctx),
         *_procedimento_do_cabecalho(ctx),
+        *_pacote_pelo_tuss(ctx, pacote),
         *_tetos(ctx, pagas),
     ]
     linhas = _com_regra(geradas, memoria, descartadas)

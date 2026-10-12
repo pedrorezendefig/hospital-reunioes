@@ -27,7 +27,7 @@ from app.services.contas_medicas.cirurgia import (  # noqa: E402
     MedicamentoDaFicha,
     Procedimento,
 )
-from app.services.contas_medicas.conferencia import ProntuarioLido, conferir  # noqa: E402
+from app.services.contas_medicas.conferencia import Pacote, ProntuarioLido, conferir  # noqa: E402
 from app.services.contas_medicas.conteudo import Conteudo, Internacao, Movimentacao  # noqa: E402
 from app.services.contas_medicas.memoria import MemoriaLida, RegraLida  # noqa: E402
 from app.services.contas_medicas.prescricao import ItemPrescrito, Prescricao, consolidar  # noqa: E402
@@ -255,7 +255,9 @@ def _campos(linha: dict) -> dict:
 
 
 def _linhas(resultado, acao: str, codigo: str | None = None) -> list[dict]:
-    return [linha for linha in resultado.linhas if linha["acao"] == acao and (codigo is None or linha["codigo"] == codigo)]
+    return [
+        linha for linha in resultado.linhas if linha["acao"] == acao and (codigo is None or linha["codigo"] == codigo)
+    ]
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -280,13 +282,18 @@ def _conta_cirurgica() -> Conta:
     """Plano Comum: a agulha no preço Carioca e outros 4 materiais no preço certo."""
     return _conta(
         _item(AGULHA, "AGULHA DESC 25X7", dia(4), 2, 0.17, grupo="MATERIAIS DESCARTAVEIS", setor=CC, pagina=5),
-        *(_item(c, "MATERIAL SINTETICO", dia(4), 1, 1.00, grupo="MATERIAIS DESCARTAVEIS", setor=CC) for c in MATERIAIS[:4]),
+        *(
+            _item(c, "MATERIAL SINTETICO", dia(4), 1, 1.00, grupo="MATERIAIS DESCARTAVEIS", setor=CC)
+            for c in MATERIAIS[:4]
+        ),
     )
 
 
 class TestAchadosDoDiretor:
     def test_agulha_lancada_a_0_17_com_tabela_0_20_vira_corrigir_preco_de_0_06(self):
-        resultado = conferir(_conta_cirurgica(), _prontuario(tipo_impressao=None), _memoria(), _tabela(TABELA_DA_CIRURGIA))
+        resultado = conferir(
+            _conta_cirurgica(), _prontuario(tipo_impressao=None), _memoria(), _tabela(TABELA_DA_CIRURGIA)
+        )
 
         [linha] = _linhas(resultado, "CORRIGIR_PRECO", AGULHA)
         assert _campos(linha) == {
@@ -376,7 +383,9 @@ class TestAchadosDoDiretor:
     def test_oxigenio_2_l_por_150_min_lancado_como_6_l_por_3_h_vira_ajustar_para_3_l_e_3_h(self):
         ficha = _ficha(gases=(Gas("O2", 2.0, 150), Gas("AR", 2.0, 150)))
         conta = _conta(
-            _item(O2_6L_CC, "OXIGENIO 6 L/MIN POR HORA CC", dia(4), 3, 9.61, grupo="GASES MEDICINAIS", setor=CC, pagina=6)
+            _item(
+                O2_6L_CC, "OXIGENIO 6 L/MIN POR HORA CC", dia(4), 3, 9.61, grupo="GASES MEDICINAIS", setor=CC, pagina=6
+            )
         )
         preco = _tabela({("DIARIA_TAXA", O2_3L_CC): {"COMUM": 4.80, "CARIOCA": 4.80}, ("DIARIA_TAXA", O2_6L_CC): 9.61})
 
@@ -419,7 +428,9 @@ class TestAchadosDoDiretor:
             anatomopatologico=None,
             consignados=None,
         )
-        conta = _conta(_item(AGULHA, "AGULHA DESC 25X7", dia(4), 2, 0.20, grupo="MATERIAIS DESCARTAVEIS"), procedimento="31005462")
+        conta = _conta(
+            _item(AGULHA, "AGULHA DESC 25X7", dia(4), 2, 0.20, grupo="MATERIAIS DESCARTAVEIS"), procedimento="31005462"
+        )
 
         resultado = conferir(conta, _prontuario(descricoes=[descricao], tipo_impressao=None), _memoria(), _tabela({}))
 
@@ -458,7 +469,9 @@ class TestAchadosDoDiretor:
         )
 
         [incluir] = _linhas(resultado, "INCLUIR")
-        assert {k: incluir[k] for k in ("codigo", "descricao", "quantidade_devida", "valor_diferenca", "regra_codigo")} == {
+        assert {
+            k: incluir[k] for k in ("codigo", "descricao", "quantidade_devida", "valor_diferenca", "regra_codigo")
+        } == {
             "codigo": "90888888",
             "descricao": "Cetoprofeno",
             "quantidade_devida": 1.0,
@@ -499,7 +512,9 @@ class TestRegraCitada:
     def test_regra_que_a_memoria_nao_tem_descarta_a_linha_e_registra_o_motivo(self):
         parametros = {**PARAMETROS_ALFA, "regras_das_conferencias": {**REGRAS_DAS_CONFERENCIAS, "preco": "ALFA-PRC-99"}}
         memoria = _memoria(parametros)
-        memoria = MemoriaLida(**{**memoria.__dict__, "regras": tuple(r for r in memoria.regras if r.codigo != "ALFA-PRC-99")})
+        memoria = MemoriaLida(
+            **{**memoria.__dict__, "regras": tuple(r for r in memoria.regras if r.codigo != "ALFA-PRC-99")}
+        )
 
         resultado = conferir(_conta_cirurgica(), _prontuario(tipo_impressao=None), memoria, _tabela(TABELA_DA_CIRURGIA))
 
@@ -528,7 +543,11 @@ class TestPreco:
 
         assert _linhas(resultado, "CORRIGIR_PRECO") == []
         [linha] = resultado.linhas
-        assert (linha["acao"], linha["regra_codigo"], linha["causa_raiz"]) == ("VALIDAR", "ALFA-PRC-01", "CADASTRO_PRECO")
+        assert (linha["acao"], linha["regra_codigo"], linha["causa_raiz"]) == (
+            "VALIDAR",
+            "ALFA-PRC-01",
+            "CADASTRO_PRECO",
+        )
         assert "plano e preços apontam colunas diferentes" in linha["motivo"].lower()
 
     def test_preco_nao_conferido_leva_etiqueta_e_fica_fora_do_apontado_e_pacote_nao_gera_correcao(self):
@@ -566,7 +585,9 @@ def _conta_com_solucoes() -> Conta:
 
 class TestLancadoSemRegistro:
     def test_ignora_soro_e_agua_destilada(self):
-        resultado = conferir(_conta_com_solucoes(), _prontuario(textos=("Sem menção a nada.",)), _memoria(), _tabela({}))
+        resultado = conferir(
+            _conta_com_solucoes(), _prontuario(textos=("Sem menção a nada.",)), _memoria(), _tabela({})
+        )
 
         assert [linha["codigo"] for linha in _linhas(resultado, "VALIDAR")] == [TAZOCIN]
 
@@ -585,8 +606,17 @@ class TestLancadoSemRegistro:
 DIARIA_CTI = "60001038"
 ACOMPANHANTE = "60000473"
 CTI = "CTI ADULTO"
-SETORES = {CTI: "CTI", "ENFERMARIA 3": "ENFERMARIA", "ISOLAMENTO 2": "ISOLAMENTO", "DAY CLINIC": "HOSPITAL_DIA", CC: "CENTRO_CIRURGICO"}
-TABELA_DE_DIARIAS = {("DIARIA_TAXA", DIARIA_CTI): {"COMUM": 609.60, "CARIOCA": 609.60}, ("DIARIA_TAXA", ACOMPANHANTE): 64.04}
+SETORES = {
+    CTI: "CTI",
+    "ENFERMARIA 3": "ENFERMARIA",
+    "ISOLAMENTO 2": "ISOLAMENTO",
+    "DAY CLINIC": "HOSPITAL_DIA",
+    CC: "CENTRO_CIRURGICO",
+}
+TABELA_DE_DIARIAS = {
+    ("DIARIA_TAXA", DIARIA_CTI): {"COMUM": 609.60, "CARIOCA": 609.60},
+    ("DIARIA_TAXA", ACOMPANHANTE): 64.04,
+}
 
 
 def _internacao(entrada: datetime, saida: datetime, setor: str = CTI) -> list[Movimentacao]:
@@ -594,7 +624,9 @@ def _internacao(entrada: datetime, saida: datetime, setor: str = CTI) -> list[Mo
 
 
 def _diarias_lancadas(codigo: str, *dias: int, unitario: float = 609.60, setor: str = CTI) -> list[ItemConta]:
-    return [_item(codigo, "DIARIA SINTETICA", dia(n), 1, unitario, grupo="DIARIAS", setor=setor, pagina=1) for n in dias]
+    return [
+        _item(codigo, "DIARIA SINTETICA", dia(n), 1, unitario, grupo="DIARIAS", setor=setor, pagina=1) for n in dias
+    ]
 
 
 class TestDiarias:
@@ -638,7 +670,10 @@ class TestDiarias:
         resultado = conferir(conta, prontuario, _memoria(), _tabela(TABELA_DE_DIARIAS), setores=SETORES)
 
         [linha] = resultado.linhas
-        assert {k: linha[k] for k in ("acao", "data", "codigo", "quantidade_lancada", "quantidade_devida", "valor_diferenca")} == {
+        assert {
+            k: linha[k]
+            for k in ("acao", "data", "codigo", "quantidade_lancada", "quantidade_devida", "valor_diferenca")
+        } == {
             "acao": "RETIRAR",
             "data": "2026-10-03",
             "codigo": DIARIA_CTI,
@@ -655,7 +690,9 @@ class TestDiarias:
         resultado = conferir(conta, prontuario, _memoria(), _tabela(TABELA_DE_DIARIAS), setores=SETORES)
 
         [linha] = resultado.linhas
-        assert {k: linha[k] for k in ("acao", "codigo", "data", "data_fim", "quantidade_devida", "valor_diferenca")} == {
+        assert {
+            k: linha[k] for k in ("acao", "codigo", "data", "data_fim", "quantidade_devida", "valor_diferenca")
+        } == {
             "acao": "INCLUIR",
             "codigo": ACOMPANHANTE,
             "data": "2026-10-01",
@@ -767,9 +804,7 @@ class TestDiariaGlobal:
     def test_so_o_item_acima_do_corte_gera_incluir_e_o_incluso_nao_gera_retirar(self):
         zyvox, dipirona, meronem, omeprazol = "91000001", "91000002", "91000003", "91000004"
         nomes = ("ZYVOX 600MG BOLSA", "DIPIRONA 1G AMP", "MERONEM 1G FA")
-        prescricoes = [
-            _prescricao(dia(n), *(_prescrito(nome, pagina=10 + n) for nome in nomes)) for n in (1, 2, 3)
-        ]
+        prescricoes = [_prescricao(dia(n), *(_prescrito(nome, pagina=10 + n) for nome in nomes)) for n in (1, 2, 3)]
         conta = _conta(
             _item(zyvox, "ZYVOX 600 MG BOLSA 300 ML", dia(1), 1, 520.00),
             _item(dipirona, "DIPIRONA 1 G AMP", dia(1), 1, 2.00),
@@ -777,10 +812,14 @@ class TestDiariaGlobal:
             # Lançado sem menção no prontuário, mas incluso na diária: entra sem cobrança.
             _item(omeprazol, "OMEPRAZOL 40 MG FA", dia(1), 1, 30.00),
         )
-        preco = _tabela({("MEDICAMENTO", zyvox): 520.00, ("MEDICAMENTO", dipirona): 2.00, ("MEDICAMENTO", omeprazol): 30.00})
+        preco = _tabela(
+            {("MEDICAMENTO", zyvox): 520.00, ("MEDICAMENTO", dipirona): 2.00, ("MEDICAMENTO", omeprazol): 30.00}
+        )
         textos = ("Zyvox, dipirona e Meronem conforme prescrição.",)
 
-        resultado = conferir(conta, _prontuario(prescricoes=prescricoes, textos=textos), _memoria(PARAMETROS_GLOBAL), preco)
+        resultado = conferir(
+            conta, _prontuario(prescricoes=prescricoes, textos=textos), _memoria(PARAMETROS_GLOBAL), preco
+        )
 
         assert [(linha["acao"], linha["codigo"]) for linha in resultado.linhas] == [
             ("INCLUIR", zyvox),
@@ -795,6 +834,103 @@ class TestDiariaGlobal:
         )
         assert "conferir se passa do corte" in validar["motivo"]
 
+    def test_taxa_de_isolamento_por_dia_de_isolamento(self):
+        # Isolamento de enfermaria: a diária é a da contratada, mais a taxa por dia.
+        conta = _conta(
+            *_diarias_lancadas(ENFERMARIA_GLOBAL, 1, 2, 3, unitario=900.00, setor="ISOLAMENTO 2"),
+            *_diarias_lancadas(TAXA_ISOLAMENTO, 1, unitario=100.00, setor="ISOLAMENTO 2"),
+        )
+        prontuario = _prontuario(
+            movimentacoes=_internacao(*TestDiarias.TRES_DIARIAS, setor="ISOLAMENTO 2"), tipo_impressao=None
+        )
+
+        resultado = conferir(conta, prontuario, _memoria(PARAMETROS_GLOBAL), _tabela(TABELA_GLOBAL), setores=SETORES)
+
+        [linha] = resultado.linhas
+        assert {
+            k: linha[k] for k in ("acao", "codigo", "data", "data_fim", "quantidade_devida", "valor_diferenca")
+        } == {
+            "acao": "INCLUIR",
+            "codigo": TAXA_ISOLAMENTO,
+            "data": "2026-10-02",
+            "data_fim": "2026-10-03",
+            "quantidade_devida": 2.0,
+            "valor_diferenca": 200.00,
+        }
+        assert linha["regra_codigo"] == "ALFA-DIA-20"
+
+    def test_hospital_dia_que_pernoita_troca_para_a_diaria_da_contratada(self):
+        # Day clinic das 7h do dia 1 às 11h do dia 2: atravessou o vencimento das 10h.
+        conta = _conta(
+            *_diarias_lancadas(HOSPITAL_DIA, 1, unitario=480.00, setor="DAY CLINIC"), acomodacao="APARTAMENTO"
+        )
+        prontuario = _prontuario(
+            movimentacoes=_internacao(datetime(2026, 10, 1, 7, 0), datetime(2026, 10, 2, 11, 0), setor="DAY CLINIC"),
+            tipo_impressao=None,
+        )
+
+        resultado = conferir(conta, prontuario, _memoria(PARAMETROS_GLOBAL), _tabela(TABELA_GLOBAL), setores=SETORES)
+
+        assert [(linha["acao"], linha["codigo"], linha["data"]) for linha in resultado.linhas] == [
+            ("INCLUIR", APARTAMENTO_GLOBAL, "2026-10-01"),
+            ("RETIRAR", HOSPITAL_DIA, "2026-10-01"),
+        ]
+        incluir = resultado.linhas[0]
+        assert (incluir["regra_codigo"], incluir["valor_diferenca"]) == ("ALFA-DIA-16", 1100.00)
+        assert "conferir pernoite" in incluir["motivo"].lower()
+
+    def test_hospital_dia_sem_pernoite_e_uma_diaria_de_hospital_dia(self):
+        conta = _conta(
+            *_diarias_lancadas(HOSPITAL_DIA, 1, unitario=480.00, setor="DAY CLINIC"), acomodacao="APARTAMENTO"
+        )
+        prontuario = _prontuario(
+            movimentacoes=_internacao(datetime(2026, 10, 1, 7, 0), datetime(2026, 10, 1, 16, 0), setor="DAY CLINIC"),
+            tipo_impressao=None,
+        )
+
+        resultado = conferir(conta, prontuario, _memoria(PARAMETROS_GLOBAL), _tabela(TABELA_GLOBAL), setores=SETORES)
+
+        assert resultado.linhas == ()
+
+    def test_pacote_pelo_tuss_da_descricao_cirurgica_com_diaria_excedente(self):
+        # Cesariana com pacote de 2 diárias; internação às 4h do dia 1 e alta às 15h
+        # do dia 4 somam 4 diárias: pacote mais 2 excedentes da enfermaria contratada.
+        cesariana = DescricaoCirurgica(
+            paginas=(30,),
+            procedimentos=(Procedimento("31309054", "CESARIANA", True),),
+            inicio=datetime(2026, 10, 1, 8, 0),
+            fim=datetime(2026, 10, 1, 9, 0),
+            anatomopatologico=None,
+            consignados=None,
+        )
+        pacotes = {
+            "31309054": Pacote(codigo="89450171", descricao="Cesariana", permanencia=2, valor=Decimal("3300.00"))
+        }
+        prontuario = _prontuario(
+            descricoes=[cesariana],
+            movimentacoes=_internacao(datetime(2026, 10, 1, 4, 0), datetime(2026, 10, 4, 15, 0), setor="ENFERMARIA 3"),
+            tipo_impressao=None,
+        )
+
+        resultado = conferir(
+            _conta(),
+            prontuario,
+            _memoria(PARAMETROS_GLOBAL),
+            _tabela(TABELA_GLOBAL),
+            setores=SETORES,
+            pacote_do_tuss=lambda tuss, data: pacotes.get(tuss),
+        )
+
+        resumo = [
+            (linha["codigo"], linha["data"], linha["data_fim"], linha["quantidade_devida"], linha["valor_diferenca"])
+            for linha in _linhas(resultado, "INCLUIR")
+        ]
+        assert resumo == [
+            ("89450171", "2026-10-01", None, 1.0, 3300.00),
+            (ENFERMARIA_GLOBAL, "2026-10-02", "2026-10-03", 2.0, 1800.00),
+        ]
+        assert {linha["regra_codigo"] for linha in resultado.linhas} == {"ALFA-PAC-03"}
+
 
 # ═══════════════════════════════════════════════════════════════════════════
 # 5. Montagem: item diário, período, duplicadas
@@ -806,10 +942,14 @@ class TestMontagem:
         # A urgência do dia 4 repete o pantoprazol da prescrição médica: as duas
         # conferências pedem o mesmo Incluir no mesmo dia, e o Guia mostra um só.
         prescricoes = [_prescricao(dia(n), _prescrito("PANTOCAL 40MG FA", pagina=10 + n)) for n in range(1, 7)]
-        urgencia = Prescricao(dia(4), time(3, 0), "PRESCRICAO URGENCIA", "CTI ADULTO", (40,), (_prescrito("PANTOCAL 40MG FA", 40),))
+        urgencia = Prescricao(
+            dia(4), time(3, 0), "PRESCRICAO URGENCIA", "CTI ADULTO", (40,), (_prescrito("PANTOCAL 40MG FA", 40),)
+        )
         conta = _conta(*(_item(PANTOCAL, "PANTOCAL 40 MG PO LIOF INJ FA", dia(n), 1, 239.65) for n in (1, 2, 3)))
 
-        resultado = conferir(conta, _prontuario(prescricoes=[*prescricoes, urgencia], tipo_impressao=None), _memoria(), _tabela({}))
+        resultado = conferir(
+            conta, _prontuario(prescricoes=[*prescricoes, urgencia], tipo_impressao=None), _memoria(), _tabela({})
+        )
 
         [linha] = _linhas(resultado, "INCLUIR", PANTOCAL)
         assert (linha["data"], linha["data_fim"], linha["quantidade_devida"], linha["valor_diferenca"]) == (
