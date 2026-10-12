@@ -347,3 +347,72 @@ class TestNaoConferido:
         banco = _carregado("ASSIM", ("MATERIAL", "assim-materiais.csv"))
 
         assert preco(banco, "op-ASSIM", "MATERIAL", "70802726", DIA) == NAO_CONFERIDO
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 5. A memória da operadora: preço validado e regra de uso de cada categoria
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+def _memoria(sigla: str, cabecalho: str) -> str:
+    """Memória sintética mínima, só com o cabeçalho que o teste precisa."""
+    return (
+        f'---\noperadora: {sigla}\nnome: {sigla} Saúde\nversao_memoria: "1.0"\nsituacao: PARCIAL\n'
+        f"{cabecalho}---\n\n# MEMÓRIA SINTÉTICA\n"
+    )
+
+
+VALIDADOS = """precos:
+  validados:
+    - { item: "Luva de procedimento", codigo: "70802726", valor: 0.50, unidade: par }
+    - { item: "Clexane 40 mg", valor: 67.99, unidade: seringa }
+"""
+
+# O bloco `tabelas` da memória da Leve v1.0: categorias e tipos que a ASSIM
+# e a Unimed não tinham, nenhum deles carregado.
+TABELAS_DA_LEVE = """tabelas:
+  materiais:     { tipo: SIMPRO, versao: "mais atualizada", arquivo: null, chave: null, deflator_percentual: 20, situacao: NAO_CARREGADA }
+  diarias_taxas: { tipo: ADITIVO, versao: "Adendo 012, vigência 01/08/2026", chave: codigo, situacao: CARREGADA }
+  medicamentos:  { tipo: BRASINDICE, regra_preco: PF, restrito_hospitalar: { regra: PF_MAIS_PERCENTUAL, percentual: 20 }, situacao: NAO_CARREGADA }
+  honorarios:    { tipo: AMB92, ch: 0.40, situacao: NAO_CARREGADA }
+  sadt:          { tipo: AMB92, ch: 0.30, situacao: NAO_CARREGADA }
+  porte_anestesico: { tipo: CBHPM, versao: "5ª edição", situacao: NAO_CARREGADA }
+"""
+
+
+class TestMemoriaDaOperadora:
+    def test_preco_validado_na_memoria_ganha_da_tabela(self):
+        cliente, banco = _cliente(GESTAO)
+        assert _enviar_memoria(cliente, _memoria("ASSIM", VALIDADOS)).status_code == 201
+        assert _enviar_tabela(cliente, "ASSIM", "MATERIAL", "assim-materiais.csv").status_code == 201
+        assimid = _id(banco, "ASSIM")
+
+        assert preco(banco, assimid, "MATERIAL", "70802726", DIA, "CARIOCA") == Decimal("0.50")
+        assert preco(banco, assimid, "MATERIAL", "70802726", DIA, "COMUM") == Decimal("0.50")
+        # O que não está validado segue a tabela.
+        assert preco(banco, assimid, "MATERIAL", "70224889", DIA, "CARIOCA") == Decimal("70.95")
+
+    def test_regra_de_uso_vem_do_bloco_tabelas_da_memoria_e_tabela_de_referencia_nao_confere(self):
+        """Medicamento da Leve é Brasíndice pelo PF: um CSV enviado nessa
+        categoria guarda a regra da memória e não confere, porque o Brasíndice
+        não é carregado nesta etapa."""
+        cliente, banco = _cliente(GESTAO)
+        assert _enviar_memoria(cliente, _memoria("LEVE", TABELAS_DA_LEVE)).status_code == 201
+        leve = _id(banco, "LEVE")
+        assert _enviar_tabela(cliente, "LEVE", "MEDICAMENTO", "unimed-lpm-medicamentos.csv").status_code == 201
+        assert _enviar_tabela(cliente, "LEVE", "MATERIAL", "unimed-lpm-materiais.csv").status_code == 201
+        assert _enviar_tabela(cliente, "LEVE", "DIARIA_TAXA", "leve-diarias-taxas.csv").status_code == 201
+
+        regras = {r["categoria"]: r["regra_uso_json"] for r in banco.linhas("cm_operadora_tabela")}
+        assert regras["MEDICAMENTO"]["regra_preco"] == "PF"
+        assert regras["MEDICAMENTO"]["restrito_hospitalar"] == {"regra": "PF_MAIS_PERCENTUAL", "percentual": 20}
+        assert (regras["MATERIAL"]["regra_preco"], regras["MATERIAL"]["percentual"]) == ("SIMPRO", -20)
+        assert (regras["DIARIA_TAXA"]["regra_preco"], regras["DIARIA_TAXA"]["chave"]) == ("COLUNA", "codigo")
+        tipos = {t["tipo"] for t in banco.linhas("cm_tabela_preco")}
+        assert tipos == {"BRASINDICE", "SIMPRO", "ADITIVO"}
+
+        assert preco(banco, leve, "MEDICAMENTO", "90458125", DIA) == NAO_CONFERIDO
+        assert preco(banco, leve, "MATERIAL", "03330109", DIA) == NAO_CONFERIDO
+        assert preco(banco, leve, "DIARIA_TAXA", "60034068", DIA) == Decimal("1100.00")
+        assert preco(banco, leve, "SADT", "40301010", DIA) == NAO_CONFERIDO
+        assert preco(banco, leve, "PORTE_ANESTESICO", "31309062", DIA) == NAO_CONFERIDO

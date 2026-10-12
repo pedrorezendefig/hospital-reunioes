@@ -30,6 +30,8 @@ __all__ = [
     "PACOTE",
     "TabelaLida",
     "TabelaRecusadaError",
+    "bloco_da_categoria",
+    "categoria_da_memoria",
     "importar_tabela",
     "ler_tabela",
     "preco",
@@ -126,6 +128,20 @@ FORMATOS: tuple[_Formato, ...] = (
 
 _NUMERO = re.compile(r"-?\d+(?:\.\d+)?")
 
+# A chave do bloco `tabelas` da memória para cada categoria. Chave que não
+# está aqui vira categoria pelo próprio nome (`sadt` -> SADT): a próxima
+# operadora inventa categoria sem pedir deploy.
+_CATEGORIA_DA_MEMORIA = {
+    "materiais": "MATERIAL",
+    "medicamentos": "MEDICAMENTO",
+    "diarias_taxas": "DIARIA_TAXA",
+    "pacotes": "PACOTE",
+    "honorarios": "HONORARIO",
+}
+
+# O que o bloco diz da carga, e não da regra de preço.
+_CHAVES_DA_CARGA = frozenset({"situacao", "arquivo", "versao"})
+
 
 @dataclass(frozen=True)
 class TabelaLida:
@@ -195,6 +211,45 @@ def ler_tabela(texto: str) -> TabelaLida:
     return TabelaLida(formato=formato, itens=tuple(itens))
 
 
+def categoria_da_memoria(chave: str) -> str:
+    """A categoria de tabela de uma chave do bloco `tabelas` da memória."""
+    return _CATEGORIA_DA_MEMORIA.get(chave, chave.strip().upper())
+
+
+def _parametros_vigentes(supabase, operadora_id: str) -> dict[str, Any]:
+    versoes = (
+        supabase.table("cm_memoria_versao")
+        .select("parametros_json")
+        .eq("operadora_id", operadora_id)
+        .eq("vigente", True)
+        .execute()
+        .data
+        or []
+    )
+    return (versoes[0].get("parametros_json") or {}) if versoes else {}
+
+
+def bloco_da_categoria(parametros: dict[str, Any], categoria: str) -> dict[str, Any]:
+    """O que a memória diz da tabela da categoria (tipo, regra de preço, chave), ou `{}`."""
+    for chave, bloco in (parametros.get("tabelas") or {}).items():
+        if isinstance(bloco, dict) and categoria_da_memoria(str(chave)) == categoria:
+            return bloco
+    return {}
+
+
+def _regra_de_uso(bloco: dict[str, Any], formato: _Formato) -> dict[str, Any]:
+    """A regra de uso da tabela: o bloco da memória inteiro, com a regra de
+    preço, a chave de busca e o percentual com sinal (deflator vira negativo)."""
+    regra = {k: v for k, v in bloco.items() if k not in _CHAVES_DA_CARGA and v is not None}
+    tipo = str(bloco.get("tipo") or "").upper()
+    regra["regra_preco"] = str(bloco.get("regra_preco") or ("SIMPRO" if tipo == "SIMPRO" else formato.regra_preco))
+    regra["chave"] = bloco.get("chave") or formato.chave
+    if bloco.get("deflator_percentual") is not None:
+        regra["percentual"] = -bloco["deflator_percentual"]
+    regra["formato"] = formato.nome
+    return regra
+
+
 def importar_tabela(
     supabase,
     operadora_id: str,
@@ -203,16 +258,24 @@ def importar_tabela(
     *,
     vigencia_inicio: date,
     vigencia_fim: date | None,
+    versao: str | None,
     arquivo_nome: str,
     autor_id: str | None,
 ) -> dict[str, Any]:
-    """Grava a tabela lida como uma versão nova da categoria e devolve o resumo."""
+    """Grava a tabela lida como uma versão nova da categoria e devolve o resumo.
+
+    Tipo, regra de preço e chave vêm do bloco `tabelas` da memória vigente;
+    sem ele, do formato do CSV.
+    """
+    bloco = bloco_da_categoria(_parametros_vigentes(supabase, operadora_id), categoria)
+    versao = versao or (str(bloco["versao"]) if bloco.get("versao") else None)
     gravada = (
         supabase.table("cm_tabela_preco")
         .insert(
             {
                 "nome": arquivo_nome,
-                "tipo": tabela.formato.nome,
+                "tipo": bloco.get("tipo") or tabela.formato.nome,
+                "versao": versao,
                 "vigencia_inicio": vigencia_inicio.isoformat(),
                 "vigencia_fim": vigencia_fim.isoformat() if vigencia_fim else None,
                 "situacao": "CARREGADA",
@@ -231,11 +294,7 @@ def importar_tabela(
             "operadora_id": operadora_id,
             "categoria": categoria,
             "tabela_id": gravada["id"],
-            "regra_uso_json": {
-                "regra_preco": tabela.formato.regra_preco,
-                "chave": tabela.formato.chave,
-                "formato": tabela.formato.nome,
-            },
+            "regra_uso_json": _regra_de_uso(bloco, tabela.formato),
         }
     ).execute()
     return {
@@ -243,6 +302,7 @@ def importar_tabela(
         "formato": tabela.formato.nome,
         "descricao_formato": tabela.formato.descricao,
         "itens": len(itens),
+        "versao": versao,
         "vigencia_inicio": vigencia_inicio.isoformat(),
         "vigencia_fim": vigencia_fim.isoformat() if vigencia_fim else None,
     }
@@ -307,6 +367,16 @@ def _itens_do_codigo(supabase, tabela_id: str, codigo: str) -> list[dict]:
     )
 
 
+def _validado(parametros: dict[str, Any], codigo: str) -> Decimal | None:
+    """O preço que a memória dá como validado para o código (`precos.validados`)."""
+    for validado in (parametros.get("precos") or {}).get("validados") or []:
+        if not isinstance(validado, dict) or validado.get("valor") is None:
+            continue
+        if str(validado.get("codigo") or "").strip() == codigo:
+            return Decimal(str(validado["valor"]))
+    return None
+
+
 def _valor(precos: dict[str, Any], regra_preco: str, coluna: str | None) -> Decimal | str:
     if regra_preco == "LPM":
         bruto = precos.get("lpm")
@@ -336,10 +406,15 @@ def preco(
 ) -> Decimal | str:
     """O preço do código na tabela da categoria vigente na data, `NAO_CONFERIDO` ou `PACOTE`.
 
+    O preço validado na memória da operadora ganha da tabela.
+
     `coluna` é a coluna de preço do plano (COMUM, CARIOCA), para a tabela que
     tem duas; `cbo` desempata o código que a tabela repete por especialidade.
     """
     codigo = codigo.strip()
+    validado = _validado(_parametros_vigentes(supabase, operadora_id), codigo)
+    if validado is not None:
+        return validado
     tabela = _versao_na_data(supabase, operadora_id, categoria.strip().upper(), data)
     if tabela is None:
         return NAO_CONFERIDO

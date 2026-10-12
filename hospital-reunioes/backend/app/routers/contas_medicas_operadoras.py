@@ -166,6 +166,7 @@ async def enviar_tabela(
     categoria: CategoriaDeTabela = Form(...),
     vigencia_inicio: date = Form(...),
     vigencia_fim: date | None = Form(default=None),
+    versao: str | None = Form(default=None, max_length=200),
     arquivo: UploadFile = File(...),
     me: dict = Depends(require_permissao_cm(PERMISSAO)),
     supabase=Depends(get_supabase_client),
@@ -191,6 +192,7 @@ async def enviar_tabela(
         tabela,
         vigencia_inicio=vigencia_inicio,
         vigencia_fim=vigencia_fim,
+        versao=(versao or "").strip() or None,
         arquivo_nome=arquivo.filename or f"{sigla}-{categoria}.csv",
         autor_id=me.get("id"),
     )
