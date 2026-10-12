@@ -1,6 +1,6 @@
 # ROTAS.md
 <!-- gerado automaticamente por /snapshot — não editar -->
-<!-- last_update: 2026-10-12T21:12+0000 -->
+<!-- last_update: 2026-10-12T21:36+0000 -->
 
 Endpoints HTTP expostos pelo backend FastAPI do Hospital Reuniões.
 
@@ -81,6 +81,16 @@ Endpoints HTTP expostos pelo backend FastAPI do Hospital Reuniões.
 | Método | Rota | O que faz | Auth |
 |--------|------|-----------|------|
 | GET | `/contas-medicas/me` | O perfil de Contas médicas da pessoa e as permissões ligadas para ela. | ✅ |
+
+## contas-medicas (`app/routers/contas_medicas_guia.py`)
+
+| Método | Rota | O que faz | Auth |
+|--------|------|-----------|------|
+| GET | `/contas-medicas/contas/{conta_id}/guia` | O Guia da Conta: cabeçalho, os três números e as linhas por dia e setor. | ✅ |
+| POST | `/contas-medicas/contas/{conta_id}/guia/concluir` | Concluir é sempre possível. Sem pendência, a Conta fica Concluída; com | ✅ |
+| POST | `/contas-medicas/contas/{conta_id}/guia/dia/feito` | Feito em todas as linhas abertas do grupo (dia e setor). As já marcadas | ✅ |
+| DELETE | `/contas-medicas/contas/{conta_id}/guia/linhas/{linha_id}/marcacao` | Desfazer: a linha volta a aberta, enquanto a Conta não foi concluída. | ✅ |
+| POST | `/contas-medicas/contas/{conta_id}/guia/linhas/{linha_id}/marcacao` | Feito, Não procede (com motivo) ou Bloqueado numa linha do Guia. | ✅ |
 
 ## contas-medicas (`app/routers/contas_medicas_operadoras.py`)
 
@@ -435,4 +445,4 @@ Endpoints HTTP expostos pelo backend FastAPI do Hospital Reuniões.
 
 ---
 
-**Totais:** 249 endpoints em 36 routers · 93% exigem auth.
+**Totais:** 254 endpoints em 37 routers · 93% exigem auth.
