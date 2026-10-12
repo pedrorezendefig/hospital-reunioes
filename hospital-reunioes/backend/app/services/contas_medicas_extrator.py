@@ -1,8 +1,57 @@
-"""Extrator de texto de PDF do módulo Contas médicas (issue #1116, ADR 0070)."""
+"""Extrator de texto de PDF do módulo Contas médicas (issue #1116, ADR 0070).
+
+Conta e Prontuário chegam do MV em PDF e viram texto pelo `pdftotext -layout`
+(poppler-utils): as expressões da leitura por código foram calibradas na saída
+do `-layout`, e ela preserva a coluna de cada campo.
+
+O `pdftotext` é parser de arquivo que vem de fora, e o uvicorn sobe com um
+worker só. Por isso ele roda isolado, com o mesmo orçamento do extrator de
+documentos que já existe (`transcricao_extractor`, issue #758): o mesmo teto de
+memória vigiado pelo pai, o mesmo `RLIMIT_AS` instalado no filho, o mesmo
+ambiente mínimo sem chave nenhuma, e o mesmo número de vagas. O prazo é outro:
+120 segundos, porque um Prontuário tem centenas de páginas e a leitura roda na
+fila, não na frente de alguém esperando.
+
+As vagas são do módulo e não as do extrator de documentos: dividir o mesmo
+semáforo deixaria um Prontuário de dois minutos segurando a vaga de quem sobe a
+transcrição de uma Ata, e a pessoa levaria "tente de novo" sem nada de errado.
+
+O texto devolvido tem dado de paciente: nunca vai para log, nem em caso de erro.
+"""
 
 from __future__ import annotations
 
+import logging
+import os
+import subprocess
+import sys
+import tempfile
+import threading
 from dataclasses import dataclass
+
+from app.services import contas_medicas_extrator_filho as filho
+from app.services import transcricao_extractor as orcamento
+
+logger = logging.getLogger(__name__)
+
+PRAZO_DA_LEITURA = 120.0
+VAGAS_DE_LEITURA = orcamento.VAGAS_DE_EXTRACAO
+_vagas = threading.BoundedSemaphore(VAGAS_DE_LEITURA)
+
+# O teto do canal de volta é maior que o do extrator de documentos (16 MB): o
+# `-layout` preenche cada linha com espaços até a coluna do campo, uma página
+# de Prontuário passa de 10 KB, e o Prontuário real do diretor tem 952 páginas.
+# 64 MB cabem seis mil páginas assim, e ainda são número que se confere contra
+# a memória do container, vezes as duas vagas.
+TETO_DO_TEXTO_DEVOLVIDO = 64 * 1024 * 1024
+
+MENSAGEM_PDF_GRANDE_DEMAIS = (
+    "O PDF é grande ou complexo demais para ser lido de uma vez. A leitura foi "
+    "interrompida para não comprometer o sistema."
+)
+MENSAGEM_PDF_ILEGIVEL = "Não consegui ler o PDF. Confira se ele abre no computador e envie de novo."
+
+_CAMINHO_DO_FILHO = os.path.abspath(filho.__file__)
 
 
 @dataclass(frozen=True)
@@ -10,3 +59,69 @@ class ErroLeitura:
     """Leitura que não pode ser usada. `motivo` é a frase que vai para a tela."""
 
     motivo: str
+
+
+@dataclass(frozen=True)
+class Pagina:
+    """Texto de uma página, com a numeração do PDF (a primeira é 1)."""
+
+    numero: int
+    texto: str
+    sem_texto: bool
+
+
+def _paginas(texto: str) -> list[Pagina]:
+    # O `pdftotext` fecha toda página com um form feed, inclusive a última.
+    partes = texto.split("\f")
+    if partes and partes[-1] == "":
+        partes.pop()
+    return [Pagina(numero=n, texto=t, sem_texto=not t.strip()) for n, t in enumerate(partes, start=1)]
+
+
+def extrair_paginas(pdf: bytes) -> list[Pagina] | ErroLeitura:
+    """Texto do PDF por página, lido pelo `pdftotext -layout` num processo isolado."""
+    if not _vagas.acquire(timeout=PRAZO_DA_LEITURA):
+        logger.warning("Leitura de PDF sem vaga apos %ss", PRAZO_DA_LEITURA)
+        return ErroLeitura(orcamento.MENSAGEM_FILA_CHEIA)
+
+    try:
+        with tempfile.TemporaryDirectory(prefix="contas-medicas-") as pasta:
+            entrada = os.path.join(pasta, "entrada.pdf")
+            saida = os.path.join(pasta, "saida")
+            erro = os.path.join(pasta, "erro")
+            with open(entrada, "wb") as f:
+                f.write(pdf)
+
+            with open(saida, "wb") as f_saida, open(erro, "wb") as f_erro:
+                proc = subprocess.Popen(
+                    [sys.executable, "-P", _CAMINHO_DO_FILHO, str(orcamento.LIMITE_DE_ENDERECAMENTO), entrada],
+                    stdin=subprocess.DEVNULL,
+                    stdout=f_saida,
+                    stderr=f_erro,
+                    env=orcamento._ambiente_do_filho(),
+                )
+                motivo = orcamento._acompanhar(
+                    proc,
+                    saida,
+                    erro,
+                    prazo=PRAZO_DA_LEITURA,
+                    teto_da_saida=TETO_DO_TEXTO_DEVOLVIDO,
+                )
+
+            if motivo is None and orcamento._tamanho(saida) > TETO_DO_TEXTO_DEVOLVIDO:
+                motivo = "saida"
+            bruto = b"" if motivo is not None else orcamento._ler(saida)
+            diagnostico = orcamento._ler_cauda(erro, orcamento.RABO_DO_ERRO_NO_LOG)
+    finally:
+        _vagas.release()
+
+    if motivo is not None or proc.returncode < 0:
+        # Código negativo é sinal: o filho foi morto (OOM do cgroup), não terminou.
+        return ErroLeitura(MENSAGEM_PDF_GRANDE_DEMAIS)
+
+    if proc.returncode != 0:
+        # O `stderr` do `pdftotext` só tem diagnóstico do arquivo, nunca o texto.
+        logger.error("Leitura de PDF falhou (codigo %s): %s", proc.returncode, diagnostico)
+        return ErroLeitura(MENSAGEM_PDF_ILEGIVEL)
+
+    return _paginas(bruto.decode("utf-8", errors="replace"))
