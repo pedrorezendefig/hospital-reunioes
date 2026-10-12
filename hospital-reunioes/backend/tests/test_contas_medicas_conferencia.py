@@ -1081,9 +1081,7 @@ class TestExames:
             _item(GASOMETRIA, "GASOMETRIA ARTERIAL", dia(3), 1, 30.00, grupo="EXAMES", pagina=7),
         )
 
-        resultado = conferir(
-            conta, _prontuario(exames=exames), _memoria(), _tabela({}), dicionario={"UREIA": {UREIA}}
-        )
+        resultado = conferir(conta, _prontuario(exames=exames), _memoria(), _tabela({}), dicionario={"UREIA": {UREIA}})
 
         [incluir] = _linhas(resultado, "INCLUIR")
         assert _campos(incluir) == {
@@ -1127,6 +1125,111 @@ class TestExames:
             "origem": "CODIGO",
         }
         assert len(resultado.linhas) == 2
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 7. Glicemia × fita, lanceta e algodão (conferência 10, ASSIM-INS-18)
+# ═══════════════════════════════════════════════════════════════════════════
+
+FITA = "70902771"
+LANCETA = "70902925"
+ALGODAO = "70019860"
+
+PARAMETROS_COM_GLICEMIA: dict[str, Any] = {
+    **PARAMETROS_ALFA,
+    "glicemia_capilar": {"codigos": [FITA, LANCETA, ALGODAO], "por_afericao": 1},
+}
+
+# A mesma glicemia está na aferição e no balanço do dia: são 4, não 8.
+GLICEMIAS_DO_DIA_3 = (
+    GlicemiasDoDia(dia(3), "AFERICAO", 4, (40, 41, 42, 43)),
+    GlicemiasDoDia(dia(3), "BALANCO", 4, (50,)),
+)
+
+
+def _conta_com_2_fitas() -> Conta:
+    material = {"grupo": "MATERIAIS DESCARTAVEIS"}
+    return _conta(
+        _item(FITA, "FITA GLICEMIA ACCU CHEK", dia(3), 2, 3.00, pagina=8, **material),
+        _item(LANCETA, "LANCETA DESC", dia(3), 4, 0.50, pagina=8, **material),
+    )
+
+
+class TestGlicemia:
+    def test_4_glicemias_no_dia_e_2_fitas_lancadas_vira_ajustar_para_4_e_sem_algodao_vira_incluir(self):
+        resultado = conferir(
+            _conta_com_2_fitas(),
+            _prontuario(glicemias=GLICEMIAS_DO_DIA_3),
+            _memoria(PARAMETROS_COM_GLICEMIA),
+            _tabela({("MATERIAL", FITA): 3.00}),
+        )
+
+        [ajustar] = _linhas(resultado, "AJUSTAR_QUANTIDADE")
+        assert _campos(ajustar) == {
+            "acao": "AJUSTAR_QUANTIDADE",
+            "data": "2026-10-03",
+            "data_fim": None,
+            "setor": "CTI ADULTO",
+            "codigo": FITA,
+            "descricao": "FITA GLICEMIA ACCU CHEK",
+            "quantidade_lancada": 2.0,
+            "quantidade_devida": 4.0,
+            "preco_lancado": 3.00,
+            "preco_tabela": 3.00,
+            "valor_diferenca": 6.00,
+            "regra_codigo": "ALFA-INS-18",
+            "evidencia_pagina": 40,
+            "nivel_evidencia": "REGISTRADO",
+            "causa_raiz": "LANCAMENTO_MANUAL",
+            "confianca": "ALTA",
+            "origem": "CODIGO",
+        }
+        assert "4 glicemias" in ajustar["motivo"]
+        [incluir] = _linhas(resultado, "INCLUIR")
+        assert (
+            incluir["codigo"],
+            incluir["quantidade_devida"],
+            incluir["regra_codigo"],
+            incluir["evidencia_pagina"],
+        ) == (
+            ALGODAO,
+            4.0,
+            "ALFA-INS-18",
+            40,
+        )
+        assert len(resultado.linhas) == 2
+
+    def test_sem_regra_de_glicemia_na_memoria_nenhuma_linha(self):
+        sem_regra = {
+            **PARAMETROS_COM_GLICEMIA,
+            "regras_das_conferencias": {k: v for k, v in REGRAS_DAS_CONFERENCIAS.items() if k != "glicemia"},
+        }
+
+        resultado = conferir(
+            _conta_com_2_fitas(),
+            _prontuario(glicemias=GLICEMIAS_DO_DIA_3),
+            _memoria(sem_regra),
+            _tabela({("MATERIAL", FITA): 3.00}),
+        )
+
+        assert resultado.linhas == ()
+
+
+class TestRegraPendenteDeExameEGlicemia:
+    def test_regra_pendente_faz_exame_e_glicemia_sairem_validar(self):
+        resultado = conferir(
+            _conta_com_2_fitas(),
+            _prontuario(glicemias=GLICEMIAS_DO_DIA_3, exames=[ExamePedido("UREIA", "3015", dia(2), 30)]),
+            _memoria(PARAMETROS_COM_GLICEMIA, pendentes=("ALFA-INS-18", "ALFA-SAD-01")),
+            _tabela({("MATERIAL", FITA): 3.00}),
+        )
+
+        assert sorted((linha["acao"], linha["codigo"] or "", linha["regra_codigo"]) for linha in resultado.linhas) == [
+            ("VALIDAR", "", "ALFA-SAD-01"),
+            ("VALIDAR", ALGODAO, "ALFA-INS-18"),
+            ("VALIDAR", FITA, "ALFA-INS-18"),
+        ]
+        assert all(linha["motivo"].startswith("Regra ALFA-") for linha in resultado.linhas)
 
 
 # ═══════════════════════════════════════════════════════════════════════════

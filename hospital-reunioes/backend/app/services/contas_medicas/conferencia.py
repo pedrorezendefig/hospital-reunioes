@@ -26,7 +26,7 @@ from decimal import ROUND_HALF_UP, Decimal
 from typing import Any
 
 from app.services.contas_medicas.cirurgia import DescricaoCirurgica
-from app.services.contas_medicas.conteudo import Conteudo, Movimentacao
+from app.services.contas_medicas.conteudo import Conteudo, GlicemiasDoDia, Movimentacao
 from app.services.contas_medicas.diarias import ParametrosDiaria, Segmento, contar_diarias, diarias_do_periodo
 from app.services.contas_medicas.dicionario import _generico, _marca, _norm, casar
 from app.services.contas_medicas.guia import NotaDeEntrada, agrupar_por_dia_e_setor, nota_de_entrada
@@ -1146,6 +1146,85 @@ def _exames(ctx: _Contexto) -> list[_Linha]:
 
 
 # ----------------------------------------------------------------------------------
+# (10) Glicemia × fita, lanceta e algodão
+# ----------------------------------------------------------------------------------
+
+
+def _glicemias(ctx: _Contexto) -> list[_Linha]:
+    """Glicemias aferidas no dia × os itens da memória (`glicemia_capilar`: códigos
+    e quantos de cada por aferição, ASSIM-INS-18). Nada lançado: Incluir; lançado a
+    menos: Ajustar. Lançado a mais não vira linha: a glicemia anotada só na evolução
+    não entra na contagem. A mesma glicemia pode estar na aferição e no balanço:
+    vale a fonte com mais glicemias no dia, nunca a soma."""
+    bloco = ctx.parametros.get("glicemia_capilar") or {}
+    codigos = [str(c) for c in bloco.get("codigos") or [] if c]
+    por_afericao = Decimal(str(bloco.get("por_afericao") or 1))
+    por_dia: dict[date, GlicemiasDoDia] = {}
+    for glicemias in ctx.prontuario.conteudo.glicemias:
+        atual = por_dia.get(glicemias.data)
+        if atual is None or glicemias.quantidade > atual.quantidade:
+            por_dia[glicemias.data] = glicemias
+    linhas = []
+    for data, glicemias in sorted(por_dia.items()):
+        if not ctx.no_periodo(data):
+            continue
+        devida = glicemias.quantidade * por_afericao
+        for codigo in codigos:
+            cobravel = ctx.cobravel("MATERIAL", codigo, data)
+            if cobravel is False:
+                continue
+            itens = [i for i in ctx.conta.itens if i.codigo == codigo and i.data == data]
+            lancada = sum((i.quantidade for i in itens), Decimal(0))
+            if lancada >= devida:
+                continue
+            motivo = f"{glicemias.quantidade} glicemias aferidas no dia ({glicemias.familia.lower()}), "
+            motivo += f"{por_afericao:g} por aferição; lançado {lancada:g}."
+            if cobravel is None:
+                motivo += " Sem preço conferível na tabela: conferir se passa do corte."
+            comum = {
+                "chave": "glicemia",
+                "data": data,
+                "codigo": codigo,
+                "nivel": "REGISTRADO",
+                "causa": "LANCAMENTO_MANUAL",
+                "pagina": glicemias.paginas[0],
+                "trecho": f"GLICEMIA: {glicemias.quantidade} aferições em {data:%d/%m/%Y}",
+                "quantidade_lancada": lancada,
+                "quantidade_devida": devida,
+            }
+            if itens:
+                tabela = ctx.preco("MATERIAL", codigo, data, ctx.coluna)
+                unitario = tabela if isinstance(tabela, Decimal) else itens[0].unitario
+                linhas.append(
+                    _Linha(
+                        acao="AJUSTAR_QUANTIDADE" if cobravel else "VALIDAR",
+                        setor=itens[0].setor,
+                        descricao=itens[0].descricao,
+                        motivo=motivo,
+                        preco_lancado=itens[0].unitario,
+                        preco_tabela=tabela if isinstance(tabela, Decimal) else None,
+                        valor=_dinheiro((devida - lancada) * unitario),
+                        **comum,
+                    )
+                )
+                continue
+            preco_lancado, preco_tabela, valor, etiqueta = ctx.valor_de_inclusao("MATERIAL", codigo, data, devida)
+            linhas.append(
+                _Linha(
+                    acao="INCLUIR" if cobravel else "VALIDAR",
+                    setor=(ctx.prontuario.conteudo.setor_por_dia.get(data) or (None,))[0],
+                    descricao=next((i.descricao for i in ctx.conta.itens if i.codigo == codigo), None),
+                    motivo=motivo + etiqueta,
+                    preco_lancado=preco_lancado,
+                    preco_tabela=preco_tabela,
+                    valor=valor,
+                    **comum,
+                )
+            )
+    return linhas
+
+
+# ----------------------------------------------------------------------------------
 # Regra citada, período e montagem
 # ----------------------------------------------------------------------------------
 
@@ -1295,6 +1374,7 @@ def conferir(
         *_pacote_pelo_tuss(ctx, pacote),
         *_tetos(ctx, pagas),
         *_exames(ctx),
+        *_glicemias(ctx),
     ]
     linhas = _com_regra(geradas, memoria, descartadas)
     linhas = _diario(_sem_duplicadas(_no_periodo(ctx, linhas, descartadas)))
