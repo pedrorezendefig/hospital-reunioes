@@ -27,6 +27,7 @@ import subprocess
 import sys
 import tempfile
 import threading
+from collections.abc import Sequence
 from dataclasses import dataclass
 
 from app.services import contas_medicas_extrator_filho as filho
@@ -76,6 +77,17 @@ def _paginas(texto: str) -> list[Pagina]:
     if partes and partes[-1] == "":
         partes.pop()
     return [Pagina(numero=n, texto=t, sem_texto=not t.strip()) for n, t in enumerate(partes, start=1)]
+
+
+def texto_para_guardar(paginas: Sequence[Pagina]) -> bytes:
+    """O texto extraído no formato do próprio `pdftotext`, para guardar no
+    bucket ao lado do PDF: o envio extrai uma vez e a fila lê daí (#1124)."""
+    return "".join(f"{pagina.texto}\f" for pagina in paginas).encode("utf-8")
+
+
+def paginas_do_texto_guardado(bruto: bytes) -> list[Pagina]:
+    """As páginas do texto que `texto_para_guardar` gravou."""
+    return _paginas(bruto.decode("utf-8", errors="replace"))
 
 
 def extrair_paginas(pdf: bytes) -> list[Pagina] | ErroLeitura:

@@ -33,7 +33,7 @@ from app.services.contas_medicas.guia import NotaDeEntrada, agrupar_por_dia_e_se
 from app.services.contas_medicas.memoria import MemoriaLida
 from app.services.contas_medicas.prescricao import ItemPrescrito, Prescricao
 from app.services.contas_medicas.prontuario import Prontuario
-from app.services.contas_medicas.tabelas import NAO_CONFERIDO, PACOTE
+from app.services.contas_medicas.tabelas import NAO_CONFERIDO, PACOTE, Pacote
 from app.services.contas_medicas_conta import Conta, ItemConta, coluna_do_plano
 
 __all__ = ["BuscaDePacote", "BuscaDePreco", "Conferencia", "Pacote", "ProntuarioLido", "conferir"]
@@ -56,17 +56,6 @@ _CATEGORIA_DO_GRUPO = {
     "PACOTES ESPECIAIS": "PACOTE",
     "HONORARIOS MEDICOS": "HONORARIO",
 }
-
-
-@dataclass(frozen=True)
-class Pacote:
-    """O pacote da tabela da operadora para um TUSS realizado."""
-
-    codigo: str
-    descricao: str | None
-    # Diárias incluídas no pacote; as além delas são excedentes (LEVE-PAC-04).
-    permanencia: int
-    valor: Decimal | None
 
 
 # A busca do pacote pelo TUSS na tabela de pacotes da operadora: (TUSS, data).

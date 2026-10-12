@@ -26,6 +26,7 @@ import sys
 import threading
 import uuid
 from datetime import UTC, datetime, timedelta
+from decimal import Decimal
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
@@ -43,6 +44,12 @@ from app.routers import contas_medicas_envio as envio_router  # noqa: E402
 from app.routers import contas_medicas_guia as guia_router  # noqa: E402
 from app.services.contas_medicas import envio as envio_service  # noqa: E402
 from app.services.contas_medicas import processamento  # noqa: E402
+from app.services.contas_medicas.conferencia import ProntuarioLido, conferir  # noqa: E402
+from app.services.contas_medicas.conteudo import ler_conteudo  # noqa: E402
+from app.services.contas_medicas.memoria import MemoriaLida, RegraLida, parametros_lidos  # noqa: E402
+from app.services.contas_medicas.prontuario import ler_prontuario  # noqa: E402
+from app.services.contas_medicas.tabelas import NAO_CONFERIDO, Pacote  # noqa: E402
+from app.services.contas_medicas_conta import ler_conta  # noqa: E402
 from app.services.contas_medicas_extrator import Pagina  # noqa: E402
 
 MIGRATION = Path(__file__).resolve().parents[2] / "supabase" / "migrations" / "116_contas_medicas_fundacao.sql"
@@ -96,6 +103,14 @@ def _violacao(nome: str, linha: dict) -> str | None:
     if nome == "notificacoes" and linha.get("tipo") not in TIPOS_DE_NOTIFICACAO:
         return "notificacoes_tipo_check"
     return None
+
+
+# Os DEFAULT da 116 que o processamento deixa o banco preencher.
+PADROES_DA_MIGRATION = {
+    "cm_conta": {"tentativas": 0, "parecer_parcial": False},
+    "cm_guia_linha": {"estado": "ABERTA", "origem": "CODIGO"},
+    "notificacoes": {"lida": False},
+}
 
 
 def _contem(valor: Any, parte: Any) -> bool:
@@ -197,7 +212,12 @@ class _Consulta:
                     raise APIError({"message": violacao, "code": "23514"})
                 self._banco.relogio += 1
                 gravadas.append(
-                    {"id": str(uuid.uuid4()), "criado_em": f"2026-10-12T10:00:00.{self._banco.relogio:06d}+00:00", **nova}
+                    {
+                        "id": str(uuid.uuid4()),
+                        "criado_em": f"2026-10-12T10:00:00.{self._banco.relogio:06d}+00:00",
+                        **PADROES_DA_MIGRATION.get(self._nome, {}),
+                        **nova,
+                    }
                 )
             tabela.extend(gravadas)
             return SimpleNamespace(data=[dict(g) for g in gravadas])
@@ -359,3 +379,403 @@ class TestContaPresa:
             None,
         )
         assert processamento.pegar_da_fila(banco, AGORA) is None
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# O par sintético: a conta, o prontuário, a memória e as tabelas
+# ═══════════════════════════════════════════════════════════════════════════
+
+ATENDIMENTO = "31245"
+FIXTURES = Path(__file__).parent / "fixtures" / "contas_medicas"
+QUEBRA = "<<<QUEBRA DE PÁGINA>>>"
+
+# Um trecho que só existe no prontuário (a capa e a descrição cirúrgica): não
+# pode aparecer em linha nenhuma de log.
+TRECHO_DO_PRONTUARIO = "ANTÔNIA MELO FARIAS"
+
+
+def _br(valor: Decimal) -> str:
+    return f"{valor:,.2f}".replace(",", "_").replace(".", ",").replace("_", ".")
+
+
+# (grupo da conta, dia de outubro, código, descrição, unidade, quantidade, unitário)
+ITENS_DA_CONTA = [
+    ("DIARIAS", 3, "60001038", "DIARIA DE UTI ADULTO", "UN", "1", "1000.00"),
+    ("DIARIAS", 4, "60001038", "DIARIA DE UTI ADULTO", "UN", "1", "1000.00"),
+    ("DIARIAS", 5, "60001038", "DIARIA DE UTI ADULTO", "UN", "1", "1000.00"),
+    ("MEDICAMENTOS", 3, "90030001", "CLEXANE 40MG/0,4ML SER PREENCH", "SER", "1", "45.00"),
+    ("MEDICAMENTOS", 4, "90030001", "CLEXANE 40MG/0,4ML SER PREENCH", "SER", "1", "45.00"),
+    ("MATERIAIS DESCARTAVEIS", 3, "70000001", "AGULHA HIPODERMICA 40X12", "UN", "10", "0.17"),
+]
+
+
+def _texto_da_conta(conta: str, inicio: int, fim: int, *, total_errado: bool = False) -> str:
+    """A "Fatura Individual" do MV com os itens do período (dias de outubro)."""
+    linhas = [
+        "HOSPITAL FICTICIO DE TESTE                                                         Página 1 de 1",
+        "                                   Fatura Individual",
+        "",
+        f"Atendimento: {ATENDIMENTO}          Conta: {conta}          Tipo: PARCIAL",
+        "Internação: 02/10/2026 22:40",
+        f"Período da   {inicio:02d}/10/2026 a {fim:02d}/10/2026          Acomodação: ENFERMARIA",
+        "Procedimento: 31005497  COLECISTECTOMIA COM COLANGIOGRAFIA          CID: K80",
+        "Plano: ALFA BASICO ENF",
+        "Guia: 123456789",
+        "",
+    ]
+    total = Decimal(0)
+    grupo_atual = None
+    for grupo, dia, codigo, descricao, unidade, quantidade, unitario in ITENS_DA_CONTA:
+        if not inicio <= dia <= fim:
+            continue
+        if grupo != grupo_atual:
+            linhas += [grupo, "51  CTI ADULTO", "    Grupo de Procedimento: 01 GERAL"]
+            grupo_atual = grupo
+        q, u = Decimal(quantidade), Decimal(unitario)
+        total += q * u
+        valores = f"{_br(q):>8}  {_br(u):>10}  {_br(q * u):>10}"
+        linhas.append(f"{dia:02d}/10/2026  {codigo}  {descricao:<40}{unidade:<8}100,00%  {valores}")
+    if total_errado:
+        total += Decimal("10.00")
+    linhas += ["", f"Total da Conta:                                                                  {_br(total)}", ""]
+    return "\n".join(linhas)
+
+
+def _fixture(nome: str) -> list[str]:
+    return [p.strip("\n") for p in (FIXTURES / f"{nome}.txt").read_text(encoding="utf-8").split(QUEBRA)]
+
+
+CABECALHO_DA_PRESCRICAO = (
+    "MEDICAMENTOS NORMAIS                       Dose Padrão     Duração   Frequência   SN   Apl   Datas/Horários"
+)
+CLEXANE = " 1 CLEXANE 40MG/0,4ML SER PREENCH          1 SERINGA                 24HS/24HS          SC    . 22"
+
+
+def _prescricao(dia: int) -> str:
+    return "\n".join(
+        [
+            "HOSPITAL SÃO MATHEUS                                                    Página: 1 / 1",
+            f"Prescrição.: {778800 + dia}  Data: {dia:02d}/10/2026 10:15",
+            f"Atendimento: {ATENDIMENTO}",
+            "Unid. Int..: CTI ADULTO   Leito..: CTI-04   Cobertura: UTI ADULTO GERAL",
+            "Internação.: 02/10/2026 22:40",
+            "PRESCRIÇÃO MÉDICA",
+            CABECALHO_DA_PRESCRICAO,
+            CLEXANE,
+        ]
+    )
+
+
+def _paginas_do_prontuario() -> list[str]:
+    """Internação no CTI de 02/10 22:40 à alta em 06/10 15:20, com Clexane
+    prescrito todo dia e a colecistectomia em 04/10. A capa lista três
+    evoluções médicas que o arquivo não trouxe: o guia sai com parecer parcial."""
+    (capa,) = _fixture("prontuario/capa")
+    capa += "\nGrupo: EVOLUÇÃO MEDICA      Quantidade: 3"
+    paginas = [
+        capa,
+        *_fixture("prontuario/admissao_unidade"),
+        *(_prescricao(dia) for dia in (3, 4, 5, 6)),
+        *_fixture("conteudo/descricao_cirurgica"),
+        *_fixture("prontuario/resumo_alta"),
+    ]
+    return [
+        f"{texto}\n\n          Impressão de Prontuário - Página {n} de {len(paginas)}"
+        for n, texto in enumerate(paginas, start=1)
+    ]
+
+
+def _arquivo_do_envio(nome: str, texto: str):
+    return ("arquivos", (nome, texto.encode("utf-8"), "application/pdf"))
+
+
+def _conta(conta: str = "48811", inicio: int = 2, fim: int = 6, **kw):
+    return _arquivo_do_envio(f"conta-{conta}.pdf", _texto_da_conta(conta, inicio, fim, **kw))
+
+
+def _prontuario():
+    return _arquivo_do_envio("prontuario.pdf", "\f".join(_paginas_do_prontuario()))
+
+
+REGRAS_DAS_CONFERENCIAS = {
+    "preco": "ALFA-PRC-02",
+    "diaria": "ALFA-DIA-01",
+    "prescricao": "ALFA-PRI-07",
+    "sem_registro": "ALFA-PRI-06",
+    "procedimento_do_cabecalho": "ALFA-PRI-12",
+    "pacote_pelo_tuss": "ALFA-PAC-03",
+}
+
+PARAMETROS = {
+    "operadora": "ALFA",
+    "colunas_de_preco": {"padrao": "COMUM"},
+    "diaria": {"hora_vencimento": "10:00", "limite_madrugada": "05:00", "codigos": {"cti": "60001038"}},
+    "regras_das_conferencias": REGRAS_DAS_CONFERENCIAS,
+}
+
+# A tabela de materiais e a de pacotes como a carga grava (#1120).
+PRECO_DA_AGULHA = {"comum": 0.20, "carioca": 0.25}
+PACOTE_DA_COLECISTECTOMIA = {"codigo": "98005497", "descricao": "PACOTE COLECISTECTOMIA", "valor": 4500.0}
+
+
+def _matriz_da_migration() -> list[dict[str, Any]]:
+    bloco = re.search(r"INSERT INTO cm_perfil_permissao\s*\([^)]*\)\s*VALUES(.*?);", _SQL, flags=re.DOTALL)
+    assert bloco, "a migration 116 nao carrega a matriz"
+    linhas = re.findall(r"\(\s*'(\w+)'\s*,\s*'(\w+)'\s*,\s*(true|false)\s*\)", bloco.group(1))
+    return [{"perfil": p, "permissao": k, "ligada": v == "true"} for p, k, v in linhas]
+
+
+def _pessoa(pid: str, perfil: str | None) -> dict[str, Any]:
+    return {
+        "id": pid,
+        "auth_user_id": f"auth-{pid}",
+        "nome_completo": f"Pessoa {pid}",
+        "email": f"{pid.lower()}@hsm.test",
+        "ativo": True,
+        "is_externo": False,
+        "is_super_admin": False,
+        "access_profile": None,
+        "perfil_pop": None,
+        "perfil_ouvidoria": None,
+        "perfil_contas_medicas": perfil,
+        "github_login": None,
+    }
+
+
+PESSOAS = {"faturista": _pessoa("F1", "faturista")}
+
+
+def _regra(codigo: str) -> dict[str, Any]:
+    return {
+        "id": f"rg-{codigo}",
+        "operadora_id": "op-alfa",
+        "memoria_versao_id": "mv-alfa",
+        "codigo": codigo,
+        "secao": codigo.split("-")[1],
+        "texto": f"Regra sintética {codigo}.",
+        "tipo": "CONTRATUAL",
+        "origem": "PRÁTICA",
+        "status": "VIGENTE",
+        "ativa": True,
+    }
+
+
+def _item_de_tabela(id_: str, tabela_id: str, codigo: str, descricao: str, precos: dict, extra: dict) -> dict:
+    return {
+        "id": id_,
+        "tabela_id": tabela_id,
+        "codigo": codigo,
+        "codigo_alternativo": None,
+        "descricao": descricao,
+        "precos_json": precos,
+        "extra_json": extra,
+    }
+
+
+def _cenario() -> _Banco:
+    pacote = PACOTE_DA_COLECISTECTOMIA
+    return _Banco(
+        {
+            "participantes": list(PESSOAS.values()),
+            "cm_perfil_permissao": _matriz_da_migration(),
+            "cm_operadora": [{"id": "op-alfa", "sigla": "ALFA", "nome": "Alfa Saúde", "situacao": "PARCIAL"}],
+            "cm_operadora_plano": [
+                {"id": "pl-1", "operadora_id": "op-alfa", "nome_mv": "ALFA BASICO", "coluna_preco": "COMUM"}
+            ],
+            "cm_memoria_versao": [
+                {
+                    "id": "mv-alfa",
+                    "operadora_id": "op-alfa",
+                    "versao": "1.0",
+                    "parametros_json": PARAMETROS,
+                    "vigente": True,
+                }
+            ],
+            "cm_regra": [_regra(codigo) for codigo in sorted(REGRAS_DAS_CONFERENCIAS.values())],
+            "cm_tabela_preco": [
+                {"id": "tb-mat", "nome": "materiais.csv", "vigencia_inicio": "2026-01-01", "vigencia_fim": None},
+                {"id": "tb-pac", "nome": "pacotes.csv", "vigencia_inicio": "2026-01-01", "vigencia_fim": None},
+            ],
+            "cm_tabela_preco_item": [
+                _item_de_tabela("it-1", "tb-mat", "70000001", "AGULHA HIPODERMICA", PRECO_DA_AGULHA, {}),
+                _item_de_tabela(
+                    "it-2",
+                    "tb-pac",
+                    pacote["codigo"],
+                    pacote["descricao"],
+                    {"valor": pacote["valor"]},
+                    {"codigos_tuss": ["31005497"], "permanencia": "2"},
+                ),
+            ],
+            "cm_operadora_tabela": [
+                {"operadora_id": "op-alfa", "categoria": categoria, "tabela_id": tabela, "regra_uso_json": {}}
+                for categoria, tabela in (("MATERIAL", "tb-mat"), ("PACOTE", "tb-pac"))
+            ],
+            "cm_setor": [
+                {"id": "st-1", "nome_mv": "CTI ADULTO", "acomodacao": "CTI"},
+                {"id": "st-2", "nome_mv": "CENTRO CIRURGICO", "acomodacao": "CENTRO_CIRURGICO"},
+            ],
+            "cm_item_dicionario": [{"id": "dc-1", "termo": "Clexane", "codigo_conta": "90030001"}],
+            "cm_envio": [],
+            "cm_arquivo": [],
+            "cm_atendimento": [],
+            "cm_conta": [],
+            "cm_conta_item": [],
+            "cm_eventos": [],
+            "cm_prescricao": [],
+            "cm_prescricao_item": [],
+            "cm_cirurgia": [],
+            "cm_glicemia_dia": [],
+            "cm_guia_linha": [],
+            "notificacoes": [],
+        }
+    )
+
+
+def _cliente(banco: _Banco, quem: str = "faturista") -> TestClient:
+    pessoa = PESSOAS[quem]
+    app = FastAPI()
+    app.state.limiter = limiter
+    app.include_router(envio_router.router, prefix="/api")
+    app.include_router(guia_router.router, prefix="/api")
+
+    async def _usuario() -> dict[str, Any]:
+        return {"id": pessoa["auth_user_id"], "email": pessoa["email"], "metadata": {}}
+
+    app.dependency_overrides[get_current_user] = _usuario
+    app.dependency_overrides[get_supabase_client] = lambda: banco
+    return TestClient(app)
+
+
+class _Extrator:
+    """O `pdftotext` do teste: o "PDF" é o texto com as páginas separadas por
+    form feed. Conta as chamadas por tipo de arquivo."""
+
+    def __init__(self):
+        self.chamadas: list[str] = []
+
+    def __call__(self, pdf: bytes):
+        texto = pdf.decode("utf-8")
+        self.chamadas.append("PRONTUARIO" if "DECLARAÇÃO DE RECEBIMENTO" in texto else "CONTA")
+        return [Pagina(numero=n, texto=t, sem_texto=not t.strip()) for n, t in enumerate(texto.split("\f"), start=1)]
+
+
+@pytest.fixture(autouse=True)
+def extrator(monkeypatch) -> _Extrator:
+    duble = _Extrator()
+    monkeypatch.setattr(envio_service, "extrair_paginas", duble)
+    monkeypatch.setattr(processamento, "extrair_paginas", duble)
+    return duble
+
+
+class _NaHora:
+    """Executor que roda a análise na hora, na thread do teste."""
+
+    def submit(self, funcao, *args, **kwargs):
+        funcao(*args, **kwargs)
+
+
+def _enviar(banco: _Banco, *arquivos) -> dict:
+    resposta = _cliente(banco).post("/api/contas-medicas/envios", files=list(arquivos))
+    assert resposta.status_code == 200, resposta.text
+    assert resposta.json()["recusas"] == []
+    return resposta.json()
+
+
+def _rodar_o_job(banco: _Banco) -> int:
+    return processamento.alimentar_fila(banco, AGORA, executor=_NaHora())
+
+
+def _guia(banco: _Banco, conta_id: str) -> dict:
+    resposta = _cliente(banco).get(f"/api/contas-medicas/contas/{conta_id}/guia")
+    assert resposta.status_code == 200, resposta.text
+    return resposta.json()
+
+
+def _linhas_do_guia(guia: dict) -> list[dict]:
+    return sorted((linha for grupo in guia["grupos"] for linha in grupo["linhas"]), key=lambda linha: linha["ordem"])
+
+
+def _conferencia_esperada(conta: str = "48811", inicio: int = 2, fim: int = 6):
+    """O que `conferir` devolve para o par sintético, com as buscas dadas à mão:
+    é a fonte da verdade do guia que o pipeline grava."""
+    conta_lida = ler_conta([_texto_da_conta(conta, inicio, fim)])
+    textos = _paginas_do_prontuario()
+    estrutura = ler_prontuario(textos, ATENDIMENTO)
+    memoria = MemoriaLida(
+        sigla="ALFA",
+        nome="Alfa Saúde",
+        versao="1.0",
+        situacao="PARCIAL",
+        parametros=parametros_lidos(PARAMETROS),
+        regras=tuple(
+            RegraLida(codigo, r["secao"], r["texto"], r["tipo"], r["origem"], r["status"], None)
+            for codigo, r in ((c, _regra(c)) for c in sorted(REGRAS_DAS_CONFERENCIAS.values()))
+        ),
+    )
+
+    def preco(categoria, codigo, _data, coluna):
+        if (categoria, codigo) == ("MATERIAL", "70000001") and coluna:
+            return Decimal(str(PRECO_DA_AGULHA[coluna.lower()]))
+        return NAO_CONFERIDO
+
+    def pacote(tuss, _data):
+        if tuss != "31005497":
+            return None
+        p = PACOTE_DA_COLECISTECTOMIA
+        return Pacote(p["codigo"], p["descricao"], 2, Decimal(str(p["valor"])))
+
+    return estrutura, conferir(
+        conta_lida,
+        ProntuarioLido(estrutura, ler_conteudo(textos, estrutura), textos),
+        memoria,
+        preco,
+        setores={"CTI ADULTO": "CTI", "CENTRO CIRURGICO": "CENTRO_CIRURGICO"},
+        dicionario={"CLEXANE": {"90030001"}},
+        pacote_do_tuss=pacote,
+    )
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 3. O pipeline de ponta a ponta
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+class TestPipeline:
+    def test_a_conta_sai_a_fazer_com_o_guia_coerente_com_conferir(self):
+        banco = _cenario()
+        _enviar(banco, _conta(), _prontuario())
+        (conta,) = banco.tabelas["cm_conta"]
+        assert conta["situacao"] == "NA_FILA"
+
+        assert _rodar_o_job(banco) == 1
+
+        gravada = banco.conta(conta["id"])
+        assert gravada["situacao"] == "A_FAZER", gravada.get("erro_motivo")
+        estrutura, esperada = _conferencia_esperada()
+        assert esperada.linhas, "o par sintético tem que gerar linhas"
+        assert gravada["nota_bruta"] == esperada.nota.nota
+        assert gravada["valor_apontado"] == float(esperada.nota.apontado)
+        assert gravada["valor_em_validacao"] == float(esperada.nota.em_validacao)
+        assert gravada["total_lancado"] == 3091.70
+        assert gravada["memoria_versao_id"] == "mv-alfa"
+        assert gravada["pronta_em"] is not None
+        assert len(banco.tabelas["cm_conta_item"]) == len(ITENS_DA_CONTA)
+
+        guia = _guia(banco, conta["id"])
+        linhas = _linhas_do_guia(guia)
+        campos = list(esperada.linhas[0])
+        assert [{k: linha[k] for k in campos} for linha in linhas] == list(esperada.linhas)
+        assert {linha["estado"] for linha in linhas} == {"ABERTA"}
+        # A tabela de materiais do banco chegou à conferência: agulha a 0,17 com tabela 0,20.
+        agulha = next(linha for linha in linhas if linha["codigo"] == "70000001")
+        assert (agulha["acao"], agulha["preco_tabela"], agulha["valor_diferenca"]) == ("CORRIGIR_PRECO", 0.20, 0.30)
+        # A busca de pacote pelo TUSS no banco chegou à conferência.
+        pacote = next(linha for linha in linhas if linha["codigo"] == "98005497")
+        assert (pacote["acao"], pacote["valor_diferenca"]) == ("INCLUIR", 4500.0)
+
+        assert guia["cabecalho"]["situacao"] == "EM_CORRECAO"
+        assert guia["cabecalho"]["parecer_parcial"] is True
+        assert guia["cabecalho"]["faltantes"] == ["O arquivo não trouxe: evolução médica (3 na capa)."]
+        assert list(estrutura.parecer_parcial) == guia["cabecalho"]["faltantes"]
+        assert guia["cabecalho"]["paciente_rotulo"] == "Antônia F."

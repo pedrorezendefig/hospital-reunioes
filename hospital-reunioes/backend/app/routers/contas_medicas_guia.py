@@ -61,6 +61,14 @@ def _conta_do_guia(supabase: Client, conta_id: UUID, me: dict) -> dict:
     return conta
 
 
+def _faltantes(conta: dict) -> list:
+    """O que o prontuário não trouxe. O processamento (#1124) grava em
+    `faltantes` os itens e, ao lado, o tempo de cada etapa, que a 116 não tem
+    coluna própria para guardar."""
+    faltantes = conta.get("faltantes") or []
+    return (faltantes.get("itens") or []) if isinstance(faltantes, dict) else faltantes
+
+
 def _linhas(supabase: Client, conta_id: str) -> list[dict]:
     return supabase.table("cm_guia_linha").select("*").eq("conta_id", conta_id).execute().data or []
 
@@ -97,7 +105,7 @@ async def abrir_guia(
             "periodo_fim": conta.get("periodo_fim"),
             "situacao": conta.get("situacao"),
             "parecer_parcial": bool(conta.get("parecer_parcial")),
-            "faltantes": conta.get("faltantes") or [],
+            "faltantes": _faltantes(conta),
         },
         "numeros": numeros_do_topo(linhas, conta.get("total_lancado"), concluida=concluida),
         "grupos": agrupar_por_dia_e_setor(linhas),
