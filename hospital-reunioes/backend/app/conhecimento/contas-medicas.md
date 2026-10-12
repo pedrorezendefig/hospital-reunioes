@@ -8,17 +8,38 @@ Toda Demanda sobre uma tela de Contas médicas, uma conta mal lida, um preço ou
 
 ## O que já está no ar
 
-Por enquanto, a fundação do módulo e a carga das operadoras:
+Por enquanto, a fundação do módulo, a carga das operadoras e o envio das contas:
 
 - o item **Contas médicas** no menu lateral, que aparece só para quem tem perfil no módulo;
-- a tela de contas, que ainda abre vazia, com o aviso "Nenhuma conta enviada ainda";
+- a tela de contas, com o envio dos PDFs, o "Último envio" e a fila, descritos abaixo;
 - os perfis e as permissões de cada um, já gravados no banco;
-- o lugar seguro onde os PDFs vão ficar guardados por sete dias;
+- o lugar seguro onde os PDFs ficam guardados por sete dias;
 - a tela Operadoras, aberta a partir da tela de contas para quem tem a permissão de regra contratual e tabelas (gestão de contas médicas e as duas diretorias).
 
 Na tela Operadoras, a gestão envia o arquivo de memória de cada convênio, o mesmo que o diretor monta, e a memória passa a valer sem programador no meio. A tela mostra a versão, quantas regras vigentes e pendentes entraram e os parâmetros lidos do cabeçalho; os números têm de bater com o arquivo. Mandar uma versão nova aposenta a anterior. Parâmetro do cabeçalho que o sistema ainda não usa fica guardado, e a memória em vigor pode ser baixada de volta inteira. Arquivo com um número no formato de CPF é recusado, porque memória não pode ter dado de paciente. Na mesma tela a gestão cadastra os nomes de plano como o MV imprime, cada um com a operadora e a coluna de preço, e os setores do MV com a acomodação de cada um. As tabelas de preço ainda aparecem como não carregadas: a carga delas chega na próxima entrega.
 
-Ainda não dá para enviar conta nem prontuário. O envio, a leitura da conta, a contagem de diárias e a conferência de preço chegam nas próximas entregas da primeira etapa, uma de cada vez. A tela do Guia já existe e é descrita abaixo; ela passa a ter linhas quando o envio e a conferência entrarem no ar.
+A conta enviada já entra na fila, mas a análise dela (a leitura da conta inteira, a contagem de diárias e a conferência de preço) chega nas próximas entregas da primeira etapa. Até lá a conta fica Na fila. A tela do Guia já existe e é descrita abaixo; ela passa a ter linhas quando a análise entrar no ar.
+
+## O envio e a fila
+
+Na tela de contas, a faturista arrasta os PDFs exportados do MV para a área de envio, ou clica em "Selecionar arquivos", vários de uma vez: a conta e o prontuário completo de cada atendimento. Ela não digita nem renomeia nada. O app lê dentro de cada PDF se ele é conta ou prontuário, pelo conteúdo da primeira página e não pelo nome do arquivo, e lê o número do atendimento. É por esse número que a conta e o prontuário se encontram. Um atendimento pode ter várias contas (as parciais), e todas usam o mesmo prontuário.
+
+Cada envio aceita até 10 atendimentos e 30 arquivos, e cada arquivo pode ter até 100 MB. O que passa disso é recusado com uma frase que diz o limite, e o resto do envio segue. A conta de um plano que ainda não está cadastrado na tela Operadoras é recusada na hora, com o nome do plano: "Plano ASSIM BÁSICO ainda não configurado". A gestão cadastra o plano e a faturista envia a conta de novo. Os outros atendimentos do mesmo envio seguem normalmente.
+
+Assim que o envio termina, aparece o **Último envio**, uma linha por atendimento, dizendo o que chegou: "31302, conta e prontuário", "31310, 2 parciais e prontuário", "31318, falta o prontuário" ou "31320, falta a conta". Logo abaixo ficam as recusas, cada uma com o arquivo e o motivo.
+
+Se o prontuário do atendimento já foi enviado nos últimos sete dias, a conta nova é pareada com ele e não é preciso mandar o prontuário de novo. Quando o período da conta passa da última data desse prontuário, o Último envio avisa para mandar o prontuário atualizado. Enviar de novo a mesma conta do mesmo atendimento não cria outra: a conta volta para a fila e é analisada outra vez.
+
+A fila mostra as contas em ordem de envio e, dentro do envio, na ordem dos arquivos. Nunca é reordenada por valor. Cada conta aparece pelo número do atendimento, com o número da conta ao lado, e com a situação:
+
+- **Falta o prontuário** ou **Falta a conta**: o par ainda não chegou;
+- **Na fila**: esperando a análise;
+- **Pronta em instantes**: a análise está rodando;
+- **A fazer**: o Guia está pronto, com a nota, o R$ a ajustar e quantos itens já foram feitos ("0 de 9");
+- **Em correção**: o Guia já foi aberto, com o botão "Continuar";
+- **Erro**: a análise não conseguiu ler um dos arquivos, com o motivo em uma frase e o botão "Enviar de novo".
+
+A aba **Concluídas** guarda as contas já concluídas, as mais recentes primeiro, com a contagem de pendências de quem concluiu com pendência. A faturista vê só as próprias contas, na fila e nas Concluídas; quem tem o Painel completo vê as de todas.
 
 ## O Guia
 

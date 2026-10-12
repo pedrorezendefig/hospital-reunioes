@@ -217,6 +217,7 @@ def _gravar_conta(
         "ordem_fila": ordem,
         "enviada_em": agora.isoformat(),
     }
+
     def do_atendimento():
         return supabase.table("cm_conta").select("*").eq("atendimento_id", atendimento_id)
 
@@ -259,7 +260,9 @@ def _gravar_atendimento(
     tem_prontuario = bool(_prontuarios_no_sistema(supabase, atendimento["id"], agora))
     situacao = "NA_FILA" if tem_prontuario else "AGUARDANDO_ARQUIVO"
     for lido, arquivo_id in contas:
-        _gravar_conta(supabase, atendimento["id"], lido, arquivo_id, situacao, faturista_id, ordem_base + lido.indice, agora)
+        _gravar_conta(
+            supabase, atendimento["id"], lido, arquivo_id, situacao, faturista_id, ordem_base + lido.indice, agora
+        )
 
     if chegou_prontuario:
         _liberar_contas_a_espera(supabase, atendimento["id"], faturista_id, ordem_base, lidos, agora)

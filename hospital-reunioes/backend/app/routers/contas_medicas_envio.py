@@ -20,13 +20,13 @@ from supabase import Client
 
 from app.dependencies import get_supabase_client, require_permissao_cm
 from app.limiter import limiter
-from app.services.contas_medicas.guia import MARCADAS, PENDENTES
 from app.services.contas_medicas.envio import (
     LIMITE_POR_ARQUIVO,
     ArquivoRecebido,
     EnvioNaoEncontradoError,
     receber,
 )
+from app.services.contas_medicas.guia import MARCADAS, PENDENTES
 
 router = APIRouter(prefix="/contas-medicas", tags=["contas-medicas"])
 

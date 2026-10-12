@@ -404,7 +404,8 @@ class TestTextoDoProduto:
 
     def test_diz_o_que_ja_esta_no_ar(self):
         no_ar = KIT.read_text(encoding="utf-8").split("## O que já está no ar")[1].split("\n## ")[0]
-        for termo in ("menu", "Nenhuma conta enviada ainda", "Ainda não dá para enviar"):
+        # O envio entrou no ar com a issue #1123: a tela deixou de abrir sempre vazia.
+        for termo in ("menu", "envio dos PDFs", "Último envio"):
             assert termo in no_ar, termo
 
 

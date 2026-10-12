@@ -868,3 +868,50 @@ class TestFila:
     @pytest.mark.parametrize("quem", ["credenciamento", "sem_eixo"])
     def test_sem_a_permissao_de_enviar_e_corrigir_contas_recebe_403(self, quem):
         assert _cliente(quem, _fila_semeada()).get(ROTA_FILA).status_code == 403
+
+
+class TestAsRotasEstaoNoApp:
+    def test_o_app_de_verdade_registra_o_envio_e_a_fila(self):
+        """A fonte é o schema OpenAPI, e não `app.routes` (FastAPI 0.141, issues #542 e #546)."""
+        from app.main import app
+
+        cache = app.openapi_schema
+        try:
+            caminhos = app.openapi()["paths"]
+        finally:
+            app.openapi_schema = cache
+
+        assert len(caminhos) > 50
+        assert "post" in caminhos[ROTA_ENVIO]
+        assert "get" in caminhos[ROTA_FILA]
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 10. O texto do Produto no Kit de conhecimento
+# ═══════════════════════════════════════════════════════════════════════════
+
+KIT = Path(__file__).resolve().parents[1] / "app" / "conhecimento" / "contas-medicas.md"
+
+
+class TestKitDeConhecimento:
+    """A sanidade geral (piso, seções, sem rota nem tabela) mora em
+    `test_kit_conhecimento.py`; aqui, o que o texto tem que dizer do envio."""
+
+    def test_diz_como_enviar_e_o_que_o_ultimo_envio_mostra(self):
+        secao = KIT.read_text(encoding="utf-8").split("## O envio e a fila", 1)[1].split("\n## ", 1)[0]
+
+        for trecho in (
+            "arrasta",
+            "Selecionar arquivos",
+            "Último envio",
+            "conta e prontuário",
+            "2 parciais e prontuário",
+            "falta o prontuário",
+            "ainda não configurado",
+            "10 atendimentos",
+            "30 arquivos",
+            "100 MB",
+            "Enviar de novo",
+            "Concluídas",
+        ):
+            assert trecho in secao, trecho
