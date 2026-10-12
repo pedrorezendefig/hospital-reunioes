@@ -98,3 +98,252 @@ class TestEnvioDaTabela:
         )
         assert preco(banco, "op-ASSIM", "MATERIAL", "70802726", DIA, "CARIOCA") == Decimal("0.38")
         assert preco(banco, "op-ASSIM", "MATERIAL", "70802726", DIA, "COMUM") == Decimal("0.44")
+
+    @pytest.mark.parametrize(
+        ("arquivo", "categoria", "formato", "itens"),
+        [
+            ("assim-materiais.csv", "MATERIAL", "MATERIAIS_COMUM_CARIOCA", 5),
+            ("assim-diarias-taxas.csv", "DIARIA_TAXA", "DIARIAS_TAXAS_COMUM_CARIOCA", 8),
+            ("assim-pacotes.csv", "PACOTE", "PACOTES", 2),
+            ("unimed-diarias-taxas.csv", "DIARIA_TAXA", "DIARIAS_TAXAS_VALOR", 5),
+            ("unimed-lpm-medicamentos.csv", "MEDICAMENTO", "LPM", 3),
+            # O pacote da Unimed e o da Leve trazem `escopo` e `fonte` a mais.
+            ("unimed-pacotes.csv", "PACOTE", "PACOTES", 1),
+            ("leve-pacotes.csv", "PACOTE", "PACOTES", 2),
+        ],
+    )
+    def test_cada_formato_e_reconhecido_pelo_cabecalho(self, arquivo, categoria, formato, itens):
+        cliente, banco = _cliente(GESTAO, _com_operadoras("ALFA"))
+
+        resposta = _enviar_tabela(cliente, "ALFA", categoria, arquivo)
+
+        assert resposta.status_code == 201, resposta.text
+        assert (resposta.json()["formato"], resposta.json()["itens"]) == (formato, itens)
+        assert len(banco.linhas("cm_tabela_preco_item")) == itens
+        [ligacao] = banco.linhas("cm_operadora_tabela")
+        assert ligacao["categoria"] == categoria
+
+    def test_cabecalho_desconhecido_e_recusado_com_as_colunas_esperadas_e_nada_e_gravado(self):
+        cliente, banco = _cliente(GESTAO, _com_operadoras("ALFA"))
+
+        resposta = _enviar_tabela(
+            cliente, "ALFA", "MATERIAL", "outro.csv", texto="codigo;nome;preco\n70802726;LUVA;0.44\n"
+        )
+
+        assert resposta.status_code == 422
+        detalhe = resposta.json()["detail"]
+        for colunas in (
+            "codigo_assim;codigo_tuss;grupo;descricao;preco_comum;preco_carioca",
+            "secao_aditivo;codigo;descricao;cbo;preco_carioca;preco_comum",
+            "grupo;codigo;acomodacao;codigo_tuss;porte;descricao;permanencia;valor;observacao",
+            "secao;codigo;descricao;valor",
+            "codigo;codigo_tiss;descricao;preco_lpm;taxa_custos;inicio_vigencia;fim_vigencia",
+        ):
+            assert colunas in detalhe, colunas
+        assert banco.linhas("cm_tabela_preco") == []
+        assert banco.linhas("cm_tabela_preco_item") == []
+
+    def test_preco_que_nao_e_numero_recusa_com_a_linha(self):
+        cliente, banco = _cliente(GESTAO, _com_operadoras("ALFA"))
+        texto = "secao;codigo;descricao;valor\nDIARIA;60000090;Diária;1.050,00\n"
+
+        resposta = _enviar_tabela(cliente, "ALFA", "DIARIA_TAXA", "diarias.csv", texto=texto)
+
+        assert resposta.status_code == 422
+        assert "Linha 2" in resposta.json()["detail"]
+        assert banco.linhas("cm_tabela_preco") == []
+
+    def test_quem_nao_tem_regra_contratual_e_tabelas_recebe_403_e_nada_e_gravado(self):
+        cliente, banco = _cliente(FATURISTA, _com_operadoras("ALFA"))
+
+        resposta = _enviar_tabela(cliente, "ALFA", "MATERIAL", "assim-materiais.csv")
+
+        assert resposta.status_code == 403
+        assert banco.linhas("cm_tabela_preco") == []
+        assert banco.linhas("cm_operadora_tabela") == []
+
+    def test_operadora_sem_cadastro_recebe_404(self):
+        cliente, banco = _cliente(GESTAO, _com_operadoras("ALFA"))
+
+        resposta = _enviar_tabela(cliente, "BETA", "MATERIAL", "assim-materiais.csv")
+
+        assert resposta.status_code == 404
+        assert banco.linhas("cm_tabela_preco") == []
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 2. A conferência da carga do diretor: os preços que têm de sair da busca
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+def _carregado(sigla: str, *tabelas: tuple[str, str]) -> _Banco:
+    cliente, banco = _cliente(GESTAO, _com_operadoras(sigla))
+    for categoria, arquivo in tabelas:
+        resposta = _enviar_tabela(cliente, sigla, categoria, arquivo)
+        assert resposta.status_code == 201, resposta.text
+    return banco
+
+
+class TestConferenciaDaCarga:
+    def test_os_nove_precos_da_assim_saem_nas_duas_colunas(self):
+        """Spec v1.0, item 21.2: código, Carioca, Comum."""
+        banco = _carregado("ASSIM", ("MATERIAL", "assim-materiais.csv"), ("DIARIA_TAXA", "assim-diarias-taxas.csv"))
+        esperados = [
+            ("MATERIAL", "70802726", "0.38", "0.44"),
+            ("MATERIAL", "70224889", "70.95", "83.47"),
+            ("MATERIAL", "70223769", "11.31", "13.30"),
+            ("MATERIAL", "70704333", "1.39", "1.63"),
+            ("MATERIAL", "70176388", "0.46", "0.54"),
+            ("DIARIA_TAXA", "60025662", "28.63", "35.81"),
+            ("DIARIA_TAXA", "60000805", "186.01", "218.84"),
+            ("DIARIA_TAXA", "60034017", "7.34", "9.18"),
+            ("DIARIA_TAXA", "60033568", "19.97", "24.95"),
+        ]
+
+        for categoria, codigo, carioca, comum in esperados:
+            assert preco(banco, "op-ASSIM", categoria, codigo, DIA, "CARIOCA") == Decimal(carioca), codigo
+            assert preco(banco, "op-ASSIM", categoria, codigo, DIA, "COMUM") == Decimal(comum), codigo
+
+    def test_os_oito_valores_da_unimed_saem_da_busca(self):
+        """Pacote da Unimed, item 3. Coluna única: o plano não escolhe coluna."""
+        banco = _carregado(
+            "UNIMED",
+            ("DIARIA_TAXA", "unimed-diarias-taxas.csv"),
+            ("PACOTE", "unimed-pacotes.csv"),
+            ("MEDICAMENTO", "unimed-lpm-medicamentos.csv"),
+            ("MATERIAL", "unimed-lpm-materiais.csv"),
+        )
+        esperados = [
+            ("DIARIA_TAXA", "60000090", "1050.00"),
+            ("DIARIA_TAXA", "60000260", "4831.55"),
+            ("DIARIA_TAXA", "60023120", "800.74"),
+            ("DIARIA_TAXA", "10102019", "65.00"),
+            ("PACOTE", "89450171", "3300.00"),
+            ("MEDICAMENTO", "90458125", "30.9600"),
+            ("MEDICAMENTO", "90008596", "22.1400"),
+            ("MATERIAL", "03330109", "3.6000"),
+        ]
+
+        for categoria, codigo, valor in esperados:
+            assert preco(banco, "op-UNIMED", categoria, codigo, DIA) == Decimal(valor), codigo
+
+    def test_os_oito_valores_da_leve_saem_da_busca_e_o_pacote_acha_por_qualquer_tuss(self):
+        """Memória da Leve v1.0: diárias e taxas no mesmo formato da Unimed, e
+        pacote com mais de um TUSS na mesma célula."""
+        banco = _carregado("LEVE", ("DIARIA_TAXA", "leve-diarias-taxas.csv"), ("PACOTE", "leve-pacotes.csv"))
+        esperados = [
+            ("DIARIA_TAXA", "60034068", "1100.00"),
+            ("DIARIA_TAXA", "60000090", "900.00"),
+            ("DIARIA_TAXA", "60034424", "480.00"),
+            ("DIARIA_TAXA", "60034599", "1850.00"),
+            ("DIARIA_TAXA", "60034602", "2650.00"),
+            ("DIARIA_TAXA", "60029080", "100.00"),
+            ("PACOTE", "98009062", "890.00"),
+            ("PACOTE", "31309062", "890.00"),
+            ("PACOTE", "31309020", "890.00"),
+            ("PACOTE", "31303013", "890.00"),
+        ]
+
+        for categoria, codigo, valor in esperados:
+            assert preco(banco, "op-LEVE", categoria, codigo, DIA) == Decimal(valor), codigo
+        pacote = next(i for i in banco.linhas("cm_tabela_preco_item") if i["codigo"] == "98003013")
+        assert pacote["extra_json"]["codigos_tuss"] == ["31309020", "31303013"]
+        assert pacote["extra_json"]["permanencia"] == "0"
+        assert "acomodacao" not in pacote["extra_json"]
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 3. A versão pela data do atendimento
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+class TestVersaoPelaData:
+    def test_duas_versoes_da_lpm_a_data_escolhe_a_certa_e_sem_versao_nao_confere(self):
+        """A LPM de setembro fecha em 30/09 e a de outubro começa em 01/10. A
+        anterior continua lá: a conta de setembro usa o preço de setembro."""
+        cliente, banco = _cliente(GESTAO, _com_operadoras("UNIMED"))
+        setembro = _enviar_tabela(
+            cliente, "UNIMED", "MEDICAMENTO", "unimed-lpm-medicamentos.csv", inicio="2026-09-01", fim="2026-09-30"
+        )
+        outubro = _enviar_tabela(
+            cliente, "UNIMED", "MEDICAMENTO", "unimed-lpm-medicamentos-v2.csv", inicio="2026-10-01"
+        )
+        assert (setembro.status_code, outubro.status_code) == (201, 201)
+        assert len(banco.linhas("cm_operadora_tabela")) == 2
+
+        def clexane(dia: date):
+            return preco(banco, "op-UNIMED", "MEDICAMENTO", "90458125", dia)
+
+        assert clexane(date(2026, 9, 15)) == Decimal("30.96")
+        assert clexane(date(2026, 9, 30)) == Decimal("30.96")
+        assert clexane(date(2026, 10, 1)) == Decimal("32.50")
+        assert clexane(date(2027, 3, 1)) == Decimal("32.50")
+        assert clexane(date(2026, 8, 31)) == NAO_CONFERIDO
+
+    def test_versao_nova_sem_fim_ganha_da_anterior_sem_fim_a_partir_do_inicio_dela(self):
+        cliente, banco = _cliente(GESTAO, _com_operadoras("UNIMED"))
+        _enviar_tabela(cliente, "UNIMED", "MEDICAMENTO", "unimed-lpm-medicamentos.csv", inicio="2026-09-01")
+        _enviar_tabela(cliente, "UNIMED", "MEDICAMENTO", "unimed-lpm-medicamentos-v2.csv", inicio="2026-10-01")
+
+        assert preco(banco, "op-UNIMED", "MEDICAMENTO", "90458125", date(2026, 9, 20)) == Decimal("30.96")
+        assert preco(banco, "op-UNIMED", "MEDICAMENTO", "90458125", date(2026, 10, 20)) == Decimal("32.50")
+
+    def test_fim_antes_do_inicio_e_recusado(self):
+        cliente, banco = _cliente(GESTAO, _com_operadoras("UNIMED"))
+
+        resposta = _enviar_tabela(
+            cliente, "UNIMED", "MEDICAMENTO", "unimed-lpm-medicamentos.csv", inicio="2026-10-01", fim="2026-09-01"
+        )
+
+        assert resposta.status_code == 422
+        assert banco.linhas("cm_tabela_preco") == []
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 4. Quando não há como conferir: NAO_CONFERIDO e PACOTE, nunca erro de preço
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+class TestNaoConferido:
+    def test_valor_pacote_na_coluna_sai_como_pacote(self):
+        banco = _carregado("ASSIM", ("DIARIA_TAXA", "assim-diarias-taxas.csv"))
+
+        assert preco(banco, "op-ASSIM", "DIARIA_TAXA", "60001062", DIA, "CARIOCA") == PACOTE
+
+    def test_preco_zero_na_lpm_nao_e_conferido(self):
+        banco = _carregado(
+            "UNIMED", ("MEDICAMENTO", "unimed-lpm-medicamentos.csv"), ("MATERIAL", "unimed-lpm-materiais.csv")
+        )
+
+        assert preco(banco, "op-UNIMED", "MEDICAMENTO", "90000001", DIA) == NAO_CONFERIDO
+        assert preco(banco, "op-UNIMED", "MATERIAL", "03137112", DIA) == NAO_CONFERIDO
+
+    def test_codigo_repetido_desempata_pelo_cbo_e_sem_cbo_nao_e_conferido(self):
+        """10101012 aparece três vezes nas diárias e taxas da ASSIM: sem
+        especialidade, Pediatria (225124) e Pneumologia (225127)."""
+        banco = _carregado("ASSIM", ("DIARIA_TAXA", "assim-diarias-taxas.csv"))
+
+        assert preco(banco, "op-ASSIM", "DIARIA_TAXA", "10101012", DIA, "COMUM", cbo="225124") == Decimal("117.03")
+        assert preco(banco, "op-ASSIM", "DIARIA_TAXA", "10101012", DIA, "COMUM", cbo="225127") == Decimal("90.50")
+        assert preco(banco, "op-ASSIM", "DIARIA_TAXA", "10101012", DIA, "COMUM") == NAO_CONFERIDO
+        assert preco(banco, "op-ASSIM", "DIARIA_TAXA", "10101012", DIA, "COMUM", cbo="999999") == NAO_CONFERIDO
+
+    def test_honorario_nao_e_conferido(self):
+        """O código de visita está na tabela de diárias e taxas da Unimed, mas
+        a categoria honorário não tem tabela: a CBHPM não chegou."""
+        banco = _carregado("UNIMED", ("DIARIA_TAXA", "unimed-diarias-taxas.csv"))
+
+        assert preco(banco, "op-UNIMED", "HONORARIO", "10102019", DIA) == NAO_CONFERIDO
+
+    def test_categoria_desconhecida_codigo_fora_da_tabela_e_celula_vazia_nao_sao_conferidos(self):
+        banco = _carregado("UNIMED", ("DIARIA_TAXA", "unimed-diarias-taxas.csv"))
+
+        assert preco(banco, "op-UNIMED", "sadt", "10102019", DIA) == NAO_CONFERIDO
+        assert preco(banco, "op-UNIMED", "DIARIA_TAXA", "99999999", DIA) == NAO_CONFERIDO
+        # A taxa de OPME é percentual: a célula do valor vem vazia.
+        assert preco(banco, "op-UNIMED", "DIARIA_TAXA", "60033487", DIA) == NAO_CONFERIDO
+
+    def test_tabela_de_duas_colunas_sem_a_coluna_do_plano_nao_e_conferida(self):
+        banco = _carregado("ASSIM", ("MATERIAL", "assim-materiais.csv"))
+
+        assert preco(banco, "op-ASSIM", "MATERIAL", "70802726", DIA) == NAO_CONFERIDO
