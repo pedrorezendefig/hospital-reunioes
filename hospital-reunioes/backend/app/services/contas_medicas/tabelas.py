@@ -22,7 +22,7 @@ import io
 import re
 from dataclasses import dataclass
 from datetime import date
-from decimal import Decimal, InvalidOperation
+from decimal import Decimal
 from typing import Any
 
 __all__ = [
@@ -31,8 +31,6 @@ __all__ = [
     "PACOTE",
     "TabelaLida",
     "TabelaRecusadaError",
-    "bloco_da_categoria",
-    "categoria_da_memoria",
     "importar_tabela",
     "ler_tabela",
     "preco",
@@ -217,7 +215,7 @@ def ler_tabela(texto: str) -> TabelaLida:
     return TabelaLida(formato=formato, itens=tuple(itens))
 
 
-def categoria_da_memoria(chave: str) -> str:
+def _categoria_da_memoria(chave: str) -> str:
     """A categoria de tabela de uma chave do bloco `tabelas` da memória."""
     return _CATEGORIA_DA_MEMORIA.get(chave, chave.strip().upper())
 
@@ -235,10 +233,10 @@ def _parametros_vigentes(supabase, operadora_id: str) -> dict[str, Any]:
     return (versoes[0].get("parametros_json") or {}) if versoes else {}
 
 
-def bloco_da_categoria(parametros: dict[str, Any], categoria: str) -> dict[str, Any]:
+def _bloco_da_categoria(parametros: dict[str, Any], categoria: str) -> dict[str, Any]:
     """O que a memória diz da tabela da categoria (tipo, regra de preço, chave), ou `{}`."""
     for chave, bloco in (parametros.get("tabelas") or {}).items():
-        if isinstance(bloco, dict) and categoria_da_memoria(str(chave)) == categoria:
+        if isinstance(bloco, dict) and _categoria_da_memoria(str(chave)) == categoria:
             return bloco
     return {}
 
@@ -273,7 +271,7 @@ def importar_tabela(
     Tipo, regra de preço e chave vêm do bloco `tabelas` da memória vigente;
     sem ele, do formato do CSV.
     """
-    bloco = bloco_da_categoria(_parametros_vigentes(supabase, operadora_id), categoria)
+    bloco = _bloco_da_categoria(_parametros_vigentes(supabase, operadora_id), categoria)
     versao = versao or (str(bloco["versao"]) if bloco.get("versao") else None)
     gravada = (
         supabase.table("cm_tabela_preco")
@@ -323,7 +321,7 @@ def tabelas_por_categoria(parametros: dict[str, Any], carregadas: list[dict[str,
     """
     categorias = list(CATEGORIAS)
     for chave in parametros.get("tabelas") or {}:
-        categoria = categoria_da_memoria(str(chave))
+        categoria = _categoria_da_memoria(str(chave))
         if categoria not in categorias:
             categorias.append(categoria)
     lista = []
@@ -333,7 +331,7 @@ def tabelas_por_categoria(parametros: dict[str, Any], carregadas: list[dict[str,
             key=lambda t: t.get("vigencia_inicio") or "",
             reverse=True,
         )
-        bloco = bloco_da_categoria(parametros, categoria)
+        bloco = _bloco_da_categoria(parametros, categoria)
         lista.append(
             {
                 "categoria": categoria,
@@ -430,12 +428,11 @@ def _valor(precos: dict[str, Any], regra_preco: str, coluna: str | None) -> Deci
     else:
         # PMC, PF, PF_MAIS_PERCENTUAL, SIMPRO: tabela de referência ainda não carregada.
         return NAO_CONFERIDO
+    if bruto is None:
+        return NAO_CONFERIDO
     if bruto == PACOTE:
         return PACOTE
-    try:
-        valor = Decimal(str(bruto))
-    except InvalidOperation:
-        return NAO_CONFERIDO
+    valor = Decimal(str(bruto))
     return valor if valor > 0 else NAO_CONFERIDO
 
 
