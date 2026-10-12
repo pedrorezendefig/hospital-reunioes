@@ -372,11 +372,16 @@ def ultimo_envio(supabase, envio_id: str, agora: datetime) -> list[dict]:
         do_atendimento = [a for a in arquivos if a["atendimento_id"] == atendimento_id]
         numero = do_atendimento[0]["numero_atendimento"]
         ids_de_conta = [a["id"] for a in do_atendimento if a["tipo"] == "CONTA"]
-        contas = (
-            supabase.table("cm_conta").select("*").in_("arquivo_id", ids_de_conta).execute().data or []
-            if ids_de_conta
-            else []
-        )
+        if ids_de_conta:
+            contas = supabase.table("cm_conta").select("*").in_("arquivo_id", ids_de_conta).execute().data or []
+        else:
+            # Só o Prontuário chegou: a Conta que já estava no sistema fecha o par.
+            contas = [
+                c
+                for c in supabase.table("cm_conta").select("*").eq("atendimento_id", atendimento_id).execute().data
+                or []
+                if c.get("arquivo_id")
+            ]
         prontuario_no_envio = any(a["tipo"] == "PRONTUARIO" for a in do_atendimento)
         tem_prontuario = prontuario_no_envio or bool(_prontuarios_no_sistema(supabase, atendimento_id, agora))
         aviso = None

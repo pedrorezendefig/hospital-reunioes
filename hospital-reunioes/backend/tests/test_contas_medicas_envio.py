@@ -560,7 +560,8 @@ class TestProntuarioNoSistema:
 
         resposta = cliente.post(ROTA_ENVIO, files=[_prontuario("31318")])
 
-        assert resposta.json()["ultimo_envio"][0]["texto"] == "31318, falta a conta"
+        # A conta não falta: ela já estava no sistema e agora fecha o par.
+        assert resposta.json()["ultimo_envio"][0]["texto"] == "31318, conta e prontuário"
         assert _situacoes(banco, "31318") == ["NA_FILA"]
 
     def test_prontuario_sem_conta_deixa_a_conta_a_espera_e_a_conta_que_chega_ocupa_o_lugar(self):
