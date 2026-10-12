@@ -1,13 +1,14 @@
 "use client";
 
 /**
- * A tela Operadoras de Contas médicas (issue #1119, PRD #1113, ADR 0070).
+ * A tela Operadoras de Contas médicas (issues #1119 e #1120, PRD #1113, ADR 0070).
  *
  * A tela mínima da carga: a lista das operadoras com a situação de cada uma e
- * três formulários, o envio do arquivo de memória que o diretor monta, o
- * cadastro dos planos como o MV imprime e o dos setores com a acomodação. Só
- * quem tem a permissão "regra contratual e tabelas" usa; o backend recusa de
- * novo, para quem chamar a API direto.
+ * as tabelas de preço por categoria, e os formulários de envio do arquivo de
+ * memória que o diretor monta, das tabelas de preço em CSV e do dicionário de
+ * itens do hospital, mais o cadastro dos planos como o MV imprime e o dos
+ * setores com a acomodação. Só quem tem a permissão "regra contratual e
+ * tabelas" usa; o backend recusa de novo, para quem chamar a API direto.
  */
 
 import { useCallback, useEffect, useState } from "react";
@@ -18,13 +19,40 @@ import { Select } from "@/components/ui/Select";
 
 type Situacao = "PRONTA" | "PARCIAL" | "SEM_MEMORIA";
 
+interface VersaoDaTabela {
+  tabela: string;
+  versao: string | null;
+  vigencia_inicio: string | null;
+  vigencia_fim: string | null;
+}
+
+interface TabelaDaCategoria {
+  categoria: string;
+  tipo: string | null;
+  situacao: "CARREGADA" | "NAO_CARREGADA";
+  versoes: VersaoDaTabela[];
+}
+
 interface Operadora {
   sigla: string;
   nome: string;
   situacao: Situacao;
   versao: string | null;
   regras: { vigentes: number; pendentes: number };
-  tabelas_carregadas: string[];
+  tabelas: TabelaDaCategoria[];
+}
+
+interface TabelaImportada {
+  operadora: string;
+  categoria: string;
+  descricao_formato: string;
+  itens: number;
+}
+
+interface DicionarioImportado {
+  termos: number;
+  novos: number;
+  atualizados: number;
 }
 
 interface MemoriaImportada {
@@ -59,13 +87,39 @@ const COR_SITUACAO: Record<Situacao, string> = {
   SEM_MEMORIA: "bg-slate-100 text-slate-600",
 };
 
-const LABEL_TABELA: Record<string, string> = {
-  MEDICAMENTO: "medicamentos",
-  MATERIAL: "materiais",
-  DIARIA_TAXA: "diárias e taxas",
-  PACOTE: "pacotes",
-  HONORARIO: "honorários",
+const LABEL_CATEGORIA: Record<string, string> = {
+  MATERIAL: "Materiais",
+  MEDICAMENTO: "Medicamentos",
+  DIARIA_TAXA: "Diárias e taxas",
+  PACOTE: "Pacotes",
+  HONORARIO: "Honorários",
+  SADT: "SADT",
+  PORTE_ANESTESICO: "Porte anestésico",
 };
+
+/** As categorias que recebem tabela pela tela. Honorário espera a CBHPM. */
+const CATEGORIAS_DE_ENVIO = ["MATERIAL", "MEDICAMENTO", "DIARIA_TAXA", "PACOTE"].map((c) => ({
+  value: c,
+  label: LABEL_CATEGORIA[c],
+}));
+
+/** Categoria que só a memória conhece (a próxima operadora inventa) aparece pelo nome. */
+function rotuloDaCategoria(categoria: string): string {
+  return LABEL_CATEGORIA[categoria] ?? categoria.replaceAll("_", " ");
+}
+
+/** "2026-08-01" vira "01/08/2026". */
+function dataBr(iso: string): string {
+  const [ano, mes, dia] = iso.split("-");
+  return `${dia}/${mes}/${ano}`;
+}
+
+function vigencia(v: VersaoDaTabela): string {
+  if (!v.vigencia_inicio) return "";
+  return v.vigencia_fim
+    ? `${dataBr(v.vigencia_inicio)} a ${dataBr(v.vigencia_fim)}`
+    : `desde ${dataBr(v.vigencia_inicio)}`;
+}
 
 /** As acomodações do cadastro de setor, na ordem da migration 116. */
 const ACOMODACOES: { value: string; label: string }[] = [
@@ -207,6 +261,14 @@ export default function OperadorasPage() {
         aoImportar={() => (token ? carregarOperadoras(token) : Promise.resolve())}
       />
 
+      <EnvioDeTabela
+        token={token}
+        operadoras={operadoras}
+        aoImportar={() => (token ? carregarOperadoras(token) : Promise.resolve())}
+      />
+
+      <EnvioDeDicionario token={token} />
+
       <CadastroDePlanos token={token} operadoras={operadoras} planos={planos} aoCadastrar={(p) => setPlanos([...planos, p])} />
 
       <CadastroDeSetores token={token} setores={setores} aoCadastrar={(s) => setSetores([...setores, s])} />
@@ -265,12 +327,6 @@ function ListaDeOperadoras({ operadoras, token }: { operadoras: Operadora[]; tok
                 ) : (
                   <p>Nenhuma memória carregada</p>
                 )}
-                <p className="text-xs text-slate-500">
-                  Tabelas de preço:{" "}
-                  {op.tabelas_carregadas.length === 0
-                    ? "não carregadas"
-                    : op.tabelas_carregadas.map((t) => LABEL_TABELA[t] ?? t).join(", ")}
-                </p>
               </div>
               {op.versao && (
                 <button
@@ -281,6 +337,7 @@ function ListaDeOperadoras({ operadoras, token }: { operadoras: Operadora[]; tok
                   <Download className="w-4 h-4" aria-hidden="true" /> Baixar memória
                 </button>
               )}
+              <TabelasDePreco sigla={op.sigla} tabelas={op.tabelas} />
             </li>
           ))}
         </ul>
@@ -291,6 +348,45 @@ function ListaDeOperadoras({ operadoras, token }: { operadoras: Operadora[]; tok
         </p>
       )}
     </section>
+  );
+}
+
+function TabelasDePreco({ sigla, tabelas }: { sigla: string; tabelas: TabelaDaCategoria[] }) {
+  return (
+    <table aria-label={`Tabelas de preço de ${sigla}`} className="basis-full w-full text-xs mt-2">
+      <thead>
+        <tr className="text-left text-slate-500 uppercase">
+          <th className="py-1 pr-3 font-medium">Categoria</th>
+          <th className="py-1 pr-3 font-medium">Tabela</th>
+          <th className="py-1 pr-3 font-medium">Versão</th>
+          <th className="py-1 pr-3 font-medium">Vigência</th>
+          <th className="py-1 font-medium">Situação</th>
+        </tr>
+      </thead>
+      <tbody className="divide-y divide-slate-100">
+        {tabelas.flatMap((t) =>
+          t.versoes.length === 0
+            ? [
+                <tr key={t.categoria}>
+                  <td className="py-1 pr-3 text-slate-800">{rotuloDaCategoria(t.categoria)}</td>
+                  <td className="py-1 pr-3 text-slate-500">{t.tipo ?? ""}</td>
+                  <td className="py-1 pr-3" />
+                  <td className="py-1 pr-3" />
+                  <td className="py-1 text-slate-500">Não carregada</td>
+                </tr>,
+              ]
+            : t.versoes.map((v, i) => (
+                <tr key={`${t.categoria}-${i}`}>
+                  <td className="py-1 pr-3 text-slate-800">{i === 0 ? rotuloDaCategoria(t.categoria) : ""}</td>
+                  <td className="py-1 pr-3 text-slate-600 break-all">{v.tabela}</td>
+                  <td className="py-1 pr-3 text-slate-600">{v.versao ?? ""}</td>
+                  <td className="py-1 pr-3 text-slate-600">{vigencia(v)}</td>
+                  <td className="py-1 text-emerald-700">Carregada</td>
+                </tr>
+              )),
+        )}
+      </tbody>
+    </table>
   );
 }
 
@@ -373,6 +469,204 @@ function EnvioDeMemoria({ token, aoImportar }: { token: string | null; aoImporta
             ))}
           </dl>
         </div>
+      )}
+    </section>
+  );
+}
+
+function EnvioDeTabela({
+  token,
+  operadoras,
+  aoImportar,
+}: {
+  token: string | null;
+  operadoras: Operadora[];
+  aoImportar: () => Promise<void>;
+}) {
+  const [operadora, setOperadora] = useState("");
+  const [categoria, setCategoria] = useState("");
+  const [inicio, setInicio] = useState("");
+  const [fim, setFim] = useState("");
+  const [versao, setVersao] = useState("");
+  const [arquivo, setArquivo] = useState<File | null>(null);
+  const [enviando, setEnviando] = useState(false);
+  const [erro, setErro] = useState<string | null>(null);
+  const [importada, setImportada] = useState<TabelaImportada | null>(null);
+  const pronto = Boolean(operadora && categoria && inicio && arquivo);
+
+  async function enviar(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    if (!token || !arquivo || !pronto) return;
+    setEnviando(true);
+    setErro(null);
+    setImportada(null);
+    try {
+      const corpo = new FormData();
+      corpo.append("categoria", categoria);
+      corpo.append("vigencia_inicio", inicio);
+      if (fim) corpo.append("vigencia_fim", fim);
+      if (versao.trim()) corpo.append("versao", versao.trim());
+      corpo.append("arquivo", arquivo);
+      const res = await fetch(`/api/contas-medicas/operadoras/${encodeURIComponent(operadora)}/tabelas`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+        body: corpo,
+      });
+      if (!res.ok) {
+        setErro(await detalheDoErro(res, `Não foi possível enviar a tabela (HTTP ${res.status}).`));
+        return;
+      }
+      setImportada(await res.json());
+      await aoImportar();
+    } catch {
+      setErro("Não foi possível enviar a tabela.");
+    } finally {
+      setEnviando(false);
+    }
+  }
+
+  return (
+    <section aria-label="Enviar tabela de preço" className={CARTAO}>
+      <h2 className="text-base font-semibold text-slate-900">Enviar tabela de preço</h2>
+      <p className="text-sm text-slate-500 mt-0.5 mb-4">
+        O CSV da tabela do convênio, com a categoria e a vigência. O formato é reconhecido pelo cabeçalho. Uma versão
+        nova fica ao lado da anterior: a conta de um atendimento antigo usa a tabela da data dele.
+      </p>
+      <form aria-label="Enviar tabela de preço" onSubmit={enviar} className="grid gap-3 sm:grid-cols-3 items-end">
+        <Select
+          label="Operadora da tabela"
+          value={operadora}
+          onChange={setOperadora}
+          options={operadoras.map((op) => ({ value: op.sigla, label: op.sigla }))}
+        />
+        <Select label="Categoria" value={categoria} onChange={setCategoria} options={CATEGORIAS_DE_ENVIO} />
+        <label className="flex flex-col gap-1.5 text-xs font-medium text-slate-500 uppercase">
+          Versão (opcional)
+          <input
+            value={versao}
+            onChange={(e) => setVersao(e.target.value)}
+            className={`${CAMPO} normal-case font-normal`}
+          />
+        </label>
+        <label className="flex flex-col gap-1.5 text-xs font-medium text-slate-500 uppercase">
+          Início da vigência
+          <input
+            type="date"
+            value={inicio}
+            onChange={(e) => setInicio(e.target.value)}
+            className={`${CAMPO} normal-case font-normal`}
+          />
+        </label>
+        <label className="flex flex-col gap-1.5 text-xs font-medium text-slate-500 uppercase">
+          Fim da vigência (opcional)
+          <input
+            type="date"
+            value={fim}
+            onChange={(e) => setFim(e.target.value)}
+            className={`${CAMPO} normal-case font-normal`}
+          />
+        </label>
+        <label className="flex flex-col gap-1.5 text-xs font-medium text-slate-500 uppercase">
+          Arquivo da tabela
+          <input
+            type="file"
+            accept=".csv,text/csv"
+            onChange={(e) => setArquivo(e.target.files?.[0] ?? null)}
+            className="text-sm normal-case font-normal text-slate-700"
+          />
+        </label>
+        <button type="submit" disabled={!pronto || enviando} className={`${BOTAO} justify-center sm:col-start-3`}>
+          {enviando ? (
+            <Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" />
+          ) : (
+            <Upload className="w-4 h-4" aria-hidden="true" />
+          )}
+          Enviar tabela
+        </button>
+      </form>
+      {erro && (
+        <p role="alert" className="flex items-start gap-2 text-sm text-red-700 mt-4 break-words">
+          <AlertCircle className="w-4 h-4 mt-0.5 shrink-0" aria-hidden="true" /> {erro}
+        </p>
+      )}
+      {importada && (
+        <p role="status" className="mt-4 rounded-xl bg-emerald-50 p-4 text-sm font-medium text-emerald-800">
+          Tabela carregada: {plural(importada.itens, "item", "itens")} de {importada.descricao_formato}, em{" "}
+          {importada.operadora} ({rotuloDaCategoria(importada.categoria)}).
+        </p>
+      )}
+    </section>
+  );
+}
+
+function EnvioDeDicionario({ token }: { token: string | null }) {
+  const [arquivo, setArquivo] = useState<File | null>(null);
+  const [enviando, setEnviando] = useState(false);
+  const [erro, setErro] = useState<string | null>(null);
+  const [importado, setImportado] = useState<DicionarioImportado | null>(null);
+
+  async function enviar(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    if (!token || !arquivo) return;
+    setEnviando(true);
+    setErro(null);
+    setImportado(null);
+    try {
+      const corpo = new FormData();
+      corpo.append("arquivo", arquivo);
+      const res = await fetch("/api/contas-medicas/dicionario", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+        body: corpo,
+      });
+      if (!res.ok) {
+        setErro(await detalheDoErro(res, `Não foi possível enviar o dicionário (HTTP ${res.status}).`));
+        return;
+      }
+      setImportado(await res.json());
+    } catch {
+      setErro("Não foi possível enviar o dicionário.");
+    } finally {
+      setEnviando(false);
+    }
+  }
+
+  return (
+    <section aria-label="Dicionário de itens" className={CARTAO}>
+      <h2 className="text-base font-semibold text-slate-900">Dicionário de itens</h2>
+      <p className="text-sm text-slate-500 mt-0.5 mb-4">
+        O dicionário do hospital, em CSV: o nome do produto na prescrição e na ficha anestésica, com os sinônimos
+        separados por barra vertical, ligado ao código da conta. Termo que já existe é atualizado.
+      </p>
+      <form aria-label="Dicionário de itens" onSubmit={enviar} className="flex flex-wrap items-end gap-3">
+        <label className="flex flex-col gap-1.5 text-xs font-medium text-slate-500 uppercase">
+          Arquivo do dicionário
+          <input
+            type="file"
+            accept=".csv,text/csv"
+            onChange={(e) => setArquivo(e.target.files?.[0] ?? null)}
+            className="text-sm normal-case font-normal text-slate-700"
+          />
+        </label>
+        <button type="submit" disabled={!arquivo || enviando} className={BOTAO}>
+          {enviando ? (
+            <Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" />
+          ) : (
+            <Upload className="w-4 h-4" aria-hidden="true" />
+          )}
+          Enviar dicionário
+        </button>
+      </form>
+      {erro && (
+        <p role="alert" className="flex items-start gap-2 text-sm text-red-700 mt-4">
+          <AlertCircle className="w-4 h-4 mt-0.5 shrink-0" aria-hidden="true" /> {erro}
+        </p>
+      )}
+      {importado && (
+        <p role="status" className="mt-4 rounded-xl bg-emerald-50 p-4 text-sm font-medium text-emerald-800">
+          Dicionário carregado: {plural(importado.termos, "termo", "termos")},{" "}
+          {plural(importado.novos, "novo", "novos")} e {plural(importado.atualizados, "atualizado", "atualizados")}.
+        </p>
       )}
     </section>
   );
