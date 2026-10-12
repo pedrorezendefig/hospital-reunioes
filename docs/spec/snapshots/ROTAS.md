@@ -1,6 +1,6 @@
 # ROTAS.md
 <!-- gerado automaticamente por /snapshot — não editar -->
-<!-- last_update: 2026-10-12T20:03+0000 -->
+<!-- last_update: 2026-10-12T21:12+0000 -->
 
 Endpoints HTTP expostos pelo backend FastAPI do Hospital Reuniões.
 
@@ -81,6 +81,18 @@ Endpoints HTTP expostos pelo backend FastAPI do Hospital Reuniões.
 | Método | Rota | O que faz | Auth |
 |--------|------|-----------|------|
 | GET | `/contas-medicas/me` | O perfil de Contas médicas da pessoa e as permissões ligadas para ela. | ✅ |
+
+## contas-medicas (`app/routers/contas_medicas_operadoras.py`)
+
+| Método | Rota | O que faz | Auth |
+|--------|------|-----------|------|
+| GET | `/contas-medicas/operadoras` | As operadoras com a situação, a versão da memória, as regras e as tabelas carregadas. | ✅ |
+| POST | `/contas-medicas/operadoras/memoria` | Importa o arquivo de memória: versão nova, vigente, com as regras dela. | ✅ |
+| GET | `/contas-medicas/operadoras/{sigla}/memoria` | A memória vigente como foi enviada, cabeçalho inteiro, para baixar. | ✅ |
+| GET | `/contas-medicas/planos` | Os nomes de plano que o MV imprime, cada um com a operadora e a coluna de preço. | ✅ |
+| POST | `/contas-medicas/planos` | Cadastra um nome de plano do MV. Sem cadastro, a conta desse plano é recusada no envio. | ✅ |
+| GET | `/contas-medicas/setores` | Os setores como o MV imprime, cada um com a acomodação. | ✅ |
+| POST | `/contas-medicas/setores` | Cadastra um setor do MV com a acomodação, que decide a diária e o teto por dia. | ✅ |
 
 ## admin (`app/routers/admin/dados_atendimento.py`)
 
@@ -423,4 +435,4 @@ Endpoints HTTP expostos pelo backend FastAPI do Hospital Reuniões.
 
 ---
 
-**Totais:** 242 endpoints em 35 routers · 93% exigem auth.
+**Totais:** 249 endpoints em 36 routers · 93% exigem auth.
