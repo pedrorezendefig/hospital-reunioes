@@ -865,3 +865,83 @@ class TestReprocesso:
         assert abertas_depois
         assert abertas_antes.isdisjoint(linha["id"] for linha in abertas_depois)
         assert len(depois) == len(antes) - 1
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 6. A leitura que não fecha
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+def _fila(banco: _Banco) -> list[dict]:
+    resposta = _cliente(banco).get("/api/contas-medicas/fila")
+    assert resposta.status_code == 200, resposta.text
+    return resposta.json()["fila"]
+
+
+def _trocar_o_pdf(banco: _Banco, tipo: str, texto: str) -> None:
+    """O PDF do tipo pedido passa a ser `texto`, sem o texto guardado ao lado."""
+    arquivo = next(a for a in banco.tabelas["cm_arquivo"] if a["tipo"] == tipo)
+    banco.bucket.pop(("contas-medicas", arquivo["chave_bucket"] + ".txt"))
+    banco.bucket[("contas-medicas", arquivo["chave_bucket"])] = texto.encode("utf-8")
+
+
+class TestLeituraQueNaoFecha:
+    def test_conta_que_nao_fecha_a_soma_sai_erro_sem_nova_tentativa(self):
+        banco = _cenario()
+        _enviar(banco, _conta(total_errado=True), _prontuario())
+
+        _rodar_o_job(banco)
+
+        (conta,) = banco.tabelas["cm_conta"]
+        assert (conta["situacao"], conta["erro_motivo"], conta["tentativas"]) == (
+            "ERRO",
+            "Não consegui ler a conta inteira",
+            1,
+        )
+        assert [(c["situacao"], c["erro_motivo"]) for c in _fila(banco)] == [
+            ("ERRO", "Não consegui ler a conta inteira")
+        ]
+        assert banco.tabelas["cm_guia_linha"] == []
+
+    def test_pdf_sem_texto_sai_erro_com_a_frase_de_exportar_de_novo(self):
+        banco = _cenario()
+        _enviar(banco, _conta(), _prontuario())
+        _trocar_o_pdf(banco, "PRONTUARIO", "\f   \f\f")
+
+        _rodar_o_job(banco)
+
+        (conta,) = banco.tabelas["cm_conta"]
+        assert (conta["situacao"], conta["erro_motivo"]) == ("ERRO", "Este PDF não tem texto. Exporte de novo pelo MV")
+
+    def test_prontuario_com_pagina_faltando_sai_erro_de_arquivo_incompleto(self):
+        banco = _cenario()
+        _enviar(banco, _conta(), _arquivo_do_envio("prontuario.pdf", "\f".join(_paginas_do_prontuario()[:-1])))
+
+        _rodar_o_job(banco)
+
+        (conta,) = banco.tabelas["cm_conta"]
+        assert (conta["situacao"], conta["erro_motivo"]) == (
+            "ERRO",
+            "Prontuário com arquivo incompleto: o rodapé indica 8 páginas e vieram 7.",
+        )
+
+    def test_falha_inesperada_volta_para_a_fila_e_na_terceira_tentativa_vira_erro_com_a_etapa(self, monkeypatch):
+        tentativas = []
+
+        def conferir_quebrado(*_a, **_kw):
+            tentativas.append(1)
+            raise RuntimeError("PostgREST fora do ar")
+
+        monkeypatch.setattr(processamento, "conferir", conferir_quebrado)
+        banco = _cenario()
+        _enviar(banco, _conta(), _prontuario())
+
+        _rodar_o_job(banco)
+
+        (conta,) = banco.tabelas["cm_conta"]
+        assert len(tentativas) == 3
+        assert (conta["situacao"], conta["erro_motivo"], conta["tentativas"]) == (
+            "ERRO",
+            "A análise parou na conferência. Envie de novo.",
+            3,
+        )
