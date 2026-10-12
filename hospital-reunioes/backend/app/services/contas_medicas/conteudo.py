@@ -80,20 +80,16 @@ def _numero(texto: str) -> float:
 def _ler_balanco(documento: Documento, primeira_pagina: str) -> Balanco:
     """Só a primeira página: a segunda traz os usuários e a assinatura (adendo v1.2, item 6.1).
     A hora de cada valor exige a coluna; aqui saem item, via, lançamentos e total."""
+    blocos: dict[str, list[LinhaDoBalanco]] = {"GANHOS": [], "PERDAS": []}
     bloco = None
-    ganhos: list[LinhaDoBalanco] = []
-    perdas: list[LinhaDoBalanco] = []
     glicemias = 0
     for linha in primeira_pagina.split("\n"):
         texto = linha.strip()
-        if texto.startswith("GANHOS"):
-            bloco = ganhos
-            continue
-        if texto.startswith("PERDAS"):
-            bloco = perdas
+        if texto.startswith(("GANHOS", "PERDAS")):
+            bloco = texto[:6]
             continue
         if texto.startswith(("SINAIS VITAIS", "Itens de Sinais")):
-            bloco = "sinais vitais"
+            bloco = "SINAIS VITAIS"
             continue
         if not texto or texto.startswith(("Total", "EVOLUÇÃO")):
             continue
@@ -102,20 +98,20 @@ def _ler_balanco(documento: Documento, primeira_pagina: str) -> Balanco:
         while k > 0 and _NUMERO.fullmatch(palavras[k - 1]):
             k -= 1
         numeros = palavras[k:]
-        if bloco == "sinais vitais":
+        if bloco == "SINAIS VITAIS":
             if texto.upper().startswith("GLICEMIA"):
                 glicemias += len(numeros)
-        elif bloco is not None and numeros:
+        elif bloco in blocos and numeros:
             via = palavras[k - 1] if k > 0 and palavras[k - 1] in _VIAS_DO_BALANCO else None
             item = " ".join(palavras[: k - 1] if via else palavras[:k]).strip(" ,")
             if item:
-                bloco.append(LinhaDoBalanco(item, via, len(numeros) - 1, _numero(numeros[-1])))
+                blocos[bloco].append(LinhaDoBalanco(item, via, len(numeros) - 1, _numero(numeros[-1])))
     return Balanco(
         data=documento.data,
         setor=documento.setor,
         paginas=documento.paginas,
-        ganhos=tuple(ganhos),
-        perdas=tuple(perdas),
+        ganhos=tuple(blocos["GANHOS"]),
+        perdas=tuple(blocos["PERDAS"]),
         glicemias=glicemias,
     )
 
@@ -124,16 +120,13 @@ _GLICEMIA_AFERIDA = re.compile(r"^\s*GLICEMIA\b[^\n]*\d", re.M)
 
 
 def _glicemias(afericoes: list[tuple[Documento, str]], balancos: list[Balanco]) -> tuple[GlicemiasDoDia, ...]:
+    fontes = [(d.data, "AFERICAO", len(_GLICEMIA_AFERIDA.findall(texto)), d.paginas) for d, texto in afericoes]
+    fontes += [(b.data, "BALANCO", b.glicemias, b.paginas[:1]) for b in balancos]
     por_dia: dict[tuple[date, str], tuple[int, tuple[int, ...]]] = {}
-    for documento, texto in afericoes:
-        quantas = len(_GLICEMIA_AFERIDA.findall(texto))
-        if quantas and documento.data:
-            antes, paginas = por_dia.get((documento.data, "AFERICAO"), (0, ()))
-            por_dia[documento.data, "AFERICAO"] = (antes + quantas, paginas + documento.paginas)
-    for balanco in balancos:
-        if balanco.glicemias and balanco.data:
-            antes, paginas = por_dia.get((balanco.data, "BALANCO"), (0, ()))
-            por_dia[balanco.data, "BALANCO"] = (antes + balanco.glicemias, paginas + balanco.paginas[:1])
+    for data, familia, quantidade, paginas in fontes:
+        if quantidade and data:
+            antes, ja_lidas = por_dia.get((data, familia), (0, ()))
+            por_dia[data, familia] = (antes + quantidade, ja_lidas + paginas)
     return tuple(
         GlicemiasDoDia(data, familia, quantidade, paginas)
         for (data, familia), (quantidade, paginas) in sorted(por_dia.items())
@@ -197,8 +190,8 @@ def _ler_internacao(por_familia: dict[str, list[str]]) -> Internacao:
 class Movimentacao:
     """No formato que o contador de diárias consome (#1115): em ordem, a INTERNACAO,
     zero ou mais TRANSFERENCIA_SETOR e a saída (ALTA, OBITO ou TRANSFERENCIA_HOSPITAL),
-    cada uma com data e hora e o setor de destino. Sem resumo de alta não há saída:
-    quem tem o período da Conta fecha com EM_CURSO."""
+    cada uma com data e hora e o setor (o de destino; na saída, o último). Sem resumo
+    de alta não há saída: quem tem o período da Conta fecha com EM_CURSO."""
 
     tipo: str
     data_hora: datetime
