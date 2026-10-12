@@ -684,3 +684,84 @@ class TestLimites:
             }
         ]
         assert [linha["texto"] for linha in corpo["ultimo_envio"]] == ["31310, falta o prontuário"]
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 6. Reprocesso
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+class TestReprocesso:
+    def test_mesmo_atendimento_e_mesma_conta_de_novo_volta_para_a_fila_sem_duplicar(self):
+        banco = _com_prontuario_no_sistema(apagar_em=_daqui_a(3))
+        banco.tabelas["cm_conta"][0].update(
+            situacao="ERRO", erro_motivo="Não consegui ler a conta inteira", tentativas=3, processando_desde="x"
+        )
+
+        resposta = _cliente("faturista", banco).post(ROTA_ENVIO, files=[_conta("31302", "48001")])
+
+        assert resposta.json()["ultimo_envio"][0]["texto"] == "31302, conta e prontuário"
+        contas = banco.contas_do_atendimento("31302")
+        assert len(contas) == 1
+        conta = contas[0]
+        assert conta["id"] == "parcial-1"
+        assert (conta["situacao"], conta["erro_motivo"], conta["tentativas"], conta["processando_desde"]) == (
+            "NA_FILA",
+            None,
+            0,
+            None,
+        )
+        novo_arquivo = next(a for a in banco.tabelas["cm_arquivo"] if a["tipo"] == "CONTA")
+        assert conta["arquivo_id"] == novo_arquivo["id"]
+        assert conta["ordem_fila"] > 1
+
+    def test_a_mesma_conta_duas_vezes_no_mesmo_envio_conta_uma_so(self):
+        banco = _cenario()
+
+        resposta = _cliente("faturista", banco).post(
+            ROTA_ENVIO, files=[_conta("31302", "48001"), _conta("31302", "48001"), _prontuario("31302")]
+        )
+
+        assert resposta.json()["ultimo_envio"][0]["texto"] == "31302, conta e prontuário"
+        assert _situacoes(banco, "31302") == ["NA_FILA"]
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 7. O arquivo no bucket
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+class TestArquivoNoBucket:
+    def test_o_pdf_vai_para_o_bucket_privado_com_hash_e_apagar_em_7_dias_depois_do_envio(self):
+        import hashlib
+
+        banco = _cenario()
+        conta, prontuario = _conta("31302", "48001"), _prontuario("31302")
+
+        _cliente("faturista", banco).post(ROTA_ENVIO, files=[conta, prontuario])
+
+        envio = banco.tabelas["cm_envio"][0]
+        assert envio["usuario_id"] == "F1"
+        enviados = {"CONTA": conta[1][1], "PRONTUARIO": prontuario[1][1]}
+        for arquivo in banco.tabelas["cm_arquivo"]:
+            conteudo = enviados[arquivo["tipo"]]
+            assert banco.bucket[("contas-medicas", arquivo["chave_bucket"])] == conteudo
+            assert arquivo["hash"] == hashlib.sha256(conteudo).hexdigest()
+            prazo = datetime.fromisoformat(arquivo["apagar_em"]) - datetime.fromisoformat(envio["criado_em"])
+            assert prazo == timedelta(days=7)
+            assert arquivo["envio_id"] == envio["id"]
+            assert "31302" not in arquivo["chave_bucket"]
+
+    def test_falha_no_bucket_recusa_o_arquivo_e_nao_deixa_linha_sem_pdf(self, monkeypatch):
+        banco = _cenario()
+
+        def recusar(*_a, **_kw):
+            raise RuntimeError("storage fora do ar")
+
+        monkeypatch.setattr(_Bucket, "upload", recusar)
+
+        resposta = _cliente("faturista", banco).post(ROTA_ENVIO, files=[_conta("31302", "48001")])
+
+        assert resposta.json()["recusas"][0]["motivo"] == "Não consegui guardar o arquivo. Envie de novo."
+        assert banco.tabelas["cm_arquivo"] == []
+        assert banco.tabelas["cm_conta"] == []
