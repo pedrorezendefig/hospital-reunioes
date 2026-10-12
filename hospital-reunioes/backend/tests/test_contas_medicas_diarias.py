@@ -134,3 +134,121 @@ def test_parciais_do_caso_a_de_01_a_04_e_de_05_a_08_saem_4_e_3():
     segunda = diarias_do_periodo(segmentos, date(2026, 10, 5), date(2026, 10, 8))
 
     assert (len(primeira[0].diarias), len(segunda[0].diarias)) == (4, 3)
+
+
+# ----------------------------------------------------------------------------------
+# Unimed: transferência de setor sem extra na origem (LEIA-ME do pacote da Unimed)
+# ----------------------------------------------------------------------------------
+
+UNIMED = ParametrosDiaria.da_memoria(
+    {
+        "diaria": {
+            **DIARIA_ASSIM,
+            "diaria_extra_na_origem_apos_vencimento": ["TRANSFERENCIA_DE_HOSPITAL", "OBITO"],
+            "transferencia_antes_do_vencimento_gera_extra": False,
+            "acompanhante_segue_a_regra_do_paciente": None,
+        }
+    }
+)
+
+CASOS_UNIMED = {
+    "enfermaria 17h D, CTI 16h30 D+2, enfermaria 17h D+5, alta 8h D+6": (
+        [
+            mov("INTERNACAO", 0, "17:00", "ENFERMARIA"),
+            mov("TRANSFERENCIA_SETOR", 2, "16:30", "CTI"),
+            mov("TRANSFERENCIA_SETOR", 5, "17:00", "ENFERMARIA"),
+            mov("ALTA", 6, "08:00"),
+        ],
+        [("ENFERMARIA", 2), ("CTI", 3), ("ENFERMARIA", 1)],
+    ),
+    "internação 6h D, alta 18h D+1": (
+        [mov("INTERNACAO", 0, "06:00", "ENFERMARIA"), mov("ALTA", 1, "18:00")],
+        [("ENFERMARIA", 1)],
+    ),
+    "internação 4h D, alta 7h D+2": (
+        [mov("INTERNACAO", 0, "04:00", "ENFERMARIA"), mov("ALTA", 2, "07:00")],
+        [("ENFERMARIA", 3)],
+    ),
+    "CTI 12h D, óbito 15h D+2": (
+        [mov("INTERNACAO", 0, "12:00", "CTI"), mov("OBITO", 2, "15:00")],
+        [("CTI", 3)],
+    ),
+}
+
+
+@pytest.mark.parametrize(("movimentacoes", "esperado"), CASOS_UNIMED.values(), ids=CASOS_UNIMED.keys())
+def test_os_casos_da_unimed_saem_como_o_diretor_validou(movimentacoes, esperado):
+    segmentos = contar_diarias(movimentacoes, UNIMED)
+
+    assert [(s.setor, len(s.diarias)) for s in segmentos] == esperado
+    assert [s.validar for s in segmentos] == [()] * len(esperado)
+
+
+# ----------------------------------------------------------------------------------
+# Parametrização: a saída muda com a memória, não com constante
+# ----------------------------------------------------------------------------------
+
+CASO_B = CASOS_ASSIM["b: internação 21h45 D, transferência 15h D+7, alta 12h D+9"][0]
+
+
+def test_tirar_a_transferencia_de_setor_da_lista_de_extra_tira_a_extra_da_origem_no_caso_b():
+    sem_setor = ParametrosDiaria.da_memoria(
+        {"diaria": {**DIARIA_ASSIM, "diaria_extra_na_origem_apos_vencimento": ["TRANSFERENCIA_DE_HOSPITAL", "OBITO"]}}
+    )
+
+    assert [len(s.diarias) for s in contar_diarias(CASO_B, ASSIM)] == [8, 2]
+    assert [len(s.diarias) for s in contar_diarias(CASO_B, sem_setor)] == [7, 2]
+
+
+# Caso j: transferência às 8h de D+3, antes do vencimento.
+CASO_J = CASOS_ASSIM["j: transferência 8h D+3, PENDENTE: sem extra e Validar"][0]
+
+
+@pytest.mark.parametrize(
+    ("valor", "diarias", "motivos"),
+    [
+        (True, [4, 1], [[], []]),
+        (False, [3, 1], [[], []]),
+        ("PENDENTE", [3, 1], [["TRANSFERENCIA_ANTES_DO_VENCIMENTO"], []]),
+    ],
+)
+def test_transferencia_antes_do_vencimento_segue_o_parametro_true_false_ou_pendente(valor, diarias, motivos):
+    parametros = ParametrosDiaria.da_memoria(
+        {"diaria": {**DIARIA_ASSIM, "transferencia_antes_do_vencimento_gera_extra": valor}}
+    )
+
+    segmentos = contar_diarias(CASO_J, parametros)
+
+    assert [len(s.diarias) for s in segmentos] == diarias
+    assert [[p.motivo for p in s.validar] for s in segmentos] == motivos
+
+
+LEVE = ParametrosDiaria.da_memoria(
+    {
+        "diaria": {
+            **DIARIA_ASSIM,
+            "diaria_extra_na_origem_apos_vencimento": ["TRANSFERENCIA_DE_HOSPITAL", "OBITO", "TRANSFERENCIA_DE_SETOR"],
+            "transferencia_antes_do_vencimento_gera_extra": True,
+            "acompanhante_segue_a_regra_do_paciente": None,
+        }
+    }
+)
+
+
+def test_leve_dia_06_enfermaria_ate_16h_e_cti_a_partir_das_16h_dao_uma_diaria_de_cada_no_dia():
+    segmentos = contar_diarias(
+        [
+            mov("INTERNACAO", 0, "21:00", "ENFERMARIA"),
+            mov("TRANSFERENCIA_SETOR", 2, "16:00", "CTI"),
+            mov("ALTA", 4, "12:00"),
+        ],
+        LEVE,
+    )
+
+    no_dia = diarias_do_periodo(segmentos, date(2026, 10, 3), date(2026, 10, 3))
+
+    assert [(s.setor, [d.inicio for d in s.diarias]) for s in no_dia] == [
+        ("ENFERMARIA", [quando(2, "10:00")]),
+        ("CTI", [quando(2, "16:00")]),
+    ]
+    assert [s.validar for s in segmentos] == [(), ()]

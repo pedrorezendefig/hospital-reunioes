@@ -136,12 +136,16 @@ def _segmento(entrada: Movimentacao, saida: Movimentacao, p: ParametrosDiaria, a
         diarias.append(Diaria(ini if k == 0 else v - UM_DIA, v, False, regra))
         v, k = v + UM_DIA, k + 1
 
-    # 3) diária extra integral na origem
+    # 3) diária extra integral na origem; antes do vencimento, só na transferência e
+    # conforme `transferencia_antes_do_vencimento_gera_extra` (true, false ou PENDENTE)
     extra = Diaria(ultimo, ultimo + UM_DIA, True, "EXTRA_NA_ORIGEM")
     tipo_com_extra = saida.tipo in p.diaria_extra_na_origem_apos_vencimento
+    antes = p.transferencia_antes_do_vencimento_gera_extra
     if tipo_com_extra and saiu_depois:
         diarias.append(extra)
-    elif saida.tipo.startswith("TRANSFERENCIA") and not saiu_depois:
+    elif tipo_com_extra and saida.tipo.startswith("TRANSFERENCIA") and antes is True:
+        diarias.append(extra)
+    elif tipo_com_extra and saida.tipo.startswith("TRANSFERENCIA") and antes == "PENDENTE":
         validar.append(
             Pendencia(
                 "TRANSFERENCIA_ANTES_DO_VENCIMENTO",
