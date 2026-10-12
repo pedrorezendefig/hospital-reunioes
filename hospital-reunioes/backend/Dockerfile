@@ -1,6 +1,7 @@
 FROM python:3.12-slim
 
-# WeasyPrint system dependencies
+# WeasyPrint system dependencies, mais o poppler-utils de Contas medicas: a
+# leitura da conta e do prontuario roda `pdftotext -layout` (ADR 0070, decisao 6).
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     libpango-1.0-0 \
@@ -9,9 +10,13 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libgdk-pixbuf-xlib-2.0-0 \
     libffi-dev \
     libcairo2 \
+    poppler-utils \
     curl \
     wget \
     && rm -rf /var/lib/apt/lists/*
+
+# Sanidade no build (issue #1114): sem o binario, a imagem nao sai.
+RUN pdftotext -v
 
 WORKDIR /app
 

@@ -17,11 +17,13 @@ import {
   BookOpenCheck,
   Target,
   CircleHelp,
+  ReceiptText,
   type LucideIcon,
 } from "lucide-react";
 import { useCurrentParticipante } from "@/hooks/useCurrentParticipante";
 import {
   isSecretaria,
+  temAcessoContasMedicas,
   temAcessoReunioes,
   temPerfilPop,
 } from "@/lib/auth";
@@ -80,6 +82,11 @@ export function Sidebar({
     label: "Ouvidoria",
     icon: Megaphone,
   };
+  // Contas médicas (ADR 0070): eixo próprio, entra em toda montagem do menu
+  // para quem tem perfil no módulo ou é super admin.
+  const contasMedicasItens: NavItem[] = temAcessoContasMedicas(participante)
+    ? [{ href: "/contas-medicas", label: "Contas médicas", icon: ReceiptText }]
+    : [];
 
   // Grupo colapsável que reúne todo o tema Reuniões (Dashboard, Calendário,
   // Pendências). "Metas" é só o rótulo, não há feature nova.
@@ -103,7 +110,7 @@ export function Sidebar({
   };
 
   const navItems: NavItem[] = popsOnly
-    ? [popsItem]
+    ? [popsItem, ...contasMedicasItens]
     : isSec
     ? [
         { href: "/secretaria", label: "Início", icon: Home },
@@ -111,6 +118,7 @@ export function Sidebar({
         { href: "/reunioes/calendario", label: "Calendário", icon: CalendarDays },
         ouvidoriaItem,
         ...(showPops ? [popsItem] : []),
+        ...contasMedicasItens,
         ...(showAdmin
           ? [{ href: "/admin", label: "Admin", icon: ShieldCheck }]
           : []),
@@ -119,6 +127,7 @@ export function Sidebar({
         reunioesMetasGroup,
         ouvidoriaItem,
         ...(showPops ? [popsItem] : []),
+        ...contasMedicasItens,
         ...(showAdmin
           ? [{ href: "/admin", label: "Admin", icon: ShieldCheck }]
           : []),

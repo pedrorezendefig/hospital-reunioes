@@ -38,6 +38,17 @@ export const PERFIL_OUVIDORIA_LABELS: Record<PerfilOuvidoria, string> = {
   diretoria_executiva: "Diretoria Executiva",
 };
 
+// Eixo de permissão do contexto Contas médicas (ADR 0070, decisão 10),
+// ortogonal aos outros três. O que cada perfil pode fazer vem da matriz do
+// backend (`/api/contas-medicas/me`), não daqui.
+export type PerfilContasMedicas =
+  | "faturista"
+  | "coordenadora"
+  | "gestao_contas_medicas"
+  | "diretoria_medica"
+  | "diretoria_executiva"
+  | "credenciamento";
+
 // Contexto POPs — POP, Versão e formulário institucional (issue #82)
 
 export type EstadoVersaoPop =

@@ -105,7 +105,9 @@ port = 54354
 [storage]
 enabled = true
 # The maximum file size allowed (e.g. "5MB", "500KB").
-file_size_limit = "50MiB"
+# 100 MiB: o prontuario completo de Contas medicas (bucket contas-medicas,
+# migration 116). O teto do bucket nao passa do teto global.
+file_size_limit = "100MiB"
 
 # Uncomment to configure local storage buckets
 # [storage.buckets.images]

@@ -92,6 +92,18 @@ class ParticipanteResponse(BaseModel):
     perfil_pop: Literal["superadmin", "gestor_qualidade", "gerente", "coordenador"] | None = None
     # Eixo de permissão do contexto Ouvidoria (ADR 0034): quem lê o Dossiê.
     perfil_ouvidoria: Literal["ouvidor", "diretoria_executiva"] | None = None
+    # Eixo de permissão de Contas médicas (ADR 0070): o menu decide por ele.
+    perfil_contas_medicas: (
+        Literal[
+            "faturista",
+            "coordenadora",
+            "gestao_contas_medicas",
+            "diretoria_medica",
+            "diretoria_executiva",
+            "credenciamento",
+        ]
+        | None
+    ) = None
     data_cadastro: date | None = None
 
 

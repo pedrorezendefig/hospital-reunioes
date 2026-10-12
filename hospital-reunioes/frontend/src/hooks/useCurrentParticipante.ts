@@ -2,7 +2,12 @@
 
 import { useState, useEffect } from "react";
 import { createClient } from "@/lib/supabase/client";
-import type { AccessProfile, PerfilOuvidoria, PerfilPop } from "@/types";
+import type {
+  AccessProfile,
+  PerfilContasMedicas,
+  PerfilOuvidoria,
+  PerfilPop,
+} from "@/types";
 
 export interface CurrentParticipante {
   id: string;
@@ -21,6 +26,8 @@ export interface CurrentParticipante {
   perfil_pop?: PerfilPop | null;
   // Eixo de permissão do contexto Ouvidoria: quem lê o Dossiê (ADR 0034).
   perfil_ouvidoria?: PerfilOuvidoria | null;
+  // Eixo de permissão do contexto Contas médicas (ADR 0070).
+  perfil_contas_medicas?: PerfilContasMedicas | null;
 }
 
 interface State {
