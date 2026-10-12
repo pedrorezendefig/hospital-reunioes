@@ -462,3 +462,125 @@ class TestPlanoSemPar:
             "Assim Carioca APT",
             "CARIOCA",
         )
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 4. O prontuário que já está no sistema
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+def _daqui_a(dias: int) -> str:
+    return (datetime.now(UTC) + timedelta(days=dias)).isoformat()
+
+
+def _com_prontuario_no_sistema(apagar_em: str, prontuario_ate: str = "2026-10-10", **arquivo) -> _Banco:
+    """O atendimento 31302 com a parcial 1 já analisada e o prontuário de um envio anterior."""
+    return _cenario(
+        cm_atendimento=[{"id": "at-1", "numero_atendimento": "31302"}],
+        cm_arquivo=[
+            {
+                "id": "arq-antigo",
+                "envio_id": "envio-antigo",
+                "tipo": "PRONTUARIO",
+                "atendimento_id": "at-1",
+                "numero_atendimento": "31302",
+                "apagar_em": apagar_em,
+                "apagado_em": None,
+                **arquivo,
+            }
+        ],
+        cm_eventos=[{"id": "ev-1", "atendimento_id": "at-1", "prontuario_ate": prontuario_ate}],
+        cm_conta=[
+            {
+                "id": "parcial-1",
+                "atendimento_id": "at-1",
+                "arquivo_id": "arq-conta-1",
+                "numero_conta": "48001",
+                "situacao": "A_FAZER",
+                "faturista_id": "F1",
+                "ordem_fila": 1,
+            }
+        ],
+    )
+
+
+class TestProntuarioNoSistema:
+    def test_conta_nova_pareia_com_o_prontuario_de_ate_7_dias_e_avisa_o_periodo_alem_dele(self):
+        banco = _com_prontuario_no_sistema(apagar_em=_daqui_a(3))
+
+        resposta = _cliente("faturista", banco).post(
+            ROTA_ENVIO, files=[_conta("31302", "48002", "11/10/2026", "20/10/2026")]
+        )
+
+        assert resposta.status_code == 200, resposta.text
+        assert resposta.json()["ultimo_envio"] == [
+            {
+                "numero_atendimento": "31302",
+                "frase": "conta e prontuário",
+                "texto": "31302, conta e prontuário",
+                "aviso": "O período da conta vai até 20/10/2026 e o prontuário no sistema, até 10/10/2026. "
+                "Envie o prontuário atualizado.",
+            }
+        ]
+        nova = next(c for c in banco.contas_do_atendimento("31302") if c["numero_conta"] == "48002")
+        assert nova["situacao"] == "NA_FILA"
+        assert [a["tipo"] for a in banco.tabelas["cm_arquivo"]] == ["PRONTUARIO", "CONTA"]
+
+    def test_periodo_dentro_do_prontuario_nao_avisa(self):
+        banco = _com_prontuario_no_sistema(apagar_em=_daqui_a(3), prontuario_ate="2026-10-20")
+
+        resposta = _cliente("faturista", banco).post(
+            ROTA_ENVIO, files=[_conta("31302", "48002", "11/10/2026", "20/10/2026")]
+        )
+
+        assert resposta.json()["ultimo_envio"][0]["aviso"] is None
+
+    @pytest.mark.parametrize(
+        "arquivo",
+        [{"apagar_em": _daqui_a(-1)}, {"apagar_em": _daqui_a(3), "apagado_em": _daqui_a(-1)}],
+        ids=["passou-dos-7-dias", "ja-saiu-do-bucket"],
+    )
+    def test_prontuario_de_mais_de_7_dias_nao_pareia(self, arquivo):
+        banco = _com_prontuario_no_sistema(**arquivo)
+
+        resposta = _cliente("faturista", banco).post(
+            ROTA_ENVIO, files=[_conta("31302", "48002", "11/10/2026", "20/10/2026")]
+        )
+
+        assert resposta.json()["ultimo_envio"][0]["texto"] == "31302, falta o prontuário"
+        nova = next(c for c in banco.contas_do_atendimento("31302") if c["numero_conta"] == "48002")
+        assert nova["situacao"] == "AGUARDANDO_ARQUIVO"
+
+    def test_o_prontuario_que_chega_depois_poe_na_fila_a_conta_que_esperava(self):
+        banco = _cenario()
+        cliente = _cliente("faturista", banco)
+        cliente.post(ROTA_ENVIO, files=[_conta("31318", "48018")])
+        assert _situacoes(banco, "31318") == ["AGUARDANDO_ARQUIVO"]
+
+        resposta = cliente.post(ROTA_ENVIO, files=[_prontuario("31318")])
+
+        assert resposta.json()["ultimo_envio"][0]["texto"] == "31318, falta a conta"
+        assert _situacoes(banco, "31318") == ["NA_FILA"]
+
+    def test_prontuario_sem_conta_deixa_a_conta_a_espera_e_a_conta_que_chega_ocupa_o_lugar(self):
+        banco = _cenario()
+        cliente = _cliente("faturista", banco)
+
+        cliente.post(ROTA_ENVIO, files=[_prontuario("31320")])
+        espera = banco.contas_do_atendimento("31320")
+        assert [(c["situacao"], c.get("arquivo_id")) for c in espera] == [("AGUARDANDO_ARQUIVO", None)]
+
+        resposta = cliente.post(ROTA_ENVIO, files=[_conta("31320", "48020")])
+
+        assert resposta.json()["ultimo_envio"][0]["texto"] == "31320, conta e prontuário"
+        contas = banco.contas_do_atendimento("31320")
+        assert [(c["numero_conta"], c["situacao"]) for c in contas] == [("48020", "NA_FILA")]
+
+    def test_o_pronto_socorro_no_mesmo_arquivo_nao_muda_o_atendimento_do_prontuario(self):
+        banco = _cenario()
+
+        resposta = _cliente("faturista", banco).post(
+            ROTA_ENVIO, files=[_conta("31302", "48001"), _prontuario("31302", pronto_socorro="31190")]
+        )
+
+        assert [linha["texto"] for linha in resposta.json()["ultimo_envio"]] == ["31302, conta e prontuário"]
