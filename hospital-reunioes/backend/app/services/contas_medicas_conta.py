@@ -41,6 +41,7 @@ __all__ = [
     "ErroLeitura",
     "ItemConta",
     "MENSAGEM_CONTA_INCOMPLETA",
+    "chave_do_plano",
     "coluna_do_plano",
     "detectar_tipo_do_arquivo",
     "ler_conta",
@@ -254,14 +255,19 @@ def _sem_sufixo_de_acomodacao(plano: str) -> str:
     return " ".join(palavras)
 
 
+def chave_do_plano(plano: str) -> str:
+    """O nome do Plano como ele é comparado: sem acento, sem diferença de
+    maiúscula e sem o sufixo de acomodação (`comparacao_do_nome` da memória ASSIM)."""
+    return _sem_sufixo_de_acomodacao(_normalizar(plano))
+
+
 def coluna_do_plano(plano: str, lista_da_memoria: Sequence[str]) -> Literal["CARIOCA", "COMUM"]:
     """Coluna de preço do Plano da Conta: CARIOCA se está na lista da memória, senão COMUM.
 
-    Compara sem acento, sem diferença de maiúscula e ignorando o sufixo de
-    acomodação (`comparacao_do_nome` da memória ASSIM).
+    Compara pela `chave_do_plano`.
     """
-    lista = {_sem_sufixo_de_acomodacao(_normalizar(nome)) for nome in lista_da_memoria}
-    return "CARIOCA" if _sem_sufixo_de_acomodacao(_normalizar(plano)) in lista else "COMUM"
+    lista = {chave_do_plano(nome) for nome in lista_da_memoria}
+    return "CARIOCA" if chave_do_plano(plano) in lista else "COMUM"
 
 
 TipoDoArquivo = Literal["CONTA", "PRONTUARIO", "DESCONHECIDO"]
