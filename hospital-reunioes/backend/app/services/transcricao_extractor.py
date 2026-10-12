@@ -234,10 +234,20 @@ def _ler_cauda(caminho: str, quantos: int) -> str:
         return ""
 
 
-def _acompanhar(proc: subprocess.Popen, saida: str, erro: str) -> str | None:
+def _acompanhar(
+    proc: subprocess.Popen,
+    saida: str,
+    erro: str,
+    prazo: float | None = None,
+    teto_da_saida: int | None = None,
+) -> str | None:
     """Espera o filho vigiando memoria, relogio e os DOIS canais de volta.
 
     Devolve o motivo da morte, ou None quando o filho terminou sozinho.
+
+    `prazo` e `teto_da_saida` existem para a leitura de PDF das Contas medicas
+    (issue #1116), que usa este mesmo vigia com prazo e canal maiores. Sem eles
+    valem os numeros deste modulo, lidos na hora da chamada.
 
     O vigia mede o tamanho dos arquivos porque e ai que estao os canais: o que
     o filho escreve vai para disco, nao para a memoria deste processo. Isso e o
@@ -246,7 +256,9 @@ def _acompanhar(proc: subprocess.Popen, saida: str, erro: str) -> str | None:
     um PDF de 306 KB com aviso por operador fez o worker crescer 522 MB enquanto
     o filho ficava parado em 239 MB.
     """
-    limite_do_relogio = time.monotonic() + PRAZO_DA_EXTRACAO
+    prazo = PRAZO_DA_EXTRACAO if prazo is None else prazo
+    teto_da_saida = TETO_DA_SAIDA_DO_FILHO if teto_da_saida is None else teto_da_saida
+    limite_do_relogio = time.monotonic() + prazo
     while True:
         try:
             proc.wait(timeout=INTERVALO_DE_VIGIA)
@@ -257,7 +269,7 @@ def _acompanhar(proc: subprocess.Popen, saida: str, erro: str) -> str | None:
         rss = _rss_em_bytes(proc.pid)
         if rss is not None and rss > TETO_DE_MEMORIA_DO_FILHO:
             return _matar(proc, "memoria", rss)
-        if _tamanho(saida) > TETO_DA_SAIDA_DO_FILHO:
+        if _tamanho(saida) > teto_da_saida:
             return _matar(proc, "saida", rss)
         if _tamanho(erro) > TETO_DO_ERRO_DO_FILHO:
             return _matar(proc, "ruido", rss)
