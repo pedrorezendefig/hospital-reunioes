@@ -33,6 +33,9 @@ __all__ = ["MemoriaLida", "MemoriaRecusadaError", "RegraLida", "ler_memoria", "p
 # comprido viraria recusa falsa.
 _CPF = re.compile(r"(?<!\d)\d{3}\.?\d{3}\.?\d{3}-\d{2}(?!\d)")
 
+# A sigla vira nome de operadora e nome do arquivo exportado.
+_SIGLA = re.compile(r"[A-Z0-9][A-Z0-9_-]{0,29}")
+
 _CABECALHO = re.compile(r"\A﻿?---[ \t]*\r?\n(.*?)\r?\n---[ \t]*(?:\r?\n|\Z)", re.DOTALL)
 _TITULO = re.compile(r"^(#{1,6})\s+(.*?)\s*#*\s*$")
 _SEPARADOR = re.compile(r"^\|?\s*:?-{3,}:?\s*(\|\s*:?-{3,}:?\s*)*\|?\s*$")
@@ -142,7 +145,7 @@ def _regra(cabecalho: list[str], celulas: list[str]) -> RegraLida | None:
         _normalizar(coluna): valor for coluna, valor in valores.items() if _normalizar(coluna) in _COLUNAS_PROPRIAS
     }
     codigo = proprias.get("ID", "").strip()
-    if not codigo.strip("-").strip():
+    if not re.search(r"[A-Za-z0-9]", codigo):  # linha vazia do modelo, ou só um traço
         return None
     extras = [
         f"{coluna}: {valor}"
@@ -222,6 +225,11 @@ def ler_memoria(texto: str) -> MemoriaLida:
     versao = str(parametros.get("versao_memoria") or "").strip()
     if not sigla:
         raise MemoriaRecusadaError("O cabeçalho não diz a operadora (campo operadora).")
+    if not _SIGLA.fullmatch(sigla):
+        raise MemoriaRecusadaError(
+            f"A sigla da operadora no cabeçalho ({sigla}) tem que ter só letras e números, como ASSIM. "
+            "O modelo vem com <SIGLA> para trocar."
+        )
     if not versao:
         raise MemoriaRecusadaError("O cabeçalho não diz a versão da memória (campo versao_memoria).")
     situacao = str(parametros.get("situacao") or "").strip().upper()

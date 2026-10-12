@@ -452,6 +452,18 @@ class TestCpfNaMemoria:
         assert banco.linhas("cm_memoria_versao") == []
         assert banco.linhas("cm_regra") == []
 
+    def test_o_modelo_enviado_sem_trocar_a_sigla_e_recusado(self):
+        """O MODELO-MEMORIA-OPERADORA.md traz `operadora: <SIGLA>`: enviado por
+        engano, criaria a operadora "<SIGLA>", que a tela não apaga."""
+        cliente, banco = _cliente(GESTAO)
+        modelo = _memoria("MEMORIA-ALFA-v1.0.md").replace("operadora: ALFA", "operadora: <SIGLA>")
+
+        resposta = _enviar_memoria(cliente, modelo)
+
+        assert resposta.status_code == 422
+        assert "sigla" in resposta.json()["detail"]
+        assert banco.linhas("cm_operadora") == []
+
 
 # ═══════════════════════════════════════════════════════════════════════════
 # 6. Planos do MV
