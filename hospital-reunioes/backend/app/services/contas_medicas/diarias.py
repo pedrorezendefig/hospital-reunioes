@@ -112,12 +112,6 @@ def _vencimento(dia: date, p: ParametrosDiaria) -> datetime:
     return datetime.combine(dia, p.hora_vencimento)
 
 
-def _primeiro_vencimento_depois_de(instante: datetime, p: ParametrosDiaria) -> datetime:
-    """O instante exatamente no vencimento já é "depois" dele (decisão 8 da spec)."""
-    v = _vencimento(instante.date(), p)
-    return v if instante < v else v + UM_DIA
-
-
 def _segmento(entrada: Movimentacao, saida: Movimentacao, p: ParametrosDiaria, acompanhante: bool) -> Segmento:
     ini, fim = entrada.data_hora, saida.data_hora
     if fim < ini:
@@ -150,13 +144,14 @@ def _segmento(entrada: Movimentacao, saida: Movimentacao, p: ParametrosDiaria, a
         v, k = v + UM_DIA, k + 1
 
     # 3) diária extra integral na origem; antes do vencimento, só na transferência e
-    # conforme `transferencia_antes_do_vencimento_gera_extra` (true, false ou PENDENTE)
+    # conforme `transferencia_antes_do_vencimento_gera_extra` (true, false ou PENDENTE;
+    # valor fora desses vale PENDENTE, e `contar_diarias` avisa)
     tipo_com_extra = saida.tipo in p.diaria_extra_na_origem_apos_vencimento
     transferencia = saida.tipo.startswith("TRANSFERENCIA")
     antes = p.transferencia_antes_do_vencimento_gera_extra
     if tipo_com_extra and (saiu_depois or (transferencia and antes is True)):
         diarias.append(Diaria(ultimo, ultimo + UM_DIA, True, "EXTRA_NA_ORIGEM"))
-    elif tipo_com_extra and transferencia and antes == "PENDENTE":
+    elif tipo_com_extra and transferencia and antes is not False:
         validar.append(
             Pendencia(
                 "TRANSFERENCIA_ANTES_DO_VENCIMENTO",
@@ -165,19 +160,7 @@ def _segmento(entrada: Movimentacao, saida: Movimentacao, p: ParametrosDiaria, a
             )
         )
 
-    # 4) transferência sem hora exata: a janela que atravessa um vencimento não diz de
-    # que lado a transferência caiu (o cálculo acima usou o fim da janela)
-    if saida.janela and _primeiro_vencimento_depois_de(saida.janela[0], p) <= saida.janela[1]:
-        validar.append(
-            Pendencia(
-                "JANELA_ATRAVESSA_O_VENCIMENTO",
-                f"Transferência de setor sem hora exata, entre {saida.janela[0]:%d/%m %H:%M} e "
-                f"{saida.janela[1]:%d/%m %H:%M}: a janela atravessa o vencimento. "
-                "Calculado com a transferência no fim da janela.",
-            )
-        )
-
-    # 5) permanência sem nenhum vencimento: regra não definida
+    # 4) permanência sem nenhum vencimento: regra não definida
     if not diarias and saida.tipo != "EM_CURSO":
         validar.append(
             Pendencia(
@@ -208,20 +191,66 @@ def contar_diarias(
         _segmento(entrada, saida, parametros, acompanhante)
         for entrada, saida in zip(movimentacoes, movimentacoes[1:], strict=False)
     ]
+
+    # Transferência sem hora exata: o cálculo usou o fim da janela. Se a transferência no
+    # começo dela muda a conta da origem ou do destino (atravessa as 10h, passa da
+    # meia-noite, sai da madrugada), a janela não diz de que lado caiu: vira Validar.
+    # Cada segmento só cresce ou só encolhe com a hora, então bastam as duas pontas.
+    for i in range(1, len(movimentacoes)):
+        transferencia = movimentacoes[i]
+        if not transferencia.janela:
+            continue
+        de, ate = transferencia.janela
+        no_comeco = replace(transferencia, data_hora=max(de, movimentacoes[i - 1].data_hora))
+        afetados = movimentacoes[i - 1 : i + 2]
+        com_o_comeco = [no_comeco if m is transferencia else m for m in afetados]
+        no_fim = [_assinatura(s) for s in segmentos[i - 1 : i + 1]]
+        if [
+            _assinatura(_segmento(a, b, parametros, acompanhante))
+            for a, b in zip(com_o_comeco, com_o_comeco[1:], strict=False)
+        ] != no_fim:
+            segmentos[i - 1] = replace(
+                segmentos[i - 1],
+                validar=segmentos[i - 1].validar
+                + (
+                    Pendencia(
+                        "JANELA_ATRAVESSA_O_VENCIMENTO",
+                        f"Transferência de setor sem hora exata, entre {de:%d/%m %H:%M} e {ate:%d/%m %H:%M}: "
+                        "a conta muda conforme a hora da transferência dentro da janela. "
+                        "Calculado com a transferência no fim da janela.",
+                    ),
+                ),
+            )
+
     # O contador só conhece o valor que as memórias validaram para estes parâmetros; o
     # outro nenhuma memória definiu. Uma pendência por conta, no primeiro segmento.
-    fora_do_validado = [nome for nome, validado in _VALOR_VALIDADO.items() if getattr(parametros, nome) is not validado]
-    if segmentos and fora_do_validado:
-        pendencias = tuple(
+    pendencias = [
+        Pendencia(
+            "PARAMETRO_NAO_SUPORTADO",
+            f"A memória traz {nome}: {getattr(parametros, nome)}, valor que o contador não sabe aplicar. "
+            "Calculado como se fosse o valor validado.",
+        )
+        for nome, validado in _VALOR_VALIDADO.items()
+        if getattr(parametros, nome) is not validado
+    ]
+    antes = parametros.transferencia_antes_do_vencimento_gera_extra
+    if not (antes is True or antes is False or antes == "PENDENTE"):
+        pendencias.append(
             Pendencia(
                 "PARAMETRO_NAO_SUPORTADO",
-                f"A memória traz {nome}: {getattr(parametros, nome)}, valor que o contador não sabe aplicar. "
-                "Calculado como se fosse o valor validado.",
+                f"A memória traz transferencia_antes_do_vencimento_gera_extra: {antes}, valor que o contador "
+                "não sabe aplicar. Calculado como PENDENTE.",
             )
-            for nome in fora_do_validado
         )
-        segmentos[0] = replace(segmentos[0], validar=segmentos[0].validar + pendencias)
+    if segmentos and pendencias:
+        segmentos[0] = replace(segmentos[0], validar=segmentos[0].validar + tuple(pendencias))
     return segmentos
+
+
+def _assinatura(s: Segmento) -> tuple[tuple[tuple[datetime, bool, str], ...], tuple[str, ...]]:
+    """O que a conta cobra do segmento, sem o início da 1ª diária (que é a própria hora
+    da transferência e por isso sempre muda dentro da janela)."""
+    return tuple((d.fim, d.extra, d.regra) for d in s.diarias), tuple(p.motivo for p in s.validar)
 
 
 def diarias_do_periodo(segmentos: Sequence[Segmento], inicio: date, fim: date) -> list[Segmento]:

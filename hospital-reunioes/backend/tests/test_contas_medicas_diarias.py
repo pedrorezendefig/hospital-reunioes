@@ -321,6 +321,47 @@ def test_janela_da_transferencia_que_atravessa_o_vencimento_vira_validar_e_intei
     assert [[p.motivo for p in s.validar] for s in segmentos] == motivos
 
 
+# A janela do `ler_conteudo` costuma passar da meia-noite sem tocar as 10h (último
+# documento no setor antigo à noite, primeiro no novo de manhã). Com a transferência às
+# 20h a conta seria CTI 7, ENF 2; com ela às 8h, CTI 8, ENF 1: tem que virar Validar.
+@pytest.mark.parametrize(
+    ("parametros", "motivos_da_origem"),
+    [
+        (UNIMED, ["JANELA_ATRAVESSA_O_VENCIMENTO"]),
+        (ASSIM, ["TRANSFERENCIA_ANTES_DO_VENCIMENTO", "JANELA_ATRAVESSA_O_VENCIMENTO"]),
+    ],
+    ids=["unimed", "assim"],
+)
+def test_janela_que_passa_da_meia_noite_sem_tocar_as_10h_muda_a_conta_e_vira_validar(parametros, motivos_da_origem):
+    segmentos = contar_diarias(
+        [
+            mov("INTERNACAO", 0, "21:45", "CTI"),
+            mov("TRANSFERENCIA_SETOR", 8, "08:00", "ENFERMARIA", (quando(7, "20:00"), quando(8, "08:00"))),
+            mov("ALTA", 9, "12:00"),
+        ],
+        parametros,
+    )
+
+    assert [(s.setor, len(s.diarias)) for s in segmentos] == [("CTI", 8), ("ENFERMARIA", 1)]
+    assert [[p.motivo for p in s.validar] for s in segmentos] == [motivos_da_origem, []]
+
+
+@pytest.mark.parametrize("valor", [None, "pendente", "SIM"])
+def test_transferencia_antes_do_vencimento_com_valor_fora_de_true_false_e_pendente_vira_validar(valor):
+    parametros = ParametrosDiaria.da_memoria(
+        {"diaria": {**DIARIA_ASSIM, "transferencia_antes_do_vencimento_gera_extra": valor}}
+    )
+
+    segmentos = contar_diarias(CASO_J, parametros)
+
+    nome = "transferencia_antes_do_vencimento_gera_extra"
+    assert [len(s.diarias) for s in segmentos] == [3, 1]
+    assert [[(p.motivo, nome in p.texto) for p in s.validar] for s in segmentos] == [
+        [("TRANSFERENCIA_ANTES_DO_VENCIMENTO", False), ("PARAMETRO_NAO_SUPORTADO", True)],
+        [],
+    ]
+
+
 @pytest.mark.parametrize(
     ("parametro", "valor"),
     [
