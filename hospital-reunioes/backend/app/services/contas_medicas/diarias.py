@@ -57,8 +57,15 @@ class ParametrosDiaria:
     @classmethod
     def da_memoria(cls, parametros: Mapping[str, Any]) -> "ParametrosDiaria":
         bloco = parametros.get("diaria") or {}
-        padrao = cls()
-        valores: dict[str, Any] = {}
+        valores: dict[str, Any] = {
+            nome: bloco[nome]
+            for nome in (
+                *_VALOR_VALIDADO,
+                "transferencia_antes_do_vencimento_gera_extra",
+                "acompanhante_segue_a_regra_do_paciente",
+            )
+            if nome in bloco
+        }
         for nome in ("hora_vencimento", "limite_madrugada"):
             if nome in bloco:
                 valores[nome] = time.fromisoformat(bloco[nome])
@@ -66,15 +73,6 @@ class ParametrosDiaria:
             valores["diaria_extra_na_origem_apos_vencimento"] = frozenset(
                 _SAIDA_DA_MEMORIA.get(tipo, tipo) for tipo in bloco["diaria_extra_na_origem_apos_vencimento"] or ()
             )
-        for nome in (
-            "sempre_integral",
-            "saida_antes_do_vencimento_paga_diaria_em_curso",
-            "alta_depois_do_vencimento_paga_o_dia",
-            "transferencia_antes_do_vencimento_gera_extra",
-            "destino_inicia_na_hora_da_transferencia",
-            "acompanhante_segue_a_regra_do_paciente",
-        ):
-            valores[nome] = bloco.get(nome, getattr(padrao, nome))
         return cls(**valores)
 
 
