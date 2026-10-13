@@ -199,13 +199,14 @@ def alimentar_fila(supabase, agora: datetime, executor=None) -> int:
     while _vagas.acquire(blocking=False):
         try:
             conta = pegar_da_fila(supabase, agora)
+            if conta is not None:
+                executor.submit(_na_vaga, supabase, conta)
         except Exception:
             _vagas.release()
             raise
         if conta is None:
             _vagas.release()
             break
-        executor.submit(_na_vaga, supabase, conta)
         entregues += 1
     return entregues
 
@@ -223,14 +224,16 @@ def _na_vaga(supabase, conta: dict) -> None:
 
 
 class _Cronometro:
+    """O tempo de cada etapa e a etapa em que a análise está (a do erro)."""
+
     def __init__(self):
         self.tempos: dict[str, float] = {}
-        self.etapa: str | None = None
+        self.atual: str | None = None
         self._inicio = perf_counter()
 
     @contextmanager
-    def etapa_(self, nome: str) -> Iterator[None]:
-        self.etapa = nome
+    def etapa(self, nome: str) -> Iterator[None]:
+        self.atual = nome
         inicio = perf_counter()
         yield
         self.tempos[nome] = round(perf_counter() - inicio, 3)
@@ -255,7 +258,7 @@ def processar(supabase, conta: dict) -> None:
         try:
             _pipeline(supabase, conta, cronometro)
         except _Falha as falha:
-            logger.warning("[ContasMedicas] Conta %s com erro de leitura na etapa %s", conta["id"], cronometro.etapa)
+            logger.warning("[ContasMedicas] Conta %s com erro de leitura na etapa %s", conta["id"], cronometro.atual)
             _fechar_tentativa(
                 supabase, conta, {"situacao": "ERRO", "erro_motivo": falha.motivo, "processando_desde": None}
             )
@@ -263,12 +266,12 @@ def processar(supabase, conta: dict) -> None:
             logger.error(
                 "[ContasMedicas] Conta %s falhou na etapa %s, tentativa %s: %s em %s",
                 conta["id"],
-                cronometro.etapa,
+                cronometro.atual,
                 conta.get("tentativas"),
                 type(erro).__name__,
                 _onde(erro),
             )
-            _devolver(supabase, conta, mensagem_da_etapa(cronometro.etapa or ""))
+            _devolver(supabase, conta, mensagem_da_etapa(cronometro.atual or ""))
             if (conta.get("tentativas") or 0) < MAXIMO_DE_TENTATIVAS:
                 return  # voltou para a fila: o envio ainda não terminou
         _avisar_se_o_envio_terminou(supabase, conta)
@@ -320,19 +323,19 @@ def _texto(supabase, arquivo: dict) -> list[Pagina]:
 def _pipeline(supabase, conta: dict, cronometro: _Cronometro) -> None:
     atendimento = _primeira(supabase.table("cm_atendimento").select("*").eq("id", conta["atendimento_id"])) or {}
 
-    with cronometro.etapa_("texto_da_conta"):
+    with cronometro.etapa("texto_da_conta"):
         arquivo_da_conta = _primeira(supabase.table("cm_arquivo").select("*").eq("id", conta.get("arquivo_id")))
         if arquivo_da_conta is None:
             raise _Falha(MENSAGEM_ARQUIVO_FORA_DO_SISTEMA)
         paginas_da_conta = _texto(supabase, arquivo_da_conta)
 
-    with cronometro.etapa_("leitura_da_conta"):
+    with cronometro.etapa("leitura_da_conta"):
         lida = ler_conta([pagina.texto for pagina in paginas_da_conta])
         if isinstance(lida, ErroLeitura):
             raise _Falha(lida.motivo)
         _gravar_itens(supabase, conta["id"], lida)
 
-    with cronometro.etapa_("texto_do_prontuario"):
+    with cronometro.etapa("texto_do_prontuario"):
         arquivo_do_prontuario = _primeira(
             supabase.table("cm_arquivo")
             .select("*")
@@ -345,7 +348,7 @@ def _pipeline(supabase, conta: dict, cronometro: _Cronometro) -> None:
             raise _Falha(MENSAGEM_SEM_PRONTUARIO)
         textos = [pagina.texto for pagina in _texto(supabase, arquivo_do_prontuario)]
 
-    with cronometro.etapa_("leitura_do_prontuario"):
+    with cronometro.etapa("leitura_do_prontuario"):
         try:
             estrutura = leitura_do_prontuario.ler_prontuario(textos, lida.atendimento)
         except leitura_do_prontuario.ErroLeitura as erro:
@@ -354,7 +357,7 @@ def _pipeline(supabase, conta: dict, cronometro: _Cronometro) -> None:
         prontuario = ProntuarioLido(estrutura, conteudo, textos)
         _gravar_prontuario(supabase, conta["atendimento_id"], arquivo_do_prontuario["id"], prontuario)
 
-    with cronometro.etapa_("conferencia"):
+    with cronometro.etapa("conferencia"):
         operadora_id = atendimento.get("operadora_id")
         memoria = memoria_vigente(supabase, operadora_id) if operadora_id else None
         if memoria is None:
@@ -369,7 +372,7 @@ def _pipeline(supabase, conta: dict, cronometro: _Cronometro) -> None:
             pacote_do_tuss=lambda tuss, data: pacote_pelo_tuss(supabase, operadora_id, tuss, data),
         )
 
-    with cronometro.etapa_("gravacao"):
+    with cronometro.etapa("gravacao"):
         linhas = _gravar_guia(supabase, conta["id"], conferencia)
         nota = nota_de_entrada(linhas, lida.total)
 
