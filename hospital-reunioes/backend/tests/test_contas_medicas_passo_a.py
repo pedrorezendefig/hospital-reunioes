@@ -383,10 +383,27 @@ class TestJanelas:
     def test_acima_do_limite_vira_janelas_com_um_dia_de_sobreposicao_e_o_evento_repetido_vira_um(self, provedor):
         # Páginas: 1 capa, 2 a 5 as evoluções de 01 a 04/10.
         paginas = _com_rodape([*_fixture("prontuario/capa"), *(_evolucao_longa(dia) for dia in (1, 2, 3, 4))])
-        # O curativo de 02/10 está nas duas primeiras janelas, e as duas o leem.
+        # O curativo de 02/10 está nas duas primeiras janelas, e as duas o leem,
+        # cada uma com as suas palavras e o seu formato de data. A bomba que a
+        # primeira janela viu sem fim termina no dia 03, que só a segunda lê.
+        curativo_relido = {
+            **_curativo(2, 3),
+            "detalhe": "curativo sacral com hidrocoloide",
+            "data_hora": "2026-10-02 09:12",
+        }
+        bomba = {
+            "tipo": "BOMBA_INFUSAO",
+            "descricao": "noradrenalina em bomba",
+            "setor": "CTI ADULTO",
+            "inicio": "2026-10-02T09:12",
+            "fim": None,
+            "pagina": 3,
+            "trecho": "Realizado curativo em região sacral com cobertura de hidrocoloide.",
+        }
+        bomba_relida = {**bomba, "descricao": "noradrenalina em BIC", "inicio": "2026-10-02", "fim": "2026-10-03T10:00"}
         provedor.respostas = [
-            _resposta(procedimentos=[_curativo(2, 3)]),
-            _resposta(procedimentos=[_curativo(2, 3)]),
+            _resposta(procedimentos=[_curativo(2, 3)], terapias=[bomba]),
+            _resposta(procedimentos=[curativo_relido], terapias=[bomba_relida]),
             _resposta(procedimentos=[_curativo(4, 5)]),
         ]
 
@@ -404,6 +421,34 @@ class TestJanelas:
         assert [(p["tipo"], p["data_hora"]) for p in eventos["procedimentos"]] == [
             ("CURATIVO", "2026-10-02T09:12"),
             ("CURATIVO", "2026-10-04T09:12"),
+        ]
+        assert [(t["descricao"], t["fim"]) for t in eventos["terapias"]] == [
+            ("noradrenalina em bomba", "2026-10-03T10:00"),
+        ]
+
+    def test_bombas_que_comecam_juntas_nao_viram_uma_e_cada_uma_ganha_o_seu_fim(self):
+        def bomba(descricao: str, fim: str | None) -> dict:
+            return {"tipo": "BOMBA_INFUSAO", "descricao": descricao, "inicio": "2026-10-02T09:12", "fim": fim}
+
+        vazio = {lista: [] for lista in ("movimentacoes", "prescricoes", "procedimentos", "cirurgias")}
+        partes = [
+            {**vazio, "terapias": [bomba("noradrenalina", None), bomba("midazolam", None)]},
+            {
+                **vazio,
+                "terapias": [
+                    bomba("midazolam em BIC", "2026-10-03T08:00"),
+                    bomba("noradrenalina BIC", None),
+                    bomba("vasopressina", None),
+                ],
+            },
+        ]
+
+        terapias = passo_a.unir_eventos(partes)["terapias"]
+
+        assert [(t["descricao"], t["fim"]) for t in terapias] == [
+            ("noradrenalina", None),
+            ("midazolam", "2026-10-03T08:00"),
+            ("vasopressina", None),
         ]
 
     def test_abaixo_do_limite_e_uma_chamada_so(self, provedor):

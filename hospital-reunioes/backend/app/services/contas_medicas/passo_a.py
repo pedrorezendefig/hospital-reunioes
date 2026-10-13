@@ -16,6 +16,7 @@ from __future__ import annotations
 
 from collections.abc import Callable, Mapping, Sequence
 from datetime import date, datetime, time
+from difflib import SequenceMatcher
 from typing import Any
 
 from app.services.contas_medicas import ia
@@ -228,36 +229,66 @@ def _chave(valor: Any) -> str:
     return normalizar(str(valor or ""))
 
 
-# O mesmo evento em duas janelas: mesmo tipo e mesmo início. O texto que diz
-# qual é o evento entra na chave, para duas bombas que começam juntas (ou dois
-# curativos no mesmo dia) não virarem uma.
-_MESMO_EVENTO = {
-    "movimentacoes": lambda e: (e["tipo"], e["data_hora"]),
-    "terapias": lambda e: (e["tipo"], e["inicio"], _chave(e["descricao"])),
-    "prescricoes": lambda e: (_chave(e["item"]), e["data"]),
-    "procedimentos": lambda e: (e["tipo"], e["data_hora"], _chave(e["detalhe"])),
-    "cirurgias": lambda e: (e["data"], e["inicio"], _chave(e["procedimento"])),
+def _dia(valor: str | None) -> Any:
+    """O dia que a IA escreveu, em qualquer dos formatos que ela usa; o texto
+    normalizado quando não dá para ler."""
+    quando = _ler_quando(valor)
+    return quando[0] if quando is not None else _chave(valor)
+
+
+def _hora(valor: str | None) -> time | None:
+    quando = _ler_quando(valor)
+    return quando[1] if quando is not None else None
+
+
+# O mesmo evento em duas janelas: mesmo tipo e mesmo dia de início (a
+# prescrição, que não tem tipo, pelo item). Cada lista diz a chave, o campo do
+# momento e o campo do texto que desempatam quando a chave casa com mais de um.
+_MESMO_EVENTO: dict[str, tuple[Callable[[Mapping[str, Any]], Any], str, str]] = {
+    "movimentacoes": (lambda e: (e["tipo"], _dia(e["data_hora"])), "data_hora", "setor"),
+    "terapias": (lambda e: (e["tipo"], _dia(e["inicio"])), "inicio", "descricao"),
+    "prescricoes": (lambda e: (_chave(e["item"]), _dia(e["data"])), "data", "item"),
+    "procedimentos": (lambda e: (e["tipo"], _dia(e["data_hora"])), "data_hora", "detalhe"),
+    "cirurgias": (lambda e: _dia(e["data"]), "inicio", "procedimento"),
 }
+
+
+def _semelhanca(a: Mapping[str, Any], b: Mapping[str, Any], momento: str, texto: str) -> tuple[bool, float]:
+    hora_a, hora_b = _hora(a.get(momento)), _hora(b.get(momento))
+    mesma_hora = hora_a is None or hora_b is None or hora_a == hora_b
+    return mesma_hora, SequenceMatcher(None, _chave(a.get(texto)), _chave(b.get(texto))).ratio()
 
 
 def unir_eventos(partes: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
     """Os eventos de todas as janelas, sem repetir o que duas janelas vizinhas
-    leram do dia em comum. A terapia que a janela anterior viu sem fim ganha o
+    leram do dia em comum. O evento da janela casa com no máximo um evento das
+    anteriores, e nunca com outro da mesma janela: duas bombas que começam
+    juntas continuam duas. A terapia que a janela anterior viu sem fim ganha o
     fim que a seguinte leu."""
     unido: dict[str, Any] = {
         "atendimento": next((p["atendimento"] for p in partes if p.get("atendimento")), None),
         "idade_anos": next((p["idade_anos"] for p in partes if p.get("idade_anos") is not None), None),
     }
-    for lista, mesmo_evento in _MESMO_EVENTO.items():
-        vistos: dict[Any, dict[str, Any]] = {}
+    for lista, (mesmo_evento, momento, texto) in _MESMO_EVENTO.items():
+        eventos: list[dict[str, Any]] = []
+        por_chave: dict[Any, list[dict[str, Any]]] = {}
         for parte in partes:
+            casados: set[int] = set()
+            novos: list[dict[str, Any]] = []
             for evento in parte.get(lista) or []:
                 chave = mesmo_evento(evento)
-                if chave not in vistos:
-                    vistos[chave] = dict(evento)
-                elif lista == "terapias" and not vistos[chave].get("fim"):
-                    vistos[chave]["fim"] = evento.get("fim")
-        unido[lista] = list(vistos.values())
+                candidatos = [c for c in por_chave.get(chave, []) if id(c) not in casados]
+                if not candidatos:
+                    novos.append(dict(evento))
+                    continue
+                par = max(candidatos, key=lambda c: _semelhanca(c, evento, momento, texto))
+                casados.add(id(par))
+                if lista == "terapias" and not par.get("fim"):
+                    par["fim"] = evento.get("fim")
+            for evento in novos:
+                eventos.append(evento)
+                por_chave.setdefault(mesmo_evento(evento), []).append(evento)
+        unido[lista] = eventos
     for lista in ("documentos_ausentes", "observacoes"):
         textos: dict[str, str] = {}
         for parte in partes:
