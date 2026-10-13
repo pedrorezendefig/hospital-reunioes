@@ -18,8 +18,10 @@ import {
   cenarioVazio,
 } from "@/lib/contas-medicas/coordenacao";
 
-const CAMPO =
-  "w-full min-h-[38px] px-3 py-1.5 text-sm border border-slate-200 rounded-lg bg-white focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary";
+// Sem largura: a linha do insumo dá a de cada campo; os outros ocupam a linha toda.
+const CAMPO_SEM_LARGURA =
+  "min-h-[38px] px-3 py-1.5 text-sm border border-slate-200 rounded-lg bg-white focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary";
+const CAMPO = `w-full ${CAMPO_SEM_LARGURA}`;
 const BOTAO =
   "inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-primary text-white text-sm font-medium disabled:opacity-50";
 const BOTAO_CLARO =
@@ -264,14 +266,14 @@ export function AbaCenarios({ token }: { token: string }) {
                   value={insumo.codigo}
                   onChange={(e) => mudarInsumo(i, { codigo: e.target.value, na_tabela: undefined })}
                   placeholder="Código"
-                  className={`${CAMPO} w-32 font-mono ${insumo.na_tabela === false ? "border-amber-500" : ""}`}
+                  className={`${CAMPO_SEM_LARGURA} w-32 font-mono ${insumo.na_tabela === false ? "border-amber-500" : ""}`}
                 />
                 <input
                   aria-label={`Descrição do insumo ${i + 1}`}
                   value={insumo.descricao ?? ""}
                   onChange={(e) => mudarInsumo(i, { descricao: e.target.value })}
                   placeholder="Descrição"
-                  className={`${CAMPO} flex-1 min-w-[10rem]`}
+                  className={`${CAMPO_SEM_LARGURA} flex-1 min-w-[10rem]`}
                 />
                 <input
                   aria-label={`Quantidade do insumo ${i + 1}`}
@@ -280,7 +282,7 @@ export function AbaCenarios({ token }: { token: string }) {
                   step="any"
                   value={insumo.quantidade}
                   onChange={(e) => mudarInsumo(i, { quantidade: Number(e.target.value) })}
-                  className={`${CAMPO} w-24`}
+                  className={`${CAMPO_SEM_LARGURA} w-24`}
                 />
                 <button
                   type="button"
