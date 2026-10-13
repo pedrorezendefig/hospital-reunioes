@@ -13,6 +13,7 @@
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { ToastProvider } from "@/components/ui/Toast";
 import type { FilaDeValidacao, Tema } from "@/lib/contas-medicas/validacao";
 
 import ValidacaoPage from "./page";
@@ -91,7 +92,7 @@ function servidor(fila: FilaDeValidacao = FILA, status = 200, leitura: Leitura =
   const pedidos: Pedido[] = [];
   const fetch = vi.fn(async (url: string, init?: RequestInit) => {
     const metodo = init?.method ?? "GET";
-    pedidos.push({ url, metodo, corpo: init?.body ? JSON.parse(String(init.body)) : null });
+    pedidos.push({ url, metodo, corpo: typeof init?.body === "string" ? JSON.parse(init.body) : null });
     if (url === "/api/contas-medicas/validacao") {
       return { ok: status === 200, status, json: async () => (status === 200 ? fila : { detail: "Sem permissão" }) };
     }
@@ -101,6 +102,9 @@ function servidor(fila: FilaDeValidacao = FILA, status = 200, leitura: Leitura =
         return { ok: false, status: 503, json: async () => ({ detail: "Tente de novo em alguns minutos." }) };
       }
       return { ok: true, status: 200, json: async () => ({ leitura_ia: LEITURA }) };
+    }
+    if (url === "/api/transcricao/voz") {
+      return { ok: true, status: 200, json: async () => ({ texto: "vem no pacote da ALFA" }) };
     }
     if (url.endsWith("/cadastro")) {
       return {
@@ -114,6 +118,15 @@ function servidor(fila: FilaDeValidacao = FILA, status = 200, leitura: Leitura =
   });
   vi.stubGlobal("fetch", fetch);
   return pedidos;
+}
+
+// O Toast é o de verdade: o Ditar avisa por ele (issue #1145).
+function abrir() {
+  render(
+    <ToastProvider>
+      <ValidacaoPage />
+    </ToastProvider>,
+  );
 }
 
 function cartao(nome: string): HTMLElement {
@@ -134,7 +147,7 @@ describe("a fila de Validação", () => {
   it("mostra os três números e os cartões na ordem do servidor, com os botões de cada tipo", async () => {
     servidor();
 
-    render(<ValidacaoPage />);
+    abrir();
 
     const numeros = await screen.findByRole("region", { name: "Números da Validação" });
     expect(within(numeros).getByText("Aguardando decisão").closest("div")?.textContent).toContain("4");
@@ -168,7 +181,7 @@ describe("a fila de Validação", () => {
 
   it("Validar regra abre o texto da regra e grava a decisão com o texto editado", async () => {
     const pedidos = servidor();
-    render(<ValidacaoPage />);
+    abrir();
     await screen.findByRole("article", { name: "Regra ALFA-PRI-03" });
 
     fireEvent.click(within(cartao("Regra ALFA-PRI-03")).getByRole("button", { name: "Validar regra" }));
@@ -189,7 +202,7 @@ describe("a fila de Validação", () => {
 
   it("Enviar ao cadastro pede a lista e Descartar grava a decisão", async () => {
     const pedidos = servidor();
-    render(<ValidacaoPage />);
+    abrir();
     await screen.findByRole("article", { name: "Código 70000020 bloqueado" });
 
     fireEvent.click(within(cartao("Código 70000020 bloqueado")).getByRole("button", { name: "Enviar ao cadastro" }));
@@ -210,7 +223,7 @@ describe("a fila de Validação", () => {
 
   it("a observação mostra a leitura da IA e Responder ao time manda o texto", async () => {
     const pedidos = servidor();
-    render(<ValidacaoPage />);
+    abrir();
     const observacao = await screen.findByRole("article", { name: "Observações sobre a regra ALFA-PRI-07" });
 
     expect(observacao.textContent).toContain("Na ALFA o Clexane vem dentro do pacote");
@@ -236,7 +249,7 @@ describe("a fila de Validação", () => {
 
   it("com a IA fora, o cartão da observação diz que a leitura está indisponível, com a mensagem do servidor", async () => {
     servidor(FILA, 200, "ia-fora");
-    render(<ValidacaoPage />);
+    abrir();
     const observacao = await screen.findByRole("article", { name: "Observações sobre a regra ALFA-PRI-07" });
 
     await waitFor(() => expect(observacao.textContent).toContain("Leitura indisponível agora"));
@@ -246,7 +259,7 @@ describe("a fila de Validação", () => {
 
   it("sem rede, o cartão da observação diz que a leitura está indisponível em vez de ficar lendo", async () => {
     servidor(FILA, 200, "sem-rede");
-    render(<ValidacaoPage />);
+    abrir();
     const observacao = await screen.findByRole("article", { name: "Observações sobre a regra ALFA-PRI-07" });
 
     await waitFor(() => expect(observacao.textContent).toContain("Leitura indisponível agora"));
@@ -255,7 +268,7 @@ describe("a fila de Validação", () => {
 
   it("o termo do dicionário mostra o código proposto e Confirmar grava a decisão", async () => {
     const pedidos = servidor();
-    render(<ValidacaoPage />);
+    abrir();
     const termo = await screen.findByRole("article", { name: "Termo SERINGA PRONTA no dicionário" });
 
     expect(termo.textContent).toContain("70000010");
@@ -274,10 +287,60 @@ describe("a fila de Validação", () => {
   it("sem a permissão, diz que não pode e não mostra cartão", async () => {
     servidor(FILA, 403);
 
-    render(<ValidacaoPage />);
+    abrir();
 
     expect(await screen.findByRole("alert")).toBeTruthy();
     expect(screen.getByRole("alert").textContent).toContain("decidir na validação");
     expect(screen.queryAllByRole("article")).toHaveLength(0);
+  });
+});
+
+class GravadorFalso {
+  static ultimo: GravadorFalso | null = null;
+  static isTypeSupported = () => true;
+  state = "inactive";
+  mimeType = "audio/webm";
+  ondataavailable: ((e: { data: Blob }) => void) | null = null;
+  onstop: (() => void) | null = null;
+
+  constructor() {
+    GravadorFalso.ultimo = this;
+  }
+
+  start() {
+    this.state = "recording";
+  }
+
+  stop() {
+    this.state = "inactive";
+    this.ondataavailable?.({ data: new Blob(["bytes-de-audio"], { type: this.mimeType }) });
+    this.onstop?.();
+  }
+}
+
+describe("o Ditar na resposta ao time (issue #1145)", () => {
+  it("tem o aviso de paciente ao lado, e o texto ditado entra no campo sem enviar a resposta", async () => {
+    GravadorFalso.ultimo = null;
+    vi.stubGlobal("MediaRecorder", GravadorFalso);
+    Object.defineProperty(navigator, "mediaDevices", {
+      configurable: true,
+      value: { getUserMedia: async () => ({ getTracks: () => [{ stop: vi.fn() }] }) },
+    });
+    const pedidos = servidor();
+    abrir();
+    const observacao = await screen.findByRole("article", { name: "Observações sobre a regra ALFA-PRI-07" });
+    fireEvent.click(within(observacao).getByRole("button", { name: "Responder ao time" }));
+
+    const botao = within(observacao).getByRole("button", { name: "Ditar: Resposta ao time" });
+    expect(botao.parentElement?.textContent).toContain("Não dite nome nem dado de paciente.");
+
+    fireEvent.click(botao);
+    await waitFor(() => expect(GravadorFalso.ultimo?.state).toBe("recording"));
+    fireEvent.click(within(observacao).getByRole("button", { name: "Parar o ditado: Resposta ao time" }));
+
+    const campo = within(observacao).getByLabelText("Resposta ao time") as HTMLTextAreaElement;
+    await waitFor(() => expect(campo.value).toBe("vem no pacote da ALFA"));
+    expect(pedidos.filter((p) => p.url === "/api/transcricao/voz")).toHaveLength(1);
+    expect(pedidos.filter((p) => p.url.endsWith("/decisao"))).toEqual([]);
   });
 });
