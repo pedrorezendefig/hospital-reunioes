@@ -22,12 +22,23 @@ from app.services.contas_medicas import ia
 from app.services.contas_medicas import prontuario as leitura_do_prontuario
 from app.services.contas_medicas.conferencia import ProntuarioLido
 from app.services.contas_medicas.desidentificacao import Identificacao, desidentificar
+from app.services.contas_medicas.evidencia import normalizar
 from app.services.contas_medicas.memoria_texto import orientacoes_de_leitura
 from app.services.contas_medicas.prescricao import ItemConsolidado
+from app.services.prompt_loader import load_prompt
 
-__all__ = ["eventos_do_atendimento"]
+__all__ = ["eventos_do_atendimento", "montar_entradas", "unir_eventos"]
 
 SEPARADOR = " · "
+
+# O modelo pequeno cobra por faixa até 100 mil tokens de entrada (adendo v1.3,
+# item 10). A estimativa é a do diretor: 3,5 caracteres por token.
+LIMITE_DE_TOKENS = 100_000
+CARACTERES_POR_TOKEN = 3.5
+# Folga para a linha que abre cada janela e para os rótulos que o adaptador
+# põe antes das orientações e do texto.
+_CABECALHO_DA_JANELA = 200
+_ROTULOS_DOS_BLOCOS = 100
 
 
 # ----------------------------------------------------------------------------------
@@ -158,10 +169,100 @@ def _identificacao(prontuario: ProntuarioLido) -> Identificacao:
     return leitura_do_prontuario._ler_capa(list(prontuario.texto_por_pagina)).identificacao
 
 
-def montar_entrada(prontuario: ProntuarioLido, achados: Sequence[Mapping[str, Any]]) -> str:
-    """O texto do prontuário para o passo A: os blocos e as seções do código."""
-    blocos = [texto for _, texto in _blocos(prontuario)]
-    return "\n\n".join([*blocos, _secoes_do_codigo(prontuario, achados, _identificacao(prontuario))])
+def _janelas(tamanhos: Sequence[int], orcamento: int) -> list[tuple[int, int]]:
+    """Os dias de cada janela (primeiro e último, pela posição), cada uma até
+    o orçamento, e a seguinte começando no último dia da anterior. A janela
+    tem ao menos dois dias, ou a sobreposição não andaria."""
+    janelas = []
+    inicio = 0
+    while True:
+        fim, tamanho = inicio, tamanhos[inicio]
+        while fim + 1 < len(tamanhos) and (fim == inicio or tamanho + tamanhos[fim + 1] <= orcamento):
+            fim += 1
+            tamanho += tamanhos[fim]
+        janelas.append((inicio, fim))
+        if fim >= len(tamanhos) - 1:
+            return janelas
+        inicio = fim
+
+
+def montar_entradas(prontuario: ProntuarioLido, achados: Sequence[Mapping[str, Any]], *, reserva: int = 0) -> list[str]:
+    """O texto do prontuário para o passo A: os blocos e as seções do código.
+    Acima do limite do modelo pequeno, uma entrada por janela de dias, com um
+    dia de sobreposição e as seções do código em todas. `reserva` é o que vai
+    junto na mesma chamada (as orientações de leitura)."""
+    blocos = _blocos(prontuario)
+    secoes = _secoes_do_codigo(prontuario, achados, _identificacao(prontuario))
+    inteiro = "\n\n".join([*(texto for _, texto in blocos), secoes])
+    orcamento = int(LIMITE_DE_TOKENS * CARACTERES_POR_TOKEN) - reserva
+    if len(inteiro) <= orcamento or not blocos:
+        return [inteiro]
+
+    por_dia: list[tuple[date | None, list[str]]] = []
+    for dia, texto in blocos:
+        if por_dia and por_dia[-1][0] == dia:
+            por_dia[-1][1].append(texto)
+        else:
+            por_dia.append((dia, [texto]))
+    tamanhos = [sum(len(texto) + 2 for texto in textos) for _, textos in por_dia]
+    janelas = _janelas(tamanhos, orcamento - len(secoes) - _CABECALHO_DA_JANELA)
+    entradas = []
+    for numero, (inicio, fim) in enumerate(janelas, start=1):
+        cabecalho = (
+            f"[[PARTE {numero} DE {len(janelas)} DO PRONTUÁRIO: de {_data(por_dia[inicio][0])} "
+            f"a {_data(por_dia[fim][0])}. As outras partes vão em chamadas separadas.]]"
+        )
+        textos = [texto for _, do_dia in por_dia[inicio : fim + 1] for texto in do_dia]
+        entradas.append("\n\n".join([cabecalho, *textos, secoes]))
+    return entradas
+
+
+# ----------------------------------------------------------------------------------
+# A união das janelas
+# ----------------------------------------------------------------------------------
+
+
+def _chave(valor: Any) -> str:
+    return normalizar(str(valor or ""))
+
+
+# O mesmo evento em duas janelas: mesmo tipo e mesmo início. O texto que diz
+# qual é o evento entra na chave, para duas bombas que começam juntas (ou dois
+# curativos no mesmo dia) não virarem uma.
+_MESMO_EVENTO = {
+    "movimentacoes": lambda e: (e["tipo"], e["data_hora"]),
+    "terapias": lambda e: (e["tipo"], e["inicio"], _chave(e["descricao"])),
+    "prescricoes": lambda e: (_chave(e["item"]), e["data"]),
+    "procedimentos": lambda e: (e["tipo"], e["data_hora"], _chave(e["detalhe"])),
+    "cirurgias": lambda e: (e["data"], e["inicio"], _chave(e["procedimento"])),
+}
+
+
+def unir_eventos(partes: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
+    """Os eventos de todas as janelas, sem repetir o que duas janelas vizinhas
+    leram do dia em comum. A terapia que a janela anterior viu sem fim ganha o
+    fim que a seguinte leu."""
+    unido: dict[str, Any] = {
+        "atendimento": next((p["atendimento"] for p in partes if p.get("atendimento")), None),
+        "idade_anos": next((p["idade_anos"] for p in partes if p.get("idade_anos") is not None), None),
+    }
+    for lista, mesmo_evento in _MESMO_EVENTO.items():
+        vistos: dict[Any, dict[str, Any]] = {}
+        for parte in partes:
+            for evento in parte.get(lista) or []:
+                chave = mesmo_evento(evento)
+                if chave not in vistos:
+                    vistos[chave] = dict(evento)
+                elif lista == "terapias" and not vistos[chave].get("fim"):
+                    vistos[chave]["fim"] = evento.get("fim")
+        unido[lista] = list(vistos.values())
+    for lista in ("documentos_ausentes", "observacoes"):
+        textos: dict[str, str] = {}
+        for parte in partes:
+            for texto in parte.get(lista) or []:
+                textos.setdefault(_chave(texto), texto)
+        unido[lista] = list(textos.values())
+    return unido
 
 
 # ----------------------------------------------------------------------------------
@@ -181,11 +282,13 @@ def eventos_do_atendimento(
 ) -> dict[str, Any]:
     """Os eventos do prontuário do atendimento: os guardados em `cm_eventos`
     para este arquivo ou, na primeira parcial, a leitura pela IA."""
-    lidos = ia.extrair_eventos(
-        montar_entrada(prontuario, achados),
-        orientacoes_de_leitura(list(regras)),
-        supabase=supabase,
-        conta_id=conta_id,
-        atendimento_id=atendimento_id,
-    )
-    return lidos.model_dump()
+    orientacoes = orientacoes_de_leitura(list(regras))
+    # A instrução, as orientações e os rótulos dos blocos vão em toda chamada.
+    reserva = len(load_prompt("contas_medicas_passo_a")) + len(orientacoes) + _ROTULOS_DOS_BLOCOS
+    partes = [
+        ia.extrair_eventos(
+            entrada, orientacoes, supabase=supabase, conta_id=conta_id, atendimento_id=atendimento_id
+        ).model_dump()
+        for entrada in montar_entradas(prontuario, achados, reserva=reserva)
+    ]
+    return unir_eventos(partes)

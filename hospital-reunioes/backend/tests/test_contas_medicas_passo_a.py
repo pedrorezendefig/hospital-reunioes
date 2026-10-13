@@ -337,3 +337,76 @@ class TestEntrada:
         for codigo in ("ALFA-PRI-01", "ALFA-DIA-01", "ALFA-INS-04"):
             assert codigo in orientacoes, codigo
         assert "ALFA-PRC-02" not in orientacoes
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 2. O prontuário acima do limite do modelo pequeno
+# ═══════════════════════════════════════════════════════════════════════════
+
+# 100 mil tokens a 3,5 caracteres por token (adendo v1.3, item 10).
+LIMITE_EM_CARACTERES = 350_000
+
+
+def _evolucao_longa(dia: int) -> str:
+    """Uma evolução de uns 120 mil caracteres: quatro delas passam do limite."""
+    corpo = [
+        f"Dia {dia:02d}/10, registro {n:04d}: paciente estável no leito, sem queixas, sinais vitais estáveis."
+        for n in range(1300)
+    ]
+    if dia == 2:
+        corpo.append("Realizado curativo em região sacral com cobertura de hidrocoloide.")
+    return "\n".join(
+        [
+            "HOSPITAL SÃO MATHEUS",
+            "Relatório de Evolução",
+            "EVOLUÇÃO MEDICA",
+            f"Atendimento {ATENDIMENTO}   Leito: CTI-04",
+            f"Data/Hora do Documento: {dia:02d}/10/2026 09:12",
+            *corpo,
+        ]
+    )
+
+
+def _curativo(dia: int, pagina: int) -> dict:
+    return {
+        "tipo": "CURATIVO",
+        "data_hora": f"2026-10-{dia:02d}T09:12",
+        "setor": "CTI ADULTO",
+        "detalhe": "curativo em região sacral",
+        "quantidade": 1,
+        "pagina": pagina,
+        "trecho": "Realizado curativo em região sacral com cobertura de hidrocoloide.",
+    }
+
+
+class TestJanelas:
+    def test_acima_do_limite_vira_janelas_com_um_dia_de_sobreposicao_e_o_evento_repetido_vira_um(self, provedor):
+        # Páginas: 1 capa, 2 a 5 as evoluções de 01 a 04/10.
+        paginas = _com_rodape([*_fixture("prontuario/capa"), *(_evolucao_longa(dia) for dia in (1, 2, 3, 4))])
+        # O curativo de 02/10 está nas duas primeiras janelas, e as duas o leem.
+        provedor.respostas = [
+            _resposta(procedimentos=[_curativo(2, 3)]),
+            _resposta(procedimentos=[_curativo(2, 3)]),
+            _resposta(procedimentos=[_curativo(4, 5)]),
+        ]
+
+        eventos = _passo_a(_Banco(), _lido(paginas), achados=())
+
+        textos = provedor.textos_do_prontuario()
+        dias_por_janela = [re.findall(r"\[\[PÁG \d+ · [^·]+ · (\d\d/10)/2026", texto) for texto in textos]
+        assert dias_por_janela == [["01/10", "02/10"], ["02/10", "03/10"], ["03/10", "04/10"]]
+        for corpo in provedor.corpos:
+            enviado = "".join(bloco["text"] for bloco in corpo["messages"][1]["content"])
+            assert len(enviado) <= LIMITE_EM_CARACTERES
+        # Cada janela leva as seções do código.
+        assert all("[[PRESCRIÇÕES CONSOLIDADAS]]" in texto for texto in textos)
+
+        assert [(p["tipo"], p["data_hora"]) for p in eventos["procedimentos"]] == [
+            ("CURATIVO", "2026-10-02T09:12"),
+            ("CURATIVO", "2026-10-04T09:12"),
+        ]
+
+    def test_abaixo_do_limite_e_uma_chamada_so(self, provedor):
+        _passo_a(_Banco(), _lido(_paginas()))
+
+        assert len(provedor.corpos) == 1
