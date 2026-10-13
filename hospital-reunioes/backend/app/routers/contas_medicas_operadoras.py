@@ -23,8 +23,10 @@ from starlette.concurrency import run_in_threadpool
 
 from app.dependencies import get_supabase_client, require_permissao_cm
 from app.limiter import limiter
+from app.services.ai_processor import chamar_ia_fora_do_loop
 from app.services.contas_medicas.dicionario import DicionarioRecusadoError, importar_dicionario, ler_dicionario
 from app.services.contas_medicas.dicionario_ia import PropostaRecusadaError, decidir_proposta, listar_propostas
+from app.services.contas_medicas.ia import ErroDaIA
 from app.services.contas_medicas.memoria import MemoriaRecusadaError, ler_memoria
 from app.services.contas_medicas.operadoras import (
     CadastroRecusadoError,
@@ -35,6 +37,14 @@ from app.services.contas_medicas.operadoras import (
     listar_planos,
     listar_setores,
     texto_da_memoria_vigente,
+)
+from app.services.contas_medicas.tabela_mapeada import (
+    ArquivoDeTabela,
+    ArquivoNaoGuardadoError,
+    Mapeamento,
+    gravar_tabela_mapeada,
+    ler_arquivo,
+    proposta_de_mapeamento,
 )
 from app.services.contas_medicas.tabelas import TabelaRecusadaError, importar_tabela, ler_tabela
 
@@ -199,6 +209,107 @@ async def enviar_tabela(
         arquivo_nome=arquivo.filename or f"{sigla}-{categoria}.csv",
         autor_id=me.get("id"),
     )
+    return {"operadora": sigla, **resumo}
+
+
+def _id_da_operadora(supabase, sigla: str) -> str:
+    operadoras = supabase.table("cm_operadora").select("id").eq("sigla", sigla).execute().data or []
+    if not operadoras:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"A operadora {sigla} não está cadastrada")
+    return operadoras[0]["id"]
+
+
+def _mapeamento_do_formulario(texto: str | None) -> Mapeamento | None:
+    if not (texto or "").strip():
+        return None
+    try:
+        return Mapeamento.model_validate_json(texto)
+    except ValueError:
+        raise _422("O mapeamento das colunas veio num formato que não dá para ler.") from None
+
+
+async def _arquivo_de_tabela(arquivo: UploadFile) -> tuple[bytes, ArquivoDeTabela]:
+    conteudo = await arquivo.read(TETO_DO_CSV + 1)
+    if len(conteudo) > TETO_DO_CSV:
+        raise _422("O arquivo passa de 20 MB, grande demais para uma tabela.")
+    try:
+        # O PDF passa pelo extrator isolado, que espera o processo filho.
+        return conteudo, await run_in_threadpool(ler_arquivo, arquivo.filename or "", conteudo)
+    except TabelaRecusadaError as exc:
+        raise _422(str(exc)) from None
+
+
+@router.post("/operadoras/{sigla}/tabelas/proposta")
+@limiter.limit("20/minute")
+async def propor_tabela_mapeada(
+    request: Request,
+    sigla: str,
+    arquivo: UploadFile = File(...),
+    mapeamento: str | None = Form(default=None, max_length=20_000),
+    _me: dict = Depends(require_permissao_cm(PERMISSAO)),
+    supabase=Depends(get_supabase_client),
+) -> dict:
+    """O mapeamento das colunas (da IA, de um arquivo já confirmado ou o ajuste
+    da pessoa), 20 linhas convertidas e o total. Não grava nada."""
+    _id_da_operadora(supabase, sigla.strip().upper())
+    da_pessoa = _mapeamento_do_formulario(mapeamento)
+    _, lido = await _arquivo_de_tabela(arquivo)
+    if lido.formato_conhecido and da_pessoa is None:
+        return {"conhecido": True, "descricao_formato": lido.formato_conhecido}
+    try:
+        proposta = await chamar_ia_fora_do_loop(proposta_de_mapeamento, supabase, lido, da_pessoa)
+    except ErroDaIA:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="A IA não conseguiu ler as colunas agora. Tente de novo em alguns minutos.",
+        ) from None
+    return {"conhecido": False, **proposta}
+
+
+@router.post("/operadoras/{sigla}/tabelas/mapeada", status_code=status.HTTP_201_CREATED)
+@limiter.limit("20/minute")
+async def confirmar_tabela_mapeada(
+    request: Request,
+    sigla: str,
+    categoria: CategoriaDeTabela = Form(...),
+    vigencia_inicio: date = Form(...),
+    mapeamento: str = Form(..., max_length=20_000),
+    vigencia_fim: date | None = Form(default=None),
+    versao: str | None = Form(default=None, max_length=200),
+    arquivo: UploadFile = File(...),
+    me: dict = Depends(require_permissao_cm(PERMISSAO)),
+    supabase=Depends(get_supabase_client),
+) -> dict:
+    """Grava a tabela lida pelo mapeamento confirmado como uma versão nova da categoria."""
+    sigla = sigla.strip().upper()
+    if vigencia_fim and vigencia_fim < vigencia_inicio:
+        raise _422("O fim da vigência é anterior ao início.")
+    operadora_id = _id_da_operadora(supabase, sigla)
+    confirmado = _mapeamento_do_formulario(mapeamento)
+    if confirmado is None:
+        raise _422("Confirme o mapeamento das colunas antes de gravar a tabela.")
+    conteudo, lido = await _arquivo_de_tabela(arquivo)
+    try:
+        resumo = await run_in_threadpool(
+            gravar_tabela_mapeada,
+            supabase,
+            operadora_id,
+            categoria,
+            lido,
+            conteudo,
+            confirmado,
+            vigencia_inicio=vigencia_inicio,
+            vigencia_fim=vigencia_fim,
+            versao=(versao or "").strip() or None,
+            arquivo_nome=arquivo.filename or f"{sigla}-{categoria}{lido.extensao}",
+            autor_id=me.get("id"),
+        )
+    except TabelaRecusadaError as exc:
+        raise _422(str(exc)) from None
+    except ArquivoNaoGuardadoError:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Não consegui guardar o arquivo. Envie de novo."
+        ) from None
     return {"operadora": sigla, **resumo}
 
 

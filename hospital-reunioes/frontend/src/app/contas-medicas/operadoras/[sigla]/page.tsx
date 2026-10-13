@@ -8,12 +8,17 @@
  * e o Exportar. Quem cria a versão nova, guarda o texto anterior e confere a
  * permissão do tipo da regra é o servidor; a tela só mostra os botões do tipo
  * que a pessoa pode mudar e relê a memória depois de cada mudança.
+ *
+ * "Ensinar uma regra nova" (issue #1141): a pessoa escreve a regra em
+ * linguagem comum, a IA propõe (regra, parâmetro, conflitos e efeito no Guia)
+ * e nada vale antes do "Validar regra". As contas abertas analisadas com a
+ * memória anterior aparecem com a marca e o "Reanalisar com a regra nova".
  */
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { AlertCircle, ArrowLeft, Download, Loader2 } from "lucide-react";
+import { AlertCircle, ArrowLeft, Download, Loader2, RefreshCw, Sparkles } from "lucide-react";
 
 import { TabelasDePreco } from "@/components/contas-medicas/TabelasDePreco";
 import { Select } from "@/components/ui/Select";
@@ -27,6 +32,7 @@ import {
   detalheDoErro,
   plural,
 } from "@/lib/contas-medicas/operadoras";
+import { ROTULO_SITUACAO } from "@/lib/contas-medicas/guia";
 import { createClient } from "@/lib/supabase/client";
 
 type Tipo = "CONTRATUAL" | "OPERACIONAL";
@@ -64,6 +70,28 @@ interface Contrato {
   ultimo_aditivo?: { numero?: string | number; inicio_vigencia?: string };
 }
 
+interface ContaComRegraNova {
+  id: string;
+  numero_atendimento: string | null;
+  numero_conta: string | null;
+  situacao: string;
+}
+
+type ValorDoParametro = string | number | boolean | null | unknown[] | Record<string, unknown>;
+
+interface Proposta {
+  regra: { secao: string; texto: string; tipo: Tipo; origem: string };
+  parametro: { chave: string; antes: ValorDoParametro; depois: ValorDoParametro } | null;
+  conflitos: { codigo: string; texto: string }[];
+  efeito_no_guia: string;
+}
+
+interface RegraEnsinada {
+  versao: string;
+  regra: string;
+  contas_com_regra_nova: number;
+}
+
 interface Memoria {
   sigla: string;
   nome: string;
@@ -76,6 +104,7 @@ interface Memoria {
   tabelas: TabelaDaCategoria[];
   historico: VersaoDaMemoria[];
   permissoes: string[];
+  contas_com_regra_nova?: ContaComRegraNova[];
 }
 
 interface Resultado {
@@ -94,6 +123,26 @@ const ABAS: { id: string; rotulo: string; filtro: (r: Regra) => boolean }[] = [
   { id: "HON", rotulo: "Honorários", filtro: (r) => r.secao === "HON" },
   { id: "pendentes", rotulo: "Pendentes", filtro: (r) => r.status === "PENDENTE" },
 ];
+
+/** As seções da memória, pelo prefixo do ID, como o modelo do diretor. */
+const SECOES = [
+  { value: "PRI", label: "Princípios" },
+  { value: "PRC", label: "Preços e tabelas" },
+  { value: "DIA", label: "Diárias" },
+  { value: "PAC", label: "Pacotes" },
+  { value: "TAX", label: "Taxas e aluguéis" },
+  { value: "CC", label: "Centro cirúrgico" },
+  { value: "HON", label: "Honorários" },
+  { value: "INS", label: "Quantidades e insumos por tempo" },
+  { value: "MED", label: "Medicamentos" },
+];
+
+function valorLegivel(valor: ValorDoParametro): string {
+  if (valor === null || valor === undefined) return "(sem valor)";
+  if (typeof valor === "boolean") return valor ? "sim" : "não";
+  if (typeof valor === "string") return valor;
+  return JSON.stringify(valor);
+}
 
 const TIPOS = [
   { value: "CONTRATUAL", label: "Contratual" },
@@ -182,6 +231,36 @@ export default function MemoriaDaOperadoraPage() {
     if (token) await carregar(token);
   }
 
+  async function aoEnsinar(resultado: RegraEnsinada) {
+    const contas = resultado.contas_com_regra_nova;
+    setAviso(
+      `Versão ${resultado.versao} da memória criada com a regra ${resultado.regra}.` +
+        (contas
+          ? ` ${plural(contas, "conta aberta ganhou", "contas abertas ganharam")} a marca "regra nova desde a análise".`
+          : ""),
+    );
+    if (token) await carregar(token);
+  }
+
+  async function reanalisar(conta: ContaComRegraNova) {
+    if (!token) return;
+    setErro(null);
+    try {
+      const res = await fetch(`/api/contas-medicas/contas/${encodeURIComponent(conta.id)}/reanalisar`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) {
+        setErro(await detalheDoErro(res, "Não foi possível reanalisar a conta."));
+        return;
+      }
+      setAviso(`O atendimento ${conta.numero_atendimento ?? ""} voltou para a análise com a regra nova.`);
+      await carregar(token);
+    } catch {
+      setErro("Não foi possível reanalisar a conta.");
+    }
+  }
+
   async function exportar() {
     if (!token) return;
     setErro(await baixarMemoria(token, sigla));
@@ -229,6 +308,12 @@ export default function MemoriaDaOperadoraPage() {
               {aviso}
             </p>
           )}
+          <ContasComRegraNova
+            contas={memoria.contas_com_regra_nova ?? []}
+            podeReanalisar={memoria.permissoes.includes("regra_contratual_tabelas")}
+            aoReanalisar={reanalisar}
+          />
+          <EnsinarRegra sigla={memoria.sigla} token={token} aoEnsinar={aoEnsinar} />
           <Regras memoria={memoria} token={token} aoMudar={aoMudar} />
           <section aria-label="Tabelas de preço" className={CARTAO}>
             <h2 className="text-base font-semibold text-slate-900">Tabelas de preço</h2>
@@ -492,6 +577,304 @@ function MudancaDaRegra({
     </form>
   );
 }
+
+function ContasComRegraNova({
+  contas,
+  podeReanalisar,
+  aoReanalisar,
+}: {
+  contas: ContaComRegraNova[];
+  podeReanalisar: boolean;
+  aoReanalisar: (conta: ContaComRegraNova) => Promise<void>;
+}) {
+  const [ocupada, setOcupada] = useState<string | null>(null);
+  if (contas.length === 0) return null;
+  return (
+    <section aria-label="Contas com regra nova desde a análise" className={CARTAO}>
+      <h2 className="text-base font-semibold text-slate-900">Contas com regra nova desde a análise</h2>
+      <p className="text-sm text-slate-500 mt-0.5">
+        Contas A fazer e Em correção analisadas com a memória anterior. Reanalisar mantém as linhas que a faturista já
+        marcou.
+      </p>
+      <ul className="mt-3 divide-y divide-slate-100">
+        {contas.map((conta) => (
+          <li key={conta.id} className="flex flex-wrap items-center gap-x-3 gap-y-2 py-2 text-sm">
+            <span className="font-medium text-slate-900">Atendimento {conta.numero_atendimento}</span>
+            {conta.numero_conta && <span className="text-slate-500">conta {conta.numero_conta}</span>}
+            <span className="text-slate-600">{ROTULO_SITUACAO[conta.situacao] ?? conta.situacao}</span>
+            <span className="inline-flex px-2.5 py-0.5 rounded-full text-xs font-semibold bg-[#EDE9FE] text-[#5B21B6]">
+              Regra nova desde a análise
+            </span>
+            {podeReanalisar && (
+              <button
+                type="button"
+                disabled={ocupada === conta.id}
+                onClick={async () => {
+                  setOcupada(conta.id);
+                  try {
+                    await aoReanalisar(conta);
+                  } finally {
+                    setOcupada(null);
+                  }
+                }}
+                className={`${BOTAO_SECUNDARIO} ml-auto disabled:opacity-50`}
+              >
+                <RefreshCw className="w-4 h-4" aria-hidden="true" /> Reanalisar com a regra nova
+              </button>
+            )}
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}
+
+function EnsinarRegra({
+  sigla,
+  token,
+  aoEnsinar,
+}: {
+  sigla: string;
+  token: string | null;
+  aoEnsinar: (resultado: RegraEnsinada) => Promise<void>;
+}) {
+  const [aberta, setAberta] = useState(false);
+  const [pedido, setPedido] = useState("");
+  const [proposta, setProposta] = useState<Proposta | null>(null);
+  const [propondo, setPropondo] = useState(false);
+  const [erro, setErro] = useState<string | null>(null);
+
+  async function propor(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    if (!token || !pedido.trim()) return;
+    setPropondo(true);
+    setErro(null);
+    try {
+      const res = await fetch(`/api/contas-medicas/operadoras/${encodeURIComponent(sigla)}/regras/proposta`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ texto: pedido.trim() }),
+      });
+      if (!res.ok) {
+        setErro(await detalheDoErro(res, `Não foi possível propor a regra (HTTP ${res.status}).`));
+        return;
+      }
+      setProposta(await res.json());
+    } catch {
+      setErro("Não foi possível propor a regra.");
+    } finally {
+      setPropondo(false);
+    }
+  }
+
+  if (!aberta) {
+    return (
+      <div>
+        <button type="button" onClick={() => setAberta(true)} className={BOTAO}>
+          <Sparkles className="w-4 h-4" aria-hidden="true" /> Ensinar uma regra nova
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <section aria-label="Ensinar uma regra nova" className={CARTAO}>
+      <h2 className="text-base font-semibold text-slate-900">Ensinar uma regra nova</h2>
+      <form aria-label="Regra em linguagem comum" onSubmit={propor} className="mt-3 space-y-3">
+        <label className="flex flex-col gap-1.5 text-xs font-medium text-slate-500 uppercase">
+          A regra, em linguagem comum
+          <textarea
+            value={pedido}
+            onChange={(e) => setPedido(e.target.value)}
+            rows={3}
+            placeholder="Por exemplo: na ASSIM a seringa de limpeza pronta não é paga."
+            className={`${CAMPO} normal-case font-normal text-slate-800 bg-white`}
+          />
+        </label>
+        {erro && (
+          <p role="alert" className="flex items-start gap-2 text-sm text-red-700">
+            <AlertCircle className="w-4 h-4 mt-0.5 shrink-0" aria-hidden="true" /> {erro}
+          </p>
+        )}
+        <div className="flex flex-wrap gap-2">
+          <button type="submit" disabled={!pedido.trim() || propondo} className={BOTAO}>
+            {propondo && <Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" />}
+            Propor regra
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setAberta(false);
+              setProposta(null);
+            }}
+            className={BOTAO_SECUNDARIO}
+          >
+            Fechar
+          </button>
+        </div>
+      </form>
+      {proposta && (
+        <PropostaDaRegra
+          key={JSON.stringify(proposta)}
+          sigla={sigla}
+          proposta={proposta}
+          token={token}
+          aoDescartar={() => setProposta(null)}
+          aoValidar={async (resultado) => {
+            setProposta(null);
+            setPedido("");
+            setAberta(false);
+            await aoEnsinar(resultado);
+          }}
+        />
+      )}
+    </section>
+  );
+}
+
+function PropostaDaRegra({
+  sigla,
+  proposta,
+  token,
+  aoDescartar,
+  aoValidar,
+}: {
+  sigla: string;
+  proposta: Proposta;
+  token: string | null;
+  aoDescartar: () => void;
+  aoValidar: (resultado: RegraEnsinada) => Promise<void>;
+}) {
+  const [texto, setTexto] = useState(proposta.regra.texto);
+  const [secao, setSecao] = useState(proposta.regra.secao);
+  const [tipo, setTipo] = useState<string>(proposta.regra.tipo);
+  const [origem, setOrigem] = useState(proposta.regra.origem);
+  const [comParametro, setComParametro] = useState(Boolean(proposta.parametro));
+  const [salvando, setSalvando] = useState(false);
+  const [erro, setErro] = useState<string | null>(null);
+  const parametro = proposta.parametro;
+
+  async function validar(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    if (!token || !texto.trim()) return;
+    setSalvando(true);
+    setErro(null);
+    try {
+      const res = await fetch(`/api/contas-medicas/operadoras/${encodeURIComponent(sigla)}/regras`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        body: JSON.stringify({
+          secao,
+          texto: texto.trim(),
+          tipo: tipo || null,
+          origem: origem.trim() || null,
+          parametro: parametro && comParametro ? { chave: parametro.chave, valor: parametro.depois } : null,
+        }),
+      });
+      if (!res.ok) {
+        setErro(await detalheDoErro(res, `Não foi possível validar a regra (HTTP ${res.status}).`));
+        return;
+      }
+      await aoValidar(await res.json());
+    } catch {
+      setErro("Não foi possível validar a regra.");
+    } finally {
+      setSalvando(false);
+    }
+  }
+
+  return (
+    <form
+      aria-label="Proposta da regra nova"
+      onSubmit={validar}
+      className="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-4 space-y-4"
+    >
+      <div className="grid gap-3 md:grid-cols-2">
+        <section aria-label="Antes" className="rounded-lg bg-white border border-slate-200 p-3 text-sm space-y-2">
+          <h3 className="text-xs font-semibold text-slate-500 uppercase">Antes</h3>
+          {parametro && (
+            <p className="text-slate-700">
+              <span className="font-mono text-xs">{parametro.chave}</span>: {valorLegivel(parametro.antes)}
+            </p>
+          )}
+          {proposta.conflitos.map((c) => (
+            <p key={c.codigo} className="text-slate-700">
+              <span className="font-mono text-xs text-slate-500">{c.codigo}</span> {c.texto}
+            </p>
+          ))}
+          {!parametro && proposta.conflitos.length === 0 && (
+            <p className="text-slate-500">A memória não tem regra sobre isso.</p>
+          )}
+        </section>
+        <section aria-label="Depois" className="rounded-lg bg-white border border-slate-200 p-3 text-sm space-y-2">
+          <h3 className="text-xs font-semibold text-slate-500 uppercase">Depois</h3>
+          <p className="text-slate-800">{texto}</p>
+          {parametro && comParametro && (
+            <p className="text-slate-700">
+              <span className="font-mono text-xs">{parametro.chave}</span>: {valorLegivel(parametro.depois)}
+            </p>
+          )}
+        </section>
+      </div>
+      <section aria-label="Conflitos" className="text-sm">
+        <h3 className="text-xs font-semibold text-slate-500 uppercase">Conflitos</h3>
+        <p className={proposta.conflitos.length ? "text-amber-700 font-medium" : "text-slate-500"}>
+          {proposta.conflitos.length
+            ? `Conflita com ${proposta.conflitos.map((c) => c.codigo).join(", ")}.`
+            : "Nenhum conflito com as regras da memória."}
+        </p>
+      </section>
+      <p className="text-sm text-slate-700">
+        <span className="font-semibold">Efeito no Guia:</span> {proposta.efeito_no_guia}
+      </p>
+      <label className="flex flex-col gap-1.5 text-xs font-medium text-slate-500 uppercase">
+        Texto da regra
+        <textarea
+          value={texto}
+          onChange={(e) => setTexto(e.target.value)}
+          rows={3}
+          className={`${CAMPO} normal-case font-normal text-slate-800 bg-white`}
+        />
+      </label>
+      <div className="grid gap-3 sm:grid-cols-3">
+        <Select label="Seção" value={secao} onChange={setSecao} options={SECOES} />
+        <Select label="Tipo" value={tipo} onChange={setTipo} options={TIPOS} />
+        <label className="flex flex-col gap-1.5 text-xs font-medium text-slate-500 uppercase">
+          Origem
+          <input
+            value={origem}
+            onChange={(e) => setOrigem(e.target.value)}
+            className={`${CAMPO} normal-case font-normal text-slate-800 bg-white`}
+          />
+        </label>
+      </div>
+      {parametro && (
+        <label className="flex items-center gap-2 text-sm text-slate-700">
+          <input type="checkbox" checked={comParametro} onChange={(e) => setComParametro(e.target.checked)} />
+          Mudar também o parâmetro {parametro.chave} para {valorLegivel(parametro.depois)}
+        </label>
+      )}
+      <p className="text-xs text-slate-500">
+        Nada vale antes de validar. Validar cria uma versão nova da memória, com o seu nome e a data.
+      </p>
+      {erro && (
+        <p role="alert" className="flex items-start gap-2 text-sm text-red-700">
+          <AlertCircle className="w-4 h-4 mt-0.5 shrink-0" aria-hidden="true" /> {erro}
+        </p>
+      )}
+      <div className="flex flex-wrap gap-2">
+        <button type="submit" disabled={!texto.trim() || salvando} className={BOTAO}>
+          {salvando && <Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" />}
+          Validar regra
+        </button>
+        <button type="button" onClick={aoDescartar} className={BOTAO_SECUNDARIO}>
+          Descartar
+        </button>
+      </div>
+    </form>
+  );
+}
+
 
 function Historico({ versoes }: { versoes: VersaoDaMemoria[] }) {
   return (

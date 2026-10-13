@@ -16,6 +16,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { AlertCircle, ArrowLeft, Download, Loader2, Upload } from "lucide-react";
+import { MapeamentoDaTabela } from "@/components/contas-medicas/MapeamentoDaTabela";
 import { PropostasDoDicionario } from "@/components/contas-medicas/PropostasDoDicionario";
 import { TabelasDePreco } from "@/components/contas-medicas/TabelasDePreco";
 import { createClient } from "@/lib/supabase/client";
@@ -25,6 +26,8 @@ import {
   COR_SITUACAO,
   LABEL_CATEGORIA,
   LABEL_SITUACAO,
+  type MapeamentoDeColunas,
+  type PropostaDeMapeamento,
   type Situacao,
   type TabelaDaCategoria,
   baixarMemoria,
@@ -480,45 +483,98 @@ function EnvioDeTabela({
   const [enviando, setEnviando] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
   const [importada, setImportada] = useState<TabelaImportada | null>(null);
+  const [proposta, setProposta] = useState<PropostaDeMapeamento | null>(null);
+  const [mapeamento, setMapeamento] = useState<MapeamentoDeColunas | null>(null);
+  const [alterado, setAlterado] = useState(false);
   const pronto = Boolean(operadora && categoria && inicio && arquivo);
+  const rota = `/api/contas-medicas/operadoras/${encodeURIComponent(operadora)}/tabelas`;
+
+  function dadosDaVersao(): FormData {
+    const corpo = new FormData();
+    corpo.append("categoria", categoria);
+    corpo.append("vigencia_inicio", inicio);
+    if (fim) corpo.append("vigencia_fim", fim);
+    if (versao.trim()) corpo.append("versao", versao.trim());
+    corpo.append("arquivo", arquivo!);
+    return corpo;
+  }
+
+  /** Um POST da seção: devolve o corpo da resposta, ou `null` com o erro já na tela. */
+  async function postar(url: string, corpo: FormData, padrao: string): Promise<Record<string, unknown> | null> {
+    setEnviando(true);
+    setErro(null);
+    try {
+      const res = await fetch(url, { method: "POST", headers: { Authorization: `Bearer ${token}` }, body: corpo });
+      if (!res.ok) {
+        setErro(await detalheDoErro(res, `${padrao} (HTTP ${res.status}).`));
+        return null;
+      }
+      return await res.json();
+    } catch {
+      setErro(`${padrao}.`);
+      return null;
+    } finally {
+      setEnviando(false);
+    }
+  }
+
+  async function gravada(resposta: Record<string, unknown> | null) {
+    if (!resposta) return;
+    setImportada(resposta as unknown as TabelaImportada);
+    setProposta(null);
+    setMapeamento(null);
+    await aoImportar();
+  }
+
+  function mostrarProposta(resposta: Record<string, unknown>) {
+    const nova = resposta as unknown as PropostaDeMapeamento;
+    setProposta(nova);
+    setMapeamento(nova.mapeamento);
+    setAlterado(false);
+  }
 
   async function enviar(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     if (!token || !arquivo || !pronto) return;
-    setEnviando(true);
-    setErro(null);
     setImportada(null);
-    try {
-      const corpo = new FormData();
-      corpo.append("categoria", categoria);
-      corpo.append("vigencia_inicio", inicio);
-      if (fim) corpo.append("vigencia_fim", fim);
-      if (versao.trim()) corpo.append("versao", versao.trim());
-      corpo.append("arquivo", arquivo);
-      const res = await fetch(`/api/contas-medicas/operadoras/${encodeURIComponent(operadora)}/tabelas`, {
-        method: "POST",
-        headers: { Authorization: `Bearer ${token}` },
-        body: corpo,
-      });
-      if (!res.ok) {
-        setErro(await detalheDoErro(res, `Não foi possível enviar a tabela (HTTP ${res.status}).`));
-        return;
-      }
-      setImportada(await res.json());
-      await aoImportar();
-    } catch {
-      setErro("Não foi possível enviar a tabela.");
-    } finally {
-      setEnviando(false);
+    setProposta(null);
+    // A proposta diz se o arquivo é um CSV de formato conhecido (carga direta)
+    // ou se precisa do mapeamento das colunas. Nada é gravado nela.
+    const corpo = new FormData();
+    corpo.append("arquivo", arquivo);
+    const resposta = await postar(`${rota}/proposta`, corpo, "Não foi possível ler a tabela");
+    if (!resposta) return;
+    if (resposta.conhecido) {
+      await gravada(await postar(rota, dadosDaVersao(), "Não foi possível enviar a tabela"));
+      return;
     }
+    mostrarProposta(resposta);
+  }
+
+  async function verAmostra() {
+    if (!arquivo || !mapeamento) return;
+    const corpo = new FormData();
+    corpo.append("arquivo", arquivo);
+    corpo.append("mapeamento", JSON.stringify(mapeamento));
+    const resposta = await postar(`${rota}/proposta`, corpo, "Não foi possível ler a tabela");
+    if (resposta) mostrarProposta(resposta);
+  }
+
+  async function confirmar() {
+    if (!arquivo || !mapeamento || !pronto) return;
+    const corpo = dadosDaVersao();
+    corpo.append("mapeamento", JSON.stringify(mapeamento));
+    await gravada(await postar(`${rota}/mapeada`, corpo, "Não foi possível gravar a tabela"));
   }
 
   return (
     <section ref={secao} aria-label="Enviar tabela de preço" className={CARTAO}>
       <h2 className="text-base font-semibold text-slate-900">Enviar tabela de preço</h2>
       <p className="text-sm text-slate-500 mt-0.5 mb-4">
-        O CSV da tabela do convênio, com a categoria e a vigência. O formato é reconhecido pelo cabeçalho. Uma versão
-        nova fica ao lado da anterior: a conta de um atendimento antigo usa a tabela da data dele.
+        A tabela do convênio, com a categoria e a vigência. O CSV de formato conhecido entra direto; o PDF, a planilha
+        e o CSV de outro cabeçalho mostram as colunas que a IA propõe e 20 linhas de amostra, e só valem depois de
+        confirmados. Uma versão nova fica ao lado da anterior: a conta de um atendimento antigo usa a tabela da data
+        dele.
       </p>
       <form aria-label="Enviar tabela de preço" onSubmit={enviar} className="grid gap-3 sm:grid-cols-3 items-end">
         <Select
@@ -559,8 +615,11 @@ function EnvioDeTabela({
           Arquivo da tabela
           <input
             type="file"
-            accept=".csv,text/csv"
-            onChange={(e) => setArquivo(e.target.files?.[0] ?? null)}
+            accept=".csv,.xlsx,.pdf,text/csv,application/pdf,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            onChange={(e) => {
+              setArquivo(e.target.files?.[0] ?? null);
+              setProposta(null);
+            }}
             className="text-sm normal-case font-normal text-slate-700"
           />
         </label>
@@ -577,6 +636,20 @@ function EnvioDeTabela({
         <p role="alert" className="flex items-start gap-2 text-sm text-red-700 mt-4 break-words">
           <AlertCircle className="w-4 h-4 mt-0.5 shrink-0" aria-hidden="true" /> {erro}
         </p>
+      )}
+      {proposta && mapeamento && (
+        <MapeamentoDaTabela
+          proposta={proposta}
+          mapeamento={mapeamento}
+          alterado={alterado}
+          ocupado={enviando}
+          aoMudar={(novo) => {
+            setMapeamento(novo);
+            setAlterado(true);
+          }}
+          aoVerAmostra={verAmostra}
+          aoConfirmar={confirmar}
+        />
       )}
       {importada && (
         <p role="status" className="mt-4 rounded-xl bg-emerald-50 p-4 text-sm font-medium text-emerald-800">

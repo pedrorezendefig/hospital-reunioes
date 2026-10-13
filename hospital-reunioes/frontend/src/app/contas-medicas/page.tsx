@@ -17,6 +17,7 @@ import Link from "next/link";
 import { AlertCircle, Loader2, ReceiptText, Upload } from "lucide-react";
 
 import { LinkParaContratos } from "@/components/contas-medicas/LinkParaContratos";
+import { LinkParaCoordenacao } from "@/components/contas-medicas/LinkParaCoordenacao";
 import { LinkParaHabilitacao } from "@/components/contas-medicas/LinkParaHabilitacao";
 import { LinkParaOperadoras } from "@/components/contas-medicas/LinkParaOperadoras";
 import { LinkParaPainel } from "@/components/contas-medicas/LinkParaPainel";
@@ -219,6 +220,7 @@ export default function ContasMedicasPage() {
           <h1 className="flex-1 text-2xl font-bold text-slate-900">Contas médicas</h1>
           <LinkParaPainel />
           <LinkParaValidacao />
+          <LinkParaCoordenacao />
           <LinkParaContratos />
           <LinkParaOperadoras />
           <LinkParaHabilitacao />

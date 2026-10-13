@@ -30,6 +30,7 @@ from app.services.contas_medicas.guia import (
     nota_de_entrada,
     numeros_do_topo,
 )
+from app.services.contas_medicas.regra_nova import SITUACOES_REANALISAVEIS, regra_nova_desde_a_analise
 from app.services.contas_medicas.validacao import (
     acompanhar_marcacao,
     linhas_do_retorno,
@@ -48,7 +49,7 @@ CONCLUIDAS = ("CONCLUIDA", "CONCLUIDA_COM_PENDENCIA")
 # fila, processando, erro) não há linha para mostrar.
 COM_GUIA = ("A_FAZER", "EM_CORRECAO", "RETORNO", *CONCLUIDAS)
 # As situações em que "Reanalisar" vale: o Guia pronto e ainda em aberto.
-REANALISAVEIS = ("A_FAZER", "EM_CORRECAO")
+REANALISAVEIS = SITUACOES_REANALISAVEIS
 
 
 def _agora() -> str:
@@ -144,6 +145,8 @@ async def abrir_guia(
         "respostas": respostas_da_conta(supabase, conta["id"], linhas),
         # O botão "Reanalisar": a tela desenha pelo que vem aqui, e a rota decide.
         "pode_reanalisar": "regra_contratual_tabelas" in me["permissoes_cm"] and conta.get("situacao") in REANALISAVEIS,
+        # A conta analisada com uma memória que já mudou: o botão vira "Reanalisar com a regra nova".
+        "regra_nova_desde_analise": regra_nova_desde_a_analise(supabase, conta, operadora.get("id")),
     }
 
 

@@ -89,6 +89,8 @@ export interface Guia {
   reenvio?: Reenvio | null;
   /** O botão "Reenviar conta corrigida": a conta concluída. */
   pode_reenviar?: boolean;
+  /** A conta foi analisada com uma memória que já mudou (issue #1141): marca e "Reanalisar com a regra nova". */
+  regra_nova_desde_analise?: boolean;
   /** O "Responder ao time" da Validação sobre o que esta conta levantou (issue #1142). */
   respostas?: RespostaDaValidacao[];
 }

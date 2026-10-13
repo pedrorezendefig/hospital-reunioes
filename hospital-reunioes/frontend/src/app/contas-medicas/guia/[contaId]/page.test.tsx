@@ -604,3 +604,33 @@ describe("o que volta da Validação (issue #1142)", () => {
     expect(descartada.textContent).not.toContain("Você não precisa decidir");
   });
 });
+
+describe("a marca regra nova desde a análise (issue #1141)", () => {
+  it("conta analisada antes da regra nova mostra a marca e o botão Reanalisar com a regra nova", async () => {
+    respostaDoGuia = guia({ pode_reanalisar: true, regra_nova_desde_analise: true });
+    await abrir();
+
+    expect(screen.getByText("Regra nova desde a análise")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Reanalisar com a regra nova" }));
+
+    await waitFor(() => expect(navegacao.push).toHaveBeenCalledWith("/contas-medicas"));
+    expect(chamadas[1].url).toBe(`/api/contas-medicas/contas/${CONTA}/reanalisar`);
+  });
+
+  it("conta analisada com a memória de agora fica sem a marca e com o botão Reanalisar", async () => {
+    respostaDoGuia = guia({ pode_reanalisar: true, regra_nova_desde_analise: false });
+    await abrir();
+
+    expect(screen.getByRole("button", { name: "Reanalisar" })).toBeTruthy();
+    expect(screen.queryByText("Regra nova desde a análise")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Reanalisar com a regra nova" })).toBeNull();
+  });
+
+  it("a faturista vê a marca mesmo sem o botão", async () => {
+    respostaDoGuia = guia({ pode_reanalisar: false, regra_nova_desde_analise: true });
+    await abrir();
+
+    expect(screen.getByText("Regra nova desde a análise")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /Reanalisar/ })).toBeNull();
+  });
+});

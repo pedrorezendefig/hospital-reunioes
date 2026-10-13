@@ -278,11 +278,14 @@ def importar_tabela(
     versao: str | None,
     arquivo_nome: str,
     autor_id: str | None,
+    mapeamento_json: dict[str, Any] | None = None,
+    arquivo_original: str | None = None,
 ) -> dict[str, Any]:
     """Grava a tabela lida como uma versão nova da categoria e devolve o resumo.
 
     Tipo, regra de preço e chave vêm do bloco `tabelas` da memória vigente;
-    sem ele, do formato do CSV.
+    sem ele, do formato do CSV. A tabela lida por mapeamento (#1146) guarda o
+    mapeamento confirmado e a chave do arquivo no bucket.
     """
     bloco = _bloco_da_categoria(_parametros_vigentes(supabase, operadora_id), categoria)
     versao = versao or (str(bloco["versao"]) if bloco.get("versao") else None)
@@ -298,6 +301,8 @@ def importar_tabela(
                 "situacao": "CARREGADA",
                 "arquivo_nome": arquivo_nome,
                 "autor_id": autor_id,
+                **({"mapeamento_json": mapeamento_json} if mapeamento_json else {}),
+                **({"arquivo_original": arquivo_original} if arquivo_original else {}),
             }
         )
         .execute()

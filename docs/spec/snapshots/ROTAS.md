@@ -1,6 +1,6 @@
 # ROTAS.md
 <!-- gerado automaticamente por /snapshot — não editar -->
-<!-- last_update: 2026-10-13T06:19+0000 -->
+<!-- last_update: 2026-10-13T07:38+0000 -->
 
 Endpoints HTTP expostos pelo backend FastAPI do Hospital Reuniões.
 
@@ -91,6 +91,17 @@ Endpoints HTTP expostos pelo backend FastAPI do Hospital Reuniões.
 | GET | `/contas-medicas/contratos/{sigla}/arquivo` | O contrato ou o aditivo confirmado da operadora. | ✅ |
 | POST | `/contas-medicas/contratos/{sigla}/arquivo` | Guarda o contrato ou o aditivo e devolve os campos que a IA leu, para a | ✅ |
 
+## contas-medicas (`app/routers/contas_medicas_coordenacao.py`)
+
+| Método | Rota | O que faz | Auth |
+|--------|------|-----------|------|
+| GET | `/contas-medicas/coordenacao` | Os três números e os lembretes abertos por conta, o mais antigo | ✅ |
+| GET | `/contas-medicas/coordenacao/cenarios` | Todos os cenários, ativos e inativos, e as operadoras, para quem cadastra. | ✅ |
+| POST | `/contas-medicas/coordenacao/cenarios` | Grava o cenário com o próximo código CEN-NNN, o autor e a data. | ✅ |
+| POST | `/contas-medicas/coordenacao/cenarios/proposta` | Os campos que a IA lê do texto da pessoa, com os códigos conferidos | ✅ |
+| PUT | `/contas-medicas/coordenacao/cenarios/{cenario_id}` | Edita, ativa ou desativa o cenário, com o antes e o depois no registro. | ✅ |
+| POST | `/contas-medicas/coordenacao/lembretes/{lembrete_id}/marcacao` | Incluído ou Não se aplica, um clique, com a observação opcional. | ✅ |
+
 ## contas-medicas (`app/routers/contas_medicas_envio.py`)
 
 | Método | Rota | O que faz | Auth |
@@ -123,7 +134,9 @@ Endpoints HTTP expostos pelo backend FastAPI do Hospital Reuniões.
 
 | Método | Rota | O que faz | Auth |
 |--------|------|-----------|------|
-| GET | `/contas-medicas/operadoras/{sigla}` | A memória da operadora para a tela: cabeçalho, regras, tabelas e histórico de versões. | ✅ |
+| GET | `/contas-medicas/operadoras/{sigla}` | A memória da operadora para a tela: cabeçalho, regras, tabelas, histórico | ✅ |
+| POST | `/contas-medicas/operadoras/{sigla}/regras` | Validar regra: a regra ensinada entra vigente numa versão nova da memória. | ✅ |
+| POST | `/contas-medicas/operadoras/{sigla}/regras/proposta` | A IA propõe a regra no formato da memória: a regra, o parâmetro que | ✅ |
 | PUT | `/contas-medicas/operadoras/{sigla}/regras/{codigo}` | Edita a regra vigente: versão nova da memória, com o texto anterior guardado. | ✅ |
 | POST | `/contas-medicas/operadoras/{sigla}/regras/{codigo}/decisao` | Decide a regra pendente: vira vigente, com quem validou e a data, numa versão nova. | ✅ |
 
@@ -139,6 +152,8 @@ Endpoints HTTP expostos pelo backend FastAPI do Hospital Reuniões.
 | POST | `/contas-medicas/operadoras/memoria` | Importa o arquivo de memória: versão nova, vigente, com as regras dela. | ✅ |
 | GET | `/contas-medicas/operadoras/{sigla}/memoria` | A memória vigente no formato do arquivo, gerada do banco com o cabeçalho inteiro, para baixar. | ✅ |
 | POST | `/contas-medicas/operadoras/{sigla}/tabelas` | Carrega o CSV como uma versão nova da tabela da categoria, ao lado das anteriores. | ✅ |
+| POST | `/contas-medicas/operadoras/{sigla}/tabelas/mapeada` | Grava a tabela lida pelo mapeamento confirmado como uma versão nova da categoria. | ✅ |
+| POST | `/contas-medicas/operadoras/{sigla}/tabelas/proposta` | O mapeamento das colunas (da IA, de um arquivo já confirmado ou o ajuste | ✅ |
 | GET | `/contas-medicas/planos` | Os nomes de plano que o MV imprime, cada um com a operadora e a coluna de preço. | ✅ |
 | POST | `/contas-medicas/planos` | Cadastra um nome de plano do MV. Sem cadastro, a conta desse plano é recusada no envio. | ✅ |
 | GET | `/contas-medicas/setores` | Os setores como o MV imprime, cada um com a acomodação. | ✅ |
@@ -491,4 +506,4 @@ Endpoints HTTP expostos pelo backend FastAPI do Hospital Reuniões.
 
 ---
 
-**Totais:** 275 endpoints em 42 routers · 94% exigem auth.
+**Totais:** 285 endpoints em 43 routers · 94% exigem auth.

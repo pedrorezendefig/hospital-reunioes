@@ -55,7 +55,7 @@ from typing import Any
 
 from app.services import storage
 from app.services import transcricao_extractor as orcamento
-from app.services.contas_medicas import dicionario_ia, passo_a, passo_b
+from app.services.contas_medicas import dicionario_ia, passo_a, passo_b, passo_c
 from app.services.contas_medicas import prontuario as leitura_do_prontuario
 from app.services.contas_medicas.conferencia import Conferencia, ProntuarioLido, conferir
 from app.services.contas_medicas.conteudo import Conteudo, ler_conteudo
@@ -477,6 +477,49 @@ def _pipeline(supabase, conta: dict, cronometro: _Cronometro) -> None:
         },
     )
     logger.info("[ContasMedicas] Conta %s pronta em %ss", conta["id"], tempos["total"])
+    # Depois da conta pronta: o Passo C não atrasa o A fazer da faturista nem
+    # entra no tempo das etapas, e a demora dele não conta no prazo da análise.
+    _lembrar_a_coordenacao(
+        supabase,
+        conta,
+        operadora_id=operadora_id,
+        lida=lida,
+        prontuario=prontuario,
+        eventos=eventos,
+        preco=busca_de_preco,
+        coluna=conferencia.coluna,
+    )
+
+
+def _lembrar_a_coordenacao(
+    supabase,
+    conta: dict,
+    *,
+    operadora_id: str,
+    lida: Conta,
+    prontuario: ProntuarioLido,
+    eventos: dict[str, Any],
+    preco,
+    coluna: str | None,
+) -> None:
+    """O Passo C (#1143): os lembretes da coordenação, depois do Passo A. A
+    faturista não sabe que eles existem: fica fora do cronômetro (o tempo das
+    etapas vai para a conta dela) e a falha só vai para o log, sem mudar a
+    situação da conta."""
+    try:
+        passo_c.lembrar_a_coordenacao(
+            supabase,
+            conta_id=conta["id"],
+            atendimento_id=conta["atendimento_id"],
+            operadora_id=operadora_id,
+            conta=lida,
+            prontuario=prontuario,
+            eventos=eventos,
+            preco=preco,
+            coluna=coluna,
+        )
+    except Exception as erro:
+        logger.error("[ContasMedicas] Conta %s sem o Passo C: %s em %s", conta["id"], type(erro).__name__, _onde(erro))
 
 
 def _memoria_lida(memoria: dict) -> MemoriaLida:

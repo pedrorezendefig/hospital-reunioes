@@ -82,6 +82,10 @@ ROTAS_TOKENIZADAS = [
 PARAMS_DE_SEGREDO = {"token"}
 PARAMS_SEM_SEGREDO = {
     "anexo_id",
+    # UUID do Cenário da Conferência da coordenação (issue #1143). Nao e
+    # credencial: a rota exige "conferencia da coordenacao" e "incluir regra
+    # operacional", e o id sozinho nao abre porta nenhuma.
+    "cenario_id",
     "codigo",
     "comentario_id",
     # UUID da Conta de Contas médicas (issue #1121). Nao e credencial: o Guia
@@ -111,6 +115,10 @@ PARAMS_SEM_SEGREDO = {
     "identificador",
     "index",
     "item_id",
+    # UUID do Lembrete da Conferência da coordenação (issue #1143). Nao e
+    # credencial: a marcacao exige "conferencia da coordenacao", e o id sozinho
+    # nao abre porta nenhuma.
+    "lembrete_id",
     # UUID da linha da Conversa da Demanda (issue #638). Nao e credencial: a
     # rota exige `require_super_admin`, e a edicao ainda amarra a Demanda do
     # caminho, entao o id sozinho nao abre porta nenhuma.

@@ -1,7 +1,7 @@
 #!/bin/bash
 # Coleta do hr-ondas: um JSON numa linha, lido de fontes que já existem (só leitura).
 # PRDs, ondas e fases: o recorte do coletor do OS (collect.py --recorte), só dos PRDs com onda
-# viva; com --todos, o /api/data inteiro do Hospital OS (8799) · `claude agents --json`: sessões vivas ·
+# viva nesta máquina ou com fatia de PR aberto (de qualquer sócio); com --todos, o /api/data inteiro do Hospital OS (8799) · `claude agents --json`: sessões vivas ·
 # $TMPDIR/fechar_onda/<sessao>/*.sql: migrations que a subida pediu ·
 # /api/health de produção: a última migration aplicada ·
 # transcript de cada sessão de onda (hooks/sessao.py): o shell em curso e as subidas ·
@@ -112,7 +112,7 @@ if [ $fresco = 1 ]; then minimo=30; url="$OS_URL?fresh=1"; else minimo=300; url=
 if [ "$idade" -ge "$minimo" ] && mkdir "$TRAVA" 2>/dev/null; then
   trap 'rmdir "$TRAVA" 2>/dev/null' EXIT
   agora=$(( $(date +%s) * 1000 ))
-  # Só os PRDs com sessão de onda viva (~6 pontos de GraphQL); --todos, ou árvore sem o
+  # Só os PRDs com sessão de onda viva ou PR aberto (~7 pontos de GraphQL); --todos, ou árvore sem o
   # recorte (branch antiga), cai no /api/data inteiro do OS (~35 pontos)
   bruto=""
   if [ $todos = 0 ]; then
