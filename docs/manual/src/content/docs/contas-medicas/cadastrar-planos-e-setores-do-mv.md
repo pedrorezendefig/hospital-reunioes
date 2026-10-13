@@ -2,7 +2,7 @@
 title: Cadastrar planos e setores do MV
 description: Ensinar ao sistema de que operadora é cada plano e que acomodação tem cada setor.
 prd: [1113]
-draft: true
+draft: false
 papel: [Gestão de contas médicas, Diretoria]
 sidebar:
   order: 7

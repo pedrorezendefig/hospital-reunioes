@@ -2,7 +2,7 @@
 title: Como a conta é conferida
 description: Como o sistema junta conta e prontuário, conta as diárias, decide o que vai para validação e o que guarda da paciente.
 prd: [1113, 1128]
-draft: true
+draft: false
 sidebar:
   order: 30
 ---

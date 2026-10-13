@@ -2,7 +2,7 @@
 title: Enviar um contrato e acompanhar o reajuste
 description: Ver quando vence o contrato de cada operadora e atualizar o contrato ou o aditivo pela tela.
 prd: [1129]
-draft: true
+draft: false
 papel: [Gestão de contas médicas, Diretoria, Credenciamento]
 sidebar:
   order: 10

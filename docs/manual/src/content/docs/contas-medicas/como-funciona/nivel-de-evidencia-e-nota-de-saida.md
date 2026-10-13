@@ -2,7 +2,7 @@
 title: Nível de evidência e nota de saída
 description: Quanto o prontuário prova cada linha, como entra o remédio "se necessário" e o que a nota de saída mede.
 prd: [1128]
-draft: true
+draft: false
 sidebar:
   order: 32
 ---

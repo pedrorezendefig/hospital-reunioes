@@ -2,7 +2,7 @@
 title: Novidades
 description: O que mudou em Contas médicas, da entrega mais recente para a mais antiga.
 prd: [1113, 1128, 1129]
-draft: true
+draft: false
 sidebar:
   order: 90
 ---

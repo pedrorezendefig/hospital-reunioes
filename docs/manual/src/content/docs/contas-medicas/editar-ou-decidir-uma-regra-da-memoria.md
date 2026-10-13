@@ -2,7 +2,7 @@
 title: Editar ou decidir uma regra da memória
 description: Mudar o texto de uma regra vigente ou decidir uma regra pendente, pela tela, com o histórico guardado.
 prd: [1129]
-draft: true
+draft: false
 papel: [Gestão de contas médicas, Diretoria]
 sidebar:
   order: 6

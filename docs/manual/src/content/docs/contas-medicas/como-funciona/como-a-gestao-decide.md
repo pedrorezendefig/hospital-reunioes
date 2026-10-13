@@ -2,7 +2,7 @@
 title: Como a gestão decide e o que volta para a conta
 description: A versão da memória, o caminho da linha Validar até o Retorno, o que só a coordenadora vê e quando chega o aviso de contrato.
 prd: [1129]
-draft: true
+draft: false
 sidebar:
   order: 31
 ---

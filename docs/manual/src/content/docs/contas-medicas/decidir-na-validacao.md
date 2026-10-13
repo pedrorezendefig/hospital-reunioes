@@ -2,7 +2,7 @@
 title: Decidir na Validação
 description: Decidir por tema o que espera a gestão, das regras pendentes às observações do time.
 prd: [1129]
-draft: true
+draft: false
 papel: [Gestão de contas médicas, Diretoria]
 video: decidir-na-validacao
 sidebar:

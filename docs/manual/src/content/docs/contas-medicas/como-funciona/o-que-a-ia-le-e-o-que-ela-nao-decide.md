@@ -2,7 +2,7 @@
 title: O que a IA lê e o que ela não decide
 description: O que a inteligência artificial faz na conta, o que fica com o programa, por que toda linha tem página e trecho e quanto custa cada conta.
 prd: [1128]
-draft: true
+draft: false
 sidebar:
   order: 31
 ---

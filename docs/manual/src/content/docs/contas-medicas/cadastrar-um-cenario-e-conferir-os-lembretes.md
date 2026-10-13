@@ -2,7 +2,7 @@
 title: Cadastrar um cenário e conferir os lembretes
 description: Dizer quais insumos conferir quando um procedimento aparece no prontuário e fazer a segunda checagem das contas.
 prd: [1129]
-draft: true
+draft: false
 papel: [Coordenadora de faturamento, Gestão de contas médicas, Diretoria]
 sidebar:
   order: 9

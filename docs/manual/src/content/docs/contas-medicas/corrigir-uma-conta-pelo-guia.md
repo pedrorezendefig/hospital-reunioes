@@ -2,7 +2,7 @@
 title: Corrigir uma conta pelo guia
 description: Corrigir no MV o que o guia aponta, marcar cada linha e concluir a conta.
 prd: [1113, 1128]
-draft: true
+draft: false
 papel: [Faturista]
 video: corrigir-uma-conta-pelo-guia
 sidebar:

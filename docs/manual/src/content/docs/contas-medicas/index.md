@@ -2,7 +2,7 @@
 title: Contas médicas
 description: Confira a conta de internação contra o prontuário antes de mandar para a operadora.
 prd: [1113, 1128, 1129]
-draft: true
+draft: false
 sidebar:
   order: 1
 ---
