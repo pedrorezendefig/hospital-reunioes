@@ -93,7 +93,7 @@ O texto do prontuário vai à IA sem o nome da paciente, e o provedor não guard
 
 O custo de cada chamada fica gravado: quantos tokens entraram e saíram, quantos vieram do cache e quanto custou, em dólar, e cada conta guarda a soma das chamadas dela, inclusive as de uma nova análise. O modelo de inteligência artificial de cada tarefa é trocado numa configuração do servidor, sem programador.
 
-Quem tem a permissão de regra contratual e tabelas vê no Guia o botão "Reanalisar", nas contas A fazer e Em correção. A conta volta para a fila e é analisada de novo, com a memória e as tabelas de agora; as linhas que a faturista já marcou ficam como estão, e as sem marcação são trocadas pelas da análise nova.
+Quem tem a permissão de regra contratual e tabelas vê no Guia o botão "Reanalisar", nas contas A fazer e Em correção. A conta volta para a fila e é analisada de novo, com a memória e as tabelas de agora; as linhas que a faturista já marcou ficam como estão, e as sem marcação são trocadas pelas da análise nova. A faturista da conta vê o botão "Reanalisar com a regra nova" só quando a conta tem a marca "regra nova desde a análise"; reanalisar sem regra nova continua com quem tem a permissão de regra contratual e tabelas.
 
 ## O Guia
 
