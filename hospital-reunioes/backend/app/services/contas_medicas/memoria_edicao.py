@@ -147,8 +147,14 @@ def _gravar_versao(
     mudancas: dict[str, dict[str, Any]],
     autor_id: str | None,
     resumo: str,
+    *,
+    novas: list[dict[str, Any]] = (),
+    parametros: dict[str, Any] | None = None,
 ) -> dict:
-    """A versão nova com as regras da vigente e as `mudancas` (por código), já vigente."""
+    """A versão nova com as regras da vigente e as `mudancas` (por código), já vigente.
+
+    `novas` são regras que não existiam (a regra ensinada pela tela), com o
+    histórico sem texto anterior; `parametros` troca o cabeçalho da vigente."""
     existentes = {
         v["versao"]
         for v in supabase.table("cm_memoria_versao").select("versao").eq("operadora_id", operadora_id).execute().data
@@ -163,7 +169,10 @@ def _gravar_versao(
                 "operadora_id": operadora_id,
                 "versao": versao,
                 # O cabeçalho inteiro, chave desconhecida incluída, com a versão nova.
-                "parametros_json": {**(vigente.get("parametros_json") or {}), "versao_memoria": versao},
+                "parametros_json": {
+                    **((vigente.get("parametros_json") if parametros is None else parametros) or {}),
+                    "versao_memoria": versao,
+                },
                 "vigente": False,
                 "autor_id": autor_id,
                 "resumo": resumo,
@@ -179,13 +188,15 @@ def _gravar_versao(
         copia["memoria_versao_id"] = nova["id"]
         copia.update(mudancas.get(regra["codigo"], {}))
         copias.append(copia)
+    copias += [{**regra, "memoria_versao_id": nova["id"]} for regra in novas]
     gravadas = supabase.table("cm_regra").insert(copias).execute().data if copias else []
 
     antes = {regra["codigo"]: regra for regra in regras}
+    codigos_novos = {regra["codigo"] for regra in novas}
     for gravada in gravadas:
-        if gravada["codigo"] not in mudancas:
+        if gravada["codigo"] not in mudancas and gravada["codigo"] not in codigos_novos:
             continue
-        anterior = antes[gravada["codigo"]]
+        anterior = {} if gravada["codigo"] in codigos_novos else antes[gravada["codigo"]]
         supabase.table("cm_regra_historico").insert(
             {
                 "regra_id": gravada["id"],

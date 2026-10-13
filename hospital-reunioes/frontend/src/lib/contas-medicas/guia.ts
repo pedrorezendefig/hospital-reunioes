@@ -89,6 +89,8 @@ export interface Guia {
   reenvio?: Reenvio | null;
   /** O botão "Reenviar conta corrigida": a conta concluída. */
   pode_reenviar?: boolean;
+  /** A conta foi analisada com uma memória que já mudou (issue #1141): marca e "Reanalisar com a regra nova". */
+  regra_nova_desde_analise?: boolean;
 }
 
 export const ROTULO_REENVIO: Record<MarcaDoReenvio, string> = {

@@ -126,8 +126,21 @@ function memoria(permissoes: string[]) {
       },
     ],
     permissoes,
+    contas_com_regra_nova: contasComRegraNova,
   };
 }
+
+const PROPOSTA = {
+  regra: {
+    secao: "DIA",
+    texto: "Transferência de setor antes das 12h não gera diária extra no setor de origem.",
+    tipo: "CONTRATUAL",
+    origem: "PRÁTICA",
+  },
+  parametro: { chave: "diaria.hora_vencimento", antes: "10:00", depois: "12:00" },
+  conflitos: [{ codigo: "ALFA-DIA-02", texto: "Transferência antes das 10h não gera diária extra." }],
+  efeito_no_guia: "A diária do dia da transferência deixa de ser cobrada no setor de origem.",
+};
 
 type Chamada = { url: string; metodo: string; corpo: unknown };
 
@@ -135,6 +148,9 @@ let chamadas: Chamada[];
 let permissoes: string[];
 let statusDaMemoria: number;
 let respostaDaMudanca: { status: number; corpo: unknown };
+let respostaDaProposta: { status: number; corpo: unknown };
+let respostaDoEnsino: { status: number; corpo: unknown };
+let contasComRegraNova: unknown[];
 
 function resposta(status: number, corpo: unknown, cabecalhos: Record<string, string> = {}): Response {
   return {
@@ -161,6 +177,15 @@ function backend() {
           "content-disposition": 'attachment; filename="MEMORIA-ALFA-v1.2.md"',
         });
       }
+      if (url === `${ROTA}/regras/proposta` && metodo === "POST") {
+        return resposta(respostaDaProposta.status, respostaDaProposta.corpo);
+      }
+      if (url === `${ROTA}/regras` && metodo === "POST") {
+        return resposta(respostaDoEnsino.status, respostaDoEnsino.corpo);
+      }
+      if (url.endsWith("/reanalisar") && metodo === "POST") {
+        return resposta(200, { situacao: "NA_FILA" });
+      }
       if (url.startsWith(`${ROTA}/regras/`) && (metodo === "PUT" || metodo === "POST")) {
         return resposta(respostaDaMudanca.status, respostaDaMudanca.corpo);
       }
@@ -178,6 +203,12 @@ beforeEach(() => {
     status: 200,
     corpo: { operadora: "ALFA", versao: "1.3", regra: "ALFA-DIA-01", outras_operadoras: [] },
   };
+  respostaDaProposta = { status: 200, corpo: PROPOSTA };
+  respostaDoEnsino = {
+    status: 200,
+    corpo: { operadora: "ALFA", versao: "1.3", regra: "ALFA-DIA-03", contas_com_regra_nova: 2 },
+  };
+  contasComRegraNova = [];
   backend();
 });
 
@@ -433,5 +464,117 @@ describe("tabelas, histórico e exportação", () => {
     expect(chamadas.some((c) => c.url === `${ROTA}/memoria` && c.metodo === "GET")).toBe(true);
     expect((clique.mock.instances[0] as unknown as HTMLAnchorElement).download).toBe("MEMORIA-ALFA-v1.2.md");
     clique.mockRestore();
+  });
+});
+
+describe("ensinar uma regra nova (issue #1141)", () => {
+  async function proporRegra() {
+    await abrir();
+    fireEvent.click(screen.getByRole("button", { name: "Ensinar uma regra nova" }));
+    fireEvent.change(screen.getByLabelText("A regra, em linguagem comum"), {
+      target: { value: "Na ALFA a transferência antes do meio-dia não gera diária extra." },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Propor regra" }));
+    return screen.findByRole("form", { name: "Proposta da regra nova" });
+  }
+
+  it("a proposta mostra antes e depois, os conflitos e o efeito no Guia, sem gravar nada", async () => {
+    const proposta = await proporRegra();
+
+    expect(chamadas.find((c) => c.url === `${ROTA}/regras/proposta`)?.corpo).toEqual({
+      texto: "Na ALFA a transferência antes do meio-dia não gera diária extra.",
+    });
+    const antes = within(proposta).getByRole("region", { name: "Antes" }).textContent ?? "";
+    expect(antes).toContain("diaria.hora_vencimento: 10:00");
+    expect(antes).toContain("ALFA-DIA-02");
+    expect(antes).toContain("Transferência antes das 10h não gera diária extra.");
+    const depois = within(proposta).getByRole("region", { name: "Depois" }).textContent ?? "";
+    expect(depois).toContain("Transferência de setor antes das 12h não gera diária extra no setor de origem.");
+    expect(depois).toContain("diaria.hora_vencimento: 12:00");
+    expect(within(proposta).getByRole("region", { name: "Conflitos" }).textContent).toContain("ALFA-DIA-02");
+    expect(proposta.textContent).toContain("A diária do dia da transferência deixa de ser cobrada no setor de origem.");
+    expect(chamadas.some((c) => c.url === `${ROTA}/regras` && c.metodo === "POST")).toBe(false);
+  });
+
+  it("Validar regra manda a regra editada e o parâmetro, avisa a versão e as contas marcadas e relê a memória", async () => {
+    const proposta = await proporRegra();
+    fireEvent.change(within(proposta).getByLabelText("Texto da regra"), {
+      target: { value: "Transferência de setor antes das 12h não gera diária extra na origem." },
+    });
+    fireEvent.click(within(proposta).getByRole("button", { name: "Validar regra" }));
+
+    const aviso = await screen.findByRole("status");
+    expect(aviso.textContent).toContain("Versão 1.3 da memória criada com a regra ALFA-DIA-03");
+    expect(aviso.textContent).toContain("2 contas abertas");
+    expect(chamadas.find((c) => c.url === `${ROTA}/regras` && c.metodo === "POST")?.corpo).toEqual({
+      secao: "DIA",
+      texto: "Transferência de setor antes das 12h não gera diária extra na origem.",
+      tipo: "CONTRATUAL",
+      origem: "PRÁTICA",
+      parametro: { chave: "diaria.hora_vencimento", valor: "12:00" },
+    });
+    await waitFor(() => expect(leiturasDaMemoria()).toBe(2));
+  });
+
+  it("sem marcar o parâmetro, a regra vai sem ele; Descartar fecha sem gravar", async () => {
+    let proposta = await proporRegra();
+    fireEvent.click(within(proposta).getByRole("button", { name: "Descartar" }));
+    expect(screen.queryByRole("form", { name: "Proposta da regra nova" })).toBeNull();
+    expect(chamadas.some((c) => c.url === `${ROTA}/regras` && c.metodo === "POST")).toBe(false);
+
+    fireEvent.click(screen.getByRole("button", { name: "Propor regra" }));
+    proposta = await screen.findByRole("form", { name: "Proposta da regra nova" });
+    fireEvent.click(within(proposta).getByLabelText(/Mudar também o parâmetro diaria.hora_vencimento/));
+    fireEvent.click(within(proposta).getByRole("button", { name: "Validar regra" }));
+
+    await screen.findByRole("status");
+    const envio = chamadas.find((c) => c.url === `${ROTA}/regras` && c.metodo === "POST");
+    expect((envio?.corpo as Record<string, unknown>).parametro).toBeNull();
+  });
+
+  it("mostra a recusa da proposta como veio", async () => {
+    respostaDaProposta = { status: 503, corpo: { detail: "A IA não respondeu agora. Tente de novo em alguns minutos." } };
+    await abrir();
+    fireEvent.click(screen.getByRole("button", { name: "Ensinar uma regra nova" }));
+    fireEvent.change(screen.getByLabelText("A regra, em linguagem comum"), { target: { value: "Qualquer regra." } });
+    fireEvent.click(screen.getByRole("button", { name: "Propor regra" }));
+
+    expect((await screen.findByRole("alert")).textContent).toContain("A IA não respondeu agora.");
+  });
+});
+
+describe("as contas com regra nova desde a análise (issue #1141)", () => {
+  const CONTA = { id: "conta-1", numero_atendimento: "31245", numero_conta: "48811", situacao: "EM_CORRECAO" };
+
+  it("lista a conta com a marca e Reanalisar com a regra nova manda a conta para a fila", async () => {
+    contasComRegraNova = [CONTA];
+    await abrir();
+
+    const secao = screen.getByRole("region", { name: "Contas com regra nova desde a análise" });
+    expect(secao.textContent).toContain("31245");
+    expect(secao.textContent).toContain("conta 48811");
+    expect(secao.textContent).toContain("Regra nova desde a análise");
+    fireEvent.click(within(secao).getByRole("button", { name: "Reanalisar com a regra nova" }));
+
+    await waitFor(() => expect(leiturasDaMemoria()).toBe(2));
+    expect(chamadas.find((c) => c.url.endsWith("/reanalisar"))?.url).toBe(
+      "/api/contas-medicas/contas/conta-1/reanalisar",
+    );
+  });
+
+  it("sem a permissão de regra contratual, a conta aparece sem o botão", async () => {
+    contasComRegraNova = [CONTA];
+    permissoes = ["incluir_regra_operacional"];
+    await abrir();
+
+    const secao = screen.getByRole("region", { name: "Contas com regra nova desde a análise" });
+    expect(secao.textContent).toContain("31245");
+    expect(within(secao).queryByRole("button", { name: "Reanalisar com a regra nova" })).toBeNull();
+  });
+
+  it("sem conta marcada, a seção não aparece", async () => {
+    await abrir();
+
+    expect(screen.queryByRole("region", { name: "Contas com regra nova desde a análise" })).toBeNull();
   });
 });
