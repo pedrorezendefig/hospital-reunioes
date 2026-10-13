@@ -1,7 +1,7 @@
 ---
 title: Contas médicas
 description: Confira a conta de internação contra o prontuário antes de mandar para a operadora.
-prd: [1113, 1128]
+prd: [1113, 1128, 1129]
 draft: true
 sidebar:
   order: 1
@@ -33,15 +33,22 @@ linha começa pelo verbo: **Incluir**, **Ajustar quantidade**, **Retirar**,
 
 - **Faturista** envia as contas e corrige cada uma pelo guia. Vê só as contas
   que ela mesma enviou.
-- **Gestão de contas médicas** e **Diretoria** carregam a memória e as tabelas
-  de cada operadora e cadastram os planos e os setores do MV.
+- **Coordenadora de faturamento** faz a segunda checagem das contas pelos
+  lembretes da **Coordenação**.
+- **Gestão de contas médicas** e **Diretoria** carregam e editam a memória e as
+  tabelas de cada operadora, cadastram os planos e os setores do MV e decidem
+  na **Validação**.
+- **Credenciamento** acompanha os **Contratos** e recebe o aviso de reajuste.
+- A **Diretoria** decide quem tem cada perfil, na **Habilitação**.
 - **Coordenadora de faturamento**, **Gestão de contas médicas** e **Diretoria**
   leem o **Painel**: a nota da semana e onde a perda da conta nasce.
 
 ## A tela que reúne tudo
 
 Em **Contas médicas**, no menu da esquerda, fica a área de envio, a **Fila** com
-as contas na ordem em que chegaram e a aba **Concluídas**.
+as contas na ordem em que chegaram e a aba **Concluídas**. No alto, cada pessoa
+vê os botões do perfil dela: **Painel**, **Validação**, **Coordenação**,
+**Contratos**, **Operadoras** e **Habilitação**.
 
 ![Tela Contas médicas com a área de envio e a fila de contas](../../../assets/contas-medicas/contas.png)
 

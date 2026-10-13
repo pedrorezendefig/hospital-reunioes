@@ -1,0 +1,426 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=1920, height=1080" />
+<title>Manual · Contas médicas · Decidir na Validação</title>
+<script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js" integrity="sha384-sG0Hv1tP1lZCk9KQmrIbY/XNwi+OY84GQqhMscbnsoBFqAz8KNCil1kvfL3Hbbk2" crossorigin="anonymous"></script>
+<script type="application/json" id="manual-video-meta">
+{
+ "modulo": "contas-medicas",
+ "slug": "decidir-na-validacao",
+ "pagina": "contas-medicas/decidir-na-validacao.md",
+ "prd": [
+  1129
+ ],
+ "issues": [
+  1147
+ ],
+ "app_version": "0.191.0",
+ "gerado_em": "2026-10-13T05:50:00-03:00"
+}
+</script>
+<style>
+  @font-face {
+    font-family: "HP Simplified";
+    src: url("assets/fonts/HPSimplified_Rg.ttf") format("truetype");
+    font-weight: 400;
+    font-style: normal;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { width: 1920px; height: 1080px; overflow: hidden; background: #fff; }
+  body { font-family: "HP Simplified", system-ui, sans-serif; }
+
+  :root {
+    --navy: #2B2E7E; --navy-light: #3B6FB6; --navy-dark: #1A1C4E;
+    --app-text: #1E293B; --app-sec: #64748B; --app-border: #E2E8F0;
+  }
+
+  #root { position: relative; width: 1920px; height: 1080px; overflow: hidden; }
+  .scene { position: absolute; inset: 0; background: #fff; overflow: hidden; }
+
+  /* Palco desenhado em 960x540 e ampliado 2x, a mesma régua das outras
+     composições do Manual. */
+  .palco { position: relative; width: 960px; height: 540px; transform: scale(2); transform-origin: top left; font-size: 12px; color: var(--app-text); background: #EEF1F6; }
+
+  .slide { display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding: 0 160px; }
+  .eyebrow { font-size: 26px; letter-spacing: .22em; text-transform: uppercase; color: var(--navy-light); font-weight: 700; }
+  .titulo { font-size: 72px; line-height: 1.12; color: var(--navy); font-weight: 700; max-width: 1560px; margin: 34px 0 30px; }
+  .sub { font-size: 36px; color: var(--app-sec); max-width: 1420px; line-height: 1.5; }
+  .selo-abertura { margin-top: 40px; display: inline-flex; gap: 14px; }
+  .selo-abertura span { border: 2px solid var(--navy); border-radius: 999px; padding: 10px 26px; font-size: 26px; font-weight: 700; color: var(--navy); background: #F5F6FE; }
+
+  .fecho-titulo { font-size: 52px; color: var(--navy); font-weight: 700; margin-bottom: 40px; }
+  .carimbo { font-size: 30px; color: var(--app-sec); }
+  .fecho-org { font-size: 26px; color: #64748B; margin-top: 16px; }
+
+  /* ===== janela de navegador ===== */
+  .janela { position: absolute; left: 30px; top: 28px; width: 580px; height: 470px; border-radius: 12px; background: #fff; box-shadow: 0 26px 60px -20px rgba(0,0,0,.42); overflow: hidden; border: 1px solid #D8DEE9; }
+  .barra { height: 20px; background: #E7EBF2; display: flex; align-items: center; gap: 4px; padding: 0 8px; border-bottom: 1px solid #D8DEE9; }
+  .barra i { width: 5px; height: 5px; border-radius: 50%; background: #C3CBD8; display: block; }
+  .barra .url { margin-left: 8px; flex: 1; height: 11px; border-radius: 6px; background: #fff; border: 1px solid #D8DEE9; font-size: 6.4px; color: #5A6273; display: flex; align-items: center; padding: 0 6px; }
+  .tela { position: absolute; left: 0; right: 0; top: 20px; bottom: 0; background: #F7F9FC; overflow: hidden; }
+
+  /* ===== moldura do app ===== */
+  .app-topo { position: absolute; left: 0; right: 0; top: 0; height: 24px; background: #fff; border-bottom: 1px solid var(--app-border); display: flex; align-items: center; justify-content: space-between; padding: 0 9px; }
+  .app-topo .marca { display: flex; align-items: center; gap: 4px; }
+  .app-topo .direita { display: flex; align-items: center; gap: 6px; color: #94A3B8; }
+  .app-topo .avatar { width: 13px; height: 13px; border-radius: 50%; background: var(--navy); color: #fff; font-size: 6px; font-weight: 700; display: flex; align-items: center; justify-content: center; }
+  .app-menu { position: absolute; left: 0; top: 24px; bottom: 0; width: 92px; background: #fff; border-right: 1px solid var(--app-border); padding: 7px 6px; }
+  .mi { display: flex; align-items: center; gap: 5px; font-size: 6.6px; color: #56606F; padding: 3.5px 5px; border-radius: 5px; margin-bottom: 2px; }
+  .mi.ativo { background: rgba(43,46,126,.08); color: var(--navy); font-weight: 700; }
+  .app-corpo { position: absolute; left: 92px; right: 0; top: 24px; bottom: 0; padding: 9px 14px; overflow: hidden; }
+
+  .h-pag { font-size: 11.5px; font-weight: 700; color: #0F172A; }
+  .dek { font-size: 6.2px; color: #56606F; margin-top: 1.5px; }
+  .cartao { background: #fff; border: 1px solid var(--app-border); border-radius: 9px; }
+  .etq { display: inline-flex; align-items: center; padding: 1.5px 5px; border-radius: 999px; font-size: 5.2px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; }
+  .voltar { display: inline-flex; align-items: center; gap: 3px; font-size: 6.2px; color: #64748B; }
+
+  /* ===== tela Contas médicas ===== */
+  .cabeca { display: flex; align-items: center; justify-content: space-between; }
+  .atalhos { display: flex; gap: 4px; }
+  .atalho { display: inline-flex; align-items: center; gap: 3px; border: 1px solid var(--app-border); background: #fff; border-radius: 5px; padding: 3px 6px; font-size: 6.2px; color: #334155; }
+  .atalho .n { background: var(--navy); color: #fff; border-radius: 999px; padding: 0 3.5px; font-size: 5.2px; font-weight: 700; }
+  .soltar { border: 1.4px dashed #CBD5E1; border-radius: 9px; background: #fff; text-align: center; padding: 14px 0 15px; margin-top: 9px; }
+  .bt { display: inline-flex; align-items: center; padding: 3px 7px; border-radius: 5px; font-size: 5.8px; font-weight: 600; }
+  .bt-cheio { background: var(--navy); color: #fff; }
+  .bt-claro { background: #fff; color: #334155; border: 1px solid var(--app-border); }
+
+  /* ===== tela Validação ===== */
+  .numeros { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin-top: 7px; }
+  .numeros .cartao { padding: 6px 8px; }
+  .rot-num { font-size: 5.2px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: #64748B; }
+  .val-num { font-size: 12px; font-weight: 700; color: var(--navy); line-height: 1.2; }
+  .tema { background: #fff; border: 1px solid var(--app-border); border-radius: 9px; padding: 6px 9px; margin-top: 6px; }
+  .tema .topo { display: flex; align-items: flex-start; gap: 6px; }
+  .tema .topo .esq { flex: 1; }
+  .tema .t { font-size: 7px; font-weight: 700; color: #0F172A; margin-top: 2px; }
+  .tema .m { font-size: 5.4px; color: #64748B; margin-top: 1px; }
+  .tema .jogo { text-align: right; }
+  .tema .jogo span { display: block; font-size: 4.8px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: #64748B; }
+  .tema .jogo b { font-size: 8.4px; color: var(--navy); }
+  .regra-txt { font-size: 6.2px; color: #334155; border-left: 1.4px solid var(--app-border); padding-left: 5px; margin-top: 4px; }
+  .fala { font-size: 6px; color: #334155; background: #F8FAFC; border-radius: 5px; padding: 3px 5px; margin-top: 4px; }
+  .leitura { font-size: 6px; color: #475569; margin-top: 4px; }
+  .leitura b { color: #334155; }
+  .botoes { display: flex; gap: 4px; margin-top: 5px; }
+  .form { background: #F8FAFC; border: 1px solid var(--app-border); border-radius: 7px; padding: 5px 7px; margin-top: 5px; }
+  .form .lb { font-size: 5px; font-weight: 600; text-transform: uppercase; color: #64748B; }
+  .area { min-height: 16px; border: 1px solid var(--app-border); border-radius: 5px; margin-top: 3px; font-size: 6px; color: #1E293B; padding: 3px 5px; background: #fff; }
+  .ajuda { font-size: 5.2px; color: #64748B; margin-top: 3px; }
+  .ditar { display: inline-flex; align-items: center; gap: 2px; border: 1px solid var(--app-border); border-radius: 4px; padding: 1.5px 4px; font-size: 5.2px; color: #475569; background: #fff; }
+  .vazio { font-size: 6.4px; color: #64748B; margin-top: 8px; display: none; }
+  .baixado { position: absolute; right: 12px; bottom: 16px; background: #fff; border: 1px solid #D8DEE9; border-radius: 9px; box-shadow: 0 16px 34px -18px rgba(0,0,0,.3); padding: 5px 9px; font-size: 6.4px; font-weight: 700; color: #334155; opacity: 0; }
+
+  /* ===== dedo fantasma e legenda ===== */
+  .ghost { position: absolute; left: 0; top: 0; z-index: 40; opacity: 0; }
+  .ghost .pulse { position: absolute; left: -7px; top: -7px; width: 34px; height: 34px; border-radius: 50%; background: rgba(43,46,126,.28); opacity: 0; }
+  .passo { position: absolute; left: 632px; top: 150px; width: 300px; opacity: 0; }
+  .passo .n { display: inline-flex; align-items: center; justify-content: center; width: 30px; height: 30px; border-radius: 50%; background: var(--navy); color: #fff; font-size: 16px; font-weight: 700; }
+  .passo h3 { font-size: 24px; line-height: 1.25; color: var(--navy); font-weight: 700; margin: 12px 0 8px; }
+  .passo p { font-size: 16.5px; line-height: 1.5; color: #556076; }
+  .passo b { color: var(--app-text); }
+  .marcador { position: absolute; border: 1.5px solid var(--navy); border-radius: 7px; box-shadow: 0 0 0 3px rgba(43,46,126,.14); opacity: 0; z-index: 30; }
+  .rodape-v { position: absolute; left: 0; right: 0; bottom: 14px; text-align: center; font-size: 9.5px; color: #576070; letter-spacing: .04em; }
+</style>
+</head>
+<body>
+
+<div id="root" data-composition-id="main" data-start="0" data-width="1920" data-height="1080" data-duration="46" data-fps="30">
+
+  <!-- 1 · Abertura -->
+  <section id="c-abertura" class="clip scene slide" data-start="0" data-duration="4" data-track-index="1">
+    <div class="eyebrow" id="ab-eyebrow">Manual · Contas médicas</div>
+    <h1 class="titulo" id="ab-titulo">Decidir na Validação</h1>
+    <p class="sub" id="ab-sub">Decidir por tema o que espera a gestão, das regras pendentes às observações do time.</p>
+    <div class="selo-abertura" id="ab-selos"><span>Gestão de contas médicas</span><span>Diretoria</span></div>
+  </section>
+
+  <!-- 2 · A tarefa, passo a passo -->
+  <section id="c-tarefa" class="clip scene" data-start="4" data-duration="37" data-track-index="2">
+    <div class="palco" id="palco-tarefa"></div>
+  </section>
+
+  <!-- 3 · Fecho -->
+  <section id="c-fecho" class="clip scene slide" data-start="41" data-duration="5" data-track-index="3">
+    <div class="fecho-titulo" id="fc-titulo">Decidir na Validação</div>
+    <div class="carimbo" id="fc-carimbo">Manual · retrata o app em v0.191.0 · gerado em 13/10/2026</div>
+    <div class="fecho-org" id="fc-org">Hospital São Matheus · Manual da plataforma</div>
+  </section>
+
+</div>
+
+<script>
+const IC = {
+  marca: '<svg width="22" height="9" viewBox="0 0 100 42" fill="none" style="flex-shrink:0"><path d="M8 40 A24 24 0 0 1 56 40" stroke="#3B6FB6" stroke-width="6" stroke-linecap="round"/><path d="M44 40 A24 24 0 0 1 92 40" stroke="#1E3A8A" stroke-width="6" stroke-linecap="round"/></svg>',
+  sino: '<svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.268 21a2 2 0 0 0 3.464 0"/><path d="M3.262 15.326A1 1 0 0 0 4 17h16a1 1 0 0 0 .74-1.673C19.41 13.956 18 12.499 18 8A6 6 0 0 0 6 8c0 4.499-1.41 5.956-2.738 7.326"/></svg>',
+  alvo: '<svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg>',
+  megafone: '<svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m3 11 18-5v12L3 14v-3z"/><path d="M11.6 16.8a3 3 0 1 1-5.8-1.6"/></svg>',
+  recibo: '<svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 2v20l2-1 2 1 2-1 2 1 2-1 2 1 2-1 2 1V2l-2 1-2-1-2 1-2-1-2 1-2-1-2 1Z"/><path d="M14 8H8"/><path d="M16 12H8"/><path d="M13 16H8"/></svg>',
+  ajuda: '<svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><path d="M12 17h.01"/></svg>',
+  subir: '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#94A3B8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" x2="12" y1="3" y2="15"/></svg>',
+  seta: '<svg width="7" height="7" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 19-7-7 7-7"/><path d="M19 12H5"/></svg>',
+  brilho: '<svg width="7" height="7" viewBox="0 0 24 24" fill="none" stroke="#2B2E7E" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.9 5.8L20 11l-6.1 2.2L12 19l-1.9-5.8L4 11l6.1-2.2z"/></svg>',
+  mic: '<svg width="6" height="6" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M19 10v1a7 7 0 0 1-14 0v-1"/><path d="M12 18v4"/></svg>',
+};
+
+const moldura = (corpo) =>
+  `<div class="app-topo"><div class="marca">${IC.marca}<span style="font-size:6.2px;font-weight:700;color:#1E3A8A;line-height:1.1">HOSPITAL<br>SÃO MATHEUS</span></div>` +
+  `<div class="direita">${IC.sino}<div class="avatar">M</div></div></div>` +
+  `<div class="app-menu"><div class="mi">${IC.alvo}Reuniões e metas</div><div class="mi">${IC.megafone}Ouvidoria</div>` +
+  `<div class="mi ativo">${IC.recibo}Contas médicas</div><div class="mi" style="margin-top:3px">${IC.ajuda}Ajuda</div></div>` +
+  `<div class="app-corpo">${corpo}</div>`;
+
+const telaContas = moldura(`
+  <div class="cabeca"><div class="h-pag">Contas médicas</div>
+    <div class="atalhos"><span class="atalho">Painel</span><span class="atalho" id="bt-validacao">Validação</span>
+      <span class="atalho">Coordenação <span class="n">2</span></span><span class="atalho">Contratos</span><span class="atalho">Operadoras</span></div></div>
+  <div class="dek">Envie a conta e o prontuário do MV e receba a lista do que corrigir antes de mandar para a operadora.</div>
+  <div class="soltar">${IC.subir}<div style="font-size:6.4px;font-weight:700;color:#1E293B;margin-top:2px">Arraste aqui a conta e o prontuário do MV</div>
+    <span class="bt bt-cheio" style="margin-top:5px">Selecionar arquivos</span></div>`);
+
+const jogo = (valor) => `<div class="jogo"><span>Em jogo</span><b>R$ ${valor}</b></div>`;
+
+const telaValidacao = moldura(`
+  <div class="voltar">${IC.seta}Contas médicas</div>
+  <div class="h-pag" style="margin-top:2px">Validação</div>
+  <div class="dek">Regras pendentes, códigos bloqueados e observações do time, por tema, com quantas contas e quanto dinheiro esperam a sua decisão.</div>
+  <div class="numeros" id="bl-numeros">
+    <div class="cartao"><div class="rot-num">Aguardando decisão</div><div class="val-num" id="n-aguardando">4</div></div>
+    <div class="cartao"><div class="rot-num">Contas afetadas</div><div class="val-num" id="n-contas">3</div></div>
+    <div class="cartao"><div class="rot-num">R$ em jogo</div><div class="val-num" id="n-valor">R$ 2.813,00</div></div>
+  </div>
+
+  <div class="tema" id="t-regra">
+    <div class="topo"><div class="esq"><span class="etq" style="background:#FEF3C7;color:#92400E">Regra pendente</span>
+      <div class="t">Regra AURORA-DIA-02</div><div class="m">AURORA · 2 contas · desde 13/10/2026</div></div>${jogo("2.424,00")}</div>
+    <div class="regra-txt">Transferência de setor antes das 10h gera diária extra na origem.</div>
+    <div class="botoes" id="bts-regra"><span class="bt bt-cheio" id="bt-validar">Validar regra</span><span class="bt bt-claro">Deixar pendente</span></div>
+    <div class="form" id="fm-regra" style="display:none">
+      <div class="lb">Texto da regra AURORA-DIA-02</div>
+      <div class="area">Transferência de setor antes das 10h gera diária extra na origem.</div>
+      <div class="ajuda">Gravar cria uma versão nova da memória da operadora.</div>
+      <div class="botoes"><span class="bt bt-cheio" id="bt-confirmar">Confirmar e validar</span><span class="bt bt-claro">Cancelar</span></div>
+    </div>
+  </div>
+
+  <div class="tema" id="t-bloq">
+    <div class="topo"><div class="esq"><span class="etq" style="background:#FEE2E2;color:#991B1B">Código bloqueado</span>
+      <div class="t">Código 70095001 bloqueado</div><div class="m">AURORA · 1 conta · desde 13/10/2026</div></div>${jogo("389,00")}</div>
+    <div class="botoes"><span class="bt bt-cheio" id="bt-cadastro">Enviar ao cadastro</span><span class="bt bt-claro">Descartar</span></div>
+  </div>
+
+  <div class="tema" id="t-obs">
+    <div class="topo"><div class="esq"><span class="etq" style="background:#EEEEF6;color:#2B2E7E">Observação do time</span>
+      <div class="t">Observações sobre a regra AURORA-MED-02</div><div class="m">AURORA · 1 conta · desde 13/10/2026</div></div>${jogo("0,00")}</div>
+    <div class="fala">A AURORA-MED-02 vale para a dose extra? O pantoprazol de resgate não está na prescrição de horário.</div>
+    <div class="leitura" id="leitura">${IC.brilho} <b>Leitura da IA:</b> A regra atual não cobre o caso. Sugestão: editar a regra.</div>
+    <div class="botoes" id="bts-obs"><span class="bt bt-claro">Manter a regra</span><span class="bt bt-claro">Editar a regra</span><span class="bt bt-cheio" id="bt-responder">Responder ao time</span></div>
+    <div class="form" id="fm-obs" style="display:none">
+      <div class="area" id="resposta"></div>
+      <div style="display:flex;align-items:center;gap:4px;margin-top:3px"><span class="ditar">${IC.mic}Ditar</span><span class="ajuda" style="margin-top:0">Não dite nome nem dado de paciente.</span></div>
+      <div class="botoes"><span class="bt bt-cheio" id="bt-enviar">Enviar resposta</span><span class="bt bt-claro">Cancelar</span></div>
+    </div>
+  </div>
+
+  <div class="tema" id="t-termo">
+    <div class="topo"><div class="esq"><span class="etq" style="background:#F1F5F9;color:#475569">Termo do dicionário</span>
+      <div class="t">Termo FLUSH SF 10ML no dicionário</div><div class="m">desde 13/10/2026</div></div></div>
+    <div class="regra-txt" style="border:0;padding:0"><b>FLUSH SF 10ML</b> liga ao código 70060310 (Seringa preenchida com soro fisiológico 10 ml)</div>
+    <div class="botoes"><span class="bt bt-cheio" id="bt-termo">Confirmar</span><span class="bt bt-claro">Rejeitar</span></div>
+  </div>
+  <div class="vazio" id="vazio">Nada aguardando decisão.</div>
+  <div class="baixado" id="baixado">Lista do cadastro baixada</div>`);
+
+document.getElementById("palco-tarefa").innerHTML =
+  `<div style="position:absolute;inset:0;background:#EEF1F6"></div>` +
+  `<div class="janela" id="janela"><div class="barra"><i></i><i></i><i></i><div class="url">plataforma do hospital · contas médicas</div></div>` +
+  `<div class="tela" id="tela-contas">${telaContas}</div>` +
+  `<div class="tela" id="tela-validacao" style="opacity:0">${telaValidacao}</div></div>` +
+  `<div class="rodape-v">Manual · retrata o app em v0.191.0 · gerado em 13/10/2026</div>` +
+  `<div class="ghost" id="g1"><svg width="17" height="17" viewBox="0 0 24 24" fill="#16181d" stroke="#fff" stroke-width="1.4"><path d="M5 3l14 8-6 1.6L9.6 19z"/></svg><div class="pulse"></div></div>` +
+  `<div class="passo" id="p1"><div class="n">1</div><h3>Em Contas médicas, clique em Validação</h3><p>O botão fica no alto, para quem decide na validação.</p></div>` +
+  `<div class="passo" id="p2"><div class="n">2</div><h3>Leia os três números do topo</h3><p><b>Aguardando decisão</b>, <b>Contas afetadas</b> e <b>R$ em jogo</b>. O maior valor vem primeiro.</p></div>` +
+  `<div class="passo" id="p3"><div class="n">3</div><h3>Regra pendente: Validar regra</h3><p>Confira o texto e clique em <b>Confirmar e validar</b>. A memória ganha versão nova e as linhas voltam às contas.</p></div>` +
+  `<div class="passo" id="p4"><div class="n">4</div><h3>Código bloqueado: Enviar ao cadastro</h3><p>A lista para o cadastro do MV é baixada. <b>Descartar</b> fecha sem ação.</p></div>` +
+  `<div class="passo" id="p5"><div class="n">5</div><h3>Observação do time: leia a Leitura da IA</h3><p>Escolha <b>Manter a regra</b>, <b>Editar a regra</b> ou <b>Responder ao time</b>. A faturista vê a resposta no guia.</p></div>` +
+  `<div class="passo" id="p6"><div class="n">6</div><h3>Termo do dicionário: Confirmar ou Rejeitar</h3><p>Cada decisão tira o tema da fila. Fila vazia: <b>Nada aguardando decisão.</b></p></div>`;
+
+/* Marca de sobreposição permitida em tudo do palco: é uma réplica de tela. */
+const PALCO = document.getElementById("palco-tarefa");
+PALCO.querySelectorAll("*").forEach((el) => {
+  el.setAttribute("data-layout-allow-overlap", "");
+  el.setAttribute("data-layout-allow-occlusion", "");
+  el.setAttribute("data-layout-allow-overflow", "");
+});
+
+/* ============================================================
+   Timeline: uma só, pausada, com tempos absolutos
+   ============================================================ */
+window.__timelines = window.__timelines || {};
+const tl = gsap.timeline({ paused: true });
+const IR = { immediateRender: false };
+const surge = (sel, t, y) => tl.fromTo(sel, { opacity: 0, y: y === undefined ? 8 : y }, { opacity: 1, y: 0, duration: 0.4, ease: "power2.out", ...IR }, t);
+const some = (sel, t) => tl.to(sel, { opacity: 0, duration: 0.25 }, t);
+const nota = (sel, t, ate) => { surge(sel, t, 14); some(sel, ate); };
+const clique = (g, t) => tl.fromTo(`${g} .pulse`, { opacity: 0.9, scale: 0.4 }, { opacity: 0, scale: 1.25, duration: 0.42, ease: "power1.out", ...IR }, t);
+const move = (g, t, x, y, dx, dy) => {
+  tl.set(g, { x: x, y: y, opacity: 1 }, t);
+  tl.to(g, { x: dx, y: dy, duration: 0.7, ease: "power2.inOut" }, t + 0.2);
+};
+const mostra = (sel, t) => tl.fromTo(sel, { opacity: 0 }, { opacity: 1, duration: 0.3, ...IR }, t);
+const esconde = (sel, t) => tl.to(sel, { opacity: 0, duration: 0.3 }, t);
+const troca = (sel, texto, t) => {
+  tl.to(sel, { opacity: 0, duration: 0.12 }, t);
+  tl.set(sel, { innerText: texto }, t + 0.13);
+  tl.to(sel, { opacity: 1, duration: 0.12 }, t + 0.14);
+};
+const exibe = (sel, t) => tl.set(sel, { display: "block" }, t);
+const exibeFlex = (sel, t) => tl.set(sel, { display: "flex" }, t);
+const oculta = (sel, t) => tl.set(sel, { display: "none" }, t);
+/* O cartão decidido apaga e sai da fila: o de baixo sobe para o lugar dele. */
+const decide = (sel, t) => { tl.to(sel, { opacity: 0, duration: 0.35 }, t); oculta(sel, t + 0.4); };
+
+/* Ancoragem ao elemento: o marcador nasce dentro do alvo e o dedo lê a
+   posição do alvo no palco (offset*, que ignora o scale(2)). */
+function xy(el) {
+  let x = 0, y = 0, n = el;
+  while (n && n !== PALCO) { x += n.offsetLeft; y += n.offsetTop; n = n.offsetParent; }
+  return { x: x, y: y, w: el.offsetWidth, h: el.offsetHeight };
+}
+function marcaEm(idAlvo) {
+  const jaTem = document.getElementById("mk-" + idAlvo);
+  if (jaTem) return "#mk-" + idAlvo;
+  const el = document.getElementById(idAlvo);
+  if (getComputedStyle(el).position === "static") el.style.position = "relative";
+  const m = document.createElement("div");
+  m.className = "marcador";
+  m.id = "mk-" + idAlvo;
+  m.setAttribute("data-layout-allow-overlap", "");
+  m.setAttribute("data-layout-allow-occlusion", "");
+  const folga = (el.offsetWidth < 16 || el.offsetHeight < 16) ? 4 : 2.5;
+  m.style.cssText = `position:absolute;left:${-folga}px;top:${-folga}px;right:${-folga}px;bottom:${-folga}px`;
+  el.appendChild(m);
+  return "#mk-" + idAlvo;
+}
+function ponto(idAlvo) {
+  const r = xy(document.getElementById(idAlvo));
+  return { x: r.x + r.w / 2 - 5, y: r.y + r.h / 2 - 3 };
+}
+/* A fila muda de altura quando um formulário abre ou um cartão sai: a
+   posição de cada alvo é medida no estado em que a tela estará quando o dedo
+   chegar. */
+function noEstado(estado, fn) {
+  const antes = {};
+  for (const [id, disp] of Object.entries(estado)) {
+    const el = document.getElementById(id);
+    antes[id] = el.style.display;
+    el.style.display = disp;
+  }
+  const r = fn();
+  for (const [id, disp] of Object.entries(antes)) document.getElementById(id).style.display = disp;
+  return r;
+}
+const ESTADO = {
+  inicio: {},
+  regraAberta: { "bts-regra": "none", "fm-regra": "block" },
+  semRegra: { "t-regra": "none" },
+  semBloq: { "t-regra": "none", "t-bloq": "none" },
+  obsAberta: { "t-regra": "none", "t-bloq": "none", "bts-obs": "none", "fm-obs": "block" },
+  soTermo: { "t-regra": "none", "t-bloq": "none", "t-obs": "none" },
+};
+function toca(t, para, de, estado, estadoDe) {
+  const a = noEstado(ESTADO[estado || "inicio"], () => ponto(para));
+  const b = de ? noEstado(ESTADO[estadoDe || estado || "inicio"], () => ponto(de)) : { x: a.x + 34, y: Math.min(a.y + 70, 480) };
+  const mk = noEstado(ESTADO[estado || "inicio"], () => marcaEm(para));
+  mostra(mk, t);
+  move("#g1", t + 0.15, b.x, b.y, a.x, a.y);
+  clique("#g1", t + 1.05);
+  return mk;
+}
+
+/* 1 · Abertura */
+surge("#ab-eyebrow", 0.25, 22);
+tl.fromTo("#ab-titulo", { opacity: 0, y: 28 }, { opacity: 1, y: 0, duration: 0.7, ease: "power3.out", ...IR }, 0.5);
+surge("#ab-sub", 1.1, 22);
+surge("#ab-selos", 1.6, 18);
+
+/* 2 · A tarefa */
+tl.fromTo("#janela", { opacity: 0, y: 20 }, { opacity: 1, y: 0, duration: 0.5, ease: "power2.out", ...IR }, 4.20);
+nota("#p1", 4.90, 9.55);
+nota("#p2", 9.90, 14.55);
+nota("#p3", 14.90, 22.55);
+nota("#p4", 22.90, 27.55);
+nota("#p5", 27.90, 35.05);
+nota("#p6", 35.40, 40.55);
+
+/* passo 1: o botão Validação, e a fila abre */
+toca(5.4, "bt-validacao");
+esconde("#mk-bt-validacao", 7.6);
+esconde("#tela-contas", 7.9);
+mostra("#tela-validacao", 8.0);
+tl.to("#g1", { opacity: 0, duration: 0.2 }, 8.0);
+
+/* passo 2: os três números */
+const mkNum = marcaEm("bl-numeros");
+mostra(mkNum, 10.3);
+esconde(mkNum, 13.8);
+
+/* passo 3: Validar regra, o texto aberto e o Confirmar e validar */
+toca(15.3, "bt-validar");
+esconde("#mk-bt-validar", 16.5);
+oculta("#bts-regra", 16.45);
+exibe("#fm-regra", 16.45);
+toca(17.6, "bt-confirmar", "bt-validar", "regraAberta", "inicio");
+esconde("#mk-bt-confirmar", 18.9);
+decide("#t-regra", 19.1);
+troca("#n-aguardando", "3", 19.6);
+troca("#n-contas", "1", 19.6);
+troca("#n-valor", "R$ 389,00", 19.6);
+tl.to("#g1", { opacity: 0, duration: 0.2 }, 20.4);
+
+/* passo 4: Enviar ao cadastro baixa a lista e o tema sai */
+toca(23.3, "bt-cadastro", null, "semRegra");
+esconde("#mk-bt-cadastro", 24.5);
+mostra("#baixado", 24.5);
+decide("#t-bloq", 24.9);
+troca("#n-aguardando", "2", 25.4);
+troca("#n-valor", "R$ 0,00", 25.4);
+esconde("#baixado", 26.6);
+tl.to("#g1", { opacity: 0, duration: 0.2 }, 26.4);
+
+/* passo 5: a leitura da IA, Responder ao time e Enviar resposta */
+const mkLeitura = noEstado(ESTADO.semBloq, () => marcaEm("leitura"));
+mostra(mkLeitura, 28.2);
+esconde(mkLeitura, 29.8);
+toca(29.9, "bt-responder", null, "semBloq");
+esconde("#mk-bt-responder", 31.1);
+oculta("#bts-obs", 31.05);
+exibe("#fm-obs", 31.05);
+tl.set("#resposta", { innerText: "Vale só para a prescrição de horário fixo. A dose de resgate entra se tiver registro." }, 31.6);
+toca(32.4, "bt-enviar", "bt-responder", "obsAberta", "semBloq");
+esconde("#mk-bt-enviar", 33.6);
+decide("#t-obs", 33.8);
+troca("#n-aguardando", "1", 34.3);
+troca("#n-contas", "0", 34.3);
+tl.to("#g1", { opacity: 0, duration: 0.2 }, 34.6);
+
+/* passo 6: Confirmar o termo e a fila vazia */
+toca(36.0, "bt-termo", null, "soTermo");
+esconde("#mk-bt-termo", 37.2);
+decide("#t-termo", 37.4);
+troca("#n-aguardando", "0", 37.9);
+exibe("#vazio", 37.85);
+mostra("#vazio", 37.9);
+tl.to("#g1", { opacity: 0, duration: 0.25 }, 38.2);
+
+/* 3 · Fecho */
+surge("#fc-titulo", 41.30, 18);
+surge("#fc-carimbo", 41.80, 14);
+surge("#fc-org", 42.20, 12);
+
+window.__timelines.main = tl;
+</script>
+</body>
+</html>
