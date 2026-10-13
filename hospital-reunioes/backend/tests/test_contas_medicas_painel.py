@@ -287,3 +287,17 @@ class TestOsCartoesDoTopo:
         assert painel["semana"] == {"inicio": "2026-10-05", "fim": "2026-10-11"}
         # (80 + 60 + 70) / 3 e (50 + 94) / 2; a C6, de volta na fila, fica fora.
         assert painel["nota_media"] == {"semana": 70.0, "anterior": 72.0}
+
+    def test_contas_concluidas_da_semana(self):
+        assert _painel()["contas_concluidas"] == {"total": 3}
+
+    def test_valor_apontado_com_os_ja_incluidos(self):
+        """Apontado: valor absoluto das Linhas que entram na nota de entrada
+        (sem Validar, sem Não conferido, sem Não procede): 100 + 40 + 30 + 60 +
+        15 + 50 + 20. Já incluídos: diferenças positivas das Linhas Feito:
+        100 + 40 + 60 + 50."""
+        assert _painel()["valor_apontado"] == {"total": 315.0, "ja_incluido": 250.0}
+
+    def test_taxa_de_nao_procede_sobre_as_linhas_apontadas_sem_validar(self):
+        """2 Linhas Não procede (L04 e L10) de 10 sem Validar."""
+        assert _painel()["nao_procede"] == {"linhas": 2, "de": 10, "taxa": 0.2}
