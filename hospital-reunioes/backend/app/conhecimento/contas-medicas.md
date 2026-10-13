@@ -115,7 +115,7 @@ Ao lado da nota de entrada aparece a **nota de saída**: a mesma conta da nota, 
 
 ## O Painel
 
-O Painel mostra à diretoria onde a perda da conta nasce. Ele abre a partir da tela de contas, pelo botão Painel. Os números são das contas concluídas, por semana de segunda a domingo, contada pelo dia em que a faturista concluiu a conta. A conta concluída e enviada de novo sai do Painel até ser concluída outra vez. No topo ficam três filtros: a semana, a operadora e o tipo de conta (Parcial, quando o atendimento tem mais de uma conta, ou Única).
+O Painel mostra à diretoria onde a perda da conta nasce. Ele abre a partir da tela de contas, pelo botão Painel. Os números são das contas concluídas, por semana de segunda a domingo, contada pelo dia em que a faturista concluiu a conta. A conta reenviada continua no Painel, contada pela nota de entrada e pela semana em que foi concluída. No topo ficam três filtros: a semana, a operadora e o tipo de conta (Parcial, quando o atendimento tem mais de uma conta, ou Única).
 
 Quatro cartões no topo:
 

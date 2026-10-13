@@ -2,8 +2,8 @@
 
 Os agregados das Contas concluídas, por semana de segunda a domingo no fuso do
 hospital. A semana de uma Conta é a do dia em que ela foi concluída
-(`concluida_em`). A Conta que foi concluída e enviada de novo voltou para a
-fila: sai do Painel até ser concluída outra vez.
+(`concluida_em`). O reenvio da conta corrigida (#1136) não muda a situação nem
+o `concluida_em`: a Conta reenviada continua no Painel.
 """
 
 from __future__ import annotations
