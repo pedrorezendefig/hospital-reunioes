@@ -74,3 +74,17 @@ async def editar_regra(
 ) -> dict:
     """Edita a regra vigente: versão nova da memória, com o texto anterior guardado."""
     return _gravar_mudanca(supabase, me, sigla, codigo, corpo, decidir=False)
+
+
+@router.post("/operadoras/{sigla}/regras/{codigo}/decisao")
+@limiter.limit("30/minute")
+async def decidir_regra(
+    request: Request,
+    sigla: str,
+    codigo: str,
+    corpo: RegraDecidida,
+    me: dict = Depends(require_permissao_cm()),
+    supabase=Depends(get_supabase_client),
+) -> dict:
+    """Decide a regra pendente: vira vigente, com quem validou e a data, numa versão nova."""
+    return _gravar_mudanca(supabase, me, sigla, codigo, corpo, decidir=True)

@@ -188,3 +188,50 @@ class TestEditarRegra:
         assert gestao.put(_regra("ALFA", "ALFA-DIA-99"), json=corpo).status_code == 404
         assert gestao.put(_regra("ZETA", "ZETA-DIA-01"), json=corpo).status_code == 404
         assert _versoes(banco, "ALFA") == {"1.0": True}
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 2. Decidir uma regra pendente
+# ═══════════════════════════════════════════════════════════════════════════
+
+DIA_02_ANTES = "Transferência de setor antes das 10h: gera ou não diária extra no setor de origem."
+DIA_02_DECIDIDA = "Transferência de setor antes das 10h não gera diária extra no setor de origem."
+
+
+class TestDecidirPendente:
+    def test_decidir_torna_a_regra_vigente_com_validador_e_data_e_a_conta_antiga_fica_na_versao_antiga(self):
+        cliente, banco = _cliente(GESTAO)
+        _importar(cliente)
+        antiga = _versao(banco, "ALFA", "1.0")
+        banco.tabelas["cm_conta"] = [{"id": "conta-1", "memoria_versao_id": antiga["id"], "situacao": "A_FAZER"}]
+
+        resposta = cliente.post(
+            _regra("ALFA", "ALFA-DIA-02") + "/decisao",
+            json={"texto": DIA_02_DECIDIDA, "tipo": "CONTRATUAL", "origem": "PRÁTICA"},
+        )
+
+        assert resposta.status_code == 200, resposta.text
+        assert _versoes(banco, "ALFA") == {"1.0": False, "1.1": True}
+        regras = {r["codigo"]: r for r in banco.linhas("cm_regra") if r["memoria_versao_id"] == _versao(banco, "ALFA", "1.1")["id"]}
+        decidida = regras["ALFA-DIA-02"]
+        assert (decidida["status"], decidida["texto"], decidida["validado_por"]) == ("VIGENTE", DIA_02_DECIDIDA, "P1")
+        assert decidida["validado_em"][:10] == datetime.now(UTC).date().isoformat()
+        assert regras["ALFA-PRI-03"]["status"] == "PENDENTE", "só a decidida muda"
+        [historico] = banco.linhas("cm_regra_historico")
+        assert (historico["texto_anterior"], historico["texto_novo"]) == (DIA_02_ANTES, DIA_02_DECIDIDA)
+
+        # A conta analisada antes continua na versão antiga, e a versão antiga
+        # continua dizendo o que dizia: a regra ainda pendente, com o texto de antes.
+        [conta] = banco.linhas("cm_conta")
+        assert conta["memoria_versao_id"] == antiga["id"]
+        da_conta = {r.codigo: r for r in ler_memoria(gerar_texto_memoria(banco, antiga["operadora_id"], antiga["id"])).regras}
+        assert (da_conta["ALFA-DIA-02"].status, da_conta["ALFA-DIA-02"].texto) == ("PENDENTE", DIA_02_ANTES)
+
+    def test_decidir_regra_vigente_ou_editar_pendente_e_recusado_sem_versao_nova(self):
+        cliente, banco = _cliente(GESTAO)
+        _importar(cliente)
+        corpo = {"texto": DIA_02_DECIDIDA, "tipo": "CONTRATUAL", "origem": "PRÁTICA"}
+
+        assert cliente.post(_regra("ALFA", "ALFA-DIA-01") + "/decisao", json=corpo).status_code == 409
+        assert cliente.put(_regra("ALFA", "ALFA-DIA-02"), json=corpo).status_code == 409
+        assert _versoes(banco, "ALFA") == {"1.0": True}
