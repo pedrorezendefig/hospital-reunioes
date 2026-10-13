@@ -20,6 +20,7 @@ concorrente.
 
 from __future__ import annotations
 
+import dataclasses
 import json
 import logging
 import os
@@ -1174,6 +1175,46 @@ class TestPassoANoPipeline:
         (eventos,) = banco.tabelas["cm_eventos"]
         assert eventos["eventos_json"]["ia"]["atendimento"] == ATENDIMENTO
 
+    def test_o_guia_sai_da_conferencia_com_os_eventos_do_passo_a(self, openrouter, monkeypatch):
+        # A IA recebe os achados da conferência sem os eventos; o guia gravado é
+        # o da conferência que roda depois, com os eventos que ela leu (#1134).
+        ventilacao = {
+            "tipo": "VENTILACAO_MECANICA",
+            "descricao": "VM",
+            "setor": "CTI ADULTO",
+            "inicio": "2026-10-03T08:00",
+            "fim": None,
+            "pagina": 5,
+            "trecho": "VM",
+        }
+        openrouter.eventos = {**EVENTOS_DA_IA, "terapias": [ventilacao]}
+        recebidos = []
+        original = processamento.conferir
+
+        def conferir_espiado(*args, **kwargs):
+            resultado = original(*args, **kwargs)
+            if kwargs.get("eventos") is not None:
+                # Só a primeira linha: o guia gravado tem que ser este, não o de antes.
+                resultado = dataclasses.replace(resultado, linhas=resultado.linhas[:1])
+            recebidos.append((kwargs.get("eventos"), resultado))
+            return resultado
+
+        monkeypatch.setattr(processamento, "conferir", conferir_espiado)
+        banco = _cenario()
+        _enviar(banco, _conta(), _prontuario())
+
+        _rodar_o_job(banco)
+
+        (conta,) = banco.tabelas["cm_conta"]
+        assert conta["situacao"] == "A_FAZER", conta.get("erro_motivo")
+        (gravados,) = banco.tabelas["cm_eventos"]
+        assert [eventos for eventos, _ in recebidos] == [None, gravados["eventos_json"]["ia"]]
+        assert [t["tipo"] for t in recebidos[-1][0]["terapias"]] == ["VENTILACAO_MECANICA"]
+        final = recebidos[-1][1]
+        linhas = _linhas_do_guia(_guia(banco, conta["id"]))
+        assert len(recebidos[0][1].linhas) > 1
+        assert [{k: linha[k] for k in final.linhas[0]} for linha in linhas] == list(final.linhas)
+
     def test_a_chamada_do_passo_a_fica_gravada_com_os_tokens(self):
         banco = _cenario()
         _enviar(banco, _conta(), _prontuario())
@@ -1307,6 +1348,7 @@ class TestTempoDasEtapas:
             "leitura_do_prontuario",
             "conferencia",
             "passo_a",
+            "conferencia_com_eventos",
             "gravacao",
             "total",
         }
