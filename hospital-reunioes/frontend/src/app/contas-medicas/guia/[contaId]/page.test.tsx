@@ -265,6 +265,41 @@ describe("as linhas por dia e setor", () => {
     expect(validar.textContent).toContain("Em jogo: R$ 1.212,00");
   });
 
+  it("a linha se necessário sem registro tem a etiqueta âmbar e o texto; as outras não (issue #1134)", async () => {
+    respostaDoGuia = guia();
+    respostaDoGuia.grupos[0].linhas.push(
+      linha({
+        id: "l-dipirona",
+        data_fim: null,
+        codigo: "91000002",
+        descricao: "DIPIRONA 1 G AMP",
+        quantidade_devida: 1,
+        valor_diferenca: 2,
+        nivel_evidencia: "PRESCRITO_SN",
+        motivo:
+          "Se necessário (DIPIRONA 1G AMP), sem registro de uso no MV: 1 por dia de prescrição, quantidade " +
+          "provisória. Confira a checagem em papel. Sem uso, marque NÃO PROCEDE.",
+      }),
+    );
+    await abrir();
+
+    const dipirona = aLinha("DIPIRONA 1 G AMP");
+    const etiqueta = within(dipirona).getByText("SE NECESSÁRIO · SEM REGISTRO NO MV");
+    expect(etiqueta.className).toContain("bg-[#FEF3C7]");
+    expect(dipirona.textContent).toContain("Confira a checagem em papel. Sem uso, marque NÃO PROCEDE.");
+    expect(within(aLinha("Luva de procedimento")).queryByText("SE NECESSÁRIO · SEM REGISTRO NO MV")).toBeNull();
+
+    fireEvent.click(within(dipirona).getByRole("button", { name: "Não procede" }));
+    expect((within(dipirona).getByLabelText("Sem evidência no prontuário") as HTMLInputElement).checked).toBe(true);
+    fireEvent.click(within(dipirona).getByRole("button", { name: "Confirmar Não procede" }));
+    await waitFor(() => expect(chamadas[1]?.corpo).toEqual({ estado: "NAO_PROCEDE", motivo: "SEM_EVIDENCIA" }));
+
+    fireEvent.click(within(aLinha("Luva de procedimento")).getByRole("button", { name: "Não procede" }));
+    expect(within(aLinha("Luva de procedimento")).getAllByRole("radio").some((r) => (r as HTMLInputElement).checked)).toBe(
+      false,
+    );
+  });
+
   it("Ver evidência vem fechado e abre a página e o trecho com o nível", async () => {
     await abrir();
     const luva = aLinha("Luva de procedimento");
