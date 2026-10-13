@@ -301,6 +301,94 @@ def test_a_consolidacao_por_item_e_dia_lida_pela_coluna_junta_o_nome_longo_dos_t
     assert (soro.se_necessario, soro.paginas) == (True, (1, 3))
 
 
+# A prescrição no x em que o MV a desenha, medido com o mesmo `extract_words` em dois
+# prontuários reais (952 e 372 páginas, Helvetica): 128 cabeçalhos com uma única
+# variação de x. Só coordenadas e tamanhos de fonte, nenhum dado de paciente. No MV a
+# quantidade da dose sai alinhada à direita, bem depois do x de "Dose", e o nome do
+# item pode terminar depois desse x: o que decide a coluna é onde a palavra começa.
+# (x, tamanho, texto)
+CABECALHO_NO_X_DO_MV = [
+    (31.0, 8, "MEDICAMENTOS NORMAIS"),
+    (181.1, 7, "Dose Padrão"),
+    (321.8, 7, "Duração"),
+    (362.5, 7, "Frequência"),
+    (407.1, 7, "SN"),
+    (430.9, 7, "Apl"),
+    (457.0, 8, "Datas/Horários"),
+]
+NOME_QUE_PASSA_DO_X_DA_DOSE = "SORO FISIOLOGICO 0,9% 500ML SISTEMA"
+ITEM_NO_X_DO_MV = [
+    (35.8, 8, "3"),
+    (47.0, 8, NOME_QUE_PASSA_DO_X_DA_DOSE),
+    (239.3, 8, "1"),
+    (252.2, 8, "FRASCO/AM"),
+    (360.9, 8, "6HS/6HS"),
+    (409.3, 8, "S"),
+    (430.7, 8, "EV"),
+    (462.2, 8, ". 06 . 12 . 18 . 24"),
+]
+
+
+def _pdf_no_x_do_mv(linhas: list[str | list[tuple[float, int, str]]]) -> bytes:
+    """Uma página A4 escrita à mão na Helvetica das 14 fontes padrão do PDF, sem fonte
+    embutida como no MV: as larguras são as mesmas em qualquer máquina. A linha que é
+    lista sai em cada x dado; a de texto sai com cada trecho separado por dois espaços
+    ou mais num x proporcional à coluna do texto."""
+    import re
+
+    def escrito(texto: str) -> bytes:
+        return texto.encode("cp1252").replace(b"\\", b"\\\\").replace(b"(", b"\\(").replace(b")", b"\\)")
+
+    conteudo = b""
+    for i, linha in enumerate(linhas):
+        if isinstance(linha, str):
+            linha = [(31.0 + 5.5 * m.start(), 8, m.group()) for m in re.finditer(r"\S+(?: \S+)*", linha)]
+        for x, tamanho, texto in linha:
+            conteudo += b"BT /F1 %d Tf %.1f %.1f Td (%s) Tj ET\n" % (tamanho, x, 800 - 12 * i, escrito(texto))
+    objetos = [
+        b"<< /Type /Catalog /Pages 2 0 R >>",
+        b"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+        b"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842]"
+        b" /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>",
+        b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>",
+        b"<< /Length %d >>\nstream\n%s\nendstream" % (len(conteudo), conteudo),
+    ]
+    pdf, posicoes = b"%PDF-1.4\n", []
+    for n, objeto in enumerate(objetos, start=1):
+        posicoes.append(len(pdf))
+        pdf += b"%d 0 obj\n%s\nendobj\n" % (n, objeto)
+    xref = len(pdf)
+    pdf += b"xref\n0 %d\n0000000000 65535 f \n" % (len(objetos) + 1)
+    pdf += b"".join(b"%010d 00000 n \n" % p for p in posicoes)
+    pdf += b"trailer\n<< /Size %d /Root 1 0 R >>\nstartxref\n%d\n%%%%EOF\n" % (len(objetos) + 1, xref)
+    return pdf
+
+
+def test_nome_que_passa_do_x_da_dose_no_layout_real_do_mv_nao_invade_a_dose():
+    from app.services.contas_medicas_extrator import extrair_paginas, extrair_palavras
+
+    (pagina,) = montar(prescricao(3, "<item>"))
+    linhas = [
+        CABECALHO_NO_X_DO_MV if linha == CABECALHO_DA_TABELA else ITEM_NO_X_DO_MV if linha == "<item>" else linha
+        for linha in pagina.split("\n")
+    ]
+    pdf = _pdf_no_x_do_mv(linhas)
+    textos = [p.texto for p in extrair_paginas(pdf)]
+    palavras = extrair_palavras(pdf, [1])
+    # o caso existe no PDF: a última palavra do nome começa antes do x de "Dose" e termina depois
+    ultima_do_nome = next(p for p in palavras[1] if p.texto == "SISTEMA")
+    assert ultima_do_nome.x0 < 181.1 < ultima_do_nome.x1
+
+    (lida,) = ler_conteudo(textos, ler_prontuario(textos, ATENDIMENTO), palavras).prescricoes
+
+    (soro,) = lida.itens
+    assert (soro.numero, soro.nome) == (3, NOME_QUE_PASSA_DO_X_DA_DOSE)
+    assert soro.dose == "1 FRASCO/AM"
+    assert soro.frequencia == "6HS/6HS"
+    assert (soro.se_necessario, soro.via) == (True, "EV")
+    assert soro.horarios == ("06", "12", "18", "24")
+
+
 # ----------------------------------------------------------------------------------
 # Balanço hídrico e glicemias
 # ----------------------------------------------------------------------------------

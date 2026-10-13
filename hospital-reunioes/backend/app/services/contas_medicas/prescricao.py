@@ -233,7 +233,14 @@ def _colunas_do_cabecalho(linha: list[_Palavra]) -> list[float] | None:
 def texto_por_coluna(palavras: Sequence[_Palavra]) -> str | None:
     """A página remontada pela posição das colunas, no formato que `ler_itens` lê:
     palavras de colunas diferentes saem com dois espaços ou mais entre elas, as da mesma
-    coluna com um espaço só, e o recuo sai do x. None quando a página não tem o cabeçalho de colunas."""
+    coluna com um espaço só, e o recuo sai do x. None quando a página não tem o cabeçalho de colunas.
+
+    A coluna de cada palavra é decidida por onde ela começa (x0): a palavra do nome que
+    termina depois do x de "Dose" continua no nome. Limitação conhecida: a palavra do nome
+    que COMEÇA no x da dose ou depois cai na coluna da dose. É um caso que o MV não produz:
+    em dois prontuários reais (952 e 372 páginas, Helvetica), os 128 cabeçalhos têm uma
+    única variação de x (Dose 181,1, Duração 321,8, Frequência 362,5, SN 407,1, Apl 430,9)
+    e nenhuma palavra do nome começa depois do x de "Dose" em 80 páginas."""
     linhas = _linhas(palavras)
     cabecalhos = [(i, c) for i, linha in enumerate(linhas) if (c := _colunas_do_cabecalho(linha))]
     if not cabecalhos:
