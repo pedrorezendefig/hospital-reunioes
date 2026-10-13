@@ -470,3 +470,27 @@ class TestCustoDaChamada:
         assert (chamada["passo"], chamada["tentativas"], chamada["sucesso"]) == ("A", 3, False)
         assert (chamada["tokens_entrada"], chamada["custo_usd"]) == (3000, 0.003)
         assert banco.tabelas["cm_conta"][0]["custo_usd"] == 0.003
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 5. O modelo de cada passo
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+class TestModeloDeCadaPasso:
+    def test_trocar_a_variavel_troca_o_modelo_da_requisicao(self, provedor, monkeypatch):
+        monkeypatch.setenv("CM_IA_MODELO_PASSO_A", "openai/modelo-do-passo-a")
+        monkeypatch.setenv("CM_IA_MODELO_PASSO_B", "google/modelo-do-passo-b")
+        monkeypatch.setattr(ia, "settings", Settings())
+        provedor.responder((json.dumps(EVENTOS_VALIDOS), USO_PADRAO), (json.dumps(LINHAS_VALIDAS), USO_PADRAO))
+
+        _extrair()
+        _comparar()
+
+        assert [corpo["model"] for corpo in provedor.corpos] == ["openai/modelo-do-passo-a", "google/modelo-do-passo-b"]
+        # Modelo que não é Anthropic no passo B: sem bloco de cache.
+        assert "cache_control" not in json.dumps(provedor.corpos[1]["messages"])
+
+    def test_sem_a_variavel_vale_o_flash_no_passo_a_e_o_sonnet_no_passo_b(self):
+        assert Settings.model_fields["cm_ia_modelo_passo_a"].default == "google/gemini-3.7-flash"
+        assert Settings.model_fields["cm_ia_modelo_passo_b"].default == "anthropic/claude-sonnet-5.5"
