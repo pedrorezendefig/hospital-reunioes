@@ -11,6 +11,8 @@ o Prontuário está no sistema (deste envio ou de outro, até 7 dias) e
 `AGUARDANDO_ARQUIVO` quando falta um dos dois. Prontuário sem Conta deixa uma
 conta à espera da Conta, para a fila mostrar "Falta a conta". Mesmo atendimento
 e mesma conta de novo é reprocesso: a conta volta para a fila, sem duplicar.
+A mesma conta de uma conta já concluída é o reenvio da conta corrigida
+(issue #1136): a conta continua concluída e ganha a nota de saída.
 
 Um envio pode chegar em mais de uma requisição: o teto do corpo do app é de
 100 MiB e não muda, e um Prontuário sozinho pode chegar perto disso. A tela
@@ -30,13 +32,16 @@ from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 
 from app.services import storage
+from app.services.contas_medicas import reenvio
 from app.services.contas_medicas.operadoras import listar_planos, reconhecer_plano
 from app.services.contas_medicas.prontuario import atendimento_do_prontuario
 from app.services.contas_medicas_conta import (
     CabecalhoDaConta,
+    Conta,
     ErroLeitura,
     detectar_tipo_do_arquivo,
     ler_cabecalho_da_conta,
+    ler_conta,
 )
 from app.services.contas_medicas_extrator import extrair_paginas, texto_para_guardar
 from app.services.contas_medicas_retencao import BUCKET, chave_do_texto
@@ -87,6 +92,8 @@ class _Lido:
     paginas: int
     # O texto extraído, guardado ao lado do PDF: a fila lê daí e não extrai de novo.
     texto: bytes
+    # O texto por página: o reenvio lê a conta inteira na hora.
+    textos: tuple[str, ...] = ()
     cabecalho: CabecalhoDaConta | None = None
     plano: dict | None = None
 
@@ -120,6 +127,7 @@ def _ler(indice: int, arquivo: ArquivoRecebido, planos: list[dict]) -> _Lido | _
         "conteudo": arquivo.conteudo,
         "paginas": len(textos),
         "texto": texto_para_guardar(paginas),
+        "textos": tuple(textos),
     }
     if tipo == "CONTA":
         cabecalho = ler_cabecalho_da_conta(textos)
@@ -244,16 +252,45 @@ def _gravar_conta(
         supabase.table("cm_conta").insert({"atendimento_id": atendimento_id, **campos}).execute()
 
 
+def _conta_concluida(supabase, atendimento_id: str, numero_conta: str | None) -> dict | None:
+    if not numero_conta:
+        return None
+    return _primeira(
+        supabase.table("cm_conta")
+        .select("*")
+        .eq("atendimento_id", atendimento_id)
+        .eq("numero_conta", numero_conta)
+        .in_("situacao", list(reenvio.CONCLUIDAS))
+    )
+
+
 def _gravar_atendimento(
     supabase, envio_id: str, numero: str, lidos: list[_Lido], faturista_id: str, ordem_base: int, agora: datetime
 ) -> list[_Recusa]:
     atendimento = _atendimento(supabase, numero)
     recusas: list[_Recusa] = []
-    guardados: list[tuple[_Lido, str]] = []
+    # A conta de uma conta concluída é reenvio: lida inteira antes de subir,
+    # para a leitura que não fecha ser recusada sem deixar arquivo para trás.
+    reenvios: dict[int, tuple[dict, Conta]] = {}
+    a_guardar: list[_Lido] = []
     for lido in lidos:
+        concluida = _conta_concluida(supabase, atendimento["id"], lido.cabecalho.conta) if lido.cabecalho else None
+        if concluida:
+            lida = ler_conta(lido.textos)
+            if isinstance(lida, ErroLeitura):
+                recusas.append(_Recusa(lido.nome, lida.motivo, numero))
+                continue
+            reenvios[lido.indice] = (concluida, lida)
+        a_guardar.append(lido)
+
+    guardados: list[tuple[_Lido, str]] = []
+    for lido in a_guardar:
         arquivo_id = _guardar(supabase, envio_id, atendimento, lido, agora)
         if arquivo_id is None:
             recusas.append(_Recusa(lido.nome, MENSAGEM_FALHA_NO_BUCKET, numero))
+        elif lido.indice in reenvios:
+            concluida, lida = reenvios[lido.indice]
+            reenvio.reenviar(supabase, concluida, lida, agora, arquivo_id)
         else:
             guardados.append((lido, arquivo_id))
 
@@ -394,11 +431,15 @@ def ultimo_envio(supabase, envio_id: str, agora: datetime) -> list[dict]:
                 or []
                 if c.get("arquivo_id")
             ]
+        reenviadas = [c for c in contas if c.get("situacao") in reenvio.CONCLUIDAS]
+        contas = [c for c in contas if c not in reenviadas]
         prontuario_no_envio = any(a["tipo"] == "PRONTUARIO" for a in do_atendimento)
         tem_prontuario = prontuario_no_envio or bool(_prontuarios_no_sistema(supabase, atendimento_id, agora))
         aviso = None
         if contas and tem_prontuario and not prontuario_no_envio:
             aviso = _aviso_de_prontuario_atualizado(supabase, atendimento_id, contas)
-        frase = _frase(len(contas), tem_prontuario)
+        # A conta corrigida reenviada diz o que pegou; o resto, o que chegou.
+        frases = [] if reenviadas and not contas else [_frase(len(contas), tem_prontuario)]
+        frase = "; ".join(frases + [reenvio.frase(c) for c in reenviadas])
         linhas.append({"numero_atendimento": numero, "frase": frase, "texto": f"{numero}, {frase}", "aviso": aviso})
     return linhas
