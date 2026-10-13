@@ -1377,6 +1377,72 @@ class TestSeNecessario:
         assert TEXTO_SN not in registrado["motivo"]
 
 
+    def test_suspenso_ou_alterado_no_dia_3_e_dia_depois_da_alta_nao_geram_linha(self):
+        # Dia 3: a prescrição da manhã suspende e a da tarde prescreve de novo (alterado).
+        prescricoes = [
+            *(_prescricao(dia(n), _sn("DIPIRONA 1G AMP", pagina=10 + n)) for n in (1, 2, 4, 5)),
+            _prescricao(dia(3), _sn("DIPIRONA 1G AMP", pagina=13, suspenso=True)),
+            _prescricao(dia(3), _sn("DIPIRONA 1G AMP", pagina=14)),
+        ]
+        prontuario = _prontuario(prescricoes=prescricoes, alta=datetime(2026, 10, 4, 15, 0))
+
+        resultado = self._conferir(prontuario, _eventos())
+
+        assert [(linha["data"], linha["data_fim"], linha["quantidade_devida"]) for linha in resultado.linhas] == [
+            ("2026-10-01", "2026-10-02", 2.0),
+            ("2026-10-04", None, 1.0),
+        ]
+        assert {linha["nivel_evidencia"] for linha in resultado.linhas} == {"PRESCRITO_SN"}
+
+    def test_2_doses_por_dia_sem_registro_na_memoria_viram_2_por_dia(self):
+        prescricoes = [_prescricao(dia(n), _sn("DIPIRONA 1G AMP", pagina=10 + n)) for n in (1, 2)]
+        parametros = {**PARAMETROS_SN, "transicao": {"se_necessario_doses_por_dia_sem_registro": 2}}
+
+        resultado = self._conferir(_prontuario(prescricoes=prescricoes), _eventos(), parametros)
+
+        [linha] = resultado.linhas
+        assert (linha["data"], linha["data_fim"], linha["quantidade_devida"], linha["valor_diferenca"]) == (
+            "2026-10-01",
+            "2026-10-02",
+            4.0,
+            8.00,
+        )
+        assert "2 por dia" in linha["motivo"]
+
+    def test_diaria_global_item_incluso_nao_gera_linha_e_acima_do_corte_gera(self):
+        zyvox = "91000001"
+        prescricoes = [
+            _prescricao(dia(n), _sn("DIPIRONA 1G AMP", pagina=10 + n), _sn("ZYVOX 600MG BOLSA", pagina=20 + n))
+            for n in (1, 2)
+        ]
+        parametros = {**PARAMETROS_GLOBAL, "regras_das_conferencias": PARAMETROS_SN["regras_das_conferencias"]}
+        tabela = {("MEDICAMENTO", DIPIRONA): 2.00, ("MEDICAMENTO", zyvox): 520.00}
+
+        resultado = conferir(
+            _conta(),
+            _prontuario(prescricoes=prescricoes),
+            _memoria(parametros),
+            _tabela(tabela),
+            dicionario={**self.DICIONARIO, "ZYVOX": {zyvox}},
+            eventos=_eventos(),
+        )
+
+        [linha] = resultado.linhas
+        assert (linha["acao"], linha["codigo"], linha["quantidade_devida"], linha["nivel_evidencia"]) == (
+            "INCLUIR",
+            zyvox,
+            2.0,
+            "PRESCRITO_SN",
+        )
+
+    def test_sem_os_eventos_do_passo_a_o_se_necessario_nao_roda(self):
+        prescricoes = [_prescricao(dia(1), _sn("DIPIRONA 1G AMP", pagina=11))]
+
+        resultado = self._conferir(_prontuario(prescricoes=prescricoes), None)
+
+        assert resultado.linhas == ()
+
+
 # ═══════════════════════════════════════════════════════════════════════════
 # 9. Tipografia (ADR 0013)
 # ═══════════════════════════════════════════════════════════════════════════
