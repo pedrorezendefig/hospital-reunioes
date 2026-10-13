@@ -42,6 +42,7 @@ import argparse
 import importlib.util
 import json
 import sys
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -52,6 +53,7 @@ if TYPE_CHECKING:
     from playwright.sync_api import Page
 
 COMPUTADOR = {"width": 1440, "height": 900}
+PAUSA_ENTRE_PRINTS = 12  # segundos
 ESCALA = 2
 
 ENV_LOCAL = Path(__file__).resolve().parents[3] / "hospital-reunioes" / ".env"
@@ -637,7 +639,7 @@ def guia_concluir(page: Page, base: str, saida: Path) -> None:
     """Corrigir, passo 6: a observação e o Concluir e abrir a próxima, sem clicar."""
     _guia(page, base)
     rodape = page.locator("footer").filter(has_text="Concluir e abrir a próxima")
-    rodape.get_by_label("Observação para a gestão de contas médicas").fill(
+    rodape.get_by_label("Observação para a gestão de contas médicas", exact=True).fill(
         "A ficha anestésica cita um segundo cateter que não achei na conta."
     )
     sem_foco(page)
@@ -1030,7 +1032,12 @@ def main() -> int:
     with sync_playwright() as p:
         navegador = p.chromium.launch()
         try:
-            for nome in escolhidos:
+            for i, nome in enumerate(escolhidos):
+                # Cada tela de contas pergunta as permissões uma vez por botão
+                # do topo, e a rota aceita 60 perguntas por minuto: sem a
+                # pausa, a décima tela leva 429 e o app manda para o início.
+                if i:
+                    time.sleep(PAUSA_ENTRE_PRINTS)
                 # Sem o service worker do app: com ele, a leitura do guia não
                 # passa pelo `page.route` e a linha de exemplo nunca chega.
                 contexto = navegador.new_context(

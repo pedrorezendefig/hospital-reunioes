@@ -21,7 +21,7 @@ ele cabe em meia tela.
    ![Fila com o link Abrir na conta A fazer](../../../assets/contas-medicas/fila-abrir.png)
 
 2. Leia o topo: **Nota de entrada**, **R$ a ajustar** e **Itens feitos**.
-   Abaixo vêm as linhas, por dia e setor, cada uma com o verbo na frente.
+   Abaixo vêm as linhas, por dia e setor.
 
    ![Topo do guia com os três números e a primeira linha](../../../assets/contas-medicas/guia.png)
 
@@ -45,16 +45,13 @@ ele cabe em meia tela.
 
 ## Quando a linha pede conferência
 
-- **SE NECESSÁRIO · SEM REGISTRO NO MV**: o remédio "se necessário" não tem
-  registro de uso no prontuário. Confira a checagem em papel. Sem uso, clique
-  em **Não procede**: o motivo já vem escolhido.
+- **SE NECESSÁRIO · SEM REGISTRO NO MV**: confira a checagem em papel; sem
+  uso, marque **Não procede**.
 
   ![Linha se necessário com a etiqueta amarela e o texto para conferir](../../../assets/contas-medicas/guia-se-necessario.png)
 
-- **conferir evidência**: o trecho citado não foi achado na página. Abra **Ver
-  evidência** e confira no prontuário antes de marcar.
-- **Conferir classe de UTI**, no fim do texto da linha: a classe da diária
-  saiu do que o prontuário registra no dia. Confira antes de lançar.
+- **conferir evidência** ou **Conferir classe de UTI**: confira o prontuário
+  antes.
 
 ## Se der errado
 
