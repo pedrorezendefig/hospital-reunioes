@@ -208,6 +208,7 @@ PROPOSTA_DO_MAPEAMENTO = {
 # O código bloqueado do tema de exemplo e o cenário da Conferência da coordenação.
 CODIGO_BLOQUEADO = "70095001"
 CENARIO = "CEN-950"
+TERMO_DO_DICIONARIO = "FLUSH SF 10ML"
 
 
 # --------------------------------------------------------------------------
@@ -496,6 +497,13 @@ def _semear_gestao(operadora_id: str, base: str) -> None:
     Validação, o cenário com dois lembretes e o contrato em Negociar reajuste."""
     from datetime import date, timedelta
 
+    # As versões antigas da AURORA saem antes: o Histórico de versões do print
+    # mostra só a memória de hoje e a edição do roteiro. Versão que alguma
+    # conta de outro teste ainda aponta fica, e o roteiro segue.
+    try:
+        _rest(f"cm_memoria_versao?operadora_id=eq.{operadora_id}&vigente=eq.false", "DELETE")
+    except SystemExit as erro:
+        print(f"aviso: versões antigas da {OPERADORA[0]} ficaram ({erro}).")
     _subir_memoria(base)
     versoes = _rest(f"cm_memoria_versao?operadora_id=eq.{operadora_id}&select=id&order=criado_em.desc&limit=2")
     contas = {c["numero_conta"]: c["id"] for c in _rest(f"cm_conta?faturista_id=eq.{FATURISTA[0]}&select=id,numero_conta")}
@@ -530,6 +538,13 @@ def _semear_gestao(operadora_id: str, base: str) -> None:
                       "fica de fora. Sugestão: editar a regra.",
     })
     _criar("cm_validacao_tema_linha", {"tema_id": tema["id"], "observacao_id": observacao["id"]})
+
+    # O termo que a IA propôs ao dicionário: a fila abre o tema dele sozinha.
+    # Apagar o termo apaga o tema antigo junto.
+    _rest(f"cm_item_dicionario?termo=eq.{urllib.parse.quote(TERMO_DO_DICIONARIO)}", "DELETE")
+    _criar("cm_item_dicionario", {"termo": TERMO_DO_DICIONARIO, "codigo_conta": "70060310",
+                                  "descricao_conta": "Seringa preenchida com soro fisiológico 10 ml",
+                                  "origem": "IA", "situacao": "PROPOSTO"})
 
     # Coordenação: o cenário de exemplo e um lembrete em cada conta. Os
     # lembretes antigos saíram com as contas antigas.
@@ -745,7 +760,7 @@ def guia_concluir(page: Page, base: str, saida: Path) -> None:
     """Corrigir, passo 6: a observação e o Concluir e abrir a próxima, sem clicar."""
     _guia(page, base)
     rodape = page.locator("footer").filter(has_text="Concluir e abrir a próxima")
-    rodape.get_by_label("Observação para a gestão de contas médicas").fill(
+    rodape.locator("#observacao-gestao").fill(
         "A ficha anestésica cita um segundo cateter que não achei na conta."
     )
     sem_foco(page)
@@ -800,7 +815,7 @@ def contas_operadoras(page: Page, base: str, saida: Path) -> None:
     botao = page.get_by_role("link", name="Operadoras")
     botao.wait_for()
     sem_foco(page)
-    balao(page, botao, 1)
+    balao(page, botao, 1, "acima")
     page.screenshot(path=str(saida / "contas-operadoras.png"), clip={"x": 0, "y": 0, "width": 1440, "height": 420})
     limpar_baloes(page)
 
@@ -826,28 +841,82 @@ def _escolher(page: Page, secao, rotulo: str, opcao: str) -> None:
     page.get_by_role("option", name=opcao, exact=True).click()
 
 
-def enviar_tabela(page: Page, base: str, saida: Path) -> None:
-    """Memória, passo 4: o formulário da tabela preenchido, sem enviar."""
+def _biblioteca_da_aurora(page: Page):
+    """O bloco da AURORA na Biblioteca de tabelas: o título e a tabela dela."""
+    secao = _secao(page, "Biblioteca de tabelas")
+    return secao, secao.get_by_role("table", name=f"Tabelas de preço de {OPERADORA[0]}")
+
+
+def _nova_versao_de_materiais(page: Page):
+    """O "Nova versão" da linha Materiais da AURORA, que abre o envio já escolhido."""
+    _, tabela = _biblioteca_da_aurora(page)
+    return tabela.get_by_role("row").filter(has_text="Materiais").get_by_role("button", name="Nova versão")
+
+
+def biblioteca(page: Page, base: str, saida: Path) -> None:
+    """Memória, passo 4: o Nova versão da biblioteca, só no bloco da AURORA."""
     _operadoras(page, base)
+    secao, tabela = _biblioteca_da_aurora(page)
+    sem_foco(page)
+    balao(page, _nova_versao_de_materiais(page), 4, "acima")
+    titulo = secao.get_by_role("heading", name=OPERADORA[0], exact=True)
+    topo, baixo = titulo.bounding_box(), tabela.bounding_box()
+    page.screenshot(
+        path=str(saida / "biblioteca.png"),
+        clip={"x": baixo["x"] - 44, "y": topo["y"] - 14, "width": baixo["width"] + 64,
+              "height": baixo["y"] + baixo["height"] - topo["y"] + 28},
+    )
+    limpar_baloes(page)
+
+
+def enviar_tabela(page: Page, base: str, saida: Path) -> None:
+    """Memória, passo 5: o envio aberto pelo Nova versão, preenchido, sem enviar."""
+    _operadoras(page, base)
+    _nova_versao_de_materiais(page).click()
     secao = _secao(page, "Enviar tabela de preço")
-    _escolher(page, secao, "Operadora da tabela", OPERADORA[0])
-    _escolher(page, secao, "Categoria", "Materiais")
     secao.get_by_label("Início da vigência").fill("2026-10-01")
     secao.locator("input[type=file]").set_input_files(
         {"name": "AURORA-materiais-2026-10.csv", "mimeType": "text/csv", "buffer": b"codigo;descricao;preco\n"}
     )
     sem_foco(page)
-    balao(page, secao.get_by_role("button", name="Enviar tabela"), 4)
+    balao(page, secao.get_by_role("button", name="Enviar tabela"), 5)
     _capturar_ate(page, secao, secao, saida / "enviar-tabela.png")
     limpar_baloes(page)
 
 
+def mapeamento(page: Page, base: str, saida: Path) -> None:
+    """Memória, passo 6: as colunas que a IA propôs e a amostra, sem gravar.
+
+    A planilha de exemplo não sai da máquina: a leitura responde com
+    `PROPOSTA_DO_MAPEAMENTO`, e quem desenha a proposta é a tela do app."""
+    _operadoras(page, base)
+    page.route(
+        "**/tabelas/proposta",
+        lambda rota: rota.fulfill(status=200, content_type="application/json",
+                                  body=json.dumps(PROPOSTA_DO_MAPEAMENTO)),
+    )
+    _nova_versao_de_materiais(page).click()
+    secao = _secao(page, "Enviar tabela de preço")
+    secao.get_by_label("Início da vigência").fill("2026-10-01")
+    secao.locator("input[type=file]").set_input_files(
+        {"name": "AURORA-materiais-2026-10.xlsx",
+         "mimeType": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "buffer": b"PK"}
+    )
+    secao.get_by_role("button", name="Enviar tabela").click()
+    proposta = secao.get_by_role("region", name="Mapeamento das colunas")
+    proposta.wait_for()
+    sem_foco(page)
+    balao(page, proposta.get_by_role("button", name="Confirmar e gravar"), 6, "acima")
+    _capturar_ate(page, proposta, proposta, saida / "mapeamento.png")
+    limpar_baloes(page)
+
+
 def operadora(page: Page, base: str, saida: Path) -> None:
-    """Memória, passo 5: só a linha da operadora de exemplo, sem as dos testes."""
+    """Editar a regra, passo 1: só a linha da operadora de exemplo, sem as dos testes."""
     _operadoras(page, base)
     linha = page.get_by_test_id(f"operadora-{OPERADORA[0]}")
     sem_foco(page)
-    balao(page, linha.get_by_text(OPERADORA[0], exact=True), 5)
+    balao(page, linha.get_by_text(OPERADORA[0], exact=True), 1)
     caixa = linha.bounding_box()
     page.screenshot(
         path=str(saida / "operadora.png"),
@@ -883,6 +952,351 @@ def setores(page: Page, base: str, saida: Path) -> None:
     limpar_baloes(page)
 
 
+# --------------------------------------------------------------------------
+# A gestão (PRD #1129)
+# --------------------------------------------------------------------------
+
+
+def _recortar(page: Page, primeiro, ultimo, arquivo: Path, folga_esquerda: int = 44) -> None:
+    """Do topo de `primeiro` ao fim de `ultimo`, com folga para o balão."""
+    topo, baixo = primeiro.bounding_box(), ultimo.bounding_box()
+    esquerda = min(topo["x"], baixo["x"])
+    direita = max(topo["x"] + topo["width"], baixo["x"] + baixo["width"])
+    page.screenshot(
+        path=str(arquivo),
+        clip={
+            "x": esquerda - folga_esquerda,
+            "y": topo["y"] - 14,
+            "width": direita - esquerda + folga_esquerda + 20,
+            "height": baixo["y"] + baixo["height"] - topo["y"] + 28,
+        },
+    )
+
+
+def _alto(page: Page) -> None:
+    """Uma janela alta: a mesma tela num monitor maior, e o recorte cabe nela."""
+    page.set_viewport_size({"width": COMPUTADOR["width"], "height": 1800})
+
+
+def _botao_do_menu(page: Page, nome: str):
+    import re
+
+    return page.locator("main").get_by_role("link", name=re.compile(rf"^{nome}")).first
+
+
+def _print_do_menu(page: Page, base: str, email: str, nome: str, arquivo: Path) -> None:
+    """O passo 1 das telas da gestão: o botão no alto da tela Contas médicas."""
+    entrar(page, base, email)
+    page.goto(f"{base}/contas-medicas", wait_until="networkidle")
+    botao = _botao_do_menu(page, nome)
+    botao.wait_for()
+    page.wait_for_load_state("networkidle")
+    sem_foco(page)
+    # Acima: à esquerda o balão cairia em cima do botão vizinho.
+    balao(page, botao, 1, "acima")
+    page.screenshot(path=str(arquivo), clip={"x": 0, "y": 0, "width": 1440, "height": 420})
+    limpar_baloes(page)
+
+
+def _memoria(page: Page, base: str) -> None:
+    entrar(page, base, GESTORA[2])
+    page.goto(f"{base}/contas-medicas/operadoras/{OPERADORA[0]}", wait_until="networkidle")
+    page.get_by_role("heading", name=f"Memória da operadora {OPERADORA[0]}").wait_for()
+    page.wait_for_load_state("networkidle")
+
+
+def regras(page: Page, base: str, saida: Path) -> None:
+    """Editar a regra, passos 2 e 3: a aba Pendentes e o Decidir da regra pendente."""
+    _memoria(page, base)
+    _alto(page)
+    secao = page.get_by_role("region", name="Regras", exact=True)
+    aba = secao.get_by_role("tab", name="Pendentes (1)")
+    aba.click()
+    sem_foco(page)
+    balao(page, aba, 2, "acima")
+    balao(page, secao.get_by_test_id("regra-AURORA-DIA-02").get_by_role("button", name="Decidir"), 3)
+    _recortar(page, secao, secao, saida / "regras.png")
+    limpar_baloes(page)
+
+
+def _abrir_edicao(page: Page):
+    linha = page.get_by_test_id("regra-AURORA-MED-02")
+    linha.get_by_role("button", name="Editar").click()
+    formulario = page.get_by_role("form", name="Editar a regra AURORA-MED-02")
+    formulario.locator("textarea").fill(
+        "Prescrição de horário fixo é cobrada em todos os dias prescritos, inclusive o dia da alta."
+    )
+    return linha, formulario
+
+
+def regra_editar(page: Page, base: str, saida: Path) -> None:
+    """Editar a regra, passos 4 e 5: o formulário aberto e preenchido, sem salvar."""
+    _memoria(page, base)
+    _alto(page)
+    linha, formulario = _abrir_edicao(page)
+    sem_foco(page)
+    balao(page, formulario.locator("textarea"), 4)
+    balao(page, formulario.get_by_role("button", name="Salvar"), 5)
+    _recortar(page, linha, formulario, saida / "regra-editar.png")
+    limpar_baloes(page)
+
+
+def historico(page: Page, base: str, saida: Path) -> None:
+    """Editar a regra, passo 6: salva de verdade e mostra a versão nova no histórico.
+
+    A versão é da operadora de exemplo, e o `--semear` sobe a memória de novo."""
+    _memoria(page, base)
+    _alto(page)
+    _, formulario = _abrir_edicao(page)
+    formulario.get_by_role("button", name="Salvar").click()
+    page.get_by_role("status").filter(has_text="da memória criada").wait_for()
+    page.wait_for_load_state("networkidle")
+    secao = page.get_by_role("region", name="Histórico de versões")
+    # A versão desta edição: a que traz o texto de antes e o de depois.
+    primeira = secao.locator("li").filter(has_text="Depois:").first
+    sem_foco(page)
+    balao(page, primeira.locator("span.font-semibold").first, 6)
+    _recortar(page, primeira, primeira, saida / "historico.png")
+    limpar_baloes(page)
+
+
+def ensinar_abrir(page: Page, base: str, saida: Path) -> None:
+    """Ensinar, passo 1: o botão Ensinar uma regra nova na Memória da operadora."""
+    _memoria(page, base)
+    botao = page.get_by_role("button", name="Ensinar uma regra nova")
+    sem_foco(page)
+    balao(page, botao, 1)
+    _recortar(page, page.get_by_role("region", name="Cabeçalho da memória"), botao, saida / "ensinar-abrir.png")
+    limpar_baloes(page)
+
+
+def _ensinar(page: Page, base: str):
+    _memoria(page, base)
+    _alto(page)
+    page.get_by_role("button", name="Ensinar uma regra nova").click()
+    secao = page.get_by_role("region", name="Ensinar uma regra nova")
+    secao.locator("textarea").fill(PEDIDO_DA_REGRA)
+    return secao
+
+
+def ensinar(page: Page, base: str, saida: Path) -> None:
+    """Ensinar, passo 2: a regra escrita em linguagem comum, sem propor."""
+    secao = _ensinar(page, base)
+    sem_foco(page)
+    balao(page, secao.get_by_role("button", name="Propor regra"), 2)
+    _recortar(page, secao, secao, saida / "ensinar.png")
+    limpar_baloes(page)
+
+
+def ensinar_proposta(page: Page, base: str, saida: Path) -> None:
+    """Ensinar, passos 3 a 5: a proposta, sem validar.
+
+    A IA não é chamada: o "Propor regra" responde com `PROPOSTA_DA_REGRA`."""
+    secao = _ensinar(page, base)
+    page.route(
+        "**/regras/proposta",
+        lambda rota: rota.fulfill(status=200, content_type="application/json", body=json.dumps(PROPOSTA_DA_REGRA)),
+    )
+    secao.get_by_role("button", name="Propor regra").click()
+    proposta = page.get_by_role("form", name="Proposta da regra nova")
+    proposta.wait_for()
+    sem_foco(page)
+    balao(page, proposta.get_by_role("heading", name="Antes"), 3, "acima-inicio")
+    balao(page, proposta.locator("textarea"), 4)
+    balao(page, proposta.get_by_role("button", name="Validar regra"), 5)
+    _recortar(page, proposta, proposta, saida / "ensinar-proposta.png")
+    limpar_baloes(page)
+
+
+def reanalisar(page: Page, base: str, saida: Path) -> None:
+    """Ensinar, passo 6: a conta analisada com a memória anterior e o Reanalisar."""
+    _memoria(page, base)
+    secao = page.get_by_role("region", name="Contas com regra nova desde a análise")
+    sem_foco(page)
+    balao(page, secao.get_by_role("button", name="Reanalisar com a regra nova").first, 6)
+    _recortar(page, secao, secao, saida / "reanalisar.png")
+    limpar_baloes(page)
+
+
+def menu_validacao(page: Page, base: str, saida: Path) -> None:
+    _print_do_menu(page, base, GESTORA[2], "Validação", saida / "menu-validacao.png")
+
+
+def _validacao(page: Page, base: str) -> None:
+    entrar(page, base, GESTORA[2])
+    _alto(page)
+    page.goto(f"{base}/contas-medicas/validacao", wait_until="networkidle")
+    page.get_by_role("article", name="Regra AURORA-DIA-02").wait_for()
+    page.wait_for_load_state("networkidle")
+
+
+def validacao(page: Page, base: str, saida: Path) -> None:
+    """Validação, passo 2: os três números e o primeiro cartão."""
+    _validacao(page, base)
+    sem_foco(page)
+    balao(page, page.get_by_text("Aguardando decisão", exact=True), 2)
+    _recortar(page, page.locator("main").get_by_role("link", name="Contas médicas"),
+              page.get_by_role("article", name="Regra AURORA-DIA-02"), saida / "validacao.png")
+    limpar_baloes(page)
+
+
+def validacao_regra(page: Page, base: str, saida: Path) -> None:
+    """Validação, passo 3: o texto da regra aberto para conferir, sem validar."""
+    _validacao(page, base)
+    cartao = page.get_by_role("article", name="Regra AURORA-DIA-02")
+    cartao.get_by_role("button", name="Validar regra").click()
+    sem_foco(page)
+    balao(page, cartao.get_by_role("button", name="Confirmar e validar"), 3)
+    _recortar(page, cartao, cartao, saida / "validacao-regra.png")
+    limpar_baloes(page)
+
+
+def validacao_temas(page: Page, base: str, saida: Path) -> None:
+    """Validação, passos 4 a 6: o código bloqueado, a observação e o termo."""
+    _validacao(page, base)
+    bloqueado = page.get_by_role("article", name=f"Código {CODIGO_BLOQUEADO} bloqueado")
+    observacao = page.get_by_role("article", name="Observações sobre a regra AURORA-MED-02")
+    termos = page.locator("article").filter(has_text="Termo do dicionário")
+    sem_foco(page)
+    balao(page, bloqueado.get_by_role("button", name="Enviar ao cadastro"), 4)
+    balao(page, observacao.get_by_role("button", name="Responder ao time"), 5, "acima")
+    ultimo = observacao
+    if termos.count():
+        ultimo = termos.first
+        balao(page, ultimo.get_by_role("button", name="Confirmar"), 6)
+    _recortar(page, bloqueado, ultimo, saida / "validacao-temas.png")
+    limpar_baloes(page)
+
+
+def menu_coordenacao(page: Page, base: str, saida: Path) -> None:
+    _print_do_menu(page, base, COORDENADORA[2], "Coordenação", saida / "menu-coordenacao.png")
+
+
+def cenario(page: Page, base: str, saida: Path) -> None:
+    """Coordenação, passos 2 e 3: o cenário novo preenchido à mão, sem salvar."""
+    entrar(page, base, GESTORA[2])
+    _alto(page)
+    page.goto(f"{base}/contas-medicas/coordenacao", wait_until="networkidle")
+    page.get_by_role("tab", name="Cenários").click()
+    page.get_by_role("button", name="Novo cenário").click()
+    novo = page.get_by_role("region", name="Novo cenário")
+    novo.get_by_label("Escreva o cenário").fill(
+        "Curativo de cateter venoso central: conferir a película transparente e a clorexidina."
+    )
+    novo.get_by_label("Nome").fill("Curativo de cateter central")
+    novo.get_by_label("Operadora").select_option(OPERADORA[0])
+    novo.get_by_label("Quando dispara").fill("Troca de curativo de cateter venoso central registrada na evolução.")
+    novo.get_by_label("Orientação para a coordenadora").fill("Confira a película e a clorexidina no dia da troca.")
+    novo.get_by_label("Código do insumo 1").fill("70051230")
+    novo.get_by_label("Descrição do insumo 1").fill("Película transparente 10 x 12 cm")
+    novo.get_by_role("button", name="Adicionar insumo").click()
+    novo.get_by_label("Código do insumo 2").fill("90044410")
+    novo.get_by_label("Descrição do insumo 2").fill("Clorexidina alcoólica 0,5% 100 ml")
+    sem_foco(page)
+    balao(page, novo.get_by_role("button", name="Preencher com a IA"), 2)
+    balao(page, novo.get_by_role("button", name="Salvar cenário"), 3)
+    _recortar(page, novo, novo, saida / "cenario.png")
+    limpar_baloes(page)
+
+
+def lembretes(page: Page, base: str, saida: Path) -> None:
+    """Coordenação, passos 4 e 5: a conta com o lembrete e a evidência aberta."""
+    entrar(page, base, COORDENADORA[2])
+    _alto(page)
+    page.goto(f"{base}/contas-medicas/coordenacao", wait_until="networkidle")
+    conta = page.get_by_role("region", name="Atendimento 900355")
+    conta.wait_for()
+    conta.get_by_role("button", name="Ver evidência").first.click()
+    sem_foco(page)
+    balao(page, conta.get_by_role("button", name="Ver evidência").first, 4)
+    balao(page, conta.get_by_role("button", name="Incluído").first, 5)
+    _recortar(page, page.locator("main").get_by_role("link", name="Contas médicas"), conta, saida / "lembretes.png")
+    limpar_baloes(page)
+
+
+def menu_contratos(page: Page, base: str, saida: Path) -> None:
+    _print_do_menu(page, base, GESTORA[2], "Contratos", saida / "menu-contratos.png")
+
+
+def _contrato(page: Page, base: str):
+    entrar(page, base, GESTORA[2])
+    _alto(page)
+    page.goto(f"{base}/contas-medicas/contratos", wait_until="networkidle")
+    cartao = page.get_by_role("listitem").filter(has=page.get_by_text("Aurora Saúde", exact=True))
+    cartao.wait_for()
+    return cartao
+
+
+def contratos(page: Page, base: str, saida: Path) -> None:
+    """Contratos, passos 2 e 3: a situação do contrato e o botão de envio."""
+    cartao = _contrato(page, base)
+    sem_foco(page)
+    balao(page, cartao.get_by_text("Negociar reajuste", exact=True), 2, "acima")
+    balao(page, cartao.get_by_role("button", name="Enviar contrato ou aditivo"), 3)
+    _recortar(page, cartao, cartao, saida / "contratos.png")
+    limpar_baloes(page)
+
+
+def contrato_form(page: Page, base: str, saida: Path) -> None:
+    """Contratos, passos 4 e 5: os campos para conferir, sem confirmar."""
+    cartao = _contrato(page, base)
+    cartao.get_by_role("button", name="Enviar contrato ou aditivo").click()
+    sem_foco(page)
+    balao(page, cartao.get_by_text("Vencimento", exact=True).last, 4)
+    balao(page, cartao.get_by_role("button", name="Confirmar"), 5)
+    _recortar(page, cartao, cartao, saida / "contrato-form.png")
+    limpar_baloes(page)
+
+
+def menu_habilitacao(page: Page, base: str, saida: Path) -> None:
+    _print_do_menu(page, base, DIRETORA[2], "Habilitação", saida / "menu-habilitacao.png")
+
+
+def _habilitacao(page: Page, base: str) -> None:
+    entrar(page, base, DIRETORA[2])
+    _alto(page)
+    page.goto(f"{base}/contas-medicas/habilitacao", wait_until="networkidle")
+    page.get_by_role("heading", name="Habilitação", exact=True).wait_for()
+    page.wait_for_load_state("networkidle")
+
+
+def habilitacao_pessoa(page: Page, base: str, saida: Path) -> None:
+    """Habilitação, passos 2 e 3: a busca e o perfil da pessoa, sem mudar."""
+    _habilitacao(page, base)
+    secao = page.get_by_role("region", name="Pessoas")
+    secao.get_by_label("Buscar pessoa pelo nome").fill("Júlio")
+    secao.get_by_role("button", name="Buscar").click()
+    pessoa = secao.get_by_role("listitem", name=SEM_PERFIL[1])
+    pessoa.wait_for()
+    sem_foco(page)
+    balao(page, secao.get_by_role("button", name="Buscar"), 2)
+    balao(page, pessoa.get_by_role("combobox"), 3)
+    _recortar(page, secao, secao, saida / "habilitacao-pessoa.png")
+    limpar_baloes(page)
+
+
+def habilitacao_matriz(page: Page, base: str, saida: Path) -> None:
+    """Habilitação, passo 4: a célula que a coordenadora ainda não tem."""
+    _habilitacao(page, base)
+    secao = page.get_by_role("region", name="Perfis e permissões")
+    sem_foco(page)
+    balao(page, secao.get_by_label("Incluir regra operacional: Coordenadora de faturamento"), 4)
+    _recortar(page, secao, secao, saida / "habilitacao-matriz.png")
+    limpar_baloes(page)
+
+
+def ditar(page: Page, base: str, saida: Path) -> None:
+    """Ditar, passo 2: o botão Ditar e o aviso, no rodapé do guia."""
+    _guia(page, base)
+    rodape = page.locator("footer").filter(has_text="Concluir e abrir a próxima")
+    botao = rodape.get_by_role("button", name="Ditar: Observação para a gestão de contas médicas")
+    sem_foco(page)
+    balao(page, botao, 2)
+    rodape.scroll_into_view_if_needed()
+    _recortar(page, rodape, rodape, saida / "ditar.png")
+    limpar_baloes(page)
+
+
 PRINTS = {
     "contas": contas,
     "envio": envio,
@@ -895,10 +1309,33 @@ PRINTS = {
     "guia-concluir": guia_concluir,
     "contas-operadoras": contas_operadoras,
     "enviar-memoria": enviar_memoria,
+    "biblioteca": biblioteca,
     "enviar-tabela": enviar_tabela,
+    "mapeamento": mapeamento,
     "operadora": operadora,
     "planos": planos,
     "setores": setores,
+    "regras": regras,
+    "regra-editar": regra_editar,
+    "historico": historico,
+    "ensinar-abrir": ensinar_abrir,
+    "ensinar": ensinar,
+    "ensinar-proposta": ensinar_proposta,
+    "reanalisar": reanalisar,
+    "menu-validacao": menu_validacao,
+    "validacao": validacao,
+    "validacao-regra": validacao_regra,
+    "validacao-temas": validacao_temas,
+    "menu-coordenacao": menu_coordenacao,
+    "cenario": cenario,
+    "lembretes": lembretes,
+    "menu-contratos": menu_contratos,
+    "contratos": contratos,
+    "contrato-form": contrato_form,
+    "menu-habilitacao": menu_habilitacao,
+    "habilitacao-pessoa": habilitacao_pessoa,
+    "habilitacao-matriz": habilitacao_matriz,
+    "ditar": ditar,
 }
 
 
