@@ -29,7 +29,7 @@ from app.services.contas_medicas.memoria_edicao import (
     ler_memoria_da_operadora,
     mudar_regra,
 )
-from app.services.contas_medicas.regra_nova import ensinar_regra, propor_regra_nova
+from app.services.contas_medicas.regra_nova import contas_com_regra_nova, ensinar_regra, propor_regra_nova
 
 router = APIRouter(prefix="/contas-medicas", tags=["contas-medicas"])
 
@@ -106,7 +106,8 @@ async def memoria_da_operadora(
     me: dict = Depends(require_permissao_cm()),
     supabase=Depends(get_supabase_client),
 ) -> dict:
-    """A memória da operadora para a tela: cabeçalho, regras, tabelas e histórico de versões.
+    """A memória da operadora para a tela: cabeçalho, regras, tabelas, histórico
+    de versões e as contas abertas com "regra nova desde a análise".
 
     Abre para quem muda regra de algum tipo; `permissoes` diz de quais, para a
     tela mostrar Editar e Decidir só onde a pessoa pode.
@@ -115,7 +116,7 @@ async def memoria_da_operadora(
     memoria = ler_memoria_da_operadora(supabase, sigla)
     if memoria is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Operadora não cadastrada")
-    return {**memoria, "permissoes": permissoes}
+    return {**memoria, "permissoes": permissoes, "contas_com_regra_nova": contas_com_regra_nova(supabase, sigla)}
 
 
 @router.post("/operadoras/{sigla}/regras/proposta")

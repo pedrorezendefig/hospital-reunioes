@@ -197,4 +197,65 @@ def ensinar_regra(
     versao = _gravar_versao(
         supabase, operadora_id, vigente, regras, {}, autor_id, resumo, novas=[nova_regra], parametros=parametros
     )
-    return {"operadora": sigla, "versao": versao["versao"], "regra": codigo}
+    return {
+        "operadora": sigla,
+        "versao": versao["versao"],
+        "regra": codigo,
+        "contas_com_regra_nova": len(contas_com_regra_nova(supabase, sigla)),
+    }
+
+
+def _analisada_antes(conta: dict[str, Any], vigente: dict | None) -> bool:
+    """A conta aberta analisada com uma versão da memória que não é mais a vigente.
+    Conta sem a versão gravada fica sem marca: não dá para dizer o que mudou."""
+    return (
+        conta.get("situacao") in SITUACOES_REANALISAVEIS
+        and bool(vigente)
+        and bool(conta.get("memoria_versao_id"))
+        and conta["memoria_versao_id"] != vigente["id"]
+    )
+
+
+def regra_nova_desde_a_analise(supabase, conta: dict[str, Any], operadora_id: str | None) -> bool:
+    """A marca "regra nova desde a análise" de uma conta, para o Guia."""
+    return bool(operadora_id) and _analisada_antes(conta, _vigente(supabase, operadora_id))
+
+
+def contas_com_regra_nova(supabase, sigla: str) -> list[dict[str, Any]]:
+    """As contas A fazer e Em correção da operadora com a marca "regra nova
+    desde a análise", em ordem de atendimento e conta."""
+    operadoras = supabase.table("cm_operadora").select("id").eq("sigla", sigla.strip().upper()).execute().data or []
+    if not operadoras:
+        return []
+    vigente = _vigente(supabase, operadoras[0]["id"])
+    atendimentos = {
+        a["id"]: a.get("numero_atendimento")
+        for a in supabase.table("cm_atendimento")
+        .select("id, numero_atendimento")
+        .eq("operadora_id", operadoras[0]["id"])
+        .execute()
+        .data
+        or []
+    }
+    if not atendimentos or not vigente:
+        return []
+    contas = (
+        supabase.table("cm_conta")
+        .select("id, atendimento_id, numero_conta, situacao, memoria_versao_id")
+        .in_("atendimento_id", sorted(atendimentos))
+        .in_("situacao", list(SITUACOES_REANALISAVEIS))
+        .execute()
+        .data
+        or []
+    )
+    marcadas = [
+        {
+            "id": c["id"],
+            "numero_atendimento": atendimentos.get(c["atendimento_id"]),
+            "numero_conta": c.get("numero_conta"),
+            "situacao": c["situacao"],
+        }
+        for c in contas
+        if _analisada_antes(c, vigente)
+    ]
+    return sorted(marcadas, key=lambda c: (str(c["numero_atendimento"] or ""), str(c["numero_conta"] or "")))

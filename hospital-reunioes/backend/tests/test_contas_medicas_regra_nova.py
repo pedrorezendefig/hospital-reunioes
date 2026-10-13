@@ -14,7 +14,6 @@ provedor da IA dublado no transporte HTTP (o adaptador roda inteiro).
 from __future__ import annotations
 
 import json
-from pathlib import Path
 from typing import Any
 
 import httpx
@@ -284,3 +283,92 @@ class TestValidarRegra:
 
         assert (com_cpf.status_code, protegida.status_code) == (409, 409)
         assert _versoes(banco, "ALFA") == {"1.0": True}
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 3. As contas analisadas antes da regra nova
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+A_FAZER_ALFA = "00000000-0000-4000-8000-0000000000a1"
+EM_CORRECAO_ALFA = "00000000-0000-4000-8000-0000000000a2"
+CONCLUIDA_ALFA = "00000000-0000-4000-8000-0000000000a3"
+A_FAZER_BETA = "00000000-0000-4000-8000-0000000000b1"
+
+
+def _com_contas(banco: _Banco) -> None:
+    """Contas analisadas com a versão vigente de hoje: três da ALFA (A fazer,
+    Em correção e Concluída) e uma A fazer da BETA."""
+    versao = {sigla: _versao(banco, sigla, "1.0")["id"] for sigla in ("ALFA", "BETA")}
+    banco.tabelas["cm_atendimento"] = [
+        {"id": "at-alfa", "numero_atendimento": "31245", "operadora_id": _operadora_id(banco, "ALFA")},
+        {"id": "at-beta", "numero_atendimento": "31302", "operadora_id": _operadora_id(banco, "BETA")},
+    ]
+
+    def conta(id_: str, atendimento: str, sigla: str, situacao: str) -> dict:
+        return {
+            "id": id_,
+            "atendimento_id": atendimento,
+            "numero_conta": f"N-{id_}",
+            "situacao": situacao,
+            "faturista_id": "F1",
+            "memoria_versao_id": versao[sigla],
+            "tentativas": 0,
+        }
+
+    banco.tabelas["cm_conta"] = [
+        conta(A_FAZER_ALFA, "at-alfa", "ALFA", "A_FAZER"),
+        conta(EM_CORRECAO_ALFA, "at-alfa", "ALFA", "EM_CORRECAO"),
+        conta(CONCLUIDA_ALFA, "at-alfa", "ALFA", "CONCLUIDA"),
+        conta(A_FAZER_BETA, "at-beta", "BETA", "A_FAZER"),
+    ]
+    banco.tabelas["cm_guia_linha"] = [
+        {"id": "l-feita", "conta_id": EM_CORRECAO_ALFA, "estado": "FEITO", "acao": "INCLUIR", "valor": 10.0},
+    ]
+
+
+ROTA_CONTAS = "/api/contas-medicas/contas"
+
+
+def _marcadas(cliente: TestClient, sigla: str) -> set[str]:
+    resposta = cliente.get(f"/api/contas-medicas/operadoras/{sigla}")
+    assert resposta.status_code == 200, resposta.text
+    return {c["id"] for c in resposta.json()["contas_com_regra_nova"]}
+
+
+class TestContasComRegraNova:
+    def test_so_as_contas_abertas_da_operadora_ficam_marcadas_e_reanalisar_devolve_para_a_fila(self):
+        cliente, banco = _cliente(GESTAO)
+        _importar(cliente)
+        _importar(cliente, "MEMORIA-BETA-v1.0.md")
+        _com_contas(banco)
+        assert _marcadas(cliente, "ALFA") == set()
+
+        validada = cliente.post(_validar("ALFA"), json=REGRA_VALIDADA)
+
+        assert validada.status_code == 200, validada.text
+        assert validada.json()["contas_com_regra_nova"] == 2
+        assert _marcadas(cliente, "ALFA") == {A_FAZER_ALFA, EM_CORRECAO_ALFA}
+        assert _marcadas(cliente, "BETA") == set()
+        [marcada] = [
+            c
+            for c in cliente.get("/api/contas-medicas/operadoras/ALFA").json()["contas_com_regra_nova"]
+            if c["id"] == A_FAZER_ALFA
+        ]
+        assert (marcada["numero_atendimento"], marcada["numero_conta"], marcada["situacao"]) == (
+            "31245",
+            f"N-{A_FAZER_ALFA}",
+            "A_FAZER",
+        )
+
+        # O Guia mostra a marca na conta da ALFA, e não na da BETA.
+        guia = cliente.get(f"{ROTA_CONTAS}/{EM_CORRECAO_ALFA}/guia").json()
+        assert guia["regra_nova_desde_analise"] is True
+        assert guia["pode_reanalisar"] is True
+        assert cliente.get(f"{ROTA_CONTAS}/{A_FAZER_BETA}/guia").json()["regra_nova_desde_analise"] is False
+
+        # Reanalisar com a regra nova devolve a conta para a fila e não apaga a linha marcada.
+        assert cliente.post(f"{ROTA_CONTAS}/{EM_CORRECAO_ALFA}/reanalisar").json() == {"situacao": "NA_FILA"}
+        assert next(c for c in banco.linhas("cm_conta") if c["id"] == EM_CORRECAO_ALFA)["situacao"] == "NA_FILA"
+        assert [linha["id"] for linha in banco.linhas("cm_guia_linha")] == ["l-feita"]
+        assert _marcadas(cliente, "ALFA") == {A_FAZER_ALFA}
