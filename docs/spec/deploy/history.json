@@ -2,6 +2,54 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-10-13T05:24:22-03:00",
+      "sha": "f4ae1299bdcb962371926a812e48a73b50284b41",
+      "app_version": "0.191.0",
+      "subject": "Onda onda-gestao-onda5: Ditado nos campos de texto longo",
+      "raw_subject": "chore(deploy): registro da onda onda-gestao-onda5 (#1190)",
+      "scope": [
+        "backend",
+        "frontend"
+      ],
+      "prds": [
+        1129
+      ],
+      "result": "healthy",
+      "duration_seconds": 255,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        },
+        {
+          "service": "frontend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "onda-enxuta onda-gestao-onda5: PR #1190 (issue #1145), mergeados PR a PR. Merge pela API do GitHub, um build. Registro pela Action pos-merge depois do health.",
+      "etapas": {
+        "merge_s": 2,
+        "build_s": {
+          "backend": 217,
+          "frontend": 196
+        },
+        "health_s": 20
+      },
+      "responsavel": "pedrorezendefig"
+    },
+    {
       "at": "2026-10-13T04:55:37-03:00",
       "sha": "417580041fa3da910e7201b8398a7a5cca223315",
       "app_version": "0.190.0",
