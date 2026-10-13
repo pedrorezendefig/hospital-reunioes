@@ -1064,15 +1064,24 @@ def _tetos(ctx: _Contexto, pagas: list[_Devida]) -> list[_Linha]:
 
 def _tetos_calculados(ctx: _Contexto, pagas: list[_Devida]) -> tuple[dict[str, Any], ...]:
     """O teto de cada consumível da memória, lançado ou não: é com ele que o
-    código corrige a quantidade que a IA propõe para o item."""
+    código corrige a quantidade que a IA propõe para o item. A linha da IA cobre
+    um período: `por_dia` e `cirurgias` dão a devida só dos dias dela."""
     do_paciente = [d for d in pagas if d.do_paciente]
-    cirurgias = len(ctx.prontuario.conteudo.descricoes_cirurgicas)
+    descricoes = ctx.prontuario.conteudo.descricoes_cirurgicas
     calculados = []
     for nome, teto in _tetos_da_memoria(ctx):
-        devida = _devida_do_teto(teto, do_paciente, cirurgias)
+        devida = _devida_do_teto(teto, do_paciente, len(descricoes))
         if devida is not None:
             calculados.append(
-                {"item": nome, "codigo": str(teto["codigo"]), "devida": devida, "diarias_pagas": len(do_paciente)}
+                {
+                    "item": nome,
+                    "codigo": str(teto["codigo"]),
+                    "devida": devida,
+                    "por_dia": tuple((d.data, _teto_do_dia(teto, d.acomodacao)) for d in do_paciente),
+                    "por_cirurgia": Decimal(str(teto.get("centro_cirurgico_por_cirurgia") or 0)),
+                    # A cirurgia sem data não cai em período nenhum: só conta na conta inteira.
+                    "cirurgias": tuple(d.inicio.date() for d in descricoes if d.inicio),
+                }
             )
     return tuple(calculados)
 

@@ -379,9 +379,11 @@ def _pipeline(supabase, conta: dict, cronometro: _Cronometro) -> None:
         prontuario = ProntuarioLido(estrutura, conteudo, textos)
         _gravar_prontuario(supabase, conta["atendimento_id"], arquivo_do_prontuario["id"], prontuario)
 
-    with cronometro.etapa("dicionario"):
+    with cronometro.etapa("dicionario"), _trava_do_prontuario(conta["atendimento_id"]):
         # O termo de medicamento sem par vai uma vez à IA, antes da
-        # conferência: a proposta já vale para esta conta.
+        # conferência: a proposta já vale para esta conta. A trava faz a
+        # parcial que chega junto esperar a proposta da outra e lê-la do
+        # dicionário, sem perguntar de novo.
         dicionario = dicionario_do_banco(supabase)
         if dicionario_ia.propor_termos(
             supabase, prontuario, lida, dicionario, conta_id=conta["id"], atendimento_id=conta["atendimento_id"]

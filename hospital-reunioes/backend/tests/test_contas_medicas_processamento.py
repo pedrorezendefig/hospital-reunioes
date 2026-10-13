@@ -217,6 +217,9 @@ class _Consulta:
             for nova in novas:
                 if violacao := _violacao(self._nome, nova):
                     raise APIError({"message": violacao, "code": "23514"})
+                # O índice único do termo (migration 116).
+                if self._nome == "cm_item_dicionario" and any(t["termo"] == nova["termo"] for t in tabela):
+                    raise APIError({"message": "idx_cm_item_dicionario_termo", "code": "23505"})
                 self._banco.relogio += 1
                 gravadas.append(
                     {
@@ -1105,11 +1108,15 @@ class _OpenRouter:
         self.uso: dict = {"prompt_tokens": 10, "completion_tokens": 5, "total_tokens": 15, "cost": 0.001}
         self.formatos: list[str] = []
         self.corpos: list[dict] = []
+        # Gancho dos testes de corrida: roda com o schema pedido, antes da resposta.
+        self.antes_de_responder = None
 
     def __call__(self, request: httpx.Request) -> httpx.Response:
         self.requisicoes += 1
         corpo = json.loads(request.content)
         formato = corpo["response_format"]["json_schema"]["name"]
+        if self.antes_de_responder:
+            self.antes_de_responder(formato)
         self.formatos.append(formato)
         self.corpos.append(corpo)
         resposta = {PASSO_A: self.eventos, PASSO_B: self.comparacao}.get(formato) or self.respostas.get(formato)

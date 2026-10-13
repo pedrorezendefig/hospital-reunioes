@@ -16,6 +16,8 @@ Passo B devolve as linhas que cada teste escolhe.
 from __future__ import annotations
 
 import json
+import threading
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Any
 
@@ -25,6 +27,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from openai import OpenAI
 from test_contas_medicas_processamento import (
+    AGORA,
     EVENTOS_DA_IA,
     PARAMETROS,
     PASSO_B,
@@ -89,11 +92,10 @@ def openrouter(monkeypatch) -> _OpenRouter:
 TRECHO_DA_ADMISSAO = "Chegou com acesso venoso periférico em membro superior esquerdo"
 
 
-# O teto da fralda no CTI. O par sintético tem 4 diárias de CTI pagas (de 02/10
-# 22:40 à alta em 06/10 15:20; o guia do código retira a 5ª lançada a mais do
-# pacote): a devida é 4 × 6 = 24.
+# O teto da fralda no CTI. O par sintético tem 4 diárias de CTI pagas, de 02/10
+# a 05/10 (de 02/10 22:40 à alta em 06/10 15:20; o guia do código retira a 5ª
+# lançada a mais do pacote): 6 fraldas por diária paga.
 TETO_DA_FRALDA = {"codigo": "70000050", "cti": 6}
-DEVIDA_DA_FRALDA = 24
 
 
 def _cenario_do_passo_b() -> _Banco:
@@ -204,9 +206,10 @@ class TestConferenciaDasLinhasDaIA:
         seringa = da_ia["70000077"]
         assert (seringa["preco_tabela"], seringa["valor_diferenca"], seringa["nao_conferido"]) == (None, None, True)
         assert da_ia["70000002"]["nao_conferido"] is False
-        # Teto: a quantidade é a do código, diárias pagas × teto, e o valor vem dela.
+        # Teto: a quantidade é a do código, diárias pagas do período da linha
+        # (03, 04 e 05/10) × 6, e o valor vem dela (fralda a 2,00 na tabela).
         fralda = da_ia["70000050"]
-        assert (fralda["quantidade_devida"], fralda["valor_diferenca"]) == (DEVIDA_DA_FRALDA, DEVIDA_DA_FRALDA * 2.0)
+        assert (fralda["quantidade_devida"], fralda["valor_diferenca"]) == (18, 36.0)
         # A mesma linha que o código já gerou: fica uma, a do código.
         pacotes = [linha for linha in linhas if linha["codigo"] == "98005497"]
         assert [(p["origem"], p["data"]) for p in pacotes] == [("CODIGO", "2026-10-04")]
@@ -214,6 +217,38 @@ class TestConferenciaDasLinhasDaIA:
         motivos = {d["linha"]["codigo"]: d["motivo"] for d in banco.conta(conta["id"])["faltantes"]["descartadas_ia"]}
         assert motivos["70000005"] == "A regra ALFA-INS-99 não existe na memória."
         assert motivos["70000002"] == "Data fora do período da conta."
+
+    def test_o_teto_da_linha_e_o_das_diarias_pagas_no_periodo_dela(self, openrouter):
+        def fralda(data: str, data_fim: str) -> dict[str, Any]:
+            return _linha_da_ia(
+                codigo="70000050",
+                descricao="FRALDA GERIATRICA",
+                data=data,
+                data_fim=data_fim,
+                quantidade_devida=30,
+                regra_id="ALFA-INS-04",
+            )
+
+        # Dois períodos que não se cruzam: 02 e 03/10 (2 diárias) e 04 a 06/10
+        # (04 e 05/10 pagas; a alta do dia 06 não é diária). Juntas, as 24 da
+        # conta inteira, nunca o dobro.
+        _, linhas = _analisar(
+            _cenario_do_passo_b(), openrouter, fralda("2026-10-02", "2026-10-03"), fralda("2026-10-04", "2026-10-06")
+        )
+        fraldas = sorted((linha["data"], linha["quantidade_devida"]) for linha in linhas if linha["origem"] == "IA")
+        assert fraldas == [("2026-10-02", 12), ("2026-10-04", 12)]
+
+    def test_a_linha_de_um_dia_so_tem_o_teto_de_uma_diaria(self, openrouter):
+        _, linhas = _analisar(
+            _cenario_do_passo_b(),
+            openrouter,
+            _linha_da_ia(
+                codigo="70000050", descricao="FRALDA GERIATRICA", quantidade_devida=30, regra_id="ALFA-INS-04"
+            ),
+        )
+        (fralda,) = [linha for linha in linhas if linha["origem"] == "IA"]
+        assert (fralda["quantidade_devida"], fralda["valor_diferenca"]) == (6, 12.0)
+        assert fralda["motivo"].endswith("Teto pelo código: 6 para 1 diária paga no período.")
 
     def test_sem_preco_na_tabela_vale_o_unitario_da_conta_e_codigo_nulo_tenta_o_dicionario(self, openrouter):
         _, linhas = _analisar(
@@ -383,6 +418,17 @@ def _cliente_da_carga(banco: _Banco, quem: str) -> TestClient:
     return TestClient(app)
 
 
+def _lancado_sem_mencao_do_clexane(banco: _Banco) -> list[str]:
+    """As contas em que o Clexane saiu "lançado sem menção": a conferência que
+    não teve o termo da enoxaparina no dicionário."""
+    return [
+        conta["numero_conta"]
+        for conta in banco.tabelas["cm_conta"]
+        for linha in _linhas_do_guia(_guia(banco, conta["id"]))
+        if linha["codigo"] == "90030001" and linha["motivo"].startswith("Lançado sem nenhuma menção")
+    ]
+
+
 class TestDicionarioPelaIA:
     def test_termo_sem_par_vai_uma_vez_a_ia_e_entra_proposto(self, openrouter):
         """A prescrição diz enoxaparina e a conta lança Clexane: nem o
@@ -408,6 +454,63 @@ class TestDicionarioPelaIA:
             "origem": "IA",
         }
         assert [c["passo"] for c in banco.tabelas["cm_chamada_ia"]].count("DICIONARIO") == 1
+
+    def test_duas_parciais_em_vagas_paralelas_perguntam_o_termo_uma_vez(self, openrouter):
+        """As duas vagas pegam as parciais do envio juntas. A barreira segura a
+        primeira na chamada do dicionário até a outra chegar lá: sem a trava do
+        atendimento, as duas leram o dicionário sem o termo e as duas perguntam.
+        Com a trava, a barreira estoura, a primeira segue sozinha e a segunda lê
+        o dicionário já com a proposta."""
+        openrouter.respostas[PROPOSTAS] = {"propostas": [{"termo": ENOXAPARINA, "codigo": "90030001"}]}
+        banco = _cenario_do_passo_b()
+        _enviar(banco, _conta("48811", 2, 3), _conta("48812", 4, 6), _prontuario_com_enoxaparina())
+        as_duas_na_ia = threading.Barrier(2, timeout=1)
+
+        def esperar_a_outra_vaga(formato: str) -> None:
+            if formato == PROPOSTAS:
+                try:
+                    as_duas_na_ia.wait()
+                except threading.BrokenBarrierError:
+                    pass
+
+        openrouter.antes_de_responder = esperar_a_outra_vaga
+        vagas = ThreadPoolExecutor(max_workers=2)
+        try:
+            assert processamento.alimentar_fila(banco, AGORA, executor=vagas) == 2
+        finally:
+            vagas.shutdown(wait=True)
+
+        assert [c["situacao"] for c in banco.tabelas["cm_conta"]] == ["A_FAZER", "A_FAZER"]
+        assert openrouter.formatos.count(PROPOSTAS) == 1
+        assert _lancado_sem_mencao_do_clexane(banco) == []
+
+    def test_o_termo_que_outra_parcial_gravou_antes_vale_nesta_conta(self, openrouter):
+        """Entre a leitura do dicionário e a gravação, outra parcial (outro
+        processo, fora da trava) grava o mesmo termo: o insert bate no índice
+        único, e a conta é conferida com o dicionário relido, não sem o termo."""
+        openrouter.respostas[PROPOSTAS] = {"propostas": [{"termo": ENOXAPARINA, "codigo": "90030001"}]}
+        banco = _cenario_do_passo_b()
+        _enviar(banco, _conta(), _prontuario_com_enoxaparina())
+
+        def a_outra_parcial_grava_antes(formato: str) -> None:
+            if formato == PROPOSTAS:
+                banco.table("cm_item_dicionario").insert(
+                    {
+                        "termo": ENOXAPARINA,
+                        "codigo_conta": "90030001",
+                        "descricao_conta": "CLEXANE 40MG/0,4ML SER PREENCH",
+                        "situacao": "PROPOSTO",
+                        "origem": "IA",
+                    }
+                ).execute()
+
+        openrouter.antes_de_responder = a_outra_parcial_grava_antes
+        _rodar_o_job(banco)
+
+        (conta,) = banco.tabelas["cm_conta"]
+        assert conta["situacao"] == "A_FAZER", conta.get("erro_motivo")
+        assert [t["termo"] for t in banco.tabelas["cm_item_dicionario"]].count(ENOXAPARINA) == 1
+        assert _lancado_sem_mencao_do_clexane(banco) == []
 
     def test_termo_que_a_ia_nao_soube_ligar_fica_sem_codigo_e_nao_volta_a_ia(self, openrouter):
         # Código fora da lista da conta é chute: vale como sem par.

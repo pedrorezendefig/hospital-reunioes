@@ -73,8 +73,10 @@ def propor_termos(
     supabase, prontuario: ProntuarioLido, conta: Conta, dicionario, *, conta_id: str, atendimento_id: str
 ) -> int:
     """Pergunta à IA o código dos termos sem par que o dicionário ainda não
-    conhece e grava as propostas. Devolve quantos termos entraram. A IA fora
-    do ar não para a análise: o termo fica para a próxima conta."""
+    conhece e grava as propostas. Devolve quantos termos o dicionário ganhou,
+    contando o que outra parcial gravou primeiro: com qualquer um, quem chama
+    relê o dicionário. A IA fora do ar não para a análise: o termo fica para a
+    próxima conta."""
     medicamentos = [{"codigo": i.codigo, "descricao": i.descricao} for i in conta.itens if i.grupo == "MEDICAMENTOS"]
     if not medicamentos:
         return 0
@@ -117,7 +119,7 @@ def propor_termos(
         except APIError as erro:
             if getattr(erro, "code", None) != _TERMO_REPETIDO:
                 raise
-            continue
+            # A outra parcial gravou o termo antes: o dicionário mudou do mesmo jeito.
         gravados += 1
     return gravados
 

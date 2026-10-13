@@ -18,7 +18,7 @@ Nenhuma linha da IA chega à faturista sem as conferências do código:
    dela, o unitário que a conta já lançou, com a etiqueta; sem nenhum, "não
    conferido". Código nulo tenta o dicionário e a descrição; sem sucesso,
    "sem código";
-7. o teto por dia é o do código: diárias pagas vezes o teto.
+7. o teto por dia é o do código: diárias pagas do período da linha vezes o teto.
 
 A causa-raiz da IA é sobreposta nos casos óbvios: diária é Regra automática;
 regra de preço e item que o MV já bloqueou, Cadastro e preço.
@@ -153,6 +153,15 @@ def _preco_da_tabela(preco: BuscaDePreco, codigo: str, data: date, coluna: str |
     return None
 
 
+def _devida_no_periodo(teto: Mapping[str, Any], inicio: date, fim: date) -> tuple[Decimal, int]:
+    """O teto das diárias pagas e das cirurgias do período da linha, e quantas
+    diárias são: duas linhas em períodos que não se cruzam somam o teto da
+    conta, nunca o dobro."""
+    dias = [devida for dia, devida in teto["por_dia"] if inicio <= dia <= fim]
+    cirurgias = sum(1 for dia in teto["cirurgias"] if inicio <= dia <= fim)
+    return sum(dias, Decimal(0)) + teto["por_cirurgia"] * cirurgias, len(dias)
+
+
 @dataclass(frozen=True)
 class _Periodo:
     acao: str
@@ -251,8 +260,9 @@ class _Conferencias:
         lancada, devida = Decimal(str(linha.quantidade_lancada)), Decimal(str(linha.quantidade_devida))
         teto = next((t for t in self.conferencia.tetos if t["codigo"] == codigo), None)
         if teto is not None and linha.acao != "RETIRAR":
-            devida = teto["devida"]
-            motivo += f" Teto pelo código: {devida:g} para {teto['diarias_pagas']} diárias pagas."
+            devida, diarias = _devida_no_periodo(teto, inicio, fim)
+            pagas = "1 diária paga" if diarias == 1 else f"{diarias} diárias pagas"
+            motivo += f" Teto pelo código: {devida:g} para {pagas} no período."
 
         # Incluir e Ajustar valem pelo preço da tabela ou, fora dela, pelo
         # unitário que a conta já lançou, com a etiqueta. Retirar tira o que foi
