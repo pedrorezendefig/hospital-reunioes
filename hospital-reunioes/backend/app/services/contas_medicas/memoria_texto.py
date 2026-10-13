@@ -59,7 +59,9 @@ ORDEM_DO_CABECALHO = (
     "transicao",
 )
 
-COLUNAS = ("ID", "Regra", "Tipo", "Origem", "Status", "Data")
+# `Modelo` é o ID da diretriz do Modelo HSM de onde a regra veio (issue #1205):
+# sai no arquivo para o exportado recarregar com o mesmo `modelo_id`.
+COLUNAS = ("ID", "Regra", "Tipo", "Origem", "Status", "Data", "Modelo")
 
 
 def _em_ordem(valor: Any) -> Any:
@@ -110,6 +112,7 @@ def _tabela(regras: list[dict[str, Any]]) -> list[str]:
                     _celula(regra.get("origem")),
                     _celula(regra.get("status")),
                     _data(regra.get("validado_em")),
+                    _celula(regra.get("modelo_id")),
                 ]
             )
         )
@@ -130,7 +133,7 @@ def gerar_texto_memoria(supabase, operadora_id: str, versao_id: str | None = Non
     operadora, versao = operadoras[0], versoes[0]
     regras = (
         supabase.table("cm_regra")
-        .select("codigo, secao, texto, tipo, origem, status, validado_em")
+        .select("codigo, secao, texto, tipo, origem, status, validado_em, modelo_id")
         .eq("memoria_versao_id", versao["id"])
         .eq("ativa", True)
         .order("codigo")

@@ -24,6 +24,7 @@ from fastapi.testclient import TestClient
 from test_contas_medicas_operadoras import (
     GESTAO,
     _Banco,
+    _com_coluna_modelo,
     _com_operadoras,
     _matriz_da_migration,
     _memoria,
@@ -374,6 +375,22 @@ class TestExportarEReimportar:
         assert exportada.status_code == 200
         assert exportada.text.startswith("---\noperadora: ALFA\nnome: Alfa Saúde\nversao_memoria: '1.0'\n")
         assert "\n## 3. DIÁRIAS\n" in exportada.text
+
+
+    def test_exportar_traz_a_coluna_modelo_e_a_ida_e_volta_devolve_o_mesmo_modelo_id(self):
+        cliente, banco = _cliente(GESTAO)
+        texto = _com_coluna_modelo(_memoria("MEMORIA-ALFA-v1.0.md"), {"ALFA-PRI-01": "HSM-PRI-01"})
+        assert cliente.post(
+            ROTA_MEMORIA, files={"arquivo": ("MEMORIA-ALFA-v1.0.md", texto.encode("utf-8"), "text/markdown")}
+        ).status_code == 201
+
+        exportada = cliente.get("/api/contas-medicas/operadoras/ALFA/memoria").text
+
+        assert "| ID | Regra | Tipo | Origem | Status | Data | Modelo |" in exportada
+        assert "| 23/09/2026 | HSM-PRI-01 |" in exportada
+        de_volta = {r.codigo: r.modelo_id for r in ler_memoria(exportada).regras}
+        assert de_volta["ALFA-PRI-01"] == "HSM-PRI-01"
+        assert de_volta["ALFA-PRI-02"] is None
 
 
 # ═══════════════════════════════════════════════════════════════════════════
