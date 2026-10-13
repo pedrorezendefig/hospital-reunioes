@@ -20,11 +20,15 @@ from typing import Any
 
 import httpx
 import pytest
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
 from openai import OpenAI
 from test_contas_medicas_processamento import (
     EVENTOS_DA_IA,
     PARAMETROS,
     PASSO_B,
+    PESSOAS,
+    _arquivo_do_envio,
     _Banco,
     _cenario,
     _conta,
@@ -34,12 +38,15 @@ from test_contas_medicas_processamento import (
     _item_de_tabela,
     _linhas_do_guia,
     _OpenRouter,
+    _paginas_do_prontuario,
     _prontuario,
     _regra,
     _rodar_o_job,
 )
 
+from app.dependencies import get_current_user, get_supabase_client
 from app.limiter import limiter
+from app.routers import contas_medicas_operadoras as operadoras_router
 from app.services.contas_medicas import envio as envio_service
 from app.services.contas_medicas import ia, processamento
 
@@ -347,6 +354,100 @@ class TestCustoDoPassoB:
             "sucesso": True,
         }
         assert chamada["modelo"].startswith("anthropic/")
+
+
+PROPOSTAS = "PropostasDoDicionario"
+# O genérico do Clexane, com a mesma largura do nome que ele substitui: a
+# prescrição do MV é lida por coluna.
+ENOXAPARINA = "ENOXAPARINA 40MG/0,4ML SER"
+ENOXA_ID, ROCU_ID = "00000000-0000-4000-8000-000000000001", "00000000-0000-4000-8000-000000000002"
+
+
+def _prontuario_com_enoxaparina():
+    paginas = [p.replace("CLEXANE 40MG/0,4ML SER PREENCH", f"{ENOXAPARINA:<30}") for p in _paginas_do_prontuario()]
+    return _arquivo_do_envio("prontuario.pdf", "\f".join(paginas))
+
+
+def _cliente_da_carga(banco: _Banco, quem: str) -> TestClient:
+    pessoa = PESSOAS[quem]
+    app = FastAPI()
+    app.state.limiter = limiter
+    app.include_router(operadoras_router.router, prefix="/api")
+
+    async def _usuario() -> dict[str, Any]:
+        return {"id": pessoa["auth_user_id"], "email": pessoa["email"], "metadata": {}}
+
+    app.dependency_overrides[get_current_user] = _usuario
+    app.dependency_overrides[get_supabase_client] = lambda: banco
+    return TestClient(app)
+
+
+class TestDicionarioPelaIA:
+    def test_termo_sem_par_vai_uma_vez_a_ia_e_entra_proposto(self, openrouter):
+        """A prescrição diz enoxaparina e a conta lança Clexane: nem o
+        dicionário, nem a marca, nem a concentração ligam os dois. A IA
+        recebe o termo e os medicamentos da conta e propõe o código. A segunda
+        parcial do atendimento tem o mesmo termo e não pergunta de novo."""
+        openrouter.respostas[PROPOSTAS] = {"propostas": [{"termo": ENOXAPARINA, "codigo": "90030001"}]}
+        banco = _cenario_do_passo_b()
+        _enviar(banco, _conta("48811", 2, 3), _conta("48812", 4, 6), _prontuario_com_enoxaparina())
+
+        assert _rodar_o_job(banco) == 2
+
+        assert [c["situacao"] for c in banco.tabelas["cm_conta"]] == ["A_FAZER", "A_FAZER"]
+        assert openrouter.formatos.count(PROPOSTAS) == 1
+        (corpo,) = [c for c in openrouter.corpos if c["response_format"]["json_schema"]["name"] == PROPOSTAS]
+        pergunta = corpo["messages"][1]["content"][0]["text"]
+        assert ENOXAPARINA in pergunta
+        assert "90030001 | CLEXANE 40MG/0,4ML SER PREENCH" in pergunta
+        (proposta,) = [t for t in banco.tabelas["cm_item_dicionario"] if t["termo"] == ENOXAPARINA]
+        assert {k: proposta[k] for k in ("codigo_conta", "situacao", "origem")} == {
+            "codigo_conta": "90030001",
+            "situacao": "PROPOSTO",
+            "origem": "IA",
+        }
+        assert [c["passo"] for c in banco.tabelas["cm_chamada_ia"]].count("DICIONARIO") == 1
+
+    def test_termo_que_a_ia_nao_soube_ligar_fica_sem_codigo_e_nao_volta_a_ia(self, openrouter):
+        # Código fora da lista da conta é chute: vale como sem par.
+        openrouter.respostas[PROPOSTAS] = {"propostas": [{"termo": ENOXAPARINA, "codigo": "99999999"}]}
+        banco = _cenario_do_passo_b()
+        _enviar(banco, _conta("48811", 2, 3), _conta("48812", 4, 6), _prontuario_com_enoxaparina())
+
+        assert _rodar_o_job(banco) == 2
+
+        assert openrouter.formatos.count(PROPOSTAS) == 1
+        (termo,) = [t for t in banco.tabelas["cm_item_dicionario"] if t["termo"] == ENOXAPARINA]
+        assert (termo["codigo_conta"], termo["situacao"]) == (None, "PROPOSTO")
+
+    def test_a_gestao_confirma_e_rejeita_a_proposta_pela_rota_e_a_faturista_nao(self, openrouter):
+        banco = _cenario_do_passo_b()
+        da_ia = {"situacao": "PROPOSTO", "origem": "IA"}
+        banco.tabelas["cm_item_dicionario"] += [
+            {"id": ENOXA_ID, "termo": ENOXAPARINA, "codigo_conta": "90030001", **da_ia},
+            {"id": ROCU_ID, "termo": "ROCURONIO 10MG/ML", "codigo_conta": "90040001", **da_ia},
+        ]
+        gestao, faturista = _cliente_da_carga(banco, "gestao"), _cliente_da_carga(banco, "faturista")
+        rota = "/api/contas-medicas/dicionario/propostas"
+
+        assert faturista.get(rota).status_code == 403
+        assert faturista.post(f"{rota}/{ENOXA_ID}/confirmar").status_code == 403
+        lista = gestao.get(rota)
+        assert lista.status_code == 200, lista.text
+        assert [(p["termo"], p["codigo_conta"]) for p in lista.json()["propostas"]] == [
+            (ENOXAPARINA, "90030001"),
+            ("ROCURONIO 10MG/ML", "90040001"),
+        ]
+
+        assert gestao.post(f"{rota}/{ENOXA_ID}/confirmar").status_code == 200
+        assert gestao.post(f"{rota}/{ROCU_ID}/rejeitar").status_code == 200
+
+        termos = {t["id"]: t for t in banco.tabelas["cm_item_dicionario"]}
+        decisao = [(t["situacao"], t["codigo_conta"], t["autor_id"]) for t in (termos[ENOXA_ID], termos[ROCU_ID])]
+        # Rejeitada: o termo fica sem código, para a IA não ser perguntada de novo.
+        assert decisao == [("CONFIRMADO", "90030001", "G1"), ("CONFIRMADO", None, "G1")]
+        assert gestao.get(rota).json()["propostas"] == []
+        assert gestao.post(f"{rota}/{ENOXA_ID}/confirmar").status_code == 409
 
 
 class TestCausaRaiz:

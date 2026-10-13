@@ -1322,6 +1322,7 @@ class TestTempoDasEtapas:
             "leitura_da_conta",
             "texto_do_prontuario",
             "leitura_do_prontuario",
+            "dicionario",
             "conferencia",
             "passo_a",
             "passo_b",

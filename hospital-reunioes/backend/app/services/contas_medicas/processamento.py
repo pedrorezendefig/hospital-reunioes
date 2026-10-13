@@ -49,7 +49,7 @@ from typing import Any
 
 from app.services import storage
 from app.services import transcricao_extractor as orcamento
-from app.services.contas_medicas import passo_a, passo_b
+from app.services.contas_medicas import dicionario_ia, passo_a, passo_b
 from app.services.contas_medicas import prontuario as leitura_do_prontuario
 from app.services.contas_medicas.conferencia import Conferencia, ProntuarioLido, conferir
 from app.services.contas_medicas.conteudo import Conteudo, ler_conteudo
@@ -101,6 +101,7 @@ ETAPAS = {
     "leitura_da_conta": "leitura da conta",
     "texto_do_prontuario": "leitura do PDF do prontuário",
     "leitura_do_prontuario": "leitura do prontuário",
+    "dicionario": "consulta do dicionário",
     "conferencia": "conferência",
     "passo_a": "leitura do prontuário pela IA",
     "passo_b": "comparação com a memória pela IA",
@@ -372,13 +373,21 @@ def _pipeline(supabase, conta: dict, cronometro: _Cronometro) -> None:
         prontuario = ProntuarioLido(estrutura, conteudo, textos)
         _gravar_prontuario(supabase, conta["atendimento_id"], arquivo_do_prontuario["id"], prontuario)
 
+    with cronometro.etapa("dicionario"):
+        # O termo de medicamento sem par vai uma vez à IA, antes da
+        # conferência: a proposta já vale para esta conta.
+        dicionario = dicionario_do_banco(supabase)
+        if dicionario_ia.propor_termos(
+            supabase, prontuario, lida, dicionario, conta_id=conta["id"], atendimento_id=conta["atendimento_id"]
+        ):
+            dicionario = dicionario_do_banco(supabase)
+
     with cronometro.etapa("conferencia"):
         operadora_id = atendimento.get("operadora_id")
         memoria = memoria_vigente(supabase, operadora_id) if operadora_id else None
         if memoria is None:
             raise _Falha(MENSAGEM_SEM_MEMORIA)
         busca_de_preco = _busca_de_preco(supabase, operadora_id)
-        dicionario = dicionario_do_banco(supabase)
         conferencia = conferir(
             lida,
             prontuario,
