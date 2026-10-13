@@ -129,3 +129,72 @@ def propor_regra_nova(supabase, sigla: str, texto: str) -> dict[str, Any]:
         ],
         "efeito_no_guia": proposta.efeito_no_guia,
     }
+
+
+def _proximo_codigo(sigla: str, secao: str, regras: list[dict[str, Any]]) -> str:
+    """`ALFA-DIA-03` quando a seção já tem a 01 e a 02: o maior número da seção mais um."""
+    prefixo = f"{sigla}-{secao}-"
+    numeros = [
+        int(r["codigo"][len(prefixo) :])
+        for r in regras
+        if r["codigo"].startswith(prefixo) and r["codigo"][len(prefixo) :].isdigit()
+    ]
+    return f"{prefixo}{max(numeros, default=0) + 1:02d}"
+
+
+def ensinar_regra(
+    supabase,
+    sigla: str,
+    *,
+    secao: str,
+    texto: str,
+    tipo: str | None,
+    origem: str | None,
+    parametro: dict[str, Any] | None,
+    autor_id: str | None,
+    permissoes: list[str],
+) -> dict[str, Any]:
+    """O "Validar regra": a regra conferida pela pessoa entra vigente numa
+    versão nova da memória, com quem validou e a data; o parâmetro, quando há,
+    muda no cabeçalho da versão nova.
+
+    Regra operacional pede "incluir regra operacional"; contratual, e qualquer
+    regra que mexa em parâmetro do cabeçalho, pede "regra contratual e tabelas".
+    """
+    sigla, operadora_id, vigente = _operadora_e_vigente(supabase, sigla)
+    texto = texto.strip()
+    if not texto:
+        raise MudancaRecusadaError("Escreva o texto da regra.")
+    if _CPF.search(texto):
+        raise MudancaRecusadaError(
+            "O texto tem um número no formato de CPF. A memória não pode ter dado de paciente: tire o número."
+        )
+    if parametro and not _chave_valida(parametro["chave"]):
+        raise MudancaRecusadaError(f"O parâmetro {parametro['chave']} não pode mudar por regra.")
+    pedidas = {permissao_do_tipo(tipo)} | ({permissao_do_tipo(None)} if parametro else set())
+    if pedidas - set(permissoes):
+        raise SemPermissaoNaRegraError("Sem permissão para incluir este tipo de regra.")
+
+    regras = _regras_da_versao(supabase, vigente["id"])
+    codigo = _proximo_codigo(sigla, secao, regras)
+    nova_regra = {
+        "operadora_id": operadora_id,
+        "codigo": codigo,
+        "secao": secao,
+        "texto": texto,
+        "tipo": tipo,
+        "origem": (origem or "").strip() or None,
+        "status": "VIGENTE",
+        "validado_por": autor_id,
+        "validado_em": _agora(),
+        "ativa": True,
+    }
+    parametros = None
+    resumo = f"{codigo} incluída (regra nova)"
+    if parametro:
+        parametros = _com_parametro(vigente.get("parametros_json") or {}, parametro["chave"], parametro["valor"])
+        resumo += f", com o parâmetro {parametro['chave']}"
+    versao = _gravar_versao(
+        supabase, operadora_id, vigente, regras, {}, autor_id, resumo, novas=[nova_regra], parametros=parametros
+    )
+    return {"operadora": sigla, "versao": versao["versao"], "regra": codigo}

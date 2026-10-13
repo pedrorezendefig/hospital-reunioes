@@ -29,7 +29,7 @@ from app.services.contas_medicas.memoria_edicao import (
     ler_memoria_da_operadora,
     mudar_regra,
 )
-from app.services.contas_medicas.regra_nova import propor_regra_nova
+from app.services.contas_medicas.regra_nova import ensinar_regra, propor_regra_nova
 
 router = APIRouter(prefix="/contas-medicas", tags=["contas-medicas"])
 
@@ -52,6 +52,20 @@ class RegraEmLinguagemComum(BaseModel):
     """O que a pessoa escreveu ou ditou para a IA propor a regra."""
 
     texto: str = Field(..., max_length=4000)
+
+
+class ParametroDaRegra(BaseModel):
+    """A chave do cabeçalho com ponto entre os níveis e o valor novo."""
+
+    chave: str = Field(..., max_length=100)
+    valor: str | int | float | bool | list | dict | None
+
+
+class RegraEnsinada(RegraDecidida):
+    """A regra nova conferida pela pessoa, na seção da memória, e o parâmetro que muda."""
+
+    secao: Literal["PRI", "PRC", "DIA", "PAC", "TAX", "CC", "HON", "INS", "MED"]
+    parametro: ParametroDaRegra | None = None
 
 
 def _permissoes_da_tela(me: dict) -> list[str]:
@@ -128,6 +142,36 @@ async def proposta_de_regra(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="A IA não respondeu agora. Tente de novo em alguns minutos.",
         ) from None
+
+
+@router.post("/operadoras/{sigla}/regras")
+@limiter.limit("30/minute")
+async def validar_regra_nova(
+    request: Request,
+    sigla: str,
+    corpo: RegraEnsinada,
+    me: dict = Depends(require_permissao_cm()),
+    supabase=Depends(get_supabase_client),
+) -> dict:
+    """Validar regra: a regra ensinada entra vigente numa versão nova da memória."""
+    try:
+        return ensinar_regra(
+            supabase,
+            sigla,
+            secao=corpo.secao,
+            texto=corpo.texto,
+            tipo=corpo.tipo,
+            origem=corpo.origem,
+            parametro=corpo.parametro.model_dump() if corpo.parametro else None,
+            autor_id=me.get("id"),
+            permissoes=me.get("permissoes_cm") or [],
+        )
+    except RegraNaoEncontradaError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from None
+    except SemPermissaoNaRegraError as exc:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from None
+    except MudancaRecusadaError as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from None
 
 
 @router.put("/operadoras/{sigla}/regras/{codigo}")
