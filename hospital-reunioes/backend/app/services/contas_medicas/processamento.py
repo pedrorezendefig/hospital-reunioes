@@ -73,8 +73,10 @@ from app.services.contas_medicas_conta import Conta, ErroLeitura, ler_conta
 from app.services.contas_medicas_extrator import (
     Pagina,
     Palavra,
+    digitalizadas,
     extrair_paginas,
     extrair_palavras,
+    ler_digitalizadas,
     paginas_do_texto_guardado,
     texto_para_guardar,
 )
@@ -348,6 +350,20 @@ def _texto(supabase, arquivo: dict) -> list[Pagina]:
     return paginas
 
 
+def _com_ocr(supabase, arquivo: dict, paginas: list[Pagina]) -> list[Pagina]:
+    """As páginas digitalizadas do Prontuário com o texto lido por OCR (#1191).
+    Roda aqui, na fila, e não no envio: o OCR de um prontuário real passa dos
+    30 s do proxy. O texto do OCR não vai para o texto guardado no bucket, que
+    fica no formato que a versão anterior lê. Sem o PDF, seguem sem texto."""
+    if not digitalizadas(paginas):
+        return paginas
+    pdf = _baixar(supabase, arquivo["chave_bucket"])
+    if pdf is None:
+        logger.warning("[ContasMedicas] OCR sem o PDF no bucket: as paginas digitalizadas seguem sem texto")
+        return paginas
+    return ler_digitalizadas(bytes(pdf), paginas)
+
+
 def _palavras_da_prescricao(supabase, arquivo: dict, estrutura) -> dict[int, list[Palavra]]:
     """As palavras com posição das páginas de prescrição, lidas do PDF (#1133).
     Sem o PDF ou sem a leitura, a prescrição fica com o leitor por linha."""
@@ -388,7 +404,8 @@ def _pipeline(supabase, conta: dict, cronometro: _Cronometro) -> None:
         )
         if arquivo_do_prontuario is None:
             raise _Falha(MENSAGEM_SEM_PRONTUARIO)
-        textos = [pagina.texto for pagina in _texto(supabase, arquivo_do_prontuario)]
+        paginas_do_prontuario = _texto(supabase, arquivo_do_prontuario)
+        textos = [pagina.texto for pagina in _com_ocr(supabase, arquivo_do_prontuario, paginas_do_prontuario)]
 
     with cronometro.etapa("leitura_do_prontuario"):
         try:

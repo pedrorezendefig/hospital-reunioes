@@ -25,7 +25,7 @@ from app.services.contas_medicas_extrator import (
     Palavra,
     extrair_paginas,
     extrair_palavras,
-    paginas_do_texto_guardado,
+    ler_digitalizadas,
     texto_para_guardar,
 )
 
@@ -128,24 +128,43 @@ def _tesseract_falso(pasta: Path, monkeypatch: pytest.MonkeyPatch, corpo: str) -
     monkeypatch.setenv("PATH", f"{pasta}{os.pathsep}{os.environ['PATH']}")
 
 
+def _ler(*paginas: str) -> list[Pagina]:
+    """O que a fila faz com o Prontuário: o texto do `pdftotext`, depois o OCR."""
+    pdf = _pdf(*paginas)
+    return ler_digitalizadas(pdf, extrair_paginas(pdf))
+
+
 def test_pagina_digitalizada_do_prontuario_ganha_o_texto_do_ocr_marcada_como_ocr(tmp_path, monkeypatch):
     _tesseract_falso(tmp_path, monkeypatch, f"sys.stdout.write({LIDO_PELO_OCR!r} + '\\n\\f')")
 
-    paginas = extrair_paginas(_pdf(CAPA_DO_PRONTUARIO, "", PAGINA_COM_TEXTO))
+    paginas = _ler(CAPA_DO_PRONTUARIO, "", PAGINA_COM_TEXTO)
 
     assert [(p.numero, p.ocr, p.sem_texto) for p in paginas] == [(1, False, False), (2, True, False), (3, False, False)]
     assert LIDO_PELO_OCR in paginas[1].texto
     assert LIDO_PELO_OCR not in paginas[2].texto
-    # Guardado no bucket e lido de volta, a página continua sendo de OCR e o
-    # form feed do `tesseract` não abre página nova.
-    guardadas = paginas_do_texto_guardado(texto_para_guardar(paginas))
-    assert [(p.numero, p.ocr) for p in guardadas] == [(1, False), (2, True), (3, False)]
+    # O form feed do `tesseract` não abre página nova no texto da página.
+    assert "\f" not in paginas[1].texto
+
+
+def test_o_envio_nao_passa_pelo_ocr_e_o_texto_guardado_fica_sem_ele(tmp_path, monkeypatch):
+    # O envio chama `extrair_paginas` dentro da requisição, atrás do proxy de 30 s,
+    # e guarda o texto no bucket: o OCR fica de fora dos dois (revisão do PR #1203).
+    chamado = tmp_path / "tesseract-chamado"
+    _tesseract_falso(tmp_path, monkeypatch, f"open({str(chamado)!r}, 'w').close()\ntime.sleep(60)")
+
+    inicio = time.monotonic()
+    paginas = extrair_paginas(_pdf(CAPA_DO_PRONTUARIO, "", PAGINA_COM_TEXTO))
+
+    assert [(p.numero, p.ocr, p.sem_texto) for p in paginas] == [(1, False, False), (2, False, True), (3, False, False)]
+    assert not chamado.exists()
+    assert time.monotonic() - inicio < 10
+    assert extrator.MARCA_DO_OCR.encode() not in texto_para_guardar(paginas)
 
 
 def test_pagina_sem_texto_da_conta_nao_passa_pelo_ocr(tmp_path, monkeypatch):
     _tesseract_falso(tmp_path, monkeypatch, f"sys.stdout.write({LIDO_PELO_OCR!r})")
 
-    paginas = extrair_paginas(_pdf("Atendimento:900001 Paciente: FULANO Conta:12345 Fatura Individual", ""))
+    paginas = _ler("Atendimento:900001 Paciente: FULANO Conta:12345 Fatura Individual", "")
 
     assert [(p.numero, p.ocr, p.sem_texto) for p in paginas] == [(1, False, False), (2, False, True)]
 
@@ -168,20 +187,31 @@ def test_pagina_que_o_ocr_nao_le_fica_sem_texto_e_a_leitura_continua(tmp_path, m
     else:
         _tesseract_falso(tmp_path, monkeypatch, tesseract)
 
-    paginas = extrair_paginas(_pdf(CAPA_DO_PRONTUARIO, "", PAGINA_COM_TEXTO))
+    paginas = _ler(CAPA_DO_PRONTUARIO, "", PAGINA_COM_TEXTO)
 
     assert [(p.numero, p.ocr, p.sem_texto) for p in paginas] == [(1, False, False), (2, False, True), (3, False, False)]
 
 
-def test_ocr_que_passa_do_prazo_deixa_a_pagina_sem_texto_e_a_leitura_continua(tmp_path, monkeypatch):
+def test_ocr_de_todas_as_paginas_cabe_num_prazo_da_leitura(tmp_path, monkeypatch):
+    # Três páginas digitalizadas, cada uma mais lenta que o prazo inteiro: o OCR
+    # do PDF todo para no prazo, não um prazo por página (revisão do PR #1203).
     _tesseract_falso(tmp_path, monkeypatch, "time.sleep(60)")
     monkeypatch.setattr(extrator, "PRAZO_DA_LEITURA", 3.0)
+    pdf = _pdf(CAPA_DO_PRONTUARIO, "", "", "", PAGINA_COM_TEXTO)
+    lidas_pelo_pdftotext = extrair_paginas(pdf)
 
     inicio = time.monotonic()
-    paginas = extrair_paginas(_pdf(CAPA_DO_PRONTUARIO, "", PAGINA_COM_TEXTO))
+    paginas = ler_digitalizadas(pdf, lidas_pelo_pdftotext)
 
-    assert [(p.numero, p.ocr, p.sem_texto) for p in paginas] == [(1, False, False), (2, False, True), (3, False, False)]
-    assert time.monotonic() - inicio < 10
+    assert [(p.numero, p.ocr, p.sem_texto) for p in paginas] == [
+        (1, False, False),
+        (2, False, True),
+        (3, False, True),
+        (4, False, True),
+        (5, False, False),
+    ]
+    # Um prazo por página levaria três; o vigia do PDF inteiro corta em um.
+    assert time.monotonic() - inicio < 2 * 3.0
 
 
 @SO_UNIX_OCR
@@ -193,7 +223,7 @@ def test_filho_do_ocr_morto_deixa_a_pagina_sem_texto_e_a_leitura_continua(tmp_pa
     falso.chmod(falso.stat().st_mode | stat.S_IXUSR)
     _tesseract_falso(tmp_path, monkeypatch, f"sys.stdout.write({LIDO_PELO_OCR!r})")
 
-    paginas = extrair_paginas(_pdf(CAPA_DO_PRONTUARIO, "", PAGINA_COM_TEXTO))
+    paginas = _ler(CAPA_DO_PRONTUARIO, "", PAGINA_COM_TEXTO)
 
     assert [(p.numero, p.ocr, p.sem_texto) for p in paginas] == [(1, False, False), (2, False, True), (3, False, False)]
     assert "OCR das paginas digitalizadas falhou" in caplog.text
