@@ -19,16 +19,21 @@ from __future__ import annotations
 
 import re
 import unicodedata
-from datetime import date
+from datetime import date, timedelta
 from typing import Any
 
 __all__ = [
     "ANTECEDENCIA_PADRAO",
     "contrato_da_memoria",
     "gravar_contrato_da_memoria",
+    "listar_contratos",
+    "situacao",
 ]
 
 ANTECEDENCIA_PADRAO = 60
+
+# Até quantos dias antes do vencimento o contrato está em Negociar reajuste.
+LIMITE_EM_DIA = 60
 
 # Os quatro campos que a memória e o envio preenchem; aviso e negociação são só da memória.
 CAMPOS_DO_CONTRATO = (
@@ -137,3 +142,44 @@ def gravar_contrato_da_memoria(supabase, operadora_id: str, parametros: dict[str
     if atual.get("confirmado_em"):
         campos = {k: v for k, v in campos.items() if k not in CAMPOS_DO_CONTRATO}
     supabase.table("cm_contrato").update(campos).eq("id", atual["id"]).execute()
+
+
+def situacao(vencimento: date | None, hoje: date) -> tuple[int | None, str]:
+    """Os dias que faltam e a situação (spec do diretor, item 14): mais de 60
+    dias Em dia; 60 ou menos Negociar reajuste; passou Vencido; sem data, Sem
+    contrato. O limite é o da spec, não a antecedência do aviso."""
+    if vencimento is None:
+        return None, "SEM_CONTRATO"
+    dias = (vencimento - hoje).days
+    if dias < 0:
+        return dias, "VENCIDO"
+    return dias, "NEGOCIAR" if dias <= LIMITE_EM_DIA else "EM_DIA"
+
+
+def antecedencia(contrato: dict[str, Any]) -> int:
+    aviso = contrato.get("aviso_dias")
+    return ANTECEDENCIA_PADRAO if aviso is None else int(aviso)
+
+
+def listar_contratos(supabase, hoje: date) -> list[dict[str, Any]]:
+    """Uma linha por operadora, com o contrato, os dias que faltam, a situação
+    e a data do aviso. A operadora sem contrato aparece como Sem contrato."""
+    operadoras = supabase.table("cm_operadora").select("id, sigla, nome").order("sigla").execute().data or []
+    contratos = {c["operadora_id"]: c for c in supabase.table("cm_contrato").select("*").execute().data or []}
+    linhas = []
+    for operadora in operadoras:
+        contrato = contratos.get(operadora["id"])
+        vencimento = _data((contrato or {}).get("vencimento"))
+        dias, estado = situacao(vencimento, hoje)
+        aviso = vencimento - timedelta(days=antecedencia(contrato)) if contrato and vencimento else None
+        linhas.append(
+            {
+                "sigla": operadora["sigla"],
+                "nome": operadora["nome"],
+                "contrato": contrato,
+                "dias": dias,
+                "situacao": estado,
+                "data_aviso": _iso(aviso),
+            }
+        )
+    return linhas

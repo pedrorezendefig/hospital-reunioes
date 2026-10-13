@@ -158,3 +158,65 @@ class TestContratoDaMemoria:
         assert _enviar_memoria(cliente, _memoria_com_contrato("")).status_code == 201
 
         assert banco.linhas("cm_contrato") == []
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 2. Dias que faltam e situacao
+# ═══════════════════════════════════════════════════════════════════════════
+
+HOJE = date(2027, 3, 2)
+
+
+def _banco_com_contratos(*contratos: tuple[str, str | None, dict[str, Any]]) -> _BancoDosContratos:
+    """Uma operadora por tupla `(sigla, vencimento, campos)`; vencimento `None` = sem contrato."""
+    banco = _BancoDosContratos()
+    for sigla, vencimento, campos in contratos:
+        operadora = banco.inserir("cm_operadora", {"sigla": sigla, "nome": f"{sigla.title()} Saude"})
+        if vencimento is not None:
+            banco.inserir(
+                "cm_contrato",
+                {
+                    "operadora_id": operadora["id"],
+                    "vencimento": vencimento,
+                    "vencimento_calculado": False,
+                    "vencimento_e_negociacao": False,
+                    "aviso_dias": 60,
+                    **campos,
+                },
+            )
+    return banco
+
+
+class TestSituacaoDoContrato:
+    def test_61_60_1_e_menos_1_dias_e_sem_contrato(self):
+        from app.services.contas_medicas.contratos import listar_contratos
+
+        banco = _banco_com_contratos(
+            ("A61", "2027-05-02", {}),
+            ("B60", "2027-05-01", {}),
+            ("C01", "2027-03-03", {}),
+            ("D00", "2027-03-01", {}),
+            ("ESEM", None, {}),
+        )
+
+        linhas = {linha["sigla"]: linha for linha in listar_contratos(banco, HOJE)}
+
+        assert {s: (linha["dias"], linha["situacao"]) for s, linha in linhas.items()} == {
+            "A61": (61, "EM_DIA"),
+            "B60": (60, "NEGOCIAR"),
+            "C01": (1, "NEGOCIAR"),
+            "D00": (-1, "VENCIDO"),
+            "ESEM": (None, "SEM_CONTRATO"),
+        }
+        assert linhas["B60"]["contrato"]["vencimento"] == "2027-05-01"
+        assert linhas["ESEM"]["contrato"] is None
+
+    def test_contrato_sem_vencimento_e_sem_contrato(self):
+        from app.services.contas_medicas.contratos import listar_contratos
+
+        banco = _banco_com_contratos(("ALFA", "", {}))
+        banco.linhas("cm_contrato")[0]["vencimento"] = None
+
+        [linha] = listar_contratos(banco, HOJE)
+
+        assert (linha["dias"], linha["situacao"]) == (None, "SEM_CONTRATO")
