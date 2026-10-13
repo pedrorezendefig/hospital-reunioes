@@ -16,6 +16,7 @@ import re
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from datetime import date, datetime
+from typing import TYPE_CHECKING
 
 from app.services.contas_medicas.cirurgia import (
     MARCA_DA_DESCRICAO,
@@ -33,8 +34,10 @@ from app.services.contas_medicas.prescricao import (
     ler_itens,
     texto_por_coluna,
 )
-from app.services.contas_medicas_extrator import Palavra
 from app.services.contas_medicas.prontuario import _RODAPE_GLOBAL, Documento, Prontuario, _sem_acento
+
+if TYPE_CHECKING:
+    from app.services.contas_medicas_extrator import Palavra
 
 # ----------------------------------------------------------------------------------
 # Balanço hídrico e glicemias
@@ -298,7 +301,7 @@ def _paginas(textos: Sequence[str], documento: Documento) -> list[tuple[int, str
     return [(n, _RODAPE_GLOBAL.sub("", textos[n - 1])) for n in documento.paginas]
 
 
-def _por_coluna(paginas: list[tuple[int, str]], palavras: Mapping[int, Sequence[Palavra]]) -> list[tuple[int, str]]:
+def _por_coluna(paginas: list[tuple[int, str]], palavras: "Mapping[int, Sequence[Palavra]]") -> list[tuple[int, str]]:
     """A página da prescrição remontada pela posição das colunas (#1133); a que não tem
     as palavras ou o cabeçalho de colunas fica com o texto do `-layout`."""
     lidas = []
@@ -311,7 +314,7 @@ def _por_coluna(paginas: list[tuple[int, str]], palavras: Mapping[int, Sequence[
 def ler_conteudo(
     texto_por_pagina: Sequence[str | None],
     prontuario: Prontuario,
-    palavras_por_pagina: Mapping[int, Sequence[Palavra]] | None = None,
+    palavras_por_pagina: "Mapping[int, Sequence[Palavra]] | None" = None,
 ) -> Conteudo:
     """`palavras_por_pagina`: as palavras com posição das páginas da prescrição, pelo
     número da página no PDF. Sem elas, a prescrição é lida por linha."""

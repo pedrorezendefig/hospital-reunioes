@@ -202,16 +202,22 @@ def _pdf_de_largura_fixa(paginas: list[str]) -> bytes:
         f'<pre style="font: 7pt monospace; margin: 0; page-break-after: always">{escape(texto)}</pre>'
         for texto in paginas
     )
-    return HTML(string=f"<html><head><style>@page {{ margin: 20pt }}</style></head><body>{corpo}</body></html>").write_pdf()
+    pagina = "<style>@page { margin: 20pt }</style>"
+    return HTML(string=f"<html><head>{pagina}</head><body>{corpo}</body></html>").write_pdf()
 
 
-def _ler_o_pdf(paginas: list[str], *, por_coluna: bool):
+def _ler_o_pdf(paginas: list[str], *, por_coluna: bool, tirar_das_palavras: frozenset[str] = frozenset()):
     from app.services.contas_medicas_extrator import extrair_paginas, extrair_palavras
 
     pdf = _pdf_de_largura_fixa(paginas)
     textos = [pagina.texto for pagina in extrair_paginas(pdf)]
     estrutura = ler_prontuario(textos, ATENDIMENTO)
-    palavras = extrair_palavras(pdf, range(1, len(textos) + 1)) if por_coluna else None
+    palavras = None
+    if por_coluna:
+        palavras = {
+            n: [p for p in lidas if p.texto not in tirar_das_palavras]
+            for n, lidas in extrair_palavras(pdf, range(1, len(textos) + 1)).items()
+        }
     return ler_conteudo(textos, estrutura, palavras)
 
 
@@ -253,6 +259,38 @@ def test_a_prescricao_inteira_lida_pela_coluna_sai_igual_a_lida_por_linha():
 
     assert len(por_coluna.itens) == 9
     assert por_coluna.itens == por_linha.itens
+
+
+def test_pagina_sem_o_cabecalho_de_colunas_cai_no_leitor_por_linha_com_o_mesmo_resultado():
+    # As palavras chegam, mas a linha de cabeçalho não está entre elas: não há x de coluna.
+    paginas = montar("conteudo/prescricao")
+    sem_cabecalho = frozenset({"Dose", "Padrão", "Duração", "Frequência", "SN", "Apl", "Datas/Horários"})
+
+    (por_linha,) = _ler_o_pdf(paginas, por_coluna=False).prescricoes
+    (sem_colunas,) = _ler_o_pdf(paginas, por_coluna=True, tirar_das_palavras=sem_cabecalho).prescricoes
+
+    assert len(sem_colunas.itens) == 9
+    assert sem_colunas.itens == por_linha.itens
+
+
+def test_a_consolidacao_por_item_e_dia_lida_pela_coluna_junta_o_nome_longo_dos_tres_dias():
+    paginas = montar(
+        prescricao(3, CEFTRIAXONA.format("D2/10", "12HS/12HS          EV"), SORO_ENCOSTADO),
+        prescricao(4, CEFTRIAXONA.format("D3/10", "12HS/12HS          EV    . 08 . 20"), CLEXANE_SUSPENSO),
+        prescricao(5, CEFTRIAXONA.format("D4/10", "24HS/24HS          EV    . 10"), SORO_ENCOSTADO),
+    )
+
+    registros = {r.nome: r for r in _ler_o_pdf(paginas, por_coluna=True).prescricao_consolidada}
+
+    assert sorted(registros) == ["CEFTRIAXONA 1G FR/AMP", SORO_LONGO]
+    assert registros["CEFTRIAXONA 1G FR/AMP"].doses_por_dia == {
+        date(2026, 10, 3): 2,
+        date(2026, 10, 4): 2,
+        date(2026, 10, 5): 1,
+    }
+    soro = registros[SORO_LONGO]
+    assert soro.doses_por_dia == {date(2026, 10, 3): 4, date(2026, 10, 5): 4}
+    assert (soro.se_necessario, soro.paginas) == (True, (1, 3))
 
 
 # ----------------------------------------------------------------------------------
@@ -451,9 +489,20 @@ def test_guia_tiss_devolve_o_procedimento_solicitado_e_a_acomodacao_autorizada()
 MODULOS = Path(__file__).parents[1] / "app" / "services" / "contas_medicas"
 
 
-@pytest.mark.parametrize("arquivo", ["conteudo.py", "prescricao.py", "cirurgia.py"])
+@pytest.mark.parametrize(
+    "arquivo",
+    [
+        MODULOS / "conteudo.py",
+        MODULOS / "prescricao.py",
+        MODULOS / "cirurgia.py",
+        MODULOS.parent / "contas_medicas_extrator.py",
+        MODULOS.parent / "contas_medicas_extrator_filho.py",
+        Path(__file__),
+    ],
+    ids=lambda a: a.name,
+)
 def test_sem_travessao_nem_meia_risca_no_codigo(arquivo):
-    texto = (MODULOS / arquivo).read_text(encoding="utf-8")
+    texto = arquivo.read_text(encoding="utf-8")
 
     assert chr(0x2014) not in texto
     assert chr(0x2013) not in texto
