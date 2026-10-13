@@ -28,7 +28,7 @@ from time import perf_counter
 from typing import Any, Literal
 
 from openai import APIError, OpenAI
-from pydantic import BaseModel, ConfigDict, ValidationError
+from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from app.config import settings
 from app.services.ai_processor import _OPENROUTER_HEADERS
@@ -57,6 +57,9 @@ PRAZO_DA_TENTATIVA_S = 180
 # Toda chamada do módulo: só provedor que aceita o schema, sem retenção do
 # texto e sem coleta para treino. O prontuário nunca fica no provedor.
 PROVEDOR = {"require_parameters": True, "zdr": True, "data_collection": "deny"}
+
+# O motivo de cada linha do Guia, como a faturista lê: uma frase curta (Anexo B).
+MOTIVO_MAX = 140
 
 _esperar = time.sleep
 
@@ -192,7 +195,7 @@ class LinhaDaComparacao(_Estrito):
     quantidade_lancada: float
     quantidade_devida: float
     regra_id: str
-    motivo: str
+    motivo: str = Field(max_length=MOTIVO_MAX)
     evidencia: Evidencia
     nivel_evidencia: Literal["REGISTRADO", "PRESCRITO", "PRESCRITO_SN", "POR_REGRA"]
     causa_raiz: Literal[
@@ -240,7 +243,8 @@ class PropostaDeRegra(_Estrito):
 def _schema_estrito(modelo: type[BaseModel]) -> dict[str, Any]:
     """O JSON schema do modelo como a saída estrita pede: as referências
     resolvidas no lugar, todo objeto fechado e com todas as chaves obrigatórias,
-    sem título nem valor padrão."""
+    sem título nem valor padrão. Sem `maxLength`, que a saída estrita da
+    Anthropic recusa com 400: o limite fica no Pydantic, que valida a resposta."""
     bruto = modelo.model_json_schema()
     definicoes = bruto.pop("$defs", {})
 
@@ -251,7 +255,9 @@ def _schema_estrito(modelo: type[BaseModel]) -> dict[str, Any]:
             return no
         if "$ref" in no:
             return resolver(definicoes[no["$ref"].rsplit("/", 1)[-1]])
-        limpo = {chave: resolver(valor) for chave, valor in no.items() if chave not in ("title", "default")}
+        limpo = {
+            chave: resolver(valor) for chave, valor in no.items() if chave not in ("title", "default", "maxLength")
+        }
         if limpo.get("type") == "object" and "properties" in limpo:
             limpo["additionalProperties"] = False
             limpo["required"] = list(limpo["properties"])
