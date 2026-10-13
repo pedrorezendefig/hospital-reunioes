@@ -20,7 +20,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 # Sanidade no build (issues #1114 e #1191): sem os binarios, a imagem nao sai.
-RUN pdftotext -v && pdftoppm -v && tesseract --version && tesseract --list-langs | grep -qx por
+RUN pdftotext -v
+RUN pdftoppm -v && tesseract --version && tesseract --list-langs | grep -qx por
 
 WORKDIR /app
 

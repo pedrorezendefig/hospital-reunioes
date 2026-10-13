@@ -433,6 +433,11 @@ class TestPdftotextNaImagem:
         linhas = [linha.strip() for linha in DOCKERFILE.read_text(encoding="utf-8").splitlines()]
         assert "RUN pdftotext -v" in linhas
 
+    def test_o_build_reprova_a_imagem_sem_o_ocr_em_portugues(self):
+        """Mutante: tirar o `grep -qx por` (ou a linha) da sanidade do OCR (#1191)."""
+        linhas = [linha.strip() for linha in DOCKERFILE.read_text(encoding="utf-8").splitlines()]
+        assert "RUN pdftoppm -v && tesseract --version && tesseract --list-langs | grep -qx por" in linhas
+
 
 class TestOMenuSabeDoEixo:
     def test_participantes_me_devolve_o_perfil_de_contas_medicas(self):
