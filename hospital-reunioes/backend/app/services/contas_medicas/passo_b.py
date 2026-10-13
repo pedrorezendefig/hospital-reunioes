@@ -45,6 +45,7 @@ from app.services.contas_medicas.evidencia import trecho_confere
 from app.services.contas_medicas.guia import agrupar_por_dia_e_setor
 from app.services.contas_medicas.memoria_texto import gerar_texto_memoria
 from app.services.contas_medicas.passo_a import _identificacao, _ler_quando, _texto_da_pagina
+from app.services.contas_medicas.tabelas import tabela_do_preco
 from app.services.contas_medicas_conta import Conta
 from app.utils.text_sanitizer import sanitizar_estrutura
 
@@ -293,6 +294,7 @@ class _Conferencias:
             "quantidade_devida": float(devida),
             "preco_lancado": _numero(lancado),
             "preco_tabela": _numero(tabela),
+            "tabela_id": tabela_do_preco(tabela),
             "valor_diferenca": _numero(valor),
             "regra_codigo": regra["codigo"],
             "motivo": _motivo_curto(antes, linha.motivo, depois),

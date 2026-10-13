@@ -41,7 +41,7 @@ from app.services.contas_medicas.conteudo import (  # noqa: E402
 from app.services.contas_medicas.memoria import MemoriaLida, RegraLida  # noqa: E402
 from app.services.contas_medicas.prescricao import ExamePedido, ItemPrescrito, Prescricao, consolidar  # noqa: E402
 from app.services.contas_medicas.prontuario import Prontuario  # noqa: E402
-from app.services.contas_medicas.tabelas import NAO_CONFERIDO  # noqa: E402
+from app.services.contas_medicas.tabelas import NAO_CONFERIDO, PrecoDeTabela  # noqa: E402
 from app.services.contas_medicas_conta import Conta, ItemConta  # noqa: E402
 
 CENTAVO = Decimal("0.01")
@@ -115,14 +115,15 @@ def _memoria(parametros: dict[str, Any] | None = None, *, pendentes: tuple[str, 
 def _tabela(precos: dict[tuple[str, str], Any]):
     """A busca de preço como a conferência recebe: (categoria, código, data, coluna).
 
-    O valor do dicionário é um preço, `PACOTE`, ou `{coluna: preço}`.
+    O valor do dicionário é um preço, `PACOTE`, ou `{coluna: preço}`. O preço
+    sai como o da tabela de verdade, com a versão: `tb-<categoria>` (#1206).
     """
 
     def preco(categoria: str, codigo: str, data: date, coluna: str | None = None):
         valor = precos.get((categoria, codigo), NAO_CONFERIDO)
         if isinstance(valor, dict):
             valor = valor.get(coluna, NAO_CONFERIDO)
-        return Decimal(str(valor)) if isinstance(valor, int | float) else valor
+        return PrecoDeTabela(str(valor), f"tb-{categoria}") if isinstance(valor, int | float) else valor
 
     return preco
 
@@ -322,6 +323,7 @@ class TestAchadosDoDiretor:
             "quantidade_devida": 2.0,
             "preco_lancado": 0.17,
             "preco_tabela": 0.20,
+            "tabela_id": "tb-MATERIAL",
             "valor_diferenca": 0.06,
             "regra_codigo": "ALFA-PRC-02",
             "evidencia_pagina": 5,
@@ -353,6 +355,7 @@ class TestAchadosDoDiretor:
             "quantidade_devida": 3.0,
             "preco_lancado": 239.65,
             "preco_tabela": None,
+            "tabela_id": None,
             "valor_diferenca": 718.95,
             "regra_codigo": "ALFA-PRI-07",
             "evidencia_pagina": 14,
@@ -384,6 +387,7 @@ class TestAchadosDoDiretor:
             "quantidade_devida": 0.0,
             "preco_lancado": 331.99,
             "preco_tabela": None,
+            "tabela_id": None,
             "valor_diferenca": -331.99,
             "regra_codigo": "ALFA-PRI-06",
             "evidencia_pagina": 3,
@@ -433,6 +437,7 @@ class TestAchadosDoDiretor:
             "quantidade_devida": 3.0,
             "preco_lancado": 9.61,
             "preco_tabela": 4.80,
+            "tabela_id": "tb-DIARIA_TAXA",
             "valor_diferenca": -14.43,
             "regra_codigo": "ALFA-CC-04",
             "evidencia_pagina": 20,
@@ -476,6 +481,7 @@ class TestAchadosDoDiretor:
             "quantidade_devida": None,
             "preco_lancado": None,
             "preco_tabela": None,
+            "tabela_id": None,
             "valor_diferenca": None,
             "regra_codigo": "ALFA-PRI-12",
             "evidencia_pagina": 30,
@@ -682,6 +688,7 @@ class TestDiarias:
             "quantidade_devida": 1.0,
             "preco_lancado": None,
             "preco_tabela": 609.60,
+            "tabela_id": "tb-DIARIA_TAXA",
             "valor_diferenca": 609.60,
             "regra_codigo": "ALFA-DIA-01",
             "evidencia_pagina": None,
@@ -832,6 +839,7 @@ class TestTeto:
             "quantidade_devida": 180.0,
             "preco_lancado": 0.30,
             "preco_tabela": None,
+            "tabela_id": None,
             "valor_diferenca": -6.00,
             "regra_codigo": "ALFA-INS-33",
             "evidencia_pagina": 4,
@@ -1105,6 +1113,7 @@ class TestExames:
             "quantidade_devida": 1.0,
             "preco_lancado": None,
             "preco_tabela": None,
+            "tabela_id": None,
             "valor_diferenca": None,
             "regra_codigo": "ALFA-SAD-01",
             "evidencia_pagina": 30,
@@ -1126,6 +1135,7 @@ class TestExames:
             "quantidade_devida": 0.0,
             "preco_lancado": 30.00,
             "preco_tabela": None,
+            "tabela_id": None,
             "valor_diferenca": -30.00,
             "regra_codigo": "ALFA-SAD-01",
             "evidencia_pagina": 7,
@@ -1215,6 +1225,7 @@ class TestGlicemia:
             "quantidade_devida": 4.0,
             "preco_lancado": 3.00,
             "preco_tabela": 3.00,
+            "tabela_id": "tb-MATERIAL",
             "valor_diferenca": 6.00,
             "regra_codigo": "ALFA-INS-18",
             "evidencia_pagina": 40,

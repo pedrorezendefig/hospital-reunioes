@@ -88,18 +88,40 @@ ESTADOS_DA_LINHA = _lista_do_check(_SQL, r"\bestado\s+TEXT NOT NULL DEFAULT 'ABE
 TIPOS_DE_NOTIFICACAO = _lista_do_check(_SQL, r"ADD CONSTRAINT notificacoes_tipo_check")
 
 
+def _colunas_da_linha_do_guia() -> set[str]:
+    """As colunas de `cm_guia_linha`: as do CREATE TABLE da 116 e as que as
+    migrations seguintes acrescentam. Coluna fora delas o PostgREST recusa."""
+    bloco = re.search(r"CREATE TABLE IF NOT EXISTS cm_guia_linha \((.*?)\n\);", _SQL, flags=re.DOTALL)
+    assert bloco, "a migration 116 nao cria cm_guia_linha"
+    colunas = set(re.findall(r"^  (\w+)\s", bloco.group(1), flags=re.MULTILINE))
+    for migration in sorted(MIGRATION.parent.glob("*.sql")):
+        colunas |= set(
+            re.findall(
+                r"ALTER TABLE cm_guia_linha\s+ADD COLUMN IF NOT EXISTS (\w+)",
+                migration.read_text(encoding="utf-8"),
+            )
+        )
+    return colunas
+
+
+COLUNAS_DA_LINHA = _colunas_da_linha_do_guia()
+
+
 def test_o_duble_le_os_checks_da_migration():
     """Piso do detector: regex que parou de casar devolveria conjunto vazio."""
     assert {"NA_FILA", "PROCESSANDO", "A_FAZER", "ERRO"} <= SITUACOES_DA_CONTA
     assert {"INCLUIR", "VALIDAR"} <= ACOES_DA_LINHA
     assert {"ABERTA", "FEITO", "NAO_PROCEDE"} <= ESTADOS_DA_LINHA
     assert {"CONTAS_MEDICAS", "MENCAO"} <= TIPOS_DE_NOTIFICACAO
+    assert {"conta_id", "acao", "preco_tabela", "criado_em"} <= COLUNAS_DA_LINHA
 
 
 def _violacao(nome: str, linha: dict) -> str | None:
     if nome == "cm_conta" and "situacao" in linha and linha["situacao"] not in SITUACOES_DA_CONTA:
         return "cm_conta_situacao_check"
     if nome == "cm_guia_linha":
+        if desconhecidas := set(linha) - COLUNAS_DA_LINHA:
+            return f"PGRST204: coluna {sorted(desconhecidas)} nao existe em cm_guia_linha"
         if linha.get("acao") not in ACOES_DA_LINHA:
             return "cm_guia_linha_acao_check"
         if linha.get("estado", "ABERTA") not in ESTADOS_DA_LINHA:
@@ -1842,3 +1864,42 @@ class TestVersaoDaTabela:
         pacote = _linhas_gravadas(banco, conta["id"])["98005497"]
 
         assert (pacote["preco_tabela"], pacote["tabela_id"]) == (4500.0, "tb-pac")
+
+    def test_a_nova_versao_nao_muda_a_conta_ja_analisada_e_vale_para_a_conta_seguinte(self):
+        from datetime import date
+
+        from app.services.contas_medicas.tabelas import importar_tabela, ler_tabela
+
+        banco = _cenario()
+        _enviar(banco, _conta("48811"), _prontuario())
+        _rodar_o_job(banco)
+        (antiga,) = banco.tabelas["cm_conta"]
+        assert _linhas_gravadas(banco, antiga["id"])["70000001"]["tabela_id"] == "tb-mat"
+
+        # "Nova versão" da tabela de materiais, valendo desde o começo do mês:
+        # pela data, a conta antiga também cairia nela.
+        csv = (
+            "codigo_assim;codigo_tuss;grupo;descricao;preco_comum;preco_carioca\n"
+            "0000009;70000001;AGULHAS;AGULHA HIPODERMICA;0.30;0.35\n"
+        )
+        importar_tabela(
+            banco,
+            "op-alfa",
+            "MATERIAL",
+            ler_tabela(csv),
+            vigencia_inicio=date(2026, 10, 1),
+            vigencia_fim=None,
+            versao="2",
+            arquivo_nome="materiais-v2.csv",
+            autor_id="G1",
+        )
+        (nova,) = [t for t in banco.tabelas["cm_tabela_preco"] if t["nome"] == "materiais-v2.csv"]
+
+        _enviar(banco, _conta("48812"))
+        _rodar_o_job(banco)
+        (seguinte,) = [c for c in banco.tabelas["cm_conta"] if c["numero_conta"] == "48812"]
+
+        velha = _linhas_gravadas(banco, antiga["id"])["70000001"]
+        assert (velha["preco_tabela"], velha["tabela_id"]) == (0.20, "tb-mat")
+        agulha = _linhas_gravadas(banco, seguinte["id"])["70000001"]
+        assert (agulha["preco_tabela"], agulha["tabela_id"]) == (0.30, nova["id"])

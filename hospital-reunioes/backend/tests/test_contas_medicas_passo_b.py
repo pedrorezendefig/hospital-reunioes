@@ -156,6 +156,18 @@ class TestConferenciaDasLinhasDaIA:
         assert (equipo["preco_tabela"], equipo["valor_diferenca"], equipo["confianca"]) == (12.5, 12.5, "ALTA")
         assert {linha["origem"] for linha in linhas if linha["codigo"] != "70000002"} == {"CODIGO"}
 
+    def test_a_linha_da_ia_com_preco_de_tabela_grava_a_versao_da_tabela(self, openrouter):
+        """Issue #1206: a versão fica no banco, a rota do Guia não mostra."""
+        banco = _cenario_do_passo_b()
+        conta, _ = _analisar(banco, openrouter, _linha_da_ia())
+
+        (equipo,) = [
+            linha
+            for linha in banco.tabelas["cm_guia_linha"]
+            if linha["conta_id"] == conta["id"] and linha["codigo"] == "70000002"
+        ]
+        assert (equipo["origem"], equipo["preco_tabela"], equipo["tabela_id"]) == ("IA", 12.5, "tb-mat")
+
     def test_cada_defeito_da_ia_recebe_a_conferencia_do_codigo(self, openrouter):
         banco = _cenario_do_passo_b()
         conta, linhas = _analisar(
