@@ -67,6 +67,17 @@ export const minutos = (ms: number) => {
   return m < 60 ? `${m} min` : `${Math.floor(m / 60)} h ${m % 60} min`
 }
 
+/**
+ * Migrations que o humano declarou aplicadas numa fala ("apliquei a migration 118",
+ * "apliquei as migrations 117 e 118"): só o passado "apliquei" seguido de "migration"
+ * e de números de três dígitos; nada de futuro, pergunta ou negativa.
+ */
+export const declaradasAplicadas = (texto: string): number[] => {
+  const m = /(?<!n[ãa]o\s)(?<!n[ãa]o\s\w+\s)\bapliquei\s+(?:j[áa]\s+)?(?:a|as|essa|essas|aquela|aquelas)?\s*migrations?\s+((?:\d{3}(?:\s*[,e]\s*)?)+)/i.exec(texto)
+  if (!m) return []
+  return [...new Set((m[1]!.match(/\d{3}/g) ?? []).map(Number))].sort((a, b) => a - b)
+}
+
 /** Migration que a subida pediu e o /api/health ainda não devolveu, uma por número. */
 export const pendentes = (c: Coleta): Migration[] => {
   const porNumero = new Map<number, Migration>()
@@ -353,6 +364,17 @@ let ultimaAssinatura: string | null = null
 const sessoesVistas = new Set<string>()
 const migrationsAvisadas = new Set<number>()
 
+/** Grava a declaração no registro (~/.claude/hr-ondas/aplicadas) e recoleta. */
+async function registrarAplicadas($: EngineInterface, numeros: number[]) {
+  const r = await $.process.run(
+    ['/bin/bash', `${$.plugin.root}/hooks/coletar.sh`, `--registrar=${numeros.join(',')}`],
+    { timeoutMs: 10_000 },
+  )
+  if (r.exitCode !== 0) throw new Error(r.stderr.slice(0, 200) || `saída ${r.exitCode}`)
+  $.ui.toast(`Migration ${numeros.join(', ')} registrada como aplicada`)
+  await coletar($, true)
+}
+
 async function coletar($: EngineInterface, fresco = false) {
   if (rodando) {
     frescoPendente ||= fresco
@@ -429,10 +451,31 @@ export const register: Register = on => {
 
   on('command.run', { command: 'ondas' }, async ($, e) => {
     const arg = e.args.trim()
+    // /ondas aplicada 118[,119]: o humano aplicou no Studio e declara
+    const aplicada = /^aplicadas?\s+([\d,\s]+)$/.exec(arg)
+    if (aplicada) {
+      const numeros = (aplicada[1]!.match(/\d+/g) ?? []).map(Number)
+      await registrarAplicadas($, numeros)
+      return { text: `Migration ${numeros.join(', ')} registrada como aplicada.` }
+    }
     if (arg === 'todos' || arg === 'ativos') await update($, todos, () => arg === 'todos')
     await $.ui.open({ id: PANE, title: 'Ondas', columns: 78 })
     await coletar($, true)
     return { text: `Painel das ondas atualizado${arg === 'todos' ? ', com todos os PRDs' : ''}.` }
+  })
+
+  // "apliquei a migration 118" em qualquer sessão: registra e o painel para de cobrar
+  on('prompt.submit', async ($, e, next) => {
+    const numeros = declaradasAplicadas(e.text)
+    if (!numeros.length) return next(e)
+    let nota: string
+    try {
+      await registrarAplicadas($, numeros)
+      nota = `hr-ondas: migration ${numeros.join(', ')} registrada como aplicada em ~/.claude/hr-ondas/aplicadas; o painel das ondas já não a cobra.`
+    } catch (falha) {
+      nota = `hr-ondas: não consegui registrar a migration ${numeros.join(', ')} como aplicada: ${String(falha).slice(0, 160)}`
+    }
+    return next({ ...e, context: [...(e.context ?? []), nota] })
   })
 
   // CI em espera na própria sessão: o --watch segura a chamada até o fim.

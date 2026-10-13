@@ -1,7 +1,7 @@
 import { expect, mock, test } from 'claude-code/testing'
 
 import {
-  agentesDoPrd, alvo, assinatura, atividadeDaSessao, corDaDuracao, detalhe, duracaoDaOnda, etapas, focoDaSessao, linhagem,
+  agentesDoPrd, alvo, assinatura, atividadeDaSessao, corDaDuracao, declaradasAplicadas, detalhe, duracaoDaOnda, etapas, focoDaSessao, linhagem,
   nomeCurtoDaSessao, ondasDoPrd, pendentes, prdsVisiveis, resumoDaOnda, rotuloDoAlvo, rotuloDoShell, sessoesDoPrd,
   situacaoDaOnda, subidaDoPr,
 } from '../hooks/register'
@@ -28,6 +28,16 @@ const AGENTES = [
 test('migration pendente é só a que o health ainda não devolveu', () => {
   expect(pendentes(comEm(COLETA)).map(m => m.numero)).toEqual([117])
   expect(pendentes(comEm({ ...COLETA, aplicada: 117 }))).toEqual([])
+})
+
+test('a fala "apliquei a migration N" é declaração; futuro, negativa e outra frase não são', () => {
+  expect(declaradasAplicadas('apliquei a migration 118 no Studio, pode seguir')).toEqual([118])
+  expect(declaradasAplicadas('Apliquei as migrations 117 e 118')).toEqual([117, 118])
+  expect(declaradasAplicadas('já apliquei a migration 116, 117, 118')).toEqual([116, 117, 118])
+  expect(declaradasAplicadas('vou aplicar a migration 118 agora')).toEqual([])
+  expect(declaradasAplicadas('não apliquei a migration 118 ainda')).toEqual([])
+  expect(declaradasAplicadas('apliquei o patch 118')).toEqual([])
+  expect(declaradasAplicadas('a migration 118 está esperando')).toEqual([])
 })
 
 test('painel mostra o PRD com sessão viva primeiro e esconde o PRD parado', () => {
