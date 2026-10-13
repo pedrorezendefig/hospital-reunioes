@@ -172,12 +172,15 @@ class _Provedor:
         self.corpos: list[dict] = []
         self.respostas: list[tuple[str, dict]] = [(json.dumps(EVENTOS_VALIDOS), USO_PADRAO)]
 
-    def responder(self, *respostas: tuple[str, dict]) -> None:
+    def responder(self, *respostas: tuple[str, dict] | httpx.Response) -> None:
         self.respostas = list(respostas)
 
     def __call__(self, request: httpx.Request) -> httpx.Response:
         self.corpos.append(json.loads(request.content))
-        conteudo, uso = self.respostas.pop(0) if len(self.respostas) > 1 else self.respostas[0]
+        resposta = self.respostas.pop(0) if len(self.respostas) > 1 else self.respostas[0]
+        if isinstance(resposta, httpx.Response):
+            return resposta
+        conteudo, uso = resposta
         return httpx.Response(
             200,
             json={
@@ -340,3 +343,40 @@ class TestRequisicaoAoProvedor:
         assert not corpo["model"].startswith("anthropic/")
         assert "Você lê prontuários hospitalares" in corpo["messages"][0]["content"][0]["text"]
         assert "cache_control" not in json.dumps(corpo["messages"])
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 3. A resposta fora do formato
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+class TestRespostaForaDoFormato:
+    def test_tres_respostas_fora_do_schema_levantam_o_erro_do_adaptador_com_espera_crescente(
+        self, provedor, monkeypatch
+    ):
+        esperas: list[float] = []
+        monkeypatch.setattr(ia, "_esperar", esperas.append)
+        provedor.responder(('{"linhas": "não é lista", "resumo": "x"}', USO_PADRAO))
+
+        with pytest.raises(ia.ErroDaIA):
+            _comparar()
+
+        assert len(provedor.corpos) == 3
+        assert len(esperas) == 2
+        assert 0 < esperas[0] < esperas[1]
+
+    def test_a_segunda_tentativa_no_formato_vale(self, provedor):
+        provedor.responder(("isto não é JSON", USO_PADRAO), (json.dumps(LINHAS_VALIDAS), USO_PADRAO))
+
+        resultado = _comparar()
+
+        assert len(provedor.corpos) == 2
+        assert [linha.regra_id for linha in resultado.linhas] == ["ASSIM-INS-33"]
+
+    def test_provedor_fora_do_ar_tambem_tem_tres_tentativas(self, provedor):
+        provedor.responder(httpx.Response(503, json={"error": {"message": "sem provedor"}}))
+
+        with pytest.raises(ia.ErroDaIA):
+            _extrair()
+
+        assert len(provedor.corpos) == 3

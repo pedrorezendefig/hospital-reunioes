@@ -19,11 +19,12 @@ memória vão em bloco de cache. A resposta é validada pelo Pydantic.
 from __future__ import annotations
 
 import json
+import logging
 import time
 from typing import Any, Literal, TypeVar
 
-from openai import OpenAI
-from pydantic import BaseModel, ConfigDict
+from openai import APIError, OpenAI
+from pydantic import BaseModel, ConfigDict, ValidationError
 
 from app.config import settings
 from app.services.ai_processor import _OPENROUTER_HEADERS
@@ -38,8 +39,12 @@ __all__ = [
     "extrair_eventos",
 ]
 
-# O prazo de uma tentativa. Três tentativas e as esperas cabem nos 15 minutos
-# em que o processamento considera a conta presa.
+logger = logging.getLogger(__name__)
+
+# Três tentativas, com espera crescente entre elas. O prazo de cada uma e as
+# esperas cabem nos 15 minutos em que o processamento considera a conta presa.
+TENTATIVAS = 3
+ESPERAS_S = (5, 20)
 PRAZO_DA_TENTATIVA_S = 240
 
 # Toda chamada do módulo: só provedor que aceita o schema, sem retenção do
@@ -261,17 +266,30 @@ def _chamar(
         {"role": "system", "content": [_bloco(instrucao, cache=anthropic)]},
         {"role": "user", "content": [_bloco(texto, cache=anthropic and cache) for texto, cache in blocos]},
     ]
-    resposta = _cliente().chat.completions.create(
-        model=modelo,
-        messages=mensagens,
-        response_format={
-            "type": "json_schema",
-            "json_schema": {"name": saida.__name__, "strict": True, "schema": _schema_estrito(saida)},
-        },
-        extra_headers=_OPENROUTER_HEADERS,
-        extra_body={"provider": PROVEDOR, "usage": {"include": True}},
-    )
-    return saida.model_validate_json(resposta.choices[0].message.content or "")
+    formato = {
+        "type": "json_schema",
+        "json_schema": {"name": saida.__name__, "strict": True, "schema": _schema_estrito(saida)},
+    }
+    cliente = _cliente()
+    falha = ""
+    for tentativa in range(1, TENTATIVAS + 1):
+        if tentativa > 1:
+            _esperar(ESPERAS_S[tentativa - 2])
+        try:
+            resposta = cliente.chat.completions.create(
+                model=modelo,
+                messages=mensagens,
+                response_format=formato,
+                extra_headers=_OPENROUTER_HEADERS,
+                extra_body={"provider": PROVEDOR, "usage": {"include": True}},
+            )
+            conteudo = resposta.choices[0].message.content if resposta.choices else None
+            return saida.model_validate_json(conteudo or "")
+        except (APIError, ValidationError) as erro:
+            # O tipo do erro, nunca a mensagem: a resposta inválida pode citar o prontuário.
+            falha = type(erro).__name__
+            logger.warning("[ContasMedicas] IA %s, tentativa %s: %s", modelo, tentativa, falha)
+    raise ErroDaIA(f"A IA não respondeu no formato em {TENTATIVAS} tentativas ({falha})")
 
 
 # ----------------------------------------------------------------------------------

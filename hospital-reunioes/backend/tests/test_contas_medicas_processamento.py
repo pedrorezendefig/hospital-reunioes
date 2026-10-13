@@ -20,6 +20,7 @@ concorrente.
 
 from __future__ import annotations
 
+import json
 import logging
 import os
 import re
@@ -33,9 +34,11 @@ from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
 
+import httpx
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
+from openai import OpenAI
 from postgrest.exceptions import APIError
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
@@ -45,7 +48,7 @@ from app.limiter import limiter  # noqa: E402
 from app.routers import contas_medicas_envio as envio_router  # noqa: E402
 from app.routers import contas_medicas_guia as guia_router  # noqa: E402
 from app.services.contas_medicas import envio as envio_service  # noqa: E402
-from app.services.contas_medicas import processamento  # noqa: E402
+from app.services.contas_medicas import ia, processamento  # noqa: E402
 from app.services.contas_medicas.conferencia import ProntuarioLido, conferir  # noqa: E402
 from app.services.contas_medicas.conteudo import ler_conteudo  # noqa: E402
 from app.services.contas_medicas.memoria import MemoriaLida, RegraLida, parametros_lidos  # noqa: E402
@@ -987,6 +990,110 @@ class TestLeituraQueNaoFecha:
             "A análise parou na conferência. Envie de novo.",
             3,
         )
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 6b. A IA que não responde no formato (issue #1130)
+# ═══════════════════════════════════════════════════════════════════════════
+
+EVENTOS_DA_IA = {
+    "atendimento": ATENDIMENTO,
+    "idade_anos": 67,
+    "movimentacoes": [],
+    "terapias": [],
+    "prescricoes": [],
+    "procedimentos": [],
+    "cirurgias": [],
+    "documentos_ausentes": [],
+    "observacoes": [],
+}
+
+
+class _OpenRouter:
+    """O provedor do teste, na fronteira HTTP: responde fora do formato
+    enquanto `fora_do_formato` for verdade, e conta as requisições."""
+
+    def __init__(self):
+        self.requisicoes = 0
+        self.fora_do_formato = True
+
+    def __call__(self, request: httpx.Request) -> httpx.Response:
+        self.requisicoes += 1
+        conteudo = "não é JSON" if self.fora_do_formato else json.dumps(EVENTOS_DA_IA)
+        return httpx.Response(
+            200,
+            json={
+                "id": "gen",
+                "object": "chat.completion",
+                "created": 1,
+                "model": "m",
+                "choices": [
+                    {"index": 0, "message": {"role": "assistant", "content": conteudo}, "finish_reason": "stop"}
+                ],
+                "usage": {"prompt_tokens": 10, "completion_tokens": 5, "total_tokens": 15, "cost": 0.001},
+            },
+        )
+
+
+@pytest.fixture
+def openrouter(monkeypatch) -> _OpenRouter:
+    duble = _OpenRouter()
+    monkeypatch.setattr(
+        ia,
+        "_cliente",
+        lambda: OpenAI(
+            api_key="chave-de-teste",
+            base_url="https://openrouter.ai/api/v1",
+            http_client=httpx.Client(transport=httpx.MockTransport(duble)),
+            max_retries=0,
+        ),
+    )
+    monkeypatch.setattr(ia, "_esperar", lambda _segundos: None)
+    return duble
+
+
+def _conferencia_que_chama_a_ia(banco: _Banco):
+    """A conferência com uma chamada ao adaptador antes, onde o passo A vai
+    entrar: o erro que sai do adaptador de verdade atravessa o pipeline."""
+
+    def conferir_com_ia(*args, **kwargs):
+        (conta,) = banco.tabelas["cm_conta"]
+        ia.extrair_eventos(
+            "texto", "orientações", supabase=banco, conta_id=conta["id"], atendimento_id=conta["atendimento_id"]
+        )
+        return conferir(*args, **kwargs)
+
+    return conferir_com_ia
+
+
+class TestIAForaDoFormato:
+    def test_a_conta_fica_em_erro_com_a_frase_e_o_reprocesso_funciona(self, monkeypatch, openrouter):
+        banco = _cenario()
+        monkeypatch.setattr(processamento, "conferir", _conferencia_que_chama_a_ia(banco))
+        _enviar(banco, _conta(), _prontuario())
+
+        _rodar_o_job(banco)
+
+        (conta,) = banco.tabelas["cm_conta"]
+        # As três tentativas são do adaptador; o pipeline não repete a conta.
+        assert openrouter.requisicoes == 3
+        assert (conta["situacao"], conta["erro_motivo"], conta["tentativas"]) == (
+            "ERRO",
+            "Tente de novo em alguns minutos",
+            1,
+        )
+        assert [(c["situacao"], c["erro_motivo"]) for c in _fila(banco)] == [
+            ("ERRO", "Tente de novo em alguns minutos")
+        ]
+
+        # O botão da conta em Erro manda a mesma conta de novo; a IA voltou.
+        openrouter.fora_do_formato = False
+        _enviar(banco, _conta())
+        _rodar_o_job(banco)
+
+        assert openrouter.requisicoes == 4
+        assert banco.conta(conta["id"])["situacao"] == "A_FAZER"
+        assert banco.conta(conta["id"])["erro_motivo"] is None
 
 
 # ═══════════════════════════════════════════════════════════════════════════
