@@ -510,3 +510,29 @@ class TestAsRotasEstaoNoApp:
         assert "get" in caminhos["/api/contas-medicas/operadoras/{sigla}"]
         assert "put" in caminhos["/api/contas-medicas/operadoras/{sigla}/regras/{codigo}"]
         assert "post" in caminhos["/api/contas-medicas/operadoras/{sigla}/regras/{codigo}/decisao"]
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 7. O texto do Produto no Kit de conhecimento
+# ═══════════════════════════════════════════════════════════════════════════
+
+KIT = Path(__file__).resolve().parents[1] / "app" / "conhecimento" / "contas-medicas.md"
+
+
+class TestTextoDoProduto:
+    """A sanidade geral (piso, seções, sem rota nem tabela) mora em
+    `test_kit_conhecimento.py`; aqui, o que ESTE texto tem que dizer da Memória por tela."""
+
+    def test_diz_que_a_memoria_se_edita_pela_tela_e_cada_mudanca_gera_versao(self):
+        no_ar = KIT.read_text(encoding="utf-8").split("## O que já está no ar")[1].split("\n## ")[0]
+
+        for termo in (
+            "edita a regra pela tela",
+            "decide a regra pendente",
+            "gera uma versão nova da memória",
+            "texto anterior",
+            "aplicar a todas as operadoras que têm esta regra",
+            "Nova versão",
+            "Exportar",
+        ):
+            assert termo in no_ar, termo
