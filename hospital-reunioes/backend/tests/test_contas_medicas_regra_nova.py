@@ -14,6 +14,7 @@ provedor da IA dublado no transporte HTTP (o adaptador roda inteiro).
 from __future__ import annotations
 
 import json
+from pathlib import Path
 from typing import Any
 
 import httpx
@@ -372,3 +373,49 @@ class TestContasComRegraNova:
         assert next(c for c in banco.linhas("cm_conta") if c["id"] == EM_CORRECAO_ALFA)["situacao"] == "NA_FILA"
         assert [linha["id"] for linha in banco.linhas("cm_guia_linha")] == ["l-feita"]
         assert _marcadas(cliente, "ALFA") == {A_FAZER_ALFA}
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 4. O texto do Produto e a tipografia
+# ═══════════════════════════════════════════════════════════════════════════
+
+RAIZ_DO_APP = Path(__file__).resolve().parents[2]
+KIT = RAIZ_DO_APP / "backend/app/conhecimento/contas-medicas.md"
+
+
+class TestTextoDoProduto:
+    """A sanidade geral do kit mora em `test_kit_conhecimento.py`; aqui, o que
+    ESTE texto tem que dizer da regra ensinada pela tela."""
+
+    def test_diz_que_regra_nova_se_ensina_em_linguagem_comum(self):
+        no_ar = KIT.read_text(encoding="utf-8").split("## O que já está no ar")[1].split("\n## ")[0]
+
+        for termo in (
+            "Ensinar uma regra nova",
+            "linguagem comum",
+            "Validar regra",
+            "regra nova desde a análise",
+            "Reanalisar com a regra nova",
+        ):
+            assert termo in no_ar, termo
+
+
+ARQUIVOS_DA_FATIA = [
+    RAIZ_DO_APP / "backend/app/services/contas_medicas/regra_nova.py",
+    RAIZ_DO_APP / "backend/app/services/contas_medicas/memoria_edicao.py",
+    RAIZ_DO_APP / "backend/app/services/contas_medicas/ia.py",
+    RAIZ_DO_APP / "backend/app/prompts/contas_medicas_regra_nova.md",
+    RAIZ_DO_APP / "backend/app/routers/contas_medicas_memoria.py",
+    RAIZ_DO_APP / "backend/app/routers/contas_medicas_guia.py",
+    KIT,
+    RAIZ_DO_APP / "frontend/src/app/contas-medicas/operadoras/[sigla]/page.tsx",
+    RAIZ_DO_APP / "frontend/src/app/contas-medicas/guia/[contaId]/page.tsx",
+    Path(__file__),
+]
+
+
+@pytest.mark.parametrize("arquivo", ARQUIVOS_DA_FATIA, ids=lambda a: a.name)
+def test_sem_travessao_nem_meia_risca(arquivo):
+    texto = arquivo.read_text(encoding="utf-8")
+    assert chr(0x2014) not in texto
+    assert chr(0x2013) not in texto
