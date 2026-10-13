@@ -615,6 +615,35 @@ class TestUmaLeitura:
             ("A", 900, 300)
         ]
 
+    def test_a_leitura_guarda_o_modelo_e_com_outro_modelo_a_ia_le_de_novo(self, provedor, monkeypatch):
+        """Issue #1197: a leitura vale para o modelo que a fez."""
+        banco = _banco_com_modelo(monkeypatch, "google/modelo-antigo")
+        provedor.respostas = [_resposta(observacoes=["Do antigo."]), _resposta(observacoes=["Do novo."])]
+        _passo_a(banco, _lido(_paginas()))
+
+        monkeypatch.setattr(ia.settings, "cm_ia_modelo_passo_a", "anthropic/modelo-novo")
+        relida = _passo_a(banco, _lido(_paginas()))
+        de_novo = _passo_a(banco, _lido(_paginas()))
+
+        assert [corpo["model"] for corpo in provedor.corpos] == ["google/modelo-antigo", "anthropic/modelo-novo"]
+        assert relida["observacoes"] == de_novo["observacoes"] == ["Do novo."]
+        (gravados,) = banco.tabelas["cm_eventos"]
+        assert gravados["eventos_json"]["ia_modelo"] == "anthropic/modelo-novo"
+
+    def test_leitura_guardada_sem_o_modelo_conta_como_de_outro_modelo(self, provedor, monkeypatch):
+        banco = _banco_com_modelo(monkeypatch, "google/modelo-atual")
+        banco.tabelas["cm_eventos"][0]["eventos_json"]["ia"] = _resposta(observacoes=["De antes do #1197."])
+
+        lida = _passo_a(banco, _lido(_paginas()))
+
+        assert [corpo["model"] for corpo in provedor.corpos] == ["google/modelo-atual"]
+        assert lida["observacoes"] == []
+
+
+def _banco_com_modelo(monkeypatch, modelo: str) -> _Banco:
+    monkeypatch.setattr(ia.settings, "cm_ia_modelo_passo_a", modelo)
+    return _Banco()
+
 
 # ═══════════════════════════════════════════════════════════════════════════
 # 6. Tipografia
