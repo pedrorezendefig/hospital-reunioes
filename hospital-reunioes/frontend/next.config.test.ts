@@ -116,3 +116,27 @@ describe("versão do rodapé", () => {
     expect(build).toBeGreaterThan(env);
   });
 });
+
+/**
+ * Corpo dos envios pelo rewrite (issue #1213).
+ *
+ * Com `src/middleware.ts` no app, o Next clona o corpo de toda requisição e
+ * corta em `experimental.middlewareClientMaxBodySize` (10 MB por padrão): o
+ * backend recebe o multipart truncado e devolve 400. O repasse ao backend
+ * ainda cai em `experimental.proxyTimeout` (30 s por padrão), menos do que um
+ * prontuário de dezenas de MB leva numa conexão residencial.
+ */
+import { LIMITE_POR_ARQUIVO } from "@/lib/contas-medicas/envio";
+
+describe("corpo dos envios pelo rewrite", () => {
+  it("o teto do corpo cabe o maior arquivo da tela de envio mais o envelope do multipart", () => {
+    const teto = nextConfig.experimental?.middlewareClientMaxBodySize;
+
+    expect(typeof teto).toBe("number");
+    expect(teto as number).toBeGreaterThan(LIMITE_POR_ARQUIVO + 1024 * 1024);
+  });
+
+  it("o repasse ao backend espera pelo menos dez minutos", () => {
+    expect(nextConfig.experimental?.proxyTimeout).toBeGreaterThanOrEqual(10 * 60 * 1000);
+  });
+});
