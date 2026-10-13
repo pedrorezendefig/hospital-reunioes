@@ -66,8 +66,12 @@ LINHAS_PARA_A_IA = 30
 # passa da leitura do índice.
 TETO_DESCOMPACTADO = 200 * 1024 * 1024
 
-_TIPOS = {".pdf": "application/pdf", ".xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"}
-_TIPOS[".csv"] = "text/csv"
+# As extensões aceitas, com o tipo do arquivo guardado no bucket.
+_TIPOS = {
+    ".pdf": "application/pdf",
+    ".xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    ".csv": "text/csv",
+}
 
 _NS = {"x": "http://schemas.openxmlformats.org/spreadsheetml/2006/main"}
 _CELULAS_DO_PDF = re.compile(r"\s{2,}")
