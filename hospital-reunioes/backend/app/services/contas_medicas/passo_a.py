@@ -15,12 +15,13 @@ as parciais e ao reenvio.
 from __future__ import annotations
 
 from collections.abc import Callable, Mapping, Sequence
-from datetime import date, time
+from datetime import date, datetime, time
 from typing import Any
 
 from app.services.contas_medicas import ia
 from app.services.contas_medicas import prontuario as leitura_do_prontuario
 from app.services.contas_medicas.conferencia import ProntuarioLido
+from app.services.contas_medicas.conteudo import Movimentacao
 from app.services.contas_medicas.desidentificacao import Identificacao, desidentificar
 from app.services.contas_medicas.evidencia import normalizar, trecho_confere
 from app.services.contas_medicas.memoria_texto import orientacoes_de_leitura
@@ -299,6 +300,116 @@ def _conferir_evidencias(eventos: dict[str, Any], texto_da_pagina: Callable[[int
 
 
 # ----------------------------------------------------------------------------------
+# As movimentações: as do código prevalecem
+# ----------------------------------------------------------------------------------
+
+_TIPOS = {
+    "INTERNACAO": "internação",
+    "ALTA": "alta",
+    "OBITO": "óbito",
+    "TRANSFERENCIA_HOSPITAL": "transferência para outro hospital",
+}
+
+
+def _rotulo(tipo: str, setor: str | None) -> str:
+    if tipo == "TRANSFERENCIA_SETOR":
+        return f"transferência para {setor or 'outro setor'}"
+    return _TIPOS.get(tipo, tipo.lower())
+
+
+def _ler_quando(texto: str | None) -> tuple[date | None, time | None] | None:
+    """A data e a hora que a IA escreveu (ISO ou dd/mm/aaaa). None quando não
+    dá para ler; (None, None) quando ela não escreveu."""
+    if not texto:
+        return None, None
+    texto = texto.strip().replace("T", " ")
+    for formato in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%d %H:%M", "%Y-%m-%d", "%d/%m/%Y %H:%M", "%d/%m/%Y"):
+        try:
+            lido = datetime.strptime(texto, formato)
+        except ValueError:
+            continue
+        return lido.date(), (lido.time() if "%H" in formato else None)
+    return None
+
+
+def _par_no_codigo(movimentacao: Mapping[str, Any], do_codigo: Sequence[Movimentacao]) -> Movimentacao | None:
+    """A movimentação do código que é a mesma da IA: mesmo tipo e mesmo
+    momento. A transferência é a mesma quando vai para o mesmo setor e cai na
+    janela que o código leu (o prontuário não traz a hora exata dela)."""
+    quando = _ler_quando(movimentacao.get("data_hora"))
+    if quando is None:
+        return None
+    dia, hora = quando
+    for candidata in do_codigo:
+        if candidata.tipo != movimentacao.get("tipo"):
+            continue
+        if candidata.tipo == "TRANSFERENCIA_SETOR":
+            if normalizar(candidata.setor or "") != normalizar(movimentacao.get("setor") or ""):
+                continue
+            inicio, fim = candidata.janela or (candidata.data_hora, candidata.data_hora)
+            if dia is None or (
+                inicio <= datetime.combine(dia, hora) <= fim if hora else inicio.date() <= dia <= fim.date()
+            ):
+                return candidata
+        elif dia is None or (
+            dia == candidata.data_hora.date()
+            and (hora is None or hora.replace(second=0) == candidata.data_hora.time().replace(second=0))
+        ):
+            return candidata
+    return None
+
+
+def _divergencia(movimentacao: Mapping[str, Any], do_codigo: Sequence[Movimentacao]) -> str:
+    quando = _ler_quando(movimentacao.get("data_hora"))
+    lido = _data(*quando) if quando else str(movimentacao.get("data_hora"))
+    frase = (
+        f"Movimentação divergente: a IA leu {_rotulo(movimentacao['tipo'], movimentacao.get('setor'))} em {lido} "
+        f"(página {movimentacao.get('pagina')}); vale a leitura do código"
+    )
+    mesmo_tipo = [m for m in do_codigo if m.tipo == movimentacao["tipo"]]
+    if not mesmo_tipo:
+        return f"{frase}, que não tem essa movimentação."
+    if len(mesmo_tipo) == 1 and movimentacao["tipo"] != "TRANSFERENCIA_SETOR":
+        (lida,) = mesmo_tipo
+        return f"{frase}, {_rotulo(lida.tipo, lida.setor)} em {_data(lida.data_hora.date(), lida.data_hora.time())}."
+    return f"{frase}."
+
+
+def _do_codigo(movimentacao: Movimentacao, par: Mapping[str, Any] | None) -> dict[str, Any]:
+    """A movimentação do código no formato do Anexo A, com a evidência da IA
+    quando ela leu a mesma."""
+    par = par or {}
+    return {
+        "tipo": movimentacao.tipo,
+        "data_hora": f"{movimentacao.data_hora:%Y-%m-%dT%H:%M}",
+        "setor": movimentacao.setor,
+        "pagina": par.get("pagina"),
+        "trecho": par.get("trecho"),
+        "etiquetas": par.get("etiquetas") or [],
+        "confianca": par.get("confianca"),
+        "origem": "CODIGO",
+    }
+
+
+def _prevalecer_o_codigo(eventos: dict[str, Any], do_codigo: Sequence[Movimentacao]) -> None:
+    """As movimentações lidas pelo código (internação, alta, setor por dia)
+    ficam no lugar das da IA. A da IA que bate empresta a página e o trecho;
+    a que diverge vira uma frase em `divergencias`, que vai para o parecer.
+    Sem a internação lida pelo código, vale a leitura da IA."""
+    eventos["divergencias"] = []
+    if not do_codigo:
+        return
+    pares: dict[int, Mapping[str, Any]] = {}
+    for movimentacao in eventos["movimentacoes"]:
+        par = _par_no_codigo(movimentacao, do_codigo)
+        if par is None:
+            eventos["divergencias"].append(_divergencia(movimentacao, do_codigo))
+        else:
+            pares.setdefault(id(par), movimentacao)
+    eventos["movimentacoes"] = [_do_codigo(m, pares.get(id(m))) for m in do_codigo]
+
+
+# ----------------------------------------------------------------------------------
 # A leitura, uma vez por atendimento
 # ----------------------------------------------------------------------------------
 
@@ -326,4 +437,5 @@ def eventos_do_atendimento(
     ]
     eventos = unir_eventos(partes)
     _conferir_evidencias(eventos, _texto_da_pagina(prontuario, _identificacao(prontuario)))
+    _prevalecer_o_codigo(eventos, prontuario.conteudo.movimentacoes)
     return eventos

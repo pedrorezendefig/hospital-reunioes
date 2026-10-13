@@ -494,3 +494,55 @@ class TestEvidencia:
             INEXISTENTE: (["conferir evidência"], "BAIXA"),
             LONGE_DA_PAGINA: (["conferir evidência"], "BAIXA"),
         }
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 4. As movimentações do código prevalecem
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+def _movimentacao(tipo: str, data_hora: str, setor: str | None, pagina: int, trecho: str) -> dict:
+    return {"tipo": tipo, "data_hora": data_hora, "setor": setor, "pagina": pagina, "trecho": trecho}
+
+
+class TestMovimentacoes:
+    def test_a_movimentacao_da_ia_que_diverge_da_do_codigo_cede_e_vira_observacao(self, provedor):
+        # O código leu a internação em 02/10 22:40 e a alta em 06/10 15:20,
+        # sem transferência (o CTI adulto em todos os documentos).
+        provedor.respostas = [
+            _resposta(
+                movimentacoes=[
+                    _movimentacao("INTERNACAO", "2026-10-02T22:40", "CTI ADULTO", 9, "02/10/2026 22:40"),
+                    _movimentacao("TRANSFERENCIA_SETOR", "2026-10-04T10:00", "ENFERMARIA", 2, "segue em ventilação"),
+                    _movimentacao("ALTA", "2026-10-06T18:00", "CTI ADULTO", 9, "DATA DA ALTA - 06/10/2026"),
+                ]
+            )
+        ]
+
+        eventos = _passo_a(_Banco(), _lido(_paginas()))
+
+        assert [(m["tipo"], m["data_hora"], m["setor"], m["pagina"]) for m in eventos["movimentacoes"]] == [
+            ("INTERNACAO", "2026-10-02T22:40", "CTI ADULTO", 9),
+            ("ALTA", "2026-10-06T15:20", "CTI ADULTO", None),
+        ]
+        assert eventos["divergencias"] == [
+            "Movimentação divergente: a IA leu transferência para ENFERMARIA em 04/10/2026 10:00 (página 2); "
+            "vale a leitura do código, que não tem essa movimentação.",
+            "Movimentação divergente: a IA leu alta em 06/10/2026 18:00 (página 9); "
+            "vale a leitura do código, alta em 06/10/2026 15:20.",
+        ]
+
+    def test_a_movimentacao_da_ia_que_bate_com_a_do_codigo_nao_vira_observacao(self, provedor):
+        provedor.respostas = [
+            _resposta(
+                movimentacoes=[
+                    _movimentacao("INTERNACAO", "2026-10-02", "CTI ADULTO", 9, "02/10/2026 22:40"),
+                    _movimentacao("ALTA", "2026-10-06T15:20", "CTI ADULTO", 9, "DATA DA ALTA - 06/10/2026"),
+                ]
+            )
+        ]
+
+        eventos = _passo_a(_Banco(), _lido(_paginas()))
+
+        assert eventos["divergencias"] == []
+        assert [m["pagina"] for m in eventos["movimentacoes"]] == [9, 9]
