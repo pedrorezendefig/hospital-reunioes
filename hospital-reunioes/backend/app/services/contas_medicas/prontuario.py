@@ -79,7 +79,7 @@ class Prontuario:
     paciente_rotulo: str | None
     idade_anos: int | None
     documentos: tuple[Documento, ...]
-    # Páginas do Atendimento digitalizadas ou sem texto: o Guia lista, a faturista
+    # Páginas do Atendimento digitalizadas que o OCR não leu (#1191): o Guia lista, a faturista
     # confere à mão se precisar.
     paginas_sem_texto: tuple[int, ...]
     # Uma frase por motivo; vazio quer dizer que o Guia não é parcial.
@@ -589,6 +589,8 @@ class _Pagina:
     familia: str
     paginacao: int | None
     campos: _Campos
+    # O texto da imagem lido por OCR (#1191), só na página digitalizada.
+    ocr: str = ""
 
 
 def _paginas_do_atendimento(paginas: list[_Pagina], atendimento: str) -> list[_Pagina]:
@@ -656,6 +658,8 @@ _FAMILIAS_DE_TEXTO = {
 
 def _linhas_para_ia(paginas: list[_Pagina], campos: _Campos) -> list[str]:
     familia = paginas[0].familia
+    if familia == "DIGITALIZADO":  # só o que o OCR leu da imagem (#1191)
+        return [linha for pagina in paginas for linha in _limpar_para_ia(pagina.ocr)]
     subtipo = _sem_acento(campos.subtipo or "").upper()
     if familia not in _FAMILIAS_DE_TEXTO:
         return []
@@ -719,14 +723,16 @@ def atendimento_do_prontuario(texto_por_pagina: Sequence[str | None]) -> str | N
 
 
 def ler_prontuario(texto_por_pagina: Sequence[str | None], atendimento: str | int) -> Prontuario:
-    textos = [texto or "" for texto in texto_por_pagina]
+    # A estrutura sai só do texto do PDF; o lido por OCR vai à IA e a mais nada.
+    separados = [_separar_ocr(texto or "") for texto in texto_por_pagina]
+    textos = [do_pdf for do_pdf, _ in separados]
     _conferir_integridade(textos)
     capa = _ler_capa(textos)
 
     paginas = []
-    for numero, texto in enumerate(textos[capa.paginas :], start=capa.paginas + 1):
+    for numero, (texto, ocr) in enumerate(separados[capa.paginas :], start=capa.paginas + 1):
         familia = _familia(texto)
-        paginas.append(_Pagina(numero, texto, familia, _paginacao(texto), _campos(texto, familia)))
+        paginas.append(_Pagina(numero, texto, familia, _paginacao(texto), _campos(texto, familia), ocr))
 
     do_atendimento = _paginas_do_atendimento(paginas, str(atendimento))
     agrupados = [(grupo, _juntar_campos(grupo)) for grupo in _montar_documentos(do_atendimento)]
@@ -750,7 +756,7 @@ def ler_prontuario(texto_por_pagina: Sequence[str | None], atendimento: str | in
                 linhas=tuple(desidentificar(linhas, capa.identificacao)),
             )
         )
-    sem_texto = tuple(p.numero for p in do_atendimento if p.familia == "DIGITALIZADO")
+    sem_texto = tuple(p.numero for p in do_atendimento if p.familia == "DIGITALIZADO" and not p.ocr.strip())
     parecer_parcial = [
         _grupos_que_faltam(capa, "\n".join(textos[capa.paginas :])),
         _paginas_sem_texto_demais(len(sem_texto), len(do_atendimento)),

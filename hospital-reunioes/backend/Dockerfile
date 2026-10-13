@@ -2,6 +2,8 @@ FROM python:3.12-slim
 
 # WeasyPrint system dependencies, mais o poppler-utils de Contas medicas: a
 # leitura da conta e do prontuario roda `pdftotext -layout` (ADR 0070, decisao 6).
+# O tesseract (Apache 2.0) com o portugues le por OCR as paginas digitalizadas
+# do prontuario, que o `pdftoppm` rasteriza (issue #1191).
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     libpango-1.0-0 \
@@ -11,12 +13,14 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libffi-dev \
     libcairo2 \
     poppler-utils \
+    tesseract-ocr \
+    tesseract-ocr-por \
     curl \
     wget \
     && rm -rf /var/lib/apt/lists/*
 
-# Sanidade no build (issue #1114): sem o binario, a imagem nao sai.
-RUN pdftotext -v
+# Sanidade no build (issues #1114 e #1191): sem os binarios, a imagem nao sai.
+RUN pdftotext -v && pdftoppm -v && tesseract --version && tesseract --list-langs | grep -qx por
 
 WORKDIR /app
 

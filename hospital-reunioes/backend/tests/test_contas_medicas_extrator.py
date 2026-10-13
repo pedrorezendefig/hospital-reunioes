@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import logging
 import os
+import shutil
 import stat
 import sys
 import time
@@ -158,7 +159,10 @@ def test_pagina_sem_texto_da_conta_nao_passa_pelo_ocr(tmp_path, monkeypatch):
 )
 def test_pagina_que_o_ocr_nao_le_fica_sem_texto_e_a_leitura_continua(tmp_path, monkeypatch, tesseract):
     if tesseract is None:
-        monkeypatch.setenv("PATH", os.pathsep.join(p for p in os.environ["PATH"].split(os.pathsep) if p != str(tmp_path)))
+        # PATH só com o poppler: o runner do CI pode ter o `tesseract` instalado.
+        for binario in ("pdftotext", "pdftoppm"):
+            (tmp_path / binario).symlink_to(shutil.which(binario))
+        monkeypatch.setenv("PATH", str(tmp_path))
     else:
         _tesseract_falso(tmp_path, monkeypatch, tesseract)
 
@@ -181,7 +185,8 @@ def test_ocr_que_passa_do_prazo_deixa_a_pagina_sem_texto_e_a_leitura_continua(tm
 def test_filho_do_ocr_morto_deixa_a_pagina_sem_texto_e_a_leitura_continua(tmp_path, monkeypatch, caplog):
     # O `pdftoppm` falso mata o filho que o chamou, como o OOM do cgroup faria.
     falso = tmp_path / "pdftoppm"
-    falso.write_text(f"#!{sys.executable}\nimport os, signal\nos.kill(os.getppid(), signal.SIGKILL)\n", encoding="utf-8")
+    corpo = "import os, signal\nos.kill(os.getppid(), signal.SIGKILL)"
+    falso.write_text(f"#!{sys.executable}\n{corpo}\n", encoding="utf-8")
     falso.chmod(falso.stat().st_mode | stat.S_IXUSR)
     _tesseract_falso(tmp_path, monkeypatch, f"sys.stdout.write({LIDO_PELO_OCR!r})")
 

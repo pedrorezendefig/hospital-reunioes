@@ -20,6 +20,10 @@ As palavras com a posição de cada uma (`extrair_palavras`, #1133) saem do mesm
 filho, pelo `pdfplumber`, com o mesmo orçamento: a prescrição lê por elas a
 coordenada das colunas.
 
+No Prontuário, as páginas digitalizadas (imagem, sem texto) são lidas por OCR
+no mesmo filho e com o mesmo orçamento (#1191): `pdftoppm` rasteriza, o
+`tesseract -l por` lê. A Conta não passa por OCR.
+
 O texto devolvido tem dado de paciente: nunca vai para log, nem em caso de erro.
 """
 
@@ -89,8 +93,7 @@ def _paginas(texto: str) -> list[Pagina]:
     if partes and partes[-1] == "":
         partes.pop()
     return [
-        Pagina(numero=n, texto=t, sem_texto=not t.strip(), ocr=MARCA_DO_OCR in t)
-        for n, t in enumerate(partes, start=1)
+        Pagina(numero=n, texto=t, sem_texto=not t.strip(), ocr=MARCA_DO_OCR in t) for n, t in enumerate(partes, start=1)
     ]
 
 
