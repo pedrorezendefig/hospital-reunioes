@@ -26,6 +26,7 @@ import re
 import sys
 import threading
 import uuid
+from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from pathlib import Path
@@ -196,6 +197,8 @@ class _Consulta:
         return self
 
     def execute(self):
+        if self._insert is not None and self._nome == "cm_eventos" and self._banco.antes_de_gravar_eventos:
+            self._banco.antes_de_gravar_eventos()
         with self._banco.trava:
             resposta = self._executar()
         leitura = self._insert is None and self._update is None and not self._delete
@@ -263,6 +266,9 @@ class _Banco:
         # Gancho do teste do claim concorrente: roda fora da trava, depois de
         # cada leitura de `cm_conta`.
         self.ao_ler_contas = None
+        # Gancho do teste das duas parciais em paralelo: roda fora da trava,
+        # antes de cada gravação em `cm_eventos`.
+        self.antes_de_gravar_eventos = None
         self.storage = SimpleNamespace(from_=lambda nome: _Bucket(self, nome))
 
     def table(self, nome: str):
@@ -837,6 +843,35 @@ class TestProntuarioUmaVez:
         assert cirurgia["procedimentos_json"][0]["codigo"] == "31005497"
         (atendimento,) = banco.tabelas["cm_atendimento"]
         assert atendimento["paciente_rotulo"] == "Antônia F."
+
+    def test_duas_parciais_em_vagas_paralelas_gravam_o_prontuario_uma_vez(self):
+        """As duas vagas pegam as parciais do mesmo atendimento juntas. A barreira
+        segura a primeira vaga na porta da gravação até a outra chegar lá: sem
+        trava por atendimento, as duas já leram `cm_eventos` vazio e apagaram,
+        e as duas gravam. Com a trava, a segunda espera a primeira terminar, a
+        barreira estoura e a primeira segue sozinha; a segunda acha o arquivo
+        gravado e não grava de novo."""
+        banco = _cenario()
+        _duas_parciais(banco)
+        as_duas_na_porta = threading.Barrier(2, timeout=1)
+
+        def esperar_a_outra_vaga():
+            try:
+                as_duas_na_porta.wait()
+            except threading.BrokenBarrierError:
+                pass
+
+        banco.antes_de_gravar_eventos = esperar_a_outra_vaga
+        vagas = ThreadPoolExecutor(max_workers=2)
+        try:
+            assert processamento.alimentar_fila(banco, AGORA, executor=vagas) == 2
+        finally:
+            vagas.shutdown(wait=True)
+
+        assert [c["situacao"] for c in banco.tabelas["cm_conta"]] == ["A_FAZER", "A_FAZER"]
+        assert [c["tentativas"] for c in banco.tabelas["cm_conta"]] == [1, 1]
+        gravadas = {t: len(banco.tabelas.get(t, [])) for t in ("cm_eventos", "cm_prescricao", "cm_cirurgia")}
+        assert gravadas == {"cm_eventos": 1, "cm_prescricao": 4, "cm_cirurgia": 1}
 
 
 # ═══════════════════════════════════════════════════════════════════════════

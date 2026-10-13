@@ -36,6 +36,7 @@ from __future__ import annotations
 import logging
 import threading
 import traceback
+import weakref
 from collections.abc import Iterator
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager
@@ -537,10 +538,30 @@ def _eventos_json(arquivo_id: str, prontuario: ProntuarioLido) -> dict[str, Any]
     }
 
 
+# As duas vagas pegam juntas as parciais do mesmo atendimento (o caso normal
+# de um envio): sem trava, as duas leem `cm_eventos` vazio e as duas gravam o
+# prontuário. Uma trava por atendimento, que some quando ninguém a segura.
+_travas_do_prontuario: weakref.WeakValueDictionary[str, threading.Lock] = weakref.WeakValueDictionary()
+_trava_das_travas = threading.Lock()
+
+
+def _trava_do_prontuario(atendimento_id: str) -> threading.Lock:
+    with _trava_das_travas:
+        trava = _travas_do_prontuario.get(atendimento_id)
+        if trava is None:
+            trava = _travas_do_prontuario[atendimento_id] = threading.Lock()
+        return trava
+
+
 def _gravar_prontuario(supabase, atendimento_id: str, arquivo_id: str, prontuario: ProntuarioLido) -> None:
     """A estrutura do prontuário no banco, uma vez por arquivo: a segunda
     parcial e o reprocesso acham o mesmo arquivo gravado e seguem. Prontuário
     novo (atualizado) troca o anterior inteiro."""
+    with _trava_do_prontuario(atendimento_id):
+        _gravar_prontuario_uma_vez(supabase, atendimento_id, arquivo_id, prontuario)
+
+
+def _gravar_prontuario_uma_vez(supabase, atendimento_id: str, arquivo_id: str, prontuario: ProntuarioLido) -> None:
     ultimo = _primeira(
         supabase.table("cm_eventos").select("*").eq("atendimento_id", atendimento_id).order("criado_em", desc=True)
     )
