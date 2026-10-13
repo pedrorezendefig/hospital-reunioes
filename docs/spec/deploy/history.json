@@ -2,6 +2,54 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-10-13T02:03:58-03:00",
+      "sha": "2e26581007ad80d5b3dbb4cf8828ad29b84899a4",
+      "app_version": "0.184.0",
+      "subject": "Onda onda-gestao-onda2: Contratos e aviso de reajuste no sino",
+      "raw_subject": "chore(deploy): registro da onda onda-gestao-onda2 (#1169)",
+      "scope": [
+        "backend",
+        "frontend"
+      ],
+      "prds": [
+        1129
+      ],
+      "result": "healthy",
+      "duration_seconds": 226,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        },
+        {
+          "service": "frontend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "onda-enxuta onda-gestao-onda2: PR #1169 (issue #1144), mergeados PR a PR. Merge pela API do GitHub, um build. Registro pela Action pos-merge depois do health.",
+      "etapas": {
+        "merge_s": 3,
+        "build_s": {
+          "backend": 25,
+          "frontend": 202
+        },
+        "health_s": 0
+      },
+      "responsavel": "pedrorezendefig"
+    },
+    {
       "at": "2026-10-13T01:25:58-03:00",
       "sha": "5e1c818e5fbaa28251011522dd47c4727da48ee5",
       "app_version": "0.183.0",
