@@ -208,8 +208,12 @@ class _Palavra(Protocol):
 # As colunas do cabeçalho, na ordem. Cada uma começa no x da sua primeira palavra.
 _CABECALHO = ("Dose", "Padr[ãa]o", "Dura[çc][ãa]o", "Frequ[êe]ncia", "SN", "Apl", "Datas/Hor[áa]rios")
 _INICIO_DAS_COLUNAS = (0, 2, 3, 4, 5, 6)
-# Palavras com o topo até esta distância (em pontos) estão na mesma linha.
-_MESMA_LINHA = 2.0
+# Palavras com o topo até esta distância (em pontos) do topo da primeira estão na mesma
+# linha. O MV não desenha o cabeçalho numa linha só: relativo a "Dose", a seção e
+# "Datas/Horários" ficam 1,83 pt acima e "Duração" a "Apl" 0,5 pt abaixo, 2,33 pt do
+# começo da linha; "Qtd Unidade", que não é da linha, fica 4,83 pt dele. Nas 213 páginas
+# de prescrição de dois prontuários reais, de 2,34 a 3,0 pt a remontagem sai igual.
+_MESMA_LINHA = 2.7
 
 
 def _linhas(palavras: Sequence[_Palavra]) -> list[list[_Palavra]]:

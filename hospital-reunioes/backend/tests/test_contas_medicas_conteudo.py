@@ -306,34 +306,54 @@ def test_a_consolidacao_por_item_e_dia_lida_pela_coluna_junta_o_nome_longo_dos_t
 # variação de x. Só coordenadas e tamanhos de fonte, nenhum dado de paciente. No MV a
 # quantidade da dose sai alinhada à direita, bem depois do x de "Dose", e o nome do
 # item pode terminar depois desse x: o que decide a coluna é onde a palavra começa.
-# (x, tamanho, texto)
+# O cabeçalho também não fica numa linha só: medido nas 213 páginas de prescrição dos
+# dois prontuários, o topo de cada palavra relativo ao de "Dose" é sempre o mesmo:
+# seção e "Datas/Horários" 1,83 pt acima, "Duração" a "Apl" 0,5 pt abaixo, e os
+# rótulos da quantidade em duas linhas, "Qtde Prescrita" 6,5 pt acima e "Qtd Unidade"
+# 3,0 pt abaixo. No item, o número fica 0,4 pt abaixo do nome e a frequência 0,39 acima.
+# (x, tamanho, texto, deslocamento da linha de base em pontos, para baixo)
 CABECALHO_NO_X_DO_MV = [
-    (31.0, 8, "MEDICAMENTOS NORMAIS"),
-    (181.1, 7, "Dose Padrão"),
-    (321.8, 7, "Duração"),
-    (362.5, 7, "Frequência"),
-    (407.1, 7, "SN"),
-    (430.9, 7, "Apl"),
-    (457.0, 8, "Datas/Horários"),
+    (245.1, 7, "Qtde Prescrita", -6.5),
+    (31.0, 8, "MEDICAMENTOS NORMAIS", -1.04),
+    (181.1, 7, "Dose Padrão", 0),
+    (235.9, 7, "Qtd Unidade", 3.0),
+    (321.8, 7, "Duração", 0.5),
+    (362.5, 7, "Frequência", 0.5),
+    (407.1, 7, "SN", 0.5),
+    (430.9, 7, "Apl", 0.5),
+    (457.0, 8, "Datas/Horários", -1.04),
 ]
+# O topo medido no MV, relativo ao de "Dose", que o PDF de teste tem que reproduzir.
+TOPO_DO_CABECALHO_NO_MV = {
+    "Qtde": -6.5,
+    "MEDICAMENTOS": -1.83,
+    "Padrão": 0,
+    "Qtd": 3.0,
+    "Duração": 0.5,
+    "Frequência": 0.5,
+    "SN": 0.5,
+    "Apl": 0.5,
+    "Datas/Horários": -1.83,
+}
 NOME_QUE_PASSA_DO_X_DA_DOSE = "SORO FISIOLOGICO 0,9% 500ML SISTEMA"
 ITEM_NO_X_DO_MV = [
-    (35.8, 8, "3"),
-    (47.0, 8, NOME_QUE_PASSA_DO_X_DA_DOSE),
-    (239.3, 8, "1"),
-    (252.2, 8, "FRASCO/AM"),
-    (360.9, 8, "6HS/6HS"),
-    (409.3, 8, "S"),
-    (430.7, 8, "EV"),
-    (462.2, 8, ". 06 . 12 . 18 . 24"),
+    (35.8, 8, "3", 0.4),
+    (47.0, 8, NOME_QUE_PASSA_DO_X_DA_DOSE, 0),
+    (239.3, 8, "1", 0),
+    (252.2, 8, "FRASCO/AM", 0),
+    (360.9, 8, "6HS/6HS", -0.39),
+    (409.3, 8, "S", 0),
+    (430.7, 8, "EV", 0),
+    (462.2, 8, ". 06 . 12 . 18 . 24", 0),
 ]
 
 
-def _pdf_no_x_do_mv(linhas: list[str | list[tuple[float, int, str]]]) -> bytes:
+def _pdf_no_x_do_mv(linhas: list[str | list[tuple[float, int, str, float]]]) -> bytes:
     """Uma página A4 escrita à mão na Helvetica das 14 fontes padrão do PDF, sem fonte
     embutida como no MV: as larguras são as mesmas em qualquer máquina. A linha que é
-    lista sai em cada x dado; a de texto sai com cada trecho separado por dois espaços
-    ou mais num x proporcional à coluna do texto."""
+    lista sai em cada x dado, com a linha de base deslocada para baixo pelo quarto
+    valor; a de texto sai com cada trecho separado por dois espaços ou mais num x
+    proporcional à coluna do texto."""
     import re
 
     def escrito(texto: str) -> bytes:
@@ -342,9 +362,10 @@ def _pdf_no_x_do_mv(linhas: list[str | list[tuple[float, int, str]]]) -> bytes:
     conteudo = b""
     for i, linha in enumerate(linhas):
         if isinstance(linha, str):
-            linha = [(31.0 + 5.5 * m.start(), 8, m.group()) for m in re.finditer(r"\S+(?: \S+)*", linha)]
-        for x, tamanho, texto in linha:
-            conteudo += b"BT /F1 %d Tf %.1f %.1f Td (%s) Tj ET\n" % (tamanho, x, 800 - 12 * i, escrito(texto))
+            linha = [(31.0 + 5.5 * m.start(), 8, m.group(), 0) for m in re.finditer(r"\S+(?: \S+)*", linha)]
+        for x, tamanho, texto, abaixo in linha:
+            base = 800 - 12 * i - abaixo
+            conteudo += b"BT /F1 %d Tf %.1f %.2f Td (%s) Tj ET\n" % (tamanho, x, base, escrito(texto))
     objetos = [
         b"<< /Type /Catalog /Pages 2 0 R >>",
         b"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
@@ -365,6 +386,7 @@ def _pdf_no_x_do_mv(linhas: list[str | list[tuple[float, int, str]]]) -> bytes:
 
 
 def test_nome_que_passa_do_x_da_dose_no_layout_real_do_mv_nao_invade_a_dose():
+    from app.services.contas_medicas.prescricao import texto_por_coluna
     from app.services.contas_medicas_extrator import extrair_paginas, extrair_palavras
 
     (pagina,) = montar(prescricao(3, "<item>"))
@@ -375,9 +397,15 @@ def test_nome_que_passa_do_x_da_dose_no_layout_real_do_mv_nao_invade_a_dose():
     pdf = _pdf_no_x_do_mv(linhas)
     textos = [p.texto for p in extrair_paginas(pdf)]
     palavras = extrair_palavras(pdf, [1])
+    # o cabeçalho do PDF tem os topos desencontrados que o MV desenha
+    dose = next(p for p in palavras[1] if p.texto == "Dose")
+    topos = {p.texto: round(p.topo - dose.topo, 2) for p in palavras[1] if p.texto in TOPO_DO_CABECALHO_NO_MV}
+    assert topos == pytest.approx(TOPO_DO_CABECALHO_NO_MV, abs=0.01)
     # o caso existe no PDF: a última palavra do nome começa antes do x de "Dose" e termina depois
     ultima_do_nome = next(p for p in palavras[1] if p.texto == "SISTEMA")
     assert ultima_do_nome.x0 < 181.1 < ultima_do_nome.x1
+    # e a página é lida pela coluna, não pelo leitor por linha
+    assert texto_por_coluna(palavras[1]) is not None
 
     (lida,) = ler_conteudo(textos, ler_prontuario(textos, ATENDIMENTO), palavras).prescricoes
 
