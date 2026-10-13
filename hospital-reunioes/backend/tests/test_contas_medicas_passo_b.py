@@ -256,6 +256,45 @@ class TestConferenciaDasLinhasDaIA:
         assert bolsa["motivo"].endswith("Sem código.")
 
 
+class TestCausaRaiz:
+    def test_a_causa_raiz_da_ia_e_sobreposta_nos_casos_obvios(self, openrouter):
+        banco = _cenario_do_passo_b()
+        banco.tabelas["cm_regra"].append(_regra("ALFA-PRC-05"))
+        # O MV não deixou lançar o curativo em outra conta: falta de cadastro.
+        banco.tabelas["cm_guia_linha"].append(
+            {"id": "gl-outra", "conta_id": "outra", "acao": "INCLUIR", "codigo": "70000003", "estado": "BLOQUEADO"}
+        )
+
+        _, linhas = _analisar(
+            banco,
+            openrouter,
+            # Diária, mesmo que a IA diga lançamento manual: Regra automática.
+            _linha_da_ia(
+                acao="VALIDAR",
+                codigo="60001038",
+                descricao="DIARIA DE UTI ADULTO",
+                data="2026-10-05",
+                data_fim="2026-10-05",
+                regra_id="ALFA-DIA-01",
+                causa_raiz="LANCAMENTO_MANUAL",
+            ),
+            # Regra de preço: Cadastro e preço.
+            _linha_da_ia(regra_id="ALFA-PRC-05", causa_raiz="DISPENSACAO"),
+            # Item que o MV bloqueou: Cadastro e preço.
+            _linha_da_ia(codigo="70000003", descricao="CURATIVO HIDROCOLOIDE", causa_raiz="DISPENSACAO"),
+            # O resto fica como a IA disse.
+            _linha_da_ia(codigo="70000004", descricao="CATETER NASAL", causa_raiz="REGISTRO_ASSISTENCIAL"),
+        )
+
+        causas = {linha["codigo"]: linha["causa_raiz"] for linha in linhas if linha["origem"] == "IA"}
+        assert causas == {
+            "60001038": "REGRA_AUTOMATICA",
+            "70000002": "CADASTRO_PRECO",
+            "70000003": "CADASTRO_PRECO",
+            "70000004": "REGISTRO_ASSISTENCIAL",
+        }
+
+
 def _prescricao_da_ia(data: str, item: str) -> dict[str, Any]:
     return {
         "data": data,

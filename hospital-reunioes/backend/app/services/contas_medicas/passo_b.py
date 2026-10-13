@@ -18,7 +18,12 @@ from decimal import ROUND_HALF_UP, Decimal
 from typing import Any
 
 from app.services.contas_medicas import ia
-from app.services.contas_medicas.conferencia import BuscaDePreco, Conferencia, ProntuarioLido
+from app.services.contas_medicas.conferencia import (
+    BuscaDePreco,
+    Conferencia,
+    ProntuarioLido,
+    _codigos_de_diaria,
+)
 from app.services.contas_medicas.dicionario import _norm, casar
 from app.services.contas_medicas.evidencia import trecho_confere
 from app.services.contas_medicas.guia import agrupar_por_dia_e_setor
@@ -162,6 +167,10 @@ class _Conferencias:
     regras: Mapping[str, Mapping[str, Any]]
     preco: BuscaDePreco
     dicionario: Mapping[str, set[str]]
+    # Os códigos de diária da memória e os que o contador deu.
+    diarias: frozenset[str]
+    # Os códigos que o MV já não deixou lançar (linha marcada Bloqueado).
+    bloqueados: frozenset[str]
     texto_da_pagina: Any
     apontadas: list[_Periodo]
     descartadas: list[dict[str, Any]]
@@ -183,6 +192,15 @@ class _Conferencias:
 
     def _unitario_da_conta(self, codigo: str | None) -> Decimal | None:
         return next((i.unitario for i in self.conta.itens if i.codigo == codigo and i.unitario > 0), None)
+
+    def _causa(self, causa: str, regra: Mapping[str, Any], codigo: str | None) -> str:
+        """A causa-raiz da IA, menos nos casos óbvios: diária é Regra
+        automática; regra de preço e item bloqueado no MV, Cadastro e preço."""
+        if codigo in self.diarias or regra.get("secao") == "DIA":
+            return "REGRA_AUTOMATICA"
+        if codigo in self.bloqueados or regra.get("secao") == "PRC":
+            return "CADASTRO_PRECO"
+        return causa
 
     def _no_periodo(self, dia: date) -> bool:
         inicio, fim = self.conta.periodo_inicio, self.conta.periodo_fim
@@ -255,10 +273,22 @@ class _Conferencias:
             "evidencia_pagina": linha.evidencia.pagina,
             "evidencia_trecho": (linha.evidencia.trecho or "")[:300] or None,
             "nivel_evidencia": linha.nivel_evidencia,
-            "causa_raiz": linha.causa_raiz,
+            "causa_raiz": self._causa(linha.causa_raiz, regra, codigo),
             "confianca": linha.confianca if confere else "BAIXA",
             "origem": "IA",
         }
+
+
+def _bloqueados(supabase, resposta: ia.LinhasDaComparacao) -> frozenset[str]:
+    """Os códigos das linhas da IA que alguma faturista já marcou Bloqueado."""
+    codigos = sorted({linha.codigo for linha in resposta.linhas if linha.codigo})
+    if not codigos:
+        return frozenset()
+    marcadas = (
+        supabase.table("cm_guia_linha").select("codigo").eq("estado", "BLOQUEADO").in_("codigo", codigos).execute().data
+        or []
+    )
+    return frozenset(linha["codigo"] for linha in marcadas)
 
 
 def comparar(
@@ -292,6 +322,9 @@ def comparar(
         regras={regra["codigo"]: regra for regra in memoria["regras"]},
         preco=preco,
         dicionario=dicionario,
+        diarias=frozenset(_codigos_de_diaria(memoria["parametros"]))
+        | frozenset(diaria["codigo"] for diaria in conferencia.diarias_pagas),
+        bloqueados=_bloqueados(supabase, resposta),
         texto_da_pagina=_texto_da_pagina(prontuario, _identificacao(prontuario)),
         apontadas=[p for p in map(_periodo_da_linha, conferencia.linhas) if p is not None],
         descartadas=[],
