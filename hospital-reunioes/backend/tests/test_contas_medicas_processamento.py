@@ -1104,3 +1104,85 @@ class TestJobNoScheduler:
         cron.processar_fila_contas_medicas()
 
         assert entregues == [(banco, True)]
+
+
+class TestDuasVagas:
+    def test_o_job_entrega_no_maximo_duas_contas_enquanto_as_duas_vagas_estao_ocupadas(self, monkeypatch):
+        monkeypatch.setattr(processamento, "processar", lambda _sb, _conta: None)
+        banco = _Banco({"cm_conta": [_conta_na_fila(f"c{n}", n) for n in (1, 2, 3)]})
+        guardadas = []
+
+        class _Guardado:
+            def submit(self, funcao, *args):
+                guardadas.append((funcao, args))
+
+        try:
+            assert processamento.alimentar_fila(banco, AGORA, executor=_Guardado()) == 2
+            assert processamento.alimentar_fila(banco, AGORA, executor=_Guardado()) == 0
+            assert [c["situacao"] for c in banco.tabelas["cm_conta"]] == ["PROCESSANDO", "PROCESSANDO", "NA_FILA"]
+        finally:
+            for funcao, args in guardadas:
+                funcao(*args)  # a análise termina e devolve a vaga
+
+        assert processamento.alimentar_fila(banco, AGORA, executor=_Guardado()) == 1
+        for funcao, args in guardadas[2:]:
+            funcao(*args)
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 11. O texto do Produto no Kit de conhecimento
+# ═══════════════════════════════════════════════════════════════════════════
+
+KIT = Path(__file__).resolve().parents[1] / "app" / "conhecimento" / "contas-medicas.md"
+
+
+class TestKitDeConhecimento:
+    """A sanidade geral (piso, seções, sem rota nem tabela) mora em
+    `test_kit_conhecimento.py`; aqui, o que o texto tem que dizer da análise."""
+
+    def test_diz_que_a_analise_roda_em_segundo_plano_e_avisa_no_sino(self):
+        secao = KIT.read_text(encoding="utf-8").split("## A análise", 1)[1].split("\n## ", 1)[0]
+
+        for trecho in (
+            "segundo plano",
+            "sino",
+            "duas contas ao mesmo tempo",
+            "três tentativas",
+            "Este PDF não tem texto",
+            "Não consegui ler a conta inteira",
+            "arquivo incompleto",
+        ):
+            assert trecho in secao, trecho
+
+    def test_nao_promete_mais_a_analise_para_uma_proxima_entrega(self):
+        texto = KIT.read_text(encoding="utf-8")
+
+        assert "chega nas próximas entregas" not in texto
+        assert "Até lá a conta fica Na fila" not in texto
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 12. Tipografia
+# ═══════════════════════════════════════════════════════════════════════════
+
+RAIZ_DO_APP = Path(__file__).resolve().parents[2]
+
+# O scheduler e o sino ficam de fora: têm travessão antigo em comentário, que
+# ninguém vê, e o lint do front já trava o texto visível do sino.
+ARQUIVOS_DA_FATIA = [
+    RAIZ_DO_APP / "backend/app/services/contas_medicas/processamento.py",
+    RAIZ_DO_APP / "backend/app/services/contas_medicas/tabelas.py",
+    RAIZ_DO_APP / "backend/app/services/contas_medicas/envio.py",
+    RAIZ_DO_APP / "backend/app/services/contas_medicas_extrator.py",
+    RAIZ_DO_APP / "backend/app/routers/contas_medicas_guia.py",
+    RAIZ_DO_APP / "backend/app/conhecimento/contas-medicas.md",
+    RAIZ_DO_APP / "frontend/src/components/layout/NotificacoesDropdown.test.tsx",
+    Path(__file__),
+]
+
+
+@pytest.mark.parametrize("arquivo", ARQUIVOS_DA_FATIA, ids=lambda a: a.name)
+def test_sem_travessao_nem_meia_risca(arquivo):
+    texto = arquivo.read_text(encoding="utf-8")
+    assert chr(0x2014) not in texto
+    assert chr(0x2013) not in texto
