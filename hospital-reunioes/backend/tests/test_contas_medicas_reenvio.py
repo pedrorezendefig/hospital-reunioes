@@ -72,7 +72,6 @@ def chamadas(monkeypatch) -> list[str]:
     def contar(nome):
         def chamada(*_a, **_kw):
             registro.append(nome)
-            raise AssertionError(f"o reenvio chamou {nome}")
 
         return chamada
 

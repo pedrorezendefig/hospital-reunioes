@@ -132,7 +132,7 @@ def resumo(conta: dict) -> dict | None:
 
 def frase(conta: dict) -> str:
     """O "Último envio" da conta reenviada."""
-    dados = resumo(conta) or {"corrigidas": 0, "ainda_na_conta": 0, "nota_saida": None}
+    dados = resumo(conta)
     corrigidas = dados["corrigidas"]
     plural = "corrigida" if corrigidas == 1 else "corrigidas"
     return (
