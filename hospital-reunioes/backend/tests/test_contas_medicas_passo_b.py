@@ -298,6 +298,22 @@ class TestConferenciaDasLinhasDaIA:
         assert (bolsa["codigo"], bolsa["valor_diferenca"], bolsa["nao_conferido"]) == (None, None, True)
         assert bolsa["motivo"].endswith("Sem código.")
 
+    def test_o_motivo_com_os_acrescimos_do_codigo_fica_em_ate_140_caracteres(self, openrouter):
+        # O motivo da IA já no limite (140), numa linha de regra pendente e sem
+        # código: o código acrescenta o "pendente" na frente e o "Sem código." no fim.
+        motivo_da_ia = ("Bolsa coletora de urina registrada na evolução de enfermagem, " * 3)[:140]
+        _, linhas = _analisar(
+            _cenario_do_passo_b(),
+            openrouter,
+            _linha_da_ia(codigo=None, descricao="BOLSA COLETORA DE URINA", regra_id="ALFA-INS-05", motivo=motivo_da_ia),
+        )
+
+        (bolsa,) = [linha for linha in linhas if linha["origem"] == "IA"]
+        assert len(bolsa["motivo"]) == 140
+        # Quem perde é o texto da IA, com reticências; o que o código conferiu fica inteiro.
+        assert bolsa["motivo"].startswith("Regra ALFA-INS-05 pendente. Bolsa coletora de urina registrada")
+        assert bolsa["motivo"].endswith("… Sem código.")
+
 
 class TestNotaComAsLinhasDaIA:
     def test_a_nota_de_entrada_muda_com_a_linha_da_ia_e_o_rs_em_validacao_soma_a_linha_validar(self, openrouter):

@@ -253,16 +253,16 @@ class _Conferencias:
                 return None
             self.apontadas.append(periodo)
 
-        acao, motivo = linha.acao, linha.motivo
+        acao, antes, depois = linha.acao, "", ""
         if regra.get("status") != "VIGENTE" and acao != "VALIDAR":
-            acao, motivo = "VALIDAR", f"Regra {regra['codigo']} pendente. {motivo}"
+            acao, antes = "VALIDAR", f"Regra {regra['codigo']} pendente. "
 
         lancada, devida = Decimal(str(linha.quantidade_lancada)), Decimal(str(linha.quantidade_devida))
         teto = next((t for t in self.conferencia.tetos if t["codigo"] == codigo), None)
         if teto is not None and linha.acao != "RETIRAR":
             devida, diarias = _devida_no_periodo(teto, inicio, fim)
             pagas = "1 diária paga" if diarias == 1 else f"{diarias} diárias pagas"
-            motivo += f" Teto pelo código: {devida:g} para {pagas} no período."
+            depois += f" Teto pelo código: {devida:g} para {pagas} no período."
 
         # Incluir e Ajustar valem pelo preço da tabela ou, fora dela, pelo
         # unitário que a conta já lançou, com a etiqueta. Retirar tira o que foi
@@ -274,9 +274,9 @@ class _Conferencias:
             tabela = _preco_da_tabela(self.preco, codigo, inicio, self.conferencia.coluna)
         unitario = tabela if tabela is not None else lancado
         if codigo is None:
-            motivo += " Sem código."
+            depois += " Sem código."
         elif tabela is None and lancado is not None and linha.acao != "RETIRAR":
-            motivo += " Valor pelo preço da conta, não conferido."
+            depois += " Valor pelo preço da conta, não conferido."
         valor = None
         if unitario is not None:
             valor = (unitario * (devida - lancada)).quantize(CENTAVO, rounding=ROUND_HALF_UP)
@@ -295,7 +295,7 @@ class _Conferencias:
             "preco_tabela": _numero(tabela),
             "valor_diferenca": _numero(valor),
             "regra_codigo": regra["codigo"],
-            "motivo": motivo,
+            "motivo": _motivo_curto(antes, linha.motivo, depois),
             "evidencia_pagina": linha.evidencia.pagina,
             "evidencia_trecho": (linha.evidencia.trecho or "")[:300] or None,
             "nivel_evidencia": linha.nivel_evidencia,
@@ -303,6 +303,15 @@ class _Conferencias:
             "confianca": linha.confianca if confere else "BAIXA",
             "origem": "IA",
         }
+
+
+def _motivo_curto(antes: str, motivo: str, depois: str) -> str:
+    """O motivo da IA com os acréscimos do código, em até 140 caracteres. Quem
+    perde é o texto da IA, com reticências: o que o código conferiu fica inteiro."""
+    cabe = ia.MOTIVO_MAX - len(antes) - len(depois)
+    if len(motivo) > cabe:
+        motivo = motivo[: max(cabe - 1, 0)].rstrip() + "…"
+    return (antes + motivo + depois)[: ia.MOTIVO_MAX]
 
 
 def _bloqueados(supabase, resposta: ia.LinhasDaComparacao) -> frozenset[str]:
