@@ -33,6 +33,7 @@ __all__ = [
     "CenarioNaoEncontradoError",
     "LembreteJaMarcadoError",
     "LembreteNaoEncontradoError",
+    "aba_de_cenarios",
     "editar_cenario",
     "incluido_pela_coordenacao",
     "itens_dos_cenarios",
@@ -225,6 +226,12 @@ def listar_cenarios(supabase) -> list[dict[str, Any]]:
     itens = itens_dos_cenarios(supabase, [c["id"] for c in cenarios])
     siglas = {o["id"]: o["sigla"] for o in _operadoras(supabase)}
     return [_cenario_para_a_tela(c, itens[c["id"]], siglas) for c in cenarios]
+
+
+def aba_de_cenarios(supabase) -> dict[str, Any]:
+    """A aba Cenários: a lista e as operadoras, para o cadastro escolher uma ou todas."""
+    operadoras = [{"sigla": o["sigla"], "nome": o.get("nome")} for o in _operadoras(supabase)]
+    return {"cenarios": listar_cenarios(supabase), "operadoras": operadoras}
 
 
 def _linha_do_cenario(campos: dict[str, Any], operadora_id: str | None) -> dict[str, Any]:

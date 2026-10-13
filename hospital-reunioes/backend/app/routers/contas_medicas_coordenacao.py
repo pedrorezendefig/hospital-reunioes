@@ -29,9 +29,9 @@ from app.services.contas_medicas.coordenacao import (
     CenarioNaoEncontradoError,
     LembreteJaMarcadoError,
     LembreteNaoEncontradoError,
+    aba_de_cenarios,
     editar_cenario,
     lembretes_abertos,
-    listar_cenarios,
     marcar_lembrete,
     novo_cenario,
     propor_cenario,
@@ -114,9 +114,9 @@ async def cenarios(
     me: dict = Depends(_PODE_VER),
     supabase=Depends(get_supabase_client),
 ) -> dict:
-    """Todos os cenários, ativos e inativos, para quem cadastra."""
+    """Todos os cenários, ativos e inativos, e as operadoras, para quem cadastra."""
     _barrar_quem_nao_cadastra(me)
-    return {"cenarios": await run_in_threadpool(listar_cenarios, supabase)}
+    return await run_in_threadpool(aba_de_cenarios, supabase)
 
 
 @router.post("/coordenacao/cenarios/proposta")

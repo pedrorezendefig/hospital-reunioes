@@ -221,8 +221,38 @@ class TestCadastroDoCenario:
 
         # O segundo é o CEN-002, na lista de quem cadastra.
         _cliente(banco, "gestao").post(f"{ROTA}/cenarios", json=_cenario_enviado(nome="Outro cenário"))
-        lista = _cliente(banco, "gestao").get(f"{ROTA}/cenarios").json()["cenarios"]
-        assert [c["codigo"] for c in lista] == ["CEN-001", "CEN-002"]
+        aba = _cliente(banco, "gestao").get(f"{ROTA}/cenarios").json()
+        assert [c["codigo"] for c in aba["cenarios"]] == ["CEN-001", "CEN-002"]
+        # A aba traz as operadoras, para o cadastro escolher uma ou todas.
+        assert [o["sigla"] for o in aba["operadoras"]] == ["ALFA"]
+
+    def test_editar_troca_os_insumos_desativa_e_registra_o_antes_e_o_depois(self):
+        banco = _banco()
+        cliente = _cliente(banco, "diretoria")
+        criado = cliente.post(f"{ROTA}/cenarios", json=_cenario_enviado()).json()["cenario"]
+
+        editado = cliente.put(
+            f"{ROTA}/cenarios/{criado['id']}",
+            json=_cenario_enviado(
+                ativo=False,
+                operadora_sigla="alfa",
+                insumos=[{"codigo": "70000001", "descricao": "AGULHA HIPODERMICA", "quantidade": 2}],
+            ),
+        )
+
+        assert editado.status_code == 200, editado.text
+        assert editado.json()["codigos_fora_da_tabela"] == []
+        cenario = editado.json()["cenario"]
+        assert (cenario["codigo"], cenario["ativo"], cenario["operadora_sigla"]) == ("CEN-001", False, "ALFA")
+        assert [(i["codigo"], i["quantidade"]) for i in cenario["insumos"]] == [("70000001", 2)]
+        (_, edicao) = [r for r in banco.tabelas["cm_registro"] if r["entidade"] == "cm_cenario"]
+        assert (edicao["autor_id"], edicao["antes_json"]["ativo"], edicao["depois_json"]["ativo"]) == (
+            "DM",
+            True,
+            False,
+        )
+        assert len(edicao["antes_json"]["insumos"]) == 2
+        assert cliente.put(f"{ROTA}/cenarios/{UM_UUID}", json=_cenario_enviado()).status_code == 404
 
     @pytest.mark.parametrize("quem", ["coordenadora", "faturista"])
     def test_sem_incluir_regra_operacional_nao_cadastra_nem_pede_a_ia(self, quem, openrouter):
