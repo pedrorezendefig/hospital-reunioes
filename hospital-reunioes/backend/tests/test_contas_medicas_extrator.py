@@ -138,3 +138,54 @@ def test_pagina_digitalizada_do_prontuario_ganha_o_texto_do_ocr_marcada_como_ocr
     # form feed do `tesseract` não abre página nova.
     guardadas = paginas_do_texto_guardado(texto_para_guardar(paginas))
     assert [(p.numero, p.ocr) for p in guardadas] == [(1, False), (2, True), (3, False)]
+
+
+def test_pagina_sem_texto_da_conta_nao_passa_pelo_ocr(tmp_path, monkeypatch):
+    _tesseract_falso(tmp_path, monkeypatch, f"sys.stdout.write({LIDO_PELO_OCR!r})")
+
+    paginas = extrair_paginas(_pdf("Atendimento:900001 Paciente: FULANO Conta:12345 Fatura Individual", ""))
+
+    assert [(p.numero, p.ocr, p.sem_texto) for p in paginas] == [(1, False, False), (2, False, True)]
+
+
+@pytest.mark.parametrize(
+    "tesseract",
+    [
+        pytest.param("sys.stderr.write('Error during processing.')\nsys.exit(1)", id="ilegivel"),
+        pytest.param("sys.stdout.write('  \\n\\f')", id="imagem-sem-letra"),
+        pytest.param(None, id="ausente"),
+    ],
+)
+def test_pagina_que_o_ocr_nao_le_fica_sem_texto_e_a_leitura_continua(tmp_path, monkeypatch, tesseract):
+    if tesseract is None:
+        monkeypatch.setenv("PATH", os.pathsep.join(p for p in os.environ["PATH"].split(os.pathsep) if p != str(tmp_path)))
+    else:
+        _tesseract_falso(tmp_path, monkeypatch, tesseract)
+
+    paginas = extrair_paginas(_pdf(CAPA_DO_PRONTUARIO, "", PAGINA_COM_TEXTO))
+
+    assert [(p.numero, p.ocr, p.sem_texto) for p in paginas] == [(1, False, False), (2, False, True), (3, False, False)]
+
+
+def test_ocr_que_passa_do_prazo_deixa_a_pagina_sem_texto_e_a_leitura_continua(tmp_path, monkeypatch):
+    _tesseract_falso(tmp_path, monkeypatch, "time.sleep(60)")
+    monkeypatch.setattr(extrator, "PRAZO_DA_LEITURA", 3.0)
+
+    inicio = time.monotonic()
+    paginas = extrair_paginas(_pdf(CAPA_DO_PRONTUARIO, "", PAGINA_COM_TEXTO))
+
+    assert [(p.numero, p.ocr, p.sem_texto) for p in paginas] == [(1, False, False), (2, False, True), (3, False, False)]
+    assert time.monotonic() - inicio < 10
+
+
+def test_filho_do_ocr_morto_deixa_a_pagina_sem_texto_e_a_leitura_continua(tmp_path, monkeypatch, caplog):
+    # O `pdftoppm` falso mata o filho que o chamou, como o OOM do cgroup faria.
+    falso = tmp_path / "pdftoppm"
+    falso.write_text(f"#!{sys.executable}\nimport os, signal\nos.kill(os.getppid(), signal.SIGKILL)\n", encoding="utf-8")
+    falso.chmod(falso.stat().st_mode | stat.S_IXUSR)
+    _tesseract_falso(tmp_path, monkeypatch, f"sys.stdout.write({LIDO_PELO_OCR!r})")
+
+    paginas = extrair_paginas(_pdf(CAPA_DO_PRONTUARIO, "", PAGINA_COM_TEXTO))
+
+    assert [(p.numero, p.ocr, p.sem_texto) for p in paginas] == [(1, False, False), (2, False, True), (3, False, False)]
+    assert "OCR das paginas digitalizadas falhou" in caplog.text
