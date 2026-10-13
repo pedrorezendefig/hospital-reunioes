@@ -546,3 +546,70 @@ class TestMovimentacoes:
 
         assert eventos["divergencias"] == []
         assert [m["pagina"] for m in eventos["movimentacoes"]] == [9, 9]
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 5. Uma leitura por atendimento
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+class TestUmaLeitura:
+    def test_a_leitura_fica_em_cm_eventos_e_a_seguinte_reaproveita_sem_chamar_a_ia(self, provedor):
+        banco = _Banco()
+        provedor.respostas = [_resposta(observacoes=["Evolução de 05/10 sem assinatura."])]
+
+        primeira = _passo_a(banco, _lido(_paginas()))
+        segunda = _passo_a(banco, _lido(_paginas()))
+
+        assert len(provedor.corpos) == 1
+        assert segunda == primeira
+        (gravados,) = banco.tabelas["cm_eventos"]
+        assert gravados["eventos_json"]["arquivo_id"] == "arq-1"
+        assert gravados["eventos_json"]["ia"]["observacoes"] == ["Evolução de 05/10 sem assinatura."]
+        assert [(c["passo"], c["tokens_entrada"], c["tokens_saida"]) for c in banco.tabelas["cm_chamada_ia"]] == [
+            ("A", 900, 300)
+        ]
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 6. Tipografia
+# ═══════════════════════════════════════════════════════════════════════════
+
+TRAVESSAO, MEIA_RISCA = chr(0x2014), chr(0x2013)
+RAIZ_DO_APP = Path(__file__).resolve().parents[2]
+ARQUIVOS_DA_FATIA = [
+    RAIZ_DO_APP / "backend/app/services/contas_medicas/passo_a.py",
+    RAIZ_DO_APP / "backend/app/services/contas_medicas/evidencia.py",
+    RAIZ_DO_APP / "backend/app/services/contas_medicas/memoria_texto.py",
+    RAIZ_DO_APP / "backend/app/services/contas_medicas/processamento.py",
+    RAIZ_DO_APP / "backend/app/prompts/contas_medicas_passo_a.md",
+    RAIZ_DO_APP / "backend/app/conhecimento/contas-medicas.md",
+    Path(__file__),
+]
+
+
+@pytest.mark.parametrize("arquivo", ARQUIVOS_DA_FATIA, ids=lambda a: a.name)
+def test_sem_travessao_nem_meia_risca_nos_arquivos(arquivo):
+    texto = arquivo.read_text(encoding="utf-8")
+    assert TRAVESSAO not in texto
+    assert MEIA_RISCA not in texto
+
+
+def test_o_texto_que_a_ia_escreveu_sai_sem_travessao_nem_meia_risca(provedor):
+    provedor.respostas = [
+        _resposta(
+            terapias=[_terapia(2, f"Iniciado MELOXICAM 15 MG {TRAVESSAO} por dor lombar.")],
+            documentos_ausentes=[f"FICHA ANESTESICA {MEIA_RISCA} cirurgia de 04/10"],
+            observacoes=[f"Evolução de 05/10 {TRAVESSAO} sem assinatura."],
+        )
+    ]
+
+    eventos = _passo_a(_Banco(), _lido(_paginas()))
+
+    gravado = json.dumps(eventos, ensure_ascii=False)
+    assert TRAVESSAO not in gravado
+    assert MEIA_RISCA not in gravado
+    assert passo_a.parecer(eventos) == [
+        "Documento ausente: FICHA ANESTESICA, cirurgia de 04/10.",
+        "Observação da IA: Evolução de 05/10, sem assinatura.",
+    ]

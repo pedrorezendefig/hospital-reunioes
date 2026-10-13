@@ -27,8 +27,9 @@ from app.services.contas_medicas.evidencia import normalizar, trecho_confere
 from app.services.contas_medicas.memoria_texto import orientacoes_de_leitura
 from app.services.contas_medicas.prescricao import ItemConsolidado
 from app.services.prompt_loader import load_prompt
+from app.utils.text_sanitizer import sanitizar_estrutura
 
-__all__ = ["eventos_do_atendimento", "montar_entradas", "unir_eventos"]
+__all__ = ["eventos_do_atendimento", "montar_entradas", "parecer", "unir_eventos"]
 
 SEPARADOR = " · "
 
@@ -425,7 +426,64 @@ def eventos_do_atendimento(
     regras: Sequence[Mapping[str, Any]],
 ) -> dict[str, Any]:
     """Os eventos do prontuário do atendimento: os guardados em `cm_eventos`
-    para este arquivo ou, na primeira parcial, a leitura pela IA."""
+    para este arquivo ou, na primeira parcial, a leitura pela IA, que fica
+    guardada ao lado da estrutura que o código gravou (`eventos_json.ia`).
+    Prontuário novo é outra linha de `cm_eventos`, e a IA lê de novo.
+
+    Quem chama segura a trava do atendimento: duas parciais ao mesmo tempo
+    pagariam a mesma leitura duas vezes."""
+    gravados = (
+        supabase.table("cm_eventos")
+        .select("id, eventos_json")
+        .eq("atendimento_id", atendimento_id)
+        .order("criado_em", desc=True)
+        .limit(1)
+        .execute()
+        .data
+        or []
+    )
+    linha = next((g for g in gravados if (g.get("eventos_json") or {}).get("arquivo_id") == arquivo_id), None)
+    if linha and "ia" in linha["eventos_json"]:
+        return linha["eventos_json"]["ia"]
+
+    eventos = _ler_pela_ia(
+        supabase,
+        conta_id=conta_id,
+        atendimento_id=atendimento_id,
+        prontuario=prontuario,
+        achados=achados,
+        regras=regras,
+    )
+    if linha:
+        supabase.table("cm_eventos").update({"eventos_json": {**linha["eventos_json"], "ia": eventos}}).eq(
+            "id", linha["id"]
+        ).execute()
+    return eventos
+
+
+def parecer(eventos: Mapping[str, Any]) -> list[str]:
+    """O que a leitura da IA acrescenta ao parecer da conta: os documentos
+    esperados que faltam, as observações dela e as movimentações que ela leu
+    diferente do código."""
+    return [
+        *(f"Documento ausente: {documento}." for documento in eventos.get("documentos_ausentes") or []),
+        *(f"Observação da IA: {observacao}" for observacao in eventos.get("observacoes") or []),
+        *(eventos.get("divergencias") or []),
+    ]
+
+
+def _ler_pela_ia(
+    supabase,
+    *,
+    conta_id: str,
+    atendimento_id: str,
+    prontuario: ProntuarioLido,
+    achados: Sequence[Mapping[str, Any]],
+    regras: Sequence[Mapping[str, Any]],
+) -> dict[str, Any]:
+    """A chamada (uma por janela), a união, a evidência conferida e as
+    movimentações do código no lugar. O texto que a IA escreveu sai sem
+    travessão nem meia-risca: vai para a tela."""
     orientacoes = orientacoes_de_leitura(list(regras))
     # A instrução, as orientações e os rótulos dos blocos vão em toda chamada.
     reserva = len(load_prompt("contas_medicas_passo_a")) + len(orientacoes) + _ROTULOS_DOS_BLOCOS
@@ -438,4 +496,5 @@ def eventos_do_atendimento(
     eventos = unir_eventos(partes)
     _conferir_evidencias(eventos, _texto_da_pagina(prontuario, _identificacao(prontuario)))
     _prevalecer_o_codigo(eventos, prontuario.conteudo.movimentacoes)
-    return eventos
+    eventos["janelas"] = len(partes)
+    return sanitizar_estrutura(eventos)
