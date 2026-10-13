@@ -19,9 +19,6 @@ from app.services.contas_medicas_conta import (
 )
 
 PAGINA_1 = """\
-HOSPITAL FICTICIO DE TESTE                                                         Página 1 de 2
-                                   Fatura Individual
-
 Atendimento: 900001          Conta: 700001          Tipo: INTERNACAO
 Internação: 01/09/2026 08:30          Alta: 05/09/2026 14:00
 Período da   01/09/2026 a 05/09/2026          Acomodação: ENFERMARIA
@@ -251,8 +248,25 @@ def test_coluna_do_plano_ignora_acento_e_maiuscula():
     assert coluna_do_plano("rioserv intermediario qc", LISTA_CARIOCA) == "CARIOCA"
 
 
-def test_primeira_pagina_com_fatura_e_conta():
+def test_primeira_pagina_da_conta_e_conta():
     assert detectar_tipo_do_arquivo(PAGINA_1) == "CONTA"
+
+
+def test_primeira_pagina_real_do_mv_sem_titulo_e_conta():
+    # O MV só imprime o cabeçalho "Fatura Individual" a partir da página 2 (issue #1194).
+    pagina_real = (
+        "Atendimento:900002 - PACIENTE FICTICIA DE TESTE - Conta:700002 - ASSIM SAUDE - Tipo: Parcial\n"
+        "Remessa: 1 - 09/2026 - Convênio: ASSIM SAUDE - Conta: 700002\n"
+        "\n"
+        "DADOS DO PACIENTE\n"
+        "       Paciente: 1 - PACIENTE FICTICIA DE TESTE\n"
+    )
+
+    assert detectar_tipo_do_arquivo(pagina_real) == "CONTA"
+
+
+def test_primeira_pagina_com_titulo_fatura_individual_continua_conta():
+    assert detectar_tipo_do_arquivo("HOSPITAL\n        Fatura Individual\n\nPaciente: 1 - FULANA\n") == "CONTA"
 
 
 def test_primeira_pagina_com_declaracao_de_recebimento_e_prontuario():

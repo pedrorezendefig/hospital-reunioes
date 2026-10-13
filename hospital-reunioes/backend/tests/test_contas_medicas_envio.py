@@ -71,9 +71,6 @@ def _extrator_de_texto(monkeypatch):
 def _texto_da_conta(atendimento: str, conta: str, inicio: str, fim: str, plano: str = "ASSIM CARIOCA ENF") -> str:
     """A primeira página da "Fatura Individual" do MV, só o cabeçalho e o total."""
     return f"""\
-HOSPITAL FICTICIO DE TESTE                                                         Página 1 de 1
-                                   Fatura Individual
-
 Atendimento: {atendimento}          Conta: {conta}          Tipo: INTERNACAO
 Internação: {inicio} 08:30
 Período da   {inicio} a {fim}          Acomodação: ENFERMARIA
