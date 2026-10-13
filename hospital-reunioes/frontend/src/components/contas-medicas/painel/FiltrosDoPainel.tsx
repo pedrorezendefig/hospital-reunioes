@@ -31,8 +31,8 @@ export function FiltrosDoPainel({
 }) {
   return (
     <div className="grid gap-3 sm:grid-cols-3">
-      <label className="block text-xs font-medium text-slate-600">
-        <span className="mb-1 block">Semana</span>
+      <label className="flex flex-col gap-1.5">
+        <span className="text-xs font-medium text-slate-500 uppercase">Semana</span>
         <input
           type="date"
           aria-label="Semana"
