@@ -847,7 +847,7 @@ class TestProntuarioUmaVez:
         (atendimento,) = banco.tabelas["cm_atendimento"]
         assert atendimento["paciente_rotulo"] == "Antônia F."
 
-    def test_duas_parciais_em_vagas_paralelas_gravam_o_prontuario_uma_vez(self):
+    def test_duas_parciais_em_vagas_paralelas_gravam_o_prontuario_uma_vez(self, openrouter):
         """As duas vagas pegam as parciais do mesmo atendimento juntas. A barreira
         segura a primeira vaga na porta da gravação até a outra chegar lá: sem
         trava por atendimento, as duas já leram `cm_eventos` vazio e apagaram,
@@ -875,6 +875,9 @@ class TestProntuarioUmaVez:
         assert [c["tentativas"] for c in banco.tabelas["cm_conta"]] == [1, 1]
         gravadas = {t: len(banco.tabelas.get(t, [])) for t in ("cm_eventos", "cm_prescricao", "cm_cirurgia")}
         assert gravadas == {"cm_eventos": 1, "cm_prescricao": 4, "cm_cirurgia": 1}
+        # A trava do atendimento vale também para o Passo A: a segunda vaga
+        # espera a primeira e acha a leitura da IA guardada.
+        assert openrouter.requisicoes == 1
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -1066,7 +1069,7 @@ class TestLeituraQueNaoFecha:
 
 
 # ═══════════════════════════════════════════════════════════════════════════
-# 6b. A IA que não responde no formato (issue #1130)
+# 6b. A IA: o Passo A no pipeline (issues #1130 e #1131)
 # ═══════════════════════════════════════════════════════════════════════════
 
 EVENTOS_DA_IA = {
@@ -1083,16 +1086,18 @@ EVENTOS_DA_IA = {
 
 
 class _OpenRouter:
-    """O provedor do teste, na fronteira HTTP: responde fora do formato
-    enquanto `fora_do_formato` for verdade, e conta as requisições."""
+    """O provedor do teste, na fronteira HTTP: devolve `eventos` no formato do
+    Anexo A, ou fora do formato enquanto `fora_do_formato` for verdade, e conta
+    as requisições."""
 
     def __init__(self):
         self.requisicoes = 0
-        self.fora_do_formato = True
+        self.fora_do_formato = False
+        self.eventos = EVENTOS_DA_IA
 
     def __call__(self, request: httpx.Request) -> httpx.Response:
         self.requisicoes += 1
-        conteudo = "não é JSON" if self.fora_do_formato else json.dumps(EVENTOS_DA_IA)
+        conteudo = "não é JSON" if self.fora_do_formato else json.dumps(self.eventos)
         return httpx.Response(
             200,
             json={
@@ -1108,8 +1113,10 @@ class _OpenRouter:
         )
 
 
-@pytest.fixture
+@pytest.fixture(autouse=True)
 def openrouter(monkeypatch) -> _OpenRouter:
+    """Toda conta passa pelo Passo A: sem este dublê, o pipeline falaria com o
+    OpenRouter de verdade (a trava de rede da suíte reprova antes)."""
     duble = _OpenRouter()
     monkeypatch.setattr(
         ia,
@@ -1125,24 +1132,10 @@ def openrouter(monkeypatch) -> _OpenRouter:
     return duble
 
 
-def _conferencia_que_chama_a_ia(banco: _Banco):
-    """A conferência com uma chamada ao adaptador antes, onde o passo A vai
-    entrar: o erro que sai do adaptador de verdade atravessa o pipeline."""
-
-    def conferir_com_ia(*args, **kwargs):
-        (conta,) = banco.tabelas["cm_conta"]
-        ia.extrair_eventos(
-            "texto", "orientações", supabase=banco, conta_id=conta["id"], atendimento_id=conta["atendimento_id"]
-        )
-        return conferir(*args, **kwargs)
-
-    return conferir_com_ia
-
-
 class TestIAForaDoFormato:
-    def test_a_conta_fica_em_erro_com_a_frase_e_o_reprocesso_funciona(self, monkeypatch, openrouter):
+    def test_a_conta_fica_em_erro_com_a_frase_e_o_reprocesso_funciona(self, openrouter):
+        openrouter.fora_do_formato = True
         banco = _cenario()
-        monkeypatch.setattr(processamento, "conferir", _conferencia_que_chama_a_ia(banco))
         _enviar(banco, _conta(), _prontuario())
 
         _rodar_o_job(banco)
@@ -1167,6 +1160,72 @@ class TestIAForaDoFormato:
         assert openrouter.requisicoes == 4
         assert banco.conta(conta["id"])["situacao"] == "A_FAZER"
         assert banco.conta(conta["id"])["erro_motivo"] is None
+
+
+class TestPassoANoPipeline:
+    def test_a_segunda_parcial_do_atendimento_nao_chama_o_passo_a(self, openrouter):
+        banco = _cenario()
+        _duas_parciais(banco)
+
+        assert _rodar_o_job(banco) == 2
+
+        assert [c["situacao"] for c in banco.tabelas["cm_conta"]] == ["A_FAZER", "A_FAZER"]
+        assert openrouter.requisicoes == 1
+        (eventos,) = banco.tabelas["cm_eventos"]
+        assert eventos["eventos_json"]["ia"]["atendimento"] == ATENDIMENTO
+
+    def test_a_chamada_do_passo_a_fica_gravada_com_os_tokens(self):
+        banco = _cenario()
+        _enviar(banco, _conta(), _prontuario())
+
+        _rodar_o_job(banco)
+
+        (conta,) = banco.tabelas["cm_conta"]
+        (chamada,) = banco.tabelas["cm_chamada_ia"]
+        assert {k: chamada[k] for k in ("conta_id", "atendimento_id", "passo", "tokens_entrada", "tokens_saida")} == {
+            "conta_id": conta["id"],
+            "atendimento_id": conta["atendimento_id"],
+            "passo": "A",
+            "tokens_entrada": 10,
+            "tokens_saida": 5,
+        }
+
+    def test_a_divergencia_os_documentos_ausentes_e_as_observacoes_da_ia_entram_no_parecer(self, openrouter):
+        # O código leu a alta em 06/10 15:20 no resumo de alta; a IA leu 18:00.
+        alta = {
+            "tipo": "ALTA",
+            "data_hora": "2026-10-06T18:00",
+            "setor": "CTI ADULTO",
+            "pagina": 8,
+            "trecho": "DATA DA ALTA - 06/10/2026",
+        }
+        meia_risca = chr(0x2013)
+        openrouter.eventos = {
+            **EVENTOS_DA_IA,
+            "movimentacoes": [alta],
+            "documentos_ausentes": ["FICHA ANESTESICA"],
+            "observacoes": [f"Evolução de enfermagem de 05/10 ilegível {meia_risca} página 22"],
+        }
+        banco = _cenario()
+        _enviar(banco, _conta(), _prontuario())
+
+        _rodar_o_job(banco)
+
+        (conta,) = banco.tabelas["cm_conta"]
+        cabecalho = _guia(banco, conta["id"])["cabecalho"]
+        assert cabecalho["parecer_parcial"] is True
+        assert cabecalho["faltantes"] == [
+            "O arquivo não trouxe: evolução médica (3 na capa).",
+            "Documento ausente: FICHA ANESTESICA.",
+            "Observação da IA: Evolução de enfermagem de 05/10 ilegível, página 22",
+            "Movimentação divergente: a IA leu alta em 06/10/2026 18:00 (página 8); "
+            "vale a leitura do código, alta em 06/10/2026 15:20.",
+        ]
+        (eventos,) = banco.tabelas["cm_eventos"]
+        assert [(m["tipo"], m["data_hora"]) for m in eventos["eventos_json"]["ia"]["movimentacoes"]] == [
+            ("INTERNACAO", "2026-10-02T22:40"),
+            ("ALTA", "2026-10-06T15:20"),
+        ]
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -1247,6 +1306,7 @@ class TestTempoDasEtapas:
             "texto_do_prontuario",
             "leitura_do_prontuario",
             "conferencia",
+            "passo_a",
             "gravacao",
             "total",
         }
