@@ -23,7 +23,7 @@ import logging
 import time
 from dataclasses import dataclass
 from time import perf_counter
-from typing import Any, Literal, TypeVar
+from typing import Any, Literal
 
 from openai import APIError, OpenAI
 from pydantic import BaseModel, ConfigDict, ValidationError
@@ -43,17 +43,16 @@ __all__ = [
 
 logger = logging.getLogger(__name__)
 
-# Três tentativas, com espera crescente entre elas. O prazo de cada uma e as
-# esperas cabem nos 15 minutos em que o processamento considera a conta presa.
+# Três tentativas, com espera crescente entre elas. Uma chamada inteira (três
+# prazos e as duas esperas) fica abaixo de 10 minutos, dentro dos 15 em que o
+# processamento considera a conta presa e a devolve para a fila.
 TENTATIVAS = 3
 ESPERAS_S = (5, 20)
-PRAZO_DA_TENTATIVA_S = 240
+PRAZO_DA_TENTATIVA_S = 180
 
 # Toda chamada do módulo: só provedor que aceita o schema, sem retenção do
 # texto e sem coleta para treino. O prontuário nunca fica no provedor.
 PROVEDOR = {"require_parameters": True, "zdr": True, "data_collection": "deny"}
-
-Saida = TypeVar("Saida", bound=BaseModel)
 
 _esperar = time.sleep
 
@@ -192,7 +191,9 @@ class LinhaDaComparacao(_Estrito):
     motivo: str
     evidencia: Evidencia
     nivel_evidencia: Literal["REGISTRADO", "PRESCRITO", "PRESCRITO_SN", "POR_REGRA"]
-    causa_raiz: Literal["DISPENSACAO", "REGRA_AUTOMATICA", "CADASTRO_PRECO", "REGISTRO_ASSISTENCIAL", "LANCAMENTO_MANUAL"]
+    causa_raiz: Literal[
+        "DISPENSACAO", "REGRA_AUTOMATICA", "CADASTRO_PRECO", "REGISTRO_ASSISTENCIAL", "LANCAMENTO_MANUAL"
+    ]
     confianca: Literal["ALTA", "MEDIA", "BAIXA"]
 
 
@@ -337,7 +338,7 @@ def _somar_na_conta(supabase, conta_id: str) -> None:
     ).eq("id", conta_id).execute()
 
 
-def _chamar(
+def _chamar[Saida: BaseModel](
     *,
     modelo: str,
     instrucao: str,
@@ -449,7 +450,7 @@ def comparar_conta(
     )
 
 
-def chamada_curta(
+def chamada_curta[Saida: BaseModel](
     instrucao: str,
     conteudo: str,
     saida: type[Saida],
@@ -468,4 +469,3 @@ def chamada_curta(
         saida=saida,
         onde=_Onde(supabase, conta_id, atendimento_id, passo),
     )
-

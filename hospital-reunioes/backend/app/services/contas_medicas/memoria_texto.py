@@ -120,7 +120,9 @@ def gerar_texto_memoria(supabase, operadora_id: str, versao_id: str | None = Non
     """O texto da memória da operadora no formato do arquivo: a versão pedida
     ou, sem ela, a vigente. Só as regras ativas entram."""
     operadoras = supabase.table("cm_operadora").select("sigla, nome").eq("id", operadora_id).execute().data or []
-    consulta = supabase.table("cm_memoria_versao").select("id, versao, parametros_json").eq("operadora_id", operadora_id)
+    consulta = (
+        supabase.table("cm_memoria_versao").select("id, versao, parametros_json").eq("operadora_id", operadora_id)
+    )
     consulta = consulta.eq("id", versao_id) if versao_id else consulta.eq("vigente", True)
     versoes = consulta.execute().data or []
     if not operadoras or not versoes:

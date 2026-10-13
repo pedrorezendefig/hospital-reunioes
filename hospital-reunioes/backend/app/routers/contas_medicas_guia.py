@@ -113,8 +113,7 @@ async def abrir_guia(
         "numeros": numeros_do_topo(linhas, conta.get("total_lancado"), concluida=concluida),
         "grupos": agrupar_por_dia_e_setor(linhas),
         # O botão "Reanalisar": a tela desenha pelo que vem aqui, e a rota decide.
-        "pode_reanalisar": "regra_contratual_tabelas" in me["permissoes_cm"]
-        and conta.get("situacao") in REANALISAVEIS,
+        "pode_reanalisar": "regra_contratual_tabelas" in me["permissoes_cm"] and conta.get("situacao") in REANALISAVEIS,
     }
 
 

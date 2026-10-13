@@ -287,7 +287,9 @@ def _extrair(banco=None, conta_id="c1"):
     )
 
 
-MEMORIA = "---\noperadora: ASSIM\n---\n\n## 1. PRINCÍPIOS\n\n| ID | Regra |\n|---|---|\n| ASSIM-PRI-01 | Atendimento |\n"
+MEMORIA = (
+    "---\noperadora: ASSIM\n---\n\n## 1. PRINCÍPIOS\n\n| ID | Regra |\n|---|---|\n| ASSIM-PRI-01 | Atendimento |\n"
+)
 
 
 def _comparar(banco=None, conta_id="c1"):
