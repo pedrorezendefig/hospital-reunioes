@@ -1,14 +1,32 @@
 #!/bin/bash
 # Coleta do hr-ondas: um JSON numa linha, lido de fontes que já existem (só leitura).
-# Hospital OS (8799): PRDs, ondas e fases · `claude agents --json`: sessões vivas ·
+# PRDs, ondas e fases: o recorte do coletor do OS (collect.py --recorte), só dos PRDs com onda
+# viva; com --todos, o /api/data inteiro do Hospital OS (8799) · `claude agents --json`: sessões vivas ·
 # $TMPDIR/fechar_onda/<sessao>/*.sql: migrations que a subida pediu ·
-# /api/health de produção: a última migration aplicada.
+# /api/health de produção: a última migration aplicada ·
+# transcript de cada sessão de onda (hooks/sessao.py): o shell em curso e as subidas ·
+# check-runs de cada PR aberto (REST, não a cota do GraphQL): início e fim do CI.
+#
+# A parte local (sessões, agentes, subidas, migrations) é fresca a cada chamada e não gasta
+# nada. A parte remota (PRDs, CI, health) fica num cache em $TMPDIR/hr-ondas/,
+# compartilhado por todas as sessões: sem argumento, só recoleta com mais de 5 min;
+# com --fresco (um evento do workflow), com mais de 30 s. Uma trava faz uma sessão só buscar.
 export PATH="$HOME/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin"
 TMP="${TMPDIR:-/tmp}"; TMP="${TMP%/}"
 OS_URL="${HR_ONDAS_OS:-http://127.0.0.1:8799/api/data}"
 HEALTH_URL="${HR_ONDAS_HEALTH:-https://api.hospitalsaomatheus.cloud/api/health}"
+CACHE_DIR="${HR_ONDAS_CACHE:-$TMP/hr-ondas}"; CACHE="$CACHE_DIR/remoto.json"; TRAVA="$CACHE_DIR/trava"
+RECORTE="$(cd "$(dirname "$0")/../../../.." && pwd)/tools/workflow-dashboard/collect.py"
+mkdir -p "$CACHE_DIR"
+fresco=0; todos=0
+for a in "$@"; do
+  case "$a" in --fresco) fresco=1 ;; --todos) todos=1 ;; esac
+done
 
-os=$(curl -s -m 20 "$OS_URL" | jq -c '
+filtrar_os() {
+  # GitHub fora (cota do GraphQL zerada) também conta como sem resposta: não apaga o retrato
+  jq -c 'select(.github.error == null)
+  | 
   .fases as $F
   | .github.issues as $all
   | ($all | map(select(.state == "OPEN") | .number)) as $abertas
@@ -23,8 +41,8 @@ os=$(curl -s -m 20 "$OS_URL" | jq -c '
                ci: ($f.sinal.ci // null), veredito: ($f.sinal.veredito // null),
                conflito: ($f.sinal.conflito // false), versao: $f.versao,
                por: [ .blocked_by[] as $b | select($abertas | index($b)) | $b ]} ] } ] }
-' 2>/dev/null)
-[ -n "$os" ] || os=null
+' 2>/dev/null
+}
 
 agentes=$(claude agents --json 2>/dev/null | jq -c --arg tmp "$TMP" '
   [ .[] | select(.name // "" | test("^onda-")) | select(.cwd | test("Hospital"))
@@ -57,6 +75,17 @@ for linha in $(echo "$agentes" | jq -r '.[] | "\(.nome)=\(.sessao)"'); do
   done
 done
 
+# Shell em curso e subidas de cada sessão, lidos do transcript dela
+subidas='[]'
+for linha in $(echo "$agentes" | jq -r '.[] | "\(.nome)=\(.sessao)"'); do
+  nome=${linha%%=*}; sid=${linha#*=}
+  jl="$PROJ/$sid.jsonl"; [ -f "$jl" ] || continue
+  info=$(python3 -I "$(dirname "$0")/sessao.py" "$jl" "$nome" 2>/dev/null)
+  [ -n "$info" ] || continue
+  agentes=$(echo "$agentes" | jq -c --arg n "$nome" --argjson i "$info" 'map(if .nome == $n then . + {shell: $i.shell} else . end)')
+  subidas=$(echo "$subidas" | jq -c --arg n "$nome" --argjson i "$info" '. + ($i.subidas | map(. + {sessao: $n}))')
+done
+
 # PRD de cada sessão: o primeiro "PRD #N" da passagem que a lançou
 prd_sessoes='{}'
 for nome in $(echo "$agentes" | jq -r '.[].nome'); do
@@ -76,10 +105,59 @@ for f in "$TMP"/fechar_onda/*/[0-9]*.sql; do
     '. + [{numero: $n, arquivo: $a, caminho: $c, sessao: $s, mtime: ($m * 1000), linhas: $l}]')
 done
 
-aplicada=$(curl -s -m 8 "$HEALTH_URL" | jq -c '.migracao // null' 2>/dev/null)
-[ -n "$aplicada" ] || aplicada=null
+# Parte remota: recoleta se o cache passou da idade e ninguém está buscando
+[ -d "$TRAVA" ] && [ $(( $(date +%s) - $(stat -f %m "$TRAVA") )) -gt 180 ] && rmdir "$TRAVA" 2>/dev/null
+idade=$(( $(date +%s) - $(stat -f %m "$CACHE" 2>/dev/null || echo 0) ))
+if [ $fresco = 1 ]; then minimo=30; url="$OS_URL?fresh=1"; else minimo=300; url="$OS_URL"; fi
+if [ "$idade" -ge "$minimo" ] && mkdir "$TRAVA" 2>/dev/null; then
+  trap 'rmdir "$TRAVA" 2>/dev/null' EXIT
+  agora=$(( $(date +%s) * 1000 ))
+  # Só os PRDs com sessão de onda viva (~6 pontos de GraphQL); --todos, ou árvore sem o
+  # recorte (branch antiga), cai no /api/data inteiro do OS (~35 pontos)
+  bruto=""
+  if [ $todos = 0 ]; then
+    prds=$(echo "$prd_sessoes" | jq -r '[.[]] | unique | join(",")')
+    bruto=$(python3 "$RECORTE" --recorte "$prds" 2>/dev/null) || bruto=""
+  fi
+  # a coleta fresca do OS inteiro leva uns 30 s
+  [ -n "$bruto" ] || bruto=$(curl -s -m 75 "$url")
+  os=$(echo "$bruto" | filtrar_os); osEm=$agora
+  # OS sem resposta: fica o último retrato bom do cache, com a hora dele
+  if [ -z "$os" ]; then
+    os=$(jq -c '.os' "$CACHE" 2>/dev/null); osEm=$(jq -c '.osEm' "$CACHE" 2>/dev/null)
+    [ -n "$os" ] || os=null; [ -n "$osEm" ] || osEm=null
+  fi
 
-jq -n -c --argjson os "$os" --argjson agentes "$agentes" --argjson prdSessoes "$prd_sessoes" \
-  --argjson subAgentes "$sub_agentes" \
-  --argjson migs "$migs" --argjson aplicada "$aplicada" \
-  '{os: $os, agentes: $agentes, prdSessoes: $prdSessoes, subAgentes: $subAgentes, migrations: $migs, aplicada: $aplicada}'
+  # CI de cada PR aberto: check-runs do commit da cabeça, em paralelo
+  ci='{}'
+  repo=$(echo "$os" | jq -r '.repo // empty' 2>/dev/null)
+  CIDIR=$(mktemp -d "$TMP/hr-ondas-ci.XXXXXX")
+  for pr in $(echo "$os" | jq -r '[.prds[]?.issues[]? | select(.fase == "pr_aberto" and .pr != null) | .pr] | unique | .[]' 2>/dev/null); do
+    ( sha=$(gh api "repos/$repo/pulls/$pr" --jq .head.sha 2>/dev/null) && [ -n "$sha" ] &&
+      gh api "repos/$repo/commits/$sha/check-runs?per_page=100" 2>/dev/null | jq -c '
+        [ .check_runs[] | select(.started_at != null) ] | select(length > 0)
+        | {inicio: (map(.started_at | sub("\\.[0-9]+Z$"; "Z") | fromdateiso8601 * 1000) | min),
+           fim: (if all(.completed_at != null) then (map(.completed_at | sub("\\.[0-9]+Z$"; "Z") | fromdateiso8601 * 1000) | max) else null end)}
+      ' > "$CIDIR/$pr" 2>/dev/null ) &
+  done
+  wait
+  for f in "$CIDIR"/*; do
+    [ -s "$f" ] || continue
+    ci=$(echo "$ci" | jq -c --arg k "$(basename "$f")" --argjson v "$(cat "$f")" '. + {($k): $v}')
+  done
+  rm -r "$CIDIR"
+
+  aplicada=$(curl -s -m 8 "$HEALTH_URL" | jq -c '.migracao // null' 2>/dev/null)
+  [ -n "$aplicada" ] || aplicada=null
+
+  jq -n -c --argjson os "$os" --argjson osEm "$osEm" --argjson ci "$ci" --argjson aplicada "$aplicada" \
+    --argjson em "$agora" '{os: $os, osEm: $osEm, ci: $ci, aplicada: $aplicada, em: $em}' > "$CACHE.$$" &&
+    mv "$CACHE.$$" "$CACHE"
+fi
+remoto=$(cat "$CACHE" 2>/dev/null)
+[ -n "$remoto" ] || remoto='{"os":null,"osEm":null,"ci":{},"aplicada":null,"em":null}'
+
+jq -n -c --argjson r "$remoto" --argjson agentes "$agentes" --argjson prdSessoes "$prd_sessoes" \
+  --argjson subAgentes "$sub_agentes" --argjson subidas "$subidas" --argjson migs "$migs" \
+  '{os: $r.os, osEm: $r.osEm, remotoEm: $r.em, ci: $r.ci, aplicada: $r.aplicada, agentes: $agentes,
+    prdSessoes: $prdSessoes, subAgentes: $subAgentes, subidas: $subidas, migrations: $migs}'

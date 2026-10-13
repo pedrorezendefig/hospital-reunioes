@@ -16,16 +16,22 @@ O pipeline de uma conta, em etapas cronometradas:
    que o aviso do envio usa, `cm_prescricao`, `cm_cirurgia`, `cm_glicemia_dia`,
    o rótulo e a idade em `cm_atendimento`) é gravada uma vez por arquivo de
    prontuário;
-4. a conferência por código (as diárias são contadas dentro dela), com a
+4. o dicionário: o medicamento da prescrição sem par na conta vai uma vez à
+   IA, e a proposta já vale nesta conta (#1135);
+5. a conferência por código (as diárias são contadas dentro dela), com a
    memória vigente, as tabelas, os setores e o dicionário do banco;
-5. o Guia: o reprocesso troca as linhas abertas e preserva as marcadas; a
-   conta fica `A_FAZER` com nota, valores, parecer parcial e o tempo de cada
-   etapa.
+6. o Passo A (eventos do prontuário, uma vez por atendimento) e o Passo B (a
+   conta comparada com a memória, com as conferências do código sobre cada
+   linha da IA);
+7. o Guia, com as linhas do código e as da IA: o reprocesso troca as linhas
+   abertas e preserva as marcadas; a conta fica `A_FAZER` com nota, valores,
+   parecer parcial e o tempo de cada etapa.
 
 Leitura que não fecha (PDF sem texto, conta que não soma, prontuário
 incompleto) vira `ERRO` com a frase da etapa, sem nova tentativa: o mesmo
-arquivo daria o mesmo erro. Falha inesperada volta para a fila; na terceira
-tentativa, `ERRO`.
+arquivo daria o mesmo erro. A IA fora do ar depois das três tentativas do
+adaptador também vira `ERRO`, com o Guia do código gravado. Falha inesperada
+volta para a fila; na terceira tentativa, `ERRO`.
 
 O texto dos PDFs é prontuário: o log leva a etapa, a conta e o tipo do erro
 com o lugar no código, nunca a mensagem da exceção, que pode citar o texto.
@@ -40,6 +46,7 @@ import weakref
 from collections.abc import Iterator
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager
+from dataclasses import replace
 from datetime import UTC, date, datetime, time, timedelta
 from decimal import Decimal
 from pathlib import Path
@@ -48,6 +55,7 @@ from typing import Any
 
 from app.services import storage
 from app.services import transcricao_extractor as orcamento
+from app.services.contas_medicas import dicionario_ia, passo_a, passo_b
 from app.services.contas_medicas import prontuario as leitura_do_prontuario
 from app.services.contas_medicas.conferencia import Conferencia, ProntuarioLido, conferir
 from app.services.contas_medicas.conteudo import Conteudo, ler_conteudo
@@ -99,7 +107,11 @@ ETAPAS = {
     "leitura_da_conta": "leitura da conta",
     "texto_do_prontuario": "leitura do PDF do prontuário",
     "leitura_do_prontuario": "leitura do prontuário",
+    "dicionario": "consulta do dicionário",
     "conferencia": "conferência",
+    "passo_a": "leitura do prontuário pela IA",
+    "conferencia_com_eventos": "conferência com a leitura da IA",
+    "passo_b": "comparação com a memória pela IA",
     "gravacao": "gravação do guia",
 }
 
@@ -368,27 +380,82 @@ def _pipeline(supabase, conta: dict, cronometro: _Cronometro) -> None:
         prontuario = ProntuarioLido(estrutura, conteudo, textos)
         _gravar_prontuario(supabase, conta["atendimento_id"], arquivo_do_prontuario["id"], prontuario)
 
+    with cronometro.etapa("dicionario"), _trava_do_prontuario(conta["atendimento_id"]):
+        # O termo de medicamento sem par vai uma vez à IA, antes da
+        # conferência: a proposta já vale para esta conta. A trava faz a
+        # parcial que chega junto esperar a proposta da outra e lê-la do
+        # dicionário, sem perguntar de novo.
+        dicionario = dicionario_do_banco(supabase)
+        if dicionario_ia.propor_termos(
+            supabase, prontuario, lida, dicionario, conta_id=conta["id"], atendimento_id=conta["atendimento_id"]
+        ):
+            dicionario = dicionario_do_banco(supabase)
+
     with cronometro.etapa("conferencia"):
         operadora_id = atendimento.get("operadora_id")
         memoria = memoria_vigente(supabase, operadora_id) if operadora_id else None
         if memoria is None:
             raise _Falha(MENSAGEM_SEM_MEMORIA)
-        conferencia = conferir(
-            lida,
-            prontuario,
-            _memoria_lida(memoria),
-            _busca_de_preco(supabase, operadora_id),
-            setores={s["nome_mv"]: s["acomodacao"] for s in listar_setores(supabase) if s.get("acomodacao")},
-            dicionario=dicionario_do_banco(supabase),
-            pacote_do_tuss=lambda tuss, data: pacote_pelo_tuss(supabase, operadora_id, tuss, data),
-        )
+        memoria_lida = _memoria_lida(memoria)
+        busca_de_preco = _busca_de_preco(supabase, operadora_id)
+        buscas = {
+            "setores": {s["nome_mv"]: s["acomodacao"] for s in listar_setores(supabase) if s.get("acomodacao")},
+            "dicionario": dicionario,
+            "pacote_do_tuss": lambda tuss, data: pacote_pelo_tuss(supabase, operadora_id, tuss, data),
+        }
+        conferencia = conferir(lida, prontuario, memoria_lida, busca_de_preco, **buscas)
+
+    try:
+        with cronometro.etapa("passo_a"), _trava_do_prontuario(conta["atendimento_id"]):
+            # Depois das conferências: a IA recebe os achados do código, para não
+            # repetir linha. A trava faz a parcial que chega junto esperar a
+            # leitura da outra e reaproveitá-la.
+            eventos = passo_a.eventos_do_atendimento(
+                supabase,
+                conta_id=conta["id"],
+                atendimento_id=conta["atendimento_id"],
+                arquivo_id=arquivo_do_prontuario["id"],
+                prontuario=prontuario,
+                achados=conferencia.linhas,
+                regras=memoria["regras"],
+            )
+
+        with cronometro.etapa("conferencia_com_eventos"):
+            # As conferências que dependem do texto livre ("se necessário" e classe
+            # de UTI do dia) rodam com os eventos que a IA leu (#1134).
+            conferencia = conferir(lida, prontuario, memoria_lida, busca_de_preco, eventos=eventos, **buscas)
+
+        with cronometro.etapa("passo_b"):
+            da_ia = passo_b.comparar_com_a_ia(
+                supabase,
+                conta_id=conta["id"],
+                atendimento_id=conta["atendimento_id"],
+                operadora_id=operadora_id,
+                memoria=memoria,
+                conta=lida,
+                prontuario=prontuario,
+                eventos=eventos,
+                conferencia=conferencia,
+                preco=busca_de_preco,
+                dicionario=dicionario,
+            )
+    except ErroDaIA:
+        # A IA não respondeu nas três tentativas: o que o código achou fica no
+        # Guia, e a conta vai para Erro. O reprocesso troca as linhas abertas.
+        _gravar_guia(supabase, conta["id"], conferencia)
+        raise
 
     with cronometro.etapa("gravacao"):
-        linhas = _gravar_guia(supabase, conta["id"], conferencia)
+        # As linhas da IA entram pelo mesmo ponto das do código, num Guia só.
+        linhas = _gravar_guia(
+            supabase, conta["id"], replace(conferencia, linhas=passo_b.juntar(conferencia.linhas, da_ia.linhas))
+        )
         nota = nota_de_entrada(linhas, lida.total)
 
     # A 116 não tem coluna para o tempo das etapas, e o PRD tem migration única:
     # ele vai em `faltantes`, ao lado dos itens que o prontuário não trouxe.
+    # O parecer junta o que a leitura por código não teve e o que a IA apontou.
+    parecer = [*estrutura.parecer_parcial, *passo_a.parecer(eventos)]
     tempos = {**cronometro.tempos, "total": cronometro.total()}
     _fechar_tentativa(
         supabase,
@@ -401,8 +468,9 @@ def _pipeline(supabase, conta: dict, cronometro: _Cronometro) -> None:
             "nota_entrada": nota.nota,
             "valor_apontado": float(nota.apontado),
             "valor_em_validacao": float(nota.em_validacao),
-            "parecer_parcial": bool(estrutura.parecer_parcial),
-            "faltantes": {"itens": list(estrutura.parecer_parcial), "tempos_por_etapa_s": tempos},
+            "parecer_parcial": bool(parecer),
+            # A linha da IA que as conferências derrubaram fica registrada, com o motivo.
+            "faltantes": {"itens": parecer, "tempos_por_etapa_s": tempos, "descartadas_ia": list(da_ia.descartadas)},
             "memoria_versao_id": memoria["memoria_versao_id"],
             "pronta_em": datetime.now(UTC).isoformat(),
         },

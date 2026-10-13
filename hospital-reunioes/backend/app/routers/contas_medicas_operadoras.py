@@ -15,6 +15,7 @@ from __future__ import annotations
 import re
 from datetime import date
 from typing import Literal
+from uuid import UUID
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, Response, UploadFile, status
 from pydantic import BaseModel, Field
@@ -23,6 +24,7 @@ from starlette.concurrency import run_in_threadpool
 from app.dependencies import get_supabase_client, require_permissao_cm
 from app.limiter import limiter
 from app.services.contas_medicas.dicionario import DicionarioRecusadoError, importar_dicionario, ler_dicionario
+from app.services.contas_medicas.dicionario_ia import PropostaRecusadaError, decidir_proposta, listar_propostas
 from app.services.contas_medicas.memoria import MemoriaRecusadaError, ler_memoria
 from app.services.contas_medicas.operadoras import (
     CadastroRecusadoError,
@@ -215,6 +217,48 @@ async def enviar_dicionario(
     except DicionarioRecusadoError as exc:
         raise _422(str(exc)) from None
     return await run_in_threadpool(importar_dicionario, supabase, termos, me.get("id"))
+
+
+@router.get("/dicionario/propostas")
+@limiter.limit("60/minute")
+async def propostas_do_dicionario(
+    request: Request,
+    _me: dict = Depends(require_permissao_cm(PERMISSAO)),
+    supabase=Depends(get_supabase_client),
+) -> dict:
+    """Os termos que a IA ligou a um código da conta, à espera da gestão."""
+    return {"propostas": listar_propostas(supabase)}
+
+
+def _decidir(supabase, proposta_id: UUID, me: dict, *, confirmar: bool) -> dict:
+    try:
+        return decidir_proposta(supabase, str(proposta_id), confirmar=confirmar, autor_id=me.get("id"))
+    except PropostaRecusadaError as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from None
+
+
+@router.post("/dicionario/propostas/{proposta_id}/confirmar")
+@limiter.limit("60/minute")
+async def confirmar_proposta(
+    request: Request,
+    proposta_id: UUID,
+    me: dict = Depends(require_permissao_cm(PERMISSAO)),
+    supabase=Depends(get_supabase_client),
+) -> dict:
+    """A proposta vira termo confirmado do dicionário, com o código que a IA deu."""
+    return _decidir(supabase, proposta_id, me, confirmar=True)
+
+
+@router.post("/dicionario/propostas/{proposta_id}/rejeitar")
+@limiter.limit("60/minute")
+async def rejeitar_proposta(
+    request: Request,
+    proposta_id: UUID,
+    me: dict = Depends(require_permissao_cm(PERMISSAO)),
+    supabase=Depends(get_supabase_client),
+) -> dict:
+    """O código proposto sai; o termo fica decidido, sem par, e a IA não é perguntada de novo."""
+    return _decidir(supabase, proposta_id, me, confirmar=False)
 
 
 @router.get("/planos")

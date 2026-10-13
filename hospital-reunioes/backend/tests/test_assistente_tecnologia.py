@@ -1121,18 +1121,22 @@ class TestPerguntaSobreOPainel:
         return resposta.json(), llm
 
     @staticmethod
-    def _secao_do_kit_no_prompt(prompt: str, titulo: str) -> str:
-        """A secao `## titulo` do kit, lida DENTRO da cerca e sem o recuo que
-        o backend poe: a frase fora da cerca nao e material de consulta."""
+    def _secao_do_kit_no_prompt(prompt: str, arquivo: str, titulo: str) -> str:
+        """A secao `## titulo` do `arquivo` do kit, lida DENTRO da cerca e sem
+        o recuo que o backend poe: a frase fora da cerca nao e material de
+        consulta. Procura dentro do arquivo porque o kit cita por arquivo e
+        secao, e o mesmo titulo pode existir em outro (o Painel de Contas
+        medicas, #1137)."""
         dentro = prompt.split(assistente_tecnologia.MARCA_INICIO_KIT)[1].split(assistente_tecnologia.MARCA_FIM_KIT)[0]
         corpo = textwrap.dedent(dentro.strip("\n").split("\n", 1)[1])
-        return corpo.split(f"\n## {titulo}\n")[1].split("\n## ")[0]
+        do_arquivo = re.split(r"\n# [\w-]+\.md\n", corpo.split(f"\n# {arquivo}\n")[1])[0]
+        return do_arquivo.split(f"\n## {titulo}\n")[1].split("\n## ")[0]
 
     def test_o_turno_leva_a_secao_do_kit_que_responde(self, monkeypatch):
         _, llm = self._turno(monkeypatch)
         prompt = llm.prompt_de_usuario
         assert self.PERGUNTA in prompt
-        painel = self._secao_do_kit_no_prompt(prompt, "O Painel")
+        painel = self._secao_do_kit_no_prompt(prompt, "tecnologia.md", "O Painel")
         assert "**Com o hospital**: as que estão em Aguardando" in painel
 
     def test_o_modelo_recebe_a_ordem_de_citar_a_fonte(self, monkeypatch):

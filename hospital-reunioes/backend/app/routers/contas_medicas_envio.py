@@ -118,6 +118,8 @@ def _item(conta: dict, atendimento: dict, linhas: list[dict]) -> dict:
         "periodo_inicio": conta.get("periodo_inicio"),
         "periodo_fim": conta.get("periodo_fim"),
         "nota_entrada": conta.get("nota_entrada") if conta.get("nota_entrada") is not None else conta.get("nota_bruta"),
+        # A nota depois do reenvio da conta corrigida (issue #1136); nula sem reenvio.
+        "nota_saida": conta.get("nota_saida"),
         "valor_apontado": conta.get("valor_apontado"),
         "itens_feitos": sum(1 for linha in da_faturista if linha.get("estado") in MARCADAS),
         "itens_total": len(da_faturista),

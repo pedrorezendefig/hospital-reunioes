@@ -16,6 +16,7 @@ from typing import Any
 
 from postgrest.exceptions import APIError
 
+from app.services.contas_medicas.contratos import gravar_contrato_da_memoria
 from app.services.contas_medicas.memoria import MemoriaLida, parametros_lidos
 from app.services.contas_medicas.memoria_texto import gerar_texto_memoria
 from app.services.contas_medicas.tabelas import tabelas_por_categoria
@@ -102,6 +103,7 @@ def importar_memoria(supabase, memoria: MemoriaLida, texto_md: str, autor_id: st
     supabase.table("cm_operadora").update({"nome": memoria.nome, "situacao": memoria.situacao}).eq(
         "id", operadora["id"]
     ).execute()
+    gravar_contrato_da_memoria(supabase, operadora["id"], memoria.parametros, texto_md)
 
     return {
         "operadora": memoria.sigla,

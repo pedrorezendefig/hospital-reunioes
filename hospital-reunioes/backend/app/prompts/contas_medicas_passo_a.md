@@ -28,4 +28,12 @@ Regras
   "documentos_ausentes".
 - Responda apenas com o JSON no formato definido.
 
+O que o código já leu
+- O TEXTO DO PRONTUÁRIO termina com o que o código estruturou sozinho: [[PRESCRIÇÕES CONSOLIDADAS]] (uma linha por item,
+  com os dias e as doses), [[BALANÇO HÍDRICO POR DIA]], [[GLICEMIAS POR DIA]] e [[ACHADOS DO CÓDIGO]].
+- Use as prescrições, o balanço e as glicemias para achar terapias e indício de uso. Cite a página que a linha traz.
+- Os achados do código já estão no guia da faturista: não os repita em "observacoes".
+- Quando o texto vier em partes ([[PARTE n DE m DO PRONTUÁRIO]]), registre só o que está nesta parte e não liste em
+  "documentos_ausentes" o que pode estar em outra parte.
+
 Depois desta instrução vêm as ORIENTAÇÕES DE LEITURA DA OPERADORA (seções 1, 3 e 8 da memória) e o TEXTO DO PRONTUÁRIO.
