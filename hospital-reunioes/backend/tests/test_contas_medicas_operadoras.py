@@ -492,6 +492,29 @@ class TestColunaModelo:
         )
         assert "Modelo" not in regras["ALFA-PRI-02"].texto
 
+    def test_sem_a_coluna_ou_com_celula_vazia_ou_traco_modelo_id_e_nulo(self):
+        sem_coluna = {r.codigo: r for r in ler_memoria(_memoria("MEMORIA-ALFA-v1.0.md")).regras}
+        com_coluna = {
+            r.codigo: r
+            for r in ler_memoria(
+                _com_coluna_modelo(_memoria("MEMORIA-ALFA-v1.0.md"), {"ALFA-PRI-01": "HSM-PRI-01", "ALFA-DIA-01": "-"})
+            ).regras
+        }
+
+        assert {r.modelo_id for r in sem_coluna.values()} == {None}
+        assert com_coluna["ALFA-PRI-02"].modelo_id is None, "célula vazia"
+        assert com_coluna["ALFA-DIA-01"].modelo_id is None, "só um traço"
+
+    def test_a_carga_grava_o_modelo_id_na_regra(self):
+        cliente, banco = _cliente(GESTAO)
+        texto = _com_coluna_modelo(_memoria("MEMORIA-ALFA-v1.0.md"), {"ALFA-PRI-01": "HSM-PRI-01"})
+
+        assert _enviar_memoria(cliente, texto).status_code == 201
+
+        regras = {r["codigo"]: r for r in banco.linhas("cm_regra")}
+        assert regras["ALFA-PRI-01"]["modelo_id"] == "HSM-PRI-01"
+        assert regras["ALFA-PRI-02"]["modelo_id"] is None
+
 
 # ═══════════════════════════════════════════════════════════════════════════
 # 5. Dado de paciente não entra
