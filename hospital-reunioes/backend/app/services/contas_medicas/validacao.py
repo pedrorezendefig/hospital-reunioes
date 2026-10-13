@@ -236,10 +236,53 @@ def _falas_do_time(ligadas: list[dict], linhas: dict[str, dict], observacoes: di
     return falas
 
 
+def _temas_do_dicionario(supabase) -> None:
+    """Um tema por termo que a IA propôs ao dicionário e ninguém decidiu ainda.
+
+    A proposta nasce fora daqui (a pergunta curta do dicionário): a fila abre o
+    tema que falta ao ser lida. O tema decidido também conta, para o termo
+    rejeitado não voltar."""
+    propostas = (
+        supabase.table("cm_item_dicionario")
+        .select("id, termo, origem, situacao")
+        .eq("origem", "IA")
+        .eq("situacao", "PROPOSTO")
+        .execute()
+        .data
+        or []
+    )
+    if not propostas:
+        return
+    with _trava_dos_temas:
+        com_tema = {
+            t.get("item_dicionario_id")
+            for t in supabase.table("cm_validacao_tema")
+            .select("item_dicionario_id")
+            .eq("tipo", DICIONARIO)
+            .execute()
+            .data
+            or []
+        }
+        novas = [
+            {"tipo": DICIONARIO, "titulo": f"Termo {p['termo']} no dicionário", "item_dicionario_id": p["id"]}
+            for p in propostas
+            if p["id"] not in com_tema
+        ]
+        if novas:
+            supabase.table("cm_validacao_tema").insert(novas).execute()
+
+
 def fila_de_validacao(supabase) -> dict[str, Any]:
     """Os temas abertos como a tela mostra, do maior R$ em jogo para o menor,
     e os três números do topo: aguardando decisão, contas afetadas e R$ em jogo."""
+    _temas_do_dicionario(supabase)
     temas = supabase.table("cm_validacao_tema").select("*").eq("estado", ABERTO).order("criado_em").execute().data or []
+    termos = {
+        t["id"]: t
+        for t in _em_lotes(
+            supabase, "cm_item_dicionario", "id", [t.get("item_dicionario_id") for t in temas], "termos da Validação"
+        )
+    }
     ligacoes = _em_lotes(supabase, "cm_validacao_tema_linha", "tema_id", [t["id"] for t in temas], "ligações")
     linhas = {
         linha["id"]: linha
@@ -312,6 +355,11 @@ def fila_de_validacao(supabase) -> dict[str, Any]:
                 "valor": float(valor),
                 "leitura_ia": tema.get("leitura_ia"),
                 "observacoes": _falas_do_time(ligadas, linhas, observacoes) if tema["tipo"] == OBSERVACAO else [],
+                "dicionario": (
+                    {k: termo.get(k) for k in ("termo", "codigo_conta", "descricao_conta")}
+                    if (termo := termos.get(tema.get("item_dicionario_id")))
+                    else None
+                ),
             }
         )
     cartoes.sort(key=lambda c: (-c["valor"], c["desde"] or ""))
@@ -546,6 +594,11 @@ def decidir_tema(supabase, tema_id: str, corpo: dict, me: dict) -> dict:
             _decidir_as_linhas(supabase, tema, me.get("id"))
         elif decisao == EDITAR_REGRA:
             _mudar_a_regra(supabase, tema, corpo, me, validar=False)
+        elif decisao == CONFIRMAR:
+            # Confirmado, o termo passa a casar na próxima análise.
+            supabase.table("cm_item_dicionario").update({"situacao": "CONFIRMADO"}).eq(
+                "id", tema.get("item_dicionario_id")
+            ).execute()
     except Exception:
         supabase.table("cm_validacao_tema").update(
             {"estado": ABERTO, "decisao": None, "resposta": None, "decidido_por": None, "decidido_em": None}

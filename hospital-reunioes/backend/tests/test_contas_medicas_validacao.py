@@ -39,6 +39,7 @@ from app.routers import contas_medicas_guia as guia_router  # noqa: E402
 from app.routers import contas_medicas_validacao as validacao_router  # noqa: E402
 from app.services.contas_medicas import ia, processamento  # noqa: E402
 from app.services.contas_medicas.conferencia import Conferencia  # noqa: E402
+from app.services.contas_medicas.dicionario import casar, dicionario_do_banco  # noqa: E402
 from app.services.contas_medicas.guia import nota_de_entrada  # noqa: E402
 
 MIGRATION_118 = Path(__file__).resolve().parents[2] / "supabase" / "migrations" / "118_contas_medicas_gestao.sql"
@@ -659,3 +660,76 @@ class TestObservacao:
         assert _decidir(banco, outro["id"], {"decisao": "MANTER_REGRA"}).status_code == 200
         assert _tema_no_banco(banco, outro["id"])["decisao"] == "MANTER_REGRA"
         assert [v["versao"] for v in banco.tabelas["cm_memoria_versao"] if v["vigente"]] == ["1.1"]
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 4. Dicionário: o termo que a IA propôs só casa depois de confirmado
+# ═══════════════════════════════════════════════════════════════════════════
+
+# O item da conta seguinte: a marca não lembra o termo, só o dicionário liga.
+POSIFLUSH = {"codigo": "70000010", "descricao": "POSIFLUSH SF 0,9% 10ML"}
+PRESCRITO = "Seringa pronta de soro 10 ml"
+
+
+def _proposta_da_ia(banco: _Banco) -> None:
+    banco.tabelas["cm_item_dicionario"].append(
+        {
+            "id": "dc-ia",
+            "termo": "SERINGA PRONTA",
+            "codigo_conta": POSIFLUSH["codigo"],
+            "descricao_conta": POSIFLUSH["descricao"],
+            "origem": "IA",
+            "situacao": "PROPOSTO",
+        }
+    )
+
+
+class TestDicionario:
+    def test_proposta_da_ia_confirmada_passa_a_casar_na_conta_seguinte(self):
+        banco = _cenario()
+        _proposta_da_ia(banco)
+        assert casar(PRESCRITO, [POSIFLUSH], dicionario_do_banco(banco)).como == "NENHUM"
+
+        [tema] = _fila_de_validacao(banco)["temas"]
+        assert tema["tipo"] == "DICIONARIO"
+        assert tema["dicionario"] == {
+            "termo": "SERINGA PRONTA",
+            "codigo_conta": POSIFLUSH["codigo"],
+            "descricao_conta": POSIFLUSH["descricao"],
+        }
+
+        resposta = _decidir(banco, tema["id"], {"decisao": "CONFIRMAR"})
+
+        assert resposta.status_code == 200, resposta.text
+        [termo] = banco.tabelas["cm_item_dicionario"]
+        assert termo["situacao"] == "CONFIRMADO"
+        casamento = casar(PRESCRITO, [POSIFLUSH], dicionario_do_banco(banco))
+        assert (casamento.como, casamento.itens) == ("DICIONARIO", [POSIFLUSH])
+        assert _fila_de_validacao(banco)["temas"] == []
+
+    def test_proposta_rejeitada_nao_casa_e_nao_volta_para_a_fila(self):
+        banco = _cenario()
+        _proposta_da_ia(banco)
+        [tema] = _fila_de_validacao(banco)["temas"]
+
+        assert _decidir(banco, tema["id"], {"decisao": "REJEITAR"}).status_code == 200
+
+        assert casar(PRESCRITO, [POSIFLUSH], dicionario_do_banco(banco)).como == "NENHUM"
+        assert _fila_de_validacao(banco)["temas"] == []
+
+    def test_termo_da_carga_da_gestao_casa_como_antes(self):
+        """A carga do dicionário grava PROPOSTO quando o CSV não diz CONFIRMADO,
+        e esses termos sempre casaram: só a proposta da IA espera a Validação."""
+        banco = _cenario()
+        banco.tabelas["cm_item_dicionario"].append(
+            {
+                "id": "dc-g",
+                "termo": "SERINGA PRONTA",
+                "codigo_conta": "70000010",
+                "origem": "GESTAO",
+                "situacao": "PROPOSTO",
+            }
+        )
+
+        assert casar(PRESCRITO, [POSIFLUSH], dicionario_do_banco(banco)).como == "DICIONARIO"
+        assert _fila_de_validacao(banco)["temas"] == []
