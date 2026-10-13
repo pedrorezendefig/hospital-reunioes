@@ -12,6 +12,7 @@
 import { useState } from "react";
 import { Copy } from "lucide-react";
 
+import { Ditar, juntarDitado } from "@/components/contas-medicas/Ditar";
 import {
   ETIQUETA_SE_NECESSARIO,
   type LinhaGuia,
@@ -249,6 +250,10 @@ export function LinhaDoGuia({ linha, concluida, ocupado, onMarcar, onDesfazer, o
             placeholder={textoObrigatorio ? "Escreva o motivo" : "Conte mais, se quiser"}
             rows={2}
             className="w-full rounded-lg border border-border px-2 py-1.5 text-sm"
+          />
+          <Ditar
+            campo="Motivo do Não procede"
+            aoTranscrever={(ditado) => setTexto((atual) => juntarDitado(atual, ditado))}
           />
           <div className="flex flex-wrap gap-2">
             <button

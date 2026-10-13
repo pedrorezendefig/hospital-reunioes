@@ -12,6 +12,7 @@
 import { useState } from "react";
 import { Loader2, Sparkles } from "lucide-react";
 
+import { Ditar, juntarDitado } from "@/components/contas-medicas/Ditar";
 import { reais } from "@/lib/contas-medicas/guia";
 import { dataBr, plural } from "@/lib/contas-medicas/operadoras";
 import { type Decisao, ROTULO_DO_TIPO, type Tema } from "@/lib/contas-medicas/validacao";
@@ -156,6 +157,7 @@ export function CartaoDeTema({ tema, ocupado, falhaDaLeitura, onDecidir, onEnvia
             placeholder="A faturista vê esta resposta no Guia da conta"
             className={CAMPO}
           />
+          <Ditar campo="Resposta ao time" aoTranscrever={(ditado) => setTexto((atual) => juntarDitado(atual, ditado))} />
           <div className="flex flex-wrap gap-2">
             <button type="submit" disabled={!texto.trim() || ocupado} className={BOTAO}>
               Enviar resposta

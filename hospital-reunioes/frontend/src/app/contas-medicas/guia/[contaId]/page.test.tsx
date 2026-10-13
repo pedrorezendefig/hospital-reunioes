@@ -634,3 +634,23 @@ describe("a marca regra nova desde a análise (issue #1141)", () => {
     expect(screen.queryByRole("button", { name: /Reanalisar/ })).toBeNull();
   });
 });
+
+describe("o Ditar (issue #1145)", () => {
+  it("o motivo do Não procede tem o Ditar com o aviso de paciente ao lado", async () => {
+    await abrir();
+    const luva = aLinha("Luva de procedimento");
+    expect(within(luva).queryByRole("button", { name: "Ditar: Motivo do Não procede" })).toBeNull();
+
+    fireEvent.click(within(luva).getByRole("button", { name: "Não procede" }));
+
+    const botao = within(luva).getByRole("button", { name: "Ditar: Motivo do Não procede" });
+    expect(botao.parentElement?.textContent).toContain("Não dite nome nem dado de paciente.");
+  });
+
+  it("a observação para a gestão tem o Ditar com o aviso de paciente ao lado", async () => {
+    await abrir();
+
+    const botao = screen.getByRole("button", { name: "Ditar: Observação para a gestão de contas médicas" });
+    expect(botao.parentElement?.textContent).toContain("Não dite nome nem dado de paciente.");
+  });
+});

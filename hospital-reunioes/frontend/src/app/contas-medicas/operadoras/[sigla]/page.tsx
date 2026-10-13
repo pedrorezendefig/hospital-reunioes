@@ -20,6 +20,7 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { AlertCircle, ArrowLeft, Download, Loader2, RefreshCw, Sparkles } from "lucide-react";
 
+import { Ditar, juntarDitado } from "@/components/contas-medicas/Ditar";
 import { TabelasDePreco } from "@/components/contas-medicas/TabelasDePreco";
 import { Select } from "@/components/ui/Select";
 import {
@@ -691,6 +692,10 @@ function EnsinarRegra({
             className={`${CAMPO} normal-case font-normal text-slate-800 bg-white`}
           />
         </label>
+        <Ditar
+          campo="A regra, em linguagem comum"
+          aoTranscrever={(ditado) => setPedido((atual) => juntarDitado(atual, ditado))}
+        />
         {erro && (
           <p role="alert" className="flex items-start gap-2 text-sm text-red-700">
             <AlertCircle className="w-4 h-4 mt-0.5 shrink-0" aria-hidden="true" /> {erro}

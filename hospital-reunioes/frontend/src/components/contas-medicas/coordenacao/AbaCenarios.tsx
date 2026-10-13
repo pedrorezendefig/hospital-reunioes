@@ -10,6 +10,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { AlertCircle, Loader2, Plus, Sparkles, Trash2 } from "lucide-react";
 
+import { Ditar, juntarDitado } from "@/components/contas-medicas/Ditar";
 import {
   type AbaDeCenarios,
   type CamposDoCenario,
@@ -201,6 +202,7 @@ export function AbaCenarios({ token }: { token: string }) {
               className={`${CAMPO} mt-1`}
             />
           </label>
+          <Ditar campo="Cenário" aoTranscrever={(ditado) => setTexto((atual) => juntarDitado(atual, ditado).slice(0, 4000))} />
           <button type="button" onClick={preencherComIa} disabled={lendo || !texto.trim()} className={BOTAO_CLARO}>
             {lendo ? (
               <Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" />

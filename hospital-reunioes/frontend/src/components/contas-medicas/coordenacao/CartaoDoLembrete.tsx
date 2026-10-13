@@ -10,6 +10,7 @@
 import { useState } from "react";
 import { Copy } from "lucide-react";
 
+import { Ditar, juntarDitado } from "@/components/contas-medicas/Ditar";
 import { type EstadoDaMarcacao, type Lembrete, dataESetor } from "@/lib/contas-medicas/coordenacao";
 import { reais } from "@/lib/contas-medicas/guia";
 
@@ -108,6 +109,10 @@ export function CartaoDoLembrete({ lembrete, ocupado, onMarcar, onCopiar }: Prop
           className="mt-1 w-full px-3 py-1.5 text-sm border border-slate-200 rounded-lg bg-white focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary"
         />
       </label>
+      <Ditar
+        campo="Observação do lembrete"
+        aoTranscrever={(ditado) => setObservacao((atual) => juntarDitado(atual, ditado).slice(0, 1000))}
+      />
       <div className="flex flex-wrap gap-2">
         <button
           type="button"
