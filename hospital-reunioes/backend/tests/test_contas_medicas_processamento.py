@@ -1820,3 +1820,25 @@ class TestVersaoDaTabela:
 
         assert linhas
         assert [linha for linha in linhas if "tabela_id" in linha] == []
+
+    def test_o_preco_validado_na_memoria_grava_a_linha_sem_tabela(self):
+        banco = _cenario()
+        (memoria,) = banco.tabelas["cm_memoria_versao"]
+        memoria["parametros_json"] = {**PARAMETROS, "precos": {"validados": [{"codigo": "70000001", "valor": 0.22}]}}
+        _enviar(banco, _conta(), _prontuario())
+        _rodar_o_job(banco)
+        (conta,) = banco.tabelas["cm_conta"]
+
+        agulha = _linhas_gravadas(banco, conta["id"])["70000001"]
+
+        assert (agulha["preco_tabela"], agulha["tabela_id"]) == (0.22, None)
+
+    def test_a_linha_do_pacote_grava_a_versao_da_tabela_de_pacotes(self):
+        banco = _cenario()
+        _enviar(banco, _conta(), _prontuario())
+        _rodar_o_job(banco)
+        (conta,) = banco.tabelas["cm_conta"]
+
+        pacote = _linhas_gravadas(banco, conta["id"])["98005497"]
+
+        assert (pacote["preco_tabela"], pacote["tabela_id"]) == (4500.0, "tb-pac")

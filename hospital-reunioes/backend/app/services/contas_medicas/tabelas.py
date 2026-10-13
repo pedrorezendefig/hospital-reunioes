@@ -84,6 +84,7 @@ class Pacote:
     descricao: str | None
     # Diárias incluídas no pacote; as além delas são excedentes (LEVE-PAC-04).
     permanencia: int
+    # `PrecoDeTabela` quando vem da busca: leva a versão da tabela de pacotes.
     valor: Decimal | None
 
 
@@ -560,5 +561,5 @@ def pacote_pelo_tuss(supabase, operadora_id: str, tuss: str, data: date) -> Paco
         codigo=item["codigo"],
         descricao=item.get("descricao"),
         permanencia=int(permanencia),
-        valor=Decimal(str(valor)) if isinstance(valor, int | float) and valor > 0 else None,
+        valor=PrecoDeTabela(str(valor), tabela["id"]) if isinstance(valor, int | float) and valor > 0 else None,
     )
