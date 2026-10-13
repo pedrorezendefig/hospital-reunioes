@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import os
 import sys
+from dataclasses import replace
 from datetime import date, datetime, time
 from decimal import Decimal
 from pathlib import Path
@@ -29,7 +30,14 @@ from app.services.contas_medicas.cirurgia import (  # noqa: E402
     Procedimento,
 )
 from app.services.contas_medicas.conferencia import Pacote, ProntuarioLido, conferir  # noqa: E402
-from app.services.contas_medicas.conteudo import Conteudo, GlicemiasDoDia, Internacao, Movimentacao  # noqa: E402
+from app.services.contas_medicas.conteudo import (  # noqa: E402
+    Balanco,
+    Conteudo,
+    GlicemiasDoDia,
+    Internacao,
+    LinhaDoBalanco,
+    Movimentacao,
+)
 from app.services.contas_medicas.memoria import MemoriaLida, RegraLida  # noqa: E402
 from app.services.contas_medicas.prescricao import ExamePedido, ItemPrescrito, Prescricao, consolidar  # noqa: E402
 from app.services.contas_medicas.prontuario import Prontuario  # noqa: E402
@@ -184,9 +192,11 @@ def _prontuario(
     documentos=(),
     exames=(),
     glicemias=(),
+    balancos=(),
     textos: tuple[str, ...] = ("",),
     tipo_impressao: str | None = "Completa",
     idade: int | None = None,
+    alta: datetime | None = None,
 ) -> ProntuarioLido:
     estrutura = Prontuario(
         atendimento="31245",
@@ -200,13 +210,13 @@ def _prontuario(
         parecer_parcial=(),
     )
     conteudo = Conteudo(
-        internacao=Internacao(None, None, None, None, None),
+        internacao=Internacao(None, alta, None, None, None),
         movimentacoes=tuple(movimentacoes),
         setor_por_dia={},
         prescricoes=tuple(prescricoes),
         prescricao_consolidada=tuple(consolidar(prescricoes)),
         exames_pedidos=tuple(exames),
-        balancos=(),
+        balancos=tuple(balancos),
         glicemias=tuple(glicemias),
         descricoes_cirurgicas=tuple(descricoes),
         fichas_anestesicas=tuple(fichas),
@@ -1259,6 +1269,112 @@ class TestRegraPendenteDeExameEGlicemia:
             ("VALIDAR", FITA, "ALFA-INS-18"),
         ]
         assert all(linha["motivo"].startswith("Regra ALFA-") for linha in resultado.linhas)
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 8. "Se necessário" com os eventos do Passo A (issue #1134)
+# ═══════════════════════════════════════════════════════════════════════════
+
+DIPIRONA = "91000002"
+TEXTO_SN = "Confira a checagem em papel. Sem uso, marque NÃO PROCEDE."
+
+PARAMETROS_SN: dict[str, Any] = {
+    **PARAMETROS_ALFA,
+    "regras_das_conferencias": {**REGRAS_DAS_CONFERENCIAS, "se_necessario": "ALFA-PRI-09"},
+}
+
+
+def _sn(nome: str, pagina: int, *, suspenso: bool = False) -> ItemPrescrito:
+    """Item "se necessário" como a leitura por código entrega: sem doses no dia."""
+    return replace(
+        _prescrito(nome, pagina, colunas="1 AMP EV S EV", doses=None),
+        se_necessario=True,
+        suspenso=suspenso,
+        frequencia=None,
+    )
+
+
+def _evento_de_prescricao(
+    nome: str, data: date, *, indicio: str | None = None, doses: float | None = None, suspenso: bool = False
+) -> dict[str, Any]:
+    """Uma prescrição do Passo A no formato que `cm_eventos` guarda."""
+    return {
+        "data": data.isoformat(),
+        "setor": CTI,
+        "item": nome,
+        "via": "EV",
+        "doses_no_dia": doses,
+        "se_necessario": True,
+        "indicio_de_uso": indicio,
+        "suspenso": suspenso,
+        "diluente": None,
+        "em_bomba": False,
+        "pagina": 40 + data.day,
+        "trecho": indicio or nome,
+        "etiquetas": [],
+        "confianca": None,
+    }
+
+
+def _eventos(*, prescricoes=(), terapias=(), procedimentos=()) -> dict[str, Any]:
+    return {
+        "movimentacoes": [],
+        "terapias": list(terapias),
+        "prescricoes": list(prescricoes),
+        "procedimentos": list(procedimentos),
+        "cirurgias": [],
+        "documentos_ausentes": [],
+        "observacoes": [],
+        "divergencias": [],
+    }
+
+
+class TestSeNecessario:
+    DICIONARIO = {"DIPIRONA": {DIPIRONA}}
+    TABELA = {("MEDICAMENTO", DIPIRONA): 2.00}
+
+    def _conferir(self, prontuario, eventos, parametros=None, tabela=None):
+        return conferir(
+            _conta(),
+            prontuario,
+            _memoria(parametros or PARAMETROS_SN),
+            _tabela(tabela or self.TABELA),
+            dicionario=self.DICIONARIO,
+            eventos=eventos,
+        )
+
+    def test_indicio_em_2_de_4_dias_inclui_as_doses_indicadas_e_1_por_dia_nos_outros_com_o_texto(self):
+        prescricoes = [_prescricao(dia(n), _sn("DIPIRONA 1G AMP", pagina=10 + n)) for n in (1, 2, 3, 4)]
+        # Dia 1: a evolução cita 2 doses. Dia 2: o balanço registra 1 lançamento.
+        eventos = _eventos(
+            prescricoes=[_evento_de_prescricao("DIPIRONA 1G AMP", dia(1), indicio="Feita dipirona 2x", doses=2)]
+        )
+        balanco = Balanco(dia(2), CTI, (30,), (LinhaDoBalanco("DIPIRONA 1G", "EV", 1, 10.0),), (), 0)
+
+        resultado = self._conferir(_prontuario(prescricoes=prescricoes, balancos=[balanco]), eventos)
+
+        resumo = [
+            (
+                linha["acao"],
+                linha["codigo"],
+                linha["data"],
+                linha["data_fim"],
+                linha["quantidade_devida"],
+                linha["valor_diferenca"],
+                linha["nivel_evidencia"],
+                linha["regra_codigo"],
+            )
+            for linha in resultado.linhas
+        ]
+        assert sorted(resumo) == [
+            ("INCLUIR", DIPIRONA, "2026-10-01", "2026-10-02", 3.0, 6.00, "REGISTRADO", "ALFA-PRI-09"),
+            ("INCLUIR", DIPIRONA, "2026-10-03", "2026-10-04", 2.0, 4.00, "PRESCRITO_SN", "ALFA-PRI-09"),
+        ]
+        registrado = next(linha for linha in resultado.linhas if linha["nivel_evidencia"] == "REGISTRADO")
+        sem_registro = next(linha for linha in resultado.linhas if linha["nivel_evidencia"] == "PRESCRITO_SN")
+        assert (registrado["evidencia_pagina"], registrado["evidencia_trecho"]) == (41, "Feita dipirona 2x")
+        assert sem_registro["motivo"].endswith(TEXTO_SN)
+        assert TEXTO_SN not in registrado["motivo"]
 
 
 # ═══════════════════════════════════════════════════════════════════════════

@@ -1228,6 +1228,162 @@ def _glicemias(ctx: _Contexto) -> list[_Linha]:
 
 
 # ----------------------------------------------------------------------------------
+# (11) "Se necessário", com os eventos do Passo A
+# ----------------------------------------------------------------------------------
+
+# O texto fixo da linha "se necessário" sem registro de uso (PRD #1128, user story 16).
+TEXTO_SE_NECESSARIO = "Confira a checagem em papel. Sem uso, marque NÃO PROCEDE."
+
+
+def _data_do_evento(texto: Any) -> date | None:
+    """O dia que a IA escreveu no evento (ISO ou dd/mm/aaaa, com ou sem hora)."""
+    texto = str(texto or "").strip()
+    for formato in ("%Y-%m-%d", "%d/%m/%Y"):
+        try:
+            return datetime.strptime(texto[:10], formato).date()
+        except ValueError:
+            continue
+    return None
+
+
+def _mesmo_nome(a: str, b: str) -> bool:
+    """O item do evento ou do balanço é o da prescrição: o mesmo nome ou a mesma marca."""
+    return _norm(a) == _norm(b) or (bool(_marca(a)) and _marca(a) == _marca(b))
+
+
+def _codigo_pelo_dicionario(nome: str, dicionario: Mapping[str, set[str]]) -> str | None:
+    """O código do item que a conta ainda não lançou: o termo do dicionário no nome."""
+    texto = _norm(nome)
+    codigos = {codigo for termo, cods in dicionario.items() if _contem(texto, termo) for codigo in cods}
+    return min(codigos) if len(codigos) == 1 else None
+
+
+def _indicio_de_uso(
+    ctx: _Contexto, eventos: Mapping[str, Any], nome: str, data: date
+) -> tuple[Decimal, int | None, str, str] | None:
+    """(doses, página, trecho, indício) do uso no dia: a prescrição do Passo A com
+    `indicio_de_uso` ou o ganho do balanço hídrico. Nenhum: None."""
+    for evento in eventos.get("prescricoes") or []:
+        indicio = evento.get("indicio_de_uso")
+        if (
+            indicio
+            and not evento.get("suspenso")
+            and _data_do_evento(evento.get("data")) == data
+            and _mesmo_nome(evento.get("item") or "", nome)
+        ):
+            doses = Decimal(str(evento.get("doses_no_dia") or 1))
+            return doses, evento.get("pagina"), evento.get("trecho") or indicio, indicio
+    for balanco in ctx.prontuario.conteudo.balancos:
+        if balanco.data != data:
+            continue
+        for ganho in balanco.ganhos:
+            if ganho.lancamentos and _mesmo_nome(ganho.item, nome):
+                indicio = f"{ganho.item}: {ganho.lancamentos} lançamentos no balanço hídrico"
+                return Decimal(ganho.lancamentos), balanco.paginas[0] if balanco.paginas else None, indicio, indicio
+    return None
+
+
+def _suspenso_no_dia(ctx: _Contexto, eventos: Mapping[str, Any], nome: str, data: date) -> bool:
+    """Suspenso ou alterado no mesmo dia: alguma prescrição do dia suspende o item."""
+    if any(
+        prescricao.data == data and any(item.nome == nome and item.suspenso for item in prescricao.itens)
+        for prescricao in ctx.prontuario.conteudo.prescricoes
+    ):
+        return True
+    return any(
+        evento.get("suspenso")
+        and _data_do_evento(evento.get("data")) == data
+        and _mesmo_nome(evento.get("item") or "", nome)
+        for evento in eventos.get("prescricoes") or []
+    )
+
+
+def _se_necessario(ctx: _Contexto, eventos: Mapping[str, Any]) -> list[_Linha]:
+    """Medicamento "se necessário" entra sempre (ASSIM-PRI-09 e diretriz geral).
+
+    Com indício de uso no dia (Passo A ou balanço), Incluir as doses indicadas,
+    nível Registrado. Sem nenhum registro, Incluir
+    `transicao.se_necessario_doses_por_dia_sem_registro` doses, nível
+    PRESCRITO_SN, com o texto fixo para a faturista conferir a checagem em papel.
+    Fora: dia já lançado, suspenso ou alterado no dia, depois da alta, e, com
+    diária global, o item incluso na diária.
+    """
+    conteudo = ctx.prontuario.conteudo
+    alta = conteudo.internacao.alta.date() if conteudo.internacao.alta else None
+    sem_registro = Decimal(
+        str((ctx.parametros.get("transicao") or {}).get("se_necessario_doses_por_dia_sem_registro") or 1)
+    )
+    chave = "se_necessario" if ctx.tem_regra("se_necessario") else "prescricao"
+    linhas = []
+    for consolidado in conteudo.prescricao_consolidada:
+        if not consolidado.se_necessario or not (consolidado.secao or "").upper().startswith("MEDICAMENTO"):
+            continue
+        casamento = casar(consolidado.nome, ctx.medicamentos, ctx.dicionario)
+        if casamento.itens:
+            lancado = casamento.itens[0]["item"]
+            codigo, descricao = lancado.codigo, lancado.descricao
+        else:
+            codigo, descricao = _codigo_pelo_dicionario(consolidado.nome, ctx.dicionario), consolidado.nome
+        dias_lancados = {par["item"].data for par in casamento.itens}
+        for data in sorted(consolidado.doses_por_dia):
+            if (
+                data in dias_lancados
+                or not ctx.no_periodo(data)
+                or (alta is not None and data > alta)
+                or _suspenso_no_dia(ctx, eventos, consolidado.nome, data)
+            ):
+                continue
+            if codigo:
+                cobravel = ctx.cobravel("MEDICAMENTO", codigo, data)
+            else:
+                cobravel = None if ctx.diaria_global else True
+            if cobravel is False:
+                continue
+            achado = _prescrito_no_dia(conteudo, consolidado.nome, data)
+            indicio = _indicio_de_uso(ctx, eventos, consolidado.nome, data)
+            quantidade = indicio[0] if indicio else sem_registro
+            preco_lancado, preco_tabela, valor, etiqueta = ctx.valor_de_inclusao(
+                "MEDICAMENTO", codigo, data, quantidade
+            )
+            if cobravel is None:
+                etiqueta += " Sem preço conferível na tabela: conferir se passa do corte."
+            if indicio:
+                _, pagina, trecho, texto = indicio
+                motivo = f"Se necessário ({consolidado.nome}) com indício de uso no dia: {texto}.{etiqueta}"
+                nivel, causa = "REGISTRADO", "DISPENSACAO"
+            else:
+                pagina = achado[1].pagina if achado else consolidado.paginas[0]
+                trecho = f"{achado[1].nome} {achado[1].colunas}" if achado else consolidado.nome
+                motivo = (
+                    f"Se necessário ({consolidado.nome}), sem registro de uso no MV: {quantidade:g} por dia de "
+                    f"prescrição, quantidade provisória.{etiqueta} {TEXTO_SE_NECESSARIO}"
+                )
+                nivel, causa = "PRESCRITO_SN", "REGISTRO_ASSISTENCIAL"
+            linhas.append(
+                _Linha(
+                    acao="INCLUIR" if cobravel else "VALIDAR",
+                    chave=chave,
+                    data=data,
+                    setor=achado[0].setor if achado else None,
+                    codigo=codigo,
+                    descricao=descricao,
+                    motivo=motivo,
+                    nivel=nivel,
+                    causa=causa,
+                    pagina=pagina,
+                    trecho=trecho,
+                    quantidade_lancada=Decimal(0),
+                    quantidade_devida=quantidade,
+                    preco_lancado=preco_lancado,
+                    preco_tabela=preco_tabela,
+                    valor=valor,
+                    confianca=casamento.confianca or "ALTA",
+                )
+            )
+    return linhas
+
+
+# ----------------------------------------------------------------------------------
 # Regra citada, período e montagem
 # ----------------------------------------------------------------------------------
 
@@ -1262,7 +1418,7 @@ def _soma(a: Decimal | None, b: Decimal | None) -> Decimal | None:
 
 def _diario(linhas: list[_Linha]) -> list[_Linha]:
     """Item diário repetido vira uma linha com data e data fim: dias seguidos da
-    mesma ação, regra, código e setor somam quantidade e valor."""
+    mesma ação, regra, código, setor e nível somam quantidade e valor."""
     unidas: list[_Linha] = []
     for linha in sorted(linhas, key=lambda x: (x.acao, x.chave, x.codigo or "", x.setor or "", x.data or date.min)):
         anterior = unidas[-1] if unidas else None
@@ -1270,8 +1426,8 @@ def _diario(linhas: list[_Linha]) -> list[_Linha]:
             anterior is not None
             and linha.data is not None
             and anterior.data is not None
-            and (anterior.acao, anterior.chave, anterior.codigo, anterior.setor)
-            == (linha.acao, linha.chave, linha.codigo, linha.setor)
+            and (anterior.acao, anterior.chave, anterior.codigo, anterior.setor, anterior.nivel)
+            == (linha.acao, linha.chave, linha.codigo, linha.setor, linha.nivel)
             and linha.codigo is not None
             and (anterior.data_fim or anterior.data) + timedelta(days=1) == linha.data
         ):
@@ -1346,12 +1502,16 @@ def conferir(
     setores: Mapping[str, str] | None = None,
     dicionario: Mapping[str, set[str]] | None = None,
     pacote_do_tuss: BuscaDePacote | None = None,
+    eventos: Mapping[str, Any] | None = None,
 ) -> Conferencia:
     """As linhas do Guia da Conta, pelas conferências por código.
 
     `setores` liga o nome do setor no MV à acomodação (`cm_setor`); `dicionario` é
     o dicionário de itens do hospital (`dicionario_do_banco`); `pacote_do_tuss`
-    acha o pacote da tabela da operadora pelo TUSS realizado.
+    acha o pacote da tabela da operadora pelo TUSS realizado. `eventos` são os
+    do Passo A (`cm_eventos`): com eles rodam as conferências que dependem do
+    texto livre ("se necessário" e classe de UTI do dia); sem eles, a diária de
+    UTI sai na classe mais baixa, para conferir.
     """
     ctx = _Contexto(
         conta=conta,
@@ -1378,6 +1538,7 @@ def conferir(
         *_tetos(ctx, pagas),
         *_exames(ctx),
         *_glicemias(ctx),
+        *(_se_necessario(ctx, eventos) if eventos is not None else []),
     ]
     linhas = _com_regra(geradas, memoria, descartadas)
     linhas = _diario(_sem_duplicadas(_no_periodo(ctx, linhas, descartadas)))
