@@ -297,12 +297,45 @@ export const situacaoDaOnda = (issues: Issue[], ags: SubAgente[], prd: Prd, agor
   return issues.some(i => i.fase === 'fila') ? 'fila' : 'parada'
 }
 
-/** Onda que não anda cabe em uma ou duas linhas: as fatias e o que ela espera de fora. */
-export const resumoDaOnda = (issues: Issue[], onda: number[]) => {
+/** Onda que não anda cabe em uma ou duas linhas: as fatias e o que ela espera de fora (quem está na mão do humano, dito). */
+export const resumoDaOnda = (issues: Issue[], onda: number[], porN?: Map<number, Issue>) => {
   const linhas = [{ texto: issues.map(i => `${MARCA[i.fase]} #${i.n}`).join('  '), cor: 'inactive' }]
   const fora = [...new Set(issues.flatMap(i => i.por))].filter(n => !onda.includes(n)).sort((a, b) => a - b)
-  if (fora.length) linhas.push({ texto: `espera ${fora.map(n => `#${n}`).join(' ')}`, cor: 'subtle' })
+  const nome = (n: number) => (porN?.get(n)?.fase === 'humana' ? `#${n} (humana)` : `#${n}`)
+  if (fora.length) linhas.push({ texto: `espera ${fora.map(nome).join(' ')}`, cor: 'subtle' })
   return linhas
+}
+
+/** Linhagem da sessão: "onda-gestao-onda4" é a onda 4 da linhagem "onda-gestao". */
+export const linhagem = (nome: string) => nome.replace(/-onda\d+$/, '')
+
+export type OndaDesenhada = {
+  numero: number
+  issues: number[]
+  /** A sessão viva desta onda (`<linhagem>-onda<numero>`), se houver. */
+  sessao?: Agente
+  /** Pela passagem: viva (sessão rodando), escrita (passagem existe, sessão não roda) ou nao; null quando a onda vem do OS. */
+  passagem: 'viva' | 'escrita' | 'nao' | null
+}
+
+/** Ondas do PRD na numeração do terminal: a fila-alvo da passagem da linhagem das suas sessões. Sem passagem, as colunas do OS. */
+export const ondasDoPrd = (c: Coleta, prd: Prd): OndaDesenhada[] => {
+  const nos = new Set(prd.issues.map(i => i.n))
+  for (const s of sessoesDoPrd(c, prd.n)) {
+    const l = linhagem(s.nome)
+    const p = c.passagens?.[l]
+    if (!p) continue
+    const ondas = Object.entries(p.ondas)
+      .map(([k, v]) => ({ numero: Number(k), issues: v.filter(n => nos.has(n)) }))
+      .filter(o => o.issues.length)
+      .sort((a, b) => a.numero - b.numero)
+    if (!ondas.length) continue
+    return ondas.map(o => {
+      const sessao = c.agentes.find(a => a.nome === `${l}-onda${o.numero}`)
+      return { ...o, sessao, passagem: sessao ? 'viva' : p.escritas.includes(o.numero) ? 'escrita' : 'nao' }
+    })
+  }
+  return prd.ondas.map((issues, k) => ({ numero: k + 1, issues, passagem: null }))
 }
 
 /** O que muda num evento do workflow, lido só da parte local da coleta. */
@@ -560,7 +593,8 @@ export const register: Register = on => {
         {prds.map(prd => {
           const sessoes = sessoesDoPrd(c, prd.n)
           const ags = agentesDoPrd(c, prd)
-          const emOnda = new Set(prd.ondas.flat())
+          const ondas = ondasDoPrd(c, prd)
+          const emOnda = new Set(ondas.flatMap(o => o.issues))
           const porN = new Map(prd.issues.map(i => [i.n, i]))
           const fora = prd.issues.filter(i => !emOnda.has(i.n))
           const entregues = fora.filter(i => i.fase === 'em_producao' || i.estado === 'CLOSED')
@@ -608,6 +642,11 @@ export const register: Register = on => {
                         </Text>
                       </Text>
                     )}
+                    {s.fala && (
+                      <Text dimColor wrap="truncate-end">
+                        {'    '}💬 {curto(s.fala.texto.split('\n')[0] ?? '', largura - 22)} · há {minutos(c.em - s.fala.em)}
+                      </Text>
+                    )}
                     {focoDaSessao(s.nome, ags, c.em).map(a =>
                       estadoDoAgente(a, c.em) === 'trabalhando' ? (
                         linhaAgente(a, rotuloDoAlvo(a, prd))
@@ -622,19 +661,23 @@ export const register: Register = on => {
                 )
               })}
 
-              {prd.ondas.map((onda, k) => {
-                const issues = onda.map(n => porN.get(n)).filter((i): i is Issue => !!i)
+              {ondas.map((o, k) => {
+                const issues = o.issues.map(n => porN.get(n)).filter((i): i is Issue => !!i)
                 const situacao = situacaoDaOnda(issues, ags, prd, c.em)
                 const tempoDaOnda = duracaoDaOnda(issues, ags, prd, c.em)
+                const passagem =
+                  situacao === 'feita' || o.sessao ? '' : o.passagem === 'nao' ? ' · passagem: ainda não' : o.passagem === 'escrita' ? ' · passagem escrita' : ''
                 return (
-                  <Box key={`o${k}`} flexDirection="column">
+                  <Box key={`o${o.numero}`} flexDirection="column">
                     {k > 0 && <Text color={COR_ONDA[situacao]}>{'      ▼'}</Text>}
                     <Box flexDirection="column" borderStyle="round" borderColor={COR_ONDA[situacao]} paddingX={1}>
-                      <Text bold color={COR_ONDA[situacao]}>
-                        Onda {k + 1}{' '}
+                      <Text bold color={COR_ONDA[situacao]} wrap="truncate-end">
+                        Onda {o.numero}{' '}
+                        {o.sessao ? <Text color="suggestion">· {o.sessao.nome} </Text> : null}
                         <Text dimColor>
                           · {NOME_ONDA[situacao]}
                           {tempoDaOnda !== null ? ` · ${minutos(tempoDaOnda)}` : ''}
+                          {passagem}
                         </Text>
                       </Text>
                       {situacao === 'andando'
@@ -665,7 +708,7 @@ export const register: Register = on => {
                               </Box>
                             )
                           })
-                        : resumoDaOnda(issues, onda).map((r, j) => (
+                        : resumoDaOnda(issues, o.issues, porN).map((r, j) => (
                             <Text key={`r${j}`} color={r.cor} wrap="wrap">
                               {r.texto}
                             </Text>

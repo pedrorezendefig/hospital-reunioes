@@ -4,7 +4,8 @@
 # viva nesta máquina ou com fatia de PR aberto (de qualquer sócio); com --todos, o /api/data inteiro do Hospital OS (8799) · `claude agents --json`: sessões vivas ·
 # $TMPDIR/fechar_onda/<sessao>/*.sql: migrations que a subida pediu ·
 # /api/health de produção: a última migration aplicada ·
-# transcript de cada sessão de onda (hooks/sessao.py): o shell em curso e as subidas ·
+# transcript de cada sessão de onda (hooks/sessao.py): o shell em curso, a última fala e as subidas ·
+# passagens em $TMPDIR/onda-enxuta/ (hooks/passagem.py): as ondas de cada linhagem de sessão ·
 # check-runs de cada PR aberto (REST, não a cota do GraphQL): início e fim do CI.
 #
 # A parte local (sessões, agentes, subidas, migrations) é fresca a cada chamada e não gasta
@@ -82,7 +83,7 @@ for linha in $(echo "$agentes" | jq -r '.[] | "\(.nome)=\(.sessao)"'); do
   jl="$PROJ/$sid.jsonl"; [ -f "$jl" ] || continue
   info=$(python3 -I "$(dirname "$0")/sessao.py" "$jl" "$nome" 2>/dev/null)
   [ -n "$info" ] || continue
-  agentes=$(echo "$agentes" | jq -c --arg n "$nome" --argjson i "$info" 'map(if .nome == $n then . + {shell: $i.shell} else . end)')
+  agentes=$(echo "$agentes" | jq -c --arg n "$nome" --argjson i "$info" 'map(if .nome == $n then . + {shell: $i.shell, fala: $i.fala} else . end)')
   subidas=$(echo "$subidas" | jq -c --arg n "$nome" --argjson i "$info" '. + ($i.subidas | map(. + {sessao: $n}))')
 done
 
@@ -94,6 +95,10 @@ for nome in $(echo "$agentes" | jq -r '.[].nome'); do
   prd=$(grep -o -m1 -E 'PRD #[0-9]+' "$arq" | head -1 | tr -dc '0-9')
   [ -n "$prd" ] && prd_sessoes=$(echo "$prd_sessoes" | jq -c --arg k "$nome" --argjson v "$prd" '. + {($k): $v}')
 done
+
+# Ondas de cada linhagem ("onda-gestao"): a fila-alvo fixa das passagens e quais já foram escritas
+passagens=$(python3 -I "$(dirname "$0")/passagem.py" "$TMP/onda-enxuta" 2>/dev/null)
+[ -n "$passagens" ] || passagens='{}'
 
 migs='[]'
 for f in "$TMP"/fechar_onda/*/[0-9]*.sql; do
@@ -159,5 +164,6 @@ remoto=$(cat "$CACHE" 2>/dev/null)
 
 jq -n -c --argjson r "$remoto" --argjson agentes "$agentes" --argjson prdSessoes "$prd_sessoes" \
   --argjson subAgentes "$sub_agentes" --argjson subidas "$subidas" --argjson migs "$migs" \
+  --argjson passagens "$passagens" \
   '{os: $r.os, osEm: $r.osEm, remotoEm: $r.em, ci: $r.ci, aplicada: $r.aplicada, agentes: $agentes,
-    prdSessoes: $prdSessoes, subAgentes: $subAgentes, subidas: $subidas, migrations: $migs}'
+    prdSessoes: $prdSessoes, subAgentes: $subAgentes, subidas: $subidas, migrations: $migs, passagens: $passagens}'
