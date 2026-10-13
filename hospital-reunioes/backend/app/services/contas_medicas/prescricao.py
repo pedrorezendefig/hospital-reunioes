@@ -7,16 +7,22 @@ prescrição vira itens, e os itens de todas viram um registro por item com os d
 em que foi prescrito e as doses de cada dia.
 
 A leitura é por linha do `pdftotext -layout`, como na referência do diretor
-(`local/contas-medicas/pacote-v1.3/leitura/prescricao.py`, fora do git). Ler pela
-coordenada das colunas é pendência registrada no PRD (#1133). Função pura, sem log:
-o texto do prontuário nunca vai para log (ADR 0070, decisão 8).
+(`local/contas-medicas/pacote-v1.3/leitura/prescricao.py`, fora do git). Quando as
+palavras da página vêm com a posição (`extract_words`, #1133), a linha de cabeçalho
+`Dose Padrão  Duração  Frequência  SN  Apl  Datas/Horários` dá o x de cada coluna e
+`texto_por_coluna` remonta a página com cada coluna separada da vizinha: o nome que
+encosta na dose deixa de engolir a dose. Página sem o cabeçalho fica com o texto do
+`-layout`. Função pura, sem log: o texto do prontuário nunca vai para log (ADR 0070,
+decisão 8).
 """
 
 import re
+import statistics
 from collections import Counter
 from collections.abc import Sequence
 from dataclasses import dataclass, field
 from datetime import date, time
+from typing import Protocol
 
 _SECAO = re.compile(r"^\s*(\S.*?)\s{2,}Dose Padr[ãa]o\s+Dura[çc][ãa]o")
 _ITEM = re.compile(r"^\s{0,10}(\d{1,3})\s(\S.*)$")
@@ -190,6 +196,64 @@ def _item(rascunho: _Rascunho) -> ItemPrescrito:
         colunas=colunas,
         pagina=rascunho.pagina,
     )
+
+
+class _Palavra(Protocol):
+    x0: float
+    x1: float
+    topo: float
+    texto: str
+
+
+# As colunas do cabeçalho, na ordem. Cada uma começa no x da sua primeira palavra.
+_CABECALHO = ("Dose", "Padr[ãa]o", "Dura[çc][ãa]o", "Frequ[êe]ncia", "SN", "Apl", "Datas/Hor[áa]rios")
+_INICIO_DAS_COLUNAS = (0, 2, 3, 4, 5, 6)
+# Palavras com o topo até esta distância (em pontos) estão na mesma linha.
+_MESMA_LINHA = 2.0
+
+
+def _linhas(palavras: Sequence[_Palavra]) -> list[list[_Palavra]]:
+    linhas: list[list[_Palavra]] = []
+    for palavra in sorted(palavras, key=lambda p: (p.topo, p.x0)):
+        if linhas and palavra.topo - linhas[-1][0].topo <= _MESMA_LINHA:
+            linhas[-1].append(palavra)
+        else:
+            linhas.append([palavra])
+    return [sorted(linha, key=lambda p: p.x0) for linha in linhas]
+
+
+def _colunas_do_cabecalho(linha: list[_Palavra]) -> list[float] | None:
+    textos = [p.texto for p in linha]
+    for i in range(len(textos) - len(_CABECALHO) + 1):
+        if all(re.fullmatch(rx, t) for rx, t in zip(_CABECALHO, textos[i:], strict=False)):
+            return [linha[i + k].x0 for k in _INICIO_DAS_COLUNAS]
+    return None
+
+
+def texto_por_coluna(palavras: Sequence[_Palavra]) -> str | None:
+    """A página remontada pela posição das colunas, no formato que `ler_itens` lê:
+    palavras de colunas diferentes saem com dois espaços ou mais entre elas, e o recuo
+    sai do x. None quando a página não tem o cabeçalho de colunas."""
+    linhas = _linhas(palavras)
+    cabecalhos = [(i, c) for i, linha in enumerate(linhas) if (c := _colunas_do_cabecalho(linha))]
+    if not cabecalhos:
+        return None
+    # A largura de um caractere converte x em coluna de texto, como o `-layout` faz.
+    largura = statistics.median((p.x1 - p.x0) / len(p.texto) for p in palavras if p.texto)
+    margem = min(p.x0 for p in palavras)
+    inicios = cabecalhos[0][1]
+    saida = []
+    for i, linha in enumerate(linhas):
+        inicios = next((c for j, c in reversed(cabecalhos) if j <= i), inicios)
+        texto, coluna_anterior = "", None
+        for palavra in linha:
+            coluna = sum(palavra.x0 >= inicio - largura / 2 for inicio in inicios)
+            separador = 0 if not texto else 1 if coluna == coluna_anterior else 2
+            posicao = max(round((palavra.x0 - margem) / largura), len(texto) + separador)
+            texto = texto.ljust(posicao) + palavra.texto
+            coluna_anterior = coluna
+        saida.append(texto)
+    return "\n".join(saida)
 
 
 def ler_itens(paginas: Sequence[tuple[int, str]]) -> list[ItemPrescrito]:

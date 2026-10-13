@@ -185,6 +185,76 @@ def test_o_mesmo_item_em_tres_dias_vira_um_registro_com_as_doses_de_cada_dia_e_o
     assert registros["CLEXANE 40MG/0,4ML SER PREENCH"].doses_por_dia == {date(2026, 10, 3): 1, date(2026, 10, 5): 1}
 
 
+# Prescrição lida pela posição das colunas (#1133): o PDF sintético é o texto do
+# layout do MV numa fonte de largura fixa, então cada coluna do cabeçalho cai num x
+# conhecido. O nome longo termina um espaço antes da coluna da dose: o `-layout`
+# devolve um espaço só entre os dois, e o leitor por linha cola a dose no nome.
+SORO_LONGO = "SORO FISIOLOGICO 0,9% 500ML SIST FECHAD"
+SORO_ENCOSTADO = f" 3 {SORO_LONGO} 1 FRASCO/AM               6HS/6HS      S     EV    . 06 . 12 . 18 . 24"
+
+
+def _pdf_de_largura_fixa(paginas: list[str]) -> bytes:
+    from html import escape
+
+    from weasyprint import HTML
+
+    corpo = "".join(
+        f'<pre style="font: 7pt monospace; margin: 0; page-break-after: always">{escape(texto)}</pre>'
+        for texto in paginas
+    )
+    return HTML(string=f"<html><head><style>@page {{ margin: 20pt }}</style></head><body>{corpo}</body></html>").write_pdf()
+
+
+def _ler_o_pdf(paginas: list[str], *, por_coluna: bool):
+    from app.services.contas_medicas_extrator import extrair_paginas, extrair_palavras
+
+    pdf = _pdf_de_largura_fixa(paginas)
+    textos = [pagina.texto for pagina in extrair_paginas(pdf)]
+    estrutura = ler_prontuario(textos, ATENDIMENTO)
+    palavras = extrair_palavras(pdf, range(1, len(textos) + 1)) if por_coluna else None
+    return ler_conteudo(textos, estrutura, palavras)
+
+
+def test_nome_longo_que_encosta_na_dose_sai_com_dose_unidade_frequencia_sn_e_via_lidas_pela_coluna():
+    assert SORO_ENCOSTADO.index("1 FRASCO") == CABECALHO_DA_TABELA.index("Dose Padrão")
+    paginas = montar(prescricao(3, CLEXANE, SORO_ENCOSTADO))
+
+    (por_linha,) = _ler_o_pdf(paginas, por_coluna=False).prescricoes
+    (por_coluna,) = _ler_o_pdf(paginas, por_coluna=True).prescricoes
+
+    # o leitor por linha erra: a dose entra no nome e some da coluna
+    soro_por_linha = next(i for i in por_linha.itens if i.numero == 3)
+    assert (soro_por_linha.nome, soro_por_linha.dose) == (f"{SORO_LONGO} 1 FRASCO/AM", None)
+
+    soro = next(i for i in por_coluna.itens if i.numero == 3)
+    assert soro.nome == SORO_LONGO
+    assert soro.dose == "1 FRASCO/AM"
+    assert soro.frequencia == "6HS/6HS"
+    assert (soro.se_necessario, soro.via) == (True, "EV")
+    assert soro.horarios == ("06", "12", "18", "24")
+    # o item que o leitor por linha já lia continua igual
+    clexane = next(i for i in por_coluna.itens if i.numero == 2)
+    assert (clexane.nome, clexane.dose, clexane.frequencia, clexane.via, clexane.horarios) == (
+        "CLEXANE 40MG/0,4ML SER PREENCH",
+        "1 SERINGA",
+        "24HS/24HS",
+        "SC",
+        ("22",),
+    )
+
+
+def test_a_prescricao_inteira_lida_pela_coluna_sai_igual_a_lida_por_linha():
+    """Seções, continuação do nome, observação, componente, suspenso, preparo do exame e
+    quem assina: a remontagem pela coluna não muda nada do que o leitor por linha já lia."""
+    paginas = montar("prontuario/capa", "conteudo/prescricao")
+
+    (por_linha,) = _ler_o_pdf(paginas, por_coluna=False).prescricoes
+    (por_coluna,) = _ler_o_pdf(paginas, por_coluna=True).prescricoes
+
+    assert len(por_coluna.itens) == 9
+    assert por_coluna.itens == por_linha.itens
+
+
 # ----------------------------------------------------------------------------------
 # Balanço hídrico e glicemias
 # ----------------------------------------------------------------------------------
