@@ -1,6 +1,6 @@
 # SCHEMA.md
 <!-- gerado automaticamente por /snapshot — não editar -->
-<!-- last_update: 2026-10-13T03:30+0000 -->
+<!-- last_update: 2026-10-13T17:14+0000 -->
 
 Diagrama relacional do Hospital Reuniões. Renderiza nativo no GitHub.
 
@@ -42,6 +42,7 @@ erDiagram
     cm_operadora ||--o{ cm_validacao_tema : "operadora_id"
     cm_prescricao ||--o{ cm_prescricao_item : "prescricao_id"
     cm_regra ||--o{ cm_regra_historico : "regra_id"
+    cm_tabela_preco ||--o{ cm_guia_linha : "tabela_id"
     cm_tabela_preco ||--o{ cm_operadora_tabela : "tabela_id"
     cm_tabela_preco ||--o{ cm_tabela_preco_item : "tabela_id"
     cm_validacao_tema ||--o{ cm_validacao_tema_linha : "tema_id"
@@ -716,7 +717,7 @@ erDiagram
         DATE data_fim
         TEXT setor
         TEXT codigo
-        _ mais_colunas "+20"
+        _ mais_colunas "+21"
     }
     cm_observacao {
         UUID id PK
@@ -960,6 +961,7 @@ erDiagram
 | `cm_conta_item` | `idx_cm_conta_item_conta` | `conta_id` | `116_contas_medicas_fundacao.sql` |
 | `cm_guia_linha` | `idx_cm_guia_linha_conta` | `conta_id` | `116_contas_medicas_fundacao.sql` |
 | `cm_guia_linha` | `idx_cm_guia_linha_causa_raiz_data` | `causa_raiz, data` | `117_contas_medicas_ia.sql` |
+| `cm_guia_linha` | `idx_cm_guia_linha_tabela` | `tabela_id` | `119_contas_medicas_versao_da_tabela.sql` |
 | `cm_observacao` | `idx_cm_observacao_conta` | `conta_id` | `116_contas_medicas_fundacao.sql` |
 | `cm_chamada_ia` | `idx_cm_chamada_ia_conta` | `conta_id` | `117_contas_medicas_ia.sql` |
 | `cm_chamada_ia` | `idx_cm_chamada_ia_criado_em` | `criado_em` | `117_contas_medicas_ia.sql` |
@@ -974,4 +976,4 @@ erDiagram
 | `cm_lembrete_item` | `idx_cm_lembrete_item_lembrete` | `lembrete_id` | `118_contas_medicas_gestao.sql` |
 
 ---
-**Resumo:** 78 tabelas · 101 relacionamentos FK detectados.
+**Resumo:** 78 tabelas · 102 relacionamentos FK detectados.

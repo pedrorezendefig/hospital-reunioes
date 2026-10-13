@@ -1,6 +1,6 @@
 # ENTIDADES.md
 <!-- gerado automaticamente por /snapshot — não editar -->
-<!-- last_update: 2026-10-13T03:30+0000 -->
+<!-- last_update: 2026-10-13T17:14+0000 -->
 
 Modelo de dados do Hospital Reuniões. Tabelas no Postgres (via Supabase).
 
@@ -1309,7 +1309,7 @@ Modelo de dados do Hospital Reuniões. Tabelas no Postgres (via Supabase).
 
 ## cm_guia_linha
 
-> Origem: `116_contas_medicas_fundacao.sql`
+> Origem: `116_contas_medicas_fundacao.sql` (alterada em: 119_contas_medicas_versao_da_tabela.sql)
 
 | Campo | Tipo | Constraints | Default | FK |
 |-------|------|-------------|---------|-----|
@@ -1341,10 +1341,12 @@ Modelo de dados do Hospital Reuniões. Tabelas no Postgres (via Supabase).
 | `marcado_por` | `VARCHAR(10)` | — | — | `participantes.id` |
 | `marcado_em` | `TIMESTAMPTZ` | — | — | — |
 | `criado_em` | `TIMESTAMPTZ` | NOT NULL | `now()` | — |
+| `tabela_id` | `UUID` | — | — | `cm_tabela_preco.id` |
 
 **Indexes:**
 - `idx_cm_guia_linha_conta` em `(conta_id)` (de `116_contas_medicas_fundacao.sql`)
 - `idx_cm_guia_linha_causa_raiz_data` em `(causa_raiz, data)` (de `117_contas_medicas_ia.sql`)
+- `idx_cm_guia_linha_tabela` em `(tabela_id)` (de `119_contas_medicas_versao_da_tabela.sql`)
 
 ## cm_observacao
 
