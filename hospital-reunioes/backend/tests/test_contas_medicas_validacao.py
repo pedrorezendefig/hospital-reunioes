@@ -520,6 +520,7 @@ class _OpenRouter:
 
     def __init__(self):
         self.corpos: list[dict] = []
+        self.leitura = LEITURA
 
     def __call__(self, request: httpx.Request) -> httpx.Response:
         self.corpos.append(json.loads(request.content))
@@ -533,7 +534,7 @@ class _OpenRouter:
                 "choices": [
                     {
                         "index": 0,
-                        "message": {"role": "assistant", "content": json.dumps(LEITURA)},
+                        "message": {"role": "assistant", "content": json.dumps(self.leitura)},
                         "finish_reason": "stop",
                     }
                 ],
@@ -733,3 +734,143 @@ class TestDicionario:
 
         assert casar(PRESCRITO, [POSIFLUSH], dicionario_do_banco(banco)).como == "DICIONARIO"
         assert _fila_de_validacao(banco)["temas"] == []
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 5. A fila inteira: a ordem e os três números do topo
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+def _os_quatro_tipos(banco: _Banco) -> None:
+    """Regra pendente em 3 contas (R$ 250,50), cateter bloqueado em 2 (R$ 66),
+    Não procede em 1 (R$ 45) e uma proposta de dicionário (sem R$)."""
+    validar = {C1: 120.0, C2: 80.0, C3: 50.5}
+    for conta_id, valor in validar.items():
+        linhas = [_linha_do_guia("VALIDAR", "70000010", valor, REGRA_PENDENTE)]
+        if conta_id != C3:
+            linhas.append(_linha_do_guia("INCLUIR", CATETER, 33.0, REGRA_VIGENTE, descricao="CATETER"))
+        if conta_id == C2:
+            linhas.append(_linha_do_guia("INCLUIR", "90030001", 45.0, REGRA_VIGENTE, descricao="CLEXANE"))
+        _gravar(banco, conta_id, *linhas)
+    for linha in list(banco.tabelas["cm_guia_linha"]):
+        if linha["codigo"] == CATETER:
+            _marcar(banco, linha["conta_id"], linha["id"], {"estado": "BLOQUEADO"})
+        elif linha["codigo"] == "90030001":
+            _marcar(banco, linha["conta_id"], linha["id"], {"estado": "NAO_PROCEDE", "motivo": "SEM_EVIDENCIA"})
+    _proposta_da_ia(banco)
+
+
+class TestAFila:
+    def test_temas_do_maior_rs_em_jogo_para_o_menor_e_os_numeros_do_topo_batem(self):
+        banco = _cenario()
+        _os_quatro_tipos(banco)
+
+        fila = _fila_de_validacao(banco)
+
+        assert [(t["tipo"], t["valor"], t["contas"]) for t in fila["temas"]] == [
+            ("REGRA_PENDENTE", 250.5, 3),
+            ("BLOQUEADO", 66.0, 2),
+            ("OBSERVACAO", 45.0, 1),
+            ("DICIONARIO", 0.0, 0),
+        ]
+        assert fila["numeros"] == {"aguardando_decisao": 4, "contas_afetadas": 3, "valor_em_jogo": 361.5}
+
+    @pytest.mark.parametrize("quem", ["faturista", "coordenadora"])
+    def test_quem_nao_decide_na_validacao_recebe_403_em_toda_rota(self, quem):
+        banco = _cenario()
+        _os_quatro_tipos(banco)
+        temas = {t["tipo"]: t["id"] for t in _fila_de_validacao(banco)["temas"]}
+        cliente = _cliente(banco, quem)
+
+        respostas = [
+            cliente.get("/api/contas-medicas/validacao"),
+            cliente.post(
+                f"/api/contas-medicas/validacao/temas/{temas['REGRA_PENDENTE']}/decisao",
+                json={"decisao": "VALIDAR_REGRA"},
+            ),
+            cliente.post(f"/api/contas-medicas/validacao/temas/{temas['BLOQUEADO']}/cadastro"),
+            cliente.post(f"/api/contas-medicas/validacao/temas/{temas['OBSERVACAO']}/leitura"),
+        ]
+
+        assert [r.status_code for r in respostas] == [403, 403, 403, 403]
+        assert {t["estado"] for t in banco.tabelas["cm_validacao_tema"]} == {"ABERTO"}
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 6. O texto do Produto no Kit de conhecimento
+# ═══════════════════════════════════════════════════════════════════════════
+
+RAIZ_DO_APP = Path(__file__).resolve().parents[2]
+KIT = RAIZ_DO_APP / "backend" / "app" / "conhecimento" / "contas-medicas.md"
+
+
+def _secao(titulo: str) -> str:
+    return KIT.read_text(encoding="utf-8").split(f"## {titulo}")[1].split("\n## ")[0]
+
+
+class TestOKitDescreveAValidacao:
+    """O Assistente de Tecnologia responde Demanda com este texto: sem a fila
+    nele, a pergunta "por que a conta concluída voltou para mim?" fica sem
+    resposta."""
+
+    def test_a_secao_da_validacao_descreve_a_fila_as_decisoes_e_o_retorno(self):
+        validacao = _secao("A Validação")
+
+        for trecho in (
+            "decidir na validação",
+            "aguardando decisão",
+            "contas afetadas",
+            "R$ em jogo",
+            "Validar regra",
+            "Deixar pendente",
+            "Enviar ao cadastro",
+            "Descartar",
+            "Manter a regra",
+            "Editar a regra",
+            "Responder ao time",
+            "dicionário",
+            "Retorno",
+            "versão nova",
+            "quem decide é a pessoa",
+        ):
+            assert trecho in validacao, trecho
+
+    def test_o_que_ja_esta_no_ar_inclui_a_validacao(self):
+        assert "a fila de Validação" in _secao("O que já está no ar")
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 7. Tipografia
+# ═══════════════════════════════════════════════════════════════════════════
+
+ARQUIVOS_DA_FATIA = [
+    RAIZ_DO_APP / "backend/app/services/contas_medicas/validacao.py",
+    RAIZ_DO_APP / "backend/app/routers/contas_medicas_validacao.py",
+    RAIZ_DO_APP / "backend/app/prompts/contas_medicas_observacao.md",
+    KIT,
+    RAIZ_DO_APP / "frontend/src/app/contas-medicas/validacao/page.tsx",
+    RAIZ_DO_APP / "frontend/src/components/contas-medicas/CartaoDeTema.tsx",
+    RAIZ_DO_APP / "frontend/src/components/contas-medicas/LinkParaValidacao.tsx",
+    RAIZ_DO_APP / "frontend/src/lib/contas-medicas/validacao.ts",
+    Path(__file__),
+]
+
+
+@pytest.mark.parametrize("arquivo", ARQUIVOS_DA_FATIA, ids=lambda a: a.name)
+def test_sem_travessao_nem_meia_risca(arquivo):
+    texto = arquivo.read_text(encoding="utf-8")
+    assert chr(0x2014) not in texto
+    assert chr(0x2013) not in texto
+
+
+def test_a_leitura_da_ia_sai_sem_travessao(provedor):
+    """O texto da IA vai para a tela: o sanitizador troca o travessão que vier."""
+    provedor.leitura = {**LEITURA, "leitura": f"A regra {chr(0x2014)} como está {chr(0x2013)} não trata do caso."}
+    banco = _cenario()
+    _nao_procede(banco, C1, "Na ALFA o Clexane vem dentro do pacote")
+    [tema] = _fila_de_validacao(banco)["temas"]
+
+    leitura = _ler(banco, tema["id"]).json()["leitura_ia"]
+
+    assert chr(0x2014) not in leitura and chr(0x2013) not in leitura
+    assert "A regra, como está, não trata do caso." in leitura
