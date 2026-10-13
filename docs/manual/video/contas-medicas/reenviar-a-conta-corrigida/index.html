@@ -1,0 +1,422 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=1920, height=1080" />
+<title>Manual · Contas médicas · Reenviar a conta corrigida</title>
+<script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js" integrity="sha384-sG0Hv1tP1lZCk9KQmrIbY/XNwi+OY84GQqhMscbnsoBFqAz8KNCil1kvfL3Hbbk2" crossorigin="anonymous"></script>
+<script type="application/json" id="manual-video-meta">
+{
+ "modulo": "contas-medicas",
+ "slug": "reenviar-a-conta-corrigida",
+ "pagina": "contas-medicas/reenviar-a-conta-corrigida.md",
+ "prd": [
+  1128
+ ],
+ "issues": [
+  1136
+ ],
+ "app_version": "0.193.0",
+ "gerado_em": "2026-10-13T07:30:00-03:00"
+}
+</script>
+<style>
+  @font-face {
+    font-family: "HP Simplified";
+    src: url("assets/fonts/HPSimplified_Rg.ttf") format("truetype");
+    font-weight: 400;
+    font-style: normal;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { width: 1920px; height: 1080px; overflow: hidden; background: #fff; }
+  body { font-family: "HP Simplified", system-ui, sans-serif; }
+
+  :root {
+    --navy: #2B2E7E; --navy-light: #3B6FB6; --navy-dark: #1A1C4E;
+    --app-text: #1E293B; --app-sec: #64748B; --app-border: #E2E8F0;
+  }
+
+  #root { position: relative; width: 1920px; height: 1080px; overflow: hidden; }
+  .scene { position: absolute; inset: 0; background: #fff; overflow: hidden; }
+
+  /* Palco desenhado em 960x540 e ampliado 2x, a mesma régua das outras
+     composições do Manual. */
+  .palco { position: relative; width: 960px; height: 540px; transform: scale(2); transform-origin: top left; font-size: 12px; color: var(--app-text); background: #EEF1F6; }
+
+  .slide { display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding: 0 160px; }
+  .eyebrow { font-size: 26px; letter-spacing: .22em; text-transform: uppercase; color: var(--navy-light); font-weight: 700; }
+  .titulo { font-size: 72px; line-height: 1.12; color: var(--navy); font-weight: 700; max-width: 1560px; margin: 34px 0 30px; }
+  .sub { font-size: 36px; color: var(--app-sec); max-width: 1420px; line-height: 1.5; }
+  .selo-abertura { margin-top: 40px; display: inline-flex; gap: 14px; }
+  .selo-abertura span { border: 2px solid var(--navy); border-radius: 999px; padding: 10px 26px; font-size: 26px; font-weight: 700; color: var(--navy); background: #F5F6FE; }
+
+  .fecho-titulo { font-size: 52px; color: var(--navy); font-weight: 700; margin-bottom: 40px; }
+  .carimbo { font-size: 30px; color: var(--app-sec); }
+  .fecho-org { font-size: 26px; color: #64748B; margin-top: 16px; }
+
+  /* ===== janela de navegador ===== */
+  .janela { position: absolute; left: 30px; top: 28px; width: 580px; height: 470px; border-radius: 12px; background: #fff; box-shadow: 0 26px 60px -20px rgba(0,0,0,.42); overflow: hidden; border: 1px solid #D8DEE9; }
+  .barra { height: 20px; background: #E7EBF2; display: flex; align-items: center; gap: 4px; padding: 0 8px; border-bottom: 1px solid #D8DEE9; }
+  .barra i { width: 5px; height: 5px; border-radius: 50%; background: #C3CBD8; display: block; }
+  .barra .url { margin-left: 8px; flex: 1; height: 11px; border-radius: 6px; background: #fff; border: 1px solid #D8DEE9; font-size: 6.4px; color: #5A6273; display: flex; align-items: center; padding: 0 6px; }
+  .tela { position: absolute; left: 0; right: 0; top: 20px; bottom: 0; background: #F7F9FC; overflow: hidden; }
+
+  /* ===== moldura do app ===== */
+  .app-topo { position: absolute; left: 0; right: 0; top: 0; height: 24px; background: #fff; border-bottom: 1px solid var(--app-border); display: flex; align-items: center; justify-content: space-between; padding: 0 9px; }
+  .app-topo .marca { display: flex; align-items: center; gap: 4px; }
+  .app-topo .direita { display: flex; align-items: center; gap: 6px; color: #94A3B8; }
+  .app-topo .avatar { width: 13px; height: 13px; border-radius: 50%; background: var(--navy); color: #fff; font-size: 6px; font-weight: 700; display: flex; align-items: center; justify-content: center; }
+  .app-menu { position: absolute; left: 0; top: 24px; bottom: 0; width: 92px; background: #fff; border-right: 1px solid var(--app-border); padding: 7px 6px; }
+  .mi { display: flex; align-items: center; gap: 5px; font-size: 6.6px; color: #56606F; padding: 3.5px 5px; border-radius: 5px; margin-bottom: 2px; }
+  .mi.ativo { background: rgba(43,46,126,.08); color: var(--navy); font-weight: 700; }
+  .app-corpo { position: absolute; left: 92px; right: 0; top: 24px; bottom: 0; padding: 9px 14px; overflow: hidden; }
+
+  .h-pag { font-size: 11.5px; font-weight: 700; color: #0F172A; }
+  .dek { font-size: 6.2px; color: #56606F; margin-top: 1.5px; }
+  .cartao { background: #fff; border: 1px solid var(--app-border); border-radius: 9px; }
+  .etq { display: inline-flex; align-items: center; padding: 1.5px 5px; border-radius: 999px; font-size: 5.2px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; }
+  .pilula { display: inline-flex; align-items: center; padding: 1.5px 6px; border-radius: 999px; font-size: 5.8px; font-weight: 600; }
+  .link { color: var(--navy); font-weight: 700; }
+
+  /* ===== fila ===== */
+  .soltar { border: 1.4px dashed #CBD5E1; border-radius: 9px; background: #fff; text-align: center; padding: 9px 0 10px; margin-top: 7px; }
+  .abas { display: flex; gap: 4px; border-bottom: 1px solid var(--app-border); margin-top: 9px; }
+  .abas span { font-size: 6.6px; padding: 4px 8px; color: #56606F; border-bottom: 1.5px solid transparent; }
+  .abas span.on { color: var(--navy); border-color: var(--navy); font-weight: 700; }
+  .fila-l { display: flex; align-items: center; gap: 6px; padding: 6px 10px; border-top: 1px solid var(--app-border); }
+  .fila-l:first-child { border-top: 0; }
+  .fila-l .q { flex: 1; }
+  .fila-l .q b { display: block; font-size: 6.8px; color: #0F172A; }
+  .fila-l .q span { font-size: 5.6px; color: #64748B; }
+  .fila-l .det { font-size: 5.8px; color: #475569; }
+
+  /* ===== guia ===== */
+  .voltar { display: inline-flex; align-items: center; gap: 3px; font-size: 6.2px; color: #64748B; }
+  .numeros { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin-top: 7px; }
+  .numeros .cartao { padding: 6px 8px; }
+  .rot-num { font-size: 5.2px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: #64748B; }
+  .val-num { font-size: 13px; font-weight: 700; color: var(--navy); line-height: 1.2; }
+  .grupo-t { display: flex; justify-content: space-between; align-items: center; margin-top: 8px; font-size: 5.6px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: #64748B; }
+  .linha { background: #fff; border: 1px solid var(--app-border); border-radius: 7px; padding: 5px 7px; margin-top: 4px; }
+  .linha .topo { display: flex; align-items: center; gap: 4px; }
+  .linha .topo .v { margin-left: auto; font-size: 6.6px; font-weight: 700; color: #0F172A; }
+  .linha .nome { font-size: 6.6px; font-weight: 700; color: #0F172A; margin-top: 2.5px; }
+  .linha .txt { font-size: 6.4px; color: #334155; margin-top: 1px; }
+  .linha .mot { font-size: 5.6px; color: #64748B; margin-top: 1px; }
+  .linha .meta { display: flex; gap: 7px; align-items: center; font-size: 5.6px; color: #64748B; margin-top: 2px; }
+  .linha .cod { display: inline-flex; align-items: center; gap: 2px; font-family: ui-monospace, Menlo, monospace; color: var(--navy); font-size: 5.8px; }
+  .botoes { display: flex; gap: 4px; margin-top: 4px; }
+  .bt { display: inline-flex; align-items: center; padding: 3px 7px; border-radius: 5px; font-size: 5.4px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; }
+  .bt-cheio { background: var(--navy); color: #fff; }
+  .bt-claro { background: #fff; color: #334155; border: 1px solid var(--app-border); }
+  .marcada { display: flex; align-items: center; gap: 5px; border-radius: 7px; padding: 4px 7px; margin-top: 4px; font-size: 6.2px; color: #334155; }
+  .marcada .v { margin-left: auto; color: #64748B; }
+  .fs { border: 1px solid var(--app-border); border-radius: 6px; padding: 4px 7px; margin-top: 4px; }
+  .fs .lg { font-size: 5.8px; font-weight: 700; color: #334155; }
+  .radio { display: flex; width: fit-content; align-items: center; gap: 4px; font-size: 6.2px; color: #334155; margin-top: 2.5px; }
+  .radio i { width: 6px; height: 6px; border-radius: 50%; border: 1px solid #94A3B8; display: inline-block; position: relative; }
+  .radio i b { position: absolute; left: 1px; top: 1px; width: 2.4px; height: 2.4px; border-radius: 50%; background: #2563EB; opacity: 0; }
+  .validar-msg { font-size: 5.8px; color: #92400E; margin-top: 3px; }
+  .rodape-guia { background: #fff; border: 1px solid var(--app-border); border-radius: 9px; padding: 6px 8px; margin-top: 7px; }
+  .area { height: 15px; border: 1px solid var(--app-border); border-radius: 5px; margin-top: 3px; font-size: 5.8px; color: #6C7786; padding: 3px 5px; }
+  .toast { position: absolute; right: 12px; bottom: 16px; background: #ECFDF5; border: 1px solid #A7F3D0; border-radius: 9px; box-shadow: 0 16px 34px -18px rgba(0,0,0,.3); padding: 5px 9px; font-size: 6.6px; font-weight: 700; color: #065F46; opacity: 0; }
+  .confirma { position: absolute; left: 150px; top: 6px; width: 230px; background: #fff; border: 1px solid #D8DEE9; border-radius: 8px; box-shadow: 0 18px 40px -14px rgba(0,0,0,.4); padding: 9px 11px; opacity: 0; z-index: 25; }
+  .confirma p { font-size: 6.8px; color: #0F172A; }
+  .confirma .acoes { display: flex; justify-content: flex-end; gap: 5px; margin-top: 8px; }
+  .confirma .acoes span { font-size: 6.2px; padding: 3px 9px; border-radius: 5px; }
+
+  /* ===== dedo fantasma e legenda ===== */
+  .ghost { position: absolute; left: 0; top: 0; z-index: 40; opacity: 0; }
+  .ghost .pulse { position: absolute; left: -7px; top: -7px; width: 34px; height: 34px; border-radius: 50%; background: rgba(43,46,126,.28); opacity: 0; }
+  .passo { position: absolute; left: 632px; top: 150px; width: 300px; opacity: 0; }
+  .passo .n { display: inline-flex; align-items: center; justify-content: center; width: 30px; height: 30px; border-radius: 50%; background: var(--navy); color: #fff; font-size: 16px; font-weight: 700; }
+  .passo h3 { font-size: 24px; line-height: 1.25; color: var(--navy); font-weight: 700; margin: 12px 0 8px; }
+  .passo p { font-size: 16.5px; line-height: 1.5; color: #556076; }
+  .passo b { color: var(--app-text); }
+  .marcador { position: absolute; border: 1.5px solid var(--navy); border-radius: 7px; box-shadow: 0 0 0 3px rgba(43,46,126,.14); opacity: 0; z-index: 30; }
+  .rodape-v { position: absolute; left: 0; right: 0; bottom: 14px; text-align: center; font-size: 9.5px; color: #576070; letter-spacing: .04em; }
+  /* ===== reenvio ===== */
+  .arquivo { position: absolute; left: 640px; top: 370px; width: 190px; display: flex; align-items: center; gap: 10px; background: #fff; border: 1px solid #D8DEE9; border-radius: 10px; padding: 10px 12px; box-shadow: 0 16px 34px -18px rgba(0,0,0,.35); opacity: 0; z-index: 35; }
+  .arquivo .doc { width: 26px; height: 32px; border-radius: 4px; background: #FEE2E2; color: #991B1B; font-size: 8px; font-weight: 700; display: flex; align-items: flex-end; justify-content: center; padding-bottom: 4px; }
+  .arquivo b { display: block; font-size: 10px; color: #0F172A; }
+  .arquivo span { font-size: 8.5px; color: #64748B; }
+  .seletor { position: absolute; left: 110px; top: 120px; width: 300px; background: #fff; border: 1px solid #D8DEE9; border-radius: 9px; box-shadow: 0 18px 40px -14px rgba(0,0,0,.4); padding: 9px 11px; opacity: 0; z-index: 25; }
+  .seletor .t { font-size: 7px; font-weight: 700; color: #0F172A; }
+  .seletor .item { display: flex; align-items: center; gap: 5px; font-size: 6.6px; color: #334155; padding: 4px 5px; border-radius: 5px; margin-top: 4px; }
+  .seletor .item.on { background: #EEF2FF; color: #1E3A8A; font-weight: 700; }
+  .seletor .acoes { display: flex; justify-content: flex-end; gap: 5px; margin-top: 8px; }
+  .seletor .acoes span { font-size: 6.2px; padding: 3px 9px; border-radius: 5px; }
+  .saida { opacity: 0; }
+  .status { font-size: 6.4px; font-weight: 700; color: #334155; margin-top: 4px; opacity: 0; }
+  .quadro { display: none; background: #fff; border: 1px solid var(--app-border); border-radius: 9px; padding: 7px 9px; margin-top: 7px; opacity: 0; }
+  .quadro .t { font-size: 7px; font-weight: 700; color: #0F172A; }
+  .quadro p { font-size: 6.4px; color: #1E293B; margin-top: 4px; }
+</style>
+</head>
+<body>
+
+<div id="root" data-composition-id="main" data-start="0" data-width="1920" data-height="1080" data-duration="45" data-fps="30">
+
+  <!-- 1 · Abertura -->
+  <section id="c-abertura" class="clip scene slide" data-start="0" data-duration="4" data-track-index="1">
+    <div class="eyebrow" id="ab-eyebrow">Manual · Contas médicas</div>
+    <h1 class="titulo" id="ab-titulo">Reenviar a conta corrigida</h1>
+    <p class="sub" id="ab-sub">Mandar de novo só a conta, depois de corrigir no MV, e ver se cada correção pegou.</p>
+    <div class="selo-abertura" id="ab-selos"><span>Faturista</span></div>
+  </section>
+
+  <!-- 2 · A tarefa, passo a passo -->
+  <section id="c-tarefa" class="clip scene" data-start="4" data-duration="36" data-track-index="2">
+    <div class="palco" id="palco-tarefa"></div>
+  </section>
+
+  <!-- 3 · Fecho -->
+  <section id="c-fecho" class="clip scene slide" data-start="40" data-duration="5" data-track-index="3">
+    <div class="fecho-titulo" id="fc-titulo">Reenviar a conta corrigida</div>
+    <div class="carimbo" id="fc-carimbo">Manual · retrata o app em v0.193.0 · gerado em 13/10/2026</div>
+    <div class="fecho-org" id="fc-org">Hospital São Matheus · Manual da plataforma</div>
+  </section>
+
+</div>
+
+<script>
+const IC = {
+  marca: '<svg width="22" height="9" viewBox="0 0 100 42" fill="none" style="flex-shrink:0"><path d="M8 40 A24 24 0 0 1 56 40" stroke="#3B6FB6" stroke-width="6" stroke-linecap="round"/><path d="M44 40 A24 24 0 0 1 92 40" stroke="#1E3A8A" stroke-width="6" stroke-linecap="round"/></svg>',
+  sino: '<svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.268 21a2 2 0 0 0 3.464 0"/><path d="M3.262 15.326A1 1 0 0 0 4 17h16a1 1 0 0 0 .74-1.673C19.41 13.956 18 12.499 18 8A6 6 0 0 0 6 8c0 4.499-1.41 5.956-2.738 7.326"/></svg>',
+  alvo: '<svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg>',
+  megafone: '<svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m3 11 18-5v12L3 14v-3z"/><path d="M11.6 16.8a3 3 0 1 1-5.8-1.6"/></svg>',
+  recibo: '<svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 2v20l2-1 2 1 2-1 2 1 2-1 2 1 2-1 2 1V2l-2 1-2-1-2 1-2-1-2 1-2-1-2 1Z"/><path d="M14 8H8"/><path d="M16 12H8"/><path d="M13 16H8"/></svg>',
+  ajuda: '<svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><path d="M12 17h.01"/></svg>',
+  subir: '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#94A3B8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" x2="12" y1="3" y2="15"/></svg>',
+  subirP: '<svg width="7" height="7" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" x2="12" y1="3" y2="15"/></svg>',
+  seta: '<svg width="7" height="7" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 19-7-7 7-7"/><path d="M19 12H5"/></svg>',
+};
+
+const moldura = (corpo) =>
+  `<div class="app-topo"><div class="marca">${IC.marca}<span style="font-size:6.2px;font-weight:700;color:#1E3A8A;line-height:1.1">HOSPITAL<br>SÃO MATHEUS</span></div>` +
+  `<div class="direita">${IC.sino}<div class="avatar">R</div></div></div>` +
+  `<div class="app-menu"><div class="mi">${IC.alvo}Reuniões e metas</div><div class="mi">${IC.megafone}Ouvidoria</div>` +
+  `<div class="mi ativo">${IC.recibo}Contas médicas</div><div class="mi" style="margin-top:3px">${IC.ajuda}Ajuda</div></div>` +
+  `<div class="app-corpo">${corpo}</div>`;
+
+const linhaFila = (id, at, comp, pilula, cor, det, acao, idAcao) =>
+  `<div class="fila-l" id="${id}"><div class="q"><b>Atendimento ${at}</b><span>${comp}</span></div>` +
+  `<span class="pilula" style="${cor}">${pilula}</span>${det ? `<span class="det">${det}</span>` : ""}` +
+  `${acao ? `<span class="link" style="font-size:6.4px" ${idAcao ? `id="${idAcao}"` : ""}>${acao}</span>` : ""}</div>`;
+
+const telaContas = moldura(`
+  <div class="h-pag">Contas médicas</div>
+  <div class="dek">Envie a conta e o prontuário do MV e receba a lista do que corrigir antes de mandar para a operadora.</div>
+  <div class="soltar" id="soltar">${IC.subir}<div style="font-size:6.4px;font-weight:700;color:#1E293B;margin-top:2px">Arraste aqui a conta e o prontuário do MV</div>
+    <span class="bt bt-cheio" style="margin-top:5px;text-transform:none;letter-spacing:0;font-size:6px">Selecionar arquivos</span></div>
+  <div class="quadro" id="quadro"><div class="t">Último envio</div>
+    <p>900355, reenvio da conta 51102: 2 corrigidas no MV, 1 ainda na conta, nota de saída 92</p></div>
+  <div class="abas"><span id="aba-fila" class="on">Fila (4)</span><span id="aba-concl">Concluídas (1)</span></div>
+  <div class="cartao" style="margin-top:7px" id="lista-fila">
+    ${linhaFila("fl-1", "900398", "conta 51190 · 28/09 a 02/10", "Em correção", "background:#FEF3C7;color:#92400E", "Nota 99, R$ 82,95, 2 de 3", "Continuar")}
+    ${linhaFila("fl-2", "900412", "conta 51230 · 03/10 a 08/10", "A fazer", "background:#FEE2E2;color:#991B1B", "Nota 97, R$ 581,45, 0 de 5", "Abrir")}
+    ${linhaFila("fl-3", "900431", "conta 51302 · 05/10 a 09/10", "Falta o prontuário", "background:#F1F5F9;color:#475569", "", "")}
+  </div>
+  <div class="cartao" style="margin-top:7px;display:none" id="lista-concl">
+    ${linhaFila("fc-1", "900355", "conta 51102 · 20/09 a 26/09", "Concluída", "background:#DCFCE7;color:#166534", "Nota 90", "Abrir", "concl-abrir")}
+  </div>`);
+
+const marcada = (id, nome, cod, v, marca) =>
+  `<div class="marcada" id="${id}" style="background:#F0FDF4;border:1px solid #BBF7D0">` +
+  `<span class="etq" style="background:#DCFCE7;color:#166534">Feito</span>` +
+  `<span class="etq saida" id="${id}-marca" style="${marca === "c" ? "background:#DCFCE7;color:#166534" : "background:#FEE2E2;color:#991B1B"}">${marca === "c" ? "corrigida no MV" : "ainda na conta"}</span>` +
+  `${nome}<span class="cod" style="font-family:ui-monospace,Menlo,monospace;color:#2B2E7E;font-size:5.8px">${cod}</span><span class="v">${v}</span></div>`;
+
+const telaGuia = moldura(`
+  <div class="voltar">${IC.seta}Contas médicas</div>
+  <div style="display:flex;align-items:center;gap:5px;margin-top:3px"><div class="h-pag">Atendimento 900355</div>
+    <span class="pilula" style="background:#DCFCE7;color:#166534">Concluída</span></div>
+  <div class="dek">Lia F. · conta 51102 · AURORA · coluna Comum · parcial de 20/09 a 26/09</div>
+  <div class="numeros">
+    <div class="cartao" id="bl-notas" style="display:flex;gap:14px"><div><div class="rot-num">Nota de entrada</div><div class="val-num">90</div></div>
+      <div class="saida" id="nota-saida"><div class="rot-num">Nota de saída</div><div class="val-num">92</div></div></div>
+    <div class="cartao"><div class="rot-num">R$ a ajustar</div><div class="val-num">R$ 558,25</div><div style="font-size:5px;color:#64748B">em 3 itens</div></div>
+    <div class="cartao"><div class="rot-num">Itens feitos</div><div class="val-num">3 de 3</div></div>
+  </div>
+  <div class="grupo-t"><span>03/10 · CTI ADULTO</span></div>
+  ${marcada("m1", "Pantoprazol 40 mg injetável", "90123456", "+R$ 68,40", "c")}
+  <div class="grupo-t"><span>04/10 · CENTRO CIRURGICO</span></div>
+  ${marcada("m2", "Ondansetrona 4 mg injetável", "90187733", "+R$ 9,85", "c")}
+  <div class="grupo-t"><span>08/10 · POSTO 3</span></div>
+  ${marcada("m3", "Diária de enfermaria", "60000600", "-R$ 480,00", "a")}
+  <div class="rodape-guia">
+    <div style="font-size:6.4px;color:#475569">Conta concluída. As marcações não mudam mais.</div>
+    <span class="bt bt-claro" id="btn-reenviar" style="margin-top:4px;padding:4px 8px;text-transform:none;letter-spacing:0;font-size:6.2px;gap:3px">${IC.subirP}Reenviar conta corrigida</span>
+    <div class="status" id="status">2 corrigidas no MV, 1 ainda na conta, nota de saída 92</div>
+    <div style="font-size:5.4px;color:#64748B;margin-top:3px">Opcional. Depois de corrigir no MV, envie só o PDF da conta para ver se a correção pegou. A conta já está na sua produção.</div>
+  </div>
+  <div class="seletor" id="seletor"><div class="t">Escolha o PDF da conta corrigida</div>
+    <div class="item">prontuario-900355.pdf</div>
+    <div class="item on" id="sel-conta">conta-900355.pdf</div>
+    <div class="acoes"><span style="border:1px solid #E2E8F0;color:#334155">Cancelar</span><span id="sel-abrir" style="background:#2563EB;color:#fff">Abrir</span></div></div>`);
+
+document.getElementById("palco-tarefa").innerHTML =
+  `<div style="position:absolute;inset:0;background:#EEF1F6"></div>` +
+  `<div class="janela" id="janela"><div class="barra"><i></i><i></i><i></i><div class="url">plataforma do hospital · contas médicas</div></div>` +
+  `<div class="tela" id="tela-contas">${telaContas}</div>` +
+  `<div class="tela" id="tela-guia" style="opacity:0">${telaGuia}</div></div>` +
+  `<div class="arquivo" id="arquivo"><div class="doc">PDF</div><div><b>conta-900355.pdf</b><span>Fatura Individual, corrigida no MV</span></div></div>` +
+  `<div class="rodape-v">Manual · retrata o app em v0.193.0 · gerado em 13/10/2026</div>` +
+  `<div class="ghost" id="g1"><svg width="17" height="17" viewBox="0 0 24 24" fill="#16181d" stroke="#fff" stroke-width="1.4"><path d="M5 3l14 8-6 1.6L9.6 19z"/></svg><div class="pulse"></div></div>` +
+  `<div class="passo" id="p1"><div class="n">1</div><h3>Exporte do MV só a conta corrigida</h3><p>A <b>Fatura Individual</b>, em PDF. O prontuário não precisa ir.</p></div>` +
+  `<div class="passo" id="p2"><div class="n">2</div><h3>Em Concluídas, clique em Abrir</h3><p>A conta concluída abre o guia, com as linhas que você marcou.</p></div>` +
+  `<div class="passo" id="p3"><div class="n">3</div><h3>Clique em Reenviar conta corrigida</h3><p>No rodapé do guia. Escolha o PDF da conta.</p></div>` +
+  `<div class="passo" id="p4"><div class="n">4</div><h3>Leia o resultado</h3><p>Cada linha <b>Feito</b> ganha <b>corrigida no MV</b> ou <b>ainda na conta</b>, e a <b>Nota de saída</b> aparece ao lado.</p></div>` +
+  `<div class="passo" id="p5"><div class="n">5</div><h3>Várias contas? Arraste todas</h3><p>Na tela <b>Contas médicas</b>. O <b>Último envio</b> mostra cada uma como reenvio.</p></div>`;
+
+const PALCO = document.getElementById("palco-tarefa");
+PALCO.querySelectorAll("*").forEach((el) => {
+  el.setAttribute("data-layout-allow-overlap", "");
+  el.setAttribute("data-layout-allow-occlusion", "");
+  el.setAttribute("data-layout-allow-overflow", "");
+});
+
+window.__timelines = window.__timelines || {};
+const tl = gsap.timeline({ paused: true });
+const IR = { immediateRender: false };
+const surge = (sel, t, y) => tl.fromTo(sel, { opacity: 0, y: y === undefined ? 8 : y }, { opacity: 1, y: 0, duration: 0.4, ease: "power2.out", ...IR }, t);
+const some = (sel, t) => tl.to(sel, { opacity: 0, duration: 0.25 }, t);
+const nota = (sel, t, ate) => { surge(sel, t, 14); some(sel, ate); };
+const clique = (g, t) => tl.fromTo(`${g} .pulse`, { opacity: 0.9, scale: 0.4 }, { opacity: 0, scale: 1.25, duration: 0.42, ease: "power1.out", ...IR }, t);
+const move = (g, t, x, y, dx, dy) => {
+  tl.set(g, { x: x, y: y, opacity: 1 }, t);
+  tl.to(g, { x: dx, y: dy, duration: 0.7, ease: "power2.inOut" }, t + 0.2);
+};
+const mostra = (sel, t) => tl.fromTo(sel, { opacity: 0 }, { opacity: 1, duration: 0.3, ...IR }, t);
+const esconde = (sel, t) => tl.to(sel, { opacity: 0, duration: 0.3 }, t);
+const exibe = (sel, t) => tl.set(sel, { display: "block" }, t);
+const oculta = (sel, t) => tl.set(sel, { display: "none" }, t);
+
+function xy(el) {
+  let x = 0, y = 0, n = el;
+  while (n && n !== PALCO) { x += n.offsetLeft; y += n.offsetTop; n = n.offsetParent; }
+  return { x: x, y: y, w: el.offsetWidth, h: el.offsetHeight };
+}
+function marcaEm(idAlvo) {
+  const jaTem = document.getElementById("mk-" + idAlvo);
+  if (jaTem) return "#mk-" + idAlvo;
+  const el = document.getElementById(idAlvo);
+  if (getComputedStyle(el).position === "static") el.style.position = "relative";
+  const m = document.createElement("div");
+  m.className = "marcador";
+  m.id = "mk-" + idAlvo;
+  m.setAttribute("data-layout-allow-overlap", "");
+  m.setAttribute("data-layout-allow-occlusion", "");
+  const folga = (el.offsetWidth < 16 || el.offsetHeight < 16) ? 4 : 2.5;
+  m.style.cssText = `position:absolute;left:${-folga}px;top:${-folga}px;right:${-folga}px;bottom:${-folga}px`;
+  el.appendChild(m);
+  return "#mk-" + idAlvo;
+}
+function ponto(idAlvo) {
+  const r = xy(document.getElementById(idAlvo));
+  return { x: r.x + r.w / 2 - 5, y: r.y + r.h / 2 - 3 };
+}
+/* A lista das Concluídas só existe depois da troca de aba: mede no estado em que estará. */
+function noEstado(estado, fn) {
+  const antes = {};
+  for (const [id, disp] of Object.entries(estado)) {
+    const el = document.getElementById(id);
+    antes[id] = el.style.display;
+    el.style.display = disp;
+  }
+  const r = fn();
+  for (const [id, disp] of Object.entries(antes)) document.getElementById(id).style.display = disp;
+  return r;
+}
+const ESTADO = { inicio: {}, concl: { "lista-fila": "none", "lista-concl": "block" } };
+function toca(t, para, de, estado, estadoDe) {
+  const a = noEstado(ESTADO[estado || "inicio"], () => ponto(para));
+  const b = de ? noEstado(ESTADO[estadoDe || estado || "inicio"], () => ponto(de)) : { x: a.x + 34, y: Math.min(a.y + 70, 480) };
+  const mk = marcaEm(para);
+  mostra(mk, t);
+  move("#g1", t + 0.15, b.x, b.y, a.x, a.y);
+  clique("#g1", t + 1.05);
+  return mk;
+}
+
+/* 1 · Abertura */
+surge("#ab-eyebrow", 0.25, 22);
+tl.fromTo("#ab-titulo", { opacity: 0, y: 28 }, { opacity: 1, y: 0, duration: 0.7, ease: "power3.out", ...IR }, 0.5);
+surge("#ab-sub", 1.1, 22);
+surge("#ab-selos", 1.6, 18);
+
+/* 2 · A tarefa */
+tl.fromTo("#janela", { opacity: 0, y: 20 }, { opacity: 1, y: 0, duration: 0.5, ease: "power2.out", ...IR }, 4.20);
+nota("#p1", 4.90, 9.55);
+nota("#p2", 9.90, 16.05);
+nota("#p3", 16.40, 22.55);
+nota("#p4", 22.90, 30.55);
+nota("#p5", 30.90, 39.25);
+
+/* passo 1: o PDF da conta corrigida, exportado do MV */
+surge("#arquivo", 5.6, 12);
+esconde("#arquivo", 9.2);
+
+/* passo 2: a aba Concluídas e o Abrir */
+toca(10.3, "aba-concl");
+tl.set("#aba-fila", { attr: { class: "" } }, 11.4);
+tl.set("#aba-concl", { attr: { class: "on" } }, 11.4);
+oculta("#lista-fila", 11.4);
+exibe("#lista-concl", 11.4);
+esconde("#mk-aba-concl", 12.0);
+toca(12.6, "concl-abrir", "aba-concl", "concl", "concl");
+esconde("#mk-concl-abrir", 14.6);
+esconde("#tela-contas", 14.9);
+mostra("#tela-guia", 15.0);
+tl.to("#g1", { opacity: 0, duration: 0.2 }, 15.0);
+
+/* passo 3: o botão do rodapé e o PDF escolhido */
+toca(16.9, "btn-reenviar");
+mostra("#seletor", 18.1);
+esconde("#mk-btn-reenviar", 18.1);
+toca(19.0, "sel-abrir", "btn-reenviar");
+esconde("#seletor", 20.2);
+tl.to("#g1", { opacity: 0, duration: 0.2 }, 20.4);
+
+/* passo 4: as marcas por linha e a nota de saída */
+mostra("#m1-marca", 23.4);
+mostra("#m2-marca", 23.7);
+mostra("#m3-marca", 24.0);
+mostra("#status", 24.2);
+mostra("#nota-saida", 24.6);
+const mkNotas = marcaEm("bl-notas");
+mostra(mkNotas, 25.4);
+esconde(mkNotas, 28.0);
+const mkM3 = marcaEm("m3");
+mostra(mkM3, 28.1);
+esconde(mkM3, 30.2);
+
+/* passo 5: várias de uma vez, pela tela Contas médicas */
+esconde("#tela-guia", 31.0);
+mostra("#tela-contas", 31.1);
+tl.set("#aba-fila", { attr: { class: "on" } }, 31.0);
+tl.set("#aba-concl", { attr: { class: "" } }, 31.0);
+oculta("#lista-concl", 31.0);
+exibe("#lista-fila", 31.0);
+tl.set("#arquivo", { x: 0, y: 0 }, 31.4);
+surge("#arquivo", 31.6, 10);
+tl.to("#arquivo", { x: -330, y: -255, scale: 0.7, duration: 1.2, ease: "power2.inOut" }, 32.5);
+const mkSoltar = marcaEm("soltar");
+mostra(mkSoltar, 32.8);
+esconde("#arquivo", 33.8);
+esconde(mkSoltar, 34.2);
+exibe("#quadro", 34.3);
+mostra("#quadro", 34.4);
+const mkQuadro = marcaEm("quadro");
+mostra(mkQuadro, 35.0);
+esconde(mkQuadro, 38.6);
+
+/* 3 · Fecho */
+surge("#fc-titulo", 40.30, 18);
+surge("#fc-carimbo", 40.80, 14);
+surge("#fc-org", 41.20, 12);
+
+window.__timelines.main = tl;
+</script>
+</body>
+</html>
