@@ -1,6 +1,6 @@
 # ROTAS.md
 <!-- gerado automaticamente por /snapshot — não editar -->
-<!-- last_update: 2026-10-13T03:30+0000 -->
+<!-- last_update: 2026-10-13T04:24+0000 -->
 
 Endpoints HTTP expostos pelo backend FastAPI do Hospital Reuniões.
 
@@ -109,6 +109,14 @@ Endpoints HTTP expostos pelo backend FastAPI do Hospital Reuniões.
 | GET | `/contas-medicas/habilitacao/pessoas` | Sem busca, quem tem perfil no módulo; com busca, as pessoas pelo nome. | ✅ |
 | PUT | `/contas-medicas/habilitacao/pessoas/{participante_id}` | Dá, troca ou tira o perfil de Contas médicas de uma pessoa. | ✅ |
 
+## contas-medicas (`app/routers/contas_medicas_memoria.py`)
+
+| Método | Rota | O que faz | Auth |
+|--------|------|-----------|------|
+| GET | `/contas-medicas/operadoras/{sigla}` | A memória da operadora para a tela: cabeçalho, regras, tabelas e histórico de versões. | ✅ |
+| PUT | `/contas-medicas/operadoras/{sigla}/regras/{codigo}` | Edita a regra vigente: versão nova da memória, com o texto anterior guardado. | ✅ |
+| POST | `/contas-medicas/operadoras/{sigla}/regras/{codigo}/decisao` | Decide a regra pendente: vira vigente, com quem validou e a data, numa versão nova. | ✅ |
+
 ## contas-medicas (`app/routers/contas_medicas_operadoras.py`)
 
 | Método | Rota | O que faz | Auth |
@@ -116,12 +124,18 @@ Endpoints HTTP expostos pelo backend FastAPI do Hospital Reuniões.
 | POST | `/contas-medicas/dicionario` | Carrega o dicionário de itens do hospital: termo atualizado ou novo, um por sinônimo. | ✅ |
 | GET | `/contas-medicas/operadoras` | As operadoras com a situação, a versão da memória, as regras e as tabelas carregadas. | ✅ |
 | POST | `/contas-medicas/operadoras/memoria` | Importa o arquivo de memória: versão nova, vigente, com as regras dela. | ✅ |
-| GET | `/contas-medicas/operadoras/{sigla}/memoria` | A memória vigente como foi enviada, cabeçalho inteiro, para baixar. | ✅ |
+| GET | `/contas-medicas/operadoras/{sigla}/memoria` | A memória vigente no formato do arquivo, gerada do banco com o cabeçalho inteiro, para baixar. | ✅ |
 | POST | `/contas-medicas/operadoras/{sigla}/tabelas` | Carrega o CSV como uma versão nova da tabela da categoria, ao lado das anteriores. | ✅ |
 | GET | `/contas-medicas/planos` | Os nomes de plano que o MV imprime, cada um com a operadora e a coluna de preço. | ✅ |
 | POST | `/contas-medicas/planos` | Cadastra um nome de plano do MV. Sem cadastro, a conta desse plano é recusada no envio. | ✅ |
 | GET | `/contas-medicas/setores` | Os setores como o MV imprime, cada um com a acomodação. | ✅ |
 | POST | `/contas-medicas/setores` | Cadastra um setor do MV com a acomodação, que decide a diária e o teto por dia. | ✅ |
+
+## contas-medicas (`app/routers/contas_medicas_painel.py`)
+
+| Método | Rota | O que faz | Auth |
+|--------|------|-----------|------|
+| GET | `/contas-medicas/painel` | Os agregados da semana escolhida (qualquer dia dela), da operadora e do | ✅ |
 
 ## admin (`app/routers/admin/dados_atendimento.py`)
 
@@ -464,4 +478,4 @@ Endpoints HTTP expostos pelo backend FastAPI do Hospital Reuniões.
 
 ---
 
-**Totais:** 263 endpoints em 39 routers · 93% exigem auth.
+**Totais:** 267 endpoints em 41 routers · 94% exigem auth.

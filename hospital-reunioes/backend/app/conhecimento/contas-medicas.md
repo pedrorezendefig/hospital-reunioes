@@ -16,11 +16,17 @@ A primeira etapa inteira: a fundação do módulo, a carga das operadoras, o env
 - os perfis e as permissões de cada um, já gravados no banco;
 - o lugar seguro onde os PDFs ficam guardados por sete dias;
 - a tela Operadoras, aberta a partir da tela de contas para quem tem a permissão de regra contratual e tabelas (gestão de contas médicas e as duas diretorias);
-- a tela de Habilitação, aberta a partir da tela de contas para quem tem a permissão de habilitar pessoas (as duas diretorias), descrita em "Quem vê".
+- a tela Memória da operadora, aberta pela operadora na tela Operadoras, descrita abaixo;
+- a tela de Habilitação, aberta a partir da tela de contas para quem tem a permissão de habilitar pessoas (as duas diretorias), descrita em "Quem vê";
+- o Painel, aberto a partir da tela de contas, descrito em "O Painel".
 
 Na tela Operadoras, a gestão envia o arquivo de memória de cada convênio, o mesmo que o diretor monta, e a memória passa a valer sem programador no meio. A tela mostra a versão, quantas regras vigentes e pendentes entraram e os parâmetros lidos do cabeçalho; os números têm de bater com o arquivo. Mandar uma versão nova aposenta a anterior. Parâmetro do cabeçalho que o sistema ainda não usa fica guardado, e a memória em vigor pode ser baixada de volta inteira. Arquivo com um número no formato de CPF é recusado, porque memória não pode ter dado de paciente. Na mesma tela a gestão cadastra os nomes de plano como o MV imprime, cada um com a operadora e a coluna de preço, e os setores do MV com a acomodação de cada um.
 
 Também na tela Operadoras entram as tabelas de preço de cada convênio. A gestão escolhe a operadora e a categoria (materiais, medicamentos, diárias e taxas ou pacotes), informa o início da vigência e, se houver, o fim, e envia a tabela de preço no arquivo de planilha separado por ponto e vírgula que o diretor entrega. O sistema reconhece sozinho o tipo da tabela pelas colunas da primeira linha e diz quantos itens entraram; arquivo com colunas que ele não conhece é recusado, e a mensagem lista as colunas esperadas. Uma versão nova não apaga a anterior: as duas ficam lado a lado, e a conta de um atendimento antigo usa a tabela que valia na data do atendimento. Para cada operadora, a tela mostra cada categoria com a tabela, a versão, a vigência e a situação (carregada ou não carregada). Honorário aparece sempre como não carregado, porque a tabela de honorários ainda não chegou; categorias que só a memória de uma operadora traz, como SADT e porte anestésico, aparecem do mesmo jeito. Preço que a memória da operadora dá como validado vale mais que a tabela.
+
+Cada operadora da tela Operadoras abre a sua **Memória da operadora**. No topo ficam a versão em vigor, a data dela, o contrato e o último aditivo, a situação e quantas regras estão pendentes. As regras vêm em abas (Todas, Diárias, Pacotes, Taxas e aluguéis, Insumos por tempo, Medicamentos, Honorários e Pendentes), cada uma com a origem, quem validou e a data. Quem tem a permissão edita a regra pela tela, no botão Editar, e decide a regra pendente no botão Decidir, que a torna vigente com o nome de quem decidiu e a data. Toda mudança gera uma versão nova da memória: a anterior deixa de valer, mas fica no histórico de versões, com o que mudou, quem mudou, quando e o texto anterior, e a conta analisada antes continua ligada à versão com que foi analisada. Regra operacional pede a permissão de incluir regra operacional; regra de preço, diária, pacote ou tabela pede a de regra contratual e tabelas. Quando a regra veio do modelo do hospital, a edição oferece "aplicar a todas as operadoras que têm esta regra", e cada operadora com a mesma regra ganha a sua versão nova. O botão Exportar baixa a memória em vigor no formato do arquivo do diretor, gerada a partir do que está no sistema; o arquivo pode ser enviado de volta sem perder regra nem parâmetro do cabeçalho.
+
+A tela Operadoras abre com o mapa: uma linha por operadora, com a situação, a versão da memória e, em cada categoria, a tabela e a versão em uso. Logo abaixo fica a biblioteca de tabelas, com todas as versões de cada categoria e a marca da que está em uso hoje. O botão "Nova versão" de uma categoria abre o envio de tabela já com a operadora e a categoria escolhidas; a versão anterior fica guardada, e a nova passa a valer a partir do início da vigência dela.
 
 Na mesma tela entra o dicionário de itens do hospital: o nome do produto na prescrição e na ficha anestésica, com os sinônimos, ligado ao código da conta (por exemplo, rocurônio e Esmeron caem no mesmo código). Termo que já existe é atualizado. Quando o nome não está no dicionário, o sistema tenta casar pela marca e pela concentração; só pela marca, o casamento sai com confiança média.
 
@@ -69,6 +75,8 @@ O tempo de cada etapa da análise fica guardado, para medir a meta de uma conta 
 
 A segunda etapa trouxe a inteligência artificial para a análise. Ela tem duas tarefas. A primeira lê o texto livre do prontuário (evoluções, anotações, prescrições, descrição cirúrgica) e lista o que aconteceu com o paciente, dia a dia, com a página e o trecho que provam cada fato. A segunda compara esses fatos com a conta e com a memória da operadora e propõe as linhas do Guia (incluir, ajustar quantidade, retirar ou validar), cada uma com a regra da memória que a sustenta. Preço, contagem de diárias e as contas da nota continuam com o código: a IA não devolve valor em reais.
 
+A leitura do prontuário pela IA acontece uma vez por atendimento e serve a todas as parciais e ao reenvio. Ela recebe só o texto que o código não leu sozinho, junto com o que ele já leu (prescrições, balanço, glicemias e as linhas que as conferências já puseram no Guia), para não refazer. Prontuário grande demais para uma leitura só é lido em partes, por períodos de dias, e o fato repetido entre duas partes conta uma vez. O trecho que a IA cita é conferido na página: quando não está lá nem na página vizinha, o fato fica marcado para conferir, com confiança baixa. Internação, alta e setor de cada dia valem como o código leu; quando a IA leu diferente, a diferença aparece no parecer parcial do Guia, junto com os documentos esperados que faltam e as observações da IA (uma evolução ilegível, por exemplo).
+
 O texto do prontuário vai à IA sem o nome da paciente, e o provedor não guarda nada do que recebe nem usa o texto para treinar modelo. A resposta tem um formato combinado; fora dele, é recusada e pedida de novo, até três vezes, com uma espera maior a cada vez. Depois disso a conta fica em Erro com "Tente de novo em alguns minutos" e o botão "Enviar de novo".
 
 O custo de cada chamada fica gravado: quantos tokens entraram e saíram, quantos vieram do cache e quanto custou, em dólar, e cada conta guarda a soma das chamadas dela, inclusive as de uma nova análise. O modelo de inteligência artificial de cada tarefa é trocado numa configuração do servidor, sem programador.
@@ -105,6 +113,28 @@ O app lê a conta nova e confere cada linha marcada como Feito. A linha Incluir 
 
 Ao lado da nota de entrada aparece a **nota de saída**: a mesma conta da nota, feita sobre a conta corrigida e só com as linhas Feito que continuam ainda na conta. Na aba Concluídas da fila, a conta reenviada mostra as duas notas. O prontuário não é lido de novo e a inteligência artificial não é chamada: o reenvio não muda o Guia nem a nota de entrada.
 
+## O Painel
+
+O Painel mostra à diretoria onde a perda da conta nasce. Ele abre a partir da tela de contas, pelo botão Painel. Os números são das contas concluídas, por semana de segunda a domingo, contada pelo dia em que a faturista concluiu a conta. A conta concluída e enviada de novo sai do Painel até ser concluída outra vez. No topo ficam três filtros: a semana, a operadora e o tipo de conta (Parcial, quando o atendimento tem mais de uma conta, ou Única).
+
+Quatro cartões no topo:
+
+- **Nota média de entrada** da semana, com a da semana anterior ao lado. Sobe quando a ponta registra e dispensa melhor.
+- **Contas concluídas** na semana.
+- **R$ apontado**, com quanto disso já foi incluído no MV (as linhas Feito).
+- **Não procede**: quantas linhas a faturista marcou como Não procede, de quantas apontadas, sem as de validação. Mede o acerto da IA e da memória.
+
+E seis blocos:
+
+- a nota média por semana, nas oito semanas até a escolhida;
+- o R$ apontado por causa-raiz (dispensação, regra automática, cadastro e preço, registro assistencial, lançamento manual), com o percentual de cada uma: diz quem corrige;
+- os dez itens que mais faltam: os códigos com mais contas com linha Incluir, com o número de contas e o R$. É a fila de parametrização para a consultoria do MV;
+- a produção de cada faturista: contas, contas com pendência, R$ incluído, taxa de Não procede e, em segundo plano, o R$ retirado;
+- o R$ incluído por nível de evidência (Registrado, Prescrito, Prescrito SN, Por regra), por semana, em barras: mostra quanto do valor incluído depende só de prescrição;
+- o custo de inteligência artificial da semana e o custo médio por conta, em dólar.
+
+Quem tem o Painel completo (coordenadora de faturamento, gestão de contas médicas e as duas diretorias) vê tudo. A faturista vê só a própria linha de produção, e mais nenhum bloco.
+
 ## Quem vê
 
 O módulo tem perfis próprios, separados dos de Reuniões, POPs e Ouvidoria. São seis: faturista, coordenadora de faturamento, gestão de contas médicas, diretoria médica, diretoria executiva e credenciamento. Quem não tem nenhum deles não vê o item no menu e não consegue abrir a tela. O Super admin do aplicativo entra, como nos outros módulos.
@@ -129,9 +159,11 @@ O módulo não guarda nome completo, CPF, carteira nem data de nascimento de pac
 - Pedido para dar ou trocar o perfil de alguém no módulo (Informação: quem faz é a diretoria, na tela de Habilitação).
 - Uma permissão desligada na Habilitação que continua valendo, ou ligada que não abre a tela (Defeito).
 - Memória recusada na tela Operadoras, ou contagem de regras que não bate com o arquivo do diretor (Defeito, ou Informação se a recusa explica o motivo, como o CPF).
+- Uma regra editada ou decidida que não gera versão nova, o botão Editar ou Decidir que some para quem tem a permissão, ou a memória exportada que não volta igual quando enviada de novo (Defeito).
 - Tabela de preço recusada, contagem de itens que não bate com o arquivo, ou preço "Não conferido" onde a tabela tem valor (Defeito, ou Informação se a recusa lista as colunas esperadas ou se o motivo é um dos casos de "Não conferido").
 - Um botão do Guia que não marca, uma conta que não conclui ou uma nota que não bate com as linhas (Defeito).
 - Uma conta que não sai de Na fila ou de "Pronta em instantes", um Erro com motivo que não bate com o PDF, ou o aviso de contas prontas que não chega ao sino (Defeito, ou Informação se o motivo do Erro explica, como o PDF sem texto).
 - Uma conta que volta para Erro com "Tente de novo em alguns minutos" mesmo depois de enviada de novo, ou o botão "Reanalisar" que não aparece para a gestão (Defeito).
+- Um número do Painel que não bate com as contas da semana, ou a faturista que vê a produção de outra pessoa (Defeito, ou Informação se a dúvida é sobre a semana de segunda a domingo ou sobre o que entra em cada número).
 - Uma linha marcada "ainda na conta" que já foi corrigida no MV, ou uma nota de saída que não bate com as linhas (Defeito, ou Informação se a conta reenviada não era a corrigida).
 - Dúvida sobre quando chega o envio de contas ou alguma das próximas entregas (Informação).

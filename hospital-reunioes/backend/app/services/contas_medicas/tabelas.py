@@ -325,12 +325,16 @@ def importar_tabela(
     }
 
 
-def tabelas_por_categoria(parametros: dict[str, Any], carregadas: list[dict[str, Any]]) -> list[dict[str, Any]]:
+def tabelas_por_categoria(
+    parametros: dict[str, Any], carregadas: list[dict[str, Any]], hoje: date | None = None
+) -> list[dict[str, Any]]:
     """Cada categoria com o tipo, a situação e as versões carregadas, da mais nova à mais antiga.
 
     As categorias são as da migration e as que a memória traz no bloco
     `tabelas` (SADT, porte anestésico...), que aparecem "não carregadas".
     `carregadas` são as linhas de `cm_tabela_preco` da operadora, com a categoria.
+    `em_uso` marca a versão que a busca de preço escolhe para hoje: a "Nova
+    versão" passa a valer a partir da vigência dela, e a anterior fica guardada.
     """
     categorias = list(CATEGORIAS)
     for chave in parametros.get("tabelas") or {}:
@@ -345,6 +349,7 @@ def tabelas_por_categoria(parametros: dict[str, Any], carregadas: list[dict[str,
             reverse=True,
         )
         bloco = _bloco_da_categoria(parametros, categoria)
+        em_uso = _vigente_na_data(versoes, hoje or date.today())
         lista.append(
             {
                 "categoria": categoria,
@@ -356,12 +361,29 @@ def tabelas_por_categoria(parametros: dict[str, Any], carregadas: list[dict[str,
                         "versao": t.get("versao"),
                         "vigencia_inicio": t.get("vigencia_inicio"),
                         "vigencia_fim": t.get("vigencia_fim"),
+                        "em_uso": t is em_uso,
                     }
                     for t in versoes
                 ],
             }
         )
     return lista
+
+
+def _vigente_na_data(tabelas: list[dict[str, Any]], data: date) -> dict[str, Any] | None:
+    """A versão que vale na data: começou até ela e não acabou antes. É a regra
+    da busca de preço e a que diz, na tela, qual versão está em uso hoje."""
+    vigentes = [
+        t
+        for t in tabelas
+        if t.get("vigencia_inicio")
+        and date.fromisoformat(t["vigencia_inicio"]) <= data
+        and (not t.get("vigencia_fim") or data <= date.fromisoformat(t["vigencia_fim"]))
+    ]
+    if not vigentes:
+        return None
+    # Vigências que se sobrepõem: vale a que começou por último.
+    return max(vigentes, key=lambda t: (t["vigencia_inicio"], t.get("criado_em") or ""))
 
 
 def _versao_na_data(supabase, operadora_id: str, categoria: str, data: date) -> dict | None:
@@ -384,17 +406,9 @@ def _versao_na_data(supabase, operadora_id: str, categoria: str, data: date) -> 
         .data
         or []
     )
-    vigentes = [
-        t
-        for t in tabelas
-        if t.get("vigencia_inicio")
-        and date.fromisoformat(t["vigencia_inicio"]) <= data
-        and (not t.get("vigencia_fim") or data <= date.fromisoformat(t["vigencia_fim"]))
-    ]
-    if not vigentes:
+    escolhida = _vigente_na_data(tabelas, data)
+    if escolhida is None:
         return None
-    # Vigências que se sobrepõem: vale a que começou por último.
-    escolhida = max(vigentes, key=lambda t: (t["vigencia_inicio"], t.get("criado_em") or ""))
     regra = next(ligacao["regra_uso_json"] for ligacao in ligacoes if ligacao["tabela_id"] == escolhida["id"])
     return {"id": escolhida["id"], "regra": regra or {}}
 

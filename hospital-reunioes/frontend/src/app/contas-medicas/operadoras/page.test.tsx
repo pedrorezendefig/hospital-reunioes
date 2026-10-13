@@ -3,10 +3,10 @@
  */
 
 /**
- * A tela Operadoras de Contas médicas (issues #1119 e #1120, PRD #1113).
+ * A tela Operadoras de Contas médicas (issues #1119, #1120 e #1140).
  *
- * A gestão vê cada operadora com a situação e as tabelas de preço por
- * categoria, e abre os formulários: o envio do arquivo de memória, da tabela
+ * A gestão vê o mapa (uma linha por operadora, com a tabela em uso de cada
+ * categoria) e a biblioteca de tabelas com "Nova versão", e abre os formulários: o envio do arquivo de memória, da tabela
  * de preço, do dicionário de itens, o cadastro dos planos do MV e o dos
  * setores. O backend é um dublê que responde por rota; o que se confere aqui é
  * a fiação da tela: o que ela mostra do que veio e o que ela manda quando a
@@ -44,6 +44,7 @@ const OPERADORAS = {
               versao: "Anexo I",
               vigencia_inicio: "2026-05-01",
               vigencia_fim: null,
+              em_uso: true,
             },
           ],
         },
@@ -57,12 +58,14 @@ const OPERADORAS = {
               versao: "LPM 01/10/2026",
               vigencia_inicio: "2026-10-01",
               vigencia_fim: null,
+              em_uso: true,
             },
             {
               tabela: "ALFA-LPM-SETEMBRO.csv",
               versao: "LPM 01/09/2026",
               vigencia_inicio: "2026-09-01",
               vigencia_fim: "2026-09-30",
+              em_uso: false,
             },
           ],
         },
@@ -193,23 +196,78 @@ describe("a lista das operadoras", () => {
     expect(gama.textContent).not.toContain("Memória versão");
   });
 
-  it("mostra, por operadora, cada categoria com a tabela, a versão, a vigência e a situação", async () => {
+  it("o mapa tem uma linha por operadora, com o link da memória e a tabela em uso de cada categoria", async () => {
     render(<OperadorasPage />);
 
-    const tabelas = await screen.findByRole("table", { name: "Tabelas de preço de ALFA" });
+    const mapa = await screen.findByRole("table", { name: "Mapa das operadoras" });
+    const cabecalho = within(mapa)
+      .getAllByRole("columnheader")
+      .map((th) => th.textContent);
+    expect(cabecalho.slice(0, 8)).toEqual([
+      "Operadora",
+      "Situação",
+      "Memória",
+      "Materiais",
+      "Medicamentos",
+      "Diárias e taxas",
+      "Pacotes",
+      "Honorários",
+    ]);
+    const alfa = within(mapa).getByTestId("operadora-ALFA");
+    const celulas = within(alfa)
+      .getAllByRole("cell")
+      .map((td) => td.textContent);
+    expect(celulas[3]).toBe("ALFA-MATERIAIS.csvAnexo I");
+    // Das duas LPM, o mapa mostra a que está em uso.
+    expect(celulas[4]).toBe("ALFA-LPM-OUTUBRO.csvLPM 01/10/2026");
+    expect(celulas[5]).toBe("Não carregada");
+    expect(celulas[7]).toBe("Não carregada");
+    expect(within(alfa).getByRole("link", { name: /ALFA/ }).getAttribute("href")).toBe("/contas-medicas/operadoras/ALFA");
+  });
+
+  it("a biblioteca mostra todas as versões de cada categoria, a em uso e as guardadas", async () => {
+    render(<OperadorasPage />);
+
+    const biblioteca = await screen.findByRole("region", { name: "Biblioteca de tabelas" });
+    const tabelas = within(biblioteca).getByRole("table", { name: "Tabelas de preço de ALFA" });
     const linhas = within(tabelas)
       .getAllByRole("row")
       .slice(1)
       .map((tr) => within(tr).getAllByRole("cell").map((td) => td.textContent));
     expect(linhas).toEqual([
-      ["Materiais", "ALFA-MATERIAIS.csv", "Anexo I", "desde 01/05/2026", "Carregada"],
-      ["Medicamentos", "ALFA-LPM-OUTUBRO.csv", "LPM 01/10/2026", "desde 01/10/2026", "Carregada"],
-      ["", "ALFA-LPM-SETEMBRO.csv", "LPM 01/09/2026", "01/09/2026 a 30/09/2026", "Carregada"],
-      ["Honorários", "", "", "", "Não carregada"],
-      ["Porte anestésico", "CBHPM", "", "", "Não carregada"],
+      ["Materiais", "ALFA-MATERIAIS.csv", "Anexo I", "desde 01/05/2026", "Em uso", "Nova versão"],
+      ["Medicamentos", "ALFA-LPM-OUTUBRO.csv", "LPM 01/10/2026", "desde 01/10/2026", "Em uso", "Nova versão"],
+      ["", "ALFA-LPM-SETEMBRO.csv", "LPM 01/09/2026", "01/09/2026 a 30/09/2026", "Guardada", ""],
+      // Honorário espera a CBHPM e o porte anestésico não tem envio: sem "Nova versão".
+      ["Honorários", "", "", "", "Não carregada", ""],
+      ["Porte anestésico", "CBHPM", "", "", "Não carregada", ""],
     ]);
-    const gama = screen.getByRole("table", { name: "Tabelas de preço de GAMA" });
+    const gama = within(biblioteca).getByRole("table", { name: "Tabelas de preço de GAMA" });
     expect(within(gama).getAllByRole("row")).toHaveLength(2);
+  });
+
+  it("Nova versão abre o envio de tabela com a operadora e a categoria escolhidas", async () => {
+    render(<OperadorasPage />);
+    const tabelas = await screen.findByRole("table", { name: "Tabelas de preço de ALFA" });
+    const medicamentos = within(tabelas)
+      .getAllByRole("row")
+      .find((tr) => tr.textContent?.startsWith("Medicamentos"))!;
+
+    fireEvent.click(within(medicamentos).getByRole("button", { name: "Nova versão" }));
+
+    const secao = screen.getByRole("region", { name: "Enviar tabela de preço" });
+    expect(within(secao).getByRole("combobox", { name: "Operadora da tabela" }).textContent).toContain("ALFA");
+    expect(within(secao).getByRole("combobox", { name: "Categoria" }).textContent).toContain("Medicamentos");
+    const arquivo = new File(["codigo;codigo_tiss\n"], "ALFA-LPM-NOVEMBRO.csv", { type: "text/csv" });
+    fireEvent.change(within(secao).getByLabelText("Início da vigência"), { target: { value: "2026-11-01" } });
+    fireEvent.change(within(secao).getByLabelText("Arquivo da tabela"), { target: { files: [arquivo] } });
+    fireEvent.click(within(secao).getByRole("button", { name: "Enviar tabela" }));
+
+    await within(secao).findByRole("status");
+    const envio = chamadas.find((c) => c.metodo === "POST" && c.url === "/api/contas-medicas/operadoras/ALFA/tabelas");
+    const corpo = envio!.corpo as FormData;
+    expect(corpo.get("categoria")).toBe("MEDICAMENTO");
+    expect(corpo.get("vigencia_inicio")).toBe("2026-11-01");
   });
 
   it("diz quando a pessoa não tem a permissão de regra contratual e tabelas", async () => {

@@ -25,7 +25,9 @@ from app.routers import (
     contas_medicas_envio,
     contas_medicas_guia,
     contas_medicas_habilitacao,
+    contas_medicas_memoria,
     contas_medicas_operadoras,
+    contas_medicas_painel,
     health,
     notificacoes,
     ouvidoria,
@@ -139,6 +141,8 @@ app.include_router(contas_medicas_operadoras.router, prefix=settings.api_prefix)
 app.include_router(contas_medicas_guia.router, prefix=settings.api_prefix)
 app.include_router(contas_medicas_envio.router, prefix=settings.api_prefix)
 app.include_router(contas_medicas_habilitacao.router, prefix=settings.api_prefix)
+app.include_router(contas_medicas_memoria.router, prefix=settings.api_prefix)
+app.include_router(contas_medicas_painel.router, prefix=settings.api_prefix)
 app.include_router(admin.router, prefix=settings.api_prefix)
 app.include_router(admin_super_admins.router, prefix=settings.api_prefix)
 app.include_router(admin_usuarios.router, prefix=settings.api_prefix)
