@@ -190,9 +190,8 @@ class _Consulta:
             gravadas = []
             for nova in novas:
                 self._banco.relogio += 1
-                gravadas.append(
-                    {"id": str(uuid.uuid4()), "criado_em": f"2026-10-12T10:00:00.{self._banco.relogio:06d}+00:00", **nova}
-                )
+                criado_em = f"2026-10-12T10:00:00.{self._banco.relogio:06d}+00:00"
+                gravadas.append({"id": str(uuid.uuid4()), "criado_em": criado_em, **nova})
             tabela.extend(gravadas)
             return SimpleNamespace(data=[dict(g) for g in gravadas])
         casam = [linha for linha in tabela if all(f(linha) for f in self._filtros)]
@@ -450,9 +449,7 @@ class TestReenvioPeloGuia:
     def test_faturista_que_nao_e_dona_nao_reenvia(self, chamadas):
         banco = _cenario()
 
-        resposta = _cliente("outra_faturista", banco).post(
-            ROTA_REENVIO, files={"arquivo": _pdf(_conta_corrigida())}
-        )
+        resposta = _cliente("outra_faturista", banco).post(ROTA_REENVIO, files={"arquivo": _pdf(_conta_corrigida())})
 
         assert resposta.status_code == 403
         assert banco.conta()["nota_saida"] is None
@@ -467,9 +464,7 @@ class TestReenvioPelaTelaContas:
     def test_conta_de_atendimento_concluido_entra_como_reenvio_e_o_ultimo_envio_diz(self, chamadas):
         banco = _cenario()
 
-        resposta = _cliente("faturista", banco).post(
-            ROTA_ENVIO, files=[("arquivos", _pdf(_conta_corrigida()))]
-        )
+        resposta = _cliente("faturista", banco).post(ROTA_ENVIO, files=[("arquivos", _pdf(_conta_corrigida()))])
 
         assert resposta.status_code == 200, resposta.text
         corpo = resposta.json()

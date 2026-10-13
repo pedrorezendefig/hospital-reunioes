@@ -34,7 +34,7 @@ Cada envio aceita até 10 atendimentos e 30 arquivos, e cada arquivo pode ter at
 
 Assim que o envio termina, aparece o **Último envio**, uma linha por atendimento, dizendo o que chegou: "31302, conta e prontuário", "31310, 2 parciais e prontuário", "31318, falta o prontuário" ou "31320, falta a conta". Logo abaixo ficam as recusas, cada uma com o arquivo e o motivo.
 
-Se o prontuário do atendimento já foi enviado nos últimos sete dias, a conta nova é pareada com ele e não é preciso mandar o prontuário de novo. Quando o período da conta passa da última data desse prontuário, o Último envio avisa para mandar o prontuário atualizado. Enviar de novo a mesma conta do mesmo atendimento não cria outra: a conta volta para a fila e é analisada outra vez.
+Se o prontuário do atendimento já foi enviado nos últimos sete dias, a conta nova é pareada com ele e não é preciso mandar o prontuário de novo. Quando o período da conta passa da última data desse prontuário, o Último envio avisa para mandar o prontuário atualizado. Enviar de novo a mesma conta do mesmo atendimento não cria outra: a conta volta para a fila e é analisada outra vez. A exceção é a conta já concluída: enviar de novo a conta dela é o reenvio da conta corrigida, descrito abaixo, e o Último envio diz "31302, reenvio da conta 48001: 2 corrigidas no MV, 1 ainda na conta, nota de saída 86".
 
 A fila mostra as contas em ordem de envio e, dentro do envio, na ordem dos arquivos. Nunca é reordenada por valor. Cada conta aparece pelo número do atendimento, com o número da conta ao lado, e com a situação:
 
@@ -95,6 +95,16 @@ No rodapé ficam a observação opcional para a gestão e o botão "Concluir e a
 
 Abrir o Guia pela primeira vez muda a conta de A fazer para Em correção. A faturista só abre as próprias contas; quem tem o Painel completo abre a de qualquer uma.
 
+## O reenvio da conta corrigida
+
+Depois de corrigir a conta no MV, a faturista pode reenviar só o PDF da conta para ver se a correção pegou. O reenvio é opcional: a conta concluída sem reenvio vale igual para a produção dela.
+
+Há dois caminhos. No Guia de uma conta concluída, o botão "Reenviar conta corrigida", no rodapé, pede o PDF da conta. Na tela de contas, ela arrasta a conta de um atendimento já concluído, uma ou várias de uma vez, e o app entende sozinho que é reenvio: a conta não volta para a fila e continua concluída. O PDF tem de ser a conta do mesmo atendimento e com o mesmo número; outro arquivo é recusado com o motivo.
+
+O app lê a conta nova e confere cada linha marcada como Feito. A linha Incluir cujo item entrou na conta, a Retirar cujo item sumiu, a Ajustar quantidade com a quantidade certa e a Corrigir preço com o preço da tabela ganham a etiqueta "corrigida no MV". As outras ganham "ainda na conta": a faturista marcou Feito, mas o item continua como antes.
+
+Ao lado da nota de entrada aparece a **nota de saída**: a mesma conta da nota, feita sobre a conta corrigida e só com as linhas Feito que continuam ainda na conta. Na aba Concluídas da fila, a conta reenviada mostra as duas notas. O prontuário não é lido de novo e a inteligência artificial não é chamada: o reenvio não muda o Guia nem a nota de entrada.
+
 ## Quem vê
 
 O módulo tem perfis próprios, separados dos de Reuniões, POPs e Ouvidoria. São seis: faturista, coordenadora de faturamento, gestão de contas médicas, diretoria médica, diretoria executiva e credenciamento. Quem não tem nenhum deles não vê o item no menu e não consegue abrir a tela. O Super admin do aplicativo entra, como nos outros módulos.
@@ -123,4 +133,5 @@ O módulo não guarda nome completo, CPF, carteira nem data de nascimento de pac
 - Um botão do Guia que não marca, uma conta que não conclui ou uma nota que não bate com as linhas (Defeito).
 - Uma conta que não sai de Na fila ou de "Pronta em instantes", um Erro com motivo que não bate com o PDF, ou o aviso de contas prontas que não chega ao sino (Defeito, ou Informação se o motivo do Erro explica, como o PDF sem texto).
 - Uma conta que volta para Erro com "Tente de novo em alguns minutos" mesmo depois de enviada de novo, ou o botão "Reanalisar" que não aparece para a gestão (Defeito).
+- Uma linha marcada "ainda na conta" que já foi corrigida no MV, ou uma nota de saída que não bate com as linhas (Defeito, ou Informação se a conta reenviada não era a corrigida).
 - Dúvida sobre quando chega o envio de contas ou alguma das próximas entregas (Informação).
