@@ -486,6 +486,52 @@ class TestReenvioPelaTelaContas:
         assert [(c["nota_entrada"], c["nota_saida"]) for c in concluidas] == [(79, 86)]
 
 
+def _prontuario_do_atendimento() -> bytes:
+    capa = "HOSPITAL FICTICIO DE TESTE\nDECLARAÇÃO DE RECEBIMENTO DE PRONTUÁRIO\nGrupo: EVOLUÇÃO MÉDICA\n"
+    pagina = "EVOLUÇÃO MÉDICA\nATENDIMENTO: 31302\nData/Hora do Documento: 05/10/2026 09:00\n"
+    return f"{capa}\f{pagina}".encode()
+
+
+def _parcial_a_espera_do_prontuario() -> dict:
+    return _conta(
+        id="33333333-3333-3333-3333-333333333333",
+        arquivo_id="arq-parcial-2",
+        numero_conta="48002",
+        situacao="AGUARDANDO_ARQUIVO",
+        nota_bruta=None,
+        nota_entrada=None,
+    )
+
+
+class TestEnvioSoComOProntuario:
+    """A parcial 1 está concluída, a parcial 2 espera o prontuário e a
+    faturista manda só o prontuário: nada ali é reenvio."""
+
+    def test_conta_concluida_sem_reenvio_nao_derruba_o_ultimo_envio(self, chamadas):
+        banco = _cenario()
+        banco.tabelas["cm_conta"].append(_parcial_a_espera_do_prontuario())
+
+        resposta = _cliente("faturista", banco).post(
+            ROTA_ENVIO, files=[("arquivos", _pdf(_prontuario_do_atendimento(), "prontuario.pdf"))]
+        )
+
+        assert resposta.status_code == 200, resposta.text
+        assert [linha["texto"] for linha in resposta.json()["ultimo_envio"]] == ["31302, 2 parciais e prontuário"]
+        situacoes = {c["numero_conta"]: c["situacao"] for c in banco.tabelas["cm_conta"]}
+        assert situacoes == {"48001": "CONCLUIDA_COM_PENDENCIA", "48002": "NA_FILA"}
+
+    def test_conta_reenviada_antes_nao_aparece_como_reenvio_deste_envio(self, chamadas):
+        banco = _cenario(_conta(reenviada_em="2026-10-11T10:00:00+00:00", nota_saida=86))
+        banco.tabelas["cm_conta"].append(_parcial_a_espera_do_prontuario())
+
+        resposta = _cliente("faturista", banco).post(
+            ROTA_ENVIO, files=[("arquivos", _pdf(_prontuario_do_atendimento(), "prontuario.pdf"))]
+        )
+
+        assert resposta.status_code == 200, resposta.text
+        assert [linha["texto"] for linha in resposta.json()["ultimo_envio"]] == ["31302, 2 parciais e prontuário"]
+
+
 # ═══════════════════════════════════════════════════════════════════════════
 # 3. As rotas no app de verdade, o kit e a tipografia
 # ═══════════════════════════════════════════════════════════════════════════

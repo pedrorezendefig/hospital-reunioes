@@ -431,7 +431,9 @@ def ultimo_envio(supabase, envio_id: str, agora: datetime) -> list[dict]:
                 or []
                 if c.get("arquivo_id")
             ]
-        reenviadas = [c for c in contas if c.get("situacao") in reenvio.CONCLUIDAS]
+        # Reenvio deste envio é a conta que aponta para um arquivo dele e foi
+        # reenviada: a concluída que só fecha o par com o Prontuário não é.
+        reenviadas = [c for c in contas if c.get("arquivo_id") in ids_de_conta and c.get("reenviada_em")]
         contas = [c for c in contas if c not in reenviadas]
         prontuario_no_envio = any(a["tipo"] == "PRONTUARIO" for a in do_atendimento)
         tem_prontuario = prontuario_no_envio or bool(_prontuarios_no_sistema(supabase, atendimento_id, agora))
