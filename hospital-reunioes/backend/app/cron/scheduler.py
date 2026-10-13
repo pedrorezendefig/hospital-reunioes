@@ -40,6 +40,9 @@ Jobs:
  11. processar_fila_contas_medicas: a cada 10 segundos, devolve à fila a conta presa
      em PROCESSANDO e entrega as contas NA_FILA ao executor de 2 vagas (issue #1124,
      ADR 0070, decisão 5). O claim é atômico: duas passadas não pegam a mesma conta.
+ 12. avisar_contratos_contas_medicas: 07:15 diário, avisa no sino o reajuste de cada
+     contrato de operadora na data do aviso (vencimento menos a antecedência), issue
+     #1144. Idempotente: `cm_aviso` guarda a data prevista e o envio.
 """
 
 import logging
@@ -337,6 +340,28 @@ def processar_fila_contas_medicas() -> None:
         logger.error(f"[Cron] Erro em processar_fila_contas_medicas: {type(e).__name__}")
 
 
+def _hoje_em_sao_paulo() -> date:
+    return datetime.now(tz=_TZ).date()
+
+
+def avisar_contratos_contas_medicas() -> None:
+    """Contratos de Contas médicas (issue #1144, PRD #1129).
+
+    Na data do aviso de cada contrato (vencimento menos a antecedência da
+    memória), um aviso no sino de quem tem "contratos e avisos". A lógica e a
+    guarda de aviso único (`cm_aviso`) vivem no serviço; aqui, só o relógio e
+    o log."""
+    from app.services.contas_medicas import contratos
+
+    try:
+        avisados = contratos.avisar_contratos(_supabase(), _hoje_em_sao_paulo())
+    except Exception as e:
+        logger.error(f"[Cron] Erro em avisar_contratos_contas_medicas: {type(e).__name__}")
+        return
+    if avisados:
+        logger.info(f"[Cron] Contratos de Contas médicas: {avisados} aviso(s) de reajuste no sino.")
+
+
 def _registrar_entrega(competencia: str, entrega, rotulo: str = "Relatório quinzenal") -> None:
     """Escreve no log o que aconteceu com uma tentativa de entrega.
 
@@ -515,6 +540,17 @@ def start_scheduler() -> None:
         coalesce=True,
         replace_existing=True,
     )
+    # 07:15, no começo do expediente: o aviso de reajuste chega ao sino de
+    # manhã. Disparo perdido num deploy sai no dia seguinte (o serviço alcança
+    # o dia perdido até o vencimento) e nunca duas vezes (`cm_aviso`).
+    scheduler.add_job(
+        avisar_contratos_contas_medicas,
+        "cron",
+        hour=7,
+        minute=15,
+        id="contratos_contas_medicas",
+        replace_existing=True,
+    )
     # Todo dia às 07h, no fuso do scheduler (America/Sao_Paulo). A quinzena
     # fecha nos dias 1 e 16, e é neles que o email sai; os outros dias existem
     # para a edição não se perder quando o container estiver fora do ar na hora
@@ -542,7 +578,7 @@ def start_scheduler() -> None:
         "lembrete_24h_reunioes (a cada 15min), reconciliar_clicksign (05:30), "
         "notificacoes_ouvidoria (a cada 10min), cobranca_prazos_ouvidoria (a cada 10min), "
         "escalonamento_ouvidoria (a cada 10min), retencao_ouvidoria (04:00), "
-        "retencao_contas_medicas (04:30), fila_contas_medicas (a cada 10s), "
+        "retencao_contas_medicas (04:30), fila_contas_medicas (a cada 10s), contratos_contas_medicas (07:15), "
         "relatorio_quinzenal_ouvidoria (07:00 diário, email nos dias 1 e 16), "
         "reconciliacao_tecnologia (de hora em hora)"
     )

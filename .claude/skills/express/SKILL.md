@@ -39,7 +39,7 @@ Não implemente nada nesta fase.
 "Siga suas recomendações", "faz a A", "vai" liberam a execução inteira. Não pergunte de novo.
 
 1. Implemente a ponte mínima. Nada especulativo. Toque só o que a ideia pede.
-2. **Verifique de verdade**, não por leitura. Se é tela, abra no navegador e clique. Se é comando, rode. Se é dado, olhe o arquivo gerado. Uma aba de navegador em segundo plano congela rolagem e animação; traga para a frente antes de julgar.
+2. **Verifique de verdade**, não por leitura. Se é tela, abra no navegador e clique: `playwright-cli` (`open <url>`, `snapshot` com refs, `click`, `screenshot`) é a ferramenta padrão para tela no localhost, mais barata que o MCP do Chrome e sem a trava de viewport do Chrome headless. Se é comando, rode. Se é dado, olhe o arquivo gerado. Uma aba de navegador em segundo plano congela rolagem e animação; traga para a frente antes de julgar.
 3. Se algo saiu diferente do esperado no teste, corrija e teste de novo antes de reportar.
 4. Se o projeto tem página de Ajuda ou doc de uso e a mudança cria um botão, link ou gesto novo, acrescente uma linha lá.
 5. Feche recursos que abriu (abas, servidores de teste).

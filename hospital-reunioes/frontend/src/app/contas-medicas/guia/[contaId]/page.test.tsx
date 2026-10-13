@@ -155,9 +155,13 @@ beforeEach(() => {
     "fetch",
     vi.fn(async (url: string, init?: RequestInit) => {
       const metodo = init?.method ?? "GET";
-      chamadas.push({ url, metodo, corpo: init?.body ? JSON.parse(String(init.body)) : undefined });
+      const corpoEnviado =
+        init?.body instanceof FormData ? init.body : init?.body ? JSON.parse(String(init.body)) : undefined;
+      chamadas.push({ url, metodo, corpo: corpoEnviado });
       const corpo = url.endsWith("/concluir")
         ? respostaDaConclusao
+        : url.endsWith("/reenvio")
+          ? { nota_saida: 86, corrigidas: 2, ainda_na_conta: 1, linhas: {} }
         : metodo === "GET"
           ? respostaDoGuia
           : { ok: true };
@@ -259,6 +263,41 @@ describe("as linhas por dia e setor", () => {
     }
     expect(validar.textContent).toContain("Você não precisa decidir: o item já foi para a validação");
     expect(validar.textContent).toContain("Em jogo: R$ 1.212,00");
+  });
+
+  it("a linha se necessário sem registro tem a etiqueta âmbar e o texto; as outras não (issue #1134)", async () => {
+    respostaDoGuia = guia();
+    respostaDoGuia.grupos[0].linhas.push(
+      linha({
+        id: "l-dipirona",
+        data_fim: null,
+        codigo: "91000002",
+        descricao: "DIPIRONA 1 G AMP",
+        quantidade_devida: 1,
+        valor_diferenca: 2,
+        nivel_evidencia: "PRESCRITO_SN",
+        motivo:
+          "Se necessário (DIPIRONA 1G AMP), sem registro de uso no MV: 1 por dia de prescrição, quantidade " +
+          "provisória. Confira a checagem em papel. Sem uso, marque NÃO PROCEDE.",
+      }),
+    );
+    await abrir();
+
+    const dipirona = aLinha("DIPIRONA 1 G AMP");
+    const etiqueta = within(dipirona).getByText("SE NECESSÁRIO · SEM REGISTRO NO MV");
+    expect(etiqueta.className).toContain("bg-[#FEF3C7]");
+    expect(dipirona.textContent).toContain("Confira a checagem em papel. Sem uso, marque NÃO PROCEDE.");
+    expect(within(aLinha("Luva de procedimento")).queryByText("SE NECESSÁRIO · SEM REGISTRO NO MV")).toBeNull();
+
+    fireEvent.click(within(dipirona).getByRole("button", { name: "Não procede" }));
+    expect((within(dipirona).getByLabelText("Sem evidência no prontuário") as HTMLInputElement).checked).toBe(true);
+    fireEvent.click(within(dipirona).getByRole("button", { name: "Confirmar Não procede" }));
+    await waitFor(() => expect(chamadas[1]?.corpo).toEqual({ estado: "NAO_PROCEDE", motivo: "SEM_EVIDENCIA" }));
+
+    fireEvent.click(within(aLinha("Luva de procedimento")).getByRole("button", { name: "Não procede" }));
+    expect(within(aLinha("Luva de procedimento")).getAllByRole("radio").some((r) => (r as HTMLInputElement).checked)).toBe(
+      false,
+    );
   });
 
   it("Ver evidência vem fechado e abre a página e o trecho com o nível", async () => {
@@ -434,5 +473,184 @@ describe("concluir", () => {
     expect(within(aLinha("Luva de procedimento")).queryByRole("button", { name: "Feito" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Concluir e abrir a próxima" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Marcar o dia como feito" })).toBeNull();
+  });
+});
+
+describe("o botão Reanalisar (issue #1130)", () => {
+  it("aparece quando o guia diz que pode e manda a conta para a análise de novo", async () => {
+    respostaDoGuia = guia({ pode_reanalisar: true });
+    await abrir();
+
+    fireEvent.click(screen.getByRole("button", { name: "Reanalisar" }));
+
+    await waitFor(() => expect(navegacao.push).toHaveBeenCalledWith("/contas-medicas"));
+    expect(chamadas[1]).toEqual({
+      url: `/api/contas-medicas/contas/${CONTA}/reanalisar`,
+      metodo: "POST",
+      corpo: undefined,
+    });
+  });
+
+  it("não aparece quando o guia diz que não pode", async () => {
+    respostaDoGuia = guia({ pode_reanalisar: false });
+    await abrir();
+
+    expect(screen.getByRole("button", { name: "Concluir e abrir a próxima" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Reanalisar" })).toBeNull();
+  });
+});
+
+describe("o reenvio da conta corrigida (issue #1136)", () => {
+  function concluida(campos: Partial<Guia> = {}): Guia {
+    return guia({ cabecalho: { ...guia().cabecalho, situacao: "CONCLUIDA" }, pode_reenviar: true, ...campos });
+  }
+
+  it("o botão fica no rodapé da conta concluída e manda só o PDF da conta", async () => {
+    respostaDoGuia = concluida();
+    await abrir();
+
+    expect(screen.getByRole("button", { name: "Reenviar conta corrigida" })).toBeTruthy();
+    const pdf = new File(["%PDF"], "conta-48811.pdf", { type: "application/pdf" });
+    fireEvent.change(screen.getByLabelText("PDF da conta corrigida"), { target: { files: [pdf] } });
+
+    await waitFor(() => expect(chamadas.filter((c) => c.metodo === "GET")).toHaveLength(2));
+    const reenvio = chamadas[1];
+    expect([reenvio.url, reenvio.metodo]).toEqual([`/api/contas-medicas/contas/${CONTA}/reenvio`, "POST"]);
+    const enviado = reenvio.corpo as FormData;
+    expect([...enviado.keys()]).toEqual(["arquivo"]);
+    expect((enviado.get("arquivo") as File).name).toBe("conta-48811.pdf");
+    expect(await screen.findByText("2 corrigidas no MV, 1 ainda na conta, nota de saída 86")).toBeTruthy();
+  });
+
+  it("conta em aberto não tem o botão", async () => {
+    respostaDoGuia = guia({ pode_reenviar: false });
+    await abrir();
+
+    expect(screen.getByRole("button", { name: "Concluir e abrir a próxima" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Reenviar conta corrigida" })).toBeNull();
+  });
+
+  it("mostra a nota de saída ao lado da de entrada e a marca de cada linha Feito", async () => {
+    const base = concluida();
+    respostaDoGuia = concluida({
+      reenvio: { nota_saida: 86, reenviada_em: "2026-10-13T10:00:00+00:00", corrigidas: 1, ainda_na_conta: 1 },
+      grupos: [
+        {
+          data: "2026-10-03",
+          setor: "CTI",
+          linhas: [
+            linha({ estado: "FEITO", reenvio: "CORRIGIDA" }),
+            linha({ id: "l-senha", acao: "RETIRAR", descricao: "Senha de acesso", estado: "FEITO", reenvio: "AINDA_NA_CONTA" }),
+            linha({ id: "l-gaze", descricao: "Gaze", estado: "NAO_PROCEDE", reenvio: null }),
+          ],
+        },
+      ],
+      numeros: base.numeros,
+    });
+    await abrir();
+
+    const numeros = screen.getByRole("region", { name: "Números do guia" });
+    expect(within(numeros).getByText("Nota de saída")).toBeTruthy();
+    expect(within(numeros).getByText("86")).toBeTruthy();
+    expect(within(aLinha("Luva de procedimento")).getByText("corrigida no MV")).toBeTruthy();
+    expect(within(aLinha("Senha de acesso")).getByText("ainda na conta")).toBeTruthy();
+    expect(within(aLinha("Gaze")).queryByText(/corrigida no MV|ainda na conta/)).toBeNull();
+  });
+
+  it("sem reenvio não há nota de saída", async () => {
+    respostaDoGuia = concluida();
+    await abrir();
+
+    const numeros = screen.getByRole("region", { name: "Números do guia" });
+    expect(within(numeros).getByText("Nota de entrada")).toBeTruthy();
+    expect(within(numeros).queryByText("Nota de saída")).toBeNull();
+  });
+});
+
+describe("o que volta da Validação (issue #1142)", () => {
+  it("a resposta ao time aparece no Guia, e a linha decidida vem com a etiqueta e os botões", async () => {
+    respostaDoGuia = guia({
+      cabecalho: { ...guia().cabecalho, situacao: "RETORNO" },
+      respostas: [
+        {
+          titulo: "Observações sobre a regra ALFA-PRI-07",
+          regra_codigo: "ALFA-PRI-07",
+          resposta: "Confirmado com a ALFA: vem no pacote.",
+          decidido_em: "2026-10-12T10:00:00+00:00",
+        },
+      ],
+      grupos: [
+        {
+          data: "2026-10-03",
+          setor: "CTI",
+          linhas: [
+            linha({ id: "l-decidida", estado: "DECIDIDA", descricao: "Seringa pronta" }),
+            linha({ id: "l-descartada", acao: "VALIDAR", estado: "DECIDIDA", descricao: "Diária" }),
+          ],
+        },
+      ],
+    });
+    await abrir();
+
+    const resposta = screen.getByRole("note", { name: "Resposta da Validação" });
+    expect(resposta.textContent).toContain("ALFA-PRI-07");
+    expect(resposta.textContent).toContain("Confirmado com a ALFA: vem no pacote.");
+    expect(screen.getByText("Retorno")).toBeTruthy();
+    const decidida = aLinha("Seringa pronta");
+    expect(decidida.textContent).toContain("Decidida na validação");
+    expect(within(decidida).getByRole("button", { name: "Feito" })).toBeTruthy();
+    const descartada = aLinha("Diária");
+    expect(descartada.textContent).toContain("Decidida na validação, sem ação no MV");
+    expect(descartada.textContent).not.toContain("Você não precisa decidir");
+  });
+});
+
+describe("a marca regra nova desde a análise (issue #1141)", () => {
+  it("conta analisada antes da regra nova mostra a marca e o botão Reanalisar com a regra nova", async () => {
+    respostaDoGuia = guia({ pode_reanalisar: true, regra_nova_desde_analise: true });
+    await abrir();
+
+    expect(screen.getByText("Regra nova desde a análise")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Reanalisar com a regra nova" }));
+
+    await waitFor(() => expect(navegacao.push).toHaveBeenCalledWith("/contas-medicas"));
+    expect(chamadas[1].url).toBe(`/api/contas-medicas/contas/${CONTA}/reanalisar`);
+  });
+
+  it("conta analisada com a memória de agora fica sem a marca e com o botão Reanalisar", async () => {
+    respostaDoGuia = guia({ pode_reanalisar: true, regra_nova_desde_analise: false });
+    await abrir();
+
+    expect(screen.getByRole("button", { name: "Reanalisar" })).toBeTruthy();
+    expect(screen.queryByText("Regra nova desde a análise")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Reanalisar com a regra nova" })).toBeNull();
+  });
+
+  it("a faturista vê a marca mesmo sem o botão", async () => {
+    respostaDoGuia = guia({ pode_reanalisar: false, regra_nova_desde_analise: true });
+    await abrir();
+
+    expect(screen.getByText("Regra nova desde a análise")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /Reanalisar/ })).toBeNull();
+  });
+});
+
+describe("o Ditar (issue #1145)", () => {
+  it("o motivo do Não procede tem o Ditar com o aviso de paciente ao lado", async () => {
+    await abrir();
+    const luva = aLinha("Luva de procedimento");
+    expect(within(luva).queryByRole("button", { name: "Ditar: Motivo do Não procede" })).toBeNull();
+
+    fireEvent.click(within(luva).getByRole("button", { name: "Não procede" }));
+
+    const botao = within(luva).getByRole("button", { name: "Ditar: Motivo do Não procede" });
+    expect(botao.parentElement?.textContent).toContain("Não dite nome nem dado de paciente.");
+  });
+
+  it("a observação para a gestão tem o Ditar com o aviso de paciente ao lado", async () => {
+    await abrir();
+
+    const botao = screen.getByRole("button", { name: "Ditar: Observação para a gestão de contas médicas" });
+    expect(botao.parentElement?.textContent).toContain("Não dite nome nem dado de paciente.");
   });
 });

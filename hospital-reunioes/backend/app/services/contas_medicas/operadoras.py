@@ -16,7 +16,9 @@ from typing import Any
 
 from postgrest.exceptions import APIError
 
+from app.services.contas_medicas.contratos import gravar_contrato_da_memoria
 from app.services.contas_medicas.memoria import MemoriaLida, parametros_lidos
+from app.services.contas_medicas.memoria_texto import gerar_texto_memoria
 from app.services.contas_medicas.tabelas import tabelas_por_categoria
 from app.services.contas_medicas_conta import chave_do_plano
 
@@ -101,6 +103,7 @@ def importar_memoria(supabase, memoria: MemoriaLida, texto_md: str, autor_id: st
     supabase.table("cm_operadora").update({"nome": memoria.nome, "situacao": memoria.situacao}).eq(
         "id", operadora["id"]
     ).execute()
+    gravar_contrato_da_memoria(supabase, operadora["id"], memoria.parametros, texto_md)
 
     return {
         "operadora": memoria.sigla,
@@ -133,7 +136,7 @@ def listar_operadoras(supabase) -> list[dict[str, Any]]:
         precos = {
             t["id"]: t
             for t in supabase.table("cm_tabela_preco")
-            .select("id, nome, tipo, versao, vigencia_inicio, vigencia_fim")
+            .select("id, nome, tipo, versao, vigencia_inicio, vigencia_fim, criado_em")
             .in_("id", [ligacao["tabela_id"] for ligacao in ligacoes])
             .execute()
             .data
@@ -212,22 +215,24 @@ def memoria_vigente(supabase, operadora_id: str) -> dict | None:
 
 
 def texto_da_memoria_vigente(supabase, sigla: str) -> tuple[str, str] | None:
-    """A versão e o texto Markdown da memória vigente, como foi enviado, para exportar."""
+    """A versão e o texto Markdown da memória vigente para exportar, gerado do
+    banco no formato do arquivo de importação: o cabeçalho de `parametros_json`
+    com todas as chaves e as regras como estão agora, por seção."""
     operadoras = supabase.table("cm_operadora").select("id").eq("sigla", sigla.strip().upper()).execute().data or []
     if not operadoras:
         return None
     versoes = (
         supabase.table("cm_memoria_versao")
-        .select("versao, texto_md")
+        .select("versao")
         .eq("operadora_id", operadoras[0]["id"])
         .eq("vigente", True)
         .execute()
         .data
         or []
     )
-    if not versoes or not versoes[0].get("texto_md"):
+    if not versoes:
         return None
-    return versoes[0]["versao"], versoes[0]["texto_md"]
+    return versoes[0]["versao"], gerar_texto_memoria(supabase, operadoras[0]["id"])
 
 
 def reconhecer_plano(nome_na_conta: str, planos: Iterable[dict[str, Any]]) -> dict[str, Any] | None:

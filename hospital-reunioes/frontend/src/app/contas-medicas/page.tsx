@@ -16,7 +16,12 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { AlertCircle, Loader2, ReceiptText, Upload } from "lucide-react";
 
+import { LinkParaContratos } from "@/components/contas-medicas/LinkParaContratos";
+import { LinkParaCoordenacao } from "@/components/contas-medicas/LinkParaCoordenacao";
+import { LinkParaHabilitacao } from "@/components/contas-medicas/LinkParaHabilitacao";
 import { LinkParaOperadoras } from "@/components/contas-medicas/LinkParaOperadoras";
+import { LinkParaPainel } from "@/components/contas-medicas/LinkParaPainel";
+import { LinkParaValidacao } from "@/components/contas-medicas/LinkParaValidacao";
 import {
   type Fila,
   type ItemDaFila,
@@ -212,8 +217,13 @@ export default function ContasMedicasPage() {
     <div className="space-y-6">
       <div>
         <div className="flex items-center justify-between gap-3">
-          <h1 className="text-2xl font-bold text-slate-900">Contas médicas</h1>
+          <h1 className="flex-1 text-2xl font-bold text-slate-900">Contas médicas</h1>
+          <LinkParaPainel />
+          <LinkParaValidacao />
+          <LinkParaCoordenacao />
+          <LinkParaContratos />
           <LinkParaOperadoras />
+          <LinkParaHabilitacao />
         </div>
         <p className="text-slate-500 text-sm mt-0.5">
           Envie a conta e o prontuário do MV e receba a lista do que corrigir antes de mandar para a operadora.

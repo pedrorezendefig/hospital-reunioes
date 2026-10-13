@@ -136,7 +136,9 @@ def _celulas(linha: str) -> list[str]:
         corpo = corpo[1:]
     if corpo.endswith("|") and not corpo.endswith("\\|"):
         corpo = corpo[:-1]
-    return [c.strip().replace("\\|", "|") for c in re.split(r"(?<!\\)\|", corpo)]
+    # `<br>` é a quebra de linha dentro da célula: é como o texto gerado do banco
+    # (`memoria_texto`) escreve a regra de várias linhas.
+    return [c.strip().replace("\\|", "|").replace("<br>", "\n") for c in re.split(r"(?<!\\)\|", corpo)]
 
 
 def _data(texto: str) -> str | None:
