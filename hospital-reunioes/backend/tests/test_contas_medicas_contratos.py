@@ -19,6 +19,7 @@ import json
 import os
 import sys
 from datetime import date
+from pathlib import Path
 from typing import Any
 
 import httpx
@@ -624,3 +625,39 @@ class TestAsRotasEstaoNoApp:
         assert "post" in caminhos[f"{ROTA}/{{sigla}}"]
         assert "post" in caminhos[f"{ROTA}/{{sigla}}/arquivo"]
         assert "get" in caminhos[f"{ROTA}/{{sigla}}/arquivo"]
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 5. O texto do Produto no Kit de conhecimento
+# ═══════════════════════════════════════════════════════════════════════════
+
+KIT = Path(__file__).resolve().parents[1] / "app" / "conhecimento" / "contas-medicas.md"
+
+
+def _secao(titulo: str) -> str:
+    return KIT.read_text(encoding="utf-8").split(f"## {titulo}")[1].split("\n## ")[0]
+
+
+class TestOKitDizComoOAvisoFunciona:
+    """O Assistente de Tecnologia responde Demanda com este texto: quem pergunta
+    por que o aviso nao chegou precisa ouvir quando ele sai e para quem."""
+
+    def test_a_secao_dos_contratos_diz_quando_e_para_quem_o_aviso_sai(self):
+        secao = _secao("Contratos e aviso de reajuste")
+
+        for trecho in (
+            "vencimento menos a antecedência",
+            "60 dias",
+            "uma vez só",
+            "na própria data",
+            "credenciamento",
+            "sino",
+            "inicia o debate do reajuste",
+            "calculado",
+            "confirma",
+            "digita",
+        ):
+            assert trecho in secao, trecho
+
+    def test_o_que_ja_esta_no_ar_inclui_a_tela_contratos(self):
+        assert "tela Contratos" in _secao("O que já está no ar")
