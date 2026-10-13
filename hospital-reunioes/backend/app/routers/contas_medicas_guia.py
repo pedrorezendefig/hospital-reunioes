@@ -122,6 +122,8 @@ async def abrir_guia(
     for grupo in grupos:
         for linha in grupo["linhas"]:
             linha["reenvio"] = marcas.get(linha["id"])
+            # A versão da tabela que deu o preço fica só registrada (#1206).
+            linha.pop("tabela_id", None)
     return {
         "cabecalho": {
             "numero_atendimento": atendimento.get("numero_atendimento"),

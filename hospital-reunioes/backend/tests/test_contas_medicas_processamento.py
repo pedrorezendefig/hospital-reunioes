@@ -844,8 +844,11 @@ class TestPipeline:
 
         guia = _guia(banco, conta["id"])
         linhas = _linhas_do_guia(guia)
-        campos = list(esperada.linhas[0])
-        assert [{k: linha[k] for k in campos} for linha in linhas] == list(esperada.linhas)
+        # A versão da tabela fica só no banco, fora da rota (#1206).
+        campos = [k for k in esperada.linhas[0] if k != "tabela_id"]
+        assert [{k: linha[k] for k in campos} for linha in linhas] == [
+            {k: linha[k] for k in campos} for linha in esperada.linhas
+        ]
         assert {linha["estado"] for linha in linhas} == {"ABERTA"}
         # A tabela de materiais do banco chegou à conferência: agulha a 0,17 com tabela 0,20.
         agulha = next(linha for linha in linhas if linha["codigo"] == "70000001")
@@ -1440,7 +1443,11 @@ class TestPassoANoPipeline:
         final = recebidos[-1][1]
         linhas = _linhas_do_guia(_guia(banco, conta["id"]))
         assert len(recebidos[0][1].linhas) > 1
-        assert [{k: linha[k] for k in final.linhas[0]} for linha in linhas] == list(final.linhas)
+        # A versão da tabela fica só no banco, fora da rota (#1206).
+        campos = [k for k in final.linhas[0] if k != "tabela_id"]
+        assert [{k: linha[k] for k in campos} for linha in linhas] == [
+            {k: linha[k] for k in campos} for linha in final.linhas
+        ]
 
     def test_a_chamada_do_passo_a_fica_gravada_com_os_tokens(self):
         banco = _cenario()
@@ -1778,3 +1785,38 @@ class TestPacotePeloTuss:
         banco.tabelas["cm_tabela_preco_item"][1]["precos_json"] = {"valor": "PACOTE"}
 
         assert self._buscar(banco).valor is None
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 14. A versão da tabela que a conta usou (issue #1206)
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+def _linhas_gravadas(banco: _Banco, conta_id: str) -> dict[str, dict]:
+    """As linhas da conta como o banco guarda, pelo código: a versão da tabela
+    não aparece em tela nenhuma, fica só registrada."""
+    return {linha["codigo"]: linha for linha in banco.tabelas["cm_guia_linha"] if linha["conta_id"] == conta_id}
+
+
+class TestVersaoDaTabela:
+    def test_a_linha_com_preco_de_tabela_grava_a_versao_vigente_na_data(self):
+        banco = _cenario()
+        _enviar(banco, _conta(), _prontuario())
+        _rodar_o_job(banco)
+        (conta,) = banco.tabelas["cm_conta"]
+
+        agulha = _linhas_gravadas(banco, conta["id"])["70000001"]
+
+        assert (agulha["preco_tabela"], agulha["tabela_id"]) == (0.20, "tb-mat")
+
+    def test_a_rota_do_guia_nao_mostra_a_versao_da_tabela(self):
+        banco = _cenario()
+        _enviar(banco, _conta(), _prontuario())
+        _rodar_o_job(banco)
+        (conta,) = banco.tabelas["cm_conta"]
+        assert _linhas_gravadas(banco, conta["id"])["70000001"]["tabela_id"] == "tb-mat"
+
+        linhas = _linhas_do_guia(_guia(banco, conta["id"]))
+
+        assert linhas
+        assert [linha for linha in linhas if "tabela_id" in linha] == []

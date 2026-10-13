@@ -33,7 +33,7 @@ from app.services.contas_medicas.guia import NotaDeEntrada, agrupar_por_dia_e_se
 from app.services.contas_medicas.memoria import MemoriaLida
 from app.services.contas_medicas.prescricao import ExamePedido, ItemPrescrito, Prescricao
 from app.services.contas_medicas.prontuario import Prontuario
-from app.services.contas_medicas.tabelas import NAO_CONFERIDO, PACOTE, Pacote
+from app.services.contas_medicas.tabelas import NAO_CONFERIDO, PACOTE, Pacote, tabela_do_preco
 from app.services.contas_medicas_conta import Conta, ItemConta, coluna_do_plano
 
 __all__ = ["BuscaDePacote", "BuscaDePreco", "Conferencia", "Pacote", "ProntuarioLido", "conferir"]
@@ -42,7 +42,8 @@ CENTAVO = Decimal("0.01")
 TOLERANCIA = Decimal("0.01")
 
 # A busca de preço de `tabelas.preco` sem o banco: (categoria, código, data, coluna)
-# devolve o preço, `NAO_CONFERIDO` ou `PACOTE`.
+# devolve o preço, `NAO_CONFERIDO` ou `PACOTE`. O preço que saiu de uma tabela é
+# `PrecoDeTabela` e leva a versão usada até a linha do Guia (#1206).
 BuscaDePreco = Callable[[str, str, date, str | None], Decimal | str]
 
 # Grupo da conta do MV → categoria da tabela de preço. Grupo fora daqui não tem
@@ -1700,6 +1701,7 @@ def _registro(linha: _Linha) -> dict[str, Any]:
         "quantidade_devida": _numero(linha.quantidade_devida),
         "preco_lancado": _numero(linha.preco_lancado),
         "preco_tabela": _numero(linha.preco_tabela),
+        "tabela_id": tabela_do_preco(linha.preco_tabela),
         "valor_diferenca": _numero(linha.valor),
         "regra_codigo": linha.regra,
         "motivo": linha.motivo,

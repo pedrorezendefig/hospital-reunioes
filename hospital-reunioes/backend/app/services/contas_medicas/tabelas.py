@@ -13,6 +13,8 @@ tabela órfã, que a busca nunca vê.
 `preco` nunca inventa valor. Sem tabela, sem versão na data, preço zero, código
 repetido sem desempate ou regra de preço de tabela que não é carregada
 (Brasíndice, Simpro, CBHPM) dão `NAO_CONFERIDO`; "PACOTE" na coluna dá `PACOTE`.
+O preço que sai de uma tabela diz de qual versão saiu (`PrecoDeTabela`, #1206):
+a linha do Guia grava essa versão, e a "Nova versão" não muda o registro.
 """
 
 from __future__ import annotations
@@ -30,12 +32,14 @@ __all__ = [
     "NAO_CONFERIDO",
     "PACOTE",
     "Pacote",
+    "PrecoDeTabela",
     "TabelaLida",
     "TabelaRecusadaError",
     "importar_tabela",
     "ler_tabela",
     "pacote_pelo_tuss",
     "preco",
+    "tabela_do_preco",
     "tabelas_por_categoria",
 ]
 
@@ -44,6 +48,28 @@ PACOTE = "PACOTE"
 
 # Itens por requisição ao PostgREST: a LPM da Unimed tem 35 mil linhas.
 _LOTE = 1000
+
+
+class PrecoDeTabela(Decimal):
+    """Um preço que saiu de uma tabela, com a versão de onde saiu (`cm_tabela_preco.id`).
+
+    Compara e calcula como `Decimal`: quem só quer o valor não muda nada. A conta
+    feita com ele (vezes a quantidade, arredondada) já é `Decimal` comum, porque a
+    versão é do preço unitário, não do valor da linha.
+    """
+
+    tabela_id: str
+
+    def __new__(cls, valor: Decimal | str, tabela_id: str) -> PrecoDeTabela:
+        preco = super().__new__(cls, valor)
+        preco.tabela_id = tabela_id
+        return preco
+
+
+def tabela_do_preco(valor: Decimal | str | None) -> str | None:
+    """A versão da tabela de onde saiu o preço; `None` para o que não veio de
+    tabela (o preço validado na memória, o lançado na conta, nenhum)."""
+    return valor.tabela_id if isinstance(valor, PrecoDeTabela) else None
 
 
 class TabelaRecusadaError(ValueError):
@@ -452,7 +478,7 @@ def _validado(parametros: dict[str, Any], codigo: str) -> Decimal | None:
     return None
 
 
-def _valor(precos: dict[str, Any], regra_preco: str, coluna: str | None) -> Decimal | str:
+def _valor(precos: dict[str, Any], regra_preco: str, coluna: str | None, tabela_id: str) -> Decimal | str:
     if regra_preco == "LPM":
         bruto = precos.get("lpm")
     elif regra_preco == "COLUNA":
@@ -464,7 +490,7 @@ def _valor(precos: dict[str, Any], regra_preco: str, coluna: str | None) -> Deci
         return NAO_CONFERIDO
     if bruto == PACOTE:
         return PACOTE
-    valor = Decimal(str(bruto))
+    valor = PrecoDeTabela(str(bruto), tabela_id)
     return valor if valor > 0 else NAO_CONFERIDO
 
 
@@ -480,7 +506,9 @@ def preco(
 ) -> Decimal | str:
     """O preço do código na tabela da categoria vigente na data, `NAO_CONFERIDO` ou `PACOTE`.
 
-    O preço validado na memória da operadora ganha da tabela.
+    O preço da tabela sai como `PrecoDeTabela`, com a versão usada. O preço
+    validado na memória da operadora ganha da tabela e sai `Decimal` comum: não
+    veio de versão nenhuma.
 
     `coluna` é a coluna de preço do plano (COMUM, CARIOCA), para a tabela que
     tem duas; `cbo` desempata o código que a tabela repete por especialidade.
@@ -497,7 +525,8 @@ def preco(
         itens = [i for i in itens if (i.get("extra_json") or {}).get("cbo") == cbo]
     if len(itens) != 1:
         return NAO_CONFERIDO
-    return _valor(itens[0].get("precos_json") or {}, tabela["regra"].get("regra_preco", "COLUNA"), coluna)
+    regra_preco = tabela["regra"].get("regra_preco", "COLUNA")
+    return _valor(itens[0].get("precos_json") or {}, regra_preco, coluna, tabela["id"])
 
 
 def pacote_pelo_tuss(supabase, operadora_id: str, tuss: str, data: date) -> Pacote | None:
