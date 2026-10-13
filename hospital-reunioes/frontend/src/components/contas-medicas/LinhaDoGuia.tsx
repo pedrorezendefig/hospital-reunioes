@@ -18,6 +18,7 @@ import {
   MOTIVOS_NAO_PROCEDE,
   ROTULO_ACAO,
   ROTULO_NIVEL,
+  ROTULO_REENVIO,
   reais,
   textoDaLinha,
   valorComSinal,
@@ -75,6 +76,15 @@ export function LinhaDoGuia({ linha, concluida, ocupado, onMarcar, onDesfazer, o
       <article aria-label={nome} className={`rounded-xl border px-3 py-2 ${marcado.fundo}`}>
         <div className="flex flex-wrap items-center gap-2">
           <span className={`${ETIQUETA} ${marcado.cor}`}>{marcado.rotulo}</span>
+          {linha.reenvio && (
+            <span
+              className={`${ETIQUETA} ${
+                linha.reenvio === "CORRIGIDA" ? "bg-[#DCFCE7] text-[#166534]" : "bg-[#FEE2E2] text-[#991B1B]"
+              }`}
+            >
+              {ROTULO_REENVIO[linha.reenvio]}
+            </span>
+          )}
           <span className="text-sm text-slate-700 min-w-0 break-words">{nome}</span>
           {codigo}
           {linha.valor_diferenca != null && (

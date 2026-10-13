@@ -1,6 +1,6 @@
 # ROTAS.md
 <!-- gerado automaticamente por /snapshot — não editar -->
-<!-- last_update: 2026-10-13T04:24+0000 -->
+<!-- last_update: 2026-10-13T05:15+0000 -->
 
 Endpoints HTTP expostos pelo backend FastAPI do Hospital Reuniões.
 
@@ -82,6 +82,15 @@ Endpoints HTTP expostos pelo backend FastAPI do Hospital Reuniões.
 |--------|------|-----------|------|
 | GET | `/contas-medicas/me` | O perfil de Contas médicas da pessoa e as permissões ligadas para ela. | ✅ |
 
+## contas-medicas (`app/routers/contas_medicas_contratos.py`)
+
+| Método | Rota | O que faz | Auth |
+|--------|------|-----------|------|
+| GET | `/contas-medicas/contratos` | Uma linha por operadora, com o contrato, os dias que faltam e a situação. | ✅ |
+| POST | `/contas-medicas/contratos/{sigla}` | Os campos confirmados passam a valer, com quem confirmou e quando. | ✅ |
+| GET | `/contas-medicas/contratos/{sigla}/arquivo` | O contrato ou o aditivo confirmado da operadora. | ✅ |
+| POST | `/contas-medicas/contratos/{sigla}/arquivo` | Guarda o contrato ou o aditivo e devolve os campos que a IA leu, para a | ✅ |
+
 ## contas-medicas (`app/routers/contas_medicas_envio.py`)
 
 | Método | Rota | O que faz | Auth |
@@ -99,6 +108,7 @@ Endpoints HTTP expostos pelo backend FastAPI do Hospital Reuniões.
 | DELETE | `/contas-medicas/contas/{conta_id}/guia/linhas/{linha_id}/marcacao` | Desfazer: a linha volta a aberta, enquanto a Conta não foi concluída. | ✅ |
 | POST | `/contas-medicas/contas/{conta_id}/guia/linhas/{linha_id}/marcacao` | Feito, Não procede (com motivo) ou Bloqueado numa linha do Guia. | ✅ |
 | POST | `/contas-medicas/contas/{conta_id}/reanalisar` | Reanalisar (issue #1130): a conta A fazer ou Em correção volta para a | ✅ |
+| POST | `/contas-medicas/contas/{conta_id}/reenvio` | Reenviar conta corrigida (issue #1136): só o PDF da conta, de uma conta | ✅ |
 
 ## contas-medicas (`app/routers/contas_medicas_habilitacao.py`)
 
@@ -478,4 +488,4 @@ Endpoints HTTP expostos pelo backend FastAPI do Hospital Reuniões.
 
 ---
 
-**Totais:** 267 endpoints em 41 routers · 94% exigem auth.
+**Totais:** 272 endpoints em 42 routers · 94% exigem auth.

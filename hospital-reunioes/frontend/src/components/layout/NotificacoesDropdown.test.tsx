@@ -86,6 +86,21 @@ describe("aviso de Contas médicas no sino", () => {
     expect(navegacao.push).toHaveBeenCalledTimes(1);
   });
 
+  it("o aviso de reajuste de contrato leva à tela Contratos (#1144)", async () => {
+    notificacoes = [
+      aviso({
+        titulo: "Contrato ASSIM: reajuste",
+        mensagem: "ASSIM: o contrato vence em 60 dias (01/05/2027). Iniciar a negociação do reajuste.",
+        referencia_id: "contrato:5d0c7a52-0000-4000-8000-000000000002",
+      }),
+    ];
+
+    await clicarNoAviso("Contrato ASSIM: reajuste");
+
+    await waitFor(() => expect(navegacao.push).toHaveBeenCalledWith("/contas-medicas/contratos"));
+    expect(navegacao.push).toHaveBeenCalledTimes(1);
+  });
+
   it("a menção segue para o kanban de pendências", async () => {
     notificacoes = [aviso({ tipo: "MENCAO", titulo: "Ana mencionou você", referencia_id: "A-0042" })];
 
