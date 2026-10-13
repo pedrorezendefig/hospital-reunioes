@@ -16,6 +16,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { AlertCircle, ArrowLeft, Download, Loader2, Upload } from "lucide-react";
+import { PropostasDoDicionario } from "@/components/contas-medicas/PropostasDoDicionario";
 import { TabelasDePreco } from "@/components/contas-medicas/TabelasDePreco";
 import { createClient } from "@/lib/supabase/client";
 import { Select } from "@/components/ui/Select";
@@ -229,6 +230,8 @@ export default function OperadorasPage() {
       />
 
       <EnvioDeDicionario token={token} />
+
+      <PropostasDoDicionario token={token} />
 
       <CadastroDePlanos token={token} operadoras={operadoras} planos={planos} aoCadastrar={(p) => setPlanos([...planos, p])} />
 
