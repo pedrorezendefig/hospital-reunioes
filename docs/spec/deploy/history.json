@@ -2,6 +2,49 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-10-13T11:16:54-03:00",
+      "sha": "87a6411c2e1775d235278c0197b920ce8ed32865",
+      "app_version": "0.193.1",
+      "subject": "PR #1195, issue #1194: Conta real do MV reconhecida pela linha de identificação na página 1",
+      "raw_subject": "chore(deploy): registro do PR avulso (#1195)",
+      "scope": [
+        "backend"
+      ],
+      "prds": [],
+      "result": "healthy",
+      "duration_seconds": 182,
+      "services_touched": [
+        "backend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        },
+        {
+          "service": "frontend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "PR avulso: PR #1195, issue #1194. Merge pela API do GitHub, um build. Registro pela Action pos-merge depois do health.",
+      "etapas": {
+        "merge_s": 3,
+        "build_s": {
+          "backend": 43
+        },
+        "health_s": 10
+      },
+      "responsavel": "pedrorezendefig"
+    },
+    {
       "at": "2026-10-13T06:17:33-03:00",
       "sha": "a41d7c80c5b0d288069f65bea652bbe8ee680ae6",
       "app_version": "0.193.0",
