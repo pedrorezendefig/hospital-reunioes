@@ -444,8 +444,13 @@ class TestRespostaForaDoFormato:
 
         resultado = _comparar()
 
-        schema = provedor.corpos[0]["response_format"]["json_schema"]["schema"]
-        assert schema["properties"]["linhas"]["items"]["properties"]["motivo"] == {"type": "string", "maxLength": 140}
+        # O schema do Anexo B limita o motivo a 140; o enviado ao provedor não
+        # leva o limite, que a saída estrita da Anthropic recusa com 400 (quem
+        # cobra é o Pydantic, e o prompt pede as 140).
+        anexo_b = ia.LinhaDaComparacao.model_json_schema()["properties"]["motivo"]
+        assert anexo_b["maxLength"] == 140
+        enviado = provedor.corpos[0]["response_format"]["json_schema"]["schema"]
+        assert enviado["properties"]["linhas"]["items"]["properties"]["motivo"] == {"type": "string"}
         # A primeira resposta, com 141, não passou no Pydantic; a de 140 vale.
         assert len(provedor.corpos) == 2
         assert [len(linha.motivo) for linha in resultado.linhas] == [140]

@@ -243,7 +243,8 @@ class PropostaDeRegra(_Estrito):
 def _schema_estrito(modelo: type[BaseModel]) -> dict[str, Any]:
     """O JSON schema do modelo como a saída estrita pede: as referências
     resolvidas no lugar, todo objeto fechado e com todas as chaves obrigatórias,
-    sem título nem valor padrão."""
+    sem título nem valor padrão. Sem `maxLength`, que a saída estrita da
+    Anthropic recusa com 400: o limite fica no Pydantic, que valida a resposta."""
     bruto = modelo.model_json_schema()
     definicoes = bruto.pop("$defs", {})
 
@@ -254,7 +255,9 @@ def _schema_estrito(modelo: type[BaseModel]) -> dict[str, Any]:
             return no
         if "$ref" in no:
             return resolver(definicoes[no["$ref"].rsplit("/", 1)[-1]])
-        limpo = {chave: resolver(valor) for chave, valor in no.items() if chave not in ("title", "default")}
+        limpo = {
+            chave: resolver(valor) for chave, valor in no.items() if chave not in ("title", "default", "maxLength")
+        }
         if limpo.get("type") == "object" and "properties" in limpo:
             limpo["additionalProperties"] = False
             limpo["required"] = list(limpo["properties"])
