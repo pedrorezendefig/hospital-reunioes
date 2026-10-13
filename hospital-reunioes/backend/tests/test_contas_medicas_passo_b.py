@@ -256,6 +256,99 @@ class TestConferenciaDasLinhasDaIA:
         assert bolsa["motivo"].endswith("Sem código.")
 
 
+class TestNotaComAsLinhasDaIA:
+    def test_a_nota_de_entrada_muda_com_a_linha_da_ia_e_o_rs_em_validacao_soma_a_linha_validar(self, openrouter):
+        """Sem a IA, o par sintético dá nota 17: R$ 5.500,30 apontados de R$
+        6.592,00 devidos (o teste do pipeline do processamento). A IA inclui
+        10 equipos a R$ 12,50 (R$ 125,00) e propõe 2 curativos a R$ 5,00 por
+        regra pendente (R$ 10,00 em validação): 5.625,30 de 6.717,00 dá 16."""
+        banco = _cenario_do_passo_b()
+        conta, _ = _analisar(
+            banco,
+            openrouter,
+            _linha_da_ia(quantidade_devida=10),
+            _linha_da_ia(
+                codigo="70000003", descricao="CURATIVO HIDROCOLOIDE", quantidade_devida=2, regra_id="ALFA-INS-05"
+            ),
+        )
+
+        gravada = banco.conta(conta["id"])
+        assert (gravada["nota_bruta"], gravada["valor_apontado"], gravada["valor_em_validacao"]) == (16, 5625.30, 10.0)
+        numeros = _guia(banco, conta["id"])["numeros"]
+        assert (numeros["nota_entrada"], numeros["valor_em_validacao"]) == (16, 10.0)
+
+
+class TestFalhaDaIA:
+    def test_a_ia_fora_do_ar_deixa_erro_com_a_frase_guarda_as_linhas_do_codigo_e_o_reprocesso_funciona(
+        self, openrouter
+    ):
+        openrouter.fora_do_formato_em = {PASSO_B}
+        banco = _cenario_do_passo_b()
+        _enviar(banco, _conta(), _prontuario())
+
+        _rodar_o_job(banco)
+
+        (conta,) = banco.tabelas["cm_conta"]
+        # As três tentativas são do adaptador; a conta não volta para a fila.
+        assert openrouter.formatos.count(PASSO_B) == 3
+        assert (conta["situacao"], conta["erro_motivo"], conta["tentativas"]) == (
+            "ERRO",
+            "Tente de novo em alguns minutos",
+            1,
+        )
+        # O que o código achou (agulha, diária, pacote e Clexane) ficou no Guia.
+        guardadas = [linha for linha in banco.tabelas["cm_guia_linha"] if linha["conta_id"] == conta["id"]]
+        assert sorted((linha["origem"], linha["codigo"]) for linha in guardadas) == [
+            ("CODIGO", "60001038"),
+            ("CODIGO", "70000001"),
+            ("CODIGO", "90030001"),
+            ("CODIGO", "98005497"),
+        ]
+
+        # A IA voltou e a faturista manda a conta de novo pelo botão da conta em Erro.
+        openrouter.fora_do_formato_em = set()
+        openrouter.comparacao = {"linhas": [_linha_da_ia()], "resumo": "Conta comparada com a memória."}
+        _enviar(banco, _conta())
+        _rodar_o_job(banco)
+
+        assert (banco.conta(conta["id"])["situacao"], banco.conta(conta["id"])["erro_motivo"]) == ("A_FAZER", None)
+        linhas = _linhas_do_guia(_guia(banco, conta["id"]))
+        assert sorted((linha["origem"], linha["codigo"]) for linha in linhas) == [
+            ("CODIGO", "60001038"),
+            ("CODIGO", "70000001"),
+            ("CODIGO", "90030001"),
+            ("CODIGO", "98005497"),
+            ("IA", "70000002"),
+        ]
+
+
+class TestCustoDoPassoB:
+    def test_a_chamada_do_passo_b_fica_gravada_com_os_tokens_de_cache_e_o_custo(self, openrouter):
+        openrouter.uso = {
+            "prompt_tokens": 2500,
+            "completion_tokens": 300,
+            "total_tokens": 2800,
+            "prompt_tokens_details": {"cached_tokens": 2000},
+            "cost": 0.0123,
+        }
+        banco = _cenario_do_passo_b()
+
+        conta, _ = _analisar(banco, openrouter)
+
+        (chamada,) = [c for c in banco.tabelas["cm_chamada_ia"] if c["passo"] == "B"]
+        campos = ("conta_id", "atendimento_id", "tokens_entrada", "tokens_saida", "tokens_cache", "custo_usd")
+        assert {campo: chamada[campo] for campo in (*campos, "sucesso")} == {
+            "conta_id": conta["id"],
+            "atendimento_id": conta["atendimento_id"],
+            "tokens_entrada": 2500,
+            "tokens_saida": 300,
+            "tokens_cache": 2000,
+            "custo_usd": 0.0123,
+            "sucesso": True,
+        }
+        assert chamada["modelo"].startswith("anthropic/")
+
+
 class TestCausaRaiz:
     def test_a_causa_raiz_da_ia_e_sobreposta_nos_casos_obvios(self, openrouter):
         banco = _cenario_do_passo_b()
