@@ -23,14 +23,21 @@ from typing import Any
 
 from app.services.contas_medicas.memoria import _CPF
 from app.services.contas_medicas.memoria_texto import gerar_texto_memoria
+from app.services.contas_medicas.operadoras import listar_operadoras
 
 __all__ = [
+    "PERMISSOES_DA_TELA",
     "MudancaRecusadaError",
     "RegraNaoEncontradaError",
     "SemPermissaoNaRegraError",
+    "ler_memoria_da_operadora",
     "mudar_regra",
     "permissao_do_tipo",
 ]
+
+
+# As permissões que abrem a tela: quem tem uma delas muda as regras do tipo dela.
+PERMISSOES_DA_TELA = ("incluir_regra_operacional", "regra_contratual_tabelas")
 
 
 class RegraNaoEncontradaError(LookupError):
@@ -84,8 +91,7 @@ def _vigente(supabase, operadora_id: str) -> dict | None:
 
 def _regras_da_versao(supabase, versao_id: str) -> list[dict[str, Any]]:
     return (
-        supabase.table("cm_regra").select("*").eq("memoria_versao_id", versao_id).eq("ativa", True).execute().data
-        or []
+        supabase.table("cm_regra").select("*").eq("memoria_versao_id", versao_id).eq("ativa", True).execute().data or []
     )
 
 
@@ -108,7 +114,12 @@ def _irmas(supabase, operadora_id: str, modelo_id: str) -> list[dict[str, Any]]:
     if not por_operadora:
         return []
     operadoras = (
-        supabase.table("cm_operadora").select("id, sigla").in_("id", sorted(por_operadora)).order("sigla").execute().data
+        supabase.table("cm_operadora")
+        .select("id, sigla")
+        .in_("id", sorted(por_operadora))
+        .order("sigla")
+        .execute()
+        .data
         or []
     )
     irmas = []
@@ -280,3 +291,104 @@ def mudar_regra(
         )
         outras.append({"operadora": irma["operadora"]["sigla"], "versao": versao_irma["versao"]})
     return {"operadora": sigla, "versao": nova["versao"], "regra": codigo, "outras_operadoras": outras}
+
+
+def _nomes(supabase, ids: set[str]) -> dict[str, str]:
+    if not ids:
+        return {}
+    pessoas = supabase.table("participantes").select("id, nome_completo").in_("id", sorted(ids)).execute().data or []
+    return {p["id"]: p.get("nome_completo") for p in pessoas}
+
+
+def _historico(supabase, versoes: list[dict[str, Any]], nomes: dict[str, str]) -> list[dict[str, Any]]:
+    """As versões da mais nova à mais antiga, cada uma com o que mudou: o
+    código, o texto anterior e o novo de cada regra mexida nela."""
+    mudancas = (
+        supabase.table("cm_regra_historico")
+        .select("regra_id, memoria_versao_id, texto_anterior, texto_novo")
+        .in_("memoria_versao_id", [v["id"] for v in versoes])
+        .execute()
+        .data
+        or []
+    )
+    codigos = {}
+    if mudancas:
+        codigos = {
+            r["id"]: r["codigo"]
+            for r in supabase.table("cm_regra")
+            .select("id, codigo")
+            .in_("id", [m["regra_id"] for m in mudancas])
+            .execute()
+            .data
+            or []
+        }
+    por_versao: dict[str, list[dict[str, Any]]] = {}
+    for mudanca in mudancas:
+        por_versao.setdefault(mudanca["memoria_versao_id"], []).append(
+            {
+                "codigo": codigos.get(mudanca["regra_id"]),
+                "texto_anterior": mudanca.get("texto_anterior"),
+                "texto_novo": mudanca["texto_novo"],
+            }
+        )
+    ordenadas = sorted(versoes, key=lambda v: (v.get("criado_em") or "", v["versao"]), reverse=True)
+    return [
+        {
+            "versao": v["versao"],
+            "vigente": v["vigente"],
+            "criado_em": v.get("criado_em"),
+            "autor": nomes.get(v.get("autor_id") or ""),
+            "resumo": v.get("resumo"),
+            "mudancas": sorted(por_versao.get(v["id"], []), key=lambda m: m["codigo"] or ""),
+        }
+        for v in ordenadas
+    ]
+
+
+def ler_memoria_da_operadora(supabase, sigla: str) -> dict[str, Any] | None:
+    """O que a tela da Memória da operadora mostra: o cabeçalho, as regras da
+    versão vigente com quem validou, as tabelas por categoria e o histórico de
+    versões. `None` quando a operadora não está cadastrada."""
+    sigla = sigla.strip().upper()
+    resumo = next((op for op in listar_operadoras(supabase) if op["sigla"] == sigla), None)
+    if resumo is None:
+        return None
+    operadora_id = supabase.table("cm_operadora").select("id").eq("sigla", sigla).execute().data[0]["id"]
+    versoes = (
+        supabase.table("cm_memoria_versao")
+        .select("id, versao, vigente, parametros_json, autor_id, criado_em, resumo")
+        .eq("operadora_id", operadora_id)
+        .execute()
+        .data
+        or []
+    )
+    vigente = next((v for v in versoes if v["vigente"]), None)
+    regras = _regras_da_versao(supabase, vigente["id"]) if vigente else []
+    pessoas = {r["validado_por"] for r in regras if r.get("validado_por")}
+    nomes = _nomes(supabase, pessoas | {v["autor_id"] for v in versoes if v.get("autor_id")})
+    return {
+        "sigla": sigla,
+        "nome": resumo["nome"],
+        "situacao": resumo["situacao"],
+        "versao": resumo["versao"],
+        "data": (vigente or {}).get("criado_em"),
+        "contrato": ((vigente or {}).get("parametros_json") or {}).get("contrato"),
+        "regras_contagem": resumo["regras"],
+        "regras": [
+            {
+                "id": r["id"],
+                "codigo": r["codigo"],
+                "secao": r.get("secao"),
+                "texto": r["texto"],
+                "tipo": r.get("tipo"),
+                "origem": r.get("origem"),
+                "status": r["status"],
+                "validado_por": nomes.get(r.get("validado_por") or ""),
+                "validado_em": r.get("validado_em"),
+                "modelo_id": r.get("modelo_id"),
+            }
+            for r in sorted(regras, key=lambda r: r["codigo"])
+        ],
+        "tabelas": resumo["tabelas"],
+        "historico": _historico(supabase, versoes, nomes),
+    }

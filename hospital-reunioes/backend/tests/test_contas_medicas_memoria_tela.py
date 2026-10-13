@@ -48,7 +48,9 @@ def _reset_rate_limiter():
     limiter._storage.reset()
 
 
-def _cliente(pessoa: dict[str, Any], banco: _Banco | None = None, ligar: tuple[str, ...] = ()) -> tuple[TestClient, _Banco]:
+def _cliente(
+    pessoa: dict[str, Any], banco: _Banco | None = None, ligar: tuple[str, ...] = ()
+) -> tuple[TestClient, _Banco]:
     """O app com a carga e a Memória por tela. `ligar` liga permissões no
     perfil da pessoa, como a Habilitação faria."""
     banco = banco or _Banco()
@@ -139,7 +141,12 @@ class TestEditarRegra:
         assert (ler_memoria(nova["texto_md"]).versao, len(lida)) == ("1.1", 5)
 
         # A versão anterior fica como estava.
-        antiga = {r.codigo: r for r in ler_memoria(gerar_texto_memoria(banco, _operadora_id(banco, "ALFA"), _versao(banco, "ALFA", "1.0")["id"])).regras}
+        antiga = {
+            r.codigo: r
+            for r in ler_memoria(
+                gerar_texto_memoria(banco, _operadora_id(banco, "ALFA"), _versao(banco, "ALFA", "1.0")["id"])
+            ).regras
+        }
         assert antiga["ALFA-DIA-01"].texto == DIA_01_ANTES
 
     def test_permissao_segue_o_tipo_da_regra_e_a_recusa_nao_grava_nada(self):
@@ -212,7 +219,11 @@ class TestDecidirPendente:
 
         assert resposta.status_code == 200, resposta.text
         assert _versoes(banco, "ALFA") == {"1.0": False, "1.1": True}
-        regras = {r["codigo"]: r for r in banco.linhas("cm_regra") if r["memoria_versao_id"] == _versao(banco, "ALFA", "1.1")["id"]}
+        regras = {
+            r["codigo"]: r
+            for r in banco.linhas("cm_regra")
+            if r["memoria_versao_id"] == _versao(banco, "ALFA", "1.1")["id"]
+        }
         decidida = regras["ALFA-DIA-02"]
         assert (decidida["status"], decidida["texto"], decidida["validado_por"]) == ("VIGENTE", DIA_02_DECIDIDA, "P1")
         assert decidida["validado_em"][:10] == datetime.now(UTC).date().isoformat()
@@ -224,7 +235,9 @@ class TestDecidirPendente:
         # continua dizendo o que dizia: a regra ainda pendente, com o texto de antes.
         [conta] = banco.linhas("cm_conta")
         assert conta["memoria_versao_id"] == antiga["id"]
-        da_conta = {r.codigo: r for r in ler_memoria(gerar_texto_memoria(banco, antiga["operadora_id"], antiga["id"])).regras}
+        da_conta = {
+            r.codigo: r for r in ler_memoria(gerar_texto_memoria(banco, antiga["operadora_id"], antiga["id"])).regras
+        }
         assert (da_conta["ALFA-DIA-02"].status, da_conta["ALFA-DIA-02"].texto) == ("PENDENTE", DIA_02_ANTES)
 
     def test_decidir_regra_vigente_ou_editar_pendente_e_recusado_sem_versao_nova(self):
@@ -312,13 +325,19 @@ class TestExportarEReimportar:
     def test_ida_e_volta_depois_de_editar_e_decidir_nao_perde_regra_nem_chave_desconhecida(self):
         cliente, banco = _cliente(GESTAO)
         _importar(cliente)
-        assert cliente.put(
-            _regra("ALFA", "ALFA-DIA-01"), json={"texto": DIA_01_DEPOIS, "tipo": "CONTRATUAL", "origem": "PRÁTICA"}
-        ).status_code == 200
-        assert cliente.post(
-            _regra("ALFA", "ALFA-DIA-02") + "/decisao",
-            json={"texto": "Linha 1 da decisão | com barra\nLinha 2", "tipo": "CONTRATUAL", "origem": "PRÁTICA"},
-        ).status_code == 200
+        assert (
+            cliente.put(
+                _regra("ALFA", "ALFA-DIA-01"), json={"texto": DIA_01_DEPOIS, "tipo": "CONTRATUAL", "origem": "PRÁTICA"}
+            ).status_code
+            == 200
+        )
+        assert (
+            cliente.post(
+                _regra("ALFA", "ALFA-DIA-02") + "/decisao",
+                json={"texto": "Linha 1 da decisão | com barra\nLinha 2", "tipo": "CONTRATUAL", "origem": "PRÁTICA"},
+            ).status_code
+            == 200
+        )
 
         exportada = cliente.get("/api/contas-medicas/operadoras/ALFA/memoria")
 
@@ -395,3 +414,99 @@ class TestNovaVersaoDeTabela:
         assert len(banco.linhas("cm_tabela_preco")) == 3
         assert preco(banco, "op-UNIMED", "MEDICAMENTO", "90458125", date(2020, 6, 1)) == Decimal("30.96")
         assert preco(banco, "op-UNIMED", "MEDICAMENTO", "90458125", date(2021, 6, 1)) == Decimal("32.50")
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 6. O que a tela da Memória da operadora lê
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+class TestMemoriaDaOperadoraNaTela:
+    def test_cabecalho_regras_tabelas_e_historico_de_versoes_do_mais_novo_ao_mais_antigo(self):
+        cliente, banco = _cliente(GESTAO)
+        _importar(cliente)
+        cliente.put(
+            _regra("ALFA", "ALFA-DIA-01"), json={"texto": DIA_01_DEPOIS, "tipo": "CONTRATUAL", "origem": "PRÁTICA"}
+        )
+        cliente.post(
+            _regra("ALFA", "ALFA-DIA-02") + "/decisao",
+            json={"texto": DIA_02_DECIDIDA, "tipo": "CONTRATUAL", "origem": "PRÁTICA"},
+        )
+
+        resposta = cliente.get("/api/contas-medicas/operadoras/ALFA")
+
+        assert resposta.status_code == 200, resposta.text
+        memoria = resposta.json()
+        assert (memoria["sigla"], memoria["nome"], memoria["situacao"], memoria["versao"]) == (
+            "ALFA",
+            "Alfa Saúde",
+            "PARCIAL",
+            "1.2",
+        )
+        assert memoria["regras_contagem"] == {"vigentes": 4, "pendentes": 1}
+        assert memoria["contrato"] == {
+            "assinatura": "2015-10-01",
+            "ultimo_aditivo": {"numero": 12, "inicio_vigencia": "2026-05-01"},
+            "aviso_antecedencia_dias": 60,
+        }
+        regras = {r["codigo"]: r for r in memoria["regras"]}
+        assert [r["codigo"] for r in memoria["regras"]] == sorted(regras)
+        assert regras["ALFA-DIA-02"]["status"] == "VIGENTE"
+        assert regras["ALFA-DIA-02"]["validado_por"] == "Pessoa de Teste"
+        assert regras["ALFA-DIA-02"]["secao"] == "DIA"
+        assert regras["ALFA-PRI-03"]["status"] == "PENDENTE"
+        assert regras["ALFA-PRI-03"]["validado_por"] is None
+        assert {"id", "texto", "tipo", "origem", "validado_em", "modelo_id"} <= set(regras["ALFA-PRI-01"])
+        assert [t["categoria"] for t in memoria["tabelas"]][:5] == [
+            "MATERIAL",
+            "MEDICAMENTO",
+            "DIARIA_TAXA",
+            "PACOTE",
+            "HONORARIO",
+        ]
+
+        historico = memoria["historico"]
+        assert [(v["versao"], v["vigente"]) for v in historico] == [("1.2", True), ("1.1", False), ("1.0", False)]
+        assert historico[0]["autor"] == "Pessoa de Teste"
+        assert historico[0]["mudancas"] == [
+            {"codigo": "ALFA-DIA-02", "texto_anterior": DIA_02_ANTES, "texto_novo": DIA_02_DECIDIDA}
+        ]
+        assert historico[1]["mudancas"] == [
+            {"codigo": "ALFA-DIA-01", "texto_anterior": DIA_01_ANTES, "texto_novo": DIA_01_DEPOIS}
+        ]
+        assert historico[2]["mudancas"] == []
+        assert historico[2]["resumo"] == "5 regras: 3 vigentes e 2 pendentes"
+
+    def test_quem_le_e_quem_muda_regra_e_a_operadora_que_nao_existe_e_404(self):
+        banco = _Banco()
+        gestao, _ = _cliente(GESTAO, banco)
+        _importar(gestao)
+        assert gestao.get("/api/contas-medicas/operadoras/ZETA").status_code == 404
+
+        faturista, _ = _cliente(_pessoa(perfil_contas_medicas="faturista"), banco)
+        assert faturista.get("/api/contas-medicas/operadoras/ALFA").status_code == 403
+
+        coordenadora, _ = _cliente(
+            _pessoa(perfil_contas_medicas="coordenadora"), banco, ligar=("incluir_regra_operacional",)
+        )
+        lida = coordenadora.get("/api/contas-medicas/operadoras/ALFA")
+        assert lida.status_code == 200
+        assert lida.json()["permissoes"] == ["incluir_regra_operacional"]
+
+
+class TestAsRotasEstaoNoApp:
+    def test_o_app_de_verdade_registra_as_rotas_da_memoria_por_tela(self):
+        """O router tem `include_router` próprio no `main.py`. A fonte é o
+        schema OpenAPI, e não `app.routes` (FastAPI 0.141, issues #542 e #546)."""
+        from app.main import app
+
+        cache = app.openapi_schema
+        try:
+            caminhos = app.openapi()["paths"]
+        finally:
+            app.openapi_schema = cache
+
+        assert len(caminhos) > 50
+        assert "get" in caminhos["/api/contas-medicas/operadoras/{sigla}"]
+        assert "put" in caminhos["/api/contas-medicas/operadoras/{sigla}/regras/{codigo}"]
+        assert "post" in caminhos["/api/contas-medicas/operadoras/{sigla}/regras/{codigo}/decisao"]

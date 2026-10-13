@@ -20,9 +20,11 @@ from pydantic import BaseModel, Field
 from app.dependencies import get_supabase_client, require_permissao_cm
 from app.limiter import limiter
 from app.services.contas_medicas.memoria_edicao import (
+    PERMISSOES_DA_TELA,
     MudancaRecusadaError,
     RegraNaoEncontradaError,
     SemPermissaoNaRegraError,
+    ler_memoria_da_operadora,
     mudar_regra,
 )
 
@@ -63,6 +65,28 @@ def _gravar_mudanca(supabase, me: dict, sigla: str, codigo: str, corpo: RegraDec
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from None
     except MudancaRecusadaError as exc:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from None
+
+
+@router.get("/operadoras/{sigla}")
+@limiter.limit("60/minute")
+async def memoria_da_operadora(
+    request: Request,
+    sigla: str,
+    me: dict = Depends(require_permissao_cm()),
+    supabase=Depends(get_supabase_client),
+) -> dict:
+    """A memória da operadora para a tela: cabeçalho, regras, tabelas e histórico de versões.
+
+    Abre para quem muda regra de algum tipo; `permissoes` diz de quais, para a
+    tela mostrar Editar e Decidir só onde a pessoa pode.
+    """
+    permissoes = [p for p in PERMISSOES_DA_TELA if p in (me.get("permissoes_cm") or [])]
+    if not permissoes:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Sem permissão para a memória das operadoras")
+    memoria = ler_memoria_da_operadora(supabase, sigla)
+    if memoria is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Operadora não cadastrada")
+    return {**memoria, "permissoes": permissoes}
 
 
 @router.put("/operadoras/{sigla}/regras/{codigo}")
