@@ -19,6 +19,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
+from postgrest.exceptions import APIError
 from test_contas_medicas_prontuario import ATENDIMENTO, CAPA_QUE_BATE, montar
 
 from app.services import contas_medicas_extrator as extrator
@@ -239,11 +240,17 @@ def test_linha_em_80_por_cento_dos_documentos_da_familia_e_aprendida_e_sai_do_te
     prontuario = _cinco_fisioterapias()
     assert all(sum(linha in d.linhas for d in prontuario.documentos) == 4 for linha in MODELO)
 
-    limpo = sem_formulario_em_branco(banco, prontuario, aprender=True)
+    primeiro = sem_formulario_em_branco(banco, prontuario, aprender=True)
 
     assert sorted((r["familia"], r["linha"], r["contagem"]) for r in banco.linhas) == sorted(
         ("FISIO_RESP", linha, 1) for linha in MODELO
     )
+    # Um paciente só não basta para dizer que a linha é do formulário.
+    assert primeiro == prontuario
+
+    sem_formulario_em_branco(banco, _cinco_fisioterapias(), aprender=True)
+    limpo = sem_formulario_em_branco(banco, _cinco_fisioterapias(), aprender=True)
+
     for documento in limpo.documentos:
         assert not set(MODELO) & set(documento.linhas)
         assert documento.linhas[0] == TITULO
@@ -262,13 +269,68 @@ def test_contagem_acumula_entre_prontuarios():
 
 def test_prontuario_com_um_formulario_so_perde_as_linhas_aprendidas_com_os_outros():
     banco = _Banco()
-    sem_formulario_em_branco(banco, _cinco_fisioterapias(), aprender=True)
+    for _ in range(3):
+        sem_formulario_em_branco(banco, _cinco_fisioterapias(), aprender=True)
     sozinho = _prontuario(_documento("FISIO_RESP", [TITULO, *MODELO, "Paciente em VNI."]))
 
     limpo = sem_formulario_em_branco(banco, sozinho, aprender=True)
 
     assert limpo.documentos[0].linhas == (TITULO, "Paciente em VNI.")
-    assert {r["contagem"] for r in banco.linhas} == {1}
+    assert {r["contagem"] for r in banco.linhas} == {3}
+
+
+def test_evolucao_copiada_de_um_paciente_nao_some_do_texto_dele_nem_do_de_outro():
+    """Evolução copiada de um dia para outro (o normal na fisioterapia do MV) fica igual
+    em todos os documentos de um paciente; é resposta, não modelo do formulário."""
+    banco = _Banco()
+    copiada = "Ausculta pulmonar: murmúrio vesicular presente com estertores em base direita."
+    um_paciente = _prontuario(*(_documento("FISIO_RESP", [TITULO, copiada]) for _ in range(3)))
+    outro_paciente = _prontuario(_documento("FISIO_RESP", [TITULO, copiada, "Paciente em VNI."]))
+
+    dele = sem_formulario_em_branco(banco, um_paciente, aprender=True)
+    do_outro = sem_formulario_em_branco(banco, outro_paciente, aprender=True)
+
+    assert all(d.linhas == (TITULO, copiada) for d in dele.documentos)
+    assert do_outro.documentos[0].linhas == (TITULO, copiada, "Paciente em VNI.")
+
+
+class _BancoQueRecusa(_Banco):
+    """O upsert falha com o código do Postgres (a leitura da tabela funciona)."""
+
+    def __init__(self, codigo: str):
+        super().__init__()
+        self.codigo = codigo
+
+    def table(self, nome: str):
+        consulta = super().table(nome)
+        upsert = consulta.upsert
+
+        def recusa(linhas, on_conflict):
+            upsert(linhas, on_conflict)
+            raise APIError({"code": self.codigo, "message": "recusado"})
+
+        consulta.upsert = recusa
+        return consulta
+
+
+@pytest.mark.parametrize(
+    ("codigo", "causa"),
+    [
+        ("42P10", "sem unique (familia, linha)"),
+        ("42P01", "tabela ausente (migration 117)"),
+        ("PGRST205", "tabela ausente (migration 117)"),
+    ],
+)
+def test_aviso_do_aprendizado_que_falha_diz_a_causa_certa(caplog, codigo, causa):
+    prontuario = _cinco_fisioterapias()
+
+    with caplog.at_level("WARNING", logger="app.services.contas_medicas.formulario"):
+        limpo = sem_formulario_em_branco(_BancoQueRecusa(codigo), prontuario, aprender=True)
+
+    assert limpo == prontuario
+    (aviso,) = [r.getMessage() for r in caplog.records]
+    assert causa in aviso
+    assert codigo in aviso
 
 
 # ═══════════════════════════════════════════════════════════════════════════

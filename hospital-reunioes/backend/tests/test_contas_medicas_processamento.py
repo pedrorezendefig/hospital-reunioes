@@ -860,7 +860,7 @@ class TestProntuarioUmaVez:
         (atendimento,) = banco.tabelas["cm_atendimento"]
         assert atendimento["paciente_rotulo"] == "Antônia F."
 
-    def test_o_formulario_em_branco_e_aprendido_uma_vez_por_arquivo_e_sai_do_texto(self, monkeypatch):
+    def test_o_formulario_em_branco_e_aprendido_uma_vez_por_arquivo_e_a_resposta_fica_no_texto(self, monkeypatch):
         banco = _cenario()
         _enviar(banco, _conta("48811", 2, 4), _conta("48812", 5, 6), _prontuario(fisioterapias=3))
         lidos = []
@@ -880,10 +880,11 @@ class TestProntuarioUmaVez:
         assert ("FISIO_RESP", conduta) in {(r["familia"], r["linha"]) for r in aprendidas}
         # As duas parciais leem o mesmo arquivo: a contagem é de prontuários, soma uma vez.
         assert {r["contagem"] for r in aprendidas} == {1}
+        # Repetida nas três fisioterapias de um paciente só, é evolução copiada: fica.
         for estrutura in lidos:
             fisioterapias = [d for d in estrutura.documentos if d.familia == "FISIO_RESP"]
             assert len(fisioterapias) == 3
-            assert all(d.linhas == ("AVALIAÇÃO RESPIRATÓRIA - VENTILAÇÃO",) for d in fisioterapias)
+            assert all(conduta in d.linhas for d in fisioterapias)
 
     def test_duas_parciais_em_vagas_paralelas_gravam_o_prontuario_uma_vez(self):
         """As duas vagas pegam as parciais do mesmo atendimento juntas. A barreira

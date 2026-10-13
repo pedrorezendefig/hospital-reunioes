@@ -6,16 +6,18 @@ resposta. Essas linhas são o modelo do formulário, iguais em quase todo
 documento da mesma Família, e só gastam a leitura da IA.
 
 Linha que aparece igual em 80% ou mais dos documentos da mesma Família de um
-Prontuário é do modelo: entra em `cm_linha_formulario` (migration 117), com a
-contagem de prontuários em que foi modelo, e sai do texto que vai à IA. As
-linhas da tabela saem de todo Prontuário, então quem tem um formulário só se
-beneficia do que os outros ensinaram.
+Prontuário é candidata a modelo: entra em `cm_linha_formulario` (migration 117)
+com a contagem de prontuários em que foi candidata. Só sai do texto que vai à
+IA quando foi candidata em `MINIMO_DE_PRONTUARIOS` prontuários ou mais, e aí
+sai de todo Prontuário, inclusive do que tem um formulário só. Um Prontuário
+sozinho não basta: a evolução copiada de um dia para outro também se repete em
+todos os documentos de um paciente, e é resposta, não pergunta.
 
-O que a tabela guarda: só as linhas que foram modelo, nunca o texto livre do
-prontuário, e já desidentificadas (o texto vem de `ler_prontuario`). Ficam de
-fora do aprendizado e da remoção a primeira linha de cada documento (o título,
-que diz à IA qual formulário é) e a linha com opção marcada (`[X]`), que é a
-resposta e não a pergunta.
+O que a tabela guarda: as candidatas, já desidentificadas (o texto vem de
+`ler_prontuario`); uma resposta repetida dentro de um paciente pode entrar com
+contagem 1, mas não sai de texto nenhum. Ficam de fora do aprendizado e da
+remoção a primeira linha de cada documento (o título, que diz à IA qual
+formulário é) e a linha com opção marcada (`[X]`), que é a resposta.
 
 A Família do editor de documentos é uma só para muitos formulários; a chave do
 aprendizado é ela com o título, para a anamnese não diluir o sumário de alta.
@@ -43,6 +45,8 @@ TABELA = "cm_linha_formulario"
 FRACAO_DO_MODELO = 0.8
 # Com menos de 3 documentos, toda linha de um documento só já seria "80%".
 MINIMO_DE_DOCUMENTOS = 3
+# Prontuários (pacientes) em que a linha foi candidata para sair do texto.
+MINIMO_DE_PRONTUARIOS = 3
 
 
 def _chave(documento: Documento) -> str | None:
@@ -65,29 +69,48 @@ def _modelo(documentos: Sequence[Documento]) -> set[str]:
     return {linha for linha, n in vezes.items() if n >= FRACAO_DO_MODELO * len(documentos)}
 
 
+_CAUSAS = {
+    "42P01": "tabela ausente (migration 117)",
+    "PGRST205": "tabela ausente (migration 117)",
+    "42P10": "sem unique (familia, linha) para o upsert",
+}
+
+
+def _causa(erro: APIError | httpx.HTTPError) -> str:
+    """O motivo do aviso, só com o código: a mensagem do banco pode trazer a linha."""
+    if isinstance(erro, httpx.HTTPError):
+        return f"banco fora ({type(erro).__name__})"
+    return f"{_CAUSAS.get(erro.code, 'erro do banco')} (codigo {erro.code})"
+
+
 def _aprender(supabase, deste: dict[str, set[str]], aprender: bool) -> dict[str, set[str]]:
-    """As linhas de modelo de cada chave: as da tabela mais as deste Prontuário, que
-    entram na tabela (ou somam um na contagem) quando `aprender`."""
+    """As linhas de modelo de cada chave: as candidatas em `MINIMO_DE_PRONTUARIOS` ou
+    mais, contando este. Com `aprender`, as deste Prontuário entram na tabela (ou somam
+    um na contagem)."""
     try:
         guardadas = (
             supabase.table(TABELA).select("familia,linha,contagem").in_("familia", list(deste)).execute().data or []
         )
         contagem = {(r["familia"], r["linha"]): r.get("contagem") or 0 for r in guardadas}
-        novas = [
-            {"familia": chave, "linha": linha, "contagem": contagem.get((chave, linha), 0) + 1}
-            for chave, linhas in deste.items()
-            for linha in sorted(linhas)
-        ]
-        if aprender and novas:
-            supabase.table(TABELA).upsert(novas, on_conflict="familia,linha").execute()
+        if aprender:
+            for chave, linhas in deste.items():
+                for linha in linhas:
+                    contagem[(chave, linha)] = contagem.get((chave, linha), 0) + 1
+            novas = [
+                {"familia": chave, "linha": linha, "contagem": contagem[(chave, linha)]}
+                for chave, linhas in deste.items()
+                for linha in sorted(linhas)
+            ]
+            if novas:
+                supabase.table(TABELA).upsert(novas, on_conflict="familia,linha").execute()
     except (APIError, httpx.HTTPError) as erro:
-        # Sem a tabela (migration 117 ainda não aplicada) ou com o banco fora, a leitura
-        # segue com o que este Prontuário ensinou: a remoção é economia, não conferência.
-        logger.warning("[ContasMedicas] Formulario em branco sem a tabela: %s", type(erro).__name__)
-        return deste
-    modelo = {chave: set(linhas) for chave, linhas in deste.items()}
-    for chave, linha in contagem:
-        modelo.setdefault(chave, set()).add(linha)
+        # A remoção é economia, não conferência: sem o aprendizado a leitura segue inteira.
+        logger.warning("[ContasMedicas] Formulario em branco sem aprendizado: %s", _causa(erro))
+        return {}
+    modelo: dict[str, set[str]] = {}
+    for (chave, linha), n in contagem.items():
+        if n >= MINIMO_DE_PRONTUARIOS:
+            modelo.setdefault(chave, set()).add(linha)
     return modelo
 
 
