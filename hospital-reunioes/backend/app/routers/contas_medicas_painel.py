@@ -18,6 +18,7 @@ from fastapi import APIRouter, Depends, Query, Request
 
 from app.dependencies import get_supabase_client, require_permissao_cm
 from app.limiter import limiter
+from app.services.contas_medicas.coordenacao import incluido_pela_coordenacao
 from app.services.contas_medicas.painel import montar_painel
 
 router = APIRouter(prefix="/contas-medicas", tags=["contas-medicas"])
@@ -40,10 +41,15 @@ async def painel(
     própria linha de produção, filtrada no servidor.
     """
     completo = "painel_completo" in me["permissoes_cm"]
-    return montar_painel(
+    operadora = str(operadora_id) if operadora_id else None
+    painel = montar_painel(
         supabase,
         semana=semana,
-        operadora_id=str(operadora_id) if operadora_id else None,
+        operadora_id=operadora,
         tipo=tipo,
         so_da_faturista=None if completo else me["id"],
     )
+    # O cartão da coordenação (#1143): só com a permissão, fora da nota e da produção.
+    if "conferencia_coordenacao" in me["permissoes_cm"]:
+        painel["coordenacao"] = incluido_pela_coordenacao(supabase, semana=semana, operadora_id=operadora, tipo=tipo)
+    return painel

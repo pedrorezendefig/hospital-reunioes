@@ -16,8 +16,10 @@ rotas da tela. O provedor responde pelo schema pedido.
 from __future__ import annotations
 
 import json
+from datetime import datetime
 from pathlib import Path
 from typing import Any
+from zoneinfo import ZoneInfo
 
 import httpx
 import pytest
@@ -479,6 +481,65 @@ class TestMarcacao:
         )
         assert de_novo.status_code == 409
         assert por_id[lembretes["CEN-001"]["id"]]["estado"] == "INCLUIDO"
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 5. O cartão do Painel
+# ═══════════════════════════════════════════════════════════════════════════
+
+FUSO = ZoneInfo("America/Sao_Paulo")
+
+
+def _conta_concluida_com_lembrete_incluido(openrouter) -> tuple[_BancoDaCoordenacao, str]:
+    """A conta analisada, concluída pela faturista, com o lembrete do CEN-001
+    (equipo, R$ 25,00) marcado Incluído pela coordenadora e o do CEN-003
+    (R$ 12,50) ainda aberto. Devolve o banco e a semana da marcação."""
+    banco = _banco_com_cenarios()
+    conta = _analisar(banco, openrouter, _ocorrencia("CEN-001"), _ocorrencia("CEN-003", TRECHO_INVENTADO))
+    faturista = _cliente(banco, "faturista")
+    assert faturista.get(f"/api/contas-medicas/contas/{conta['id']}/guia").status_code == 200
+    concluida = faturista.post(f"/api/contas-medicas/contas/{conta['id']}/guia/concluir", json={})
+    assert concluida.status_code == 200, concluida.text
+    lembretes = _lembretes_por_cenario(_conferencia(banco))
+    marcada = _cliente(banco, "coordenadora").post(
+        f"{ROTA}/lembretes/{lembretes['CEN-001']['id']}/marcacao", json={"estado": "INCLUIDO"}
+    )
+    assert marcada.status_code == 200, marcada.text
+    semana = datetime.fromisoformat(marcada.json()["marcado_em"]).astimezone(FUSO).date().isoformat()
+    return banco, semana
+
+
+def _painel(banco: _Banco, quem: str, semana: str) -> dict:
+    resposta = _cliente(banco, quem).get("/api/contas-medicas/painel", params={"semana": semana})
+    assert resposta.status_code == 200, resposta.text
+    return resposta.json()
+
+
+class TestCartaoDoPainel:
+    def test_o_cartao_traz_o_rs_incluido_pela_coordenacao_so_para_quem_tem_a_permissao(self, openrouter):
+        banco, semana = _conta_concluida_com_lembrete_incluido(openrouter)
+
+        coordenadora = _painel(banco, "coordenadora", semana)
+        diretoria = _painel(banco, "diretoria", semana)
+        faturista = _painel(banco, "faturista", semana)
+
+        # Só o Incluído conta: o lembrete aberto (R$ 12,50) fica de fora.
+        assert coordenadora["coordenacao"] == {"valor_incluido": 25.0, "lembretes_incluidos": 1}
+        assert diretoria["coordenacao"] == coordenadora["coordenacao"]
+        assert not {c for c in _chaves(faturista) if "coordena" in c or "lembrete" in c}
+
+    def test_o_cartao_fica_fora_da_nota_e_da_producao(self, openrouter):
+        banco, semana = _conta_concluida_com_lembrete_incluido(openrouter)
+        com_o_cartao = _painel(banco, "coordenadora", semana)
+        assert com_o_cartao["producao"], "a conta concluída precisa estar na produção para o teste valer"
+
+        # O mesmo Painel com os lembretes apagados: tudo igual, menos o cartão.
+        banco.tabelas["cm_lembrete"], banco.tabelas["cm_lembrete_item"] = [], []
+        sem_lembrete = _painel(banco, "coordenadora", semana)
+
+        assert sem_lembrete.pop("coordenacao") == {"valor_incluido": 0, "lembretes_incluidos": 0}
+        com_o_cartao.pop("coordenacao")
+        assert com_o_cartao == sem_lembrete
 
 
 KIT = Path(__file__).resolve().parents[1] / "app" / "conhecimento" / "contas-medicas.md"

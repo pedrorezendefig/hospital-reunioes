@@ -16,14 +16,14 @@ from __future__ import annotations
 
 import re
 from collections import defaultdict
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
 from typing import Any
 
 from pydantic import BaseModel, ConfigDict
 
 from app.services.contas_medicas import ia
-from app.services.contas_medicas.painel import _em_lotes
+from app.services.contas_medicas.painel import _em_lotes, _filtrar, _meia_noite, segunda_da_semana
 from app.services.paginacao import ler_tudo
 from app.services.prompt_loader import load_prompt
 from app.utils.text_sanitizer import sanitizar_estrutura
@@ -34,6 +34,7 @@ __all__ = [
     "LembreteJaMarcadoError",
     "LembreteNaoEncontradoError",
     "editar_cenario",
+    "incluido_pela_coordenacao",
     "itens_dos_cenarios",
     "lembretes_abertos",
     "listar_cenarios",
@@ -449,3 +450,38 @@ def marcar_lembrete(
         raise LembreteJaMarcadoError("Este lembrete já foi marcado")
     (lembrete,) = marcado
     return {chave: lembrete.get(chave) for chave in ("id", "estado", "observacao", "marcado_por", "marcado_em")}
+
+
+# ----------------------------------------------------------------------------------
+# O cartão do Painel
+# ----------------------------------------------------------------------------------
+
+
+def incluido_pela_coordenacao(
+    supabase, *, semana: date, operadora_id: str | None = None, tipo: str | None = None
+) -> dict[str, Any]:
+    """O R$ dos lembretes marcados Incluído na semana (segunda a domingo, pela
+    data da marcação), com os filtros do Painel. Fica numa chave própria, fora
+    da nota de entrada e da produção das faturistas."""
+    segunda = segunda_da_semana(semana)
+    lembretes = ler_tudo(
+        lambda: (
+            supabase.table("cm_lembrete")
+            .select("id, conta_id, marcado_em")
+            .eq("estado", "INCLUIDO")
+            .gte("marcado_em", _meia_noite(segunda))
+            .lt("marcado_em", _meia_noite(segunda + timedelta(weeks=1)))
+            .order("id")
+        ),
+        rotulo="lembretes incluídos",
+    )
+    contas = _em_lotes(
+        supabase, "cm_conta", "id, atendimento_id", "id", (lb["conta_id"] for lb in lembretes), "contas do cartão"
+    )
+    filtradas = {conta["id"] for conta in _filtrar(supabase, contas, operadora_id, tipo)}
+    lembretes = [lb for lb in lembretes if lb["conta_id"] in filtradas]
+    itens = _em_lotes(
+        supabase, "cm_lembrete_item", "lembrete_id, valor", "lembrete_id", (lb["id"] for lb in lembretes), "R$ incluído"
+    )
+    total = sum((Decimal(str(item.get("valor") or 0)) for item in itens), Decimal(0))
+    return {"valor_incluido": _dinheiro(total), "lembretes_incluidos": len(lembretes)}
