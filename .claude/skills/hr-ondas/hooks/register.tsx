@@ -270,7 +270,7 @@ export const atividadeDaSessao = (s: Agente, c: Coleta): { texto: string; inicio
 
 /** Padrão conhecido vira rótulo fixo; o resto é a description que o orquestrador escreveu. */
 export const rotuloDoShell = (descricao: string, comando: string) => {
-  const subida = /fechar_onda\.py\s+--prs\s+([\d\s]+)/.exec(comando)
+  const subida = /python[\d.]*\s+(?:-\S+\s+)*\S*fechar_onda\.py\s+--prs\s+([\d\s]+)/.exec(comando)
   if (subida && !/--dry-run/.test(comando)) return `subida ${subida[1]!.trim().split(/\s+/).map(p => `#${p}`).join(' ')}`
   const ci = /gh\s+(?:pr\s+checks\s+(\d+)[^|;&]*--watch|run\s+watch)/.exec(comando)
   if (ci) return ci[1] ? `esperando o CI do PR #${ci[1]}` : 'esperando o CI'

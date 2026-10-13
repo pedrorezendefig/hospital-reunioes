@@ -242,6 +242,8 @@ test('rótulo do shell: subida e CI pelo padrão, o resto pela description', () 
   const subida = 'cd /r; python3 .claude/skills/onda-enxuta/scripts/fechar_onda.py --prs 1171 1169 --sessao onda-gestao-onda2 > log'
   expect(rotuloDoShell('Roda a subida', subida)).toBe('subida #1171 #1169')
   expect(rotuloDoShell('Simula a subida', `${subida} --dry-run`)).toBe('Simula a subida')
+  // o comando citado num comentário (heredoc) não é subida
+  expect(rotuloDoShell('Dá baixa na #1142', "cat > b.md <<'EOF'\nrode `fechar_onda.py --prs 1178`\nEOF")).toBe('Dá baixa na #1142')
   expect(rotuloDoShell('', 'gh pr checks 1169 --watch')).toBe('esperando o CI do PR #1169')
   expect(rotuloDoShell('', 'gh run watch 123')).toBe('esperando o CI')
   expect(rotuloDoShell('Comenta o relatório da onda no PRD 1129', 'gh issue comment 1129')).toBe('Comenta o relatório da onda no PRD 1129')
