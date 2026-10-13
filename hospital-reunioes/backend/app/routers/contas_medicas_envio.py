@@ -26,7 +26,7 @@ from app.services.contas_medicas.envio import (
     EnvioNaoEncontradoError,
     receber,
 )
-from app.services.contas_medicas.guia import MARCADAS, PENDENTES
+from app.services.contas_medicas.guia import MARCADAS, linha_pendente
 
 router = APIRouter(prefix="/contas-medicas", tags=["contas-medicas"])
 
@@ -121,7 +121,7 @@ def _item(conta: dict, atendimento: dict, linhas: list[dict]) -> dict:
         "valor_apontado": conta.get("valor_apontado"),
         "itens_feitos": sum(1 for linha in da_faturista if linha.get("estado") in MARCADAS),
         "itens_total": len(da_faturista),
-        "pendencias": sum(1 for linha in linhas if linha.get("estado") in PENDENTES),
+        "pendencias": sum(1 for linha in linhas if linha_pendente(linha)),
         "erro_motivo": conta.get("erro_motivo"),
     }
 

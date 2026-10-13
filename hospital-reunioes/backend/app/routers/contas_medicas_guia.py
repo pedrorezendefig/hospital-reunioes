@@ -21,9 +21,9 @@ from supabase import Client
 from app.dependencies import get_supabase_client, require_permissao_cm
 from app.limiter import limiter
 from app.services.contas_medicas.guia import (
-    PENDENTES,
     agrupar_por_dia_e_setor,
     linha_nao_conferida,
+    linha_pendente,
     nota_de_entrada,
     numeros_do_topo,
 )
@@ -266,7 +266,7 @@ async def concluir_guia(
     """
     conta = _conta_em_correcao(supabase, conta_id, me)
     linhas = _linhas(supabase, conta["id"])
-    pendencias = sum(1 for linha in linhas if linha.get("estado") in PENDENTES)
+    pendencias = sum(1 for linha in linhas if linha_pendente(linha))
     situacao = "CONCLUIDA_COM_PENDENCIA" if pendencias else "CONCLUIDA"
     sem_nao_procede = [linha for linha in linhas if linha.get("estado") != "NAO_PROCEDE"]
     nota = nota_de_entrada(sem_nao_procede, conta.get("total_lancado")).nota

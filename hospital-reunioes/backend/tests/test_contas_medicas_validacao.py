@@ -352,3 +352,64 @@ class TestRegraPendente:
         assert [(linha["codigo"], linha["acao"], linha["estado"]) for linha in linhas] == [
             ("70000010", "INCLUIR", "DECIDIDA")
         ]
+
+    def test_linha_decidida_e_pendencia_da_faturista_ate_ela_marcar_no_retorno(self):
+        banco = _cenario()
+        _validar_em_tres_contas(banco)
+        [tema] = _fila_de_validacao(banco)["temas"]
+        assert _decidir(banco, tema["id"], {"decisao": "VALIDAR_REGRA"}).status_code == 200
+        faturista = _cliente(banco, "faturista")
+
+        sem_marcar = faturista.post(f"/api/contas-medicas/contas/{C3}/guia/concluir", json={})
+        assert sem_marcar.json()["situacao"] == "CONCLUIDA_COM_PENDENCIA"
+
+        banco.conta(C3)["situacao"] = "RETORNO"
+        [linha] = _linhas_do_guia(_guia(banco, C3))
+        assert _guia(banco, C3)["numeros"]["itens_sem_marcacao"] == 1
+        feito = faturista.post(
+            f"/api/contas-medicas/contas/{C3}/guia/linhas/{linha['id']}/marcacao", json={"estado": "FEITO"}
+        )
+        assert feito.status_code == 200, feito.text
+        concluida = faturista.post(f"/api/contas-medicas/contas/{C3}/guia/concluir", json={})
+        assert concluida.json()["situacao"] == "CONCLUIDA"
+
+    def test_regra_vigente_validada_sem_texto_novo_nao_cria_versao_e_linha_sem_diferenca_e_descartada(self):
+        """A linha Validar de regra já vigente (o caso ambíguo) e a que não diz
+        o que corrigir (a diária que não fecha): Decidida sem ação, sem Retorno."""
+        banco = _cenario()
+        _gravar(
+            banco,
+            C3,
+            _linha_do_guia(
+                "VALIDAR",
+                None,
+                300.0,
+                REGRA_VIGENTE,
+                quantidade_lancada=None,
+                quantidade_devida=None,
+                preco_tabela=None,
+                descricao="Diária",
+            ),
+        )
+        [tema] = _fila_de_validacao(banco)["temas"]
+        assert _guia(banco, C3)["numeros"]["valor_em_validacao"] == 300.0
+
+        assert _decidir(banco, tema["id"], {"decisao": "VALIDAR_REGRA"}).status_code == 200
+
+        assert [v["versao"] for v in banco.tabelas["cm_memoria_versao"]] == ["1.0"]
+        [linha] = banco.tabelas["cm_guia_linha"]
+        assert (linha["acao"], linha["estado"]) == ("VALIDAR", "DECIDIDA")
+        assert banco.conta(C3)["situacao"] == "CONCLUIDA_COM_PENDENCIA"
+        assert _guia(banco, C3)["numeros"]["valor_em_validacao"] == 0
+
+    def test_deixar_pendente_fecha_o_tema_sem_mexer_na_memoria_nem_nas_linhas(self):
+        banco = _cenario()
+        _validar_em_tres_contas(banco)
+        [tema] = _fila_de_validacao(banco)["temas"]
+
+        assert _decidir(banco, tema["id"], {"decisao": "DEIXAR_PENDENTE"}).status_code == 200
+
+        assert [v["versao"] for v in banco.tabelas["cm_memoria_versao"]] == ["1.0"]
+        assert {(linha["acao"], linha["estado"]) for linha in banco.tabelas["cm_guia_linha"]} == {("VALIDAR", "ABERTA")}
+        assert _fila_de_validacao(banco)["temas"] == []
+        assert _decidir(banco, tema["id"], {"decisao": "VALIDAR_REGRA"}).status_code == 409
