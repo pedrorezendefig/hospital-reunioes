@@ -2,6 +2,54 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-10-12T21:36:18-03:00",
+      "sha": "58f7f1e4f46fb529d9ac47a644431f32ef4cf8e2",
+      "app_version": "0.179.0",
+      "subject": "Onda onda-a-onda6: Processamento da fila, pipeline e aviso no sino; Conferências de exame e glicemia",
+      "raw_subject": "chore(deploy): registro da onda onda-a-onda6 (#1162 #1161)",
+      "scope": [
+        "backend",
+        "frontend"
+      ],
+      "prds": [
+        1113
+      ],
+      "result": "healthy",
+      "duration_seconds": 513,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        },
+        {
+          "service": "frontend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "onda-enxuta onda-a-onda6: PR #1162 (issue #1124), PR #1161 (issue #1126), mergeados PR a PR. Merge pela API do GitHub, um build. Registro pela Action pos-merge depois do health.",
+      "etapas": {
+        "merge_s": 5,
+        "build_s": {
+          "backend": 119,
+          "frontend": 209
+        },
+        "health_s": 0
+      },
+      "responsavel": "pedrorezendefig"
+    },
+    {
       "at": "2026-10-12T20:28:24-03:00",
       "sha": "829e0875912c5ed2549a1273b3c9bbe62659a098",
       "app_version": "0.178.0",
