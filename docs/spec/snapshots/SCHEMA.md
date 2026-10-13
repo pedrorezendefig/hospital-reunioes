@@ -1,6 +1,6 @@
 # SCHEMA.md
 <!-- gerado automaticamente por /snapshot — não editar -->
-<!-- last_update: 2026-10-12T20:03+0000 -->
+<!-- last_update: 2026-10-13T03:17+0000 -->
 
 Diagrama relacional do Hospital Reuniões. Renderiza nativo no GitHub.
 
@@ -15,30 +15,50 @@ erDiagram
     cm_atendimento ||--o{ cm_eventos : "atendimento_id"
     cm_atendimento ||--o{ cm_glicemia_dia : "atendimento_id"
     cm_atendimento ||--o{ cm_prescricao : "atendimento_id"
+    cm_cenario ||--o{ cm_cenario_item : "cenario_id"
+    cm_cenario ||--o{ cm_lembrete : "cenario_id"
     cm_conta ||--o{ cm_conta_item : "conta_id"
     cm_conta ||--o{ cm_guia_linha : "conta_id"
+    cm_conta ||--o{ cm_lembrete : "conta_id"
     cm_conta ||--o{ cm_observacao : "conta_id"
+    cm_contrato ||--o{ cm_aviso : "contrato_id"
     cm_envio ||--o{ cm_arquivo : "envio_id"
+    cm_guia_linha ||--o{ cm_validacao_tema_linha : "guia_linha_id"
+    cm_item_dicionario ||--o{ cm_validacao_tema : "item_dicionario_id"
+    cm_lembrete ||--o{ cm_lembrete_item : "lembrete_id"
     cm_memoria_versao ||--o{ cm_conta : "memoria_versao_id"
     cm_memoria_versao ||--o{ cm_regra : "memoria_versao_id"
+    cm_memoria_versao ||--o{ cm_regra_historico : "memoria_versao_id"
+    cm_observacao ||--o{ cm_validacao_tema_linha : "observacao_id"
     cm_operadora ||--o{ cm_atendimento : "operadora_id"
+    cm_operadora ||--o{ cm_cenario : "operadora_id"
+    cm_operadora ||--o{ cm_contrato : "operadora_id"
     cm_operadora ||--o{ cm_memoria_versao : "operadora_id"
     cm_operadora ||--o{ cm_operadora_plano : "operadora_id"
     cm_operadora ||--o{ cm_operadora_tabela : "operadora_id"
     cm_operadora ||--o{ cm_regra : "operadora_id"
+    cm_operadora ||--o{ cm_validacao_tema : "operadora_id"
     cm_prescricao ||--o{ cm_prescricao_item : "prescricao_id"
+    cm_regra ||--o{ cm_regra_historico : "regra_id"
     cm_tabela_preco ||--o{ cm_operadora_tabela : "tabela_id"
     cm_tabela_preco ||--o{ cm_tabela_preco_item : "tabela_id"
+    cm_validacao_tema ||--o{ cm_validacao_tema_linha : "tema_id"
     participantes ||--o{ audit_log : "actor_id"
     participantes ||--o{ bulk_jobs : "actor_id"
+    participantes ||--o{ cm_cenario : "autor_id"
     participantes ||--o{ cm_conta : "faturista_id"
+    participantes ||--o{ cm_contrato : "confirmado_por"
     participantes ||--o{ cm_envio : "usuario_id"
     participantes ||--o{ cm_guia_linha : "marcado_por"
     participantes ||--o{ cm_item_dicionario : "autor_id"
+    participantes ||--o{ cm_lembrete : "marcado_por"
     participantes ||--o{ cm_memoria_versao : "autor_id"
     participantes ||--o{ cm_observacao : "autor_id"
+    participantes ||--o{ cm_registro : "autor_id"
     participantes ||--o{ cm_regra : "validado_por"
+    participantes ||--o{ cm_regra_historico : "autor_id"
     participantes ||--o{ cm_tabela_preco : "autor_id"
+    participantes ||--o{ cm_validacao_tema : "decidido_por"
     participantes ||--o{ comentarios_pendencias : "autor_id"
     participantes ||--o{ notificacoes : "destinatario_id"
     participantes ||--o{ ouvidoria_acessos : "ator_id"
@@ -543,7 +563,7 @@ erDiagram
         TEXT texto
         TEXT tipo
         TEXT origem
-        _ mais_colunas "+6"
+        _ mais_colunas "+7"
     }
     cm_tabela_preco {
         UUID id PK
@@ -554,7 +574,7 @@ erDiagram
         DATE vigencia_fim
         TEXT situacao
         TEXT arquivo_nome
-        _ mais_colunas "+2"
+        _ mais_colunas "+4"
     }
     cm_tabela_preco_item {
         UUID id PK
@@ -703,6 +723,98 @@ erDiagram
         TEXT texto
         TIMESTAMPTZ criado_em
     }
+    cm_registro {
+        UUID id PK
+        VARCHAR autor_id FK
+        TIMESTAMPTZ data
+        TEXT entidade
+        TEXT entidade_id
+        JSONB antes_json
+        JSONB depois_json
+    }
+    cm_regra_historico {
+        UUID id PK
+        UUID regra_id FK
+        UUID memoria_versao_id FK
+        TEXT texto_anterior
+        TEXT texto_novo
+        VARCHAR autor_id FK
+        TIMESTAMPTZ criado_em
+    }
+    cm_validacao_tema {
+        UUID id PK
+        UUID operadora_id FK
+        TEXT tipo
+        TEXT regra_codigo
+        TEXT codigo_item
+        UUID item_dicionario_id FK
+        TEXT titulo
+        TEXT estado
+        _ mais_colunas "+6"
+    }
+    cm_validacao_tema_linha {
+        UUID id PK
+        UUID tema_id FK
+        UUID guia_linha_id FK
+        UUID observacao_id FK
+        TIMESTAMPTZ criado_em
+    }
+    cm_cenario {
+        UUID id PK
+        TEXT codigo
+        TEXT nome
+        UUID operadora_id FK
+        TEXT gatilho_texto
+        TEXT orientacao
+        BOOLEAN ativo
+        VARCHAR autor_id FK
+        _ mais_colunas "+1"
+    }
+    cm_cenario_item {
+        UUID id PK
+        UUID cenario_id FK
+        TEXT codigo
+        TEXT descricao
+        NUMERIC quantidade
+    }
+    cm_lembrete {
+        UUID id PK
+        UUID conta_id FK
+        UUID cenario_id FK
+        DATE data
+        TEXT setor
+        INTEGER evidencia_pagina
+        TEXT evidencia_trecho
+        TEXT estado
+        _ mais_colunas "+4"
+    }
+    cm_lembrete_item {
+        UUID id PK
+        UUID lembrete_id FK
+        TEXT codigo
+        TEXT descricao
+        NUMERIC quantidade
+        NUMERIC preco_tabela
+        NUMERIC valor
+    }
+    cm_contrato {
+        UUID id PK
+        UUID operadora_id FK
+        DATE data_assinatura
+        TEXT aditivo_numero
+        DATE aditivo_data
+        DATE vigencia_inicio
+        DATE vencimento
+        BOOLEAN vencimento_calculado
+        _ mais_colunas "+6"
+    }
+    cm_aviso {
+        UUID id PK
+        UUID contrato_id FK
+        DATE data_prevista
+        TIMESTAMPTZ enviado_em
+        TIMESTAMPTZ criado_em
+    }
 ```
 
 ## Indexes principais
@@ -811,6 +923,7 @@ erDiagram
 | `cm_operadora_plano` | `idx_cm_operadora_plano_nome_mv` | `(lower(nome_mv` | `116_contas_medicas_fundacao.sql` |
 | `cm_memoria_versao` | `idx_cm_memoria_versao_vigente` | `operadora_id` | `116_contas_medicas_fundacao.sql` |
 | `cm_regra` | `idx_cm_regra_operadora_codigo` | `operadora_id, codigo` | `116_contas_medicas_fundacao.sql` |
+| `cm_regra` | `idx_cm_regra_modelo` | `modelo_id` | `118_contas_medicas_gestao.sql` |
 | `cm_tabela_preco_item` | `idx_cm_tabela_preco_item_tabela_codigo` | `tabela_id, codigo` | `116_contas_medicas_fundacao.sql` |
 | `cm_operadora_tabela` | `idx_cm_operadora_tabela_operadora` | `operadora_id, categoria` | `116_contas_medicas_fundacao.sql` |
 | `cm_setor` | `idx_cm_setor_nome_mv` | `(lower(nome_mv` | `116_contas_medicas_fundacao.sql` |
@@ -826,6 +939,15 @@ erDiagram
 | `cm_conta_item` | `idx_cm_conta_item_conta` | `conta_id` | `116_contas_medicas_fundacao.sql` |
 | `cm_guia_linha` | `idx_cm_guia_linha_conta` | `conta_id` | `116_contas_medicas_fundacao.sql` |
 | `cm_observacao` | `idx_cm_observacao_conta` | `conta_id` | `116_contas_medicas_fundacao.sql` |
+| `cm_registro` | `idx_cm_registro_entidade` | `entidade, entidade_id, data DESC` | `118_contas_medicas_gestao.sql` |
+| `cm_regra_historico` | `idx_cm_regra_historico_regra` | `regra_id, criado_em DESC` | `118_contas_medicas_gestao.sql` |
+| `cm_validacao_tema` | `idx_cm_validacao_tema_estado` | `estado, tipo` | `118_contas_medicas_gestao.sql` |
+| `cm_validacao_tema_linha` | `idx_cm_validacao_tema_linha_tema` | `tema_id` | `118_contas_medicas_gestao.sql` |
+| `cm_validacao_tema_linha` | `idx_cm_validacao_tema_linha_guia` | `tema_id, guia_linha_id` | `118_contas_medicas_gestao.sql` |
+| `cm_cenario_item` | `idx_cm_cenario_item_cenario` | `cenario_id` | `118_contas_medicas_gestao.sql` |
+| `cm_lembrete` | `idx_cm_lembrete_conta` | `conta_id` | `118_contas_medicas_gestao.sql` |
+| `cm_lembrete` | `idx_cm_lembrete_estado` | `estado, criado_em` | `118_contas_medicas_gestao.sql` |
+| `cm_lembrete_item` | `idx_cm_lembrete_item_lembrete` | `lembrete_id` | `118_contas_medicas_gestao.sql` |
 
 ---
-**Resumo:** 66 tabelas · 79 relacionamentos FK detectados.
+**Resumo:** 76 tabelas · 99 relacionamentos FK detectados.
