@@ -23,7 +23,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from openai import OpenAI
 from test_contas_medicas_memoria_tela import _importar, _operadora_id, _versao, _versoes
-from test_contas_medicas_operadoras import GESTAO, _Banco, _matriz_da_migration, _pessoa
+from test_contas_medicas_operadoras import GESTAO, _Banco, _Consulta, _matriz_da_migration, _pessoa
 
 from app.dependencies import get_current_user, get_supabase_client
 from app.limiter import limiter
@@ -373,6 +373,64 @@ class TestContasComRegraNova:
         assert next(c for c in banco.linhas("cm_conta") if c["id"] == EM_CORRECAO_ALFA)["situacao"] == "NA_FILA"
         assert [linha["id"] for linha in banco.linhas("cm_guia_linha")] == ["l-feita"]
         assert _marcadas(cliente, "ALFA") == {A_FAZER_ALFA}
+
+    def test_operadora_com_mais_atendimentos_que_o_limite_marca_as_abertas_sem_consultar_os_concluidos(self):
+        """`cm_atendimento` cresce para sempre. O banco de verdade corta o select
+        em 1000 linhas e recusa lista de ids grande na query string; a marca e a
+        Memória continuam de pé, e os atendimentos concluídos ficam fora da consulta."""
+        cliente, banco = _cliente(GESTAO, _BancoComLimites())
+        _importar(cliente)
+        _importar(cliente, "MEMORIA-BETA-v1.0.md")
+        _com_contas(banco)
+        versao = _versao(banco, "ALFA", "1.0")["id"]
+        alfa = _operadora_id(banco, "ALFA")
+        concluidos = [f"at-concluido-{i}" for i in range(_BancoComLimites.MAX_ROWS + 200)]
+        banco.tabelas["cm_atendimento"] = [
+            {"id": a, "numero_atendimento": f"9{i:05d}", "operadora_id": alfa} for i, a in enumerate(concluidos)
+        ] + banco.tabelas["cm_atendimento"]
+        # As concluídas são as mais antigas: vêm antes das abertas no banco.
+        banco.tabelas["cm_conta"] = [
+            {"id": f"c-{a}", "atendimento_id": a, "situacao": "CONCLUIDA", "memoria_versao_id": versao}
+            for a in concluidos
+        ] + banco.tabelas["cm_conta"]
+
+        validada = cliente.post(_validar("ALFA"), json=REGRA_VALIDADA)
+
+        assert validada.status_code == 200, validada.text
+        assert validada.json()["contas_com_regra_nova"] == 2
+        assert _marcadas(cliente, "ALFA") == {A_FAZER_ALFA, EM_CORRECAO_ALFA}
+        consultados = {v for valores in banco.listas_consultadas for v in valores}
+        assert not consultados & set(concluidos)
+
+
+class _ConsultaComLimites(_Consulta):
+    def in_(self, coluna, valores):
+        valores = list(valores)
+        if len(valores) > _BancoComLimites.MAX_IDS_NA_URL:
+            raise RuntimeError("414 Request-URI Too Large")
+        self._banco.listas_consultadas.append(valores)
+        return super().in_(coluna, valores)
+
+    def execute(self):
+        resposta = super().execute()
+        if self._operacao == "select":
+            resposta.data = resposta.data[: _BancoComLimites.MAX_ROWS]
+        return resposta
+
+
+class _BancoComLimites(_Banco):
+    """O dublê com os dois limites do banco de verdade: o `max_rows` do PostgREST
+    e o tamanho da linha de requisição do gateway (cerca de 200 UUIDs)."""
+
+    MAX_ROWS = 1000
+    MAX_IDS_NA_URL = 200
+
+    def __init__(self):
+        super().__init__()
+        self.listas_consultadas: list[list] = []
+
+    def table(self, nome: str):
+        return _ConsultaComLimites(self, nome)
 
 
 # ═══════════════════════════════════════════════════════════════════════════

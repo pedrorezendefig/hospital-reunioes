@@ -45,6 +45,10 @@ __all__ = [
 # As situações em que "Reanalisar" vale: o Guia pronto e ainda em aberto.
 SITUACOES_REANALISAVEIS = ("A_FAZER", "EM_CORRECAO")
 
+# Ids por consulta: a lista vai na query string, e o gateway corta a linha de
+# requisição perto de 200 UUIDs.
+_IDS_POR_CONSULTA = 100
+
 # A chave do cabeçalho, com ponto entre os níveis. Nome e versão da memória não
 # mudam por regra: a versão é do sistema, e a sigla é a operadora.
 _CHAVE = re.compile(r"[a-z_][a-z0-9_]*(\.[a-z0-9_]+)*")
@@ -228,26 +232,33 @@ def contas_com_regra_nova(supabase, sigla: str) -> list[dict[str, Any]]:
     if not operadoras:
         return []
     vigente = _vigente(supabase, operadoras[0]["id"])
-    atendimentos = {
-        a["id"]: a.get("numero_atendimento")
-        for a in supabase.table("cm_atendimento")
-        .select("id, numero_atendimento")
-        .eq("operadora_id", operadoras[0]["id"])
-        .execute()
-        .data
-        or []
-    }
-    if not atendimentos or not vigente:
+    if not vigente:
         return []
-    contas = (
-        supabase.table("cm_conta")
+    # Parte das contas abertas, que são poucas; `cm_atendimento` cresce para
+    # sempre e não cabe numa lista de ids na query string.
+    abertas = [
+        c
+        for c in supabase.table("cm_conta")
         .select("id, atendimento_id, numero_conta, situacao, memoria_versao_id")
-        .in_("atendimento_id", sorted(atendimentos))
         .in_("situacao", list(SITUACOES_REANALISAVEIS))
         .execute()
         .data
         or []
-    )
+        if _analisada_antes(c, vigente)
+    ]
+    ids = sorted({c["atendimento_id"] for c in abertas})
+    atendimentos: dict[str, Any] = {}
+    for inicio in range(0, len(ids), _IDS_POR_CONSULTA):
+        for a in (
+            supabase.table("cm_atendimento")
+            .select("id, numero_atendimento")
+            .in_("id", ids[inicio : inicio + _IDS_POR_CONSULTA])
+            .eq("operadora_id", operadoras[0]["id"])
+            .execute()
+            .data
+            or []
+        ):
+            atendimentos[a["id"]] = a.get("numero_atendimento")
     marcadas = [
         {
             "id": c["id"],
@@ -255,7 +266,7 @@ def contas_com_regra_nova(supabase, sigla: str) -> list[dict[str, Any]]:
             "numero_conta": c.get("numero_conta"),
             "situacao": c["situacao"],
         }
-        for c in contas
-        if _analisada_antes(c, vigente)
+        for c in abertas
+        if c["atendimento_id"] in atendimentos
     ]
     return sorted(marcadas, key=lambda c: (str(c["numero_atendimento"] or ""), str(c["numero_conta"] or "")))
