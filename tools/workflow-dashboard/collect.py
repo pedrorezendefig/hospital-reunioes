@@ -155,39 +155,46 @@ MARCADOR_DEMANDA = "<!-- demanda-vitta id="
 def _gh_issues(root: Path) -> list[dict]:
     items = json.loads(_run(["gh", "issue", "list", "--state", "all", "--limit", GH_LIMIT,
                              "--json", ISSUE_FIELDS], root))
-    issues = []
-    for it in items:
-        body = it.get("body") or ""
-        blocked = bloqueios_do_corpo(body)
-        criteria = re.findall(r"^\s*[-*] \[([ xX])\]", body, re.M)
-        parent = None
-        m = re.search(r"(?mi)^.{0,20}pai[^#\n]{0,40}#(\d+)", body)
-        if m:
-            parent = int(m.group(1))
-        issues.append({
-            "number": it["number"],
-            "title": it["title"],
-            "state": it["state"],
-            "labels": [l["name"] for l in it.get("labels") or []],
-            "created_at": it.get("createdAt"),
-            "closed_at": it.get("closedAt"),
-            "assignees": [a.get("login") for a in it.get("assignees") or []],
-            "author": (it.get("author") or {}).get("login"),
-            "url": it.get("url"),
-            "body": body,
-            # nasceu do botão "Levar para desenvolvimento" da aba Tecnologia (ADR 0054)
-            "demanda": MARCADOR_DEMANDA in body,
-            "blocked_by": sorted(set(blocked)),
-            "parent": parent,
-            "criteria": {"done": sum(1 for c in criteria if c.strip()), "total": len(criteria)},
-        })
-    return issues
+    return [_issue_do_gh(it) for it in items]
+
+
+def _issue_do_gh(it: dict) -> dict:
+    """Issue no shape do payload, do `gh issue list --json` ou de um nó GraphQL já achatado."""
+    body = it.get("body") or ""
+    blocked = bloqueios_do_corpo(body)
+    criteria = re.findall(r"^\s*[-*] \[([ xX])\]", body, re.M)
+    parent = None
+    m = re.search(r"(?mi)^.{0,20}pai[^#\n]{0,40}#(\d+)", body)
+    if m:
+        parent = int(m.group(1))
+    return {
+        "number": it["number"],
+        "title": it["title"],
+        "state": it["state"],
+        "labels": [l["name"] for l in it.get("labels") or []],
+        "created_at": it.get("createdAt"),
+        "closed_at": it.get("closedAt"),
+        "assignees": [a.get("login") for a in it.get("assignees") or []],
+        "author": (it.get("author") or {}).get("login"),
+        "url": it.get("url"),
+        "body": body,
+        # nasceu do botão "Levar para desenvolvimento" da aba Tecnologia (ADR 0054)
+        "demanda": MARCADOR_DEMANDA in body,
+        "blocked_by": sorted(set(blocked)),
+        "parent": parent,
+        "criteria": {"done": sum(1 for c in criteria if c.strip()), "total": len(criteria)},
+    }
 
 
 def _gh_prs(root: Path) -> list[dict]:
     items = json.loads(_run(["gh", "pr", "list", "--state", "all", "--limit", GH_LIMIT,
                              "--json", PR_FIELDS], root))
-    return [{
+    return [_pr_do_gh(it) for it in items]
+
+
+def _pr_do_gh(it: dict) -> dict:
+    """PR no shape do payload, do `gh pr list --json` ou de um nó GraphQL já achatado."""
+    return {
         "number": it["number"],
         "title": it["title"],
         "state": it["state"],
@@ -208,7 +215,7 @@ def _gh_prs(root: Path) -> list[dict]:
         "reviews": [],
         "comentarios": None,
         "vereditos": [],
-    } for it in items]
+    }
 
 
 def _check(c: dict) -> dict:
@@ -925,8 +932,129 @@ def collect(root: Path) -> dict:
     }
 
 
+# Recorte do hr-ondas: os PRDs com onda viva, as fatias (sub-issue nativa ou "Pai: #N" no corpo)
+# e os PRs que as fecham, numa consulta só: ~3 pontos de GraphQL para dois PRDs, contra os ~35 do OS
+# inteiro. O maior PRD até hoje tem 19 fatias; o teto de 30 sub-issues cabe com folga.
+_RECORTE_FATIA = """
+fragment Fatia on Issue {
+  number title state createdAt closedAt url body
+  labels(first:20){ nodes{ name } }
+  assignees(first:5){ nodes{ login } }
+  author{ login }
+  blockedBy(first:20){ nodes{ number } }
+  closedByPullRequestsReferences(first:5,includeClosedPrs:true){
+    nodes{ number title state mergedAt headRefName url createdAt closedAt isDraft author{ login } mergedBy{ login } }
+  }
+}
+"""
+
+
+def _achatar(no: dict) -> dict:
+    """Nó GraphQL com connections ({nodes: [...]}) no formato do `gh --json` (listas)."""
+    return {k: (v["nodes"] if isinstance(v, dict) and "nodes" in v else v) for k, v in no.items()}
+
+
+_PRS_ABERTOS_QUERY = """
+query($owner:String!,$name:String!){
+  repository(owner:$owner,name:$name){
+    pullRequests(states:OPEN,first:50){
+      nodes{ number closingIssuesReferences(first:5){ nodes{ number body parent{ number } } } }
+    }
+  }
+}
+"""
+
+
+def _prds_de_prs_abertos(root: Path, slug: str) -> set[int]:
+    """PRD de cada fatia com PR aberto: sub-issue nativa ou "Pai: #N" no corpo (~1 ponto)."""
+    owner, name = slug.split("/", 1)
+    out = json.loads(_run(["gh", "api", "graphql", "-f", f"query={_PRS_ABERTOS_QUERY}",
+                           "-F", f"owner={owner}", "-F", f"name={name}"], root))
+    prds = set()
+    for pr in out["data"]["repository"]["pullRequests"]["nodes"]:
+        for i in pr["closingIssuesReferences"]["nodes"]:
+            pai = (i.get("parent") or {}).get("number") or _issue_do_gh({**i, "title": "", "state": ""})["parent"]
+            if pai:
+                prds.add(pai)
+    return prds
+
+
+def _gh_recorte(root: Path, slug: str, prds: list[int]) -> dict:
+    owner, name = slug.split("/", 1)
+    partes = []
+    for n in prds:
+        partes.append(f"p{n}: issue(number:{n}){{ ...Fatia subIssues(first:30){{ nodes{{ ...Fatia }} }} }}")
+    buscas = [f's{n}: search(query:"repo:{slug} is:issue \\"Pai: #{n}\\"",type:ISSUE,first:10)'
+              f"{{ nodes{{ ...Fatia }} }}" for n in prds]
+    query = (f'query{{ repository(owner:"{owner}",name:"{name}"){{ {" ".join(partes)} }} {" ".join(buscas)} }}'
+             + _RECORTE_FATIA)
+    return json.loads(_run(["gh", "api", "graphql", "-f", f"query={query}"], root))["data"]
+
+
+def collect_recorte(root: Path, prds: list[int]) -> dict:
+    """O pedaço do /api/data que o hr-ondas lê (repo_slug, github.issues, fases).
+
+    Só dos `prds` (os com sessão de onda viva) e dos PRDs que têm fatia com PR aberto, de
+    quem quer que seja: um sócio, uma /pegar-issue à mão.
+    """
+    state = _spec_json_fresh(root, "docs/spec/deploy/state.json")
+    history = (_spec_json_fresh(root, "docs/spec/deploy/history.json") or {}).get("deploys") or []
+    slug = _repo_slug(state)
+    github = {"error": None, "error_kind": None, "issues": [], "prs": [], "prds": []}
+    fases = None
+    try:
+        prds = sorted(set(prds) | _prds_de_prs_abertos(root, slug))
+    except Exception as e:
+        github["error_kind"], github["error"] = _gh_failure(e)
+        return {"repo_slug": slug, "github": github, "fases": None}
+    if prds:
+        try:
+            data = _gh_recorte(root, slug, prds)
+            issues: dict[int, dict] = {}
+            prs: dict[int, dict] = {}
+
+            def guardar(no: dict, parent: int | None) -> None:
+                no = _achatar(no)
+                i = _issue_do_gh(no)
+                i["blocked_by"] = sorted(set(i["blocked_by"]) | {b["number"] for b in no.get("blockedBy") or []})
+                i["parent"] = parent if parent is not None else i["parent"]
+                issues.setdefault(i["number"], i)
+                for p in no.get("closedByPullRequestsReferences") or []:
+                    pr = prs.setdefault(p["number"], _pr_do_gh(p))
+                    pr["closes"] = sorted(set(pr["closes"]) | {i["number"]})
+
+            for n in prds:
+                prd = (data.get("repository") or {}).get(f"p{n}")
+                if not prd:
+                    continue
+                for sub in prd["subIssues"]["nodes"]:
+                    guardar(sub, n)
+                guardar({k: v for k, v in prd.items() if k != "subIssues"}, None)
+                for no in (data.get(f"s{n}") or {}).get("nodes") or []:
+                    if no and _issue_do_gh(_achatar(no))["parent"] == n:
+                        guardar(no, n)
+            lista = list(issues.values())
+            for i in lista:
+                i["children"] = sorted(c["number"] for c in lista if c["parent"] == i["number"])
+                i["is_prd"] = i["number"] in prds
+            prs_lista = list(prs.values())
+            classes = _classes_dos_prs(root)
+            for p in prs_lista:
+                p["classe"] = classes.get(p["number"]) if p["state"] == "MERGED" else None
+            _enriquecer_prs_abertos(root, prs_lista)
+            github.update(issues=lista, prs=prs_lista, prds=sorted(prds))
+            fases = montar_fases(lista, prs_lista, history, _branches_remotas(root))
+        except Exception as e:
+            github["error_kind"], github["error"] = _gh_failure(e)
+    return {"repo_slug": slug, "github": github, "fases": fases}
+
+
 if __name__ == "__main__":
     root = Path(__file__).resolve().parents[2]
+    if "--recorte" in sys.argv:
+        alvo = sys.argv[sys.argv.index("--recorte") + 1]
+        json.dump(collect_recorte(root, [int(n) for n in alvo.split(",") if n]), sys.stdout, ensure_ascii=False)
+        sys.exit(0)
     data = collect(root)
     if "--json" in sys.argv:
         json.dump(data, sys.stdout, ensure_ascii=False, indent=2)
