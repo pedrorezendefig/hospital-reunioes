@@ -338,7 +338,7 @@ def _somar_na_conta(supabase, conta_id: str) -> None:
     ).eq("id", conta_id).execute()
 
 
-def _chamar[Saida: BaseModel](
+def _chamar_a_ia[Saida: BaseModel](
     *,
     modelo: str,
     instrucao: str,
@@ -412,7 +412,7 @@ def extrair_eventos(
 ) -> EventosDoProntuario:
     """O passo A: os eventos do prontuário, com página e trecho em cada um.
     Não recebe a conta nem a tabela de preço."""
-    return _chamar(
+    return _chamar_a_ia(
         modelo=settings.cm_ia_modelo_passo_a,
         instrucao=load_prompt("contas_medicas_passo_a"),
         blocos=[
@@ -436,7 +436,7 @@ def comparar_conta(
 ) -> LinhasDaComparacao:
     """O passo B: as linhas do Guia que a IA propõe. A memória vai em bloco de
     cache: é o mesmo texto para todas as contas da operadora."""
-    return _chamar(
+    return _chamar_a_ia(
         modelo=settings.cm_ia_modelo_passo_b,
         instrucao=load_prompt("contas_medicas_passo_b"),
         blocos=[
@@ -462,7 +462,7 @@ def chamada_curta[Saida: BaseModel](
 ) -> Saida:
     """A pergunta curta (dicionário e observações), no modelo do passo A, com o
     schema que quem chama escolhe."""
-    return _chamar(
+    return _chamar_a_ia(
         modelo=settings.cm_ia_modelo_passo_a,
         instrucao=instrucao,
         blocos=[(conteudo, False)],

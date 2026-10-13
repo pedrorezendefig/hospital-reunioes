@@ -77,6 +77,18 @@ class TestMigration117:
     def test_cria_a_linha_de_formulario_aprendida(self):
         assert {"familia", "linha", "contagem"} <= _colunas_da_tabela(_sql(), "cm_linha_formulario")
 
+    def test_a_linha_de_formulario_aceita_o_upsert_da_familia_composta(self):
+        """Contrato com a #1132: `upsert(on_conflict="familia,linha")` pede o
+        UNIQUE, e a família chega composta (`DOC_EDITOR|<título>`): texto livre,
+        sem CHECK contra a lista de Famílias nem limite curto."""
+        bloco = re.search(r"CREATE TABLE IF NOT EXISTS cm_linha_formulario \((.*?)\n\);", _sql(), flags=re.DOTALL)
+        assert bloco
+        corpo = bloco.group(1)
+
+        assert re.search(r"UNIQUE \(familia, linha\)", corpo)
+        (familia,) = [linha.strip() for linha in corpo.splitlines() if linha.strip().startswith("familia ")]
+        assert re.fullmatch(r"familia\s+TEXT NOT NULL CHECK \(btrim\(familia\) <> ''\),", familia)
+
     def test_o_nivel_de_evidencia_aceita_prescrito_se_necessario(self):
         assert _valores_do_check(_sql(), "cm_guia_linha_nivel_evidencia_check") == {
             "REGISTRADO",
