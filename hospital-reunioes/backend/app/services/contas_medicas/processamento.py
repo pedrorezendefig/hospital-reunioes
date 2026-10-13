@@ -102,6 +102,7 @@ ETAPAS = {
     "leitura_do_prontuario": "leitura do prontuário",
     "conferencia": "conferência",
     "passo_a": "leitura do prontuário pela IA",
+    "conferencia_com_eventos": "conferência com a leitura da IA",
     "gravacao": "gravação do guia",
 }
 
@@ -375,15 +376,14 @@ def _pipeline(supabase, conta: dict, cronometro: _Cronometro) -> None:
         memoria = memoria_vigente(supabase, operadora_id) if operadora_id else None
         if memoria is None:
             raise _Falha(MENSAGEM_SEM_MEMORIA)
-        conferencia = conferir(
-            lida,
-            prontuario,
-            _memoria_lida(memoria),
-            _busca_de_preco(supabase, operadora_id),
-            setores={s["nome_mv"]: s["acomodacao"] for s in listar_setores(supabase) if s.get("acomodacao")},
-            dicionario=dicionario_do_banco(supabase),
-            pacote_do_tuss=lambda tuss, data: pacote_pelo_tuss(supabase, operadora_id, tuss, data),
-        )
+        memoria_lida = _memoria_lida(memoria)
+        busca_de_preco = _busca_de_preco(supabase, operadora_id)
+        buscas = {
+            "setores": {s["nome_mv"]: s["acomodacao"] for s in listar_setores(supabase) if s.get("acomodacao")},
+            "dicionario": dicionario_do_banco(supabase),
+            "pacote_do_tuss": lambda tuss, data: pacote_pelo_tuss(supabase, operadora_id, tuss, data),
+        }
+        sem_eventos = conferir(lida, prontuario, memoria_lida, busca_de_preco, **buscas)
 
     with cronometro.etapa("passo_a"), _trava_do_prontuario(conta["atendimento_id"]):
         # Depois das conferências: a IA recebe os achados do código, para não
@@ -395,9 +395,14 @@ def _pipeline(supabase, conta: dict, cronometro: _Cronometro) -> None:
             atendimento_id=conta["atendimento_id"],
             arquivo_id=arquivo_do_prontuario["id"],
             prontuario=prontuario,
-            achados=conferencia.linhas,
+            achados=sem_eventos.linhas,
             regras=memoria["regras"],
         )
+
+    with cronometro.etapa("conferencia_com_eventos"):
+        # As conferências que dependem do texto livre ("se necessário" e classe
+        # de UTI do dia) rodam com os eventos que a IA leu (#1134).
+        conferencia = conferir(lida, prontuario, memoria_lida, busca_de_preco, eventos=eventos, **buscas)
 
     with cronometro.etapa("gravacao"):
         linhas = _gravar_guia(supabase, conta["id"], conferencia)
