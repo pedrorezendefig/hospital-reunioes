@@ -286,6 +286,20 @@ class TestReaproveitamento:
         assert resposta.json()["mapeamento"] == PROPOSTA_DA_IA
         assert len(ia.chamadas) == 1
 
+    def test_segundo_arquivo_com_o_cabecalho_em_outra_caixa_reaproveita_com_os_nomes_do_arquivo_novo(self, ia):
+        cliente, _banco = _cliente(GESTAO, _banco_com_bucket(_com_operadoras("ALFA")))
+        primeiro = _xlsx(CABECALHO, _linhas(5))
+        _propor(cliente, "maio.xlsx", primeiro)
+        assert _confirmar(cliente, "maio.xlsx", primeiro, PROPOSTA_DA_IA).status_code == 201
+
+        resposta = _propor(cliente, "junho.xlsx", _xlsx([c.upper() for c in CABECALHO], _linhas(7)))
+
+        corpo = resposta.json()
+        assert (corpo["origem"], corpo["erro"], corpo["total"]) == ("CONFIRMADO", None, 7)
+        assert corpo["mapeamento"]["codigo"] == "CÓD. TUSS"
+        assert corpo["mapeamento"]["precos"] == [{"chave": "valor", "coluna": "PREÇO (R$)"}]
+        assert len(ia.chamadas) == 1
+
     def test_cabecalho_diferente_pergunta_a_ia_de_novo(self, ia):
         cliente, _banco = _cliente(GESTAO, _banco_com_bucket(_com_operadoras("ALFA")))
         primeiro = _xlsx(CABECALHO, _linhas(5))

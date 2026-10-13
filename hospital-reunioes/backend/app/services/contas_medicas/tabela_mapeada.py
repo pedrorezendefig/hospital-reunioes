@@ -320,7 +320,10 @@ def _assinatura(cabecalho: list[str]) -> str:
 
 
 def _mapeamento_confirmado(supabase, cabecalho: list[str]) -> Mapeamento | None:
-    """O mapeamento da última tabela confirmada com o mesmo cabeçalho."""
+    """O mapeamento da última tabela confirmada com o mesmo cabeçalho, com os
+    nomes das colunas do cabeçalho novo: a assinatura casa sem caixa, então
+    `CÓD. TUSS` acha o mapeamento de `Cód. TUSS` e cada coluna é traduzida
+    pela posição no cabeçalho gravado."""
     gravadas = (
         supabase.table("cm_tabela_preco")
         .select("mapeamento_json, criado_em")
@@ -332,11 +335,27 @@ def _mapeamento_confirmado(supabase, cabecalho: list[str]) -> Mapeamento | None:
         or []
     )
     for gravada in gravadas:
+        mapeamento_json = gravada.get("mapeamento_json") or {}
         try:
-            return Mapeamento.model_validate((gravada.get("mapeamento_json") or {}).get("colunas"))
+            mapeamento = Mapeamento.model_validate(mapeamento_json.get("colunas"))
         except ValidationError:
             return None
+        traducao = dict(zip(mapeamento_json.get("cabecalho") or [], cabecalho, strict=False))
+        return _traduzido(mapeamento, traducao)
     return None
+
+
+def _traduzido(mapeamento: Mapeamento, traducao: dict[str, str]) -> Mapeamento:
+    def nome(coluna: str | None) -> str | None:
+        return traducao.get(coluna, coluna) if coluna is not None else None
+
+    return Mapeamento(
+        codigo=nome(mapeamento.codigo),
+        codigo_alternativo=nome(mapeamento.codigo_alternativo),
+        descricao=nome(mapeamento.descricao),
+        unidade=nome(mapeamento.unidade),
+        precos=[ColunaDePreco(chave=p.chave, coluna=nome(p.coluna)) for p in mapeamento.precos],
+    )
 
 
 def _tabela_para_a_ia(arquivo: ArquivoDeTabela) -> str:
