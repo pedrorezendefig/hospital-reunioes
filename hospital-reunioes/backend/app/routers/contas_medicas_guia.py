@@ -24,13 +24,19 @@ from app.limiter import limiter
 from app.services.contas_medicas import reenvio
 from app.services.contas_medicas.envio import LIMITE_POR_ARQUIVO, MENSAGEM_ARQUIVO_GRANDE
 from app.services.contas_medicas.guia import (
-    PENDENTES,
     agrupar_por_dia_e_setor,
     linha_nao_conferida,
+    linha_pendente,
     nota_de_entrada,
     numeros_do_topo,
 )
 from app.services.contas_medicas.regra_nova import SITUACOES_REANALISAVEIS, regra_nova_desde_a_analise
+from app.services.contas_medicas.validacao import (
+    acompanhar_marcacao,
+    linhas_do_retorno,
+    respostas_da_conta,
+    temas_da_observacao,
+)
 from app.services.contas_medicas_conta import ErroLeitura
 
 router = APIRouter(prefix="/contas-medicas", tags=["contas-medicas"])
@@ -110,7 +116,9 @@ async def abrir_guia(
     concluida = conta.get("situacao") in CONCLUIDAS
     dados_do_reenvio = reenvio.resumo(conta)
     marcas = (dados_do_reenvio or {}).get("linhas") or {}
-    grupos = agrupar_por_dia_e_setor(linhas)
+    # Em Retorno, a faturista vê só o que a Validação devolveu.
+    da_tela = linhas_do_retorno(supabase, linhas) if conta.get("situacao") == "RETORNO" else linhas
+    grupos = agrupar_por_dia_e_setor(da_tela)
     for grupo in grupos:
         for linha in grupo["linhas"]:
             linha["reenvio"] = marcas.get(linha["id"])
@@ -133,6 +141,8 @@ async def abrir_guia(
         # marcas por linha, nulo enquanto a conta não foi reenviada.
         "reenvio": dados_do_reenvio,
         "pode_reenviar": concluida,
+        # O "Responder ao time" da Validação sobre o que esta conta levantou.
+        "respostas": respostas_da_conta(supabase, conta["id"], linhas),
         # O botão "Reanalisar": a tela desenha pelo que vem aqui, e a rota decide.
         "pode_reanalisar": "regra_contratual_tabelas" in me["permissoes_cm"] and conta.get("situacao") in REANALISAVEIS,
         # A conta analisada com uma memória que já mudou: o botão vira "Reanalisar com a regra nova".
@@ -208,10 +218,13 @@ async def marcar_linha(
     me: dict = Depends(_PODE_CORRIGIR),
     supabase: Client = Depends(get_supabase_client),
 ) -> dict:
-    """Feito, Não procede (com motivo) ou Bloqueado numa linha do Guia."""
+    """Feito, Não procede (com motivo) ou Bloqueado numa linha do Guia. O
+    Bloqueado e o Não procede caem na fila de Validação."""
     conta = _conta_em_correcao(supabase, conta_id, me)
     linha = _linha_da_faturista(supabase, conta, linha_id)
-    return _gravar_marcacao(supabase, linha, me, corpo.estado, corpo.motivo, corpo.texto)
+    marcada = _gravar_marcacao(supabase, linha, me, corpo.estado, corpo.motivo, corpo.texto)
+    acompanhar_marcacao(supabase, conta, marcada)
+    return marcada
 
 
 @router.delete("/contas/{conta_id}/guia/linhas/{linha_id}/marcacao")
@@ -226,7 +239,9 @@ async def desfazer_marcacao(
     """Desfazer: a linha volta a aberta, enquanto a Conta não foi concluída."""
     conta = _conta_em_correcao(supabase, conta_id, me)
     linha = _linha_da_faturista(supabase, conta, linha_id)
-    return _gravar_marcacao(supabase, linha, me, "ABERTA")
+    desfeita = _gravar_marcacao(supabase, linha, me, "ABERTA")
+    acompanhar_marcacao(supabase, conta, desfeita)
+    return desfeita
 
 
 class Dia(BaseModel):
@@ -286,7 +301,7 @@ async def concluir_guia(
     """
     conta = _conta_em_correcao(supabase, conta_id, me)
     linhas = _linhas(supabase, conta["id"])
-    pendencias = sum(1 for linha in linhas if linha.get("estado") in PENDENTES)
+    pendencias = sum(1 for linha in linhas if linha_pendente(linha))
     situacao = "CONCLUIDA_COM_PENDENCIA" if pendencias else "CONCLUIDA"
     sem_nao_procede = [linha for linha in linhas if linha.get("estado") != "NAO_PROCEDE"]
     nota = nota_de_entrada(sem_nao_procede, conta.get("total_lancado")).nota
@@ -297,9 +312,13 @@ async def concluir_guia(
 
     observacao = (corpo.observacao or "").strip()
     if observacao:
-        supabase.table("cm_observacao").insert(
-            {"conta_id": conta["id"], "autor_id": me.get("id"), "texto": observacao}
-        ).execute()
+        gravada = (
+            supabase.table("cm_observacao")
+            .insert({"conta_id": conta["id"], "autor_id": me.get("id"), "texto": observacao})
+            .execute()
+        )
+        # A observação cai na fila de Validação, no tema da regra que ela cita.
+        temas_da_observacao(supabase, conta, gravada.data[0])
 
     return {
         "situacao": situacao,

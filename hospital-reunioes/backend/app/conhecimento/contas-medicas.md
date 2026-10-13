@@ -20,6 +20,7 @@ A primeira etapa inteira: a fundação do módulo, a carga das operadoras, o env
 - a tela de Habilitação, aberta a partir da tela de contas para quem tem a permissão de habilitar pessoas (as duas diretorias), descrita em "Quem vê";
 - a tela Contratos, aberta a partir da tela de contas para quem tem a permissão de contratos e avisos (credenciamento, gestão de contas médicas e as duas diretorias), com o aviso de reajuste no sino, descrita em "Contratos e aviso de reajuste";
 - o Painel, aberto a partir da tela de contas, descrito em "O Painel";
+- a fila de Validação, aberta a partir da tela de contas para quem tem a permissão de decidir na validação (gestão de contas médicas e as duas diretorias), descrita em "A Validação";
 - a tela Coordenação, aberta a partir da tela de contas para quem tem a permissão de Conferência da coordenação (coordenadora de faturamento, gestão de contas médicas e as duas diretorias), com o número de lembretes abertos no botão, descrita em "A Conferência da coordenação".
 
 Na tela Operadoras, a gestão envia o arquivo de memória de cada convênio, o mesmo que o diretor monta, e a memória passa a valer sem programador no meio. A tela mostra a versão, quantas regras vigentes e pendentes entraram e os parâmetros lidos do cabeçalho; os números têm de bater com o arquivo. Mandar uma versão nova aposenta a anterior. Parâmetro do cabeçalho que o sistema ainda não usa fica guardado, e a memória em vigor pode ser baixada de volta inteira. Arquivo com um número no formato de CPF é recusado, porque memória não pode ter dado de paciente. Na mesma tela a gestão cadastra os nomes de plano como o MV imprime, cada um com a operadora e a coluna de preço, e os setores do MV com a acomodação de cada um.
@@ -53,6 +54,7 @@ A fila mostra as contas em ordem de envio e, dentro do envio, na ordem dos arqui
 - **Pronta em instantes**: a análise está rodando;
 - **A fazer**: o Guia está pronto, com a nota, o R$ a ajustar e quantos itens já foram feitos ("0 de 9");
 - **Em correção**: o Guia já foi aberto, com o botão "Continuar";
+- **Retorno**: a conta já concluída voltou da Validação com linhas decididas para lançar;
 - **Erro**: a análise não conseguiu ler um dos arquivos, com o motivo em uma frase e o botão "Enviar de novo".
 
 A aba **Concluídas** guarda as contas já concluídas, as mais recentes primeiro, com a contagem de pendências de quem concluiu com pendência. A faturista vê só as próprias contas, na fila e nas Concluídas; quem tem o Painel completo vê as de todas.
@@ -173,6 +175,23 @@ E seis blocos:
 
 Quem tem o Painel completo (coordenadora de faturamento, gestão de contas médicas e as duas diretorias) vê tudo. A faturista vê só a própria linha de produção, e mais nenhum bloco.
 
+## A Validação
+
+A Validação é a fila em que a diretoria e a gestão decidem o que a faturista não decide. Ela abre a partir da tela de contas, pelo botão Validação, para quem tem a permissão de decidir na validação (gestão de contas médicas e as duas diretorias). A fila agrupa por tema, não por conta: um cartão junta todas as contas que esperam a mesma decisão.
+
+No topo ficam três números: quantos temas estão aguardando decisão, quantas contas afetadas eles somam e o R$ em jogo. Os cartões vêm do maior R$ em jogo para o menor, cada um com a operadora, quantas contas, desde quando espera e o R$.
+
+São quatro tipos de cartão:
+
+- **Regra pendente**: as linhas Validar do Guia, um cartão por regra e operadora. "Validar regra" abre o texto da regra para conferir e editar; ao confirmar, a regra fica vigente numa versão nova da memória, e as linhas das contas afetadas viram Decidida, com a ação que a regra manda (incluir, ajustar quantidade, corrigir preço ou retirar), ou sem ação quando a linha não tem diferença para corrigir. "Deixar pendente" fecha o cartão sem mexer na memória nem nas linhas; a próxima conta com a mesma regra abre outro cartão.
+- **Código bloqueado**: as linhas que a faturista marcou Bloqueado, um cartão por código. "Enviar ao cadastro" baixa a lista em planilha (código, descrição, operadora, coluna, preço de tabela e contas afetadas), para o cadastro e a consultoria do MV, e fecha o cartão. "Descartar" fecha sem lista.
+- **Observação do time**: as linhas Não procede, com o motivo, e as observações escritas na conclusão do Guia, um cartão por regra citada; a observação que não cita regra cai no cartão da operadora sem regra. Em cada cartão, a inteligência artificial lê as observações e diz se a regra atual já cobre o caso e se sugere manter ou editar. A leitura fica guardada e só é refeita quando chega observação nova. É apoio: quem decide é a pessoa. As decisões são "Manter a regra", "Editar a regra" (versão nova da memória) e "Responder ao time", cujo texto aparece no Guia das contas que levantaram a questão.
+- **Termo do dicionário**: o termo que a inteligência artificial propôs ao dicionário, um cartão por termo. A proposta já liga o nome ao código desde que chegou; confirmar mantém a ligação, e rejeitar tira o código, como na tela Operadoras: o termo nunca mais liga nem volta à IA. O termo carregado pela gestão na tela Operadoras continua valendo como sempre valeu.
+
+Toda decisão grava quem decidiu e quando, e o cartão sai da fila. Mexer na memória pede também a permissão do tipo da regra, como na Memória da operadora.
+
+Quando a regra é validada e uma das contas afetadas já estava concluída, ela volta para a fila da faturista na situação **Retorno**, e o Guia dela mostra só as linhas decididas, para lançar no MV o que a diretoria validou. A linha decidida conta como pendência até a faturista marcar, e a conta é concluída de novo pelo mesmo botão. A conta que ainda estava com a faturista recebe as linhas decididas no próprio Guia.
+
 ## Quem vê
 
 O módulo tem perfis próprios, separados dos de Reuniões, POPs e Ouvidoria. São seis: faturista, coordenadora de faturamento, gestão de contas médicas, diretoria médica, diretoria executiva e credenciamento. Quem não tem nenhum deles não vê o item no menu e não consegue abrir a tela. O Super admin do aplicativo entra, como nos outros módulos.
@@ -206,4 +225,5 @@ O módulo não guarda nome completo, CPF, carteira nem data de nascimento de pac
 - Um número do Painel que não bate com as contas da semana, ou a faturista que vê a produção de outra pessoa (Defeito, ou Informação se a dúvida é sobre a semana de segunda a domingo ou sobre o que entra em cada número).
 - Um lembrete da coordenação para um insumo que já está na conta, um cenário que não gera lembrete quando o prontuário mostra o procedimento, ou a faturista que vê um cenário ou um lembrete (Defeito, ou Informação se a dúvida é sobre o período da conta ou sobre o cenário estar desativado).
 - Uma linha marcada "ainda na conta" que já foi corrigida no MV, ou uma nota de saída que não bate com as linhas (Defeito, ou Informação se a conta reenviada não era a corrigida).
+- Um cartão da Validação que não some depois da decisão, uma conta concluída que não volta em Retorno depois de validada a regra, ou a lista do cadastro que não baixa (Defeito, ou Informação se a dúvida é por que a conta voltou).
 - Dúvida sobre quando chega o envio de contas ou alguma das próximas entregas (Informação).

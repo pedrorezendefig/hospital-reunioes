@@ -60,6 +60,9 @@ export function LinhaDoGuia({ linha, concluida, ocupado, onMarcar, onDesfazer, o
   const nome = linha.descricao ?? linha.codigo ?? "Linha do guia";
   const validar = linha.acao === "VALIDAR";
   const marcado = ESTADO_MARCADO[linha.estado];
+  // A Validação decidiu (issue #1142): com ação, volta para a faturista lançar;
+  // sem ação (Validar descartado), não há nada a fazer no MV.
+  const decidida = linha.estado === "DECIDIDA";
 
   const codigo = linha.codigo ? (
     <button
@@ -131,6 +134,9 @@ export function LinhaDoGuia({ linha, concluida, ocupado, onMarcar, onDesfazer, o
         {linha.nivel_evidencia === "PRESCRITO_SN" && (
           <span className={`${ETIQUETA} bg-[#FEF3C7] text-[#92400E]`}>{ETIQUETA_SE_NECESSARIO}</span>
         )}
+        {decidida && !validar && (
+          <span className={`${ETIQUETA} bg-[#FEF3C7] text-[#92400E]`}>Decidida na validação</span>
+        )}
         {linha.nao_conferido && <span className={`${ETIQUETA} bg-[#F1F5F9] text-[#475569]`}>Não conferido</span>}
         {linha.confianca === "BAIXA" && (
           <span className={`${ETIQUETA} bg-[#FEF3C7] text-[#92400E]`}>conferir evidência</span>
@@ -179,7 +185,9 @@ export function LinhaDoGuia({ linha, concluida, ocupado, onMarcar, onDesfazer, o
         </div>
       )}
 
-      {validar ? (
+      {validar && decidida ? (
+        <p className="text-xs text-slate-500">Decidida na validação, sem ação no MV</p>
+      ) : validar ? (
         <div className="text-xs text-[#92400E] space-y-0.5">
           <p>Você não precisa decidir: o item já foi para a validação</p>
           {linha.valor_diferenca != null && (

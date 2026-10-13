@@ -147,6 +147,10 @@ PARAMS_SEM_SEGREDO = {
     # sigla sozinha nao abre porta nenhuma, como o `convenio_id`.
     "sigla",
     "signer_id",
+    # UUID do tema da fila de Validação de Contas médicas (issue #1142). Nao e
+    # credencial: a rota exige a permissao "decidir na validacao", e o id
+    # sozinho nao abre porta nenhuma, como o `conta_id`.
+    "tema_id",
 }
 
 # As rotas com segredo no path, congeladas. Rota nova com `{token}` entra aqui

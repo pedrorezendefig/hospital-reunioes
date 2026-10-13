@@ -306,6 +306,24 @@ export default function GuiaPage() {
         </div>
       )}
 
+      {(guia.respostas ?? []).length > 0 && (
+        <div
+          role="note"
+          aria-label="Resposta da Validação"
+          className="rounded-xl border border-border bg-[#EEEEF6] px-4 py-3 text-sm text-slate-700 space-y-2"
+        >
+          <p className="font-semibold uppercase tracking-[0.04em] text-primary">Resposta da Validação</p>
+          {(guia.respostas ?? []).map((resposta, indice) => (
+            <div key={indice}>
+              <p className="text-xs text-slate-500">
+                {resposta.regra_codigo ? `Regra ${resposta.regra_codigo}` : resposta.titulo}
+              </p>
+              <p className="whitespace-pre-line break-words">{resposta.resposta}</p>
+            </div>
+          ))}
+        </div>
+      )}
+
       <section aria-label="Números do guia" className="grid grid-cols-1 sm:grid-cols-3 gap-3">
         <div className="bg-white rounded-2xl border border-border shadow-premium p-4 flex flex-wrap gap-x-6 gap-y-2">
           <div>

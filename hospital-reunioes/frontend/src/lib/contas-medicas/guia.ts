@@ -91,6 +91,15 @@ export interface Guia {
   pode_reenviar?: boolean;
   /** A conta foi analisada com uma memória que já mudou (issue #1141): marca e "Reanalisar com a regra nova". */
   regra_nova_desde_analise?: boolean;
+  /** O "Responder ao time" da Validação sobre o que esta conta levantou (issue #1142). */
+  respostas?: RespostaDaValidacao[];
+}
+
+export interface RespostaDaValidacao {
+  titulo: string;
+  regra_codigo: string | null;
+  resposta: string;
+  decidido_em: string | null;
 }
 
 export const ROTULO_REENVIO: Record<MarcaDoReenvio, string> = {

@@ -66,6 +66,7 @@ from app.services.contas_medicas.ia import ErroDaIA
 from app.services.contas_medicas.memoria import MemoriaLida, RegraLida
 from app.services.contas_medicas.operadoras import listar_setores, memoria_vigente
 from app.services.contas_medicas.tabelas import pacote_pelo_tuss, preco
+from app.services.contas_medicas.validacao import temas_das_linhas_validar
 from app.services.contas_medicas_conta import Conta, ErroLeitura, ler_conta
 from app.services.contas_medicas_extrator import (
     Pagina,
@@ -604,7 +605,11 @@ def _gravar_guia(supabase, conta_id: str, conferencia: Conferencia) -> list[dict
     ]
     if not novas:
         return marcadas
-    return marcadas + (supabase.table("cm_guia_linha").insert(novas).execute().data or [])
+    gravadas = supabase.table("cm_guia_linha").insert(novas).execute().data or []
+    # A linha Validar entra na fila de Validação aqui, pela ação: o código e a
+    # IA gravam por este mesmo ponto.
+    temas_das_linhas_validar(supabase, conta_id, gravadas)
+    return marcadas + gravadas
 
 
 # ----------------------------------------------------------------------------------

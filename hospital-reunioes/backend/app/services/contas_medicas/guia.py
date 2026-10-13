@@ -63,7 +63,9 @@ def nota_de_entrada(linhas: Iterable[dict], total_lancado) -> NotaDeEntrada:
     for linha in linhas:
         valor = _dinheiro(linha.get("valor_diferenca"))
         if linha.get("acao") == "VALIDAR":
-            em_validacao += abs(valor)
+            # A descartada na Validação (Decidida sem ação) já não está em jogo.
+            if linha.get("estado") != "DECIDIDA":
+                em_validacao += abs(valor)
             continue
         if linha_nao_conferida(linha):
             continue
@@ -93,6 +95,17 @@ MARCADAS = ("FEITO", "NAO_PROCEDE", "BLOQUEADO")
 # O que deixa a Conta "Concluída com pendência": linha sem marcação, em
 # validação ou bloqueada (spec, item 5).
 PENDENTES = ("ABERTA", "EM_VALIDACAO", "BLOQUEADO")
+
+
+def linha_decidida_a_lancar(linha: dict) -> bool:
+    """A linha que a Validação decidiu com uma ação (issue #1142): volta para a
+    faturista lançar no MV, e até ela marcar conta como linha sem marcação."""
+    return linha.get("estado") == "DECIDIDA" and linha.get("acao") != "VALIDAR"
+
+
+def linha_pendente(linha: dict) -> bool:
+    """A linha que deixa a Conta "Concluída com pendência"."""
+    return linha.get("estado") in PENDENTES or linha_decidida_a_lancar(linha)
 
 
 def _chave_de_ordem(linha: dict) -> tuple:
@@ -132,5 +145,7 @@ def numeros_do_topo(linhas: list[dict], total_lancado, *, concluida: bool) -> di
         "valor_em_validacao": float(nota.em_validacao),
         "itens_feitos": sum(1 for linha in dela if linha.get("estado") in MARCADAS),
         "itens_total": len(dela),
-        "itens_sem_marcacao": sum(1 for linha in dela if linha.get("estado") == "ABERTA"),
+        "itens_sem_marcacao": sum(
+            1 for linha in dela if linha.get("estado") == "ABERTA" or linha_decidida_a_lancar(linha)
+        ),
     }
