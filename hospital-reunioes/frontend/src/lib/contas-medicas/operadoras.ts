@@ -22,6 +22,35 @@ export interface TabelaDaCategoria {
   versoes: VersaoDaTabela[];
 }
 
+/** Qual coluna do arquivo do convênio é cada campo do item (issue #1146). */
+export interface MapeamentoDeColunas {
+  codigo: string;
+  codigo_alternativo: string | null;
+  descricao: string | null;
+  unidade: string | null;
+  /** `chave` é o nome do preço: "valor" quando é um só, o plano quando são vários. */
+  precos: { chave: string; coluna: string }[];
+}
+
+export interface ItemDaAmostra {
+  codigo: string;
+  codigo_alternativo: string | null;
+  descricao: string | null;
+  unidade: string | null;
+  precos: Record<string, number | string | null>;
+}
+
+/** A proposta do backend: o mapeamento, 20 itens convertidos e o total. Nada gravado. */
+export interface PropostaDeMapeamento {
+  cabecalho: string[];
+  mapeamento: MapeamentoDeColunas;
+  /** IA: a IA propôs; CONFIRMADO: reaproveitado de um arquivo de mesmo cabeçalho; PESSOA: o ajuste. */
+  origem: "IA" | "CONFIRMADO" | "PESSOA";
+  amostra: ItemDaAmostra[];
+  total: number;
+  erro: string | null;
+}
+
 export const LABEL_SITUACAO: Record<Situacao, string> = {
   PRONTA: "Pronta",
   PARCIAL: "Parcial",

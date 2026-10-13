@@ -104,12 +104,36 @@ const IMPORTADA = {
   parametros: { diaria: { hora_vencimento: "10:00" }, opme: { fornecida_por: "OPERADORA" } },
 };
 
+/** A proposta de uma planilha do convênio: a IA apontou as colunas. */
+const PROPOSTA = {
+  conhecido: false,
+  cabecalho: ["Preço (R$)", "Descrição do item", "Cód. TUSS", "Unid.", "Cód. interno"],
+  mapeamento: {
+    codigo: "Cód. TUSS",
+    codigo_alternativo: "Cód. interno",
+    descricao: "Descrição do item",
+    unidade: "Unid.",
+    precos: [{ chave: "valor", coluna: "Preço (R$)" }],
+  },
+  origem: "IA",
+  amostra: [
+    { codigo: "70000000", codigo_alternativo: "A0", descricao: "Item 0", unidade: "UN", precos: { valor: 1.5 } },
+    { codigo: "70000003", codigo_alternativo: "A3", descricao: "Item 3", unidade: "UN", precos: { valor: 4.5 } },
+  ],
+  total: 25,
+  erro: null,
+};
+
+/** O CSV de cabeçalho conhecido vai pela carga direta. */
+const CONHECIDO = { conhecido: true, descricao_formato: "materiais com preço Comum e Carioca" };
+
 type Chamada = { url: string; metodo: string; corpo: unknown };
 
 let chamadas: Chamada[];
 let statusDaLista: number;
 let respostaDaMemoria: { status: number; corpo: unknown };
 let respostaDaTabela: { status: number; corpo: unknown };
+let respostaDaProposta: unknown;
 let planos: Array<Record<string, string | null>>;
 let setores: Array<Record<string, string | null>>;
 
@@ -132,6 +156,16 @@ function backend() {
       }
       if (url === "/api/contas-medicas/operadoras/ALFA/tabelas" && metodo === "POST") {
         return resposta(respostaDaTabela.status, respostaDaTabela.corpo);
+      }
+      if (url === "/api/contas-medicas/operadoras/ALFA/tabelas/proposta" && metodo === "POST") {
+        const ajuste = (corpo as FormData).get("mapeamento");
+        if (typeof ajuste === "string") {
+          return resposta(200, { ...PROPOSTA, mapeamento: JSON.parse(ajuste), origem: "PESSOA" });
+        }
+        return resposta(200, respostaDaProposta);
+      }
+      if (url === "/api/contas-medicas/operadoras/ALFA/tabelas/mapeada" && metodo === "POST") {
+        return resposta(201, { ...TABELA_IMPORTADA, formato: "MAPEAMENTO", descricao_formato: "tabela lida por mapeamento", itens: 25 });
       }
       if (url === "/api/contas-medicas/dicionario" && metodo === "POST") {
         return resposta(201, { termos: 4, novos: 3, atualizados: 1 });
@@ -170,6 +204,7 @@ beforeEach(() => {
   statusDaLista = 200;
   respostaDaMemoria = { status: 201, corpo: IMPORTADA };
   respostaDaTabela = { status: 201, corpo: TABELA_IMPORTADA };
+  respostaDaProposta = CONHECIDO;
   planos = [];
   setores = [];
   backend();
@@ -428,5 +463,97 @@ describe("as tabelas de preço e o dicionário", () => {
     expect(resultado.textContent).toContain("4 termos, 3 novos e 1 atualizado");
     const envio = chamadas.find((c) => c.metodo === "POST" && c.url === "/api/contas-medicas/dicionario");
     expect((envio!.corpo as FormData).get("arquivo")).toBe(arquivo);
+  });
+});
+
+describe("a tabela em PDF ou planilha, lida por mapeamento (#1146)", () => {
+  const ROTA_PROPOSTA = "/api/contas-medicas/operadoras/ALFA/tabelas/proposta";
+  const ROTA_MAPEADA = "/api/contas-medicas/operadoras/ALFA/tabelas/mapeada";
+
+  async function enviarPlanilha() {
+    respostaDaProposta = PROPOSTA;
+    render(<OperadorasPage />);
+    await screen.findByTestId("operadora-ALFA");
+    const secao = screen.getByRole("region", { name: "Enviar tabela de preço" });
+    escolher("Operadora da tabela", "ALFA");
+    escolher("Categoria", "Materiais");
+    fireEvent.change(within(secao).getByLabelText("Início da vigência"), { target: { value: "2026-05-01" } });
+    const arquivo = new File(["planilha"], "ALFA-PROPRIA.xlsx");
+    fireEvent.change(within(secao).getByLabelText("Arquivo da tabela"), { target: { files: [arquivo] } });
+    fireEvent.click(within(secao).getByRole("button", { name: "Enviar tabela" }));
+    const mapeamento = await within(secao).findByRole("region", { name: "Mapeamento das colunas" });
+    return { secao, mapeamento, arquivo };
+  }
+
+  it("mostra o mapeamento da IA, a amostra e o total, e nada é gravado antes de confirmar", async () => {
+    const { mapeamento, arquivo } = await enviarPlanilha();
+
+    expect(mapeamento.textContent).toContain("A IA propôs as colunas");
+    expect(within(mapeamento).getByRole("combobox", { name: "Código" }).textContent).toContain("Cód. TUSS");
+    expect(within(mapeamento).getByRole("combobox", { name: "Código alternativo" }).textContent).toContain(
+      "Cód. interno",
+    );
+    const amostra = within(mapeamento).getByRole("table", { name: "Amostra da tabela" });
+    const linha = within(amostra)
+      .getAllByRole("row")
+      .find((tr) => tr.textContent?.includes("70000003"))!;
+    expect(linha.textContent).toContain("Item 3");
+    expect(linha.textContent).toContain("4,50");
+    expect(mapeamento.textContent).toContain("25 itens no arquivo");
+    const proposta = chamadas.find((c) => c.url === ROTA_PROPOSTA);
+    expect((proposta!.corpo as FormData).get("arquivo")).toBe(arquivo);
+    expect(chamadas.some((c) => c.url === ROTA_MAPEADA)).toBe(false);
+    expect(chamadas.some((c) => c.url === "/api/contas-medicas/operadoras/ALFA/tabelas")).toBe(false);
+  });
+
+  it("confirmar grava a tabela com o mapeamento conferido e mostra quantos itens entraram", async () => {
+    const { secao, mapeamento, arquivo } = await enviarPlanilha();
+
+    fireEvent.click(within(mapeamento).getByRole("button", { name: "Confirmar e gravar" }));
+
+    const resultado = await within(secao).findByRole("status");
+    expect(resultado.textContent).toContain("25 itens de tabela lida por mapeamento");
+    const envio = chamadas.find((c) => c.url === ROTA_MAPEADA);
+    const corpo = envio!.corpo as FormData;
+    expect(JSON.parse(corpo.get("mapeamento") as string)).toEqual(PROPOSTA.mapeamento);
+    expect(corpo.get("categoria")).toBe("MATERIAL");
+    expect(corpo.get("vigencia_inicio")).toBe("2026-05-01");
+    expect(corpo.get("arquivo")).toBe(arquivo);
+  });
+
+  it("o ajuste da coluna pede a amostra de novo antes de confirmar", async () => {
+    const { mapeamento } = await enviarPlanilha();
+
+    fireEvent.click(within(mapeamento).getByRole("combobox", { name: "Código" }));
+    fireEvent.click(within(mapeamento).getByRole("option", { name: "Cód. interno" }));
+
+    const confirmar = within(mapeamento).getByRole("button", { name: "Confirmar e gravar" }) as HTMLButtonElement;
+    expect(confirmar.disabled).toBe(true);
+    fireEvent.click(within(mapeamento).getByRole("button", { name: "Ver amostra com o ajuste" }));
+
+    await within(mapeamento).findByText(/Amostra com o seu ajuste/);
+    const ajustes = chamadas.filter((c) => c.url === ROTA_PROPOSTA);
+    expect(JSON.parse((ajustes[1].corpo as FormData).get("mapeamento") as string).codigo).toBe("Cód. interno");
+    expect(confirmar.disabled).toBe(false);
+  });
+
+  it("o CSV de cabeçalho conhecido vai direto, sem mapeamento", async () => {
+    const secao = await (async () => {
+      render(<OperadorasPage />);
+      await screen.findByTestId("operadora-ALFA");
+      const s = screen.getByRole("region", { name: "Enviar tabela de preço" });
+      escolher("Operadora da tabela", "ALFA");
+      escolher("Categoria", "Materiais");
+      fireEvent.change(within(s).getByLabelText("Início da vigência"), { target: { value: "2026-05-01" } });
+      fireEvent.change(within(s).getByLabelText("Arquivo da tabela"), {
+        target: { files: [new File(["codigo_assim;codigo_tuss\n"], "ALFA.csv")] },
+      });
+      fireEvent.click(within(s).getByRole("button", { name: "Enviar tabela" }));
+      return s;
+    })();
+
+    await within(secao).findByRole("status");
+    expect(within(secao).queryByRole("region", { name: "Mapeamento das colunas" })).toBeNull();
+    expect(chamadas.some((c) => c.url === "/api/contas-medicas/operadoras/ALFA/tabelas")).toBe(true);
   });
 });
