@@ -391,8 +391,7 @@ async def reanalisar_conta(
             raise HTTPException(status_code=403, detail="Sem permissão para esta ação em Contas médicas")
         conta = _conta_do_guia(supabase, conta_id, me, REANALISAVEIS, _SO_REANALISAVEL)
         atendimento = _primeira(supabase, "cm_atendimento", "id", conta.get("atendimento_id")) or {}
-        regra_nova = regra_nova_desde_a_analise(supabase, conta, atendimento.get("operadora_id"))
-        if not _pode_reanalisar(me, conta, regra_nova):
+        if not regra_nova_desde_a_analise(supabase, conta, atendimento.get("operadora_id")):
             raise HTTPException(status_code=403, detail="Reanalisar sem regra nova é da gestão")
     # Condicional na situação: a conta que mudou entre a leitura e a escrita
     # (concluída, já na fila) não volta para a análise.

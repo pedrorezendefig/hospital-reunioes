@@ -2,7 +2,7 @@
 title: Ensinar uma regra nova
 description: Escrever uma regra como você falaria, conferir o que a IA propõe e validar na memória da operadora.
 prd: [1129]
-draft: false
+draft: true
 papel: [Gestão de contas médicas, Diretoria]
 sidebar:
   order: 7
@@ -36,7 +36,9 @@ em linguagem comum e a IA monta a regra; nada vale antes de você validar.
 
 6. Em **Contas com regra nova desde a análise**, clique em **Reanalisar com a
    regra nova** na conta que deve seguir a regra. As linhas que a faturista já
-   marcou ficam como estão.
+   marcou ficam como estão. A faturista da conta também vê o botão
+   **Reanalisar com a regra nova** no guia, quando a regra mudou depois da
+   análise.
 
    ![Contas com a marca Regra nova desde a análise e o botão Reanalisar](../../../assets/contas-medicas/reanalisar.png)
 
@@ -44,7 +46,8 @@ em linguagem comum e a IA monta a regra; nada vale antes de você validar.
 
 - **A proposta aponta conflito:** a memória já tem regra sobre o assunto.
   Edite a regra antiga em vez de criar outra.
-- **O botão Reanalisar não aparece:** ele é de quem tem a permissão de regra
-  contratual e tabelas.
+- **O botão Reanalisar não aparece:** sem regra nova desde a análise, ele é
+  de quem tem a permissão de regra contratual e tabelas. A faturista vê o
+  botão só na conta dela e só quando a regra mudou.
 - **A conta não está na lista:** só entram contas **A fazer** e **Em
   correção**. Conta concluída não muda.

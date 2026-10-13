@@ -2,7 +2,7 @@
 title: Como a gestão decide e o que volta para a conta
 description: A versão da memória, o caminho da linha Validar até o Retorno, o que só a coordenadora vê e quando chega o aviso de contrato.
 prd: [1129]
-draft: false
+draft: true
 sidebar:
   order: 31
 ---
@@ -16,8 +16,9 @@ depois de cada regra.
 
 A conta lembra a versão com que foi analisada. Editar uma regra não mexe em
 conta já concluída. Conta **A fazer** ou **Em correção** ganha a marca **Regra
-nova desde a análise** e só muda se a gestão clicar em **Reanalisar com a regra
-nova**; as linhas que a faturista já marcou ficam.
+nova desde a análise** e só muda se alguém clicar em **Reanalisar com a regra
+nova**: a gestão, ou a faturista da conta no guia; as linhas que a faturista já
+marcou ficam.
 
 ## Por que a linha nasce Validar, e como a decisão volta
 
