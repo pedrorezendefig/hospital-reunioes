@@ -1186,3 +1186,43 @@ def test_sem_travessao_nem_meia_risca(arquivo):
     texto = arquivo.read_text(encoding="utf-8")
     assert chr(0x2014) not in texto
     assert chr(0x2013) not in texto
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 13. A busca do pacote pelo TUSS no banco
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+class TestPacotePeloTuss:
+    def _buscar(self, banco: _Banco, tuss: str = "31005497", dia: int = 4):
+        from datetime import date
+
+        from app.services.contas_medicas.tabelas import pacote_pelo_tuss
+
+        return pacote_pelo_tuss(banco, "op-alfa", tuss, date(2026, 10, dia))
+
+    def test_acha_o_pacote_do_tuss_na_tabela_vigente(self):
+        assert self._buscar(_cenario()) == Pacote("98005497", "PACOTE COLECISTECTOMIA", 2, Decimal("4500.0"))
+
+    def test_tuss_sem_pacote_nao_tem_pacote(self):
+        assert self._buscar(_cenario(), tuss="31009158") is None
+
+    def test_tuss_em_dois_pacotes_nao_escolhe_um(self):
+        banco = _cenario()
+        banco.tabelas["cm_tabela_preco_item"].append(
+            _item_de_tabela("it-3", "tb-pac", "98005498", "OUTRO", {"valor": 1.0}, {"codigos_tuss": ["31005497"]})
+        )
+
+        assert self._buscar(banco) is None
+
+    def test_sem_permanencia_legivel_nao_inventa_diarias(self):
+        banco = _cenario()
+        banco.tabelas["cm_tabela_preco_item"][1]["extra_json"]["permanencia"] = "ver contrato"
+
+        assert self._buscar(banco) is None
+
+    def test_sem_valor_na_coluna_o_pacote_sai_sem_valor(self):
+        banco = _cenario()
+        banco.tabelas["cm_tabela_preco_item"][1]["precos_json"] = {"valor": "PACOTE"}
+
+        assert self._buscar(banco).valor is None
