@@ -5,7 +5,7 @@ prd: [1113]
 draft: true
 papel: [Gestão de contas médicas, Diretoria]
 sidebar:
-  order: 5
+  order: 7
 ---
 
 ## Quando usar

@@ -1,7 +1,7 @@
 ---
 title: Contas médicas
 description: Confira a conta de internação contra o prontuário antes de mandar para a operadora.
-prd: [1113, 1129]
+prd: [1113, 1128, 1129]
 draft: true
 sidebar:
   order: 1
@@ -40,6 +40,8 @@ linha começa pelo verbo: **Incluir**, **Ajustar quantidade**, **Retirar**,
   na **Validação**.
 - **Credenciamento** acompanha os **Contratos** e recebe o aviso de reajuste.
 - A **Diretoria** decide quem tem cada perfil, na **Habilitação**.
+- **Coordenadora de faturamento**, **Gestão de contas médicas** e **Diretoria**
+  leem o **Painel**: a nota da semana e onde a perda da conta nasce.
 
 ## A tela que reúne tudo
 
@@ -54,11 +56,14 @@ vê os botões do perfil dela: **Painel**, **Validação**, **Coordenação**,
 
 1. Você arrasta a conta e o prontuário do MV para a tela. O sistema junta os
    dois pelo atendimento e a conta entra na fila.
-2. O sistema lê os dois PDFs, conta as diárias e confere a conta contra a
-   memória da operadora. A conta fica **A fazer** e o sino avisa.
+2. O sistema lê os dois PDFs e conta as diárias, a inteligência artificial lê
+   o texto livre do prontuário, e tudo é conferido contra a memória da
+   operadora. A conta fica **A fazer** e o sino avisa.
 3. Você abre o guia, corrige no MV linha a linha e marca **Feito**, **Não
    procede** ou **Bloqueado**.
 4. Você clica em **Concluir e abrir a próxima**, e a conta vai para
    **Concluídas**.
+5. Se quiser, você reenvia só a conta corrigida e vê se cada correção pegou,
+   com a **Nota de saída**.
 
 O que você marcar fica guardado e vira o retrato de onde a conta sai errada.
