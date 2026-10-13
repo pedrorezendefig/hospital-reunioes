@@ -41,7 +41,7 @@ Salve em `%TEMP%\onda-enxuta\<nome>-onda<N+1>.md`. A primeira linha precisa ser 
 /onda-enxuta --sessao <nome> --onda <N+1> --paralelo <P>
 
 ## Passagem
-Sessão <nome>, onda <N> com os PRs verdes em <data hora ISO>.
+Sessão <nome> (PRD #<PRD>), onda <N> com os PRs verdes em <data hora ISO>.
 Em deploy: PRs #a #b (issues #x #y), versão esperada v<antiga> -> v<nova>, subida na chave <nome>-onda<N>.
 Ondas anteriores: <cada uma com os PRs e o estado deles no GitHub (mergeados ou abertos), ou "nenhuma">.
 

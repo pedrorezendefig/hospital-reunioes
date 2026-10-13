@@ -5,10 +5,15 @@ import type { Agente, Ci, Coleta, EsperaCi, Fase, Issue, Migration, Prd, SubAgen
 
 // Torre das ondas: só leitura. A coleta (hooks/coletar.sh) junta o Hospital OS,
 // o `claude agents`, as migrations que a subida pediu e o /api/health.
+// O relógio só olha o que é local (sessões, agentes, subidas, migrations); o GitHub e o OS
+// são buscados quando um evento do workflow acontece: agente que começa ou termina, sessão
+// que nasce ou para, subida que fecha, migration nova, ou um gh/fechar_onda nesta sessão.
 
 const PANE = 'ondas'
 const STUDIO = 'https://studio.hospitalsaomatheus.cloud/project/default/sql/new'
 const PERIODO_MS = 10_000
+/** Comando desta sessão que muda o GitHub ou a produção: ao terminar, recoleta. */
+const EVENTO_NO_SHELL = /fechar_onda\.py\s+--prs|gh\s+pr\s+(create|merge|ready|close)|gh\s+issue\s+(create|close|edit)|gh\s+run\s+watch|gh\s+pr\s+checks\b[^|;&]*--watch/
 const APLICADA_VISIVEL_MS = 60 * 60 * 1000
 
 const coleta = atom({ plugin: 'hr-ondas', key: 'coleta' } as const, null)
@@ -82,7 +87,7 @@ export const aplicadasRecentes = (c: Coleta): Migration[] =>
         .sort((a, b) => a.numero - b.numero)
 
 export const sessoesDoPrd = (c: Coleta, prd: number): Agente[] =>
-  c.agentes.filter(a => c.prdSessoes[a.nome] === prd)
+  c.agentes.filter(a => prdDaSessao(c, a.nome) === prd)
 
 /** PRDs que entram no painel: com sessão de onda viva ou com fatia andando. */
 export const prdsVisiveis = (c: Coleta, mostrarTodos: boolean): Prd[] => {
@@ -150,8 +155,25 @@ export const duracao = (ms: number) => {
   return h ? `${h}:${mm.padStart(2, '0')}:${ss}` : `${mm}:${ss}`
 }
 
+/** PRD dono da issue ou do PR que o sub-agente cita. */
+const prdDoAlvo = (c: Coleta, a: SubAgente): number | undefined =>
+  (c.os?.prds ?? []).find(p => alvo(a, p) !== null)?.n
+
+/** PRD da sessão: o do alvo do sub-agente mais recente dela; sem alvo, o da passagem (coletar.sh). */
+export const prdDaSessao = (c: Coleta, nome: string): number | undefined => {
+  const dela = (c.subAgentes ?? []).filter(a => a.sessao === nome).sort((x, y) => y.inicio - x.inicio)
+  for (const a of dela) {
+    const n = prdDoAlvo(c, a)
+    if (n !== undefined) return n
+  }
+  return c.prdSessoes[nome]
+}
+
+/** Sub-agentes do PRD: pelo alvo; sem alvo em nenhum PRD, pelo PRD da sessão. */
 export const agentesDoPrd = (c: Coleta, prd: Prd): SubAgente[] =>
-  (c.subAgentes ?? []).filter(a => c.prdSessoes[a.sessao] === prd.n).sort((x, y) => x.inicio - y.inicio)
+  (c.subAgentes ?? [])
+    .filter(a => (prdDoAlvo(c, a) ?? prdDaSessao(c, a.sessao)) === prd.n)
+    .sort((x, y) => x.inicio - y.inicio)
 
 /** A fatia de um sub-agente pela descrição: "PR 1166" vai à issue do PR, "#1139" à issue. */
 export const alvo = (a: SubAgente, prd: Prd): number | null => {
@@ -261,15 +283,30 @@ export const resumoDaOnda = (issues: Issue[], onda: number[]) => {
   return linhas
 }
 
+/** O que muda num evento do workflow, lido só da parte local da coleta. */
+export const assinatura = (c: Pick<Coleta, 'agentes' | 'subAgentes' | 'subidas' | 'migrations'>) =>
+  JSON.stringify([
+    c.agentes.map(a => `${a.nome}:${a.status}`),
+    (c.subAgentes ?? []).map(a => `${a.id}:${a.terminou}`),
+    (c.subidas ?? []).map(s => `${s.prs.join(',')}:${s.fim !== null}`),
+    c.migrations.map(m => `${m.sessao}/${m.arquivo}`),
+  ])
+
 let rodando = false
+let frescoPendente = false
+let ultimaAssinatura: string | null = null
 const sessoesVistas = new Set<string>()
 const migrationsAvisadas = new Set<number>()
 
-async function coletar($: EngineInterface) {
-  if (rodando) return
+async function coletar($: EngineInterface, fresco = false) {
+  if (rodando) {
+    frescoPendente ||= fresco
+    return
+  }
   rodando = true
   try {
-    const r = await $.process.run(['/bin/bash', `${$.plugin.root}/hooks/coletar.sh`], {
+    const args = fresco ? ['--fresco'] : []
+    const r = await $.process.run(['/bin/bash', `${$.plugin.root}/hooks/coletar.sh`, ...args], {
       timeoutMs: 90_000,
     })
     if (r.exitCode !== 0) throw new Error(r.stderr.slice(0, 200) || `saída ${r.exitCode}`)
@@ -280,9 +317,12 @@ async function coletar($: EngineInterface) {
     const c: Coleta = {
       ...bruto,
       os: bruto.os ?? anterior?.os ?? null,
-      osEm: bruto.os ? agora : (anterior?.osEm ?? null),
+      osEm: bruto.os ? (bruto.osEm ?? agora) : (anterior?.osEm ?? null),
       em: agora,
     }
+    const a = assinatura(c)
+    if (ultimaAssinatura !== null && a !== ultimaAssinatura) frescoPendente = true
+    ultimaAssinatura = a
     await update($, coleta, () => c)
     await update($, erro, () => (c.os ? null : 'Hospital OS fora do ar em 127.0.0.1:8799'))
 
@@ -313,6 +353,10 @@ async function coletar($: EngineInterface) {
   } finally {
     rodando = false
   }
+  if (frescoPendente) {
+    frescoPendente = false
+    await coletar($, true)
+  }
 }
 
 export const register: Register = on => {
@@ -332,15 +376,23 @@ export const register: Register = on => {
     const arg = e.args.trim()
     if (arg === 'todos' || arg === 'ativos') await update($, todos, () => arg === 'todos')
     await $.ui.open({ id: PANE, title: 'Ondas', columns: 78 })
-    await coletar($)
+    await coletar($, true)
     return { text: `Painel das ondas atualizado${arg === 'todos' ? ', com todos os PRDs' : ''}.` }
   })
 
-  // CI em espera na própria sessão: o --watch segura a chamada até o fim
+  // CI em espera na própria sessão: o --watch segura a chamada até o fim.
+  // Todo comando que muda o GitHub ou a produção recoleta ao terminar.
   on('tool.call', { tool: 'Bash' }, async ($, e, next) => {
     const cmd = e.command
     const assistindo = /gh\s+run\s+watch|gh\s+pr\s+checks\b[^|;&]*--watch/.test(cmd)
-    if (!assistindo) return next(e)
+    if (!assistindo) {
+      if (!EVENTO_NO_SHELL.test(cmd)) return next(e)
+      try {
+        return await next(e)
+      } finally {
+        void coletar($, true)
+      }
+    }
     const pr = Number(/gh\s+pr\s+checks\s+(\d+)/.exec(cmd)?.[1]) || null
     const repo = (await read($, coleta))?.os?.repo ?? 'pedrorezendefig/hospital-reunioes'
     const url = pr ? `https://github.com/${repo}/pull/${pr}/checks` : `https://github.com/${repo}/actions`
@@ -349,6 +401,7 @@ export const register: Register = on => {
       return await next(e)
     } finally {
       await update($, esperaCi, () => null)
+      void coletar($, true)
     }
   })
 
@@ -451,9 +504,9 @@ export const register: Register = on => {
     return (
       <Box flexDirection="column">
         <Text dimColor>
-          atualizado há {Math.round(((await $.clock.now()) - c.em) / 1000)} s ·{' '}
+          GitHub há {minutos((await $.clock.now()) - (c.remotoEm ?? c.em))} ·{' '}
           {mostrarTodos ? 'todos os PRDs (/ondas ativos)' : 'PRDs ativos (/ondas todos)'}
-          {c.osEm != null && c.osEm < c.em ? (
+          {c.osEm != null && c.osEm < (c.remotoEm ?? c.em) ? (
             <Text color="warning"> · Hospital OS sem resposta, PRDs de há {minutos(c.em - c.osEm)}</Text>
           ) : null}
         </Text>

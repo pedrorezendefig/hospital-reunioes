@@ -445,6 +445,8 @@ if PATH="$PATH_SHELL" python3 -c "import playwright" >/dev/null 2>&1; then
 else
   opc "playwright (roteiro de prints)" "pip install playwright && python3 -m playwright install chromium"
 fi
+# Verificação de tela pelo agente (/express e fatias de frontend): Playwright CLI.
+PATH="$PATH_SHELL" command -v playwright-cli >/dev/null 2>&1 && ok "playwright-cli (verificar tela)" || opc "playwright-cli (verificar tela)" "npm i -g @playwright/cli && playwright-cli install --skills"
 fi
 
 # ---------------------------------------------------------------- Mapa do repo

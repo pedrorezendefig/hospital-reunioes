@@ -20,6 +20,7 @@ concorrente.
 
 from __future__ import annotations
 
+import dataclasses
 import json
 import logging
 import os
@@ -217,6 +218,9 @@ class _Consulta:
             for nova in novas:
                 if violacao := _violacao(self._nome, nova):
                     raise APIError({"message": violacao, "code": "23514"})
+                # O índice único do termo (migration 116).
+                if self._nome == "cm_item_dicionario" and any(t["termo"] == nova["termo"] for t in tabela):
+                    raise APIError({"message": "idx_cm_item_dicionario_termo", "code": "23505"})
                 self._banco.relogio += 1
                 gravadas.append(
                     {
@@ -877,7 +881,7 @@ class TestProntuarioUmaVez:
         assert gravadas == {"cm_eventos": 1, "cm_prescricao": 4, "cm_cirurgia": 1}
         # A trava do atendimento vale também para o Passo A: a segunda vaga
         # espera a primeira e acha a leitura da IA guardada.
-        assert openrouter.requisicoes == 1
+        assert openrouter.formatos.count(PASSO_A) == 1
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -1085,19 +1089,40 @@ EVENTOS_DA_IA = {
 }
 
 
+PASSO_A, PASSO_B = "EventosDoProntuario", "LinhasDaComparacao"
+
+
 class _OpenRouter:
-    """O provedor do teste, na fronteira HTTP: devolve `eventos` no formato do
-    Anexo A, ou fora do formato enquanto `fora_do_formato` for verdade, e conta
-    as requisições."""
+    """O provedor do teste, na fronteira HTTP: responde pelo schema pedido
+    (`eventos` no formato do Anexo A, `comparacao` no do Anexo B, `respostas`
+    para os outros), fora do formato enquanto `fora_do_formato` for verdade
+    (todos) ou o schema estiver em `fora_do_formato_em`, e guarda o corpo e o
+    schema de cada requisição."""
 
     def __init__(self):
         self.requisicoes = 0
         self.fora_do_formato = False
+        self.fora_do_formato_em: set[str] = set()
         self.eventos = EVENTOS_DA_IA
+        self.comparacao: dict = {"linhas": [], "resumo": "Conta conferida."}
+        self.respostas: dict[str, dict] = {}
+        self.uso: dict = {"prompt_tokens": 10, "completion_tokens": 5, "total_tokens": 15, "cost": 0.001}
+        self.formatos: list[str] = []
+        self.corpos: list[dict] = []
+        # Gancho dos testes de corrida: roda com o schema pedido, antes da resposta.
+        self.antes_de_responder = None
 
     def __call__(self, request: httpx.Request) -> httpx.Response:
         self.requisicoes += 1
-        conteudo = "não é JSON" if self.fora_do_formato else json.dumps(self.eventos)
+        corpo = json.loads(request.content)
+        formato = corpo["response_format"]["json_schema"]["name"]
+        if self.antes_de_responder:
+            self.antes_de_responder(formato)
+        self.formatos.append(formato)
+        self.corpos.append(corpo)
+        resposta = {PASSO_A: self.eventos, PASSO_B: self.comparacao}.get(formato) or self.respostas.get(formato)
+        fora = self.fora_do_formato or formato in self.fora_do_formato_em or resposta is None
+        conteudo = "não é JSON" if fora else json.dumps(resposta)
         return httpx.Response(
             200,
             json={
@@ -1108,7 +1133,7 @@ class _OpenRouter:
                 "choices": [
                     {"index": 0, "message": {"role": "assistant", "content": conteudo}, "finish_reason": "stop"}
                 ],
-                "usage": {"prompt_tokens": 10, "completion_tokens": 5, "total_tokens": 15, "cost": 0.001},
+                "usage": self.uso,
             },
         )
 
@@ -1142,7 +1167,7 @@ class TestIAForaDoFormato:
 
         (conta,) = banco.tabelas["cm_conta"]
         # As três tentativas são do adaptador; o pipeline não repete a conta.
-        assert openrouter.requisicoes == 3
+        assert openrouter.formatos == [PASSO_A] * 3
         assert (conta["situacao"], conta["erro_motivo"], conta["tentativas"]) == (
             "ERRO",
             "Tente de novo em alguns minutos",
@@ -1157,7 +1182,7 @@ class TestIAForaDoFormato:
         _enviar(banco, _conta())
         _rodar_o_job(banco)
 
-        assert openrouter.requisicoes == 4
+        assert openrouter.formatos.count(PASSO_A) == 4
         assert banco.conta(conta["id"])["situacao"] == "A_FAZER"
         assert banco.conta(conta["id"])["erro_motivo"] is None
 
@@ -1170,9 +1195,49 @@ class TestPassoANoPipeline:
         assert _rodar_o_job(banco) == 2
 
         assert [c["situacao"] for c in banco.tabelas["cm_conta"]] == ["A_FAZER", "A_FAZER"]
-        assert openrouter.requisicoes == 1
+        assert openrouter.formatos.count(PASSO_A) == 1
         (eventos,) = banco.tabelas["cm_eventos"]
         assert eventos["eventos_json"]["ia"]["atendimento"] == ATENDIMENTO
+
+    def test_o_guia_sai_da_conferencia_com_os_eventos_do_passo_a(self, openrouter, monkeypatch):
+        # A IA recebe os achados da conferência sem os eventos; o guia gravado é
+        # o da conferência que roda depois, com os eventos que ela leu (#1134).
+        ventilacao = {
+            "tipo": "VENTILACAO_MECANICA",
+            "descricao": "VM",
+            "setor": "CTI ADULTO",
+            "inicio": "2026-10-03T08:00",
+            "fim": None,
+            "pagina": 5,
+            "trecho": "VM",
+        }
+        openrouter.eventos = {**EVENTOS_DA_IA, "terapias": [ventilacao]}
+        recebidos = []
+        original = processamento.conferir
+
+        def conferir_espiado(*args, **kwargs):
+            resultado = original(*args, **kwargs)
+            if kwargs.get("eventos") is not None:
+                # Só a primeira linha: o guia gravado tem que ser este, não o de antes.
+                resultado = dataclasses.replace(resultado, linhas=resultado.linhas[:1])
+            recebidos.append((kwargs.get("eventos"), resultado))
+            return resultado
+
+        monkeypatch.setattr(processamento, "conferir", conferir_espiado)
+        banco = _cenario()
+        _enviar(banco, _conta(), _prontuario())
+
+        _rodar_o_job(banco)
+
+        (conta,) = banco.tabelas["cm_conta"]
+        assert conta["situacao"] == "A_FAZER", conta.get("erro_motivo")
+        (gravados,) = banco.tabelas["cm_eventos"]
+        assert [eventos for eventos, _ in recebidos] == [None, gravados["eventos_json"]["ia"]]
+        assert [t["tipo"] for t in recebidos[-1][0]["terapias"]] == ["VENTILACAO_MECANICA"]
+        final = recebidos[-1][1]
+        linhas = _linhas_do_guia(_guia(banco, conta["id"]))
+        assert len(recebidos[0][1].linhas) > 1
+        assert [{k: linha[k] for k in final.linhas[0]} for linha in linhas] == list(final.linhas)
 
     def test_a_chamada_do_passo_a_fica_gravada_com_os_tokens(self):
         banco = _cenario()
@@ -1181,7 +1246,7 @@ class TestPassoANoPipeline:
         _rodar_o_job(banco)
 
         (conta,) = banco.tabelas["cm_conta"]
-        (chamada,) = banco.tabelas["cm_chamada_ia"]
+        (chamada,) = [c for c in banco.tabelas["cm_chamada_ia"] if c["passo"] == "A"]
         assert {k: chamada[k] for k in ("conta_id", "atendimento_id", "passo", "tokens_entrada", "tokens_saida")} == {
             "conta_id": conta["id"],
             "atendimento_id": conta["atendimento_id"],
@@ -1305,8 +1370,11 @@ class TestTempoDasEtapas:
             "leitura_da_conta",
             "texto_do_prontuario",
             "leitura_do_prontuario",
+            "dicionario",
             "conferencia",
             "passo_a",
+            "conferencia_com_eventos",
+            "passo_b",
             "gravacao",
             "total",
         }

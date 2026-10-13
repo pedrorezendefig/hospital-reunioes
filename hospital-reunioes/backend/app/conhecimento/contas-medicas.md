@@ -18,6 +18,7 @@ A primeira etapa inteira: a fundação do módulo, a carga das operadoras, o env
 - a tela Operadoras, aberta a partir da tela de contas para quem tem a permissão de regra contratual e tabelas (gestão de contas médicas e as duas diretorias);
 - a tela Memória da operadora, aberta pela operadora na tela Operadoras, descrita abaixo;
 - a tela de Habilitação, aberta a partir da tela de contas para quem tem a permissão de habilitar pessoas (as duas diretorias), descrita em "Quem vê";
+- a tela Contratos, aberta a partir da tela de contas para quem tem a permissão de contratos e avisos (credenciamento, gestão de contas médicas e as duas diretorias), com o aviso de reajuste no sino, descrita em "Contratos e aviso de reajuste";
 - o Painel, aberto a partir da tela de contas, descrito em "O Painel".
 
 Na tela Operadoras, a gestão envia o arquivo de memória de cada convênio, o mesmo que o diretor monta, e a memória passa a valer sem programador no meio. A tela mostra a versão, quantas regras vigentes e pendentes entraram e os parâmetros lidos do cabeçalho; os números têm de bater com o arquivo. Mandar uma versão nova aposenta a anterior. Parâmetro do cabeçalho que o sistema ainda não usa fica guardado, e a memória em vigor pode ser baixada de volta inteira. Arquivo com um número no formato de CPF é recusado, porque memória não pode ter dado de paciente. Na mesma tela a gestão cadastra os nomes de plano como o MV imprime, cada um com a operadora e a coluna de preço, e os setores do MV com a acomodação de cada um.
@@ -40,7 +41,7 @@ Cada envio aceita até 10 atendimentos e 30 arquivos, e cada arquivo pode ter at
 
 Assim que o envio termina, aparece o **Último envio**, uma linha por atendimento, dizendo o que chegou: "31302, conta e prontuário", "31310, 2 parciais e prontuário", "31318, falta o prontuário" ou "31320, falta a conta". Logo abaixo ficam as recusas, cada uma com o arquivo e o motivo.
 
-Se o prontuário do atendimento já foi enviado nos últimos sete dias, a conta nova é pareada com ele e não é preciso mandar o prontuário de novo. Quando o período da conta passa da última data desse prontuário, o Último envio avisa para mandar o prontuário atualizado. Enviar de novo a mesma conta do mesmo atendimento não cria outra: a conta volta para a fila e é analisada outra vez.
+Se o prontuário do atendimento já foi enviado nos últimos sete dias, a conta nova é pareada com ele e não é preciso mandar o prontuário de novo. Quando o período da conta passa da última data desse prontuário, o Último envio avisa para mandar o prontuário atualizado. Enviar de novo a mesma conta do mesmo atendimento não cria outra: a conta volta para a fila e é analisada outra vez. A exceção é a conta já concluída: enviar de novo a conta dela é o reenvio da conta corrigida, descrito abaixo, e o Último envio diz "31302, reenvio da conta 48001: 2 corrigidas no MV, 1 ainda na conta, nota de saída 86".
 
 A fila mostra as contas em ordem de envio e, dentro do envio, na ordem dos arquivos. Nunca é reordenada por valor. Cada conta aparece pelo número do atendimento, com o número da conta ao lado, e com a situação:
 
@@ -77,7 +78,13 @@ A segunda etapa trouxe a inteligência artificial para a análise. Ela tem duas 
 
 A leitura do prontuário pela IA acontece uma vez por atendimento e serve a todas as parciais e ao reenvio. Ela recebe só o texto que o código não leu sozinho, junto com o que ele já leu (prescrições, balanço, glicemias e as linhas que as conferências já puseram no Guia), para não refazer. Prontuário grande demais para uma leitura só é lido em partes, por períodos de dias, e o fato repetido entre duas partes conta uma vez. O trecho que a IA cita é conferido na página: quando não está lá nem na página vizinha, o fato fica marcado para conferir, com confiança baixa. Internação, alta e setor de cada dia valem como o código leu; quando a IA leu diferente, a diferença aparece no parecer parcial do Guia, junto com os documentos esperados que faltam e as observações da IA (uma evolução ilegível, por exemplo).
 
-O texto do prontuário vai à IA sem o nome da paciente, e o provedor não guarda nada do que recebe nem usa o texto para treinar modelo. A resposta tem um formato combinado; fora dele, é recusada e pedida de novo, até três vezes, com uma espera maior a cada vez. Depois disso a conta fica em Erro com "Tente de novo em alguns minutos" e o botão "Enviar de novo".
+Na segunda tarefa, a IA recebe a memória inteira da operadora, os fatos do prontuário no período da conta, com um dia a mais de cada lado, os itens lançados na conta (sem o preço) e o que o código já calculou: as diárias pagas por setor e por dia, o teto de cada consumível, a coluna de preço do plano e as linhas que as conferências já puseram no Guia. Ela compara o que aconteceu com a paciente com o que foi lançado na conta, aplicando as regras do convênio, e cobre o que o código não alcança sozinho: os acessórios de cada medicação (diluente, seringa, agulha, equipo), os insumos por tempo de cada terapia, os consumíveis com teto que depende de uma condição (paciente acamada, curativo, sonda), as taxas por dia e o bloco do centro cirúrgico.
+
+Nenhuma linha da IA chega à faturista sem seis conferências do código. A regra citada existe na memória: senão a linha cai, e o motivo fica registrado na conta. A regra está vigente: regra pendente vira Validar, nunca ordem. O trecho citado está na página do prontuário ou na vizinha: senão a linha sai com "conferir evidência" e confiança baixa. O código existe na tabela da operadora: fora dela, o valor sai pelo preço que a conta já lançou, com a etiqueta, ou a linha fica "Não conferido"; a linha que veio sem código tenta o dicionário e a descrição. O teto por dia é recalculado pelo código: diárias pagas vezes o teto. E a linha está dentro do período da conta: senão cai. A linha que repete o que o código já apontou fica uma só, a do código. A causa-raiz de linha de diária é sempre regra automática, e a de regra de preço ou de item que o MV já bloqueou, cadastro e preço. O valor em reais de cada linha, a nota de entrada e o R$ em validação são calculados pelo código, com as linhas da IA junto com as do código, agrupadas no mesmo dia e setor.
+
+Quando um medicamento da prescrição não casa com nenhum item da conta, nem pelo dicionário nem pela marca e pela concentração, a IA é perguntada uma vez, com os medicamentos da conta, e propõe o código. A proposta já vale nas contas seguintes, sem IA, e aparece na tela Operadoras, em "Propostas da IA para o dicionário", para a gestão confirmar ou rejeitar. Rejeitar tira o código e deixa o termo decidido, sem par: a IA não é perguntada de novo.
+
+O texto do prontuário vai à IA sem o nome da paciente, e o provedor não guarda nada do que recebe nem usa o texto para treinar modelo. A resposta tem um formato combinado; fora dele, é recusada e pedida de novo, até três vezes, com uma espera maior a cada vez. Depois disso a conta fica em Erro com "Tente de novo em alguns minutos" e o botão "Enviar de novo"; as linhas que o código já achou ficam guardadas, e enviar de novo refaz a análise.
 
 O custo de cada chamada fica gravado: quantos tokens entraram e saíram, quantos vieram do cache e quanto custou, em dólar, e cada conta guarda a soma das chamadas dela, inclusive as de uma nova análise. O modelo de inteligência artificial de cada tarefa é trocado numa configuração do servidor, sem programador.
 
@@ -91,6 +98,10 @@ No topo ficam o número do atendimento, o rótulo da paciente, a conta, a operad
 
 As linhas vêm agrupadas por dia e setor, como "03/10 · CTI". Cada linha começa pelo verbo (Incluir, Ajustar quantidade, Corrigir preço, Retirar ou Validar) e traz a quantidade, o período, o valor com sinal e o código, que copia com um clique. "Ver evidência" abre a página do prontuário e o trecho que sustenta a linha. A etiqueta cinza "Não conferido" marca o valor que não pôde ser conferido contra a tabela da operadora: ele fica fora da nota e do R$ a ajustar.
 
+Medicamento "se necessário" entra sempre no Guia. Quando o prontuário mostra que ele foi dado no dia (a leitura pela IA achou checagem, dispensação ou evolução citando a dose, ou o balanço hídrico registra o uso), a linha inclui as doses indicadas, com nível Registrado. Sem nenhum registro de uso, a linha inclui uma dose por dia de prescrição (quantidade provisória, que a memória da operadora pode mudar), com nível Prescrito SN, a etiqueta amarela "SE NECESSÁRIO · SEM REGISTRO NO MV" e o texto "Confira a checagem em papel. Sem uso, marque NÃO PROCEDE." O Não procede dessa linha já abre com o motivo "sem evidência no prontuário". Não entra o dia em que o item foi suspenso ou alterado, nem dia depois da alta; na operadora de diária global, só o item cobrado à parte. Essas linhas contam na nota como qualquer Incluir e aparecem separadas no Painel, como Prescrito SN.
+
+A diária de UTI sai na classe que o prontuário mostra em cada dia. Com ventilação mecânica, monitorização invasiva, marca-passo ou droga vasoativa registrados no dia, a linha aponta a classe mais alta que a memória da operadora liga a esse registro (classe V na Unimed, classe II na Leve, nível 2 do pacote de UTI da ASSIM, só na Linha Carioca), com a página e o trecho; sem nenhum desses registros, a classe mais baixa. Toda linha de diária de UTI traz a observação "conferir classe de UTI", e a classe lançada errada sai para retirar.
+
 Em cada linha, três botões:
 
 - **Feito**: a faturista corrigiu no MV. Um clique, e a linha recolhe em verde.
@@ -103,9 +114,29 @@ No rodapé ficam a observação opcional para a gestão e o botão "Concluir e a
 
 Abrir o Guia pela primeira vez muda a conta de A fazer para Em correção. A faturista só abre as próprias contas; quem tem o Painel completo abre a de qualquer uma.
 
+## O reenvio da conta corrigida
+
+Depois de corrigir a conta no MV, a faturista pode reenviar só o PDF da conta para ver se a correção pegou. O reenvio é opcional: a conta concluída sem reenvio vale igual para a produção dela.
+
+Há dois caminhos. No Guia de uma conta concluída, o botão "Reenviar conta corrigida", no rodapé, pede o PDF da conta. Na tela de contas, ela arrasta a conta de um atendimento já concluído, uma ou várias de uma vez, e o app entende sozinho que é reenvio: a conta não volta para a fila e continua concluída. O PDF tem de ser a conta do mesmo atendimento e com o mesmo número; outro arquivo é recusado com o motivo.
+
+O app lê a conta nova e confere cada linha marcada como Feito. A linha Incluir cujo item entrou na conta, a Retirar cujo item sumiu, a Ajustar quantidade com a quantidade certa e a Corrigir preço com o preço da tabela ganham a etiqueta "corrigida no MV". As outras ganham "ainda na conta": a faturista marcou Feito, mas o item continua como antes.
+
+Ao lado da nota de entrada aparece a **nota de saída**: a mesma conta da nota, feita sobre a conta corrigida e só com as linhas Feito que continuam ainda na conta. Na aba Concluídas da fila, a conta reenviada mostra as duas notas. O prontuário não é lido de novo e a inteligência artificial não é chamada: o reenvio não muda o Guia nem a nota de entrada.
+
+## Contratos e aviso de reajuste
+
+A tela Contratos mostra uma linha por operadora: a data de assinatura do contrato, o último aditivo (número e data), o início da vigência, o vencimento, os dias que faltam e a situação. A cor diz a situação: verde **Em dia** (mais de 60 dias até o vencimento), âmbar **Negociar reajuste** (60 dias ou menos), vermelho **Vencido** e cinza **Sem contrato**.
+
+O contrato de cada operadora nasce da memória dela, quando a gestão envia o arquivo de memória na tela Operadoras. Quando a memória não traz o vencimento, ele é o início da vigência do último aditivo mais um ano, e a tela marca a data como "calculado". Quando a memória diz que a data não é vencimento (é o caso da Unimed e da Leve, em que a data é a do início da negociação do reajuste), a tela e o aviso dizem isso.
+
+Para atualizar o contrato, a gestão ou a diretoria clica em "Enviar contrato ou aditivo" e escolhe o arquivo. A inteligência artificial lê do texto os quatro campos (assinatura, último aditivo, início da vigência e vencimento) e preenche o formulário; nada vale antes de a pessoa conferir e confirmar no botão "Confirmar", e o contrato guarda quem confirmou e quando. Contrato em imagem ou escaneado não tem texto para ler: os campos ficam vazios e a pessoa digita. O arquivo enviado fica guardado e pode ser baixado na própria linha. O credenciamento vê a tela e recebe o aviso, mas não muda o contrato.
+
+O aviso sai no sino uma vez só, na data do aviso, que é o vencimento menos a antecedência da memória da operadora (60 dias quando a memória não diz). Antecedência zero avisa na própria data do vencimento. Recebem o aviso todas as pessoas com a permissão de contratos e avisos: credenciamento, gestão de contas médicas e as duas diretorias, ou quem a Habilitação ligar. O texto é como "ASSIM: o contrato vence em 60 dias (01/05/2027). Iniciar a negociação do reajuste."; quando a data não é vencimento, como na Unimed, o texto diz que naquela data inicia o debate do reajuste. Clicar no aviso abre a tela Contratos. A conferência roda todo dia de manhã; se o sistema estava fora do ar no dia do aviso, ele sai no dia seguinte, até o vencimento.
+
 ## O Painel
 
-O Painel mostra à diretoria onde a perda da conta nasce. Ele abre a partir da tela de contas, pelo botão Painel. Os números são das contas concluídas, por semana de segunda a domingo, contada pelo dia em que a faturista concluiu a conta. A conta concluída e enviada de novo sai do Painel até ser concluída outra vez. No topo ficam três filtros: a semana, a operadora e o tipo de conta (Parcial, quando o atendimento tem mais de uma conta, ou Única).
+O Painel mostra à diretoria onde a perda da conta nasce. Ele abre a partir da tela de contas, pelo botão Painel. Os números são das contas concluídas, por semana de segunda a domingo, contada pelo dia em que a faturista concluiu a conta. A conta reenviada continua no Painel, contada pela nota de entrada e pela semana em que foi concluída. No topo ficam três filtros: a semana, a operadora e o tipo de conta (Parcial, quando o atendimento tem mais de uma conta, ou Única).
 
 Quatro cartões no topo:
 
@@ -154,5 +185,7 @@ O módulo não guarda nome completo, CPF, carteira nem data de nascimento de pac
 - Um botão do Guia que não marca, uma conta que não conclui ou uma nota que não bate com as linhas (Defeito).
 - Uma conta que não sai de Na fila ou de "Pronta em instantes", um Erro com motivo que não bate com o PDF, ou o aviso de contas prontas que não chega ao sino (Defeito, ou Informação se o motivo do Erro explica, como o PDF sem texto).
 - Uma conta que volta para Erro com "Tente de novo em alguns minutos" mesmo depois de enviada de novo, ou o botão "Reanalisar" que não aparece para a gestão (Defeito).
+- O aviso de reajuste de contrato que não chegou ao sino, chegou duas vezes ou chegou na data errada, ou um contrato com a situação que não bate com o vencimento (Defeito, ou Informação se a data do aviso explica, como a antecedência da memória).
 - Um número do Painel que não bate com as contas da semana, ou a faturista que vê a produção de outra pessoa (Defeito, ou Informação se a dúvida é sobre a semana de segunda a domingo ou sobre o que entra em cada número).
+- Uma linha marcada "ainda na conta" que já foi corrigida no MV, ou uma nota de saída que não bate com as linhas (Defeito, ou Informação se a conta reenviada não era a corrigida).
 - Dúvida sobre quando chega o envio de contas ou alguma das próximas entregas (Informação).

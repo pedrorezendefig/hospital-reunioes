@@ -1,6 +1,6 @@
 # ROTAS.md
 <!-- gerado automaticamente por /snapshot — não editar -->
-<!-- last_update: 2026-10-13T04:24+0000 -->
+<!-- last_update: 2026-10-13T06:19+0000 -->
 
 Endpoints HTTP expostos pelo backend FastAPI do Hospital Reuniões.
 
@@ -82,6 +82,15 @@ Endpoints HTTP expostos pelo backend FastAPI do Hospital Reuniões.
 |--------|------|-----------|------|
 | GET | `/contas-medicas/me` | O perfil de Contas médicas da pessoa e as permissões ligadas para ela. | ✅ |
 
+## contas-medicas (`app/routers/contas_medicas_contratos.py`)
+
+| Método | Rota | O que faz | Auth |
+|--------|------|-----------|------|
+| GET | `/contas-medicas/contratos` | Uma linha por operadora, com o contrato, os dias que faltam e a situação. | ✅ |
+| POST | `/contas-medicas/contratos/{sigla}` | Os campos confirmados passam a valer, com quem confirmou e quando. | ✅ |
+| GET | `/contas-medicas/contratos/{sigla}/arquivo` | O contrato ou o aditivo confirmado da operadora. | ✅ |
+| POST | `/contas-medicas/contratos/{sigla}/arquivo` | Guarda o contrato ou o aditivo e devolve os campos que a IA leu, para a | ✅ |
+
 ## contas-medicas (`app/routers/contas_medicas_envio.py`)
 
 | Método | Rota | O que faz | Auth |
@@ -99,6 +108,7 @@ Endpoints HTTP expostos pelo backend FastAPI do Hospital Reuniões.
 | DELETE | `/contas-medicas/contas/{conta_id}/guia/linhas/{linha_id}/marcacao` | Desfazer: a linha volta a aberta, enquanto a Conta não foi concluída. | ✅ |
 | POST | `/contas-medicas/contas/{conta_id}/guia/linhas/{linha_id}/marcacao` | Feito, Não procede (com motivo) ou Bloqueado numa linha do Guia. | ✅ |
 | POST | `/contas-medicas/contas/{conta_id}/reanalisar` | Reanalisar (issue #1130): a conta A fazer ou Em correção volta para a | ✅ |
+| POST | `/contas-medicas/contas/{conta_id}/reenvio` | Reenviar conta corrigida (issue #1136): só o PDF da conta, de uma conta | ✅ |
 
 ## contas-medicas (`app/routers/contas_medicas_habilitacao.py`)
 
@@ -122,6 +132,9 @@ Endpoints HTTP expostos pelo backend FastAPI do Hospital Reuniões.
 | Método | Rota | O que faz | Auth |
 |--------|------|-----------|------|
 | POST | `/contas-medicas/dicionario` | Carrega o dicionário de itens do hospital: termo atualizado ou novo, um por sinônimo. | ✅ |
+| GET | `/contas-medicas/dicionario/propostas` | Os termos que a IA ligou a um código da conta, à espera da gestão. | ✅ |
+| POST | `/contas-medicas/dicionario/propostas/{proposta_id}/confirmar` | A proposta vira termo confirmado do dicionário, com o código que a IA deu. | ✅ |
+| POST | `/contas-medicas/dicionario/propostas/{proposta_id}/rejeitar` | O código proposto sai; o termo fica decidido, sem par, e a IA não é perguntada de novo. | ✅ |
 | GET | `/contas-medicas/operadoras` | As operadoras com a situação, a versão da memória, as regras e as tabelas carregadas. | ✅ |
 | POST | `/contas-medicas/operadoras/memoria` | Importa o arquivo de memória: versão nova, vigente, com as regras dela. | ✅ |
 | GET | `/contas-medicas/operadoras/{sigla}/memoria` | A memória vigente no formato do arquivo, gerada do banco com o cabeçalho inteiro, para baixar. | ✅ |
@@ -478,4 +491,4 @@ Endpoints HTTP expostos pelo backend FastAPI do Hospital Reuniões.
 
 ---
 
-**Totais:** 267 endpoints em 41 routers · 94% exigem auth.
+**Totais:** 275 endpoints em 42 routers · 94% exigem auth.

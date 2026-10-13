@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import os
 import sys
+from dataclasses import replace
 from datetime import date, datetime, time
 from decimal import Decimal
 from pathlib import Path
@@ -29,7 +30,14 @@ from app.services.contas_medicas.cirurgia import (  # noqa: E402
     Procedimento,
 )
 from app.services.contas_medicas.conferencia import Pacote, ProntuarioLido, conferir  # noqa: E402
-from app.services.contas_medicas.conteudo import Conteudo, GlicemiasDoDia, Internacao, Movimentacao  # noqa: E402
+from app.services.contas_medicas.conteudo import (  # noqa: E402
+    Balanco,
+    Conteudo,
+    GlicemiasDoDia,
+    Internacao,
+    LinhaDoBalanco,
+    Movimentacao,
+)
 from app.services.contas_medicas.memoria import MemoriaLida, RegraLida  # noqa: E402
 from app.services.contas_medicas.prescricao import ExamePedido, ItemPrescrito, Prescricao, consolidar  # noqa: E402
 from app.services.contas_medicas.prontuario import Prontuario  # noqa: E402
@@ -184,9 +192,11 @@ def _prontuario(
     documentos=(),
     exames=(),
     glicemias=(),
+    balancos=(),
     textos: tuple[str, ...] = ("",),
     tipo_impressao: str | None = "Completa",
     idade: int | None = None,
+    alta: datetime | None = None,
 ) -> ProntuarioLido:
     estrutura = Prontuario(
         atendimento="31245",
@@ -200,13 +210,13 @@ def _prontuario(
         parecer_parcial=(),
     )
     conteudo = Conteudo(
-        internacao=Internacao(None, None, None, None, None),
+        internacao=Internacao(None, alta, None, None, None),
         movimentacoes=tuple(movimentacoes),
         setor_por_dia={},
         prescricoes=tuple(prescricoes),
         prescricao_consolidada=tuple(consolidar(prescricoes)),
         exames_pedidos=tuple(exames),
-        balancos=(),
+        balancos=tuple(balancos),
         glicemias=tuple(glicemias),
         descricoes_cirurgicas=tuple(descricoes),
         fichas_anestesicas=tuple(fichas),
@@ -1262,8 +1272,353 @@ class TestRegraPendenteDeExameEGlicemia:
 
 
 # ═══════════════════════════════════════════════════════════════════════════
+# 8. "Se necessário" com os eventos do Passo A (issue #1134)
+# ═══════════════════════════════════════════════════════════════════════════
+
+DIPIRONA = "91000002"
+TEXTO_SN = "Confira a checagem em papel. Sem uso, marque NÃO PROCEDE."
+
+PARAMETROS_SN: dict[str, Any] = {
+    **PARAMETROS_ALFA,
+    "regras_das_conferencias": {**REGRAS_DAS_CONFERENCIAS, "se_necessario": "ALFA-PRI-09"},
+}
+
+
+def _sn(nome: str, pagina: int, *, suspenso: bool = False) -> ItemPrescrito:
+    """Item "se necessário" como a leitura por código entrega: sem doses no dia."""
+    return replace(
+        _prescrito(nome, pagina, colunas="1 AMP EV S EV", doses=None),
+        se_necessario=True,
+        suspenso=suspenso,
+        frequencia=None,
+    )
+
+
+def _evento_de_prescricao(
+    nome: str, data: date, *, indicio: str | None = None, doses: float | None = None, suspenso: bool = False
+) -> dict[str, Any]:
+    """Uma prescrição do Passo A no formato que `cm_eventos` guarda."""
+    return {
+        "data": data.isoformat(),
+        "setor": CTI,
+        "item": nome,
+        "via": "EV",
+        "doses_no_dia": doses,
+        "se_necessario": True,
+        "indicio_de_uso": indicio,
+        "suspenso": suspenso,
+        "diluente": None,
+        "em_bomba": False,
+        "pagina": 40 + data.day,
+        "trecho": indicio or nome,
+        "etiquetas": [],
+        "confianca": None,
+    }
+
+
+def _eventos(*, prescricoes=(), terapias=(), procedimentos=()) -> dict[str, Any]:
+    return {
+        "movimentacoes": [],
+        "terapias": list(terapias),
+        "prescricoes": list(prescricoes),
+        "procedimentos": list(procedimentos),
+        "cirurgias": [],
+        "documentos_ausentes": [],
+        "observacoes": [],
+        "divergencias": [],
+    }
+
+
+class TestSeNecessario:
+    DICIONARIO = {"DIPIRONA": {DIPIRONA}}
+    TABELA = {("MEDICAMENTO", DIPIRONA): 2.00}
+
+    def _conferir(self, prontuario, eventos, parametros=None, tabela=None):
+        return conferir(
+            _conta(),
+            prontuario,
+            _memoria(parametros or PARAMETROS_SN),
+            _tabela(tabela or self.TABELA),
+            dicionario=self.DICIONARIO,
+            eventos=eventos,
+        )
+
+    def test_indicio_em_2_de_4_dias_inclui_as_doses_indicadas_e_1_por_dia_nos_outros_com_o_texto(self):
+        prescricoes = [_prescricao(dia(n), _sn("DIPIRONA 1G AMP", pagina=10 + n)) for n in (1, 2, 3, 4)]
+        # Dia 1: a evolução cita 2 doses. Dia 2: o balanço registra 1 lançamento.
+        eventos = _eventos(
+            prescricoes=[_evento_de_prescricao("DIPIRONA 1G AMP", dia(1), indicio="Feita dipirona 2x", doses=2)]
+        )
+        balanco = Balanco(dia(2), CTI, (30,), (LinhaDoBalanco("DIPIRONA 1G", "EV", 1, 10.0),), (), 0)
+
+        resultado = self._conferir(_prontuario(prescricoes=prescricoes, balancos=[balanco]), eventos)
+
+        resumo = [
+            (
+                linha["acao"],
+                linha["codigo"],
+                linha["data"],
+                linha["data_fim"],
+                linha["quantidade_devida"],
+                linha["valor_diferenca"],
+                linha["nivel_evidencia"],
+                linha["regra_codigo"],
+            )
+            for linha in resultado.linhas
+        ]
+        assert sorted(resumo) == [
+            ("INCLUIR", DIPIRONA, "2026-10-01", "2026-10-02", 3.0, 6.00, "REGISTRADO", "ALFA-PRI-09"),
+            ("INCLUIR", DIPIRONA, "2026-10-03", "2026-10-04", 2.0, 4.00, "PRESCRITO_SN", "ALFA-PRI-09"),
+        ]
+        registrado = next(linha for linha in resultado.linhas if linha["nivel_evidencia"] == "REGISTRADO")
+        sem_registro = next(linha for linha in resultado.linhas if linha["nivel_evidencia"] == "PRESCRITO_SN")
+        assert (registrado["evidencia_pagina"], registrado["evidencia_trecho"]) == (41, "Feita dipirona 2x")
+        assert sem_registro["motivo"].endswith(TEXTO_SN)
+        assert TEXTO_SN not in registrado["motivo"]
+
+    def test_suspenso_ou_alterado_no_dia_3_e_dia_depois_da_alta_nao_geram_linha(self):
+        # Dia 3: a prescrição da manhã suspende e a da tarde prescreve de novo (alterado).
+        prescricoes = [
+            *(_prescricao(dia(n), _sn("DIPIRONA 1G AMP", pagina=10 + n)) for n in (1, 2, 4, 5)),
+            _prescricao(dia(3), _sn("DIPIRONA 1G AMP", pagina=13, suspenso=True)),
+            _prescricao(dia(3), _sn("DIPIRONA 1G AMP", pagina=14)),
+        ]
+        prontuario = _prontuario(prescricoes=prescricoes, alta=datetime(2026, 10, 4, 15, 0))
+
+        resultado = self._conferir(prontuario, _eventos())
+
+        assert [(linha["data"], linha["data_fim"], linha["quantidade_devida"]) for linha in resultado.linhas] == [
+            ("2026-10-01", "2026-10-02", 2.0),
+            ("2026-10-04", None, 1.0),
+        ]
+        assert {linha["nivel_evidencia"] for linha in resultado.linhas} == {"PRESCRITO_SN"}
+
+    def test_2_doses_por_dia_sem_registro_na_memoria_viram_2_por_dia(self):
+        prescricoes = [_prescricao(dia(n), _sn("DIPIRONA 1G AMP", pagina=10 + n)) for n in (1, 2)]
+        parametros = {**PARAMETROS_SN, "transicao": {"se_necessario_doses_por_dia_sem_registro": 2}}
+
+        resultado = self._conferir(_prontuario(prescricoes=prescricoes), _eventos(), parametros)
+
+        [linha] = resultado.linhas
+        assert (linha["data"], linha["data_fim"], linha["quantidade_devida"], linha["valor_diferenca"]) == (
+            "2026-10-01",
+            "2026-10-02",
+            4.0,
+            8.00,
+        )
+        assert "2 por dia" in linha["motivo"]
+
+    def test_diaria_global_item_incluso_nao_gera_linha_e_acima_do_corte_gera(self):
+        zyvox = "91000001"
+        prescricoes = [
+            _prescricao(dia(n), _sn("DIPIRONA 1G AMP", pagina=10 + n), _sn("ZYVOX 600MG BOLSA", pagina=20 + n))
+            for n in (1, 2)
+        ]
+        parametros = {**PARAMETROS_GLOBAL, "regras_das_conferencias": PARAMETROS_SN["regras_das_conferencias"]}
+        tabela = {("MEDICAMENTO", DIPIRONA): 2.00, ("MEDICAMENTO", zyvox): 520.00}
+
+        resultado = conferir(
+            _conta(),
+            _prontuario(prescricoes=prescricoes),
+            _memoria(parametros),
+            _tabela(tabela),
+            dicionario={**self.DICIONARIO, "ZYVOX": {zyvox}},
+            eventos=_eventos(),
+        )
+
+        [linha] = resultado.linhas
+        assert (linha["acao"], linha["codigo"], linha["quantidade_devida"], linha["nivel_evidencia"]) == (
+            "INCLUIR",
+            zyvox,
+            2.0,
+            "PRESCRITO_SN",
+        )
+
+    def test_sem_os_eventos_do_passo_a_o_se_necessario_nao_roda(self):
+        prescricoes = [_prescricao(dia(1), _sn("DIPIRONA 1G AMP", pagina=11))]
+
+        resultado = self._conferir(_prontuario(prescricoes=prescricoes), None)
+
+        assert resultado.linhas == ()
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 8b. Classe de UTI do dia pelos eventos do Passo A (issue #1134)
+# ═══════════════════════════════════════════════════════════════════════════
+
+UNIMED_CLASSE_1, UNIMED_CLASSE_2, UNIMED_CLASSE_5 = "60000252", "60000236", "60000260"
+ASSIM_NIVEL_1, ASSIM_NIVEL_2 = "98032437", "98032445"
+REGRAS_COM_CLASSE = {**REGRAS_DAS_CONFERENCIAS, "classe_de_uti": "ALFA-DIA-14"}
+
+# Como a Unimed: diária global com as classes I, II e V da UTI adulto.
+PARAMETROS_UNIMED: dict[str, Any] = {
+    **PARAMETROS_GLOBAL,
+    "diaria_global": {
+        "uti_adulto_classe_1": {"codigo": UNIMED_CLASSE_1, "valor": 2415.00},
+        "uti_adulto_classe_2": {"codigo": UNIMED_CLASSE_2, "valor": 3492.88},
+        "uti_adulto_classe_5": {"codigo": UNIMED_CLASSE_5, "valor": 4831.55},
+    },
+    "regras_das_conferencias": REGRAS_COM_CLASSE,
+}
+TABELA_UNIMED = {
+    ("DIARIA_TAXA", UNIMED_CLASSE_1): 2415.00,
+    ("DIARIA_TAXA", UNIMED_CLASSE_2): 3492.88,
+    ("DIARIA_TAXA", UNIMED_CLASSE_5): 4831.55,
+}
+
+# Como a ASSIM: pacote de UTI adulto em dois níveis, só na Linha Carioca.
+PARAMETROS_ASSIM: dict[str, Any] = {
+    **PARAMETROS_ALFA,
+    "pacote_uti_adulto": {
+        "somente_linha_carioca": True,
+        "nivel_1": {"codigo": ASSIM_NIVEL_1, "valor": 1406.77},
+        "nivel_2": {"codigo": ASSIM_NIVEL_2, "valor": 1954.46},
+    },
+    "regras_das_conferencias": REGRAS_COM_CLASSE,
+}
+TABELA_ASSIM = {
+    **TABELA_DE_DIARIAS,
+    ("PACOTE", ASSIM_NIVEL_1): 1406.77,
+    ("PACOTE", ASSIM_NIVEL_2): 1954.46,
+}
+
+
+def _terapia(tipo: str, inicio: str, fim: str | None, *, pagina: int, trecho: str) -> dict[str, Any]:
+    """Uma terapia do Passo A no formato que `cm_eventos` guarda."""
+    return {
+        "tipo": tipo,
+        "descricao": trecho,
+        "setor": CTI,
+        "inicio": inicio,
+        "fim": fim,
+        "pagina": pagina,
+        "trecho": trecho,
+        "etiquetas": [],
+        "confianca": None,
+    }
+
+
+def _resumo_das_diarias(resultado) -> list[tuple]:
+    return sorted(
+        (
+            linha["acao"],
+            linha["codigo"],
+            linha["data"],
+            linha["data_fim"],
+            linha["quantidade_devida"] if linha["acao"] == "INCLUIR" else linha["quantidade_lancada"],
+            linha["valor_diferenca"],
+            linha["regra_codigo"],
+        )
+        for linha in resultado.linhas
+    )
+
+
+class TestClasseDeUti:
+    VENTILACAO = _terapia(
+        "VENTILACAO_MECANICA", "2026-10-01T15:00", "2026-10-02T22:00", pagina=50, trecho="Em VM, modo PCV"
+    )
+
+    def _prontuario_de_cti(self) -> ProntuarioLido:
+        return _prontuario(movimentacoes=_internacao(*TestDiarias.TRES_DIARIAS), tipo_impressao=None)
+
+    def test_ventilacao_mecanica_em_2_de_3_dias_sai_classe_v_nos_2_e_classe_i_no_terceiro(self):
+        resultado = conferir(
+            _conta(),
+            self._prontuario_de_cti(),
+            _memoria(PARAMETROS_UNIMED),
+            _tabela(TABELA_UNIMED),
+            setores=SETORES,
+            eventos=_eventos(terapias=[self.VENTILACAO]),
+        )
+
+        assert _resumo_das_diarias(resultado) == [
+            ("INCLUIR", UNIMED_CLASSE_1, "2026-10-03", None, 1.0, 2415.00, "ALFA-DIA-14"),
+            ("INCLUIR", UNIMED_CLASSE_5, "2026-10-01", "2026-10-02", 2.0, 9663.10, "ALFA-DIA-14"),
+        ]
+        classe_1, classe_5 = sorted(resultado.linhas, key=lambda linha: linha["codigo"])
+        assert (classe_5["evidencia_pagina"], classe_5["evidencia_trecho"]) == (50, "Em VM, modo PCV")
+        assert "ventilação mecânica" in classe_5["motivo"]
+        assert classe_1["evidencia_trecho"].startswith("Setor CTI ADULTO: de 01/10/2026 14:00")
+        assert all("conferir classe de uti" in linha["motivo"].lower() for linha in resultado.linhas)
+
+    def test_classe_i_lancada_nos_dias_de_ventilacao_sai_para_retirar_com_a_observacao(self):
+        conta = _conta(*_diarias_lancadas(UNIMED_CLASSE_1, 1, 2, 3, unitario=2415.00))
+
+        resultado = conferir(
+            conta,
+            self._prontuario_de_cti(),
+            _memoria(PARAMETROS_UNIMED),
+            _tabela(TABELA_UNIMED),
+            setores=SETORES,
+            eventos=_eventos(terapias=[self.VENTILACAO]),
+        )
+
+        assert _resumo_das_diarias(resultado) == [
+            ("INCLUIR", UNIMED_CLASSE_5, "2026-10-01", "2026-10-02", 2.0, 9663.10, "ALFA-DIA-14"),
+            ("RETIRAR", UNIMED_CLASSE_1, "2026-10-01", "2026-10-02", 2.0, -4830.00, "ALFA-DIA-14"),
+        ]
+        retirar = _linhas(resultado, "RETIRAR")[0]
+        assert "conferir classe de uti" in retirar["motivo"].lower()
+
+    def test_assim_linha_carioca_monitorizacao_invasiva_no_dia_2_e_nivel_2_e_os_outros_nivel_1(self):
+        pai = _terapia("PRESSAO_INVASIVA", "2026-10-02T09:00", "2026-10-02T18:00", pagina=52, trecho="PAI radial")
+
+        resultado = conferir(
+            _conta(plano="Alfa Max Qc"),
+            self._prontuario_de_cti(),
+            _memoria(PARAMETROS_ASSIM),
+            _tabela(TABELA_ASSIM),
+            setores=SETORES,
+            eventos=_eventos(terapias=[pai]),
+        )
+
+        assert _resumo_das_diarias(resultado) == [
+            ("INCLUIR", ASSIM_NIVEL_1, "2026-10-01", None, 1.0, 1406.77, "ALFA-DIA-14"),
+            ("INCLUIR", ASSIM_NIVEL_1, "2026-10-03", None, 1.0, 1406.77, "ALFA-DIA-14"),
+            ("INCLUIR", ASSIM_NIVEL_2, "2026-10-02", None, 1.0, 1954.46, "ALFA-DIA-14"),
+        ]
+        nivel_2 = _linhas(resultado, "INCLUIR", ASSIM_NIVEL_2)[0]
+        assert (nivel_2["evidencia_pagina"], nivel_2["evidencia_trecho"]) == (52, "PAI radial")
+        assert all("conferir classe de uti" in linha["motivo"].lower() for linha in resultado.linhas)
+
+    def test_assim_fora_da_linha_carioca_segue_a_diaria_de_cti(self):
+        pai = _terapia("PRESSAO_INVASIVA", "2026-10-02T09:00", "2026-10-02T18:00", pagina=52, trecho="PAI radial")
+
+        resultado = conferir(
+            _conta(plano="Alfa Basico"),
+            self._prontuario_de_cti(),
+            _memoria(PARAMETROS_ASSIM),
+            _tabela(TABELA_ASSIM),
+            setores=SETORES,
+            eventos=_eventos(terapias=[pai]),
+        )
+
+        assert {linha["codigo"] for linha in resultado.linhas} == {DIARIA_CTI}
+
+
+# ═══════════════════════════════════════════════════════════════════════════
 # 9. Tipografia (ADR 0013)
 # ═══════════════════════════════════════════════════════════════════════════
+
+
+KIT = Path(__file__).resolve().parents[1] / "app" / "conhecimento" / "contas-medicas.md"
+
+
+def test_o_kit_de_conhecimento_diz_como_o_se_necessario_e_a_classe_de_uti_entram_no_guia():
+    secao = KIT.read_text(encoding="utf-8").split("## O Guia", 1)[1].split("\n## ", 1)[0]
+
+    for trecho in (
+        '"se necessário"',
+        "SE NECESSÁRIO · SEM REGISTRO NO MV",
+        TEXTO_SN,
+        "uma dose por dia de prescrição",
+        "as doses indicadas",
+        "Prescrito SN",
+        "sem evidência no prontuário",
+        "conferir classe de UTI",
+        "ventilação mecânica",
+    ):
+        assert trecho in secao, trecho
 
 
 def test_motivo_e_evidencia_sem_travessao_nem_meia_risca():
