@@ -135,6 +135,7 @@ class _Consulta:
         self._filtros: list = []
         self._ordem: list[tuple[str, bool]] = []
         self._limite: int | None = None
+        self._inicio = 0
         self._update: dict | None = None
         self._insert: dict | list | None = None
         self._upsert: tuple[list, list[str]] | None = None
@@ -187,6 +188,10 @@ class _Consulta:
 
     def limit(self, n):
         self._limite = n
+        return self
+
+    def range(self, inicio, fim):
+        self._inicio, self._limite = inicio, fim - inicio + 1
         return self
 
     def update(self, campos):
@@ -258,6 +263,7 @@ class _Consulta:
             return SimpleNamespace(data=[dict(linha) for linha in casam])
         for coluna, desc in reversed(self._ordem):
             casam.sort(key=lambda linha, c=coluna: (linha.get(c) is None, str(linha.get(c) or "")), reverse=desc)
+        casam = casam[self._inicio :]
         if self._limite is not None:
             casam = casam[: self._limite]
         return SimpleNamespace(data=[dict(linha) for linha in casam])

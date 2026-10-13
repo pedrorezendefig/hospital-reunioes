@@ -23,6 +23,7 @@ from postgrest.exceptions import APIError
 from test_contas_medicas_prontuario import ATENDIMENTO, CAPA_QUE_BATE, montar
 
 from app.services import contas_medicas_extrator as extrator
+from app.services import paginacao
 from app.services.contas_medicas.formulario import sem_formulario_em_branco
 from app.services.contas_medicas.marcacoes import so_o_marcado
 from app.services.contas_medicas.prontuario import Documento, Prontuario, ler_prontuario
@@ -250,10 +251,14 @@ def test_fisioterapia_real_reduzida_sai_com_a_ventilacao_marcada_e_sem_o_esquele
 
 
 class _Banco:
-    """Dublê do Supabase só com o que o aprendizado usa de `cm_linha_formulario`."""
+    """Dublê do Supabase só com o que o aprendizado usa de `cm_linha_formulario`.
 
-    def __init__(self):
+    `teto` imita o `max_rows` do PostgREST: a leitura volta cortada nele, com
+    sucesso e sem aviso, com ou sem `range`."""
+
+    def __init__(self, teto: int | None = None):
         self.linhas: list[dict] = []
+        self.teto = teto
 
     def table(self, nome: str):
         assert nome == "cm_linha_formulario"
@@ -265,8 +270,18 @@ class _Consulta:
         self._banco = banco
         self._filtro = lambda _linha: True
         self._upsert: list[dict] | None = None
+        self._ordem: str | None = None
+        self._recorte: tuple[int, int] | None = None
 
     def select(self, *_a, **_kw):
+        return self
+
+    def order(self, coluna):
+        self._ordem = coluna
+        return self
+
+    def range(self, inicio, fim):
+        self._recorte = (inicio, fim)
         return self
 
     def in_(self, coluna, valores):
@@ -287,9 +302,14 @@ class _Consulta:
                 if velha:
                     velha.update(nova)
                 else:
-                    self._banco.linhas.append(dict(nova))
+                    self._banco.linhas.append({"id": len(self._banco.linhas) + 1, **nova})
             return SimpleNamespace(data=self._upsert)
-        return SimpleNamespace(data=[dict(linha) for linha in self._banco.linhas if self._filtro(linha)])
+        linhas = [dict(linha) for linha in self._banco.linhas if self._filtro(linha)]
+        if self._ordem:
+            linhas.sort(key=lambda linha: linha[self._ordem])
+        if self._recorte:
+            linhas = linhas[self._recorte[0] : self._recorte[1] + 1]
+        return SimpleNamespace(data=linhas[: self._banco.teto] if self._banco.teto else linhas)
 
 
 TITULO = "EVOLUÇÃO DE FISIOTERAPIA"
@@ -353,6 +373,35 @@ def test_contagem_acumula_entre_prontuarios():
     sem_formulario_em_branco(banco, _cinco_fisioterapias(), aprender=True)
 
     assert {r["linha"]: r["contagem"] for r in banco.linhas} == dict.fromkeys(MODELO, 2)
+
+
+def test_contagem_acumula_mesmo_com_a_tabela_maior_que_o_teto_de_linhas_do_postgrest():
+    """O PostgREST corta a leitura no `max_rows` com sucesso e sem aviso. As linhas
+    que não voltassem teriam a contagem reescrita para 1 e nunca sairiam do texto."""
+    banco = _Banco(teto=3)
+    for _ in range(2):
+        sem_formulario_em_branco(banco, _cinco_fisioterapias(), aprender=True)
+    respostas = [{"familia": "FISIO_RESP", "linha": f"Resposta copiada {i}.", "contagem": 1} for i in range(5)]
+    banco.linhas = [{"id": i, **r} for i, r in enumerate([*respostas, *banco.linhas])]
+
+    limpo = sem_formulario_em_branco(banco, _cinco_fisioterapias(), aprender=True)
+
+    assert {r["linha"]: r["contagem"] for r in banco.linhas if r["linha"] in MODELO} == dict.fromkeys(MODELO, 3)
+    assert all(not set(MODELO) & set(d.linhas) for d in limpo.documentos)
+
+
+def test_leitura_que_para_no_teto_da_paginacao_nao_reescreve_contagem(monkeypatch, caplog):
+    banco = _Banco()
+    for _ in range(2):
+        sem_formulario_em_branco(banco, _cinco_fisioterapias(), aprender=True)
+    monkeypatch.setattr(paginacao, "MAX_LINHAS", 2)
+
+    with caplog.at_level("WARNING", logger="app.services.contas_medicas.formulario"):
+        limpo = sem_formulario_em_branco(banco, _cinco_fisioterapias(), aprender=True)
+
+    assert {r["contagem"] for r in banco.linhas} == {2}
+    assert limpo == _cinco_fisioterapias()
+    assert any("leitura da tabela incompleta" in r.getMessage() for r in caplog.records)
 
 
 def test_prontuario_com_um_formulario_so_perde_as_linhas_aprendidas_com_os_outros():

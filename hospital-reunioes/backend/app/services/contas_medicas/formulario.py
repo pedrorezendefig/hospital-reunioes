@@ -43,6 +43,7 @@ from postgrest.exceptions import APIError
 from app.services.contas_medicas.esqueleto_formulario import ESQUELETO
 from app.services.contas_medicas.marcacoes import MARCADA
 from app.services.contas_medicas.prontuario import FAMILIAS_DE_FORMULARIO, Documento, Prontuario
+from app.services.paginacao import LeituraIncompletaError, ler_tudo
 
 logger = logging.getLogger(__name__)
 
@@ -81,8 +82,10 @@ _CAUSAS = {
 }
 
 
-def _causa(erro: APIError | httpx.HTTPError) -> str:
+def _causa(erro: APIError | httpx.HTTPError | LeituraIncompletaError) -> str:
     """O motivo do aviso, só com o código: a mensagem do banco pode trazer a linha."""
+    if isinstance(erro, LeituraIncompletaError):
+        return "leitura da tabela incompleta (teto de linhas)"
     if isinstance(erro, httpx.HTTPError):
         return f"banco fora ({type(erro).__name__})"
     return f"{_CAUSAS.get(erro.code, 'erro do banco')} (codigo {erro.code})"
@@ -93,8 +96,11 @@ def _aprender(supabase, deste: dict[str, set[str]], aprender: bool) -> dict[str,
     mais, contando este. Com `aprender`, as deste Prontuário entram na tabela (ou somam
     um na contagem)."""
     try:
-        guardadas = (
-            supabase.table(TABELA).select("familia,linha,contagem").in_("familia", list(deste)).execute().data or []
+        # Paginada: o PostgREST corta no `max_rows` sem aviso, e a linha que não
+        # voltasse teria a contagem reescrita para 1 no upsert abaixo.
+        guardadas = ler_tudo(
+            lambda: supabase.table(TABELA).select("id,familia,linha,contagem").in_("familia", list(deste)).order("id"),
+            rotulo="linhas de formulario aprendidas",
         )
         contagem = {(r["familia"], r["linha"]): r.get("contagem") or 0 for r in guardadas}
         if aprender:
@@ -108,8 +114,9 @@ def _aprender(supabase, deste: dict[str, set[str]], aprender: bool) -> dict[str,
             ]
             if novas:
                 supabase.table(TABELA).upsert(novas, on_conflict="familia,linha").execute()
-    except (APIError, httpx.HTTPError) as erro:
+    except (APIError, httpx.HTTPError, LeituraIncompletaError) as erro:
         # A remoção é economia, não conferência: sem o aprendizado sai só o esqueleto fixo.
+        # Com a leitura incompleta, nada é gravado, para não reescrever contagem que não voltou.
         logger.warning("[ContasMedicas] Formulario em branco sem aprendizado: %s", _causa(erro))
         return {}
     modelo: dict[str, set[str]] = {}
