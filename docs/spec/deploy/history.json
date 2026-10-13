@@ -2,6 +2,54 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-10-13T04:55:37-03:00",
+      "sha": "417580041fa3da910e7201b8398a7a5cca223315",
+      "app_version": "0.190.0",
+      "subject": "Onda onda-gestao-onda3b: Fila de Validação (regras pendentes, bloqueados, observações, Retorno, enviar ao cadastro)",
+      "raw_subject": "chore(deploy): registro da onda onda-gestao-onda3b (#1178)",
+      "scope": [
+        "backend",
+        "frontend"
+      ],
+      "prds": [
+        1129
+      ],
+      "result": "healthy",
+      "duration_seconds": 214,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        },
+        {
+          "service": "frontend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "onda-enxuta onda-gestao-onda3b: PR #1178 (issue #1142), mergeados PR a PR. Merge pela API do GitHub, um build. Registro pela Action pos-merge depois do health.",
+      "etapas": {
+        "merge_s": 3,
+        "build_s": {
+          "backend": 22,
+          "frontend": 191
+        },
+        "health_s": 0
+      },
+      "responsavel": "pedrorezendefig"
+    },
+    {
       "at": "2026-10-13T04:41:11-03:00",
       "sha": "4dd88f93eedf083ced476470bdd7d78e23c47154",
       "app_version": "0.189.0",
