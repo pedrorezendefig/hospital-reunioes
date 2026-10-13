@@ -16,6 +16,7 @@ Passo B devolve as linhas que cada teste escolhe.
 from __future__ import annotations
 
 import json
+from pathlib import Path
 from typing import Any
 
 import httpx
@@ -564,3 +565,73 @@ class TestEntradaDoPassoB:
             "data": "2026-10-04",
             "data_fim": None,
         } in linhas_do_codigo
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# O kit de conhecimento e a tipografia
+# ═══════════════════════════════════════════════════════════════════════════
+
+TRAVESSAO, MEIA_RISCA = chr(0x2014), chr(0x2013)
+RAIZ_DO_APP = Path(__file__).resolve().parents[2]
+KIT_DO_PRODUTO = RAIZ_DO_APP / "backend/app/conhecimento/contas-medicas.md"
+ARQUIVOS_DA_FATIA = [
+    RAIZ_DO_APP / "backend/app/services/contas_medicas/passo_b.py",
+    RAIZ_DO_APP / "backend/app/services/contas_medicas/dicionario_ia.py",
+    RAIZ_DO_APP / "backend/app/services/contas_medicas/processamento.py",
+    RAIZ_DO_APP / "backend/app/services/contas_medicas/conferencia.py",
+    RAIZ_DO_APP / "backend/app/routers/contas_medicas_operadoras.py",
+    RAIZ_DO_APP / "backend/app/prompts/contas_medicas_dicionario.md",
+    RAIZ_DO_APP / "frontend/src/components/contas-medicas/PropostasDoDicionario.tsx",
+    KIT_DO_PRODUTO,
+    Path(__file__),
+]
+
+
+def test_o_kit_diz_o_que_a_ia_compara_e_o_que_o_codigo_confere():
+    texto = " ".join(KIT_DO_PRODUTO.read_text(encoding="utf-8").split()).casefold()
+
+    # O que a IA compara, e com o quê.
+    for trecho in (
+        "compara o que aconteceu com a paciente com o que foi lançado na conta, aplicando as regras do convênio",
+        "a memória inteira da operadora",
+        "os fatos do prontuário no período da conta, com um dia a mais de cada lado",
+        "acessórios de cada medicação",
+        "insumos por tempo de cada terapia",
+        "o bloco do centro cirúrgico",
+    ):
+        assert trecho.casefold() in texto, trecho
+    # As seis conferências do código, e o que acontece quando cada uma falha.
+    for trecho in (
+        "seis conferências do código",
+        "a regra citada existe na memória",
+        "regra pendente vira Validar",
+        "o trecho citado está na página do prontuário ou na vizinha",
+        "o código existe na tabela da operadora",
+        "o teto por dia é recalculado pelo código",
+        "a linha está dentro do período da conta",
+        "Propostas da IA para o dicionário",
+    ):
+        assert trecho.casefold() in texto, trecho
+
+
+@pytest.mark.parametrize("arquivo", ARQUIVOS_DA_FATIA, ids=lambda a: a.name)
+def test_sem_travessao_nem_meia_risca_nos_arquivos(arquivo):
+    texto = arquivo.read_text(encoding="utf-8")
+    assert TRAVESSAO not in texto
+    assert MEIA_RISCA not in texto
+
+
+def test_o_texto_que_a_ia_escreveu_na_linha_sai_sem_travessao_nem_meia_risca(openrouter):
+    banco = _cenario_do_passo_b()
+
+    _, linhas = _analisar(
+        banco,
+        openrouter,
+        _linha_da_ia(motivo=f"Acesso venoso {TRAVESSAO} sem equipo na conta."),
+        _linha_da_ia(regra_id="ALFA-INS-99", motivo=f"Luva {MEIA_RISCA} sem regra."),
+    )
+
+    (equipo,) = [linha for linha in linhas if linha["origem"] == "IA"]
+    assert equipo["motivo"] == "Acesso venoso, sem equipo na conta."
+    gravado = json.dumps(banco.tabelas["cm_conta"][0]["faltantes"], ensure_ascii=False)
+    assert TRAVESSAO not in gravado and MEIA_RISCA not in gravado
