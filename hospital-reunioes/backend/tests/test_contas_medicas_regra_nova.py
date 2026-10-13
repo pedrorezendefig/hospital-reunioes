@@ -403,6 +403,37 @@ class TestContasComRegraNova:
         assert not consultados & set(concluidos)
 
 
+# A faturista da conta (issue #1207): "Reanalisar com a regra nova" é dela
+# quando a memória mudou depois da análise; sem regra nova, é da gestão.
+FATURISTA_DA_CONTA = _pessoa(id="F1", auth_user_id="auth-f1", perfil_contas_medicas="faturista")
+
+
+def _regra_nova_na_alfa() -> _Banco:
+    """A gestão ensina uma regra na ALFA: as contas abertas da ALFA ficam com a
+    marca, a A fazer da BETA não."""
+    cliente, banco = _cliente(GESTAO)
+    _importar(cliente)
+    _importar(cliente, "MEMORIA-BETA-v1.0.md")
+    _com_contas(banco)
+    assert cliente.post(_validar("ALFA"), json=REGRA_VALIDADA).status_code == 200
+    return banco
+
+
+def _situacao(banco: _Banco, conta_id: str) -> str:
+    return next(c for c in banco.linhas("cm_conta") if c["id"] == conta_id)["situacao"]
+
+
+class TestFaturistaReanalisaComARegraNova:
+    def test_faturista_da_conta_reanalisa_a_conta_com_regra_nova(self):
+        banco = _regra_nova_na_alfa()
+        cliente, _ = _cliente(FATURISTA_DA_CONTA, banco)
+
+        resposta = cliente.post(f"{ROTA_CONTAS}/{A_FAZER_ALFA}/reanalisar")
+
+        assert resposta.status_code == 200, resposta.text
+        assert _situacao(banco, A_FAZER_ALFA) == "NA_FILA"
+
+
 class _ConsultaComLimites(_Consulta):
     def in_(self, coluna, valores):
         valores = list(valores)

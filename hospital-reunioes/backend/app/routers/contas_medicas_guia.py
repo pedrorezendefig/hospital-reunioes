@@ -42,7 +42,7 @@ from app.services.contas_medicas_conta import ErroLeitura
 router = APIRouter(prefix="/contas-medicas", tags=["contas-medicas"])
 
 _PODE_CORRIGIR = require_permissao_cm("enviar_corrigir_contas")
-_PODE_MEXER_EM_REGRA = require_permissao_cm("regra_contratual_tabelas")
+_DE_CONTAS_MEDICAS = require_permissao_cm()
 
 CONCLUIDAS = ("CONCLUIDA", "CONCLUIDA_COM_PENDENCIA")
 # As situações em que o Guia já existe. Antes disso (aguardando arquivo, na
@@ -50,6 +50,7 @@ CONCLUIDAS = ("CONCLUIDA", "CONCLUIDA_COM_PENDENCIA")
 COM_GUIA = ("A_FAZER", "EM_CORRECAO", "RETORNO", *CONCLUIDAS)
 # As situações em que "Reanalisar" vale: o Guia pronto e ainda em aberto.
 REANALISAVEIS = SITUACOES_REANALISAVEIS
+_SO_REANALISAVEL = "Só a conta A fazer ou Em correção pode ser reanalisada"
 
 
 def _agora() -> str:
@@ -115,6 +116,7 @@ async def abrir_guia(
     linhas = _linhas(supabase, conta["id"])
     concluida = conta.get("situacao") in CONCLUIDAS
     dados_do_reenvio = reenvio.resumo(conta)
+    regra_nova = regra_nova_desde_a_analise(supabase, conta, operadora.get("id"))
     marcas = (dados_do_reenvio or {}).get("linhas") or {}
     # Em Retorno, a faturista vê só o que a Validação devolveu.
     da_tela = linhas_do_retorno(supabase, linhas) if conta.get("situacao") == "RETORNO" else linhas
@@ -144,10 +146,17 @@ async def abrir_guia(
         # O "Responder ao time" da Validação sobre o que esta conta levantou.
         "respostas": respostas_da_conta(supabase, conta["id"], linhas),
         # O botão "Reanalisar": a tela desenha pelo que vem aqui, e a rota decide.
-        "pode_reanalisar": "regra_contratual_tabelas" in me["permissoes_cm"] and conta.get("situacao") in REANALISAVEIS,
+        "pode_reanalisar": _pode_reanalisar(me, conta, regra_nova),
         # A conta analisada com uma memória que já mudou: o botão vira "Reanalisar com a regra nova".
-        "regra_nova_desde_analise": regra_nova_desde_a_analise(supabase, conta, operadora.get("id")),
+        "regra_nova_desde_analise": regra_nova,
     }
+
+
+def _pode_reanalisar(me: dict, conta: dict, regra_nova: bool) -> bool:
+    """Reanalisar vale na conta aberta. Quem mexe em regra contratual e tabelas
+    reanalisa a qualquer hora; quem trabalha a conta no Guia, só com regra nova
+    desde a análise (issue #1207): reanalisar à toa gasta os passos da IA."""
+    return conta.get("situacao") in REANALISAVEIS and ("regra_contratual_tabelas" in me["permissoes_cm"] or regra_nova)
 
 
 def _conta_em_correcao(supabase: Client, conta_id: UUID, me: dict) -> dict:
@@ -362,19 +371,29 @@ async def reenviar_conta(
 async def reanalisar_conta(
     request: Request,
     conta_id: UUID,
-    me: dict = Depends(_PODE_MEXER_EM_REGRA),
+    me: dict = Depends(_DE_CONTAS_MEDICAS),
     supabase: Client = Depends(get_supabase_client),
 ) -> dict:
     """Reanalisar (issue #1130): a conta A fazer ou Em correção volta para a
     fila e passa pela análise de novo, com a memória e as tabelas de agora. O
     reprocesso preserva as linhas que a faturista já marcou e troca as abertas.
 
-    Só para quem mexe em regra contratual e tabelas: é quem sabe que a regra
-    mudou. A faturista da conta continua a mesma.
+    Quem mexe em regra contratual e tabelas reanalisa a qualquer hora. Quem
+    abre o Guia da conta reanalisa só com regra nova desde a análise, a marca
+    que o Guia mostra (issue #1207). A faturista da conta continua a mesma.
     """
-    conta = _primeira(supabase, "cm_conta", "id", str(conta_id))
-    if not conta:
-        raise HTTPException(status_code=404, detail="Conta não encontrada")
+    if "regra_contratual_tabelas" in me["permissoes_cm"]:
+        conta = _primeira(supabase, "cm_conta", "id", str(conta_id))
+        if not conta:
+            raise HTTPException(status_code=404, detail="Conta não encontrada")
+    else:
+        if "enviar_corrigir_contas" not in me["permissoes_cm"]:
+            raise HTTPException(status_code=403, detail="Sem permissão para esta ação em Contas médicas")
+        conta = _conta_do_guia(supabase, conta_id, me, REANALISAVEIS, _SO_REANALISAVEL)
+        atendimento = _primeira(supabase, "cm_atendimento", "id", conta.get("atendimento_id")) or {}
+        regra_nova = regra_nova_desde_a_analise(supabase, conta, atendimento.get("operadora_id"))
+        if not _pode_reanalisar(me, conta, regra_nova):
+            raise HTTPException(status_code=403, detail="Reanalisar sem regra nova é da gestão")
     # Condicional na situação: a conta que mudou entre a leitura e a escrita
     # (concluída, já na fila) não volta para a análise.
     devolvida = (
@@ -387,7 +406,7 @@ async def reanalisar_conta(
         or []
     )
     if not devolvida:
-        raise HTTPException(status_code=409, detail="Só a conta A fazer ou Em correção pode ser reanalisada")
+        raise HTTPException(status_code=409, detail=_SO_REANALISAVEL)
     return {"situacao": "NA_FILA"}
 
 
