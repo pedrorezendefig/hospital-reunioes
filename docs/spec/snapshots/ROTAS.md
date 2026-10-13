@@ -1,6 +1,6 @@
 # ROTAS.md
 <!-- gerado automaticamente por /snapshot — não editar -->
-<!-- last_update: 2026-10-13T07:38+0000 -->
+<!-- last_update: 2026-10-13T07:52+0000 -->
 
 Endpoints HTTP expostos pelo backend FastAPI do Hospital Reuniões.
 
@@ -117,7 +117,7 @@ Endpoints HTTP expostos pelo backend FastAPI do Hospital Reuniões.
 | POST | `/contas-medicas/contas/{conta_id}/guia/concluir` | Concluir é sempre possível. Sem pendência, a Conta fica Concluída; com | ✅ |
 | POST | `/contas-medicas/contas/{conta_id}/guia/dia/feito` | Feito em todas as linhas abertas do grupo (dia e setor). As já marcadas | ✅ |
 | DELETE | `/contas-medicas/contas/{conta_id}/guia/linhas/{linha_id}/marcacao` | Desfazer: a linha volta a aberta, enquanto a Conta não foi concluída. | ✅ |
-| POST | `/contas-medicas/contas/{conta_id}/guia/linhas/{linha_id}/marcacao` | Feito, Não procede (com motivo) ou Bloqueado numa linha do Guia. | ✅ |
+| POST | `/contas-medicas/contas/{conta_id}/guia/linhas/{linha_id}/marcacao` | Feito, Não procede (com motivo) ou Bloqueado numa linha do Guia. O | ✅ |
 | POST | `/contas-medicas/contas/{conta_id}/reanalisar` | Reanalisar (issue #1130): a conta A fazer ou Em correção volta para a | ✅ |
 | POST | `/contas-medicas/contas/{conta_id}/reenvio` | Reenviar conta corrigida (issue #1136): só o PDF da conta, de uma conta | ✅ |
 
@@ -164,6 +164,15 @@ Endpoints HTTP expostos pelo backend FastAPI do Hospital Reuniões.
 | Método | Rota | O que faz | Auth |
 |--------|------|-----------|------|
 | GET | `/contas-medicas/painel` | Os agregados da semana escolhida (qualquer dia dela), da operadora e do | ✅ |
+
+## contas-medicas (`app/routers/contas_medicas_validacao.py`)
+
+| Método | Rota | O que faz | Auth |
+|--------|------|-----------|------|
+| GET | `/contas-medicas/validacao` | Os temas abertos, do maior R$ em jogo para o menor, e os três números do topo. | ✅ |
+| POST | `/contas-medicas/validacao/temas/{tema_id}/cadastro` | "Enviar ao cadastro": fecha o tema do código bloqueado e devolve a lista | ✅ |
+| POST | `/contas-medicas/validacao/temas/{tema_id}/decisao` | Decide o tema: grava quem decidiu e quando, e o tema sai da fila. | ✅ |
+| POST | `/contas-medicas/validacao/temas/{tema_id}/leitura` | A leitura da IA sobre as observações do tema: a guardada ou, na falta, | ✅ |
 
 ## admin (`app/routers/admin/dados_atendimento.py`)
 
@@ -506,4 +515,4 @@ Endpoints HTTP expostos pelo backend FastAPI do Hospital Reuniões.
 
 ---
 
-**Totais:** 285 endpoints em 43 routers · 94% exigem auth.
+**Totais:** 289 endpoints em 44 routers · 94% exigem auth.
