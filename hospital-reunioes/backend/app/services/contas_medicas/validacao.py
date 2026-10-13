@@ -20,14 +20,21 @@ from __future__ import annotations
 
 import csv
 import io
+import re
 import threading
 from collections.abc import Iterable
 from datetime import UTC, datetime
 from decimal import ROUND_HALF_UP, Decimal
-from typing import Any
+from typing import Any, Literal
 
+from pydantic import BaseModel, ConfigDict
+
+from app.services.contas_medicas.ia import chamada_curta
 from app.services.contas_medicas.memoria_edicao import mudar_regra
+from app.services.contas_medicas.operadoras import memoria_vigente
 from app.services.paginacao import ler_tudo
+from app.services.prompt_loader import load_prompt
+from app.utils.text_sanitizer import sanitizar_travessao
 
 __all__ = [
     "DecisaoRecusadaError",
@@ -62,6 +69,16 @@ def _em_lotes(supabase, tabela: str, coluna: str, ids: Iterable[str], rotulo: st
         linhas += ler_tudo(
             lambda lote=lote: supabase.table(tabela).select("*").in_(coluna, lote).order("id"), rotulo=rotulo
         )
+    return linhas
+
+
+def _poucas_por_id(supabase, tabela: str, coluna: str, ids: Iterable[str]) -> list[dict]:
+    """A leitura do que é de uma conta ou de uma linha: lotes de 100 ids, cada
+    id com poucas linhas, longe do teto de mil do PostgREST. Sem paginação."""
+    ids = [i for i in dict.fromkeys(ids) if i]
+    linhas: list[dict] = []
+    for i in range(0, len(ids), LOTE_DE_IDS):
+        linhas += supabase.table(tabela).select("*").in_(coluna, ids[i : i + LOTE_DE_IDS]).execute().data or []
     return linhas
 
 
@@ -130,13 +147,8 @@ def acompanhar_marcacao(supabase, conta: dict, linha: dict) -> None:
         ligacoes = (
             supabase.table("cm_validacao_tema_linha").select("*").eq("guia_linha_id", linha["id"]).execute().data or []
         )
-        # Uma linha está em poucos temas: a leitura direta, sem lotes.
-        temas = (
-            supabase.table("cm_validacao_tema").select("*").in_("id", [li["tema_id"] for li in ligacoes]).execute().data
-            if ligacoes
-            else []
-        )
-        abertos = [t["id"] for t in temas or [] if t.get("estado") == ABERTO and t["tipo"] in (BLOQUEADO, OBSERVACAO)]
+        temas = _poucas_por_id(supabase, "cm_validacao_tema", "id", [li["tema_id"] for li in ligacoes])
+        abertos = [t["id"] for t in temas if t.get("estado") == ABERTO and t["tipo"] in (BLOQUEADO, OBSERVACAO)]
         if abertos:
             supabase.table("cm_validacao_tema_linha").delete().eq("guia_linha_id", linha["id"]).in_(
                 "tema_id", abertos
@@ -144,6 +156,41 @@ def acompanhar_marcacao(supabase, conta: dict, linha: dict) -> None:
         if linha.get("estado") == "BLOQUEADO" and linha.get("codigo"):
             tema = _tema_aberto(supabase, BLOQUEADO, f"Código {linha['codigo']} bloqueado", codigo_item=linha["codigo"])
             _ligar(supabase, tema, guia_linha_id=linha["id"])
+        elif linha.get("estado") == "NAO_PROCEDE":
+            operadora_id = _operadora_da_conta(supabase, conta["id"])
+            _ligar(
+                supabase,
+                _tema_da_observacao(supabase, operadora_id, linha.get("regra_codigo")),
+                guia_linha_id=linha["id"],
+            )
+
+
+def _tema_da_observacao(supabase, operadora_id: str | None, regra: str | None) -> dict:
+    """O tema aberto das observações sobre a regra. A leitura da IA guardada
+    nele não leu a observação que está chegando: some, e a próxima é nova."""
+    titulo = f"Observações sobre a regra {regra}" if regra else "Observações sem regra citada"
+    tema = _tema_aberto(supabase, OBSERVACAO, titulo, operadora_id=operadora_id, regra_codigo=regra)
+    if tema.get("leitura_ia"):
+        supabase.table("cm_validacao_tema").update({"leitura_ia": None}).eq("id", tema["id"]).execute()
+    return tema
+
+
+def temas_da_observacao(supabase, conta: dict, observacao: dict) -> None:
+    """A observação da conclusão entra no tema de cada regra da memória vigente
+    que ela cita pelo código; sem regra citada, no tema da operadora sem regra."""
+    operadora_id = _operadora_da_conta(supabase, conta["id"])
+    memoria = memoria_vigente(supabase, operadora_id) if operadora_id else None
+    texto = observacao.get("texto") or ""
+    citadas = sorted(
+        {
+            r["codigo"]
+            for r in (memoria or {}).get("regras", [])
+            if re.search(rf"(?<![\w-]){re.escape(r['codigo'])}(?![\w-])", texto, re.IGNORECASE)
+        }
+    )
+    with _trava_dos_temas:
+        for regra in citadas or [None]:
+            _ligar(supabase, _tema_da_observacao(supabase, operadora_id, regra), observacao_id=observacao["id"])
 
 
 # ----------------------------------------------------------------------------------
@@ -165,6 +212,28 @@ def _regras_vigentes(supabase, operadora_ids: Iterable[str]) -> dict[tuple[str, 
         for r in regras
         if r.get("ativa", True) and r["memoria_versao_id"] in vigentes
     }
+
+
+# O motivo do Não procede como a faturista escolheu no Guia.
+MOTIVOS_NAO_PROCEDE = {
+    "JA_ESTA_NA_CONTA": "Já está na conta",
+    "SEM_EVIDENCIA": "Sem evidência no prontuário",
+    "REGRA_E_OUTRA": "A regra é outra",
+    "OUTRO": "Outro",
+}
+
+
+def _falas_do_time(ligadas: list[dict], linhas: dict[str, dict], observacoes: dict[str, dict]) -> list[str]:
+    """O que o time disse no tema, na ordem em que chegou: o motivo do Não
+    procede (com o texto, quando houver) e as observações da conclusão."""
+    falas = []
+    for ligacao in sorted(ligadas, key=lambda li: li.get("criado_em") or ""):
+        if (linha := linhas.get(ligacao.get("guia_linha_id"))) is not None:
+            motivo = MOTIVOS_NAO_PROCEDE.get(linha.get("motivo_nao_procede") or "", "Não procede")
+            falas.append(f"{motivo}: {linha['texto_nao_procede']}" if linha.get("texto_nao_procede") else motivo)
+        elif (observacao := observacoes.get(ligacao.get("observacao_id"))) is not None:
+            falas.append(observacao["texto"])
+    return falas
 
 
 def fila_de_validacao(supabase) -> dict[str, Any]:
@@ -216,14 +285,9 @@ def fila_de_validacao(supabase) -> dict[str, Any]:
     cartoes = []
     todas_as_contas: set[str] = set()
     for tema in temas:
-        das_linhas = [
-            linhas[li["guia_linha_id"]] for li in do_tema.get(tema["id"], []) if li.get("guia_linha_id") in linhas
-        ]
-        das_observacoes = [
-            observacoes[li["observacao_id"]]
-            for li in do_tema.get(tema["id"], [])
-            if li.get("observacao_id") in observacoes
-        ]
+        ligadas = do_tema.get(tema["id"], [])
+        das_linhas = [linhas[li["guia_linha_id"]] for li in ligadas if li.get("guia_linha_id") in linhas]
+        das_observacoes = [observacoes[li["observacao_id"]] for li in ligadas if li.get("observacao_id") in observacoes]
         conta_ids = {x["conta_id"] for x in [*das_linhas, *das_observacoes]}
         if not conta_ids and tema["tipo"] != DICIONARIO:
             continue
@@ -247,6 +311,7 @@ def fila_de_validacao(supabase) -> dict[str, Any]:
                 "desde": tema.get("criado_em"),
                 "valor": float(valor),
                 "leitura_ia": tema.get("leitura_ia"),
+                "observacoes": _falas_do_time(ligadas, linhas, observacoes) if tema["tipo"] == OBSERVACAO else [],
             }
         )
     cartoes.sort(key=lambda c: (-c["valor"], c["desde"] or ""))
@@ -441,10 +506,8 @@ def _celula(valor: str) -> str:
 def linhas_do_retorno(supabase, linhas: list[dict]) -> list[dict]:
     """As linhas da conta em Retorno que voltaram para a faturista: as que a
     Validação decidiu ao validar a regra. As outras ela já resolveu antes."""
-    ligacoes = _em_lotes(
-        supabase, "cm_validacao_tema_linha", "guia_linha_id", [linha["id"] for linha in linhas], "ligações do Retorno"
-    )
-    temas = _em_lotes(supabase, "cm_validacao_tema", "id", [li["tema_id"] for li in ligacoes], "temas do Retorno")
+    ligacoes = _poucas_por_id(supabase, "cm_validacao_tema_linha", "guia_linha_id", [linha["id"] for linha in linhas])
+    temas = _poucas_por_id(supabase, "cm_validacao_tema", "id", [li["tema_id"] for li in ligacoes])
     validados = {t["id"] for t in temas if t["tipo"] == REGRA_PENDENTE and t.get("decisao") == VALIDAR_REGRA}
     voltaram = {li["guia_linha_id"] for li in ligacoes if li["tema_id"] in validados}
     return [linha for linha in linhas if linha["id"] in voltaram]
@@ -460,7 +523,18 @@ def decidir_tema(supabase, tema_id: str, corpo: dict, me: dict) -> dict:
     decisao = corpo.get("decisao")
     if decisao not in DECISOES.get(tema["tipo"], ()):
         raise DecisaoRecusadaError("Esta decisão não cabe neste tema.")
-    fechamento = {"estado": DECIDIDO, "decisao": decisao, "decidido_por": me.get("id"), "decidido_em": _agora()}
+    resposta = sanitizar_travessao((corpo.get("texto") or "").strip()) or None
+    if decisao == RESPONDER and not resposta:
+        raise DecisaoRecusadaError("Escreva a resposta ao time.")
+    if decisao == EDITAR_REGRA and not tema.get("regra_codigo"):
+        raise DecisaoRecusadaError("A observação não cita regra: edite pela Memória da operadora.")
+    fechamento = {
+        "estado": DECIDIDO,
+        "decisao": decisao,
+        "resposta": resposta if decisao == RESPONDER else None,
+        "decidido_por": me.get("id"),
+        "decidido_em": _agora(),
+    }
     tomado = (
         supabase.table("cm_validacao_tema").update(fechamento).eq("id", tema["id"]).eq("estado", ABERTO).execute()
     ).data or []
@@ -470,9 +544,94 @@ def decidir_tema(supabase, tema_id: str, corpo: dict, me: dict) -> dict:
         if decisao == VALIDAR_REGRA:
             _mudar_a_regra(supabase, tema, corpo, me, validar=True)
             _decidir_as_linhas(supabase, tema, me.get("id"))
+        elif decisao == EDITAR_REGRA:
+            _mudar_a_regra(supabase, tema, corpo, me, validar=False)
     except Exception:
         supabase.table("cm_validacao_tema").update(
-            {"estado": ABERTO, "decisao": None, "decidido_por": None, "decidido_em": None}
+            {"estado": ABERTO, "decisao": None, "resposta": None, "decidido_por": None, "decidido_em": None}
         ).eq("id", tema["id"]).execute()
         raise
     return {**tema, **fechamento}
+
+
+# ----------------------------------------------------------------------------------
+# A leitura da IA sobre a observação
+# ----------------------------------------------------------------------------------
+
+
+class LeituraDaObservacao(BaseModel):
+    """A resposta curta: a regra atual já cobre o caso, e a sugestão."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    cobre: bool
+    sugestao: Literal["MANTER", "EDITAR"]
+    leitura: str
+
+
+def _frase_da_leitura(leitura: LeituraDaObservacao) -> str:
+    cobre = "A regra atual já cobre o caso." if leitura.cobre else "A regra atual não cobre o caso."
+    sugestao = "manter a regra" if leitura.sugestao == "MANTER" else "editar a regra"
+    return sanitizar_travessao(f"{cobre} {leitura.leitura.strip()} Sugestão: {sugestao}.")
+
+
+def leitura_da_observacao(supabase, tema_id: str) -> str:
+    """A leitura da IA sobre as observações do tema: uma chamada curta, guardada
+    no tema. É apoio; quem decide é a pessoa. Observação nova no tema apaga a
+    leitura guardada, e a próxima chamada lê de novo."""
+    tema = _tema(supabase, tema_id)
+    if tema["tipo"] != OBSERVACAO:
+        raise DecisaoRecusadaError("A leitura da IA é só das observações do time.")
+    if tema.get("leitura_ia"):
+        return tema["leitura_ia"]
+    ligadas = _ligacoes(supabase, tema["id"])
+    linhas = {
+        li["id"]: li
+        for li in _em_lotes(supabase, "cm_guia_linha", "id", [x.get("guia_linha_id") for x in ligadas], "linhas")
+    }
+    observacoes = {
+        o["id"]: o for o in _em_lotes(supabase, "cm_observacao", "id", [x.get("observacao_id") for x in ligadas], "obs")
+    }
+    regra = (
+        _regras_vigentes(supabase, [tema["operadora_id"]]).get((tema["operadora_id"], tema.get("regra_codigo")))
+        if tema.get("operadora_id")
+        else None
+    )
+    partes = [
+        f"REGRA {tema['regra_codigo']} ({regra.get('status')}): {regra.get('texto')}"
+        if regra
+        else "REGRA: a observação não cita regra da memória."
+    ]
+    partes.append("OBSERVAÇÕES DO TIME")
+    partes += [f"- {fala}" for fala in _falas_do_time(ligadas, linhas, observacoes)]
+    leitura = chamada_curta(
+        load_prompt("contas_medicas_observacao"),
+        "\n".join(partes),
+        LeituraDaObservacao,
+        passo="OBSERVACAO",
+        supabase=supabase,
+        conta_id=None,
+    )
+    frase = _frase_da_leitura(leitura)
+    supabase.table("cm_validacao_tema").update({"leitura_ia": frase}).eq("id", tema["id"]).execute()
+    return frase
+
+
+def respostas_da_conta(supabase, conta_id: str, linhas: list[dict]) -> list[dict]:
+    """O que a Validação respondeu ao time sobre esta conta: os temas ligados a
+    uma linha ou a uma observação dela, decididos com "Responder ao time"."""
+    observacoes = supabase.table("cm_observacao").select("id").eq("conta_id", conta_id).execute().data or []
+    ligacoes = _poucas_por_id(
+        supabase, "cm_validacao_tema_linha", "guia_linha_id", [linha["id"] for linha in linhas]
+    ) + _poucas_por_id(supabase, "cm_validacao_tema_linha", "observacao_id", [o["id"] for o in observacoes])
+    temas = _poucas_por_id(supabase, "cm_validacao_tema", "id", [li["tema_id"] for li in ligacoes])
+    respondidos = [t for t in temas if t.get("decisao") == RESPONDER and t.get("resposta")]
+    return [
+        {
+            "titulo": t["titulo"],
+            "regra_codigo": t.get("regra_codigo"),
+            "resposta": t["resposta"],
+            "decidido_em": t.get("decidido_em"),
+        }
+        for t in sorted(respondidos, key=lambda t: t.get("decidido_em") or "")
+    ]

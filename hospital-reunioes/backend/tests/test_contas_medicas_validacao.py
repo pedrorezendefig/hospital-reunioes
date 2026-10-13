@@ -14,15 +14,18 @@ processamento e os CHECKs das migrations 116 e 118.
 
 from __future__ import annotations
 
+import json
 import os
 import re
 import sys
 from pathlib import Path
 from typing import Any
 
+import httpx
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
+from openai import OpenAI
 from postgrest.exceptions import APIError
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
@@ -34,7 +37,7 @@ from app.limiter import limiter  # noqa: E402
 from app.routers import contas_medicas_envio as envio_router  # noqa: E402
 from app.routers import contas_medicas_guia as guia_router  # noqa: E402
 from app.routers import contas_medicas_validacao as validacao_router  # noqa: E402
-from app.services.contas_medicas import processamento  # noqa: E402
+from app.services.contas_medicas import ia, processamento  # noqa: E402
 from app.services.contas_medicas.conferencia import Conferencia  # noqa: E402
 from app.services.contas_medicas.guia import nota_de_entrada  # noqa: E402
 
@@ -119,6 +122,7 @@ PESSOAS = {"faturista": FATURISTA, "gestao": GESTAO, "coordenadora": COORDENADOR
 REGRA_PENDENTE = "ALFA-PRI-03"
 REGRA_VIGENTE = "ALFA-PRI-07"
 TEXTO_PENDENTE = "Seringa de limpeza pronta é cobrada à parte."
+TEXTO_VIGENTE = "Medicamento prescrito e não lançado é incluído."
 
 
 def _regra(codigo: str, status: str, texto: str, tipo: str = "CONTRATUAL") -> dict[str, Any]:
@@ -187,7 +191,7 @@ def _cenario() -> _BancoDaValidacao:
             ],
             "cm_regra": [
                 _regra(REGRA_PENDENTE, "PENDENTE", TEXTO_PENDENTE),
-                _regra(REGRA_VIGENTE, "VIGENTE", "Medicamento prescrito e não lançado é incluído.", "OPERACIONAL"),
+                _regra(REGRA_VIGENTE, "VIGENTE", TEXTO_VIGENTE, "OPERACIONAL"),
             ],
             "cm_atendimento": [_atendimento(1), _atendimento(2), _atendimento(3)],
             "cm_conta": [_conta(1, "EM_CORRECAO"), _conta(2, "A_FAZER"), _conta(3, "CONCLUIDA_COM_PENDENCIA")],
@@ -496,3 +500,162 @@ class TestBloqueado:
         assert desfeita.status_code == 200, desfeita.text
         [tema] = _fila_de_validacao(banco)["temas"]
         assert (tema["contas"], tema["valor"]) == (1, 33.0)
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 3. Observação do time: um tema por regra citada, com a leitura da IA
+# ═══════════════════════════════════════════════════════════════════════════
+
+LEITURA = {
+    "cobre": False,
+    "sugestao": "EDITAR",
+    "leitura": "A regra não trata do Clexane dentro do pacote da ALFA.",
+}
+
+
+class _OpenRouter:
+    """O provedor do teste, na fronteira HTTP: devolve a leitura no formato
+    pedido, guarda o que recebeu e conta as requisições."""
+
+    def __init__(self):
+        self.corpos: list[dict] = []
+
+    def __call__(self, request: httpx.Request) -> httpx.Response:
+        self.corpos.append(json.loads(request.content))
+        return httpx.Response(
+            200,
+            json={
+                "id": "gen",
+                "object": "chat.completion",
+                "created": 1,
+                "model": "m",
+                "choices": [
+                    {
+                        "index": 0,
+                        "message": {"role": "assistant", "content": json.dumps(LEITURA)},
+                        "finish_reason": "stop",
+                    }
+                ],
+                "usage": {"prompt_tokens": 10, "completion_tokens": 5, "total_tokens": 15, "cost": 0.001},
+            },
+        )
+
+    def texto_enviado(self, i: int = 0) -> str:
+        return json.dumps(self.corpos[i]["messages"], ensure_ascii=False)
+
+
+@pytest.fixture
+def provedor(monkeypatch) -> _OpenRouter:
+    duble = _OpenRouter()
+    monkeypatch.setattr(
+        ia,
+        "_cliente",
+        lambda: OpenAI(
+            api_key="chave-de-teste",
+            base_url="https://openrouter.ai/api/v1",
+            http_client=httpx.Client(transport=httpx.MockTransport(duble)),
+            max_retries=0,
+        ),
+    )
+    monkeypatch.setattr(ia, "_esperar", lambda _segundos: None)
+    return duble
+
+
+def _nao_procede(banco: _Banco, conta_id: str, texto: str) -> dict:
+    [linha] = _gravar(banco, conta_id, _linha_do_guia("INCLUIR", "90030001", 45.0, REGRA_VIGENTE))
+    return _marcar(banco, conta_id, linha["id"], {"estado": "NAO_PROCEDE", "motivo": "REGRA_E_OUTRA", "texto": texto})
+
+
+def _ler(banco: _Banco, tema_id: str):
+    return _cliente(banco).post(f"/api/contas-medicas/validacao/temas/{tema_id}/leitura")
+
+
+class TestObservacao:
+    def test_nao_procede_vira_tema_da_regra_a_leitura_da_ia_e_uma_so_e_a_resposta_aparece_no_guia(self, provedor):
+        banco = _cenario()
+        _nao_procede(banco, C1, "Na ALFA o Clexane vem dentro do pacote")
+
+        [tema] = _fila_de_validacao(banco)["temas"]
+        assert (tema["tipo"], tema["regra_codigo"], tema["operadora"], tema["contas"]) == (
+            "OBSERVACAO",
+            REGRA_VIGENTE,
+            "ALFA",
+            1,
+        )
+        assert tema["observacoes"] == ["A regra é outra: Na ALFA o Clexane vem dentro do pacote"]
+        assert tema["leitura_ia"] is None
+
+        primeira, segunda = _ler(banco, tema["id"]), _ler(banco, tema["id"])
+
+        assert primeira.status_code == 200, primeira.text
+        esperada = (
+            "A regra atual não cobre o caso. A regra não trata do Clexane dentro do pacote da ALFA."
+            " Sugestão: editar a regra."
+        )
+        assert primeira.json()["leitura_ia"] == segunda.json()["leitura_ia"] == esperada
+        assert len(provedor.corpos) == 1, "a leitura fica guardada no tema: uma chamada por observação"
+        assert TEXTO_VIGENTE in provedor.texto_enviado() and "Clexane vem dentro do pacote" in provedor.texto_enviado()
+        assert _fila_de_validacao(banco)["temas"][0]["leitura_ia"] == esperada
+        [chamada] = banco.tabelas["cm_chamada_ia"]
+        assert chamada["passo"] == "OBSERVACAO"
+
+        resposta = _decidir(
+            banco, tema["id"], {"decisao": "RESPONDER", "texto": "Confirmado com a ALFA: vem no pacote."}
+        )
+
+        assert resposta.status_code == 200, resposta.text
+        assert _tema_no_banco(banco, tema["id"])["resposta"] == "Confirmado com a ALFA: vem no pacote."
+        [recado] = _guia(banco, C1)["respostas"]
+        assert recado["resposta"] == "Confirmado com a ALFA: vem no pacote."
+        assert recado["regra_codigo"] == REGRA_VIGENTE
+        assert _guia(banco, C2)["respostas"] == []
+
+    def test_observacao_nova_no_tema_pede_leitura_nova(self, provedor):
+        banco = _cenario()
+        _nao_procede(banco, C1, "Na ALFA o Clexane vem dentro do pacote")
+        [tema] = _fila_de_validacao(banco)["temas"]
+        assert _ler(banco, tema["id"]).status_code == 200
+
+        _nao_procede(banco, C2, "Mesma coisa na conta de outubro")
+
+        [tema] = _fila_de_validacao(banco)["temas"]
+        assert (tema["contas"], tema["leitura_ia"]) == (2, None)
+        assert _ler(banco, tema["id"]).status_code == 200
+        assert len(provedor.corpos) == 2
+
+    def test_observacao_da_conclusao_entra_no_tema_da_regra_que_ela_cita(self):
+        banco = _cenario()
+        banco.conta(C1)["situacao"] = "EM_CORRECAO"
+
+        concluida = _cliente(banco, "faturista").post(
+            f"/api/contas-medicas/contas/{C1}/guia/concluir",
+            json={"observacao": f"A {REGRA_VIGENTE} não vale para o Clexane da ALFA."},
+        )
+
+        assert concluida.status_code == 200, concluida.text
+        [tema] = _fila_de_validacao(banco)["temas"]
+        assert (tema["tipo"], tema["regra_codigo"], tema["contas"]) == ("OBSERVACAO", REGRA_VIGENTE, 1)
+        assert tema["observacoes"] == [f"A {REGRA_VIGENTE} não vale para o Clexane da ALFA."]
+
+    def test_manter_a_regra_fecha_o_tema_e_editar_a_regra_grava_versao_nova(self):
+        banco = _cenario()
+        _nao_procede(banco, C1, "Na ALFA o Clexane vem dentro do pacote")
+        [tema] = _fila_de_validacao(banco)["temas"]
+
+        editada = _decidir(banco, tema["id"], {"decisao": "EDITAR_REGRA", "texto": TEXTO_VIGENTE + " Fora de pacote."})
+
+        assert editada.status_code == 200, editada.text
+        vigente = next(v for v in banco.tabelas["cm_memoria_versao"] if v["vigente"])
+        regra = next(
+            r
+            for r in banco.tabelas["cm_regra"]
+            if r["memoria_versao_id"] == vigente["id"] and r["codigo"] == REGRA_VIGENTE
+        )
+        assert (vigente["versao"], regra["texto"]) == ("1.1", TEXTO_VIGENTE + " Fora de pacote.")
+        assert _tema_no_banco(banco, tema["id"])["decisao"] == "EDITAR_REGRA"
+
+        _nao_procede(banco, C2, "Outra observação")
+        [outro] = _fila_de_validacao(banco)["temas"]
+        assert _decidir(banco, outro["id"], {"decisao": "MANTER_REGRA"}).status_code == 200
+        assert _tema_no_banco(banco, outro["id"])["decisao"] == "MANTER_REGRA"
+        assert [v["versao"] for v in banco.tabelas["cm_memoria_versao"] if v["vigente"]] == ["1.1"]

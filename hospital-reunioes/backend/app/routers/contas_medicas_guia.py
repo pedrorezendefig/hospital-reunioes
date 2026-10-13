@@ -27,7 +27,12 @@ from app.services.contas_medicas.guia import (
     nota_de_entrada,
     numeros_do_topo,
 )
-from app.services.contas_medicas.validacao import acompanhar_marcacao, linhas_do_retorno
+from app.services.contas_medicas.validacao import (
+    acompanhar_marcacao,
+    linhas_do_retorno,
+    respostas_da_conta,
+    temas_da_observacao,
+)
 
 router = APIRouter(prefix="/contas-medicas", tags=["contas-medicas"])
 
@@ -115,6 +120,8 @@ async def abrir_guia(
         },
         "numeros": numeros_do_topo(linhas, conta.get("total_lancado"), concluida=concluida),
         "grupos": agrupar_por_dia_e_setor(da_tela),
+        # O "Responder ao time" da Validação sobre o que esta conta levantou.
+        "respostas": respostas_da_conta(supabase, conta["id"], linhas),
         # O botão "Reanalisar": a tela desenha pelo que vem aqui, e a rota decide.
         "pode_reanalisar": "regra_contratual_tabelas" in me["permissoes_cm"] and conta.get("situacao") in REANALISAVEIS,
     }
@@ -282,9 +289,13 @@ async def concluir_guia(
 
     observacao = (corpo.observacao or "").strip()
     if observacao:
-        supabase.table("cm_observacao").insert(
-            {"conta_id": conta["id"], "autor_id": me.get("id"), "texto": observacao}
-        ).execute()
+        gravada = (
+            supabase.table("cm_observacao")
+            .insert({"conta_id": conta["id"], "autor_id": me.get("id"), "texto": observacao})
+            .execute()
+        )
+        # A observação cai na fila de Validação, no tema da regra que ela cita.
+        temas_da_observacao(supabase, conta, gravada.data[0])
 
     return {
         "situacao": situacao,
