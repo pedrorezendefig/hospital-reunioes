@@ -1601,6 +1601,26 @@ class TestClasseDeUti:
 # ═══════════════════════════════════════════════════════════════════════════
 
 
+KIT = Path(__file__).resolve().parents[1] / "app" / "conhecimento" / "contas-medicas.md"
+
+
+def test_o_kit_de_conhecimento_diz_como_o_se_necessario_e_a_classe_de_uti_entram_no_guia():
+    secao = KIT.read_text(encoding="utf-8").split("## O Guia", 1)[1].split("\n## ", 1)[0]
+
+    for trecho in (
+        '"se necessário"',
+        "SE NECESSÁRIO · SEM REGISTRO NO MV",
+        TEXTO_SN,
+        "uma dose por dia de prescrição",
+        "as doses indicadas",
+        "Prescrito SN",
+        "sem evidência no prontuário",
+        "conferir classe de UTI",
+        "ventilação mecânica",
+    ):
+        assert trecho in secao, trecho
+
+
 def test_motivo_e_evidencia_sem_travessao_nem_meia_risca():
     """O motivo e o trecho vão para a tela da faturista: o módulo não escreve
     travessão nem meia-risca em nenhuma frase."""
