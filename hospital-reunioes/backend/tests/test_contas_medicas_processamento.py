@@ -1080,6 +1080,39 @@ class TestReanalisar:
         assert len(abertas_depois) == len(abertas_antes)
         assert abertas_antes.isdisjoint(linha["id"] for linha in abertas_depois)
 
+    def test_reanalisar_com_outro_modelo_le_o_prontuario_de_novo_e_preserva_as_marcacoes(self, openrouter, monkeypatch):
+        """Issue #1197: trocou o modelo do Passo A e reanalisou, a IA lê o
+        prontuário de novo com o modelo novo; a linha Feito continua Feito."""
+        banco = _cenario()
+        conta, _, pacote = _conta_com_uma_linha_feita(banco)
+        assert openrouter.formatos.count(PASSO_A) == 1
+        monkeypatch.setattr(ia.settings, "cm_ia_modelo_passo_a", "anthropic/claude-modelo-novo")
+        openrouter.eventos = {**EVENTOS_DA_IA, "observacoes": ["Lida pelo modelo novo."]}
+
+        assert _reanalisar(banco, conta["id"]).status_code == 200
+        _rodar_o_job(banco)
+
+        assert banco.conta(conta["id"])["situacao"] == "A_FAZER", banco.conta(conta["id"]).get("erro_motivo")
+        lidas_pelo_passo_a = [
+            c["model"] for c in openrouter.corpos if c["response_format"]["json_schema"]["name"] == PASSO_A
+        ]
+        assert lidas_pelo_passo_a[1:] == ["anthropic/claude-modelo-novo"]
+        (eventos,) = banco.tabelas["cm_eventos"]
+        assert eventos["eventos_json"]["ia"]["observacoes"] == ["Lida pelo modelo novo."]
+        depois = _linhas_do_guia(_guia(banco, conta["id"]))
+        pacotes = [linha for linha in depois if linha["codigo"] == "98005497"]
+        assert [(p["id"], p["estado"], p["marcado_por"]) for p in pacotes] == [(pacote["id"], "FEITO", "F1")]
+
+    def test_reanalisar_com_o_mesmo_modelo_reaproveita_a_leitura(self, openrouter):
+        banco = _cenario()
+        conta, _, _ = _conta_com_uma_linha_feita(banco)
+
+        assert _reanalisar(banco, conta["id"]).status_code == 200
+        _rodar_o_job(banco)
+
+        assert banco.conta(conta["id"])["situacao"] == "A_FAZER"
+        assert openrouter.formatos.count(PASSO_A) == 1
+
     def test_o_guia_diz_quem_ve_o_botao(self):
         """A tela desenha o botão pelo que o Guia responde, sem perguntar de novo."""
         banco = _cenario()

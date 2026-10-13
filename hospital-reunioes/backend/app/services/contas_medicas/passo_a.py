@@ -19,6 +19,7 @@ from datetime import date, datetime, time
 from difflib import SequenceMatcher
 from typing import Any
 
+from app.config import settings
 from app.services.contas_medicas import ia
 from app.services.contas_medicas import prontuario as leitura_do_prontuario
 from app.services.contas_medicas.conferencia import ProntuarioLido
@@ -458,8 +459,11 @@ def eventos_do_atendimento(
 ) -> dict[str, Any]:
     """Os eventos do prontuário do atendimento: os guardados em `cm_eventos`
     para este arquivo ou, na primeira parcial, a leitura pela IA, que fica
-    guardada ao lado da estrutura que o código gravou (`eventos_json.ia`).
-    Prontuário novo é outra linha de `cm_eventos`, e a IA lê de novo.
+    guardada ao lado da estrutura que o código gravou (`eventos_json.ia`),
+    com o modelo que leu (`eventos_json.ia_modelo`). Prontuário novo é outra
+    linha de `cm_eventos`, e a IA lê de novo; modelo novo também (#1197): é
+    assim que o Reanalisar mostra o efeito da troca de modelo. A leitura
+    guardada sem o modelo, de antes do #1197, conta como de outro modelo.
 
     Quem chama segura a trava do atendimento: duas parciais ao mesmo tempo
     pagariam a mesma leitura duas vezes."""
@@ -474,7 +478,8 @@ def eventos_do_atendimento(
         or []
     )
     linha = next((g for g in gravados if (g.get("eventos_json") or {}).get("arquivo_id") == arquivo_id), None)
-    if linha and "ia" in linha["eventos_json"]:
+    modelo = settings.cm_ia_modelo_passo_a
+    if linha and "ia" in linha["eventos_json"] and linha["eventos_json"].get("ia_modelo") == modelo:
         return linha["eventos_json"]["ia"]
 
     eventos = _ler_pela_ia(
@@ -486,9 +491,9 @@ def eventos_do_atendimento(
         regras=regras,
     )
     if linha:
-        supabase.table("cm_eventos").update({"eventos_json": {**linha["eventos_json"], "ia": eventos}}).eq(
-            "id", linha["id"]
-        ).execute()
+        supabase.table("cm_eventos").update(
+            {"eventos_json": {**linha["eventos_json"], "ia": eventos, "ia_modelo": modelo}}
+        ).eq("id", linha["id"]).execute()
     return eventos
 
 
