@@ -2,6 +2,54 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-10-13T04:33:48-03:00",
+      "sha": "86b0b101d20c8cf437de4daf0f69da53dc1086f7",
+      "app_version": "0.188.0",
+      "subject": "Onda onda-gestao-onda3: Ensinar uma regra nova com proposta da IA e reanalisar contas afetadas; Tabela de preço em PDF ou planilha com mapeamento proposto pela IA",
+      "raw_subject": "chore(deploy): registro da onda onda-gestao-onda3 (#1175 #1176)",
+      "scope": [
+        "backend",
+        "frontend"
+      ],
+      "prds": [
+        1129
+      ],
+      "result": "healthy",
+      "duration_seconds": 250,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        },
+        {
+          "service": "frontend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "onda-enxuta onda-gestao-onda3: PR #1175 (issue #1141), PR #1176 (issue #1146), mergeados PR a PR. Merge pela API do GitHub, um build. Registro pela Action pos-merge depois do health.",
+      "etapas": {
+        "merge_s": 7,
+        "build_s": {
+          "backend": 192,
+          "frontend": 173
+        },
+        "health_s": 10
+      },
+      "responsavel": "pedrorezendefig"
+    },
+    {
       "at": "2026-10-13T03:22:26-03:00",
       "sha": "ac3eb0d0091a1d7c1d77233b0ff986347e433f57",
       "app_version": "0.187.0",
