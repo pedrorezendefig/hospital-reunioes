@@ -410,3 +410,87 @@ class TestJanelas:
         _passo_a(_Banco(), _lido(_paginas()))
 
         assert len(provedor.corpos) == 1
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 3. A evidência de cada evento
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+def _terapia(pagina: int, trecho: str) -> dict:
+    return {
+        "tipo": "OXIGENIO",
+        "descricao": f"oxigênio, página {pagina}",
+        "setor": "CTI ADULTO",
+        "inicio": "2026-10-05T08:00",
+        "fim": None,
+        "pagina": pagina,
+        "trecho": trecho,
+    }
+
+
+def _procedimento(pagina: int, trecho: str) -> dict:
+    return {
+        "tipo": "OUTRO",
+        "data_hora": "2026-10-03T14:30",
+        "setor": None,
+        "detalhe": trecho,
+        "quantidade": 1,
+        "pagina": pagina,
+        "trecho": trecho,
+    }
+
+
+def _prescricao(pagina: int, trecho: str) -> dict:
+    return {
+        "data": "2026-10-03",
+        "setor": "CTI ADULTO",
+        "item": trecho,
+        "via": "EV",
+        "doses_no_dia": 1,
+        "se_necessario": False,
+        "indicio_de_uso": None,
+        "suspenso": False,
+        "diluente": None,
+        "em_bomba": True,
+        "pagina": pagina,
+        "trecho": trecho,
+    }
+
+
+# Páginas de `_paginas()`: 2 é a evolução, 3 a admissão, 4 a prescrição, 6 a
+# anotação de enfermagem e 9 o resumo de alta.
+CONFERE = "Iniciado MELOXICAM 15 MG por dor lombar."
+NA_VIZINHA = "Mantida dieta por sonda nasoenteral."
+DESIDENTIFICADO = "Paciente PACIENTE, 75 anos, segue em ventilação espontânea"
+OUTRO_ACENTO_E_ESPACO = "Realizado  curativo em regiao sacral com   cobertura de hidrocolóide."
+INEXISTENTE = "Noradrenalina 4 mg em bomba de infusão contínua."
+LONGE_DA_PAGINA = "Plano: manter antibiótico, D03 de CVD em subclávia direita."
+
+
+class TestEvidencia:
+    def test_o_trecho_que_nao_existe_na_pagina_nem_na_vizinha_sai_com_a_etiqueta_e_confianca_baixa(self, provedor):
+        provedor.respostas = [
+            _resposta(
+                terapias=[_terapia(2, CONFERE), _terapia(3, NA_VIZINHA)],
+                procedimentos=[_procedimento(2, DESIDENTIFICADO), _procedimento(6, OUTRO_ACENTO_E_ESPACO)],
+                prescricoes=[_prescricao(4, INEXISTENTE), _prescricao(9, LONGE_DA_PAGINA)],
+            )
+        ]
+        banco = _Banco()
+
+        eventos = _passo_a(banco, _lido(_paginas()))
+
+        conferencia = {
+            evento["trecho"]: (evento["etiquetas"], evento["confianca"])
+            for lista in ("terapias", "procedimentos", "prescricoes")
+            for evento in eventos[lista]
+        }
+        assert conferencia == {
+            CONFERE: ([], None),
+            NA_VIZINHA: ([], None),
+            DESIDENTIFICADO: ([], None),
+            OUTRO_ACENTO_E_ESPACO: ([], None),
+            INEXISTENTE: (["conferir evidência"], "BAIXA"),
+            LONGE_DA_PAGINA: (["conferir evidência"], "BAIXA"),
+        }

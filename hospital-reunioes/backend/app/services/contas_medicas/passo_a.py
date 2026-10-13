@@ -14,7 +14,7 @@ as parciais e ao reenvio.
 
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from datetime import date, time
 from typing import Any
 
@@ -22,7 +22,7 @@ from app.services.contas_medicas import ia
 from app.services.contas_medicas import prontuario as leitura_do_prontuario
 from app.services.contas_medicas.conferencia import ProntuarioLido
 from app.services.contas_medicas.desidentificacao import Identificacao, desidentificar
-from app.services.contas_medicas.evidencia import normalizar
+from app.services.contas_medicas.evidencia import normalizar, trecho_confere
 from app.services.contas_medicas.memoria_texto import orientacoes_de_leitura
 from app.services.contas_medicas.prescricao import ItemConsolidado
 from app.services.prompt_loader import load_prompt
@@ -266,6 +266,39 @@ def unir_eventos(partes: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
 
 
 # ----------------------------------------------------------------------------------
+# A evidência
+# ----------------------------------------------------------------------------------
+
+CONFERIR_EVIDENCIA = "conferir evidência"
+
+
+def _texto_da_pagina(prontuario: ProntuarioLido, identificacao: Identificacao) -> Callable[[int], str | None]:
+    """O texto da página do PDF como a IA o leu: desidentificado. Só as
+    páginas citadas (e as vizinhas) passam pela desidentificação."""
+    paginas = prontuario.texto_por_pagina
+    lidas: dict[int, str | None] = {}
+
+    def texto(numero: int) -> str | None:
+        if numero not in lidas:
+            bruto = paginas[numero - 1] if 1 <= numero <= len(paginas) else None
+            lidas[numero] = "\n".join(desidentificar(bruto.split("\n"), identificacao)) if bruto else None
+        return lidas[numero]
+
+    return texto
+
+
+def _conferir_evidencias(eventos: dict[str, Any], texto_da_pagina: Callable[[int], str | None]) -> None:
+    """Todo evento ganha `etiquetas` e `confianca`: o trecho que não está na
+    página citada nem na vizinha sai com "conferir evidência" e confiança
+    baixa. O que confere fica sem confiança: a IA não dá uma no passo A."""
+    for lista in _MESMO_EVENTO:
+        for evento in eventos[lista]:
+            confere = trecho_confere(evento.get("trecho"), evento.get("pagina"), texto_da_pagina)
+            evento["etiquetas"] = [] if confere else [CONFERIR_EVIDENCIA]
+            evento["confianca"] = None if confere else "BAIXA"
+
+
+# ----------------------------------------------------------------------------------
 # A leitura, uma vez por atendimento
 # ----------------------------------------------------------------------------------
 
@@ -291,4 +324,6 @@ def eventos_do_atendimento(
         ).model_dump()
         for entrada in montar_entradas(prontuario, achados, reserva=reserva)
     ]
-    return unir_eventos(partes)
+    eventos = unir_eventos(partes)
+    _conferir_evidencias(eventos, _texto_da_pagina(prontuario, _identificacao(prontuario)))
+    return eventos
