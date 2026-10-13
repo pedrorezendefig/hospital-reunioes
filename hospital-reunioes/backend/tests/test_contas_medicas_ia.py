@@ -585,3 +585,59 @@ class TestTextoDaMemoria:
 
         assert ler_memoria(gerar_texto_memoria(banco, operadora_id)).versao == "2.1"
         assert ler_memoria(gerar_texto_memoria(banco, operadora_id, primeira["id"])).versao == "2.0"
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 7. O texto do Produto no Kit de conhecimento
+# ═══════════════════════════════════════════════════════════════════════════
+
+KIT = Path(__file__).resolve().parents[1] / "app" / "conhecimento" / "contas-medicas.md"
+
+
+class TestKitDeConhecimento:
+    """A sanidade geral do kit mora em `test_kit_conhecimento.py`; aqui, o que
+    o texto tem que dizer da IA."""
+
+    def test_diz_que_a_ia_entrou_o_que_ela_faz_e_que_o_custo_fica_gravado(self):
+        secao = KIT.read_text(encoding="utf-8").split("## A inteligência artificial", 1)[1].split("\n## ", 1)[0]
+
+        for trecho in (
+            "lê o texto livre do prontuário",
+            "compara",
+            "memória da operadora",
+            "não devolve valor em reais",
+            "não guarda nada",
+            "três vezes",
+            "Tente de novo em alguns minutos",
+            "O custo de cada chamada fica gravado",
+            "Reanalisar",
+        ):
+            assert trecho in secao, trecho
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 8. Tipografia
+# ═══════════════════════════════════════════════════════════════════════════
+
+RAIZ_DO_APP = Path(__file__).resolve().parents[2]
+
+ARQUIVOS_DA_FATIA = [
+    MIGRATION_117,
+    RAIZ_DO_APP / "backend/app/services/contas_medicas/ia.py",
+    RAIZ_DO_APP / "backend/app/services/contas_medicas/memoria_texto.py",
+    RAIZ_DO_APP / "backend/app/services/contas_medicas/memoria.py",
+    RAIZ_DO_APP / "backend/app/prompts/contas_medicas_passo_a.md",
+    RAIZ_DO_APP / "backend/app/prompts/contas_medicas_passo_b.md",
+    RAIZ_DO_APP / "backend/app/conhecimento/contas-medicas.md",
+    RAIZ_DO_APP / "backend/app/routers/contas_medicas_guia.py",
+    RAIZ_DO_APP / "frontend/src/app/contas-medicas/guia/[contaId]/page.tsx",
+    MEMORIAS / "MEMORIA-GAMA-v2.0.md",
+    Path(__file__),
+]
+
+
+@pytest.mark.parametrize("arquivo", ARQUIVOS_DA_FATIA, ids=lambda a: a.name)
+def test_sem_travessao_nem_meia_risca(arquivo):
+    texto = arquivo.read_text(encoding="utf-8")
+    assert chr(0x2014) not in texto
+    assert chr(0x2013) not in texto

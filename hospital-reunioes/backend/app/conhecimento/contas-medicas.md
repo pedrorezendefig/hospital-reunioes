@@ -64,6 +64,16 @@ Se o app reiniciar no meio de uma análise, a conta volta sozinha para a fila. D
 
 O tempo de cada etapa da análise fica guardado, para medir a meta de uma conta de cinco dias pronta em até cinco minutos.
 
+## A inteligência artificial
+
+A segunda etapa trouxe a inteligência artificial para a análise. Ela tem duas tarefas. A primeira lê o texto livre do prontuário (evoluções, anotações, prescrições, descrição cirúrgica) e lista o que aconteceu com o paciente, dia a dia, com a página e o trecho que provam cada fato. A segunda compara esses fatos com a conta e com a memória da operadora e propõe as linhas do Guia (incluir, ajustar quantidade, retirar ou validar), cada uma com a regra da memória que a sustenta. Preço, contagem de diárias e as contas da nota continuam com o código: a IA não devolve valor em reais.
+
+O texto do prontuário vai à IA sem o nome da paciente, e o provedor não guarda nada do que recebe nem usa o texto para treinar modelo. A resposta tem um formato combinado; fora dele, é recusada e pedida de novo, até três vezes, com uma espera maior a cada vez. Depois disso a conta fica em Erro com "Tente de novo em alguns minutos" e o botão "Enviar de novo".
+
+O custo de cada chamada fica gravado: quantos tokens entraram e saíram, quantos vieram do cache e quanto custou, em dólar, e cada conta guarda a soma das chamadas dela, inclusive as de uma nova análise. O modelo de inteligência artificial de cada tarefa é trocado numa configuração do servidor, sem programador.
+
+Quem tem a permissão de regra contratual e tabelas vê no Guia o botão "Reanalisar", nas contas A fazer e Em correção. A conta volta para a fila e é analisada de novo, com a memória e as tabelas de agora; as linhas que a faturista já marcou ficam como estão, e as sem marcação são trocadas pelas da análise nova.
+
 ## O Guia
 
 O Guia é a tela de uma conta com a lista do que corrigir no MV. Foi feito para caber em meia tela, ao lado do MV, e vira lista em telas estreitas.
@@ -110,4 +120,5 @@ O módulo não guarda nome completo, CPF, carteira nem data de nascimento de pac
 - Tabela de preço recusada, contagem de itens que não bate com o arquivo, ou preço "Não conferido" onde a tabela tem valor (Defeito, ou Informação se a recusa lista as colunas esperadas ou se o motivo é um dos casos de "Não conferido").
 - Um botão do Guia que não marca, uma conta que não conclui ou uma nota que não bate com as linhas (Defeito).
 - Uma conta que não sai de Na fila ou de "Pronta em instantes", um Erro com motivo que não bate com o PDF, ou o aviso de contas prontas que não chega ao sino (Defeito, ou Informação se o motivo do Erro explica, como o PDF sem texto).
+- Uma conta que volta para Erro com "Tente de novo em alguns minutos" mesmo depois de enviada de novo, ou o botão "Reanalisar" que não aparece para a gestão (Defeito).
 - Dúvida sobre quando chega o envio de contas ou alguma das próximas entregas (Informação).
