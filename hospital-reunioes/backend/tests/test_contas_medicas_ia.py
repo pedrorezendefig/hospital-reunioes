@@ -22,6 +22,7 @@ from types import SimpleNamespace
 import httpx
 import pytest
 from openai import OpenAI
+from pydantic import BaseModel
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
@@ -372,6 +373,31 @@ class TestRequisicaoAoProvedor:
         assert MEMORIA in memoria["text"]
         assert resto
         assert all("cache_control" not in bloco for bloco in resto)
+
+    def test_a_chamada_curta_usa_o_schema_de_quem_chama_e_grava_o_passo(self, provedor):
+        class Proposta(BaseModel):
+            codigo: str | None
+            confianca: str
+
+        banco = _BancoDeCusto([{"id": "c1"}])
+        provedor.responder(('{"codigo": "90030001", "confianca": "MEDIA"}', USO_PADRAO))
+
+        proposta = ia.chamada_curta(
+            "Ache o código da conta para o termo.",
+            "Termo: Clexane",
+            Proposta,
+            passo="DICIONARIO",
+            supabase=banco,
+            conta_id="c1",
+        )
+
+        assert proposta == Proposta(codigo="90030001", confianca="MEDIA")
+        (corpo,) = provedor.corpos
+        schema = corpo["response_format"]["json_schema"]["schema"]
+        assert set(schema["properties"]) == {"codigo", "confianca"}
+        assert corpo["provider"]["zdr"] is True
+        (chamada,) = banco.tabelas["cm_chamada_ia"]
+        assert (chamada["passo"], chamada["modelo"]) == ("DICIONARIO", corpo["model"])
 
     def test_modelo_que_nao_e_anthropic_nao_leva_bloco_de_cache(self, provedor):
         _extrair()
