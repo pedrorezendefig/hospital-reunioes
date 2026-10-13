@@ -54,6 +54,7 @@ from app.services.contas_medicas.conteudo import Conteudo, ler_conteudo
 from app.services.contas_medicas.desidentificacao import desidentificar
 from app.services.contas_medicas.dicionario import dicionario_do_banco
 from app.services.contas_medicas.guia import nota_de_entrada
+from app.services.contas_medicas.ia import ErroDaIA
 from app.services.contas_medicas.memoria import MemoriaLida, RegraLida
 from app.services.contas_medicas.operadoras import listar_setores, memoria_vigente
 from app.services.contas_medicas.tabelas import pacote_pelo_tuss, preco
@@ -88,6 +89,9 @@ MENSAGEM_PDF_SEM_TEXTO = "Este PDF não tem texto. Exporte de novo pelo MV"
 MENSAGEM_ARQUIVO_FORA_DO_SISTEMA = "O arquivo já saiu do sistema. Envie de novo."
 MENSAGEM_SEM_PRONTUARIO = "O prontuário deste atendimento não está no sistema. Envie o prontuário de novo."
 MENSAGEM_SEM_MEMORIA = "A operadora desta conta está sem memória carregada."
+# A IA fora do ar ou fora do formato depois das três tentativas do adaptador
+# (spec 9.9): Erro na hora, e a faturista reprocessa pelo botão da conta.
+MENSAGEM_IA_FORA_DO_AR = "Tente de novo em alguns minutos"
 
 # A etapa como a faturista lê, na frase do Erro depois da terceira tentativa.
 ETAPAS = {
@@ -262,6 +266,12 @@ def processar(supabase, conta: dict) -> None:
             logger.warning("[ContasMedicas] Conta %s com erro de leitura na etapa %s", conta["id"], cronometro.atual)
             _fechar_tentativa(
                 supabase, conta, {"situacao": "ERRO", "erro_motivo": falha.motivo, "processando_desde": None}
+            )
+        except ErroDaIA as erro:
+            # O adaptador já tentou três vezes: a conta não volta para a fila.
+            logger.warning("[ContasMedicas] Conta %s sem a IA na etapa %s: %s", conta["id"], cronometro.atual, erro)
+            _fechar_tentativa(
+                supabase, conta, {"situacao": "ERRO", "erro_motivo": MENSAGEM_IA_FORA_DO_AR, "processando_desde": None}
             )
         except Exception as erro:
             logger.error(

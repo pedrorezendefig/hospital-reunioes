@@ -780,6 +780,8 @@ class TestAsRotasEstaoNoApp:
         assert {"post", "delete"} <= set(caminhos[f"{base}/linhas/{{linha_id}}/marcacao"])
         assert "post" in caminhos[f"{base}/dia/feito"]
         assert "post" in caminhos[f"{base}/concluir"]
+        # Reanalisar (issue #1130).
+        assert "post" in caminhos["/api/contas-medicas/contas/{conta_id}/reanalisar"]
 
 
 KIT = Path(__file__).resolve().parents[1] / "app" / "conhecimento" / "contas-medicas.md"

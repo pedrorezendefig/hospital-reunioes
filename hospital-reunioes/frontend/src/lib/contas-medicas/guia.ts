@@ -72,6 +72,8 @@ export interface Guia {
     itens_sem_marcacao: number;
   };
   grupos: GrupoGuia[];
+  /** O botão "Reanalisar" (issue #1130): a permissão de regra contratual e tabelas, na conta ainda aberta. */
+  pode_reanalisar?: boolean;
 }
 
 export const ROTULO_ACAO: Record<AcaoGuia, string> = {
