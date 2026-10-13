@@ -605,3 +605,35 @@ class TestOKitDescreveOPainel:
 
     def test_o_que_ja_esta_no_ar_inclui_o_painel(self):
         assert "o Painel" in _secao("O que já está no ar")
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 6. Tipografia
+# ═══════════════════════════════════════════════════════════════════════════
+
+RAIZ_DO_APP = Path(__file__).resolve().parents[2]
+COMPONENTES = RAIZ_DO_APP / "frontend/src/components/contas-medicas/painel"
+
+ARQUIVOS_DA_FATIA = [
+    RAIZ_DO_APP / "backend/app/services/contas_medicas/painel.py",
+    RAIZ_DO_APP / "backend/app/routers/contas_medicas_painel.py",
+    RAIZ_DO_APP / "backend/app/conhecimento/contas-medicas.md",
+    RAIZ_DO_APP / "frontend/src/app/contas-medicas/painel/page.tsx",
+    RAIZ_DO_APP / "frontend/src/lib/contas-medicas/painel.ts",
+    RAIZ_DO_APP / "frontend/src/components/contas-medicas/LinkParaPainel.tsx",
+    *sorted(COMPONENTES.glob("*.ts*")),
+    Path(__file__),
+]
+
+
+def test_a_varredura_alcanca_os_componentes_do_painel():
+    """Sem esta conta, a pasta renomeada deixaria o glob vazio e a varredura
+    verde sobre nada."""
+    assert len([a for a in ARQUIVOS_DA_FATIA if a.parent == COMPONENTES]) >= 12
+
+
+@pytest.mark.parametrize("arquivo", ARQUIVOS_DA_FATIA, ids=lambda a: a.name)
+def test_sem_travessao_nem_meia_risca(arquivo):
+    texto = arquivo.read_text(encoding="utf-8")
+    assert chr(0x2014) not in texto
+    assert chr(0x2013) not in texto
