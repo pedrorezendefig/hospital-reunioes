@@ -523,3 +523,35 @@ class TestARotaEstaNoApp:
         assert "put" in caminhos[ROTA_PERMISSAO]
         assert "get" in caminhos[ROTA_PESSOAS]
         assert "put" in caminhos[f"{ROTA_PESSOAS}/{{participante_id}}"]
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 7. O texto do Produto no Kit de conhecimento
+# ═══════════════════════════════════════════════════════════════════════════
+
+KIT = Path(__file__).resolve().parents[1] / "app" / "conhecimento" / "contas-medicas.md"
+
+
+def _secao(titulo: str) -> str:
+    return KIT.read_text(encoding="utf-8").split(f"## {titulo}")[1].split("\n## ")[0]
+
+
+class TestOKitDizQueAHabilitacaoEPorTela:
+    """O Assistente de Tecnologia responde Demanda com este texto: se ele
+    disser que o perfil e gravado pela tecnologia, manda a pessoa esperar por
+    quem nao faz mais isso."""
+
+    def test_quem_ve_diz_que_a_diretoria_habilita_pela_tela_e_vale_na_hora(self):
+        quem_ve = _secao("Quem vê")
+
+        assert "tela de **Habilitação**" in quem_ve
+        assert "vale na hora" in quem_ve
+        assert "equipe de tecnologia" not in quem_ve
+
+    def test_o_que_ja_esta_no_ar_inclui_a_habilitacao(self):
+        assert "tela de Habilitação" in _secao("O que já está no ar")
+
+    def test_o_pedido_de_perfil_aponta_para_a_tela(self):
+        demanda = _secao("O que costuma virar Demanda")
+
+        assert "na tela de Habilitação" in demanda

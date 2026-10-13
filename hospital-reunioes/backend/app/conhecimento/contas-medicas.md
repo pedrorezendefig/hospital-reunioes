@@ -15,7 +15,8 @@ A primeira etapa inteira: a fundação do módulo, a carga das operadoras, o env
 - a análise da conta, que roda sozinha em segundo plano e avisa no sino quando o Guia fica pronto;
 - os perfis e as permissões de cada um, já gravados no banco;
 - o lugar seguro onde os PDFs ficam guardados por sete dias;
-- a tela Operadoras, aberta a partir da tela de contas para quem tem a permissão de regra contratual e tabelas (gestão de contas médicas e as duas diretorias).
+- a tela Operadoras, aberta a partir da tela de contas para quem tem a permissão de regra contratual e tabelas (gestão de contas médicas e as duas diretorias);
+- a tela de Habilitação, aberta a partir da tela de contas para quem tem a permissão de habilitar pessoas (as duas diretorias), descrita em "Quem vê".
 
 Na tela Operadoras, a gestão envia o arquivo de memória de cada convênio, o mesmo que o diretor monta, e a memória passa a valer sem programador no meio. A tela mostra a versão, quantas regras vigentes e pendentes entraram e os parâmetros lidos do cabeçalho; os números têm de bater com o arquivo. Mandar uma versão nova aposenta a anterior. Parâmetro do cabeçalho que o sistema ainda não usa fica guardado, e a memória em vigor pode ser baixada de volta inteira. Arquivo com um número no formato de CPF é recusado, porque memória não pode ter dado de paciente. Na mesma tela a gestão cadastra os nomes de plano como o MV imprime, cada um com a operadora e a coluna de preço, e os setores do MV com a acomodação de cada um.
 
@@ -96,7 +97,7 @@ Cada perfil vem com um conjunto inicial de permissões, tirado da especificaçã
 - **Diretoria médica** e **Diretoria executiva**: tudo.
 - **Credenciamento**: só os contratos e o aviso de reajuste.
 
-Hoje o perfil de cada pessoa é gravado pela equipe de tecnologia, a partir do e-mail que o diretor informa. A tela de Habilitação, que liga e desliga cada permissão por perfil, chega na terceira etapa.
+Esse conjunto não é fixo. A diretoria muda tudo pela tela de **Habilitação**, sem programador no meio: os perfis ficam nas linhas e as permissões nas colunas, e cada célula liga ou desliga com um clique. Na mesma tela, a busca acha a pessoa pelo nome, e ali se dá, troca ou tira o perfil dela. A mudança vale na hora: quem ganha um perfil passa a ver o item no menu, e quem perde uma permissão deixa de abrir a tela dela já no clique seguinte. Toda mudança fica registrada com quem mudou, quando, como estava antes e como ficou.
 
 ## Dado de paciente
 
@@ -105,7 +106,8 @@ O módulo não guarda nome completo, CPF, carteira nem data de nascimento de pac
 ## O que costuma virar Demanda
 
 - Uma pessoa que deveria ver Contas médicas no menu e não vê, ou o contrário (Defeito, ou Informação se for dúvida sobre o perfil).
-- Pedido para dar ou trocar o perfil de alguém no módulo (Informação).
+- Pedido para dar ou trocar o perfil de alguém no módulo (Informação: quem faz é a diretoria, na tela de Habilitação).
+- Uma permissão desligada na Habilitação que continua valendo, ou ligada que não abre a tela (Defeito).
 - Memória recusada na tela Operadoras, ou contagem de regras que não bate com o arquivo do diretor (Defeito, ou Informação se a recusa explica o motivo, como o CPF).
 - Tabela de preço recusada, contagem de itens que não bate com o arquivo, ou preço "Não conferido" onde a tabela tem valor (Defeito, ou Informação se a recusa lista as colunas esperadas ou se o motivo é um dos casos de "Não conferido").
 - Um botão do Guia que não marca, uma conta que não conclui ou uma nota que não bate com as linhas (Defeito).
