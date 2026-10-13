@@ -52,8 +52,10 @@ filtrar_os() {
          ci: ($f.sinal.ci // null), veredito: ($f.sinal.veredito // null),
          conflito: ($f.sinal.conflito // false), versao: $f.versao,
          por: [ .blocked_by[] as $b | select($abertas | index($b)) | $b ]};
+  # PRD fechado volta ao painel enquanto tiver fatia aberta (lacuna achada na auditoria, reaberta por fatia nova)
   {repo: .repo_slug,
-     prds: [ $all[] | select(.is_prd and .state == "OPEN") | . as $p
+     prds: [ $all[] | select(.is_prd and (.state == "OPEN"
+         or (.number as $p | any($all[]; .parent == $p and .state == "OPEN")))) | . as $p
        | {n: .number, titulo: .title,
           ondas: ($F.ondas[($p.number | tostring)] // []),
           issues: [ $all[] | select(.parent == $p.number) | fatia ] } ],
@@ -64,12 +66,16 @@ filtrar_os() {
 ' 2>/dev/null
 }
 
-agentes=$(claude agents --json 2>/dev/null | jq -c --arg tmp "$TMP" '
-  [ .[] | select(.name // "" | test("^onda-")) | select(.cwd | test("Hospital"))
-    | {nome: .name, status: .status, estado: (.state // null), inicio: .startedAt, sessao: .sessionId} ]' 2>/dev/null)
+# Candidatas: toda sessão viva no Hospital. Fica no painel a que se chama `onda-*` (sessão de
+# fundo da /onda-enxuta) ou a que tem sub-agente hr-* (implementador, revisor, corretor) vivo
+# ou terminado há menos de 30 min: uma onda rodada numa sessão interativa (filtro mais abaixo).
+agentes=$(claude agents --json 2>/dev/null | jq -c '
+  [ .[] | select(.cwd // "" | test("Hospital"))
+    | {nome: (.name // .sessionId), status: .status, estado: (.state // null), inicio: .startedAt, sessao: .sessionId,
+       onda: ((.name // "") | test("^onda-"))} ]' 2>/dev/null)
 [ -n "$agentes" ] || agentes='[]'
 
-# Sub-agentes de cada sessão de onda: tipo e alvo no .meta.json, modelo, contexto e fim
+# Sub-agentes de cada sessão: tipo e alvo no .meta.json, modelo, contexto e fim
 # na última resposta do .jsonl (end_turn na última linha = terminou)
 PROJ="$HOME/.claude/projects/$(pwd | tr '/.' '--')"
 [ -d "$PROJ" ] || PROJ="$HOME/.claude/projects/-Users-pedrorezende-PedroDev-Hospital"
@@ -94,6 +100,13 @@ for linha in $(echo "$agentes" | jq -r '.[] | "\(.nome)=\(.sessao)"'); do
     [ -n "$item" ] && sub_agentes=$(echo "$sub_agentes" | jq -c --argjson i "$item" '. + [$i]')
   done
 done
+
+# O filtro: sessão `onda-*`, ou sessão com sub-agente hr-* vivo ou recém-terminado. As demais
+# saem, com os sub-agentes delas.
+agentes=$(echo "$agentes" | jq -c --argjson subs "$sub_agentes" --argjson agora "$(( $(date +%s) * 1000 ))" '
+  map(select(.onda or (.nome as $n | any($subs[]; .sessao == $n and (.tipo | test("^hr-"))
+        and ((.terminou | not) or ($agora - .fim) < 1800000)))) | del(.onda))')
+sub_agentes=$(echo "$sub_agentes" | jq -c --argjson ags "$agentes" '[ .[] | select(.sessao as $s | any($ags[]; .nome == $s)) ]')
 
 # Shell em curso e subidas de cada sessão, lidos do transcript dela
 subidas='[]'
