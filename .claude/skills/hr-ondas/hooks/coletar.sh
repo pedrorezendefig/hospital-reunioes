@@ -70,33 +70,22 @@ for linha in $(echo "$agentes" | jq -r '.[] | "\(.nome)=\(.sessao)"'); do
   subidas=$(echo "$subidas" | jq -c --arg n "$nome" --argjson i "$info" '. + ($i.subidas | map(. + {sessao: $n}))')
 done
 
-# CI de cada PR aberto: início e fim pelos checks do GitHub, em paralelo. A coleta roda a cada
-# 10 s em cada sessão e o `gh pr checks` gasta o GraphQL que o fechar_onda.py usa: cache comum
-# a todas as sessões em $TMP/hr-ondas-ci-cache/<pr>.json, 60 s com CI rodando e 10 min com
-# CI terminado. Falha do gh não apaga o valor anterior, só renova o mtime (espera o TTL).
+# CI de cada PR aberto: início e fim pelos checks do GitHub, em paralelo
 ci='{}'
-CACHE="$TMP/hr-ondas-ci-cache"; mkdir -p "$CACHE"
-agora=$(date +%s)
-prs=$(echo "$os" | jq -r '[.prds[]?.issues[]? | select(.fase == "pr_aberto" and .pr != null) | .pr] | unique | .[]' 2>/dev/null)
-for pr in $prs; do
-  arq="$CACHE/$pr.json"
-  if [ -f "$arq" ]; then
-    ttl=60; jq -e '.fim != null' "$arq" >/dev/null 2>&1 && ttl=600
-    [ $((agora - $(stat -f %m "$arq"))) -lt "$ttl" ] && continue
-  fi
-  ( tmp=$(mktemp "$CACHE/.$pr.XXXXXX")
-    gh pr checks "$pr" --json startedAt,completedAt 2>/dev/null | jq -c '
+CIDIR=$(mktemp -d "$TMP/hr-ondas-ci.XXXXXX")
+for pr in $(echo "$os" | jq -r '[.prds[]?.issues[]? | select(.fase == "pr_aberto" and .pr != null) | .pr] | unique | .[]' 2>/dev/null); do
+  ( gh pr checks "$pr" --json startedAt,completedAt 2>/dev/null | jq -c '
       [ .[] | select(.startedAt != null) ] | select(length > 0)
       | {inicio: (map(.startedAt | sub("\\.[0-9]+Z$"; "Z") | fromdateiso8601 * 1000) | min),
          fim: (if all(.completedAt != null) then (map(.completedAt | sub("\\.[0-9]+Z$"; "Z") | fromdateiso8601 * 1000) | max) else null end)}
-    ' > "$tmp" 2>/dev/null
-    if [ -s "$tmp" ]; then mv "$tmp" "$arq"; else rm -f "$tmp"; touch "$arq"; fi ) &
+    ' > "$CIDIR/$pr" 2>/dev/null ) &
 done
 wait
-for pr in $prs; do
-  [ -s "$CACHE/$pr.json" ] || continue
-  ci=$(echo "$ci" | jq -c --arg k "$pr" --argjson v "$(cat "$CACHE/$pr.json")" '. + {($k): $v}')
+for f in "$CIDIR"/*; do
+  [ -s "$f" ] || continue
+  ci=$(echo "$ci" | jq -c --arg k "$(basename "$f")" --argjson v "$(cat "$f")" '. + {($k): $v}')
 done
+rm -r "$CIDIR"
 
 # PRD de cada sessão: o primeiro "PRD #N" da passagem que a lançou
 prd_sessoes='{}'
