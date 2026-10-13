@@ -63,6 +63,8 @@ export interface ItemDaFila {
   periodo_inicio: string | null;
   periodo_fim: string | null;
   nota_entrada: number | null;
+  /** A nota depois do reenvio da conta corrigida (issue #1136); nula sem reenvio. */
+  nota_saida?: number | null;
   valor_apontado: number | null;
   itens_feitos: number;
   itens_total: number;
@@ -194,7 +196,11 @@ export function detalheDaConta(conta: ItemDaFila): string {
     case "CONCLUIDA_COM_PENDENCIA": {
       const pendencias =
         conta.pendencias > 0 ? `${conta.pendencias} ${conta.pendencias === 1 ? "pendência" : "pendências"}` : null;
-      return [nota, pendencias].filter(Boolean).join(", ");
+      const notas =
+        conta.nota_saida != null && conta.nota_entrada != null
+          ? `Nota de entrada ${conta.nota_entrada}, nota de saída ${conta.nota_saida}`
+          : nota;
+      return [notas, pendencias].filter(Boolean).join(", ");
     }
     default:
       return "";
