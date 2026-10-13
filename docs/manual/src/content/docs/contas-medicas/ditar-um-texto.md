@@ -2,7 +2,7 @@
 title: Ditar um texto
 description: Falar em vez de digitar nos campos de texto longo de Contas médicas e revisar antes de enviar.
 prd: [1129]
-draft: true
+draft: false
 papel: [Faturista, Coordenadora de faturamento, Gestão de contas médicas, Diretoria]
 sidebar:
   order: 12

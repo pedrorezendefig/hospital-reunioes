@@ -2,7 +2,7 @@
 title: Enviar contas e prontuários
 description: Mandar a conta e o prontuário do MV para conferência e acompanhar cada uma na fila.
 prd: [1113]
-draft: true
+draft: false
 papel: [Faturista]
 sidebar:
   order: 2

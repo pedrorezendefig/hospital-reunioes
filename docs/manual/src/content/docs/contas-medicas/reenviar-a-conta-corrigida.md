@@ -2,7 +2,7 @@
 title: Reenviar a conta corrigida
 description: Mandar de novo só a conta, depois de corrigir no MV, e ver se cada correção pegou.
 prd: [1128]
-draft: true
+draft: false
 papel: [Faturista]
 video: reenviar-a-conta-corrigida
 sidebar:

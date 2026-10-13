@@ -2,7 +2,7 @@
 title: Habilitar uma pessoa
 description: Dar, trocar ou tirar o perfil de Contas médicas de alguém e decidir o que cada perfil pode fazer.
 prd: [1129]
-draft: true
+draft: false
 papel: [Diretoria]
 sidebar:
   order: 11
