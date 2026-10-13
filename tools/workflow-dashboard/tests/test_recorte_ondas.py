@@ -1,7 +1,8 @@
-"""Recorte das ondas (hr-ondas): só os PRDs com onda viva, numa consulta GraphQL e uma lista de PRs abertos.
+"""Recorte das ondas (hr-ondas): os PRDs com onda viva ou com PR aberto, em três chamadas ao gh.
 
 `gh` e `git` mockados em collect._run. O que se prova: a régua de fases é a mesma do OS
-inteiro, a fatia ligada pelo corpo ("Pai: #N") entra, e o custo é de duas chamadas ao gh.
+inteiro, a fatia ligada pelo corpo ("Pai: #N") entra, o PRD de um PR aberto entra sem sessão
+viva (trabalho de um sócio, uma /pegar-issue à mão), e o custo é de três chamadas ao gh.
 """
 
 import json
@@ -45,11 +46,14 @@ ABERTOS = [{"number": 50, "statusCheckRollup": [{"__typename": "CheckRun", "name
             "mergeStateStatus": "BLOCKED", "reviews": [], "comments": []}]
 
 
-def _montar(monkeypatch, tmp_path):
+def _montar(monkeypatch, tmp_path, abertos=()):
     chamadas = []
+    descoberta = {"data": {"repository": {"pullRequests": {"nodes": list(abertos)}}}}
 
     def run(cmd, cwd, timeout=None):
         chamadas.append(cmd)
+        if cmd[:3] == ["gh", "api", "graphql"] and "pullRequests(states:OPEN" in " ".join(cmd):
+            return json.dumps(descoberta)
         if cmd[:3] == ["gh", "api", "graphql"]:
             return json.dumps(RESPOSTA)
         if cmd[:3] == ["gh", "pr", "list"]:
@@ -77,15 +81,28 @@ def test_recorte_traz_o_prd_vivo_com_fases_e_a_filha_pelo_corpo(monkeypatch, tmp
     assert d["fases"]["ondas"][10] == [[11, 13], [12]]
 
 
-def test_recorte_custa_duas_chamadas_ao_gh(monkeypatch, tmp_path):
+def test_recorte_custa_tres_chamadas_ao_gh(monkeypatch, tmp_path):
     chamadas = _montar(monkeypatch, tmp_path)
     collect.collect_recorte(tmp_path, [10])
     gh = [c for c in chamadas if c[0] == "gh"]
-    assert [c[:3] for c in gh] == [["gh", "api", "graphql"], ["gh", "pr", "list"]]
-    assert "--state" in gh[1] and gh[1][gh[1].index("--state") + 1] == "open"
+    assert [c[:3] for c in gh] == [["gh", "api", "graphql"], ["gh", "api", "graphql"], ["gh", "pr", "list"]]
+    assert "--state" in gh[2] and gh[2][gh[2].index("--state") + 1] == "open"
 
 
-def test_recorte_sem_prd_nao_chama_o_github(monkeypatch, tmp_path):
+def test_prd_de_pr_aberto_entra_sem_sessao_viva(monkeypatch, tmp_path):
+    pai_nativo = {"number": 70, "closingIssuesReferences": {"nodes": [{"number": 11, "body": "", "parent": {"number": 10}}]}}
+    pai_no_corpo = {"number": 71, "closingIssuesReferences": {"nodes": [{"number": 13, "body": "Pai: #10", "parent": None}]}}
+    solta = {"number": 72, "closingIssuesReferences": {"nodes": [{"number": 99, "body": "", "parent": None}]}}
+    for pr in (pai_nativo, pai_no_corpo):
+        chamadas = _montar(monkeypatch, tmp_path, abertos=[pr, solta])
+        d = collect.collect_recorte(tmp_path, [])
+        recorte = [c for c in chamadas if c[:3] == ["gh", "api", "graphql"]][1][-1]
+        assert "p10:" in recorte and "p99:" not in recorte
+        assert d["github"]["prds"] == [10] and d["fases"]["issues"][11]["fase"] == "pr_aberto"
+
+
+def test_recorte_sem_prd_e_sem_pr_aberto_so_pergunta_os_prs_abertos(monkeypatch, tmp_path):
     chamadas = _montar(monkeypatch, tmp_path)
     d = collect.collect_recorte(tmp_path, [])
-    assert d["github"]["issues"] == [] and not [c for c in chamadas if c[0] == "gh"]
+    gh = [c for c in chamadas if c[0] == "gh"]
+    assert d["github"]["issues"] == [] and len(gh) == 1 and "pullRequests(states:OPEN" in " ".join(gh[0])
