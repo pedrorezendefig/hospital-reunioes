@@ -40,8 +40,14 @@ __all__ = [
     "DecisaoRecusadaError",
     "TemaNaoEncontradoError",
     "acao_decidida",
+    "acompanhar_marcacao",
+    "csv_do_cadastro",
     "decidir_tema",
     "fila_de_validacao",
+    "leitura_da_observacao",
+    "linhas_do_retorno",
+    "respostas_da_conta",
+    "temas_da_observacao",
     "temas_das_linhas_validar",
 ]
 
@@ -93,11 +99,16 @@ def _tema_aberto(
 ) -> dict:
     """O tema aberto da chave, ou um novo. Quem chama segura a trava.
 
-    A chave tem coluna nula (o Bloqueado não tem operadora; a observação sem
-    regra citada não tem regra): a comparação é aqui, sobre os abertos do tipo."""
+    A chave pode ter coluna nula (o Bloqueado não tem operadora; a observação
+    sem regra citada não tem regra): o banco filtra as preenchidas, e o nulo é
+    conferido aqui."""
     chave = {"operadora_id": operadora_id, "regra_codigo": regra_codigo, "codigo_item": codigo_item}
-    abertos = supabase.table("cm_validacao_tema").select("*").eq("tipo", tipo).eq("estado", ABERTO).execute().data
-    achado = next((t for t in abertos or [] if all(t.get(c) == v for c, v in chave.items())), None)
+    consulta = supabase.table("cm_validacao_tema").select("*").eq("tipo", tipo).eq("estado", ABERTO)
+    for coluna, valor in chave.items():
+        if valor is not None:
+            consulta = consulta.eq(coluna, valor)
+    abertos = consulta.execute().data or []
+    achado = next((t for t in abertos if all(t.get(c) == v for c, v in chave.items())), None)
     if achado:
         return achado
     return supabase.table("cm_validacao_tema").insert({"tipo": tipo, "titulo": titulo, **chave}).execute().data[0]
@@ -242,26 +253,24 @@ def _temas_do_dicionario(supabase) -> None:
     A proposta nasce fora daqui (a pergunta curta do dicionário): a fila abre o
     tema que falta ao ser lida. O tema decidido também conta, para o termo
     rejeitado não voltar."""
-    propostas = (
-        supabase.table("cm_item_dicionario")
-        .select("id, termo, origem, situacao")
-        .eq("origem", "IA")
-        .eq("situacao", "PROPOSTO")
-        .execute()
-        .data
-        or []
+    propostas = ler_tudo(
+        lambda: (
+            supabase.table("cm_item_dicionario")
+            .select("id, termo, origem, situacao")
+            .eq("origem", "IA")
+            .eq("situacao", "PROPOSTO")
+            .order("id")
+        ),
+        rotulo="propostas do dicionário",
     )
     if not propostas:
         return
     with _trava_dos_temas:
         com_tema = {
             t.get("item_dicionario_id")
-            for t in supabase.table("cm_validacao_tema")
-            .select("item_dicionario_id")
-            .eq("tipo", DICIONARIO)
-            .execute()
-            .data
-            or []
+            for t in _em_lotes(
+                supabase, "cm_validacao_tema", "item_dicionario_id", [p["id"] for p in propostas], "temas do dicionário"
+            )
         }
         novas = [
             {"tipo": DICIONARIO, "titulo": f"Termo {p['termo']} no dicionário", "item_dicionario_id": p["id"]}
@@ -276,7 +285,9 @@ def fila_de_validacao(supabase) -> dict[str, Any]:
     """Os temas abertos como a tela mostra, do maior R$ em jogo para o menor,
     e os três números do topo: aguardando decisão, contas afetadas e R$ em jogo."""
     _temas_do_dicionario(supabase)
-    temas = supabase.table("cm_validacao_tema").select("*").eq("estado", ABERTO).order("criado_em").execute().data or []
+    temas = ler_tudo(
+        lambda: supabase.table("cm_validacao_tema").select("*").eq("estado", ABERTO).order("id"), rotulo="temas abertos"
+    )
     termos = {
         t["id"]: t
         for t in _em_lotes(
