@@ -31,11 +31,14 @@ from app.services.contas_medicas.guia import (
 router = APIRouter(prefix="/contas-medicas", tags=["contas-medicas"])
 
 _PODE_CORRIGIR = require_permissao_cm("enviar_corrigir_contas")
+_PODE_MEXER_EM_REGRA = require_permissao_cm("regra_contratual_tabelas")
 
 CONCLUIDAS = ("CONCLUIDA", "CONCLUIDA_COM_PENDENCIA")
 # As situações em que o Guia já existe. Antes disso (aguardando arquivo, na
 # fila, processando, erro) não há linha para mostrar.
 COM_GUIA = ("A_FAZER", "EM_CORRECAO", "RETORNO", *CONCLUIDAS)
+# As situações em que "Reanalisar" vale: o Guia pronto e ainda em aberto.
+REANALISAVEIS = ("A_FAZER", "EM_CORRECAO")
 
 
 def _agora() -> str:
@@ -280,6 +283,40 @@ async def concluir_guia(
         "nota_bruta": conta.get("nota_bruta"),
         "proxima_conta_id": _proxima_a_fazer(supabase, conta.get("faturista_id")),
     }
+
+
+@router.post("/contas/{conta_id}/reanalisar")
+@limiter.limit("60/minute")
+async def reanalisar_conta(
+    request: Request,
+    conta_id: UUID,
+    me: dict = Depends(_PODE_MEXER_EM_REGRA),
+    supabase: Client = Depends(get_supabase_client),
+) -> dict:
+    """Reanalisar (issue #1130): a conta A fazer ou Em correção volta para a
+    fila e passa pela análise de novo, com a memória e as tabelas de agora. O
+    reprocesso preserva as linhas que a faturista já marcou e troca as abertas.
+
+    Só para quem mexe em regra contratual e tabelas: é quem sabe que a regra
+    mudou. A faturista da conta continua a mesma.
+    """
+    conta = _primeira(supabase, "cm_conta", "id", str(conta_id))
+    if not conta:
+        raise HTTPException(status_code=404, detail="Conta não encontrada")
+    # Condicional na situação: a conta que mudou entre a leitura e a escrita
+    # (concluída, já na fila) não volta para a análise.
+    devolvida = (
+        supabase.table("cm_conta")
+        .update({"situacao": "NA_FILA", "tentativas": 0, "erro_motivo": None, "processando_desde": None})
+        .eq("id", conta["id"])
+        .in_("situacao", list(REANALISAVEIS))
+        .execute()
+        .data
+        or []
+    )
+    if not devolvida:
+        raise HTTPException(status_code=409, detail="Só a conta A fazer ou Em correção pode ser reanalisada")
+    return {"situacao": "NA_FILA"}
 
 
 def _proxima_a_fazer(supabase: Client, faturista_id: str | None) -> str | None:

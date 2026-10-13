@@ -553,7 +553,7 @@ def _pessoa(pid: str, perfil: str | None) -> dict[str, Any]:
     }
 
 
-PESSOAS = {"faturista": _pessoa("F1", "faturista")}
+PESSOAS = {"faturista": _pessoa("F1", "faturista"), "gestao": _pessoa("G1", "gestao_contas_medicas")}
 
 
 def _regra(codigo: str) -> dict[str, Any]:
@@ -910,6 +910,68 @@ class TestReprocesso:
         assert abertas_depois
         assert abertas_antes.isdisjoint(linha["id"] for linha in abertas_depois)
         assert len(depois) == len(antes) - 1
+
+
+def _reanalisar(banco: _Banco, conta_id: str, quem: str = "gestao"):
+    return _cliente(banco, quem).post(f"/api/contas-medicas/contas/{conta_id}/reanalisar")
+
+
+def _conta_com_uma_linha_feita(banco: _Banco) -> tuple[dict, list[dict], dict]:
+    """A conta analisada, aberta pela faturista, com a linha do pacote Feito."""
+    _enviar(banco, _conta(), _prontuario())
+    _rodar_o_job(banco)
+    (conta,) = banco.tabelas["cm_conta"]
+    antes = _linhas_do_guia(_guia(banco, conta["id"]))
+    pacote = next(linha for linha in antes if linha["codigo"] == "98005497")
+    marcada = _cliente(banco).post(
+        f"/api/contas-medicas/contas/{conta['id']}/guia/linhas/{pacote['id']}/marcacao", json={"estado": "FEITO"}
+    )
+    assert marcada.status_code == 200, marcada.text
+    return conta, antes, pacote
+
+
+class TestReanalisar:
+    """O botão "Reanalisar" (issue #1130): a gestão manda a conta A fazer ou Em
+    correção para a análise de novo, depois de mudar regra ou tabela."""
+
+    def test_reanalisar_reprocessa_e_preserva_as_linhas_marcadas(self):
+        banco = _cenario()
+        conta, antes, pacote = _conta_com_uma_linha_feita(banco)
+        assert banco.conta(conta["id"])["situacao"] == "EM_CORRECAO"
+
+        resposta = _reanalisar(banco, conta["id"])
+
+        assert resposta.status_code == 200, resposta.text
+        assert banco.conta(conta["id"])["situacao"] == "NA_FILA"
+        _rodar_o_job(banco)
+        assert banco.conta(conta["id"])["situacao"] == "A_FAZER"
+        depois = _linhas_do_guia(_guia(banco, conta["id"]))
+        pacotes = [linha for linha in depois if linha["codigo"] == "98005497"]
+        assert [(p["id"], p["estado"], p["marcado_por"]) for p in pacotes] == [(pacote["id"], "FEITO", "F1")]
+        abertas_antes = {linha["id"] for linha in antes if linha["id"] != pacote["id"]}
+        abertas_depois = [linha for linha in depois if linha["estado"] == "ABERTA"]
+        assert len(abertas_depois) == len(abertas_antes)
+        assert abertas_antes.isdisjoint(linha["id"] for linha in abertas_depois)
+
+    def test_sem_a_permissao_de_regra_contratual_e_tabelas_recebe_403(self):
+        banco = _cenario()
+        conta, _, _ = _conta_com_uma_linha_feita(banco)
+
+        resposta = _reanalisar(banco, conta["id"], quem="faturista")
+
+        assert resposta.status_code == 403
+        assert banco.conta(conta["id"])["situacao"] == "EM_CORRECAO"
+
+    @pytest.mark.parametrize("situacao", ["NA_FILA", "PROCESSANDO", "ERRO", "CONCLUIDA"])
+    def test_so_reanalisa_conta_a_fazer_ou_em_correcao(self, situacao):
+        banco = _cenario()
+        conta, _, _ = _conta_com_uma_linha_feita(banco)
+        banco.conta(conta["id"])["situacao"] = situacao
+
+        resposta = _reanalisar(banco, conta["id"])
+
+        assert resposta.status_code == 409
+        assert banco.conta(conta["id"])["situacao"] == situacao
 
 
 # ═══════════════════════════════════════════════════════════════════════════
