@@ -89,6 +89,45 @@ def _regras_da_versao(supabase, versao_id: str) -> list[dict[str, Any]]:
     )
 
 
+def _irmas(supabase, operadora_id: str, modelo_id: str) -> list[dict[str, Any]]:
+    """Cada outra operadora com a irmã da regra (o mesmo `modelo_id`) na memória
+    vigente: a operadora, a versão vigente, as regras dela e as irmãs."""
+    candidatas = (
+        supabase.table("cm_regra")
+        .select("operadora_id, memoria_versao_id, codigo, tipo")
+        .eq("modelo_id", modelo_id)
+        .eq("ativa", True)
+        .execute()
+        .data
+        or []
+    )
+    por_operadora: dict[str, list[dict]] = {}
+    for candidata in candidatas:
+        if candidata["operadora_id"] != operadora_id:
+            por_operadora.setdefault(candidata["operadora_id"], []).append(candidata)
+    if not por_operadora:
+        return []
+    operadoras = (
+        supabase.table("cm_operadora").select("id, sigla").in_("id", sorted(por_operadora)).order("sigla").execute().data
+        or []
+    )
+    irmas = []
+    for operadora in operadoras:
+        vigente = _vigente(supabase, operadora["id"])
+        # A irmã de uma versão antiga não conta: a regra é a da memória em uso.
+        da_vigente = [c for c in por_operadora[operadora["id"]] if vigente and c["memoria_versao_id"] == vigente["id"]]
+        if da_vigente:
+            irmas.append(
+                {
+                    "operadora": operadora,
+                    "vigente": vigente,
+                    "regras": _regras_da_versao(supabase, vigente["id"]),
+                    "irmas": da_vigente,
+                }
+            )
+    return irmas
+
+
 def _gravar_versao(
     supabase,
     operadora_id: str,
@@ -176,10 +215,14 @@ def mudar_regra(
     decidir: bool,
     autor_id: str | None,
     permissoes: list[str],
+    aplicar_a_todas: bool = False,
 ) -> dict[str, Any]:
     """Edita a regra vigente (ou decide a pendente, que vira vigente) numa versão nova da memória.
 
-    Quem muda passa a ser quem validou, com a data de agora.
+    Quem muda passa a ser quem validou, com a data de agora. Com
+    `aplicar_a_todas`, a regra que veio do Modelo HSM muda também em cada
+    operadora que tem a irmã dela (o mesmo `modelo_id`) na memória vigente,
+    uma versão nova por operadora.
     """
     sigla = sigla.strip().upper()
     operadoras = supabase.table("cm_operadora").select("id, sigla").eq("sigla", sigla).execute().data or []
@@ -204,7 +247,9 @@ def mudar_regra(
     if not decidir and alvo["status"] != "VIGENTE":
         raise MudancaRecusadaError(f"A regra {codigo} está pendente: decida em vez de editar.")
 
-    faltam = {permissao_do_tipo(t) for t in (alvo.get("tipo"), tipo)} - set(permissoes)
+    irmas = _irmas(supabase, operadora_id, alvo["modelo_id"]) if aplicar_a_todas and alvo.get("modelo_id") else []
+    tipos = {alvo.get("tipo"), tipo, *(r.get("tipo") for irma in irmas for r in irma["irmas"])}
+    faltam = {permissao_do_tipo(t) for t in tipos} - set(permissoes)
     if faltam:
         raise SemPermissaoNaRegraError("Sem permissão para mudar este tipo de regra.")
 
@@ -219,4 +264,17 @@ def mudar_regra(
         campos["status"] = "VIGENTE"
     resumo = f"{codigo} {'decidida (vigente)' if decidir else 'editada'}"
     nova = _gravar_versao(supabase, operadora_id, vigente, regras, {codigo: campos}, autor_id, resumo)
-    return {"operadora": sigla, "versao": nova["versao"], "regra": codigo}
+    outras = []
+    for irma in irmas:
+        codigos = [r["codigo"] for r in irma["irmas"]]
+        versao_irma = _gravar_versao(
+            supabase,
+            irma["operadora"]["id"],
+            irma["vigente"],
+            irma["regras"],
+            dict.fromkeys(codigos, campos),
+            autor_id,
+            f"{', '.join(codigos)} editada (aplicada a todas a partir de {codigo})",
+        )
+        outras.append({"operadora": irma["operadora"]["sigla"], "versao": versao_irma["versao"]})
+    return {"operadora": sigla, "versao": nova["versao"], "regra": codigo, "outras_operadoras": outras}

@@ -38,7 +38,9 @@ class RegraDecidida(BaseModel):
 
 
 class RegraEditada(RegraDecidida):
-    pass
+    """Com `aplicar_a_todas`, a regra do Modelo HSM muda em cada operadora que a tem."""
+
+    aplicar_a_todas: bool = False
 
 
 def _gravar_mudanca(supabase, me: dict, sigla: str, codigo: str, corpo: RegraDecidida, *, decidir: bool) -> dict:
@@ -53,6 +55,7 @@ def _gravar_mudanca(supabase, me: dict, sigla: str, codigo: str, corpo: RegraDec
             decidir=decidir,
             autor_id=me.get("id"),
             permissoes=me.get("permissoes_cm") or [],
+            aplicar_a_todas=getattr(corpo, "aplicar_a_todas", False),
         )
     except RegraNaoEncontradaError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from None

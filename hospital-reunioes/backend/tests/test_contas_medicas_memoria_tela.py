@@ -235,3 +235,59 @@ class TestDecidirPendente:
         assert cliente.post(_regra("ALFA", "ALFA-DIA-01") + "/decisao", json=corpo).status_code == 409
         assert cliente.put(_regra("ALFA", "ALFA-DIA-02"), json=corpo).status_code == 409
         assert _versoes(banco, "ALFA") == {"1.0": True}
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 3. "Aplicar a todas as operadoras que têm esta regra"
+# ═══════════════════════════════════════════════════════════════════════════
+
+PRI_01_NOVA = "Identificar sempre pelo número do atendimento e pela data de entrada, nunca pelo número da conta."
+
+
+def _com_modelo(banco: _Banco, codigo: str, modelo_id: str) -> None:
+    """A regra que veio do Modelo HSM: a carga ainda não lê `modelo_id` do arquivo."""
+    for regra in banco.linhas("cm_regra"):
+        if regra["codigo"] == codigo:
+            regra["modelo_id"] = modelo_id
+
+
+class TestAplicarATodas:
+    def test_diretriz_geral_gera_uma_versao_em_cada_operadora_com_o_mesmo_modelo_e_nenhuma_nas_outras(self):
+        cliente, banco = _cliente(GESTAO)
+        for arquivo in ("MEMORIA-ALFA-v1.0.md", "MEMORIA-BETA-v1.0.md", "MEMORIA-GAMA-v2.0.md"):
+            _importar(cliente, arquivo)
+        _com_modelo(banco, "ALFA-PRI-01", "HSM-PRI-01")
+        _com_modelo(banco, "GAMA-PRI-01", "HSM-PRI-01")
+        _com_modelo(banco, "BETA-INS-00", "HSM-INS-00")
+
+        resposta = cliente.put(
+            _regra("ALFA", "ALFA-PRI-01"),
+            json={"texto": PRI_01_NOVA, "tipo": "OPERACIONAL", "origem": "PRÁTICA", "aplicar_a_todas": True},
+        )
+
+        assert resposta.status_code == 200, resposta.text
+        assert resposta.json()["outras_operadoras"] == [{"operadora": "GAMA", "versao": "2.1"}]
+        assert _versoes(banco, "ALFA") == {"1.0": False, "1.1": True}
+        assert _versoes(banco, "GAMA") == {"2.0": False, "2.1": True}
+        assert _versoes(banco, "BETA") == {"1.0": True}
+
+        gama = {r["codigo"]: r for r in memoria_vigente(banco, _operadora_id(banco, "GAMA"))["regras"]}
+        assert gama["GAMA-PRI-01"]["texto"] == PRI_01_NOVA
+        assert len(gama) == 4, "a versão da GAMA leva as regras dela, e não as da ALFA"
+        assert gama["GAMA-DIA-01"]["texto"] == "A diária vence às 10h e é sempre integral."
+        assert {h["texto_novo"] for h in banco.linhas("cm_regra_historico")} == {PRI_01_NOVA}
+        assert len(banco.linhas("cm_regra_historico")) == 2
+
+    def test_sem_aplicar_a_todas_so_a_operadora_editada_muda(self):
+        cliente, banco = _cliente(GESTAO)
+        for arquivo in ("MEMORIA-ALFA-v1.0.md", "MEMORIA-GAMA-v2.0.md"):
+            _importar(cliente, arquivo)
+        _com_modelo(banco, "ALFA-PRI-01", "HSM-PRI-01")
+        _com_modelo(banco, "GAMA-PRI-01", "HSM-PRI-01")
+
+        resposta = cliente.put(
+            _regra("ALFA", "ALFA-PRI-01"), json={"texto": PRI_01_NOVA, "tipo": "OPERACIONAL", "origem": "PRÁTICA"}
+        )
+
+        assert resposta.json()["outras_operadoras"] == []
+        assert _versoes(banco, "GAMA") == {"2.0": True}
