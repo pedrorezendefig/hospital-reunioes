@@ -1,7 +1,7 @@
 ---
 title: Corrigir uma conta pelo guia
 description: Corrigir no MV o que o guia aponta, marcar cada linha e concluir a conta.
-prd: [1113]
+prd: [1113, 1128]
 draft: true
 papel: [Faturista]
 video: corrigir-uma-conta-pelo-guia
@@ -42,6 +42,19 @@ ele cabe em meia tela.
    gestão de contas médicas**, ela vai junto.
 
    ![Rodapé do guia com a observação e o botão Concluir e abrir a próxima](../../../assets/contas-medicas/guia-concluir.png)
+
+## Quando a linha pede conferência
+
+- **SE NECESSÁRIO · SEM REGISTRO NO MV**: o remédio "se necessário" não tem
+  registro de uso no prontuário. Confira a checagem em papel. Sem uso, clique
+  em **Não procede**: o motivo já vem escolhido.
+
+  ![Linha se necessário com a etiqueta amarela e o texto para conferir](../../../assets/contas-medicas/guia-se-necessario.png)
+
+- **conferir evidência**: o trecho citado não foi achado na página. Abra **Ver
+  evidência** e confira no prontuário antes de marcar.
+- **Conferir classe de UTI**, no fim do texto da linha: a classe da diária
+  saiu do que o prontuário registra no dia. Confira antes de lançar.
 
 ## Se der errado
 
