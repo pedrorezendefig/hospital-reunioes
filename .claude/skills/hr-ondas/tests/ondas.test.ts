@@ -1,7 +1,7 @@
 import { expect, mock, test } from 'claude-code/testing'
 
 import {
-  alvo, atividadeDaSessao, corDaDuracao, detalhe, duracaoDaOnda, etapas, pendentes, prdsVisiveis, rotuloDoShell,
+  alvo, assinatura, atividadeDaSessao, corDaDuracao, detalhe, duracaoDaOnda, etapas, pendentes, prdsVisiveis, rotuloDoShell,
   situacaoDaOnda, subidaDoPr,
 } from '../hooks/register'
 import type { Coleta, SubAgente } from '../types'
@@ -210,4 +210,39 @@ test('Hospital OS sem resposta: o painel guarda o último retrato e avisa a idad
   expect(await pane.find({ text: /Hospital OS sem resposta, PRDs de há 3 min/ })).toBeTruthy()
   expect(await pane.find({ text: /PRD #1128/ })).toBeTruthy()
   expect(await pane.find({ text: /fora do ar/ })).toBeUndefined()
+})
+
+test('assinatura muda quando agente termina, subida fecha ou migration chega; não muda com o shell', () => {
+  const base = { agentes: [{ nome: 'onda-x', status: 'busy', estado: null, inicio: 0 }], subAgentes: AGENTES, subidas: [], migrations: [] }
+  const a = assinatura(base)
+  expect(assinatura({ ...base, agentes: [{ ...base.agentes[0]!, shell: { descricao: 'x', comando: 'ls', inicio: 1 } }] })).toBe(a)
+  expect(assinatura({ ...base, subAgentes: AGENTES.map(x => ({ ...x, terminou: true })) })).not.toBe(a)
+  expect(assinatura({ ...base, subidas: [{ sessao: 'onda-x', prs: [1], inicio: 0, fim: 5 }] })).not.toBe(a)
+  expect(assinatura({ ...base, agentes: [{ ...base.agentes[0]!, status: 'idle' }] })).not.toBe(a)
+})
+
+test('relógio coleta sem ir ao GitHub; evento do workflow pede coleta fresca uma vez', async ($, on) => {
+  const chamadas: string[][] = []
+  let terminou = false
+  const relogio = mock.clock(on, { now: AGORA })
+  on('process.run', (_$: any, e: any) => {
+    chamadas.push([...e.argv])
+    const subAgentes = [{ ...AGENTES[1]!, terminou }]
+    return { value: { exitCode: 0, stdout: JSON.stringify({ ...COLETA, subAgentes }), stderr: '' } }
+  })
+  on('command.register', () => ({ value: undefined }))
+  on('ui.open', () => ({ value: { isPlaced: true } }))
+  on('ui.toast', () => ({ value: undefined }))
+  on('ui.status', () => ({ value: undefined }))
+  on('session.start', () => ({ cwd: '/repo' }))
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: false })
+  await relogio.advance(10_001)
+  const frescas = () => chamadas.filter(c => JSON.stringify(c).includes('--fresco')).length
+  expect(chamadas.length).toBe(2)
+  expect(frescas()).toBe(0)
+  terminou = true // o revisor terminou: evento
+  await relogio.advance(10_000)
+  expect(frescas()).toBe(1)
+  await relogio.advance(10_000) // nada mudou de novo
+  expect(frescas()).toBe(1)
 })
