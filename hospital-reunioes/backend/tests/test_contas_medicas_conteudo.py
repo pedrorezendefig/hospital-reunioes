@@ -185,6 +185,238 @@ def test_o_mesmo_item_em_tres_dias_vira_um_registro_com_as_doses_de_cada_dia_e_o
     assert registros["CLEXANE 40MG/0,4ML SER PREENCH"].doses_por_dia == {date(2026, 10, 3): 1, date(2026, 10, 5): 1}
 
 
+# Prescrição lida pela posição das colunas (#1133): o PDF sintético é o texto do
+# layout do MV numa fonte de largura fixa, então cada coluna do cabeçalho cai num x
+# conhecido. O nome longo termina um espaço antes da coluna da dose: o `-layout`
+# devolve um espaço só entre os dois, e o leitor por linha cola a dose no nome.
+# Nada garante que o PDF do MV use fonte de largura fixa: os testes de "não muda o
+# que já lia" rodam também em fonte proporcional, em que o x não é a coluna do texto.
+FONTES = pytest.mark.parametrize("fonte", ["monospace", "Helvetica"])
+SORO_LONGO = "SORO FISIOLOGICO 0,9% 500ML SIST FECHAD"
+SORO_ENCOSTADO = f" 3 {SORO_LONGO} 1 FRASCO/AM               6HS/6HS      S     EV    . 06 . 12 . 18 . 24"
+
+
+def _pdf_de_largura_fixa(paginas: list[str], fonte: str = "monospace") -> bytes:
+    from html import escape
+
+    from weasyprint import HTML
+
+    corpo = "".join(
+        f'<pre style="font: 7pt {fonte}; margin: 0; page-break-after: always">{escape(texto)}</pre>'
+        for texto in paginas
+    )
+    pagina = "<style>@page { margin: 20pt }</style>"
+    return HTML(string=f"<html><head>{pagina}</head><body>{corpo}</body></html>").write_pdf()
+
+
+def _ler_o_pdf(
+    paginas: list[str], *, por_coluna: bool, tirar_das_palavras: frozenset[str] = frozenset(), fonte: str = "monospace"
+):
+    from app.services.contas_medicas_extrator import extrair_paginas, extrair_palavras
+
+    pdf = _pdf_de_largura_fixa(paginas, fonte)
+    textos = [pagina.texto for pagina in extrair_paginas(pdf)]
+    estrutura = ler_prontuario(textos, ATENDIMENTO)
+    palavras = None
+    if por_coluna:
+        palavras = {
+            n: [p for p in lidas if p.texto not in tirar_das_palavras]
+            for n, lidas in extrair_palavras(pdf, range(1, len(textos) + 1)).items()
+        }
+    return ler_conteudo(textos, estrutura, palavras)
+
+
+def test_nome_longo_que_encosta_na_dose_sai_com_dose_unidade_frequencia_sn_e_via_lidas_pela_coluna():
+    assert SORO_ENCOSTADO.index("1 FRASCO") == CABECALHO_DA_TABELA.index("Dose Padrão")
+    paginas = montar(prescricao(3, CLEXANE, SORO_ENCOSTADO))
+
+    (por_linha,) = _ler_o_pdf(paginas, por_coluna=False).prescricoes
+    (por_coluna,) = _ler_o_pdf(paginas, por_coluna=True).prescricoes
+
+    # o leitor por linha erra: a dose entra no nome e some da coluna
+    soro_por_linha = next(i for i in por_linha.itens if i.numero == 3)
+    assert (soro_por_linha.nome, soro_por_linha.dose) == (f"{SORO_LONGO} 1 FRASCO/AM", None)
+
+    soro = next(i for i in por_coluna.itens if i.numero == 3)
+    assert soro.nome == SORO_LONGO
+    assert soro.dose == "1 FRASCO/AM"
+    assert soro.frequencia == "6HS/6HS"
+    assert (soro.se_necessario, soro.via) == (True, "EV")
+    assert soro.horarios == ("06", "12", "18", "24")
+    # o item que o leitor por linha já lia continua igual
+    clexane = next(i for i in por_coluna.itens if i.numero == 2)
+    assert (clexane.nome, clexane.dose, clexane.frequencia, clexane.via, clexane.horarios) == (
+        "CLEXANE 40MG/0,4ML SER PREENCH",
+        "1 SERINGA",
+        "24HS/24HS",
+        "SC",
+        ("22",),
+    )
+
+
+@FONTES
+def test_a_prescricao_inteira_lida_pela_coluna_sai_igual_a_lida_por_linha(fonte):
+    """Seções, continuação do nome, observação, componente, suspenso, preparo do exame e
+    quem assina: a remontagem pela coluna não muda nada do que o leitor por linha já lia.
+    A referência é a leitura por linha em fonte de largura fixa, a que acerta os 9 itens:
+    em fonte proporcional o `-layout` também cola a dose no nome do PANTOCAL."""
+    paginas = montar("prontuario/capa", "conteudo/prescricao")
+
+    (por_linha,) = _ler_o_pdf(paginas, por_coluna=False).prescricoes
+    (por_coluna,) = _ler_o_pdf(paginas, por_coluna=True, fonte=fonte).prescricoes
+
+    assert len(por_coluna.itens) == 9
+    assert por_coluna.itens == por_linha.itens
+
+
+def test_pagina_sem_o_cabecalho_de_colunas_cai_no_leitor_por_linha_com_o_mesmo_resultado():
+    # As palavras chegam, mas a linha de cabeçalho não está entre elas: não há x de coluna.
+    paginas = montar("conteudo/prescricao")
+    sem_cabecalho = frozenset({"Dose", "Padrão", "Duração", "Frequência", "SN", "Apl", "Datas/Horários"})
+
+    (por_linha,) = _ler_o_pdf(paginas, por_coluna=False).prescricoes
+    (sem_colunas,) = _ler_o_pdf(paginas, por_coluna=True, tirar_das_palavras=sem_cabecalho).prescricoes
+
+    assert len(sem_colunas.itens) == 9
+    assert sem_colunas.itens == por_linha.itens
+
+
+def test_a_consolidacao_por_item_e_dia_lida_pela_coluna_junta_o_nome_longo_dos_tres_dias():
+    paginas = montar(
+        prescricao(3, CEFTRIAXONA.format("D2/10", "12HS/12HS          EV"), SORO_ENCOSTADO),
+        prescricao(4, CEFTRIAXONA.format("D3/10", "12HS/12HS          EV    . 08 . 20"), CLEXANE_SUSPENSO),
+        prescricao(5, CEFTRIAXONA.format("D4/10", "24HS/24HS          EV    . 10"), SORO_ENCOSTADO),
+    )
+
+    registros = {r.nome: r for r in _ler_o_pdf(paginas, por_coluna=True).prescricao_consolidada}
+
+    assert sorted(registros) == ["CEFTRIAXONA 1G FR/AMP", SORO_LONGO]
+    assert registros["CEFTRIAXONA 1G FR/AMP"].doses_por_dia == {
+        date(2026, 10, 3): 2,
+        date(2026, 10, 4): 2,
+        date(2026, 10, 5): 1,
+    }
+    soro = registros[SORO_LONGO]
+    assert soro.doses_por_dia == {date(2026, 10, 3): 4, date(2026, 10, 5): 4}
+    assert (soro.se_necessario, soro.paginas) == (True, (1, 3))
+
+
+# A prescrição no x em que o MV a desenha, medido com o mesmo `extract_words` em dois
+# prontuários reais (952 e 372 páginas, Helvetica): 128 cabeçalhos com uma única
+# variação de x. Só coordenadas e tamanhos de fonte, nenhum dado de paciente. No MV a
+# quantidade da dose sai alinhada à direita, bem depois do x de "Dose", e o nome do
+# item pode terminar depois desse x: o que decide a coluna é onde a palavra começa.
+# O cabeçalho também não fica numa linha só: medido nas 213 páginas de prescrição dos
+# dois prontuários, o topo de cada palavra relativo ao de "Dose" é sempre o mesmo:
+# seção e "Datas/Horários" 1,83 pt acima, "Duração" a "Apl" 0,5 pt abaixo, e os
+# rótulos da quantidade em duas linhas, "Qtde Prescrita" 6,5 pt acima e "Qtd Unidade"
+# 3,0 pt abaixo. No item, o número fica 0,4 pt abaixo do nome e a frequência 0,39 acima.
+# (x, tamanho, texto, deslocamento da linha de base em pontos, para baixo)
+CABECALHO_NO_X_DO_MV = [
+    (245.1, 7, "Qtde Prescrita", -6.5),
+    (31.0, 8, "MEDICAMENTOS NORMAIS", -1.04),
+    (181.1, 7, "Dose Padrão", 0),
+    (235.9, 7, "Qtd Unidade", 3.0),
+    (321.8, 7, "Duração", 0.5),
+    (362.5, 7, "Frequência", 0.5),
+    (407.1, 7, "SN", 0.5),
+    (430.9, 7, "Apl", 0.5),
+    (457.0, 8, "Datas/Horários", -1.04),
+]
+# O topo medido no MV, relativo ao de "Dose", que o PDF de teste tem que reproduzir.
+TOPO_DO_CABECALHO_NO_MV = {
+    "Qtde": -6.5,
+    "MEDICAMENTOS": -1.83,
+    "Padrão": 0,
+    "Qtd": 3.0,
+    "Duração": 0.5,
+    "Frequência": 0.5,
+    "SN": 0.5,
+    "Apl": 0.5,
+    "Datas/Horários": -1.83,
+}
+NOME_QUE_PASSA_DO_X_DA_DOSE = "SORO FISIOLOGICO 0,9% 500ML SISTEMA"
+ITEM_NO_X_DO_MV = [
+    (35.8, 8, "3", 0.4),
+    (47.0, 8, NOME_QUE_PASSA_DO_X_DA_DOSE, 0),
+    (239.3, 8, "1", 0),
+    (252.2, 8, "FRASCO/AM", 0),
+    (360.9, 8, "6HS/6HS", -0.39),
+    (409.3, 8, "S", 0),
+    (430.7, 8, "EV", 0),
+    (462.2, 8, ". 06 . 12 . 18 . 24", 0),
+]
+
+
+def _pdf_no_x_do_mv(linhas: list[str | list[tuple[float, int, str, float]]]) -> bytes:
+    """Uma página A4 escrita à mão na Helvetica das 14 fontes padrão do PDF, sem fonte
+    embutida como no MV: as larguras são as mesmas em qualquer máquina. A linha que é
+    lista sai em cada x dado, com a linha de base deslocada para baixo pelo quarto
+    valor; a de texto sai com cada trecho separado por dois espaços ou mais num x
+    proporcional à coluna do texto."""
+    import re
+
+    def escrito(texto: str) -> bytes:
+        return texto.encode("cp1252").replace(b"\\", b"\\\\").replace(b"(", b"\\(").replace(b")", b"\\)")
+
+    conteudo = b""
+    for i, linha in enumerate(linhas):
+        if isinstance(linha, str):
+            linha = [(31.0 + 5.5 * m.start(), 8, m.group(), 0) for m in re.finditer(r"\S+(?: \S+)*", linha)]
+        for x, tamanho, texto, abaixo in linha:
+            base = 800 - 12 * i - abaixo
+            conteudo += b"BT /F1 %d Tf %.1f %.2f Td (%s) Tj ET\n" % (tamanho, x, base, escrito(texto))
+    objetos = [
+        b"<< /Type /Catalog /Pages 2 0 R >>",
+        b"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+        b"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842]"
+        b" /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>",
+        b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>",
+        b"<< /Length %d >>\nstream\n%s\nendstream" % (len(conteudo), conteudo),
+    ]
+    pdf, posicoes = b"%PDF-1.4\n", []
+    for n, objeto in enumerate(objetos, start=1):
+        posicoes.append(len(pdf))
+        pdf += b"%d 0 obj\n%s\nendobj\n" % (n, objeto)
+    xref = len(pdf)
+    pdf += b"xref\n0 %d\n0000000000 65535 f \n" % (len(objetos) + 1)
+    pdf += b"".join(b"%010d 00000 n \n" % p for p in posicoes)
+    pdf += b"trailer\n<< /Size %d /Root 1 0 R >>\nstartxref\n%d\n%%%%EOF\n" % (len(objetos) + 1, xref)
+    return pdf
+
+
+def test_nome_que_passa_do_x_da_dose_no_layout_real_do_mv_nao_invade_a_dose():
+    from app.services.contas_medicas.prescricao import texto_por_coluna
+    from app.services.contas_medicas_extrator import extrair_paginas, extrair_palavras
+
+    (pagina,) = montar(prescricao(3, "<item>"))
+    linhas = [
+        CABECALHO_NO_X_DO_MV if linha == CABECALHO_DA_TABELA else ITEM_NO_X_DO_MV if linha == "<item>" else linha
+        for linha in pagina.split("\n")
+    ]
+    pdf = _pdf_no_x_do_mv(linhas)
+    textos = [p.texto for p in extrair_paginas(pdf)]
+    palavras = extrair_palavras(pdf, [1])
+    # o cabeçalho do PDF tem os topos desencontrados que o MV desenha
+    dose = next(p for p in palavras[1] if p.texto == "Dose")
+    topos = {p.texto: round(p.topo - dose.topo, 2) for p in palavras[1] if p.texto in TOPO_DO_CABECALHO_NO_MV}
+    assert topos == pytest.approx(TOPO_DO_CABECALHO_NO_MV, abs=0.01)
+    # o caso existe no PDF: a última palavra do nome começa antes do x de "Dose" e termina depois
+    ultima_do_nome = next(p for p in palavras[1] if p.texto == "SISTEMA")
+    assert ultima_do_nome.x0 < 181.1 < ultima_do_nome.x1
+    # e a página é lida pela coluna, não pelo leitor por linha
+    assert texto_por_coluna(palavras[1]) is not None
+
+    (lida,) = ler_conteudo(textos, ler_prontuario(textos, ATENDIMENTO), palavras).prescricoes
+
+    (soro,) = lida.itens
+    assert (soro.numero, soro.nome) == (3, NOME_QUE_PASSA_DO_X_DA_DOSE)
+    assert soro.dose == "1 FRASCO/AM"
+    assert soro.frequencia == "6HS/6HS"
+    assert (soro.se_necessario, soro.via) == (True, "EV")
+    assert soro.horarios == ("06", "12", "18", "24")
+
+
 # ----------------------------------------------------------------------------------
 # Balanço hídrico e glicemias
 # ----------------------------------------------------------------------------------
@@ -381,9 +613,20 @@ def test_guia_tiss_devolve_o_procedimento_solicitado_e_a_acomodacao_autorizada()
 MODULOS = Path(__file__).parents[1] / "app" / "services" / "contas_medicas"
 
 
-@pytest.mark.parametrize("arquivo", ["conteudo.py", "prescricao.py", "cirurgia.py"])
+@pytest.mark.parametrize(
+    "arquivo",
+    [
+        MODULOS / "conteudo.py",
+        MODULOS / "prescricao.py",
+        MODULOS / "cirurgia.py",
+        MODULOS.parent / "contas_medicas_extrator.py",
+        MODULOS.parent / "contas_medicas_extrator_filho.py",
+        Path(__file__),
+    ],
+    ids=lambda a: a.name,
+)
 def test_sem_travessao_nem_meia_risca_no_codigo(arquivo):
-    texto = (MODULOS / arquivo).read_text(encoding="utf-8")
+    texto = arquivo.read_text(encoding="utf-8")
 
     assert chr(0x2014) not in texto
     assert chr(0x2013) not in texto
