@@ -2,6 +2,54 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-10-13T02:17:25-03:00",
+      "sha": "2a6fdd1b9795cdeaaab34d43344f12740d0b6bb7",
+      "app_version": "0.185.0",
+      "subject": "Onda onda-ia-onda2: Reenvio da conta corrigida e nota de saída",
+      "raw_subject": "chore(deploy): registro da onda onda-ia-onda2 (#1170)",
+      "scope": [
+        "backend",
+        "frontend"
+      ],
+      "prds": [
+        1128
+      ],
+      "result": "healthy",
+      "duration_seconds": 202,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        },
+        {
+          "service": "frontend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "onda-enxuta onda-ia-onda2: PR #1170 (issue #1136), mergeados PR a PR. Merge pela API do GitHub, um build. Registro pela Action pos-merge depois do health.",
+      "etapas": {
+        "merge_s": 2,
+        "build_s": {
+          "backend": 20,
+          "frontend": 182
+        },
+        "health_s": 0
+      },
+      "responsavel": "pedrorezendefig"
+    },
+    {
       "at": "2026-10-13T02:03:58-03:00",
       "sha": "2e26581007ad80d5b3dbb4cf8828ad29b84899a4",
       "app_version": "0.184.0",
