@@ -1126,6 +1126,35 @@ class TestExames:
         }
         assert len(resultado.linhas) == 2
 
+    def test_pedido_da_parcial_anterior_repetido_na_prescricao_do_dia_seguinte_nao_vira_incluir(self):
+        exames = [
+            ExamePedido("HEMOGRAMA COMPLETO", "3014", dia(2), 30),
+            ExamePedido("HEMOGRAMA COMPLETO", "3014", dia(3), 31),
+        ]
+        conta = _conta(inicio=dia(3), fim=dia(6))
+
+        resultado = conferir(conta, _prontuario(exames=exames), _memoria(), _tabela({}), dicionario={})
+
+        assert _linhas(resultado, "INCLUIR") == []
+
+    def test_dois_pedidos_do_mesmo_exame_no_mesmo_dia_sem_lancamento_viram_incluir_2_com_os_dois_pedidos(self):
+        exames = [
+            ExamePedido("GASOMETRIA ARTERIAL", "4001", dia(3), 40),
+            ExamePedido("GASOMETRIA ARTERIAL", "4002", dia(3), 40),
+            ExamePedido("GASOMETRIA ARTERIAL", "4003", dia(3), 40),
+            ExamePedido("GASOMETRIA ARTERIAL", "4004", dia(3), 40),
+        ]
+        conta = _conta(_item(GASOMETRIA, "GASOMETRIA ARTERIAL", dia(3), 2, 30.00, grupo="EXAMES", pagina=7))
+
+        resultado = conferir(conta, _prontuario(exames=exames), _memoria(), _tabela({}), dicionario={})
+
+        [incluir] = _linhas(resultado, "INCLUIR")
+        assert incluir["codigo"] == GASOMETRIA
+        assert incluir["quantidade_devida"] == 2.0
+        assert incluir["valor_diferenca"] == 60.00
+        assert "pedidos 4003, 4004" in incluir["motivo"]
+        assert not resultado.descartadas
+
 
 # ═══════════════════════════════════════════════════════════════════════════
 # 7. Glicemia × fita, lanceta e algodão (conferência 10, ASSIM-INS-18)

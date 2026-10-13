@@ -31,7 +31,7 @@ from app.services.contas_medicas.diarias import ParametrosDiaria, Segmento, cont
 from app.services.contas_medicas.dicionario import _generico, _marca, _norm, casar
 from app.services.contas_medicas.guia import NotaDeEntrada, agrupar_por_dia_e_setor, nota_de_entrada
 from app.services.contas_medicas.memoria import MemoriaLida
-from app.services.contas_medicas.prescricao import ItemPrescrito, Prescricao
+from app.services.contas_medicas.prescricao import ExamePedido, ItemPrescrito, Prescricao
 from app.services.contas_medicas.prontuario import Prontuario
 from app.services.contas_medicas.tabelas import NAO_CONFERIDO, PACOTE
 from app.services.contas_medicas_conta import Conta, ItemConta, coluna_do_plano
@@ -1080,22 +1080,36 @@ def _exames(ctx: _Contexto) -> list[_Linha]:
     vale para cobrar exame (adendo v1.3, item 2)."""
     lancados = [i for i in ctx.conta.itens if i.grupo in _GRUPOS_DE_EXAME]
     restante = {id(i): i.quantidade for i in lancados}
-    vistos: set[tuple[str, str]] = set()
-    linhas = []
+    # O mesmo pedido repetido na prescrição do dia seguinte é um pedido só, e vale
+    # a primeira data: o pedido do último dia da parcial anterior já foi cobrado lá.
+    primeiro: dict[tuple[str, str], ExamePedido] = {}
     for exame in ctx.prontuario.conteudo.exames_pedidos:
-        # O mesmo pedido repetido na prescrição do dia seguinte é um pedido só.
-        if (exame.pedido, _norm(exame.nome)) in vistos or (exame.data and not ctx.no_periodo(exame.data)):
+        chave = (exame.pedido, _norm(exame.nome))
+        atual = primeiro.get(chave)
+        if atual is None or (exame.data and (atual.data is None or exame.data < atual.data)):
+            primeiro[chave] = exame
+    # Pedidos sem lançamento do mesmo código e dia somam numa linha Incluir.
+    faltam: dict[tuple, tuple[str | None, list[ExamePedido]]] = {}
+    for exame in primeiro.values():
+        if exame.data and not ctx.no_periodo(exame.data):
             continue
-        vistos.add((exame.pedido, _norm(exame.nome)))
         mesmos = [i for i in lancados if _mesmo_exame(exame.nome, i, ctx.dicionario)]
         livre = next((i for i in mesmos if restante[id(i)] > 0), None)
         if livre is not None:
             restante[id(livre)] -= 1
             continue
         codigo = mesmos[0].codigo if mesmos else _codigo_no_dicionario(exame.nome, ctx.dicionario)
+        chave = (codigo or _norm(exame.nome), exame.data)
+        faltam.setdefault(chave, (codigo, []))[1].append(exame)
+    linhas = []
+    for codigo, pedidos in faltam.values():
+        exame = pedidos[0]
+        quantidade = Decimal(len(pedidos))
+        numeros = ", ".join(p.pedido for p in pedidos)
+        rotulo = f"pedidos {numeros}" if len(pedidos) > 1 else f"pedido {numeros}"
         data = exame.data or ctx.conta.periodo_inicio
         preco_lancado, preco_tabela, valor, etiqueta = (
-            ctx.valor_de_inclusao("SADT", codigo, data, Decimal(1)) if data else (None, None, None, "")
+            ctx.valor_de_inclusao("SADT", codigo, data, quantidade) if data else (None, None, None, "")
         )
         linhas.append(
             _Linha(
@@ -1105,13 +1119,13 @@ def _exames(ctx: _Contexto) -> list[_Linha]:
                 setor=(ctx.prontuario.conteudo.setor_por_dia.get(exame.data) or (None,))[0] if exame.data else None,
                 codigo=codigo,
                 descricao=exame.nome,
-                motivo=f"Exame solicitado (pedido {exame.pedido}) e sem lançamento na conta.{etiqueta}",
+                motivo=f"Exame solicitado ({rotulo}) e sem lançamento na conta.{etiqueta}",
                 nivel="PRESCRITO",
                 causa="LANCAMENTO_MANUAL",
                 pagina=exame.pagina,
-                trecho=f"{exame.nome} ; Pedido: {exame.pedido}",
+                trecho=" | ".join(f"{p.nome} ; Pedido: {p.pedido}" for p in pedidos),
                 quantidade_lancada=Decimal(0),
-                quantidade_devida=Decimal(1),
+                quantidade_devida=quantidade,
                 preco_lancado=preco_lancado,
                 preco_tabela=preco_tabela,
                 valor=valor,
