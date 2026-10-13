@@ -2,6 +2,51 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-10-13T06:17:33-03:00",
+      "sha": "a41d7c80c5b0d288069f65bea652bbe8ee680ae6",
+      "app_version": "0.193.0",
+      "subject": "Onda onda-ia-onda4: Marcações de caixa e botão e formulário em branco aprendido",
+      "raw_subject": "chore(deploy): registro da onda onda-ia-onda4 (#1165)",
+      "scope": [
+        "backend"
+      ],
+      "prds": [
+        1128
+      ],
+      "result": "healthy",
+      "duration_seconds": 66,
+      "services_touched": [
+        "backend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        },
+        {
+          "service": "frontend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "onda-enxuta onda-ia-onda4: PR #1165 (issue #1132), mergeados PR a PR. Merge pela API do GitHub, um build. Registro pela Action pos-merge depois do health.",
+      "etapas": {
+        "merge_s": 2,
+        "build_s": {
+          "backend": 40
+        },
+        "health_s": 10
+      },
+      "responsavel": "pedrorezendefig"
+    },
+    {
       "at": "2026-10-13T06:05:46-03:00",
       "sha": "e0deddd4182bc2a7236d583efc3e363b295d2c23",
       "app_version": "0.192.0",
