@@ -20,6 +20,7 @@ concorrente.
 
 from __future__ import annotations
 
+import logging
 import os
 import re
 import sys
@@ -1030,3 +1031,76 @@ class TestTempoDasEtapas:
         }
         assert all(isinstance(segundos, float) and segundos >= 0 for segundos in tempos.values())
         assert tempos["total"] >= max(segundos for etapa, segundos in tempos.items() if etapa != "total")
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 9. O log não leva texto de prontuário
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+def _linhas_de_log(caplog) -> list[str]:
+    formatador = logging.Formatter("%(name)s %(levelname)s %(message)s")
+    return [formatador.format(registro) for registro in caplog.records]
+
+
+class TestLogSemProntuario:
+    def test_nenhuma_linha_de_log_tem_texto_do_prontuario_nem_no_erro(self, caplog, monkeypatch):
+        """A exceção que nasce na leitura pode citar o texto que não leu: o log
+        leva o tipo e o lugar, nunca a mensagem dela."""
+        caplog.set_level(logging.DEBUG)
+        leituras = []
+
+        def ler_conteudo_que_cita_o_texto(textos, estrutura):
+            leituras.append(1)
+            if len(leituras) == 2:
+                raise ValueError(f"campo ilegível: {textos[0]}")
+            return ler_conteudo(textos, estrutura)
+
+        monkeypatch.setattr(processamento, "ler_conteudo", ler_conteudo_que_cita_o_texto)
+        banco = _cenario()
+        _enviar(banco, _conta("48811", 2, 4), _conta("48812", 5, 6), _prontuario())
+
+        _rodar_o_job(banco)
+
+        linhas = _linhas_de_log(caplog)
+        assert any("pronta em" in linha for linha in linhas)
+        assert any("falhou na etapa leitura_do_prontuario" in linha and "ValueError" in linha for linha in linhas)
+        assert [linha for linha in linhas if TRECHO_DO_PRONTUARIO in linha] == []
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 10. O job no scheduler
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+class TestJobNoScheduler:
+    def test_o_job_roda_a_cada_10_segundos_uma_instancia_por_vez(self):
+        from apscheduler.triggers.interval import IntervalTrigger
+
+        from app.cron import scheduler as cron
+
+        try:
+            cron.start_scheduler()
+            job = cron.scheduler.get_job("fila_contas_medicas")
+            assert job is not None
+            assert job.func is cron.processar_fila_contas_medicas
+            assert isinstance(job.trigger, IntervalTrigger)
+            assert job.trigger.interval == timedelta(seconds=10)
+            assert job.max_instances == 1
+        finally:
+            cron.stop_scheduler()
+
+    def test_o_job_consome_a_fila_do_banco(self, monkeypatch):
+        from app.cron import scheduler as cron
+
+        banco = _cenario()
+        _enviar(banco, _conta(), _prontuario())
+        monkeypatch.setattr(cron, "_supabase", lambda: banco)
+        entregues = []
+        monkeypatch.setattr(
+            processamento, "alimentar_fila", lambda sb, agora: entregues.append((sb, agora.tzinfo is not None))
+        )
+
+        cron.processar_fila_contas_medicas()
+
+        assert entregues == [(banco, True)]

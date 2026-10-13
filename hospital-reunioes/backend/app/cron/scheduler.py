@@ -37,6 +37,9 @@ Jobs:
  10. expurgar_arquivos_contas_medicas: 04:30 diário, tira do bucket `contas-medicas`
      o PDF e o texto extraído de todo arquivo com `apagar_em` vencido e carimba
      `apagado_em` (issue #1125). Idempotente: o carimbo tira a linha da varredura.
+ 11. processar_fila_contas_medicas: a cada 10 segundos, devolve à fila a conta presa
+     em PROCESSANDO e entrega as contas NA_FILA ao executor de 2 vagas (issue #1124,
+     ADR 0070, decisão 5). O claim é atômico: duas passadas não pegam a mesma conta.
 """
 
 import logging
@@ -320,6 +323,20 @@ def expurgar_arquivos_contas_medicas() -> None:
         )
 
 
+def processar_fila_contas_medicas() -> None:
+    """A fila de Contas médicas (issue #1124, ADR 0070, decisão 5).
+
+    Devolve à fila o que ficou preso em PROCESSANDO e entrega cada conta
+    NA_FILA a uma vaga livre do executor; a análise roda fora do scheduler. Na
+    falha, só o tipo do erro: a mensagem pode citar o texto do prontuário."""
+    from app.services.contas_medicas import processamento
+
+    try:
+        processamento.alimentar_fila(_supabase(), datetime.now(tz=ZoneInfo("UTC")))
+    except Exception as e:
+        logger.error(f"[Cron] Erro em processar_fila_contas_medicas: {type(e).__name__}")
+
+
 def _registrar_entrega(competencia: str, entrega, rotulo: str = "Relatório quinzenal") -> None:
     """Escreve no log o que aconteceu com uma tentativa de entrega.
 
@@ -486,6 +503,18 @@ def start_scheduler() -> None:
         id="retencao_contas_medicas",
         replace_existing=True,
     )
+    # A cada 10 segundos: a conta pronta chega ao sino logo depois do envio. Uma
+    # passada por vez (`max_instances=1`) e sem rajada depois de um atraso
+    # (`coalesce`): a passada só entrega contas ao executor, e a análise roda lá.
+    scheduler.add_job(
+        processar_fila_contas_medicas,
+        "interval",
+        seconds=10,
+        id="fila_contas_medicas",
+        max_instances=1,
+        coalesce=True,
+        replace_existing=True,
+    )
     # Todo dia às 07h, no fuso do scheduler (America/Sao_Paulo). A quinzena
     # fecha nos dias 1 e 16, e é neles que o email sai; os outros dias existem
     # para a edição não se perder quando o container estiver fora do ar na hora
@@ -513,7 +542,7 @@ def start_scheduler() -> None:
         "lembrete_24h_reunioes (a cada 15min), reconciliar_clicksign (05:30), "
         "notificacoes_ouvidoria (a cada 10min), cobranca_prazos_ouvidoria (a cada 10min), "
         "escalonamento_ouvidoria (a cada 10min), retencao_ouvidoria (04:00), "
-        "retencao_contas_medicas (04:30), "
+        "retencao_contas_medicas (04:30), fila_contas_medicas (a cada 10s), "
         "relatorio_quinzenal_ouvidoria (07:00 diário, email nos dias 1 e 16), "
         "reconciliacao_tecnologia (de hora em hora)"
     )
