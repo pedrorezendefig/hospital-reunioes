@@ -17,21 +17,37 @@ antecedência da memória (60 dias quando a memória não diz).
 
 from __future__ import annotations
 
+import os
 import re
 import unicodedata
+import uuid
 from datetime import UTC, date, datetime, timedelta
 from typing import Any
+from zoneinfo import ZoneInfo
 
 from postgrest.exceptions import APIError
+from pydantic import BaseModel, ConfigDict
 
 from app.dependencies import foi_desligado, selecionar_participantes
+from app.services import storage
+from app.services.contas_medicas import ia
+from app.services.contas_medicas_extrator import ErroLeitura, extrair_paginas
+from app.services.contas_medicas_retencao import BUCKET
+from app.services.prompt_loader import load_prompt
 
 __all__ = [
     "ANTECEDENCIA_PADRAO",
+    "ArquivoDoContratoRecusadoError",
+    "ContratoRecusadoError",
+    "arquivo_do_contrato",
     "avisar_contratos",
+    "confirmar_contrato",
     "contrato_da_memoria",
     "gravar_contrato_da_memoria",
+    "hoje_em_sao_paulo",
+    "ler_contrato_enviado",
     "listar_contratos",
+    "operadora_da_sigla",
     "situacao",
 ]
 
@@ -300,3 +316,156 @@ def avisar_contratos(supabase, hoje: date, agora: datetime | None = None) -> int
         supabase.table("cm_aviso").update({"enviado_em": agora.isoformat()}).eq("id", aviso["id"]).execute()
         avisados += 1
     return avisados
+
+
+def hoje_em_sao_paulo() -> date:
+    return datetime.now(tz=ZoneInfo("America/Sao_Paulo")).date()
+
+
+# ----------------------------------------------------------------------------------
+# O envio do contrato ou do aditivo
+# ----------------------------------------------------------------------------------
+
+# Os formatos aceitos: PDF (com ou sem texto) e a foto ou o escaneado em imagem.
+TIPOS_DO_ARQUIVO = {".pdf": "application/pdf", ".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg"}
+
+# Um contrato com todos os aditivos cabe folgado; o resto do texto não muda os
+# quatro campos e só encarece a leitura.
+TETO_DO_TEXTO = 150_000
+
+AVISO_SEM_TEXTO = "O arquivo não tem texto para ler (é imagem). Digite os campos e confirme."
+AVISO_IA_FALHOU = "Não foi possível ler os campos do arquivo agora. Digite os campos e confirme."
+
+
+class ArquivoDoContratoRecusadoError(ValueError):
+    """O arquivo enviado não entra; a mensagem é para quem enviou."""
+
+
+class ContratoRecusadoError(ValueError):
+    """A confirmação não vale; a mensagem é para quem confirmou."""
+
+
+class CamposDoContrato(BaseModel):
+    """O que a IA devolve do contrato ou do aditivo (spec do diretor, item 14)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    data_assinatura: str | None
+    aditivo_numero: str | None
+    aditivo_data: str | None
+    vigencia_inicio: str | None
+    vencimento: str | None
+
+
+def _campos_vazios() -> dict[str, Any]:
+    return {campo: None for campo in CAMPOS_DO_CONTRATO} | {"vencimento_calculado": False}
+
+
+def _com_vencimento(campos: dict[str, Any]) -> dict[str, Any]:
+    """O vencimento ausente com vigência presente vira vigência mais um ano, calculado."""
+    vigencia = _data(campos.get("vigencia_inicio"))
+    if not campos.get("vencimento") and vigencia is not None:
+        return {**campos, "vencimento": mais_um_ano(vigencia).isoformat(), "vencimento_calculado": True}
+    return {**campos, "vencimento_calculado": False}
+
+
+def propor_campos_do_contrato(supabase, texto: str) -> dict[str, Any]:
+    """Os quatro campos que a IA lê do texto do contrato, para a pessoa
+    confirmar. A data que não for data vira vazio, para ela digitar.
+
+    O custo vai para `cm_chamada_ia` como chamada curta (passo OBSERVACAO): o
+    CHECK da migration 117 não tem um passo próprio para contrato."""
+    lidos = ia.chamada_curta(
+        load_prompt("contas_medicas_contrato"),
+        f"TEXTO DO CONTRATO\n{texto[:TETO_DO_TEXTO]}",
+        CamposDoContrato,
+        passo="OBSERVACAO",
+        supabase=supabase,
+        conta_id=None,
+    )
+    numero = (lidos.aditivo_numero or "").strip()[:40] or None
+    campos = {
+        "data_assinatura": _iso(_data(lidos.data_assinatura)),
+        "aditivo_numero": numero,
+        "aditivo_data": _iso(_data(lidos.aditivo_data)),
+        "vigencia_inicio": _iso(_data(lidos.vigencia_inicio)),
+        "vencimento": _iso(_data(lidos.vencimento)),
+    }
+    return _com_vencimento(campos)
+
+
+def _texto_do_pdf(conteudo: bytes) -> str:
+    paginas = extrair_paginas(conteudo)
+    if isinstance(paginas, ErroLeitura):
+        return ""
+    return "\n".join(pagina.texto for pagina in paginas).strip()
+
+
+def operadora_da_sigla(supabase, sigla: str) -> str | None:
+    linhas = supabase.table("cm_operadora").select("id").eq("sigla", sigla.strip().upper()).execute().data or []
+    return linhas[0]["id"] if linhas else None
+
+
+def _pasta_do_contrato(operadora_id: str) -> str:
+    return f"contratos/{operadora_id}/"
+
+
+def ler_contrato_enviado(supabase, operadora_id: str, nome: str, conteudo: bytes) -> dict[str, Any]:
+    """Guarda o contrato ou o aditivo enviado e devolve os campos propostos.
+
+    Nada muda em `cm_contrato`: os campos só valem quando a pessoa confirma
+    (`confirmar_contrato`). Arquivo sem texto (imagem, PDF escaneado) volta
+    com os campos vazios, para digitar."""
+    extensao = os.path.splitext(nome or "")[1].lower()
+    if extensao not in TIPOS_DO_ARQUIVO:
+        raise ArquivoDoContratoRecusadoError("Envie o contrato ou o aditivo em PDF ou em imagem (PNG ou JPG).")
+    chave = f"{_pasta_do_contrato(operadora_id)}{uuid.uuid4()}{extensao}"
+    if not storage.upload_private(supabase, BUCKET, chave, conteudo, TIPOS_DO_ARQUIVO[extensao]):
+        raise ArquivoDoContratoRecusadoError("Não foi possível guardar o arquivo. Tente de novo.")
+    texto = _texto_do_pdf(conteudo) if extensao == ".pdf" else ""
+    resposta = {"arquivo": chave, "tem_texto": bool(texto), "campos": _campos_vazios(), "aviso": None}
+    if not texto:
+        return {**resposta, "aviso": AVISO_SEM_TEXTO}
+    try:
+        return {**resposta, "campos": propor_campos_do_contrato(supabase, texto)}
+    except ia.ErroDaIA:
+        return {**resposta, "aviso": AVISO_IA_FALHOU}
+
+
+def confirmar_contrato(
+    supabase, operadora_id: str, campos: dict[str, Any], autor_id: str | None, agora: datetime
+) -> dict[str, Any]:
+    """Os campos que a pessoa confirmou passam a valer, com autor e data.
+
+    O vencimento só fica "calculado" quando a pessoa deixou a data que o app
+    calculou (vigência mais um ano); digitada, é a data do documento. O
+    arquivo tem de ser um dos guardados para esta operadora."""
+    arquivo = campos.get("arquivo")
+    if arquivo and not str(arquivo).startswith(_pasta_do_contrato(operadora_id)):
+        raise ContratoRecusadoError("O arquivo não é um contrato enviado para esta operadora.")
+    valores = {campo: campos.get(campo) for campo in CAMPOS_DO_CONTRATO if campo != "vencimento_calculado"}
+    valores = {k: v.isoformat() if isinstance(v, date) else v for k, v in valores.items()}
+    vigencia = _data(valores["vigencia_inicio"])
+    if valores["vencimento"]:
+        calculado = bool(campos.get("vencimento_calculado")) and vigencia is not None
+        calculado = calculado and _data(valores["vencimento"]) == mais_um_ano(vigencia)
+        valores["vencimento_calculado"] = calculado
+    else:
+        valores = _com_vencimento(valores)
+    valores |= {"confirmado_por": autor_id, "confirmado_em": agora.isoformat()}
+    if arquivo:
+        valores["arquivo"] = arquivo
+    atual = _contrato_de(supabase, operadora_id)
+    if atual is None:
+        return supabase.table("cm_contrato").insert({"operadora_id": operadora_id, **valores}).execute().data[0]
+    return supabase.table("cm_contrato").update(valores).eq("id", atual["id"]).execute().data[0]
+
+
+def arquivo_do_contrato(supabase, operadora_id: str) -> tuple[str, bytes] | None:
+    """A chave e o conteúdo do contrato confirmado da operadora, para baixar."""
+    contrato = _contrato_de(supabase, operadora_id)
+    chave = (contrato or {}).get("arquivo")
+    if not chave:
+        return None
+    conteudo = storage.download_file(supabase, BUCKET, chave)
+    return (chave, conteudo) if conteudo is not None else None

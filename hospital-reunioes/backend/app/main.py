@@ -22,6 +22,7 @@ from app.routers import (
     conector_mcp,
     configuracoes,
     contas_medicas,
+    contas_medicas_contratos,
     contas_medicas_envio,
     contas_medicas_guia,
     contas_medicas_habilitacao,
@@ -141,6 +142,7 @@ app.include_router(contas_medicas_guia.router, prefix=settings.api_prefix)
 app.include_router(contas_medicas_envio.router, prefix=settings.api_prefix)
 app.include_router(contas_medicas_habilitacao.router, prefix=settings.api_prefix)
 app.include_router(contas_medicas_memoria.router, prefix=settings.api_prefix)
+app.include_router(contas_medicas_contratos.router, prefix=settings.api_prefix)
 app.include_router(admin.router, prefix=settings.api_prefix)
 app.include_router(admin_super_admins.router, prefix=settings.api_prefix)
 app.include_router(admin_usuarios.router, prefix=settings.api_prefix)

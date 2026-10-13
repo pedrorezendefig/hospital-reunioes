@@ -15,18 +15,21 @@ operadora e um aviso por contrato e data.
 
 from __future__ import annotations
 
+import json
 import os
 import sys
 from datetime import date
-from pathlib import Path
 from typing import Any
 
+import httpx
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
+from openai import OpenAI
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
+from test_contas_medicas_ia import USO_PADRAO, _Provedor  # noqa: E402
 from test_contas_medicas_operadoras import (  # noqa: E402
     _Banco,
     _enviar_memoria,
@@ -39,6 +42,8 @@ from test_contas_medicas_operadoras import _cliente as _cliente_da_carga  # noqa
 
 from app.dependencies import get_current_user, get_supabase_client  # noqa: E402
 from app.limiter import limiter  # noqa: E402
+from app.routers import contas_medicas_contratos as contratos_router  # noqa: E402
+from app.services.contas_medicas import ia  # noqa: E402
 
 MEMORIA_ALFA = _memoria("MEMORIA-ALFA-v1.0.md")
 BLOCO_ALFA = """contrato:
@@ -46,6 +51,25 @@ BLOCO_ALFA = """contrato:
   ultimo_aditivo: { numero: 12, inicio_vigencia: 2026-05-01 }
   aviso_antecedencia_dias: 60
 """
+
+
+@pytest.fixture
+def provedor(monkeypatch) -> _Provedor:
+    """O duble do provedor de IA do teste do adaptador (#1130): a chamada
+    passa pelo adaptador de verdade (schema estrito, ZDR, custo) e para no HTTP."""
+    duble = _Provedor()
+
+    def cliente():
+        return OpenAI(
+            api_key="chave-de-teste",
+            base_url="https://openrouter.ai/api/v1",
+            http_client=httpx.Client(transport=httpx.MockTransport(duble)),
+            max_retries=0,
+        )
+
+    monkeypatch.setattr(ia, "_cliente", cliente)
+    monkeypatch.setattr(ia, "_esperar", lambda _segundos: None)
+    return duble
 
 
 @pytest.fixture(autouse=True)
@@ -72,6 +96,29 @@ class _BancoDosContratos(_Banco):
             (o["contrato_id"], o["data_prevista"]) == (linha["contrato_id"], linha["data_prevista"]) for o in outras
         ):
             raise _erro("23505", "duplicate key value violates unique constraint cm_aviso_unico")
+
+
+class _Bucket:
+    def __init__(self, arquivos: dict[str, bytes]):
+        self._arquivos = arquivos
+
+    def upload(self, caminho, conteudo, _opcoes):
+        self._arquivos[caminho] = conteudo
+
+    def download(self, caminho):
+        if caminho not in self._arquivos:
+            raise RuntimeError("Object not found")
+        return self._arquivos[caminho]
+
+
+class _Storage:
+    def __init__(self):
+        self.arquivos: dict[str, bytes] = {}
+        self.buckets: set[str] = set()
+
+    def from_(self, bucket):
+        self.buckets.add(bucket)
+        return _Bucket(self.arquivos)
 
 
 GESTAO = _pessoa(perfil_contas_medicas="gestao_contas_medicas")
@@ -346,3 +393,234 @@ class TestRotinaNoScheduler:
         cron.avisar_contratos_contas_medicas()
 
         assert len(banco.linhas("notificacoes")) == len(COM_A_PERMISSAO)
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 4. A tela: lista, envio do contrato, confirmacao e quem pode
+# ═══════════════════════════════════════════════════════════════════════════
+
+ROTA = "/api/contas-medicas/contratos"
+CREDENCIAMENTO = _pessoa(id="CRE", auth_user_id="auth-cre", perfil_contas_medicas="credenciamento")
+GESTORA = _pessoa(id="GES", auth_user_id="auth-ges", perfil_contas_medicas="gestao_contas_medicas")
+FATURISTA = _pessoa(id="FAT", auth_user_id="auth-fat", perfil_contas_medicas="faturista")
+
+TEXTO_DO_CONTRATO = (
+    "TERMO ADITIVO No 13 AO CONTRATO DE CREDENCIAMENTO firmado em 01/10/2015. "
+    "Assinado em 20/04/2027. Vigencia a partir de 01/05/2027."
+)
+PROPOSTA_DA_IA = {
+    "data_assinatura": "2015-10-01",
+    "aditivo_numero": "13",
+    "aditivo_data": "2027-04-20",
+    "vigencia_inicio": "2027-05-01",
+    "vencimento": None,
+}
+
+
+def _pdf(*paginas: str) -> bytes:
+    from weasyprint import HTML
+
+    corpo = "".join(f'<div style="page-break-before: always"><p>{texto}</p></div>' for texto in paginas)
+    return HTML(string=f"<html><body>{corpo}</body></html>").write_pdf()
+
+
+def _tela(pessoa: dict[str, Any], banco: _BancoDosContratos | None = None) -> tuple[TestClient, _BancoDosContratos]:
+    banco = banco or _banco_com_contratos(("ALFA", "2027-05-01", {"aditivo_numero": "12"}), ("BETA", None, {}))
+    banco.tabelas["participantes"] = [dict(pessoa)]
+    banco.tabelas["cm_perfil_permissao"] = _matriz_da_migration()
+    banco.storage = _Storage()
+    app = FastAPI()
+    app.state.limiter = limiter
+    app.include_router(contratos_router.router, prefix="/api")
+
+    async def _usuario() -> dict[str, Any]:
+        return {"id": pessoa["auth_user_id"], "email": pessoa["email"], "metadata": {}}
+
+    app.dependency_overrides[get_current_user] = _usuario
+    app.dependency_overrides[get_supabase_client] = lambda: banco
+    return TestClient(app), banco
+
+
+def _enviar(cliente: TestClient, conteudo: bytes, nome: str = "aditivo-13.pdf", tipo: str = "application/pdf"):
+    return cliente.post(f"{ROTA}/ALFA/arquivo", files={"arquivo": (nome, conteudo, tipo)})
+
+
+def _confirmar(cliente: TestClient, **campos):
+    return cliente.post(f"{ROTA}/ALFA", json=campos)
+
+
+class TestATelaDosContratos:
+    def test_lista_uma_linha_por_operadora_com_a_situacao(self, monkeypatch):
+        monkeypatch.setattr(contratos_router, "hoje_em_sao_paulo", lambda: HOJE)
+        cliente, _ = _tela(CREDENCIAMENTO)
+
+        resposta = cliente.get(ROTA)
+
+        assert resposta.status_code == 200, resposta.text
+        corpo = resposta.json()
+        assert [(c["sigla"], c["dias"], c["situacao"]) for c in corpo["contratos"]] == [
+            ("ALFA", 60, "NEGOCIAR"),
+            ("BETA", None, "SEM_CONTRATO"),
+        ]
+        assert corpo["pode_editar"] is False
+
+    def test_a_gestao_pode_editar(self):
+        cliente, _ = _tela(GESTORA)
+
+        assert cliente.get(ROTA).json()["pode_editar"] is True
+
+    def test_quem_nao_tem_contratos_e_avisos_recebe_403(self):
+        cliente, _ = _tela(FATURISTA)
+
+        assert cliente.get(ROTA).status_code == 403
+
+
+class TestEnvioDoContrato:
+    def test_contrato_com_texto_volta_com_os_campos_da_ia_e_nada_vale_antes_de_confirmar(self, provedor):
+        provedor.responder((json.dumps(PROPOSTA_DA_IA), USO_PADRAO))
+        cliente, banco = _tela(GESTORA)
+        antes = [dict(c) for c in banco.linhas("cm_contrato")]
+
+        resposta = _enviar(cliente, _pdf(TEXTO_DO_CONTRATO))
+
+        assert resposta.status_code == 200, resposta.text
+        corpo = resposta.json()
+        assert corpo["tem_texto"] is True
+        assert corpo["campos"] == {
+            **PROPOSTA_DA_IA,
+            "vencimento": "2028-05-01",
+            "vencimento_calculado": True,
+        }
+        assert banco.linhas("cm_contrato") == antes
+        [corpo_da_ia] = provedor.corpos
+        assert "TERMO ADITIVO No 13" in corpo_da_ia["messages"][1]["content"][0]["text"]
+        assert corpo_da_ia["provider"]["zdr"] is True
+        assert corpo["arquivo"] in banco.storage.arquivos
+        assert banco.storage.buckets == {"contas-medicas"}
+        assert len(banco.linhas("cm_chamada_ia")) == 1
+
+    def test_confirmado_vale_com_autor_e_data(self, provedor):
+        provedor.responder((json.dumps(PROPOSTA_DA_IA), USO_PADRAO))
+        cliente, banco = _tela(GESTORA)
+        proposta = _enviar(cliente, _pdf(TEXTO_DO_CONTRATO)).json()
+
+        resposta = _confirmar(cliente, **proposta["campos"], arquivo=proposta["arquivo"])
+
+        assert resposta.status_code == 200, resposta.text
+        [contrato] = banco.linhas("cm_contrato")
+        assert {k: contrato[k] for k in (*PROPOSTA_DA_IA, "vencimento_calculado", "arquivo")} == {
+            **PROPOSTA_DA_IA,
+            "vencimento": "2028-05-01",
+            "vencimento_calculado": True,
+            "arquivo": proposta["arquivo"],
+        }
+        assert contrato["confirmado_por"] == "GES"
+        assert contrato["confirmado_em"]
+
+    def test_vencimento_digitado_pela_pessoa_nao_e_calculado(self):
+        cliente, banco = _tela(GESTORA)
+
+        resposta = _confirmar(cliente, vigencia_inicio="2027-05-01", vencimento="2028-03-31", vencimento_calculado=True)
+
+        assert resposta.status_code == 200, resposta.text
+        [contrato] = banco.linhas("cm_contrato")
+        assert (contrato["vencimento"], contrato["vencimento_calculado"]) == ("2028-03-31", False)
+
+    def test_operadora_sem_contrato_ganha_o_contrato_confirmado(self):
+        cliente, banco = _tela(GESTORA)
+
+        resposta = cliente.post(f"{ROTA}/BETA", json={"vencimento": "2027-12-31"})
+
+        assert resposta.status_code == 200, resposta.text
+        beta = next(o for o in banco.linhas("cm_operadora") if o["sigla"] == "BETA")
+        [contrato] = [c for c in banco.linhas("cm_contrato") if c["operadora_id"] == beta["id"]]
+        assert contrato["vencimento"] == "2027-12-31"
+
+    def test_arquivo_sem_texto_deixa_os_campos_para_digitar_sem_chamar_a_ia(self, provedor):
+        cliente, banco = _tela(GESTORA)
+
+        resposta = _enviar(cliente, _pdf(""))
+
+        assert resposta.status_code == 200, resposta.text
+        corpo = resposta.json()
+        assert corpo["tem_texto"] is False
+        assert set(corpo["campos"].values()) == {None, False}
+        assert provedor.corpos == []
+        assert corpo["arquivo"] in banco.storage.arquivos
+
+    def test_imagem_entra_e_os_campos_ficam_para_digitar(self, provedor):
+        cliente, _ = _tela(GESTORA)
+
+        resposta = _enviar(cliente, b"\x89PNG\r\n\x1a\n", nome="contrato-2015.png", tipo="image/png")
+
+        assert resposta.status_code == 200, resposta.text
+        assert resposta.json()["tem_texto"] is False
+        assert provedor.corpos == []
+
+    def test_ia_fora_do_formato_deixa_os_campos_para_digitar(self, provedor):
+        provedor.responder(("nao e json", USO_PADRAO))
+        cliente, _ = _tela(GESTORA)
+
+        resposta = _enviar(cliente, _pdf(TEXTO_DO_CONTRATO))
+
+        assert resposta.status_code == 200, resposta.text
+        assert set(resposta.json()["campos"].values()) == {None, False}
+        assert (
+            resposta.json()["aviso"] == "Não foi possível ler os campos do arquivo agora. Digite os campos e confirme."
+        )
+
+    def test_arquivo_de_outro_lugar_do_bucket_e_recusado(self):
+        """Sem a cerca, a chave de um prontuario viraria o "contrato" e o
+        download devolveria o PDF do paciente."""
+        cliente, banco = _tela(GESTORA)
+
+        resposta = _confirmar(cliente, vencimento="2028-05-01", arquivo="envio-1/arq-1.pdf")
+
+        assert resposta.status_code == 422
+        assert banco.linhas("cm_contrato")[0]["vencimento"] == "2027-05-01"
+
+    def test_o_arquivo_confirmado_pode_ser_baixado(self, provedor):
+        provedor.responder((json.dumps(PROPOSTA_DA_IA), USO_PADRAO))
+        cliente, _ = _tela(GESTORA)
+        conteudo = _pdf(TEXTO_DO_CONTRATO)
+        proposta = _enviar(cliente, conteudo).json()
+        _confirmar(cliente, **proposta["campos"], arquivo=proposta["arquivo"])
+
+        resposta = cliente.get(f"{ROTA}/ALFA/arquivo")
+
+        assert resposta.status_code == 200
+        assert resposta.content == conteudo
+        assert resposta.headers["content-type"] == "application/pdf"
+
+
+class TestCredenciamentoSoVe:
+    def test_credenciamento_ve_a_tela_mas_recebe_403_no_post(self, provedor):
+        cliente, banco = _tela(CREDENCIAMENTO)
+        antes = [dict(c) for c in banco.linhas("cm_contrato")]
+
+        assert cliente.get(ROTA).status_code == 200
+        assert _enviar(cliente, _pdf(TEXTO_DO_CONTRATO)).status_code == 403
+        assert _confirmar(cliente, vencimento="2030-01-01").status_code == 403
+
+        assert banco.linhas("cm_contrato") == antes
+        assert banco.storage.arquivos == {}
+        assert provedor.corpos == []
+
+    def test_credenciamento_recebe_o_aviso(self):
+        banco = _banco_do_aviso(("ASSIM", "2027-05-01", {}))
+
+        _avisar(banco, HOJE)
+
+        assert "CRE" in {n["destinatario_id"] for n in banco.linhas("notificacoes")}
+
+
+class TestAsRotasEstaoNoApp:
+    def test_o_app_de_verdade_registra_as_rotas_dos_contratos(self):
+        from app.main import app
+
+        caminhos = app.openapi()["paths"]
+        assert len(caminhos) > 50, "piso de sanidade: o openapi voltou quase vazio"
+        assert "get" in caminhos[ROTA]
+        assert "post" in caminhos[f"{ROTA}/{{sigla}}"]
+        assert "post" in caminhos[f"{ROTA}/{{sigla}}/arquivo"]
+        assert "get" in caminhos[f"{ROTA}/{{sigla}}/arquivo"]
