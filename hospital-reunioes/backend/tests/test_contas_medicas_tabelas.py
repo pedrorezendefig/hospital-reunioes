@@ -31,6 +31,7 @@ from test_contas_medicas_operadoras import (
 
 from app.limiter import limiter
 from app.services.contas_medicas.dicionario import casar, dicionario_do_banco
+from app.services.contas_medicas.dicionario_ia import decidir_proposta
 from app.services.contas_medicas.tabelas import NAO_CONFERIDO, PACOTE, preco
 
 FIXTURES = Path(__file__).resolve().parent / "fixtures" / "contas_medicas" / "tabelas"
@@ -567,6 +568,39 @@ class TestDicionario:
             casamento = casar(nome, ITENS_DA_CONTA, dicionario)
             assert [i["codigo"] for i in casamento.itens] == ["90342100"], nome
             assert (casamento.como, casamento.confianca) == ("DICIONARIO", "ALTA"), nome
+
+    def test_termo_proposto_casa_com_confianca_media_e_o_confirmado_com_alta(self):
+        _, banco = _cliente(GESTAO)
+        banco.inserir(
+            "cm_item_dicionario",
+            {"termo": "ROCURONIO", "codigo_conta": "90342100", "situacao": "PROPOSTO", "origem": "IA"},
+        )
+        banco.inserir(
+            "cm_item_dicionario",
+            {"termo": "PANTOPRAZOL", "codigo_conta": "90487540", "situacao": "CONFIRMADO", "origem": "GESTAO"},
+        )
+        dicionario = dicionario_do_banco(banco)
+
+        proposto = casar("Rocurônio", ITENS_DA_CONTA, dicionario)
+        confirmado = casar("Pantoprazol", ITENS_DA_CONTA, dicionario)
+
+        assert [i["codigo"] for i in proposto.itens] == ["90342100"]
+        assert (proposto.como, proposto.confianca) == ("DICIONARIO", "MEDIA")
+        assert [i["codigo"] for i in confirmado.itens] == ["90487540"]
+        assert (confirmado.como, confirmado.confianca) == ("DICIONARIO", "ALTA")
+
+    def test_termo_rejeitado_pela_gestao_nao_casa(self):
+        _, banco = _cliente(GESTAO)
+        proposta = banco.inserir(
+            "cm_item_dicionario",
+            {"termo": "ROCURONIO", "codigo_conta": "90342100", "situacao": "PROPOSTO", "origem": "IA"},
+        )
+        decidir_proposta(banco, proposta["id"], confirmar=False, autor_id="P1")
+
+        casamento = casar("Rocurônio", ITENS_DA_CONTA, dicionario_do_banco(banco))
+
+        assert casamento.itens == []
+        assert (casamento.como, casamento.confianca) == ("NENHUM", None)
 
     def test_nome_sem_par_no_dicionario_casa_por_marca_e_concentracao(self):
         casamento = casar("PANTOCAL 40MG EV FR/AMP (PANTOPRAZOL)", ITENS_DA_CONTA, {})

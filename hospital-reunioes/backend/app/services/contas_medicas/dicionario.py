@@ -22,6 +22,7 @@ from typing import Any
 
 __all__ = [
     "Casamento",
+    "Dicionario",
     "DicionarioRecusadoError",
     "TermoLido",
     "casar",
@@ -57,6 +58,18 @@ class Casamento:
     itens: list[dict[str, Any]] = field(default_factory=list)
     como: str = "NENHUM"
     confianca: str | None = None
+
+
+class Dicionario(dict[str, set[str]]):
+    """Termo normalizado -> códigos da conta, como o casamento usa.
+
+    `propostos` guarda os pares (termo, código) ainda em `PROPOSTO`: o
+    casamento por eles sai com confiança média até a gestão confirmar.
+    """
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.propostos: set[tuple[str, str]] = set()
 
 
 def _norm(texto: str | None) -> str:
@@ -124,12 +137,16 @@ def importar_dicionario(supabase, termos: list[TermoLido], autor_id: str | None)
     return {"termos": len(termos), "novos": len(novos), "atualizados": atualizados}
 
 
-def dicionario_do_banco(supabase) -> dict[str, set[str]]:
-    """O dicionário como o casamento usa: termo normalizado -> códigos da conta."""
-    dicionario: dict[str, set[str]] = {}
-    for linha in supabase.table("cm_item_dicionario").select("termo, codigo_conta").execute().data or []:
+def dicionario_do_banco(supabase) -> Dicionario:
+    """O dicionário como o casamento usa: termo normalizado -> códigos da conta.
+    O termo rejeitado fica sem código e não entra; o proposto entra marcado."""
+    dicionario = Dicionario()
+    for linha in supabase.table("cm_item_dicionario").select("termo, codigo_conta, situacao").execute().data or []:
         if linha.get("codigo_conta"):
-            dicionario.setdefault(_norm(linha["termo"]), set()).add(linha["codigo_conta"])
+            termo = _norm(linha["termo"])
+            dicionario.setdefault(termo, set()).add(linha["codigo_conta"])
+            if linha.get("situacao") != "CONFIRMADO":
+                dicionario.propostos.add((termo, linha["codigo_conta"]))
     return dicionario
 
 
@@ -153,20 +170,26 @@ def casar(nome: str, itens_conta: list[dict[str, Any]], dicionario: dict[str, se
     """Os itens da conta que correspondem ao nome do prontuário.
 
     Ordem: termo do dicionário no nome (ou o genérico entre parênteses),
-    marca e concentração, só a marca (confiança média). Nada: sem par.
+    marca e concentração, só a marca (confiança média). Nada: sem par. O
+    casamento por termo ainda proposto também sai com confiança média.
     """
     texto = _norm(nome)
-    codigos: set[str] = set()
-    for termo, cods in dicionario.items():
-        if termo and (termo == texto or re.search(r"(?<![A-Z])" + re.escape(termo) + r"(?![A-Z])", texto)):
-            codigos |= cods
+    termos = [
+        termo
+        for termo in dicionario
+        if termo and (termo == texto or re.search(r"(?<![A-Z])" + re.escape(termo) + r"(?![A-Z])", texto))
+    ]
     generico = _generico(nome)
     if generico and generico in dicionario:
-        codigos |= dicionario[generico]
+        termos.append(generico)
+    propostos = getattr(dicionario, "propostos", set())
+    codigos = {codigo for termo in termos for codigo in dicionario[termo]}
+    confirmados = {codigo for termo in termos for codigo in dicionario[termo] if (termo, codigo) not in propostos}
     if codigos:
         achados = [i for i in itens_conta if i["codigo"] in codigos]
         if achados:
-            return Casamento(achados, "DICIONARIO", "ALTA")
+            confianca = "ALTA" if all(i["codigo"] in confirmados for i in achados) else "MEDIA"
+            return Casamento(achados, "DICIONARIO", confianca)
     marca, concentracao = _marca(nome), _concentracao(nome)
     if len(marca) >= 4:
         mesmos = [i for i in itens_conta if _marca(i["descricao"]) == marca]

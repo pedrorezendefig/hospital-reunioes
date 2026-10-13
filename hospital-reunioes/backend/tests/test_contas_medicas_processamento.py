@@ -652,7 +652,9 @@ def _cenario() -> _Banco:
                 {"id": "st-1", "nome_mv": "CTI ADULTO", "acomodacao": "CTI"},
                 {"id": "st-2", "nome_mv": "CENTRO CIRURGICO", "acomodacao": "CENTRO_CIRURGICO"},
             ],
-            "cm_item_dicionario": [{"id": "dc-1", "termo": "Clexane", "codigo_conta": "90030001"}],
+            "cm_item_dicionario": [
+                {"id": "dc-1", "termo": "Clexane", "codigo_conta": "90030001", "situacao": "CONFIRMADO"}
+            ],
             "cm_envio": [],
             "cm_arquivo": [],
             "cm_atendimento": [],
