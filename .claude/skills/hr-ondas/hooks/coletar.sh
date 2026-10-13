@@ -3,7 +3,8 @@
 # PRDs, ondas e fases: o recorte do coletor do OS (collect.py --recorte), só dos PRDs com onda
 # viva nesta máquina ou com fatia de PR aberto (de qualquer sócio); com --todos, o /api/data inteiro do Hospital OS (8799) · `claude agents --json`: sessões vivas ·
 # $TMPDIR/fechar_onda/<sessao>/*.sql: migrations que a subida pediu ·
-# /api/health de produção: a última migration aplicada ·
+# /api/health de produção: a última migration aplicada · ~/.claude/hr-ondas/aplicadas: as que o
+# humano declarou aplicadas ("apliquei a migration N" numa sessão, ou /ondas aplicada N) ·
 # transcript de cada sessão de onda (hooks/sessao.py): o shell em curso, a última fala e as subidas ·
 # passagens em $TMPDIR/onda-enxuta/ (hooks/passagem.py): as ondas de cada linhagem de sessão ·
 # check-runs de cada PR aberto (REST, não a cota do GraphQL): início e fim do CI.
@@ -17,12 +18,24 @@ TMP="${TMPDIR:-/tmp}"; TMP="${TMP%/}"
 OS_URL="${HR_ONDAS_OS:-http://127.0.0.1:8799/api/data}"
 HEALTH_URL="${HR_ONDAS_HEALTH:-https://api.hospitalsaomatheus.cloud/api/health}"
 CACHE_DIR="${HR_ONDAS_CACHE:-$TMP/hr-ondas}"; CACHE="$CACHE_DIR/remoto.json"; TRAVA="$CACHE_DIR/trava"
+# registro durável (fora do TMPDIR, que o macOS limpa): uma linha "<numero> <quando>" por declaração
+REGISTRO="${HR_ONDAS_REGISTRO:-$HOME/.claude/hr-ondas/aplicadas}"
 RECORTE="$(cd "$(dirname "$0")/../../../.." && pwd)/tools/workflow-dashboard/collect.py"
 mkdir -p "$CACHE_DIR"
-fresco=0; todos=0
+fresco=0; todos=0; registrar=""
 for a in "$@"; do
-  case "$a" in --fresco) fresco=1 ;; --todos) todos=1 ;; esac
+  case "$a" in --fresco) fresco=1 ;; --todos) todos=1 ;; --registrar=*) registrar="${a#--registrar=}" ;; esac
 done
+
+# --registrar=118[,119]: o humano declarou a migration aplicada; só grava e sai
+if [ -n "$registrar" ]; then
+  mkdir -p "$(dirname "$REGISTRO")"
+  for n in ${registrar//,/ }; do
+    case "$n" in ''|*[!0-9]*) echo "número inválido: $n" >&2; exit 2 ;; esac
+    echo "$((10#$n)) $(date +%Y-%m-%dT%H:%M:%S%z)" >> "$REGISTRO"
+  done
+  exit 0
+fi
 
 filtrar_os() {
   # GitHub fora (cota do GraphQL zerada) também conta como sem resposta: não apaga o retrato
@@ -152,7 +165,9 @@ if [ "$idade" -ge "$minimo" ] && mkdir "$TRAVA" 2>/dev/null; then
   done
   rm -r "$CIDIR"
 
-  aplicada=$(curl -s -m 8 "$HEALTH_URL" | jq -c '.migracao // null' 2>/dev/null)
+  # health sem resposta (ou sem o número): fica o último valor bom do cache, como o retrato do OS
+  aplicada=$(curl -s -m 8 "$HEALTH_URL" | jq -c '.migracao // empty' 2>/dev/null)
+  [ -n "$aplicada" ] || aplicada=$(jq -c '.aplicada // null' "$CACHE" 2>/dev/null)
   [ -n "$aplicada" ] || aplicada=null
 
   jq -n -c --argjson os "$os" --argjson osEm "$osEm" --argjson ci "$ci" --argjson aplicada "$aplicada" \
@@ -161,6 +176,11 @@ if [ "$idade" -ge "$minimo" ] && mkdir "$TRAVA" 2>/dev/null; then
 fi
 remoto=$(cat "$CACHE" 2>/dev/null)
 [ -n "$remoto" ] || remoto='{"os":null,"osEm":null,"ci":{},"aplicada":null,"em":null}'
+
+# a maior migration que o humano declarou aplicada vale tanto quanto a do health
+declarada=$(awk '/^[0-9]+ /{ if ($1+0 > m) m = $1+0 } END { print (m ? m : "null") }' "$REGISTRO" 2>/dev/null)
+[ -n "$declarada" ] || declarada=null
+remoto=$(echo "$remoto" | jq -c --argjson d "$declarada" '.aplicada = ([.aplicada, $d] | map(select(. != null)) | max)')
 
 jq -n -c --argjson r "$remoto" --argjson agentes "$agentes" --argjson prdSessoes "$prd_sessoes" \
   --argjson subAgentes "$sub_agentes" --argjson subidas "$subidas" --argjson migs "$migs" \
