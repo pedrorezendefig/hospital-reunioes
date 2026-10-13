@@ -347,3 +347,100 @@ class TestEndpointTranscreverVoz:
 
         assert r.status_code == 413
         assert chamou == []
+
+
+# ─── Gate do eixo de Contas médicas (issue #1145) ────────────────────────────
+
+
+class _ParticipantesFake:
+    """`participantes` com uma pessoa só; o gate de verdade a resolve daqui.
+
+    Nem o gate nem `get_participante_for_user` são dublados: dublar a guarda
+    deixaria o teste verde sobre nada, que é justamente o que ele existe para
+    descartar.
+    """
+
+    def __init__(self, pessoa: dict):
+        self._pessoa = pessoa
+
+    def table(self, _nome: str):
+        return self
+
+    def select(self, *_a, **_kw):
+        return self
+
+    def eq(self, *_a, **_kw):
+        return self
+
+    def update(self, *_a, **_kw):
+        return self
+
+    def execute(self):
+        return SimpleNamespace(data=[dict(self._pessoa)])
+
+
+def _pessoa_logada(*, access_profile=None, perfil_contas_medicas=None, perfil_pop=None) -> dict:
+    return {
+        "id": "P9",
+        "auth_user_id": CURRENT_USER["id"],
+        "email": CURRENT_USER["email"],
+        "nome_completo": "Pessoa Nove",
+        "ativo": True,
+        "is_super_admin": False,
+        "access_profile": access_profile,
+        "perfil_pop": perfil_pop,
+        "perfil_ouvidoria": None,
+        "perfil_contas_medicas": perfil_contas_medicas,
+    }
+
+
+def _cliente_com_gate_de_pe(pessoa: dict, monkeypatch, chamadas: list) -> TestClient:
+    monkeypatch.setattr(transcricao_router, "transcrever", lambda a, f: chamadas.append(1) or "Glosa da seringa.")
+    app = FastAPI()
+    app.include_router(transcricao_router.router, prefix="/api")
+    app.dependency_overrides[get_current_user] = lambda: CURRENT_USER
+    app.dependency_overrides[get_supabase_client] = lambda: _ParticipantesFake(pessoa)
+    return TestClient(app)
+
+
+def _ditar(cliente: TestClient):
+    return cliente.post("/api/transcricao/voz", files={"audio": ("voz.webm", b"bytes", "audio/webm")})
+
+
+class TestDitadoNoEixoContasMedicas:
+    def test_faturista_sem_papel_nas_reunioes_dita(self, monkeypatch):
+        """Quem só tem o eixo de Contas médicas dita nos campos do módulo dele."""
+        chamadas: list = []
+        cliente = _cliente_com_gate_de_pe(_pessoa_logada(perfil_contas_medicas="faturista"), monkeypatch, chamadas)
+
+        r = _ditar(cliente)
+
+        assert r.status_code == 200
+        assert r.json() == {"texto": "Glosa da seringa."}
+
+    def test_quem_nao_tem_perfil_nenhum_continua_recusado(self, monkeypatch):
+        """O detector do teste de cima: sem ele, um gate aberto a qualquer
+        pessoa logada provaria a mesma coisa. E a IA nem é chamada."""
+        chamadas: list = []
+        cliente = _cliente_com_gate_de_pe(_pessoa_logada(), monkeypatch, chamadas)
+
+        r = _ditar(cliente)
+
+        assert r.status_code == 403
+        assert chamadas == []
+
+    def test_perfil_de_contas_medicas_desconhecido_nao_abre_a_porta(self, monkeypatch):
+        """Só os perfis do eixo contam; um valor estranho na coluna não vale."""
+        chamadas: list = []
+        cliente = _cliente_com_gate_de_pe(_pessoa_logada(perfil_contas_medicas="visitante"), monkeypatch, chamadas)
+
+        r = _ditar(cliente)
+
+        assert r.status_code == 403
+        assert chamadas == []
+
+    def test_facilitador_das_reunioes_segue_ditando(self, monkeypatch):
+        chamadas: list = []
+        cliente = _cliente_com_gate_de_pe(_pessoa_logada(access_profile="regular"), monkeypatch, chamadas)
+
+        assert _ditar(cliente).status_code == 200

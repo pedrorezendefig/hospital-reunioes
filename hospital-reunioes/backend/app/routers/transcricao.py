@@ -15,7 +15,7 @@ from app.dependencies import (
     get_current_user,
     get_participante_for_user,
     get_supabase_client,
-    require_acesso_reunioes,
+    require_acesso_ditado,
 )
 from app.models.schemas import TranscricaoResponse
 from app.services.transcricao_service import TranscricaoIndisponivelError, transcrever
@@ -23,9 +23,9 @@ from app.services.transcricao_service import TranscricaoIndisponivelError, trans
 router = APIRouter(
     prefix="/transcricao",
     tags=["transcricao"],
-    # Gate de contexto (ADR 0007): sem papel nas Reuniões -> 403 em todo o router
-    # (preserva o comportamento do antigo POST /notas/transcrever).
-    dependencies=[Depends(require_acesso_reunioes)],
+    # Gate de contexto (ADR 0007): sem papel nas Reuniões nem perfil de Contas
+    # médicas (issue #1145, o "Ditar" do módulo) -> 403 em todo o router.
+    dependencies=[Depends(require_acesso_ditado)],
 )
 logger = logging.getLogger(__name__)
 

@@ -102,6 +102,7 @@ def logar(monkeypatch):
 # nada.
 GATES = [
     (deps.require_acesso_reunioes, {}),
+    (deps.require_acesso_ditado, {}),
     (deps.require_participante_reunioes, {}),
     (deps.require_super_admin, {}),
     (deps.require_secretaria, {"access_profile": "secretaria", "is_super_admin": False}),
@@ -115,6 +116,7 @@ GATES = [
 
 IDS = [
     "require_acesso_reunioes",
+    "require_acesso_ditado",
     "require_participante_reunioes",
     "require_super_admin",
     "require_secretaria",
