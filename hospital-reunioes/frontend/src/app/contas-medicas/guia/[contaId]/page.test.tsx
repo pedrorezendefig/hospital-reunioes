@@ -436,3 +436,27 @@ describe("concluir", () => {
     expect(screen.queryByRole("button", { name: "Marcar o dia como feito" })).toBeNull();
   });
 });
+
+describe("o botão Reanalisar (issue #1130)", () => {
+  it("aparece quando o guia diz que pode e manda a conta para a análise de novo", async () => {
+    respostaDoGuia = guia({ pode_reanalisar: true });
+    await abrir();
+
+    fireEvent.click(screen.getByRole("button", { name: "Reanalisar" }));
+
+    await waitFor(() => expect(navegacao.push).toHaveBeenCalledWith("/contas-medicas"));
+    expect(chamadas[1]).toEqual({
+      url: `/api/contas-medicas/contas/${CONTA}/reanalisar`,
+      metodo: "POST",
+      corpo: undefined,
+    });
+  });
+
+  it("não aparece quando o guia diz que não pode", async () => {
+    respostaDoGuia = guia({ pode_reanalisar: false });
+    await abrir();
+
+    expect(screen.getByRole("button", { name: "Concluir e abrir a próxima" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Reanalisar" })).toBeNull();
+  });
+});

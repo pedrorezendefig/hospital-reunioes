@@ -953,6 +953,17 @@ class TestReanalisar:
         assert len(abertas_depois) == len(abertas_antes)
         assert abertas_antes.isdisjoint(linha["id"] for linha in abertas_depois)
 
+    def test_o_guia_diz_quem_ve_o_botao(self):
+        """A tela desenha o botão pelo que o Guia responde, sem perguntar de novo."""
+        banco = _cenario()
+        conta, _, _ = _conta_com_uma_linha_feita(banco)
+        rota = f"/api/contas-medicas/contas/{conta['id']}/guia"
+
+        assert _cliente(banco, "gestao").get(rota).json()["pode_reanalisar"] is True
+        assert _cliente(banco, "faturista").get(rota).json()["pode_reanalisar"] is False
+        banco.conta(conta["id"])["situacao"] = "CONCLUIDA"
+        assert _cliente(banco, "gestao").get(rota).json()["pode_reanalisar"] is False
+
     def test_sem_a_permissao_de_regra_contratual_e_tabelas_recebe_403(self):
         banco = _cenario()
         conta, _, _ = _conta_com_uma_linha_feita(banco)
