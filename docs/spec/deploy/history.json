@@ -2,6 +2,56 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-10-13T00:21:37-03:00",
+      "sha": "e34a946adcae0923440c62853c3476de5b0b436f",
+      "app_version": "0.180.0",
+      "subject": "Onda onda-gestao-onda1: Habilitação por tela e migration 118",
+      "raw_subject": "chore(deploy): registro da onda onda-gestao-onda1 (#1166)",
+      "scope": [
+        "backend",
+        "frontend"
+      ],
+      "prds": [
+        1129
+      ],
+      "result": "healthy",
+      "duration_seconds": 502,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        },
+        {
+          "service": "frontend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [
+        "118_contas_medicas_gestao.sql"
+      ],
+      "rollback_target_sha": null,
+      "notes": "onda-enxuta onda-gestao-onda1: PR #1166 (issue #1139), mergeados PR a PR. Merge pela API do GitHub, um build. Registro pela Action pos-merge depois do health.",
+      "etapas": {
+        "merge_s": 3,
+        "build_s": {
+          "backend": 41,
+          "frontend": 298
+        },
+        "health_s": 0
+      },
+      "responsavel": "pedrorezendefig"
+    },
+    {
       "at": "2026-10-12T21:36:18-03:00",
       "sha": "58f7f1e4f46fb529d9ac47a644431f32ef4cf8e2",
       "app_version": "0.179.0",
