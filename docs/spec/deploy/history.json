@@ -2,6 +2,51 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-10-13T14:17:03-03:00",
+      "sha": "dd25ed4010c015e05ba9e9a3635318a1091f3ab6",
+      "app_version": "0.195.0",
+      "subject": "Onda hospital-33-onda1: Carga da memória grava modelo_id e libera Aplicar a todas; Faturista da conta reanalisa com a regra nova; Conta registra a versão da tabela de preço que usou",
+      "raw_subject": "chore(deploy): registro da onda hospital-33-onda1 (#1209 #1210 #1212)",
+      "scope": [
+        "backend"
+      ],
+      "prds": [],
+      "result": "healthy",
+      "duration_seconds": 4465,
+      "services_touched": [
+        "backend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        },
+        {
+          "service": "frontend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [
+        "119_contas_medicas_versao_da_tabela.sql"
+      ],
+      "rollback_target_sha": null,
+      "notes": "onda-enxuta hospital-33-onda1: PR #1209 (issue #1205), PR #1210 (issue #1207), PR #1212 (issue #1206), mergeados PR a PR. Merge pela API do GitHub, um build. Registro pela Action pos-merge depois do health.",
+      "etapas": {
+        "merge_s": 9,
+        "build_s": {
+          "backend": 50
+        },
+        "health_s": 0
+      },
+      "responsavel": "pedrorezendefig"
+    },
+    {
       "at": "2026-10-13T12:23:45-03:00",
       "sha": "1fd69b85b566902f9f8aea45ee4045a0bc1860fc",
       "app_version": "0.194.0",
