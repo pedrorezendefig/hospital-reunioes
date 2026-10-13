@@ -134,7 +134,7 @@ def listar_operadoras(supabase) -> list[dict[str, Any]]:
         precos = {
             t["id"]: t
             for t in supabase.table("cm_tabela_preco")
-            .select("id, nome, tipo, versao, vigencia_inicio, vigencia_fim")
+            .select("id, nome, tipo, versao, vigencia_inicio, vigencia_fim, criado_em")
             .in_("id", [ligacao["tabela_id"] for ligacao in ligacoes])
             .execute()
             .data

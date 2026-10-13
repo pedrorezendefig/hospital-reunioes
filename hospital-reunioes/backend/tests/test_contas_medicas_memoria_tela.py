@@ -355,3 +355,43 @@ class TestExportarEReimportar:
         assert exportada.status_code == 200
         assert exportada.text.startswith("---\noperadora: ALFA\nnome: Alfa Saúde\nversao_memoria: '1.0'\n")
         assert "\n## 3. DIÁRIAS\n" in exportada.text
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 5. "Nova versão" de tabela: a anterior fica, a data escolhe
+# ═══════════════════════════════════════════════════════════════════════════
+
+TABELAS = Path(__file__).resolve().parent / "fixtures" / "contas_medicas" / "tabelas"
+
+
+def _nova_versao_de_tabela(cliente: TestClient, arquivo: str, inicio: str):
+    return cliente.post(
+        "/api/contas-medicas/operadoras/UNIMED/tabelas",
+        data={"categoria": "MEDICAMENTO", "vigencia_inicio": inicio},
+        files={"arquivo": (arquivo, (TABELAS / arquivo).read_bytes(), "text/csv")},
+    )
+
+
+class TestNovaVersaoDeTabela:
+    def test_a_anterior_fica_a_em_uso_e_a_da_data_de_hoje_e_a_busca_de_preco_escolhe_pela_data(self):
+        from app.services.contas_medicas.tabelas import preco
+
+        cliente, banco = _cliente(GESTAO, _com_operadoras("UNIMED"))
+        for arquivo, inicio in (
+            ("unimed-lpm-medicamentos.csv", "2020-01-01"),
+            ("unimed-lpm-medicamentos-v2.csv", "2021-01-01"),
+            ("unimed-lpm-medicamentos-v2.csv", "2099-01-01"),
+        ):
+            assert _nova_versao_de_tabela(cliente, arquivo, inicio).status_code == 201
+
+        [unimed] = cliente.get("/api/contas-medicas/operadoras").json()["operadoras"]
+        medicamentos = next(t for t in unimed["tabelas"] if t["categoria"] == "MEDICAMENTO")
+
+        assert [(v["vigencia_inicio"], v["em_uso"]) for v in medicamentos["versoes"]] == [
+            ("2099-01-01", False),
+            ("2021-01-01", True),
+            ("2020-01-01", False),
+        ]
+        assert len(banco.linhas("cm_tabela_preco")) == 3
+        assert preco(banco, "op-UNIMED", "MEDICAMENTO", "90458125", date(2020, 6, 1)) == Decimal("30.96")
+        assert preco(banco, "op-UNIMED", "MEDICAMENTO", "90458125", date(2021, 6, 1)) == Decimal("32.50")
