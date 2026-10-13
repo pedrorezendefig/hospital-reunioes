@@ -21,6 +21,7 @@ O texto devolvido tem dado de paciente: nunca vai para log, nem em caso de erro.
 
 from __future__ import annotations
 
+import json
 import logging
 import os
 import subprocess
@@ -31,7 +32,10 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 
 from app.services import contas_medicas_extrator_filho as filho
+from app.services import contas_medicas_marcacoes_filho as filho_das_marcacoes
 from app.services import transcricao_extractor as orcamento
+from app.services.contas_medicas.marcacoes import inserir_nas_paginas
+from app.services.contas_medicas.prontuario import e_formulario
 
 logger = logging.getLogger(__name__)
 
@@ -53,6 +57,7 @@ MENSAGEM_PDF_GRANDE_DEMAIS = (
 MENSAGEM_PDF_ILEGIVEL = "Não consegui ler o PDF. Confira se ele abre no computador e envie de novo."
 
 _CAMINHO_DO_FILHO = os.path.abspath(filho.__file__)
+_CAMINHO_DAS_MARCACOES = os.path.abspath(filho_das_marcacoes.__file__)
 
 
 @dataclass(frozen=True)
@@ -90,8 +95,66 @@ def paginas_do_texto_guardado(bruto: bytes) -> list[Pagina]:
     return _paginas(bruto.decode("utf-8", errors="replace"))
 
 
+@dataclass(frozen=True)
+class _Desfecho:
+    motivo: str | None
+    codigo: int
+    bruto: bytes
+    diagnostico: str
+
+
+def _rodar(argv: list[str], pasta: str, nome: str) -> _Desfecho:
+    """Um filho com o orçamento da leitura: prazo, teto de memória e canal de volta."""
+    saida = os.path.join(pasta, f"{nome}.saida")
+    erro = os.path.join(pasta, f"{nome}.erro")
+    with open(saida, "wb") as f_saida, open(erro, "wb") as f_erro:
+        proc = subprocess.Popen(
+            [sys.executable, "-P", *argv],
+            stdin=subprocess.DEVNULL,
+            stdout=f_saida,
+            stderr=f_erro,
+            env=orcamento._ambiente_do_filho(),
+        )
+        motivo = orcamento._acompanhar(
+            proc,
+            saida,
+            erro,
+            prazo=PRAZO_DA_LEITURA,
+            teto_da_saida=TETO_DO_TEXTO_DEVOLVIDO,
+        )
+    if motivo is None and orcamento._tamanho(saida) > TETO_DO_TEXTO_DEVOLVIDO:
+        motivo = "saida"
+    bruto = b"" if motivo is not None else orcamento._ler(saida)
+    return _Desfecho(motivo, proc.returncode, bruto, orcamento._ler_cauda(erro, orcamento.RABO_DO_ERRO_NO_LOG))
+
+
+def _marcacoes(entrada: str, pasta: str, paginas: list[Pagina]) -> dict[int, list[list[str]]]:
+    """As marcações dos formulários, lidas num segundo filho com o mesmo orçamento.
+    Só as páginas de formulário: um Prontuário tem centenas de páginas e o
+    `pdfplumber` é lento. Se a leitura falhar, o texto segue sem as marcações."""
+    formularios = [p.numero for p in paginas if not p.sem_texto and e_formulario(p.texto)]
+    if not formularios:
+        return {}
+    limite = str(orcamento.LIMITE_DE_ENDERECAMENTO)
+    lista = ",".join(map(str, formularios))
+    desfecho = _rodar([_CAMINHO_DAS_MARCACOES, limite, entrada, lista], pasta, "marcacoes")
+    if desfecho.motivo is not None or desfecho.codigo != 0:
+        logger.warning(
+            "Leitura das marcacoes falhou (%s): o texto segue sem elas",
+            desfecho.motivo or f"codigo {desfecho.codigo}: {desfecho.diagnostico}",
+        )
+        return {}
+    try:
+        lidas = json.loads(desfecho.bruto)
+        return {int(numero): linhas for numero, linhas in lidas.items()}
+    except (ValueError, AttributeError):
+        logger.warning("Leitura das marcacoes devolveu saida ilegivel: o texto segue sem elas")
+        return {}
+
+
 def extrair_paginas(pdf: bytes) -> list[Pagina] | ErroLeitura:
-    """Texto do PDF por página, lido pelo `pdftotext -layout` num processo isolado."""
+    """Texto do PDF por página, lido pelo `pdftotext -layout` num processo isolado,
+    com as marcações de caixa e botão dos formulários no lugar das imagens."""
     if not _vagas.acquire(timeout=PRAZO_DA_LEITURA):
         logger.warning("Leitura de PDF sem vaga apos %ss", PRAZO_DA_LEITURA)
         return ErroLeitura(orcamento.MENSAGEM_FILA_CHEIA)
@@ -99,41 +162,28 @@ def extrair_paginas(pdf: bytes) -> list[Pagina] | ErroLeitura:
     try:
         with tempfile.TemporaryDirectory(prefix="contas-medicas-") as pasta:
             entrada = os.path.join(pasta, "entrada.pdf")
-            saida = os.path.join(pasta, "saida")
-            erro = os.path.join(pasta, "erro")
             with open(entrada, "wb") as f:
                 f.write(pdf)
 
-            with open(saida, "wb") as f_saida, open(erro, "wb") as f_erro:
-                proc = subprocess.Popen(
-                    [sys.executable, "-P", _CAMINHO_DO_FILHO, str(orcamento.LIMITE_DE_ENDERECAMENTO), entrada],
-                    stdin=subprocess.DEVNULL,
-                    stdout=f_saida,
-                    stderr=f_erro,
-                    env=orcamento._ambiente_do_filho(),
-                )
-                motivo = orcamento._acompanhar(
-                    proc,
-                    saida,
-                    erro,
-                    prazo=PRAZO_DA_LEITURA,
-                    teto_da_saida=TETO_DO_TEXTO_DEVOLVIDO,
-                )
-
-            if motivo is None and orcamento._tamanho(saida) > TETO_DO_TEXTO_DEVOLVIDO:
-                motivo = "saida"
-            bruto = b"" if motivo is not None else orcamento._ler(saida)
-            diagnostico = orcamento._ler_cauda(erro, orcamento.RABO_DO_ERRO_NO_LOG)
+            desfecho = _rodar([_CAMINHO_DO_FILHO, str(orcamento.LIMITE_DE_ENDERECAMENTO), entrada], pasta, "texto")
+            if desfecho.motivo is not None or desfecho.codigo != 0:
+                paginas, marcacoes = [], {}
+            else:
+                paginas = _paginas(desfecho.bruto.decode("utf-8", errors="replace"))
+                marcacoes = _marcacoes(entrada, pasta, paginas)
     finally:
         _vagas.release()
 
-    if motivo is not None or proc.returncode < 0:
+    if desfecho.motivo is not None or desfecho.codigo < 0:
         # Código negativo é sinal: o filho foi morto (OOM do cgroup), não terminou.
         return ErroLeitura(MENSAGEM_PDF_GRANDE_DEMAIS)
 
-    if proc.returncode != 0:
+    if desfecho.codigo != 0:
         # O `stderr` do `pdftotext` só tem diagnóstico do arquivo, nunca o texto.
-        logger.error("Leitura de PDF falhou (codigo %s): %s", proc.returncode, diagnostico)
+        logger.error("Leitura de PDF falhou (codigo %s): %s", desfecho.codigo, desfecho.diagnostico)
         return ErroLeitura(MENSAGEM_PDF_ILEGIVEL)
 
-    return _paginas(bruto.decode("utf-8", errors="replace"))
+    if not marcacoes:
+        return paginas
+    textos = inserir_nas_paginas([p.texto for p in paginas], marcacoes)
+    return [Pagina(p.numero, texto, p.sem_texto) for p, texto in zip(paginas, textos, strict=True)]
