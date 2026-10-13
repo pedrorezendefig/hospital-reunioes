@@ -436,6 +436,20 @@ class TestRespostaForaDoFormato:
         assert len(provedor.corpos) == 2
         assert [linha.regra_id for linha in resultado.linhas] == ["ASSIM-INS-33"]
 
+    def test_o_motivo_da_linha_tem_ate_140_caracteres_no_schema_e_o_de_141_e_recusado(self, provedor):
+        (linha,) = LINHAS_VALIDAS["linhas"]
+        longa = {"linhas": [{**linha, "motivo": "x" * 141}], "resumo": "x"}
+        no_limite = {"linhas": [{**linha, "motivo": "x" * 140}], "resumo": "x"}
+        provedor.responder((json.dumps(longa), USO_PADRAO), (json.dumps(no_limite), USO_PADRAO))
+
+        resultado = _comparar()
+
+        schema = provedor.corpos[0]["response_format"]["json_schema"]["schema"]
+        assert schema["properties"]["linhas"]["items"]["properties"]["motivo"] == {"type": "string", "maxLength": 140}
+        # A primeira resposta, com 141, não passou no Pydantic; a de 140 vale.
+        assert len(provedor.corpos) == 2
+        assert [len(linha.motivo) for linha in resultado.linhas] == [140]
+
     def test_provedor_fora_do_ar_tambem_tem_tres_tentativas(self, provedor):
         provedor.responder(httpx.Response(503, json={"error": {"message": "sem provedor"}}))
 

@@ -28,7 +28,7 @@ from time import perf_counter
 from typing import Any, Literal
 
 from openai import APIError, OpenAI
-from pydantic import BaseModel, ConfigDict, ValidationError
+from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from app.config import settings
 from app.services.ai_processor import _OPENROUTER_HEADERS
@@ -57,6 +57,9 @@ PRAZO_DA_TENTATIVA_S = 180
 # Toda chamada do módulo: só provedor que aceita o schema, sem retenção do
 # texto e sem coleta para treino. O prontuário nunca fica no provedor.
 PROVEDOR = {"require_parameters": True, "zdr": True, "data_collection": "deny"}
+
+# O motivo de cada linha do Guia, como a faturista lê: uma frase curta (Anexo B).
+MOTIVO_MAX = 140
 
 _esperar = time.sleep
 
@@ -192,7 +195,7 @@ class LinhaDaComparacao(_Estrito):
     quantidade_lancada: float
     quantidade_devida: float
     regra_id: str
-    motivo: str
+    motivo: str = Field(max_length=MOTIVO_MAX)
     evidencia: Evidencia
     nivel_evidencia: Literal["REGISTRADO", "PRESCRITO", "PRESCRITO_SN", "POR_REGRA"]
     causa_raiz: Literal[
