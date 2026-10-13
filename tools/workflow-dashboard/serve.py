@@ -28,7 +28,10 @@ import collect as collector  # noqa: E402
 
 STATIC = HERE / "static"
 ROOT = HERE.parents[1]
-TTL_SECONDS = 60
+# O GitHub é coletado por evento: ?fresh=1 vem do botão de recoletar e do hr-ondas quando
+# um agente começa ou termina, uma subida fecha ou chega migration. Sem evento, o retrato vale
+# 5 min; o auto-refresh da página (60 s) só relê o cache e não gasta a cota do GraphQL.
+TTL_SECONDS = 300
 
 MIME = {
     ".html": "text/html; charset=utf-8",

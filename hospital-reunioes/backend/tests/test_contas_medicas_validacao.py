@@ -664,7 +664,7 @@ class TestObservacao:
 
 
 # ═══════════════════════════════════════════════════════════════════════════
-# 4. Dicionário: o termo que a IA propôs só casa depois de confirmado
+# 4. Dicionário: a Validação confirma ou rejeita o termo que a IA propôs
 # ═══════════════════════════════════════════════════════════════════════════
 
 # O item da conta seguinte: a marca não lembra o termo, só o dicionário liga.
@@ -689,7 +689,6 @@ class TestDicionario:
     def test_proposta_da_ia_confirmada_passa_a_casar_na_conta_seguinte(self):
         banco = _cenario()
         _proposta_da_ia(banco)
-        assert casar(PRESCRITO, [POSIFLUSH], dicionario_do_banco(banco)).como == "NENHUM"
 
         [tema] = _fila_de_validacao(banco)["temas"]
         assert tema["tipo"] == "DICIONARIO"
@@ -715,12 +714,16 @@ class TestDicionario:
 
         assert _decidir(banco, tema["id"], {"decisao": "REJEITAR"}).status_code == 200
 
+        # Como a rejeição pela tela Operadoras (issue #1135): o termo fica
+        # decidido e sem código, para a IA não ser perguntada de novo.
+        [termo] = banco.tabelas["cm_item_dicionario"]
+        assert (termo["situacao"], termo["codigo_conta"], termo["autor_id"]) == ("CONFIRMADO", None, "G1")
         assert casar(PRESCRITO, [POSIFLUSH], dicionario_do_banco(banco)).como == "NENHUM"
         assert _fila_de_validacao(banco)["temas"] == []
 
     def test_termo_da_carga_da_gestao_casa_como_antes(self):
         """A carga do dicionário grava PROPOSTO quando o CSV não diz CONFIRMADO,
-        e esses termos sempre casaram: só a proposta da IA espera a Validação."""
+        e esses termos sempre casaram: só a proposta da IA vai para a Validação."""
         banco = _cenario()
         banco.tabelas["cm_item_dicionario"].append(
             {

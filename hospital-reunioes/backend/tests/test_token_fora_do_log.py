@@ -126,6 +126,10 @@ PARAMS_SEM_SEGREDO = {
     "produto_id",
     "participante_id",
     "prorrogacao_id",
+    # UUID da proposta da IA no dicionário de Contas médicas (issue #1135). Nao
+    # e credencial: a rota exige a permissao "regra contratual e tabelas", e o
+    # id sozinho nao abre porta nenhuma, como a `sigla`.
+    "proposta_id",
     "protocolo",
     "relatorio_id",
     "responsavel_id",

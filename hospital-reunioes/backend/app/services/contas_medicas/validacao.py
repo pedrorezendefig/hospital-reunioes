@@ -29,6 +29,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict
 
+from app.services.contas_medicas.dicionario_ia import PropostaRecusadaError, decidir_proposta
 from app.services.contas_medicas.ia import chamada_curta
 from app.services.contas_medicas.memoria_edicao import mudar_regra
 from app.services.contas_medicas.operadoras import memoria_vigente
@@ -605,11 +606,15 @@ def decidir_tema(supabase, tema_id: str, corpo: dict, me: dict) -> dict:
             _decidir_as_linhas(supabase, tema, me.get("id"))
         elif decisao == EDITAR_REGRA:
             _mudar_a_regra(supabase, tema, corpo, me, validar=False)
-        elif decisao == CONFIRMAR:
-            # Confirmado, o termo passa a casar na próxima análise.
-            supabase.table("cm_item_dicionario").update({"situacao": "CONFIRMADO"}).eq(
-                "id", tema.get("item_dicionario_id")
-            ).execute()
+        elif decisao in (CONFIRMAR, REJEITAR):
+            # A mesma decisão da tela Operadoras (issue #1135): rejeitar tira o
+            # código, para o termo não casar nem voltar à IA.
+            try:
+                decidir_proposta(
+                    supabase, tema.get("item_dicionario_id"), confirmar=decisao == CONFIRMAR, autor_id=me.get("id")
+                )
+            except PropostaRecusadaError as exc:
+                raise DecisaoRecusadaError(str(exc)) from None
     except Exception:
         supabase.table("cm_validacao_tema").update(
             {"estado": ABERTO, "decisao": None, "resposta": None, "decidido_por": None, "decidido_em": None}

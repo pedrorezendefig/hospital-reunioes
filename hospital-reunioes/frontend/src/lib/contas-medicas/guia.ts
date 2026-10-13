@@ -41,6 +41,17 @@ export interface LinhaGuia {
   motivo_nao_procede: MotivoNaoProcede | null;
   texto_nao_procede: string | null;
   nao_conferido: boolean;
+  /** A marca do reenvio da conta corrigida (issue #1136), só nas linhas Feito de conta reenviada. */
+  reenvio?: MarcaDoReenvio | null;
+}
+
+export type MarcaDoReenvio = "CORRIGIDA" | "AINDA_NA_CONTA";
+
+export interface Reenvio {
+  nota_saida: number | null;
+  reenviada_em: string;
+  corrigidas: number;
+  ainda_na_conta: number;
 }
 
 export interface GrupoGuia {
@@ -74,6 +85,10 @@ export interface Guia {
   grupos: GrupoGuia[];
   /** O botão "Reanalisar" (issue #1130): a permissão de regra contratual e tabelas, na conta ainda aberta. */
   pode_reanalisar?: boolean;
+  /** O reenvio da conta corrigida (issue #1136): nulo enquanto a conta não foi reenviada. */
+  reenvio?: Reenvio | null;
+  /** O botão "Reenviar conta corrigida": a conta concluída. */
+  pode_reenviar?: boolean;
   /** O "Responder ao time" da Validação sobre o que esta conta levantou (issue #1142). */
   respostas?: RespostaDaValidacao[];
 }
@@ -83,6 +98,17 @@ export interface RespostaDaValidacao {
   regra_codigo: string | null;
   resposta: string;
   decidido_em: string | null;
+}
+
+export const ROTULO_REENVIO: Record<MarcaDoReenvio, string> = {
+  CORRIGIDA: "corrigida no MV",
+  AINDA_NA_CONTA: "ainda na conta",
+};
+
+/** "2 corrigidas no MV, 1 ainda na conta, nota de saída 86" */
+export function resumoDoReenvio(r: { corrigidas: number; ainda_na_conta: number; nota_saida: number | null }): string {
+  const corrigidas = `${r.corrigidas} ${r.corrigidas === 1 ? "corrigida" : "corrigidas"} no MV`;
+  return `${corrigidas}, ${r.ainda_na_conta} ainda na conta, nota de saída ${r.nota_saida}`;
 }
 
 export const ROTULO_ACAO: Record<AcaoGuia, string> = {
@@ -106,6 +132,17 @@ export const ROTULO_NIVEL: Record<NonNullable<LinhaGuia["nivel_evidencia"]>, str
   PRESCRITO_SN: "Prescrito SN",
   POR_REGRA: "Por regra",
 };
+
+/**
+ * A etiqueta âmbar da linha "se necessário" sem registro de uso no MV (nível
+ * PRESCRITO_SN, issue #1134). O texto para a faturista vem no motivo.
+ */
+export const ETIQUETA_SE_NECESSARIO = "SE NECESSÁRIO · SEM REGISTRO NO MV";
+
+/** O motivo que o Não procede já traz marcado: a linha SN sem uso não tem evidência. */
+export function motivoInicialDoNaoProcede(linha: LinhaGuia): MotivoNaoProcede | null {
+  return linha.nivel_evidencia === "PRESCRITO_SN" ? "SEM_EVIDENCIA" : null;
+}
 
 export const ROTULO_SITUACAO: Record<string, string> = {
   A_FAZER: "A fazer",

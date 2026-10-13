@@ -6,16 +6,18 @@
  * A tela que cabe ao lado do MV (720 px): cabeçalho da conta, os três números
  * (Nota de entrada, R$ a ajustar, Itens feitos), as linhas por dia e setor e o
  * rodapé com a observação e o "Concluir e abrir a próxima", sempre habilitado.
+ * Na conta concluída, o rodapé tem o "Reenviar conta corrigida" (issue #1136):
+ * a nota de saída vai ao lado da de entrada e cada linha Feito ganha a marca.
  *
  * Quem decide tudo é o servidor: a faturista só abre a própria conta, abrir
  * muda A fazer para Em correção, e concluída não aceita marcação. Depois de
  * cada clique a tela relê o Guia, para os números nunca saírem da conta.
  */
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
-import { ArrowLeft, RefreshCw } from "lucide-react";
+import { ArrowLeft, RefreshCw, Upload } from "lucide-react";
 
 import { LinhaDoGuia, type Marcacao } from "@/components/contas-medicas/LinhaDoGuia";
 import { useToast } from "@/components/ui/Toast";
@@ -27,6 +29,7 @@ import {
   dataCurta,
   perguntaDeConclusao,
   reais,
+  resumoDoReenvio,
   rotuloDoGrupo,
 } from "@/lib/contas-medicas/guia";
 import { createClient } from "@/lib/supabase/client";
@@ -87,6 +90,8 @@ export default function GuiaPage() {
   const [erro, setErro] = useState<string | null>(null);
   const [ocupado, setOcupado] = useState(false);
   const [observacao, setObservacao] = useState("");
+  const [resultadoDoReenvio, setResultadoDoReenvio] = useState<string | null>(null);
+  const seletorDoPdf = useRef<HTMLInputElement>(null);
 
   const base = `/api/contas-medicas/contas/${contaId}/guia`;
 
@@ -114,6 +119,7 @@ export default function GuiaPage() {
       setToken(tk);
       setGuia(null);
       setObservacao("");
+      setResultadoDoReenvio(null);
       if (tk) await carregar(tk);
       else setErro("Sessão expirada. Entre de novo.");
     }
@@ -187,6 +193,29 @@ export default function GuiaPage() {
     } finally {
       setOcupado(false);
     }
+  }
+
+  async function reenviar(arquivo: File | undefined) {
+    if (!token || !arquivo) return;
+    const corpo = new FormData();
+    corpo.append("arquivo", arquivo, arquivo.name);
+    setOcupado(true);
+    try {
+      const resposta = await fetch(`/api/contas-medicas/contas/${contaId}/reenvio`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+        body: corpo,
+      });
+      if (!resposta.ok) {
+        toast(await detalhe(resposta, "Não consegui ler a conta corrigida. Envie de novo."), "error");
+        return;
+      }
+      setResultadoDoReenvio(resumoDoReenvio(await resposta.json()));
+    } finally {
+      setOcupado(false);
+      if (seletorDoPdf.current) seletorDoPdf.current.value = "";
+    }
+    await carregar(token);
   }
 
   async function concluir() {
@@ -291,9 +320,17 @@ export default function GuiaPage() {
       )}
 
       <section aria-label="Números do guia" className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-        <div className="bg-white rounded-2xl border border-border shadow-premium p-4">
-          <p className={TITULO}>Nota de entrada</p>
-          <p className="text-3xl font-bold text-primary">{numeros.nota_entrada}</p>
+        <div className="bg-white rounded-2xl border border-border shadow-premium p-4 flex flex-wrap gap-x-6 gap-y-2">
+          <div>
+            <p className={TITULO}>Nota de entrada</p>
+            <p className="text-3xl font-bold text-primary">{numeros.nota_entrada}</p>
+          </div>
+          {guia.reenvio?.nota_saida != null && (
+            <div>
+              <p className={TITULO}>Nota de saída</p>
+              <p className="text-3xl font-bold text-primary">{guia.reenvio.nota_saida}</p>
+            </div>
+          )}
         </div>
         <div className="bg-white rounded-2xl border border-border shadow-premium p-4">
           <p className={TITULO}>R$ a ajustar</p>
@@ -349,9 +386,39 @@ export default function GuiaPage() {
       })}
 
       {concluida ? (
-        <p className="bg-white rounded-2xl border border-border p-4 text-sm text-slate-600">
-          Conta concluída. As marcações não mudam mais.
-        </p>
+        <footer className="bg-white rounded-2xl border border-border p-4 space-y-3">
+          <p className="text-sm text-slate-600">Conta concluída. As marcações não mudam mais.</p>
+          {guia.pode_reenviar && (
+            <div className="space-y-2">
+              <input
+                ref={seletorDoPdf}
+                type="file"
+                accept="application/pdf"
+                aria-label="PDF da conta corrigida"
+                className="hidden"
+                onChange={(evento) => reenviar(evento.target.files?.[0])}
+              />
+              <button
+                type="button"
+                onClick={() => seletorDoPdf.current?.click()}
+                disabled={ocupado}
+                className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl border border-slate-200 bg-white text-sm font-semibold text-slate-700 hover:border-slate-300 disabled:opacity-50"
+              >
+                <Upload className="w-4 h-4" aria-hidden="true" />
+                Reenviar conta corrigida
+              </button>
+              {resultadoDoReenvio && (
+                <p role="status" className="text-sm font-semibold text-slate-700">
+                  {resultadoDoReenvio}
+                </p>
+              )}
+              <p className="text-xs text-slate-500">
+                Opcional. Depois de corrigir no MV, envie só o PDF da conta para ver se a correção pegou. A conta já
+                está na sua produção.
+              </p>
+            </div>
+          )}
+        </footer>
       ) : (
         <footer className="bg-white rounded-2xl border border-border shadow-premium p-4 space-y-3">
           <label htmlFor="observacao-gestao" className={`block ${TITULO}`}>

@@ -13,11 +13,14 @@ import { useState } from "react";
 import { Copy } from "lucide-react";
 
 import {
+  ETIQUETA_SE_NECESSARIO,
   type LinhaGuia,
   type MotivoNaoProcede,
   MOTIVOS_NAO_PROCEDE,
+  motivoInicialDoNaoProcede,
   ROTULO_ACAO,
   ROTULO_NIVEL,
+  ROTULO_REENVIO,
   reais,
   textoDaLinha,
   valorComSinal,
@@ -51,7 +54,7 @@ const BOTAO = "px-3 py-1.5 rounded-lg text-xs font-semibold uppercase tracking-[
 export function LinhaDoGuia({ linha, concluida, ocupado, onMarcar, onDesfazer, onCopiar }: Props) {
   const [evidenciaAberta, setEvidenciaAberta] = useState(false);
   const [naoProcedeAberto, setNaoProcedeAberto] = useState(false);
-  const [motivo, setMotivo] = useState<MotivoNaoProcede | null>(null);
+  const [motivo, setMotivo] = useState<MotivoNaoProcede | null>(() => motivoInicialDoNaoProcede(linha));
   const [texto, setTexto] = useState("");
 
   const nome = linha.descricao ?? linha.codigo ?? "Linha do guia";
@@ -78,6 +81,15 @@ export function LinhaDoGuia({ linha, concluida, ocupado, onMarcar, onDesfazer, o
       <article aria-label={nome} className={`rounded-xl border px-3 py-2 ${marcado.fundo}`}>
         <div className="flex flex-wrap items-center gap-2">
           <span className={`${ETIQUETA} ${marcado.cor}`}>{marcado.rotulo}</span>
+          {linha.reenvio && (
+            <span
+              className={`${ETIQUETA} ${
+                linha.reenvio === "CORRIGIDA" ? "bg-[#DCFCE7] text-[#166534]" : "bg-[#FEE2E2] text-[#991B1B]"
+              }`}
+            >
+              {ROTULO_REENVIO[linha.reenvio]}
+            </span>
+          )}
           <span className="text-sm text-slate-700 min-w-0 break-words">{nome}</span>
           {codigo}
           {linha.valor_diferenca != null && (
@@ -119,6 +131,9 @@ export function LinhaDoGuia({ linha, concluida, ocupado, onMarcar, onDesfazer, o
         >
           {ROTULO_ACAO[linha.acao]}
         </span>
+        {linha.nivel_evidencia === "PRESCRITO_SN" && (
+          <span className={`${ETIQUETA} bg-[#FEF3C7] text-[#92400E]`}>{ETIQUETA_SE_NECESSARIO}</span>
+        )}
         {decidida && !validar && (
           <span className={`${ETIQUETA} bg-[#FEF3C7] text-[#92400E]`}>Decidida na validação</span>
         )}

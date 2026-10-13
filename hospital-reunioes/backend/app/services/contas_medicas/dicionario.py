@@ -125,15 +125,9 @@ def importar_dicionario(supabase, termos: list[TermoLido], autor_id: str | None)
 
 
 def dicionario_do_banco(supabase) -> dict[str, set[str]]:
-    """O dicionário como o casamento usa: termo normalizado -> códigos da conta.
-
-    O termo que a IA propôs só entra depois que a Validação confirma (issue
-    #1142). O da carga da gestão entra como sempre entrou, proposto ou não."""
+    """O dicionário como o casamento usa: termo normalizado -> códigos da conta."""
     dicionario: dict[str, set[str]] = {}
-    termos = supabase.table("cm_item_dicionario").select("termo, codigo_conta, origem, situacao").execute().data
-    for linha in termos or []:
-        if linha.get("origem") == "IA" and linha.get("situacao") != "CONFIRMADO":
-            continue
+    for linha in supabase.table("cm_item_dicionario").select("termo, codigo_conta").execute().data or []:
         if linha.get("codigo_conta"):
             dicionario.setdefault(_norm(linha["termo"]), set()).add(linha["codigo_conta"])
     return dicionario

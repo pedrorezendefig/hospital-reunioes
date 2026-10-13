@@ -1,6 +1,9 @@
 import { expect, mock, test } from 'claude-code/testing'
 
-import { alvo, detalhe, etapas, pendentes, prdsVisiveis, situacaoDaOnda } from '../hooks/register'
+import {
+  agentesDoPrd, alvo, assinatura, atividadeDaSessao, corDaDuracao, detalhe, duracaoDaOnda, etapas, pendentes,
+  prdsVisiveis, rotuloDoShell, sessoesDoPrd, situacaoDaOnda, subidaDoPr,
+} from '../hooks/register'
 import type { Coleta, SubAgente } from '../types'
 
 const AGORA = 1_800_000_000_000
@@ -46,6 +49,37 @@ test('sub-agente cai na fatia pelo número da issue ou do PR', () => {
   expect(alvo(sub({ descricao: 'Implementa #9999' }), prd)).toBeNull()
 })
 
+test('sub-agente vai ao PRD do alvo, mesmo com a sessão mapeada para outro PRD', () => {
+  // a passagem da onda-ia cita primeiro "nem no PRD #1129" e o coletar.sh mapeia a sessão para o 1129
+  const prds = BRUTO.os.prds.map(p => p.n !== 1128 ? p : {
+    ...p, issues: p.issues.map(i => i.n === 1135 ? { ...i, fase: 'pr_aberto', pr: 1179 } : i),
+  })
+  const cor = sub({ sessao: 'onda-ia-onda3', id: 'cor', tipo: 'hr-corretor', descricao: 'Corrige must-fix do PR #1179' })
+  // na onda-gestao (PRD #1129), um revisor do PR #1179 também vai ao PRD #1128
+  const cruz = sub({ sessao: 'onda-gestao-onda3', id: 'cruz', tipo: 'hr-revisor', descricao: 'Revisa PR #1179', inicio: AGORA - 900_000 })
+  const solto = sub({ sessao: 'onda-gestao-onda3', id: 'solto', tipo: 'general-purpose', descricao: 'Audita a fila' })
+  const gest = sub({ sessao: 'onda-gestao-onda3', id: 'gest', descricao: 'Implementa issue #1141', inicio: AGORA })
+  const c = {
+    ...comEm(COLETA),
+    os: { ...BRUTO.os, prds },
+    agentes: [
+      { nome: 'onda-ia-onda3', status: 'busy', estado: 'working', inicio: 0 },
+      { nome: 'onda-gestao-onda3', status: 'busy', estado: 'working', inicio: 0 },
+      { nome: 'onda-c-onda1', status: 'busy', estado: 'working', inicio: 0 },
+    ],
+    prdSessoes: { 'onda-ia-onda3': 1129, 'onda-gestao-onda3': 1129, 'onda-c-onda1': 1129 },
+    subAgentes: [cor, cruz, solto, gest],
+  } as Coleta
+  const p1128 = c.os!.prds.find(p => p.n === 1128)!
+  const p1129 = c.os!.prds.find(p => p.n === 1129)!
+  expect(agentesDoPrd(c, p1128).map(a => `${a.id}:${alvo(a, p1128)}`)).toEqual(['cruz:1135', 'cor:1135'])
+  // sem alvo em nenhum PRD, o sub-agente fica no PRD da sessão, em "outros agentes"
+  expect(agentesDoPrd(c, p1129).map(a => a.id)).toEqual(['solto', 'gest'])
+  // a sessão vai ao PRD do alvo do seu sub-agente mais recente; sem sub-agente, fica no da passagem
+  expect(sessoesDoPrd(c, 1128).map(s => s.nome)).toEqual(['onda-ia-onda3'])
+  expect(sessoesDoPrd(c, 1129).map(s => s.nome)).toEqual(['onda-gestao-onda3', 'onda-c-onda1'])
+})
+
 test('esteira da fatia: implementou, CI vermelho, revisor trabalhando', () => {
   const prd = comEm(COLETA).os!.prds.find(p => p.n === 1128)!
   const i = prd.issues.find(x => x.n === 1132)!
@@ -63,9 +97,14 @@ test('onda com fatia em PR anda; onda só bloqueada fica parada', () => {
   expect(situacaoDaOnda(porN(prd.ondas[2]!), [], prd, AGORA)).toBe('parada')
 })
 
+const SUBIDA_EM_CURSO = [{ sessao: 'onda-ia-onda1', prs: [1150], inicio: AGORA - 120_000, fim: null }]
+const CI_RODANDO = { '1150': { inicio: AGORA - 9 * 60_000, fim: null } }
+
 const montar = async ($: any, on: any) => {
   mock.clock(on, { now: AGORA })
-  on('process.run', () => ({ value: { exitCode: 0, stdout: JSON.stringify({ ...COLETA, subAgentes: AGENTES }), stderr: '' } }))
+  on('process.run', () => ({
+    value: { exitCode: 0, stdout: JSON.stringify({ ...COLETA, subAgentes: AGENTES, subidas: SUBIDA_EM_CURSO, ci: CI_RODANDO }), stderr: '' },
+  }))
   on('command.register', () => ({ value: undefined }))
   on('ui.open', () => ({ value: { isPlaced: true } }))
   on('ui.toast', () => ({ value: undefined }))
@@ -89,6 +128,11 @@ for (const surface of ['terminal', 'desktop'] as const) {
     expect(await pane.find({ text: /Opus 5\.5 · xhigh/ })).toBeTruthy()
     expect(await pane.find({ text: /ctx 26% · 263k/ })).toBeTruthy()
     expect(await pane.find({ text: /Onda 3 · parada/ })).toBeTruthy()
+    // tempos: a onda desde o primeiro agente, a subida em curso da sessão, o CI pelos checks
+    expect(await pane.find({ text: /Onda 1 · andando · 10 min/ })).toBeTruthy()
+    expect(await pane.find({ text: /subida #1150/ })).toBeTruthy()
+    expect(await pane.find({ text: /^ · 2:00$/ })).toBeTruthy()
+    expect(await pane.find({ text: /^ 9 min$/ })).toBeTruthy()
   })
 
   test(`faixa acima do prompt avisa a migration com o link (${surface})`, async ($, on) => {
@@ -121,4 +165,115 @@ test('sessão interativa nasce com o painel das ondas aberto', async ($, on) => 
 
 test('sessão de fundo não abre o painel sem novidade', async ($, on) => {
   expect(await iniciar($, on, false)).toEqual([])
+})
+
+test('cor da duração: amarelo no p75, vermelho no p90, etapa sem teto sem cor', () => {
+  expect(corDaDuracao('hr-implementador', 29 * 60_000)).toBeUndefined()
+  expect(corDaDuracao('hr-implementador', 30 * 60_000)).toBe('warning')
+  expect(corDaDuracao('hr-implementador', 35 * 60_000)).toBe('error')
+  expect(corDaDuracao('CI', 12 * 60_000)).toBe('error')
+  expect(corDaDuracao('subida', 10 * 60_000)).toBe('warning')
+  expect(corDaDuracao('no ar', 999 * 60_000)).toBeUndefined()
+})
+
+test('rótulo do shell: subida e CI pelo padrão, o resto pela description', () => {
+  const subida = 'cd /r; python3 .claude/skills/onda-enxuta/scripts/fechar_onda.py --prs 1171 1169 --sessao onda-gestao-onda2 > log'
+  expect(rotuloDoShell('Roda a subida', subida)).toBe('subida #1171 #1169')
+  expect(rotuloDoShell('Simula a subida', `${subida} --dry-run`)).toBe('Simula a subida')
+  expect(rotuloDoShell('', 'gh pr checks 1169 --watch')).toBe('esperando o CI do PR #1169')
+  expect(rotuloDoShell('', 'gh run watch 123')).toBe('esperando o CI')
+  expect(rotuloDoShell('Comenta o relatório da onda no PRD 1129', 'gh issue comment 1129')).toBe('Comenta o relatório da onda no PRD 1129')
+  expect(rotuloDoShell('', 'cd /repo; git status --short')).toBe('git status --short')
+})
+
+test('esteira com tempos: soma dos agentes, CI pelos checks, subida em curso; migration pendente tira a cor', () => {
+  const prd = comEm(COLETA).os!.prds.find(p => p.n === 1128)!
+  const i = prd.issues.find(x => x.n === 1132)!
+  const ags = [
+    sub({ id: 'imp', descricao: 'Implementa #1132', terminou: true, inicio: AGORA - 40 * 60_000, fim: AGORA - 5 * 60_000 }),
+    sub({ id: 'cor', tipo: 'hr-corretor', descricao: 'Corrige PR 1150', inicio: AGORA - 3 * 60_000, fim: AGORA - 60_000 }),
+  ]
+  const subida = { sessao: 'onda-ia-onda1', prs: [1150], inicio: AGORA - 11 * 60_000, fim: null }
+  const por = Object.fromEntries(etapas(i, ags, AGORA, { ci: { inicio: AGORA - 9 * 60_000, fim: null }, subida }).map(s => [s.nome, s]))
+  expect(por.implementar).toEqual({ nome: 'implementar', estado: 'feita', ms: 35 * 60_000, cor: 'error' })
+  expect(por.CI).toEqual({ nome: 'CI', estado: 'falhou', ms: 9 * 60_000, cor: 'warning' })
+  expect(por.corrigir).toEqual({ nome: 'corrigir', estado: 'agora', ms: 3 * 60_000, cor: undefined })
+  expect(por.subida).toEqual({ nome: 'subida', estado: 'agora', ms: 11 * 60_000, cor: 'warning' })
+  const esperandoStudio = etapas(i, ags, AGORA, { subida, migrationPendente: true }).find(s => s.nome === 'subida')!
+  expect(esperandoStudio.ms).toBe(11 * 60_000)
+  expect(esperandoStudio.cor).toBeUndefined()
+  // sem checks nem subida, a etapa não inventa tempo
+  expect(etapas(i, [], AGORA).map(s => s.ms)).toEqual([undefined, undefined, undefined, undefined, undefined])
+})
+
+test('atividade da sessão: subida em curso ganha do shell; tempo da onda do primeiro agente até agora', () => {
+  const c = comEm({ ...COLETA, subAgentes: AGENTES, subidas: SUBIDA_EM_CURSO } as typeof COLETA)
+  const s = { ...c.agentes[0]!, shell: { descricao: 'Comenta', comando: 'gh', inicio: AGORA - 5000 } }
+  expect(atividadeDaSessao(s, c)).toEqual({ texto: 'subida #1150', inicio: AGORA - 120_000 })
+  expect(atividadeDaSessao(s, { ...c, subidas: [] })).toEqual({ texto: 'Comenta', inicio: AGORA - 5000 })
+  expect(atividadeDaSessao({ ...s, shell: null }, { ...c, subidas: [] })).toBeNull()
+  expect(subidaDoPr(c, 1150)?.inicio).toBe(AGORA - 120_000)
+  expect(subidaDoPr(c, null)).toBeUndefined()
+  const prd = c.os!.prds.find(p => p.n === 1128)!
+  const onda1 = prd.ondas[0]!.map(n => prd.issues.find(i => i.n === n)!)
+  expect(duracaoDaOnda(onda1, AGENTES, prd, AGORA)).toBe(600_000) // o revisor ainda trabalha: até agora
+  expect(duracaoDaOnda(onda1, [], prd, AGORA)).toBeNull()
+})
+
+test('Hospital OS sem resposta: o painel guarda o último retrato e avisa a idade', async ($, on) => {
+  let coletas = 0
+  const relogio = mock.clock(on, { now: AGORA })
+  on('process.run', () => {
+    coletas += 1
+    return { value: { exitCode: 0, stdout: JSON.stringify(coletas === 1 ? COLETA : { ...COLETA, os: null }), stderr: '' } }
+  })
+  on('command.register', () => ({ value: undefined }))
+  on('ui.open', () => ({ value: { isPlaced: true } }))
+  on('ui.toast', () => ({ value: undefined }))
+  on('ui.status', () => ({ value: undefined }))
+  on('command.run', () => ({ text: '' }))
+  on('ui.render', () => null)
+  await $.command.run({ command: 'ondas', args: '', origin: 'user', presentation: 'text' })
+  await relogio.advance(3 * 60_000)
+  await $.command.run({ command: 'ondas', args: '', origin: 'user', presentation: 'text' })
+  expect(coletas).toBe(2)
+  const pane = await $.ui.mount({ plugin: 'hr-ondas', surface: 'terminal', component: 'Pane', requestId: 'ondas', props: {} as any })
+  expect(await pane.find({ text: /Hospital OS sem resposta, PRDs de há 3 min/ })).toBeTruthy()
+  expect(await pane.find({ text: /PRD #1128/ })).toBeTruthy()
+  expect(await pane.find({ text: /fora do ar/ })).toBeUndefined()
+})
+
+test('assinatura muda quando agente termina, subida fecha ou migration chega; não muda com o shell', () => {
+  const base = { agentes: [{ nome: 'onda-x', status: 'busy', estado: null, inicio: 0 }], subAgentes: AGENTES, subidas: [], migrations: [] }
+  const a = assinatura(base)
+  expect(assinatura({ ...base, agentes: [{ ...base.agentes[0]!, shell: { descricao: 'x', comando: 'ls', inicio: 1 } }] })).toBe(a)
+  expect(assinatura({ ...base, subAgentes: AGENTES.map(x => ({ ...x, terminou: true })) })).not.toBe(a)
+  expect(assinatura({ ...base, subidas: [{ sessao: 'onda-x', prs: [1], inicio: 0, fim: 5 }] })).not.toBe(a)
+  expect(assinatura({ ...base, agentes: [{ ...base.agentes[0]!, status: 'idle' }] })).not.toBe(a)
+})
+
+test('relógio coleta sem ir ao GitHub; evento do workflow pede coleta fresca uma vez', async ($, on) => {
+  const chamadas: string[][] = []
+  let terminou = false
+  const relogio = mock.clock(on, { now: AGORA })
+  on('process.run', (_$: any, e: any) => {
+    chamadas.push([...e.argv])
+    const subAgentes = [{ ...AGENTES[1]!, terminou }]
+    return { value: { exitCode: 0, stdout: JSON.stringify({ ...COLETA, subAgentes }), stderr: '' } }
+  })
+  on('command.register', () => ({ value: undefined }))
+  on('ui.open', () => ({ value: { isPlaced: true } }))
+  on('ui.toast', () => ({ value: undefined }))
+  on('ui.status', () => ({ value: undefined }))
+  on('session.start', () => ({ cwd: '/repo' }))
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: false })
+  await relogio.advance(10_001)
+  const frescas = () => chamadas.filter(c => JSON.stringify(c).includes('--fresco')).length
+  expect(chamadas.length).toBe(2)
+  expect(frescas()).toBe(0)
+  terminou = true // o revisor terminou: evento
+  await relogio.advance(10_000)
+  expect(frescas()).toBe(1)
+  await relogio.advance(10_000) // nada mudou de novo
+  expect(frescas()).toBe(1)
 })
