@@ -422,7 +422,7 @@ def _pipeline(supabase, conta: dict, cronometro: _Cronometro) -> None:
             )
 
         with cronometro.etapa("passo_b"):
-            da_ia = passo_b.comparar(
+            da_ia = passo_b.comparar_com_a_ia(
                 supabase,
                 conta_id=conta["id"],
                 atendimento_id=conta["atendimento_id"],

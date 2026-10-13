@@ -48,7 +48,7 @@ from app.services.contas_medicas.passo_a import _identificacao, _ler_quando, _te
 from app.services.contas_medicas_conta import Conta
 from app.utils.text_sanitizer import sanitizar_estrutura
 
-__all__ = ["LinhasDaIA", "comparar", "eventos_do_periodo", "juntar"]
+__all__ = ["LinhasDaIA", "comparar_com_a_ia", "eventos_do_periodo", "juntar"]
 
 CENTAVO = Decimal("0.01")
 
@@ -317,7 +317,7 @@ def _bloqueados(supabase, resposta: ia.LinhasDaComparacao) -> frozenset[str]:
     return frozenset(linha["codigo"] for linha in marcadas)
 
 
-def comparar(
+def comparar_com_a_ia(
     supabase,
     *,
     conta_id: str,
