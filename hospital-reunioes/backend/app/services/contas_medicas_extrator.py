@@ -16,6 +16,10 @@ As vagas são do módulo e não as do extrator de documentos: dividir o mesmo
 semáforo deixaria um Prontuário de dois minutos segurando a vaga de quem sobe a
 transcrição de uma Ata, e a pessoa levaria "tente de novo" sem nada de errado.
 
+As palavras com a posição de cada uma (`extrair_palavras`, #1133) saem do mesmo
+filho, pelo `pdfplumber`, com o mesmo orçamento: a prescrição lê por elas a
+coordenada das colunas.
+
 O texto devolvido tem dado de paciente: nunca vai para log, nem em caso de erro.
 """
 
@@ -28,8 +32,9 @@ import subprocess
 import sys
 import tempfile
 import threading
-from collections.abc import Sequence
+from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
+from typing import NamedTuple
 
 from app.services import contas_medicas_extrator_filho as filho
 from app.services import contas_medicas_marcacoes_filho as filho_das_marcacoes
@@ -187,3 +192,56 @@ def extrair_paginas(pdf: bytes) -> list[Pagina] | ErroLeitura:
         return paginas
     textos = inserir_nas_paginas([p.texto for p in paginas], marcacoes)
     return [Pagina(p.numero, texto, p.sem_texto) for p, texto in zip(paginas, textos, strict=True)]
+
+
+def _no_filho(pdf: bytes, *argumentos: str) -> bytes | ErroLeitura:
+    """A saída do filho sobre o PDF, num processo isolado, dentro do orçamento."""
+    if not _vagas.acquire(timeout=PRAZO_DA_LEITURA):
+        logger.warning("Leitura de PDF sem vaga apos %ss", PRAZO_DA_LEITURA)
+        return ErroLeitura(orcamento.MENSAGEM_FILA_CHEIA)
+
+    try:
+        with tempfile.TemporaryDirectory(prefix="contas-medicas-") as pasta:
+            entrada = os.path.join(pasta, "entrada.pdf")
+            with open(entrada, "wb") as f:
+                f.write(pdf)
+            argv = [_CAMINHO_DO_FILHO, str(orcamento.LIMITE_DE_ENDERECAMENTO), entrada, *argumentos]
+            desfecho = _rodar(argv, pasta, "filho")
+    finally:
+        _vagas.release()
+
+    if desfecho.motivo is not None or desfecho.codigo < 0:
+        # Código negativo é sinal: o filho foi morto (OOM do cgroup), não terminou.
+        return ErroLeitura(MENSAGEM_PDF_GRANDE_DEMAIS)
+
+    if desfecho.codigo != 0:
+        # O `stderr` do filho só tem diagnóstico do arquivo, nunca o texto.
+        logger.error("Leitura de PDF falhou (codigo %s): %s", desfecho.codigo, desfecho.diagnostico)
+        return ErroLeitura(MENSAGEM_PDF_ILEGIVEL)
+
+    return desfecho.bruto
+
+
+class Palavra(NamedTuple):
+    """Uma palavra da página com a posição, em pontos a partir do canto de cima à esquerda."""
+
+    x0: float
+    x1: float
+    topo: float
+    texto: str
+
+
+def extrair_palavras(pdf: bytes, paginas: Iterable[int]) -> dict[int, list[Palavra]] | ErroLeitura:
+    """As palavras de cada página pedida, com a posição, lidas pelo `extract_words`
+    do `pdfplumber` no mesmo processo isolado (#1133). Página fora do PDF não volta."""
+    pedidas = sorted(set(paginas))
+    if not pedidas:
+        return {}
+    bruto = _no_filho(pdf, ",".join(str(n) for n in pedidas))
+    if isinstance(bruto, ErroLeitura):
+        return bruto
+    try:
+        lidas = json.loads(bruto.decode("utf-8", errors="replace"))
+    except ValueError:
+        return ErroLeitura(MENSAGEM_PDF_ILEGIVEL)
+    return {int(n): [Palavra(*p) for p in palavras] for n, palavras in lidas.items()}

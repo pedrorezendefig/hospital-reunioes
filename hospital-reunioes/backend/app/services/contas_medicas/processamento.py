@@ -12,10 +12,11 @@ O pipeline de uma conta, em etapas cronometradas:
    extraído de novo, e o texto fica guardado: o prontuário de um atendimento é
    extraído uma vez e serve a todas as parciais e ao reprocesso;
 2. a leitura da conta, gravada em `cm_conta_item`;
-3. a leitura do prontuário. A estrutura (`cm_eventos`, com o `prontuario_ate`
-   que o aviso do envio usa, `cm_prescricao`, `cm_cirurgia`, `cm_glicemia_dia`,
-   o rótulo e a idade em `cm_atendimento`) é gravada uma vez por arquivo de
-   prontuário;
+3. a leitura do prontuário, com a prescrição lida pela posição das colunas
+   (as palavras das páginas dela vêm do PDF, #1133). A estrutura
+   (`cm_eventos`, com o `prontuario_ate` que o aviso do envio usa,
+   `cm_prescricao`, `cm_cirurgia`, `cm_glicemia_dia`, o rótulo e a idade em
+   `cm_atendimento`) é gravada uma vez por arquivo de prontuário;
 4. o dicionário: o medicamento da prescrição sem par na conta vai uma vez à
    IA, e a proposta já vale nesta conta (#1135);
 5. a conferência por código (as diárias são contadas dentro dela), com a
@@ -71,7 +72,9 @@ from app.services.contas_medicas.validacao import temas_das_linhas_validar
 from app.services.contas_medicas_conta import Conta, ErroLeitura, ler_conta
 from app.services.contas_medicas_extrator import (
     Pagina,
+    Palavra,
     extrair_paginas,
+    extrair_palavras,
     paginas_do_texto_guardado,
     texto_para_guardar,
 )
@@ -345,6 +348,20 @@ def _texto(supabase, arquivo: dict) -> list[Pagina]:
     return paginas
 
 
+def _palavras_da_prescricao(supabase, arquivo: dict, estrutura) -> dict[int, list[Palavra]]:
+    """As palavras com posição das páginas de prescrição, lidas do PDF (#1133).
+    Sem o PDF ou sem a leitura, a prescrição fica com o leitor por linha."""
+    paginas = {n for d in estrutura.documentos if d.familia == "PRESCRICAO" for n in d.paginas}
+    if not paginas:
+        return {}
+    pdf = _baixar(supabase, arquivo["chave_bucket"])
+    palavras = extrair_palavras(bytes(pdf), paginas) if pdf is not None else None
+    if not isinstance(palavras, dict):
+        logger.warning("[ContasMedicas] Prescricao lida por linha: as palavras do PDF nao vieram")
+        return {}
+    return palavras
+
+
 def _pipeline(supabase, conta: dict, cronometro: _Cronometro) -> None:
     atendimento = _primeira(supabase.table("cm_atendimento").select("*").eq("id", conta["atendimento_id"])) or {}
 
@@ -378,7 +395,8 @@ def _pipeline(supabase, conta: dict, cronometro: _Cronometro) -> None:
             estrutura = leitura_do_prontuario.ler_prontuario(textos, lida.atendimento)
         except leitura_do_prontuario.ErroLeitura as erro:
             raise _Falha(str(erro)) from None
-        conteudo = ler_conteudo(textos, estrutura)
+        palavras = _palavras_da_prescricao(supabase, arquivo_do_prontuario, estrutura)
+        conteudo = ler_conteudo(textos, estrutura, palavras)
         prontuario = ProntuarioLido(estrutura, conteudo, textos)
         gravou = _gravar_prontuario(supabase, conta["atendimento_id"], arquivo_do_prontuario["id"], prontuario)
         # A contagem do formulário em branco é de prontuários: só o arquivo novo soma.

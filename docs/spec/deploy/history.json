@@ -2,6 +2,51 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-10-13T06:05:46-03:00",
+      "sha": "e0deddd4182bc2a7236d583efc3e363b295d2c23",
+      "app_version": "0.192.0",
+      "subject": "Onda onda-ia-onda4: Prescrição lida por coordenada de coluna",
+      "raw_subject": "chore(deploy): registro da onda onda-ia-onda4 (#1164)",
+      "scope": [
+        "backend"
+      ],
+      "prds": [
+        1128
+      ],
+      "result": "healthy",
+      "duration_seconds": 59,
+      "services_touched": [
+        "backend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        },
+        {
+          "service": "frontend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "onda-enxuta onda-ia-onda4: PR #1164 (issue #1133), mergeados PR a PR. Merge pela API do GitHub, um build. Registro pela Action pos-merge depois do health.",
+      "etapas": {
+        "merge_s": 3,
+        "build_s": {
+          "backend": 24
+        },
+        "health_s": 10
+      },
+      "responsavel": "pedrorezendefig"
+    },
+    {
       "at": "2026-10-13T05:24:22-03:00",
       "sha": "f4ae1299bdcb962371926a812e48a73b50284b41",
       "app_version": "0.191.0",

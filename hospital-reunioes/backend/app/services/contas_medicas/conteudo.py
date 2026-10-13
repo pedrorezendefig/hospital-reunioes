@@ -13,9 +13,10 @@ não estão desidentificados: quem os mandar à IA passa por `desidentificar`.
 """
 
 import re
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from datetime import date, datetime
+from typing import TYPE_CHECKING
 
 from app.services.contas_medicas.cirurgia import (
     MARCA_DA_DESCRICAO,
@@ -31,8 +32,12 @@ from app.services.contas_medicas.prescricao import (
     consolidar,
     exames_pedidos,
     ler_itens,
+    texto_por_coluna,
 )
 from app.services.contas_medicas.prontuario import _RODAPE_GLOBAL, Documento, Prontuario, _sem_acento
+
+if TYPE_CHECKING:
+    from app.services.contas_medicas_extrator import Palavra
 
 # ----------------------------------------------------------------------------------
 # Balanço hídrico e glicemias
@@ -296,7 +301,23 @@ def _paginas(textos: Sequence[str], documento: Documento) -> list[tuple[int, str
     return [(n, _RODAPE_GLOBAL.sub("", textos[n - 1])) for n in documento.paginas]
 
 
-def ler_conteudo(texto_por_pagina: Sequence[str | None], prontuario: Prontuario) -> Conteudo:
+def _por_coluna(paginas: list[tuple[int, str]], palavras: "Mapping[int, Sequence[Palavra]]") -> list[tuple[int, str]]:
+    """A página da prescrição remontada pela posição das colunas (#1133); a que não tem
+    as palavras ou o cabeçalho de colunas fica com o texto do `-layout`."""
+    lidas = []
+    for n, texto in paginas:
+        remontado = texto_por_coluna(palavras[n]) if palavras.get(n) else None
+        lidas.append((n, texto if remontado is None else _RODAPE_GLOBAL.sub("", remontado)))
+    return lidas
+
+
+def ler_conteudo(
+    texto_por_pagina: Sequence[str | None],
+    prontuario: Prontuario,
+    palavras_por_pagina: "Mapping[int, Sequence[Palavra]] | None" = None,
+) -> Conteudo:
+    """`palavras_por_pagina`: as palavras com posição das páginas da prescrição, pelo
+    número da página no PDF. Sem elas, a prescrição é lida por linha."""
     textos = [texto or "" for texto in texto_por_pagina]
     prescricoes: list[Prescricao] = []
     balancos: list[Balanco] = []
@@ -311,7 +332,7 @@ def ler_conteudo(texto_por_pagina: Sequence[str | None], prontuario: Prontuario)
         texto = "\n".join(texto for _, texto in paginas)
         por_familia.setdefault(d.familia, []).append(texto)
         if d.familia == "PRESCRICAO":
-            itens = tuple(ler_itens(paginas))
+            itens = tuple(ler_itens(_por_coluna(paginas, palavras_por_pagina or {})))
             prescricoes.append(Prescricao(d.data, d.hora, d.subtipo, d.setor, d.paginas, itens))
         elif d.familia == "BALANCO":
             balancos.append(_ler_balanco(d, paginas[0][1]))

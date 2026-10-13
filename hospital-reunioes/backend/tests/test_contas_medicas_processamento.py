@@ -56,7 +56,7 @@ from app.services.contas_medicas.memoria import MemoriaLida, RegraLida, parametr
 from app.services.contas_medicas.prontuario import ler_prontuario  # noqa: E402
 from app.services.contas_medicas.tabelas import NAO_CONFERIDO, Pacote  # noqa: E402
 from app.services.contas_medicas_conta import ler_conta  # noqa: E402
-from app.services.contas_medicas_extrator import Pagina  # noqa: E402
+from app.services.contas_medicas_extrator import ErroLeitura, Pagina, Palavra  # noqa: E402
 
 MIGRATION = Path(__file__).resolve().parents[2] / "supabase" / "migrations" / "116_contas_medicas_fundacao.sql"
 
@@ -697,11 +697,44 @@ class _Extrator:
         return [Pagina(numero=n, texto=t, sem_texto=not t.strip()) for n, t in enumerate(texto.split("\f"), start=1)]
 
 
+def _palavras_de_largura_fixa(texto: str) -> list[Palavra]:
+    """As palavras do texto com a posição de uma fonte de largura fixa: 5 pontos por
+    caractere, 10 por linha. É o que o `extract_words` devolve de um PDF assim."""
+    return [
+        Palavra(m.start() * 5.0, m.end() * 5.0, n * 10.0, m.group())
+        for n, linha in enumerate(texto.split("\n"))
+        for m in re.finditer(r"\S+", linha)
+    ]
+
+
+class _ExtratorDePalavras:
+    """O `extract_words` do teste: lê as palavras do "PDF" de texto e guarda as páginas pedidas."""
+
+    def __init__(self):
+        self.pedidas: list[list[int]] = []
+        self.falha: ErroLeitura | None = None
+
+    def __call__(self, pdf: bytes, paginas):
+        pedidas = sorted(paginas)
+        self.pedidas.append(pedidas)
+        if self.falha is not None:
+            return self.falha
+        textos = pdf.decode("utf-8").split("\f")
+        return {n: _palavras_de_largura_fixa(textos[n - 1]) for n in pedidas}
+
+
 @pytest.fixture(autouse=True)
 def extrator(monkeypatch) -> _Extrator:
     duble = _Extrator()
     monkeypatch.setattr(envio_service, "extrair_paginas", duble)
     monkeypatch.setattr(processamento, "extrair_paginas", duble)
+    return duble
+
+
+@pytest.fixture(autouse=True)
+def extrator_de_palavras(monkeypatch) -> _ExtratorDePalavras:
+    duble = _ExtratorDePalavras()
+    monkeypatch.setattr(processamento, "extrair_palavras", duble)
     return duble
 
 
@@ -822,6 +855,43 @@ class TestPipeline:
         assert guia["cabecalho"]["faltantes"] == ["O arquivo não trouxe: evolução médica (3 na capa)."]
         assert list(estrutura.parecer_parcial) == guia["cabecalho"]["faltantes"]
         assert guia["cabecalho"]["paciente_rotulo"] == "Antônia F."
+
+
+# O nome termina um espaço antes da coluna da dose: lido por linha, a dose entra no nome.
+CLEXANE_ENCOSTADO = " 1 CLEXANE 40MG/0,4ML SER PREENCH SC 40 MG 1 SERINGA                 24HS/24HS          SC    . 22"
+
+
+def _prontuario_com_o_nome_encostado():
+    assert CLEXANE_ENCOSTADO.index("1 SERINGA") == CABECALHO_DA_PRESCRICAO.index("Dose Padrão")
+    paginas = [p.replace(CLEXANE, CLEXANE_ENCOSTADO) for p in _paginas_do_prontuario()]
+    return _arquivo_do_envio("prontuario.pdf", "\f".join(paginas))
+
+
+class TestPrescricaoPorColuna:
+    def test_as_paginas_da_prescricao_sao_lidas_pela_posicao_das_colunas(self, extrator_de_palavras):
+        banco = _cenario()
+        _enviar(banco, _conta(), _prontuario_com_o_nome_encostado())
+
+        _rodar_o_job(banco)
+
+        assert banco.tabelas["cm_conta"][0]["situacao"] == "A_FAZER"
+        paginas_da_prescricao = [n for n, t in enumerate(_paginas_do_prontuario(), start=1) if "Prescrição.:" in t]
+        assert extrator_de_palavras.pedidas == [paginas_da_prescricao]
+        itens = banco.tabelas["cm_prescricao_item"]
+        assert len(itens) == 4
+        nome = "CLEXANE 40MG/0,4ML SER PREENCH SC 40 MG"
+        assert {(i["nome"], i["colunas"]["dose"]) for i in itens} == {(nome, "1 SERINGA")}
+
+    def test_sem_a_leitura_das_palavras_a_prescricao_e_lida_por_linha_e_a_conta_fica_pronta(self, extrator_de_palavras):
+        extrator_de_palavras.falha = ErroLeitura("qualquer")
+        banco = _cenario()
+        _enviar(banco, _conta(), _prontuario())
+
+        _rodar_o_job(banco)
+
+        assert banco.tabelas["cm_conta"][0]["situacao"] == "A_FAZER"
+        itens = banco.tabelas["cm_prescricao_item"]
+        assert {(i["nome"], i["colunas"]["dose"]) for i in itens} == {("CLEXANE 40MG/0,4ML SER PREENCH", "1 SERINGA")}
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -1447,11 +1517,11 @@ class TestLogSemProntuario:
         caplog.set_level(logging.DEBUG)
         leituras = []
 
-        def ler_conteudo_que_cita_o_texto(textos, estrutura):
+        def ler_conteudo_que_cita_o_texto(textos, estrutura, palavras=None):
             leituras.append(1)
             if len(leituras) == 2:
                 raise ValueError(f"campo ilegível: {textos[0]}")
-            return ler_conteudo(textos, estrutura)
+            return ler_conteudo(textos, estrutura, palavras)
 
         monkeypatch.setattr(processamento, "ler_conteudo", ler_conteudo_que_cita_o_texto)
         banco = _cenario()
