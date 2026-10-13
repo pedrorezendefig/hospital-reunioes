@@ -308,18 +308,22 @@ def coluna_do_plano(plano: str, lista_da_memoria: Sequence[str]) -> Literal["CAR
 
 
 TipoDoArquivo = Literal["CONTA", "PRONTUARIO", "DESCONHECIDO"]
+_LINHA_DE_IDENTIFICACAO = re.compile(r"ATENDIMENTO:\s*\d+.{0,120}\bCONTA:\s*\d+")
 
 
 def detectar_tipo_do_arquivo(primeira_pagina: str) -> TipoDoArquivo:
     """Conta ou Prontuário pela primeira página do PDF.
 
     O Prontuário vem primeiro porque a assinatura dele é a mais específica: a
-    capa é a "Declaração de recebimento de prontuário". "Fatura" é palavra
-    inteira, para "faturamento" num relatório qualquer não virar Conta.
+    capa é a "Declaração de recebimento de prontuário". A Conta é a linha de
+    identificação do MV, `Atendimento:<n> ... Conta:<n>`, que abre a primeira
+    página; o título "Fatura Individual" fica como alternativa, porque o MV só
+    o imprime a partir da página 2 (issue #1194). "Fatura" é palavra inteira,
+    para "faturamento" num relatório qualquer não virar Conta.
     """
     texto = _normalizar(primeira_pagina)
     if "DECLARACAO DE RECEBIMENTO DE PRONTUARIO" in texto:
         return "PRONTUARIO"
-    if re.search(r"\bFATURA\b", texto):
+    if _LINHA_DE_IDENTIFICACAO.search(texto) or re.search(r"\bFATURA\b", texto):
         return "CONTA"
     return "DESCONHECIDO"
