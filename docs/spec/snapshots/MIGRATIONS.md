@@ -1,6 +1,6 @@
 # MIGRATIONS.md
 <!-- gerado automaticamente por /snapshot — não editar -->
-<!-- last_update: 2026-10-13T03:17+0000 -->
+<!-- last_update: 2026-10-13T03:30+0000 -->
 
 Ordem cronológica das migrations do Postgres do Hospital Reuniões.
 
@@ -118,7 +118,8 @@ Ordem cronológica das migrations do Postgres do Hospital Reuniões.
 | 114 | `114_migracoes_aplicadas.sql` | recibo de migration aplicada (issue #969, PRD #963, ADR 0063) | 1 | 0 | 0 | 0 |
 | 115 | `115_tecnologia_anexos_e_em_producao.sql` | Anexo da Demanda e a Etapa Em producao | 1 | 2 | 1 | 0 |
 | 116 | `116_contas_medicas_fundacao.sql` | Contas medicas, a fundacao (issue #1114, PRD #1113, ADR 0070) | 22 | 1 | 19 | 0 |
+| 117 | `117_contas_medicas_ia.sql` | Contas medicas, a IA (issue #1130, PRD #1128) | 2 | 2 | 3 | 0 |
 | 118 | `118_contas_medicas_gestao.sql` | Contas medicas, as telas de gestao (issue #1139, PRD #1129, ADR 0070) | 10 | 3 | 10 | 0 |
 
 **Legenda:** C = CREATE TABLE · A = ALTER TABLE · I = CREATE INDEX · D = DROP.
-**Total:** 113 migrations.
+**Total:** 114 migrations.

@@ -1,6 +1,6 @@
 # SCHEMA.md
 <!-- gerado automaticamente por /snapshot — não editar -->
-<!-- last_update: 2026-10-13T03:17+0000 -->
+<!-- last_update: 2026-10-13T03:30+0000 -->
 
 Diagrama relacional do Hospital Reuniões. Renderiza nativo no GitHub.
 
@@ -10,6 +10,7 @@ Diagrama relacional do Hospital Reuniões. Renderiza nativo no GitHub.
 erDiagram
     cm_arquivo ||--o{ cm_conta : "arquivo_id"
     cm_atendimento ||--o{ cm_arquivo : "atendimento_id"
+    cm_atendimento ||--o{ cm_chamada_ia : "atendimento_id"
     cm_atendimento ||--o{ cm_cirurgia : "atendimento_id"
     cm_atendimento ||--o{ cm_conta : "atendimento_id"
     cm_atendimento ||--o{ cm_eventos : "atendimento_id"
@@ -17,6 +18,7 @@ erDiagram
     cm_atendimento ||--o{ cm_prescricao : "atendimento_id"
     cm_cenario ||--o{ cm_cenario_item : "cenario_id"
     cm_cenario ||--o{ cm_lembrete : "cenario_id"
+    cm_conta ||--o{ cm_chamada_ia : "conta_id"
     cm_conta ||--o{ cm_conta_item : "conta_id"
     cm_conta ||--o{ cm_guia_linha : "conta_id"
     cm_conta ||--o{ cm_lembrete : "conta_id"
@@ -692,7 +694,7 @@ erDiagram
         DATE periodo_inicio
         DATE periodo_fim
         NUMERIC total_lancado
-        _ mais_colunas "+23"
+        _ mais_colunas "+25"
     }
     cm_conta_item {
         UUID id PK
@@ -722,6 +724,25 @@ erDiagram
         VARCHAR autor_id FK
         TEXT texto
         TIMESTAMPTZ criado_em
+    }
+    cm_chamada_ia {
+        UUID id PK
+        UUID conta_id FK
+        UUID atendimento_id FK
+        TEXT passo
+        TEXT modelo
+        INTEGER tokens_entrada
+        INTEGER tokens_saida
+        INTEGER tokens_cache
+        _ mais_colunas "+5"
+    }
+    cm_linha_formulario {
+        UUID id PK
+        TEXT familia
+        TEXT linha
+        INTEGER contagem
+        TIMESTAMPTZ criado_em
+        TIMESTAMPTZ atualizado_em
     }
     cm_registro {
         UUID id PK
@@ -938,7 +959,10 @@ erDiagram
 | `cm_conta` | `idx_cm_conta_atendimento` | `atendimento_id` | `116_contas_medicas_fundacao.sql` |
 | `cm_conta_item` | `idx_cm_conta_item_conta` | `conta_id` | `116_contas_medicas_fundacao.sql` |
 | `cm_guia_linha` | `idx_cm_guia_linha_conta` | `conta_id` | `116_contas_medicas_fundacao.sql` |
+| `cm_guia_linha` | `idx_cm_guia_linha_causa_raiz_data` | `causa_raiz, data` | `117_contas_medicas_ia.sql` |
 | `cm_observacao` | `idx_cm_observacao_conta` | `conta_id` | `116_contas_medicas_fundacao.sql` |
+| `cm_chamada_ia` | `idx_cm_chamada_ia_conta` | `conta_id` | `117_contas_medicas_ia.sql` |
+| `cm_chamada_ia` | `idx_cm_chamada_ia_criado_em` | `criado_em` | `117_contas_medicas_ia.sql` |
 | `cm_registro` | `idx_cm_registro_entidade` | `entidade, entidade_id, data DESC` | `118_contas_medicas_gestao.sql` |
 | `cm_regra_historico` | `idx_cm_regra_historico_regra` | `regra_id, criado_em DESC` | `118_contas_medicas_gestao.sql` |
 | `cm_validacao_tema` | `idx_cm_validacao_tema_estado` | `estado, tipo` | `118_contas_medicas_gestao.sql` |
@@ -950,4 +974,4 @@ erDiagram
 | `cm_lembrete_item` | `idx_cm_lembrete_item_lembrete` | `lembrete_id` | `118_contas_medicas_gestao.sql` |
 
 ---
-**Resumo:** 76 tabelas · 99 relacionamentos FK detectados.
+**Resumo:** 78 tabelas · 101 relacionamentos FK detectados.

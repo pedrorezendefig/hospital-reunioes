@@ -1,6 +1,6 @@
 # ENTIDADES.md
 <!-- gerado automaticamente por /snapshot — não editar -->
-<!-- last_update: 2026-10-13T03:17+0000 -->
+<!-- last_update: 2026-10-13T03:30+0000 -->
 
 Modelo de dados do Hospital Reuniões. Tabelas no Postgres (via Supabase).
 
@@ -1239,7 +1239,7 @@ Modelo de dados do Hospital Reuniões. Tabelas no Postgres (via Supabase).
 
 ## cm_conta
 
-> Origem: `116_contas_medicas_fundacao.sql`
+> Origem: `116_contas_medicas_fundacao.sql` (alterada em: 117_contas_medicas_ia.sql)
 
 | Campo | Tipo | Constraints | Default | FK |
 |-------|------|-------------|---------|-----|
@@ -1274,6 +1274,8 @@ Modelo de dados do Hospital Reuniões. Tabelas no Postgres (via Supabase).
 | `tokens_cache` | `INTEGER` | — | — | — |
 | `custo_usd` | `NUMERIC(10, 4)` | — | — | — |
 | `criado_em` | `TIMESTAMPTZ` | NOT NULL | `now()` | — |
+| `nota_saida` | `NUMERIC(6, 2)` | — | — | — |
+| `reenviada_em` | `TIMESTAMPTZ` | — | — | — |
 
 **Indexes:**
 - `idx_cm_conta_faturista_situacao_ordem` em `(faturista_id, situacao, ordem_fila)` (de `116_contas_medicas_fundacao.sql`)
@@ -1342,6 +1344,7 @@ Modelo de dados do Hospital Reuniões. Tabelas no Postgres (via Supabase).
 
 **Indexes:**
 - `idx_cm_guia_linha_conta` em `(conta_id)` (de `116_contas_medicas_fundacao.sql`)
+- `idx_cm_guia_linha_causa_raiz_data` em `(causa_raiz, data)` (de `117_contas_medicas_ia.sql`)
 
 ## cm_observacao
 
@@ -1357,6 +1360,43 @@ Modelo de dados do Hospital Reuniões. Tabelas no Postgres (via Supabase).
 
 **Indexes:**
 - `idx_cm_observacao_conta` em `(conta_id)` (de `116_contas_medicas_fundacao.sql`)
+
+## cm_chamada_ia
+
+> Origem: `117_contas_medicas_ia.sql`
+
+| Campo | Tipo | Constraints | Default | FK |
+|-------|------|-------------|---------|-----|
+| `id` | `UUID` | PK | `gen_random_uuid()` | — |
+| `conta_id` | `UUID` | — | — | `cm_conta.id` |
+| `atendimento_id` | `UUID` | — | — | `cm_atendimento.id` |
+| `passo` | `TEXT` | NOT NULL | — | — |
+| `modelo` | `TEXT` | NOT NULL | — | — |
+| `tokens_entrada` | `INTEGER` | NOT NULL | `0` | — |
+| `tokens_saida` | `INTEGER` | NOT NULL | `0` | — |
+| `tokens_cache` | `INTEGER` | NOT NULL | `0` | — |
+| `custo_usd` | `NUMERIC(12, 6)` | NOT NULL | `0` | — |
+| `duracao_ms` | `INTEGER` | NOT NULL | `0` | — |
+| `tentativas` | `INTEGER` | NOT NULL | `1` | — |
+| `sucesso` | `BOOLEAN` | NOT NULL | `true` | — |
+| `criado_em` | `TIMESTAMPTZ` | NOT NULL | `now()` | — |
+
+**Indexes:**
+- `idx_cm_chamada_ia_conta` em `(conta_id)` (de `117_contas_medicas_ia.sql`)
+- `idx_cm_chamada_ia_criado_em` em `(criado_em)` (de `117_contas_medicas_ia.sql`)
+
+## cm_linha_formulario
+
+> Origem: `117_contas_medicas_ia.sql`
+
+| Campo | Tipo | Constraints | Default | FK |
+|-------|------|-------------|---------|-----|
+| `id` | `UUID` | PK | `gen_random_uuid()` | — |
+| `familia` | `TEXT` | NOT NULL | — | — |
+| `linha` | `TEXT` | NOT NULL | — | — |
+| `contagem` | `INTEGER` | NOT NULL | `0` | — |
+| `criado_em` | `TIMESTAMPTZ` | NOT NULL | `now()` | — |
+| `atualizado_em` | `TIMESTAMPTZ` | NOT NULL | `now()` | — |
 
 ## cm_registro
 
@@ -1538,4 +1578,4 @@ Modelo de dados do Hospital Reuniões. Tabelas no Postgres (via Supabase).
 
 ---
 
-**Resumo:** 76 tabelas vivas.
+**Resumo:** 78 tabelas vivas.
