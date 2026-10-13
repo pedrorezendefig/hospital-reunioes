@@ -41,7 +41,9 @@ def _agora() -> str:
     return datetime.now(UTC).isoformat()
 
 
-def _registrar(supabase, autor_id: str | None, entidade: str, entidade_id: str, antes: dict, depois: dict) -> None:
+def _gravar_registro(
+    supabase, autor_id: str | None, entidade: str, entidade_id: str, antes: dict, depois: dict
+) -> None:
     supabase.table("cm_registro").insert(
         {
             "autor_id": autor_id,
@@ -90,7 +92,9 @@ def mudar_permissao(supabase, perfil: str, permissao: str, ligada: bool, autor_i
         supabase.table("cm_perfil_permissao").upsert(
             {"perfil": perfil, "permissao": permissao, "ligada": ligada}, on_conflict="perfil,permissao"
         ).execute()
-        _registrar(supabase, autor_id, ENTIDADE_MATRIZ, f"{perfil}:{permissao}", {"ligada": antes}, {"ligada": ligada})
+        _gravar_registro(
+            supabase, autor_id, ENTIDADE_MATRIZ, f"{perfil}:{permissao}", {"ligada": antes}, {"ligada": ligada}
+        )
     return {"perfil": perfil, "permissao": permissao, "ligada": ligada}
 
 
@@ -134,5 +138,5 @@ def mudar_perfil(supabase, participante_id: str, perfil: str | None, autor_id: s
     antes = atual[0].get("perfil_contas_medicas")
     if antes != perfil:
         supabase.table("participantes").update({"perfil_contas_medicas": perfil}).eq("id", participante_id).execute()
-        _registrar(supabase, autor_id, ENTIDADE_PERFIL, participante_id, {"perfil": antes}, {"perfil": perfil})
+        _gravar_registro(supabase, autor_id, ENTIDADE_PERFIL, participante_id, {"perfil": antes}, {"perfil": perfil})
     return _pessoa_publica({**atual[0], "perfil_contas_medicas": perfil})
