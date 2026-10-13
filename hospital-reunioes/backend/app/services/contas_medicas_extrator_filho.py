@@ -15,6 +15,11 @@ devolve em JSON as palavras dessas páginas com a posição de cada uma, pelo
 `extract_words` do `pdfplumber` (issue #1133). É o que a prescrição usa para ler
 pela coordenada das colunas. O `pdfplumber` é importado depois do limite.
 
+Com `--ocr <páginas> <prazo>`, o filho rasteriza cada página pedida pelo
+`pdftoppm` e lê a imagem pelo `tesseract` (issue #1191), e devolve em JSON o
+texto de cada uma. As páginas digitalizadas do Prontuário são as únicas que
+chegam aqui.
+
 Topo em stdlib pura: o pai importa este módulo só para saber o caminho.
 """
 
@@ -42,6 +47,50 @@ def palavras(entrada: str, paginas: set[int]) -> dict[str, list[list]]:
     return achadas
 
 
+def ocr(entrada: str, paginas: set[int], prazo: float) -> dict[str, str]:
+    """Página (a primeira é 1) -> texto lido pelo `tesseract -l por` na imagem que o
+    `pdftoppm` rasterizou (issue #1191). Os dois herdam o `RLIMIT_AS` deste processo.
+    Página que não sai (ilegível, binário ausente, prazo esgotado) fica de fora."""
+    import subprocess
+    import tempfile
+    import time
+
+    fim = time.monotonic() + prazo
+    # Uma thread só: cada thread do OpenMP reserva pilha, e isso conta no `RLIMIT_AS`.
+    ambiente = {**os.environ, "OMP_THREAD_LIMIT": "1"}
+    lidas: dict[str, str] = {}
+    with tempfile.TemporaryDirectory(prefix="ocr-") as pasta:
+        for numero in sorted(paginas):
+            imagem = os.path.join(pasta, str(numero))
+            try:
+                subprocess.run(
+                    ["pdftoppm", "-f", str(numero), "-l", str(numero), "-r", "300", "-gray", "-png", "-singlefile"]
+                    + [entrada, imagem],
+                    capture_output=True,
+                    check=True,
+                    timeout=max(fim - time.monotonic(), 0.001),
+                )
+                lido = subprocess.run(
+                    ["tesseract", f"{imagem}.png", "stdout", "-l", "por"],
+                    capture_output=True,
+                    check=True,
+                    timeout=max(fim - time.monotonic(), 0.001),
+                    env=ambiente,
+                )
+            except subprocess.TimeoutExpired:
+                break
+            except (OSError, subprocess.SubprocessError):
+                continue
+            finally:
+                if os.path.exists(f"{imagem}.png"):
+                    os.remove(f"{imagem}.png")
+            # O `tesseract` fecha a página com form feed, que no texto guardado abre página nova.
+            texto = lido.stdout.decode("utf-8", errors="replace").replace("\f", "").strip()
+            if texto:
+                lidas[str(numero)] = texto
+    return lidas
+
+
 def main(argv: list[str]) -> int:
     limite, entrada = int(argv[1]), argv[2]
     try:
@@ -51,6 +100,11 @@ def main(argv: list[str]) -> int:
     except (ValueError, OSError, AttributeError):
         # No macOS o kernel recusa `RLIMIT_AS`; quem segura é o vigia do pai.
         print(f"RLIMIT_AS indisponivel em {sys.platform}: quem segura e o vigia do pai", file=sys.stderr)
+
+    if len(argv) > 3 and argv[3] == "--ocr":
+        lidas = ocr(entrada, {int(n) for n in argv[4].split(",") if n}, float(argv[5]))
+        sys.stdout.write(json.dumps(lidas, ensure_ascii=False))
+        return 0
 
     if len(argv) > 3:
         try:

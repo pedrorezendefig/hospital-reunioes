@@ -439,6 +439,23 @@ def _familia(texto: str) -> str:
     return "NAO_RECONHECIDO"
 
 
+def e_digitalizada(texto: str) -> bool:
+    """Se a página é imagem: a extração lê por OCR só essas páginas (#1191)."""
+    return _familia(texto) == "DIGITALIZADO"
+
+
+# O texto que o OCR leu da imagem vem depois desta linha, na página digitalizada
+# (#1191). O que vem antes é o do PDF (rodapé, assinatura) e é por ele que a
+# página se estrutura; o depois só vai à IA.
+MARCA_DO_OCR = "<<<TEXTO LIDO POR OCR>>>"
+
+
+def _separar_ocr(texto: str) -> tuple[str, str]:
+    """(texto do PDF, texto do OCR); o segundo vazio na página sem OCR."""
+    do_pdf, _, do_ocr = texto.partition(MARCA_DO_OCR)
+    return do_pdf, do_ocr
+
+
 # Famílias de formulário, com caixas e botões (#1132): fisioterapia e o editor de
 # documentos do MV (anamnese de UTI, sumário de alta, fonoaudiologia e os demais).
 FAMILIAS_DE_FORMULARIO = frozenset({"FISIO_RESP", "FISIO_MOTORA", "FISIO_ADMISSAO", "DOC_EDITOR"})

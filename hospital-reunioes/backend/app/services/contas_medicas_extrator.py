@@ -40,7 +40,7 @@ from app.services import contas_medicas_extrator_filho as filho
 from app.services import contas_medicas_marcacoes_filho as filho_das_marcacoes
 from app.services import transcricao_extractor as orcamento
 from app.services.contas_medicas.marcacoes import inserir_nas_paginas
-from app.services.contas_medicas.prontuario import e_formulario
+from app.services.contas_medicas.prontuario import MARCA_DO_OCR, e_digitalizada, e_formulario
 
 logger = logging.getLogger(__name__)
 
@@ -74,11 +74,13 @@ class ErroLeitura:
 
 @dataclass(frozen=True)
 class Pagina:
-    """Texto de uma página, com a numeração do PDF (a primeira é 1)."""
+    """Texto de uma página, com a numeração do PDF (a primeira é 1). `ocr` diz que
+    a página é digitalizada e o texto da imagem veio do `tesseract` (#1191)."""
 
     numero: int
     texto: str
     sem_texto: bool
+    ocr: bool = False
 
 
 def _paginas(texto: str) -> list[Pagina]:
@@ -86,7 +88,10 @@ def _paginas(texto: str) -> list[Pagina]:
     partes = texto.split("\f")
     if partes and partes[-1] == "":
         partes.pop()
-    return [Pagina(numero=n, texto=t, sem_texto=not t.strip()) for n, t in enumerate(partes, start=1)]
+    return [
+        Pagina(numero=n, texto=t, sem_texto=not t.strip(), ocr=MARCA_DO_OCR in t)
+        for n, t in enumerate(partes, start=1)
+    ]
 
 
 def texto_para_guardar(paginas: Sequence[Pagina]) -> bytes:
@@ -157,9 +162,41 @@ def _marcacoes(entrada: str, pasta: str, paginas: list[Pagina]) -> dict[int, lis
         return {}
 
 
+def _ocr(entrada: str, pasta: str, paginas: list[Pagina]) -> dict[int, str]:
+    """O texto das páginas digitalizadas do Prontuário, lido pelo `tesseract` num
+    filho com o mesmo orçamento (#1191). Só o Prontuário: a Conta sai do MV em
+    texto. Se a leitura falhar ou passar do prazo, as páginas seguem sem texto."""
+    # Import tardio: `contas_medicas_conta` importa o `ErroLeitura` deste módulo.
+    from app.services.contas_medicas_conta import detectar_tipo_do_arquivo
+
+    if not paginas or detectar_tipo_do_arquivo(paginas[0].texto) != "PRONTUARIO":
+        return {}
+    digitalizadas = [p.numero for p in paginas if e_digitalizada(p.texto)]
+    if not digitalizadas:
+        return {}
+    limite = str(orcamento.LIMITE_DE_ENDERECAMENTO)
+    lista = ",".join(map(str, digitalizadas))
+    # O filho para antes do vigia, para devolver o que já leu em vez de morrer.
+    prazo = str(PRAZO_DA_LEITURA * 0.9)
+    desfecho = _rodar([_CAMINHO_DO_FILHO, limite, entrada, "--ocr", lista, prazo], pasta, "ocr")
+    if desfecho.motivo is not None or desfecho.codigo != 0:
+        logger.warning(
+            "OCR das paginas digitalizadas falhou (%s): elas seguem sem texto",
+            desfecho.motivo or f"codigo {desfecho.codigo}: {desfecho.diagnostico}",
+        )
+        return {}
+    try:
+        lidas = json.loads(desfecho.bruto)
+        return {int(numero): texto for numero, texto in lidas.items()}
+    except (ValueError, AttributeError):
+        logger.warning("OCR das paginas digitalizadas devolveu saida ilegivel: elas seguem sem texto")
+        return {}
+
+
 def extrair_paginas(pdf: bytes) -> list[Pagina] | ErroLeitura:
     """Texto do PDF por página, lido pelo `pdftotext -layout` num processo isolado,
-    com as marcações de caixa e botão dos formulários no lugar das imagens."""
+    com as marcações de caixa e botão dos formulários no lugar das imagens e, no
+    Prontuário, o texto das páginas digitalizadas lido por OCR."""
     if not _vagas.acquire(timeout=PRAZO_DA_LEITURA):
         logger.warning("Leitura de PDF sem vaga apos %ss", PRAZO_DA_LEITURA)
         return ErroLeitura(orcamento.MENSAGEM_FILA_CHEIA)
@@ -172,10 +209,11 @@ def extrair_paginas(pdf: bytes) -> list[Pagina] | ErroLeitura:
 
             desfecho = _rodar([_CAMINHO_DO_FILHO, str(orcamento.LIMITE_DE_ENDERECAMENTO), entrada], pasta, "texto")
             if desfecho.motivo is not None or desfecho.codigo != 0:
-                paginas, marcacoes = [], {}
+                paginas, marcacoes, lidas_por_ocr = [], {}, {}
             else:
                 paginas = _paginas(desfecho.bruto.decode("utf-8", errors="replace"))
                 marcacoes = _marcacoes(entrada, pasta, paginas)
+                lidas_por_ocr = _ocr(entrada, pasta, paginas)
     finally:
         _vagas.release()
 
@@ -188,10 +226,18 @@ def extrair_paginas(pdf: bytes) -> list[Pagina] | ErroLeitura:
         logger.error("Leitura de PDF falhou (codigo %s): %s", desfecho.codigo, desfecho.diagnostico)
         return ErroLeitura(MENSAGEM_PDF_ILEGIVEL)
 
-    if not marcacoes:
-        return paginas
-    textos = inserir_nas_paginas([p.texto for p in paginas], marcacoes)
-    return [Pagina(p.numero, texto, p.sem_texto) for p, texto in zip(paginas, textos, strict=True)]
+    if marcacoes:
+        textos = inserir_nas_paginas([p.texto for p in paginas], marcacoes)
+        paginas = [Pagina(p.numero, texto, p.sem_texto) for p, texto in zip(paginas, textos, strict=True)]
+    if lidas_por_ocr:
+        paginas = [_com_ocr(p, lidas_por_ocr[p.numero]) if p.numero in lidas_por_ocr else p for p in paginas]
+    return paginas
+
+
+def _com_ocr(pagina: Pagina, lido: str) -> Pagina:
+    """O texto do OCR vai depois do que o `pdftotext` leu (rodapé e assinatura), atrás
+    da marca: a leitura do Prontuário estrutura a página só pelo que vem antes dela."""
+    return Pagina(pagina.numero, f"{pagina.texto}\n{MARCA_DO_OCR}\n{lido}\n", sem_texto=False, ocr=True)
 
 
 def _no_filho(pdf: bytes, *argumentos: str) -> bytes | ErroLeitura:

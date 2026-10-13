@@ -18,7 +18,15 @@ import pytest
 
 from app.services import contas_medicas_extrator as extrator
 from app.services import transcricao_extractor
-from app.services.contas_medicas_extrator import ErroLeitura, Pagina, Palavra, extrair_paginas, extrair_palavras
+from app.services.contas_medicas_extrator import (
+    ErroLeitura,
+    Pagina,
+    Palavra,
+    extrair_paginas,
+    extrair_palavras,
+    paginas_do_texto_guardado,
+    texto_para_guardar,
+)
 
 
 def _pdf(*paginas: str) -> bytes:
@@ -98,3 +106,35 @@ def test_palavras_de_arquivo_que_nao_e_pdf_voltam_erro_de_leitura():
     resultado = extrair_palavras(b"%PDF-1.4 isto nao e um pdf de verdade", [1])
 
     assert resultado == ErroLeitura(extrator.MENSAGEM_PDF_ILEGIVEL)
+
+
+# OCR das páginas digitalizadas do Prontuário (issue #1191). A máquina de quem
+# testa não tem `tesseract`: um falso entra na frente do PATH e faz o papel dele,
+# com o form feed no fim, como o de verdade imprime.
+CAPA_DO_PRONTUARIO = "DECLARAÇÃO DE RECEBIMENTO DE PRONTUÁRIO " + " ".join(
+    f"Grupo: {grupo} Quantidade: 1"
+    for grupo in ("EVOLUÇÃO MEDICA", "PRESCRICAO MEDICA", "ANOTAÇÕES DE ENFERMAGEM", "TERMOS DIGITALIZADOS")
+)
+PAGINA_COM_TEXTO = "EVOLUÇÃO MEDICA " + "Paciente estável, sem queixas, segue em observação na unidade. " * 4
+LIDO_PELO_OCR = "TERMO DE CONSENTIMENTO LIVRE E ESCLARECIDO"
+
+
+def _tesseract_falso(pasta: Path, monkeypatch: pytest.MonkeyPatch, corpo: str) -> None:
+    falso = pasta / "tesseract"
+    falso.write_text(f"#!{sys.executable}\nimport sys, time\n{corpo}\n", encoding="utf-8")
+    falso.chmod(falso.stat().st_mode | stat.S_IXUSR)
+    monkeypatch.setenv("PATH", f"{pasta}{os.pathsep}{os.environ['PATH']}")
+
+
+def test_pagina_digitalizada_do_prontuario_ganha_o_texto_do_ocr_marcada_como_ocr(tmp_path, monkeypatch):
+    _tesseract_falso(tmp_path, monkeypatch, f"sys.stdout.write({LIDO_PELO_OCR!r} + '\\n\\f')")
+
+    paginas = extrair_paginas(_pdf(CAPA_DO_PRONTUARIO, "", PAGINA_COM_TEXTO))
+
+    assert [(p.numero, p.ocr, p.sem_texto) for p in paginas] == [(1, False, False), (2, True, False), (3, False, False)]
+    assert LIDO_PELO_OCR in paginas[1].texto
+    assert LIDO_PELO_OCR not in paginas[2].texto
+    # Guardado no bucket e lido de volta, a página continua sendo de OCR e o
+    # form feed do `tesseract` não abre página nova.
+    guardadas = paginas_do_texto_guardado(texto_para_guardar(paginas))
+    assert [(p.numero, p.ocr) for p in guardadas] == [(1, False), (2, True), (3, False)]
