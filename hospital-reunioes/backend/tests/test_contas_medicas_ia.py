@@ -226,6 +226,9 @@ class _Consulta:
         self._filtros.append((coluna, valor))
         return self
 
+    def order(self, *_a, **_kw):
+        return self  # a lista já está na ordem de gravação
+
     def insert(self, linha):
         self._insert = linha
         return self
@@ -380,3 +383,90 @@ class TestRespostaForaDoFormato:
             _extrair()
 
         assert len(provedor.corpos) == 3
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 4. O custo de cada chamada
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+def _uso(entrada: int, saida: int, cache: int, custo: float) -> dict:
+    return {
+        "prompt_tokens": entrada,
+        "completion_tokens": saida,
+        "total_tokens": entrada + saida,
+        "prompt_tokens_details": {"cached_tokens": cache},
+        "cost": custo,
+    }
+
+
+CAMPOS_DA_CHAMADA = (
+    "conta_id",
+    "atendimento_id",
+    "passo",
+    "modelo",
+    "tokens_entrada",
+    "tokens_saida",
+    "tokens_cache",
+    "custo_usd",
+    "duracao_ms",
+    "tentativas",
+    "sucesso",
+)
+
+
+class TestCustoDaChamada:
+    def test_a_chamada_grava_tokens_cache_custo_e_duracao(self, provedor, monkeypatch):
+        relogio = iter([100.0, 100.25])
+        monkeypatch.setattr(ia, "perf_counter", lambda: next(relogio))
+        banco = _BancoDeCusto([{"id": "c1"}])
+        provedor.responder((json.dumps(LINHAS_VALIDAS), _uso(12000, 800, 11000, 0.0123)))
+
+        _comparar(banco)
+
+        (chamada,) = banco.tabelas["cm_chamada_ia"]
+        assert {campo: chamada[campo] for campo in CAMPOS_DA_CHAMADA} == {
+            "conta_id": "c1",
+            "atendimento_id": "at-1",
+            "passo": "B",
+            "modelo": "anthropic/claude-sonnet-5.5",
+            "tokens_entrada": 12000,
+            "tokens_saida": 800,
+            "tokens_cache": 11000,
+            "custo_usd": 0.0123,
+            "duracao_ms": 250,
+            "tentativas": 1,
+            "sucesso": True,
+        }
+
+    def test_uma_conta_com_duas_chamadas_mostra_a_soma(self, provedor):
+        banco = _BancoDeCusto([{"id": "c1"}, {"id": "c2"}])
+        provedor.responder(
+            (json.dumps(EVENTOS_VALIDOS), _uso(3000, 500, 0, 0.0021)),
+            (json.dumps(LINHAS_VALIDAS), _uso(12000, 800, 11000, 0.0123)),
+        )
+
+        _extrair(banco)
+        _comparar(banco)
+
+        conta, outra = banco.tabelas["cm_conta"]
+        assert {k: conta[k] for k in ("tokens_entrada", "tokens_saida", "tokens_cache", "custo_usd")} == {
+            "tokens_entrada": 15000,
+            "tokens_saida": 1300,
+            "tokens_cache": 11000,
+            "custo_usd": 0.0144,
+        }
+        assert conta["modelo_ia"] == "google/gemini-3.7-flash, anthropic/claude-sonnet-5.5"
+        assert outra == {"id": "c2"}
+
+    def test_as_tentativas_fora_do_formato_tambem_custam(self, provedor):
+        banco = _BancoDeCusto([{"id": "c1"}])
+        provedor.responder(("não é JSON", _uso(1000, 10, 0, 0.001)))
+
+        with pytest.raises(ia.ErroDaIA):
+            _extrair(banco)
+
+        (chamada,) = banco.tabelas["cm_chamada_ia"]
+        assert (chamada["passo"], chamada["tentativas"], chamada["sucesso"]) == ("A", 3, False)
+        assert (chamada["tokens_entrada"], chamada["custo_usd"]) == (3000, 0.003)
+        assert banco.tabelas["cm_conta"][0]["custo_usd"] == 0.003

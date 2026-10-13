@@ -21,6 +21,8 @@ from __future__ import annotations
 import json
 import logging
 import time
+from dataclasses import dataclass
+from time import perf_counter
 from typing import Any, Literal, TypeVar
 
 from openai import APIError, OpenAI
@@ -252,15 +254,99 @@ def _bloco(texto: str, *, cache: bool) -> dict[str, Any]:
     return bloco
 
 
+@dataclass
+class _Uso:
+    """O que a chamada custou, somado entre as tentativas: a tentativa que
+    voltou fora do formato também foi cobrada."""
+
+    entrada: int = 0
+    saida: int = 0
+    cache: int = 0
+    custo: float = 0.0
+
+    def somar(self, resposta: Any) -> None:
+        uso = getattr(resposta, "usage", None)
+        if uso is None:
+            return
+        detalhes = getattr(uso, "prompt_tokens_details", None)
+        custo = getattr(uso, "cost", None)
+        if custo is None:
+            custo = (getattr(uso, "model_extra", None) or {}).get("cost")
+        self.entrada += uso.prompt_tokens or 0
+        self.saida += uso.completion_tokens or 0
+        self.cache += (getattr(detalhes, "cached_tokens", None) or 0) if detalhes else 0
+        self.custo += float(custo or 0)
+
+
+@dataclass(frozen=True)
+class _Onde:
+    """Onde a chamada fica gravada."""
+
+    supabase: Any
+    conta_id: str | None
+    atendimento_id: str | None
+    passo: str
+
+
+def _gravar(onde: _Onde, modelo: str, uso: _Uso, duracao_ms: int, tentativas: int, sucesso: bool) -> None:
+    """A chamada em `cm_chamada_ia` e a soma das chamadas da conta em
+    `cm_conta`. Falha ao gravar o custo não derruba a análise: refazer a conta
+    pagaria a IA de novo."""
+    try:
+        onde.supabase.table("cm_chamada_ia").insert(
+            {
+                "conta_id": onde.conta_id,
+                "atendimento_id": onde.atendimento_id,
+                "passo": onde.passo,
+                "modelo": modelo,
+                "tokens_entrada": uso.entrada,
+                "tokens_saida": uso.saida,
+                "tokens_cache": uso.cache,
+                "custo_usd": round(uso.custo, 6),
+                "duracao_ms": duracao_ms,
+                "tentativas": tentativas,
+                "sucesso": sucesso,
+            }
+        ).execute()
+        if onde.conta_id:
+            _somar_na_conta(onde.supabase, onde.conta_id)
+    except Exception as erro:
+        logger.error("[ContasMedicas] Custo da IA da conta %s sem gravação: %s", onde.conta_id, type(erro).__name__)
+
+
+def _somar_na_conta(supabase, conta_id: str) -> None:
+    """A conta guarda a soma de todas as chamadas dela, inclusive as do
+    reprocesso: é o que a IA custou de verdade para aquela conta."""
+    chamadas = (
+        supabase.table("cm_chamada_ia")
+        .select("modelo, tokens_entrada, tokens_saida, tokens_cache, custo_usd")
+        .eq("conta_id", conta_id)
+        .order("criado_em")
+        .execute()
+        .data
+        or []
+    )
+    supabase.table("cm_conta").update(
+        {
+            "tokens_entrada": sum(int(c.get("tokens_entrada") or 0) for c in chamadas),
+            "tokens_saida": sum(int(c.get("tokens_saida") or 0) for c in chamadas),
+            "tokens_cache": sum(int(c.get("tokens_cache") or 0) for c in chamadas),
+            "custo_usd": round(sum(float(c.get("custo_usd") or 0) for c in chamadas), 4),
+            "modelo_ia": ", ".join(dict.fromkeys(c["modelo"] for c in chamadas if c.get("modelo"))),
+        }
+    ).eq("id", conta_id).execute()
+
+
 def _chamar(
     *,
     modelo: str,
     instrucao: str,
     blocos: list[tuple[str, bool]],
     saida: type[Saida],
+    onde: _Onde,
 ) -> Saida:
-    """Uma chamada. `blocos` é o conteúdo do usuário, cada um com a marca de
-    cache, que só vale quando o modelo é Anthropic."""
+    """Uma chamada, em até três tentativas. `blocos` é o conteúdo do usuário,
+    cada um com a marca de cache, que só vale quando o modelo é Anthropic."""
     anthropic = modelo.startswith("anthropic/")
     mensagens = [
         {"role": "system", "content": [_bloco(instrucao, cache=anthropic)]},
@@ -271,7 +357,9 @@ def _chamar(
         "json_schema": {"name": saida.__name__, "strict": True, "schema": _schema_estrito(saida)},
     }
     cliente = _cliente()
+    uso = _Uso()
     falha = ""
+    inicio = perf_counter()
     for tentativa in range(1, TENTATIVAS + 1):
         if tentativa > 1:
             _esperar(ESPERAS_S[tentativa - 2])
@@ -283,12 +371,17 @@ def _chamar(
                 extra_headers=_OPENROUTER_HEADERS,
                 extra_body={"provider": PROVEDOR, "usage": {"include": True}},
             )
+            uso.somar(resposta)
             conteudo = resposta.choices[0].message.content if resposta.choices else None
-            return saida.model_validate_json(conteudo or "")
+            resultado = saida.model_validate_json(conteudo or "")
         except (APIError, ValidationError) as erro:
             # O tipo do erro, nunca a mensagem: a resposta inválida pode citar o prontuário.
             falha = type(erro).__name__
             logger.warning("[ContasMedicas] IA %s, tentativa %s: %s", modelo, tentativa, falha)
+            continue
+        _gravar(onde, modelo, uso, round((perf_counter() - inicio) * 1000), tentativa, sucesso=True)
+        return resultado
+    _gravar(onde, modelo, uso, round((perf_counter() - inicio) * 1000), TENTATIVAS, sucesso=False)
     raise ErroDaIA(f"A IA não respondeu no formato em {TENTATIVAS} tentativas ({falha})")
 
 
@@ -326,6 +419,7 @@ def extrair_eventos(
             (f"TEXTO DO PRONTUÁRIO\n{texto}", False),
         ],
         saida=EventosDoProntuario,
+        onde=_Onde(supabase, conta_id, atendimento_id, "A"),
     )
 
 
@@ -351,6 +445,7 @@ def comparar_conta(
             (f"CÁLCULOS\n{_json(calculos)}", False),
         ],
         saida=LinhasDaComparacao,
+        onde=_Onde(supabase, conta_id, atendimento_id, "B"),
     )
 
 
@@ -371,4 +466,6 @@ def chamada_curta(
         instrucao=instrucao,
         blocos=[(conteudo, False)],
         saida=saida,
+        onde=_Onde(supabase, conta_id, atendimento_id, passo),
     )
+
