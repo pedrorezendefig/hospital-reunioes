@@ -19,11 +19,16 @@ from __future__ import annotations
 
 import re
 import unicodedata
-from datetime import date, timedelta
+from datetime import UTC, date, datetime, timedelta
 from typing import Any
+
+from postgrest.exceptions import APIError
+
+from app.dependencies import foi_desligado, selecionar_participantes
 
 __all__ = [
     "ANTECEDENCIA_PADRAO",
+    "avisar_contratos",
     "contrato_da_memoria",
     "gravar_contrato_da_memoria",
     "listar_contratos",
@@ -31,6 +36,10 @@ __all__ = [
 ]
 
 ANTECEDENCIA_PADRAO = 60
+
+# O aviso guarda o contrato na referência do sino com este prefixo: é por ele
+# que o clique no sino leva à tela Contratos, e não à fila de contas.
+PREFIXO_DA_REFERENCIA = "contrato:"
 
 # Até quantos dias antes do vencimento o contrato está em Negociar reajuste.
 LIMITE_EM_DIA = 60
@@ -183,3 +192,111 @@ def listar_contratos(supabase, hoje: date) -> list[dict[str, Any]]:
             }
         )
     return linhas
+
+
+def _data_br(dia: date) -> str:
+    return dia.strftime("%d/%m/%Y")
+
+
+def texto_do_aviso(sigla: str, vencimento: date, dias: int, negociacao: bool) -> str:
+    """O texto da spec: "ASSIM: o contrato vence em 60 dias (01/05/2027).
+    Iniciar a negociação do reajuste." Quando a memória diz que a data não é
+    vencimento (Unimed, Leve), o texto diz que é o início do debate."""
+    quando = "hoje" if dias == 0 else f"em {dias} {'dia' if dias == 1 else 'dias'}"
+    if negociacao:
+        return (
+            f"{sigla}: {quando} ({_data_br(vencimento)}) inicia o debate do reajuste. "
+            "A data não é o vencimento do contrato."
+        )
+    return f"{sigla}: o contrato vence {quando} ({_data_br(vencimento)}). Iniciar a negociação do reajuste."
+
+
+def _quem_recebe(supabase) -> list[str]:
+    """Quem tem "contratos e avisos" pela matriz e não foi desligado."""
+    perfis = [
+        linha["perfil"]
+        for linha in supabase.table("cm_perfil_permissao")
+        .select("perfil")
+        .eq("permissao", "contratos_avisos")
+        .eq("ligada", True)
+        .execute()
+        .data
+        or []
+    ]
+    if not perfis:
+        return []
+    pessoas = selecionar_participantes(
+        supabase, "id, ativo, perfil_contas_medicas", lambda q: q.in_("perfil_contas_medicas", perfis)
+    )
+    return [p["id"] for p in pessoas.data or [] if not foi_desligado(p)]
+
+
+def _aviso_registrado(supabase, contrato_id: str, data_prevista: date) -> dict | None:
+    linhas = (
+        supabase.table("cm_aviso")
+        .select("*")
+        .eq("contrato_id", contrato_id)
+        .eq("data_prevista", data_prevista.isoformat())
+        .execute()
+        .data
+        or []
+    )
+    return linhas[0] if linhas else None
+
+
+def avisar_contratos(supabase, hoje: date, agora: datetime | None = None) -> int:
+    """A rotina diária: na data do aviso (vencimento menos a antecedência), um
+    aviso CONTAS_MEDICAS no sino de cada pessoa com "contratos e avisos".
+
+    Uma vez por contrato e data: `cm_aviso` guarda a data prevista e o envio.
+    O dia perdido (container fora do ar na hora) sai no dia seguinte, até o
+    vencimento; contrato vencido não recebe aviso atrasado. Devolve quantos
+    contratos foram avisados."""
+    agora = agora or datetime.now(UTC)
+    destinatarios: list[str] | None = None
+    operadoras = {o["id"]: o["sigla"] for o in supabase.table("cm_operadora").select("id, sigla").execute().data or []}
+    avisados = 0
+    for contrato in supabase.table("cm_contrato").select("*").execute().data or []:
+        vencimento = _data(contrato.get("vencimento"))
+        if vencimento is None:
+            continue
+        data_prevista = vencimento - timedelta(days=antecedencia(contrato))
+        if not data_prevista <= hoje <= vencimento:
+            continue
+        aviso = _aviso_registrado(supabase, contrato["id"], data_prevista)
+        if aviso and aviso.get("enviado_em"):
+            continue
+        if aviso is None:
+            try:
+                aviso = (
+                    supabase.table("cm_aviso")
+                    .insert({"contrato_id": contrato["id"], "data_prevista": data_prevista.isoformat()})
+                    .execute()
+                    .data[0]
+                )
+            except APIError as exc:
+                if exc.code == "23505":  # outra passada chegou antes
+                    continue
+                raise
+        if destinatarios is None:
+            destinatarios = _quem_recebe(supabase)
+        sigla = operadoras.get(contrato["operadora_id"], "Operadora")
+        mensagem = texto_do_aviso(
+            sigla, vencimento, (vencimento - hoje).days, bool(contrato.get("vencimento_e_negociacao"))
+        )
+        if destinatarios:
+            supabase.table("notificacoes").insert(
+                [
+                    {
+                        "destinatario_id": pessoa,
+                        "tipo": "CONTAS_MEDICAS",
+                        "titulo": f"Contrato {sigla}: reajuste",
+                        "mensagem": mensagem,
+                        "referencia_id": f"{PREFIXO_DA_REFERENCIA}{aviso['id']}",
+                    }
+                    for pessoa in destinatarios
+                ]
+            ).execute()
+        supabase.table("cm_aviso").update({"enviado_em": agora.isoformat()}).eq("id", aviso["id"]).execute()
+        avisados += 1
+    return avisados
