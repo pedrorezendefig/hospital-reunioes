@@ -122,7 +122,7 @@ export function LinhaDoGuia({ linha, concluida, ocupado, onMarcar, onDesfazer, o
         {decidida && !validar && (
           <span className={`${ETIQUETA} bg-[#FEF3C7] text-[#92400E]`}>Decidida na validação</span>
         )}
-        {linha.nao_conferido &&<span className={`${ETIQUETA} bg-[#F1F5F9] text-[#475569]`}>Não conferido</span>}
+        {linha.nao_conferido && <span className={`${ETIQUETA} bg-[#F1F5F9] text-[#475569]`}>Não conferido</span>}
         {linha.confianca === "BAIXA" && (
           <span className={`${ETIQUETA} bg-[#FEF3C7] text-[#92400E]`}>conferir evidência</span>
         )}
