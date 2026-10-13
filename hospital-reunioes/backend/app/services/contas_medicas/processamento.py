@@ -40,6 +40,7 @@ import weakref
 from collections.abc import Iterator
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager
+from dataclasses import replace
 from datetime import UTC, date, datetime, time, timedelta
 from decimal import Decimal
 from pathlib import Path
@@ -48,7 +49,7 @@ from typing import Any
 
 from app.services import storage
 from app.services import transcricao_extractor as orcamento
-from app.services.contas_medicas import passo_a
+from app.services.contas_medicas import passo_a, passo_b
 from app.services.contas_medicas import prontuario as leitura_do_prontuario
 from app.services.contas_medicas.conferencia import Conferencia, ProntuarioLido, conferir
 from app.services.contas_medicas.conteudo import Conteudo, ler_conteudo
@@ -102,6 +103,7 @@ ETAPAS = {
     "leitura_do_prontuario": "leitura do prontuário",
     "conferencia": "conferência",
     "passo_a": "leitura do prontuário pela IA",
+    "passo_b": "comparação com a memória pela IA",
     "gravacao": "gravação do guia",
 }
 
@@ -375,32 +377,56 @@ def _pipeline(supabase, conta: dict, cronometro: _Cronometro) -> None:
         memoria = memoria_vigente(supabase, operadora_id) if operadora_id else None
         if memoria is None:
             raise _Falha(MENSAGEM_SEM_MEMORIA)
+        busca_de_preco = _busca_de_preco(supabase, operadora_id)
         conferencia = conferir(
             lida,
             prontuario,
             _memoria_lida(memoria),
-            _busca_de_preco(supabase, operadora_id),
+            busca_de_preco,
             setores={s["nome_mv"]: s["acomodacao"] for s in listar_setores(supabase) if s.get("acomodacao")},
             dicionario=dicionario_do_banco(supabase),
             pacote_do_tuss=lambda tuss, data: pacote_pelo_tuss(supabase, operadora_id, tuss, data),
         )
 
-    with cronometro.etapa("passo_a"), _trava_do_prontuario(conta["atendimento_id"]):
-        # Depois das conferências: a IA recebe os achados do código, para não
-        # repetir linha. A trava faz a parcial que chega junto esperar a
-        # leitura da outra e reaproveitá-la.
-        eventos = passo_a.eventos_do_atendimento(
-            supabase,
-            conta_id=conta["id"],
-            atendimento_id=conta["atendimento_id"],
-            arquivo_id=arquivo_do_prontuario["id"],
-            prontuario=prontuario,
-            achados=conferencia.linhas,
-            regras=memoria["regras"],
-        )
+    try:
+        with cronometro.etapa("passo_a"), _trava_do_prontuario(conta["atendimento_id"]):
+            # Depois das conferências: a IA recebe os achados do código, para não
+            # repetir linha. A trava faz a parcial que chega junto esperar a
+            # leitura da outra e reaproveitá-la.
+            eventos = passo_a.eventos_do_atendimento(
+                supabase,
+                conta_id=conta["id"],
+                atendimento_id=conta["atendimento_id"],
+                arquivo_id=arquivo_do_prontuario["id"],
+                prontuario=prontuario,
+                achados=conferencia.linhas,
+                regras=memoria["regras"],
+            )
+
+        with cronometro.etapa("passo_b"):
+            da_ia = passo_b.comparar(
+                supabase,
+                conta_id=conta["id"],
+                atendimento_id=conta["atendimento_id"],
+                operadora_id=operadora_id,
+                memoria=memoria,
+                conta=lida,
+                prontuario=prontuario,
+                eventos=eventos,
+                conferencia=conferencia,
+                preco=busca_de_preco,
+            )
+    except ErroDaIA:
+        # A IA não respondeu nas três tentativas: o que o código achou fica no
+        # Guia, e a conta vai para Erro. O reprocesso troca as linhas abertas.
+        _gravar_guia(supabase, conta["id"], conferencia)
+        raise
 
     with cronometro.etapa("gravacao"):
-        linhas = _gravar_guia(supabase, conta["id"], conferencia)
+        # As linhas da IA entram pelo mesmo ponto das do código, num Guia só.
+        linhas = _gravar_guia(
+            supabase, conta["id"], replace(conferencia, linhas=passo_b.juntar(conferencia.linhas, da_ia.linhas))
+        )
         nota = nota_de_entrada(linhas, lida.total)
 
     # A 116 não tem coluna para o tempo das etapas, e o PRD tem migration única:
