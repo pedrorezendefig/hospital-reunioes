@@ -48,6 +48,7 @@ from typing import Any
 
 from app.services import storage
 from app.services import transcricao_extractor as orcamento
+from app.services.contas_medicas import passo_a
 from app.services.contas_medicas import prontuario as leitura_do_prontuario
 from app.services.contas_medicas.conferencia import Conferencia, ProntuarioLido, conferir
 from app.services.contas_medicas.conteudo import Conteudo, ler_conteudo
@@ -100,6 +101,7 @@ ETAPAS = {
     "texto_do_prontuario": "leitura do PDF do prontuário",
     "leitura_do_prontuario": "leitura do prontuário",
     "conferencia": "conferência",
+    "passo_a": "leitura do prontuário pela IA",
     "gravacao": "gravação do guia",
 }
 
@@ -383,12 +385,28 @@ def _pipeline(supabase, conta: dict, cronometro: _Cronometro) -> None:
             pacote_do_tuss=lambda tuss, data: pacote_pelo_tuss(supabase, operadora_id, tuss, data),
         )
 
+    with cronometro.etapa("passo_a"), _trava_do_prontuario(conta["atendimento_id"]):
+        # Depois das conferências: a IA recebe os achados do código, para não
+        # repetir linha. A trava faz a parcial que chega junto esperar a
+        # leitura da outra e reaproveitá-la.
+        eventos = passo_a.eventos_do_atendimento(
+            supabase,
+            conta_id=conta["id"],
+            atendimento_id=conta["atendimento_id"],
+            arquivo_id=arquivo_do_prontuario["id"],
+            prontuario=prontuario,
+            achados=conferencia.linhas,
+            regras=memoria["regras"],
+        )
+
     with cronometro.etapa("gravacao"):
         linhas = _gravar_guia(supabase, conta["id"], conferencia)
         nota = nota_de_entrada(linhas, lida.total)
 
     # A 116 não tem coluna para o tempo das etapas, e o PRD tem migration única:
     # ele vai em `faltantes`, ao lado dos itens que o prontuário não trouxe.
+    # O parecer junta o que a leitura por código não teve e o que a IA apontou.
+    parecer = [*estrutura.parecer_parcial, *passo_a.parecer(eventos)]
     tempos = {**cronometro.tempos, "total": cronometro.total()}
     _fechar_tentativa(
         supabase,
@@ -401,8 +419,8 @@ def _pipeline(supabase, conta: dict, cronometro: _Cronometro) -> None:
             "nota_entrada": nota.nota,
             "valor_apontado": float(nota.apontado),
             "valor_em_validacao": float(nota.em_validacao),
-            "parecer_parcial": bool(estrutura.parecer_parcial),
-            "faltantes": {"itens": list(estrutura.parecer_parcial), "tempos_por_etapa_s": tempos},
+            "parecer_parcial": bool(parecer),
+            "faltantes": {"itens": parecer, "tempos_por_etapa_s": tempos},
             "memoria_versao_id": memoria["memoria_versao_id"],
             "pronta_em": datetime.now(UTC).isoformat(),
         },

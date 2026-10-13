@@ -23,7 +23,7 @@ from typing import Any
 
 import yaml
 
-__all__ = ["gerar_texto_memoria"]
+__all__ = ["gerar_texto_memoria", "orientacoes_de_leitura"]
 
 # As seções do MODELO-MEMORIA-OPERADORA.md, pelo prefixo do ID da regra.
 SECOES = {
@@ -152,3 +152,19 @@ def gerar_texto_memoria(supabase, operadora_id: str, versao_id: str | None = Non
         partes.append(f"## {secao}")
         partes.append("\n".join(_tabela(por_secao[secao])))
     return "\n\n".join(partes) + "\n"
+
+
+# O que orienta a leitura do prontuário no passo A (spec 9.2): princípios,
+# diárias e quantidades por tempo. O resto da memória é do passo B.
+SECOES_DA_LEITURA = ("PRI", "DIA", "INS")
+
+
+def orientacoes_de_leitura(regras: list[dict[str, Any]]) -> str:
+    """As seções 1, 3 e 8 da memória, no mesmo formato de tabela do texto
+    inteiro. `regras` são as ativas da versão, como `memoria_vigente` lê."""
+    partes = []
+    for prefixo in SECOES_DA_LEITURA:
+        da_secao = sorted((r for r in regras if r.get("secao") == prefixo), key=lambda r: r["codigo"])
+        if da_secao:
+            partes += [f"## {SECOES[prefixo]}", "\n".join(_tabela(da_secao))]
+    return "\n\n".join(partes) + "\n" if partes else "(a memória não tem orientações de leitura)\n"

@@ -2,6 +2,54 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-10-13T01:25:58-03:00",
+      "sha": "5e1c818e5fbaa28251011522dd47c4727da48ee5",
+      "app_version": "0.183.0",
+      "subject": "Onda onda-ia-onda2: Passo A no pipeline, eventos do prontuário com página e trecho; Painel (nota por semana, causa-raiz, itens que faltam, produção, nível de evidência, custo de IA)",
+      "raw_subject": "chore(deploy): registro da onda onda-ia-onda2 (#1172 #1173)",
+      "scope": [
+        "backend",
+        "frontend"
+      ],
+      "prds": [
+        1128
+      ],
+      "result": "healthy",
+      "duration_seconds": 222,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        },
+        {
+          "service": "frontend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "onda-enxuta onda-ia-onda2: PR #1172 (issue #1131), PR #1173 (issue #1137), mergeados PR a PR. Merge pela API do GitHub, um build. Registro pela Action pos-merge depois do health.",
+      "etapas": {
+        "merge_s": 5,
+        "build_s": {
+          "backend": 19,
+          "frontend": 180
+        },
+        "health_s": 0
+      },
+      "responsavel": "pedrorezendefig"
+    },
+    {
       "at": "2026-10-13T01:14:30-03:00",
       "sha": "50db1ac2028809f47e76aca3822d0a00da403c00",
       "app_version": "0.182.0",

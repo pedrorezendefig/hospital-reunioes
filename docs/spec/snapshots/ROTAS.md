@@ -1,6 +1,6 @@
 # ROTAS.md
 <!-- gerado automaticamente por /snapshot — não editar -->
-<!-- last_update: 2026-10-13T04:11+0000 -->
+<!-- last_update: 2026-10-13T04:24+0000 -->
 
 Endpoints HTTP expostos pelo backend FastAPI do Hospital Reuniões.
 
@@ -130,6 +130,12 @@ Endpoints HTTP expostos pelo backend FastAPI do Hospital Reuniões.
 | POST | `/contas-medicas/planos` | Cadastra um nome de plano do MV. Sem cadastro, a conta desse plano é recusada no envio. | ✅ |
 | GET | `/contas-medicas/setores` | Os setores como o MV imprime, cada um com a acomodação. | ✅ |
 | POST | `/contas-medicas/setores` | Cadastra um setor do MV com a acomodação, que decide a diária e o teto por dia. | ✅ |
+
+## contas-medicas (`app/routers/contas_medicas_painel.py`)
+
+| Método | Rota | O que faz | Auth |
+|--------|------|-----------|------|
+| GET | `/contas-medicas/painel` | Os agregados da semana escolhida (qualquer dia dela), da operadora e do | ✅ |
 
 ## admin (`app/routers/admin/dados_atendimento.py`)
 
@@ -472,4 +478,4 @@ Endpoints HTTP expostos pelo backend FastAPI do Hospital Reuniões.
 
 ---
 
-**Totais:** 266 endpoints em 40 routers · 93% exigem auth.
+**Totais:** 267 endpoints em 41 routers · 94% exigem auth.

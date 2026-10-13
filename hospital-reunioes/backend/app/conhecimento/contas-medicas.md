@@ -18,7 +18,8 @@ A primeira etapa inteira: a fundação do módulo, a carga das operadoras, o env
 - a tela Operadoras, aberta a partir da tela de contas para quem tem a permissão de regra contratual e tabelas (gestão de contas médicas e as duas diretorias);
 - a tela Memória da operadora, aberta pela operadora na tela Operadoras, descrita abaixo;
 - a tela de Habilitação, aberta a partir da tela de contas para quem tem a permissão de habilitar pessoas (as duas diretorias), descrita em "Quem vê";
-- a tela Contratos, aberta a partir da tela de contas para quem tem a permissão de contratos e avisos (credenciamento, gestão de contas médicas e as duas diretorias), com o aviso de reajuste no sino, descrita em "Contratos e aviso de reajuste".
+- a tela Contratos, aberta a partir da tela de contas para quem tem a permissão de contratos e avisos (credenciamento, gestão de contas médicas e as duas diretorias), com o aviso de reajuste no sino, descrita em "Contratos e aviso de reajuste";
+- o Painel, aberto a partir da tela de contas, descrito em "O Painel".
 
 Na tela Operadoras, a gestão envia o arquivo de memória de cada convênio, o mesmo que o diretor monta, e a memória passa a valer sem programador no meio. A tela mostra a versão, quantas regras vigentes e pendentes entraram e os parâmetros lidos do cabeçalho; os números têm de bater com o arquivo. Mandar uma versão nova aposenta a anterior. Parâmetro do cabeçalho que o sistema ainda não usa fica guardado, e a memória em vigor pode ser baixada de volta inteira. Arquivo com um número no formato de CPF é recusado, porque memória não pode ter dado de paciente. Na mesma tela a gestão cadastra os nomes de plano como o MV imprime, cada um com a operadora e a coluna de preço, e os setores do MV com a acomodação de cada um.
 
@@ -75,6 +76,8 @@ O tempo de cada etapa da análise fica guardado, para medir a meta de uma conta 
 
 A segunda etapa trouxe a inteligência artificial para a análise. Ela tem duas tarefas. A primeira lê o texto livre do prontuário (evoluções, anotações, prescrições, descrição cirúrgica) e lista o que aconteceu com o paciente, dia a dia, com a página e o trecho que provam cada fato. A segunda compara esses fatos com a conta e com a memória da operadora e propõe as linhas do Guia (incluir, ajustar quantidade, retirar ou validar), cada uma com a regra da memória que a sustenta. Preço, contagem de diárias e as contas da nota continuam com o código: a IA não devolve valor em reais.
 
+A leitura do prontuário pela IA acontece uma vez por atendimento e serve a todas as parciais e ao reenvio. Ela recebe só o texto que o código não leu sozinho, junto com o que ele já leu (prescrições, balanço, glicemias e as linhas que as conferências já puseram no Guia), para não refazer. Prontuário grande demais para uma leitura só é lido em partes, por períodos de dias, e o fato repetido entre duas partes conta uma vez. O trecho que a IA cita é conferido na página: quando não está lá nem na página vizinha, o fato fica marcado para conferir, com confiança baixa. Internação, alta e setor de cada dia valem como o código leu; quando a IA leu diferente, a diferença aparece no parecer parcial do Guia, junto com os documentos esperados que faltam e as observações da IA (uma evolução ilegível, por exemplo).
+
 O texto do prontuário vai à IA sem o nome da paciente, e o provedor não guarda nada do que recebe nem usa o texto para treinar modelo. A resposta tem um formato combinado; fora dele, é recusada e pedida de novo, até três vezes, com uma espera maior a cada vez. Depois disso a conta fica em Erro com "Tente de novo em alguns minutos" e o botão "Enviar de novo".
 
 O custo de cada chamada fica gravado: quantos tokens entraram e saíram, quantos vieram do cache e quanto custou, em dólar, e cada conta guarda a soma das chamadas dela, inclusive as de uma nova análise. O modelo de inteligência artificial de cada tarefa é trocado numa configuração do servidor, sem programador.
@@ -111,6 +114,28 @@ Para atualizar o contrato, a gestão ou a diretoria clica em "Enviar contrato ou
 
 O aviso sai no sino uma vez só, na data do aviso, que é o vencimento menos a antecedência da memória da operadora (60 dias quando a memória não diz). Antecedência zero avisa na própria data do vencimento. Recebem o aviso todas as pessoas com a permissão de contratos e avisos: credenciamento, gestão de contas médicas e as duas diretorias, ou quem a Habilitação ligar. O texto é como "ASSIM: o contrato vence em 60 dias (01/05/2027). Iniciar a negociação do reajuste."; quando a data não é vencimento, como na Unimed, o texto diz que naquela data inicia o debate do reajuste. Clicar no aviso abre a tela Contratos. A conferência roda todo dia de manhã; se o sistema estava fora do ar no dia do aviso, ele sai no dia seguinte, até o vencimento.
 
+## O Painel
+
+O Painel mostra à diretoria onde a perda da conta nasce. Ele abre a partir da tela de contas, pelo botão Painel. Os números são das contas concluídas, por semana de segunda a domingo, contada pelo dia em que a faturista concluiu a conta. A conta concluída e enviada de novo sai do Painel até ser concluída outra vez. No topo ficam três filtros: a semana, a operadora e o tipo de conta (Parcial, quando o atendimento tem mais de uma conta, ou Única).
+
+Quatro cartões no topo:
+
+- **Nota média de entrada** da semana, com a da semana anterior ao lado. Sobe quando a ponta registra e dispensa melhor.
+- **Contas concluídas** na semana.
+- **R$ apontado**, com quanto disso já foi incluído no MV (as linhas Feito).
+- **Não procede**: quantas linhas a faturista marcou como Não procede, de quantas apontadas, sem as de validação. Mede o acerto da IA e da memória.
+
+E seis blocos:
+
+- a nota média por semana, nas oito semanas até a escolhida;
+- o R$ apontado por causa-raiz (dispensação, regra automática, cadastro e preço, registro assistencial, lançamento manual), com o percentual de cada uma: diz quem corrige;
+- os dez itens que mais faltam: os códigos com mais contas com linha Incluir, com o número de contas e o R$. É a fila de parametrização para a consultoria do MV;
+- a produção de cada faturista: contas, contas com pendência, R$ incluído, taxa de Não procede e, em segundo plano, o R$ retirado;
+- o R$ incluído por nível de evidência (Registrado, Prescrito, Prescrito SN, Por regra), por semana, em barras: mostra quanto do valor incluído depende só de prescrição;
+- o custo de inteligência artificial da semana e o custo médio por conta, em dólar.
+
+Quem tem o Painel completo (coordenadora de faturamento, gestão de contas médicas e as duas diretorias) vê tudo. A faturista vê só a própria linha de produção, e mais nenhum bloco.
+
 ## Quem vê
 
 O módulo tem perfis próprios, separados dos de Reuniões, POPs e Ouvidoria. São seis: faturista, coordenadora de faturamento, gestão de contas médicas, diretoria médica, diretoria executiva e credenciamento. Quem não tem nenhum deles não vê o item no menu e não consegue abrir a tela. O Super admin do aplicativo entra, como nos outros módulos.
@@ -141,4 +166,5 @@ O módulo não guarda nome completo, CPF, carteira nem data de nascimento de pac
 - Uma conta que não sai de Na fila ou de "Pronta em instantes", um Erro com motivo que não bate com o PDF, ou o aviso de contas prontas que não chega ao sino (Defeito, ou Informação se o motivo do Erro explica, como o PDF sem texto).
 - Uma conta que volta para Erro com "Tente de novo em alguns minutos" mesmo depois de enviada de novo, ou o botão "Reanalisar" que não aparece para a gestão (Defeito).
 - O aviso de reajuste de contrato que não chegou ao sino, chegou duas vezes ou chegou na data errada, ou um contrato com a situação que não bate com o vencimento (Defeito, ou Informação se a data do aviso explica, como a antecedência da memória).
+- Um número do Painel que não bate com as contas da semana, ou a faturista que vê a produção de outra pessoa (Defeito, ou Informação se a dúvida é sobre a semana de segunda a domingo ou sobre o que entra em cada número).
 - Dúvida sobre quando chega o envio de contas ou alguma das próximas entregas (Informação).
