@@ -132,10 +132,14 @@ export function NotificacoesDropdown() {
     // kanban. O aceite interno guarda o id da reunião, não o token (issue
     // #295): o link vem do endpoint autenticado, que só atende o próprio
     // destinatário e mantém o banco hash-only. O aviso de Contas médicas
-    // guarda o envio e leva à fila de contas, onde estão os guias (#1124).
+    // guarda o envio e leva à fila de contas, onde estão os guias (#1124);
+    // o aviso de reajuste guarda "contrato:<aviso>" e leva à tela Contratos
+    // (#1144), que o credenciamento abre e a fila não.
     if (notif.referencia_id) {
       setOpen(false);
-      if (notif.tipo === "CONTAS_MEDICAS") {
+      if (notif.tipo === "CONTAS_MEDICAS" && notif.referencia_id.startsWith("contrato:")) {
+        router.push("/contas-medicas/contratos");
+      } else if (notif.tipo === "CONTAS_MEDICAS") {
         router.push("/contas-medicas");
       } else if (notif.tipo === "ACEITE_INTERNO") {
         await irParaOAceite(notif.referencia_id);
