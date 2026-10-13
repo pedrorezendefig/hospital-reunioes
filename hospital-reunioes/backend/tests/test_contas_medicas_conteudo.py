@@ -189,27 +189,32 @@ def test_o_mesmo_item_em_tres_dias_vira_um_registro_com_as_doses_de_cada_dia_e_o
 # layout do MV numa fonte de largura fixa, então cada coluna do cabeçalho cai num x
 # conhecido. O nome longo termina um espaço antes da coluna da dose: o `-layout`
 # devolve um espaço só entre os dois, e o leitor por linha cola a dose no nome.
+# Nada garante que o PDF do MV use fonte de largura fixa: os testes de "não muda o
+# que já lia" rodam também em fonte proporcional, em que o x não é a coluna do texto.
+FONTES = pytest.mark.parametrize("fonte", ["monospace", "Helvetica"])
 SORO_LONGO = "SORO FISIOLOGICO 0,9% 500ML SIST FECHAD"
 SORO_ENCOSTADO = f" 3 {SORO_LONGO} 1 FRASCO/AM               6HS/6HS      S     EV    . 06 . 12 . 18 . 24"
 
 
-def _pdf_de_largura_fixa(paginas: list[str]) -> bytes:
+def _pdf_de_largura_fixa(paginas: list[str], fonte: str = "monospace") -> bytes:
     from html import escape
 
     from weasyprint import HTML
 
     corpo = "".join(
-        f'<pre style="font: 7pt monospace; margin: 0; page-break-after: always">{escape(texto)}</pre>'
+        f'<pre style="font: 7pt {fonte}; margin: 0; page-break-after: always">{escape(texto)}</pre>'
         for texto in paginas
     )
     pagina = "<style>@page { margin: 20pt }</style>"
     return HTML(string=f"<html><head>{pagina}</head><body>{corpo}</body></html>").write_pdf()
 
 
-def _ler_o_pdf(paginas: list[str], *, por_coluna: bool, tirar_das_palavras: frozenset[str] = frozenset()):
+def _ler_o_pdf(
+    paginas: list[str], *, por_coluna: bool, tirar_das_palavras: frozenset[str] = frozenset(), fonte: str = "monospace"
+):
     from app.services.contas_medicas_extrator import extrair_paginas, extrair_palavras
 
-    pdf = _pdf_de_largura_fixa(paginas)
+    pdf = _pdf_de_largura_fixa(paginas, fonte)
     textos = [pagina.texto for pagina in extrair_paginas(pdf)]
     estrutura = ler_prontuario(textos, ATENDIMENTO)
     palavras = None
@@ -249,13 +254,16 @@ def test_nome_longo_que_encosta_na_dose_sai_com_dose_unidade_frequencia_sn_e_via
     )
 
 
-def test_a_prescricao_inteira_lida_pela_coluna_sai_igual_a_lida_por_linha():
+@FONTES
+def test_a_prescricao_inteira_lida_pela_coluna_sai_igual_a_lida_por_linha(fonte):
     """Seções, continuação do nome, observação, componente, suspenso, preparo do exame e
-    quem assina: a remontagem pela coluna não muda nada do que o leitor por linha já lia."""
+    quem assina: a remontagem pela coluna não muda nada do que o leitor por linha já lia.
+    A referência é a leitura por linha em fonte de largura fixa, a que acerta os 9 itens:
+    em fonte proporcional o `-layout` também cola a dose no nome do PANTOCAL."""
     paginas = montar("prontuario/capa", "conteudo/prescricao")
 
     (por_linha,) = _ler_o_pdf(paginas, por_coluna=False).prescricoes
-    (por_coluna,) = _ler_o_pdf(paginas, por_coluna=True).prescricoes
+    (por_coluna,) = _ler_o_pdf(paginas, por_coluna=True, fonte=fonte).prescricoes
 
     assert len(por_coluna.itens) == 9
     assert por_coluna.itens == por_linha.itens

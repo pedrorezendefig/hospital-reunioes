@@ -232,8 +232,8 @@ def _colunas_do_cabecalho(linha: list[_Palavra]) -> list[float] | None:
 
 def texto_por_coluna(palavras: Sequence[_Palavra]) -> str | None:
     """A página remontada pela posição das colunas, no formato que `ler_itens` lê:
-    palavras de colunas diferentes saem com dois espaços ou mais entre elas, e o recuo
-    sai do x. None quando a página não tem o cabeçalho de colunas."""
+    palavras de colunas diferentes saem com dois espaços ou mais entre elas, as da mesma
+    coluna com um espaço só, e o recuo sai do x. None quando a página não tem o cabeçalho de colunas."""
     linhas = _linhas(palavras)
     cabecalhos = [(i, c) for i, linha in enumerate(linhas) if (c := _colunas_do_cabecalho(linha))]
     if not cabecalhos:
@@ -248,9 +248,14 @@ def texto_por_coluna(palavras: Sequence[_Palavra]) -> str | None:
         texto, coluna_anterior = "", None
         for palavra in linha:
             coluna = sum(palavra.x0 >= inicio - largura / 2 for inicio in inicios)
-            separador = 0 if not texto else 1 if coluna == coluna_anterior else 2
-            posicao = max(round((palavra.x0 - margem) / largura), len(texto) + separador)
-            texto = texto.ljust(posicao) + palavra.texto
+            if texto and coluna == coluna_anterior:
+                # Mesma coluna: um espaço só. O x vira coluna de texto pela largura mediana
+                # do caractere, o que só é exato em fonte de largura fixa; em fonte
+                # proporcional o erro se acumula e abriria dois espaços dentro do nome.
+                texto += " " + palavra.texto
+            else:
+                posicao = max(round((palavra.x0 - margem) / largura), len(texto) + 2 * bool(texto))
+                texto = texto.ljust(posicao) + palavra.texto
             coluna_anterior = coluna
         saida.append(texto)
     return "\n".join(saida)
