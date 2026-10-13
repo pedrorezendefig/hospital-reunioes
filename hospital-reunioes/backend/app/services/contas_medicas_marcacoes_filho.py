@@ -97,19 +97,39 @@ def linhas_com_marcas(pagina) -> list[list[str]]:
     if not marcas:
         return []
 
-    itens = [(m[0], (m[1] + m[2]) / 2, m[3], True) for m in marcas]
-    itens += [(p["x0"], (p["top"] + p["bottom"]) / 2, p["text"], False) for p in pagina.extract_words()]
-    itens.sort(key=lambda item: (item[1], item[0]))
-
-    linhas: list[list[tuple]] = []
-    centro = None
-    for item in itens:
-        if centro is None or abs(item[1] - centro) > MESMA_LINHA:
+    palavras = sorted(
+        ((p["x0"], (p["top"] + p["bottom"]) / 2, p["text"]) for p in pagina.extract_words()),
+        key=lambda palavra: (palavra[1], palavra[0]),
+    )
+    linhas: list[list[tuple]] = []  # cada linha: [(x0, texto, é marca)]
+    linha_da_palavra: list[int] = []
+    centros: list[float] = []
+    for x0, centro, texto in palavras:
+        if not centros or abs(centro - centros[-1]) > MESMA_LINHA:
             linhas.append([])
-            centro = item[1]
-        linhas[-1].append(item)
+            centros.append(centro)
+        linhas[-1].append((x0, texto, False))
+        linha_da_palavra.append(len(linhas) - 1)
+
+    for x0, topo, base, marca in marcas:
+        # A marca vai para a linha da opção, a palavra logo à direita dela. No MV o
+        # botão fica uns pontos abaixo do rótulo da pergunta: pelo centro, ele caía
+        # numa linha sem palavra nenhuma e a marcação se perdia.
+        centro = (topo + base) / 2
+        direita = [i for i, (px, pc, _) in enumerate(palavras) if px >= x0 and abs(pc - centro) <= MESMA_LINHA]
+        if direita:
+            destino = linha_da_palavra[min(direita, key=lambda i: palavras[i][0])]
+        else:
+            perto = [i for i, c in enumerate(centros) if abs(c - centro) <= MESMA_LINHA]
+            if perto:
+                destino = min(perto, key=lambda i: abs(centros[i] - centro))
+            else:
+                linhas.append([])
+                centros.append(centro)
+                destino = len(linhas) - 1
+        linhas[destino].append((x0, marca, True))
     return [
-        [texto for _, _, texto, _ in sorted(linha, key=lambda item: item[0])]
+        [texto for _, texto, _ in sorted(linha, key=lambda item: item[0])]
         for linha in linhas
         if any(e_marca for *_, e_marca in linha)
     ]

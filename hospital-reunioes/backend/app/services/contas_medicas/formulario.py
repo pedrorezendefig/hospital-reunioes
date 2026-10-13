@@ -1,9 +1,13 @@
-"""Formulário em branco aprendido (issue #1132, PRD #1128).
+"""Formulário em branco: esqueleto fixo e aprendido (issue #1132, PRD #1128).
 
 Os formulários do MV (fisioterapia e o editor de documentos: anamnese de UTI,
 sumário de alta, fonoaudiologia e os demais) imprimem as perguntas mesmo sem
 resposta. Essas linhas são o modelo do formulário, iguais em quase todo
 documento da mesma Família, e só gastam a leitura da IA.
+
+O esqueleto dos formulários conhecidos é fixo (`esqueleto_formulario`) e sai do
+texto desde o primeiro Prontuário, com ou sem o banco. O aprendizado abaixo é o
+complemento, para formulário novo ou alterado.
 
 Linha que aparece igual em 80% ou mais dos documentos da mesma Família de um
 Prontuário é candidata a modelo: entra em `cm_linha_formulario` (migration 117)
@@ -36,6 +40,7 @@ from collections.abc import Sequence
 import httpx
 from postgrest.exceptions import APIError
 
+from app.services.contas_medicas.esqueleto_formulario import ESQUELETO
 from app.services.contas_medicas.marcacoes import MARCADA
 from app.services.contas_medicas.prontuario import FAMILIAS_DE_FORMULARIO, Documento, Prontuario
 
@@ -104,7 +109,7 @@ def _aprender(supabase, deste: dict[str, set[str]], aprender: bool) -> dict[str,
             if novas:
                 supabase.table(TABELA).upsert(novas, on_conflict="familia,linha").execute()
     except (APIError, httpx.HTTPError) as erro:
-        # A remoção é economia, não conferência: sem o aprendizado a leitura segue inteira.
+        # A remoção é economia, não conferência: sem o aprendizado sai só o esqueleto fixo.
         logger.warning("[ContasMedicas] Formulario em branco sem aprendizado: %s", _causa(erro))
         return {}
     modelo: dict[str, set[str]] = {}
@@ -115,8 +120,8 @@ def _aprender(supabase, deste: dict[str, set[str]], aprender: bool) -> dict[str,
 
 
 def sem_formulario_em_branco(supabase, prontuario: Prontuario, *, aprender: bool) -> Prontuario:
-    """O Prontuário com as linhas de modelo fora dos documentos de formulário.
-    `aprender` falso (o mesmo arquivo lido de novo) só remove, sem somar na contagem."""
+    """O Prontuário com o esqueleto fixo e as linhas de modelo aprendidas fora dos
+    documentos de formulário. `aprender` falso (o mesmo arquivo lido de novo) só remove, sem somar na contagem."""
     por_chave: dict[str, list[Documento]] = {}
     for documento in prontuario.documentos:
         if chave := _chave(documento):
@@ -128,10 +133,11 @@ def sem_formulario_em_branco(supabase, prontuario: Prontuario, *, aprender: bool
 
     def limpo(documento: Documento) -> Documento:
         chave = _chave(documento)
-        if not chave or not modelo.get(chave):
+        fora = (ESQUELETO.get(chave, frozenset()) | modelo.get(chave, set())) if chave else set()
+        if not fora:
             return documento
         titulo, *corpo = documento.linhas
-        fica = tuple(linha for linha in corpo if linha not in modelo[chave])
+        fica = tuple(linha for linha in corpo if linha not in fora)
         return dataclasses.replace(documento, linhas=(titulo, *fica))
 
     return dataclasses.replace(prontuario, documentos=tuple(limpo(d) for d in prontuario.documentos))

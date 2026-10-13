@@ -24,6 +24,7 @@ from test_contas_medicas_prontuario import ATENDIMENTO, CAPA_QUE_BATE, montar
 
 from app.services import contas_medicas_extrator as extrator
 from app.services.contas_medicas.formulario import sem_formulario_em_branco
+from app.services.contas_medicas.marcacoes import so_o_marcado
 from app.services.contas_medicas.prontuario import Documento, Prontuario, ler_prontuario
 from app.services.contas_medicas_extrator import extrair_paginas
 
@@ -38,10 +39,10 @@ def _pixels(largura: int, altura: int, fracao_escura: float) -> bytes:
     return bytes([0] * escuros + [255] * (largura * altura - escuros))
 
 
-def _pdf(textos: list[tuple[int, int, str]], imagens: list[tuple[int, int, int, int, tuple]]) -> bytes:
+def _pdf(textos: list[tuple], imagens: list[tuple[int, int, int, int, tuple]], *, corpo: int = 10) -> bytes:
     """Uma página A4. `textos`: (x, y, texto); `imagens`: (x, y, largura e altura
     desenhadas em pontos, (largura, altura, fração escura) da imagem). Origem embaixo."""
-    conteudo = [f"BT /F1 10 Tf {x} {y} Td ({t}) Tj ET" for x, y, t in textos]
+    conteudo = [f"BT /F1 {corpo} Tf {x} {y} Td ({t}) Tj ET" for x, y, t in textos]
     conteudo += [f"q {w} 0 0 {h} {x} {y} cm /Im{i} Do Q" for i, (x, y, w, h, _) in enumerate(imagens)]
     stream = "\n".join(conteudo).encode("latin-1")
     xobjetos = " ".join(f"/Im{i} {6 + i} 0 R" for i in range(len(imagens)))
@@ -154,6 +155,93 @@ def test_rotulo_na_linha_de_cima_com_dois_pontos_vai_junto_da_opcao_marcada():
 
     assert "Suporte ventilatório: [X] VNI" in linhas
     assert "Suporte ventilatório:" not in linhas
+
+
+def test_rotulo_sem_opcao_marcada_nao_leva_a_resposta_da_pergunta_de_baixo():
+    """No MV o rótulo de algumas perguntas vem depois das opções: a sedação marcada
+    não é resposta do nível de consciência, que ficou sem nada marcado."""
+    linhas = so_o_marcado(
+        [
+            "NÍVEL DE CONSCIÊNCIA:",
+            "[ ] Lúcido e Orientado  [ ] Desorientado  [ ] Sonolento",
+            "[ ] Sim  [X] Não  Quais:  RASS:",
+            "SEDAÇÃO",
+        ]
+    )
+
+    assert linhas == ["NÍVEL DE CONSCIÊNCIA:", "[X] Não", "Quais:  RASS:", "SEDAÇÃO"]
+
+
+# Uma fisioterapia respiratória do MV, reduzida: as linhas de formulário e a posição
+# de cada coisa vêm de um prontuário real; a resposta e o texto livre são inventados,
+# sem nome, data nem profissional. Como no MV, o rótulo fica uns pontos acima das
+# opções e o `pdfplumber` os põe em linhas diferentes, que o `pdftotext` junta.
+FISIOTERAPIA = _pdf(
+    [
+        (50, 800, "Atendimento: 31245"),
+        (50, 780, "AVALIA\xc7\xc3O RESPIRAT\xd3RIA - VENTILA\xc7\xc3O"),
+        (60, 760, "DROGA VASOATIVA"),
+        (224, 754, "Sim"),
+        (279, 754, "N\xe3o"),
+        (321, 754, "Quais:"),
+        (51, 720, "Espont\xe2nea:"),
+        (224, 720, "sem O2"),
+        (300, 714, "com O2"),
+        (420, 714, "l/min %"),
+        (51, 690, "Assist\xeancia Ventilat\xf3ria:"),
+        (224, 685.5, "Sim"),
+        (279, 685.5, "N\xe3o"),
+        (51, 650, "Mec\xe2nica Ventilat\xf3ria:"),
+        (200, 650, "Press\xe3o de Plat\xf4:"),
+        (320, 650, "Drive Pressure:"),
+        (430, 650, "Cst:"),
+        (480, 650, "Rav:"),
+        (530, 650, "M.P:"),
+        (51, 630, "Gasometria Arterial"),
+        (51, 610, "DIAGN\xd3STICO FISIOTERAP\xcaUTICO"),
+        (51, 595, "Paciente colaborativo, sem desconforto respirat\xf3rio durante a sess\xe3o."),
+        (51, 575, "EVOLU\xc7\xc3O DE FISIOTERAPIA"),
+        (51, 560, "Realizados exerc\xedcios respirat\xf3rios e incentivador inspirat\xf3rio, boa toler\xe2ncia."),
+    ],
+    [
+        (202, 750.5, 12, 14, BOTAO_VAZIO),
+        (257, 750.5, 12, 14, BOTAO_MARCADO),
+        (210, 719.5, 8, 8, CAIXA_VAZIA),
+        (287, 713.5, 8, 8, CAIXA_MARCADA),
+        (202, 680.5, 12, 14, BOTAO_MARCADO),
+        (257, 680.5, 12, 14, BOTAO_VAZIO),
+    ],
+    corpo=12,
+)
+
+
+def test_fisioterapia_real_reduzida_sai_com_a_ventilacao_marcada_e_sem_o_esqueleto():
+    pagina = extrair_paginas(FISIOTERAPIA)[0].texto
+    prontuario = ler_prontuario(montar(CAPA_QUE_BATE, [pagina]), ATENDIMENTO)
+    assert [d.familia for d in prontuario.documentos] == ["FISIO_RESP"]
+
+    esqueleto = {
+        "Quais:",
+        "l/min %",
+        "Mecânica Ventilatória:  Pressão de Platô:  Drive Pressure:  Cst:  Rav:  M.P:",
+        "Gasometria Arterial",
+        "DIAGNÓSTICO FISIOTERAPÊUTICO",
+        "EVOLUÇÃO DE FISIOTERAPIA",
+    }
+    assert esqueleto <= set(prontuario.documentos[0].linhas)
+
+    # Primeiro Prontuário, banco vazio: o esqueleto sai sem aquecimento.
+    (documento,) = sem_formulario_em_branco(_Banco(), prontuario, aprender=True).documentos
+
+    assert not esqueleto & set(documento.linhas)
+    assert documento.linhas == (
+        "AVALIAÇÃO RESPIRATÓRIA - VENTILAÇÃO",
+        "DROGA VASOATIVA [X] Não",
+        "Espontânea: [X] com O2",
+        "Assistência Ventilatória: [X] Sim",
+        "Paciente colaborativo, sem desconforto respiratório durante a sessão.",
+        "Realizados exercícios respiratórios e incentivador inspiratório, boa tolerância.",
+    )
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -333,6 +421,14 @@ def test_aviso_do_aprendizado_que_falha_diz_a_causa_certa(caplog, codigo, causa)
     assert codigo in aviso
 
 
+def test_esqueleto_fixo_sai_mesmo_com_o_aprendizado_fora():
+    documento = _documento("FISIO_RESP", [TITULO, "Gasometria Arterial", "Paciente em VNI."])
+
+    limpo = sem_formulario_em_branco(_BancoQueRecusa("42P01"), _prontuario(documento), aprender=True)
+
+    assert limpo.documentos[0].linhas == (TITULO, "Paciente em VNI.")
+
+
 # ═══════════════════════════════════════════════════════════════════════════
 # Licença e tipografia
 # ═══════════════════════════════════════════════════════════════════════════
@@ -366,6 +462,7 @@ def test_nenhuma_dependencia_do_pyproject_tem_licenca_agpl():
     [
         "app/services/contas_medicas/marcacoes.py",
         "app/services/contas_medicas/formulario.py",
+        "app/services/contas_medicas/esqueleto_formulario.py",
         "app/services/contas_medicas_marcacoes_filho.py",
     ],
 )
