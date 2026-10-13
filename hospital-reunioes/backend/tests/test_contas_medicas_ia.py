@@ -27,6 +27,9 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from app.config import Settings  # noqa: E402
 from app.services.contas_medicas import ia  # noqa: E402
+from app.services.contas_medicas.memoria import ler_memoria  # noqa: E402
+from app.services.contas_medicas.memoria_texto import gerar_texto_memoria  # noqa: E402
+from app.services.contas_medicas.operadoras import importar_memoria  # noqa: E402
 
 MIGRATIONS = Path(__file__).resolve().parents[2] / "supabase" / "migrations"
 MIGRATION_117 = MIGRATIONS / "117_contas_medicas_ia.sql"
@@ -213,10 +216,15 @@ def provedor(monkeypatch) -> _Provedor:
     return duble
 
 
+# Os DEFAULT das migrations que a importação deixa o banco preencher.
+PADROES_DA_MIGRATION = {"cm_regra": {"ativa": True}}
+
+
 class _Consulta:
     def __init__(self, banco: _BancoDeCusto, nome: str):
         self._banco, self._nome = banco, nome
         self._filtros: list = []
+        self._ordem: str | None = None
         self._insert = self._update = None
 
     def select(self, *_a, **_kw):
@@ -226,11 +234,12 @@ class _Consulta:
         self._filtros.append((coluna, valor))
         return self
 
-    def order(self, *_a, **_kw):
-        return self  # a lista já está na ordem de gravação
+    def order(self, coluna, desc=False):
+        self._ordem = coluna
+        return self
 
-    def insert(self, linha):
-        self._insert = linha
+    def insert(self, linhas):
+        self._insert = linhas
         return self
 
     def update(self, campos):
@@ -240,12 +249,23 @@ class _Consulta:
     def execute(self):
         tabela = self._banco.tabelas.setdefault(self._nome, [])
         if self._insert is not None:
-            tabela.append(dict(self._insert))
-            return SimpleNamespace(data=[dict(self._insert)])
+            novas = [
+                {
+                    "id": f"{self._nome}-{len(tabela) + i}",
+                    "criado_em": len(tabela) + i,
+                    **PADROES_DA_MIGRATION.get(self._nome, {}),
+                    **linha,
+                }
+                for i, linha in enumerate(self._insert if isinstance(self._insert, list) else [self._insert])
+            ]
+            tabela.extend(novas)
+            return SimpleNamespace(data=[dict(linha) for linha in novas])
         casam = [linha for linha in tabela if all(linha.get(c) == v for c, v in self._filtros)]
         if self._update is not None:
             for linha in casam:
                 linha.update(self._update)
+        if self._ordem:
+            casam.sort(key=lambda linha: linha.get(self._ordem))
         return SimpleNamespace(data=[dict(linha) for linha in casam])
 
 
@@ -494,3 +514,74 @@ class TestModeloDeCadaPasso:
     def test_sem_a_variavel_vale_o_flash_no_passo_a_e_o_sonnet_no_passo_b(self):
         assert Settings.model_fields["cm_ia_modelo_passo_a"].default == "google/gemini-3.7-flash"
         assert Settings.model_fields["cm_ia_modelo_passo_b"].default == "anthropic/claude-sonnet-5.5"
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 6. O texto da memória gerado do banco
+# ═══════════════════════════════════════════════════════════════════════════
+
+MEMORIAS = Path(__file__).parent / "fixtures" / "contas_medicas" / "memoria"
+
+
+def _importar(banco: _BancoDeCusto, arquivo: str) -> str:
+    """Importa pelo caminho da tela Operadoras e devolve o id da operadora."""
+    texto = (MEMORIAS / arquivo).read_text(encoding="utf-8")
+    importar_memoria(banco, ler_memoria(texto), texto, None)
+    (operadora,) = [o for o in banco.tabelas["cm_operadora"] if o["sigla"] == ler_memoria(texto).sigla]
+    return operadora["id"]
+
+
+def _regras_por_codigo(memoria) -> list:
+    return sorted(memoria.regras, key=lambda regra: regra.codigo)
+
+
+class TestTextoDaMemoria:
+    def test_o_texto_gerado_do_banco_e_igual_ao_arquivo_importado(self):
+        banco = _BancoDeCusto()
+        operadora_id = _importar(banco, "MEMORIA-GAMA-v2.0.md")
+
+        gerado = gerar_texto_memoria(banco, operadora_id)
+
+        assert gerado == (MEMORIAS / "MEMORIA-GAMA-v2.0.md").read_text(encoding="utf-8")
+
+    @pytest.mark.parametrize("arquivo", ["MEMORIA-ALFA-v1.0.md", "MEMORIA-BETA-v1.0.md"])
+    def test_ida_e_volta_de_um_arquivo_do_diretor_nao_perde_regra_nem_parametro(self, arquivo):
+        """O arquivo do diretor tem texto solto, comentário no cabeçalho e
+        tabela com colunas próprias (a regra da BETA vira texto de várias
+        linhas): o gerado é outro texto, a memória lida é a mesma."""
+        banco = _BancoDeCusto()
+        operadora_id = _importar(banco, arquivo)
+        original = ler_memoria((MEMORIAS / arquivo).read_text(encoding="utf-8"))
+
+        relida = ler_memoria(gerar_texto_memoria(banco, operadora_id))
+
+        assert (relida.sigla, relida.nome, relida.versao, relida.situacao) == (
+            original.sigla,
+            original.nome,
+            original.versao,
+            original.situacao,
+        )
+        assert relida.parametros == original.parametros
+        assert _regras_por_codigo(relida) == _regras_por_codigo(original)
+
+    def test_a_regra_editada_no_banco_sai_no_texto(self):
+        """É o texto do banco, e não o arquivo guardado: a regra mudada na tela
+        vai para a IA como está agora."""
+        banco = _BancoDeCusto()
+        operadora_id = _importar(banco, "MEMORIA-GAMA-v2.0.md")
+        regra = next(r for r in banco.tabelas["cm_regra"] if r["codigo"] == "GAMA-DIA-01")
+        regra["texto"] = "A diária vence às 12h."
+
+        relida = ler_memoria(gerar_texto_memoria(banco, operadora_id))
+
+        assert next(r.texto for r in relida.regras if r.codigo == "GAMA-DIA-01") == "A diária vence às 12h."
+
+    def test_a_versao_pedida_e_nao_a_vigente(self):
+        banco = _BancoDeCusto()
+        operadora_id = _importar(banco, "MEMORIA-GAMA-v2.0.md")
+        (primeira,) = banco.tabelas["cm_memoria_versao"]
+        texto_novo = (MEMORIAS / "MEMORIA-GAMA-v2.0.md").read_text(encoding="utf-8").replace("'2.0'", "'2.1'")
+        importar_memoria(banco, ler_memoria(texto_novo), texto_novo, None)
+
+        assert ler_memoria(gerar_texto_memoria(banco, operadora_id)).versao == "2.1"
+        assert ler_memoria(gerar_texto_memoria(banco, operadora_id, primeira["id"])).versao == "2.0"
