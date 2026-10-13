@@ -1,15 +1,16 @@
 ---
 title: Como a conta é conferida
 description: Como o sistema junta conta e prontuário, conta as diárias, decide o que vai para validação e o que guarda da paciente.
-prd: [1113]
+prd: [1113, 1128]
 draft: true
 sidebar:
   order: 30
 ---
 
-Nesta primeira entrega, quem confere é só o programa: aritmética, contagem e
-busca exata, sem inteligência artificial. Preço, diária e quantidade nunca são
-chute.
+Preço, diária e quantidade são conta do programa: aritmética, contagem e busca
+exata, nunca chute. A inteligência artificial lê o texto livre do prontuário e
+propõe linhas, que o programa confere antes de chegarem ao guia: veja
+[O que a IA lê e o que ela não decide](../o-que-a-ia-le-e-o-que-ela-nao-decide/).
 
 ## Conta e prontuário se encontram pelo atendimento
 
@@ -54,6 +55,12 @@ depois do vencimento segue a regra; janela que atravessa o vencimento vira
 
 A diária cobrada é a da acomodação contratada, mesmo que o MV mostre outra.
 Setor que o sistema não conhece também vira **Validar**.
+
+Na UTI, a classe da diária sai do que o prontuário registra em cada dia.
+Ventilação mecânica, monitorização invasiva, marca-passo ou droga vasoativa no
+dia levam à classe mais alta que a memória da operadora liga a esse registro,
+com a página e o trecho; sem nenhum deles, a classe mais baixa. Toda diária de
+UTI termina com "Conferir classe de UTI".
 
 ## O que fica guardado da paciente
 

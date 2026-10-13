@@ -1,0 +1,413 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=1920, height=1080" />
+<title>Manual · Contas médicas · Ler o Painel</title>
+<script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js" integrity="sha384-sG0Hv1tP1lZCk9KQmrIbY/XNwi+OY84GQqhMscbnsoBFqAz8KNCil1kvfL3Hbbk2" crossorigin="anonymous"></script>
+<script type="application/json" id="manual-video-meta">
+{
+ "modulo": "contas-medicas",
+ "slug": "ler-o-painel",
+ "pagina": "contas-medicas/ler-o-painel.md",
+ "prd": [
+  1128
+ ],
+ "issues": [
+  1137
+ ],
+ "app_version": "0.193.0",
+ "gerado_em": "2026-10-13T07:30:00-03:00"
+}
+</script>
+<style>
+  @font-face {
+    font-family: "HP Simplified";
+    src: url("assets/fonts/HPSimplified_Rg.ttf") format("truetype");
+    font-weight: 400;
+    font-style: normal;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { width: 1920px; height: 1080px; overflow: hidden; background: #fff; }
+  body { font-family: "HP Simplified", system-ui, sans-serif; }
+
+  :root {
+    --navy: #2B2E7E; --navy-light: #3B6FB6; --navy-dark: #1A1C4E;
+    --app-text: #1E293B; --app-sec: #64748B; --app-border: #E2E8F0;
+  }
+
+  #root { position: relative; width: 1920px; height: 1080px; overflow: hidden; }
+  .scene { position: absolute; inset: 0; background: #fff; overflow: hidden; }
+
+  /* Palco desenhado em 960x540 e ampliado 2x, a mesma régua das outras
+     composições do Manual. */
+  .palco { position: relative; width: 960px; height: 540px; transform: scale(2); transform-origin: top left; font-size: 12px; color: var(--app-text); background: #EEF1F6; }
+
+  .slide { display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding: 0 160px; }
+  .eyebrow { font-size: 26px; letter-spacing: .22em; text-transform: uppercase; color: var(--navy-light); font-weight: 700; }
+  .titulo { font-size: 72px; line-height: 1.12; color: var(--navy); font-weight: 700; max-width: 1560px; margin: 34px 0 30px; }
+  .sub { font-size: 36px; color: var(--app-sec); max-width: 1420px; line-height: 1.5; }
+  .selo-abertura { margin-top: 40px; display: inline-flex; gap: 14px; }
+  .selo-abertura span { border: 2px solid var(--navy); border-radius: 999px; padding: 10px 26px; font-size: 26px; font-weight: 700; color: var(--navy); background: #F5F6FE; }
+
+  .fecho-titulo { font-size: 52px; color: var(--navy); font-weight: 700; margin-bottom: 40px; }
+  .carimbo { font-size: 30px; color: var(--app-sec); }
+  .fecho-org { font-size: 26px; color: #64748B; margin-top: 16px; }
+
+  /* ===== janela de navegador ===== */
+  .janela { position: absolute; left: 30px; top: 28px; width: 580px; height: 470px; border-radius: 12px; background: #fff; box-shadow: 0 26px 60px -20px rgba(0,0,0,.42); overflow: hidden; border: 1px solid #D8DEE9; }
+  .barra { height: 20px; background: #E7EBF2; display: flex; align-items: center; gap: 4px; padding: 0 8px; border-bottom: 1px solid #D8DEE9; }
+  .barra i { width: 5px; height: 5px; border-radius: 50%; background: #C3CBD8; display: block; }
+  .barra .url { margin-left: 8px; flex: 1; height: 11px; border-radius: 6px; background: #fff; border: 1px solid #D8DEE9; font-size: 6.4px; color: #5A6273; display: flex; align-items: center; padding: 0 6px; }
+  .tela { position: absolute; left: 0; right: 0; top: 20px; bottom: 0; background: #F7F9FC; overflow: hidden; }
+
+  /* ===== moldura do app ===== */
+  .app-topo { position: absolute; left: 0; right: 0; top: 0; height: 24px; background: #fff; border-bottom: 1px solid var(--app-border); display: flex; align-items: center; justify-content: space-between; padding: 0 9px; }
+  .app-topo .marca { display: flex; align-items: center; gap: 4px; }
+  .app-topo .direita { display: flex; align-items: center; gap: 6px; color: #94A3B8; }
+  .app-topo .avatar { width: 13px; height: 13px; border-radius: 50%; background: var(--navy); color: #fff; font-size: 6px; font-weight: 700; display: flex; align-items: center; justify-content: center; }
+  .app-menu { position: absolute; left: 0; top: 24px; bottom: 0; width: 92px; background: #fff; border-right: 1px solid var(--app-border); padding: 7px 6px; }
+  .mi { display: flex; align-items: center; gap: 5px; font-size: 6.6px; color: #56606F; padding: 3.5px 5px; border-radius: 5px; margin-bottom: 2px; }
+  .mi.ativo { background: rgba(43,46,126,.08); color: var(--navy); font-weight: 700; }
+  .app-corpo { position: absolute; left: 92px; right: 0; top: 24px; bottom: 0; padding: 9px 14px; overflow: hidden; }
+
+  .h-pag { font-size: 11.5px; font-weight: 700; color: #0F172A; }
+  .dek { font-size: 6.2px; color: #56606F; margin-top: 1.5px; }
+  .cartao { background: #fff; border: 1px solid var(--app-border); border-radius: 9px; }
+  .etq { display: inline-flex; align-items: center; padding: 1.5px 5px; border-radius: 999px; font-size: 5.2px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; }
+  .pilula { display: inline-flex; align-items: center; padding: 1.5px 6px; border-radius: 999px; font-size: 5.8px; font-weight: 600; }
+  .link { color: var(--navy); font-weight: 700; }
+
+  /* ===== fila ===== */
+  .soltar { border: 1.4px dashed #CBD5E1; border-radius: 9px; background: #fff; text-align: center; padding: 9px 0 10px; margin-top: 7px; }
+  .abas { display: flex; gap: 4px; border-bottom: 1px solid var(--app-border); margin-top: 9px; }
+  .abas span { font-size: 6.6px; padding: 4px 8px; color: #56606F; border-bottom: 1.5px solid transparent; }
+  .abas span.on { color: var(--navy); border-color: var(--navy); font-weight: 700; }
+  .fila-l { display: flex; align-items: center; gap: 6px; padding: 6px 10px; border-top: 1px solid var(--app-border); }
+  .fila-l:first-child { border-top: 0; }
+  .fila-l .q { flex: 1; }
+  .fila-l .q b { display: block; font-size: 6.8px; color: #0F172A; }
+  .fila-l .q span { font-size: 5.6px; color: #64748B; }
+  .fila-l .det { font-size: 5.8px; color: #475569; }
+
+  /* ===== guia ===== */
+  .voltar { display: inline-flex; align-items: center; gap: 3px; font-size: 6.2px; color: #64748B; }
+  .numeros { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin-top: 7px; }
+  .numeros .cartao { padding: 6px 8px; }
+  .rot-num { font-size: 5.2px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: #64748B; }
+  .val-num { font-size: 13px; font-weight: 700; color: var(--navy); line-height: 1.2; }
+  .grupo-t { display: flex; justify-content: space-between; align-items: center; margin-top: 8px; font-size: 5.6px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: #64748B; }
+  .linha { background: #fff; border: 1px solid var(--app-border); border-radius: 7px; padding: 5px 7px; margin-top: 4px; }
+  .linha .topo { display: flex; align-items: center; gap: 4px; }
+  .linha .topo .v { margin-left: auto; font-size: 6.6px; font-weight: 700; color: #0F172A; }
+  .linha .nome { font-size: 6.6px; font-weight: 700; color: #0F172A; margin-top: 2.5px; }
+  .linha .txt { font-size: 6.4px; color: #334155; margin-top: 1px; }
+  .linha .mot { font-size: 5.6px; color: #64748B; margin-top: 1px; }
+  .linha .meta { display: flex; gap: 7px; align-items: center; font-size: 5.6px; color: #64748B; margin-top: 2px; }
+  .linha .cod { display: inline-flex; align-items: center; gap: 2px; font-family: ui-monospace, Menlo, monospace; color: var(--navy); font-size: 5.8px; }
+  .botoes { display: flex; gap: 4px; margin-top: 4px; }
+  .bt { display: inline-flex; align-items: center; padding: 3px 7px; border-radius: 5px; font-size: 5.4px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; }
+  .bt-cheio { background: var(--navy); color: #fff; }
+  .bt-claro { background: #fff; color: #334155; border: 1px solid var(--app-border); }
+  .marcada { display: flex; align-items: center; gap: 5px; border-radius: 7px; padding: 4px 7px; margin-top: 4px; font-size: 6.2px; color: #334155; }
+  .marcada .v { margin-left: auto; color: #64748B; }
+  .fs { border: 1px solid var(--app-border); border-radius: 6px; padding: 4px 7px; margin-top: 4px; }
+  .fs .lg { font-size: 5.8px; font-weight: 700; color: #334155; }
+  .radio { display: flex; width: fit-content; align-items: center; gap: 4px; font-size: 6.2px; color: #334155; margin-top: 2.5px; }
+  .radio i { width: 6px; height: 6px; border-radius: 50%; border: 1px solid #94A3B8; display: inline-block; position: relative; }
+  .radio i b { position: absolute; left: 1px; top: 1px; width: 2.4px; height: 2.4px; border-radius: 50%; background: #2563EB; opacity: 0; }
+  .validar-msg { font-size: 5.8px; color: #92400E; margin-top: 3px; }
+  .rodape-guia { background: #fff; border: 1px solid var(--app-border); border-radius: 9px; padding: 6px 8px; margin-top: 7px; }
+  .area { height: 15px; border: 1px solid var(--app-border); border-radius: 5px; margin-top: 3px; font-size: 5.8px; color: #6C7786; padding: 3px 5px; }
+  .toast { position: absolute; right: 12px; bottom: 16px; background: #ECFDF5; border: 1px solid #A7F3D0; border-radius: 9px; box-shadow: 0 16px 34px -18px rgba(0,0,0,.3); padding: 5px 9px; font-size: 6.6px; font-weight: 700; color: #065F46; opacity: 0; }
+  .confirma { position: absolute; left: 150px; top: 6px; width: 230px; background: #fff; border: 1px solid #D8DEE9; border-radius: 8px; box-shadow: 0 18px 40px -14px rgba(0,0,0,.4); padding: 9px 11px; opacity: 0; z-index: 25; }
+  .confirma p { font-size: 6.8px; color: #0F172A; }
+  .confirma .acoes { display: flex; justify-content: flex-end; gap: 5px; margin-top: 8px; }
+  .confirma .acoes span { font-size: 6.2px; padding: 3px 9px; border-radius: 5px; }
+
+  /* ===== dedo fantasma e legenda ===== */
+  .ghost { position: absolute; left: 0; top: 0; z-index: 40; opacity: 0; }
+  .ghost .pulse { position: absolute; left: -7px; top: -7px; width: 34px; height: 34px; border-radius: 50%; background: rgba(43,46,126,.28); opacity: 0; }
+  .passo { position: absolute; left: 632px; top: 150px; width: 300px; opacity: 0; }
+  .passo .n { display: inline-flex; align-items: center; justify-content: center; width: 30px; height: 30px; border-radius: 50%; background: var(--navy); color: #fff; font-size: 16px; font-weight: 700; }
+  .passo h3 { font-size: 24px; line-height: 1.25; color: var(--navy); font-weight: 700; margin: 12px 0 8px; }
+  .passo p { font-size: 16.5px; line-height: 1.5; color: #556076; }
+  .passo b { color: var(--app-text); }
+  .marcador { position: absolute; border: 1.5px solid var(--navy); border-radius: 7px; box-shadow: 0 0 0 3px rgba(43,46,126,.14); opacity: 0; z-index: 30; }
+  .rodape-v { position: absolute; left: 0; right: 0; bottom: 14px; text-align: center; font-size: 9.5px; color: #576070; letter-spacing: .04em; }
+  /* ===== painel ===== */
+  .botoes-topo { display: flex; gap: 4px; }
+  .bt-topo { display: inline-flex; align-items: center; gap: 3px; padding: 3px 6px; border: 1px solid #E2E8F0; border-radius: 5px; background: #fff; font-size: 6px; color: #334155; }
+  .rolagem { position: absolute; left: 0; right: 0; top: 0; }
+  .filtros { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin-top: 8px; }
+  .filtros .rot { font-size: 5.2px; font-weight: 600; color: #64748B; text-transform: uppercase; }
+  .filtros .campo { margin-top: 2px; height: 15px; border: 1px solid #E2E8F0; border-radius: 5px; background: #fff; font-size: 6.2px; color: #1E293B; display: flex; align-items: center; padding: 0 6px; }
+  .semana-rot { font-size: 6.2px; color: #475569; margin-top: 7px; }
+  .cartoes { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; margin-top: 6px; }
+  .bloco { background: #fff; border: 1px solid var(--app-border); border-radius: 9px; padding: 7px 8px; }
+  .bloco .tt { font-size: 6.4px; font-weight: 700; color: #334155; }
+  .bloco .st { font-size: 5.2px; color: #64748B; margin-top: 1px; }
+  .bloco .num { font-size: 13px; font-weight: 700; color: var(--navy); margin-top: 3px; }
+  .bloco .ap { font-size: 5.2px; color: #64748B; margin-top: 1px; }
+  .blocos { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-top: 6px; }
+  .causa { margin-top: 4px; }
+  .causa .l { display: flex; align-items: baseline; gap: 4px; font-size: 6px; color: #1E293B; }
+  .causa .l i { font-style: normal; font-size: 5.2px; color: #64748B; }
+  .causa .l .pc { margin-left: auto; font-weight: 700; color: var(--navy); }
+  .causa .l .rs { width: 44px; text-align: right; font-size: 5.4px; color: #64748B; }
+  .trilho { height: 3px; border-radius: 3px; background: #E2E8F0; margin-top: 2px; overflow: hidden; }
+  .trilho b { display: block; height: 100%; background: var(--navy); border-radius: 3px; }
+  .tab { width: 100%; border-collapse: collapse; margin-top: 4px; }
+  .tab th { font-size: 5.2px; color: #64748B; font-weight: 500; text-align: left; padding: 2px 0; border-bottom: 1px solid #E2E8F0; }
+  .tab td { font-size: 5.8px; color: #1E293B; padding: 2.5px 0; border-bottom: 1px solid #F1F5F9; }
+  .tab .r { text-align: right; }
+  .tab .n { color: var(--navy); font-weight: 700; }
+  .tab .m { font-family: ui-monospace, Menlo, monospace; color: #64748B; font-size: 5.4px; }
+  .lista-op { position: absolute; background: #fff; border: 1px solid #E2E8F0; border-radius: 6px; box-shadow: 0 14px 30px -14px rgba(0,0,0,.35); padding: 3px; width: 140px; opacity: 0; z-index: 20; }
+  .lista-op div { font-size: 6.2px; padding: 3px 5px; border-radius: 4px; color: #334155; }
+  .lista-op div.on { background: #EEF2FF; color: #1E3A8A; font-weight: 700; }
+</style>
+</head>
+<body>
+
+<div id="root" data-composition-id="main" data-start="0" data-width="1920" data-height="1080" data-duration="45" data-fps="30">
+
+  <!-- 1 · Abertura -->
+  <section id="c-abertura" class="clip scene slide" data-start="0" data-duration="4" data-track-index="1">
+    <div class="eyebrow" id="ab-eyebrow">Manual · Contas médicas</div>
+    <h1 class="titulo" id="ab-titulo">Ler o Painel</h1>
+    <p class="sub" id="ab-sub">Ver a nota da semana, onde a perda da conta nasce e quem corrige.</p>
+    <div class="selo-abertura" id="ab-selos"><span>Coordenadora de faturamento</span><span>Gestão de contas médicas</span><span>Diretoria</span></div>
+  </section>
+
+  <!-- 2 · A tarefa, passo a passo -->
+  <section id="c-tarefa" class="clip scene" data-start="4" data-duration="36" data-track-index="2">
+    <div class="palco" id="palco-tarefa"></div>
+  </section>
+
+  <!-- 3 · Fecho -->
+  <section id="c-fecho" class="clip scene slide" data-start="40" data-duration="5" data-track-index="3">
+    <div class="fecho-titulo" id="fc-titulo">Ler o Painel</div>
+    <div class="carimbo" id="fc-carimbo">Manual · retrata o app em v0.193.0 · gerado em 13/10/2026</div>
+    <div class="fecho-org" id="fc-org">Hospital São Matheus · Manual da plataforma</div>
+  </section>
+
+</div>
+
+<script>
+const IC = {
+  marca: '<svg width="22" height="9" viewBox="0 0 100 42" fill="none" style="flex-shrink:0"><path d="M8 40 A24 24 0 0 1 56 40" stroke="#3B6FB6" stroke-width="6" stroke-linecap="round"/><path d="M44 40 A24 24 0 0 1 92 40" stroke="#1E3A8A" stroke-width="6" stroke-linecap="round"/></svg>',
+  sino: '<svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.268 21a2 2 0 0 0 3.464 0"/><path d="M3.262 15.326A1 1 0 0 0 4 17h16a1 1 0 0 0 .74-1.673C19.41 13.956 18 12.499 18 8A6 6 0 0 0 6 8c0 4.499-1.41 5.956-2.738 7.326"/></svg>',
+  alvo: '<svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg>',
+  megafone: '<svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m3 11 18-5v12L3 14v-3z"/><path d="M11.6 16.8a3 3 0 1 1-5.8-1.6"/></svg>',
+  recibo: '<svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 2v20l2-1 2 1 2-1 2 1 2-1 2 1 2-1 2 1V2l-2 1-2-1-2 1-2-1-2 1-2-1-2 1Z"/><path d="M14 8H8"/><path d="M16 12H8"/><path d="M13 16H8"/></svg>',
+  ajuda: '<svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><path d="M12 17h.01"/></svg>',
+  subir: '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#94A3B8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" x2="12" y1="3" y2="15"/></svg>',
+  seta: '<svg width="7" height="7" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 19-7-7 7-7"/><path d="M19 12H5"/></svg>',
+  barras: '<svg width="7" height="7" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="M18 17V9"/><path d="M13 17V5"/><path d="M8 17v-3"/></svg>',
+  baixo: '<svg width="6" height="6" viewBox="0 0 24 24" fill="none" stroke="#64748B" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>',
+};
+
+const moldura = (corpo) =>
+  `<div class="app-topo"><div class="marca">${IC.marca}<span style="font-size:6.2px;font-weight:700;color:#1E3A8A;line-height:1.1">HOSPITAL<br>SÃO MATHEUS</span></div>` +
+  `<div class="direita">${IC.sino}<div class="avatar">M</div></div></div>` +
+  `<div class="app-menu"><div class="mi">${IC.alvo}Reuniões e metas</div><div class="mi">${IC.megafone}Ouvidoria</div>` +
+  `<div class="mi ativo">${IC.recibo}Contas médicas</div><div class="mi" style="margin-top:3px">${IC.ajuda}Ajuda</div></div>` +
+  `<div class="app-corpo">${corpo}</div>`;
+
+const telaContas = moldura(`
+  <div style="display:flex;align-items:center;justify-content:space-between;gap:6px"><div class="h-pag">Contas médicas</div>
+    <div class="botoes-topo"><span class="bt-topo" id="bt-painel">${IC.barras}Painel</span><span class="bt-topo">Validação</span><span class="bt-topo">Coordenação</span><span class="bt-topo">Contratos</span><span class="bt-topo">Operadoras</span></div></div>
+  <div class="dek">Envie a conta e o prontuário do MV e receba a lista do que corrigir antes de mandar para a operadora.</div>
+  <div class="soltar">${IC.subir}<div style="font-size:6.4px;font-weight:700;color:#1E293B;margin-top:2px">Arraste aqui a conta e o prontuário do MV</div>
+    <span class="bt bt-cheio" style="margin-top:5px;text-transform:none;letter-spacing:0;font-size:6px">Selecionar arquivos</span></div>`);
+
+const causa = (nome, quem, pc, rs, w) =>
+  `<div class="causa"><div class="l">${nome}<i>${quem}</i><span class="pc">${pc}</span><span class="rs">${rs}</span></div><div class="trilho"><b style="width:${w}%"></b></div></div>`;
+
+const telaPainel = moldura(`<div class="rolagem" id="rolagem" style="padding:9px 14px">
+  <div class="voltar">${IC.seta}Contas médicas</div>
+  <div class="h-pag" style="margin-top:3px">Painel</div>
+  <div class="dek">A nota da semana e onde a perda da conta nasce, pelas contas concluídas de segunda a domingo.</div>
+  <div class="filtros">
+    <div><div class="rot">Semana</div><div class="campo" id="f-semana"><span id="f-semana-v">12/10/2026</span></div></div>
+    <div><div class="rot">Operadora</div><div class="campo" id="f-op" style="justify-content:space-between"><span id="f-op-v">Todas</span>${IC.baixo}</div></div>
+    <div><div class="rot">Tipo de conta</div><div class="campo" style="justify-content:space-between"><span>Todos</span>${IC.baixo}</div></div>
+  </div>
+  <div class="semana-rot" id="semana-rot">Semana de 12/10 a 18/10/2026</div>
+  <div class="cartoes" id="cartoes">
+    <div class="bloco"><div class="tt">Nota média de entrada</div><div class="num">93,8</div><div class="ap">Semana anterior: 95,5</div></div>
+    <div class="bloco"><div class="tt">Contas concluídas</div><div class="num">4</div><div class="ap">contas na semana</div></div>
+    <div class="bloco"><div class="tt">R$ apontado</div><div class="num">R$ 1.159,50</div><div class="ap">Já incluídos: R$ 431,65</div></div>
+    <div class="bloco"><div class="tt">Não procede</div><div class="num">6,3%</div><div class="ap">1 de 16 linhas</div></div>
+  </div>
+  <div class="blocos">
+    <div class="bloco"><div class="tt">Nota média por semana</div><div class="st">De segunda a domingo, pelo dia em que a conta foi concluída</div>
+      <svg viewBox="0 0 220 70" width="100%" height="66" style="margin-top:4px"><g stroke="#E2E8F0" stroke-width=".6"><line x1="14" y1="8" x2="216" y2="8"/><line x1="14" y1="24" x2="216" y2="24"/><line x1="14" y1="40" x2="216" y2="40"/><line x1="14" y1="56" x2="216" y2="56"/></g>
+        <polyline fill="none" stroke="#2B2E7E" stroke-width="1.6" points="16,18 44,16 72,11 100,12 128,12 156,10 184,10 212,11"/>
+        <g fill="#2B2E7E"><circle cx="16" cy="18" r="1.8"/><circle cx="44" cy="16" r="1.8"/><circle cx="72" cy="11" r="1.8"/><circle cx="100" cy="12" r="1.8"/><circle cx="128" cy="12" r="1.8"/><circle cx="156" cy="10" r="1.8"/><circle cx="184" cy="10" r="1.8"/><circle cx="212" cy="11" r="1.8"/></g>
+        <g font-size="5" fill="#64748B"><text x="10" y="66">17/08</text><text x="94" y="66">14/09</text><text x="200" y="66">05/10</text></g></svg></div>
+    <div class="bloco" id="bl-causa"><div class="tt">R$ apontado por causa-raiz</div><div class="st">Onde o problema nasce e quem corrige</div>
+      ${causa("Dispensação", "farmácia e enfermagem", "13,7%", "R$ 159,25", 14)}
+      ${causa("Regra automática", "TI e consultoria MV", "65,2%", "R$ 756,00", 65)}
+      ${causa("Cadastro e preço", "credenciamento e cadastro", "4,1%", "R$ 48,00", 4)}
+      ${causa("Registro assistencial", "enfermagem e corpo clínico", "10,9%", "R$ 125,85", 11)}
+      ${causa("Lançamento manual", "faturamento", "6,1%", "R$ 70,40", 6)}</div>
+    <div class="bloco" id="bl-itens"><div class="tt">Os dez itens que mais faltam</div><div class="st">Fila de parametrização para a consultoria do MV</div>
+      <table class="tab"><tr><th>Código</th><th>Item</th><th class="r">Contas</th><th class="r">R$</th></tr>
+        <tr><td class="m">90123456</td><td>Pantoprazol 40 mg injetável</td><td class="r n">2</td><td class="r">R$ 136,80</td></tr>
+        <tr><td class="m">70081975</td><td>Curativo com filme transparente</td><td class="r n">2</td><td class="r">R$ 83,60</td></tr>
+        <tr><td class="m">90187733</td><td>Ondansetrona 4 mg injetável</td><td class="r n">2</td><td class="r">R$ 19,70</td></tr>
+        <tr><td class="m">70044190</td><td>Equipo de bomba de infusão</td><td class="r n">1</td><td class="r">R$ 86,00</td></tr></table></div>
+    <div class="bloco" id="bl-prod"><div class="tt">Produção por faturista</div>
+      <table class="tab"><tr><th>Faturista</th><th class="r">Contas</th><th class="r">Com pendência</th><th class="r">R$ incluído</th><th class="r">Não procede</th></tr>
+        <tr><td>Bianca Torres</td><td class="r n">2</td><td class="r">1</td><td class="r n">R$ 235,00</td><td class="r">0%</td></tr>
+        <tr><td>Caio Moreira</td><td class="r n">1</td><td class="r">0</td><td class="r n">R$ 118,40</td><td class="r">25%</td></tr>
+        <tr><td>Renata Lima</td><td class="r n">1</td><td class="r">0</td><td class="r n">R$ 78,25</td><td class="r">0%</td></tr></table></div>
+  </div>
+  <div class="lista-op" id="lista-op"><div>Todas</div><div>ALFA</div><div>ASSIM</div><div class="on" id="op-aurora">AURORA</div></div>
+</div>`);
+
+document.getElementById("palco-tarefa").innerHTML =
+  `<div style="position:absolute;inset:0;background:#EEF1F6"></div>` +
+  `<div class="janela" id="janela"><div class="barra"><i></i><i></i><i></i><div class="url">plataforma do hospital · contas médicas</div></div>` +
+  `<div class="tela" id="tela-contas">${telaContas}</div>` +
+  `<div class="tela" id="tela-painel" style="opacity:0">${telaPainel}</div></div>` +
+  `<div class="rodape-v">Manual · retrata o app em v0.193.0 · gerado em 13/10/2026</div>` +
+  `<div class="ghost" id="g1"><svg width="17" height="17" viewBox="0 0 24 24" fill="#16181d" stroke="#fff" stroke-width="1.4"><path d="M5 3l14 8-6 1.6L9.6 19z"/></svg><div class="pulse"></div></div>` +
+  `<div class="passo" id="p1"><div class="n">1</div><h3>Em Contas médicas, clique em Painel</h3><p>O botão fica no alto da tela, ao lado de <b>Validação</b>.</p></div>` +
+  `<div class="passo" id="p2"><div class="n">2</div><h3>Escolha a semana e a operadora</h3><p>Qualquer dia da <b>Semana</b> serve. Os números mudam na hora.</p></div>` +
+  `<div class="passo" id="p3"><div class="n">3</div><h3>Leia os cartões do topo</h3><p><b>Nota média de entrada</b>, <b>Contas concluídas</b>, <b>R$ apontado</b> e <b>Não procede</b>.</p></div>` +
+  `<div class="passo" id="p4"><div class="n">4</div><h3>Veja onde a perda nasce</h3><p>Em <b>R$ apontado por causa-raiz</b>, cada causa diz quem corrige.</p></div>` +
+  `<div class="passo" id="p5"><div class="n">5</div><h3>Leve os itens que mais faltam ao MV</h3><p><b>Os dez itens que mais faltam</b> são a fila para a consultoria do MV.</p></div>` +
+  `<div class="passo" id="p6"><div class="n">6</div><h3>Compare a produção</h3><p>Em <b>Produção por faturista</b>, contas e valor lado a lado.</p></div>`;
+
+const PALCO = document.getElementById("palco-tarefa");
+PALCO.querySelectorAll("*").forEach((el) => {
+  el.setAttribute("data-layout-allow-overlap", "");
+  el.setAttribute("data-layout-allow-occlusion", "");
+  el.setAttribute("data-layout-allow-overflow", "");
+});
+
+/* A lista da operadora abre logo abaixo do campo. */
+(function () {
+  const campo = document.getElementById("f-op");
+  const lista = document.getElementById("lista-op");
+  let x = 0, y = 0, n = campo;
+  const raiz = document.getElementById("rolagem");
+  while (n && n !== raiz) { x += n.offsetLeft; y += n.offsetTop; n = n.offsetParent; }
+  lista.style.left = x + "px";
+  lista.style.top = (y + campo.offsetHeight + 2) + "px";
+})();
+
+window.__timelines = window.__timelines || {};
+const tl = gsap.timeline({ paused: true });
+const IR = { immediateRender: false };
+const surge = (sel, t, y) => tl.fromTo(sel, { opacity: 0, y: y === undefined ? 8 : y }, { opacity: 1, y: 0, duration: 0.4, ease: "power2.out", ...IR }, t);
+const some = (sel, t) => tl.to(sel, { opacity: 0, duration: 0.25 }, t);
+const nota = (sel, t, ate) => { surge(sel, t, 14); some(sel, ate); };
+const clique = (g, t) => tl.fromTo(`${g} .pulse`, { opacity: 0.9, scale: 0.4 }, { opacity: 0, scale: 1.25, duration: 0.42, ease: "power1.out", ...IR }, t);
+const move = (g, t, x, y, dx, dy) => {
+  tl.set(g, { x: x, y: y, opacity: 1 }, t);
+  tl.to(g, { x: dx, y: dy, duration: 0.7, ease: "power2.inOut" }, t + 0.2);
+};
+const mostra = (sel, t) => tl.fromTo(sel, { opacity: 0 }, { opacity: 1, duration: 0.3, ...IR }, t);
+const esconde = (sel, t) => tl.to(sel, { opacity: 0, duration: 0.3 }, t);
+const troca = (sel, texto, t) => {
+  tl.to(sel, { opacity: 0, duration: 0.12 }, t);
+  tl.set(sel, { innerText: texto }, t + 0.13);
+  tl.to(sel, { opacity: 1, duration: 0.12 }, t + 0.14);
+};
+
+function xy(el) {
+  let x = 0, y = 0, n = el;
+  while (n && n !== PALCO) { x += n.offsetLeft; y += n.offsetTop; n = n.offsetParent; }
+  return { x: x, y: y, w: el.offsetWidth, h: el.offsetHeight };
+}
+function marcaEm(idAlvo) {
+  const jaTem = document.getElementById("mk-" + idAlvo);
+  if (jaTem) return "#mk-" + idAlvo;
+  const el = document.getElementById(idAlvo);
+  if (getComputedStyle(el).position === "static") el.style.position = "relative";
+  const m = document.createElement("div");
+  m.className = "marcador";
+  m.id = "mk-" + idAlvo;
+  m.setAttribute("data-layout-allow-overlap", "");
+  m.setAttribute("data-layout-allow-occlusion", "");
+  const folga = (el.offsetWidth < 16 || el.offsetHeight < 16) ? 4 : 2.5;
+  m.style.cssText = `position:absolute;left:${-folga}px;top:${-folga}px;right:${-folga}px;bottom:${-folga}px`;
+  el.appendChild(m);
+  return "#mk-" + idAlvo;
+}
+function ponto(idAlvo) {
+  const r = xy(document.getElementById(idAlvo));
+  return { x: r.x + r.w / 2 - 5, y: r.y + r.h / 2 - 3 };
+}
+function toca(t, para, de) {
+  const a = ponto(para);
+  const b = de ? ponto(de) : { x: a.x + 34, y: Math.min(a.y + 70, 480) };
+  const mk = marcaEm(para);
+  mostra(mk, t);
+  move("#g1", t + 0.15, b.x, b.y, a.x, a.y);
+  clique("#g1", t + 1.05);
+  return mk;
+}
+/* Destaque de bloco sem dedo: o leitor lê, não clica. */
+function destaca(id, de, ate) {
+  const mk = marcaEm(id);
+  mostra(mk, de);
+  esconde(mk, ate);
+}
+
+/* 1 · Abertura */
+surge("#ab-eyebrow", 0.25, 22);
+tl.fromTo("#ab-titulo", { opacity: 0, y: 28 }, { opacity: 1, y: 0, duration: 0.7, ease: "power3.out", ...IR }, 0.5);
+surge("#ab-sub", 1.1, 22);
+surge("#ab-selos", 1.6, 18);
+
+/* 2 · A tarefa */
+tl.fromTo("#janela", { opacity: 0, y: 20 }, { opacity: 1, y: 0, duration: 0.5, ease: "power2.out", ...IR }, 4.20);
+nota("#p1", 4.90, 9.55);
+nota("#p2", 9.90, 16.05);
+nota("#p3", 16.40, 21.55);
+nota("#p4", 21.90, 27.55);
+nota("#p5", 27.90, 33.55);
+nota("#p6", 33.90, 39.25);
+
+/* passo 1: o botão Painel */
+toca(5.4, "bt-painel");
+esconde("#mk-bt-painel", 7.4);
+esconde("#tela-contas", 7.7);
+mostra("#tela-painel", 7.8);
+tl.to("#g1", { opacity: 0, duration: 0.2 }, 7.8);
+
+/* passo 2: a semana e a operadora */
+toca(10.3, "f-semana");
+troca("#f-semana-v", "05/10/2026", 11.5);
+troca("#semana-rot", "Semana de 05/10 a 11/10/2026", 11.6);
+esconde("#mk-f-semana", 12.0);
+toca(12.3, "f-op", "f-semana");
+mostra("#lista-op", 13.4);
+esconde("#mk-f-op", 13.4);
+toca(13.9, "op-aurora", "f-op");
+esconde("#lista-op", 15.1);
+troca("#f-op-v", "AURORA", 15.1);
+tl.to("#g1", { opacity: 0, duration: 0.2 }, 15.4);
+
+/* passo 3: os cartões */
+destaca("cartoes", 16.9, 21.2);
+
+/* passos 4, 5 e 6: os blocos, sem clique */
+destaca("bl-causa", 23.2, 27.4);
+destaca("bl-itens", 29.0, 33.4);
+destaca("bl-prod", 34.4, 38.8);
+
+/* 3 · Fecho */
+surge("#fc-titulo", 40.30, 18);
+surge("#fc-carimbo", 40.80, 14);
+surge("#fc-org", 41.20, 12);
+
+window.__timelines.main = tl;
+</script>
+</body>
+</html>

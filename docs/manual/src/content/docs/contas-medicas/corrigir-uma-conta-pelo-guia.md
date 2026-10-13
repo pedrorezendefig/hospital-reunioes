@@ -1,7 +1,7 @@
 ---
 title: Corrigir uma conta pelo guia
 description: Corrigir no MV o que o guia aponta, marcar cada linha e concluir a conta.
-prd: [1113]
+prd: [1113, 1128]
 draft: true
 papel: [Faturista]
 video: corrigir-uma-conta-pelo-guia
@@ -21,7 +21,7 @@ ele cabe em meia tela.
    ![Fila com o link Abrir na conta A fazer](../../../assets/contas-medicas/fila-abrir.png)
 
 2. Leia o topo: **Nota de entrada**, **R$ a ajustar** e **Itens feitos**.
-   Abaixo vêm as linhas, por dia e setor, cada uma com o verbo na frente.
+   Abaixo vêm as linhas, por dia e setor.
 
    ![Topo do guia com os três números e a primeira linha](../../../assets/contas-medicas/guia.png)
 
@@ -42,6 +42,16 @@ ele cabe em meia tela.
    gestão de contas médicas**, ela vai junto.
 
    ![Rodapé do guia com a observação e o botão Concluir e abrir a próxima](../../../assets/contas-medicas/guia-concluir.png)
+
+## Quando a linha pede conferência
+
+- **SE NECESSÁRIO · SEM REGISTRO NO MV**: confira a checagem em papel; sem
+  uso, marque **Não procede**.
+
+  ![Linha se necessário com a etiqueta amarela e o texto para conferir](../../../assets/contas-medicas/guia-se-necessario.png)
+
+- **conferir evidência** ou **Conferir classe de UTI**: confira o prontuário
+  antes.
 
 ## Se der errado
 
