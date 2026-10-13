@@ -11,10 +11,11 @@ o arquivo das outras telas.
 
 from __future__ import annotations
 
+import re
 from typing import Literal
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from pydantic import BaseModel, Field
 
 from app.dependencies import get_supabase_client, require_permissao_cm
@@ -27,6 +28,7 @@ from app.services.contas_medicas.memoria_edicao import (
 from app.services.contas_medicas.validacao import (
     DecisaoRecusadaError,
     TemaNaoEncontradoError,
+    csv_do_cadastro,
     decidir_tema,
     fila_de_validacao,
 )
@@ -84,3 +86,27 @@ async def decidir(
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from None
     except (DecisaoRecusadaError, MudancaRecusadaError) as exc:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from None
+
+
+@router.post("/validacao/temas/{tema_id}/cadastro")
+@limiter.limit("30/minute")
+async def enviar_ao_cadastro(
+    request: Request,
+    tema_id: UUID,
+    me: dict = Depends(_PODE_DECIDIR),
+    supabase=Depends(get_supabase_client),
+) -> Response:
+    """ "Enviar ao cadastro": fecha o tema do código bloqueado e devolve a lista
+    em CSV, para o cadastro e a consultoria do MV."""
+    try:
+        tema = decidir_tema(supabase, str(tema_id), {"decisao": "ENVIAR_AO_CADASTRO"}, me)
+    except TemaNaoEncontradoError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from None
+    except DecisaoRecusadaError as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from None
+    nome = f"cadastro-{re.sub(r'[^0-9A-Za-z.-]', '', tema.get('codigo_item') or '') or 'bloqueado'}.csv"
+    return Response(
+        content="﻿" + csv_do_cadastro(supabase, tema["id"]),
+        media_type="text/csv; charset=utf-8",
+        headers={"Content-Disposition": f'attachment; filename="{nome}"'},
+    )

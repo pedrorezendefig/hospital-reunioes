@@ -18,6 +18,8 @@ regra abre outro tema.
 
 from __future__ import annotations
 
+import csv
+import io
 import threading
 from collections.abc import Iterable
 from datetime import UTC, datetime
@@ -63,10 +65,6 @@ def _em_lotes(supabase, tabela: str, coluna: str, ids: Iterable[str], rotulo: st
     return linhas
 
 
-def _igual_ou_nulo(consulta, coluna: str, valor):
-    return consulta.eq(coluna, valor) if valor is not None else consulta.is_(coluna, "null")
-
-
 def _tema_aberto(
     supabase,
     tipo: str,
@@ -76,28 +74,22 @@ def _tema_aberto(
     regra_codigo: str | None = None,
     codigo_item: str | None = None,
 ) -> dict:
-    """O tema aberto da chave, ou um novo. Quem chama segura a trava."""
-    consulta = supabase.table("cm_validacao_tema").select("*").eq("tipo", tipo).eq("estado", ABERTO)
-    consulta = _igual_ou_nulo(consulta, "operadora_id", operadora_id)
-    consulta = _igual_ou_nulo(consulta, "regra_codigo", regra_codigo)
-    consulta = _igual_ou_nulo(consulta, "codigo_item", codigo_item)
-    achados = consulta.limit(1).execute().data or []
-    if achados:
-        return achados[0]
-    return (
-        supabase.table("cm_validacao_tema")
-        .insert(
-            {
-                "tipo": tipo,
-                "titulo": titulo,
-                "operadora_id": operadora_id,
-                "regra_codigo": regra_codigo,
-                "codigo_item": codigo_item,
-            }
-        )
-        .execute()
-        .data[0]
-    )
+    """O tema aberto da chave, ou um novo. Quem chama segura a trava.
+
+    A chave tem coluna nula (o Bloqueado não tem operadora; a observação sem
+    regra citada não tem regra): a comparação é aqui, sobre os abertos do tipo."""
+    chave = {"operadora_id": operadora_id, "regra_codigo": regra_codigo, "codigo_item": codigo_item}
+    abertos = supabase.table("cm_validacao_tema").select("*").eq("tipo", tipo).eq("estado", ABERTO).execute().data
+    achado = next((t for t in abertos or [] if all(t.get(c) == v for c, v in chave.items())), None)
+    if achado:
+        return achado
+    return supabase.table("cm_validacao_tema").insert({"tipo": tipo, "titulo": titulo, **chave}).execute().data[0]
+
+
+def _ligar(supabase, tema: dict, *, guia_linha_id: str | None = None, observacao_id: str | None = None) -> None:
+    supabase.table("cm_validacao_tema_linha").insert(
+        {"tema_id": tema["id"], "guia_linha_id": guia_linha_id, "observacao_id": observacao_id}
+    ).execute()
 
 
 def _operadora_da_conta(supabase, conta_id: str) -> str | None:
@@ -128,6 +120,30 @@ def temas_das_linhas_validar(supabase, conta_id: str, linhas: list[dict]) -> Non
             supabase.table("cm_validacao_tema_linha").insert(
                 [{"tema_id": tema["id"], "guia_linha_id": linha["id"]} for linha in da_regra]
             ).execute()
+
+
+def acompanhar_marcacao(supabase, conta: dict, linha: dict) -> None:
+    """A marcação da faturista na fila de Validação. Toda marcação (e o
+    Desfazer) tira a linha dos temas abertos de Bloqueado e de observação; o
+    Bloqueado põe a linha no tema aberto do código."""
+    with _trava_dos_temas:
+        ligacoes = (
+            supabase.table("cm_validacao_tema_linha").select("*").eq("guia_linha_id", linha["id"]).execute().data or []
+        )
+        # Uma linha está em poucos temas: a leitura direta, sem lotes.
+        temas = (
+            supabase.table("cm_validacao_tema").select("*").in_("id", [li["tema_id"] for li in ligacoes]).execute().data
+            if ligacoes
+            else []
+        )
+        abertos = [t["id"] for t in temas or [] if t.get("estado") == ABERTO and t["tipo"] in (BLOQUEADO, OBSERVACAO)]
+        if abertos:
+            supabase.table("cm_validacao_tema_linha").delete().eq("guia_linha_id", linha["id"]).in_(
+                "tema_id", abertos
+            ).execute()
+        if linha.get("estado") == "BLOQUEADO" and linha.get("codigo"):
+            tema = _tema_aberto(supabase, BLOQUEADO, f"Código {linha['codigo']} bloqueado", codigo_item=linha["codigo"])
+            _ligar(supabase, tema, guia_linha_id=linha["id"])
 
 
 # ----------------------------------------------------------------------------------
@@ -368,6 +384,58 @@ def _decidir_as_linhas(supabase, tema: dict, autor_id: str | None) -> None:
         supabase.table("cm_conta").update({"situacao": "RETORNO"}).in_("id", sorted(a_lancar)).in_(
             "situacao", list(CONCLUIDAS)
         ).execute()
+
+
+COLUNAS_DO_CADASTRO = ("Código", "Descrição", "Operadora", "Coluna", "Preço de tabela", "Contas afetadas")
+
+
+def _reais(valor) -> str:
+    return "" if valor is None else f"{_dinheiro(valor):,.2f}".replace(",", "_").replace(".", ",").replace("_", ".")
+
+
+def csv_do_cadastro(supabase, tema_id: str) -> str:
+    """A lista do código bloqueado para o cadastro e a consultoria do MV: uma
+    linha por descrição, operadora, coluna e preço, com as contas afetadas.
+    Separado por ponto e vírgula, como as planilhas da casa."""
+    linhas = _linhas_do_tema(supabase, tema_id)
+    contas = {c["id"]: c for c in _em_lotes(supabase, "cm_conta", "id", [x["conta_id"] for x in linhas], "contas")}
+    atendimentos = {
+        a["id"]: a
+        for a in _em_lotes(
+            supabase, "cm_atendimento", "id", [c["atendimento_id"] for c in contas.values()], "atendimentos"
+        )
+    }
+    siglas = {
+        o["id"]: o["sigla"]
+        for o in _em_lotes(
+            supabase, "cm_operadora", "id", [a.get("operadora_id") for a in atendimentos.values()], "operadoras"
+        )
+    }
+    grupos: dict[tuple, list[str]] = {}
+    for linha in sorted(linhas, key=lambda x: (contas.get(x["conta_id"]) or {}).get("ordem_fila") or 0):
+        conta = contas.get(linha["conta_id"]) or {}
+        atendimento = atendimentos.get(conta.get("atendimento_id")) or {}
+        chave = (
+            linha.get("codigo") or "",
+            linha.get("descricao") or "",
+            siglas.get(atendimento.get("operadora_id"), ""),
+            atendimento.get("coluna_preco") or "",
+            _reais(linha.get("preco_tabela")),
+        )
+        rotulo = f"{atendimento.get('numero_atendimento') or ''} ({conta.get('numero_conta') or ''})".strip()
+        if rotulo not in grupos.setdefault(chave, []):
+            grupos[chave].append(rotulo)
+    saida = io.StringIO()
+    escritor = csv.writer(saida, delimiter=";", lineterminator="\n")
+    escritor.writerow(COLUNAS_DO_CADASTRO)
+    for chave, rotulos in grupos.items():
+        escritor.writerow([_celula(valor) for valor in (*chave, ", ".join(rotulos))])
+    return saida.getvalue()
+
+
+def _celula(valor: str) -> str:
+    """A descrição vem do PDF do MV: a célula que começa como fórmula vira texto."""
+    return f"'{valor}" if valor[:1] in ("=", "+", "-", "@", "\t", "\r") else valor
 
 
 def linhas_do_retorno(supabase, linhas: list[dict]) -> list[dict]:

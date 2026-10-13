@@ -27,7 +27,7 @@ from app.services.contas_medicas.guia import (
     nota_de_entrada,
     numeros_do_topo,
 )
-from app.services.contas_medicas.validacao import linhas_do_retorno
+from app.services.contas_medicas.validacao import acompanhar_marcacao, linhas_do_retorno
 
 router = APIRouter(prefix="/contas-medicas", tags=["contas-medicas"])
 
@@ -188,10 +188,13 @@ async def marcar_linha(
     me: dict = Depends(_PODE_CORRIGIR),
     supabase: Client = Depends(get_supabase_client),
 ) -> dict:
-    """Feito, Não procede (com motivo) ou Bloqueado numa linha do Guia."""
+    """Feito, Não procede (com motivo) ou Bloqueado numa linha do Guia. O
+    Bloqueado e o Não procede caem na fila de Validação."""
     conta = _conta_em_correcao(supabase, conta_id, me)
     linha = _linha_da_faturista(supabase, conta, linha_id)
-    return _gravar_marcacao(supabase, linha, me, corpo.estado, corpo.motivo, corpo.texto)
+    marcada = _gravar_marcacao(supabase, linha, me, corpo.estado, corpo.motivo, corpo.texto)
+    acompanhar_marcacao(supabase, conta, marcada)
+    return marcada
 
 
 @router.delete("/contas/{conta_id}/guia/linhas/{linha_id}/marcacao")
@@ -206,7 +209,9 @@ async def desfazer_marcacao(
     """Desfazer: a linha volta a aberta, enquanto a Conta não foi concluída."""
     conta = _conta_em_correcao(supabase, conta_id, me)
     linha = _linha_da_faturista(supabase, conta, linha_id)
-    return _gravar_marcacao(supabase, linha, me, "ABERTA")
+    desfeita = _gravar_marcacao(supabase, linha, me, "ABERTA")
+    acompanhar_marcacao(supabase, conta, desfeita)
+    return desfeita
 
 
 class Dia(BaseModel):

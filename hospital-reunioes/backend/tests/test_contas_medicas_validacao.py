@@ -413,3 +413,86 @@ class TestRegraPendente:
         assert {(linha["acao"], linha["estado"]) for linha in banco.tabelas["cm_guia_linha"]} == {("VALIDAR", "ABERTA")}
         assert _fila_de_validacao(banco)["temas"] == []
         assert _decidir(banco, tema["id"], {"decisao": "VALIDAR_REGRA"}).status_code == 409
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 2. Bloqueado: um tema por código, e a lista para o cadastro
+# ═══════════════════════════════════════════════════════════════════════════
+
+CATETER = "70000020"
+
+
+def _marcar(banco: _Banco, conta_id: str, linha_id: str, corpo: dict):
+    resposta = _cliente(banco, "faturista").post(
+        f"/api/contas-medicas/contas/{conta_id}/guia/linhas/{linha_id}/marcacao", json=corpo
+    )
+    assert resposta.status_code == 200, resposta.text
+    return resposta.json()
+
+
+def _bloquear_em_duas_contas(banco: _Banco) -> list[dict]:
+    linhas = []
+    for conta_id in (C1, C2):
+        [linha] = _gravar(
+            banco,
+            conta_id,
+            _linha_do_guia("INCLUIR", CATETER, 33.0, REGRA_VIGENTE, descricao="CATETER VENOSO CENTRAL DUPLO"),
+        )
+        linhas.append(_marcar(banco, conta_id, linha["id"], {"estado": "BLOQUEADO"}))
+    return linhas
+
+
+def _tema_no_banco(banco: _Banco, tema_id: str) -> dict:
+    return next(t for t in banco.tabelas["cm_validacao_tema"] if t["id"] == tema_id)
+
+
+class TestBloqueado:
+    def test_bloqueado_em_duas_contas_pelo_mesmo_codigo_vira_um_tema_e_enviar_ao_cadastro_gera_o_csv(self):
+        banco = _cenario()
+        _bloquear_em_duas_contas(banco)
+
+        [tema] = _fila_de_validacao(banco)["temas"]
+        assert (tema["tipo"], tema["codigo_item"], tema["contas"], tema["valor"]) == ("BLOQUEADO", CATETER, 2, 66.0)
+        assert tema["operadora"] == "ALFA"
+
+        resposta = _cliente(banco).post(f"/api/contas-medicas/validacao/temas/{tema['id']}/cadastro")
+
+        assert resposta.status_code == 200, resposta.text
+        assert resposta.headers["content-type"].startswith("text/csv")
+        assert "attachment" in resposta.headers["content-disposition"]
+        linhas = resposta.content.decode("utf-8-sig").splitlines()
+        assert linhas == [
+            "Código;Descrição;Operadora;Coluna;Preço de tabela;Contas afetadas",
+            f"{CATETER};CATETER VENOSO CENTRAL DUPLO;ALFA;COMUM;33,00;31301 (48801), 31302 (48802)",
+        ]
+        gravado = _tema_no_banco(banco, tema["id"])
+        assert (gravado["estado"], gravado["decisao"], gravado["decidido_por"]) == (
+            "DECIDIDO",
+            "ENVIAR_AO_CADASTRO",
+            "G1",
+        )
+        assert _fila_de_validacao(banco)["temas"] == []
+
+    def test_descartar_fecha_o_tema_sem_csv(self):
+        banco = _cenario()
+        _bloquear_em_duas_contas(banco)
+        [tema] = _fila_de_validacao(banco)["temas"]
+
+        resposta = _decidir(banco, tema["id"], {"decisao": "DESCARTAR"})
+
+        assert resposta.status_code == 200, resposta.text
+        assert resposta.headers["content-type"].startswith("application/json")
+        assert _tema_no_banco(banco, tema["id"])["decisao"] == "DESCARTAR"
+        assert _cliente(banco).post(f"/api/contas-medicas/validacao/temas/{tema['id']}/cadastro").status_code == 409
+
+    def test_desfazer_o_bloqueado_tira_a_linha_do_tema(self):
+        banco = _cenario()
+        primeira, _segunda = _bloquear_em_duas_contas(banco)
+
+        desfeita = _cliente(banco, "faturista").delete(
+            f"/api/contas-medicas/contas/{C1}/guia/linhas/{primeira['id']}/marcacao"
+        )
+
+        assert desfeita.status_code == 200, desfeita.text
+        [tema] = _fila_de_validacao(banco)["temas"]
+        assert (tema["contas"], tema["valor"]) == (1, 33.0)
