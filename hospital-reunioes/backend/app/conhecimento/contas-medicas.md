@@ -98,6 +98,10 @@ No topo ficam o número do atendimento, o rótulo da paciente, a conta, a operad
 
 As linhas vêm agrupadas por dia e setor, como "03/10 · CTI". Cada linha começa pelo verbo (Incluir, Ajustar quantidade, Corrigir preço, Retirar ou Validar) e traz a quantidade, o período, o valor com sinal e o código, que copia com um clique. "Ver evidência" abre a página do prontuário e o trecho que sustenta a linha. A etiqueta cinza "Não conferido" marca o valor que não pôde ser conferido contra a tabela da operadora: ele fica fora da nota e do R$ a ajustar.
 
+Medicamento "se necessário" entra sempre no Guia. Quando o prontuário mostra que ele foi dado no dia (a leitura pela IA achou checagem, dispensação ou evolução citando a dose, ou o balanço hídrico registra o uso), a linha inclui as doses indicadas, com nível Registrado. Sem nenhum registro de uso, a linha inclui uma dose por dia de prescrição (quantidade provisória, que a memória da operadora pode mudar), com nível Prescrito SN, a etiqueta amarela "SE NECESSÁRIO · SEM REGISTRO NO MV" e o texto "Confira a checagem em papel. Sem uso, marque NÃO PROCEDE." O Não procede dessa linha já abre com o motivo "sem evidência no prontuário". Não entra o dia em que o item foi suspenso ou alterado, nem dia depois da alta; na operadora de diária global, só o item cobrado à parte. Essas linhas contam na nota como qualquer Incluir e aparecem separadas no Painel, como Prescrito SN.
+
+A diária de UTI sai na classe que o prontuário mostra em cada dia. Com ventilação mecânica, monitorização invasiva, marca-passo ou droga vasoativa registrados no dia, a linha aponta a classe mais alta que a memória da operadora liga a esse registro (classe V na Unimed, classe II na Leve, nível 2 do pacote de UTI da ASSIM, só na Linha Carioca), com a página e o trecho; sem nenhum desses registros, a classe mais baixa. Toda linha de diária de UTI traz a observação "conferir classe de UTI", e a classe lançada errada sai para retirar.
+
 Em cada linha, três botões:
 
 - **Feito**: a faturista corrigiu no MV. Um clique, e a linha recolhe em verde.

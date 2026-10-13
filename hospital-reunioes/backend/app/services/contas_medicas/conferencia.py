@@ -133,6 +133,8 @@ class _Contexto:
     setores: Mapping[str, str]
     # IDs das regras que a memória tem.
     regras: frozenset[str]
+    # Os eventos do Passo A (`cm_eventos`); None antes da leitura pela IA.
+    eventos: Mapping[str, Any] | None = None
 
     def tem_regra(self, chave: str) -> bool:
         return (self.parametros.get("regras_das_conferencias") or {}).get(chave) in self.regras
@@ -341,6 +343,8 @@ class _Devida:
     acomodacao: str
     # Diária do paciente (as que contam para o teto), não de acompanhante nem taxa.
     do_paciente: bool = True
+    # A tabela do preço: o pacote de UTI da ASSIM é da tabela de pacotes.
+    categoria: str = "DIARIA_TAXA"
 
 
 def _codigo_configurado(parametros: Mapping[str, Any], nome: str) -> str | None:
@@ -414,7 +418,6 @@ def _devidas_do_segmento(ctx: _Contexto, segmento: Segmento, acomodacao: str) ->
     """As diárias devidas do segmento e as pendências (texto) que viram Validar.
     Devidas `None`: o segmento não foi contado (a memória não traz o código)."""
     pagina, trecho = _evidencia_do_segmento(ctx, segmento)
-    global_ = ctx.parametros.get("diaria_global") or {}
     contratada = _contratada(ctx.conta)
     pendencias = [p.texto for p in segmento.validar]
 
@@ -446,12 +449,19 @@ def _devidas_do_segmento(ctx: _Contexto, segmento: Segmento, acomodacao: str) ->
         dias = [segmento.inicio.date()] if ctx.no_periodo(segmento.inicio.date()) else []
         if not _codigo_configurado(ctx.parametros, cobrada) and contratada:
             cobrada = f"hospital_dia_{contratada}"
-    elif acomodacao == "CTI":
-        classes = sorted(nome for nome in global_ if nome.startswith("uti_adulto_classe"))
-        if classes:
-            # Classe do dia é do Passo B (PRD 2): sai a mais baixa, para conferir.
-            familia = {c for c in (_codigo_configurado(ctx.parametros, n) for n in classes) if c}
-            cobrada, observacao = classes[0], " Conferir classe de UTI."
+    elif acomodacao == "CTI" and (classes := _classes_de_uti(ctx)):
+        chave_uti = "classe_de_uti" if ctx.tem_regra("classe_de_uti") else "diaria"
+        devidas = []
+        for data in dias:
+            classe, observacao_uti, familia_uti, evidencia = _classe_do_dia(ctx, classes, data)
+            devidas.append(
+                replace(
+                    devida(data, classe.codigo, chave_uti, classe.descricao, observacao_uti, familia_uti),
+                    categoria=classe.categoria,
+                    **evidencia,
+                )
+            )
+        return devidas + _extras_do_segmento(ctx, segmento, acomodacao, dias, devida), pendencias
     elif acomodacao in {"ENFERMARIA", "APARTAMENTO", "ISOLAMENTO"} and contratada:
         cobrada = contratada
     codigo = _codigo_configurado(ctx.parametros, cobrada)
@@ -462,14 +472,173 @@ def _devidas_do_segmento(ctx: _Contexto, segmento: Segmento, acomodacao: str) ->
         pendencias.append(f"A memória não traz o código da diária de {nome}.")
         return None, pendencias
     devidas = [devida(data, codigo, chave, descricao, observacao, familia) for data in dias if codigo]
+    return devidas + _extras_do_segmento(ctx, segmento, acomodacao, dias, devida), pendencias
 
+
+def _extras_do_segmento(
+    ctx: _Contexto, segmento: Segmento, acomodacao: str, dias: list[date], devida: Callable[..., _Devida]
+) -> list[_Devida]:
+    """A diária de acompanhante e a taxa de isolamento dos dias do segmento."""
+    extras = []
     acompanhante = _codigo_configurado(ctx.parametros, "acompanhante")
     if segmento.acompanhante and acompanhante:
-        devidas += [devida(data, acompanhante, "acompanhante", "Diária de acompanhante") for data in dias]
+        extras += [devida(data, acompanhante, "acompanhante", "Diária de acompanhante") for data in dias]
     taxa = _codigo_configurado(ctx.parametros, "taxa_isolamento_dia")
     if acomodacao == "ISOLAMENTO" and taxa:
-        devidas += [devida(data, taxa, "taxa_isolamento", "Taxa de isolamento") for data in dias]
-    return devidas, pendencias
+        extras += [devida(data, taxa, "taxa_isolamento", "Taxa de isolamento") for data in dias]
+    return extras
+
+
+# ----------------------------------------------------------------------------------
+# Classe de UTI do dia, pelos eventos do Passo A
+# ----------------------------------------------------------------------------------
+
+VENTILACAO_MECANICA = "VENTILACAO_MECANICA"
+MONITORIZACAO_INVASIVA = "MONITORIZACAO_INVASIVA"
+MARCA_PASSO = "MARCA_PASSO"
+DROGA_VASOATIVA = "DROGA_VASOATIVA"
+VENTILACAO_NAO_INVASIVA = "VENTILACAO_NAO_INVASIVA"
+
+_NOME_DO_CRITERIO = {
+    VENTILACAO_MECANICA: "ventilação mecânica",
+    MONITORIZACAO_INVASIVA: "monitorização invasiva",
+    MARCA_PASSO: "marca-passo",
+    DROGA_VASOATIVA: "droga vasoativa",
+    VENTILACAO_NAO_INVASIVA: "ventilação não invasiva",
+}
+
+# A terapia do Passo A que é critério de classe.
+_CRITERIO_DA_TERAPIA = {
+    "VENTILACAO_MECANICA": VENTILACAO_MECANICA,
+    "PRESSAO_INVASIVA": MONITORIZACAO_INVASIVA,
+    "VENTILACAO_NAO_INVASIVA": VENTILACAO_NAO_INVASIVA,
+}
+_MARCA_PASSO = re.compile(r"MARCA\s*-?\s*PASSO|MARCAPASSO")
+_VASOATIVA = re.compile(
+    r"(?<![A-Z])(NORADRENALINA|NOREPINEFRINA|ADRENALINA|EPINEFRINA|DOBUTAMINA|DOPAMINA|VASOPRESSINA"
+    r"|NITROPRUSSIATO|NITROGLICERINA|MILRINONA)"
+)
+_ROMANO = {1: "I", 2: "II", 3: "III", 4: "IV", 5: "V"}
+_OBSERVACAO_UTI = " Conferir classe de UTI."
+
+
+@dataclass(frozen=True)
+class _ClasseDeUti:
+    codigo: str
+    descricao: str
+    categoria: str
+    # Basta um critério registrado no dia; a mais baixa não tem (é a que sobra).
+    criterios: frozenset[str]
+
+
+def _numero_da_classe(nome: str) -> int:
+    final = nome.rsplit("_", 1)[-1]
+    return int(final) if final.isdigit() else 0
+
+
+def _criterios_padrao(nome: str, mais_alta: bool, niveis: bool) -> frozenset[str]:
+    """Os critérios das memórias do diretor, quando o bloco da classe não traz
+    `criterios`: ASSIM nível 2 (ASSIM-PAC-03), Unimed classes II e V
+    (UNIMED-DIA-13 a 16), Leve classe II (LEVE-DIA-12 e 13). Com a Classe V,
+    a II é monitorização invasiva ou droga vasoativa; sem ela, a II é a mais
+    alta e leva a ventilação mecânica e o marca-passo."""
+    numero = _numero_da_classe(nome)
+    if niveis or (numero == 2 and mais_alta):
+        return frozenset({VENTILACAO_MECANICA, MONITORIZACAO_INVASIVA, MARCA_PASSO})
+    if numero == 2:
+        return frozenset({MONITORIZACAO_INVASIVA, DROGA_VASOATIVA})
+    if numero == 5:
+        return frozenset({VENTILACAO_MECANICA})
+    return frozenset()
+
+
+def _classes_de_uti(ctx: _Contexto) -> list[_ClasseDeUti]:
+    """As classes (ou níveis) de UTI adulto da memória, da mais baixa para a mais
+    alta: os níveis do pacote de UTI (ASSIM, só Linha Carioca) ou as classes da
+    diária global (Unimed, Leve). Vazia: a diária de CTI é uma só."""
+    pacote = ctx.parametros.get("pacote_uti_adulto") or {}
+    blocos: dict[str, Any] = {}
+    if isinstance(pacote, dict) and (ctx.coluna == "CARIOCA" or not pacote.get("somente_linha_carioca")):
+        blocos = {n: b for n, b in pacote.items() if n.startswith("nivel_") and isinstance(b, dict) and b.get("codigo")}
+    rotulo, categoria, niveis = "Pacote de UTI adulto nível {}", "PACOTE", True
+    if not blocos:
+        blocos = {
+            n: b
+            for n, b in (ctx.parametros.get("diaria_global") or {}).items()
+            if n.startswith("uti_adulto_classe") and isinstance(b, dict) and b.get("codigo")
+        }
+        rotulo, categoria, niveis = "Diária de UTI adulto classe {}", "DIARIA_TAXA", False
+    nomes = sorted(blocos, key=_numero_da_classe)
+    classes = []
+    for posicao, nome in enumerate(nomes):
+        numero = _numero_da_classe(nome)
+        if posicao == 0:
+            criterios: frozenset[str] = frozenset()
+        elif blocos[nome].get("criterios"):
+            criterios = frozenset(str(c).upper() for c in blocos[nome]["criterios"])
+        else:
+            criterios = _criterios_padrao(nome, posicao == len(nomes) - 1, niveis)
+        classes.append(
+            _ClasseDeUti(
+                codigo=str(blocos[nome]["codigo"]),
+                descricao=rotulo.format(numero if niveis else _ROMANO.get(numero, numero)),
+                categoria=categoria,
+                criterios=criterios,
+            )
+        )
+    return classes
+
+
+def _em_uso_no_dia(terapia: Mapping[str, Any], data: date) -> bool:
+    inicio, fim = _data_do_evento(terapia.get("inicio")), _data_do_evento(terapia.get("fim"))
+    return inicio is not None and inicio <= data and (fim is None or data <= fim)
+
+
+def _criterios_do_dia(eventos: Mapping[str, Any], data: date) -> dict[str, tuple[int | None, str | None]]:
+    """Critério de classe registrado no dia → (página, trecho) do evento que o mostra."""
+    achados: dict[str, tuple[int | None, str | None]] = {}
+    for terapia in eventos.get("terapias") or []:
+        criterio = _CRITERIO_DA_TERAPIA.get(terapia.get("tipo"))
+        if criterio is None and _MARCA_PASSO.search(_norm(terapia.get("descricao"))):
+            criterio = MARCA_PASSO
+        if criterio and _em_uso_no_dia(terapia, data):
+            achados.setdefault(criterio, (terapia.get("pagina"), terapia.get("trecho")))
+    for procedimento in eventos.get("procedimentos") or []:
+        if _data_do_evento(procedimento.get("data_hora")) == data and _MARCA_PASSO.search(
+            _norm(procedimento.get("detalhe"))
+        ):
+            achados.setdefault(MARCA_PASSO, (procedimento.get("pagina"), procedimento.get("trecho")))
+    for prescricao in eventos.get("prescricoes") or []:
+        if (
+            not prescricao.get("suspenso")
+            and _data_do_evento(prescricao.get("data")) == data
+            and _VASOATIVA.search(_norm(prescricao.get("item")))
+        ):
+            achados.setdefault(DROGA_VASOATIVA, (prescricao.get("pagina"), prescricao.get("trecho")))
+    return achados
+
+
+def _classe_do_dia(
+    ctx: _Contexto, classes: list[_ClasseDeUti], data: date
+) -> tuple[_ClasseDeUti, str, set[str] | None, dict[str, Any]]:
+    """(classe, observação, família, evidência) da diária de UTI do dia.
+
+    Sem os eventos do Passo A, a mais baixa, e qualquer classe lançada vale por
+    ela na comparação. Com os eventos, a mais alta com um critério registrado no
+    dia, com a página e o trecho do evento; sem critério, a mais baixa. Cada
+    classe é um código: a lançada na classe errada sai para retirar.
+    """
+    mais_baixa = classes[0]
+    if ctx.eventos is None:
+        return mais_baixa, _OBSERVACAO_UTI, {c.codigo for c in classes}, {}
+    achados = _criterios_do_dia(ctx.eventos, data)
+    for classe in reversed(classes[1:]):
+        criterio = next((c for c in sorted(classe.criterios) if c in achados), None)
+        if criterio:
+            pagina, trecho = achados[criterio]
+            nome = _NOME_DO_CRITERIO.get(criterio, criterio.lower())
+            return classe, f" Registro de {nome} no dia.{_OBSERVACAO_UTI}", None, {"pagina": pagina, "trecho": trecho}
+    return mais_baixa, f" Sem critério de classe mais alta registrado no dia.{_OBSERVACAO_UTI}", None, {}
 
 
 def _diarias(ctx: _Contexto, pacote: Pacote | None) -> tuple[list[_Linha], list[_Devida]]:
@@ -508,13 +677,15 @@ def _diarias(ctx: _Contexto, pacote: Pacote | None) -> tuple[list[_Linha], list[
     familias: dict[frozenset[str], list[_Devida]] = {}
     for d in cobradas:
         familias.setdefault(d.familia, []).append(d)
+    classes = {classe.codigo for classe in _classes_de_uti(ctx)}
     if completa:
         conhecidos = set().union(*familias) if familias else set()
-        for codigo in _codigos_de_diaria(ctx.parametros) - conhecidos:
+        for codigo in (_codigos_de_diaria(ctx.parametros) | classes) - conhecidos:
             familias[frozenset({codigo})] = []
     for familia, devidas_da_familia in familias.items():
         lancados = [i for i in ctx.conta.itens if i.codigo in familia]
-        linhas += _comparar_diarias(ctx, devidas_da_familia, lancados, retirar=completa)
+        observacao = _OBSERVACAO_UTI if familia & classes else ""
+        linhas += _comparar_diarias(ctx, devidas_da_familia, lancados, retirar=completa, observacao=observacao)
     return linhas, devidas
 
 
@@ -548,7 +719,7 @@ def _validar_diaria(texto: str, data: date | None, setor: str | None) -> _Linha:
 
 
 def _comparar_diarias(
-    ctx: _Contexto, devidas: list[_Devida], lancados: list[ItemConta], *, retirar: bool = True
+    ctx: _Contexto, devidas: list[_Devida], lancados: list[ItemConta], *, retirar: bool = True, observacao: str = ""
 ) -> list[_Linha]:
     lancada = sum((i.quantidade for i in lancados), Decimal(0))
     diferenca = len(devidas) - lancada
@@ -571,7 +742,7 @@ def _comparar_diarias(
                 por_data_lancada[d.data] -= 1
                 continue
             preco_lancado, preco_tabela, valor, etiqueta = ctx.valor_de_inclusao(
-                "DIARIA_TAXA", d.codigo, d.data, Decimal(1)
+                d.categoria, d.codigo, d.data, Decimal(1)
             )
             linhas.append(
                 _Linha(
@@ -610,7 +781,7 @@ def _comparar_diarias(
                 setor=item.setor,
                 codigo=item.codigo,
                 descricao=item.descricao,
-                motivo=f"Lançado a mais: {resumo}",
+                motivo=f"Lançado a mais: {resumo}{observacao}",
                 nivel="POR_REGRA",
                 causa="REGRA_AUTOMATICA",
                 pagina=item.pagina,
@@ -1273,6 +1444,165 @@ def _glicemias(ctx: _Contexto) -> list[_Linha]:
 
 
 # ----------------------------------------------------------------------------------
+# (11) "Se necessário", com os eventos do Passo A
+# ----------------------------------------------------------------------------------
+
+# O texto fixo da linha "se necessário" sem registro de uso (PRD #1128, user story 16).
+TEXTO_SE_NECESSARIO = "Confira a checagem em papel. Sem uso, marque NÃO PROCEDE."
+
+
+def _data_do_evento(texto: Any) -> date | None:
+    """O dia que a IA escreveu no evento (ISO ou dd/mm/aaaa, com ou sem hora)."""
+    texto = str(texto or "").strip()
+    for formato in ("%Y-%m-%d", "%d/%m/%Y"):
+        try:
+            return datetime.strptime(texto[:10], formato).date()
+        except ValueError:
+            continue
+    return None
+
+
+def _mesmo_nome(a: str, b: str) -> bool:
+    """O item do evento ou do balanço é o da prescrição: o mesmo nome ou a mesma marca."""
+    return _norm(a) == _norm(b) or (bool(_marca(a)) and _marca(a) == _marca(b))
+
+
+def _codigo_pelo_dicionario(nome: str, dicionario: Mapping[str, set[str]]) -> str | None:
+    """O código do item que a conta ainda não lançou: o termo do dicionário no nome."""
+    texto = _norm(nome)
+    codigos = {codigo for termo, cods in dicionario.items() if _contem(texto, termo) for codigo in cods}
+    return min(codigos) if len(codigos) == 1 else None
+
+
+def _indicio_de_uso(
+    ctx: _Contexto, eventos: Mapping[str, Any], nome: str, data: date
+) -> tuple[Decimal, int | None, str, str] | None:
+    """(doses, página, trecho, indício) do uso no dia: a prescrição do Passo A com
+    `indicio_de_uso` ou o ganho do balanço hídrico. Nenhum: None."""
+    for evento in eventos.get("prescricoes") or []:
+        indicio = evento.get("indicio_de_uso")
+        if (
+            indicio
+            and not evento.get("suspenso")
+            and _data_do_evento(evento.get("data")) == data
+            and _mesmo_nome(evento.get("item") or "", nome)
+        ):
+            doses = Decimal(str(evento.get("doses_no_dia") or 1))
+            return doses, evento.get("pagina"), evento.get("trecho") or indicio, indicio
+    for balanco in ctx.prontuario.conteudo.balancos:
+        if balanco.data != data:
+            continue
+        for ganho in balanco.ganhos:
+            if ganho.lancamentos and _mesmo_nome(ganho.item, nome):
+                indicio = f"{ganho.item}: {ganho.lancamentos} lançamentos no balanço hídrico"
+                return Decimal(ganho.lancamentos), balanco.paginas[0] if balanco.paginas else None, indicio, indicio
+    return None
+
+
+def _suspenso_no_dia(ctx: _Contexto, eventos: Mapping[str, Any], nome: str, data: date) -> bool:
+    """Suspenso ou alterado no mesmo dia: alguma prescrição do dia suspende o item."""
+    if any(
+        prescricao.data == data and any(item.nome == nome and item.suspenso for item in prescricao.itens)
+        for prescricao in ctx.prontuario.conteudo.prescricoes
+    ):
+        return True
+    return any(
+        evento.get("suspenso")
+        and _data_do_evento(evento.get("data")) == data
+        and _mesmo_nome(evento.get("item") or "", nome)
+        for evento in eventos.get("prescricoes") or []
+    )
+
+
+def _se_necessario(ctx: _Contexto) -> list[_Linha]:
+    """Medicamento "se necessário" entra sempre (ASSIM-PRI-09 e diretriz geral).
+
+    Com indício de uso no dia (Passo A ou balanço), Incluir as doses indicadas,
+    nível Registrado. Sem nenhum registro, Incluir
+    `transicao.se_necessario_doses_por_dia_sem_registro` doses, nível
+    PRESCRITO_SN, com o texto fixo para a faturista conferir a checagem em papel.
+    Fora: dia já lançado, suspenso ou alterado no dia, depois da alta, e, com
+    diária global, o item incluso na diária. Sem os eventos, não roda.
+    """
+    eventos = ctx.eventos
+    if eventos is None:
+        return []
+    conteudo = ctx.prontuario.conteudo
+    alta = conteudo.internacao.alta.date() if conteudo.internacao.alta else None
+    sem_registro = Decimal(
+        str((ctx.parametros.get("transicao") or {}).get("se_necessario_doses_por_dia_sem_registro") or 1)
+    )
+    chave = "se_necessario" if ctx.tem_regra("se_necessario") else "prescricao"
+    linhas = []
+    for consolidado in conteudo.prescricao_consolidada:
+        if not consolidado.se_necessario or not (consolidado.secao or "").upper().startswith("MEDICAMENTO"):
+            continue
+        casamento = casar(consolidado.nome, ctx.medicamentos, ctx.dicionario)
+        if casamento.itens:
+            lancado = casamento.itens[0]["item"]
+            codigo, descricao = lancado.codigo, lancado.descricao
+        else:
+            codigo, descricao = _codigo_pelo_dicionario(consolidado.nome, ctx.dicionario), consolidado.nome
+        dias_lancados = {par["item"].data for par in casamento.itens}
+        for data in sorted(consolidado.doses_por_dia):
+            if (
+                data in dias_lancados
+                or not ctx.no_periodo(data)
+                or (alta is not None and data > alta)
+                or _suspenso_no_dia(ctx, eventos, consolidado.nome, data)
+            ):
+                continue
+            if codigo:
+                cobravel = ctx.cobravel("MEDICAMENTO", codigo, data)
+            else:
+                cobravel = None if ctx.diaria_global else True
+            if cobravel is False:
+                continue
+            achado = _prescrito_no_dia(conteudo, consolidado.nome, data)
+            indicio = _indicio_de_uso(ctx, eventos, consolidado.nome, data)
+            quantidade = indicio[0] if indicio else sem_registro
+            preco_lancado, preco_tabela, valor, etiqueta = ctx.valor_de_inclusao(
+                "MEDICAMENTO", codigo, data, quantidade
+            )
+            if cobravel is None:
+                etiqueta += " Sem preço conferível na tabela: conferir se passa do corte."
+            if indicio:
+                _, pagina, trecho, texto = indicio
+                motivo = f"Se necessário ({consolidado.nome}) com indício de uso no dia: {texto}.{etiqueta}"
+                nivel, causa = "REGISTRADO", "DISPENSACAO"
+            else:
+                pagina = achado[1].pagina if achado else consolidado.paginas[0]
+                trecho = f"{achado[1].nome} {achado[1].colunas}" if achado else consolidado.nome
+                motivo = (
+                    f"Se necessário ({consolidado.nome}), sem registro de uso no MV: {quantidade:g} por dia de "
+                    f"prescrição, quantidade provisória.{etiqueta} {TEXTO_SE_NECESSARIO}"
+                )
+                nivel, causa = "PRESCRITO_SN", "REGISTRO_ASSISTENCIAL"
+            linhas.append(
+                _Linha(
+                    acao="INCLUIR" if cobravel else "VALIDAR",
+                    chave=chave,
+                    data=data,
+                    setor=achado[0].setor if achado else None,
+                    codigo=codigo,
+                    descricao=descricao,
+                    motivo=motivo,
+                    nivel=nivel,
+                    causa=causa,
+                    pagina=pagina,
+                    trecho=trecho,
+                    quantidade_lancada=Decimal(0),
+                    quantidade_devida=quantidade,
+                    preco_lancado=preco_lancado,
+                    preco_tabela=preco_tabela,
+                    valor=valor,
+                    confianca=casamento.confianca or "ALTA",
+                )
+            )
+    return linhas
+
+
+# ----------------------------------------------------------------------------------
 # Regra citada, período e montagem
 # ----------------------------------------------------------------------------------
 
@@ -1307,7 +1637,7 @@ def _soma(a: Decimal | None, b: Decimal | None) -> Decimal | None:
 
 def _diario(linhas: list[_Linha]) -> list[_Linha]:
     """Item diário repetido vira uma linha com data e data fim: dias seguidos da
-    mesma ação, regra, código e setor somam quantidade e valor."""
+    mesma ação, regra, código, setor e nível somam quantidade e valor."""
     unidas: list[_Linha] = []
     for linha in sorted(linhas, key=lambda x: (x.acao, x.chave, x.codigo or "", x.setor or "", x.data or date.min)):
         anterior = unidas[-1] if unidas else None
@@ -1315,8 +1645,8 @@ def _diario(linhas: list[_Linha]) -> list[_Linha]:
             anterior is not None
             and linha.data is not None
             and anterior.data is not None
-            and (anterior.acao, anterior.chave, anterior.codigo, anterior.setor)
-            == (linha.acao, linha.chave, linha.codigo, linha.setor)
+            and (anterior.acao, anterior.chave, anterior.codigo, anterior.setor, anterior.nivel)
+            == (linha.acao, linha.chave, linha.codigo, linha.setor, linha.nivel)
             and linha.codigo is not None
             and (anterior.data_fim or anterior.data) + timedelta(days=1) == linha.data
         ):
@@ -1391,12 +1721,16 @@ def conferir(
     setores: Mapping[str, str] | None = None,
     dicionario: Mapping[str, set[str]] | None = None,
     pacote_do_tuss: BuscaDePacote | None = None,
+    eventos: Mapping[str, Any] | None = None,
 ) -> Conferencia:
     """As linhas do Guia da Conta, pelas conferências por código.
 
     `setores` liga o nome do setor no MV à acomodação (`cm_setor`); `dicionario` é
     o dicionário de itens do hospital (`dicionario_do_banco`); `pacote_do_tuss`
-    acha o pacote da tabela da operadora pelo TUSS realizado.
+    acha o pacote da tabela da operadora pelo TUSS realizado. `eventos` são os
+    do Passo A (`cm_eventos`): com eles rodam as conferências que dependem do
+    texto livre ("se necessário" e classe de UTI do dia); sem eles, a diária de
+    UTI sai na classe mais baixa, para conferir.
     """
     ctx = _Contexto(
         conta=conta,
@@ -1407,6 +1741,7 @@ def conferir(
         dicionario=dicionario or {},
         setores={_norm(nome): acomodacao for nome, acomodacao in (setores or {}).items()},
         regras=frozenset(regra.codigo for regra in memoria.regras),
+        eventos=eventos,
     )
     descartadas: list[dict[str, Any]] = []
     pacote = _pacote_do_atendimento(ctx, pacote_do_tuss)
@@ -1423,6 +1758,7 @@ def conferir(
         *_tetos(ctx, pagas),
         *_exames(ctx),
         *_glicemias(ctx),
+        *_se_necessario(ctx),
     ]
     linhas = _com_regra(geradas, memoria, descartadas)
     linhas = _diario(_sem_duplicadas(_no_periodo(ctx, linhas, descartadas)))

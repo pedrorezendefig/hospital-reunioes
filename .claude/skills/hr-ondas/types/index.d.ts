@@ -69,8 +69,10 @@ export type Coleta = {
   migrations: Migration[]
   aplicada: number | null
   em: number
-  /** Hora da última resposta do Hospital OS; menor que `em` quando o `os` é o da coleta anterior. */
+  /** Hora da última resposta do Hospital OS; menor que `remotoEm` quando o `os` é o de antes. */
   osEm?: number | null
+  /** Hora da última busca no GitHub, OS e health (cache compartilhado entre as sessões). */
+  remotoEm?: number | null
 }
 
 export type EsperaCi = { pr: number | null; url: string }

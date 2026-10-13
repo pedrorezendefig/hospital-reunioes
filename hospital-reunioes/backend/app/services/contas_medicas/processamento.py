@@ -110,6 +110,7 @@ ETAPAS = {
     "dicionario": "consulta do dicionário",
     "conferencia": "conferência",
     "passo_a": "leitura do prontuário pela IA",
+    "conferencia_com_eventos": "conferência com a leitura da IA",
     "passo_b": "comparação com a memória pela IA",
     "gravacao": "gravação do guia",
 }
@@ -395,16 +396,14 @@ def _pipeline(supabase, conta: dict, cronometro: _Cronometro) -> None:
         memoria = memoria_vigente(supabase, operadora_id) if operadora_id else None
         if memoria is None:
             raise _Falha(MENSAGEM_SEM_MEMORIA)
+        memoria_lida = _memoria_lida(memoria)
         busca_de_preco = _busca_de_preco(supabase, operadora_id)
-        conferencia = conferir(
-            lida,
-            prontuario,
-            _memoria_lida(memoria),
-            busca_de_preco,
-            setores={s["nome_mv"]: s["acomodacao"] for s in listar_setores(supabase) if s.get("acomodacao")},
-            dicionario=dicionario,
-            pacote_do_tuss=lambda tuss, data: pacote_pelo_tuss(supabase, operadora_id, tuss, data),
-        )
+        buscas = {
+            "setores": {s["nome_mv"]: s["acomodacao"] for s in listar_setores(supabase) if s.get("acomodacao")},
+            "dicionario": dicionario,
+            "pacote_do_tuss": lambda tuss, data: pacote_pelo_tuss(supabase, operadora_id, tuss, data),
+        }
+        conferencia = conferir(lida, prontuario, memoria_lida, busca_de_preco, **buscas)
 
     try:
         with cronometro.etapa("passo_a"), _trava_do_prontuario(conta["atendimento_id"]):
@@ -420,6 +419,11 @@ def _pipeline(supabase, conta: dict, cronometro: _Cronometro) -> None:
                 achados=conferencia.linhas,
                 regras=memoria["regras"],
             )
+
+        with cronometro.etapa("conferencia_com_eventos"):
+            # As conferências que dependem do texto livre ("se necessário" e classe
+            # de UTI do dia) rodam com os eventos que a IA leu (#1134).
+            conferencia = conferir(lida, prontuario, memoria_lida, busca_de_preco, eventos=eventos, **buscas)
 
         with cronometro.etapa("passo_b"):
             da_ia = passo_b.comparar_com_a_ia(
