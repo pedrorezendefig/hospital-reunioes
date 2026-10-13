@@ -1,37 +1,36 @@
 "use client";
 
 /**
- * A tela Operadoras de Contas médicas (issues #1119 e #1120, PRD #1113, ADR 0070).
+ * A tela Operadoras de Contas médicas (issues #1119, #1120 e #1140, ADR 0070).
  *
- * A tela mínima da carga: a lista das operadoras com a situação de cada uma e
- * as tabelas de preço por categoria, e os formulários de envio do arquivo de
- * memória que o diretor monta, das tabelas de preço em CSV e do dicionário de
- * itens do hospital, mais o cadastro dos planos como o MV imprime e o dos
- * setores com a acomodação. Só quem tem a permissão "regra contratual e
- * tabelas" usa; o backend recusa de novo, para quem chamar a API direto.
+ * O mapa das operadoras (uma linha por operadora, com a situação, a memória e
+ * a tabela em uso de cada categoria, e o link para a Memória da operadora), a
+ * biblioteca de tabelas com "Nova versão", e os formulários de envio do
+ * arquivo de memória que o diretor monta, das tabelas de preço em CSV e do
+ * dicionário de itens do hospital, mais o cadastro dos planos como o MV
+ * imprime e o dos setores com a acomodação. Só quem tem a permissão "regra
+ * contratual e tabelas" usa; o backend recusa de novo, para quem chamar a API
+ * direto.
  */
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { AlertCircle, ArrowLeft, Download, Loader2, Upload } from "lucide-react";
+import { TabelasDePreco } from "@/components/contas-medicas/TabelasDePreco";
 import { createClient } from "@/lib/supabase/client";
 import { Select } from "@/components/ui/Select";
-
-type Situacao = "PRONTA" | "PARCIAL" | "SEM_MEMORIA";
-
-interface VersaoDaTabela {
-  tabela: string;
-  versao: string | null;
-  vigencia_inicio: string | null;
-  vigencia_fim: string | null;
-}
-
-interface TabelaDaCategoria {
-  categoria: string;
-  tipo: string | null;
-  situacao: "CARREGADA" | "NAO_CARREGADA";
-  versoes: VersaoDaTabela[];
-}
+import {
+  CATEGORIAS_DE_ENVIO,
+  COR_SITUACAO,
+  LABEL_CATEGORIA,
+  LABEL_SITUACAO,
+  type Situacao,
+  type TabelaDaCategoria,
+  baixarMemoria,
+  detalheDoErro,
+  plural,
+  rotuloDaCategoria,
+} from "@/lib/contas-medicas/operadoras";
 
 interface Operadora {
   sigla: string;
@@ -75,50 +74,16 @@ interface Setor {
   acomodacao: string | null;
 }
 
-const LABEL_SITUACAO: Record<Situacao, string> = {
-  PRONTA: "Pronta",
-  PARCIAL: "Parcial",
-  SEM_MEMORIA: "Sem memória",
-};
+/** As categorias do envio de tabela, na ordem da tela. */
+const OPCOES_DE_CATEGORIA = CATEGORIAS_DE_ENVIO.map((c) => ({ value: c, label: LABEL_CATEGORIA[c] }));
 
-const COR_SITUACAO: Record<Situacao, string> = {
-  PRONTA: "bg-emerald-50 text-emerald-700",
-  PARCIAL: "bg-amber-50 text-amber-700",
-  SEM_MEMORIA: "bg-slate-100 text-slate-600",
-};
+/** As colunas do mapa: as categorias da migration, inclusive Honorários, que espera a CBHPM. */
+const CATEGORIAS_DO_MAPA = [...CATEGORIAS_DE_ENVIO, "HONORARIO"];
 
-const LABEL_CATEGORIA: Record<string, string> = {
-  MATERIAL: "Materiais",
-  MEDICAMENTO: "Medicamentos",
-  DIARIA_TAXA: "Diárias e taxas",
-  PACOTE: "Pacotes",
-  HONORARIO: "Honorários",
-  SADT: "SADT",
-  PORTE_ANESTESICO: "Porte anestésico",
-};
-
-/** As categorias que recebem tabela pela tela. Honorário espera a CBHPM. */
-const CATEGORIAS_DE_ENVIO = ["MATERIAL", "MEDICAMENTO", "DIARIA_TAXA", "PACOTE"].map((c) => ({
-  value: c,
-  label: LABEL_CATEGORIA[c],
-}));
-
-/** Categoria que só a memória conhece (a próxima operadora inventa) aparece pelo nome. */
-function rotuloDaCategoria(categoria: string): string {
-  return LABEL_CATEGORIA[categoria] ?? categoria.replaceAll("_", " ");
-}
-
-/** "2026-08-01" vira "01/08/2026". */
-function dataBr(iso: string): string {
-  const [ano, mes, dia] = iso.split("-");
-  return `${dia}/${mes}/${ano}`;
-}
-
-function vigencia(v: VersaoDaTabela): string {
-  if (!v.vigencia_inicio) return "";
-  return v.vigencia_fim
-    ? `${dataBr(v.vigencia_inicio)} a ${dataBr(v.vigencia_fim)}`
-    : `desde ${dataBr(v.vigencia_inicio)}`;
+interface EscolhaDeTabela {
+  operadora: string;
+  categoria: string;
+  vez: number;
 }
 
 /** As acomodações do cadastro de setor, na ordem da migration 116. */
@@ -136,22 +101,8 @@ const ACOMODACOES: { value: string; label: string }[] = [
 
 const LABEL_ACOMODACAO = Object.fromEntries(ACOMODACOES.map((a) => [a.value, a.label]));
 
-function plural(n: number, singular: string, varias: string): string {
-  return `${n} ${n === 1 ? singular : varias}`;
-}
-
 function contagemDeRegras(vigentes: number, pendentes: number): string {
   return `${plural(vigentes, "regra vigente", "regras vigentes")} e ${plural(pendentes, "pendente", "pendentes")}`;
-}
-
-async function detalheDoErro(res: Response, padrao: string): Promise<string> {
-  try {
-    const corpo = await res.json();
-    if (typeof corpo?.detail === "string") return corpo.detail;
-  } catch {
-    // resposta sem JSON (ex.: 500 do proxy)
-  }
-  return padrao;
 }
 
 const CARTAO = "bg-white rounded-2xl border border-border shadow-premium p-6";
@@ -168,6 +119,7 @@ export default function OperadorasPage() {
   const [carregando, setCarregando] = useState(true);
   const [semPermissao, setSemPermissao] = useState(false);
   const [erroGeral, setErroGeral] = useState<string | null>(null);
+  const [escolha, setEscolha] = useState<EscolhaDeTabela | null>(null);
 
   const carregarOperadoras = useCallback(async (sessao: string) => {
     const res = await fetch("/api/contas-medicas/operadoras", {
@@ -254,7 +206,14 @@ export default function OperadorasPage() {
         </p>
       )}
 
-      <ListaDeOperadoras operadoras={operadoras} token={token} />
+      <MapaDasOperadoras operadoras={operadoras} token={token} />
+
+      <BibliotecaDeTabelas
+        operadoras={operadoras}
+        aoPedirNovaVersao={(operadora, categoria) =>
+          setEscolha({ operadora, categoria, vez: (escolha?.vez ?? 0) + 1 })
+        }
+      />
 
       <EnvioDeMemoria
         token={token}
@@ -262,6 +221,8 @@ export default function OperadorasPage() {
       />
 
       <EnvioDeTabela
+        key={escolha?.vez ?? 0}
+        inicial={escolha}
         token={token}
         operadoras={operadoras}
         aoImportar={() => (token ? carregarOperadoras(token) : Promise.resolve())}
@@ -276,71 +237,95 @@ export default function OperadorasPage() {
   );
 }
 
-function ListaDeOperadoras({ operadoras, token }: { operadoras: Operadora[]; token: string | null }) {
+function TabelaEmUso({ tabela }: { tabela: TabelaDaCategoria | undefined }) {
+  const emUso = tabela?.versoes.find((v) => v.em_uso);
+  if (emUso) {
+    return (
+      <>
+        <span className="block text-slate-800 break-all">{emUso.tabela}</span>
+        {emUso.versao && <span className="block text-slate-500">{emUso.versao}</span>}
+      </>
+    );
+  }
+  return (
+    <span className="text-slate-500">
+      {tabela?.situacao === "CARREGADA" ? "Sem versão em uso" : "Não carregada"}
+    </span>
+  );
+}
+
+function MapaDasOperadoras({ operadoras, token }: { operadoras: Operadora[]; token: string | null }) {
   const [erro, setErro] = useState<string | null>(null);
 
   async function baixar(sigla: string) {
     if (!token) return;
-    setErro(null);
-    const res = await fetch(`/api/contas-medicas/operadoras/${encodeURIComponent(sigla)}/memoria`, {
-      headers: { Authorization: `Bearer ${token}` },
-    });
-    if (!res.ok) {
-      setErro(await detalheDoErro(res, "Não foi possível baixar a memória."));
-      return;
-    }
-    const nome =
-      res.headers.get("content-disposition")?.match(/filename="([^"]+)"/)?.[1] ?? `MEMORIA-${sigla}.md`;
-    const url = URL.createObjectURL(await res.blob());
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = nome;
-    link.click();
-    URL.revokeObjectURL(url);
+    setErro(await baixarMemoria(token, sigla));
   }
 
   return (
     <section aria-label="Operadoras" className={CARTAO}>
-      <h2 className="text-base font-semibold text-slate-900 mb-4">Operadoras</h2>
+      <h2 className="text-base font-semibold text-slate-900">Operadoras</h2>
+      <p className="text-sm text-slate-500 mt-0.5 mb-4">
+        Uma linha por operadora, com a tabela em uso de cada categoria. Abra a operadora para editar a memória.
+      </p>
       {operadoras.length === 0 ? (
         <p className="text-slate-500 text-sm">Nenhuma operadora ainda. Envie a primeira memória abaixo.</p>
       ) : (
-        <ul className="divide-y divide-slate-100">
-          {operadoras.map((op) => (
-            <li
-              key={op.sigla}
-              data-testid={`operadora-${op.sigla}`}
-              className="py-3 flex flex-wrap items-center gap-x-4 gap-y-1"
-            >
-              <div className="min-w-[10rem]">
-                <p className="text-sm font-semibold text-slate-900">{op.sigla}</p>
-                <p className="text-xs text-slate-500">{op.nome}</p>
-              </div>
-              <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${COR_SITUACAO[op.situacao]}`}>
-                {LABEL_SITUACAO[op.situacao]}
-              </span>
-              <div className="text-sm text-slate-600 flex-1 min-w-[14rem]">
-                {op.versao ? (
-                  <p>
-                    Memória versão {op.versao}, {contagemDeRegras(op.regras.vigentes, op.regras.pendentes)}
-                  </p>
-                ) : (
-                  <p>Nenhuma memória carregada</p>
-                )}
-              </div>
-              {op.versao && (
-                <button
-                  type="button"
-                  onClick={() => baixar(op.sigla)}
-                  className="inline-flex items-center gap-1 text-sm text-primary hover:underline"
-                >
-                  <Download className="w-4 h-4" aria-hidden="true" /> Baixar memória
-                </button>
-              )}
-              <TabelasDePreco sigla={op.sigla} tabelas={op.tabelas} />
-            </li>
-          ))}
-        </ul>
+        <div className="overflow-x-auto">
+          <table aria-label="Mapa das operadoras" className="w-full text-xs">
+            <thead>
+              <tr className="text-left text-slate-500 uppercase">
+                <th className="py-1 pr-3 font-medium">Operadora</th>
+                <th className="py-1 pr-3 font-medium">Situação</th>
+                <th className="py-1 pr-3 font-medium">Memória</th>
+                {CATEGORIAS_DO_MAPA.map((c) => (
+                  <th key={c} className="py-1 pr-3 font-medium">
+                    {rotuloDaCategoria(c)}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100 align-top">
+              {operadoras.map((op) => (
+                <tr key={op.sigla} data-testid={`operadora-${op.sigla}`}>
+                  <td className="py-2 pr-3 min-w-[8rem]">
+                    <Link
+                      href={`/contas-medicas/operadoras/${encodeURIComponent(op.sigla)}`}
+                      className="text-sm font-semibold text-primary hover:underline"
+                    >
+                      {op.sigla}
+                    </Link>
+                    <span className="block text-slate-500">{op.nome}</span>
+                    {op.versao && (
+                      <button
+                        type="button"
+                        onClick={() => baixar(op.sigla)}
+                        className="mt-1 inline-flex items-center gap-1 text-primary hover:underline whitespace-nowrap"
+                      >
+                        <Download className="w-3.5 h-3.5" aria-hidden="true" /> Baixar memória
+                      </button>
+                    )}
+                  </td>
+                  <td className="py-2 pr-3">
+                    <span className={`font-medium px-2 py-0.5 rounded-full whitespace-nowrap ${COR_SITUACAO[op.situacao]}`}>
+                      {LABEL_SITUACAO[op.situacao]}
+                    </span>
+                  </td>
+                  <td className="py-2 pr-3 text-slate-600 min-w-[10rem]">
+                    {op.versao
+                      ? `Memória versão ${op.versao}, ${contagemDeRegras(op.regras.vigentes, op.regras.pendentes)}`
+                      : "Nenhuma memória carregada"}
+                  </td>
+                  {CATEGORIAS_DO_MAPA.map((c) => (
+                    <td key={c} className="py-2 pr-3 min-w-[7rem]">
+                      <TabelaEmUso tabela={op.tabelas.find((t) => t.categoria === c)} />
+                    </td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       )}
       {erro && (
         <p role="alert" className="text-sm text-red-700 mt-3">
@@ -351,42 +336,31 @@ function ListaDeOperadoras({ operadoras, token }: { operadoras: Operadora[]; tok
   );
 }
 
-function TabelasDePreco({ sigla, tabelas }: { sigla: string; tabelas: TabelaDaCategoria[] }) {
+function BibliotecaDeTabelas({
+  operadoras,
+  aoPedirNovaVersao,
+}: {
+  operadoras: Operadora[];
+  aoPedirNovaVersao: (operadora: string, categoria: string) => void;
+}) {
   return (
-    <table aria-label={`Tabelas de preço de ${sigla}`} className="basis-full w-full text-xs mt-2">
-      <thead>
-        <tr className="text-left text-slate-500 uppercase">
-          <th className="py-1 pr-3 font-medium">Categoria</th>
-          <th className="py-1 pr-3 font-medium">Tabela</th>
-          <th className="py-1 pr-3 font-medium">Versão</th>
-          <th className="py-1 pr-3 font-medium">Vigência</th>
-          <th className="py-1 font-medium">Situação</th>
-        </tr>
-      </thead>
-      <tbody className="divide-y divide-slate-100">
-        {tabelas.flatMap((t) =>
-          t.versoes.length === 0
-            ? [
-                <tr key={t.categoria}>
-                  <td className="py-1 pr-3 text-slate-800">{rotuloDaCategoria(t.categoria)}</td>
-                  <td className="py-1 pr-3 text-slate-500">{t.tipo ?? ""}</td>
-                  <td className="py-1 pr-3" />
-                  <td className="py-1 pr-3" />
-                  <td className="py-1 text-slate-500">Não carregada</td>
-                </tr>,
-              ]
-            : t.versoes.map((v, i) => (
-                <tr key={`${t.categoria}-${i}`}>
-                  <td className="py-1 pr-3 text-slate-800">{i === 0 ? rotuloDaCategoria(t.categoria) : ""}</td>
-                  <td className="py-1 pr-3 text-slate-600 break-all">{v.tabela}</td>
-                  <td className="py-1 pr-3 text-slate-600">{v.versao ?? ""}</td>
-                  <td className="py-1 pr-3 text-slate-600">{vigencia(v)}</td>
-                  <td className="py-1 text-emerald-700">Carregada</td>
-                </tr>
-              )),
-        )}
-      </tbody>
-    </table>
+    <section aria-label="Biblioteca de tabelas" className={CARTAO}>
+      <h2 className="text-base font-semibold text-slate-900">Biblioteca de tabelas</h2>
+      <p className="text-sm text-slate-500 mt-0.5 mb-2">
+        Todas as versões de cada tabela. A nova versão fica ao lado da anterior e passa a valer a partir do início da
+        vigência dela; a conta de um atendimento antigo usa a tabela da data dele.
+      </p>
+      {operadoras.map((op) => (
+        <div key={op.sigla} className="mt-4">
+          <h3 className="text-sm font-semibold text-slate-800">{op.sigla}</h3>
+          <TabelasDePreco
+            rotulo={`Tabelas de preço de ${op.sigla}`}
+            tabelas={op.tabelas}
+            aoPedirNovaVersao={(categoria) => aoPedirNovaVersao(op.sigla, categoria)}
+          />
+        </div>
+      ))}
+    </section>
   );
 }
 
@@ -475,16 +449,27 @@ function EnvioDeMemoria({ token, aoImportar }: { token: string | null; aoImporta
 }
 
 function EnvioDeTabela({
+  inicial,
   token,
   operadoras,
   aoImportar,
 }: {
+  /** A operadora e a categoria que o "Nova versão" da biblioteca escolheu. */
+  inicial: EscolhaDeTabela | null;
   token: string | null;
   operadoras: Operadora[];
   aoImportar: () => Promise<void>;
 }) {
-  const [operadora, setOperadora] = useState("");
-  const [categoria, setCategoria] = useState("");
+  const [operadora, setOperadora] = useState(inicial?.operadora ?? "");
+  const [categoria, setCategoria] = useState(inicial?.categoria ?? "");
+  const secao = useRef<HTMLElement>(null);
+  const campoDoInicio = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (!inicial) return;
+    secao.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    campoDoInicio.current?.focus();
+  }, [inicial]);
   const [inicio, setInicio] = useState("");
   const [fim, setFim] = useState("");
   const [versao, setVersao] = useState("");
@@ -526,7 +511,7 @@ function EnvioDeTabela({
   }
 
   return (
-    <section aria-label="Enviar tabela de preço" className={CARTAO}>
+    <section ref={secao} aria-label="Enviar tabela de preço" className={CARTAO}>
       <h2 className="text-base font-semibold text-slate-900">Enviar tabela de preço</h2>
       <p className="text-sm text-slate-500 mt-0.5 mb-4">
         O CSV da tabela do convênio, com a categoria e a vigência. O formato é reconhecido pelo cabeçalho. Uma versão
@@ -539,7 +524,7 @@ function EnvioDeTabela({
           onChange={setOperadora}
           options={operadoras.map((op) => ({ value: op.sigla, label: op.sigla }))}
         />
-        <Select label="Categoria" value={categoria} onChange={setCategoria} options={CATEGORIAS_DE_ENVIO} />
+        <Select label="Categoria" value={categoria} onChange={setCategoria} options={OPCOES_DE_CATEGORIA} />
         <label className="flex flex-col gap-1.5 text-xs font-medium text-slate-500 uppercase">
           Versão (opcional)
           <input
@@ -551,6 +536,7 @@ function EnvioDeTabela({
         <label className="flex flex-col gap-1.5 text-xs font-medium text-slate-500 uppercase">
           Início da vigência
           <input
+            ref={campoDoInicio}
             type="date"
             value={inicio}
             onChange={(e) => setInicio(e.target.value)}
