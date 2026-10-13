@@ -78,7 +78,7 @@ video: registrar-manifestacao-pelo-formulario
 
 
 def montar(raiz: Path) -> None:
-    """Um manual sem lacuna: os cinco módulos, e a Ouvidoria escrita inteira."""
+    """Um manual sem lacuna: os seis módulos, e a Ouvidoria escrita inteira."""
     conteudo = raiz / "src" / "content" / "docs"
     for modulo in inventario_manual.MODULOS:
         (conteudo / modulo).mkdir(parents=True)
@@ -212,7 +212,7 @@ def test_prd_nao_sai_dos_numeros_do_comentario(tmp_path):
     assert "#57" in lacunas[0]
 
 
-def test_pagina_fora_dos_cinco_modulos_nao_fecha_a_conta(tmp_path):
+def test_pagina_fora_dos_seis_modulos_nao_fecha_a_conta(tmp_path):
     """Sem módulo, não há terminal que feche a lacuna: a conta não fecha."""
     montar(tmp_path)
     solta = tmp_path / "src" / "content" / "docs" / "tecnologia"
@@ -250,17 +250,17 @@ def test_manual_com_lacunas_sai_com_codigo_0(tmp_path):
     resultado = rodar(tmp_path, entregues)
     assert resultado.returncode == 0, resultado.stderr
     assert "prd-sem-novidades" in resultado.stdout
-    assert "5 módulos" in resultado.stdout
+    assert "6 módulos" in resultado.stdout
 
 
-def test_pagina_fora_dos_cinco_modulos_sai_com_codigo_1(tmp_path):
+def test_pagina_fora_dos_seis_modulos_sai_com_codigo_1(tmp_path):
     montar(tmp_path)
     solta = tmp_path / "src" / "content" / "docs" / "tecnologia"
     solta.mkdir()
     (solta / "index.md").write_text(VISAO_GERAL, encoding="utf-8")
     resultado = rodar(tmp_path)
     assert resultado.returncode == 1
-    assert "fora dos cinco módulos" in resultado.stderr
+    assert "fora dos seis módulos" in resultado.stderr
 
 
 def test_manual_sem_pagina_nenhuma_sai_com_codigo_1(tmp_path):

@@ -14,7 +14,7 @@ módulo que já estão em produção. A skill monta esse arquivo do GitHub e do
 `docs/spec/deploy/history.json`; sem ele, dois dos quatro tipos de lacuna não
 são conferidos e o relatório diz isso.
 
-Sai com código 1 quando a conta não fecha: página fora dos cinco módulos, ou
+Sai com código 1 quando a conta não fecha: página fora dos seis módulos, ou
 nenhum módulo encontrado (inventário vazio é varredura que não rodou, não
 manual pronto).
 """
@@ -33,7 +33,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 from lint_manual import e_pagina_de_tarefa, ler_frontmatter  # noqa: E402
 
 # A ordem é a do menu do app (ADR 0057, decisão 1). A aba Tecnologia fica fora.
-MODULOS = ["primeiros-passos", "reunioes", "ouvidoria", "pops", "admin"]
+MODULOS = ["primeiros-passos", "reunioes", "ouvidoria", "pops", "contas-medicas", "admin"]
 
 RE_IMAGEM = re.compile(r"!\[[^\]]*\]\(([^)\s]+)")
 RE_NUMERO = re.compile(r"\d+")
@@ -243,7 +243,7 @@ def main() -> int:
         return 1
     if inventario.fora_de_balde:
         print(
-            "Inventário do Manual: página fora dos cinco módulos, sem terminal "
+            "Inventário do Manual: página fora dos seis módulos, sem terminal "
             "que a feche:\n"
             + "\n".join(f"  - {p}" for p in inventario.fora_de_balde)
             + f"\nOs módulos são {', '.join(MODULOS)} (ADR 0057, decisão 1).",

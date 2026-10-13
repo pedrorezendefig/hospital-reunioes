@@ -150,6 +150,14 @@ ROUTERS_DE_TESTE = {
         "router = APIRouter()\n@router.get('/x', dependencies=[Depends(deps.require_admin)])\ndef lista(): ...\n"
     ),
     "routers/health.py": "router = APIRouter()\n@router.get('/health')\ndef health(): ...\n",
+    # O gate guardado num nome do módulo (`_PODE = require_perfil(...)`), como
+    # nos routers de Contas médicas: o nome leva à fábrica, e a fábrica ao login.
+    "routers/apelido.py": (
+        "_PODE = require_perfil('a')\nrouter = APIRouter()\n@router.get('/x')\ndef lista(u=Depends(_PODE)): ...\n"
+    ),
+    "routers/apelido_aberto.py": (
+        "_ABRE = montar('a')\nrouter = APIRouter()\n@router.get('/x')\ndef aberta(u=Depends(_ABRE)): ...\n"
+    ),
 }
 
 
@@ -157,6 +165,7 @@ def test_a_varredura_segue_a_cadeia_de_depends():
     assert _sensivel().rotas_sem_login(ROUTERS_DE_TESTE) == {
         "routers/aberta.py": ["publica"],
         "routers/api_key.py": ["so_chave"],
+        "routers/apelido_aberto.py": ["aberta"],
         "routers/health.py": ["health"],
     }
 

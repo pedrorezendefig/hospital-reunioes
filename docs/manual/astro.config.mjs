@@ -13,6 +13,7 @@ const modulos = [
   { label: "Reuniões e metas", pasta: "reunioes" },
   { label: "Ouvidoria", pasta: "ouvidoria" },
   { label: "POPs", pasta: "pops" },
+  { label: "Contas médicas", pasta: "contas-medicas" },
   { label: "Admin", pasta: "admin" },
 ];
 
