@@ -27,6 +27,7 @@ from app.services.contas_medicas.guia import (
     nota_de_entrada,
     numeros_do_topo,
 )
+from app.services.contas_medicas.validacao import linhas_do_retorno
 
 router = APIRouter(prefix="/contas-medicas", tags=["contas-medicas"])
 
@@ -97,6 +98,8 @@ async def abrir_guia(
     operadora = _primeira(supabase, "cm_operadora", "id", atendimento.get("operadora_id")) or {}
     linhas = _linhas(supabase, conta["id"])
     concluida = conta.get("situacao") in CONCLUIDAS
+    # Em Retorno, a faturista vê só o que a Validação devolveu.
+    da_tela = linhas_do_retorno(supabase, linhas) if conta.get("situacao") == "RETORNO" else linhas
     return {
         "cabecalho": {
             "numero_atendimento": atendimento.get("numero_atendimento"),
@@ -111,7 +114,7 @@ async def abrir_guia(
             "faltantes": _faltantes(conta),
         },
         "numeros": numeros_do_topo(linhas, conta.get("total_lancado"), concluida=concluida),
-        "grupos": agrupar_por_dia_e_setor(linhas),
+        "grupos": agrupar_por_dia_e_setor(da_tela),
         # O botão "Reanalisar": a tela desenha pelo que vem aqui, e a rota decide.
         "pode_reanalisar": "regra_contratual_tabelas" in me["permissoes_cm"] and conta.get("situacao") in REANALISAVEIS,
     }

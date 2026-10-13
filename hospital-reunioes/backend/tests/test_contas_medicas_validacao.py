@@ -148,9 +148,17 @@ def _atendimento(n: int) -> dict[str, Any]:
     }
 
 
+def _conta_id(n: int) -> str:
+    """A rota do Guia pede UUID no caminho."""
+    return f"00000000-0000-4000-8000-00000000000{n}"
+
+
+C1, C2, C3 = _conta_id(1), _conta_id(2), _conta_id(3)
+
+
 def _conta(n: int, situacao: str) -> dict[str, Any]:
     return {
-        "id": f"c-{n}",
+        "id": _conta_id(n),
         "atendimento_id": f"at-{n}",
         "numero_conta": f"4880{n}",
         "situacao": situacao,
@@ -251,10 +259,28 @@ def _fila_de_validacao(banco: _Banco, quem: str = "gestao") -> dict:
     return resposta.json()
 
 
+def _decidir(banco: _Banco, tema_id: str, corpo: dict, quem: str = "gestao"):
+    return _cliente(banco, quem).post(f"/api/contas-medicas/validacao/temas/{tema_id}/decisao", json=corpo)
+
+
+def _linha(banco: _Banco, linha_id: str) -> dict:
+    return next(linha for linha in banco.tabelas["cm_guia_linha"] if linha["id"] == linha_id)
+
+
+def _guia(banco: _Banco, conta_id: str, quem: str = "faturista") -> dict:
+    resposta = _cliente(banco, quem).get(f"/api/contas-medicas/contas/{conta_id}/guia")
+    assert resposta.status_code == 200, resposta.text
+    return resposta.json()
+
+
+def _linhas_do_guia(guia: dict) -> list[dict]:
+    return [linha for grupo in guia["grupos"] for linha in grupo["linhas"]]
+
+
 def _validar_em_tres_contas(banco: _Banco) -> None:
-    _gravar(banco, "c-1", _linha_do_guia("VALIDAR", "70000010", 120.0, REGRA_PENDENTE))
-    _gravar(banco, "c-2", _linha_do_guia("VALIDAR", "70000010", 80.0, REGRA_PENDENTE))
-    _gravar(banco, "c-3", _linha_do_guia("VALIDAR", "70000010", 50.5, REGRA_PENDENTE))
+    _gravar(banco, C1, _linha_do_guia("VALIDAR", "70000010", 120.0, REGRA_PENDENTE))
+    _gravar(banco, C2, _linha_do_guia("VALIDAR", "70000010", 80.0, REGRA_PENDENTE))
+    _gravar(banco, C3, _linha_do_guia("VALIDAR", "70000010", 50.5, REGRA_PENDENTE))
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -277,3 +303,52 @@ class TestRegraPendente:
         assert tema["valor"] == 250.5
         assert tema["regra"]["texto"] == TEXTO_PENDENTE
         assert tema["desde"]
+
+    def test_validar_regra_torna_vigente_em_versao_nova_decide_as_tres_linhas_e_a_concluida_volta_em_retorno(self):
+        banco = _cenario()
+        _validar_em_tres_contas(banco)
+        # A conta concluída tem outra linha, já feita: ela não volta.
+        _gravar(
+            banco,
+            C3,
+            _linha_do_guia("VALIDAR", "70000010", 50.5, REGRA_PENDENTE),
+            _linha_do_guia("INCLUIR", "90030001", 45.0, REGRA_VIGENTE),
+        )
+        feita = next(linha for linha in banco.tabelas["cm_guia_linha"] if linha["codigo"] == "90030001")
+        feita["estado"] = "FEITO"
+        [tema] = _fila_de_validacao(banco)["temas"]
+
+        resposta = _decidir(banco, tema["id"], {"decisao": "VALIDAR_REGRA", "texto": TEXTO_PENDENTE})
+
+        assert resposta.status_code == 200, resposta.text
+        # A regra vigente, numa versão nova da memória.
+        vigente = next(v for v in banco.tabelas["cm_memoria_versao"] if v["vigente"])
+        assert vigente["versao"] == "1.1"
+        regra = next(
+            r
+            for r in banco.tabelas["cm_regra"]
+            if r["memoria_versao_id"] == vigente["id"] and r["codigo"] == REGRA_PENDENTE
+        )
+        assert (regra["status"], regra["validado_por"]) == ("VIGENTE", "G1")
+        # As três linhas Decidida, com a ação que a regra manda (incluir).
+        decididas = [linha for linha in banco.tabelas["cm_guia_linha"] if linha["codigo"] == "70000010"]
+        assert sorted(linha["conta_id"] for linha in decididas) == [C1, C2, C3]
+        assert {(linha["estado"], linha["acao"]) for linha in decididas} == {("DECIDIDA", "INCLUIR")}
+        # A decisão grava quem e quando, e o tema sai da fila.
+        gravado = next(t for t in banco.tabelas["cm_validacao_tema"] if t["id"] == tema["id"])
+        assert (gravado["estado"], gravado["decisao"], gravado["decidido_por"]) == ("DECIDIDO", "VALIDAR_REGRA", "G1")
+        assert gravado["decidido_em"]
+        assert _fila_de_validacao(banco)["temas"] == []
+        # Só a concluída vai para Retorno; as outras seguem com a faturista.
+        assert {c["id"]: c["situacao"] for c in banco.tabelas["cm_conta"]} == {
+            C1: "EM_CORRECAO",
+            C2: "A_FAZER",
+            C3: "RETORNO",
+        }
+        # A concluída aparece na fila da faturista, e o Guia dela traz só a linha decidida.
+        fila = _cliente(banco, "faturista").get("/api/contas-medicas/fila").json()
+        assert (C3, "RETORNO") in {(c["id"], c["situacao"]) for c in fila["fila"]}
+        linhas = _linhas_do_guia(_guia(banco, C3))
+        assert [(linha["codigo"], linha["acao"], linha["estado"]) for linha in linhas] == [
+            ("70000010", "INCLUIR", "DECIDIDA")
+        ]
