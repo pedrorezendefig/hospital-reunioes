@@ -378,13 +378,14 @@ def _pipeline(supabase, conta: dict, cronometro: _Cronometro) -> None:
         if memoria is None:
             raise _Falha(MENSAGEM_SEM_MEMORIA)
         busca_de_preco = _busca_de_preco(supabase, operadora_id)
+        dicionario = dicionario_do_banco(supabase)
         conferencia = conferir(
             lida,
             prontuario,
             _memoria_lida(memoria),
             busca_de_preco,
             setores={s["nome_mv"]: s["acomodacao"] for s in listar_setores(supabase) if s.get("acomodacao")},
-            dicionario=dicionario_do_banco(supabase),
+            dicionario=dicionario,
             pacote_do_tuss=lambda tuss, data: pacote_pelo_tuss(supabase, operadora_id, tuss, data),
         )
 
@@ -415,6 +416,7 @@ def _pipeline(supabase, conta: dict, cronometro: _Cronometro) -> None:
                 eventos=eventos,
                 conferencia=conferencia,
                 preco=busca_de_preco,
+                dicionario=dicionario,
             )
     except ErroDaIA:
         # A IA não respondeu nas três tentativas: o que o código achou fica no
@@ -446,7 +448,8 @@ def _pipeline(supabase, conta: dict, cronometro: _Cronometro) -> None:
             "valor_apontado": float(nota.apontado),
             "valor_em_validacao": float(nota.em_validacao),
             "parecer_parcial": bool(parecer),
-            "faltantes": {"itens": parecer, "tempos_por_etapa_s": tempos},
+            # A linha da IA que as conferências derrubaram fica registrada, com o motivo.
+            "faltantes": {"itens": parecer, "tempos_por_etapa_s": tempos, "descartadas_ia": list(da_ia.descartadas)},
             "memoria_versao_id": memoria["memoria_versao_id"],
             "pronta_em": datetime.now(UTC).isoformat(),
         },
