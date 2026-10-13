@@ -2,6 +2,49 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-10-13T16:13:38-03:00",
+      "sha": "aec58c765175d9349e46d44bec574731a6ddf083",
+      "app_version": "0.195.1",
+      "subject": "PR #1214, issue #1213: Envio acima de 10 MB cortado pelo proxy do Next (middlewareClientMaxBodySize e proxyTimeout)",
+      "raw_subject": "chore(deploy): registro do PR avulso (#1214)",
+      "scope": [
+        "frontend"
+      ],
+      "prds": [],
+      "result": "healthy",
+      "duration_seconds": 258,
+      "services_touched": [
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        },
+        {
+          "service": "frontend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "PR avulso: PR #1214, issue #1213. Merge pela API do GitHub, um build. Registro pela Action pos-merge depois do health.",
+      "etapas": {
+        "merge_s": 3,
+        "build_s": {
+          "frontend": 237
+        },
+        "health_s": 0
+      },
+      "responsavel": "pedrorezendefig"
+    },
+    {
       "at": "2026-10-13T14:17:03-03:00",
       "sha": "dd25ed4010c015e05ba9e9a3635318a1091f3ab6",
       "app_version": "0.195.0",
