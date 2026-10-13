@@ -93,6 +93,10 @@ def _insumo_do_lembrete(item: Mapping[str, Any], preco: BuscaDePreco, dia: date,
     }
 
 
+def _apagar_os_abertos(supabase, conta_id: str) -> None:
+    supabase.table("cm_lembrete").delete().eq("conta_id", conta_id).eq("estado", "ABERTO").execute()
+
+
 def lembrar_a_coordenacao(
     supabase,
     *,
@@ -107,13 +111,14 @@ def lembrar_a_coordenacao(
 ) -> int:
     """Os lembretes da conta, e quantos foram criados. O reprocesso troca os
     abertos e preserva os que a coordenadora já marcou: a mesma ocorrência
-    (cenário e dia) marcada não volta."""
+    (cenário e dia) marcada não volta. Os abertos só saem depois que a IA
+    respondeu: o Passo C que falha deixa os de antes como estavam."""
     existentes = supabase.table("cm_lembrete").select("*").eq("conta_id", conta_id).execute().data or []
     marcados = {(m["cenario_id"], m.get("data")) for m in existentes if m.get("estado") != "ABERTO"}
-    supabase.table("cm_lembrete").delete().eq("conta_id", conta_id).eq("estado", "ABERTO").execute()
 
     cenarios = _cenarios_ativos(supabase, operadora_id)
     if not cenarios:
+        _apagar_os_abertos(supabase, conta_id)
         return 0
     do_periodo = eventos_do_periodo(eventos, conta.periodo_inicio, conta.periodo_fim)
     resposta = ia.chamada_curta(
@@ -127,6 +132,7 @@ def lembrar_a_coordenacao(
         conta_id=conta_id,
         atendimento_id=atendimento_id,
     )
+    _apagar_os_abertos(supabase, conta_id)
 
     por_codigo = {c["codigo"].strip().upper(): c for c in cenarios}
     insumos = itens_dos_cenarios(supabase, [c["id"] for c in cenarios])

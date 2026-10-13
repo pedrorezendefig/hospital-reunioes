@@ -452,17 +452,6 @@ def _pipeline(supabase, conta: dict, cronometro: _Cronometro) -> None:
         )
         nota = nota_de_entrada(linhas, lida.total)
 
-    _lembrar_a_coordenacao(
-        supabase,
-        conta,
-        operadora_id=operadora_id,
-        lida=lida,
-        prontuario=prontuario,
-        eventos=eventos,
-        preco=busca_de_preco,
-        coluna=conferencia.coluna,
-    )
-
     # A 116 não tem coluna para o tempo das etapas, e o PRD tem migration única:
     # ele vai em `faltantes`, ao lado dos itens que o prontuário não trouxe.
     # O parecer junta o que a leitura por código não teve e o que a IA apontou.
@@ -487,6 +476,18 @@ def _pipeline(supabase, conta: dict, cronometro: _Cronometro) -> None:
         },
     )
     logger.info("[ContasMedicas] Conta %s pronta em %ss", conta["id"], tempos["total"])
+    # Depois da conta pronta: o Passo C não atrasa o A fazer da faturista nem
+    # entra no tempo das etapas, e a demora dele não conta no prazo da análise.
+    _lembrar_a_coordenacao(
+        supabase,
+        conta,
+        operadora_id=operadora_id,
+        lida=lida,
+        prontuario=prontuario,
+        eventos=eventos,
+        preco=busca_de_preco,
+        coluna=conferencia.coluna,
+    )
 
 
 def _lembrar_a_coordenacao(

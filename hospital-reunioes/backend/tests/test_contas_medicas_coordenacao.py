@@ -48,7 +48,7 @@ from app.routers import contas_medicas_envio as envio_router
 from app.routers import contas_medicas_guia as guia_router
 from app.routers import contas_medicas_painel as painel_router
 from app.services.contas_medicas import envio as envio_service
-from app.services.contas_medicas import ia, processamento
+from app.services.contas_medicas import ia, passo_c, processamento
 
 ROTA = "/api/contas-medicas/coordenacao"
 
@@ -403,6 +403,40 @@ class TestPassoC:
 
         assert conta["situacao"] == "A_FAZER"
         assert banco.tabelas.get("cm_lembrete", []) == []
+
+    def test_reprocesso_com_a_ia_fora_do_ar_no_passo_c_mantem_os_lembretes_abertos(self, openrouter):
+        banco = _banco_com_cenarios()
+        conta = _analisar(banco, openrouter, _ocorrencia("CEN-001"))
+        (lembrete,) = banco.tabelas["cm_lembrete"]
+        openrouter.fora_do_formato_em = {PASSO_C}
+
+        resposta = _cliente(banco, "gestao").post(f"/api/contas-medicas/contas/{conta['id']}/reanalisar")
+        assert resposta.status_code == 200, resposta.text
+        _rodar_o_job(banco)
+
+        assert banco.conta(conta["id"])["situacao"] == "A_FAZER"
+        assert [(lb["id"], lb["estado"]) for lb in banco.tabelas["cm_lembrete"]] == [(lembrete["id"], "ABERTO")]
+
+    def test_a_conta_fica_a_fazer_antes_do_passo_c_e_o_tempo_dele_fica_fora_do_total(self, openrouter, monkeypatch):
+        """O Passo C lento não atrasa a faturista nem entra no tempo da conta dela."""
+        banco = _banco_com_cenarios()
+        relogio = [0.0]
+        monkeypatch.setattr(processamento, "perf_counter", lambda: relogio[0])
+        original = passo_c.lembrar_a_coordenacao
+        situacao_no_passo_c = []
+
+        def _passo_c_lento(supabase, **kwargs):
+            situacao_no_passo_c.append(banco.conta(kwargs["conta_id"])["situacao"])
+            relogio[0] += 600
+            return original(supabase, **kwargs)
+
+        monkeypatch.setattr(passo_c, "lembrar_a_coordenacao", _passo_c_lento)
+
+        conta = _analisar(banco, openrouter, _ocorrencia("CEN-001"))
+
+        assert situacao_no_passo_c == ["A_FAZER"]
+        assert conta["faltantes"]["tempos_por_etapa_s"]["total"] == 0
+        assert len(banco.tabelas["cm_lembrete"]) == 1
 
 
 # ═══════════════════════════════════════════════════════════════════════════
