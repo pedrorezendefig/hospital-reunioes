@@ -301,3 +301,36 @@ class TestOsCartoesDoTopo:
     def test_taxa_de_nao_procede_sobre_as_linhas_apontadas_sem_validar(self):
         """2 Linhas Não procede (L04 e L10) de 10 sem Validar."""
         assert _painel()["nao_procede"] == {"linhas": 2, "de": 10, "taxa": 0.2}
+
+
+class TestOsBlocos:
+    def test_nota_media_por_semana_nas_oito_semanas_ate_a_escolhida(self):
+        serie = _painel()["nota_por_semana"]
+
+        assert [ponto["semana"] for ponto in serie] == [
+            "2026-08-17",
+            "2026-08-24",
+            "2026-08-31",
+            "2026-09-07",
+            "2026-09-14",
+            "2026-09-21",
+            "2026-09-28",
+            "2026-10-05",
+        ]
+        assert serie[0] == {"semana": "2026-08-17", "nota_media": None, "contas": 0}
+        assert serie[-2:] == [
+            {"semana": "2026-09-28", "nota_media": 72.0, "contas": 2},
+            {"semana": "2026-10-05", "nota_media": 70.0, "contas": 3},
+        ]
+
+    def test_valor_apontado_por_causa_raiz_com_percentual(self):
+        """Dispensação 100 + 40 + 60; Regra automática 50; Cadastro e preço 15
+        (a Seringa é Não conferido); Registro assistencial 0 (a Fita é Não
+        procede); Lançamento manual 30 + 20. Total 315."""
+        assert _painel()["causa_raiz"] == [
+            {"causa": "DISPENSACAO", "valor": 200.0, "percentual": 63.5},
+            {"causa": "REGRA_AUTOMATICA", "valor": 50.0, "percentual": 15.9},
+            {"causa": "CADASTRO_PRECO", "valor": 15.0, "percentual": 4.8},
+            {"causa": "REGISTRO_ASSISTENCIAL", "valor": 0.0, "percentual": 0.0},
+            {"causa": "LANCAMENTO_MANUAL", "valor": 50.0, "percentual": 15.9},
+        ]

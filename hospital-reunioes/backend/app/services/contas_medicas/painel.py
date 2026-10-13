@@ -11,7 +11,7 @@ from __future__ import annotations
 from collections import defaultdict
 from collections.abc import Iterable
 from datetime import date, datetime, time, timedelta
-from decimal import Decimal
+from decimal import ROUND_HALF_UP, Decimal
 from typing import Any
 from zoneinfo import ZoneInfo
 
@@ -28,6 +28,9 @@ SEMANAS_NA_SERIE = 8
 # As situações de quem foi concluída. Retorno também: foi concluída e a
 # Validação devolveu uma Linha.
 CONCLUIDAS = ("CONCLUIDA", "CONCLUIDA_COM_PENDENCIA", "RETORNO")
+
+# A ordem da spec do diretor (item 15.2).
+CAUSAS = ("DISPENSACAO", "REGRA_AUTOMATICA", "CADASTRO_PRECO", "REGISTRO_ASSISTENCIAL", "LANCAMENTO_MANUAL")
 
 _CAMPOS_DA_CONTA = "id, atendimento_id, faturista_id, situacao, nota_entrada, concluida_em, custo_usd"
 _CAMPOS_DA_LINHA = "id, conta_id, acao, codigo, descricao, valor_diferenca, preco_tabela, estado, causa_raiz, nivel_evidencia"
@@ -102,6 +105,22 @@ def _nao_procede(linhas: list[dict]) -> dict[str, Any]:
     return {"linhas": nao, "de": len(de), "taxa": round(nao / len(de), 4) if de else None}
 
 
+def _percentual(parte: Decimal, total: Decimal) -> float:
+    if not total:
+        return 0.0
+    return float((parte * 100 / total).quantize(Decimal("0.1"), rounding=ROUND_HALF_UP))
+
+
+def _por_causa_raiz(linhas: list[dict]) -> list[dict[str, Any]]:
+    """O R$ apontado de cada causa-raiz, com o percentual do total."""
+    soma = dict.fromkeys(CAUSAS, Decimal(0))
+    for linha in linhas:
+        if _apontada(linha) and linha.get("causa_raiz") in soma:
+            soma[linha["causa_raiz"]] += abs(_valor(linha))
+    total = sum(soma.values(), Decimal(0))
+    return [{"causa": c, "valor": _dinheiro(v), "percentual": _percentual(v, total)} for c, v in soma.items()]
+
+
 def _nota_media(contas: list[dict]) -> float | None:
     notas = [float(c["nota_entrada"]) for c in contas if c.get("nota_entrada") is not None]
     return round(sum(notas) / len(notas), 1) if notas else None
@@ -123,6 +142,7 @@ def montar_painel(supabase, *, semana: date) -> dict[str, Any]:
     ):
         linhas_por_conta[linha["conta_id"]].append(linha)
     linhas_da_semana = [linha for conta in da_semana for linha in linhas_por_conta[conta["id"]]]
+    semanas = [primeira + timedelta(weeks=i) for i in range(SEMANAS_NA_SERIE)]
 
     return {
         "semana": {"inicio": segunda.isoformat(), "fim": (segunda + timedelta(days=6)).isoformat()},
@@ -136,4 +156,9 @@ def montar_painel(supabase, *, semana: date) -> dict[str, Any]:
             "ja_incluido": _dinheiro(sum((_incluido(linha) for linha in linhas_da_semana), Decimal(0))),
         },
         "nao_procede": _nao_procede(linhas_da_semana),
+        "nota_por_semana": [
+            {"semana": s.isoformat(), "nota_media": _nota_media(por_semana[s]), "contas": len(por_semana[s])}
+            for s in semanas
+        ],
+        "causa_raiz": _por_causa_raiz(linhas_da_semana),
     }
