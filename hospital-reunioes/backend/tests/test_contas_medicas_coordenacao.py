@@ -542,4 +542,76 @@ class TestCartaoDoPainel:
         assert com_o_cartao == sem_lembrete
 
 
+# ═══════════════════════════════════════════════════════════════════════════
+# 7. O texto do Produto no Kit de conhecimento
+# ═══════════════════════════════════════════════════════════════════════════
+
 KIT = Path(__file__).resolve().parents[1] / "app" / "conhecimento" / "contas-medicas.md"
+
+
+class TestTextoDoProduto:
+    """A sanidade geral (piso, seções, sem rota nem tabela) mora em
+    `test_kit_conhecimento.py`; aqui, o que ESTE texto diz da coordenação."""
+
+    def _secao(self) -> str:
+        return KIT.read_text(encoding="utf-8").split("## A Conferência da coordenação")[1].split("\n## ")[0]
+
+    def test_diz_o_que_e_a_conferencia_da_coordenacao(self):
+        secao = self._secao()
+
+        for termo in (
+            "segunda checagem",
+            "cenário",
+            "lembrete",
+            "insumos",
+            "Incluído",
+            "Não se aplica",
+            "conferir evidência",
+            "R$ incluído pela coordenação",
+        ):
+            assert termo in secao, termo
+
+    def test_diz_quem_ve_e_que_a_faturista_nao_ve(self):
+        secao = self._secao()
+
+        for termo in (
+            "coordenadora",
+            "gestão de contas médicas",
+            "duas diretorias",
+            "incluir regra operacional",
+            "A faturista não vê",
+            "não mudam",
+        ):
+            assert termo in secao, termo
+        no_ar = KIT.read_text(encoding="utf-8").split("## O que já está no ar")[1].split("\n## ")[0]
+        assert "tela Coordenação" in no_ar
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 8. Sem travessão nem meia-risca
+# ═══════════════════════════════════════════════════════════════════════════
+
+APP = Path(__file__).resolve().parents[1] / "app"
+ARQUIVOS_DA_FATIA = [
+    APP / "prompts" / "contas_medicas_cenario.md",
+    APP / "prompts" / "contas_medicas_passo_c.md",
+    APP / "services" / "contas_medicas" / "coordenacao.py",
+    APP / "services" / "contas_medicas" / "passo_c.py",
+    APP / "routers" / "contas_medicas_coordenacao.py",
+]
+
+
+@pytest.mark.parametrize("arquivo", ARQUIVOS_DA_FATIA, ids=lambda caminho: caminho.name)
+def test_sem_travessao_nem_meia_risca_nos_arquivos(arquivo):
+    texto = arquivo.read_text(encoding="utf-8")
+    assert chr(0x2014) not in texto and chr(0x2013) not in texto
+
+
+def test_o_texto_que_a_ia_escreveu_no_lembrete_sai_sem_travessao_nem_meia_risca(openrouter):
+    banco = _banco_com_cenarios()
+    setor = f"CTI ADULTO {chr(0x2014)} LEITO 4"
+
+    _analisar(banco, openrouter, {**_ocorrencia("CEN-001"), "setor": setor})
+
+    (lembrete,) = _lembretes_por_cenario(_conferencia(banco)).values()
+    assert chr(0x2014) not in lembrete["setor"] and lembrete["setor"].startswith("CTI ADULTO")
