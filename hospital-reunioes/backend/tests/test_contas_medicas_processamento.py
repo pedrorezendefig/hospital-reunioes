@@ -1003,3 +1003,30 @@ class TestAvisoNoSino:
             "1 conta pronta",
             "O guia está na fila de Contas médicas. 1 conta com erro.",
         )
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 8. O tempo de cada etapa
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+class TestTempoDasEtapas:
+    def test_o_tempo_de_cada_etapa_fica_gravado_na_conta(self):
+        banco = _cenario()
+        _enviar(banco, _conta(), _prontuario())
+
+        _rodar_o_job(banco)
+
+        (conta,) = banco.tabelas["cm_conta"]
+        tempos = conta["faltantes"]["tempos_por_etapa_s"]
+        assert set(tempos) == {
+            "texto_da_conta",
+            "leitura_da_conta",
+            "texto_do_prontuario",
+            "leitura_do_prontuario",
+            "conferencia",
+            "gravacao",
+            "total",
+        }
+        assert all(isinstance(segundos, float) and segundos >= 0 for segundos in tempos.values())
+        assert tempos["total"] >= max(segundos for etapa, segundos in tempos.items() if etapa != "total")

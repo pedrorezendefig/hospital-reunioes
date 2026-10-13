@@ -372,24 +372,27 @@ def _pipeline(supabase, conta: dict, cronometro: _Cronometro) -> None:
     with cronometro.etapa_("gravacao"):
         linhas = _gravar_guia(supabase, conta["id"], conferencia)
         nota = nota_de_entrada(linhas, lida.total)
-        tempos = {**cronometro.tempos, "total": cronometro.total()}
-        _fechar_tentativa(
-            supabase,
-            conta,
-            {
-                "situacao": "A_FAZER",
-                "erro_motivo": None,
-                "total_lancado": float(lida.total),
-                "nota_bruta": nota.nota,
-                "nota_entrada": nota.nota,
-                "valor_apontado": float(nota.apontado),
-                "valor_em_validacao": float(nota.em_validacao),
-                "parecer_parcial": bool(estrutura.parecer_parcial),
-                "faltantes": {"itens": list(estrutura.parecer_parcial), "tempos_por_etapa_s": tempos},
-                "memoria_versao_id": memoria["memoria_versao_id"],
-                "pronta_em": datetime.now(UTC).isoformat(),
-            },
-        )
+
+    # A 116 não tem coluna para o tempo das etapas, e o PRD tem migration única:
+    # ele vai em `faltantes`, ao lado dos itens que o prontuário não trouxe.
+    tempos = {**cronometro.tempos, "total": cronometro.total()}
+    _fechar_tentativa(
+        supabase,
+        conta,
+        {
+            "situacao": "A_FAZER",
+            "erro_motivo": None,
+            "total_lancado": float(lida.total),
+            "nota_bruta": nota.nota,
+            "nota_entrada": nota.nota,
+            "valor_apontado": float(nota.apontado),
+            "valor_em_validacao": float(nota.em_validacao),
+            "parecer_parcial": bool(estrutura.parecer_parcial),
+            "faltantes": {"itens": list(estrutura.parecer_parcial), "tempos_por_etapa_s": tempos},
+            "memoria_versao_id": memoria["memoria_versao_id"],
+            "pronta_em": datetime.now(UTC).isoformat(),
+        },
+    )
     logger.info("[ContasMedicas] Conta %s pronta em %ss", conta["id"], tempos["total"])
 
 
