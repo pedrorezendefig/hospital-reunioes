@@ -24,6 +24,7 @@ from fastapi.testclient import TestClient
 from test_contas_medicas_operadoras import (
     GESTAO,
     _Banco,
+    _com_coluna_modelo,
     _com_operadoras,
     _matriz_da_migration,
     _memoria,
@@ -73,8 +74,10 @@ def _cliente(
     return TestClient(app), banco
 
 
-def _importar(cliente: TestClient, nome: str = "MEMORIA-ALFA-v1.0.md") -> None:
-    resposta = cliente.post(ROTA_MEMORIA, files={"arquivo": (nome, _memoria(nome).encode("utf-8"), "text/markdown")})
+def _importar(cliente: TestClient, nome: str = "MEMORIA-ALFA-v1.0.md", texto: str | None = None) -> None:
+    """Envia a fixture `nome`, ou `texto` com esse nome de arquivo."""
+    texto = _memoria(nome) if texto is None else texto
+    resposta = cliente.post(ROTA_MEMORIA, files={"arquivo": (nome, texto.encode("utf-8"), "text/markdown")})
     assert resposta.status_code == 201, resposta.text
 
 
@@ -258,7 +261,7 @@ PRI_01_NOVA = "Identificar sempre pelo número do atendimento e pela data de ent
 
 
 def _com_modelo(banco: _Banco, codigo: str, modelo_id: str) -> None:
-    """A regra que veio do Modelo HSM: a carga ainda não lê `modelo_id` do arquivo."""
+    """A regra que veio do Modelo HSM, marcada direto no banco."""
     for regra in banco.linhas("cm_regra"):
         if regra["codigo"] == codigo:
             regra["modelo_id"] = modelo_id
@@ -304,6 +307,40 @@ class TestAplicarATodas:
 
         assert resposta.json()["outras_operadoras"] == []
         assert _versoes(banco, "GAMA") == {"2.0": True}
+
+    def test_o_modelo_id_que_a_carga_grava_liga_a_edicao_as_irmas_com_versao_e_historico(self):
+        """Issue #1205: sem `_com_modelo`, o `modelo_id` vem só da coluna Modelo
+        dos arquivos (a ALFA com a coluna acrescentada, a GAMA já com ela)."""
+        cliente, banco = _cliente(GESTAO)
+        alfa = _com_coluna_modelo(_memoria("MEMORIA-ALFA-v1.0.md"), {"ALFA-PRI-01": "HSM-PRI-01"})
+        _importar(cliente, texto=alfa)
+        _importar(cliente, "MEMORIA-GAMA-v2.0.md")
+
+        resposta = cliente.put(
+            _regra("ALFA", "ALFA-PRI-01"),
+            json={"texto": PRI_01_NOVA, "tipo": "OPERACIONAL", "origem": "PRÁTICA", "aplicar_a_todas": True},
+        )
+
+        assert resposta.status_code == 200, resposta.text
+        assert resposta.json()["outras_operadoras"] == [{"operadora": "GAMA", "versao": "2.1"}]
+        assert _versoes(banco, "ALFA") == {"1.0": False, "1.1": True}
+        assert _versoes(banco, "GAMA") == {"2.0": False, "2.1": True}
+        historico = {
+            next(r["codigo"] for r in banco.linhas("cm_regra") if r["id"] == h["regra_id"]): h["texto_novo"]
+            for h in banco.linhas("cm_regra_historico")
+        }
+        assert historico == {"ALFA-PRI-01": PRI_01_NOVA, "GAMA-PRI-01": PRI_01_NOVA}
+
+    def test_a_tela_recebe_o_modelo_id_da_carga_e_null_na_regra_sem_modelo(self):
+        """A tela mostra "Aplicar a todas" só quando a regra tem `modelo_id`."""
+        cliente, _ = _cliente(GESTAO)
+        _importar(cliente, "MEMORIA-GAMA-v2.0.md")
+
+        regras = {r["codigo"]: r for r in cliente.get("/api/contas-medicas/operadoras/GAMA").json()["regras"]}
+
+        assert regras["GAMA-PRI-01"]["modelo_id"] == "HSM-PRI-01"
+        assert regras["GAMA-PRI-02"]["modelo_id"] is None
+        assert regras["GAMA-DIA-01"]["modelo_id"] is None
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -374,6 +411,19 @@ class TestExportarEReimportar:
         assert exportada.status_code == 200
         assert exportada.text.startswith("---\noperadora: ALFA\nnome: Alfa Saúde\nversao_memoria: '1.0'\n")
         assert "\n## 3. DIÁRIAS\n" in exportada.text
+
+    def test_exportar_traz_a_coluna_modelo_e_a_ida_e_volta_devolve_o_mesmo_modelo_id(self):
+        cliente, banco = _cliente(GESTAO)
+        texto = _com_coluna_modelo(_memoria("MEMORIA-ALFA-v1.0.md"), {"ALFA-PRI-01": "HSM-PRI-01"})
+        _importar(cliente, texto=texto)
+
+        exportada = cliente.get("/api/contas-medicas/operadoras/ALFA/memoria").text
+
+        assert "| ID | Regra | Tipo | Origem | Status | Data | Modelo |" in exportada
+        assert "| 23/09/2026 | HSM-PRI-01 |" in exportada
+        de_volta = {r.codigo: r.modelo_id for r in ler_memoria(exportada).regras}
+        assert de_volta["ALFA-PRI-01"] == "HSM-PRI-01"
+        assert de_volta["ALFA-PRI-02"] is None
 
 
 # ═══════════════════════════════════════════════════════════════════════════

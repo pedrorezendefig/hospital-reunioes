@@ -12,8 +12,11 @@ chaves que o código usa e preserva o resto.
 
 Toda tabela cuja primeira coluna é `ID` vira regra, fora as das seções
 "Pendentes (resumo)" e "Histórico", que repetem ou contam o que já está nas
-outras. Coluna além de ID, Regra, Tipo, Origem, Status e Data entra no texto
-da regra como "Coluna: valor", uma por linha.
+outras. A coluna Modelo, quando existe, dá o ID da diretriz do Modelo HSM
+de onde a regra veio (`HSM-PRI-01`, issue #1205): é o `modelo_id` que liga as
+cópias da mesma diretriz entre as operadoras. Coluna além de ID, Regra, Tipo,
+Origem, Status, Data e Modelo entra no texto da regra como "Coluna: valor",
+uma por linha.
 """
 
 from __future__ import annotations
@@ -46,7 +49,7 @@ _SECOES_IGNORADAS = frozenset({"PENDENTES (RESUMO)", "PENDENTES", "HISTORICO"})
 _TIPOS = frozenset({"CONTRATUAL", "OPERACIONAL"})
 
 # As colunas da tabela de regra que têm campo próprio; o resto vai para o texto.
-_COLUNAS_PROPRIAS = frozenset({"ID", "REGRA", "TIPO", "ORIGEM", "STATUS", "DATA"})
+_COLUNAS_PROPRIAS = frozenset({"ID", "REGRA", "TIPO", "ORIGEM", "STATUS", "DATA", "MODELO"})
 
 # O que o código lê do cabeçalho, e o valor quando a memória não traz a chave.
 # `transicao` cai nas diretrizes gerais HSM, que valem para toda operadora
@@ -96,6 +99,7 @@ class RegraLida:
     origem: str | None
     status: str
     validado_em: str | None
+    modelo_id: str | None = None
 
 
 @dataclass(frozen=True)
@@ -173,6 +177,7 @@ def _regra(cabecalho: list[str], celulas: list[str]) -> RegraLida | None:
     if not texto:
         return None
     tipo = proprias.get("TIPO", "").upper()
+    modelo_id = proprias.get("MODELO", "").strip()
     return RegraLida(
         codigo=codigo,
         secao=_secao(codigo),
@@ -181,6 +186,8 @@ def _regra(cabecalho: list[str], celulas: list[str]) -> RegraLida | None:
         origem=proprias.get("ORIGEM") or None,
         status="VIGENTE" if proprias.get("STATUS", "").upper() == "VIGENTE" else "PENDENTE",
         validado_em=_data(proprias.get("DATA", "")),
+        # Célula vazia ou só um traço: a regra é da operadora, não do modelo.
+        modelo_id=modelo_id if re.search(r"[A-Za-z0-9]", modelo_id) else None,
     )
 
 

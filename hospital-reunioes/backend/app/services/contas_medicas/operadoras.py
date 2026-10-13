@@ -91,6 +91,7 @@ def importar_memoria(supabase, memoria: MemoriaLida, texto_md: str, autor_id: st
                     "origem": r.origem,
                     "status": r.status,
                     "validado_em": r.validado_em,
+                    "modelo_id": r.modelo_id,
                 }
                 for r in memoria.regras
             ]

@@ -2,7 +2,7 @@
 title: Carregar a memória e as tabelas de uma operadora
 description: Subir o arquivo de memória e as tabelas de preço de um convênio, sem depender da equipe de tecnologia.
 prd: [1113, 1129]
-draft: false
+draft: true
 papel: [Gestão de contas médicas, Diretoria]
 sidebar:
   order: 6
@@ -22,7 +22,10 @@ mudar uma regra só, não precisa subir o arquivo: veja
    ![Tela Contas médicas com o botão Operadoras](../../../assets/contas-medicas/contas-operadoras.png)
 
 2. Em **Enviar memória**, escolha o **Arquivo de memória** da operadora e
-   clique em **Enviar memória**. A versão nova aposenta a anterior.
+   clique em **Enviar memória**. A versão nova aposenta a anterior. A regra
+   que veio do Modelo HSM leva na coluna **Modelo** o ID da diretriz (por
+   exemplo, HSM-PRI-01): é ela que faz a tela oferecer **Aplicar a todas as
+   operadoras que têm esta regra** quando alguém edita a regra.
 3. Confira o quadro verde: a versão lida e quantas regras estão vigentes e
    pendentes.
 

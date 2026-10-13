@@ -21,19 +21,19 @@ transicao:
 
 ## 1. PRINCÍPIOS
 
-| ID | Regra | Tipo | Origem | Status | Data |
-|---|---|---|---|---|---|
-| GAMA-PRI-01 | Identificar sempre pelo número do atendimento, nunca pelo número da conta. | OPERACIONAL | PRÁTICA | VIGENTE | 23/09/2026 |
-| GAMA-PRI-02 | Escopo: itens e divergência de valor \| sem prazo nem elegibilidade. | OPERACIONAL | PRÁTICA | PENDENTE |  |
+| ID | Regra | Tipo | Origem | Status | Data | Modelo |
+|---|---|---|---|---|---|---|
+| GAMA-PRI-01 | Identificar sempre pelo número do atendimento, nunca pelo número da conta. | OPERACIONAL | PRÁTICA | VIGENTE | 23/09/2026 | HSM-PRI-01 |
+| GAMA-PRI-02 | Escopo: itens e divergência de valor \| sem prazo nem elegibilidade. | OPERACIONAL | PRÁTICA | PENDENTE |  |  |
 
 ## 3. DIÁRIAS
 
-| ID | Regra | Tipo | Origem | Status | Data |
-|---|---|---|---|---|---|
-| GAMA-DIA-01 | A diária vence às 10h e é sempre integral. | CONTRATUAL | CONTRATO | VIGENTE | 06/10/2026 |
+| ID | Regra | Tipo | Origem | Status | Data | Modelo |
+|---|---|---|---|---|---|---|
+| GAMA-DIA-01 | A diária vence às 10h e é sempre integral. | CONTRATUAL | CONTRATO | VIGENTE | 06/10/2026 |  |
 
 ## 8. QUANTIDADES E INSUMOS POR TEMPO
 
-| ID | Regra | Tipo | Origem | Status | Data |
-|---|---|---|---|---|---|
-| GAMA-INS-01 | Gatilho (terapia registrada): ventilação mecânica<br>Insumo: filtro HME<br>Quantidade: 1 a cada 24 h |  | PROTOCOLO | PENDENTE |  |
+| ID | Regra | Tipo | Origem | Status | Data | Modelo |
+|---|---|---|---|---|---|---|
+| GAMA-INS-01 | Gatilho (terapia registrada): ventilação mecânica<br>Insumo: filtro HME<br>Quantidade: 1 a cada 24 h |  | PROTOCOLO | PENDENTE |  |  |
