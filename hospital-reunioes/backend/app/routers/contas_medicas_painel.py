@@ -11,6 +11,8 @@ o arquivo das outras telas.
 from __future__ import annotations
 
 from datetime import date
+from typing import Literal
+from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query, Request
 
@@ -26,8 +28,13 @@ router = APIRouter(prefix="/contas-medicas", tags=["contas-medicas"])
 async def painel(
     request: Request,
     semana: date = Query(...),
+    operadora_id: UUID | None = Query(default=None),
+    tipo: Literal["parcial", "unica"] | None = Query(default=None),
     me: dict = Depends(require_permissao_cm()),
     supabase=Depends(get_supabase_client),
 ) -> dict:
-    """Os agregados da semana escolhida (qualquer dia dela)."""
-    return montar_painel(supabase, semana=semana)
+    """Os agregados da semana escolhida (qualquer dia dela), da operadora e do
+    tipo de conta, quando vierem."""
+    return montar_painel(
+        supabase, semana=semana, operadora_id=str(operadora_id) if operadora_id else None, tipo=tipo
+    )

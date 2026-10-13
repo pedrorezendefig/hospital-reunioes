@@ -86,6 +86,30 @@ def _em_lotes(supabase, tabela: str, campos: str, coluna: str, ids: Iterable[str
     return linhas
 
 
+def _filtrar(supabase, contas: list[dict], operadora_id: str | None, tipo: str | None) -> list[dict]:
+    """Recorta as Contas pela operadora do atendimento e pelo tipo de conta:
+    Parcial quando o atendimento tem mais de uma conta, Única quando tem uma."""
+    if operadora_id:
+        atendimentos = _em_lotes(
+            supabase, "cm_atendimento", "id, operadora_id", "id", (c["atendimento_id"] for c in contas), "atendimentos"
+        )
+        da_operadora = {a["id"] for a in atendimentos if a.get("operadora_id") == operadora_id}
+        contas = [c for c in contas if c["atendimento_id"] in da_operadora]
+    if tipo:
+        irmas = _em_lotes(
+            supabase, "cm_conta", "id, atendimento_id", "atendimento_id", (c["atendimento_id"] for c in contas), "parciais"
+        )
+        quantas: dict[str, int] = defaultdict(int)
+        for conta in irmas:
+            quantas[conta["atendimento_id"]] += 1
+        contas = [c for c in contas if (quantas[c["atendimento_id"]] > 1) == (tipo == "parcial")]
+    return contas
+
+
+def _operadoras(supabase) -> list[dict[str, Any]]:
+    return supabase.table("cm_operadora").select("id, sigla, nome").order("sigla").execute().data or []
+
+
 def _valor(linha: dict) -> Decimal:
     return Decimal(str(linha.get("valor_diferenca") or 0))
 
@@ -198,10 +222,12 @@ def _nota_media(contas: list[dict]) -> float | None:
     return round(sum(notas) / len(notas), 1) if notas else None
 
 
-def montar_painel(supabase, *, semana: date) -> dict[str, Any]:
+def montar_painel(
+    supabase, *, semana: date, operadora_id: str | None = None, tipo: str | None = None
+) -> dict[str, Any]:
     segunda = segunda_da_semana(semana)
     primeira = segunda - timedelta(weeks=SEMANAS_NA_SERIE - 1)
-    contas = _contas_concluidas(supabase, primeira, segunda + timedelta(weeks=1))
+    contas = _filtrar(supabase, _contas_concluidas(supabase, primeira, segunda + timedelta(weeks=1)), operadora_id, tipo)
 
     por_semana: dict[date, list[dict]] = defaultdict(list)
     for conta in contas:
@@ -218,6 +244,7 @@ def montar_painel(supabase, *, semana: date) -> dict[str, Any]:
 
     return {
         "semana": {"inicio": segunda.isoformat(), "fim": (segunda + timedelta(days=6)).isoformat()},
+        "filtros": {"operadoras": _operadoras(supabase)},
         "nota_media": {
             "semana": _nota_media(da_semana),
             "anterior": _nota_media(por_semana[segunda - timedelta(weeks=1)]),

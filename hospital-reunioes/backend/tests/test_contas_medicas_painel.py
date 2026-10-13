@@ -405,3 +405,68 @@ class TestOsBlocos:
     def test_custo_de_ia_do_periodo_e_medio_por_conta(self):
         """0,40 + 0,20 + 0,60 dólares em 3 contas."""
         assert _painel()["custo_ia"] == {"total_usd": 1.2, "medio_por_conta_usd": 0.4, "contas": 3}
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 2. Os filtros mudam os números
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+class TestOsFiltros:
+    def test_filtro_por_operadora(self):
+        """Só ASSIM: C1 e C3 na semana, C5 na anterior."""
+        painel = _painel(operadora_id=ASSIM)
+
+        assert painel["nota_media"] == {"semana": 75.0, "anterior": 94.0}
+        assert painel["contas_concluidas"] == {"total": 2}
+        assert painel["valor_apontado"] == {"total": 240.0, "ja_incluido": 190.0}
+        assert painel["nao_procede"] == {"linhas": 2, "de": 7, "taxa": 0.2857}
+        assert [(i["codigo"], i["contas"], i["valor"]) for i in painel["itens_que_faltam"]] == [
+            ("M100", 2, 150.0),
+            ("M200", 1, 40.0),
+        ]
+        assert [(p["nome"], p["contas"], p["valor_incluido"]) for p in painel["producao"]] == [
+            ("Ana Faturista", 1, 140.0),
+            ("Bia Faturista", 1, 50.0),
+        ]
+        assert painel["nivel_evidencia"][-1] == {
+            "semana": SEMANA,
+            "REGISTRADO": 100.0,
+            "PRESCRITO": 40.0,
+            "PRESCRITO_SN": 0.0,
+            "POR_REGRA": 50.0,
+        }
+        assert painel["custo_ia"] == {"total_usd": 1.0, "medio_por_conta_usd": 0.5, "contas": 2}
+
+    def test_filtro_por_semana(self):
+        """A semana anterior: C4 e C5."""
+        painel = _painel(semana=SEMANA_ANTERIOR)
+
+        assert painel["semana"] == {"inicio": "2026-09-28", "fim": "2026-10-04"}
+        assert painel["nota_media"] == {"semana": 72.0, "anterior": None}
+        assert painel["contas_concluidas"] == {"total": 2}
+        assert painel["valor_apontado"] == {"total": 100.0, "ja_incluido": 100.0}
+        assert [(p["nome"], p["contas"], p["valor_incluido"]) for p in painel["producao"]] == [
+            ("Ana Faturista", 1, 30.0),
+            ("Bia Faturista", 1, 70.0),
+        ]
+        assert painel["custo_ia"] == {"total_usd": 0.4, "medio_por_conta_usd": 0.2, "contas": 2}
+
+    def test_filtro_por_tipo_de_conta(self):
+        """Parcial: o atendimento tem mais de uma conta (at-2 tem C3 e C5).
+        Única: o atendimento tem uma só."""
+        parcial = _painel(tipo="parcial")
+        unica = _painel(tipo="unica")
+
+        assert parcial["contas_concluidas"] == {"total": 1}
+        assert parcial["nota_media"] == {"semana": 70.0, "anterior": 94.0}
+        assert unica["contas_concluidas"] == {"total": 2}
+        assert unica["nota_media"] == {"semana": 70.0, "anterior": 50.0}
+
+    def test_a_lista_de_operadoras_do_filtro_vem_na_ordem_da_sigla(self):
+        assert _painel()["filtros"] == {
+            "operadoras": [
+                {"id": ASSIM, "sigla": "ASSIM", "nome": "ASSIM Saúde"},
+                {"id": UNIMED, "sigla": "UNIMED", "nome": "Unimed"},
+            ]
+        }
