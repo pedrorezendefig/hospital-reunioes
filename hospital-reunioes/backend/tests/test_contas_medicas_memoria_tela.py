@@ -141,3 +141,50 @@ class TestEditarRegra:
         # A versão anterior fica como estava.
         antiga = {r.codigo: r for r in ler_memoria(gerar_texto_memoria(banco, _operadora_id(banco, "ALFA"), _versao(banco, "ALFA", "1.0")["id"])).regras}
         assert antiga["ALFA-DIA-01"].texto == DIA_01_ANTES
+
+    def test_permissao_segue_o_tipo_da_regra_e_a_recusa_nao_grava_nada(self):
+        """A coordenadora com "incluir regra operacional" ligada (e sem "regra
+        contratual e tabelas") muda a regra operacional e recebe 403 na
+        contratual; trocar o tipo de operacional para contratual também pede a
+        contratual. Quem só tem a contratual recebe 403 na operacional."""
+        banco = _Banco()
+        gestao, _ = _cliente(GESTAO, banco)
+        _importar(gestao)
+        coordenadora, _ = _cliente(
+            _pessoa(perfil_contas_medicas="coordenadora"), banco, ligar=("incluir_regra_operacional",)
+        )
+        pri_01 = {"texto": "Identificar pelo número do atendimento.", "tipo": "OPERACIONAL", "origem": "PRÁTICA"}
+
+        contratual = coordenadora.put(
+            _regra("ALFA", "ALFA-DIA-01"), json={"texto": DIA_01_DEPOIS, "tipo": "CONTRATUAL", "origem": "PRÁTICA"}
+        )
+        virou_contratual = coordenadora.put(_regra("ALFA", "ALFA-PRI-01"), json={**pri_01, "tipo": "CONTRATUAL"})
+        virou_operacional = coordenadora.put(
+            _regra("ALFA", "ALFA-DIA-01"), json={"texto": DIA_01_DEPOIS, "tipo": "OPERACIONAL", "origem": "PRÁTICA"}
+        )
+
+        assert (contratual.status_code, virou_contratual.status_code, virou_operacional.status_code) == (403, 403, 403)
+        assert _versoes(banco, "ALFA") == {"1.0": True}
+        assert banco.linhas("cm_regra_historico") == []
+
+        assert coordenadora.put(_regra("ALFA", "ALFA-PRI-01"), json=pri_01).status_code == 200
+        assert _versoes(banco, "ALFA") == {"1.0": False, "1.1": True}
+
+        so_contratual, _ = _cliente(
+            _pessoa(perfil_contas_medicas="credenciamento"), banco, ligar=("regra_contratual_tabelas",)
+        )
+        assert so_contratual.put(_regra("ALFA", "ALFA-PRI-01"), json=pri_01).status_code == 403
+        assert _versoes(banco, "ALFA") == {"1.0": False, "1.1": True}
+
+    def test_faturista_recebe_403_e_regra_que_nao_existe_e_404(self):
+        banco = _Banco()
+        gestao, _ = _cliente(GESTAO, banco)
+        _importar(gestao)
+        faturista, _ = _cliente(_pessoa(perfil_contas_medicas="faturista"), banco)
+        corpo = {"texto": DIA_01_DEPOIS, "tipo": "CONTRATUAL", "origem": "PRÁTICA"}
+
+        assert faturista.put(_regra("ALFA", "ALFA-DIA-01"), json=corpo).status_code == 403
+        gestao, _ = _cliente(GESTAO, banco)
+        assert gestao.put(_regra("ALFA", "ALFA-DIA-99"), json=corpo).status_code == 404
+        assert gestao.put(_regra("ZETA", "ZETA-DIA-01"), json=corpo).status_code == 404
+        assert _versoes(banco, "ALFA") == {"1.0": True}
