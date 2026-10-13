@@ -2,6 +2,54 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-10-13T03:22:26-03:00",
+      "sha": "ac3eb0d0091a1d7c1d77233b0ff986347e433f57",
+      "app_version": "0.187.0",
+      "subject": "Onda onda-ia-onda3: Passo B, comparação com a memória e conferência das linhas da IA",
+      "raw_subject": "chore(deploy): registro da onda onda-ia-onda3 (#1179)",
+      "scope": [
+        "backend",
+        "frontend"
+      ],
+      "prds": [
+        1128
+      ],
+      "result": "healthy",
+      "duration_seconds": 224,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        },
+        {
+          "service": "frontend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "onda-enxuta onda-ia-onda3: PR #1179 (issue #1135), mergeados PR a PR. Merge pela API do GitHub, um build. Registro pela Action pos-merge depois do health.",
+      "etapas": {
+        "merge_s": 3,
+        "build_s": {
+          "backend": 22,
+          "frontend": 199
+        },
+        "health_s": 0
+      },
+      "responsavel": "pedrorezendefig"
+    },
+    {
       "at": "2026-10-13T03:06:27-03:00",
       "sha": "4e97df6dce846c5a97a2f114dc15c5d54a615db0",
       "app_version": "0.186.0",
