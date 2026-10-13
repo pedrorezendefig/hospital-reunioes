@@ -2,6 +2,51 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-10-13T12:23:45-03:00",
+      "sha": "1fd69b85b566902f9f8aea45ee4045a0bc1860fc",
+      "app_version": "0.194.0",
+      "subject": "Onda onda-b-onda1: OCR das páginas digitalizadas do prontuário",
+      "raw_subject": "chore(deploy): registro da onda onda-b-onda1 (#1203)",
+      "scope": [
+        "backend"
+      ],
+      "prds": [
+        1128
+      ],
+      "result": "healthy",
+      "duration_seconds": 162,
+      "services_touched": [
+        "backend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        },
+        {
+          "service": "frontend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "onda-enxuta onda-b-onda1: PR #1203 (issue #1191), mergeados PR a PR. Merge pela API do GitHub, um build. Registro pela Action pos-merge depois do health.",
+      "etapas": {
+        "merge_s": 2,
+        "build_s": {
+          "backend": 130
+        },
+        "health_s": 10
+      },
+      "responsavel": "pedrorezendefig"
+    },
+    {
       "at": "2026-10-13T12:09:27-03:00",
       "sha": "bfe3294ae2b3bcd876ef9584a73c3592c6f3a107",
       "app_version": "0.193.2",
