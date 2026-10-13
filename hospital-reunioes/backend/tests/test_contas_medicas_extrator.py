@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import logging
 import os
+import shutil
 import stat
 import sys
 import time
@@ -18,7 +19,15 @@ import pytest
 
 from app.services import contas_medicas_extrator as extrator
 from app.services import transcricao_extractor
-from app.services.contas_medicas_extrator import ErroLeitura, Pagina, Palavra, extrair_paginas, extrair_palavras
+from app.services.contas_medicas_extrator import (
+    ErroLeitura,
+    Pagina,
+    Palavra,
+    extrair_paginas,
+    extrair_palavras,
+    ler_digitalizadas,
+    texto_para_guardar,
+)
 
 
 def _pdf(*paginas: str) -> bytes:
@@ -98,3 +107,123 @@ def test_palavras_de_arquivo_que_nao_e_pdf_voltam_erro_de_leitura():
     resultado = extrair_palavras(b"%PDF-1.4 isto nao e um pdf de verdade", [1])
 
     assert resultado == ErroLeitura(extrator.MENSAGEM_PDF_ILEGIVEL)
+
+
+# OCR das páginas digitalizadas do Prontuário (issue #1191). A máquina de quem
+# testa não tem `tesseract`: um falso entra na frente do PATH e faz o papel dele,
+# com o form feed no fim, como o de verdade imprime.
+CAPA_DO_PRONTUARIO = "DECLARAÇÃO DE RECEBIMENTO DE PRONTUÁRIO " + " ".join(
+    f"Grupo: {grupo} Quantidade: 1"
+    for grupo in ("EVOLUÇÃO MEDICA", "PRESCRICAO MEDICA", "ANOTAÇÕES DE ENFERMAGEM", "TERMOS DIGITALIZADOS")
+)
+PAGINA_COM_TEXTO = "EVOLUÇÃO MEDICA " + "Paciente estável, sem queixas, segue em observação na unidade. " * 4
+LIDO_PELO_OCR = "TERMO DE CONSENTIMENTO LIVRE E ESCLARECIDO"
+SO_UNIX_OCR = pytest.mark.so_unix("PATH só com o poppler por symlink, e o filho morto por SIGKILL")
+
+
+def _tesseract_falso(pasta: Path, monkeypatch: pytest.MonkeyPatch, corpo: str) -> None:
+    falso = pasta / "tesseract"
+    falso.write_text(f"#!{sys.executable}\nimport sys, time\n{corpo}\n", encoding="utf-8")
+    falso.chmod(falso.stat().st_mode | stat.S_IXUSR)
+    monkeypatch.setenv("PATH", f"{pasta}{os.pathsep}{os.environ['PATH']}")
+
+
+def _ler(*paginas: str) -> list[Pagina]:
+    """O que a fila faz com o Prontuário: o texto do `pdftotext`, depois o OCR."""
+    pdf = _pdf(*paginas)
+    return ler_digitalizadas(pdf, extrair_paginas(pdf))
+
+
+def test_pagina_digitalizada_do_prontuario_ganha_o_texto_do_ocr_marcada_como_ocr(tmp_path, monkeypatch):
+    _tesseract_falso(tmp_path, monkeypatch, f"sys.stdout.write({LIDO_PELO_OCR!r} + '\\n\\f')")
+
+    paginas = _ler(CAPA_DO_PRONTUARIO, "", PAGINA_COM_TEXTO)
+
+    assert [(p.numero, p.ocr, p.sem_texto) for p in paginas] == [(1, False, False), (2, True, False), (3, False, False)]
+    assert LIDO_PELO_OCR in paginas[1].texto
+    assert LIDO_PELO_OCR not in paginas[2].texto
+    # O form feed do `tesseract` não abre página nova no texto da página.
+    assert "\f" not in paginas[1].texto
+
+
+def test_o_envio_nao_passa_pelo_ocr_e_o_texto_guardado_fica_sem_ele(tmp_path, monkeypatch):
+    # O envio chama `extrair_paginas` dentro da requisição, atrás do proxy de 30 s,
+    # e guarda o texto no bucket: o OCR fica de fora dos dois (revisão do PR #1203).
+    chamado = tmp_path / "tesseract-chamado"
+    _tesseract_falso(tmp_path, monkeypatch, f"open({str(chamado)!r}, 'w').close()\ntime.sleep(60)")
+
+    inicio = time.monotonic()
+    paginas = extrair_paginas(_pdf(CAPA_DO_PRONTUARIO, "", PAGINA_COM_TEXTO))
+
+    assert [(p.numero, p.ocr, p.sem_texto) for p in paginas] == [(1, False, False), (2, False, True), (3, False, False)]
+    assert not chamado.exists()
+    assert time.monotonic() - inicio < 10
+    assert extrator.MARCA_DO_OCR.encode() not in texto_para_guardar(paginas)
+
+
+def test_pagina_sem_texto_da_conta_nao_passa_pelo_ocr(tmp_path, monkeypatch):
+    _tesseract_falso(tmp_path, monkeypatch, f"sys.stdout.write({LIDO_PELO_OCR!r})")
+
+    paginas = _ler("Atendimento:900001 Paciente: FULANO Conta:12345 Fatura Individual", "")
+
+    assert [(p.numero, p.ocr, p.sem_texto) for p in paginas] == [(1, False, False), (2, False, True)]
+
+
+@SO_UNIX_OCR
+@pytest.mark.parametrize(
+    "tesseract",
+    [
+        pytest.param("sys.stderr.write('Error during processing.')\nsys.exit(1)", id="ilegivel"),
+        pytest.param("sys.stdout.write('  \\n\\f')", id="imagem-sem-letra"),
+        pytest.param(None, id="ausente"),
+    ],
+)
+def test_pagina_que_o_ocr_nao_le_fica_sem_texto_e_a_leitura_continua(tmp_path, monkeypatch, tesseract):
+    if tesseract is None:
+        # PATH só com o poppler: o runner do CI pode ter o `tesseract` instalado.
+        for binario in ("pdftotext", "pdftoppm"):
+            (tmp_path / binario).symlink_to(shutil.which(binario))
+        monkeypatch.setenv("PATH", str(tmp_path))
+    else:
+        _tesseract_falso(tmp_path, monkeypatch, tesseract)
+
+    paginas = _ler(CAPA_DO_PRONTUARIO, "", PAGINA_COM_TEXTO)
+
+    assert [(p.numero, p.ocr, p.sem_texto) for p in paginas] == [(1, False, False), (2, False, True), (3, False, False)]
+
+
+def test_ocr_de_todas_as_paginas_cabe_num_prazo_da_leitura(tmp_path, monkeypatch):
+    # Três páginas digitalizadas, cada uma mais lenta que o prazo inteiro: o OCR
+    # do PDF todo para no prazo, não um prazo por página (revisão do PR #1203).
+    _tesseract_falso(tmp_path, monkeypatch, "time.sleep(60)")
+    monkeypatch.setattr(extrator, "PRAZO_DA_LEITURA", 3.0)
+    pdf = _pdf(CAPA_DO_PRONTUARIO, "", "", "", PAGINA_COM_TEXTO)
+    lidas_pelo_pdftotext = extrair_paginas(pdf)
+
+    inicio = time.monotonic()
+    paginas = ler_digitalizadas(pdf, lidas_pelo_pdftotext)
+
+    assert [(p.numero, p.ocr, p.sem_texto) for p in paginas] == [
+        (1, False, False),
+        (2, False, True),
+        (3, False, True),
+        (4, False, True),
+        (5, False, False),
+    ]
+    # Um prazo por página levaria três; o vigia do PDF inteiro corta em um.
+    assert time.monotonic() - inicio < 2 * 3.0
+
+
+@SO_UNIX_OCR
+def test_filho_do_ocr_morto_deixa_a_pagina_sem_texto_e_a_leitura_continua(tmp_path, monkeypatch, caplog):
+    # O `pdftoppm` falso mata o filho que o chamou, como o OOM do cgroup faria.
+    falso = tmp_path / "pdftoppm"
+    corpo = "import os, signal\nos.kill(os.getppid(), signal.SIGKILL)"
+    falso.write_text(f"#!{sys.executable}\n{corpo}\n", encoding="utf-8")
+    falso.chmod(falso.stat().st_mode | stat.S_IXUSR)
+    _tesseract_falso(tmp_path, monkeypatch, f"sys.stdout.write({LIDO_PELO_OCR!r})")
+
+    paginas = _ler(CAPA_DO_PRONTUARIO, "", PAGINA_COM_TEXTO)
+
+    assert [(p.numero, p.ocr, p.sem_texto) for p in paginas] == [(1, False, False), (2, False, True), (3, False, False)]
+    assert "OCR das paginas digitalizadas falhou" in caplog.text

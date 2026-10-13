@@ -18,7 +18,7 @@ from pathlib import Path
 
 import pytest
 
-from app.services.contas_medicas.prontuario import ErroLeitura, ler_prontuario
+from app.services.contas_medicas.prontuario import MARCA_DO_OCR, ErroLeitura, ler_prontuario
 
 FIXTURES = Path(__file__).parent / "fixtures" / "contas_medicas" / "prontuario"
 QUEBRA = "<<<QUEBRA DE PÁGINA>>>"
@@ -354,3 +354,39 @@ def test_rodape_com_total_igual_ao_numero_de_paginas_le_o_prontuario():
     paginas = montar("capa", "evolucao", "anotacao_enf")
 
     assert ler_prontuario(paginas, ATENDIMENTO).total_paginas == 3
+
+
+# OCR das páginas digitalizadas (issue #1191): o extrator põe o texto da imagem
+# depois do que o `pdftotext` leu, atrás da marca.
+TERMO_LIDO_POR_OCR = (
+    "TERMO DE CONSENTIMENTO PARA TRANSFUSÃO DE SANGUE\n"
+    "Eu, ANTÔNIA MELO FARIAS, autorizo a transfusão de concentrado de hemácias."
+)
+
+
+def com_ocr(pagina: str, lido: str) -> str:
+    return f"{pagina}\n{MARCA_DO_OCR}\n{lido}\n"
+
+
+def test_pagina_digitalizada_lida_por_ocr_vai_a_ia_como_digitalizado_e_deixa_de_contar_como_sem_texto():
+    paginas = montar(CAPA_QUE_BATE, "evolucao", [""], "digitalizado", "prescricao_medica", "anotacao_enf")
+    paginas[2] = com_ocr(paginas[2], TERMO_LIDO_POR_OCR)
+
+    resultado = ler_prontuario(paginas, ATENDIMENTO)
+
+    (termo,) = [d for d in resultado.documentos if d.paginas == (3,)]
+    assert termo.familia == "DIGITALIZADO"
+    assert termo.linhas == (
+        "TERMO DE CONSENTIMENTO PARA TRANSFUSÃO DE SANGUE",
+        "Eu, PACIENTE, autorizo a transfusão de concentrado de hemácias.",
+    )
+    assert resultado.paginas_sem_texto == (4,)
+    assert resultado.parecer_parcial == ("O arquivo tem 1 de 6 páginas sem texto, mais de 10%.",)
+
+
+def test_rodape_de_outro_arquivo_lido_por_ocr_nao_vira_arquivo_incompleto():
+    # o termo digitalizado é a foto de uma folha impressa de outro prontuário
+    paginas = montar("capa", "evolucao", [""], "anotacao_enf")
+    paginas[2] = com_ocr(paginas[2], "Impressão de Prontuário - Página 7 de 300")
+
+    assert ler_prontuario(paginas, ATENDIMENTO).total_paginas == 4

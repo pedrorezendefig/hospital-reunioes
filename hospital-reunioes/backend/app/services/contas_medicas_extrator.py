@@ -20,6 +20,12 @@ As palavras com a posição de cada uma (`extrair_palavras`, #1133) saem do mesm
 filho, pelo `pdfplumber`, com o mesmo orçamento: a prescrição lê por elas a
 coordenada das colunas.
 
+No Prontuário, as páginas digitalizadas (imagem, sem texto) são lidas por OCR
+(`ler_digitalizadas`, #1191): `pdftoppm` rasteriza, o `tesseract -l por` lê,
+num filho só, com um `PRAZO_DA_LEITURA` para todas as páginas do PDF. Roda na
+fila da análise, nunca no envio, e o texto do OCR não vai para o texto guardado
+no bucket. A Conta não passa por OCR.
+
 O texto devolvido tem dado de paciente: nunca vai para log, nem em caso de erro.
 """
 
@@ -40,7 +46,7 @@ from app.services import contas_medicas_extrator_filho as filho
 from app.services import contas_medicas_marcacoes_filho as filho_das_marcacoes
 from app.services import transcricao_extractor as orcamento
 from app.services.contas_medicas.marcacoes import inserir_nas_paginas
-from app.services.contas_medicas.prontuario import e_formulario
+from app.services.contas_medicas.prontuario import MARCA_DO_OCR, e_digitalizada, e_formulario
 
 logger = logging.getLogger(__name__)
 
@@ -74,11 +80,13 @@ class ErroLeitura:
 
 @dataclass(frozen=True)
 class Pagina:
-    """Texto de uma página, com a numeração do PDF (a primeira é 1)."""
+    """Texto de uma página, com a numeração do PDF (a primeira é 1). `ocr` diz que
+    a página é digitalizada e o texto da imagem veio do `tesseract` (#1191)."""
 
     numero: int
     texto: str
     sem_texto: bool
+    ocr: bool = False
 
 
 def _paginas(texto: str) -> list[Pagina]:
@@ -192,6 +200,45 @@ def extrair_paginas(pdf: bytes) -> list[Pagina] | ErroLeitura:
         return paginas
     textos = inserir_nas_paginas([p.texto for p in paginas], marcacoes)
     return [Pagina(p.numero, texto, p.sem_texto) for p, texto in zip(paginas, textos, strict=True)]
+
+
+def digitalizadas(paginas: Sequence[Pagina]) -> list[int]:
+    """As páginas do Prontuário que a leitura chamaria de `DIGITALIZADO`, as que o
+    OCR lê (#1191). A Conta sai do MV em texto e não passa por OCR."""
+    # Import tardio: `contas_medicas_conta` importa o `ErroLeitura` deste módulo.
+    from app.services.contas_medicas_conta import detectar_tipo_do_arquivo
+
+    if not paginas or detectar_tipo_do_arquivo(paginas[0].texto) != "PRONTUARIO":
+        return []
+    return [p.numero for p in paginas if e_digitalizada(p.texto)]
+
+
+def ler_digitalizadas(pdf: bytes, paginas: Sequence[Pagina]) -> list[Pagina]:
+    """As páginas com o texto das digitalizadas lido pelo `tesseract` (#1191), num
+    filho só e com um `PRAZO_DA_LEITURA` para todas. Chamada pela fila da análise,
+    fora da requisição do envio. Se a leitura falhar ou passar do prazo, as
+    páginas que não saíram seguem sem texto."""
+    pedidas = digitalizadas(paginas)
+    if not pedidas:
+        return list(paginas)
+    # O filho para antes do vigia, para devolver o que já leu em vez de morrer.
+    prazo = str(PRAZO_DA_LEITURA * 0.9)
+    bruto = _no_filho(pdf, "--ocr", ",".join(map(str, pedidas)), prazo)
+    if isinstance(bruto, ErroLeitura):
+        logger.warning("OCR das paginas digitalizadas falhou (%s): elas seguem sem texto", bruto.motivo)
+        return list(paginas)
+    try:
+        lidas = {int(numero): texto for numero, texto in json.loads(bruto).items()}
+    except (ValueError, AttributeError):
+        logger.warning("OCR das paginas digitalizadas devolveu saida ilegivel: elas seguem sem texto")
+        return list(paginas)
+    return [_com_ocr(p, lidas[p.numero]) if p.numero in lidas else p for p in paginas]
+
+
+def _com_ocr(pagina: Pagina, lido: str) -> Pagina:
+    """O texto do OCR vai depois do que o `pdftotext` leu (rodapé e assinatura), atrás
+    da marca: a leitura do Prontuário estrutura a página só pelo que vem antes dela."""
+    return Pagina(pagina.numero, f"{pagina.texto}\n{MARCA_DO_OCR}\n{lido}\n", sem_texto=False, ocr=True)
 
 
 def _no_filho(pdf: bytes, *argumentos: str) -> bytes | ErroLeitura:

@@ -53,10 +53,10 @@ from app.services.contas_medicas import ia, processamento  # noqa: E402
 from app.services.contas_medicas.conferencia import ProntuarioLido, conferir  # noqa: E402
 from app.services.contas_medicas.conteudo import ler_conteudo  # noqa: E402
 from app.services.contas_medicas.memoria import MemoriaLida, RegraLida, parametros_lidos  # noqa: E402
-from app.services.contas_medicas.prontuario import ler_prontuario  # noqa: E402
+from app.services.contas_medicas.prontuario import MARCA_DO_OCR, ler_prontuario  # noqa: E402
 from app.services.contas_medicas.tabelas import NAO_CONFERIDO, Pacote  # noqa: E402
 from app.services.contas_medicas_conta import ler_conta  # noqa: E402
-from app.services.contas_medicas_extrator import ErroLeitura, Pagina, Palavra  # noqa: E402
+from app.services.contas_medicas_extrator import ErroLeitura, Pagina, Palavra, digitalizadas  # noqa: E402
 
 MIGRATION = Path(__file__).resolve().parents[2] / "supabase" / "migrations" / "116_contas_medicas_fundacao.sql"
 
@@ -501,16 +501,18 @@ def _prescricao(dia: int) -> str:
     )
 
 
-def _paginas_do_prontuario(fisioterapias: int = 0) -> list[str]:
+def _paginas_do_prontuario(fisioterapias: int = 0, digitalizadas: int = 0) -> list[str]:
     """Internação no CTI de 02/10 22:40 à alta em 06/10 15:20, com Clexane
     prescrito todo dia e a colecistectomia em 04/10. A capa lista três
     evoluções médicas que o arquivo não trouxe: o guia sai com parecer parcial.
-    `fisioterapias`: quantas avaliações respiratórias iguais entram (#1132)."""
+    `fisioterapias`: quantas avaliações respiratórias iguais entram (#1132).
+    `digitalizadas`: quantas folhas só em imagem, com o rodapé, entram (#1191)."""
     (capa,) = _fixture("prontuario/capa")
     capa += "\nGrupo: EVOLUÇÃO MEDICA      Quantidade: 3"
     paginas = [
         capa,
         *_fixture("prontuario/admissao_unidade"),
+        *[""] * digitalizadas,
         *(_prescricao(dia) for dia in (3, 4, 5, 6)),
         *_fixture("prontuario/fisio_resp") * fisioterapias,
         *_fixture("conteudo/descricao_cirurgica"),
@@ -530,8 +532,8 @@ def _conta(conta: str = "48811", inicio: int = 2, fim: int = 6, **kw):
     return _arquivo_do_envio(f"conta-{conta}.pdf", _texto_da_conta(conta, inicio, fim, **kw))
 
 
-def _prontuario(fisioterapias: int = 0):
-    return _arquivo_do_envio("prontuario.pdf", "\f".join(_paginas_do_prontuario(fisioterapias)))
+def _prontuario(fisioterapias: int = 0, digitalizadas: int = 0):
+    return _arquivo_do_envio("prontuario.pdf", "\f".join(_paginas_do_prontuario(fisioterapias, digitalizadas)))
 
 
 REGRAS_DAS_CONFERENCIAS = {
@@ -1007,6 +1009,54 @@ class TestProntuarioUmaVez:
 # ═══════════════════════════════════════════════════════════════════════════
 # 5. O reprocesso
 # ═══════════════════════════════════════════════════════════════════════════
+
+
+class TestOcrNaFila:
+    """O OCR das folhas digitalizadas (#1191) roda na fila, não no envio, e não
+    entra no texto guardado no bucket (revisão do PR #1203)."""
+
+    TERMO = "TERMO DE CONSENTIMENTO PARA TRANSFUSAO DE SANGUE, autorizo a transfusao."
+
+    def test_a_folha_digitalizada_lida_na_fila_deixa_de_contar_como_sem_texto_e_o_bucket_fica_sem_o_ocr(
+        self, monkeypatch
+    ):
+        pedidas: list[tuple[bytes, list[int]]] = []
+
+        def ocr(pdf: bytes, paginas):
+            numeros = digitalizadas(paginas)
+            pedidas.append((pdf, numeros))
+            lido = f"\n{MARCA_DO_OCR}\n{self.TERMO}\n"
+            return [Pagina(p.numero, p.texto + lido, False, True) if p.numero in numeros else p for p in paginas]
+
+        monkeypatch.setattr(processamento, "ler_digitalizadas", ocr)
+        banco = _cenario()
+        _enviar(banco, _conta(), _prontuario(digitalizadas=1))
+
+        assert pedidas == []  # o envio não passa pelo OCR
+
+        _rodar_o_job(banco)
+
+        ((pdf, numeros),) = pedidas
+        assert pdf.startswith("\f".join(_paginas_do_prontuario(digitalizadas=1)[:1]).encode())
+        assert numeros == [3]
+        (eventos,) = banco.tabelas["cm_eventos"]
+        assert eventos["eventos_json"]["paginas_sem_texto"] == []
+        assert {"familia": "DIGITALIZADO", "paginas": [3]}.items() <= next(
+            d for d in eventos["eventos_json"]["documentos"] if d["paginas"] == [3]
+        ).items()
+        guardados = [conteudo for (_, chave), conteudo in banco.bucket.items() if not chave.endswith(".pdf")]
+        assert guardados
+        assert all(MARCA_DO_OCR.encode() not in conteudo for conteudo in guardados)
+
+    def test_sem_o_ocr_a_folha_digitalizada_conta_como_sem_texto(self, monkeypatch):
+        monkeypatch.setattr(processamento, "ler_digitalizadas", lambda _pdf, paginas: list(paginas))
+        banco = _cenario()
+        _enviar(banco, _conta(), _prontuario(digitalizadas=1))
+
+        _rodar_o_job(banco)
+
+        (eventos,) = banco.tabelas["cm_eventos"]
+        assert eventos["eventos_json"]["paginas_sem_texto"] == [3]
 
 
 class TestReprocesso:
