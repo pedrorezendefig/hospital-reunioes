@@ -13,7 +13,7 @@ from __future__ import annotations
 import re
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
-from datetime import date
+from datetime import date, timedelta
 from decimal import ROUND_HALF_UP, Decimal
 from typing import Any
 
@@ -27,9 +27,12 @@ from app.services.contas_medicas.passo_a import _identificacao, _ler_quando, _te
 from app.services.contas_medicas_conta import Conta
 from app.utils.text_sanitizer import sanitizar_estrutura
 
-__all__ = ["LinhasDaIA", "comparar", "juntar"]
+__all__ = ["LinhasDaIA", "comparar", "eventos_do_periodo", "juntar"]
 
 CENTAVO = Decimal("0.01")
+
+# Os eventos que vão para a IA: o período da conta e um dia para cada lado.
+MARGEM = timedelta(days=1)
 
 # As categorias da tabela em que o código da linha da IA é procurado. A linha
 # não diz o grupo da conta, e o mesmo código não está em duas tabelas.
@@ -53,6 +56,39 @@ def _numero(valor: Decimal | None) -> float | None:
     return float(valor) if valor is not None else None
 
 
+# As listas datadas do Anexo A: o campo do começo e, na terapia, o do fim.
+_LISTAS_COM_DATA = {
+    "movimentacoes": ("data_hora", None),
+    "terapias": ("inicio", "fim"),
+    "prescricoes": ("data", None),
+    "procedimentos": ("data_hora", None),
+    "cirurgias": ("data", None),
+}
+_SEM_DATA = ("atendimento", "idade_anos", "documentos_ausentes", "observacoes")
+
+
+def eventos_do_periodo(eventos: Mapping[str, Any], inicio: date | None, fim: date | None) -> dict[str, Any]:
+    """Os eventos que tocam o período da conta com um dia de margem para cada
+    lado: a parcial não paga a leitura do atendimento inteiro. A terapia sem
+    fim segue em curso; o evento sem data legível vai, por precaução."""
+    de = inicio - MARGEM if inicio else None
+    ate = fim + MARGEM if fim else None
+
+    def toca(evento: Mapping[str, Any], campo_inicio: str, campo_fim: str | None) -> bool:
+        comeco = _dia(evento.get(campo_inicio))
+        if comeco is None:
+            return True
+        termino = comeco
+        if campo_fim:
+            termino = _dia(evento.get(campo_fim)) or date.max
+        return (ate is None or comeco <= ate) and (de is None or termino >= de)
+
+    recorte: dict[str, Any] = {chave: eventos.get(chave) for chave in _SEM_DATA}
+    for lista, (campo_inicio, campo_fim) in _LISTAS_COM_DATA.items():
+        recorte[lista] = [e for e in eventos.get(lista) or [] if toca(e, campo_inicio, campo_fim)]
+    return recorte
+
+
 def _itens(conta: Conta) -> list[dict[str, Any]]:
     """Os itens lançados, sem o preço: preço é do código, não da IA."""
     return [
@@ -62,7 +98,7 @@ def _itens(conta: Conta) -> list[dict[str, Any]]:
             "grupo": item.grupo,
             "codigo": item.codigo,
             "descricao": item.descricao,
-            "quantidade": f"{item.quantidade:g}",
+            "quantidade": f"{item.quantidade.normalize():f}",
             "unidade": item.unidade,
         }
         for item in conta.itens
@@ -243,7 +279,7 @@ def comparar(
     `memoria` é a vigente, como `memoria_vigente` lê."""
     resposta = ia.comparar_conta(
         gerar_texto_memoria(supabase, operadora_id, memoria["memoria_versao_id"]),
-        eventos,
+        eventos_do_periodo(eventos, conta.periodo_inicio, conta.periodo_fim),
         _itens(conta),
         _calculos(conferencia),
         supabase=supabase,

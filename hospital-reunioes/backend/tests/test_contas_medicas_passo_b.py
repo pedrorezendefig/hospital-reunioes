@@ -15,13 +15,16 @@ Passo B devolve as linhas que cada teste escolhe.
 
 from __future__ import annotations
 
+import json
 from typing import Any
 
 import httpx
 import pytest
 from openai import OpenAI
 from test_contas_medicas_processamento import (
+    EVENTOS_DA_IA,
     PARAMETROS,
+    PASSO_B,
     _Banco,
     _cenario,
     _conta,
@@ -251,3 +254,80 @@ class TestConferenciaDasLinhasDaIA:
         (bolsa,) = [linha for linha in da_ia if linha["descricao"] == "BOLSA COLETORA DE URINA"]
         assert (bolsa["codigo"], bolsa["valor_diferenca"], bolsa["nao_conferido"]) == (None, None, True)
         assert bolsa["motivo"].endswith("Sem código.")
+
+
+def _prescricao_da_ia(data: str, item: str) -> dict[str, Any]:
+    return {
+        "data": data,
+        "setor": "CTI ADULTO",
+        "item": item,
+        "via": "EV",
+        "doses_no_dia": 1,
+        "se_necessario": False,
+        "indicio_de_uso": None,
+        "suspenso": False,
+        "diluente": None,
+        "em_bomba": False,
+        "pagina": 3,
+        "trecho": item,
+    }
+
+
+def _terapia_da_ia(inicio: str, fim: str | None, descricao: str) -> dict[str, Any]:
+    return {
+        "tipo": "OXIGENIO",
+        "descricao": descricao,
+        "setor": "CTI ADULTO",
+        "inicio": inicio,
+        "fim": fim,
+        "pagina": 2,
+        "trecho": descricao,
+    }
+
+
+class TestEntradaDoPassoB:
+    def test_a_entrada_leva_a_memoria_em_cache_os_eventos_do_periodo_os_itens_e_as_linhas_do_codigo(self, openrouter):
+        # A conta vai de 02/10 a 06/10: a margem é 01/10 e 07/10.
+        openrouter.eventos = {
+            **EVENTOS_DA_IA,
+            "prescricoes": [
+                _prescricao_da_ia("2026-09-20", "DIPIRONA FORA ANTES"),
+                _prescricao_da_ia("2026-10-01", "DIPIRONA NA MARGEM DE ANTES"),
+                _prescricao_da_ia("2026-10-04", "DIPIRONA NO PERIODO"),
+                _prescricao_da_ia("2026-10-07", "DIPIRONA NA MARGEM DE DEPOIS"),
+                _prescricao_da_ia("2026-10-08", "DIPIRONA FORA DEPOIS"),
+            ],
+            "terapias": [
+                _terapia_da_ia("2026-09-15T08:00", "2026-09-25T08:00", "OXIGENIO DA INTERNACAO ANTERIOR"),
+                _terapia_da_ia("2026-09-28T08:00", None, "OXIGENIO QUE SEGUE EM CURSO"),
+            ],
+        }
+
+        _analisar(_cenario_do_passo_b(), openrouter)
+
+        (corpo,) = [c for c in openrouter.corpos if c["response_format"]["json_schema"]["name"] == PASSO_B]
+        memoria, eventos, conta, calculos = corpo["messages"][1]["content"]
+        assert memoria["cache_control"] == {"type": "ephemeral"}
+        assert "# MEMÓRIA DA OPERADORA: Alfa Saúde" in memoria["text"]
+        assert "| ALFA-INS-05 | Regra sintética ALFA-INS-05. | CONTRATUAL | PRÁTICA | PENDENTE |" in memoria["text"]
+        assert all("cache_control" not in bloco for bloco in (eventos, conta, calculos))
+
+        assert eventos["text"].startswith("EVENTOS\n")
+        for dentro in ("NA MARGEM DE ANTES", "NO PERIODO", "NA MARGEM DE DEPOIS", "QUE SEGUE EM CURSO"):
+            assert dentro in eventos["text"], dentro
+        for fora in ("FORA ANTES", "FORA DEPOIS", "INTERNACAO ANTERIOR"):
+            assert fora not in eventos["text"], fora
+
+        assert conta["text"].startswith("CONTA\n")
+        assert "70000001 | AGULHA HIPODERMICA 40X12 | 10 | UN" in conta["text"]
+        assert "0,17" not in conta["text"] and "0.17" not in conta["text"], "o preço lançado não vai para a IA"
+
+        assert calculos["text"].startswith("CÁLCULOS\n")
+        linhas_do_codigo = json.loads(calculos["text"].removeprefix("CÁLCULOS\n"))["linhas_do_codigo"]
+        assert {
+            "acao": "INCLUIR",
+            "codigo": "98005497",
+            "descricao": "PACOTE COLECISTECTOMIA",
+            "data": "2026-10-04",
+            "data_fim": None,
+        } in linhas_do_codigo
