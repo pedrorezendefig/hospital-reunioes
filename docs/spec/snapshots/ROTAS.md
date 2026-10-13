@@ -1,6 +1,6 @@
 # ROTAS.md
 <!-- gerado automaticamente por /snapshot — não editar -->
-<!-- last_update: 2026-10-13T07:30+0000 -->
+<!-- last_update: 2026-10-13T07:31+0000 -->
 
 Endpoints HTTP expostos pelo backend FastAPI do Hospital Reuniões.
 
@@ -141,6 +141,8 @@ Endpoints HTTP expostos pelo backend FastAPI do Hospital Reuniões.
 | POST | `/contas-medicas/operadoras/memoria` | Importa o arquivo de memória: versão nova, vigente, com as regras dela. | ✅ |
 | GET | `/contas-medicas/operadoras/{sigla}/memoria` | A memória vigente no formato do arquivo, gerada do banco com o cabeçalho inteiro, para baixar. | ✅ |
 | POST | `/contas-medicas/operadoras/{sigla}/tabelas` | Carrega o CSV como uma versão nova da tabela da categoria, ao lado das anteriores. | ✅ |
+| POST | `/contas-medicas/operadoras/{sigla}/tabelas/mapeada` | Grava a tabela lida pelo mapeamento confirmado como uma versão nova da categoria. | ✅ |
+| POST | `/contas-medicas/operadoras/{sigla}/tabelas/proposta` | O mapeamento das colunas (da IA, de um arquivo já confirmado ou o ajuste | ✅ |
 | GET | `/contas-medicas/planos` | Os nomes de plano que o MV imprime, cada um com a operadora e a coluna de preço. | ✅ |
 | POST | `/contas-medicas/planos` | Cadastra um nome de plano do MV. Sem cadastro, a conta desse plano é recusada no envio. | ✅ |
 | GET | `/contas-medicas/setores` | Os setores como o MV imprime, cada um com a acomodação. | ✅ |
@@ -493,4 +495,4 @@ Endpoints HTTP expostos pelo backend FastAPI do Hospital Reuniões.
 
 ---
 
-**Totais:** 277 endpoints em 42 routers · 94% exigem auth.
+**Totais:** 279 endpoints em 42 routers · 94% exigem auth.
