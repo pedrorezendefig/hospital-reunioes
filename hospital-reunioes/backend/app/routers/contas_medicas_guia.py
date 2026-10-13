@@ -124,6 +124,8 @@ async def abrir_guia(
     for grupo in grupos:
         for linha in grupo["linhas"]:
             linha["reenvio"] = marcas.get(linha["id"])
+            # A versão da tabela que deu o preço fica só registrada (#1206).
+            linha.pop("tabela_id", None)
     return {
         "cabecalho": {
             "numero_atendimento": atendimento.get("numero_atendimento"),
@@ -197,6 +199,8 @@ def _gravar_marcacao(supabase: Client, linha: dict, me: dict, estado: str, motiv
     }
     gravada = supabase.table("cm_guia_linha").update(campos).eq("id", linha["id"]).execute().data or []
     resultado = gravada[0] if gravada else {**linha, **campos}
+    # A versão da tabela que deu o preço fica só registrada (#1206).
+    resultado = {chave: valor for chave, valor in resultado.items() if chave != "tabela_id"}
     return {**resultado, "nao_conferido": linha_nao_conferida(resultado)}
 
 
