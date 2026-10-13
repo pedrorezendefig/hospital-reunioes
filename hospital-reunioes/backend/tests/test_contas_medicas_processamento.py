@@ -1843,6 +1843,23 @@ class TestVersaoDaTabela:
         assert linhas
         assert [linha for linha in linhas if "tabela_id" in linha] == []
 
+    def test_a_marcacao_e_o_desfazer_nao_mostram_a_versao_da_tabela(self):
+        banco = _cenario()
+        _enviar(banco, _conta(), _prontuario())
+        _rodar_o_job(banco)
+        (conta,) = banco.tabelas["cm_conta"]
+        agulha = _linhas_gravadas(banco, conta["id"])["70000001"]
+        assert agulha["tabela_id"] == "tb-mat"
+        rota = f"/api/contas-medicas/contas/{conta['id']}/guia/linhas/{agulha['id']}/marcacao"
+
+        marcada = _cliente(banco).post(rota, json={"estado": "FEITO"})
+        desfeita = _cliente(banco).delete(rota)
+
+        assert (marcada.status_code, desfeita.status_code) == (200, 200)
+        assert (marcada.json()["estado"], desfeita.json()["estado"]) == ("FEITO", "ABERTA")
+        assert ("tabela_id" in marcada.json(), "tabela_id" in desfeita.json()) == (False, False)
+        assert _linhas_gravadas(banco, conta["id"])["70000001"]["tabela_id"] == "tb-mat"
+
     def test_o_preco_validado_na_memoria_grava_a_linha_sem_tabela(self):
         banco = _cenario()
         (memoria,) = banco.tabelas["cm_memoria_versao"]
