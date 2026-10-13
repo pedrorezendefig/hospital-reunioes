@@ -47,6 +47,14 @@ class Settings(BaseSettings):
     # OpenRouter, mesma chave/billing do Pipeline. Prefixo `openai/` segue a
     # convenção de `llm_model` (OpenRouter roteia o modelo por provedor).
     transcricao_model: str = "openai/gpt-4o-mini-transcribe"
+    # Contas médicas (issue #1130, PRD #1128): o modelo de cada passo da
+    # análise, pela mesma chave do OpenRouter. Passo A lê o prontuário e lista
+    # os eventos (o modelo flash em uso no app); passo B compara a conta com a
+    # memória da operadora. Trocar é mudar a variável e reiniciar, sem deploy
+    # de código. Prefixo `anthropic/` liga o bloco de cache da instrução e da
+    # memória.
+    cm_ia_modelo_passo_a: str = "google/gemini-3.7-flash"
+    cm_ia_modelo_passo_b: str = "anthropic/claude-sonnet-5.5"
 
     # Fireflies
     fireflies_api_key: str = ""

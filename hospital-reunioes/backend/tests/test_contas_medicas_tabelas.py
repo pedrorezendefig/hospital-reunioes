@@ -457,6 +457,7 @@ class TestTabelasNaLista:
                         "versao": "Adendo 012, vigência 01/08/2026",
                         "vigencia_inicio": "2026-08-01",
                         "vigencia_fim": None,
+                        "em_uso": True,
                     }
                 ],
             },
@@ -470,12 +471,14 @@ class TestTabelasNaLista:
                         "versao": "Adendo 012",
                         "vigencia_inicio": "2026-08-01",
                         "vigencia_fim": None,
+                        "em_uso": True,
                     },
                     {
                         "tabela": "leve-pacotes.csv",
                         "versao": None,
                         "vigencia_inicio": "2026-01-01",
                         "vigencia_fim": "2026-07-31",
+                        "em_uso": False,
                     },
                 ],
             },

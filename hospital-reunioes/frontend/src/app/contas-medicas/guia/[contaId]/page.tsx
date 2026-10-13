@@ -6,17 +6,20 @@
  * A tela que cabe ao lado do MV (720 px): cabeçalho da conta, os três números
  * (Nota de entrada, R$ a ajustar, Itens feitos), as linhas por dia e setor e o
  * rodapé com a observação e o "Concluir e abrir a próxima", sempre habilitado.
+ * Na conta concluída, o rodapé tem o "Reenviar conta corrigida" (issue #1136):
+ * a nota de saída vai ao lado da de entrada e cada linha Feito ganha a marca.
  *
  * Quem decide tudo é o servidor: a faturista só abre a própria conta, abrir
  * muda A fazer para Em correção, e concluída não aceita marcação. Depois de
  * cada clique a tela relê o Guia, para os números nunca saírem da conta.
  */
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, RefreshCw, Upload } from "lucide-react";
 
+import { Ditar, juntarDitado } from "@/components/contas-medicas/Ditar";
 import { LinhaDoGuia, type Marcacao } from "@/components/contas-medicas/LinhaDoGuia";
 import { useToast } from "@/components/ui/Toast";
 import {
@@ -27,6 +30,7 @@ import {
   dataCurta,
   perguntaDeConclusao,
   reais,
+  resumoDoReenvio,
   rotuloDoGrupo,
 } from "@/lib/contas-medicas/guia";
 import { createClient } from "@/lib/supabase/client";
@@ -87,6 +91,8 @@ export default function GuiaPage() {
   const [erro, setErro] = useState<string | null>(null);
   const [ocupado, setOcupado] = useState(false);
   const [observacao, setObservacao] = useState("");
+  const [resultadoDoReenvio, setResultadoDoReenvio] = useState<string | null>(null);
+  const seletorDoPdf = useRef<HTMLInputElement>(null);
 
   const base = `/api/contas-medicas/contas/${contaId}/guia`;
 
@@ -114,6 +120,7 @@ export default function GuiaPage() {
       setToken(tk);
       setGuia(null);
       setObservacao("");
+      setResultadoDoReenvio(null);
       if (tk) await carregar(tk);
       else setErro("Sessão expirada. Entre de novo.");
     }
@@ -170,6 +177,48 @@ export default function GuiaPage() {
     );
   }
 
+  async function reanalisar() {
+    if (!token) return;
+    setOcupado(true);
+    try {
+      const resposta = await fetch(`/api/contas-medicas/contas/${contaId}/reanalisar`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!resposta.ok) {
+        toast(await detalhe(resposta, "Não deu certo. Tente de novo."), "error");
+        return;
+      }
+      toast("A conta voltou para a análise", "success");
+      router.push("/contas-medicas");
+    } finally {
+      setOcupado(false);
+    }
+  }
+
+  async function reenviar(arquivo: File | undefined) {
+    if (!token || !arquivo) return;
+    const corpo = new FormData();
+    corpo.append("arquivo", arquivo, arquivo.name);
+    setOcupado(true);
+    try {
+      const resposta = await fetch(`/api/contas-medicas/contas/${contaId}/reenvio`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+        body: corpo,
+      });
+      if (!resposta.ok) {
+        toast(await detalhe(resposta, "Não consegui ler a conta corrigida. Envie de novo."), "error");
+        return;
+      }
+      setResultadoDoReenvio(resumoDoReenvio(await resposta.json()));
+    } finally {
+      setOcupado(false);
+      if (seletorDoPdf.current) seletorDoPdf.current.value = "";
+    }
+    await carregar(token);
+  }
+
   async function concluir() {
     if (!guia) return;
     const pergunta = perguntaDeConclusao(guia.numeros.itens_sem_marcacao);
@@ -221,6 +270,22 @@ export default function GuiaPage() {
           >
             {ROTULO_SITUACAO[cabecalho.situacao] ?? cabecalho.situacao}
           </span>
+          {guia.regra_nova_desde_analise && (
+            <span className="inline-flex px-2.5 py-0.5 rounded-full text-xs font-semibold bg-[#EDE9FE] text-[#5B21B6]">
+              Regra nova desde a análise
+            </span>
+          )}
+          {guia.pode_reanalisar && (
+            <button
+              type="button"
+              onClick={reanalisar}
+              disabled={ocupado}
+              className="ml-auto inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 bg-white text-sm text-slate-700 hover:border-slate-300 disabled:opacity-50"
+            >
+              <RefreshCw className="w-4 h-4" aria-hidden="true" />
+              {guia.regra_nova_desde_analise ? "Reanalisar com a regra nova" : "Reanalisar"}
+            </button>
+          )}
         </div>
         <p className="text-sm text-slate-500 break-words">{subtitulo(guia)}</p>
       </header>
@@ -242,10 +307,36 @@ export default function GuiaPage() {
         </div>
       )}
 
+      {(guia.respostas ?? []).length > 0 && (
+        <div
+          role="note"
+          aria-label="Resposta da Validação"
+          className="rounded-xl border border-border bg-[#EEEEF6] px-4 py-3 text-sm text-slate-700 space-y-2"
+        >
+          <p className="font-semibold uppercase tracking-[0.04em] text-primary">Resposta da Validação</p>
+          {(guia.respostas ?? []).map((resposta, indice) => (
+            <div key={indice}>
+              <p className="text-xs text-slate-500">
+                {resposta.regra_codigo ? `Regra ${resposta.regra_codigo}` : resposta.titulo}
+              </p>
+              <p className="whitespace-pre-line break-words">{resposta.resposta}</p>
+            </div>
+          ))}
+        </div>
+      )}
+
       <section aria-label="Números do guia" className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-        <div className="bg-white rounded-2xl border border-border shadow-premium p-4">
-          <p className={TITULO}>Nota de entrada</p>
-          <p className="text-3xl font-bold text-primary">{numeros.nota_entrada}</p>
+        <div className="bg-white rounded-2xl border border-border shadow-premium p-4 flex flex-wrap gap-x-6 gap-y-2">
+          <div>
+            <p className={TITULO}>Nota de entrada</p>
+            <p className="text-3xl font-bold text-primary">{numeros.nota_entrada}</p>
+          </div>
+          {guia.reenvio?.nota_saida != null && (
+            <div>
+              <p className={TITULO}>Nota de saída</p>
+              <p className="text-3xl font-bold text-primary">{guia.reenvio.nota_saida}</p>
+            </div>
+          )}
         </div>
         <div className="bg-white rounded-2xl border border-border shadow-premium p-4">
           <p className={TITULO}>R$ a ajustar</p>
@@ -301,9 +392,39 @@ export default function GuiaPage() {
       })}
 
       {concluida ? (
-        <p className="bg-white rounded-2xl border border-border p-4 text-sm text-slate-600">
-          Conta concluída. As marcações não mudam mais.
-        </p>
+        <footer className="bg-white rounded-2xl border border-border p-4 space-y-3">
+          <p className="text-sm text-slate-600">Conta concluída. As marcações não mudam mais.</p>
+          {guia.pode_reenviar && (
+            <div className="space-y-2">
+              <input
+                ref={seletorDoPdf}
+                type="file"
+                accept="application/pdf"
+                aria-label="PDF da conta corrigida"
+                className="hidden"
+                onChange={(evento) => reenviar(evento.target.files?.[0])}
+              />
+              <button
+                type="button"
+                onClick={() => seletorDoPdf.current?.click()}
+                disabled={ocupado}
+                className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl border border-slate-200 bg-white text-sm font-semibold text-slate-700 hover:border-slate-300 disabled:opacity-50"
+              >
+                <Upload className="w-4 h-4" aria-hidden="true" />
+                Reenviar conta corrigida
+              </button>
+              {resultadoDoReenvio && (
+                <p role="status" className="text-sm font-semibold text-slate-700">
+                  {resultadoDoReenvio}
+                </p>
+              )}
+              <p className="text-xs text-slate-500">
+                Opcional. Depois de corrigir no MV, envie só o PDF da conta para ver se a correção pegou. A conta já
+                está na sua produção.
+              </p>
+            </div>
+          )}
+        </footer>
       ) : (
         <footer className="bg-white rounded-2xl border border-border shadow-premium p-4 space-y-3">
           <label htmlFor="observacao-gestao" className={`block ${TITULO}`}>
@@ -316,6 +437,10 @@ export default function GuiaPage() {
             rows={2}
             placeholder="Opcional"
             className="w-full rounded-lg border border-border px-3 py-2 text-sm"
+          />
+          <Ditar
+            campo="Observação para a gestão de contas médicas"
+            aoTranscrever={(ditado) => setObservacao((atual) => juntarDitado(atual, ditado))}
           />
           <button
             type="button"

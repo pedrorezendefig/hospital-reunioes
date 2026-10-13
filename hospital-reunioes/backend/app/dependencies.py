@@ -484,6 +484,30 @@ def permissoes_contas_medicas(supabase, participante: dict[str, Any] | None) -> 
     return [p for p in PERMISSOES_CONTAS_MEDICAS if p in ligadas]
 
 
+async def require_acesso_ditado(
+    current_user: dict = Depends(get_current_user),
+    supabase: Client = Depends(get_supabase_client),
+) -> None:
+    """Gate da transcrição de voz: papel nas Reuniões OU o eixo de Contas médicas.
+
+    O ditado nasceu nas Reuniões e a Ata guiada segue ditando por aqui; a issue
+    #1145 abriu a mesma rota para quem só tem perfil de Contas médicas, porque
+    os campos de texto longo do módulo ganharam o botão "Ditar". Quem não tem
+    nenhum dos dois continua recusado. `me=None` passa adiante como no gate das
+    Reuniões: a rota já devolve 403 para token órfão.
+    """
+    me = await get_participante_for_user(current_user, supabase)
+    barrar_desligado(me)
+    if me is None:
+        return
+    tem_eixo_cm = me.get("perfil_contas_medicas") in PERFIS_CONTAS_MEDICAS
+    if not tem_acesso_reunioes(me) and not tem_eixo_cm:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Ditado restrito a quem tem papel nas Reuniões ou em Contas médicas",
+        )
+
+
 def require_permissao_cm(permissao: str | None = None):
     """Gate das rotas de Contas médicas: 403 sem a permissão na matriz.
 

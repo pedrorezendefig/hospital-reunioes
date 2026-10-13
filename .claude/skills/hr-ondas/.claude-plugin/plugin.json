@@ -1,0 +1,1 @@
+{ "name": "hr-ondas", "version": "0.1.0", "description": "Torre das ondas: PRD, onda e issue com a fase, sessões vivas e migrations pendentes com link direto", "types": "./types/index.d.ts" }
