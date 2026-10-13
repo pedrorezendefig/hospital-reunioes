@@ -82,6 +82,14 @@ def rotas_sem_login(fontes: dict[str, str]) -> dict[str, list[str]]:
         for no in ast.walk(arvore):
             if isinstance(no, (ast.FunctionDef, ast.AsyncFunctionDef)):
                 grafo.setdefault(no.name, set()).update(depends(no))
+        # O gate guardado num nome do módulo (`_PODE = require_permissao_cm(...)`):
+        # `Depends(_PODE)` chega ao nome, e o nome leva à fábrica.
+        for no in arvore.body:
+            if isinstance(no, ast.Assign) and isinstance(no.value, ast.Call):
+                fabrica = getattr(no.value.func, "id", getattr(no.value.func, "attr", None))
+                for alvo in no.targets:
+                    if fabrica and isinstance(alvo, ast.Name):
+                        grafo.setdefault(alvo.id, set()).add(fabrica)
     com_login, cresceu = {"get_current_user"}, True
     while cresceu:
         novos = {nome for nome, alvos in grafo.items() if alvos & com_login} - com_login
