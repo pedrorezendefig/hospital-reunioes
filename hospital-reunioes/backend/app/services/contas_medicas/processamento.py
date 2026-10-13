@@ -685,14 +685,10 @@ def _avisar_se_o_envio_terminou(supabase, conta: dict) -> None:
         if arquivo is None:
             return
         envio_id = arquivo["envio_id"]
-        ids = [
-            a["id"]
-            for a in supabase.table("cm_arquivo").select("id").eq("envio_id", envio_id).eq("tipo", "CONTA").execute().data
-            or []
-        ]
-        situacoes = [
-            c["situacao"] for c in supabase.table("cm_conta").select("situacao").in_("arquivo_id", ids).execute().data or []
-        ]
+        do_envio = supabase.table("cm_arquivo").select("id").eq("envio_id", envio_id).eq("tipo", "CONTA").execute()
+        ids = [a["id"] for a in do_envio.data or []]
+        contas = supabase.table("cm_conta").select("situacao").in_("arquivo_id", ids).execute()
+        situacoes = [c["situacao"] for c in contas.data or []]
         if any(situacao in _ESPERANDO for situacao in situacoes):
             return
         erros = situacoes.count("ERRO")
