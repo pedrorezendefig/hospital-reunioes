@@ -1,0 +1,339 @@
+"""O Passo A de Contas médicas: os eventos do prontuário com página e trecho
+(issue #1131, PRD #1128).
+
+A IA lê só o texto livre que o código não estruturou, já desidentificado, mais
+o que o código já leu (prescrições consolidadas, balanço, glicemias e os
+achados das conferências). Os testes passam pelo adaptador de verdade e trocam
+só o transporte HTTP: o que eles leem é o corpo que sairia para o OpenRouter e
+a resposta é a do Anexo A, montada à mão.
+
+O prontuário é sintético, montado das fixtures de texto do MV
+(`tests/fixtures/contas_medicas/`), com a paciente fictícia ANTÔNIA MELO FARIAS.
+"""
+
+from __future__ import annotations
+
+import json
+import os
+import re
+import sys
+import unicodedata
+from pathlib import Path
+from types import SimpleNamespace
+
+import httpx
+import pytest
+from openai import OpenAI
+
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+
+from app.services.contas_medicas import ia, passo_a  # noqa: E402
+from app.services.contas_medicas.conferencia import ProntuarioLido  # noqa: E402
+from app.services.contas_medicas.conteudo import ler_conteudo  # noqa: E402
+from app.services.contas_medicas.prontuario import ler_prontuario  # noqa: E402
+
+FIXTURES = Path(__file__).parent / "fixtures" / "contas_medicas"
+QUEBRA = "<<<QUEBRA DE PÁGINA>>>"
+ATENDIMENTO = "31245"
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# O prontuário sintético
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+def _fixture(nome: str) -> list[str]:
+    return [p.strip("\n") for p in (FIXTURES / f"{nome}.txt").read_text(encoding="utf-8").split(QUEBRA)]
+
+
+def _com_rodape(paginas: list[str]) -> list[str]:
+    return [
+        f"{texto}\n\n          Impressão de Prontuário - Página {n} de {len(paginas)}"
+        for n, texto in enumerate(paginas, start=1)
+    ]
+
+
+def _lido(paginas: list[str]) -> ProntuarioLido:
+    estrutura = ler_prontuario(paginas, ATENDIMENTO)
+    return ProntuarioLido(estrutura, ler_conteudo(paginas, estrutura), paginas)
+
+
+# A evolução médica vem antes no arquivo e é de 05/10: a entrada sai pela data.
+EVOLUCAO_DE_05_10 = [p.replace("03/10/2026 09:12", "05/10/2026 08:00") for p in _fixture("prontuario/evolucao")]
+PRESCRICAO_DE_03_10 = [
+    p.replace("20/10/2026", "03/10/2026").replace("18/10/2026", "02/10/2026") for p in _fixture("conteudo/prescricao")
+]
+
+
+def _paginas() -> list[str]:
+    """1 capa, 2 evolução (05/10), 3 admissão (02/10), 4 e 5 prescrição (03/10),
+    6 anotação de enfermagem (03/10), 7 e 8 balanço (03/10), 9 resumo de alta (06/10)."""
+    return _com_rodape(
+        [
+            *_fixture("prontuario/capa"),
+            *EVOLUCAO_DE_05_10,
+            *_fixture("prontuario/admissao_unidade"),
+            *PRESCRICAO_DE_03_10,
+            *_fixture("prontuario/anotacao_enf"),
+            *_fixture("conteudo/balanco"),
+            *_fixture("prontuario/resumo_alta"),
+        ]
+    )
+
+
+# O que a capa imprime da paciente: nada disso pode sair para a IA.
+VALORES_DA_CAPA = (
+    "ANTONIA",
+    "MELO FARIAS",
+    "FARIAS",
+    "JOSEFA",
+    "RIBEIRO COSTA",
+    "14/03/1951",
+    "529.982.247-25",
+    "52998224725",
+    "20.481.337-6",
+    "0817734",
+)
+
+# Uma linha que as conferências por código já puseram no guia.
+ACHADO_DO_CODIGO = {
+    "acao": "INCLUIR",
+    "data": "2026-10-04",
+    "data_fim": "2026-10-04",
+    "setor": "CTI ADULTO",
+    "codigo": "90030001",
+    "descricao": "CLEXANE 40MG/0,4ML SER PREENCH",
+    "quantidade_lancada": 0.0,
+    "quantidade_devida": 1.0,
+    "regra_codigo": "ALFA-PRI-07",
+    "motivo": "Prescrito em 04/10 e não lançado.",
+    "evidencia_pagina": 4,
+    "nivel_evidencia": "PRESCRITO",
+    "origem": "CODIGO",
+}
+
+
+def _regra(codigo: str, texto: str) -> dict:
+    return {"codigo": codigo, "secao": codigo.split("-")[1], "texto": texto, "tipo": "CONTRATUAL", "status": "VIGENTE"}
+
+
+REGRAS = [
+    _regra("ALFA-PRI-01", "Leia o prontuário pelo atendimento."),
+    _regra("ALFA-PRC-02", "Preço pela tabela vigente."),
+    _regra("ALFA-DIA-01", "Diária vence às 10h."),
+    _regra("ALFA-INS-04", "Equipo por bomba a cada 72 horas."),
+]
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# O provedor e o banco de mentira
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+def _resposta(**listas) -> dict:
+    """Uma resposta no formato do Anexo A, com as listas pedidas."""
+    return {
+        "atendimento": ATENDIMENTO,
+        "idade_anos": 75,
+        "movimentacoes": [],
+        "terapias": [],
+        "prescricoes": [],
+        "procedimentos": [],
+        "cirurgias": [],
+        "documentos_ausentes": [],
+        "observacoes": [],
+        **listas,
+    }
+
+
+class _Provedor:
+    """O OpenRouter do teste: guarda o corpo de cada requisição e devolve
+    `respostas` na ordem; a última se repete."""
+
+    def __init__(self):
+        self.corpos: list[dict] = []
+        self.respostas: list[dict] = [_resposta()]
+
+    def __call__(self, request: httpx.Request) -> httpx.Response:
+        self.corpos.append(json.loads(request.content))
+        resposta = self.respostas.pop(0) if len(self.respostas) > 1 else self.respostas[0]
+        return httpx.Response(
+            200,
+            json={
+                "id": f"gen-{len(self.corpos)}",
+                "object": "chat.completion",
+                "created": 1,
+                "model": self.corpos[-1]["model"],
+                "choices": [
+                    {
+                        "index": 0,
+                        "message": {"role": "assistant", "content": json.dumps(resposta)},
+                        "finish_reason": "stop",
+                    }
+                ],
+                "usage": {"prompt_tokens": 900, "completion_tokens": 300, "total_tokens": 1200, "cost": 0.002},
+            },
+        )
+
+    def textos_do_prontuario(self) -> list[str]:
+        """O bloco TEXTO DO PRONTUÁRIO de cada requisição."""
+        return [corpo["messages"][1]["content"][1]["text"] for corpo in self.corpos]
+
+
+@pytest.fixture
+def provedor(monkeypatch) -> _Provedor:
+    duble = _Provedor()
+    monkeypatch.setattr(
+        ia,
+        "_cliente",
+        lambda: OpenAI(
+            api_key="chave-de-teste",
+            base_url="https://openrouter.ai/api/v1",
+            http_client=httpx.Client(transport=httpx.MockTransport(duble)),
+            max_retries=0,
+        ),
+    )
+    monkeypatch.setattr(ia, "_esperar", lambda _segundos: None)
+    return duble
+
+
+class _Consulta:
+    def __init__(self, banco: _Banco, nome: str):
+        self._banco, self._nome = banco, nome
+        self._filtros: list = []
+        self._ordem: tuple[str, bool] | None = None
+        self._limite: int | None = None
+        self._insert = self._update = None
+
+    def select(self, *_a, **_kw):
+        return self
+
+    def eq(self, coluna, valor):
+        self._filtros.append((coluna, valor))
+        return self
+
+    def order(self, coluna, desc=False):
+        self._ordem = (coluna, desc)
+        return self
+
+    def limit(self, n):
+        self._limite = n
+        return self
+
+    def insert(self, linhas):
+        self._insert = linhas
+        return self
+
+    def update(self, campos):
+        self._update = campos
+        return self
+
+    def execute(self):
+        tabela = self._banco.tabelas.setdefault(self._nome, [])
+        if self._insert is not None:
+            novas = [
+                {"id": f"{self._nome}-{len(tabela) + i}", "criado_em": len(tabela) + i, **linha}
+                for i, linha in enumerate(self._insert if isinstance(self._insert, list) else [self._insert])
+            ]
+            tabela.extend(novas)
+            return SimpleNamespace(data=[dict(linha) for linha in novas])
+        casam = [linha for linha in tabela if all(linha.get(c) == v for c, v in self._filtros)]
+        if self._update is not None:
+            for linha in casam:
+                linha.update(json.loads(json.dumps(self._update)))
+        if self._ordem:
+            casam.sort(key=lambda linha: linha.get(self._ordem[0]), reverse=self._ordem[1])
+        if self._limite is not None:
+            casam = casam[: self._limite]
+        return SimpleNamespace(data=[json.loads(json.dumps(linha)) for linha in casam])
+
+
+class _Banco:
+    """O banco do teste, com a estrutura do prontuário já gravada pelo pipeline."""
+
+    def __init__(self):
+        self.tabelas: dict[str, list[dict]] = {
+            "cm_conta": [{"id": "c1", "atendimento_id": "at-1"}],
+            "cm_eventos": [{"id": "ev-1", "atendimento_id": "at-1", "eventos_json": {"arquivo_id": "arq-1"}}],
+            "cm_chamada_ia": [],
+        }
+
+    def table(self, nome: str):
+        return _Consulta(self, nome)
+
+
+def _passo_a(banco: _Banco, prontuario: ProntuarioLido, achados=(ACHADO_DO_CODIGO,)) -> dict:
+    return passo_a.eventos_do_atendimento(
+        banco,
+        conta_id="c1",
+        atendimento_id="at-1",
+        arquivo_id="arq-1",
+        prontuario=prontuario,
+        achados=list(achados),
+        regras=REGRAS,
+    )
+
+
+def _sem_acento(texto: str) -> str:
+    return "".join(c for c in unicodedata.normalize("NFD", texto) if unicodedata.category(c) != "Mn")
+
+
+def _secao(texto: str, titulo: str) -> list[str]:
+    """As linhas de uma seção do código no texto enviado, até a próxima seção."""
+    depois = texto.split(f"[[{titulo}]]\n", 1)[1]
+    return depois.split("\n[[", 1)[0].splitlines()
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 1. A entrada
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+class TestEntrada:
+    def test_a_entrada_tem_os_marcadores_pela_data_sem_valor_da_capa_com_prescricoes_e_achados(self, provedor):
+        _passo_a(_Banco(), _lido(_paginas()))
+
+        (texto,) = provedor.textos_do_prontuario()
+        # Um bloco por documento de texto livre, pela data e hora do documento,
+        # com a página do PDF original. Prescrição e balanço não vão como bloco:
+        # vão nas seções do código.
+        assert re.findall(r"\[\[PÁG [^\]]*\]\]", texto) == [
+            "[[PÁG 3 · ADMISSAO_UNIDADE · 02/10/2026 23:05 · CTI ADULTO]]",
+            "[[PÁG 6 · ANOTACAO_ENF · 03/10/2026 14:30 · sem setor]]",
+            "[[PÁG 2 · EVOLUÇÃO MEDICA · 05/10/2026 08:00 · sem setor]]",
+            "[[PÁG 9 · RESUMO_ALTA · 06/10/2026 15:20 · sem setor]]",
+        ]
+        assert "Realizado curativo em região sacral com cobertura de hidrocoloide." in texto
+
+        normalizado = _sem_acento(texto).upper()
+        for valor in VALORES_DA_CAPA:
+            assert valor not in normalizado, valor
+
+        prescricoes = _secao(texto, "PRESCRIÇÕES CONSOLIDADAS")
+        for item in (
+            "PANTOCAL 40MG EV FR/AMP (PANTOPRAZOL)",
+            "DIPIRONA SODICA 500MG/ML SOL INJ",
+            "ONDANSETRONA 2MG/ML SOL INJ",
+            "METOCLOPRAMIDA 5MG/ML SOL INJ",
+            "SORO FISIOLOGICO 0,9% 500ML",
+            "CEFTRIAXONA 1G FR/AMP",
+        ):
+            (linha,) = [linha for linha in prescricoes if item in linha]
+            assert "03/10" in linha and "PÁG 4" in linha, linha
+        (dipirona,) = [linha for linha in prescricoes if "DIPIRONA" in linha]
+        assert "SE NECESSÁRIO" in dipirona and "EM CASO DE DOR OU FEBRE" in dipirona
+
+        (achado,) = _secao(texto, "ACHADOS DO CÓDIGO")
+        for parte in ("INCLUIR", "04/10/2026", "90030001", "CLEXANE 40MG/0,4ML SER PREENCH", "ALFA-PRI-07"):
+            assert parte in achado, parte
+
+        assert any("SORO FISIOLOGICO 0,9% EV" in linha for linha in _secao(texto, "BALANÇO HÍDRICO POR DIA"))
+        assert _secao(texto, "GLICEMIAS POR DIA") == ["03/10/2026: 4"]
+
+    def test_as_orientacoes_de_leitura_sao_as_secoes_1_3_e_8_da_memoria(self, provedor):
+        _passo_a(_Banco(), _lido(_paginas()))
+
+        orientacoes = provedor.corpos[0]["messages"][1]["content"][0]["text"]
+        for codigo in ("ALFA-PRI-01", "ALFA-DIA-01", "ALFA-INS-04"):
+            assert codigo in orientacoes, codigo
+        assert "ALFA-PRC-02" not in orientacoes
