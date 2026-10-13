@@ -763,6 +763,12 @@ class TestPipeline:
         assert gravada["memoria_versao_id"] == "mv-alfa"
         assert gravada["pronta_em"] is not None
         assert len(banco.tabelas["cm_conta_item"]) == len(ITENS_DA_CONTA)
+        (na_fila,) = _fila(banco)
+        assert (na_fila["situacao"], na_fila["nota_entrada"], na_fila["valor_apontado"]) == (
+            "A_FAZER",
+            esperada.nota.nota,
+            float(esperada.nota.apontado),
+        )
 
         guia = _guia(banco, conta["id"])
         linhas = _linhas_do_guia(guia)
