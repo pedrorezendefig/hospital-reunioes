@@ -1,14 +1,16 @@
 """O adaptador de IA de Contas médicas (issue #1130, PRD #1128).
 
 A única porta do módulo para a IA, sobre o cliente do OpenRouter que o app já
-usa. Três chamadas:
+usa. Quatro chamadas:
 
 - `extrair_eventos`: o passo A, que lê o prontuário e lista os eventos
   (Anexo A da spec);
 - `comparar_conta`: o passo B, que compara a conta com a memória da operadora
   e devolve as linhas do Guia (Anexo B, com o "se necessário" do adendo v1.1);
 - `chamada_curta`: a pergunta curta do dicionário e das observações, com o
-  schema que quem chama escolhe.
+  schema que quem chama escolhe;
+- `propor_regra`: a regra nova que a pessoa escreveu em linguagem comum, no
+  formato da memória da operadora (issue #1141).
 
 Toda chamada sai igual: saída estruturada estrita (`json_schema` com
 `strict`), só para provedor que respeita os parâmetros, sem retenção do texto
@@ -36,9 +38,11 @@ __all__ = [
     "ErroDaIA",
     "EventosDoProntuario",
     "LinhasDaComparacao",
+    "PropostaDeRegra",
     "chamada_curta",
     "comparar_conta",
     "extrair_eventos",
+    "propor_regra",
 ]
 
 logger = logging.getLogger(__name__)
@@ -202,6 +206,30 @@ class LinhasDaComparacao(_Estrito):
 
     linhas: list[LinhaDaComparacao]
     resumo: str
+
+
+class RegraProposta(_Estrito):
+    secao: Literal["PRI", "PRC", "DIA", "PAC", "TAX", "CC", "HON", "INS", "MED"]
+    texto: str
+    tipo: Literal["CONTRATUAL", "OPERACIONAL"]
+    origem: str
+
+
+class ParametroProposto(_Estrito):
+    """A chave do cabeçalho com ponto entre os níveis (`diaria.hora_vencimento`)
+    e o valor novo em JSON, porque o valor pode ser texto, número, sim ou não."""
+
+    chave: str
+    valor_json: str
+
+
+class PropostaDeRegra(_Estrito):
+    """A regra nova proposta pela IA: os quatro blocos que a tela mostra."""
+
+    regra: RegraProposta
+    parametro: ParametroProposto | None
+    conflitos: list[str]
+    efeito_no_guia: str
 
 
 # ----------------------------------------------------------------------------------
@@ -387,7 +415,7 @@ def _chamar_a_ia[Saida: BaseModel](
 
 
 # ----------------------------------------------------------------------------------
-# As três portas
+# As portas
 # ----------------------------------------------------------------------------------
 
 
@@ -468,4 +496,23 @@ def chamada_curta[Saida: BaseModel](
         blocos=[(conteudo, False)],
         saida=saida,
         onde=_Onde(supabase, conta_id, atendimento_id, passo),
+    )
+
+
+def propor_regra(texto: str, memoria: str, *, supabase) -> PropostaDeRegra:
+    """A regra nova que a pessoa escreveu, no formato da memória: a regra, o
+    parâmetro do cabeçalho que muda, as regras com que conflita e o efeito no
+    Guia. No modelo do passo B, com a memória em bloco de cache.
+
+    Fica gravada como OBSERVACAO, a leitura de texto livre sobre regra: a
+    migration 118 é a única do PRD e o CHECK do passo não tem valor próprio."""
+    return _chamar_a_ia(
+        modelo=settings.cm_ia_modelo_passo_b,
+        instrucao=load_prompt("contas_medicas_regra_nova"),
+        blocos=[
+            (f"MEMÓRIA DA OPERADORA\n{memoria}", True),
+            (f"REGRA EM LINGUAGEM COMUM\n{texto}", False),
+        ],
+        saida=PropostaDeRegra,
+        onde=_Onde(supabase, None, None, "OBSERVACAO"),
     )

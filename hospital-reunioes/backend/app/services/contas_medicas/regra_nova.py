@@ -1,0 +1,131 @@
+"""Ensinar uma regra nova na Memória da operadora (issue #1141, PRD #1129, ADR 0070).
+
+Dois tempos. Na proposta, a pessoa escreve a regra em linguagem comum e a IA
+devolve a regra no formato da memória, o parâmetro do cabeçalho que muda, as
+regras com que ela conflita e o efeito no Guia; nada é gravado. No "Validar
+regra", a regra conferida pela pessoa entra numa versão nova da memória, pelo
+mesmo caminho da edição pela tela (`memoria_edicao`): histórico, registro e
+texto gerado do banco. O parâmetro, quando há, muda no `parametros_json` da
+versão nova.
+
+A conta A fazer ou Em correção analisada com uma versão que não é mais a
+vigente fica marcada com "regra nova desde a análise": é ela que o "Reanalisar
+com a regra nova" refaz.
+"""
+
+from __future__ import annotations
+
+import copy
+import json
+import re
+from typing import Any
+
+from app.services.contas_medicas import ia
+from app.services.contas_medicas.memoria import _CPF
+from app.services.contas_medicas.memoria_edicao import (
+    MudancaRecusadaError,
+    RegraNaoEncontradaError,
+    SemPermissaoNaRegraError,
+    _agora,
+    _gravar_versao,
+    _regras_da_versao,
+    _vigente,
+    permissao_do_tipo,
+)
+from app.services.contas_medicas.memoria_texto import gerar_texto_memoria
+
+__all__ = [
+    "SITUACOES_REANALISAVEIS",
+    "contas_com_regra_nova",
+    "ensinar_regra",
+    "propor_regra_nova",
+    "regra_nova_desde_a_analise",
+]
+
+# As situações em que "Reanalisar" vale: o Guia pronto e ainda em aberto.
+SITUACOES_REANALISAVEIS = ("A_FAZER", "EM_CORRECAO")
+
+# A chave do cabeçalho, com ponto entre os níveis. Nome e versão da memória não
+# mudam por regra: a versão é do sistema, e a sigla é a operadora.
+_CHAVE = re.compile(r"[a-z_][a-z0-9_]*(\.[a-z0-9_]+)*")
+_CHAVES_PROTEGIDAS = frozenset({"operadora", "versao_memoria", "nome"})
+
+
+def _operadora_e_vigente(supabase, sigla: str) -> tuple[str, str, dict]:
+    sigla = sigla.strip().upper()
+    operadoras = supabase.table("cm_operadora").select("id, sigla").eq("sigla", sigla).execute().data or []
+    vigente = _vigente(supabase, operadoras[0]["id"]) if operadoras else None
+    if not vigente:
+        raise RegraNaoEncontradaError(f"A operadora {sigla} não tem memória carregada.")
+    return sigla, operadoras[0]["id"], vigente
+
+
+def _chave_valida(chave: str) -> bool:
+    return bool(_CHAVE.fullmatch(chave)) and chave.split(".")[0] not in _CHAVES_PROTEGIDAS
+
+
+def _valor_do_parametro(parametros: dict[str, Any], chave: str) -> Any:
+    valor: Any = parametros
+    for parte in chave.split("."):
+        if not isinstance(valor, dict):
+            return None
+        valor = valor.get(parte)
+    return valor
+
+
+def _com_parametro(parametros: dict[str, Any], chave: str, valor: Any) -> dict[str, Any]:
+    """O cabeçalho com a chave trocada; o resto, inclusive o que o código não lê, fica."""
+    novo = copy.deepcopy(parametros)
+    *caminho, ultima = chave.split(".")
+    no = novo
+    for parte in caminho:
+        if not isinstance(no.get(parte), dict):
+            no[parte] = {}
+        no = no[parte]
+    no[ultima] = valor
+    return novo
+
+
+def _valor_json(valor_json: str) -> Any:
+    try:
+        return json.loads(valor_json)
+    except ValueError:
+        return valor_json
+
+
+def propor_regra_nova(supabase, sigla: str, texto: str) -> dict[str, Any]:
+    """A proposta da IA para o texto da pessoa, sem gravar nada na memória.
+
+    O "antes" do parâmetro e o texto das regras em conflito vêm da memória
+    vigente, e não da IA; conflito com ID que a memória não tem fica de fora.
+    """
+    texto = texto.strip()
+    if not texto:
+        raise MudancaRecusadaError("Escreva a regra.")
+    if _CPF.search(texto):
+        raise MudancaRecusadaError(
+            "O texto tem um número no formato de CPF. A memória não pode ter dado de paciente: tire o número."
+        )
+    _, operadora_id, vigente = _operadora_e_vigente(supabase, sigla)
+    memoria = gerar_texto_memoria(supabase, operadora_id, vigente["id"])
+    proposta = ia.propor_regra(texto, memoria, supabase=supabase)
+
+    regras = {r["codigo"]: r for r in _regras_da_versao(supabase, vigente["id"])}
+    parametro = None
+    if proposta.parametro and _chave_valida(proposta.parametro.chave):
+        chave = proposta.parametro.chave
+        parametro = {
+            "chave": chave,
+            "antes": _valor_do_parametro(vigente.get("parametros_json") or {}, chave),
+            "depois": _valor_json(proposta.parametro.valor_json),
+        }
+    return {
+        "regra": proposta.regra.model_dump(),
+        "parametro": parametro,
+        "conflitos": [
+            {"codigo": codigo, "texto": regras[codigo]["texto"]}
+            for codigo in dict.fromkeys(proposta.conflitos)
+            if codigo in regras
+        ],
+        "efeito_no_guia": proposta.efeito_no_guia,
+    }
