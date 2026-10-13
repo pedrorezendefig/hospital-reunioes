@@ -15,6 +15,7 @@ o arquivo das outras.
 
 from __future__ import annotations
 
+from typing import Literal
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
@@ -26,9 +27,12 @@ from app.limiter import limiter
 from app.services.ai_processor import chamar_ia_fora_do_loop
 from app.services.contas_medicas.coordenacao import (
     CenarioNaoEncontradoError,
+    LembreteJaMarcadoError,
+    LembreteNaoEncontradoError,
     editar_cenario,
     lembretes_abertos,
     listar_cenarios,
+    marcar_lembrete,
     novo_cenario,
     propor_cenario,
 )
@@ -59,6 +63,11 @@ class CenarioConferido(BaseModel):
 
 class TextoDoCenario(BaseModel):
     texto: str = Field(..., min_length=1, max_length=4000)
+
+
+class MarcacaoDoLembrete(BaseModel):
+    estado: Literal["INCLUIDO", "NAO_SE_APLICA"]
+    observacao: str | None = Field(default=None, max_length=1000)
 
 
 def _pode_cadastrar(me: dict) -> bool:
@@ -152,3 +161,23 @@ async def mudar_cenario(
         return await run_in_threadpool(editar_cenario, supabase, str(cenario_id), _campos(corpo), me.get("id"))
     except CenarioNaoEncontradoError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from None
+
+
+@router.post("/coordenacao/lembretes/{lembrete_id}/marcacao")
+@limiter.limit("120/minute")
+async def marcar(
+    request: Request,
+    lembrete_id: UUID,
+    corpo: MarcacaoDoLembrete,
+    me: dict = Depends(_PODE_VER),
+    supabase=Depends(get_supabase_client),
+) -> dict:
+    """Incluído ou Não se aplica, um clique, com a observação opcional."""
+    try:
+        return await run_in_threadpool(
+            marcar_lembrete, supabase, str(lembrete_id), corpo.estado, corpo.observacao, me.get("id")
+        )
+    except LembreteNaoEncontradoError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from None
+    except LembreteJaMarcadoError as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from None

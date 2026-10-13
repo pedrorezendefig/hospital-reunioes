@@ -373,4 +373,112 @@ class TestPassoC:
         assert banco.tabelas.get("cm_lembrete", []) == []
 
 
+# ═══════════════════════════════════════════════════════════════════════════
+# 3. A faturista não vê cenário nem lembrete
+# ═══════════════════════════════════════════════════════════════════════════
+
+UM_UUID = "00000000-0000-4000-8000-000000000001"
+
+
+def _chaves(valor: Any) -> set[str]:
+    """Todas as chaves de um JSON, em qualquer profundidade."""
+    if isinstance(valor, dict):
+        return set(valor) | {chave for filho in valor.values() for chave in _chaves(filho)}
+    if isinstance(valor, list):
+        return {chave for filho in valor for chave in _chaves(filho)}
+    return set()
+
+
+class TestFaturistaNaoVe:
+    def test_as_rotas_de_cenario_e_de_lembrete_devolvem_403_sem_dado_nenhum(self, openrouter):
+        banco = _banco_com_cenarios()
+        _analisar(banco, openrouter, _ocorrencia("CEN-001"))
+        (lembrete,) = banco.tabelas["cm_lembrete"]
+        cliente = _cliente(banco, "faturista")
+
+        respostas = [
+            cliente.get(ROTA),
+            cliente.get(f"{ROTA}/cenarios"),
+            cliente.post(f"{ROTA}/cenarios/proposta", json={"texto": TEXTO_DO_CENARIO}),
+            cliente.post(f"{ROTA}/cenarios", json=_cenario_enviado()),
+            cliente.put(f"{ROTA}/cenarios/{UM_UUID}", json=_cenario_enviado()),
+            cliente.post(f"{ROTA}/lembretes/{lembrete['id']}/marcacao", json={"estado": "INCLUIDO"}),
+        ]
+
+        assert [r.status_code for r in respostas] == [403] * 6
+        for resposta in respostas:
+            assert "CEN-" not in resposta.text and "Sondagem" not in resposta.text
+        assert banco.tabelas["cm_lembrete"][0]["estado"] == "ABERTO"
+
+    def test_o_guia_da_conta_com_lembrete_nao_traz_nenhum_campo_de_cenario(self, openrouter):
+        banco = _banco_com_cenarios()
+        conta = _analisar(banco, openrouter, _ocorrencia("CEN-001"), _ocorrencia("CEN-003", TRECHO_INVENTADO))
+        assert len(banco.tabelas["cm_lembrete"]) == 2, "a conta precisa ter lembrete para o teste valer"
+
+        resposta = _cliente(banco, "faturista").get(f"/api/contas-medicas/contas/{conta['id']}/guia")
+
+        assert resposta.status_code == 200, resposta.text
+        assert not {c for c in _chaves(resposta.json()) if "cenario" in c or "lembrete" in c or "coordena" in c}
+        for vestigio in ("CEN-001", "CEN-003", "Sondagem vesical com equipo", "Orientação do CEN", "Quando o CEN"):
+            assert vestigio not in resposta.text
+        # O tempo das etapas vai para a conta dela: são as etapas de antes do Passo C.
+        assert set(banco.conta(conta["id"])["faltantes"]["tempos_por_etapa_s"]) == {
+            "texto_da_conta",
+            "leitura_da_conta",
+            "texto_do_prontuario",
+            "leitura_do_prontuario",
+            "dicionario",
+            "conferencia",
+            "passo_a",
+            "conferencia_com_eventos",
+            "passo_b",
+            "gravacao",
+            "total",
+        }
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 4. Incluído e Não se aplica
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+class TestMarcacao:
+    def test_incluido_e_nao_se_aplica_mudam_o_estado_com_autor_data_e_observacao(self, openrouter):
+        banco = _banco_com_cenarios()
+        _analisar(banco, openrouter, _ocorrencia("CEN-001"), _ocorrencia("CEN-003", TRECHO_INVENTADO))
+        lembretes = _lembretes_por_cenario(_conferencia(banco))
+        cliente = _cliente(banco, "coordenadora")
+
+        incluido = cliente.post(
+            f"{ROTA}/lembretes/{lembretes['CEN-001']['id']}/marcacao",
+            json={"estado": "INCLUIDO", "observacao": "Equipo lançado no MV."},
+        )
+        nao_se_aplica = cliente.post(
+            f"{ROTA}/lembretes/{lembretes['CEN-003']['id']}/marcacao", json={"estado": "NAO_SE_APLICA"}
+        )
+
+        assert (incluido.status_code, nao_se_aplica.status_code) == (200, 200), incluido.text
+        por_id = {lembrete["id"]: lembrete for lembrete in banco.tabelas["cm_lembrete"]}
+        sondagem, inventado = por_id[lembretes["CEN-001"]["id"]], por_id[lembretes["CEN-003"]["id"]]
+        assert (sondagem["estado"], sondagem["marcado_por"], sondagem["observacao"]) == (
+            "INCLUIDO",
+            "CO",
+            "Equipo lançado no MV.",
+        )
+        # Sem observação, a etiqueta da evidência que o lembrete aberto guardava sai.
+        assert (inventado["estado"], inventado["marcado_por"], inventado["observacao"]) == ("NAO_SE_APLICA", "CO", None)
+        assert sondagem["marcado_em"] and inventado["marcado_em"]
+        # Marcados, saem da lista dos abertos; marcar de novo é conflito.
+        assert _conferencia(banco)["numeros"] == {
+            "lembretes_abertos": 0,
+            "contas_com_lembrete": 0,
+            "valor_a_conferir": 0,
+        }
+        de_novo = cliente.post(
+            f"{ROTA}/lembretes/{lembretes['CEN-001']['id']}/marcacao", json={"estado": "NAO_SE_APLICA"}
+        )
+        assert de_novo.status_code == 409
+        assert por_id[lembretes["CEN-001"]["id"]]["estado"] == "INCLUIDO"
+
+
 KIT = Path(__file__).resolve().parents[1] / "app" / "conhecimento" / "contas-medicas.md"

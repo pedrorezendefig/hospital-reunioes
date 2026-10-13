@@ -31,10 +31,13 @@ from app.utils.text_sanitizer import sanitizar_estrutura
 __all__ = [
     "CONFERIR_EVIDENCIA",
     "CenarioNaoEncontradoError",
+    "LembreteJaMarcadoError",
+    "LembreteNaoEncontradoError",
     "editar_cenario",
     "itens_dos_cenarios",
     "lembretes_abertos",
     "listar_cenarios",
+    "marcar_lembrete",
     "novo_cenario",
     "propor_cenario",
 ]
@@ -54,6 +57,14 @@ _CODIGO = re.compile(r"^CEN-(\d+)$")
 
 class CenarioNaoEncontradoError(Exception):
     """O cenário da rota não existe."""
+
+
+class LembreteNaoEncontradoError(Exception):
+    """O lembrete da rota não existe."""
+
+
+class LembreteJaMarcadoError(Exception):
+    """O lembrete já saiu de aberto."""
 
 
 def _agora() -> str:
@@ -408,3 +419,33 @@ def lembretes_abertos(supabase) -> dict[str, Any]:
         },
         "contas": list(por_conta.values()),
     }
+
+
+def marcar_lembrete(
+    supabase, lembrete_id: str, estado: str, observacao: str | None, autor_id: str | None
+) -> dict[str, Any]:
+    """Incluído ou Não se aplica, com quem marcou, quando e a observação
+    opcional, que substitui a etiqueta do lembrete aberto. Condicional no
+    estado: duas marcações ao mesmo tempo gravam uma vez."""
+    if not (supabase.table("cm_lembrete").select("id").eq("id", lembrete_id).execute().data or []):
+        raise LembreteNaoEncontradoError("Lembrete não encontrado")
+    marcado = (
+        supabase.table("cm_lembrete")
+        .update(
+            {
+                "estado": estado,
+                "observacao": (observacao or "").strip() or None,
+                "marcado_por": autor_id,
+                "marcado_em": _agora(),
+            }
+        )
+        .eq("id", lembrete_id)
+        .eq("estado", "ABERTO")
+        .execute()
+        .data
+        or []
+    )
+    if not marcado:
+        raise LembreteJaMarcadoError("Este lembrete já foi marcado")
+    (lembrete,) = marcado
+    return {chave: lembrete.get(chave) for chave in ("id", "estado", "observacao", "marcado_por", "marcado_em")}
