@@ -38,6 +38,16 @@ const nextConfig: NextConfig = {
     NEXT_PUBLIC_APP_VERSION: APP_VERSION,
   },
   generateBuildId: async () => `v${APP_VERSION}-${Date.now()}`,
+  experimental: {
+    // Envio de Contas médicas (issue #1213). Com o `src/middleware.ts` no app,
+    // o Next clona o corpo de toda requisição e corta em 10 MB por padrão: o
+    // backend recebia só o começo do prontuário e devolvia 400. O teto cabe o
+    // maior arquivo da tela de envio (100 MB) mais o envelope do multipart.
+    middlewareClientMaxBodySize: 120 * 1024 * 1024,
+    // O repasse ao backend cortava em 30 s, menos do que um prontuário de
+    // dezenas de MB leva numa conexão residencial.
+    proxyTimeout: 10 * 60 * 1000,
+  },
   async rewrites() {
     // O rewrite roda no servidor do Next. API_PROXY_URL é o caminho interno
     // até o backend (rede do Docker): sem a volta pela URL pública, o Traefik
