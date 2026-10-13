@@ -2,6 +2,54 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-10-13T04:41:11-03:00",
+      "sha": "4dd88f93eedf083ced476470bdd7d78e23c47154",
+      "app_version": "0.189.0",
+      "subject": "Onda onda-gestao-onda4: Conferência da coordenação (cenários, Passo C, lembretes, tela)",
+      "raw_subject": "chore(deploy): registro da onda onda-gestao-onda4 (#1186)",
+      "scope": [
+        "backend",
+        "frontend"
+      ],
+      "prds": [
+        1129
+      ],
+      "result": "healthy",
+      "duration_seconds": 504,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        },
+        {
+          "service": "frontend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "onda-enxuta onda-gestao-onda4: PR #1186 (issue #1143), mergeados PR a PR. Merge pela API do GitHub, um build. Registro pela Action pos-merge depois do health.",
+      "etapas": {
+        "merge_s": 4,
+        "build_s": {
+          "backend": 23,
+          "frontend": 200
+        },
+        "health_s": 0
+      },
+      "responsavel": "pedrorezendefig"
+    },
+    {
       "at": "2026-10-13T04:33:48-03:00",
       "sha": "86b0b101d20c8cf437de4daf0f69da53dc1086f7",
       "app_version": "0.188.0",
