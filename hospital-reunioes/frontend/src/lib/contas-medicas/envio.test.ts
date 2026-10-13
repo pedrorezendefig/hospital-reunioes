@@ -183,4 +183,11 @@ describe("o que a fila mostra de cada conta", () => {
     );
     expect(detalheDaConta(item({ situacao: "NA_FILA" }))).toBe("");
   });
+
+  it("a conta concluída e reenviada mostra a nota de entrada e a de saída (issue #1136)", () => {
+    expect(
+      detalheDaConta(item({ situacao: "CONCLUIDA_COM_PENDENCIA", nota_entrada: 79, nota_saida: 86, pendencias: 1 })),
+    ).toBe("Nota de entrada 79, nota de saída 86, 1 pendência");
+    expect(detalheDaConta(item({ situacao: "CONCLUIDA", nota_entrada: 79, nota_saida: null }))).toBe("Nota 79");
+  });
 });
