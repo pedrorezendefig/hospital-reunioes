@@ -240,6 +240,11 @@ export default function GuiaPage() {
           >
             {ROTULO_SITUACAO[cabecalho.situacao] ?? cabecalho.situacao}
           </span>
+          {guia.regra_nova_desde_analise && (
+            <span className="inline-flex px-2.5 py-0.5 rounded-full text-xs font-semibold bg-[#EDE9FE] text-[#5B21B6]">
+              Regra nova desde a análise
+            </span>
+          )}
           {guia.pode_reanalisar && (
             <button
               type="button"
@@ -248,7 +253,7 @@ export default function GuiaPage() {
               className="ml-auto inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 bg-white text-sm text-slate-700 hover:border-slate-300 disabled:opacity-50"
             >
               <RefreshCw className="w-4 h-4" aria-hidden="true" />
-              Reanalisar
+              {guia.regra_nova_desde_analise ? "Reanalisar com a regra nova" : "Reanalisar"}
             </button>
           )}
         </div>

@@ -74,6 +74,8 @@ export interface Guia {
   grupos: GrupoGuia[];
   /** O botão "Reanalisar" (issue #1130): a permissão de regra contratual e tabelas, na conta ainda aberta. */
   pode_reanalisar?: boolean;
+  /** A conta foi analisada com uma memória que já mudou (issue #1141): marca e "Reanalisar com a regra nova". */
+  regra_nova_desde_analise?: boolean;
 }
 
 export const ROTULO_ACAO: Record<AcaoGuia, string> = {
