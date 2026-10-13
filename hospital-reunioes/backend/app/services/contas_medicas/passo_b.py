@@ -5,13 +5,29 @@ prontuário no período da conta com um dia de margem, os itens da conta e os
 CÁLCULOS do código (diárias pagas, tetos, coluna de preço e as linhas que as
 conferências já geraram) e devolve linhas do Guia, sem valor em reais.
 
-Nenhuma linha da IA chega à faturista sem as conferências do código.
+Nenhuma linha da IA chega à faturista sem as conferências do código:
+
+1. a regra citada existe na memória (senão a linha cai e fica registrada);
+2. a linha está no período da conta (senão cai e fica registrada);
+3. a mesma ação no mesmo código, com o período cruzando o de uma linha que o
+   código ou a IA já apontou, é a mesma linha: fica a primeira;
+4. regra pendente vira Validar, nunca ordem;
+5. o trecho citado está na página ou na vizinha (senão confiança baixa, que a
+   tela mostra como "conferir evidência");
+6. o código está na tabela da operadora: o preço da tabela dá o valor; fora
+   dela, o unitário que a conta já lançou, com a etiqueta; sem nenhum, "não
+   conferido". Código nulo tenta o dicionário e a descrição; sem sucesso,
+   "sem código";
+7. o teto por dia é o do código: diárias pagas vezes o teto.
+
+A causa-raiz da IA é sobreposta nos casos óbvios: diária é Regra automática;
+regra de preço e item que o MV já bloqueou, Cadastro e preço.
 """
 
 from __future__ import annotations
 
 import re
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import date, timedelta
 from decimal import ROUND_HALF_UP, Decimal
@@ -171,7 +187,7 @@ class _Conferencias:
     diarias: frozenset[str]
     # Os códigos que o MV já não deixou lançar (linha marcada Bloqueado).
     bloqueados: frozenset[str]
-    texto_da_pagina: Any
+    texto_da_pagina: Callable[[int], str | None]
     apontadas: list[_Periodo]
     descartadas: list[dict[str, Any]]
 

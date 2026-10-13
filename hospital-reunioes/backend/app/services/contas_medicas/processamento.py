@@ -16,16 +16,22 @@ O pipeline de uma conta, em etapas cronometradas:
    que o aviso do envio usa, `cm_prescricao`, `cm_cirurgia`, `cm_glicemia_dia`,
    o rótulo e a idade em `cm_atendimento`) é gravada uma vez por arquivo de
    prontuário;
-4. a conferência por código (as diárias são contadas dentro dela), com a
+4. o dicionário: o medicamento da prescrição sem par na conta vai uma vez à
+   IA, e a proposta já vale nesta conta (#1135);
+5. a conferência por código (as diárias são contadas dentro dela), com a
    memória vigente, as tabelas, os setores e o dicionário do banco;
-5. o Guia: o reprocesso troca as linhas abertas e preserva as marcadas; a
-   conta fica `A_FAZER` com nota, valores, parecer parcial e o tempo de cada
-   etapa.
+6. o Passo A (eventos do prontuário, uma vez por atendimento) e o Passo B (a
+   conta comparada com a memória, com as conferências do código sobre cada
+   linha da IA);
+7. o Guia, com as linhas do código e as da IA: o reprocesso troca as linhas
+   abertas e preserva as marcadas; a conta fica `A_FAZER` com nota, valores,
+   parecer parcial e o tempo de cada etapa.
 
 Leitura que não fecha (PDF sem texto, conta que não soma, prontuário
 incompleto) vira `ERRO` com a frase da etapa, sem nova tentativa: o mesmo
-arquivo daria o mesmo erro. Falha inesperada volta para a fila; na terceira
-tentativa, `ERRO`.
+arquivo daria o mesmo erro. A IA fora do ar depois das três tentativas do
+adaptador também vira `ERRO`, com o Guia do código gravado. Falha inesperada
+volta para a fila; na terceira tentativa, `ERRO`.
 
 O texto dos PDFs é prontuário: o log leva a etapa, a conta e o tipo do erro
 com o lugar no código, nunca a mensagem da exceção, que pode citar o texto.
