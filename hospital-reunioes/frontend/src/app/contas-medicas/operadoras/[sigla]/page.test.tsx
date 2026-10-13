@@ -15,6 +15,8 @@
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { ToastProvider } from "@/components/ui/Toast";
+
 import MemoriaDaOperadoraPage from "./page";
 
 vi.mock("next/navigation", () => ({
@@ -218,7 +220,11 @@ afterEach(() => {
 });
 
 async function abrir() {
-  render(<MemoriaDaOperadoraPage />);
+  render(
+    <ToastProvider>
+      <MemoriaDaOperadoraPage />
+    </ToastProvider>,
+  );
   return screen.findByRole("table", { name: "Regras da memória" });
 }
 
@@ -254,7 +260,11 @@ describe("o cabeçalho", () => {
   it("diz quando a pessoa não tem permissão para a memória", async () => {
     statusDaMemoria = 403;
 
-    render(<MemoriaDaOperadoraPage />);
+    render(
+      <ToastProvider>
+        <MemoriaDaOperadoraPage />
+      </ToastProvider>,
+    );
 
     expect(await screen.findByText(/não tem permissão para mudar as regras da memória/)).toBeTruthy();
   });
@@ -576,5 +586,15 @@ describe("as contas com regra nova desde a análise (issue #1141)", () => {
     await abrir();
 
     expect(screen.queryByRole("region", { name: "Contas com regra nova desde a análise" })).toBeNull();
+  });
+});
+
+describe("o Ditar ao ensinar uma regra nova (issue #1145)", () => {
+  it("o campo da regra em linguagem comum tem o Ditar com o aviso de paciente ao lado", async () => {
+    await abrir();
+    fireEvent.click(screen.getByRole("button", { name: "Ensinar uma regra nova" }));
+
+    const botao = screen.getByRole("button", { name: "Ditar: A regra, em linguagem comum" });
+    expect(botao.parentElement?.textContent).toContain("Não dite nome nem dado de paciente.");
   });
 });

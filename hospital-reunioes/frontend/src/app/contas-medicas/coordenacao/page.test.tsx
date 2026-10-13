@@ -17,6 +17,8 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { AbaDeCenarios, Conferencia } from "@/lib/contas-medicas/coordenacao";
 
+import { ToastProvider } from "@/components/ui/Toast";
+
 import CoordenacaoPage from "./page";
 
 vi.mock("@/lib/supabase/client", () => ({
@@ -132,13 +134,22 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
+// O Toast é o de verdade: o Ditar avisa por ele (issue #1145).
+function abrir() {
+  render(
+    <ToastProvider>
+      <CoordenacaoPage />
+    </ToastProvider>,
+  );
+}
+
 describe("a tela Coordenação", () => {
   it("mostra os três números e os lembretes por conta, com evidência, código e valor", async () => {
     servidor();
     const copiar = vi.fn(async () => undefined);
     Object.defineProperty(navigator, "clipboard", { value: { writeText: copiar }, configurable: true });
 
-    render(<CoordenacaoPage />);
+    abrir();
 
     const abertos = await screen.findByRole("region", { name: "Lembretes abertos" });
     expect(abertos.textContent).toContain("2");
@@ -169,7 +180,7 @@ describe("a tela Coordenação", () => {
   it("Incluído e Não se aplica mandam a marcação com a observação e releem a lista", async () => {
     const pedidos = servidor();
 
-    render(<CoordenacaoPage />);
+    abrir();
 
     const sondagem = await screen.findByRole("article", { name: "Sondagem vesical com equipo" });
     fireEvent.change(within(sondagem).getByLabelText("Observação (opcional)"), {
@@ -197,7 +208,7 @@ describe("a tela Coordenação", () => {
   it("a aba Cenários só aparece para quem cadastra", async () => {
     servidor(false);
 
-    render(<CoordenacaoPage />);
+    abrir();
 
     await screen.findByRole("region", { name: "Lembretes abertos" });
     expect(screen.queryByRole("tab", { name: "Cenários" })).toBeNull();
@@ -206,7 +217,7 @@ describe("a tela Coordenação", () => {
   it("na aba Cenários, desativar manda o cenário inteiro com ativo falso", async () => {
     const pedidos = servidor(true);
 
-    render(<CoordenacaoPage />);
+    abrir();
 
     fireEvent.click(await screen.findByRole("tab", { name: "Cenários" }));
     const linha = await screen.findByRole("article", { name: /CEN-001/ });
@@ -223,7 +234,7 @@ describe("a tela Coordenação", () => {
   it("no cenário novo, a IA preenche, o código fora da tabela é apontado e salvar manda o que a pessoa conferiu", async () => {
     const pedidos = servidor(true);
 
-    render(<CoordenacaoPage />);
+    abrir();
 
     fireEvent.click(await screen.findByRole("tab", { name: "Cenários" }));
     fireEvent.click(await screen.findByRole("button", { name: "Novo cenário" }));
@@ -262,9 +273,31 @@ describe("a tela Coordenação", () => {
       }),
     );
 
-    render(<CoordenacaoPage />);
+    abrir();
 
     expect((await screen.findByRole("alert")).textContent).toContain("Não foi possível carregar");
     expect(screen.queryByText(/Carregando/)).toBeNull();
+  });
+});
+
+describe("o Ditar na Coordenação (issue #1145)", () => {
+  it("a observação do lembrete tem o Ditar com o aviso de paciente ao lado", async () => {
+    servidor();
+    abrir();
+
+    const sondagem = await screen.findByRole("article", { name: "Sondagem vesical com equipo" });
+    const botao = within(sondagem).getByRole("button", { name: "Ditar: Observação do lembrete" });
+    expect(botao.parentElement?.textContent).toContain("Não dite nome nem dado de paciente.");
+  });
+
+  it("o cadastro de cenário tem o Ditar com o aviso de paciente ao lado", async () => {
+    servidor(true);
+    abrir();
+
+    fireEvent.click(await screen.findByRole("tab", { name: "Cenários" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Novo cenário" }));
+
+    const botao = screen.getByRole("button", { name: "Ditar: Cenário" });
+    expect(botao.parentElement?.textContent).toContain("Não dite nome nem dado de paciente.");
   });
 });
