@@ -23,11 +23,20 @@ Receita:
 1. Supabase local no ar (`supabase start` em `hospital-reunioes/`).
 2. Stack do app com o código que o print vai mostrar:
    `bash .claude/skills/atualizar-app/scripts/apply.sh`.
-3. Dados de exemplo (a faturista, a gestora, a operadora AURORA e as contas):
+3. Dados de exemplo (a faturista, a gestora, a coordenadora, a diretora, a
+   operadora AURORA, as contas, os temas da Validação, o cenário com os
+   lembretes e o contrato):
    `python3 docs/manual/prints/contas-medicas.py --semear`. É idempotente,
    refaz as contas do zero a cada rodada e recusa rodar contra qualquer banco
-   que não seja o local.
+   que não seja o local. A memória da AURORA sobe pela própria tela (o app
+   precisa estar no ar), para a Memória da operadora ter versão vigente.
 4. `python3 docs/manual/prints/contas-medicas.py`.
+
+Três telas da gestão chamam a IA e o roteiro não chama: a proposta de "Ensinar
+uma regra nova" e a do mapeamento das colunas da tabela vêm dos exemplos
+`PROPOSTA_DA_REGRA` e `PROPOSTA_DO_MAPEAMENTO`, e a leitura da IA da
+observação nasce gravada no tema. A tela que desenha cada resposta é a do app.
+O cenário é preenchido à mão, sem o "Preencher com a IA".
 
 O balão numerado é o do roteiro do Admin, importado dele: é o mesmo círculo em
 todo o manual.
@@ -76,6 +85,18 @@ GESTORA = (
     "Gerente de Contas Médicas",
     "gestao_contas_medicas",
 )
+# P952 e P959 já servem a outros testes locais da faixa: a gestão começa no P953.
+COORDENADORA = (
+    "P953",
+    "Sílvia Rocha",
+    "silvia.rocha@exemplo.local",
+    "Coordenadora de Faturamento",
+    "coordenadora",
+)
+DIRETORA = ("P954", "Helena Prates", "helena.prates@exemplo.local", "Diretora Médica", "diretoria_medica")
+# Quem a diretora habilita no print da Habilitação: nasce sem perfil no módulo.
+SEM_PERFIL = ("P955", "Júlio Andrade", "julio.andrade@exemplo.local", "Assistente de Faturamento", None)
+PESSOAS = (FATURISTA, GESTORA, COORDENADORA, DIRETORA, SEM_PERFIL)
 
 OPERADORA = ("AURORA", "Aurora Saúde")
 PLANO = "AURORA ESSENCIAL"
@@ -144,6 +165,49 @@ RESPOSTA_DO_ENVIO = {
         }
     ],
 }
+
+# O que a IA responderia ao "Propor regra" da regra de exemplo, no formato da
+# rota (`services/contas_medicas/regra_nova.py`).
+PEDIDO_DA_REGRA = "Na Aurora a seringa de limpeza pronta não é paga, tem que tirar da conta."
+PROPOSTA_DA_REGRA = {
+    "regra": {
+        "secao": "INS",
+        "texto": "A seringa de limpeza pronta (flush) não é paga: retirar da conta.",
+        "tipo": "OPERACIONAL",
+        "origem": "PRÁTICA",
+    },
+    "parametro": None,
+    "conflitos": [],
+    "efeito_no_guia": "A seringa de limpeza pronta lançada na conta vira uma linha Retirar, com a regra nova.",
+}
+
+# O que a leitura de uma planilha de outro cabeçalho devolveria: as colunas que
+# a IA apontou e as primeiras linhas convertidas. Códigos e preços inventados.
+PROPOSTA_DO_MAPEAMENTO = {
+    "cabecalho": ["COD_TUSS", "COD_INTERNO", "DESCRICAO_ITEM", "UN", "VALOR_COMUM", "VALOR_MASTER"],
+    "mapeamento": {
+        "codigo": "COD_TUSS",
+        "codigo_alternativo": "COD_INTERNO",
+        "descricao": "DESCRICAO_ITEM",
+        "unidade": "UN",
+        "precos": [{"chave": "comum", "coluna": "VALOR_COMUM"}, {"chave": "master", "coluna": "VALOR_MASTER"}],
+    },
+    "origem": "IA",
+    "amostra": [
+        {"codigo": "70031245", "codigo_alternativo": "A-1102", "descricao": "Agulha hipodérmica 25 x 7",
+         "unidade": "UN", "precos": {"comum": 0.95, "master": 1.10}},
+        {"codigo": "70044120", "codigo_alternativo": "S-0414", "descricao": "Sonda Foley 2 vias nº 14",
+         "unidade": "UN", "precos": {"comum": 18.40, "master": 21.30}},
+        {"codigo": "70044210", "codigo_alternativo": "C-0210", "descricao": "Coletor de urina sistema fechado",
+         "unidade": "UN", "precos": {"comum": 12.90, "master": 14.80}},
+    ],
+    "total": 1840,
+    "erro": None,
+}
+
+# O código bloqueado do tema de exemplo e o cenário da Conferência da coordenação.
+CODIGO_BLOQUEADO = "70095001"
+CENARIO = "CEN-950"
 
 
 # --------------------------------------------------------------------------
@@ -315,10 +379,11 @@ def _conta(atendimento: str, operadora_id: str, ordem: int, situacao: str, linha
         _criar("cm_guia_linha", {"conta_id": conta["id"], "ordem": i, **linha})
 
 
-def semear() -> None:
-    """As duas pessoas, a operadora AURORA com plano e setor, e cinco contas."""
+def semear(base: str = "http://localhost:3000") -> None:
+    """As pessoas, a operadora AURORA com plano e setor, cinco contas e o que a
+    gestão vê: a memória, os temas da Validação, o cenário e o contrato."""
     _credenciais_locais()
-    for pid, nome, email, cargo, perfil in (FATURISTA, GESTORA):
+    for pid, nome, email, cargo, perfil in PESSOAS:
         _rest(
             "participantes",
             "POST",
@@ -367,11 +432,145 @@ def semear() -> None:
 
     _conta("900377", operadora_id, 4, "ERRO", [], rotulo="Paulo R.", idade=71, numero_conta="51288",
            erro_motivo="Este PDF não tem texto. Exporte de novo pelo MV")
-    concluidas = [dict(l, estado="FEITO") for l in LINHAS_DO_GUIA[:2]]
+    concluidas = [dict(l, estado="FEITO") for l in LINHAS_DO_GUIA[:2]] + [
+        _linha(
+            "INCLUIR", "2026-09-22", "POSTO 3", CODIGO_BLOQUEADO, "Cateter venoso central duplo lúmen",
+            quantidade_lancada=0, quantidade_devida=1, preco_tabela=389.00, valor_diferenca=389.00,
+            regra_codigo="AURORA-PRI-01", motivo="Na evolução de enfermagem, sem item na conta.",
+            nivel_evidencia="REGISTRADO", causa_raiz="CADASTRO_PRECO", confianca="ALTA", estado="BLOQUEADO",
+        )
+    ]
     _conta("900355", operadora_id, 0, "CONCLUIDA", concluidas, rotulo="Lia F.", idade=45,
-           numero_conta="51102", periodo_inicio="2026-09-20", periodo_fim="2026-09-26", total_lancado=6210.00)
+           numero_conta="51102", periodo_inicio="2026-09-20", periodo_fim="2026-09-26", total_lancado=6210.00,
+           concluida_em="2026-10-09T15:20:00-03:00")
 
+    _semear_gestao(operadora_id, base)
     print("dados de exemplo do módulo Contas médicas prontos.")
+
+
+# --------------------------------------------------------------------------
+# A gestão: memória, Validação, Coordenação e Contratos
+# --------------------------------------------------------------------------
+
+
+def _token(email: str) -> str:
+    """O acesso da pessoa de exemplo, pelo login do Supabase local."""
+    url, chave = _credenciais_locais()
+    corpo = json.dumps({"email": email, "password": SENHA}).encode()
+    req = urllib.request.Request(
+        f"{url}/auth/v1/token?grant_type=password",
+        data=corpo,
+        headers={"apikey": chave, "Content-Type": "application/json"},
+    )
+    with urllib.request.urlopen(req, timeout=20) as resposta:
+        return json.load(resposta)["access_token"]
+
+
+def _subir_memoria(base: str) -> None:
+    """A memória sintética entra pela rota da tela, como a gestora faria: é o
+    servidor que lê o arquivo e cria a versão vigente."""
+    fronteira = "----manual-contas-medicas"
+    corpo = (
+        f"--{fronteira}\r\n"
+        'Content-Disposition: form-data; name="arquivo"; filename="MEMORIA-AURORA-v1.0.md"\r\n'
+        "Content-Type: text/markdown\r\n\r\n"
+        f"{MEMORIA}\r\n--{fronteira}--\r\n"
+    ).encode()
+    req = urllib.request.Request(
+        f"{base}/api/contas-medicas/operadoras/memoria",
+        data=corpo,
+        headers={
+            "Authorization": f"Bearer {_token(GESTORA[2])}",
+            "Content-Type": f"multipart/form-data; boundary={fronteira}",
+        },
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=60):
+            pass
+    except urllib.error.HTTPError as e:
+        raise SystemExit(f"memória de exemplo: {e.code} {e.read().decode()[:300]}")
+
+
+def _semear_gestao(operadora_id: str, base: str) -> None:
+    """A memória vigente, a conta com regra nova desde a análise, três temas da
+    Validação, o cenário com dois lembretes e o contrato em Negociar reajuste."""
+    from datetime import date, timedelta
+
+    _subir_memoria(base)
+    versoes = _rest(f"cm_memoria_versao?operadora_id=eq.{operadora_id}&select=id&order=criado_em.desc&limit=2")
+    contas = {c["numero_conta"]: c["id"] for c in _rest(f"cm_conta?faturista_id=eq.{FATURISTA[0]}&select=id,numero_conta")}
+    # A 51230 foi analisada com a memória de hoje; a 51190, com a anterior.
+    _rest(f"cm_conta?id=eq.{contas['51230']}", "PATCH", {"memoria_versao_id": versoes[0]["id"]})
+    if len(versoes) > 1:
+        _rest(f"cm_conta?id=eq.{contas['51190']}", "PATCH", {"memoria_versao_id": versoes[1]["id"]})
+
+    # Validação: os temas da AURORA e o do código bloqueado são refeitos do zero.
+    _rest(f"cm_validacao_tema?operadora_id=eq.{operadora_id}", "DELETE")
+    _rest(f"cm_validacao_tema?codigo_item=eq.{CODIGO_BLOQUEADO}", "DELETE")
+    ids = ",".join(contas.values())
+    validar = _rest(f"cm_guia_linha?conta_id=in.({ids})&acao=eq.VALIDAR&regra_codigo=eq.AURORA-DIA-02&select=id")
+    tema = _criar("cm_validacao_tema", {"operadora_id": operadora_id, "tipo": "REGRA_PENDENTE",
+                                        "titulo": "Regra AURORA-DIA-02", "regra_codigo": "AURORA-DIA-02"})
+    for linha in validar:
+        _criar("cm_validacao_tema_linha", {"tema_id": tema["id"], "guia_linha_id": linha["id"]})
+
+    bloqueada = _rest(f"cm_guia_linha?conta_id=eq.{contas['51102']}&codigo=eq.{CODIGO_BLOQUEADO}&select=id")[0]
+    tema = _criar("cm_validacao_tema", {"tipo": "BLOQUEADO", "titulo": f"Código {CODIGO_BLOQUEADO} bloqueado",
+                                        "codigo_item": CODIGO_BLOQUEADO})
+    _criar("cm_validacao_tema_linha", {"tema_id": tema["id"], "guia_linha_id": bloqueada["id"]})
+
+    observacao = _criar("cm_observacao", {
+        "conta_id": contas["51102"], "autor_id": FATURISTA[0],
+        "texto": "A AURORA-MED-02 vale para a dose extra? O pantoprazol de resgate não está na prescrição de horário.",
+    })
+    tema = _criar("cm_validacao_tema", {
+        "operadora_id": operadora_id, "tipo": "OBSERVACAO", "titulo": "Observações sobre a regra AURORA-MED-02",
+        "regra_codigo": "AURORA-MED-02",
+        "leitura_ia": "A regra atual não cobre o caso. Ela fala da prescrição de horário fixo; a dose de resgate "
+                      "fica de fora. Sugestão: editar a regra.",
+    })
+    _criar("cm_validacao_tema_linha", {"tema_id": tema["id"], "observacao_id": observacao["id"]})
+
+    # Coordenação: o cenário de exemplo e um lembrete em cada conta. Os
+    # lembretes antigos saíram com as contas antigas.
+    _rest(f"cm_cenario?codigo=eq.{CENARIO}", "DELETE")
+    insumos = [
+        ("70044120", "Sonda Foley 2 vias nº 14", 18.40),
+        ("70044210", "Coletor de urina sistema fechado", 12.90),
+        ("90076530", "Lidocaína gel 2% 30 g", 9.70),
+    ]
+    cenario = _criar("cm_cenario", {
+        "codigo": CENARIO, "nome": "Sondagem vesical de demora", "operadora_id": operadora_id,
+        "gatilho_texto": "Sondagem vesical de demora registrada na evolução de enfermagem.",
+        "orientacao": "Confira a sonda, o coletor e a lidocaína gel no dia da sondagem.",
+        "autor_id": GESTORA[0],
+    })
+    for codigo, descricao, _preco in insumos:
+        _criar("cm_cenario_item", {"cenario_id": cenario["id"], "codigo": codigo, "descricao": descricao, "quantidade": 1})
+    for conta, dia, setor, pagina, faltam in (
+        ("51102", "2026-09-22", "POSTO 3", 87, insumos[:2]),
+        ("51190", "2026-09-29", "CTI ADULTO", 54, insumos[2:]),
+    ):
+        lembrete = _criar("cm_lembrete", {
+            "conta_id": contas[conta], "cenario_id": cenario["id"], "data": dia, "setor": setor,
+            "evidencia_pagina": pagina,
+            "evidencia_trecho": "SVD PASSADA COM TÉCNICA ASSÉPTICA, SONDA FOLEY 14, SEM INTERCORRÊNCIAS",
+        })
+        for codigo, descricao, preco in faltam:
+            _criar("cm_lembrete_item", {"lembrete_id": lembrete["id"], "codigo": codigo, "descricao": descricao,
+                                        "quantidade": 1, "preco_tabela": preco, "valor": preco})
+
+    # Contratos: a vigência do último aditivo faz o vencimento cair daqui a 45
+    # dias, calculado (vigência mais um ano), e o aviso de 60 dias já passou.
+    hoje = date.today()
+    vencimento = hoje + timedelta(days=45)
+    _rest(f"cm_contrato?operadora_id=eq.{operadora_id}", "DELETE")
+    _criar("cm_contrato", {
+        "operadora_id": operadora_id, "data_assinatura": "2023-03-01", "aditivo_numero": "2",
+        "aditivo_data": (vencimento - timedelta(days=380)).isoformat(),
+        "vigencia_inicio": vencimento.replace(year=vencimento.year - 1).isoformat(),
+        "vencimento": vencimento.isoformat(), "vencimento_calculado": True, "aviso_dias": 60,
+    })
 
 
 def _guia_a_fazer() -> None:
@@ -712,7 +911,7 @@ def main() -> int:
     args = ap.parse_args()
 
     if args.semear:
-        semear()
+        semear(args.base.rstrip("/"))
         return 0
 
     saida = Path(args.saida)
