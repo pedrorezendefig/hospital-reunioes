@@ -27,6 +27,7 @@ from app.services.ai_processor import chamar_ia_fora_do_loop
 from app.services.contas_medicas.coordenacao import (
     CenarioNaoEncontradoError,
     editar_cenario,
+    lembretes_abertos,
     listar_cenarios,
     novo_cenario,
     propor_cenario,
@@ -83,6 +84,18 @@ def _campos(corpo: CenarioConferido) -> dict:
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail="Todo insumo precisa do código da conta."
         )
     return campos
+
+
+@router.get("/coordenacao")
+@limiter.limit("60/minute")
+async def conferencia_da_coordenacao(
+    request: Request,
+    me: dict = Depends(_PODE_VER),
+    supabase=Depends(get_supabase_client),
+) -> dict:
+    """Os três números e os lembretes abertos por conta, o mais antigo
+    primeiro. `pode_cadastrar` diz à tela se mostra a aba Cenários."""
+    return {**await run_in_threadpool(lembretes_abertos, supabase), "pode_cadastrar": _pode_cadastrar(me)}
 
 
 @router.get("/coordenacao/cenarios")

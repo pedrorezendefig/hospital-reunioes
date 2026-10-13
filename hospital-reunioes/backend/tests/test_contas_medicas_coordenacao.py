@@ -29,9 +29,14 @@ from test_contas_medicas_processamento import (
     _Banco,
     _cenario,
     _Consulta,
+    _conta,
+    _enviar,
     _Extrator,
+    _item_de_tabela,
     _OpenRouter,
     _pessoa,
+    _prontuario,
+    _rodar_o_job,
 )
 
 from app.dependencies import get_current_user, get_supabase_client
@@ -227,6 +232,145 @@ class TestCadastroDoCenario:
         assert cliente.post(f"{ROTA}/cenarios/proposta", json={"texto": TEXTO_DO_CENARIO}).status_code == 403
         assert banco.tabelas.get("cm_cenario", []) == []
         assert openrouter.requisicoes == 0
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 2. O Passo C no pipeline
+# ═══════════════════════════════════════════════════════════════════════════
+
+PASSO_C = "OcorrenciasDosCenarios"
+
+# A página 2 do prontuário sintético (admissão no CTI) diz isto, palavra por palavra.
+TRECHO_DA_ADMISSAO = "Chegou com acesso venoso periférico em membro superior esquerdo"
+# E não diz isto em página nenhuma.
+TRECHO_INVENTADO = "Sondagem vesical de demora com lidocaína gel e coletor fechado"
+
+
+def _cenario_no_banco(banco: _Banco, codigo: str, insumos: list[tuple[str, str, float]], **campos: Any) -> dict:
+    cenario = {
+        "id": f"cn-{codigo}",
+        "codigo": codigo,
+        "nome": f"Cenário {codigo}",
+        "operadora_id": None,
+        "gatilho_texto": f"Quando o {codigo} acontece",
+        "orientacao": f"Orientação do {codigo}",
+        "ativo": True,
+        "autor_id": "G1",
+        "criado_em": "2026-10-01T10:00:00+00:00",
+        **campos,
+    }
+    banco.tabelas.setdefault("cm_cenario", []).append(cenario)
+    banco.tabelas.setdefault("cm_cenario_item", []).extend(
+        {"id": f"ci-{codigo}-{n}", "cenario_id": cenario["id"], "codigo": c, "descricao": d, "quantidade": q}
+        for n, (c, d, q) in enumerate(insumos)
+    )
+    return cenario
+
+
+def _ocorrencia(cenario: str, trecho: str = TRECHO_DA_ADMISSAO, data: str = "2026-10-03") -> dict[str, Any]:
+    return {"cenario_id": cenario, "data": data, "setor": "CTI ADULTO", "evidencia": {"pagina": 2, "trecho": trecho}}
+
+
+def _banco_com_cenarios() -> _BancoDaCoordenacao:
+    """Três cenários ativos que valem para todas as operadoras, um inativo e um
+    de outra operadora. A conta 48811 lança a agulha (70000001) em 03/10 e não
+    lança o equipo (70000002), que a tabela de materiais da ALFA dá a 12,50."""
+    banco = _banco()
+    banco.tabelas["cm_tabela_preco_item"].append(
+        _item_de_tabela("it-equipo", "tb-mat", "70000002", "EQUIPO MACROGOTAS", {"comum": 12.5, "carioca": 13.0}, {})
+    )
+    banco.tabelas["cm_operadora"].append({"id": "op-beta", "sigla": "BETA", "nome": "Beta Saúde", "situacao": "PRONTA"})
+    _cenario_no_banco(
+        banco,
+        "CEN-001",
+        [("70000001", "AGULHA HIPODERMICA", 10), ("70000002", "EQUIPO MACROGOTAS", 2)],
+        nome="Sondagem vesical com equipo",
+    )
+    _cenario_no_banco(banco, "CEN-002", [("70000001", "AGULHA HIPODERMICA", 1)], nome="Só a agulha")
+    _cenario_no_banco(banco, "CEN-003", [("70000002", "EQUIPO MACROGOTAS", 1)], nome="Evidência inventada")
+    _cenario_no_banco(banco, "CEN-004", [("70000002", "EQUIPO", 1)], nome="Desligado", ativo=False)
+    _cenario_no_banco(banco, "CEN-005", [("70000002", "EQUIPO", 1)], nome="Só da Beta", operadora_id="op-beta")
+    return banco
+
+
+def _analisar(banco: _Banco, openrouter: _OpenRouter, *ocorrencias: dict[str, Any]) -> dict:
+    openrouter.respostas[PASSO_C] = {"ocorrencias": list(ocorrencias)}
+    _enviar(banco, _conta(), _prontuario())
+    _rodar_o_job(banco)
+    (conta,) = banco.tabelas["cm_conta"]
+    assert conta["situacao"] == "A_FAZER", conta.get("erro_motivo")
+    return conta
+
+
+def _conferencia(banco: _Banco, quem: str = "coordenadora") -> dict:
+    resposta = _cliente(banco, quem).get(ROTA)
+    assert resposta.status_code == 200, resposta.text
+    return resposta.json()
+
+
+def _lembretes_por_cenario(corpo: dict) -> dict[str, dict]:
+    return {lembrete["cenario"]["codigo"]: lembrete for conta in corpo["contas"] for lembrete in conta["lembretes"]}
+
+
+class TestPassoC:
+    def test_so_o_insumo_que_falta_vira_lembrete_com_o_valor_da_tabela(self, openrouter):
+        banco = _banco_com_cenarios()
+
+        _analisar(
+            banco, openrouter, _ocorrencia("CEN-001"), _ocorrencia("CEN-002"), _ocorrencia("CEN-003", TRECHO_INVENTADO)
+        )
+
+        corpo = _conferencia(banco)
+        lembretes = _lembretes_por_cenario(corpo)
+        # A agulha já está na conta no período: o CEN-002 não vira lembrete, e
+        # no CEN-001 só o equipo falta, 2 a R$ 12,50 pela tabela da ALFA.
+        assert set(lembretes) == {"CEN-001", "CEN-003"}
+        sondagem = lembretes["CEN-001"]
+        assert [(i["codigo"], i["quantidade"], i["preco_tabela"], i["valor"]) for i in sondagem["insumos"]] == [
+            ("70000002", 2, 12.5, 25.0)
+        ]
+        assert (sondagem["data"], sondagem["setor"], sondagem["evidencia_pagina"]) == ("2026-10-03", "CTI ADULTO", 2)
+        assert sondagem["evidencia_trecho"] == TRECHO_DA_ADMISSAO
+        assert sondagem["etiquetas"] == []
+        # O trecho que não está na página citada nem na vizinha: lembrete com a etiqueta.
+        assert lembretes["CEN-003"]["etiquetas"] == ["conferir evidência"]
+        # Os três números do topo e a conta com o atendimento e a operadora.
+        assert corpo["numeros"] == {"lembretes_abertos": 2, "contas_com_lembrete": 1, "valor_a_conferir": 37.5}
+        (conta,) = corpo["contas"]
+        assert (conta["numero_atendimento"], conta["operadora"], conta["situacao"]) == ("31245", "ALFA", "A_FAZER")
+
+    def test_a_ia_recebe_so_os_cenarios_ativos_da_operadora_e_nada_disso_entra_no_passo_b(self, openrouter):
+        banco = _banco_com_cenarios()
+
+        _analisar(banco, openrouter)
+
+        (pedido,) = [c for c in openrouter.corpos if c["response_format"]["json_schema"]["name"] == PASSO_C]
+        enviado = json.dumps(pedido["messages"], ensure_ascii=False)
+        assert all(codigo in enviado for codigo in ("CEN-001", "CEN-002", "CEN-003"))
+        assert "CEN-004" not in enviado and "CEN-005" not in enviado
+        # O Passo C vem depois do Passo A, e o Passo B não recebe cenário nenhum.
+        formatos = openrouter.formatos
+        assert formatos.index("EventosDoProntuario") < formatos.index(PASSO_C)
+        (comparacao,) = [
+            c for c in openrouter.corpos if c["response_format"]["json_schema"]["name"] == "LinhasDaComparacao"
+        ]
+        assert "CEN-" not in json.dumps(comparacao["messages"], ensure_ascii=False)
+
+    def test_sem_cenario_ativo_a_ia_nao_e_chamada(self, openrouter):
+        banco = _banco()
+
+        _analisar(banco, openrouter)
+
+        assert PASSO_C not in openrouter.formatos
+
+    def test_a_ia_fora_do_ar_no_passo_c_nao_derruba_a_conta_da_faturista(self, openrouter):
+        banco = _banco_com_cenarios()
+        openrouter.fora_do_formato_em = {PASSO_C}
+
+        conta = _analisar(banco, openrouter, _ocorrencia("CEN-001"))
+
+        assert conta["situacao"] == "A_FAZER"
+        assert banco.tabelas.get("cm_lembrete", []) == []
 
 
 KIT = Path(__file__).resolve().parents[1] / "app" / "conhecimento" / "contas-medicas.md"

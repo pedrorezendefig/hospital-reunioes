@@ -17,6 +17,7 @@ from __future__ import annotations
 import re
 from collections import defaultdict
 from datetime import UTC, datetime
+from decimal import Decimal
 from typing import Any
 
 from pydantic import BaseModel, ConfigDict
@@ -31,6 +32,8 @@ __all__ = [
     "CONFERIR_EVIDENCIA",
     "CenarioNaoEncontradoError",
     "editar_cenario",
+    "itens_dos_cenarios",
+    "lembretes_abertos",
     "listar_cenarios",
     "novo_cenario",
     "propor_cenario",
@@ -180,7 +183,7 @@ def _registrar(supabase, autor_id: str | None, cenario_id: str, antes: dict | No
     ).execute()
 
 
-def _itens_dos_cenarios(supabase, ids: list[str]) -> dict[str, list[dict]]:
+def itens_dos_cenarios(supabase, ids: list[str]) -> dict[str, list[dict]]:
     por_cenario: dict[str, list[dict]] = defaultdict(list)
     for item in _em_lotes(supabase, "cm_cenario_item", "*", "cenario_id", ids, "insumos dos cenários"):
         por_cenario[item["cenario_id"]].append(item)
@@ -207,7 +210,7 @@ def _cenario_para_a_tela(cenario: dict, itens: list[dict], siglas: dict[str, str
 def listar_cenarios(supabase) -> list[dict[str, Any]]:
     """Todos os cenários, ativos e inativos, na ordem do código."""
     cenarios = ler_tudo(lambda: supabase.table("cm_cenario").select("*").order("codigo"), rotulo="cenários")
-    itens = _itens_dos_cenarios(supabase, [c["id"] for c in cenarios])
+    itens = itens_dos_cenarios(supabase, [c["id"] for c in cenarios])
     siglas = {o["id"]: o["sigla"] for o in _operadoras(supabase)}
     return [_cenario_para_a_tela(c, itens[c["id"]], siglas) for c in cenarios]
 
@@ -263,7 +266,7 @@ def editar_cenario(supabase, cenario_id: str, campos: dict[str, Any], autor_id: 
     if not atuais:
         raise CenarioNaoEncontradoError("Cenário não encontrado")
     (atual,) = atuais
-    antes_itens = _itens_dos_cenarios(supabase, [cenario_id])[cenario_id]
+    antes_itens = itens_dos_cenarios(supabase, [cenario_id])[cenario_id]
     operadora_id = operadora_da_sigla(supabase, campos.get("operadora_sigla"))
     linha = _linha_do_cenario(campos, operadora_id)
     supabase.table("cm_cenario").update(linha).eq("id", cenario_id).execute()
@@ -275,3 +278,133 @@ def editar_cenario(supabase, cenario_id: str, campos: dict[str, Any], autor_id: 
     }
     _registrar(supabase, autor_id, cenario_id, antes, {**linha, "insumos": campos["insumos"]})
     return _resposta_do_cenario(supabase, cenario_id, campos, operadora_id)
+
+
+# ----------------------------------------------------------------------------------
+# Os lembretes
+# ----------------------------------------------------------------------------------
+
+
+def _dinheiro(valor: Decimal) -> float:
+    return float(round(valor, 2))
+
+
+def _por_id(linhas: list[dict]) -> dict[str, dict]:
+    return {linha["id"]: linha for linha in linhas}
+
+
+def _numero_ou_nada(valor: Any) -> float | None:
+    return float(valor) if valor is not None else None
+
+
+def _lembrete_para_a_tela(lembrete: dict, cenario: dict, itens: list[dict]) -> dict[str, Any]:
+    """O lembrete como a coordenadora lê. A etiqueta mora na observação do
+    lembrete aberto (a 118 não tem coluna para ela)."""
+    etiqueta = lembrete.get("estado") == "ABERTO" and lembrete.get("observacao") == CONFERIR_EVIDENCIA
+    return {
+        "id": lembrete["id"],
+        "cenario": {
+            "codigo": cenario.get("codigo"),
+            "nome": cenario.get("nome"),
+            "orientacao": cenario.get("orientacao"),
+        },
+        "data": lembrete.get("data"),
+        "setor": lembrete.get("setor"),
+        "evidencia_pagina": lembrete.get("evidencia_pagina"),
+        "evidencia_trecho": lembrete.get("evidencia_trecho"),
+        "etiquetas": [CONFERIR_EVIDENCIA] if etiqueta else [],
+        "criado_em": lembrete.get("criado_em"),
+        "insumos": [
+            {
+                "codigo": item["codigo"],
+                "descricao": item.get("descricao"),
+                "quantidade": _numero_ou_nada(item.get("quantidade")),
+                "preco_tabela": _numero_ou_nada(item.get("preco_tabela")),
+                "valor": _numero_ou_nada(item.get("valor")),
+            }
+            for item in itens
+        ],
+    }
+
+
+def _conta_para_a_tela(conta: dict, atendimento: dict, siglas: dict[str, str]) -> dict[str, Any]:
+    return {
+        "conta_id": conta["id"],
+        "numero_atendimento": atendimento.get("numero_atendimento"),
+        "paciente_rotulo": atendimento.get("paciente_rotulo"),
+        "numero_conta": conta.get("numero_conta"),
+        "operadora": siglas.get(atendimento.get("operadora_id") or ""),
+        "situacao": conta.get("situacao"),
+        "concluida_em": conta.get("concluida_em"),
+        "periodo_inicio": conta.get("periodo_inicio"),
+        "periodo_fim": conta.get("periodo_fim"),
+        "lembretes": [],
+    }
+
+
+def lembretes_abertos(supabase) -> dict[str, Any]:
+    """Os três números do topo e os lembretes abertos agrupados por conta, a
+    conta do lembrete mais antigo primeiro. As leituras por id vão em lotes."""
+    lembretes = ler_tudo(
+        lambda: supabase.table("cm_lembrete").select("*").eq("estado", "ABERTO").order("criado_em").order("id"),
+        rotulo="lembretes abertos",
+    )
+    itens: dict[str, list[dict]] = defaultdict(list)
+    for item in _em_lotes(
+        supabase, "cm_lembrete_item", "*", "lembrete_id", (lb["id"] for lb in lembretes), "insumos dos lembretes"
+    ):
+        itens[item["lembrete_id"]].append(item)
+    cenarios = _por_id(
+        _em_lotes(
+            supabase,
+            "cm_cenario",
+            "id, codigo, nome, orientacao",
+            "id",
+            (lb["cenario_id"] for lb in lembretes),
+            "cenários dos lembretes",
+        )
+    )
+    contas = _por_id(
+        _em_lotes(
+            supabase,
+            "cm_conta",
+            "id, atendimento_id, numero_conta, situacao, concluida_em, periodo_inicio, periodo_fim",
+            "id",
+            (lb["conta_id"] for lb in lembretes),
+            "contas com lembrete",
+        )
+    )
+    atendimentos = _por_id(
+        _em_lotes(
+            supabase,
+            "cm_atendimento",
+            "id, numero_atendimento, paciente_rotulo, operadora_id",
+            "id",
+            (c["atendimento_id"] for c in contas.values() if c.get("atendimento_id")),
+            "atendimentos com lembrete",
+        )
+    )
+    siglas = {o["id"]: o["sigla"] for o in _operadoras(supabase)}
+
+    por_conta: dict[str, dict[str, Any]] = {}
+    total = Decimal(0)
+    for lembrete in lembretes:
+        conta = contas.get(lembrete["conta_id"])
+        if conta is None:
+            continue
+        if conta["id"] not in por_conta:
+            atendimento = atendimentos.get(conta.get("atendimento_id") or "") or {}
+            por_conta[conta["id"]] = _conta_para_a_tela(conta, atendimento, siglas)
+        do_lembrete = itens[lembrete["id"]]
+        total += sum((Decimal(str(i.get("valor") or 0)) for i in do_lembrete), Decimal(0))
+        cenario = cenarios.get(lembrete["cenario_id"]) or {}
+        por_conta[conta["id"]]["lembretes"].append(_lembrete_para_a_tela(lembrete, cenario, do_lembrete))
+
+    return {
+        "numeros": {
+            "lembretes_abertos": sum(len(conta["lembretes"]) for conta in por_conta.values()),
+            "contas_com_lembrete": len(por_conta),
+            "valor_a_conferir": _dinheiro(total),
+        },
+        "contas": list(por_conta.values()),
+    }
