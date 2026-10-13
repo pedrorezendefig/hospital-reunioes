@@ -44,6 +44,10 @@ dependencies = [
     # Cabeçalho da memória da operadora em Contas médicas (issue #1119). Já
     # vinha pelo `uvicorn[standard]`; declarado porque o app passou a importar.
     "pyyaml>=6.0",
+    # Marcações de caixa e botão em Contas médicas (issue #1132): fração de pixels
+    # escuros da imagem. Já vinha pelo `pdfplumber`; declarado porque o app passou
+    # a importar. Licença MIT-CMU: a referência do diretor usava PyMuPDF (AGPL).
+    "pillow>=11.0",
 ]
 
 [project.optional-dependencies]

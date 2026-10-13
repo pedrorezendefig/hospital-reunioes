@@ -10,12 +10,18 @@ pelo diretor nos desenhos do MV (caixa vazia 0,27 e marcada 0,39; botão vazio
 
 from __future__ import annotations
 
+import re
+import tomllib
 import zlib
 from datetime import date
+from importlib import metadata
+from pathlib import Path
 from types import SimpleNamespace
 
+import pytest
 from test_contas_medicas_prontuario import ATENDIMENTO, CAPA_QUE_BATE, montar
 
+from app.services import contas_medicas_extrator as extrator
 from app.services.contas_medicas.formulario import sem_formulario_em_branco
 from app.services.contas_medicas.prontuario import Documento, Prontuario, ler_prontuario
 from app.services.contas_medicas_extrator import extrair_paginas
@@ -107,6 +113,20 @@ def test_caixa_e_botao_viram_x_ou_colchete_vazio_na_linha_da_opcao():
     assert "Suporte ventilatório:" in linhas
     assert "[ ] VMI [X] VNI" in linhas
     assert "Dieta: [X] VO [ ] SNE" in linhas
+
+
+def test_leitura_das_marcacoes_que_falha_deixa_o_texto_sem_elas_e_sem_conteudo_no_log(tmp_path, monkeypatch, caplog):
+    quebrado = tmp_path / "marcacoes_quebradas.py"
+    quebrado.write_text("import sys\nsys.exit(1)\n", encoding="utf-8")
+    monkeypatch.setattr(extrator, "_CAMINHO_DAS_MARCACOES", str(quebrado))
+
+    paginas = extrair_paginas(FORMULARIO)
+
+    linhas = _linhas(paginas[0].texto)
+    assert "VMI VNI" in linhas
+    assert "Dieta: VO SNE" in linhas
+    assert "segue sem elas" in caplog.text
+    assert "31245" not in caplog.text
 
 
 def _linhas_para_a_ia() -> list[str]:
@@ -249,3 +269,46 @@ def test_prontuario_com_um_formulario_so_perde_as_linhas_aprendidas_com_os_outro
 
     assert limpo.documentos[0].linhas == (TITULO, "Paciente em VNI.")
     assert {r["contagem"] for r in banco.linhas} == {1}
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Licença e tipografia
+# ═══════════════════════════════════════════════════════════════════════════
+
+BACKEND = Path(__file__).resolve().parents[1]
+
+
+def _dependencias_do_pyproject() -> list[str]:
+    projeto = tomllib.loads((BACKEND / "pyproject.toml").read_text(encoding="utf-8"))["project"]
+    return [re.match(r"[A-Za-z0-9_.\-]+", d).group(0) for d in projeto["dependencies"]]
+
+
+def _licenca(pacote: str) -> str:
+    dados = metadata.metadata(pacote)
+    classificadores = [c for c in dados.get_all("Classifier") or [] if c.startswith("License")]
+    return " ".join([dados.get("License-Expression") or "", dados.get("License") or "", *classificadores])
+
+
+def test_nenhuma_dependencia_do_pyproject_tem_licenca_agpl():
+    dependencias = _dependencias_do_pyproject()
+    assert {"pdfplumber", "pillow"} <= {d.lower() for d in dependencias}
+
+    agpl = {d: _licenca(d) for d in dependencias if re.search(r"AGPL|Affero", _licenca(d), re.I)}
+
+    assert agpl == {}
+    assert not {"pymupdf", "fitz"} & {d.lower() for d in dependencias}
+
+
+@pytest.mark.parametrize(
+    "arquivo",
+    [
+        "app/services/contas_medicas/marcacoes.py",
+        "app/services/contas_medicas/formulario.py",
+        "app/services/contas_medicas_marcacoes_filho.py",
+    ],
+)
+def test_sem_travessao_nem_meia_risca(arquivo):
+    texto = (BACKEND / arquivo).read_text(encoding="utf-8")
+
+    assert chr(0x2014) not in texto
+    assert chr(0x2013) not in texto
