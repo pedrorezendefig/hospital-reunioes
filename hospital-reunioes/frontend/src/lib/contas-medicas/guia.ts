@@ -98,6 +98,17 @@ export const ROTULO_NIVEL: Record<NonNullable<LinhaGuia["nivel_evidencia"]>, str
   POR_REGRA: "Por regra",
 };
 
+/**
+ * A etiqueta âmbar da linha "se necessário" sem registro de uso no MV (nível
+ * PRESCRITO_SN, issue #1134). O texto para a faturista vem no motivo.
+ */
+export const ETIQUETA_SE_NECESSARIO = "SE NECESSÁRIO · SEM REGISTRO NO MV";
+
+/** O motivo que o Não procede já traz marcado: a linha SN sem uso não tem evidência. */
+export function motivoInicialDoNaoProcede(linha: LinhaGuia): MotivoNaoProcede | null {
+  return linha.nivel_evidencia === "PRESCRITO_SN" ? "SEM_EVIDENCIA" : null;
+}
+
 export const ROTULO_SITUACAO: Record<string, string> = {
   A_FAZER: "A fazer",
   EM_CORRECAO: "Em correção",

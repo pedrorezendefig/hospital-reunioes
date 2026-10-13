@@ -13,9 +13,11 @@ import { useState } from "react";
 import { Copy } from "lucide-react";
 
 import {
+  ETIQUETA_SE_NECESSARIO,
   type LinhaGuia,
   type MotivoNaoProcede,
   MOTIVOS_NAO_PROCEDE,
+  motivoInicialDoNaoProcede,
   ROTULO_ACAO,
   ROTULO_NIVEL,
   reais,
@@ -51,7 +53,7 @@ const BOTAO = "px-3 py-1.5 rounded-lg text-xs font-semibold uppercase tracking-[
 export function LinhaDoGuia({ linha, concluida, ocupado, onMarcar, onDesfazer, onCopiar }: Props) {
   const [evidenciaAberta, setEvidenciaAberta] = useState(false);
   const [naoProcedeAberto, setNaoProcedeAberto] = useState(false);
-  const [motivo, setMotivo] = useState<MotivoNaoProcede | null>(null);
+  const [motivo, setMotivo] = useState<MotivoNaoProcede | null>(() => motivoInicialDoNaoProcede(linha));
   const [texto, setTexto] = useState("");
 
   const nome = linha.descricao ?? linha.codigo ?? "Linha do guia";
@@ -116,6 +118,9 @@ export function LinhaDoGuia({ linha, concluida, ocupado, onMarcar, onDesfazer, o
         >
           {ROTULO_ACAO[linha.acao]}
         </span>
+        {linha.nivel_evidencia === "PRESCRITO_SN" && (
+          <span className={`${ETIQUETA} bg-[#FEF3C7] text-[#92400E]`}>{ETIQUETA_SE_NECESSARIO}</span>
+        )}
         {linha.nao_conferido && <span className={`${ETIQUETA} bg-[#F1F5F9] text-[#475569]`}>Não conferido</span>}
         {linha.confianca === "BAIXA" && (
           <span className={`${ETIQUETA} bg-[#FEF3C7] text-[#92400E]`}>conferir evidência</span>
