@@ -118,6 +118,7 @@ CAPA_DO_PRONTUARIO = "DECLARAÇÃO DE RECEBIMENTO DE PRONTUÁRIO " + " ".join(
 )
 PAGINA_COM_TEXTO = "EVOLUÇÃO MEDICA " + "Paciente estável, sem queixas, segue em observação na unidade. " * 4
 LIDO_PELO_OCR = "TERMO DE CONSENTIMENTO LIVRE E ESCLARECIDO"
+SO_UNIX_OCR = pytest.mark.so_unix("PATH só com o poppler por symlink, e o filho morto por SIGKILL")
 
 
 def _tesseract_falso(pasta: Path, monkeypatch: pytest.MonkeyPatch, corpo: str) -> None:
@@ -149,6 +150,7 @@ def test_pagina_sem_texto_da_conta_nao_passa_pelo_ocr(tmp_path, monkeypatch):
     assert [(p.numero, p.ocr, p.sem_texto) for p in paginas] == [(1, False, False), (2, False, True)]
 
 
+@SO_UNIX_OCR
 @pytest.mark.parametrize(
     "tesseract",
     [
@@ -182,6 +184,7 @@ def test_ocr_que_passa_do_prazo_deixa_a_pagina_sem_texto_e_a_leitura_continua(tm
     assert time.monotonic() - inicio < 10
 
 
+@SO_UNIX_OCR
 def test_filho_do_ocr_morto_deixa_a_pagina_sem_texto_e_a_leitura_continua(tmp_path, monkeypatch, caplog):
     # O `pdftoppm` falso mata o filho que o chamou, como o OOM do cgroup faria.
     falso = tmp_path / "pdftoppm"
