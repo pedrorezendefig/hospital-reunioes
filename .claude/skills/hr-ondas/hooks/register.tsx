@@ -87,7 +87,7 @@ export const aplicadasRecentes = (c: Coleta): Migration[] =>
         .sort((a, b) => a.numero - b.numero)
 
 export const sessoesDoPrd = (c: Coleta, prd: number): Agente[] =>
-  c.agentes.filter(a => c.prdSessoes[a.nome] === prd)
+  c.agentes.filter(a => prdDaSessao(c, a.nome) === prd)
 
 /** PRDs que entram no painel: com sessão de onda viva ou com fatia andando. */
 export const prdsVisiveis = (c: Coleta, mostrarTodos: boolean): Prd[] => {
@@ -155,8 +155,25 @@ export const duracao = (ms: number) => {
   return h ? `${h}:${mm.padStart(2, '0')}:${ss}` : `${mm}:${ss}`
 }
 
+/** PRD dono da issue ou do PR que o sub-agente cita. */
+const prdDoAlvo = (c: Coleta, a: SubAgente): number | undefined =>
+  (c.os?.prds ?? []).find(p => alvo(a, p) !== null)?.n
+
+/** PRD da sessão: o do alvo do sub-agente mais recente dela; sem alvo, o da passagem (coletar.sh). */
+export const prdDaSessao = (c: Coleta, nome: string): number | undefined => {
+  const dela = (c.subAgentes ?? []).filter(a => a.sessao === nome).sort((x, y) => y.inicio - x.inicio)
+  for (const a of dela) {
+    const n = prdDoAlvo(c, a)
+    if (n !== undefined) return n
+  }
+  return c.prdSessoes[nome]
+}
+
+/** Sub-agentes do PRD: pelo alvo; sem alvo em nenhum PRD, pelo PRD da sessão. */
 export const agentesDoPrd = (c: Coleta, prd: Prd): SubAgente[] =>
-  (c.subAgentes ?? []).filter(a => c.prdSessoes[a.sessao] === prd.n).sort((x, y) => x.inicio - y.inicio)
+  (c.subAgentes ?? [])
+    .filter(a => (prdDoAlvo(c, a) ?? prdDaSessao(c, a.sessao)) === prd.n)
+    .sort((x, y) => x.inicio - y.inicio)
 
 /** A fatia de um sub-agente pela descrição: "PR 1166" vai à issue do PR, "#1139" à issue. */
 export const alvo = (a: SubAgente, prd: Prd): number | null => {

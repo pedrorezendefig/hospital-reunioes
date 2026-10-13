@@ -1,8 +1,8 @@
 import { expect, mock, test } from 'claude-code/testing'
 
 import {
-  alvo, assinatura, atividadeDaSessao, corDaDuracao, detalhe, duracaoDaOnda, etapas, pendentes, prdsVisiveis, rotuloDoShell,
-  situacaoDaOnda, subidaDoPr,
+  agentesDoPrd, alvo, assinatura, atividadeDaSessao, corDaDuracao, detalhe, duracaoDaOnda, etapas, pendentes,
+  prdsVisiveis, rotuloDoShell, sessoesDoPrd, situacaoDaOnda, subidaDoPr,
 } from '../hooks/register'
 import type { Coleta, SubAgente } from '../types'
 
@@ -47,6 +47,37 @@ test('sub-agente cai na fatia pelo número da issue ou do PR', () => {
   const prd = comEm(COLETA).os!.prds.find(p => p.n === 1128)!
   expect(AGENTES.map(a => alvo(a, prd))).toEqual([1132, 1132])
   expect(alvo(sub({ descricao: 'Implementa #9999' }), prd)).toBeNull()
+})
+
+test('sub-agente vai ao PRD do alvo, mesmo com a sessão mapeada para outro PRD', () => {
+  // a passagem da onda-ia cita primeiro "nem no PRD #1129" e o coletar.sh mapeia a sessão para o 1129
+  const prds = BRUTO.os.prds.map(p => p.n !== 1128 ? p : {
+    ...p, issues: p.issues.map(i => i.n === 1135 ? { ...i, fase: 'pr_aberto', pr: 1179 } : i),
+  })
+  const cor = sub({ sessao: 'onda-ia-onda3', id: 'cor', tipo: 'hr-corretor', descricao: 'Corrige must-fix do PR #1179' })
+  // na onda-gestao (PRD #1129), um revisor do PR #1179 também vai ao PRD #1128
+  const cruz = sub({ sessao: 'onda-gestao-onda3', id: 'cruz', tipo: 'hr-revisor', descricao: 'Revisa PR #1179', inicio: AGORA - 900_000 })
+  const solto = sub({ sessao: 'onda-gestao-onda3', id: 'solto', tipo: 'general-purpose', descricao: 'Audita a fila' })
+  const gest = sub({ sessao: 'onda-gestao-onda3', id: 'gest', descricao: 'Implementa issue #1141', inicio: AGORA })
+  const c = {
+    ...comEm(COLETA),
+    os: { ...BRUTO.os, prds },
+    agentes: [
+      { nome: 'onda-ia-onda3', status: 'busy', estado: 'working', inicio: 0 },
+      { nome: 'onda-gestao-onda3', status: 'busy', estado: 'working', inicio: 0 },
+      { nome: 'onda-c-onda1', status: 'busy', estado: 'working', inicio: 0 },
+    ],
+    prdSessoes: { 'onda-ia-onda3': 1129, 'onda-gestao-onda3': 1129, 'onda-c-onda1': 1129 },
+    subAgentes: [cor, cruz, solto, gest],
+  } as Coleta
+  const p1128 = c.os!.prds.find(p => p.n === 1128)!
+  const p1129 = c.os!.prds.find(p => p.n === 1129)!
+  expect(agentesDoPrd(c, p1128).map(a => `${a.id}:${alvo(a, p1128)}`)).toEqual(['cruz:1135', 'cor:1135'])
+  // sem alvo em nenhum PRD, o sub-agente fica no PRD da sessão, em "outros agentes"
+  expect(agentesDoPrd(c, p1129).map(a => a.id)).toEqual(['solto', 'gest'])
+  // a sessão vai ao PRD do alvo do seu sub-agente mais recente; sem sub-agente, fica no da passagem
+  expect(sessoesDoPrd(c, 1128).map(s => s.nome)).toEqual(['onda-ia-onda3'])
+  expect(sessoesDoPrd(c, 1129).map(s => s.nome)).toEqual(['onda-gestao-onda3', 'onda-c-onda1'])
 })
 
 test('esteira da fatia: implementou, CI vermelho, revisor trabalhando', () => {
