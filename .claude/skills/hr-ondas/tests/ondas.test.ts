@@ -1,8 +1,9 @@
 import { expect, mock, test } from 'claude-code/testing'
 
 import {
-  agentesDoPrd, alvo, assinatura, atividadeDaSessao, corDaDuracao, detalhe, duracaoDaOnda, etapas, focoDaSessao,
-  nomeCurtoDaSessao, pendentes, prdsVisiveis, rotuloDoAlvo, rotuloDoShell, sessoesDoPrd, situacaoDaOnda, subidaDoPr,
+  agentesDoPrd, alvo, assinatura, atividadeDaSessao, corDaDuracao, detalhe, duracaoDaOnda, etapas, focoDaSessao, linhagem,
+  nomeCurtoDaSessao, ondasDoPrd, pendentes, prdsVisiveis, resumoDaOnda, rotuloDoAlvo, rotuloDoShell, sessoesDoPrd,
+  situacaoDaOnda, subidaDoPr,
 } from '../hooks/register'
 import type { Coleta, SubAgente } from '../types'
 
@@ -117,13 +118,40 @@ test('onda com fatia em PR anda; onda só bloqueada fica parada', () => {
   expect(situacaoDaOnda(porN(prd.ondas[2]!), [], prd, AGORA)).toBe('parada')
 })
 
+// a fila-alvo da passagem onda-ia-onda1.md, com uma issue de outro PRD e uma que não existe
+const PASSAGENS = {
+  'onda-ia': { ondas: { '1': [1130, 1132, 1133], '2': [1131, 1136, 1137, 1139], '3': [1134, 1135], '4': [1138, 9999] }, escritas: [1, 2] },
+}
+
+test('ondas do PRD vêm da passagem da linhagem da sessão; sem passagem, das colunas do OS', () => {
+  const c = { ...comEm(COLETA), passagens: PASSAGENS } as Coleta
+  const prd = c.os!.prds.find(p => p.n === 1128)!
+  const ondas = ondasDoPrd(c, prd)
+  expect(ondas.map(o => `${o.numero}:${o.issues.join(',')}`)).toEqual(['1:1130,1132,1133', '2:1131,1136,1137', '3:1134,1135', '4:1138'])
+  // a onda da sessão viva, a escrita sem sessão e a que ainda não tem passagem
+  expect(ondas.map(o => `${o.passagem}:${o.sessao?.nome ?? '-'}`)).toEqual(['viva:onda-ia-onda1', 'escrita:-', 'nao:-', 'nao:-'])
+  // o PRD #1129 não tem sessão viva nem passagem: colunas do OS, numeradas
+  const outro = c.os!.prds.find(p => p.n === 1129)!
+  expect(ondasDoPrd(c, outro).map(o => `${o.numero}:${o.passagem}`)).toEqual(['1:null', '2:null', '3:null', '4:null', '5:null'])
+  expect(ondasDoPrd(comEm(COLETA), prd).map(o => o.issues)).toEqual(prd.ondas)
+  expect(linhagem('onda-gestao-onda4')).toBe('onda-gestao')
+})
+
+test('resumo da onda parada diz qual bloqueadora está na mão do humano', () => {
+  const prd = comEm(COLETA).os!.prds.find(p => p.n === 1129)!
+  const porN = new Map(prd.issues.map(i => [i.n, i.n === 1142 ? { ...i, fase: 'humana' as const } : i]))
+  const i1145 = porN.get(1145)!
+  expect(resumoDaOnda([i1145], [1145], porN).map(r => r.texto)).toEqual(['× #1145', 'espera #1141 #1142 (humana) #1143'])
+  expect(resumoDaOnda([i1145], [1145]).map(r => r.texto)[1]).toBe('espera #1141 #1142 #1143')
+})
+
 const SUBIDA_EM_CURSO = [{ sessao: 'onda-ia-onda1', prs: [1150], inicio: AGORA - 120_000, fim: null }]
 const CI_RODANDO = { '1150': { inicio: AGORA - 9 * 60_000, fim: null } }
 
-const montar = async ($: any, on: any) => {
+const montar = async ($: any, on: any, extra: Record<string, unknown> = {}) => {
   mock.clock(on, { now: AGORA })
   on('process.run', () => ({
-    value: { exitCode: 0, stdout: JSON.stringify({ ...COLETA, subAgentes: AGENTES, subidas: SUBIDA_EM_CURSO, ci: CI_RODANDO }), stderr: '' },
+    value: { exitCode: 0, stdout: JSON.stringify({ ...COLETA, subAgentes: AGENTES, subidas: SUBIDA_EM_CURSO, ci: CI_RODANDO, ...extra }), stderr: '' },
   }))
   on('command.register', () => ({ value: undefined }))
   on('ui.open', () => ({ value: { isPlaced: true } }))
@@ -156,6 +184,17 @@ for (const surface of ['terminal', 'desktop'] as const) {
     expect(await pane.find({ text: /subida #1150/ })).toBeTruthy()
     expect(await pane.find({ text: /^ · 2:00$/ })).toBeTruthy()
     expect(await pane.find({ text: /^ 9 min$/ })).toBeTruthy()
+  })
+
+  test(`painel numera as ondas pelo terminal e mostra a fala da sessão (${surface})`, async ($, on) => {
+    const agentes = [{ ...COLETA.agentes[0]!, fala: { texto: 'Aguardando o CI do PR #1150.\nDetalhe que não aparece.', em: AGORA - 4 * 60_000 } }]
+    await montar($, on, { passagens: PASSAGENS, agentes })
+    const pane = await $.ui.mount({ plugin: 'hr-ondas', surface, component: 'Pane', requestId: 'ondas', props: {} as any })
+    expect(await pane.find({ text: /Onda 1 · onda-ia-onda1 · andando/ })).toBeTruthy()
+    expect(await pane.find({ text: /Onda 2 · na fila · passagem escrita/ })).toBeTruthy()
+    expect(await pane.find({ text: /Onda 3 · parada · passagem: ainda não/ })).toBeTruthy()
+    expect(await pane.find({ text: /💬 Aguardando o CI do PR #1150\. · há 4 min/ })).toBeTruthy()
+    expect(await pane.find({ text: /Detalhe que não aparece/ })).toBeUndefined()
   })
 
   test(`faixa acima do prompt avisa a migration com o link (${surface})`, async ($, on) => {

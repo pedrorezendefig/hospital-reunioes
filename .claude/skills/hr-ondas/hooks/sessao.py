@@ -5,6 +5,8 @@ Uso: sessao.py <transcript.jsonl> <nome-da-sessao>
 Imprime um JSON numa linha:
   shell    o último Bash em primeiro plano ainda sem resultado: {descricao, comando, inicio}
            (ms desde a época), ou null
+  fala     a última frase que o orquestrador escreveu (primeira linha, até 200 caracteres)
+           e a hora dela: {texto, em}, ou null. É o status que a /onda-enxuta imprime a cada passo.
   subidas  cada `fechar_onda.py --prs` que a sessão rodou (sem --dry-run): {prs, inicio, fim}
            fim é null enquanto o processo ainda aparece no `ps`; depois, o mtime do arquivo
            de saída que o Bash em segundo plano devolveu
@@ -54,6 +56,7 @@ def main(caminho, nome):
     usos = {}  # id -> {descricao, comando, inicio, bg}
     sem_resultado = []  # ids de Bash em primeiro plano ainda abertos, em ordem
     subidas = {}  # id -> {prs, inicio, fim}
+    fala = None
     with open(caminho, encoding="utf-8", errors="ignore") as f:
         for linha in f:
             try:
@@ -66,7 +69,14 @@ def main(caminho, nome):
                 continue
             for bloco in conteudo:
                 tipo = bloco.get("type")
-                if tipo == "tool_use" and bloco.get("name") == "Bash":
+                if tipo == "text" and msg.get("role") == "assistant":
+                    texto = (bloco.get("text") or "").strip()
+                    if texto:
+                        fala = {
+                            "texto": texto.splitlines()[0][:200],
+                            "em": ms(e["timestamp"]),
+                        }
+                elif tipo == "tool_use" and bloco.get("name") == "Bash":
                     entrada = bloco.get("input") or {}
                     cmd = entrada.get("command") or ""
                     uso = {
@@ -125,7 +135,8 @@ def main(caminho, nome):
         }
     print(
         json.dumps(
-            {"shell": shell, "subidas": list(subidas.values())}, ensure_ascii=False
+            {"shell": shell, "fala": fala, "subidas": list(subidas.values())},
+            ensure_ascii=False,
         )
     )
 

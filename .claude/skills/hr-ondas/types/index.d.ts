@@ -21,6 +21,9 @@ export type Prd = { n: number; titulo: string; ondas: number[][]; issues: Issue[
 /** O Bash em primeiro plano que a sessão da onda está rodando agora. */
 export type Shell = { descricao: string; comando: string; inicio: number }
 
+/** A última frase que o orquestrador da sessão escreveu: o status de cada passo da /onda-enxuta. */
+export type Fala = { texto: string; em: number }
+
 export type Agente = {
   nome: string
   status: string
@@ -28,7 +31,11 @@ export type Agente = {
   inicio: number
   sessao?: string
   shell?: Shell | null
+  fala?: Fala | null
 }
+
+/** Ondas de uma linhagem de sessão ("onda-gestao"), lidas das passagens: fila-alvo fixa e passagens escritas. */
+export type Passagem = { ondas: Record<string, number[]>; escritas: number[] }
 
 /** Uma rodada do fechar_onda.py na sessão: fim null enquanto roda. */
 export type Subida = { sessao: string; prs: number[]; inicio: number; fim: number | null }
@@ -67,6 +74,7 @@ export type Coleta = {
   subidas?: Subida[]
   ci?: Record<string, Ci>
   migrations: Migration[]
+  passagens?: Record<string, Passagem>
   aplicada: number | null
   em: number
   /** Hora da última resposta do Hospital OS; menor que `remotoEm` quando o `os` é o de antes. */
