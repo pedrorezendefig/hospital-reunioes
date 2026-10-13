@@ -2,6 +2,49 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-10-13T12:09:27-03:00",
+      "sha": "bfe3294ae2b3bcd876ef9584a73c3592c6f3a107",
+      "app_version": "0.193.2",
+      "subject": "Onda onda-a-onda1: Termo PROPOSTO do dicionário casa com confiança média; Motivo do Passo B em até 140 caracteres; Reanalisar roda o Passo A de novo com o modelo atual",
+      "raw_subject": "chore(deploy): registro da onda onda-a-onda1 (#1200 #1204 #1199)",
+      "scope": [
+        "backend"
+      ],
+      "prds": [],
+      "result": "healthy",
+      "duration_seconds": 333,
+      "services_touched": [
+        "backend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        },
+        {
+          "service": "frontend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "onda-enxuta onda-a-onda1: PR #1200 (issue #1196), PR #1204 (issue #1198), PR #1199 (issue #1197), mergeados PR a PR. Merge pela API do GitHub, um build. Registro pela Action pos-merge depois do health.",
+      "etapas": {
+        "merge_s": 10,
+        "build_s": {
+          "backend": 246
+        },
+        "health_s": 10
+      },
+      "responsavel": "pedrorezendefig"
+    },
+    {
       "at": "2026-10-13T11:16:54-03:00",
       "sha": "87a6411c2e1775d235278c0197b920ce8ed32865",
       "app_version": "0.193.1",
