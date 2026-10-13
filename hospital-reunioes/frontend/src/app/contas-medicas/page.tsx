@@ -19,6 +19,7 @@ import { AlertCircle, Loader2, ReceiptText, Upload } from "lucide-react";
 import { LinkParaHabilitacao } from "@/components/contas-medicas/LinkParaHabilitacao";
 import { LinkParaOperadoras } from "@/components/contas-medicas/LinkParaOperadoras";
 import { LinkParaPainel } from "@/components/contas-medicas/LinkParaPainel";
+import { LinkParaValidacao } from "@/components/contas-medicas/LinkParaValidacao";
 import {
   type Fila,
   type ItemDaFila,
@@ -216,6 +217,7 @@ export default function ContasMedicasPage() {
         <div className="flex items-center justify-between gap-3">
           <h1 className="flex-1 text-2xl font-bold text-slate-900">Contas médicas</h1>
           <LinkParaPainel />
+          <LinkParaValidacao />
           <LinkParaOperadoras />
           <LinkParaHabilitacao />
         </div>

@@ -74,6 +74,15 @@ export interface Guia {
   grupos: GrupoGuia[];
   /** O botão "Reanalisar" (issue #1130): a permissão de regra contratual e tabelas, na conta ainda aberta. */
   pode_reanalisar?: boolean;
+  /** O "Responder ao time" da Validação sobre o que esta conta levantou (issue #1142). */
+  respostas?: RespostaDaValidacao[];
+}
+
+export interface RespostaDaValidacao {
+  titulo: string;
+  regra_codigo: string | null;
+  resposta: string;
+  decidido_em: string | null;
 }
 
 export const ROTULO_ACAO: Record<AcaoGuia, string> = {

@@ -460,3 +460,41 @@ describe("o botão Reanalisar (issue #1130)", () => {
     expect(screen.queryByRole("button", { name: "Reanalisar" })).toBeNull();
   });
 });
+
+describe("o que volta da Validação (issue #1142)", () => {
+  it("a resposta ao time aparece no Guia, e a linha decidida vem com a etiqueta e os botões", async () => {
+    respostaDoGuia = guia({
+      cabecalho: { ...guia().cabecalho, situacao: "RETORNO" },
+      respostas: [
+        {
+          titulo: "Observações sobre a regra ALFA-PRI-07",
+          regra_codigo: "ALFA-PRI-07",
+          resposta: "Confirmado com a ALFA: vem no pacote.",
+          decidido_em: "2026-10-12T10:00:00+00:00",
+        },
+      ],
+      grupos: [
+        {
+          data: "2026-10-03",
+          setor: "CTI",
+          linhas: [
+            linha({ id: "l-decidida", estado: "DECIDIDA", descricao: "Seringa pronta" }),
+            linha({ id: "l-descartada", acao: "VALIDAR", estado: "DECIDIDA", descricao: "Diária" }),
+          ],
+        },
+      ],
+    });
+    await abrir();
+
+    const resposta = screen.getByRole("note", { name: "Resposta da Validação" });
+    expect(resposta.textContent).toContain("ALFA-PRI-07");
+    expect(resposta.textContent).toContain("Confirmado com a ALFA: vem no pacote.");
+    expect(screen.getByText("Retorno")).toBeTruthy();
+    const decidida = aLinha("Seringa pronta");
+    expect(decidida.textContent).toContain("Decidida na validação");
+    expect(within(decidida).getByRole("button", { name: "Feito" })).toBeTruthy();
+    const descartada = aLinha("Diária");
+    expect(descartada.textContent).toContain("Decidida na validação, sem ação no MV");
+    expect(descartada.textContent).not.toContain("Você não precisa decidir");
+  });
+});
