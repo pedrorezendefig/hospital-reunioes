@@ -29,9 +29,9 @@ from app.services.contas_medicas.cirurgia import (  # noqa: E402
     Procedimento,
 )
 from app.services.contas_medicas.conferencia import Pacote, ProntuarioLido, conferir  # noqa: E402
-from app.services.contas_medicas.conteudo import Conteudo, Internacao, Movimentacao  # noqa: E402
+from app.services.contas_medicas.conteudo import Conteudo, GlicemiasDoDia, Internacao, Movimentacao  # noqa: E402
 from app.services.contas_medicas.memoria import MemoriaLida, RegraLida  # noqa: E402
-from app.services.contas_medicas.prescricao import ItemPrescrito, Prescricao, consolidar  # noqa: E402
+from app.services.contas_medicas.prescricao import ExamePedido, ItemPrescrito, Prescricao, consolidar  # noqa: E402
 from app.services.contas_medicas.prontuario import Prontuario  # noqa: E402
 from app.services.contas_medicas.tabelas import NAO_CONFERIDO  # noqa: E402
 from app.services.contas_medicas_conta import Conta, ItemConta  # noqa: E402
@@ -58,6 +58,8 @@ REGRAS_DAS_CONFERENCIAS = {
     "gas": "ALFA-CC-04",
     "procedimento_do_cabecalho": "ALFA-PRI-12",
     "teto": "ALFA-INS-33",
+    "exame": "ALFA-SAD-01",
+    "glicemia": "ALFA-INS-18",
 }
 
 PARAMETROS_ALFA: dict[str, Any] = {
@@ -180,6 +182,8 @@ def _prontuario(
     descricoes=(),
     movimentacoes=(),
     documentos=(),
+    exames=(),
+    glicemias=(),
     textos: tuple[str, ...] = ("",),
     tipo_impressao: str | None = "Completa",
     idade: int | None = None,
@@ -201,9 +205,9 @@ def _prontuario(
         setor_por_dia={},
         prescricoes=tuple(prescricoes),
         prescricao_consolidada=tuple(consolidar(prescricoes)),
-        exames_pedidos=(),
+        exames_pedidos=tuple(exames),
         balancos=(),
-        glicemias=(),
+        glicemias=tuple(glicemias),
         descricoes_cirurgicas=tuple(descricoes),
         fichas_anestesicas=tuple(fichas),
         guias_tiss=(),
@@ -1055,6 +1059,206 @@ class TestMontagem:
         [descartada] = resultado.descartadas
         assert descartada["linha"]["descricao"] == "Cetoprofeno"
         assert "fora do período" in descartada["motivo"]
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 6. Exame solicitado × exame lançado (adendo v1.3, item 6, conferência 9)
+# ═══════════════════════════════════════════════════════════════════════════
+
+HEMOGRAMA = "40304361"
+UREIA = "40301630"
+GASOMETRIA = "40302040"
+
+
+class TestExames:
+    def test_2_exames_pedidos_e_1_lancado_vira_incluir_com_o_pedido_e_lancado_sem_pedido_vira_validar(self):
+        exames = [
+            ExamePedido("HEMOGRAMA COMPLETO", "3014", dia(2), 30),
+            ExamePedido("UREIA", "3015", dia(2), 30),
+        ]
+        conta = _conta(
+            _item(HEMOGRAMA, "HEMOGRAMA COMPLETO", dia(2), 1, 15.00, grupo="EXAMES", pagina=7),
+            _item(GASOMETRIA, "GASOMETRIA ARTERIAL", dia(3), 1, 30.00, grupo="EXAMES", pagina=7),
+        )
+
+        resultado = conferir(conta, _prontuario(exames=exames), _memoria(), _tabela({}), dicionario={"UREIA": {UREIA}})
+
+        [incluir] = _linhas(resultado, "INCLUIR")
+        assert _campos(incluir) == {
+            "acao": "INCLUIR",
+            "data": "2026-10-02",
+            "data_fim": None,
+            "setor": None,
+            "codigo": UREIA,
+            "descricao": "UREIA",
+            "quantidade_lancada": 0.0,
+            "quantidade_devida": 1.0,
+            "preco_lancado": None,
+            "preco_tabela": None,
+            "valor_diferenca": None,
+            "regra_codigo": "ALFA-SAD-01",
+            "evidencia_pagina": 30,
+            "nivel_evidencia": "PRESCRITO",
+            "causa_raiz": "LANCAMENTO_MANUAL",
+            "confianca": "ALTA",
+            "origem": "CODIGO",
+        }
+        assert "pedido 3015" in incluir["motivo"]
+        [validar] = _linhas(resultado, "VALIDAR")
+        assert _campos(validar) == {
+            "acao": "VALIDAR",
+            "data": "2026-10-03",
+            "data_fim": None,
+            "setor": "CTI ADULTO",
+            "codigo": GASOMETRIA,
+            "descricao": "GASOMETRIA ARTERIAL",
+            "quantidade_lancada": 1.0,
+            "quantidade_devida": 0.0,
+            "preco_lancado": 30.00,
+            "preco_tabela": None,
+            "valor_diferenca": -30.00,
+            "regra_codigo": "ALFA-SAD-01",
+            "evidencia_pagina": 7,
+            "nivel_evidencia": "POR_REGRA",
+            "causa_raiz": "REGISTRO_ASSISTENCIAL",
+            "confianca": "ALTA",
+            "origem": "CODIGO",
+        }
+        assert len(resultado.linhas) == 2
+
+    def test_pedido_da_parcial_anterior_repetido_na_prescricao_do_dia_seguinte_nao_vira_incluir(self):
+        exames = [
+            ExamePedido("HEMOGRAMA COMPLETO", "3014", dia(2), 30),
+            ExamePedido("HEMOGRAMA COMPLETO", "3014", dia(3), 31),
+        ]
+        conta = _conta(inicio=dia(3), fim=dia(6))
+
+        resultado = conferir(conta, _prontuario(exames=exames), _memoria(), _tabela({}), dicionario={})
+
+        assert _linhas(resultado, "INCLUIR") == []
+
+    def test_dois_pedidos_do_mesmo_exame_no_mesmo_dia_sem_lancamento_viram_incluir_2_com_os_dois_pedidos(self):
+        exames = [
+            ExamePedido("GASOMETRIA ARTERIAL", "4001", dia(3), 40),
+            ExamePedido("GASOMETRIA ARTERIAL", "4002", dia(3), 40),
+            ExamePedido("GASOMETRIA ARTERIAL", "4003", dia(3), 40),
+            ExamePedido("GASOMETRIA ARTERIAL", "4004", dia(3), 40),
+        ]
+        conta = _conta(_item(GASOMETRIA, "GASOMETRIA ARTERIAL", dia(3), 2, 30.00, grupo="EXAMES", pagina=7))
+
+        resultado = conferir(conta, _prontuario(exames=exames), _memoria(), _tabela({}), dicionario={})
+
+        [incluir] = _linhas(resultado, "INCLUIR")
+        assert incluir["codigo"] == GASOMETRIA
+        assert incluir["quantidade_devida"] == 2.0
+        assert incluir["valor_diferenca"] == 60.00
+        assert "pedidos 4003, 4004" in incluir["motivo"]
+        assert not resultado.descartadas
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 7. Glicemia × fita, lanceta e algodão (conferência 10, ASSIM-INS-18)
+# ═══════════════════════════════════════════════════════════════════════════
+
+FITA = "70902771"
+LANCETA = "70902925"
+ALGODAO = "70019860"
+
+PARAMETROS_COM_GLICEMIA: dict[str, Any] = {
+    **PARAMETROS_ALFA,
+    "glicemia_capilar": {"codigos": [FITA, LANCETA, ALGODAO], "por_afericao": 1},
+}
+
+# A mesma glicemia está na aferição e no balanço do dia: são 4, não 8.
+GLICEMIAS_DO_DIA_3 = (
+    GlicemiasDoDia(dia(3), "AFERICAO", 4, (40, 41, 42, 43)),
+    GlicemiasDoDia(dia(3), "BALANCO", 4, (50,)),
+)
+
+
+def _conta_com_2_fitas() -> Conta:
+    material = {"grupo": "MATERIAIS DESCARTAVEIS"}
+    return _conta(
+        _item(FITA, "FITA GLICEMIA ACCU CHEK", dia(3), 2, 3.00, pagina=8, **material),
+        _item(LANCETA, "LANCETA DESC", dia(3), 4, 0.50, pagina=8, **material),
+    )
+
+
+class TestGlicemia:
+    def test_4_glicemias_no_dia_e_2_fitas_lancadas_vira_ajustar_para_4_e_sem_algodao_vira_incluir(self):
+        resultado = conferir(
+            _conta_com_2_fitas(),
+            _prontuario(glicemias=GLICEMIAS_DO_DIA_3),
+            _memoria(PARAMETROS_COM_GLICEMIA),
+            _tabela({("MATERIAL", FITA): 3.00}),
+        )
+
+        [ajustar] = _linhas(resultado, "AJUSTAR_QUANTIDADE")
+        assert _campos(ajustar) == {
+            "acao": "AJUSTAR_QUANTIDADE",
+            "data": "2026-10-03",
+            "data_fim": None,
+            "setor": "CTI ADULTO",
+            "codigo": FITA,
+            "descricao": "FITA GLICEMIA ACCU CHEK",
+            "quantidade_lancada": 2.0,
+            "quantidade_devida": 4.0,
+            "preco_lancado": 3.00,
+            "preco_tabela": 3.00,
+            "valor_diferenca": 6.00,
+            "regra_codigo": "ALFA-INS-18",
+            "evidencia_pagina": 40,
+            "nivel_evidencia": "REGISTRADO",
+            "causa_raiz": "LANCAMENTO_MANUAL",
+            "confianca": "ALTA",
+            "origem": "CODIGO",
+        }
+        assert "4 glicemias" in ajustar["motivo"]
+        [incluir] = _linhas(resultado, "INCLUIR")
+        assert (
+            incluir["codigo"],
+            incluir["quantidade_devida"],
+            incluir["regra_codigo"],
+            incluir["evidencia_pagina"],
+        ) == (
+            ALGODAO,
+            4.0,
+            "ALFA-INS-18",
+            40,
+        )
+        assert len(resultado.linhas) == 2
+
+    def test_sem_regra_de_glicemia_na_memoria_nenhuma_linha(self):
+        sem_regra = {
+            **PARAMETROS_COM_GLICEMIA,
+            "regras_das_conferencias": {k: v for k, v in REGRAS_DAS_CONFERENCIAS.items() if k != "glicemia"},
+        }
+
+        resultado = conferir(
+            _conta_com_2_fitas(),
+            _prontuario(glicemias=GLICEMIAS_DO_DIA_3),
+            _memoria(sem_regra),
+            _tabela({("MATERIAL", FITA): 3.00}),
+        )
+
+        assert resultado.linhas == ()
+
+
+class TestRegraPendenteDeExameEGlicemia:
+    def test_regra_pendente_faz_exame_e_glicemia_sairem_validar(self):
+        resultado = conferir(
+            _conta_com_2_fitas(),
+            _prontuario(glicemias=GLICEMIAS_DO_DIA_3, exames=[ExamePedido("UREIA", "3015", dia(2), 30)]),
+            _memoria(PARAMETROS_COM_GLICEMIA, pendentes=("ALFA-INS-18", "ALFA-SAD-01")),
+            _tabela({("MATERIAL", FITA): 3.00}),
+        )
+
+        assert sorted((linha["acao"], linha["codigo"] or "", linha["regra_codigo"]) for linha in resultado.linhas) == [
+            ("VALIDAR", "", "ALFA-SAD-01"),
+            ("VALIDAR", ALGODAO, "ALFA-INS-18"),
+            ("VALIDAR", FITA, "ALFA-INS-18"),
+        ]
+        assert all(linha["motivo"].startswith("Regra ALFA-") for linha in resultado.linhas)
 
 
 # ═══════════════════════════════════════════════════════════════════════════

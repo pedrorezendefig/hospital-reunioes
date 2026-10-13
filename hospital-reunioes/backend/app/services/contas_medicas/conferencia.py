@@ -26,12 +26,12 @@ from decimal import ROUND_HALF_UP, Decimal
 from typing import Any
 
 from app.services.contas_medicas.cirurgia import DescricaoCirurgica
-from app.services.contas_medicas.conteudo import Conteudo, Movimentacao
+from app.services.contas_medicas.conteudo import Conteudo, GlicemiasDoDia, Movimentacao
 from app.services.contas_medicas.diarias import ParametrosDiaria, Segmento, contar_diarias, diarias_do_periodo
 from app.services.contas_medicas.dicionario import _generico, _marca, _norm, casar
 from app.services.contas_medicas.guia import NotaDeEntrada, agrupar_por_dia_e_setor, nota_de_entrada
 from app.services.contas_medicas.memoria import MemoriaLida
-from app.services.contas_medicas.prescricao import ItemPrescrito, Prescricao
+from app.services.contas_medicas.prescricao import ExamePedido, ItemPrescrito, Prescricao
 from app.services.contas_medicas.prontuario import Prontuario
 from app.services.contas_medicas.tabelas import NAO_CONFERIDO, PACOTE, Pacote
 from app.services.contas_medicas_conta import Conta, ItemConta, coluna_do_plano
@@ -1042,6 +1042,192 @@ def _tetos(ctx: _Contexto, pagas: list[_Devida]) -> list[_Linha]:
 
 
 # ----------------------------------------------------------------------------------
+# (9) Exame solicitado × exame lançado
+# ----------------------------------------------------------------------------------
+
+_GRUPOS_DE_EXAME = frozenset({"EXAMES", "SADT"})
+
+
+def _contem(texto: str, termo: str) -> bool:
+    return bool(termo) and re.search(r"(?<![A-Z])" + re.escape(termo) + r"(?![A-Z])", texto) is not None
+
+
+def _mesmo_exame(nome: str, item: ItemConta, dicionario: Mapping[str, set[str]]) -> bool:
+    """O exame pedido e o lançado pelo dicionário ou pelo nome, nos dois sentidos:
+    o pedido "HEMOGRAMA COMPLETO" casa com o lançado "HEMOGRAMA COMPLETO - AUTOMATIZADO"."""
+    pedido, lancado = _norm(nome), _norm(item.descricao)
+    if item.codigo in dicionario.get(pedido, set()):
+        return True
+    marca = _marca(item.descricao)
+    return _contem(lancado, pedido) or (len(marca) >= 3 and _contem(pedido, marca))
+
+
+def _exames(ctx: _Contexto) -> list[_Linha]:
+    """Pedido na prescrição de exames sem item de exame na conta: Incluir, com o
+    número do pedido. Exame lançado sem pedido: Validar, e só com impressão
+    completa (na parcial, a falta do pedido não prova nada). A solicitação é o que
+    vale para cobrar exame (adendo v1.3, item 2)."""
+    lancados = [i for i in ctx.conta.itens if i.grupo in _GRUPOS_DE_EXAME]
+    restante = {id(i): i.quantidade for i in lancados}
+    # O mesmo pedido repetido na prescrição do dia seguinte é um pedido só, e vale
+    # a primeira data: o pedido do último dia da parcial anterior já foi cobrado lá.
+    primeiro: dict[tuple[str, str], ExamePedido] = {}
+    for exame in ctx.prontuario.conteudo.exames_pedidos:
+        chave = (exame.pedido, _norm(exame.nome))
+        atual = primeiro.get(chave)
+        if atual is None or (exame.data and (atual.data is None or exame.data < atual.data)):
+            primeiro[chave] = exame
+    # Pedidos sem lançamento do mesmo código e dia somam numa linha Incluir.
+    faltam: dict[tuple, tuple[str | None, list[ExamePedido]]] = {}
+    for exame in primeiro.values():
+        if exame.data and not ctx.no_periodo(exame.data):
+            continue
+        mesmos = [i for i in lancados if _mesmo_exame(exame.nome, i, ctx.dicionario)]
+        livre = next((i for i in mesmos if restante[id(i)] > 0), None)
+        if livre is not None:
+            restante[id(livre)] -= 1
+            continue
+        codigo = mesmos[0].codigo if mesmos else _codigo_no_dicionario(exame.nome, ctx.dicionario)
+        chave = (codigo or _norm(exame.nome), exame.data)
+        faltam.setdefault(chave, (codigo, []))[1].append(exame)
+    linhas = []
+    for codigo, pedidos in faltam.values():
+        exame = pedidos[0]
+        quantidade = Decimal(len(pedidos))
+        numeros = ", ".join(p.pedido for p in pedidos)
+        rotulo = f"pedidos {numeros}" if len(pedidos) > 1 else f"pedido {numeros}"
+        data = exame.data or ctx.conta.periodo_inicio
+        preco_lancado, preco_tabela, valor, etiqueta = (
+            ctx.valor_de_inclusao("SADT", codigo, data, quantidade) if data else (None, None, None, "")
+        )
+        linhas.append(
+            _Linha(
+                acao="INCLUIR",
+                chave="exame",
+                data=exame.data,
+                setor=(ctx.prontuario.conteudo.setor_por_dia.get(exame.data) or (None,))[0] if exame.data else None,
+                codigo=codigo,
+                descricao=exame.nome,
+                motivo=f"Exame solicitado ({rotulo}) e sem lançamento na conta.{etiqueta}",
+                nivel="PRESCRITO",
+                causa="LANCAMENTO_MANUAL",
+                pagina=exame.pagina,
+                trecho=" | ".join(f"{p.nome} ; Pedido: {p.pedido}" for p in pedidos),
+                quantidade_lancada=Decimal(0),
+                quantidade_devida=quantidade,
+                preco_lancado=preco_lancado,
+                preco_tabela=preco_tabela,
+                valor=valor,
+            )
+        )
+    if not (ctx.prontuario.estrutura.tipo_impressao or "").upper().startswith("COMPLETA"):
+        return linhas
+    for item in lancados:
+        sobra = restante[id(item)]
+        if sobra <= 0:
+            continue
+        linhas.append(
+            _Linha(
+                acao="VALIDAR",
+                chave="exame",
+                data=item.data,
+                setor=item.setor,
+                codigo=item.codigo,
+                descricao=item.descricao,
+                motivo="Exame lançado sem pedido na prescrição de exames. Conferir a solicitação.",
+                nivel="POR_REGRA",
+                causa="REGISTRO_ASSISTENCIAL",
+                pagina=item.pagina,
+                trecho=_trecho_do_item(item),
+                quantidade_lancada=sobra,
+                quantidade_devida=Decimal(0),
+                preco_lancado=item.unitario,
+                valor=-_dinheiro(item.unitario * sobra),
+            )
+        )
+    return linhas
+
+
+# ----------------------------------------------------------------------------------
+# (10) Glicemia × fita, lanceta e algodão
+# ----------------------------------------------------------------------------------
+
+
+def _glicemias(ctx: _Contexto) -> list[_Linha]:
+    """Glicemias aferidas no dia × os itens da memória (`glicemia_capilar`: códigos
+    e quantos de cada por aferição, ASSIM-INS-18). Nada lançado: Incluir; lançado a
+    menos: Ajustar. Lançado a mais não vira linha: a glicemia anotada só na evolução
+    não entra na contagem. A mesma glicemia pode estar na aferição e no balanço:
+    vale a fonte com mais glicemias no dia, nunca a soma."""
+    bloco = ctx.parametros.get("glicemia_capilar") or {}
+    codigos = [str(c) for c in bloco.get("codigos") or [] if c]
+    por_afericao = Decimal(str(bloco.get("por_afericao") or 1))
+    por_dia: dict[date, GlicemiasDoDia] = {}
+    for glicemias in ctx.prontuario.conteudo.glicemias:
+        atual = por_dia.get(glicemias.data)
+        if atual is None or glicemias.quantidade > atual.quantidade:
+            por_dia[glicemias.data] = glicemias
+    linhas = []
+    for data, glicemias in sorted(por_dia.items()):
+        if not ctx.no_periodo(data):
+            continue
+        devida = glicemias.quantidade * por_afericao
+        for codigo in codigos:
+            cobravel = ctx.cobravel("MATERIAL", codigo, data)
+            if cobravel is False:
+                continue
+            itens = [i for i in ctx.conta.itens if i.codigo == codigo and i.data == data]
+            lancada = sum((i.quantidade for i in itens), Decimal(0))
+            if lancada >= devida:
+                continue
+            motivo = f"{glicemias.quantidade} glicemias aferidas no dia ({glicemias.familia.lower()}), "
+            motivo += f"{por_afericao:g} por aferição; lançado {lancada:g}."
+            if cobravel is None:
+                motivo += " Sem preço conferível na tabela: conferir se passa do corte."
+            comum = {
+                "chave": "glicemia",
+                "data": data,
+                "codigo": codigo,
+                "nivel": "REGISTRADO",
+                "causa": "LANCAMENTO_MANUAL",
+                "pagina": glicemias.paginas[0],
+                "trecho": f"GLICEMIA: {glicemias.quantidade} aferições em {data:%d/%m/%Y}",
+                "quantidade_lancada": lancada,
+                "quantidade_devida": devida,
+            }
+            if itens:
+                tabela = ctx.preco("MATERIAL", codigo, data, ctx.coluna)
+                unitario = tabela if isinstance(tabela, Decimal) else itens[0].unitario
+                linhas.append(
+                    _Linha(
+                        acao="AJUSTAR_QUANTIDADE" if cobravel else "VALIDAR",
+                        setor=itens[0].setor,
+                        descricao=itens[0].descricao,
+                        motivo=motivo,
+                        preco_lancado=itens[0].unitario,
+                        preco_tabela=tabela if isinstance(tabela, Decimal) else None,
+                        valor=_dinheiro((devida - lancada) * unitario),
+                        **comum,
+                    )
+                )
+                continue
+            preco_lancado, preco_tabela, valor, etiqueta = ctx.valor_de_inclusao("MATERIAL", codigo, data, devida)
+            linhas.append(
+                _Linha(
+                    acao="INCLUIR" if cobravel else "VALIDAR",
+                    setor=(ctx.prontuario.conteudo.setor_por_dia.get(data) or (None,))[0],
+                    descricao=next((i.descricao for i in ctx.conta.itens if i.codigo == codigo), None),
+                    motivo=motivo + etiqueta,
+                    preco_lancado=preco_lancado,
+                    preco_tabela=preco_tabela,
+                    valor=valor,
+                    **comum,
+                )
+            )
+    return linhas
+
+
+# ----------------------------------------------------------------------------------
 # Regra citada, período e montagem
 # ----------------------------------------------------------------------------------
 
@@ -1190,6 +1376,8 @@ def conferir(
         *_procedimento_do_cabecalho(ctx),
         *_pacote_pelo_tuss(ctx, pacote),
         *_tetos(ctx, pagas),
+        *_exames(ctx),
+        *_glicemias(ctx),
     ]
     linhas = _com_regra(geradas, memoria, descartadas)
     linhas = _diario(_sem_duplicadas(_no_periodo(ctx, linhas, descartadas)))
