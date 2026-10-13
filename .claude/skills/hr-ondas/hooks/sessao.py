@@ -20,6 +20,9 @@ import sys
 from datetime import datetime
 
 SUBIDA = re.compile(r"fechar_onda\.py\s+--prs\s+([\d\s]+)")
+# No transcript, só o comando que executa o script: o texto `fechar_onda.py --prs N` dentro de
+# um comentário ou de uma passagem (heredoc) não é subida.
+INVOCA = re.compile(r"python[\d.]*\s+(?:-\S+\s+)*\S*fechar_onda\.py\s+--prs\s+([\d\s]+)")
 SAIDA = re.compile(r"written to: (\S+\.output)")
 
 
@@ -88,7 +91,7 @@ def main(caminho, nome):
                     usos[bloco["id"]] = uso
                     if not uso["bg"]:
                         sem_resultado.append(bloco["id"])
-                    m = SUBIDA.search(cmd)
+                    m = INVOCA.search(cmd)
                     if m and "--dry-run" not in cmd:
                         subidas[bloco["id"]] = {
                             "prs": [int(x) for x in m.group(1).split()],
@@ -114,8 +117,10 @@ def main(caminho, nome):
                             subidas[tid]["fim"] = ms(e["timestamp"])
 
     vivos = rodando(nome)
-    for s in subidas.values():
+    # O processo vivo é a subida mais recente com esses PRs; as anteriores já acabaram.
+    for s in sorted(subidas.values(), key=lambda s: s["inicio"], reverse=True):
         if tuple(s["prs"]) in vivos:
+            vivos.discard(tuple(s["prs"]))
             s["fim"] = None
         elif s["fim"] is None:
             saida = s.get("saida")
