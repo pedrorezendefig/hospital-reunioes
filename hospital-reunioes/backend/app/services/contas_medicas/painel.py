@@ -40,7 +40,9 @@ NIVEIS = ("REGISTRADO", "PRESCRITO", "PRESCRITO_SN", "POR_REGRA")
 ITENS_QUE_FALTAM = 10
 
 _CAMPOS_DA_CONTA = "id, atendimento_id, faturista_id, situacao, nota_entrada, concluida_em, custo_usd"
-_CAMPOS_DA_LINHA = "id, conta_id, acao, codigo, descricao, valor_diferenca, preco_tabela, estado, causa_raiz, nivel_evidencia"
+_CAMPOS_DA_LINHA = (
+    "id, conta_id, acao, codigo, descricao, valor_diferenca, preco_tabela, estado, causa_raiz, nivel_evidencia"
+)
 
 # Quantos ids cabem num `in_` por vez: o cliente do PostgREST põe a lista na
 # querystring, e algumas centenas de UUIDs estouram o header do proxy.
@@ -60,19 +62,25 @@ def _semana_da_conta(conta: dict) -> date:
     return segunda_da_semana(instante.date())
 
 
-def _contas_concluidas(supabase, de: date, ate: date) -> list[dict]:
-    """As Contas concluídas de `de` (segunda) até antes de `ate` (segunda)."""
-    return ler_tudo(
-        lambda: (
+def _contas_concluidas(supabase, de: date, ate: date, faturista_id: str | None) -> list[dict]:
+    """As Contas concluídas de `de` (segunda) até antes de `ate` (segunda).
+
+    Com `faturista_id`, só as dela: o filtro é no banco, e a Conta de outra
+    faturista nem chega ao processo."""
+
+    def consulta():
+        q = (
             supabase.table("cm_conta")
             .select(_CAMPOS_DA_CONTA)
             .in_("situacao", list(CONCLUIDAS))
             .gte("concluida_em", _meia_noite(de))
             .lt("concluida_em", _meia_noite(ate))
-            .order("id")
-        ),
-        rotulo="contas do Painel",
-    )
+        )
+        if faturista_id is not None:
+            q = q.eq("faturista_id", faturista_id)
+        return q.order("id")
+
+    return ler_tudo(consulta, rotulo="contas do Painel")
 
 
 def _em_lotes(supabase, tabela: str, campos: str, coluna: str, ids: Iterable[str], rotulo: str) -> list[dict]:
@@ -97,7 +105,12 @@ def _filtrar(supabase, contas: list[dict], operadora_id: str | None, tipo: str |
         contas = [c for c in contas if c["atendimento_id"] in da_operadora]
     if tipo:
         irmas = _em_lotes(
-            supabase, "cm_conta", "id, atendimento_id", "atendimento_id", (c["atendimento_id"] for c in contas), "parciais"
+            supabase,
+            "cm_conta",
+            "id, atendimento_id",
+            "atendimento_id",
+            (c["atendimento_id"] for c in contas),
+            "parciais",
         )
         quantas: dict[str, int] = defaultdict(int)
         for conta in irmas:
@@ -166,7 +179,12 @@ def _itens_que_faltam(linhas: list[dict]) -> list[dict[str, Any]]:
         item["valor"] += _valor(linha)
     ordem = sorted(por_codigo.items(), key=lambda par: (-len(par[1]["contas"]), -par[1]["valor"], par[0]))
     return [
-        {"codigo": codigo, "descricao": item["descricao"], "contas": len(item["contas"]), "valor": _dinheiro(item["valor"])}
+        {
+            "codigo": codigo,
+            "descricao": item["descricao"],
+            "contas": len(item["contas"]),
+            "valor": _dinheiro(item["valor"]),
+        }
         for codigo, item in ordem[:ITENS_QUE_FALTAM]
     ]
 
@@ -223,11 +241,22 @@ def _nota_media(contas: list[dict]) -> float | None:
 
 
 def montar_painel(
-    supabase, *, semana: date, operadora_id: str | None = None, tipo: str | None = None
+    supabase,
+    *,
+    semana: date,
+    operadora_id: str | None = None,
+    tipo: str | None = None,
+    so_da_faturista: str | None = None,
 ) -> dict[str, Any]:
+    """O payload do Painel: cada cartão e cada bloco na própria chave.
+
+    `so_da_faturista` é o Painel de quem não tem "painel completo": só a linha
+    de produção dela, e nenhum outro bloco.
+    """
     segunda = segunda_da_semana(semana)
     primeira = segunda - timedelta(weeks=SEMANAS_NA_SERIE - 1)
-    contas = _filtrar(supabase, _contas_concluidas(supabase, primeira, segunda + timedelta(weeks=1)), operadora_id, tipo)
+    concluidas = _contas_concluidas(supabase, primeira, segunda + timedelta(weeks=1), so_da_faturista)
+    contas = _filtrar(supabase, concluidas, operadora_id, tipo)
 
     por_semana: dict[date, list[dict]] = defaultdict(list)
     for conta in contas:
@@ -239,12 +268,23 @@ def montar_painel(
         supabase, "cm_guia_linha", _CAMPOS_DA_LINHA, "conta_id", (c["id"] for c in contas), "linhas do Painel"
     ):
         linhas_por_conta[linha["conta_id"]].append(linha)
-    linhas_da_semana = [linha for conta in da_semana for linha in linhas_por_conta[conta["id"]]]
+
+    def linhas_de(delas: list[dict]) -> list[dict]:
+        return [linha for conta in delas for linha in linhas_por_conta[conta["id"]]]
+
+    linhas_da_semana = linhas_de(da_semana)
     semanas = [primeira + timedelta(weeks=i) for i in range(SEMANAS_NA_SERIE)]
 
-    return {
+    cabecalho = {
         "semana": {"inicio": segunda.isoformat(), "fim": (segunda + timedelta(days=6)).isoformat()},
         "filtros": {"operadoras": _operadoras(supabase)},
+    }
+    producao = _producao(supabase, da_semana, linhas_por_conta)
+    if so_da_faturista is not None:
+        return {**cabecalho, "producao": producao}
+
+    return {
+        **cabecalho,
         "nota_media": {
             "semana": _nota_media(da_semana),
             "anterior": _nota_media(por_semana[segunda - timedelta(weeks=1)]),
@@ -261,10 +301,9 @@ def montar_painel(
         ],
         "causa_raiz": _por_causa_raiz(linhas_da_semana),
         "itens_que_faltam": _itens_que_faltam(linhas_da_semana),
-        "producao": _producao(supabase, da_semana, linhas_por_conta),
+        "producao": producao,
         "nivel_evidencia": [
-            {"semana": s.isoformat(), **_incluido_por_nivel([l for c in por_semana[s] for l in linhas_por_conta[c["id"]]])}
-            for s in semanas
+            {"semana": s.isoformat(), **_incluido_por_nivel(linhas_de(por_semana[s]))} for s in semanas
         ],
         "custo_ia": _custo_ia(da_semana),
     }

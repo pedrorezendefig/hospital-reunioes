@@ -34,7 +34,16 @@ async def painel(
     supabase=Depends(get_supabase_client),
 ) -> dict:
     """Os agregados da semana escolhida (qualquer dia dela), da operadora e do
-    tipo de conta, quando vierem."""
+    tipo de conta, quando vierem.
+
+    Basta ter o eixo do módulo. Quem não tem "painel completo" recebe só a
+    própria linha de produção, filtrada no servidor.
+    """
+    completo = "painel_completo" in me["permissoes_cm"]
     return montar_painel(
-        supabase, semana=semana, operadora_id=str(operadora_id) if operadora_id else None, tipo=tipo
+        supabase,
+        semana=semana,
+        operadora_id=str(operadora_id) if operadora_id else None,
+        tipo=tipo,
+        so_da_faturista=None if completo else me["id"],
     )

@@ -81,11 +81,15 @@ class _Consulta:
         return self
 
     def gte(self, coluna, valor):
-        self._filtros.append(lambda linha: linha.get(coluna) is not None and _instante(linha[coluna]) >= _instante(valor))
+        self._filtros.append(
+            lambda linha: linha.get(coluna) is not None and _instante(linha[coluna]) >= _instante(valor)
+        )
         return self
 
     def lt(self, coluna, valor):
-        self._filtros.append(lambda linha: linha.get(coluna) is not None and _instante(linha[coluna]) < _instante(valor))
+        self._filtros.append(
+            lambda linha: linha.get(coluna) is not None and _instante(linha[coluna]) < _instante(valor)
+        )
         return self
 
     def order(self, coluna, desc=False):
@@ -347,7 +351,17 @@ class TestOsBlocos:
     def test_itens_que_mais_faltam_sao_no_maximo_dez(self):
         contas = [_conta(f"K{i:02d}", "at-1", "F1", "CONCLUIDA", 80, "2026-10-06T14:00:00+00:00", 0) for i in range(12)]
         linhas = [
-            _l(f"I{i:02d}-{j}", f"K{j:02d}", "INCLUIR", f"C{i:02d}", f"Item {i}", 1.0, "FEITO", "DISPENSACAO", "REGISTRADO")
+            _l(
+                f"I{i:02d}-{j}",
+                f"K{j:02d}",
+                "INCLUIR",
+                f"C{i:02d}",
+                f"Item {i}",
+                1.0,
+                "FEITO",
+                "DISPENSACAO",
+                "REGISTRADO",
+            )
             for i in range(12)
             for j in range(12 - i)
         ]
@@ -386,7 +400,13 @@ class TestOsBlocos:
 
         assert [ponto["semana"] for ponto in serie][-2:] == [SEMANA_ANTERIOR, SEMANA]
         assert len(serie) == 8
-        assert serie[0] == {"semana": "2026-08-17", "REGISTRADO": 0.0, "PRESCRITO": 0.0, "PRESCRITO_SN": 0.0, "POR_REGRA": 0.0}
+        assert serie[0] == {
+            "semana": "2026-08-17",
+            "REGISTRADO": 0.0,
+            "PRESCRITO": 0.0,
+            "PRESCRITO_SN": 0.0,
+            "POR_REGRA": 0.0,
+        }
         assert serie[-2] == {
             "semana": SEMANA_ANTERIOR,
             "REGISTRADO": 70.0,
@@ -463,6 +483,16 @@ class TestOsFiltros:
         assert unica["contas_concluidas"] == {"total": 2}
         assert unica["nota_media"] == {"semana": 70.0, "anterior": 50.0}
 
+    def test_os_ids_vao_ao_banco_em_lotes(self):
+        """Algumas centenas de UUIDs num `in_` estouram o header do proxy."""
+        contas = [
+            _conta(f"K{i:03d}", "at-1", "F1", "CONCLUIDA", 80, "2026-10-06T14:00:00+00:00", 0) for i in range(250)
+        ]
+        banco = _cenario(contas, [])
+
+        assert _painel(banco=banco, operadora_id=ASSIM)["contas_concluidas"] == {"total": 250}
+        assert banco.maior_in == 100
+
     def test_a_lista_de_operadoras_do_filtro_vem_na_ordem_da_sigla(self):
         assert _painel()["filtros"] == {
             "operadoras": [
@@ -470,3 +500,71 @@ class TestOsFiltros:
                 {"id": UNIMED, "sigla": "UNIMED", "nome": "Unimed"},
             ]
         }
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 3. Quem vê o quê
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+class TestQuemVe:
+    def test_faturista_recebe_so_a_propria_linha_de_producao_e_nenhum_outro_bloco(self):
+        painel = _painel("ana")
+
+        assert set(painel) == {"semana", "filtros", "producao"}
+        assert painel["producao"] == [
+            {
+                "faturista_id": "F1",
+                "nome": "Ana Faturista",
+                "contas": 2,
+                "com_pendencia": 1,
+                "valor_incluido": 200.0,
+                "valor_retirado": 30.0,
+                "taxa_nao_procede": 0.1429,
+            }
+        ]
+
+    def test_os_filtros_valem_para_a_linha_da_faturista(self):
+        painel = _painel("bia", operadora_id=UNIMED, semana=SEMANA_ANTERIOR)
+
+        assert [(p["nome"], p["contas"], p["valor_incluido"]) for p in painel["producao"]] == [
+            ("Bia Faturista", 1, 70.0)
+        ]
+
+    def test_sem_o_eixo_de_contas_medicas_recebe_403(self):
+        resposta = _cliente("sem_eixo", _cenario()).get(ROTA, params={"semana": SEMANA})
+
+        assert resposta.status_code == 403
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 4. A semana vai de segunda a domingo, no fuso do hospital
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+class TestASemana:
+    """Domingo 04/10 às 23h30 em Brasília já é segunda 05/10 em UTC; segunda
+    05/10 à 0h30 em Brasília é a primeira meia hora da semana nova."""
+
+    def _banco(self) -> _Banco:
+        return _cenario(
+            [
+                _conta("DOM", "at-1", "F1", "CONCLUIDA", 40, "2026-10-04T23:30:00-03:00", 0),
+                _conta("SEG", "at-3", "F1", "CONCLUIDA", 90, "2026-10-05T00:30:00-03:00", 0),
+            ],
+            [],
+        )
+
+    def test_conta_concluida_no_domingo_fica_na_semana_que_ele_fecha(self):
+        painel = _painel(banco=self._banco(), semana="2026-10-04")
+
+        assert painel["semana"] == {"inicio": "2026-09-28", "fim": "2026-10-04"}
+        assert painel["contas_concluidas"] == {"total": 1}
+        assert painel["nota_media"] == {"semana": 40.0, "anterior": None}
+
+    def test_conta_concluida_na_segunda_seguinte_abre_a_semana_nova(self):
+        painel = _painel(banco=self._banco(), semana="2026-10-05")
+
+        assert painel["semana"] == {"inicio": "2026-10-05", "fim": "2026-10-11"}
+        assert painel["contas_concluidas"] == {"total": 1}
+        assert painel["nota_media"] == {"semana": 90.0, "anterior": 40.0}
