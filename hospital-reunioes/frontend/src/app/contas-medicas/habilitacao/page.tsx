@@ -237,7 +237,7 @@ function MatrizDePermissoes({
                 <th
                   key={permissao}
                   scope="col"
-                  className="font-medium text-slate-500 py-2 px-2 text-center align-bottom min-w-[6.5rem]"
+                  className="font-medium text-slate-500 py-2 px-2 text-center align-bottom min-w-[5.5rem]"
                 >
                   {rotulo(LABEL_PERMISSAO, permissao)}
                 </th>
