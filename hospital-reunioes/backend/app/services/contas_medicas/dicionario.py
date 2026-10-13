@@ -67,9 +67,9 @@ class Dicionario(dict[str, set[str]]):
     casamento por eles sai com confiança média até a gestão confirmar.
     """
 
-    def __init__(self, *args, propostos: set[tuple[str, str]] | None = None, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.propostos = propostos or set()
+    def __init__(self) -> None:
+        super().__init__()
+        self.propostos: set[tuple[str, str]] = set()
 
 
 def _norm(texto: str | None) -> str:
