@@ -11,10 +11,13 @@ pelo diretor nos desenhos do MV (caixa vazia 0,27 e marcada 0,39; botão vazio
 from __future__ import annotations
 
 import zlib
+from datetime import date
+from types import SimpleNamespace
 
 from test_contas_medicas_prontuario import ATENDIMENTO, CAPA_QUE_BATE, montar
 
-from app.services.contas_medicas.prontuario import ler_prontuario
+from app.services.contas_medicas.formulario import sem_formulario_em_branco
+from app.services.contas_medicas.prontuario import Documento, Prontuario, ler_prontuario
 from app.services.contas_medicas_extrator import extrair_paginas
 
 CAIXA_VAZIA = (14, 14, 0.27)
@@ -130,3 +133,119 @@ def test_rotulo_na_linha_de_cima_com_dois_pontos_vai_junto_da_opcao_marcada():
 
     assert "Suporte ventilatório: [X] VNI" in linhas
     assert "Suporte ventilatório:" not in linhas
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Formulário em branco aprendido
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+class _Banco:
+    """Dublê do Supabase só com o que o aprendizado usa de `cm_linha_formulario`."""
+
+    def __init__(self):
+        self.linhas: list[dict] = []
+
+    def table(self, nome: str):
+        assert nome == "cm_linha_formulario"
+        return _Consulta(self)
+
+
+class _Consulta:
+    def __init__(self, banco: _Banco):
+        self._banco = banco
+        self._filtro = lambda _linha: True
+        self._upsert: list[dict] | None = None
+
+    def select(self, *_a, **_kw):
+        return self
+
+    def in_(self, coluna, valores):
+        valores = list(valores)
+        self._filtro = lambda linha: linha[coluna] in valores
+        return self
+
+    def upsert(self, linhas, on_conflict: str):
+        assert on_conflict == "familia,linha"
+        self._upsert = list(linhas)
+        return self
+
+    def execute(self):
+        if self._upsert is not None:
+            for nova in self._upsert:
+                chave = (nova["familia"], nova["linha"])
+                velha = next((v for v in self._banco.linhas if (v["familia"], v["linha"]) == chave), None)
+                if velha:
+                    velha.update(nova)
+                else:
+                    self._banco.linhas.append(dict(nova))
+            return SimpleNamespace(data=self._upsert)
+        return SimpleNamespace(data=[dict(linha) for linha in self._banco.linhas if self._filtro(linha)])
+
+
+TITULO = "EVOLUÇÃO DE FISIOTERAPIA"
+MODELO = [
+    "Ausculta pulmonar:",
+    "Padrão respiratório:",
+    "Conduta fisioterapêutica:",
+    "Orientações ao paciente e acompanhante:",
+]
+EM_TRES_DE_CINCO = "Paciente em ar ambiente."
+
+
+def _documento(familia: str, linhas: list[str]) -> Documento:
+    return Documento(familia, (1,), ATENDIMENTO, date(2026, 10, 3), None, None, None, None, tuple(linhas))
+
+
+def _prontuario(*documentos: Documento) -> Prontuario:
+    return Prontuario(ATENDIMENTO, 10, None, {}, None, None, tuple(documentos), (), ())
+
+
+def _cinco_fisioterapias() -> Prontuario:
+    """Cinco documentos da mesma Família: cada linha do modelo falta em um deles (está
+    em 4 de 5, 80%); a de ar ambiente está em 3 de 5 (60%); cada um tem uma linha só dele."""
+    documentos = []
+    for i in range(5):
+        linhas = [TITULO] + [linha for j, linha in enumerate(MODELO) if j != i]
+        if i < 3:
+            linhas.append(EM_TRES_DE_CINCO)
+        linhas.append(f"Saturação {90 + i}% após a sessão.")
+        documentos.append(_documento("FISIO_RESP", linhas))
+    return _prontuario(*documentos)
+
+
+def test_linha_em_80_por_cento_dos_documentos_da_familia_e_aprendida_e_sai_do_texto():
+    banco = _Banco()
+    prontuario = _cinco_fisioterapias()
+    assert all(sum(linha in d.linhas for d in prontuario.documentos) == 4 for linha in MODELO)
+
+    limpo = sem_formulario_em_branco(banco, prontuario, aprender=True)
+
+    assert sorted((r["familia"], r["linha"], r["contagem"]) for r in banco.linhas) == sorted(
+        ("FISIO_RESP", linha, 1) for linha in MODELO
+    )
+    for documento in limpo.documentos:
+        assert not set(MODELO) & set(documento.linhas)
+        assert documento.linhas[0] == TITULO
+    assert sum(EM_TRES_DE_CINCO in d.linhas for d in limpo.documentos) == 3
+    assert [d.linhas[-1] for d in limpo.documentos] == [f"Saturação {90 + i}% após a sessão." for i in range(5)]
+
+
+def test_contagem_acumula_entre_prontuarios():
+    banco = _Banco()
+
+    sem_formulario_em_branco(banco, _cinco_fisioterapias(), aprender=True)
+    sem_formulario_em_branco(banco, _cinco_fisioterapias(), aprender=True)
+
+    assert {r["linha"]: r["contagem"] for r in banco.linhas} == dict.fromkeys(MODELO, 2)
+
+
+def test_prontuario_com_um_formulario_so_perde_as_linhas_aprendidas_com_os_outros():
+    banco = _Banco()
+    sem_formulario_em_branco(banco, _cinco_fisioterapias(), aprender=True)
+    sozinho = _prontuario(_documento("FISIO_RESP", [TITULO, *MODELO, "Paciente em VNI."]))
+
+    limpo = sem_formulario_em_branco(banco, sozinho, aprender=True)
+
+    assert limpo.documentos[0].linhas == (TITULO, "Paciente em VNI.")
+    assert {r["contagem"] for r in banco.linhas} == {1}

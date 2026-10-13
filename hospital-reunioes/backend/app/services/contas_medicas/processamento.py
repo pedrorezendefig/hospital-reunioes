@@ -53,6 +53,7 @@ from app.services.contas_medicas.conferencia import Conferencia, ProntuarioLido,
 from app.services.contas_medicas.conteudo import Conteudo, ler_conteudo
 from app.services.contas_medicas.desidentificacao import desidentificar
 from app.services.contas_medicas.dicionario import dicionario_do_banco
+from app.services.contas_medicas.formulario import sem_formulario_em_branco
 from app.services.contas_medicas.guia import nota_de_entrada
 from app.services.contas_medicas.memoria import MemoriaLida, RegraLida
 from app.services.contas_medicas.operadoras import listar_setores, memoria_vigente
@@ -356,7 +357,10 @@ def _pipeline(supabase, conta: dict, cronometro: _Cronometro) -> None:
             raise _Falha(str(erro)) from None
         conteudo = ler_conteudo(textos, estrutura)
         prontuario = ProntuarioLido(estrutura, conteudo, textos)
-        _gravar_prontuario(supabase, conta["atendimento_id"], arquivo_do_prontuario["id"], prontuario)
+        gravou = _gravar_prontuario(supabase, conta["atendimento_id"], arquivo_do_prontuario["id"], prontuario)
+        # A contagem do formulário em branco é de prontuários: só o arquivo novo soma.
+        estrutura = sem_formulario_em_branco(supabase, estrutura, aprender=gravou)
+        prontuario = ProntuarioLido(estrutura, conteudo, textos)
 
     with cronometro.etapa("conferencia"):
         operadora_id = atendimento.get("operadora_id")
@@ -553,20 +557,20 @@ def _trava_do_prontuario(atendimento_id: str) -> threading.Lock:
         return trava
 
 
-def _gravar_prontuario(supabase, atendimento_id: str, arquivo_id: str, prontuario: ProntuarioLido) -> None:
+def _gravar_prontuario(supabase, atendimento_id: str, arquivo_id: str, prontuario: ProntuarioLido) -> bool:
     """A estrutura do prontuário no banco, uma vez por arquivo: a segunda
     parcial e o reprocesso acham o mesmo arquivo gravado e seguem. Prontuário
-    novo (atualizado) troca o anterior inteiro."""
+    novo (atualizado) troca o anterior inteiro. Devolve se gravou."""
     with _trava_do_prontuario(atendimento_id):
-        _gravar_prontuario_uma_vez(supabase, atendimento_id, arquivo_id, prontuario)
+        return _gravar_prontuario_uma_vez(supabase, atendimento_id, arquivo_id, prontuario)
 
 
-def _gravar_prontuario_uma_vez(supabase, atendimento_id: str, arquivo_id: str, prontuario: ProntuarioLido) -> None:
+def _gravar_prontuario_uma_vez(supabase, atendimento_id: str, arquivo_id: str, prontuario: ProntuarioLido) -> bool:
     ultimo = _primeira(
         supabase.table("cm_eventos").select("*").eq("atendimento_id", atendimento_id).order("criado_em", desc=True)
     )
     if ultimo and (ultimo.get("eventos_json") or {}).get("arquivo_id") == arquivo_id:
-        return
+        return False
     for tabela in ("cm_eventos", "cm_prescricao", "cm_cirurgia", "cm_glicemia_dia"):
         supabase.table(tabela).delete().eq("atendimento_id", atendimento_id).execute()
 
@@ -583,6 +587,7 @@ def _gravar_prontuario_uma_vez(supabase, atendimento_id: str, arquivo_id: str, p
     supabase.table("cm_atendimento").update(
         {"paciente_rotulo": prontuario.estrutura.paciente_rotulo, "idade_anos": prontuario.estrutura.idade_anos}
     ).eq("id", atendimento_id).execute()
+    return True
 
 
 def _gravar_prescricoes(supabase, atendimento_id: str, prontuario: ProntuarioLido) -> None:

@@ -133,6 +133,7 @@ class _Consulta:
         self._limite: int | None = None
         self._update: dict | None = None
         self._insert: dict | list | None = None
+        self._upsert: tuple[list, list[str]] | None = None
         self._delete = False
 
     def select(self, *_a, **_kw):
@@ -196,18 +197,31 @@ class _Consulta:
         self._delete = True
         return self
 
+    def upsert(self, linhas, on_conflict: str):
+        self._upsert = (list(linhas), on_conflict.split(","))
+        return self
+
     def execute(self):
         if self._insert is not None and self._nome == "cm_eventos" and self._banco.antes_de_gravar_eventos:
             self._banco.antes_de_gravar_eventos()
         with self._banco.trava:
             resposta = self._executar()
-        leitura = self._insert is None and self._update is None and not self._delete
+        leitura = self._insert is None and self._update is None and self._upsert is None and not self._delete
         if leitura and self._nome == "cm_conta" and self._banco.ao_ler_contas:
             self._banco.ao_ler_contas()
         return resposta
 
     def _executar(self):
         tabela = self._banco.tabelas.setdefault(self._nome, [])
+        if self._upsert is not None:
+            novas, chave = self._upsert
+            for nova in novas:
+                velha = next((v for v in tabela if all(v.get(c) == nova[c] for c in chave)), None)
+                if velha is None:
+                    tabela.append(dict(nova))
+                else:
+                    velha.update(nova)
+            return SimpleNamespace(data=[dict(nova) for nova in novas])
         if self._insert is not None:
             novas = self._insert if isinstance(self._insert, list) else [self._insert]
             gravadas = []
@@ -474,16 +488,18 @@ def _prescricao(dia: int) -> str:
     )
 
 
-def _paginas_do_prontuario() -> list[str]:
+def _paginas_do_prontuario(fisioterapias: int = 0) -> list[str]:
     """Internação no CTI de 02/10 22:40 à alta em 06/10 15:20, com Clexane
     prescrito todo dia e a colecistectomia em 04/10. A capa lista três
-    evoluções médicas que o arquivo não trouxe: o guia sai com parecer parcial."""
+    evoluções médicas que o arquivo não trouxe: o guia sai com parecer parcial.
+    `fisioterapias`: quantas avaliações respiratórias iguais entram (#1132)."""
     (capa,) = _fixture("prontuario/capa")
     capa += "\nGrupo: EVOLUÇÃO MEDICA      Quantidade: 3"
     paginas = [
         capa,
         *_fixture("prontuario/admissao_unidade"),
         *(_prescricao(dia) for dia in (3, 4, 5, 6)),
+        *_fixture("prontuario/fisio_resp") * fisioterapias,
         *_fixture("conteudo/descricao_cirurgica"),
         *_fixture("prontuario/resumo_alta"),
     ]
@@ -501,8 +517,8 @@ def _conta(conta: str = "48811", inicio: int = 2, fim: int = 6, **kw):
     return _arquivo_do_envio(f"conta-{conta}.pdf", _texto_da_conta(conta, inicio, fim, **kw))
 
 
-def _prontuario():
-    return _arquivo_do_envio("prontuario.pdf", "\f".join(_paginas_do_prontuario()))
+def _prontuario(fisioterapias: int = 0):
+    return _arquivo_do_envio("prontuario.pdf", "\f".join(_paginas_do_prontuario(fisioterapias)))
 
 
 REGRAS_DAS_CONFERENCIAS = {
@@ -843,6 +859,31 @@ class TestProntuarioUmaVez:
         assert cirurgia["procedimentos_json"][0]["codigo"] == "31005497"
         (atendimento,) = banco.tabelas["cm_atendimento"]
         assert atendimento["paciente_rotulo"] == "Antônia F."
+
+    def test_o_formulario_em_branco_e_aprendido_uma_vez_por_arquivo_e_sai_do_texto(self, monkeypatch):
+        banco = _cenario()
+        _enviar(banco, _conta("48811", 2, 4), _conta("48812", 5, 6), _prontuario(fisioterapias=3))
+        lidos = []
+        conferir_de_verdade = processamento.conferir
+
+        def conferir_guardando_o_prontuario(lida, prontuario, *args, **kwargs):
+            lidos.append(prontuario.estrutura)
+            return conferir_de_verdade(lida, prontuario, *args, **kwargs)
+
+        monkeypatch.setattr(processamento, "conferir", conferir_guardando_o_prontuario)
+
+        assert _rodar_o_job(banco) == 2
+        assert len(lidos) == 2
+
+        aprendidas = banco.tabelas["cm_linha_formulario"]
+        conduta = "Conduta: exercícios respiratórios, incentivador inspiratório, 2 séries de 10 repetições."
+        assert ("FISIO_RESP", conduta) in {(r["familia"], r["linha"]) for r in aprendidas}
+        # As duas parciais leem o mesmo arquivo: a contagem é de prontuários, soma uma vez.
+        assert {r["contagem"] for r in aprendidas} == {1}
+        for estrutura in lidos:
+            fisioterapias = [d for d in estrutura.documentos if d.familia == "FISIO_RESP"]
+            assert len(fisioterapias) == 3
+            assert all(d.linhas == ("AVALIAÇÃO RESPIRATÓRIA - VENTILAÇÃO",) for d in fisioterapias)
 
     def test_duas_parciais_em_vagas_paralelas_gravam_o_prontuario_uma_vez(self):
         """As duas vagas pegam as parciais do mesmo atendimento juntas. A barreira
