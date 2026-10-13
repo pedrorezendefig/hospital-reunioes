@@ -954,6 +954,31 @@ def _achatar(no: dict) -> dict:
     return {k: (v["nodes"] if isinstance(v, dict) and "nodes" in v else v) for k, v in no.items()}
 
 
+_PRS_ABERTOS_QUERY = """
+query($owner:String!,$name:String!){
+  repository(owner:$owner,name:$name){
+    pullRequests(states:OPEN,first:50){
+      nodes{ number closingIssuesReferences(first:5){ nodes{ number body parent{ number } } } }
+    }
+  }
+}
+"""
+
+
+def _prds_de_prs_abertos(root: Path, slug: str) -> set[int]:
+    """PRD de cada fatia com PR aberto: sub-issue nativa ou "Pai: #N" no corpo (~1 ponto)."""
+    owner, name = slug.split("/", 1)
+    out = json.loads(_run(["gh", "api", "graphql", "-f", f"query={_PRS_ABERTOS_QUERY}",
+                           "-F", f"owner={owner}", "-F", f"name={name}"], root))
+    prds = set()
+    for pr in out["data"]["repository"]["pullRequests"]["nodes"]:
+        for i in pr["closingIssuesReferences"]["nodes"]:
+            pai = (i.get("parent") or {}).get("number") or _issue_do_gh({**i, "title": "", "state": ""})["parent"]
+            if pai:
+                prds.add(pai)
+    return prds
+
+
 def _gh_recorte(root: Path, slug: str, prds: list[int]) -> dict:
     owner, name = slug.split("/", 1)
     partes = []
@@ -967,12 +992,21 @@ def _gh_recorte(root: Path, slug: str, prds: list[int]) -> dict:
 
 
 def collect_recorte(root: Path, prds: list[int]) -> dict:
-    """O pedaço do /api/data que o hr-ondas lê (repo_slug, github.issues, fases), só dos `prds`."""
+    """O pedaço do /api/data que o hr-ondas lê (repo_slug, github.issues, fases).
+
+    Só dos `prds` (os com sessão de onda viva) e dos PRDs que têm fatia com PR aberto, de
+    quem quer que seja: um sócio, uma /pegar-issue à mão.
+    """
     state = _spec_json_fresh(root, "docs/spec/deploy/state.json")
     history = (_spec_json_fresh(root, "docs/spec/deploy/history.json") or {}).get("deploys") or []
     slug = _repo_slug(state)
     github = {"error": None, "error_kind": None, "issues": [], "prs": [], "prds": []}
     fases = None
+    try:
+        prds = sorted(set(prds) | _prds_de_prs_abertos(root, slug))
+    except Exception as e:
+        github["error_kind"], github["error"] = _gh_failure(e)
+        return {"repo_slug": slug, "github": github, "fases": None}
     if prds:
         try:
             data = _gh_recorte(root, slug, prds)
