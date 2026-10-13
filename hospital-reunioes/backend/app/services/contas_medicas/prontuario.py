@@ -37,6 +37,7 @@ from app.services.contas_medicas.desidentificacao import (
     ler_identificacao,
     rotulo,
 )
+from app.services.contas_medicas.marcacoes import so_o_marcado
 
 
 class ErroLeitura(Exception):  # noqa: N818, nome da spec, o mesmo da leitura da Conta (#1116)
@@ -438,6 +439,16 @@ def _familia(texto: str) -> str:
     return "NAO_RECONHECIDO"
 
 
+# Famílias de formulário, com caixas e botões (#1132): fisioterapia e o editor de
+# documentos do MV (anamnese de UTI, sumário de alta, fonoaudiologia e os demais).
+FAMILIAS_DE_FORMULARIO = frozenset({"FISIO_RESP", "FISIO_MOTORA", "FISIO_ADMISSAO", "DOC_EDITOR"})
+
+
+def e_formulario(texto: str) -> bool:
+    """Se a página é de formulário: a extração lê as marcações só dessas páginas."""
+    return _familia(texto) in FAMILIAS_DE_FORMULARIO
+
+
 # ----------------------------------------------------------------------------------
 # Campos da página
 # ----------------------------------------------------------------------------------
@@ -635,7 +646,7 @@ def _linhas_para_ia(paginas: list[_Pagina], campos: _Campos) -> list[str]:
         return []
     if (familia, subtipo) in {("SAE", "HISTORICO DE ENFERMAGEM"), ("EVOLUCAO", "EVOLUCAO SERVICO SOCIAL")}:
         return []
-    linhas = [linha for pagina in paginas for linha in _limpar_para_ia(pagina.texto)]
+    linhas = so_o_marcado([linha for pagina in paginas for linha in _limpar_para_ia(pagina.texto)])
     if familia == "DOC_EDITOR" and linhas and _sem_acento(linhas[0]).upper().startswith("RECEITUARIO"):
         return []  # receita de alta
     if familia == "PRESCRICAO":
