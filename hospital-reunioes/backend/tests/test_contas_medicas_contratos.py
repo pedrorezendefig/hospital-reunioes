@@ -661,3 +661,37 @@ class TestOKitDizComoOAvisoFunciona:
 
     def test_o_que_ja_esta_no_ar_inclui_a_tela_contratos(self):
         assert "tela Contratos" in _secao("O que já está no ar")
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 6. Tipografia (ADR 0013)
+# ═══════════════════════════════════════════════════════════════════════════
+
+RAIZ_DO_APP = Path(__file__).resolve().parents[2]
+
+ARQUIVOS_DA_FATIA = [
+    RAIZ_DO_APP / "backend/app/services/contas_medicas/contratos.py",
+    RAIZ_DO_APP / "backend/app/routers/contas_medicas_contratos.py",
+    RAIZ_DO_APP / "backend/app/prompts/contas_medicas_contrato.md",
+    RAIZ_DO_APP / "backend/app/conhecimento/contas-medicas.md",
+    RAIZ_DO_APP / "frontend/src/app/contas-medicas/contratos/page.tsx",
+    RAIZ_DO_APP / "frontend/src/components/contas-medicas/LinkParaContratos.tsx",
+    Path(__file__),
+]
+
+
+@pytest.mark.parametrize("arquivo", ARQUIVOS_DA_FATIA, ids=lambda a: a.name)
+def test_sem_travessao_nem_meia_risca(arquivo):
+    texto = arquivo.read_text(encoding="utf-8")
+    assert chr(0x2014) not in texto
+    assert chr(0x2013) not in texto
+
+
+def test_o_texto_do_aviso_nao_tem_travessao():
+    """O texto que vai ao sino sai do codigo, nao de arquivo."""
+    from app.services.contas_medicas.contratos import texto_do_aviso
+
+    for negociacao in (False, True):
+        for dias in (0, 1, 60):
+            texto = texto_do_aviso("ASSIM", date(2027, 5, 1), dias, negociacao)
+            assert chr(0x2014) not in texto and chr(0x2013) not in texto
