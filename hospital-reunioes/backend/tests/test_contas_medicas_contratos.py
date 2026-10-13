@@ -580,6 +580,42 @@ class TestEnvioDoContrato:
         assert resposta.status_code == 422
         assert banco.linhas("cm_contrato")[0]["vencimento"] == "2027-05-01"
 
+    @pytest.mark.parametrize(
+        "resto",
+        [
+            "../../envio-1/arq-1.pdf",
+            "../../../ouvidoria-anexos/x.pdf",
+            "..%2F..%2Fenvio-1/arq-1.pdf",
+            "sub/00000000-0000-0000-0000-000000000000.pdf",
+            "00000000-0000-0000-0000-000000000000.exe",
+            "00000000-0000-0000-0000-000000000000.pdf/../../../envio-1/arq-1.pdf",
+        ],
+    )
+    def test_chave_com_o_prefixo_mas_fora_do_formato_e_recusada(self, resto):
+        """O prefixo `contratos/<id>/` nao basta: o `..` sobe pastas na URL
+        do Storage e chega ao prontuario ou a outro bucket."""
+        cliente, banco = _tela(GESTORA)
+        [alfa] = [o for o in banco.linhas("cm_operadora") if o["sigla"] == "ALFA"]
+
+        resposta = _confirmar(cliente, vencimento="2028-05-01", arquivo=f"contratos/{alfa['id']}/{resto}")
+
+        assert resposta.status_code == 422
+        assert banco.linhas("cm_contrato")[0]["vencimento"] == "2027-05-01"
+
+    def test_chave_fora_do_formato_ja_gravada_nao_e_baixada(self):
+        """O download refaz a cerca: chave que chegou ao banco por outro
+        caminho nao vira o PDF do prontuario."""
+        cliente, banco = _tela(GESTORA)
+        [alfa] = [o for o in banco.linhas("cm_operadora") if o["sigla"] == "ALFA"]
+        chave = f"contratos/{alfa['id']}/../../envio-1/arq-1.pdf"
+        banco.storage.arquivos[chave] = b"%PDF prontuario"
+        [contrato] = [c for c in banco.linhas("cm_contrato") if c["operadora_id"] == alfa["id"]]
+        contrato["arquivo"] = chave
+
+        resposta = cliente.get(f"{ROTA}/ALFA/arquivo")
+
+        assert resposta.status_code == 404
+
     def test_o_arquivo_confirmado_pode_ser_baixado(self, provedor):
         provedor.responder((json.dumps(PROPOSTA_DA_IA), USO_PADRAO))
         cliente, _ = _tela(GESTORA)

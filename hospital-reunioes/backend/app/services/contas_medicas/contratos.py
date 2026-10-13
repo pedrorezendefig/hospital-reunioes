@@ -410,6 +410,18 @@ def _pasta_do_contrato(operadora_id: str) -> str:
     return f"contratos/{operadora_id}/"
 
 
+_NOME_GUARDADO = re.compile(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(\.pdf|\.png|\.jpg|\.jpeg)")
+
+
+def _e_contrato_guardado(chave: str, operadora_id: str) -> bool:
+    """A chave tem a forma exata que `ler_contrato_enviado` grava.
+
+    Só o prefixo não basta: `contratos/<id>/../../envio-1/arq.pdf` sobe
+    pastas na URL do Storage e chega ao prontuário ou a outro bucket."""
+    pasta = _pasta_do_contrato(operadora_id)
+    return chave.startswith(pasta) and _NOME_GUARDADO.fullmatch(chave[len(pasta) :]) is not None
+
+
 def ler_contrato_enviado(supabase, operadora_id: str, nome: str, conteudo: bytes) -> dict[str, Any]:
     """Guarda o contrato ou o aditivo enviado e devolve os campos propostos.
 
@@ -441,7 +453,7 @@ def confirmar_contrato(
     calculou (vigência mais um ano); digitada, é a data do documento. O
     arquivo tem de ser um dos guardados para esta operadora."""
     arquivo = campos.get("arquivo")
-    if arquivo and not str(arquivo).startswith(_pasta_do_contrato(operadora_id)):
+    if arquivo and not _e_contrato_guardado(str(arquivo), operadora_id):
         raise ContratoRecusadoError("O arquivo não é um contrato enviado para esta operadora.")
     valores = {campo: campos.get(campo) for campo in CAMPOS_DO_CONTRATO if campo != "vencimento_calculado"}
     valores = {k: v.isoformat() if isinstance(v, date) else v for k, v in valores.items()}
@@ -465,7 +477,7 @@ def arquivo_do_contrato(supabase, operadora_id: str) -> tuple[str, bytes] | None
     """A chave e o conteúdo do contrato confirmado da operadora, para baixar."""
     contrato = _contrato_de(supabase, operadora_id)
     chave = (contrato or {}).get("arquivo")
-    if not chave:
+    if not chave or not _e_contrato_guardado(chave, operadora_id):
         return None
     conteudo = storage.download_file(supabase, BUCKET, chave)
     return (chave, conteudo) if conteudo is not None else None
