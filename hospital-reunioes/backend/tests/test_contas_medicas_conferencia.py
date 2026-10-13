@@ -1376,7 +1376,6 @@ class TestSeNecessario:
         assert sem_registro["motivo"].endswith(TEXTO_SN)
         assert TEXTO_SN not in registrado["motivo"]
 
-
     def test_suspenso_ou_alterado_no_dia_3_e_dia_depois_da_alta_nao_geram_linha(self):
         # Dia 3: a prescrição da manhã suspende e a da tarde prescreve de novo (alterado).
         prescricoes = [
@@ -1441,6 +1440,160 @@ class TestSeNecessario:
         resultado = self._conferir(_prontuario(prescricoes=prescricoes), None)
 
         assert resultado.linhas == ()
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 8b. Classe de UTI do dia pelos eventos do Passo A (issue #1134)
+# ═══════════════════════════════════════════════════════════════════════════
+
+UNIMED_CLASSE_1, UNIMED_CLASSE_2, UNIMED_CLASSE_5 = "60000252", "60000236", "60000260"
+ASSIM_NIVEL_1, ASSIM_NIVEL_2 = "98032437", "98032445"
+REGRAS_COM_CLASSE = {**REGRAS_DAS_CONFERENCIAS, "classe_de_uti": "ALFA-DIA-14"}
+
+# Como a Unimed: diária global com as classes I, II e V da UTI adulto.
+PARAMETROS_UNIMED: dict[str, Any] = {
+    **PARAMETROS_GLOBAL,
+    "diaria_global": {
+        "uti_adulto_classe_1": {"codigo": UNIMED_CLASSE_1, "valor": 2415.00},
+        "uti_adulto_classe_2": {"codigo": UNIMED_CLASSE_2, "valor": 3492.88},
+        "uti_adulto_classe_5": {"codigo": UNIMED_CLASSE_5, "valor": 4831.55},
+    },
+    "regras_das_conferencias": REGRAS_COM_CLASSE,
+}
+TABELA_UNIMED = {
+    ("DIARIA_TAXA", UNIMED_CLASSE_1): 2415.00,
+    ("DIARIA_TAXA", UNIMED_CLASSE_2): 3492.88,
+    ("DIARIA_TAXA", UNIMED_CLASSE_5): 4831.55,
+}
+
+# Como a ASSIM: pacote de UTI adulto em dois níveis, só na Linha Carioca.
+PARAMETROS_ASSIM: dict[str, Any] = {
+    **PARAMETROS_ALFA,
+    "pacote_uti_adulto": {
+        "somente_linha_carioca": True,
+        "nivel_1": {"codigo": ASSIM_NIVEL_1, "valor": 1406.77},
+        "nivel_2": {"codigo": ASSIM_NIVEL_2, "valor": 1954.46},
+    },
+    "regras_das_conferencias": REGRAS_COM_CLASSE,
+}
+TABELA_ASSIM = {
+    **TABELA_DE_DIARIAS,
+    ("PACOTE", ASSIM_NIVEL_1): 1406.77,
+    ("PACOTE", ASSIM_NIVEL_2): 1954.46,
+}
+
+
+def _terapia(tipo: str, inicio: str, fim: str | None, *, pagina: int, trecho: str) -> dict[str, Any]:
+    """Uma terapia do Passo A no formato que `cm_eventos` guarda."""
+    return {
+        "tipo": tipo,
+        "descricao": trecho,
+        "setor": CTI,
+        "inicio": inicio,
+        "fim": fim,
+        "pagina": pagina,
+        "trecho": trecho,
+        "etiquetas": [],
+        "confianca": None,
+    }
+
+
+def _resumo_das_diarias(resultado) -> list[tuple]:
+    return sorted(
+        (
+            linha["acao"],
+            linha["codigo"],
+            linha["data"],
+            linha["data_fim"],
+            linha["quantidade_devida"] if linha["acao"] == "INCLUIR" else linha["quantidade_lancada"],
+            linha["valor_diferenca"],
+            linha["regra_codigo"],
+        )
+        for linha in resultado.linhas
+    )
+
+
+class TestClasseDeUti:
+    VENTILACAO = _terapia(
+        "VENTILACAO_MECANICA", "2026-10-01T15:00", "2026-10-02T22:00", pagina=50, trecho="Em VM, modo PCV"
+    )
+
+    def _prontuario_de_cti(self) -> ProntuarioLido:
+        return _prontuario(movimentacoes=_internacao(*TestDiarias.TRES_DIARIAS), tipo_impressao=None)
+
+    def test_ventilacao_mecanica_em_2_de_3_dias_sai_classe_v_nos_2_e_classe_i_no_terceiro(self):
+        resultado = conferir(
+            _conta(),
+            self._prontuario_de_cti(),
+            _memoria(PARAMETROS_UNIMED),
+            _tabela(TABELA_UNIMED),
+            setores=SETORES,
+            eventos=_eventos(terapias=[self.VENTILACAO]),
+        )
+
+        assert _resumo_das_diarias(resultado) == [
+            ("INCLUIR", UNIMED_CLASSE_1, "2026-10-03", None, 1.0, 2415.00, "ALFA-DIA-14"),
+            ("INCLUIR", UNIMED_CLASSE_5, "2026-10-01", "2026-10-02", 2.0, 9663.10, "ALFA-DIA-14"),
+        ]
+        classe_1, classe_5 = sorted(resultado.linhas, key=lambda linha: linha["codigo"])
+        assert (classe_5["evidencia_pagina"], classe_5["evidencia_trecho"]) == (50, "Em VM, modo PCV")
+        assert "ventilação mecânica" in classe_5["motivo"]
+        assert classe_1["evidencia_trecho"].startswith("Setor CTI ADULTO: de 01/10/2026 14:00")
+        assert all("conferir classe de uti" in linha["motivo"].lower() for linha in resultado.linhas)
+
+    def test_classe_i_lancada_nos_dias_de_ventilacao_sai_para_retirar_com_a_observacao(self):
+        conta = _conta(*_diarias_lancadas(UNIMED_CLASSE_1, 1, 2, 3, unitario=2415.00))
+
+        resultado = conferir(
+            conta,
+            self._prontuario_de_cti(),
+            _memoria(PARAMETROS_UNIMED),
+            _tabela(TABELA_UNIMED),
+            setores=SETORES,
+            eventos=_eventos(terapias=[self.VENTILACAO]),
+        )
+
+        assert _resumo_das_diarias(resultado) == [
+            ("INCLUIR", UNIMED_CLASSE_5, "2026-10-01", "2026-10-02", 2.0, 9663.10, "ALFA-DIA-14"),
+            ("RETIRAR", UNIMED_CLASSE_1, "2026-10-01", "2026-10-02", 2.0, -4830.00, "ALFA-DIA-14"),
+        ]
+        retirar = _linhas(resultado, "RETIRAR")[0]
+        assert "conferir classe de uti" in retirar["motivo"].lower()
+
+    def test_assim_linha_carioca_monitorizacao_invasiva_no_dia_2_e_nivel_2_e_os_outros_nivel_1(self):
+        pai = _terapia("PRESSAO_INVASIVA", "2026-10-02T09:00", "2026-10-02T18:00", pagina=52, trecho="PAI radial")
+
+        resultado = conferir(
+            _conta(plano="Alfa Max Qc"),
+            self._prontuario_de_cti(),
+            _memoria(PARAMETROS_ASSIM),
+            _tabela(TABELA_ASSIM),
+            setores=SETORES,
+            eventos=_eventos(terapias=[pai]),
+        )
+
+        assert _resumo_das_diarias(resultado) == [
+            ("INCLUIR", ASSIM_NIVEL_1, "2026-10-01", None, 1.0, 1406.77, "ALFA-DIA-14"),
+            ("INCLUIR", ASSIM_NIVEL_1, "2026-10-03", None, 1.0, 1406.77, "ALFA-DIA-14"),
+            ("INCLUIR", ASSIM_NIVEL_2, "2026-10-02", None, 1.0, 1954.46, "ALFA-DIA-14"),
+        ]
+        nivel_2 = _linhas(resultado, "INCLUIR", ASSIM_NIVEL_2)[0]
+        assert (nivel_2["evidencia_pagina"], nivel_2["evidencia_trecho"]) == (52, "PAI radial")
+        assert all("conferir classe de uti" in linha["motivo"].lower() for linha in resultado.linhas)
+
+    def test_assim_fora_da_linha_carioca_segue_a_diaria_de_cti(self):
+        pai = _terapia("PRESSAO_INVASIVA", "2026-10-02T09:00", "2026-10-02T18:00", pagina=52, trecho="PAI radial")
+
+        resultado = conferir(
+            _conta(plano="Alfa Basico"),
+            self._prontuario_de_cti(),
+            _memoria(PARAMETROS_ASSIM),
+            _tabela(TABELA_ASSIM),
+            setores=SETORES,
+            eventos=_eventos(terapias=[pai]),
+        )
+
+        assert {linha["codigo"] for linha in resultado.linhas} == {DIARIA_CTI}
 
 
 # ═══════════════════════════════════════════════════════════════════════════
