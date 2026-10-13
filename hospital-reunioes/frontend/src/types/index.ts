@@ -357,7 +357,8 @@ export type TipoNotificacao =
   | "COMENTARIO"
   | "PRAZO_PROXIMO"
   | "RESPONSAVEL_ATRIBUIDO"
-  | "ACEITE_INTERNO";
+  | "ACEITE_INTERNO"
+  | "CONTAS_MEDICAS";
 
 export interface Notificacao {
   id: string;

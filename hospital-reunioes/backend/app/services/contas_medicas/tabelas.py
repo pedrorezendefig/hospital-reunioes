@@ -29,10 +29,12 @@ __all__ = [
     "CATEGORIAS",
     "NAO_CONFERIDO",
     "PACOTE",
+    "Pacote",
     "TabelaLida",
     "TabelaRecusadaError",
     "importar_tabela",
     "ler_tabela",
+    "pacote_pelo_tuss",
     "preco",
     "tabelas_por_categoria",
 ]
@@ -46,6 +48,17 @@ _LOTE = 1000
 
 class TabelaRecusadaError(ValueError):
     """O CSV não entra; a mensagem é para quem enviou."""
+
+
+@dataclass(frozen=True)
+class Pacote:
+    """O pacote da tabela da operadora para um TUSS realizado."""
+
+    codigo: str
+    descricao: str | None
+    # Diárias incluídas no pacote; as além delas são excedentes (LEVE-PAC-04).
+    permanencia: int
+    valor: Decimal | None
 
 
 @dataclass(frozen=True)
@@ -466,3 +479,38 @@ def preco(
     if len(itens) != 1:
         return NAO_CONFERIDO
     return _valor(itens[0].get("precos_json") or {}, tabela["regra"].get("regra_preco", "COLUNA"), coluna)
+
+
+def pacote_pelo_tuss(supabase, operadora_id: str, tuss: str, data: date) -> Pacote | None:
+    """O pacote da tabela de pacotes vigente na data que cobre o TUSS realizado.
+
+    A busca que a conferência recebe como `pacote_do_tuss` (#1122). Como o
+    `preco`, nunca inventa: sem tabela na data, TUSS em mais de um pacote ou
+    permanência que não é número, `None`. O valor fica `None` quando a coluna
+    não traz número, e a conferência cai no preço da conta.
+    """
+    tabela = _versao_na_data(supabase, operadora_id, "PACOTE", data)
+    if tabela is None:
+        return None
+    itens = (
+        supabase.table("cm_tabela_preco_item")
+        .select("codigo, descricao, precos_json, extra_json")
+        .eq("tabela_id", tabela["id"])
+        .contains("extra_json", {"codigos_tuss": [tuss.strip()]})
+        .execute()
+        .data
+        or []
+    )
+    if len(itens) != 1:
+        return None
+    item = itens[0]
+    permanencia = str((item.get("extra_json") or {}).get("permanencia") or "").strip()
+    if not permanencia.isdigit():
+        return None
+    valor = (item.get("precos_json") or {}).get("valor")
+    return Pacote(
+        codigo=item["codigo"],
+        descricao=item.get("descricao"),
+        permanencia=int(permanencia),
+        valor=Decimal(str(valor)) if isinstance(valor, int | float) and valor > 0 else None,
+    )

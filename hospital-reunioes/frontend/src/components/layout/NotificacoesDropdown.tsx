@@ -12,6 +12,7 @@ import {
   Clock,
   UserCheck,
   PenLine,
+  Receipt,
   X,
 } from "lucide-react";
 import { Notificacao } from "@/types";
@@ -23,6 +24,7 @@ const TIPO_CONFIG: Record<string, { icon: typeof Bell; color: string; bg: string
   PRAZO_PROXIMO: { icon: Clock, color: "text-red-600", bg: "bg-red-50" },
   RESPONSAVEL_ATRIBUIDO: { icon: UserCheck, color: "text-emerald-600", bg: "bg-emerald-50" },
   ACEITE_INTERNO: { icon: PenLine, color: "text-amber-600", bg: "bg-amber-50" },
+  CONTAS_MEDICAS: { icon: Receipt, color: "text-emerald-600", bg: "bg-emerald-50" },
 };
 
 const POLL_INTERVAL_MS = 30000;
@@ -129,10 +131,13 @@ export function NotificacoesDropdown() {
     // Navigate: os tipos comuns apontam para a pendência relacionada no
     // kanban. O aceite interno guarda o id da reunião, não o token (issue
     // #295): o link vem do endpoint autenticado, que só atende o próprio
-    // destinatário e mantém o banco hash-only.
+    // destinatário e mantém o banco hash-only. O aviso de Contas médicas
+    // guarda o envio e leva à fila de contas, onde estão os guias (#1124).
     if (notif.referencia_id) {
       setOpen(false);
-      if (notif.tipo === "ACEITE_INTERNO") {
+      if (notif.tipo === "CONTAS_MEDICAS") {
+        router.push("/contas-medicas");
+      } else if (notif.tipo === "ACEITE_INTERNO") {
         await irParaOAceite(notif.referencia_id);
       } else {
         router.push(`/pendencias/kanban?highlight=${notif.referencia_id}`);

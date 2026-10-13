@@ -38,8 +38,8 @@ from app.services.contas_medicas_conta import (
     detectar_tipo_do_arquivo,
     ler_cabecalho_da_conta,
 )
-from app.services.contas_medicas_extrator import extrair_paginas
-from app.services.contas_medicas_retencao import BUCKET
+from app.services.contas_medicas_extrator import extrair_paginas, texto_para_guardar
+from app.services.contas_medicas_retencao import BUCKET, chave_do_texto
 
 LIMITE_DE_ATENDIMENTOS = 10
 LIMITE_DE_ARQUIVOS = 30
@@ -85,6 +85,8 @@ class _Lido:
     tipo: str
     numero_atendimento: str
     paginas: int
+    # O texto extraído, guardado ao lado do PDF: a fila lê daí e não extrai de novo.
+    texto: bytes
     cabecalho: CabecalhoDaConta | None = None
     plano: dict | None = None
 
@@ -112,7 +114,13 @@ def _ler(indice: int, arquivo: ArquivoRecebido, planos: list[dict]) -> _Lido | _
         return _Recusa(arquivo.nome, paginas.motivo)
     textos = [pagina.texto for pagina in paginas]
     tipo = detectar_tipo_do_arquivo(textos[0] if textos else "")
-    base = {"indice": indice, "nome": arquivo.nome, "conteudo": arquivo.conteudo, "paginas": len(textos)}
+    base = {
+        "indice": indice,
+        "nome": arquivo.nome,
+        "conteudo": arquivo.conteudo,
+        "paginas": len(textos),
+        "texto": texto_para_guardar(paginas),
+    }
     if tipo == "CONTA":
         cabecalho = ler_cabecalho_da_conta(textos)
         if isinstance(cabecalho, ErroLeitura):
@@ -172,11 +180,15 @@ def _prontuarios_no_sistema(supabase, atendimento_id: str, agora: datetime) -> l
 
 
 def _guardar(supabase, envio_id: str, atendimento: dict, lido: _Lido, agora: datetime) -> str | None:
-    """O PDF no bucket privado e a linha em `cm_arquivo`. A chave não leva dado do paciente."""
+    """O PDF no bucket privado e a linha em `cm_arquivo`. A chave não leva dado do paciente.
+
+    O texto extraído vai ao lado do PDF. Se ele não subir, o arquivo entra
+    assim mesmo: a fila extrai de novo e guarda (#1124)."""
     arquivo_id = str(uuid.uuid4())
     chave = f"{envio_id}/{arquivo_id}.pdf"
     if not storage.upload_private(supabase, BUCKET, chave, lido.conteudo, "application/pdf"):
         return None
+    storage.upload_private(supabase, BUCKET, chave_do_texto(chave), lido.texto, "text/plain")
     supabase.table("cm_arquivo").insert(
         {
             "id": arquivo_id,

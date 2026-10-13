@@ -37,6 +37,7 @@ from app.limiter import limiter  # noqa: E402
 from app.routers import contas_medicas_envio as envio_router  # noqa: E402
 from app.services.contas_medicas import envio as envio_service  # noqa: E402
 from app.services.contas_medicas_extrator import Pagina  # noqa: E402
+from app.services.contas_medicas_retencao import chave_do_texto  # noqa: E402
 
 MIGRATION = Path(__file__).resolve().parents[2] / "supabase" / "migrations" / "116_contas_medicas_fundacao.sql"
 
@@ -450,7 +451,7 @@ class TestPlanoSemPar:
         assert [linha["texto"] for linha in corpo["ultimo_envio"]] == ["31310, conta e prontuário"]
         assert _situacoes(banco, "31310") == ["NA_FILA"]
         assert [c["numero_conta"] for c in banco.tabelas["cm_conta"]] == ["48010"]
-        assert len(banco.bucket) == 2
+        assert len([chave for _bucket, chave in banco.bucket if chave.endswith(".pdf")]) == 2
 
     def test_o_plano_reconhecido_leva_a_operadora_e_a_coluna_para_o_atendimento(self):
         banco = _cenario()
@@ -747,6 +748,9 @@ class TestArquivoNoBucket:
         for arquivo in banco.tabelas["cm_arquivo"]:
             conteudo = enviados[arquivo["tipo"]]
             assert banco.bucket[("contas-medicas", arquivo["chave_bucket"])] == conteudo
+            # O texto extraído fica ao lado, na chave que a retenção apaga junto (#1124).
+            texto = banco.bucket[("contas-medicas", chave_do_texto(arquivo["chave_bucket"]))]
+            assert texto.decode("utf-8").split("\f")[:-1] == conteudo.decode("utf-8").split("\f")
             assert arquivo["hash"] == hashlib.sha256(conteudo).hexdigest()
             prazo = datetime.fromisoformat(arquivo["apagar_em"]) - datetime.fromisoformat(envio["criado_em"])
             assert prazo == timedelta(days=7)

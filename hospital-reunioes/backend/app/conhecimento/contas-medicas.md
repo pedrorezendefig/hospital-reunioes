@@ -8,10 +8,11 @@ Toda Demanda sobre uma tela de Contas médicas, uma conta mal lida, um preço ou
 
 ## O que já está no ar
 
-Por enquanto, a fundação do módulo, a carga das operadoras e o envio das contas:
+A primeira etapa inteira: a fundação do módulo, a carga das operadoras, o envio das contas, a análise e o Guia:
 
 - o item **Contas médicas** no menu lateral, que aparece só para quem tem perfil no módulo;
 - a tela de contas, com o envio dos PDFs, o "Último envio" e a fila, descritos abaixo;
+- a análise da conta, que roda sozinha em segundo plano e avisa no sino quando o Guia fica pronto;
 - os perfis e as permissões de cada um, já gravados no banco;
 - o lugar seguro onde os PDFs ficam guardados por sete dias;
 - a tela Operadoras, aberta a partir da tela de contas para quem tem a permissão de regra contratual e tabelas (gestão de contas médicas e as duas diretorias).
@@ -23,8 +24,6 @@ Também na tela Operadoras entram as tabelas de preço de cada convênio. A gest
 Na mesma tela entra o dicionário de itens do hospital: o nome do produto na prescrição e na ficha anestésica, com os sinônimos, ligado ao código da conta (por exemplo, rocurônio e Esmeron caem no mesmo código). Termo que já existe é atualizado. Quando o nome não está no dicionário, o sistema tenta casar pela marca e pela concentração; só pela marca, o casamento sai com confiança média.
 
 Na conferência, um preço que não pode ser comparado com a tabela sai como "Não conferido", e nunca como erro de preço: tabela não carregada para a categoria, nenhuma versão vigente na data do atendimento, preço zero na tabela, item que a tabela marca como pacote, código que aparece repetido na tabela sem a especialidade que desempata, e honorário.
-
-A conta enviada já entra na fila, mas a análise dela (a leitura da conta inteira, a contagem de diárias e a conferência de preço) chega nas próximas entregas da primeira etapa. Até lá a conta fica Na fila. A tela do Guia já existe e é descrita abaixo; ela passa a ter linhas quando a análise entrar no ar.
 
 ## O envio e a fila
 
@@ -46,6 +45,24 @@ A fila mostra as contas em ordem de envio e, dentro do envio, na ordem dos arqui
 - **Erro**: a análise não conseguiu ler um dos arquivos, com o motivo em uma frase e o botão "Enviar de novo".
 
 A aba **Concluídas** guarda as contas já concluídas, as mais recentes primeiro, com a contagem de pendências de quem concluiu com pendência. A faturista vê só as próprias contas, na fila e nas Concluídas; quem tem o Painel completo vê as de todas.
+
+## A análise
+
+Assim que a conta e o prontuário do atendimento estão no sistema, a análise começa sozinha, em segundo plano: a faturista não precisa esperar na tela nem atualizar a página. O app lê a conta inteira e o prontuário, conta as diárias pelas movimentações, confere preço, prescrição, ficha anestésica e o que foi lançado sem registro, e monta o Guia. Ele analisa até duas contas ao mesmo tempo e continua respondendo enquanto lê um prontuário grande; as outras esperam a vez na fila, na ordem de envio.
+
+O prontuário é lido uma vez por atendimento e serve a todas as parciais: a segunda parcial do mesmo atendimento não espera a leitura de novo. Quando o atendimento recebe um prontuário mais novo, ele substitui o anterior.
+
+Quando as contas de um envio terminam, a faturista recebe um aviso no sino, como "2 contas prontas". Clicar no aviso abre a fila de contas, onde cada uma aparece como A fazer.
+
+Enviar de novo uma conta que já tinha Guia refaz a análise: as linhas que a faturista já marcou (Feito, Não procede ou Bloqueado) ficam como estão, e as que estavam sem marcação são trocadas pelas da análise nova.
+
+Se o app reiniciar no meio de uma análise, a conta volta sozinha para a fila. Depois de três tentativas sem terminar, ela fica em Erro, com o botão "Enviar de novo". Leitura que não fecha também vira Erro na hora, com o motivo em uma frase:
+
+- "Este PDF não tem texto. Exporte de novo pelo MV": o PDF veio como imagem;
+- "Não consegui ler a conta inteira": a soma dos itens lidos não bateu com o total da conta;
+- "Prontuário com arquivo incompleto": o rodapé indica mais páginas do que vieram no arquivo.
+
+O tempo de cada etapa da análise fica guardado, para medir a meta de uma conta de cinco dias pronta em até cinco minutos.
 
 ## O Guia
 
@@ -92,4 +109,5 @@ O módulo não guarda nome completo, CPF, carteira nem data de nascimento de pac
 - Memória recusada na tela Operadoras, ou contagem de regras que não bate com o arquivo do diretor (Defeito, ou Informação se a recusa explica o motivo, como o CPF).
 - Tabela de preço recusada, contagem de itens que não bate com o arquivo, ou preço "Não conferido" onde a tabela tem valor (Defeito, ou Informação se a recusa lista as colunas esperadas ou se o motivo é um dos casos de "Não conferido").
 - Um botão do Guia que não marca, uma conta que não conclui ou uma nota que não bate com as linhas (Defeito).
+- Uma conta que não sai de Na fila ou de "Pronta em instantes", um Erro com motivo que não bate com o PDF, ou o aviso de contas prontas que não chega ao sino (Defeito, ou Informação se o motivo do Erro explica, como o PDF sem texto).
 - Dúvida sobre quando chega o envio de contas ou alguma das próximas entregas (Informação).
