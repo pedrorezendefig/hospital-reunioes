@@ -1,6 +1,6 @@
 # ROTAS.md
 <!-- gerado automaticamente por /snapshot — não editar -->
-<!-- last_update: 2026-10-13T05:15+0000 -->
+<!-- last_update: 2026-10-13T06:19+0000 -->
 
 Endpoints HTTP expostos pelo backend FastAPI do Hospital Reuniões.
 
@@ -132,6 +132,9 @@ Endpoints HTTP expostos pelo backend FastAPI do Hospital Reuniões.
 | Método | Rota | O que faz | Auth |
 |--------|------|-----------|------|
 | POST | `/contas-medicas/dicionario` | Carrega o dicionário de itens do hospital: termo atualizado ou novo, um por sinônimo. | ✅ |
+| GET | `/contas-medicas/dicionario/propostas` | Os termos que a IA ligou a um código da conta, à espera da gestão. | ✅ |
+| POST | `/contas-medicas/dicionario/propostas/{proposta_id}/confirmar` | A proposta vira termo confirmado do dicionário, com o código que a IA deu. | ✅ |
+| POST | `/contas-medicas/dicionario/propostas/{proposta_id}/rejeitar` | O código proposto sai; o termo fica decidido, sem par, e a IA não é perguntada de novo. | ✅ |
 | GET | `/contas-medicas/operadoras` | As operadoras com a situação, a versão da memória, as regras e as tabelas carregadas. | ✅ |
 | POST | `/contas-medicas/operadoras/memoria` | Importa o arquivo de memória: versão nova, vigente, com as regras dela. | ✅ |
 | GET | `/contas-medicas/operadoras/{sigla}/memoria` | A memória vigente no formato do arquivo, gerada do banco com o cabeçalho inteiro, para baixar. | ✅ |
@@ -488,4 +491,4 @@ Endpoints HTTP expostos pelo backend FastAPI do Hospital Reuniões.
 
 ---
 
-**Totais:** 272 endpoints em 42 routers · 94% exigem auth.
+**Totais:** 275 endpoints em 42 routers · 94% exigem auth.
