@@ -47,6 +47,8 @@ export interface Painel {
   producao: LinhaDeProducao[];
   nivel_evidencia?: IncluidoNaSemana[];
   custo_ia?: { total_usd: number; medio_por_conta_usd: number; contas: number };
+  /** Só para quem tem a Conferência da coordenação (#1143). */
+  coordenacao?: { valor_incluido: number; lembretes_incluidos: number };
 }
 
 export interface FiltrosDoPainel {
