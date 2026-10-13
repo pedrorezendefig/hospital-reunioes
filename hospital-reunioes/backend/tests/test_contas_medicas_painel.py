@@ -334,3 +334,74 @@ class TestOsBlocos:
             {"causa": "REGISTRO_ASSISTENCIAL", "valor": 0.0, "percentual": 0.0},
             {"causa": "LANCAMENTO_MANUAL", "valor": 50.0, "percentual": 15.9},
         ]
+
+    def test_itens_que_mais_faltam_por_numero_de_contas_com_incluir(self):
+        """A Luva falta em 3 contas (100 + 60 + 50). A Lanceta, em 1: na C3 ela
+        é Não procede, então não faltava. A Fita é Não procede e sai."""
+        assert _painel()["itens_que_faltam"] == [
+            {"codigo": "M100", "descricao": "Luva", "contas": 3, "valor": 210.0},
+            {"codigo": "M200", "descricao": "Lanceta", "contas": 1, "valor": 40.0},
+            {"codigo": "M400", "descricao": "Seringa", "contas": 1, "valor": 25.0},
+        ]
+
+    def test_itens_que_mais_faltam_sao_no_maximo_dez(self):
+        contas = [_conta(f"K{i:02d}", "at-1", "F1", "CONCLUIDA", 80, "2026-10-06T14:00:00+00:00", 0) for i in range(12)]
+        linhas = [
+            _l(f"I{i:02d}-{j}", f"K{j:02d}", "INCLUIR", f"C{i:02d}", f"Item {i}", 1.0, "FEITO", "DISPENSACAO", "REGISTRADO")
+            for i in range(12)
+            for j in range(12 - i)
+        ]
+
+        itens = _painel(banco=_cenario(contas, linhas))["itens_que_faltam"]
+
+        assert [(item["codigo"], item["contas"]) for item in itens] == [(f"C{i:02d}", 12 - i) for i in range(10)]
+
+    def test_producao_por_faturista(self):
+        """Ana: C1 e C2 (uma com pendência), incluído 100 + 40 + 60, retirado
+        30, 1 Não procede em 7 Linhas. Bia: C3, incluído 50, retirado 20, 1
+        Não procede em 3 Linhas."""
+        assert _painel()["producao"] == [
+            {
+                "faturista_id": "F1",
+                "nome": "Ana Faturista",
+                "contas": 2,
+                "com_pendencia": 1,
+                "valor_incluido": 200.0,
+                "valor_retirado": 30.0,
+                "taxa_nao_procede": 0.1429,
+            },
+            {
+                "faturista_id": "F2",
+                "nome": "Bia Faturista",
+                "contas": 1,
+                "com_pendencia": 0,
+                "valor_incluido": 50.0,
+                "valor_retirado": 20.0,
+                "taxa_nao_procede": 0.3333,
+            },
+        ]
+
+    def test_valor_incluido_por_nivel_de_evidencia_por_semana(self):
+        serie = _painel()["nivel_evidencia"]
+
+        assert [ponto["semana"] for ponto in serie][-2:] == [SEMANA_ANTERIOR, SEMANA]
+        assert len(serie) == 8
+        assert serie[0] == {"semana": "2026-08-17", "REGISTRADO": 0.0, "PRESCRITO": 0.0, "PRESCRITO_SN": 0.0, "POR_REGRA": 0.0}
+        assert serie[-2] == {
+            "semana": SEMANA_ANTERIOR,
+            "REGISTRADO": 70.0,
+            "PRESCRITO": 30.0,
+            "PRESCRITO_SN": 0.0,
+            "POR_REGRA": 0.0,
+        }
+        assert serie[-1] == {
+            "semana": SEMANA,
+            "REGISTRADO": 100.0,
+            "PRESCRITO": 40.0,
+            "PRESCRITO_SN": 60.0,
+            "POR_REGRA": 50.0,
+        }
+
+    def test_custo_de_ia_do_periodo_e_medio_por_conta(self):
+        """0,40 + 0,20 + 0,60 dólares em 3 contas."""
+        assert _painel()["custo_ia"] == {"total_usd": 1.2, "medio_por_conta_usd": 0.4, "contas": 3}

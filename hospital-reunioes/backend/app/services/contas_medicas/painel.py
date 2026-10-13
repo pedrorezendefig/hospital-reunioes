@@ -15,6 +15,7 @@ from decimal import ROUND_HALF_UP, Decimal
 from typing import Any
 from zoneinfo import ZoneInfo
 
+from app.dependencies import selecionar_participantes
 from app.services.contas_medicas.guia import linha_nao_conferida
 from app.services.paginacao import ler_tudo
 
@@ -31,6 +32,12 @@ CONCLUIDAS = ("CONCLUIDA", "CONCLUIDA_COM_PENDENCIA", "RETORNO")
 
 # A ordem da spec do diretor (item 15.2).
 CAUSAS = ("DISPENSACAO", "REGRA_AUTOMATICA", "CADASTRO_PRECO", "REGISTRO_ASSISTENCIAL", "LANCAMENTO_MANUAL")
+
+# Os níveis de evidência, na ordem do adendo v1.1 (item 4).
+NIVEIS = ("REGISTRADO", "PRESCRITO", "PRESCRITO_SN", "POR_REGRA")
+
+# Quantos itens a fila de parametrização para a consultoria do MV mostra.
+ITENS_QUE_FALTAM = 10
 
 _CAMPOS_DA_CONTA = "id, atendimento_id, faturista_id, situacao, nota_entrada, concluida_em, custo_usd"
 _CAMPOS_DA_LINHA = "id, conta_id, acao, codigo, descricao, valor_diferenca, preco_tabela, estado, causa_raiz, nivel_evidencia"
@@ -121,6 +128,71 @@ def _por_causa_raiz(linhas: list[dict]) -> list[dict[str, Any]]:
     return [{"causa": c, "valor": _dinheiro(v), "percentual": _percentual(v, total)} for c, v in soma.items()]
 
 
+def _itens_que_faltam(linhas: list[dict]) -> list[dict[str, Any]]:
+    """Os códigos com mais Contas com Linha Incluir. A Linha Não procede sai:
+    o item não faltava."""
+    por_codigo: dict[str, dict[str, Any]] = {}
+    for linha in linhas:
+        if linha.get("acao") != "INCLUIR" or linha.get("estado") == "NAO_PROCEDE" or not linha.get("codigo"):
+            continue
+        item = por_codigo.setdefault(
+            linha["codigo"], {"descricao": linha.get("descricao"), "contas": set(), "valor": Decimal(0)}
+        )
+        item["contas"].add(linha["conta_id"])
+        item["valor"] += _valor(linha)
+    ordem = sorted(por_codigo.items(), key=lambda par: (-len(par[1]["contas"]), -par[1]["valor"], par[0]))
+    return [
+        {"codigo": codigo, "descricao": item["descricao"], "contas": len(item["contas"]), "valor": _dinheiro(item["valor"])}
+        for codigo, item in ordem[:ITENS_QUE_FALTAM]
+    ]
+
+
+def _producao(supabase, contas: list[dict], linhas_por_conta: dict[str, list[dict]]) -> list[dict[str, Any]]:
+    """Uma linha por faturista: Contas concluídas, com pendência, R$ incluído,
+    R$ retirado (glosa evitada) e a taxa de Não procede."""
+    por_faturista: dict[str | None, list[dict]] = defaultdict(list)
+    for conta in contas:
+        por_faturista[conta.get("faturista_id")].append(conta)
+    ids = [fid for fid in por_faturista if fid]
+    nomes = {}
+    if ids:
+        pessoas = selecionar_participantes(supabase, "id, nome_completo", lambda q: q.in_("id", ids)).data or []
+        nomes = {p["id"]: p.get("nome_completo") for p in pessoas}
+
+    producao = []
+    for fid, delas in por_faturista.items():
+        linhas = [linha for conta in delas for linha in linhas_por_conta[conta["id"]]]
+        feitas = [linha for linha in linhas if linha.get("estado") == "FEITO"]
+        producao.append(
+            {
+                "faturista_id": fid,
+                "nome": nomes.get(fid),
+                "contas": len(delas),
+                "com_pendencia": sum(1 for c in delas if c.get("situacao") == "CONCLUIDA_COM_PENDENCIA"),
+                "valor_incluido": _dinheiro(sum((_incluido(linha) for linha in feitas), Decimal(0))),
+                "valor_retirado": _dinheiro(sum((-min(_valor(linha), Decimal(0)) for linha in feitas), Decimal(0))),
+                "taxa_nao_procede": _nao_procede(linhas)["taxa"],
+            }
+        )
+    return sorted(producao, key=lambda linha: (linha["nome"] is None, linha["nome"] or ""))
+
+
+def _incluido_por_nivel(linhas: list[dict]) -> dict[str, float]:
+    soma = dict.fromkeys(NIVEIS, Decimal(0))
+    for linha in linhas:
+        if linha.get("nivel_evidencia") in soma:
+            soma[linha["nivel_evidencia"]] += _incluido(linha)
+    return {nivel: _dinheiro(valor) for nivel, valor in soma.items()}
+
+
+def _custo_ia(contas: list[dict]) -> dict[str, Any]:
+    """A soma do custo de IA das Contas (o de todas as chamadas de cada uma,
+    inclusive as de uma nova análise) e a média por Conta."""
+    total = sum((Decimal(str(c.get("custo_usd") or 0)) for c in contas), Decimal(0))
+    medio = total / len(contas) if contas else Decimal(0)
+    return {"total_usd": float(round(total, 4)), "medio_por_conta_usd": float(round(medio, 4)), "contas": len(contas)}
+
+
 def _nota_media(contas: list[dict]) -> float | None:
     notas = [float(c["nota_entrada"]) for c in contas if c.get("nota_entrada") is not None]
     return round(sum(notas) / len(notas), 1) if notas else None
@@ -161,4 +233,11 @@ def montar_painel(supabase, *, semana: date) -> dict[str, Any]:
             for s in semanas
         ],
         "causa_raiz": _por_causa_raiz(linhas_da_semana),
+        "itens_que_faltam": _itens_que_faltam(linhas_da_semana),
+        "producao": _producao(supabase, da_semana, linhas_por_conta),
+        "nivel_evidencia": [
+            {"semana": s.isoformat(), **_incluido_por_nivel([l for c in por_semana[s] for l in linhas_por_conta[c["id"]]])}
+            for s in semanas
+        ],
+        "custo_ia": _custo_ia(da_semana),
     }
