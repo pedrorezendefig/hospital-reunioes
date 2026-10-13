@@ -452,14 +452,18 @@ function MudancaDaRegra({
           value={texto}
           onChange={(e) => setTexto(e.target.value)}
           rows={3}
-          className={`${CAMPO} normal-case font-normal`}
+          className={`${CAMPO} normal-case font-normal text-slate-800 bg-white`}
         />
       </label>
       <div className="grid gap-3 sm:grid-cols-2">
         <Select label="Tipo" value={tipo} onChange={setTipo} options={TIPOS} />
         <label className="flex flex-col gap-1.5 text-xs font-medium text-slate-500 uppercase">
           Origem
-          <input value={origem} onChange={(e) => setOrigem(e.target.value)} className={`${CAMPO} normal-case font-normal`} />
+          <input
+            value={origem}
+            onChange={(e) => setOrigem(e.target.value)}
+            className={`${CAMPO} normal-case font-normal text-slate-800 bg-white`}
+          />
         </label>
       </div>
       {!decidir && regra.modelo_id && (

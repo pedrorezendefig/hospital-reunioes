@@ -40,15 +40,15 @@ export function TabelasDePreco({
   }
 
   return (
-    <table aria-label={rotulo} className="w-full text-xs mt-2">
+    <table aria-label={rotulo} className="w-full table-fixed text-xs mt-2">
       <thead>
         <tr className="text-left text-slate-500 uppercase">
-          <th className="py-1 pr-3 font-medium">Categoria</th>
-          <th className="py-1 pr-3 font-medium">Tabela</th>
-          <th className="py-1 pr-3 font-medium">Versão</th>
-          <th className="py-1 pr-3 font-medium">Vigência</th>
-          <th className="py-1 pr-3 font-medium">Situação</th>
-          {aoPedirNovaVersao && <th className="py-1 font-medium" aria-label="Ação" />}
+          <th className="w-[16%] py-1 pr-3 font-medium">Categoria</th>
+          <th className="w-[28%] py-1 pr-3 font-medium">Tabela</th>
+          <th className="w-[22%] py-1 pr-3 font-medium">Versão</th>
+          <th className="w-[16%] py-1 pr-3 font-medium">Vigência</th>
+          <th className="w-[10%] py-1 pr-3 font-medium">Situação</th>
+          {aoPedirNovaVersao && <th className="w-[8%] py-1 font-medium" aria-label="Ação" />}
         </tr>
       </thead>
       <tbody className="divide-y divide-slate-100">

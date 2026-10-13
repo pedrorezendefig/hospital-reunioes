@@ -283,7 +283,6 @@ function MapaDasOperadoras({ operadoras, token }: { operadoras: Operadora[]; tok
                     {rotuloDaCategoria(c)}
                   </th>
                 ))}
-                <th className="py-1 font-medium" aria-label="Ação" />
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 align-top">
@@ -297,6 +296,15 @@ function MapaDasOperadoras({ operadoras, token }: { operadoras: Operadora[]; tok
                       {op.sigla}
                     </Link>
                     <span className="block text-slate-500">{op.nome}</span>
+                    {op.versao && (
+                      <button
+                        type="button"
+                        onClick={() => baixar(op.sigla)}
+                        className="mt-1 inline-flex items-center gap-1 text-primary hover:underline whitespace-nowrap"
+                      >
+                        <Download className="w-3.5 h-3.5" aria-hidden="true" /> Baixar memória
+                      </button>
+                    )}
                   </td>
                   <td className="py-2 pr-3">
                     <span className={`font-medium px-2 py-0.5 rounded-full whitespace-nowrap ${COR_SITUACAO[op.situacao]}`}>
@@ -313,17 +321,6 @@ function MapaDasOperadoras({ operadoras, token }: { operadoras: Operadora[]; tok
                       <TabelaEmUso tabela={op.tabelas.find((t) => t.categoria === c)} />
                     </td>
                   ))}
-                  <td className="py-2">
-                    {op.versao && (
-                      <button
-                        type="button"
-                        onClick={() => baixar(op.sigla)}
-                        className="inline-flex items-center gap-1 text-primary hover:underline whitespace-nowrap"
-                      >
-                        <Download className="w-4 h-4" aria-hidden="true" /> Baixar memória
-                      </button>
-                    )}
-                  </td>
                 </tr>
               ))}
             </tbody>
