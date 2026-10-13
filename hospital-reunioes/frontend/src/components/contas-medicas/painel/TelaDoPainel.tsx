@@ -7,6 +7,7 @@ import { BlocoNivelEvidencia } from "./BlocoNivelEvidencia";
 import { BlocoNotaPorSemana } from "./BlocoNotaPorSemana";
 import { BlocoProducao } from "./BlocoProducao";
 import { CartaoContasConcluidas } from "./CartaoContasConcluidas";
+import { CartaoCoordenacao } from "./CartaoCoordenacao";
 import { CartaoNaoProcede } from "./CartaoNaoProcede";
 import { CartaoNotaMedia } from "./CartaoNotaMedia";
 import { CartaoValorApontado } from "./CartaoValorApontado";
@@ -17,7 +18,8 @@ import { CartaoValorApontado } from "./CartaoValorApontado";
  * a faturista recebe só a produção. Cartão novo entra aqui, ao lado dos outros.
  */
 export function TelaDoPainel({ painel }: { painel: Painel }) {
-  const temCartoes = painel.nota_media || painel.contas_concluidas || painel.valor_apontado || painel.nao_procede;
+  const temCartoes =
+    painel.nota_media || painel.contas_concluidas || painel.valor_apontado || painel.nao_procede || painel.coordenacao;
   return (
     <div className="space-y-4">
       {temCartoes && (
@@ -26,6 +28,7 @@ export function TelaDoPainel({ painel }: { painel: Painel }) {
           {painel.contas_concluidas && <CartaoContasConcluidas contas={painel.contas_concluidas} />}
           {painel.valor_apontado && <CartaoValorApontado valor={painel.valor_apontado} />}
           {painel.nao_procede && <CartaoNaoProcede naoProcede={painel.nao_procede} />}
+          {painel.coordenacao && <CartaoCoordenacao coordenacao={painel.coordenacao} />}
         </div>
       )}
       <div className="grid gap-4 lg:grid-cols-2">
