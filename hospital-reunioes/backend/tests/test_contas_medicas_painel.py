@@ -543,14 +543,15 @@ class TestQuemVe:
 
 
 class TestASemana:
-    """Domingo 04/10 às 23h30 em Brasília já é segunda 05/10 em UTC; segunda
+    """O banco devolve o instante em UTC. Domingo 04/10 às 23h30 em Brasília já
+    é segunda 05/10 em UTC, e ainda é da semana que o domingo fecha; segunda
     05/10 à 0h30 em Brasília é a primeira meia hora da semana nova."""
 
     def _banco(self) -> _Banco:
         return _cenario(
             [
-                _conta("DOM", "at-1", "F1", "CONCLUIDA", 40, "2026-10-04T23:30:00-03:00", 0),
-                _conta("SEG", "at-3", "F1", "CONCLUIDA", 90, "2026-10-05T00:30:00-03:00", 0),
+                _conta("DOM", "at-1", "F1", "CONCLUIDA", 40, "2026-10-05T02:30:00+00:00", 0),
+                _conta("SEG", "at-3", "F1", "CONCLUIDA", 90, "2026-10-05T03:30:00+00:00", 0),
             ],
             [],
         )
@@ -568,3 +569,39 @@ class TestASemana:
         assert painel["semana"] == {"inicio": "2026-10-05", "fim": "2026-10-11"}
         assert painel["contas_concluidas"] == {"total": 1}
         assert painel["nota_media"] == {"semana": 90.0, "anterior": 40.0}
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 5. O texto do Produto no Kit de conhecimento
+# ═══════════════════════════════════════════════════════════════════════════
+
+KIT = Path(__file__).resolve().parents[1] / "app" / "conhecimento" / "contas-medicas.md"
+
+
+def _secao(titulo: str) -> str:
+    return KIT.read_text(encoding="utf-8").split(f"## {titulo}")[1].split("\n## ")[0]
+
+
+class TestOKitDescreveOPainel:
+    """O Assistente de Tecnologia responde Demanda com este texto: sem o
+    Painel nele, a pergunta "por que não vejo a produção da Bia?" fica sem
+    resposta."""
+
+    def test_a_secao_do_painel_diz_o_que_ele_mostra_e_quem_ve(self):
+        painel = _secao("O Painel")
+
+        for trecho in (
+            "segunda a domingo",
+            "semana anterior",
+            "causa-raiz",
+            "dez itens que mais faltam",
+            "produção de cada faturista",
+            "nível de evidência",
+            "custo de inteligência artificial",
+            "Painel completo",
+            "só a própria linha de produção",
+        ):
+            assert trecho in painel, trecho
+
+    def test_o_que_ja_esta_no_ar_inclui_o_painel(self):
+        assert "o Painel" in _secao("O que já está no ar")
