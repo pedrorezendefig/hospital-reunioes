@@ -305,9 +305,9 @@ async function coletar($: EngineInterface, fresco = false) {
   }
   rodando = true
   try {
-    const args = fresco ? ['--fresco'] : []
+    const args = [...(fresco ? ['--fresco'] : []), ...((await read($, todos)) ? ['--todos'] : [])]
     const r = await $.process.run(['/bin/bash', `${$.plugin.root}/hooks/coletar.sh`, ...args], {
-      timeoutMs: 90_000,
+      timeoutMs: 120_000,
     })
     if (r.exitCode !== 0) throw new Error(r.stderr.slice(0, 200) || `saída ${r.exitCode}`)
     const agora = await $.clock.now()

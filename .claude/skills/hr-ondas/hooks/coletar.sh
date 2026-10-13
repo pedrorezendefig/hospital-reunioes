@@ -1,13 +1,14 @@
 #!/bin/bash
 # Coleta do hr-ondas: um JSON numa linha, lido de fontes que já existem (só leitura).
-# Hospital OS (8799): PRDs, ondas e fases · `claude agents --json`: sessões vivas ·
+# PRDs, ondas e fases: o recorte do coletor do OS (collect.py --recorte), só dos PRDs com onda
+# viva; com --todos, o /api/data inteiro do Hospital OS (8799) · `claude agents --json`: sessões vivas ·
 # $TMPDIR/fechar_onda/<sessao>/*.sql: migrations que a subida pediu ·
 # /api/health de produção: a última migration aplicada ·
 # transcript de cada sessão de onda (hooks/sessao.py): o shell em curso e as subidas ·
 # check-runs de cada PR aberto (REST, não a cota do GraphQL): início e fim do CI.
 #
 # A parte local (sessões, agentes, subidas, migrations) é fresca a cada chamada e não gasta
-# nada. A parte remota (Hospital OS, CI, health) fica num cache em $TMPDIR/hr-ondas/,
+# nada. A parte remota (PRDs, CI, health) fica num cache em $TMPDIR/hr-ondas/,
 # compartilhado por todas as sessões: sem argumento, só recoleta com mais de 5 min;
 # com --fresco (um evento do workflow), com mais de 30 s. Uma trava faz uma sessão só buscar.
 export PATH="$HOME/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin"
@@ -15,11 +16,16 @@ TMP="${TMPDIR:-/tmp}"; TMP="${TMP%/}"
 OS_URL="${HR_ONDAS_OS:-http://127.0.0.1:8799/api/data}"
 HEALTH_URL="${HR_ONDAS_HEALTH:-https://api.hospitalsaomatheus.cloud/api/health}"
 CACHE_DIR="${HR_ONDAS_CACHE:-$TMP/hr-ondas}"; CACHE="$CACHE_DIR/remoto.json"; TRAVA="$CACHE_DIR/trava"
+RECORTE="$(cd "$(dirname "$0")/../../../.." && pwd)/tools/workflow-dashboard/collect.py"
 mkdir -p "$CACHE_DIR"
+fresco=0; todos=0
+for a in "$@"; do
+  case "$a" in --fresco) fresco=1 ;; --todos) todos=1 ;; esac
+done
 
-coletar_os() {
+filtrar_os() {
   # GitHub fora (cota do GraphQL zerada) também conta como sem resposta: não apaga o retrato
-  curl -s -m 20 "$1" | jq -c 'select(.github.error == null)
+  jq -c 'select(.github.error == null)
   | 
   .fases as $F
   | .github.issues as $all
@@ -100,13 +106,22 @@ for f in "$TMP"/fechar_onda/*/[0-9]*.sql; do
 done
 
 # Parte remota: recoleta se o cache passou da idade e ninguém está buscando
-[ -d "$TRAVA" ] && [ $(( $(date +%s) - $(stat -f %m "$TRAVA") )) -gt 120 ] && rmdir "$TRAVA" 2>/dev/null
+[ -d "$TRAVA" ] && [ $(( $(date +%s) - $(stat -f %m "$TRAVA") )) -gt 180 ] && rmdir "$TRAVA" 2>/dev/null
 idade=$(( $(date +%s) - $(stat -f %m "$CACHE" 2>/dev/null || echo 0) ))
-if [ "$1" = "--fresco" ]; then minimo=30; url="$OS_URL?fresh=1"; else minimo=300; url="$OS_URL"; fi
+if [ $fresco = 1 ]; then minimo=30; url="$OS_URL?fresh=1"; else minimo=300; url="$OS_URL"; fi
 if [ "$idade" -ge "$minimo" ] && mkdir "$TRAVA" 2>/dev/null; then
   trap 'rmdir "$TRAVA" 2>/dev/null' EXIT
   agora=$(( $(date +%s) * 1000 ))
-  os=$(coletar_os "$url"); osEm=$agora
+  # Só os PRDs com sessão de onda viva (~6 pontos de GraphQL); --todos, ou árvore sem o
+  # recorte (branch antiga), cai no /api/data inteiro do OS (~35 pontos)
+  bruto=""
+  if [ $todos = 0 ]; then
+    prds=$(echo "$prd_sessoes" | jq -r '[.[]] | unique | join(",")')
+    bruto=$(python3 "$RECORTE" --recorte "$prds" 2>/dev/null) || bruto=""
+  fi
+  # a coleta fresca do OS inteiro leva uns 30 s
+  [ -n "$bruto" ] || bruto=$(curl -s -m 75 "$url")
+  os=$(echo "$bruto" | filtrar_os); osEm=$agora
   # OS sem resposta: fica o último retrato bom do cache, com a hora dele
   if [ -z "$os" ]; then
     os=$(jq -c '.os' "$CACHE" 2>/dev/null); osEm=$(jq -c '.osEm' "$CACHE" 2>/dev/null)
