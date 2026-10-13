@@ -960,30 +960,41 @@ query($owner:String!,$name:String!){
     pullRequests(states:OPEN,first:50){
       nodes{ number closingIssuesReferences(first:5){ nodes{ number body parent{ number } } } }
     }
+    issues(states:OPEN,labels:["in-progress"],first:30){ nodes{ number body parent{ number } } }
   }
 }
 """
 
 
-def _prds_de_prs_abertos(root: Path, slug: str) -> set[int]:
-    """PRD de cada fatia com PR aberto: sub-issue nativa ou "Pai: #N" no corpo (~1 ponto)."""
+def _pai(no: dict) -> int | None:
+    """PRD pai: sub-issue nativa ou "Pai: #N" no corpo."""
+    corpo = {"number": no["number"], "title": "", "state": "", "body": no.get("body")}
+    return (no.get("parent") or {}).get("number") or _issue_do_gh(corpo)["parent"]
+
+
+def _em_andamento(root: Path, slug: str) -> tuple[set[int], set[int]]:
+    """Issues com PR aberto ou label in-progress (~1 ponto): o PRD pai de cada uma e as sem PRD."""
     owner, name = slug.split("/", 1)
     out = json.loads(_run(["gh", "api", "graphql", "-f", f"query={_PRS_ABERTOS_QUERY}",
                            "-F", f"owner={owner}", "-F", f"name={name}"], root))
-    prds = set()
-    for pr in out["data"]["repository"]["pullRequests"]["nodes"]:
-        for i in pr["closingIssuesReferences"]["nodes"]:
-            pai = (i.get("parent") or {}).get("number") or _issue_do_gh({**i, "title": "", "state": ""})["parent"]
-            if pai:
-                prds.add(pai)
-    return prds
+    repo = out["data"]["repository"]
+    nos = [i for pr in repo["pullRequests"]["nodes"] for i in pr["closingIssuesReferences"]["nodes"]]
+    prds, soltas = set(), set()
+    for i in nos + repo["issues"]["nodes"]:
+        pai = _pai(i)
+        if pai:
+            prds.add(pai)
+        else:
+            soltas.add(i["number"])
+    return prds, soltas
 
 
-def _gh_recorte(root: Path, slug: str, prds: list[int]) -> dict:
+def _gh_recorte(root: Path, slug: str, prds: list[int], soltas: list[int] = ()) -> dict:
     owner, name = slug.split("/", 1)
     partes = []
     for n in prds:
         partes.append(f"p{n}: issue(number:{n}){{ ...Fatia subIssues(first:30){{ nodes{{ ...Fatia }} }} }}")
+    partes += [f"i{n}: issue(number:{n}){{ ...Fatia parent{{ number }} }}" for n in soltas]
     buscas = [f's{n}: search(query:"repo:{slug} is:issue \\"Pai: #{n}\\"",type:ISSUE,first:10)'
               f"{{ nodes{{ ...Fatia }} }}" for n in prds]
     query = (f'query{{ repository(owner:"{owner}",name:"{name}"){{ {" ".join(partes)} }} {" ".join(buscas)} }}'
@@ -991,11 +1002,12 @@ def _gh_recorte(root: Path, slug: str, prds: list[int]) -> dict:
     return json.loads(_run(["gh", "api", "graphql", "-f", f"query={query}"], root))["data"]
 
 
-def collect_recorte(root: Path, prds: list[int]) -> dict:
+def collect_recorte(root: Path, prds: list[int], soltas: list[int] = ()) -> dict:
     """O pedaço do /api/data que o hr-ondas lê (repo_slug, github.issues, fases).
 
-    Só dos `prds` (os com sessão de onda viva) e dos PRDs que têm fatia com PR aberto, de
-    quem quer que seja: um sócio, uma /pegar-issue à mão.
+    Só dos `prds` (os com sessão de onda viva) e dos PRDs que têm fatia com PR aberto ou
+    in-progress, de quem quer que seja: um sócio, uma /pegar-issue à mão. Mais as issues sem
+    PRD pai em andamento: as `soltas` (fila fixa de uma sessão viva), com PR aberto ou in-progress.
     """
     state = _spec_json_fresh(root, "docs/spec/deploy/state.json")
     history = (_spec_json_fresh(root, "docs/spec/deploy/history.json") or {}).get("deploys") or []
@@ -1003,13 +1015,15 @@ def collect_recorte(root: Path, prds: list[int]) -> dict:
     github = {"error": None, "error_kind": None, "issues": [], "prs": [], "prds": []}
     fases = None
     try:
-        prds = sorted(set(prds) | _prds_de_prs_abertos(root, slug))
+        pais, andando = _em_andamento(root, slug)
+        prds = sorted(set(prds) | pais)
+        soltas = sorted((set(soltas) | andando) - set(prds))
     except Exception as e:
         github["error_kind"], github["error"] = _gh_failure(e)
         return {"repo_slug": slug, "github": github, "fases": None}
-    if prds:
+    if prds or soltas:
         try:
-            data = _gh_recorte(root, slug, prds)
+            data = _gh_recorte(root, slug, prds, soltas)
             issues: dict[int, dict] = {}
             prs: dict[int, dict] = {}
 
@@ -1033,6 +1047,11 @@ def collect_recorte(root: Path, prds: list[int]) -> dict:
                 for no in (data.get(f"s{n}") or {}).get("nodes") or []:
                     if no and _issue_do_gh(_achatar(no))["parent"] == n:
                         guardar(no, n)
+            # sem PRD pai: a citada que é fatia de um PRD fora do recorte fica de fora
+            for n in soltas:
+                no = (data.get("repository") or {}).get(f"i{n}")
+                if no and not _pai(no):
+                    guardar({k: v for k, v in no.items() if k != "parent"}, None)
             lista = list(issues.values())
             for i in lista:
                 i["children"] = sorted(c["number"] for c in lista if c["parent"] == i["number"])
@@ -1053,7 +1072,9 @@ if __name__ == "__main__":
     root = Path(__file__).resolve().parents[2]
     if "--recorte" in sys.argv:
         alvo = sys.argv[sys.argv.index("--recorte") + 1]
-        json.dump(collect_recorte(root, [int(n) for n in alvo.split(",") if n]), sys.stdout, ensure_ascii=False)
+        soltas = sys.argv[sys.argv.index("--soltas") + 1] if "--soltas" in sys.argv else ""
+        json.dump(collect_recorte(root, [int(n) for n in alvo.split(",") if n],
+                                  [int(n) for n in soltas.split(",") if n]), sys.stdout, ensure_ascii=False)
         sys.exit(0)
     data = collect(root)
     if "--json" in sys.argv:

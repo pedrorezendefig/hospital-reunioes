@@ -1,8 +1,8 @@
 import { expect, mock, test } from 'claude-code/testing'
 
 import {
-  agentesDoPrd, alvo, assinatura, atividadeDaSessao, corDaDuracao, declaradasAplicadas, detalhe, duracaoDaOnda, etapas, focoDaSessao, linhagem,
-  nomeCurtoDaSessao, ondasDoPrd, pendentes, prdsVisiveis, resumoDaOnda, rotuloDoAlvo, rotuloDoShell, sessoesDoPrd,
+  agentesDoPrd, alvo, assinatura, atividadeDaSessao, comSemPrd, corDaDuracao, declaradasAplicadas, detalhe, duracaoDaOnda, etapas, focoDaSessao, linhagem,
+  nomeCurtoDaSessao, ondasDoPrd, pendentes, prdsVisiveis, resumoDaOnda, rotuloDoAlvo, rotuloDoShell, SEM_PRD, sessoesDoPrd,
   situacaoDaOnda, subidaDoPr,
 } from '../hooks/register'
 import type { Coleta, SubAgente } from '../types'
@@ -155,6 +155,30 @@ test('resumo da onda parada diz qual bloqueadora está na mão do humano', () =>
   expect(resumoDaOnda([i1145], [1145]).map(r => r.texto)[1]).toBe('espera #1141 #1142 #1143')
 })
 
+// a #1191 (sem PRD pai, PR aberto) na fila fixa da onda-b, e uma in-progress de um sócio, sem sessão
+const SOLTAS = [
+  { n: 1191, titulo: 'Contas médicas: OCR da página digitalizada', estado: 'OPEN', url: 'u', fase: 'pr_aberto', pr: 1203, ci: 'verde', veredito: null, conflito: false, versao: null, por: [] },
+  { n: 1205, titulo: 'fix solto', estado: 'OPEN', url: 'u', fase: 'em_andamento', pr: null, ci: null, veredito: null, conflito: false, versao: null, por: [] },
+]
+const ONDA_B = { nome: 'onda-b-onda1', status: 'busy', estado: 'working', inicio: 0 }
+const SEM_PRD_NA_COLETA = {
+  os: { ...BRUTO.os, soltas: SOLTAS },
+  agentes: [...COLETA.agentes, ONDA_B],
+  passagens: { ...PASSAGENS, 'onda-b': { ondas: { '1': [1191] }, escritas: [1] } },
+}
+
+test('issue sem PRD pai andando vira o grupo "Sem PRD", com a sessão da fila dela', () => {
+  const c = { ...comEm(COLETA), ...SEM_PRD_NA_COLETA, os: comSemPrd(SEM_PRD_NA_COLETA.os as Coleta['os']) } as Coleta
+  expect(prdsVisiveis(c, false).map(p => p.n)).toEqual([1128, SEM_PRD])
+  const sem = c.os!.prds.find(p => p.n === SEM_PRD)!
+  expect(sem.issues.map(i => i.n)).toEqual([1191, 1205])
+  // a passagem da onda-b não cita PRD: a sessão vai ao grupo pela fila fixa
+  expect(sessoesDoPrd(c, SEM_PRD).map(s => s.nome)).toEqual(['onda-b-onda1'])
+  expect(ondasDoPrd(c, sem).map(o => `${o.numero}:${o.issues.join(',')}:${o.sessao?.nome}`)).toEqual(['1:1191:onda-b-onda1'])
+  // sem issue solta, não há grupo
+  expect(comSemPrd(BRUTO.os as Coleta['os'])!.prds.map(p => p.n)).toEqual([1129, 1128])
+})
+
 const SUBIDA_EM_CURSO = [{ sessao: 'onda-ia-onda1', prs: [1150], inicio: AGORA - 120_000, fim: null }]
 const CI_RODANDO = { '1150': { inicio: AGORA - 9 * 60_000, fim: null } }
 
@@ -205,6 +229,17 @@ for (const surface of ['terminal', 'desktop'] as const) {
     expect(await pane.find({ text: /Onda 3 · parada · passagem: ainda não/ })).toBeTruthy()
     expect(await pane.find({ text: /💬 Aguardando o CI do PR #1150\. · há 4 min/ })).toBeTruthy()
     expect(await pane.find({ text: /Detalhe que não aparece/ })).toBeUndefined()
+  })
+
+  test(`issue sem PRD aparece no grupo "Sem PRD" com PR, CI e esteira (${surface})`, async ($, on) => {
+    await montar($, on, SEM_PRD_NA_COLETA)
+    const pane = await $.ui.mount({ plugin: 'hr-ondas', surface, component: 'Pane', requestId: 'ondas', props: {} as any })
+    expect(await pane.find({ text: /^Sem PRD$/ })).toBeTruthy()
+    expect(await pane.find({ text: /Onda 1 · onda-b-onda1 · andando/ })).toBeTruthy()
+    expect(await pane.find({ text: /PR #1203/ })).toBeTruthy()
+    expect(await pane.find({ text: /OCR da página digitalizada/ })).toBeTruthy()
+    expect(await pane.find({ text: /CI ✓/ })).toBeTruthy()
+    expect(await pane.find({ text: /em andamento/ })).toBeTruthy()
   })
 
   test(`faixa acima do prompt avisa a migration com o link (${surface})`, async ($, on) => {
