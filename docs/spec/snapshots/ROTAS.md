@@ -1,6 +1,6 @@
 # ROTAS.md
 <!-- gerado automaticamente por /snapshot — não editar -->
-<!-- last_update: 2026-10-13T07:31+0000 -->
+<!-- last_update: 2026-10-13T07:38+0000 -->
 
 Endpoints HTTP expostos pelo backend FastAPI do Hospital Reuniões.
 
@@ -90,6 +90,17 @@ Endpoints HTTP expostos pelo backend FastAPI do Hospital Reuniões.
 | POST | `/contas-medicas/contratos/{sigla}` | Os campos confirmados passam a valer, com quem confirmou e quando. | ✅ |
 | GET | `/contas-medicas/contratos/{sigla}/arquivo` | O contrato ou o aditivo confirmado da operadora. | ✅ |
 | POST | `/contas-medicas/contratos/{sigla}/arquivo` | Guarda o contrato ou o aditivo e devolve os campos que a IA leu, para a | ✅ |
+
+## contas-medicas (`app/routers/contas_medicas_coordenacao.py`)
+
+| Método | Rota | O que faz | Auth |
+|--------|------|-----------|------|
+| GET | `/contas-medicas/coordenacao` | Os três números e os lembretes abertos por conta, o mais antigo | ✅ |
+| GET | `/contas-medicas/coordenacao/cenarios` | Todos os cenários, ativos e inativos, e as operadoras, para quem cadastra. | ✅ |
+| POST | `/contas-medicas/coordenacao/cenarios` | Grava o cenário com o próximo código CEN-NNN, o autor e a data. | ✅ |
+| POST | `/contas-medicas/coordenacao/cenarios/proposta` | Os campos que a IA lê do texto da pessoa, com os códigos conferidos | ✅ |
+| PUT | `/contas-medicas/coordenacao/cenarios/{cenario_id}` | Edita, ativa ou desativa o cenário, com o antes e o depois no registro. | ✅ |
+| POST | `/contas-medicas/coordenacao/lembretes/{lembrete_id}/marcacao` | Incluído ou Não se aplica, um clique, com a observação opcional. | ✅ |
 
 ## contas-medicas (`app/routers/contas_medicas_envio.py`)
 
@@ -495,4 +506,4 @@ Endpoints HTTP expostos pelo backend FastAPI do Hospital Reuniões.
 
 ---
 
-**Totais:** 279 endpoints em 42 routers · 94% exigem auth.
+**Totais:** 285 endpoints em 43 routers · 94% exigem auth.
