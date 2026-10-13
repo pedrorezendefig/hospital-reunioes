@@ -45,6 +45,7 @@ export default function ValidacaoPage() {
   const [carregando, setCarregando] = useState(true);
   const [erro, setErro] = useState<string | null>(null);
   const [ocupado, setOcupado] = useState<string | null>(null);
+  const [falhasDaLeitura, setFalhasDaLeitura] = useState<Record<string, string>>({});
   const lidas = useRef(new Set<string>());
 
   const carregar = useCallback(async (tk: string) => {
@@ -88,14 +89,19 @@ export default function ValidacaoPage() {
     for (const tema of fila.temas) {
       if (tema.tipo !== "OBSERVACAO" || tema.leitura_ia || lidas.current.has(tema.id)) continue;
       lidas.current.add(tema.id);
-      lerObservacao(token, tema).then(({ leitura }) => {
-        if (!leitura) return;
-        setFila((atual) =>
-          atual
-            ? { ...atual, temas: atual.temas.map((t) => (t.id === tema.id ? { ...t, leitura_ia: leitura } : t)) }
-            : atual,
-        );
-      });
+      lerObservacao(token, tema)
+        .catch(() => ({ leitura: undefined, erro: "Não foi possível ler a observação." }))
+        .then(({ leitura, erro: falha }) => {
+          if (!leitura) {
+            setFalhasDaLeitura((atual) => ({ ...atual, [tema.id]: falha ?? "Não foi possível ler a observação." }));
+            return;
+          }
+          setFila((atual) =>
+            atual
+              ? { ...atual, temas: atual.temas.map((t) => (t.id === tema.id ? { ...t, leitura_ia: leitura } : t)) }
+              : atual,
+          );
+        });
     }
   }, [token, fila]);
 
@@ -168,6 +174,7 @@ export default function ValidacaoPage() {
                   key={tema.id}
                   tema={tema}
                   ocupado={ocupado === tema.id}
+                  falhaDaLeitura={falhasDaLeitura[tema.id]}
                   onDecidir={(decisao, corpo) => aoDecidir(tema, decisao, corpo)}
                   onEnviarAoCadastro={() => aoEnviarAoCadastro(tema)}
                 />

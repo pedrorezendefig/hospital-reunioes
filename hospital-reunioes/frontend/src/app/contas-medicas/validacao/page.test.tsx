@@ -85,7 +85,9 @@ const LEITURA = "A regra atual não cobre o caso. Sugestão: editar a regra.";
 
 type Pedido = { url: string; metodo: string; corpo: unknown };
 
-function servidor(fila: FilaDeValidacao = FILA, status = 200) {
+type Leitura = "ok" | "ia-fora" | "sem-rede";
+
+function servidor(fila: FilaDeValidacao = FILA, status = 200, leitura: Leitura = "ok") {
   const pedidos: Pedido[] = [];
   const fetch = vi.fn(async (url: string, init?: RequestInit) => {
     const metodo = init?.method ?? "GET";
@@ -93,7 +95,13 @@ function servidor(fila: FilaDeValidacao = FILA, status = 200) {
     if (url === "/api/contas-medicas/validacao") {
       return { ok: status === 200, status, json: async () => (status === 200 ? fila : { detail: "Sem permissão" }) };
     }
-    if (url.endsWith("/leitura")) return { ok: true, status: 200, json: async () => ({ leitura_ia: LEITURA }) };
+    if (url.endsWith("/leitura")) {
+      if (leitura === "sem-rede") throw new TypeError("Failed to fetch");
+      if (leitura === "ia-fora") {
+        return { ok: false, status: 503, json: async () => ({ detail: "Tente de novo em alguns minutos." }) };
+      }
+      return { ok: true, status: 200, json: async () => ({ leitura_ia: LEITURA }) };
+    }
     if (url.endsWith("/cadastro")) {
       return {
         ok: true,
@@ -224,6 +232,25 @@ describe("a fila de Validação", () => {
         corpo: { decisao: "RESPONDER", texto: "Confirmado com a ALFA: vem no pacote." },
       }),
     );
+  });
+
+  it("com a IA fora, o cartão da observação diz que a leitura está indisponível, com a mensagem do servidor", async () => {
+    servidor(FILA, 200, "ia-fora");
+    render(<ValidacaoPage />);
+    const observacao = await screen.findByRole("article", { name: "Observações sobre a regra ALFA-PRI-07" });
+
+    await waitFor(() => expect(observacao.textContent).toContain("Leitura indisponível agora"));
+    expect(observacao.textContent).toContain("Tente de novo em alguns minutos.");
+    expect(observacao.textContent).not.toContain("lendo as observações");
+  });
+
+  it("sem rede, o cartão da observação diz que a leitura está indisponível em vez de ficar lendo", async () => {
+    servidor(FILA, 200, "sem-rede");
+    render(<ValidacaoPage />);
+    const observacao = await screen.findByRole("article", { name: "Observações sobre a regra ALFA-PRI-07" });
+
+    await waitFor(() => expect(observacao.textContent).toContain("Leitura indisponível agora"));
+    expect(observacao.textContent).not.toContain("lendo as observações");
   });
 
   it("o termo do dicionário mostra o código proposto e Confirmar grava a decisão", async () => {

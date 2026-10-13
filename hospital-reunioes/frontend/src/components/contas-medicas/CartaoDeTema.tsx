@@ -36,11 +36,13 @@ type Aberto = "regra" | "resposta" | null;
 interface Props {
   tema: Tema;
   ocupado: boolean;
+  /** A leitura da IA falhou (IA fora ou sem rede): a mensagem do servidor. */
+  falhaDaLeitura?: string;
   onDecidir: (decisao: Decisao, corpo?: { texto?: string }) => void;
   onEnviarAoCadastro: () => void;
 }
 
-export function CartaoDeTema({ tema, ocupado, onDecidir, onEnviarAoCadastro }: Props) {
+export function CartaoDeTema({ tema, ocupado, falhaDaLeitura, onDecidir, onEnviarAoCadastro }: Props) {
   const [aberto, setAberto] = useState<Aberto>(null);
   const [texto, setTexto] = useState("");
 
@@ -100,7 +102,8 @@ export function CartaoDeTema({ tema, ocupado, onDecidir, onEnviarAoCadastro }: P
           <Sparkles className="w-4 h-4 mt-0.5 shrink-0 text-primary" aria-hidden="true" />
           <span>
             <span className="font-semibold text-slate-700">Leitura da IA: </span>
-            {tema.leitura_ia ?? "lendo as observações..."}
+            {tema.leitura_ia ??
+              (falhaDaLeitura ? `Leitura indisponível agora. ${falhaDaLeitura}` : "lendo as observações...")}
             <span className="block text-xs text-slate-500">É apoio: quem decide é você.</span>
           </span>
         </p>
