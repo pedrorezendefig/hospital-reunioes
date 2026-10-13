@@ -2,7 +2,9 @@
 # Coleta do hr-ondas: um JSON numa linha, lido de fontes que já existem (só leitura).
 # Hospital OS (8799): PRDs, ondas e fases · `claude agents --json`: sessões vivas ·
 # $TMPDIR/fechar_onda/<sessao>/*.sql: migrations que a subida pediu ·
-# /api/health de produção: a última migration aplicada.
+# /api/health de produção: a última migration aplicada ·
+# transcript de cada sessão de onda (hooks/sessao.py): o shell em curso e as subidas ·
+# `gh pr checks` de cada PR aberto: início e fim do CI.
 export PATH="$HOME/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin"
 TMP="${TMPDIR:-/tmp}"; TMP="${TMP%/}"
 OS_URL="${HR_ONDAS_OS:-http://127.0.0.1:8799/api/data}"
@@ -57,6 +59,34 @@ for linha in $(echo "$agentes" | jq -r '.[] | "\(.nome)=\(.sessao)"'); do
   done
 done
 
+# Shell em curso e subidas de cada sessão, lidos do transcript dela
+subidas='[]'
+for linha in $(echo "$agentes" | jq -r '.[] | "\(.nome)=\(.sessao)"'); do
+  nome=${linha%%=*}; sid=${linha#*=}
+  jl="$PROJ/$sid.jsonl"; [ -f "$jl" ] || continue
+  info=$(python3 -I "$(dirname "$0")/sessao.py" "$jl" "$nome" 2>/dev/null)
+  [ -n "$info" ] || continue
+  agentes=$(echo "$agentes" | jq -c --arg n "$nome" --argjson i "$info" 'map(if .nome == $n then . + {shell: $i.shell} else . end)')
+  subidas=$(echo "$subidas" | jq -c --arg n "$nome" --argjson i "$info" '. + ($i.subidas | map(. + {sessao: $n}))')
+done
+
+# CI de cada PR aberto: início e fim pelos checks do GitHub, em paralelo
+ci='{}'
+CIDIR=$(mktemp -d "$TMP/hr-ondas-ci.XXXXXX")
+for pr in $(echo "$os" | jq -r '[.prds[]?.issues[]? | select(.fase == "pr_aberto" and .pr != null) | .pr] | unique | .[]' 2>/dev/null); do
+  ( gh pr checks "$pr" --json startedAt,completedAt 2>/dev/null | jq -c '
+      [ .[] | select(.startedAt != null) ] | select(length > 0)
+      | {inicio: (map(.startedAt | sub("\\.[0-9]+Z$"; "Z") | fromdateiso8601 * 1000) | min),
+         fim: (if all(.completedAt != null) then (map(.completedAt | sub("\\.[0-9]+Z$"; "Z") | fromdateiso8601 * 1000) | max) else null end)}
+    ' > "$CIDIR/$pr" 2>/dev/null ) &
+done
+wait
+for f in "$CIDIR"/*; do
+  [ -s "$f" ] || continue
+  ci=$(echo "$ci" | jq -c --arg k "$(basename "$f")" --argjson v "$(cat "$f")" '. + {($k): $v}')
+done
+rm -r "$CIDIR"
+
 # PRD de cada sessão: o primeiro "PRD #N" da passagem que a lançou
 prd_sessoes='{}'
 for nome in $(echo "$agentes" | jq -r '.[].nome'); do
@@ -80,6 +110,6 @@ aplicada=$(curl -s -m 8 "$HEALTH_URL" | jq -c '.migracao // null' 2>/dev/null)
 [ -n "$aplicada" ] || aplicada=null
 
 jq -n -c --argjson os "$os" --argjson agentes "$agentes" --argjson prdSessoes "$prd_sessoes" \
-  --argjson subAgentes "$sub_agentes" \
+  --argjson subAgentes "$sub_agentes" --argjson subidas "$subidas" --argjson ci "$ci" \
   --argjson migs "$migs" --argjson aplicada "$aplicada" \
-  '{os: $os, agentes: $agentes, prdSessoes: $prdSessoes, subAgentes: $subAgentes, migrations: $migs, aplicada: $aplicada}'
+  '{os: $os, agentes: $agentes, prdSessoes: $prdSessoes, subAgentes: $subAgentes, subidas: $subidas, ci: $ci, migrations: $migs, aplicada: $aplicada}'

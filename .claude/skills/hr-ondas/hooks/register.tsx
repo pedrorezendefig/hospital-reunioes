@@ -1,14 +1,14 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register } from 'claude-code'
 
-import type { Agente, Coleta, EsperaCi, Fase, Issue, Migration, Prd, SubAgente } from '../types'
+import type { Agente, Ci, Coleta, EsperaCi, Fase, Issue, Migration, Prd, SubAgente, Subida } from '../types'
 
 // Torre das ondas: só leitura. A coleta (hooks/coletar.sh) junta o Hospital OS,
 // o `claude agents`, as migrations que a subida pediu e o /api/health.
 
 const PANE = 'ondas'
 const STUDIO = 'https://studio.hospitalsaomatheus.cloud/project/default/sql/new'
-const PERIODO_MS = 20_000
+const PERIODO_MS = 10_000
 const APLICADA_VISIVEL_MS = 60 * 60 * 1000
 
 const coleta = atom({ plugin: 'hr-ondas', key: 'coleta' } as const, null)
@@ -126,6 +126,22 @@ export const nomeModelo = (m: string | null) => {
   return r ? `${r[1]![0]!.toUpperCase()}${r[1]!.slice(1)} ${r[2]}.${r[3]}` : (m ?? '')
 }
 
+/** Tetos em minutos (amarelo, vermelho): p75 e p90 do histórico desta máquina em 13/10/2026. */
+export const TETOS: Record<string, [number, number]> = {
+  'hr-implementador': [30, 35],
+  'hr-revisor': [5, 10],
+  'hr-corretor': [10, 15],
+  CI: [8, 12],
+  subida: [10, 25],
+}
+
+export const corDaDuracao = (etapa: string, ms: number): 'warning' | 'error' | undefined => {
+  const teto = TETOS[etapa]
+  if (!teto) return undefined
+  const min = ms / 60_000
+  return min >= teto[1] ? 'error' : min >= teto[0] ? 'warning' : undefined
+}
+
 export const duracao = (ms: number) => {
   const s = Math.max(0, Math.round(ms / 1000))
   const h = Math.floor(s / 3600)
@@ -149,28 +165,81 @@ type EstadoEtapa = 'feita' | 'agora' | 'falhou' | 'falta'
 const COR_ETAPA: Record<EstadoEtapa, string> = { feita: 'success', agora: 'suggestion', falhou: 'error', falta: 'inactive' }
 const MARCA_ETAPA: Record<EstadoEtapa, string> = { feita: ' ✓', agora: ' ●', falhou: ' ✗', falta: '' }
 
-/** Esteira da fatia: implementar → CI → revisar → (corrigir) → subida → no ar. */
-export const etapas = (i: Issue, ags: SubAgente[], agora: number) => {
+export type Etapa = { nome: string; estado: EstadoEtapa; ms?: number; cor?: 'warning' | 'error' }
+
+/** A subida que levou o PR da fatia: a mais recente que o cita. */
+export const subidaDoPr = (c: Coleta, pr: number | null): Subida | undefined =>
+  pr === null ? undefined : (c.subidas ?? []).filter(s => s.prs.includes(pr)).sort((a, b) => b.inicio - a.inicio)[0]
+
+/** Esteira da fatia: implementar → CI → revisar → (corrigir) → subida → no ar, com o tempo de cada etapa. */
+export const etapas = (
+  i: Issue,
+  ags: SubAgente[],
+  agora: number,
+  extra: { ci?: Ci; subida?: Subida; migrationPendente?: boolean } = {},
+) => {
   const de = (tipo: string) => ags.filter(a => a.tipo === tipo)
   const estado = (tipo: string, feita: boolean): EstadoEtapa => {
     const lista = de(tipo)
     if (lista.some(a => estadoDoAgente(a, agora) === 'trabalhando')) return 'agora'
     return feita || (lista.length > 0 && lista.every(a => a.terminou)) ? 'feita' : 'falta'
   }
+  // soma do tempo dos sub-agentes do tipo; o que trabalha conta até agora
+  const gasto = (tipo: string) => {
+    const lista = de(tipo)
+    if (!lista.length) return undefined
+    return lista.reduce((n, a) => n + ((estadoDoAgente(a, agora) === 'trabalhando' ? agora : a.fim) - a.inicio), 0)
+  }
+  const com = (nome: string, estado: EstadoEtapa, ms: number | undefined, teto = nome, pintar = true): Etapa =>
+    ms === undefined || estado === 'falta' ? { nome, estado } : { nome, estado, ms, cor: pintar ? corDaDuracao(teto, ms) : undefined }
   const depoisDoPr = ['pr_aberto', 'mergeada', 'em_producao'].includes(i.fase)
   const subiu = ['mergeada', 'em_producao'].includes(i.fase)
-  const lista: { nome: string; estado: EstadoEtapa }[] = [
-    { nome: 'implementar', estado: estado('hr-implementador', depoisDoPr) },
-    {
-      nome: 'CI',
-      estado: subiu || i.ci === 'verde' ? 'feita' : i.ci === 'vermelho' ? 'falhou' : i.pr ? 'agora' : 'falta',
-    },
-    { nome: 'revisar', estado: estado('hr-revisor', subiu || !!i.veredito) },
+  const ciMs = extra.ci ? (extra.ci.fim ?? agora) - extra.ci.inicio : undefined
+  const lista: Etapa[] = [
+    com('implementar', estado('hr-implementador', depoisDoPr), gasto('hr-implementador'), 'hr-implementador'),
+    com('CI', subiu || i.ci === 'verde' ? 'feita' : i.ci === 'vermelho' ? 'falhou' : i.pr ? 'agora' : 'falta', ciMs),
+    com('revisar', estado('hr-revisor', subiu || !!i.veredito), gasto('hr-revisor'), 'hr-revisor'),
   ]
-  if (de('hr-corretor').length) lista.push({ nome: 'corrigir', estado: estado('hr-corretor', subiu) })
-  lista.push({ nome: 'subida', estado: i.fase === 'em_producao' ? 'feita' : i.fase === 'mergeada' ? 'agora' : 'falta' })
+  if (de('hr-corretor').length) lista.push(com('corrigir', estado('hr-corretor', subiu), gasto('hr-corretor'), 'hr-corretor'))
+  const s = extra.subida
+  const subidaMs = s ? (s.fim ?? agora) - s.inicio : undefined
+  lista.push(
+    com(
+      'subida',
+      i.fase === 'em_producao' ? 'feita' : i.fase === 'mergeada' || (s && s.fim === null) ? 'agora' : 'falta',
+      subidaMs,
+      'subida',
+      !extra.migrationPendente, // esperando o Studio, o tempo é do humano: sem cor
+    ),
+  )
   lista.push({ nome: 'no ar', estado: i.fase === 'em_producao' ? 'feita' : 'falta' })
   return lista
+}
+
+/** O que a sessão está fazendo agora: a subida em curso, senão o Bash em primeiro plano. */
+export const atividadeDaSessao = (s: Agente, c: Coleta): { texto: string; inicio: number } | null => {
+  const subida = (c.subidas ?? []).find(x => x.sessao === s.nome && x.fim === null)
+  if (subida) return { texto: `subida ${subida.prs.map(p => `#${p}`).join(' ')}`, inicio: subida.inicio }
+  if (!s.shell) return null
+  return { texto: rotuloDoShell(s.shell.descricao, s.shell.comando), inicio: s.shell.inicio }
+}
+
+/** Padrão conhecido vira rótulo fixo; o resto é a description que o orquestrador escreveu. */
+export const rotuloDoShell = (descricao: string, comando: string) => {
+  const subida = /fechar_onda\.py\s+--prs\s+([\d\s]+)/.exec(comando)
+  if (subida && !/--dry-run/.test(comando)) return `subida ${subida[1]!.trim().split(/\s+/).map(p => `#${p}`).join(' ')}`
+  const ci = /gh\s+(?:pr\s+checks\s+(\d+)[^|;&]*--watch|run\s+watch)/.exec(comando)
+  if (ci) return ci[1] ? `esperando o CI do PR #${ci[1]}` : 'esperando o CI'
+  return descricao || curto(comando.replace(/^cd [^;]*;\s*/, ''), 60)
+}
+
+/** Do primeiro sub-agente da onda ao último fim, ou até agora. */
+export const duracaoDaOnda = (issues: Issue[], ags: SubAgente[], prd: Prd, agora: number): number | null => {
+  const da = ags.filter(a => issues.some(i => i.n === alvo(a, prd)))
+  if (!da.length) return null
+  const inicio = Math.min(...da.map(a => a.inicio))
+  const fim = da.some(a => estadoDoAgente(a, agora) === 'trabalhando') ? agora : Math.max(...da.map(a => a.fim))
+  return fim - inicio
 }
 
 type SituacaoOnda = 'feita' | 'andando' | 'fila' | 'parada'
@@ -204,7 +273,16 @@ async function coletar($: EngineInterface) {
       timeoutMs: 90_000,
     })
     if (r.exitCode !== 0) throw new Error(r.stderr.slice(0, 200) || `saída ${r.exitCode}`)
-    const c: Coleta = { ...JSON.parse(r.stdout), em: await $.clock.now() }
+    const agora = await $.clock.now()
+    const bruto = JSON.parse(r.stdout) as Omit<Coleta, 'em'>
+    const anterior = await read($, coleta)
+    // OS sem resposta: fica o último retrato bom; o resto (sessões, agentes, migrations) é fresco
+    const c: Coleta = {
+      ...bruto,
+      os: bruto.os ?? anterior?.os ?? null,
+      osEm: bruto.os ? agora : (anterior?.osEm ?? null),
+      em: agora,
+    }
     await update($, coleta, () => c)
     await update($, erro, () => (c.os ? null : 'Hospital OS fora do ar em 127.0.0.1:8799'))
 
@@ -342,26 +420,42 @@ export const register: Register = on => {
       )
     }
 
-    const passos = (i: Issue, ags: SubAgente[]) => (
-      <Text key={`s${i.n}`} wrap="truncate-end">
-        {'    '}
-        {etapas(i, ags, c.em).map((s, k) => (
-          <Text key={`e${k}`}>
-            {k > 0 ? <Text dimColor> → </Text> : null}
-            <Text color={COR_ETAPA[s.estado]}>
-              {s.nome}
-              {MARCA_ETAPA[s.estado]}
+    const passos = (i: Issue, ags: SubAgente[], sessao: string | undefined) => {
+      const extra = {
+        ci: i.pr ? c.ci?.[String(i.pr)] : undefined,
+        subida: subidaDoPr(c, i.pr),
+        migrationPendente: p.some(m => m.sessao === sessao),
+      }
+      return (
+        <Text key={`s${i.n}`} wrap="truncate-end">
+          {'    '}
+          {etapas(i, ags, c.em, extra).map((s, k) => (
+            <Text key={`e${k}`}>
+              {k > 0 ? <Text dimColor> → </Text> : null}
+              <Text color={COR_ETAPA[s.estado]}>
+                {s.nome}
+                {MARCA_ETAPA[s.estado]}
+              </Text>
+              {s.ms !== undefined ? (
+                <Text color={s.cor} dimColor={!s.cor}>
+                  {' '}
+                  {minutos(s.ms)}
+                </Text>
+              ) : null}
             </Text>
-          </Text>
-        ))}
-      </Text>
-    )
+          ))}
+        </Text>
+      )
+    }
 
     return (
       <Box flexDirection="column">
         <Text dimColor>
           atualizado há {Math.round(((await $.clock.now()) - c.em) / 1000)} s ·{' '}
           {mostrarTodos ? 'todos os PRDs (/ondas ativos)' : 'PRDs ativos (/ondas todos)'}
+          {c.osEm != null && c.osEm < c.em ? (
+            <Text color="warning"> · Hospital OS sem resposta, PRDs de há {minutos(c.em - c.osEm)}</Text>
+          ) : null}
         </Text>
         {falha && <Text color="error">{falha}</Text>}
 
@@ -414,28 +508,48 @@ export const register: Register = on => {
               {sessoes.map(s => {
                 const daSessao = ags.filter(a => a.sessao === s.nome)
                 const vivos = daSessao.filter(a => estadoDoAgente(a, c.em) === 'trabalhando').length
+                const atividade = atividadeDaSessao(s, c)
+                const corAtividade = atividade?.texto.startsWith('subida') ? corDaDuracao('subida', c.em - atividade.inicio) : undefined
                 return (
-                  <Text key={s.nome} wrap="truncate-end">
-                    <Text color={s.status === 'busy' ? 'suggestion' : 'inactive'}>
-                      {s.status === 'busy' ? '●' : '○'} {s.nome}
+                  <Box key={s.nome} flexDirection="column">
+                    <Text wrap="truncate-end">
+                      <Text color={s.status === 'busy' ? 'suggestion' : 'inactive'}>
+                        {s.status === 'busy' ? '●' : '○'} {s.nome}
+                      </Text>
+                      <Text dimColor>
+                        {' '}
+                        · {duracao(c.em - s.inicio)} · {vivos} trabalhando · {daSessao.length - vivos} terminado(s)
+                      </Text>
                     </Text>
-                    <Text dimColor>
-                      {' '}
-                      · {vivos} trabalhando · {daSessao.length - vivos} terminado(s)
-                    </Text>
-                  </Text>
+                    {atividade && (
+                      <Text wrap="truncate-end">
+                        {'    '}
+                        <Text color="suggestion">⚙ </Text>
+                        <Text>{curto(atividade.texto, largura - 14)}</Text>
+                        <Text color={corAtividade} dimColor={!corAtividade}>
+                          {' '}
+                          · {duracao(c.em - atividade.inicio)}
+                        </Text>
+                      </Text>
+                    )}
+                  </Box>
                 )
               })}
 
               {prd.ondas.map((onda, k) => {
                 const issues = onda.map(n => porN.get(n)).filter((i): i is Issue => !!i)
                 const situacao = situacaoDaOnda(issues, ags, prd, c.em)
+                const tempoDaOnda = duracaoDaOnda(issues, ags, prd, c.em)
                 return (
                   <Box key={`o${k}`} flexDirection="column">
                     {k > 0 && <Text color={COR_ONDA[situacao]}>{'      ▼'}</Text>}
                     <Box flexDirection="column" borderStyle="round" borderColor={COR_ONDA[situacao]} paddingX={1}>
                       <Text bold color={COR_ONDA[situacao]}>
-                        Onda {k + 1} <Text dimColor>· {NOME_ONDA[situacao]}</Text>
+                        Onda {k + 1}{' '}
+                        <Text dimColor>
+                          · {NOME_ONDA[situacao]}
+                          {tempoDaOnda !== null ? ` · ${minutos(tempoDaOnda)}` : ''}
+                        </Text>
                       </Text>
                       {situacao === 'andando'
                         ? issues.map(i => {
@@ -459,7 +573,7 @@ export const register: Register = on => {
                                     {detalhe(i)}
                                   </Text>
                                 ) : (
-                                  passos(i, dela)
+                                  passos(i, dela, sessoes.find(s => dela.some(a => a.sessao === s.nome))?.nome)
                                 )}
                                 {dela.map(linhaAgente)}
                               </Box>
