@@ -277,3 +277,19 @@ test('relógio coleta sem ir ao GitHub; evento do workflow pede coleta fresca um
   await relogio.advance(10_000) // nada mudou de novo
   expect(frescas()).toBe(1)
 })
+
+test('/ondas todos pede o OS inteiro; /ondas ativos volta ao recorte', async ($, on) => {
+  const chamadas: string[][] = []
+  mock.clock(on, { now: AGORA })
+  on('process.run', (_$: any, e: any) => {
+    chamadas.push([...e.argv])
+    return { value: { exitCode: 0, stdout: JSON.stringify(COLETA), stderr: '' } }
+  })
+  on('ui.open', () => ({ value: { isPlaced: true } }))
+  on('ui.toast', () => ({ value: undefined }))
+  on('ui.status', () => ({ value: undefined }))
+  on('command.run', () => ({ text: '' }))
+  await $.command.run({ command: 'ondas', args: 'todos', origin: 'user', presentation: 'text' })
+  await $.command.run({ command: 'ondas', args: 'ativos', origin: 'user', presentation: 'text' })
+  expect(chamadas.map(c => c.slice(2))).toEqual([['--fresco', '--todos'], ['--fresco']])
+})
