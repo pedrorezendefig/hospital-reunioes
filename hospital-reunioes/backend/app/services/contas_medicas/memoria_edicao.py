@@ -144,13 +144,15 @@ def _gravar_versao(
         or []
     }
     agora = _agora()
+    versao = _proxima_versao(vigente["versao"], existentes)
     nova = (
         supabase.table("cm_memoria_versao")
         .insert(
             {
                 "operadora_id": operadora_id,
-                "versao": _proxima_versao(vigente["versao"], existentes),
-                "parametros_json": vigente.get("parametros_json") or {},
+                "versao": versao,
+                # O cabeçalho inteiro, chave desconhecida incluída, com a versão nova.
+                "parametros_json": {**(vigente.get("parametros_json") or {}), "versao_memoria": versao},
                 "vigente": False,
                 "autor_id": autor_id,
                 "resumo": resumo,

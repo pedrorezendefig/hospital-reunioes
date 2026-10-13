@@ -291,3 +291,67 @@ class TestAplicarATodas:
 
         assert resposta.json()["outras_operadoras"] == []
         assert _versoes(banco, "GAMA") == {"2.0": True}
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 4. Exportar e reimportar sem perder regra nem chave do cabeçalho
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+def _regras_comparaveis(banco: _Banco, sigla: str) -> dict[str, tuple]:
+    vigente = memoria_vigente(banco, _operadora_id(banco, sigla))
+    regras = {r["id"]: r for r in banco.linhas("cm_regra")}
+    linhas = [r for r in regras.values() if r["memoria_versao_id"] == vigente["memoria_versao_id"]]
+    return {
+        r["codigo"]: (r["secao"], r["texto"], r["tipo"], r["origem"], r["status"], str(r["validado_em"] or "")[:10])
+        for r in linhas
+    }
+
+
+class TestExportarEReimportar:
+    def test_ida_e_volta_depois_de_editar_e_decidir_nao_perde_regra_nem_chave_desconhecida(self):
+        cliente, banco = _cliente(GESTAO)
+        _importar(cliente)
+        assert cliente.put(
+            _regra("ALFA", "ALFA-DIA-01"), json={"texto": DIA_01_DEPOIS, "tipo": "CONTRATUAL", "origem": "PRÁTICA"}
+        ).status_code == 200
+        assert cliente.post(
+            _regra("ALFA", "ALFA-DIA-02") + "/decisao",
+            json={"texto": "Linha 1 da decisão | com barra\nLinha 2", "tipo": "CONTRATUAL", "origem": "PRÁTICA"},
+        ).status_code == 200
+
+        exportada = cliente.get("/api/contas-medicas/operadoras/ALFA/memoria")
+
+        assert exportada.status_code == 200
+        assert 'filename="MEMORIA-ALFA-v1.2.md"' in exportada.headers["content-disposition"]
+        # O arquivo sai do banco: a versão vigente com as regras como estão agora.
+        assert exportada.text == gerar_texto_memoria(banco, _operadora_id(banco, "ALFA"))
+
+        outro, reimportado = _cliente(GESTAO)
+        volta = outro.post(
+            ROTA_MEMORIA, files={"arquivo": ("MEMORIA-ALFA-v1.2.md", exportada.content, "text/markdown")}
+        )
+        assert volta.status_code == 201, volta.text
+        assert volta.json()["regras"] == {"total": 5, "vigentes": 4, "pendentes": 1}
+        assert _regras_comparaveis(reimportado, "ALFA") == _regras_comparaveis(banco, "ALFA")
+        [original] = [v for v in banco.linhas("cm_memoria_versao") if v["versao"] == "1.2"]
+        [de_volta] = reimportado.linhas("cm_memoria_versao")
+        assert de_volta["parametros_json"]["opme"] == {
+            "fornecida_por": "OPERADORA",
+            "negociacao": "direta entre o fornecedor e a operadora",
+        }
+        assert de_volta["parametros_json"] == original["parametros_json"]
+        assert de_volta["versao"] == "1.2"
+
+    def test_exportar_a_memoria_importada_sai_do_banco_no_formato_gerado(self):
+        """O arquivo exportado é o gerado do banco, com o cabeçalho na ordem do
+        modelo do diretor, e não o texto guardado na importação (que começa
+        pelos comentários do arquivo sintético)."""
+        cliente, _ = _cliente(GESTAO)
+        _importar(cliente)
+
+        exportada = cliente.get("/api/contas-medicas/operadoras/ALFA/memoria")
+
+        assert exportada.status_code == 200
+        assert exportada.text.startswith("---\noperadora: ALFA\nnome: Alfa Saúde\nversao_memoria: '1.0'\n")
+        assert "\n## 3. DIÁRIAS\n" in exportada.text

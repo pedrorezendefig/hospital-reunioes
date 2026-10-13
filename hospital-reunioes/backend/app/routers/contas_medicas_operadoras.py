@@ -145,7 +145,7 @@ async def exportar_memoria(
     _me: dict = Depends(require_permissao_cm(PERMISSAO)),
     supabase=Depends(get_supabase_client),
 ) -> Response:
-    """A memória vigente como foi enviada, cabeçalho inteiro, para baixar."""
+    """A memória vigente no formato do arquivo, gerada do banco com o cabeçalho inteiro, para baixar."""
     vigente = texto_da_memoria_vigente(supabase, sigla)
     if vigente is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Operadora sem memória carregada")
