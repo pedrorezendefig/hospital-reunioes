@@ -67,7 +67,8 @@ export type Migration = {
 }
 
 export type Coleta = {
-  os: { repo: string; prds: Prd[] } | null
+  /** `soltas`: issues sem PRD pai em andamento (coletar.sh); o mod as junta no grupo "Sem PRD". */
+  os: { repo: string; prds: Prd[]; soltas?: Issue[] } | null
   agentes: Agente[]
   prdSessoes: Record<string, number>
   subAgentes?: SubAgente[]

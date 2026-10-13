@@ -46,16 +46,17 @@ ABERTOS = [{"number": 50, "statusCheckRollup": [{"__typename": "CheckRun", "name
             "mergeStateStatus": "BLOCKED", "reviews": [], "comments": []}]
 
 
-def _montar(monkeypatch, tmp_path, abertos=()):
+def _montar(monkeypatch, tmp_path, abertos=(), em_andamento=(), resposta=RESPOSTA):
     chamadas = []
-    descoberta = {"data": {"repository": {"pullRequests": {"nodes": list(abertos)}}}}
+    descoberta = {"data": {"repository": {"pullRequests": {"nodes": list(abertos)},
+                                          "issues": {"nodes": list(em_andamento)}}}}
 
     def run(cmd, cwd, timeout=None):
         chamadas.append(cmd)
         if cmd[:3] == ["gh", "api", "graphql"] and "pullRequests(states:OPEN" in " ".join(cmd):
             return json.dumps(descoberta)
         if cmd[:3] == ["gh", "api", "graphql"]:
-            return json.dumps(RESPOSTA)
+            return json.dumps(resposta)
         if cmd[:3] == ["gh", "pr", "list"]:
             return json.dumps(ABERTOS)
         if cmd[:2] == ["git", "ls-remote"]:
@@ -106,3 +107,24 @@ def test_recorte_sem_prd_e_sem_pr_aberto_so_pergunta_os_prs_abertos(monkeypatch,
     d = collect.collect_recorte(tmp_path, [])
     gh = [c for c in chamadas if c[0] == "gh"]
     assert d["github"]["issues"] == [] and len(gh) == 1 and "pullRequests(states:OPEN" in " ".join(gh[0])
+
+
+def test_issue_sem_prd_entra_pelo_pr_aberto_pelo_label_e_pela_fila_da_sessao(monkeypatch, tmp_path):
+    """A #1191 (sem PRD pai, PR aberto, fila de uma sessão viva) sumia do painel: entra solta."""
+    pr_da_solta = {"number": 72, "closingIssuesReferences": {"nodes": [{"number": 99, "body": "", "parent": None}]}}
+    rotulada = {"number": 98, "body": "", "parent": None}
+    resposta = {"data": {"repository": {
+        "i97": {**_issue(97, "na fila da sessão"), "parent": None},
+        "i98": {**_issue(98, "em andamento", labels=["in-progress"]), "parent": None},
+        "i99": {**_issue(99, "fix solto", prs=[PR_ABERTO]), "parent": None},
+        "i96": {**_issue(96, "fatia de um PRD fora do recorte"), "parent": {"number": 80}},
+    }}}
+    chamadas = _montar(monkeypatch, tmp_path, abertos=[pr_da_solta], em_andamento=[rotulada], resposta=resposta)
+    d = collect.collect_recorte(tmp_path, [], soltas=[97, 96])
+    gh = [c for c in chamadas if c[0] == "gh"]
+    assert len(gh) == 3 and all(f"i{n}:" in gh[1][-1] for n in (96, 97, 98, 99))
+    por_n = {i["number"]: i for i in d["github"]["issues"]}
+    assert sorted(por_n) == [97, 98, 99] and d["github"]["prds"] == []
+    assert not any(i["is_prd"] or i["parent"] for i in por_n.values())
+    f = d["fases"]["issues"]
+    assert f[99]["fase"] == "pr_aberto" and f[99]["pr"] == 50 and f[98]["fase"] == "em_andamento"

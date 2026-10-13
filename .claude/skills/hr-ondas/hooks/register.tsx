@@ -97,6 +97,13 @@ export const aplicadasRecentes = (c: Coleta): Migration[] =>
         .filter(m => m.numero <= c.aplicada! && c.em - m.mtime < APLICADA_VISIVEL_MS)
         .sort((a, b) => a.numero - b.numero)
 
+/** Grupo das issues sem PRD pai em andamento: um PRD de número 0, desenhado como os outros. */
+export const SEM_PRD = 0
+export const comSemPrd = (os: Coleta['os']): Coleta['os'] =>
+  os?.soltas?.length
+    ? { ...os, prds: [...os.prds, { n: SEM_PRD, titulo: 'issues sem PRD pai em andamento', ondas: [], issues: os.soltas }] }
+    : os
+
 export const sessoesDoPrd = (c: Coleta, prd: number): Agente[] =>
   c.agentes.filter(a => prdDaSessao(c, a.nome) === prd)
 
@@ -170,14 +177,15 @@ export const duracao = (ms: number) => {
 const prdDoAlvo = (c: Coleta, a: SubAgente): number | undefined =>
   (c.os?.prds ?? []).find(p => alvo(a, p) !== null)?.n
 
-/** PRD da sessão: o do alvo do sub-agente mais recente dela; sem alvo, o da passagem (coletar.sh). */
+/** PRD da sessão: o do alvo do sub-agente mais recente dela; sem alvo, o da passagem (coletar.sh); passagem sem PRD, o da fila fixa. */
 export const prdDaSessao = (c: Coleta, nome: string): number | undefined => {
   const dela = (c.subAgentes ?? []).filter(a => a.sessao === nome).sort((x, y) => y.inicio - x.inicio)
   for (const a of dela) {
     const n = prdDoAlvo(c, a)
     if (n !== undefined) return n
   }
-  return c.prdSessoes[nome]
+  const fila = c.passagens?.[linhagem(nome)]?.ondas[/-onda(\d+)$/.exec(nome)?.[1] ?? ''] ?? []
+  return c.prdSessoes[nome] ?? (c.os?.prds ?? []).find(p => p.issues.some(i => fila.includes(i.n)))?.n
 }
 
 /** Sub-agentes do PRD: pelo alvo; sem alvo em nenhum PRD, pelo PRD da sessão. */
@@ -393,7 +401,7 @@ async function coletar($: EngineInterface, fresco = false) {
     // OS sem resposta: fica o último retrato bom; o resto (sessões, agentes, migrations) é fresco
     const c: Coleta = {
       ...bruto,
-      os: bruto.os ?? anterior?.os ?? null,
+      os: comSemPrd(bruto.os) ?? anterior?.os ?? null,
       osEm: bruto.os ? (bruto.osEm ?? agora) : (anterior?.osEm ?? null),
       em: agora,
     }
@@ -649,7 +657,7 @@ export const register: Register = on => {
             <Box key={`prd${prd.n}`} flexDirection="column" marginTop={1}>
               <Text wrap="truncate-end">
                 <Text bold>
-                  <Link href={`https://github.com/${repo}/issues/${prd.n}`} label={`PRD #${prd.n}`} />
+                  {prd.n === SEM_PRD ? 'Sem PRD' : <Link href={`https://github.com/${repo}/issues/${prd.n}`} label={`PRD #${prd.n}`} />}
                 </Text>{' '}
                 <Text dimColor>
                   {feitas}/{prd.issues.length} no ar

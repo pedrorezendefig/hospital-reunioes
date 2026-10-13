@@ -1,7 +1,8 @@
 #!/bin/bash
 # Coleta do hr-ondas: um JSON numa linha, lido de fontes que já existem (só leitura).
 # PRDs, ondas e fases: o recorte do coletor do OS (collect.py --recorte), só dos PRDs com onda
-# viva nesta máquina ou com fatia de PR aberto (de qualquer sócio); com --todos, o /api/data inteiro do Hospital OS (8799) · `claude agents --json`: sessões vivas ·
+# viva nesta máquina ou com fatia de PR aberto (de qualquer sócio); com --todos, o /api/data inteiro do Hospital OS (8799) ·
+# issues sem PRD pai em andamento (fila fixa de sessão viva, PR aberto ou in-progress): `soltas` · `claude agents --json`: sessões vivas ·
 # $TMPDIR/fechar_onda/<sessao>/*.sql: migrations que a subida pediu ·
 # /api/health de produção: a última migration aplicada · ~/.claude/hr-ondas/aplicadas: as que o
 # humano declarou aplicadas ("apliquei a migration N" numa sessão, ou /ondas aplicada N) ·
@@ -39,22 +40,27 @@ fi
 
 filtrar_os() {
   # GitHub fora (cota do GraphQL zerada) também conta como sem resposta: não apaga o retrato
-  jq -c 'select(.github.error == null)
+  # $1: as issues da fila fixa das sessões vivas; sem PRD pai, entram em `soltas` até fechadas
+  jq -c --argjson citadas "$1" 'select(.github.error == null)
   | 
   .fases as $F
   | .github.issues as $all
   | ($all | map(select(.state == "OPEN") | .number)) as $abertas
-  | {repo: .repo_slug,
+  | def fatia: ($F.issues[(.number | tostring)] // {}) as $f
+      | {n: .number, titulo: .title, estado: .state, url: .url,
+         fase: ($f.fase // "triagem"), pr: $f.pr,
+         ci: ($f.sinal.ci // null), veredito: ($f.sinal.veredito // null),
+         conflito: ($f.sinal.conflito // false), versao: $f.versao,
+         por: [ .blocked_by[] as $b | select($abertas | index($b)) | $b ]};
+  {repo: .repo_slug,
      prds: [ $all[] | select(.is_prd and .state == "OPEN") | . as $p
        | {n: .number, titulo: .title,
           ondas: ($F.ondas[($p.number | tostring)] // []),
-          issues: [ $all[] | select(.parent == $p.number)
-            | ($F.issues[(.number | tostring)] // {}) as $f
-            | {n: .number, titulo: .title, estado: .state, url: .url,
-               fase: ($f.fase // "triagem"), pr: $f.pr,
-               ci: ($f.sinal.ci // null), veredito: ($f.sinal.veredito // null),
-               conflito: ($f.sinal.conflito // false), versao: $f.versao,
-               por: [ .blocked_by[] as $b | select($abertas | index($b)) | $b ]} ] } ] }
+          issues: [ $all[] | select(.parent == $p.number) | fatia ] } ],
+     soltas: [ $all[] | select(.parent == null and (.is_prd | not))
+       | select(.number as $n | ($citadas | index($n))
+           or (.state == "OPEN" and ((.labels | index("in-progress")) or $F.issues[($n | tostring)].fase == "pr_aberto")))
+       | fatia ] }
 ' 2>/dev/null
 }
 
@@ -112,6 +118,11 @@ done
 # Ondas de cada linhagem ("onda-gestao"): a fila-alvo fixa das passagens e quais já foram escritas
 passagens=$(python3 -I "$(dirname "$0")/passagem.py" "$TMP/onda-enxuta" 2>/dev/null)
 [ -n "$passagens" ] || passagens='{}'
+# A fila fixa de cada sessão viva ("onda-b-onda1" é a onda 1 da linhagem "onda-b"): a issue sem
+# PRD pai entra no recorte por ela
+citadas=$(jq -n -c --argjson a "$agentes" --argjson p "$passagens" \
+  '[ $a[].nome | capture("^(?<l>.+)-onda(?<n>[0-9]+)$") | $p[.l].ondas[.n] // [] | .[] ] | unique' 2>/dev/null)
+[ -n "$citadas" ] || citadas='[]'
 
 migs='[]'
 for f in "$TMP"/fechar_onda/*/[0-9]*.sql; do
@@ -135,11 +146,11 @@ if [ "$idade" -ge "$minimo" ] && mkdir "$TRAVA" 2>/dev/null; then
   bruto=""
   if [ $todos = 0 ]; then
     prds=$(echo "$prd_sessoes" | jq -r '[.[]] | unique | join(",")')
-    bruto=$(python3 "$RECORTE" --recorte "$prds" 2>/dev/null) || bruto=""
+    bruto=$(python3 "$RECORTE" --recorte "$prds" --soltas "$(echo "$citadas" | jq -r 'join(",")')" 2>/dev/null) || bruto=""
   fi
   # a coleta fresca do OS inteiro leva uns 30 s
   [ -n "$bruto" ] || bruto=$(curl -s -m 75 "$url")
-  os=$(echo "$bruto" | filtrar_os); osEm=$agora
+  os=$(echo "$bruto" | filtrar_os "$citadas"); osEm=$agora
   # OS sem resposta: fica o último retrato bom do cache, com a hora dele
   if [ -z "$os" ]; then
     os=$(jq -c '.os' "$CACHE" 2>/dev/null); osEm=$(jq -c '.osEm' "$CACHE" 2>/dev/null)
@@ -150,7 +161,7 @@ if [ "$idade" -ge "$minimo" ] && mkdir "$TRAVA" 2>/dev/null; then
   ci='{}'
   repo=$(echo "$os" | jq -r '.repo // empty' 2>/dev/null)
   CIDIR=$(mktemp -d "$TMP/hr-ondas-ci.XXXXXX")
-  for pr in $(echo "$os" | jq -r '[.prds[]?.issues[]? | select(.fase == "pr_aberto" and .pr != null) | .pr] | unique | .[]' 2>/dev/null); do
+  for pr in $(echo "$os" | jq -r '[.prds[]?.issues[]?, .soltas[]? | select(.fase == "pr_aberto" and .pr != null) | .pr] | unique | .[]' 2>/dev/null); do
     ( sha=$(gh api "repos/$repo/pulls/$pr" --jq .head.sha 2>/dev/null) && [ -n "$sha" ] &&
       gh api "repos/$repo/commits/$sha/check-runs?per_page=100" 2>/dev/null | jq -c '
         [ .check_runs[] | select(.started_at != null) ] | select(length > 0)
