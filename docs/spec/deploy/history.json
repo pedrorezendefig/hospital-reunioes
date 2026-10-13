@@ -2,6 +2,54 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-10-13T01:14:30-03:00",
+      "sha": "50db1ac2028809f47e76aca3822d0a00da403c00",
+      "app_version": "0.182.0",
+      "subject": "Onda onda-gestao-onda2: Memória da operadora por tela e biblioteca de tabelas com Nova versão",
+      "raw_subject": "chore(deploy): registro da onda onda-gestao-onda2 (#1171)",
+      "scope": [
+        "backend",
+        "frontend"
+      ],
+      "prds": [
+        1129
+      ],
+      "result": "healthy",
+      "duration_seconds": 230,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        },
+        {
+          "service": "frontend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "onda-enxuta onda-gestao-onda2: PR #1171 (issue #1140), mergeados PR a PR. Merge pela API do GitHub, um build. Registro pela Action pos-merge depois do health.",
+      "etapas": {
+        "merge_s": 2,
+        "build_s": {
+          "backend": 26,
+          "frontend": 210
+        },
+        "health_s": 0
+      },
+      "responsavel": "pedrorezendefig"
+    },
+    {
       "at": "2026-10-13T00:33:33-03:00",
       "sha": "d006fc4d0368b10a9740c2ebf8488cfea2a3e36d",
       "app_version": "0.181.0",
