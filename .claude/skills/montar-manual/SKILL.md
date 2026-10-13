@@ -43,7 +43,7 @@ JSON
 python3 tools/inventario_manual.py --dir docs/manual --entregues <scratchpad>/entregues.json
 ```
 
-O inventário acusa, por módulo, quatro lacunas: `sem-video` (Página de tarefa sem Vídeo de tarefa), `print-faltando` (a página aponta para um print que não existe), `prd-sem-novidades` (PRD em produção cujo número não está no `prd:` do frontmatter do `novidades.md` do módulo, que é como o inventário conta a entrada) e `draft-entregue` (página em `draft` de PRD que já está no ar). Ele **sai com código 1** quando a conta não fecha: página fora dos cinco módulos (sem terminal que a feche) ou nenhuma página encontrada (varredura que não rodou não pode passar por manual pronto). Nesse caso conserte antes de planejar.
+O inventário acusa, por módulo, quatro lacunas: `sem-video` (Página de tarefa sem Vídeo de tarefa), `print-faltando` (a página aponta para um print que não existe), `prd-sem-novidades` (PRD em produção cujo número não está no `prd:` do frontmatter do `novidades.md` do módulo, que é como o inventário conta a entrada) e `draft-entregue` (página em `draft` de PRD que já está no ar). Ele **sai com código 1** quando a conta não fecha: página fora dos seis módulos (sem terminal que a feche) ou nenhuma página encontrada (varredura que não rodou não pode passar por manual pronto). Nesse caso conserte antes de planejar.
 
 Sem `--entregues` o relatório sai, mas declara que dois dos quatro tipos não foram conferidos. Não planeje em cima disso: a lista de PRDs entregues é o passo 1, não um extra.
 

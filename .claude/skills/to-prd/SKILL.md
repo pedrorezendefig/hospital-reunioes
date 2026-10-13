@@ -81,7 +81,7 @@ Lista de decisões de teste. Inclua: o que faz um bom teste (testar só comporta
 
 As páginas do Manual do usuário (`docs/manual/`) que esta entrega cria ou altera. É desta seção que a Fatia de manual tira o trabalho dela, então ela é lista, não promessa:
 
-- **Páginas de tarefa** (uma ação cada, título no infinitivo): qual nasce, qual muda e em que módulo (`primeiros-passos`, `reunioes`, `ouvidoria`, `pops`, `admin`).
+- **Páginas de tarefa** (uma ação cada, título no infinitivo): qual nasce, qual muda e em que módulo (`primeiros-passos`, `reunioes`, `ouvidoria`, `pops`, `contas-medicas`, `admin`).
 - **Como funciona**: o que a entrega muda no comportamento que não é ação de ninguém (como o prazo é contado, o que o sistema apaga sozinho).
 - **Novidades**: a entrada que este PRD gera no `novidades.md` do módulo, na língua do usuário.
 

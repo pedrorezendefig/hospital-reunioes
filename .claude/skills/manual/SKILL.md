@@ -21,7 +21,8 @@ errou, e o lint trava.
 | `/manual #PRD` | Só as páginas que aquele PRD cria ou muda, todas em `draft: true`, mais a entrada de Novidades. É a receita da Fatia de manual. Veja `references/prd-e-novidades.md`. |
 | `/manual publicar` | Tira o draft que a Action deixou (página com Vídeo de tarefa), roda o `publicar.sh` e registra o link. É do humano, depois do deploy que fecha PRD com Fatia de manual. Veja `references/publicar.md`. |
 
-Módulos: `primeiros-passos`, `reunioes`, `ouvidoria`, `pops`, `admin`. A aba
+Módulos: `primeiros-passos`, `reunioes`, `ouvidoria`, `pops`, `contas-medicas`,
+`admin`. A aba
 Tecnologia fica fora de propósito (a divulgação do #634 cobre).
 
 ## Fontes da verdade (nesta ordem, todas obrigatórias)
