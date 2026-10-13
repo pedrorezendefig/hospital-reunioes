@@ -18,7 +18,7 @@ import pytest
 
 from app.services import contas_medicas_extrator as extrator
 from app.services import transcricao_extractor
-from app.services.contas_medicas_extrator import ErroLeitura, Pagina, extrair_paginas
+from app.services.contas_medicas_extrator import ErroLeitura, Pagina, Palavra, extrair_paginas, extrair_palavras
 
 
 def _pdf(*paginas: str) -> bytes:
@@ -79,5 +79,22 @@ def test_leitura_que_passa_do_teto_de_memoria_e_interrompida(tmp_path, monkeypat
 
 def test_pdf_que_o_pdftotext_nao_le_devolve_erro_de_leitura():
     resultado = extrair_paginas(b"%PDF-1.4 isto nao e um pdf de verdade")
+
+    assert resultado == ErroLeitura(extrator.MENSAGEM_PDF_ILEGIVEL)
+
+
+def test_palavras_voltam_com_a_posicao_so_das_paginas_pedidas():
+    palavras = extrair_palavras(_pdf("Fatura Individual", "Dose Padrão Duração", "Total"), [2, 9])
+
+    assert list(palavras) == [2]
+    assert [p.texto for p in palavras[2]] == ["Dose", "Padrão", "Duração"]
+    dose, padrao, _ = palavras[2]
+    assert isinstance(dose, Palavra)
+    assert dose.x0 < dose.x1 < padrao.x0
+    assert dose.topo == padrao.topo
+
+
+def test_palavras_de_arquivo_que_nao_e_pdf_voltam_erro_de_leitura():
+    resultado = extrair_palavras(b"%PDF-1.4 isto nao e um pdf de verdade", [1])
 
     assert resultado == ErroLeitura(extrator.MENSAGEM_PDF_ILEGIVEL)

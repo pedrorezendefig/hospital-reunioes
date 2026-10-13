@@ -23,7 +23,6 @@ from __future__ import annotations
 import json
 import os
 import sys
-from io import BytesIO
 
 SAIDA_SEM_PDFTOTEXT = 127
 
@@ -32,10 +31,8 @@ def palavras(entrada: str, paginas: set[int]) -> dict[str, list[list]]:
     """Página (a primeira é 1) -> [x0, x1, topo, texto] de cada palavra, soltando cada página lida."""
     import pdfplumber
 
-    with open(entrada, "rb") as f:
-        conteudo = f.read()
     achadas: dict[str, list[list]] = {}
-    with pdfplumber.open(BytesIO(conteudo)) as pdf:
+    with pdfplumber.open(entrada) as pdf:
         for numero in sorted(n for n in paginas if 1 <= n <= len(pdf.pages)):
             pagina = pdf.pages[numero - 1]
             achadas[str(numero)] = [
@@ -56,8 +53,13 @@ def main(argv: list[str]) -> int:
         print(f"RLIMIT_AS indisponivel em {sys.platform}: quem segura e o vigia do pai", file=sys.stderr)
 
     if len(argv) > 3:
-        paginas = {int(n) for n in argv[3].split(",") if n}
-        sys.stdout.write(json.dumps(palavras(entrada, paginas), ensure_ascii=False))
+        try:
+            lidas = palavras(entrada, {int(n) for n in argv[3].split(",") if n})
+        except Exception as e:
+            # Só o tipo: a mensagem do parser pode citar o conteúdo do arquivo, e o pai loga o stderr.
+            print(f"pdfplumber falhou: {type(e).__name__}", file=sys.stderr)
+            return 1
+        sys.stdout.write(json.dumps(lidas, ensure_ascii=False))
         return 0
 
     try:

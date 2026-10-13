@@ -16,6 +16,10 @@ As vagas são do módulo e não as do extrator de documentos: dividir o mesmo
 semáforo deixaria um Prontuário de dois minutos segurando a vaga de quem sobe a
 transcrição de uma Ata, e a pessoa levaria "tente de novo" sem nada de errado.
 
+As palavras com a posição de cada uma (`extrair_palavras`, #1133) saem do mesmo
+filho, pelo `pdfplumber`, com o mesmo orçamento: a prescrição lê por elas a
+coordenada das colunas.
+
 O texto devolvido tem dado de paciente: nunca vai para log, nem em caso de erro.
 """
 

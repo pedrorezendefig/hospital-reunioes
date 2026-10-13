@@ -13,10 +13,10 @@ O pipeline de uma conta, em etapas cronometradas:
    extraído uma vez e serve a todas as parciais e ao reprocesso;
 2. a leitura da conta, gravada em `cm_conta_item`;
 3. a leitura do prontuário, com a prescrição lida pela posição das colunas
-   (as palavras das páginas dela vêm do PDF, #1133). A estrutura (`cm_eventos`, com o `prontuario_ate`
-   que o aviso do envio usa, `cm_prescricao`, `cm_cirurgia`, `cm_glicemia_dia`,
-   o rótulo e a idade em `cm_atendimento`) é gravada uma vez por arquivo de
-   prontuário;
+   (as palavras das páginas dela vêm do PDF, #1133). A estrutura
+   (`cm_eventos`, com o `prontuario_ate` que o aviso do envio usa,
+   `cm_prescricao`, `cm_cirurgia`, `cm_glicemia_dia`, o rótulo e a idade em
+   `cm_atendimento`) é gravada uma vez por arquivo de prontuário;
 4. a conferência por código (as diárias são contadas dentro dela), com a
    memória vigente, as tabelas, os setores e o dicionário do banco;
 5. o Guia: o reprocesso troca as linhas abertas e preserva as marcadas; a
