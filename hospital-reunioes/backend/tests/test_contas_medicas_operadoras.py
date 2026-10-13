@@ -37,6 +37,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 from app.dependencies import get_current_user, get_supabase_client  # noqa: E402
 from app.limiter import limiter  # noqa: E402
 from app.routers import contas_medicas_operadoras as operadoras_router  # noqa: E402
+from app.services.contas_medicas.memoria import ler_memoria  # noqa: E402
 from app.services.contas_medicas.operadoras import memoria_vigente, reconhecer_plano  # noqa: E402
 
 MIGRATION = Path(__file__).resolve().parents[2] / "supabase" / "migrations" / "116_contas_medicas_fundacao.sql"
@@ -456,6 +457,40 @@ class TestVersaoNova:
         assert len(regras) == 5
         assert regras["ALFA-DIA-02"]["status"] == "VIGENTE"
         assert regras["ALFA-DIA-02"]["texto"] == "Transferência de setor antes das 10h não gera diária extra."
+
+
+def _com_coluna_modelo(texto: str, modelos: dict[str, str]) -> str:
+    """A memória com a coluna `Modelo` em toda tabela de regra, como o diretor
+    acrescenta nas diretrizes que vieram do Modelo HSM. `modelos` dá o ID por
+    código da regra; a regra fora dele fica com a célula vazia."""
+    linhas = []
+    for linha in texto.splitlines():
+        if linha.startswith("| ID | Regra |"):
+            linha += " Modelo |"
+        elif linha.startswith("|---|"):
+            linha += "---|"
+        elif linha.startswith("| ") and linha.split("|")[1].strip() in modelos:
+            linha += f" {modelos[linha.split('|')[1].strip()]} |"
+        elif linha.startswith("| "):
+            linha += " |"
+        linhas.append(linha)
+    return "\n".join(linhas) + "\n"
+
+
+class TestColunaModelo:
+    """A coluna `Modelo` liga a regra à diretriz do Modelo HSM (issue #1205):
+    é o `modelo_id` que o "Aplicar a todas as operadoras" procura."""
+
+    def test_coluna_modelo_preenchida_vira_modelo_id_e_nao_entra_no_texto(self):
+        texto = _com_coluna_modelo(_memoria("MEMORIA-ALFA-v1.0.md"), {"ALFA-PRI-01": "HSM-PRI-01"})
+
+        regras = {r.codigo: r for r in ler_memoria(texto).regras}
+
+        assert regras["ALFA-PRI-01"].modelo_id == "HSM-PRI-01"
+        assert regras["ALFA-PRI-01"].texto == (
+            "Identificar sempre pelo número do atendimento, nunca pelo número da conta."
+        )
+        assert "Modelo" not in regras["ALFA-PRI-02"].texto
 
 
 # ═══════════════════════════════════════════════════════════════════════════
