@@ -1,8 +1,8 @@
 import { expect, mock, test } from 'claude-code/testing'
 
 import {
-  agentesDoPrd, alvo, assinatura, atividadeDaSessao, corDaDuracao, detalhe, duracaoDaOnda, etapas, pendentes,
-  prdsVisiveis, rotuloDoShell, sessoesDoPrd, situacaoDaOnda, subidaDoPr,
+  agentesDoPrd, alvo, assinatura, atividadeDaSessao, corDaDuracao, detalhe, duracaoDaOnda, etapas, focoDaSessao,
+  nomeCurtoDaSessao, pendentes, prdsVisiveis, rotuloDoAlvo, rotuloDoShell, sessoesDoPrd, situacaoDaOnda, subidaDoPr,
 } from '../hooks/register'
 import type { Coleta, SubAgente } from '../types'
 
@@ -47,6 +47,26 @@ test('sub-agente cai na fatia pelo número da issue ou do PR', () => {
   const prd = comEm(COLETA).os!.prds.find(p => p.n === 1128)!
   expect(AGENTES.map(a => alvo(a, prd))).toEqual([1132, 1132])
   expect(alvo(sub({ descricao: 'Implementa #9999' }), prd)).toBeNull()
+  // "#1150" sem a palavra PR: não é issue, é o PR da #1132 (os corretores da onda falam assim)
+  expect(alvo(sub({ descricao: 'Rebase conflito #1150' }), prd)).toBe(1132)
+  expect(rotuloDoAlvo(sub({ descricao: 'Rebase conflito #1150' }), prd)).toBe('#1132 (PR #1150)')
+  expect(rotuloDoAlvo(sub({ descricao: 'Implementa #1133' }), prd)).toBe('#1133')
+  expect(rotuloDoAlvo(sub({ descricao: 'Audita a fila' }), prd)).toBe('Audita a fila')
+})
+
+test('foco da sessão: os sub-agentes vivos; sem vivo, o último que acabou', () => {
+  const vivo = sub({ id: 'vivo', sessao: 'onda-gestao-onda4', descricao: 'Implementar #1143' })
+  const outroVivo = sub({ id: 'vivo2', sessao: 'onda-gestao-onda4', tipo: 'hr-revisor', descricao: 'Revisar PR 1150' })
+  const velho = sub({ id: 'velho', sessao: 'onda-gestao-onda3', terminou: true, fim: AGORA - 900_000 })
+  const recente = sub({ id: 'recente', sessao: 'onda-gestao-onda3', tipo: 'hr-corretor', terminou: true, fim: AGORA - 60_000 })
+  const ags = [velho, vivo, recente, outroVivo]
+  expect(focoDaSessao('onda-gestao-onda4', ags, AGORA).map(a => a.id)).toEqual(['vivo', 'vivo2'])
+  expect(focoDaSessao('onda-gestao-onda3', ags, AGORA).map(a => a.id)).toEqual(['recente'])
+  expect(focoDaSessao('onda-gestao-onda5', ags, AGORA)).toEqual([])
+  // parado (sem end_turn, sem escrita há mais de 10 min) não é vivo: vira o "último"
+  const parado = sub({ id: 'parado', sessao: 'onda-x', fim: AGORA - 11 * 60_000 })
+  expect(focoDaSessao('onda-x', [parado], AGORA).map(a => a.id)).toEqual(['parado'])
+  expect(nomeCurtoDaSessao('onda-gestao-onda4')).toBe('gestao-onda4')
 })
 
 test('sub-agente vai ao PRD do alvo, mesmo com a sessão mapeada para outro PRD', () => {
@@ -127,6 +147,9 @@ for (const surface of ['terminal', 'desktop'] as const) {
     expect(await pane.find({ text: /hr-revisor/ })).toBeTruthy()
     expect(await pane.find({ text: /Opus 5\.5 · xhigh/ })).toBeTruthy()
     expect(await pane.find({ text: /ctx 26% · 263k/ })).toBeTruthy()
+    // a sessão diz no que está: o revisor vivo com a fatia; a linha do agente na issue diz a sessão
+    expect(await pane.find({ text: /^ #1132 \(PR #1150\)$/ })).toBeTruthy()
+    expect(await pane.find({ text: /ia-onda1 · Opus 5\.5/ })).toBeTruthy()
     expect(await pane.find({ text: /Onda 3 · parada/ })).toBeTruthy()
     // tempos: a onda desde o primeiro agente, a subida em curso da sessão, o CI pelos checks
     expect(await pane.find({ text: /Onda 1 · andando · 10 min/ })).toBeTruthy()

@@ -180,8 +180,30 @@ export const alvo = (a: SubAgente, prd: Prd): number | null => {
   const pr = /PR\s*#?(\d+)/i.exec(a.descricao)
   if (pr) return prd.issues.find(i => i.pr === Number(pr[1]))?.n ?? null
   const n = Number(/#(\d+)/.exec(a.descricao)?.[1])
-  return prd.issues.some(i => i.n === n) ? n : null
+  if (prd.issues.some(i => i.n === n)) return n
+  // "Rebase conflito #1178": o orquestrador cita o PR sem a palavra PR
+  return prd.issues.find(i => i.pr === n)?.n ?? null
 }
+
+/** A fatia do sub-agente para a tela: "#1142 (PR #1178)"; sem fatia, a descrição que ele recebeu. */
+export const rotuloDoAlvo = (a: SubAgente, prd: Prd): string => {
+  const n = alvo(a, prd)
+  if (n === null) return a.descricao
+  const pr = prd.issues.find(i => i.n === n)?.pr
+  return pr ? `#${n} (PR #${pr})` : `#${n}`
+}
+
+/** No que a sessão está: os sub-agentes trabalhando; sem nenhum, o último que acabou. */
+export const focoDaSessao = (nome: string, ags: SubAgente[], agora: number): SubAgente[] => {
+  const dela = ags.filter(a => a.sessao === nome)
+  const vivos = dela.filter(a => estadoDoAgente(a, agora) === 'trabalhando')
+  if (vivos.length) return vivos
+  const ultimo = dela.sort((x, y) => y.fim - x.fim)[0]
+  return ultimo ? [ultimo] : []
+}
+
+/** "onda-gestao-onda4" vira "gestao-onda4" ao lado do sub-agente. */
+export const nomeCurtoDaSessao = (nome: string) => nome.replace(/^onda-/, '')
 
 type EstadoEtapa = 'feita' | 'agora' | 'falhou' | 'falta'
 const COR_ETAPA: Record<EstadoEtapa, string> = { feita: 'success', agora: 'suggestion', falhou: 'error', falta: 'inactive' }
@@ -452,7 +474,7 @@ export const register: Register = on => {
     const repo = c.os?.repo ?? 'pedrorezendefig/hospital-reunioes'
     const linkIssue = (n: number) => <Link href={`https://github.com/${repo}/issues/${n}`} label={`#${n}`} />
 
-    const linhaAgente = (a: SubAgente) => {
+    const linhaAgente = (a: SubAgente, alvoDele?: string) => {
       const estado = estadoDoAgente(a, c.em)
       const pct = Math.round((a.ctx / JANELA) * 100)
       const cheio = Math.min(10, Math.round(pct / 10))
@@ -461,9 +483,10 @@ export const register: Register = on => {
           {'    '}
           <Text color={COR_AGENTE[estado]}>{MARCA_AGENTE[estado]} </Text>
           <Text bold>{a.tipo}</Text>
+          {alvoDele ? <Text> {alvoDele}</Text> : null}
           <Text dimColor>
             {' '}
-            {[nomeModelo(a.modelo), a.esforco].filter(Boolean).join(' · ')}{' '}
+            {[alvoDele ? null : nomeCurtoDaSessao(a.sessao), nomeModelo(a.modelo), a.esforco].filter(Boolean).join(' · ')}{' '}
           </Text>
           <Text color={COR_AGENTE[estado]}>{'▰'.repeat(cheio)}</Text>
           <Text dimColor>
@@ -585,6 +608,16 @@ export const register: Register = on => {
                         </Text>
                       </Text>
                     )}
+                    {focoDaSessao(s.nome, ags, c.em).map(a =>
+                      estadoDoAgente(a, c.em) === 'trabalhando' ? (
+                        linhaAgente(a, rotuloDoAlvo(a, prd))
+                      ) : (
+                        <Text key={`u${a.id}`} dimColor wrap="truncate-end">
+                          {'    '}○ último: {a.tipo} {rotuloDoAlvo(a, prd)} · {estadoDoAgente(a, c.em) === 'terminou' ? 'terminou' : 'parado'} há{' '}
+                          {minutos(c.em - a.fim)}
+                        </Text>
+                      ),
+                    )}
                   </Box>
                 )
               })}
@@ -628,7 +661,7 @@ export const register: Register = on => {
                                 ) : (
                                   passos(i, dela, sessoes.find(s => dela.some(a => a.sessao === s.nome))?.nome)
                                 )}
-                                {dela.map(linhaAgente)}
+                                {dela.map(a => linhaAgente(a))}
                               </Box>
                             )
                           })
@@ -656,7 +689,7 @@ export const register: Register = on => {
               {semAlvo.length > 0 && (
                 <Box flexDirection="column" marginTop={1}>
                   <Text dimColor>outros agentes</Text>
-                  {semAlvo.map(linhaAgente)}
+                  {semAlvo.map(a => linhaAgente(a))}
                 </Box>
               )}
             </Box>
