@@ -4,7 +4,7 @@ Você é o agente que vai instalar, **neste repositório**, o fluxo de trabalho 
 
 O que você entrega no fim:
 
-1. O painel local de 5 abas (Issues, PRs, Produção, Mapa, Domínio), o Hospital OS da ORIGEM, de pé, com o mesmo design system da ORIGEM e a paleta do DESTINO.
+1. O painel local de 4 abas: Issues, PRs, Produção e Documentação, com as sub-abas Fluxo, Mapa, Decisões e Glossário, o Hospital OS da ORIGEM, de pé, com o mesmo design system da ORIGEM e a paleta do DESTINO.
 2. As skills do pipeline instaladas e adaptadas à stack do DESTINO.
 3. As labels, os CIs de higiene e o contrato de deploy no lugar.
 4. O domínio semeado: `CONTEXT.md` rascunho, ADR 0001 da instalação, primeiro snapshot.
@@ -236,15 +236,14 @@ sleep 3; curl -s 'http://localhost:8765/api/data?fresh' | python3 -c 'import jso
 
 O `/api/data` tem que voltar sem `error` no bloco `github`, com `adrs` (1 item), `context_md` (texto), `snapshots` (7 arquivos), `state` e `history` (contrato de deploy) e `github` com `issues` (lista, pode estar vazia).
 
-Depois, peça para a pessoa abrir `http://localhost:8765` e passar pelas 5 abas. Pergunte, uma por vez se precisar, se cada aba mostra o que se espera:
+Depois, peça para a pessoa abrir `http://localhost:8765` e passar pelas 4 abas. Pergunte, uma por vez se precisar, se cada aba mostra o que se espera:
 
 | Aba | O que tem que aparecer |
 |---|---|
 | Issues | vazio ou as issues que já existiam, e o chip `ready-for-human` sem a issue da Fase 7 (ela entra depois) |
 | PRs | quadro vazio ou os PRs que já existiam (o PR da Fase 7 ainda não foi aberto) |
 | Produção | o estado do `state.json` e a timeline vazia (ou o stub) |
-| Mapa | as áreas da P6 e os arquivos do snapshot |
-| Domínio | a ADR 0001 e o glossário rascunho |
+| Documentação | Fluxo: o desenho do `fluxo.json`; Mapa: as áreas da P6 e os arquivos do snapshot; Decisões: a ADR 0001; Glossário: o `CONTEXT.md` rascunho |
 
 Mate o servidor ao fim. Os gates da P5 (lint, testes, build do app do DESTINO) você não precisa rodar aqui: o CI do PR roda.
 
