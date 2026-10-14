@@ -18,16 +18,15 @@ Ela aparece em dois lugares, os dois dentro do painel de Usuários: a coluna
 nenhuma outra tela da plataforma ela é mostrada, e a própria pessoa nunca vê a
 dela.
 
-A etiqueta fica escondida por decisão: ela diz coisa sobre a hierarquia de
-alguém, e o texto que identifica a pessoa para os colegas é o **Cargo**,
-escrito por extenso. É o Cargo que aparece nas atas, nas pendências
-e nas listas.
+A etiqueta fica escondida de propósito, porque diz algo sobre a hierarquia de
+alguém. Para os colegas, quem identifica a pessoa é o **Cargo**, escrito por
+extenso, e é ele que aparece nas atas, nas pendências e nas listas.
 
 ## Ela não é o que abre as telas
 
 Quem decide o que a pessoa enxerga é o **Perfil de acesso**: Regular,
-Secretária ou Super Admin. A Role não muda nada disso. Trocar a Role de alguém
-não dá nem tira acesso a módulo nenhum.
+Secretária ou Super Admin. Trocar a Role de alguém não dá nem tira acesso a
+módulo nenhum.
 
 ## O pouco que sobrou
 
@@ -50,5 +49,5 @@ Ao cadastrar alguém, escolha a Role que corresponde à posição real da pessoa
 porque ela ainda decide quem apaga reunião. O formulário começa em
 **coordenador**, o único dos quatro que não apaga nada. Acesso vem sempre do
 Perfil de acesso ou dos acessos de POPs e Ouvidoria, nunca da Role. Para a
-Secretária, o campo nem aparece, porque a função dela é de sistema e não
-de organograma.
+Secretária o campo nem aparece, porque a função dela é de sistema, fora do
+organograma.

@@ -1,28 +1,6 @@
 {
   "sobre": "Cacoetes de texto gerado que já estavam no Manual quando a trava do tools/lint_manual.py nasceu (issue #1218, ADR 0071). Eles não reprovam o build; cacoete novo reprova. A reescrita de cada módulo (issues #1223 a #1228) tira os da sua pasta e apaga as linhas daqui; o lint avisa quando uma linha ficou sem cacoete na página.",
   "paginas": {
-    "admin/cadastrar-uma-pessoa.md": [
-      "não consegue entrar**:"
-    ],
-    "admin/como-funciona/de-onde-a-ana-tira-as-respostas.md": [
-      "não entra em tela nenhuma:",
-      "não tem:"
-    ],
-    "admin/como-funciona/o-que-fica-registrado.md": [
-      "não fica na tela:"
-    ],
-    "admin/como-funciona/quem-entra-no-admin.md": [
-      "não dá acesso ao dossiê:"
-    ],
-    "admin/entregar-o-acesso-a-uma-pessoa.md": [
-      "não precisa de mais nada:"
-    ],
-    "admin/manter-os-dados-do-atendimento.md": [
-      "não é só do Super Admin:"
-    ],
-    "admin/tirar-o-acesso-de-quem-saiu.md": [
-      "não apagar:"
-    ],
     "contas-medicas/carregar-a-memoria-e-as-tabelas-de-uma-operadora.md": [
       "não precisa subir o arquivo:"
     ],

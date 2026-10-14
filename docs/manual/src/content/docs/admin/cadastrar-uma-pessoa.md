@@ -33,8 +33,8 @@ esta tela.
 6. Em **Role (cargo hospitalar)**, escolha a posição real da pessoa, e então
    clique em **Criar**. Aparece **Usuário criado com sucesso**.
 
-A pessoa ainda **não consegue entrar**: a ficha existe, a senha não. O passo
-seguinte é [Entregar o acesso a uma pessoa](../entregar-o-acesso-a-uma-pessoa/).
+A ficha existe, mas a pessoa ainda **não consegue entrar**, porque não tem
+senha. O passo seguinte é [Entregar o acesso a uma pessoa](../entregar-o-acesso-a-uma-pessoa/).
 
 ## Se der errado
 
@@ -42,5 +42,5 @@ seguinte é [Entregar o acesso a uma pessoa](../entregar-o-acesso-a-uma-pessoa/)
   endereço. Procure a pessoa na busca da lista antes de criar de novo.
 - **O campo Cargo virou opcional sozinho:** você marcou **Secretária**. Nesse
   perfil o cargo não se aplica, e o campo **Role** some do formulário.
-- **Você não sabe o que pôr em Role:** ela não dá acesso a tela nenhuma, mas
-  decide quem apaga reunião. Veja [A Role que ninguém vê](../como-funciona/a-role-que-ninguem-ve/).
+- **Você não sabe o que pôr em Role:** ela decide quem apaga reunião e não
+  abre tela nenhuma. Veja [A Role que ninguém vê](../como-funciona/a-role-que-ninguem-ve/).

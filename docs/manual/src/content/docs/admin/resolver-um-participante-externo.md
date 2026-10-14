@@ -36,8 +36,8 @@ que alguém falou numa reunião e o sistema não casou com ninguém do cadastro.
 
    ![Formulário de promover a interno preenchido](../../../assets/admin/promover-a-interno.png)
 
-5. Depois de promover, gere a senha em **Resetar senha**: promover não entrega
-   acesso.
+5. Depois de promover, gere a senha em **Resetar senha**, porque promover não
+   entrega acesso.
 
 ## Se der errado
 

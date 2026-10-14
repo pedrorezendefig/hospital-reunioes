@@ -34,9 +34,10 @@ pessoa.
 
 ## Se der errado
 
-- **O botão Criar está apagado:** o **Nome** está vazio. É o único campo
-  obrigatório.
-- **A gravação foi recusada:** já existe um setor com esse nome. A lista não
+- **O botão Criar está apagado:** o **Nome**, único campo obrigatório, está
+  vazio.
+- **A gravação foi recusada:** já existe um setor com esse nome, e a lista não
   aceita repetido.
-- **Você arquivou e o setor continua na ficha de alguém:** arquivar tira da
-  sugestão de agora em diante, não apaga o que já foi gravado nas pessoas.
+- **Você arquivou e o setor continua na ficha de alguém:** arquivar só tira o
+  setor da sugestão de agora em diante. O que já foi gravado nas pessoas fica
+  como está.
