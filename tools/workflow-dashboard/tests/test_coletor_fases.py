@@ -357,6 +357,12 @@ def test_corpo_novo_devolve_so_o_paragrafo_o_que_muda():
     }
 
 
+def test_template_do_pr_pede_o_paragrafo_que_o_coletor_le():
+    template = (DASH.parents[1] / ".github" / "PULL_REQUEST_TEMPLATE.md").read_text()
+    resumo = collect.resumo_funcional(template)
+    assert resumo["o_que_muda"] and resumo["antes"] is None and resumo["depois"] is None
+
+
 def test_valor_entregue_le_antes_e_depois_da_secao_e_nao_da_evidencia():
     assert collect.resumo_funcional(CORPO_ANTES_DEPOIS) == {
         "o_que_muda": None,
