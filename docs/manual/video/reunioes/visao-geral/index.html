@@ -216,7 +216,7 @@
   .ok-p { color: var(--color-emerald-500); display: flex; }
   .x-p { color: var(--color-slate-400); display: flex; }
   .sig .q { width: 40px; height: 40px; border-radius: var(--radius-xl); background: var(--color-blue-100); color: var(--color-blue-600); display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
-  .sig .sub-t { font-size: 12px; color: var(--color-slate-500); margin-top: 2px; }
+  .sig .sub-t { width: fit-content; font-size: 12px; color: var(--color-slate-500); margin-top: 2px; }
   .sig .sub-t b { font-weight: 500; color: var(--color-slate-700); }
   .acao-s { display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px; font-size: 12px; font-weight: 500; color: var(--color-slate-600); border-radius: var(--radius-lg); }
   .assina { display: flex; align-items: center; gap: 12px; padding: 8px 12px; border-radius: var(--radius-xl); background: var(--color-slate-50); }
@@ -251,6 +251,7 @@
   .c-pend { background: linear-gradient(90deg, var(--color-amber-300), var(--color-orange-300)); }
   .c-prog { background: linear-gradient(90deg, var(--color-sky-300), var(--color-blue-400)); }
   .c-atr { background: linear-gradient(90deg, var(--color-red-300), var(--color-red-400)); }
+  .col-cab, .cartoes { position: relative; }
   .cartoes { padding: 12px; display: flex; flex-direction: column; gap: 10px; min-height: 120px; }
   .kc { background: var(--color-white); border: 1px solid var(--color-slate-100); border-radius: var(--radius-xl); padding: 16px; box-shadow: 0 1px 2px var(--color-shadow); }
   .kc .ids { display: flex; justify-content: space-between; margin-bottom: 8px; font-family: var(--font-mono); font-size: 10px; line-height: 16px; }
@@ -487,13 +488,14 @@ mira(9.4, 1.4, alvo("m0-titulo"), 1.2, 11.0);
 toca(11.0, alvo("m0-titulo")); troca("#m0", "#m1", 11.95); mira(11.0, 1.2, alvo("m1-titulo m1-tipo"), 1.3, 13.6);
 toca(12.4, alvo("m1-tipo"), alvo("m1-titulo")); troca("#m1", "#m2", 13.35); mira(13.6, 1.0, alvo("m2-h9"), 1.3, 15.0);
 toca(13.8, alvo("m2-h9"), alvo("m2-tipo")); troca("#m2", "#m3", 14.75);
-/* A janela rola até Participantes; a rolagem não passa do fim do formulário mais curto, como no navegador. */
-const RM = () => Math.min(noApp("m3-rot-part").y - noApp("m3").y - 20, ...["m4", "m5", "m6", "m7"].map((m) => noApp(m).h - 489));
-rola("#rolo-m", RM, 15.0, 0.7); mira(15.0, 1.2, alvo("m4-busca m4-op2", RM), 1.2, 21.0);
-toca(15.8, alvo("m3-busca", RM)); troca("#m3", "#m4", 16.75);
-toca(17.2, alvo("m4-op0", RM), alvo("m3-busca", RM)); troca("#m4", "#m5", 18.15);
-toca(18.4, alvo("m5-op0", RM), alvo("m4-op0", RM)); troca("#m5", "#m6", 19.35);
-toca(19.6, alvo("m6-op0", RM), alvo("m5-op0", RM)); troca("#m6", "#m7", 20.55);
+/* A janela rola até Participantes; a rolagem não passa do fim do formulário, como no navegador. */
+const parte = () => noApp("m3-rot-part").y - noApp("m3").y - 20, RMa = () => Math.min(parte(), noApp("m3").h - 489), RM = () => Math.min(parte(), ...["m4", "m5", "m6", "m7"].map((m) => noApp(m).h - 489));
+rola("#rolo-m", RMa, 15.0, 0.7); mira(15.0, 1.2, alvo("m3-busca", RMa), 1.2, 16.8); toca(15.8, alvo("m3-busca", RMa)); troca("#m3", "#m4", 16.75);
+/* A lista abre e o formulário cresce: a janela rola mais um pouco até a lista. */
+rola("#rolo-m", RM, 16.85, 0.4); mira(16.8, 1.0, alvo("m4-busca m4-op2", RM), 1.2, 21.0);
+toca(17.3, alvo("m4-op0", RM), alvo("m3-busca", RMa)); troca("#m4", "#m5", 18.25);
+toca(18.5, alvo("m5-op0", RM), alvo("m4-op0", RM)); troca("#m5", "#m6", 19.45);
+toca(19.7, alvo("m6-op0", RM), alvo("m5-op0", RM)); troca("#m6", "#m7", 20.65);
 /* 3 (21 a 27): Agendar Reunião; o aviso verde entra no alto e a rolagem segura o dia na tela. */
 const RMF = () => noApp("m7").h - 489, agendar = alvo("m7-agendar", RMF);
 rola("#rolo-m", RMF, 21.0, 0.7); mira(21.0, 1.0, agendar, 1.2, 22.8); toca(21.7, agendar, alvo("m6-op0", RM)); solta(22.8);
