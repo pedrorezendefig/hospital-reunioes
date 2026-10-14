@@ -285,9 +285,10 @@ export function EspelhoGlobalHealth() {
     <div className="space-y-4">
       <p className="text-sm text-text-secondary">
         O que a agenda online da Global Health publica agora. Nada fica gravado
-        aqui: cada clique em Atualizar busca a resposta de novo. Clique numa especialidade para ver os convênios
-        aceitos e os profissionais disponíveis nela, e siga pelo convênio e pelo
-        plano até os horários livres.
+        aqui: cada clique em Atualizar busca a resposta de novo. Clique numa
+        especialidade para ver os convênios aceitos e os profissionais
+        disponíveis nela, e siga pelo convênio e pelo plano até os horários
+        livres.
       </p>
 
       {erro && (
