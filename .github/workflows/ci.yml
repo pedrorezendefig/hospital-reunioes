@@ -57,6 +57,9 @@ jobs:
           backend=false; frontend=false; ferramenta=false
           if muda '^hospital-reunioes/(backend|supabase)/'; then backend=true; fi
           if muda '^hospital-reunioes/frontend/'; then frontend=true; fi
+          # Os casos dos cacoetes (ADR 0071) são lidos também pelo vitest da
+          # regra do ESLint: mudou o JSON, o front prova que concorda.
+          if muda '^tools/tells_casos\.json$'; then frontend=true; fi
           if printf '%s\n' "$arquivos" | grep -qv '^hospital-reunioes/'; then ferramenta=true; fi
           # Mexeu no próprio CI, o diff veio vazio, ou um caminho continua entre
           # aspas (aspa, barra invertida, caractere de controle): roda tudo.

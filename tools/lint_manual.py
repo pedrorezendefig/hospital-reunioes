@@ -177,7 +177,9 @@ def checar(
 
         pagina = relativo.as_posix()
         ja_no_ar = {_uma_linha(t) for t in conhecidos.get(pagina, [])}
-        achados_tells = {_uma_linha(o.trecho): o for o in tells_texto.achar_tells(visivel)}
+        achados_tells = {
+            _uma_linha(o.trecho): o for o in tells_texto.achar_tells(visivel)
+        }
         for trecho, o in achados_tells.items():
             if trecho not in ja_no_ar:
                 erros.append(
