@@ -22,7 +22,7 @@ discreto do tipo **3 de 5 assinaram**. Quando a assinatura é recusada ou
 cancelada, quem falta recebe um link para ler a ata e clicar em **Li e aceito**,
 sem entrar na plataforma.
 
-<video controls muted playsinline preload="metadata" src="/video/percepcao/272-pendencia-nasce-na-assinatura.mp4"></video>
+O vídeo desta entrega está na [página de divulgação](https://272-aceites-e-pendencias-por-assina.vercel.app).
 
 Tarefas que mudaram:
 [Enviar a ata para assinatura](/reunioes/enviar-a-ata-para-assinatura/) ·

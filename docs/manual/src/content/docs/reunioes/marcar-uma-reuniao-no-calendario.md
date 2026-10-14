@@ -4,7 +4,6 @@ description: Abrir a data, escolher os participantes e deixar a reunião program
 prd: [731]
 draft: false
 papel: [Facilitador, Secretária]
-video: marcar-uma-reuniao-no-calendario
 sidebar:
   order: 2
 ---

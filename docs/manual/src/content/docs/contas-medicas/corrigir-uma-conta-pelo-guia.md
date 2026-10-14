@@ -4,7 +4,6 @@ description: Corrigir no MV o que o guia aponta, marcar cada linha e concluir a 
 prd: [1113, 1128]
 draft: false
 papel: [Faturista]
-video: corrigir-uma-conta-pelo-guia
 busca: [boleto, fatura]
 proximas: [reenviar-a-conta-corrigida, ler-o-painel]
 sidebar:

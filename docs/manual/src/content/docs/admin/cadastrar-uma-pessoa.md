@@ -4,7 +4,6 @@ description: Criar a ficha de alguém na plataforma e escolher o perfil de acess
 prd: [731]
 draft: false
 papel: [Só admin]
-video: cadastrar-uma-pessoa
 sidebar:
   order: 2
 ---

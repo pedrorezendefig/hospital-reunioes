@@ -4,7 +4,6 @@ description: Entregar o texto do que foi falado para a ata sair escrita.
 prd: [731]
 draft: false
 papel: [Facilitador]
-video: anexar-a-transcricao-da-reuniao
 sidebar:
   order: 4
 ---

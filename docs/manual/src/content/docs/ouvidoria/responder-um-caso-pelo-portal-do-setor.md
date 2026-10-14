@@ -5,7 +5,6 @@ prd: [317, 469, 598, 659]
 draft: false
 papel: [Gestor do setor]
 login: false
-video: cap-3
 sidebar:
   order: 6
 ---

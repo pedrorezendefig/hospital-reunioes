@@ -39,7 +39,7 @@ mesma hora, com motivo obrigatório, sem esperar a área devolver. A área que
 perdeu o caso recebe um aviso curto, e o cadastro de responsáveis por setor
 deixou de ser só da Diretoria.
 
-<video controls muted playsinline preload="metadata" src="/video/percepcao/706-o-caso-muda-de-area-num-clique.mp4"></video>
+O vídeo desta entrega está na [página de divulgação](https://redirecionamento-ouvidoria-hsm.vercel.app).
 
 Está em [Redirecionar o caso para outra área](/ouvidoria/redirecionar-o-caso-para-outra-area/)
 e em [Cadastrar responsáveis de setor](/ouvidoria/cadastrar-responsaveis-de-setor/).
@@ -122,7 +122,7 @@ Agosto de 2026. O prazo passou a ser cobrado sozinho, numa escada de quatro
 degraus que termina na Diretoria, e a área ganhou o pedido de prorrogação. A
 resposta fraca passou a voltar para o setor com metade do prazo.
 
-<video controls muted playsinline preload="metadata" src="/video/percepcao/318-o-prazo-agora-tem-consequencia.mp4"></video>
+O vídeo desta entrega está na [página de divulgação](https://ouvidoria-hsm.vercel.app).
 
 Está em [Quando ninguém responde](/ouvidoria/como-funciona/quando-ninguem-responde/),
 [Decidir um pedido de mais prazo](/ouvidoria/decidir-um-pedido-de-mais-prazo/) e
@@ -134,7 +134,7 @@ Agosto de 2026. A Ouvidoria passou a viver na plataforma: formulário público,
 cartaz com QR por ponto de escuta, registro manual, classificação com sigilo e o
 acionamento da área por email, com prazo contado em calendário útil.
 
-<video controls muted playsinline preload="metadata" src="/video/percepcao/317-a-reclamacao-chega-ao-setor-com-prazo.mp4"></video>
+O vídeo desta entrega está na [página de divulgação](https://ouvidoria-hsm.vercel.app).
 
 Está em [Classificar e acionar um caso](/ouvidoria/classificar-e-acionar-um-caso/)
 e em [Como o prazo é contado](/ouvidoria/como-funciona/como-o-prazo-e-contado/).

@@ -3,7 +3,6 @@ title: Criar um POP
 description: Abrir um procedimento novo, escolher o Setor e definir quem elabora, revisa e valida.
 prd: [76]
 draft: false
-video: criar-um-pop
 papel: [Superadmin, Gestor de Qualidade, Gerente, Coordenador]
 sidebar:
   order: 3

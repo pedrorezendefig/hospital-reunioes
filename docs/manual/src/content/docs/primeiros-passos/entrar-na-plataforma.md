@@ -4,7 +4,6 @@ description: Abrir a plataforma do hospital com o seu email e a sua senha.
 prd: [731]
 draft: false
 papel: [Todo mundo]
-video: entrar-na-plataforma
 sidebar:
   order: 2
 ---

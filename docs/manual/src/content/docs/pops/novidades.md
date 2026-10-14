@@ -36,10 +36,6 @@ principal na vertical, desvios ao lado e os passos numerados como no
 texto. O mesmo desenho vai para o documento assinado, e dá para baixar em
 **PNG** ou **SVG** para usar em treinamento.
 
-<video controls muted playsinline preload="metadata">
-  <source src="/video/pops/210-fluxograma-desenhado-pelo-sistema.mp4" type="video/mp4" />
-</video>
-
 Tarefas que mudaram: [Ver o fluxograma do POP](../ver-o-fluxograma-do-pop/)
 
 ## 07/07/2026 · A elaboração segue o documento que você anexa

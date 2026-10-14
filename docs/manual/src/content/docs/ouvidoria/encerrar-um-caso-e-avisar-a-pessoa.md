@@ -4,7 +4,6 @@ description: Como fechar o caso com um desfecho e mandar a conclusão para quem 
 prd: [317, 471]
 draft: false
 papel: [Ouvidoria]
-video: cap-5
 sidebar:
   order: 13
 ---

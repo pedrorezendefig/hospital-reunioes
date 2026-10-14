@@ -30,10 +30,13 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
 
-from lint_manual import e_pagina_de_tarefa, ler_frontmatter  # noqa: E402
+from lint_manual import ler_frontmatter  # noqa: E402
 
 # A ordem é a do menu do app (ADR 0057, decisão 1). A aba Tecnologia fica fora.
 MODULOS = ["primeiros-passos", "reunioes", "ouvidoria", "pops", "contas-medicas", "admin"]
+# Módulo que fica sem Vídeo de visão geral: o Admin é usado por poucas pessoas
+# e o texto da página basta (emenda de 14/10/2026 à ADR 0057).
+SEM_VIDEO = {"admin"}
 
 RE_IMAGEM = re.compile(r"!\[[^\]]*\]\(([^)\s]+)")
 RE_NUMERO = re.compile(r"\d+")
@@ -92,6 +95,7 @@ def inventariar(
         modulo for modulo in entregues if modulo not in MODULOS
     ]
     novidades: dict[str, list[int]] = {}
+    com_visao_geral: set[str] = set()
 
     for arquivo in sorted(conteudo.rglob("*.md*")):
         if arquivo.suffix not in (".md", ".mdx"):
@@ -111,15 +115,8 @@ def inventariar(
         if relativo.stem == "novidades":
             novidades[modulo] = prds_da_pagina(campos)
 
-        if e_pagina_de_tarefa(relativo) and not campos.get("video"):
-            inventario.modulos[modulo].append(
-                Lacuna(
-                    modulo,
-                    "sem-video",
-                    f"{relativo}: Página de tarefa sem Vídeo de tarefa. A página "
-                    "publica com o aviso 'vídeo em produção' até ele sair.",
-                )
-            )
+        if relativo.stem == "index" and len(relativo.parts) == 2 and campos.get("video"):
+            com_visao_geral.add(modulo)
 
         for alvo in RE_IMAGEM.findall(texto):
             if alvo.startswith(("http://", "https://", "/")):
@@ -150,6 +147,16 @@ def inventariar(
                 )
 
     for modulo in MODULOS:
+        if modulo not in com_visao_geral and modulo not in SEM_VIDEO:
+            inventario.modulos[modulo].append(
+                Lacuna(
+                    modulo,
+                    "sem-visao-geral",
+                    f"{modulo}/index.md: módulo sem Vídeo de visão geral. A "
+                    "abertura publica sem vídeo até ele sair (a receita está em "
+                    ".claude/skills/manual/references/video-de-visao-geral.md).",
+                )
+            )
         for prd in entregues.get(modulo, []):
             if prd not in novidades.get(modulo, []):
                 inventario.modulos[modulo].append(

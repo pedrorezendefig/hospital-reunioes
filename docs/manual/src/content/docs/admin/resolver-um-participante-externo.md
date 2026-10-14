@@ -4,7 +4,6 @@ description: Juntar a linha EXTERNO à pessoa certa, ou transformá-la em gente 
 prd: [731]
 draft: false
 papel: [Só admin]
-video: resolver-um-participante-externo
 sidebar:
   order: 7
 ---

@@ -4,7 +4,6 @@ description: Ler a ata e firmar os seus compromissos sem entrar na plataforma.
 prd: [272]
 draft: false
 papel: [Participante]
-video: aceitar-a-ata-pelo-link
 login: false
 sidebar:
   order: 8

@@ -4,7 +4,6 @@ description: Ver a nota da semana, onde a perda da conta nasce e quem corrige.
 prd: [1128]
 draft: false
 papel: [Coordenadora de faturamento, Gestão de contas médicas, Diretoria]
-video: ler-o-painel
 sidebar:
   order: 5
 ---
