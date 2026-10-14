@@ -2,10 +2,11 @@
 /**
  * Molde da Página de tarefa (ADR 0057, decisões 2 e 4).
  *
- * Os selos de quem faz e o Vídeo de tarefa saem do frontmatter, desenhados
- * aqui, para o Markdown de cada página ficar só com o texto: quando usar, passo
- * a passo e se der errado. Página sem `papel` não é Página de tarefa (é Visão
- * geral, Como funciona ou Novidades) e passa direto.
+ * Os selos de quem faz saem do frontmatter, desenhados aqui, para o Markdown
+ * de cada página ficar só com o texto: quando usar, passo a passo e se der
+ * errado. Página sem `papel` não é Página de tarefa (é Visão geral, Como
+ * funciona ou Novidades) e passa direto. O Vídeo de visão geral também sai do
+ * frontmatter, só na abertura do módulo e na página inicial.
  *
  * O corpo da Página de tarefa vai dentro de `.tarefa-corpo`, que é onde o tema
  * numera os passos com o número grande e acomoda o Print de passo dentro do
@@ -36,6 +37,11 @@ const eTarefa = papeis.length > 0;
 // `login: false` é a tela que a pessoa abre por link ou QR, sem entrar no app.
 const selos = dados.login === false ? [...papeis, "Sem login"] : papeis;
 const modulo = entry.id.split("/")[0];
+// A abertura do módulo tem o id do próprio módulo (`ouvidoria`), e a página
+// inicial tem o id `index`. Só elas mostram vídeo, e a página inicial mostra o
+// de Primeiros passos (emenda de 14/10/2026 à ADR 0057).
+const eAbertura = !eTarefa && !entry.id.includes("/");
+const pastaDoVideo = entry.id === "index" ? "primeiros-passos" : modulo;
 // Home e páginas fora dos módulos não têm módulo para mostrar.
 const rotuloDoModulo = modulos.find((m) => m.pasta === modulo)?.label;
 const busca = dados.busca ?? [];
@@ -66,25 +72,28 @@ function classeDoSelo(selo: string) {
   )
 }
 {
-  /* Página sem vídeo publica sem dizer nada (emenda de 17/09/2026 à decisão 4):
-     o aviso "Vídeo em produção" era recado de produção na tela do usuário. A
-     lacuna continua cobrada pelo inventário da /montar-manual.
+  /* O Vídeo de visão geral do módulo, na abertura. Abertura sem vídeo publica
+     sem dizer nada; a lacuna é cobrada pelo inventário da /montar-manual.
+     Página de tarefa não exibe vídeo (emenda de 14/10/2026 à ADR 0057).
 
      A capa é o primeiro quadro do MP4, gerada pelo `publicar.sh`. No `pnpm dev`
      ela não existe, e o navegador simplesmente ignora um `poster` que não
      carrega. */
 }
 {
-  eTarefa && dados.video && (
-    <div class="tarefa-video">
+  eAbertura && dados.video && (
+    <div class="abertura-video">
       <video
         controls
         muted
         playsinline
         preload="metadata"
-        poster={`/video/${modulo}/${dados.video}.jpg`}
+        poster={`/video/${pastaDoVideo}/${dados.video}.jpg`}
       >
-        <source src={`/video/${modulo}/${dados.video}.mp4`} type="video/mp4" />
+        <source
+          src={`/video/${pastaDoVideo}/${dados.video}.mp4`}
+          type="video/mp4"
+        />
       </video>
     </div>
   )

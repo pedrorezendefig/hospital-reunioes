@@ -36,6 +36,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
 
+from checar_video_manual import modulo_da_abertura  # noqa: E402
 from lint_manual import ler_frontmatter, ler_lista  # noqa: E402
 
 
@@ -355,6 +356,41 @@ def checar_home(conteudo: Path, dist: Path) -> list[str]:
     return []
 
 
+RE_VIDEO = re.compile(r"<video\b", re.IGNORECASE)
+
+
+def checar_video_da_pagina(relativo: Path, campos: dict[str, str], html: Path) -> list[str]:
+    """Vídeo de visão geral só na abertura do módulo (issue #1260).
+
+    Abertura com `video:` mostra o player com a capa; toda outra página, Página
+    de tarefa incluída, sai sem `<video>` nenhum.
+    """
+    texto = html.read_text(encoding="utf-8")
+    slug = campos.get("video", "")
+    modulo = modulo_da_abertura(relativo)
+    if not slug or modulo is None:
+        if RE_VIDEO.search(texto):
+            return [
+                f"{relativo}: a página saiu com vídeo. O Manual tem um Vídeo de "
+                "visão geral por módulo, na abertura, pelo campo `video:`; "
+                "Página de tarefa e Novidades levam link, não vídeo (emenda de "
+                "14/10/2026 à ADR 0057)."
+            ]
+        return []
+    fonte = f"/video/{modulo}/{slug}.mp4"
+    capa = f"/video/{modulo}/{slug}.jpg"
+    if f'src="{fonte}"' not in texto:
+        falta = f"o player do {fonte}"
+    elif f'poster="{capa}"' not in texto:
+        falta = f"a capa {capa}"
+    else:
+        return []
+    return [
+        f"{relativo}: declara video: {slug} e a página saiu sem {falta}. O "
+        "player e a capa saem de src/components/MarkdownContent.astro."
+    ]
+
+
 def checar(raiz: Path) -> list[str]:
     conteudo = raiz / "src" / "content" / "docs"
     dist = raiz / "dist"
@@ -389,6 +425,7 @@ def checar(raiz: Path) -> list[str]:
                 problemas += checar_busca_da_pagina(
                     conteudo, relativo, indexadas[url], html
                 )
+                problemas += checar_video_da_pagina(relativo, campos, html)
 
     paginas = sorted(dist.rglob("*.html"))
     if not paginas:

@@ -602,3 +602,85 @@ def test_home_sem_a_barra_trava(tmp_path):
     problemas = checar_build_manual.checar(tmp_path)
     assert len(problemas) == 1
     assert "O que você quer fazer?" in problemas[0]
+
+
+# --- Vídeo de visão geral só na abertura do módulo (issue #1260) -------------
+#
+# O tema desenha o player a partir do `video:` do frontmatter, e só na abertura
+# do módulo (e na página inicial, que mostra o de Primeiros passos). Página de
+# tarefa não exibe vídeo nenhum, nem embutido no Markdown.
+
+
+def player(modulo: str, slug: str) -> str:
+    """O player como o MarkdownContent.astro desenha: capa e fonte."""
+    return (
+        '<div class="abertura-video"><video controls muted playsinline '
+        f'preload="metadata" poster="/video/{modulo}/{slug}.jpg">'
+        f'<source src="/video/{modulo}/{slug}.mp4" type="video/mp4"></video></div>'
+    )
+
+
+ABERTURA_COM_VIDEO = "title: Reuniões\nvideo: visao-geral"
+
+
+def test_abertura_com_video_exibe_o_player_e_a_capa_passa(tmp_path):
+    montar(tmp_path)
+    publicar(
+        tmp_path,
+        "reunioes/index.md",
+        ABERTURA_COM_VIDEO,
+        corpo_html=player("reunioes", "visao-geral"),
+    )
+    assert checar_build_manual.checar(tmp_path) == []
+
+
+def test_abertura_com_video_sem_o_player_trava(tmp_path):
+    montar(tmp_path)
+    publicar(tmp_path, "reunioes/index.md", ABERTURA_COM_VIDEO)
+    problemas = checar_build_manual.checar(tmp_path)
+    assert len(problemas) == 1
+    assert "reunioes/index.md" in problemas[0]
+    assert "/video/reunioes/visao-geral.mp4" in problemas[0]
+
+
+def test_abertura_com_video_sem_a_capa_trava(tmp_path):
+    montar(tmp_path)
+    publicar(
+        tmp_path,
+        "reunioes/index.md",
+        ABERTURA_COM_VIDEO,
+        corpo_html=player("reunioes", "visao-geral").replace(
+            ' poster="/video/reunioes/visao-geral.jpg"', ""
+        ),
+    )
+    problemas = checar_build_manual.checar(tmp_path)
+    assert len(problemas) == 1
+    assert "/video/reunioes/visao-geral.jpg" in problemas[0]
+
+
+def test_pagina_inicial_exibe_o_video_de_primeiros_passos(tmp_path):
+    site_com_home(
+        tmp_path, BARRA + CARTOES + player("primeiros-passos", "conheca-a-plataforma")
+    )
+    (tmp_path / "src/content/docs/index.mdx").write_text(
+        HOME_MDX.replace(
+            "template: splash", "template: splash\nvideo: conheca-a-plataforma"
+        ),
+        encoding="utf-8",
+    )
+    assert checar_build_manual.checar(tmp_path) == []
+
+
+def test_pagina_de_tarefa_com_video_no_html_trava(tmp_path):
+    """Nem pelo campo nem embutido: o vídeo do Manual é um por módulo."""
+    montar(tmp_path)
+    publicar(
+        tmp_path,
+        "reunioes/marcar-uma-reuniao.md",
+        "title: Marcar uma reunião\npapel: [Secretária]",
+        corpo_html='<video controls src="/video/reunioes/marcar.mp4"></video>',
+    )
+    problemas = checar_build_manual.checar(tmp_path)
+    assert len(problemas) == 1
+    assert "reunioes/marcar-uma-reuniao.md" in problemas[0]
+    assert "vídeo" in problemas[0]
