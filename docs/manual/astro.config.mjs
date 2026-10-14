@@ -5,17 +5,10 @@ import starlight from "@astrojs/starlight";
 // módulo tem página publicada, e componente em página só existe com MDX.
 import mdx from "@astrojs/mdx";
 
-// Seções na ordem do menu do app (ADR 0057, decisão 1). A aba Tecnologia fica
-// fora de propósito. Cada seção é gerada da árvore de pastas; a ordem dentro
+// Seções na ordem do menu do app (ADR 0057, decisão 1), na lista de
+// `src/modulos.mjs`. Cada seção é gerada da árvore de pastas; a ordem dentro
 // dela vem do `sidebar.order` do frontmatter de cada página.
-const modulos = [
-  { label: "Primeiros passos", pasta: "primeiros-passos" },
-  { label: "Reuniões e metas", pasta: "reunioes" },
-  { label: "Ouvidoria", pasta: "ouvidoria" },
-  { label: "POPs", pasta: "pops" },
-  { label: "Contas médicas", pasta: "contas-medicas" },
-  { label: "Admin", pasta: "admin" },
-];
+import { modulos } from "./src/modulos.mjs";
 
 export default defineConfig({
   site: "https://manual-hsm.vercel.app",
@@ -42,6 +35,8 @@ export default defineConfig({
         MarkdownContent: "./src/components/MarkdownContent.astro",
         // Modo claro como padrão; o seletor continua disponível.
         ThemeProvider: "./src/components/ThemeProvider.astro",
+        // A barra de busca larga também no celular (issue #1221).
+        Search: "./src/components/Search.astro",
       },
       // Reescreve o rótulo dos grupos que o `autogenerate` tira do nome da
       // pasta, sem abrir mão da geração automática (veja o arquivo).

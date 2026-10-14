@@ -1,0 +1,16 @@
+---
+/**
+ * A barra de busca do cabeçalho (issue #1221).
+ *
+ * É a busca do Starlight (Pagefind, o diálogo e o atalho de teclado) dentro de
+ * um invólucro nosso: no celular o padrão mostra só a lupa, e quem abre o
+ * Manual no telefone procura a tarefa antes de qualquer coisa. O tema
+ * (`tema.css`, seção "Barra de busca") estica o botão e mostra o texto também
+ * na tela estreita.
+ */
+import Default from "@astrojs/starlight/components/Search.astro";
+---
+
+<div class="barra-de-busca">
+  <Default {...Astro.props} />
+</div>

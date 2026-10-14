@@ -78,6 +78,7 @@ def montar(
     icone: str | None = "/favicon.png",
     icone_no_dist: bool = True,
     rotulo: str = "Como funciona",
+    modulo: str | None = "Primeiros passos",
 ):
     conteudo = raiz / "src" / "content" / "docs"
     (conteudo / "primeiros-passos" / "como-funciona").mkdir(parents=True)
@@ -120,10 +121,25 @@ def montar(
 
     fragmentos = dist / "pagefind" / "fragment"
     fragmentos.mkdir(parents=True)
-    for i, url in enumerate(urls):
-        corpo = b"pagefind_dcd" + json.dumps({"url": url, "content": "x"}).encode()
-        (fragmentos / f"pt-br_{i}.pf_fragment").write_bytes(gzip.compress(corpo))
+    for url in urls:
+        escrever_fragmento(dist, url, modulo=modulo)
     return dist
+
+
+def escrever_fragmento(
+    dist: Path, url: str, *, conteudo: str = "x", modulo: str | None = None
+) -> None:
+    """Um fragmento do Pagefind como o build grava: JSON comprimido com prefixo."""
+    fragmentos = dist / "pagefind" / "fragment"
+    fragmentos.mkdir(parents=True, exist_ok=True)
+    meta = {"title": url}
+    if modulo is not None:
+        meta["módulo"] = modulo
+    corpo = b"pagefind_dcd" + json.dumps(
+        {"url": url, "content": conteudo, "meta": meta}
+    ).encode()
+    i = len(list(fragmentos.glob("*.pf_fragment")))
+    (fragmentos / f"pt-br_{i}.pf_fragment").write_bytes(gzip.compress(corpo))
 
 
 def test_draft_fora_do_dist_e_da_busca_passa(tmp_path):
@@ -383,3 +399,206 @@ def test_sem_rotulo_de_grupo_sai_com_codigo_1(tmp_path):
     resultado = rodar(tmp_path)
     assert resultado.returncode == 1
     assert "nenhum rótulo de grupo achado" in resultado.stderr
+
+
+# --- Busca afinada, módulo no resultado e Tarefas próximas (issue #1221) -----
+#
+# O que a issue promete ao usuário só existe no site gerado: a palavra do dia a
+# dia no índice da busca, o módulo no resultado, os links do fim da Página de
+# tarefa e a barra na home. O conferidor lê isso do dist, como nas travas acima.
+
+
+def publicar(
+    raiz: Path,
+    caminho: str,
+    frontmatter: str,
+    *,
+    corpo_html: str = "",
+    conteudo_da_busca: str = "x",
+    modulo: str | None = "Primeiros passos",
+) -> None:
+    """Acrescenta ao site do `montar` uma página publicada: arquivo, HTML e busca."""
+    conteudo = raiz / "src" / "content" / "docs"
+    arquivo = conteudo / caminho
+    arquivo.parent.mkdir(parents=True, exist_ok=True)
+    arquivo.write_text(
+        f"---\n{frontmatter}\nprd: [1215]\ndraft: false\n---\n\nTexto.\n",
+        encoding="utf-8",
+    )
+    relativo = Path(caminho)
+    url = checar_build_manual.url_da_pagina(relativo)
+    html = raiz / "dist" / url.strip("/") / "index.html"
+    html.parent.mkdir(parents=True, exist_ok=True)
+    html.write_text(
+        html_pagina().replace("</body>", corpo_html + "</body>"), encoding="utf-8"
+    )
+    escrever_fragmento(raiz / "dist", url, conteudo=conteudo_da_busca, modulo=modulo)
+
+
+TAREFA_COM_BUSCA = "title: Trocar a sua senha\npapel: [Todo mundo]\nbusca: [boleto, Fatura]"
+
+
+def test_palavra_de_busca_no_indice_passa(tmp_path):
+    montar(tmp_path)
+    publicar(
+        tmp_path,
+        "primeiros-passos/trocar-a-sua-senha.md",
+        TAREFA_COM_BUSCA,
+        conteudo_da_busca="Trocar a sua senha. boleto fatura",
+    )
+    assert checar_build_manual.checar(tmp_path) == []
+
+
+def test_palavra_de_busca_fora_do_indice_trava(tmp_path):
+    """`busca: [boleto]` que não chegou ao índice: digitar boleto não acha nada."""
+    montar(tmp_path)
+    publicar(
+        tmp_path,
+        "primeiros-passos/trocar-a-sua-senha.md",
+        TAREFA_COM_BUSCA,
+        conteudo_da_busca="Trocar a sua senha. fatura",
+    )
+    problemas = checar_build_manual.checar(tmp_path)
+    assert len(problemas) == 1
+    assert "boleto" in problemas[0]
+    assert "trocar-a-sua-senha" in problemas[0]
+
+
+def test_resultado_sem_o_modulo_trava(tmp_path):
+    """Sem o metadado, o resultado da busca não diz de que módulo é a tarefa."""
+    montar(tmp_path, modulo=None)
+    problemas = checar_build_manual.checar(tmp_path)
+    assert len(problemas) == 2
+    assert all("módulo" in p for p in problemas)
+
+
+def test_resultado_com_o_nome_cru_da_pasta_trava(tmp_path):
+    montar(tmp_path, modulo="primeiros-passos")
+    problemas = checar_build_manual.checar(tmp_path)
+    assert len(problemas) == 2
+    assert all("primeiros-passos" in p for p in problemas)
+
+
+def html_proximas(*hrefs: str, titulo: str = "Tarefas próximas") -> str:
+    links = "".join(f'<li><a href="{h}">Tarefa</a></li>' for h in hrefs)
+    return (
+        f'<nav class="tarefas-proximas" data-pagefind-ignore><h2>{titulo}</h2>'
+        f"<ul>{links}</ul></nav>"
+    )
+
+
+def site_com_proximas(raiz: Path, corpo_html: str) -> None:
+    montar(raiz)
+    publicar(
+        raiz,
+        "primeiros-passos/trocar-a-sua-senha.md",
+        "title: Trocar a sua senha\npapel: [Todo mundo]\n"
+        "proximas: [entrar-na-plataforma, ver-o-seu-perfil]",
+        corpo_html=corpo_html,
+    )
+    publicar(
+        raiz,
+        "primeiros-passos/ver-o-seu-perfil.md",
+        "title: Ver o seu perfil\npapel: [Todo mundo]",
+    )
+
+
+def test_tarefas_proximas_com_os_links_do_modulo_passa(tmp_path):
+    site_com_proximas(
+        tmp_path,
+        html_proximas(
+            "/primeiros-passos/entrar-na-plataforma/",
+            "/primeiros-passos/ver-o-seu-perfil/",
+        ),
+    )
+    assert checar_build_manual.checar(tmp_path) == []
+
+
+def test_pagina_com_proximas_sem_o_bloco_trava(tmp_path):
+    site_com_proximas(tmp_path, "")
+    problemas = checar_build_manual.checar(tmp_path)
+    assert len(problemas) == 1
+    assert "Tarefas próximas" in problemas[0]
+    assert "trocar-a-sua-senha" in problemas[0]
+
+
+def test_tarefas_proximas_sem_um_dos_links_trava(tmp_path):
+    site_com_proximas(
+        tmp_path, html_proximas("/primeiros-passos/entrar-na-plataforma/")
+    )
+    problemas = checar_build_manual.checar(tmp_path)
+    assert len(problemas) == 1
+    assert "ver-o-seu-perfil" in problemas[0]
+
+
+def test_bloco_sem_o_titulo_tarefas_proximas_trava(tmp_path):
+    site_com_proximas(
+        tmp_path,
+        html_proximas(
+            "/primeiros-passos/entrar-na-plataforma/",
+            "/primeiros-passos/ver-o-seu-perfil/",
+            titulo="Veja também",
+        ),
+    )
+    problemas = checar_build_manual.checar(tmp_path)
+    assert len(problemas) == 1
+    assert "Tarefas próximas" in problemas[0]
+
+
+def test_proxima_em_draft_nao_vira_link(tmp_path):
+    """Draft não existe no ar: o link levaria a uma página não encontrada."""
+    site_com_proximas(
+        tmp_path,
+        html_proximas(
+            "/primeiros-passos/entrar-na-plataforma/",
+            "/primeiros-passos/ver-o-seu-perfil/",
+            "/primeiros-passos/redefinir-a-senha/",
+        ),
+    )
+    (tmp_path / "src/content/docs/primeiros-passos/redefinir-a-senha.md").write_text(
+        "---\ntitle: Redefinir\nprd: [1]\ndraft: true\npapel: [Todo mundo]\n---\n",
+        encoding="utf-8",
+    )
+    trocar = tmp_path / "src/content/docs/primeiros-passos/trocar-a-sua-senha.md"
+    trocar.write_text(
+        trocar.read_text(encoding="utf-8").replace(
+            "ver-o-seu-perfil]", "ver-o-seu-perfil, redefinir-a-senha]"
+        ),
+        encoding="utf-8",
+    )
+    problemas = checar_build_manual.checar(tmp_path)
+    assert len(problemas) == 1
+    assert "redefinir-a-senha" in problemas[0]
+
+
+HOME_MDX = "---\ntitle: Manual da plataforma\ntemplate: splash\n---\n"
+BARRA = '<div class="busca-da-home"><button>O que você quer fazer?</button></div>'
+CARTOES = '<div class="modulos"><a class="modulo-card" href="/x/">X</a></div>'
+
+
+def site_com_home(raiz: Path, corpo_html: str) -> None:
+    montar(raiz)
+    (raiz / "src/content/docs/index.mdx").write_text(HOME_MDX, encoding="utf-8")
+    (raiz / "dist/index.html").write_text(
+        html_pagina().replace("</body>", corpo_html + "</body>"), encoding="utf-8"
+    )
+    escrever_fragmento(raiz / "dist", "/")
+
+
+def test_home_com_a_barra_acima_dos_cartoes_passa(tmp_path):
+    site_com_home(tmp_path, BARRA + CARTOES)
+    assert checar_build_manual.checar(tmp_path) == []
+
+
+def test_home_com_a_barra_abaixo_dos_cartoes_trava(tmp_path):
+    site_com_home(tmp_path, CARTOES + BARRA)
+    problemas = checar_build_manual.checar(tmp_path)
+    assert len(problemas) == 1
+    assert "O que você quer fazer?" in problemas[0]
+
+
+def test_home_sem_a_barra_trava(tmp_path):
+    site_com_home(tmp_path, CARTOES)
+    problemas = checar_build_manual.checar(tmp_path)
+    assert len(problemas) == 1
+    assert "O que você quer fazer?" in problemas[0]

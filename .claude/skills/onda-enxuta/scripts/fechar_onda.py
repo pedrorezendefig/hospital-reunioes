@@ -43,7 +43,10 @@ cabe em 10 linhas mais uma por PR, fora as da migration):
      `migracao` (anterior ao #969): avisa e segue sem esperar, como antes
   2. semaforo de deploy (chave = nome da sessao, unica por construcao; na onda,
      `<sessao>-onda<N>`). Trava parada (a subida dona saiu com 3 ou 4) ou velha:
-     sai na hora com 8, sem pegar nem soltar. Com a trava pega, confere de novo
+     sai na hora com 8, sem pegar nem soltar. A trava guarda o pid da subida e,
+     antes do primeiro merge de app, a fase `app-na-main`: dono morto sem ela e
+     trava orfa, que o semaforo.sh solta sozinho; com ela, trava parada (8).
+     Com a trava pega, confere de novo
      o `blocked_by` da issue de cada PR (issue #999): a bloqueadora pode ter sido
      reaberta pelo rollback de outra subida, e o PR com bloqueio aberto fica de fora
   3. versao nova (semver) pelo tipo dominante dos commits do lote, a partir do
@@ -465,7 +468,8 @@ def semaforo(raiz: Path, acao: str, chave: str, descricao: str = "") -> int:
     cmd = [BASH, bash_path(raiz / SEMAFORO), acao, chave]
     if descricao:
         cmd.append(descricao)
-    proc = run(cmd, cwd=raiz, check=False, timeout=700)
+    # o pid desta subida vai na trava: quem chega e o acha morto nao espera 60 min
+    proc = run(cmd, cwd=raiz, check=False, timeout=700, env={"SEMAFORO_PID": str(os.getpid())})
     return proc.returncode
 
 
@@ -1612,6 +1616,10 @@ def main() -> int:
             try:
                 head = preparar_pr(raiz, wt, info)
                 if antes_do_primeiro:
+                    if not ferramenta:
+                        # daqui em diante, morrer deixa prod pela metade: a trava de
+                        # dono morto fica parada, nao orfa
+                        semaforo(raiz, "fase", args.sessao, "app-na-main")
                     # a imagem no ar antes do primeiro merge e o alvo de um rollback (issue #968)
                     for sid in servicos:
                         if em_modo_imagem(servicos_cfg[sid]):

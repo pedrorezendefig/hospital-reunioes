@@ -18,7 +18,8 @@ Escreve a mensagem que o Pedro manda no WhatsApp quando um PRD chega em produç�
 1. **Fontes.** Leia o PRD e as sub-issues pelo `gh issue view`. A matéria-prima é o bloco "Para o diretor" de cada uma ("O que muda" e "O que você precisa saber"); o resto do corpo serve para não inventar comportamento. Se o `/divulgar` já publicou, pegue o link da página no último comentário `<!-- automacao -->` do PRD.
 2. **Só o que está no ar.** Confira em `docs/spec/deploy/history.json` da `main` (ou no comentário de subida do PRD) quais filhas já foram deployadas. Filha ainda aberta ou sem deploy fica fora da mensagem; se nenhuma subiu, pare e diga isso.
 3. **Escreva** no formato abaixo.
-4. **Entregue** em bloco de código para copiar num toque, e registre a mesma mensagem como comentário no PRD com `<!-- automacao -->` na primeira linha e o cabeçalho `## Mensagem enviada`, para o histórico saber o que foi dito e quando.
+4. **Humanizer** (ADR 0071): passe a mensagem pela Skill tool com `humanizer` em modo embutido antes de entregar. A amostra de voz é o exemplo aprovado abaixo (PRD #1056): ela manda no tom semi-formal, o humanizer só tira os cacoetes. Link e nomes da tela não mudam.
+5. **Entregue** em bloco de código para copiar num toque, e registre a mesma mensagem como comentário no PRD com `<!-- automacao -->` na primeira linha e o cabeçalho `## Mensagem enviada`, para o histórico saber o que foi dito e quando.
 
 ## Formato
 

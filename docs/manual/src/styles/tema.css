@@ -227,3 +227,104 @@
   color: var(--sl-color-gray-2);
   font-size: 0.95rem;
 }
+
+/* Barra de busca (issue #1221). No celular o Starlight mostra só a lupa; aqui
+   o botão ocupa a largura livre do cabeçalho e mostra o texto, como no
+   computador. O invólucro é o `Search.astro` nosso. */
+@media (max-width: 50rem) {
+  .header > div:has(> .barra-de-busca) {
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+
+  .barra-de-busca {
+    width: 100%;
+  }
+
+  .barra-de-busca button[data-open-modal] {
+    width: 100%;
+    height: 2.5rem;
+    padding-inline: 0.75rem;
+    border: 1px solid var(--sl-color-gray-5);
+    border-radius: 0.5rem;
+    background-color: var(--sl-color-black);
+    color: var(--sl-color-gray-2);
+    font-size: var(--sl-text-sm);
+  }
+
+  .barra-de-busca button[data-open-modal] > span {
+    display: block;
+  }
+
+  /* O nome do site some no celular; a logo continua e a barra ganha o
+     espaço. */
+  .site-title span {
+    display: none;
+  }
+}
+
+/* A barra da home, acima dos cartões de módulo: abre a mesma busca. */
+.busca-da-home button {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  width: 100%;
+  max-width: 40rem;
+  margin-inline: auto;
+  padding: 0.9rem 1.2rem;
+  border: 1px solid var(--sl-color-gray-5);
+  border-radius: 8px;
+  background: var(--sl-color-black);
+  color: var(--sl-color-gray-2);
+  font: inherit;
+  font-size: 1.1rem;
+  cursor: pointer;
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.08);
+}
+
+.busca-da-home button:hover {
+  border-color: var(--hsm-navy);
+}
+
+.busca-da-home svg {
+  flex-shrink: 0;
+  font-size: 1.4rem;
+  color: var(--hsm-navy);
+}
+
+/* Palavras de `busca:` no frontmatter: entram no índice, não na tela. */
+.busca-sinonimos {
+  display: none;
+}
+
+/* Tarefas próximas, no fim da Página de tarefa. */
+.tarefas-proximas {
+  margin-top: 2.5rem;
+  padding-top: 1.2rem;
+  border-top: 1px solid var(--sl-color-gray-5);
+}
+
+.tarefas-proximas h2 {
+  font-size: var(--sl-text-h4);
+  margin-bottom: 0.6rem;
+}
+
+.tarefas-proximas ul {
+  list-style: none;
+  padding-left: 0;
+  display: grid;
+  gap: 0.5rem;
+}
+
+.tarefas-proximas a {
+  display: block;
+  padding: 0.6rem 0.9rem;
+  border: 1px solid var(--sl-color-gray-5);
+  border-radius: 8px;
+  text-decoration: none;
+  color: var(--sl-color-text-accent);
+}
+
+.tarefas-proximas a:hover {
+  border-color: var(--hsm-navy);
+}

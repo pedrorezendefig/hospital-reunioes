@@ -34,6 +34,8 @@ Issue tracker = **GitHub Issues** via `gh` (veja `docs/agents/issue-tracker.md`)
 
    **Nunca cite número de issue ou de PR dentro deste bloco** (nada de "o PRD #469", "a #430 entregou"). O bloco é a única parte do corpo que o app lê e mostra ao diretor na aba Tecnologia, e o ADR 0054, decisão 9, diz que ele não vê número de issue. O código não raspa número de texto livre (raspar mutilaria "40 mil" e "3 partes"), então a regra vale aqui, na escrita. Precisa referenciar outro trabalho? Descreva pelo nome ("o PRD da Ouvidoria"), ou deixe a referência na parte técnica, abaixo do bloco.
 
+   **Humanizer antes do `gh issue create`** (ADR 0071): passe o corpo pela Skill tool com `humanizer` em modo embutido, com atenção ao bloco "Para o diretor", que o app mostra ao diretor. A amostra de voz é o bloco "Para o diretor" de um PRD já publicado: ela manda no tom, o humanizer só tira os cacoetes. O resto do corpo fica neutro e direto; termos do `CONTEXT.md`, títulos do template e histórias no formato "Como `<ator>`" não mudam.
+
    Capture e **anuncie o número** da issue-PRD criada (o `gh issue create` devolve a URL; o número é o último segmento — ex.: `URL=$(gh issue create …); PRD=${URL##*/}`). Diga ao usuário, ex.: _"PRD publicado como **#41**"_. Esse número é o **pai** das fatias: o `/to-issues` o usa pra vincular cada fatia como **sub-issue** nativa. Rodando `/to-issues` em seguida nesta mesma conversa, ele já tem o `#41` no contexto.
 
 <prd-template>

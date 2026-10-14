@@ -9,7 +9,14 @@
 #   semaforo.sh pegar  <chave> [descricao]   # espera até conseguir (ou até --espera segundos)
 #   semaforo.sh soltar <chave> [--forcar]    # só o dono solta; --forcar ignora o dono
 #   semaforo.sh parar  <chave> [linha]       # o dono marca a trava como parada
+#   semaforo.sh fase   <chave> <fase>        # o dono marca a fase (app-na-main)
 #   semaforo.sh status                        # quem segura e há quanto tempo
+#
+# Dono morto: com SEMAFORO_PID no ambiente, `pegar` guarda o pid de quem segura.
+# Quem chega e acha esse pid morto não espera a trava ficar velha: sem a fase
+# `app-na-main` a trava é órfã (nada do app entrou na main) e sai do caminho;
+# com ela, a trava fica parada na hora, e prod espera o humano. Trava sem pid
+# (o `/ship` manual) segue a fila e a regra dos 60 min, como antes.
 #
 # Chave: identificador da sessão (basename do scratchpad da sessão serve).
 # Reentrante: pegar com a mesma chave de quem já segura devolve 0 na hora.
@@ -49,6 +56,7 @@ idade_min() {
 dono() { cat "$LOCK/chave" 2>/dev/null || echo "?"; }
 descricao() { cat "$LOCK/descricao" 2>/dev/null || echo ""; }
 motivo_da_parada() { sed -n 2p "$LOCK/parada" 2>/dev/null; }
+pid_do_dono() { cat "$LOCK/pid" 2>/dev/null; }
 
 case "$ACAO" in
   status)
@@ -70,6 +78,7 @@ case "$ACAO" in
         echo "$CHAVE" > "$LOCK/chave"
         echo "$DESC"  > "$LOCK/descricao"
         agora        > "$LOCK/desde"
+        [ -n "${SEMAFORO_PID:-}" ] && echo "$SEMAFORO_PID" > "$LOCK/pid"
         echo "pegou: $CHAVE ($DESC)"
         exit 0
       fi
@@ -80,6 +89,24 @@ case "$ACAO" in
       if [ "$(dono)" = "$CHAVE" ]; then
         echo "já é sua (reentrante): $CHAVE"
         exit 0
+      fi
+      PID_DONO="$(pid_do_dono)"
+      if [ -n "$PID_DONO" ] && ! kill -0 "$PID_DONO" 2>/dev/null; then
+        if [ "$(cat "$LOCK/fase" 2>/dev/null)" = "app-na-main" ]; then
+          printf '%s\n%s\n' "$(dono)" "a subida de $(dono) morreu (pid $PID_DONO) com código do app já na main: confira o Coolify e o health, depois \`/deploy rollback\` ou soltar a trava." > "$LOCK/parada"
+          echo "parada: prod espera rollback humano, chave $(dono): $(motivo_da_parada)" >&2
+          exit 4
+        fi
+        # nada do app na main: a trava é órfã. Só um dos que chegam limpa, e só
+        # se ela ainda for a do mesmo pid morto
+        if mkdir "$LOCK.limpeza" 2>/dev/null; then
+          if [ "$(pid_do_dono)" = "$PID_DONO" ]; then
+            echo "trava órfã de $(dono) (pid $PID_DONO morto, nada do app na main): solta."
+            rm -rf "$LOCK"
+          fi
+          rmdir "$LOCK.limpeza"
+        fi
+        continue
       fi
       if [ "$(idade_min)" -ge "$VELHA_MIN" ]; then
         echo "trava velha: $(dono) segura há $(idade_min) min ($(descricao)). Prod pode estar esperando rollback humano: quem confere o Coolify e solta a trava é o humano." >&2
@@ -115,7 +142,17 @@ case "$ACAO" in
     echo "parada: $CHAVE ($LINHA)"
     ;;
 
+  fase)
+    CHAVE="${1:-}"; FASE="${2:-}"
+    [ -n "$CHAVE" ] && [ -n "$FASE" ] || { echo "uso: semaforo.sh fase <chave> <fase>" >&2; exit 64; }
+    if [ ! -d "$LOCK" ] || [ "$(dono)" != "$CHAVE" ]; then
+      echo "recusado: a trava não é de $CHAVE" >&2
+      exit 1
+    fi
+    echo "$FASE" > "$LOCK/fase"
+    ;;
+
   *)
-    echo "uso: semaforo.sh pegar|soltar|parar|status" >&2; exit 64
+    echo "uso: semaforo.sh pegar|soltar|parar|fase|status" >&2; exit 64
     ;;
 esac

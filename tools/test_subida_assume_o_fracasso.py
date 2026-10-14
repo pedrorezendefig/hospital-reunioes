@@ -214,6 +214,8 @@ def anotar_o_semaforo(fo, monkeypatch, c) -> list[dict]:
     semaforo = fo.semaforo
 
     def anotando(raiz, acao, chave, descricao=""):
+        if acao == "fase":  # teste próprio: test_semaforo_dono_morto.py
+            return semaforo(raiz, acao, chave, descricao)
         momentos.append({"acao": acao, "descricao": descricao, "merges": [m["branch"] for m in c.merges],
                          "reabertas": [a[2] for a in c.gh_chamadas if a[:2] == ["issue", "reopen"]]})
         return semaforo(raiz, acao, chave, descricao)

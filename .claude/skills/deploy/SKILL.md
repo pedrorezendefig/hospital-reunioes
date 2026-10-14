@@ -119,6 +119,7 @@ $S status                                # quem segura e há quanto tempo
 - **Chave** = identificador da sessão. Use o basename do diretório de scratchpad da sessão (é único por sessão e a sessão o conhece).
 - A trava é `/tmp/deploy-semaforo-<project.slug>.lock` (pasta criada com `mkdir`, atômico). Vale só para sessões na mesma máquina, que é o caso do trabalho paralelo deste repo.
 - `pegar` devolve `3` se passou o tempo de espera (default 540 s, cabe no timeout do Bash): chame de novo, sem alarde. Devolve `2` se a trava tem mais de 60 min: confira `coolify app deployments list` e, sem build rodando, `soltar <chave-do-dono> --forcar`. Nunca force com build em andamento.
+- **Dono morto.** A subida (`fechar_onda.py`) grava o próprio pid na trava (`SEMAFORO_PID`) e, antes do primeiro merge de app, a fase `app-na-main`. Quem chega e acha o pid morto não espera os 60 min: sem a fase, a trava é órfã e sai do caminho sozinha; com a fase, fica parada na hora (`4`), porque prod pode estar pela metade. Trava sem pid (o `/ship` manual) segue a regra dos 60 min.
 - **Regra:** pegar **antes do primeiro push na `main`** (merge ou commit direto), soltar **depois** do health verde e do push do bookkeeping, ou depois do rollback. Sempre soltar, mesmo em falha.
 
 ## Bootstrap (executado em todo modo, antes de qualquer outra coisa)

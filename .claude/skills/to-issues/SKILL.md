@@ -103,6 +103,8 @@ Para cada fatia aprovada, publique uma issue com `gh issue create`, usando o tem
 
 **Nunca cite número de issue ou de PR dentro deste bloco** (nada de "o PRD #469", "a #430 entregou"). O bloco é a única parte do corpo que o app lê e mostra ao diretor na aba Tecnologia, e o ADR 0054, decisão 9, diz que ele não vê número de issue. O código não raspa número de texto livre (raspar mutilaria "40 mil" e "3 partes"), então a regra vale aqui, na escrita. A referência a outra issue vive na parte técnica, abaixo do bloco, onde o campo "Bloqueada por: #X" e o "Pai" já moram.
 
+**Humanizer antes de cada `gh issue create`** (ADR 0071): passe o corpo da fatia pela Skill tool com `humanizer` em modo embutido, com atenção ao bloco "Para o diretor", que o app mostra ao diretor. A amostra de voz é o bloco "Para o diretor" do próprio PRD pai: ele manda no tom, o humanizer só tira os cacoetes. O resto do corpo fica neutro e direto; critérios de aceite continuam verificáveis e termos do `CONTEXT.md` não mudam.
+
 **Vincule cada fatia como sub-issue nativa do PRD** — dá barra de progresso (ex.: "2 de 4 concluídas") e navegação pai↔filha na UI do GitHub. Logo após criar a fatia:
 
 ```bash
