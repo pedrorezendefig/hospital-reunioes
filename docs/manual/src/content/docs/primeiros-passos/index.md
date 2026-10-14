@@ -1,8 +1,9 @@
 ---
 title: Primeiros passos
 description: O primeiro dia na plataforma, de entrar até deixar a sua conta do seu jeito.
-prd: [731]
+prd: [731, 1259]
 draft: false
+video: conheca-a-plataforma
 sidebar:
   order: 1
 ---
