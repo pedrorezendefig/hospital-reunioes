@@ -5,7 +5,7 @@ description: Planeja sessões /onda-enxuta sem conflito, presta contas de cada i
 
 # Montar ondas enxutas: plano de sessões paralelas
 
-Planejador da `/onda-enxuta`. A `/onda-enxuta` executa **uma** fila em **várias ondas**, uma sessão de fundo por onda; esta skill decide **quantas** filas abrir, **o que** vai em cada uma e **em que ordem** as ondas sobem. Sai daqui um arquivo de prompt por sessão e **um comando de lançamento** por sessão. Nada roda aqui: o Pedro roda os comandos num terminal, cada sessão nasce em segundo plano e leva a onda 1 até produção sem parar (ADR 0068); só a migration chama o humano, por notificação.
+Planejador da `/onda-enxuta`. A `/onda-enxuta` executa **uma** fila em **várias ondas**, uma sessão de fundo por onda; esta skill decide **quantas** filas abrir, **o que** vai em cada uma e **em que ordem** as ondas sobem. Sai daqui um arquivo de prompt por sessão e **um comando de lançamento** por sessão, e o plano termina numa pergunta só: "Posso lançar?". Com o "pode" do Pedro, a própria skill lança a sessão da **onda 1** de cada fila (passo 7); cada uma nasce em segundo plano e leva a onda 1 até produção sem parar (ADR 0068); só a migration chama o humano, por notificação. Fora o lançamento da onda 1, nada roda aqui.
 
 A meta é sair com **toda issue aberta em um de dois lugares**: dentro de um prompt (`ready-for-agent`) ou numa lista curta do que só o humano faz. Issue "esperando triagem" no fim do plano é falha do plano.
 
@@ -114,7 +114,7 @@ Mostre a tabela final: sessão · onda · issues · dependência (de quem cada i
 
 ### 5. Escrever os prompts e os comandos de lançamento
 
-Um arquivo de prompt por sessão, gravado em `$TMPDIR/onda-enxuta/<nome>-onda1.md` (macOS) ou `%TEMP%\onda-enxuta\<nome>-onda1.md` (Windows), criando a pasta, e um comando de lançamento por sessão. O comando de lançamento vem **com o prefixo `!`**: o Pedro cola na própria sessão que montou o plano e o `lancar_sessao.sh` limpa o ambiente herdado (`env -u ANTHROPIC_API_KEY ...`), então a sessão de fundo nasce dali mesmo, sem abrir terminal. Nomeie as sessões `onda-a`, `onda-b`, `onda-c`. O prompt inteiro também vai impresso na resposta, com um **cabeçalho de leitura** acima (o Pedro lê o cabeçalho para saber o que a sessão vai fazer; a sessão só recebe o arquivo). Formato do cabeçalho:
+Um arquivo de prompt por sessão, gravado em `$TMPDIR/onda-enxuta/<nome>-onda1.md` (macOS) ou `%TEMP%\onda-enxuta\<nome>-onda1.md` (Windows), criando a pasta, e um comando de lançamento por sessão. O comando impresso vem **com o prefixo `!`** e serve para relançar à mão (sessão que morreu, plano retomado noutro dia): o lançamento normal é o do passo 7, feito pela própria skill depois do "pode". O `lancar_sessao.sh` limpa o ambiente herdado (`env -u ANTHROPIC_API_KEY ...`), então a sessão de fundo nasce da sessão que montou o plano, pelo Bash ou pelo `!`, sem abrir terminal. Nomeie as sessões `onda-a`, `onda-b`, `onda-c`. Escreva **só o arquivo da onda 1** de cada sessão: a passagem para a onda seguinte é a `/onda-enxuta` que escreve, com os PRs verdes. Arquivo de onda 2 ou 3 escrito aqui é convite para lançar fora de ordem (em 13/10/2026 uma onda 3 foi lançada com toda a fila ainda bloqueada e teve que ser parada); a exceção é a fila que para num OK humano no meio (Fatia de manual com vídeo): aí o arquivo da onda seguinte existe, com o nome `<nome>-onda<N>.md`, e o relatório diz em que momento o humano o lança. O prompt inteiro também vai impresso na resposta, com um **cabeçalho de leitura** acima (o Pedro lê o cabeçalho para saber o que a sessão vai fazer; a sessão só recebe o arquivo). Formato do cabeçalho:
 
 ```markdown
 ### Sessão onda-a: <tema>
@@ -128,7 +128,7 @@ Um arquivo de prompt por sessão, gravado em `$TMPDIR/onda-enxuta/<nome>-onda1.m
 
 **Por que vale a pena:** <2 ou 3 frases, na língua do diretor: o que o usuário ganha ou o risco que fecha quando esta sessão terminar. Sem nome de arquivo.>
 
-**Lançar (cole nesta sessão):**
+**Lançar (a skill lança no passo 7; o comando fica para relançar à mão):**
 
 ```
 ! bash .claude/skills/onda-enxuta/scripts/lancar_sessao.sh onda-a-onda1 "$TMPDIR/onda-enxuta/onda-a-onda1.md"
@@ -196,15 +196,17 @@ A resposta final tem esta forma, nesta ordem. É o que o Pedro lê do celular.
 4. **Tabela final** do passo 4.
 5. **Os prompts**, inteiros, cada um com o cabeçalho de leitura (issues, resumo por issue, valor, comando de lançamento) em cima do bloco. Por último, os prompts de divulgação (5b), um por PRD que fecha.
 6. **Passo a passo:**
-   1. Num terminal na raiz do repositório, rodar o comando de lançamento de cada sessão (todos de uma vez, se quiser). Cada uma nasce em segundo plano, monta a fila e roda a onda 1 até produção. `claude agents` lista as sessões vivas; `claude logs <id>` mostra o andamento.
+   1. O lançamento das sessões da onda 1 é o passo 7, logo abaixo, com o "pode" do Pedro. Cada uma nasce em segundo plano, monta a fila e roda a onda 1 até produção. `claude agents` lista as sessões vivas; `claude logs <id>` mostra o andamento.
    2. Nada a aprovar: cada sessão mergeia e sobe a própria onda sozinha (ADR 0068), e o semáforo enfileira os deploys. A notificação chega em três casos: migration no lote (cole no Studio o arquivo que ela cita), fatia que foi para `ready-for-human` e rollback. Liste a sequência onda a onda, alternando sessões, e marque na linha certa "a onda N traz a migration 0XX". Lance a sessão com migration quando o Pedro estiver perto do Studio.
    3. Com os PRs verdes, a sessão lança sozinha a sessão da onda seguinte e, em paralelo com ela, sobe a onda (um merge pela API por PR, um build); depois comenta o resultado da subida no PRD, imprime a conta de tokens e encerra. Nada a fazer até a próxima notificação.
    4. **Divulgação:** para cada PRD que fecha, a linha "cole o prompt de `/divulgar #X` num terminal próprio" no momento certo (agora, ou logo após o deploy da onda que sobe a última tela), depois "`/mensagem-prd #X` no mesmo terminal" e, com o link publicado, "mande a mensagem e o link ao diretor e aos usuários do módulo".
    5. "No tempo morto": as tarefas do item 3. As intervenções do 3b entram na linha da onda certa, como a migration.
 
+7. **A pergunta de lançamento.** O relatório termina com uma pergunta só, em uma linha: "Posso lançar as sessões da onda 1 (onda-a, onda-b)?", listando antes dela, por sessão, a pré-condição que ainda depende do humano (arquivo que ele coloca, Studio aberto para a migration da onda 1), quando houver. A resposta é texto livre: "pode", "vai", "sim", "lança" lançam; "só a onda-a" lança uma; "não" deixa os comandos impressos e encerra. Com o sim, rode pelo Bash, da raiz do repositório, um `lancar_sessao.sh` por sessão, em sequência, e imprima a linha `backgrounded · <id> · <nome>` de cada um mais o `claude logs <id>`. Sessão com pré-condição não cumprida: pergunte na mesma linha se lança assim mesmo (o prompt já diz o que o implementador faz sem ela) ou se fica para depois. Só os arquivos `-onda1.md` são lançados aqui, nunca o de uma onda seguinte.
+
 ## O que esta skill não faz
 
-- Não dispara sessão, não pega issue, não mergeia. Quem executa é a `/onda-enxuta`, uma sessão de fundo por onda, lançada pelo comando que este plano entrega.
+- Não dispara nada além da sessão da onda 1 de cada fila, e só depois do "pode" (passo 7). Não pega issue, não mergeia. Quem executa é a `/onda-enxuta`, uma sessão de fundo por onda, que lança sozinha a onda seguinte.
 - Não tria issue sem critério de aceite. Não decide sozinha uma decisão de domínio (ADR, RN do `CONTEXT.md`): ela pergunta ao humano (2b) e crava a resposta. Só vai para "precisa de você" a decisão sem saídas formuladas, ou a que vira PRD novo.
 - Não faz ação operacional (cadastro em produção, envio de arquivo a terceiros, pedido a serviço externo). Isso é "precisa de você", com o passo escrito.
 - Não substitui o `/triage` para issue nova sem critério; só move as que já nasceram prontas.
