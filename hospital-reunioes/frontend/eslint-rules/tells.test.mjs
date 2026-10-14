@@ -87,6 +87,13 @@ describe("regra hospital/sem-tells", () => {
     }
   });
 
+  it("depois da varredura (issue #1229) nenhum cacoete do front fica de fora da regra", () => {
+    const { arquivos } = JSON.parse(
+      readFileSync(new URL("./tells_conhecidos.json", import.meta.url), "utf8"),
+    );
+    expect(arquivos).toEqual({});
+  });
+
   it("a mensagem cita o cacoete e o trecho", () => {
     const [erro] = lintar('const t = "A ata nao vale isso. A ata não é um resumo, é a memória.";');
     expect(erro.message).toContain("nao-e-x-e-y");

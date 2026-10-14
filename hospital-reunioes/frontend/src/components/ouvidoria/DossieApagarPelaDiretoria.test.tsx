@@ -242,7 +242,7 @@ describe("a confirmação com motivo obrigatório (issue #595)", () => {
 
     const modal = await screen.findByRole("dialog");
 
-    expect(within(modal).getByText(/não pode ser apagado depois/)).toBeTruthy();
+    expect(within(modal).getByText(/depois não dá para apagar/)).toBeTruthy();
     expect(within(modal).getByText(/sem o nome nem o contato de quem manifestou/)).toBeTruthy();
   });
 

@@ -22,7 +22,7 @@ retrato geral em vez da lista item a item.
 
 2. Leia os quatro números do alto, todos clicáveis: **Conformidade**,
    **Vencem em 3 dias**, **Atas Paradas** e **Aguardam Assinatura**.
-3. Clique em **Vencem em 3 dias** para cair na lista de pendências já filtrada
+3. Clique em **Vencem em 3 dias** para abrir a lista de pendências já filtrada
    pelas críticas.
 4. Em **Status das Pendências**, veja a divisão por situação: **Pendente**,
    **Em Progresso**, **Concluído**, **Atrasado** e **Repactuada**.

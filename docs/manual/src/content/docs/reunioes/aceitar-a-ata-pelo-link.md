@@ -14,8 +14,8 @@ sidebar:
 
 Quando você recebeu por email um link para aceitar uma ata. Isso acontece
 quando a coleta de assinaturas digitais daquela ata foi encerrada e ainda
-faltava você. É o seu aceite, registrado pelo próprio hospital, sem assinatura
-digital. Você não precisa de conta nem de senha.
+faltava você. O seu aceite fica registrado pelo próprio hospital, sem
+assinatura digital, e você não precisa de conta nem de senha.
 
 ## Passo a passo
 
@@ -25,7 +25,7 @@ digital. Você não precisa de conta nem de senha.
 2. No aviso amarelo do alto, confira o seu nome.
 3. Leia a ata: **Pauta da Reunião**, **Discussão dos Pontos** e o quadro com as
    ações e os prazos.
-4. Veja quais ações estão no seu nome: são essas que viram compromisso seu.
+4. Veja quais ações estão no seu nome. Essas viram compromisso seu.
 5. Marque a frase **Li a ata completa acima e aceito os compromissos
    registrados sob minha responsabilidade.**
 6. Clique em **Li e aceito**. A tela responde **Aceite registrado** e as suas
@@ -40,4 +40,5 @@ digital. Você não precisa de conta nem de senha.
 - **Você voltou ao link depois de aceitar:** o aceite é registrado uma vez só.
   Voltar não cria pendência duplicada.
 - **Tem uma ação no quadro que não é sua:** aceite o que é seu e avise quem
-  conduziu a reunião. O responsável se corrige na plataforma, não por aqui.
+  conduziu a reunião. Esta tela não troca o responsável; a correção é feita
+  na plataforma.

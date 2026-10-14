@@ -2,6 +2,54 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-10-14T01:52:28-03:00",
+      "sha": "577cbcc98955cc56543e96b2c7462324c1fed5f8",
+      "app_version": "0.196.1",
+      "subject": "Onda onda-texto-onda3: Manual de Primeiros passos reescrito pela régua do humanizer; Varredura do texto visível do app e dos templates pelo humanizer",
+      "raw_subject": "chore(deploy): registro da onda onda-texto-onda3 (#1247 #1248)",
+      "scope": [
+        "backend",
+        "frontend"
+      ],
+      "prds": [
+        1215
+      ],
+      "result": "healthy",
+      "duration_seconds": 267,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        },
+        {
+          "service": "frontend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "onda-enxuta onda-texto-onda3: PR #1247 (issue #1223), PR #1248 (issue #1229), mergeados PR a PR. Merge pela API do GitHub, um build. Registro pela Action pos-merge depois do health.",
+      "etapas": {
+        "merge_s": 6,
+        "build_s": {
+          "backend": 29,
+          "frontend": 221
+        },
+        "health_s": 0
+      },
+      "responsavel": "pedrorezendefig"
+    },
+    {
       "at": "2026-10-14T00:11:48-03:00",
       "sha": "d2a16555a398f11d1cdbb4929e03e66f216efbee",
       "app_version": "0.196.0",

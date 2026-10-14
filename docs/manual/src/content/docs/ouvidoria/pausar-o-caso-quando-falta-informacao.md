@@ -11,9 +11,9 @@ sidebar:
 
 ## Quando usar
 
-Quando a apuração depende de um dado que só quem manifestou tem: o dia da
-consulta, o nome de quem atendeu, um documento. Pausar é parar o relógio da
-área, então use quando a pausa faz sentido por si.
+Quando a apuração depende de um dado que só quem manifestou tem, como o dia da
+consulta, o nome de quem atendeu ou um documento. A pausa interrompe o relógio
+da área, então use só quando a espera pela pessoa justifica isso.
 
 ## Passo a passo
 
@@ -37,5 +37,5 @@ consulta, o nome de quem atendeu, um documento. Pausar é parar o relógio da
   manifestante**.
 - **O caso está parado e a área reclama do prazo:** enquanto a pausa dura, o
   relógio dela não anda, e o relatório mostra esse tempo separado.
-- **Você quer só deixar um bilhete no caso:** não use a pausa para isso. Para
-  registro que não para o relógio, escreva na **Observação da validação**.
+- **Você quer só deixar um bilhete no caso:** escreva na **Observação da
+  validação**, que não mexe no relógio.

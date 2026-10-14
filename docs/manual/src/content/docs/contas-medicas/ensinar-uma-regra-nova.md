@@ -10,7 +10,7 @@ sidebar:
 
 ## Quando usar
 
-Quando a operadora tem uma regra que a memória ainda não conhece. Você escreve
+Quando a operadora tem regra que a memória ainda não conhece. Você escreve
 em linguagem comum e a IA monta a regra; nada vale antes de você validar.
 
 ## Passo a passo
@@ -35,19 +35,18 @@ em linguagem comum e a IA monta a regra; nada vale antes de você validar.
    ![Proposta da regra nova com Antes, Depois, Conflitos e o botão Validar regra](../../../assets/contas-medicas/ensinar-proposta.png)
 
 6. Em **Contas com regra nova desde a análise**, clique em **Reanalisar com a
-   regra nova** na conta que deve seguir a regra. As linhas que a faturista já
-   marcou ficam como estão. A faturista da conta também vê o botão
-   **Reanalisar com a regra nova** no guia, quando a regra mudou depois da
-   análise.
+   regra nova** na conta que deve seguir a regra. As linhas já marcadas não
+   mudam. A faturista também vê **Reanalisar com a regra nova** no guia
+   da conta dela.
 
    ![Contas com a marca Regra nova desde a análise e o botão Reanalisar](../../../assets/contas-medicas/reanalisar.png)
 
 ## Se der errado
 
 - **A proposta aponta conflito:** a memória já tem regra sobre o assunto.
-  Edite a regra antiga em vez de criar outra.
-- **O botão Reanalisar não aparece:** sem regra nova desde a análise, ele é
-  de quem tem a permissão de regra contratual e tabelas. A faturista vê o
-  botão só na conta dela e só quando a regra mudou.
+  Edite a antiga em vez de criar outra.
+- **O botão Reanalisar não aparece:** ele só aparece quando a regra mudou
+  depois da análise, para quem tem a permissão de regra contratual e tabelas
+  e para a faturista da conta.
 - **A conta não está na lista:** só entram contas **A fazer** e **Em
   correção**. Conta concluída não muda.

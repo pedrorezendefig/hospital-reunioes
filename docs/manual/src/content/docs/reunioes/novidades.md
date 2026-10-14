@@ -16,9 +16,9 @@ só nasciam quando o último assinava. Agora cada assinatura solta na hora as
 ações daquela pessoa, e a assinatura de quem conduziu a reunião solta as de
 quem não estava na lista de assinaturas.
 
-Duas travas antigas caíram junto. Quando o prazo da assinatura digital estoura,
-a ata deixa de ficar presa para sempre: ela fecha com o que tem e ganha um selo
-discreto do tipo **3 de 5 assinaram**. E quando a assinatura é recusada ou
+Na mesma entrega, a ata parou de travar em dois casos. Quando o prazo da
+assinatura digital estoura, ela fecha com as assinaturas que tem e ganha um selo
+discreto do tipo **3 de 5 assinaram**. Quando a assinatura é recusada ou
 cancelada, quem falta recebe um link para ler a ata e clicar em **Li e aceito**,
 sem entrar na plataforma.
 
@@ -32,12 +32,11 @@ Tarefas que mudaram:
 ## 10/07/2026 · A lista de participantes da ata é do Facilitador
 
 O assistente inflava a lista de presentes: uma reunião de seis pessoas saía com
-vinte e oito nomes, porque ele contava também quem tinha sido só citado. E não
-havia jeito determinístico de corrigir, porque pedir a correção pelo chat
-reescrevia a lista inteira de volta.
+vinte e oito nomes, porque ele contava também quem tinha sido só citado. Pedir
+a correção pelo chat não resolvia, porque reescrevia a lista inteira de volta.
 
-Agora a lista é sua. Você exclui e acrescenta nome a nome na validação, e a
-correção pelo chat não toca mais nela. Quem sai da lista sai também do convite
+Agora quem cuida da lista é você. Na validação, você exclui e acrescenta nome a
+nome, e a correção pelo chat não mexe mais nela. Quem sai da lista sai também do convite
 e da assinatura, e quem é responsável por uma ação não pode ser removido por
 engano.
 
@@ -48,8 +47,8 @@ Tarefas que mudaram:
 
 Na montagem da ata conversando, o assistente passou a usar os nomes do cadastro
 do hospital e a perguntar quando fica em dúvida ("qual Lucas?"). O quadro mostra
-o nome certo e sinaliza quem ficou sem vínculo, porque é o vínculo que faz a
-cobrança chegar na pessoa.
+o nome certo e sinaliza quem ficou sem vínculo: sem ele, a cobrança não chega
+na pessoa.
 
 Tarefas que mudaram:
 [Montar a ata conversando](/reunioes/montar-a-ata-conversando/)
@@ -72,7 +71,8 @@ quando ninguém precisava assinar nada. Na validação passou a existir
 **Finalizar sem assinatura**: as pendências nascem na hora e a reunião fica
 **Aprovada**, num verde próprio, diferente do verde da assinada.
 
-A escolha é por ata e é definitiva: assinar depois não existe.
+A escolha vale para cada ata, e a ata finalizada assim não pode mais ser
+assinada.
 
 Tarefas que mudaram:
 [Revisar e aprovar a ata](/reunioes/revisar-e-aprovar-a-ata/)

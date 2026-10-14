@@ -13,8 +13,8 @@ mandar para a operadora.
 
 ## As palavras que você vai ver o tempo todo
 
-**Atendimento** é o número da internação no MV. É por ele que o sistema junta
-a conta e o prontuário: você nunca digita, o número é lido dentro dos PDFs.
+**Atendimento** é o número da internação no MV. O sistema lê esse número
+dentro dos PDFs e junta a conta e o prontuário por ele; você nunca digita.
 
 **Conta** é a fatura do atendimento, o PDF "Fatura Individual" do MV. Quando a
 internação é cobrada em partes, cada **parcial** vira uma conta na fila.
@@ -66,4 +66,4 @@ vê os botões do perfil dela: **Painel**, **Validação**, **Coordenação**,
 5. Se quiser, você reenvia só a conta corrigida e vê se cada correção pegou,
    com a **Nota de saída**.
 
-O que você marcar fica guardado e vira o retrato de onde a conta sai errada.
+O que você marca fica guardado e mostra onde a conta costuma sair errada.

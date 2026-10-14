@@ -9,13 +9,13 @@ sidebar:
   order: 16
 ---
 
-O vídeo é o capítulo 6 do módulo, regravado na versão 0.137.1.
+O vídeo é o capítulo 6, regravado na versão 0.137.1.
 
 ## Quando usar
 
-Quando alguém passa a trabalhar na Ouvidoria, ou deixa de trabalhar. Ter acesso
-às reuniões ou aos documentos não dá acesso a caso nenhum: este é um acesso
-separado.
+Quando alguém passa a trabalhar na Ouvidoria, ou deixa de trabalhar. Este
+acesso é separado: quem entra nas reuniões ou nos documentos só vê os casos
+depois de recebê-lo.
 
 ## Passo a passo
 
@@ -38,8 +38,8 @@ separado.
   fechar. Sem email cadastrado a tela recusa, porque o login precisa de
   endereço. O passo a passo completo está em
   [Dar acesso aos POPs e à Ouvidoria](/admin/dar-acesso-aos-pops-e-a-ouvidoria/).
-- **Você administra a plataforma e não consegue abrir um caso sigiloso:**
-  administrar o sistema não dá acesso a denúncia. Caso sigiloso é só do ouvidor
-  e da Diretoria.
+- **Você administra a plataforma e não consegue abrir um caso sigiloso:** caso
+  sigiloso é só do ouvidor e da Diretoria, e administrar o sistema não dá acesso
+  a denúncia.
 - **Alguém saiu do hospital:** quem é desligado perde o acesso junto, sem
   ninguém precisar lembrar de tirar na mão.

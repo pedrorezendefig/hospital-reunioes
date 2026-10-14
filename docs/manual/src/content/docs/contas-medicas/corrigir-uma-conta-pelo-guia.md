@@ -39,7 +39,7 @@ ele cabe em meia tela.
 
    ![Linha com os quatro motivos do Não procede](../../../assets/contas-medicas/guia-nao-procede.png)
 
-5. A linha **Validar** não tem botão: o item já foi para a gestão decidir.
+5. A linha **Validar** não tem botão, porque o item já foi para a gestão decidir.
 6. Clique em **Concluir e abrir a próxima**. Se escrever na **Observação para a
    gestão de contas médicas**, ela vai junto.
 

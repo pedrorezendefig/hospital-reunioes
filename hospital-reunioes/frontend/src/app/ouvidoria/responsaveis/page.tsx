@@ -225,7 +225,7 @@ export default function ResponsaveisDaOuvidoriaPage() {
 
       <h1 className="text-2xl font-bold text-slate-900">Responsáveis por setor</h1>
       <p className="text-slate-500 text-sm mt-0.5 mb-6">
-        O titular recebe o acionamento da Ouvidoria. Setor sem titular vigente não é acionável: a
+        O titular recebe o acionamento da Ouvidoria. Setor sem titular vigente não é acionável. A
         demanda sobe ao gestor da área e a Diretoria recebe o alerta.
       </p>
 

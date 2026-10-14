@@ -26,8 +26,8 @@ formulário no site do hospital.
 
 Os emails saem por um serviço de envio de fora do Brasil, e por isso foi
 decidido campo a campo o que pode viajar. Para quem falou com a Ouvidoria,
-viajam o protocolo e o desfecho. O relato dela nunca volta por email, a
-resposta que o setor escreveu nunca sai, e nenhum nome de colaborador aparece.
+viajam o protocolo e o desfecho. Ficam de fora o relato da pessoa, a resposta
+que o setor escreveu e qualquer nome de colaborador.
 
 ## O texto do encerramento sai do hospital
 
@@ -37,5 +37,5 @@ vai ser lida por um paciente ou um familiar.
 ## Quando o aviso não sai
 
 Sem email de contato, com pedido de anonimato ou com só um telefone, o aviso
-não sai e o caso registra isso com todas as letras. O texto do desfecho continua
-no registro do caso.
+não sai, e o caso registra que ele não saiu. O texto do desfecho continua no
+registro do caso.

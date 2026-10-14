@@ -12,8 +12,8 @@ sidebar:
 ## Quando usar
 
 Quando um caso está com a área, o prazo aperta e você quer chamar de novo. O
-sistema já cobra sozinho nos degraus do vencimento: esta é a cobrança que parte
-de você, fora dessa escada.
+sistema já cobra sozinho conforme o vencimento chega; esta cobrança é a que
+você faz por conta própria, fora dessa escada.
 
 ## Passo a passo
 
@@ -25,8 +25,8 @@ de você, fora dessa escada.
 2. Clique em **Cobrar**.
 3. Espere a confirmação. A tela mostra **Acionamento reenviado** com o nome de
    quem recebeu.
-4. Se o envio não sair na hora, a tela diz que o reenvio ficou na fila: o sistema
-   tenta de novo sozinho.
+4. Se o envio não sair na hora, a tela avisa que o reenvio ficou na fila, e o
+   sistema tenta de novo sozinho.
 
 ## Se der errado
 
@@ -34,8 +34,8 @@ de você, fora dessa escada.
   quem responde em
   [Cadastrar responsáveis de setor](/ouvidoria/cadastrar-responsaveis-de-setor/)
   e cobre de novo.
-- **O titular do setor mudou:** a cobrança vai para quem responde hoje, não para
-  quem recebeu o email original.
-- **A área respondeu e o caso continua na lista:** ele sai da fila de tramitação
-  no encerramento, não na resposta. Veja
+- **O titular do setor mudou:** a cobrança vai para quem responde pelo setor
+  hoje, mesmo que o email original tenha ido para outra pessoa.
+- **A área respondeu e o caso continua na lista:** ele só sai da fila de
+  tramitação quando a Ouvidoria encerra. Veja
   [Encerrar um caso e avisar a pessoa](/ouvidoria/encerrar-um-caso-e-avisar-a-pessoa/).

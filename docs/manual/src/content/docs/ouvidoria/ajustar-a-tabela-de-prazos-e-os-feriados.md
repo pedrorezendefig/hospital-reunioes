@@ -35,8 +35,8 @@ feriado novo no calendário do Rio. Ninguém mais mexe nesta tela.
 - **Um caso já encaminhado continua com o prazo antigo:** a tabela nova vale só
   para as validações novas. Quem já recebeu a demanda mantém o prazo que
   recebeu.
-- **O acuse de recebimento não respeita o expediente:** só ele. Esse prazo corre
-  em horas corridas, contando noite e fim de semana, porque é uma promessa a
-  quem esperou.
-- **Alguém mudou um prazo e ninguém sabe quem:** sabe sim. Cada mudança guarda
-  quem mudou, quando e de quanto para quanto.
+- **O acuse de recebimento não respeita o expediente:** ele é o único prazo que
+  corre em horas corridas, contando noite e fim de semana, porque é uma promessa
+  a quem esperou.
+- **Alguém mudou um prazo e ninguém sabe quem:** cada mudança fica registrada
+  com quem mudou, quando e de quanto para quanto.

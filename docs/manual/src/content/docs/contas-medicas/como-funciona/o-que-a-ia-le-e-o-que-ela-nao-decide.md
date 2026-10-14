@@ -7,8 +7,8 @@ sidebar:
   order: 31
 ---
 
-A inteligência artificial (IA) lê o que o programa sozinho não alcança: o texto
-livre do prontuário. Preço, diária e as contas da nota continuam com o
+A inteligência artificial (IA) lê o texto livre do prontuário, a parte que o
+programa sozinho não consegue interpretar. Preço, diária e as contas da nota continuam com o
 programa.
 
 ## As duas tarefas da IA
@@ -30,22 +30,23 @@ Antes da IA, o programa arruma o texto:
 
 - **Caixas marcadas.** Nos formulários (ventilação, oxigênio, via da dieta), o
   programa enxerga a caixinha ou o botão marcado e guarda só a opção escolhida.
-  Antes, "Assistência ventilatória: Sim Não" chegava sem dizer qual.
+  Sem isso, "Assistência ventilatória: Sim Não" chegaria sem dizer qual.
 - **Formulário em branco.** As linhas fixas dos formulários, que se repetem em
   toda evolução de fisioterapia, saem do texto desde o primeiro prontuário.
   Formulário novo ou alterado é aprendido: a linha que se repete em 8 de cada
   10 documentos do mesmo tipo sai a partir do terceiro prontuário.
-- **Prescrição por coluna.** A prescrição é lida pela posição das colunas, e
-  não pelo espaço entre as palavras: dose, unidade e frequência não se
-  misturam. Sem as colunas, vale a leitura de antes.
+- **Prescrição por coluna.** O programa lê a prescrição pela posição das
+  colunas, para que dose, unidade e frequência não se misturem. Quando não há
+  colunas, a leitura volta a ser pelo espaço entre as palavras.
 
 ## O que a IA não decide
 
-A IA não devolve valor em reais, não conta diária e não mexe na nota. E nenhuma
-linha dela chega ao guia sem passar pelo programa, que confere seis coisas:
+A IA não devolve valor em reais, não conta diária e não mexe na nota. Toda
+linha dela passa pelo programa antes de chegar ao guia, e ele confere seis
+coisas:
 
 1. A regra citada existe na memória da operadora. Se não existe, a linha cai.
-2. A regra está vigente. Regra pendente vira **Validar**, nunca ordem.
+2. A regra está vigente. Se está pendente, a linha vira **Validar**.
 3. O trecho está na página citada ou na vizinha. Se não está, a linha sai com
    a etiqueta **conferir evidência**.
 4. O código existe na tabela da operadora. Se não existe, o valor sai como

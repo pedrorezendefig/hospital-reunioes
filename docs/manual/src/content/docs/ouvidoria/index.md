@@ -8,36 +8,35 @@ sidebar:
 ---
 
 A Ouvidoria recebe tudo o que paciente, acompanhante e colaborador contam para
-o hospital: reclamação, elogio, sugestão, denúncia. Cada relato vira um caso com
-número próprio, um setor responsável e um prazo, e ninguém o encerra sem
-resposta. Esta seção conta como isso funciona e como se faz cada parte.
+o hospital, seja reclamação, elogio, sugestão ou denúncia. Cada relato vira um
+caso com número próprio, um setor responsável e um prazo, e ninguém o encerra
+sem resposta. Esta seção explica como isso funciona e como se faz cada parte.
 
 ## As seis palavras que você vai ver o tempo todo
 
 **Manifestação** é o nome de tudo que uma pessoa conta para a Ouvidoria. Neste
 manual também chamamos de caso. Cada uma ganha um número na hora.
 
-**Protocolo** é esse número, no formato 2026-0001. Nasce sozinho, na ordem de
-chegada. É o que a pessoa guarda e o que a Ouvidoria usa para achar o caso.
+**Protocolo** é esse número, no formato 2026-0001. Ele sai sozinho, na ordem de
+chegada. A pessoa guarda o protocolo, e a Ouvidoria o usa para achar o caso.
 
 **Ouvidor** é quem lê o relato, decide do que se trata, escolhe o setor
-responsável e cobra a resposta. Nenhuma dessas decisões é automática.
+responsável e cobra a resposta. O sistema não toma nenhuma dessas decisões.
 
 **Responsável do setor** é quem responde pela sua área quando um caso chega
-nela. Não precisa de conta nem de senha: recebe um email com um botão e
-responde por ali mesmo.
+nela. Ele recebe um email com um botão e responde por ali mesmo, sem conta e
+sem senha.
 
 **Gravidade** é o tamanho do problema, em quatro degraus: crítico, alto, médio e
-baixo. É ela que define quanto tempo o setor tem para responder.
+baixo. Ela define quanto tempo o setor tem para responder.
 
 **Situação** é onde o caso está agora: esperando a Ouvidoria olhar, esperando o
-setor responder, esperando o manifestante, respondido ou encerrado. Muda sozinha
-conforme o caso anda.
+setor responder, esperando o manifestante, respondido ou encerrado. Ela muda
+sozinha conforme o caso anda.
 
-Uma regra vale para tudo: nenhuma porta de entrada decide nada. Quem escreve
-pelo site, quem lê o QR na parede e a assistente de atendimento só registram o
-que aconteceu. O tipo, o setor, a gravidade e o sigilo são sempre escolha do
-ouvidor, depois de ler.
+Nenhuma porta de entrada decide nada. Quem escreve pelo site, quem lê o QR na
+parede e a assistente de atendimento só registram o que aconteceu. O tipo, o
+setor, a gravidade e o sigilo são sempre escolha do ouvidor, depois de ler.
 
 ## O caminho de um caso, do começo ao fim
 
@@ -54,14 +53,14 @@ ouvidor, depois de ler.
 5. **A Ouvidoria encerra e avisa a pessoa**, com uma conclusão escrita em
    linguagem simples.
 
-O sistema nunca aciona um setor sozinho. Sozinho, ele só cobra quem já foi
-acionado e avisa quem precisa saber.
+O sistema nunca aciona um setor por conta própria. O que ele faz sozinho é
+cobrar quem já foi acionado e avisar quem precisa saber.
 
 ## Os sete vídeos do módulo
 
-Sete vídeos curtos, sem narração, atuados nas telas de verdade. O capítulo 1 e o
-capítulo 6 foram regravados na versão 0.137.1, a que está no ar. Os outros cinco
-retratam a versão 0.109.0 e continuam valendo como visão de conjunto.
+São sete vídeos curtos, sem narração, encenados nas telas de verdade. O
+capítulo 1 e o capítulo 6 foram regravados na versão 0.137.1, a que está no ar.
+Os outros cinco mostram a versão 0.109.0 e ainda servem para ver o conjunto.
 
 ### 1. Por onde o caso chega
 
@@ -74,15 +73,15 @@ A tarefa está em [Registrar uma manifestação pela Ouvidoria](/ouvidoria/regis
 
 <video controls muted playsinline preload="metadata" src="/video/ouvidoria/cap-2.mp4"></video>
 
-O ponto azul, a tela de classificar e o caso mudando de faixa com o email
-saindo. A tarefa está em [Classificar e acionar um caso](/ouvidoria/classificar-e-acionar-um-caso/).
+O caso novo aparece com o ponto azul, passa pela tela de classificar e muda de
+faixa enquanto o email sai para o setor. A tarefa está em [Classificar e acionar um caso](/ouvidoria/classificar-e-acionar-um-caso/).
 
 ### 3. O setor responde
 
 <video controls muted playsinline preload="metadata" src="/video/ouvidoria/cap-3.mp4"></video>
 
-O email de acionamento, a tela de quem responde e a resposta curta que não liga
-o botão. A tarefa está em [Responder um caso pelo portal do setor](/ouvidoria/responder-um-caso-pelo-portal-do-setor/).
+O setor recebe o email de acionamento e abre a tela de resposta, onde uma
+resposta curta demais deixa o botão desligado. A tarefa está em [Responder um caso pelo portal do setor](/ouvidoria/responder-um-caso-pelo-portal-do-setor/).
 
 ### 4. O relógio e a cobrança
 
@@ -109,5 +108,5 @@ está em [Dar acesso à Ouvidoria a alguém](/ouvidoria/dar-acesso-a-ouvidoria-a
 
 <video controls muted playsinline preload="metadata" src="/video/ouvidoria/cap-7.mp4"></video>
 
-O painel se atualizando, a nota do Google lançada e o relatório quinzenal
-chegando. A tarefa está em [Acompanhar o painel da Ouvidoria](/ouvidoria/acompanhar-o-painel-da-ouvidoria/).
+O painel se atualiza, a nota do Google é lançada e o relatório quinzenal chega
+por email. A tarefa está em [Acompanhar o painel da Ouvidoria](/ouvidoria/acompanhar-o-painel-da-ouvidoria/).
