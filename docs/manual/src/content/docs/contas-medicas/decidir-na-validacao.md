@@ -32,7 +32,7 @@ da memória e devolve as linhas às contas.
 :::
 
 3. **Regra pendente:** clique em **Validar regra**, confira o texto e clique em
-   **Confirmar e validar**. Para decidir depois, **Deixar pendente**.
+   **Confirmar e validar**. Para decidir depois, clique em **Deixar pendente**.
 
    ![Texto da regra aberto com o botão Confirmar e validar](../../../assets/contas-medicas/validacao-regra.png)
 
@@ -51,5 +51,5 @@ da memória e devolve as linhas às contas.
   validação. Peça à diretoria.
 - **Aparece "Este tema já foi decidido":** outra pessoa decidiu antes.
   Recarregue a tela para ver o que sobrou.
-- **A leitura da IA não veio:** decida sem ela. A leitura é apoio; quem decide
-  é você.
+- **A leitura da IA não veio:** decida sem ela. A leitura só apoia a sua
+  decisão.

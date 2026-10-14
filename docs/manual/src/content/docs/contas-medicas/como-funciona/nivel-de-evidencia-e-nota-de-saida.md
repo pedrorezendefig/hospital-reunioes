@@ -40,9 +40,9 @@ A **Nota de entrada**, de 0 a 100, diz quanto a conta estava certa antes da
 sua correção: quanto mais R$ o guia aponta, menor a nota. Na conclusão, ela é
 refeita sem as linhas **Não procede**.
 
-A **Nota de saída** só existe quando você reenvia a conta corrigida. É a mesma
-conta, feita sobre a conta nova e só com as linhas **Feito** que continuam
-**ainda na conta**. Tudo corrigido no MV, a nota de saída é 100.
+A **Nota de saída** só existe quando você reenvia a conta corrigida. É o mesmo
+cálculo, feito sobre a conta nova e só com as linhas **Feito** que continuam
+**ainda na conta**. Se tudo foi corrigido no MV, a nota de saída é 100.
 
 O **Painel** conta a nota de entrada, na semana em que a conta foi concluída:
 o reenvio não muda o Painel nem a sua produção.

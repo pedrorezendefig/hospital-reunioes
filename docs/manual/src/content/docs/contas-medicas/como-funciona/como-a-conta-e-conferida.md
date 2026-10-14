@@ -7,8 +7,8 @@ sidebar:
   order: 30
 ---
 
-Preço, diária e quantidade são conta do programa: aritmética, contagem e busca
-exata, nunca chute. A inteligência artificial lê o texto livre do prontuário e
+O programa calcula preço, diária e quantidade por aritmética, contagem e busca
+exata. A inteligência artificial lê o texto livre do prontuário e
 propõe linhas, que o programa confere antes de chegarem ao guia: veja
 [O que a IA lê e o que ela não decide](../o-que-a-ia-le-e-o-que-ela-nao-decide/).
 
@@ -38,9 +38,8 @@ faltou pode não aparecer no guia.
 
 Toda linha do guia se apoia numa regra da memória da operadora. Quando essa
 regra ainda não foi validada pela diretoria ou pela gestão de contas médicas, a
-linha não vira ordem: ela nasce **Validar**, sem botão, com o valor em jogo. A
-decisão é de quem valida a regra, e por isso você não precisa decidir nada
-nela.
+linha nasce **Validar**, sem botão, com o valor em jogo. A decisão fica com
+quem valida a regra, e você não precisa fazer nada nessa linha.
 
 ## Como a diária é contada
 
@@ -50,8 +49,8 @@ vêm da memória da operadora (em geral, vence às 10h e é sempre integral).
 
 Quando a troca de setor não tem hora exata, o sistema usa a janela entre o
 último registro no setor antigo e o primeiro no novo. Janela toda antes ou toda
-depois do vencimento segue a regra; janela que atravessa o vencimento vira
-**Validar**, em vez de chute.
+depois do vencimento segue a regra. Janela que atravessa o vencimento vira
+**Validar**, porque não dá para saber de que lado dele a troca aconteceu.
 
 A diária cobrada é a da acomodação contratada, mesmo que o MV mostre outra.
 Setor que o sistema não conhece também vira **Validar**.
@@ -64,8 +63,8 @@ UTI termina com "Conferir classe de UTI".
 
 ## O que fica guardado da paciente
 
-Nenhum nome completo fica guardado: só o primeiro nome com a inicial do
-sobrenome (por exemplo, "Ana P.") e a idade. CPF, carteira, data de nascimento,
+Da paciente ficam só o primeiro nome com a inicial do sobrenome (por exemplo,
+"Ana P.") e a idade. CPF, carteira, data de nascimento,
 endereço e telefone são apagados antes de qualquer gravação.
 
 Os PDFs da conta e do prontuário, e o texto tirado deles, saem do sistema sete
