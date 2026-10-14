@@ -178,8 +178,9 @@ Comece copiando o mais parecido com a sua tarefa. O que eles ensinaram:
   A tela de um vídeo antigo é rascunho: a do Redirecionar estava 54 versões
   atrás (botão desligado cinza no lugar do apagado, ajuda dos campos faltando).
 - Medida pelo `offsetLeft`/`offsetTop` até a raiz do app, que ignora a câmera e
-  a rolagem; a rolagem entra na conta à mão. A fonte já está carregada quando o
-  script roda, então a medida pode ser feita na montagem.
+  a rolagem; a rolagem entra na conta à mão. A medida nunca é feita na
+  montagem (veja a regra de 14/10/2026 no fim deste arquivo): o alvo é uma
+  função, e o GSAP a chama quando o tween começa.
 - Tela que muda de estado (fila relida, janela que abre, campo preenchido) é
   um quadro por estado, um em cima do outro, e a troca é de `opacity`. Nada de
   `display` no timeline (o `check` trava) e nada de layout que reflui no meio
@@ -229,8 +230,20 @@ o vídeo: carimbo do vizinho trava o CI.
    `migration, endpoint, API, PR, pull request, deploy, RLS, schema, backend,
    frontend, commit, branch, merge, token, env, SQL, Supabase, Coolify, prompt`,
    mais travessão e meia-risca. Cada ocorrência vira linguagem funcional ou sai.
-2. **Check:** `npx --yes hyperframes@0.8.41 check` na pasta da composição, com
-   0 erros e 0 avisos.
+2. **Check e anel:** `npx --yes hyperframes@0.8.41 check` na pasta da
+   composição, com 0 erros e 0 avisos. Depois o gate do anel:
+
+   ```bash
+   python3 tools/anel_video_manual.py \
+     --composicao docs/manual/video/<modulo>/<slug>/index.html
+   ```
+
+   Ele abre a composição no navegador, espera a fonte como o render espera e,
+   de 0,1 em 0,1 s, compara o anel aceso (`#mk`) com o alvo que o `marca()`
+   declara em `data-alvo`. Reprova o anel fora do alvo, com folga de mais de
+   20 px de um lado, sem `data-alvo`, ou passando por cima de texto visível de
+   fora do alvo. O `check` não vê nada disso: para ele o anel é um elemento
+   válido em qualquer lugar do quadro.
 3. **Draft:**
 
    ```bash
@@ -261,7 +274,7 @@ o vídeo: carimbo do vizinho trava o CI.
    # VERIFY: <título da tarefa>
 
    - Draft: docs/manual/public/video/<modulo>/<slug>.mp4, NN s, sha256 <12 primeiros>
-   - Check (HyperFrames 0.8.41): 0 erros, 0 avisos
+   - Check (HyperFrames 0.8.41): 0 erros, 0 avisos; gate do anel OK
    - Strips: N cortes, gate OK; olhei corte-01 a corte-NN
    - Quadros a cada 3 s: o que conferi (marcador, dedo, legenda, tela igual ao app)
    - Texto da tela: humanizer e varredura anti-técnica, sem achados
@@ -291,4 +304,26 @@ de compor um vídeo novo, leia a lista.
 
 Formato: `- DD/MM/AAAA, <modulo>/<slug>: a regra, no imperativo.`
 
-Nenhuma ainda.
+- 14/10/2026, contas-medicas/decidir-na-validacao e
+  ouvidoria/redirecionar-o-caso-para-outra-area: nunca meça o layout na
+  montagem. O script da composição roda antes de a fonte do app carregar, o
+  layout ainda está na fonte de reserva (mais larga), e toda medida feita ali
+  sai errada: o anel caiu ao lado do botão Validação, cortando "Painel", e
+  desceu abaixo da Leitura da IA, que quebrava em mais linhas. Valem o anel,
+  o dedo, a câmera, a rolagem e a posição de popup. Declare o alvo como
+  função (`alvo("id", rolagem)` dos pilotos) e passe ao GSAP valores-função
+  (`x: () => a.caixa().x`), que ele calcula quando o tween começa; o render
+  só busca o primeiro quadro depois da fonte. Popup que depende do layout
+  ganha a posição num `tl.set` com valor-função, não num `style.top` solto.
+- 14/10/2026, mesmos vídeos: o anel contorna o que a pessoa lê, inteiro, com
+  ar em volta. Campo é rótulo e valor juntos (o anel só no valor cortou o
+  rótulo "SETOR"); texto curto num bloco de largura cheia ganha
+  `width: fit-content` para o anel não sobrar pela linha toda; e a folga do
+  anel (8 px vezes o zoom) não pode cair em cima de vizinho: o aviso de
+  download afinou para o anel não cortar o número do sino. O gate do anel
+  (`tools/anel_video_manual.py`) trava os três casos.
+- 14/10/2026, ouvidoria/redirecionar-o-caso-para-outra-area: a faixa azul de
+  item escolhido numa lista é filha da lista e herda o `padding` das linhas
+  (`.lista-sel div`); zere o `padding` dela, ou o texto da faixa desce e
+  anda para a direita da linha que ela cobre. Confira a faixa no quadro em
+  que ela acende.
