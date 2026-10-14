@@ -39,6 +39,9 @@ RE_HEX = re.compile(
     r"(?<![&\w])#(?:[0-9a-fA-F]{8}|[0-9a-fA-F]{6}|[0-9a-fA-F]{3,4})(?![\w-])"
 )
 RE_FONTE = re.compile(r"\b(?:font-family|fontFamily|font)\s*:\s*([^;}\n]+)")
+RE_ESTILO = re.compile(r"<style\b[^>]*>(.*?)</style>", re.S | re.I)
+RE_SELETOR_DE_CLASSE = re.compile(r"\.([A-Za-z_][\w-]*)")
+RE_ATRIBUTO_CLASS = re.compile(r'\bclass="([^"]*)"')
 RE_REGISTRO = re.compile(
     r"window\.__timelines(?:\[\s*[\"']([\w-]+)[\"']\s*\]|\.([\w$]+))\s*=\s*([\w$]+)"
 )
@@ -110,6 +113,29 @@ def _cor_e_fonte(html: str, rotulo: str) -> list[str]:
     return problemas
 
 
+def _classes_da_raiz(html: str) -> set[str]:
+    """As classes que o `<style>` da composição estiliza."""
+    css = " ".join(RE_ESTILO.findall(html))
+    css = re.sub(r"/\*.*?\*/", "", css, flags=re.S)
+    css = re.sub(r"url\([^)]*\)", "", css)  # o `.ttf` da fonte não é classe
+    return set(RE_SELETOR_DE_CLASSE.findall(css))
+
+
+def _classes_em_comum(raiz: str, card: str, rotulo_card: str) -> list[str]:
+    """Regra de classe da raiz que pega um elemento do card montado.
+
+    Depois de montado, o card divide a página com a réplica da tela: um `.tela`
+    da réplica também posiciona o `.tela` do lower-third (issue #1231).
+    """
+    usadas = {c for attr in RE_ATRIBUTO_CLASS.findall(card) for c in attr.split()}
+    return [
+        f"{rotulo_card}: a composição estiliza .{classe}, que é também uma classe "
+        "do card, e a regra da réplica deforma o card montado. Dê à classe da "
+        "réplica um nome próprio (por exemplo, .ap-" + classe + ")."
+        for classe in sorted(_classes_da_raiz(raiz) & usadas)
+    ]
+
+
 def _timeline_curto(
     rotulo: str, composicao: str, dura: float, slot: float
 ) -> list[str]:
@@ -149,6 +175,7 @@ def _gates_da_composicao(arquivo: Path, rotulo: str) -> list[str]:
             continue
         html_card = card.read_text(encoding="utf-8")
         problemas += _cor_e_fonte(html_card, rotulo_card)
+        problemas += _classes_em_comum(html, html_card, rotulo_card)
         problemas += _timeline_curto(
             rotulo_card,
             host["data-composition-id"],

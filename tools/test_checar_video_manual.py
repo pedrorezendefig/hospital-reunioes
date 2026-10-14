@@ -428,3 +428,36 @@ def test_card_do_estilo_com_hex_trava(tmp_path):
     problemas = checar_video_manual.checar(tmp_path)
     assert len(problemas) == 1
     assert "_estilo/cards/legenda-de-passo" in problemas[0]
+
+
+# A réplica da tela e os cards dividem a mesma página depois de montados: uma
+# regra de classe da raiz pega também o elemento do card que tem a mesma
+# classe. No piloto (issue #1231), o `.tela` da réplica jogou o nome da tela do
+# lower-third para cima do lugar, e o `.cartao` deformou o callout; o `check`
+# do HyperFrames acusa só a sobreposição de texto, sem dizer de onde ela vem.
+def montar_com_estilo_na_raiz(tmp_path: Path, estilo: str) -> None:
+    montar_com_card(tmp_path, 60)
+    pasta = tmp_path / "video" / "ouvidoria" / "registrar-manifestacao-pelo-formulario"
+    raiz = pasta / "index.html"
+    raiz.write_text(
+        raiz.read_text(encoding="utf-8").replace(
+            "</head>", f"<style>{estilo}</style></head>"
+        ),
+        encoding="utf-8",
+    )
+
+
+def test_classe_da_replica_com_o_nome_de_uma_classe_do_card_trava(tmp_path):
+    montar_com_estilo_na_raiz(tmp_path, ".placa { position: absolute; top: 0; }")
+    problemas = checar_video_manual.checar(tmp_path)
+    assert len(problemas) == 1
+    assert ".placa" in problemas[0]
+    assert "compositions/legenda-de-passo.html" in problemas[0]
+
+
+def test_classe_da_replica_com_nome_proprio_passa(tmp_path):
+    montar_com_estilo_na_raiz(
+        tmp_path,
+        "@font-face { src: url('assets/fonts/x.ttf'); } .ap-placa { opacity: .5; }",
+    )
+    assert checar_video_manual.checar(tmp_path) == []
