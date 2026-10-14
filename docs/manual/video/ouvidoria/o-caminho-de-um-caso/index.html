@@ -1,0 +1,518 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=1920, height=1080" />
+<title>Manual · Ouvidoria · O caminho de um caso</title>
+<link rel="stylesheet" href="tokens.css" />
+<script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js" integrity="sha384-sG0Hv1tP1lZCk9KQmrIbY/XNwi+OY84GQqhMscbnsoBFqAz8KNCil1kvfL3Hbbk2" crossorigin="anonymous"></script>
+<script type="application/json" id="manual-video-meta">
+{
+ "modulo": "ouvidoria",
+ "slug": "o-caminho-de-um-caso",
+ "pagina": "ouvidoria/index.md",
+ "prd": [1259],
+ "issues": [1263],
+ "app_version": "0.196.1",
+ "gerado_em": "2026-10-14T12:00:00-03:00"
+}
+</script>
+<style>
+  /* Vídeo de visão geral da Ouvidoria (ADR 0072), no Estilo do manual: cor e
+     fonte só pelos tokens. Na réplica, cada cor é a da classe do app, pelo
+     token de mesmo nome (text-slate-500 vira var(--color-slate-500)). */
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { width: 1920px; height: 1080px; overflow: hidden; background: var(--video-palco); }
+  body { font-family: var(--font-app); color: var(--color-text); }
+  #main { position: relative; width: 1920px; height: 1080px; overflow: hidden; }
+  #slot-abertura, #slot-carimbo { z-index: 5; }
+  #c-tarefa { position: absolute; inset: 0; z-index: 1; }
+  .palco { position: absolute; inset: 0; background: var(--video-palco); }
+  #camera { position: absolute; left: 0; top: 0; width: 1920px; height: 1080px; transform-origin: 0 0; }
+  [id^="slot-passo"] { z-index: 3; }
+  [id^="slot-lugar"] { z-index: 2; }
+
+  /* ===== a janela do navegador ===== */
+  .janela { position: absolute; left: 160px; top: 32px; width: 1600px; height: 848px; border-radius: var(--radius-3xl); background: var(--color-white); border: 1px solid var(--color-slate-300); box-shadow: var(--video-sombra); overflow: hidden; opacity: 0; }
+  .barra-nav { position: absolute; left: 0; top: 0; width: 1600px; height: 44px; background: var(--color-slate-100); border-bottom: 1px solid var(--color-slate-200); display: flex; align-items: center; gap: 9px; padding: 0 18px; }
+  .barra-nav i { display: block; width: 12px; height: 12px; border-radius: 50%; background: var(--color-slate-300); }
+  .barra-nav .url { position: relative; margin-left: 14px; width: 620px; height: 28px; border-radius: 14px; background: var(--color-white); border: 1px solid var(--color-slate-200); font-size: 16px; color: var(--color-slate-500); }
+  .url span { position: absolute; left: 16px; top: 4px; white-space: nowrap; }
+  .vista { position: absolute; left: 0; top: 44px; width: 1600px; height: 804px; overflow: hidden; background: var(--color-bg); }
+  .app { position: absolute; left: 0; top: 0; width: 1280px; height: 643.2px; transform: scale(1.25); transform-origin: 0 0; background: var(--color-bg); font-size: 14px; line-height: 20px; overflow: hidden; }
+
+  /* ===== a casca do app ===== */
+  .lado { position: absolute; left: 0; top: 0; width: 256px; height: 643.2px; border-right: 1px solid var(--color-border); background: var(--color-surface); }
+  .lado .marca { height: 122px; border-bottom: 1px solid var(--color-border); display: flex; align-items: center; justify-content: center; }
+  .lado .marca img { width: 170px; height: 96px; object-fit: contain; }
+  .lado nav { padding: 16px 12px; display: flex; flex-direction: column; gap: 4px; }
+  .mi { display: flex; align-items: center; gap: 12px; padding: 10px 12px; border-radius: var(--radius-xl); font-size: 14px; color: var(--color-text-secondary); }
+  .mi .fim { margin-left: auto; opacity: .5; display: flex; }
+  .mi.on { background: color-mix(in srgb, var(--color-primary) 10%, transparent); color: var(--color-primary); border-left: 3px solid var(--color-primary); padding-left: 9px; }
+  .mi .selo { margin-left: auto; min-width: 18px; height: 18px; padding: 0 4px; border-radius: 999px; background: var(--color-primary); color: var(--color-white); font-size: 10px; display: inline-flex; align-items: center; justify-content: center; }
+  .sub { margin: 4px 0 0 16px; padding-left: 12px; border-left: 2px solid color-mix(in srgb, var(--color-border) 50%, transparent); display: flex; flex-direction: column; gap: 4px; }
+  .sub .mi { padding: 8px 12px; border-radius: var(--radius-lg); }
+  .topo { position: absolute; left: 256px; top: 0; width: 1024px; height: 64px; background: var(--color-slate-50); border-bottom: 1px solid var(--color-slate-200); display: flex; align-items: center; padding: 0 24px; }
+  .busca { width: 256px; height: 38px; border-radius: var(--radius-xl); background: var(--color-bg); border: 1px solid var(--color-border); display: flex; align-items: center; gap: 10px; padding: 0 12px; font-size: 14px; color: color-mix(in srgb, var(--color-text-secondary) 40%, transparent); }
+  .quem { margin-left: auto; margin-right: 24px; display: flex; align-items: center; gap: 24px; }
+  .sino { color: var(--color-slate-500); display: flex; }
+  .divisor { width: 1px; height: 32px; background: var(--color-border); }
+  .pessoa { display: flex; align-items: center; gap: 12px; }
+  .pessoa .tx { text-align: right; }
+  .pessoa .tx b { display: block; font-size: 14px; font-weight: 600; color: var(--color-slate-700); }
+  .pessoa .tx span { font-size: 12px; color: var(--color-slate-500); }
+  .avatar { width: 40px; height: 40px; border-radius: 50%; background: var(--color-primary); color: var(--color-white); font-weight: 700; display: flex; align-items: center; justify-content: center; }
+  .corpo { position: absolute; left: 256px; top: 64px; width: 1024px; height: 579.2px; overflow: hidden; background: var(--color-bg); }
+  .pg { position: absolute; left: 0; top: 0; width: 1024px; opacity: 0; }
+
+  /* ===== a lista da Ouvidoria (page.tsx e ListaDaFila.tsx) ===== */
+  .fila { padding: 32px; }
+  .fila h1 { font-size: 24px; line-height: 32px; font-weight: 700; color: var(--color-slate-900); }
+  .fila .st { font-size: 14px; color: var(--color-slate-500); margin-top: 2px; }
+  .pilulas { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 16px 0 10px; }
+  .pil { display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px; border-radius: 999px; font-size: 14px; font-weight: 500; white-space: nowrap; background: var(--color-slate-100); color: var(--color-slate-700); }
+  .pil.azul { background: var(--color-sky-100); color: var(--color-sky-700); }
+  .pil.verm { background: var(--color-red-100); color: var(--color-red-700); }
+  .bt-q { display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px; border-radius: var(--radius-lg); font-size: 14px; font-weight: 600; text-transform: uppercase; letter-spacing: .025em; white-space: nowrap; background: var(--color-slate-100); color: var(--color-slate-700); }
+  .bt-q.prim { background: var(--color-primary); color: var(--color-white); }
+  .grupo { margin-top: 24px; border: 1px solid var(--color-sky-200); border-radius: var(--radius-2xl); overflow: hidden; background: var(--color-white); }
+  .grupo .gcab { display: flex; justify-content: space-between; padding: 8px 20px; background: var(--color-sky-100); color: var(--color-sky-700); font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .025em; }
+  .grupo .gcab span { text-transform: none; font-weight: 600; }
+  .lin { display: flex; align-items: center; gap: 12px; padding: 10px 20px; min-height: 64px; border-top: 1px solid var(--color-slate-100); }
+  .lin .ct { flex: 1; min-width: 0; }
+  .lin .l1 { display: flex; gap: 8px; white-space: nowrap; overflow: hidden; }
+  .lin .prt { font-family: var(--font-mono); font-size: 14px; font-weight: 600; color: var(--color-slate-800); }
+  .lin .rs { font-size: 14px; color: var(--color-slate-700); overflow: hidden; text-overflow: ellipsis; }
+  .lin .l2 { font-size: 12px; color: var(--color-slate-500); margin-top: 4px; }
+  .lin .l2 .vence { color: var(--color-red-600); font-weight: 600; }
+  .bt-lin { display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px; border-radius: var(--radius-lg); font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: .025em; background: var(--color-primary); color: var(--color-white); white-space: nowrap; }
+
+  /* ===== o caso aberto (Dossie.tsx) ===== */
+  .caso { width: 896px; margin: 0 auto; padding: 32px; }
+  .volta { display: inline-flex; align-items: center; gap: 6px; font-size: 14px; color: var(--color-slate-500); margin-bottom: 16px; }
+  .ap-secao { background: var(--color-white); border: 1px solid var(--color-border); border-radius: var(--radius-2xl); box-shadow: var(--shadow-premium); padding: 24px; }
+  .ap-cab { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; padding-bottom: 16px; margin-bottom: 20px; border-bottom: 1px solid var(--color-slate-100); }
+  .ap-cab .esq { display: flex; align-items: flex-start; gap: 12px; }
+  .ap-cab .ic { width: 40px; height: 40px; border-radius: var(--radius-xl); background: color-mix(in srgb, var(--color-primary) 10%, transparent); color: var(--color-primary); display: flex; align-items: center; justify-content: center; }
+  .ap-cab h1 { font-size: 20px; line-height: 28px; font-weight: 700; color: var(--color-slate-900); }
+  .ap-cab .est { font-size: 14px; color: var(--color-slate-500); margin-top: 2px; }
+  .acoes { display: flex; align-items: center; gap: 8px; }
+  .acao { display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px; border-radius: var(--radius-lg); font-size: 12px; line-height: 16px; font-weight: 600; text-transform: uppercase; letter-spacing: .025em; white-space: nowrap; }
+  .acao.prim { background: var(--color-primary); color: var(--color-white); }
+  .acao.branca { background: var(--color-white); color: var(--color-slate-700); border: 1px solid var(--color-slate-300); }
+  .acao.verde { background: var(--color-emerald-50); color: var(--color-emerald-700); border: 1px solid var(--color-emerald-200); }
+  .blocos { display: flex; flex-direction: column; gap: 20px; }
+  .faixa-info { display: flex; align-items: flex-start; gap: 8px; padding: 12px 16px; border-radius: var(--radius-xl); font-size: 14px; background: var(--color-slate-50); border: 1px solid var(--color-border); color: var(--color-slate-700); }
+  .faixa-info .ic { display: flex; margin-top: 2px; color: var(--color-slate-500); }
+  .faixa-info b { font-weight: 500; color: var(--color-slate-800); }
+  .campos { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .campos dt, .sec-rot { font-size: 12px; line-height: 16px; font-weight: 600; text-transform: uppercase; letter-spacing: .025em; color: var(--color-slate-400); }
+  .sec-rot span { text-transform: none; }
+  .campos dd { font-size: 14px; color: var(--color-slate-700); margin-top: 2px; }
+  .sec p { font-size: 14px; color: var(--color-slate-700); margin-top: 4px; }
+  .devol { margin-top: 10px; display: flex; flex-direction: column; gap: 8px; align-items: flex-start; }
+  .devol .area-t { width: 100%; min-height: 58px; padding: 8px 12px; border-radius: var(--radius-lg); border: 1px solid var(--color-slate-200); font-size: 14px; color: var(--color-slate-400); }
+  .bt-ambar { display: inline-flex; padding: 6px 12px; border-radius: var(--radius-lg); font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: .025em; background: var(--color-amber-600); color: var(--color-white); opacity: .5; }
+  .devol small { font-size: 12px; color: var(--color-slate-500); }
+
+  /* ===== as janelas do app (AdminModal) ===== */
+  .sobre-app { position: absolute; left: 0; top: 0; width: 1280px; height: 643.2px; opacity: 0; }
+  .veu { position: absolute; inset: 0; background: color-mix(in srgb, var(--color-black) 40%, transparent); }
+  .modal { position: absolute; top: 32px; background: var(--color-white); border-radius: var(--radius-2xl); box-shadow: var(--shadow-premium-strong); overflow: hidden; }
+  .md-cab { position: absolute; left: 0; top: 0; width: 100%; display: flex; align-items: flex-start; gap: 12px; padding: 16px 24px; border-bottom: 1px solid var(--color-border); background: var(--color-white); }
+  .md-cab .ic { color: var(--color-slate-800); display: flex; margin-top: 4px; }
+  .md-cab h2 { font-size: 18px; line-height: 28px; font-weight: 700; color: var(--color-text); }
+  .md-cab p { position: relative; font-size: 12px; line-height: 16px; color: var(--color-slate-500); margin-top: 2px; }
+  .md-cab .x { margin-left: auto; color: var(--color-slate-400); display: flex; padding: 6px; }
+  .md-corpo { position: absolute; left: 0; width: 100%; overflow: hidden; }
+  .md-rolo { position: absolute; left: 0; top: 0; width: 100%; padding: 20px 24px; display: flex; flex-direction: column; gap: 20px; }
+  .md-pe { position: absolute; left: 0; bottom: 0; width: 100%; height: 64px; display: flex; align-items: center; justify-content: flex-end; gap: 8px; padding: 0 24px; border-top: 1px solid var(--color-border); background: var(--color-slate-50); }
+  .g2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .g3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; }
+  .rot { display: block; font-size: 12px; line-height: 16px; font-weight: 600; color: var(--color-slate-500); text-transform: uppercase; letter-spacing: .025em; margin-bottom: 4px; }
+  .rot span { text-transform: none; }
+  .campo { position: relative; width: 100%; min-height: 38px; padding: 8px 12px; border-radius: var(--radius-lg); border: 1px solid var(--color-slate-200); font-size: 14px; color: var(--color-slate-700); background: var(--color-white); white-space: nowrap; overflow: hidden; }
+  .campo.sel .ic { position: absolute; right: 12px; top: 10px; display: flex; color: var(--color-slate-500); }
+  .campo.alto { min-height: 70px; white-space: normal; }
+  .campo.mais-alto { min-height: 90px; white-space: normal; }
+  .campo .vazio { color: var(--color-slate-400); }
+  .campo .vazio.cinza { color: var(--color-slate-700); }
+  .campo .cheio { position: absolute; left: 12px; right: 12px; top: 8px; opacity: 0; background: var(--color-white); }
+  .campo-foco { position: absolute; inset: -1px; border-radius: var(--radius-lg); border: 1px solid color-mix(in srgb, var(--color-primary) 40%, transparent); box-shadow: 0 0 0 2px color-mix(in srgb, var(--color-primary) 30%, transparent); opacity: 0; }
+  .dica { margin-top: 6px; font-size: 12px; line-height: 19.5px; color: var(--color-slate-500); }
+  .dica.clara { color: var(--color-slate-400); line-height: 16px; margin-top: 4px; }
+  .marcar { display: flex; align-items: center; gap: 8px; font-size: 14px; color: var(--color-slate-700); }
+  .qd { width: 16px; height: 16px; border: 1px solid var(--color-slate-300); border-radius: var(--radius-sm); background: var(--color-white); flex-shrink: 0; }
+  .sigilo { padding: 12px 16px; border-radius: var(--radius-xl); background: var(--color-slate-50); border: 1px solid var(--color-slate-200); display: flex; align-items: flex-start; gap: 8px; font-size: 14px; color: var(--color-slate-700); }
+  .sigilo .qd { width: 13px; height: 13px; margin-top: 3px; border-color: var(--color-slate-500); }
+  .sigilo b { font-weight: 600; }
+  .sigilo small { display: block; font-size: 12px; line-height: 16px; color: var(--color-slate-500); margin-top: 2px; }
+  .opcoes { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .opc { position: relative; padding: 10px 12px; border-radius: var(--radius-xl); border: 1px solid var(--color-slate-200); background: var(--color-white); color: var(--color-slate-900); }
+  .opc b { display: block; font-size: 14px; font-weight: 600; }
+  .opc small { display: block; font-size: 12px; line-height: 16px; margin-top: 2px; opacity: .8; }
+  .opc .acesa { position: absolute; inset: -1px; padding: 10px 12px; border-radius: var(--radius-xl); border: 1px solid var(--color-amber-200); background: var(--color-amber-100); color: var(--color-amber-700); opacity: 0; }
+  .opc .acesa.azul { border-color: color-mix(in srgb, var(--color-primary) 40%, transparent); background: color-mix(in srgb, var(--color-primary) 10%, var(--color-white)); color: var(--color-primary); }
+  .opc.so b { color: var(--color-slate-700); }
+  .bt-texto { padding: 8px 16px; border-radius: var(--radius-lg); font-size: 14px; font-weight: 600; text-transform: uppercase; letter-spacing: .025em; color: var(--color-slate-600); }
+  .bt-ato { position: relative; display: inline-flex; align-items: center; gap: 6px; padding: 8px 16px; border-radius: var(--radius-lg); font-size: 14px; font-weight: 600; text-transform: uppercase; letter-spacing: .025em; background: var(--color-primary); color: var(--color-white); white-space: nowrap; }
+  .apagado { position: absolute; inset: 0; border-radius: inherit; background: color-mix(in srgb, var(--color-white) 55%, transparent); }
+  .anexo-in { display: flex; align-items: center; gap: 12px; font-size: 14px; color: var(--color-slate-500); }
+  .anexo-in b { padding: 6px 12px; border-radius: var(--radius-lg); background: var(--color-slate-100); color: var(--color-slate-700); font-weight: 600; }
+  .ok-reg { text-align: center; padding: 32px 0; }
+  .ok-reg .ic { width: 56px; height: 56px; border-radius: var(--radius-2xl); background: var(--color-emerald-50); color: var(--color-emerald-500); display: flex; align-items: center; justify-content: center; margin: 0 auto 12px; }
+  .ok-reg p { font-size: 14px; color: var(--color-slate-500); }
+  .ok-reg .num { font-family: var(--font-mono); font-size: 24px; line-height: 32px; font-weight: 700; color: var(--color-slate-900); margin-top: 4px; }
+  .aviso-ambar { display: flex; align-items: flex-start; gap: 8px; padding: 10px 12px; margin-bottom: 8px; border-radius: var(--radius-xl); background: var(--color-amber-50); border: 1px solid var(--color-amber-200); color: var(--color-amber-900); font-size: 12px; line-height: 19.5px; }
+  .aviso-ambar .ic { display: flex; margin-top: 2px; }
+
+  /* ===== o email (templates email_ouvidoria_*.html) ===== */
+  .correio { position: absolute; top: 32px; width: 640px; height: 678.4px; transform: scale(1.25); transform-origin: 0 0; border-radius: var(--radius-2xl); background: var(--color-slate-100); border: 1px solid var(--color-slate-300); box-shadow: var(--video-sombra); overflow: hidden; opacity: 0; font-family: var(--font-sans); }
+  .correio .assunto { position: absolute; left: 0; top: 0; width: 640px; height: 58px; padding: 10px 18px; background: var(--color-white); border-bottom: 1px solid var(--color-slate-200); font-size: 13px; color: var(--color-slate-500); line-height: 19px; }
+  .correio .assunto b { color: var(--color-slate-800); font-weight: 700; }
+  .correio .janela-mail { position: absolute; left: 0; top: 58px; width: 640px; height: 620.4px; overflow: hidden; }
+  .mail-rolo { position: absolute; left: 0; top: 0; width: 640px; padding: 24px 40px; }
+  .mail { background: var(--color-white); border-radius: 16px; overflow: hidden; box-shadow: 0 10px 30px -12px color-mix(in srgb, var(--color-slate-900) 25%, transparent); }
+  .mail .grad { height: 4px; background: linear-gradient(90deg, var(--color-primary), var(--color-blue-500)); }
+  .mail .mcab { display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 24px 0 18px; border-bottom: 1px solid var(--color-slate-200); }
+  .mail .mcab img { width: 140px; height: 70px; object-fit: contain; }
+  .mail .mcab span { font-size: 11px; letter-spacing: .14em; color: var(--color-slate-500); }
+  .mail .mc { padding: 24px 32px; }
+  .mail p { font-size: 13px; line-height: 21px; color: var(--color-slate-600); margin-bottom: 14px; }
+  .mail p b { color: var(--color-slate-800); }
+  .mgrav { border-radius: 10px; overflow: hidden; border: 1px solid var(--color-slate-200); margin-bottom: 18px; }
+  .mgrav .mg { padding: 8px 18px; background: var(--color-blue-950); color: var(--color-white); font-size: 11px; font-weight: 700; letter-spacing: .1em; }
+  .mgrav .mgc, .mprot { padding: 12px 18px; background: var(--color-slate-50); font-size: 12px; color: var(--color-slate-700); line-height: 19px; }
+  .mprot { border: 1px solid var(--color-slate-200); border-radius: 10px; margin-bottom: 18px; }
+  .mk { font-size: 10px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--color-slate-400); }
+  .mnum { font-size: 20px; line-height: 28px; font-weight: 700; color: var(--color-slate-800); }
+  .mbx { border-radius: 10px; padding: 14px 18px; margin-bottom: 12px; border: 1px solid var(--color-slate-200); background: var(--color-slate-50); font-size: 13px; line-height: 20px; color: var(--color-slate-700); }
+  .mbx.res { background: var(--color-white); border-color: var(--color-indigo-200); font-size: 15px; font-weight: 600; color: var(--color-slate-800); }
+  .mbx.res .mk { color: var(--color-primary); }
+  .mbx.nota { background: var(--color-indigo-50); border-color: var(--color-indigo-300); color: var(--color-indigo-900); }
+  .mbx.nota .mk { color: var(--color-indigo-800); }
+  .mbx .mk { margin-bottom: 6px; }
+  .mail .peq { font-size: 12px; color: var(--color-slate-500); margin-bottom: 4px; }
+  .mail .cta { display: flex; justify-content: center; margin: 18px 0 12px; }
+  .mail .cta span { display: inline-block; padding: 12px 32px; border-radius: 10px; background: linear-gradient(135deg, var(--color-primary), var(--color-blue-700)); color: var(--color-white); font-size: 14px; font-weight: 700; }
+  .mail .rod { text-align: center; font-size: 12px; color: var(--color-slate-400); }
+  .mail .mrodape { padding: 16px; background: var(--color-slate-50); border-top: 1px solid var(--color-slate-200); text-align: center; font-size: 11px; line-height: 17px; color: var(--color-slate-400); }
+  .mail .link { color: var(--color-blue-800); text-decoration: underline; }
+
+  /* ===== o portal do setor (ouvidoria-setor/[token]/page.tsx) ===== */
+  .portal { background: var(--color-slate-50); }
+  .pt-rolo { position: absolute; left: 384px; top: 0; width: 512px; padding: 24px 0; display: flex; flex-direction: column; gap: 16px; }
+  .pt-cx { background: var(--color-white); border: 1px solid var(--color-slate-200); border-radius: var(--radius-2xl); box-shadow: var(--shadow-premium); overflow: hidden; }
+  .pt-grav { padding: 10px 24px; border-bottom: 1px solid var(--color-amber-200); background: var(--color-amber-100); color: var(--color-amber-700); font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .025em; }
+  .pt-in { padding: 24px; display: flex; flex-direction: column; gap: 12px; }
+  .pt-id { display: flex; align-items: center; gap: 10px; }
+  .pt-id img { width: 92px; height: 52px; object-fit: contain; }
+  .pt-id h1 { font-size: 14px; font-weight: 700; color: var(--color-slate-900); }
+  .pt-prazo { display: flex; align-items: flex-start; gap: 8px; padding: 10px 12px; border-radius: var(--radius-xl); border: 1px solid var(--color-slate-200); background: var(--color-slate-50); color: var(--color-slate-700); font-size: 14px; font-weight: 600; }
+  .pt-prazo .ic { display: flex; margin-top: 2px; }
+  .pt-sec { font-size: 14px; color: var(--color-slate-500); display: flex; gap: 8px; }
+  .pt-sec .p { font-family: var(--font-mono); font-weight: 700; color: var(--color-slate-700); }
+  .pt-sec b { font-weight: 600; color: var(--color-slate-700); }
+  .pt-sec i { font-style: normal; color: var(--color-slate-300); }
+  .pt-dl { display: flex; justify-content: space-between; font-size: 14px; }
+  .pt-dl dt { color: var(--color-slate-500); }
+  .pt-dl dd { font-weight: 600; color: var(--color-slate-800); }
+  .pt-rot { font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: .025em; color: var(--color-slate-400); margin-bottom: 6px; }
+  .pt-res { font-size: 16px; line-height: 22px; font-weight: 600; color: var(--color-slate-900); }
+  .pt-rel, .pt-nota { font-size: 14px; line-height: 22px; color: var(--color-slate-700); padding: 10px 12px; border-radius: var(--radius-xl); background: var(--color-slate-50); border: 1px solid var(--color-slate-200); }
+  .pt-nota { background: color-mix(in srgb, var(--color-primary) 5%, var(--color-white)); border-color: color-mix(in srgb, var(--color-primary) 20%, transparent); border-left: 4px solid var(--color-primary); }
+  .pt-lab { font-size: 14px; font-weight: 700; text-transform: uppercase; letter-spacing: .025em; color: var(--color-slate-700); }
+  .pt-ori { font-size: 12px; line-height: 19.5px; color: var(--color-slate-500); margin: 6px 0; }
+  .pt-campo { position: relative; min-height: 136px; padding: 10px 12px; border-radius: var(--radius-xl); border: 1px solid var(--color-slate-200); font-size: 16px; line-height: 24px; color: var(--color-slate-800); }
+  .pt-campo .vazio { color: var(--color-slate-400); }
+  .pt-campo .cheio { position: absolute; left: 12px; right: 12px; top: 10px; opacity: 0; background: var(--color-white); }
+  .pt-campo .campo-foco { border-radius: var(--radius-xl); }
+  .pt-anexo { display: inline-flex; align-items: center; gap: 6px; padding: 8px 12px; border-radius: var(--radius-lg); background: var(--color-slate-100); color: var(--color-slate-700); font-size: 14px; font-weight: 600; text-transform: uppercase; letter-spacing: .025em; }
+  .pt-anexo span { text-transform: none; }
+  .pt-bt { position: relative; display: flex; justify-content: center; padding: 12px 16px; border-radius: var(--radius-xl); background: var(--color-primary); color: var(--color-white); font-size: 14px; font-weight: 600; text-transform: uppercase; letter-spacing: .025em; }
+  .pt-recibo { position: absolute; left: 384px; top: 120px; width: 512px; padding: 32px; text-align: center; background: var(--color-white); border: 1px solid var(--color-emerald-200); border-radius: var(--radius-2xl); box-shadow: var(--shadow-premium); display: flex; flex-direction: column; align-items: center; gap: 14px; }
+  .pt-recibo img { width: 92px; height: 52px; object-fit: contain; }
+  .pt-recibo .ic { color: var(--color-emerald-500); display: flex; }
+  .pt-recibo p { font-size: 14px; color: var(--color-slate-500); }
+  .pt-recibo .num { font-size: 24px; line-height: 32px; font-weight: 700; color: var(--color-slate-900); }
+
+  /* ===== o foco: marcador, dedo e toque ===== */
+  .marcador { position: absolute; left: 0; top: 0; opacity: 0; border: 3px solid var(--video-foco); border-radius: 14px; box-shadow: 0 0 0 8px var(--video-foco-halo); }
+  .dedo { position: absolute; left: 0; top: 0; opacity: 0; width: 40px; height: 40px; }
+  .dedo svg { position: absolute; left: 0; top: 0; width: 40px; height: 40px; }
+  .dedo path { fill: var(--video-foco); stroke: var(--color-white); stroke-width: 1.4; }
+  .toque { position: absolute; left: -22px; top: -22px; width: 56px; height: 56px; border-radius: 50%; background: var(--video-foco-halo); border: 2px solid var(--video-foco); opacity: 0; }
+</style>
+</head>
+<body>
+<div id="main" data-composition-id="main" data-start="0" data-width="1920" data-height="1080" data-duration="110">
+
+  <div id="slot-abertura" data-composition-id="abertura" data-composition-src="compositions/abertura.html"
+    data-variable-values='{"secao":"Manual · Ouvidoria","titulo":"O caminho de um caso, do registro ao encerramento","papel":"Ouvidoria e setor"}'
+    data-start="0" data-duration="4" data-track-index="1" data-width="1920" data-height="1080"></div>
+
+  <section id="c-tarefa" class="clip" data-start="4" data-duration="102" data-track-index="2">
+    <div class="palco"></div>
+    <div id="camera" data-layout-allow-overflow></div>
+  </section>
+
+  <div id="slot-lugar-1" data-composition-id="lower-third" data-composition-src="compositions/lower-third.html" data-variable-values='{"lugar":"Ouvidoria","tela":"Manifestações do hospital"}' data-start="4.4" data-duration="2.8" data-track-index="5" data-width="1920" data-height="1080"></div>
+  <div id="slot-lugar-2" data-composition-id="lower-third" data-composition-src="compositions/lower-third.html" data-variable-values='{"lugar":"Ouvidoria","tela":"Manifestação 2026-0012"}' data-start="27.4" data-duration="2.8" data-track-index="5" data-width="1920" data-height="1080"></div>
+  <div id="slot-lugar-3" data-composition-id="lower-third" data-composition-src="compositions/lower-third.html" data-variable-values='{"lugar":"Responsável do setor","tela":"Email: nova demanda para Nutrição"}' data-start="50.4" data-duration="3" data-track-index="5" data-width="1920" data-height="1080"></div>
+  <div id="slot-lugar-4" data-composition-id="lower-third" data-composition-src="compositions/lower-third.html" data-variable-values='{"lugar":"Responsável do setor","tela":"Demanda da Ouvidoria, sem login"}' data-start="56.4" data-duration="3" data-track-index="5" data-width="1920" data-height="1080"></div>
+  <div id="slot-lugar-5" data-composition-id="lower-third" data-composition-src="compositions/lower-third.html" data-variable-values='{"lugar":"Ouvidoria","tela":"Manifestação 2026-0012, respondida"}' data-start="73.4" data-duration="2.8" data-track-index="5" data-width="1920" data-height="1080"></div>
+  <div id="slot-lugar-6" data-composition-id="lower-third" data-composition-src="compositions/lower-third.html" data-variable-values='{"lugar":"Quem manifestou","tela":"Email: sua manifestação foi concluída"}' data-start="100.4" data-duration="3" data-track-index="5" data-width="1920" data-height="1080"></div>
+
+  <div id="slot-passo-1" data-composition-id="legenda-de-passo" data-composition-src="compositions/legenda-de-passo.html" data-variable-values='{"numero":"1","texto":"A pessoa ligou. Na Ouvidoria, clique em **Nova manifestação**."}' data-start="4" data-duration="6" data-track-index="3" data-width="1920" data-height="1080"></div>
+  <div id="slot-passo-2" data-composition-id="legenda-de-passo" data-composition-src="compositions/legenda-de-passo.html" data-variable-values='{"numero":"2","texto":"Escolha o canal, o tipo e o setor, e escreva o resumo e o relato."}' data-start="10" data-duration="9" data-track-index="4" data-width="1920" data-height="1080"></div>
+  <div id="slot-passo-3" data-composition-id="legenda-de-passo" data-composition-src="compositions/legenda-de-passo.html" data-variable-values='{"numero":"3","texto":"Clique em **Registrar manifestação** e passe o protocolo a quem falou."}' data-start="19" data-duration="8" data-track-index="3" data-width="1920" data-height="1080"></div>
+  <div id="slot-passo-4" data-composition-id="legenda-de-passo" data-composition-src="compositions/legenda-de-passo.html" data-variable-values='{"numero":"4","texto":"No caso, leia o relato e clique em **Validar e acionar**."}' data-start="27" data-duration="7" data-track-index="4" data-width="1920" data-height="1080"></div>
+  <div id="slot-passo-5" data-composition-id="legenda-de-passo" data-composition-src="compositions/legenda-de-passo.html" data-variable-values='{"numero":"5","texto":"Confira a área, escolha a **Gravidade** e escreva o **Extrato para o setor**."}' data-start="34" data-duration="9" data-track-index="3" data-width="1920" data-height="1080"></div>
+  <div id="slot-passo-6" data-composition-id="legenda-de-passo" data-composition-src="compositions/legenda-de-passo.html" data-variable-values='{"numero":"6","texto":"Clique em **Validar e acionar a área**. O setor recebe o email com o prazo."}' data-start="43" data-duration="7" data-track-index="4" data-width="1920" data-height="1080"></div>
+  <div id="slot-passo-7" data-composition-id="legenda-de-passo" data-composition-src="compositions/legenda-de-passo.html" data-variable-values='{"numero":"7","texto":"O responsável do setor recebe o email e clica em **Abrir a demanda da Ouvidoria**."}' data-start="50" data-duration="7" data-track-index="3" data-width="1920" data-height="1080"></div>
+  <div id="slot-passo-8" data-composition-id="legenda-de-passo" data-composition-src="compositions/legenda-de-passo.html" data-variable-values='{"numero":"8","texto":"Ele lê a **NOTA DA OUVIDORIA** e escreve em **O que foi feito**."}' data-start="57" data-duration="9" data-track-index="4" data-width="1920" data-height="1080"></div>
+  <div id="slot-passo-9" data-composition-id="legenda-de-passo" data-composition-src="compositions/legenda-de-passo.html" data-variable-values='{"numero":"9","texto":"Um clique em **Responder à Ouvidoria** leva a resposta ao caso."}' data-start="66" data-duration="7" data-track-index="3" data-width="1920" data-height="1080"></div>
+  <div id="slot-passo-10" data-composition-id="legenda-de-passo" data-composition-src="compositions/legenda-de-passo.html" data-variable-values='{"numero":"10","texto":"Leia a **Resposta da área**. Se ela não resolve, devolva ao setor."}' data-start="73" data-duration="8" data-track-index="4" data-width="1920" data-height="1080"></div>
+  <div id="slot-passo-11" data-composition-id="legenda-de-passo" data-composition-src="compositions/legenda-de-passo.html" data-variable-values='{"numero":"11","texto":"Se resolve, clique em **Encerrar** e escolha o **Desfecho**."}' data-start="81" data-duration="9" data-track-index="3" data-width="1920" data-height="1080"></div>
+  <div id="slot-passo-12" data-composition-id="legenda-de-passo" data-composition-src="compositions/legenda-de-passo.html" data-variable-values='{"numero":"12","texto":"Escreva para a pessoa e clique em **Encerrar caso**."}' data-start="90" data-duration="10" data-track-index="4" data-width="1920" data-height="1080"></div>
+  <div id="slot-passo-13" data-composition-id="legenda-de-passo" data-composition-src="compositions/legenda-de-passo.html" data-variable-values='{"numero":"13","texto":"A pessoa recebe a conclusão por email, com o protocolo."}' data-start="100" data-duration="6" data-track-index="3" data-width="1920" data-height="1080"></div>
+
+  <div id="slot-carimbo" data-composition-id="carimbo" data-composition-src="compositions/carimbo.html"
+    data-variable-values='{"titulo":"O caminho de um caso, do registro ao encerramento","carimbo":"Manual · retrata o app em v0.196.1 · gerado em 14/10/2026"}'
+    data-start="106" data-duration="4" data-track-index="1" data-width="1920" data-height="1080"></div>
+</div>
+
+<script>
+/* Ícones: os do lucide, os mesmos do app. */
+const P = {
+  alvo: '<circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/>', painel: '<rect width="7" height="9" x="3" y="3" rx="1"/><rect width="7" height="5" x="14" y="3" rx="1"/><rect width="7" height="9" x="14" y="12" rx="1"/><rect width="7" height="5" x="3" y="16" rx="1"/>',
+  calendario: '<path d="M8 2v4"/><path d="M16 2v4"/><rect width="18" height="18" x="3" y="4" rx="2"/><path d="M3 10h18"/>', relogio: '<circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>', baixo: '<path d="m6 9 6 6 6-6"/>', direita: '<path d="m9 18 6-6-6-6"/>',
+  megafone: '<path d="m3 11 18-5v12L3 14v-3z"/><path d="M11.6 16.8a3 3 0 1 1-5.8-1.6"/>', escudo: '<path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/><path d="m9 12 2 2 4-4"/>',
+  ajuda: '<circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><path d="M12 17h.01"/>', lupa: '<circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/>', voltar: '<path d="m12 19-7-7 7-7"/><path d="M19 12H5"/>',
+  sino: '<path d="M10.268 21a2 2 0 0 0 3.464 0"/><path d="M3.262 15.326A1 1 0 0 0 4 17h16a1 1 0 0 0 .74-1.673C19.41 13.956 18 12.499 18 8A6 6 0 0 0 6 8c0 4.499-1.41 5.956-2.738 7.326"/>', pessoa: '<circle cx="12" cy="8" r="5"/><path d="M20 21a8 8 0 0 0-16 0"/>',
+  pin: '<path d="M20 10c0 4.993-5.539 10.193-7.399 11.799a1 1 0 0 1-1.202 0C9.539 20.193 4 14.993 4 10a8 8 0 0 1 16 0"/><circle cx="12" cy="10" r="3"/>', trocar: '<path d="m3 7 3 3 3-3"/><path d="M6 10V5a2 2 0 0 1 2-2h2"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/>',
+  checkc: '<circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/>', enviar: '<path d="M14.536 21.686a.5.5 0 0 0 .937-.024l6.5-19a.496.496 0 0 0-.635-.635l-19 6.5a.5.5 0 0 0-.024.937l7.93 3.18a2 2 0 0 1 1.112 1.11z"/><path d="m21.854 2.147-10.94 10.939"/>',
+  fechar: '<path d="M18 6 6 18"/><path d="m6 6 12 12"/>', mais: '<path d="M5 12h14"/><path d="M12 5v14"/>', estrela: '<polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>',
+  gente: '<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>', arquivo: '<rect width="20" height="5" x="2" y="3" rx="1"/><path d="M4 8v11a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8"/><path d="M10 12h4"/>',
+  alerta: '<circle cx="12" cy="12" r="10"/><line x1="12" x2="12" y1="8" y2="12"/><line x1="12" x2="12.01" y1="16" y2="16"/>', clipe: '<path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l8.57-8.57A4 4 0 1 1 18 8.84l-8.59 8.57a2 2 0 0 1-2.83-2.83l8.49-8.48"/>', carta: '<rect width="20" height="16" x="2" y="4" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/>',
+};
+const ic = (nome, s, traco) => `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="${traco || 2}" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0">${P[nome]}</svg>`;
+const LOGO = '<img src="assets/logo-hsm.png" alt="Hospital São Matheus" />';
+
+/* O caso de exemplo, do telefonema ao encerramento. */
+const C = { prot: "2026-0012", nome: "Otávio Brandão", contato: "otavio.brandao@exemplo.local", pac: "Lúcia Brandão", ref: "Quarto 312, segunda e terça", setor: "Nutrição", rotulo: "Refeição",
+  resumo: "Ligou dizendo que a dieta chegou fria no quarto 312", relato: "Ligou às 9h contando que o almoço chegou frio no quarto 312 na segunda e na terça, e que avisou a copa nos dois dias sem troca da refeição.",
+  extrato: "Apurar por que o almoço chegou frio ao quarto 312 na segunda e na terça, e o que a Nutrição mudou na entrega.", resp: "Trocamos a ordem do carrinho do terceiro andar, que agora sai por último da copa, e a copeira confere a temperatura na porta do quarto.",
+  desfecho: "Apuramos o que você contou com a equipe da Nutrição. A entrega das refeições do terceiro andar mudou para chegarem quentes. Obrigado por avisar a Ouvidoria.", prazo: "20/10/2026 às 17h00 (vence em 4 dias úteis)" };
+
+/* A casca do app (barra lateral e topo), como a Claudia, da Ouvidoria, vê. */
+const casca = `<div class="lado"><div class="marca">${LOGO}</div><nav>
+    <div class="mi">${ic("alvo", 18, 1.5)}Reuniões e metas<span class="fim">${ic("baixo", 16)}</span></div>
+    <div class="sub"><div class="mi">${ic("painel", 16, 1.5)}Dashboard</div><div class="mi">${ic("calendario", 16, 1.5)}Calendário</div><div class="mi">${ic("relogio", 16, 1.5)}Pendências<span class="fim">${ic("direita", 16)}</span></div></div>
+    <div class="mi on">${ic("megafone", 18, 2)}Ouvidoria<span class="selo">5</span></div><div class="mi">${ic("escudo", 18, 1.5)}Admin</div><div class="mi" style="margin-top:8px">${ic("ajuda", 18, 1.5)}Ajuda</div></nav></div>
+  <div class="topo"><div class="busca">${ic("lupa", 16)}Buscar...</div><div class="quem"><div class="sino">${ic("sino", 22, 1.75)}</div><div class="divisor"></div>
+    <div class="pessoa"><div class="tx"><b>claudia.bastos</b><span>claudia.bastos@exemplo.l...</span></div><div class="avatar">C</div></div></div></div>`;
+
+/* A lista da Ouvidoria. */
+const linha = (p, rs, l2) => `<div class="lin"><div class="ct"><div class="l1"><span class="prt">${p}</span><span class="rs">${rs}</span></div><div class="l2">${l2}</div></div><span class="bt-lin">${ic("enviar", 14)}Validar e acionar</span></div>`;
+const fila = `<div class="pg fila" id="pg-fila" style="opacity:1"><h1>Ouvidoria</h1><p class="st">Manifestações do hospital, na ordem do trabalho da ouvidoria</p>
+  <div class="pilulas"><span class="pil">${ic("painel", 16)}Painel</span><span class="pil">${ic("estrela", 16)}Nota externa</span><span class="pil">${ic("pin", 16)}Pontos</span><span class="pil">${ic("gente", 16)}Responsáveis</span><span class="pil azul">11 em andamento</span><span class="pil verm">${ic("alerta", 16)}8 com prazo estourado</span><span class="bt-q">${ic("arquivo", 16)}Arquivados</span></div>
+  <span class="bt-q prim" id="bt-nova">${ic("mais", 16)}Nova manifestação</span>
+  <div class="grupo"><div class="gcab">Em classificação<span>5 manifestações</span></div>${linha("2026-0011", "Esperou mais de uma hora na Recepção depois do horário marcado", "A definir · Sem responsável · 24/09/2026")}${linha("2026-0008", "Colaborador relata conduta inadequada de superior durante plantão.", 'Centro Cirúrgico · Dr. Paulo Sá · <span class="vence">10/09/2026</span>')}${linha("2026-0005", "Paciente recebeu boleto de exame que o convênio deveria cobrir integralmente.", 'Faturamento · André Costa · <span class="vence">10/09/2026</span>')}${linha("2026-0003", "Sugiro que o hospital coloque sinalização no piso, como faixas coloridas.", 'A definir · Sem responsável · <span class="vence">10/09/2026</span>')}</div></div>`;
+
+/* O caso aberto, em cada momento do caminho. */
+const ESTADO = { classif: ["Em classificação", "Ainda não classificada"], area: ["Aguardando área", "Médio"], resp: ["Respondida", "Médio"], fim: ["Encerrada", "Médio"] };
+const campo = (rot, val) => `<div><dt>${rot}</dt><dd>${val}</dd></div>`;
+const botoes = { classif: `<span class="acao prim" id="classif-bt">${ic("enviar", 14)}Validar e acionar</span><span class="acao verde">${ic("checkc", 14)}Encerrar</span>`, area: `<span class="acao branca">${ic("trocar", 14)}Redirecionar</span><span class="acao verde">${ic("checkc", 14)}Encerrar</span>`,
+  resp: `<span class="acao branca">${ic("trocar", 14)}Redirecionar</span><span class="acao verde" id="resp-bt">${ic("checkc", 14)}Encerrar</span>`, fim: "" };
+const caso = (e) => `<div class="pg" id="pg-${e}"><div id="${e}-rolo" style="position:absolute;left:0;top:0;width:1024px"><div class="caso">
+  <div class="volta">${ic("voltar", 16)}Painel da Ouvidoria</div>
+  <section class="ap-secao"><header class="ap-cab"><div class="esq"><span class="ic">${ic("pessoa", 20)}</span><div id="${e}-cab"><h1>Manifestação ${C.prot}</h1><p class="est">${ESTADO[e][0]}</p></div></div><div class="acoes">${botoes[e]}</div></header>
+    <div class="blocos"><div class="faixa-info"><span class="ic">${ic("pin", 16)}</span><span><b>Registrada pela Ouvidoria</b> (telefone)</span></div>
+      <dl class="campos">${campo("Quem manifestou", C.nome)}${campo("Contato", C.contato)}${campo("Vínculo", "acompanhante")}${campo("Paciente", C.pac)}${campo("Referência do atendimento", C.ref)}${campo("Setor", C.setor)}${campo("Tipo", "Reclamação")}${campo("Rótulo do caso", C.rotulo)}${campo("Gravidade", ESTADO[e][1])}</dl>
+      <div class="sec"><h3 class="sec-rot">Resumo</h3><p>${C.resumo}</p></div><div class="sec" id="${e}-relato"><h3 class="sec-rot">Relato integral</h3><p>${C.relato}</p></div>
+      ${e === "resp" ? `<div class="sec" id="resp-resposta"><h3 class="sec-rot">Resposta da área<span> (Rosana Teixeira, 15/10/2026, 10:20)</span></h3><p>${C.resp}</p></div>
+      <div class="devol" id="resp-devol"><div class="area-t">Motivo da devolução (obrigatório, vai no email ao setor)</div><span class="bt-ambar" id="resp-devolver">Devolver por insuficiência</span><small>O caso volta para o setor com metade do prazo da gravidade, contada de agora. O tempo já gasto continua valendo: o relógio não recomeça.</small></div>` : ""}
+    </div></section></div></div></div>`;
+
+/* Campo que a pessoa preenche: o vazio some e o cheio aparece. */
+const preenche = (id, vazio, cheio, extra) => `<div class="campo ${extra || ""}" id="${id}"><span class="vazio${extra && /sel|val/.test(extra) ? " cinza" : ""}">${vazio}</span><span class="cheio" id="${id}-v">${cheio}</span>${extra && extra.includes("sel") ? `<span class="ic">${ic("baixo", 16)}</span>` : ""}<span class="campo-foco" id="${id}-f"></span></div>`;
+const bloco = (id, rot, corpo, dica) => `<div id="${id}"><label class="rot" id="${id}-r">${rot}</label>${corpo}${dica ? `<p class="dica clara">${dica}</p>` : ""}</div>`;
+
+/* A janela Nova manifestação (NovaManifestacaoModal.tsx). */
+const janelaNova = `<div class="veu"></div><div class="modal" id="nv-modal" style="left:304px;width:672px;height:579px">
+  <header class="md-cab"><span class="ic">${ic("megafone", 20)}</span><div><h2>Nova manifestação</h2><p><span id="nv-d1">Registro manual da ouvidoria</span><span id="nv-d2" style="position:absolute;left:0;top:0;opacity:0;white-space:nowrap">Registro concluído</span></p></div><span class="x">${ic("fechar", 20)}</span></header>
+  <div class="md-corpo" style="top:79px;height:436px"><div class="md-rolo" id="nv-rolo">
+    <div class="g2">${bloco("nv-canal", "Canal de origem", preenche("nv-canal-c", "WhatsApp", "Telefone", "sel"))}${bloco("nv-data", "Data e hora do contato", preenche("nv-data-c", "14/10/2026, 09:12", "14/10/2026, 09:05", "val"), "Quando a manifestação chegou ao hospital, mesmo que você registre depois.")}</div>
+    <div class="g2"><div id="nv-tipo"><label class="rot">Tipo da manifestação</label>${preenche("nv-tipo-c", "Escolha o tipo", "Reclamação", "sel")}<p class="dica" style="line-height:19.5px">Denúncia e relato de conduta nascem com sigilo reforçado: o caso fica restrito ao Ouvidor e à Diretoria Executiva.</p></div>${bloco("nv-rot", 'Rótulo do caso <span>(opcional)</span>', preenche("nv-rot-c", "Ex.: demora no atendimento", C.rotulo))}${bloco("nv-setor", "Setor", preenche("nv-setor-c", "Escolha o setor", C.setor, "sel"))}</div>
+    ${bloco("nv-resumo", "Resumo", preenche("nv-resumo-c", "Uma linha sobre o caso, para a fila do painel", C.resumo))}
+    ${bloco("nv-relato", "Relato integral", preenche("nv-relato-c", "O que a pessoa contou, na íntegra e sem edição.", C.relato, "mais-alto"))}
+    <label class="marcar"><span class="qd"></span>Manifestação anônima (sem nome e sem contato, não há retorno individual)</label>
+    <div class="g3" id="nv-pessoa">${bloco("nv-nome", "Quem manifestou", preenche("nv-nome-c", "", C.nome))}${bloco("nv-cont", "Contato", preenche("nv-cont-c", "Telefone ou email", C.contato))}${bloco("nv-vinc", "Vínculo", preenche("nv-vinc-c", "Não informado", "Acompanhante", "sel"))}</div>
+    <div class="g2" id="nv-paciente">${bloco("nv-pac", 'Nome do paciente <span>(opcional)</span>', preenche("nv-pac-c", "De quem é o caso", C.pac))}${bloco("nv-ref", 'Referência do atendimento <span>(opcional)</span>', preenche("nv-ref-c", "Quando ou onde foi", C.ref))}</div>
+    <div><label class="rot">Anexos</label><div class="anexo-in"><b>Escolher arquivos</b>Nenhum arquivo escolhido</div><p class="dica clara">Imagem, PDF, áudio ou documento, até 20 MB por arquivo.</p></div>
+  </div><div class="ok-reg" id="nv-ok" style="position:absolute;left:0;top:0;width:672px;opacity:0"><div class="ic">${ic("checkc", 28, 1.5)}</div><div id="nv-protocolo" style="width:fit-content;margin:0 auto"><p>Protocolo gerado</p><p class="num">${C.prot}</p></div><p style="margin-top:12px">Informe este número a quem manifestou. O caso entrou na fila em classificação.</p></div></div>
+  <div class="md-pe"><div id="nv-pe1" style="display:flex;gap:8px"><span class="bt-texto">Cancelar</span><span class="bt-ato" id="nv-registrar">Registrar manifestação<span class="apagado" id="nv-apagado"></span></span></div><span class="bt-ato" id="nv-fechar" style="position:absolute;right:24px;opacity:0">Fechar</span></div></div>`;
+
+/* A janela Validar e acionar (ValidarModal.tsx, acionamento). */
+const grav = (nome, ajuda, id) => `<div class="opc"${id ? ` id="${id}"` : ""}><b>${nome}</b><small>${ajuda}</small>${id ? `<div class="acesa" id="${id}-on"><b>${nome}</b><small>${ajuda}</small></div>` : ""}</div>`;
+const janelaValidar = `<div class="veu"></div><div class="modal" id="vd-modal" style="left:304px;width:672px;height:579px">
+  <header class="md-cab"><span class="ic">${ic("enviar", 20)}</span><div><h2>Validar e acionar ${C.prot}</h2><p>O setor recebe o email de acionamento com o prazo assim que você confirmar.</p></div><span class="x">${ic("fechar", 20)}</span></header>
+  <div class="md-corpo" style="top:79px;height:500px"><div class="md-rolo" id="vd-rolo">
+    <div><label class="rot">Tipo da manifestação</label><div class="campo sel">Reclamação<span class="ic">${ic("baixo", 16)}</span></div><p class="dica">Denúncia e relato de conduta são sigilosos por natureza: o caso sai do painel de quem está fora da Ouvidoria e o email do setor vai sem a identificação de quem manifestou.</p></div>
+    <div><label class="rot">Rótulo do caso <span>(opcional)</span></label><div class="campo">${C.rotulo}</div></div>
+    <div class="sigilo"><span class="qd"></span><span><b>Sigilo reforçado</b><small>Marque para restringir o caso ao Ouvidor e à Diretoria Executiva. Desmarque para devolver o caso ao painel de todos.</small></span></div>
+    <div id="vd-area"><label class="rot">Área responsável</label><div class="campo sel">${C.setor}<span class="ic">${ic("baixo", 16)}</span></div></div>
+    <div id="vd-grav"><span class="rot">Gravidade</span><div class="opcoes">${grav("Crítico", "Risco à vida, à segurança ou à imagem. A área é acionada na hora, fora do expediente inclusive.")}${grav("Alto", "Dano relevante ao paciente ou ao serviço. A área responde em 2 dias úteis.")}${grav("Médio", "Falha que precisa de correção, sem dano imediato.", "vd-medio")}${grav("Baixo", "Sugestão, elogio ou queixa que a ouvidoria resolve direto.")}</div></div>
+    <div id="vd-extrato"><div id="vd-extrato-lc"><label class="rot">Extrato para o setor <span>(obrigatório)</span></label>${preenche("vd-extrato-c", "Ex.: Conduta da equipe de enfermagem no plantão noturno. Apurar e responder à Ouvidoria.", C.extrato, "mais-alto")}</div><p class="dica">Vai no email e na tela do responsável junto do resumo, do relato integral, do nome de quem manifestou e do Paciente do caso, quando houver. Escreva com as suas palavras o que a área precisa resolver: é o pedido da Ouvidoria ao setor. Sem este texto o acionamento não sai.</p></div>
+    <div><label class="rot">Observação da validação <span>(opcional)</span></label><div class="campo alto"><span class="vazio">Fica na trilha do caso, junto do movimento de acionamento.</span></div></div>
+    <div style="display:flex;justify-content:flex-end;gap:8px"><span class="bt-texto">Cancelar</span><span class="bt-ato" id="vd-confirmar">${ic("checkc", 16)}Validar e acionar a área<span class="apagado" id="vd-apagado"></span></span></div>
+  </div></div></div>`;
+
+/* A janela Encerrar (EncerrarModal.tsx). */
+const desf = (nome, id) => `<div class="opc so"${id ? ` id="${id}"` : ""}><b>${nome}</b>${id ? `<div class="acesa azul" id="${id}-on"><b>${nome}</b></div>` : ""}</div>`;
+const janelaEncerrar = `<div class="veu"></div><div class="modal" id="en-modal" style="left:384px;width:512px;height:579px">
+  <header class="md-cab"><span class="ic">${ic("checkc", 20)}</span><div><h2>Encerrar ${C.prot}</h2><p>O caso grava o desfecho, sai da fila de tramitação e o desfecho vai por email a quem manifestou.</p></div><span class="x">${ic("fechar", 20)}</span></header>
+  <div class="md-corpo" style="top:96px;height:483px"><div class="md-rolo" id="en-rolo">
+    <div id="en-desfecho"><span class="rot">Desfecho</span><div class="opcoes">${desf("Procedente", "en-proc")}${desf("Improcedente")}${desf("Parcialmente procedente")}${desf("Sem condições de apuração")}${desf("Sem retorno do manifestante")}</div></div>
+    <div id="en-texto"><label class="rot">Desfecho para o manifestante <span>(obrigatório)</span></label><div class="aviso-ambar"><span class="ic">${ic("carta", 16)}</span><span><b>Este texto sai do hospital.</b> Ele é enviado por email a quem abriu a manifestação, junto do protocolo. Escreva para a pessoa, em linguagem simples. Não escreva nome de colaborador, medida disciplinar nem detalhe da apuração interna: nada disso pode sair daqui.</span></div>${preenche("en-texto-c", "O que foi apurado e como o caso terminou, dito para quem reclamou.", C.desfecho, "mais-alto")}</div>
+    <div style="display:flex;justify-content:flex-end;gap:8px"><span class="bt-texto">Cancelar</span><span class="bt-ato" id="en-confirmar">Encerrar caso<span class="apagado" id="en-apagado"></span></span></div>
+  </div></div></div>`;
+
+/* O portal do setor e o recibo. */
+const portal = `<div class="pg" id="pt-form" style="opacity:1;width:1280px;height:643.2px"><div class="pt-rolo" id="pt-rolo">
+  <div class="pt-cx"><div class="pt-grav">Gravidade Médio</div><div class="pt-in"><div class="pt-id">${LOGO}<h1>Demanda da Ouvidoria</h1></div><div class="pt-prazo" id="pt-prazo"><span class="ic">${ic("relogio", 16)}</span>Prazo de resposta: ${C.prazo}</div>
+    <div class="pt-sec"><span class="p">${C.prot}</span><i>|</i><b>${C.setor}</b><i>|</i><span>${C.rotulo}</span></div><dl class="pt-dl"><dt>Quem manifestou</dt><dd>${C.nome}</dd></dl><dl class="pt-dl" style="margin-top:-8px"><dt>Paciente</dt><dd>${C.pac} (${C.ref})</dd></dl></div></div>
+  <div class="pt-cx pt-in"><div><p class="pt-rot">Resumo</p><p class="pt-res">${C.resumo}</p></div><div><p class="pt-rot">Relato integral</p><p class="pt-rel">${C.relato}</p></div><div id="pt-nota"><p class="pt-rot">NOTA DA OUVIDORIA</p><p class="pt-nota">${C.extrato}</p></div></div>
+  <div class="pt-cx pt-in"><div id="pt-campo-bloco"><p class="pt-lab">O que foi feito</p><p class="pt-ori">Conte o que foi FEITO para corrigir, com pelo menos 20 caracteres. A apuração do motivo fica com a Ouvidoria.</p><div class="pt-campo" id="pt-campo"><span class="vazio">Ex.: Conversamos com a equipe da recepção em 02/09 e passamos a abrir o segundo guichê às 7h. A coordenadora Ana Paula acompanha a fila diariamente.</span><span class="cheio" id="pt-campo-v">${C.resp}</span><span class="campo-foco" id="pt-campo-f"></span></div></div>
+    <div><span class="pt-anexo">${ic("clipe", 16)}Anexar arquivos <span>(opcional)</span></span><p class="dica clara">Imagem, PDF, áudio ou documento, até 20 MB por arquivo.</p></div><div class="pt-bt" id="pt-bt">Responder à Ouvidoria<span class="apagado" id="pt-apagado"></span></div></div>
+  </div></div>
+  <div class="pg" id="pt-ok" style="width:1280px;height:643.2px"><div class="pt-recibo">${LOGO}<span class="ic">${ic("checkc", 48, 1.75)}</span><div id="pt-ok-num"><p>Resposta registrada na manifestação</p><p class="num">${C.prot}</p></div><p>A Ouvidoria vai conferir a resposta e encerrar o caso. Este link era de uso único e não abre mais.</p></div></div>`;
+
+/* Os dois emails. */
+const mailCab = (assunto, para) => `<div class="assunto"><b>${assunto}</b><br>Para: ${para}</div>`;
+const mail1 = `${mailCab(`Ouvidoria ${C.prot}: nova demanda para ${C.setor}`, "rosana.teixeira@exemplo.local")}<div class="janela-mail"><div class="mail-rolo" id="m1-rolo"><div class="mail"><div class="grad"></div><div class="mcab">${LOGO}<span>OUVIDORIA</span></div><div class="mc">
+  <div class="mgrav" id="m1-grav"><div class="mg">MÉDIO</div><div class="mgc"><div class="mk">Protocolo</div><div class="mnum">${C.prot}</div>Setor: <b>${C.setor}</b><br>Prazo: <b>${C.prazo}</b></div></div>
+  <p>Olá, <b>Rosana Teixeira</b>!</p><p>A Ouvidoria validou uma manifestação e acionou o setor <b>${C.setor}</b> na categoria <b>${C.rotulo}</b>. Leia abaixo o caso e responda dentro do prazo.</p>
+  <div class="mbx res"><div class="mk">Resumo</div>${C.resumo}</div><div class="mbx"><div class="mk">Relato integral</div>${C.relato}</div><div class="mbx nota"><div class="mk">Nota da Ouvidoria</div>${C.extrato}</div>
+  <p class="peq">Quem manifestou: ${C.nome}</p><p class="peq">Paciente: ${C.pac} (${C.ref})</p><div class="cta"><span id="m1-abrir">Abrir a demanda da Ouvidoria</span></div><p class="rod">Não responda a este email. A Ouvidoria acompanha o prazo e cobra o setor no vencimento.</p></div>
+  <div class="mrodape">Hospital São Matheus, Sistema de Gestão de Reuniões<br>Este email foi enviado automaticamente. Por favor, não responda.</div></div></div></div>`;
+const mail2 = `${mailCab(`Ouvidoria ${C.prot}: sua manifestação foi concluída`, C.contato)}<div class="janela-mail"><div class="mail-rolo"><div class="mail"><div class="grad"></div><div class="mcab">${LOGO}<span>OUVIDORIA</span></div><div class="mc">
+  <p>Olá!</p><p>A Ouvidoria do Hospital São Matheus concluiu a apuração da sua manifestação.</p><div class="mprot" id="m2-prot"><div class="mk">Protocolo</div><div class="mnum">${C.prot}</div></div>
+  <div id="m2-apurado"><div class="mk" style="margin-bottom:4px">O que foi apurado</div><p>${C.desfecho}</p></div><p>Se o problema continuar, ou se você quiser falar de novo sobre este caso, procure a Ouvidoria por <span class="link">https://app.hospitalsaomatheus.cloud/manifestacao</span> informando o número do protocolo acima.</p></div>
+  <div class="mrodape">Hospital São Matheus, Sistema de Gestão de Reuniões<br>Este email foi enviado automaticamente. Por favor, não responda.</div></div></div></div>`;
+
+const barra = (urls) => `<div class="barra-nav"><i></i><i></i><i></i><div class="url">${urls}</div></div>`;
+document.getElementById("camera").innerHTML = `
+  <div class="janela" id="janela">${barra('<span id="url-fila">app.hospitalsaomatheus.cloud/ouvidoria</span><span id="url-caso" style="opacity:0">app.hospitalsaomatheus.cloud/ouvidoria/m/2026-0012</span>')}
+    <div class="vista"><div class="app" id="app" data-camada data-x="160" data-y="76" data-s="1.25">${casca}<div class="corpo">${fila}${caso("classif")}${caso("area")}${caso("resp")}${caso("fim")}</div>
+      <div class="sobre-app" id="ov-nova">${janelaNova}</div><div class="sobre-app" id="ov-validar">${janelaValidar}</div><div class="sobre-app" id="ov-encerrar">${janelaEncerrar}</div></div></div></div>
+  <div class="correio" id="m1" data-camada data-x="560" data-y="32" data-s="1.25" style="left:560px">${mail1}</div>
+  <div class="janela" id="janela2">${barra("<span>app.hospitalsaomatheus.cloud/ouvidoria-setor/7f3c9a2e</span>")}
+    <div class="vista"><div class="app portal" id="app2" data-camada data-x="160" data-y="76" data-s="1.25">${portal}</div></div></div>
+  <div class="correio" id="m2" data-camada data-x="560" data-y="32" data-s="1.25" style="left:560px">${mail2}</div>
+  <div class="marcador" id="mk"></div><div class="dedo" id="dedo"><svg viewBox="0 0 24 24"><path d="M5 3l14 8-6 1.6L9.6 19z"/></svg><div class="toque" id="toque"></div></div>`;
+/* Réplica de tela: sobreposição e corte são de propósito. */
+document.querySelectorAll("#camera, #camera *").forEach((el) => ["overlap", "occlusion", "overflow"].forEach((k) => el.setAttribute(`data-layout-allow-${k}`, "")));
+
+/* Medidas: onde cada elemento fica no quadro com a câmera em repouso, pelo
+   offset do layout até a camada (app, portal ou email), que ignora a câmera e
+   a rolagem. Nada se mede na montagem (regra de 14/10/2026): alvo e rolagem
+   são funções que o GSAP chama quando o tween começa. */
+const CENTRO = { x: 960, y: 452 }, JANELA = { x0: 160, y0: 32, x1: 1760, y1: 880 };
+function noQuadro(id, rolagem) {
+  let el = document.getElementById(id), x = 0, y = 0;
+  const w = el.offsetWidth, h = el.offsetHeight;
+  while (el && !("camada" in el.dataset)) { x += el.offsetLeft; y += el.offsetTop; el = el.offsetParent; }
+  const s = Number(el.dataset.s);
+  return { x: Number(el.dataset.x) + x * s, y: Number(el.dataset.y) + (y - rolagem) * s, w: w * s, h: h * s };
+}
+const juntaCaixas = (rs) => { const x = Math.min(...rs.map((r) => r.x)), y = Math.min(...rs.map((r) => r.y)); return { x, y, w: Math.max(...rs.map((r) => r.x + r.w)) - x, h: Math.max(...rs.map((r) => r.y + r.h)) - y }; };
+const valor = (v) => (typeof v === "function" ? v() : v);
+const alvo = (ids, rolagem = 0) => ({ ids, caixa: () => juntaCaixas(ids.split(" ").map((id) => noQuadro(id, valor(rolagem)))) });
+const REPOUSO = { ids: "", caixa: () => ({ x: 160, y: 32, w: 1600, h: 848 }) };
+function enquadra(r, s) {
+  const x = CENTRO.x - s * (r.x + r.w / 2), y = CENTRO.y - s * (r.y + r.h / 2);
+  return { scale: s, x: Math.min(JANELA.x0 * (1 - s), Math.max(JANELA.x1 * (1 - s), x)), y: Math.min(JANELA.y0 * (1 - s), Math.max(JANELA.y1 * (1 - s), y)) };
+}
+const camera = (a, s) => ({ scale: s, x: () => enquadra(a.caixa(), s).x, y: () => enquadra(a.caixa(), s).y });
+/* Rolagem de um rolo que deixa o alvo a 24 px do topo da área visível. */
+const rolagemPara = (rolo, alvoId, visivel) => () => { const r = document.getElementById(rolo); let el = document.getElementById(alvoId), y = 0; while (el && el !== r) { y += el.offsetTop; el = el.offsetParent; } return Math.max(0, Math.min(r.offsetHeight - visivel, y - 24)); };
+const fimDo = (rolo, visivel) => () => Math.max(0, document.getElementById(rolo).offsetHeight - visivel);
+
+window.__timelines = window.__timelines || {};
+const tl = gsap.timeline({ paused: true });
+tl.set("#camera", { scale: 1, x: 0, y: 0 }, 0);
+function mira(t, dur, a, s, ate) {
+  tl.to("#camera", { ...camera(a, s), duration: dur, ease: "power2.inOut" }, t);
+  tl.to("#camera", { ...camera(a, s * 1.025), duration: ate - t - dur, ease: "none" }, t + dur);
+}
+/* Anel em volta do alvo; o data-alvo é o que o gate do anel confere. */
+function marca(t, a, ate) {
+  tl.set("#mk", { attr: { "data-alvo": a.ids }, x: () => a.caixa().x - 8, y: () => a.caixa().y - 8, width: () => a.caixa().w + 16, height: () => a.caixa().h + 16, scale: 1.06 }, t - 0.02);
+  tl.to("#mk", { opacity: 1, scale: 1, duration: 0.3, ease: "power2.out" }, t);
+  tl.to("#mk", { opacity: 0, duration: 0.25 }, ate);
+}
+const centro = (a) => { const r = a.caixa(); return { x: r.x + r.w / 2 - 8, y: r.y + r.h / 2 - 6 }; };
+function toca(t, a) {
+  tl.set("#dedo", { x: () => centro(a).x + 120, y: () => centro(a).y + 150 }, t - 0.02);
+  tl.to("#dedo", { opacity: 1, duration: 0.2 }, t);
+  tl.to("#dedo", { x: () => centro(a).x, y: () => centro(a).y, duration: 0.7, ease: "power2.inOut" }, t + 0.2);
+  tl.fromTo("#toque", { opacity: 0.9, scale: 0.4 }, { opacity: 0, scale: 1.3, duration: 0.45, ease: "power1.out", immediateRender: false }, t + 0.95);
+  tl.to("#dedo", { opacity: 0, duration: 0.25 }, t + 1.6);
+}
+const aperta = (sel, t) => { tl.to(sel, { scale: 0.97, duration: 0.1 }, t); tl.to(sel, { scale: 1, duration: 0.1 }, t + 0.1); };
+const rola = (sel, y, t) => tl.to(sel, { y: () => -valor(y), duration: 0.8, ease: "power2.inOut" }, t);
+const surge = (sel, t, dur) => tl.to(sel, { opacity: 1, duration: dur || 0.3 }, t);
+const some = (sel, t, dur) => tl.to(sel, { opacity: 0, duration: dur || 0.3 }, t);
+/* Campo preenchido: foco, o vazio sai, o texto entra. */
+function escreve(id, t) { surge(`#${id}-f`, t, 0.15); surge(`#${id}-v`, t + 0.25, 0.7); some(`#${id}-f`, t + 1.4, 0.2); }
+/* Troca de página dentro do app, com rastro curto. */
+function trocaPagina(de, para, t) {
+  tl.to(de, { x: -80, filter: "blur(10px)", opacity: 0, duration: 0.35, ease: "power2.in" }, t);
+  tl.set(para, { x: 80, filter: "blur(10px)", opacity: 0 }, t + 0.28);
+  tl.to(para, { x: 0, filter: "blur(0px)", opacity: 1, duration: 0.55, ease: "power2.out" }, t + 0.3);
+}
+/* Troca de janela (app, email, portal), com rastro e no mesmo sentido. */
+function trocaJanela(de, para, t) {
+  tl.to(de, { x: -300, filter: "blur(24px)", opacity: 0, duration: 0.35, ease: "power2.in" }, t);
+  tl.set(para, { x: 300, filter: "blur(24px)", opacity: 0 }, t + 0.23);
+  tl.to(para, { x: 0, filter: "blur(0px)", opacity: 1, duration: 0.6, ease: "power2.out" }, t + 0.25);
+}
+const abreJanela = (ov, modal, t) => { surge(ov, t, 0.25); tl.fromTo(modal, { scale: 0.95 }, { scale: 1, duration: 0.3, ease: "power2.out" }, t); };
+
+/* A janela do navegador entra com um rastro curto, saindo do branco da abertura. */
+tl.fromTo("#janela", { opacity: 0, y: 24, filter: "blur(12px)" }, { opacity: 1, y: 0, filter: "blur(0px)", duration: 0.5, ease: "power2.out" }, 4.0);
+/* 1 (4 a 10): Nova manifestação, na lista da Ouvidoria. */
+const bNova = alvo("bt-nova"); mira(4.4, 2.4, bNova, 1.45, 7.8); marca(5.8, bNova, 7.3); toca(5.9, bNova); aperta("#bt-nova", 6.85); abreJanela("#ov-nova", "#nv-modal", 7.4); mira(7.8, 1.6, alvo("nv-modal"), 1.05, 10.0);
+/* 2 (10 a 19): canal, tipo, setor, resumo e relato. */
+mira(10.0, 1.6, alvo("nv-canal nv-data"), 1.5, 13.0); marca(10.6, alvo("nv-canal-r nv-canal-c"), 12.4); escreve("nv-canal-c", 10.9); escreve("nv-data-c", 11.6); mira(13.0, 1.4, alvo("nv-tipo nv-setor"), 1.4, 15.2); escreve("nv-tipo-c", 13.3); escreve("nv-rot-c", 13.9); escreve("nv-setor-c", 14.4); marca(14.2, alvo("nv-tipo nv-setor"), 15.1); const R_RESUMO = rolagemPara("nv-rolo", "nv-resumo", 436); rola("#nv-rolo", R_RESUMO, 15.2); mira(15.2, 1.4, alvo("nv-resumo nv-pessoa", R_RESUMO), 1.15, 19.0); escreve("nv-resumo-c", 15.9); escreve("nv-relato-c", 16.5); marca(17.0, alvo("nv-relato", R_RESUMO), 18.5); escreve("nv-nome-c", 17.3); escreve("nv-cont-c", 17.6); escreve("nv-vinc-c", 17.9); some("#nv-apagado", 18.4);
+/* 3 (19 a 27): o fim do formulário, Registrar e o protocolo. */
+const R_FIM_NOVA = fimDo("nv-rolo", 436); rola("#nv-rolo", R_FIM_NOVA, 19.0); escreve("nv-pac-c", 19.6); escreve("nv-ref-c", 19.9); const bRegistrar = alvo("nv-registrar"); mira(19.2, 1.6, bRegistrar, 1.45, 22.0); toca(20.6, bRegistrar); aperta("#nv-registrar", 21.55); some("#nv-rolo", 21.9, 0.25); some("#nv-pe1", 21.9, 0.25); some("#nv-d1", 21.9, 0.2); surge("#nv-ok", 22.1); tl.set("#nv-modal", { height: 363 }, 22.0); surge("#nv-fechar", 22.1); surge("#nv-d2", 22.1, 0.2); const bProt = alvo("nv-protocolo"); mira(22.0, 1.4, bProt, 1.6, 26.2); marca(22.8, bProt, 25.6);
+/* 4 (27 a 34): o caso novo, o relato e Validar e acionar. */
+some("#ov-nova", 26.1, 0.3); trocaPagina("#pg-fila", "#pg-classif", 26.4); some("#url-fila", 26.6, 0.2); surge("#url-caso", 26.7, 0.2); mira(26.2, 1.0, REPOUSO, 1.0, 27.4); const R_RELATO = rolagemPara("classif-rolo", "classif-relato", 579.2); rola("#classif-rolo", R_RELATO, 27.4); const bRelato = alvo("classif-relato", R_RELATO); mira(27.4, 1.8, bRelato, 1.35, 30.2); marca(28.4, bRelato, 29.9); rola("#classif-rolo", 0, 30.0); const bValidar = alvo("classif-bt"); mira(30.4, 1.4, bValidar, 1.45, 32.4); toca(30.9, bValidar); aperta("#classif-bt", 31.85); abreJanela("#ov-validar", "#vd-modal", 32.2); mira(32.4, 1.4, alvo("vd-modal"), 1.05, 34.0);
+/* 5 (34 a 43): área, gravidade e extrato. */
+const R_AREA = rolagemPara("vd-rolo", "vd-area", 500); rola("#vd-rolo", R_AREA, 34.0); const bArea = alvo("vd-area", R_AREA); mira(34.0, 1.6, bArea, 1.4, 36.4); marca(34.9, bArea, 36.2); const bMedio = alvo("vd-medio", R_AREA); mira(36.4, 1.2, alvo("vd-grav", R_AREA), 1.3, 39.4); toca(36.8, bMedio); surge("#vd-medio-on", 37.75, 0.2); marca(38.1, bMedio, 39.2); const R_EXTRATO = rolagemPara("vd-rolo", "vd-extrato", 500); rola("#vd-rolo", R_EXTRATO, 39.4); const bExtrato = alvo("vd-extrato", R_EXTRATO); mira(39.4, 1.4, bExtrato, 1.3, 43.0); escreve("vd-extrato-c", 40.0); some("#vd-apagado", 40.8); marca(41.2, alvo("vd-extrato-lc", R_EXTRATO), 42.8);
+/* 6 (43 a 50): Validar e acionar a área. O caso fica com a área. */
+const R_FIM_VD = fimDo("vd-rolo", 500); rola("#vd-rolo", R_FIM_VD, 43.0); const bConfirmar = alvo("vd-confirmar", R_FIM_VD); mira(43.0, 1.6, bConfirmar, 1.45, 45.6); toca(43.9, bConfirmar); aperta("#vd-confirmar", 44.85); some("#ov-validar", 45.3, 0.3); tl.set("#pg-classif", { opacity: 0 }, 45.6); tl.set("#pg-area", { opacity: 1 }, 45.6); const bEstado = alvo("area-cab"); mira(45.6, 1.4, bEstado, 1.5, 49.4); marca(46.4, bEstado, 48.9); mira(49.4, 0.5, REPOUSO, 1.0, 49.95);
+/* 7 (50 a 57): o email da área e o botão do caso. */
+trocaJanela("#janela", "#m1", 49.6); const bGrav = alvo("m1-grav"); mira(50.2, 1.4, bGrav, 1.25, 53.0); marca(51.0, bGrav, 52.8); const R_M1 = fimDo("m1-rolo", 620.4); rola("#m1-rolo", R_M1, 53.0); const bAbrir = alvo("m1-abrir", R_M1); mira(53.0, 1.4, bAbrir, 1.4, 55.4); toca(53.7, bAbrir); aperta("#m1-abrir", 54.65); mira(55.4, 0.5, REPOUSO, 1.0, 55.95); trocaJanela("#m1", "#janela2", 55.6);
+/* 8 (57 a 66): o prazo, a nota da Ouvidoria e o que foi feito. */
+const bPrazo = alvo("pt-prazo"); mira(56.2, 1.0, bPrazo, 1.35, 57.6); const R_NOTA = rolagemPara("pt-rolo", "pt-nota", 643.2); rola("#pt-rolo", R_NOTA, 57.6); const bNota = alvo("pt-nota", R_NOTA); mira(57.6, 1.4, bNota, 1.4, 60.2); marca(58.4, bNota, 60.0); const R_CAMPO = rolagemPara("pt-rolo", "pt-campo-bloco", 643.2); rola("#pt-rolo", R_CAMPO, 60.2); const bCampo = alvo("pt-campo", R_CAMPO); mira(60.2, 1.4, bCampo, 1.4, 66.0); toca(60.8, bCampo); escreve("pt-campo", 61.75); some("#pt-apagado", 62.6); marca(63.0, alvo("pt-campo-bloco", R_CAMPO), 65.6);
+/* 9 (66 a 73): Responder à Ouvidoria e o recibo. */
+const R_FIM_PT = fimDo("pt-rolo", 643.2); rola("#pt-rolo", R_FIM_PT, 66.0); const bResponder = alvo("pt-bt", R_FIM_PT); mira(66.0, 1.4, bResponder, 1.4, 68.6); toca(66.6, bResponder); aperta("#pt-bt", 67.55); trocaPagina("#pt-form", "#pt-ok", 68.0); const bRecibo = alvo("pt-ok-num"); mira(68.6, 1.2, bRecibo, 1.5, 72.2); marca(69.4, bRecibo, 71.8); mira(72.2, 0.4, REPOUSO, 1.0, 72.7);
+/* 10 (73 a 81): de volta ao caso, a resposta da área. */
+tl.set("#pg-area", { opacity: 0 }, 72.0); tl.set("#pg-resp", { opacity: 1 }, 72.0); trocaJanela("#janela2", "#janela", 72.4); const R_RESP = rolagemPara("resp-rolo", "resp-resposta", 579.2); rola("#resp-rolo", R_RESP, 73.4); const bResposta = alvo("resp-resposta", R_RESP); mira(73.4, 1.6, bResposta, 1.4, 77.2); marca(74.4, bResposta, 76.9); const bDevolver = alvo("resp-devolver", R_RESP); mira(77.2, 1.2, alvo("resp-devol", R_RESP), 1.35, 80.6); marca(77.9, bDevolver, 80.2);
+/* 11 (81 a 90): Encerrar e o desfecho. */
+rola("#resp-rolo", 0, 80.6); const bEncerrar = alvo("resp-bt"); mira(80.8, 1.4, bEncerrar, 1.45, 83.2); toca(81.4, bEncerrar); aperta("#resp-bt", 82.35); abreJanela("#ov-encerrar", "#en-modal", 82.8); const bProc = alvo("en-proc"); mira(83.2, 1.4, alvo("en-desfecho"), 1.35, 90.0); toca(84.8, bProc); surge("#en-proc-on", 85.75, 0.2); marca(86.3, alvo("en-desfecho"), 89.6);
+/* 12 (90 a 100): o texto para a pessoa e Encerrar caso. */
+const R_TEXTO = rolagemPara("en-rolo", "en-texto", 483); rola("#en-rolo", R_TEXTO, 89.8); const bTexto = alvo("en-texto-c", R_TEXTO); mira(90.0, 1.4, alvo("en-texto", R_TEXTO), 1.3, 94.6); toca(90.4, bTexto); escreve("en-texto-c", 91.35); some("#en-apagado", 92.2); marca(92.4, alvo("en-texto", R_TEXTO), 94.2); const R_FIM_EN = fimDo("en-rolo", 483); rola("#en-rolo", R_FIM_EN, 94.3); const bEncerrarCaso = alvo("en-confirmar", R_FIM_EN); mira(94.6, 1.2, bEncerrarCaso, 1.5, 96.8); toca(94.9, bEncerrarCaso); aperta("#en-confirmar", 95.85); some("#ov-encerrar", 96.3, 0.3); tl.set("#pg-resp", { opacity: 0 }, 96.6); tl.set("#pg-fim", { opacity: 1 }, 96.6); const bFim = alvo("fim-cab"); mira(96.8, 1.0, bFim, 1.5, 99.4); marca(97.3, bFim, 99.2); mira(99.4, 0.4, REPOUSO, 1.0, 99.9);
+/* 13 (100 a 106): o email da conclusão, para quem manifestou. */
+trocaJanela("#janela", "#m2", 99.6); const bApurado = alvo("m2-prot m2-apurado"); mira(100.2, 1.6, bApurado, 1.25, 105.8); marca(101.4, bApurado, 105.4);
+
+/* Âncora: o timeline preenche o slot inteiro. */
+tl.to({}, { duration: 110 }, 0);
+window.__timelines["main"] = tl;
+</script>
+</body>
+</html>
