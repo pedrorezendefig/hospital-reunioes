@@ -1,0 +1,30 @@
+---
+/**
+ * A barra da home: "O que você quer fazer?" acima dos cartões (issue #1221).
+ *
+ * Não é uma segunda busca: abre o mesmo diálogo da barra do cabeçalho. Duas
+ * instâncias da busca do Starlight na página brigariam pelo atalho de teclado
+ * e pelo mesmo `id` do resultado.
+ */
+import { Icon } from "@astrojs/starlight/components";
+---
+
+<div class="busca-da-home">
+  <button type="button" data-abre-a-busca>
+    <Icon name="magnifier" />
+    <span>O que você quer fazer?</span>
+  </button>
+</div>
+
+<script>
+  for (const botao of document.querySelectorAll("[data-abre-a-busca]")) {
+    botao.addEventListener("click", (evento) => {
+      // Sem isto, o clique sobe até a janela, que o diálogo lê como clique
+      // fora dele, e ele fecha no mesmo instante em que abriu.
+      evento.stopPropagation();
+      document
+        .querySelector<HTMLButtonElement>("site-search button[data-open-modal]")
+        ?.click();
+    });
+  }
+</script>

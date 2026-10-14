@@ -4,6 +4,7 @@ description: Mandar a conta e o prontuário do MV para conferência e acompanhar
 prd: [1113]
 draft: false
 papel: [Faturista]
+proximas: [corrigir-uma-conta-pelo-guia]
 sidebar:
   order: 2
 ---

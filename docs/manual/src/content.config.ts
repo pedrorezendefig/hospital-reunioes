@@ -18,6 +18,13 @@ export const collections = {
         login: z.boolean().optional(),
         // Slug do Vídeo de tarefa. Ausente = vídeo ainda em produção.
         video: z.string().optional(),
+        // Palavras do dia a dia que acham a página na busca, mesmo fora do
+        // texto ("boleto" acha a página que fala "guia"). Issue #1221.
+        busca: z.array(z.string()).optional(),
+        // Até três tarefas do mesmo módulo que costumam vir depois, pelo nome
+        // do arquivo sem extensão. O tema desenha "Tarefas próximas" no fim;
+        // o lint do Manual reprova slug fora do módulo.
+        proximas: z.array(z.string()).max(3).optional(),
       }),
     }),
   }),

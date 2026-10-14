@@ -11,14 +11,24 @@
  * numera os passos com o número grande e acomoda o Print de passo dentro do
  * item da lista (emenda de 17/09/2026, decisão 2). Nada disso aparece no
  * Markdown da página.
+ *
+ * A busca afinada (issue #1221) também sai daqui, para toda página de módulo:
+ * o nome do módulo vai como metadado do Pagefind (o resultado mostra
+ * "Módulo: Ouvidoria"), as palavras de `busca:` entram no índice num trecho
+ * que a tela não mostra, e `proximas:` vira o bloco "Tarefas próximas" no fim
+ * da Página de tarefa.
  */
+import { getEntry } from "astro:content";
 import Default from "@astrojs/starlight/components/MarkdownContent.astro";
+import { modulos } from "../modulos.mjs";
 
 const { entry } = Astro.locals.starlightRoute;
 const dados = entry.data as {
   papel?: string[];
   login?: boolean;
   video?: string;
+  busca?: string[];
+  proximas?: string[];
 };
 
 const papeis = dados.papel ?? [];
@@ -26,6 +36,18 @@ const eTarefa = papeis.length > 0;
 // `login: false` é a tela que a pessoa abre por link ou QR, sem entrar no app.
 const selos = dados.login === false ? [...papeis, "Sem login"] : papeis;
 const modulo = entry.id.split("/")[0];
+// Home e páginas fora dos módulos não têm módulo para mostrar.
+const rotuloDoModulo = modulos.find((m) => m.pasta === modulo)?.label;
+const busca = dados.busca ?? [];
+
+// Tarefa em draft não existe no ar: vira link só o que está publicado.
+const proximas: { href: string; titulo: string }[] = [];
+for (const slug of eTarefa ? (dados.proximas ?? []) : []) {
+  const pagina = await getEntry("docs", `${modulo}/${slug}`);
+  if (pagina && !pagina.data.draft) {
+    proximas.push({ href: `/${pagina.id}/`, titulo: pagina.data.title });
+  }
+}
 
 function classeDoSelo(selo: string) {
   if (selo === "Sem login") return "tarefa-selo tarefa-selo--sem-login";
@@ -67,6 +89,37 @@ function classeDoSelo(selo: string) {
     </div>
   )
 }
-<div class={eTarefa ? "tarefa-corpo" : undefined}>
+<div
+  class={eTarefa ? "tarefa-corpo" : undefined}
+  data-pagefind-meta={rotuloDoModulo ? `módulo:${rotuloDoModulo}` : undefined}
+>
+  {
+    /* Só para o índice da busca: a tela esconde, o leitor de tela pula. Vem
+       antes do texto para o resultado apontar o topo da página, e não a
+       última seção dela. */
+    busca.length > 0 && (
+      <p class="busca-sinonimos" aria-hidden="true">
+        {busca.join(", ")}
+      </p>
+    )
+  }
   <Default><slot /></Default>
 </div>
+{
+  proximas.length > 0 && (
+    <nav
+      class="tarefas-proximas"
+      aria-labelledby="tarefas-proximas"
+      data-pagefind-ignore
+    >
+      <h2 id="tarefas-proximas">Tarefas próximas</h2>
+      <ul>
+        {proximas.map(({ href, titulo }) => (
+          <li>
+            <a href={href}>{titulo}</a>
+          </li>
+        ))}
+      </ul>
+    </nav>
+  )
+}
