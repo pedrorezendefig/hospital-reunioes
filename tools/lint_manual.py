@@ -6,7 +6,9 @@ Trava a publicação quando o texto que o usuário lê sai do padrão do ADR 005
 - jargão técnico em texto visível (mesma lista do gate anti-técnica da /divulgar);
 - cacoete regexável de texto gerado ("não é X, é Y" e variantes, fecho
   repetido), pela lista única de tools/tells_texto.py (ADR 0071, decisão 1);
-- frontmatter obrigatório faltando.
+- frontmatter obrigatório faltando;
+- `proximas:` com slug que não existe no módulo, de outro módulo ou com mais
+  de três itens (issue #1221).
 
 Avisa, sem travar, quando uma Página de tarefa passa de 250 palavras, e
 quando um cacoete da lista de conhecidos (tools/tells_conhecidos.json, o que já
@@ -75,6 +77,32 @@ def ler_frontmatter(texto: str) -> dict[str, str]:
     return campos
 
 
+def ler_lista(texto: str, chave: str) -> list[str]:
+    """Uma lista do frontmatter, em linha (`[a, b]`) ou em bloco (`- a`)."""
+    if not texto.startswith("---\n"):
+        return []
+    fim = texto.find("\n---", 3)
+    if fim == -1:
+        return []
+    linhas = texto[4:fim].splitlines()
+    for i, linha in enumerate(linhas):
+        nome, sep, valor = linha.partition(":")
+        if not sep or linha.startswith((" ", "\t")) or nome.strip().lower() != chave:
+            continue
+        valor = valor.strip()
+        if valor.startswith("["):
+            itens = valor.strip("[]").split(",")
+        else:
+            itens = []
+            for seguinte in linhas[i + 1 :]:
+                item = seguinte.strip()
+                if not item.startswith("- "):
+                    break
+                itens.append(item[2:])
+        return [it.strip().strip("\"'") for it in itens if it.strip()]
+    return []
+
+
 def texto_visivel(texto: str) -> str:
     """O que a pessoa lê na página: sem frontmatter, código, comentário nem marcação.
 
@@ -123,6 +151,44 @@ def e_pagina_de_tarefa(relativo: Path) -> bool:
     return GRUPO_COMO_FUNCIONA not in relativo.parts[:-1]
 
 
+# Tarefas próximas (issue #1221): o tema desenha até três links no fim da
+# Página de tarefa, todos do mesmo módulo.
+TETO_DE_PROXIMAS = 3
+
+
+def checar_proximas(pasta: Path, relativo: Path, texto: str) -> list[str]:
+    """`proximas:` só aponta para página que existe no próprio módulo."""
+    proximas = ler_lista(texto, "proximas")
+    nome = str(relativo)
+    erros: list[str] = []
+    if len(proximas) > TETO_DE_PROXIMAS:
+        erros.append(
+            f"{nome}: {len(proximas)} tarefas em proximas, acima do teto de "
+            "três. Deixe as que mais costumam vir depois (issue #1221)."
+        )
+    modulo = relativo.parts[0]
+    for slug in proximas:
+        no_modulo = ".." not in Path(slug).parts and any(
+            (pasta / modulo / f"{slug}{ext}").is_file() for ext in (".md", ".mdx")
+        )
+        if no_modulo:
+            continue
+        outros = sorted(
+            {
+                p.relative_to(pasta).parts[0]
+                for p in pasta.glob(f"*/{Path(slug).name}.md*")
+                if p.relative_to(pasta).parts[0] != modulo
+            }
+        )
+        onde = f" Ela existe em {', '.join(outros)}, outro módulo." if outros else ""
+        erros.append(
+            f"{nome}: proximas aponta para '{slug}', que não é página do "
+            f"módulo {modulo}.{onde} Use o nome do arquivo de uma página da "
+            "mesma pasta, sem extensão."
+        )
+    return erros
+
+
 CONHECIDOS = Path(__file__).resolve().parent / "tells_conhecidos.json"
 
 
@@ -161,6 +227,8 @@ def checar(
                     "Toda página de módulo declara title, prd e draft; "
                     "a Página de tarefa declara também papel (ADR 0057)."
                 )
+        if len(relativo.parts) > 1:
+            erros += checar_proximas(pasta, relativo, texto)
         for linha_num, linha in enumerate(texto.splitlines(), start=1):
             if TRAVESSAO in linha or MEIA_RISCA in linha:
                 erros.append(
