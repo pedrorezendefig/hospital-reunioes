@@ -190,7 +190,7 @@ export function LinhaDoGuia({ linha, concluida, ocupado, onMarcar, onDesfazer, o
         <p className="text-xs text-slate-500">Decidida na validação, sem ação no MV</p>
       ) : validar ? (
         <div className="text-xs text-[#92400E] space-y-0.5">
-          <p>Você não precisa decidir: o item já foi para a validação</p>
+          <p>Nada a decidir aqui: o item já foi para a validação</p>
           {linha.valor_diferenca != null && (
             <p className="font-semibold">Em jogo: R$ {reais(Math.abs(linha.valor_diferenca))}</p>
           )}

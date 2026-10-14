@@ -21,7 +21,7 @@ import { NATUREZAS_INFORMADAS, type NaturezaInformada } from "./publico";
  * tipo que decide sigilo e estado.
  */
 export const SUGESTAO_NAO_E_CLASSIFICACAO =
-  "É a sugestão de quem manifestou, não a classificação do caso: quem classifica é o ouvidor.";
+  "É a sugestão de quem manifestou. Quem classifica o caso é o ouvidor.";
 
 export interface CasoComNatureza {
   natureza_informada: string | null;

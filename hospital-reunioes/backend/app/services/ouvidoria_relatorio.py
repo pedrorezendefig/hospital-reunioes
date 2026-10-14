@@ -499,9 +499,8 @@ def apresentar(registro: dict) -> dict:
             "titulo": "Fila viva, sem recorte de período.",
             # O carimbo que a fila viva exige: ela não tem recorte de período.
             "nota": (
-                f"Fila medida em {medido_em}. Este bloco responde o que estava pendente naquele instante, "
-                "e não o que entrou na quinzena: os dois universos são diferentes, e por isso o total daqui "
-                "não se soma ao volume do período."
+                f"Fila medida em {medido_em}. Este bloco mostra o que estava pendente naquele instante, "
+                "seja qual for a data de entrada. Por isso o total daqui não se soma ao volume do período."
             ),
             "itens": [
                 {

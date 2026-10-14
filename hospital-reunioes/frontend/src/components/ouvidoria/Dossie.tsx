@@ -1155,8 +1155,8 @@ export function Dossie({ protocolo, token }: DossieProps) {
             <div className="flex items-start gap-2 px-4 py-3 rounded-xl bg-amber-50 border border-amber-200 text-amber-800 text-sm">
               <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
               <span>
-                Não foi possível ler a trilha deste caso agora. Se alguma área o devolveu, o aviso da
-                devolução não aparece nesta tela: recarregue a página antes de despachar.
+                Não foi possível ler a trilha deste caso agora. Se alguma área o devolveu, esta tela não
+                mostra o aviso. Recarregue a página antes de despachar.
               </span>
             </div>
           )}
@@ -1952,7 +1952,7 @@ export function Dossie({ protocolo, token }: DossieProps) {
           {confirmandoApagamento && (
             <ReasonModal
               title={`Apagar a manifestação ${dossie.protocolo}`}
-              description="O relato, a identificação, os anexos e a resposta da área somem. Ficam o protocolo, a linha do tempo e os números. O motivo abaixo fica gravado no caso e na trilha, com o seu nome, e não pode ser apagado depois: escreva a decisão, sem o nome nem o contato de quem manifestou."
+              description="O relato, a identificação, os anexos e a resposta da área somem. Ficam o protocolo, a linha do tempo e os números. O motivo abaixo fica gravado no caso e na trilha, com o seu nome, e depois não dá para apagar. Escreva a decisão, sem o nome nem o contato de quem manifestou."
               confirmLabel="Apagar agora"
               placeholder="Ex.: pedido da paciente, decidido pela Diretoria em reunião"
               erro={erroDoApagamento}
