@@ -1,0 +1,66 @@
+<!doctype html>
+<!--
+  ESTILO DO MANUAL · card de apoio · legenda de passo (uma por passo)
+  Transparente fora da placa: fica por cima da tela do app. A placa mora no
+  retângulo --video-legenda-* do tokens.css e não anima: um passo encosta no
+  outro e só o número e o texto trocam, sem a placa piscar. O gate de strips
+  (tools/strips_video_manual.py) reprova quadro sem a placa nesse retângulo.
+  Slots: numero (2), texto (90). **palavra** sai em negrito (a palavra da tela).
+  Contrato dos cards: _estilo/DESIGN.md, seção "Cards e slots".
+-->
+<html lang="pt-BR" data-composition-variables='[
+  {"id":"numero","type":"string","label":"Número do passo","default":"1","maxLength":2},
+  {"id":"texto","type":"string","label":"Texto do passo","default":"Clique em **Enviar manifestação**.","maxLength":90}
+]'>
+<head>
+<meta charset="UTF-8" />
+<link rel="stylesheet" href="tokens.css" />
+<script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js" integrity="sha384-sG0Hv1tP1lZCk9KQmrIbY/XNwi+OY84GQqhMscbnsoBFqAz8KNCil1kvfL3Hbbk2" crossorigin="anonymous"></script>
+</head>
+<body>
+<div id="legenda-de-passo" data-composition-id="legenda-de-passo" data-start="0" data-width="1920" data-height="1080" data-duration="6">
+  <style>
+    #legenda-de-passo { position: absolute; inset: 0; width: 1920px; height: 1080px; overflow: hidden; background: transparent; font-family: var(--font-app); }
+    .placa {
+      position: absolute;
+      left: var(--video-legenda-esquerda); top: var(--video-legenda-topo);
+      width: var(--video-legenda-largura); height: var(--video-legenda-altura);
+      box-sizing: border-box; padding: 0 48px; display: flex; align-items: center; gap: 32px;
+      background: var(--video-legenda-fundo); border-radius: var(--radius-3xl); box-shadow: var(--video-sombra);
+    }
+    .numero {
+      flex: 0 0 72px; width: 72px; height: 72px; border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      background: var(--video-passo); color: var(--video-legenda-fundo); font-size: 38px;
+    }
+    .texto { flex: 1 1 auto; font-size: 40px; line-height: 1.25; color: var(--video-legenda-texto); }
+    .texto b { font-weight: 700; }
+  </style>
+  <div class="placa">
+    <div class="numero" data-slot="numero">1</div>
+    <div class="texto" data-slot="texto">Clique em **Enviar manifestação**.</div>
+  </div>
+</div>
+<script>
+window.__timelines = window.__timelines || {};
+/* Slots: o host preenche por data-variable-values; sem host, vale o default
+   declarado no <html>. **palavra** vira negrito (a palavra da tela). */
+const valores = window.__hyperframes && window.__hyperframes.getVariables ? window.__hyperframes.getVariables() : {};
+document.querySelectorAll("#legenda-de-passo [data-slot]").forEach((el) => {
+  const bruto = valores[el.dataset.slot] || el.textContent;
+  el.innerHTML = bruto
+    .replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" })[c])
+    .replace(/\*\*(.+?)\*\*/g, "<b>$1</b>");
+});
+
+const tl = gsap.timeline({ paused: true });
+/* Troca sem pop: a placa já está lá; número e texto chegam com fade curto. */
+tl.fromTo("#legenda-de-passo .numero", { opacity: 0, scale: 0.85 }, { opacity: 1, scale: 1, duration: 0.3, ease: "power2.out" }, 0);
+tl.fromTo("#legenda-de-passo .texto", { opacity: 0, y: 10 }, { opacity: 1, y: 0, duration: 0.35, ease: "power2.out" }, 0.08);
+/* Âncora do slot: um Vídeo de tarefa tem no máximo 60 s, então o timeline
+   cobre qualquer passo, e a placa nunca some antes do slot acabar. */
+tl.to({}, { duration: 60 }, 0);
+window.__timelines["legenda-de-passo"] = tl;
+</script>
+</body>
+</html>

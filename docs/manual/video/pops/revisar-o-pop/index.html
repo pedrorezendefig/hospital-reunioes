@@ -261,8 +261,8 @@ msgalerta: '<path d="M22 17a2 2 0 0 1-2 2H6.828a2 2 0 0 0-1.414.586l-2.202 2.202
 zoommenos: '<circle cx="11" cy="11" r="8"/><line x1="21" x2="16.65" y1="21" y2="16.65"/><line x1="8" x2="14" y1="11" y2="11"/>',
 };
 const ic = (nome, s, traco) => `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="${traco || 2}" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0">${P[nome]}</svg>`;
-const janela = (url, app, sobre) => `<div class="janela" id="janela"><div class="barra-nav"><i></i><i></i><i></i><div class="url">${url}</div></div>
-  <div class="vista"><div class="app" id="app">${app}${sobre || ""}</div></div></div>
+const janela = (url, app, sobre, fora) => `<div class="janela" id="janela"><div class="barra-nav"><i></i><i></i><i></i><div class="url">${url}</div></div>
+  <div class="vista"><div class="app" id="app">${app}${sobre || ""}</div></div>${fora || ""}</div>
   <div class="marcador" id="mk"></div><div class="dedo" id="dedo"><svg viewBox="0 0 24 24"><path d="M5 3l14 8-6 1.6L9.6 19z"/></svg><div class="toque" id="toque"></div></div>`;
 /* Réplica de tela: sobreposição e corte são de propósito. */
 const liberaCamera = () => document.querySelectorAll("#camera, #camera *").forEach((el) => ["overlap", "occlusion", "overflow"].forEach((k) => el.setAttribute(`data-layout-allow-${k}`, "")));
@@ -273,8 +273,9 @@ const APP_X = 160, APP_Y = 32 + 44, ESCALA_APP = 1.11111, CENTRO = { x: 960, y: 
 const valor = (v) => (typeof v === "function" ? v() : v);
 function noQuadro(id, rolagem) {
   let el = document.getElementById(id), x = 0, y = 0;
-  const w = el.offsetWidth, h = el.offsetHeight, app = document.getElementById("app");
-  while (el && el !== app) { x += el.offsetLeft; y += el.offsetTop; el = el.offsetParent; }
+  const w = el.offsetWidth, h = el.offsetHeight, app = document.getElementById("app"), jan = document.getElementById("janela");
+  while (el && el !== app && el !== jan) { x += el.offsetLeft; y += el.offsetTop; el = el.offsetParent; }
+  if (el === jan) return { x: 160 + x, y: 32 + y, w, h }; /* na barra do navegador, fora do app */
   return { x: APP_X + x * ESCALA_APP, y: APP_Y + (y - rolagem) * ESCALA_APP, w: w * ESCALA_APP, h: h * ESCALA_APP };
 }
 const juntaCaixas = (rs) => { const x = Math.min(...rs.map((r) => r.x)), y = Math.min(...rs.map((r) => r.y)); return { x, y, w: Math.max(...rs.map((r) => r.x + r.w)) - x, h: Math.max(...rs.map((r) => r.y + r.h)) - y }; };
@@ -322,8 +323,8 @@ function trocaTela(de, para, t) {
   tl.fromTo(para, { x: 300, filter: "blur(24px)", opacity: 0 }, { x: 0, filter: "blur(0px)", opacity: 1, duration: 0.6, ease: "power2.out" }, t + 0.25);
 }
 /* Monta a réplica na câmera; a janela do navegador entra com um rastro curto, saindo do branco da abertura. */
-function monta(url, app, sobre) {
-  document.getElementById("camera").innerHTML = janela(url, app, sobre); liberaCamera();
+function monta(url, app, sobre, fora) {
+  document.getElementById("camera").innerHTML = janela(url, app, sobre, fora); liberaCamera();
   tl.fromTo("#janela", { opacity: 0, y: 24, filter: "blur(12px)" }, { opacity: 1, y: 0, filter: "blur(0px)", duration: 0.5, ease: "power2.out" }, 4.0);
 }
 /* A casca do app (barra lateral e topo), como a Marina Alves, Superadmin de POPs, vê. */
@@ -385,7 +386,7 @@ const confirma = (id, o) => `<div class="sobre-app" id="${id}"><div class="conf-
    (lib/pops/fluxograma/svg.ts) com as cores trocadas pelos tokens. */
 const FLUXO_SVG = '<svg viewBox="0 0 722 569" width="722" height="569" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Fluxograma do procedimento"><defs><marker id="flx-ponta" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M 0 1.5 L 9 5 L 0 8.5 z" style="fill:var(--color-slate-400)"/></marker><filter id="flx-sombra" x="-20%" y="-20%" width="140%" height="160%"><feDropShadow dx="0" dy="1" stdDeviation="1.6" flood-opacity="0.10" style="flood-color:var(--color-slate-900)"/></filter></defs><path d="M 300 57 V 87" fill="none" stroke-width="1.8" marker-end="url(#flx-ponta)" style="stroke:var(--color-slate-400)"/><path d="M 300 135 V 165" fill="none" stroke-width="1.8" marker-end="url(#flx-ponta)" style="stroke:var(--color-slate-400)"/><path d="M 300 231 V 261" fill="none" stroke-width="1.8" marker-end="url(#flx-ponta)" style="stroke:var(--color-slate-400)"/><path d="M 300 390 V 420" fill="none" stroke-width="1.8" marker-end="url(#flx-ponta)" style="stroke:var(--color-slate-400)"/><path d="M 300 486 V 516" fill="none" stroke-width="1.8" marker-end="url(#flx-ponta)" style="stroke:var(--color-slate-400)"/><path d="M 418 285 H 494" fill="none" stroke-width="1.8" marker-end="url(#flx-ponta)" style="stroke:var(--color-slate-400)"/><path d="M 182 271 H 144 Q 136 271 136 279 V 358 Q 136 366 144 366 H 178" fill="none" stroke-width="1.8" marker-end="url(#flx-ponta)" style="stroke:var(--color-slate-400)"/><path d="M 600 248 V 206 Q 600 198 592 198 H 422" fill="none" stroke-width="1.8" marker-end="url(#flx-ponta)" style="stroke:var(--color-slate-400)"/><rect x="252" y="23" width="96" height="34" rx="17" filter="url(#flx-sombra)" style="fill:var(--color-primary)"/><path d="M 274 34 l 10 6 l -10 6 z" opacity="0.9" style="fill:var(--color-white)"/><text x="307" y="45" text-anchor="middle" font-size="14.5" font-weight="700" style="fill:var(--color-white);font-family:var(--font-app)">Início</text><rect x="256" y="516" width="88" height="34" rx="17" stroke-width="1.5" filter="url(#flx-sombra)" style="fill:var(--color-emerald-300);stroke:var(--color-emerald-400)"/><path d="M 276 533 l 4.5 4.5 l 8 -8.5" stroke-width="2.4" fill="none" stroke-linecap="round" stroke-linejoin="round" style="stroke:var(--color-green-900)"/><text x="308" y="538" text-anchor="middle" font-size="14.5" font-weight="700" style="fill:var(--color-green-900);font-family:var(--font-app)">Fim</text><rect x="182" y="87" width="236" height="48" rx="8" stroke-width="1.5" filter="url(#flx-sombra)" style="fill:var(--color-white);stroke:var(--color-border)"/><circle cx="182" cy="111" r="11" stroke-width="1.2" style="fill:color-mix(in srgb, var(--color-primary) 8%, var(--color-white));stroke:color-mix(in srgb, var(--color-primary) 22%, var(--color-white))"/><text x="182" y="115" text-anchor="middle" font-size="12" font-weight="700" style="fill:var(--color-primary);font-family:var(--font-app)">1</text><text x="306" y="107" text-anchor="middle" font-size="15" font-weight="400" style="fill:var(--color-text);font-family:var(--font-app)">Higienizar as mãos e</text><text x="306" y="125" text-anchor="middle" font-size="15" font-weight="400" style="fill:var(--color-text);font-family:var(--font-app)">reunir o material</text><rect x="182" y="165" width="236" height="66" rx="8" stroke-width="1.5" filter="url(#flx-sombra)" style="fill:var(--color-white);stroke:var(--color-border)"/><circle cx="182" cy="198" r="11" stroke-width="1.2" style="fill:color-mix(in srgb, var(--color-primary) 8%, var(--color-white));stroke:color-mix(in srgb, var(--color-primary) 22%, var(--color-white))"/><text x="182" y="202" text-anchor="middle" font-size="12" font-weight="700" style="fill:var(--color-primary);font-family:var(--font-app)">2</text><text x="306" y="185" text-anchor="middle" font-size="15" font-weight="400" style="fill:var(--color-text);font-family:var(--font-app)">Conferir a prescrição e</text><text x="306" y="203" text-anchor="middle" font-size="15" font-weight="400" style="fill:var(--color-text);font-family:var(--font-app)">a identificação do</text><text x="306" y="221" text-anchor="middle" font-size="15" font-weight="400" style="fill:var(--color-text);font-family:var(--font-app)">paciente</text><rect x="182" y="261" width="236" height="48" rx="8" stroke-width="1.5" filter="url(#flx-sombra)" style="fill:var(--color-amber-50);stroke:var(--color-amber-300)"/><rect x="174" y="277" width="16" height="16" rx="3" transform="rotate(45 182 285)" stroke-width="1.5" style="fill:var(--color-white);stroke:var(--color-amber-300)"/><text x="182" y="289.5" text-anchor="middle" font-size="12" font-weight="700" style="fill:var(--color-amber-900);font-family:var(--font-app)">?</text><text x="306" y="281" text-anchor="middle" font-size="15" font-weight="600" style="fill:var(--color-amber-900);font-family:var(--font-app)">A prescrição confere</text><text x="306" y="299" text-anchor="middle" font-size="15" font-weight="600" style="fill:var(--color-amber-900);font-family:var(--font-app)">com a identificação?</text><rect x="182" y="342" width="236" height="48" rx="8" stroke-width="1.5" filter="url(#flx-sombra)" style="fill:var(--color-white);stroke:var(--color-border)"/><circle cx="182" cy="366" r="11" stroke-width="1.2" style="fill:color-mix(in srgb, var(--color-primary) 8%, var(--color-white));stroke:color-mix(in srgb, var(--color-primary) 22%, var(--color-white))"/><text x="182" y="370" text-anchor="middle" font-size="12" font-weight="700" style="fill:var(--color-primary);font-family:var(--font-app)">4</text><text x="306" y="362" text-anchor="middle" font-size="15" font-weight="400" style="fill:var(--color-text);font-family:var(--font-app)">Executar o procedimento</text><text x="306" y="380" text-anchor="middle" font-size="15" font-weight="400" style="fill:var(--color-text);font-family:var(--font-app)">conforme a técnica</text><rect x="182" y="420" width="236" height="66" rx="8" stroke-width="1.5" filter="url(#flx-sombra)" style="fill:var(--color-white);stroke:var(--color-border)"/><circle cx="182" cy="453" r="11" stroke-width="1.2" style="fill:color-mix(in srgb, var(--color-primary) 8%, var(--color-white));stroke:color-mix(in srgb, var(--color-primary) 22%, var(--color-white))"/><text x="182" y="457" text-anchor="middle" font-size="12" font-weight="700" style="fill:var(--color-primary);font-family:var(--font-app)">5</text><text x="306" y="440" text-anchor="middle" font-size="15" font-weight="400" style="fill:var(--color-text);font-family:var(--font-app)">Registrar o</text><text x="306" y="458" text-anchor="middle" font-size="15" font-weight="400" style="fill:var(--color-text);font-family:var(--font-app)">procedimento no</text><text x="306" y="476" text-anchor="middle" font-size="15" font-weight="400" style="fill:var(--color-text);font-family:var(--font-app)">prontuário</text><rect x="498" y="248" width="204" height="74" rx="8" stroke-width="1.5" filter="url(#flx-sombra)" style="fill:var(--color-white);stroke:var(--color-border)"/><circle cx="498" cy="285" r="11" stroke-width="1.2" style="fill:color-mix(in srgb, var(--color-primary) 8%, var(--color-white));stroke:color-mix(in srgb, var(--color-primary) 22%, var(--color-white))"/><text x="498" y="289" text-anchor="middle" font-size="12" font-weight="700" style="fill:var(--color-primary);font-family:var(--font-app)">3</text><text x="606" y="272" text-anchor="middle" font-size="15" font-weight="400" style="fill:var(--color-text);font-family:var(--font-app)">Suspender e acionar</text><text x="606" y="290" text-anchor="middle" font-size="15" font-weight="400" style="fill:var(--color-text);font-family:var(--font-app)">o enfermeiro</text><text x="606" y="308" text-anchor="middle" font-size="15" font-weight="400" style="fill:var(--color-text);font-family:var(--font-app)">responsável</text><rect x="436" y="274" width="44" height="22" rx="11" stroke-width="1.2" style="fill:var(--color-red-50);stroke:var(--color-red-200)"/><text x="458" y="289.5" text-anchor="middle" font-size="12" font-weight="700" style="fill:var(--color-red-700);font-family:var(--font-app)">Não</text><rect x="126" y="260" width="44" height="22" rx="11" stroke-width="1.2" style="fill:var(--color-emerald-50);stroke:var(--color-emerald-200)"/><text x="148" y="275.5" text-anchor="middle" font-size="12" font-weight="700" style="fill:var(--color-emerald-700);font-family:var(--font-app)">Sim</text></svg>';
 /* FluxogramaPalco.tsx: barra de zoom e de exportação, palco com o desenho enquadrado. */
-const palco = (p, legenda, zoom) => `<div class="flx" id="${p}-flx"><div class="flx-barra"><div class="flx-zoom" id="${p}-zoom"><span class="flx-f" id="${p}-menos">${ic("zoommenos", 16)}</span><span class="flx-pct"><span id="${p}-pct0">${zoom[0]}</span><span id="${p}-pct1" class="flx-pct2">${zoom[1]}</span></span><span class="flx-f" id="${p}-mais">${ic("zoommais", 16)}</span><span class="flx-f" id="${p}-ajustar">${ic("ajustar", 16)}</span></div>
+const palco = (p, legenda, zoom) => `<div class="flx" id="${p}-flx"><div class="flx-barra"><div class="flx-zoom" id="${p}-zoom"><span class="flx-f" id="${p}-menos">${ic("zoommenos", 16)}</span><span class="flx-pct">${zoom.map((z, i) => `<span id="${p}-pct${i}"${i ? ' class="flx-pct2"' : ""}>${z}</span>`).join("")}</span><span class="flx-f" id="${p}-mais">${ic("zoommais", 16)}</span><span class="flx-f" id="${p}-ajustar">${ic("ajustar", 16)}</span></div>
   <div class="flx-exp"><span class="flx-bt" id="${p}-png">${ic("imagem", 14)}PNG</span><span class="flx-bt" id="${p}-svg">${ic("baixar", 14)}SVG</span></div></div>
   <div class="flx-palco" id="${p}-palco"><div class="flx-des" id="${p}-des">${FLUXO_SVG}</div><span class="flx-dica">Role para dar zoom, arraste para mover</span></div><p class="flx-leg">${legenda}</p></div>`;
 /* O POP de exemplo do roteiro: HSM_CTI-001, com a Marina como Revisora. */
@@ -395,7 +396,7 @@ const SECOES = [
   ["Aplicação", par("Equipe assistencial do Centro de Terapia Intensiva, em todos os turnos.")],
   ["Materiais necessários", itens("ul", ["Sabonete líquido", "Papel toalha", "Preparação alcoólica a 70%"])],
   ["Descrição do procedimento", itens("ol", ["Retire adornos das mãos e dos punhos.", "Abra a torneira e molhe as mãos sem encostar na pia.", "Ensaboe palmas, dorsos, espaços entre os dedos e polegares.", "Enxágue das pontas dos dedos em direção aos punhos.", "Seque com papel toalha e feche a torneira com ele."])],
-  ["Fluxograma", palco("d", "HSM_CTI-001 · POP Higienização das Mãos", ["89%", "89%"])],
+  ["Fluxograma", palco("d", "HSM_CTI-001 · POP Higienização das Mãos", ["89%"])],
   ["Referências", par("ANVISA. Segurança do paciente em serviços de saúde: higienização das mãos.")],
 ];
 const MOTIVO = "Faltou o tempo de fricção com a preparação alcoólica, de 20 a 30 segundos.";
@@ -408,79 +409,44 @@ monta("app.hospitalsaomatheus.cloud/pops",
   confirma("c-devolver", { titulo: "Devolver à elaboração?", texto: "A Versão volta ao Elaborador com os seus comentários e, no reenvio, retorna direto para você.", rotulo: "Devolver", perigo: true, motivo: MOTIVO, dica: "O que precisa ser ajustado? (registrado com seu nome e horário)" }) + aviso);
 /* Passo 1 (4 a 9): POPs no menu da esquerda. */
 const bMenu = alvo("g-menu-pops");
-mira(4.4, 2.2, bMenu, 1.5, 8.6);
-marca(5.6, bMenu, 8.2);
-toca(5.8, bMenu);
-soltaDedo(7.4);
+mira(4.4, 2.2, bMenu, 1.5, 8.6); marca(5.6, bMenu, 8.2); toca(5.8, bMenu); soltaDedo(7.4);
 /* Passo 2 (9 a 16): Revisar, na linha do HSM_CTI-001. A tela troca com rastro. */
 const bRevisar = alvo("g-HSM_CTI-001-etapa");
-mira(8.6, 1.8, bRevisar, 1.45, 12.4);
-marca(9.9, bRevisar, 12.0);
-toca(10.0, bRevisar);
-soltaDedo(11.6);
+mira(8.6, 1.8, bRevisar, 1.45, 12.4); marca(9.9, bRevisar, 12.0); toca(10.0, bRevisar); soltaDedo(11.6);
 trocaTela("#t-lista", "#t-doc", 12.1);
 mira(12.4, 1.2, REPOUSO, 1.0, 13.6);
 const bEtapa = alvo("d-etapa");
-mira(13.6, 1.4, bEtapa, 1.5, 16.0);
-marca(14.2, bEtapa, 15.8);
+mira(13.6, 1.4, bEtapa, 1.5, 16.0); marca(14.2, bEtapa, 15.8);
 /* Passo 3 (16 a 24): a leitura, da Identificação ao fluxograma. */
 const bIdent = alvo("d-ident");
-mira(16.0, 1.4, bIdent, 1.2, 18.6);
-marca(16.6, bIdent, 18.4);
+mira(16.0, 1.4, bIdent, 1.2, 18.6); marca(16.6, bIdent, 18.4);
 const ROLA_FLX = rolagemPara("d-rolo", "d-s6", 68 + 8, 723.6);
-rola("#d-rolo", () => ROLA_FLX() * 0.45, 18.6, 1.4);
-mira(18.6, 1.6, REPOUSO, 1.0, 20.2);
-rola("#d-rolo", ROLA_FLX, 20.2, 1.2);
+rola("#d-rolo", () => ROLA_FLX() * 0.45, 18.6, 1.4); mira(18.6, 1.6, REPOUSO, 1.0, 20.2); rola("#d-rolo", ROLA_FLX, 20.2, 1.2);
 const bPalco = alvo("d-palco", ROLA_FLX);
-mira(20.6, 1.4, bPalco, 1.12, 24.0);
-marca(21.6, bPalco, 23.6);
-rola("#d-rolo", 0, 23.8, 0.8);
+mira(20.6, 1.4, bPalco, 1.12, 24.0); marca(21.6, bPalco, 23.6); rola("#d-rolo", 0, 23.8, 0.8);
 /* Passo 4 (24 a 31): Aprovar revisão abre a confirmação; o botão Aprovar confirma. */
 const bAprovar = alvo("d-aprovar");
-mira(24.0, 1.6, bAprovar, 1.5, 26.9);
-toca(24.9, bAprovar);
-soltaDedo(26.3);
-tl.to("#c-aprovar", { opacity: 1, duration: 0.25 }, 26.0);
+mira(24.0, 1.6, bAprovar, 1.5, 26.9); toca(24.9, bAprovar); soltaDedo(26.3); tl.to("#c-aprovar", { opacity: 1, duration: 0.25 }, 26.0);
 tl.fromTo("#c-aprovar-caixa", { y: 10 }, { y: 0, duration: 0.3, ease: "power2.out" }, 26.0);
 mira(26.9, 1.2, alvo("c-aprovar-caixa"), 1.4, 31.0);
 const bSim = alvo("c-aprovar-sim");
-marca(27.6, bSim, 29.4);
-toca(29.2, alvo("c-aprovar-nao"));
-soltaDedo(30.5);
-esconde("#c-aprovar", 30.25, 0.2);
+marca(27.6, bSim, 29.4); toca(29.2, alvo("c-aprovar-nao")); soltaDedo(30.5); esconde("#c-aprovar", 30.25, 0.2);
 /* Passo 5 (31 a 36): Devolver com comentários. */
 const bDevolver = alvo("d-devolver");
-mira(31.0, 1.4, bDevolver, 1.5, 34.2);
-marca(31.8, bDevolver, 33.6);
-toca(31.9, bDevolver);
-soltaDedo(33.4);
-tl.to("#c-devolver", { opacity: 1, duration: 0.25 }, 33.1);
+mira(31.0, 1.4, bDevolver, 1.5, 34.2); marca(31.8, bDevolver, 33.6); toca(31.9, bDevolver); soltaDedo(33.4); tl.to("#c-devolver", { opacity: 1, duration: 0.25 }, 33.1);
 tl.fromTo("#c-devolver-caixa", { y: 10 }, { y: 0, duration: 0.3, ease: "power2.out" }, 33.1);
 mira(34.2, 1.4, alvo("c-devolver-caixa"), 1.3, 36.0);
 /* Passo 6 (36 a 47): o motivo, obrigatório; com ele, Devolver acende. */
 const bArea = alvo("c-devolver-area");
-mira(36.0, 1.2, alvo("c-devolver-motivo"), 1.55, 40.6);
-toca(36.2, bArea);
-mostra("#c-devolver-foco", 37.15, 0.1);
-esconde("#c-devolver-vazio", 37.3, 0.1);
-mostra("#c-devolver-cheio", 37.35, 0.9);
-esconde("#c-devolver-n0", 37.4, 0.05);
-mostra("#c-devolver-n1", 37.4, 0.05);
-esconde("#c-devolver-apagado", 37.6, 0.3);
-soltaDedo(37.6);
-marca(39.1, alvo("c-devolver-area"), 40.4);
+mira(36.0, 1.2, alvo("c-devolver-motivo"), 1.55, 40.6); toca(36.2, bArea); mostra("#c-devolver-foco", 37.15, 0.1); esconde("#c-devolver-vazio", 37.3, 0.1);
+mostra("#c-devolver-cheio", 37.35, 0.9); esconde("#c-devolver-n0", 37.4, 0.05); mostra("#c-devolver-n1", 37.4, 0.05); esconde("#c-devolver-apagado", 37.6, 0.3);
+soltaDedo(37.6); marca(39.1, alvo("c-devolver-area"), 40.4);
 const bSimD = alvo("c-devolver-sim");
-mira(40.6, 1.0, bSimD, 1.5, 42.6);
-toca(40.8, bSimD);
-aperta("#c-devolver-sim", 41.75);
-soltaDedo(42.1);
-esconde("#c-devolver", 42.2, 0.2);
+mira(40.6, 1.0, bSimD, 1.5, 42.6); toca(40.8, bSimD); aperta("#c-devolver-sim", 41.75); soltaDedo(42.1); esconde("#c-devolver", 42.2, 0.2);
 trocaTela("#t-doc", "#t-lista2", 42.4);
-mostra("#aviso", 43.2, 0.3);
-mira(42.6, 1.2, REPOUSO, 1.0, 43.8);
+mostra("#aviso", 43.2, 0.3); mira(42.6, 1.2, REPOUSO, 1.0, 43.8);
 const bLinha = alvo("h-HSM_CTI-001");
-mira(43.8, 1.4, bLinha, 1.25, 47.0);
-marca(44.6, alvo("h-HSM_CTI-001-estado"), 46.6);
+mira(43.8, 1.4, bLinha, 1.25, 47.0); marca(44.6, alvo("h-HSM_CTI-001-estado"), 46.6);
 /* Âncora: o timeline preenche o slot inteiro. */
 tl.to({}, { duration: 51 }, 0);
 window.__timelines["main"] = tl;

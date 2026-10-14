@@ -190,8 +190,8 @@ formatura: '<path d="M21.42 10.922a1 1 0 0 0-.019-1.838L12.83 5.18a2 2 0 0 0-1.6
 megafone: '<path d="M11 6a13 13 0 0 0 8.4-2.8A1 1 0 0 1 21 4v12a1 1 0 0 1-1.6.8A13 13 0 0 0 11 14H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2z"/><path d="M6 14a12 12 0 0 0 2.4 7.2 2 2 0 0 0 3.2-2.4A8 8 0 0 1 10 14"/><path d="M8 6v8"/>', ok: '<path d="M20 6 9 17l-5-5"/>', painel: '<rect width="7" height="9" x="3" y="3" rx="1"/><rect width="7" height="5" x="14" y="3" rx="1"/><rect width="7" height="9" x="14" y="12" rx="1"/><rect width="7" height="5" x="3" y="16" rx="1"/>', relogio: '<circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/>', sino: '<path d="M10.268 21a2 2 0 0 0 3.464 0"/><path d="M3.262 15.326A1 1 0 0 0 4 17h16a1 1 0 0 0 .74-1.673C19.41 13.956 18 12.499 18 8A6 6 0 0 0 6 8c0 4.499-1.411 5.956-2.738 7.326"/>',
 };
 const ic = (nome, s, traco) => `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="${traco || 2}" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0">${P[nome]}</svg>`;
-const janela = (url, app, sobre) => `<div class="janela" id="janela"><div class="barra-nav"><i></i><i></i><i></i><div class="url">${url}</div></div>
-  <div class="vista"><div class="app" id="app">${app}${sobre || ""}</div></div></div>
+const janela = (url, app, sobre, fora) => `<div class="janela" id="janela"><div class="barra-nav"><i></i><i></i><i></i><div class="url">${url}</div></div>
+  <div class="vista"><div class="app" id="app">${app}${sobre || ""}</div></div>${fora || ""}</div>
   <div class="marcador" id="mk"></div><div class="dedo" id="dedo"><svg viewBox="0 0 24 24"><path d="M5 3l14 8-6 1.6L9.6 19z"/></svg><div class="toque" id="toque"></div></div>`;
 /* Réplica de tela: sobreposição e corte são de propósito. */
 const liberaCamera = () => document.querySelectorAll("#camera, #camera *").forEach((el) => ["overlap", "occlusion", "overflow"].forEach((k) => el.setAttribute(`data-layout-allow-${k}`, "")));
@@ -202,8 +202,9 @@ const APP_X = 160, APP_Y = 32 + 44, ESCALA_APP = 1.11111, CENTRO = { x: 960, y: 
 const valor = (v) => (typeof v === "function" ? v() : v);
 function noQuadro(id, rolagem) {
   let el = document.getElementById(id), x = 0, y = 0;
-  const w = el.offsetWidth, h = el.offsetHeight, app = document.getElementById("app");
-  while (el && el !== app) { x += el.offsetLeft; y += el.offsetTop; el = el.offsetParent; }
+  const w = el.offsetWidth, h = el.offsetHeight, app = document.getElementById("app"), jan = document.getElementById("janela");
+  while (el && el !== app && el !== jan) { x += el.offsetLeft; y += el.offsetTop; el = el.offsetParent; }
+  if (el === jan) return { x: 160 + x, y: 32 + y, w, h }; /* na barra do navegador, fora do app */
   return { x: APP_X + x * ESCALA_APP, y: APP_Y + (y - rolagem) * ESCALA_APP, w: w * ESCALA_APP, h: h * ESCALA_APP };
 }
 const juntaCaixas = (rs) => { const x = Math.min(...rs.map((r) => r.x)), y = Math.min(...rs.map((r) => r.y)); return { x, y, w: Math.max(...rs.map((r) => r.x + r.w)) - x, h: Math.max(...rs.map((r) => r.y + r.h)) - y }; };
@@ -251,8 +252,8 @@ function trocaTela(de, para, t) {
   tl.fromTo(para, { x: 300, filter: "blur(24px)", opacity: 0 }, { x: 0, filter: "blur(0px)", opacity: 1, duration: 0.6, ease: "power2.out" }, t + 0.25);
 }
 /* Monta a réplica na câmera; a janela do navegador entra com um rastro curto, saindo do branco da abertura. */
-function monta(url, app, sobre) {
-  document.getElementById("camera").innerHTML = janela(url, app, sobre); liberaCamera();
+function monta(url, app, sobre, fora) {
+  document.getElementById("camera").innerHTML = janela(url, app, sobre, fora); liberaCamera();
   tl.fromTo("#janela", { opacity: 0, y: 24, filter: "blur(12px)" }, { opacity: 1, y: 0, filter: "blur(0px)", duration: 0.5, ease: "power2.out" }, 4.0);
 }
 /* A casca do app (barra lateral e topo), como a Marina Alves, Superadmin de POPs, vê. */
@@ -294,6 +295,8 @@ const gestao = (p, linhas, extra) => `<div class="rolo" id="${p}-rolo"><div clas
   ${listaPops(p, linhas || POPS.map((l) => linhaPop(p, l)).join(""))}${cartoes(p)}${extra || ""}</div>`;
 /* Campos do app: Select (components/ui/Select.tsx), lista aberta e input. O valor escolhido mora por cima do texto de exemplo e entra por opacidade. */
 const sel = (id, vazio, cheio) => `<div class="cx cx-sel" id="${id}"><span class="vazio" id="${id}-v">${vazio}</span><span class="cheio sobre" id="${id}-c">${cheio}</span><span class="ic-sel">${ic("baixo", 16)}</span><span class="cx-foco" id="${id}-f"></span></div>`;
+/* Select que já tem valor e troca por outro. */
+const selValor = (id, atual, novo) => `<div class="cx cx-sel" id="${id}"><span class="cheio" id="${id}-v">${atual}</span><span class="cheio sobre" id="${id}-c">${novo}</span><span class="ic-sel">${ic("baixo", 16)}</span><span class="cx-foco" id="${id}-f"></span></div>`;
 const lista = (id, ops, atual) => `<div class="lista" id="${id}" style="left:0;right:0;top:calc(100% + .25rem);min-width:200px">${ops.map((o, i) => `<div class="op${o === atual ? " esc" : ""}" id="${id}-${i}"><i>${o === atual ? ic("ok", 16, 3) : ""}</i>${o}</div>`).join("")}</div>`;
 const campo = (id, vazio, cheio) => `<div class="cx" id="${id}"><span class="vazio" id="${id}-v">${vazio || "&nbsp;"}</span><span class="cheio sobre" id="${id}-c">${cheio}</span><span class="cx-foco" id="${id}-f"></span></div>`;
 /* Escolha numa lista: toca o campo, a lista abre, toca a opção, o valor entra. */
@@ -324,59 +327,35 @@ monta("app.hospitalsaomatheus.cloud/pops",
   casca(gestao("g", POPS.map((l) => linhaPop("g", l)).join("") + linhaPop("g", NOVO, 0))), janelaCriar + aviso);
 /* Passo 1 (4 a 9): POPs no menu da esquerda. */
 const bMenu = alvo("g-menu-pops");
-mira(4.4, 2.2, bMenu, 1.5, 8.6);
-marca(5.6, bMenu, 8.2);
-toca(5.8, bMenu);
-soltaDedo(7.4);
+mira(4.4, 2.2, bMenu, 1.5, 8.6); marca(5.6, bMenu, 8.2); toca(5.8, bMenu); soltaDedo(7.4);
 /* Passo 2 (9 a 15): Criar novo POP, no alto da lista. A janela abre por cima. */
 const bCriar = alvo("g-criar");
-mira(8.6, 1.8, bCriar, 1.5, 12.3);
-marca(9.8, bCriar, 11.9);
-toca(9.9, bCriar);
-soltaDedo(11.4);
+mira(8.6, 1.8, bCriar, 1.5, 12.3); marca(9.8, bCriar, 11.9); toca(9.9, bCriar); soltaDedo(11.4);
 abre("#sobre-criar", "#md-criar", 11.6);
 mira(12.3, 1.6, alvo("md-criar"), 1.0, 15.0);
 /* Passo 3 (15 a 22,5): Setor e Criticidade; o Nome vem sugerido do Setor. */
 mira(15.0, 1.6, alvo("md-l1 b-nome"), 1.35, 22.5);
 const oFarm = escolhe(15.4, "f-setor", "l-setor", 2);
-mostra("#f-nome-c", 17.95, 0.1);
-esconde("#f-nome-v", 17.95, 0.1);
+mostra("#f-nome-c", 17.95, 0.1); esconde("#f-nome-v", 17.95, 0.1);
 const oAlta = escolhe(18.1, "f-crit", "l-crit", 1, oFarm);
-soltaDedo(20.7);
-marca(20.6, alvo("b-nome"), 22.3);
+soltaDedo(20.7); marca(20.6, alvo("b-nome"), 22.3);
 /* Passo 4 (22,5 a 31): as três pessoas, cada uma na sua lista. */
 mira(22.5, 1.4, alvo("md-l2"), 1.35, 31.0);
 const oHelena = escolhe(22.9, "f-elab", "l-f-elab", 0, oAlta);
 const oRafael = escolhe(25.4, "f-rev", "l-f-rev", 2, oHelena);
-escolhe(27.9, "f-val", "l-f-val", 1, oRafael);
-soltaDedo(30.5);
-marca(30.4, alvo("md-l2"), 31.0);
+escolhe(27.9, "f-val", "l-f-val", 1, oRafael); soltaDedo(30.5); marca(30.4, alvo("md-l2"), 31.0);
 /* Passo 5 (31 a 38): prazos já vêm com 15 e 30; a periodicidade e a base normativa. */
-mira(31.0, 1.4, alvo("md-l3 b-base"), 1.3, 38.0);
-marca(31.8, alvo("b-prazo-e b-prazo-r"), 33.2);
+mira(31.0, 1.4, alvo("md-l3 b-base"), 1.3, 38.0); marca(31.8, alvo("b-prazo-e b-prazo-r"), 33.2);
 const oAno = escolhe(33.2, "f-per", "l-per", 2);
-toca(35.8, alvo("f-base"), oAno);
-mostra("#f-base-f", 36.75, 0.1);
-esconde("#f-base-v", 36.8, 0.1);
-mostra("#f-base-c", 36.8, 0.05);
-digita("#f-base-c", 36.85, 0.9);
+toca(35.8, alvo("f-base"), oAno); mostra("#f-base-f", 36.75, 0.1); esconde("#f-base-v", 36.8, 0.1); mostra("#f-base-c", 36.8, 0.05); digita("#f-base-c", 36.85, 0.9);
 soltaDedo(37.4);
 /* Passo 6 (38 a 48): Criar POP. A janela fecha, a linha nova entra e o aviso verde confirma. */
 const bBotao = alvo("bt-criar-pop");
-mira(38.0, 1.4, bBotao, 1.5, 40.4);
-toca(38.5, bBotao, alvo("f-base"));
-aperta("#bt-criar-pop", 39.45);
-soltaDedo(39.9);
-esconde("#sobre-criar", 40.0, 0.3);
+mira(38.0, 1.4, bBotao, 1.5, 40.4); toca(38.5, bBotao, alvo("f-base")); aperta("#bt-criar-pop", 39.45); soltaDedo(39.9); esconde("#sobre-criar", 40.0, 0.3);
 const ROLA_NOVO = rolagemPara("g-rolo", "g-HSM_FARM-003", 330, 655.6);
-rola("#g-rolo", ROLA_NOVO, 40.3, 1.0);
-mostra("#g-HSM_FARM-003", 41.2, 0.4);
-mostra("#aviso", 41.2, 0.3);
-mira(40.4, 1.6, REPOUSO, 1.0, 42.4);
+rola("#g-rolo", ROLA_NOVO, 40.3, 1.0); mostra("#g-HSM_FARM-003", 41.2, 0.4); mostra("#aviso", 41.2, 0.3); mira(40.4, 1.6, REPOUSO, 1.0, 42.4);
 const bNovo = alvo("g-HSM_FARM-003", ROLA_NOVO);
-mira(42.4, 1.6, bNovo, 1.3, 45.2);
-marca(43.0, alvo("g-HSM_FARM-003-codigo", ROLA_NOVO), 45.0);
-mira(45.2, 1.4, alvo("aviso"), 1.3, 48.0);
+mira(42.4, 1.6, bNovo, 1.3, 45.2); marca(43.0, alvo("g-HSM_FARM-003-codigo", ROLA_NOVO), 45.0); mira(45.2, 1.4, alvo("aviso"), 1.3, 48.0);
 /* Âncora: o timeline preenche o slot inteiro. */
 tl.to({}, { duration: 52 }, 0);
 window.__timelines["main"] = tl;
