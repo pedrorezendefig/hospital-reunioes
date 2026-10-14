@@ -16,15 +16,15 @@ depois de cada regra.
 
 A conta lembra a versão com que foi analisada. Editar uma regra não mexe em
 conta já concluída. Conta **A fazer** ou **Em correção** ganha a marca **Regra
-nova desde a análise** e só muda se alguém clicar em **Reanalisar com a regra
-nova**: a gestão, ou a faturista da conta no guia; as linhas que a faturista já
-marcou ficam.
+nova desde a análise** e só muda quando a gestão, ou a faturista da conta pelo
+guia, clica em **Reanalisar com a regra nova**. As linhas que a faturista já
+marcou continuam como estão.
 
 ## Por que a linha nasce Validar, e como a decisão volta
 
 Toda linha do guia se apoia numa regra. Se a regra ainda está pendente, a linha
-não vira ordem para a faturista: nasce **Validar**, sem botão, e entra na fila
-de **Validação**, junto com as linhas de todas as contas que dependem da mesma
+nasce **Validar**, sem botão para a faturista, e entra na fila de
+**Validação**, junto com as linhas de todas as contas que dependem da mesma
 regra.
 
 Quando a gestão valida a regra, essas linhas viram **Decidida na validação**,

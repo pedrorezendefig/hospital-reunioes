@@ -12,8 +12,8 @@ sidebar:
 ## Quando usar
 
 Quando um procedimento do seu Setor ainda não existe no sistema, ou quando a
-equipe vai transformar um documento antigo em POP. Criar o POP é o que reserva
-o Código e avisa quem vai escrever.
+equipe vai transformar um documento antigo em POP. Ao criar o POP, você reserva
+o Código e o sistema avisa quem vai escrever.
 
 ## Passo a passo
 
@@ -43,4 +43,4 @@ o Código e avisa quem vai escrever.
   acesso à Gestão de POPs pode ser escolhida. O Superadmin concede o acesso na
   mesma tela.
 - **Você errou uma das três pessoas:** na linha do POP, clique em **Papéis** e
-  troque. Vale até a Versão entrar em assinatura.
+  troque. Dá para trocar até a Versão entrar em assinatura.

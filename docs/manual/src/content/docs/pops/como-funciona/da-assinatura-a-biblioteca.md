@@ -15,8 +15,8 @@ Não existe botão de "enviar para assinatura". No instante em que o Validador
 clica em **Aprovar validação**, o sistema monta o documento oficial da Versão e
 o envia para as três pessoas do POP assinarem por email.
 
-Os três recebem ao mesmo tempo e cada um assina quando puder: não há fila, e o
-Validador não precisa esperar o Elaborador. Se a mesma pessoa acumula dois
+Os três recebem ao mesmo tempo e cada um assina quando puder, em qualquer
+ordem. O Validador não precisa esperar o Elaborador. Se a mesma pessoa acumula dois
 papéis, ela assina uma vez só.
 
 ## O que a Versão faz enquanto isso
@@ -25,7 +25,7 @@ Ela fica em **Em Assinatura**. O conteúdo está travado: ninguém edita, nem qu
 elaborou. Na lista, o botão da linha vira **Ver**, e o documento pode ser lido
 e baixado por quem tem o Setor no escopo.
 
-Assinaram os três, a Versão passa a **Publicado**, ganha a data de publicação e
+Quando os três assinam, a Versão passa a **Publicado**, ganha a data de publicação e
 aparece na Biblioteca com o documento assinado.
 
 ## Quando a assinatura não sai
@@ -33,12 +33,12 @@ aparece na Biblioteca com o documento assinado.
 O envio depende de cada uma das três pessoas ter email no cadastro. Faltando
 um, o documento não sai e a Versão fica parada em **Em Assinatura**.
 
-**Não há botão de reenviar em tela nenhuma**, e corrigir o cadastro depois não
-faz o documento sair sozinho. Quem estiver nessa
-situação avisa quem cuida da plataforma, e o reenvio é feito fora da tela.
+**Nenhuma tela tem botão de reenviar**, e corrigir o cadastro depois não faz o
+documento sair sozinho. Nesse caso, avise quem cuida da plataforma, que faz o
+reenvio por fora.
 
-Nada do que já foi aprovado se perde. A Versão não volta para trás, o conteúdo
-continua travado e as aprovações do Revisor e do Validador seguem valendo.
+Enquanto isso, a Versão continua onde está, com o conteúdo travado, e as
+aprovações do Revisor e do Validador seguem valendo.
 
 ## O POP publicado não sai da Biblioteca
 

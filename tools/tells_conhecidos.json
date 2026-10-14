@@ -1,30 +1,4 @@
 {
   "sobre": "Cacoetes de texto gerado que já estavam no Manual quando a trava do tools/lint_manual.py nasceu (issue #1218, ADR 0071). Eles não reprovam o build; cacoete novo reprova. A reescrita de cada módulo (issues #1223 a #1228) tira os da sua pasta e apaga as linhas daqui; o lint avisa quando uma linha ficou sem cacoete na página.",
-  "paginas": {
-    "contas-medicas/carregar-a-memoria-e-as-tabelas-de-uma-operadora.md": [
-      "não precisa subir o arquivo:"
-    ],
-    "contas-medicas/como-funciona/como-a-conta-e-conferida.md": [
-      "não vira ordem:"
-    ],
-    "contas-medicas/como-funciona/como-a-gestao-decide.md": [
-      "não vira ordem para a faturista:"
-    ],
-    "contas-medicas/como-funciona/o-que-a-ia-le-e-o-que-ela-nao-decide.md": [
-      "não alcança:",
-      "não pelo espaço entre as palavras:"
-    ],
-    "contas-medicas/corrigir-uma-conta-pelo-guia.md": [
-      "não tem botão:"
-    ],
-    "contas-medicas/ditar-um-texto.md": [
-      "não envia nada sozinho:"
-    ],
-    "pops/como-funciona/codigo-e-versoes.md": [
-      "não é reaproveitado. É"
-    ],
-    "pops/dar-acesso-a-gestao-de-pops.md": [
-      "não aparece:"
-    ]
-  }
+  "paginas": {}
 }

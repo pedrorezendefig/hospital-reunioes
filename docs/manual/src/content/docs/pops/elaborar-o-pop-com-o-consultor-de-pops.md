@@ -43,4 +43,4 @@ Aprovar a versão final tira o POP da sua mão e manda ao Revisor.
 - **Aparece uma tarja amarela no alto com Devolvido na Revisão:** o Revisor ou
   o Validador devolveu. Leia o comentário, corrija e aprove de novo.
 - **Você abriu a tela e diz "Elaboração concluída":** a Versão já saiu da sua
-  mão. Dali em diante ela se lê pelo botão **Ver** da lista.
+  mão. Para ler, use o botão **Ver** da lista.
