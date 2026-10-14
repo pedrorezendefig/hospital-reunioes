@@ -62,3 +62,79 @@ def reescrever_corpo(body: str | None, paragrafo: str) -> str | None:
         return body[:ini] + conteudo + body[fim:]
     topo = len(MARCADOR) if body.startswith(MARCADOR) else 0
     return body[:topo] + "## 💬 Valor entregue\n\n" + linha + "\n" + body[topo:]
+
+
+def _gh(args: list[str], entrada: str | None = None) -> str:
+    return subprocess.run(["gh", *args], input=entrada, capture_output=True, text=True, check=True).stdout
+
+
+def _janela(gh) -> list[dict]:
+    return json.loads(gh(["pr", "list", "--state", "all", "--limit", JANELA, "--json", "number,title,body"]))
+
+
+def _fontes(prs: list[dict]) -> dict:
+    """O que o redator do parágrafo lê, só dos PRs ainda não reescritos."""
+    fontes = {}
+    for pr in prs:
+        body = pr.get("body") or ""
+        if ja_reescrito(body):
+            continue
+        antes = re.search(r"\*\*Antes:\*\*\s*(.+)", body)
+        depois = re.search(r"\*\*Depois:\*\*\s*(.+)", body)
+        fontes[str(pr["number"])] = {
+            "titulo": pr.get("title"),
+            "antes": antes.group(1).strip() if antes else None,
+            "depois": depois.group(1).strip() if depois else None,
+            "corpo": None if antes or depois else body[:1500],
+        }
+    return fontes
+
+
+def main(argv: list[str] | None = None, gh=_gh) -> int:
+    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("--fontes", help="grava as fontes dos PRs ainda não reescritos neste JSON e sai")
+    ap.add_argument("--paragrafos", help='JSON {"<número do PR>": "<parágrafo O que muda>"}')
+    ap.add_argument("--dry-run", action="store_true", help="imprime o diff de cada PR e não grava nada")
+    args = ap.parse_args(argv)
+    if not (args.fontes or args.paragrafos):
+        ap.error("informe --fontes ou --paragrafos")
+
+    prs = _janela(gh)
+    if args.fontes:
+        with open(args.fontes, "w", encoding="utf-8") as f:
+            json.dump(_fontes(prs), f, ensure_ascii=False, indent=1)
+        return 0
+    with open(args.paragrafos, encoding="utf-8") as f:
+        paragrafos = json.load(f)
+
+    faltando = 0
+    for pr in prs:
+        numero, body = pr["number"], pr.get("body") or ""
+        if ja_reescrito(body):
+            print(f"#{numero}: já reescrito")
+            continue
+        if str(numero) not in paragrafos:
+            print(f"#{numero}: sem parágrafo, não gravado")
+            faltando += 1
+            continue
+        novo = reescrever_corpo(body, paragrafos[str(numero)])
+        if args.dry_run:
+            diff = difflib.unified_diff(
+                body.splitlines(keepends=True),
+                novo.splitlines(keepends=True),
+                f"PR #{numero} (atual)",
+                f"PR #{numero} (novo)",
+                n=1,
+            )
+            sys.stdout.writelines(linha if linha.endswith("\n") else linha + "\n" for linha in diff)
+            continue
+        gh(
+            ["api", "-X", "PATCH", f"repos/{{owner}}/{{repo}}/pulls/{numero}", "--input", "-"],
+            json.dumps({"body": novo}),
+        )
+        print(f"#{numero}: gravado")
+    return 1 if faltando else 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
