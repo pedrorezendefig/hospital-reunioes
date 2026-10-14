@@ -279,15 +279,21 @@ def _texto_puro(texto: str, maximo: int = 420) -> str:
 
 
 def resumo_funcional(body: str) -> dict | None:
-    """O resumo do hover: a seção "Valor entregue" do template (antes e depois, em
-    linguagem simples). O #1090 usou "Resumo funcional" (o que é, valor) e vira texto
-    corrido; PR antigo, sem nenhuma, cai no primeiro parágrafo do Contexto."""
+    """O resumo do hover: o parágrafo "O que muda" da seção "Valor entregue" do
+    template (ADR 0071, decisão 4). Fallback dos PRs ainda não reescritos: o par
+    Antes e Depois da mesma seção; o "Resumo funcional" do #1090 (o que é, valor)
+    vira texto corrido; PR antigo, sem nenhuma, cai no primeiro parágrafo do Contexto."""
     body = body or ""
     campo = lambda secao, rot: (re.search(rf"\*\*{rot}:\*\*\s*(.+)", secao or "") or [None, ""])[1].strip()
     valor = _secao(body, "valor entregue")
+    # o parágrafo pode quebrar linha: vai até a linha em branco ou o fim da seção
+    paragrafo = re.search(r"\*\*O que muda:\*\*\s*(.+?)(?:\n\s*\n|\Z)", valor or "", re.S)
+    vazio = {"o_que_muda": None, "antes": None, "depois": None, "contexto": None}
+    if paragrafo:
+        return {**vazio, "o_que_muda": _texto_puro(paragrafo.group(1))}
     antes, depois = campo(valor, "Antes"), campo(valor, "Depois")
     if antes or depois:
-        return {"antes": antes or None, "depois": depois or None, "contexto": None}
+        return {**vazio, "antes": antes or None, "depois": depois or None}
     funcional = _secao(body, "resumo funcional")
     texto = " ".join(t for t in (campo(funcional, "O que é"), campo(funcional, "Valor")) if t)
     if not texto:
@@ -295,7 +301,7 @@ def resumo_funcional(body: str) -> dict | None:
         # os dois primeiros parágrafos, um por linha em branco (o hover desenha um <p> por parágrafo)
         paragrafos = [" ".join(p.split()) for p in (contexto or "").split("\n\n") if p.strip()][:2]
         texto = "\n\n".join(paragrafos)
-    return {"antes": None, "depois": None, "contexto": _texto_puro(texto)} if texto else None
+    return {**vazio, "contexto": _texto_puro(texto)} if texto else None
 
 
 def _resumir_prs_recentes(root: Path, prs: list[dict]) -> None:

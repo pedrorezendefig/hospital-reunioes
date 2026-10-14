@@ -163,9 +163,9 @@ function cardHtml(c, ctx) {
 const NOME_DA_FASE = Object.fromEntries([...COLUNAS, ['fechado_sem_merge', 'Fechado sem merge']]);
 
 /* conteúdo do resumo (só span, p, b, em e a: o seletor dos testes conta
-   com nenhum div dentro): o título, o valor entregue (antes e depois, da
-   seção do template do PR; PR antigo mostra os dois primeiros parágrafos do
-   Contexto), o que resolve (o título das issues) e uma linha de rodapé com
+   com nenhum div dentro): o título, o que muda (o parágrafo da seção Valor
+   entregue do template do PR, sozinho; PR ainda não reescrito mostra antes e
+   depois, e o mais antigo os dois primeiros parágrafos do Contexto), o que resolve (o título das issues) e uma linha de rodapé com
    issue, situação e data. fixo = o clicado, com links */
 function resumoDoPr(pr, fase, ctx, fixo) {
   const issues = pr.closes.length
@@ -178,14 +178,15 @@ function resumoDoPr(pr, fase, ctx, fixo) {
   const quando = pr.merged_at || (fase.fase === 'fechado_sem_merge' ? fase.desde : null);
   const rodape = [issues, esc(situacao), quando ? esc(ctx.fmtDT(quando)) : ''].filter(Boolean).join(' · ');
   const r = pr.resumo || {};
-  const valor = r.antes || r.depois
-    ? `${r.antes ? `<p><em>Antes</em> ${esc(r.antes)}</p>` : ''}${r.depois ? `<p><em>Depois</em> ${esc(r.depois)}</p>` : ''}`
-    : r.contexto ? r.contexto.split('\n\n').map(p => `<p>${esc(p)}</p>`).join('') : '';
+  const valor = r.o_que_muda ? `<span class="fx-k">o que muda</span><p>${esc(r.o_que_muda)}</p>`
+    : r.antes || r.depois
+      ? `<span class="fx-k">valor entregue</span>${r.antes ? `<p><em>Antes</em> ${esc(r.antes)}</p>` : ''}${r.depois ? `<p><em>Depois</em> ${esc(r.depois)}</p>` : ''}`
+      : r.contexto ? `<span class="fx-k">valor entregue</span>${r.contexto.split('\n\n').map(p => `<p>${esc(p)}</p>`).join('')}` : '';
   const resolve = pr.closes.filter(n => (ctx.issues[n] || {}).title)
     .map(n => `<p>#${n} ${esc(ctx.issues[n].title)}</p>`).join('');
   return `<b>PR #${pr.number} · ${esc(NOME_DA_FASE[fase.fase] || fase.fase)}</b>
     <p class="pr-pop-tit">${esc(pr.title)}</p>
-    ${valor ? `<span class="fx-k">valor entregue</span>${valor}` : ''}${resolve ? `<span class="fx-k">o que resolve</span>${resolve}` : ''}
+    ${valor}${resolve ? `<span class="fx-k">o que resolve</span>${resolve}` : ''}
     <p class="pr-pop-rodape">${rodape}</p>
     ${fixo ? `<a class="pr-pop-gh" href="${esc(ctx.data.repo_url)}/pull/${esc(pr.number)}" target="_blank" rel="noopener">abrir no GitHub ↗</a>` : ''}`;
 }

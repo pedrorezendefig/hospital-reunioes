@@ -6,15 +6,15 @@ Pode editar manualmente. No modelo Pocock o contexto vive na Issue, não em chro
 ## 💬 Valor entregue
 
 <!--
-O que muda de verdade para quem usa ou opera, em linguagem muito simples, como se explicasse para
-um colega do hospital que não é dev. Uma frase cada, sem jargão (sem endpoint, branch, componente, PR).
-É a seção principal do hover do card do PR no Hospital OS.
-Exemplo. Antes: o secretário copiava a Ata para o Word para mandar por email.
-         Depois: a Ata sai pronta em PDF com um clique.
+Um parágrafo de 1 a 3 frases sobre o que a issue entrega para quem usa ou opera, escrito como quem
+explica a um colega do hospital que não é dev. Sem jargão (sem endpoint, branch, componente, PR).
+Escreva a partir da issue e passe pelo humanizer antes de abrir o PR (ADR 0071).
+É o que o hover do card do PR mostra no Hospital OS, sozinho.
+Exemplo: o secretário baixa a Ata pronta em PDF com um clique e manda por email, sem copiar
+nada para o Word.
 -->
 
-**Antes:** <como era>
-**Depois:** <como fica>
+**O que muda:** <1 a 3 frases, em linguagem de hospital>
 
 ## 🎯 Contexto
 
