@@ -2,110 +2,110 @@
   "sobre": "Cacoetes de texto gerado que já estavam no Manual quando a trava do tools/lint_manual.py nasceu (issue #1218, ADR 0071). Eles não reprovam o build; cacoete novo reprova. A reescrita de cada módulo (issues #1223 a #1228) tira os da sua pasta e apaga as linhas daqui; o lint avisa quando uma linha ficou sem cacoete na página.",
   "paginas": {
     "admin/cadastrar-uma-pessoa.md": [
-      "não consegue entrar**: a"
+      "não consegue entrar**:"
     ],
     "admin/como-funciona/de-onde-a-ana-tira-as-respostas.md": [
-      "não entra em tela nenhuma: l",
-      "não tem: p"
+      "não entra em tela nenhuma:",
+      "não tem:"
     ],
     "admin/como-funciona/o-que-fica-registrado.md": [
-      "não fica na tela: e"
+      "não fica na tela:"
     ],
     "admin/como-funciona/quem-entra-no-admin.md": [
-      "não dá acesso ao dossiê: q"
+      "não dá acesso ao dossiê:"
     ],
     "admin/entregar-o-acesso-a-uma-pessoa.md": [
-      "não precisa de mais nada: o"
+      "não precisa de mais nada:"
     ],
     "admin/manter-os-dados-do-atendimento.md": [
-      "não é só do Super Admin: a"
+      "não é só do Super Admin:"
     ],
     "admin/tirar-o-acesso-de-quem-saiu.md": [
-      "não apagar: o"
+      "não apagar:"
     ],
     "contas-medicas/carregar-a-memoria-e-as-tabelas-de-uma-operadora.md": [
-      "não precisa subir o arquivo: v"
+      "não precisa subir o arquivo:"
     ],
     "contas-medicas/como-funciona/como-a-conta-e-conferida.md": [
-      "não vira ordem: e"
+      "não vira ordem:"
     ],
     "contas-medicas/como-funciona/como-a-gestao-decide.md": [
-      "não vira ordem para a faturista: n"
+      "não vira ordem para a faturista:"
     ],
     "contas-medicas/como-funciona/o-que-a-ia-le-e-o-que-ela-nao-decide.md": [
-      "não alcança: o",
-      "não pelo espaço entre as palavras: d"
+      "não alcança:",
+      "não pelo espaço entre as palavras:"
     ],
     "contas-medicas/corrigir-uma-conta-pelo-guia.md": [
-      "não tem botão: o"
+      "não tem botão:"
     ],
     "contas-medicas/ditar-um-texto.md": [
-      "não envia nada sozinho: q"
+      "não envia nada sozinho:"
     ],
     "ouvidoria/cadastrar-responsaveis-de-setor.md": [
-      "Não apague: o"
+      "Não apague:"
     ],
     "ouvidoria/como-funciona/como-ler-a-lista-de-casos.md": [
-      "não alcança: o",
-      "não sigiloso: o"
+      "não alcança:",
+      "não sigiloso:"
     ],
     "ouvidoria/como-funciona/o-que-e-sigiloso.md": [
-      "não teto: o"
+      "não teto:"
     ],
     "ouvidoria/como-funciona/o-que-o-sistema-apaga-sozinho.md": [
-      "não pode ser reaberto: q"
+      "não pode ser reaberto:"
     ],
     "ouvidoria/como-funciona/quando-ninguem-responde.md": [
-      "não fica parado: a"
+      "não fica parado:"
     ],
     "ouvidoria/como-funciona/quem-faz-o-que.md": [
-      "não atende o WhatsApp do hospital**: a",
-      "não sigiloso: p"
+      "não atende o WhatsApp do hospital**:",
+      "não sigiloso:"
     ],
     "ouvidoria/dar-acesso-a-ouvidoria-a-alguem.md": [
-      "não dá acesso a caso nenhum: e"
+      "não dá acesso a caso nenhum:"
     ],
     "ouvidoria/devolver-um-caso-que-nao-e-do-seu-setor.md": [
-      "não precisa fazer mais nada: o"
+      "não precisa fazer mais nada:"
     ],
     "ouvidoria/imprimir-o-cartaz-com-o-qr-do-setor.md": [
-      "não apaga o cartaz nem muda o código: o"
+      "não apaga o cartaz nem muda o código:"
     ],
     "ouvidoria/index.md": [
-      "Não precisa de conta nem de senha: r"
+      "Não precisa de conta nem de senha:"
     ],
     "ouvidoria/novidades.md": [
-      "não classificação: q"
+      "não classificação:"
     ],
     "ouvidoria/registrar-manifestacao-pelo-formulario.md": [
-      "Não precisa escolher: a"
+      "Não precisa escolher:"
     ],
     "ouvidoria/registrar-uma-manifestacao-pela-ouvidoria.md": [
-      "não escreveu pelo formulário: l"
+      "não escreveu pelo formulário:"
     ],
     "pops/como-funciona/codigo-e-versoes.md": [
       "não é reaproveitado. É"
     ],
     "pops/dar-acesso-a-gestao-de-pops.md": [
-      "não aparece: c"
+      "não aparece:"
     ],
     "primeiros-passos/trocar-a-sua-senha.md": [
-      "não obriga essa troca: e"
+      "não obriga essa troca:"
     ],
     "reunioes/comentar-e-mencionar-numa-pendencia.md": [
-      "não entra na plataforma não recebe menção: f"
+      "não entra na plataforma não recebe menção:"
     ],
     "reunioes/como-funciona/o-que-a-secretaria-ve-a-mais.md": [
-      "Não tem **Dashboard**: o"
+      "Não tem **Dashboard**:"
     ],
     "reunioes/como-funciona/quando-a-pendencia-nasce.md": [
-      "não fica presa: a"
+      "não fica presa:"
     ],
     "reunioes/enviar-a-ata-para-assinatura.md": [
-      "Não há reenvio: q"
+      "Não há reenvio:"
     ],
     "reunioes/index.md": [
-      "não espera** a ata inteira ficar pronta: q"
+      "não espera** a ata inteira ficar pronta:"
     ]
   }
 }

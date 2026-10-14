@@ -116,7 +116,7 @@ CACOETES: list[Cacoete] = [
         # são aviso de falha, não contraste.
         _por_regex(
             f"(?<![{L}])não\\s+(?!foi\\s+possível|pôde|puderam)"
-            f"[^\\n.!?;:,]{{1,40}}:\\s+[{L}]"
+            f"[^\\n.!?;:,]{{1,40}}:(?=\\s+[{L}])"
         ),
     ),
     Cacoete(

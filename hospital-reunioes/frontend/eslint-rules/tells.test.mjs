@@ -55,6 +55,38 @@ describe("regra hospital/sem-tells", () => {
     expect(erros.map((e) => e.ruleId)).toEqual(caso.tells.map(() => "hospital/sem-tells"));
   });
 
+  it("cacoete conhecido no arquivo listado passa, em outro arquivo trava", () => {
+    const codigo = 'const t = "A ata não é um resumo, é a memória.";';
+    const conhecidos = { "src/tela.jsx": ["não é um resumo, é"] };
+    const lintarEm = (arquivo) =>
+      new Linter({ configType: "flat" }).verify(
+        codigo,
+        [
+          {
+            files: ["**/*.jsx"],
+            plugins: { hospital: pluginHospital },
+            rules: { "hospital/sem-tells": ["error", { conhecidos }] },
+          },
+        ],
+        { filename: `${process.cwd()}/${arquivo}` },
+      );
+    expect(lintarEm("src/tela.jsx")).toEqual([]);
+    expect(lintarEm("src/outra.jsx")).toHaveLength(1);
+  });
+
+  it("a lista de conhecidos do front cobre o que esta no ar e nada mais", () => {
+    const { arquivos } = JSON.parse(
+      readFileSync(new URL("./tells_conhecidos.json", import.meta.url), "utf8"),
+    );
+    for (const [arquivo, trechos] of Object.entries(arquivos)) {
+      const fonte = readFileSync(new URL(`../${arquivo}`, import.meta.url), "utf8");
+      const achados = acharTells(fonte).map((o) => o.trecho);
+      for (const trecho of trechos) {
+        expect(achados, `${arquivo}: "${trecho}" ja saiu, tire da lista`).toContain(trecho);
+      }
+    }
+  });
+
   it("a mensagem cita o cacoete e o trecho", () => {
     const [erro] = lintar('const t = "A ata nao vale isso. A ata não é um resumo, é a memória.";');
     expect(erro.message).toContain("nao-e-x-e-y");

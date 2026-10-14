@@ -9,6 +9,8 @@
 // A regra `hospital/sem-tells` olha string e texto de JSX, como a trava do
 // travessao no eslint.config.mjs; comentario fica de fora.
 
+import { relative, sep } from "node:path";
+
 const L = "A-Za-zÀ-ÖØ-öø-ÿ";
 const COPULA = "(?:é|são|foi|era)";
 
@@ -80,7 +82,7 @@ export const CACOETES = [
     // "Nao foi possivel X: <causa>" e "nao pode ser lido: ..." sao aviso de
     // falha, nao contraste.
     achar: porRegex(
-      `(?<![${L}])não\\s+(?!foi\\s+possível|pôde|puderam)[^\\n.!?;:,]{1,40}:\\s+[${L}]`,
+      `(?<![${L}])não\\s+(?!foi\\s+possível|pôde|puderam)[^\\n.!?;:,]{1,40}:(?=\\s+[${L}])`,
     ),
   },
   {
@@ -103,11 +105,26 @@ export function acharTells(texto, cacoetes = CACOETES) {
     .sort((a, b) => a.posicao - b.posicao || a.cacoete.localeCompare(b.cacoete));
 }
 
+// Opcao `conhecidos`: arquivo (relativo ao frontend) -> trechos que ja estavam
+// no ar quando a regra nasceu (eslint-rules/tells_conhecidos.json). Eles passam;
+// a varredura do texto do app (issue #1229) tira da tela e da lista.
 const semTells = {
-  meta: { type: "problem", schema: [] },
+  meta: {
+    type: "problem",
+    schema: [
+      {
+        type: "object",
+        properties: { conhecidos: { type: "object" } },
+        additionalProperties: false,
+      },
+    ],
+  },
   create(context) {
+    const arquivo = relative(context.cwd, context.filename).split(sep).join("/");
+    const jaNoAr = new Set(context.options[0]?.conhecidos?.[arquivo] ?? []);
     const checar = (node, texto) => {
       for (const o of acharTells(texto)) {
+        if (jaNoAr.has(o.trecho)) continue;
         context.report({
           node,
           message:
