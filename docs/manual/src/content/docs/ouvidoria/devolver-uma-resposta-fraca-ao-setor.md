@@ -28,9 +28,9 @@ você pediu ou não resolve o caso. O caso volta para a mesma área.
 
 ## Se der errado
 
-- **O prazo já estava estourado:** continua estourado. A devolução não limpa o
-  atraso que já corria.
-- **O caso não é daquela área:** aí o caminho é
+- **O prazo já estava estourado:** a devolução não apaga o atraso que já
+  corria, e o caso segue estourado.
+- **O caso não é daquela área:** use
   [Redirecionar o caso para outra área](/ouvidoria/redirecionar-o-caso-para-outra-area/).
-- **As respostas antigas sumiram:** não somem. Cada ida e volta vira um ciclo, e
-  o bloco **Respostas anteriores** guarda todas.
+- **As respostas antigas sumiram:** cada ida e volta vira um ciclo, e o bloco
+  **Respostas anteriores** guarda todas.

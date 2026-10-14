@@ -20,9 +20,9 @@ cadastra responsáveis de setor, lança a nota externa e vê painel e relatório
 
 ## Diretoria Executiva
 
-Mesmo caminho e tudo o que o ouvidor faz, mais o que é só dela: a tabela de
-prazos, os feriados e o apagamento de um caso antes do prazo de guarda. Recebe
-os casos que subiram a escada, o aviso de caso grave, o aviso de cadastro
+Entra pelo mesmo caminho e faz tudo o que o ouvidor faz. Só ela mexe na tabela
+de prazos e nos feriados, e só ela apaga um caso antes do prazo de guarda.
+Recebe os casos que subiram a escada, o aviso de caso grave, o aviso de cadastro
 faltando e os relatórios.
 
 ## Responsável do setor
@@ -35,8 +35,8 @@ caso protegido.
 
 ## Quem tem papel nas Reuniões e não tem acesso à Ouvidoria
 
-Abre a lista e lê, de cada caso não sigiloso: protocolo, setor, situação, prazo,
-gravidade, tipo, desfecho e o resumo do caso. Quem só cuida de POPs não entra
+Abre a lista e lê, de cada caso fora do sigilo, protocolo, setor, situação,
+prazo, gravidade, tipo, desfecho e o resumo do caso. Quem só cuida de POPs não entra
 nem na lista. Não abre a página do caso, e não alcança o relato, a
 identificação de quem falou, os anexos, a resposta da área nem o histórico.
 
@@ -52,12 +52,12 @@ própria, com chave de serviço. Não classifica, não muda situação e não de
 desfecho, tipo ou sigilo. O palpite dela sobre a gravidade fica guardado à
 parte, marcado como palpite.
 
-A Ana **não atende o WhatsApp do hospital**: aquele número é de gente, e o que
-chega por ele entra pelo registro feito pela Ouvidoria. O canal em que a Ana
-conversa hoje ainda é de teste, e o dia em que ela assumir o WhatsApp é uma
-decisão que ainda não foi tomada.
+A Ana **não atende o WhatsApp do hospital**. Aquele número é atendido por
+gente, e o que chega por ele entra pelo registro feito pela Ouvidoria. O canal
+em que a Ana conversa hoje ainda é de teste, e ainda não há decisão sobre quando
+ela vai assumir o WhatsApp.
 
 ## O que ninguém pode
 
-Apagar ou editar o histórico de um caso. Todo movimento grava o que era antes, o
-que virou, quem fez e quando. Erro se conserta com um movimento novo.
+Ninguém apaga nem edita o histórico de um caso. Todo movimento grava o que era
+antes, o que virou, quem fez e quando. Erro se conserta com um movimento novo.

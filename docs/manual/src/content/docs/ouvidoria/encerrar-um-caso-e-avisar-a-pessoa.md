@@ -9,13 +9,13 @@ sidebar:
   order: 13
 ---
 
-O vídeo é o capítulo 5 do módulo, gravado na versão 0.109.0: o que mudou
-depois não aparece nele.
+O vídeo é o capítulo 5, gravado na versão 0.109.0, e não mostra o que mudou
+depois.
 
 ## Quando usar
 
-Quando a resposta da área resolve o caso, ou quando não há mais o que apurar. O
-encerramento é o que tira o caso da fila e o que avisa quem falou.
+Quando a resposta da área resolve o caso, ou quando não há mais o que apurar. É
+o encerramento que tira o caso da fila e avisa quem falou.
 
 ## Passo a passo
 
@@ -46,7 +46,7 @@ O desfecho vai por email a quem manifestou, junto do protocolo.
 - **O botão não fecha o caso:** faltou escolher o desfecho ou escrever o texto.
   Os dois são obrigatórios.
 - **O caso não tem email de contato, ou é anônimo:** o aviso não sai, e o caso
-  registra isso com todas as letras. O texto do desfecho fica guardado no caso.
+  registra que ele não saiu. O texto do desfecho fica guardado no caso.
 - **Você escolheu Sem retorno do manifestante:** ele exige duas tentativas de
   contato registradas no caso e cinco dias úteis de espera desde a primeira.
 - **A pessoa voltou a reclamar do mesmo:** o caso reabre por reincidência, no

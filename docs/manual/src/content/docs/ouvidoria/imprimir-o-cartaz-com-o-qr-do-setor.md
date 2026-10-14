@@ -22,7 +22,7 @@ dizendo de onde a pessoa falou.
    ![Tela de pontos de escuta com o QR de cada lugar](../../../assets/ouvidoria/pontos.png)
 
 2. Em **Novo ponto de escuta**, escolha o **Setor**.
-3. Escreva em **Onde o cartaz vai ficar** um nome curto: "Sala de espera".
+3. Escreva em **Onde o cartaz vai ficar** um nome curto, como "Sala de espera".
 4. Clique em **Criar cartaz**. O sistema sorteia um código de seis caracteres,
    sem as letras e os números que se confundem ao digitar.
 5. Clique em **Cartaz A5** para baixar o cartaz pronto, com a logo, o QR grande
@@ -38,8 +38,8 @@ câmera não lê o código.
 
 ## Se der errado
 
-- **Você aposentou e o cartaz continua na parede:** ele continua funcionando.
-  Aposentar não apaga o cartaz nem muda o código: o formulário abre igual, só
-  para de dizer de onde a pessoa está falando. **Reativar** desfaz.
+- **Você aposentou e o cartaz continua na parede:** o código é o mesmo e o
+  formulário abre igual, só que o caso deixa de dizer de onde a pessoa falou.
+  **Reativar** desfaz.
 - **O setor do cartaz não é quem vai responder:** o cartaz diz de onde a pessoa
   falou. Quem responde é o setor que você escolhe ao classificar.
