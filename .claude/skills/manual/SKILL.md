@@ -61,6 +61,8 @@ papel: [Ouvidoria]         # quem faz: Ouvidoria, Gestor do setor, Facilitador,
                            # Secretária, Só admin, Qualquer pessoa
 login: false               # só na tela aberta por link ou QR, sem entrar no app
 video: <slug do vídeo>     # ausente = a página publica sem vídeo, sem aviso
+busca: [boleto, fatura]    # palavras do dia a dia que acham a página na busca
+proximas: [<slug>, <slug>] # até 3 tarefas do mesmo módulo que vêm depois
 sidebar:
   order: 2
 ---
@@ -84,6 +86,15 @@ isso no Markdown**. O Print de passo fica **dentro do item da lista**, com três
 espaços de recuo, logo abaixo do passo que ele ilustra: é assim que o tema o
 acomoda sob o número grande. O Aviso destacado é no máximo um por página e só
 para o irreversível.
+
+`busca:` lista as palavras que a pessoa digitaria e que o texto não usa (ela
+procura "boleto", a página fala "guia"). Elas entram no índice da busca sem
+aparecer na tela; palavra que já está no texto não precisa estar aqui.
+`proximas:` aponta até três tarefas do mesmo módulo, pelo nome do arquivo sem
+extensão, e o tema desenha "Tarefas próximas" no fim da página. O lint reprova
+nome que não existe no módulo, de outro módulo ou mais de três; tarefa em
+draft não vira link até subir. O módulo da página aparece sozinho no resultado
+da busca, sem campo nenhum.
 
 As outras páginas do módulo: `index.md` é a Visão geral (as palavras que a
 pessoa vê o tempo todo e o caminho de ponta a ponta), o grupo `como-funciona/`
