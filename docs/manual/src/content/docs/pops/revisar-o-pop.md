@@ -3,7 +3,6 @@ title: Revisar o POP
 description: Fazer a análise técnica da Versão e aprovar ou devolver com comentários.
 prd: [76]
 draft: false
-video: revisar-o-pop
 papel: [Revisor]
 sidebar:
   order: 6

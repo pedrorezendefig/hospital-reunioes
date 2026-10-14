@@ -3,7 +3,6 @@ title: Trocar a sua senha
 description: Escolher uma senha nova estando dentro da plataforma, sem passar pelo email.
 prd: [731]
 draft: false
-video: trocar-a-sua-senha
 papel: [Todo mundo]
 sidebar:
   order: 4

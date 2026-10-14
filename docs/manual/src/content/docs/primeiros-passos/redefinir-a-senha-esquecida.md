@@ -3,7 +3,6 @@ title: Redefinir a senha que você esqueceu
 description: Receber por email o link para escolher uma senha nova, sem depender de ninguém.
 prd: [731]
 draft: false
-video: redefinir-a-senha-esquecida
 papel: [Todo mundo]
 sidebar:
   order: 3

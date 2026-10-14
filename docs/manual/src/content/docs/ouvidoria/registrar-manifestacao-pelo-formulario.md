@@ -5,7 +5,6 @@ prd: [659, 731]
 draft: false
 papel: [Qualquer pessoa]
 login: false
-video: registrar-manifestacao-pelo-formulario
 sidebar:
   order: 2
 ---

@@ -4,7 +4,6 @@ description: Como lançar no sistema o caso que chegou por telefone, balcão, Wh
 prd: [317, 659, 720]
 draft: false
 papel: [Ouvidoria]
-video: cap-1
 sidebar:
   order: 3
 ---

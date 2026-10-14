@@ -4,7 +4,6 @@ description: Como decidir do que se trata, escolher a área responsável e manda
 prd: [317, 469, 471, 659]
 draft: false
 papel: [Ouvidoria]
-video: cap-2
 sidebar:
   order: 5
 ---

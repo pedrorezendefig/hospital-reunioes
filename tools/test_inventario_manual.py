@@ -35,7 +35,6 @@ description: Como contar uma reclamação para a Ouvidoria.
 prd: [731]
 draft: false
 papel: [Qualquer pessoa]
-video: registrar-manifestacao-pelo-formulario
 ---
 
 ## Passo a passo
@@ -66,7 +65,6 @@ description: Como contar uma reclamação para a Ouvidoria.
 prd: [731]                 # PRDs que criaram ou mudaram a página
 draft: true                # sai quando o PRD sobe para produção
 papel: [Qualquer pessoa]
-video: registrar-manifestacao-pelo-formulario
 ---
 
 ## Passo a passo
@@ -78,11 +76,17 @@ video: registrar-manifestacao-pelo-formulario
 
 
 def montar(raiz: Path) -> None:
-    """Um manual sem lacuna: os seis módulos, e a Ouvidoria escrita inteira."""
+    """Um manual sem lacuna: os seis módulos, e a Ouvidoria escrita inteira.
+
+    Cada abertura tem o Vídeo de visão geral, menos a do Admin, que fica sem.
+    """
     conteudo = raiz / "src" / "content" / "docs"
     for modulo in inventario_manual.MODULOS:
         (conteudo / modulo).mkdir(parents=True)
-        (conteudo / modulo / "index.md").write_text(VISAO_GERAL, encoding="utf-8")
+        abertura = VISAO_GERAL
+        if modulo != "admin":
+            abertura = abertura.replace("draft: false", "draft: false\nvideo: visao-geral")
+        (conteudo / modulo / "index.md").write_text(abertura, encoding="utf-8")
         (conteudo / modulo / "novidades.md").write_text(NOVIDADES, encoding="utf-8")
     (conteudo / "ouvidoria" / "registrar-manifestacao-pelo-formulario.md").write_text(
         TAREFA, encoding="utf-8"
@@ -104,23 +108,39 @@ def test_manual_escrito_nao_tem_lacuna(tmp_path):
     assert inventario.fora_de_balde == []
 
 
-def test_pagina_de_tarefa_sem_video_vira_lacuna_do_modulo(tmp_path):
+def test_pagina_de_tarefa_sem_video_nao_e_lacuna(tmp_path):
+    """O Vídeo de tarefa saiu do Manual (issue #1260): a tarefa não tem vídeo."""
     montar(tmp_path)
-    tarefa = (
-        tmp_path
-        / "src"
-        / "content"
-        / "docs"
-        / "ouvidoria"
-        / "registrar-manifestacao-pelo-formulario.md"
-    )
-    tarefa.write_text(
-        TAREFA.replace("video: registrar-manifestacao-pelo-formulario\n", ""),
-        encoding="utf-8",
+    inventario = inventario_manual.inventariar(tmp_path, {"ouvidoria": [731]})
+    assert "sem-video" not in [lacuna.tipo for lacuna in inventario.lacunas]
+    assert inventario.lacunas == []
+
+
+def test_modulo_sem_video_de_visao_geral_vira_lacuna(tmp_path):
+    montar(tmp_path)
+    (tmp_path / "src" / "content" / "docs" / "ouvidoria" / "index.md").write_text(
+        VISAO_GERAL, encoding="utf-8"
     )
     inventario = inventario_manual.inventariar(tmp_path, {"ouvidoria": [731]})
-    assert tipos(inventario, "ouvidoria") == ["sem-video"]
+    assert tipos(inventario, "ouvidoria") == ["sem-visao-geral"]
+    assert "ouvidoria/index.md" in inventario.lacunas[0].detalhe
     assert tipos(inventario, "pops") == []
+
+
+def test_modulo_sem_abertura_tambem_fica_sem_video_de_visao_geral(tmp_path):
+    montar(tmp_path)
+    (tmp_path / "src" / "content" / "docs" / "pops" / "index.md").unlink()
+    inventario = inventario_manual.inventariar(tmp_path)
+    assert tipos(inventario, "pops") == ["sem-visao-geral"]
+
+
+def test_admin_sem_video_de_visao_geral_nao_e_lacuna(tmp_path):
+    """O Admin é usado por poucas pessoas e fica sem vídeo (emenda à ADR 0057)."""
+    montar(tmp_path)
+    abertura = tmp_path / "src" / "content" / "docs" / "admin" / "index.md"
+    assert "video:" not in abertura.read_text(encoding="utf-8")
+    inventario = inventario_manual.inventariar(tmp_path)
+    assert tipos(inventario, "admin") == []
 
 
 def test_print_referenciado_que_nao_existe_vira_lacuna(tmp_path):

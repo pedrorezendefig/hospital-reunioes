@@ -17,6 +17,10 @@ set -euo pipefail
 RAIZ="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 SITE="$RAIZ/docs/manual"
 TETO_MB=90
+# Orçamento de vídeo (emenda à ADR 0057, issue #1260): o Manual tem um Vídeo de
+# visão geral por módulo, e a soma deles cabe folgada no plano grátis.
+TETO_SOMA_VIDEOS_MB=40
+TETO_VIDEO_MB=8
 
 DRY_RUN=""
 PULAR_BUILD=""
@@ -63,9 +67,9 @@ if [ -z "$PULAR_BUILD" ]; then
   [ -d "$SITE/.vercel" ] && cp -R "$SITE/.vercel" "$SAIDA/"
 fi
 
-# Os MP4 que as páginas usam. Vídeo de tarefa nasce em public/video/ e já vem no
-# dist; Vídeo de percepção de valor que a página de Novidades embute mora em
-# docs/comunicacao/ e é copiado aqui. O que a página aponta e ninguém acha trava
+# Os MP4 que as páginas usam. O Vídeo de visão geral nasce em public/video/ e já
+# vem no dist; um vídeo que a página aponte e que só exista em docs/comunicacao/
+# é copiado aqui. O que a página aponta e ninguém acha trava
 # a publicação: subir com o quadro do vídeo quebrado é pior do que não subir.
 echo "== vídeos"
 VIDEOS=$(grep -rhoiE 'src="[^"]+\.mp4"' "$SAIDA" --include="*.html" | sed 's/^[Ss][Rr][Cc]="//; s/"$//' | sort -u || true)
@@ -117,6 +121,44 @@ EOF
 if [ -n "$FALTANDO" ]; then
   echo "vídeo que a página usa e não existe nem em docs/comunicacao:$FALTANDO" >&2
   echo "renderize a composição do vídeo antes de publicar." >&2
+  exit 1
+fi
+
+# As três travas do orçamento, medidas no MP4 já reencodado, que é o que sobe.
+# O módulo é a pasta do vídeo (/video/<modulo>/<arquivo>.mp4). A página inicial
+# mostra o mesmo arquivo da abertura de Primeiros passos, e o `sort -u` lá em
+# cima já o contou uma vez só.
+SOMA_KB=0
+MODULOS_VISTOS=""
+while IFS= read -r caminho; do
+  [ -n "$caminho" ] || continue
+  bytes=$(wc -c < "$SAIDA/${caminho#/}")
+  video_kb=$(( (bytes + 1023) / 1024 ))
+  if [ "$video_kb" -gt $(( TETO_VIDEO_MB * 1024 )) ]; then
+    echo "vídeo acima de ${TETO_VIDEO_MB} MB: $caminho tem ${video_kb} KB depois do reencode." >&2
+    echo "o Vídeo de visão geral cabe em ${TETO_VIDEO_MB} MB: encurte o vídeo antes de publicar." >&2
+    exit 1
+  fi
+  pasta=$(dirname "$caminho")
+  # Uma linha "<pasta> <caminho>" por vídeo já contado; a pasta repetida devolve
+  # o primeiro vídeo dela, para a mensagem dizer os dois.
+  anterior=$(printf '%s\n' "$MODULOS_VISTOS" | awk -v p="$pasta" '$1 == p { print $2; exit }')
+  if [ -n "$anterior" ]; then
+    echo "mais de um vídeo no módulo $(basename "$pasta"): $anterior e $caminho." >&2
+    echo "o Manual tem um Vídeo de visão geral por módulo; vídeo de tarefa fica fora do site." >&2
+    exit 1
+  fi
+  MODULOS_VISTOS="$MODULOS_VISTOS
+$pasta $caminho"
+  SOMA_KB=$(( SOMA_KB + video_kb ))
+done <<EOF
+$VIDEOS
+EOF
+echo "== vídeos somam $(( SOMA_KB / 1024 )) MB (teto ${TETO_SOMA_VIDEOS_MB} MB)"
+if [ "$SOMA_KB" -gt $(( TETO_SOMA_VIDEOS_MB * 1024 )) ]; then
+  echo "a soma dos vídeos passou de ${TETO_SOMA_VIDEOS_MB} MB: ${SOMA_KB} KB depois do reencode." >&2
+  echo "vídeos que entram na conta:" >&2
+  printf '%s\n' "$VIDEOS" | sed '/^$/d; s/^/  /' >&2
   exit 1
 fi
 

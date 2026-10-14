@@ -97,11 +97,11 @@
   border-color: #b9e6cb;
 }
 
-.tarefa-video {
+.abertura-video {
   margin-bottom: 1.4rem;
 }
 
-.tarefa-video video {
+.abertura-video video {
   width: 100%;
   border: 1px solid var(--hsm-borda);
 }

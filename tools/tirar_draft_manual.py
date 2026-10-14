@@ -38,6 +38,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
 
+from checar_video_manual import modulo_da_abertura  # noqa: E402
 from inventario_manual import prds_da_pagina, valor_do_campo  # noqa: E402
 from lint_manual import ler_frontmatter  # noqa: E402
 
@@ -93,11 +94,11 @@ def sem_draft(texto: str) -> str | None:
     return None
 
 
-# A Action tira o draft no runner, mas não publica: o MP4 do Vídeo de tarefa
-# não vem no clone e a Vercel não tem token no repositório (issue #951).
+# A Action tira o draft no runner, mas não publica: o MP4 do Vídeo de visão
+# geral não vem no clone e a Vercel não tem token no repositório (issue #951).
 PROXIMO_PASSO = (
     "Próximo passo: rode `/manual publicar` da sua máquina, a que tem os MP4 "
-    "dos Vídeos de tarefa. É ele que tira o draft das páginas com vídeo e "
+    "dos Vídeos de visão geral. É ele que tira o draft das páginas com vídeo e "
     "republica o Manual em https://manual-hsm.vercel.app."
 )
 
@@ -125,13 +126,14 @@ def video_sem_mp4(raiz: Path, conteudo: Path, paginas: list[Path]) -> list[str]:
         slug = ler_frontmatter(arquivo.read_text(encoding="utf-8")).get("video", "")
         if not slug:
             continue
-        modulo = relativo.parts[0]
+        # A página inicial mostra o vídeo de Primeiros passos.
+        modulo = modulo_da_abertura(relativo) or relativo.parts[0]
         if not (raiz / "public" / "video" / modulo / f"{slug}.mp4").is_file():
             faltando.append(
                 f"{relativo}: exibe o vídeo '{slug}' e o MP4 não existe em "
                 f"public/video/{modulo}/{slug}.mp4. Renderize a composição de "
                 f"video/{modulo}/{slug}/ antes de publicar (a receita está em "
-                ".claude/skills/manual/references/video-de-tarefa.md)."
+                ".claude/skills/manual/references/video-de-visao-geral.md)."
             )
     return faltando
 

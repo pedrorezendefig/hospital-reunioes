@@ -4,7 +4,6 @@ description: Como ver, em tempo real, o que está na fila, o que venceu, o que v
 prd: [287, 319]
 draft: false
 papel: [Ouvidoria]
-video: cap-7
 sidebar:
   order: 21
 ---

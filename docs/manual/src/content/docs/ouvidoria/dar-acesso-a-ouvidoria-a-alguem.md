@@ -4,7 +4,6 @@ description: Como conceder, trocar ou tirar o acesso que permite abrir manifesta
 prd: [317]
 draft: false
 papel: [Só admin]
-video: cap-6
 sidebar:
   order: 16
 ---

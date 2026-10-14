@@ -56,57 +56,12 @@ setor, a gravidade e o sigilo são sempre escolha do ouvidor, depois de ler.
 O sistema nunca aciona um setor por conta própria. O que ele faz sozinho é
 cobrar quem já foi acionado e avisar quem precisa saber.
 
-## Os sete vídeos do módulo
+## Onde está cada parte do caminho
 
-São sete vídeos curtos, sem narração, encenados nas telas de verdade. O
-capítulo 1 e o capítulo 6 foram regravados na versão 0.137.1, a que está no ar.
-Os outros cinco mostram a versão 0.109.0 e ainda servem para ver o conjunto.
-
-### 1. Por onde o caso chega
-
-<video controls muted playsinline preload="metadata" src="/video/ouvidoria/cap-1.mp4"></video>
-
-Um elogio entra pelo cartaz do Pronto Atendimento e o caso mostra de onde veio.
-A tarefa está em [Registrar uma manifestação pela Ouvidoria](/ouvidoria/registrar-uma-manifestacao-pela-ouvidoria/).
-
-### 2. A Ouvidoria lê e encaminha
-
-<video controls muted playsinline preload="metadata" src="/video/ouvidoria/cap-2.mp4"></video>
-
-O caso novo aparece com o ponto azul, passa pela tela de classificar e muda de
-faixa enquanto o email sai para o setor. A tarefa está em [Classificar e acionar um caso](/ouvidoria/classificar-e-acionar-um-caso/).
-
-### 3. O setor responde
-
-<video controls muted playsinline preload="metadata" src="/video/ouvidoria/cap-3.mp4"></video>
-
-O setor recebe o email de acionamento e abre a tela de resposta, onde uma
-resposta curta demais deixa o botão desligado. A tarefa está em [Responder um caso pelo portal do setor](/ouvidoria/responder-um-caso-pelo-portal-do-setor/).
-
-### 4. O relógio e a cobrança
-
-<video controls muted playsinline preload="metadata" src="/video/ouvidoria/cap-4.mp4"></video>
-
-A tabela de prazos, a sexta que vence na terça, o pedido de mais prazo e a
-escada de cobrança. A tarefa está em [Decidir um pedido de mais prazo](/ouvidoria/decidir-um-pedido-de-mais-prazo/).
-
-### 5. O que volta para quem falou
-
-<video controls muted playsinline preload="metadata" src="/video/ouvidoria/cap-5.mp4"></video>
-
-O aviso de que chegou e o aviso de que terminou, os dois únicos emails que saem
-do hospital. A tarefa está em [Encerrar um caso e avisar a pessoa](/ouvidoria/encerrar-um-caso-e-avisar-a-pessoa/).
-
-### 6. Quem faz o quê
-
-<video controls muted playsinline preload="metadata" src="/video/ouvidoria/cap-6.mp4"></video>
-
-A concessão do acesso, a vigência do responsável e o setor sem titular. A tarefa
-está em [Dar acesso à Ouvidoria a alguém](/ouvidoria/dar-acesso-a-ouvidoria-a-alguem/).
-
-### 7. O que a Diretoria enxerga
-
-<video controls muted playsinline preload="metadata" src="/video/ouvidoria/cap-7.mp4"></video>
-
-O painel se atualiza, a nota do Google é lançada e o relatório quinzenal chega
-por email. A tarefa está em [Acompanhar o painel da Ouvidoria](/ouvidoria/acompanhar-o-painel-da-ouvidoria/).
+1. O caso chega: [Registrar uma manifestação pela Ouvidoria](/ouvidoria/registrar-uma-manifestacao-pela-ouvidoria/).
+2. A Ouvidoria lê e encaminha: [Classificar e acionar um caso](/ouvidoria/classificar-e-acionar-um-caso/).
+3. O setor responde: [Responder um caso pelo portal do setor](/ouvidoria/responder-um-caso-pelo-portal-do-setor/).
+4. O prazo aperta e o setor pede mais tempo: [Decidir um pedido de mais prazo](/ouvidoria/decidir-um-pedido-de-mais-prazo/).
+5. A pessoa que falou recebe a resposta: [Encerrar um caso e avisar a pessoa](/ouvidoria/encerrar-um-caso-e-avisar-a-pessoa/).
+6. Alguém novo passa a usar a Ouvidoria: [Dar acesso à Ouvidoria a alguém](/ouvidoria/dar-acesso-a-ouvidoria-a-alguem/).
+7. A Diretoria acompanha os números: [Acompanhar o painel da Ouvidoria](/ouvidoria/acompanhar-o-painel-da-ouvidoria/).

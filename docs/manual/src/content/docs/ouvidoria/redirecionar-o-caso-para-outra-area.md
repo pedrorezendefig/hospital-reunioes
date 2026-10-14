@@ -4,7 +4,6 @@ description: Como tirar o caso de uma área e acionar outra num clique, sem espe
 prd: [706]
 draft: false
 papel: [Ouvidoria]
-video: redirecionar-o-caso-para-outra-area
 sidebar:
   order: 12
 ---

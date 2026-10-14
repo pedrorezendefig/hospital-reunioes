@@ -321,3 +321,15 @@ def test_sem_pagina_em_draft_nao_ha_aviso(tmp_path):
 
     assert saida.returncode == 0, saida.stderr
     assert not resumo.exists()
+
+
+def test_pagina_inicial_procura_o_mp4_de_primeiros_passos(tmp_path):
+    """A página inicial mostra o Vídeo de visão geral de Primeiros passos
+    (issue #1260): o MP4 dela mora em public/video/primeiros-passos/."""
+    arquivo = escrever(tmp_path, "index.mdx", "731", video="conheca-a-plataforma")
+    mp4(tmp_path, "primeiros-passos", "conheca-a-plataforma")
+
+    saida = rodar(tmp_path, "--prd", "731")
+
+    assert saida.returncode == 0, saida.stderr
+    assert "draft: false" in arquivo.read_text(encoding="utf-8")

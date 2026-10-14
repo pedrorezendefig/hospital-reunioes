@@ -16,7 +16,8 @@ export const collections = {
         papel: z.array(z.string()).optional(),
         // `false` na tela que a pessoa abre por link ou QR, sem entrar no app.
         login: z.boolean().optional(),
-        // Slug do Vídeo de tarefa. Ausente = vídeo ainda em produção.
+        // Slug do Vídeo de visão geral, só na abertura do módulo e na página
+        // inicial (que mostra o de Primeiros passos). Ausente = sem vídeo.
         video: z.string().optional(),
         // Palavras do dia a dia que acham a página na busca, mesmo fora do
         // texto ("boleto" acha a página que fala "guia"). Issue #1221.

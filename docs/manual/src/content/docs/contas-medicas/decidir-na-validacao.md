@@ -4,7 +4,6 @@ description: Decidir por tema o que espera a gestão, das regras pendentes às o
 prd: [1129]
 draft: false
 papel: [Gestão de contas médicas, Diretoria]
-video: decidir-na-validacao
 sidebar:
   order: 8
 ---

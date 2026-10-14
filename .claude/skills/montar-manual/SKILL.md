@@ -43,7 +43,7 @@ JSON
 python3 tools/inventario_manual.py --dir docs/manual --entregues <scratchpad>/entregues.json
 ```
 
-O inventário acusa, por módulo, quatro lacunas: `sem-video` (Página de tarefa sem Vídeo de tarefa), `print-faltando` (a página aponta para um print que não existe), `prd-sem-novidades` (PRD em produção cujo número não está no `prd:` do frontmatter do `novidades.md` do módulo, que é como o inventário conta a entrada) e `draft-entregue` (página em `draft` de PRD que já está no ar). Ele **sai com código 1** quando a conta não fecha: página fora dos seis módulos (sem terminal que a feche) ou nenhuma página encontrada (varredura que não rodou não pode passar por manual pronto). Nesse caso conserte antes de planejar.
+O inventário acusa, por módulo, quatro lacunas: `sem-visao-geral` (módulo sem Vídeo de visão geral na abertura; o Admin fica fora, e Página de tarefa não tem vídeo desde a ADR 0072), `print-faltando` (a página aponta para um print que não existe), `prd-sem-novidades` (PRD em produção cujo número não está no `prd:` do frontmatter do `novidades.md` do módulo, que é como o inventário conta a entrada) e `draft-entregue` (página em `draft` de PRD que já está no ar). Ele **sai com código 1** quando a conta não fecha: página fora dos seis módulos (sem terminal que a feche) ou nenhuma página encontrada (varredura que não rodou não pode passar por manual pronto). Nesse caso conserte antes de planejar.
 
 Sem `--entregues` o relatório sai, mas declara que dois dos quatro tipos não foram conferidos. Não planeje em cima disso: a lista de PRDs entregues é o passo 1, não um extra.
 
@@ -63,8 +63,8 @@ Regras de recorte, para a lista não inchar: uma tarefa é **uma ação** ("Regi
 
 | Balde | O que cai aqui | Destino |
 |---|---|---|
-| Terminal do módulo | tudo que tem módulo dono: página que falta, `sem-video`, `print-faltando`, `prd-sem-novidades`, `draft-entregue` | um prompt por módulo (passo 5) |
-| Só você | OK nos drafts de vídeo, registro de DNS, troca do QR da apresentação, publicação na Vercel depois dos merges | lista "precisa de você" (passo 6) |
+| Terminal do módulo | tudo que tem módulo dono: página que falta, `sem-visao-geral`, `print-faltando`, `prd-sem-novidades`, `draft-entregue` | um prompt por módulo (passo 5) |
+| Só você | registro de DNS, troca do QR da apresentação, publicação na Vercel depois dos merges | lista "precisa de você" (passo 6) |
 
 A regra de desempate é a pasta: a lacuna pertence ao módulo da página. Lacuna sem módulo não existe por construção, e é isso que o código de saída 1 do inventário garante.
 
@@ -90,7 +90,7 @@ Cada prompt tem um **cabeçalho de leitura fora do bloco** (o Pedro lê antes de
 ```markdown
 ### Terminal <letra>: módulo <modulo> (issue #<N>)
 
-**O que este terminal produz:** <n> Páginas de tarefa, <n> prints, <n> Vídeos de tarefa, <n> entradas de Novidades.
+**O que este terminal produz:** <n> Páginas de tarefa, <n> prints, o Vídeo de visão geral do módulo (se faltar), <n> entradas de Novidades.
 
 **Por que vale a pena:** <2 ou 3 frases na língua do diretor: que dúvida do usuário do hospital para de chegar em você quando esta seção estiver no ar.>
 ```
@@ -119,7 +119,7 @@ Pastas que você pode tocar, e nenhuma outra:
 A produzir:
 - Páginas de tarefa que faltam: <lista, uma por linha, com o título no infinitivo>
 - Prints: <lista> (entram no Roteiro de prints do módulo, nunca recortados à mão)
-- Vídeos de tarefa: <lista de slugs> (composição em docs/manual/video/<modulo>/<slug>/)
+- Vídeo de visão geral: <slug> (composição em docs/manual/video/<modulo>/<slug>/, receita em .claude/skills/manual/references/video-de-visao-geral.md; só se o inventário acusou sem-visao-geral). Página de tarefa não tem vídeo.
 - Novidades: entrada do PRD #<N> com a data do deploy (history.json), não a de hoje, E o número no frontmatter do novidades.md (prd: [<N>, ...]), senão o inventário continua acusando a entrada que você acabou de escrever
 - Draft a tirar: <páginas em draft cujo PRD já está em produção>
 
@@ -149,7 +149,7 @@ A resposta final, nesta ordem:
 4. **Os prompts**, inteiros, cada um com o cabeçalho de leitura em cima do bloco.
 5. **Passo a passo:**
    1. Abrir os terminais (até `--max-sessoes`) e colar um prompt em cada.
-   2. Aprovar os drafts de vídeo conforme chegarem: é o gate que segura cada PR.
+   2. Acompanhar os PRs: o vídeo sobe sem esperar OK humano, e a nota que você mandar depois vira regra no PR do conserto.
    3. Mergear um módulo por vez, conferindo o CI do workflow `Manual` de cada PR.
    4. **Depois de todos os merges**, publicar uma vez: `/manual publicar`.
    5. Rodar o inventário de novo. O módulo entregue fecha em zero lacunas; é esse o critério de pronto.

@@ -4,7 +4,6 @@ description: Mandar de novo só a conta, depois de corrigir no MV, e ver se cada
 prd: [1128]
 draft: false
 papel: [Faturista]
-video: reenviar-a-conta-corrigida
 sidebar:
   order: 4
 ---

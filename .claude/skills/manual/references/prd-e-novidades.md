@@ -16,16 +16,20 @@ fatia.
    funcionalidade ainda não está em produção: é a subida (`fechar_onda.py`) que tira o
    draft quando ela sobe, e é por isso que o `draft` é o único mecanismo de
    invisibilidade do manual.
-3. **Prints e vídeo** das páginas novas, pelas receitas de `prints.md` e
-   `video-de-tarefa.md`.
-4. **Uma entrada em `novidades.md`** do módulo (formato abaixo).
-5. **Não publique.** A Fatia de manual termina no PR verde, com o caminho do
-   MP4 final no corpo, e sobe pela subida como qualquer outra fatia, sem
-   esperar OK no vídeo. Quem publica é o humano, com `/manual publicar`,
-   depois que a funcionalidade sobe.
+3. **Prints** das páginas novas, pela receita de `prints.md`. Página de tarefa
+   não tem vídeo.
+4. **O Vídeo de visão geral do módulo, só se a issue pedir.** A Fatia de manual
+   pede vídeo quando o PRD muda o caminho principal do módulo; aí o vídeo da
+   abertura é refeito pela receita de `video-de-visao-geral.md`. PRD que mexe
+   numa tarefa do canto não toca no vídeo. O Admin não tem vídeo.
+5. **Uma entrada em `novidades.md`** do módulo (formato abaixo).
+6. **Não publique.** A Fatia de manual termina no PR verde (com o caminho do
+   MP4 final no corpo, quando refez o vídeo) e sobe pela subida como qualquer
+   outra fatia, sem esperar OK no vídeo. Quem publica é o humano, com
+   `/manual publicar`, depois que a funcionalidade sobe.
 
 Página que o PRD apaga (tela que deixou de existir) sai do repositório no mesmo
-PR, junto com a composição do vídeo dela: o conferidor acusa composição órfã.
+PR.
 
 ## A página Novidades
 
@@ -49,7 +53,9 @@ Tarefas que mudaram: [Encaminhar para outra área](./encaminhar-para-outra-area/
 - O **título é o valor entregue**, na língua do usuário, não o título do PRD.
 - Entrada de PRD que ainda não subiu nasce junto com as páginas, na mesma
   página em `draft`, e aparece quando o módulo republica.
-- Se a entrega tem Vídeo de percepção de valor em `docs/comunicacao/`, embuta
-  ele aqui com `<video controls muted playsinline>`: a publicação copia o MP4
-  para dentro do site e trava se não achar.
+- Se a entrega tem página de divulgação (o link fica em comentário no PRD, da
+  `/divulgar`), ponha o link: "O vídeo desta entrega está na [página de
+  divulgação](https://<projeto>.vercel.app)." Não embuta o vídeo: ele pesaria no
+  orçamento de 40 MB do Manual, e o conferidor do build trava `<video>` fora da
+  abertura do módulo.
 - Novidades não leva `papel`: não é Página de tarefa e não tem selo.

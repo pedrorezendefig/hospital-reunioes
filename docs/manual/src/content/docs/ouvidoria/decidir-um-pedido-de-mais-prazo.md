@@ -4,7 +4,6 @@ description: Como aprovar ou negar a prorrogação que a área pediu, e o que ac
 prd: [318]
 draft: false
 papel: [Ouvidoria]
-video: cap-4
 sidebar:
   order: 9
 ---
