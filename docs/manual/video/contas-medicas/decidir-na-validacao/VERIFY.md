@@ -1,7 +1,8 @@
 # VERIFY: Decidir na Validação
 
-- Draft: docs/manual/public/video/contas-medicas/decidir-na-validacao.mp4, 50 s, sha256 3815829654e3
+- Draft: docs/manual/public/video/contas-medicas/decidir-na-validacao.mp4, 50 s, sha256 e8e00c370d57
 - Check (HyperFrames 0.8.41): 0 erros, 0 avisos (lint, runtime, layout, motion; contraste 15/15)
+- Anel (nota do Pedro, 14/10/2026): o anel caía à esquerda de Validação, cortando "Painel", e descia abaixo da Leitura da IA, porque a medida era feita na montagem, com a fonte de reserva. A medida passou para o início de cada tween. Gate do anel OK. Quadros olhados no draft novo: 6,2 e 7,0 s (Validação), 12,5 s (os três números), 28,5 s (aviso de download, que afinou para o anel não cortar o número do sino), 32,5 s (Leitura da IA) e 44 s ("Nada aguardando decisão.", com o anel na largura do texto).
 - Strips: 13 cortes, gate OK; olhei corte-01 a corte-13. A placa da legenda fica parada na troca de passo (só número e texto entram); a janela entra com rastro a partir do branco da abertura (corte-01); a troca Contas médicas para Validação tem rastro nos dois lados; o fecho corta do app para o cartão branco do carimbo (corte-13), sem quadro preto.
 - Quadros a cada 3 s: marcador em Validação, nos três números, em volta do aviso de download e de "Nada aguardando decisão."; o dedo toca Validar regra, Confirmar e validar, Enviar ao cadastro, Responder ao time, o campo da resposta, Enviar resposta e Confirmar; os números mudam a cada decisão (4/3/R$ 2.813,00, depois 3/1/R$ 389,00, 2/1/R$ 0,00, 1/0, 0/0); a tela bate com os prints validacao.png, validacao-regra.png, validacao-temas.png e menu-validacao.png e com o CartaoDeTema.tsx (rótulos, etiquetas, botões, "É apoio: quem decide é você.", aviso do ditado).
 - Texto da tela: legendas, lower-thirds, callout, abertura e carimbo passaram pelo humanizer e pela varredura anti-técnica, sem achados. Legenda 3 encurtada para caber nos 90 caracteres do slot.

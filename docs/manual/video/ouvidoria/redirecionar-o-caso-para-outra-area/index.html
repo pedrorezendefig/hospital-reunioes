@@ -266,7 +266,7 @@ document.querySelectorAll("#camera, #camera *").forEach((el) => ["overlap", "occ
 /* Medidas: onde cada elemento fica no quadro com a câmera em repouso, pelo
    offset do layout (que ignora a câmera e a rolagem da janela). Nada se mede
    na montagem: o script roda antes de a fonte do app carregar, e a medida ali
-   sai com a fonte de reserva (o anel caía ao lado do alvo, PR #1246). Alvo e
+   sai com a fonte de reserva (o anel caía ao lado do alvo, nota do Pedro no OK dos pilotos). Alvo e
    rolagem são funções que o GSAP chama quando o tween começa, e o render só
    busca o primeiro quadro depois da fonte. */
 const APP = document.getElementById("app");

@@ -1,7 +1,8 @@
 # VERIFY: Redirecionar o caso para outra área
 
-- Draft: docs/manual/public/video/ouvidoria/redirecionar-o-caso-para-outra-area.mp4, 50 s, sha256 c68394ae00d3
+- Draft: docs/manual/public/video/ouvidoria/redirecionar-o-caso-para-outra-area.mp4, 50 s, sha256 6d5a9ecb6e86
 - Check (HyperFrames 0.8.41): 0 erros, 0 avisos (lint, runtime, layout, motion; contraste 12/12)
+- Anel (nota do Pedro, 14/10/2026): o anel caía à esquerda de Redirecionar porque a medida era feita na montagem, com a fonte de reserva, e no campo Setor cortava o rótulo. A medida passou para o início de cada tween, o anel do Setor contorna rótulo e valor, e a faixa azul de Faturamento na lista ficou alinhada com a linha (herdava o padding das linhas). Gate do anel OK. Quadros olhados no draft novo: 6,2 e 7,0 s (Redirecionar), 11,5 s (Tipo), 14,5 s (Médio), 18,9 e 19,2 s (lista e faixa), 21 s (Área responsável), 28,5 s (Motivo), 40 s (confirmação verde) e 44 s (Setor).
 - Strips: 11 cortes, gate OK; olhei corte-01 a corte-11. A placa da legenda fica parada na troca de passo; a janela do navegador entra com rastro a partir do branco da abertura (corte-01); o fecho corta do caso para o cartão branco do carimbo (corte-11), sem quadro preto.
 - Quadros a cada 3 s: marcador em Redirecionar, no Tipo da manifestação, na gravidade Médio já marcada, na Área responsável depois da escolha, no Motivo do redirecionamento com a ajuda embaixo, na confirmação verde e no campo Setor; o dedo toca Redirecionar, o seletor, Faturamento na lista, o campo do motivo e Redirecionar para a área nova; o botão sai do apagado quando o motivo é escrito; a tela bate com os prints caso-redirecionar.png e redirecionar-modal.png e com o ValidarModal.tsx e o Dossie.tsx (rótulos, ajudas, botões e a frase "Caso redirecionado para Faturamento. A área anterior foi avisada.").
 - Texto da tela: legendas, lower-thirds, abertura e carimbo passaram pelo humanizer e pela varredura anti-técnica, sem achados.

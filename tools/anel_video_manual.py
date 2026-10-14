@@ -143,7 +143,9 @@ def checar(composicao: Path) -> list[str]:
         navegador = p.chromium.launch()
         pagina = navegador.new_page(viewport={"width": 1920, "height": 1080})
         pagina.goto(composicao.resolve().as_uri())
-        pagina.wait_for_function("() => window.__timelines && Object.keys(window.__timelines).length")
+        pagina.wait_for_function(
+            "() => window.__timelines && Object.keys(window.__timelines).length"
+        )
         # O render espera a fonte antes do primeiro quadro; o gate também.
         pagina.evaluate("() => document.fonts.ready.then(() => true)")
         duracao = float(
@@ -166,7 +168,9 @@ def checar(composicao: Path) -> list[str]:
                 motivo = f"data-alvo cita id que não existe: {' '.join(m['faltam'])}"
             else:
                 anel = _xywh(m["anel"])
-                cortados = texto_sob_o_anel(anel, [(tx, _xywh(c)) for tx, c in m["textos"]])
+                cortados = texto_sob_o_anel(
+                    anel, [(tx, _xywh(c)) for tx, c in m["textos"]]
+                )
                 motivo = desvio_do_anel(anel, _xywh(m["alvo"])) or (
                     f"anel atravessa texto fora do alvo: {' | '.join(cortados)}"
                     if cortados
@@ -178,7 +182,9 @@ def checar(composicao: Path) -> list[str]:
                 trecho_com_achado = m["ids"]
         navegador.close()
     if not acesos:
-        achados.append("o anel (#mk) não acende em instante nenhum: o gate não viu nada")
+        achados.append(
+            "o anel (#mk) não acende em instante nenhum: o gate não viu nada"
+        )
     return achados
 
 
