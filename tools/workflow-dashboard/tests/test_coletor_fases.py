@@ -295,7 +295,23 @@ def test_git_log_falhando_deixa_a_classe_desconhecida(monkeypatch):
 
 # ---------- resumo funcional do PR (o hover do quadro) ----------
 
-CORPO_NOVO = """## 💬 Valor entregue
+CORPO_O_QUE_MUDA = """## 💬 Valor entregue
+
+<!-- um parágrafo, como quem explica a um colega do hospital -->
+**O que muda:** o secretário baixa a Ata em `PDF` com um clique
+e manda por email sem passar pelo Word.
+
+## 🎯 Contexto
+
+Pedido da diretoria.
+
+## 🔎 Evidência
+
+- **Antes:** teste vermelho
+- **Depois:** teste verde
+"""
+
+CORPO_ANTES_DEPOIS = """## 💬 Valor entregue
 
 <!-- linguagem simples -->
 **Antes:** o secretário copiava a Ata para o Word para mandar por email.
@@ -332,8 +348,18 @@ Por quê: o resto do texto longo.
 """
 
 
+def test_corpo_novo_devolve_so_o_paragrafo_o_que_muda():
+    assert collect.resumo_funcional(CORPO_O_QUE_MUDA) == {
+        "o_que_muda": "o secretário baixa a Ata em PDF com um clique e manda por email sem passar pelo Word.",
+        "antes": None,
+        "depois": None,
+        "contexto": None,
+    }
+
+
 def test_valor_entregue_le_antes_e_depois_da_secao_e_nao_da_evidencia():
-    assert collect.resumo_funcional(CORPO_NOVO) == {
+    assert collect.resumo_funcional(CORPO_ANTES_DEPOIS) == {
+        "o_que_muda": None,
         "antes": "o secretário copiava a Ata para o Word para mandar por email.",
         "depois": "a Ata sai em PDF com um clique.",
         "contexto": None,
@@ -342,6 +368,7 @@ def test_valor_entregue_le_antes_e_depois_da_secao_e_nao_da_evidencia():
 
 def test_secao_resumo_funcional_do_1090_vira_texto_corrido():
     assert collect.resumo_funcional(CORPO_RESUMO_FUNCIONAL) == {
+        "o_que_muda": None,
         "antes": None,
         "depois": None,
         "contexto": "a Ata sai em PDF. sem copiar para o Word.",
@@ -350,6 +377,7 @@ def test_secao_resumo_funcional_do_1090_vira_texto_corrido():
 
 def test_pr_antigo_sem_a_secao_cai_no_contexto():
     assert collect.resumo_funcional(CORPO_ANTIGO) == {
+        "o_que_muda": None,
         "antes": None,
         "depois": None,
         "contexto": "Decisão registrada neste PR: o quadro ganha uma coluna Entregue.\n\nPor quê: o resto do texto longo.",
@@ -359,6 +387,11 @@ def test_pr_antigo_sem_a_secao_cai_no_contexto():
 def test_pr_antigo_traz_os_dois_primeiros_paragrafos_do_contexto():
     corpo = "## Contexto\n\nPrimeiro **parágrafo**.\n\n- segundo\n  em duas linhas\n\nTerceiro fica fora.\n\n## Outra\n"
     assert collect.resumo_funcional(corpo)["contexto"] == "Primeiro parágrafo.\n\n- segundo em duas linhas"
+
+
+def test_corpo_sem_secao_nao_tem_resumo():
+    corpo = "## ✅ Critérios de aceite\n\n- [ ] **O que muda:** fora da seção não conta\n\n## Closes\n\nCloses #9\n"
+    assert collect.resumo_funcional(corpo) is None
 
 
 def test_contexto_longo_e_cortado_e_corpo_vazio_nao_tem_resumo():
@@ -373,7 +406,7 @@ def test_resumo_vem_dos_prs_recentes_numa_chamada_so(monkeypatch):
 
     def run(cmd, cwd, timeout=None):
         chamadas.append(cmd)
-        return json.dumps([{"number": 11, "body": CORPO_NOVO}, {"number": 10, "body": ""}])
+        return json.dumps([{"number": 11, "body": CORPO_ANTES_DEPOIS}, {"number": 10, "body": ""}])
 
     monkeypatch.setattr(collect, "_run", run)
     prs = [{"number": 10}, {"number": 11}, {"number": 3}]
