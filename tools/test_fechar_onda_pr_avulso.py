@@ -586,7 +586,8 @@ def preparar(fo, monkeypatch, c: Cenario) -> None:
         return run_real(cmd, *args, **kwargs)
 
     def semaforo(raiz, acao, chave, descricao=""):
-        c.semaforo.append((acao, chave))
+        if acao != "fase":  # a fase da trava tem teste próprio: test_semaforo_dono_morto.py
+            c.semaforo.append((acao, chave))
         return 0
 
     def esperar_build(service, desde, sha_push, ignorar=()):
