@@ -357,3 +357,75 @@ def test_os_conhecidos_do_manual_atual_seguram_o_que_esta_no_ar():
         text=True,
     )
     assert resultado.returncode == 0, resultado.stderr
+
+
+# --- Tarefas próximas (issue #1221) ---------------------------------------
+
+
+def tarefa(titulo: str, proximas: str = "") -> str:
+    """Página de tarefa mínima; `proximas` entra como linha crua do frontmatter."""
+    return PAGINA_VALIDA.replace(
+        "title: Registrar uma manifestação", f"title: {titulo}\n{proximas}".rstrip()
+    )
+
+
+def site_com_proximas(raiz: Path, proximas: str) -> Path:
+    escrever(raiz, "ouvidoria/registrar-manifestacao.md", tarefa("Registrar", proximas))
+    escrever(raiz, "ouvidoria/classificar-um-caso.md", tarefa("Classificar"))
+    escrever(raiz, "ouvidoria/encerrar-um-caso.md", tarefa("Encerrar"))
+    escrever(raiz, "ouvidoria/arquivar-um-caso.md", tarefa("Arquivar"))
+    escrever(raiz, "ouvidoria/cobrar-o-setor.md", tarefa("Cobrar"))
+    escrever(raiz, "pops/criar-um-pop.md", tarefa("Criar um POP"))
+    return raiz / "src" / "content" / "docs"
+
+
+def test_proximas_do_mesmo_modulo_passam(tmp_path):
+    pasta = site_com_proximas(
+        tmp_path, "proximas: [classificar-um-caso, encerrar-um-caso, arquivar-um-caso]"
+    )
+    erros, _ = lint_manual.checar(pasta)
+    assert erros == []
+
+
+def test_proximas_em_lista_de_bloco_tambem_e_lida(tmp_path):
+    pasta = site_com_proximas(
+        tmp_path, "proximas:\n  - classificar-um-caso\n  - caso-que-nao-existe"
+    )
+    erros, _ = lint_manual.checar(pasta)
+    assert len(erros) == 1
+    assert "caso-que-nao-existe" in erros[0]
+
+
+def test_proxima_com_slug_inexistente_reprova(tmp_path):
+    pasta = site_com_proximas(tmp_path, "proximas: [classificar-um-caso, fechar-caso]")
+    erros, _ = lint_manual.checar(pasta)
+    assert len(erros) == 1
+    assert "registrar-manifestacao.md" in erros[0]
+    assert "fechar-caso" in erros[0]
+
+
+def test_proxima_de_outro_modulo_reprova(tmp_path):
+    """`criar-um-pop` existe, mas em POPs: o link levaria a pessoa para outro módulo."""
+    pasta = site_com_proximas(tmp_path, "proximas: [criar-um-pop]")
+    erros, _ = lint_manual.checar(pasta)
+    assert len(erros) == 1
+    assert "criar-um-pop" in erros[0]
+    assert "pops" in erros[0]
+
+
+def test_proxima_com_caminho_de_outro_modulo_reprova(tmp_path):
+    pasta = site_com_proximas(tmp_path, "proximas: [../pops/criar-um-pop]")
+    erros, _ = lint_manual.checar(pasta)
+    assert len(erros) == 1
+
+
+def test_mais_de_tres_proximas_reprova(tmp_path):
+    pasta = site_com_proximas(
+        tmp_path,
+        "proximas: [classificar-um-caso, encerrar-um-caso, arquivar-um-caso, "
+        "cobrar-o-setor]",
+    )
+    erros, _ = lint_manual.checar(pasta)
+    assert len(erros) == 1
+    assert "4" in erros[0]
+    assert "três" in erros[0]

@@ -5,6 +5,8 @@ prd: [1113, 1128]
 draft: false
 papel: [Faturista]
 video: corrigir-uma-conta-pelo-guia
+busca: [boleto, fatura]
+proximas: [reenviar-a-conta-corrigida, ler-o-painel]
 sidebar:
   order: 3
 ---
