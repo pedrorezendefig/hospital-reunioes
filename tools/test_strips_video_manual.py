@@ -39,9 +39,9 @@ TOKENS = """:root {
 """
 
 
-def mp4(destino: Path, *filtros: str) -> Path:
-    """Dois segundos de tela clara a 30 fps, com os filtros pedidos por cima."""
-    cadeia = ",".join(("color=c=0xEEF1F6:s=320x180:r=30:d=2", *filtros))
+def mp4(destino: Path, *filtros: str, duracao: int = 2) -> Path:
+    """Tela clara a 30 fps (dois segundos, se não disser), com os filtros pedidos por cima."""
+    cadeia = ",".join((f"color=c=0xEEF1F6:s=320x180:r=30:d={duracao}", *filtros))
     subprocess.run(
         [
             "ffmpeg",
@@ -126,3 +126,27 @@ def test_legenda_com_a_placa_o_tempo_todo_passa(tmp_path):
     video = mp4(tmp_path / "com-placa.mp4", PLACA)
     resultado = rodar(tmp_path, video, COM_LEGENDA)
     assert resultado.returncode == 0, resultado.stderr
+
+
+# Um Vídeo de tarefa de verdade tem uns vinte cortes: abertura, clipe da
+# tarefa, cada legenda de passo, lower-third, callout e carimbo. Doze clipes
+# de meio segundo em seis segundos dão onze cortes e 220 quadros pedidos.
+MUITOS_CORTES = """<!doctype html>
+<html><body>
+<div id="main" data-composition-id="main" data-start="0" data-width="1920" data-height="1080" data-duration="6">
+""" + "".join(
+    f'  <section id="c-{i}" class="clip" data-start="{i / 2:g}" data-duration="0.5" data-track-index="1"></section>\n'
+    for i in range(12)
+) + """</div>
+</body></html>
+"""
+
+
+def test_muitos_cortes_nao_quebram_o_gate(tmp_path):
+    """Pedir os 220 quadros numa expressão só estoura o parser do ffmpeg
+    ("Cannot allocate memory") e o gate morria antes de olhar o primeiro
+    corte, justo no primeiro vídeo de verdade (issue #1231)."""
+    video = mp4(tmp_path / "longo.mp4", duracao=6)
+    resultado = rodar(tmp_path, video, MUITOS_CORTES)
+    assert resultado.returncode == 0, resultado.stderr
+    assert len(list((tmp_path / "strips").glob("corte-*.png"))) == 11
