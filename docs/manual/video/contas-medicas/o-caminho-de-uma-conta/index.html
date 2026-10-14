@@ -1,0 +1,522 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=1920, height=1080" />
+<title>Manual · Contas médicas · O caminho de uma conta</title>
+<link rel="stylesheet" href="tokens.css" />
+<script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js" integrity="sha384-sG0Hv1tP1lZCk9KQmrIbY/XNwi+OY84GQqhMscbnsoBFqAz8KNCil1kvfL3Hbbk2" crossorigin="anonymous"></script>
+<script type="application/json" id="manual-video-meta">
+{
+ "modulo": "contas-medicas",
+ "slug": "o-caminho-de-uma-conta",
+ "pagina": "contas-medicas/index.md",
+ "prd": [1113, 1259],
+ "issues": [1265],
+ "app_version": "0.196.1",
+ "gerado_em": "2026-10-14T06:30:00-03:00"
+}
+</script>
+<style>
+  /* Estilo do manual (emenda de 13/10/2026 à ADR 0057): cor e fonte só pelos
+     tokens. Na réplica, cada cor é a da classe do app, pelo token de mesmo
+     nome (text-slate-500 vira var(--color-slate-500)). Vídeo de visão geral
+     de Contas médicas (ADR 0072): enviar, o Painel, o guia e a Validação, com
+     a mesma conta de exemplo (atendimento 900412) do começo ao fim. A
+     faturista é a Renata; a gestão de contas médicas é a Marta. */
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { width: 1920px; height: 1080px; overflow: hidden; background: var(--video-palco); }
+  body { font-family: var(--font-app); color: var(--color-text); }
+
+  #main { position: relative; width: 1920px; height: 1080px; overflow: hidden; }
+  #slot-abertura, #slot-carimbo { z-index: 5; }
+  #c-tarefa { position: absolute; inset: 0; z-index: 1; }
+  .palco { position: absolute; inset: 0; background: var(--video-palco); }
+  #camera { position: absolute; left: 0; top: 0; width: 1920px; height: 1080px; transform-origin: 0 0; }
+  [id^="slot-passo"] { z-index: 3; }
+  [id^="slot-lugar"] { z-index: 2; }
+
+  /* ===== a janela do navegador ===== */
+  .janela { position: absolute; left: 160px; top: 32px; width: 1600px; height: 848px; border-radius: var(--radius-3xl); background: var(--color-white); border: 1px solid var(--color-slate-300); box-shadow: var(--video-sombra); overflow: hidden; }
+  .barra-nav { position: absolute; left: 0; top: 0; width: 1600px; height: 44px; background: var(--color-slate-100); border-bottom: 1px solid var(--color-slate-200); display: flex; align-items: center; gap: 9px; padding: 0 18px; }
+  .barra-nav i { display: block; width: 12px; height: 12px; border-radius: 50%; background: var(--color-slate-300); }
+  .barra-nav .url { margin-left: 14px; width: 620px; height: 28px; border-radius: 14px; background: var(--color-white); border: 1px solid var(--color-slate-200); display: flex; align-items: center; padding: 0 16px; font-size: 16px; color: var(--color-slate-500); }
+
+  /* ===== o app, desenhado em 1280x643 e ampliado 1,25x ===== */
+  .vista { position: absolute; left: 0; top: 44px; width: 1600px; height: 804px; overflow: hidden; background: var(--color-bg); }
+  .app { position: absolute; left: 0; top: 0; width: 1280px; height: 643.2px; transform: scale(1.25); transform-origin: 0 0; background: var(--color-bg); font-size: 14px; line-height: 20px; }
+
+  /* ===== a casca (AppShell, Sidebar, Header) ===== */
+  .lado { position: absolute; left: 0; top: 0; width: 256px; height: 643.2px; border-right: 1px solid var(--color-border); background: linear-gradient(to bottom, var(--color-surface), var(--color-bg)); }
+  .lado .marca { height: 122px; border-bottom: 1px solid var(--color-border); display: flex; align-items: center; justify-content: center; }
+  .lado .marca img { width: 170px; height: 96px; object-fit: contain; }
+  .lado nav { padding: 16px; display: flex; flex-direction: column; gap: 4px; }
+  .mi { display: flex; align-items: center; gap: 12px; padding: 10px 12px; border-radius: var(--radius-xl); font-size: 14px; font-weight: 500; color: var(--color-text-secondary); }
+  .mi .fim { margin-left: auto; opacity: .5; display: flex; }
+  .mi.on { background: color-mix(in srgb, var(--color-primary) 10%, transparent); color: var(--color-primary); border-left: 3px solid var(--color-primary); padding-left: 10px; }
+  .sub { margin: 4px 0 0 16px; padding-left: 12px; border-left: 2px solid color-mix(in srgb, var(--color-border) 50%, transparent); display: flex; flex-direction: column; gap: 4px; }
+  .sub .mi { padding: 8px 12px; border-radius: var(--radius-lg); }
+  .topo { position: absolute; left: 256px; top: 0; width: 1024px; height: 64px; background: var(--color-slate-50); border-bottom: 1px solid var(--color-slate-200); display: flex; align-items: center; padding: 0 24px; }
+  .busca { width: 256px; height: 38px; border-radius: var(--radius-xl); background: var(--color-bg); border: 1px solid var(--color-border); display: flex; align-items: center; gap: 10px; padding: 0 12px; font-size: 14px; color: color-mix(in srgb, var(--color-text-secondary) 40%, transparent); }
+  .quem { margin-left: auto; margin-right: 24px; display: flex; align-items: center; gap: 24px; }
+  .sino { position: relative; color: var(--color-slate-500); display: flex; }
+  .sino .n { position: absolute; top: -6px; right: -8px; min-width: 18px; height: 18px; border-radius: 999px; background: var(--color-red-500); color: var(--color-white); font-size: 10px; display: flex; align-items: center; justify-content: center; opacity: 0; }
+  .divisor { width: 1px; height: 32px; background: var(--color-border); }
+  .pessoas { position: relative; }
+  .pessoa { display: flex; align-items: center; gap: 12px; }
+  .pessoa + .pessoa { position: absolute; right: 0; top: 0; opacity: 0; }
+  .pessoa .tx { text-align: right; }
+  .pessoa .tx b { display: block; font-size: 14px; font-weight: 600; color: var(--color-slate-700); }
+  .pessoa .tx span { font-size: 12px; color: var(--color-slate-500); white-space: nowrap; }
+  .avatar { position: relative; width: 40px; height: 40px; border-radius: 50%; background: var(--color-primary); color: var(--color-white); font-weight: 700; display: flex; align-items: center; justify-content: center; }
+  .avatar .seta { position: absolute; right: -2px; bottom: -2px; width: 16px; height: 16px; border-radius: 50%; background: var(--color-white); border: 1px solid var(--color-slate-100); color: var(--color-slate-400); display: flex; align-items: center; justify-content: center; }
+
+  .corpo { position: absolute; left: 256px; top: 64px; width: 1024px; height: 579.2px; overflow: hidden; background: var(--color-bg); }
+  .tela-app { position: absolute; left: 0; top: 0; width: 1024px; height: 579.2px; opacity: 0; filter: blur(0px); }
+  #tela-r { opacity: 1; }
+  .rolo { position: absolute; left: 0; top: 0; width: 1024px; height: 1600px; }
+  .pagina { position: absolute; left: 0; top: 0; width: 1024px; padding: 32px; display: flex; flex-direction: column; gap: 24px; background: var(--color-bg); opacity: 0; }
+  .pagina.vista-1 { opacity: 1; }
+
+  /* ===== Contas médicas (app/contas-medicas/page.tsx) ===== */
+  h1 { font-size: 24px; line-height: 32px; font-weight: 700; color: var(--color-slate-900); }
+  .dek { font-size: 14px; color: var(--color-slate-500); margin-top: 2px; }
+  .ap-cabeca { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+  .ap-cabeca h1 { flex: 1; }
+  .atalho { display: inline-flex; align-items: center; gap: 8px; padding: 8px 12px; border-radius: var(--radius-lg); border: 1px solid var(--color-slate-200); background: var(--color-white); font-size: 14px; color: var(--color-slate-700); white-space: nowrap; }
+  .atalho .n { border-radius: 999px; background: var(--color-primary); color: var(--color-white); padding: 2px 8px; font-size: 12px; line-height: 16px; }
+  .soltar { position: relative; border: 2px dashed var(--color-slate-300); border-radius: var(--radius-2xl); background: var(--color-white); padding: 32px; text-align: center; }
+  .soltar .ic { display: flex; justify-content: center; margin-bottom: 12px; color: var(--color-slate-400); }
+  .soltar .t1 { font-size: 14px; font-weight: 500; color: var(--color-slate-800); }
+  .soltar .t2 { font-size: 12px; line-height: 16px; color: var(--color-slate-500); margin-top: 4px; }
+  .soltar-on { position: absolute; inset: -2px; border: 2px dashed var(--color-primary); border-radius: var(--radius-2xl); background: color-mix(in srgb, var(--color-primary) 5%, var(--color-white)); opacity: 0; }
+  .enviando { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; gap: 8px; font-size: 14px; color: var(--color-slate-600); background: var(--color-white); border-radius: var(--radius-2xl); opacity: 0; }
+  .bt { display: inline-flex; align-items: center; gap: 8px; padding: 6px 12px; border-radius: var(--radius-lg); font-size: 14px; font-weight: 500; white-space: nowrap; }
+  .bt.cheio { background: var(--color-primary); color: var(--color-white); }
+  .bt.claro { background: var(--color-white); color: var(--color-slate-700); border: 1px solid var(--color-slate-200); }
+  .bt.grande { padding: 8px 16px; margin-top: 16px; }
+  .abas { display: flex; gap: 8px; border-bottom: 1px solid var(--color-border); }
+  .aba { padding: 8px 16px; font-size: 14px; font-weight: 500; color: var(--color-text-secondary); border-bottom: 2px solid transparent; }
+  .aba.on { color: var(--color-primary); border-bottom-color: var(--color-primary); }
+  .ap-cartao { background: var(--color-white); border: 1px solid var(--color-border); border-radius: var(--radius-2xl); box-shadow: var(--shadow-premium); padding: 20px; }
+  .vazio-fila { padding: 40px; text-align: center; color: var(--color-slate-500); }
+  .vazio-fila .ic { display: flex; justify-content: center; color: var(--color-slate-300); margin-bottom: 12px; }
+  .fila { margin-top: 16px; padding: 0; }
+  .fila-l { list-style: none; display: flex; align-items: center; gap: 4px 16px; padding: 12px 20px; border-top: 1px solid var(--color-border); }
+  .fila-l:first-child { border-top: 0; }
+  .fila-l .q { flex: 1; min-width: 0; }
+  .fila-l .q b { display: block; font-size: 14px; font-weight: 600; color: var(--color-slate-900); }
+  .fila-l .q span { font-size: 12px; line-height: 16px; color: var(--color-slate-500); }
+  .sit { border-radius: 999px; padding: 2px 10px; font-size: 12px; line-height: 16px; font-weight: 500; }
+  .sit.fazer { background: var(--color-red-100); color: var(--color-red-800); }
+  .sit.corr { background: var(--color-amber-100); color: var(--color-amber-800); }
+  .sit.cinza { background: var(--color-slate-100); color: var(--color-slate-600); }
+  .det { font-size: 12px; line-height: 16px; color: var(--color-slate-600); }
+  .acao { font-size: 14px; font-weight: 500; color: var(--color-primary); }
+  .ultimo { padding: 20px; }
+  .ultimo h2 { font-size: 14px; font-weight: 600; color: var(--color-slate-900); margin-bottom: 12px; }
+  .ultimo li { list-style: none; font-size: 14px; color: var(--color-slate-800); margin-top: 8px; }
+  .arraste { position: absolute; left: 0; top: 0; opacity: 0; display: flex; align-items: center; gap: 10px; padding: 10px 14px; border-radius: var(--radius-xl); background: var(--color-white); border: 1px solid var(--color-slate-200); box-shadow: var(--shadow-premium-strong); font-size: 18px; color: var(--color-slate-700); }
+  .arraste .ic { color: var(--color-slate-500); display: flex; }
+  .arraste .qtd { min-width: 26px; height: 26px; border-radius: 999px; background: var(--color-red-500); color: var(--color-white); font-size: 15px; display: flex; align-items: center; justify-content: center; }
+
+  /* ===== Painel (painel/page.tsx, FiltrosDoPainel, TelaDoPainel, Moldura) ===== */
+  .volta { display: inline-flex; align-items: center; gap: 6px; font-size: 14px; color: var(--color-slate-500); margin-bottom: 8px; }
+  .filtros { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+  .filtro { display: flex; flex-direction: column; gap: 6px; }
+  .filtro .rot { font-size: 12px; line-height: 16px; font-weight: 500; text-transform: uppercase; color: var(--color-slate-500); }
+  .campo { min-height: 38px; display: flex; align-items: center; gap: 6px; padding: 6px 12px; border: 1px solid var(--color-slate-200); border-radius: var(--radius-lg); background: var(--color-white); font-size: 14px; color: var(--color-slate-700); }
+  .campo .seta-c { margin-left: auto; color: var(--color-slate-400); display: flex; }
+  .campo .cal { margin-left: auto; color: var(--color-slate-900); display: flex; }
+  .semana { font-size: 14px; color: var(--color-slate-600); width: fit-content; }
+  .pn-grade { display: flex; flex-direction: column; gap: 16px; }
+  .pn-cartoes { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; }
+  .pn-blocos { display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; }
+  .pn-moldura h2 { font-size: 14px; line-height: 20px; font-weight: 600; color: var(--color-slate-700); }
+  .pn-moldura .st { font-size: 12px; line-height: 16px; color: var(--color-slate-500); margin-top: 2px; }
+  .pn-moldura .cont { margin-top: 12px; }
+  .pn-num { font-size: 30px; line-height: 36px; font-weight: 700; color: var(--color-primary); }
+  .pn-apoio { margin-top: 4px; font-size: 12px; line-height: 16px; color: var(--color-slate-500); }
+  .grafico { width: 100%; height: 220px; display: block; }
+  .grafico .grade { stroke: var(--color-border); stroke-width: 1; }
+  .grafico .curva { fill: none; stroke: var(--color-primary); stroke-width: 2.5; }
+  .grafico .ponto { fill: var(--color-primary); }
+  .grafico text { font-size: 12px; fill: var(--color-text-secondary); font-family: var(--font-app); }
+  .causas { display: flex; flex-direction: column; gap: 12px; }
+  .causa-l { display: flex; align-items: baseline; gap: 12px; font-size: 14px; }
+  .causa-l .nm { font-weight: 500; color: var(--color-slate-800); }
+  .causa-l .qm { font-size: 12px; color: var(--color-slate-500); }
+  .causa-l .pc { margin-left: auto; font-weight: 600; color: var(--color-primary); }
+  .causa-l .rs { width: 112px; flex-shrink: 0; text-align: right; font-size: 12px; color: var(--color-slate-500); }
+  .trilho { height: 8px; margin-top: 6px; overflow: hidden; border-radius: 999px; background: var(--color-border); }
+  .trilho b { display: block; height: 100%; border-radius: 999px; background: var(--color-primary); }
+  .tab { width: 100%; border-collapse: collapse; font-size: 14px; }
+  .tab th { padding: 6px 0; font-size: 12px; font-weight: 500; text-align: left; color: var(--color-slate-500); }
+  .tab td { padding: 6px 0; border-top: 1px solid var(--color-slate-100); color: var(--color-slate-800); }
+  .tab .r { text-align: right; }
+  .tab .pr { font-weight: 600; color: var(--color-primary); }
+  .tab .cd { font-family: var(--font-mono); font-size: 12px; color: var(--color-slate-600); }
+  .tab .ap { color: var(--color-slate-700); }
+  .tab .ap4 { color: var(--color-slate-400); }
+
+  /* ===== Guia (guia/[contaId]/page.tsx e LinhaDoGuia.tsx) ===== */
+  .guia { left: 128px; width: 768px; padding: 32px 0; gap: 20px; }
+  .g-cab { display: flex; flex-direction: column; gap: 4px; }
+  .g-tit { display: flex; align-items: center; gap: 8px; width: fit-content; }
+  .etq { display: inline-flex; align-items: center; padding: 2px 8px; border-radius: 999px; font-size: 11px; line-height: 16px; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; white-space: nowrap; }
+  .etq.sit-g { padding: 2px 10px; font-size: 12px; text-transform: none; letter-spacing: 0; background: var(--color-amber-100); color: var(--color-amber-800); }
+  .etq.acao-g { background: color-mix(in srgb, var(--color-primary) 8%, var(--color-white)); color: var(--color-primary); }
+  .etq.amb, .etq.regra { background: var(--color-amber-100); color: var(--color-amber-800); }
+  .etq.verde { background: var(--color-green-100); color: var(--color-green-800); }
+  .etq.cinza, .etq.termo { background: var(--color-slate-100); color: var(--color-slate-600); }
+  .etq.bloq { background: var(--color-red-100); color: var(--color-red-800); }
+  .etq.obs { background: color-mix(in srgb, var(--color-primary) 8%, var(--color-white)); color: var(--color-primary); }
+  .rotulo { font-size: 12px; line-height: 16px; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; color: var(--color-slate-500); }
+  .g-nums { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+  .g-nums .ap-cartao { padding: 16px; }
+  .g-val { font-size: 30px; line-height: 36px; font-weight: 700; color: var(--color-primary); }
+  .g-apoio { font-size: 12px; line-height: 16px; color: var(--color-slate-500); }
+  .grupo { display: flex; flex-direction: column; gap: 8px; }
+  .grupo-cab { display: flex; align-items: center; justify-content: space-between; }
+  .dia { font-size: 12px; line-height: 16px; font-weight: 600; color: var(--color-primary); }
+  .gl { border: 1px solid var(--color-border); border-radius: var(--radius-xl); background: var(--color-white); padding: 12px; display: flex; flex-direction: column; gap: 6px; }
+  .gl-l1 { display: flex; align-items: center; gap: 6px; }
+  .gl-l1 .v { margin-left: auto; font-size: 14px; font-weight: 600; color: var(--color-slate-900); }
+  .gl-nome { font-size: 14px; font-weight: 600; color: var(--color-slate-900); }
+  .gl-txt { font-size: 14px; color: var(--color-slate-700); }
+  .gl-mot { font-size: 12px; line-height: 16px; color: var(--color-slate-500); }
+  .gl-meta { display: flex; align-items: center; gap: 12px; font-size: 12px; line-height: 16px; color: var(--color-slate-500); }
+  .cod { display: inline-flex; align-items: center; gap: 4px; font-family: var(--font-mono); font-size: 12px; color: var(--color-primary); }
+  .lk { color: var(--color-primary); }
+  .gl-bts { display: flex; gap: 8px; padding-top: 4px; }
+  .gb { padding: 6px 12px; border-radius: var(--radius-lg); font-size: 12px; line-height: 16px; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; border: 1px solid var(--color-border); color: var(--color-slate-700); background: var(--color-white); }
+  .gb.cheio { background: var(--color-primary); color: var(--color-white); border-color: var(--color-primary); }
+  .gb.apagado { opacity: .5; }
+  .gl-val { font-size: 12px; line-height: 16px; color: var(--color-amber-800); display: flex; flex-direction: column; gap: 2px; width: fit-content; }
+  .gl-val b { font-weight: 600; }
+  .gm { border: 1px solid var(--color-border); border-radius: var(--radius-xl); padding: 8px 12px; display: flex; align-items: center; gap: 8px; }
+  .gm.feito { background: var(--color-green-50); border-color: var(--color-green-200); }
+  .gm.np { background: var(--color-slate-50); }
+  .gm .nm { font-size: 14px; color: var(--color-slate-700); }
+  .gm .v { margin-left: auto; font-size: 14px; color: var(--color-slate-500); }
+  .gm .dz { font-size: 12px; line-height: 16px; font-weight: 600; color: var(--color-primary); }
+  .np-form { margin-top: 8px; border: 1px solid var(--color-border); border-radius: var(--radius-lg); padding: 4px 12px 8px; display: flex; flex-direction: column; gap: 8px; position: relative; }
+  .np-form .lg { position: absolute; left: 8px; top: -9px; padding: 0 4px; background: var(--color-white); font-size: 12px; line-height: 16px; font-weight: 600; color: var(--color-slate-700); }
+  .radios { display: flex; flex-direction: column; gap: 4px; padding-top: 10px; }
+  .radio { display: flex; width: fit-content; align-items: center; gap: 8px; font-size: 14px; color: var(--color-slate-700); }
+  .radio i { position: relative; width: 13px; height: 13px; border-radius: 50%; border: 1px solid var(--color-slate-500); display: block; }
+  .radio.on i { border: 4px solid var(--color-blue-600); }
+  .campo-tx { min-height: 58px; border: 1px solid var(--color-border); border-radius: var(--radius-lg); padding: 6px 8px; font-size: 14px; color: var(--color-slate-400); position: relative; }
+  .ditar-linha { display: flex; align-items: center; gap: 8px; }
+  .ditar { display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--color-slate-200); border-radius: var(--radius-lg); padding: 4px 10px; font-size: 12px; line-height: 16px; color: var(--color-slate-600); background: var(--color-white); }
+  .ajuda { font-size: 12px; line-height: 16px; color: var(--color-slate-500); }
+  .g-rod { display: flex; flex-direction: column; gap: 12px; padding: 16px; }
+  .concluir { width: fit-content; padding: 8px 16px; border-radius: var(--radius-xl); background: var(--color-primary); color: var(--color-white); font-size: 14px; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; }
+  .aviso { position: absolute; right: 16px; bottom: 16px; z-index: 9; display: flex; align-items: center; gap: 12px; min-width: 300px; padding: 12px 16px; border-radius: var(--radius-2xl); border: 1px solid var(--color-emerald-100); background: var(--color-emerald-50); box-shadow: var(--shadow-premium-strong); font-size: 14px; font-weight: 500; color: var(--color-slate-800); opacity: 0; }
+  .aviso .ok { color: var(--color-emerald-500); display: flex; }
+  .aviso .x { margin-left: auto; color: var(--color-slate-400); display: flex; padding: 4px; }
+
+  /* ===== Validação (validacao/page.tsx e CartaoDeTema.tsx) ===== */
+  .numeros { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+  .rot-num { font-size: 12px; line-height: 16px; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; color: var(--color-slate-500); }
+  .val-num { font-size: 24px; line-height: 32px; font-weight: 700; color: var(--color-primary); margin-top: 4px; }
+  .temas { display: flex; flex-direction: column; gap: 16px; }
+  .tema { display: flex; flex-direction: column; gap: 12px; }
+  .tema .topo-t { display: flex; align-items: flex-start; gap: 8px; }
+  .tema .esq { flex: 1; display: flex; flex-direction: column; align-items: flex-start; gap: 4px; }
+  .tema h2 { font-size: 16px; line-height: 24px; font-weight: 600; color: var(--color-slate-900); }
+  .tema .meta { font-size: 12px; line-height: 16px; color: var(--color-slate-500); }
+  .jogo { text-align: right; }
+  .jogo span { display: block; font-size: 11px; line-height: 16px; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; color: var(--color-slate-500); }
+  .jogo b { font-size: 18px; line-height: 28px; color: var(--color-primary); }
+  .citacao { font-size: 14px; color: var(--color-slate-700); border-left: 2px solid var(--color-border); padding-left: 12px; }
+  .fala { font-size: 14px; color: var(--color-slate-700); background: var(--color-slate-50); border-radius: var(--radius-lg); padding: 6px 12px; }
+  .leitura { display: flex; align-items: flex-start; gap: 8px; font-size: 14px; color: var(--color-slate-600); }
+  .leitura .ic { color: var(--color-primary); margin-top: 2px; display: flex; }
+  .leitura b { font-weight: 600; color: var(--color-slate-700); }
+  .leitura small { display: block; font-size: 12px; line-height: 16px; color: var(--color-slate-500); }
+  .termo-tx { font-size: 14px; color: var(--color-slate-700); }
+  .termo-tx b { font-weight: 600; }
+  .termo-tx code { font-family: var(--font-mono); font-size: 14px; }
+  .botoes { display: flex; gap: 8px; padding-top: 4px; }
+  .form { border-radius: var(--radius-xl); border: 1px solid var(--color-slate-200); background: var(--color-slate-50); padding: 12px; display: flex; flex-direction: column; gap: 8px; }
+  .form .lb { font-size: 12px; line-height: 16px; font-weight: 500; text-transform: uppercase; color: var(--color-slate-500); }
+  .area { position: relative; min-height: 80px; border: 1px solid var(--color-slate-200); border-radius: var(--radius-lg); background: var(--color-white); padding: 6px 12px; font-size: 14px; color: var(--color-slate-800); }
+
+  /* ===== o foco: marcador, dedo e toque ===== */
+  .marcador { position: absolute; left: 0; top: 0; opacity: 0; border: 3px solid var(--video-foco); border-radius: 14px; box-shadow: 0 0 0 8px var(--video-foco-halo); }
+  .dedo { position: absolute; left: 0; top: 0; opacity: 0; width: 40px; height: 40px; }
+  .dedo svg { position: absolute; left: 0; top: 0; width: 40px; height: 40px; }
+  .dedo path { fill: var(--video-foco); stroke: var(--color-white); stroke-width: 1.4; }
+  .toque { position: absolute; left: -22px; top: -22px; width: 56px; height: 56px; border-radius: 50%; background: var(--video-foco-halo); border: 2px solid var(--video-foco); opacity: 0; }
+</style>
+</head>
+<body>
+<div id="main" data-composition-id="main" data-start="0" data-width="1920" data-height="1080" data-duration="96">
+
+  <div id="slot-abertura" data-composition-id="abertura" data-composition-src="compositions/abertura.html" data-variable-values='{"secao":"Manual · Visão geral","titulo":"Contas médicas","papel":"Faturista e gestão"}' data-start="0" data-duration="4" data-track-index="1" data-width="1920" data-height="1080"></div>
+
+  <section id="c-tarefa" class="clip" data-start="4" data-duration="88" data-track-index="2">
+    <div class="palco"></div>
+    <div id="camera" data-layout-allow-overflow></div>
+  </section>
+
+  <div id="slot-lugar-1" data-composition-id="lower-third" data-composition-src="compositions/lower-third.html" data-variable-values='{"lugar":"Faturista","tela":"Contas médicas"}' data-start="4.3" data-duration="2.7" data-track-index="5" data-width="1920" data-height="1080"></div>
+  <div id="slot-lugar-2" data-composition-id="lower-third" data-composition-src="compositions/lower-third.html" data-variable-values='{"lugar":"Gestão de contas médicas","tela":"Painel"}' data-start="30.0" data-duration="2.8" data-track-index="5" data-width="1920" data-height="1080"></div>
+  <div id="slot-lugar-3" data-composition-id="lower-third" data-composition-src="compositions/lower-third.html" data-variable-values='{"lugar":"Faturista","tela":"Atendimento 900412"}' data-start="52.0" data-duration="2.8" data-track-index="5" data-width="1920" data-height="1080"></div>
+  <div id="slot-lugar-4" data-composition-id="lower-third" data-composition-src="compositions/lower-third.html" data-variable-values='{"lugar":"Gestão de contas médicas","tela":"Validação"}' data-start="75.8" data-duration="2.8" data-track-index="5" data-width="1920" data-height="1080"></div>
+
+  <div id="slot-passo-1" data-composition-id="legenda-de-passo" data-composition-src="compositions/legenda-de-passo.html" data-variable-values='{"numero":"1","texto":"Em **Contas médicas**, arraste a conta e o prontuário do MV para a área tracejada."}' data-start="4" data-duration="7" data-track-index="3" data-width="1920" data-height="1080"></div>
+  <div id="slot-passo-2" data-composition-id="legenda-de-passo" data-composition-src="compositions/legenda-de-passo.html" data-variable-values='{"numero":"2","texto":"O **Último envio** diz, por atendimento, se chegaram a conta e o prontuário."}' data-start="11" data-duration="7" data-track-index="4" data-width="1920" data-height="1080"></div>
+  <div id="slot-passo-3" data-composition-id="legenda-de-passo" data-composition-src="compositions/legenda-de-passo.html" data-variable-values='{"numero":"3","texto":"A conta entra na **Fila** e fica **A fazer** em alguns minutos. O sino avisa."}' data-start="18" data-duration="8" data-track-index="3" data-width="1920" data-height="1080"></div>
+  <div id="slot-passo-4" data-composition-id="legenda-de-passo" data-composition-src="compositions/legenda-de-passo.html" data-variable-values='{"numero":"4","texto":"Na gestão de contas médicas, clique em **Painel**, no alto da tela."}' data-start="26" data-duration="6" data-track-index="4" data-width="1920" data-height="1080"></div>
+  <div id="slot-passo-5" data-composition-id="legenda-de-passo" data-composition-src="compositions/legenda-de-passo.html" data-variable-values='{"numero":"5","texto":"Os cartões do topo trazem a nota da semana, as contas concluídas e o **R$ apontado**."}' data-start="32" data-duration="8" data-track-index="3" data-width="1920" data-height="1080"></div>
+  <div id="slot-passo-6" data-composition-id="legenda-de-passo" data-composition-src="compositions/legenda-de-passo.html" data-variable-values='{"numero":"6","texto":"Em **R$ apontado por causa-raiz**, veja onde a perda nasce e quem corrige."}' data-start="40" data-duration="8" data-track-index="4" data-width="1920" data-height="1080"></div>
+  <div id="slot-passo-7" data-composition-id="legenda-de-passo" data-composition-src="compositions/legenda-de-passo.html" data-variable-values='{"numero":"7","texto":"Na **Fila**, clique em **Abrir** na conta. O guia abre com o que corrigir."}' data-start="48" data-duration="6" data-track-index="3" data-width="1920" data-height="1080"></div>
+  <div id="slot-passo-8" data-composition-id="legenda-de-passo" data-composition-src="compositions/legenda-de-passo.html" data-variable-values='{"numero":"8","texto":"Corrija no MV linha a linha e marque **Feito**, **Não procede** ou **Bloqueado**."}' data-start="54" data-duration="9" data-track-index="4" data-width="1920" data-height="1080"></div>
+  <div id="slot-passo-9" data-composition-id="legenda-de-passo" data-composition-src="compositions/legenda-de-passo.html" data-variable-values='{"numero":"9","texto":"Clique em **Concluir e abrir a próxima**. A conta vai para **Concluídas**."}' data-start="63" data-duration="9" data-track-index="3" data-width="1920" data-height="1080"></div>
+  <div id="slot-passo-10" data-composition-id="legenda-de-passo" data-composition-src="compositions/legenda-de-passo.html" data-variable-values='{"numero":"10","texto":"Na gestão, clique em **Validação**: ali ficam os temas que esperam a sua decisão."}' data-start="72" data-duration="6" data-track-index="4" data-width="1920" data-height="1080"></div>
+  <div id="slot-passo-11" data-composition-id="legenda-de-passo" data-composition-src="compositions/legenda-de-passo.html" data-variable-values='{"numero":"11","texto":"Na regra pendente, clique em **Validar regra** e depois em **Confirmar e validar**."}' data-start="78" data-duration="7" data-track-index="3" data-width="1920" data-height="1080"></div>
+  <div id="slot-passo-12" data-composition-id="legenda-de-passo" data-composition-src="compositions/legenda-de-passo.html" data-variable-values='{"numero":"12","texto":"O tema decidido sai da fila. **Aguardando decisão** e **R$ em jogo** diminuem."}' data-start="85" data-duration="7" data-track-index="4" data-width="1920" data-height="1080"></div>
+
+  <div id="slot-carimbo" data-composition-id="carimbo" data-composition-src="compositions/carimbo.html" data-variable-values='{"titulo":"Contas médicas","carimbo":"Manual · retrata o app em v0.196.1 · gerado em 14/10/2026"}' data-start="92" data-duration="4" data-track-index="1" data-width="1920" data-height="1080"></div>
+</div>
+
+<script>
+/* Ícones: os do lucide, os mesmos do app, no traço da cor do texto. */
+const P = {
+  alvo: '<circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/>', painel: '<rect width="7" height="9" x="3" y="3" rx="1"/><rect width="7" height="5" x="14" y="3" rx="1"/><rect width="7" height="9" x="14" y="12" rx="1"/><rect width="7" height="5" x="3" y="16" rx="1"/>',
+  calendario: '<path d="M8 2v4"/><path d="M16 2v4"/><rect width="18" height="18" x="3" y="4" rx="2"/><path d="M3 10h18"/><path d="M8 14h.01"/><path d="M12 14h.01"/><path d="M16 14h.01"/><path d="M8 18h.01"/><path d="M12 18h.01"/><path d="M16 18h.01"/>',
+  relogio: '<circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>', baixo: '<path d="m6 9 6 6 6-6"/>', direita: '<path d="m9 18 6-6-6-6"/>',
+  megafone: '<path d="m3 11 18-5v12L3 14v-3z"/><path d="M11.6 16.8a3 3 0 1 1-5.8-1.6"/>', recibo: '<path d="M4 2v20l2-1 2 1 2-1 2 1 2-1 2 1 2-1 2 1V2l-2 1-2-1-2 1-2-1-2 1-2-1-2 1Z"/><path d="M14 8H8"/><path d="M16 12H8"/><path d="M13 16H8"/>',
+  escudo: '<path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/><path d="m9 12 2 2 4-4"/>',
+  ajuda: '<circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><path d="M12 17h.01"/>', lupa: '<circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/>',
+  sino: '<path d="M10.268 21a2 2 0 0 0 3.464 0"/><path d="M3.262 15.326A1 1 0 0 0 4 17h16a1 1 0 0 0 .74-1.673C19.41 13.956 18 12.499 18 8A6 6 0 0 0 6 8c0 4.499-1.41 5.956-2.738 7.326"/>',
+  grafico: '<path d="M3 3v18h18"/><path d="M18 17V9"/><path d="M13 17V5"/><path d="M8 17v-3"/>', checks: '<path d="m3 17 2 2 4-4"/><path d="m3 7 2 2 4-4"/><path d="M13 6h8"/><path d="M13 12h8"/><path d="M13 18h8"/>',
+  prancheta: '<rect width="8" height="4" x="8" y="2" rx="1" ry="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><path d="m9 14 2 2 4-4"/>',
+  contrato: '<path d="M20 19.5v.5a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8.5L18 5.5"/><path d="M8 18h1"/><path d="M18.42 9.61a2.1 2.1 0 1 1 2.97 2.97L16.95 17 13 18l.99-3.95 4.43-4.44Z"/>',
+  predio: '<path d="M6 22V4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v18Z"/><path d="M6 12H4a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h2"/><path d="M18 9h2a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2h-2"/><path d="M10 6h4"/><path d="M10 10h4"/><path d="M10 14h4"/><path d="M10 18h4"/>',
+  subir: '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" x2="12" y1="3" y2="15"/>', voltar: '<path d="m12 19-7-7 7-7"/><path d="M19 12H5"/>',
+  copiar: '<rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/>', mic: '<path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" x2="12" y1="19" y2="22"/>',
+  ok: '<path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><path d="m9 11 3 3L22 4"/>', x: '<path d="M18 6 6 18"/><path d="m6 6 12 12"/>', carrega: '<path d="M21 12a9 9 0 1 1-6.219-8.56"/>',
+  arquivo: '<path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M10 9H8"/><path d="M16 13H8"/><path d="M16 17H8"/>',
+  brilho: '<path d="M9.937 15.5A2 2 0 0 0 8.5 14.063l-6.135-1.582a.5.5 0 0 1 0-.962L8.5 9.936A2 2 0 0 0 9.937 8.5l1.582-6.135a.5.5 0 0 1 .963 0L14.063 8.5A2 2 0 0 0 15.5 9.937l6.135 1.581a.5.5 0 0 1 0 .964L15.5 14.063a2 2 0 0 0-1.437 1.437l-1.582 6.135a.5.5 0 0 1-.963 0z"/><path d="M20 3v4"/><path d="M22 5h-4"/><path d="M4 17v2"/><path d="M5 18H3"/>',
+};
+const ic = (nome, s, traco) => `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="${traco || 2}" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0">${P[nome]}</svg>`;
+
+/* A casca do app, como a Renata e a Marta veem (as duas têm o mesmo menu); no topo, o nome troca quando muda quem usa. */
+const pessoa = (id, nome, email, letra) => `<div class="pessoa" id="${id}"><div class="tx"><b>${nome}</b><span>${email}</span></div><div class="avatar">${letra}<span class="seta">${ic("baixo", 12)}</span></div></div>`;
+const casca = `<div class="lado"><div class="marca"><img src="assets/logo-hsm.png" alt="Hospital São Matheus" /></div><nav>
+    <div class="mi">${ic("alvo", 18, 1.5)}Reuniões e metas<span class="fim">${ic("baixo", 16)}</span></div>
+    <div class="sub"><div class="mi">${ic("painel", 16, 1.5)}Dashboard</div><div class="mi">${ic("calendario", 16, 1.5)}Calendário</div><div class="mi">${ic("relogio", 16, 1.5)}Pendências<span class="fim">${ic("direita", 16)}</span></div></div>
+    <div class="mi">${ic("megafone", 18, 1.5)}Ouvidoria</div><div class="mi on">${ic("recibo", 18, 2)}Contas médicas</div><div class="mi">${ic("escudo", 18, 1.5)}Admin</div><div class="mi" style="margin-top:8px">${ic("ajuda", 18, 1.5)}Ajuda</div></nav></div>
+  <div class="topo"><div class="busca">${ic("lupa", 16)}Buscar...</div><div class="quem"><div class="sino" id="sino">${ic("sino", 22, 1.75)}<span class="n" id="sino-n">1</span></div><div class="divisor"></div>
+    <div class="pessoas" id="pessoas">${pessoa("quem-r", "renata.lima", "renata.lima@exemplo.local", "R")}${pessoa("quem-m", "marta.queiroz", "marta.queiroz@exemplo.l...", "M")}</div></div></div>`;
+
+/* Contas médicas (app/contas-medicas/page.tsx). Cada estado (antes do envio, com o Último envio, a conta pronta, a volta à tela) é um quadro inteiro. */
+const soltar = (p) => `<div class="soltar" id="${p}-soltar"><div class="ic">${ic("subir", 32)}</div><p class="t1">Arraste aqui a conta e o prontuário do MV</p><p class="t2">Vários de uma vez, sem renomear: o app lê o tipo e o atendimento dentro de cada PDF. Até 10 atendimentos e 30 arquivos por envio, 100 MB por arquivo.</p><span class="bt cheio grande">Selecionar arquivos</span>
+  <span class="soltar-on" id="${p}-on"></span><span class="enviando" id="${p}-enviando">${ic("carrega", 16)}Enviando 3 arquivos e lendo cada PDF</span></div>`;
+const linha = (p, k, at, comp, sit, cls, det, acao) => `<li class="fila-l" id="${p}-l${k}"><div class="q"><b>Atendimento ${at}</b><span>${comp}</span></div><span class="sit ${cls}">${sit}</span>${det ? `<span class="det">${det}</span>` : ""}${acao ? `<span class="acao" id="${p}-acao${k}">${acao}</span>` : ""}</li>`;
+const L398 = (p) => linha(p, "398", "900398", "conta 51190 · 28/09 a 02/10", "Em correção", "corr", "Nota 99, R$ 82,95, 2 de 3", "Continuar");
+const L431 = (p) => linha(p, "431", "900431", "conta 51302 · 05/10 a 09/10", "Falta o prontuário", "cinza");
+const L412 = (p, pronta) => (pronta ? linha(p, "412", "900412", "conta 51230 · 03/10 a 08/10", "A fazer", "fazer", "Nota 97, R$ 73,10, 0 de 2", "Abrir") : linha(p, "412", "900412", "conta 51230 · 03/10 a 08/10", "Na fila", "cinza"));
+const ULTIMO = (p) => `<section class="ap-cartao ultimo" id="${p}-ultimo"><h2>Último envio</h2><ul><li>900412, conta e prontuário</li><li>900431, falta o prontuário</li></ul></section>`, atalhosR = `<span class="atalho">${ic("grafico", 16)}Painel</span>`;
+const atalhosM = `<span class="atalho" id="m-painel">${ic("grafico", 16)}Painel</span><span class="atalho" id="m-validacao">${ic("checks", 16)}Validação</span><span class="atalho">${ic("prancheta", 16)}Coordenação<span class="n">2</span></span><span class="atalho">${ic("contrato", 16)}Contratos</span><span class="atalho">${ic("predio", 16)}Operadoras</span>`;
+const contas = (p, atalhos, ultimo, n, lista, primeira) => `<div class="pagina${primeira ? " vista-1" : ""}" id="${p}">
+  <div><div class="ap-cabeca"><h1>Contas médicas</h1>${atalhos}</div><p class="dek">Envie a conta e o prontuário do MV e receba a lista do que corrigir antes de mandar para a operadora.</p></div>
+  ${soltar(p)}${ultimo ? ULTIMO(p) : ""}<div><div class="abas" id="${p}-abas"><span class="aba on">Fila (${n[0]})</span><span class="aba">Concluídas (${n[1]})</span></div>${lista}</div></div>`;
+const fila = (...ls) => `<ul class="ap-cartao fila">${ls.join("")}</ul>`, VAZIA = `<div class="ap-cartao" style="margin-top:16px;padding:0"><div class="vazio-fila"><div class="ic">${ic("recibo", 32)}</div>Nenhuma conta enviada ainda</div></div>`;
+const telaR = `<div class="rolo" id="rolo-r">${contas("r0", atalhosR, false, [1, 1], fila(L398("r0")), true)}${contas("r1", atalhosR, true, [3, 1], fila(L398("r1"), L412("r1"), L431("r1")))}${contas("r2", atalhosR, true, [3, 1], fila(L398("r2"), L412("r2", true), L431("r2")))}${contas("r3", atalhosR, false, [3, 1], fila(L398("r3"), L412("r3", true), L431("r3")))}</div>`;
+const telaM = `<div class="rolo">${contas("m0", atalhosM, false, [0, 0], VAZIA, true)}</div>`;
+
+/* Painel (painel/page.tsx e os blocos de components/contas-medicas/painel). */
+const moldura = (id, titulo, sub, corpo) => `<section class="ap-cartao pn-moldura" ${id ? `id="${id}"` : ""}><h2>${titulo}</h2>${sub ? `<p class="st">${sub}</p>` : ""}<div class="cont">${corpo}</div></section>`;
+const cartao = (titulo, num, apoio, id) => moldura(id, titulo, "", `<p class="pn-num">${num}</p><p class="pn-apoio">${apoio}</p>`);
+const NOTAS = [86, 89, 94, 93, 93, 96, 96, 93.4];
+const grafico = () => { const x = (i) => 46 + i * 52, y = (n) => 8 + (100 - n) * 1.8, ds = ["17/08", "24/08", "31/08", "07/09", "14/09", "21/09", "28/09", "05/10"];
+  return `<svg class="grafico" viewBox="0 0 432 220">${[0, 25, 50, 75, 100].map((n) => `<line class="grade" x1="40" x2="430" y1="${y(n)}" y2="${y(n)}"/><text x="30" y="${y(n) + 4}" text-anchor="end">${n}</text>`).join("")}
+    <polyline class="curva" points="${NOTAS.map((n, i) => `${x(i)},${y(n)}`).join(" ")}"/>${NOTAS.map((n, i) => `<circle class="ponto" cx="${x(i)}" cy="${y(n)}" r="3"/><text x="${x(i)}" y="214" text-anchor="middle">${ds[i]}</text>`).join("")}</svg>`; };
+const causa = (nm, qm, pc, rs) => `<div><div class="causa-l"><span class="nm">${nm}</span><span class="qm">${qm}</span><span class="pc">${pc.toLocaleString("pt-BR", { minimumFractionDigits: 1 })}%</span><span class="rs">R$ ${rs}</span></div><div class="trilho"><b style="width:${pc}%"></b></div></div>`;
+const item = (cd, nm, n, rs) => `<tr><td class="cd">${cd}</td><td>${nm}</td><td class="r pr">${n}</td><td class="r ap">R$ ${rs}</td></tr>`;
+const telaP = `<div class="rolo" id="rolo-p"><div class="pagina vista-1" id="p0">
+  <div><span class="volta">${ic("voltar", 16)}Contas médicas</span><h1>Painel</h1><p class="dek">A nota da semana e onde a perda da conta nasce, pelas contas concluídas de segunda a domingo.</p></div>
+  <div class="filtros"><div class="filtro"><span class="rot">Semana</span><div class="campo">05/10/2026<span class="cal">${ic("calendario", 16)}</span></div></div><div class="filtro"><span class="rot">Operadora</span><div class="campo">Todas<span class="seta-c">${ic("baixo", 16)}</span></div></div><div class="filtro"><span class="rot">Tipo de conta</span><div class="campo">Todos<span class="seta-c">${ic("baixo", 16)}</span></div></div></div><p class="semana">Semana de 05/10 a 11/10/2026</p>
+  <div class="pn-grade"><div class="pn-cartoes">${cartao("Nota média de entrada", "93,4", "Semana anterior: 95,5", "p0-c1")}${cartao("Contas concluídas", 6, "contas na semana", "p0-c2")}${cartao("R$ apontado", "R$ 1.874,30", "Já incluídos: R$ 512,05", "p0-c3")}${cartao("Não procede", "4,2%", "1 de 24 linhas", "p0-c4")}${cartao("R$ incluído pela coordenação", "R$ 0,00", "0 lembretes incluídos")}</div>
+  <div class="pn-blocos">${moldura("", "Nota média por semana", "De segunda a domingo, pelo dia em que a conta foi concluída", grafico())}
+  ${moldura("p0-causa", "R$ apontado por causa-raiz", "Onde o problema nasce e quem corrige", `<div class="causas">${causa("Dispensação", "farmácia e enfermagem", 10.3, "193,05")}${causa("Regra automática", "TI e consultoria MV", 48.8, "914,66")}${causa("Cadastro e preço", "credenciamento e cadastro", 28.2, "528,55")}${causa("Registro assistencial", "enfermagem e corpo clínico", 8.2, "153,69")}${causa("Lançamento manual", "faturamento", 4.5, "84,35")}</div>`)}
+  ${moldura("", "Os dez itens que mais faltam", "Fila de parametrização para a consultoria do MV", `<table class="tab"><tr><th>Código</th><th>Item</th><th class="r">Contas</th><th class="r">R$</th></tr>${item("90123456", "Pantoprazol 40 mg injetável", 2, "136,80")}${item("70081975", "Curativo com filme transparente", 2, "83,60")}${item("90187733", "Ondansetrona 4 mg injetável", 2, "19,70")}</table>`)}</div></div></div></div>`;
+
+/* O Guia (guia/[contaId]/page.tsx e LinhaDoGuia.tsx). Cada marcação relê o guia: cada estado é um quadro inteiro. */
+const cod = (c, id) => `<span class="cod" ${id ? `id="${id}"` : ""}>${c}${ic("copiar", 12)}</span>`;
+const PANTO = { acao: "Incluir", v: "+R$ 68,40", nome: "Pantoprazol 40 mg injetável", txt: "Incluir 3, de 03/10 a 05/10", mot: "Prescrito em 6 dias, lançado em 3.", cod: "90123456", regra: "AURORA-MED-02", ev: true };
+const AGULHA = { acao: "Corrigir preço", v: "-R$ 4,70", nome: "Agulha hipodérmica 25 x 7", txt: "Corrigir preço de R$ 1,42 para R$ 0,95, em 03/10", mot: "Coluna errada: o lançado é o preço da outra coluna.", cod: "70031245", regra: "AURORA-PRI-01" };
+const aberta = (p, l, k, form) => `<article class="gl" id="${p}-${k}"><div class="gl-l1"><span class="etq acao-g">${l.acao}</span><span class="v">${l.v}</span></div><p class="gl-nome">${l.nome}</p><p class="gl-txt">${l.txt}</p><p class="gl-mot">${l.mot}</p>
+  <div class="gl-meta">${cod(l.cod, `${p}-${k}-cod`)}<span>Regra ${l.regra}</span>${l.ev ? `<span class="lk">Ver evidência</span>` : ""}</div>
+  <div class="gl-bts"><span class="gb cheio" id="${p}-${k}-feito">Feito</span><span class="gb" id="${p}-${k}-np">Não procede</span><span class="gb">Bloqueado</span></div>${form || ""}</article>`;
+const formNP = (p, motivo) => `<div class="np-form"><span class="lg">Por que não procede?</span><div class="radios">${["Já está na conta", "Sem evidência no prontuário", "A regra é outra", "Outro"].map((m, i) => `<span class="radio${motivo && i === 2 ? " on" : ""}" ${i === 2 ? `id="${p}-regra-outra"` : ""}><i></i>${m}</span>`).join("")}</div>
+  <div class="campo-tx">Conte mais, se quiser</div><div class="ditar-linha"><span class="ditar">${ic("mic", 14)}Ditar</span><p class="ajuda">Não dite nome nem dado de paciente.</p></div>
+  <div class="gl-bts"><span class="gb cheio${motivo ? "" : " apagado"}" id="${p}-confirmar">Confirmar</span><span class="gb">Cancelar</span></div></div>`;
+const marcada = (p, l, k, feito) => `<article class="gm ${feito ? "feito" : "np"}" id="${p}-${k}"><span class="etq ${feito ? "verde" : "cinza"}">${feito ? "Feito" : "Não procede"}</span><span class="nm">${l.nome}</span>${cod(l.cod)}<span class="v">${l.v}</span><span class="dz">Desfazer</span></article>`;
+const validar = (p) => `<article class="gl" id="${p}-diaria"><div class="gl-l1"><span class="etq amb">Validar</span></div><p class="gl-nome">Diária de CTI adulto</p><p class="gl-txt">Validar, em 04/10</p><p class="gl-mot">Transferência de setor antes das 10h: a regra da diária espera a gestão decidir.</p>
+  <div class="gl-meta">${cod("60000710")}<span>Regra AURORA-DIA-02</span></div><div class="gl-val"><p>Nada a decidir aqui: o item já foi para a validação</p><p><b>Em jogo: R$ 1.212,00</b></p></div></article>`;
+const grupo = (rot, dia, linhas) => `<section class="grupo"><div class="grupo-cab"><h2 class="rotulo">${rot}</h2>${dia ? `<span class="dia">Marcar o dia como feito</span>` : ""}</div>${linhas}</section>`;
+const cabeca = (p, at, sub) => `<div id="${p}-cab"><span class="volta">${ic("voltar", 16)}Contas médicas</span><header class="g-cab"><div class="g-tit" id="${p}-tit"><h1>Atendimento ${at}</h1><span class="etq sit-g">Em correção</span></div><p class="dek">${sub}</p></header></div>`;
+const nums = (p, nota, valor, resumo, feitos) => `<section class="g-nums" id="${p}-nums"><div class="ap-cartao"><p class="rotulo">Nota de entrada</p><p class="g-val">${nota}</p></div><div class="ap-cartao"><p class="rotulo">R$ a ajustar</p><p class="g-val">R$ ${valor}</p><p class="g-apoio">${resumo}</p></div><div class="ap-cartao"><p class="rotulo">Itens feitos</p><p class="g-val">${feitos}</p></div></section>`;
+const rodape = (p) => `<footer class="ap-cartao g-rod" id="${p}-rodape"><label class="rotulo">Observação para a gestão de contas médicas</label><div class="campo-tx">Opcional</div>
+  <div class="ditar-linha"><span class="ditar">${ic("mic", 14)}Ditar</span><p class="ajuda">Não dite nome nem dado de paciente.</p></div><span class="concluir" id="${p}-concluir">Concluir e abrir a próxima</span><p class="ajuda">Você pode concluir com pendência. Os itens em validação e os bloqueados seguem para a gestão, e a conta já entra na sua produção.</p></footer>`;
+const estado = (p, feitos, linhas03, primeira) => `<div class="pagina guia${primeira ? " vista-1" : ""}" id="${p}">${cabeca(p, "900412", "Ana P. · conta 51230 · AURORA · coluna Comum · parcial de 03/10 a 08/10")}${nums(p, 97, "73,10", "em 2 itens, mais 1.212,00 em validação", feitos)}
+  ${grupo("03/10 · CTI ADULTO", feitos !== "2 de 2", linhas03)}${grupo("04/10 · CTI ADULTO", false, validar(p))}${rodape(p)}</div>`;
+const telaG = `<div class="rolo" id="rolo-g">${estado("g0", "0 de 2", aberta("g0", PANTO, "panto") + aberta("g0", AGULHA, "agulha"), true)}${estado("g1", "1 de 2", marcada("g1", PANTO, "panto", true) + aberta("g1", AGULHA, "agulha"))}
+  ${estado("g2", "1 de 2", marcada("g2", PANTO, "panto", true) + aberta("g2", AGULHA, "agulha", formNP("g2", false)))}${estado("g3", "1 de 2", marcada("g3", PANTO, "panto", true) + aberta("g3", AGULHA, "agulha", formNP("g3", true)))}${estado("g4", "2 de 2", marcada("g4", PANTO, "panto", true) + marcada("g4", AGULHA, "agulha", false))}</div>`;
+const telaN = `<div class="rolo"><div class="pagina guia vista-1">${cabeca("n0", "900398", "Rui M. · conta 51190 · AURORA · coluna Comum · parcial de 28/09 a 02/10")}${nums("n0", 99, "82,95", "em 3 itens", "2 de 3")}
+  ${grupo("29/09 · POSTO 3", true, marcada("n0", { nome: "Ondansetrona 4 mg injetável", cod: "90187733", v: "+R$ 9,85" }, "a", true) + marcada("n0", { nome: "Curativo com filme transparente", cod: "70081975", v: "+R$ 41,80" }, "b", true) + aberta("n0", { acao: "Incluir", v: "+R$ 31,30", nome: "Equipo de bomba de infusão", txt: "Incluir 1, em 30/09", mot: "Registrado na evolução, sem lançamento.", cod: "70044190", regra: "AURORA-MAT-01" }, "c"))}</div></div>`;
+const aviso = (id, texto) => `<div class="aviso" id="${id}"><span class="ok">${ic("ok", 20)}</span>${texto}<span class="x">${ic("x", 16)}</span></div>`;
+
+/* Validação (validacao/page.tsx e CartaoDeTema.tsx). A fila se relê a cada decisão: cada estado é um quadro inteiro. */
+const numeros = (p, a, c, v) => `<section class="numeros" id="${p}-numeros"><div class="ap-cartao"><p class="rot-num">Aguardando decisão</p><p class="val-num">${a}</p></div><div class="ap-cartao"><p class="rot-num">Contas afetadas</p><p class="val-num">${c}</p></div><div class="ap-cartao"><p class="rot-num">R$ em jogo</p><p class="val-num">R$ ${v}</p></div></section>`;
+const topoTema = (etq, cls, titulo, meta, valor) => `<div class="topo-t"><div class="esq"><span class="etq ${cls}">${etq}</span><h2>${titulo}</h2><p class="meta">${meta}</p></div>${valor ? `<p class="jogo"><span>Em jogo</span><b>R$ ${valor}</b></p>` : ""}</div>`;
+const botoes = (cheio, id, pre, pos) => `<div class="botoes">${(pre || []).map((b) => `<span class="bt claro">${b}</span>`).join("")}<span class="bt cheio" id="${id}">${cheio}</span>${(pos || []).map((b) => `<span class="bt claro">${b}</span>`).join("")}</div>`;
+const REGRA = "Transferência de setor antes das 10h gera diária extra na origem.";
+const temaRegra = (p, aberto) => `<article class="ap-cartao tema" id="${p}-regra">${topoTema("Regra pendente", "regra", "Regra AURORA-DIA-02", "AURORA · 2 contas · desde 13/10/2026", "2.424,00")}<blockquote class="citacao">${REGRA}</blockquote>
+  ${aberto ? `<div class="form"><p class="lb">Texto da regra AURORA-DIA-02</p><div class="area">${REGRA}</div><p class="ajuda">Gravar cria uma versão nova da memória da operadora.</p>${botoes("Confirmar e validar", `${p}-bt-confirmar`, [], ["Cancelar"])}</div>` : botoes("Validar regra", `${p}-bt-validar`, [], ["Deixar pendente"])}</article>`;
+const temaBloq = (p) => `<article class="ap-cartao tema" id="${p}-bloq">${topoTema("Código bloqueado", "bloq", "Código 70095001 bloqueado", "AURORA · 1 conta · desde 13/10/2026", "389,00")}${botoes("Enviar ao cadastro", `${p}-bt-cadastro`, [], ["Descartar"])}</article>`;
+const temaObs = (p) => `<article class="ap-cartao tema" id="${p}-obs">${topoTema("Observação do time", "obs", "Observações sobre a regra AURORA-MED-02", "AURORA · 1 conta · desde 13/10/2026", "0,00")}
+  <blockquote class="citacao">Prescrição de horário fixo é cobrada em todos os dias prescritos, inclusive o dia da alta.</blockquote><p class="fala">A AURORA-MED-02 vale para a dose extra? O pantoprazol de resgate não está na prescrição de horário.</p>
+  <p class="leitura"><span class="ic">${ic("brilho", 16)}</span><span><b>Leitura da IA: </b>A regra atual não cobre o caso. Ela fala da prescrição de horário fixo; a dose de resgate fica de fora. Sugestão: editar a regra.<small>É apoio: quem decide é você.</small></span></p>
+  ${botoes("Responder ao time", `${p}-bt-responder`, ["Manter a regra", "Editar a regra"])}</article>`;
+const temaTermo = (p) => `<article class="ap-cartao tema" id="${p}-termo">${topoTema("Termo do dicionário", "termo", "Termo FLUSH SF 10ML no dicionário", "desde 13/10/2026")}<p class="termo-tx"><b>FLUSH SF 10ML</b> liga ao código <code>70060310</code> (Seringa preenchida com soro fisiológico 10 ml)</p>${botoes("Confirmar", `${p}-bt-termo`, [], ["Rejeitar"])}</article>`;
+const validacao = (p, n, temas, primeira) => `<div class="pagina${primeira ? " vista-1" : ""}" id="${p}"><div><span class="volta">${ic("voltar", 16)}Contas médicas</span><h1>Validação</h1><p class="dek">Regras pendentes, códigos bloqueados e observações do time, por tema, com quantas contas e quanto dinheiro esperam a sua decisão.</p></div>${numeros(p, ...n)}<div class="temas" id="${p}-temas">${temas.join("")}</div></div>`;
+const telaV = `<div class="rolo" id="rolo-v">${validacao("v0", [4, 3, "2.813,00"], [temaRegra("v0"), temaBloq("v0"), temaObs("v0"), temaTermo("v0")], true)}${validacao("v1", [4, 3, "2.813,00"], [temaRegra("v1", true), temaBloq("v1"), temaObs("v1"), temaTermo("v1")])}${validacao("v2", [3, 1, "389,00"], [temaBloq("v2"), temaObs("v2"), temaTermo("v2")])}</div>`;
+
+const tela = (id, html) => `<div class="tela-app" id="${id}">${html}</div>`;
+document.getElementById("camera").innerHTML = `<div class="janela" id="janela">
+    <div class="barra-nav"><i></i><i></i><i></i><div class="url">app.hospitalsaomatheus.cloud/contas-medicas</div></div>
+    <div class="vista"><div class="app" id="app">${casca}<div class="corpo">${tela("tela-r", telaR)}${tela("tela-m", telaM)}${tela("tela-p", telaP)}${tela("tela-g", telaG)}${tela("tela-n", telaN)}${tela("tela-v", telaV)}</div>${aviso("av-copiado", "Código copiado")}${aviso("av-concluida", "Conta concluída")}</div></div></div>
+  <div class="arraste" id="arraste"><span class="ic">${ic("arquivo", 24)}</span>conta-51230.pdf<span class="qtd">3</span></div>
+  <div class="marcador" id="mk"></div><div class="dedo" id="dedo"><svg viewBox="0 0 24 24"><path d="M5 3l14 8-6 1.6L9.6 19z"/></svg><div class="toque" id="toque"></div></div>`;
+/* Réplica de tela: sobreposição e corte são de propósito. */
+document.querySelectorAll("#camera, #camera *").forEach((el) => ["overlap", "occlusion", "overflow"].forEach((k) => el.setAttribute(`data-layout-allow-${k}`, "")));
+
+/* Medidas: onde cada elemento fica no quadro com a câmera em repouso, pelo offset do layout (que ignora a câmera e a rolagem).
+   Nada se mede na montagem: o script roda antes de a fonte do app carregar. Cada alvo é uma função que o GSAP chama quando o tween começa. */
+const APP = document.getElementById("app");
+const APP_X = 160, APP_Y = 32 + 44, ESCALA_APP = 1.25, CENTRO = { x: 960, y: 452 }, JANELA = { x0: 160, y0: 32, x1: 1760, y1: 880 };
+function noApp(id) {
+  let el = document.getElementById(id), x = 0, y = 0;
+  const w = el.offsetWidth, h = el.offsetHeight;
+  while (el && el !== APP) { x += el.offsetLeft; y += el.offsetTop; el = el.offsetParent; }
+  return { x, y, w, h };
+}
+const valor = (v) => (typeof v === "function" ? v() : v);
+function noQuadro(id, rolagem) { const r = noApp(id); return { x: APP_X + r.x * ESCALA_APP, y: APP_Y + (r.y - valor(rolagem)) * ESCALA_APP, w: r.w * ESCALA_APP, h: r.h * ESCALA_APP }; }
+const juntaCaixas = (rs) => { const x = Math.min(...rs.map((r) => r.x)), y = Math.min(...rs.map((r) => r.y)); return { x, y, w: Math.max(...rs.map((r) => r.x + r.w)) - x, h: Math.max(...rs.map((r) => r.y + r.h)) - y }; };
+/* Alvo: um ou mais ids (separados por espaço) e a rolagem da página em que ele é visto. */
+const alvo = (ids, rolagem = 0) => ({ ids, caixa: () => juntaCaixas(ids.split(" ").map((id) => noQuadro(id, rolagem))) });
+const REPOUSO = { ids: "", caixa: () => ({ x: 160, y: 32, w: 1600, h: 848 }) };
+/* Rolagem que põe o elemento a 24 px do topo do corpo, sem passar do fim da página. */
+const rolagemAte = (id, pagina) => () => Math.max(0, Math.min(noApp(id).y - 64 - 24, document.getElementById(pagina).offsetHeight - 579.2));
+function enquadra(r, s) {
+  const x = CENTRO.x - s * (r.x + r.w / 2), y = CENTRO.y - s * (r.y + r.h / 2);
+  return { scale: s, x: Math.min(JANELA.x0 * (1 - s), Math.max(JANELA.x1 * (1 - s), x)), y: Math.min(JANELA.y0 * (1 - s), Math.max(JANELA.y1 * (1 - s), y)) };
+}
+const camera = (a, s) => ({ scale: s, x: () => enquadra(a.caixa(), s).x, y: () => enquadra(a.caixa(), s).y });
+
+/* Timeline: uma só, pausada, com tempos absolutos. */
+window.__timelines = window.__timelines || {};
+const tl = gsap.timeline({ paused: true });
+tl.set("#camera", { scale: 1, x: 0, y: 0 }, 0);
+/* Push-in no alvo e, até o próximo movimento, uma deriva lenta: a câmera nunca para. */
+function mira(t, dur, a, s, ate) {
+  tl.to("#camera", { ...camera(a, s), duration: dur, ease: "power2.inOut" }, t);
+  tl.to("#camera", { ...camera(a, s * 1.025), duration: ate - t - dur, ease: "none" }, t + dur);
+}
+/* Anel em volta do alvo; o data-alvo é o que o gate do anel confere. */
+function marca(t, a, ate) {
+  tl.set("#mk", { attr: { "data-alvo": a.ids }, x: () => a.caixa().x - 8, y: () => a.caixa().y - 8, width: () => a.caixa().w + 16, height: () => a.caixa().h + 16, scale: 1.06 }, t - 0.02);
+  tl.to("#mk", { opacity: 1, scale: 1, duration: 0.3, ease: "power2.out" }, t);
+  tl.to("#mk", { opacity: 0, duration: 0.25 }, ate);
+}
+const centro = (a) => { const r = a.caixa(); return { x: r.x + r.w / 2 - 8, y: r.y + r.h / 2 - 6 }; };
+function toca(t, a, de) {
+  const b = de ? () => centro(de) : () => ({ x: centro(a).x + 120, y: centro(a).y + 150 });
+  tl.set("#dedo", { x: () => b().x, y: () => b().y }, t - 0.02);
+  tl.to("#dedo", { opacity: 1, duration: 0.2 }, t);
+  tl.to("#dedo", { x: () => centro(a).x, y: () => centro(a).y, duration: 0.7, ease: "power2.inOut" }, t + 0.2);
+  tl.fromTo("#toque", { opacity: 0.9, scale: 0.4 }, { opacity: 0, scale: 1.3, duration: 0.45, ease: "power1.out", immediateRender: false }, t + 0.95);
+}
+const soltaDedo = (t) => tl.to("#dedo", { opacity: 0, duration: 0.25 }, t);
+const troca = (sai, entra, t) => { tl.set(sai, { opacity: 0 }, t); tl.set(entra, { opacity: 1 }, t); }; /* troca de estado na mesma tela: instantânea, como o app relendo os dados */
+const rola = (rolo, r, t) => tl.to(rolo, { y: () => -valor(r), duration: 0.8, ease: "power2.inOut" }, t);
+const avisa = (id, t, ate) => { tl.to(id, { opacity: 1, duration: 0.3, ease: "power2.out" }, t); tl.to(id, { opacity: 0, duration: 0.3 }, ate); };
+/* Transição com rastro: a tela que sai desliza e desfoca para a esquerda, a que entra vem da direita. */
+const sai = (sel, t) => tl.to(sel, { x: -240, opacity: 0, filter: "blur(20px)", duration: 0.35, ease: "power2.in" }, t);
+const entra = (sel, t) => { tl.set(sel, { x: 240, filter: "blur(20px)" }, t - 0.02); tl.to(sel, { x: 0, opacity: 1, filter: "blur(0px)", duration: 0.6, ease: "power2.out" }, t); };
+/* Muda quem usa: o nome no alto troca no lugar. */
+const vira = (de, para, t) => { tl.to(de, { opacity: 0, duration: 0.3 }, t); tl.to(para, { opacity: 1, duration: 0.3 }, t + 0.1); };
+
+/* A janela entra com um rastro curto, saindo do branco da abertura. */
+tl.fromTo("#janela", { opacity: 0, y: 24, filter: "blur(12px)" }, { opacity: 1, y: 0, filter: "blur(0px)", duration: 0.5, ease: "power2.out" }, 4.0);
+
+/* Passo 1 (4 a 11): a Renata arrasta a conta e os prontuários para a área de envio. */
+const bSoltar = alvo("r0-soltar"); mira(4.4, 2.0, bSoltar, 1.2, 11.0); marca(5.2, bSoltar, 6.3);
+tl.set("#arraste", { x: () => centro(bSoltar).x + 380, y: () => centro(bSoltar).y + 300 }, 6.4); tl.to("#arraste", { opacity: 1, duration: 0.25 }, 6.5);
+tl.to("#arraste", { x: () => centro(bSoltar).x - 110, y: () => centro(bSoltar).y + 20, duration: 1.4, ease: "power2.inOut" }, 6.7); tl.to("#r0-on", { opacity: 1, duration: 0.2 }, 7.7);
+tl.to("#arraste", { opacity: 0, duration: 0.2 }, 8.2); tl.to("#r0-on", { opacity: 0, duration: 0.2 }, 8.3); tl.to("#r0-enviando", { opacity: 1, duration: 0.2 }, 8.3); troca("#r0", "#r1", 10.4);
+
+/* Passo 2 (11 a 18): o Último envio, uma linha por atendimento. */
+const bUltimo = alvo("r1-ultimo"); mira(11.0, 1.6, bUltimo, 1.35, 18.0); marca(12.2, bUltimo, 17.6);
+
+/* Passo 3 (18 a 26): a conta na Fila, de Na fila para A fazer, e o sino. */
+const ROLA_FILA = rolagemAte("r1-abas", "r1");
+rola("#rolo-r", ROLA_FILA, 18.0); mira(18.0, 1.6, alvo("r1-l412", ROLA_FILA), 1.45, 23.4); marca(19.4, alvo("r1-l412", ROLA_FILA), 21.4);
+troca("#r1", "#r2", 21.7); marca(22.0, alvo("r2-l412", ROLA_FILA), 23.4); tl.to("#sino-n", { opacity: 1, duration: 0.3 }, 22.4);
+mira(23.4, 1.2, alvo("sino pessoas"), 1.5, 26.6);
+
+/* Passo 4 (26 a 32): agora é a Marta, da gestão: Contas médicas e o botão Painel. */
+vira("#quem-r", "#quem-m", 26.0); sai("#tela-r", 26.0); entra("#tela-m", 26.2);
+const bPainel = alvo("m-painel"); mira(26.6, 1.4, bPainel, 1.45, 29.6); marca(27.8, bPainel, 29.0); toca(27.9, bPainel); soltaDedo(29.2);
+sai("#tela-m", 29.4); entra("#tela-p", 29.6); mira(29.6, 1.0, REPOUSO, 1.0, 32.0);
+
+/* Passo 5 (32 a 40): os cartões do topo, a nota e o R$ apontado. */
+const bCartoes = alvo("p0-c1 p0-c2 p0-c3 p0-c4"); mira(32.0, 1.8, bCartoes, 1.3, 40.0); marca(33.0, bCartoes, 35.8); marca(36.2, alvo("p0-c1"), 37.8); marca(38.1, alvo("p0-c3"), 39.7);
+
+/* Passo 6 (40 a 48): a causa-raiz. */
+const ROLA_CAUSA = rolagemAte("p0-causa", "p0"), bCausa = alvo("p0-causa", ROLA_CAUSA);
+rola("#rolo-p", ROLA_CAUSA, 40.0); mira(40.0, 2.0, bCausa, 1.3, 47.6); marca(41.4, bCausa, 47.2);
+
+/* Passo 7 (48 a 54): de volta à Renata, a Fila e o Abrir. A tela relida não tem mais o Último envio. */
+troca("#r2", "#r3", 47.9); tl.set("#rolo-r", { y: 0 }, 47.9); vira("#quem-m", "#quem-r", 48.0); sai("#tela-p", 48.0); entra("#tela-r", 48.2); mira(47.6, 1.0, REPOUSO, 1.0, 48.8);
+const bAbrir = alvo("r3-acao412"); mira(48.8, 1.4, alvo("r3-l412"), 1.4, 51.6); marca(49.6, alvo("r3-l412"), 51.0); toca(50.0, bAbrir); soltaDedo(51.3);
+sai("#tela-r", 51.5); entra("#tela-g", 51.7); mira(51.6, 1.0, REPOUSO, 1.0, 52.8); mira(52.8, 1.0, alvo("g0-nums"), 1.3, 54.0); marca(53.0, alvo("g0-nums"), 53.9);
+
+/* Passo 8 (54 a 63): copiar o código e Feito; na linha seguinte, Não procede com o motivo. */
+const bCod = alvo("g0-panto-cod"); mira(54.0, 1.4, alvo("g0-panto"), 1.4, 58.0); toca(54.6, bCod); avisa("#av-copiado", 55.6, 57.2); toca(56.6, alvo("g0-panto-feito"), bCod); troca("#g0", "#g1", 57.6); soltaDedo(57.9);
+const ROLA_AGULHA = rolagemAte("g2-agulha", "g2"), bNp = alvo("g1-agulha-np", ROLA_AGULHA), bRegra = alvo("g2-regra-outra", ROLA_AGULHA);
+rola("#rolo-g", ROLA_AGULHA, 58.0); mira(58.0, 1.2, alvo("g2-agulha", ROLA_AGULHA), 1.2, 63.0); toca(58.6, bNp); troca("#g1", "#g2", 59.6);
+toca(60.1, bRegra, bNp); troca("#g2", "#g3", 61.1); toca(61.5, alvo("g3-confirmar", ROLA_AGULHA), bRegra); troca("#g3", "#g4", 62.5); soltaDedo(62.8);
+marca(62.6, alvo("g4-agulha", ROLA_AGULHA), 63.4);
+
+/* Passo 9 (63 a 72): Concluir e abrir a próxima; o aviso confirma e a próxima conta abre. */
+const ROLA_RODAPE = rolagemAte("g4-rodape", "g4"), bConcluir = alvo("g4-concluir", ROLA_RODAPE);
+rola("#rolo-g", ROLA_RODAPE, 63.4); mira(63.4, 1.6, bConcluir, 1.45, 66.2); toca(64.4, bConcluir); avisa("#av-concluida", 65.4, 68.8); soltaDedo(65.7);
+sai("#tela-g", 65.9); entra("#tela-n", 66.1); mira(66.2, 1.0, REPOUSO, 1.0, 67.2); mira(67.2, 1.4, alvo("n0-cab"), 1.3, 72.0); marca(68.2, alvo("n0-tit"), 71.6);
+
+/* Passo 10 (72 a 78): a Marta de novo, o botão Validação e os três números. */
+vira("#quem-r", "#quem-m", 72.0); sai("#tela-n", 72.0); entra("#tela-m", 72.2); mira(72.0, 0.8, REPOUSO, 1.0, 72.8);
+const bValidacao = alvo("m-validacao"); mira(72.8, 1.4, bValidacao, 1.45, 75.4); marca(73.8, bValidacao, 75.0); toca(73.9, bValidacao); soltaDedo(75.2);
+sai("#tela-m", 75.4); entra("#tela-v", 75.6); mira(75.4, 1.0, REPOUSO, 1.0, 76.4); mira(76.4, 1.2, alvo("v0-numeros"), 1.3, 78.0); marca(76.8, alvo("v0-numeros"), 77.9);
+
+/* Passo 11 (78 a 85): Validar regra, o texto aberto e Confirmar e validar. */
+const bValidar = alvo("v0-bt-validar"), ROLA_REGRA = 120;
+mira(78.0, 1.4, bValidar, 1.45, 80.6); toca(78.6, bValidar); troca("#v0", "#v1", 79.6); rola("#rolo-v", ROLA_REGRA, 79.9);
+const bConfirmar = alvo("v1-bt-confirmar", ROLA_REGRA); mira(80.6, 1.2, bConfirmar, 1.45, 83.0); toca(81.2, bConfirmar, alvo("v0-bt-validar", ROLA_REGRA)); troca("#v1", "#v2", 82.2); soltaDedo(82.5); rola("#rolo-v", 0, 82.6);
+
+/* Passo 12 (85 a 92): o tema saiu da fila e os números diminuíram. */
+mira(83.0, 1.4, alvo("v2-numeros"), 1.3, 88.6); marca(85.4, alvo("v2-numeros"), 88.4); mira(88.6, 1.4, alvo("v2-numeros v2-temas"), 1.1, 92.0);
+
+/* Âncora: o timeline preenche o slot inteiro. */
+tl.to({}, { duration: 96 }, 0);
+window.__timelines["main"] = tl;
+</script>
+</body>
+</html>
