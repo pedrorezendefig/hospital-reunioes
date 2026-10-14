@@ -16,7 +16,7 @@ name: Pós-merge
 # `bypass_actors` do ruleset (.github/rulesets/main.json). A chave vive num
 # secret do Environment `pos-merge`, restrito à branch main.
 #
-# A Action não publica o Manual (issue #951): o MP4 do Vídeo de tarefa não vem
+# A Action não publica o Manual (issue #951): o MP4 do Vídeo de visão geral não vem
 # no clone e a Vercel não tem token aqui. Quem põe no ar é o humano, com
 # `/manual publicar` da máquina que tem os MP4. A Action avisa: o resumo do run
 # diz o que saiu e o que ficou em draft, e o terceiro job, `avisar`, comenta no
@@ -120,7 +120,7 @@ jobs:
         # Os PRDs do deploy mais recente do history.json (ADR 0057: só sai do
         # draft o que está em produção). PR avulso registra prds vazio, e sem
         # --prd o argparse sairia com 2: lista vazia pula o passo. Saída 2 do
-        # tirar-draft é bloqueio sem escrever nada (o MP4 do Vídeo de tarefa
+        # tirar-draft é bloqueio sem escrever nada (o MP4 do Vídeo de visão geral
         # não vem no clone, issue #951): a página fica em draft, a Action avisa
         # e segue para o snapshot. O --resumo só existe com página em draft do
         # PRD: sem ele, não há aviso nem comentário.

@@ -1,7 +1,7 @@
 ---
 status: accepted
 amends: 0044, 0056
-amended_by: 0058, 0062, 0071
+amended_by: 0058, 0062, 0071, 0072
 ---
 
 # Manual do usuário: um site por módulo, vídeo por tarefa, fatia de manual por PRD
@@ -81,6 +81,10 @@ A rejeição de "humanização separada" registrada na seção Produção abaixo
 Decisão do Pedro, depois do piloto de dois vídeos (#1231, PR #1246): "Eu não quero mais checar draft. Eu confio até o final. Eu não quero que você me pergunte." A Fatia de manual parava no PR verde, fora da subida, até alguém assistir ao draft e rodar o `fechar_onda.py`; a emenda de 13/10/2026 pedia o mesmo OK por vídeo no dia a dia e por módulo na campanha de rerender.
 
 **Decisões 4 e 8, o vídeo sobe sem OK humano.** O agente faz o draft, passa pelos gates (`hyperframes check`, strips de cada corte, `tools/checar_video_manual.py`, `tools/anel_video_manual.py`, quadros olhados e `VERIFY.md`), faz o render final na própria fatia e abre o PR, que entra na subida como qualquer outro. Na campanha de rerender, a Folha de contato continua sendo feita e vai no corpo do PR como evidência, sem esperar resposta. O loop "nota vira regra" continua: a nota do Pedro chega depois, com o vídeo no ar, e o conserto e a regra saem num PR novo. Rejeitado: manter o OK só para vídeo novo (a nota do piloto, o anel fora do lugar, virou o gate `anel_video_manual.py`, e a espera segurava a fatia inteira). As paradas humanas da ADR 0068, regra 9, passam a ser três.
+
+## Emenda a este ADR (14/out/2026, um vídeo por módulo e orçamento de 40 MB, ADR 0072)
+
+Decisão do Pedro (PRD #1259). O vídeo do Manual deixa de ser por tarefa: cada módulo abre com um **Vídeo de visão geral** do caminho principal, "Conheça a plataforma" aparece também na página inicial, e o Admin fica sem vídeo (decisões 3 e 4). As 61 Páginas de tarefa perdem o vídeo, e as composições dos Vídeos de tarefa e dos capítulos da Ouvidoria saem do repositório; os masters ficam em `local/`. O `publicar.sh` ganha três travas depois do reencode: soma dos MP4 até 40 MB, um vídeo por módulo, nenhum acima de 8 MB, com o teto de 90 MB mantido (decisão 6). Novidades levam link para a página de divulgação no lugar do vídeo embutido (decisão 12), e a Fatia de manual só pede vídeo quando o PRD muda o caminho principal do módulo (decisão 8). O detalhe e os rejeitados estão na ADR 0072.
 
 ## Consequências
 

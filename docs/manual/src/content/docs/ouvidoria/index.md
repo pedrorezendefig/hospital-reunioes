@@ -56,12 +56,12 @@ setor, a gravidade e o sigilo são sempre escolha do ouvidor, depois de ler.
 O sistema nunca aciona um setor por conta própria. O que ele faz sozinho é
 cobrar quem já foi acionado e avisar quem precisa saber.
 
-## Cada parte do caminho, na sua tarefa
+## Onde está cada parte do caminho
 
-1. **Por onde o caso chega:** [Registrar uma manifestação pela Ouvidoria](/ouvidoria/registrar-uma-manifestacao-pela-ouvidoria/).
-2. **A Ouvidoria lê e encaminha:** [Classificar e acionar um caso](/ouvidoria/classificar-e-acionar-um-caso/).
-3. **O setor responde:** [Responder um caso pelo portal do setor](/ouvidoria/responder-um-caso-pelo-portal-do-setor/).
-4. **O prazo e a cobrança:** [Decidir um pedido de mais prazo](/ouvidoria/decidir-um-pedido-de-mais-prazo/).
-5. **O que volta para quem falou:** [Encerrar um caso e avisar a pessoa](/ouvidoria/encerrar-um-caso-e-avisar-a-pessoa/).
-6. **Quem faz o quê:** [Dar acesso à Ouvidoria a alguém](/ouvidoria/dar-acesso-a-ouvidoria-a-alguem/).
-7. **O que a Diretoria enxerga:** [Acompanhar o painel da Ouvidoria](/ouvidoria/acompanhar-o-painel-da-ouvidoria/).
+1. O caso chega: [Registrar uma manifestação pela Ouvidoria](/ouvidoria/registrar-uma-manifestacao-pela-ouvidoria/).
+2. A Ouvidoria lê e encaminha: [Classificar e acionar um caso](/ouvidoria/classificar-e-acionar-um-caso/).
+3. O setor responde: [Responder um caso pelo portal do setor](/ouvidoria/responder-um-caso-pelo-portal-do-setor/).
+4. O prazo aperta e o setor pede mais tempo: [Decidir um pedido de mais prazo](/ouvidoria/decidir-um-pedido-de-mais-prazo/).
+5. A pessoa que falou recebe a resposta: [Encerrar um caso e avisar a pessoa](/ouvidoria/encerrar-um-caso-e-avisar-a-pessoa/).
+6. Alguém novo passa a usar a Ouvidoria: [Dar acesso à Ouvidoria a alguém](/ouvidoria/dar-acesso-a-ouvidoria-a-alguem/).
+7. A Diretoria acompanha os números: [Acompanhar o painel da Ouvidoria](/ouvidoria/acompanhar-o-painel-da-ouvidoria/).

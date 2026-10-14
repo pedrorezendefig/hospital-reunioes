@@ -1,12 +1,23 @@
-# Vídeo de tarefa
+# Vídeo de visão geral
 
-Um vídeo por Página de tarefa: a mesma tarefa da página, do primeiro toque ao
-resultado, para quem prefere ver a fazer. É a receita de vídeo da `/divulgar`
-aplicada a uma tarefa só, e não uma demonstração de entrega.
+Um vídeo por módulo, na abertura do módulo (`<modulo>/index.md`): o caminho
+principal do módulo de ponta a ponta, com dados de exemplo, para quem quer
+entender o módulo inteiro antes de abrir uma tarefa (ADR 0072, que emenda a
+0057). "Conheça a plataforma" é o de Primeiros passos, e a página inicial do
+Manual mostra o mesmo arquivo. O Admin fica sem vídeo.
 
-**Vídeo de tarefa não é Vídeo de percepção de valor.** O de percepção mora em
-`docs/comunicacao/`, é do diretor e fala de uma entrega. Este é do usuário e
-fala de uma tarefa.
+**Página de tarefa não tem vídeo.** O Vídeo de tarefa saiu do Manual em
+14/10/2026 (issue #1260): as composições saíram do repositório e os MP4 antigos
+ficam em `local/manual-video-masters/`, guardados para um link externo que é
+outro PRD.
+
+**Vídeo de visão geral não é Vídeo de percepção de valor.** O de percepção mora
+em `docs/comunicacao/`, é do diretor e fala de uma entrega. Este é do usuário e
+fala do módulo como ele está no ar.
+
+**Quando refazer.** Só quando um PRD muda o caminho principal do módulo (o
+`/to-issues` diz isso na Fatia de manual). PRD que mexe numa tarefa do canto
+muda a página, não o vídeo.
 
 Todo vídeo novo, e todo vídeo refeito, segue o **Estilo do manual**
 (`docs/manual/video/_estilo/DESIGN.md`, emenda de 13/10/2026 à ADR 0057): leia o
@@ -28,13 +39,18 @@ como montar, como conferir e como uma nota humana vira regra.
 - MP4 renderizado: `docs/manual/public/video/<modulo>/<slug>.mp4`, **fora do
   git** (o `.gitignore` do site já cobre `public/video/`). As strips do gate
   ficam em `renders/strips/` da composição, também fora do git.
-- A página exibe pelo frontmatter `video: <slug>`; o tema monta o `<video>`.
+- A abertura do módulo exibe pelo frontmatter `video: <slug>`; o tema monta o
+  `<video>` com a capa. "Conheça a plataforma" vai no `index.md` de
+  `primeiros-passos/` e no `index.mdx` da página inicial, com o mesmo slug; a
+  composição e o MP4 moram em `primeiros-passos/`. O campo em Página de tarefa
+  trava o conferidor.
 - O HyperFrames Student Kit mora em `~/PedroDev/hyperframes-student-kit`, só
   para leitura. Nenhuma skill dele é instalada (três têm o nome das skills
   globais de HyperFrames). O HyperFrames do manual fica na 0.8.41.
 
-`python3 tools/checar_video_manual.py --dir docs/manual` trava se a página
-exibe vídeo sem composição, se falta carimbo, se algum MP4 foi parar na árvore
+`python3 tools/checar_video_manual.py --dir docs/manual` trava se a abertura
+exibe vídeo sem composição, se uma página que não é abertura declara vídeo, se
+falta carimbo, se algum MP4 foi parar na árvore
 versionada e, em todo vídeo fora de `_estilo/pendentes-de-rerender.txt`, se
 falta o `VERIFY.md`, se há cor em hex ou fonte fora dos tokens, ou se algum
 timeline (da raiz ou de um card montado) é mais curto que o slot. Os mesmos
@@ -42,9 +58,17 @@ gates de cor, fonte e timeline valem para os cards de `_estilo/cards/`.
 
 ## Especificação
 
-1920x1080, 30 fps, **30 a 60 s**, sem voz: o vídeo funciona no mudo, com a
+1920x1080, 30 fps, **90 a 120 s**, sem voz: o vídeo funciona no mudo, com a
 legenda de passo na tela. Réplica do app real, com as cores e a fonte do
 `tokens.css`. Na dúvida entre bonito e fiel, fiel vence.
+
+**Orçamento.** Depois do reencode 720p do `publicar.sh`, o vídeo cabe em
+**8 MB**, a soma dos vídeos do Manual cabe em **40 MB** e cada módulo tem um
+vídeo só. As três travas estão no `publicar.sh` e a recusa diz a regra e o
+vídeo. Confira antes do PR com
+`bash docs/manual/publicar.sh --dry-run`: ele monta, reencoda, mede e para.
+Vídeo que passa de 8 MB é vídeo longo demais ou com movimento demais; encurte
+a cena, não a qualidade.
 
 Do kit vem a disciplina, não a cara: push-in no elemento do passo, câmera que
 nunca para, transição com rastro entre telas, legenda que troca sem pop,
@@ -53,14 +77,18 @@ preto, tipo cromado ou cena de 1,5 s: o vídeo tem que parecer o app.
 
 Roteiro fixo:
 
-1. **Abertura (3 a 5 s):** card `abertura`, com o título da tarefa no
-   infinitivo, igual ao da página, e o selo de quem faz.
-2. **A tarefa (o vídeo é isso):** os mesmos passos da página, na mesma ordem e
-   com as mesmas palavras de tela, cada um com o seu card `legenda-de-passo`.
-   Dedo fantasma toca, campo preenche, tela reage como o app reagiria. O
-   `lower-third` diz em que tela a pessoa está quando a tela muda; o `callout`,
-   no máximo um, é o par do Aviso destacado da página.
+1. **Abertura (3 a 5 s):** card `abertura`, com o nome do módulo como no
+   menu do app.
+2. **O caminho principal (o vídeo é isso):** os passos de "O caminho de ponta
+   a ponta" da abertura do módulo, na mesma ordem e com as mesmas palavras de
+   tela, cada um com o seu card `legenda-de-passo`. Um caso de exemplo anda do
+   começo ao fim; quem muda de papel no meio (o setor que responde, o
+   facilitador que assina) aparece no `lower-third`. Dedo fantasma toca, campo
+   preenche, tela reage como o app reagiria.
 3. **Fecho (3 a 5 s):** card `carimbo`, com a linha do carimbo de geração.
+
+Do caminho principal ficam de fora os desvios e as telas de configuração: eles
+têm a sua Página de tarefa, com texto e prints.
 
 **Carimbo, dois níveis.** Visível no fecho, no slot `carimbo`:
 `Manual · retrata o app em v<X.Y.Z> · gerado em DD/MM/AAAA` (a versão em
@@ -72,7 +100,7 @@ máquina, no `<head>` da composição, com os cinco campos que o conferidor cobr
 ```html
 <script type="application/json" id="manual-video-meta">
 {"modulo": "ouvidoria", "slug": "<slug>",
- "pagina": "ouvidoria/<slug>.md", "prd": 731, "issues": [736],
+ "pagina": "ouvidoria/index.md", "prd": 731, "issues": [736],
  "app_version": "0.136.0", "gerado_em": "<ISO-8601 com timezone>"}
 </script>
 ```
@@ -172,7 +200,15 @@ tl.fromTo("#tela-b", { x: 300, filter: "blur(24px)", opacity: 0 },
 `ouvidoria/redirecionar-o-caso-para-outra-area` (issue #1231) foram os
 primeiros no estilo: a janela do navegador, a casca do app (barra lateral e
 topo) desenhada em 1280x643 e ampliada 1,25x, a câmera, o marcador e o dedo.
-Comece copiando o mais parecido com a sua tarefa. O que eles ensinaram:
+As composições dos Vídeos de tarefa saíram do repositório na issue #1260, e
+continuam no histórico do git: o último commit com elas é `72a3781f`.
+
+```bash
+git show 72a3781f:docs/manual/video/<modulo>/<slug>/index.html > /tmp/molde.html
+git ls-tree -r --name-only 72a3781f -- docs/manual/video/<modulo>/  # o que havia
+```
+
+Comece pelo piloto e pelas telas do seu módulo. O que os pilotos ensinaram:
 
 - A tela sai do código do frontend e do print atual do roteiro, nesta ordem.
   A tela de um vídeo antigo é rascunho: a do Redirecionar estava 54 versões
@@ -197,12 +233,12 @@ Comece copiando o mais parecido com a sua tarefa. O que eles ensinaram:
 - Popup do navegador (lista do seletor, aviso de download) fica fora da caixa
   que corta, por cima do app, como o navegador desenha.
 
-**Réplica a partir dos vídeos antigos.** As composições de
-`_estilo/pendentes-de-rerender.txt` já têm as telas desenhadas (palco de
-960x540 ampliado 2x, celular, janela, dedo, marcadores). Elas servem de ponto
-de partida para o que os pilotos não têm (celular, e-mail, portal do setor):
-confira contra o código, troque cada hex pelo token e apague a linha do vídeo
-na lista no mesmo PR que o refaz. Os hex mais comuns:
+**Réplica a partir dos vídeos antigos.** As composições antigas (as de
+`_estilo/pendentes-de-rerender.txt` e os sete capítulos da Ouvidoria, também
+no `72a3781f`) já têm as telas desenhadas (palco de 960x540 ampliado 2x,
+celular, janela, dedo, marcadores). Elas servem de ponto de partida para o que
+os pilotos não têm (celular, e-mail, portal do setor): confira contra o código
+e troque cada hex pelo token. Os hex mais comuns:
 
 | Hex antigo | Token |
 | --- | --- |
@@ -220,8 +256,9 @@ na lista no mesmo PR que o refaz. Os hex mais comuns:
 | `#EEF1F6` (palco) | `var(--video-palco)` |
 
 **Copiou pasta? Troque o carimbo primeiro.** `modulo`, `slug` e `pagina` vêm
-colados do vídeo antigo, e o conferidor compara os três com a página que exibe
-o vídeo: carimbo do vizinho trava o CI.
+colados do vídeo antigo, e o conferidor compara os três com a abertura que
+exibe o vídeo: carimbo do vizinho trava o CI. "Conheça a plataforma" carimba
+`primeiros-passos/index.md`.
 
 ## Os gates, nesta ordem
 
@@ -271,7 +308,7 @@ o vídeo: carimbo do vizinho trava o CI.
 6. **`VERIFY.md`** ao lado da composição, com o que foi conferido de verdade:
 
    ```markdown
-   # VERIFY: <título da tarefa>
+   # VERIFY: <nome do módulo>
 
    - Draft: docs/manual/public/video/<modulo>/<slug>.mp4, NN s, sha256 <12 primeiros>
    - Check (HyperFrames 0.8.41): 0 erros, 0 avisos; gate do anel OK
@@ -288,9 +325,9 @@ o vídeo: carimbo do vizinho trava o CI.
    Copie o MP4 para `local/manual-video-masters/<modulo>/<slug>.mp4` da árvore
    principal (o worktree some na subida e o MP4 não vem no clone) e ponha o
    caminho no corpo do PR. O vídeo não espera OK humano (emenda de 14/10/2026
-   à ADR 0057): o PR sobe como qualquer outro. Na campanha de rerender dos
-   vídeos antigos, a Folha de contato (os quadros-chave de todos os vídeos do
-   módulo numa imagem e um MP4 inteiro) vai no corpo do PR como evidência.
+   à ADR 0057): o PR sobe como qualquer outro.
+9. **Orçamento:** `bash docs/manual/publicar.sh --dry-run` passa nas três
+   travas, e o tamanho do vídeo depois do reencode vai no corpo do PR.
 
 ## Nota vira regra
 

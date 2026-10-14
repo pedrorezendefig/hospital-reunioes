@@ -1,7 +1,7 @@
 # `/manual publicar`
 
 Tira o draft que a Action deixou e publica o site do manual na Vercel. Quem
-roda é o humano, da máquina que tem os MP4 dos Vídeos de tarefa, depois do
+roda é o humano, da máquina que tem os MP4 dos Vídeos de visão geral, depois do
 deploy que fecha PRD com Fatia de manual: a Action pós-merge não publica, e o
 aviso dela no PRD fechado lista o que saiu e o que ficou em draft (issue #951).
 
@@ -14,7 +14,7 @@ aviso dela no PRD fechado lista o que saiu e o que ficou em draft (issue #951).
 
    Sem página em draft, ele diz isso e não mexe em nada. Saída 2 é o que falta
    nesta máquina, com o caminho na saída de erro: o MP4 (renderize pela
-   `references/video-de-tarefa.md`), Node, corepack ou ffmpeg.
+   `references/video-de-visao-geral.md`), Node, corepack ou ffmpeg.
 2. Publique:
 
    ```bash
@@ -32,7 +32,9 @@ aviso dela no PRD fechado lista o que saiu e o que ficou em draft (issue #951).
    `<!-- automacao -->` na primeira linha.
 
 O `publicar.sh` faz, nesta ordem: lint do texto, build do Starlight, conferidor
-do draft, reencode de cada MP4 para 720p, trava de 90 MB e deploy de uma cópia
+do draft, reencode de cada MP4 para 720p, as três travas do orçamento de vídeo
+(ADR 0072: soma dos MP4 até 40 MB, um vídeo por módulo, nenhum acima de 8 MB),
+trava de 90 MB do site inteiro e deploy de uma cópia
 **fora do repo** (a Vercel recusa publicar de dentro de um repositório com
 outro projeto vinculado, a mesma pedra da `/divulgar`). O vínculo `.vercel/`
 volta para `docs/manual/` e fica fora do git.
@@ -41,7 +43,14 @@ volta para `docs/manual/` e fica fora do git.
 
 - **"vídeo que a página usa e não existe":** o MP4 não está em
   `docs/manual/public/video/` nem em `docs/comunicacao/`. Renderize a composição
-  (`references/video-de-tarefa.md`) antes de publicar; MP4 não vem no clone.
+  (`references/video-de-visao-geral.md`) antes de publicar; MP4 não vem no clone.
+- **"vídeo acima de 8 MB":** o Vídeo de visão geral passou do teto depois do
+  reencode. Encurte a cena ou tire movimento, e renderize de novo.
+- **"mais de um vídeo no módulo":** o Manual tem um vídeo por módulo, na
+  abertura. A mensagem diz os dois; o que sobra sai da página (a página inicial
+  usa o mesmo arquivo de Primeiros passos e conta uma vez só).
+- **"a soma dos vídeos passou de 40 MB":** a mensagem lista os vídeos da conta.
+  Encurte o maior.
 - **Trava de 90 MB:** o plano onde o site mora recusa acima de 100 MB. Corte ou
   encurte vídeo. Hospedar vídeo fora do site é decisão nova, com ADR próprio.
 - **Lint ou conferidor do draft:** conserte o texto ou o frontmatter. Não use
@@ -56,7 +65,7 @@ volta para `docs/manual/` e fica fora do git.
 - A subida (`fechar_onda.py`) não publica nem tira draft (ADR 0068): quem tira o
   `draft` das páginas dos PRDs que subiram é uma Action no push da `main`,
   depois do registro, e ela não publica. Antes de tirar o draft, o
-  `tools/tirar_draft_manual.py` confere que o MP4 de cada Vídeo de tarefa
+  `tools/tirar_draft_manual.py` confere que o MP4 de cada Vídeo de visão geral
   existe **naquela máquina** (ele não vem no clone) e que Node, corepack e
   ffmpeg estão lá. Faltando qualquer um, ele sai bloqueado sem tocar em nada:
   basta uma página com vídeo para o lote inteiro ficar em `draft` e fora do ar
