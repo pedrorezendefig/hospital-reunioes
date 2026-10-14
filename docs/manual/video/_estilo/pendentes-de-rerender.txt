@@ -16,7 +16,6 @@ admin/mudar-o-perfil-de-acesso
 admin/resolver-um-participante-externo
 admin/tirar-o-acesso-de-quem-saiu
 contas-medicas/corrigir-uma-conta-pelo-guia
-contas-medicas/decidir-na-validacao
 contas-medicas/ler-o-painel
 contas-medicas/reenviar-a-conta-corrigida
 ouvidoria/ajustar-a-tabela-de-prazos-e-os-feriados
@@ -37,7 +36,6 @@ ouvidoria/lancar-a-nota-do-google-e-do-reclame-aqui
 ouvidoria/pausar-o-caso-quando-falta-informacao
 ouvidoria/pedir-mais-prazo-pelo-portal-do-setor
 ouvidoria/reabrir-um-caso-por-reincidencia
-ouvidoria/redirecionar-o-caso-para-outra-area
 ouvidoria/registrar-manifestacao-pelo-formulario
 pops/anexar-o-material-de-referencia
 pops/assinar-o-pop
