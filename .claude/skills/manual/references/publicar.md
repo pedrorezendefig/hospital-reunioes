@@ -62,5 +62,5 @@ volta para `docs/manual/` e fica fora do git.
   basta uma página com vídeo para o lote inteiro ficar em `draft` e fora do ar
   até o humano rodar o `/manual publicar` numa máquina que tenha tudo.
 
-A Fatia de manual **não publica**: ela para no PR verde, fora da subida, e quem
-viu o draft do vídeo roda o `fechar_onda.py`.
+A Fatia de manual **não publica**: ela abre o PR com o render final feito e
+sobe pela subida como qualquer outra fatia, sem esperar OK no vídeo.

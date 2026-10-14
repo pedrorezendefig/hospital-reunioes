@@ -5,7 +5,7 @@ description: 'Executor AFK da fila de issues em ondas: sessão de fundo por onda
 
 # Onda enxuta
 
-Esvazia uma fila de issues em ondas: implementa em paralelo, revisa uma vez, mergeia sozinha os PRs verdes e sobe um deploy por onda. Só a migration e o draft do vídeo da fatia de manual esperam o humano (ADRs 0057 e 0063). Baixa em 3 tentativas. Estado no GitHub; custo em `~/.claude/onda-enxuta/medicoes/`.
+Esvazia uma fila de issues em ondas: implementa em paralelo, revisa uma vez, mergeia sozinha os PRs verdes e sobe um deploy por onda. Só a migration espera o humano no caminho feliz (ADR 0068, regra 9). Baixa em 3 tentativas. Estado no GitHub; custo em `~/.claude/onda-enxuta/medicoes/`.
 
 ## Sintaxe
 
@@ -75,12 +75,12 @@ PR verde = CI verde e, no app, `VEREDITO: LIMPO` ou corretor sem `pendente`. Iss
 
 ### 4. Lote pronto: lance a onda seguinte
 
-Com todos os PRs verdes ou baixados, registre a hora dos PRs verdes e imprima a tabela (issue · PR · status · migration · MP4 do draft). Sobrou fila (se toda ela depende desta onda, lance só depois da subida):
+Com todos os PRs verdes ou baixados, registre a hora dos PRs verdes e imprima a tabela (issue · PR · status · migration · MP4 do vídeo). Sobrou fila (se toda ela depende desta onda, lance só depois da subida):
 
 1. `python .claude/skills/onda-enxuta/scripts/fechar_onda.py --prs <a> <b> --sessao <nome>-onda<N> --dry-run`: a linha `plano:` dá a versão esperada.
 2. Escreva a **passagem** (modelo em `references/prompts.md`) em `%TEMP%\onda-enxuta\<nome>-onda<N+1>.md` e lance: `bash .claude/skills/onda-enxuta/scripts/lancar_sessao.sh <nome>-onda<N+1> "<caminho>"`.
 
-**Fatia de manual:** o PR fica fora da subida até o OK humano no draft. `PushNotification` "Draft do vídeo da #<N> no PR #<PR>: <MP4>"; quem viu roda `fechar_onda.py --prs <PR>`. Não conta tentativa.
+**Fatia de manual:** entra na subida como qualquer PR verde, com o render final já feito na fatia; o vídeo não espera OK humano (emenda de 14/10/2026 à ADR 0068).
 
 ### 5. Subida
 

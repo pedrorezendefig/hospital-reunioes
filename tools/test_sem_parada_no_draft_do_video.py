@@ -42,12 +42,13 @@ FRASES_DO_FLUXO_ANTIGO = [
     r"s[óo] o Pedro aprova",
     r"v[ií]deo com OK humano",
     r"antes do OK humano",
+    r"aprovar o draft do v[ií]deo",
 ]
 
 
 def _status_aceito(texto: str) -> bool:
-    m = re.match(r"^---\n(.*?)\n---\n", texto, re.S)
-    return bool(m and re.search(r"^status:\s*accepted", m.group(1), re.M))
+    m = re.match(r"^---\n(.*?)\n---\n", texto, re.DOTALL)
+    return bool(m and re.search(r"^status:\s*accepted", m.group(1), re.MULTILINE))
 
 
 def textos_do_pipeline() -> dict[str, str]:

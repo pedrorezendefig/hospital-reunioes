@@ -81,13 +81,10 @@
 
     { "id": "migration", "x": 3.6, "y": 12.8, "w": 220, "classe": "humano", "titulo": "migration", "sub": ["humano cola no Studio; a subida", "espera o /api/health até 24 h"],
       "porque": "Migration é a mudança que voltar a imagem não desfaz, por isso ficou como parada humana quando todo o resto passou a subir sozinho (ADR 0063, decisão 1).",
-      "detalhe": "Só duas coisas esperam o humano (ADR 0068, regra 9). A primeira é a migration: o humano cola o SQL no Studio do Supabase e a subida espera o /api/health devolver o número dela, até 24 h." },
+      "detalhe": "Três coisas esperam o humano (ADR 0068, regra 9): a migration, o rollback que a subida não fez e a baixa. A primeira é a migration: o humano cola o SQL no Studio do Supabase e a subida espera o /api/health devolver o número dela, até 24 h." },
     { "id": "rollback", "x": 7.6, "y": 12.8, "w": 220, "classe": "humano", "titulo": "rollback que a subida não fez", "sub": ["saídas 3/4/8 do fechar_onda", "voltar a imagem no Coolify"],
       "porque": "O rollback automático cobre o caso comum; quando ele mesmo falha, só uma pessoa olhando o Coolify decide com segurança o que volta (ADR 0064, emenda da decisão 6a).",
       "detalhe": "Health ruim dispara rollback automático. Quando a subida não consegue (saídas 3, 4 e 8 do fechar_onda.py), o humano volta a imagem anterior no Coolify (/deploy rollback) e reabre a issue." },
-    { "id": "draft", "x": 10.4, "y": 12.8, "w": 220, "classe": "humano", "titulo": "draft do vídeo do Manual", "sub": ["o humano grava o MP4", "e roda /manual publicar"],
-      "porque": "O Manual só mostra o que está em produção, e o vídeo precisa do OK de alguém antes de ir ao ar: por isso a Fatia de manual para no draft (ADR 0057, decisões 4 e 5).",
-      "detalhe": "A segunda espera humana: a Fatia de manual para no draft do vídeo. O humano grava o MP4 e roda /manual publicar da máquina, que tira o draft das páginas com Vídeo de tarefa e republica o site (ADR 0057)." },
 
     { "id": "producao", "x": 6, "y": 13.8, "w": 240, "classe": "fim", "titulo": "Produção", "sub": "versão nova no ar, no history.json",
       "porque": "Produção é o fim porque é onde o pedido vira valor para o hospital; o history.json guarda a verdade do deploy que o GitHub não tem (ADR 0062, decisão 9).",
@@ -119,7 +116,6 @@
     { "de": "health", "para": "registro" },
     { "de": "health", "para": "migration", "tracejada": true, "rotulo": "migration pendente, até 24 h" },
     { "de": "health", "para": "rollback", "rotulo": "health ruim" },
-    { "de": "registro", "para": "draft", "rotulo": "fatia de manual" },
     { "de": "registro", "para": "producao", "modo": "direita", "rotulo": "no ar" }
   ],
   "legenda": [

@@ -75,9 +75,10 @@ def test_classes_das_cores_e_as_paradas_humanas_da_0068(fluxo):
     classes = {n["classe"] for n in fluxo["nos"]}
     assert classes <= {"auto", "humano", "decisao", "fim"}, classes
     humanos = {n["id"] for n in fluxo["nos"] if n["classe"] == "humano"}
-    # as paradas humanas que o painel promete: migration, draft do vídeo,
-    # rollback que a subida não conseguiu e a baixa ready-for-human
-    assert {"migration", "draft", "rollback", "baixa"} <= humanos
+    # as paradas humanas que o painel promete: migration, rollback que a
+    # subida não conseguiu e a baixa ready-for-human (o draft do vídeo saiu
+    # em 14/10/2026, issue #1253)
+    assert humanos == {"migration", "rollback", "baixa"}
     assert [n["id"] for n in fluxo["nos"] if n["classe"] == "decisao"] == ["porta"]
     for n in fluxo["nos"]:
         assert n.get("detalhe"), f"nó {n['id']} sem a regra (campo detalhe)"
@@ -423,15 +424,12 @@ def test_painel_do_passo_mostra_como_funciona_e_por_que_existe_com_termos(
         hash_inicial="#documentacao/fluxo",
         dados={**DADOS_DOC, "context_md": CONTEXTO},
         preludio_extra=f"_respostas['/fluxo.json'] = {json.dumps(fluxo)};\n",
-        antes="await _esperar(); _clicar({ act: 'fluxono', id: 'draft' });",
+        antes="await _esperar(); _clicar({ act: 'fluxono', id: 'rollback' });",
     )
     assert "como funciona" in painel and "por que existe" in painel
-    # o porquê do draft (os termos dele viram span, por isso o trecho sem termo)
-    assert (
-        "só mostra o que está em produção" in painel
-        and "0057, decisões 4 e 5" in painel
-    )
-    assert "<b>Fatia de manual</b>A issue que todo PRD com tela ganha no fim." in painel
+    # o porquê do rollback (os termos dele viram span, por isso o trecho sem termo)
+    assert "cobre o caso comum" in painel and "0064, emenda da decisão 6a" in painel
+    assert '<span class="gl-termo" tabindex="0">rollback<' in painel
 
 
 def test_dica_do_fluxo_fala_do_hover_e_do_clique():
