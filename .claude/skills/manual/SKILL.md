@@ -105,6 +105,13 @@ leva `papel`.
   texto alternativo das imagens não conta).
 - **Sem travessão e sem meia-risca** (ADR 0013) e sem jargão em texto visível:
   a lista que trava está em `tools/lint_manual.py`.
+- **Humanizer antes do lint, em toda página** (ADR 0071): escrita a página
+  (Visão geral, Página de tarefa, Como funciona ou Novidades), chame a Skill
+  tool com `humanizer` em modo embutido e só depois rode o
+  `tools/lint_manual.py`. A amostra de voz é uma Página de tarefa já publicada
+  do módulo: ela manda no tom, o humanizer só tira os cacoetes. O molde não
+  muda (passos, teto de palavras, a palavra da tela em negrito), e o que está
+  em frontmatter, caminho de print e bloco de código fica igual.
 
 ## Prints e vídeo
 

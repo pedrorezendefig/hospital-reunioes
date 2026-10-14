@@ -70,6 +70,8 @@ Regras da pasta mãe: uma subpasta por contexto de domínio (`reunioes/`, `pops/
 
 **Gate anti-técnica (antes de renderizar):** varrer todo texto visível procurando `migration, endpoint, API, PR, pull request, deploy, RLS, schema, backend, frontend, commit, branch, merge, token, env, SQL, Supabase, Coolify, prompt`. Cada ocorrência vira linguagem funcional ou sai. Varrer também travessão e meia-risca.
 
+**Humanizer no texto do vídeo (antes de renderizar, ADR 0071):** título da abertura, slide de antes e depois e legendas passam pela Skill tool com `humanizer` em modo embutido. A amostra de voz é o vídeo de uma entrega anterior em `docs/comunicacao/`: ela manda no tom, o humanizer só tira os cacoetes. Nome de botão e de tela, igual ao app, não muda.
+
 **Gate de qualidade (duas camadas):**
 1. **Auto-revisão de frames**: `ffmpeg -i <mp4> -vf fps=1 frames/%03d.png` e conferir olhando: telas batem com o app real, todos os critérios de aceite aparecem, texto legível no tempo em tela, zero jargão, zero travessão.
 2. **OK humano** no draft. Só depois, o render final. Ajuste pedido = novo draft, novo OK.
@@ -92,6 +94,8 @@ Regras da pasta mãe: uma subpasta por contexto de domínio (`reunioes/`, `pops/
 6. **Rodapé:** contexto, mês/ano e versão do app.
 
 **Regras de conteúdo:** linguagem de negócio, vocabulário do `CONTEXT.md`, mesmo gate anti-técnica do vídeo. Enxuto de verdade: seção da aba Funcionalidade que passa de uma tela de leitura, cortar. pt-BR, sem travessão nem meia-risca (`grep -Pn "\x{2013}|\x{2014}" index.html`). Verificar com Chrome headless (screenshot das duas abas) antes de publicar.
+
+**Humanizer no texto da página (antes de publicar, ADR 0071):** hero, cards de *O que mudou*, checklist e parágrafo da aba do vídeo passam pela Skill tool com `humanizer` em modo embutido. A amostra de voz é a página de referência (`272-pendencia-nasce-na-assinatura/index.html`): ela manda no tom, o humanizer só tira os cacoetes. HTML, classes e carimbo ficam iguais.
 
 **Publicação (pela CLI, sem pedir ao humano).** Deploy de dentro do repo é BLOQUEADO pela Vercel (`TEAM_ACCESS_REQUIRED`: a CLI anexa o autor git, que não é membro do time). Sempre de uma cópia FORA do repo, só com o que a página precisa:
 
