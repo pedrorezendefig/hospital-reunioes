@@ -1,0 +1,56 @@
+<!doctype html>
+<!--
+  ESTILO DO MANUAL · card de apoio · lower-third (em que tela a pessoa está)
+  Entra quando a tarefa muda de tela e diz o lugar com as palavras do menu do
+  app. Fica acima da placa da legenda, à esquerda, sem cobrir a tela inteira.
+  Slots: lugar (32), tela (48).
+  Contrato dos cards: _estilo/DESIGN.md, seção "Cards e slots".
+-->
+<html lang="pt-BR" data-composition-variables='[
+  {"id":"lugar","type":"string","label":"Módulo ou menu","default":"Ouvidoria","maxLength":32},
+  {"id":"tela","type":"string","label":"Nome da tela","default":"Caixa de entrada","maxLength":48}
+]'>
+<head>
+<meta charset="UTF-8" />
+<link rel="stylesheet" href="tokens.css" />
+<script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js" integrity="sha384-sG0Hv1tP1lZCk9KQmrIbY/XNwi+OY84GQqhMscbnsoBFqAz8KNCil1kvfL3Hbbk2" crossorigin="anonymous"></script>
+</head>
+<body>
+<div id="lower-third" data-composition-id="lower-third" data-start="0" data-width="1920" data-height="1080" data-duration="6">
+  <style>
+    #lower-third { position: absolute; inset: 0; width: 1920px; height: 1080px; overflow: hidden; background: transparent; font-family: var(--font-app); }
+    .etiqueta {
+      position: absolute; left: var(--video-legenda-esquerda); top: 788px; height: 92px;
+      box-sizing: border-box; padding: 0 36px 0 30px; display: flex; flex-direction: column; justify-content: center;
+      background: var(--video-cartao); border: 2px solid var(--video-borda); border-left: 8px solid var(--video-marca);
+      border-radius: var(--radius-xl); box-shadow: var(--video-sombra);
+    }
+    .lugar { font-size: 22px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--video-texto-apoio); }
+    .tela { margin-top: 4px; font-size: 34px; color: var(--video-marca); white-space: nowrap; }
+  </style>
+  <div class="etiqueta">
+    <div class="lugar" data-slot="lugar">Ouvidoria</div>
+    <div class="tela" data-slot="tela">Caixa de entrada</div>
+  </div>
+</div>
+<script>
+window.__timelines = window.__timelines || {};
+/* Slots: o host preenche por data-variable-values; sem host, vale o default
+   declarado no <html>. */
+const valores = window.__hyperframes && window.__hyperframes.getVariables ? window.__hyperframes.getVariables() : {};
+document.querySelectorAll("#lower-third [data-slot]").forEach((el) => {
+  const bruto = valores[el.dataset.slot] || el.textContent;
+  el.innerHTML = bruto
+    .replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" })[c])
+    .replace(/\*\*(.+?)\*\*/g, "<b>$1</b>");
+});
+
+const tl = gsap.timeline({ paused: true });
+tl.fromTo("#lower-third .etiqueta", { opacity: 0, x: -24 }, { opacity: 1, x: 0, duration: 0.4, ease: "power3.out" }, 0);
+tl.fromTo("#lower-third .tela", { opacity: 0, y: 8 }, { opacity: 1, y: 0, duration: 0.35, ease: "power2.out" }, 0.15);
+/* Âncora do slot: um Vídeo de tarefa tem no máximo 60 s. */
+tl.to({}, { duration: 60 }, 0);
+window.__timelines["lower-third"] = tl;
+</script>
+</body>
+</html>
