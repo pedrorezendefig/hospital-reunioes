@@ -813,6 +813,21 @@ def test_hover_tem_titulo_valor_entregue_o_que_resolve_e_rodape(tmp_path):
 
 
 @com_node
+def test_hover_e_resumo_fixado_mostram_so_o_paragrafo_o_que_muda(tmp_path):
+    dados = _dados_do_pop()
+    pr = next(p for p in dados["github"]["prs"] if p["number"] == 70)
+    pr["resumo"] = {"o_que_muda": "A Ata sai em <PDF> com um clique.", "antes": "copiava para o Word.",
+                    "depois": "sai em PDF.", "contexto": "Texto do contexto."}
+    pop = _app(tmp_path, "popDoPr('70', S.data, { fmtDT, depVer })", dados=dados)
+    html = _app(tmp_path, hash_inicial="#prs/70", dados=dados)
+    fixo = re.search(r'<div class="st-pop pr-pop pr-pop-fixo" data-n="70"[^>]*>(.*?)</div>', html, re.S).group(1)
+    for resumo in (pop, fixo):
+        assert '<span class="fx-k">o que muda</span><p>A Ata sai em &lt;PDF&gt; com um clique.</p>' in resumo
+        for fora in ("valor entregue", "<em>Antes</em>", "<em>Depois</em>", "Texto do contexto."):
+            assert fora not in resumo, fora
+
+
+@com_node
 def test_pr_antigo_mostra_o_contexto_como_valor_entregue(tmp_path):
     dados = _dados_do_pop()
     pr = next(p for p in dados["github"]["prs"] if p["number"] == 70)
