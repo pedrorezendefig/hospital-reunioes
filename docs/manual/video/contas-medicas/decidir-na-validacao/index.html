@@ -39,7 +39,7 @@
   .barra-nav { position: absolute; left: 0; top: 0; width: 1600px; height: 44px; background: var(--color-slate-100); border-bottom: 1px solid var(--color-slate-200); display: flex; align-items: center; gap: 9px; padding: 0 18px; }
   .barra-nav i { display: block; width: 12px; height: 12px; border-radius: 50%; background: var(--color-slate-300); }
   .barra-nav .url { margin-left: 14px; width: 620px; height: 28px; border-radius: 14px; background: var(--color-white); border: 1px solid var(--color-slate-200); display: flex; align-items: center; padding: 0 16px; font-size: 16px; color: var(--color-slate-500); }
-  .baixou { position: absolute; right: 18px; top: 52px; width: 330px; padding: 12px 16px; display: flex; align-items: center; gap: 12px; background: var(--color-white); border: 1px solid var(--color-slate-200); border-radius: var(--radius-3xl); box-shadow: var(--shadow-premium-strong); font-size: 16px; color: var(--color-slate-700); opacity: 0; }
+  .baixou { position: absolute; right: 18px; top: 52px; width: 300px; padding: 12px 16px; display: flex; align-items: center; gap: 12px; background: var(--color-white); border: 1px solid var(--color-slate-200); border-radius: var(--radius-3xl); box-shadow: var(--shadow-premium-strong); font-size: 16px; color: var(--color-slate-700); opacity: 0; }
   .baixou .ic { width: 36px; height: 36px; border-radius: var(--radius-2xl); background: var(--color-slate-100); color: var(--color-slate-600); display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
   .baixou small { display: block; font-size: 14px; color: var(--color-slate-500); margin-top: 2px; }
   .icone-baixar { margin-left: auto; color: var(--color-slate-600); display: flex; }
@@ -133,7 +133,7 @@
   .ajuda { font-size: 12px; line-height: 16px; color: var(--color-slate-500); }
   .ditar-linha { display: flex; align-items: center; gap: 8px; }
   .ditar { display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--color-slate-200); border-radius: var(--radius-lg); padding: 4px 10px; font-size: 12px; line-height: 16px; color: var(--color-slate-600); background: var(--color-white); }
-  .nada { font-size: 14px; color: var(--color-slate-500); }
+  .nada { width: fit-content; font-size: 14px; color: var(--color-slate-500); }
 
   /* ===== o foco: marcador, dedo e toque ===== */
   .marcador { position: absolute; left: 0; top: 0; opacity: 0; border: 3px solid var(--video-foco); border-radius: 14px; box-shadow: 0 0 0 8px var(--video-foco-halo); }
@@ -266,47 +266,53 @@ document.getElementById("camera").innerHTML = `<div class="janela" id="janela">
 document.querySelectorAll("#camera, #camera *").forEach((el) => ["overlap", "occlusion", "overflow"].forEach((k) => el.setAttribute(`data-layout-allow-${k}`, "")));
 
 /* Medidas: onde cada elemento fica no quadro com a câmera em repouso, pelo
-   offset do layout (que ignora a câmera e a rolagem). A fonte já está
-   carregada quando o script roda. */
+   offset do layout (que ignora a câmera e a rolagem). Nada se mede na
+   montagem: o script roda antes de a fonte do app carregar, e a medida ali
+   sai com a fonte de reserva (o anel caía ao lado do botão, PR #1246). Cada
+   alvo é uma função que o GSAP chama quando o tween começa, e o render só
+   busca o primeiro quadro depois da fonte. */
 const APP = document.getElementById("app");
 const APP_X = 160, APP_Y = 32 + 44, ESCALA_APP = 1.25, CENTRO = { x: 960, y: 452 }, JANELA = { x0: 160, y0: 32, x1: 1760, y1: 880 };
 function noQuadro(id, rolagem) {
   let el = document.getElementById(id), x = 0, y = 0;
   const w = el.offsetWidth, h = el.offsetHeight;
   while (el && el !== APP) { x += el.offsetLeft; y += el.offsetTop; el = el.offsetParent; }
-  return { x: APP_X + x * ESCALA_APP, y: APP_Y + (y - (rolagem || 0)) * ESCALA_APP, w: w * ESCALA_APP, h: h * ESCALA_APP };
+  return { x: APP_X + x * ESCALA_APP, y: APP_Y + (y - rolagem) * ESCALA_APP, w: w * ESCALA_APP, h: h * ESCALA_APP };
 }
-const naJanela = (id) => { const el = document.getElementById(id); return { x: JANELA.x0 + el.offsetLeft, y: JANELA.y0 + el.offsetTop, w: el.offsetWidth, h: el.offsetHeight }; };
-const junta = (a, b) => ({ x: Math.min(a.x, b.x), y: Math.min(a.y, b.y), w: Math.max(a.x + a.w, b.x + b.w) - Math.min(a.x, b.x), h: Math.max(a.y + a.h, b.y + b.h) - Math.min(a.y, b.y) });
-const REPOUSO = { x: 160, y: 32, w: 1600, h: 848 };
+const juntaCaixas = (rs) => { const x = Math.min(...rs.map((r) => r.x)), y = Math.min(...rs.map((r) => r.y)); return { x, y, w: Math.max(...rs.map((r) => r.x + r.w)) - x, h: Math.max(...rs.map((r) => r.y + r.h)) - y }; };
+/* Alvo: um ou mais ids (separados por espaço) e a rolagem em que ele é visto. */
+const alvo = (ids, rolagem = 0) => ({ ids, caixa: () => juntaCaixas(ids.split(" ").map((id) => noQuadro(id, rolagem))) });
+const naJanela = (id) => ({ ids: id, caixa: () => { const el = document.getElementById(id); return { x: JANELA.x0 + el.offsetLeft, y: JANELA.y0 + el.offsetTop, w: el.offsetWidth, h: el.offsetHeight }; } });
+const REPOUSO = { ids: "", caixa: () => ({ x: 160, y: 32, w: 1600, h: 848 }) };
 /* A câmera centra o alvo e nunca mostra mais palco do que mostra em repouso. */
 function enquadra(r, s) {
   const x = CENTRO.x - s * (r.x + r.w / 2), y = CENTRO.y - s * (r.y + r.h / 2);
   return { scale: s, x: Math.min(JANELA.x0 * (1 - s), Math.max(JANELA.x1 * (1 - s), x)), y: Math.min(JANELA.y0 * (1 - s), Math.max(JANELA.y1 * (1 - s), y)) };
 }
+const camera = (a, s) => ({ scale: s, x: () => enquadra(a.caixa(), s).x, y: () => enquadra(a.caixa(), s).y });
 
 /* Timeline: uma só, pausada, com tempos absolutos. */
 window.__timelines = window.__timelines || {};
 const tl = gsap.timeline({ paused: true });
 tl.set("#camera", { scale: 1, x: 0, y: 0 }, 0);
 /* Push-in no alvo e, até o próximo movimento, uma deriva lenta: a câmera nunca para. */
-function mira(t, dur, r, s, ate) {
-  tl.to("#camera", { ...enquadra(r, s), duration: dur, ease: "power2.inOut" }, t);
-  tl.to("#camera", { ...enquadra(r, s * 1.025), duration: ate - t - dur, ease: "none" }, t + dur);
+function mira(t, dur, a, s, ate) {
+  tl.to("#camera", { ...camera(a, s), duration: dur, ease: "power2.inOut" }, t);
+  tl.to("#camera", { ...camera(a, s * 1.025), duration: ate - t - dur, ease: "none" }, t + dur);
 }
-/* Marcador em volta do alvo. */
-function marca(t, r, ate) {
-  tl.set("#mk", { x: r.x - 8, y: r.y - 8, width: r.w + 16, height: r.h + 16, scale: 1.06 }, t - 0.02);
+/* Anel em volta do alvo; o data-alvo é o que o gate do anel confere. */
+function marca(t, a, ate) {
+  tl.set("#mk", { attr: { "data-alvo": a.ids }, x: () => a.caixa().x - 8, y: () => a.caixa().y - 8, width: () => a.caixa().w + 16, height: () => a.caixa().h + 16, scale: 1.06 }, t - 0.02);
   tl.to("#mk", { opacity: 1, scale: 1, duration: 0.3, ease: "power2.out" }, t);
   tl.to("#mk", { opacity: 0, duration: 0.25 }, ate);
 }
 /* Dedo: anda até o centro do alvo e toca. */
-const centro = (r) => ({ x: r.x + r.w / 2 - 8, y: r.y + r.h / 2 - 6 });
-function toca(t, r, de) {
-  const a = centro(r), b = de ? centro(de) : { x: a.x + 120, y: a.y + 150 };
-  tl.set("#dedo", { x: b.x, y: b.y }, t - 0.02);
+const centro = (a) => { const r = a.caixa(); return { x: r.x + r.w / 2 - 8, y: r.y + r.h / 2 - 6 }; };
+function toca(t, a, de) {
+  const b = de ? () => centro(de) : () => ({ x: centro(a).x + 120, y: centro(a).y + 150 });
+  tl.set("#dedo", { x: () => b().x, y: () => b().y }, t - 0.02);
   tl.to("#dedo", { opacity: 1, duration: 0.2 }, t);
-  tl.to("#dedo", { x: a.x, y: a.y, duration: 0.7, ease: "power2.inOut" }, t + 0.2);
+  tl.to("#dedo", { x: () => centro(a).x, y: () => centro(a).y, duration: 0.7, ease: "power2.inOut" }, t + 0.2);
   tl.fromTo("#toque", { opacity: 0.9, scale: 0.4 }, { opacity: 0, scale: 1.3, duration: 0.45, ease: "power1.out", immediateRender: false }, t + 0.95);
 }
 const soltaDedo = (t) => tl.to("#dedo", { opacity: 0, duration: 0.25 }, t);
@@ -318,7 +324,7 @@ const rola = (y, t) => tl.to("#rolo-v", { y: -y, duration: 0.7, ease: "power2.in
 tl.fromTo("#janela", { opacity: 0, y: 24, filter: "blur(12px)" }, { opacity: 1, y: 0, filter: "blur(0px)", duration: 0.5, ease: "power2.out" }, 4.0);
 
 /* Passo 1 (4 a 10): o botão Validação. */
-const bValidacao = noQuadro("bt-validacao");
+const bValidacao = alvo("bt-validacao");
 mira(4.4, 2.6, bValidacao, 1.45, 8.3);
 marca(6.0, bValidacao, 8.0);
 toca(6.1, bValidacao);
@@ -330,27 +336,27 @@ tl.fromTo("#tela-validacao", { x: 240, opacity: 0, filter: "blur(20px)" }, { x: 
 mira(8.3, 1.4, REPOUSO, 1.0, 10.2);
 
 /* Passo 2 (10 a 16): os três números. */
-const bNumeros = noQuadro("v0-numeros");
+const bNumeros = alvo("v0-numeros");
 mira(10.2, 2.4, bNumeros, 1.3, 15.8);
 marca(11.0, bNumeros, 13.4);
 
 /* Passo 3 (16 a 24): Validar regra, o texto aberto e Confirmar e validar. */
-const bValidar = noQuadro("v0-bt-validar");
+const bValidar = alvo("v0-bt-validar");
 mira(15.8, 2.0, bValidar, 1.45, 18.8);
 toca(17.0, bValidar);
 troca("#v0", "#v1", 18.05);
 const ROLA_REGRA = 120;
 rola(ROLA_REGRA, 18.4);
-const bConfirmar = noQuadro("v1-bt-confirmar", ROLA_REGRA);
+const bConfirmar = alvo("v1-bt-confirmar", ROLA_REGRA);
 mira(18.8, 1.5, bConfirmar, 1.45, 21.3);
-toca(19.6, bConfirmar, noQuadro("v0-bt-validar", ROLA_REGRA));
+toca(19.6, bConfirmar, alvo("v0-bt-validar", ROLA_REGRA));
 troca("#v1", "#v2", 20.65);
 soltaDedo(21.0);
 rola(0, 21.2);
-mira(21.3, 1.8, noQuadro("v2-numeros"), 1.2, 24.0);
+mira(21.3, 1.8, alvo("v2-numeros"), 1.2, 24.0);
 
 /* Passo 4 (24 a 31): Enviar ao cadastro, e o navegador baixa a lista. */
-const bCadastro = noQuadro("v2-bt-cadastro");
+const bCadastro = alvo("v2-bt-cadastro");
 mira(24.0, 1.8, bCadastro, 1.45, 26.6);
 toca(25.0, bCadastro);
 troca("#v2", "#v3", 26.05);
@@ -362,35 +368,35 @@ marca(27.4, bBaixou, 29.8);
 tl.to("#baixou", { opacity: 0, duration: 0.3 }, 30.4);
 
 /* Passo 5 (31 a 39): a Leitura da IA, Responder ao time e Enviar resposta. */
-const bLeitura = noQuadro("v3-leitura");
+const bLeitura = alvo("v3-leitura");
 mira(31.0, 2.0, bLeitura, 1.4, 33.6);
 marca(31.8, bLeitura, 33.3);
-const bResponder = noQuadro("v3-bt-responder");
+const bResponder = alvo("v3-bt-responder");
 toca(33.3, bResponder);
 troca("#v3", "#v4", 34.35);
 const ROLA_RESPOSTA = 110;
 rola(ROLA_RESPOSTA, 34.6);
-const bResposta = noQuadro("v4-resposta", ROLA_RESPOSTA);
+const bResposta = alvo("v4-resposta", ROLA_RESPOSTA);
 mira(33.6, 1.8, bResposta, 1.4, 37.6);
-toca(35.0, bResposta, noQuadro("v3-bt-responder", ROLA_RESPOSTA));
+toca(35.0, bResposta, alvo("v3-bt-responder", ROLA_RESPOSTA));
 tl.set("#v4-foco", { opacity: 1 }, 35.95);
 tl.to("#v4-vazia", { opacity: 0, duration: 0.15 }, 36.0);
 tl.to("#v4-escrito", { opacity: 1, duration: 0.5 }, 36.1);
-const bEnviar = noQuadro("v4-bt-enviar", ROLA_RESPOSTA);
+const bEnviar = alvo("v4-bt-enviar", ROLA_RESPOSTA);
 toca(36.7, bEnviar, bResposta);
 troca("#v4", "#v5", 37.75);
 soltaDedo(38.0);
 rola(0, 38.0);
-mira(37.6, 1.4, noQuadro("v5-numeros"), 1.2, 39.0);
+mira(37.6, 1.4, alvo("v5-numeros"), 1.2, 39.0);
 
 /* Passo 6 (39 a 46): Confirmar o termo, e a fila fica vazia. */
-const bTermo = noQuadro("v5-bt-termo");
+const bTermo = alvo("v5-bt-termo");
 mira(39.0, 1.8, bTermo, 1.45, 41.6);
 toca(40.0, bTermo);
 troca("#v5", "#v6", 41.05);
 soltaDedo(41.4);
-const bNada = noQuadro("v6-nada");
-mira(41.6, 2.0, junta(noQuadro("v6-numeros"), bNada), 1.25, 46.0);
+const bNada = alvo("v6-nada");
+mira(41.6, 2.0, alvo("v6-numeros v6-nada"), 1.25, 46.0);
 marca(42.4, bNada, 45.2);
 
 /* Âncora: o timeline preenche o slot inteiro. */
