@@ -84,7 +84,9 @@ def _fechos_repetidos(texto: str) -> Iterator[tuple[int, str]]:
         if len(paragrafos) >= 2 and len(paragrafos[-1]) == 1:
             p, linha = paragrafos[-1][0]
             limpa = linha.strip().strip("*_")
-            if limpa and re.match(f"[{L}]", limpa):
+            # Linha com link aponta para outra página ("Tarefas que mudaram:
+            # [...]", "Está em [...]"): é a estrutura das Novidades, não fecho.
+            if re.match(f"[{L}]", limpa) and "[" not in limpa:
                 inicio = re.split(r"[,.:;!?]", limpa, maxsplit=1)[0]
                 chave = " ".join(RE_NAO_LETRA.sub(" ", inicio.lower()).split())
                 fecho = (p + linha.index(linha.strip()), linha.strip(), chave)
