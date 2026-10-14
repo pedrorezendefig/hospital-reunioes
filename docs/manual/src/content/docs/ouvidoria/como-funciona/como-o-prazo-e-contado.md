@@ -8,8 +8,8 @@ sidebar:
 ---
 
 O prazo vem da gravidade, e quem define a tabela é a Diretoria. Depois que o
-caso é encaminhado, o prazo fica congelado nele: mudar a tabela não mexe em caso
-já encaminhado.
+caso é encaminhado, o prazo fica congelado nele, e uma mudança na tabela não
+alcança caso já encaminhado.
 
 ## Quanto tempo cada um tem
 
@@ -22,9 +22,8 @@ já encaminhado.
 - **Baixo:** sugestão, elogio ou queixa que a própria Ouvidoria resolve. Não
   passa pela área.
 
-Esses números são o ponto de partida. O que vale é o que estiver na tela
-**Tabela de prazos**, e cada mudança guarda quem mudou, quando e de quanto para
-quanto.
+Esses são os números de partida. Vale o que estiver na tela **Tabela de
+prazos**, e cada mudança guarda quem mudou, quando e de quanto para quanto.
 
 ## O expediente
 
@@ -33,8 +32,9 @@ Segunda a sexta, das 8h às 17h. A hora útil anda dentro desse período e para 
 
 ## Os feriados
 
-Nacionais, do estado do Rio e do município do Rio, numa lista que a Diretoria
-edita. Feriado sai da conta; feriado removido volta a contar como dia útil.
+Contam os feriados nacionais, do estado do Rio e do município do Rio, numa lista
+que a Diretoria edita. Feriado sai da conta, e o que for removido da lista volta
+a contar como dia útil.
 
 ## O dia do fato não conta
 
@@ -48,4 +48,4 @@ fim de semana, porque é uma promessa a quem esperou. Todo o resto conta só em
 expediente.
 
 A lista, a página do caso, o email e o relatório mostram o mesmo prazo e a
-mesma frase, porque todos perguntam ao mesmo lugar.
+mesma frase, porque todos tiram o prazo do mesmo cálculo.

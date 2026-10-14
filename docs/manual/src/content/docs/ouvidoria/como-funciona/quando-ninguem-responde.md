@@ -17,8 +17,8 @@ para uma pessoa diferente.
    responder sem estourar nada.
 2. **No vencimento, sem resposta:** cobrança para o titular e para o substituto.
    A ausência de uma pessoa não trava o caso.
-3. **Um dia útil depois:** o gestor da área. Deixa de ser assunto do setor e
-   vira assunto da gestão.
+3. **Um dia útil depois:** o gestor da área. A partir daqui, o caso é assunto da
+   gestão.
 4. **Dois dias úteis depois:** a Diretoria. É o último degrau.
 
 ## A cobrança respeita o horário comercial
@@ -28,8 +28,8 @@ sair. A exceção é o caso crítico, que sai na hora, a qualquer hora.
 
 ## Se o email falha, o sistema tenta de novo
 
-Com espera crescente entre as tentativas. Na terceira falha, o caso é marcado
-como falha de envio e quem cuida da plataforma é avisado.
+A espera entre uma tentativa e outra vai crescendo. Na terceira falha, o caso é
+marcado como falha de envio e quem cuida da plataforma é avisado.
 
 ## A escada confere se há alguém no degrau
 
@@ -38,6 +38,6 @@ existe, o caso sai da varredura com o carimbo de que não há a quem escalar, em
 vez de queimar degraus no vazio, e a Diretoria recebe um aviso separado, de
 cadastro.
 
-Setor sem titular vigente não fica parado: a demanda sobe direto para o gestor
-da área, e a Diretoria é avisada. Sem titular e sem gestor, o acionamento é
+Quando o setor está sem titular vigente, a demanda sobe direto para o gestor da
+área, e a Diretoria é avisada. Sem titular e sem gestor, o acionamento é
 recusado na hora de classificar.

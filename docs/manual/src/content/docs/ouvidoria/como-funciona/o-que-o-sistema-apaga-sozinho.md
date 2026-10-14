@@ -14,13 +14,14 @@ anos, contados da conclusão. Ele varre os cinco lugares onde o relato pode
 estar: a manifestação, os anexos, as observações do histórico, as tentativas de
 contato e o detalhe dos avisos enviados.
 
-O que os relatórios contam é preservado: some o texto, ficam os números.
+Os números que os relatórios contam continuam lá, porque só o texto sai.
 
 ## Números nunca levam nome junto
 
 Antes de qualquer texto entrar numa conta ou num resumo, o sistema tira dele os
 dados que identificam pessoas. Isso vale inclusive para o que a inteligência
-artificial lê no relatório mensal: ela recebe o agregado, nunca o relato.
+artificial lê no relatório mensal: ela recebe só os números somados, sem o
+relato.
 
 ## Quando a Diretoria apaga antes
 
@@ -30,5 +31,5 @@ decidiu.
 
 Apagar retira o relato, a identificação de quem manifestou, os anexos e a
 resposta da área. Ficam o protocolo, a linha do tempo e os números dos
-relatórios. Não tem volta, e o caso apagado não pode ser reaberto: quem voltar a
-reclamar registra manifestação nova.
+relatórios. O apagamento não tem volta. O caso apagado também não pode ser
+reaberto, e quem voltar a reclamar registra manifestação nova.

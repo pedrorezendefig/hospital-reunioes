@@ -7,8 +7,8 @@ sidebar:
   order: 34
 ---
 
-Nem todo caso anda em linha reta. O sistema já entende seis desvios, e nenhum
-deles apaga o que já aconteceu.
+O sistema trata seis desvios do caminho normal de um caso, e nenhum deles apaga
+o que já aconteceu.
 
 ![As situações em que o caso volta ou muda de situação](../../../../assets/ouvidoria/fluxo-quando-o-caso-sai-do-caminho-reto.svg)
 
@@ -40,12 +40,12 @@ verdade.
 ## A pessoa some
 
 Depois de duas tentativas de contato registradas e cinco dias úteis de espera, o
-ouvidor encerra com **Sem retorno do manifestante**. É um desfecho neutro: não
-conta como resolvido nem como não resolvido.
+ouvidor encerra com **Sem retorno do manifestante**. Esse desfecho é neutro e
+não conta como resolvido nem como não resolvido.
 
 ## A pessoa volta a reclamar do mesmo
 
 Se ela volta em até 30 dias, o caso original é marcado como reincidência e
-reabre. Não nasce protocolo novo, a área recebe um link novo, e cada ida e volta
-vira um ciclo com histórico próprio. O indicador de prazo guarda o prazo que foi
-rompido, não a hora em que a resposta finalmente chegou.
+reabre. O protocolo continua o mesmo, a área recebe um link novo, e cada ida e
+volta vira um ciclo com histórico próprio. O indicador de prazo guarda o prazo
+rompido, e a resposta que chega depois não muda esse registro.

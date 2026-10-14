@@ -12,8 +12,8 @@ sidebar:
 ## Quando usar
 
 Quando a apuração depende de um dado que só quem manifestou tem, como o dia da
-consulta, o nome de quem atendeu ou um documento. A pausa para o relógio da
-área, então use só quando a espera pela pessoa justifica parar o prazo.
+consulta, o nome de quem atendeu ou um documento. A pausa interrompe o relógio
+da área, então use só quando a espera pela pessoa justifica isso.
 
 ## Passo a passo
 

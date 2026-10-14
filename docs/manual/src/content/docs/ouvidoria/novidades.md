@@ -27,8 +27,8 @@ e em [Responder um caso pelo portal do setor](/ouvidoria/responder-um-caso-pelo-
 
 Setembro de 2026. O registro feito pela Ouvidoria ganhou sete canais de origem:
 WhatsApp, Telefone, Presencial, Email, Instagram, Reclame Aqui e Google. O
-relatório do mês passou a mostrar por onde as reclamações realmente chegam, em
-vez de somar quase tudo em telefone.
+relatório do mês passou a mostrar por onde as reclamações chegam, em vez de
+somar quase tudo em telefone.
 
 Está em [Registrar uma manifestação pela Ouvidoria](/ouvidoria/registrar-uma-manifestacao-pela-ouvidoria/).
 
@@ -67,8 +67,8 @@ Está em [Devolver um caso que não é do seu setor](/ouvidoria/devolver-um-caso
 
 Setembro de 2026. A tela do responsável do setor passou a mostrar gravidade e
 prazo antes de tudo, com os três textos do caso separados: o resumo, o relato de
-quem falou e a nota da Ouvidoria. Assim a área responde ao paciente, e não à
-interpretação da Ouvidoria.
+quem falou e a nota da Ouvidoria. Assim a área responde ao que o paciente
+contou, com a leitura da Ouvidoria à parte.
 
 Está em [Responder um caso pelo portal do setor](/ouvidoria/responder-um-caso-pelo-portal-do-setor/).
 
@@ -100,8 +100,8 @@ Está em [Como ler a lista de casos](/ouvidoria/como-funciona/como-ler-a-lista-d
 ## O formulário honra o cartaz
 
 Setembro de 2026. Quem abre o formulário pelo QR passou a poder dizer se traz um
-elogio, uma reclamação, uma sugestão ou um pedido de informação. É sugestão de
-quem manifesta, não classificação: quem classifica continua sendo o ouvidor.
+elogio, uma reclamação, uma sugestão ou um pedido de informação. A escolha é um
+palpite de quem manifesta, e quem classifica continua sendo o ouvidor.
 
 Está em [Registrar uma manifestação pelo formulário](/ouvidoria/registrar-manifestacao-pelo-formulario/)
 e em [Imprimir o cartaz com o QR do setor](/ouvidoria/imprimir-o-cartaz-com-o-qr-do-setor/).

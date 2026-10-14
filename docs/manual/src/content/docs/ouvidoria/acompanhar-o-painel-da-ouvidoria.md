@@ -34,8 +34,8 @@ O painel atualiza sozinho e é a mesma fonte dos números do relatório.
 
 ## Se der errado
 
-- **Um bloco aparece marcado como não carregado:** o número dele ficou de fora,
-  o que é diferente de zero. Recarregue a página antes de tirar conclusão.
+- **Um bloco aparece marcado como não carregado:** o bloco falhou ao carregar e
+  pode não estar vazio. Recarregue a página antes de tirar conclusão.
 - **Um caso grave continua no painel mesmo com a área já tendo respondido:** o
   caso só sai do painel quando a Ouvidoria o encerra.
 - **A conta de Já venceu não bate com a coluna Vencidas:** os dois números contam
