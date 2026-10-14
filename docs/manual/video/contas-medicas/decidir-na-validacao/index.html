@@ -13,8 +13,8 @@
  "pagina": "contas-medicas/decidir-na-validacao.md",
  "prd": [1129, 1216],
  "issues": [1147, 1231],
- "app_version": "0.196.0",
- "gerado_em": "2026-10-14T01:30:00-03:00"
+ "app_version": "0.196.1",
+ "gerado_em": "2026-10-14T04:30:00-03:00"
 }
 </script>
 <style>
@@ -187,7 +187,7 @@
     data-start="39" data-duration="7" data-track-index="4" data-width="1920" data-height="1080"></div>
 
   <div id="slot-carimbo" data-composition-id="carimbo" data-composition-src="compositions/carimbo.html"
-    data-variable-values='{"titulo":"Decidir na Validação","carimbo":"Manual · retrata o app em v0.196.0 · gerado em 14/10/2026"}'
+    data-variable-values='{"titulo":"Decidir na Validação","carimbo":"Manual · retrata o app em v0.196.1 · gerado em 14/10/2026"}'
     data-start="46" data-duration="4" data-track-index="1" data-width="1920" data-height="1080"></div>
 </div>
 
@@ -198,6 +198,7 @@ const P = {
   calendario: '<path d="M8 2v4"/><path d="M16 2v4"/><rect width="18" height="18" x="3" y="4" rx="2"/><path d="M3 10h18"/><path d="M8 14h.01"/><path d="M12 14h.01"/><path d="M16 14h.01"/><path d="M8 18h.01"/><path d="M12 18h.01"/><path d="M16 18h.01"/>',
   relogio: '<circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>', baixo: '<path d="m6 9 6 6 6-6"/>', direita: '<path d="m9 18 6-6-6-6"/>',
   megafone: '<path d="m3 11 18-5v12L3 14v-3z"/><path d="M11.6 16.8a3 3 0 1 1-5.8-1.6"/>', recibo: '<path d="M4 2v20l2-1 2 1 2-1 2 1 2-1 2 1 2-1 2 1V2l-2 1-2-1-2 1-2-1-2 1-2-1-2 1Z"/><path d="M14 8H8"/><path d="M16 12H8"/><path d="M13 16H8"/>',
+  escudo: '<path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/><path d="m9 12 2 2 4-4"/>',
   ajuda: '<circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><path d="M12 17h.01"/>', lupa: '<circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/>',
   sino: '<path d="M10.268 21a2 2 0 0 0 3.464 0"/><path d="M3.262 15.326A1 1 0 0 0 4 17h16a1 1 0 0 0 .74-1.673C19.41 13.956 18 12.499 18 8A6 6 0 0 0 6 8c0 4.499-1.41 5.956-2.738 7.326"/>',
   grafico: '<path d="M3 3v18h18"/><path d="M18 17V9"/><path d="M13 17V5"/><path d="M8 17v-3"/>', checks: '<path d="m3 17 2 2 4-4"/><path d="m3 7 2 2 4-4"/><path d="M13 6h8"/><path d="M13 12h8"/><path d="M13 18h8"/>',
@@ -215,7 +216,7 @@ const ic = (nome, s, traco) => `<svg width="${s}" height="${s}" viewBox="0 0 24 
 const casca = `<div class="lado"><div class="marca"><img src="assets/logo-hsm.png" alt="Hospital São Matheus" /></div><nav>
     <div class="mi">${ic("alvo", 18, 1.5)}Reuniões e metas<span class="fim">${ic("baixo", 16)}</span></div>
     <div class="sub"><div class="mi">${ic("painel", 16, 1.5)}Dashboard</div><div class="mi">${ic("calendario", 16, 1.5)}Calendário</div><div class="mi">${ic("relogio", 16, 1.5)}Pendências<span class="fim">${ic("direita", 16)}</span></div></div>
-    <div class="mi">${ic("megafone", 18, 1.5)}Ouvidoria</div><div class="mi on">${ic("recibo", 18, 2)}Contas médicas</div><div class="mi" style="margin-top:8px">${ic("ajuda", 18, 1.5)}Ajuda</div></nav></div>
+    <div class="mi">${ic("megafone", 18, 1.5)}Ouvidoria</div><div class="mi on">${ic("recibo", 18, 2)}Contas médicas</div><div class="mi">${ic("escudo", 18, 1.5)}Admin</div><div class="mi" style="margin-top:8px">${ic("ajuda", 18, 1.5)}Ajuda</div></nav></div>
   <div class="topo"><div class="busca">${ic("lupa", 16)}Buscar...</div><div class="quem"><div class="sino">${ic("sino", 22, 1.75)}<span class="n">1</span></div><div class="divisor"></div>
     <div class="pessoa"><div class="tx"><b>marta.queiroz</b><span>marta.queiroz@exemplo.l...</span></div><div class="avatar">M<span class="seta">${ic("baixo", 12)}</span></div></div></div></div>`;
 

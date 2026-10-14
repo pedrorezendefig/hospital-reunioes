@@ -1,0 +1,9 @@
+# VERIFY: Corrigir uma conta pelo guia
+
+- Final: docs/manual/public/video/contas-medicas/corrigir-uma-conta-pelo-guia.mp4, 53 s, render high, sha256 002fa242c2e4 (master em local/manual-video-masters/contas-medicas/)
+- Check (HyperFrames 0.8.41): 0 erros, 0 avisos (lint, runtime, layout, motion; contraste 11/11); gate do anel OK
+- Strips: 11 cortes, gate OK; olhei corte-01 a corte-11. A placa da legenda fica parada na troca de passo; a troca Fila para Atendimento 900412 tem rastro nos dois lados; o fecho corta do app para o cartão branco do carimbo (corte-11), sem quadro preto.
+- Quadros a cada 3 s (draft e final): anel em Abrir, nos três números do topo, na linha Feito, na linha Não procede, em "Nada a decidir aqui" da linha Validar; o dedo toca Abrir, o código 90123456 (aviso "Código copiado"), Feito, Não procede, "A regra é outra", Confirmar, o campo da observação e Concluir e abrir a próxima (aviso "Conta concluída" e a próxima conta, 900398, abre). Itens feitos vai de 0 de 2 a 1 de 2 e 2 de 2; a linha Validar fica fora da conta, como no servidor. Confirmar fica apagado até escolher o motivo. A tela bate com fila-abrir.png, guia.png, guia-linha.png, guia-nao-procede.png e guia-concluir.png e com LinhaDoGuia.tsx e guia/[contaId]/page.tsx.
+- Texto da tela: legendas, lower-thirds, abertura e carimbo passaram pelo humanizer e pela varredura anti-técnica, sem achados.
+- Ressalvas: o guia tem duas linhas para marcar e uma Validar, menos que o print, para caber em 53 s. "Ver evidência" aparece na linha, mas o vídeo não abre a evidência (o passo 3 da página cita, o vídeo mostra copiar e Feito). Valores e nomes são de exemplo, coerentes entre a fila, o guia e a próxima conta.
+- OK humano: dispensado para esta campanha por decisão do Pedro em 14/10/2026 ("não quero mais checar draft, confio até o final"); render final feito direto, com todos os gates.

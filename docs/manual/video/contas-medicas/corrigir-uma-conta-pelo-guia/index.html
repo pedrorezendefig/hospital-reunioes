@@ -4,435 +4,417 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=1920, height=1080" />
 <title>Manual · Contas médicas · Corrigir uma conta pelo guia</title>
+<link rel="stylesheet" href="tokens.css" />
 <script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js" integrity="sha384-sG0Hv1tP1lZCk9KQmrIbY/XNwi+OY84GQqhMscbnsoBFqAz8KNCil1kvfL3Hbbk2" crossorigin="anonymous"></script>
 <script type="application/json" id="manual-video-meta">
 {
  "modulo": "contas-medicas",
  "slug": "corrigir-uma-conta-pelo-guia",
  "pagina": "contas-medicas/corrigir-uma-conta-pelo-guia.md",
- "prd": [
-  1113
- ],
- "issues": [
-  1127
- ],
- "app_version": "0.179.0",
- "gerado_em": "2026-10-12T23:30:00-03:00"
+ "prd": [1113, 1128, 1216],
+ "issues": [1127, 1236],
+ "app_version": "0.196.1",
+ "gerado_em": "2026-10-14T03:30:00-03:00"
 }
 </script>
 <style>
-  @font-face {
-    font-family: "HP Simplified";
-    src: url("assets/fonts/HPSimplified_Rg.ttf") format("truetype");
-    font-weight: 400;
-    font-style: normal;
-  }
+  /* Estilo do manual (emenda de 13/10/2026 à ADR 0057): cor e fonte só pelos
+     tokens. Na réplica, cada cor é a da classe do app, pelo token de mesmo
+     nome (text-slate-500 vira var(--color-slate-500)). */
   * { margin: 0; padding: 0; box-sizing: border-box; }
-  html, body { width: 1920px; height: 1080px; overflow: hidden; background: #fff; }
-  body { font-family: "HP Simplified", system-ui, sans-serif; }
+  html, body { width: 1920px; height: 1080px; overflow: hidden; background: var(--video-palco); }
+  body { font-family: var(--font-app); color: var(--color-text); }
 
-  :root {
-    --navy: #2B2E7E; --navy-light: #3B6FB6; --navy-dark: #1A1C4E;
-    --app-text: #1E293B; --app-sec: #64748B; --app-border: #E2E8F0;
-  }
+  #main { position: relative; width: 1920px; height: 1080px; overflow: hidden; }
+  #slot-abertura, #slot-carimbo { z-index: 5; }
+  #c-tarefa { position: absolute; inset: 0; z-index: 1; }
+  .palco { position: absolute; inset: 0; background: var(--video-palco); }
+  #camera { position: absolute; left: 0; top: 0; width: 1920px; height: 1080px; transform-origin: 0 0; }
+  [id^="slot-passo"] { z-index: 3; }
+  [id^="slot-lugar"] { z-index: 2; }
 
-  #root { position: relative; width: 1920px; height: 1080px; overflow: hidden; }
-  .scene { position: absolute; inset: 0; background: #fff; overflow: hidden; }
+  /* ===== a janela do navegador ===== */
+  .janela { position: absolute; left: 160px; top: 32px; width: 1600px; height: 848px; border-radius: var(--radius-3xl); background: var(--color-white); border: 1px solid var(--color-slate-300); box-shadow: var(--video-sombra); overflow: hidden; }
+  .barra-nav { position: absolute; left: 0; top: 0; width: 1600px; height: 44px; background: var(--color-slate-100); border-bottom: 1px solid var(--color-slate-200); display: flex; align-items: center; gap: 9px; padding: 0 18px; }
+  .barra-nav i { display: block; width: 12px; height: 12px; border-radius: 50%; background: var(--color-slate-300); }
+  .barra-nav .url { margin-left: 14px; width: 620px; height: 28px; border-radius: 14px; background: var(--color-white); border: 1px solid var(--color-slate-200); display: flex; align-items: center; padding: 0 16px; font-size: 16px; color: var(--color-slate-500); }
 
-  /* Palco desenhado em 960x540 e ampliado 2x, a mesma régua das outras
-     composições do Manual. */
-  .palco { position: relative; width: 960px; height: 540px; transform: scale(2); transform-origin: top left; font-size: 12px; color: var(--app-text); background: #EEF1F6; }
+  /* ===== o app, desenhado em 1280x643 e ampliado 1,25x ===== */
+  .vista { position: absolute; left: 0; top: 44px; width: 1600px; height: 804px; overflow: hidden; background: var(--color-bg); }
+  .app { position: absolute; left: 0; top: 0; width: 1280px; height: 643.2px; transform: scale(1.25); transform-origin: 0 0; background: var(--color-bg); font-size: 14px; line-height: 20px; }
+  .lado { position: absolute; left: 0; top: 0; width: 256px; height: 643.2px; border-right: 1px solid var(--color-border); background: var(--color-surface); }
+  .lado .marca { height: 122px; border-bottom: 1px solid var(--color-border); display: flex; align-items: center; justify-content: center; }
+  .lado .marca img { width: 170px; height: 96px; object-fit: contain; }
+  .lado nav { padding: 16px 12px; display: flex; flex-direction: column; gap: 4px; }
+  .mi { display: flex; align-items: center; gap: 12px; padding: 10px 12px; border-radius: var(--radius-xl); font-size: 14px; color: var(--color-text-secondary); }
+  .mi .fim { margin-left: auto; opacity: .5; display: flex; }
+  .mi.on { background: color-mix(in srgb, var(--color-primary) 10%, transparent); color: var(--color-primary); border-left: 3px solid var(--color-primary); padding-left: 9px; }
+  .sub { margin: 4px 0 0 16px; padding-left: 12px; border-left: 2px solid color-mix(in srgb, var(--color-border) 50%, transparent); display: flex; flex-direction: column; gap: 4px; }
+  .sub .mi { padding: 8px 12px; border-radius: var(--radius-lg); }
+  .topo { position: absolute; left: 256px; top: 0; width: 1024px; height: 64px; background: var(--color-slate-50); border-bottom: 1px solid var(--color-slate-200); display: flex; align-items: center; padding: 0 24px; }
+  .busca { width: 256px; height: 38px; border-radius: var(--radius-xl); background: var(--color-bg); border: 1px solid var(--color-border); display: flex; align-items: center; gap: 10px; padding: 0 12px; font-size: 14px; color: color-mix(in srgb, var(--color-text-secondary) 40%, transparent); }
+  .quem { margin-left: auto; margin-right: 24px; display: flex; align-items: center; gap: 24px; }
+  .sino { position: relative; color: var(--color-slate-500); display: flex; }
+  .divisor { width: 1px; height: 32px; background: var(--color-border); }
+  .pessoa { display: flex; align-items: center; gap: 12px; }
+  .pessoa .tx { text-align: right; }
+  .pessoa .tx b { display: block; font-size: 14px; font-weight: 600; color: var(--color-slate-700); }
+  .pessoa .tx span { font-size: 12px; color: var(--color-slate-500); }
+  .avatar { position: relative; width: 40px; height: 40px; border-radius: 50%; background: var(--color-primary); color: var(--color-white); font-weight: 700; display: flex; align-items: center; justify-content: center; }
+  .avatar .seta { position: absolute; right: -2px; bottom: -2px; width: 16px; height: 16px; border-radius: 50%; background: var(--color-white); border: 1px solid var(--color-slate-100); color: var(--color-slate-400); display: flex; align-items: center; justify-content: center; }
 
-  .slide { display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding: 0 160px; }
-  .eyebrow { font-size: 26px; letter-spacing: .22em; text-transform: uppercase; color: var(--navy-light); font-weight: 700; }
-  .titulo { font-size: 72px; line-height: 1.12; color: var(--navy); font-weight: 700; max-width: 1560px; margin: 34px 0 30px; }
-  .sub { font-size: 36px; color: var(--app-sec); max-width: 1420px; line-height: 1.5; }
-  .selo-abertura { margin-top: 40px; display: inline-flex; gap: 14px; }
-  .selo-abertura span { border: 2px solid var(--navy); border-radius: 999px; padding: 10px 26px; font-size: 26px; font-weight: 700; color: var(--navy); background: #F5F6FE; }
+  .corpo { position: absolute; left: 256px; top: 64px; width: 1024px; height: 579.2px; overflow: hidden; background: var(--color-bg); }
+  .tela-app { position: absolute; left: 0; top: 0; width: 1024px; height: 579.2px; }
+  .rolo { position: absolute; left: 0; top: 0; width: 1024px; height: 1600px; }
+  .pagina { position: absolute; left: 0; top: 0; width: 1024px; padding: 32px; display: flex; flex-direction: column; gap: 24px; background: var(--color-bg); }
 
-  .fecho-titulo { font-size: 52px; color: var(--navy); font-weight: 700; margin-bottom: 40px; }
-  .carimbo { font-size: 30px; color: var(--app-sec); }
-  .fecho-org { font-size: 26px; color: #64748B; margin-top: 16px; }
+  h1 { font-size: 24px; line-height: 32px; font-weight: 700; color: var(--color-slate-900); }
+  .dek { font-size: 14px; color: var(--color-slate-500); margin-top: 2px; }
+  .ap-cabeca { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+  .ap-cabeca h1 { flex: 1; }
+  .atalho { display: inline-flex; align-items: center; gap: 8px; padding: 8px 12px; border-radius: var(--radius-lg); border: 1px solid var(--color-slate-200); background: var(--color-white); font-size: 14px; color: var(--color-slate-700); white-space: nowrap; }
+  .soltar { border: 2px dashed var(--color-slate-300); border-radius: var(--radius-2xl); background: var(--color-white); padding: 32px; text-align: center; }
+  .soltar .ic { display: flex; justify-content: center; margin-bottom: 12px; color: var(--color-slate-400); }
+  .soltar .t1 { font-size: 14px; color: var(--color-slate-800); }
+  .soltar .t2 { font-size: 12px; line-height: 16px; color: var(--color-slate-500); margin-top: 4px; }
+  .bt { display: inline-flex; align-items: center; gap: 8px; padding: 6px 12px; border-radius: var(--radius-lg); font-size: 14px; white-space: nowrap; }
+  .bt.cheio { background: var(--color-primary); color: var(--color-white); }
+  .bt.grande { padding: 8px 16px; margin-top: 16px; }
+  .abas { display: flex; gap: 8px; border-bottom: 1px solid var(--color-border); }
+  .aba { padding: 8px 16px; font-size: 14px; font-weight: 500; color: var(--color-text-secondary); border-bottom: 2px solid transparent; }
+  .aba.on { color: var(--color-primary); border-bottom-color: var(--color-primary); }
+  .ap-cartao { background: var(--color-white); border: 1px solid var(--color-border); border-radius: var(--radius-2xl); box-shadow: var(--shadow-premium); padding: 20px; }
 
-  /* ===== janela de navegador ===== */
-  .janela { position: absolute; left: 30px; top: 28px; width: 580px; height: 470px; border-radius: 12px; background: #fff; box-shadow: 0 26px 60px -20px rgba(0,0,0,.42); overflow: hidden; border: 1px solid #D8DEE9; }
-  .barra { height: 20px; background: #E7EBF2; display: flex; align-items: center; gap: 4px; padding: 0 8px; border-bottom: 1px solid #D8DEE9; }
-  .barra i { width: 5px; height: 5px; border-radius: 50%; background: #C3CBD8; display: block; }
-  .barra .url { margin-left: 8px; flex: 1; height: 11px; border-radius: 6px; background: #fff; border: 1px solid #D8DEE9; font-size: 6.4px; color: #5A6273; display: flex; align-items: center; padding: 0 6px; }
-  .tela { position: absolute; left: 0; right: 0; top: 20px; bottom: 0; background: #F7F9FC; overflow: hidden; }
-
-  /* ===== moldura do app ===== */
-  .app-topo { position: absolute; left: 0; right: 0; top: 0; height: 24px; background: #fff; border-bottom: 1px solid var(--app-border); display: flex; align-items: center; justify-content: space-between; padding: 0 9px; }
-  .app-topo .marca { display: flex; align-items: center; gap: 4px; }
-  .app-topo .direita { display: flex; align-items: center; gap: 6px; color: #94A3B8; }
-  .app-topo .avatar { width: 13px; height: 13px; border-radius: 50%; background: var(--navy); color: #fff; font-size: 6px; font-weight: 700; display: flex; align-items: center; justify-content: center; }
-  .app-menu { position: absolute; left: 0; top: 24px; bottom: 0; width: 92px; background: #fff; border-right: 1px solid var(--app-border); padding: 7px 6px; }
-  .mi { display: flex; align-items: center; gap: 5px; font-size: 6.6px; color: #56606F; padding: 3.5px 5px; border-radius: 5px; margin-bottom: 2px; }
-  .mi.ativo { background: rgba(43,46,126,.08); color: var(--navy); font-weight: 700; }
-  .app-corpo { position: absolute; left: 92px; right: 0; top: 24px; bottom: 0; padding: 9px 14px; overflow: hidden; }
-
-  .h-pag { font-size: 11.5px; font-weight: 700; color: #0F172A; }
-  .dek { font-size: 6.2px; color: #56606F; margin-top: 1.5px; }
-  .cartao { background: #fff; border: 1px solid var(--app-border); border-radius: 9px; }
-  .etq { display: inline-flex; align-items: center; padding: 1.5px 5px; border-radius: 999px; font-size: 5.2px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; }
-  .pilula { display: inline-flex; align-items: center; padding: 1.5px 6px; border-radius: 999px; font-size: 5.8px; font-weight: 600; }
-  .link { color: var(--navy); font-weight: 700; }
-
-  /* ===== fila ===== */
-  .soltar { border: 1.4px dashed #CBD5E1; border-radius: 9px; background: #fff; text-align: center; padding: 9px 0 10px; margin-top: 7px; }
-  .abas { display: flex; gap: 4px; border-bottom: 1px solid var(--app-border); margin-top: 9px; }
-  .abas span { font-size: 6.6px; padding: 4px 8px; color: #56606F; border-bottom: 1.5px solid transparent; }
-  .abas span.on { color: var(--navy); border-color: var(--navy); font-weight: 700; }
-  .fila-l { display: flex; align-items: center; gap: 6px; padding: 6px 10px; border-top: 1px solid var(--app-border); }
+  /* ===== Fila (LinhaDaFila em app/contas-medicas/page.tsx) ===== */
+  .fila { margin-top: 16px; padding: 0; }
+  .fila-l { display: flex; align-items: center; gap: 4px 16px; padding: 12px 20px; border-top: 1px solid var(--color-border); }
   .fila-l:first-child { border-top: 0; }
-  .fila-l .q { flex: 1; }
-  .fila-l .q b { display: block; font-size: 6.8px; color: #0F172A; }
-  .fila-l .q span { font-size: 5.6px; color: #64748B; }
-  .fila-l .det { font-size: 5.8px; color: #475569; }
+  .fila-l .q { flex: 1; min-width: 0; }
+  .fila-l .q b { display: block; font-size: 14px; font-weight: 600; color: var(--color-slate-900); }
+  .fila-l .q span { font-size: 12px; line-height: 16px; color: var(--color-slate-500); }
+  .sit { border-radius: 999px; padding: 2px 10px; font-size: 12px; line-height: 16px; font-weight: 500; }
+  .sit.fazer { background: var(--color-red-100); color: var(--color-red-800); }
+  .sit.corr { background: var(--color-amber-100); color: var(--color-amber-800); }
+  .sit.cinza { background: var(--color-slate-100); color: var(--color-slate-600); }
+  .det { font-size: 12px; line-height: 16px; color: var(--color-slate-600); }
+  .det.erro { color: var(--color-red-700); }
+  .acao { font-size: 14px; font-weight: 500; color: var(--color-primary); }
 
-  /* ===== guia ===== */
-  .voltar { display: inline-flex; align-items: center; gap: 3px; font-size: 6.2px; color: #64748B; }
-  .numeros { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin-top: 7px; }
-  .numeros .cartao { padding: 6px 8px; }
-  .rot-num { font-size: 5.2px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: #64748B; }
-  .val-num { font-size: 13px; font-weight: 700; color: var(--navy); line-height: 1.2; }
-  .grupo-t { display: flex; justify-content: space-between; align-items: center; margin-top: 8px; font-size: 5.6px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: #64748B; }
-  .linha { background: #fff; border: 1px solid var(--app-border); border-radius: 7px; padding: 5px 7px; margin-top: 4px; }
-  .linha .topo { display: flex; align-items: center; gap: 4px; }
-  .linha .topo .v { margin-left: auto; font-size: 6.6px; font-weight: 700; color: #0F172A; }
-  .linha .nome { font-size: 6.6px; font-weight: 700; color: #0F172A; margin-top: 2.5px; }
-  .linha .txt { font-size: 6.4px; color: #334155; margin-top: 1px; }
-  .linha .mot { font-size: 5.6px; color: #64748B; margin-top: 1px; }
-  .linha .meta { display: flex; gap: 7px; align-items: center; font-size: 5.6px; color: #64748B; margin-top: 2px; }
-  .linha .cod { display: inline-flex; align-items: center; gap: 2px; font-family: ui-monospace, Menlo, monospace; color: var(--navy); font-size: 5.8px; }
-  .botoes { display: flex; gap: 4px; margin-top: 4px; }
-  .bt { display: inline-flex; align-items: center; padding: 3px 7px; border-radius: 5px; font-size: 5.4px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; }
-  .bt-cheio { background: var(--navy); color: #fff; }
-  .bt-claro { background: #fff; color: #334155; border: 1px solid var(--app-border); }
-  .marcada { display: flex; align-items: center; gap: 5px; border-radius: 7px; padding: 4px 7px; margin-top: 4px; font-size: 6.2px; color: #334155; }
-  .marcada .v { margin-left: auto; color: #64748B; }
-  .fs { border: 1px solid var(--app-border); border-radius: 6px; padding: 4px 7px; margin-top: 4px; }
-  .fs .lg { font-size: 5.8px; font-weight: 700; color: #334155; }
-  .radio { display: flex; width: fit-content; align-items: center; gap: 4px; font-size: 6.2px; color: #334155; margin-top: 2.5px; }
-  .radio i { width: 6px; height: 6px; border-radius: 50%; border: 1px solid #94A3B8; display: inline-block; position: relative; }
-  .radio i b { position: absolute; left: 1px; top: 1px; width: 2.4px; height: 2.4px; border-radius: 50%; background: #2563EB; opacity: 0; }
-  .validar-msg { font-size: 5.8px; color: #92400E; margin-top: 3px; }
-  .rodape-guia { background: #fff; border: 1px solid var(--app-border); border-radius: 9px; padding: 6px 8px; margin-top: 7px; }
-  .area { height: 15px; border: 1px solid var(--app-border); border-radius: 5px; margin-top: 3px; font-size: 5.8px; color: #6C7786; padding: 3px 5px; }
-  .toast { position: absolute; right: 12px; bottom: 16px; background: #ECFDF5; border: 1px solid #A7F3D0; border-radius: 9px; box-shadow: 0 16px 34px -18px rgba(0,0,0,.3); padding: 5px 9px; font-size: 6.6px; font-weight: 700; color: #065F46; opacity: 0; }
-  .confirma { position: absolute; left: 150px; top: 6px; width: 230px; background: #fff; border: 1px solid #D8DEE9; border-radius: 8px; box-shadow: 0 18px 40px -14px rgba(0,0,0,.4); padding: 9px 11px; opacity: 0; z-index: 25; }
-  .confirma p { font-size: 6.8px; color: #0F172A; }
-  .confirma .acoes { display: flex; justify-content: flex-end; gap: 5px; margin-top: 8px; }
-  .confirma .acoes span { font-size: 6.2px; padding: 3px 9px; border-radius: 5px; }
+  /* ===== Guia (guia/[contaId]/page.tsx e LinhaDoGuia.tsx) ===== */
+  .guia { left: 128px; width: 768px; padding: 32px 0; gap: 20px; }
+  .volta { display: inline-flex; align-items: center; gap: 6px; font-size: 14px; color: var(--color-slate-500); margin-bottom: 8px; }
+  .g-cab { display: flex; flex-direction: column; gap: 4px; }
+  .g-tit { display: flex; align-items: center; gap: 8px; }
+  .etq { display: inline-flex; align-items: center; padding: 2px 8px; border-radius: 999px; font-size: 11px; line-height: 16px; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; white-space: nowrap; }
+  .etq.sit-g { padding: 2px 10px; font-size: 12px; text-transform: none; letter-spacing: 0; background: var(--color-amber-100); color: var(--color-amber-800); }
+  .etq.acao-g { background: color-mix(in srgb, var(--color-primary) 8%, var(--color-white)); color: var(--color-primary); }
+  .etq.amb { background: var(--color-amber-100); color: var(--color-amber-800); }
+  .etq.verde { background: var(--color-green-100); color: var(--color-green-800); }
+  .etq.cinza { background: var(--color-slate-100); color: var(--color-slate-600); }
+  .rotulo { font-size: 12px; line-height: 16px; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; color: var(--color-slate-500); }
+  .g-nums { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+  .g-nums .ap-cartao { padding: 16px; }
+  .g-val { font-size: 30px; line-height: 36px; font-weight: 700; color: var(--color-primary); }
+  .g-apoio { font-size: 12px; line-height: 16px; color: var(--color-slate-500); }
+  .grupo { display: flex; flex-direction: column; gap: 8px; }
+  .grupo-cab { display: flex; align-items: center; justify-content: space-between; }
+  .dia { font-size: 12px; line-height: 16px; font-weight: 600; color: var(--color-primary); }
+  .gl { border: 1px solid var(--color-border); border-radius: var(--radius-xl); background: var(--color-white); padding: 12px; display: flex; flex-direction: column; gap: 6px; }
+  .gl-l1 { display: flex; align-items: center; gap: 6px; }
+  .gl-l1 .v { margin-left: auto; font-size: 14px; font-weight: 600; color: var(--color-slate-900); }
+  .gl-nome { font-size: 14px; font-weight: 600; color: var(--color-slate-900); }
+  .gl-txt { font-size: 14px; color: var(--color-slate-700); }
+  .gl-mot { font-size: 12px; line-height: 16px; color: var(--color-slate-500); }
+  .gl-meta { display: flex; align-items: center; gap: 12px; font-size: 12px; line-height: 16px; color: var(--color-slate-500); }
+  .cod { display: inline-flex; align-items: center; gap: 4px; font-family: var(--font-mono); font-size: 12px; color: var(--color-primary); }
+  .lk { color: var(--color-primary); }
+  .gl-bts { display: flex; gap: 8px; padding-top: 4px; }
+  .gb { padding: 6px 12px; border-radius: var(--radius-lg); font-size: 12px; line-height: 16px; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; border: 1px solid var(--color-border); color: var(--color-slate-700); background: var(--color-white); }
+  .gb.cheio { background: var(--color-primary); color: var(--color-white); border-color: var(--color-primary); }
+  .gb.apagado { opacity: .5; }
+  .gl-val { font-size: 12px; line-height: 16px; color: var(--color-amber-800); display: flex; flex-direction: column; gap: 2px; width: fit-content; }
+  .gl-val b { font-weight: 600; }
+  .gm { border: 1px solid var(--color-border); border-radius: var(--radius-xl); padding: 8px 12px; display: flex; align-items: center; gap: 8px; }
+  .gm.feito { background: var(--color-green-50); border-color: var(--color-green-200); }
+  .gm.np { background: var(--color-slate-50); }
+  .gm .nm { font-size: 14px; color: var(--color-slate-700); }
+  .gm .v { margin-left: auto; font-size: 14px; color: var(--color-slate-500); }
+  .gm .dz { font-size: 12px; line-height: 16px; font-weight: 600; color: var(--color-primary); }
+  .np-form { margin-top: 8px; border: 1px solid var(--color-border); border-radius: var(--radius-lg); padding: 4px 12px 8px; display: flex; flex-direction: column; gap: 8px; position: relative; }
+  .np-form .lg { position: absolute; left: 8px; top: -9px; padding: 0 4px; background: var(--color-white); font-size: 12px; line-height: 16px; font-weight: 600; color: var(--color-slate-700); }
+  .radios { display: flex; flex-direction: column; gap: 4px; padding-top: 10px; }
+  .radio { display: flex; width: fit-content; align-items: center; gap: 8px; font-size: 14px; color: var(--color-slate-700); }
+  .radio i { position: relative; width: 13px; height: 13px; border-radius: 50%; border: 1px solid var(--color-slate-500); display: block; }
+  .radio.on i { border: 4px solid var(--color-blue-600); }
+  .campo-tx { min-height: 58px; border: 1px solid var(--color-border); border-radius: var(--radius-lg); padding: 6px 8px; font-size: 14px; color: var(--color-slate-400); position: relative; }
+  .campo-tx .escrito { position: absolute; left: 12px; right: 12px; top: 8px; color: var(--color-slate-900); }
+  .campo-foco { position: absolute; inset: -1px; border: 1px solid var(--color-primary); border-radius: var(--radius-lg); box-shadow: 0 0 0 1px var(--color-primary); opacity: 0; }
+  .ditar-linha { display: flex; align-items: center; gap: 8px; }
+  .ditar { display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--color-slate-200); border-radius: var(--radius-lg); padding: 4px 10px; font-size: 12px; line-height: 16px; color: var(--color-slate-600); background: var(--color-white); }
+  .ajuda { font-size: 12px; line-height: 16px; color: var(--color-slate-500); }
+  .g-rod { display: flex; flex-direction: column; gap: 12px; padding: 16px; }
+  .concluir { width: fit-content; padding: 8px 16px; border-radius: var(--radius-xl); background: var(--color-primary); color: var(--color-white); font-size: 14px; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; }
+  .aviso { position: absolute; right: 16px; bottom: 16px; z-index: 9; display: flex; align-items: center; gap: 12px; min-width: 300px; padding: 12px 16px; border-radius: var(--radius-2xl); border: 1px solid var(--color-emerald-100); background: var(--color-emerald-50); box-shadow: var(--shadow-premium-strong); font-size: 14px; font-weight: 500; color: var(--color-slate-800); opacity: 0; }
+  .aviso .ok { color: var(--color-emerald-500); display: flex; }
+  .aviso .x { margin-left: auto; color: var(--color-slate-400); display: flex; padding: 4px; }
 
-  /* ===== dedo fantasma e legenda ===== */
-  .ghost { position: absolute; left: 0; top: 0; z-index: 40; opacity: 0; }
-  .ghost .pulse { position: absolute; left: -7px; top: -7px; width: 34px; height: 34px; border-radius: 50%; background: rgba(43,46,126,.28); opacity: 0; }
-  .passo { position: absolute; left: 632px; top: 150px; width: 300px; opacity: 0; }
-  .passo .n { display: inline-flex; align-items: center; justify-content: center; width: 30px; height: 30px; border-radius: 50%; background: var(--navy); color: #fff; font-size: 16px; font-weight: 700; }
-  .passo h3 { font-size: 24px; line-height: 1.25; color: var(--navy); font-weight: 700; margin: 12px 0 8px; }
-  .passo p { font-size: 16.5px; line-height: 1.5; color: #556076; }
-  .passo b { color: var(--app-text); }
-  .marcador { position: absolute; border: 1.5px solid var(--navy); border-radius: 7px; box-shadow: 0 0 0 3px rgba(43,46,126,.14); opacity: 0; z-index: 30; }
-  .rodape-v { position: absolute; left: 0; right: 0; bottom: 14px; text-align: center; font-size: 9.5px; color: #576070; letter-spacing: .04em; }
+  /* ===== o foco: marcador, dedo e toque ===== */
+  .marcador { position: absolute; left: 0; top: 0; opacity: 0; border: 3px solid var(--video-foco); border-radius: 14px; box-shadow: 0 0 0 8px var(--video-foco-halo); }
+  .dedo { position: absolute; left: 0; top: 0; opacity: 0; width: 40px; height: 40px; }
+  .dedo svg { position: absolute; left: 0; top: 0; width: 40px; height: 40px; }
+  .dedo path { fill: var(--video-foco); stroke: var(--color-white); stroke-width: 1.4; }
+  .toque { position: absolute; left: -22px; top: -22px; width: 56px; height: 56px; border-radius: 50%; background: var(--video-foco-halo); border: 2px solid var(--video-foco); opacity: 0; }
 </style>
 </head>
 <body>
+<div id="main" data-composition-id="main" data-start="0" data-width="1920" data-height="1080" data-duration="53">
 
-<div id="root" data-composition-id="main" data-start="0" data-width="1920" data-height="1080" data-duration="44" data-fps="30">
+  <div id="slot-abertura" data-composition-id="abertura" data-composition-src="compositions/abertura.html"
+    data-variable-values='{"secao":"Manual · Contas médicas","titulo":"Corrigir uma conta pelo guia","papel":"Faturista"}'
+    data-start="0" data-duration="4" data-track-index="1" data-width="1920" data-height="1080"></div>
 
-  <!-- 1 · Abertura -->
-  <section id="c-abertura" class="clip scene slide" data-start="0" data-duration="4" data-track-index="1">
-    <div class="eyebrow" id="ab-eyebrow">Manual · Contas médicas</div>
-    <h1 class="titulo" id="ab-titulo">Corrigir uma conta pelo guia</h1>
-    <p class="sub" id="ab-sub">Corrigir no MV o que o guia aponta, marcar cada linha e concluir a conta.</p>
-    <div class="selo-abertura" id="ab-selos"><span>Faturista</span></div>
+  <section id="c-tarefa" class="clip" data-start="4" data-duration="45" data-track-index="2">
+    <div class="palco"></div>
+    <div id="camera" data-layout-allow-overflow></div>
   </section>
 
-  <!-- 2 · A tarefa, passo a passo -->
-  <section id="c-tarefa" class="clip scene" data-start="4" data-duration="35" data-track-index="2">
-    <div class="palco" id="palco-tarefa"></div>
-  </section>
+  <div id="slot-lugar-1" data-composition-id="lower-third" data-composition-src="compositions/lower-third.html"
+    data-variable-values='{"lugar":"Contas médicas","tela":"Fila"}'
+    data-start="4.3" data-duration="2.7" data-track-index="5" data-width="1920" data-height="1080"></div>
+  <div id="slot-lugar-2" data-composition-id="lower-third" data-composition-src="compositions/lower-third.html"
+    data-variable-values='{"lugar":"Contas médicas","tela":"Atendimento 900412"}'
+    data-start="9.1" data-duration="2.8" data-track-index="5" data-width="1920" data-height="1080"></div>
 
-  <!-- 3 · Fecho -->
-  <section id="c-fecho" class="clip scene slide" data-start="39" data-duration="5" data-track-index="3">
-    <div class="fecho-titulo" id="fc-titulo">Corrigir uma conta pelo guia</div>
-    <div class="carimbo" id="fc-carimbo">Manual · retrata o app em v0.179.0 · gerado em 12/10/2026</div>
-    <div class="fecho-org" id="fc-org">Hospital São Matheus · Manual da plataforma</div>
-  </section>
+  <div id="slot-passo-1" data-composition-id="legenda-de-passo" data-composition-src="compositions/legenda-de-passo.html"
+    data-variable-values='{"numero":"1","texto":"Na **Fila**, clique em **Abrir** na conta. Ela passa para **Em correção**."}'
+    data-start="4" data-duration="6" data-track-index="3" data-width="1920" data-height="1080"></div>
+  <div id="slot-passo-2" data-composition-id="legenda-de-passo" data-composition-src="compositions/legenda-de-passo.html"
+    data-variable-values='{"numero":"2","texto":"Leia o topo: **Nota de entrada**, **R$ a ajustar** e **Itens feitos**."}'
+    data-start="10" data-duration="6" data-track-index="4" data-width="1920" data-height="1080"></div>
+  <div id="slot-passo-3" data-composition-id="legenda-de-passo" data-composition-src="compositions/legenda-de-passo.html"
+    data-variable-values='{"numero":"3","texto":"Clique no código para copiar, corrija no MV e clique em **Feito**. A linha fica verde."}'
+    data-start="16" data-duration="9" data-track-index="3" data-width="1920" data-height="1080"></div>
+  <div id="slot-passo-4" data-composition-id="legenda-de-passo" data-composition-src="compositions/legenda-de-passo.html"
+    data-variable-values='{"numero":"4","texto":"A correção não cabe? **Não procede**, escolha o motivo e **Confirmar**."}'
+    data-start="25" data-duration="9" data-track-index="4" data-width="1920" data-height="1080"></div>
+  <div id="slot-passo-5" data-composition-id="legenda-de-passo" data-composition-src="compositions/legenda-de-passo.html"
+    data-variable-values='{"numero":"5","texto":"A linha **Validar** não tem botão: o item já foi para a gestão decidir."}'
+    data-start="34" data-duration="5" data-track-index="3" data-width="1920" data-height="1080"></div>
+  <div id="slot-passo-6" data-composition-id="legenda-de-passo" data-composition-src="compositions/legenda-de-passo.html"
+    data-variable-values='{"numero":"6","texto":"Escreva a observação, se quiser, e clique em **Concluir e abrir a próxima**."}'
+    data-start="39" data-duration="10" data-track-index="4" data-width="1920" data-height="1080"></div>
 
+  <div id="slot-carimbo" data-composition-id="carimbo" data-composition-src="compositions/carimbo.html"
+    data-variable-values='{"titulo":"Corrigir uma conta pelo guia","carimbo":"Manual · retrata o app em v0.196.1 · gerado em 14/10/2026"}'
+    data-start="49" data-duration="4" data-track-index="1" data-width="1920" data-height="1080"></div>
 </div>
 
 <script>
-const IC = {
-  marca: '<svg width="22" height="9" viewBox="0 0 100 42" fill="none" style="flex-shrink:0"><path d="M8 40 A24 24 0 0 1 56 40" stroke="#3B6FB6" stroke-width="6" stroke-linecap="round"/><path d="M44 40 A24 24 0 0 1 92 40" stroke="#1E3A8A" stroke-width="6" stroke-linecap="round"/></svg>',
-  sino: '<svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.268 21a2 2 0 0 0 3.464 0"/><path d="M3.262 15.326A1 1 0 0 0 4 17h16a1 1 0 0 0 .74-1.673C19.41 13.956 18 12.499 18 8A6 6 0 0 0 6 8c0 4.499-1.41 5.956-2.738 7.326"/></svg>',
-  alvo: '<svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg>',
-  megafone: '<svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m3 11 18-5v12L3 14v-3z"/><path d="M11.6 16.8a3 3 0 1 1-5.8-1.6"/></svg>',
-  recibo: '<svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 2v20l2-1 2 1 2-1 2 1 2-1 2 1 2-1 2 1V2l-2 1-2-1-2 1-2-1-2 1-2-1-2 1Z"/><path d="M14 8H8"/><path d="M16 12H8"/><path d="M13 16H8"/></svg>',
-  ajuda: '<svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><path d="M12 17h.01"/></svg>',
-  subir: '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#94A3B8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" x2="12" y1="3" y2="15"/></svg>',
-  seta: '<svg width="7" height="7" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 19-7-7 7-7"/><path d="M19 12H5"/></svg>',
-  copiar: '<svg width="6" height="6" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="14" height="14" x="8" y="8" rx="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>',
+/* Ícones: os do lucide, os mesmos do app, no traço da cor do texto. */
+const P = {
+  alvo: '<circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/>', painel: '<rect width="7" height="9" x="3" y="3" rx="1"/><rect width="7" height="5" x="14" y="3" rx="1"/><rect width="7" height="9" x="14" y="12" rx="1"/><rect width="7" height="5" x="3" y="16" rx="1"/>',
+  calendario: '<path d="M8 2v4"/><path d="M16 2v4"/><rect width="18" height="18" x="3" y="4" rx="2"/><path d="M3 10h18"/><path d="M8 14h.01"/><path d="M12 14h.01"/><path d="M16 14h.01"/><path d="M8 18h.01"/><path d="M12 18h.01"/><path d="M16 18h.01"/>',
+  relogio: '<circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>', baixo: '<path d="m6 9 6 6 6-6"/>', direita: '<path d="m9 18 6-6-6-6"/>',
+  megafone: '<path d="m3 11 18-5v12L3 14v-3z"/><path d="M11.6 16.8a3 3 0 1 1-5.8-1.6"/>', recibo: '<path d="M4 2v20l2-1 2 1 2-1 2 1 2-1 2 1 2-1 2 1V2l-2 1-2-1-2 1-2-1-2 1-2-1-2 1Z"/><path d="M14 8H8"/><path d="M16 12H8"/><path d="M13 16H8"/>',
+  escudo: '<path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/><path d="m9 12 2 2 4-4"/>',
+  ajuda: '<circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><path d="M12 17h.01"/>', lupa: '<circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/>',
+  sino: '<path d="M10.268 21a2 2 0 0 0 3.464 0"/><path d="M3.262 15.326A1 1 0 0 0 4 17h16a1 1 0 0 0 .74-1.673C19.41 13.956 18 12.499 18 8A6 6 0 0 0 6 8c0 4.499-1.41 5.956-2.738 7.326"/>',
+  grafico: '<path d="M3 3v18h18"/><path d="M18 17V9"/><path d="M13 17V5"/><path d="M8 17v-3"/>',
+  subir: '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" x2="12" y1="3" y2="15"/>', voltar: '<path d="m12 19-7-7 7-7"/><path d="M19 12H5"/>',
+  copiar: '<rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/>', mic: '<path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" x2="12" y1="19" y2="22"/>',
+  ok: '<path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><path d="m9 11 3 3L22 4"/>', x: '<path d="M18 6 6 18"/><path d="m6 6 12 12"/>',
 };
+const ic = (nome, s, traco) => `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="${traco || 2}" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0">${P[nome]}</svg>`;
 
-const moldura = (url, corpo) =>
-  `<div class="app-topo"><div class="marca">${IC.marca}<span style="font-size:6.2px;font-weight:700;color:#1E3A8A;line-height:1.1">HOSPITAL<br>SÃO MATHEUS</span></div>` +
-  `<div class="direita">${IC.sino}<div class="avatar">R</div></div></div>` +
-  `<div class="app-menu"><div class="mi">${IC.alvo}Reuniões e metas</div><div class="mi">${IC.megafone}Ouvidoria</div>` +
-  `<div class="mi ativo">${IC.recibo}Contas médicas</div><div class="mi" style="margin-top:3px">${IC.ajuda}Ajuda</div></div>` +
-  `<div class="app-corpo">${corpo}</div>`;
+/* A casca do app (barra lateral e topo), como a Renata vê: AppShell, Sidebar e Header do frontend. */
+const casca = `<div class="lado"><div class="marca"><img src="assets/logo-hsm.png" alt="Hospital São Matheus" /></div><nav>
+    <div class="mi">${ic("alvo", 18, 1.5)}Reuniões e metas<span class="fim">${ic("baixo", 16)}</span></div>
+    <div class="sub"><div class="mi">${ic("painel", 16, 1.5)}Dashboard</div><div class="mi">${ic("calendario", 16, 1.5)}Calendário</div><div class="mi">${ic("relogio", 16, 1.5)}Pendências<span class="fim">${ic("direita", 16)}</span></div></div>
+    <div class="mi">${ic("megafone", 18, 1.5)}Ouvidoria</div><div class="mi on">${ic("recibo", 18, 2)}Contas médicas</div><div class="mi">${ic("escudo", 18, 1.5)}Admin</div><div class="mi" style="margin-top:8px">${ic("ajuda", 18, 1.5)}Ajuda</div></nav></div>
+  <div class="topo"><div class="busca">${ic("lupa", 16)}Buscar...</div><div class="quem"><div class="sino">${ic("sino", 22, 1.75)}</div><div class="divisor"></div>
+    <div class="pessoa"><div class="tx"><b>renata.lima</b><span>renata.lima@exemplo.local</span></div><div class="avatar">R<span class="seta">${ic("baixo", 12)}</span></div></div></div></div>`;
 
-const linhaFila = (id, at, comp, pilula, cor, det, acao, idAcao) =>
-  `<div class="fila-l" id="${id}"><div class="q"><b>Atendimento ${at}</b><span>${comp}</span></div>` +
-  `<span class="pilula" style="${cor}">${pilula}</span>${det ? `<span class="det">${det}</span>` : ""}` +
-  `${acao ? `<span class="link" style="font-size:6.4px" ${idAcao ? `id="${idAcao}"` : ""}>${acao}</span>` : ""}</div>`;
+/* Tela Contas médicas (app/contas-medicas/page.tsx), com a fila da Renata. */
+const conta = (at, comp, sit, cls, det, acao, id) => `<li class="fila-l" style="list-style:none"><div class="q"><b>Atendimento ${at}</b><span>${comp}</span></div><span class="sit ${cls}">${sit}</span>${det ? `<span class="det">${det}</span>` : ""}${acao ? `<span class="acao" ${id ? `id="${id}"` : ""}>${acao}</span>` : ""}</li>`;
+const telaContas = `<div class="rolo" id="rolo-c"><div class="pagina" id="pc">
+  <div><div class="ap-cabeca"><h1>Contas médicas</h1><span class="atalho">${ic("grafico", 16)}Painel</span></div>
+    <p class="dek">Envie a conta e o prontuário do MV e receba a lista do que corrigir antes de mandar para a operadora.</p></div>
+  <div class="soltar"><div class="ic">${ic("subir", 32)}</div><p class="t1">Arraste aqui a conta e o prontuário do MV</p><p class="t2">Vários de uma vez, sem renomear: o app lê o tipo e o atendimento dentro de cada PDF. Até 10 atendimentos e 30 arquivos por envio, 100 MB por arquivo.</p><span class="bt cheio grande">Selecionar arquivos</span></div>
+  <div><div class="abas"><span class="aba on" id="aba-fila">Fila (4)</span><span class="aba">Concluídas (1)</span></div><ul class="ap-cartao fila">
+    ${conta("900398", "conta 51190 · 28/09 a 02/10", "Em correção", "corr", "Nota 99, R$ 82,95, 2 de 3", "Continuar")}
+    ${conta("900412", "conta 51230 · 03/10 a 08/10", "A fazer", "fazer", "Nota 97, R$ 73,10, 0 de 2", "Abrir", "bt-abrir")}
+    ${conta("900431", "conta 51302 · 05/10 a 09/10", "Falta o prontuário", "cinza", "", "")}
+    <li class="fila-l" style="list-style:none"><div class="q"><b>Atendimento 900377</b><span>conta 51288</span></div><span class="sit fazer">Erro</span><span class="det erro">Este PDF não tem texto. Exporte de novo pelo MV</span><span class="acao">Enviar de novo</span></li></ul></div>
+</div></div>`;
 
-const telaFila = moldura("", `
-  <div class="h-pag">Contas médicas</div>
-  <div class="dek">Envie a conta e o prontuário do MV e receba a lista do que corrigir antes de mandar para a operadora.</div>
-  <div class="soltar">${IC.subir}<div style="font-size:6.4px;font-weight:700;color:#1E293B;margin-top:2px">Arraste aqui a conta e o prontuário do MV</div>
-    <span class="bt bt-cheio" style="margin-top:5px;text-transform:none;letter-spacing:0;font-size:6px">Selecionar arquivos</span></div>
-  <div class="abas"><span class="on">Fila (4)</span><span>Concluídas (1)</span></div>
-  <div class="cartao" style="margin-top:7px">
-    ${linhaFila("fl-1", "900398", "conta 51190 · 28/09 a 02/10", "Em correção", "background:#FEF3C7;color:#92400E", "Nota 99, R$ 82,95, 2 de 3", "Continuar")}
-    ${linhaFila("fl-2", "900412", "conta 51230 · 03/10 a 08/10", "A fazer", "background:#FEE2E2;color:#991B1B", "Nota 97, R$ 581,45, 0 de 5", "Abrir", "fila-abrir")}
-    ${linhaFila("fl-3", "900431", "conta 51302 · 05/10 a 09/10", "Falta o prontuário", "background:#F1F5F9;color:#475569", "", "")}
-    ${linhaFila("fl-4", "900377", "conta 51288", "Erro", "background:#FEE2E2;color:#991B1B", "Este PDF não tem texto. Exporte de novo pelo MV", "Enviar de novo")}
-  </div>`);
+/* O Guia (guia/[contaId]/page.tsx e LinhaDoGuia.tsx). Cada marcação relê o
+   guia e a tela muda de uma vez: cada estado é um quadro inteiro, e a troca
+   entre eles é instantânea, como no app. */
+const cod = (c, id) => `<span class="cod" ${id ? `id="${id}"` : ""}>${c}${ic("copiar", 12)}</span>`;
+const PANTO = { acao: "Incluir", v: "+R$ 68,40", nome: "Pantoprazol 40 mg injetável", txt: "Incluir 3, de 03/10 a 05/10", mot: "Prescrito em 6 dias, lançado em 3.", cod: "90123456", regra: "AURORA-MED-02", ev: true };
+const AGULHA = { acao: "Corrigir preço", v: "-R$ 4,70", nome: "Agulha hipodérmica 25 x 7", txt: "Corrigir preço de R$ 1,42 para R$ 0,95, em 03/10", mot: "Coluna errada: o lançado é o preço da outra coluna.", cod: "70031245", regra: "AURORA-PRI-01" };
+const DIARIA = { nome: "Diária de CTI adulto", txt: "Validar, em 04/10", mot: "Transferência de setor antes das 10h: a regra da diária espera a gestão decidir.", cod: "60000710", regra: "AURORA-DIA-02" };
+const aberta = (p, l, k, form) => `<article class="gl" id="${p}-${k}"><div class="gl-l1"><span class="etq acao-g">${l.acao}</span><span class="v">${l.v}</span></div><p class="gl-nome">${l.nome}</p><p class="gl-txt">${l.txt}</p><p class="gl-mot">${l.mot}</p>
+  <div class="gl-meta">${cod(l.cod, `${p}-${k}-cod`)}<span>Regra ${l.regra}</span>${l.ev ? `<span class="lk">Ver evidência</span>` : ""}</div>
+  <div class="gl-bts"><span class="gb cheio" id="${p}-${k}-feito">Feito</span><span class="gb" id="${p}-${k}-np">Não procede</span><span class="gb">Bloqueado</span></div>${form || ""}</article>`;
+const formNP = (p, motivo) => `<div class="np-form"><span class="lg">Por que não procede?</span><div class="radios">${["Já está na conta", "Sem evidência no prontuário", "A regra é outra", "Outro"].map((m, i) => `<span class="radio${motivo && i === 2 ? " on" : ""}" ${i === 2 ? `id="${p}-regra-outra"` : ""}><i></i>${m}</span>`).join("")}</div>
+  <div class="campo-tx">Conte mais, se quiser</div><div class="ditar-linha"><span class="ditar">${ic("mic", 14)}Ditar</span><p class="ajuda">Não dite nome nem dado de paciente.</p></div>
+  <div class="gl-bts"><span class="gb cheio${motivo ? "" : " apagado"}" id="${p}-confirmar">Confirmar</span><span class="gb">Cancelar</span></div></div>`;
+const marcada = (p, l, k, feito) => `<article class="gm ${feito ? "feito" : "np"}" id="${p}-${k}"><span class="etq ${feito ? "verde" : "cinza"}">${feito ? "Feito" : "Não procede"}</span><span class="nm">${l.nome}</span>${cod(l.cod)}<span class="v">${l.v}</span><span class="dz">Desfazer</span></article>`;
+const validar = (p) => `<article class="gl" id="${p}-diaria"><div class="gl-l1"><span class="etq amb">Validar</span></div><p class="gl-nome">${DIARIA.nome}</p><p class="gl-txt">${DIARIA.txt}</p><p class="gl-mot">${DIARIA.mot}</p>
+  <div class="gl-meta">${cod(DIARIA.cod)}<span>Regra ${DIARIA.regra}</span></div><div class="gl-val" id="${p}-nada"><p>Nada a decidir aqui: o item já foi para a validação</p><p><b>Em jogo: R$ 1.212,00</b></p></div></article>`;
+const grupo = (rot, dia, linhas) => `<section class="grupo"><div class="grupo-cab"><h2 class="rotulo">${rot}</h2>${dia ? `<span class="dia">Marcar o dia como feito</span>` : ""}</div>${linhas}</section>`;
+const cabeca = (at, sub) => `<div><span class="volta">${ic("voltar", 16)}Contas médicas</span><header class="g-cab"><div class="g-tit"><h1>Atendimento ${at}</h1><span class="etq sit-g">Em correção</span></div><p class="dek">${sub}</p></header></div>`;
+const nums = (p, nota, valor, resumo, feitos) => `<section class="g-nums" id="${p}-nums"><div class="ap-cartao"><p class="rotulo">Nota de entrada</p><p class="g-val">${nota}</p></div><div class="ap-cartao"><p class="rotulo">R$ a ajustar</p><p class="g-val">R$ ${valor}</p><p class="g-apoio">${resumo}</p></div><div class="ap-cartao"><p class="rotulo">Itens feitos</p><p class="g-val" id="${p}-feitos">${feitos}</p></div></section>`;
+const rodape = (p) => `<footer class="ap-cartao g-rod" id="${p}-rodape"><label class="rotulo">Observação para a gestão de contas médicas</label><div class="campo-tx" id="${p}-obs"><span id="${p}-vazia">Opcional</span><span class="campo-foco" id="${p}-foco"></span><span class="escrito" id="${p}-escrito" style="opacity:0">O prontuário cita um segundo cateter que não achei na conta.</span></div>
+  <div class="ditar-linha"><span class="ditar">${ic("mic", 14)}Ditar</span><p class="ajuda">Não dite nome nem dado de paciente.</p></div><span class="concluir" id="${p}-concluir">Concluir e abrir a próxima</span><p class="ajuda">Você pode concluir com pendência. Os itens em validação e os bloqueados seguem para a gestão, e a conta já entra na sua produção.</p></footer>`;
+const estado = (p, feitos, linhas03, visivel) => `<div class="pagina guia" id="${p}" style="opacity:${visivel ? 1 : 0}">${cabeca("900412", "Ana P. · conta 51230 · AURORA · coluna Comum · parcial de 03/10 a 08/10")}${nums(p, 97, "73,10", "em 2 itens, mais 1.212,00 em validação", feitos)}
+  ${grupo("03/10 · CTI ADULTO", feitos !== "2 de 2", linhas03)}${grupo("04/10 · CTI ADULTO", false, validar(p))}${rodape(p)}</div>`;
+const telaGuia = `<div class="rolo" id="rolo-g">
+  ${estado("g0", "0 de 2", aberta("g0", PANTO, "panto") + aberta("g0", AGULHA, "agulha"), true)}
+  ${estado("g1", "1 de 2", marcada("g1", PANTO, "panto", true) + aberta("g1", AGULHA, "agulha"))}
+  ${estado("g2", "1 de 2", marcada("g2", PANTO, "panto", true) + aberta("g2", AGULHA, "agulha", formNP("g2", false)))}
+  ${estado("g3", "1 de 2", marcada("g3", PANTO, "panto", true) + aberta("g3", AGULHA, "agulha", formNP("g3", true)))}
+  ${estado("g4", "2 de 2", marcada("g4", PANTO, "panto", true) + marcada("g4", AGULHA, "agulha", false))}</div>`;
+const telaProxima = `<div class="rolo"><div class="pagina guia">${cabeca("900398", "Rui M. · conta 51190 · AURORA · coluna Comum · parcial de 28/09 a 02/10")}${nums("n0", 99, "82,95", "em 3 itens", "2 de 3")}
+  ${grupo("29/09 · POSTO 3", true, marcada("n0", { nome: "Ondansetrona 4 mg injetável", cod: "90187733", v: "+R$ 9,85" }, "a", true) + marcada("n0", { nome: "Curativo com filme transparente", cod: "70081975", v: "+R$ 41,80" }, "b", true) + aberta("n0", { acao: "Incluir", v: "+R$ 31,30", nome: "Equipo de bomba de infusão", txt: "Incluir 1, em 30/09", mot: "Registrado na evolução, sem lançamento.", cod: "70044190", regra: "AURORA-MAT-01" }, "c"))}</div></div>`;
+const aviso = (id, texto) => `<div class="aviso" id="${id}"><span class="ok">${ic("ok", 20)}</span>${texto}<span class="x">${ic("x", 16)}</span></div>`;
 
-const telaGuia = moldura("", `
-  <div class="voltar">${IC.seta}Contas médicas</div>
-  <div style="display:flex;align-items:center;gap:5px;margin-top:3px"><div class="h-pag">Atendimento 900412</div>
-    <span class="pilula" id="sit-guia" style="background:#FEF3C7;color:#92400E">Em correção</span></div>
-  <div class="dek">Ana P. · conta 51230 · AURORA · coluna Comum · parcial de 03/10 a 08/10</div>
-  <div class="numeros" id="bl-numeros">
-    <div class="cartao"><div class="rot-num">Nota de entrada</div><div class="val-num">97</div></div>
-    <div class="cartao"><div class="rot-num">R$ a ajustar</div><div class="val-num">R$ 581,45</div><div style="font-size:5px;color:#64748B">em 5 itens, mais 1.212,00 em validação</div></div>
-    <div class="cartao"><div class="rot-num">Itens feitos</div><div class="val-num" id="itens-feitos">0 de 5</div></div>
-  </div>
-  <div class="grupo-t"><span>03/10 · CTI ADULTO</span><span class="link" style="text-transform:none;letter-spacing:0">Marcar o dia como feito</span></div>
+document.getElementById("camera").innerHTML = `<div class="janela" id="janela">
+    <div class="barra-nav"><i></i><i></i><i></i><div class="url">app.hospitalsaomatheus.cloud/contas-medicas</div></div>
+    <div class="vista"><div class="app" id="app">${casca}<div class="corpo"><div class="tela-app" id="tela-contas">${telaContas}</div><div class="tela-app" id="tela-guia" style="opacity:0">${telaGuia}</div><div class="tela-app" id="tela-proxima" style="opacity:0">${telaProxima}</div></div>${aviso("av-copiado", "Código copiado")}${aviso("av-concluida", "Conta concluída")}</div></div></div>
+  <div class="marcador" id="mk"></div><div class="dedo" id="dedo"><svg viewBox="0 0 24 24"><path d="M5 3l14 8-6 1.6L9.6 19z"/></svg><div class="toque" id="toque"></div></div>`;
+/* Réplica de tela: sobreposição e corte são de propósito. */
+document.querySelectorAll("#camera, #camera *").forEach((el) => ["overlap", "occlusion", "overflow"].forEach((k) => el.setAttribute(`data-layout-allow-${k}`, "")));
 
-  <div class="linha" id="l1-aberta">
-    <div class="topo"><span class="etq" style="background:#EEEEF6;color:#2B2E7E">Incluir</span><span class="v">+R$ 68,40</span></div>
-    <div class="nome">Pantoprazol 40 mg injetável</div>
-    <div class="txt">Incluir 3, de 03/10 a 05/10</div>
-    <div class="mot">Prescrito em 6 dias, lançado em 3.</div>
-    <div class="meta"><span class="cod" id="cod-panto">90123456${IC.copiar}</span><span>Regra AURORA-MED-02</span><span class="link" style="font-weight:400">Ver evidência</span></div>
-    <div class="botoes"><span class="bt bt-cheio" id="feito-panto">Feito</span><span class="bt bt-claro">Não procede</span><span class="bt bt-claro">Bloqueado</span></div>
-  </div>
-  <div class="marcada" id="l1-feita" style="display:none;background:#F0FDF4;border:1px solid #BBF7D0">
-    <span class="etq" style="background:#DCFCE7;color:#166534">Feito</span>Pantoprazol 40 mg injetável<span class="cod" style="font-family:ui-monospace,Menlo,monospace;color:#2B2E7E;font-size:5.8px">90123456</span><span class="v">+R$ 68,40</span><span class="link" style="font-size:5.6px">Desfazer</span>
-  </div>
+/* Medidas: onde cada elemento fica no quadro com a câmera em repouso, pelo
+   offset do layout (que ignora a câmera e a rolagem). Nada se mede na
+   montagem: o script roda antes de a fonte do app carregar. Cada alvo é uma
+   função que o GSAP chama quando o tween começa. */
+const APP = document.getElementById("app");
+const APP_X = 160, APP_Y = 32 + 44, ESCALA_APP = 1.25, CENTRO = { x: 960, y: 452 }, JANELA = { x0: 160, y0: 32, x1: 1760, y1: 880 };
+function noApp(id) {
+  let el = document.getElementById(id), x = 0, y = 0;
+  const w = el.offsetWidth, h = el.offsetHeight;
+  while (el && el !== APP) { x += el.offsetLeft; y += el.offsetTop; el = el.offsetParent; }
+  return { x, y, w, h };
+}
+const valor = (v) => (typeof v === "function" ? v() : v);
+function noQuadro(id, rolagem) { const r = noApp(id); return { x: APP_X + r.x * ESCALA_APP, y: APP_Y + (r.y - valor(rolagem)) * ESCALA_APP, w: r.w * ESCALA_APP, h: r.h * ESCALA_APP }; }
+const juntaCaixas = (rs) => { const x = Math.min(...rs.map((r) => r.x)), y = Math.min(...rs.map((r) => r.y)); return { x, y, w: Math.max(...rs.map((r) => r.x + r.w)) - x, h: Math.max(...rs.map((r) => r.y + r.h)) - y }; };
+const alvo = (ids, rolagem = 0) => ({ ids, caixa: () => juntaCaixas(ids.split(" ").map((id) => noQuadro(id, rolagem))) });
+const REPOUSO = { ids: "", caixa: () => ({ x: 160, y: 32, w: 1600, h: 848 }) };
+/* Rolagem que põe o elemento a 24 px do topo do corpo, sem passar do fim da página. */
+const ALTURA_CORPO = 579.2;
+const rolagemAte = (id, pagina) => () => Math.max(0, Math.min(noApp(id).y - 64 - 24, document.getElementById(pagina).offsetHeight - ALTURA_CORPO));
+function enquadra(r, s) {
+  const x = CENTRO.x - s * (r.x + r.w / 2), y = CENTRO.y - s * (r.y + r.h / 2);
+  return { scale: s, x: Math.min(JANELA.x0 * (1 - s), Math.max(JANELA.x1 * (1 - s), x)), y: Math.min(JANELA.y0 * (1 - s), Math.max(JANELA.y1 * (1 - s), y)) };
+}
+const camera = (a, s) => ({ scale: s, x: () => enquadra(a.caixa(), s).x, y: () => enquadra(a.caixa(), s).y });
 
-  <div class="linha" id="l2-aberta">
-    <div class="topo"><span class="etq" style="background:#EEEEF6;color:#2B2E7E">Corrigir preço</span><span class="v">-R$ 4,70</span></div>
-    <div class="nome">Agulha hipodérmica 25 x 7</div>
-    <div class="txt">Corrigir preço de R$ 1,42 para R$ 0,95, em 03/10</div>
-    <div class="meta"><span class="cod">70031245${IC.copiar}</span><span>Regra AURORA-PRI-01</span></div>
-    <div class="botoes"><span class="bt bt-cheio">Feito</span><span class="bt bt-claro" id="np-agulha">Não procede</span><span class="bt bt-claro">Bloqueado</span></div>
-    <div class="fs" id="fs-agulha" style="display:none">
-      <div class="lg">Por que não procede?</div>
-      <div class="radio"><i><b></b></i>Já está na conta</div>
-      <div class="radio"><i><b></b></i>Sem evidência no prontuário</div>
-      <div class="radio" id="mt-regra"><i><b id="mt-regra-ponto"></b></i>A regra é outra</div>
-      <div class="radio"><i><b></b></i>Outro</div>
-      <div class="botoes"><span class="bt bt-cheio" id="conf-agulha">Confirmar</span><span class="bt bt-claro">Cancelar</span></div>
-    </div>
-  </div>
-  <div class="marcada" id="l2-feita" style="display:none;background:#F8FAFC;border:1px solid #E2E8F0">
-    <span class="etq" style="background:#F1F5F9;color:#475569">Não procede</span>Agulha hipodérmica 25 x 7<span class="cod" style="font-family:ui-monospace,Menlo,monospace;color:#2B2E7E;font-size:5.8px">70031245</span><span class="v">-R$ 4,70</span><span class="link" style="font-size:5.6px">Desfazer</span>
-  </div>
-
-  <div class="linha" id="l3">
-    <div class="topo"><span class="etq" style="background:#FEF3C7;color:#92400E">Validar</span></div>
-    <div class="nome">Diária de CTI adulto</div>
-    <div class="txt">Validar, em 03/10</div>
-    <div class="validar-msg" id="validar-msg">Você não precisa decidir: o item já foi para a validação<br><b>Em jogo: R$ 1.212,00</b></div>
-  </div>
-
-  <div class="rodape-guia">
-    <div class="rot-num">Observação para a gestão de contas médicas</div>
-    <div class="area">Opcional</div>
-    <span class="bt bt-cheio" id="btn-concluir" style="margin-top:4px;padding:4px 8px">Concluir e abrir a próxima</span>
-  </div>
-  <div class="confirma" id="confirma"><p>3 itens sem marcação. Concluir assim mesmo?</p>
-    <div class="acoes"><span style="border:1px solid #E2E8F0;color:#334155">Cancelar</span><span id="confirma-ok" style="background:#2563EB;color:#fff">OK</span></div></div>
-  <div class="toast" id="toast-copiado">Código copiado</div>
-  <div class="toast" id="toast-concluida">Conta concluída</div>`);
-
-document.getElementById("palco-tarefa").innerHTML =
-  `<div style="position:absolute;inset:0;background:#EEF1F6"></div>` +
-  `<div class="janela" id="janela"><div class="barra"><i></i><i></i><i></i><div class="url">plataforma do hospital · contas médicas</div></div>` +
-  `<div class="tela" id="tela-fila">${telaFila}</div>` +
-  `<div class="tela" id="tela-guia" style="opacity:0">${telaGuia}</div></div>` +
-  `<div class="rodape-v">Manual · retrata o app em v0.179.0 · gerado em 12/10/2026</div>` +
-  `<div class="ghost" id="g1"><svg width="17" height="17" viewBox="0 0 24 24" fill="#16181d" stroke="#fff" stroke-width="1.4"><path d="M5 3l14 8-6 1.6L9.6 19z"/></svg><div class="pulse"></div></div>` +
-  `<div class="passo" id="p1"><div class="n">1</div><h3>Na Fila, clique em Abrir</h3><p>A conta <b>A fazer</b> abre o guia e passa para <b>Em correção</b>.</p></div>` +
-  `<div class="passo" id="p2"><div class="n">2</div><h3>Leia os três números do topo</h3><p><b>Nota de entrada</b>, <b>R$ a ajustar</b> e <b>Itens feitos</b>. Abaixo, as linhas por dia e setor.</p></div>` +
-  `<div class="passo" id="p3"><div class="n">3</div><h3>Copie o código, corrija no MV e clique em Feito</h3><p>A linha recolhe em verde e <b>Itens feitos</b> sobe.</p></div>` +
-  `<div class="passo" id="p4"><div class="n">4</div><h3>Não cabe? Clique em Não procede</h3><p>Escolha o motivo e clique em <b>Confirmar</b>. Se o MV não deixou lançar, é <b>Bloqueado</b>.</p></div>` +
-  `<div class="passo" id="p5"><div class="n">5</div><h3>A linha Validar não tem botão</h3><p>O item já foi para a gestão decidir. Você não precisa fazer nada nela.</p></div>` +
-  `<div class="passo" id="p6"><div class="n">6</div><h3>Clique em Concluir e abrir a próxima</h3><p>Com linha sem marcação, o app pergunta antes. A próxima conta <b>A fazer</b> já abre.</p></div>`;
-
-/* Marca de sobreposição permitida em tudo do palco: é uma réplica de tela. */
-const PALCO = document.getElementById("palco-tarefa");
-PALCO.querySelectorAll("*").forEach((el) => {
-  el.setAttribute("data-layout-allow-overlap", "");
-  el.setAttribute("data-layout-allow-occlusion", "");
-  el.setAttribute("data-layout-allow-overflow", "");
-});
-
-/* ============================================================
-   Timeline: uma só, pausada, com tempos absolutos
-   ============================================================ */
+/* Timeline: uma só, pausada, com tempos absolutos. */
 window.__timelines = window.__timelines || {};
 const tl = gsap.timeline({ paused: true });
-const IR = { immediateRender: false };
-const surge = (sel, t, y) => tl.fromTo(sel, { opacity: 0, y: y === undefined ? 8 : y }, { opacity: 1, y: 0, duration: 0.4, ease: "power2.out", ...IR }, t);
-const some = (sel, t) => tl.to(sel, { opacity: 0, duration: 0.25 }, t);
-const nota = (sel, t, ate) => { surge(sel, t, 14); some(sel, ate); };
-const clique = (g, t) => tl.fromTo(`${g} .pulse`, { opacity: 0.9, scale: 0.4 }, { opacity: 0, scale: 1.25, duration: 0.42, ease: "power1.out", ...IR }, t);
-const move = (g, t, x, y, dx, dy) => {
-  tl.set(g, { x: x, y: y, opacity: 1 }, t);
-  tl.to(g, { x: dx, y: dy, duration: 0.7, ease: "power2.inOut" }, t + 0.2);
-};
-const mostra = (sel, t) => tl.fromTo(sel, { opacity: 0 }, { opacity: 1, duration: 0.3, ...IR }, t);
-const esconde = (sel, t) => tl.to(sel, { opacity: 0, duration: 0.3 }, t);
-const troca = (sel, texto, t) => {
-  tl.to(sel, { opacity: 0, duration: 0.12 }, t);
-  tl.set(sel, { innerText: texto }, t + 0.13);
-  tl.to(sel, { opacity: 1, duration: 0.12 }, t + 0.14);
-};
-const exibe = (sel, t) => tl.set(sel, { display: "block" }, t);
-const exibeFlex = (sel, t) => tl.set(sel, { display: "flex" }, t);
-const oculta = (sel, t) => tl.set(sel, { display: "none" }, t);
-
-/* Ancoragem ao elemento: o marcador nasce dentro do alvo e o dedo lê a
-   posição do alvo no palco (offset*, que ignora o scale(2)). */
-function xy(el) {
-  let x = 0, y = 0, n = el;
-  while (n && n !== PALCO) { x += n.offsetLeft; y += n.offsetTop; n = n.offsetParent; }
-  return { x: x, y: y, w: el.offsetWidth, h: el.offsetHeight };
+tl.set("#camera", { scale: 1, x: 0, y: 0 }, 0);
+function mira(t, dur, a, s, ate) {
+  tl.to("#camera", { ...camera(a, s), duration: dur, ease: "power2.inOut" }, t);
+  tl.to("#camera", { ...camera(a, s * 1.025), duration: ate - t - dur, ease: "none" }, t + dur);
 }
-function marcaEm(idAlvo) {
-  const jaTem = document.getElementById("mk-" + idAlvo);
-  if (jaTem) return "#mk-" + idAlvo;
-  const el = document.getElementById(idAlvo);
-  if (getComputedStyle(el).position === "static") el.style.position = "relative";
-  const m = document.createElement("div");
-  m.className = "marcador";
-  m.id = "mk-" + idAlvo;
-  m.setAttribute("data-layout-allow-overlap", "");
-  m.setAttribute("data-layout-allow-occlusion", "");
-  const folga = (el.offsetWidth < 16 || el.offsetHeight < 16) ? 4 : 2.5;
-  m.style.cssText = `position:absolute;left:${-folga}px;top:${-folga}px;right:${-folga}px;bottom:${-folga}px`;
-  el.appendChild(m);
-  return "#mk-" + idAlvo;
+function marca(t, a, ate) {
+  tl.set("#mk", { attr: { "data-alvo": a.ids }, x: () => a.caixa().x - 8, y: () => a.caixa().y - 8, width: () => a.caixa().w + 16, height: () => a.caixa().h + 16, scale: 1.06 }, t - 0.02);
+  tl.to("#mk", { opacity: 1, scale: 1, duration: 0.3, ease: "power2.out" }, t);
+  tl.to("#mk", { opacity: 0, duration: 0.25 }, ate);
 }
-function ponto(idAlvo) {
-  const r = xy(document.getElementById(idAlvo));
-  return { x: r.x + r.w / 2 - 5, y: r.y + r.h / 2 - 3 };
+const centro = (a) => { const r = a.caixa(); return { x: r.x + r.w / 2 - 8, y: r.y + r.h / 2 - 6 }; };
+function toca(t, a, de) {
+  const b = de ? () => centro(de) : () => ({ x: centro(a).x + 120, y: centro(a).y + 150 });
+  tl.set("#dedo", { x: () => b().x, y: () => b().y }, t - 0.02);
+  tl.to("#dedo", { opacity: 1, duration: 0.2 }, t);
+  tl.to("#dedo", { x: () => centro(a).x, y: () => centro(a).y, duration: 0.7, ease: "power2.inOut" }, t + 0.2);
+  tl.fromTo("#toque", { opacity: 0.9, scale: 0.4 }, { opacity: 0, scale: 1.3, duration: 0.45, ease: "power1.out", immediateRender: false }, t + 0.95);
 }
-/* A tela muda de altura quando uma linha recolhe ou o motivo abre: a posição
-   de cada alvo é medida no estado em que a tela estará quando o dedo chegar. */
-function noEstado(estado, fn) {
-  const antes = {};
-  for (const [id, disp] of Object.entries(estado)) {
-    const el = document.getElementById(id);
-    antes[id] = el.style.display;
-    el.style.display = disp;
-  }
-  const r = fn();
-  for (const [id, disp] of Object.entries(antes)) document.getElementById(id).style.display = disp;
-  return r;
-}
-const ESTADO = {
-  inicio: {},
-  motivo: { "l1-aberta": "none", "l1-feita": "flex", "fs-agulha": "block" },
-  depois: { "l1-aberta": "none", "l1-feita": "flex", "l2-aberta": "none", "l2-feita": "flex" },
-  depoisFeito: { "l1-aberta": "none", "l1-feita": "flex" },
-};
-function toca(t, para, de, estado, estadoDe) {
-  const a = noEstado(ESTADO[estado || "inicio"], () => ponto(para));
-  const b = de ? noEstado(ESTADO[estadoDe || estado || "inicio"], () => ponto(de)) : { x: a.x + 34, y: Math.min(a.y + 70, 480) };
-  const mk = marcaEm(para);
-  mostra(mk, t);
-  move("#g1", t + 0.15, b.x, b.y, a.x, a.y);
-  clique("#g1", t + 1.05);
-  return mk;
-}
+const soltaDedo = (t) => tl.to("#dedo", { opacity: 0, duration: 0.25 }, t);
+const troca = (sai, entra, t) => { tl.set(sai, { opacity: 0 }, t); tl.set(entra, { opacity: 1 }, t); };
+const rola = (rolo, r, t) => tl.to(rolo, { y: () => -valor(r), duration: 0.8, ease: "power2.inOut" }, t);
+const avisa = (id, t, ate) => { tl.to(id, { opacity: 1, duration: 0.3, ease: "power2.out" }, t); tl.to(id, { opacity: 0, duration: 0.3 }, ate); };
 
-/* 1 · Abertura */
-surge("#ab-eyebrow", 0.25, 22);
-tl.fromTo("#ab-titulo", { opacity: 0, y: 28 }, { opacity: 1, y: 0, duration: 0.7, ease: "power3.out", ...IR }, 0.5);
-surge("#ab-sub", 1.1, 22);
-surge("#ab-selos", 1.6, 18);
+/* A janela entra com um rastro curto, saindo do branco da abertura. */
+tl.fromTo("#janela", { opacity: 0, y: 24, filter: "blur(12px)" }, { opacity: 1, y: 0, filter: "blur(0px)", duration: 0.5, ease: "power2.out" }, 4.0);
 
-/* 2 · A tarefa */
-tl.fromTo("#janela", { opacity: 0, y: 20 }, { opacity: 1, y: 0, duration: 0.5, ease: "power2.out", ...IR }, 4.20);
-nota("#p1", 4.90, 9.55);
-nota("#p2", 9.90, 14.55);
-nota("#p3", 14.90, 20.55);
-nota("#p4", 20.90, 27.05);
-nota("#p5", 27.40, 31.55);
-nota("#p6", 31.90, 38.55);
+/* Passo 1 (4 a 10): a Fila e o Abrir. */
+const ROLA_FILA = rolagemAte("aba-fila", "pc");
+rola("#rolo-c", () => Math.max(0, valor(ROLA_FILA) - 40), 4.4);
+const bAbrir = alvo("bt-abrir", () => Math.max(0, valor(ROLA_FILA) - 40));
+mira(4.6, 2.2, bAbrir, 1.45, 8.3);
+marca(6.0, bAbrir, 8.0);
+toca(6.1, bAbrir);
+soltaDedo(7.7);
+/* Transição com rastro: a Fila sai pela esquerda e o guia entra pela direita. */
+tl.fromTo("#tela-contas", { x: 0, opacity: 1, filter: "blur(0px)" }, { x: -240, opacity: 0, filter: "blur(20px)", duration: 0.35, ease: "power2.in" }, 8.3);
+tl.fromTo("#tela-guia", { x: 240, opacity: 0, filter: "blur(20px)" }, { x: 0, opacity: 1, filter: "blur(0px)", duration: 0.6, ease: "power2.out", immediateRender: false }, 8.5);
+mira(8.3, 1.4, REPOUSO, 1.0, 10.2);
 
-/* passo 1: o Abrir da conta A fazer, e o guia abre */
-toca(5.4, "fila-abrir");
-esconde("#mk-fila-abrir", 7.6);
-esconde("#tela-fila", 7.9);
-mostra("#tela-guia", 8.0);
-tl.to("#g1", { opacity: 0, duration: 0.2 }, 8.0);
+/* Passo 2 (10 a 16): os três números do topo. */
+const bNums = alvo("g0-nums");
+mira(10.2, 2.2, bNums, 1.35, 16.0);
+marca(11.0, bNums, 15.6);
 
-/* passo 2: os três números */
-const mkNum = marcaEm("bl-numeros");
-mostra(mkNum, 10.3);
-esconde(mkNum, 13.8);
+/* Passo 3 (16 a 25): copiar o código e marcar Feito. */
+const bCod = alvo("g0-panto-cod");
+mira(16.0, 1.8, alvo("g0-panto"), 1.4, 19.2);
+toca(16.8, bCod);
+avisa("#av-copiado", 17.9, 19.9);
+const bFeito = alvo("g0-panto-feito");
+toca(19.6, bFeito, bCod);
+troca("#g0", "#g1", 20.65);
+soltaDedo(21.0);
+mira(20.4, 1.6, alvo("g1-panto g1-nums"), 1.25, 25.0);
+marca(21.6, alvo("g1-panto"), 24.6);
 
-/* passo 3: o código copia, a correção vai no MV, e o Feito recolhe a linha */
-toca(15.2, "cod-panto");
-mostra("#toast-copiado", 16.3);
-esconde("#toast-copiado", 17.6);
-esconde("#mk-cod-panto", 16.8);
-toca(17.4, "feito-panto", "cod-panto");
-oculta("#l1-aberta", 18.6);
-exibeFlex("#l1-feita", 18.6);
-troca("#itens-feitos", "1 de 5", 18.7);
+/* Passo 4 (25 a 34): Não procede, o motivo e Confirmar. */
+const ROLA_AGULHA = rolagemAte("g2-agulha", "g2");
+rola("#rolo-g", ROLA_AGULHA, 25.0);
+const bNp = alvo("g1-agulha-np", ROLA_AGULHA);
+mira(25.0, 1.8, alvo("g1-agulha", ROLA_AGULHA), 1.25, 26.8);
+toca(25.9, bNp);
+troca("#g1", "#g2", 26.95);
+mira(26.8, 1.6, alvo("g2-agulha", ROLA_AGULHA), 1.2, 33.8);
+const bRegra = alvo("g2-regra-outra", ROLA_AGULHA);
+toca(28.2, bRegra, bNp);
+troca("#g2", "#g3", 29.25);
+const bConfirmar = alvo("g3-confirmar", ROLA_AGULHA);
+toca(30.4, bConfirmar, bRegra);
+troca("#g3", "#g4", 31.45);
+soltaDedo(31.8);
+marca(32.0, alvo("g4-agulha", ROLA_AGULHA), 33.6);
 
-/* passo 4: Não procede, o motivo e o Confirmar */
-toca(21.2, "np-agulha", "feito-panto", "depoisFeito", "inicio");
-exibe("#fs-agulha", 22.35);
-toca(23.0, "mt-regra", "np-agulha", "motivo", "depoisFeito");
-mostra("#mt-regra-ponto", 24.1);
-esconde("#mk-np-agulha", 23.0);
-esconde("#mk-mt-regra", 24.7);
-toca(24.7, "conf-agulha", "mt-regra", "motivo");
-oculta("#l2-aberta", 25.9);
-exibeFlex("#l2-feita", 25.9);
-troca("#itens-feitos", "2 de 5", 26.0);
-tl.to("#g1", { opacity: 0, duration: 0.2 }, 26.2);
+/* Passo 5 (34 a 39): a linha Validar, sem botão. */
+const bNada = alvo("g4-nada", ROLA_AGULHA);
+mira(33.8, 1.8, alvo("g4-diaria", ROLA_AGULHA), 1.35, 39.0);
+marca(35.0, bNada, 38.6);
 
-/* passo 5: a linha Validar, sem botão */
-const mkVal = marcaEm("validar-msg");
-mostra(mkVal, 27.8);
-esconde(mkVal, 31.2);
+/* Passo 6 (39 a 49): a observação e Concluir e abrir a próxima. */
+const ROLA_RODAPE = rolagemAte("g4-rodape", "g4");
+rola("#rolo-g", ROLA_RODAPE, 39.0);
+const bObs = alvo("g4-obs", ROLA_RODAPE);
+mira(39.0, 1.8, alvo("g4-rodape", ROLA_RODAPE), 1.3, 45.0);
+toca(40.4, bObs);
+tl.to("#g4-foco", { opacity: 1, duration: 0.1 }, 41.35);
+tl.to("#g4-vazia", { opacity: 0, duration: 0.15 }, 41.4);
+tl.to("#g4-escrito", { opacity: 1, duration: 0.6 }, 41.5);
+const bConcluir = alvo("g4-concluir", ROLA_RODAPE);
+toca(42.6, bConcluir, bObs);
+soltaDedo(44.0);
+avisa("#av-concluida", 43.7, 46.8);
+/* A próxima conta abre com o mesmo rastro de troca de tela. */
+tl.to("#tela-guia", { x: -240, opacity: 0, filter: "blur(20px)", duration: 0.35, ease: "power2.in" }, 44.2);
+tl.fromTo("#tela-proxima", { x: 240, opacity: 0, filter: "blur(20px)" }, { x: 0, opacity: 1, filter: "blur(0px)", duration: 0.6, ease: "power2.out", immediateRender: false }, 44.4);
+mira(45.0, 1.6, alvo("n0-nums"), 1.15, 49.0);
 
-/* passo 6: Concluir, a pergunta e a próxima */
-toca(32.2, "btn-concluir", null, "depois");
-mostra("#confirma", 33.4);
-esconde("#mk-btn-concluir", 33.4);
-toca(34.4, "confirma-ok", "btn-concluir", "depois");
-esconde("#confirma", 35.6);
-mostra("#toast-concluida", 35.8);
-tl.to("#g1", { opacity: 0, duration: 0.25 }, 35.7);
-
-/* 3 · Fecho */
-surge("#fc-titulo", 39.30, 18);
-surge("#fc-carimbo", 39.80, 14);
-surge("#fc-org", 40.20, 12);
-
-window.__timelines.main = tl;
+/* Âncora: o timeline preenche o slot inteiro. */
+tl.to({}, { duration: 53 }, 0);
+window.__timelines["main"] = tl;
 </script>
 </body>
 </html>
