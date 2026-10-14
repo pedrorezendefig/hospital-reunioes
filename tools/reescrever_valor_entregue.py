@@ -79,8 +79,11 @@ def _fontes(prs: list[dict]) -> dict:
         body = pr.get("body") or ""
         if ja_reescrito(body):
             continue
-        antes = re.search(r"\*\*Antes:\*\*\s*(.+)", body)
-        depois = re.search(r"\*\*Depois:\*\*\s*(.+)", body)
+        # só o par da seção Valor entregue: o par da Evidência fala de teste, não de valor
+        span = _secao_valor(body)
+        secao = body[span[0] : span[1]] if span else ""
+        antes = re.search(r"\*\*Antes:\*\*\s*(.+)", secao)
+        depois = re.search(r"\*\*Depois:\*\*\s*(.+)", secao)
         fontes[str(pr["number"])] = {
             "titulo": pr.get("title"),
             "antes": antes.group(1).strip() if antes else None,
