@@ -11,24 +11,23 @@ sidebar:
 
 Ao criar o POP, o sistema monta o Código no formato `HSM_[SIGLA]-[NNN]`, por
 exemplo `HSM_CTI-001`. A sigla é a do Setor e o número segue a ordem de criação
-dentro daquele Setor. Ninguém digita, ninguém edita e ele não é reaproveitado.
+dentro daquele Setor. Ninguém digita nem edita o Código, e o número de um POP
+nunca passa para outro.
 
-É por isso que o Código serve de referência em treinamento, cartaz e auditoria:
-ele aponta para o mesmo procedimento a vida inteira, mesmo que o nome do POP
-mude.
+Por isso o Código serve de referência em treinamento, cartaz e auditoria: ele
+aponta para o mesmo procedimento a vida inteira, mesmo que o nome do POP mude.
 
 ## A Versão é o conteúdo numa data
 
-O POP é a entidade permanente. O texto vive nas Versões dele. A primeira é a
-**v1.0**. Quando o procedimento muda, nasce uma Versão nova, que percorre o
+O POP é permanente, e o texto dele fica nas Versões. A primeira é a **v1.0**. Quando o procedimento muda, nasce uma Versão nova, que percorre o
 caminho inteiro de novo: elaboração, revisão, validação e assinatura.
 
 A **versão vigente** é a última publicada. Enquanto uma Versão nova está sendo
-escrita, a vigente continua valendo na Biblioteca: quem consulta nunca fica sem
-procedimento.
+escrita, a vigente continua valendo na Biblioteca, e quem consulta nunca fica
+sem procedimento.
 
-A Versão anterior não é apagada. Ela fica guardada com o documento assinado, as
-datas e os nomes de quem assinou.
+A Versão anterior fica guardada com o documento assinado, as datas e os nomes de
+quem assinou.
 
 ## A periodicidade de revisão
 
@@ -42,5 +41,5 @@ próxima revisão, não muda a cor de nada, não avisa ninguém quando o prazo
 passa. O campo diz de quanto em quanto tempo o hospital combinou revisar aquele
 procedimento, e acompanhar isso é trabalho de quem cuida da qualidade.
 
-Rever um POP significa abrir uma Versão nova, que percorre o caminho inteiro de
-novo, ainda que o conteúdo não mude nada.
+Para rever um POP, abra uma Versão nova. Ela percorre o caminho inteiro, mesmo
+que o conteúdo fique igual.

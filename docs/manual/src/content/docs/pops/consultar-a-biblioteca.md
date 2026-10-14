@@ -20,7 +20,7 @@ tem POP assinado pelas três pessoas responsáveis.
 1. No menu da esquerda, clique em **POPs**.
 
    ![Item POPs no menu da esquerda](../../../assets/pops/menu-pops.png)
-2. No cartão **Biblioteca**, clique para abrir.
+2. Clique no cartão **Biblioteca**.
 
    ![Cartao Biblioteca na tela de Gestao de POPs](../../../assets/pops/cartao-biblioteca.png)
 3. Procure o Setor: os POPs aparecem agrupados por Setor, com a sigla ao lado
@@ -44,5 +44,5 @@ tem POP assinado pelas três pessoas responsáveis.
   acesso. Se o procedimento é de outro Setor, peça ao Superadmin para incluir
   esse Setor no seu acesso.
 - **Você abriu a ficha e um responsável aparece como "-":** o POP foi assinado
-  por quem estava designado na época. A ficha mostra as pessoas do cadastro
+  por quem estava designado na época, e a ficha mostra as pessoas pelo cadastro
   atual.

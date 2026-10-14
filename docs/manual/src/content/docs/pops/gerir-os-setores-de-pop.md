@@ -11,9 +11,9 @@ sidebar:
 
 ## Quando usar
 
-Antes de criar o primeiro POP de uma unidade. Sem Setor cadastrado não há
-Código, e é a sigla do Setor que aparece em `HSM_CTI-001`. Só o Superadmin vê
-este bloco.
+Antes de criar o primeiro POP de uma unidade. O Código depende do Setor
+cadastrado, porque a sigla do Setor entra nele, como em `HSM_CTI-001`. Só o
+Superadmin vê este bloco.
 
 ## Passo a passo
 
@@ -36,7 +36,7 @@ este bloco.
 - **O botão Salvar está apagado:** falta o Nome ou a Sigla. Os dois são
   obrigatórios.
 - **A gravação foi recusada:** já existe Setor com esse nome ou com essa sigla.
-  Os dois não se repetem.
+  Nome e sigla não se repetem entre Setores.
 - **Você mudou a sigla de um Setor que já tem POP:** os Códigos já criados não
-  mudam, porque o Código é travado. A sigla nova só vale para os POPs
-  seguintes, e a lista passa a mostrar duas siglas diferentes no mesmo Setor.
+  mudam, porque o Código é travado. A sigla nova vale só para os POPs
+  seguintes, e a lista passa a mostrar duas siglas no mesmo Setor.
