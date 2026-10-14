@@ -23,8 +23,8 @@ conta, quando a operadora lança um plano novo ou quando o MV ganha um setor.
    ![Formulário Planos do MV preenchido](../../../assets/contas-medicas/planos.png)
 
 4. Em **Setores do MV**, escreva o **Nome no MV** do setor.
-5. Escolha a **Acomodação** e clique em **Cadastrar setor**. É a acomodação
-   que decide a diária e o teto por dia.
+5. Escolha a **Acomodação** e clique em **Cadastrar setor**. A acomodação
+   decide a diária e o teto por dia.
 
    ![Formulário Setores do MV preenchido](../../../assets/contas-medicas/setores.png)
 

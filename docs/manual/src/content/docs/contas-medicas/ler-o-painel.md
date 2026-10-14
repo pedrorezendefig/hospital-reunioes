@@ -38,9 +38,9 @@ domingo, pelo dia em que a faturista concluiu.
 
 ## Se der errado
 
-- **A faturista diz que só vê uma linha:** é assim. Ela vê só a própria
-  produção, e mais nenhum bloco.
-- **A semana aparece vazia:** nenhuma conta foi concluída nela. A conta conta
-  na semana em que foi concluída, não na do envio.
+- **A faturista diz que só vê uma linha:** ela vê só a própria produção, sem
+  os outros blocos.
+- **A semana aparece vazia:** nenhuma conta foi concluída nela. Cada conta
+  entra na semana em que foi concluída, não na do envio.
 - **O botão Painel não aparece:** o seu perfil não tem o Painel. Peça à
   diretoria pela tela de Habilitação.
