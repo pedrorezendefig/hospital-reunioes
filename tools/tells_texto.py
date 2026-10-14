@@ -112,7 +112,12 @@ CACOETES: list[Cacoete] = [
     ),
     Cacoete(
         "nao-x-dois-pontos-y",
-        _por_regex(f"(?<![{L}])não\\s+[^\\n.!?;:,]{{1,40}}:\\s+[{L}]"),
+        # "Não foi possível X: <causa>" e "não pôde ser lido: <o que fazer>"
+        # são aviso de falha, não contraste.
+        _por_regex(
+            f"(?<![{L}])não\\s+(?!foi\\s+possível|pôde|puderam)"
+            f"[^\\n.!?;:,]{{1,40}}:\\s+[{L}]"
+        ),
     ),
     Cacoete(
         "mais-do-que-x-y",

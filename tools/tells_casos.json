@@ -26,6 +26,8 @@
     {"texto": "Não, é só clicar em Salvar.", "tells": []},
     {"texto": "O perfil Leitor não apenas consulta.", "tells": []},
     {"texto": "Clique em Salvar. A reunião aparece na lista.", "tells": []},
+    {"texto": "Não foi possível carregar o Painel: a conexão caiu.", "tells": []},
+    {"texto": "O arquivo não pôde ser lido: tente enviar de novo.", "tells": []},
     {"texto": "## Quando usar\n\nQuando alguém liga para reclamar.\n\n## Passo a passo\n\nClique em Nova manifestação.\n", "tells": []},
     {"texto": "## Enviar a ata\n\nClique em Enviar.\n\nPronto, a ata foi enviada.\n\n## Encerrar o caso\n\nAbra o caso.\n\nO caso sai da lista de abertos.\n", "tells": []},
     {"texto": "## 12/10/2026\n\nA lista de casos ganhou o filtro por setor.\n\nTarefas que mudaram: [Ler a lista](ler.md)\n\n## 05/10/2026\n\nO cartaz do setor saiu com o QR maior.\n\nTarefas que mudaram: [Imprimir o cartaz](cartaz.md)\n", "tells": []},

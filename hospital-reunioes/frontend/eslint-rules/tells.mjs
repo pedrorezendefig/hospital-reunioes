@@ -77,7 +77,11 @@ export const CACOETES = [
   },
   {
     nome: "nao-x-dois-pontos-y",
-    achar: porRegex(`(?<![${L}])não\\s+[^\\n.!?;:,]{1,40}:\\s+[${L}]`),
+    // "Nao foi possivel X: <causa>" e "nao pode ser lido: ..." sao aviso de
+    // falha, nao contraste.
+    achar: porRegex(
+      `(?<![${L}])não\\s+(?!foi\\s+possível|pôde|puderam)[^\\n.!?;:,]{1,40}:\\s+[${L}]`,
+    ),
   },
   {
     nome: "mais-do-que-x-y",
