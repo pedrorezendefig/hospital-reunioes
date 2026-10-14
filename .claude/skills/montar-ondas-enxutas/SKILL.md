@@ -1,6 +1,6 @@
 ---
 name: montar-ondas-enxutas
-description: Planeja sessões /onda-enxuta sem conflito, presta contas de cada issue aberta, um comando de lançamento por sessão. Não executa. Sintaxe `/montar-ondas-enxutas [--exceto #PRD] [--max-sessoes N]`.
+description: Planeja sessões /onda-enxuta sem conflito, presta contas de cada issue aberta, um comando de lançamento por sessão; termina em "Posso lançar?" e, com o "pode", lança a onda 1 de cada fila. Sintaxe `/montar-ondas-enxutas [--exceto #PRD] [--max-sessoes N]`.
 ---
 
 # Montar ondas enxutas: plano de sessões paralelas
