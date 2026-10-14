@@ -1,0 +1,553 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=1920, height=1080" />
+<title>Manual · Reuniões e metas · Visão geral</title>
+<link rel="stylesheet" href="tokens.css" />
+<script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js" integrity="sha384-sG0Hv1tP1lZCk9KQmrIbY/XNwi+OY84GQqhMscbnsoBFqAz8KNCil1kvfL3Hbbk2" crossorigin="anonymous"></script>
+<script type="application/json" id="manual-video-meta">
+{
+ "modulo": "reunioes",
+ "slug": "visao-geral",
+ "pagina": "reunioes/index.md",
+ "prd": 1259,
+ "issues": [1262],
+ "app_version": "0.196.1",
+ "gerado_em": "2026-10-14T06:00:00-03:00"
+}
+</script>
+<style>
+  /* Estilo do manual (emenda de 13/10/2026 à ADR 0057): cor e fonte só pelos
+     tokens. Na réplica, cada cor é a da classe do app, pelo token de mesmo
+     nome (text-slate-500 vira var(--color-slate-500)). */
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { width: 1920px; height: 1080px; overflow: hidden; background: var(--video-palco); }
+  body { font-family: var(--font-app); color: var(--color-text); }
+  #main { position: relative; width: 1920px; height: 1080px; overflow: hidden; }
+  #slot-abertura, #slot-carimbo { z-index: 5; }
+  #c-tarefa { position: absolute; inset: 0; z-index: 1; }
+  .palco { position: absolute; inset: 0; background: var(--video-palco); }
+  #camera { position: absolute; left: 0; top: 0; width: 1920px; height: 1080px; transform-origin: 0 0; }
+  [id^="slot-passo"] { z-index: 3; }
+  [id^="slot-lugar"] { z-index: 2; }
+
+  /* ===== a janela do navegador ===== */
+  .janela { position: absolute; left: 160px; top: 32px; width: 1600px; height: 848px; border-radius: var(--radius-3xl); background: var(--color-white); border: 1px solid var(--color-slate-300); box-shadow: var(--video-sombra); overflow: hidden; }
+  .barra-nav { position: absolute; left: 0; top: 0; width: 1600px; height: 44px; background: var(--color-slate-100); border-bottom: 1px solid var(--color-slate-200); display: flex; align-items: center; gap: 9px; padding: 0 18px; }
+  .barra-nav i { display: block; width: 12px; height: 12px; border-radius: 50%; background: var(--color-slate-300); }
+  .barra-nav .url { position: relative; margin-left: 14px; width: 620px; height: 28px; border-radius: 14px; background: var(--color-white); border: 1px solid var(--color-slate-200); display: flex; align-items: center; padding: 0 16px; font-size: 16px; color: var(--color-slate-500); }
+
+  /* ===== o app, desenhado em 1280x643 e ampliado 1,25x ===== */
+  .vista { position: absolute; left: 0; top: 44px; width: 1600px; height: 804px; overflow: hidden; background: var(--color-bg); }
+  .app { position: absolute; left: 0; top: 0; width: 1280px; height: 643.2px; transform: scale(1.25); transform-origin: 0 0; background: var(--color-bg); font-size: 14px; line-height: 20px; overflow: hidden; }
+  .lado { position: absolute; left: 0; top: 0; width: 256px; height: 643.2px; border-right: 1px solid var(--color-border); background: linear-gradient(var(--color-surface), var(--color-bg)); }
+  .lado .marca { height: 122px; border-bottom: 1px solid var(--color-border); display: flex; align-items: center; justify-content: center; }
+  .lado .marca img { width: 170px; height: 96px; object-fit: contain; }
+  .lado nav { padding: 16px; display: flex; flex-direction: column; gap: 4px; }
+  .mi { display: flex; align-items: center; gap: 12px; padding: 10px 12px; border-radius: var(--radius-xl); font-size: 14px; font-weight: 500; color: var(--color-text-secondary); }
+  .mi .fim { margin-left: auto; opacity: .5; display: flex; }
+  .mi.grupo { background: color-mix(in srgb, var(--color-primary) 5%, transparent); color: var(--color-primary); }
+  .sub { margin: 4px 0 0 16px; padding-left: 12px; border-left: 2px solid color-mix(in srgb, var(--color-border) 50%, transparent); display: flex; flex-direction: column; gap: 4px; }
+  .sub .mi { padding: 8px 12px; border-radius: var(--radius-lg); }
+  .sub .mi.on { background: color-mix(in srgb, var(--color-primary) 10%, transparent); color: var(--color-primary); }
+  .topo { position: absolute; left: 256px; top: 0; width: 1024px; height: 64px; background: var(--color-slate-50); border-bottom: 1px solid var(--color-slate-200); display: flex; align-items: center; padding: 0 24px; }
+  .busca { width: 256px; height: 38px; border-radius: var(--radius-xl); background: var(--color-bg); border: 1px solid var(--color-border); display: flex; align-items: center; gap: 10px; padding: 0 12px; font-size: 14px; color: color-mix(in srgb, var(--color-text-secondary) 40%, transparent); }
+  .quem { margin-left: auto; margin-right: 24px; display: flex; align-items: center; gap: 24px; }
+  .sino { color: var(--color-slate-500); display: flex; }
+  .divisor { width: 1px; height: 32px; background: var(--color-border); }
+  .pessoa { display: flex; align-items: center; gap: 12px; }
+  .pessoa .tx { text-align: right; }
+  .pessoa .tx b { display: block; font-size: 14px; font-weight: 600; color: var(--color-slate-700); }
+  .pessoa .tx span { font-size: 12px; color: var(--color-slate-500); }
+  .avatar { width: 40px; height: 40px; border-radius: 50%; background: var(--color-primary); color: var(--color-white); font-weight: 700; display: flex; align-items: center; justify-content: center; }
+
+  .corpo { position: absolute; left: 256px; top: 64px; width: 1024px; height: 579.2px; overflow: hidden; background: var(--color-bg); }
+  .tela-app { position: absolute; left: 0; top: 0; width: 1024px; height: 579.2px; }
+  .rolo { position: absolute; left: 0; top: 0; width: 1024px; }
+  .pagina { position: absolute; left: 0; top: 0; width: 1024px; padding: 32px; display: flex; flex-direction: column; gap: 24px; background: var(--color-bg); }
+  .pagina.g20 { gap: 20px; }
+
+  /* ===== peças comuns ===== */
+  h1 { font-size: 24px; line-height: 32px; font-weight: 700; color: var(--color-slate-900); }
+  h2 { font-size: 16px; line-height: 24px; font-weight: 600; color: var(--color-slate-900); }
+  .dek { font-size: 14px; color: var(--color-slate-500); margin-top: 2px; }
+  .lin { display: flex; align-items: center; gap: 8px; }
+  .entre { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+  .ic-p { color: var(--color-primary); display: flex; }
+  .ap { background: var(--color-white); border: 1px solid var(--color-border); border-radius: var(--radius-2xl); box-shadow: var(--shadow-premium); }
+  .ap-topo { padding: 16px 24px; border-bottom: 1px solid var(--color-slate-100); display: flex; align-items: center; gap: 10px; }
+  .ap-corpo { padding: 20px 24px; }
+  .bt { display: inline-flex; align-items: center; gap: 8px; padding: 10px 16px; border-radius: var(--radius-xl); font-size: 14px; font-weight: 500; white-space: nowrap; }
+  .bt.cheio { background: linear-gradient(90deg, var(--color-primary), var(--color-primary-dark)); color: var(--color-white); }
+  .bt.indigo { background: linear-gradient(90deg, var(--color-indigo-600), var(--color-indigo-700)); color: var(--color-white); }
+  .bt.claro { background: var(--color-white); color: var(--color-slate-700); border: 1px solid var(--color-slate-200); }
+  .bt.perigo { border: 1px solid var(--color-red-200); color: var(--color-red-600); }
+  .bt.contorno { border: 1px solid color-mix(in srgb, var(--color-primary) 30%, transparent); color: var(--color-primary); padding: 10px 24px; }
+  .bt.ambar { background: var(--color-amber-100); color: var(--color-amber-800); padding: 10px 24px; }
+  .bt.duplo { border: 2px solid color-mix(in srgb, var(--color-primary) 30%, transparent); color: var(--color-primary); padding: 12px 20px; }
+  .troca { position: relative; display: inline-flex; }
+  .troca .depois { position: absolute; left: 0; top: 0; opacity: 0; white-space: nowrap; display: inline-flex; align-items: center; gap: 8px; }
+  .troca .antes { display: inline-flex; align-items: center; gap: 8px; }
+  .rot { font-size: 12px; line-height: 16px; font-weight: 500; color: var(--color-slate-500); text-transform: uppercase; }
+  .sel { height: 38px; border: 1px solid var(--color-slate-200); border-radius: var(--radius-xl); background: var(--color-white); display: flex; align-items: center; justify-content: space-between; padding: 0 12px; font-size: 14px; color: var(--color-slate-500); }
+  .volta { display: inline-flex; align-items: center; gap: 4px; font-size: 14px; color: var(--color-slate-400); margin-bottom: 8px; }
+  .mono { font-family: var(--font-mono); font-size: 12px; color: var(--color-slate-400); margin-top: 2px; }
+  .ini { width: 32px; height: 32px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 600; flex-shrink: 0; background: var(--color-slate-200); color: var(--color-slate-600); }
+  .nome b { display: block; font-size: 14px; font-weight: 500; color: var(--color-slate-800); }
+  .nome span { font-size: 12px; color: var(--color-slate-400); }
+
+  /* ===== Calendário ===== */
+  .filtros { padding: 16px; border-radius: var(--radius-xl); display: flex; flex-direction: column; gap: 12px; }
+  .filtros .t { font-size: 14px; font-weight: 600; color: var(--color-slate-700); }
+  .cal-cab { padding: 16px 24px; border-bottom: 1px solid var(--color-slate-100); }
+  .cal-cab h3 { font-size: 18px; line-height: 28px; font-weight: 700; color: var(--color-slate-900); }
+  .visao { display: flex; background: var(--color-slate-100); border-radius: var(--radius-xl); padding: 4px; gap: 4px; }
+  .visao span { display: flex; align-items: center; gap: 6px; padding: 6px 12px; border-radius: var(--radius-lg); font-size: 12px; font-weight: 500; color: var(--color-slate-500); }
+  .visao span.on { background: var(--color-white); color: var(--color-indigo-700); box-shadow: 0 1px 2px var(--color-shadow); }
+  .semana, .grade { display: grid; grid-template-columns: repeat(7, 1fr); }
+  .semana { border-bottom: 1px solid var(--color-slate-100); }
+  .semana span { padding: 8px 0; text-align: center; font-size: 12px; font-weight: 600; color: var(--color-slate-500); letter-spacing: .025em; }
+  .dia { min-height: 160px; padding: 8px; border-bottom: 1px solid var(--color-slate-50); border-right: 1px solid var(--color-slate-50); display: flex; flex-direction: column; gap: 2px; }
+  .dia .n { width: 28px; height: 28px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 14px; font-weight: 500; color: var(--color-slate-700); margin-bottom: 4px; }
+  .dia .n.passou { color: var(--color-slate-300); }
+  .dia .n.hoje { background: var(--color-indigo-600); color: var(--color-white); }
+  .ev { position: relative; padding: 6px 28px 6px 8px; border-radius: var(--radius-lg); border: 1px solid; display: flex; flex-direction: column; gap: 2px; line-height: 1.25; }
+  .ev b { font-size: 11px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .ev span { font-size: 10px; font-weight: 500; opacity: .7; }
+  .ev .lx { position: absolute; right: 2px; top: 2px; opacity: .4; display: flex; }
+  .ev.prog { background: var(--color-slate-100); color: var(--color-slate-800); border-color: var(--color-slate-200); }
+  .ev.ass { background: var(--color-emerald-100); color: var(--color-emerald-800); border-color: var(--color-emerald-200); }
+  .legenda-cal { padding: 12px 24px; border-top: 1px solid var(--color-slate-50); display: flex; gap: 16px; font-size: 12px; color: var(--color-slate-400); }
+  .legenda-cal i { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 6px; }
+  .ok-verde { display: flex; align-items: center; gap: 8px; padding: 12px 16px; border-radius: var(--radius-xl); background: var(--color-emerald-50); border: 1px solid var(--color-emerald-100); color: var(--color-emerald-700); font-size: 14px; }
+
+  /* ===== janela Agendar Reunião ===== */
+  #veu { position: absolute; inset: 0; backdrop-filter: blur(4px); opacity: 0; }
+  #modal { position: absolute; left: 304px; top: 64px; width: 672px; height: 566px; background: var(--color-white); border-radius: var(--radius-2xl); box-shadow: var(--shadow-premium-strong); overflow: hidden; opacity: 0; }
+  .m-cab { position: absolute; left: 0; top: 0; width: 672px; height: 77px; padding: 20px 28px; border-bottom: 1px solid var(--color-slate-100); display: flex; align-items: center; gap: 12px; background: var(--color-white); z-index: 2; }
+  .m-cab .q { width: 36px; height: 36px; border-radius: var(--radius-xl); background: var(--color-indigo-50); color: var(--color-indigo-600); display: flex; align-items: center; justify-content: center; }
+  .m-cab h4 { font-size: 18px; line-height: 28px; font-weight: 600; color: var(--color-slate-900); }
+  .m-cab small { display: block; font-size: 12px; line-height: 16px; color: var(--color-slate-400); }
+  .m-vista { position: absolute; left: 0; top: 77px; width: 672px; height: 489px; overflow: hidden; }
+  .m-form { position: absolute; left: 0; top: 0; width: 672px; padding: 28px; display: flex; flex-direction: column; gap: 20px; background: var(--color-white); }
+  .m-form label.lin { display: flex; gap: 4px; }
+  .m-form label { display: block; font-size: 14px; font-weight: 500; color: var(--color-slate-700); margin-bottom: 6px; }
+  .campo { padding: 12px 16px; border: 1px solid var(--color-slate-200); border-radius: var(--radius-xl); font-size: 14px; color: var(--color-slate-900); }
+  .campo.vazio { color: var(--color-slate-400); }
+  .duas { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .hora-caixa { border: 1px solid var(--color-slate-200); border-radius: var(--radius-xl); padding: 12px; background: color-mix(in srgb, var(--color-slate-50) 50%, transparent); }
+  .hora-caixa p { font-size: 12px; color: var(--color-slate-500); }
+  .hora-caixa .escolhida { font-weight: 600; color: var(--color-indigo-600); margin: 8px 0; display: flex; align-items: center; gap: 4px; }
+  .horas { display: grid; grid-template-columns: repeat(6, 1fr); gap: 4px; margin-top: 8px; }
+  .horas span { padding: 4px; border-radius: var(--radius-lg); border: 1px solid var(--color-slate-200); background: var(--color-slate-50); color: var(--color-slate-600); font-size: 11px; line-height: 16px; font-weight: 500; text-align: center; }
+  .horas span.on { background: var(--color-indigo-600); border-color: var(--color-indigo-600); color: var(--color-white); }
+  .conta { margin-left: 8px; padding: 2px 8px; border-radius: 999px; background: var(--color-indigo-100); color: var(--color-indigo-700); font-size: 12px; font-weight: 600; }
+  .fichas { display: flex; flex-wrap: wrap; gap: 6px; padding: 12px; margin-bottom: 12px; background: color-mix(in srgb, var(--color-indigo-50) 60%, transparent); border: 1px solid var(--color-indigo-100); border-radius: var(--radius-xl); }
+  .fichas span { display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px; border-radius: 999px; background: var(--color-white); border: 1px solid var(--color-indigo-200); color: var(--color-indigo-700); font-size: 12px; font-weight: 500; }
+  .conta-p { padding: 2px 6px; border-radius: 999px; background: color-mix(in srgb, var(--color-primary) 10%, transparent); color: var(--color-primary); font-size: 12px; }
+  .aviso-m { font-size: 12px; color: var(--color-slate-500); margin-bottom: 8px; }
+  .busca-p { display: flex; align-items: center; gap: 12px; padding: 12px 14px; border: 1px solid var(--color-slate-200); border-radius: var(--radius-xl); font-size: 14px; color: var(--color-slate-400); }
+  .busca-p.foco { border-color: var(--color-indigo-400); box-shadow: 0 0 0 2px var(--color-indigo-300); }
+  .lista-p { margin-top: 8px; border: 1px solid var(--color-slate-200); border-radius: var(--radius-xl); overflow: hidden; }
+  .lista-p .cab { font-size: 10px; line-height: 16px; font-weight: 500; color: var(--color-slate-400); padding: 8px 16px; background: var(--color-slate-50); border-bottom: 1px solid var(--color-slate-100); text-transform: uppercase; letter-spacing: .025em; }
+  .op { display: flex; align-items: center; gap: 12px; padding: 12px 16px; border-bottom: 1px solid var(--color-slate-50); }
+  .op .ini { background: var(--color-indigo-100); color: var(--color-indigo-700); }
+  .op .mais { margin-left: auto; width: 28px; height: 28px; border-radius: 50%; background: var(--color-indigo-100); color: var(--color-indigo-600); display: flex; align-items: center; justify-content: center; }
+  .botoes-m { display: flex; gap: 12px; padding-top: 8px; }
+  .botoes-m span { flex: 1; text-align: center; padding: 12px; border-radius: var(--radius-xl); font-size: 14px; font-weight: 500; }
+
+  /* ===== a reunião ===== */
+  .pilula { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 999px; font-size: 12px; font-weight: 600; background: var(--color-slate-100); color: var(--color-slate-700); border: 1px solid var(--color-slate-200); margin-bottom: 4px; }
+  .colunas { display: grid; grid-template-columns: 2fr 1fr; gap: 24px; align-items: start; }
+  .pilha { display: flex; flex-direction: column; gap: 20px; }
+  .campo-r { display: flex; gap: 8px; align-items: flex-start; }
+  .campo-r .ic-c { color: var(--color-slate-400); margin-top: 2px; display: flex; }
+  .campo-r small { display: block; font-size: 12px; line-height: 16px; font-weight: 500; color: var(--color-slate-400); margin-bottom: 2px; }
+  .campo-r b { font-size: 14px; font-weight: 500; color: var(--color-slate-800); }
+  .campo-r i { font-size: 14px; color: var(--color-slate-300); }
+  .grade2 { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
+  .dica { margin-left: auto; font-size: 12px; color: var(--color-slate-400); background: var(--color-slate-50); padding: 2px 8px; border-radius: 999px; border: 1px solid var(--color-slate-200); }
+  .pessoa-r { display: flex; align-items: center; gap: 12px; padding: 8px 12px; border-radius: var(--radius-xl); background: var(--color-slate-50); }
+  .tracejado { display: flex; align-items: center; gap: 8px; padding: 10px 16px; border-radius: var(--radius-xl); border: 2px dashed var(--color-slate-200); color: var(--color-slate-400); font-size: 14px; font-weight: 500; }
+  .para { font-size: 14px; color: var(--color-slate-600); margin-bottom: 16px; }
+  .para code { font-family: var(--font-mono); font-size: 12px; background: var(--color-slate-100); padding: 2px 4px; border-radius: var(--radius-sm); }
+  .check { display: flex; gap: 10px; align-items: flex-start; font-size: 14px; }
+  .check .s { color: var(--color-success); display: flex; margin-top: 2px; }
+  .check .n { color: var(--color-slate-300); display: flex; margin-top: 2px; }
+  .check s { color: var(--color-slate-500); }
+  .check b { font-weight: 500; color: var(--color-slate-800); }
+  .check small { display: block; font-size: 12px; color: var(--color-slate-400); }
+  .barra { height: 6px; border-radius: 999px; background: var(--color-slate-100); }
+  .barra div { height: 6px; border-radius: 999px; background: linear-gradient(90deg, var(--color-primary), var(--color-primary-dark)); width: 75%; }
+  .resumo { background: var(--color-slate-50); border: 1px solid var(--color-border); border-radius: var(--radius-2xl); padding: 16px 20px; display: flex; flex-direction: column; gap: 8px; font-size: 14px; }
+  .resumo .entre span { color: var(--color-slate-500); }
+  .resumo .entre b { font-weight: 500; color: var(--color-slate-800); }
+
+  .fluxo { padding: 16px 24px; display: flex; align-items: center; gap: 8px; }
+  .passo-s { display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px; border-radius: 999px; font-size: 12px; font-weight: 500; white-space: nowrap; background: var(--color-slate-100); color: var(--color-slate-400); }
+  .passo-s.feito { background: linear-gradient(90deg, var(--color-primary), var(--color-primary-dark)); color: var(--color-white); }
+  .passo-s.agora { background: color-mix(in srgb, var(--color-primary) 10%, transparent); color: var(--color-primary); box-shadow: 0 0 0 2px color-mix(in srgb, var(--color-primary) 30%, transparent); }
+  .traco { width: 24px; height: 1px; background: var(--color-slate-200); }
+  .traco.feito { background: var(--color-primary); }
+  .metas { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+  .meta { padding: 12px 16px; border-radius: var(--radius-xl); }
+  .meta small { display: flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 500; color: var(--color-slate-400); margin-bottom: 4px; }
+  .meta b { font-size: 14px; font-weight: 600; color: var(--color-slate-900); }
+  .processando { padding: 32px 20px; border-radius: var(--radius-2xl); background: var(--color-stone-50); border: 1px solid var(--color-stone-200); text-align: center; }
+  .processando .q { width: 56px; height: 56px; border-radius: var(--radius-2xl); background: var(--color-stone-100); color: var(--color-slate-600); display: flex; align-items: center; justify-content: center; margin: 0 auto 12px; }
+  .processando b { font-size: 14px; font-weight: 500; color: var(--color-slate-900); }
+  .processando small { display: block; font-size: 12px; color: var(--color-slate-500); margin-top: 4px; }
+  .validar { padding: 24px; border-color: color-mix(in srgb, var(--color-primary) 30%, transparent); }
+  .validar .q { width: 40px; height: 40px; border-radius: var(--radius-xl); background: color-mix(in srgb, var(--color-warning) 10%, transparent); color: var(--color-warning); display: flex; align-items: center; justify-content: center; }
+  .validar h2 { font-size: 18px; line-height: 28px; font-weight: 700; }
+  .validar p { font-size: 14px; color: var(--color-slate-600); }
+  .topico { border-left: 4px solid color-mix(in srgb, var(--color-primary) 40%, transparent); background: var(--color-slate-50); border-radius: var(--radius-xl); padding: 16px 20px; font-size: 14px; color: var(--color-slate-700); display: flex; flex-direction: column; gap: 8px; }
+  .topico h5 { font-size: 14px; font-weight: 600; color: var(--color-primary); }
+  .topico .contrib { font-size: 10px; letter-spacing: .05em; font-weight: 600; color: var(--color-slate-500); text-transform: uppercase; }
+  .decisao { border-left: 2px solid var(--color-cyan-400); background: var(--color-cyan-50); padding: 8px 12px; border-radius: var(--radius-lg); }
+  .decisao strong { color: var(--color-cyan-900); }
+  .decisao em { display: block; font-size: 12px; color: var(--color-slate-600); margin-top: 2px; }
+  table { width: 100%; border-collapse: collapse; font-size: 14px; color: var(--color-slate-700); }
+  th { text-align: left; font-size: 12px; font-weight: 600; color: var(--color-slate-500); text-transform: uppercase; padding: 8px 8px 8px 0; border-bottom: 1px solid var(--color-slate-100); }
+  td { padding: 12px 8px 12px 0; vertical-align: top; border-bottom: 1px solid var(--color-slate-50); }
+  td small { display: block; font-size: 12px; color: var(--color-slate-400); }
+  .aberto { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 11px; font-weight: 500; background: var(--color-amber-50); color: var(--color-amber-700); border: 1px solid var(--color-amber-200); }
+  .ok-p { color: var(--color-emerald-500); display: flex; }
+  .x-p { color: var(--color-slate-400); display: flex; }
+  .sig .q { width: 40px; height: 40px; border-radius: var(--radius-xl); background: var(--color-blue-100); color: var(--color-blue-600); display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+  .sig .sub-t { width: fit-content; font-size: 12px; color: var(--color-slate-500); margin-top: 2px; }
+  .sig .sub-t b { font-weight: 500; color: var(--color-slate-700); }
+  .acao-s { display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px; font-size: 12px; font-weight: 500; color: var(--color-slate-600); border-radius: var(--radius-lg); }
+  .assina { display: flex; align-items: center; gap: 12px; padding: 8px 12px; border-radius: var(--radius-xl); background: var(--color-slate-50); }
+  .assina .ini.ok { background: linear-gradient(135deg, var(--color-emerald-200), var(--color-emerald-300)); color: var(--color-emerald-800); }
+  .assina .ini.falta { background: linear-gradient(135deg, var(--color-amber-200), var(--color-amber-300)); color: var(--color-amber-800); }
+  .lembrar { display: inline-flex; align-items: center; gap: 4px; padding: 4px 8px; font-size: 11px; font-weight: 500; color: var(--color-slate-600); border: 1px solid var(--color-slate-200); border-radius: var(--radius-lg); }
+  .selo { display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border-radius: 999px; font-size: 11px; font-weight: 500; white-space: nowrap; }
+  .selo.ok { background: var(--color-emerald-50); color: var(--color-emerald-700); border: 1px solid var(--color-emerald-200); }
+  .selo.falta { background: var(--color-amber-50); color: var(--color-amber-700); border: 1px solid var(--color-amber-200); }
+  .envelope { padding: 12px 24px; border-top: 1px solid var(--color-slate-100); font-family: var(--font-mono); font-size: 10px; color: var(--color-slate-400); }
+  .assinada { display: flex; align-items: center; justify-content: space-between; gap: 16px; background: var(--color-emerald-50); border: 1px solid var(--color-emerald-200); border-radius: var(--radius-2xl); padding: 16px 24px; }
+  .assinada .q { width: 40px; height: 40px; border-radius: var(--radius-xl); background: var(--color-emerald-100); color: var(--color-emerald-600); display: flex; align-items: center; justify-content: center; }
+  .assinada b { font-size: 14px; font-weight: 600; color: var(--color-emerald-800); }
+  .assinada small { display: block; font-size: 12px; color: var(--color-emerald-700); margin-top: 4px; }
+  .recorre { padding: 16px 24px; display: flex; align-items: center; gap: 10px; }
+  .recorre .dica { margin-left: auto; background: var(--color-slate-100); border: 0; }
+  .bt.verde { background: var(--color-emerald-600); color: var(--color-white); padding: 8px 16px; }
+
+  /* ===== Kanban ===== */
+  .alterna { display: flex; gap: 4px; padding: 4px; background: var(--color-white); border: 1px solid var(--color-slate-200); border-radius: var(--radius-xl); box-shadow: 0 1px 2px var(--color-shadow); }
+  .alterna span { display: flex; align-items: center; gap: 6px; padding: 6px 12px; border-radius: var(--radius-lg); font-size: 14px; font-weight: 500; color: var(--color-slate-500); }
+  .alterna span.on { background: color-mix(in srgb, var(--color-primary) 10%, transparent); color: var(--color-primary); }
+  .filtros-k { padding: 16px; border-radius: var(--radius-xl); display: flex; flex-direction: column; gap: 16px; }
+  .campos-k { display: grid; grid-template-columns: repeat(6, 1fr); gap: 16px; align-items: end; }
+  .campos-k .rot { margin-bottom: 6px; }
+  .campos-k .sel { font-size: 13px; padding: 0 8px; }
+  .limpar { height: 38px; display: flex; align-items: center; justify-content: center; border-radius: var(--radius-lg); background: var(--color-slate-100); font-size: 13px; font-weight: 500; color: var(--color-slate-500); }
+  .quadro { display: flex; gap: 16px; }
+  .col { position: relative; width: 280px; flex-shrink: 0; border-radius: var(--radius-2xl); border: 1px solid var(--color-slate-100); background: color-mix(in srgb, var(--color-slate-50) 50%, transparent); }
+  .col-cab { display: flex; align-items: center; justify-content: space-between; padding: 12px 16px; border-radius: var(--radius-2xl) var(--radius-2xl) 0 0; color: var(--color-white); font-size: 14px; font-weight: 600; }
+  .col-cab .q { font-size: 12px; font-weight: 700; padding: 2px 8px; border-radius: 999px; background: color-mix(in srgb, var(--color-white) 20%, transparent); color: color-mix(in srgb, var(--color-white) 80%, transparent); }
+  .c-pend { background: linear-gradient(90deg, var(--color-amber-300), var(--color-orange-300)); }
+  .c-prog { background: linear-gradient(90deg, var(--color-sky-300), var(--color-blue-400)); }
+  .c-atr { background: linear-gradient(90deg, var(--color-red-300), var(--color-red-400)); }
+  .col-cab, .cartoes { position: relative; }
+  .cartoes { padding: 12px; display: flex; flex-direction: column; gap: 10px; min-height: 120px; }
+  .kc { background: var(--color-white); border: 1px solid var(--color-slate-100); border-radius: var(--radius-xl); padding: 16px; box-shadow: 0 1px 2px var(--color-shadow); }
+  .kc .ids { display: flex; justify-content: space-between; margin-bottom: 8px; font-family: var(--font-mono); font-size: 10px; line-height: 16px; }
+  .kc .ids span { color: var(--color-slate-400); background: var(--color-slate-50); padding: 0 6px; border-radius: var(--radius-sm); }
+  .kc .ids i { font-style: normal; color: var(--color-slate-300); }
+  .kc p { font-size: 14px; font-weight: 500; color: var(--color-slate-800); line-height: 1.375; margin-bottom: 12px; }
+  .kc .meta-k { font-size: 12px; line-height: 16px; color: var(--color-slate-400); margin-bottom: 12px; }
+  .kc .resp { display: flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 500; color: var(--color-slate-700); }
+  .kc .resp span { width: 24px; height: 24px; border-radius: 50%; background: color-mix(in srgb, var(--color-primary) 10%, transparent); color: var(--color-primary); font-size: 10px; font-weight: 700; display: flex; align-items: center; justify-content: center; }
+  .solte { height: 80px; border-radius: var(--radius-xl); border: 2px dashed var(--color-slate-200); display: flex; align-items: center; justify-content: center; font-size: 12px; color: var(--color-slate-400); }
+  .sobre { position: absolute; inset: -1px; border-radius: var(--radius-2xl); border: 1px solid var(--color-blue-100); background: linear-gradient(color-mix(in srgb, var(--color-blue-50) 50%, transparent), transparent); box-shadow: var(--shadow-premium-strong); opacity: 0; }
+  #fantasma { position: absolute; left: 0; top: 0; width: 256px; opacity: 0; }
+
+  /* ===== o foco: marcador, dedo e toque ===== */
+  .marcador { position: absolute; left: 0; top: 0; opacity: 0; border: 3px solid var(--video-foco); border-radius: 14px; box-shadow: 0 0 0 8px var(--video-foco-halo); }
+  .dedo { position: absolute; left: 0; top: 0; opacity: 0; width: 40px; height: 40px; }
+  .dedo svg { position: absolute; left: 0; top: 0; width: 40px; height: 40px; }
+  .dedo path { fill: var(--video-foco); stroke: var(--color-white); stroke-width: 1.4; }
+  .toque { position: absolute; left: -22px; top: -22px; width: 56px; height: 56px; border-radius: 50%; background: var(--video-foco-halo); border: 2px solid var(--video-foco); opacity: 0; }
+</style>
+</head>
+<body>
+<div id="main" data-composition-id="main" data-start="0" data-width="1920" data-height="1080" data-duration="96">
+  <div id="slot-abertura" data-composition-id="abertura" data-composition-src="compositions/abertura.html" data-variable-values='{"secao":"Manual · Reuniões e metas","titulo":"Da reunião marcada às pendências no quadro","papel":"Facilitador"}' data-start="0" data-duration="4" data-track-index="1" data-width="1920" data-height="1080"></div>
+  <section id="c-tarefa" class="clip" data-start="4" data-duration="88" data-track-index="2">
+    <div class="palco"></div>
+    <div id="camera" data-layout-allow-overflow></div>
+  </section>
+  <div id="slot-lugar-1" data-composition-id="lower-third" data-composition-src="compositions/lower-third.html" data-variable-values='{"lugar":"Reuniões e metas","tela":"Calendário"}' data-start="4.3" data-duration="2.7" data-track-index="5" data-width="1920" data-height="1080"></div>
+  <div id="slot-lugar-2" data-composition-id="lower-third" data-composition-src="compositions/lower-third.html" data-variable-values='{"lugar":"Calendário","tela":"Acompanhamento da CME"}' data-start="28.6" data-duration="2.7" data-track-index="5" data-width="1920" data-height="1080"></div>
+  <div id="slot-lugar-3" data-composition-id="lower-third" data-composition-src="compositions/lower-third.html" data-variable-values='{"lugar":"Quem participou","tela":"Assina pelo email"}' data-start="66.2" data-duration="2.6" data-track-index="5" data-width="1920" data-height="1080"></div>
+  <div id="slot-lugar-4" data-composition-id="lower-third" data-composition-src="compositions/lower-third.html" data-variable-values='{"lugar":"Pendências","tela":"Kanban"}' data-start="75.4" data-duration="2.6" data-track-index="5" data-width="1920" data-height="1080"></div>
+  <div id="slot-passo-1" data-composition-id="legenda-de-passo" data-composition-src="compositions/legenda-de-passo.html" data-variable-values='{"numero":"1","texto":"No **Calendário**, clique no dia da reunião."}' data-start="4" data-duration="7" data-track-index="3" data-width="1920" data-height="1080"></div>
+  <div id="slot-passo-2" data-composition-id="legenda-de-passo" data-composition-src="compositions/legenda-de-passo.html" data-variable-values='{"numero":"2","texto":"Preencha **Título**, **Tipo** e o horário, e escolha os **Participantes**."}' data-start="11" data-duration="10" data-track-index="4" data-width="1920" data-height="1080"></div>
+  <div id="slot-passo-3" data-composition-id="legenda-de-passo" data-composition-src="compositions/legenda-de-passo.html" data-variable-values='{"numero":"3","texto":"Clique em **Agendar Reunião**. O convite sai por email na hora."}' data-start="21" data-duration="6" data-track-index="3" data-width="1920" data-height="1080"></div>
+  <div id="slot-passo-4" data-composition-id="legenda-de-passo" data-composition-src="compositions/legenda-de-passo.html" data-variable-values='{"numero":"4","texto":"Depois da reunião, clique no cartão dela no **Calendário**."}' data-start="27" data-duration="6" data-track-index="4" data-width="1920" data-height="1080"></div>
+  <div id="slot-passo-5" data-composition-id="legenda-de-passo" data-composition-src="compositions/legenda-de-passo.html" data-variable-values='{"numero":"5","texto":"Sem transcrição, use a **Ata Guiada** e monte a ata conversando."}' data-start="33" data-duration="7" data-track-index="3" data-width="1920" data-height="1080"></div>
+  <div id="slot-passo-6" data-composition-id="legenda-de-passo" data-composition-src="compositions/legenda-de-passo.html" data-variable-values='{"numero":"6","texto":"Com a transcrição, clique em **Anexar Transcrição e Processar com IA**."}' data-start="40" data-duration="7" data-track-index="4" data-width="1920" data-height="1080"></div>
+  <div id="slot-passo-7" data-composition-id="legenda-de-passo" data-composition-src="compositions/legenda-de-passo.html" data-variable-values='{"numero":"7","texto":"O assistente escreve a ata. Leia a discussão e o quadro de ações."}' data-start="47" data-duration="9" data-track-index="3" data-width="1920" data-height="1080"></div>
+  <div id="slot-passo-8" data-composition-id="legenda-de-passo" data-composition-src="compositions/legenda-de-passo.html" data-variable-values='{"numero":"8","texto":"Confira o documento em **Baixar PDF** e clique em **Enviar para assinatura**."}' data-start="56" data-duration="6" data-track-index="4" data-width="1920" data-height="1080"></div>
+  <div id="slot-passo-9" data-composition-id="legenda-de-passo" data-composition-src="compositions/legenda-de-passo.html" data-variable-values='{"numero":"9","texto":"Cada participante assina pelo email. **Lembrar** cobra quem falta."}' data-start="62" data-duration="10" data-track-index="3" data-width="1920" data-height="1080"></div>
+  <div id="slot-passo-10" data-composition-id="legenda-de-passo" data-composition-src="compositions/legenda-de-passo.html" data-variable-values='{"numero":"10","texto":"Com a ata assinada, as pendências nascem. Abra **Pendências** e **Kanban**."}' data-start="72" data-duration="7" data-track-index="4" data-width="1920" data-height="1080"></div>
+  <div id="slot-passo-11" data-composition-id="legenda-de-passo" data-composition-src="compositions/legenda-de-passo.html" data-variable-values='{"numero":"11","texto":"Arraste o cartão para a coluna nova e solte."}' data-start="79" data-duration="6" data-track-index="3" data-width="1920" data-height="1080"></div>
+  <div id="slot-passo-12" data-composition-id="legenda-de-passo" data-composition-src="compositions/legenda-de-passo.html" data-variable-values='{"numero":"12","texto":"O estado muda na hora, e a **Lista** mostra a mesma mudança."}' data-start="85" data-duration="7" data-track-index="4" data-width="1920" data-height="1080"></div>
+  <div id="slot-carimbo" data-composition-id="carimbo" data-composition-src="compositions/carimbo.html" data-variable-values='{"titulo":"Reuniões e metas","carimbo":"Manual · retrata o app em v0.196.1 · gerado em 14/10/2026"}' data-start="92" data-duration="4" data-track-index="1" data-width="1920" data-height="1080"></div>
+</div>
+<script>
+/* Ícones: os do lucide, os mesmos do app, no traço da cor do texto. */
+const P = {
+  alvo: '<circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/>', painel: '<rect width="7" height="9" x="3" y="3" rx="1"/><rect width="7" height="5" x="14" y="3" rx="1"/><rect width="7" height="9" x="14" y="12" rx="1"/><rect width="7" height="5" x="3" y="16" rx="1"/>', dias: '<path d="M8 2v4"/><path d="M16 2v4"/><rect width="18" height="18" x="3" y="4" rx="2"/><path d="M3 10h18"/><path d="M8 14h.01"/><path d="M12 14h.01"/><path d="M16 14h.01"/><path d="M8 18h.01"/><path d="M12 18h.01"/><path d="M16 18h.01"/>', mes: '<path d="M8 2v4"/><path d="M16 2v4"/><rect width="18" height="18" x="3" y="4" rx="2"/><path d="M3 10h18"/>', relogio: '<circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>', baixo: '<path d="m6 9 6 6 6-6"/>', direita: '<path d="m9 18 6-6-6-6"/>', esquerda: '<path d="m15 18-6-6 6-6"/>',
+  megafone: '<path d="m3 11 18-5v12L3 14v-3z"/><path d="M11.6 16.8a3 3 0 1 1-5.8-1.6"/>', escudo: '<path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/><path d="m9 12 2 2 4-4"/>', ajuda: '<circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><path d="M12 17h.01"/>', lupa: '<circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/>', sino: '<path d="M10.268 21a2 2 0 0 0 3.464 0"/><path d="M3.262 15.326A1 1 0 0 0 4 17h16a1 1 0 0 0 .74-1.673C19.41 13.956 18 12.499 18 8A6 6 0 0 0 6 8c0 4.499-1.41 5.956-2.738 7.326"/>', subir: '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" x2="12" y1="3" y2="15"/>',
+  baixar: '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M7 10l5 5 5-5"/><path d="M12 15V3"/>', mais: '<path d="M5 12h14"/><path d="M12 5v14"/>', filtro: '<polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/>', grade: '<rect width="7" height="7" x="3" y="3" rx="1"/><rect width="7" height="7" x="14" y="3" rx="1"/><rect width="7" height="7" x="14" y="14" rx="1"/><rect width="7" height="7" x="3" y="14" rx="1"/>', x: '<path d="M18 6 6 18"/><path d="m6 6 12 12"/>', pessoas: '<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>', lixo: '<path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/><line x1="10" x2="10" y1="11" y2="17"/><line x1="14" x2="14" y1="11" y2="17"/>',
+  voltar: '<path d="m12 19-7-7 7-7"/><path d="M19 12H5"/>', caneta: '<path d="M12 20h9"/><path d="M16.376 3.622a1 1 0 0 1 3.002 3.002L7.368 18.635a2 2 0 0 1-.855.506l-2.872.838a.5.5 0 0 1-.62-.62l.838-2.872a2 2 0 0 1 .506-.854z"/>', arquivo: '<path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M10 9H8"/><path d="M16 13H8"/><path d="M16 17H8"/>', brilho: '<path d="M9.937 15.5A2 2 0 0 0 8.5 14.063l-6.135-1.582a.5.5 0 0 1 0-.962L8.5 9.936A2 2 0 0 0 9.937 8.5l1.582-6.135a.5.5 0 0 1 .963 0L14.063 8.5A2 2 0 0 0 15.5 9.937l6.135 1.581a.5.5 0 0 1 0 .964L15.5 14.063a2 2 0 0 0-1.437 1.437l-1.582 6.135a.5.5 0 0 1-.963 0z"/><path d="M20 3v4"/><path d="M22 5h-4"/><path d="M4 17v2"/><path d="M5 18H3"/>', girando: '<path d="M21 12a9 9 0 1 1-6.219-8.56"/>',
+  repete: '<path d="m2 9 3-3 3 3"/><path d="M13 18H7a2 2 0 0 1-2-2V6"/><path d="m22 15-3 3-3-3"/><path d="M11 6h6a2 2 0 0 1 2 2v10"/>', conversa: '<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>', robo: '<path d="M12 8V4H8"/><rect width="16" height="12" x="4" y="8" rx="2"/><path d="M2 14h2"/><path d="M20 14h2"/><path d="M15 13v2"/><path d="M9 13v2"/>', prancheta: '<rect width="8" height="4" x="8" y="2" rx="1" ry="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><path d="m9 14 2 2 4-4"/>', selo: '<path d="M3.85 8.62a4 4 0 0 1 4.78-4.77 4 4 0 0 1 6.74 0 4 4 0 0 1 4.78 4.78 4 4 0 0 1 0 6.74 4 4 0 0 1-4.77 4.78 4 4 0 0 1-6.75 0 4 4 0 0 1-4.78-4.77 4 4 0 0 1 0-6.76Z"/><path d="m9 12 2 2 4-4"/>', alerta: '<path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/><path d="M12 9v4"/><path d="M12 17h.01"/>',
+  certo: '<path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><path d="m9 11 3 3L22 4"/>', certo2: '<circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/>', checks: '<path d="m3 17 2 2 4-4"/><path d="m3 7 2 2 4-4"/><path d="M13 6h8"/><path d="M13 12h8"/><path d="M13 18h8"/>', afazer: '<rect x="3" y="5" width="6" height="6" rx="1"/><path d="m3 17 2 2 4-4"/><path d="M13 6h8"/><path d="M13 12h8"/><path d="M13 18h8"/>', kanban: '<rect width="18" height="18" x="3" y="3" rx="2"/><path d="M8 7v7"/><path d="M12 7v4"/><path d="M16 7v9"/>', lista: '<line x1="8" x2="21" y1="6" y2="6"/><line x1="8" x2="21" y1="12" y2="12"/><line x1="8" x2="21" y1="18" y2="18"/><line x1="3" x2="3.01" y1="6" y2="6"/><line x1="3" x2="3.01" y1="12" y2="12"/><line x1="3" x2="3.01" y1="18" y2="18"/>', girar: '<path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/>',
+  circalerta: '<circle cx="12" cy="12" r="10"/><line x1="12" x2="12" y1="8" y2="12"/><line x1="12" x2="12.01" y1="16" y2="16"/>', email: '<rect width="20" height="16" x="2" y="4" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/>', sincr: '<path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/>', atualizar: '<path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/>', marcado: '<path d="m9 11 3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/>', vazio: '<rect width="18" height="18" x="3" y="3" rx="2"/>',
+};
+const ic = (nome, s, traco) => `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="${traco || 2}" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0">${P[nome]}</svg>`;
+/* A casca do app (Sidebar e Header), como a Renata, facilitadora, vê: o menu muda com a tela (Calendário, reunião, Pendências aberta, Kanban). */
+function lado(id, estado) {
+  const grupo = estado === "cal" || estado === "kan", pendAberto = estado === "pend" || estado === "kan";
+  const mi = (nome, rot, extra, cls, idEl) => `<div class="mi ${cls || ""}"${idEl ? ` id="${idEl}"` : ""}>${ic(nome, 16, cls && cls.includes("on") ? 2 : 1.5)}${rot}${extra || ""}</div>`;
+  const pend = `<div class="mi ${estado === "kan" ? "grupo" : ""}" id="${id}-pend">${ic("relogio", 16, 1.5)}Pendências<span class="fim">${ic(pendAberto ? "baixo" : "direita", 16)}</span></div>` + (pendAberto ? `<div class="sub">${mi("afazer", "Lista")}${mi("kanban", "Kanban", "", estado === "kan" ? "on" : "", `${id}-kan`)}</div>` : "");
+  return `<div class="lado" id="${id}" style="opacity:${estado === "cal" ? 1 : 0}"><div class="marca"><img src="assets/logo-hsm.png" alt="Hospital São Matheus" /></div><nav>
+    <div class="mi ${grupo ? "grupo" : ""}">${ic("alvo", 18, grupo ? 2 : 1.5)}Reuniões e metas<span class="fim">${ic("baixo", 16)}</span></div>
+    <div class="sub">${mi("painel", "Dashboard")}${mi("dias", "Calendário", "", estado === "cal" ? "on" : "", `${id}-cal`)}<div>${pend}</div></div>
+    <div class="mi">${ic("megafone", 18, 1.5)}Ouvidoria</div><div class="mi">${ic("escudo", 18, 1.5)}Admin</div><div class="mi" style="margin-top:8px">${ic("ajuda", 18, 1.5)}Ajuda</div></nav></div>`;
+}
+const topo = `<div class="topo"><div class="busca">${ic("lupa", 16)}Buscar...</div><div class="quem"><div class="sino">${ic("sino", 22, 1.75)}</div><div class="divisor"></div>
+  <div class="pessoa"><div class="tx"><b>Renata Fontes</b><span>renata.fontes@exemplo.lo...</span></div><div class="avatar">R</div></div></div></div>`;
+/* Calendário (reunioes/calendario/page.tsx): outubro de 2026, hoje é 14.
+   Dois quadros: antes e depois de agendar (o aviso verde entra no alto). */
+const EV = { 8: `<div class="ev ass"><b>Comissão de Farmácia</b><span>14:00 · Gerencial</span><span class="lx">${ic("lixo", 10)}</span></div>`, 23: `<div class="ev prog"><b>Reunião de Diretoria</b><span>10:00 · Diretoria</span><span class="lx">${ic("lixo", 10)}</span></div>` };
+function calendario(p, agendada) {
+  let dias = "";
+  for (let i = 0, d = -3; i < 35; i++, d++) {
+    const n = d < 1 ? "" : `<span class="n ${d === 14 ? "hoje" : d < 14 ? "passou" : ""}">${d}</span>`;
+    const ev = (EV[d] || "") + (agendada && d === 21 ? `<div class="ev prog" id="${p}-ev"><b>Acompanhamento da CME</b><span>09:00 · Coordenação</span><span class="lx">${ic("lixo", 10)}</span></div>` : "");
+    dias += `<div class="dia" id="${p}-d${d}">${n}${ev}</div>`;
+  }
+  const ok = agendada ? `<div class="ok-verde">${ic("certo", 16)}Reunião agendada com sucesso. Os participantes foram notificados por email.</div>` : "";
+  return `<div class="pagina" id="${p}" style="opacity:${agendada ? 0 : 1}">
+  <div class="entre"><div><h1>Calendário de Reuniões</h1><p class="dek">Agende e visualize reuniões presenciais</p></div><div class="lin"><span class="bt claro">${ic("subir", 16)}Importar Transcrição</span><span class="bt indigo">${ic("mais", 16)}Agendar Reunião</span></div></div>${ok}
+  <div class="ap filtros"><div class="lin t">${ic("filtro", 16)}Filtros</div><div style="width:290px"><p class="rot" style="margin-bottom:6px">Facilitador</p><div class="sel">Todos os Facilitadores${ic("baixo", 16)}</div></div></div>
+  <div class="ap"><div class="cal-cab entre"><span class="ic-p" style="color:var(--color-slate-600)">${ic("esquerda", 20)}</span><h3>Outubro 2026</h3><div class="lin"><div class="visao"><span class="on">${ic("grade", 14)}Mensal</span><span>${ic("mes", 14)}Semanal</span></div><span style="color:var(--color-slate-600);display:flex">${ic("direita", 20)}</span></div></div>
+    <div class="semana">${["DOM", "SEG", "TER", "QUA", "QUI", "SEX", "SÁB"].map((s) => `<span>${s}</span>`).join("")}</div><div class="grade">${dias}</div>
+    <div class="legenda-cal"><span><i style="background:var(--color-indigo-400)"></i>Programada</span><span><i style="background:var(--color-amber-400)"></i>Processando IA</span><span><i style="background:var(--color-blue-400)"></i>Aguard. Validação</span><span><i style="background:var(--color-sky-400)"></i>Aguard. Assinatura</span><span><i style="background:var(--color-emerald-400)"></i>Assinada</span><span><i style="background:var(--color-red-400)"></i>Erro</span><span>· Clique no evento para ver detalhes, ou no dia para agendar</span></div></div></div>`;
+}
+/* Janela Agendar Reunião (AgendarModal): um quadro por estado do formulário. */
+const PESSOAS = [["Otávio Serra", "Técnico de Esterilização · CME"], ["Luciana Braga", "Enfermeira · UTI"], ["Tiago Meireles", "Farmacêutico · Farmácia"], ["Paulo Andrade", "Engenheiro Clínico · Engenharia Clínica"]];
+const HORAS = ["07:00", "07:30", "08:00", "08:30", "09:00", "09:30", "10:00", "10:30", "11:00", "11:30", "12:00", "12:30", "13:00", "13:30", "14:00", "14:30", "15:00", "15:30"];
+function janela(p, e) {
+  const sel = PESSOAS.slice(0, e.sel || 0), disp = PESSOAS.slice(e.sel || 0);
+  return `<div class="m-form" id="${p}" style="opacity:${p === "m0" ? 1 : 0}">
+  <div><label>Título</label><div class="campo ${e.titulo ? "" : "vazio"}" id="${p}-titulo">${e.titulo ? "Acompanhamento da CME" : "Ex: Reunião de Diretoria, Abril 2026"}</div></div>
+  <div class="duas"><div><label>Data</label><div class="campo entre">21/10/2026${ic("mes", 16)}</div></div><div><label>Tipo</label><div class="sel" style="height:46px" id="${p}-tipo"><span style="color:var(--color-slate-${e.tipo ? 900 : 400})">${e.tipo ? "Coordenação" : "Selecionar..."}</span>${ic("baixo", 16)}</div></div></div>
+  <div><label class="lin">${ic("relogio", 14)}Horário da Reunião</label><div class="hora-caixa"><p>Selecione o horário de início:</p>${e.hora ? `<p class="escolhida">${ic("relogio", 12)}Selecionado: 09:00</p>` : ""}<div class="horas">${HORAS.map((h) => `<span class="${e.hora && h === "09:00" ? "on" : ""}"${h === "09:00" ? ` id="${p}-h9"` : ""}>${h}</span>`).join("")}</div></div></div>
+  <div><label>Pauta (opcional)</label><div class="campo vazio" style="height:90px">Descreva a pauta da reunião...</div></div>
+  <div><label class="lin" id="${p}-rot-part">${ic("pessoas", 14)}Participantes${sel.length ? `<span class="conta">${sel.length} selecionado${sel.length > 1 ? "s" : ""}</span>` : ""}</label>
+    ${sel.length ? `<div class="fichas">${sel.map(([n]) => `<span>${n}${ic("x", 12)}</span>`).join("")}</div><p class="aviso-m">Os participantes selecionados serão notificados por email assim que a reunião for salva.</p>` : ""}
+    <div class="busca-p ${e.lista ? "foco" : ""}" id="${p}-busca">${ic("lupa", 16)}Buscar participante...</div>
+    ${e.lista ? `<div class="lista-p"><div class="cab">Participantes disponíveis</div>${disp.map(([n, c], i) => `<div class="op" id="${p}-op${i}"><span class="ini">${n[0]}</span><div class="nome"><b>${n}</b><span>${c}</span></div><span class="mais">${ic("mais", 14)}</span></div>`).join("")}</div>` : ""}</div>
+  <div class="botoes-m"><span class="bt claro" style="justify-content:center">Cancelar</span><span class="bt indigo" style="justify-content:center" id="${p}-agendar">Agendar Reunião</span></div></div>`;
+}
+/* A reunião programada (reunioes/[id]/page.tsx, ramo PROGRAMADA). */
+const campo = (nome, rot, val) => `<div class="campo-r"><span class="ic-c">${ic(nome, 16, 1.5)}</span><div><small>${rot}</small>${val ? `<b>${val}</b>` : "<i>Não definido</i>"}</div></div>`;
+const cartao = (nome, titulo, corpo, id, extra) => `<div class="ap"${id ? ` id="${id}"` : ""}><div class="ap-topo"><span class="ic-p">${ic(nome, 16, 1.5)}</span><h2>${titulo}</h2>${extra || ""}</div><div class="ap-corpo">${corpo}</div></div>`;
+const linhaPessoa = ([n, c]) => `<div class="pessoa-r"><span class="ini">${n[0]}</span><div class="nome"><b>${n}</b><span>${c}</span></div></div>`;
+const telaProgramada = `<div class="rolo" id="rolo-prog"><div class="pagina">
+  <div><span class="volta">${ic("voltar", 14)}Calendário</span><div class="entre" style="align-items:flex-start"><div id="p-cab"><span class="pilula">${ic("dias", 12)}Programada</span><h1>Coordenação, 21 de outubro de 2026</h1><p class="mono">MANREU02</p></div><span class="bt perigo">${ic("lixo", 16)}Desmarcar</span></div></div>
+  <div class="colunas"><div class="pilha">
+    ${cartao("caneta", "Detalhes da Reunião", `<div class="pilha" style="gap:16px">${campo("arquivo", "Título da Reunião", "Acompanhamento da CME")}<div class="grade2">${campo("arquivo", "Tipo de Reunião", "Coordenação")}${campo("relogio", "Horário de Início", "09:00")}${campo("dias", "Data", "21/10/2026")}</div>${campo("arquivo", "Pauta", "")}</div>`, "", `<span class="dica">Clique em qualquer campo para editar</span>`)}
+    ${cartao("pessoas", "Participantes", `<div class="pilha" style="gap:8px">${PESSOAS.slice(0, 3).map(linhaPessoa).join("")}<div class="tracejado">${ic("mais", 16)}Adicionar participante</div></div>`, "", `<span class="conta-p">3</span>`)}
+    ${cartao("subir", "Transcrição", `<p class="para">Após a reunião, anexe o arquivo de transcrição (<code>.txt</code>, <code>.md</code>, <code>.pdf</code> ou <code>.docx</code>) para que a IA processe e gere a ata automaticamente.</p><span class="bt cheio" style="padding:12px 20px" id="p-anexar"><span class="troca"><span class="antes" id="p-anexar-a">${ic("subir", 16)}Anexar Transcrição e Processar com IA</span><span class="depois" id="p-anexar-b">${ic("girando", 16)}Enviando e iniciando IA...</span></span></span>`, "p-transcricao")}
+    ${cartao("brilho", "Ata Guiada", `<p class="para">Reunião rápida, sem transcrição? Monte a ata conversando (por texto ou voz) com um assistente, numa tela dedicada onde o resumo e o quadro de ações tomam forma ao vivo. Você revisa e finaliza sem assinatura.</p><span class="bt duplo">${ic("conversa", 16)}Iniciar Ata Guiada</span>`, "p-guiada")}
+    <div class="ap recorre"><span class="ic-p">${ic("repete", 16, 1.5)}</span><h2>Recorrência</h2><span class="dica">Configurar</span></div>
+  </div><div class="pilha">
+    ${cartao("brilho", "Preparação", `<div class="pilha" style="gap:12px"><div class="entre" style="font-size:12px"><span style="color:var(--color-slate-500)">3 de 4 concluídos</span><b style="color:var(--color-primary)">75%</b></div><div class="barra"><div></div></div>
+      <div class="check"><span class="n">${ic("vazio", 16)}</span><div><b>Definir pauta da reunião</b><small>Descreva o propósito principal</small></div></div><div class="check"><span class="s">${ic("marcado", 16)}</span><s>Definir tipo de reunião</s></div><div class="check"><span class="s">${ic("marcado", 16)}</span><s>Definir horário de início</s></div><div class="check"><span class="s">${ic("marcado", 16)}</span><s>Adicionar participantes (3 adicionados)</s></div></div>`)}
+    <div class="resumo"><p class="rot" style="font-weight:600">Resumo</p><div class="entre"><span>Data</span><b>21/10/2026</b></div><div class="entre"><span>Horário</span><b>09:00</b></div><div class="entre"><span>Tipo</span><b>Coordenação</b></div><div class="entre"><span>Participantes</span><b>3</b></div></div>
+  </div></div></div></div>`;
+/* A reunião depois da transcrição (ramo padrão): um quadro por estado da ata. */
+const PASSOS = [["robo", "Processando IA"], ["pessoas", "Resolver Participantes"], ["prancheta", "Aguard. Validação"], ["caneta", "Aguard. Assinatura"], ["selo", "Assinada"]];
+const fluxo = (p, agora) => `<div class="ap fluxo" id="${p}-fluxo">${PASSOS.map(([nome, rot], i) => `<span class="passo-s ${i < agora ? "feito" : i === agora ? "agora" : ""}">${ic(nome, 14, i <= agora ? 2 : 1.5)}${rot}</span>${i < 4 ? `<span class="traco ${i < agora ? "feito" : ""}"></span>` : ""}`).join("")}</div>`;
+const metas = (horario, acoes) => `<div class="metas">${[["dias", "Data", "21/10/2026"], ["relogio", "Horário", horario], ["arquivo", "Tipo", "Coordenação"], ["checks", "Ações", acoes]].map(([nome, rot, val]) => `<div class="ap meta"><small>${ic(nome, 14, 1.5)}${rot}</small><b>${val}</b></div>`).join("")}</div>`;
+const cabecaStd = (p, pdf) => `<div><span class="volta">${ic("voltar", 14)}Calendário</span><div class="entre" style="align-items:flex-start"><div><h1>Coordenação, 21 de outubro de 2026</h1><p class="mono">MANREU02</p></div><div class="lin" style="gap:12px"><span class="bt perigo">${ic("lixo", 16)}Desmarcar</span>${pdf ? `<span class="bt cheio" style="padding:8px 16px" id="${p}-pdf">${ic("baixar", 16)}Baixar PDF</span>` : ""}</div></div></div>`;
+const ATA = [["Otávio Serra", "Técnico de Esterilização"], ["Luciana Braga", "Enfermeira"], ["Tiago Meireles", "Farmacêutico"], ["Renata Fontes", "Coordenação"]];
+const ata = (p, emValidacao) => `
+  ${cartao("pessoas", `Participantes (4)`, `<div class="grade2" style="gap:8px">${ATA.map(([n, c]) => `<div class="pessoa-r"><span class="ini">${n[0]}</span><div class="nome" style="flex:1"><b>${n}</b><span>${c}</span></div>${emValidacao ? `<span class="ok-p">${ic("certo2", 16)}</span><span class="x-p">${ic("x", 14)}</span>` : ""}</div>`).join("")}</div>${emValidacao ? `<div class="tracejado" style="width:fit-content;margin-top:12px">${ic("mais", 16)}Adicionar participante</div>` : ""}`)}
+  ${cartao("alvo", "Pauta da Reunião", `<p style="color:var(--color-slate-700)">Acompanhar os indicadores do Centro de Material e Esterilização e combinar o que cada setor entrega até a próxima reunião.</p>`)}
+  ${cartao("conversa", "Discussão dos Pontos (1)", `<div class="topico"><h5>4.1 Tempo de giro das autoclaves</h5><p>O setor mostrou o tempo médio de cada ciclo e onde a fila de material cresce no fim da tarde.</p><p class="contrib">Contribuições</p><p><b>Luciana Braga (Enfermeira - Unidade de Terapia Intensiva):</b> pediu cobertura no turno da noite.</p><div class="decisao"><strong>Decisão:</strong> antecipar o último ciclo do dia em uma hora durante o mês de teste.<em>Responsável: Otávio Serra</em></div></div>`)}
+  ${cartao("checks", "Quadro de Atribuições (2 ações)", `<table><tr><th>Ação</th><th>Responsável</th><th>Objetivo / Meta</th><th>Prazo</th><th>Status</th></tr>
+    <tr><td>Revisar o fluxo de esterilização do instrumental cirúrgico</td><td>Otávio Serra<small>Técnico de Esterilização</small></td><td style="font-size:12px">Reduzir a fila de material do fim da tarde</td><td>30/10/2026</td><td><span class="aberto">Aberto</span></td></tr>
+    <tr><td>Atualizar a escala de plantão da UTI</td><td>Luciana Braga<small>Enfermeira</small></td><td style="font-size:12px">Garantir cobertura no turno da noite</td><td>28/10/2026</td><td><span class="aberto">Aberto</span></td></tr></table>`, `${p}-quadro`)}`;
+const validacao = (p) => `<div class="ap validar" id="${p}-validar"><div class="lin" style="gap:12px;margin-bottom:16px"><span class="q">${ic("alerta", 20)}</span><div><h2>Validação Necessária</h2><p>Por favor, revise o PDF da ata antes de prosseguir com a assinatura.</p></div></div>
+  <div class="lin" style="gap:12px"><span class="bt cheio" style="padding:10px 24px" id="${p}-enviar">${ic("caneta", 16)}<span class="troca"><span class="antes" id="${p}-enviar-a">Enviar para assinatura</span><span class="depois" id="${p}-enviar-b">Enviando...</span></span></span><span class="bt contorno">${ic("certo", 16)}Finalizar sem assinatura</span><span class="bt ambar">${ic("caneta", 16)}Solicitar Correção</span></div></div>`;
+const QUEM = [["Renata Fontes", "renata.fontes@exemplo.local"], ["Otávio Serra", "otavio.serra@exemplo.local"], ["Luciana Braga", "luciana.braga@exemplo.local"], ["Tiago Meireles", "tiago.meireles@exemplo.local"]];
+const assinaturas = (p, assinou, criadas) => `<div class="ap sig" id="${p}-sig"><div class="ap-topo" style="gap:12px"><span class="q">${ic("caneta", 20)}</span><div style="flex:1"><h2>Aguardando assinatura digital</h2><p class="sub-t" id="${p}-conta"><b>${assinou.filter(Boolean).length} de 4</b> assinaram · Pendências criadas: <b>${criadas} de 2</b></p></div><span class="acao-s">${ic("sincr", 14)}Sincronizar</span><span class="acao-s">${ic("atualizar", 14)}Atualizar</span></div>
+  <div class="ap-corpo pilha" style="gap:8px;padding:16px 24px">${QUEM.map(([n, e], i) => `<div class="assina"><span class="ini ${assinou[i] ? "ok" : "falta"}">${n[0]}</span><div class="nome" style="flex:1"><b>${n}</b><span>${e}</span></div>${assinou[i] ? `<span class="selo ok">${ic("certo2", 12)}${assinou[i]}</span>` : `<span class="lembrar" id="${p}-lembrar${i}">${ic("email", 12)}<span class="troca"><span class="antes" id="${p}-lembrar${i}-a">${p === "sa1" && i === 3 ? "Enviado" : "Lembrar"}</span><span class="depois" id="${p}-lembrar${i}-b">Enviado</span></span></span><span class="selo falta">${ic("relogio", 12)}Pendente</span>`}</div>`).join("")}</div>
+  <p class="envelope">Envelope: 7f3c9e21-4b8a-4d2e-9c61-2e5f0a8b4d17</p></div>`;
+const assinada = (p) => `<div class="assinada" id="${p}-assinada"><div class="lin" style="gap:16px;align-items:flex-start"><span class="q">${ic("selo", 20)}</span><div><b>Ata Assinada Digitalmente</b><small>Assinada em 21 de outubro de 2026</small></div></div><span class="bt verde">${ic("baixar", 16)}PDF Assinado</span></div>`;
+const quadroStd = (p, visivel, miolo) => `<div class="pagina" id="${p}" style="opacity:${visivel ? 1 : 0};max-width:960px">${miolo}</div>`;
+const telaStd = `<div class="rolo" id="rolo-std">
+  ${quadroStd("sp", true, `${cabecaStd("sp", false)}${fluxo("sp", 0)}${metas("-", "0 total")}<div class="processando" id="sp-proc"><div class="q">${ic("robo", 28)}</div><b>A IA está processando a transcrição...</b><small>Isso pode levar até 30 segundos. Recarregue a página em instantes.</small></div>`)}
+  ${quadroStd("sv", false, `${cabecaStd("sv", true)}${fluxo("sv", 2)}${metas("09:00:00 - 10:00:00", "2 total")}${validacao("sv")}${ata("sv", true)}`)}
+  ${quadroStd("sa0", false, `${cabecaStd("sa0", true)}${fluxo("sa0", 3)}${assinaturas("sa0", [0, 0, 0, 0], 0)}${metas("09:00:00 - 10:00:00", "2 total")}${ata("sa0", false)}`)}
+  ${quadroStd("sa1", false, `${cabecaStd("sa1", true)}${fluxo("sa1", 3)}${assinaturas("sa1", ["21/10 11:02", "21/10 11:40", 0, 0], 1)}${metas("09:00:00 - 10:00:00", "2 total")}${ata("sa1", false)}`)}
+  ${quadroStd("sa2", false, `${cabecaStd("sa2", true)}${fluxo("sa2", 4)}${assinada("sa2")}${metas("09:00:00 - 10:00:00", "2 total")}${ata("sa2", false)}`)}</div>`;
+/* Kanban (pendencias/kanban/page.tsx): antes e depois de soltar o cartão. */
+const kc = (id, acao, desc, meta, resp, ini) => `<div class="kc"${id ? ` id="${id}"` : ""}><div class="ids"><span>${acao}</span><i>${acao === "MANP06" || acao === "MANP04" ? "MANREU01" : "MANREU02"}</i></div><p>${desc}</p><p class="meta-k">→ ${meta}</p><div class="resp"><span>${ini}</span>${resp}</div></div>`;
+const C08 = (id) => kc(id, "MANP08", "Revisar o fluxo de esterilização do instrumental cirúrgico", "Reduzir a fila de material do fim da tarde", "Otávio Serra", "OS");
+const C09 = kc("", "MANP09", "Atualizar a escala de plantão da UTI", "Garantir cobertura no turno da noite", "Luciana Braga", "LB");
+const C06 = kc("", "MANP06", "Revisar o contrato de manutenção das autoclaves", "Contrato revisado com o setor de compras", "Otávio Serra", "OS");
+const C04 = kc("", "MANP04", "Publicar o relatório de indicadores do trimestre", "Relatório no painel do setor", "Renata Fontes", "RF");
+const coluna = (p, cls, nome, rot, n, cartoes, sobre) => `<div class="col" id="${p}-col-${cls}">${sobre ? `<div class="sobre" id="${p}-sobre"></div>` : ""}<div class="col-cab c-${cls}" id="${p}-cab-${cls}"><span class="lin">${ic(nome, 16, 2.5)}${rot}</span><span class="q">${n}</span></div><div class="cartoes">${cartoes}</div></div>`;
+const kanban = (p, solto) => `<div class="pagina g20" id="${p}" style="opacity:${solto ? 0 : 1}">
+  <div class="entre"><div id="${p}-cab"><h1>Kanban</h1><p class="dek">Arraste os cards para alterar o status das pendências</p></div><div class="alterna"><span>${ic("lista", 16)}Lista</span><span class="on">${ic("grade", 16)}Kanban</span></div></div>
+  <div class="ap filtros-k"><div class="lin" style="font-size:14px;font-weight:600;color:var(--color-slate-700)">${ic("filtro", 16)}Filtros Dinâmicos</div><div class="campos-k">${[["Setor", "Todos os Setores"], ["Responsável", "Equipe Inteira"], ["Facilitador", "Todos os Facilitadores"], ["A partir de", "dd/mm/aaaa"], ["Até", "dd/mm/aaaa"]].map(([r, v]) => `<div><p class="rot">${r}</p><div class="sel">${v}</div></div>`).join("")}<div class="limpar">Limpar Filtros</div></div></div>
+  <div class="quadro">${coluna(p, "pend", "relogio", "PENDENTE", solto ? 2 : 3, (solto ? "" : C08(`${p}-c08`)) + C09 + C06)}${coluna(p, "prog", "girar", "EM PROGRESSO", solto ? 1 : 0, solto ? C08(`${p}-c08`) : `<div class="solte" id="${p}-solte">Solte aqui</div>`, !solto)}${coluna(p, "atr", "circalerta", "ATRASADO", 1, C04)}</div></div>`;
+document.getElementById("camera").innerHTML = `<div class="janela" id="janela">
+    <div class="barra-nav"><i></i><i></i><i></i><div class="url"><span id="url-cal">app.hospitalsaomatheus.cloud/reunioes/calendario</span><span id="url-reu" style="position:absolute;opacity:0">app.hospitalsaomatheus.cloud/reunioes/MANREU02</span><span id="url-kan" style="position:absolute;opacity:0">app.hospitalsaomatheus.cloud/pendencias/kanban</span></div></div>
+    <div class="vista"><div class="app" id="app">${lado("lado-cal", "cal")}${lado("lado-reu", "reu")}${lado("lado-pend", "pend")}${lado("lado-kan", "kan")}${topo}<div class="corpo">
+      <div class="tela-app" id="t-cal"><div class="rolo" id="rolo-cal">${calendario("cal0", false)}${calendario("cal1", true)}</div></div>
+      <div class="tela-app" id="t-prog" style="opacity:0">${telaProgramada}</div>
+      <div class="tela-app" id="t-std" style="opacity:0">${telaStd}</div>
+      <div class="tela-app" id="t-kan" style="opacity:0"><div class="rolo" id="rolo-kan">${kanban("k0", false)}${kanban("k1", true)}</div><div id="fantasma">${C08("")}</div></div></div>
+      <div id="veu"></div><div id="modal"><div class="m-cab"><span class="q">${ic("dias", 20)}</span><div><h4>Agendar Reunião</h4><small>Preencha os dados abaixo</small></div><span style="margin-left:auto;color:var(--color-slate-400);display:flex">${ic("x", 20)}</span></div>
+        <div class="m-vista"><div class="rolo" id="rolo-m" style="width:672px">${janela("m0", {})}${janela("m1", { titulo: 1 })}${janela("m2", { titulo: 1, tipo: 1 })}${janela("m3", { titulo: 1, tipo: 1, hora: 1 })}${janela("m4", { titulo: 1, tipo: 1, hora: 1, lista: 1 })}${janela("m5", { titulo: 1, tipo: 1, hora: 1, lista: 1, sel: 1 })}${janela("m6", { titulo: 1, tipo: 1, hora: 1, lista: 1, sel: 2 })}${janela("m7", { titulo: 1, tipo: 1, hora: 1, lista: 1, sel: 3 })}</div></div></div>
+    </div></div></div>
+  <div class="marcador" id="mk"></div><div class="dedo" id="dedo"><svg viewBox="0 0 24 24"><path d="M5 3l14 8-6 1.6L9.6 19z"/></svg><div class="toque" id="toque"></div></div>`;
+/* Réplica de tela: sobreposição e corte são de propósito. */
+document.querySelectorAll("#camera, #camera *").forEach((el) => ["overlap", "occlusion", "overflow"].forEach((k) => el.setAttribute(`data-layout-allow-${k}`, "")));
+/* Medidas: onde cada elemento fica no quadro com a câmera em repouso, pelo
+   offset do layout (que ignora a câmera e a rolagem). Nada se mede na montagem
+   (regra de 14/10/2026): cada alvo e cada rolagem é uma função que o GSAP chama
+   quando o tween começa, e o render só busca o primeiro quadro depois da fonte. */
+const APP = document.getElementById("app");
+const APP_X = 160, APP_Y = 32 + 44, ESCALA_APP = 1.25, CENTRO = { x: 960, y: 452 }, JANELA = { x0: 160, y0: 32, x1: 1760, y1: 880 };
+const valor = (v) => (typeof v === "function" ? v() : v);
+function noApp(id) {
+  let el = document.getElementById(id), x = 0, y = 0;
+  const w = el.offsetWidth, h = el.offsetHeight;
+  while (el && el !== APP) { x += el.offsetLeft; y += el.offsetTop; el = el.offsetParent; }
+  return { x, y, w, h };
+}
+const noQuadro = (id, rolagem) => { const r = noApp(id); return { x: APP_X + r.x * ESCALA_APP, y: APP_Y + (r.y - valor(rolagem)) * ESCALA_APP, w: r.w * ESCALA_APP, h: r.h * ESCALA_APP }; };
+const juntaCaixas = (rs) => { const x = Math.min(...rs.map((r) => r.x)), y = Math.min(...rs.map((r) => r.y)); return { x, y, w: Math.max(...rs.map((r) => r.x + r.w)) - x, h: Math.max(...rs.map((r) => r.y + r.h)) - y }; };
+/* Alvo: um ou mais ids (separados por espaço) e a rolagem em que ele é visto. */
+const alvo = (ids, rolagem = 0) => ({ ids, caixa: () => juntaCaixas(ids.split(" ").map((id) => noQuadro(id, rolagem))) });
+/* Rolagem que leva o elemento a "folga" px do topo da área do app (64 = topo). */
+const ate = (id, folga) => () => Math.max(0, noApp(id).y - 64 - folga);
+const REPOUSO = { ids: "", caixa: () => ({ x: 160, y: 32, w: 1600, h: 848 }) };
+function enquadra(r, s) {
+  const x = CENTRO.x - s * (r.x + r.w / 2), y = CENTRO.y - s * (r.y + r.h / 2);
+  return { scale: s, x: Math.min(JANELA.x0 * (1 - s), Math.max(JANELA.x1 * (1 - s), x)), y: Math.min(JANELA.y0 * (1 - s), Math.max(JANELA.y1 * (1 - s), y)) };
+}
+const camera = (a, s) => ({ scale: s, x: () => enquadra(a.caixa(), s).x, y: () => enquadra(a.caixa(), s).y });
+window.__timelines = window.__timelines || {};
+const tl = gsap.timeline({ paused: true });
+tl.set("#camera", { scale: 1, x: 0, y: 0 }, 0);
+function mira(t, dur, a, s, fim) {
+  tl.to("#camera", { ...camera(a, s), duration: dur, ease: "power2.inOut" }, t);
+  tl.to("#camera", { ...camera(a, s * 1.025), duration: fim - t - dur, ease: "none" }, t + dur);
+}
+function marca(t, a, fim) {
+  tl.set("#mk", { attr: { "data-alvo": a.ids }, x: () => a.caixa().x - 8, y: () => a.caixa().y - 8, width: () => a.caixa().w + 16, height: () => a.caixa().h + 16, scale: 1.06 }, t - 0.02);
+  tl.to("#mk", { opacity: 1, scale: 1, duration: 0.3, ease: "power2.out" }, t);
+  tl.to("#mk", { opacity: 0, duration: 0.25 }, fim);
+}
+const centro = (a) => { const r = a.caixa(); return { x: r.x + r.w / 2 - 8, y: r.y + r.h / 2 - 6 }; };
+function toca(t, a, de) {
+  const b = de ? () => centro(de) : () => ({ x: centro(a).x + 120, y: centro(a).y + 150 });
+  tl.set("#dedo", { x: () => b().x, y: () => b().y }, t - 0.02);
+  tl.to("#dedo", { opacity: 1, duration: 0.2 }, t);
+  tl.to("#dedo", { x: () => centro(a).x, y: () => centro(a).y, duration: 0.7, ease: "power2.inOut" }, t + 0.2);
+  tl.fromTo("#toque", { opacity: 0.9, scale: 0.4 }, { opacity: 0, scale: 1.3, duration: 0.45, ease: "power1.out", immediateRender: false }, t + 0.95);
+}
+const solta = (t) => tl.to("#dedo", { opacity: 0, duration: 0.25 }, t);
+const troca = (sai, entra, t) => { tl.set(sai, { opacity: 0 }, t); tl.set(entra, { opacity: 1 }, t); };
+const rola = (rolo, r, t, dur) => tl.to(rolo, { y: () => -valor(r), duration: dur || 0.8, ease: "power2.inOut" }, t);
+/* Transição com rastro: a tela sai pela esquerda e a nova entra pela direita. */
+function passa(sai, entra, t) {
+  tl.to(sai, { x: -240, opacity: 0, filter: "blur(20px)", duration: 0.35, ease: "power2.in" }, t);
+  tl.fromTo(entra, { x: 240, opacity: 0, filter: "blur(20px)" }, { x: 0, opacity: 1, filter: "blur(0px)", duration: 0.6, ease: "power2.out", immediateRender: false }, t + 0.2);
+}
+tl.fromTo("#janela", { opacity: 0, y: 24, filter: "blur(12px)" }, { opacity: 1, y: 0, filter: "blur(0px)", duration: 0.5, ease: "power2.out" }, 4.0);
+/* 1 (4 a 11): o Calendário e o dia 21; a janela Agendar Reunião abre. */
+const RC = ate("cal0-d18", 150), d21 = alvo("cal0-d21", RC);
+mira(4.4, 2.0, alvo("lado-cal-cal"), 1.35, 6.6); marca(5.0, alvo("lado-cal-cal"), 6.5); rola("#rolo-cal", RC, 6.8); mira(6.6, 1.2, REPOUSO, 1.0, 7.8);
+mira(7.8, 1.4, d21, 1.35, 9.4); toca(8.2, d21); solta(9.3);
+tl.to("#veu", { opacity: 1, duration: 0.3 }, 9.2); tl.fromTo("#modal", { opacity: 0, y: 16 }, { opacity: 1, y: 0, duration: 0.4, ease: "power2.out" }, 9.25);
+mira(9.4, 1.4, alvo("m0-titulo"), 1.2, 11.0);
+/* 2 (11 a 21): título, tipo, horário e participantes, um quadro por mudança. */
+toca(11.0, alvo("m0-titulo")); troca("#m0", "#m1", 11.95); mira(11.0, 1.2, alvo("m1-titulo m1-tipo"), 1.3, 13.6);
+toca(12.4, alvo("m1-tipo"), alvo("m1-titulo")); troca("#m1", "#m2", 13.35); mira(13.6, 1.0, alvo("m2-h9"), 1.3, 15.0);
+toca(13.8, alvo("m2-h9"), alvo("m2-tipo")); troca("#m2", "#m3", 14.75);
+/* A janela rola até Participantes; a rolagem não passa do fim do formulário, como no navegador. */
+const parte = () => noApp("m3-rot-part").y - noApp("m3").y - 20, RMa = () => Math.min(parte(), noApp("m3").h - 489), RM = () => Math.min(parte(), ...["m4", "m5", "m6", "m7"].map((m) => noApp(m).h - 489));
+rola("#rolo-m", RMa, 15.0, 0.7); mira(15.0, 1.2, alvo("m3-busca", RMa), 1.2, 16.8); toca(15.8, alvo("m3-busca", RMa)); troca("#m3", "#m4", 16.75);
+/* A lista abre e o formulário cresce: a janela rola mais um pouco até a lista. */
+rola("#rolo-m", RM, 16.85, 0.4); mira(16.8, 1.0, alvo("m4-busca m4-op2", RM), 1.2, 21.0);
+toca(17.3, alvo("m4-op0", RM), alvo("m3-busca", RMa)); troca("#m4", "#m5", 18.25);
+toca(18.5, alvo("m5-op0", RM), alvo("m4-op0", RM)); troca("#m5", "#m6", 19.45);
+toca(19.7, alvo("m6-op0", RM), alvo("m5-op0", RM)); troca("#m6", "#m7", 20.65);
+/* 3 (21 a 27): Agendar Reunião; o aviso verde entra no alto e a rolagem segura o dia na tela. */
+const RMF = () => noApp("m7").h - 489, agendar = alvo("m7-agendar", RMF);
+rola("#rolo-m", RMF, 21.0, 0.7); mira(21.0, 1.0, agendar, 1.2, 22.8); toca(21.7, agendar, alvo("m6-op0", RM)); solta(22.8);
+tl.to("#modal", { opacity: 0, duration: 0.25 }, 22.7); tl.to("#veu", { opacity: 0, duration: 0.25 }, 22.7);
+const RC1 = ate("cal1-d18", 150), ev = alvo("cal1-ev", RC1);
+troca("#cal0", "#cal1", 22.9); tl.set("#rolo-cal", { y: () => -valor(RC1) }, 22.9);
+mira(22.8, 1.4, ev, 1.45, 27.0); marca(23.6, ev, 26.4);
+/* 4 (27 a 33): o cartão abre a reunião programada. */
+toca(27.0, ev); solta(28.2); passa("#t-cal", "#t-prog", 28.0); troca("#lado-cal", "#lado-reu", 28.2); troca("#url-cal", "#url-reu", 28.2);
+mira(28.0, 1.4, REPOUSO, 1.0, 29.6); mira(29.6, 1.8, alvo("p-cab"), 1.35, 33.0); marca(30.2, alvo("p-cab"), 32.6);
+/* 5 (33 a 40): Transcrição ou Ata Guiada. */
+const RP = ate("p-transcricao", 16), anexar = alvo("p-anexar", RP);
+rola("#rolo-prog", RP, 33.0, 0.9); mira(33.0, 1.8, alvo("p-guiada", RP), 1.3, 39.6); marca(34.6, alvo("p-guiada", RP), 38.8);
+/* 6 (40 a 47): Anexar Transcrição e Processar com IA; a página recarrega e a IA processa. */
+mira(39.6, 1.4, anexar, 1.45, 42.3); toca(40.4, anexar); troca("#p-anexar-a", "#p-anexar-b", 41.4); solta(42.0);
+tl.to("#t-prog", { opacity: 0, duration: 0.25 }, 42.3); tl.to("#t-std", { opacity: 1, duration: 0.35 }, 42.4);
+mira(42.3, 1.4, REPOUSO, 1.0, 43.7); mira(43.7, 1.6, alvo("sp-fluxo sp-proc"), 1.25, 47.0); marca(44.4, alvo("sp-proc"), 46.6);
+/* 7 (47 a 56): a ata escrita, em Validação Necessária. */
+const RQ = ate("sv-quadro", 24);
+troca("#sp", "#sv", 47.1); mira(47.0, 1.4, alvo("sv-fluxo sv-validar"), 1.2, 49.0); marca(47.6, alvo("sv-fluxo"), 48.9);
+rola("#rolo-std", RQ, 49.2, 1.0); mira(49.2, 1.6, alvo("sv-quadro", RQ), 1.25, 54.4); marca(50.8, alvo("sv-quadro", RQ), 54.0);
+rola("#rolo-std", 0, 54.4, 0.9); mira(54.4, 1.4, REPOUSO, 1.0, 55.8);
+/* 8 (56 a 62): Baixar PDF e Enviar para assinatura. */
+const enviar = alvo("sv-enviar");
+mira(55.8, 1.4, alvo("sv-pdf"), 1.45, 57.6); marca(56.4, alvo("sv-pdf"), 57.8);
+mira(57.6, 1.2, enviar, 1.45, 60.0); toca(58.0, enviar, alvo("sv-pdf")); troca("#sv-enviar-a", "#sv-enviar-b", 59.0); solta(59.4);
+tl.to("#rolo-std", { opacity: 0, duration: 0.2 }, 59.8); troca("#sv", "#sa0", 60.0); tl.to("#rolo-std", { opacity: 1, duration: 0.3 }, 60.05);
+mira(60.0, 1.6, alvo("sa0-sig"), 1.2, 62.2); marca(60.8, alvo("sa0-conta"), 62.0);
+/* 9 (62 a 72): Lembrar cobra quem falta; as assinaturas chegam e a ata fecha. */
+const lembrar = alvo("sa0-lembrar3");
+mira(62.2, 1.4, lembrar, 1.45, 65.4); toca(62.8, lembrar); troca("#sa0-lembrar3-a", "#sa0-lembrar3-b", 63.75); solta(64.6);
+mira(65.4, 1.4, alvo("sa1-sig"), 1.2, 68.8); troca("#sa0", "#sa1", 66.0); marca(66.6, alvo("sa1-conta"), 68.5);
+troca("#sa1", "#sa2", 68.8); mira(68.8, 1.4, alvo("sa2-fluxo sa2-assinada"), 1.25, 72.0); marca(69.4, alvo("sa2-assinada"), 71.8);
+/* 10 (72 a 79): Pendências e Kanban no menu. */
+mira(72.0, 1.4, alvo("lado-reu-pend"), 1.4, 75.0); toca(72.4, alvo("lado-reu-pend")); troca("#lado-reu", "#lado-pend", 73.35);
+toca(73.8, alvo("lado-pend-kan"), alvo("lado-reu-pend")); solta(75.0);
+passa("#t-std", "#t-kan", 74.8); troca("#lado-pend", "#lado-kan", 75.0); troca("#url-reu", "#url-kan", 75.0);
+mira(75.0, 1.2, REPOUSO, 1.0, 76.2); mira(76.2, 1.8, alvo("k0-col-pend k0-col-prog"), 1.25, 79.0); marca(77.0, alvo("k0-c08"), 78.8);
+/* 11 e 12 (79 a 92): o cartão sai de PENDENTE e cai em EM PROGRESSO. O navegador arrasta uma
+   cópia do cartão; o original fica apagado e a coluna de destino acende. */
+const c08 = alvo("k0-c08"), solte = alvo("k0-solte"), doCartao = () => noApp("k0-c08"), doSolte = () => noApp("k0-solte");
+mira(79.0, 1.4, alvo("k0-c08 k0-solte"), 1.3, 85.0); toca(79.4, c08);
+tl.set("#fantasma", { x: () => doCartao().x - 256, y: () => doCartao().y - 64, rotation: 1 }, 80.3); tl.set("#fantasma", { opacity: 0.92 }, 80.4);
+tl.set("#k0-c08", { opacity: 0.5, scale: 0.95, rotation: 1 }, 80.4);
+tl.to("#fantasma", { x: () => doSolte().x - 256, y: () => doSolte().y - 64, duration: 1.8, ease: "power2.inOut" }, 80.6);
+tl.to("#dedo", { x: () => centro(solte).x, y: () => centro(solte).y, duration: 1.8, ease: "power2.inOut" }, 80.6);
+tl.to("#k0-sobre", { opacity: 1, duration: 0.25 }, 81.6); tl.to("#k0-col-prog", { scale: 1.01, duration: 0.25 }, 81.6);
+troca("#k0", "#k1", 82.8); tl.set("#fantasma", { opacity: 0 }, 82.8); solta(83.0);
+marca(83.6, alvo("k1-c08"), 86.6); mira(85.0, 1.8, alvo("k1-cab-pend k1-cab-prog k1-c08"), 1.2, 92.0); marca(87.4, alvo("k1-cab-pend k1-cab-prog"), 91.4);
+/* Âncora: o timeline preenche o slot inteiro. */
+tl.to({}, { duration: 96 }, 0);
+window.__timelines["main"] = tl;
+</script>
+</body>
+</html>

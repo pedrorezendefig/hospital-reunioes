@@ -1,8 +1,9 @@
 ---
 title: Reuniões e metas
 description: O caminho de uma reunião, da data marcada às pendências que nascem da ata.
-prd: [731]
+prd: [731, 1259]
 draft: false
+video: visao-geral
 sidebar:
   order: 1
 ---
