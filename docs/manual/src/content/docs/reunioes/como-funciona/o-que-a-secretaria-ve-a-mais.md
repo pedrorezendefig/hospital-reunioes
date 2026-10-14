@@ -7,9 +7,9 @@ sidebar:
   order: 21
 ---
 
-Na plataforma, **Secretária** é um acesso, dado a quem prepara a reunião que
-outra pessoa vai conduzir. Por isso ele enxerga mais de umas coisas e menos
-de outras.
+Na plataforma, **Secretária** é o acesso de quem prepara a reunião que outra
+pessoa vai conduzir. Com ele, a pessoa vê algumas coisas a mais que o
+Facilitador e outras a menos.
 
 ## O que ela vê a mais
 
@@ -29,18 +29,18 @@ reunião, vê a agenda e os participantes, e as seções da ata ficam escondidas
 - Não inicia a Ata Guiada. A tela avisa **Sem acesso à Ata Guiada** e explica
   que a montagem da ata é do Facilitador.
 - Não aprova, não envia para assinatura e não finaliza sem assinatura.
-- **Não vê pendência nenhuma**, nem na lista, nem no quadro, nem o painel de
+- Não vê pendência nenhuma, nem na lista, nem no quadro, nem o painel de
   desempenho. O menu dela não tem o grupo **Reuniões e metas**, e o servidor
   recusa o acesso mesmo por link direto.
-- **Não comenta nem menciona** numa pendência, pelo mesmo motivo.
-- Não tem **Dashboard**: o menu dela abre em **Início**.
+- Não comenta nem menciona numa pendência, pelo mesmo motivo.
+- O menu dela abre em **Início** e fica sem o **Dashboard**.
 
 ## Por que a divisão é essa
 
 A ata é o documento pelo qual o Facilitador responde. Quem prepara a reunião
 cuida do que vem antes (data, sala, pessoas, pauta) e do que precisa ser
-corrigido depois (participante que faltou, nome errado). Quem conduziu é quem
-assume o que ficou escrito, e quem cobra o que saiu dali.
+corrigido depois (participante que faltou, nome errado). Quem conduziu assume
+o que ficou escrito e cobra o que saiu dali.
 
 ## E o Super Admin
 
