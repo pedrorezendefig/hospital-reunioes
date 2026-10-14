@@ -15,9 +15,6 @@ admin/manter-os-dados-do-atendimento
 admin/mudar-o-perfil-de-acesso
 admin/resolver-um-participante-externo
 admin/tirar-o-acesso-de-quem-saiu
-contas-medicas/corrigir-uma-conta-pelo-guia
-contas-medicas/ler-o-painel
-contas-medicas/reenviar-a-conta-corrigida
 ouvidoria/ajustar-a-tabela-de-prazos-e-os-feriados
 ouvidoria/arquivar-um-caso-encerrado
 ouvidoria/cadastrar-responsaveis-de-setor
