@@ -1,0 +1,67 @@
+<!doctype html>
+<!--
+  ESTILO DO MANUAL · card de tela cheia · carimbo (fecho, 3 a 5 s)
+  Opaco: fecha o vídeo com o título da tarefa e a linha do carimbo de geração
+  (que versão do app o vídeo retrata e quando foi gerado). A versão legível por
+  máquina continua no <head> da composição do vídeo (manual-video-meta), que é
+  o que o tools/checar_video_manual.py confere.
+  Slots: titulo (70), carimbo (80), assinatura (60).
+  Contrato dos cards: _estilo/DESIGN.md, seção "Cards e slots".
+-->
+<html lang="pt-BR" data-composition-variables='[
+  {"id":"titulo","type":"string","label":"Título da tarefa","default":"Registrar uma manifestação pelo formulário","maxLength":70},
+  {"id":"carimbo","type":"string","label":"Linha do carimbo","default":"Manual · retrata o app em v0.195.1 · gerado em 13/10/2026","maxLength":80},
+  {"id":"assinatura","type":"string","label":"Assinatura","default":"Hospital São Matheus · Manual da plataforma","maxLength":60}
+]'>
+<head>
+<meta charset="UTF-8" />
+<link rel="stylesheet" href="tokens.css" />
+<script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js" integrity="sha384-sG0Hv1tP1lZCk9KQmrIbY/XNwi+OY84GQqhMscbnsoBFqAz8KNCil1kvfL3Hbbk2" crossorigin="anonymous"></script>
+</head>
+<body>
+<div id="carimbo" data-composition-id="carimbo" data-start="0" data-width="1920" data-height="1080" data-duration="4">
+  <style>
+    #carimbo { position: absolute; inset: 0; width: 1920px; height: 1080px; overflow: hidden; font-family: var(--font-app); }
+    .fundo { position: absolute; inset: 0; background: var(--video-cartao); }
+    .camera { position: absolute; inset: 0; width: 1920px; height: 1080px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 28px; }
+    .logo { width: 200px; height: 113px; object-fit: contain; }
+    .titulo { width: 1600px; text-align: center; font-size: 56px; line-height: 1.15; color: var(--video-marca); }
+    .linha { width: 1280px; height: 2px; background: var(--video-borda); }
+    .carimbo { width: 1600px; text-align: center; font-size: 32px; color: var(--video-texto-apoio); }
+    .assinatura { width: 1600px; margin-top: -12px; text-align: center; font-size: 28px; color: var(--video-texto-apoio); }
+  </style>
+  <div class="fundo"></div>
+  <div class="camera" data-layout-allow-overflow>
+    <img class="logo" src="assets/logo-hsm.png" alt="Hospital São Matheus" />
+    <div class="titulo" data-slot="titulo">Registrar uma manifestação pelo formulário</div>
+    <div class="linha"></div>
+    <div class="carimbo" data-slot="carimbo">Manual · retrata o app em v0.195.1 · gerado em 13/10/2026</div>
+    <div class="assinatura" data-slot="assinatura">Hospital São Matheus · Manual da plataforma</div>
+  </div>
+</div>
+<script>
+window.__timelines = window.__timelines || {};
+/* Slots: o host preenche por data-variable-values; sem host, vale o default
+   declarado no <html>. */
+const valores = window.__hyperframes && window.__hyperframes.getVariables ? window.__hyperframes.getVariables() : {};
+document.querySelectorAll("#carimbo [data-slot]").forEach((el) => {
+  const bruto = valores[el.dataset.slot] || el.textContent;
+  el.innerHTML = bruto
+    .replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" })[c])
+    .replace(/\*\*(.+?)\*\*/g, "<b>$1</b>");
+});
+
+const tl = gsap.timeline({ paused: true });
+/* A câmera nunca para: o fecho se afasta devagar, o contrário da abertura. */
+tl.fromTo("#carimbo .camera", { scale: 1.03 }, { scale: 1, duration: 5, ease: "none" }, 0);
+tl.fromTo("#carimbo .logo", { opacity: 0 }, { opacity: 1, duration: 0.5, ease: "power2.out" }, 0.1);
+tl.fromTo("#carimbo .titulo", { opacity: 0, y: 18 }, { opacity: 1, y: 0, duration: 0.55, ease: "power3.out" }, 0.3);
+tl.fromTo("#carimbo .linha", { scaleX: 0 }, { scaleX: 1, duration: 0.5, ease: "power2.out" }, 0.6);
+tl.fromTo("#carimbo .carimbo", { opacity: 0, y: 12 }, { opacity: 1, y: 0, duration: 0.45, ease: "power2.out" }, 0.8);
+tl.fromTo("#carimbo .assinatura", { opacity: 0, y: 10 }, { opacity: 1, y: 0, duration: 0.45, ease: "power2.out" }, 1.05);
+/* Âncora do slot: o timeline cobre os 5 s que o fecho pode ter. */
+tl.to({}, { duration: 5 }, 0);
+window.__timelines["carimbo"] = tl;
+</script>
+</body>
+</html>

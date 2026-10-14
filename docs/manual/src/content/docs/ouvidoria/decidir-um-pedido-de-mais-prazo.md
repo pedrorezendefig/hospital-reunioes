@@ -9,8 +9,8 @@ sidebar:
   order: 9
 ---
 
-O vídeo é o capítulo 4 do módulo, gravado na versão 0.109.0: o que mudou
-depois não aparece nele.
+O vídeo é o capítulo 4, gravado na versão 0.109.0, e não mostra o que mudou
+depois.
 
 ## Quando usar
 
@@ -33,8 +33,8 @@ esperando decisão, e quem decide é sempre o ouvidor.
 
 ## Se der errado
 
-- **O pedido chegou depois do vencimento:** não chega. Pedido fora do prazo é
-  recusado antes de existir, e o caso segue vencido.
-- **A área pediu duas vezes:** também não acontece. Vale uma vez por caso.
+- **O pedido chegou depois do vencimento:** o sistema recusa o pedido feito fora
+  do prazo antes que ele chegue a você, e o caso segue vencido.
+- **A área pediu duas vezes:** cada caso aceita um pedido só.
 - **O prazo novo passaria de um mês:** o teto é de 30 dias úteis contados da
   entrada do caso, e a aprovação respeita esse teto.

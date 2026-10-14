@@ -11,8 +11,8 @@ sidebar:
 
 ## Quando usar
 
-Sempre que for fechar o mês ou a quinzena, antes do relatório sair. Nenhuma das
-duas notas é medida pelo sistema: alguém abre as páginas, lê e digita.
+Sempre que for fechar o mês ou a quinzena, antes do relatório sair. O sistema
+não mede as duas notas sozinho; alguém abre as páginas, lê e digita.
 
 ## Passo a passo
 
@@ -29,9 +29,9 @@ duas notas é medida pelo sistema: alguém abre as páginas, lê e digita.
 
 ## Se der errado
 
-- **Você digitou errado:** registre de novo com o valor certo. Cada lançamento é
-  uma linha nova, e o que vale é a última de cada fonte. Nada é sobrescrito.
-- **As escalas parecem trocadas:** são mesmo diferentes. Google vai até 5 e
-  Reclame Aqui até 10, e por isso as duas aparecem sempre com a escala junto.
-- **Ninguém lançou no mês:** o relatório diz que não foi lançado. Ausência de
-  nota não vira zero.
+- **Você digitou errado:** registre de novo com o valor certo. Cada lançamento
+  vira uma linha nova, sem apagar o anterior, e vale a última de cada fonte.
+- **As escalas parecem trocadas:** o Google vai até 5 e o Reclame Aqui até 10,
+  e por isso as duas notas aparecem sempre com a escala junto.
+- **Ninguém lançou no mês:** o relatório avisa que a nota não foi lançada, e a
+  falta dela não conta como zero.

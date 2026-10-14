@@ -63,8 +63,10 @@ Roteiro fixo:
 3. **Fecho (3 a 5 s):** card `carimbo`, com a linha do carimbo de geração.
 
 **Carimbo, dois níveis.** Visível no fecho, no slot `carimbo`:
-`Manual · retrata o app em v<X.Y.Z> · gerado em DD/MM/AAAA` (versão de
-`hospital-reunioes/frontend/package.json` no momento da geração). Legível por
+`Manual · retrata o app em v<X.Y.Z> · gerado em DD/MM/AAAA` (a versão em
+produção, `last_app_version` de `docs/spec/deploy/state.json`; o
+`package.json` do frontend parou na 0.163.2 quando a versão passou a ser da
+subida). Legível por
 máquina, no `<head>` da composição, com os cinco campos que o conferidor cobra:
 
 ```html
@@ -166,11 +168,41 @@ tl.fromTo("#tela-b", { x: 300, filter: "blur(24px)", opacity: 0 },
   com o token de cada estado, e um fade de `opacity` entre elas. Tween de cor
   com `var()` ou com o `oklch` do Tailwind não interpola de forma confiável.
 
+**Os pilotos são o molde.** `contas-medicas/decidir-na-validacao` e
+`ouvidoria/redirecionar-o-caso-para-outra-area` (issue #1231) foram os
+primeiros no estilo: a janela do navegador, a casca do app (barra lateral e
+topo) desenhada em 1280x643 e ampliada 1,25x, a câmera, o marcador e o dedo.
+Comece copiando o mais parecido com a sua tarefa. O que eles ensinaram:
+
+- A tela sai do código do frontend e do print atual do roteiro, nesta ordem.
+  A tela de um vídeo antigo é rascunho: a do Redirecionar estava 54 versões
+  atrás (botão desligado cinza no lugar do apagado, ajuda dos campos faltando).
+- Medida pelo `offsetLeft`/`offsetTop` até a raiz do app, que ignora a câmera e
+  a rolagem; a rolagem entra na conta à mão. A medida nunca é feita na
+  montagem (veja a regra de 14/10/2026 no fim deste arquivo): o alvo é uma
+  função, e o GSAP a chama quando o tween começa.
+- Tela que muda de estado (fila relida, janela que abre, campo preenchido) é
+  um quadro por estado, um em cima do outro, e a troca é de `opacity`. Nada de
+  `display` no timeline (o `check` trava) e nada de layout que reflui no meio
+  do vídeo.
+- Helper do timeline sem `if`: o `check` lê os dois ramos e acusa `fromTo`
+  repetido e tween sobreposto que não existem. Estado inicial escondido vai no
+  CSS (`opacity: 0`), e a câmera ganha um `tl.set("#camera", { scale: 1, x: 0,
+  y: 0 }, 0)` de base; daí em diante, só `to`.
+- A composição tem no máximo 300 linhas fora do `<style>` (aviso
+  `composition_file_too_large`). Junte em linhas longas o HTML da réplica.
+- Classe da réplica não repete classe de card (`.tela`, `.cartao`, `.cabeca`,
+  `.titulo`, `.texto`): depois de montado, o card divide a página com a
+  réplica e a regra pega os dois. O conferidor trava.
+- Popup do navegador (lista do seletor, aviso de download) fica fora da caixa
+  que corta, por cima do app, como o navegador desenha.
+
 **Réplica a partir dos vídeos antigos.** As composições de
 `_estilo/pendentes-de-rerender.txt` já têm as telas desenhadas (palco de
-960x540 ampliado 2x, celular, janela, dedo, marcadores). Copie a tela, troque
-cada hex pelo token e apague a linha do vídeo na lista no mesmo PR que o refaz.
-Os hex mais comuns:
+960x540 ampliado 2x, celular, janela, dedo, marcadores). Elas servem de ponto
+de partida para o que os pilotos não têm (celular, e-mail, portal do setor):
+confira contra o código, troque cada hex pelo token e apague a linha do vídeo
+na lista no mesmo PR que o refaz. Os hex mais comuns:
 
 | Hex antigo | Token |
 | --- | --- |
@@ -198,8 +230,20 @@ o vídeo: carimbo do vizinho trava o CI.
    `migration, endpoint, API, PR, pull request, deploy, RLS, schema, backend,
    frontend, commit, branch, merge, token, env, SQL, Supabase, Coolify, prompt`,
    mais travessão e meia-risca. Cada ocorrência vira linguagem funcional ou sai.
-2. **Check:** `npx --yes hyperframes@0.8.41 check` na pasta da composição, com
-   0 erros e 0 avisos.
+2. **Check e anel:** `npx --yes hyperframes@0.8.41 check` na pasta da
+   composição, com 0 erros e 0 avisos. Depois o gate do anel:
+
+   ```bash
+   python3 tools/anel_video_manual.py \
+     --composicao docs/manual/video/<modulo>/<slug>/index.html
+   ```
+
+   Ele abre a composição no navegador, espera a fonte como o render espera e,
+   de 0,1 em 0,1 s, compara o anel aceso (`#mk`) com o alvo que o `marca()`
+   declara em `data-alvo`. Reprova o anel fora do alvo, com folga de mais de
+   20 px de um lado, sem `data-alvo`, ou passando por cima de texto visível de
+   fora do alvo. O `check` não vê nada disso: para ele o anel é um elemento
+   válido em qualquer lugar do quadro.
 3. **Draft:**
 
    ```bash
@@ -230,7 +274,7 @@ o vídeo: carimbo do vizinho trava o CI.
    # VERIFY: <título da tarefa>
 
    - Draft: docs/manual/public/video/<modulo>/<slug>.mp4, NN s, sha256 <12 primeiros>
-   - Check (HyperFrames 0.8.41): 0 erros, 0 avisos
+   - Check (HyperFrames 0.8.41): 0 erros, 0 avisos; gate do anel OK
    - Strips: N cortes, gate OK; olhei corte-01 a corte-NN
    - Quadros a cada 3 s: o que conferi (marcador, dedo, legenda, tela igual ao app)
    - Texto da tela: humanizer e varredura anti-técnica, sem achados
@@ -260,4 +304,26 @@ de compor um vídeo novo, leia a lista.
 
 Formato: `- DD/MM/AAAA, <modulo>/<slug>: a regra, no imperativo.`
 
-Nenhuma ainda.
+- 14/10/2026, contas-medicas/decidir-na-validacao e
+  ouvidoria/redirecionar-o-caso-para-outra-area: nunca meça o layout na
+  montagem. O script da composição roda antes de a fonte do app carregar, o
+  layout ainda está na fonte de reserva (mais larga), e toda medida feita ali
+  sai errada: o anel caiu ao lado do botão Validação, cortando "Painel", e
+  desceu abaixo da Leitura da IA, que quebrava em mais linhas. Valem o anel,
+  o dedo, a câmera, a rolagem e a posição de popup. Declare o alvo como
+  função (`alvo("id", rolagem)` dos pilotos) e passe ao GSAP valores-função
+  (`x: () => a.caixa().x`), que ele calcula quando o tween começa; o render
+  só busca o primeiro quadro depois da fonte. Popup que depende do layout
+  ganha a posição num `tl.set` com valor-função, não num `style.top` solto.
+- 14/10/2026, mesmos vídeos: o anel contorna o que a pessoa lê, inteiro, com
+  ar em volta. Campo é rótulo e valor juntos (o anel só no valor cortou o
+  rótulo "SETOR"); texto curto num bloco de largura cheia ganha
+  `width: fit-content` para o anel não sobrar pela linha toda; e a folga do
+  anel (8 px vezes o zoom) não pode cair em cima de vizinho: o aviso de
+  download afinou para o anel não cortar o número do sino. O gate do anel
+  (`tools/anel_video_manual.py`) trava os três casos.
+- 14/10/2026, ouvidoria/redirecionar-o-caso-para-outra-area: a faixa azul de
+  item escolhido numa lista é filha da lista e herda o `padding` das linhas
+  (`.lista-sel div`); zere o `padding` dela, ou o texto da faixa desce e
+  anda para a direita da linha que ela cobre. Confira a faixa no quadro em
+  que ela acende.

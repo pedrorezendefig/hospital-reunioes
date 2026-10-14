@@ -25,7 +25,7 @@ resposta ou já respondido. Não é preciso esperar a área devolver.
 
    ![Janela de redirecionamento já preenchida](../../../assets/ouvidoria/redirecionar-modal.png)
 
-3. Escolha a **Área responsável** certa. A mesma área não vale.
+3. Escolha a **Área responsável** certa. A tela não aceita a mesma área.
 4. Escreva o **Motivo do redirecionamento**. Ele é obrigatório e fica na trilha
    do caso, com o seu nome e a área de onde ele saiu.
 5. Clique em **Redirecionar para a área nova**. A tela confirma o caso
@@ -39,7 +39,8 @@ resposta ou já respondido. Não é preciso esperar a área devolver.
   Cadastre o responsável antes; nada acontece com o caso enquanto isso.
 - **O caso está pausado esperando o manifestante:** retome o caso antes de
   redirecionar.
-- **Você queria cobrar de novo quem já respondeu:** aí o caminho é
+- **Você queria cobrar de novo quem já respondeu:** use
   [Devolver uma resposta fraca ao setor](/ouvidoria/devolver-uma-resposta-fraca-ao-setor/).
-- **O tempo perdido com a área errada:** ele entra na conta da Ouvidoria, não na
-  da área nova. O motivo escrito é o que explica isso depois.
+- **O tempo perdido com a área errada:** esse tempo fica na conta da Ouvidoria,
+  e a área nova recebe o prazo inteiro. Depois, o motivo escrito explica a
+  demora.

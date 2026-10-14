@@ -36,8 +36,8 @@ pedido vale uma vez por caso e precisa ser feito antes do vencimento.
 
 - **O botão de pedir não aparece:** ou o prazo já venceu, ou o caso já teve um
   pedido. Nos dois casos, responda com o que tiver e fale com a Ouvidoria.
-- **O pedido foi enviado sem justificativa:** não é possível. Sem o texto, o
-  sistema recusa o pedido.
+- **O pedido foi enviado sem justificativa:** o sistema recusa o pedido que
+  chega sem esse texto.
 - **A Ouvidoria negou:** a tela diz "A Ouvidoria negou a prorrogação" e o prazo
   de antes continua valendo. Você recebe a decisão por email mesmo que já tenha
   respondido.

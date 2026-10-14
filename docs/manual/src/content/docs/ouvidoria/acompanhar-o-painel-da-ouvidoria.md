@@ -9,8 +9,8 @@ sidebar:
   order: 21
 ---
 
-O vídeo é o capítulo 7 do módulo, gravado na versão 0.109.0: o que mudou
-depois não aparece nele.
+O vídeo é o capítulo 7, gravado na versão 0.109.0, e não mostra o que mudou
+depois.
 
 ## Quando usar
 
@@ -34,12 +34,12 @@ O painel atualiza sozinho e é a mesma fonte dos números do relatório.
 
 ## Se der errado
 
-- **Um bloco aparece marcado como não carregado:** ele não está dizendo que não
-  há nada. Recarregue a página antes de tirar conclusão.
-- **Um caso grave continua no painel mesmo com a área já tendo respondido:** ele
-  sai quando a Ouvidoria encerra, não quando a área responde.
-- **A conta de Já venceu não bate com a coluna Vencidas:** as duas perguntas são
-  diferentes. A tabela por área olha o caso já entregue à área; o bloco de cima
-  conta também o que está parado na Ouvidoria.
+- **Um bloco aparece marcado como não carregado:** o bloco falhou ao carregar e
+  pode não estar vazio. Recarregue a página antes de tirar conclusão.
+- **Um caso grave continua no painel mesmo com a área já tendo respondido:** o
+  caso só sai do painel quando a Ouvidoria o encerra.
+- **A conta de Já venceu não bate com a coluna Vencidas:** os dois números contam
+  coisas diferentes. A tabela por área olha o caso já entregue à área; o bloco de
+  cima conta também o que está parado na Ouvidoria.
 - **Alguém vai projetar a tela numa reunião:** cuidado com os casos marcados como
   sigilosos.

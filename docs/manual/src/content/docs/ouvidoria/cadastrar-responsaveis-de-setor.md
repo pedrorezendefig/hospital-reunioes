@@ -28,8 +28,8 @@ responsabilidade por um setor. Setor sem titular vigente não é acionável.
 4. Preencha **Nome**, **Email** e o **Início da vigência**. O **Fim da vigência**
    é opcional.
 5. Clique em **Cadastrar**.
-6. Para tirar alguém do papel, use **Encerrar vigência hoje**. Não apague: o
-   histórico dos casos antigos aponta para quem respondia na época.
+6. Para tirar alguém do papel, use **Encerrar vigência hoje** em vez de apagar.
+   O histórico dos casos antigos aponta para quem respondia na época.
 
 ## Se der errado
 

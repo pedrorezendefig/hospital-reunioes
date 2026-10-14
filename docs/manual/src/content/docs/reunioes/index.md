@@ -9,8 +9,8 @@ sidebar:
 
 Esta seção cobre o ciclo inteiro de uma reunião do hospital: marcar no
 calendário, registrar o que foi tratado, fechar a ata e acompanhar o que cada
-pessoa se comprometeu a fazer. O que interessa à plataforma é o compromisso
-que sai do documento.
+pessoa se comprometeu a fazer. A plataforma acompanha esses compromissos, que
+saem do quadro de ações da ata.
 
 ## As palavras que você vai ver o tempo todo
 
@@ -19,14 +19,14 @@ nasce **Programada** e caminha até um fim: **Assinada**, **Aprovada** ou
 cancelada.
 
 **Facilitador** é quem conduz a reunião e responde pela ata: marca, revisa,
-aprova e envia para assinatura. É ele que entra na plataforma.
+aprova e envia para assinatura. Ele tem conta na plataforma.
 
 **Participante** é quem foi chamado para a reunião. Nem todo participante entra
 na plataforma: quem não tem conta recebe o convite da reunião por email e, se
 tiver que assinar a ata, o email da assinatura.
 
-**Transcrição** é o texto do que foi falado na reunião. É o que você anexa para
-a ata sair pronta.
+**Transcrição** é o texto do que foi falado na reunião. Você anexa esse texto e
+a ata sai pronta.
 
 **Ata** é o documento da reunião: pauta, discussão, decisões e o quadro de
 ações. Ela pode nascer de dois jeitos, e cada reunião tem uma só.
@@ -35,16 +35,17 @@ ações. Ela pode nascer de dois jeitos, e cada reunião tem uma só.
 conversa com o assistente da plataforma.
 
 **Pendência** é cada ação do quadro da ata virada compromisso de alguém, com
-responsável e prazo. É ela que aparece na lista, no quadro e nas cobranças.
+responsável e prazo. Ela aparece na lista, no quadro e nas cobranças.
 
 **Repactuada** é o estado de quem perdeu o prazo combinado e vai receber outro.
 Marcar uma pendência como Repactuada apaga a data dela, e a data nova você
-escreve na mesma pendência. É a mesma linha o tempo todo, com o histórico de
-comentários intacto.
+escreve na mesma pendência. A linha continua a mesma, com o histórico de
+comentários.
 
 ## Dois caminhos para a mesma ata
 
-Você escolhe o caminho na hora de fechar a ata, não no cadastro.
+Você escolhe o caminho na hora de fechar a ata. O cadastro da reunião não pede
+essa escolha.
 
 - **Com transcrição:** você anexa o texto da reunião, o assistente monta a ata
   completa, gera o documento e ela pode ir para assinatura digital.
@@ -56,7 +57,7 @@ E, no fim, dois desfechos possíveis:
 - **Enviar para assinatura** leva a ata para a assinatura digital, e ela
   termina **Assinada**.
 - **Finalizar sem assinatura** cria as pendências na hora e a ata termina
-  **Aprovada**. É definitivo: não existe assinar depois.
+  **Aprovada**. Depois disso, a ata não pode mais ir para assinatura.
 
 ## O caminho de uma ata, de ponta a ponta
 
@@ -84,12 +85,12 @@ E, no fim, dois desfechos possíveis:
    [Kanban](/reunioes/mover-as-pendencias-no-kanban/) e no
    [Dashboard](/reunioes/acompanhar-o-dashboard/).
 
-A pendência **não espera** a ata inteira ficar pronta: quem assina primeiro já
-solta as pendências dele. Isso está em
+As pendências de quem assina primeiro nascem na hora da assinatura, antes de a
+ata inteira ficar pronta. Isso está em
 [Quando a pendência nasce](/reunioes/como-funciona/quando-a-pendencia-nasce/).
 
 ## E as metas?
 
-**Metas** é parte do nome do grupo no menu, não uma tela à parte. Quem
-acompanha meta acompanha pelo quadro de pendências e pelo Dashboard: prazo,
-conclusão e o percentual **No Prazo**.
+**Metas** aparece no nome do grupo do menu, mas não tem tela própria. Quem
+acompanha meta usa o quadro de pendências e o Dashboard: prazo, conclusão e o
+percentual **No Prazo**.
