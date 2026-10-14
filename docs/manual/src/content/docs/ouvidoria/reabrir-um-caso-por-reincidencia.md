@@ -12,7 +12,7 @@ sidebar:
 ## Quando usar
 
 Quando quem já manifestou volta a reclamar do mesmo assunto em até 30 dias. O
-caso original volta a andar, e não nasce protocolo novo.
+caso original volta a andar, com o mesmo protocolo.
 
 ## Passo a passo
 
@@ -29,8 +29,9 @@ caso original volta a andar, e não nasce protocolo novo.
 
 ## Se der errado
 
-- **Passou de 30 dias, ou é outro assunto:** aí é caso novo, com protocolo novo.
-- **O caso era sigiloso e você quer abrir:** a reabertura só eleva o sigilo,
-  nunca o diminui.
+- **Passou de 30 dias, ou é outro assunto:** registre como caso novo, que ganha
+  protocolo novo.
+- **O caso era sigiloso e você quer abrir:** a reabertura mantém o sigilo e pode
+  até aumentá-lo.
 - **O caso foi apagado a pedido:** caso apagado não reabre. Quem voltar a
   reclamar registra manifestação nova.

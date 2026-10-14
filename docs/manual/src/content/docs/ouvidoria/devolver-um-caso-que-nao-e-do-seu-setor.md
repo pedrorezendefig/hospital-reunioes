@@ -13,8 +13,8 @@ sidebar:
 ## Quando usar
 
 Quando o caso que chegou para você é de outra área, e a sua não tem como apurar.
-Devolver é para o erro de destino; a área não escolhe quem responde no lugar
-dela.
+A devolução corrige o destino errado, e quem escolhe a área certa é a
+Ouvidoria.
 
 ## Passo a passo
 
@@ -29,14 +29,14 @@ dela.
    ![Campo do motivo e o botão de devolver](../../../assets/ouvidoria/portal-devolver-formulario.png)
 
 4. Clique em **Devolver à Ouvidoria**.
-5. A tela confirma o caso devolvido. Você não precisa fazer mais nada: o ouvidor
-   encaminha para a área certa.
+5. A tela confirma o caso devolvido. Daí em diante é com o ouvidor, que
+   encaminha o caso para a área certa.
 
 ## Se der errado
 
 - **O link some da tela:** ele só existe enquanto o caso está esperando a sua
-  resposta. Caso já respondido ou já devolvido não devolve de novo.
+  resposta. Caso já respondido ou já devolvido não volta a ser devolvido.
 - **Você devolveu por engano:** fale com a Ouvidoria citando o protocolo. O
   ouvidor consegue encaminhar o caso de volta para a sua área.
-- **O link não abre mais depois de devolver:** ele morre na devolução. Se o
-  caso voltar para você, a Ouvidoria manda um link novo.
+- **O link não abre mais depois de devolver:** ele deixa de valer quando você
+  devolve. Se o caso voltar para você, a Ouvidoria manda um link novo.

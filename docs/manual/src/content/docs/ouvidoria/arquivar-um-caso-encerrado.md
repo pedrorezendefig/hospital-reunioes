@@ -12,8 +12,8 @@ sidebar:
 ## Quando usar
 
 Quando a lista está cheia de casos encerrados e você quer ver só o que ainda
-anda. Arquivar organiza a lista: não muda o caso, não apaga nada e não tira o
-caso dos relatórios.
+anda. Arquivar só organiza a lista. O caso fica como estava, nada é apagado e
+ele continua nos relatórios.
 
 ## Passo a passo
 
@@ -38,5 +38,5 @@ caso dos relatórios.
   em andamento tem prazo correndo, e escondê-lo seria esconder atraso.
 - **A pessoa voltou a reclamar do mesmo:** o caso reaberto sai do arquivo
   sozinho, porque volta a andar.
-- **O caso arquivado não abre mais:** abre. Ele continua acessível pelo
-  protocolo e continua nos relatórios e no painel.
+- **O caso arquivado não abre mais:** ele continua acessível pelo protocolo e
+  segue contando nos relatórios e no painel.
