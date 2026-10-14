@@ -41,6 +41,14 @@ def test_antes_e_depois_viram_o_que_muda_e_o_resto_fica_igual():
     assert resumo_funcional(novo)["o_que_muda"] == PARAGRAFO
 
 
+def test_antes_e_depois_separados_por_linha_em_branco_viram_um_paragrafo_so():
+    corpo = "## 💬 Valor entregue\n\n**Antes:** a.\n\n**Depois:** b.\n\n" + RESTO
+
+    novo = rv.reescrever_corpo(corpo, PARAGRAFO)
+
+    assert novo == "## 💬 Valor entregue\n\n**O que muda:** " + PARAGRAFO + "\n\n" + RESTO
+
+
 def test_pr_sem_a_secao_ganha_valor_entregue_logo_abaixo_do_marcador():
     corpo = "<!-- automacao -->\nRegistro do deploy de producao.\n\nCloses #942\n"
 

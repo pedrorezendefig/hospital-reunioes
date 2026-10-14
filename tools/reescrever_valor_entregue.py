@@ -30,7 +30,8 @@ JANELA = "200"
 MARCADOR = "<!-- automacao -->\n"
 _TITULO_VALOR = re.compile(r"(?m)^##[^\n]*Valor entregue[^\n]*\n")
 _PROXIMO_TITULO = re.compile(r"(?m)^## ")
-_ANTES_DEPOIS = re.compile(r"(?m)(?:^\*\*(?:Antes|Depois):\*\*[^\n]*(?:\n|\Z))+")
+# o par vira uma linha só, com ou sem linha em branco entre as duas metades
+_ANTES_DEPOIS = re.compile(r"(?m)^\*\*Antes:\*\*[^\n]*\n(?:[ \t]*\n)*\*\*Depois:\*\*[^\n]*")
 
 
 def _secao_valor(body: str) -> tuple[int, int] | None:
@@ -52,16 +53,16 @@ def reescrever_corpo(body: str | None, paragrafo: str) -> str | None:
     body = body or ""
     if ja_reescrito(body):
         return None
-    linha = f"**O que muda:** {paragrafo.strip()}\n"
+    linha = f"**O que muda:** {paragrafo.strip()}"
     span = _secao_valor(body)
     if span:
         ini, fim = span
-        conteudo, n = _ANTES_DEPOIS.subn(linha, body[ini:fim], count=1)
+        conteudo, n = _ANTES_DEPOIS.subn(lambda _: linha, body[ini:fim], count=1)
         if not n:
             raise ValueError("seção Valor entregue sem Antes e Depois")
         return body[:ini] + conteudo + body[fim:]
     topo = len(MARCADOR) if body.startswith(MARCADOR) else 0
-    return body[:topo] + "## 💬 Valor entregue\n\n" + linha + "\n" + body[topo:]
+    return body[:topo] + "## 💬 Valor entregue\n\n" + linha + "\n\n" + body[topo:]
 
 
 def _gh(args: list[str], entrada: str | None = None) -> str:
