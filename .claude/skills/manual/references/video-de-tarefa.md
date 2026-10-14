@@ -63,8 +63,10 @@ Roteiro fixo:
 3. **Fecho (3 a 5 s):** card `carimbo`, com a linha do carimbo de geração.
 
 **Carimbo, dois níveis.** Visível no fecho, no slot `carimbo`:
-`Manual · retrata o app em v<X.Y.Z> · gerado em DD/MM/AAAA` (versão de
-`hospital-reunioes/frontend/package.json` no momento da geração). Legível por
+`Manual · retrata o app em v<X.Y.Z> · gerado em DD/MM/AAAA` (a versão em
+produção, `last_app_version` de `docs/spec/deploy/state.json`; o
+`package.json` do frontend parou na 0.163.2 quando a versão passou a ser da
+subida). Legível por
 máquina, no `<head>` da composição, com os cinco campos que o conferidor cobra:
 
 ```html
@@ -166,11 +168,40 @@ tl.fromTo("#tela-b", { x: 300, filter: "blur(24px)", opacity: 0 },
   com o token de cada estado, e um fade de `opacity` entre elas. Tween de cor
   com `var()` ou com o `oklch` do Tailwind não interpola de forma confiável.
 
+**Os pilotos são o molde.** `contas-medicas/decidir-na-validacao` e
+`ouvidoria/redirecionar-o-caso-para-outra-area` (issue #1231) foram os
+primeiros no estilo: a janela do navegador, a casca do app (barra lateral e
+topo) desenhada em 1280x643 e ampliada 1,25x, a câmera, o marcador e o dedo.
+Comece copiando o mais parecido com a sua tarefa. O que eles ensinaram:
+
+- A tela sai do código do frontend e do print atual do roteiro, nesta ordem.
+  A tela de um vídeo antigo é rascunho: a do Redirecionar estava 54 versões
+  atrás (botão desligado cinza no lugar do apagado, ajuda dos campos faltando).
+- Medida pelo `offsetLeft`/`offsetTop` até a raiz do app, que ignora a câmera e
+  a rolagem; a rolagem entra na conta à mão. A fonte já está carregada quando o
+  script roda, então a medida pode ser feita na montagem.
+- Tela que muda de estado (fila relida, janela que abre, campo preenchido) é
+  um quadro por estado, um em cima do outro, e a troca é de `opacity`. Nada de
+  `display` no timeline (o `check` trava) e nada de layout que reflui no meio
+  do vídeo.
+- Helper do timeline sem `if`: o `check` lê os dois ramos e acusa `fromTo`
+  repetido e tween sobreposto que não existem. Estado inicial escondido vai no
+  CSS (`opacity: 0`), e a câmera ganha um `tl.set("#camera", { scale: 1, x: 0,
+  y: 0 }, 0)` de base; daí em diante, só `to`.
+- A composição tem no máximo 300 linhas fora do `<style>` (aviso
+  `composition_file_too_large`). Junte em linhas longas o HTML da réplica.
+- Classe da réplica não repete classe de card (`.tela`, `.cartao`, `.cabeca`,
+  `.titulo`, `.texto`): depois de montado, o card divide a página com a
+  réplica e a regra pega os dois. O conferidor trava.
+- Popup do navegador (lista do seletor, aviso de download) fica fora da caixa
+  que corta, por cima do app, como o navegador desenha.
+
 **Réplica a partir dos vídeos antigos.** As composições de
 `_estilo/pendentes-de-rerender.txt` já têm as telas desenhadas (palco de
-960x540 ampliado 2x, celular, janela, dedo, marcadores). Copie a tela, troque
-cada hex pelo token e apague a linha do vídeo na lista no mesmo PR que o refaz.
-Os hex mais comuns:
+960x540 ampliado 2x, celular, janela, dedo, marcadores). Elas servem de ponto
+de partida para o que os pilotos não têm (celular, e-mail, portal do setor):
+confira contra o código, troque cada hex pelo token e apague a linha do vídeo
+na lista no mesmo PR que o refaz. Os hex mais comuns:
 
 | Hex antigo | Token |
 | --- | --- |
