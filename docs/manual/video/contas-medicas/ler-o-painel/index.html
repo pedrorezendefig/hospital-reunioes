@@ -4,410 +4,365 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=1920, height=1080" />
 <title>Manual · Contas médicas · Ler o Painel</title>
+<link rel="stylesheet" href="tokens.css" />
 <script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js" integrity="sha384-sG0Hv1tP1lZCk9KQmrIbY/XNwi+OY84GQqhMscbnsoBFqAz8KNCil1kvfL3Hbbk2" crossorigin="anonymous"></script>
 <script type="application/json" id="manual-video-meta">
 {
  "modulo": "contas-medicas",
  "slug": "ler-o-painel",
  "pagina": "contas-medicas/ler-o-painel.md",
- "prd": [
-  1128
- ],
- "issues": [
-  1137
- ],
- "app_version": "0.193.0",
- "gerado_em": "2026-10-13T07:30:00-03:00"
+ "prd": [1128, 1216],
+ "issues": [1137, 1236],
+ "app_version": "0.196.1",
+ "gerado_em": "2026-10-14T03:00:00-03:00"
 }
 </script>
 <style>
-  @font-face {
-    font-family: "HP Simplified";
-    src: url("assets/fonts/HPSimplified_Rg.ttf") format("truetype");
-    font-weight: 400;
-    font-style: normal;
-  }
+  /* Estilo do manual (emenda de 13/10/2026 à ADR 0057): cor e fonte só pelos
+     tokens. Na réplica, cada cor é a da classe do app, pelo token de mesmo
+     nome (text-slate-500 vira var(--color-slate-500)). */
   * { margin: 0; padding: 0; box-sizing: border-box; }
-  html, body { width: 1920px; height: 1080px; overflow: hidden; background: #fff; }
-  body { font-family: "HP Simplified", system-ui, sans-serif; }
+  html, body { width: 1920px; height: 1080px; overflow: hidden; background: var(--video-palco); }
+  body { font-family: var(--font-app); color: var(--color-text); }
 
-  :root {
-    --navy: #2B2E7E; --navy-light: #3B6FB6; --navy-dark: #1A1C4E;
-    --app-text: #1E293B; --app-sec: #64748B; --app-border: #E2E8F0;
-  }
+  #main { position: relative; width: 1920px; height: 1080px; overflow: hidden; }
+  #slot-abertura, #slot-carimbo { z-index: 5; }
+  #c-tarefa { position: absolute; inset: 0; z-index: 1; }
+  .palco { position: absolute; inset: 0; background: var(--video-palco); }
+  #camera { position: absolute; left: 0; top: 0; width: 1920px; height: 1080px; transform-origin: 0 0; }
+  [id^="slot-passo"] { z-index: 3; }
+  [id^="slot-lugar"] { z-index: 2; }
 
-  #root { position: relative; width: 1920px; height: 1080px; overflow: hidden; }
-  .scene { position: absolute; inset: 0; background: #fff; overflow: hidden; }
+  /* ===== a janela do navegador ===== */
+  .janela { position: absolute; left: 160px; top: 32px; width: 1600px; height: 848px; border-radius: var(--radius-3xl); background: var(--color-white); border: 1px solid var(--color-slate-300); box-shadow: var(--video-sombra); overflow: hidden; }
+  .barra-nav { position: absolute; left: 0; top: 0; width: 1600px; height: 44px; background: var(--color-slate-100); border-bottom: 1px solid var(--color-slate-200); display: flex; align-items: center; gap: 9px; padding: 0 18px; }
+  .barra-nav i { display: block; width: 12px; height: 12px; border-radius: 50%; background: var(--color-slate-300); }
+  .barra-nav .url { margin-left: 14px; width: 620px; height: 28px; border-radius: 14px; background: var(--color-white); border: 1px solid var(--color-slate-200); display: flex; align-items: center; padding: 0 16px; font-size: 16px; color: var(--color-slate-500); }
 
-  /* Palco desenhado em 960x540 e ampliado 2x, a mesma régua das outras
-     composições do Manual. */
-  .palco { position: relative; width: 960px; height: 540px; transform: scale(2); transform-origin: top left; font-size: 12px; color: var(--app-text); background: #EEF1F6; }
+  /* ===== o app, desenhado em 1280x643 e ampliado 1,25x ===== */
+  .vista { position: absolute; left: 0; top: 44px; width: 1600px; height: 804px; overflow: hidden; background: var(--color-bg); }
+  .app { position: absolute; left: 0; top: 0; width: 1280px; height: 643.2px; transform: scale(1.25); transform-origin: 0 0; background: var(--color-bg); font-size: 14px; line-height: 20px; }
+  .lado { position: absolute; left: 0; top: 0; width: 256px; height: 643.2px; border-right: 1px solid var(--color-border); background: var(--color-surface); }
+  .lado .marca { height: 122px; border-bottom: 1px solid var(--color-border); display: flex; align-items: center; justify-content: center; }
+  .lado .marca img { width: 170px; height: 96px; object-fit: contain; }
+  .lado nav { padding: 16px 12px; display: flex; flex-direction: column; gap: 4px; }
+  .mi { display: flex; align-items: center; gap: 12px; padding: 10px 12px; border-radius: var(--radius-xl); font-size: 14px; color: var(--color-text-secondary); }
+  .mi .fim { margin-left: auto; opacity: .5; display: flex; }
+  .mi.on { background: color-mix(in srgb, var(--color-primary) 10%, transparent); color: var(--color-primary); border-left: 3px solid var(--color-primary); padding-left: 9px; }
+  .sub { margin: 4px 0 0 16px; padding-left: 12px; border-left: 2px solid color-mix(in srgb, var(--color-border) 50%, transparent); display: flex; flex-direction: column; gap: 4px; }
+  .sub .mi { padding: 8px 12px; border-radius: var(--radius-lg); }
+  .topo { position: absolute; left: 256px; top: 0; width: 1024px; height: 64px; background: var(--color-slate-50); border-bottom: 1px solid var(--color-slate-200); display: flex; align-items: center; padding: 0 24px; }
+  .busca { width: 256px; height: 38px; border-radius: var(--radius-xl); background: var(--color-bg); border: 1px solid var(--color-border); display: flex; align-items: center; gap: 10px; padding: 0 12px; font-size: 14px; color: color-mix(in srgb, var(--color-text-secondary) 40%, transparent); }
+  .quem { margin-left: auto; margin-right: 24px; display: flex; align-items: center; gap: 24px; }
+  .sino { position: relative; color: var(--color-slate-500); display: flex; }
+  .sino .n { position: absolute; top: -6px; right: -8px; min-width: 18px; height: 18px; border-radius: 999px; background: var(--color-red-500); color: var(--color-white); font-size: 10px; display: flex; align-items: center; justify-content: center; }
+  .divisor { width: 1px; height: 32px; background: var(--color-border); }
+  .pessoa { display: flex; align-items: center; gap: 12px; }
+  .pessoa .tx { text-align: right; }
+  .pessoa .tx b { display: block; font-size: 14px; font-weight: 600; color: var(--color-slate-700); }
+  .pessoa .tx span { font-size: 12px; color: var(--color-slate-500); }
+  .avatar { position: relative; width: 40px; height: 40px; border-radius: 50%; background: var(--color-primary); color: var(--color-white); font-weight: 700; display: flex; align-items: center; justify-content: center; }
+  .avatar .seta { position: absolute; right: -2px; bottom: -2px; width: 16px; height: 16px; border-radius: 50%; background: var(--color-white); border: 1px solid var(--color-slate-100); color: var(--color-slate-400); display: flex; align-items: center; justify-content: center; }
 
-  .slide { display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding: 0 160px; }
-  .eyebrow { font-size: 26px; letter-spacing: .22em; text-transform: uppercase; color: var(--navy-light); font-weight: 700; }
-  .titulo { font-size: 72px; line-height: 1.12; color: var(--navy); font-weight: 700; max-width: 1560px; margin: 34px 0 30px; }
-  .sub { font-size: 36px; color: var(--app-sec); max-width: 1420px; line-height: 1.5; }
-  .selo-abertura { margin-top: 40px; display: inline-flex; gap: 14px; }
-  .selo-abertura span { border: 2px solid var(--navy); border-radius: 999px; padding: 10px 26px; font-size: 26px; font-weight: 700; color: var(--navy); background: #F5F6FE; }
+  .corpo { position: absolute; left: 256px; top: 64px; width: 1024px; height: 579.2px; overflow: hidden; background: var(--color-bg); }
+  .tela-app { position: absolute; left: 0; top: 0; width: 1024px; height: 579.2px; }
+  .rolo { position: absolute; left: 0; top: 0; width: 1024px; height: 1400px; }
+  .pagina { position: absolute; left: 0; top: 0; width: 1024px; padding: 32px; display: flex; flex-direction: column; gap: 24px; background: var(--color-bg); }
 
-  .fecho-titulo { font-size: 52px; color: var(--navy); font-weight: 700; margin-bottom: 40px; }
-  .carimbo { font-size: 30px; color: var(--app-sec); }
-  .fecho-org { font-size: 26px; color: #64748B; margin-top: 16px; }
+  h1 { font-size: 24px; line-height: 32px; font-weight: 700; color: var(--color-slate-900); }
+  .dek { font-size: 14px; color: var(--color-slate-500); margin-top: 2px; }
+  .ap-cabeca { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+  .ap-cabeca h1 { flex: 1; }
+  .atalho { display: inline-flex; align-items: center; gap: 8px; padding: 8px 12px; border-radius: var(--radius-lg); border: 1px solid var(--color-slate-200); background: var(--color-white); font-size: 14px; color: var(--color-slate-700); white-space: nowrap; }
+  .atalho .n { border-radius: 999px; background: var(--color-primary); color: var(--color-white); padding: 2px 8px; font-size: 12px; line-height: 16px; }
+  .soltar { border: 2px dashed var(--color-slate-300); border-radius: var(--radius-2xl); background: var(--color-white); padding: 32px; text-align: center; }
+  .soltar .ic { display: flex; justify-content: center; margin-bottom: 12px; color: var(--color-slate-400); }
+  .soltar .t1 { font-size: 14px; color: var(--color-slate-800); }
+  .soltar .t2 { font-size: 12px; line-height: 16px; color: var(--color-slate-500); margin-top: 4px; }
+  .bt { display: inline-flex; align-items: center; gap: 8px; padding: 6px 12px; border-radius: var(--radius-lg); font-size: 14px; white-space: nowrap; }
+  .bt.cheio { background: var(--color-primary); color: var(--color-white); }
+  .bt.grande { padding: 8px 16px; margin-top: 16px; }
+  .abas { display: flex; gap: 8px; border-bottom: 1px solid var(--color-border); }
+  .aba { padding: 8px 16px; font-size: 14px; color: var(--color-text-secondary); border-bottom: 2px solid transparent; }
+  .aba.on { color: var(--color-primary); border-bottom-color: var(--color-primary); }
+  .ap-cartao { background: var(--color-white); border: 1px solid var(--color-border); border-radius: var(--radius-2xl); box-shadow: var(--shadow-premium); padding: 20px; }
+  .vazio-fila { padding: 40px; text-align: center; color: var(--color-slate-500); }
+  .vazio-fila .ic { display: flex; justify-content: center; color: var(--color-slate-300); margin-bottom: 12px; }
 
-  /* ===== janela de navegador ===== */
-  .janela { position: absolute; left: 30px; top: 28px; width: 580px; height: 470px; border-radius: 12px; background: #fff; box-shadow: 0 26px 60px -20px rgba(0,0,0,.42); overflow: hidden; border: 1px solid #D8DEE9; }
-  .barra { height: 20px; background: #E7EBF2; display: flex; align-items: center; gap: 4px; padding: 0 8px; border-bottom: 1px solid #D8DEE9; }
-  .barra i { width: 5px; height: 5px; border-radius: 50%; background: #C3CBD8; display: block; }
-  .barra .url { margin-left: 8px; flex: 1; height: 11px; border-radius: 6px; background: #fff; border: 1px solid #D8DEE9; font-size: 6.4px; color: #5A6273; display: flex; align-items: center; padding: 0 6px; }
-  .tela { position: absolute; left: 0; right: 0; top: 20px; bottom: 0; background: #F7F9FC; overflow: hidden; }
-
-  /* ===== moldura do app ===== */
-  .app-topo { position: absolute; left: 0; right: 0; top: 0; height: 24px; background: #fff; border-bottom: 1px solid var(--app-border); display: flex; align-items: center; justify-content: space-between; padding: 0 9px; }
-  .app-topo .marca { display: flex; align-items: center; gap: 4px; }
-  .app-topo .direita { display: flex; align-items: center; gap: 6px; color: #94A3B8; }
-  .app-topo .avatar { width: 13px; height: 13px; border-radius: 50%; background: var(--navy); color: #fff; font-size: 6px; font-weight: 700; display: flex; align-items: center; justify-content: center; }
-  .app-menu { position: absolute; left: 0; top: 24px; bottom: 0; width: 92px; background: #fff; border-right: 1px solid var(--app-border); padding: 7px 6px; }
-  .mi { display: flex; align-items: center; gap: 5px; font-size: 6.6px; color: #56606F; padding: 3.5px 5px; border-radius: 5px; margin-bottom: 2px; }
-  .mi.ativo { background: rgba(43,46,126,.08); color: var(--navy); font-weight: 700; }
-  .app-corpo { position: absolute; left: 92px; right: 0; top: 24px; bottom: 0; padding: 9px 14px; overflow: hidden; }
-
-  .h-pag { font-size: 11.5px; font-weight: 700; color: #0F172A; }
-  .dek { font-size: 6.2px; color: #56606F; margin-top: 1.5px; }
-  .cartao { background: #fff; border: 1px solid var(--app-border); border-radius: 9px; }
-  .etq { display: inline-flex; align-items: center; padding: 1.5px 5px; border-radius: 999px; font-size: 5.2px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; }
-  .pilula { display: inline-flex; align-items: center; padding: 1.5px 6px; border-radius: 999px; font-size: 5.8px; font-weight: 600; }
-  .link { color: var(--navy); font-weight: 700; }
-
-  /* ===== fila ===== */
-  .soltar { border: 1.4px dashed #CBD5E1; border-radius: 9px; background: #fff; text-align: center; padding: 9px 0 10px; margin-top: 7px; }
-  .abas { display: flex; gap: 4px; border-bottom: 1px solid var(--app-border); margin-top: 9px; }
-  .abas span { font-size: 6.6px; padding: 4px 8px; color: #56606F; border-bottom: 1.5px solid transparent; }
-  .abas span.on { color: var(--navy); border-color: var(--navy); font-weight: 700; }
-  .fila-l { display: flex; align-items: center; gap: 6px; padding: 6px 10px; border-top: 1px solid var(--app-border); }
-  .fila-l:first-child { border-top: 0; }
-  .fila-l .q { flex: 1; }
-  .fila-l .q b { display: block; font-size: 6.8px; color: #0F172A; }
-  .fila-l .q span { font-size: 5.6px; color: #64748B; }
-  .fila-l .det { font-size: 5.8px; color: #475569; }
-
-  /* ===== guia ===== */
-  .voltar { display: inline-flex; align-items: center; gap: 3px; font-size: 6.2px; color: #64748B; }
-  .numeros { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin-top: 7px; }
-  .numeros .cartao { padding: 6px 8px; }
-  .rot-num { font-size: 5.2px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: #64748B; }
-  .val-num { font-size: 13px; font-weight: 700; color: var(--navy); line-height: 1.2; }
-  .grupo-t { display: flex; justify-content: space-between; align-items: center; margin-top: 8px; font-size: 5.6px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: #64748B; }
-  .linha { background: #fff; border: 1px solid var(--app-border); border-radius: 7px; padding: 5px 7px; margin-top: 4px; }
-  .linha .topo { display: flex; align-items: center; gap: 4px; }
-  .linha .topo .v { margin-left: auto; font-size: 6.6px; font-weight: 700; color: #0F172A; }
-  .linha .nome { font-size: 6.6px; font-weight: 700; color: #0F172A; margin-top: 2.5px; }
-  .linha .txt { font-size: 6.4px; color: #334155; margin-top: 1px; }
-  .linha .mot { font-size: 5.6px; color: #64748B; margin-top: 1px; }
-  .linha .meta { display: flex; gap: 7px; align-items: center; font-size: 5.6px; color: #64748B; margin-top: 2px; }
-  .linha .cod { display: inline-flex; align-items: center; gap: 2px; font-family: ui-monospace, Menlo, monospace; color: var(--navy); font-size: 5.8px; }
-  .botoes { display: flex; gap: 4px; margin-top: 4px; }
-  .bt { display: inline-flex; align-items: center; padding: 3px 7px; border-radius: 5px; font-size: 5.4px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; }
-  .bt-cheio { background: var(--navy); color: #fff; }
-  .bt-claro { background: #fff; color: #334155; border: 1px solid var(--app-border); }
-  .marcada { display: flex; align-items: center; gap: 5px; border-radius: 7px; padding: 4px 7px; margin-top: 4px; font-size: 6.2px; color: #334155; }
-  .marcada .v { margin-left: auto; color: #64748B; }
-  .fs { border: 1px solid var(--app-border); border-radius: 6px; padding: 4px 7px; margin-top: 4px; }
-  .fs .lg { font-size: 5.8px; font-weight: 700; color: #334155; }
-  .radio { display: flex; width: fit-content; align-items: center; gap: 4px; font-size: 6.2px; color: #334155; margin-top: 2.5px; }
-  .radio i { width: 6px; height: 6px; border-radius: 50%; border: 1px solid #94A3B8; display: inline-block; position: relative; }
-  .radio i b { position: absolute; left: 1px; top: 1px; width: 2.4px; height: 2.4px; border-radius: 50%; background: #2563EB; opacity: 0; }
-  .validar-msg { font-size: 5.8px; color: #92400E; margin-top: 3px; }
-  .rodape-guia { background: #fff; border: 1px solid var(--app-border); border-radius: 9px; padding: 6px 8px; margin-top: 7px; }
-  .area { height: 15px; border: 1px solid var(--app-border); border-radius: 5px; margin-top: 3px; font-size: 5.8px; color: #6C7786; padding: 3px 5px; }
-  .toast { position: absolute; right: 12px; bottom: 16px; background: #ECFDF5; border: 1px solid #A7F3D0; border-radius: 9px; box-shadow: 0 16px 34px -18px rgba(0,0,0,.3); padding: 5px 9px; font-size: 6.6px; font-weight: 700; color: #065F46; opacity: 0; }
-  .confirma { position: absolute; left: 150px; top: 6px; width: 230px; background: #fff; border: 1px solid #D8DEE9; border-radius: 8px; box-shadow: 0 18px 40px -14px rgba(0,0,0,.4); padding: 9px 11px; opacity: 0; z-index: 25; }
-  .confirma p { font-size: 6.8px; color: #0F172A; }
-  .confirma .acoes { display: flex; justify-content: flex-end; gap: 5px; margin-top: 8px; }
-  .confirma .acoes span { font-size: 6.2px; padding: 3px 9px; border-radius: 5px; }
-
-  /* ===== dedo fantasma e legenda ===== */
-  .ghost { position: absolute; left: 0; top: 0; z-index: 40; opacity: 0; }
-  .ghost .pulse { position: absolute; left: -7px; top: -7px; width: 34px; height: 34px; border-radius: 50%; background: rgba(43,46,126,.28); opacity: 0; }
-  .passo { position: absolute; left: 632px; top: 150px; width: 300px; opacity: 0; }
-  .passo .n { display: inline-flex; align-items: center; justify-content: center; width: 30px; height: 30px; border-radius: 50%; background: var(--navy); color: #fff; font-size: 16px; font-weight: 700; }
-  .passo h3 { font-size: 24px; line-height: 1.25; color: var(--navy); font-weight: 700; margin: 12px 0 8px; }
-  .passo p { font-size: 16.5px; line-height: 1.5; color: #556076; }
-  .passo b { color: var(--app-text); }
-  .marcador { position: absolute; border: 1.5px solid var(--navy); border-radius: 7px; box-shadow: 0 0 0 3px rgba(43,46,126,.14); opacity: 0; z-index: 30; }
-  .rodape-v { position: absolute; left: 0; right: 0; bottom: 14px; text-align: center; font-size: 9.5px; color: #576070; letter-spacing: .04em; }
-  /* ===== painel ===== */
-  .botoes-topo { display: flex; gap: 4px; }
-  .bt-topo { display: inline-flex; align-items: center; gap: 3px; padding: 3px 6px; border: 1px solid #E2E8F0; border-radius: 5px; background: #fff; font-size: 6px; color: #334155; }
-  .rolagem { position: absolute; left: 0; right: 0; top: 0; }
-  .filtros { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin-top: 8px; }
-  .filtros .rot { font-size: 5.2px; font-weight: 600; color: #64748B; text-transform: uppercase; }
-  .filtros .campo { margin-top: 2px; height: 15px; border: 1px solid #E2E8F0; border-radius: 5px; background: #fff; font-size: 6.2px; color: #1E293B; display: flex; align-items: center; padding: 0 6px; }
-  .semana-rot { font-size: 6.2px; color: #475569; margin-top: 7px; }
-  .cartoes { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; margin-top: 6px; }
-  .bloco { background: #fff; border: 1px solid var(--app-border); border-radius: 9px; padding: 7px 8px; }
-  .bloco .tt { font-size: 6.4px; font-weight: 700; color: #334155; }
-  .bloco .st { font-size: 5.2px; color: #64748B; margin-top: 1px; }
-  .bloco .num { font-size: 13px; font-weight: 700; color: var(--navy); margin-top: 3px; }
-  .bloco .ap { font-size: 5.2px; color: #64748B; margin-top: 1px; }
-  .blocos { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-top: 6px; }
-  .causa { margin-top: 4px; }
-  .causa .l { display: flex; align-items: baseline; gap: 4px; font-size: 6px; color: #1E293B; }
-  .causa .l i { font-style: normal; font-size: 5.2px; color: #64748B; }
-  .causa .l .pc { margin-left: auto; font-weight: 700; color: var(--navy); }
-  .causa .l .rs { width: 44px; text-align: right; font-size: 5.4px; color: #64748B; }
-  .trilho { height: 3px; border-radius: 3px; background: #E2E8F0; margin-top: 2px; overflow: hidden; }
-  .trilho b { display: block; height: 100%; background: var(--navy); border-radius: 3px; }
-  .tab { width: 100%; border-collapse: collapse; margin-top: 4px; }
-  .tab th { font-size: 5.2px; color: #64748B; font-weight: 500; text-align: left; padding: 2px 0; border-bottom: 1px solid #E2E8F0; }
-  .tab td { font-size: 5.8px; color: #1E293B; padding: 2.5px 0; border-bottom: 1px solid #F1F5F9; }
+  /* ===== Painel (painel/page.tsx, FiltrosDoPainel, TelaDoPainel, Moldura) ===== */
+  .volta { display: inline-flex; align-items: center; gap: 4px; font-size: 14px; color: var(--color-slate-500); margin-bottom: 8px; }
+  .filtros { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+  .filtro { position: relative; display: flex; flex-direction: column; gap: 6px; }
+  .filtro .rot { font-size: 12px; line-height: 16px; font-weight: 500; text-transform: uppercase; color: var(--color-slate-500); }
+  .campo { position: relative; min-height: 38px; display: flex; align-items: center; gap: 6px; padding: 6px 12px; border: 1px solid var(--color-slate-200); border-radius: var(--radius-lg); background: var(--color-white); font-size: 14px; color: var(--color-slate-700); }
+  .campo .seta-c { margin-left: auto; color: var(--color-slate-400); display: flex; }
+  .campo .cal { margin-left: auto; color: var(--color-slate-900); display: flex; }
+  .campo-foco { position: absolute; inset: -1px; border: 1px solid var(--color-primary); border-radius: var(--radius-lg); box-shadow: 0 0 0 1px var(--color-primary); opacity: 0; }
+  .lista-op { position: absolute; left: 0; top: 64px; width: 100%; background: var(--color-white); border: 1px solid var(--color-slate-200); border-radius: var(--radius-xl); box-shadow: var(--shadow-premium-strong); overflow: hidden; opacity: 0; z-index: 4; }
+  .lista-op div { display: flex; align-items: center; gap: 10px; padding: 10px 12px; font-size: 14px; color: var(--color-slate-700); }
+  .lista-op .ck { width: 16px; height: 16px; display: flex; color: var(--color-primary); }
+  .lista-op .sel { font-weight: 500; color: var(--color-primary); background: color-mix(in srgb, var(--color-primary) 5%, transparent); }
+  .lista-op .hover { background: var(--color-slate-50); }
+  .semana { font-size: 14px; color: var(--color-slate-600); width: fit-content; }
+  .pn-grade { display: flex; flex-direction: column; gap: 16px; }
+  .pn-cartoes { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; }
+  .pn-blocos { display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; }
+  .pn-moldura h2 { font-size: 14px; line-height: 20px; font-weight: 600; color: var(--color-slate-700); }
+  .pn-moldura .st { font-size: 12px; line-height: 16px; color: var(--color-slate-500); margin-top: 2px; }
+  .pn-moldura .cont { margin-top: 12px; }
+  .pn-num { font-size: 30px; line-height: 36px; font-weight: 700; color: var(--color-primary); }
+  .pn-apoio { margin-top: 4px; font-size: 12px; line-height: 16px; color: var(--color-slate-500); }
+  .grafico { width: 100%; height: 220px; display: block; }
+  .grafico .grade { stroke: var(--color-border); stroke-width: 1; }
+  .grafico .curva { fill: none; stroke: var(--color-primary); stroke-width: 2.5; }
+  .grafico .ponto { fill: var(--color-primary); }
+  .grafico text { font-size: 12px; fill: var(--color-text-secondary); font-family: var(--font-app); }
+  .causas { display: flex; flex-direction: column; gap: 12px; }
+  .causa-l { display: flex; align-items: baseline; gap: 12px; font-size: 14px; }
+  .causa-l .nm { font-weight: 500; color: var(--color-slate-800); }
+  .causa-l .qm { font-size: 12px; color: var(--color-slate-500); }
+  .causa-l .pc { margin-left: auto; font-weight: 600; color: var(--color-primary); }
+  .causa-l .rs { width: 112px; flex-shrink: 0; text-align: right; font-size: 12px; color: var(--color-slate-500); }
+  .trilho { height: 8px; margin-top: 6px; overflow: hidden; border-radius: 999px; background: var(--color-border); }
+  .trilho b { display: block; height: 100%; border-radius: 999px; background: var(--color-primary); }
+  .tab { width: 100%; border-collapse: collapse; font-size: 14px; }
+  .tab th { padding: 6px 0; font-size: 12px; font-weight: 500; text-align: left; color: var(--color-slate-500); }
+  .tab td { padding: 6px 0; border-top: 1px solid var(--color-slate-100); color: var(--color-slate-800); }
   .tab .r { text-align: right; }
-  .tab .n { color: var(--navy); font-weight: 700; }
-  .tab .m { font-family: ui-monospace, Menlo, monospace; color: #64748B; font-size: 5.4px; }
-  .lista-op { position: absolute; background: #fff; border: 1px solid #E2E8F0; border-radius: 6px; box-shadow: 0 14px 30px -14px rgba(0,0,0,.35); padding: 3px; width: 140px; opacity: 0; z-index: 20; }
-  .lista-op div { font-size: 6.2px; padding: 3px 5px; border-radius: 4px; color: #334155; }
-  .lista-op div.on { background: #EEF2FF; color: #1E3A8A; font-weight: 700; }
+  .tab .pr { font-weight: 600; color: var(--color-primary); }
+  .tab .cd { font-family: var(--font-mono); font-size: 12px; color: var(--color-slate-600); }
+  .tab .ap { color: var(--color-slate-700); }
+  .tab .ap4 { color: var(--color-slate-400); }
+
+  /* ===== o foco: marcador, dedo e toque ===== */
+  .marcador { position: absolute; left: 0; top: 0; opacity: 0; border: 3px solid var(--video-foco); border-radius: 14px; box-shadow: 0 0 0 8px var(--video-foco-halo); }
+  .dedo { position: absolute; left: 0; top: 0; opacity: 0; width: 40px; height: 40px; }
+  .dedo svg { position: absolute; left: 0; top: 0; width: 40px; height: 40px; }
+  .dedo path { fill: var(--video-foco); stroke: var(--color-white); stroke-width: 1.4; }
+  .toque { position: absolute; left: -22px; top: -22px; width: 56px; height: 56px; border-radius: 50%; background: var(--video-foco-halo); border: 2px solid var(--video-foco); opacity: 0; }
 </style>
 </head>
 <body>
+<div id="main" data-composition-id="main" data-start="0" data-width="1920" data-height="1080" data-duration="46">
 
-<div id="root" data-composition-id="main" data-start="0" data-width="1920" data-height="1080" data-duration="45" data-fps="30">
+  <div id="slot-abertura" data-composition-id="abertura" data-composition-src="compositions/abertura.html"
+    data-variable-values='{"secao":"Manual · Contas médicas","titulo":"Ler o Painel","papel":"Gestão de contas médicas"}'
+    data-start="0" data-duration="4" data-track-index="1" data-width="1920" data-height="1080"></div>
 
-  <!-- 1 · Abertura -->
-  <section id="c-abertura" class="clip scene slide" data-start="0" data-duration="4" data-track-index="1">
-    <div class="eyebrow" id="ab-eyebrow">Manual · Contas médicas</div>
-    <h1 class="titulo" id="ab-titulo">Ler o Painel</h1>
-    <p class="sub" id="ab-sub">Ver a nota da semana, onde a perda da conta nasce e quem corrige.</p>
-    <div class="selo-abertura" id="ab-selos"><span>Coordenadora de faturamento</span><span>Gestão de contas médicas</span><span>Diretoria</span></div>
+  <section id="c-tarefa" class="clip" data-start="4" data-duration="38" data-track-index="2">
+    <div class="palco"></div>
+    <div id="camera" data-layout-allow-overflow></div>
   </section>
 
-  <!-- 2 · A tarefa, passo a passo -->
-  <section id="c-tarefa" class="clip scene" data-start="4" data-duration="36" data-track-index="2">
-    <div class="palco" id="palco-tarefa"></div>
-  </section>
+  <div id="slot-lugar-1" data-composition-id="lower-third" data-composition-src="compositions/lower-third.html"
+    data-variable-values='{"lugar":"Contas médicas","tela":"Contas médicas"}'
+    data-start="4.3" data-duration="2.7" data-track-index="5" data-width="1920" data-height="1080"></div>
+  <div id="slot-lugar-2" data-composition-id="lower-third" data-composition-src="compositions/lower-third.html"
+    data-variable-values='{"lugar":"Contas médicas","tela":"Painel"}'
+    data-start="9.1" data-duration="2.8" data-track-index="5" data-width="1920" data-height="1080"></div>
 
-  <!-- 3 · Fecho -->
-  <section id="c-fecho" class="clip scene slide" data-start="40" data-duration="5" data-track-index="3">
-    <div class="fecho-titulo" id="fc-titulo">Ler o Painel</div>
-    <div class="carimbo" id="fc-carimbo">Manual · retrata o app em v0.193.0 · gerado em 13/10/2026</div>
-    <div class="fecho-org" id="fc-org">Hospital São Matheus · Manual da plataforma</div>
-  </section>
+  <div id="slot-passo-1" data-composition-id="legenda-de-passo" data-composition-src="compositions/legenda-de-passo.html"
+    data-variable-values='{"numero":"1","texto":"Em **Contas médicas**, clique em **Painel**."}'
+    data-start="4" data-duration="6" data-track-index="3" data-width="1920" data-height="1080"></div>
+  <div id="slot-passo-2" data-composition-id="legenda-de-passo" data-composition-src="compositions/legenda-de-passo.html"
+    data-variable-values='{"numero":"2","texto":"Escolha a **Semana**, a **Operadora** e o **Tipo de conta**. Os números mudam na hora."}'
+    data-start="10" data-duration="7" data-track-index="4" data-width="1920" data-height="1080"></div>
+  <div id="slot-passo-3" data-composition-id="legenda-de-passo" data-composition-src="compositions/legenda-de-passo.html"
+    data-variable-values='{"numero":"3","texto":"Leia os cartões do topo. A **Nota média de entrada** traz a semana anterior ao lado."}'
+    data-start="17" data-duration="6" data-track-index="3" data-width="1920" data-height="1080"></div>
+  <div id="slot-passo-4" data-composition-id="legenda-de-passo" data-composition-src="compositions/legenda-de-passo.html"
+    data-variable-values='{"numero":"4","texto":"Em **R$ apontado por causa-raiz**, veja onde a perda nasce e quem corrige."}'
+    data-start="23" data-duration="7" data-track-index="4" data-width="1920" data-height="1080"></div>
+  <div id="slot-passo-5" data-composition-id="legenda-de-passo" data-composition-src="compositions/legenda-de-passo.html"
+    data-variable-values='{"numero":"5","texto":"Leve **Os dez itens que mais faltam** para a consultoria do MV."}'
+    data-start="30" data-duration="6" data-track-index="3" data-width="1920" data-height="1080"></div>
+  <div id="slot-passo-6" data-composition-id="legenda-de-passo" data-composition-src="compositions/legenda-de-passo.html"
+    data-variable-values='{"numero":"6","texto":"Em **Produção por faturista**, compare contas e valor lado a lado."}'
+    data-start="36" data-duration="6" data-track-index="4" data-width="1920" data-height="1080"></div>
 
+  <div id="slot-carimbo" data-composition-id="carimbo" data-composition-src="compositions/carimbo.html"
+    data-variable-values='{"titulo":"Ler o Painel","carimbo":"Manual · retrata o app em v0.196.1 · gerado em 14/10/2026"}'
+    data-start="42" data-duration="4" data-track-index="1" data-width="1920" data-height="1080"></div>
 </div>
 
 <script>
-const IC = {
-  marca: '<svg width="22" height="9" viewBox="0 0 100 42" fill="none" style="flex-shrink:0"><path d="M8 40 A24 24 0 0 1 56 40" stroke="#3B6FB6" stroke-width="6" stroke-linecap="round"/><path d="M44 40 A24 24 0 0 1 92 40" stroke="#1E3A8A" stroke-width="6" stroke-linecap="round"/></svg>',
-  sino: '<svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.268 21a2 2 0 0 0 3.464 0"/><path d="M3.262 15.326A1 1 0 0 0 4 17h16a1 1 0 0 0 .74-1.673C19.41 13.956 18 12.499 18 8A6 6 0 0 0 6 8c0 4.499-1.41 5.956-2.738 7.326"/></svg>',
-  alvo: '<svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg>',
-  megafone: '<svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m3 11 18-5v12L3 14v-3z"/><path d="M11.6 16.8a3 3 0 1 1-5.8-1.6"/></svg>',
-  recibo: '<svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 2v20l2-1 2 1 2-1 2 1 2-1 2 1 2-1 2 1V2l-2 1-2-1-2 1-2-1-2 1-2-1-2 1Z"/><path d="M14 8H8"/><path d="M16 12H8"/><path d="M13 16H8"/></svg>',
-  ajuda: '<svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><path d="M12 17h.01"/></svg>',
-  subir: '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#94A3B8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" x2="12" y1="3" y2="15"/></svg>',
-  seta: '<svg width="7" height="7" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 19-7-7 7-7"/><path d="M19 12H5"/></svg>',
-  barras: '<svg width="7" height="7" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="M18 17V9"/><path d="M13 17V5"/><path d="M8 17v-3"/></svg>',
-  baixo: '<svg width="6" height="6" viewBox="0 0 24 24" fill="none" stroke="#64748B" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>',
+/* Ícones: os do lucide, os mesmos do app, no traço da cor do texto. */
+const P = {
+  alvo: '<circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/>', painel: '<rect width="7" height="9" x="3" y="3" rx="1"/><rect width="7" height="5" x="14" y="3" rx="1"/><rect width="7" height="9" x="14" y="12" rx="1"/><rect width="7" height="5" x="3" y="16" rx="1"/>',
+  calendario: '<path d="M8 2v4"/><path d="M16 2v4"/><rect width="18" height="18" x="3" y="4" rx="2"/><path d="M3 10h18"/><path d="M8 14h.01"/><path d="M12 14h.01"/><path d="M16 14h.01"/><path d="M8 18h.01"/><path d="M12 18h.01"/><path d="M16 18h.01"/>',
+  relogio: '<circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>', baixo: '<path d="m6 9 6 6 6-6"/>', direita: '<path d="m9 18 6-6-6-6"/>',
+  megafone: '<path d="m3 11 18-5v12L3 14v-3z"/><path d="M11.6 16.8a3 3 0 1 1-5.8-1.6"/>', recibo: '<path d="M4 2v20l2-1 2 1 2-1 2 1 2-1 2 1 2-1 2 1V2l-2 1-2-1-2 1-2-1-2 1-2-1-2 1Z"/><path d="M14 8H8"/><path d="M16 12H8"/><path d="M13 16H8"/>',
+  escudo: '<path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/><path d="m9 12 2 2 4-4"/>',
+  ajuda: '<circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><path d="M12 17h.01"/>', lupa: '<circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/>',
+  sino: '<path d="M10.268 21a2 2 0 0 0 3.464 0"/><path d="M3.262 15.326A1 1 0 0 0 4 17h16a1 1 0 0 0 .74-1.673C19.41 13.956 18 12.499 18 8A6 6 0 0 0 6 8c0 4.499-1.41 5.956-2.738 7.326"/>',
+  grafico: '<path d="M3 3v18h18"/><path d="M18 17V9"/><path d="M13 17V5"/><path d="M8 17v-3"/>', checks: '<path d="m3 17 2 2 4-4"/><path d="m3 7 2 2 4-4"/><path d="M13 6h8"/><path d="M13 12h8"/><path d="M13 18h8"/>',
+  prancheta: '<rect width="8" height="4" x="8" y="2" rx="1" ry="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><path d="m9 14 2 2 4-4"/>',
+  contrato: '<path d="M20 19.5v.5a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8.5L18 5.5"/><path d="M8 18h1"/><path d="M18.42 9.61a2.1 2.1 0 1 1 2.97 2.97L16.95 17 13 18l.99-3.95 4.43-4.44Z"/>',
+  predio: '<path d="M6 22V4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v18Z"/><path d="M6 12H4a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h2"/><path d="M18 9h2a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2h-2"/><path d="M10 6h4"/><path d="M10 10h4"/><path d="M10 14h4"/><path d="M10 18h4"/>',
+  subir: '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" x2="12" y1="3" y2="15"/>', voltar: '<path d="m12 19-7-7 7-7"/><path d="M19 12H5"/>', check: '<path d="M20 6 9 17l-5-5"/>',
 };
+const ic = (nome, s, traco) => `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="${traco || 2}" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0">${P[nome]}</svg>`;
 
-const moldura = (corpo) =>
-  `<div class="app-topo"><div class="marca">${IC.marca}<span style="font-size:6.2px;font-weight:700;color:#1E3A8A;line-height:1.1">HOSPITAL<br>SÃO MATHEUS</span></div>` +
-  `<div class="direita">${IC.sino}<div class="avatar">M</div></div></div>` +
-  `<div class="app-menu"><div class="mi">${IC.alvo}Reuniões e metas</div><div class="mi">${IC.megafone}Ouvidoria</div>` +
-  `<div class="mi ativo">${IC.recibo}Contas médicas</div><div class="mi" style="margin-top:3px">${IC.ajuda}Ajuda</div></div>` +
-  `<div class="app-corpo">${corpo}</div>`;
+/* A casca do app (barra lateral e topo), como a Marta vê: AppShell, Sidebar e Header do frontend. */
+const casca = `<div class="lado"><div class="marca"><img src="assets/logo-hsm.png" alt="Hospital São Matheus" /></div><nav>
+    <div class="mi">${ic("alvo", 18, 1.5)}Reuniões e metas<span class="fim">${ic("baixo", 16)}</span></div>
+    <div class="sub"><div class="mi">${ic("painel", 16, 1.5)}Dashboard</div><div class="mi">${ic("calendario", 16, 1.5)}Calendário</div><div class="mi">${ic("relogio", 16, 1.5)}Pendências<span class="fim">${ic("direita", 16)}</span></div></div>
+    <div class="mi">${ic("megafone", 18, 1.5)}Ouvidoria</div><div class="mi on">${ic("recibo", 18, 2)}Contas médicas</div><div class="mi">${ic("escudo", 18, 1.5)}Admin</div><div class="mi" style="margin-top:8px">${ic("ajuda", 18, 1.5)}Ajuda</div></nav></div>
+  <div class="topo"><div class="busca">${ic("lupa", 16)}Buscar...</div><div class="quem"><div class="sino">${ic("sino", 22, 1.75)}<span class="n">1</span></div><div class="divisor"></div>
+    <div class="pessoa"><div class="tx"><b>marta.queiroz</b><span>marta.queiroz@exemplo.l...</span></div><div class="avatar">M<span class="seta">${ic("baixo", 12)}</span></div></div></div></div>`;
 
-const telaContas = moldura(`
-  <div style="display:flex;align-items:center;justify-content:space-between;gap:6px"><div class="h-pag">Contas médicas</div>
-    <div class="botoes-topo"><span class="bt-topo" id="bt-painel">${IC.barras}Painel</span><span class="bt-topo">Validação</span><span class="bt-topo">Coordenação</span><span class="bt-topo">Contratos</span><span class="bt-topo">Operadoras</span></div></div>
-  <div class="dek">Envie a conta e o prontuário do MV e receba a lista do que corrigir antes de mandar para a operadora.</div>
-  <div class="soltar">${IC.subir}<div style="font-size:6.4px;font-weight:700;color:#1E293B;margin-top:2px">Arraste aqui a conta e o prontuário do MV</div>
-    <span class="bt bt-cheio" style="margin-top:5px;text-transform:none;letter-spacing:0;font-size:6px">Selecionar arquivos</span></div>`);
+/* Tela Contas médicas (app/contas-medicas/page.tsx), com a fila da Marta vazia. */
+const telaContas = `<div class="rolo"><div class="pagina">
+  <div><div class="ap-cabeca"><h1>Contas médicas</h1><span class="atalho" id="bt-painel">${ic("grafico", 16)}Painel</span><span class="atalho">${ic("checks", 16)}Validação</span><span class="atalho">${ic("prancheta", 16)}Coordenação<span class="n">2</span></span><span class="atalho">${ic("contrato", 16)}Contratos</span><span class="atalho">${ic("predio", 16)}Operadoras</span></div>
+    <p class="dek">Envie a conta e o prontuário do MV e receba a lista do que corrigir antes de mandar para a operadora.</p></div>
+  <div class="soltar"><div class="ic">${ic("subir", 32)}</div><p class="t1">Arraste aqui a conta e o prontuário do MV</p><p class="t2">Vários de uma vez, sem renomear: o app lê o tipo e o atendimento dentro de cada PDF. Até 10 atendimentos e 30 arquivos por envio, 100 MB por arquivo.</p><span class="bt cheio grande">Selecionar arquivos</span></div>
+  <div><div class="abas"><span class="aba on">Fila (0)</span><span class="aba">Concluídas (0)</span></div><div class="ap-cartao" style="margin-top:16px;padding:0"><div class="vazio-fila"><div class="ic">${ic("recibo", 32)}</div>Nenhuma conta enviada ainda</div></div></div>
+</div></div>`;
 
-const causa = (nome, quem, pc, rs, w) =>
-  `<div class="causa"><div class="l">${nome}<i>${quem}</i><span class="pc">${pc}</span><span class="rs">${rs}</span></div><div class="trilho"><b style="width:${w}%"></b></div></div>`;
+/* Tela Painel (painel/page.tsx e os cartões e blocos de components/contas-medicas/painel).
+   O Painel relê os números quando o filtro muda: cada filtro é um quadro inteiro
+   e a troca entre eles é instantânea, como no app. */
+const moldura = (id, titulo, sub, corpo) => `<section class="ap-cartao pn-moldura" ${id ? `id="${id}"` : ""}><h2>${titulo}</h2>${sub ? `<p class="st">${sub}</p>` : ""}<div class="cont">${corpo}</div></section>`;
+const cartao = (titulo, num, apoio, id) => moldura(id, titulo, "", `<p class="pn-num">${num}</p><p class="pn-apoio">${apoio}</p>`);
+const NOTAS = [86, 89, 94, 93, 93, 96, 96, 92.5];
+const grafico = () => { const x = (i) => 46 + i * 52, y = (n) => 8 + (100 - n) * 1.8, ds = ["17/08", "24/08", "31/08", "07/09", "14/09", "21/09", "28/09", "05/10"];
+  return `<svg class="grafico" viewBox="0 0 432 220">${[0, 25, 50, 75, 100].map((n) => `<line class="grade" x1="40" x2="430" y1="${y(n)}" y2="${y(n)}"/><text x="30" y="${y(n) + 4}" text-anchor="end">${n}</text>`).join("")}
+    <polyline class="curva" points="${NOTAS.map((n, i) => `${x(i)},${y(n)}`).join(" ")}"/>${NOTAS.map((n, i) => `<circle class="ponto" cx="${x(i)}" cy="${y(n)}" r="3"/><text x="${x(i)}" y="214" text-anchor="middle">${ds[i]}</text>`).join("")}</svg>`; };
+const causa = (nm, qm, pc, rs) => `<div><div class="causa-l"><span class="nm">${nm}</span><span class="qm">${qm}</span><span class="pc">${pc.toLocaleString("pt-BR", { minimumFractionDigits: 1 })}%</span><span class="rs">R$ ${rs}</span></div><div class="trilho"><b style="width:${pc}%"></b></div></div>`;
+const item = (cd, nm, n, rs) => `<tr><td class="cd">${cd}</td><td>${nm}</td><td class="r pr">${n}</td><td class="r ap">R$ ${rs}</td></tr>`;
+const prod = (nm, c, p, inc, np, ret) => `<tr><td>${nm}</td><td class="r pr">${c}</td><td class="r ap">${p}</td><td class="r pr">R$ ${inc}</td><td class="r ap">${np}</td><td class="r ap4">R$ ${ret}</td></tr>`;
+const blocos = (p) => `<div class="pn-blocos">
+  ${moldura("", "Nota média por semana", "De segunda a domingo, pelo dia em que a conta foi concluída", grafico())}
+  ${moldura(`${p}-causa`, "R$ apontado por causa-raiz", "Onde o problema nasce e quem corrige", `<div class="causas">${causa("Dispensação", "farmácia e enfermagem", 10.3, "159,25")}${causa("Regra automática", "TI e consultoria MV", 48.8, "756,00")}${causa("Cadastro e preço", "credenciamento e cadastro", 28.2, "437,00")}${causa("Registro assistencial", "enfermagem e corpo clínico", 8.1, "125,85")}${causa("Lançamento manual", "faturamento", 4.5, "70,40")}</div>`)}
+  ${moldura(`${p}-itens`, "Os dez itens que mais faltam", "Fila de parametrização para a consultoria do MV", `<table class="tab"><tr><th>Código</th><th>Item</th><th class="r">Contas</th><th class="r">R$</th></tr>${item("90123456", "Pantoprazol 40 mg injetável", 2, "136,80")}${item("70081975", "Curativo com filme transparente", 2, "83,60")}${item("90187733", "Ondansetrona 4 mg injetável", 2, "19,70")}${item("70095001", "Cateter venoso central duplo lúmen", 1, "389,00")}${item("70044190", "Equipo de bomba de infusão", 1, "86,00")}${item("70072210", "Bolsa coletora de urina", 1, "32,40")}</table>`)}
+  ${moldura(`${p}-prod`, "Produção por faturista", "", `<table class="tab"><tr><th>Faturista</th><th class="r">Contas</th><th class="r">Com pendência</th><th class="r">R$ incluído</th><th class="r">Não procede</th><th class="r ap4">R$ retirado</th></tr>${prod("Bianca Torres", 2, 1, "235,00", "0%", "143,00")}${prod("Caio Moreira", 1, 0, "118,40", "25%", "95,00")}${prod("Renata Lima", 1, 0, "78,25", "0%", "480,00")}</table>`)}
+</div>`;
+const opcao = (nome, sel, hover, id) => `<div ${id ? `id="${id}" ` : ""}class="${sel ? "sel" : ""}${hover ? " hover" : ""}"><span class="ck">${sel ? ic("check", 16, 3) : ""}</span>${nome}</div>`;
+const filtros = (p, op, aberto) => `<div class="filtros" id="${p}-filtros">
+  <div class="filtro"><span class="rot">Semana</span><div class="campo">05/10/2026<span class="cal">${ic("calendario", 16)}</span></div></div>
+  <div class="filtro"><span class="rot">Operadora</span><div class="campo" id="${p}-op">${op}<span class="seta-c">${ic("baixo", 16)}</span>${aberto ? `<span class="campo-foco" id="${p}-op-foco"></span>` : ""}</div>
+    ${aberto ? `<div class="lista-op" id="${p}-lista">${opcao("Todas", true)}${opcao("AURORA", false, true, `${p}-aurora`)}</div>` : ""}</div>
+  <div class="filtro"><span class="rot">Tipo de conta</span><div class="campo">Todos<span class="seta-c">${ic("baixo", 16)}</span></div></div></div>`;
+const painel = (p, op, n, visivel) => `<div class="pagina" id="${p}" style="opacity:${visivel ? 1 : 0}">
+  <div><span class="volta">${ic("voltar", 16)}Contas médicas</span><h1>Painel</h1><p class="dek">A nota da semana e onde a perda da conta nasce, pelas contas concluídas de segunda a domingo.</p></div>
+  ${filtros(p, op, p === "p0")}<p class="semana">Semana de 05/10 a 11/10/2026</p>
+  <div class="pn-grade"><div class="pn-cartoes">${cartao("Nota média de entrada", n[0], `Semana anterior: ${n[1]}`, `${p}-c1`)}${cartao("Contas concluídas", n[2], "contas na semana", `${p}-c2`)}${cartao("R$ apontado", `R$ ${n[3]}`, `Já incluídos: R$ ${n[4]}`, `${p}-c3`)}${cartao("Não procede", n[5], n[6], `${p}-c4`)}${cartao("R$ incluído pela coordenação", "R$ 0,00", "0 lembretes incluídos")}</div>${blocos(p)}</div></div>`;
+const telaPainel = `<div class="rolo" id="rolo-p">${painel("p0", "Todas", ["93,4", "95,5", 6, "1.874,30", "512,05", "4,2%", "1 de 24 linhas"], true)}${painel("p1", "AURORA", ["92,5", "95,5", 4, "1.548,50", "431,65", "5,9%", "1 de 17 linhas"])}</div>`;
 
-const telaPainel = moldura(`<div class="rolagem" id="rolagem" style="padding:9px 14px">
-  <div class="voltar">${IC.seta}Contas médicas</div>
-  <div class="h-pag" style="margin-top:3px">Painel</div>
-  <div class="dek">A nota da semana e onde a perda da conta nasce, pelas contas concluídas de segunda a domingo.</div>
-  <div class="filtros">
-    <div><div class="rot">Semana</div><div class="campo" id="f-semana"><span id="f-semana-v">12/10/2026</span></div></div>
-    <div><div class="rot">Operadora</div><div class="campo" id="f-op" style="justify-content:space-between"><span id="f-op-v">Todas</span>${IC.baixo}</div></div>
-    <div><div class="rot">Tipo de conta</div><div class="campo" style="justify-content:space-between"><span>Todos</span>${IC.baixo}</div></div>
-  </div>
-  <div class="semana-rot" id="semana-rot">Semana de 12/10 a 18/10/2026</div>
-  <div class="cartoes" id="cartoes">
-    <div class="bloco"><div class="tt">Nota média de entrada</div><div class="num">93,8</div><div class="ap">Semana anterior: 95,5</div></div>
-    <div class="bloco"><div class="tt">Contas concluídas</div><div class="num">4</div><div class="ap">contas na semana</div></div>
-    <div class="bloco"><div class="tt">R$ apontado</div><div class="num">R$ 1.159,50</div><div class="ap">Já incluídos: R$ 431,65</div></div>
-    <div class="bloco"><div class="tt">Não procede</div><div class="num">6,3%</div><div class="ap">1 de 16 linhas</div></div>
-  </div>
-  <div class="blocos">
-    <div class="bloco"><div class="tt">Nota média por semana</div><div class="st">De segunda a domingo, pelo dia em que a conta foi concluída</div>
-      <svg viewBox="0 0 220 70" width="100%" height="66" style="margin-top:4px"><g stroke="#E2E8F0" stroke-width=".6"><line x1="14" y1="8" x2="216" y2="8"/><line x1="14" y1="24" x2="216" y2="24"/><line x1="14" y1="40" x2="216" y2="40"/><line x1="14" y1="56" x2="216" y2="56"/></g>
-        <polyline fill="none" stroke="#2B2E7E" stroke-width="1.6" points="16,18 44,16 72,11 100,12 128,12 156,10 184,10 212,11"/>
-        <g fill="#2B2E7E"><circle cx="16" cy="18" r="1.8"/><circle cx="44" cy="16" r="1.8"/><circle cx="72" cy="11" r="1.8"/><circle cx="100" cy="12" r="1.8"/><circle cx="128" cy="12" r="1.8"/><circle cx="156" cy="10" r="1.8"/><circle cx="184" cy="10" r="1.8"/><circle cx="212" cy="11" r="1.8"/></g>
-        <g font-size="5" fill="#64748B"><text x="10" y="66">17/08</text><text x="94" y="66">14/09</text><text x="200" y="66">05/10</text></g></svg></div>
-    <div class="bloco" id="bl-causa"><div class="tt">R$ apontado por causa-raiz</div><div class="st">Onde o problema nasce e quem corrige</div>
-      ${causa("Dispensação", "farmácia e enfermagem", "13,7%", "R$ 159,25", 14)}
-      ${causa("Regra automática", "TI e consultoria MV", "65,2%", "R$ 756,00", 65)}
-      ${causa("Cadastro e preço", "credenciamento e cadastro", "4,1%", "R$ 48,00", 4)}
-      ${causa("Registro assistencial", "enfermagem e corpo clínico", "10,9%", "R$ 125,85", 11)}
-      ${causa("Lançamento manual", "faturamento", "6,1%", "R$ 70,40", 6)}</div>
-    <div class="bloco" id="bl-itens"><div class="tt">Os dez itens que mais faltam</div><div class="st">Fila de parametrização para a consultoria do MV</div>
-      <table class="tab"><tr><th>Código</th><th>Item</th><th class="r">Contas</th><th class="r">R$</th></tr>
-        <tr><td class="m">90123456</td><td>Pantoprazol 40 mg injetável</td><td class="r n">2</td><td class="r">R$ 136,80</td></tr>
-        <tr><td class="m">70081975</td><td>Curativo com filme transparente</td><td class="r n">2</td><td class="r">R$ 83,60</td></tr>
-        <tr><td class="m">90187733</td><td>Ondansetrona 4 mg injetável</td><td class="r n">2</td><td class="r">R$ 19,70</td></tr>
-        <tr><td class="m">70044190</td><td>Equipo de bomba de infusão</td><td class="r n">1</td><td class="r">R$ 86,00</td></tr></table></div>
-    <div class="bloco" id="bl-prod"><div class="tt">Produção por faturista</div>
-      <table class="tab"><tr><th>Faturista</th><th class="r">Contas</th><th class="r">Com pendência</th><th class="r">R$ incluído</th><th class="r">Não procede</th></tr>
-        <tr><td>Bianca Torres</td><td class="r n">2</td><td class="r">1</td><td class="r n">R$ 235,00</td><td class="r">0%</td></tr>
-        <tr><td>Caio Moreira</td><td class="r n">1</td><td class="r">0</td><td class="r n">R$ 118,40</td><td class="r">25%</td></tr>
-        <tr><td>Renata Lima</td><td class="r n">1</td><td class="r">0</td><td class="r n">R$ 78,25</td><td class="r">0%</td></tr></table></div>
-  </div>
-  <div class="lista-op" id="lista-op"><div>Todas</div><div>ALFA</div><div>ASSIM</div><div class="on" id="op-aurora">AURORA</div></div>
-</div>`);
+document.getElementById("camera").innerHTML = `<div class="janela" id="janela">
+    <div class="barra-nav"><i></i><i></i><i></i><div class="url">app.hospitalsaomatheus.cloud/contas-medicas</div></div>
+    <div class="vista"><div class="app" id="app">${casca}<div class="corpo"><div class="tela-app" id="tela-contas">${telaContas}</div><div class="tela-app" id="tela-painel" style="opacity:0">${telaPainel}</div></div></div></div></div>
+  <div class="marcador" id="mk"></div><div class="dedo" id="dedo"><svg viewBox="0 0 24 24"><path d="M5 3l14 8-6 1.6L9.6 19z"/></svg><div class="toque" id="toque"></div></div>`;
+/* Réplica de tela: sobreposição e corte são de propósito. */
+document.querySelectorAll("#camera, #camera *").forEach((el) => ["overlap", "occlusion", "overflow"].forEach((k) => el.setAttribute(`data-layout-allow-${k}`, "")));
 
-document.getElementById("palco-tarefa").innerHTML =
-  `<div style="position:absolute;inset:0;background:#EEF1F6"></div>` +
-  `<div class="janela" id="janela"><div class="barra"><i></i><i></i><i></i><div class="url">plataforma do hospital · contas médicas</div></div>` +
-  `<div class="tela" id="tela-contas">${telaContas}</div>` +
-  `<div class="tela" id="tela-painel" style="opacity:0">${telaPainel}</div></div>` +
-  `<div class="rodape-v">Manual · retrata o app em v0.193.0 · gerado em 13/10/2026</div>` +
-  `<div class="ghost" id="g1"><svg width="17" height="17" viewBox="0 0 24 24" fill="#16181d" stroke="#fff" stroke-width="1.4"><path d="M5 3l14 8-6 1.6L9.6 19z"/></svg><div class="pulse"></div></div>` +
-  `<div class="passo" id="p1"><div class="n">1</div><h3>Em Contas médicas, clique em Painel</h3><p>O botão fica no alto da tela, ao lado de <b>Validação</b>.</p></div>` +
-  `<div class="passo" id="p2"><div class="n">2</div><h3>Escolha a semana e a operadora</h3><p>Qualquer dia da <b>Semana</b> serve. Os números mudam na hora.</p></div>` +
-  `<div class="passo" id="p3"><div class="n">3</div><h3>Leia os cartões do topo</h3><p><b>Nota média de entrada</b>, <b>Contas concluídas</b>, <b>R$ apontado</b> e <b>Não procede</b>.</p></div>` +
-  `<div class="passo" id="p4"><div class="n">4</div><h3>Veja onde a perda nasce</h3><p>Em <b>R$ apontado por causa-raiz</b>, cada causa diz quem corrige.</p></div>` +
-  `<div class="passo" id="p5"><div class="n">5</div><h3>Leve os itens que mais faltam ao MV</h3><p><b>Os dez itens que mais faltam</b> são a fila para a consultoria do MV.</p></div>` +
-  `<div class="passo" id="p6"><div class="n">6</div><h3>Compare a produção</h3><p>Em <b>Produção por faturista</b>, contas e valor lado a lado.</p></div>`;
+/* Medidas: onde cada elemento fica no quadro com a câmera em repouso, pelo
+   offset do layout (que ignora a câmera e a rolagem). Nada se mede na
+   montagem: o script roda antes de a fonte do app carregar. Cada alvo é uma
+   função que o GSAP chama quando o tween começa. */
+const APP = document.getElementById("app");
+const APP_X = 160, APP_Y = 32 + 44, ESCALA_APP = 1.25, CENTRO = { x: 960, y: 452 }, JANELA = { x0: 160, y0: 32, x1: 1760, y1: 880 };
+function noApp(id) {
+  let el = document.getElementById(id), x = 0, y = 0;
+  const w = el.offsetWidth, h = el.offsetHeight;
+  while (el && el !== APP) { x += el.offsetLeft; y += el.offsetTop; el = el.offsetParent; }
+  return { x, y, w, h };
+}
+const valor = (v) => (typeof v === "function" ? v() : v);
+function noQuadro(id, rolagem) { const r = noApp(id); return { x: APP_X + r.x * ESCALA_APP, y: APP_Y + (r.y - valor(rolagem)) * ESCALA_APP, w: r.w * ESCALA_APP, h: r.h * ESCALA_APP }; }
+const juntaCaixas = (rs) => { const x = Math.min(...rs.map((r) => r.x)), y = Math.min(...rs.map((r) => r.y)); return { x, y, w: Math.max(...rs.map((r) => r.x + r.w)) - x, h: Math.max(...rs.map((r) => r.y + r.h)) - y }; };
+/* Alvo: um ou mais ids (separados por espaço) e a rolagem em que ele é visto. */
+const alvo = (ids, rolagem = 0) => ({ ids, caixa: () => juntaCaixas(ids.split(" ").map((id) => noQuadro(id, rolagem))) });
+const REPOUSO = { ids: "", caixa: () => ({ x: 160, y: 32, w: 1600, h: 848 }) };
+/* Rolagem que põe o bloco a 24 px do topo do corpo, sem passar do fim da página. */
+const ALTURA_CORPO = 579.2;
+const rolagemAte = (id) => () => Math.min(noApp(id).y - 64 - 24, document.getElementById("p1").offsetHeight - ALTURA_CORPO);
+function enquadra(r, s) {
+  const x = CENTRO.x - s * (r.x + r.w / 2), y = CENTRO.y - s * (r.y + r.h / 2);
+  return { scale: s, x: Math.min(JANELA.x0 * (1 - s), Math.max(JANELA.x1 * (1 - s), x)), y: Math.min(JANELA.y0 * (1 - s), Math.max(JANELA.y1 * (1 - s), y)) };
+}
+const camera = (a, s) => ({ scale: s, x: () => enquadra(a.caixa(), s).x, y: () => enquadra(a.caixa(), s).y });
 
-const PALCO = document.getElementById("palco-tarefa");
-PALCO.querySelectorAll("*").forEach((el) => {
-  el.setAttribute("data-layout-allow-overlap", "");
-  el.setAttribute("data-layout-allow-occlusion", "");
-  el.setAttribute("data-layout-allow-overflow", "");
-});
-
-/* A lista da operadora abre logo abaixo do campo. */
-(function () {
-  const campo = document.getElementById("f-op");
-  const lista = document.getElementById("lista-op");
-  let x = 0, y = 0, n = campo;
-  const raiz = document.getElementById("rolagem");
-  while (n && n !== raiz) { x += n.offsetLeft; y += n.offsetTop; n = n.offsetParent; }
-  lista.style.left = x + "px";
-  lista.style.top = (y + campo.offsetHeight + 2) + "px";
-})();
-
+/* Timeline: uma só, pausada, com tempos absolutos. */
 window.__timelines = window.__timelines || {};
 const tl = gsap.timeline({ paused: true });
-const IR = { immediateRender: false };
-const surge = (sel, t, y) => tl.fromTo(sel, { opacity: 0, y: y === undefined ? 8 : y }, { opacity: 1, y: 0, duration: 0.4, ease: "power2.out", ...IR }, t);
-const some = (sel, t) => tl.to(sel, { opacity: 0, duration: 0.25 }, t);
-const nota = (sel, t, ate) => { surge(sel, t, 14); some(sel, ate); };
-const clique = (g, t) => tl.fromTo(`${g} .pulse`, { opacity: 0.9, scale: 0.4 }, { opacity: 0, scale: 1.25, duration: 0.42, ease: "power1.out", ...IR }, t);
-const move = (g, t, x, y, dx, dy) => {
-  tl.set(g, { x: x, y: y, opacity: 1 }, t);
-  tl.to(g, { x: dx, y: dy, duration: 0.7, ease: "power2.inOut" }, t + 0.2);
-};
-const mostra = (sel, t) => tl.fromTo(sel, { opacity: 0 }, { opacity: 1, duration: 0.3, ...IR }, t);
-const esconde = (sel, t) => tl.to(sel, { opacity: 0, duration: 0.3 }, t);
-const troca = (sel, texto, t) => {
-  tl.to(sel, { opacity: 0, duration: 0.12 }, t);
-  tl.set(sel, { innerText: texto }, t + 0.13);
-  tl.to(sel, { opacity: 1, duration: 0.12 }, t + 0.14);
-};
-
-function xy(el) {
-  let x = 0, y = 0, n = el;
-  while (n && n !== PALCO) { x += n.offsetLeft; y += n.offsetTop; n = n.offsetParent; }
-  return { x: x, y: y, w: el.offsetWidth, h: el.offsetHeight };
+tl.set("#camera", { scale: 1, x: 0, y: 0 }, 0);
+function mira(t, dur, a, s, ate) {
+  tl.to("#camera", { ...camera(a, s), duration: dur, ease: "power2.inOut" }, t);
+  tl.to("#camera", { ...camera(a, s * 1.025), duration: ate - t - dur, ease: "none" }, t + dur);
 }
-function marcaEm(idAlvo) {
-  const jaTem = document.getElementById("mk-" + idAlvo);
-  if (jaTem) return "#mk-" + idAlvo;
-  const el = document.getElementById(idAlvo);
-  if (getComputedStyle(el).position === "static") el.style.position = "relative";
-  const m = document.createElement("div");
-  m.className = "marcador";
-  m.id = "mk-" + idAlvo;
-  m.setAttribute("data-layout-allow-overlap", "");
-  m.setAttribute("data-layout-allow-occlusion", "");
-  const folga = (el.offsetWidth < 16 || el.offsetHeight < 16) ? 4 : 2.5;
-  m.style.cssText = `position:absolute;left:${-folga}px;top:${-folga}px;right:${-folga}px;bottom:${-folga}px`;
-  el.appendChild(m);
-  return "#mk-" + idAlvo;
+function marca(t, a, ate) {
+  tl.set("#mk", { attr: { "data-alvo": a.ids }, x: () => a.caixa().x - 8, y: () => a.caixa().y - 8, width: () => a.caixa().w + 16, height: () => a.caixa().h + 16, scale: 1.06 }, t - 0.02);
+  tl.to("#mk", { opacity: 1, scale: 1, duration: 0.3, ease: "power2.out" }, t);
+  tl.to("#mk", { opacity: 0, duration: 0.25 }, ate);
 }
-function ponto(idAlvo) {
-  const r = xy(document.getElementById(idAlvo));
-  return { x: r.x + r.w / 2 - 5, y: r.y + r.h / 2 - 3 };
+const centro = (a) => { const r = a.caixa(); return { x: r.x + r.w / 2 - 8, y: r.y + r.h / 2 - 6 }; };
+function toca(t, a, de) {
+  const b = de ? () => centro(de) : () => ({ x: centro(a).x + 120, y: centro(a).y + 150 });
+  tl.set("#dedo", { x: () => b().x, y: () => b().y }, t - 0.02);
+  tl.to("#dedo", { opacity: 1, duration: 0.2 }, t);
+  tl.to("#dedo", { x: () => centro(a).x, y: () => centro(a).y, duration: 0.7, ease: "power2.inOut" }, t + 0.2);
+  tl.fromTo("#toque", { opacity: 0.9, scale: 0.4 }, { opacity: 0, scale: 1.3, duration: 0.45, ease: "power1.out", immediateRender: false }, t + 0.95);
 }
-function toca(t, para, de) {
-  const a = ponto(para);
-  const b = de ? ponto(de) : { x: a.x + 34, y: Math.min(a.y + 70, 480) };
-  const mk = marcaEm(para);
-  mostra(mk, t);
-  move("#g1", t + 0.15, b.x, b.y, a.x, a.y);
-  clique("#g1", t + 1.05);
-  return mk;
-}
-/* Destaque de bloco sem dedo: o leitor lê, não clica. */
-function destaca(id, de, ate) {
-  const mk = marcaEm(id);
-  mostra(mk, de);
-  esconde(mk, ate);
-}
+const soltaDedo = (t) => tl.to("#dedo", { opacity: 0, duration: 0.25 }, t);
+const troca = (sai, entra, t) => { tl.set(sai, { opacity: 0 }, t); tl.set(entra, { opacity: 1 }, t); };
+const rola = (r, t) => tl.to("#rolo-p", { y: () => -valor(r), duration: 0.8, ease: "power2.inOut" }, t);
 
-/* 1 · Abertura */
-surge("#ab-eyebrow", 0.25, 22);
-tl.fromTo("#ab-titulo", { opacity: 0, y: 28 }, { opacity: 1, y: 0, duration: 0.7, ease: "power3.out", ...IR }, 0.5);
-surge("#ab-sub", 1.1, 22);
-surge("#ab-selos", 1.6, 18);
+/* A janela entra com um rastro curto, saindo do branco da abertura. */
+tl.fromTo("#janela", { opacity: 0, y: 24, filter: "blur(12px)" }, { opacity: 1, y: 0, filter: "blur(0px)", duration: 0.5, ease: "power2.out" }, 4.0);
 
-/* 2 · A tarefa */
-tl.fromTo("#janela", { opacity: 0, y: 20 }, { opacity: 1, y: 0, duration: 0.5, ease: "power2.out", ...IR }, 4.20);
-nota("#p1", 4.90, 9.55);
-nota("#p2", 9.90, 16.05);
-nota("#p3", 16.40, 21.55);
-nota("#p4", 21.90, 27.55);
-nota("#p5", 27.90, 33.55);
-nota("#p6", 33.90, 39.25);
+/* Passo 1 (4 a 10): o botão Painel. */
+const bPainel = alvo("bt-painel");
+mira(4.4, 2.6, bPainel, 1.45, 8.3);
+marca(6.0, bPainel, 8.0);
+toca(6.1, bPainel);
+soltaDedo(7.7);
+/* Transição com rastro: Contas médicas sai pela esquerda e o Painel entra pela direita. */
+tl.fromTo("#tela-contas", { x: 0, opacity: 1, filter: "blur(0px)" }, { x: -240, opacity: 0, filter: "blur(20px)", duration: 0.35, ease: "power2.in" }, 8.3);
+tl.fromTo("#tela-painel", { x: 240, opacity: 0, filter: "blur(20px)" }, { x: 0, opacity: 1, filter: "blur(0px)", duration: 0.6, ease: "power2.out", immediateRender: false }, 8.5);
+mira(8.3, 1.4, REPOUSO, 1.0, 10.2);
 
-/* passo 1: o botão Painel */
-toca(5.4, "bt-painel");
-esconde("#mk-bt-painel", 7.4);
-esconde("#tela-contas", 7.7);
-mostra("#tela-painel", 7.8);
-tl.to("#g1", { opacity: 0, duration: 0.2 }, 7.8);
+/* Passo 2 (10 a 17): os filtros; a Operadora vira AURORA e os números mudam. */
+const bFiltros = alvo("p0-filtros");
+mira(10.2, 2.0, bFiltros, 1.3, 12.6);
+marca(10.8, bFiltros, 12.4);
+const bOp = alvo("p0-op");
+toca(12.6, bOp);
+tl.to("#p0-op-foco", { opacity: 1, duration: 0.1 }, 13.55);
+tl.to("#p0-lista", { opacity: 1, duration: 0.2 }, 13.6);
+mira(12.6, 1.6, alvo("p0-op p0-lista"), 1.4, 15.2);
+toca(14.1, alvo("p0-aurora"), bOp);
+troca("#p0", "#p1", 15.1);
+soltaDedo(15.4);
+mira(15.2, 1.8, alvo("p1-c1 p1-c2 p1-c3 p1-c4"), 1.2, 17.2);
 
-/* passo 2: a semana e a operadora */
-toca(10.3, "f-semana");
-troca("#f-semana-v", "05/10/2026", 11.5);
-troca("#semana-rot", "Semana de 05/10 a 11/10/2026", 11.6);
-esconde("#mk-f-semana", 12.0);
-toca(12.3, "f-op", "f-semana");
-mostra("#lista-op", 13.4);
-esconde("#mk-f-op", 13.4);
-toca(13.9, "op-aurora", "f-op");
-esconde("#lista-op", 15.1);
-troca("#f-op-v", "AURORA", 15.1);
-tl.to("#g1", { opacity: 0, duration: 0.2 }, 15.4);
+/* Passo 3 (17 a 23): os cartões do topo. */
+const bCartoes = alvo("p1-c1 p1-c2 p1-c3 p1-c4");
+mira(17.2, 2.0, bCartoes, 1.3, 23.0);
+marca(17.6, bCartoes, 22.6);
 
-/* passo 3: os cartões */
-destaca("cartoes", 16.9, 21.2);
+/* Passo 4 (23 a 30): a causa-raiz. */
+const ROLA_CAUSA = rolagemAte("p1-causa");
+rola(ROLA_CAUSA, 23.0);
+const bCausa = alvo("p1-causa", ROLA_CAUSA);
+mira(23.0, 2.2, bCausa, 1.3, 30.0);
+marca(24.4, bCausa, 29.6);
 
-/* passos 4, 5 e 6: os blocos, sem clique */
-destaca("bl-causa", 23.2, 27.4);
-destaca("bl-itens", 29.0, 33.4);
-destaca("bl-prod", 34.4, 38.8);
+/* Passo 5 (30 a 36): os dez itens que mais faltam. */
+const ROLA_ITENS = rolagemAte("p1-itens");
+rola(ROLA_ITENS, 30.0);
+const bItens = alvo("p1-itens", ROLA_ITENS);
+mira(30.0, 2.2, bItens, 1.3, 36.0);
+marca(31.2, bItens, 35.6);
 
-/* 3 · Fecho */
-surge("#fc-titulo", 40.30, 18);
-surge("#fc-carimbo", 40.80, 14);
-surge("#fc-org", 41.20, 12);
+/* Passo 6 (36 a 42): a produção por faturista. */
+const bProd = alvo("p1-prod", ROLA_ITENS);
+mira(36.0, 2.2, bProd, 1.3, 42.0);
+marca(37.2, bProd, 41.6);
 
-window.__timelines.main = tl;
+/* Âncora: o timeline preenche o slot inteiro. */
+tl.to({}, { duration: 46 }, 0);
+window.__timelines["main"] = tl;
 </script>
 </body>
 </html>
