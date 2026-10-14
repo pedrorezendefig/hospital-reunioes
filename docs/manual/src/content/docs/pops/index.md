@@ -61,6 +61,6 @@ que está com você.
 7. Com as três assinaturas, a Versão fica **Publicado** e aparece na
    Biblioteca.
 
-Em qualquer etapa, quem devolve manda a Versão de volta para **Em Elaboração**,
-com um comentário. Corrigida, ela retorna direto para quem devolveu, sem repetir
+Na revisão ou na validação, quem devolve manda a Versão de volta para
+**Em Elaboração**, com um comentário. Corrigida, ela retorna direto para quem devolveu, sem repetir
 a etapa anterior.
