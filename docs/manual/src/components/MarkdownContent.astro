@@ -38,10 +38,10 @@ const eTarefa = papeis.length > 0;
 const selos = dados.login === false ? [...papeis, "Sem login"] : papeis;
 const modulo = entry.id.split("/")[0];
 // A abertura do módulo tem o id do próprio módulo (`ouvidoria`), e a página
-// inicial tem o id `index`. Só elas mostram vídeo, e a página inicial mostra o
-// de Primeiros passos (emenda de 14/10/2026 à ADR 0057).
+// inicial tem o id vazio. Só elas mostram vídeo, e a página inicial mostra o de
+// Primeiros passos (emenda de 14/10/2026 à ADR 0057).
 const eAbertura = !eTarefa && !entry.id.includes("/");
-const pastaDoVideo = entry.id === "index" ? "primeiros-passos" : modulo;
+const pastaDoVideo = modulo || "primeiros-passos";
 // Home e páginas fora dos módulos não têm módulo para mostrar.
 const rotuloDoModulo = modulos.find((m) => m.pasta === modulo)?.label;
 const busca = dados.busca ?? [];
