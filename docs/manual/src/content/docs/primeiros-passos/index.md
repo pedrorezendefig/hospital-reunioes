@@ -16,7 +16,8 @@ esquerda e deixar a conta do seu jeito.
 
 **Plataforma** é este sistema inteiro, com tudo o que ele guarda: as reuniões e
 as atas, as pendências, os procedimentos da Gestão de POPs e os casos da
-Ouvidoria. Um endereço só, uma conta só.
+Ouvidoria. Tudo isso fica num endereço só, e você entra em tudo com a mesma
+conta.
 
 **Conta** é o seu acesso, formado pelo seu email e pela sua senha. Ela é
 pessoal: o que você faz na plataforma fica registrado no seu nome.
@@ -24,16 +25,14 @@ pessoal: o que você faz na plataforma fica registrado no seu nome.
 **Perfil de acesso** é o que a sua conta pode fazer. Quem administra a
 plataforma define o seu, e é ele que decide o que aparece no seu menu.
 
-**Menu** é a lista da esquerda, com os módulos que a sua conta alcança. Dois
-colegas abrem a mesma plataforma e veem menus diferentes.
+**Menu** é a lista da esquerda, com os módulos que a sua conta alcança. Por
+isso dois colegas abrem a mesma plataforma e veem menus diferentes.
 
 **Participante** é toda pessoa cadastrada, com conta ou sem conta. Quem é
 citado numa reunião ou fica responsável por uma ação não precisa ter conta para
 aparecer na plataforma.
 
 ## Quem entra e quem não entra
-
-Nem todo mundo que aparece na plataforma precisa entrar nela.
 
 - **Quem entra** é quem conduz o trabalho: Facilitador, Secretária, quem cuida
   da Gestão de POPs, quem cuida da Ouvidoria e o Super Admin.
@@ -42,12 +41,11 @@ Nem todo mundo que aparece na plataforma precisa entrar nela.
   vai a assinatura, o email de assinar. Quem precisa aceitar uma ata ganha um
   link que abre a ata inteira sem pedir senha.
 
-Algumas telas são feitas para abrir sem conta, e todas chegam até você por um
-link ou por um QR: o aceite de uma ata, o formulário da Ouvidoria e as telas em
-que uma área responde um caso são as mais comuns. Neste manual elas levam o
-selo **Sem login**. A assinatura digital, de uma ata ou de um POP, nem é tela
-da plataforma: acontece no email do serviço que assina. Fora isso, a plataforma
-pede email e senha.
+Algumas telas abrem sem conta e chegam até você por um link ou por um QR. As
+mais comuns são o aceite de uma ata, o formulário da Ouvidoria e as telas em
+que uma área responde um caso. Neste manual elas levam o selo **Sem login**. A
+assinatura digital, de uma ata ou de um POP, acontece fora da plataforma, no
+email do serviço que assina. Todo o resto pede email e senha.
 
 ## O caminho do seu primeiro dia
 
