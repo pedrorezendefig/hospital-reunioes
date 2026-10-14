@@ -34,16 +34,6 @@ ouvidoria/pausar-o-caso-quando-falta-informacao
 ouvidoria/pedir-mais-prazo-pelo-portal-do-setor
 ouvidoria/reabrir-um-caso-por-reincidencia
 ouvidoria/registrar-manifestacao-pelo-formulario
-pops/anexar-o-material-de-referencia
-pops/assinar-o-pop
-pops/consultar-a-biblioteca
-pops/criar-um-pop
-pops/dar-acesso-a-gestao-de-pops
-pops/elaborar-o-pop-com-o-consultor-de-pops
-pops/gerir-os-setores-de-pop
-pops/revisar-o-pop
-pops/validar-o-pop
-pops/ver-o-fluxograma-do-pop
 reunioes/aceitar-a-ata-pelo-link
 reunioes/acompanhar-as-pendencias-na-lista
 reunioes/acompanhar-o-dashboard
