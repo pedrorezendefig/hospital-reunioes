@@ -4,9 +4,13 @@
 Trava a publicação quando o texto que o usuário lê sai do padrão do ADR 0057:
 - travessão (U+2014) e meia-risca (U+2013) em qualquer página (ADR 0013);
 - jargão técnico em texto visível (mesma lista do gate anti-técnica da /divulgar);
+- cacoete regexável de texto gerado ("não é X, é Y" e variantes, fecho
+  repetido), pela lista única de tools/tells_texto.py (ADR 0071, decisão 1);
 - frontmatter obrigatório faltando.
 
-Avisa, sem travar, quando uma Página de tarefa passa de 250 palavras.
+Avisa, sem travar, quando uma Página de tarefa passa de 250 palavras, e
+quando um cacoete da lista de conhecidos (tools/tells_conhecidos.json, o que já
+estava no ar quando a trava nasceu) sai da página: tire a linha da lista.
 
 Sem dependências externas. Uso: python3 tools/lint_manual.py [--dir <pasta>]
 Sai com código 1 se houver qualquer erro.
@@ -15,9 +19,14 @@ Sai com código 1 se houver qualquer erro.
 from __future__ import annotations
 
 import argparse
+import json
 import re
 import sys
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+
+import tells_texto  # noqa: E402
 
 TRAVESSAO = "\u2014"
 MEIA_RISCA = "\u2013"
@@ -114,8 +123,23 @@ def e_pagina_de_tarefa(relativo: Path) -> bool:
     return GRUPO_COMO_FUNCIONA not in relativo.parts[:-1]
 
 
-def checar(pasta: Path) -> tuple[list[str], list[str]]:
+CONHECIDOS = Path(__file__).resolve().parent / "tells_conhecidos.json"
+
+
+def ler_conhecidos(arquivo: Path = CONHECIDOS) -> dict[str, list[str]]:
+    """Página -> trechos de cacoete que já estavam no ar (ADR 0071)."""
+    return json.loads(arquivo.read_text(encoding="utf-8"))["paginas"]
+
+
+def _uma_linha(trecho: str) -> str:
+    return " ".join(trecho.split())
+
+
+def checar(
+    pasta: Path, conhecidos: dict[str, list[str]] | None = None
+) -> tuple[list[str], list[str]]:
     """Roda todas as regras. Devolve (erros, avisos)."""
+    conhecidos = conhecidos or {}
     erros: list[str] = []
     avisos: list[str] = []
     for arquivo in sorted(pasta.rglob("*.md*")):
@@ -151,6 +175,22 @@ def checar(pasta: Path) -> tuple[list[str], list[str]]:
                 "Escreva o que a pessoa faz na tela (ADR 0057, decisão 10)."
             )
 
+        pagina = relativo.as_posix()
+        ja_no_ar = {_uma_linha(t) for t in conhecidos.get(pagina, [])}
+        achados_tells = {_uma_linha(o.trecho): o for o in tells_texto.achar_tells(visivel)}
+        for trecho, o in achados_tells.items():
+            if trecho not in ja_no_ar:
+                erros.append(
+                    f"{nome}: cacoete de texto gerado ({o.cacoete}): "
+                    f'"{trecho}". Reescreva com o fato direto; o humanizer '
+                    "mostra como (ADR 0071)."
+                )
+        for trecho in sorted(ja_no_ar - achados_tells.keys()):
+            avisos.append(
+                f'{nome}: cacoete conhecido "{trecho}" já saiu da página; '
+                "tire a linha de tools/tells_conhecidos.json."
+            )
+
         if e_pagina_de_tarefa(relativo):
             palavras = len(texto_contado(visivel).split())
             if palavras > TETO_DE_PALAVRAS:
@@ -172,7 +212,7 @@ def main() -> int:
         print(f"Lint do Manual: pasta '{pasta}' não existe.", file=sys.stderr)
         return 1
 
-    erros, avisos = checar(pasta)
+    erros, avisos = checar(pasta, ler_conhecidos())
     for aviso in avisos:
         print(f"aviso: {aviso}")
     if erros:
