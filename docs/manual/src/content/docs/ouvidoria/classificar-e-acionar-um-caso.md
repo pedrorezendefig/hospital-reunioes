@@ -8,9 +8,6 @@ sidebar:
   order: 5
 ---
 
-O vídeo é o capítulo 2, gravado na versão 0.109.0, e não mostra o que mudou
-depois.
-
 ## Quando usar
 
 Assim que um caso novo aparece na lista. Sem este passo, nenhuma área

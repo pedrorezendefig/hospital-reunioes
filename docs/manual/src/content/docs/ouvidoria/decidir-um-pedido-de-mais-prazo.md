@@ -8,9 +8,6 @@ sidebar:
   order: 9
 ---
 
-O vídeo é o capítulo 4, gravado na versão 0.109.0, e não mostra o que mudou
-depois.
-
 ## Quando usar
 
 Quando uma área pediu dias úteis a mais para responder. O caso mostra o pedido

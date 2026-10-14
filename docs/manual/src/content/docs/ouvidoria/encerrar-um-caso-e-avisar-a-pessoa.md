@@ -8,9 +8,6 @@ sidebar:
   order: 13
 ---
 
-O vídeo é o capítulo 5, gravado na versão 0.109.0, e não mostra o que mudou
-depois.
-
 ## Quando usar
 
 Quando a resposta da área resolve o caso, ou quando não há mais o que apurar. É

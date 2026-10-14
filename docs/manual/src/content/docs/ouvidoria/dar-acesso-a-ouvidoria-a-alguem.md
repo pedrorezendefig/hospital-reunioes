@@ -8,8 +8,6 @@ sidebar:
   order: 16
 ---
 
-O vídeo é o capítulo 6, regravado na versão 0.137.1.
-
 ## Quando usar
 
 Quando alguém passa a trabalhar na Ouvidoria, ou deixa de trabalhar. Este

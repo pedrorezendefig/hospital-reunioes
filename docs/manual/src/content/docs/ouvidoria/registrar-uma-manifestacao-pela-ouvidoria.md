@@ -8,8 +8,6 @@ sidebar:
   order: 3
 ---
 
-O vídeo é o capítulo 1, regravado na versão 0.137.1.
-
 ## Quando usar
 
 Quando a pessoa ligou, veio ao balcão, mandou mensagem ou avaliou o hospital na

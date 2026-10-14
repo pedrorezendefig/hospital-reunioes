@@ -8,9 +8,6 @@ sidebar:
   order: 21
 ---
 
-O vídeo é o capítulo 7, gravado na versão 0.109.0, e não mostra o que mudou
-depois.
-
 ## Quando usar
 
 No começo do dia, e sempre que precisar saber onde a Ouvidoria está apertada.

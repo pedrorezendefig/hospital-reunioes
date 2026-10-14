@@ -9,9 +9,6 @@ sidebar:
   order: 6
 ---
 
-O vídeo é o capítulo 3, gravado na versão 0.109.0, e não mostra o que mudou
-depois.
-
 ## Quando usar
 
 Quando chega no seu email uma **Demanda da Ouvidoria** para a sua área. O link
