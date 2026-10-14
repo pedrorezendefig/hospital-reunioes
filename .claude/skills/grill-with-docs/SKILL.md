@@ -11,6 +11,26 @@ Interview me relentlessly about every aspect of this plan until we reach a share
 
 Ask the questions one at a time, waiting for feedback on each question before continuing. Asking multiple questions at once is bewildering.
 
+**Formato da pergunta (Hospital Reuniões):** vale para o modo normal e para o lote.
+
+- Sem emoji. Sem travessão nem meia-risca: use vírgula, dois-pontos, parênteses ou ponto.
+- Cada opção numa linha própria, uma embaixo da outra. Nunca duas opções na mesma linha.
+- Toda pergunta fecha com uma linha "Recomendo:". Pergunta de sim ou não também lista duas opções: (a) a recomendada e (b) o contrário.
+- Cada opção cabe em uma linha. O custo e o ganho vão no contexto, não dentro da opção.
+
+```
+**P1. <título da pergunta>**
+
+<uma ou duas frases de contexto: o que está em jogo e por que importa>
+
+- **(a)** <primeira opção, o que ela quer dizer na prática>
+- **(b)** <segunda opção>
+
+**Recomendo:** (a). <uma frase com o motivo>
+```
+
+A numeração continua na sessão inteira (P1, P2, P3...), para "P4" apontar sempre para a mesma pergunta.
+
 If a *fact* can be found by exploring the codebase, look it up rather than asking me. If the fact lives in the official docs of an external service or library the project uses (ClickSign, Supabase/PostgREST, Coolify, WeasyPrint...), fire the `research` skill as a background agent and keep the grilling moving; fold the cited answer in when it arrives. The *decisions*, though, are mine: put each one to me and wait for my answer.
 
 Do not enact the plan until I confirm we have reached a shared understanding.
@@ -19,7 +39,7 @@ Do not enact the plan until I confirm we have reached a shared understanding.
 
 1. Levante os fatos no código primeiro, como no modo normal.
 2. Liste **todas** as lacunas de uma vez, mesmo que sejam 20, numeradas e agrupadas por tema. Cada uma: a escolha em **negrito**, o porquê em 1 a 2 frases e a alternativa descartada, quando houver.
-3. Não chute preferência de negócio, o que o diretor quer, dinheiro nem texto com a voz do Pedro: essas linhas saem marcadas "⚑ precisa de você", com no máximo uma sugestão de rascunho, sem fingir decisão.
+3. Não chute preferência de negócio, o que o diretor quer, dinheiro nem texto com a voz do Pedro: essas linhas saem marcadas "[precisa de você]", com no máximo uma sugestão de rascunho, sem fingir decisão.
 4. No fim, um quadro `# | decisão | escolha | por quê` e a linha "Onde eu mais posso estar errado:" com as 2 escolhas mais arriscadas. Feche com a pergunta única: "ok" ou "N: correção"?
 5. "ok" aceita tudo. "N: correção" corrige só aquela linha; reajuste as decisões que dependem dela e mostre só as linhas que mudaram, antes de fechar.
 6. `CONTEXT.md` e ADR só mudam depois do "ok", nunca no meio do lote. O fechamento é o mesmo de baixo.
