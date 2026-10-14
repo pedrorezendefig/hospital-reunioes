@@ -30,8 +30,11 @@ import struct
 import subprocess
 import sys
 import zlib
-from html.parser import HTMLParser
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).parent))
+
+from checar_video_manual import elementos  # noqa: E402
 
 RAIZ = Path(__file__).resolve().parent.parent
 TOKENS_PADRAO = RAIZ / "docs" / "manual" / "video" / "_estilo" / "tokens.css"
@@ -46,17 +49,6 @@ FRACAO_DA_PLACA = 0.5  # o resto é o texto e o número em cima da placa
 CARD_DA_LEGENDA = "legenda-de-passo"
 
 
-class _Clipes(HTMLParser):
-    def __init__(self) -> None:
-        super().__init__(convert_charrefs=True)
-        self.elementos: list[dict[str, str]] = []
-
-    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
-        atributos = {nome: valor or "" for nome, valor in attrs}
-        if "data-start" in atributos or "data-composition-id" in atributos:
-            self.elementos.append(atributos)
-
-
 def _segundos(valor: str) -> float | None:
     try:
         return float(valor)
@@ -66,13 +58,12 @@ def _segundos(valor: str) -> float | None:
 
 def ler_composicao(html: str) -> tuple[list[float], list[tuple[float, float]]]:
     """Os cortes (segundos) e os intervalos em que há legenda de passo."""
-    leitor = _Clipes()
-    leitor.feed(html)
-    raiz = next(e for e in leitor.elementos if "data-composition-id" in e)
+    todos = elementos(html)
+    raiz = next(e for e in todos if "data-composition-id" in e)
     total = _segundos(raiz.get("data-duration", "")) or 0.0
     cortes: set[float] = set()
     legendas: list[tuple[float, float]] = []
-    for elemento in leitor.elementos:
+    for elemento in todos:
         if elemento is raiz:
             continue
         inicio = _segundos(elemento.get("data-start", ""))
@@ -87,7 +78,10 @@ def ler_composicao(html: str) -> tuple[list[float], list[tuple[float, float]]]:
 
 def _tokens(css: str) -> dict[str, str]:
     css = re.sub(r"/\*.*?\*/", "", css, flags=re.S)
-    return {n: " ".join(v.split()) for n, v in re.findall(r"(--[\w-]+)\s*:\s*([^;{}]+);", css)}
+    return {
+        n: " ".join(v.split())
+        for n, v in re.findall(r"(--[\w-]+)\s*:\s*([^;{}]+);", css)
+    }
 
 
 def _resolver(tokens: dict[str, str], nome: str) -> str:
@@ -96,7 +90,9 @@ def _resolver(tokens: dict[str, str], nome: str) -> str:
     return _resolver(tokens, referencia.group(1)) if referencia else valor
 
 
-def placa_da_legenda(css: str) -> tuple[tuple[int, int, int], tuple[int, int, int, int]]:
+def placa_da_legenda(
+    css: str,
+) -> tuple[tuple[int, int, int], tuple[int, int, int, int]]:
     """A cor da placa e o retângulo dela no quadro reduzido, lidos dos tokens."""
     tokens = _tokens(css)
     cor = _resolver(tokens, "--video-legenda-fundo").lstrip("#")
@@ -117,10 +113,20 @@ def placa_da_legenda(css: str) -> tuple[tuple[int, int, int], tuple[int, int, in
 def _sonda(mp4: Path) -> tuple[float, int]:
     saida = subprocess.run(
         [
-            "ffprobe", "-v", "error", "-select_streams", "v:0",
-            "-show_entries", "stream=r_frame_rate:format=duration", "-of", "json", str(mp4),
+            "ffprobe",
+            "-v",
+            "error",
+            "-select_streams",
+            "v:0",
+            "-show_entries",
+            "stream=r_frame_rate:format=duration",
+            "-of",
+            "json",
+            str(mp4),
         ],
-        capture_output=True, text=True, check=True,
+        capture_output=True,
+        text=True,
+        check=True,
     )
     dados = json.loads(saida.stdout)
     num, den = dados["streams"][0]["r_frame_rate"].split("/")
@@ -133,14 +139,28 @@ def _quadros(mp4: Path, indices: list[int]) -> dict[int, bytes]:
     escolha = "+".join(f"eq(n,{i})" for i in indices)
     saida = subprocess.run(
         [
-            "ffmpeg", "-v", "error", "-i", str(mp4),
-            "-vf", f"select='{escolha}',scale={LARGURA}:{ALTURA}",
-            "-fps_mode", "passthrough", "-f", "rawvideo", "-pix_fmt", "rgb24", "-",
+            "ffmpeg",
+            "-v",
+            "error",
+            "-i",
+            str(mp4),
+            "-vf",
+            f"select='{escolha}',scale={LARGURA}:{ALTURA}",
+            "-fps_mode",
+            "passthrough",
+            "-f",
+            "rawvideo",
+            "-pix_fmt",
+            "rgb24",
+            "-",
         ],
-        capture_output=True, check=True,
+        capture_output=True,
+        check=True,
     )
     tamanho = LARGURA * ALTURA * 3
-    return {i: saida.stdout[k * tamanho : (k + 1) * tamanho] for k, i in enumerate(indices)}
+    return {
+        i: saida.stdout[k * tamanho : (k + 1) * tamanho] for k, i in enumerate(indices)
+    }
 
 
 def e_preto(quadro: bytes) -> bool:
@@ -153,14 +173,18 @@ def e_preto(quadro: bytes) -> bool:
     return escuros >= FRACAO_PRETA * len(pixels)
 
 
-def tem_placa(quadro: bytes, cor: tuple[int, int, int], caixa: tuple[int, int, int, int]) -> bool:
+def tem_placa(
+    quadro: bytes, cor: tuple[int, int, int], caixa: tuple[int, int, int, int]
+) -> bool:
     x0, y0, x1, y1 = caixa
     total = iguais = 0
     for y in range(y0, y1):
         for x in range(x0, x1):
             p = (y * LARGURA + x) * 3
             total += 1
-            if all(abs(quadro[p + c] - cor[c]) <= TOLERANCIA_DA_PLACA for c in range(3)):
+            if all(
+                abs(quadro[p + c] - cor[c]) <= TOLERANCIA_DA_PLACA for c in range(3)
+            ):
                 iguais += 1
     return total > 0 and iguais >= FRACAO_DA_PLACA * total
 
@@ -168,7 +192,9 @@ def tem_placa(quadro: bytes, cor: tuple[int, int, int], caixa: tuple[int, int, i
 def _png(caminho: Path, largura: int, altura: int, rgb: bytes) -> None:
     def bloco(tipo: bytes, dados: bytes) -> bytes:
         corpo = tipo + dados
-        return struct.pack(">I", len(dados)) + corpo + struct.pack(">I", zlib.crc32(corpo))
+        return (
+            struct.pack(">I", len(dados)) + corpo + struct.pack(">I", zlib.crc32(corpo))
+        )
 
     linhas = b"".join(
         b"\x00" + rgb[y * largura * 3 : (y + 1) * largura * 3] for y in range(altura)
@@ -219,20 +245,30 @@ def checar(mp4: Path, composicao: Path, tokens: Path, saida: Path) -> list[str]:
             [quadros[i] for i in antes],
             [quadros[i] for i in depois],
         )
+        pretos: list[float] = []
+        sem_placa: list[float] = []
+        meio_quadro = 0.5 / fps
         for i in antes + depois:
             instante = i / fps
             if e_preto(quadros[i]):
-                problemas.append(f"corte em {t:.2f}s: quadro preto em {instante:.2f}s")
+                pretos.append(instante)
                 continue
-            meio_quadro = 0.5 / fps
             com_legenda = any(
                 a + meio_quadro <= instante < b - meio_quadro for a, b in legendas
             )
             if placa and com_legenda and not tem_placa(quadros[i], *placa):
-                problemas.append(
-                    f"corte em {t:.2f}s: legenda sem fundo em {instante:.2f}s "
-                    "(a placa da legenda não está no lugar)"
-                )
+                sem_placa.append(instante)
+        if pretos:
+            problemas.append(
+                f"corte em {t:.2f}s: quadro preto em {pretos[0]:.2f}s "
+                f"({len(pretos)} de {len(antes + depois)} quadros da strip)"
+            )
+        if sem_placa:
+            problemas.append(
+                f"corte em {t:.2f}s: legenda sem fundo em {sem_placa[0]:.2f}s "
+                f"({len(sem_placa)} quadros com o card de legenda e sem a placa "
+                "no retângulo --video-legenda-* do tokens.css)"
+            )
     return problemas
 
 
@@ -248,7 +284,8 @@ def main() -> int:
     problemas = checar(args.mp4, args.composicao, args.tokens, saida)
     if problemas:
         print(
-            "Gate de strips falhou:\n" + "\n".join(f"  - {p}" for p in problemas)
+            "Gate de strips falhou:\n"
+            + "\n".join(f"  - {p}" for p in problemas)
             + f"\nStrips em {saida}",
             file=sys.stderr,
         )

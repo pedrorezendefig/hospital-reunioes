@@ -44,8 +44,19 @@ def mp4(destino: Path, *filtros: str) -> Path:
     cadeia = ",".join(("color=c=0xEEF1F6:s=320x180:r=30:d=2", *filtros))
     subprocess.run(
         [
-            "ffmpeg", "-v", "error", "-y", "-f", "lavfi", "-i", cadeia,
-            "-c:v", "libx264", "-pix_fmt", "yuv420p", str(destino),
+            "ffmpeg",
+            "-v",
+            "error",
+            "-y",
+            "-f",
+            "lavfi",
+            "-i",
+            cadeia,
+            "-c:v",
+            "libx264",
+            "-pix_fmt",
+            "yuv420p",
+            str(destino),
         ],
         check=True,
     )
@@ -60,11 +71,16 @@ def rodar(tmp_path: Path, video: Path, composicao: str = COMPOSICAO):
     (tmp_path / "tokens.css").write_text(TOKENS, encoding="utf-8")
     return subprocess.run(
         [
-            sys.executable, str(GATE),
-            "--mp4", str(video),
-            "--composicao", str(tmp_path / "index.html"),
-            "--tokens", str(tmp_path / "tokens.css"),
-            "--saida", str(tmp_path / "strips"),
+            sys.executable,
+            str(GATE),
+            "--mp4",
+            str(video),
+            "--composicao",
+            str(tmp_path / "index.html"),
+            "--tokens",
+            str(tmp_path / "tokens.css"),
+            "--saida",
+            str(tmp_path / "strips"),
         ],
         capture_output=True,
         text=True,

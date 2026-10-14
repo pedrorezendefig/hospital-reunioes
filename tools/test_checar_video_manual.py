@@ -263,7 +263,8 @@ def test_hex_dentro_do_timeline_tambem_trava(tmp_path):
     montar(
         tmp_path,
         corpo=CORPO_NO_ESTILO.replace(
-            "{ opacity: 1, duration: 0.4 }", '{ opacity: 1, color: "#2b2e7e", duration: 0.4 }'
+            "{ opacity: 1, duration: 0.4 }",
+            '{ opacity: 1, color: "#2b2e7e", duration: 0.4 }',
         ),
     )
     problemas = checar_video_manual.checar(tmp_path)
@@ -280,7 +281,9 @@ def test_seletor_de_id_nao_e_cor(tmp_path):
 def test_fonte_fora_dos_tokens_trava(tmp_path):
     montar(
         tmp_path,
-        corpo=CORPO_NO_ESTILO.replace("font-family: var(--font-app)", "font-family: Arial"),
+        corpo=CORPO_NO_ESTILO.replace(
+            "font-family: var(--font-app)", "font-family: Arial"
+        ),
     )
     problemas = checar_video_manual.checar(tmp_path)
     assert len(problemas) == 1
@@ -291,7 +294,9 @@ def test_timeline_mais_curto_que_o_slot_trava(tmp_path):
     """O kit viu quadro preto quando o timeline acaba antes do `data-duration`."""
     montar(
         tmp_path,
-        corpo=CORPO_NO_ESTILO.replace("tl.to({}, { duration: 42 }, 0);", "tl.to({}, { duration: 30 }, 0);"),
+        corpo=CORPO_NO_ESTILO.replace(
+            "tl.to({}, { duration: 42 }, 0);", "tl.to({}, { duration: 30 }, 0);"
+        ),
     )
     problemas = checar_video_manual.checar(tmp_path)
     assert len(problemas) == 1
@@ -332,7 +337,9 @@ HOST_DA_LEGENDA = (
 
 
 def montar_com_card(tmp_path: Path, duracao_do_card: int) -> None:
-    pasta = montar(tmp_path, corpo=CORPO_NO_ESTILO.replace("\n</div>", "\n" + HOST_DA_LEGENDA, 1))
+    pasta = montar(
+        tmp_path, corpo=CORPO_NO_ESTILO.replace("\n</div>", "\n" + HOST_DA_LEGENDA, 1)
+    )
     (pasta / "compositions").mkdir()
     (pasta / "compositions" / "legenda-de-passo.html").write_text(
         CARD_MONTADO.replace("DURACAO", str(duracao_do_card)), encoding="utf-8"
@@ -363,7 +370,9 @@ def test_card_com_hex_dentro_da_composicao_do_video_trava(tmp_path):
         / "legenda-de-passo.html"
     )
     card.write_text(
-        card.read_text(encoding="utf-8").replace("var(--video-legenda-fundo)", "#1A1C4E"),
+        card.read_text(encoding="utf-8").replace(
+            "var(--video-legenda-fundo)", "#1A1C4E"
+        ),
         encoding="utf-8",
     )
     problemas = checar_video_manual.checar(tmp_path)
@@ -398,7 +407,9 @@ def test_pasta_do_estilo_nao_e_composicao_orfa(tmp_path):
     montar(tmp_path)
     card = tmp_path / "video" / "_estilo" / "cards" / "legenda-de-passo"
     card.mkdir(parents=True)
-    (card / "index.html").write_text(CARD_MONTADO.replace("DURACAO", "60"), encoding="utf-8")
+    (card / "index.html").write_text(
+        CARD_MONTADO.replace("DURACAO", "60"), encoding="utf-8"
+    )
     (tmp_path / "video" / "_estilo" / "references").mkdir()
     assert checar_video_manual.checar(tmp_path) == []
 
@@ -409,7 +420,9 @@ def test_card_do_estilo_com_hex_trava(tmp_path):
     card = tmp_path / "video" / "_estilo" / "cards" / "legenda-de-passo"
     card.mkdir(parents=True)
     (card / "index.html").write_text(
-        CARD_MONTADO.replace("DURACAO", "60").replace("var(--video-legenda-fundo)", "#1A1C4E"),
+        CARD_MONTADO.replace("DURACAO", "60").replace(
+            "var(--video-legenda-fundo)", "#1A1C4E"
+        ),
         encoding="utf-8",
     )
     problemas = checar_video_manual.checar(tmp_path)

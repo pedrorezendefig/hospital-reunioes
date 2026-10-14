@@ -80,7 +80,9 @@ ESTILO_DO_MANUAL: list[tuple[str, str, str]] = [
 
 
 def _declaracoes(css: str) -> list[tuple[str, str]]:
-    return [(nome, " ".join(valor.split())) for nome, valor in RE_DECLARACAO.findall(css)]
+    return [
+        (nome, " ".join(valor.split())) for nome, valor in RE_DECLARACAO.findall(css)
+    ]
 
 
 def _paleta_do_tailwind(tema: str) -> dict[str, str]:
@@ -107,10 +109,10 @@ def _tokens_do_app(globals_css: str) -> dict[str, str]:
 def _font_faces(globals_css: str) -> list[str]:
     blocos = []
     for corpo in RE_FONT_FACE.findall(globals_css):
-        campos = dict(
-            (chave.strip(), " ".join(valor.split()))
+        campos = {
+            chave.strip(): " ".join(valor.split())
             for chave, valor in re.findall(r"([\w-]+)\s*:\s*([^;]+);", corpo)
-        )
+        }
         arquivo = re.search(r"url\(\s*[\"']?([^\"')]+)", campos.get("src", ""))
         if not arquivo:
             continue
@@ -131,17 +133,21 @@ def gerar(globals_css: str, tema_tailwind: str | None) -> str:
     globals_css = RE_COMENTARIO.sub("", globals_css)
     if '@import "tailwindcss"' in globals_css and tema_tailwind is None:
         raise ValueError(
-            'o globals.css importa o Tailwind e o theme.css dele não foi achado'
+            "o globals.css importa o Tailwind e o theme.css dele não foi achado"
         )
     partes = [
-        "/* GERADO por tools/gerar_tokens_video.py a partir do globals.css do\n"
-        "   frontend. Não edite à mão: mude o globals.css (ou o gerador) e rode\n"
-        "   python3 tools/gerar_tokens_video.py de novo. */",
+        (
+            "/* GERADO por tools/gerar_tokens_video.py a partir do globals.css do\n"
+            "   frontend. Não edite à mão: mude o globals.css (ou o gerador) e rode\n"
+            "   python3 tools/gerar_tokens_video.py de novo. */"
+        ),
         *_font_faces(globals_css),
     ]
     raiz = [":root {"]
     if tema_tailwind is not None:
-        raiz.append('  /* Paleta e fontes que o app herda pelo @import "tailwindcss" */')
+        raiz.append(
+            '  /* Paleta e fontes que o app herda pelo @import "tailwindcss" */'
+        )
         raiz += [f"  {n}: {v};" for n, v in _paleta_do_tailwind(tema_tailwind).items()]
     raiz.append("  /* Tokens do app (globals.css) */")
     raiz += [f"  {n}: {v};" for n, v in _tokens_do_app(globals_css).items()]

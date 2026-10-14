@@ -44,8 +44,8 @@ RE_REGISTRO = re.compile(
 )
 
 
-class _Composicoes(HTMLParser):
-    """Os elementos com `data-composition-id`: a raiz e os hosts de card."""
+class _Elementos(HTMLParser):
+    """Os elementos com tempo ou com `data-composition-id` (raiz, clipes, hosts)."""
 
     def __init__(self) -> None:
         super().__init__(convert_charrefs=True)
@@ -53,14 +53,19 @@ class _Composicoes(HTMLParser):
 
     def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
         atributos = {nome: valor or "" for nome, valor in attrs}
-        if "data-composition-id" in atributos:
+        if "data-start" in atributos or "data-composition-id" in atributos:
             self.elementos.append(atributos)
 
 
-def _composicoes(html: str) -> list[dict[str, str]]:
-    leitor = _Composicoes()
+def elementos(html: str) -> list[dict[str, str]]:
+    """Também usado pelo tools/strips_video_manual.py para achar os cortes."""
+    leitor = _Elementos()
     leitor.feed(html)
     return leitor.elementos
+
+
+def _composicoes(html: str) -> list[dict[str, str]]:
+    return [e for e in elementos(html) if "data-composition-id" in e]
 
 
 def _duracao(valor: str) -> float:
@@ -105,13 +110,17 @@ def _cor_e_fonte(html: str, rotulo: str) -> list[str]:
     return problemas
 
 
-def _timeline_curto(rotulo: str, composicao: str, dura: float, slot: float) -> list[str]:
+def _timeline_curto(
+    rotulo: str, composicao: str, dura: float, slot: float
+) -> list[str]:
     if dura >= slot:
         return []
     return [
-        f"{rotulo}: o timeline de '{composicao}' garante {dura:g}s e o slot pede "
-        f"{slot:g}s. Termine o timeline com tl.to({{}}, {{ duration: {slot:g} }}, 0) "
-        "para ele preencher o slot inteiro, sem quadro preto no fim."
+        (
+            f"{rotulo}: o timeline de '{composicao}' garante {dura:g}s e o slot pede "
+            f"{slot:g}s. Termine o timeline com tl.to({{}}, {{ duration: {slot:g} }}, 0) "
+            "para ele preencher o slot inteiro, sem quadro preto no fim."
+        )
     ]
 
 
@@ -119,10 +128,10 @@ def _gates_da_composicao(arquivo: Path, rotulo: str) -> list[str]:
     """Cor, fonte e timeline da raiz e de cada card montado nela."""
     html = arquivo.read_text(encoding="utf-8")
     problemas = _cor_e_fonte(html, rotulo)
-    elementos = _composicoes(html)
-    if not elementos:
+    composicoes = _composicoes(html)
+    if not composicoes:
         return problemas + [f"{rotulo}: sem elemento raiz com data-composition-id."]
-    raiz, hosts = elementos[0], elementos[1:]
+    raiz, hosts = composicoes[0], composicoes[1:]
     problemas += _timeline_curto(
         rotulo,
         raiz["data-composition-id"],
@@ -221,10 +230,14 @@ def checar(raiz: Path) -> list[str]:
                 "quadros olhados) antes do OK humano (emenda de 13/10/2026 à "
                 "ADR 0057)."
             )
-        problemas += _gates_da_composicao(composicao, f"video/{modulo}/{slug}/index.html")
+        problemas += _gates_da_composicao(
+            composicao, f"video/{modulo}/{slug}/index.html"
+        )
 
     for card in sorted((raiz / "video" / ESTILO / "cards").glob("*/index.html")):
-        problemas += _gates_da_composicao(card, f"video/{ESTILO}/cards/{card.parent.name}")
+        problemas += _gates_da_composicao(
+            card, f"video/{ESTILO}/cards/{card.parent.name}"
+        )
 
     for pasta in sorted((raiz / "video").glob("*/*")):
         if not pasta.is_dir() or pasta.parent.name == ESTILO:

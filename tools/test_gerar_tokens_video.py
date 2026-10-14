@@ -48,7 +48,9 @@ TEMA_TAILWIND = """@theme default {
 """
 
 
-def gerar(tmp_path: Path, globals_css: str) -> tuple[subprocess.CompletedProcess[str], Path]:
+def gerar(
+    tmp_path: Path, globals_css: str
+) -> tuple[subprocess.CompletedProcess[str], Path]:
     """O gerador como a receita manda rodar: lê arquivos, grava o tokens.css."""
     (tmp_path / "globals.css").write_text(globals_css, encoding="utf-8")
     (tmp_path / "theme.css").write_text(TEMA_TAILWIND, encoding="utf-8")
@@ -76,7 +78,8 @@ def test_mudar_a_cor_no_globals_muda_o_token(tmp_path):
     assert "--color-primary: #2B2E7E;" in saida.read_text(encoding="utf-8")
 
     resultado, saida = gerar(
-        tmp_path, GLOBALS.replace("--color-primary: #2B2E7E;", "--color-primary: #7A1F3D;")
+        tmp_path,
+        GLOBALS.replace("--color-primary: #2B2E7E;", "--color-primary: #7A1F3D;"),
     )
     assert resultado.returncode == 0, resultado.stderr
     tokens = saida.read_text(encoding="utf-8")
@@ -91,7 +94,9 @@ def test_paleta_que_o_app_herda_do_tailwind_vira_token(tmp_path):
     tokens = saida.read_text(encoding="utf-8")
     assert "--color-slate-500: oklch(55.4% 0.046 257.417);" in tokens
     assert "--font-mono: ui-monospace, SFMono-Regular, Menlo, monospace;" in tokens
-    assert '--font-app: "HP Simplified", system-ui, -apple-system, sans-serif;' in tokens
+    assert (
+        '--font-app: "HP Simplified", system-ui, -apple-system, sans-serif;' in tokens
+    )
     assert 'src: url("assets/fonts/HPSimplified_Rg.ttf")' in tokens
 
 
