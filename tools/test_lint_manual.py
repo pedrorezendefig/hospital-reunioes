@@ -290,3 +290,70 @@ def test_jargao_dentro_do_alternativo_continua_travando(tmp_path):
     erros, _ = lint_manual.checar(tmp_path / "src" / "content" / "docs")
     assert len(erros) == 1
     assert "endpoint" in erros[0]
+
+
+# Cacoetes regexáveis de texto gerado (ADR 0071, decisão 1). A lista mora em
+# tools/tells_texto.py; aqui só se prova que o lint do Manual a chama.
+CONTRASTE = "A ata não é um resumo, é a memória da reunião."
+CORRIGIDA = "A ata guarda o que a reunião decidiu."
+
+
+def pagina_com(frase: str) -> str:
+    return PAGINA_VALIDA.replace("pelo telefone.", f"pelo telefone. {frase}")
+
+
+def test_contraste_nao_e_x_e_y_reprova_a_pagina(tmp_path):
+    escrever(tmp_path, "ouvidoria/registrar-manifestacao.md", pagina_com(CONTRASTE))
+    erros, _ = lint_manual.checar(tmp_path / "src" / "content" / "docs")
+    assert len(erros) == 1
+    assert "registrar-manifestacao.md" in erros[0]
+    assert '(nao-e-x-e-y): "não é um resumo, é"' in erros[0]
+
+
+def test_a_mesma_pagina_corrigida_passa(tmp_path):
+    escrever(tmp_path, "ouvidoria/registrar-manifestacao.md", pagina_com(CORRIGIDA))
+    erros, _ = lint_manual.checar(tmp_path / "src" / "content" / "docs")
+    assert erros == []
+
+
+def test_contraste_pela_linha_de_comando_sai_com_codigo_1(tmp_path):
+    escrever(tmp_path, "ouvidoria/registrar-manifestacao.md", pagina_com(CONTRASTE))
+    resultado = rodar(tmp_path / "src" / "content" / "docs")
+    assert resultado.returncode == 1
+    assert "(nao-e-x-e-y)" in resultado.stderr
+
+
+def test_cacoete_conhecido_passa_e_avisa_quando_sai(tmp_path):
+    """A lista de conhecidos segura o que já estava no ar até a reescrita."""
+    pasta = tmp_path / "src" / "content" / "docs"
+    conhecidos = {"ouvidoria/registrar-manifestacao.md": ["não é um resumo, é"]}
+    escrever(tmp_path, "ouvidoria/registrar-manifestacao.md", pagina_com(CONTRASTE))
+    erros, avisos = lint_manual.checar(pasta, conhecidos)
+    assert erros == []
+    assert avisos == []
+
+    escrever(tmp_path, "ouvidoria/registrar-manifestacao.md", pagina_com(CORRIGIDA))
+    erros, avisos = lint_manual.checar(pasta, conhecidos)
+    assert erros == []
+    assert len(avisos) == 1
+    assert 'cacoete conhecido "não é um resumo, é" já saiu' in avisos[0]
+
+
+def test_conhecido_de_outra_pagina_nao_segura(tmp_path):
+    pasta = tmp_path / "src" / "content" / "docs"
+    conhecidos = {"ouvidoria/outra-pagina.md": ["não é um resumo, é"]}
+    escrever(tmp_path, "ouvidoria/registrar-manifestacao.md", pagina_com(CONTRASTE))
+    erros, _ = lint_manual.checar(pasta, conhecidos)
+    assert len(erros) == 1
+
+
+def test_os_conhecidos_do_manual_atual_seguram_o_que_esta_no_ar():
+    """O Manual de hoje passa com a lista; a reescrita por módulo a esvazia."""
+    raiz = Path(__file__).resolve().parent.parent
+    resultado = subprocess.run(
+        [sys.executable, str(LINT), "--dir", "docs/manual/src/content/docs"],
+        cwd=raiz,
+        capture_output=True,
+        text=True,
+    )
+    assert resultado.returncode == 0, resultado.stderr

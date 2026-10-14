@@ -1,0 +1,37 @@
+{
+  "sobre": "Casos dos cacoetes regexáveis de texto gerado (ADR 0071, decisão 1). Um arquivo só, lido pelo tools/test_tells_texto.py (lint do Manual) e pelo hospital-reunioes/frontend/eslint-rules/tells.test.mjs (ESLint do front): os dois lints têm de concordar em cada caso. 'tells' é a lista esperada de cacoetes; vazia quer dizer texto limpo. Contraste em que as duas metades informam é negativo.",
+  "casos": [
+    {"texto": "A ata não é um resumo, é a memória da reunião.", "tells": ["nao-e-x-e-y"]},
+    {"texto": "Isso não é um detalhe. É o que garante a assinatura.", "tells": ["nao-e-x-e-y"]},
+    {"texto": "Os POPs não são documentos soltos, são o padrão do hospital.", "tells": ["nao-e-x-e-y"]},
+    {"texto": "A ata não é opcional, mas sim parte da reunião.", "tells": ["nao-e-x-e-y"]},
+    {"texto": "NÃO É UM RESUMO, É A MEMÓRIA DA REUNIÃO.", "tells": ["nao-e-x-e-y"]},
+    {"texto": "A tela não só mostra as pendências, mas também avisa quem atrasou.", "tells": ["nao-so-x-mas-y"]},
+    {"texto": "O relatório serve não apenas para a diretoria como para toda a equipe.", "tells": ["nao-so-x-mas-y"]},
+    {"texto": "Não somente o facilitador, mas qualquer participante pode assinar.", "tells": ["nao-so-x-mas-y"]},
+    {"texto": "Arquivar não apaga: guarda a reunião fora da lista.", "tells": ["nao-x-dois-pontos-y"]},
+    {"texto": "Não é um erro: é a regra do módulo.", "tells": ["nao-x-dois-pontos-y"]},
+    {"texto": "Mais do que um registro, a ata é a memória da reunião.", "tells": ["mais-do-que-x-y"]},
+    {"texto": "Clique em Salvar. Mais que uma lista, o painel mostra quem precisa agir.", "tells": ["mais-do-que-x-y"]},
+    {"texto": "Não se trata de cobrar, e sim de lembrar o prazo.", "tells": ["nao-se-trata-de"]},
+    {"texto": "O lembrete não se trata de uma cobrança.", "tells": ["nao-se-trata-de"]},
+    {"texto": "## Quando usar\n\nQuando alguém traz uma reclamação pelo telefone.\n\nSimples assim.\n\n## Passo a passo\n\nClique em Nova manifestação e escolha o canal.\n\nSimples assim.\n", "tells": ["fecho-repetido"]},
+    {"texto": "## Enviar a ata\n\nClique em Enviar e confirme os participantes.\n\nPronto, a ata foi enviada.\n\n## Encerrar o caso\n\nAbra o caso e clique em Encerrar.\n\nPronto, o caso foi encerrado.\n", "tells": ["fecho-repetido"]},
+
+    {"texto": "A ata não é enviada sozinha; o facilitador envia pela tela.", "tells": []},
+    {"texto": "Se a reunião não tem pauta, o botão de gerar a ata fica cinza.", "tells": []},
+    {"texto": "Não encontrou o botão? Peça acesso ao gestor do módulo.", "tells": []},
+    {"texto": "O exame custa mais do que o previsto, então avise o setor.", "tells": []},
+    {"texto": "Ele não é gestor do módulo, então vê só as próprias pendências.", "tells": []},
+    {"texto": "Não, é só clicar em Salvar.", "tells": []},
+    {"texto": "O perfil Leitor não apenas consulta.", "tells": []},
+    {"texto": "Clique em Salvar. A reunião aparece na lista.", "tells": []},
+    {"texto": "Não foi possível carregar o Painel: a conexão caiu.", "tells": []},
+    {"texto": "O arquivo não pôde ser lido: tente enviar de novo.", "tells": []},
+    {"texto": "## Quando usar\n\nQuando alguém liga para reclamar.\n\n## Passo a passo\n\nClique em Nova manifestação.\n", "tells": []},
+    {"texto": "## Enviar a ata\n\nClique em Enviar.\n\nPronto, a ata foi enviada.\n\n## Encerrar o caso\n\nAbra o caso.\n\nO caso sai da lista de abertos.\n", "tells": []},
+    {"texto": "## 12/10/2026\n\nA lista de casos ganhou o filtro por setor.\n\nTarefas que mudaram: [Ler a lista](ler.md)\n\n## 05/10/2026\n\nO cartaz do setor saiu com o QR maior.\n\nTarefas que mudaram: [Imprimir o cartaz](cartaz.md)\n", "tells": []},
+    {"texto": "## Filtro\n\nA lista ganhou o filtro por setor.\n\nEstá em [Ler a lista](ler.md).\n\n## Cartaz\n\nO QR do cartaz ficou maior.\n\nEstá em [Imprimir o cartaz](cartaz.md).\n", "tells": []},
+    {"texto": "## Lista\n\nA lista mostra as reuniões.\n\n![Tela da lista](lista.png)\n\n## Detalhe\n\nO detalhe mostra a pauta.\n\n![Tela da lista com o detalhe](detalhe.png)\n", "tells": []}
+  ]
+}
