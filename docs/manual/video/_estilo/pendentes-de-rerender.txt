@@ -1,0 +1,67 @@
+# Vídeos de tarefa feitos antes do Estilo do manual (emenda de 13/10/2026 à
+# ADR 0057, issue #1230). O tools/checar_video_manual.py deixa estes fora dos
+# gates novos (VERIFY.md, cor e fonte pelos tokens, timeline do tamanho do
+# slot). A lista só encolhe: quem refaz um vídeo no estilo apaga a linha dele
+# no mesmo PR. Vídeo novo nunca entra aqui.
+
+admin/cadastrar-um-cargo
+admin/cadastrar-um-setor
+admin/cadastrar-um-tipo-de-reuniao
+admin/cadastrar-uma-pessoa
+admin/consultar-o-espelho-da-global-health
+admin/dar-acesso-aos-pops-e-a-ouvidoria
+admin/entregar-o-acesso-a-uma-pessoa
+admin/manter-os-dados-do-atendimento
+admin/mudar-o-perfil-de-acesso
+admin/resolver-um-participante-externo
+admin/tirar-o-acesso-de-quem-saiu
+contas-medicas/corrigir-uma-conta-pelo-guia
+contas-medicas/decidir-na-validacao
+contas-medicas/ler-o-painel
+contas-medicas/reenviar-a-conta-corrigida
+ouvidoria/ajustar-a-tabela-de-prazos-e-os-feriados
+ouvidoria/arquivar-um-caso-encerrado
+ouvidoria/cadastrar-responsaveis-de-setor
+ouvidoria/cap-1
+ouvidoria/cap-2
+ouvidoria/cap-3
+ouvidoria/cap-4
+ouvidoria/cap-5
+ouvidoria/cap-6
+ouvidoria/cap-7
+ouvidoria/cobrar-o-setor-que-nao-respondeu
+ouvidoria/devolver-um-caso-que-nao-e-do-seu-setor
+ouvidoria/devolver-uma-resposta-fraca-ao-setor
+ouvidoria/imprimir-o-cartaz-com-o-qr-do-setor
+ouvidoria/lancar-a-nota-do-google-e-do-reclame-aqui
+ouvidoria/pausar-o-caso-quando-falta-informacao
+ouvidoria/pedir-mais-prazo-pelo-portal-do-setor
+ouvidoria/reabrir-um-caso-por-reincidencia
+ouvidoria/redirecionar-o-caso-para-outra-area
+ouvidoria/registrar-manifestacao-pelo-formulario
+pops/anexar-o-material-de-referencia
+pops/assinar-o-pop
+pops/consultar-a-biblioteca
+pops/criar-um-pop
+pops/dar-acesso-a-gestao-de-pops
+pops/elaborar-o-pop-com-o-consultor-de-pops
+pops/gerir-os-setores-de-pop
+pops/revisar-o-pop
+pops/validar-o-pop
+pops/ver-o-fluxograma-do-pop
+primeiros-passos/entrar-na-plataforma
+primeiros-passos/escolher-os-avisos-que-voce-recebe
+primeiros-passos/redefinir-a-senha-esquecida
+primeiros-passos/trocar-a-sua-senha
+primeiros-passos/ver-o-seu-perfil
+reunioes/aceitar-a-ata-pelo-link
+reunioes/acompanhar-as-pendencias-na-lista
+reunioes/acompanhar-o-dashboard
+reunioes/anexar-a-transcricao-da-reuniao
+reunioes/comentar-e-mencionar-numa-pendencia
+reunioes/enviar-a-ata-para-assinatura
+reunioes/marcar-a-reuniao-de-um-facilitador
+reunioes/marcar-uma-reuniao-no-calendario
+reunioes/montar-a-ata-conversando
+reunioes/mover-as-pendencias-no-kanban
+reunioes/revisar-e-aprovar-a-ata
