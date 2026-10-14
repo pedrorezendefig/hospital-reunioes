@@ -46,6 +46,11 @@ gates de cor, fonte e timeline valem para os cards de `_estilo/cards/`.
 legenda de passo na tela. Réplica do app real, com as cores e a fonte do
 `tokens.css`. Na dúvida entre bonito e fiel, fiel vence.
 
+Do kit vem a disciplina, não a cara: push-in no elemento do passo, câmera que
+nunca para, transição com rastro entre telas, legenda que troca sem pop,
+abertura e carimbo de 3 a 5 s e timeline que preenche o slot. Nada de canvas
+preto, tipo cromado ou cena de 1,5 s: o vídeo tem que parecer o app.
+
 Roteiro fixo:
 
 1. **Abertura (3 a 5 s):** card `abertura`, com o título da tarefa no
