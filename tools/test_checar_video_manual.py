@@ -1,10 +1,11 @@
-"""Testes do conferidor do Vídeo de tarefa (tools/checar_video_manual.py).
+"""Testes do conferidor do vídeo do Manual (tools/checar_video_manual.py).
 
-Cada teste monta um manual mínimo num diretório temporário: uma Página de
-tarefa que declara `video` e a composição correspondente. O conferidor prova o
+Cada teste monta um manual mínimo num diretório temporário: a abertura de um
+módulo que declara `video` e a composição correspondente. O conferidor prova o
 que o ADR 0057 (decisão 3) promete e a issue #736 cobra: todo vídeo que uma
 página exibe tem composição versionada com carimbo de geração, e o MP4, que é
-regerável, não mora na árvore versionada.
+regerável, não mora na árvore versionada. Desde a issue #1260 o vídeo é o de
+visão geral, um por módulo, na abertura: Página de tarefa não exibe vídeo.
 """
 
 from __future__ import annotations
@@ -21,11 +22,20 @@ import checar_video_manual  # noqa: E402
 CONFERIDOR = Path(__file__).resolve().parent / "checar_video_manual.py"
 
 PAGINA_COM_VIDEO = """---
+title: Ouvidoria
+prd: [731]
+draft: true
+video: visao-geral
+---
+
+A Ouvidoria recebe a manifestação e a leva até o setor.
+"""
+
+TAREFA = """---
 title: Registrar uma manifestação pelo formulário
 prd: [731]
 draft: true
 papel: [Sem login]
-video: registrar-manifestacao-pelo-formulario
 ---
 
 Escreva o seu relato e clique em **Enviar manifestação**.
@@ -33,8 +43,8 @@ Escreva o seu relato e clique em **Enviar manifestação**.
 
 CARIMBO = {
     "modulo": "ouvidoria",
-    "slug": "registrar-manifestacao-pelo-formulario",
-    "pagina": "ouvidoria/registrar-manifestacao-pelo-formulario.md",
+    "slug": "visao-geral",
+    "pagina": "ouvidoria/index.md",
     "app_version": "0.136.0",
     "gerado_em": "2026-09-16T10:00:00-03:00",
 }
@@ -82,10 +92,11 @@ def montar(
 ) -> Path:
     conteudo = raiz / "src" / "content" / "docs" / "ouvidoria"
     conteudo.mkdir(parents=True)
+    (conteudo / "index.md").write_text(PAGINA_COM_VIDEO, encoding="utf-8")
     (conteudo / "registrar-manifestacao-pelo-formulario.md").write_text(
-        PAGINA_COM_VIDEO, encoding="utf-8"
+        TAREFA, encoding="utf-8"
     )
-    pasta = raiz / "video" / "ouvidoria" / "registrar-manifestacao-pelo-formulario"
+    pasta = raiz / "video" / "ouvidoria" / "visao-geral"
     if com_composicao:
         pasta.mkdir(parents=True)
         (pasta / "index.html").write_text(composicao(carimbo, corpo), encoding="utf-8")
@@ -95,20 +106,21 @@ def montar(
             )
     if mp4_versionado:
         pasta.mkdir(parents=True, exist_ok=True)
-        (pasta / "registrar-manifestacao-pelo-formulario.mp4").write_bytes(b"x")
+        (pasta / "visao-geral.mp4").write_bytes(b"x")
     return pasta
 
 
-def test_pagina_com_composicao_e_carimbo_passa(tmp_path):
+def test_abertura_com_composicao_e_carimbo_passa(tmp_path):
     montar(tmp_path)
     assert checar_video_manual.checar(tmp_path) == []
 
 
-def test_pagina_que_exibe_video_sem_composicao_trava(tmp_path):
+def test_abertura_com_video_sem_composicao_trava(tmp_path):
     montar(tmp_path, com_composicao=False)
     problemas = checar_video_manual.checar(tmp_path)
     assert len(problemas) == 1
     assert "não tem composição" in problemas[0]
+    assert "video/ouvidoria/visao-geral/index.html" in problemas[0]
 
 
 def test_composicao_sem_carimbo_de_geracao_trava(tmp_path):
@@ -165,7 +177,7 @@ def test_mp4_renderizado_em_public_video_passa(tmp_path):
     montar(tmp_path)
     rendido = tmp_path / "public" / "video" / "ouvidoria"
     rendido.mkdir(parents=True)
-    (rendido / "registrar-manifestacao-pelo-formulario.mp4").write_bytes(b"x")
+    (rendido / "visao-geral.mp4").write_bytes(b"x")
     assert checar_video_manual.checar(tmp_path) == []
 
 
@@ -176,7 +188,7 @@ def test_mp4_em_renders_passa(tmp_path):
         tmp_path
         / "video"
         / "ouvidoria"
-        / "registrar-manifestacao-pelo-formulario"
+        / "visao-geral"
         / "renders"
     )
     sobra.mkdir(parents=True)
@@ -195,10 +207,28 @@ def test_composicao_que_pagina_nenhuma_exibe_trava(tmp_path):
     assert "consultar-protocolo" in problemas[0]
 
 
-def test_pagina_sem_video_passa(tmp_path):
-    """Frontmatter sem `video` é o aviso "vídeo em produção", não um erro."""
+def test_abertura_sem_video_passa(tmp_path):
+    """Módulo ainda sem Vídeo de visão geral publica sem ele (o Admin nem tem)."""
     montar(tmp_path, com_composicao=False)
-    pagina = (
+    abertura = tmp_path / "src" / "content" / "docs" / "ouvidoria" / "index.md"
+    abertura.write_text(
+        PAGINA_COM_VIDEO.replace("video: visao-geral\n", ""), encoding="utf-8"
+    )
+    assert checar_video_manual.checar(tmp_path) == []
+
+
+def test_pagina_de_tarefa_sem_video_nao_e_acusada(tmp_path):
+    """O Vídeo de tarefa saiu do Manual: a tarefa sem vídeo é o normal."""
+    montar(tmp_path)
+    problemas = checar_video_manual.checar(tmp_path)
+    assert not any("registrar-manifestacao-pelo-formulario" in p for p in problemas)
+    assert problemas == []
+
+
+def test_pagina_de_tarefa_com_video_trava(tmp_path):
+    """O tema só desenha vídeo na abertura: o campo na tarefa sumiria calado."""
+    montar(tmp_path)
+    tarefa = (
         tmp_path
         / "src"
         / "content"
@@ -206,11 +236,65 @@ def test_pagina_sem_video_passa(tmp_path):
         / "ouvidoria"
         / "registrar-manifestacao-pelo-formulario.md"
     )
-    pagina.write_text(
-        PAGINA_COM_VIDEO.replace("video: registrar-manifestacao-pelo-formulario\n", ""),
-        encoding="utf-8",
+    tarefa.write_text(
+        TAREFA.replace("papel:", "video: registrar\npapel:"), encoding="utf-8"
     )
+    problemas = checar_video_manual.checar(tmp_path)
+    assert len(problemas) == 1
+    assert "registrar-manifestacao-pelo-formulario.md" in problemas[0]
+    assert "abertura" in problemas[0]
+
+
+HOME = """---
+title: Manual da plataforma
+template: splash
+video: conheca-a-plataforma
+---
+"""
+
+ABERTURA_PP = """---
+title: Primeiros passos
+video: conheca-a-plataforma
+---
+"""
+
+CARIMBO_PP = {
+    **CARIMBO,
+    "modulo": "primeiros-passos",
+    "slug": "conheca-a-plataforma",
+    "pagina": "primeiros-passos/index.md",
+}
+
+
+def montar_conheca_a_plataforma(raiz: Path, *, com_composicao: bool = True) -> None:
+    """A página inicial e a abertura de Primeiros passos mostram o mesmo vídeo."""
+    montar(raiz)
+    conteudo = raiz / "src" / "content" / "docs"
+    (conteudo / "index.mdx").write_text(HOME, encoding="utf-8")
+    (conteudo / "primeiros-passos").mkdir()
+    (conteudo / "primeiros-passos" / "index.md").write_text(
+        ABERTURA_PP, encoding="utf-8"
+    )
+    if com_composicao:
+        pasta = raiz / "video" / "primeiros-passos" / "conheca-a-plataforma"
+        pasta.mkdir(parents=True)
+        (pasta / "index.html").write_text(composicao(CARIMBO_PP), encoding="utf-8")
+        (pasta / "VERIFY.md").write_text("# VERIFY\n", encoding="utf-8")
+
+
+def test_pagina_inicial_usa_o_video_de_primeiros_passos(tmp_path):
+    montar_conheca_a_plataforma(tmp_path)
     assert checar_video_manual.checar(tmp_path) == []
+
+
+def test_pagina_inicial_com_video_sem_composicao_trava(tmp_path):
+    montar(tmp_path)
+    (tmp_path / "src" / "content" / "docs" / "index.mdx").write_text(
+        HOME, encoding="utf-8"
+    )
+    problemas = checar_video_manual.checar(tmp_path)
+    assert len(problemas) == 1
+    assert "video/primeiros-passos/conheca-a-plataforma/index.html" in problemas[0]
 
 
 def rodar(raiz: Path) -> subprocess.CompletedProcess[str]:
@@ -226,7 +310,7 @@ def test_video_sem_composicao_sai_com_codigo_1(tmp_path):
     montar(tmp_path, com_composicao=False)
     resultado = rodar(tmp_path)
     assert resultado.returncode == 1
-    assert "Conferidor do Vídeo de tarefa falhou" in resultado.stderr
+    assert "Conferidor do vídeo do Manual falhou" in resultado.stderr
 
 
 def test_manual_em_ordem_sai_com_codigo_0(tmp_path):
@@ -365,7 +449,7 @@ def test_card_com_hex_dentro_da_composicao_do_video_trava(tmp_path):
         tmp_path
         / "video"
         / "ouvidoria"
-        / "registrar-manifestacao-pelo-formulario"
+        / "visao-geral"
         / "compositions"
         / "legenda-de-passo.html"
     )
@@ -389,7 +473,7 @@ def test_composicao_pendente_de_rerender_fica_fora_dos_gates_novos(tmp_path):
     estilo = tmp_path / "video" / "_estilo"
     estilo.mkdir()
     (estilo / "pendentes-de-rerender.txt").write_text(
-        "# vídeos de antes do Estilo do manual\nouvidoria/registrar-manifestacao-pelo-formulario\n",
+        "# vídeos de antes do Estilo do manual\nouvidoria/visao-geral\n",
         encoding="utf-8",
     )
     assert checar_video_manual.checar(tmp_path) == []
@@ -437,7 +521,7 @@ def test_card_do_estilo_com_hex_trava(tmp_path):
 # do HyperFrames acusa só a sobreposição de texto, sem dizer de onde ela vem.
 def montar_com_estilo_na_raiz(tmp_path: Path, estilo: str) -> None:
     montar_com_card(tmp_path, 60)
-    pasta = tmp_path / "video" / "ouvidoria" / "registrar-manifestacao-pelo-formulario"
+    pasta = tmp_path / "video" / "ouvidoria" / "visao-geral"
     raiz = pasta / "index.html"
     raiz.write_text(
         raiz.read_text(encoding="utf-8").replace(

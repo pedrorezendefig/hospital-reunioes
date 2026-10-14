@@ -1,5 +1,12 @@
 #!/usr/bin/env python3
-"""Confere os Vídeos de tarefa do Manual: fonte versionada, MP4 fora do git.
+"""Confere o vídeo do Manual: fonte versionada, MP4 fora do git.
+
+Desde a issue #1260 (emenda de 14/10/2026 à ADR 0057) o vídeo do Manual é o
+Vídeo de visão geral, um por módulo, na abertura do módulo
+(`<modulo>/index.md`). A página inicial mostra o de Primeiros passos, então a
+composição dela mora em `video/primeiros-passos/`. Página de tarefa não exibe
+vídeo: o campo `video` fora da abertura é recusado, porque o tema não o
+desenha e ele sumiria calado.
 
 Desde a emenda de 13/10/2026 à ADR 0057 (issue #1230), confere também o
 Estilo do manual em toda composição que não está na lista de pendentes de
@@ -197,10 +204,29 @@ def _pendentes(raiz: Path) -> set[tuple[str, str]]:
     }
 
 
+# A página inicial não é de módulo nenhum e mostra o vídeo de Primeiros passos.
+MODULO_DA_PAGINA_INICIAL = "primeiros-passos"
+
+
+def modulo_da_abertura(relativo: Path) -> str | None:
+    """O módulo cuja abertura é esta página, ou None se ela não é abertura.
+
+    Também usado pelo tools/tirar_draft_manual.py para achar o MP4.
+    """
+    if relativo.stem != "index":
+        return None
+    if len(relativo.parts) == 1:
+        return MODULO_DA_PAGINA_INICIAL
+    if len(relativo.parts) == 2:
+        return relativo.parts[0]
+    return None
+
+
 def checar(raiz: Path) -> list[str]:
     conteudo = raiz / "src" / "content" / "docs"
     problemas: list[str] = []
-    exibidas: set[tuple[str, str]] = set()
+    # (modulo, slug) -> as páginas que exibem o vídeo
+    exibidas: dict[tuple[str, str], list[str]] = {}
     pendentes = _pendentes(raiz)
 
     for arquivo in sorted(conteudo.rglob("*.md*")):
@@ -210,14 +236,25 @@ def checar(raiz: Path) -> list[str]:
         slug = ler_frontmatter(arquivo.read_text(encoding="utf-8")).get("video", "")
         if not slug:
             continue
-        modulo = relativo.parts[0]
-        exibidas.add((modulo, slug))
+        modulo = modulo_da_abertura(relativo)
+        if modulo is None:
+            problemas.append(
+                f"{relativo}: declara o vídeo '{slug}' e não é a abertura de um "
+                "módulo. O Manual tem um Vídeo de visão geral por módulo, na "
+                "abertura (<modulo>/index.md); Página de tarefa não exibe vídeo "
+                "(emenda de 14/10/2026 à ADR 0057). Tire o campo `video`."
+            )
+            continue
+        exibidas.setdefault((modulo, slug), []).append(str(relativo))
+
+    for (modulo, slug), paginas in sorted(exibidas.items()):
         composicao = raiz / "video" / modulo / slug / "index.html"
         if not composicao.is_file():
             problemas.append(
-                f"{relativo}: exibe o vídeo '{slug}' e não tem composição em "
-                f"video/{modulo}/{slug}/index.html. O MP4 fica fora do git: "
-                "sem a composição, ninguém regera o vídeo (ADR 0057, decisão 3)."
+                f"{', '.join(paginas)}: exibe o vídeo '{slug}' e não tem "
+                f"composição em video/{modulo}/{slug}/index.html. O MP4 fica "
+                "fora do git: sem a composição, ninguém regera o vídeo (ADR "
+                "0057, decisão 3)."
             )
             continue
 
@@ -234,18 +271,24 @@ def checar(raiz: Path) -> list[str]:
         # Compor um vídeo novo começa copiando a pasta de um pronto, e o carimbo
         # vem colado junto. Preenchido com os dados do vídeo antigo, ele passa
         # por completo e mente sobre que tela o vídeo retrata.
-        esperado = {"modulo": modulo, "slug": slug, "pagina": str(relativo)}
+        # A página inicial divide o vídeo com a abertura de Primeiros passos: o
+        # carimbo aponta uma das duas.
+        esperado = {"modulo": modulo, "slug": slug}
         divergentes = [
             f"{campo}: '{carimbo[campo]}' no lugar de '{valor}'"
             for campo, valor in esperado.items()
             if carimbo.get(campo) and carimbo[campo] != valor
         ]
+        if carimbo.get("pagina") and carimbo["pagina"] not in paginas:
+            divergentes.append(
+                f"pagina: '{carimbo['pagina']}' no lugar de '{' ou '.join(paginas)}'"
+            )
         if divergentes:
             problemas.append(
                 f"video/{modulo}/{slug}/index.html: carimbo de outra página "
                 f"({'; '.join(divergentes)}). Copiar a pasta de uma composição "
                 "pronta traz o carimbo do vídeo antigo: troque os campos pelos "
-                "desta tarefa (ADR 0057, decisão 3)."
+                "deste vídeo (ADR 0057, decisão 3)."
             )
 
         if (modulo, slug) in pendentes:
@@ -272,7 +315,7 @@ def checar(raiz: Path) -> list[str]:
         if (pasta.parent.name, pasta.name) not in exibidas:
             problemas.append(
                 f"video/{pasta.parent.name}/{pasta.name}: composição que página "
-                "nenhuma exibe. Aponte uma Página de tarefa para ela pelo campo "
+                "nenhuma exibe. Aponte a abertura do módulo para ela pelo campo "
                 "`video` do frontmatter, ou apague a pasta."
             )
 
@@ -299,12 +342,12 @@ def main() -> int:
     problemas = checar(raiz)
     if problemas:
         print(
-            "Conferidor do Vídeo de tarefa falhou:\n"
+            "Conferidor do vídeo do Manual falhou:\n"
             + "\n".join(f"  - {p}" for p in problemas),
             file=sys.stderr,
         )
         return 1
-    print("Vídeos de tarefa OK.")
+    print("Vídeos do Manual OK.")
     return 0
 
 
