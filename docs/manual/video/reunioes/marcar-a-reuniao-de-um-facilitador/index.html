@@ -170,14 +170,14 @@ const ic = (nome, s, traco) => `<svg width="${s}" height="${s}" viewBox="0 0 24 
 
 /* A casca do app (barra lateral e topo), igual à Sidebar.tsx e ao Header.tsx. */
 function casca(ativo, quem, pre = "") {
-  const f = (on) => (on ? 2 : 1.5), pend = ativo === "lista" || ativo === "kanban", grupo = pend || ativo === "dashboard" || ativo === "calendario";
+  const f = (on) => (on ? 2 : 1.5), pend = ativo === "lista" || ativo === "kanban", ab = pend || quem.aberto, grupo = pend || ativo === "dashboard" || ativo === "calendario";
   const sub = (k, icone, rot) => `<div class="mi${ativo === k ? " folha-on" : ""}" id="${pre}mi-${k}">${ic(icone, 16, f(ativo === k))}${rot}</div>`;
   const raiz = (on, icone, rot, id) => `<div class="mi${on ? " on" : ""}" id="${pre}mi-${id}">${ic(icone, 18, f(on))}${rot}</div>`;
   const menu = quem.sec
     ? raiz(ativo === "inicio" || ativo === "nova", "casa", "Início", "inicio") + raiz(ativo === "nova", "calmais", "Nova reunião", "nova") + raiz(ativo === "cal-sec", "calendario", "Calendário", "calendario")
     : `<div class="mi${grupo ? " grupo-on" : ""}">${ic("alvo", 18, f(grupo))}Reuniões e metas<span class="fim">${ic("baixo", 16)}</span></div>
-    <div class="sub">${sub("dashboard", "painel", "Dashboard")}${sub("calendario", "calendario", "Calendário")}<div class="mi${pend ? " grupo-on" : ""}" id="${pre}mi-pendencias">${ic("relogio", 16, f(pend))}Pendências<span class="fim">${ic(pend ? "baixo" : "direita", 16)}</span></div>
-    ${pend ? `<div class="sub" style="margin-top:0">${sub("lista", "lista", "Lista")}${sub("kanban", "kanban", "Kanban")}</div>` : ""}</div>`;
+    <div class="sub">${sub("dashboard", "painel", "Dashboard")}${sub("calendario", "calendario", "Calendário")}<div class="mi${pend ? " grupo-on" : ""}" id="${pre}mi-pendencias">${ic("relogio", 16, f(pend))}Pendências<span class="fim">${ic(ab ? "baixo" : "direita", 16)}</span></div>
+    ${ab ? `<div class="sub" style="margin-top:0">${sub("lista", "lista", "Lista")}${sub("kanban", "kanban", "Kanban")}</div>` : ""}</div>`;
   return `<div class="lado"><div class="marca"><img src="assets/logo-hsm.png" alt="Hospital São Matheus" /></div><nav>${menu}
     <div class="mi">${ic("megafone", 18, 1.5)}Ouvidoria<span class="selo">5</span></div><div class="mi">${ic("escudo", 18, 1.5)}Admin</div><div class="mi" style="margin-top:8px">${ic("ajuda", 18, 1.5)}Ajuda</div></nav></div>
   <div class="topo"><div class="busca">${ic("lupa", 16)}Buscar...</div><div class="quem"><div class="sino" id="${pre}sino">${ic("sino", 22, 1.75)}${quem.sino ? `<span class="n" id="${pre}sino-n">${quem.sino}</span>` : ""}</div><div class="divisor"></div>
@@ -186,7 +186,7 @@ function casca(ativo, quem, pre = "") {
 const RENATA = { nome: "Renata Fontes", email: "renata.fontes@exemplo.l..." };
 const BEATRIZ = { nome: "Beatriz Nunes", email: "beatriz.nunes@exemplo.l...", sec: true };
 /* O menu depois da navegação, por cima do de antes; a troca é de opacidade. */
-const casca2 = (ativo, quem) => `<div class="casca2" id="casca2">${casca(ativo, quem, "b-")}</div>`;
+const casca2 = (ativo, quem, pre = "b-", id = "casca2") => `<div class="casca2" id="${id}">${casca(ativo, quem, pre)}</div>`;
 
 /* Início da Secretaria: as reuniões que ainda vão acontecer. */
 const reuniaoSec = (tit, obj, data, hora, fac, id) => `<article class="se-r"${id ? ` id="${id}"` : ""}><div><h2>${tit}</h2><p>${obj}</p><div class="se-info"><span>${ic("calendario", 14)}${data}</span><span>${ic("relogio", 14)}${hora}</span><span>${ic("pessoas", 14)}Facilitador: ${fac}</span><span>${ic("pessoac", 14)}Marcada por: Você</span></div></div><div class="se-acoes"><span>${ic("caneta", 16)}</span><span>${ic("lixo", 16)}</span></div></article>`;
