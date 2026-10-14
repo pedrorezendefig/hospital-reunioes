@@ -1,0 +1,575 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=1920, height=1080" />
+<title>Manual · POPs · Conheça os POPs</title>
+<link rel="stylesheet" href="tokens.css" />
+<script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js" integrity="sha384-sG0Hv1tP1lZCk9KQmrIbY/XNwi+OY84GQqhMscbnsoBFqAz8KNCil1kvfL3Hbbk2" crossorigin="anonymous"></script>
+<script type="application/json" id="manual-video-meta">
+{
+ "modulo": "pops",
+ "slug": "conheca-os-pops",
+ "pagina": "pops/index.md",
+ "prd": [76, 1259],
+ "issues": [1264],
+ "app_version": "0.196.1",
+ "gerado_em": "2026-10-14T07:00:00-03:00"
+}
+</script>
+<style>
+  /* Estilo do manual (emenda de 13/10/2026 à ADR 0057): cor e fonte só pelos
+     tokens. Na réplica, cada cor é a da classe do app, pelo token de mesmo
+     nome (text-slate-500 vira var(--color-slate-500)). O app usa 17 px como
+     tamanho de base (globals.css), e a réplica mede em rem como o Tailwind. */
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { font-size: 17px; }
+  html, body { width: 1920px; height: 1080px; overflow: hidden; background: var(--video-palco); }
+  body { font-family: var(--font-app); color: var(--color-text); }
+  #main { position: relative; width: 1920px; height: 1080px; overflow: hidden; }
+  #slot-abertura, #slot-carimbo { z-index: 5; }
+  #c-tarefa { position: absolute; inset: 0; z-index: 1; }
+  .palco { position: absolute; inset: 0; background: var(--video-palco); }
+  #camera { position: absolute; left: 0; top: 0; width: 1920px; height: 1080px; transform-origin: 0 0; }
+  [id^="slot-passo"] { z-index: 3; }
+  [id^="slot-lugar"], #slot-aviso { z-index: 2; }
+
+  /* ===== a janela do navegador ===== */
+  .janela { position: absolute; left: 160px; top: 32px; width: 1600px; height: 848px; border-radius: var(--radius-3xl); background: var(--color-white); border: 1px solid var(--color-slate-300); box-shadow: var(--video-sombra); overflow: hidden; }
+  .barra-nav { position: absolute; left: 0; top: 0; width: 1600px; height: 44px; background: var(--color-slate-100); border-bottom: 1px solid var(--color-slate-200); display: flex; align-items: center; gap: 9px; padding: 0 18px; }
+  .barra-nav i { display: block; width: 12px; height: 12px; border-radius: 50%; background: var(--color-slate-300); }
+  .barra-nav .url { margin-left: 14px; width: 620px; height: 28px; border-radius: 14px; background: var(--color-white); border: 1px solid var(--color-slate-200); display: flex; align-items: center; padding: 0 16px; font-size: 16px; color: var(--color-slate-500); white-space: nowrap; }
+
+  /* ===== o app, desenhado em 1440 px (a largura dos prints do roteiro) e
+     ampliado para os 1600 px da janela ===== */
+  .vista { position: absolute; left: 0; top: 44px; width: 1600px; height: 804px; overflow: hidden; background: var(--color-bg); }
+  .app { position: absolute; left: 0; top: 0; width: 1440px; height: 723.6px; transform: scale(1.11111); transform-origin: 0 0; background: var(--color-bg); font-size: 1rem; line-height: 1.5; overflow: hidden; }
+  .lado { position: absolute; left: 0; top: 0; width: 16rem; height: 723.6px; border-right: 1px solid var(--color-border); background: var(--color-surface); }
+  .lado .marca { height: 8rem; border-bottom: 1px solid var(--color-border); display: flex; align-items: center; justify-content: center; }
+  .lado .marca img { width: 11rem; height: 6.2rem; object-fit: contain; }
+  .lado nav { padding: 1rem .75rem; display: flex; flex-direction: column; gap: .25rem; }
+  .mi { display: flex; align-items: center; gap: .75rem; padding: .625rem .75rem; border-radius: var(--radius-xl); font-size: .875rem; line-height: 1.25rem; font-weight: 500; color: var(--color-text-secondary); }
+  .mi .fim { margin-left: auto; opacity: .5; display: flex; }
+  .mi.on { background: color-mix(in srgb, var(--color-primary) 10%, transparent); color: var(--color-primary); border-left: 3px solid var(--color-primary); padding-left: .625rem; }
+  .sub { margin: .25rem 0 0 1rem; padding-left: .75rem; border-left: 2px solid color-mix(in srgb, var(--color-border) 50%, transparent); display: flex; flex-direction: column; gap: .25rem; }
+  .sub .mi { padding: .5rem .75rem; border-radius: var(--radius-lg); }
+  .topo { position: absolute; left: 16rem; top: 0; right: 0; height: 4rem; background: var(--color-slate-50); border-bottom: 1px solid var(--color-slate-200); display: flex; align-items: center; padding: 0 1.5rem; }
+  .busca { width: 16rem; height: 2.25rem; border-radius: var(--radius-xl); background: var(--color-bg); border: 1px solid var(--color-border); display: flex; align-items: center; gap: .6rem; padding: 0 .75rem; font-size: .875rem; color: color-mix(in srgb, var(--color-text-secondary) 40%, transparent); }
+  .quem { margin-left: auto; margin-right: 1.5rem; display: flex; align-items: center; gap: 1.5rem; }
+  .sino { color: var(--color-slate-500); display: flex; }
+  .divisor { width: 1px; height: 2rem; background: var(--color-border); }
+  .pessoa { display: flex; align-items: center; gap: .75rem; }
+  .pessoa .tx { text-align: right; line-height: 1.25rem; }
+  .pessoa .tx b { display: block; font-size: .875rem; font-weight: 600; color: var(--color-slate-700); }
+  .pessoa .tx span { font-size: .75rem; color: var(--color-slate-500); }
+  .avatar { position: relative; width: 2.5rem; height: 2.5rem; border-radius: 50%; background: var(--color-primary); color: var(--color-white); font-weight: 700; display: flex; align-items: center; justify-content: center; }
+  .avatar .seta { position: absolute; right: -2px; bottom: -2px; width: 1rem; height: 1rem; border-radius: 50%; background: var(--color-white); border: 1px solid var(--color-slate-100); color: var(--color-slate-400); display: flex; align-items: center; justify-content: center; }
+  .corpo { position: absolute; left: 16rem; top: 4rem; right: 0; bottom: 0; overflow: hidden; background: var(--color-bg); }
+  .rolo { position: absolute; left: 0; top: 0; width: 100%; padding: 2rem; }
+  .pg { display: flex; flex-direction: column; gap: 2rem; }
+  .rodape { border-top: 1px solid var(--color-border); padding: .75rem 1rem .75rem 0; text-align: right; font-size: .75rem; line-height: 1rem; color: var(--color-text-secondary); }
+  .ic-ac { padding: .375rem; border-radius: var(--radius-lg); color: var(--color-slate-500); display: inline-flex; }
+  .nova .cel { height: 0; overflow: hidden; padding: 0 1.25rem; }
+  .tabela .nova td { border-top-width: 0; }
+
+  /* ===== peças do app: cabeçalho de página, bloco, botão, tabela ===== */
+  .pg-cab { display: flex; align-items: center; gap: .75rem; }
+  .pg-ic { padding: .5rem; border-radius: var(--radius-xl); background: color-mix(in srgb, var(--color-primary) 10%, transparent); color: var(--color-primary); display: flex; }
+  .pg-cab h1 { font-size: 1.5rem; line-height: 2rem; font-weight: 700; color: var(--color-text); }
+  .pg-cab p { font-size: .875rem; line-height: 1.25rem; color: var(--color-text-secondary); }
+  .bl { display: flex; flex-direction: column; gap: 1rem; }
+  .bl-cab { display: flex; align-items: center; justify-content: space-between; }
+  .bl-cab .esq { display: flex; align-items: center; gap: .5rem; color: var(--color-primary); }
+  .bl-cab h2 { font-size: 1.125rem; line-height: 1.75rem; font-weight: 700; color: var(--color-text); }
+  .bl-cab p { font-size: .75rem; line-height: 1rem; color: var(--color-text-secondary); }
+  .bt-grad { display: inline-flex; align-items: center; gap: .5rem; padding: .5rem 1rem; border-radius: var(--radius-xl); background: linear-gradient(to right, var(--color-primary), var(--color-primary-light)); color: var(--color-white); font-size: .875rem; line-height: 1.25rem; font-weight: 600; box-shadow: 0 4px 6px -1px var(--color-shadow), 0 2px 4px -2px var(--color-shadow); white-space: nowrap; }
+  .bt-pri { display: inline-flex; align-items: center; gap: .5rem; padding: .5rem 1rem; border-radius: var(--radius-xl); background: var(--color-primary); color: var(--color-white); font-size: .875rem; line-height: 1.25rem; font-weight: 600; white-space: nowrap; }
+  .bt-leve { display: inline-flex; padding: .5rem 1rem; border-radius: var(--radius-xl); font-size: .875rem; line-height: 1.25rem; font-weight: 500; color: var(--color-text-secondary); }
+  .chip { padding: .375rem .75rem; border-radius: 999px; font-size: .75rem; line-height: 1rem; font-weight: 600; background: var(--color-slate-100); color: var(--color-slate-600); }
+  .chip.on { background: var(--color-primary); color: var(--color-white); }
+  .cartao-app { background: var(--color-white); border-radius: var(--radius-2xl); border: 1px solid var(--color-border); box-shadow: var(--shadow-premium); padding: 1.25rem; color: var(--color-primary); }
+  .cartao-app svg { display: block; margin-bottom: .5rem; }
+  .cartao-app h2 { font-size: 1rem; line-height: 1.5rem; font-weight: 600; color: var(--color-text); }
+  .cartao-app p { font-size: .875rem; line-height: 1.25rem; color: var(--color-text-secondary); margin-top: .25rem; }
+  .tabela { background: var(--color-white); border-radius: var(--radius-2xl); border: 1px solid var(--color-border); box-shadow: var(--shadow-premium); overflow: hidden; }
+  .tabela table { width: 100%; border-collapse: collapse; font-size: .875rem; line-height: 1.25rem; }
+  .tabela th { padding: .75rem 1.25rem; text-align: left; font-size: .75rem; line-height: 1rem; font-weight: 600; color: var(--color-slate-400); text-transform: uppercase; letter-spacing: .025em; background: var(--color-slate-50); border-bottom: 1px solid var(--color-slate-100); }
+  .tabela td { padding: .75rem 1.25rem; color: var(--color-slate-600); border-top: 1px solid var(--color-slate-50); vertical-align: middle; }
+  .tabela tr:first-child td { border-top: 0; }
+  .selo { display: inline-flex; padding: .125rem .5rem; border-radius: var(--radius-sm); font-size: .75rem; line-height: 1rem; font-weight: 600; }
+  .s-cod { white-space: nowrap; background: color-mix(in srgb, var(--color-primary) 10%, transparent); color: var(--color-primary); }
+  .s-red { background: var(--color-red-100); color: var(--color-red-700); }
+  .s-orange { background: var(--color-orange-100); color: var(--color-orange-700); }
+  .s-yellow { background: var(--color-yellow-100); color: var(--color-yellow-700); }
+  .s-slate { background: var(--color-slate-100); color: var(--color-slate-700); }
+  .s-blue { background: var(--color-blue-100); color: var(--color-blue-700); }
+  .s-amber { background: var(--color-amber-100); color: var(--color-amber-700); }
+  .s-purple { background: var(--color-purple-100); color: var(--color-purple-700); }
+  .s-indigo { background: var(--color-indigo-100); color: var(--color-indigo-700); }
+  .s-emerald { background: var(--color-emerald-100); color: var(--color-emerald-700); }
+  .acoes { display: flex; align-items: center; gap: .25rem; }
+  .ac { display: inline-flex; align-items: center; gap: .375rem; padding: .375rem .75rem; border-radius: var(--radius-lg); font-size: .75rem; line-height: 1rem; font-weight: 600; }
+  .ac.so { padding: .375rem .5rem; }
+  .ac-slate { background: var(--color-slate-100); color: var(--color-slate-600); }
+  .ac-pri { background: color-mix(in srgb, var(--color-primary) 10%, transparent); color: var(--color-primary); }
+  .ac-red { background: var(--color-red-50); color: var(--color-red-600); }
+
+  /* ===== janelas por cima do app ===== */
+  .sobre-app { position: absolute; left: 0; top: 0; width: 1440px; height: 723.6px; opacity: 0; }
+  .veu { position: absolute; inset: 0; background: color-mix(in srgb, var(--color-black) 40%, transparent); backdrop-filter: blur(2px); }
+  .md-centro { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; padding: 1rem; }
+  .md { position: relative; background: var(--color-white); border-radius: var(--radius-2xl); box-shadow: var(--shadow-premium-strong); padding: 1.5rem; display: flex; flex-direction: column; gap: 1rem; }
+  .md-topo { display: flex; align-items: center; justify-content: space-between; }
+  .md-topo h3 { font-size: 1.125rem; line-height: 1.75rem; font-weight: 700; color: var(--color-text); }
+  .md-topo p { font-size: .75rem; line-height: 1rem; color: var(--color-text-secondary); }
+  .md-topo .x { color: var(--color-slate-400); display: flex; padding: .25rem; }
+  .rot { display: block; font-size: .875rem; line-height: 1.25rem; font-weight: 500; color: var(--color-text); margin-bottom: .25rem; }
+  .cx { position: relative; width: 100%; padding: .5rem .75rem; font-size: .875rem; line-height: 1.25rem; border: 1px solid var(--color-slate-200); border-radius: var(--radius-lg); color: var(--color-text); background: var(--color-white); }
+  .cx-sel { min-height: 38px; display: flex; align-items: center; gap: .375rem; padding: .375rem .75rem; }
+  .cx-sel .ic-sel { margin-left: auto; color: var(--color-slate-400); display: flex; }
+  .cx .vazio { color: var(--color-slate-400); }
+  .cx .cheio { color: var(--color-slate-700); }
+  .cx .sobre { position: absolute; left: .75rem; top: 50%; transform: translateY(-50%); opacity: 0; }
+  .cx-foco { position: absolute; inset: -1px; border-radius: var(--radius-lg); border: 1px solid var(--color-primary); box-shadow: 0 0 0 1px var(--color-primary); opacity: 0; }
+  .cmp { position: relative; }
+  .g2 { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+  .g3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 1rem; }
+  .md-botoes { display: flex; justify-content: flex-end; gap: .5rem; padding-top: .5rem; }
+  .lista { position: absolute; z-index: 2; background: var(--color-white); border: 1px solid var(--color-slate-200); border-radius: var(--radius-xl); box-shadow: 0 10px 15px -3px var(--color-shadow), 0 4px 6px -4px var(--color-shadow); opacity: 0; overflow: hidden; }
+  .lista .op { display: flex; align-items: center; gap: .625rem; padding: .625rem .75rem; font-size: .875rem; line-height: 1.25rem; color: var(--color-slate-700); }
+  .lista .op i { width: 1rem; height: 1rem; display: flex; color: var(--color-primary); }
+  .lista .op.esc { position: relative; background: color-mix(in srgb, var(--color-primary) 5%, var(--color-white)); color: var(--color-primary); font-weight: 500; }
+  .aviso-ok { position: absolute; right: 1rem; bottom: 1rem; display: flex; align-items: center; gap: .75rem; padding: .75rem 1rem; min-width: 300px; max-width: 28rem; border-radius: var(--radius-2xl); border: 1px solid var(--color-emerald-100); background: var(--color-emerald-50); box-shadow: var(--shadow-premium-strong); opacity: 0; }
+  .aviso-ok .ic { color: var(--color-emerald-500); display: flex; }
+  .aviso-ok p { flex: 1; font-size: .875rem; line-height: 1.25rem; font-weight: 500; color: var(--color-slate-800); }
+  .aviso-ok .x { color: var(--color-slate-400); display: flex; padding: .25rem; }
+
+  /* ===== o foco: marcador, dedo e toque ===== */
+  .marcador { position: absolute; left: 0; top: 0; opacity: 0; border: 3px solid var(--video-foco); border-radius: 14px; box-shadow: 0 0 0 8px var(--video-foco-halo); }
+  .dedo { position: absolute; left: 0; top: 0; opacity: 0; width: 40px; height: 40px; }
+  .dedo svg { position: absolute; left: 0; top: 0; width: 40px; height: 40px; }
+  .dedo path { fill: var(--video-foco); stroke: var(--color-white); stroke-width: 1.4; }
+  .toque { position: absolute; left: -22px; top: -22px; width: 56px; height: 56px; border-radius: 50%; background: var(--video-foco-halo); border: 2px solid var(--video-foco); opacity: 0; }
+  .apaga { position: absolute; inset: 0; border-radius: var(--radius-xl); background: color-mix(in srgb, var(--color-white) 50%, transparent); }
+  /* ===== a Versão do POP (pops/[id]/versao e elaboracao, PopVivoView.tsx) ===== */
+  .pg-doc { position: absolute; left: 0; top: 0; width: 1440px; height: 723.6px; background: var(--color-slate-50); overflow: hidden; }
+  .doc-rolo { position: absolute; left: 0; top: 0; width: 1440px; padding-top: 4rem; }
+  .vh { position: absolute; left: 0; top: 0; width: 1440px; height: 4rem; z-index: 2; background: color-mix(in srgb, var(--color-white) 85%, transparent); backdrop-filter: blur(8px); border-bottom: 1px solid var(--color-slate-100); }
+  .vh-in { height: 4rem; margin: 0 auto; padding: 0 1.5rem; display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
+  .vh .esq { display: flex; align-items: center; gap: .75rem; min-width: 0; }
+  .vh .volta { padding: .5rem; color: var(--color-slate-500); display: flex; }
+  .vh .eti { display: flex; align-items: center; gap: .375rem; color: var(--color-primary); font-size: .75rem; line-height: 1rem; font-weight: 600; text-transform: uppercase; letter-spacing: .025em; }
+  .vh h1 { font-size: 1rem; line-height: 1.5rem; font-weight: 700; color: var(--color-slate-900); white-space: nowrap; }
+  .vh h1 span { color: var(--color-slate-400); font-weight: 400; }
+  .vh .dir { display: flex; align-items: center; gap: .5rem; }
+  .pilula { display: inline-flex; padding: .25rem .625rem; border-radius: 999px; background: var(--color-slate-100); color: var(--color-slate-600); font-size: .75rem; line-height: 1rem; font-weight: 600; white-space: nowrap; }
+  .bt-devolver { display: flex; align-items: center; gap: .5rem; padding: .625rem 1rem; border: 1px solid var(--color-amber-300); background: var(--color-amber-50); color: var(--color-amber-800); font-size: .875rem; line-height: 1.25rem; font-weight: 500; border-radius: var(--radius-xl); white-space: nowrap; }
+  .bt-verde { position: relative; display: flex; align-items: center; gap: .5rem; padding: .625rem 1.25rem; background: linear-gradient(to right, var(--color-green-600), var(--color-green-700)); color: var(--color-white); font-size: .875rem; line-height: 1.25rem; font-weight: 500; border-radius: var(--radius-xl); white-space: nowrap; }
+  .doc-main { margin: 0 auto; padding: 1.5rem; display: flex; flex-direction: column; gap: 1rem; }
+  .sec { background: var(--color-white); border-radius: var(--radius-2xl); border: 1px solid var(--color-border); box-shadow: var(--shadow-premium); overflow: hidden; }
+  .sec-cab { padding: .75rem 1.25rem; border-bottom: 1px solid var(--color-slate-50); display: flex; align-items: center; justify-content: space-between; gap: .75rem; }
+  .sec-cab h2 { font-size: .875rem; line-height: 1.25rem; font-weight: 700; color: var(--color-slate-900); }
+  .sec-cab .mira { padding: .375rem; border-radius: var(--radius-lg); color: var(--color-slate-400); display: flex; }
+  .sec-id { padding: .875rem 1.25rem; border-bottom: 1px solid var(--color-slate-100); display: flex; align-items: center; gap: .625rem; }
+  .ic-box { width: 2rem; height: 2rem; border-radius: var(--radius-lg); background: color-mix(in srgb, var(--color-primary) 10%, transparent); color: var(--color-primary); display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+  .sec-id h2 { font-size: .875rem; line-height: 1.25rem; font-weight: 700; color: var(--color-slate-900); }
+  .sec-id p { font-size: .75rem; line-height: 1rem; color: var(--color-slate-400); }
+  .sec-corpo { padding: 1rem 1.25rem; }
+  .sec-corpo .nome { font-size: 1rem; line-height: 1.5rem; font-weight: 700; color: var(--color-slate-900); margin-bottom: .75rem; }
+  .ident { display: grid; grid-template-columns: 1fr 1fr 1fr; column-gap: 1.5rem; row-gap: .625rem; }
+  .ident dt { font-size: 10px; line-height: 14px; font-weight: 600; color: var(--color-slate-400); text-transform: uppercase; letter-spacing: .025em; }
+  .ident dd { font-size: .875rem; line-height: 1.25rem; color: var(--color-slate-700); }
+  .md-p { font-size: .875rem; line-height: 1.625; color: var(--color-slate-700); }
+  .md-l { padding-left: 1.25rem; margin: .5rem 0; display: flex; flex-direction: column; gap: .25rem; font-size: .875rem; line-height: 1.625; color: var(--color-slate-700); }
+  ul.md-l { list-style: disc; }
+  ol.md-l { list-style: decimal; }
+  .devol { background: var(--color-amber-50); border-radius: var(--radius-2xl); border: 1px solid var(--color-amber-200); overflow: hidden; }
+  .devol-cab { padding: .875rem 1.25rem; border-bottom: 1px solid var(--color-amber-100); display: flex; align-items: center; gap: .625rem; }
+  .devol-cab .ic-box { background: var(--color-amber-100); color: var(--color-amber-700); }
+  .devol-cab h2 { font-size: .875rem; line-height: 1.25rem; font-weight: 700; color: var(--color-amber-900); }
+  .devol-cab p { font-size: .75rem; line-height: 1rem; color: color-mix(in srgb, var(--color-amber-700) 80%, transparent); }
+  .devol-corpo { padding: 1rem 1.25rem; font-size: .875rem; line-height: 1.625; color: var(--color-amber-900); }
+  /* ConfirmDialog.tsx: fundo só com desfoque, caixa branca centrada */
+  .conf-fundo { position: absolute; inset: 0; backdrop-filter: blur(4px); display: flex; align-items: center; justify-content: center; padding: 0 1rem; }
+  .conf { position: relative; width: 28rem; background: var(--color-white); border-radius: var(--radius-2xl); box-shadow: 0 25px 50px -12px color-mix(in srgb, var(--color-black) 25%, transparent); padding: 1.5rem; }
+  .conf .x { position: absolute; top: .75rem; right: .75rem; padding: .375rem; color: var(--color-slate-400); display: flex; }
+  .conf .alerta { width: 3rem; height: 3rem; border-radius: var(--radius-2xl); margin: 0 auto 1rem; display: flex; align-items: center; justify-content: center; background: color-mix(in srgb, var(--color-primary) 10%, transparent); color: var(--color-primary); }
+  .conf.perigo .alerta { background: var(--color-red-100); color: var(--color-red-600); }
+  .conf h3 { font-size: 1.125rem; line-height: 1.75rem; font-weight: 700; color: var(--color-slate-900); text-align: center; margin-bottom: .25rem; }
+  .conf .desc { font-size: .875rem; line-height: 1.25rem; color: var(--color-slate-500); text-align: center; margin-bottom: 1rem; }
+  .conf .motivo { margin: .5rem 0 1rem; }
+  .conf .motivo label { display: block; font-size: .75rem; line-height: 1rem; font-weight: 500; color: var(--color-slate-700); margin-bottom: .375rem; }
+  .conf .area { position: relative; height: 6.4rem; border-radius: var(--radius-xl); border: 1px solid var(--color-slate-200); padding: .5rem .75rem; font-size: .875rem; line-height: 1.25rem; }
+  .conf .area .vazio { color: var(--color-slate-400); }
+  .conf .area .cheio { position: absolute; left: .75rem; right: .75rem; top: .5rem; color: var(--color-slate-800); opacity: 0; }
+  .conf .conta { position: relative; display: flex; justify-content: flex-end; margin-top: .25rem; font-size: 10px; line-height: 14px; color: var(--color-slate-400); }
+  .conf .bts { display: flex; gap: .75rem; margin-top: .5rem; }
+  .conf .bts > span { position: relative; flex: 1; display: flex; justify-content: center; padding: .625rem 0; border-radius: var(--radius-xl); font-size: .875rem; line-height: 1.25rem; font-weight: 500; }
+  .conf .bt-nao { border: 1px solid var(--color-slate-200); color: var(--color-slate-700); }
+  .conf .bt-sim { background: var(--color-primary); color: var(--color-white); }
+  .conf.perigo .bt-sim { background: var(--color-red-600); }
+  .conf .apagado { position: absolute; inset: 0; border-radius: var(--radius-xl); background: color-mix(in srgb, var(--color-white) 40%, transparent); }
+  /* ===== o fluxograma (FluxogramaPalco.tsx) ===== */
+  .flx { display: flex; flex-direction: column; gap: .625rem; }
+  .flx-barra { display: flex; align-items: center; gap: .375rem; }
+  .flx-zoom { display: flex; align-items: center; gap: .25rem; border-radius: var(--radius-lg); border: 1px solid var(--color-slate-200); background: var(--color-white); padding: .125rem; }
+  .flx-f { padding: .375rem; border-radius: 3px; color: var(--color-slate-500); display: flex; }
+  .flx-pct { position: relative; padding: 0 .375rem; min-width: 3rem; text-align: center; font-size: .75rem; line-height: 1rem; font-weight: 500; color: var(--color-slate-500); }
+  .flx-pct2 { position: absolute; left: 0; right: 0; top: 0; opacity: 0; }
+  .flx-exp { display: flex; align-items: center; gap: .25rem; margin-left: auto; }
+  .flx-bt { display: inline-flex; align-items: center; gap: .375rem; padding: .375rem .625rem; border-radius: var(--radius-lg); border: 1px solid var(--color-slate-200); background: var(--color-white); font-size: .75rem; line-height: 1rem; font-weight: 500; color: var(--color-slate-600); }
+  .flx-palco { position: relative; overflow: hidden; height: 506px; border-radius: var(--radius-xl); border: 1px solid var(--color-slate-200); background: color-mix(in srgb, var(--color-slate-50) 60%, transparent); }
+  .flx-des { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; transform-origin: center center; }
+  .flx-des svg { flex-shrink: 0; }
+  .flx-dica { position: absolute; bottom: .5rem; right: .75rem; font-size: 10px; line-height: 14px; color: var(--color-slate-400); }
+  .flx-leg { font-size: 11px; line-height: 16px; color: var(--color-slate-400); }
+  /* ===== a Elaboração (pops/[id]/elaboracao/page.tsx e ChatElaboracaoPop.tsx) ===== */
+  .el-grade { position: absolute; left: 40px; top: 4rem; width: 1360px; padding: 1.5rem; }
+  .el-rolo { position: absolute; left: 1.5rem; top: 1.5rem; display: flex; flex-direction: column; gap: 1rem; }
+  .per { background: var(--color-white); border-radius: var(--radius-2xl); border: 1px solid var(--color-border); box-shadow: var(--shadow-premium); padding: .875rem 1.25rem; display: flex; align-items: center; column-gap: 1rem; }
+  .per .rot-per { display: flex; align-items: center; gap: .5rem; color: var(--color-primary); }
+  .per .rot-per b { font-size: .875rem; line-height: 1.25rem; font-weight: 600; color: var(--color-slate-700); }
+  .per .sug { display: inline-flex; align-items: center; gap: .375rem; padding: .25rem .625rem; border-radius: 999px; background: color-mix(in srgb, var(--color-primary) 10%, transparent); color: var(--color-primary); font-size: .75rem; line-height: 1rem; font-weight: 500; opacity: 0; }
+  .per .fim-per { margin-left: auto; display: flex; align-items: center; gap: .5rem; }
+  .per .fim-per small { font-size: .75rem; line-height: 1rem; color: var(--color-slate-400); }
+  .vazia { font-size: .875rem; line-height: 1.25rem; color: var(--color-slate-300); font-style: italic; }
+  .sec.ativa { border-color: color-mix(in srgb, var(--color-primary) 40%, transparent); }
+  .mira-on { position: absolute; inset: 0; border-radius: var(--radius-lg); background: color-mix(in srgb, var(--color-primary) 10%, transparent); color: var(--color-primary); display: flex; align-items: center; justify-content: center; opacity: 0; }
+  .sec-cab .mira { position: relative; }
+  .chat { position: absolute; top: 1.5rem; width: 400px; height: 596px; background: var(--color-white); border-radius: var(--radius-2xl); border: 1px solid color-mix(in srgb, var(--color-primary) 30%, transparent); box-shadow: var(--shadow-premium); display: flex; flex-direction: column; overflow: hidden; }
+  .chat-cab { padding: .875rem 1.25rem; border-bottom: 1px solid var(--color-slate-100); display: flex; align-items: center; gap: .625rem; flex-shrink: 0; }
+  .chat-cab h3 { font-size: .875rem; line-height: 1.25rem; font-weight: 700; color: var(--color-slate-900); }
+  .chat-cab p { font-size: .75rem; line-height: 1rem; color: var(--color-slate-400); }
+  .chat-msgs { flex: 1; padding: 1rem 1.25rem; display: flex; flex-direction: column; gap: .75rem; overflow: hidden; }
+  .msg { display: flex; gap: .625rem; }
+  .msg.eu { flex-direction: row-reverse; }
+  .msg .av { width: 1.75rem; height: 1.75rem; border-radius: var(--radius-lg); display: flex; align-items: center; justify-content: center; flex-shrink: 0; background: var(--color-slate-100); color: var(--color-slate-600); }
+  .msg.eu .av { background: linear-gradient(to bottom right, var(--color-primary), var(--color-primary-dark)); color: var(--color-white); }
+  .msg .bal { max-width: 80%; padding: .625rem .875rem; border-radius: var(--radius-xl); border-top-left-radius: 2px; font-size: .875rem; line-height: 1.625; background: var(--color-slate-50); color: var(--color-slate-700); border: 1px solid var(--color-slate-100); }
+  .msg.eu .bal { background: linear-gradient(to right, var(--color-primary), var(--color-primary-dark)); color: var(--color-white); border: 0; border-radius: var(--radius-xl); border-top-right-radius: 2px; }
+  .pontos { display: flex; gap: .25rem; padding: .625rem .875rem; border-radius: var(--radius-xl); background: var(--color-slate-50); border: 1px solid var(--color-slate-100); }
+  .pontos i { width: 6px; height: 6px; border-radius: 50%; background: var(--color-slate-300); }
+  .chat-extra { padding: .5rem 1.25rem 0; flex-shrink: 0; display: flex; flex-direction: column; gap: .375rem; }
+  .eti-mat { display: flex; align-items: center; gap: .5rem; padding: .375rem .75rem; border-radius: var(--radius-lg); background: color-mix(in srgb, var(--color-primary) 5%, transparent); border: 1px solid color-mix(in srgb, var(--color-primary) 20%, transparent); color: var(--color-primary); }
+  .eti-mat .nome-mat { flex: 1; font-size: .75rem; line-height: 1rem; color: var(--color-slate-700); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .eti-mat .xm { padding: 2px; color: var(--color-slate-400); display: flex; }
+  .arranque { display: flex; align-items: center; gap: .5rem; padding: .625rem .875rem; border-radius: var(--radius-xl); border: 1px solid color-mix(in srgb, var(--color-primary) 30%, transparent); background: color-mix(in srgb, var(--color-primary) 5%, transparent); color: var(--color-primary); font-size: .75rem; line-height: 1rem; font-weight: 500; }
+  .apontando { align-self: flex-start; display: inline-flex; align-items: center; gap: .375rem; padding: .25rem .75rem; border-radius: 999px; background: color-mix(in srgb, var(--color-primary) 10%, transparent); color: var(--color-primary); font-size: .75rem; line-height: 1rem; font-weight: 500; }
+  .chat-pe { padding: .75rem 1.25rem; border-top: 1px solid var(--color-slate-100); display: flex; gap: .5rem; flex-shrink: 0; }
+  .chat-pe .txt { position: relative; flex: 1; height: 2.6rem; padding: .625rem .875rem; border-radius: var(--radius-xl); border: 1px solid var(--color-slate-200); background: var(--color-slate-50); font-size: .875rem; line-height: 1.25rem; overflow: hidden; }
+  .chat-pe .txt .vazio { color: var(--color-slate-400); }
+  .chat-pe .txt .cheio { position: absolute; left: .875rem; right: .875rem; top: .625rem; color: var(--color-slate-900); opacity: 0; }
+  .chat-pe .bt-ch { position: relative; padding: .625rem .75rem; border-radius: var(--radius-xl); border: 1px solid var(--color-slate-200); background: var(--color-white); color: var(--color-slate-500); display: flex; align-items: center; }
+  .chat-pe .bt-env { position: relative; padding: .625rem .75rem; border-radius: var(--radius-xl); background: linear-gradient(to right, var(--color-primary), var(--color-primary-dark)); color: var(--color-white); display: flex; align-items: center; }
+  .tela-app { position: absolute; left: 0; top: 0; width: 1440px; height: 723.6px; }
+  .moldura { position: absolute; inset: 0; border-radius: var(--radius-2xl); border: 1px solid color-mix(in srgb, var(--color-primary) 40%, transparent); }
+  #e-msgs-in { position: relative; flex-shrink: 0; display: flex; flex-direction: column; gap: .75rem; }
+  /* ===== a janela Criar novo POP (CriarPopModal, PopsManager.tsx) ===== */
+  #md-criar { width: 42rem; max-height: 651px; overflow: hidden; }
+  #md-criar .md-form { display: flex; flex-direction: column; gap: 1rem; }
+  #bt-criar-pop { box-shadow: 0 4px 6px -1px var(--color-shadow), 0 2px 4px -2px var(--color-shadow); }
+  #md-criar .bt-leve { font-weight: 600; color: var(--color-slate-600); }
+  #f-base-c { clip-path: inset(0 100% 0 0); }
+  .barra-nav .url { position: relative; }
+  .barra-nav .url span { position: absolute; left: 16px; }
+  /* O email e a página de assinatura são de fora da plataforma: caixas neutras, sem a casca do app. */
+  .mail { position: absolute; inset: 0; background: var(--color-white); }
+  .mail-topo { height: 3.5rem; border-bottom: 1px solid var(--color-slate-200); display: flex; align-items: center; gap: .75rem; padding: 0 1.5rem; font-size: 1.125rem; line-height: 1.75rem; font-weight: 600; color: var(--color-slate-700); }
+  .mail-lista { padding: .5rem 1rem; }
+  .mail-linha { display: flex; align-items: center; gap: 1.5rem; padding: .875rem 1rem; border-bottom: 1px solid var(--color-slate-100); font-size: .875rem; line-height: 1.25rem; color: var(--color-slate-600); }
+  .mail-linha .de { width: 12rem; flex-shrink: 0; }
+  .mail-linha .assunto { flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .mail-linha .hora { width: 4rem; text-align: right; color: var(--color-slate-500); }
+  .mail-linha.nova { background: color-mix(in srgb, var(--color-blue-500) 6%, var(--color-white)); }
+  .mail-linha.nova .de, .mail-linha.nova .assunto { font-weight: 700; color: var(--color-slate-900); }
+  .mail-msg { padding: 2rem 3rem; display: flex; flex-direction: column; gap: 1.25rem; font-size: .9375rem; line-height: 1.5rem; color: var(--color-slate-700); }
+  .mail-msg h2 { font-size: 1.25rem; line-height: 1.75rem; font-weight: 600; color: var(--color-slate-900); }
+  .mail-msg .rem { font-size: .875rem; color: var(--color-slate-500); }
+  .mail-msg .bt-mail { align-self: flex-start; padding: .75rem 1.5rem; border-radius: var(--radius-lg); background: var(--color-blue-600); color: var(--color-white); font-weight: 600; }
+  .assina { position: absolute; inset: 0; background: var(--color-slate-200); }
+  .folha { position: absolute; left: 260px; top: 1.5rem; width: 620px; height: 900px; background: var(--color-white); box-shadow: var(--shadow-premium); padding: 2rem 2.25rem; font-size: 11px; line-height: 15px; color: var(--color-text); }
+  .folha .f-cab { display: flex; align-items: center; gap: 1.25rem; border-bottom: 2px solid var(--color-primary); padding-bottom: .75rem; }
+  .folha .f-cab img { width: 110px; height: 62px; object-fit: contain; }
+  .folha .f-cab b { display: block; font-size: 19px; line-height: 24px; color: var(--color-primary); }
+  .folha .f-cab span { display: block; font-size: 11px; color: var(--color-text-secondary); }
+  .folha .f-faixa { margin: .75rem 0; padding: .375rem .625rem; background: var(--color-amber-50); color: var(--color-amber-800); font-size: 10px; border-radius: var(--radius-sm); }
+  .folha h4 { font-size: 13px; line-height: 18px; color: var(--color-primary); margin: .5rem 0 .375rem; }
+  .folha .f-lin { display: flex; padding: .25rem 0; border-bottom: 1px solid var(--color-slate-100); }
+  .folha .f-lin i { font-style: normal; width: 9rem; color: var(--color-text-secondary); }
+  .folha .f-pill { padding: 1px 6px; border-radius: var(--radius-sm); background: color-mix(in srgb, var(--color-primary) 8%, var(--color-white)); color: var(--color-primary); font-weight: 600; }
+  .assina-lado { position: absolute; right: 2rem; top: 1.5rem; width: 300px; background: var(--color-white); border-radius: var(--radius-2xl); box-shadow: var(--shadow-premium); padding: 1.25rem; display: flex; flex-direction: column; gap: 1rem; font-size: .875rem; line-height: 1.25rem; color: var(--color-slate-700); }
+  .assina-lado b { font-size: 1rem; color: var(--color-slate-900); }
+  .assina-lado .bt-assinar { position: relative; padding: .75rem; border-radius: var(--radius-lg); background: var(--color-blue-600); color: var(--color-white); font-weight: 600; text-align: center; }
+  .assina-lado .ok-ass { display: flex; align-items: center; gap: .5rem; color: var(--color-emerald-700); font-weight: 600; }
+  .estado2 { position: absolute; left: 1.25rem; top: 0; }
+  /* ===== a Biblioteca (pops/biblioteca e BibliotecaPops.tsx) ===== */
+  .volta-gestao { display: inline-flex; align-items: center; gap: .5rem; font-size: .875rem; line-height: 1.25rem; font-weight: 500; color: var(--color-text-secondary); margin-left: auto; }
+  .grupo { font-size: .875rem; line-height: 1.25rem; font-weight: 600; color: var(--color-text-secondary); text-transform: uppercase; letter-spacing: .025em; padding: 0 .25rem; align-self: flex-start; }
+  .cod-mono { font-family: var(--font-mono); font-size: .75rem; line-height: 1rem; font-weight: 600; color: var(--color-text); }
+  .ficha { width: 42rem; }
+  .ficha .cod-mono { color: var(--color-text-secondary); }
+  .caixa-ficha { background: var(--color-slate-50); border-radius: var(--radius-xl); border: 1px solid var(--color-slate-100); padding: 1rem; }
+  .caixa-ficha h4 { font-size: .75rem; line-height: 1rem; font-weight: 600; color: var(--color-text-secondary); text-transform: uppercase; letter-spacing: .025em; margin-bottom: .75rem; }
+  .caixa-ficha ul { list-style: none; display: flex; flex-direction: column; gap: .5rem; }
+  .caixa-ficha li { display: flex; align-items: center; justify-content: space-between; gap: .75rem; font-size: .875rem; line-height: 1.25rem; color: var(--color-text-secondary); }
+  .caixa-ficha li b { font-weight: 500; color: var(--color-text); white-space: nowrap; }
+  /* O aviso de download do navegador, no canto da barra, fora da caixa do app. */
+  .icone-baixar { position: absolute; right: 22px; top: 11px; color: var(--color-slate-500); display: flex; }
+  .baixou { position: absolute; right: 18px; top: 52px; width: 420px; padding: 12px 16px; display: flex; align-items: center; gap: 12px; background: var(--color-white); border: 1px solid var(--color-slate-200); border-radius: var(--radius-3xl); box-shadow: var(--shadow-premium-strong); font-size: 15px; line-height: 21px; color: var(--color-slate-700); word-break: break-all; opacity: 0; }
+  .baixou .ic { width: 36px; height: 36px; border-radius: var(--radius-2xl); background: var(--color-slate-100); color: var(--color-slate-600); display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+  .baixou small { display: block; font-size: 14px; line-height: 18px; color: var(--color-slate-500); margin-top: 2px; word-break: normal; }
+  /* ===== Vídeo de visão geral de POPs (ADR 0072): o HSM_CTI-002 anda do
+     começo ao fim, com a Marina (Superadmin e Elaboradora), o Rafael (Revisor)
+     e a Helena (Validadora). Cada tela é um quadro; a troca é de opacidade. ===== */
+  .flx-des { transform: scale(.886); }
+  #t-g2, #t-e, #t-r1, #t-r, #t-v1, #t-v, #t-v2, #t-mail, #t-msg, #t-doc, #t-p, #b-rolo, #e-m1, #e-m2, #e-pontos, #e-secs, #assinado { opacity: 0; }
+  #u-elab, #u-versao, #u-mail, #u-click, #u-bib { opacity: 0; }
+  #e-caixa-secs { position: relative; }
+  #e-vazio { position: absolute; left: 0; right: 0; top: 0; padding: 1.5rem 1.25rem; }
+  #e-secs { display: flex; flex-direction: column; gap: 1rem; }
+  #f-nome-c { clip-path: inset(0 100% 0 0); }
+  /* O campo de mensagem é um textarea de uma linha: o texto que passa dela fica escondido. */
+  #e-txt-v, #e-txt-c { display: block; height: 1.25rem; overflow: hidden; }
+</style>
+</head>
+<body>
+<div id="main" data-composition-id="main" data-start="0" data-width="1920" data-height="1080" data-duration="99">
+
+  <div id="slot-abertura" data-composition-id="abertura" data-composition-src="compositions/abertura.html" data-variable-values='{"secao":"Manual · POPs","titulo":"Conheça os POPs","papel":"Todo perfil POP"}' data-start="0" data-duration="4" data-track-index="1" data-width="1920" data-height="1080"></div>
+
+  <section id="c-tarefa" class="clip" data-start="4" data-duration="92" data-track-index="2">
+    <div class="palco"></div>
+    <div id="camera" data-layout-allow-overflow></div>
+  </section>
+
+  <div id="slot-lugar-1" data-composition-id="lower-third" data-composition-src="compositions/lower-third.html" data-variable-values='{"lugar":"POPs","tela":"Gestão de POPs"}' data-start="4.3" data-duration="2.7" data-track-index="5" data-width="1920" data-height="1080"></div>
+  <div id="slot-lugar-2" data-composition-id="lower-third" data-composition-src="compositions/lower-third.html" data-variable-values='{"lugar":"Elaboradora: Marina Alves","tela":"Elaboração do HSM_CTI-002"}' data-start="31.8" data-duration="2.8" data-track-index="5" data-width="1920" data-height="1080"></div>
+  <div id="slot-lugar-3" data-composition-id="lower-third" data-composition-src="compositions/lower-third.html" data-variable-values='{"lugar":"Revisor: Rafael Pimenta","tela":"Gestão de POPs"}' data-start="46.7" data-duration="2.8" data-track-index="5" data-width="1920" data-height="1080"></div>
+  <div id="slot-lugar-4" data-composition-id="lower-third" data-composition-src="compositions/lower-third.html" data-variable-values='{"lugar":"Validadora: Helena Duarte","tela":"Gestão de POPs"}' data-start="59.8" data-duration="2.8" data-track-index="5" data-width="1920" data-height="1080"></div>
+  <div id="slot-lugar-5" data-composition-id="lower-third" data-composition-src="compositions/lower-third.html" data-variable-values='{"lugar":"Fora da plataforma","tela":"Seu email"}' data-start="70.6" data-duration="2.8" data-track-index="5" data-width="1920" data-height="1080"></div>
+  <div id="slot-lugar-6" data-composition-id="lower-third" data-composition-src="compositions/lower-third.html" data-variable-values='{"lugar":"POPs","tela":"Biblioteca"}' data-start="89.4" data-duration="2.8" data-track-index="5" data-width="1920" data-height="1080"></div>
+
+  <div id="slot-passo-1" data-composition-id="legenda-de-passo" data-composition-src="compositions/legenda-de-passo.html" data-variable-values='{"numero":"1","texto":"Em **POPs**, clique em **Criar novo POP**."}' data-start="4" data-duration="5" data-track-index="3" data-width="1920" data-height="1080"></div>
+  <div id="slot-passo-2" data-composition-id="legenda-de-passo" data-composition-src="compositions/legenda-de-passo.html" data-variable-values='{"numero":"2","texto":"Escolha o **Setor** e a **Criticidade**, e escreva o **Nome do POP**."}' data-start="9" data-duration="7" data-track-index="4" data-width="1920" data-height="1080"></div>
+  <div id="slot-passo-3" data-composition-id="legenda-de-passo" data-composition-src="compositions/legenda-de-passo.html" data-variable-values='{"numero":"3","texto":"Escolha **Elaborador**, **Revisor**, **Validador** e a **Periodicidade de revisão**."}' data-start="16" data-duration="8" data-track-index="3" data-width="1920" data-height="1080"></div>
+  <div id="slot-passo-4" data-composition-id="legenda-de-passo" data-composition-src="compositions/legenda-de-passo.html" data-variable-values='{"numero":"4","texto":"Clique em **Criar POP**. A Versão nasce em **A Elaborar**."}' data-start="24" data-duration="6" data-track-index="4" data-width="1920" data-height="1080"></div>
+  <div id="slot-passo-5" data-composition-id="legenda-de-passo" data-composition-src="compositions/legenda-de-passo.html" data-variable-values='{"numero":"5","texto":"A Elaboradora clica em **Elaborar** e conta o procedimento ao **Consultor de POPs**."}' data-start="30" data-duration="7" data-track-index="3" data-width="1920" data-height="1080"></div>
+  <div id="slot-passo-6" data-composition-id="legenda-de-passo" data-composition-src="compositions/legenda-de-passo.html" data-variable-values='{"numero":"6","texto":"As seções do POP tomam forma ao lado, a cada resposta do Consultor."}' data-start="37" data-duration="6" data-track-index="4" data-width="1920" data-height="1080"></div>
+  <div id="slot-passo-7" data-composition-id="legenda-de-passo" data-composition-src="compositions/legenda-de-passo.html" data-variable-values='{"numero":"7","texto":"No fim, ela clica em **Aprovar versão final**. A Versão vai para **Em Revisão**."}' data-start="43" data-duration="6" data-track-index="3" data-width="1920" data-height="1080"></div>
+  <div id="slot-passo-8" data-composition-id="legenda-de-passo" data-composition-src="compositions/legenda-de-passo.html" data-variable-values='{"numero":"8","texto":"O Revisor clica em **Revisar** e lê o documento inteiro."}' data-start="49" data-duration="6" data-track-index="4" data-width="1920" data-height="1080"></div>
+  <div id="slot-passo-9" data-composition-id="legenda-de-passo" data-composition-src="compositions/legenda-de-passo.html" data-variable-values='{"numero":"9","texto":"Ele clica em **Aprovar revisão**. Se faltar algo, usa **Devolver com comentários**."}' data-start="55" data-duration="6" data-track-index="3" data-width="1920" data-height="1080"></div>
+  <div id="slot-passo-10" data-composition-id="legenda-de-passo" data-composition-src="compositions/legenda-de-passo.html" data-variable-values='{"numero":"10","texto":"A Validadora clica em **Validar**, lê e clica em **Aprovar validação**."}' data-start="61" data-duration="6" data-track-index="4" data-width="1920" data-height="1080"></div>
+  <div id="slot-passo-11" data-composition-id="legenda-de-passo" data-composition-src="compositions/legenda-de-passo.html" data-variable-values='{"numero":"11","texto":"A Versão vai para **Em Assinatura** e o documento sai por email para os três."}' data-start="67" data-duration="5" data-track-index="3" data-width="1920" data-height="1080"></div>
+  <div id="slot-passo-12" data-composition-id="legenda-de-passo" data-composition-src="compositions/legenda-de-passo.html" data-variable-values='{"numero":"12","texto":"Cada um abre a mensagem da ClickSign e clica em **Visualizar para assinar**."}' data-start="72" data-duration="6" data-track-index="4" data-width="1920" data-height="1080"></div>
+  <div id="slot-passo-13" data-composition-id="legenda-de-passo" data-composition-src="compositions/legenda-de-passo.html" data-variable-values='{"numero":"13","texto":"Cada um confere o Código e a Versão e clica em **Assinar**. A ordem não importa."}' data-start="78" data-duration="6" data-track-index="3" data-width="1920" data-height="1080"></div>
+  <div id="slot-passo-14" data-composition-id="legenda-de-passo" data-composition-src="compositions/legenda-de-passo.html" data-variable-values='{"numero":"14","texto":"Com as três assinaturas, a Versão fica **Publicado**. Clique em **Biblioteca**."}' data-start="84" data-duration="6" data-track-index="4" data-width="1920" data-height="1080"></div>
+  <div id="slot-passo-15" data-composition-id="legenda-de-passo" data-composition-src="compositions/legenda-de-passo.html" data-variable-values='{"numero":"15","texto":"Na **Biblioteca**, os POPs ficam por Setor. A linha abre a **Ficha do POP**."}' data-start="90" data-duration="6" data-track-index="3" data-width="1920" data-height="1080"></div>
+
+  <div id="slot-carimbo" data-composition-id="carimbo" data-composition-src="compositions/carimbo.html" data-variable-values='{"titulo":"Conheça os POPs","carimbo":"Manual · retrata o app em v0.196.1 · gerado em 14/10/2026"}' data-start="96" data-duration="3" data-track-index="1" data-width="1920" data-height="1080"></div>
+</div>
+
+<script>
+/* Ícones: os do lucide, os mesmos do app, no traço da cor do texto. */
+const P = {
+ajuda: '<circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><path d="M12 17h.01"/>', ajustar: '<path d="M15 3h6v6"/><path d="m21 3-7 7"/><path d="m3 21 7-7"/><path d="M9 21H3v-6"/>', alerta: '<path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/><path d="M12 9v4"/><path d="M12 17h.01"/>', alvo: '<circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/>', arquivo: '<path d="M6 22a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.704.706l3.588 3.588A2.4 2.4 0 0 1 20 8v12a2 2 0 0 1-2 2z"/><path d="M14 2v5a1 1 0 0 0 1 1h5"/><path d="M10 9H8"/><path d="M16 13H8"/><path d="M16 17H8"/>', baixar: '<path d="M12 15V3"/><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m7 10 5 5 5-5"/>', baixo: '<path d="m6 9 6 6 6-6"/>', brilho: '<path d="M11.017 2.814a1 1 0 0 1 1.966 0l1.051 5.558a2 2 0 0 0 1.594 1.594l5.558 1.051a1 1 0 0 1 0 1.966l-5.558 1.051a2 2 0 0 0-1.594 1.594l-1.051 5.558a1 1 0 0 1-1.966 0l-1.051-5.558a2 2 0 0 0-1.594-1.594l-5.558-1.051a1 1 0 0 1 0-1.966l5.558-1.051a2 2 0 0 0 1.594-1.594z"/><path d="M20 2v4"/><path d="M22 4h-4"/><circle cx="4" cy="20" r="2"/>', calendario: '<path d="M8 2v4"/><path d="M16 2v4"/><rect width="18" height="18" x="3" y="4" rx="2"/><path d="M3 10h18"/><path d="M8 14h.01"/><path d="M12 14h.01"/><path d="M16 14h.01"/><path d="M8 18h.01"/><path d="M12 18h.01"/><path d="M16 18h.01"/>', calrel: '<path d="M16 14v2.2l1.6 1"/><path d="M16 2v4"/><path d="M21 7.5V6a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h3.5"/><path d="M3 10h5"/><path d="M8 2v4"/><circle cx="16" cy="16" r="6"/>', checkc: '<path d="M21.801 10A10 10 0 1 1 17 3.335"/><path d="m9 11 3 3L22 4"/>', clipe: '<path d="m16 6-8.414 8.586a2 2 0 0 0 2.829 2.829l8.414-8.586a4 4 0 1 0-5.657-5.657l-8.379 8.551a6 6 0 1 0 8.485 8.485l8.379-8.551"/>', desfazer: '<path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 5.5 5.5a5.5 5.5 0 0 1-5.5 5.5H11"/>', direita: '<path d="m9 18 6-6-6-6"/>', enviar: '<path d="M14.536 21.686a.5.5 0 0 0 .937-.024l6.5-19a.496.496 0 0 0-.635-.635l-19 6.5a.5.5 0 0 0-.024.937l7.93 3.18a2 2 0 0 1 1.112 1.11z"/><path d="m21.854 2.147-10.94 10.939"/>',
+escudo: '<path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/><path d="m9 12 2 2 4-4"/>', estante: '<path d="m16 6 4 14"/><path d="M12 6v14"/><path d="M8 8v12"/><path d="M4 4v16"/>', fechar: '<path d="M18 6 6 18"/><path d="m6 6 12 12"/>', formatura: '<path d="M21.42 10.922a1 1 0 0 0-.019-1.838L12.83 5.18a2 2 0 0 0-1.66 0L2.6 9.08a1 1 0 0 0 0 1.832l8.57 3.908a2 2 0 0 0 1.66 0z"/><path d="M22 10v6"/><path d="M6 12.5V16a6 3 0 0 0 12 0v-3.5"/>', imagem: '<rect width="18" height="18" x="3" y="3" rx="2" ry="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/>', inbox: '<polyline points="22 12 16 12 14 15 10 15 8 12 2 12"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/>', lapis: '<path d="M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z"/><path d="m15 5 4 4"/>', livro: '<path d="M12 21V7"/><path d="m16 12 2 2 4-4"/><path d="M22 6V4a1 1 0 0 0-1-1h-5a4 4 0 0 0-4 4 4 4 0 0 0-4-4H3a1 1 0 0 0-1 1v13a1 1 0 0 0 1 1h6a3 3 0 0 1 3 3 3 3 0 0 1 3-3h6a1 1 0 0 0 1-1v-1.3"/>', lixo: '<path d="M10 11v6"/><path d="M14 11v6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>', lupa: '<path d="m21 21-4.34-4.34"/><circle cx="11" cy="11" r="8"/>', mais: '<path d="M5 12h14"/><path d="M12 5v14"/>', megafone: '<path d="M11 6a13 13 0 0 0 8.4-2.8A1 1 0 0 1 21 4v12a1 1 0 0 1-1.6.8A13 13 0 0 0 11 14H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2z"/><path d="M6 14a12 12 0 0 0 2.4 7.2 2 2 0 0 0 3.2-2.4A8 8 0 0 1 10 14"/><path d="M8 6v8"/>', micro: '<path d="M12 19v3"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><rect x="9" y="2" width="6" height="13" rx="3"/>', mira: '<circle cx="12" cy="12" r="10"/><line x1="22" x2="18" y1="12" y2="12"/><line x1="6" x2="2" y1="12" y2="12"/><line x1="12" x2="12" y1="6" y2="2"/><line x1="12" x2="12" y1="22" y2="18"/>', msgalerta: '<path d="M22 17a2 2 0 0 1-2 2H6.828a2 2 0 0 0-1.414.586l-2.202 2.202A.71.71 0 0 1 2 21.286V5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2z"/><path d="M12 15h.01"/><path d="M12 7v4"/>',
+ok: '<path d="M20 6 9 17l-5-5"/>', painel: '<rect width="7" height="9" x="3" y="3" rx="1"/><rect width="7" height="5" x="14" y="3" rx="1"/><rect width="7" height="9" x="14" y="12" rx="1"/><rect width="7" height="5" x="3" y="16" rx="1"/>', pessoa: '<path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>', pessoamais: '<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><line x1="19" x2="19" y1="8" y2="14"/><line x1="22" x2="16" y1="11" y2="11"/>', pessoamenos: '<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><line x1="22" x2="16" y1="11" y2="11"/>', pessoas: '<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><path d="M16 3.128a4 4 0 0 1 0 7.744"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><circle cx="9" cy="7" r="4"/>', predio: '<path d="M10 12h4"/><path d="M10 8h4"/><path d="M14 21v-3a2 2 0 0 0-4 0v3"/><path d="M6 10H4a2 2 0 0 0-2 2v7a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-2"/><path d="M6 21V5a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v16"/>', relogio: '<circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/>', robo: '<path d="M12 8V4H8"/><rect width="16" height="12" x="4" y="8" rx="2"/><path d="M2 14h2"/><path d="M20 14h2"/><path d="M15 13v2"/><path d="M9 13v2"/>', sino: '<path d="M10.268 21a2 2 0 0 0 3.464 0"/><path d="M3.262 15.326A1 1 0 0 0 4 17h16a1 1 0 0 0 .74-1.673C19.41 13.956 18 12.499 18 8A6 6 0 0 0 6 8c0 4.499-1.411 5.956-2.738 7.326"/>', voltar: '<path d="m12 19-7-7 7-7"/><path d="M19 12H5"/>', zoommais: '<circle cx="11" cy="11" r="8"/><line x1="21" x2="16.65" y1="21" y2="16.65"/><line x1="11" x2="11" y1="8" y2="14"/><line x1="8" x2="14" y1="11" y2="11"/>', zoommenos: '<circle cx="11" cy="11" r="8"/><line x1="21" x2="16.65" y1="21" y2="16.65"/><line x1="8" x2="14" y1="11" y2="11"/>',
+};
+const ic = (nome, s, traco) => `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="${traco || 2}" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0">${P[nome]}</svg>`;
+const janela = (url, app, sobre, fora) => `<div class="janela" id="janela"><div class="barra-nav"><i></i><i></i><i></i><div class="url">${url}</div></div> <div class="vista"><div class="app" id="app">${app}${sobre || ""}</div></div>${fora || ""}</div> <div class="marcador" id="mk"></div><div class="dedo" id="dedo"><svg viewBox="0 0 24 24"><path d="M5 3l14 8-6 1.6L9.6 19z"/></svg><div class="toque" id="toque"></div></div>`;
+/* Réplica de tela: sobreposição e corte são de propósito. */
+const liberaCamera = () => document.querySelectorAll("#camera, #camera *").forEach((el) => ["overlap", "occlusion", "overflow"].forEach((k) => el.setAttribute(`data-layout-allow-${k}`, "")));
+/* Medidas: onde cada elemento fica no quadro com a câmera em repouso, pelo offset do layout (que ignora a câmera e a rolagem). Nada se mede na montagem, antes da fonte do app (regra de 14/10/2026): alvo e rolagem são funções que o GSAP chama quando o tween começa. */
+const APP_X = 160, APP_Y = 32 + 44, ESCALA_APP = 1.11111, CENTRO = { x: 960, y: 452 }, JANELA = { x0: 160, y0: 32, x1: 1760, y1: 880 };
+const valor = (v) => (typeof v === "function" ? v() : v);
+function noQuadro(id, rolagem) { let el = document.getElementById(id), x = 0, y = 0; const w = el.offsetWidth, h = el.offsetHeight, app = document.getElementById("app"); while (el && el !== app) { x += el.offsetLeft; y += el.offsetTop; el = el.offsetParent; } return { x: APP_X + x * ESCALA_APP, y: APP_Y + (y - rolagem) * ESCALA_APP, w: w * ESCALA_APP, h: h * ESCALA_APP };
+}
+const juntaCaixas = (rs) => { const x = Math.min(...rs.map((r) => r.x)), y = Math.min(...rs.map((r) => r.y)); return { x, y, w: Math.max(...rs.map((r) => r.x + r.w)) - x, h: Math.max(...rs.map((r) => r.y + r.h)) - y }; };
+/* Alvo: um ou mais ids (separados por espaço) e a rolagem em que ele é visto. */
+const alvo = (ids, rolagem = 0) => ({ ids, caixa: () => juntaCaixas(ids.split(" ").map((id) => noQuadro(id, valor(rolagem)))) });
+const REPOUSO = { ids: "", caixa: () => ({ x: 160, y: 32, w: 1600, h: 848 }) };
+function enquadra(r, s) { const x = CENTRO.x - s * (r.x + r.w / 2), y = CENTRO.y - s * (r.y + r.h / 2); return { scale: s, x: Math.min(JANELA.x0 * (1 - s), Math.max(JANELA.x1 * (1 - s), x)), y: Math.min(JANELA.y0 * (1 - s), Math.max(JANELA.y1 * (1 - s), y)) };
+}
+const camera = (a, s) => ({ scale: s, x: () => enquadra(a.caixa(), s).x, y: () => enquadra(a.caixa(), s).y });
+/* Rolagem de um rolo que deixa o alvo a `folga` px do topo da área visível; a conta é feita uma vez, quando a rolagem começa. */
+const rolagemCalc = (rolo, id, folga, visivel) => { const r = document.getElementById(rolo); let y = 0; for (let e = document.getElementById(id); e && e !== r; e = e.offsetParent) y += e.offsetTop; return Math.max(0, Math.min(r.offsetHeight - visivel, y - folga)); };
+const rolagemPara = (rolo, id, folga, visivel) => { let v; return () => (v !== undefined ? v : (v = rolagemCalc(rolo, id, folga, visivel))); };
+/* Timeline: uma só, pausada, com tempos absolutos. */
+window.__timelines = window.__timelines || {};
+const tl = gsap.timeline({ paused: true });
+tl.set("#camera", { scale: 1, x: 0, y: 0 }, 0);
+/* Push-in no alvo e, até o próximo movimento, uma deriva lenta: a câmera nunca para. */
+function mira(t, dur, a, s, ate) { tl.to("#camera", { ...camera(a, s), duration: dur, ease: "power2.inOut" }, t); tl.to("#camera", { ...camera(a, s * 1.025), duration: ate - t - dur, ease: "none" }, t + dur); }
+/* Anel em volta do alvo; o data-alvo é o que o gate do anel confere. */
+function marca(t, a, ate) { tl.set("#mk", { attr: { "data-alvo": a.ids }, x: () => a.caixa().x - 8, y: () => a.caixa().y - 8, width: () => a.caixa().w + 16, height: () => a.caixa().h + 16, scale: 1.06 }, t - 0.02); tl.to("#mk", { opacity: 1, scale: 1, duration: 0.3, ease: "power2.out" }, t); tl.to("#mk", { opacity: 0, duration: 0.25 }, ate);
+}
+const centro = (a) => { const r = a.caixa(); return { x: r.x + r.w / 2 - 8, y: r.y + r.h / 2 - 6 }; };
+/* Dedo fantasma: entra, vai até o alvo em `v` segundos e toca 0,25 + v depois de `t`. */
+function toca(t, a, de, v = 0.7) { const b = de ? () => centro(de) : () => ({ x: centro(a).x + 120, y: centro(a).y + 150 }); tl.set("#dedo", { x: () => b().x, y: () => b().y }, t - 0.02); tl.to("#dedo", { opacity: 1, duration: 0.2 }, t); tl.to("#dedo", { x: () => centro(a).x, y: () => centro(a).y, duration: v, ease: "power2.inOut" }, t + 0.2); tl.fromTo("#toque", { opacity: 0.9, scale: 0.4 }, { opacity: 0, scale: 1.3, duration: 0.45, ease: "power1.out", immediateRender: false }, t + 0.25 + v);
+}
+const soltaDedo = (t) => tl.to("#dedo", { opacity: 0, duration: 0.25 }, t);
+const rola = (sel, y, t, dur = 0.9) => tl.to(sel, { y: () => -valor(y), duration: dur, ease: "power2.inOut" }, t);
+const mostra = (sel, t, dur = 0.25) => tl.to(sel, { opacity: 1, duration: dur }, t);
+const esconde = (sel, t, dur = 0.25) => tl.to(sel, { opacity: 0, duration: dur }, t);
+/* Janela do app que abre (véu e caixa juntos, a caixa com o scale-in do app) e botão que afunda no toque. */
+function abre(sobre, caixa, t) { mostra(sobre, t, 0.22); tl.fromTo(caixa, { scale: 0.95 }, { scale: 1, duration: 0.25, ease: "power2.out" }, t); }
+function confirmaAbre(id, t) { mostra(`#${id}`, t, 0.25); tl.fromTo(`#${id}-caixa`, { y: 10 }, { y: 0, duration: 0.3, ease: "power2.out" }, t); }
+const aperta = (sel, t) => { tl.to(sel, { scale: 0.96, duration: 0.1 }, t); tl.to(sel, { scale: 1, duration: 0.1 }, t + 0.1); };
+/* Texto que entra num campo: o valor inteiro já está no DOM e a máscara de largura revela. */
+const digita = (sel, t, dur) => tl.fromTo(sel, { clipPath: "inset(0 100% 0 0)" }, { clipPath: "inset(0 0% 0 0)", duration: dur, ease: "none" }, t);
+/* Troca de tela com rastro: a que sai desliza e desfoca, a que entra vem do lado oposto e entra em foco. */
+function trocaTela(de, para, t) { tl.to(de, { x: -300, filter: "blur(24px)", opacity: 0, duration: 0.35, ease: "power2.in" }, t); tl.fromTo(para, { x: 300, filter: "blur(24px)", opacity: 0 }, { x: 0, filter: "blur(0px)", opacity: 1, duration: 0.6, ease: "power2.out" }, t + 0.25);
+}
+/* O endereço na barra do navegador troca junto com a tela. */
+const trocaUrl = (de, para, t) => { esconde(`#u-${de}`, t, 0.2); mostra(`#u-${para}`, t + 0.1, 0.2); };
+/* As três pessoas do exemplo. A Marina é Superadmin de POPs e vê os blocos de Setores e de acesso; o Rafael (Gerente) e a Helena (Coordenadora do CTI) veem só a lista do seu escopo. */
+const MARINA = { login: "marina.alves", ini: "M", perfil: "Superadmin", adm: true }, RAFAEL = { login: "rafael.pimenta", ini: "R", perfil: "Gerente" }, HELENA = { login: "helena.duarte", ini: "H", perfil: "Coordenador" };
+/* A casca do app (barra lateral e topo), como cada pessoa vê. */
+const casca = (conteudo, p, q) => `<div class="lado"><div class="marca"><img src="assets/logo-hsm.png" alt="Hospital São Matheus" /></div><nav> <div class="mi">${ic("alvo", 18, 1.5)}Reuniões e metas<span class="fim">${ic("baixo", 16)}</span></div> <div class="sub"><div class="mi">${ic("painel", 16, 1.5)}Dashboard</div><div class="mi">${ic("calendario", 16, 1.5)}Calendário</div><div class="mi">${ic("relogio", 16, 1.5)}Pendências<span class="fim">${ic("direita", 16)}</span></div></div> <div class="mi">${ic("megafone", 18, 1.5)}Ouvidoria</div><div class="mi on" id="${p}-menu-pops">${ic("livro", 18, 2)}POPs</div>${q.adm ? `<div class="mi">${ic("escudo", 18, 1.5)}Admin</div>` : ""}<div class="mi" style="margin-top:8px">${ic("ajuda", 18, 1.5)}Ajuda</div></nav></div> <div class="topo"><div class="busca">${ic("lupa", 16)}Buscar...</div><div class="quem"><div class="sino">${ic("sino", 22, 1.75)}</div><div class="divisor"></div> <div class="pessoa"><div class="tx"><b>${q.login}</b><span>${q.login}@exemplo.lo...</span></div><div class="avatar">${q.ini}<span class="seta">${ic("baixo", 12)}</span></div></div></div></div> <div class="corpo">${conteudo}</div>`;
+/* A lista POPs do meu escopo (PopsManager.tsx), do mais novo para o mais antigo. O botão da etapa sai do papel de quem vê; Papéis vale até a assinatura e a lixeira é só do Superadmin. */
+const ESTADO = { "A Elaborar": "s-slate", "Em Elaboração": "s-blue", "Em Revisão": "s-amber", "Em Validação": "s-purple", "Em Assinatura": "s-indigo", "Publicado": "s-emerald" };
+const CRIT = { "CRÍTICA": "s-red", "ALTA": "s-orange", "MÉDIA": "s-yellow" };
+const NOVO = ["HSM_CTI-002", "POP Aspiração de Vias Aéreas", "CTI", "ALTA"];
+const OUTROS = [["HSM_CC-001", "POP Cirurgia Segura", "CC", "CRÍTICA", "Em Validação", "Rafael Pimenta"], ["HSM_CC-002", "POP Contagem de Compressas", "CC", "ALTA", "Em Assinatura", "Rafael Pimenta"], ["HSM_CTI-001", "POP Higienização das Mãos", "CTI", "CRÍTICA", "Em Revisão", "Rafael Pimenta"], ["HSM_FARM-001", "POP Dispensação de Medicamentos Potencialmente Perigosos", "FARM", "CRÍTICA", "Publicado", "Helena Duarte"], ["HSM_FARM-002", "POP Recebimento de Medicamentos", "FARM", "MÉDIA", "A Elaborar", "Marina Alves"]];
+function linhaPop(p, [cod, nome, sigla, crit, est, elab], etapa, adm) { const id = `${p}-${cod}`, papeis = !["Em Assinatura", "Publicado"].includes(est); const doc = etapa === "Elaborar" ? `<span class="ac ac-pri" id="${id}-etapa">${ic("brilho", 14)}Elaborar</span>` : ["A Elaborar", "Em Elaboração"].includes(est) ? "" : `<div class="acoes"><span class="ac ${etapa ? "ac-pri" : "ac-slate"}" id="${id}-etapa">${ic("livro", 14)}${etapa || "Ver"}</span><span class="ac ac-pri">${ic("arquivo", 14)}PDF</span><span class="ac ac-pri so">${ic("baixar", 14)}</span></div>`; return `<tr id="${id}"><td style="width:150px"><span class="selo s-cod" id="${id}-codigo">${cod}</span></td><td><span style="font-weight:500;color:var(--color-text)">${nome}</span></td><td style="width:120px"><span style="color:var(--color-text-secondary)">${sigla}</span></td> <td style="width:120px"><span class="selo ${CRIT[crit]}">${crit}</span></td><td style="width:150px"><span class="selo ${ESTADO[est]}" id="${id}-estado">v1.0 · ${est}</span></td><td style="width:180px"><span style="color:var(--color-text-secondary)">${elab}</span></td> <td style="width:300px"><div class="acoes">${papeis ? `<span class="ac ac-slate">${ic("lapis", 14)}Papéis</span>` : ""}${doc}${papeis && adm ? `<span class="ac ac-red so">${ic("lixo", 14)}</span>` : ""}</div></td></tr>`;
+}
+/* As linhas de cada pessoa: o HSM_CTI-002 no estado do momento e os outros POPs do escopo dela. */
+const ETAPA_MARINA = { "HSM_CC-001": "Validar", "HSM_CTI-001": "Revisar", "HSM_FARM-002": "Elaborar" };
+const linhasMarina = (p, est, etapa) => (est ? linhaPop(p, [...NOVO, est, "Marina Alves"], etapa, true) : "") + OUTROS.map((l) => linhaPop(p, l, ETAPA_MARINA[l[0]], true)).join("");
+const linhasDe = (p, est, etapa, siglas) => linhaPop(p, [...NOVO, est, "Marina Alves"], etapa) + OUTROS.filter((l) => siglas.includes(l[2])).map((l) => linhaPop(p, l, "")).join("");
+const listaPops = (p, linhas) => `<div class="bl" id="${p}-lista"><div class="bl-cab"><div class="esq">${ic("arquivo", 20)}<div><h2>POPs do meu escopo</h2><p>Código travado pelo sistema · Versão 1.0 nasce em A Elaborar</p></div></div> <span class="bt-grad" id="${p}-criar">${ic("mais", 16)}Criar novo POP</span></div> <div style="display:flex;flex-wrap:wrap;gap:.5rem">${["Todos", ...Object.keys(ESTADO)].map((e, i) => `<span class="chip${i ? "" : " on"}">${e}</span>`).join("")}</div> <div class="tabela"><table><thead><tr><th>Código</th><th>Nome</th><th>Setor</th><th>Criticidade</th><th>Estado</th><th>Elaborador</th><th></th></tr></thead><tbody>${linhas}</tbody></table></div></div>`;
+const cartoes = (p) => `<div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem"><div class="cartao-app" id="${p}-biblioteca">${ic("estante", 20)}<h2>Biblioteca</h2><p>Repositório oficial dos POPs publicados, por Setor, com o PDF assinado.</p></div> <div class="cartao-app" style="opacity:.75">${ic("formatura", 20)}<h2>Treinamentos</h2><p>Capacitação da equipe nos POPs publicados (em breve).</p></div></div>`;
+/* Os blocos do Superadmin (SetoresManager.tsx e UsuariosPopsManager.tsx), só na tela da Marina. */
+const SETORES = [["Centro Cirúrgico", "CC"], ["Centro de Terapia Intensiva", "CTI"], ["Farmácia", "FARM"]];
+const blocoSetores = `<div class="bl"><div class="bl-cab"><div class="esq">${ic("predio", 20)}<div><h2>Setores</h2><p>Unidades do organograma. A sigla trava o código dos POPs (HSM_SIGLA-NNN)</p></div></div><span class="bt-grad">${ic("mais", 16)}Novo Setor</span></div> <div class="tabela"><table><thead><tr><th>Nome</th><th style="width:140px">Sigla</th><th style="width:96px">Ações</th></tr></thead><tbody>${SETORES.map(([n, s]) => `<tr><td><span style="font-weight:500;color:var(--color-text)">${n}</span></td><td><span class="selo s-cod">${s}</span></td><td><span class="ic-ac">${ic("lapis", 16)}</span></td></tr>`).join("")}</tbody></table></div></div>`;
+const PERFIS_POP = [["Helena Duarte", "helena.duarte@exemplo.local", "Coordenador"], ["Marina Alves", "marina.alves@exemplo.local", "Superadmin"], ["Rafael Pimenta", "rafael.pimenta@exemplo.local", "Gerente"]];
+const blocoAcesso = `<div class="bl"><div class="bl-cab"><div class="esq">${ic("pessoas", 20)}<div><h2>Acesso ao POPs</h2><p>Perfis do contexto POPs e vínculos de Setor. Conceder a quem não loga cria o acesso.</p></div></div><span class="bt-grad">${ic("pessoamais", 16)}Conceder perfil</span></div> <div class="tabela"><table><thead><tr><th>Nome</th><th style="width:200px">Perfil POP</th><th style="width:110px">Login</th><th style="width:120px">Ações</th></tr></thead><tbody>${PERFIS_POP.map(([n, e, pf]) => `<tr><td><span style="font-weight:500;color:var(--color-text)">${n}</span><div style="font-size:.75rem;line-height:1rem;color:var(--color-slate-500)">${e}</div></td><td><div class="cx cx-sel"><span class="cheio">${pf}</span><span class="ic-sel">${ic("baixo", 16)}</span></div></td><td><span class="selo" style="font-weight:500;background:var(--color-emerald-50);color:var(--color-emerald-600)">Ativo</span></td><td><span class="acoes"><span class="ic-ac">${ic("predio", 16)}</span><span class="ic-ac">${ic("pessoamenos", 16)}</span></span></td></tr>`).join("")}</tbody></table></div></div>`;
+/* A página /pops inteira, de cima: cabeçalho, lista, cartões, os blocos do Superadmin e o rodapé com a versão. */
+const gestao = (p, linhas, q) => `<div class="rolo" id="${p}-rolo"><div class="pg"><div class="pg-cab"><span class="pg-ic">${ic("livro", 24)}</span><div><h1>Gestão de POPs</h1><p>Procedimentos Operacionais Padrão do HSM · seu perfil: ${q.perfil}</p></div></div> ${listaPops(p, linhas)}${cartoes(p)}${q.adm ? blocoSetores + blocoAcesso : ""}</div><footer class="rodape">v0.196.1</footer></div>`;
+const telaLista = (p, linhas, q, extra) => `<div class="tela-app" id="t-${p}">${casca(gestao(p, linhas, q) + (extra || ""), p, q)}</div>`;
+const aviso = (id, texto) => `<div class="aviso-ok" id="${id}"><span class="ic">${ic("checkc", 20)}</span><p>${texto}</p><span class="x">${ic("fechar", 16)}</span></div>`;
+/* Campos do app: Select (components/ui/Select.tsx), lista aberta e input. O valor escolhido mora por cima do texto de exemplo. */
+const sel = (id, vazio, cheio) => `<div class="cx cx-sel" id="${id}"><span class="vazio" id="${id}-v">${vazio}</span><span class="cheio sobre" id="${id}-c">${cheio}</span><span class="ic-sel">${ic("baixo", 16)}</span><span class="cx-foco" id="${id}-f"></span></div>`;
+const selValor = (id, atual, novo) => `<div class="cx cx-sel" id="${id}"><span class="cheio" id="${id}-v">${atual}</span><span class="cheio sobre" id="${id}-c">${novo}</span><span class="ic-sel">${ic("baixo", 16)}</span><span class="cx-foco" id="${id}-f"></span></div>`;
+const lista = (id, ops, atual) => `<div class="lista" id="${id}" style="left:0;right:0;top:calc(100% + .25rem);min-width:200px">${ops.map((o, i) => `<div class="op${o === atual ? " esc" : ""}" id="${id}-${i}"><i>${o === atual ? ic("ok", 16, 3) : ""}</i>${o}</div>`).join("")}</div>`;
+/* Escolha numa lista, no ritmo de quem já conhece a tela: toca o campo, a lista abre, toca a opção, o valor entra. */
+function escolhe(t, campoId, listaId, i, de) { const c = alvo(campoId), o = alvo(`${listaId}-${i}`); toca(t, c, de, 0.45); mostra(`#${campoId}-f`, t + 0.7, 0.1); mostra(`#${listaId}`, t + 0.75, 0.15); toca(t + 0.9, o, c, 0.45); esconde(`#${listaId}`, t + 1.7, 0.12); esconde(`#${campoId}-f`, t + 1.75, 0.1); esconde(`#${campoId}-v`, t + 1.75, 0.1); mostra(`#${campoId}-c`, t + 1.75, 0.1); return o;
+}
+/* A janela Criar novo POP (CriarPopModal): o Nome vem sugerido do Setor e a pessoa troca pelo do procedimento. */
+const PESSOAS = ["Helena Duarte", "Marina Alves", "Rafael Pimenta"];
+const pessoa = (papel, id, nome) => `<div class="cmp"><label class="rot">${papel}</label>${sel(id, "Selecione", nome)}${lista(`l-${id}`, PESSOAS)}</div>`;
+const janelaCriar = `<div class="sobre-app" id="sobre-criar"><div class="veu"></div><div class="md-centro"><div class="md" id="md-criar"> <div class="md-topo"><div><h3>Criar novo POP</h3><p>O código HSM_[SIGLA]-[NNN] é gerado pelo sistema e travado para sempre</p></div><span class="x">${ic("fechar", 20)}</span></div> <div class="md-form"> <div class="g2" id="md-l1"><div class="cmp"><label class="rot">Setor</label>${sel("f-setor", "Selecione o Setor", "Centro de Terapia Intensiva (CTI)")}${lista("l-setor", ["Centro Cirúrgico (CC)", "Centro de Terapia Intensiva (CTI)", "Farmácia (FARM)"])}</div> <div class="cmp"><label class="rot">Criticidade</label>${sel("f-crit", "Selecione", "ALTA")}${lista("l-crit", ["CRÍTICA", "ALTA", "MÉDIA"])}</div></div> <div id="b-nome"><label class="rot">Nome do POP</label><div class="cx" id="f-nome"><span class="vazio" id="f-nome-v">Ex.: Higienização das Mãos</span><span class="cheio sobre" id="f-nome-s">POP Centro de Terapia Intensiva</span><span class="cheio sobre" id="f-nome-c">POP Aspiração de Vias Aéreas</span><span class="cx-foco" id="f-nome-f"></span></div></div> <div class="g3" id="md-l2">${pessoa("Elaborador", "f-elab", "Marina Alves")}${pessoa("Revisor", "f-rev", "Rafael Pimenta")}${pessoa("Validador", "f-val", "Helena Duarte")}</div> <div class="g3" id="md-l3"><div><label class="rot">Prazo de elaboração (dias úteis)</label><div class="cx">15</div></div><div><label class="rot">Prazo de revisão (dias)</label><div class="cx">30</div></div> <div class="cmp"><label class="rot">Periodicidade de revisão</label>${sel("f-per", "Selecione", "1 ano")}${lista("l-per", ["3 meses", "6 meses", "1 ano", "2 anos"])}</div></div> <div><label class="rot">Base normativa (opcional)</label><div class="cx"><span class="vazio">Ex.: RDC 63/2011, Manual ONA</span></div></div> <div class="md-botoes"><span class="bt-leve">Cancelar</span><span class="bt-grad" id="bt-criar-pop">Criar POP</span></div> </div></div></div></div>`;
+/* A Versão do POP (PopVivoView.tsx): Identificação do cadastro e as seções do rascunho. */
+const par = (t) => `<p class="md-p">${t}</p>`;
+const itens = (tag, l) => `<${tag} class="md-l">${l.map((i) => `<li>${i}</li>`).join("")}</${tag}>`;
+const POP = { cod: "HSM_CTI-002", nome: "POP Aspiração de Vias Aéreas", setor: "Centro de Terapia Intensiva (CTI)", crit: "ALTA", elab: "Marina Alves", rev: "Rafael Pimenta", val: "Helena Duarte" };
+function identificacao(p) { const campos = [["Código", POP.cod], ["Setor", POP.setor], ["Versão", "v1.0"], ["Data de criação", "16/09/2026"], ["Criticidade", POP.crit], ["Base normativa", "-"], ["Elaborador", POP.elab], ["Revisor", POP.rev], ["Validador", POP.val]]; return `<section class="sec" id="${p}-ident"><div class="sec-id"><span class="ic-box">${ic("arquivo", 16)}</span><div><h2>1. Identificação</h2><p>Preenchida pelo sistema (código travado).</p></div></div> <div class="sec-corpo"><p class="nome">${POP.nome}</p><dl class="ident">${campos.map(([r, v]) => `<div><dt>${r}</dt><dd>${v}</dd></div>`).join("")}</dl></div></section>`;
+}
+const secao = (p, n, titulo, corpo, mira) => `<section class="sec" id="${p}-s${n}"><div class="sec-cab"><h2>${n}. ${titulo}</h2>${mira ? `<span class="mira">${ic("mira", 16)}</span>` : ""}</div><div class="sec-corpo">${corpo}</div></section>`;
+/* O fluxograma de exemplo do roteiro, desenhado pelo renderer do app (lib/pops/fluxograma/svg.ts) com as cores trocadas pelos tokens. */
+const FLUXO_SVG = '<svg viewBox="0 0 722 569" width="722" height="569" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Fluxograma do procedimento"><defs><marker id="flx-ponta" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M 0 1.5 L 9 5 L 0 8.5 z" style="fill:var(--color-slate-400)"/></marker><filter id="flx-sombra" x="-20%" y="-20%" width="140%" height="160%"><feDropShadow dx="0" dy="1" stdDeviation="1.6" flood-opacity="0.10" style="flood-color:var(--color-slate-900)"/></filter></defs><path d="M 300 57 V 87" fill="none" stroke-width="1.8" marker-end="url(#flx-ponta)" style="stroke:var(--color-slate-400)"/><path d="M 300 135 V 165" fill="none" stroke-width="1.8" marker-end="url(#flx-ponta)" style="stroke:var(--color-slate-400)"/><path d="M 300 231 V 261" fill="none" stroke-width="1.8" marker-end="url(#flx-ponta)" style="stroke:var(--color-slate-400)"/><path d="M 300 390 V 420" fill="none" stroke-width="1.8" marker-end="url(#flx-ponta)" style="stroke:var(--color-slate-400)"/><path d="M 300 486 V 516" fill="none" stroke-width="1.8" marker-end="url(#flx-ponta)" style="stroke:var(--color-slate-400)"/><path d="M 418 285 H 494" fill="none" stroke-width="1.8" marker-end="url(#flx-ponta)" style="stroke:var(--color-slate-400)"/><path d="M 182 271 H 144 Q 136 271 136 279 V 358 Q 136 366 144 366 H 178" fill="none" stroke-width="1.8" marker-end="url(#flx-ponta)" style="stroke:var(--color-slate-400)"/><path d="M 600 248 V 206 Q 600 198 592 198 H 422" fill="none" stroke-width="1.8" marker-end="url(#flx-ponta)" style="stroke:var(--color-slate-400)"/><rect x="252" y="23" width="96" height="34" rx="17" filter="url(#flx-sombra)" style="fill:var(--color-primary)"/><path d="M 274 34 l 10 6 l -10 6 z" opacity="0.9" style="fill:var(--color-white)"/><text x="307" y="45" text-anchor="middle" font-size="14.5" font-weight="700" style="fill:var(--color-white);font-family:var(--font-app)">Início</text><rect x="256" y="516" width="88" height="34" rx="17" stroke-width="1.5" filter="url(#flx-sombra)" style="fill:var(--color-emerald-300);stroke:var(--color-emerald-400)"/><path d="M 276 533 l 4.5 4.5 l 8 -8.5" stroke-width="2.4" fill="none" stroke-linecap="round" stroke-linejoin="round" style="stroke:var(--color-green-900)"/><text x="308" y="538" text-anchor="middle" font-size="14.5" font-weight="700" style="fill:var(--color-green-900);font-family:var(--font-app)">Fim</text><rect x="182" y="87" width="236" height="48" rx="8" stroke-width="1.5" filter="url(#flx-sombra)" style="fill:var(--color-white);stroke:var(--color-border)"/><circle cx="182" cy="111" r="11" stroke-width="1.2" style="fill:color-mix(in srgb, var(--color-primary) 8%, var(--color-white));stroke:color-mix(in srgb, var(--color-primary) 22%, var(--color-white))"/><text x="182" y="115" text-anchor="middle" font-size="12" font-weight="700" style="fill:var(--color-primary);font-family:var(--font-app)">1</text><text x="306" y="107" text-anchor="middle" font-size="15" font-weight="400" style="fill:var(--color-text);font-family:var(--font-app)">Higienizar as mãos e</text><text x="306" y="125" text-anchor="middle" font-size="15" font-weight="400" style="fill:var(--color-text);font-family:var(--font-app)">reunir o material</text><rect x="182" y="165" width="236" height="66" rx="8" stroke-width="1.5" filter="url(#flx-sombra)" style="fill:var(--color-white);stroke:var(--color-border)"/><circle cx="182" cy="198" r="11" stroke-width="1.2" style="fill:color-mix(in srgb, var(--color-primary) 8%, var(--color-white));stroke:color-mix(in srgb, var(--color-primary) 22%, var(--color-white))"/><text x="182" y="202" text-anchor="middle" font-size="12" font-weight="700" style="fill:var(--color-primary);font-family:var(--font-app)">2</text><text x="306" y="185" text-anchor="middle" font-size="15" font-weight="400" style="fill:var(--color-text);font-family:var(--font-app)">Conferir a prescrição e</text><text x="306" y="203" text-anchor="middle" font-size="15" font-weight="400" style="fill:var(--color-text);font-family:var(--font-app)">a identificação do</text><text x="306" y="221" text-anchor="middle" font-size="15" font-weight="400" style="fill:var(--color-text);font-family:var(--font-app)">paciente</text><rect x="182" y="261" width="236" height="48" rx="8" stroke-width="1.5" filter="url(#flx-sombra)" style="fill:var(--color-amber-50);stroke:var(--color-amber-300)"/><rect x="174" y="277" width="16" height="16" rx="3" transform="rotate(45 182 285)" stroke-width="1.5" style="fill:var(--color-white);stroke:var(--color-amber-300)"/><text x="182" y="289.5" text-anchor="middle" font-size="12" font-weight="700" style="fill:var(--color-amber-900);font-family:var(--font-app)">?</text><text x="306" y="281" text-anchor="middle" font-size="15" font-weight="600" style="fill:var(--color-amber-900);font-family:var(--font-app)">A prescrição confere</text><text x="306" y="299" text-anchor="middle" font-size="15" font-weight="600" style="fill:var(--color-amber-900);font-family:var(--font-app)">com a identificação?</text><rect x="182" y="342" width="236" height="48" rx="8" stroke-width="1.5" filter="url(#flx-sombra)" style="fill:var(--color-white);stroke:var(--color-border)"/><circle cx="182" cy="366" r="11" stroke-width="1.2" style="fill:color-mix(in srgb, var(--color-primary) 8%, var(--color-white));stroke:color-mix(in srgb, var(--color-primary) 22%, var(--color-white))"/><text x="182" y="370" text-anchor="middle" font-size="12" font-weight="700" style="fill:var(--color-primary);font-family:var(--font-app)">4</text><text x="306" y="362" text-anchor="middle" font-size="15" font-weight="400" style="fill:var(--color-text);font-family:var(--font-app)">Executar o procedimento</text><text x="306" y="380" text-anchor="middle" font-size="15" font-weight="400" style="fill:var(--color-text);font-family:var(--font-app)">conforme a técnica</text><rect x="182" y="420" width="236" height="66" rx="8" stroke-width="1.5" filter="url(#flx-sombra)" style="fill:var(--color-white);stroke:var(--color-border)"/><circle cx="182" cy="453" r="11" stroke-width="1.2" style="fill:color-mix(in srgb, var(--color-primary) 8%, var(--color-white));stroke:color-mix(in srgb, var(--color-primary) 22%, var(--color-white))"/><text x="182" y="457" text-anchor="middle" font-size="12" font-weight="700" style="fill:var(--color-primary);font-family:var(--font-app)">5</text><text x="306" y="440" text-anchor="middle" font-size="15" font-weight="400" style="fill:var(--color-text);font-family:var(--font-app)">Registrar o</text><text x="306" y="458" text-anchor="middle" font-size="15" font-weight="400" style="fill:var(--color-text);font-family:var(--font-app)">procedimento no</text><text x="306" y="476" text-anchor="middle" font-size="15" font-weight="400" style="fill:var(--color-text);font-family:var(--font-app)">prontuário</text><rect x="498" y="248" width="204" height="74" rx="8" stroke-width="1.5" filter="url(#flx-sombra)" style="fill:var(--color-white);stroke:var(--color-border)"/><circle cx="498" cy="285" r="11" stroke-width="1.2" style="fill:color-mix(in srgb, var(--color-primary) 8%, var(--color-white));stroke:color-mix(in srgb, var(--color-primary) 22%, var(--color-white))"/><text x="498" y="289" text-anchor="middle" font-size="12" font-weight="700" style="fill:var(--color-primary);font-family:var(--font-app)">3</text><text x="606" y="272" text-anchor="middle" font-size="15" font-weight="400" style="fill:var(--color-text);font-family:var(--font-app)">Suspender e acionar</text><text x="606" y="290" text-anchor="middle" font-size="15" font-weight="400" style="fill:var(--color-text);font-family:var(--font-app)">o enfermeiro</text><text x="606" y="308" text-anchor="middle" font-size="15" font-weight="400" style="fill:var(--color-text);font-family:var(--font-app)">responsável</text><rect x="436" y="274" width="44" height="22" rx="11" stroke-width="1.2" style="fill:var(--color-red-50);stroke:var(--color-red-200)"/><text x="458" y="289.5" text-anchor="middle" font-size="12" font-weight="700" style="fill:var(--color-red-700);font-family:var(--font-app)">Não</text><rect x="126" y="260" width="44" height="22" rx="11" stroke-width="1.2" style="fill:var(--color-emerald-50);stroke:var(--color-emerald-200)"/><text x="148" y="275.5" text-anchor="middle" font-size="12" font-weight="700" style="fill:var(--color-emerald-700);font-family:var(--font-app)">Sim</text></svg>';
+/* FluxogramaPalco.tsx: barra de zoom e de exportação, palco com o desenho enquadrado. */
+const palco = (p) => `<div class="flx"><div class="flx-barra"><div class="flx-zoom"><span class="flx-f">${ic("zoommenos", 16)}</span><span class="flx-pct"><span>89%</span></span><span class="flx-f">${ic("zoommais", 16)}</span><span class="flx-f">${ic("ajustar", 16)}</span></div> <div class="flx-exp"><span class="flx-bt">${ic("imagem", 14)}PNG</span><span class="flx-bt">${ic("baixar", 14)}SVG</span></div></div> <div class="flx-palco" id="${p}-palco"><div class="flx-des">${FLUXO_SVG}</div><span class="flx-dica">Role para dar zoom, arraste para mover</span></div><p class="flx-leg">${POP.cod} · ${POP.nome}</p></div>`;
+const SECOES = (p) => [ ["Objetivo", par("Padronizar a aspiração de vias aéreas em pacientes intubados do Centro de Terapia Intensiva, preservando a oxigenação e prevenindo lesão de mucosa.")], ["Aplicação", par("Equipe de enfermagem e fisioterapia do Centro de Terapia Intensiva.")], ["Materiais necessários", itens("ul", ["Sonda de aspiração estéril", "Luva estéril e óculos de proteção", "Soro fisiológico a 0,9%"])], ["Descrição do procedimento", itens("ol", ["Higienize as mãos e reúna o material.", "Confira a prescrição e a identificação do paciente.", "Aspire por no máximo 15 segundos a cada passagem da sonda.", "Espere 1 minuto entre uma passagem e outra.", "Registre o procedimento no prontuário."])], ["Fluxograma", palco(p)],
+];
+const secoes = (p, mira) => SECOES(p).map(([t, c], i) => secao(p, i + 2, t, c, mira)).join("");
+/* ConfirmDialog.tsx: a confirmação simples de cada etapa. */
+const confirma = (id, titulo, texto, rotulo) => `<div class="sobre-app" id="${id}"><div class="conf-fundo"><div class="conf" id="${id}-caixa"><span class="x">${ic("fechar", 16)}</span><div class="alerta">${ic("alerta", 24)}</div><h3>${titulo}</h3><p class="desc">${texto}</p> <div class="bts"><span class="bt-nao">Cancelar</span><span class="bt-sim" id="${id}-sim">${rotulo}</span></div></div></div></div>`;
+/* A Elaboração (pops/[id]/elaboracao): o POP vivo à esquerda e o Consultor de POPs à direita. Na primeira conversa o rascunho está vazio, e Aprovar versão final fica apagado até haver conteúdo. */
+const msg = (eu, texto, id) => `<div class="msg${eu ? " eu" : ""}"${id ? ` id="${id}"` : ""}><span class="av">${ic(eu ? "pessoa" : "robo", 14)}</span><div class="bal">${texto}</div></div>`;
+const BOAS_VINDAS = "Vamos elaborar este POP juntos. Me conte como o procedimento funciona na prática. Eu estruturo nas seções do template institucional, seguindo as boas práticas de hospitais acreditados, e pergunto o que faltar. As seções tomam forma ao lado; quando o documento estiver pronto, use \"Aprovar versão final\".";
+const FALA = "Aspiramos o paciente intubado com sonda estéril, no máximo 15 segundos por passagem, com 1 minuto entre uma e outra, e registramos no prontuário.";
+const RESPOSTA = "Montei o Objetivo, a Aplicação, os Materiais e a Descrição do procedimento, e desenhei o fluxograma. Pela criticidade, sugiro revisar a cada 6 meses.";
+const periodicidade = `<div class="per" id="e-per"><span class="rot-per">${ic("calrel", 16)}<b>Periodicidade de revisão</b></span><span class="sug" id="e-sug">${ic("brilho", 12)}Agente sugere: 6 meses</span> <span class="fim-per"><small>Escolha final</small><span class="cmp" style="min-width:180px">${selValor("e-fper", "1 ano", "1 ano")}</span></span></div>`;
+const esquerda = periodicidade + identificacao("e") + `<div id="e-caixa-secs"><section class="sec" id="e-vazio"><p class="vazia">As seções do POP tomam forma conforme a conversa com o agente.</p></section><div id="e-secs">${secoes("e", true)}</div></div>`;
+const chat = `<div class="chat" id="e-chat" style="left:934.5px"><div class="chat-cab"><span class="ic-box">${ic("robo", 16)}</span><div><h3>Consultor de POPs</h3><p>Boas práticas ONA / JCI</p></div></div> <div class="chat-msgs" id="e-msgs"><div id="e-msgs-in">${msg(false, BOAS_VINDAS)}${msg(true, FALA, "e-m1")}<div class="msg" id="e-pontos"><span class="av">${ic("robo", 14)}</span><div class="pontos"><i></i><i></i><i></i></div></div>${msg(false, RESPOSTA, "e-m2")}</div></div> <div class="chat-pe"><div class="txt" id="e-txt"><span class="vazio" id="e-txt-v">Descreva o procedimento, passo a passo...</span><span class="cheio" id="e-txt-c">${FALA}</span></div><span class="bt-ch">${ic("clipe", 16)}</span><span class="bt-ch" id="e-micro">${ic("micro", 16)}</span><span class="bt-env" id="e-enviar">${ic("enviar", 16)}<span class="apaga" id="e-enviar-apaga"></span></span></div></div>`;
+const cabElab = `<header class="vh"><div class="vh-in" style="max-width:80rem"><div class="esq"><span class="volta">${ic("voltar", 16)}</span><div><div class="eti">${ic("brilho", 14)}Elaboração de POP</div><h1>${POP.cod}<span> · ${POP.nome}</span></h1></div></div> <span class="bt-verde" id="e-aprovar">${ic("checkc", 16)}Aprovar versão final<span class="apaga" id="e-aprovar-apaga"></span></span></div></header>`;
+const telaElab = `<div class="tela-app" id="t-e"><div class="pg-doc"><div class="el-grade"><div class="el-rolo" id="e-rolo" style="width:883.5px">${esquerda}</div>${chat}</div>${cabElab}</div></div>`;
+/* A leitura da Versão (pops/[id]/versao), com o rótulo e os botões da etapa de quem lê. */
+const telaDoc = (p, etapa, estado, botao) => `<div class="tela-app" id="t-${p}"><div class="pg-doc"><div class="doc-rolo" id="${p}-rolo"><main class="doc-main" style="max-width:64rem">${identificacao(p)}${secoes(p)}</main></div> <header class="vh"><div class="vh-in" style="max-width:64rem"><div class="esq"><span class="volta">${ic("voltar", 16)}</span><div><div class="eti" id="${p}-etapa">${ic("livro", 14)}${etapa}</div><h1>${POP.cod}<span> · ${POP.nome}</span></h1></div></div> <div class="dir"><span class="pilula">v1.0 · ${estado}</span><span class="bt-devolver" id="${p}-devolver">${ic("desfazer", 16)}Devolver com comentários</span><span class="bt-verde" id="${p}-aprovar">${ic("checkc", 16)}${botao}</span></div></div></header></div></div>`;
+/* A assinatura, fora da plataforma: o email da ClickSign e a página de assinar, desenhados neutros. */
+const DOC = "HSM_CTI-002_POP-Aspiracao-Vias-Aereas_v1.0_202610_PRELIMINAR";
+const mailLinha = (de, assunto, hora, id) => `<div class="mail-linha${id ? " nova" : ""}"${id ? ` id="${id}"` : ""}><span class="de">${de}</span><span class="assunto">${assunto}</span><span class="hora">${hora}</span></div>`;
+const caixaMail = `<div class="tela-app" id="t-mail"><div class="mail"><div class="mail-topo">${ic("inbox", 20)}Caixa de entrada</div><div class="mail-lista">${mailLinha("ClickSign", `Documento para assinar: ${DOC}`, "08:47", "m-click")}${mailLinha("Equipe da Qualidade", "Agenda da auditoria interna de outubro", "Ontem")}${mailLinha("Recursos Humanos", "Escala de plantão do feriado", "Ontem")}${mailLinha("Comissão de Controle de Infecção", "Indicadores do mês", "seg.")}</div></div></div>`;
+const mensagem = `<div class="tela-app" id="t-msg"><div class="mail"><div class="mail-topo">${ic("voltar", 20)}Caixa de entrada</div><div class="mail-msg"><h2>Documento para assinar: ${DOC}</h2><span class="rem">ClickSign · 08:47</span> <p>Olá, Marina Alves. Você recebeu um documento para assinar: <b>${DOC}</b>.</p><span class="bt-mail" id="m-link">Visualizar para assinar</span></div></div></div>`;
+const lin = (r, v, id) => `<div class="f-lin"${id ? ` id="${id}"` : ""}><i>${r}</i><span>${v}</span></div>`;
+const folha = `<div class="tela-app" id="t-doc"><div class="assina"><div class="folha"><div class="f-cab"><img src="assets/logo-hsm.png" alt="" /><div><b>Procedimento Operacional Padrão</b><span>Hospital São Matheus</span><span>Cuidar bem. Agir certo. Crescer juntos.</span></div></div> <div class="f-faixa">Documento preliminar: pendente de assinatura digital · Em Assinatura</div><h4>1. Identificação</h4>${lin("Código", `<span class="f-pill">${POP.cod}</span>`, "f-cod")}${lin("Nome do POP", POP.nome)}${lin("Setor", POP.setor)}${lin("Versão", "1.0 · Em Assinatura", "f-ver")}${lin("Data de criação", "16/09/2026")}${lin("Criticidade", POP.crit)}${lin("Elaborador", POP.elab)}${lin("Revisor", POP.rev)}${lin("Validador", POP.val)} <h4>2. Objetivo</h4><p>Padronizar a aspiração de vias aéreas em pacientes intubados do Centro de Terapia Intensiva, preservando a oxigenação e prevenindo lesão de mucosa.</p></div> <div class="assina-lado" id="lado"><b>Marina Alves</b><span>Leia o documento e assine para concluir a sua parte.</span><span class="bt-assinar" id="b-assinar">Assinar</span><span class="ok-ass" id="assinado">${ic("checkc", 18)}Documento assinado</span></div></div></div>`;
+/* A Biblioteca (BibliotecaPops.tsx): os POPs publicados por Setor, em ordem alfabética, e a Ficha do POP. */
+const grupoBib = (titulo, id, linhas) => `<div style="display:flex;flex-direction:column;gap:.5rem"><h2 class="grupo"${id ? ` id="${id}"` : ""}>${titulo}</h2><div class="tabela"><table><thead><tr><th style="width:150px">Código</th><th>Procedimento</th><th style="width:90px">Versão</th><th style="width:110px">Criticidade</th><th style="width:120px">Publicado em</th><th>Ações</th></tr></thead><tbody>${linhas}</tbody></table></div></div>`;
+const linhaBib = (cod, nome, crit, data, id) => `<tr${id ? ` id="${id}"` : ""}><td><span class="cod-mono">${cod}</span></td><td>${nome}</td><td><span${id ? ' id="b-ver"' : ""} style="color:var(--color-text-secondary)">v1.0</span></td><td>${crit}</td><td>${data}</td><td><span class="acoes"><span class="ic-ac" style="color:var(--color-slate-400)">${ic("arquivo", 16)}</span><span class="ic-ac" style="color:var(--color-slate-400)">${ic("baixar", 16)}</span></span></td></tr>`;
+const biblioteca = `<div class="rolo" id="b-rolo"><div class="pg"><div class="pg-cab"><span class="pg-ic">${ic("estante", 24)}</span><div><h1>Biblioteca</h1><p>POPs publicados: a versão oficial e assinada de cada procedimento, por Setor.</p></div><span class="volta-gestao">${ic("voltar", 16)}Gestão de POPs</span></div> ${grupoBib("Centro de Terapia Intensiva · CTI", "b-grupo", linhaBib(POP.cod, POP.nome, POP.crit, "06/10/2026", "b-linha"))}${grupoBib("Farmácia · FARM", "", linhaBib("HSM_FARM-001", "POP Dispensação de Medicamentos Potencialmente Perigosos", "CRÍTICA", "02/09/2026"))}</div><footer class="rodape">v0.196.1</footer></div>`;
+const caixaFicha = (titulo, id, l) => `<div class="caixa-ficha" id="${id}"><h4>${titulo}</h4><ul>${l.map(([r, v]) => `<li>${r}<b>${v}</b></li>`).join("")}</ul></div>`;
+const ficha = `<div class="sobre-app" id="sobre-ficha"><div class="veu"></div><div class="md-centro"><div class="md ficha" id="ficha"><div class="md-topo"><div><p class="cod-mono">${POP.cod}</p><h3>${POP.nome}</h3><p>Centro de Terapia Intensiva · CTI · v1.0 · ALTA · Revisão a cada 1 ano</p></div><span class="x">${ic("fechar", 20)}</span></div> <div class="g2">${caixaFicha("Datas de cada etapa", "f-datas", [["Criação do POP", "16/09/2026"], ["Elaboração concluída", "23/09/2026"], ["Revisão aprovada", "29/09/2026"], ["Validação aprovada", "01/10/2026"], ["Publicado (todas as assinaturas)", "06/10/2026"]])}${caixaFicha("Responsáveis", "f-resp", [["Elaborador", POP.elab], ["Revisor", POP.rev], ["Validador", POP.val]])}</div> <div style="display:flex;justify-content:flex-end"><span class="bt-pri" id="f-baixar">${ic("baixar", 16)}Baixar PDF assinado</span></div></div></div></div>`;
+/* Monta a réplica: todas as telas, uma em cima da outra, e as janelas que abrem por cima do app. */
+const U = "app.hospitalsaomatheus.cloud/pops";
+const url = [["pops", U], ["elab", `${U}/…/elaboracao`], ["versao", `${U}/…/versao`], ["mail", "Seu email"], ["click", "app.clicksign.com"], ["bib", `${U}/biblioteca`]].map(([id, t]) => `<span id="u-${id}">${t}</span>`).join("");
+const telas = telaLista("g", linhasMarina("g"), MARINA) + telaLista("g2", linhasMarina("g2", "A Elaborar", "Elaborar"), MARINA) + telaElab + telaLista("r1", linhasDe("r1", "Em Revisão", "Revisar", ["CC", "CTI"]), RAFAEL) + telaDoc("r", "Revisão técnica", "Em Revisão", "Aprovar revisão") + telaLista("v1", linhasDe("v1", "Em Validação", "Validar", ["CTI"]), HELENA) + telaDoc("v", "Validação final", "Em Validação", "Aprovar validação") + telaLista("v2", linhasDe("v2", "Em Assinatura", "", ["CTI"]), HELENA) + caixaMail + mensagem + folha + telaLista("p", linhasMarina("p", "Publicado", ""), MARINA, biblioteca);
+const sobre = janelaCriar + aviso("aviso-g", "POP HSM_CTI-002 criado. Elaborador notificado por email") + aviso("aviso-v", "Validação aprovada. A Versão seguiu para a assinatura.") + ficha + confirma("c-elab", "Aprovar versão final?", "A Versão segue para a Revisão e a edição se encerra. O Revisor designado é notificado por email com o prazo.", "Aprovar e enviar") + confirma("c-rev", "Aprovar a Revisão?", "A Versão segue para a Validação e o Validador é notificado por email.", "Aprovar") + confirma("c-val", "Aprovar a Validação?", "A Versão segue para a assinatura digital (Em Assinatura).", "Aprovar");
+document.getElementById("camera").innerHTML = janela(url, telas, sobre); liberaCamera();
+tl.fromTo("#janela", { opacity: 0, y: 24, filter: "blur(12px)" }, { opacity: 1, y: 0, filter: "blur(0px)", duration: 0.5, ease: "power2.out" }, 4.0);
+/* Passo 1 (4 a 9): POPs no menu e Criar novo POP, no alto da lista. A janela abre por cima. */
+const bMenu = alvo("g-menu-pops"), bCriar = alvo("g-criar");
+mira(4.4, 1.4, bMenu, 1.5, 6.0); marca(4.9, bMenu, 5.9); mira(6.0, 1.2, bCriar, 1.5, 8.2); marca(6.6, bCriar, 7.9); toca(6.4, bCriar); aperta("#g-criar", 7.35); soltaDedo(7.7);
+abre("#sobre-criar", "#md-criar", 7.6); mira(8.2, 0.8, alvo("md-criar"), 1.0, 9.2);
+/* Passo 2 (9 a 16): o Setor, o Nome sugerido trocado pelo do procedimento e a Criticidade. */
+mira(9.2, 1.0, alvo("md-l1 b-nome"), 1.35, 16.0); const oCti = escolhe(9.4, "f-setor", "l-setor", 1); mostra("#f-nome-s", 11.2, 0.1); esconde("#f-nome-v", 11.2, 0.1);
+const bNome = alvo("f-nome"); toca(11.5, bNome, oCti, 0.45); mostra("#f-nome-f", 12.2, 0.1); esconde("#f-nome-s", 12.3, 0.1); mostra("#f-nome-c", 12.3, 0.05); digita("#f-nome-c", 12.35, 1.0); esconde("#f-nome-f", 13.5, 0.1);
+const oAlta = escolhe(13.7, "f-crit", "l-crit", 1, bNome);
+/* Passo 3 (16 a 24): as três pessoas e a periodicidade, cada uma na sua lista. */
+mira(16.0, 1.0, alvo("md-l2 md-l3"), 1.3, 24.0); const oMarina = escolhe(16.2, "f-elab", "l-f-elab", 1, oAlta); const oRafael = escolhe(18.1, "f-rev", "l-f-rev", 2, oMarina);
+const oHelena = escolhe(20.0, "f-val", "l-f-val", 0, oRafael); const oAno = escolhe(21.9, "f-per", "l-per", 2, oHelena);
+/* Passo 4 (24 a 30): Criar POP. A janela fecha, a lista relida traz o HSM_CTI-002 no alto, em A Elaborar. */
+const bBotao = alvo("bt-criar-pop"); mira(24.0, 1.0, bBotao, 1.5, 25.6); toca(24.1, bBotao, oAno); aperta("#bt-criar-pop", 25.05); soltaDedo(25.4);
+esconde("#sobre-criar", 25.5, 0.3); mostra("#t-g2", 25.5, 0.3); esconde("#t-g", 25.85, 0.05); mostra("#aviso-g", 25.9, 0.3); mira(25.6, 0.8, REPOUSO, 1.0, 26.6);
+mira(26.6, 1.0, alvo("g2-HSM_CTI-002"), 1.3, 30.0); marca(27.0, alvo("g2-HSM_CTI-002-estado"), 28.6); esconde("#aviso-g", 29.6, 0.3);
+/* Passo 5 (30 a 37): Elaborar, na linha do POP; a conversa com o Consultor de POPs. */
+const bElab = alvo("g2-HSM_CTI-002-etapa"); mira(30.0, 1.0, bElab, 1.5, 31.6); toca(30.2, bElab); soltaDedo(31.4); trocaTela("#t-g2", "#t-e", 31.3); trocaUrl("pops", "elab", 31.4);
+mira(31.6, 0.6, REPOUSO, 1.0, 32.4); mira(32.4, 1.2, alvo("e-chat"), 1.25, 37.0);
+const msgs = document.getElementById("e-msgs");
+const rolaChat = (ate) => () => { const el = document.getElementById(ate); return Math.max(0, el.offsetTop + el.offsetHeight - (msgs.clientHeight - 2 * 17)); };
+const bCampo = alvo("e-txt"), bEnviar = alvo("e-enviar"); toca(32.6, bCampo, undefined, 0.45); esconde("#e-txt-v", 33.35, 0.1); mostra("#e-txt-c", 33.4, 0.8); esconde("#e-enviar-apaga", 33.6, 0.2);
+toca(34.3, bEnviar, bCampo, 0.45); aperta("#e-enviar", 35.0); soltaDedo(35.3); esconde("#e-txt-c", 35.1, 0.15); mostra("#e-txt-v", 35.15, 0.15); tl.set("#e-enviar-apaga", { opacity: 1 }, 35.15);
+rola("#e-msgs-in", rolaChat("e-m1"), 35.1, 0.5); mostra("#e-m1", 35.2, 0.3); mostra("#e-pontos", 35.6, 0.2); esconde("#e-pontos", 36.3, 0.15); rola("#e-msgs-in", rolaChat("e-m2"), 36.3, 0.5);
+mostra("#e-m2", 36.4, 0.35); esconde("#e-vazio", 36.6, 0.3); mostra("#e-secs", 36.7, 0.5); mostra("#e-sug", 36.8, 0.3); esconde("#e-aprovar-apaga", 36.8, 0.3);
+/* Passo 6 (37 a 43): as seções na coluna do POP, até o fluxograma. */
+mira(37.0, 1.2, alvo("e-s2 e-s3"), 1.3, 39.4); marca(37.6, alvo("e-s2"), 39.0);
+const ROLA_FLX = rolagemPara("e-rolo", "e-s6", 68 - 25.5 + 8, 723.6), bPalco = alvo("e-palco", ROLA_FLX);
+rola("#e-rolo", ROLA_FLX, 39.4, 1.4); mira(39.4, 1.4, REPOUSO, 1.0, 40.8); mira(40.8, 1.0, bPalco, 1.12, 43.0); marca(41.2, bPalco, 42.5); rola("#e-rolo", 0, 42.6, 0.8);
+/* Passo 7 (43 a 49): Aprovar versão final e Aprovar e enviar. Na tela do Revisor, o POP está Em Revisão. */
+const bAprE = alvo("e-aprovar"); mira(43.0, 1.0, bAprE, 1.5, 44.6); toca(43.2, bAprE); confirmaAbre("c-elab", 44.3); mira(44.6, 0.8, alvo("c-elab-caixa"), 1.4, 46.2);
+toca(44.8, alvo("c-elab-sim"), bAprE); aperta("#c-elab-sim", 45.75); soltaDedo(46.0); esconde("#c-elab", 45.95, 0.2); trocaTela("#t-e", "#t-r1", 46.2); trocaUrl("elab", "pops", 46.3);
+mira(46.2, 0.6, REPOUSO, 1.0, 47.0); mira(47.0, 1.0, alvo("r1-HSM_CTI-002"), 1.3, 49.0); marca(47.5, alvo("r1-HSM_CTI-002-estado"), 48.8);
+/* Passo 8 (49 a 55): Revisar abre a Revisão técnica; a leitura desce até o fluxograma. */
+const bRev = alvo("r1-HSM_CTI-002-etapa"); mira(49.0, 0.8, bRev, 1.5, 50.6); toca(49.2, bRev); soltaDedo(50.4); trocaTela("#t-r1", "#t-r", 50.4); trocaUrl("pops", "versao", 50.5);
+mira(50.6, 1.0, alvo("r-etapa"), 1.5, 52.4); marca(51.3, alvo("r-etapa"), 52.3);
+const ROLA_R = rolagemPara("r-rolo", "r-s6", 68 + 8, 723.6); mira(52.4, 1.0, REPOUSO, 1.0, 55.0); rola("#r-rolo", () => ROLA_R() * 0.5, 52.5, 1.1); rola("#r-rolo", ROLA_R, 53.6, 1.0); rola("#r-rolo", 0, 54.7, 0.7);
+/* Passo 9 (55 a 61): Devolver com comentários é o outro caminho; aqui, Aprovar revisão e Aprovar. */
+const bAprR = alvo("r-aprovar"); mira(55.0, 1.0, alvo("r-devolver r-aprovar"), 1.5, 57.6); marca(55.6, alvo("r-devolver"), 56.6); toca(56.6, bAprR); confirmaAbre("c-rev", 57.7);
+mira(57.6, 0.8, alvo("c-rev-caixa"), 1.4, 59.4); toca(58.0, alvo("c-rev-sim"), bAprR); aperta("#c-rev-sim", 58.95); soltaDedo(59.2); esconde("#c-rev", 59.15, 0.2); trocaTela("#t-r", "#t-v1", 59.4); trocaUrl("versao", "pops", 59.5);
+mira(59.4, 0.6, REPOUSO, 1.0, 60.2); mira(60.2, 0.8, alvo("v1-HSM_CTI-002"), 1.3, 61.4); marca(60.5, alvo("v1-HSM_CTI-002-estado"), 61.3);
+/* Passo 10 (61 a 67): Validar abre a Validação final; Aprovar validação e Aprovar. */
+const bVal = alvo("v1-HSM_CTI-002-etapa"); mira(61.4, 0.6, bVal, 1.5, 62.6); toca(61.5, bVal); soltaDedo(62.7); trocaTela("#t-v1", "#t-v", 62.6); trocaUrl("pops", "versao", 62.7);
+mira(62.6, 0.8, alvo("v-etapa"), 1.5, 64.2); marca(63.3, alvo("v-etapa"), 64.1); const bAprV = alvo("v-aprovar"); mira(64.2, 0.8, bAprV, 1.5, 65.6); toca(64.3, bAprV); confirmaAbre("c-val", 65.4);
+mira(65.6, 0.6, alvo("c-val-caixa"), 1.4, 67.0); toca(65.7, alvo("c-val-sim"), bAprV); aperta("#c-val-sim", 66.65); soltaDedo(66.9); esconde("#c-val", 66.85, 0.2);
+/* Passo 11 (67 a 72): de volta à lista, Em Assinatura; o documento vai por email. */
+trocaTela("#t-v", "#t-v2", 67.0); trocaUrl("versao", "pops", 67.1); mostra("#aviso-v", 67.7, 0.3); mira(67.0, 0.6, REPOUSO, 1.0, 67.8); mira(67.8, 1.0, alvo("v2-HSM_CTI-002"), 1.3, 70.2);
+marca(68.3, alvo("v2-HSM_CTI-002-estado"), 69.9); esconde("#aviso-v", 69.9, 0.2); trocaTela("#t-v2", "#t-mail", 70.2); trocaUrl("pops", "mail", 70.3);
+/* Passo 12 (72 a 78): a mensagem da ClickSign e o link. */
+const bMsg = alvo("m-click"), bLink = alvo("m-link"); mira(70.2, 1.0, bMsg, 1.05, 73.6); marca(71.0, bMsg, 73.0); toca(72.3, bMsg); soltaDedo(73.5); esconde("#t-mail", 73.4, 0.25); mostra("#t-msg", 73.5, 0.25);
+mira(73.6, 1.0, bLink, 1.4, 76.4); marca(74.3, bLink, 75.6); toca(74.7, bLink); soltaDedo(75.9); trocaTela("#t-msg", "#t-doc", 76.0); trocaUrl("mail", "click", 76.1);
+/* Passo 13 (78 a 84): o Código e a Versão no alto do documento, e Assinar. */
+mira(76.4, 1.4, alvo("f-cod f-ver"), 1.7, 79.4); marca(77.4, alvo("f-cod"), 78.3); marca(78.6, alvo("f-ver"), 79.4); const bAss = alvo("b-assinar"); mira(79.4, 1.0, alvo("lado"), 1.5, 84.0); toca(80.0, bAss); aperta("#b-assinar", 80.95);
+soltaDedo(81.3); mostra("#assinado", 81.3, 0.3); marca(81.8, alvo("assinado"), 83.5);
+/* Passo 14 (84 a 90): com as três assinaturas, Publicado; o cartão Biblioteca, abaixo da lista. */
+trocaTela("#t-doc", "#t-p", 83.8); trocaUrl("click", "pops", 83.9); mira(84.0, 1.0, alvo("p-HSM_CTI-002"), 1.3, 86.2); marca(84.6, alvo("p-HSM_CTI-002-estado"), 86.0);
+const ROLA_C = rolagemPara("p-rolo", "p-biblioteca", 260, 655.6), bCartao = alvo("p-biblioteca", ROLA_C); rola("#p-rolo", ROLA_C, 86.2, 1.0); mira(86.2, 1.2, bCartao, 1.35, 89.2);
+marca(87.4, bCartao, 88.9); toca(87.5, bCartao); soltaDedo(88.8); trocaTela("#p-rolo", "#b-rolo", 89.0); trocaUrl("pops", "bib", 89.1); mira(89.2, 0.6, REPOUSO, 1.0, 90.0);
+/* Passo 15 (90 a 96): o grupo do Setor e a linha, que abre a Ficha do POP. */
+mira(90.0, 1.0, alvo("b-grupo b-linha"), 1.3, 92.4); marca(90.5, alvo("b-grupo"), 91.6); toca(91.6, alvo("b-ver")); soltaDedo(92.8); abre("#sobre-ficha", "#ficha", 92.7);
+mira(92.4, 1.0, alvo("ficha"), 1.2, 96.0); marca(93.4, alvo("f-datas f-resp"), 95.6);
+/* Âncora: o timeline preenche o slot inteiro. */
+tl.to({}, { duration: 99 }, 0);
+window.__timelines["main"] = tl;
+</script>
+</body>
+</html>

@@ -1,8 +1,9 @@
 ---
 title: POPs
 description: O caminho de um Procedimento Operacional Padrão, de quem escreve a quem assina e publica.
-prd: [76]
+prd: [76, 1259]
 draft: false
+video: conheca-os-pops
 sidebar:
   order: 1
 ---
