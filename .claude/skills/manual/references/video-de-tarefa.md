@@ -8,36 +8,61 @@ aplicada a uma tarefa só, e não uma demonstração de entrega.
 `docs/comunicacao/`, é do diretor e fala de uma entrega. Este é do usuário e
 fala de uma tarefa.
 
+Todo vídeo novo, e todo vídeo refeito, segue o **Estilo do manual**
+(`docs/manual/video/_estilo/DESIGN.md`, emenda de 13/10/2026 à ADR 0057): leia o
+`DESIGN.md` antes de compor. Ele diz a paleta e o papel de cada cor, a fonte, o
+vocabulário de movimento, os cinco cards e o que não fazer. Esta receita diz
+como montar, como conferir e como uma nota humana vira regra.
+
 ## Onde cada coisa mora
 
 - Composição (a fonte, versionada): `docs/manual/video/<modulo>/<slug>/`, com
-  `index.html`, `hyperframes.json`, `package.json`, `meta.json` e o link
-  `assets -> ../../../../comunicacao/_assets` (fonte e logo únicos, ADR 0044).
+  `index.html`, `hyperframes.json`, `package.json`, `meta.json`, `VERIFY.md`,
+  `compositions/` (as cópias dos cards que o vídeo usa) e dois links:
+  `assets -> ../../../../comunicacao/_assets` (fonte e logo únicos, ADR 0044) e
+  `tokens.css -> ../../_estilo/tokens.css`.
+- Estilo do manual: `docs/manual/video/_estilo/`, com o `DESIGN.md`, o
+  `tokens.css` (gerado do `globals.css` do app por
+  `python3 tools/gerar_tokens_video.py`, nunca à mão), os cards em
+  `cards/<card>/` e as Fichas de referência em `references/`.
 - MP4 renderizado: `docs/manual/public/video/<modulo>/<slug>.mp4`, **fora do
-  git** (o `.gitignore` do site já cobre `public/video/`).
+  git** (o `.gitignore` do site já cobre `public/video/`). As strips do gate
+  ficam em `renders/strips/` da composição, também fora do git.
 - A página exibe pelo frontmatter `video: <slug>`; o tema monta o `<video>`.
+- O HyperFrames Student Kit mora em `~/PedroDev/hyperframes-student-kit`, só
+  para leitura. Nenhuma skill dele é instalada (três têm o nome das skills
+  globais de HyperFrames). O HyperFrames do manual fica na 0.8.41.
 
 `python3 tools/checar_video_manual.py --dir docs/manual` trava se a página
-exibe vídeo sem composição, se falta carimbo ou se algum MP4 foi parar na
-árvore versionada.
+exibe vídeo sem composição, se falta carimbo, se algum MP4 foi parar na árvore
+versionada e, em todo vídeo fora de `_estilo/pendentes-de-rerender.txt`, se
+falta o `VERIFY.md`, se há cor em hex ou fonte fora dos tokens, ou se algum
+timeline (da raiz ou de um card montado) é mais curto que o slot. Os mesmos
+gates de cor, fonte e timeline valem para os cards de `_estilo/cards/`.
 
 ## Especificação
 
-1920x1080, 30 fps, **30 a 60 s**, sem voz: o vídeo funciona no mudo, com
-legenda de passo na tela. Réplica do app real, com as cores e a tipografia do
-`globals.css` do frontend, HP Simplified por `@font-face` apontando para
-`assets/fonts/HPSimplified_Rg.ttf`. Na dúvida entre bonito e fiel, fiel vence.
+1920x1080, 30 fps, **30 a 60 s**, sem voz: o vídeo funciona no mudo, com a
+legenda de passo na tela. Réplica do app real, com as cores e a fonte do
+`tokens.css`. Na dúvida entre bonito e fiel, fiel vence.
+
+Do kit vem a disciplina, não a cara: push-in no elemento do passo, câmera que
+nunca para, transição com rastro entre telas, legenda que troca sem pop,
+abertura e carimbo de 3 a 5 s e timeline que preenche o slot. Nada de canvas
+preto, tipo cromado ou cena de 1,5 s: o vídeo tem que parecer o app.
 
 Roteiro fixo:
 
-1. **Abertura (3 a 5 s):** título da tarefa no infinitivo, igual ao da página,
-   e os selos de quem faz.
+1. **Abertura (3 a 5 s):** card `abertura`, com o título da tarefa no
+   infinitivo, igual ao da página, e o selo de quem faz.
 2. **A tarefa (o vídeo é isso):** os mesmos passos da página, na mesma ordem e
-   com as mesmas palavras de tela, cada um com a legenda numerada ao lado da
-   tela. Dedo fantasma toca, campo preenche, tela reage como o app reagiria.
-3. **Fecho (3 a 5 s):** carimbo de geração.
+   com as mesmas palavras de tela, cada um com o seu card `legenda-de-passo`.
+   Dedo fantasma toca, campo preenche, tela reage como o app reagiria. O
+   `lower-third` diz em que tela a pessoa está quando a tela muda; o `callout`,
+   no máximo um, é o par do Aviso destacado da página.
+3. **Fecho (3 a 5 s):** card `carimbo`, com a linha do carimbo de geração.
 
-**Carimbo, dois níveis.** Visível no fecho:
+**Carimbo, dois níveis.** Visível no fecho, no slot `carimbo`:
 `Manual · retrata o app em v<X.Y.Z> · gerado em DD/MM/AAAA` (versão de
 `hospital-reunioes/frontend/package.json` no momento da geração). Legível por
 máquina, no `<head>` da composição, com os cinco campos que o conferidor cobra:
@@ -50,37 +75,189 @@ máquina, no `<head>` da composição, com os cinco campos que o conferidor cobr
 </script>
 ```
 
-## Produzir
+## Montar
 
 Leia as skills globais na ordem `/hyperframes` → `/hyperframes-core` →
-`/hyperframes-animation`. Copiar a estrutura de uma composição pronta sai mais
-barato que `init`: `docs/manual/video/ouvidoria/registrar-manifestacao-pelo-formulario/`
-já tem o palco de 960x540 ampliado 2x, o celular, o dedo fantasma e os
-marcadores; as réplicas de tela interna do app estão nos capítulos em
-`docs/comunicacao/ouvidoria/manual-cap-*/video/`.
+`/hyperframes-animation`, e o `DESIGN.md` do estilo.
+
+```bash
+cd docs/manual/video/<modulo>/<slug>
+ln -s ../../../../comunicacao/_assets assets
+ln -s ../../_estilo/tokens.css tokens.css
+mkdir -p compositions
+cp ../../_estilo/cards/abertura/index.html compositions/abertura.html
+cp ../../_estilo/cards/legenda-de-passo/index.html compositions/legenda-de-passo.html
+cp ../../_estilo/cards/carimbo/index.html compositions/carimbo.html
+# lower-third e callout só se o vídeo usar
+```
+
+O card entra copiado e inteiro: a cópia dentro do projeto é o que o empacotador
+do HyperFrames aceita (link para fora do projeto ele pula). Não mexa na cópia;
+card que precisa mudar muda em `_estilo/cards/`, e a nota vira regra.
+
+A raiz carrega os tokens e monta cada card como sub-composição, com o texto nos
+slots por `data-variable-values`. O mesmo card entra quantas vezes for preciso
+com o mesmo `data-composition-id`, um host por instância:
+
+```html
+<head>
+  <link rel="stylesheet" href="tokens.css" />
+  <!-- GSAP e o carimbo legível por máquina, como acima -->
+</head>
+<body>
+<div id="main" data-composition-id="main" data-start="0" data-width="1920" data-height="1080" data-duration="42">
+  <div id="slot-abertura" data-composition-id="abertura" data-composition-src="compositions/abertura.html"
+    data-variable-values='{"secao":"Manual · Ouvidoria","titulo":"Registrar uma manifestação pelo formulário","papel":"Sem login"}'
+    data-start="0" data-duration="4" data-track-index="1" data-width="1920" data-height="1080"></div>
+
+  <section id="c-tarefa" class="clip" data-start="4" data-duration="33" data-track-index="2">
+    <!-- a réplica da tela, dentro de um .camera -->
+  </section>
+
+  <div id="slot-passo-1" data-composition-id="legenda-de-passo" data-composition-src="compositions/legenda-de-passo.html"
+    data-variable-values='{"numero":"1","texto":"Abra o formulário pelo **QR do cartaz**."}'
+    data-start="4" data-duration="5" data-track-index="3" data-width="1920" data-height="1080"></div>
+  <div id="slot-passo-2" data-composition-id="legenda-de-passo" data-composition-src="compositions/legenda-de-passo.html"
+    data-variable-values='{"numero":"2","texto":"Escreva o relato em **O que aconteceu?**."}'
+    data-start="9" data-duration="5" data-track-index="4" data-width="1920" data-height="1080"></div>
+
+  <div id="slot-carimbo" data-composition-id="carimbo" data-composition-src="compositions/carimbo.html"
+    data-variable-values='{"titulo":"Registrar uma manifestação pelo formulário","carimbo":"Manual · retrata o app em v0.195.1 · gerado em 13/10/2026"}'
+    data-start="37" data-duration="5" data-track-index="1" data-width="1920" data-height="1080"></div>
+</div>
+<script>
+window.__timelines = window.__timelines || {};
+const tl = gsap.timeline({ paused: true });
+/* ... os movimentos da tarefa ... */
+tl.to({}, { duration: 42 }, 0); // âncora: o timeline preenche o slot inteiro
+window.__timelines["main"] = tl;
+</script>
+</body>
+```
+
+- Os passos encostam: o `data-start` de um é o fim do anterior, alternando
+  entre duas trilhas. A placa fica no lugar e só o texto troca.
+- O slot de um card de apoio vai até 60 s (a âncora do card); o de abertura e
+  carimbo, até 5 s. Slot maior que a âncora trava o conferidor.
+- `**palavra**` no slot sai em negrito: é a palavra da tela, como na página.
+- Cor e fonte só por `var(--...)`. Na réplica, a cor é a da classe do app:
+  `var(--color-slate-500)` para `text-slate-500`.
+
+**Movimento, em GSAP** (o porquê de cada um está no `DESIGN.md`):
+
+```js
+/* Push-in no elemento do passo: o wrapper .camera (com
+   data-layout-allow-overflow) aproxima e centraliza o botão citado. */
+tl.fromTo("#camera", { scale: 1, x: 0, y: 0 },
+  { scale: 1.08, x: 120, y: 40, duration: 2.5, ease: "power1.inOut" }, 4);
+/* Câmera que nunca para: deriva lenta até o próximo movimento. */
+tl.to("#camera", { scale: 1.11, duration: 3, ease: "none" }, 6.5);
+/* Transição com rastro: a tela A sai, a B entra pelo lado oposto. */
+tl.fromTo("#tela-a", { x: 0, filter: "blur(0px)", opacity: 1 },
+  { x: -300, filter: "blur(24px)", opacity: 0, duration: 0.35, ease: "power2.in" }, 8.8);
+tl.fromTo("#tela-b", { x: 300, filter: "blur(24px)", opacity: 0 },
+  { x: 0, filter: "blur(0px)", opacity: 1, duration: 0.6, ease: "power2.out" }, 9);
+```
+
+- O primeiro movimento de um alvo é `fromTo`; os seguintes do mesmo alvo são
+  `to`. Dois `fromTo` no mesmo alvo dão o aviso
+  `gsap_repeated_fromto_without_baseline` no `check`.
+- Cor que muda (botão que acende, campo que ganha borda) vira duas camadas, uma
+  com o token de cada estado, e um fade de `opacity` entre elas. Tween de cor
+  com `var()` ou com o `oklch` do Tailwind não interpola de forma confiável.
+
+**Réplica a partir dos vídeos antigos.** As composições de
+`_estilo/pendentes-de-rerender.txt` já têm as telas desenhadas (palco de
+960x540 ampliado 2x, celular, janela, dedo, marcadores). Copie a tela, troque
+cada hex pelo token e apague a linha do vídeo na lista no mesmo PR que o refaz.
+Os hex mais comuns:
+
+| Hex antigo | Token |
+| --- | --- |
+| `#2B2E7E` | `var(--color-primary)` |
+| `#3B6FB6` | `var(--color-primary-light)` |
+| `#1E293B` | `var(--color-text)` |
+| `#64748B` | `var(--color-text-secondary)` |
+| `#E2E8F0` | `var(--color-border)` |
+| `#0F172A` | `var(--color-slate-900)` |
+| `#334155` | `var(--color-slate-700)` |
+| `#475569` | `var(--color-slate-600)` |
+| `#94A3B8` | `var(--color-slate-400)` |
+| `#F1F5F9` | `var(--color-slate-100)` |
+| `#F8FAFC` | `var(--color-slate-50)` |
+| `#EEF1F6` (palco) | `var(--video-palco)` |
 
 **Copiou pasta? Troque o carimbo primeiro.** `modulo`, `slug` e `pagina` vêm
 colados do vídeo antigo, e o conferidor compara os três com a página que exibe
 o vídeo: carimbo do vizinho trava o CI.
 
-```bash
-cd docs/manual/video/<modulo>/<slug>
-npx --yes hyperframes@0.8.41 check
-npx --yes hyperframes@0.8.41 render --quality draft \
-  -o ../../../public/video/<modulo>/<slug>.mp4
-```
+## Os gates, nesta ordem
 
-## Os três gates, nesta ordem
-
-1. **Anti-técnica (antes de renderizar):** varra todo texto visível procurando
+1. **Texto da tela (antes de renderizar):** todo texto visível (slots, réplica)
+   passa pelo humanizer (ADR 0071) e pela varredura anti-técnica:
    `migration, endpoint, API, PR, pull request, deploy, RLS, schema, backend,
    frontend, commit, branch, merge, token, env, SQL, Supabase, Coolify, prompt`,
    mais travessão e meia-risca. Cada ocorrência vira linguagem funcional ou sai.
-2. **Auto-revisão de frames:** `ffmpeg -i <mp4> -vf fps=1/3 frames/%02d.png` e
-   olhe as imagens. Marcador em cima do elemento certo, dedo no botão que a
-   legenda cita, texto legível, a tela batendo com o app real. O `check` do
-   HyperFrames não vê nada disso.
-3. **OK humano no draft:** entregue o caminho do MP4 de draft ao Pedro (na
+2. **Check:** `npx --yes hyperframes@0.8.41 check` na pasta da composição, com
+   0 erros e 0 avisos.
+3. **Draft:**
+
+   ```bash
+   npx --yes hyperframes@0.8.41 render --quality draft \
+     -o ../../../public/video/<modulo>/<slug>.mp4
+   ```
+
+4. **Strips de cada corte:**
+
+   ```bash
+   python3 tools/strips_video_manual.py \
+     --mp4 docs/manual/public/video/<modulo>/<slug>.mp4 \
+     --composicao docs/manual/video/<modulo>/<slug>/index.html
+   ```
+
+   O gate tira dez quadros de cada lado de cada corte (início e fim de cada
+   clipe e de cada card) e reprova quadro preto e legenda sem fundo (quadro com
+   card de legenda e sem a placa no retângulo do `tokens.css`). Passou? Olhe as
+   strips mesmo assim: a de cima é antes do corte, a de baixo é depois. A placa
+   fica parada enquanto o texto troca? A transição tem rastro? O dedo está no
+   botão que a legenda cita?
+5. **Quadros a cada 3 s:** `ffmpeg -i <mp4> -vf fps=1/3 frames/%02d.png` e olhe.
+   Marcador em cima do elemento certo, texto legível, a tela batendo com o app
+   real. O `check` não vê nada disso.
+6. **`VERIFY.md`** ao lado da composição, com o que foi conferido de verdade:
+
+   ```markdown
+   # VERIFY: <título da tarefa>
+
+   - Draft: docs/manual/public/video/<modulo>/<slug>.mp4, NN s, sha256 <12 primeiros>
+   - Check (HyperFrames 0.8.41): 0 erros, 0 avisos
+   - Strips: N cortes, gate OK; olhei corte-01 a corte-NN
+   - Quadros a cada 3 s: o que conferi (marcador, dedo, legenda, tela igual ao app)
+   - Texto da tela: humanizer e varredura anti-técnica, sem achados
+   - Ressalvas: o que não deu para conferir, e por quê
+   - OK humano: quem, quando, cada nota e a regra que ela virou
+   ```
+
+7. **Conferidor:** `python3 tools/checar_video_manual.py --dir docs/manual`.
+8. **OK humano no draft:** entregue o caminho do MP4 de draft ao Pedro (na
    `/onda-enxuta`, no corpo do PR: ele fica verde fora da subida até quem viu o
-   vídeo rodar o `fechar_onda.py`) e espere. Ajuste pedido = novo draft, novo OK. Só depois do OK vem o render
-   final (`--quality high`), e ele é o que a publicação sobe.
+   vídeo rodar o `fechar_onda.py`) e espere. Ajuste pedido = novo draft, novo
+   OK. Só depois do OK vem o render final (`--quality high`), e ele é o que a
+   publicação sobe. Na campanha de rerender dos vídeos antigos o OK é por
+   módulo, com a Folha de contato (os quadros-chave de todos os vídeos do
+   módulo numa imagem e um MP4 inteiro).
+
+## Nota vira regra
+
+Toda nota humana no draft vira duas coisas no mesmo PR: o conserto neste vídeo
+e uma regra, para a nota não voltar no próximo. Nota de cor, fonte ou card vai
+para o `DESIGN.md` ou para o card em `_estilo/cards/`. Nota de ritmo, montagem
+ou gate vai para a lista abaixo, com a data e o vídeo de origem. Se a regra dá
+para checar por máquina, ela vira teste em `tools/` em vez de linha aqui. Antes
+de compor um vídeo novo, leia a lista.
+
+## Regras que vieram de nota
+
+Formato: `- DD/MM/AAAA, <modulo>/<slug>: a regra, no imperativo.`
+
+Nenhuma ainda.

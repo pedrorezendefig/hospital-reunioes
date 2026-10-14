@@ -120,8 +120,11 @@ leva `papel`.
   refazer um só). Nunca em Página de tarefa.
 - **Vídeo de tarefa**: composição HyperFrames versionada em
   `docs/manual/video/<modulo>/<slug>/`, MP4 fora do git, 30 a 60 s, mudo, com
-  carimbo de geração. Vai a draft e **só o Pedro aprova**; o render final vem
-  depois do OK. Receita em `references/video-de-tarefa.md`.
+  carimbo de geração, no **Estilo do manual** (`docs/manual/video/_estilo/`:
+  `DESIGN.md`, tokens gerados do app e os cinco cards). Passa pelo gate de
+  strips e ganha um `VERIFY.md`. Vai a draft e **só o Pedro aprova**; o render
+  final vem depois do OK, e cada nota dele vira regra no mesmo PR. Receita em
+  `references/video-de-tarefa.md`.
 
 ## Antes de entregar
 
@@ -140,4 +143,6 @@ Checklist:
 4. Todo `video` do frontmatter tem composição versionada com carimbo, e o MP4
    ficou fora do git.
 5. O draft do vídeo foi entregue ao Pedro e o OK veio antes do render final.
-6. Os quatro comandos acima passam.
+6. Vídeo novo ou refeito: `tools/strips_video_manual.py` sem achado, `VERIFY.md`
+   ao lado da composição e cada nota do draft virou regra.
+7. Os quatro comandos acima passam.
