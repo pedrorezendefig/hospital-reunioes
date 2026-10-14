@@ -279,21 +279,23 @@ o vídeo: carimbo do vizinho trava o CI.
    - Quadros a cada 3 s: o que conferi (marcador, dedo, legenda, tela igual ao app)
    - Texto da tela: humanizer e varredura anti-técnica, sem achados
    - Ressalvas: o que não deu para conferir, e por quê
-   - OK humano: quem, quando, cada nota e a regra que ela virou
+   - Render final: caminho, NN s, sha256 <12 primeiros>
    ```
 
 7. **Conferidor:** `python3 tools/checar_video_manual.py --dir docs/manual`.
-8. **OK humano no draft:** entregue o caminho do MP4 de draft ao Pedro (na
-   `/onda-enxuta`, no corpo do PR: ele fica verde fora da subida até quem viu o
-   vídeo rodar o `fechar_onda.py`) e espere. Ajuste pedido = novo draft, novo
-   OK. Só depois do OK vem o render final (`--quality high`), e ele é o que a
-   publicação sobe. Na campanha de rerender dos vídeos antigos o OK é por
-   módulo, com a Folha de contato (os quadros-chave de todos os vídeos do
-   módulo numa imagem e um MP4 inteiro).
+8. **Render final, sem esperar ninguém:** com os gates acima limpos, renderize
+   de novo com `--quality high` no mesmo caminho; é ele que a publicação sobe.
+   Copie o MP4 para `local/manual-video-masters/<modulo>/<slug>.mp4` da árvore
+   principal (o worktree some na subida e o MP4 não vem no clone) e ponha o
+   caminho no corpo do PR. O vídeo não espera OK humano (emenda de 14/10/2026
+   à ADR 0057): o PR sobe como qualquer outro. Na campanha de rerender dos
+   vídeos antigos, a Folha de contato (os quadros-chave de todos os vídeos do
+   módulo numa imagem e um MP4 inteiro) vai no corpo do PR como evidência.
 
 ## Nota vira regra
 
-Toda nota humana no draft vira duas coisas no mesmo PR: o conserto neste vídeo
+Toda nota humana sobre um vídeo, que agora chega com ele já no ar, vira duas
+coisas no mesmo PR: o conserto neste vídeo
 e uma regra, para a nota não voltar no próximo. Nota de cor, fonte ou card vai
 para o `DESIGN.md` ou para o card em `_estilo/cards/`. Nota de ritmo, montagem
 ou gate vai para a lista abaixo, com a data e o vídeo de origem. Se a regra dá

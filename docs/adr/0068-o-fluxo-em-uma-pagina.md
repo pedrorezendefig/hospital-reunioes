@@ -25,10 +25,16 @@ O que o pipeline faz hoje, de issue a produção. O histórico de como se chegou
 
 7. **A `main` é protegida:** PR e CI verde obrigatórios, sem exigir a branch em dia com a base. O único bypass é a deploy key da Action pós-merge, num job que não instala nada.
 8. **A subida é uma só, o `fechar_onda.py`**, para PR avulso e para onda: merge PR a PR pela API (squash, no head do CI verde), versão pelo tipo dos commits sem commit (`APP_VERSION` e tag), um build, health com conferência de versão, registro em `history.json` e `state.json`. Health ruim: rollback automático para a imagem anterior, revert dos squashes e issue reaberta. PR de ferramenta: só o merge.
-9. **Quatro coisas esperam o humano:** (1) a migration (ele cola no Studio; a subida espera o `/api/health` devolver o número dela, até 24 h); (2) o draft do vídeo da fatia de manual; (3) o rollback que a subida não conseguiu sozinha (saídas 3, 4 e 8 do `fechar_onda.py`: `/deploy rollback` à mão); (4) a baixa `ready-for-human` (3 tentativas esgotadas, dúvida, corretor pendente).
+9. **Três coisas esperam o humano:** (1) a migration (ele cola no Studio; a subida espera o `/api/health` devolver o número dela, até 24 h); (2) o rollback que a subida não conseguiu sozinha (saídas 3, 4 e 8 do `fechar_onda.py`: `/deploy rollback` à mão); (3) a baixa `ready-for-human` (3 tentativas esgotadas, dúvida, corretor pendente). A Fatia de manual sobe como qualquer outra fatia (emenda de 14/10/2026, abaixo).
 10. **A onda seguinte sai no PR verde**, antes da subida da atual; o semáforo ordena os deploys.
 11. **Snapshot e draft do Manual** saem na Action do push da `main`, não na subida.
 
 ## Regra de casa
 
 12. **Cada regra tem uma casa:** script ou skill, nunca as duas. Decisão de ferramenta vai no corpo do PR, não em ADR nova; ADR é para o app e para mudança deste fluxo inteiro. As skills de `.claude/skills/` são o kit completo do fluxo e a fonte de verdade do Hospital; a cópia global é outra linhagem, e a duplicata é intencional. O fluxo é exportável pelo roteiro versionado em `tools/instalar-fluxo/` (`ROTEIRO.md` e `MANIFESTO.md`), que copia a árvore viva, nunca por prompt solto; skill do pipeline criada, renomeada ou apagada atualiza o `MANIFESTO.md` e o `/ask-pedro` no mesmo commit.
+
+## Emenda (14/out/2026, o draft do Vídeo de tarefa deixa de esperar o humano)
+
+Decisão do Pedro, depois do piloto de dois Vídeos de tarefa (#1231, PR #1246): "Eu não quero mais checar draft. Eu confio até o final. Eu não quero que você me pergunte." A regra 9 listava quatro esperas, e a segunda era o draft do vídeo da Fatia de manual: o PR ficava verde fora da subida até alguém assistir ao MP4 e rodar o `fechar_onda.py`. Agora a Fatia de manual faz o render final na própria fatia, abre o PR e entra na subida como qualquer outra fatia, sem `PushNotification` pedindo OK. Quem segura a qualidade do vídeo são os gates que o piloto deixou: `hyperframes check`, as strips de cada corte, o `tools/checar_video_manual.py` e o `tools/anel_video_manual.py`. Nota que o Pedro mandar depois, com o vídeo no ar, vira conserto e regra num PR novo, como qualquer outro pedido.
+
+A regra 9 passa a listar três esperas. A emenda de 13/10/2026 à ADR 0057, que pedia OK por vídeo no dia a dia e por módulo na campanha de rerender, cai junto (emenda de 14/10/2026 à ADR 0057). O Vídeo de percepção de valor da `/divulgar` não muda: ele não passa pela subida e continua com o OK humano dele (ADRs 0026 e 0045).

@@ -133,7 +133,7 @@ Regras:
   python3 tools/checar_video_manual.py --dir docs/manual
   cd docs/manual && corepack pnpm@9 install --frozen-lockfile && corepack pnpm@9 build
   python3 tools/checar_build_manual.py --dir docs/manual
-- Pare no draft de cada vídeo e me mande o caminho do MP4: o OK é meu, e só depois vem o render final.
+- Com os gates limpos, faça o render final sem esperar ninguém, copie o MP4 para local/manual-video-masters/ da árvore principal e ponha o caminho no corpo do PR.
 - Feche com /ship "docs: manual do módulo <modulo>" --issue <N>
 ```
 
@@ -145,7 +145,7 @@ A resposta final, nesta ordem:
 
 1. **Uma linha de contas:** "L lacunas no manual: X vão para os N terminais, Y são suas." Cite o arquivo do scratchpad.
 2. **O inventário por módulo**, a tabela do passo 1 mais a lista de páginas que faltam do passo 2, módulo a módulo, com o total de cada um.
-3. **As que ficam com você:** uma linha por item, com a ação concreta ("aprovar o draft do vídeo X", "criar o registro A de `manual` apontando para 76.76.21.21 na Hostinger", "trocar o QR do pptx da apresentação") e o que ela destrava.
+3. **As que ficam com você:** uma linha por item, com a ação concreta ("rodar o /manual publicar depois do merge", "criar o registro A de `manual` apontando para 76.76.21.21 na Hostinger", "trocar o QR do pptx da apresentação") e o que ela destrava.
 4. **Os prompts**, inteiros, cada um com o cabeçalho de leitura em cima do bloco.
 5. **Passo a passo:**
    1. Abrir os terminais (até `--max-sessoes`) e colar um prompt em cada.

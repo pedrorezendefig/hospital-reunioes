@@ -240,7 +240,7 @@ def test_manual_em_ordem_sai_com_codigo_0(tmp_path):
 
 
 def test_video_sem_verify_trava(tmp_path):
-    """Sem VERIFY.md ninguém sabe o que foi conferido antes do OK humano."""
+    """Sem VERIFY.md ninguém sabe o que foi conferido antes do render final."""
     montar(tmp_path, com_verify=False)
     problemas = checar_video_manual.checar(tmp_path)
     assert len(problemas) == 1

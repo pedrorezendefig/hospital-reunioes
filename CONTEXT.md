@@ -403,7 +403,7 @@ _Evitar_: cor ou fonte fixa dentro de um vídeo (vem dos tokens); canvas preto e
 A nota curta, uma por vídeo de referência (os gerados pelo Opus 5.5 ficam em `local/manual-video-referencias/`, fora do git), em `_estilo/references/`: o que copiar daquele vídeo (uma transição, um ritmo, um card) e o que não copiar. O `DESIGN.md` do [Estilo do manual] cita as fichas, para cada sessão tirar a mesma coisa da mesma referência.
 
 **Folha de contato**:
-O que o agente entrega para o OK humano por módulo na campanha de rerender dos [Vídeos de tarefa]: os quadros-chave de todos os vídeos do módulo numa imagem só, mais um MP4 inteiro. No dia a dia e no piloto o OK continua por vídeo, no draft.
+O que o agente põe no corpo do PR, como evidência, na campanha de rerender dos [Vídeos de tarefa]: os quadros-chave de todos os vídeos do módulo numa imagem só, mais um MP4 inteiro. Desde 14/10/2026 nenhum vídeo espera OK humano, nem por módulo nem no draft (emenda à ADR 0057).
 
 **Vídeo de percepção de valor**:
 O vídeo de uma entrega (PRD) feito para o diretor ver o sistema funcionando (ADR 0026, ADR 0045): a unidade é o que mudou, não a tarefa. No [Manual] ele entra em [Novidades], e serve de [Vídeo de tarefa] quando a entrega coincide com uma tarefa.

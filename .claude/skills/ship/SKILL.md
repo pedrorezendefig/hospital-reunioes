@@ -71,7 +71,7 @@ Em segundo plano (builds levam minutos); leia só a saída. O que fazer em cada 
 
 **Migration nova:** a subida imprime `migration: cole no Studio <arquivo>:1` e espera o `/api/health` devolver o número dela (até 24 h). Repasse a linha por `PushNotification`. Quem aplica é o humano, no SQL Editor do Studio de produção; o `/ship` nunca aplica migration. Quando o humano disser "apliquei a migration N" (ou `/ondas aplicada N`), o mod hr-ondas grava em `~/.claude/hr-ondas/aplicadas` e o painel para de cobrar; a subida continua esperando o `/api/health`.
 
-**Fatia de manual** (ADR 0057): termina no PR verde, com o caminho do MP4 no corpo, e `PushNotification` "Draft do vídeo da #N no PR #P: <MP4>". Quem viu o vídeo roda a subida.
+**Fatia de manual** (ADR 0057): sobe como qualquer outra, com o render final feito na fatia e o caminho do MP4 no corpo do PR. Nada de `PushNotification` pedindo OK no vídeo (emenda de 14/10/2026 à ADR 0068).
 
 **Pendência só humana** (import na virada, credencial, ato externo): uma issue `ready-for-human` por pendência, ligada ao PRD pelo corpo ("Pai: #N"), nunca como sub-issue nativa.
 
