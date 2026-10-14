@@ -10,7 +10,7 @@ sidebar:
 ## Quem vê o item Admin
 
 O item **Admin** no menu da esquerda aparece para qualquer pessoa com papel nas
-Reuniões, e não só para o Super Admin. Quem só tem o acesso aos POPs ou o da
+Reuniões, seja qual for o perfil. Quem só tem o acesso aos POPs ou o da
 Ouvidoria não vê o item. Ele aparece para tanta gente porque a área de
 Administração guarda uma tela que o hospital inteiro precisa, os
 **Dados do Atendimento**.
@@ -39,10 +39,10 @@ a própria tela explica cada um embaixo da opção:
 **Acesso aos POPs** e **Acesso à Ouvidoria** não vêm do Perfil de acesso. São
 concedidos um a um, na ficha da pessoa, e valem sozinhos.
 
-Nos POPs a separação é limpa: sem o **Acesso aos POPs**, ninguém abre a área
+Nos POPs a regra é simples: sem o **Acesso aos POPs**, ninguém abre a área
 de procedimentos, seja qual for o Perfil de acesso.
 
-Na Ouvidoria a linha passa em outro lugar. Quem tem papel
+Na Ouvidoria a divisão é outra. Quem tem papel
 nas Reuniões, o Super Admin incluído, **abre a lista de casos** e lê o
 protocolo, o setor, a situação, o prazo, a gravidade, o tipo, o desfecho e o
 resumo de cada caso não sigiloso. O que exige **Ouvidor** ou
@@ -51,8 +51,8 @@ relato, quem falou, os anexos e o histórico, ver o arquivo dos casos
 encerrados, e enxergar o caso sigiloso, que nem aparece na lista de quem está
 de fora.
 
-Ou seja, o Super Admin **não lê o relato de quem procurou a Ouvidoria**, mas
-enxerga a fila. Administrar o sistema não dá acesso ao dossiê: quem concede
-esse acesso é ele, e a concessão fica registrada. A página
+Ou seja, o Super Admin enxerga a fila e **não lê o relato de quem procurou a Ouvidoria**.
+Ser administrador não abre o dossiê. O Super Admin é quem concede esse acesso,
+e a concessão fica registrada. A página
 [Quem faz o quê](../../../ouvidoria/como-funciona/quem-faz-o-que/), na seção da
 Ouvidoria, tem o quadro completo.

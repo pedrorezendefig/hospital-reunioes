@@ -12,12 +12,10 @@ sidebar:
 ## Quando usar
 
 Sempre que um preço particular mudar, um exame novo entrar ou o preparo de um
-exame mudar. O que você grava aqui vale na resposta
-seguinte da assistente, sem espera.
+exame mudar. O que você grava aqui já vale na resposta seguinte da assistente.
 
-Esta é a única tela da área de administração que não é só do Super Admin: a
-Secretária também edita, e quem tem perfil Regular abre e lê, sem os botões de
-edição.
+É a única tela da área de administração que a Secretária também edita. Quem tem
+perfil Regular abre e lê, sem os botões de edição.
 
 ## Passo a passo
 

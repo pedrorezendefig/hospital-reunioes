@@ -254,7 +254,7 @@ def checar(raiz: Path) -> list[str]:
             problemas.append(
                 f"video/{modulo}/{slug}: sem VERIFY.md. Grave ao lado da "
                 "composição o que foi conferido (strips de cada corte, check, "
-                "quadros olhados) antes do OK humano (emenda de 13/10/2026 à "
+                "quadros olhados) antes do render final (emenda de 13/10/2026 à "
                 "ADR 0057)."
             )
         problemas += _gates_da_composicao(

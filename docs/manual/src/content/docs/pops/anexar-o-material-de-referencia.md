@@ -12,8 +12,8 @@ sidebar:
 ## Quando usar
 
 Sempre que já existe alguma coisa escrita: o POP antigo, uma norma ou um
-artigo. O Consultor de POPs lê esses arquivos e escreve a partir deles,
-mantendo a estrutura e o conteúdo do original.
+artigo. O Consultor de POPs lê esses arquivos e escreve a partir deles, com a
+estrutura e o conteúdo do original.
 
 ## Passo a passo
 
@@ -30,17 +30,16 @@ mantendo a estrutura e o conteúdo do original.
 5. O pedido pronto cai no campo de mensagem. Ajuste o texto se quiser e envie.
 
    ![Campo de mensagem com o pedido pronto](../../../assets/pops/pedido-de-elaboracao.png)
-6. Para tirar um arquivo, clique no X da etiqueta dele. Ele sai do que o
-   Consultor de POPs considera.
+6. Para tirar um arquivo, clique no X da etiqueta dele. O Consultor de POPs
+   deixa de usá-lo.
 
 ## Se der errado
 
 - **O arquivo foi recusado:** aparece um aviso com o nome dele e o motivo.
-  Formatos aceitos são `.txt`, `.md`, `.pdf` e `.docx`. Documento escaneado como
+  Os formatos aceitos são `.txt`, `.md`, `.pdf` e `.docx`. Documento escaneado como
   imagem não é lido.
-- **O botão de arranque não aparece:** ele só existe enquanto ninguém escreveu
-  nada na conversa. Depois da primeira mensagem, peça a elaboração com suas
-  palavras.
+- **O botão que escreve o pedido não aparece:** ele só aparece com a conversa
+  vazia. Depois da primeira mensagem, peça a elaboração com suas palavras.
 - **O texto saiu diferente do documento antigo:** diga no chat o que ficou de
   fora. O Consultor de POPs corrige erros de português do original e confere se
   todo o conteúdo foi abordado.

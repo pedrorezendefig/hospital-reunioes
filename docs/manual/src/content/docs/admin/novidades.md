@@ -10,16 +10,16 @@ sidebar:
 ## 27/08/2026 · A lista de convênios sai, e o Espelho da agenda online entra
 
 A tabela de convênios por especialidade, que alguém precisava manter à mão,
-deixou de existir. Ela era uma segunda verdade sobre cobertura, e envelhecia
-calada toda vez que a agenda online mudava sem ninguém avisar.
+saiu do app. Ela repetia a cobertura que a agenda online já publica e ficava
+desatualizada toda vez que a agenda mudava sem ninguém avisar.
 
-No lugar dela nasceu o **Espelho da Global Health**, uma seção só de leitura
+No lugar dela entrou o **Espelho da Global Health**, uma seção só de leitura
 dentro de **Dados do Atendimento**. Ela mostra ao vivo o que a agenda publica
 neste momento: as especialidades, os convênios aceitos em cada uma, os médicos
 com o botão ligado, os planos de cada convênio e os horários livres. Nada é
 gravado aqui, e cada clique em **Atualizar** busca a resposta fresca.
 
-É essa seção que responde, em meio minuto, por que a assistente não achou
+Com ela dá para descobrir, em meio minuto, por que a assistente não achou
 horário para alguém: a especialidade não está publicada, o convênio não foi
 liberado nela, o médico está desligado, ou a agenda não tem vaga mesmo.
 
@@ -32,8 +32,8 @@ cirurgia saíram da planilha separada e entraram na área de Administração, co
 tela própria, busca e histórico de alteração.
 
 Quem cuida disso são o Super Admin e a Secretária, que criam, corrigem e
-desativam registro por registro. O que era mexer numa planilha à parte, e
-esperar alguém sincronizar, virou salvar uma linha e valer na resposta seguinte
+desativam registro por registro. Antes era preciso mexer numa planilha à parte
+e esperar alguém sincronizar; agora a linha salva já vale na resposta seguinte
 ao paciente.
 
 Cada registro guarda também o que a assistente deve falar junto do valor, em

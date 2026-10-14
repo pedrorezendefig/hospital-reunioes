@@ -52,7 +52,7 @@ Regras:
   - *conta pessoal* (projeto Vercel, chave ou máquina que só uma pessoa tem): diga qual conta e confira se esta máquina tem o vínculo (ex.: `docs/manual/.vercel/project.json`);
   - *decisão de domínio* (pacote grande, perguntas abertas na triagem, emenda de ADR): o caminho é `/grill-with-docs #<N> --lote`, e o passo 1 é juntar o insumo externo que falta (organograma, número, resposta do diretor) antes de abrir o grill;
   - *divulgação* (`type:divulgacao`): a pessoa aprova vídeo e página; o resto é `/divulgar`;
-  - *as quatro paradas da regra 9 da ADR 0068* (migration no Studio, draft do vídeo do Manual, rollback, baixa `ready-for-human`): siga as memórias do projeto (migration pelo caminho clicável, segredo só na tela do Coolify).
+  - *as três paradas da regra 9 da ADR 0068* (migration no Studio, rollback, baixa `ready-for-human`): siga as memórias do projeto (migration pelo caminho clicável, segredo só na tela do Coolify).
 - **Confira se já foi feito** antes de mandar fazer: `curl` no endereço público procurando a frase velha, `gh pr list --search <N>`, estado do deploy. Se já foi, o passo a passo vira "fechar com `gh issue close <N> --comment ...`".
 - **O caminho mais curto**: reaproveite o que a issue já traz (bloco `O que fazer`, perguntas da triagem com recomendação). Prefira `--dry-run` primeiro quando o script tiver. Não invente passo que a issue não pede.
 - **Separe o que é do agente.** Quase sempre só uma parte é humana (aprovar, decidir, logar numa conta); o resto o agente roda nesta máquina. Diga qual parte é qual.

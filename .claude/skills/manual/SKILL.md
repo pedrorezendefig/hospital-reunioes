@@ -1,6 +1,6 @@
 ---
 name: manual
-description: Produz o Manual do usuário em docs/manual/. `/manual <módulo>` escreve a seção, `/manual #PRD` as páginas do PRD em draft, `/manual publicar` publica. Prints por roteiro, vídeo com OK humano.
+description: Produz o Manual do usuário em docs/manual/. `/manual <módulo>` escreve a seção, `/manual #PRD` as páginas do PRD em draft, `/manual publicar` publica. Prints por roteiro, vídeo pelos gates do Estilo do manual.
 ---
 
 # Manual
@@ -140,8 +140,9 @@ leva `papel`.
   `docs/manual/video/<modulo>/<slug>/`, MP4 fora do git, 30 a 60 s, mudo, com
   carimbo de geração, no **Estilo do manual** (`docs/manual/video/_estilo/`:
   `DESIGN.md`, tokens gerados do app e os cinco cards). Passa pelo gate de
-  strips e ganha um `VERIFY.md`. Vai a draft e **só o Pedro aprova**; o render
-  final vem depois do OK, e cada nota dele vira regra no mesmo PR. Receita em
+  strips e ganha um `VERIFY.md`. Os gates limpos levam direto ao render final,
+  sem esperar OK humano; nota que o Pedro mandar depois vira regra no PR do
+  conserto. Receita em
   `references/video-de-tarefa.md`.
 
 ## Antes de entregar
@@ -160,7 +161,7 @@ Checklist:
 3. Todo print veio do roteiro do módulo, e o roteiro roda de ponta a ponta.
 4. Todo `video` do frontmatter tem composição versionada com carimbo, e o MP4
    ficou fora do git.
-5. O draft do vídeo foi entregue ao Pedro e o OK veio antes do render final.
+5. O render final saiu depois dos gates limpos e o MP4 foi copiado para os masters.
 6. Vídeo novo ou refeito: `tools/strips_video_manual.py` sem achado, `VERIFY.md`
-   ao lado da composição e cada nota do draft virou regra.
+   ao lado da composição e cada nota recebida virou regra.
 7. Os quatro comandos acima passam.

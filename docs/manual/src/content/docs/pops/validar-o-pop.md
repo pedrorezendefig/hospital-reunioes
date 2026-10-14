@@ -28,7 +28,7 @@ Quando o Revisor aprovou e você recebeu o email avisando. A validação é a
 :::caution[Aprovar aqui não tem volta]
 A validação aprovada manda o documento para a assinatura e trava o conteúdo.
 :::
-4. Estando de acordo, clique em **Aprovar validação** e confirme em
+4. Se estiver de acordo, clique em **Aprovar validação** e confirme em
    **Aprovar**.
 5. A Versão passa para **Em Assinatura** e o documento sai por email para o
    Elaborador, o Revisor e você assinarem.
@@ -40,10 +40,10 @@ A validação aprovada manda o documento para a assinatura e trava o conteúdo.
 ## Se der errado
 
 - **Você devolveu e quer saber por onde a Versão volta:** ela vai para o
-  Elaborador e, quando ele reenviar, volta direto para você. Não passa pelo
+  Elaborador e, quando ele reenviar, volta direto para você, sem passar pelo
   Revisor de novo.
-- **Você aprovou e quer mudar alguma coisa:** não dá. A partir de
-  **Em Assinatura** o conteúdo está travado. O caminho é aguardar a publicação
-  e abrir uma Versão nova.
+- **Você aprovou e quer mudar alguma coisa:** não dá, porque a partir de
+  **Em Assinatura** o conteúdo fica travado. Espere a publicação e abra uma
+  Versão nova.
 - **Você não vê os botões:** confira se o estado na lista é
   **v1.0 · Em Validação** e se o Validador designado é você.

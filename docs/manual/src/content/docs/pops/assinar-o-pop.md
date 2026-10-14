@@ -27,7 +27,7 @@ que você recebe da ClickSign.
    fica **Em Assinatura**.
 
    ![Lista com um POP Em Assinatura e outro Publicado](../../../assets/pops/gestao-de-pops-assinatura.png)
-6. Assinaram os três, o POP passa a **Publicado** e aparece na Biblioteca com o
+6. Quando os três assinam, o POP passa a **Publicado** e aparece na Biblioteca com o
    documento assinado.
 
 ## Se der errado
@@ -39,4 +39,5 @@ que você recebe da ClickSign.
   sistema não pede duas assinaturas da mesma pessoa.
 - **Todo mundo assinou e o POP continua Em Assinatura:** a mudança de estado
   chega alguns instantes depois da última assinatura. Se demorar muito, avise
-  quem cuida da plataforma: reenviar o documento não tem botão em tela nenhuma.
+  quem cuida da plataforma, porque nenhuma tela tem botão para reenviar o
+  documento.

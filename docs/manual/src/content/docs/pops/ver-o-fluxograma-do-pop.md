@@ -11,9 +11,9 @@ sidebar:
 
 ## Quando usar
 
-Quando você quer entender o procedimento pelo desenho: o que vem antes, o que
-vem depois e o que fazer quando a resposta é não. Todo POP tem
-a seção de fluxograma, e ela também sai no documento assinado.
+Quando você quer ver no desenho a ordem dos passos do procedimento e o que
+fazer quando a resposta é não. Todo POP tem a seção de fluxograma, e ela também
+sai no documento assinado.
 
 ## Passo a passo
 

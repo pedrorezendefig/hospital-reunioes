@@ -13,11 +13,11 @@ sidebar:
 
 Os tipos oferecidos na hora de marcar uma reunião são **fixos**, e são cinco:
 **Diretoria**, **Gerencial**, **Coordenação**, **Mensal** e **Extraordinária**.
-Eles estão no próprio sistema.
+Eles vêm escritos no próprio sistema.
 
-O que você cria nesta tela não aparece nessa escolha, nem em nenhuma outra tela
-da plataforma. A tela grava, a mensagem de sucesso aparece, e o item fica só
-aqui.
+O que você cria nesta tela não aparece nessa escolha nem em outra tela da
+plataforma. A gravação dá certo e mostra a mensagem de sucesso, mas o item só
+existe aqui.
 
 ## O que a tela faz
 
@@ -44,6 +44,5 @@ Ela mantém uma lista, com a mesma mecânica de **Setores** e **Cargos**:
 - **O botão Criar está apagado:** o **Nome** está vazio.
 - **A gravação foi recusada com "Nome ja existe":** já existe um item com esse
   nome, mesmo escrito com outras maiúsculas.
-- **Você criou um tipo e ele não aparece ao marcar a reunião:** é o
-  comportamento descrito no alto desta página. A escolha de tipo não vem desta
-  lista.
+- **Você criou um tipo e ele não aparece ao marcar a reunião:** a escolha de
+  tipo não vem desta lista, como diz o alto desta página.

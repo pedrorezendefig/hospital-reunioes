@@ -10,15 +10,15 @@ sidebar:
 ## Duas fontes, e cada uma é dona de uma coisa
 
 A **Ana** é a assistente que conversa com o paciente sobre preço, preparo e
-horário. Ela não tem conta na plataforma e não entra em tela nenhuma: lê o que
+horário. Sem conta na plataforma e sem entrar em tela nenhuma, ela lê o que
 está cadastrado e responde.
 
-O que ela usa vem de dois lugares, e a divisão é firme:
+O que ela usa vem de dois lugares, cada um com a sua parte:
 
 - **A agenda online da Global Health** é dona da agenda: quais especialidades
   existem, quem atende, quais convênios são aceitos e quando há vaga. O hospital
   não edita nada disso aqui.
-- **Os Dados do Atendimento** são donos do que a agenda não tem: preço
+- **Os Dados do Atendimento** cuidam do que fica fora da agenda: preço
   particular da consulta, preço e preparo do exame, estimativa de cirurgia e os
   diferenciais de cada um.
 
@@ -27,15 +27,15 @@ Por isso a tela tem os dois lados: as três tabelas que você edita e o
 
 ## Por que não existe convênio para editar aqui
 
-Já existiu uma tabela de convênios por especialidade nesta tela, mantida à mão.
-Ela saiu. Cobertura de convênio quem responde é a agenda online, e manter uma
-segunda lista significava duas verdades, com a nossa envelhecendo calada. No
-lugar dela entrou o Espelho, que mostra a lista de verdade sem copiá-la.
+Esta tela já teve uma tabela de convênios por especialidade, mantida à mão, e
+ela saiu. Quem responde pela cobertura de convênio é a agenda online, e uma
+segunda lista feita aqui ficava desatualizada a cada mudança na agenda. No
+lugar dela entrou o Espelho, que mostra a lista da agenda sem copiá-la.
 
 ## A edição vale na hora
 
-Não existe espera entre gravar e valer. Salvou o preço novo, a próxima pessoa
-que perguntar recebe o preço novo. O mesmo vale para o **Desativar**: o
+Depois que você salva um preço novo, a próxima pessoa que perguntar já recebe
+esse preço. O mesmo vale para o **Desativar**: o
 registro sai da resposta imediatamente, mas continua na tela para você reativar.
 
 ## Por onde a Ana atende hoje
@@ -44,8 +44,8 @@ registro sai da resposta imediatamente, mas continua na tela para você reativar
 atendimento que a equipe já usava. O canal vivo da assistente hoje é um
 Telegram de teste, e é lá que ela conversa de verdade com quem a procura.
 
-A mudança para o WhatsApp oficial está prevista e ainda não aconteceu. Isso
-importa para você por dois motivos. Primeiro, o que você cadastra aqui já vale,
-mesmo com o alcance ainda pequeno. Segundo, quando alguém disser que
-"perguntou no WhatsApp do hospital e a resposta veio errada", quem respondeu
-foi uma pessoa, não a assistente, e o conserto não é nesta tela.
+A mudança para o WhatsApp oficial está prevista e ainda não aconteceu. Enquanto
+isso, o que você cadastra aqui já vale, mesmo com o alcance ainda pequeno. E
+quando alguém disser que "perguntou no WhatsApp do hospital e a resposta veio
+errada", quem respondeu foi uma pessoa da equipe, e o conserto fica fora desta
+tela.

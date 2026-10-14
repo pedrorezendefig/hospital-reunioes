@@ -25,8 +25,8 @@ observação do lembrete, na Coordenação.
 
 3. Clique em **Parar**. O botão mostra **Transcrevendo** e, em seguida, o texto
    cai no campo, depois do que você já tinha escrito.
-4. Revise o texto. O ditado não envia nada sozinho: quem envia é você, pelo
-   botão do formulário.
+4. Revise o texto. O ditado só preenche o campo; para enviar, use o botão do
+   formulário.
 
 ## Se der errado
 

@@ -12,8 +12,8 @@ sidebar:
 ## Quando usar
 
 Quando alguém vai ser cadastrado com uma função que ainda não está na lista. O
-cargo é o texto que identifica a pessoa nas telas para todo mundo, então vale a
-pena escrevê-lo do jeito que o hospital fala.
+cargo é o texto que identifica a pessoa nas telas para todo mundo, então
+escreva do jeito que o hospital fala.
 
 ## Passo a passo
 
@@ -35,7 +35,8 @@ pena escrevê-lo do jeito que o hospital fala.
 
 - **O botão Criar está apagado:** o **Nome** está vazio.
 - **A gravação foi recusada com "Nome ja existe":** já existe cargo com esse
-  nome, mesmo escrito com outras maiúsculas. A lista não diferencia.
+  nome, mesmo escrito com outras maiúsculas, porque a lista não distingue
+  maiúscula de minúscula.
 - **Você corrigiu o nome e a ficha de alguém continua com o antigo:** a lista
-  alimenta a sugestão do formulário; o que já foi gravado na pessoa é texto
-  dela e se ajusta na ficha.
+  só alimenta a sugestão do formulário. O que já foi gravado na pessoa é texto
+  da ficha dela, e se corrige lá.

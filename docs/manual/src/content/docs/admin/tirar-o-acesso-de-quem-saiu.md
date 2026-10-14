@@ -12,8 +12,9 @@ sidebar:
 ## Quando usar
 
 Quando a pessoa sai do hospital ou muda de função e não deve mais entrar.
-Quase sempre o certo é **desligar**, não apagar: o nome dela está em atas,
-pendências e assinaturas, e o histórico precisa continuar de pé.
+Quase sempre o certo é **desligar** a ficha em vez de apagá-la, porque o nome
+da pessoa está em atas, pendências e assinaturas, e esse histórico precisa
+continuar de pé.
 
 ## Passo a passo
 
@@ -37,8 +38,8 @@ Ao salvar, a conta de entrada é fechada e a sessão que ela tiver aberta cai em
 
 ## Se der errado
 
-- **Você clicou no lixo, Deletar:** essa ação apaga a ficha para sempre e não
-  tem volta. Use só para cadastro errado, nunca para desligamento.
+- **Você clicou no lixo, Deletar:** essa ação apaga a ficha para sempre. Use
+  só para cadastro errado, nunca para desligamento.
 - **A tela recusa com "Voce nao pode deletar a si mesmo":** a plataforma não
   deixa você apagar a sua própria ficha. Peça a outro Super Admin.
 - **A pessoa inativa continua aparecendo para escolher numa reunião:** a lista
