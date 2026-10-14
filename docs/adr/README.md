@@ -27,6 +27,7 @@ Só `status: accepted` vale como decisão; `superseded` é histórico (CLAUDE.md
 | ADR | Status | Título |
 |---|---|---|
 | [0070](0070-contas-medicas-aritmetica-no-codigo-ia-no-julgamento-memoria-no-banco.md) | accepted | Contas médicas: aritmética no código, IA só onde há julgamento, memória da operadora no banco, fila no banco |
+| [0071](0071-humanizer-e-a-regua-do-texto-para-fora.md) | accepted | Humanizer é a régua de todo texto para fora; manual e Hospital OS reescritos por ela (emenda 0057) |
 
 ## Tecnologia (Demandas Vitta x Hospital)
 

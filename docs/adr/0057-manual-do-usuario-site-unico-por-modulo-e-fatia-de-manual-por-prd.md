@@ -1,7 +1,7 @@
 ---
 status: accepted
 amends: 0044, 0056
-amended_by: 0058, 0062
+amended_by: 0058, 0062, 0071
 ---
 
 # Manual do usuário: um site por módulo, vídeo por tarefa, fatia de manual por PRD
@@ -63,6 +63,18 @@ Decisão do Pedro (grilling de 17/09/2026, com a recomendação seguida em todas
 **Produção.** A camada didática é uma segunda campanha de prompts em `docs/prompts/` (07 a 09), na mesma mecânica dos vídeos: um worktree por terminal, um terminal por módulo, teto de três terminais de print (o app local e o banco são compartilhados), o tema sozinho e antes de todos, os fluxogramas em paralelo com os prints porque não tocam Página de tarefa, e o 06 (enxugar a escrita) por último, porque mexe no texto de todas. Humanização separada foi rejeitada: o texto já é humano, e os três cacoetes encontrados ("é assim mesmo", "de propósito", "não é X: é Y") entram no 06.
 
 As demais decisões ficam intactas.
+
+## Emenda a este ADR (13/out/2026, o Vídeo de tarefa ganha estilo próprio e a campanha de rerender, ADR 0071)
+
+Decisão do Pedro (grilling de 13/10/2026). Os 61 Vídeos de tarefa são réplicas fiéis do app, mas cada um saiu de uma sessão diferente, sem estilo compartilhado nem gate de verificação além do `check` e do olhar humano. O [HyperFrames Student Kit](https://github.com/nateherkai/hyperframes-student-kit) de Nate Herk traz o que faltava: um contrato de estilo (`DESIGN.md` + `tokens.css` + cards como sub-composições com slots nomeados), um vocabulário de movimento, gates de verificação por frames e o loop "nota do revisor vira regra na skill". A filosofia visual do kit (canvas preto, tipo cromado, 1,5 s por cena) é de reel, e não entra.
+
+**Decisão 4, o Vídeo de tarefa ganha a disciplina do kit com a cara do hospital.** O corpo continua réplica fiel do app, mudo, 30 a 60 s ("na dúvida, fiel vence"). Entram do kit: (a) um **Estilo do manual** em `docs/manual/video/_estilo/`, no formato da style-library do kit, com `DESIGN.md`, `tokens.css` tirado do `globals.css` do frontend e cards reusáveis (legenda de passo, callout, lower-third, abertura, carimbo) como sub-composições com slots; (b) o vocabulário de movimento: push-in no elemento do passo, câmera que nunca para, transição com rastro entre telas, e a lei do timeline que preenche o slot inteiro (sem quadro preto); (c) os gates de verificação: strips de frames a cada corte, `VERIFY.md` por vídeo, além do carimbo e do gate anti-técnica que já existem; (d) o loop em que cada nota humana no draft vira regra na skill `/manual`, para a nota não se repetir. Rejeitado: visual do kit só na abertura e no fecho (dois mundos num vídeo de 45 s); adotar o kit inteiro (bonito e deixa de parecer o app).
+
+**O kit mora fora do repositório.** Clone em `~/PedroDev/hyperframes-student-kit` como referência de leitura; o que o manual usa é adaptado à mão para `.claude/skills/manual/references/` e para o Estilo do manual. Nenhuma skill do kit é instalada globalmente (três têm o mesmo nome das skills globais de HyperFrames). O HyperFrames continua na versão do manual, não na do kit. Os vídeos de referência gerados pelo Opus 5.5 ficam em `local/manual-video-referencias/` (fora do git, como os masters) e cada um tem uma **Ficha de referência** em `_estilo/references/`: o que copiar dele e o que não copiar. O `DESIGN.md` cita as fichas.
+
+**Gate da campanha de rerender dos 61 vídeos.** A regra "OK humano no draft de cada vídeo" vale para o dia a dia e para o piloto; na campanha, o OK é por módulo. Ordem: a fundação (estilo, cards, gates, skill) é uma issue sozinha; depois um piloto de dois vídeos com OK por vídeo e nota virando regra; depois um terminal por módulo, teto de três (render disputa CPU), cada um entregando uma **Folha de contato** (quadros-chave de todos os vídeos do módulo e um MP4 inteiro) para um OK por módulo. O texto que aparece no vídeo passa pelo humanizer (ADR 0071). Rejeitado: 61 OKs (campanha presa à agenda); sem OK humano (o primeiro vídeo errado vai ao ar sem ninguém ver).
+
+A rejeição de "humanização separada" registrada na seção Produção abaixo deixa de valer: a ADR 0071 decide a reescrita.
 
 ## Consequências
 

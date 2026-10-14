@@ -391,6 +391,20 @@ _Evitar_: uma entrada por deploy ou por fix (isso é o changelog, que é doc de 
 O vídeo de 30 a 60 s de uma [Página de tarefa]: um exemplo único com dados de exemplo, do primeiro clique ao resultado, mudo, com legendas curtas, gerado com a mesma receita do [Vídeo de percepção de valor] e aprovado por gente antes de publicar. Regerável quando a tela muda. Não é gravação de tela com voz.
 _Evitar_: um vídeo por capítulo como unidade (obriga a assistir 90 s para achar 15); vídeo obrigatório para publicar a página.
 
+**Régua de texto**:
+A passagem obrigatória de todo texto que alguém de fora vai ler (página do [Manual], texto de tela, PDF, hover do Hospital OS, mensagem, legenda de vídeo) pela skill `humanizer` antes de gravar, mais o lint que trava no CI os cacoetes que dão para pegar por regex (ADR 0071). A voz é a do canal: a amostra aprovada manda no tom, a skill só tira o cacoete.
+_Evitar_: "não é X, é Y"; fecho de uma linha que repete o parágrafo; tríade forçada; rótulo em negrito em tudo; texto para fora gravado sem a passagem.
+
+**Estilo do manual**:
+O contrato visual compartilhado dos [Vídeos de tarefa], em `docs/manual/video/_estilo/`: `DESIGN.md`, `tokens.css` com as cores e a fonte do app, e cards reusáveis (legenda de passo, callout, lower-third, abertura, carimbo) como sub-composições com slots de texto. Veio do formato da style-library do HyperFrames Student Kit; o corpo do vídeo continua réplica fiel do app, mudo (emenda de 13/10/2026 ao ADR 0057).
+_Evitar_: cor ou fonte fixa dentro de um vídeo (vem dos tokens); canvas preto e tipo cromado do kit; vídeo que não preenche o slot inteiro do timeline.
+
+**Ficha de referência**:
+A nota curta, uma por vídeo de referência (os gerados pelo Opus 5.5 ficam em `local/manual-video-referencias/`, fora do git), em `_estilo/references/`: o que copiar daquele vídeo (uma transição, um ritmo, um card) e o que não copiar. O `DESIGN.md` do [Estilo do manual] cita as fichas, para cada sessão tirar a mesma coisa da mesma referência.
+
+**Folha de contato**:
+O que o agente entrega para o OK humano por módulo na campanha de rerender dos [Vídeos de tarefa]: os quadros-chave de todos os vídeos do módulo numa imagem só, mais um MP4 inteiro. No dia a dia e no piloto o OK continua por vídeo, no draft.
+
 **Vídeo de percepção de valor**:
 O vídeo de uma entrega (PRD) feito para o diretor ver o sistema funcionando (ADR 0026, ADR 0045): a unidade é o que mudou, não a tarefa. No [Manual] ele entra em [Novidades], e serve de [Vídeo de tarefa] quando a entrega coincide com uma tarefa.
 
