@@ -12,8 +12,7 @@ sidebar:
 ## Quando usar
 
 Quando você quer conferir com que email a plataforma conhece você, em que setor
-você está cadastrado, ou ter um número rápido de quantas pendências ainda estão
-com você.
+você está cadastrado, ou quantas pendências ainda estão com você.
 
 ## Passo a passo
 

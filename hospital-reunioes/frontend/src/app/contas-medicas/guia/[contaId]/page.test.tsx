@@ -261,7 +261,7 @@ describe("as linhas por dia e setor", () => {
     for (const nome of ["Feito", "Não procede", "Bloqueado"]) {
       expect(within(validar).queryByRole("button", { name: nome })).toBeNull();
     }
-    expect(validar.textContent).toContain("Você não precisa decidir: o item já foi para a validação");
+    expect(validar.textContent).toContain("Nada a decidir aqui: o item já foi para a validação");
     expect(validar.textContent).toContain("Em jogo: R$ 1.212,00");
   });
 
@@ -601,7 +601,7 @@ describe("o que volta da Validação (issue #1142)", () => {
     expect(within(decidida).getByRole("button", { name: "Feito" })).toBeTruthy();
     const descartada = aLinha("Diária");
     expect(descartada.textContent).toContain("Decidida na validação, sem ação no MV");
-    expect(descartada.textContent).not.toContain("Você não precisa decidir");
+    expect(descartada.textContent).not.toContain("Nada a decidir aqui");
   });
 });
 

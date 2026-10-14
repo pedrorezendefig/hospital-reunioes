@@ -1981,7 +1981,7 @@ export default function ReuniaoDetailPage() {
         title="Finalizar sem assinatura?"
         description={
           `Isto criará ${ata?.quadro_atribuicoes?.length ?? 0} pendência(s) imediatamente e marcará a Ata como APROVADA.\n\n` +
-          "A Ata não terá assinatura digital: você abre mão da formalidade do ClickSign. Esta ação é definitiva."
+          "A Ata fica sem a assinatura digital do ClickSign. Esta ação é definitiva."
         }
         confirmLabel="Finalizar sem assinatura"
       />

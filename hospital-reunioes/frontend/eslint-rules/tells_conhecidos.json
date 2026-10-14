@@ -1,43 +1,4 @@
 {
-  "sobre": "Cacoetes de texto gerado que já estavam nas telas quando a regra hospital/sem-tells nasceu (issue #1218, ADR 0071). Eles passam no lint; cacoete novo trava. A varredura do texto do app (issue #1229) reescreve cada um e apaga a linha daqui; o teste da regra falha se uma linha ficar sem o cacoete no arquivo.",
-  "arquivos": {
-    "src/app/ouvidoria/pontos/page.tsx": [
-      "não apaga o cartaz nem muda o código:"
-    ],
-    "src/app/ouvidoria/prazos/page.tsx": [
-      "não em calendário útil:"
-    ],
-    "src/app/ouvidoria/responsaveis/page.tsx": [
-      "não é acionável:"
-    ],
-    "src/app/pendencias/kanban/page.tsx": [
-      "não encontrada:"
-    ],
-    "src/app/reunioes/[id]/page.tsx": [
-      "não terá assinatura digital:"
-    ],
-    "src/components/admin/dados-atendimento/EspelhoGlobalHealth.tsx": [
-      "não um caderno:",
-      "não é feita:"
-    ],
-    "src/components/contas-medicas/LinhaDoGuia.tsx": [
-      "não precisa decidir:"
-    ],
-    "src/components/ouvidoria/Dossie.tsx": [
-      "não aparece nesta tela:",
-      "não pode ser apagado depois:"
-    ],
-    "src/components/ouvidoria/EncerrarModal.tsx": [
-      "não resolvido:"
-    ],
-    "src/components/tecnologia/assistente.ts": [
-      "Não crie de novo:"
-    ],
-    "src/lib/ouvidoria/natureza-informada.ts": [
-      "não a classificação do caso:"
-    ],
-    "src/lib/ouvidoria/origem.ts": [
-      "não prova presença no local:"
-    ]
-  }
+  "sobre": "Cacoetes de texto gerado que já estavam nas telas quando a regra hospital/sem-tells nasceu (issue #1218, ADR 0071). A varredura do texto do app (issue #1229) reescreveu todos e esvaziou a lista; o teste da regra trava se ela voltar a ter linha. Cacoete novo se reescreve na hora.",
+  "arquivos": {}
 }

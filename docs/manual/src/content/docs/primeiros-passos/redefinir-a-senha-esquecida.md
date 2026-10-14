@@ -11,8 +11,8 @@ sidebar:
 
 ## Quando usar
 
-Quando você não consegue entrar porque não lembra a senha. Este caminho é seu:
-ninguém precisa gerar senha nova para você.
+Quando você não consegue entrar porque não lembra a senha. Você resolve
+sozinho por aqui, sem pedir a ninguém uma senha nova.
 
 ## Passo a passo
 
@@ -35,10 +35,9 @@ ninguém precisa gerar senha nova para você.
 
 - **O email não chega:** olhe a caixa de spam. A tela responde
   **Verifique seu email** mesmo quando o endereço não existe na plataforma, para
-  não contar a estranhos quem tem conta aqui. Confira se você digitou o email
-  certo e tente de novo.
-- **A tela mostra Link inválido:** o aviso explica que o link expirou ou já foi
-  usado. Clique em **Solicitar novo link** e repita o pedido.
+  que um estranho não descubra quem tem conta aqui. Confira se você digitou o
+  email certo e tente de novo.
+- **A tela mostra Link inválido:** o link expirou ou já foi usado. Clique em **Solicitar novo link** e repita o pedido.
 - **A tela recusa a senha:** ela avisa **A senha deve ter pelo menos 8
   caracteres.** ou **As senhas não coincidem. Verifique e tente novamente.**
   Escreva uma senha mais longa, ou repita a mesma nos dois campos.

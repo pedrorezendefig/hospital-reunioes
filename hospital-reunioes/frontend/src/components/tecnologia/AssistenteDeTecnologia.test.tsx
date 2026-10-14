@@ -878,6 +878,9 @@ describe("Criar Demanda", () => {
 
     const alerta = await screen.findByRole("alert");
     expect(alerta.textContent).toContain(CRIADA_SEM_CONFIRMACAO);
+    // Comparar com a própria constante não pega frase que empurra a recriar
+    // (PR #1248): o marcador literal é o pedido de não criar outra.
+    expect(alerta.textContent).toContain("não crie outra");
     // A frase do chat não serve aqui: lá o desfecho foi ruim, aqui foi bom.
     expect(alerta.textContent).not.toContain(RESPOSTA_ILEGIVEL);
     // A saída oferecida é o Quadro.

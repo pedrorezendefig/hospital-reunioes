@@ -364,7 +364,7 @@ export default function PontosDeEscutaPage() {
       )}
 
       <p className="text-xs text-slate-400 mt-6 leading-relaxed">
-        Aposentar não apaga o cartaz nem muda o código: quem ler um QR aposentado continua caindo no
+        Aposentar mantém o cartaz e o código. Quem ler um QR aposentado continua caindo no
         formulário da Ouvidoria, só que sem dizer de onde veio.
       </p>
     </div>
