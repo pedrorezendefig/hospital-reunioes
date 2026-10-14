@@ -4,289 +4,355 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=1920, height=1080" />
 <title>Manual · Reuniões e metas · Aceitar a ata pelo link</title>
+<link rel="stylesheet" href="tokens.css" />
 <script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js" integrity="sha384-sG0Hv1tP1lZCk9KQmrIbY/XNwi+OY84GQqhMscbnsoBFqAz8KNCil1kvfL3Hbbk2" crossorigin="anonymous"></script>
 <script type="application/json" id="manual-video-meta">
-{
- "modulo": "reunioes",
- "slug": "aceitar-a-ata-pelo-link",
- "pagina": "reunioes/aceitar-a-ata-pelo-link.md",
- "prd": [
-  272
- ],
- "issues": [],
- "app_version": "0.142.1",
- "gerado_em": "2026-09-17T16:00:00-03:00"
-}
+{"modulo": "reunioes", "slug": "aceitar-a-ata-pelo-link", "pagina": "reunioes/aceitar-a-ata-pelo-link.md", "prd": [272, 1216], "issues": [1233], "app_version": "0.196.1", "gerado_em": "2026-10-14T12:00:00-03:00"}
 </script>
 <style>
-  @font-face {
-    font-family: "HP Simplified";
-    src: url("assets/fonts/HPSimplified_Rg.ttf") format("truetype");
-    font-weight: 400;
-    font-style: normal;
-  }
+  /* Estilo do manual (emenda de 13/10/2026 à ADR 0057): cor e fonte só pelos
+     tokens. Na réplica, cada cor é a da classe do app, pelo token de mesmo
+     nome (text-slate-500 vira var(--color-slate-500)). */
   * { margin: 0; padding: 0; box-sizing: border-box; }
-  html, body { width: 1920px; height: 1080px; overflow: hidden; background: #fff; }
-  body { font-family: "HP Simplified", system-ui, sans-serif; }
+  html, body { width: 1920px; height: 1080px; overflow: hidden; background: var(--video-palco); }
+  body { font-family: var(--font-app); color: var(--color-text); }
 
-  :root {
-    --navy: #2B2E7E; --navy-light: #3B6FB6; --navy-dark: #1A1C4E;
-    --app-text: #1E293B; --app-sec: #64748B; --app-border: #E2E8F0;
-  }
+  #main { position: relative; width: 1920px; height: 1080px; overflow: hidden; }
+  #slot-abertura, #slot-carimbo { z-index: 5; }
+  #c-tarefa { position: absolute; inset: 0; z-index: 1; }
+  .palco { position: absolute; inset: 0; background: var(--video-palco); }
+  #camera { position: absolute; left: 0; top: 0; width: 1920px; height: 1080px; transform-origin: 0 0; }
+  [id^="slot-passo"] { z-index: 3; }
+  [id^="slot-lugar"] { z-index: 2; }
+  #slot-aviso { z-index: 4; }
 
-  #root { position: relative; width: 1920px; height: 1080px; overflow: hidden; }
-  .scene { position: absolute; inset: 0; background: #fff; overflow: hidden; }
+  /* ===== a janela do navegador ===== */
+  .janela { position: absolute; left: 160px; top: 32px; width: 1600px; height: 848px; border-radius: var(--radius-3xl); background: var(--color-white); border: 1px solid var(--color-slate-300); box-shadow: var(--video-sombra); overflow: hidden; }
+  .barra-nav { position: absolute; left: 0; top: 0; width: 1600px; height: 44px; background: var(--color-slate-100); border-bottom: 1px solid var(--color-slate-200); display: flex; align-items: center; gap: 9px; padding: 0 18px; }
+  .barra-nav i { display: block; width: 12px; height: 12px; border-radius: 50%; background: var(--color-slate-300); }
+  .barra-nav .url { margin-left: 14px; width: 620px; height: 28px; border-radius: 14px; background: var(--color-white); border: 1px solid var(--color-slate-200); display: flex; align-items: center; padding: 0 16px; font-size: 16px; color: var(--color-slate-500); }
 
-  /* Palco desenhado em 960x540 e ampliado 2x, para os tamanhos do app saírem
-     nítidos em 1080p. Mesma régua das outras composições do Manual. */
-  .palco { position: relative; width: 960px; height: 540px; transform: scale(2); transform-origin: top left; font-size: 12px; color: var(--app-text); background: #EEF1F6; }
+  /* ===== o app, desenhado em 1280x643 e ampliado 1,25x ===== */
+  .vista { position: absolute; left: 0; top: 44px; width: 1600px; height: 804px; overflow: hidden; background: var(--color-bg); }
+  .app { position: absolute; left: 0; top: 0; width: 1280px; height: 643.2px; transform: scale(1.25); transform-origin: 0 0; background: var(--color-bg); font-size: 14px; line-height: 20px; }
+  .lado { position: absolute; left: 0; top: 0; width: 256px; height: 643.2px; border-right: 1px solid var(--color-border); background: var(--color-surface); }
+  .lado .marca { height: 122px; border-bottom: 1px solid var(--color-border); display: flex; align-items: center; justify-content: center; }
+  .lado .marca img { width: 170px; height: 96px; object-fit: contain; }
+  .lado nav { padding: 16px 12px; display: flex; flex-direction: column; gap: 4px; }
+  .mi { display: flex; align-items: center; gap: 12px; padding: 10px 12px; border-radius: var(--radius-xl); font-size: 14px; color: var(--color-text-secondary); }
+  .mi .fim { margin-left: auto; opacity: .5; display: flex; }
+  .mi.on { background: color-mix(in srgb, var(--color-primary) 10%, transparent); color: var(--color-primary); border-left: 3px solid var(--color-primary); padding-left: 9px; }
+  .mi.grupo-on { background: color-mix(in srgb, var(--color-primary) 5%, transparent); color: var(--color-primary); }
+  .sub { margin: 4px 0 0 16px; padding-left: 12px; border-left: 2px solid color-mix(in srgb, var(--color-border) 50%, transparent); display: flex; flex-direction: column; gap: 4px; }
+  .sub .mi { padding: 8px 12px; border-radius: var(--radius-lg); }
+  .sub .mi.folha-on { background: color-mix(in srgb, var(--color-primary) 10%, transparent); color: var(--color-primary); }
+  .mi .selo { margin-left: auto; min-width: 18px; height: 18px; padding: 0 4px; border-radius: 999px; background: var(--color-primary); color: var(--color-white); font-size: 10px; display: inline-flex; align-items: center; justify-content: center; }
+  .topo { position: absolute; left: 256px; top: 0; width: 1024px; height: 64px; background: var(--color-slate-50); border-bottom: 1px solid var(--color-slate-200); display: flex; align-items: center; padding: 0 24px; }
+  .busca { width: 256px; height: 38px; border-radius: var(--radius-xl); background: var(--color-bg); border: 1px solid var(--color-border); display: flex; align-items: center; gap: 10px; padding: 0 12px; font-size: 14px; color: color-mix(in srgb, var(--color-text-secondary) 40%, transparent); }
+  .quem { margin-left: auto; margin-right: 24px; display: flex; align-items: center; gap: 24px; }
+  .sino { position: relative; color: var(--color-slate-500); display: flex; }
+  .sino .n { position: absolute; top: -6px; right: -8px; min-width: 18px; height: 18px; border-radius: 999px; background: var(--color-red-500); color: var(--color-white); font-size: 10px; display: flex; align-items: center; justify-content: center; }
+  .divisor { width: 1px; height: 32px; background: var(--color-border); }
+  .pessoa { display: flex; align-items: center; gap: 12px; }
+  .pessoa .tx { text-align: right; }
+  .pessoa .tx b { display: block; font-size: 14px; font-weight: 600; color: var(--color-slate-700); }
+  .pessoa .tx span { font-size: 12px; color: var(--color-slate-500); }
+  .avatar { position: relative; width: 40px; height: 40px; border-radius: 50%; background: var(--color-primary); color: var(--color-white); font-weight: 700; display: flex; align-items: center; justify-content: center; }
+  .avatar .seta { position: absolute; right: -2px; bottom: -2px; width: 16px; height: 16px; border-radius: 50%; background: var(--color-white); border: 1px solid var(--color-slate-100); color: var(--color-slate-400); display: flex; align-items: center; justify-content: center; }
+  .corpo { position: absolute; left: 256px; top: 64px; width: 1024px; height: 579.2px; overflow: hidden; background: var(--color-bg); }
+  .rolo { position: absolute; left: 0; top: 0; width: 1024px; padding: 32px; }
+  .sobre-app { position: absolute; left: 0; top: 0; width: 1280px; height: 643.2px; opacity: 0; }
+  .casca2 { position: absolute; left: 0; top: 0; width: 1280px; height: 643.2px; opacity: 0; }
+  .veu { position: absolute; left: 0; top: 0; width: 1280px; height: 643.2px; backdrop-filter: blur(4px); }
 
-  .slide { display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding: 0 160px; }
-  .eyebrow { font-size: 26px; letter-spacing: .22em; text-transform: uppercase; color: var(--navy-light); font-weight: 700; }
-  .titulo { font-size: 72px; line-height: 1.12; color: var(--navy); font-weight: 700; max-width: 1560px; margin: 34px 0 30px; }
-  .sub { font-size: 36px; color: var(--app-sec); max-width: 1420px; line-height: 1.5; }
-  .selo-abertura { margin-top: 40px; display: inline-flex; gap: 14px; }
-  .selo-abertura span { border: 2px solid var(--app-border); border-radius: 999px; padding: 10px 26px; font-size: 26px; font-weight: 700; color: var(--app-sec); }
-  .selo-abertura span.destaque { border-color: var(--navy); color: var(--navy); background: #F5F6FE; }
+  /* ===== o foco: marcador, dedo e toque ===== */
+  .marcador { position: absolute; left: 0; top: 0; opacity: 0; border: 3px solid var(--video-foco); border-radius: 14px; box-shadow: 0 0 0 8px var(--video-foco-halo); }
+  .dedo { position: absolute; left: 0; top: 0; opacity: 0; width: 40px; height: 40px; }
+  .dedo svg { position: absolute; left: 0; top: 0; width: 40px; height: 40px; }
+  .dedo path { fill: var(--video-foco); stroke: var(--color-white); stroke-width: 1.4; }
+  .toque { position: absolute; left: -22px; top: -22px; width: 56px; height: 56px; border-radius: 50%; background: var(--video-foco-halo); border: 2px solid var(--video-foco); opacity: 0; }
 
-  .fecho-titulo { font-size: 52px; color: var(--navy); font-weight: 700; margin-bottom: 40px; }
-  .carimbo { font-size: 30px; color: var(--app-sec); }
-  .fecho-org { font-size: 26px; color: #64748B; margin-top: 16px; }
+/* ===== a reunião aberta (reunioes/[id]/page.tsx) ===== */
+  .re { width: 896px; display: flex; flex-direction: column; gap: 24px; }
+  .re-volta { display: inline-flex; align-items: center; gap: 4px; font-size: 14px; color: var(--color-slate-400); margin-bottom: 8px; }
+  .re-topo { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
+  .re-topo h1 { font-size: 24px; line-height: 32px; font-weight: 700; color: var(--color-slate-900); }
+  .re-cod { font-family: var(--font-mono); font-size: 12px; line-height: 16px; color: var(--color-slate-400); margin-top: 2px; }
+  .re-selo { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; margin-bottom: 4px; border-radius: 999px; font-size: 12px; line-height: 16px; font-weight: 600; background: var(--color-slate-100); color: var(--color-slate-700); border: 1px solid var(--color-slate-200); }
+  .re-bts { display: flex; align-items: center; gap: 12px; }
+  .re-desmarcar { display: flex; align-items: center; gap: 8px; padding: 10px 16px; border-radius: var(--radius-xl); border: 1px solid var(--color-red-200); color: var(--color-red-600); font-size: 14px; font-weight: 500; }
+  .re-pdf, .bt-grad { display: flex; align-items: center; gap: 8px; padding: 8px 16px; border-radius: var(--radius-xl); background: linear-gradient(90deg, var(--color-primary), var(--color-primary-dark)); color: var(--color-white); font-size: 14px; font-weight: 500; white-space: nowrap; }
+  .re-tl { background: var(--color-white); border-radius: var(--radius-2xl); border: 1px solid var(--color-border); box-shadow: var(--shadow-premium); padding: 16px 24px; display: flex; align-items: center; gap: 8px; }
+  .re-tl .pl { display: flex; align-items: center; gap: 6px; padding: 6px 12px; border-radius: 999px; font-size: 12px; line-height: 16px; font-weight: 500; background: var(--color-slate-100); color: var(--color-slate-400); white-space: nowrap; }
+  .re-tl .pl.feito { background: linear-gradient(90deg, var(--color-primary), var(--color-primary-dark)); color: var(--color-white); }
+  .re-tl .pl.agora { background: color-mix(in srgb, var(--color-primary) 10%, transparent); color: var(--color-primary); box-shadow: 0 0 0 2px color-mix(in srgb, var(--color-primary) 30%, transparent); }
+  .re-tl .tr { height: 1px; width: 24px; background: var(--color-slate-200); }
+  .re-tl .tr.feito { background: var(--color-primary); }
+  .re-meta { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+  .re-meta div { background: var(--color-white); border-radius: var(--radius-xl); border: 1px solid var(--color-border); box-shadow: var(--shadow-premium); padding: 12px 16px; }
+  .re-meta small { display: flex; align-items: center; gap: 6px; font-size: 12px; line-height: 16px; font-weight: 500; color: var(--color-slate-400); margin-bottom: 4px; }
+  .re-meta b { font-size: 14px; font-weight: 600; color: var(--color-slate-900); }
+  .sc { background: var(--color-white); border-radius: var(--radius-2xl); border: 1px solid var(--color-border); box-shadow: var(--shadow-premium); }
+  .sc-cab { padding: 16px 24px; border-bottom: 1px solid var(--color-slate-100); display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+  .sc-tt { display: flex; align-items: center; gap: 10px; color: var(--color-primary); }
+  .sc-tt h2 { font-size: 16px; line-height: 24px; font-weight: 600; color: var(--color-slate-900); }
+  .sc-corpo { padding: 20px 24px; font-size: 14px; color: var(--color-slate-600); }
+  .sc-alvo { padding: 6px; border-radius: var(--radius-lg); color: var(--color-slate-400); display: flex; }
+  .pa-grade { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .pa { display: flex; align-items: center; gap: 12px; padding: 8px 12px; border-radius: var(--radius-xl); background: var(--color-slate-50); }
+  .pa .av { width: 32px; height: 32px; border-radius: 50%; background: linear-gradient(135deg, color-mix(in srgb, var(--color-primary) 20%, transparent), color-mix(in srgb, var(--color-primary-light) 20%, transparent)); color: var(--color-primary); font-size: 12px; font-weight: 600; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+  .pa b { display: block; font-size: 14px; font-weight: 500; color: var(--color-slate-800); }
+  .pa small { display: block; font-size: 12px; line-height: 16px; color: var(--color-slate-400); }
+  .pa .fim { margin-left: auto; display: flex; align-items: center; gap: 6px; color: var(--color-success); }
+  .pa .fim i { display: flex; padding: 4px; color: var(--color-slate-400); }
+  .pa-add { display: inline-flex; align-items: center; gap: 8px; padding: 8px 12px; margin-top: 12px; border-radius: var(--radius-xl); border: 2px dashed var(--color-slate-200); color: var(--color-slate-400); font-size: 14px; font-weight: 500; }
+  .di { border-left: 4px solid color-mix(in srgb, var(--color-primary) 40%, transparent); background: var(--color-slate-50); border-radius: 0 var(--radius-xl) var(--radius-xl) 0; padding: 12px 16px; }
+  .di + .di { margin-top: 16px; }
+  .di > b { display: block; font-size: 14px; font-weight: 600; color: var(--color-primary); }
+  .di > p { margin-top: 8px; color: var(--color-slate-700); }
+  .di .ct { margin-top: 12px; font-size: 10px; line-height: 15px; text-transform: uppercase; letter-spacing: .05em; font-weight: 600; color: var(--color-slate-500); }
+  .di li { list-style: none; margin-top: 4px; color: var(--color-slate-700); }
+  .di li strong { color: var(--color-slate-800); }
+  .di .dc { margin-top: 12px; padding: 8px 12px; border-radius: var(--radius-lg); background: var(--color-cyan-50); border-left: 2px solid var(--color-cyan-500); color: var(--color-slate-800); }
+  .di .dc strong { color: var(--color-cyan-900); }
+  .di .dc span { display: block; margin-top: 2px; font-size: 12px; line-height: 16px; color: var(--color-slate-600); font-style: italic; }
+  .qd { width: 100%; border-collapse: collapse; font-size: 14px; }
+  .qd th { text-align: left; padding: 0 16px 8px 0; font-size: 12px; line-height: 16px; font-weight: 600; color: var(--color-slate-400); text-transform: uppercase; letter-spacing: .025em; border-bottom: 1px solid var(--color-slate-100); }
+  .qd td { padding: 12px 16px 12px 0; vertical-align: top; color: var(--color-slate-600); border-top: 1px solid var(--color-slate-50); }
+  .qd td:first-child { color: var(--color-slate-800); font-weight: 500; }
+  .qd td small { display: block; font-size: 12px; line-height: 16px; color: var(--color-slate-400); }
+  .qd .st { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 10px; line-height: 15px; font-weight: 600; border: 1px solid var(--color-amber-200); background: var(--color-amber-50); color: var(--color-amber-700); }
+  .va { background: var(--color-white); border-radius: var(--radius-2xl); border: 1px solid color-mix(in srgb, var(--color-primary) 30%, transparent); box-shadow: var(--shadow-premium); padding: 24px; }
+  .va-cab { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; }
+  .va-cab .ico { width: 40px; height: 40px; border-radius: var(--radius-xl); background: color-mix(in srgb, var(--color-warning) 10%, transparent); color: var(--color-warning); display: flex; align-items: center; justify-content: center; }
+  .va-cab h2 { font-size: 18px; line-height: 28px; font-weight: 700; color: var(--color-slate-900); }
+  .va-cab p { font-size: 14px; color: var(--color-slate-600); }
+  .va-bts { display: flex; flex-wrap: wrap; gap: 12px; }
+  .va-bts span { display: flex; align-items: center; gap: 8px; padding: 10px 24px; border-radius: var(--radius-xl); font-size: 16px; line-height: 24px; font-weight: 500; }
+  .va-bts .env { background: linear-gradient(90deg, var(--color-primary), var(--color-primary-dark)); color: var(--color-white); }
+  .va-bts .sem { border: 1px solid color-mix(in srgb, var(--color-primary) 30%, transparent); color: var(--color-primary); }
+  .va-bts .cor { background: var(--color-amber-100); color: var(--color-amber-800); }
 
-  /* ===== janela de navegador ===== */
-  .janela { position: absolute; left: 36px; top: 72px; width: 570px; height: 400px; border-radius: 12px; background: #fff; box-shadow: 0 26px 60px -20px rgba(0,0,0,.42); overflow: hidden; border: 1px solid #D8DEE9; }
-  .barra { height: 20px; background: #E7EBF2; display: flex; align-items: center; gap: 4px; padding: 0 8px; border-bottom: 1px solid #D8DEE9; }
-  .barra i { width: 5px; height: 5px; border-radius: 50%; background: #C3CBD8; display: block; }
-  .barra .url { margin-left: 8px; flex: 1; height: 11px; border-radius: 6px; background: #fff; border: 1px solid #D8DEE9; font-size: 6.4px; color: #5A6273; display: flex; align-items: center; padding: 0 6px; }
-  .tela { position: absolute; left: 0; right: 0; top: 20px; bottom: 0; background: #F7F9FC; overflow: hidden; }
-
-  /* ===== moldura do app: topo + menu lateral ===== */
-  .app-topo { position: absolute; left: 0; right: 0; top: 0; height: 24px; background: #fff; border-bottom: 1px solid var(--app-border); display: flex; align-items: center; justify-content: space-between; padding: 0 9px; }
-  .app-topo .marca { display: flex; align-items: center; gap: 4px; }
-  .app-topo .direita { display: flex; align-items: center; gap: 6px; color: #94A3B8; }
-  .app-topo .avatar { width: 13px; height: 13px; border-radius: 50%; background: #E8EAF7; color: var(--navy); font-size: 6px; font-weight: 700; display: flex; align-items: center; justify-content: center; }
-  .app-menu { position: absolute; left: 0; top: 24px; bottom: 0; width: 92px; background: #fff; border-right: 1px solid var(--app-border); padding: 7px 6px; }
-  .mi { display: flex; align-items: center; gap: 5px; font-size: 6.6px; color: #56606F; padding: 3.5px 5px; border-radius: 5px; margin-bottom: 2px; }
-  .mi.grupo { justify-content: space-between; }
-  .mi.on { background: rgba(43,46,126,.05); color: var(--navy); font-weight: 700; }
-  .mi.ativo { background: rgba(43,46,126,.08); color: var(--navy); font-weight: 700; }
-  .submenu { margin: 2px 0 2px 8px; padding-left: 5px; border-left: 1.5px solid rgba(226,232,240,.8); }
-  .submenu .mi { font-size: 6.2px; padding: 3px 5px; }
-  .app-corpo { position: absolute; left: 92px; right: 0; top: 24px; bottom: 0; padding: 11px 12px; overflow: hidden; }
-
-  /* ===== tipografia de conteúdo ===== */
-  .h-pag { font-size: 11.5px; font-weight: 700; color: #0F172A; }
-  /* Um tom mais escuro que o secundário do app: em vídeo, lido de longe, o
-     #64748B do globals.css não chega nos 4.5:1 exigidos. */
-  .dek { font-size: 6.4px; color: #56606F; margin-top: 1.5px; }
-  .cartao { background: #fff; border: 1px solid var(--app-border); border-radius: 9px; }
-
-  .btn { display: inline-flex; align-items: center; gap: 4px; font-size: 7px; font-weight: 700; border-radius: 7px; padding: 5px 9px; }
-  .btn-cheio { background: linear-gradient(90deg, #2B2E7E, #1A1C4E); color: #fff; }
-  .btn-indigo { background: linear-gradient(90deg, #4F46E5, #4338CA); color: #fff; }
-  .btn-vazado { border: 1.4px solid rgba(43,46,126,.3); color: var(--navy); background: #fff; }
-  .btn-claro { border: 1px solid var(--app-border); color: #475569; background: #fff; }
-  .btn-ambar { background: #FEF3C7; color: #92400E; }
-  .btn-verde { background: linear-gradient(90deg, #15803D, #14532D); color: #fff; }
-
-  .campo { position: relative; height: 19px; border: 1px solid var(--app-border); border-radius: 7px; display: flex; align-items: center; gap: 5px; padding: 0 7px; font-size: 6.8px; color: var(--app-text); background: #fff; }
-  .campo .ph { color: #626D80; }
-  /* O valor digitado ocupa o mesmo lugar do placeholder, sem empurrar layout. */
-  .campo .val { position: absolute; left: 7px; right: 7px; opacity: 0; color: var(--app-text); white-space: nowrap; overflow: hidden; }
-  .campo .val.com-icone { left: 19px; }
-  .lb { font-size: 6.6px; font-weight: 700; color: #475569; margin-bottom: 3px; }
-
-  .selo { display: inline-flex; align-items: center; gap: 2.5px; border-radius: 999px; padding: 2px 6px; font-size: 5.8px; font-weight: 700; }
-
-  /* ===== dedo fantasma ===== */
-  .ghost { position: absolute; left: 0; top: 0; z-index: 40; opacity: 0; }
-  .ghost .pulse { position: absolute; left: -7px; top: -7px; width: 34px; height: 34px; border-radius: 50%; background: rgba(43,46,126,.28); opacity: 0; }
-
-  /* ===== legenda de passo, do lado da janela ===== */
-  .passo { position: absolute; left: 626px; width: 300px; opacity: 0; }
-  .passo .n { display: inline-flex; align-items: center; justify-content: center; width: 30px; height: 30px; border-radius: 50%; background: var(--navy); color: #fff; font-size: 16px; font-weight: 700; }
-  .passo h3 { font-size: 24px; line-height: 1.25; color: var(--navy); font-weight: 700; margin: 12px 0 8px; }
-  /* Um tom mais escuro que o secundário do app: legenda de vídeo é lida de
-     longe e precisa passar no contraste 4.5:1. */
-  .passo p { font-size: 16.5px; line-height: 1.5; color: #556076; }
-  .passo b { color: var(--app-text); }
-  .marcador { position: absolute; border: 1.5px solid var(--navy); border-radius: 7px; box-shadow: 0 0 0 3px rgba(43,46,126,.14); opacity: 0; z-index: 30; }
-
-  /* ===== rodapé do carimbo, em toda cena com o app ===== */
-  .rodape-v { position: absolute; left: 0; right: 0; bottom: 8px; text-align: center; font-size: 9.5px; color: #5C6676; letter-spacing: .04em; }
+  /* ===== a tela de aceite por link, sem login (aceite/[token]/page.tsx) ===== */
+  .ac-pg { position: absolute; left: 0; top: 0; width: 1280px; height: 643.2px; overflow: hidden; background: var(--color-bg); }
+  .ac-rolo { position: absolute; left: 256px; top: 0; width: 768px; padding: 32px 16px; display: flex; flex-direction: column; gap: 16px; }
+  .ac-logo { display: flex; justify-content: center; margin-bottom: 8px; }
+  .ac-logo img { width: 120px; height: 68px; object-fit: contain; }
+  .ac-carga { display: flex; align-items: center; justify-content: center; gap: 8px; padding: 64px 0; font-size: 14px; color: var(--color-slate-500); }
+  .ac-cab { background: var(--color-white); border-radius: var(--radius-2xl); border: 1px solid var(--color-border); box-shadow: var(--shadow-premium); padding: 20px 24px; }
+  .ac-cab small { display: block; font-size: 10px; line-height: 15px; text-transform: uppercase; letter-spacing: .05em; font-weight: 600; color: var(--color-slate-400); margin-bottom: 4px; }
+  .ac-cab h1 { font-size: 20px; line-height: 28px; font-weight: 700; color: var(--color-slate-900); }
+  .ac-cab p { font-size: 14px; color: var(--color-slate-500); margin-top: 4px; }
+  .ac-aviso { margin-top: 12px; display: flex; align-items: flex-start; gap: 8px; font-size: 12px; line-height: 16px; color: var(--color-amber-700); background: var(--color-amber-50); border: 1px solid var(--color-amber-200); border-radius: var(--radius-lg); padding: 8px 12px; }
+  .ac-aviso .ic { display: flex; margin-top: 2px; }
+  .ac-caixa { background: var(--color-white); border-radius: var(--radius-2xl); border: 1px solid var(--color-border); box-shadow: var(--shadow-premium); padding: 20px 24px; display: flex; flex-direction: column; gap: 16px; }
+  .ac-frase { display: flex; align-items: flex-start; gap: 12px; font-size: 14px; line-height: 1.625; color: var(--color-slate-700); }
+  .ac-ck { position: relative; width: 16px; height: 16px; margin-top: 3px; border-radius: var(--radius-sm); border: 1px solid var(--color-slate-300); background: var(--color-white); flex-shrink: 0; }
+  .ac-ck i { position: absolute; inset: -1px; border-radius: var(--radius-sm); background: var(--color-primary); color: var(--color-white); display: flex; align-items: center; justify-content: center; opacity: 0; }
+  .ac-bt { position: relative; display: flex; align-items: center; justify-content: center; gap: 8px; padding: 12px 24px; border-radius: var(--radius-xl); background: linear-gradient(90deg, var(--color-primary), var(--color-primary-light)); color: var(--color-white); font-size: 14px; font-weight: 600; }
+  .ac-bt i { position: absolute; inset: 0; border-radius: var(--radius-xl); background: color-mix(in srgb, var(--color-white) 50%, transparent); }
+  .ac-nota { font-size: 11px; line-height: 16px; color: var(--color-slate-400); text-align: center; }
+  .ac-ok { background: var(--color-white); border-radius: var(--radius-2xl); border: 1px solid var(--color-emerald-200); box-shadow: var(--shadow-premium); padding: 40px 24px; text-align: center; }
+  .ac-ok .ic { color: var(--color-emerald-500); display: flex; justify-content: center; margin-bottom: 12px; }
+  .ac-ok h1 { font-size: 20px; line-height: 28px; font-weight: 700; color: var(--color-slate-900); }
+  .ac-ok p { margin: 12px auto 0; max-width: 448px; font-size: 14px; line-height: 1.625; color: var(--color-slate-600); }
 </style>
 </head>
 <body>
+<div id="main" data-composition-id="main" data-start="0" data-width="1920" data-height="1080" data-duration="49">
 
-<div id="root" data-composition-id="main" data-start="0" data-width="1920" data-height="1080" data-duration="41" data-fps="30">
+  <div id="slot-abertura" data-composition-id="abertura" data-composition-src="compositions/abertura.html" data-variable-values='{"secao": "Manual · Reuniões e metas", "titulo": "Aceitar a ata pelo link", "papel": "Participante"}' data-start="0" data-duration="4" data-track-index="1" data-width="1920" data-height="1080"></div>
 
-  <!-- 1 · Abertura -->
-  <section id="c-abertura" class="clip scene slide" data-start="0" data-duration="4" data-track-index="1">
-    <div class="eyebrow" id="ab-eyebrow">Manual · Reuniões e metas</div>
-    <h1 class="titulo" id="ab-titulo">Aceitar a ata pelo link</h1>
-    <p class="sub" id="ab-sub">Ler a ata e firmar os seus compromissos sem entrar na plataforma.</p>
-    <div class="selo-abertura" id="ab-selos"><span class="destaque">Participante</span></div>
+  <section id="c-tarefa" class="clip" data-start="4" data-duration="41" data-track-index="2">
+    <div class="palco"></div>
+    <div id="camera" data-layout-allow-overflow></div>
   </section>
 
-  <!-- 2 · A tarefa, passo a passo -->
-  <section id="c-tarefa" class="clip scene" data-start="4" data-duration="32" data-track-index="2">
-    <div class="palco" id="palco-tarefa"></div>
-  </section>
-
-  <!-- 3 · Fecho -->
-  <section id="c-fecho" class="clip scene slide" data-start="36" data-duration="5" data-track-index="3">
-    <div class="fecho-titulo" id="fc-titulo">Aceitar a ata pelo link</div>
-    <div class="carimbo" id="fc-carimbo">Manual · retrata o app em v0.142.1 · gerado em 17/09/2026</div>
-    <div class="fecho-org" id="fc-org">Hospital São Matheus · Manual da plataforma</div>
-  </section>
-
+  <div id="slot-lugar-1" data-composition-id="lower-third" data-composition-src="compositions/lower-third.html" data-variable-values='{"lugar": "Link do email, sem login", "tela": "Ata de reunião para aceite"}' data-start="6" data-duration="2.6" data-track-index="5" data-width="1920" data-height="1080"></div>
+  <div id="slot-passo-1" data-composition-id="legenda-de-passo" data-composition-src="compositions/legenda-de-passo.html" data-variable-values='{"numero": "1", "texto": "Abra o link do email. A tela mostra **Ata de reunião para aceite**."}' data-start="4" data-duration="6" data-track-index="3" data-width="1920" data-height="1080"></div>
+  <div id="slot-passo-2" data-composition-id="legenda-de-passo" data-composition-src="compositions/legenda-de-passo.html" data-variable-values='{"numero": "2", "texto": "No aviso amarelo do alto, confira o seu nome."}' data-start="10" data-duration="5" data-track-index="4" data-width="1920" data-height="1080"></div>
+  <div id="slot-passo-3" data-composition-id="legenda-de-passo" data-composition-src="compositions/legenda-de-passo.html" data-variable-values='{"numero": "3", "texto": "Leia a ata: **Pauta da Reunião**, **Discussão dos Pontos** e o quadro de ações."}' data-start="15" data-duration="9" data-track-index="3" data-width="1920" data-height="1080"></div>
+  <div id="slot-passo-4" data-composition-id="legenda-de-passo" data-composition-src="compositions/legenda-de-passo.html" data-variable-values='{"numero": "4", "texto": "Veja quais ações estão no seu nome. Essas viram compromisso seu."}' data-start="24" data-duration="6" data-track-index="4" data-width="1920" data-height="1080"></div>
+  <div id="slot-passo-5" data-composition-id="legenda-de-passo" data-composition-src="compositions/legenda-de-passo.html" data-variable-values='{"numero": "5", "texto": "Marque a frase **Li a ata completa acima e aceito os compromissos**."}' data-start="30" data-duration="6" data-track-index="3" data-width="1920" data-height="1080"></div>
+  <div id="slot-passo-6" data-composition-id="legenda-de-passo" data-composition-src="compositions/legenda-de-passo.html" data-variable-values='{"numero": "6", "texto": "Clique em **Li e aceito**. A tela responde **Aceite registrado**."}' data-start="36" data-duration="9" data-track-index="4" data-width="1920" data-height="1080"></div>
+  <div id="slot-carimbo" data-composition-id="carimbo" data-composition-src="compositions/carimbo.html" data-variable-values='{"titulo": "Aceitar a ata pelo link", "carimbo": "Manual · retrata o app em v0.196.1 · gerado em 14/10/2026"}' data-start="45" data-duration="4" data-track-index="1" data-width="1920" data-height="1080"></div>
 </div>
 
 <script>
-document.getElementById("palco-tarefa").innerHTML =
-  `<div style="position:absolute;inset:0;background:#EEF1F6"></div><div class="janela" data-layout-allow-overflow data-layout-allow-occlusion id="janela"><div class="barra"><i></i><i></i><i></i><div class="url">link do email · aceite da ata</div></div><div data-layout-allow-overlap class="tela" data-layout-allow-overflow data-layout-allow-occlusion id="tela-aceite" style="background:#F8FAFC"><div data-layout-allow-overlap style="position:absolute;inset:0;padding:8px 40px;overflow:hidden"><div data-layout-allow-overlap style="display:flex;justify-content:center;margin-bottom:6px"><div data-layout-allow-overlap style="display:flex;align-items:center;gap:4px"><svg width="22" height="9" viewBox="0 0 100 42" fill="none" style="flex-shrink:0"><path d="M8 40 A24 24 0 0 1 56 40" stroke="#3B6FB6" stroke-width="6" stroke-linecap="round"/><path d="M44 40 A24 24 0 0 1 92 40" stroke="#1E3A8A" stroke-width="6" stroke-linecap="round"/></svg><span data-layout-allow-overlap style="font-size:6px;font-weight:700;color:#1E3A8A;line-height:1.1">HOSPITAL<br>SÃO MATHEUS</span></div></div><div data-layout-allow-overlap class="cartao" style="padding:7px 9px"><div data-layout-allow-overlap style="font-size:5px;text-transform:uppercase;letter-spacing:.12em;font-weight:700;color:#626D80">Ata de reunião para aceite</div><div data-layout-allow-overlap style="font-size:9.5px;font-weight:700;color:#0F172A;margin-top:1.5px">Reunião Gerencial, setembro 2026</div><div data-layout-allow-overlap style="font-size:6.2px;color:#64748B;margin-top:1.5px">Gerencial · 16 de setembro de 2026 · 09:00</div><div data-layout-allow-overlap id="ac-aviso" style="margin-top:5px;display:flex;align-items:flex-start;gap:3px;background:#FFFBEB;border:1px solid #FDE68A;border-radius:6px;padding:4px 5px;font-size:5.8px;color:#92400E;line-height:1.5"><svg width="6" height="6" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg><span data-layout-allow-overlap>Olá, <b>Marina Alves</b>. A coleta de assinaturas digitais desta ata foi encerrada. Leia o conteúdo abaixo e registre o seu aceite no final da página.</span></div></div><div data-layout-allow-overlap class="cartao" id="ac-pauta" style="padding:6px 9px;margin-top:5px"><div data-layout-allow-overlap style="display:flex;align-items:center;gap:4px;margin-bottom:3px"><span data-layout-allow-overlap style="color:#626D80"><svg width="7" height="7" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg></span><span data-layout-allow-overlap style="font-size:7px;font-weight:700;color:#0F172A">Pauta da Reunião</span></div><div data-layout-allow-overlap style="font-size:6.2px;color:#475569;line-height:1.5">Fechar as metas do trimestre e revisar as pendências abertas.</div></div><div data-layout-allow-overlap class="cartao" id="ac-discussao" style="padding:6px 9px;margin-top:5px"><div data-layout-allow-overlap style="display:flex;align-items:center;gap:4px;margin-bottom:3px"><span data-layout-allow-overlap style="color:#626D80"><svg width="7" height="7" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><path d="M12 20a8 8 0 1 0-6.4-3.2L4 20l3.2-1.6A8 8 0 0 0 12 20"/></svg></span><span data-layout-allow-overlap style="font-size:7px;font-weight:700;color:#0F172A">Discussão dos Pontos (2)</span></div><div data-layout-allow-overlap style="border-left:2px solid rgba(43,46,126,.4);background:#F8FAFC;border-radius:0 6px 6px 0;padding:4px 6px"><div data-layout-allow-overlap style="font-size:6px;font-weight:700;color:#2B2E7E">4.1 Escala da enfermagem</div><div data-layout-allow-overlap style="font-size:5.8px;color:#475569;margin-top:2px;line-height:1.45">A escala atual deixa o plantão da madrugada curto.</div><div data-layout-allow-overlap style="margin-top:3px;background:#ECFEFF;border-left:1.6px solid #06B6D4;border-radius:0 4px 4px 0;padding:2.5px 4px;font-size:5.6px"><b style="color:#155E75">Decisão:</b> <span data-layout-allow-overlap style="color:#334155">revisar a escala até o fim do mês.</span></div></div></div><div data-layout-allow-overlap class="cartao" id="ac-quadro" style="padding:6px 9px;margin-top:5px"><div data-layout-allow-overlap style="display:flex;align-items:center;gap:4px"><span data-layout-allow-overlap style="color:#626D80"><svg width="7" height="7" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><rect x="3" y="5" width="6" height="6" rx="1"/><path d="m3 17 2 2 4-4"/><path d="M13 6h8"/><path d="M13 12h8"/><path d="M13 18h8"/></svg></span><span data-layout-allow-overlap style="font-size:7px;font-weight:700;color:#0F172A">Quadro de Atribuições (2 ações)</span></div><div data-layout-allow-overlap style="margin-top:3px"><div data-layout-allow-overlap style="display:flex;align-items:center;gap:5px;padding:4px 0;border-top:1px solid #F1F5F9"><span data-layout-allow-overlap style="flex:1;font-size:6.2px;color:#334155">Apresentar a escala nova da enfermagem</span><span data-layout-allow-overlap style="font-size:5.8px;color:#64748B;width:54px">Marina Alves</span><span data-layout-allow-overlap style="font-size:5.8px;color:#64748B;width:38px;text-align:right">30/09/2026</span></div><div data-layout-allow-overlap style="display:flex;align-items:center;gap:5px;padding:4px 0;border-top:1px solid #F1F5F9"><span data-layout-allow-overlap style="flex:1;font-size:6.2px;color:#334155">Fechar a compra do oxímetro</span><span data-layout-allow-overlap style="font-size:5.8px;color:#64748B;width:54px">Rafael Nunes</span><span data-layout-allow-overlap style="font-size:5.8px;color:#64748B;width:38px;text-align:right">25/09/2026</span></div></div></div><div data-layout-allow-overlap class="cartao" id="ac-caixa" style="padding:7px 9px;margin-top:5px"><div data-layout-allow-overlap style="display:flex;align-items:flex-start;gap:5px"><span data-layout-allow-overlap id="ac-check" style="width:8px;height:8px;border:1.4px solid #CBD5E1;border-radius:2.5px;flex-shrink:0;margin-top:1px;display:flex;align-items:center;justify-content:center;color:#fff"><span data-layout-allow-overlap id="ac-check-on" data-layout-allow-overlap style="opacity:0"><svg width="6" height="6" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><path d="M20 6 9 17l-5-5"/></svg></span></span><span data-layout-allow-overlap style="font-size:6.4px;color:#475569;line-height:1.5">Li a ata completa acima e aceito os compromissos registrados sob minha responsabilidade.</span></div><div data-layout-allow-overlap class="btn" id="ac-botao" style="width:100%;justify-content:center;margin-top:6px;background:linear-gradient(90deg,#2B2E7E,#3B6FB6);color:#fff;opacity:.5"><svg width="7" height="7" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/></svg>Li e aceito</div><div data-layout-allow-overlap style="font-size:5.2px;color:#626D80;text-align:center;margin-top:4px">O aceite é registrado uma única vez e cria as suas pendências imediatamente.</div></div></div></div><div class="tela" data-layout-allow-overlap data-layout-allow-overflow data-layout-allow-occlusion id="ok-tela-aceite-ok" style="opacity:0;background:#F8FAFC;display:flex;align-items:center;justify-content:center"><div class="cartao" style="width:250px;border-color:#A7F3D0;padding:22px 16px;text-align:center"><div style="color:#10B981;display:flex;justify-content:center;margin-bottom:6px"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/></svg></div><div style="font-size:10px;font-weight:700;color:#0F172A">Aceite registrado</div><div style="font-size:6.6px;color:#475569;margin-top:5px;line-height:1.55">Obrigado, Marina Alves. Seu compromisso com as ações desta ata foi firmado e suas pendências já entraram no acompanhamento.</div></div></div></div><div class="rodape-v">Manual · retrata o app em v0.142.1 · gerado em 17/09/2026</div><div class="ghost" data-layout-allow-overlap data-layout-allow-occlusion id="g1"><svg width="17" height="17" viewBox="0 0 24 24" fill="#16181d" stroke="#fff" stroke-width="1.4"><path d="M5 3l14 8-6 1.6L9.6 19z"/></svg><div class="pulse"></div></div>` +
-  `<div class="passo" id="p1" style="top:150px"><div class="n">1</div><h3>Abra o link do email</h3><p>A tela mostra <b>Ata de reunião para aceite</b>. Você não precisa de conta nem de senha.</p></div><div class="passo" id="p2" style="top:150px"><div class="n">2</div><h3>No aviso amarelo do alto, confira o seu nome</h3><p>É ele que diz de quem é este aceite.</p></div><div class="passo" id="p3" style="top:150px"><div class="n">3</div><h3>Leia a ata</h3><p><b>Pauta da Reunião</b>, <b>Discussão dos Pontos</b> e o quadro com as ações e os prazos.</p></div><div class="passo" id="p4" style="top:150px"><div class="n">4</div><h3>Veja quais ações estão no seu nome</h3><p>São essas que viram compromisso seu.</p></div><div class="passo" id="p5" style="top:150px"><div class="n">5</div><h3>Marque a frase de confirmação</h3><p>Sem ela marcada, o botão <b>Li e aceito</b> continua apagado.</p></div><div class="passo" id="p6" style="top:150px"><div class="n">6</div><h3>Clique em Li e aceito</h3><p>A tela responde <b>Aceite registrado</b> e as suas pendências entram no acompanhamento na hora.</p></div>`;
+/* Ícones: os do lucide, os mesmos do app, no traço da cor do texto. */
+const P = {
+  alvo: '<circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/>', painel: '<rect width="7" height="9" x="3" y="3" rx="1"/><rect width="7" height="5" x="14" y="3" rx="1"/><rect width="7" height="9" x="14" y="12" rx="1"/><rect width="7" height="5" x="3" y="16" rx="1"/>', calendario: '<path d="M8 2v4"/><path d="M16 2v4"/><rect width="18" height="18" x="3" y="4" rx="2"/><path d="M3 10h18"/><path d="M8 14h.01"/><path d="M12 14h.01"/><path d="M16 14h.01"/><path d="M8 18h.01"/><path d="M12 18h.01"/><path d="M16 18h.01"/>',
+  calmais: '<path d="M16 19h6"/><path d="M16 2v4"/><path d="M19 16v6"/><path d="M21 12.598V6a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h8.5"/><path d="M3 10h18"/><path d="M8 2v4"/>', casa: '<path d="M15 21v-8a1 1 0 0 0-1-1h-4a1 1 0 0 0-1 1v8"/><path d="M3 10a2 2 0 0 1 .709-1.528l7-5.999a2 2 0 0 1 2.582 0l7 5.999A2 2 0 0 1 21 10v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>', relogio: '<circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>', baixo: '<path d="m6 9 6 6 6-6"/>', direita: '<path d="m9 18 6-6-6-6"/>', megafone: '<path d="m3 11 18-5v12L3 14v-3z"/><path d="M11.6 16.8a3 3 0 1 1-5.8-1.6"/>',
+  escudo: '<path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/><path d="m9 12 2 2 4-4"/>', ajuda: '<circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><path d="M12 17h.01"/>', lupa: '<circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/>', sino: '<path d="M10.268 21a2 2 0 0 0 3.464 0"/><path d="M3.262 15.326A1 1 0 0 0 4 17h16a1 1 0 0 0 .74-1.673C19.41 13.956 18 12.499 18 8A6 6 0 0 0 6 8c0 4.499-1.41 5.956-2.738 7.326"/>', voltar: '<path d="m12 19-7-7 7-7"/><path d="M19 12H5"/>',
+  lista: '<rect x="3" y="5" width="6" height="6" rx="1"/><path d="m3 17 2 2 4-4"/><path d="M13 6h8"/><path d="M13 12h8"/><path d="M13 18h8"/>', kanban: '<rect width="18" height="18" x="3" y="3" rx="2"/><path d="M8 7v7"/><path d="M12 7v4"/><path d="M16 7v9"/>', fechar: '<path d="M18 6 6 18"/><path d="m6 6 12 12"/>', mais: '<path d="M5 12h14"/><path d="M12 5v14"/>', lixo: '<path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/>', pessoas: '<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>',
+  checkc: '<circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/>', check: '<path d="M20 6 9 17l-5-5"/>', arquivo: '<path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M10 9H8"/><path d="M16 13H8"/><path d="M16 17H8"/>', baixar: '<path d="M12 15V3"/><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m7 10 5 5 5-5"/>', alerta: '<path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/><path d="M12 9v4"/><path d="M12 17h.01"/>', gira: '<path d="M21 12a9 9 0 1 1-6.219-8.56"/>',
+  caneta: '<path d="M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z"/>', balao: '<path d="M7.9 20A9 9 0 1 0 4 16.1L2 22Z"/>', robo: '<path d="M12 8V4H8"/><rect width="16" height="12" x="4" y="8" rx="2"/><path d="M2 14h2"/><path d="M20 14h2"/><path d="M15 13v2"/><path d="M9 13v2"/>', penline: '<path d="M12 20h9"/><path d="M16.376 3.622a1 1 0 0 1 3.002 3.002L7.368 18.635a2 2 0 0 1-.855.506l-2.872.838a.5.5 0 0 1-.62-.62l.838-2.872a2 2 0 0 1 .506-.854z"/>',
+  prancheta: '<rect width="8" height="4" x="8" y="2" rx="1" ry="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><path d="m9 14 2 2 4-4"/>', selo: '<path d="M3.85 8.62a4 4 0 0 1 4.78-4.77 4 4 0 0 1 6.74 0 4 4 0 0 1 4.78 4.78 4 4 0 0 1 0 6.74 4 4 0 0 1-4.77 4.78 4 4 0 0 1-6.75 0 4 4 0 0 1-4.78-4.77 4 4 0 0 1 0-6.76Z"/><path d="m9 12 2 2 4-4"/>', listacheck: '<path d="m3 17 2 2 4-4"/><path d="m3 7 2 2 4-4"/><path d="M13 6h8"/><path d="M13 12h8"/><path d="M13 18h8"/>', pessoa: '<circle cx="12" cy="8" r="5"/><path d="M20 21a8 8 0 0 0-16 0"/>',
+};
+const ic = (nome, s, traco) => `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="${traco || 2}" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0">${P[nome]}</svg>`;
 
-/* ============================================================
-   Timeline: uma só, pausada, com tempos absolutos
-   ============================================================ */
+/* A casca do app (barra lateral e topo), igual à Sidebar.tsx e ao Header.tsx. */
+function casca(ativo, quem, pre = "") {
+  const f = (on) => (on ? 2 : 1.5), pend = ativo === "lista" || ativo === "kanban", grupo = pend || ativo === "dashboard" || ativo === "calendario";
+  const sub = (k, icone, rot) => `<div class="mi${ativo === k ? " folha-on" : ""}" id="${pre}mi-${k}">${ic(icone, 16, f(ativo === k))}${rot}</div>`;
+  const raiz = (on, icone, rot, id) => `<div class="mi${on ? " on" : ""}" id="${pre}mi-${id}">${ic(icone, 18, f(on))}${rot}</div>`;
+  const menu = quem.sec
+    ? raiz(ativo === "inicio" || ativo === "nova", "casa", "Início", "inicio") + raiz(ativo === "nova", "calmais", "Nova reunião", "nova") + raiz(ativo === "cal-sec", "calendario", "Calendário", "calendario")
+    : `<div class="mi${grupo ? " grupo-on" : ""}">${ic("alvo", 18, f(grupo))}Reuniões e metas<span class="fim">${ic("baixo", 16)}</span></div>
+    <div class="sub">${sub("dashboard", "painel", "Dashboard")}${sub("calendario", "calendario", "Calendário")}<div class="mi${pend ? " grupo-on" : ""}" id="${pre}mi-pendencias">${ic("relogio", 16, f(pend))}Pendências<span class="fim">${ic(pend ? "baixo" : "direita", 16)}</span></div>
+    ${pend ? `<div class="sub" style="margin-top:0">${sub("lista", "lista", "Lista")}${sub("kanban", "kanban", "Kanban")}</div>` : ""}</div>`;
+  return `<div class="lado"><div class="marca"><img src="assets/logo-hsm.png" alt="Hospital São Matheus" /></div><nav>${menu}
+    <div class="mi">${ic("megafone", 18, 1.5)}Ouvidoria<span class="selo">5</span></div><div class="mi">${ic("escudo", 18, 1.5)}Admin</div><div class="mi" style="margin-top:8px">${ic("ajuda", 18, 1.5)}Ajuda</div></nav></div>
+  <div class="topo"><div class="busca">${ic("lupa", 16)}Buscar...</div><div class="quem"><div class="sino" id="${pre}sino">${ic("sino", 22, 1.75)}${quem.sino ? `<span class="n" id="${pre}sino-n">${quem.sino}</span>` : ""}</div><div class="divisor"></div>
+    <div class="pessoa"><div class="tx"><b>${quem.nome}</b><span>${quem.email}</span></div><div class="avatar">${quem.nome[0]}<span class="seta">${ic("baixo", 12)}</span></div></div></div></div>`;
+}
+const RENATA = { nome: "Renata Fontes", email: "renata.fontes@exemplo.l..." };
+const BEATRIZ = { nome: "Beatriz Nunes", email: "beatriz.nunes@exemplo.l...", sec: true };
+/* O menu depois da navegação, por cima do de antes; a troca é de opacidade. */
+const casca2 = (ativo, quem) => `<div class="casca2" id="casca2">${casca(ativo, quem, "b-")}</div>`;
+
+/* A reunião de exemplo do manual: Coordenação de 13 de outubro, com a ata escrita. */
+const secao = (id, titulo, icone, corpo, acao = "") => `<div class="sc"${id ? ` id="${id}"` : ""}><div class="sc-cab"><div class="sc-tt">${ic(icone, 18, 1.5)}<h2>${titulo}</h2></div>${acao}</div><div class="sc-corpo">${corpo}</div></div>`;
+const PESSOAS_ATA = [["Renata Fontes", "Coordenação"], ["Tiago Meireles", "Farmacêutico"], ["Luciana Braga", "Enfermeira"], ["Otávio Serra", "Técnico de Esterilização"]];
+const quadro = (p) => secao(`${p}-sc-quadro`, "Quadro de Atribuições (2 ações)", "listacheck", `<table class="qd"><thead><tr>${["Ação", "Responsável", "Objetivo / Meta", "Prazo", "Status"].map((h) => `<th>${h}</th>`).join("")}</tr></thead><tbody>
+  <tr><td>Revisar o fluxo de esterilização do instrumental cirúrgico</td><td>Otávio Serra<small>Técnico de Esterilização</small></td><td style="font-size:12px;line-height:16px">Reduzir a fila de material do fim da tarde</td><td>26/10/2026</td><td><span class="st">Aberto</span></td></tr>
+  <tr><td>Atualizar a escala de plantão da UTI</td><td>Luciana Braga<small>Enfermeira</small></td><td style="font-size:12px;line-height:16px">Garantir cobertura no turno da noite</td><td>22/10/2026</td><td><span class="st">Aberto</span></td></tr></tbody></table>`);
+const pautaAta = (p) => secao(`${p}-sc-pauta-ata`, "Pauta da Reunião", "alvo", `<p style="color:var(--color-slate-700)">Acompanhar os indicadores do Centro de Material e Esterilização e combinar o que cada setor entrega até a próxima reunião.</p>`);
+
+/* A ata que a Luciana recebe por link, depois que a coleta de assinaturas fechou. */
+const pessoaAc = (n) => `<div class="pa"><span class="av">${n[0][0]}</span><div><b>${n[0]}</b><small>${n[1]}</small></div></div>`;
+const topico = (n, tit, desc, dec) => `<div class="di"><b>4.${n} ${tit}</b><p>${desc}</p><div class="dc"><strong>Decisão:</strong> ${dec}</div></div>`;
+const FRASE = "Li a ata completa acima e aceito os compromissos registrados sob minha responsabilidade.";
+const ata = `<div class="ac-cab" id="ac-cab"><small>Ata de reunião para aceite</small><h1>Comissão de Farmácia</h1><p>Gerencial · 8 de outubro de 2026 · 14:00</p>
+  <div class="ac-aviso" id="ac-aviso"><span class="ic">${ic("alerta", 14)}</span><span>Olá, <strong>Luciana Braga</strong>. A coleta de assinaturas digitais desta ata foi encerrada. Leia o conteúdo abaixo e registre o seu aceite no final da página.</span></div></div>
+  ${secao("", "Participantes (4)", "pessoas", `<div class="pa-grade">${PESSOAS_ATA.map(pessoaAc).join("")}</div>`)}${pautaAta("ac")}
+  ${secao("ac-disc", "Discussão dos Pontos (2)", "balao", topico(1, "Tempo de giro das autoclaves", "O setor apresentou o tempo médio de cada ciclo e mostrou onde a fila de material cresce no fim da tarde.", "Antecipar o último ciclo do dia em uma hora durante o mês de teste.") + topico(2, "Reposição do material de consumo", "A Farmácia apontou atraso na entrega de indicadores biológicos e propôs um pedido programado.", "Passar a fazer o pedido no primeiro dia útil de cada mês."))}
+  ${quadro("ac").replace("<tr><td>Atualizar", '<tr id="ac-minha"><td>Atualizar')}
+  <div class="ac-caixa" id="ac-caixa"><div class="ac-frase" id="ac-frase"><span class="ac-ck"><i id="ac-ck">${ic("check", 12, 3)}</i></span><span>${FRASE}</span></div>
+    <span class="ac-bt" id="ac-bt">${ic("checkc", 16)}Li e aceito<i id="ac-bt-off"></i></span><p class="ac-nota">O aceite é registrado uma única vez e cria as suas pendências imediatamente.</p></div>`;
+const TELA = `<div class="ac-pg"><div class="ac-rolo" id="ac-carga"><div class="ac-logo"><img src="assets/logo-hsm.png" alt="Hospital São Matheus" /></div><div class="ac-carga">${ic("gira", 20)}Carregando a ata...</div></div>
+  <div class="ac-rolo" id="ac-rolo" style="opacity:0"><div class="ac-logo"><img src="assets/logo-hsm.png" alt="Hospital São Matheus" /></div>${ata}</div>
+  <div class="ac-rolo" id="ac-fim" style="opacity:0"><div class="ac-logo"><img src="assets/logo-hsm.png" alt="Hospital São Matheus" /></div><div class="ac-ok" id="ac-ok"><div class="ic">${ic("checkc", 48)}</div><h1>Aceite registrado</h1><p>Obrigado, Luciana Braga. Seu compromisso com as ações desta ata foi firmado e suas pendências já entraram no acompanhamento.</p></div></div></div>`;
+
+document.getElementById("camera").innerHTML = `<div class="janela" id="janela">
+    <div class="barra-nav"><i></i><i></i><i></i><div class="url" style="position:relative"><span id="url-0" style="position:absolute;left:16px;right:16px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;opacity:1">app.hospitalsaomatheus.cloud/aceite/manual-aceite-exemplo-2026</span></div></div>
+    <div class="vista"><div class="app" id="app">${TELA}</div></div></div>
+  <div class="marcador" id="mk"></div><div class="dedo" id="dedo"><svg viewBox="0 0 24 24"><path d="M5 3l14 8-6 1.6L9.6 19z"/></svg><div class="toque" id="toque"></div></div>`;
+/* Réplica de tela: sobreposição e corte são de propósito. */
+document.querySelectorAll("#camera, #camera *").forEach((el) => ["overlap", "occlusion", "overflow"].forEach((k) => el.setAttribute(`data-layout-allow-${k}`, "")));
+
+/* Medidas pelo offset do layout (ignora câmera e rolagem), nunca na montagem: o alvo é
+   função que o GSAP chama no início do tween, já com a fonte do app (regra de 14/10/2026). */
+const APP = document.getElementById("app");
+const APP_X = 160, APP_Y = 32 + 44, ESCALA_APP = 1.25, CENTRO = { x: 960, y: 452 }, JANELA = { x0: 160, y0: 32, x1: 1760, y1: 880 };
+function noQuadro(id, rolagem) {
+  let el = document.getElementById(id), x = 0, y = 0;
+  const w = el.offsetWidth, h = el.offsetHeight;
+  while (el && el !== APP) { x += el.offsetLeft; y += el.offsetTop; el = el.offsetParent; }
+  return { x: APP_X + x * ESCALA_APP, y: APP_Y + (y - rolagem) * ESCALA_APP, w: w * ESCALA_APP, h: h * ESCALA_APP };
+}
+const juntaCaixas = (rs) => { const x = Math.min(...rs.map((r) => r.x)), y = Math.min(...rs.map((r) => r.y)); return { x, y, w: Math.max(...rs.map((r) => r.x + r.w)) - x, h: Math.max(...rs.map((r) => r.y + r.h)) - y }; };
+const valor = (v) => (typeof v === "function" ? v() : v);
+/* Alvo: um ou mais ids (separados por espaço) e a rolagem em que ele é visto. */
+const alvo = (ids, rolagem = 0) => ({ ids, caixa: () => juntaCaixas(ids.split(" ").map((id) => noQuadro(id, valor(rolagem)))) });
+const REPOUSO = { ids: "", caixa: () => ({ x: 160, y: 32, w: 1600, h: 848 }) };
+function enquadra(r, s) {
+  const x = CENTRO.x - s * (r.x + r.w / 2), y = CENTRO.y - s * (r.y + r.h / 2);
+  return { scale: s, x: Math.min(JANELA.x0 * (1 - s), Math.max(JANELA.x1 * (1 - s), x)), y: Math.min(JANELA.y0 * (1 - s), Math.max(JANELA.y1 * (1 - s), y)) };
+}
+const camera = (a, s) => ({ scale: s, x: () => enquadra(a.caixa(), s).x, y: () => enquadra(a.caixa(), s).y });
+/* Rolagem de um contêiner que deixa o alvo a `margem` px do topo da caixa visível. */
+const rolagemPara = (rolo, altura, id, margem = 24) => () => { const r = document.getElementById(rolo); let el = document.getElementById(id), y = 0; while (el && el !== r) { y += el.offsetTop; el = el.offsetParent; } return Math.max(0, Math.min(r.offsetHeight - altura, y - margem)); };
+
+/* Timeline: uma só, pausada, com tempos absolutos. */
 window.__timelines = window.__timelines || {};
 const tl = gsap.timeline({ paused: true });
-const IR = { immediateRender: false };
-const surge = (sel, t, y) => tl.fromTo(sel, { opacity: 0, y: y === undefined ? 8 : y }, { opacity: 1, y: 0, duration: 0.4, ease: "power2.out", ...IR }, t);
-const some = (sel, t) => tl.to(sel, { opacity: 0, duration: 0.25 }, t);
-const nota = (sel, t, ate) => { surge(sel, t, 14); some(sel, ate); };
-const clique = (g, t) => tl.fromTo(`${g} .pulse`, { opacity: 0.9, scale: 0.4 }, { opacity: 0, scale: 1.25, duration: 0.42, ease: "power1.out", ...IR }, t);
-const move = (g, t, x, y, dx, dy) => {
-  tl.set(g, { x: x, y: y, opacity: 1 }, t);
-  tl.to(g, { x: dx, y: dy, duration: 0.7, ease: "power2.inOut" }, t + 0.2);
-};
-const aperta = (sel, t) => tl.to(sel, { scale: 0.97, duration: 0.1, yoyo: true, repeat: 1 }, t);
-const mostra = (sel, t) => tl.fromTo(sel, { opacity: 0 }, { opacity: 1, duration: 0.3, ...IR }, t);
-const esconde = (sel, t) => tl.to(sel, { opacity: 0, duration: 0.3 }, t);
-/* Campo do app: o placeholder dá lugar ao valor, e a borda acende. */
-const digita = (base, t) => {
-  tl.to(base + "-ph", { opacity: 0, duration: 0.15 }, t);
-  tl.to(base + "-val", { opacity: 1, duration: 0.22 }, t + 0.15);
-  tl.to(base, { borderColor: "#2B2E7E", duration: 0.2 }, t);
-};
-/* Troca o texto de um rótulo no meio do passo (Lembrar → Enviado). */
-const troca = (sel, texto, t) => {
-  tl.to(sel, { opacity: 0, duration: 0.12 }, t);
-  tl.set(sel, { innerText: texto }, t + 0.13);
-  tl.to(sel, { opacity: 1, duration: 0.12 }, t + 0.14);
-};
-/* Acende a borda de um bloco (coluna de destino, cartão em foco). */
-const acende = (sel, t, cor) => tl.to(sel, { borderColor: cor || "#2B2E7E", duration: 0.25 }, t);
-
-/* ── Ancoragem ao elemento, em vez de coordenada escrita à mão ──────────────
-   O marcador nasce DENTRO do alvo e o dedo lê a posição do alvo no palco:
-   assim nenhum dos dois pode apontar o campo de cima. Medidas por offset*,
-   que ignoram o scale(2) do palco e não dependem da fonte ter carregado. */
-const PALCO = document.getElementById("palco-tarefa");
-function xy(el) {
-  let x = 0, y = 0, n = el;
-  while (n && n !== PALCO) { x += n.offsetLeft; y += n.offsetTop; n = n.offsetParent; }
-  return { x: x, y: y, w: el.offsetWidth, h: el.offsetHeight };
+tl.set("#camera", { scale: 1, x: 0, y: 0 }, 0);
+function mira(t, dur, a, s, ate) {
+  tl.to("#camera", { ...camera(a, s), duration: dur, ease: "power2.inOut" }, t);
+  tl.to("#camera", { ...camera(a, s * 1.025), duration: ate - t - dur, ease: "none" }, t + dur);
 }
-/* Cria o marcador colado no alvo e devolve o seletor dele. */
-function marcaEm(idAlvo) {
-  const jaTem = document.getElementById("mk-" + idAlvo);
-  if (jaTem) return "#mk-" + idAlvo;   // dois passos no mesmo alvo reusam o marcador
-  const el = document.getElementById(idAlvo);
-  const antes = getComputedStyle(el).position;
-  if (antes === "static") el.style.position = "relative";
-  const m = document.createElement("div");
-  m.className = "marcador";
-  m.id = "mk-" + idAlvo;
-  m.setAttribute("data-layout-allow-overlap", "");
-  m.setAttribute("data-layout-allow-occlusion", "");
-  // Alvo de ícone é pequeno: sem folga maior o contorno some na tela.
-  const folga = (el.offsetWidth < 16 || el.offsetHeight < 16) ? 5 : 3;
-  m.style.cssText = `position:absolute;left:${-folga}px;top:${-folga}px;right:${-folga}px;bottom:${-folga}px`;
-  el.appendChild(m);
-  return "#mk-" + idAlvo;
+/* Anel em volta do alvo; o data-alvo é o que o gate do anel confere. */
+function marca(t, a, ate) {
+  tl.set("#mk", { attr: { "data-alvo": a.ids }, x: () => a.caixa().x - 8, y: () => a.caixa().y - 8, width: () => a.caixa().w + 16, height: () => a.caixa().h + 16, scale: 1.06 }, t - 0.02);
+  tl.to("#mk", { opacity: 1, scale: 1, duration: 0.3, ease: "power2.out" }, t);
+  tl.to("#mk", { opacity: 0, duration: 0.25 }, ate);
 }
-/* Ponto que o dedo toca: o centro do alvo, descontando a ponta do cursor. */
-function ponto(idAlvo) {
-  const r = xy(document.getElementById(idAlvo));
-  return { x: r.x + r.w / 2 - 5, y: r.y + r.h / 2 - 3 };
+const centro = (a) => { const r = a.caixa(); return { x: r.x + r.w / 2 - 8, y: r.y + r.h / 2 - 6 }; };
+function toca(t, a, de) {
+  const b = de ? () => centro(de) : () => ({ x: centro(a).x + 120, y: centro(a).y + 150 });
+  tl.set("#dedo", { x: () => b().x, y: () => b().y }, t - 0.02);
+  tl.to("#dedo", { opacity: 1, duration: 0.2 }, t);
+  tl.to("#dedo", { x: () => centro(a).x, y: () => centro(a).y, duration: 0.7, ease: "power2.inOut" }, t + 0.2);
+  tl.fromTo("#toque", { opacity: 0.9, scale: 0.4 }, { opacity: 0, scale: 1.3, duration: 0.45, ease: "power1.out", immediateRender: false }, t + 0.95);
 }
-/* Encosta um flutuante (menu, lista de nomes) embaixo do alvo que o abre.
-   Vira filho do alvo, como o marcador: medida nenhuma pode errar o lugar. */
-function abaixoDe(idFlutuante, idAlvo, dx) {
-  const alvo = document.getElementById(idAlvo);
-  const f = document.getElementById(idFlutuante);
-  if (getComputedStyle(alvo).position === "static") alvo.style.position = "relative";
-  alvo.appendChild(f);
-  f.style.left = (dx || 0) + "px";
-  f.style.top = "calc(100% + 3px)";
-}
-/* O dedo sai de `de` e toca `para`, com marcador e pulso no compasso do passo.
-   Sem `de`, entra pela borda de baixo do palco. */
-function toca(t, para, de) {
-  const a = ponto(para);
-  const b = de ? ponto(de) : { x: a.x + 34, y: Math.min(a.y + 70, 458) };
-  const mk = marcaEm(para);
-  mostra(mk, t);
-  move("#g1", t + 0.15, b.x, b.y, a.x, a.y);
-  clique("#g1", t + 1.05);
-  return mk;
-}
+const soltaDedo = (t) => tl.to("#dedo", { opacity: 0, duration: 0.25 }, t);
+const rola = (sel, y, t) => tl.to(sel, { y: () => -valor(y), duration: 0.8, ease: "power2.inOut" }, t);
+const mostra = (sel, t, d = 0.25) => tl.to(sel, { opacity: 1, duration: d }, t);
+const esconde = (sel, t, d = 0.25) => tl.to(sel, { opacity: 0, duration: d }, t);
+/* Campo do app: o texto de exemplo dá lugar ao valor, e a borda acende. */
+function preenche(base, t) { esconde(`#${base}-vazio`, t, 0.15); mostra(`#${base}-cheio`, t + 0.15, 0.5); }
+const aperta = (sel, t) => { tl.to(sel, { scale: 0.97, duration: 0.1 }, t); tl.to(sel, { scale: 1, duration: 0.1 }, t + 0.1); };
 
-/* 1 · Abertura */
-surge("#ab-eyebrow", 0.25, 22);
-tl.fromTo("#ab-titulo", { opacity: 0, y: 28 }, { opacity: 1, y: 0, duration: 0.7, ease: "power3.out", ...IR }, 0.5);
-surge("#ab-sub", 1.1, 22);
-surge("#ab-selos", 1.6, 18);
-
-/* 2 · A tarefa */
-tl.fromTo("#janela", { opacity: 0, y: 20 }, { opacity: 1, y: 0, duration: 0.5, ease: "power2.out", ...IR }, 4.20);
-nota('#p1', 4.90, 9.55);
-nota('#p2', 9.90, 14.55);
-nota('#p3', 14.90, 19.55);
-nota('#p4', 19.90, 24.55);
-nota('#p5', 24.90, 29.55);
-nota('#p6', 29.90, 34.55);
+/* A janela do navegador entra com um rastro curto, saindo do branco da abertura. */
+tl.fromTo("#janela", { opacity: 0, y: 24, filter: "blur(12px)" }, { opacity: 1, y: 0, filter: "blur(0px)", duration: 0.5, ease: "power2.out" }, 4);
 
 
-/* passo 1: a tela do aceite */
-mostra(marcaEm("ac-aviso"), 7.9);
+/* A rolagem da página, medida no começo de cada tween. */
+const rolaAte = (id, margem) => () => { const r = document.getElementById("ac-rolo"), el = document.getElementById(id); let y = 0, n = el; while (n && n !== r) { y += n.offsetTop; n = n.offsetParent; } return Math.max(0, Math.min(r.offsetHeight - 643.2, y - margem)); };
+/* Passo 1 (4 a 10): o link abre a Ata de reunião para aceite. */
+tl.to("#ac-carga svg", { rotation: 360, transformOrigin: "50% 50%", duration: 1.2, ease: "none" }, 4.4);
+esconde("#ac-carga", 5.6, 0.2);
+tl.fromTo("#ac-rolo", { opacity: 0, y: 16 }, { opacity: 1, y: 0, duration: 0.5, ease: "power2.out" }, 5.8);
+const bCab = alvo("ac-cab");
+mira(6.0, 1.6, bCab, 1.35, 10.0);
+marca(7.2, alvo("ac-cab"), 9.7);
 
-/* passo 2: o nome no aviso */
-esconde("#mk-ac-aviso", 13.5);
+/* Passo 2 (10 a 15): o nome no aviso amarelo do alto. */
+const bAviso = alvo("ac-aviso");
+mira(10.0, 1.4, bAviso, 1.6, 15.0);
+marca(11.0, bAviso, 14.7);
 
-/* passo 3: pauta e discussão */
-mostra(marcaEm("ac-pauta"), 15.4);
-mostra(marcaEm("ac-discussao"), 16.5);
-esconde("#mk-ac-pauta", 19.2);
-esconde("#mk-ac-discussao", 19.2);
+/* Passo 3 (15 a 24): ler a pauta, a discussão e o quadro. */
+const R1 = rolaAte("ac-sc-pauta-ata", 24);
+rola("#ac-rolo", R1, 15.0);
+mira(15.0, 1.4, alvo("ac-sc-pauta-ata", R1), 1.15, 18.0);
+const R2 = rolaAte("ac-disc", 24);
+rola("#ac-rolo", R2, 18.0);
+mira(18.0, 1.6, alvo("ac-disc", R2), 1.1, 24.0);
+marca(19.2, alvo("ac-disc", R2), 23.6);
 
-/* passo 4: o quadro de ações */
-mostra(marcaEm("ac-quadro"), 20.4);
-esconde("#mk-ac-quadro", 24.2);
+/* Passo 4 (24 a 30): as ações no seu nome viram compromisso seu. */
+const R3 = rolaAte("ac-sc-quadro", 24);
+rola("#ac-rolo", R3, 24.0);
+const bMinha = alvo("ac-minha", R3);
+mira(24.0, 1.6, bMinha, 1.4, 30.0);
+marca(25.6, bMinha, 29.7);
 
-/* passo 5: marcar a frase */
-toca(25.3, "ac-check");
-tl.to("#ac-check", { background: "#2B2E7E", borderColor: "#2B2E7E", duration: 0.2 }, 26.5);
-tl.to("#ac-check-on", { opacity: 1, duration: 0.2 }, 26.6);
-tl.to("#ac-botao", { opacity: 1, duration: 0.3 }, 26.7);
-esconde("#mk-ac-check", 28.3);
+/* Passo 5 (30 a 36): marcar a frase de confirmação. */
+const R4 = rolaAte("ac-caixa", 160);
+rola("#ac-rolo", R4, 30.0);
+const bFrase = alvo("ac-frase", R4);
+mira(30.0, 1.6, bFrase, 1.45, 36.0);
+toca(31.0, bFrase);
+mostra("#ac-ck", 31.95, 0.1); esconde("#ac-bt-off", 31.95, 0.2);
+soltaDedo(33.0);
+marca(33.2, bFrase, 35.7);
 
-/* passo 6: aceitar */
-toca(30.2, "ac-botao", "ac-check");
-aperta("#ac-botao", 31.3);
-esconde("#mk-ac-botao", 31.9);
-tl.to("#g1", { opacity: 0, duration: 0.2 }, 32.0);
-tl.to("#ok-tela-aceite-ok", { opacity: 1, duration: 0.25 }, 32.2);
+/* Passo 6 (36 a 45): Li e aceito. A tela responde Aceite registrado. */
+const bBt = alvo("ac-bt", R4);
+mira(36.0, 1.2, bBt, 1.45, 39.0);
+toca(36.4, bBt); soltaDedo(38.0);
+aperta("#ac-bt", 37.35);
+tl.to("#ac-rolo", { opacity: 0, duration: 0.25 }, 38.2);
+tl.fromTo("#ac-fim", { opacity: 0, y: 16 }, { opacity: 1, y: 0, duration: 0.5, ease: "power2.out" }, 38.5);
+const bOk = alvo("ac-ok");
+mira(39.0, 1.6, bOk, 1.4, 45.0);
+marca(40.4, bOk, 44.6);
 
-
-/* 3 · Fecho */
-surge("#fc-titulo", 36.30, 18);
-surge("#fc-carimbo", 36.80, 14);
-surge("#fc-org", 37.20, 12);
-
-window.__timelines.main = tl;
+/* Âncora: o timeline preenche o slot inteiro. */
+tl.to({}, { duration: 49 }, 0);
+window.__timelines["main"] = tl;
 </script>
 </body>
 </html>
