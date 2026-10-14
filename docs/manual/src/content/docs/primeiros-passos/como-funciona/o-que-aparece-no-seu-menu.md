@@ -7,9 +7,8 @@ sidebar:
   order: 20
 ---
 
-O menu da esquerda não é igual para todo mundo. Ele mostra só o que o seu
-perfil de acesso alcança, e é por isso que o colega do lado tem itens que você
-não tem.
+O menu da esquerda mostra só o que o seu perfil de acesso alcança. Por isso o
+colega do lado pode ter itens que você não tem.
 
 ## Três acessos independentes
 
@@ -22,10 +21,9 @@ A plataforma junta três áreas de trabalho, e o acesso a cada uma é separado.
 - **Ouvidoria** é o acesso dos casos que as pessoas contam ao hospital, com
   dois níveis: **Ouvidor** e **Diretoria Executiva**.
 
-Eles não se somam nem se herdam. Quem cuida de procedimentos e não conduz
-reunião nenhuma tem só **POPs** no menu. Quem conduz reuniões e não cuida de
-procedimentos não vê **POPs**. Ter o acesso mais alto de uma área não dá
-acesso nenhum às outras.
+Um acesso não traz nenhum dos outros, nem mesmo o nível mais alto de uma
+área. Quem cuida de procedimentos e não conduz reunião nenhuma tem só **POPs**
+no menu, e quem conduz reuniões sem cuidar de procedimentos não vê **POPs**.
 
 ## O que cada menu costuma ter
 
@@ -47,11 +45,11 @@ No celular o menu vira uma barra embaixo, com **Início**, **Reuniões**,
 
 ## Onde fica o que não está no menu
 
-**Meu Perfil**, **Configurações** e **Sair da conta** não ficam na lista da
-esquerda: eles estão no seu nome, no alto da tela à direita.
+**Meu Perfil**, **Configurações** e **Sair da conta** ficam no seu nome, no
+alto da tela à direita, fora da lista da esquerda.
 
 ## Quando falta alguma coisa
 
-Item que falta no menu é acesso que falta, não problema de navegador nem de
-tela pequena. Peça a quem administra a plataforma para conferir qual dos três
-acessos falta para você.
+Se um item falta no menu, o que falta é o acesso: trocar de navegador ou
+aumentar a tela não faz ele aparecer. Peça a quem administra a plataforma para
+conferir qual dos três acessos falta para você.
