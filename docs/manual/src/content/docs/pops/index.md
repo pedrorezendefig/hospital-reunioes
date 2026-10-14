@@ -7,8 +7,8 @@ sidebar:
   order: 1
 ---
 
-Esta seção cobre a **Gestão de POPs**: onde os procedimentos do hospital são
-escritos, revisados, assinados e ficam disponíveis para a equipe.
+Esta seção trata da **Gestão de POPs**, a área onde os procedimentos do
+hospital são escritos, revisados e assinados, e onde a equipe os encontra.
 
 ## As palavras que você vai ver o tempo todo
 
@@ -61,6 +61,6 @@ que está com você.
 7. Com as três assinaturas, a Versão fica **Publicado** e aparece na
    Biblioteca.
 
-A qualquer momento uma devolução volta a Versão para **Em Elaboração**, com o
-comentário de quem devolveu. Depois da correção, ela retorna direto para quem
-devolveu, sem repetir a etapa anterior.
+Em qualquer etapa, quem devolve manda a Versão de volta para **Em Elaboração**,
+com um comentário. Corrigida, ela retorna direto para quem devolveu, sem repetir
+a etapa anterior.

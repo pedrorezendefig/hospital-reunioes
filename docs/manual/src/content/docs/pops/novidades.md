@@ -10,7 +10,7 @@ sidebar:
 ## 17/07/2026 · Re-elaborar um POP antigo começa num clique
 
 Quem vai transformar um documento antigo em POP não precisa mais saber o que
-pedir ao Consultor de POPs. Anexou o arquivo, aparece o botão
+pedir ao Consultor de POPs. Depois de anexar o arquivo, aparece o botão
 **Elaborar a nova versão a partir do material anexado**, que escreve o pedido
 por você. Dá para ajustar o texto antes de enviar.
 
@@ -23,16 +23,16 @@ Tarefas que mudaram: [Anexar o material de referência](../anexar-o-material-de-
 ## 17/07/2026 · O fluxograma abre inteiro na tela
 
 O desenho do procedimento passou a nascer enquadrado: abre inteiro, sem ninguém
-precisar dar zoom ou arrastar para achar o começo. O palco ganhou destaque e um
-botão de **Ajustar à tela** para voltar ao enquadramento de origem quando você
+precisar dar zoom ou arrastar para achar o começo. A área do desenho ficou mais
+destacada e ganhou um botão de **Ajustar à tela** para voltar ao enquadramento de origem quando você
 se perder no zoom.
 
 Tarefas que mudaram: [Ver o fluxograma do POP](../ver-o-fluxograma-do-pop/)
 
 ## 10/07/2026 · O fluxograma do POP é desenhado pelo sistema
 
-O caminho do procedimento virou desenho de verdade, feito pelo próprio sistema:
-caminho principal na vertical, desvios ao lado e os passos numerados como no
+O próprio sistema passou a desenhar o caminho do procedimento, com o caminho
+principal na vertical, desvios ao lado e os passos numerados como no
 texto. O mesmo desenho vai para o documento assinado, e dá para baixar em
 **PNG** ou **SVG** para usar em treinamento.
 
@@ -53,7 +53,7 @@ Tarefas que mudaram: [Elaborar o POP com o Consultor de POPs](../elaborar-o-pop-
 
 ## 12/06/2026 · A Gestão de POPs entra no ar
 
-O ciclo completo do procedimento passou a viver na plataforma: cadastro dos
+O ciclo completo do procedimento passou a ser feito na plataforma: cadastro dos
 Setores, criação do POP com Código travado, elaboração com o Consultor de POPs,
 revisão, validação, assinatura digital pelas três pessoas responsáveis e
 publicação na Biblioteca.
