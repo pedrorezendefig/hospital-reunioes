@@ -14,7 +14,7 @@ sidebar:
 Logo depois do seu primeiro acesso, para tirar a senha que veio pronta de quem
 criou a sua conta. E sempre que você achar que alguém mais sabe a sua senha.
 
-A plataforma não obriga essa troca: ela é sua iniciativa.
+A plataforma não pede essa troca, então fica com você lembrar de fazer.
 
 ## Passo a passo
 
@@ -35,7 +35,7 @@ A plataforma não obriga essa troca: ela é sua iniciativa.
   preenchidos, iguais e com 8 caracteres ou mais. A tela avisa embaixo do campo
   o que falta.
 - **Você recebeu a senha de outra pessoa e ela já circulou:** troque assim que
-  entrar. A senha que veio pronta é temporária por natureza, mesmo que a
+  entrar. A senha que veio pronta foi feita para ser trocada, mesmo que a
   plataforma continue aceitando ela.
 - **Você não consegue entrar para chegar até aqui:** use
   [Redefinir a senha que você esqueceu](/primeiros-passos/redefinir-a-senha-esquecida/),
