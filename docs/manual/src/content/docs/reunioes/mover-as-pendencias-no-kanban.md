@@ -36,7 +36,7 @@ vez". O quadro mostra a mesma coisa da lista, distribuída em colunas.
   avisa o erro no alto. Espere um instante e arraste de novo.
 - **Você não acha um cartão que sabe que existe:** o quadro também tem teto e
   respeita os filtros. Comece por **Limpar Filtros**.
-- **O cartão diz Sem responsável ou Externo:** a ação nasceu sem alguém do
-  cadastro no comando. Quem é **Externo** não recebe cobrança da plataforma.
-- **Você moveu para a coluna errada:** arraste de volta. Nenhuma coluna é
-  terminal no quadro.
+- **O cartão diz Sem responsável ou Externo:** a ação nasceu sem um responsável
+  do cadastro. Quem é **Externo** não recebe cobrança da plataforma.
+- **Você moveu para a coluna errada:** arraste de volta. No quadro, o cartão
+  sai de qualquer coluna, inclusive de **Concluido** e **Cancelado**.

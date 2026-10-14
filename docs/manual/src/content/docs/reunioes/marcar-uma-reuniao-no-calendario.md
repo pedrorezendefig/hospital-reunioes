@@ -21,34 +21,31 @@ que você escolhe quem vai conduzir.
 
 ## Passo a passo
 
-1. No menu, clique em **Calendário**. Quem conduz reuniões acha ele dentro do
-   grupo **Reuniões e metas**; na Secretaria ele fica solto.
+1. No menu, clique em **Calendário**. Ele fica no grupo **Reuniões e metas**;
+   na Secretaria, fica solto no menu.
 
    ![Calendário de reuniões aberto no mês](../../../assets/reunioes/calendario.png)
-2. Clique no dia da reunião. A janela **Agendar Reunião** abre com a data
-   preenchida. Se você é da Secretaria, o clique (no dia, no horário da
-   semana ou no botão **Agendar Reunião**) abre a tela **Marcar nova reunião**
-   já com a data e a hora, e você segue em
+2. Clique no dia. A janela **Agendar Reunião** abre com a data preenchida. Na Secretaria, qualquer clique de agendar abre
+   **Marcar nova reunião** com a data e a hora; siga em
    [Marcar a reunião de um facilitador](/reunioes/marcar-a-reuniao-de-um-facilitador/).
 3. Escreva o **Título** e confira a **Data**. Em **Tipo**, escolha
    **Diretoria**, **Gerencial**, **Coordenação**, **Mensal** ou
    **Extraordinária**.
 
    ![Janela Agendar Reunião preenchida com título, horário e participantes](../../../assets/reunioes/agendar-reuniao.png)
-4. Em **Horário da Reunião**, escolha a hora de início, e escreva a
+4. Em **Horário da Reunião**, escolha o início e escreva a
    **Pauta (opcional)**.
 5. Em **Participantes**, procure cada pessoa em **Buscar participante...** e
-   clique no nome para incluir.
-6. Clique em **Agendar Reunião**. Os participantes recebem o convite por email
-   na hora.
+   clique no nome.
+6. Clique em **Agendar Reunião**. O convite sai por email na hora.
 
 Reunião que se repete: abra ela e use **Recorrência**, depois **Configurar**.
 A **Frequência** é **Semanal** ou **Quinzenal**.
 
 ## Se der errado
 
-- **A pessoa que você procura não aparece:** só quem está cadastrado aparece na
-  busca, dez por vez. Escreva mais letras do nome, ou peça a quem administra a
-  plataforma para cadastrar a pessoa.
+- **A pessoa que você procura não aparece:** a busca mostra só quem está
+  cadastrado, dez por vez. Escreva mais letras do nome ou peça o cadastro a
+  quem administra a plataforma.
 - **Você marcou no dia errado:** abra a reunião e corrija a data enquanto ela
   estiver **Programada**. Para desistir, use a lixeira no cartão.
