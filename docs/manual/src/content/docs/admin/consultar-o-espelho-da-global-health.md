@@ -13,7 +13,7 @@ sidebar:
 
 Quando alguém reclama que a assistente não ofereceu horário, não aceitou um
 convênio ou não achou o médico. O Espelho mostra o que a agenda online publica
-agora, e quase sempre a resposta está aqui.
+agora, e quase sempre a explicação está nele.
 
 O Espelho fica dentro dos Dados do Atendimento, então quem abre aquela tela abre
 esta: Secretária, Regular e Super Admin. Aqui ninguém edita nada.
@@ -43,9 +43,9 @@ esta: Secretária, Regular e Super Admin. Aqui ninguém edita nada.
 ## Se der errado
 
 - **A lista está vazia com um aviso de falha em cima:** a consulta não chegou à
-  agenda online. A lista está vazia por causa da falha, não por falta de
-  cadastro. Clique em **Atualizar** de novo.
+  agenda online, então o vazio vem da falha e não diz nada sobre o cadastro.
+  Clique em **Atualizar** de novo.
 - **O convênio não aparece na especialidade:** ele não está liberado para ela.
-  Isso se resolve no Painel de Controle da agenda online, não aqui.
+  A liberação se faz no Painel de Controle da agenda online.
 - **O médico não aparece:** ele está com o botão desligado na agenda online
   para aquela especialidade.

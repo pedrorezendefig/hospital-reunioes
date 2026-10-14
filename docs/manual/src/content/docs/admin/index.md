@@ -23,8 +23,8 @@ três: **Regular**, **Secretária** e **Super Admin**. Cada pessoa tem um.
 **Acesso aos POPs** e **Acesso à Ouvidoria** são dois acessos à parte, que se
 concedem na mesma tela e não dependem do Perfil de acesso.
 
-**Role** é uma etiqueta antiga que aparece só aqui, na lista e no formulário.
-Ela não é o que abre as telas. Veja [A Role que ninguém vê](como-funciona/a-role-que-ninguem-ve/).
+**Role** é uma etiqueta antiga que aparece só aqui, na lista e no formulário,
+e não abre tela nenhuma. Veja [A Role que ninguém vê](como-funciona/a-role-que-ninguem-ve/).
 
 **Externo** é a pessoa que entrou no cadastro sozinha, pelo nome citado numa
 ata, sem ninguém ter preenchido ficha. A lista marca essas linhas com
@@ -33,8 +33,7 @@ ata, sem ninguém ter preenchido ficha. A lista marca essas linhas com
 ## Quem entra e o que alcança
 
 No menu da esquerda do app, o item **Admin** aparece para todo mundo que tem
-papel nas Reuniões, e não só para o Super Admin. O que muda é o que existe lá
-dentro.
+papel nas Reuniões, mas cada perfil encontra uma coisa lá dentro.
 
 - **Super Admin** abre o painel em **Usuários** e vê as quatro seções.
 - **Secretária** e **Regular** abrem direto em **Dados do Atendimento**, o
@@ -54,7 +53,7 @@ Sob o título **Administração**:
 - **Atendimento**: **Dados do Atendimento**, os preços, preparos e estimativas
   que a Ana lê, mais o **Espelho da Global Health**.
 - **Tecnologia**: o Quadro de Demandas entre o hospital e a empresa que cuida
-  do sistema. Existe na tela, é do Super Admin, e este manual não a cobre.
+  do sistema. É do Super Admin e fica fora deste manual.
 
 No pé da barra, **Voltar ao app** devolve você ao painel de reuniões.
 

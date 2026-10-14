@@ -12,8 +12,8 @@ sidebar:
 ## Quando usar
 
 Depois de cadastrar alguém, e sempre que alguém perder a senha. A plataforma
-não manda email de boas-vindas nem link de primeiro acesso: quem entrega a
-senha é você.
+não manda email de boas-vindas nem link de primeiro acesso, então é você quem
+entrega a senha.
 
 ## Passo a passo
 
@@ -45,9 +45,8 @@ A senha não volta a aparecer depois que você fechar a janela.
   **Resetar senha**, que gera outra.
 - **A tela recusa com "Participante sem email cadastrado":** a ficha está sem
   endereço, e é o endereço que identifica a pessoa na entrada. Preencha o
-  **Email** pelo lápis, **Editar**, e repita. Quem nunca entrou na plataforma
-  não precisa de mais nada: o próprio **Resetar senha** cria a conta dela na
-  hora.
+  **Email** pelo lápis, **Editar**, e repita. Se a pessoa nunca entrou na
+  plataforma, o próprio **Resetar senha** cria a conta dela na hora.
 - **A pessoa continua sem entrar depois de receber a senha:** confira se a
   ficha dela está com **Ativo** marcado. Quem está desligado é recusado na
-  porta.
+  entrada.
