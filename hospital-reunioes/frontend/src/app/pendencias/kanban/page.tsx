@@ -347,7 +347,7 @@ function KanbanContent() {
         if (resultado.acao === "abrir") {
           setSelectedPendencia(resultado.pendencia);
         } else {
-          toast("Pendência não encontrada: pode ter sido excluída ou você não tem acesso a ela.", "warning");
+          toast("Pendência não encontrada. Ela pode ter sido excluída, ou você não tem acesso a ela.", "warning");
         }
       })
       .catch(() => {

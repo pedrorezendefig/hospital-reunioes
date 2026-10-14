@@ -24,8 +24,8 @@ const MSG_TRAVESSAO =
 // Cacoetes regexaveis de texto gerado ("nao e X, e Y" e variantes, fecho
 // repetido) em string e texto de JSX (ADR 0071, decisao 1). A lista vive em
 // eslint-rules/tells.mjs, espelho de tools/tells_texto.py, e os casos dos dois
-// em tools/tells_casos.json. O que ja estava no ar fica em
-// eslint-rules/tells_conhecidos.json ate a varredura (issue #1229). Teste fica
+// em tools/tells_casos.json. O que ja estava no ar ficou em
+// eslint-rules/tells_conhecidos.json ate a varredura (issue #1229), que a esvaziou. Teste fica
 // de fora: nome de teste nao chega ao usuario.
 const { arquivos: TELLS_CONHECIDOS } = JSON.parse(
   readFileSync(new URL("./eslint-rules/tells_conhecidos.json", import.meta.url), "utf8"),

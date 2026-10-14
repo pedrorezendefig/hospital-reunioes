@@ -284,9 +284,8 @@ export function EspelhoGlobalHealth() {
   return (
     <div className="space-y-4">
       <p className="text-sm text-text-secondary">
-        O que a agenda online da Global Health publica agora. Esta seção é uma
-        janela, não um caderno: nada fica gravado, e cada clique em Atualizar
-        busca a resposta fresca. Clique numa especialidade para ver os convênios
+        O que a agenda online da Global Health publica agora. Nada fica gravado
+        aqui: cada clique em Atualizar busca a resposta de novo. Clique numa especialidade para ver os convênios
         aceitos e os profissionais disponíveis nela, e siga pelo convênio e pelo
         plano até os horários livres.
       </p>
@@ -475,8 +474,8 @@ function BlocoDeHorarios(props: {
           </p>
           <p className="mt-1">
             A agenda online só responde horário com especialidade, convênio e
-            plano juntos. Sem os três, a consulta não é feita: assim, quando
-            este bloco disser que não há horário, é porque não há mesmo.
+            plano juntos, e este bloco só consulta com os três escolhidos. Por
+            isso, quando ele disser que não há horário, é porque não há mesmo.
           </p>
         </div>
       ) : (

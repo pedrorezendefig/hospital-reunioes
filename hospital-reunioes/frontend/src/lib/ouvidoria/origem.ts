@@ -15,7 +15,7 @@
  * o campo como evidência (decisão 4 da issue).
  */
 export const QR_NAO_PROVA_PRESENCA =
-  "Ler o QR não prova presença no local: o endereço do formulário pode ser aberto de qualquer lugar.";
+  "O endereço do formulário abre de qualquer lugar, então ler o QR não prova que a pessoa esteve no local.";
 
 export interface OrigemDoCaso {
   canal: string | null;

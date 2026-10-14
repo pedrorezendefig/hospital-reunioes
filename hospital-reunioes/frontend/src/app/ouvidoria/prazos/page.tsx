@@ -59,7 +59,7 @@ const LABEL_MARCO: Record<Marco, string> = {
 
 const AJUDA_MARCO: Record<Marco, string> = {
   acusar_recebimento:
-    "Da entrada até o manifestante saber que a manifestação chegou. Conta em relógio de parede, não em calendário útil: quem manifesta na sexta à noite recebe no sábado.",
+    "Da entrada até o manifestante saber que a manifestação chegou. Conta em relógio de parede, com fim de semana e feriado: quem manifesta na sexta à noite recebe no sábado.",
   triagem: "Da entrada até o ouvidor validar e acionar a área.",
   area_resposta: "Do acionamento até a área responder.",
   conclusiva: "Da entrada até a resposta final ao manifestante.",

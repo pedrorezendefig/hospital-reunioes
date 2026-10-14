@@ -283,7 +283,7 @@ export function listaDeProdutosValida(corpo: unknown): corpo is ProdutoDaEscolha
  */
 export const CRIADA_SEM_CONFIRMACAO =
   "A Demanda foi criada, mas a resposta do servidor não deu para ler, então não dá para abri-la daqui. " +
-  "Não crie de novo: confira no Quadro.";
+  "Confira no Quadro antes de criar de novo.";
 
 /** Os rótulos fixos de cada Tipo. Decisão não tem roteiro: é texto corrido. */
 export const ROTEIRO_POR_TIPO: Record<TipoDemanda, string[]> = {
