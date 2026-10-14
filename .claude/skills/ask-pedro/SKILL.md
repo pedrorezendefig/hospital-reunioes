@@ -68,6 +68,7 @@ Teste rápido entre B e C: **alguém precisa conferir que fez o que foi pedido?*
 - ADRs: consuma só `status: accepted`; supersessão bidirecional travada pelo CI `lint-adr`.
 - Estado vive nas GitHub Issues + `docs/spec/deploy/*.json`; proibido criar docs paralelos de estado/processo.
 - Nada de travessão nem meia-risca em texto visível ao usuário (ADR 0013).
+- **Régua de texto: todo texto para fora passa pelo humanizer** (ADR 0071): `/manual`, `/ship`, `/divulgar`, `/mensagem-prd`, `/to-prd` e `/to-issues` chamam a skill `humanizer` em modo embutido antes de gravar ou publicar, na voz da amostra aprovada do canal; o `tools/lint_manual.py` e o ESLint do front travam os cacoetes regexáveis. Texto interno (comentário de código, scratchpad) não passa.
 - **O Manual só mostra o que está no ar** (ADR 0057): página de funcionalidade que ainda não subiu nasce em `draft`, e quem tira o draft é a Action do push da `main`, depois do registro da subida (ADR 0068), nunca a mão no frontmatter. A página com Vídeo de tarefa (o MP4 não vem no clone) sai do draft pelo `/manual publicar` que o humano roda da máquina com os MP4, e é só esse modo que republica o site (issue #951). A Fatia de manual roda depois das fatias de código, não no mesmo PR.
 
 ## Manutenção deste router
