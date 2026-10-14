@@ -11,8 +11,8 @@ sidebar:
 
 ## Quando usar
 
-Quando a ata precisa da formalidade da assinatura digital. É o caminho da
-reunião com transcrição; a Ata Guiada não passa por aqui.
+Quando a ata precisa da formalidade da assinatura digital. Este é o caminho da
+reunião com transcrição; a Ata Guiada termina sem assinatura.
 
 ## Passo a passo
 
@@ -37,7 +37,8 @@ reunião com transcrição; a Ata Guiada não passa por aqui.
 - **O aviso diz que o disparo dos emails falhou:** use o **Lembrar** de cada
   pessoa para mandar o convite.
 - **O cartão mudou para Coleta interna de aceites:** alguém recusou, ou a
-  assinatura foi cancelada. Não há reenvio: quem falta recebe um link, como em
+  assinatura foi cancelada. A assinatura não é reenviada, e quem falta recebe
+  um link, como em
   [Aceitar a ata pelo link](/reunioes/aceitar-a-ata-pelo-link/).
 - **Acabou o prazo e nem todo mundo assinou:** o documento fecha assim mesmo. O
   banner ganha um selo do tipo **3 de 5 assinaram**, e as pendências que
