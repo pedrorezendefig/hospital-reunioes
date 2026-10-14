@@ -12,7 +12,12 @@ from zoneinfo import ZoneInfo
 
 import pytest
 
-from app.services.ouvidoria_notificacoes import montar_alerta_sem_titular, montar_nova_demanda
+from app.services.ouvidoria_notificacoes import (
+    montar_alerta_sem_titular,
+    montar_nova_demanda,
+    montar_prazo_rompido,
+    montar_vespera_vencimento,
+)
 
 FUSO = ZoneInfo("America/Sao_Paulo")
 # Terça-feira útil, meio do expediente.
@@ -146,6 +151,16 @@ class TestSigilo:
         assert "Joana da Silva" not in html
         assert "Joana da Silva" not in texto
         assert "sigilo reforçado" in html.lower()
+
+    @pytest.mark.parametrize("montar", [montar_prazo_rompido, montar_vespera_vencimento])
+    def test_aviso_do_sigilo_chama_o_texto_de_nota_da_ouvidoria_e_nao_de_resumo(self, montar):
+        """No glossário (Extrato para o setor) o resumo é a palavra crua de quem
+        manifestou, justamente o que não viaja sob sigilo reforçado. O texto que
+        o email mostra é o extrato, a nota da Ouvidoria (PR #1248)."""
+        _, html, _ = montar(_manifestacao(sigilo_reforcado=True), "Maria", AGORA, SEM_FERIADOS)
+
+        assert "nota da Ouvidoria" in html
+        assert "resumo" not in html.lower()
 
 
 class TestSemTravessao:
