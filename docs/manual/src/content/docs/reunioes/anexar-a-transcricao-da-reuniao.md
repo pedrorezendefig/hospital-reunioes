@@ -11,8 +11,8 @@ sidebar:
 
 ## Quando usar
 
-Depois da reunião, quando você tem o texto do que foi falado. É este passo que
-faz a ata nascer completa, com discussão, decisões e o quadro de ações.
+Depois da reunião, quando você tem o texto do que foi falado. Com ele, a ata
+nasce completa, com discussão, decisões e o quadro de ações.
 
 ## Passo a passo
 

@@ -12,12 +12,12 @@ coisas diferentes no painel no mesmo dia, e as duas estão certas.
 
 ## A regra curta
 
-**A pendência nasce quando o compromisso da pessoa se firma**, e não quando a
-ata inteira fica pronta. Firmar é uma destas três coisas: assinar a ata,
-aceitar pelo link, ou o Facilitador finalizar a ata sem assinatura.
+**A pendência nasce quando o compromisso da pessoa se firma**, mesmo que a ata
+inteira ainda não esteja pronta. Firmar é uma destas três coisas: assinar a
+ata, aceitar pelo link, ou o Facilitador finalizar a ata sem assinatura.
 
-Nascida, ela é plena desde o primeiro segundo: aparece na lista e no quadro,
-com o prazo correndo e podendo virar **Atrasado**.
+Assim que nasce, ela aparece na lista e no quadro, com o prazo correndo, e pode
+virar **Atrasado**.
 
 ## Os quatro momentos
 
@@ -37,9 +37,8 @@ todas as pendências no mesmo instante e a reunião fica **Aprovada**.
 ## O prazo da assinatura digital não mata a ata
 
 Se o prazo da coleta de assinaturas estoura, o documento fecha com as
-assinaturas que tiver. A ata não fica presa: as pendências que faltavam nascem,
-a reunião vira **Assinada** e o banner ganha um selo discreto do tipo
-**3 de 5 assinaram**. Com todo mundo assinado, esse selo não aparece.
+assinaturas que tiver. As pendências que faltavam nascem, a reunião vira
+**Assinada** e o banner ganha um selo discreto do tipo **3 de 5 assinaram**. Com todo mundo assinado, esse selo não aparece.
 
 ## Quando ninguém assinou
 
@@ -48,7 +47,8 @@ reunião passa a **Coleta interna de aceites**: quem falta recebe um link para
 ler a ata e aceitar por dentro da plataforma. Quando toda ação do quadro tem
 pendência, a reunião fecha.
 
-O que já nasceu fica. Ação que já virou pendência não volta a ser editável.
+As pendências que já nasceram continuam valendo, e a ação que virou pendência
+não volta a ser editável.
 
 ## Por que a sua ação não apareceu
 

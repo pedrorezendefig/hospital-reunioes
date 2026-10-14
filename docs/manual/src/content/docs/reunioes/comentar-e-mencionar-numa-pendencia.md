@@ -45,7 +45,7 @@ pendência, e quem vier depois lê o histórico inteiro.
 - **A lista de nomes não abre depois da arroba:** escreva as primeiras letras
   do nome. A lista mostra oito por vez e filtra pelo que você digita.
 - **Você mencionou e a pessoa não viu:** o aviso fica no sino dela, no alto da
-  tela, até ser lido. Quem não entra na plataforma não recebe menção: fale com
-  a pessoa por fora.
+  tela, até ser lido. Quem não entra na plataforma não recebe a menção, então
+  fale com a pessoa por fora.
 - **Você comentou na pendência errada:** apague o seu comentário pelo ícone de
   lixeira na linha dele e escreva no lugar certo.
