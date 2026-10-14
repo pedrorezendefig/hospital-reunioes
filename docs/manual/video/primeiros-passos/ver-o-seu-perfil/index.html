@@ -68,8 +68,8 @@
   .avatar { position: relative; width: 40px; height: 40px; border-radius: 50%; background: linear-gradient(to bottom right, var(--color-primary), var(--color-primary-dark)); color: var(--color-white); font-weight: 700; display: flex; align-items: center; justify-content: center; }
   .avatar .seta { position: absolute; right: -2px; bottom: -2px; width: 16px; height: 16px; border-radius: 50%; background: var(--color-white); border: 1px solid var(--color-slate-100); color: var(--color-slate-400); display: flex; align-items: center; justify-content: center; }
   .menu-nome { position: absolute; left: 1008px; top: 66px; width: 224px; background: var(--color-white); border: 1px solid var(--color-slate-200); border-radius: var(--radius-2xl); box-shadow: var(--shadow-premium-strong); overflow: hidden; opacity: 0; transform-origin: 100% 0; }
-  .menu-nome .bloco { padding: 6px; }
-  .menu-nome .bloco + .bloco { background: color-mix(in srgb, var(--color-slate-50) 50%, transparent); border-top: 1px solid var(--color-slate-100); }
+  .menu-nome .mn-bloco { padding: 6px; }
+  .menu-nome .mn-bloco + .mn-bloco { background: color-mix(in srgb, var(--color-slate-50) 50%, transparent); border-top: 1px solid var(--color-slate-100); }
   .menu-nome .item { display: flex; align-items: center; gap: 10px; padding: 8px 12px; border-radius: var(--radius-lg); font-size: 14px; color: var(--color-slate-600); }
   .menu-nome .item .ic { display: flex; color: var(--color-slate-400); }
   .menu-nome .item.sair { color: var(--color-red-600); }
@@ -184,8 +184,8 @@ const lado = (id, noDash) => `<div class="lado" id="${id}"><div class="marca"><i
     <div class="mi">${ic("megafone", 18, 1.5)}Ouvidoria</div><div class="mi">${ic("escudo", 18, 1.5)}Admin</div><div class="mi" style="margin-top:8px">${ic("ajuda", 18, 1.5)}Ajuda</div></nav></div>`;
 const topo = `<div class="topo"><div class="busca">${ic("lupa", 16)}Buscar...</div><div class="quem"><div class="sino">${ic("sino", 22, 1.75)}</div><div class="divisor"></div>
     <div class="pessoa" id="pessoa"><span class="aceso" id="pessoa-aceso"></span><div class="tx"><b>paula.nogueira</b><span>paula.nogueira@exemplo...</span></div><div class="avatar">P<span class="seta" id="seta">${ic("baixo", 12)}</span></div></div></div></div>`;
-const menuNome = `<div class="menu-nome" id="menu-nome"><div class="bloco"><div class="item" id="item-perfil"><span class="ic">${ic("pessoa", 16)}</span>Meu Perfil</div><div class="item"><span class="ic">${ic("engrenagem", 16)}</span>Configurações</div></div>
-  <div class="bloco"><div class="item sair"><span class="ic">${ic("sair", 16)}</span>Sair da conta</div></div></div>`;
+const menuNome = `<div class="menu-nome" id="menu-nome"><div class="mn-bloco"><div class="item" id="item-perfil"><span class="ic">${ic("pessoa", 16)}</span>Meu Perfil</div><div class="item"><span class="ic">${ic("engrenagem", 16)}</span>Configurações</div></div>
+  <div class="mn-bloco"><div class="item sair"><span class="ic">${ic("sair", 16)}</span>Sair da conta</div></div></div>`;
 
 const kpi = (icone, cor, n, r, s, alerta) => `<div class="kpi${alerta ? " alerta" : ""}"><div class="ic" style="background:color-mix(in srgb, ${cor} 10%, transparent);color:${cor}">${icone}</div><div class="n"${n.endsWith("%") ? ' style="color:var(--color-success)"' : ""}>${n}</div><div class="r">${r}</div>${s ? `<div class="s">${s}</div>` : ""}</div>`;
 const anel = '<svg width="28" height="28" viewBox="0 0 28 28"><circle cx="14" cy="14" r="10" fill="none" stroke="var(--color-slate-200)" stroke-width="3"/><circle cx="14" cy="14" r="10" fill="none" stroke="var(--color-success)" stroke-width="3" stroke-dasharray="62.83" stroke-dashoffset="8.8" transform="rotate(-90 14 14)"/></svg>';

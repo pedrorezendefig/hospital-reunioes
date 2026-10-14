@@ -68,8 +68,8 @@
   .avatar { position: relative; width: 40px; height: 40px; border-radius: 50%; background: linear-gradient(to bottom right, var(--color-primary), var(--color-primary-dark)); color: var(--color-white); font-weight: 700; display: flex; align-items: center; justify-content: center; }
   .avatar .seta { position: absolute; right: -2px; bottom: -2px; width: 16px; height: 16px; border-radius: 50%; background: var(--color-white); border: 1px solid var(--color-slate-100); color: var(--color-slate-400); display: flex; align-items: center; justify-content: center; }
   .menu-nome { position: absolute; left: 1008px; top: 66px; width: 224px; background: var(--color-white); border: 1px solid var(--color-slate-200); border-radius: var(--radius-2xl); box-shadow: var(--shadow-premium-strong); overflow: hidden; opacity: 0; transform-origin: 100% 0; }
-  .menu-nome .bloco { padding: 6px; }
-  .menu-nome .bloco + .bloco { background: color-mix(in srgb, var(--color-slate-50) 50%, transparent); border-top: 1px solid var(--color-slate-100); }
+  .menu-nome .mn-bloco { padding: 6px; }
+  .menu-nome .mn-bloco + .mn-bloco { background: color-mix(in srgb, var(--color-slate-50) 50%, transparent); border-top: 1px solid var(--color-slate-100); }
   .menu-nome .item { display: flex; align-items: center; gap: 10px; padding: 8px 12px; border-radius: var(--radius-lg); font-size: 14px; color: var(--color-slate-600); }
   .menu-nome .item .ic { display: flex; color: var(--color-slate-400); }
   .menu-nome .item.sair { color: var(--color-red-600); }
@@ -93,7 +93,7 @@
 
   /* ===== Configurações (app/configuracoes/page.tsx, SecuritySection.tsx) ===== */
   .conf-cab { margin-bottom: 24px; }
-  .conf-cab .linha { display: flex; align-items: center; gap: 12px; margin-bottom: 4px; }
+  .conf-cab .cf-linha { display: flex; align-items: center; gap: 12px; margin-bottom: 4px; }
   .caixa-ic { padding: 8px; border-radius: var(--radius-xl); background: color-mix(in srgb, var(--color-primary) 10%, transparent); color: var(--color-primary); display: flex; }
   .conf-cab h1 { font-size: 24px; line-height: 32px; font-weight: 700; color: var(--color-text); }
   .conf-cab p { margin-left: 52px; font-size: 14px; color: var(--color-text-secondary); }
@@ -103,10 +103,10 @@
   .conf-menu nav { display: flex; flex-direction: column; gap: 4px; margin-bottom: 12px; }
   .bt-sec { position: relative; display: flex; align-items: center; gap: 12px; padding: 10px 12px; border-radius: var(--radius-lg); font-size: 14px; font-weight: 500; color: var(--color-slate-600); }
   .bt-sec.on { background: linear-gradient(to right, var(--color-primary), var(--color-primary-light)); color: var(--color-white); box-shadow: 0 4px 6px -1px color-mix(in srgb, var(--color-black) 10%, transparent); }
-  .secao { flex: 1; min-width: 0; background: var(--color-white); border-radius: var(--radius-2xl); border: 1px solid var(--color-border); box-shadow: var(--shadow-premium); padding: 24px; }
-  .secao .linha { display: flex; align-items: center; gap: 12px; margin-bottom: 4px; }
-  .secao h2 { font-size: 18px; line-height: 28px; font-weight: 700; color: var(--color-text); }
-  .secao .linha + p { margin: 0 0 24px 44px; font-size: 14px; color: var(--color-text-secondary); }
+  .cf-secao { flex: 1; min-width: 0; background: var(--color-white); border-radius: var(--radius-2xl); border: 1px solid var(--color-border); box-shadow: var(--shadow-premium); padding: 24px; }
+  .cf-secao .cf-linha { display: flex; align-items: center; gap: 12px; margin-bottom: 4px; }
+  .cf-secao h2 { font-size: 18px; line-height: 28px; font-weight: 700; color: var(--color-text); }
+  .cf-secao .cf-linha + p { margin: 0 0 24px 44px; font-size: 14px; color: var(--color-text-secondary); }
   .form { width: 448px; }
   .grupo { margin-bottom: 20px; }
   .grupo label { display: block; font-size: 14px; font-weight: 500; color: var(--color-text); margin-bottom: 6px; }
@@ -196,8 +196,8 @@ const lado = (id, noDash) => `<div class="lado" id="${id}"><div class="marca"><i
     <div class="mi">${ic("megafone", 18, 1.5)}Ouvidoria</div><div class="mi">${ic("escudo", 18, 1.5)}Admin</div><div class="mi" style="margin-top:8px">${ic("ajuda", 18, 1.5)}Ajuda</div></nav></div>`;
 const topo = `<div class="topo"><div class="busca">${ic("lupa", 16)}Buscar...</div><div class="quem"><div class="sino">${ic("sino", 22, 1.75)}</div><div class="divisor"></div>
     <div class="pessoa" id="pessoa"><span class="aceso" id="pessoa-aceso"></span><div class="tx"><b>paula.nogueira</b><span>paula.nogueira@exemplo...</span></div><div class="avatar">P<span class="seta" id="seta">${ic("baixo", 12)}</span></div></div></div></div>`;
-const menuNome = `<div class="menu-nome" id="menu-nome"><div class="bloco"><div class="item"><span class="ic">${ic("pessoa", 16)}</span>Meu Perfil</div><div class="item" id="item-conf"><span class="ic">${ic("engrenagem", 16)}</span>Configurações</div></div>
-  <div class="bloco"><div class="item sair"><span class="ic">${ic("sair", 16)}</span>Sair da conta</div></div></div>`;
+const menuNome = `<div class="menu-nome" id="menu-nome"><div class="mn-bloco"><div class="item"><span class="ic">${ic("pessoa", 16)}</span>Meu Perfil</div><div class="item" id="item-conf"><span class="ic">${ic("engrenagem", 16)}</span>Configurações</div></div>
+  <div class="mn-bloco"><div class="item sair"><span class="ic">${ic("sair", 16)}</span>Sair da conta</div></div></div>`;
 
 const kpi = (icone, cor, n, r, s, alerta) => `<div class="kpi${alerta ? " alerta" : ""}"><div class="ic" style="background:color-mix(in srgb, ${cor} 10%, transparent);color:${cor}">${icone}</div><div class="n"${n.endsWith("%") ? ' style="color:var(--color-success)"' : ""}>${n}</div><div class="r">${r}</div>${s ? `<div class="s">${s}</div>` : ""}</div>`;
 const anel = '<svg width="28" height="28" viewBox="0 0 28 28"><circle cx="14" cy="14" r="10" fill="none" stroke="var(--color-slate-200)" stroke-width="3"/><circle cx="14" cy="14" r="10" fill="none" stroke="var(--color-success)" stroke-width="3" stroke-dasharray="62.83" stroke-dashoffset="8.8" transform="rotate(-90 14 14)"/></svg>';
@@ -208,9 +208,9 @@ const paginaDash = `<div class="pagina" id="p-dash"><div class="ola"><h1>Olá, p
 /* Configurações, na aba Segurança (a que abre primeiro). */
 const sec = (id, icone, nome, on) => `<div class="bt-sec${on ? " on" : ""}" id="${id}">${ic(icone, 18, on ? 2 : 1.5)}${nome}</div>`;
 const campo = (id, rot, vazio) => `<div class="grupo" id="g-${id}"><label>${rot}</label><div class="entrada" id="${id}"><span class="vazio" id="${id}-vazio">${vazio}</span><span class="cheio" id="${id}-cheio">••••••••••••</span><span class="olho">${ic("olho", 18)}</span><span class="foco" id="${id}-foco"></span></div></div>`;
-const paginaConf = `<div class="pagina" id="p-conf"><div class="conf-cab"><div class="linha"><span class="caixa-ic">${ic("engrenagem", 24)}</span><h1>Configurações</h1></div><p>Gerencie suas preferências e configurações do sistema</p></div>
+const paginaConf = `<div class="pagina" id="p-conf"><div class="conf-cab"><div class="cf-linha"><span class="caixa-ic">${ic("engrenagem", 24)}</span><h1>Configurações</h1></div><p>Gerencie suas preferências e configurações do sistema</p></div>
   <div class="conf"><aside class="conf-menu" id="conf-menu"><div class="rot" id="rot-pessoal">Pessoal</div><nav>${sec("sec-seguranca", "escudoSimples", "Segurança", true)}${sec("sec-notif", "sino", "Notificações")}${sec("sec-email", "email", "Email")}${sec("sec-aparencia", "paleta", "Aparência")}</nav></aside>
-    <div class="secao"><div class="linha"><span class="caixa-ic">${ic("escudoSimples", 20)}</span><h2>Segurança</h2></div><p>Gerencie sua senha de acesso ao sistema</p>
+    <div class="cf-secao"><div class="cf-linha"><span class="caixa-ic">${ic("escudoSimples", 20)}</span><h2>Segurança</h2></div><p>Gerencie sua senha de acesso ao sistema</p>
       <div class="form">${campo("nova", "Nova senha", "Mínimo 8 caracteres")}${campo("confirma", "Confirmar nova senha", "Repita a nova senha")}<span class="bt-alterar" id="bt-alterar">Alterar senha</span></div></div></div></div>`;
 const avisoVerde = `<div class="aviso-verde" id="aviso-verde"><span class="ic">${ic("checkc", 20)}</span><p id="aviso-tx">Senha alterada com sucesso!</p><span class="x">${ic("fechar", 16)}</span></div>`;
 

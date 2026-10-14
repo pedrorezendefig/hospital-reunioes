@@ -47,11 +47,6 @@ pops/gerir-os-setores-de-pop
 pops/revisar-o-pop
 pops/validar-o-pop
 pops/ver-o-fluxograma-do-pop
-primeiros-passos/entrar-na-plataforma
-primeiros-passos/escolher-os-avisos-que-voce-recebe
-primeiros-passos/redefinir-a-senha-esquecida
-primeiros-passos/trocar-a-sua-senha
-primeiros-passos/ver-o-seu-perfil
 reunioes/aceitar-a-ata-pelo-link
 reunioes/acompanhar-as-pendencias-na-lista
 reunioes/acompanhar-o-dashboard
