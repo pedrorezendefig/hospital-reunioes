@@ -134,33 +134,58 @@ def _sonda(mp4: Path) -> tuple[float, int]:
     return fps, round(float(dados["format"]["duration"]) * fps)
 
 
+FAIXAS_POR_CHAMADA = 16  # o parser do select do ffmpeg estoura com expressão longa
+
+
+def _faixas(indices: list[int]) -> list[tuple[int, int]]:
+    """Os índices ordenados em faixas contíguas: 5,6,7,9 vira (5, 7), (9, 9)."""
+    faixas: list[tuple[int, int]] = []
+    for i in indices:
+        if faixas and i == faixas[-1][1] + 1:
+            faixas[-1] = (faixas[-1][0], i)
+        else:
+            faixas.append((i, i))
+    return faixas
+
+
 def _quadros(mp4: Path, indices: list[int]) -> dict[int, bytes]:
-    """Os quadros pedidos, numa passada só, em RGB reduzido."""
-    escolha = "+".join(f"eq(n,{i})" for i in indices)
-    saida = subprocess.run(
-        [
-            "ffmpeg",
-            "-v",
-            "error",
-            "-i",
-            str(mp4),
-            "-vf",
-            f"select='{escolha}',scale={LARGURA}:{ALTURA}",
-            "-fps_mode",
-            "passthrough",
-            "-f",
-            "rawvideo",
-            "-pix_fmt",
-            "rgb24",
-            "-",
-        ],
-        capture_output=True,
-        check=True,
-    )
+    """Os quadros pedidos, em RGB reduzido.
+
+    Um termo por quadro (`eq(n,5)+eq(n,6)+...`) estoura o parser do ffmpeg
+    perto de cem termos ("Cannot allocate memory"), e um Vídeo de tarefa de
+    verdade pede uns quatrocentos. Por isso o pedido vai em faixas
+    (`between(n,5,24)`), poucas por chamada.
+    """
     tamanho = LARGURA * ALTURA * 3
-    return {
-        i: saida.stdout[k * tamanho : (k + 1) * tamanho] for k, i in enumerate(indices)
-    }
+    quadros: dict[int, bytes] = {}
+    faixas = _faixas(sorted(set(indices)))
+    for k in range(0, len(faixas), FAIXAS_POR_CHAMADA):
+        lote = faixas[k : k + FAIXAS_POR_CHAMADA]
+        escolha = "+".join(f"between(n,{a},{b})" for a, b in lote)
+        saida = subprocess.run(
+            [
+                "ffmpeg",
+                "-v",
+                "error",
+                "-i",
+                str(mp4),
+                "-vf",
+                f"select='{escolha}',scale={LARGURA}:{ALTURA}",
+                "-fps_mode",
+                "passthrough",
+                "-f",
+                "rawvideo",
+                "-pix_fmt",
+                "rgb24",
+                "-",
+            ],
+            capture_output=True,
+            check=True,
+        )
+        pedidos = [i for a, b in lote for i in range(a, b + 1)]
+        for j, i in enumerate(pedidos):
+            quadros[i] = saida.stdout[j * tamanho : (j + 1) * tamanho]
+    return quadros
 
 
 def e_preto(quadro: bytes) -> bool:
