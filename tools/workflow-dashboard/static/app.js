@@ -238,7 +238,20 @@ function setTab(t) {
   sincronizarHash();
   marcarAba();
   render();
+  animarEntrada();
   window.scrollTo({ top: 0 });
+}
+
+/* o conteúdo da aba nova entra subindo; a classe sai logo depois, para a
+   recoleta automática redesenhar a tela sem repetir a animação */
+function animarEntrada() {
+  const v = $('#view');
+  if (!v || !v.classList) return;
+  v.classList.remove('vw-entra');
+  void v.offsetWidth;
+  v.classList.add('vw-entra');
+  clearTimeout(S.tEntra);
+  S.tEntra = setTimeout(() => v.classList.remove('vw-entra'), 900);
 }
 
 function marcarAba() {
