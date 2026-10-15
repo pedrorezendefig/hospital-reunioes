@@ -104,7 +104,7 @@ Reply to the reviewer summarizing what was done with their comment. The reply ca
 An issue whose body carries `<!-- demanda-vitta id="..." -->` was created by the app's **Levar para desenvolvimento** button (ADR 0054). Treat it differently in two places:
 
 - **Context.** The "Para o diretor" block is the director's own words, already PII-filtered (ADR 0060); the Origem line links to the Demanda in the app, where the full Conversa lives. Say upfront "veio da Demanda, responsável @login" so the maintainer knows who owns it on the app side. Reply to the director through the Demanda's Conversa, never by GitHub comment (comments don't flow back to the app).
-- **Assignee.** The issue is born assigned to the Demanda's responsável. In `needs-triage` that assignee is **responsibility, not claim** (same reading as the PRD owner, ADR 0068). When you move it to `ready-for-agent`, **remove the assignee** (`gh issue edit <N> --remove-assignee <login>`): the pool is `no:assignee`, and a kept assignee hides the issue from `/pegar-issue` and the `/onda`. `ready-for-human` keeps it.
+- **Assignee.** The issue is born assigned to the Demanda's responsável. In `needs-triage` that assignee is **responsibility, not claim** (same reading as the PRD owner, ADR 0068). When you move it to `ready-for-agent`, **keep the assignee**: the pool ignores assignees (the lock is the `ready-for-agent` to `in-progress` label swap), so the issue stays visible to `/pegar-issue` and the `/onda-enxuta`, with the responsável shown beside it. `ready-for-human` keeps it too.
 
 The port (A/B/C) is still the triage's call: the button only opens the door.
 

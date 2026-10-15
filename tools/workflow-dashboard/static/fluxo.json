@@ -32,7 +32,7 @@
 
     { "id": "triage", "x": 6, "y": 3.0, "w": 240, "classe": "auto", "skill": "triage", "titulo": "/triage ou issue com critérios", "sub": "a tarefa diz o que é estar pronto",
       "porque": "A lista do que conta como pronto é o combinado entre quem pede e quem faz. Ela vira os testes e é o que o revisor confere.",
-      "detalhe": "A tarefa nasce no GitHub, pelo /triage ou à mão, sempre com a lista do que precisa funcionar no fim. Só entra na fila a tarefa liberada, sem dono e sem outra tarefa travando." },
+      "detalhe": "A tarefa nasce no GitHub, pelo /triage ou à mão, sempre com a lista do que precisa funcionar no fim. Só entra na fila a tarefa liberada e sem outra tarefa travando. Ter alguém designado não tira da fila." },
     { "id": "pegar", "x": 6, "y": 4.0, "w": 240, "classe": "auto", "skill": "pegar-issue", "titulo": "/pegar-issue N", "sub": "reserva a tarefa e começa",
       "porque": "Várias sessões trabalham ao mesmo tempo. A reserva garante que duas nunca peguem a mesma tarefa.",
       "detalhe": "Marca a tarefa como sua no GitHub, cria um espaço separado para o código e lê o que foi pedido. Sem número, mostra a fila de tarefas livres. Depois segue sozinho até a entrega." },

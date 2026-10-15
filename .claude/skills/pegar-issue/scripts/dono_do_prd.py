@@ -7,8 +7,9 @@ bloquear o claim, e mostra o dono ao lado de cada fatia da fila.
 Uso:
   python3 dono_do_prd.py <N>     imprime o aviso, ou nada se a fatia é do próprio
                                  PRD, se o PRD não tem dono ou se a issue é avulsa
-  python3 dono_do_prd.py --fila  imprime a fila ready-for-agent sem dono e sem
-                                 bloqueio, em tabela, com o PRD e o dono dele
+  python3 dono_do_prd.py --fila  imprime a fila ready-for-agent sem bloqueio, em
+                                 tabela, com o PRD, o dono dele e quem está
+                                 designado (designar não tira da fila)
 """
 
 from __future__ import annotations
@@ -30,12 +31,15 @@ query($owner: String!, $repo: String!, $n: Int!) {{
 CONSULTA_DA_FILA = f"""
 query($q: String!) {{
   search(query: $q, type: ISSUE_ADVANCED, first: 100) {{
-    nodes {{ ... on Issue {{ number title labels(first: 20) {{ nodes {{ name }} }} {PAI} }} }}
+    nodes {{ ... on Issue {{
+      number title labels(first: 20) {{ nodes {{ name }} }}
+      assignees(first: 10) {{ nodes {{ login }} }} {PAI}
+    }} }}
   }}
 }}
 """
 
-FILTRO_DA_FILA = "is:issue is:open label:ready-for-agent no:assignee -is:blocked"
+FILTRO_DA_FILA = "is:issue is:open label:ready-for-agent -is:blocked"
 
 
 def gh(*args: str) -> str:
@@ -55,10 +59,10 @@ def repositorio() -> str:
     return gh("repo", "view", "--json", "nameWithOwner", "-q", ".nameWithOwner").strip()
 
 
-def donos(parent: dict | None) -> list[str]:
-    if not parent:
+def donos(issue: dict | None) -> list[str]:
+    if not issue:
         return []
-    return [a["login"] for a in parent["assignees"]["nodes"]]
+    return [a["login"] for a in issue["assignees"]["nodes"]]
 
 
 def aviso(donos_do_prd: list[str], login: str) -> str | None:
@@ -78,11 +82,18 @@ def linha(issue: dict) -> str:
         dono = ", ".join("@" + d for d in donos(parent)) or "sem dono"
     else:
         prd, dono = "avulsa", ""
-    return f"| {issue['number']} | {issue['title']} | {', '.join(labels)} | {prd} | {dono} |"
+    designados = ", ".join("@" + d for d in donos(issue))
+    return (
+        f"| {issue['number']} | {issue['title']} | {', '.join(labels)} | {prd} | {dono}"
+        f" | {designados} |"
+    )
 
 
 def tabela(issues: list[dict]) -> str:
-    cabecalho = ["| # | título | labels | PRD | dono do PRD |", "|---|---|---|---|---|"]
+    cabecalho = [
+        "| # | título | labels | PRD | dono do PRD | designada a |",
+        "|---|---|---|---|---|---|",
+    ]
     return "\n".join(cabecalho + [linha(i) for i in issues])
 
 
