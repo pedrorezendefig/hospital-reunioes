@@ -155,7 +155,7 @@ function cardSvg(p) {
   return `<g class="er-tab" data-t="${esc(t.nome)}" tabindex="0" role="group"
     aria-label="Tabela ${esc(t.nome)}: ${t.colunas.length + (t.extras || 0)} colunas"
     transform="translate(${p.x} ${p.y})" style="--i:${Math.min(p.i, 12)}"><g class="er-tab-lift">
-    <rect class="er-tab-fundo" x="0" y="0" width="${CW}" height="${g.h}" rx="10"/>
+    <rect class="er-tab-fundo" x="0" y="0" width="${CW}" height="${g.h}" rx="5"/>
     <rect class="er-tab-bar" x="0" y="7" width="3" height="${g.h - 14}" rx="1.5" style="fill:${cor}"/>
     <text class="er-tab-nome" data-act="ficha" data-t="${esc(t.nome)}" x="12" y="21">${esc(t.nome)}</text>
     ${verbete}
@@ -218,7 +218,7 @@ function erMiolo(diag) {
 
   const caixas = clusters.map(c => `
     <g class="er-cluster">
-      <rect x="${c.x}" y="${c.y}" width="${c.w}" height="${c.h}" rx="14"/>
+      <rect x="${c.x}" y="${c.y}" width="${c.w}" height="${c.h}" rx="6"/>
       <text x="${c.x + PAD}" y="${c.y + 20}" style="fill:${COR_DOMINIO[c.nome]}">${esc(c.nome.toUpperCase())} · ${c.n}</text>
     </g>`).join('');
 
@@ -294,7 +294,7 @@ function seqSvg(diag) {
   const colunas = parts.map(p => `
     <g class="seq-part" data-p="${esc(p.id)}">
       <line class="seq-life" x1="${cx[p.id]}" y1="${SQ_TOP + SQ_HEAD}" x2="${cx[p.id]}" y2="${H - 4}"/>
-      <rect x="${cx[p.id] - (colW - 18) / 2}" y="${SQ_TOP}" width="${colW - 18}" height="${SQ_HEAD}" rx="9"/>
+      <rect x="${cx[p.id] - (colW - 18) / 2}" y="${SQ_TOP}" width="${colW - 18}" height="${SQ_HEAD}" rx="5"/>
       <text x="${cx[p.id]}" y="${SQ_TOP + 19}">${esc(p.nome || p.id)}</text>
     </g>`).join('');
 
@@ -520,7 +520,7 @@ function estadoSvg(diag) {
   const nos = estados.map((n, i) => {
     const p = pos.get(n);
     return `<g class="st-no ${idxE.has(n) ? 'st-no-feliz' : 'st-no-desvio'}" data-e="${esc(n)}" style="--i:${Math.min(i, 12)}">
-      <rect x="${f(p.x - NW / 2)}" y="${f(p.y)}" width="${NW}" height="${NH}" rx="10"/>
+      <rect x="${f(p.x - NW / 2)}" y="${f(p.y)}" width="${NW}" height="${NH}" rx="5"/>
       <text x="${f(p.x)}" y="${f(p.y + NH / 2 + 4)}">${esc(n)}</text>
     </g>`;
   }).join('');
@@ -693,7 +693,7 @@ function flowSvg(diag) {
     const classe = n.decisao ? 'fl-no-decisao' : idxE.has(n.id) ? 'fl-no-feliz' : 'fl-no-desvio';
     const forma = n.decisao
       ? `<path d="M ${f(p.x)} ${f(p.y)} L ${f(p.x + DW / 2)} ${f(cy)} L ${f(p.x)} ${f(p.y + p.h)} L ${f(p.x - DW / 2)} ${f(cy)} Z"/>`
-      : `<rect x="${f(p.x - FW / 2)}" y="${f(p.y)}" width="${FW}" height="${p.h}" rx="10"/>`;
+      : `<rect x="${f(p.x - FW / 2)}" y="${f(p.y)}" width="${FW}" height="${p.h}" rx="5"/>`;
     const texto = n.linhas.map((l, j) =>
       `<text x="${f(p.x)}" y="${f(cy + (j - (n.linhas.length - 1) / 2) * FLH + 3.8)}">${esc(l)}</text>`).join('');
     return `<g class="fl-no ${classe}" data-n="${esc(n.id)}" style="--i:${Math.min(i, 12)}">${forma}${texto}</g>`;
@@ -745,8 +745,8 @@ function fxNo(p, i) {
   const tx = humano ? x0 + FX_PAD + FX_MAO : cx;
   const largura = w - 2 * FX_PAD - (humano ? FX_MAO : 0);
   const forma = n.classe === 'decisao'
-    ? `<rect x="${x0}" y="${top}" width="${w}" height="${h}" rx="10"/><rect x="${x0 + 3}" y="${top + 3}" width="${w - 6}" height="${h - 6}" rx="8"/>`
-    : `<rect x="${x0}" y="${top}" width="${w}" height="${h}" rx="10"/>`;
+    ? `<rect x="${x0}" y="${top}" width="${w}" height="${h}" rx="5"/><rect x="${x0 + 3}" y="${top + 3}" width="${w - 6}" height="${h - 6}" rx="3"/>`
+    : `<rect x="${x0}" y="${top}" width="${w}" height="${h}" rx="5"/>`;
   const mao = humano
     ? `<g class="fx-mao" transform="translate(${x0 + FX_PAD - 2} ${top + 9}) scale(.85)"><path d="${FX_MAO_PATH}"/></g>` : '';
   const titulo = `<text class="fx-t" x="${tx}" y="${top + 21}">${esc(corta(n.titulo || n.id, Math.floor(largura / FX_T)))}</text>`;
@@ -805,7 +805,7 @@ function fxRaia(r, CX, RY) {
   const titulo = String(r.titulo || '');
   const cw = Math.round(titulo.length * 6.8) + 22;
   const cx0 = r.alinhar === 'direita' ? x + w - 10 - cw : x + 10;
-  return `<g class="fx-raia"><rect x="${x}" y="${y}" width="${w}" height="${h}" rx="14"/>
+  return `<g class="fx-raia"><rect x="${x}" y="${y}" width="${w}" height="${h}" rx="6"/>
     <g class="fx-raia-chip"><rect x="${cx0}" y="${y + 10}" width="${cw}" height="22" rx="11"/>
     <text x="${cx0 + cw / 2}" y="${y + 25}" text-anchor="middle">${esc(titulo)}</text></g></g>`;
 }
