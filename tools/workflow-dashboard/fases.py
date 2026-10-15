@@ -386,7 +386,7 @@ def _fase_issue(
         )
     elif "blocked" in labels or any(b in abertas for b in issue["blocked_by"]):
         out["fase"] = "bloqueada"
-    elif "in-progress" in labels or issue["assignees"]:
+    elif "in-progress" in labels:
         out["fase"] = "em_andamento"
         out["branch"] = _branch_sem_pr(issue["number"], prs, branches)
         out["sub"] = "branch_criada" if out["branch"] else None
