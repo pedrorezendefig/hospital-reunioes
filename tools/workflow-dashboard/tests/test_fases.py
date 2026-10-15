@@ -226,6 +226,12 @@ def test_designada_sem_in_progress_fica_na_fila():
     assert _fase(issue)["fase"] == "fila"
 
 
+def test_designada_fora_da_fila_continua_em_andamento():
+    """A emenda vale só para a fila: needs-triage com assignee segue em andamento."""
+    issue = _issue(30, labels=["needs-triage"], assignees=["bia"])
+    assert _fase(issue)["fase"] == "em_andamento"
+
+
 def test_triagem_perde_para_o_bloqueio():
     issue = _issue(19, labels=["needs-triage"], blocked_by=[18])
     assert _fase(issue, outras=[_issue(18)])["fase"] == "bloqueada"
