@@ -30,7 +30,7 @@ O `/to-prd` cria a issue grande (o **PRD**); o `/to-issues` quebra em fatias e r
 - **De que PRD veio uma fatia:** a seção `Pai: #N` no corpo, ou o painel de sub-issues na UI da própria fatia.
 - Quando a **última fatia aberta** fecha, a [Action de higiene](#higiene-de-fechamento-github-action) fecha o PRD sozinha, com um comentário. O **claim e o paralelismo (abaixo) acontecem nas fatias**, não no PRD.
 - **Emenda (ADR 0068): o PRD tem dono.** O `/to-prd` põe como assignee do PRD quem fez o grilling. Isso não é claim (ninguém "trabalha o PRD"), é responsabilidade: fatia ainda sem claim conta, para efeito de visão, como do dono do PRD. O Hospital OS (painel local) filtra a aba Issues por quem está designado (assignee), sem herdar o dono do PRD (ADR 0068).
-- **Issue nascida de uma Demanda (botão "Levar para desenvolvimento", ADR 0054) nasce designada ao responsável do card.** Em `needs-triage` esse assignee é responsabilidade, não claim, pela mesma leitura do dono do PRD. A `/triage` tira o assignee ao mover para `ready-for-agent`, porque o pool é `no:assignee`. O Hospital OS marca essas issues com o chip "Demanda".
+- **Issue nascida de uma Demanda (botão "Levar para desenvolvimento", ADR 0054) nasce designada ao responsável do card.** Em `needs-triage` esse assignee é responsabilidade, não claim, pela mesma leitura do dono do PRD. A `/triage` mantém o assignee ao mover para `ready-for-agent`: designar não tira a issue da fila. O Hospital OS marca essas issues com o chip "Demanda".
 
 ## Higiene de fechamento (GitHub Action)
 
@@ -75,36 +75,26 @@ O `/to-issues` gera issues vertical-slice **independentes**. Várias sessões Cl
 
 ### 1. Ver a fila disponível
 ```bash
-gh issue list --label ready-for-agent --search "no:assignee -is:blocked" \
-  --json number,title,labels --jq '.[] | {number, title}'
+gh issue list --label ready-for-agent --search "-is:blocked" \
+  --json number,title,labels,assignees --jq '.[] | {number, title, assignees: [.assignees[].login]}'
 ```
-Só aparecem issues **prontas para agente**, **sem dono** e **sem bloqueio aberto** (o `-is:blocked` filtra server-side pelas dependências nativas; veja abaixo).
+Só aparecem issues **prontas para agente** e **sem bloqueio aberto** (o `-is:blocked` filtra server-side pelas dependências nativas; veja abaixo). Issue com alguém designado (assignee) continua na fila: designar não é claim, e quem roda a skill escolhe o número.
 
 ### 2. Claim atômico (o "lock")
 Ao escolher a issue `<N>`, marque-a sua imediatamente:
 ```bash
 gh issue edit <N> --remove-label ready-for-agent --add-label in-progress --add-assignee @me
 ```
-O `--remove-label ready-for-agent` é o lock: a issue **some da fila** para qualquer outra sessão.
+O `--remove-label ready-for-agent` é o lock: a issue **some da fila** para qualquer outra sessão. Se ele falhar porque a label já não estava lá, outra sessão pegou primeiro: pare e escolha outra. Assignee que já estava na issue não impede o claim e não é removido.
 
-### 3. Verificação anti-corrida (defensiva)
-Logo após o claim, releia os donos:
-```bash
-gh issue view <N> --json assignees --jq '.assignees[].login'
-```
-Se aparecer **mais de um dono** (duas sessões pegaram quase ao mesmo tempo), abra mão e pegue a próxima:
-```bash
-gh issue edit <N> --remove-assignee @me   # devolve para quem chegou primeiro
-```
-
-### 4. Isolar o filesystem: 1 worktree por issue
+### 3. Isolar o filesystem: 1 worktree por issue
 Para rodar em paralelo de verdade na mesma máquina, cada sessão trabalha num **git worktree** próprio (branches isoladas, mesmo `.git`, sem Docker), nascido da `origin/main` recém-buscada, e não do HEAD da árvore principal, que pode estar atrasado (issue #1081):
 ```bash
 git fetch origin && git worktree add ../hospital-issue-<N> -b <type>/<slug>-<N> origin/main
 ```
 Abra a sessão Claude Code dentro de `../hospital-issue-<N>`. O `EnterWorktree` nativo do Claude Code também resolve isso; nesse caso confira com `git log --oneline -1 origin/main` que a branch nasceu da ponta.
 
-### 5. Trabalhar e fechar
+### 4. Trabalhar e fechar
 - Branch determinística por número da issue: `<type>/<slug>-<N>` → nunca colide com outra.
 - O `/tdd` usa os **critérios de aceite** da issue como a lista de testes.
 - `/ship` abre o PR com `Closes #N` no corpo → ao mergear, o GitHub **fecha a issue**, e a [Action de higiene](#higiene-de-fechamento-github-action) remove o `in-progress` automaticamente.
@@ -125,7 +115,7 @@ Dependência entre issues usa o recurso nativo de **issue dependencies** do GitH
 - **Consultar os bloqueios de uma issue:** `gh api "repos/$REPO/issues/<N>/dependencies/blocked_by" --jq '.[].number'` (o `gh` local ainda não expõe `blockedBy` em `--json`).
 - **Regra da fila:** a busca resolve tudo server-side; issue bloqueada nem aparece:
   ```bash
-  gh issue list --label ready-for-agent --search "no:assignee -is:blocked"
+  gh issue list --label ready-for-agent --search "-is:blocked"
   ```
 - **Destravamento é automático:** quando a última bloqueadora fecha, `is:blocked` deixa de casar e a issue reaparece na fila sozinha. Não há varredura manual nem label para flipar; a fatia bloqueada já nasce com `ready-for-agent`.
 - **Atenção (REST legado):** automação que use `GET /search/issues` precisa de `advanced_search=true`, senão `is:blocked` é ignorado em silêncio. O `gh issue list --search` já usa a busca certa.
@@ -139,7 +129,7 @@ Protocolo para a skill `/wayfinder` (planejamento multi-sessão de esforços com
 - **Tickets** = sub-issues nativas do mapa (mesmo `gh api .../sub_issues` do vínculo PRD → fatias). Cada ticket resolve **uma** decisão ou investigação, com label `wayfinder:<type>` (`research` AFK, `prototype`/`grilling` HITL, `task` conforme marcado).
 - **Bloqueio entre tickets** = dependência nativa "blocked by" (mesma mecânica da seção acima).
 - **Frontier** (o que está pegável) = filhas abertas, desbloqueadas e **sem assignee**. Liste as filhas com `gh api "repos/$REPO/issues/<mapa>/sub_issues"` e filtre por estado aberto, sem assignee e sem bloqueio nativo aberto.
-- **Claim** = assignee apenas (a atribuição é o lock; mesma verificação anti-corrida do protocolo de paralelismo).
+- **Claim** = assignee apenas (a atribuição é o lock: ticket wayfinder não tem `ready-for-agent`, então não usa a troca de label do protocolo de paralelismo).
 - **Tickets wayfinder NUNCA recebem `ready-for-agent`** nem entram na máquina de estados do `/triage`: a fila de execução (`/pegar-issue`, `/onda-enxuta`) enxerga só issues de build. As duas filas não colidem.
 - **Resolução:** a resposta vira comentário no ticket, o ticket fecha, e o mapa ganha uma linha em "Decisions so far". Tickets tipo `grilling` usam `/grill-with-docs` (decisões atualizam `CONTEXT.md`/ADR inline).
 - **Idioma:** corpo e comentários em pt-BR; os labels técnicos (`wayfinder:map`, `wayfinder:<type>`) ficam em inglês, como commit e merge.

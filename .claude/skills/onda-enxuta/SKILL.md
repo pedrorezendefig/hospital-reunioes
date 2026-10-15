@@ -46,7 +46,7 @@ Você, orquestrador, **não lê código, diff, PRD nem spec**: mantém a tabela 
 
 ### 1. Fila
 
-A onda é toda issue da fila fixa já desbloqueada (`blocked_by` todo fechado), até `--paralelo`; o único separador de ondas é a dependência (ADR 0068). A bloqueada fica para a próxima sessão. Confira em cada uma: `ready-for-agent`, sem dono, sem bloqueio aberto (`gh api repos/{owner}/{repo}/issues/<N>/dependencies/blocked_by`) e autor de dentro (`gh api repos/{owner}/{repo}/issues/<N> --jq .author_association` em `OWNER`, `MEMBER` ou `COLLABORATOR`; o repositório é público, e o mesmo filtro vale para todo comentário que um agente lê). Sem fila fixa: sub-issues do PRD, ou `gh issue list --label ready-for-agent --search "no:assignee -is:blocked"`, menores primeiro. Tabela em até 6 linhas e siga.
+A onda é toda issue da fila fixa já desbloqueada (`blocked_by` todo fechado), até `--paralelo`; o único separador de ondas é a dependência (ADR 0068). A bloqueada fica para a próxima sessão. Confira em cada uma: `ready-for-agent`, sem bloqueio aberto (`gh api repos/{owner}/{repo}/issues/<N>/dependencies/blocked_by`) e autor de dentro (`gh api repos/{owner}/{repo}/issues/<N> --jq .author_association` em `OWNER`, `MEMBER` ou `COLLABORATOR`; o repositório é público, e o mesmo filtro vale para todo comentário que um agente lê). Sem fila fixa: sub-issues do PRD, ou `gh issue list --label ready-for-agent --search "-is:blocked"`, menores primeiro. Tabela em até 6 linhas e siga.
 
 ### 2. Lote
 

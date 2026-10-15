@@ -328,7 +328,7 @@ Rode estes comandos um por um e confirme o resultado esperado:
 ```
 /pegar-issue
 ```
-Esperado: tabela com as issues `ready-for-agent` sem dono (pode estar vazia se ninguém criou issues ainda). Se responde "comando não encontrado", a skill local não foi carregada — confirme que está no diretório do repo.
+Esperado: tabela com as issues `ready-for-agent` desbloqueadas (pode estar vazia se ninguém criou issues ainda). Se responde "comando não encontrado", a skill local não foi carregada — confirme que está no diretório do repo.
 
 ### 6.2 `/deploy status` mostra estado da produção
 ```
