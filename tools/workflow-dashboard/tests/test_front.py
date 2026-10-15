@@ -58,9 +58,9 @@ def test_titulo_do_painel_e_hospital_os():
 def test_tokens_definem_a_paleta_baseline():
     root = _root_block().lower()
     for hexa in (
-        "#0f2f63",  # navy profundo
-        "#2563c9",  # azul royal
-        "#5790e6",  # azul claro
+        "#363573",  # índigo da logo
+        "#31559f",  # azul da logo
+        "#6f8fd0",  # azul claro
         "#0b6e97",  # teal
         "#f4f4f4",  # superfície
         "#0a0a0a",  # tinta
@@ -86,9 +86,9 @@ def test_tokens_definem_tints_alpha_e_raios():
         "--navy40",
     ):
         assert f"{tok}:" in root, f"tint {tok} ausente do bloco de tokens"
-    assert "--r-card:1.5rem" in root
-    assert "--r-card-lg:2rem" in root
-    assert "--r-inner:.75rem" in root
+    assert "--r-card:6px" in root
+    assert "--r-card-lg:8px" in root
+    assert "--r-inner:5px" in root
     assert "--r-pill:" in root
 
 
@@ -176,7 +176,7 @@ def test_inset_branco_com_secoes_cartao():
     assert "padding:.5rem" in body.group(0), "inset de 0.5rem ausente no body"
     assert ".75rem" in re.search(r"@media \(min-width:640px\)\{[^}]*\}+", CSS).group(0)
     card = re.search(r"\.card\{[^}]*\}", CSS)
-    assert card and "var(--r-card)" in card.group(0), "cartões fora do raio 1.5rem"
+    assert card and "var(--r-card)" in card.group(0), "cartões fora do raio de 6px"
 
 
 def test_footer_navy_com_hairlines_translucidas():

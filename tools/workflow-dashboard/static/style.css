@@ -1,5 +1,7 @@
 /* Fluxo vivo, dashboard do workflow · Hospital Reuniões
-   Identidade Baseline (navy · branco · azul royal · Onest), reskin da issue 258.
+   Identidade Baseline (navy · branco · azul royal · Onest), reskin da issue 258,
+   com as cores da logo do Hospital São Matheus (índigo e azul) e o trilho
+   de ícones na esquerda.
    O bloco :root abaixo é a ÚNICA fonte de verdade da identidade visual:
    paleta, tints alpha, raios, semânticas de status e tipografia. Nenhuma
    cor fixa pode viver fora dele. */
@@ -8,16 +10,19 @@
 
 :root{
   /* paleta base */
-  --navy:#0f2f63; --brand:#2563c9; --brand-light:#5790e6; --teal:#0b6e97;
+  /* --navy e --brand são o índigo e o azul da logo do Hospital São Matheus */
+  --navy:#363573; --brand:#31559f; --brand-light:#6f8fd0; --teal:#0b6e97;
   --bg:#ffffff; --surface:#f4f4f4; --ink:#0a0a0a; --ink-soft:#717784;
   --ghost:#d7dae1; --hairline:#e6e8ec; --on-navy:#ffffff;
+  /* linha que carrega informação (seta, aresta, borda de nó): 3:1 sobre o branco e a superfície (WCAG 1.4.11) */
+  --linha-forte:#7f8696;
   /* tints alpha: branco sobre navy (cards glassy, bordas, captions) e navy velado */
   --w10:rgba(255,255,255,.10); --w15:rgba(255,255,255,.15); --w20:rgba(255,255,255,.20);
   --w25:rgba(255,255,255,.25); --w40:rgba(255,255,255,.40); --w55:rgba(255,255,255,.55);
   --w65:rgba(255,255,255,.65); --w70:rgba(255,255,255,.70); --w80:rgba(255,255,255,.80);
-  --navy40:rgba(15,47,99,.40);
+  --navy40:rgba(54,53,115,.40);
   /* raios */
-  --r-card:1.5rem; --r-card-lg:2rem; --r-pill:999px; --r-inner:.75rem;
+  --r-card:6px; --r-card-lg:8px; --r-pill:999px; --r-inner:5px;
   /* semânticas de status re-harmonizadas sobre a paleta (legíveis nos dois planos) */
   --green:#1a7a4f; --green-wash:#e1efe8;
   --red:#c03028; --red-wash:#f7e3e1;
@@ -25,7 +30,7 @@
   --purple:#6d5bd0; --purple-wash:#eae7f8;
   --blue:#0b6e97; --blue-wash:#e0eef4;
   --coral:#b4552d; --coral-wash:#f6e8df;
-  --brand-wash:#e4edfb;
+  --brand-wash:#e6ebf6;
   /* aliases estruturais: componentes herdados leem estes nomes */
   --paper:var(--bg); --paper-2:var(--surface); --card:#ffffff;
   --indigo:var(--brand); --indigo-2:var(--brand-light); --indigo-wash:var(--brand-wash);
@@ -38,6 +43,7 @@
   /* tipografia: Onest 400/500 como família única de texto; mono para shas e comandos */
   --sans:"Onest",system-ui,sans-serif;
   --mono:"IBM Plex Mono",ui-monospace,SFMono-Regular,monospace;
+  --rail:252px;
 }
 
 *{box-sizing:border-box}
@@ -47,9 +53,9 @@ body{
   font-family:var(--sans); font-weight:400;
   font-size:16px; line-height:1.6; letter-spacing:.005em;
   -webkit-font-smoothing:antialiased; overflow-x:hidden;
-  padding:.5rem;
+  padding:.5rem; padding-left:calc(var(--rail) + .5rem);
 }
-@media (min-width:640px){body{padding:.75rem}}
+@media (min-width:640px){body{padding:.75rem; padding-left:calc(var(--rail) + .75rem)}}
 .wrap{position:relative; z-index:1; max-width:1180px; margin:0 auto; padding:0 28px}
 a{color:var(--indigo); text-underline-offset:3px; text-decoration-thickness:1.5px}
 ::selection{background:var(--indigo-wash)}
@@ -61,23 +67,32 @@ h1,h2,h3{font-family:var(--sans); font-weight:500; letter-spacing:-.018em; line-
 ::-webkit-scrollbar-thumb{background:var(--line-2); border-radius:var(--r-pill)}
 ::-webkit-scrollbar-track{background:transparent}
 
-/* ---------- hero navy ---------- */
-.hero{position:relative; z-index:1; background:var(--navy); color:var(--on-navy);
-  border-radius:var(--r-card-lg); padding:34px 0 92px; min-height:24vh;
-  display:flex; flex-direction:column; justify-content:center}
-.mast-top{display:flex; align-items:center; justify-content:space-between; gap:18px; flex-wrap:wrap}
+/* ---------- barra lateral: a navegação inteira, logo no topo e status no pé ---------- */
+.ico{width:20px; height:20px; flex:none; fill:none; stroke:currentColor; stroke-width:1.8;
+  stroke-linecap:round; stroke-linejoin:round}
+/* as duas cores da logo entram por variável: o <use> não deixa o seletor entrar */
+.logo{display:inline-block; flex:none}
+.hsm-a{fill:var(--logo-a)}
+.hsm-b{fill:var(--logo-b)}
+.sr-only{position:absolute; width:1px; height:1px; overflow:hidden; clip:rect(0 0 0 0); white-space:nowrap}
+
+.hero{position:fixed; z-index:60; top:.75rem; bottom:.75rem; left:.75rem; width:calc(var(--rail) - .75rem);
+  background:var(--navy); color:var(--on-navy); border-radius:var(--r-card-lg);
+  padding:26px 14px 18px; display:flex; flex-direction:column; gap:30px; overflow-y:auto}
 .eyebrow{font-family:var(--mono); font-size:12px; font-weight:500; letter-spacing:.22em;
   text-transform:uppercase; color:var(--w70); display:inline-flex; align-items:center; gap:10px}
 .eyebrow::before{content:""; width:8px; height:8px; border-radius:var(--r-pill); background:var(--brand-light); flex:none}
-.hero-title{font-size:clamp(28px,4vw,46px); margin:14px 0 4px; max-width:20ch;
-  font-weight:500; letter-spacing:-.02em; line-height:1.1; color:var(--on-navy)}
-.hero-title .accent{color:var(--brand-light)}
+.hero-title{font-size:28px; margin:0 6px; font-weight:500; letter-spacing:-.02em; line-height:1.1; color:var(--on-navy)}
+.hero-title .clip-inner{display:inline-flex; align-items:center; gap:.4em}
+.hero-title .logo{width:3.6em; height:1.9em}
+.hero-title{--logo-a:var(--w70); --logo-b:var(--on-navy)}
+.hero-title .accent{color:var(--on-navy); padding-left:.4em; border-left:1px solid var(--w25)}
 
-.mast-status{display:flex; align-items:center; gap:10px; flex-wrap:wrap}
+.mast-status{display:flex; flex-direction:column; align-items:flex-start; gap:10px; margin-top:auto; padding:0 4px}
 .capsule{display:inline-flex; align-items:center; gap:9px; background:var(--w10);
-  border:1px solid var(--w15); border-radius:var(--r-pill); padding:7px 14px;
+  border:1px solid var(--w15); border-radius:var(--r-pill); padding:6px 12px;
   backdrop-filter:blur(8px); -webkit-backdrop-filter:blur(8px);
-  font-family:var(--mono); font-size:12.5px; color:var(--w80); white-space:nowrap}
+  font-family:var(--mono); font-size:11.5px; color:var(--w80); white-space:nowrap}
 .capsule b{color:var(--on-navy); font-weight:500}
 /* no plano claro (conteúdo das abas) a cápsula troca pro card branco */
 main .capsule{background:var(--card); border-color:var(--ghost); color:var(--ink-soft)}
@@ -90,16 +105,13 @@ main .capsule b{color:var(--ink)}
 .iconbtn.spin{animation:spin .9s linear infinite}
 @keyframes spin{to{transform:rotate(360deg)}}
 
-/* ---------- tabs em pills (trilho navy colado no hero, gruda no scroll) ---------- */
-.tabs{position:sticky; top:.5rem; z-index:40; display:flex; justify-content:center;
-  margin:-62px 16px 26px}
-.tabs-row{display:flex; gap:4px; overflow-x:auto; scrollbar-width:none; max-width:100%;
-  background:color-mix(in srgb, var(--navy) 92%, transparent); border:1px solid var(--w15);
-  border-radius:var(--r-pill); padding:5px;
-  backdrop-filter:blur(8px); -webkit-backdrop-filter:blur(8px)}
+/* ---------- abas: lista vertical na barra, a ativa em pílula branca ---------- */
+.tabs{display:block}
+.tabs-row{display:flex; flex-direction:column; gap:4px; scrollbar-width:none}
 .tabs-row::-webkit-scrollbar{display:none}
-.tabs-row button{appearance:none; background:none; border:0; cursor:pointer; padding:9px 16px;
-  font-family:var(--mono); font-size:12.5px; font-weight:500; letter-spacing:.03em;
+.tabs-row button{appearance:none; display:flex; align-items:center; gap:12px; width:100%;
+  background:none; border:0; cursor:pointer; padding:11px 14px; text-align:left;
+  font-family:var(--sans); font-size:15px; font-weight:500;
   color:var(--w70); border-radius:var(--r-pill); white-space:nowrap;
   transition:color .15s ease, background .15s ease}
 .tabs-row button.on{background:var(--on-navy); color:var(--navy)}
@@ -154,7 +166,7 @@ main.wrap{background:var(--surface); border-radius:var(--r-card-lg);
 @keyframes pulse{0%,100%{box-shadow:0 0 0 0 color-mix(in srgb, var(--green) 35%, transparent)} 50%{box-shadow:0 0 0 6px transparent}}
 
 .chip{display:inline-flex; align-items:center; gap:6px; font-family:var(--mono); font-size:11.5px;
-  background:var(--paper-2); border:1px solid var(--line); border-radius:8px; padding:3px 9px; color:var(--ink-soft)}
+  background:var(--paper-2); border:1px solid var(--line); border-radius:var(--r-inner); padding:3px 9px; color:var(--ink-soft)}
 
 /* ---------- controles ---------- */
 .controls{display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin:14px 0 18px}
@@ -242,7 +254,7 @@ main.wrap{background:var(--surface); border-radius:var(--r-card-lg);
   animation:erIn .5s cubic-bezier(.16,.8,.3,1) backwards; animation-delay:calc(var(--i,0)*28ms)}
 .er-tab-lift{transition:transform .22s ease}
 .er-tab.on .er-tab-lift,.er-tab:focus-visible .er-tab-lift{transform:translateY(-2px)}
-.er-tab-fundo{fill:var(--card); stroke:var(--line-2); stroke-width:1.2; transition:stroke .18s ease}
+.er-tab-fundo{fill:var(--card); stroke:var(--linha-forte); stroke-width:1.2; transition:stroke .18s ease}
 .er-tab:hover .er-tab-fundo,.er-tab:focus-visible .er-tab-fundo,.er-tab.on .er-tab-fundo{stroke:var(--brand); stroke-width:1.6}
 .er-tab-nome{font:500 13px var(--mono); fill:var(--ink); cursor:pointer}
 .er-tab-nome:hover{fill:var(--brand)}
@@ -260,7 +272,7 @@ main.wrap{background:var(--surface); border-radius:var(--r-card-lg);
 .er-col-fk:hover .er-col-nome,.er-col-fk:hover .er-col-dest,.er-col.fk-on .er-col-nome{fill:var(--brand)}
 .er-col-extra{font:500 10px var(--mono); fill:var(--amber)}
 /* arestas com fluxo contínuo sutil; o hover pinta de coral e acelera o traço */
-.er-edge{fill:none; stroke:var(--indigo); stroke-width:1.1; opacity:.3;
+.er-edge{fill:none; stroke:var(--indigo); stroke-width:1.2; opacity:.85;
   stroke-dasharray:4 7; animation:erFluxo 1.6s linear infinite; transition:opacity .18s ease}
 .er-edge-pt{fill:var(--indigo); opacity:.3; transition:opacity .18s ease}
 .er-hover .er-tab:not(.on){opacity:.22}
@@ -280,7 +292,7 @@ main.wrap{background:var(--surface); border-radius:var(--r-card-lg);
 .st-hint{font-family:var(--mono); font-size:11px; color:var(--ink-soft); opacity:.85; margin-bottom:10px}
 .st-svg{display:block; width:100%; max-width:720px; height:auto; margin:0 auto}
 .st-no{animation:erIn .5s cubic-bezier(.16,.8,.3,1) backwards; animation-delay:calc(var(--i,0)*28ms)}
-.st-no rect{fill:var(--card); stroke:var(--line-2); stroke-width:1.2}
+.st-no rect{fill:var(--card); stroke:var(--linha-forte); stroke-width:1.2}
 .st-no-feliz rect{stroke:var(--indigo); stroke-width:1.6}
 .st-no-desvio rect{fill:color-mix(in srgb, var(--amber) 9%, var(--card))}
 .st-no text{font:500 11.5px var(--mono); fill:var(--ink); text-anchor:middle}
@@ -289,9 +301,9 @@ main.wrap{background:var(--surface); border-radius:var(--r-card-lg);
 .st-fim circle:last-child{fill:var(--ink)}
 .st-rel{cursor:pointer; outline:none}
 .st-hit{fill:none; stroke:transparent; stroke-width:16}
-.st-edge{fill:none; stroke:var(--ink-soft); stroke-width:1.3; opacity:.5;
+.st-edge{fill:none; stroke:var(--linha-forte); stroke-width:1.3; opacity:1;
   transition:opacity .18s ease, stroke .18s ease}
-.st-seta{fill:var(--ink-soft); opacity:.6; transition:opacity .18s ease, fill .18s ease}
+.st-seta{fill:var(--linha-forte); opacity:1; transition:opacity .18s ease, fill .18s ease}
 .st-rel.feliz .st-edge{stroke:var(--indigo); stroke-width:2; animation:stPulso 2.8s ease-in-out infinite}
 .st-rel.feliz .st-seta{fill:var(--indigo); opacity:.9}
 .st-hover .st-rel:not(.on) .st-edge{opacity:.1; animation:none}
@@ -310,13 +322,13 @@ main.wrap{background:var(--surface); border-radius:var(--r-card-lg);
 .fl-hint{font-family:var(--mono); font-size:11px; color:var(--ink-soft); opacity:.85; margin-bottom:10px}
 .fl-svg{display:block; width:100%; max-width:760px; height:auto; margin:0 auto}
 .fl-no{animation:erIn .5s cubic-bezier(.16,.8,.3,1) backwards; animation-delay:calc(var(--i,0)*28ms)}
-.fl-no rect,.fl-no path{fill:var(--card); stroke:var(--line-2); stroke-width:1.2}
+.fl-no rect,.fl-no path{fill:var(--card); stroke:var(--linha-forte); stroke-width:1.2}
 .fl-no-feliz rect{stroke:var(--indigo); stroke-width:1.6}
 .fl-no-desvio rect{fill:color-mix(in srgb, var(--amber) 9%, var(--card))}
 .fl-no-decisao path{stroke:var(--brand); stroke-width:1.8; fill:color-mix(in srgb, var(--brand) 7%, var(--card))}
 .fl-no text{font:500 10.5px var(--mono); fill:var(--ink); text-anchor:middle}
-.fl-edge{fill:none; stroke:var(--ink-soft); stroke-width:1.3; opacity:.5}
-.fl-seta{fill:var(--ink-soft); opacity:.6}
+.fl-edge{fill:none; stroke:var(--linha-forte); stroke-width:1.3}
+.fl-seta{fill:var(--linha-forte)}
 .fl-rel.feliz .fl-edge{stroke:var(--indigo); stroke-width:2; animation:stPulso 2.8s ease-in-out infinite}
 .fl-rel.feliz .fl-seta{fill:var(--indigo); opacity:.9}
 .fl-rotulo{font:500 10.5px var(--mono); fill:var(--brand); text-anchor:middle;
@@ -485,7 +497,7 @@ body.er-lock main{z-index:130}
   gap:12px; padding:7px 18px; border-top:1px dashed var(--line); position:relative}
 .rt-row:hover{background:color-mix(in srgb, var(--paper-2) 45%, transparent)}
 .rt-met{font-family:var(--mono); font-size:10px; font-weight:500; letter-spacing:.06em; text-align:center;
-  border-radius:7px; padding:2px 0; border:1px solid transparent}
+  border-radius:var(--r-inner); padding:2px 0; border:1px solid transparent}
 .rt-get{background:var(--green-wash); color:var(--green); border-color:color-mix(in srgb, var(--green) 25%, transparent)}
 .rt-post{background:var(--indigo-wash); color:var(--indigo); border-color:color-mix(in srgb, var(--brand) 22%, transparent)}
 .rt-patch{background:var(--amber-wash); color:var(--amber); border-color:color-mix(in srgb, var(--amber) 30%, transparent)}
@@ -556,11 +568,11 @@ body.er-lock main{z-index:130}
 .ctx-app-nome{font:500 15px var(--mono); fill:var(--on-navy); text-anchor:middle}
 .ctx-app-sub{font:400 10.5px var(--mono); fill:var(--indigo-wash); text-anchor:middle}
 .ctx-svc{cursor:pointer; outline:none}
-.ctx-svc rect{fill:var(--card); stroke:var(--line-2); stroke-width:1.4; transition:stroke .18s ease}
+.ctx-svc rect{fill:var(--card); stroke:var(--linha-forte); stroke-width:1.4; transition:stroke .18s ease}
 .ctx-svc:hover rect,.ctx-svc:focus-visible rect,.ctx-svc.on rect{stroke:var(--brand); stroke-width:2}
 .ctx-nome{font:500 13px var(--mono); fill:var(--ink); text-anchor:middle}
 .ctx-sub{font:400 8.5px var(--mono); fill:var(--ink-soft); text-anchor:middle}
-.ctx-seta{stroke:var(--indigo); stroke-width:1.6; opacity:.45; fill:none; transition:opacity .18s ease}
+.ctx-seta{stroke:var(--indigo); stroke-width:1.6; opacity:1; fill:none; transition:opacity .18s ease}
 #ctxPonta path{fill:var(--indigo)}
 .ctx-rotulo{font:500 10.5px var(--mono); fill:var(--brand); text-anchor:middle;
   paint-order:stroke; stroke:var(--card); stroke-width:3px; opacity:.9}
@@ -580,7 +592,7 @@ body.er-lock main{z-index:130}
 .tr-local{font-family:var(--mono); font-size:11px; color:var(--ink-soft); margin:3px 0 10px}
 .tr-arvore{border-top:1px dashed var(--line); padding-top:8px}
 .tr-no{display:flex; align-items:baseline; gap:10px; padding:4px 8px 4px calc(8px + var(--n,0)*18px);
-  border-radius:8px; position:relative}
+  border-radius:var(--r-inner); position:relative}
 .tr-no:hover{background:color-mix(in srgb, var(--paper-2) 55%, transparent)}
 .tr-nome{font-family:var(--mono); font-size:12.5px; color:var(--ink-soft); white-space:nowrap}
 .tr-dir .tr-nome{color:var(--ink); font-weight:500}
@@ -783,14 +795,14 @@ body.er-lock main{z-index:130}
 /* ============ Ajustes pós-entrega do reskin (issue 268) ============ */
 /* Fatia dentro do grupo do PRD ganha contorno hairline pra dar dimensão
    e separação; só tokens, coerente com os cards claros do painel. */
-.children > .nrow{border:1px solid var(--hairline); border-radius:14px;
+.children > .nrow{border:1px solid var(--hairline); border-radius:var(--r-card);
   padding:14px 16px; background:var(--card)}
 .children{border-left:0; padding-left:0}
 /* ============ fim ajustes (issue 268) ============ */
 
 /* card que o hash aponta (#issues/930, #producao/v0.161.0; issue 944): fundo
    lavado e filete brand. Depois do bloco 268 para vencer o fundo da fatia. */
-.nrow[aria-current="true"]{background:var(--brand-wash); border-radius:14px; box-shadow:inset 3px 0 0 var(--brand)}
+.nrow[aria-current="true"]{background:var(--brand-wash); border-radius:var(--r-card); box-shadow:inset 3px 0 0 var(--brand)}
 .pd-card[aria-current="true"]{border-color:var(--brand); box-shadow:0 0 0 1px var(--brand)}
 /* o GitHub é o link secundário de cada card: no deploy, o ↗ do commit */
 .pd-gh{font-size:14px; line-height:1; color:var(--ink-soft); text-decoration:none; padding:2px 6px}
@@ -839,7 +851,7 @@ body.er-lock main{z-index:130}
 .dd.open .dd-menu{display:block; animation:dd-in .14s var(--ease-quart)}
 @keyframes dd-in{from{opacity:0; transform:translateY(-4px)}to{opacity:1; transform:none}}
 .dd-opt{appearance:none; cursor:pointer; display:flex; align-items:center; gap:8px; width:100%; text-align:left;
-  font-family:var(--mono); font-size:12px; background:transparent; border:0; border-radius:8px; padding:8px 10px; color:var(--ink)}
+  font-family:var(--mono); font-size:12px; background:transparent; border:0; border-radius:var(--r-inner); padding:8px 10px; color:var(--ink)}
 .dd-opt:hover{background:var(--surface)}
 .dd-opt.on{background:var(--brand-wash); color:var(--brand)}
 .dd-opt .pessoa-dot{margin-right:0}
@@ -905,8 +917,8 @@ body.er-lock main{z-index:130}
 .onda-faixa{stroke:var(--hairline); stroke-width:1}
 .onda-seta path{fill:none; stroke:var(--red); stroke-width:1.5; opacity:.8}
 .onda-seta .onda-ponta{fill:var(--red); stroke:none}
-.onda-fluxo path{fill:none; stroke:var(--ghost); stroke-width:1.6}
-.onda-fluxo .onda-ponta{fill:var(--ghost); stroke:none}
+.onda-fluxo path{fill:none; stroke:var(--linha-forte); stroke-width:1.6}
+.onda-fluxo .onda-ponta{fill:var(--linha-forte); stroke:none}
 .onda-no{cursor:pointer}
 .onda-anel{fill:var(--card); stroke:var(--fase); stroke-width:2.5}
 .onda-dot{fill:var(--pessoa)}
@@ -920,11 +932,11 @@ body.er-lock main{z-index:130}
 .onda-f-mergeada{--fase:var(--purple)}
 .onda-f-em_producao{--fase:var(--green)}
 .onda-f-humana{--fase:var(--coral)}
-.onda-f-encerrada_sem_pr{--fase:var(--ghost)}
+.onda-f-encerrada_sem_pr{--fase:var(--linha-forte)}
 /* PR e versão: links de hash; a borda do PR é a fase dele no quadro da aba PRs */
 .onda-pr,.onda-ver{cursor:pointer; text-decoration:none}
-.onda-pr-corpo{fill:var(--card); stroke:var(--fase-pr, var(--ghost)); stroke-width:2; stroke-dasharray:none}
-.onda-p-aberto_sem_ci{--fase-pr:var(--ghost)}
+.onda-pr-corpo{fill:var(--card); stroke:var(--fase-pr, var(--linha-forte)); stroke-width:2; stroke-dasharray:none}
+.onda-p-aberto_sem_ci{--fase-pr:var(--linha-forte)}
 .onda-p-ci_vermelho{--fase-pr:var(--red)}
 .onda-p-esperando_revisor{--fase-pr:var(--blue)}
 .onda-p-verde_esperando_merge{--fase-pr:var(--brand)}
@@ -1045,7 +1057,7 @@ body.er-lock main{z-index:130}
 .fx-raia-chip rect{fill:var(--card); stroke:var(--line-2); stroke-width:1}
 .fx-raia-chip text{font:500 11px var(--mono); letter-spacing:.06em; fill:var(--ink-soft)}
 .fx-no{cursor:pointer; outline:none; animation:erIn .5s cubic-bezier(.16,.8,.3,1) backwards; animation-delay:calc(var(--i,0)*22ms)}
-.fx-no rect{fill:var(--card); stroke:var(--line-2); stroke-width:1.2; transition:stroke-width .18s ease}
+.fx-no rect{fill:var(--card); stroke:var(--linha-forte); stroke-width:1.2; transition:stroke-width .18s ease}
 .fx-auto rect{stroke:var(--brand); fill:color-mix(in srgb, var(--brand) 6%, var(--card))}
 .fx-humano rect{stroke:var(--amber); stroke-width:1.6; fill:var(--amber-wash)}
 .fx-decisao rect{stroke:var(--ink-soft); fill:var(--paper-2)}
@@ -1058,7 +1070,7 @@ body.er-lock main{z-index:130}
 .fx-mao path{fill:none; stroke:var(--amber); stroke-width:1.6; stroke-linecap:round; stroke-linejoin:round}
 .fx-no:hover rect:first-child,.fx-no:focus-visible rect:first-child,.fx-no.on rect:first-child{stroke-width:2.4}
 .fx-no.on rect:first-child{filter:drop-shadow(0 4px 10px color-mix(in srgb, var(--navy) 18%, transparent))}
-.fx-edge{fill:none; stroke:var(--ink-soft); stroke-width:1.4; opacity:.7}
+.fx-edge{fill:none; stroke:var(--linha-forte); stroke-width:1.4}
 .fx-edge.fx-tracejada{stroke-dasharray:5 4}
 .fx-seta{fill:var(--ink-soft)}
 .fx-rotulo{font:500 10.5px var(--mono); fill:var(--brand);
@@ -1110,7 +1122,7 @@ body.er-lock main{z-index:130}
 .adr-setas{position:absolute; inset:0; width:100%; height:100%; pointer-events:none; z-index:2; overflow:visible}
 .adr-grade{display:grid; grid-template-columns:repeat(auto-fill, minmax(150px, 1fr)); gap:22px 20px}
 .adr-mini{position:relative; display:flex; flex-direction:column; gap:5px; min-height:88px; min-width:0; padding:9px 11px;
-  background:var(--card); border:1px solid var(--line-2); border-radius:10px; cursor:pointer;
+  background:var(--card); border:1px solid var(--line-2); border-radius:var(--r-card); cursor:pointer;
   transition:opacity .18s ease, border-color .18s ease, box-shadow .18s ease}
 .adr-mini:hover,.adr-mini:focus-visible{border-color:var(--brand); outline:none}
 .adr-mini.on{border-color:var(--brand); box-shadow:0 0 0 2px var(--brand-wash)}
@@ -1167,3 +1179,37 @@ body.er-lock main{z-index:130}
 .g-chips .chip:hover{border-color:var(--indigo); color:var(--indigo)}
 .g-termo{scroll-margin-top:90px}
 .md p.g-alvo{background:var(--brand-wash); border-radius:var(--r-inner); padding:6px 10px; margin-left:-10px; margin-right:-10px}
+
+/* telas estreitas: a barra lateral vira faixa no topo, com as abas em linha */
+@media (max-width:768px){
+  body{padding-left:.5rem}
+  .hero{position:relative; top:auto; bottom:auto; left:auto; width:auto; margin-bottom:.5rem; gap:16px}
+  .tabs-row{flex-direction:row; overflow-x:auto}
+  .tabs-row button{width:auto}
+  .mast-status{flex-direction:row; flex-wrap:wrap; align-items:center; margin-top:0}
+}
+
+/* ---------- vida: o conteúdo entra ao trocar de aba, a barra entra em sequência,
+   o ícone responde ao mouse e o trabalho em andamento pulsa devagar.
+   Com prefers-reduced-motion, a regra global de motion zera tudo isso. ---------- */
+@keyframes entra{from{opacity:0; transform:translateY(10px)}}
+@keyframes entraLado{from{opacity:0; transform:translateX(-12px)}}
+@keyframes icoPop{40%{transform:scale(1.18)}}
+@keyframes andamento{0%,100%{stroke-opacity:1} 50%{stroke-opacity:.35}}
+#view.vw-entra > *{animation:entra .5s var(--ease-expo) both}
+#view.vw-entra > *:nth-child(2){animation-delay:.06s}
+#view.vw-entra > *:nth-child(3){animation-delay:.12s}
+#view.vw-entra > *:nth-child(n+4){animation-delay:.18s}
+.hero-title,.hero-tag{animation:entra .6s var(--ease-expo) backwards}
+.tabs-row button{animation:entraLado .5s var(--ease-expo) backwards}
+.tabs-row button:nth-child(1){animation-delay:.08s}
+.tabs-row button:nth-child(2){animation-delay:.13s}
+.tabs-row button:nth-child(3){animation-delay:.18s}
+.tabs-row button:nth-child(4){animation-delay:.23s}
+.mast-status{animation:entra .6s var(--ease-expo) .3s backwards}
+.tabs-row button .ico{transition:transform .25s var(--ease-quart)}
+.tabs-row button.on .ico{animation:icoPop .45s var(--ease-expo)}
+.onda-f-em_andamento .onda-anel{animation:andamento 2.4s ease-in-out infinite}
+@media (min-width:769px){
+  .tabs-row button:hover .ico{transform:translateX(2px) scale(1.08)}
+}

@@ -428,7 +428,7 @@ def test_painel_do_passo_mostra_como_funciona_e_por_que_existe_com_termos(
     )
     assert "como funciona" in painel and "por que existe" in painel
     # o porquê do rollback (os termos dele viram span, por isso o trecho sem termo)
-    assert "cobre o caso comum" in painel and "0064, emenda da decisão 6a" in painel
+    assert "cobre o caso comum" in painel and "decide com segurança o que volta" in painel
     assert '<span class="gl-termo" tabindex="0">rollback<' in painel
 
 
