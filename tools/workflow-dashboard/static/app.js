@@ -10,7 +10,7 @@ import { posicionarPop, renderArea, wireArea } from './areas.js';
 import { desenharSetas, mapaDecisoes, vinculosDe } from './decisoes.js';
 import { corDaPessoa } from './pessoas.js';
 import { renderOndas } from './ondas.js';
-import { alternarPessoa, filtrosPrsDaRota, filtrosPrsNaRota, filtrosPrsVazios, popDoPr, renderQuadroPrs } from './prs.js';
+import { alternarMes, alternarPessoa, filtrosPrsDaRota, filtrosPrsNaRota, filtrosPrsVazios, popDoPr, renderQuadroPrs } from './prs.js';
 
 /* a aba abre no que está pendente: só as abertas */
 const filtrosVazios = () => ({ state: 'OPEN', fase: '', resp: '', prd: null, label: '', q: '' });
@@ -1525,8 +1525,8 @@ view.addEventListener('click', e => {
   } else if (act === 'pfabertos') {
     S.fPrs.abertos = !S.fPrs.abertos;
     render();
-  } else if (act === 'pftodos') {
-    S.fPrs.todos = !S.fPrs.todos;
+  } else if (act === 'pfmes') {
+    S.fPrs = alternarMes(S.fPrs, t.dataset.v);
     render();
   } else if (act === 'dep') {
     const i = Number(t.dataset.i);

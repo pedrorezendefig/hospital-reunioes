@@ -30,7 +30,7 @@ export const LIMITE_DIAS = 3;
    sem build, #965) são o fim do caminho: não são gargalo nem envelhecem, e
    guardam o histórico inteiro; o quadro mostra só a última semana delas, a
    não ser com um PRD filtrado (aí todos os PRs do PRD), com o PR apontado
-   pelo hash ou com o botão "mostrar todos" da nota (todos=1 na rota) */
+   pelo hash ou com meses escolhidos no período (aí os desses meses) */
 const FIM = 'em_producao';
 const ENTREGUE = 'entregue';
 const ehFim = fase => fase.fase === FIM || fase.fase === ENTREGUE;
@@ -38,12 +38,25 @@ export const JANELA_PRODUCAO_DIAS = 7;
 
 /* filtros da aba <-> filtros da rota (texto; vazio = sem filtro). resp é
    uma lista: várias pessoas ao mesmo tempo, uma raia para cada */
-export const filtrosPrsVazios = () => ({ resp: [], prd: null, abertos: false, todos: false });
+export const filtrosPrsVazios = () => ({ resp: [], prd: null, abertos: false, meses: [] });
 export const filtrosPrsDaRota = p => ({
   resp: p.resp ? p.resp.split(',').filter(Boolean) : [], prd: Number(p.prd) || null, abertos: p.abertos === '1',
-  todos: p.todos === '1',
+  meses: p.meses ? p.meses.split(',').filter(Boolean) : [],
 });
-export const filtrosPrsNaRota = f => ({ resp: f.resp.join(','), prd: f.prd ? String(f.prd) : '', abertos: f.abertos ? '1' : '', todos: f.todos ? '1' : '' });
+export const filtrosPrsNaRota = f => ({ resp: f.resp.join(','), prd: f.prd ? String(f.prd) : '', abertos: f.abertos ? '1' : '', meses: f.meses.join(',') });
+
+/* liga/desliga um mês do período (AAAA-MM), mais recente primeiro */
+export const alternarMes = (f, mes) => ({
+  ...f, meses: f.meses.includes(mes) ? f.meses.filter(m => m !== mes) : [...f.meses, mes].sort().reverse(),
+});
+
+/* mês (AAAA-MM, hora local) em que o PR entrou em Em produção ou Entregue */
+function mesDe(c) {
+  const d = new Date(c.fase.desde || c.pr.merged_at || '');
+  return isNaN(d) ? null : `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+}
+const NOMES_MES = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez'];
+const nomeDoMes = m => `${NOMES_MES[Number(m.slice(5)) - 1]} ${m.slice(0, 4)}`;
 
 /* liga/desliga uma pessoa no filtro (o chip clicado de novo sai) */
 export const alternarPessoa = (f, login) => ({
@@ -227,7 +240,7 @@ function filtroChip(act, v, on, txt, attrs = '') {
 
 const filtroAtivo = f => JSON.stringify(f) !== JSON.stringify(filtrosPrsVazios());
 
-function filtrosHtml(pessoas, prds, f) {
+function filtrosHtml(pessoas, prds, meses, f) {
   const linha = (rot, chips) => chips
     ? `<div class="filtro"><span class="filtro-rot">${rot}</span><div class="filtro-chips">${chips}</div></div>` : '';
   const pessoa = login => `<button type="button" class="fchip fpessoa${f.resp.includes(login) ? ' on' : ''}" data-act="pfresp" data-v="${esc(login)}" aria-pressed="${f.resp.includes(login)}" style="--pessoa:${corDe(login)}"><span class="pessoa-dot"></span>${nomeDe(login)}</button>`;
@@ -235,6 +248,7 @@ function filtrosHtml(pessoas, prds, f) {
   <div class="filtros rv">
     ${linha('pessoa', pessoas.map(pessoa).join(''))}
     ${linha('PRD', prds.map(p => filtroChip('pfprd', p.number, f.prd === p.number, `#${p.number}`, ` title="${esc(p.title)}"`)).join(''))}
+    ${linha('período', meses.map(m => filtroChip('pfmes', m, f.meses.includes(m), nomeDoMes(m))).join(''))}
     ${linha('estado', filtroChip('pfabertos', '1', f.abertos, 'só abertos')
       + (filtroAtivo(f) ? '<button type="button" class="fchip limpar" data-act="pflimpar">limpar</button>' : ''))}
   </div>`;
@@ -260,8 +274,8 @@ export function renderQuadroPrs(ctx) {
     .map(pr => ({ pr, fase: fases[pr.number], pessoas: pessoasDoPr(pr, issues) }));
   const passa = c => (!f.resp.length || c.pessoas.some(p => f.resp.includes(p))) && (!f.prd || doPrd(c.pr, f.prd, issues))
     && (!f.abertos || c.pr.state === 'OPEN');
-  const naJanela = c => !ehFim(c.fase) || f.prd || f.todos || item === String(c.pr.number)
-    || (c.fase.dias_na_coluna ?? Infinity) <= JANELA_PRODUCAO_DIAS;
+  const naJanela = c => !ehFim(c.fase) || f.prd || item === String(c.pr.number)
+    || (f.meses.length ? f.meses.includes(mesDe(c)) : (c.fase.dias_na_coluna ?? Infinity) <= JANELA_PRODUCAO_DIAS);
 
   const noQuadro = todos.filter(c => COLUNAS.some(([k]) => k === c.fase.fase));
   const filtrados = noQuadro.filter(passa);
@@ -297,15 +311,10 @@ export function renderQuadroPrs(ctx) {
   const prds = (data.github.issues || [])
     .filter(i => i.is_prd && (i.state === 'OPEN' || i.number === f.prd) && todos.some(c => doPrd(c.pr, i.number, issues)))
     .sort((a, b) => b.number - a.number);
-  /* o botão só existe quando há o que expandir (ou para voltar); com PRD
-     filtrado a janela já não vale */
-  const antigos = f.prd ? 0 : filtrados.filter(c => ehFim(c.fase) && (c.fase.dias_na_coluna ?? Infinity) > JANELA_PRODUCAO_DIAS).length;
-  const botaoTodos = txt => ` ${filtroChip('pftodos', '1', f.todos, txt)}`;
-  const nota = f.todos && antigos
-    ? `<div class="pr-nota rv">Em produção e Entregue mostram todos os PRs, inclusive os ${antigos} mais antigos que uma semana.${botaoTodos('só a última semana')}</div>`
-    : foraDaJanela
-      ? `<div class="pr-nota rv">Em produção e Entregue mostram só a última semana: ${foraDaJanela} ${foraDaJanela === 1 ? 'PR mais antigo fica fora' : 'PRs mais antigos ficam fora'}; com um PRD filtrado, aparecem todos os dele.${botaoTodos('mostrar todos')}</div>`
-      : '';
+  const meses = [...new Set(noQuadro.filter(c => ehFim(c.fase)).map(mesDe).filter(Boolean))].sort().reverse();
+  const nota = foraDaJanela && !f.meses.length
+    ? `<div class="pr-nota rv">Em produção e Entregue mostram só a última semana: ${foraDaJanela} ${foraDaJanela === 1 ? 'PR mais antigo fica fora' : 'PRs mais antigos ficam fora'}; escolha um mês em período, ou um PRD, para ver os mais antigos.</div>`
+    : '';
   const visiveis = new Set([...cards, ...tentativas].map(c => String(c.pr.number)));
   const fora = item && !visiveis.has(item)
     ? `<div class="pr-fora rv">O PR #${esc(item)} não aparece no quadro com estes filtros. ${ghLink(ctx, item)}</div>`
@@ -318,7 +327,7 @@ export function renderQuadroPrs(ctx) {
     ? `<div class="st-pop pr-pop pr-pop-fixo" data-n="${marcado.pr.number}">${resumoDoPr(marcado.pr, marcado.fase, ctx, true)}</div>`
     : '<div class="st-pop pr-pop" hidden></div>';
 
-  return `${filtrosHtml(pessoas, prds, f)}
+  return `${filtrosHtml(pessoas, prds, meses, f)}
   ${fora}
   <div class="pr-quadro-rolagem rv"><div class="pr-quadro">${cabecalho}${linhas}</div></div>
   ${nota}
