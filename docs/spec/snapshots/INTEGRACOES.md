@@ -1,29 +1,29 @@
 # INTEGRACOES.md
 <!-- gerado automaticamente por /snapshot — não editar -->
-<!-- last_update: 2026-10-21T19:37+0000 -->
+<!-- last_update: 2026-10-21T20:42+0000 -->
 
 Serviços externos usados pelo Hospital Reuniões. Secrets configurados no Coolify (não no git).
 
 ## OpenRouter
 **Pra que serve:** LLM único das atas, correções e extração, pelo LLM_MODEL (prod: google/gemini-3.7-flash desde 21/08/2026; default do código: openai/gpt-5.4-mini). Transcrição de voz pelo TRANSCRICAO_MODEL (default: openai/gpt-4o-mini-transcribe)
-**Onde aparece no código:** `app/services/transcricao_service.py`, `app/services/ai_processor.py`, `app/services/contas_medicas/ia.py`
+**Onde aparece no código:** `app/services/ai_processor.py`, `app/services/transcricao_service.py`, `app/services/contas_medicas/ia.py`
 **Secret/env primária:** `OPENROUTER_API_KEY`
 
 ## ClickSign
 **Pra que serve:** Assinatura digital de atas (sandbox em dev, app em prod)
-**Onde aparece no código:** `app/config.py`, `app/services/pops_email_service.py`, `app/services/participantes_ata_service.py`
+**Onde aparece no código:** `app/routers/reunioes.py`, `app/routers/webhooks.py`, `app/routers/admin/legacy.py`
 **Secret/env primária:** `CLICKSIGN_API_KEY`
 **Variáveis relacionadas:** `CLICKSIGN_BASE_URL`, `CLICKSIGN_WEBHOOK_SECRET`
 
 ## Resend
 **Pra que serve:** Emails transacionais e SMTP do Supabase Auth
-**Onde aparece no código:** `app/config.py`, `app/services/tecnologia_email.py`, `app/services/email_service.py`
+**Onde aparece no código:** `app/services/email_service.py`, `app/services/tecnologia_email.py`, `app/config.py`
 **Secret/env primária:** `RESEND_API_KEY`
 **Variáveis relacionadas:** `RESEND_FROM_EMAIL`, `RESEND_INBOUND_API_KEY`, `RESEND_INBOUND_BASE_URL`, `RESEND_WEBHOOK_SECRET`
 
 ## Fireflies
 **Pra que serve:** Sync de transcrições via webhook
-**Onde aparece no código:** `app/config.py`, `app/routers/admin/legacy.py`
+**Onde aparece no código:** `app/routers/admin/legacy.py`, `app/config.py`
 **Secret/env primária:** `FIREFLIES_API_KEY`
 
 ---
