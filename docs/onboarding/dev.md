@@ -42,7 +42,7 @@ Agora há issues na fila pra qualquer um pegar.
 ### Cenário B — Vou pegar trabalho da fila
 
 ```
-/pegar-issue          # lista as issues ready-for-agent sem dono
+/pegar-issue          # lista as issues ready-for-agent desbloqueadas
 /pegar-issue 42       # dá o "claim" (vira sua), cria a branch e carrega a spec
 /tdd                  # red → green → refactor: critérios de aceite viram testes
 /ship                 # gates da ADR 0068 e, com o PR verde, roda a subida sozinho:

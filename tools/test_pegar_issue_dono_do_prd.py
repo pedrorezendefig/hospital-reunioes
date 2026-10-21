@@ -96,11 +96,14 @@ def fila(*issues: dict) -> dict:
     return {"data": {"search": {"nodes": list(issues)}}}
 
 
-def fatia(numero: int, titulo: str, labels: list[str], parent: dict | None) -> dict:
+def fatia(
+    numero: int, titulo: str, labels: list[str], parent: dict | None, *designados: str
+) -> dict:
     return {
         "number": numero,
         "title": titulo,
         "labels": {"nodes": [{"name": n} for n in ["ready-for-agent", *labels]]},
+        "assignees": {"nodes": [{"login": d} for d in designados]},
         "parent": parent,
     }
 
@@ -110,27 +113,32 @@ def test_a_fila_mostra_o_dono_do_prd_ao_lado_de_cada_fatia(tmp_path):
         fatia(907, "Esteira: subida única", ["type:chore"], prd(902, "pedrorezendefig")),
         fatia(888, "Tecnologia: menção viva", ["type:fix"], None),
         fatia(664, "Fatia de PRD sem dono", [], prd(659)),
+        fatia(1270, "Painel: aba PRs", [], prd(1260, "pedrorezendefig"), "lucassampaioc1"),
     )
 
     feito = rodar(tmp_path, resposta, "--fila")
 
     assert feito.returncode == 0, feito.stderr
     linhas = feito.stdout.splitlines()
-    assert linhas[0] == "| # | título | labels | PRD | dono do PRD |"
+    assert linhas[0] == "| # | título | labels | PRD | dono do PRD | designada a |"
     assert linhas[2:] == [
-        "| 907 | Esteira: subida única | type:chore | #902 | @pedrorezendefig |",
-        "| 888 | Tecnologia: menção viva | type:fix | avulsa |  |",
-        "| 664 | Fatia de PRD sem dono |  | #659 | sem dono |",
+        "| 907 | Esteira: subida única | type:chore | #902 | @pedrorezendefig |  |",
+        "| 888 | Tecnologia: menção viva | type:fix | avulsa |  |  |",
+        "| 664 | Fatia de PRD sem dono |  | #659 | sem dono |  |",
+        "| 1270 | Painel: aba PRs |  | #1260 | @pedrorezendefig | @lucassampaioc1 |",
     ]
 
 
-def test_a_fila_continua_so_com_pronta_sem_dono_e_desbloqueada(tmp_path):
-    """O `-is:blocked` só vale na busca avançada; na comum volta a fatia bloqueada."""
+def test_a_fila_traz_pronta_e_desbloqueada_com_ou_sem_designado(tmp_path):
+    """Designar alguém não tira a issue da fila: o lock é a label, não o assignee.
+
+    O `-is:blocked` só vale na busca avançada; na comum volta a fatia bloqueada.
+    """
     rodar(tmp_path, fila(), "--fila")
 
     chamada = (tmp_path / "gh.log").read_text(encoding="utf-8")
     assert "ISSUE_ADVANCED" in chamada
     assert (
-        "q=repo:hsm/hospital-reunioes is:issue is:open label:ready-for-agent "
-        "no:assignee -is:blocked"
+        "q=repo:hsm/hospital-reunioes is:issue is:open label:ready-for-agent -is:blocked"
     ) in chamada
+    assert "no:assignee" not in chamada
