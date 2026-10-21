@@ -57,7 +57,7 @@ Todo comentário do agente no GitHub leva `<!-- automacao -->` na primeira linha
 
 ## Passo 9: critérios de aceite na issue
 
-Com os gates verdes e issue vinculada, marque no corpo **da issue** cada critério entregue (`- [x]`) e risque o descopado (`- [ ] ~~...~~`). Sem descope e sem checkbox fora dos critérios, basta `sed 's/^- \[ \] /- [x] /'` no corpo e `gh issue edit N --body-file`.
+Com issue vinculada, confira cada critério contra o diff antes da subida: o que ficou de fora vai riscado no corpo **da issue** (`- [ ] ~~...~~`) com o motivo no PR. Marcar o resto é da subida: logo depois do merge, o `fechar_onda.py` vira em `- [x]` toda caixa vazia que não está riscada, no avulso e na onda. Critério não entregue e não riscado sai marcado como entregue.
 
 ## Passo 10: a subida
 

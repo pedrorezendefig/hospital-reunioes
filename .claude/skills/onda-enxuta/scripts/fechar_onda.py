@@ -58,7 +58,9 @@ cabe em 10 linhas mais uma por PR, fora as da migration):
      (o merge do PR anterior do lote deixa o seguinte atras; o ruleset nao exige
      em dia com a base, ADR 0068), so com a conferencia local, sem
      commit, de que a main entra sem conflito; o CI verde que o head ja tinha e
-     merge pela API (squash, conferindo o sha do head). Antes do primeiro
+     merge pela API (squash, conferindo o sha do head); logo depois, as caixas
+     vazias da issue que ele fecha viram `- [x]`, menos a riscada
+     (`- [ ] ~~...~~`, descopada). Antes do primeiro
      merge: a imagem no ar de cada app do lote (alvo do rollback; em modo
      imagem, a tag do ultimo deploy dele no state.json) e o
      APP_VERSION no backend e no frontend do Coolify (o backend a le no runtime,
@@ -769,6 +771,26 @@ def sem_travessao(s: str) -> str:
     """Travessao e meia-risca viram hifen entre numeros e virgula no resto (ADR 0013)."""
     s = re.sub(r"(\d)\s*[\u2013\u2014]\s*(\d)", r"\1-\2", s)
     return re.sub(r"\s*[\u2013\u2014]\s*", ", ", s)
+
+
+CAIXA_VAZIA = re.compile(r"^(\s*[-*]) \[ \](?! ~~)", re.M)  # `- [ ] ~~...~~` e o descopado
+
+
+def marcar_criterios(raiz: Path, info: dict) -> None:
+    """Marca as caixas vazias da issue que o PR fecha, menos a riscada (descopada).
+    O merge e o fim dos gates (revisao spec x diff e CI verde): a issue nao fecha
+    com os criterios em branco. Falha aqui so avisa, o merge ja entrou."""
+    for ref in info.get("closingIssuesReferences") or []:
+        n = ref["number"]
+        try:
+            corpo = gh_json(["issue", "view", str(n), "--json", "body"], cwd=raiz).get("body") or ""
+            novo, k = CAIXA_VAZIA.subn(r"\1 [x]", corpo)
+            if k:
+                run(["gh", "api", "-X", "PATCH", f"repos/{{owner}}/{{repo}}/issues/{n}", "-f", f"body={novo}"],
+                    cwd=raiz)
+                print(f"criterios: issue #{n} com {k} caixa{'s' if k > 1 else ''} marcada{'s' if k > 1 else ''}")
+        except Exception as e:  # noqa: BLE001
+            print(f"aviso: criterios da issue #{n} nao marcados ({str(e)[:200]})")
 
 
 def rotulo_issues(info: dict) -> str:
@@ -1654,6 +1676,7 @@ def main() -> int:
             info["head_mergeado"] = head  # a imagem que o CI publicou e a dele (issue #1001)
             mergeados.append((info, sha, t))
             print(f"merge: PR #{n} na main pela API, squash {sha[:8]}")
+            marcar_criterios(raiz, info)
         remover_worktree(raiz, wt)
         wt = None
 
