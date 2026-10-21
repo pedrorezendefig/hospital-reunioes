@@ -190,6 +190,7 @@ class Cenario:
         self.ruleset_antigo = False
         self.sem_checks = False  # o CI nunca rodou: nenhum check no PR
         self.bloqueadoras: dict[int, list[dict]] = {}  # issue -> o `blocked_by` dela (issue #999)
+        self.corpo_da_issue = "## Pai\n\n`#902`, PRD da esteira.\n"
         # quantas rodadas do CI do head que a subida empurra o GitHub cancela por
         # falta de runner (#953)
         self.sem_runner = 0
@@ -534,7 +535,7 @@ def preparar(fo, monkeypatch, c: Cenario) -> None:
             # como o gh de verdade: só os campos pedidos no --json
             return c.ver_pr(int(args[2]), args[args.index("--json") + 1].split(","))
         if args[:2] == ["issue", "view"]:
-            return {"body": "## Pai\n\n`#902`, PRD da esteira.\n"}
+            return {"body": c.corpo_da_issue}
         if args == ["api", "user"]:
             return {"login": "ana", "id": 1}  # quem roda a subida: o `responsavel` do registro
         if args[:2] == ["run", "list"]:
@@ -2454,3 +2455,33 @@ def test_digest_no_ghcr_le_o_digest_da_tag_sem_login_e_none_quando_nao_le(monkey
 
     monkeypatch.setattr(fo.urllib.request, "urlopen", recusa)
     assert fo.digest_no_ghcr("ghcr.io/dono/repo-backend", IMAGEM_ANTERIOR) is None
+
+
+# --------------------------------------------- critérios de aceite na issue
+
+def test_merge_marca_os_criterios_da_issue_e_deixa_o_descopado_riscado(tmp_path, monkeypatch, capsys):
+    """A issue fecha no merge com os critérios marcados: o `/ship` avulso marcava no
+    Passo 9, mas a onda nunca passa por ele e 390 issues fecharam com as caixas vazias."""
+    fo = carregar_fechar_onda()
+    c = pr_de_codigo(tmp_path)
+    c.corpo_da_issue = ("## Pai\n\n`#902`, PRD da esteira.\n\n## Critérios de aceite\n"
+                        "- [ ] prazo em dias úteis\n- [ ] ~~feriado municipal~~ (descopado)\n- [x] já marcado\n")
+    preparar(fo, monkeypatch, c)
+
+    assert rodar_main(fo, monkeypatch, c) == 0
+
+    edicoes = [a for a in c.gh_chamadas if a[:4] == ["api", "-X", "PATCH", "repos/{owner}/{repo}/issues/5"]]
+    assert edicoes == [["api", "-X", "PATCH", "repos/{owner}/{repo}/issues/5", "-f",
+                        "body=## Pai\n\n`#902`, PRD da esteira.\n\n## Critérios de aceite\n"
+                        "- [x] prazo em dias úteis\n- [ ] ~~feriado municipal~~ (descopado)\n- [x] já marcado\n"]]
+    assert "criterios: issue #5 com 1 caixa marcada" in capsys.readouterr().out
+
+
+def test_issue_sem_caixa_vazia_nao_e_editada(tmp_path, monkeypatch):
+    fo = carregar_fechar_onda()
+    c = pr_de_codigo(tmp_path)
+    preparar(fo, monkeypatch, c)
+
+    assert rodar_main(fo, monkeypatch, c) == 0
+
+    assert not [a for a in c.gh_chamadas if a[:3] == ["api", "-X", "PATCH"]]
