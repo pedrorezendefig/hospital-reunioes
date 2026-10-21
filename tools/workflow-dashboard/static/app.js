@@ -1525,6 +1525,9 @@ view.addEventListener('click', e => {
   } else if (act === 'pfabertos') {
     S.fPrs.abertos = !S.fPrs.abertos;
     render();
+  } else if (act === 'pftodos') {
+    S.fPrs.todos = !S.fPrs.todos;
+    render();
   } else if (act === 'dep') {
     const i = Number(t.dataset.i);
     const ver = depVer(S.data.history[i].app_version);

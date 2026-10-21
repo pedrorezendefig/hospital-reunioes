@@ -523,7 +523,7 @@ def test_botao_limpar_da_aba_prs_so_com_filtro_e_volta_ao_padrao(tmp_path):
         """,
     )
     assert 'data-act="pflimpar"' in html
-    assert filtros == {"resp": [], "prd": None, "abertos": False}
+    assert filtros == {"resp": [], "prd": None, "abertos": False, "todos": False}
 
 
 @com_node
@@ -681,6 +681,26 @@ def test_em_producao_mostra_a_ultima_semana_e_conta_as_mais_antigas(tmp_path):
     assert 61 not in _no_quadro(html)
     assert {70, 71, 72, 73} <= set(_no_quadro(html))
     assert re.search(r'class="pr-nota[^"]*"[^>]*>[^<]*1 PR mais antigo', html)
+
+
+@com_node
+def test_botao_mostrar_todos_expande_em_producao_e_entregue_e_vai_para_o_hash(tmp_path):
+    html, hash_depois = _app(
+        tmp_path, "[_view.innerHTML, location.hash]", antes="_clicar({ act: 'pftodos', v: '1' });"
+    )
+    assert 61 in _no_quadro(html)
+    assert hash_depois == "#prs?todos=1"
+    assert 'aria-pressed="true"' in _botoes(html, "pftodos")["1"]
+    assert re.search(r'class="pr-nota[^"]*"[^>]*>[^<]*todos os PRs', html)
+    volta = _app(tmp_path, hash_inicial="#prs?todos=1", antes="_clicar({ act: 'pftodos', v: '1' });")
+    assert 61 not in _no_quadro(volta)
+    assert 'aria-pressed="false"' in _botoes(volta, "pftodos")["1"]
+
+
+@com_node
+def test_sem_nada_fora_da_janela_nao_tem_botao_mostrar_todos(tmp_path):
+    html = _app(tmp_path, hash_inicial="#prs?prd=900")
+    assert "pftodos" not in html
 
 
 # ---------- o texto de em construção saiu ----------
