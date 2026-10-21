@@ -523,7 +523,7 @@ def test_botao_limpar_da_aba_prs_so_com_filtro_e_volta_ao_padrao(tmp_path):
         """,
     )
     assert 'data-act="pflimpar"' in html
-    assert filtros == {"resp": [], "prd": None, "abertos": False, "todos": False}
+    assert filtros == {"resp": [], "prd": None, "abertos": False, "meses": []}
 
 
 @com_node
@@ -683,24 +683,52 @@ def test_em_producao_mostra_a_ultima_semana_e_conta_as_mais_antigas(tmp_path):
     assert re.search(r'class="pr-nota[^"]*"[^>]*>[^<]*1 PR mais antigo', html)
 
 
-@com_node
-def test_botao_mostrar_todos_expande_em_producao_e_entregue_e_vai_para_o_hash(tmp_path):
-    html, hash_depois = _app(
-        tmp_path, "[_view.innerHTML, location.hash]", antes="_clicar({ act: 'pftodos', v: '1' });"
+def _com_meses():
+    return _com_entregues(
+        (95, "2026-10-04T10:00:00Z", 2), (97, "2026-09-20T10:00:00Z", 16), (98, "2026-08-10T10:00:00Z", 57)
     )
-    assert 61 in _no_quadro(html)
-    assert hash_depois == "#prs?todos=1"
-    assert 'aria-pressed="true"' in _botoes(html, "pftodos")["1"]
-    assert re.search(r'class="pr-nota[^"]*"[^>]*>[^<]*todos os PRs', html)
-    volta = _app(tmp_path, hash_inicial="#prs?todos=1", antes="_clicar({ act: 'pftodos', v: '1' });")
-    assert 61 not in _no_quadro(volta)
-    assert 'aria-pressed="false"' in _botoes(volta, "pftodos")["1"]
 
 
 @com_node
-def test_sem_nada_fora_da_janela_nao_tem_botao_mostrar_todos(tmp_path):
-    html = _app(tmp_path, hash_inicial="#prs?prd=900")
-    assert "pftodos" not in html
+def test_periodo_lista_os_meses_de_em_producao_e_entregue_no_topo(tmp_path):
+    html = _app(tmp_path, dados=_com_meses())
+    assert list(_botoes(html, "pfmes")) == ["2026-10", "2026-09", "2026-08"]
+    assert "out 2026" in _botoes(html, "pfmes")["2026-10"] + html
+    assert html.index('data-act="pfmes"') < html.index('class="pr-quadro"')
+
+
+@com_node
+def test_meses_escolhidos_trocam_a_ultima_semana_e_somam_no_hash(tmp_path):
+    html, hashes = _app(
+        tmp_path,
+        "[_view.innerHTML, _h]",
+        antes="""
+        const _h = [];
+        _clicar({ act: 'pfmes', v: '2026-09' }); _h.push(location.hash);
+        _clicar({ act: 'pfmes', v: '2026-08' }); _h.push(location.hash);
+        """,
+        dados=_com_meses(),
+    )
+    assert hashes == ["#prs?meses=2026-09", "#prs?meses=2026-09%2C2026-08"]
+    quadro = set(_no_quadro(html))
+    assert {97, 98} <= quadro and not {95, 70, 71} & quadro
+    assert {80, 81, 86} <= quadro  # abertos e mergeados sem deploy não dependem do período
+    assert 'aria-pressed="true"' in _botoes(html, "pfmes")["2026-08"]
+    volta = _app(tmp_path, hash_inicial="#prs?meses=2026-09", antes="_clicar({ act: 'pfmes', v: '2026-09' });",
+                 dados=_com_meses())
+    assert 95 in _no_quadro(volta) and 97 not in _no_quadro(volta)
+
+
+@com_node
+def test_nota_aponta_para_o_periodo_e_some_com_mes_escolhido(tmp_path):
+    html = _app(tmp_path, dados=_com_meses())
+    assert re.search(r'class="pr-nota[^"]*"[^>]*>[^<]*escolha um mês em período', html)
+    assert "pr-nota" not in _app(tmp_path, hash_inicial="#prs?meses=2026-09", dados=_com_meses())
+
+
+def test_reveal_dispara_com_qualquer_pixel_visivel():
+    ui = (STATIC / "ui.js").read_text(encoding="utf-8")
+    assert "threshold: 0," in ui  # quadro mais alto que 20 telas nunca chegava a 5% visível
 
 
 # ---------- o texto de em construção saiu ----------
