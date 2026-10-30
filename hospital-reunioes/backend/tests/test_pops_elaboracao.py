@@ -18,7 +18,6 @@ import json
 import os
 import sys
 from dataclasses import dataclass
-from types import SimpleNamespace
 from typing import Any
 
 import pytest
@@ -26,6 +25,8 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+
+from anthropic_apoio import resposta_de_texto  # noqa: E402
 
 from app.dependencies import get_current_user, get_supabase_client  # noqa: E402
 from app.routers.pops import elaboracao as elaboracao_router  # noqa: E402
@@ -198,7 +199,7 @@ def _reset_rate_limiter():
 @pytest.fixture(autouse=True)
 def _mock_llm_by_default(monkeypatch):
     """O pytest carrega o `.env` real (chave OpenRouter de PROD); força o caminho
-    MOCK por padrão — os testes da IA real sobrescrevem com `_stub_openrouter`."""
+    MOCK por padrão: os testes da IA real sobrescrevem com `_stub_ia`."""
     from app.services import ai_processor
 
     monkeypatch.setattr(ai_processor, "_llm_provider", lambda: "mock")
@@ -239,7 +240,7 @@ def _client_para(pessoa: dict, sb: _SupabaseMock) -> TestClient:
     return TestClient(app)
 
 
-# ─── Fake LLM (nunca toca o OpenRouter real — padrão test_ata_guiada) ─────────
+# ─── Fake LLM (nunca toca a Anthropic real, padrão test_ata_guiada) ─────────
 
 
 class _FakeCompletions:
@@ -252,21 +253,21 @@ class _FakeCompletions:
         self._calls.append(kwargs)
         if self._exc is not None:
             raise self._exc
-        return SimpleNamespace(choices=[SimpleNamespace(message=SimpleNamespace(content=self._content))])
+        return resposta_de_texto(self._content)
 
 
 class _FakeLLMClient:
     def __init__(self, *, content: str | None = None, exc: Exception | None = None):
         self.calls: list[dict] = []
-        self.chat = SimpleNamespace(completions=_FakeCompletions(content=content, exc=exc, calls=self.calls))
+        self.messages = _FakeCompletions(content=content, exc=exc, calls=self.calls)
 
 
-def _stub_openrouter(monkeypatch, *, content: str | None = None, exc: Exception | None = None) -> _FakeLLMClient:
+def _stub_ia(monkeypatch, *, content: str | None = None, exc: Exception | None = None) -> _FakeLLMClient:
     from app.services import ai_processor
 
     client = _FakeLLMClient(content=content, exc=exc)
-    monkeypatch.setattr(ai_processor, "_llm_provider", lambda: "openrouter")
-    monkeypatch.setattr(ai_processor, "_get_llm", lambda: (client, "modelo-teste", {}))
+    monkeypatch.setattr(ai_processor, "_llm_provider", lambda: "anthropic")
+    monkeypatch.setattr(ai_processor, "_get_llm", lambda: (client, "modelo-teste"))
     return client
 
 
@@ -316,7 +317,7 @@ class TestChatElaboracao:
         """CA: o rascunho (lista de seções, ADR 0016) devolvido pelo agente
         persiste na Versão a cada interação — fechar a tela não perde a
         elaboração."""
-        _stub_openrouter(
+        _stub_ia(
             monkeypatch,
             content=_resposta_ia([_secao("Objetivo", "Padronizar X."), _secao("Abrangência", "CTI.")]),
         )
@@ -372,7 +373,7 @@ class TestChatElaboracao:
     def test_chat_primeira_interacao_move_a_elaborar_para_em_elaboracao(self, monkeypatch):
         """A_ELABORAR → EM_ELABORACAO na primeira interação, com auditoria
         (toda transição de estado é registrada — PRD #76)."""
-        _stub_openrouter(monkeypatch, content=_resposta_ia())
+        _stub_ia(monkeypatch, content=_resposta_ia())
         sb = _sb(versao=_versao(estado="A_ELABORAR"))
         client = _client_para(ELABORADOR, sb)
 
@@ -384,7 +385,7 @@ class TestChatElaboracao:
         assert "POPS_INICIAR_ELABORACAO" in acoes
 
     def test_chat_interacao_seguinte_mantem_em_elaboracao_sem_reauditar(self, monkeypatch):
-        _stub_openrouter(monkeypatch, content=_resposta_ia())
+        _stub_ia(monkeypatch, content=_resposta_ia())
         rascunho = {"secoes": [{"id": "id-x", "titulo": "Objetivo", "conteudo": "Já existia.", "tipo": "texto"}]}
         sb = _sb(versao=_versao(estado="EM_ELABORACAO", rascunho=rascunho))
         client = _client_para(ELABORADOR, sb)
@@ -398,25 +399,25 @@ class TestChatElaboracao:
     def test_chat_secao_apontada_presente_no_prompt(self, monkeypatch):
         """CA: o agente respeita a seção apontada (⌖) — ela chega no prompt
         para a correção dirigida."""
-        client_llm = _stub_openrouter(monkeypatch, content=_resposta_ia())
+        client_llm = _stub_ia(monkeypatch, content=_resposta_ia())
         client = _client_para(ELABORADOR, _sb(versao=_versao(estado="EM_ELABORACAO")))
 
         res = _chat(client, mensagem="[Seção: Objetivo]\nDeixa mais direto.", section_context="Objetivo")
 
         assert res.status_code == 200
-        user_prompt = client_llm.calls[0]["messages"][1]["content"]
+        user_prompt = client_llm.calls[0]["messages"][0]["content"]
         assert "SEÇÃO APONTADA" in user_prompt
         assert "Objetivo" in user_prompt
 
     def test_chat_contexto_do_pop_no_prompt(self, monkeypatch):
         """O agente sabe O QUE está elaborando: código, nome, setor e base
         normativa do POP entram no prompt."""
-        client_llm = _stub_openrouter(monkeypatch, content=_resposta_ia())
+        client_llm = _stub_ia(monkeypatch, content=_resposta_ia())
         client = _client_para(ELABORADOR, _sb(versao=_versao(estado="EM_ELABORACAO")))
 
         _chat(client)
 
-        user_prompt = client_llm.calls[0]["messages"][1]["content"]
+        user_prompt = client_llm.calls[0]["messages"][0]["content"]
         assert "HSM_CTI-001" in user_prompt
         assert "Higienização das Mãos" in user_prompt
         assert "Coordenação do CTI" in user_prompt
@@ -426,12 +427,12 @@ class TestChatElaboracao:
         """CA (ADR 0016): o prompt de sistema institui a estrutura DINÂMICA:
         espelha o modelo do Material de referência; sem modelo, propõe a
         estrutura institucional; sinaliza lacuna de acreditação sem travar."""
-        client_llm = _stub_openrouter(monkeypatch, content=_resposta_ia())
+        client_llm = _stub_ia(monkeypatch, content=_resposta_ia())
         client = _client_para(ELABORADOR, _sb(versao=_versao(estado="EM_ELABORACAO")))
 
         _chat(client)
 
-        system_prompt = client_llm.calls[0]["messages"][0]["content"]
+        system_prompt = client_llm.calls[0]["system"]
         prompt_lower = system_prompt.lower()
         # A estrutura espelha o modelo anexado e é dinâmica (cria/renomeia/reordena).
         assert "espelh" in prompt_lower or "modelo" in prompt_lower
@@ -450,12 +451,12 @@ class TestChatElaboracao:
         das três áreas viaja junta."""
         from app.services.prompt_loader import load_prompt
 
-        client_llm = _stub_openrouter(monkeypatch, content=_resposta_ia())
+        client_llm = _stub_ia(monkeypatch, content=_resposta_ia())
         client = _client_para(ELABORADOR, _sb(versao=_versao(estado="EM_ELABORACAO")))
 
         _chat(client)
 
-        system_prompt = client_llm.calls[0]["messages"][0]["content"]
+        system_prompt = client_llm.calls[0]["system"]
         assert system_prompt == load_prompt("chat_elaboracao_pop_system")
         # As três áreas convivem no mesmo prompt (curadoria compacta).
         assert "CLT" in system_prompt
@@ -465,24 +466,24 @@ class TestChatElaboracao:
     def test_contexto_do_pop_leva_o_nome_do_setor(self, monkeypatch):
         """CA (ADR 0021): a interpretação da área é da IA, pelo NOME do Setor
         que viaja no prompt (sem classificação persistida)."""
-        client_llm = _stub_openrouter(monkeypatch, content=_resposta_ia())
+        client_llm = _stub_ia(monkeypatch, content=_resposta_ia())
         client = _client_para(ELABORADOR, _sb(versao=_versao(estado="EM_ELABORACAO")))
 
         _chat(client)
 
-        user_prompt = client_llm.calls[0]["messages"][1]["content"]
+        user_prompt = client_llm.calls[0]["messages"][0]["content"]
         assert "Coordenação do CTI" in user_prompt  # o nome do Setor segue no contexto
 
     def test_system_prompt_fluxograma_instrui_gramatica_json(self, monkeypatch):
         """CA (ADR 0024): a seção de tipo `fluxograma` carrega o objeto JSON da
         gramática restrita emitido pelo agente, as convenções Mermaid saíram
         do prompt."""
-        client_llm = _stub_openrouter(monkeypatch, content=_resposta_ia())
+        client_llm = _stub_ia(monkeypatch, content=_resposta_ia())
         client = _client_para(ELABORADOR, _sb(versao=_versao(estado="EM_ELABORACAO")))
 
         _chat(client)
 
-        system_prompt = client_llm.calls[0]["messages"][0]["content"]
+        system_prompt = client_llm.calls[0]["system"]
         assert "Mermaid" not in system_prompt
         assert "flowchart" not in system_prompt.lower()
         assert '"nos"' in system_prompt
@@ -495,7 +496,7 @@ class TestChatElaboracao:
     def test_chat_periodicidade_sugerida_persiste_na_versao(self, monkeypatch):
         """CA: a Periodicidade sugerida pelo agente fica gravada (na Versão) e
         volta na resposta para a UI exibir."""
-        _stub_openrouter(monkeypatch, content=_resposta_ia(periodicidade="6_meses"))
+        _stub_ia(monkeypatch, content=_resposta_ia(periodicidade="6_meses"))
         sb = _sb(versao=_versao(estado="EM_ELABORACAO"))
         client = _client_para(ELABORADOR, sb)
 
@@ -507,7 +508,7 @@ class TestChatElaboracao:
 
     def test_chat_sem_nova_sugestao_preserva_a_anterior(self, monkeypatch):
         """Turno sem sugestão (null) não apaga a sugestão já gravada."""
-        _stub_openrouter(monkeypatch, content=_resposta_ia(periodicidade=None))
+        _stub_ia(monkeypatch, content=_resposta_ia(periodicidade=None))
         sb = _sb(versao=_versao(estado="EM_ELABORACAO", periodicidade_sugerida="1_ano"))
         client = _client_para(ELABORADOR, sb)
 
@@ -519,7 +520,7 @@ class TestChatElaboracao:
     def test_chat_nao_elaborador_403(self, monkeypatch):
         """CA: só o Elaborador designado elabora — até perfis de escopo total
         (Gestor de Qualidade) levam 403 no chat."""
-        _stub_openrouter(monkeypatch, content=_resposta_ia())
+        _stub_ia(monkeypatch, content=_resposta_ia())
         for pessoa in (INTRUSO, REVISOR):
             client = _client_para(pessoa, _sb())
             res = _chat(client)
@@ -533,7 +534,7 @@ class TestChatElaboracao:
     def test_chat_estado_invalido_400(self, monkeypatch):
         """CA: transição/ação fora de estado válido → 400. Em EM_REVISAO a
         elaboração está fechada."""
-        _stub_openrouter(monkeypatch, content=_resposta_ia())
+        _stub_ia(monkeypatch, content=_resposta_ia())
         for estado in ("EM_REVISAO", "EM_VALIDACAO", "EM_ASSINATURA", "PUBLICADO"):
             client = _client_para(ELABORADOR, _sb(versao=_versao(estado=estado)))
             res = _chat(client)
@@ -555,7 +556,7 @@ class TestChatElaboracao:
     def test_chat_ia_indisponivel_preserva_rascunho_sem_persistir(self, monkeypatch):
         """IA fora do ar: resposta clara, rascunho do request preservado e NADA
         persiste/transiciona (a interação não aconteceu de fato)."""
-        _stub_openrouter(monkeypatch, exc=RuntimeError("502 Bad Gateway"))
+        _stub_ia(monkeypatch, exc=RuntimeError("502 Bad Gateway"))
         sb = _sb(versao=_versao(estado="A_ELABORAR"))
         client = _client_para(ELABORADOR, sb)
         rascunho_in = {"secoes": [{"id": "id-o", "titulo": "Objetivo", "conteudo": "Montado antes.", "tipo": "texto"}]}
@@ -592,7 +593,7 @@ class TestSecoesDinamicas:
         """CA: renomear/reordenar entre turnos preserva os IDs — o agente ecoa
         os ids do turno anterior e o sistema os mantém (o ⌖ sobrevive)."""
         # Turno 1: duas seções inéditas (sem id) — o sistema atribui.
-        _stub_openrouter(
+        _stub_ia(
             monkeypatch,
             content=_resposta_ia([_secao("Objetivo", "A."), _secao("Abrangência", "B.")]),
         )
@@ -605,7 +606,7 @@ class TestSecoesDinamicas:
 
         # Turno 2: o agente devolve invertido, com a primeira renomeada,
         # ecoando os ids; e acrescenta uma seção inédita (sem id).
-        _stub_openrouter(
+        _stub_ia(
             monkeypatch,
             content=_resposta_ia(
                 [
@@ -632,7 +633,7 @@ class TestSecoesDinamicas:
                 {"id": "id-b", "titulo": "Abrangência", "conteudo": "B", "tipo": "texto"},
             ]
         }
-        _stub_openrouter(monkeypatch, content=_resposta_ia([_secao("Objetivo", "A", sid="id-a")]))
+        _stub_ia(monkeypatch, content=_resposta_ia([_secao("Objetivo", "A", sid="id-a")]))
         sb = _sb(versao=_versao(estado="EM_ELABORACAO", rascunho=rascunho))
         client = _client_para(ELABORADOR, sb)
 
@@ -645,7 +646,7 @@ class TestSecoesDinamicas:
     def test_sinalizacao_de_lacuna_no_reply_nao_trava(self, monkeypatch):
         """CA: o agente sinaliza a ausência de uma seção esperada por ONA/JCI no
         `reply`, mas o turno avança normalmente (não bloqueia)."""
-        _stub_openrouter(
+        _stub_ia(
             monkeypatch,
             content=_resposta_ia(
                 [_secao("Objetivo", "Padronizar.")],
@@ -667,7 +668,7 @@ class TestSecoesDinamicas:
     def test_periodicidade_preservada_com_secoes(self, monkeypatch):
         """CA: a sugestão de Periodicidade segue na resposta junto da lista de
         seções (não se perde na mudança de shape)."""
-        _stub_openrouter(
+        _stub_ia(
             monkeypatch,
             content=_resposta_ia([_secao("Objetivo", "X.")], periodicidade="6_meses"),
         )
@@ -707,7 +708,7 @@ class TestFluxogramaJsonNoChat:
         """CA (ADR 0024): o agente emite a seção `fluxograma` como objeto JSON
         da gramática restrita; o backend valida e persiste o objeto na Versão."""
         secao_flux = {"titulo": "Fluxograma", "conteudo": FLUX_JSON, "tipo": "fluxograma"}
-        _stub_openrouter(monkeypatch, content=_resposta_ia([_secao("Objetivo", "Padronizar."), secao_flux]))
+        _stub_ia(monkeypatch, content=_resposta_ia([_secao("Objetivo", "Padronizar."), secao_flux]))
         sb = _sb(versao=_versao(estado="EM_ELABORACAO"))
         client = _client_para(ELABORADOR, sb)
 
@@ -725,7 +726,7 @@ class TestFluxogramaJsonNoChat:
         aceito e a Elaboração não trava."""
         invalido = {"nos": [{"id": "n1", "tipo": "decisao", "texto": "Conforme?", "ramos": [{"rotulo": "Sim"}]}]}
         secao_flux = {"titulo": "Fluxograma", "conteudo": invalido, "tipo": "fluxograma"}
-        _stub_openrouter(monkeypatch, content=_resposta_ia([secao_flux]))
+        _stub_ia(monkeypatch, content=_resposta_ia([secao_flux]))
         sb = _sb(versao=_versao(estado="EM_ELABORACAO"))
         client = _client_para(ELABORADOR, sb)
 
@@ -736,13 +737,13 @@ class TestFluxogramaJsonNoChat:
         assert isinstance(persistido["conteudo"], str)
 
         # O rascunho persistido volta no request seguinte sem ser recusado.
-        _stub_openrouter(monkeypatch, content=_resposta_ia([_secao("Objetivo", "X.")]))
+        _stub_ia(monkeypatch, content=_resposta_ia([_secao("Objetivo", "X.")]))
         res2 = _chat(client, rascunho={"secoes": sb.tables["pops_versoes"][0]["rascunho"]["secoes"]})
         assert res2.status_code == 200
 
     def test_request_com_fluxograma_objeto_valido_aceito(self, monkeypatch):
         """CA: os endpoints aceitam o objeto válido no rascunho do request."""
-        _stub_openrouter(monkeypatch, content=_resposta_ia())
+        _stub_ia(monkeypatch, content=_resposta_ia())
         client = _client_para(ELABORADOR, _sb(versao=_versao(estado="EM_ELABORACAO")))
         rascunho = {"secoes": [{"id": "id-f", "titulo": "Fluxograma", "conteudo": FLUX_JSON, "tipo": "fluxograma"}]}
 

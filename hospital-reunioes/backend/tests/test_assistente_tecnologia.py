@@ -23,7 +23,6 @@ import sys
 import textwrap
 import threading
 from dataclasses import dataclass
-from types import SimpleNamespace
 from typing import Any
 
 import httpx
@@ -34,6 +33,8 @@ from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+
+from anthropic_apoio import resposta_de_texto  # noqa: E402
 
 from app.dependencies import get_current_user, get_supabase_client  # noqa: E402
 from app.limiter import limiter  # noqa: E402
@@ -203,28 +204,28 @@ class _FakeCompletions:
         self._calls.append(kwargs)
         if self._exc is not None:
             raise self._exc
-        return SimpleNamespace(choices=[SimpleNamespace(message=SimpleNamespace(content=self._content))])
+        return resposta_de_texto(self._content)
 
 
 class _FakeLLMClient:
-    """Cliente OpenAI-like que devolve um `content` canned ou levanta `exc`.
+    """Cliente no formato da Anthropic que devolve um `content` canned ou levanta `exc`.
     `calls` guarda os kwargs de cada chamada, para olhar o prompt enviado."""
 
     def __init__(self, *, content=None, exc=None):
         self.calls: list[dict] = []
-        self.chat = SimpleNamespace(completions=_FakeCompletions(content=content, exc=exc, calls=self.calls))
+        self.messages = _FakeCompletions(content=content, exc=exc, calls=self.calls)
 
     @property
     def prompt_de_usuario(self) -> str:
-        return self.calls[-1]["messages"][1]["content"]
+        return self.calls[-1]["messages"][0]["content"]
 
 
 def _stub_llm(monkeypatch, *, content=None, exc=None) -> _FakeLLMClient:
     from app.services import ai_processor
 
     client = _FakeLLMClient(content=content, exc=exc)
-    monkeypatch.setattr(ai_processor, "_llm_provider", lambda: "openrouter")
-    monkeypatch.setattr(ai_processor, "_get_llm", lambda: (client, "modelo-teste", {}))
+    monkeypatch.setattr(ai_processor, "_llm_provider", lambda: "anthropic")
+    monkeypatch.setattr(ai_processor, "_get_llm", lambda: (client, "modelo-teste"))
     return client
 
 
@@ -542,13 +543,23 @@ class TestTurno:
         assert corpo["reply"] == "Entendi, vou anotar."
         assert corpo["rascunho"]["descricao"] == "Onde: no app, na tela de login"
 
-    def test_usa_json_mode_e_temperatura_baixa(self, monkeypatch):
+    def test_uma_chamada_com_a_instrucao_em_system_e_sem_temperatura(self, monkeypatch):
+        """O Sonnet 5.5 recusa `temperature` fora do padrão (issue #1302)."""
         llm = _stub_llm(monkeypatch, content=_resposta_do_modelo())
         cliente = _montar(logado=_pessoa("p1"))
         cliente.post(ROTA, json=_corpo())
         assert len(llm.calls) == 1
-        assert llm.calls[0]["temperature"] == 0.3
-        assert llm.calls[0]["response_format"] == {"type": "json_object"}
+        assert "temperature" not in llm.calls[0]
+        assert llm.calls[0]["system"]
+        assert [m["role"] for m in llm.calls[0]["messages"]] == ["user"]
+
+    def test_o_json_cercado_por_texto_ou_cerca_de_codigo_ainda_e_lido(self, monkeypatch):
+        """Sem o `json_object` do OpenAI, o modelo às vezes cerca o JSON."""
+        llm = _stub_llm(monkeypatch, content="Aqui está:\n```json\n" + _resposta_do_modelo() + "\n```")
+        cliente = _montar(logado=_pessoa("p1"))
+        corpo = cliente.post(ROTA, json=_corpo()).json()
+        assert len(llm.calls) == 1
+        assert corpo["reply"] == json.loads(_resposta_do_modelo())["reply"]
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -1141,9 +1152,8 @@ class TestPerguntaSobreOPainel:
 
     def test_o_modelo_recebe_a_ordem_de_citar_a_fonte(self, monkeypatch):
         _, llm = self._turno(monkeypatch)
-        sistema = llm.calls[-1]["messages"][0]
-        assert sistema["role"] == "system"
-        assert "**diga de onde tirou** (o arquivo e a seção" in sistema["content"]
+        sistema = llm.calls[-1]["system"]
+        assert "**diga de onde tirou** (o arquivo e a seção" in sistema
 
     def test_a_resposta_que_cita_a_secao_chega_inteira(self, monkeypatch):
         corpo, _ = self._turno(monkeypatch, reply=self.RESPOSTA_CITANDO)
@@ -1634,7 +1644,7 @@ def _parte_da_imagem(llm: _FakeLLMClient) -> dict:
     partes = _conteudo_enviado(llm)
     if not isinstance(partes, list):
         return {}
-    return next((p for p in partes if isinstance(p, dict) and p.get("type") == "image_url"), {})
+    return next((p for p in partes if isinstance(p, dict) and p.get("type") == "image"), {})
 
 
 class TestDescreverImagem:
@@ -1716,7 +1726,7 @@ class TestDescreverImagem:
         assert cliente.post(DESCREVER, files=_imagem("tela.png")).status_code == 200
 
         esperado = base64.b64encode(BYTES_DA_IMAGEM).decode("ascii")
-        assert _parte_da_imagem(llm).get("image_url", {}).get("url") == f"data:image/png;base64,{esperado}"
+        assert _parte_da_imagem(llm).get("source") == {"type": "base64", "media_type": "image/png", "data": esperado}
 
     def test_o_tipo_vem_da_extensao_e_nao_do_cabecalho_do_cliente(self, monkeypatch):
         """Mesma regra do Anexo da Ouvidoria (ADR 0034): o cabecalho e do lado
@@ -1724,7 +1734,7 @@ class TestDescreverImagem:
         llm = _stub_llm(monkeypatch, content="a tela do sistema")
         cliente = _montar(logado=_pessoa("p1"))
         assert cliente.post(DESCREVER, files=_imagem("tela.png", tipo="image/webp")).status_code == 200
-        assert _parte_da_imagem(llm)["image_url"]["url"].startswith("data:image/png;base64,")
+        assert _parte_da_imagem(llm)["source"]["media_type"] == "image/png"
 
     @pytest.mark.parametrize(
         "nome,tipo",
@@ -1741,7 +1751,7 @@ class TestDescreverImagem:
         llm = _stub_llm(monkeypatch, content="a tela do sistema")
         cliente = _montar(logado=_pessoa("p1"))
         assert cliente.post(DESCREVER, files=_imagem(nome)).status_code == 200
-        assert _parte_da_imagem(llm)["image_url"]["url"].startswith(f"data:{tipo};base64,")
+        assert _parte_da_imagem(llm)["source"]["media_type"] == tipo
 
     def test_usa_o_mesmo_modelo_do_chat(self, monkeypatch):
         """Nem cliente proprio nem modelo proprio para visao (ADR 0056): o

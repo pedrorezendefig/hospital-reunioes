@@ -20,9 +20,15 @@ import logging
 import httpx
 
 from app.config import settings
-from app.services.ai_processor import _OPENROUTER_HEADERS, _llm_provider, _log_llm_call
 
 logger = logging.getLogger(__name__)
+
+# A transcrição é a única chamada que segue no OpenRouter (issue #1302): a IA de
+# texto do app foi para a Anthropic, que não transcreve áudio.
+_OPENROUTER_HEADERS = {
+    "HTTP-Referer": "https://hospitalsaomatheus.cloud",
+    "X-Title": "Hospital Reunioes",
+}
 
 # Timeout generoso: transcrição de áudio é mais lenta que um chat completion.
 _TIMEOUT = httpx.Timeout(60.0, connect=10.0)
@@ -66,12 +72,12 @@ def transcrever(audio: bytes, formato: str) -> str:
     if not audio:
         raise TranscricaoIndisponivelError("Áudio vazio — nada a transcrever")
 
-    provider = _llm_provider()
-    if provider == "mock":
+    if not settings.openrouter_api_key:
         raise TranscricaoIndisponivelError("Nenhuma chave do OpenRouter configurada para transcrição")
 
+    provider = "openrouter"
     model = settings.transcricao_model
-    _log_llm_call("transcricao-voz", provider, model)
+    logger.info(f"[Transcricao] Chamando {provider} (modelo={model})")
 
     # Normaliza o MIME: o MediaRecorder do Chrome manda "audio/webm;codecs=opus";
     # o `format` do OpenRouter é só o container ("webm").

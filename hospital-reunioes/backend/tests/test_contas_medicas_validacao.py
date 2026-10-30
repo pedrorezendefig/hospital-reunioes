@@ -21,11 +21,11 @@ import sys
 from pathlib import Path
 from typing import Any
 
-import httpx
+import httpx2
 import pytest
+from anthropic_apoio import cliente_por_transporte, mensagem
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
-from openai import OpenAI
 from postgrest.exceptions import APIError
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
@@ -514,7 +514,7 @@ LEITURA = {
 }
 
 
-class _OpenRouter:
+class _IAFalsa:
     """O provedor do teste, na fronteira HTTP: devolve a leitura no formato
     pedido, guarda o que recebeu e conta as requisições."""
 
@@ -522,42 +522,21 @@ class _OpenRouter:
         self.corpos: list[dict] = []
         self.leitura = LEITURA
 
-    def __call__(self, request: httpx.Request) -> httpx.Response:
+    def __call__(self, request: httpx2.Request) -> httpx2.Response:
         self.corpos.append(json.loads(request.content))
-        return httpx.Response(
-            200,
-            json={
-                "id": "gen",
-                "object": "chat.completion",
-                "created": 1,
-                "model": "m",
-                "choices": [
-                    {
-                        "index": 0,
-                        "message": {"role": "assistant", "content": json.dumps(self.leitura)},
-                        "finish_reason": "stop",
-                    }
-                ],
-                "usage": {"prompt_tokens": 10, "completion_tokens": 5, "total_tokens": 15, "cost": 0.001},
-            },
-        )
+        return httpx2.Response(200, json=mensagem(json.dumps(self.leitura)))
 
     def texto_enviado(self, i: int = 0) -> str:
         return json.dumps(self.corpos[i]["messages"], ensure_ascii=False)
 
 
 @pytest.fixture
-def provedor(monkeypatch) -> _OpenRouter:
-    duble = _OpenRouter()
+def provedor(monkeypatch) -> _IAFalsa:
+    duble = _IAFalsa()
     monkeypatch.setattr(
         ia,
         "_cliente",
-        lambda: OpenAI(
-            api_key="chave-de-teste",
-            base_url="https://openrouter.ai/api/v1",
-            http_client=httpx.Client(transport=httpx.MockTransport(duble)),
-            max_retries=0,
-        ),
+        lambda: cliente_por_transporte(duble),
     )
     monkeypatch.setattr(ia, "_esperar", lambda _segundos: None)
     return duble

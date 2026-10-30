@@ -64,7 +64,7 @@ Estado terminal de uma Ata finalizada **sem assinatura digital**. Na validação
 _Evitar_: concluída, fechada, validada.
 
 **Pipeline de IA** (ou **Pipeline**):
-A sequência de chamadas LLM que transforma Transcrição em Ata (extrair fala → casar participantes → resumir → estruturar JSON → gerar Ata em português → PDF). OpenRouter é o provedor único (hoje roteia um modelo OpenAI); sem chave configurada, em desenvolvimento, o Pipeline cai num mock.
+A sequência de chamadas LLM que transforma Transcrição em Ata (extrair fala → casar participantes → resumir → estruturar JSON → gerar Ata em português → PDF). A API da Anthropic é o provedor único da IA de texto, no Claude Sonnet 5.5 (issue #1302); sem chave configurada, em desenvolvimento, o Pipeline cai num mock.
 _Evitar_: processamento, job de IA.
 
 ## Pendências

@@ -4,7 +4,7 @@
 A IA lê só o texto livre que o código não estruturou, já desidentificado, mais
 o que o código já leu (prescrições consolidadas, balanço, glicemias e os
 achados das conferências). Os testes passam pelo adaptador de verdade e trocam
-só o transporte HTTP: o que eles leem é o corpo que sairia para o OpenRouter e
+só o transporte HTTP: o que eles leem é o corpo que sairia para a Anthropic e
 a resposta é a do Anexo A, montada à mão.
 
 O prontuário é sintético, montado das fixtures de texto do MV
@@ -21,9 +21,9 @@ import unicodedata
 from pathlib import Path
 from types import SimpleNamespace
 
-import httpx
+import httpx2
 import pytest
-from openai import OpenAI
+from anthropic_apoio import cliente_por_transporte, mensagem, uso
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
@@ -147,37 +147,21 @@ def _resposta(**listas) -> dict:
 
 
 class _Provedor:
-    """O OpenRouter do teste: guarda o corpo de cada requisição e devolve
+    """A Anthropic do teste: guarda o corpo de cada requisição e devolve
     `respostas` na ordem; a última se repete."""
 
     def __init__(self):
         self.corpos: list[dict] = []
         self.respostas: list[dict] = [_resposta()]
 
-    def __call__(self, request: httpx.Request) -> httpx.Response:
+    def __call__(self, request: httpx2.Request) -> httpx2.Response:
         self.corpos.append(json.loads(request.content))
         resposta = self.respostas.pop(0) if len(self.respostas) > 1 else self.respostas[0]
-        return httpx.Response(
-            200,
-            json={
-                "id": f"gen-{len(self.corpos)}",
-                "object": "chat.completion",
-                "created": 1,
-                "model": self.corpos[-1]["model"],
-                "choices": [
-                    {
-                        "index": 0,
-                        "message": {"role": "assistant", "content": json.dumps(resposta)},
-                        "finish_reason": "stop",
-                    }
-                ],
-                "usage": {"prompt_tokens": 900, "completion_tokens": 300, "total_tokens": 1200, "cost": 0.002},
-            },
-        )
+        return httpx2.Response(200, json=mensagem(json.dumps(resposta), uso(entrada=900, saida=300)))
 
     def textos_do_prontuario(self) -> list[str]:
         """O bloco TEXTO DO PRONTUÁRIO de cada requisição."""
-        return [corpo["messages"][1]["content"][1]["text"] for corpo in self.corpos]
+        return [corpo["messages"][0]["content"][1]["text"] for corpo in self.corpos]
 
 
 @pytest.fixture
@@ -186,12 +170,7 @@ def provedor(monkeypatch) -> _Provedor:
     monkeypatch.setattr(
         ia,
         "_cliente",
-        lambda: OpenAI(
-            api_key="chave-de-teste",
-            base_url="https://openrouter.ai/api/v1",
-            http_client=httpx.Client(transport=httpx.MockTransport(duble)),
-            max_retries=0,
-        ),
+        lambda: cliente_por_transporte(duble),
     )
     monkeypatch.setattr(ia, "_esperar", lambda _segundos: None)
     return duble
@@ -333,7 +312,7 @@ class TestEntrada:
     def test_as_orientacoes_de_leitura_sao_as_secoes_1_3_e_8_da_memoria(self, provedor):
         _passo_a(_Banco(), _lido(_paginas()))
 
-        orientacoes = provedor.corpos[0]["messages"][1]["content"][0]["text"]
+        orientacoes = provedor.corpos[0]["messages"][0]["content"][0]["text"]
         for codigo in ("ALFA-PRI-01", "ALFA-DIA-01", "ALFA-INS-04"):
             assert codigo in orientacoes, codigo
         assert "ALFA-PRC-02" not in orientacoes
@@ -413,7 +392,7 @@ class TestJanelas:
         dias_por_janela = [re.findall(r"\[\[PÁG \d+ · [^·]+ · (\d\d/10)/2026", texto) for texto in textos]
         assert dias_por_janela == [["01/10", "02/10"], ["02/10", "03/10"], ["03/10", "04/10"]]
         for corpo in provedor.corpos:
-            enviado = "".join(bloco["text"] for bloco in corpo["messages"][1]["content"])
+            enviado = "".join(bloco["text"] for bloco in corpo["messages"][0]["content"])
             assert len(enviado) <= LIMITE_EM_CARACTERES
         # Cada janela leva as seções do código.
         assert all("[[PRESCRIÇÕES CONSOLIDADAS]]" in texto for texto in textos)
@@ -617,26 +596,26 @@ class TestUmaLeitura:
 
     def test_a_leitura_guarda_o_modelo_e_com_outro_modelo_a_ia_le_de_novo(self, provedor, monkeypatch):
         """Issue #1197: a leitura vale para o modelo que a fez."""
-        banco = _banco_com_modelo(monkeypatch, "google/modelo-antigo")
+        banco = _banco_com_modelo(monkeypatch, "claude-modelo-antigo")
         provedor.respostas = [_resposta(observacoes=["Do antigo."]), _resposta(observacoes=["Do novo."])]
         _passo_a(banco, _lido(_paginas()))
 
-        monkeypatch.setattr(ia.settings, "cm_ia_modelo_passo_a", "anthropic/modelo-novo")
+        monkeypatch.setattr(ia.settings, "cm_ia_modelo_passo_a", "claude-modelo-novo")
         relida = _passo_a(banco, _lido(_paginas()))
         de_novo = _passo_a(banco, _lido(_paginas()))
 
-        assert [corpo["model"] for corpo in provedor.corpos] == ["google/modelo-antigo", "anthropic/modelo-novo"]
+        assert [corpo["model"] for corpo in provedor.corpos] == ["claude-modelo-antigo", "claude-modelo-novo"]
         assert relida["observacoes"] == de_novo["observacoes"] == ["Do novo."]
         (gravados,) = banco.tabelas["cm_eventos"]
-        assert gravados["eventos_json"]["ia_modelo"] == "anthropic/modelo-novo"
+        assert gravados["eventos_json"]["ia_modelo"] == "claude-modelo-novo"
 
     def test_leitura_guardada_sem_o_modelo_conta_como_de_outro_modelo(self, provedor, monkeypatch):
-        banco = _banco_com_modelo(monkeypatch, "google/modelo-atual")
+        banco = _banco_com_modelo(monkeypatch, "claude-modelo-atual")
         banco.tabelas["cm_eventos"][0]["eventos_json"]["ia"] = _resposta(observacoes=["De antes do #1197."])
 
         lida = _passo_a(banco, _lido(_paginas()))
 
-        assert [corpo["model"] for corpo in provedor.corpos] == ["google/modelo-atual"]
+        assert [corpo["model"] for corpo in provedor.corpos] == ["claude-modelo-atual"]
         assert lida["observacoes"] == []
 
 

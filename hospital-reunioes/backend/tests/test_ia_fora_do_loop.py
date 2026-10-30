@@ -37,6 +37,7 @@ from slowapi.errors import RateLimitExceeded
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
+from anthropic_apoio import resposta_de_texto  # noqa: E402
 from test_assistente_tecnologia import _corpo, _imagem, _montar, _pessoa  # noqa: E402
 from test_ata_guiada import CURRENT_USER, FACILITADOR, _reuniao_programada, _SupabaseMock  # noqa: E402
 from test_pops_elaboracao import ELABORADOR, _chat, _client_para, _resposta_ia, _sb, _versao  # noqa: E402
@@ -65,22 +66,22 @@ def _reset_rate_limiter():
 
 
 class _ProvedorQueAnotaAThread:
-    """Cliente OpenAI-like: guarda o nome da thread de cada chamada."""
+    """Cliente no formato da Anthropic: guarda o nome da thread de cada chamada."""
 
     def __init__(self):
         self.threads: list[str] = []
-        self.chat = SimpleNamespace(completions=SimpleNamespace(create=self._create))
+        self.messages = SimpleNamespace(create=self._create)
 
     def _create(self, **_kwargs):
         self.threads.append(threading.current_thread().name)
-        return SimpleNamespace(choices=[SimpleNamespace(message=SimpleNamespace(content=RESPOSTA_DO_MODELO))])
+        return resposta_de_texto(RESPOSTA_DO_MODELO)
 
 
 @pytest.fixture
 def provedor(monkeypatch) -> _ProvedorQueAnotaAThread:
     cliente = _ProvedorQueAnotaAThread()
-    monkeypatch.setattr(ai_processor, "_llm_provider", lambda: "openrouter")
-    monkeypatch.setattr(ai_processor, "_get_llm", lambda: (cliente, "modelo-teste", {}))
+    monkeypatch.setattr(ai_processor, "_llm_provider", lambda: "anthropic")
+    monkeypatch.setattr(ai_processor, "_get_llm", lambda: (cliente, "modelo-teste"))
     return cliente
 
 
@@ -190,13 +191,11 @@ class TestVersaoQueSaiDaElaboracaoDuranteOChat:
 
         def _enviada_para_revisao_no_meio(**_kwargs):
             sb.tables["pops_versoes"][0]["estado"] = "EM_REVISAO"
-            return SimpleNamespace(choices=[SimpleNamespace(message=SimpleNamespace(content=_resposta_ia()))])
+            return resposta_de_texto(_resposta_ia())
 
-        cliente_da_ia = SimpleNamespace(
-            chat=SimpleNamespace(completions=SimpleNamespace(create=_enviada_para_revisao_no_meio))
-        )
-        monkeypatch.setattr(ai_processor, "_llm_provider", lambda: "openrouter")
-        monkeypatch.setattr(ai_processor, "_get_llm", lambda: (cliente_da_ia, "modelo-teste", {}))
+        cliente_da_ia = SimpleNamespace(messages=SimpleNamespace(create=_enviada_para_revisao_no_meio))
+        monkeypatch.setattr(ai_processor, "_llm_provider", lambda: "anthropic")
+        monkeypatch.setattr(ai_processor, "_get_llm", lambda: (cliente_da_ia, "modelo-teste"))
 
         resposta = _chat(_client_para(ELABORADOR, sb))
 
@@ -240,10 +239,11 @@ def _apelidos(arvore: ast.AST) -> dict[str, str]:
 
 
 def _chama_o_provedor(chamada: ast.Call) -> bool:
-    """`<qualquer coisa>.completions.create(...)` ou `_get_llm()`."""
+    """`<qualquer coisa>.messages.create(...)` (o SDK da Anthropic, issue #1302),
+    `<qualquer coisa>.completions.create(...)` ou `_get_llm()`."""
     alvo = chamada.func
     if isinstance(alvo, ast.Attribute) and alvo.attr == "create":
-        return isinstance(alvo.value, ast.Attribute) and alvo.value.attr == "completions"
+        return isinstance(alvo.value, ast.Attribute) and alvo.value.attr in ("messages", "completions")
     return _nome_chamado(chamada) == "_get_llm"
 
 
@@ -318,7 +318,7 @@ def _cliente():
     return None
 
 def resumir(texto):
-    return _cliente().chat.completions.create(model="m", messages=[])
+    return _cliente().messages.create(model="m", max_tokens=1, messages=[])
 
 def resumir_com_titulo(texto):
     return "Titulo: " + resumir(texto)
@@ -360,8 +360,8 @@ class TestTravaDaClasse:
         """O jeito errado mais provável de uma rota nova: pegar o cliente e chamar ali mesmo."""
         (tmp_path / "rota.py").write_text(
             "async def rota_nova(texto):\n"
-            "    cliente, modelo, extra = ai_processor._get_llm()\n"
-            "    return cliente.chat.completions.create(model=modelo, messages=[])\n",
+            "    cliente, modelo = ai_processor._get_llm()\n"
+            "    return cliente.messages.create(model=modelo, max_tokens=1, messages=[])\n",
             encoding="utf-8",
         )
         assert async_que_chamam_a_ia_no_loop(tmp_path) == [

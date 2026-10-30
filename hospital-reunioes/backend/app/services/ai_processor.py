@@ -7,7 +7,7 @@ from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta
 from functools import partial
 
-from openai import OpenAI
+import anthropic
 
 from app.config import settings
 from app.services.prompt_loader import load_prompt, render_prompt
@@ -15,32 +15,51 @@ from app.utils.text_sanitizer import sanitizar_estrutura, sanitizar_travessao
 
 logger = logging.getLogger(__name__)
 
-
-_OPENROUTER_HEADERS = {
-    "HTTP-Referer": "https://hospitalsaomatheus.cloud",
-    "X-Title": "Hospital Reunioes",
-}
+# O teto de saída de cada chamada dos chats e da Ata. Acima de ~21 mil tokens o
+# SDK exige streaming; a maior resposta do app (a Ata inteira) fica bem abaixo.
+MAX_TOKENS = 16000
 
 
 def _llm_provider() -> str:
-    """Retorna 'openrouter' ou 'mock' conforme a chave do OpenRouter."""
-    if settings.openrouter_api_key and settings.openrouter_api_key != "your-openrouter-key":
-        return "openrouter"
+    """Retorna 'anthropic' ou 'mock' conforme a chave da Anthropic (issue #1302)."""
+    if settings.anthropic_api_key:
+        return "anthropic"
     return "mock"
 
 
-def _get_llm() -> tuple[OpenAI, str, dict]:
-    """Retorna (client, model, extra_kwargs) do OpenRouter.
+def _get_llm() -> tuple[anthropic.Anthropic, str]:
+    """Retorna (client, model) da API da Anthropic.
 
-    O cliente é o SDK `openai` apontado para o OpenRouter (mesma superfície de
-    API). Caller deve checar _llm_provider() == 'mock' antes para evitar
-    instanciar cliente sem chave.
+    Caller deve checar _llm_provider() == 'mock' antes para evitar instanciar
+    cliente sem chave.
     """
-    client = OpenAI(
-        api_key=settings.openrouter_api_key,
-        base_url=settings.openrouter_base_url,
+    return anthropic.Anthropic(api_key=settings.anthropic_api_key), settings.llm_model
+
+
+def _pedir_texto(client, model: str, *, system: str | None, conteudo) -> str:
+    """Uma chamada à IA, com a instrução em `system` e uma mensagem do usuário.
+    Devolve o texto da resposta. Recusa e resposta cortada no teto viram erro,
+    que cada chamador trata do seu jeito (nenhum deles levanta para a tela)."""
+    kwargs = {"system": system} if system else {}
+    resposta = client.messages.create(
+        model=model,
+        max_tokens=MAX_TOKENS,
+        messages=[{"role": "user", "content": conteudo}],
+        **kwargs,
     )
-    return client, settings.llm_model, {"extra_headers": _OPENROUTER_HEADERS}
+    if resposta.stop_reason in ("refusal", "max_tokens"):
+        raise ValueError(f"resposta da IA interrompida ({resposta.stop_reason})")
+    return "".join(bloco.text for bloco in resposta.content if bloco.type == "text")
+
+
+def _pedir_json(client, model: str, *, system: str, usuario: str) -> str:
+    """Como `_pedir_texto`, para os prompts que pedem um objeto JSON. Sem o
+    `json_object` do OpenAI, o modelo às vezes cerca o JSON com ```json ou
+    fala antes dele: o texto volta só do primeiro `{` ao último `}`, e quem
+    chama faz o `json.loads` como antes."""
+    texto = _pedir_texto(client, model, system=system, conteudo=usuario)
+    inicio, fim = texto.find("{"), texto.rfind("}")
+    return texto[inicio : fim + 1] if 0 <= inicio < fim else texto
 
 
 # Executor PRÓPRIO das chamadas à IA feitas por rota `async def` (issue #773).
@@ -80,10 +99,8 @@ async def chamar_ia_fora_do_loop(funcao, /, *args, **kwargs):
 
 
 def _log_llm_call(reuniao_id: str, provider: str, model: str) -> None:
-    """Loga chamada LLM com a chave do OpenRouter mascarada."""
-    key_used = settings.openrouter_api_key
-    masked = f"{key_used[:8]}...{key_used[-4:]}" if len(key_used) >= 12 else "***"
-    logger.info(f"[AI] Chamando LLM via {provider} (modelo={model}, chave={masked}, reuniao={reuniao_id})")
+    """Loga a chamada à IA, sem pedaço nenhum da chave."""
+    logger.info(f"[AI] Chamando LLM via {provider} (modelo={model}, reuniao={reuniao_id})")
 
 
 def _build_system_prompt(data_reuniao: str) -> str:
@@ -150,15 +167,15 @@ def process_transcricao(
     objetivo_agendado: str = "",
 ) -> dict:
     """
-    Envia a transcrição para o GPT-4o-mini e retorna o json_ata estruturado.
+    Envia a transcrição para a IA e retorna o json_ata estruturado.
     Em caso de falha, retorna dict com campo 'error'.
     """
     provider = _llm_provider()
     if provider == "mock":
-        logger.warning("Nenhuma chave do OpenRouter (OPENROUTER_API_KEY) configurada — ativando modo mock")
+        logger.warning("Nenhuma chave da Anthropic (ANTHROPIC_API_KEY) configurada, ativando modo mock")
         return _mock_ata(reuniao_id, tipo_reuniao)
 
-    client, model, extra = _get_llm()
+    client, model = _get_llm()
     _log_llm_call(reuniao_id, provider, model)
 
     # Data atual injetada para que a IA calcule prazos relativos corretamente
@@ -190,17 +207,7 @@ def process_transcricao(
     )
 
     try:
-        response = client.chat.completions.create(
-            model=model,
-            messages=[
-                {"role": "system", "content": _build_system_prompt(hoje_iso)},
-                {"role": "user", "content": user_content},
-            ],
-            temperature=0.2,
-            response_format={"type": "json_object"},
-            **extra,
-        )
-        raw = response.choices[0].message.content
+        raw = _pedir_json(client, model, system=_build_system_prompt(hoje_iso), usuario=user_content)
         parsed = json.loads(raw)
         # ADR 0013: a saída da IA vira Ata (e Pendência/email) sem travessão.
         parsed = sanitizar_estrutura(parsed)
@@ -246,7 +253,7 @@ def process_correcao(
         logger.warning("Modo MOCK ativo para correção (sem chave LLM)")
         return json_ata_atual
 
-    client, model, extra = _get_llm()
+    client, model = _get_llm()
     _log_llm_call(f"correcao/{reuniao_id}", provider, model)
     hoje_iso = datetime.now().strftime("%Y-%m-%d")
 
@@ -259,17 +266,7 @@ def process_correcao(
     )
 
     try:
-        response = client.chat.completions.create(
-            model=model,
-            messages=[
-                {"role": "system", "content": load_prompt("correcao_ata")},
-                {"role": "user", "content": user_content},
-            ],
-            temperature=0.1,
-            response_format={"type": "json_object"},
-            **extra,
-        )
-        raw = response.choices[0].message.content
+        raw = _pedir_json(client, model, system=load_prompt("correcao_ata"), usuario=user_content)
         parsed = json.loads(raw)
         # ADR 0013: ata corrigida também sai sem travessão.
         parsed = sanitizar_estrutura(parsed)
@@ -297,7 +294,7 @@ def chat_correcao(
     de partida e retorna a lista atualizada, em vez de reconstruir tudo do
     chat history a cada turno.
 
-    Se a chamada ao OpenRouter falha (auth, rate limit, indisponibilidade),
+    Se a chamada à IA falha (auth, rate limit, indisponibilidade),
     devolve um erro claro ao usuário — sem failover automático.
     """
     provider = _llm_provider()
@@ -309,7 +306,7 @@ def chat_correcao(
             "correction_plan": plan_in,
         }
 
-    client, model, extra = _get_llm()
+    client, model = _get_llm()
     _log_llm_call("chat-correcao", provider, model)
     hoje_iso = datetime.now().strftime("%Y-%m-%d")
 
@@ -329,17 +326,7 @@ def chat_correcao(
     system_prompt = load_prompt("chat_correcao_system")
 
     try:
-        response = client.chat.completions.create(
-            model=model,
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_content},
-            ],
-            temperature=0.3,
-            response_format={"type": "json_object"},
-            **extra,
-        )
-        parsed = json.loads(response.choices[0].message.content)
+        parsed = json.loads(_pedir_json(client, model, system=system_prompt, usuario=user_content))
     except Exception as e:
         logger.error(f"Erro no chat de correção via {provider}: {e}")
         return {
@@ -382,7 +369,7 @@ def chat_ata_guiada(
     canônicos e perguntar no ambíguo; após a resposta, o quadro é re-resolvido
     deterministicamente (`resolver_quadro`) — o LLM nunca decide FK.
 
-    Espelha o `chat_correcao` (síncrono, request/response, OpenRouter-only, sem
+    Espelha o `chat_correcao` (síncrono, request/response, um provedor só, sem
     failover). Sem chave de IA configurada, cai no caminho MOCK — não quebra o
     endpoint.
     """
@@ -403,7 +390,7 @@ def chat_ata_guiada(
             "rascunho": rascunho,
         }
 
-    client, model, extra = _get_llm()
+    client, model = _get_llm()
     _log_llm_call("chat-ata-guiada", provider, model)
     hoje_iso = datetime.now().strftime("%Y-%m-%d")
 
@@ -429,17 +416,7 @@ def chat_ata_guiada(
     system_prompt = load_prompt("chat_ata_guiada_system")
 
     try:
-        response = client.chat.completions.create(
-            model=model,
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_content},
-            ],
-            temperature=0.3,
-            response_format={"type": "json_object"},
-            **extra,
-        )
-        parsed = json.loads(response.choices[0].message.content)
+        parsed = json.loads(_pedir_json(client, model, system=system_prompt, usuario=user_content))
         # response_format=json_object é só um hint — nem todo modelo garante objeto
         # top-level. Um array/string/null aqui viraria AttributeError fora do try; trata
         # como erro pra cair no caminho gracioso abaixo (CA5: nada de 500 cru).
@@ -550,7 +527,7 @@ def chat_elaboracao_pop(
             "periodicidade_sugerida": None,
         }
 
-    client, model, extra = _get_llm()
+    client, model = _get_llm()
     _log_llm_call("chat-elaboracao-pop", provider, model)
     hoje_iso = datetime.now().strftime("%Y-%m-%d")
 
@@ -573,17 +550,7 @@ def chat_elaboracao_pop(
     system_prompt = load_prompt("chat_elaboracao_pop_system")
 
     try:
-        response = client.chat.completions.create(
-            model=model,
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_content},
-            ],
-            temperature=0.3,
-            response_format={"type": "json_object"},
-            **extra,
-        )
-        parsed = json.loads(response.choices[0].message.content)
+        parsed = json.loads(_pedir_json(client, model, system=system_prompt, usuario=user_content))
         if not isinstance(parsed, dict):
             raise ValueError("resposta da IA não é um objeto JSON")
     except Exception as e:
@@ -664,8 +631,8 @@ def _bloco_pop_contexto(pop_contexto: dict | None) -> str:
 
 
 def _mock_ata(reuniao_id: str, tipo_reuniao: str) -> dict:
-    """Retorna uma ata fictícia no formato HSM (6 seções) para testes sem chave do OpenRouter."""
-    logger.info(f"[AI] MOCK: Gerando ata ficticia para {reuniao_id} (sem chave do OpenRouter ou erro)")
+    """Retorna uma ata fictícia no formato HSM (6 seções) para testes sem chave da IA."""
+    logger.info(f"[AI] MOCK: Gerando ata ficticia para {reuniao_id} (sem chave da IA ou erro)")
     return {
         "hora_inicio": "14:00",
         "hora_fim": "15:30",
@@ -772,23 +739,20 @@ def sugerir_acoes_ouvidoria(resumo: str) -> dict:
 
     try:
         # `_get_llm` fica DENTRO do try: instanciar o cliente lê
-        # `openrouter_base_url` do settings, e uma env malformada estouraria
+        # a chave do settings, e uma env malformada estouraria
         # aqui. Fora do try, essa exceção subiria até o job e o relatório do
         # mês inteiro não sairia, em vez de sair sem a seção. A promessa desta
         # função é não levantar nunca, e ela vale desde a primeira linha.
-        client, model, extra = _get_llm()
+        client, model = _get_llm()
         _log_llm_call("ouvidoria-sugestoes", provider, model)
-        response = client.chat.completions.create(
-            model=model,
-            messages=[
-                {"role": "system", "content": load_prompt("ouvidoria_sugestoes_system")},
-                {"role": "user", "content": render_prompt("ouvidoria_sugestoes_user", resumo=resumo)},
-            ],
-            temperature=0.3,
-            response_format={"type": "json_object"},
-            **extra,
+        parsed = json.loads(
+            _pedir_json(
+                client,
+                model,
+                system=load_prompt("ouvidoria_sugestoes_system"),
+                usuario=render_prompt("ouvidoria_sugestoes_user", resumo=resumo),
+            )
         )
-        parsed = json.loads(response.choices[0].message.content)
         if not isinstance(parsed, dict):
             raise ValueError("resposta da IA não é um objeto JSON")
         itens = _normalizar_sugestoes(parsed.get("sugestoes"))

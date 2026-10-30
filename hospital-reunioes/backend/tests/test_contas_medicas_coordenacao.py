@@ -21,11 +21,10 @@ from pathlib import Path
 from typing import Any
 from zoneinfo import ZoneInfo
 
-import httpx
 import pytest
+from anthropic_apoio import cliente_por_transporte, nomear_schemas
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
-from openai import OpenAI
 from test_contas_medicas_processamento import (
     PESSOAS,
     _Banco,
@@ -34,8 +33,8 @@ from test_contas_medicas_processamento import (
     _conta,
     _enviar,
     _Extrator,
+    _IAFalsa,
     _item_de_tabela,
-    _OpenRouter,
     _pessoa,
     _prontuario,
     _rodar_o_job,
@@ -72,19 +71,11 @@ def _extrator(monkeypatch) -> _Extrator:
 
 
 @pytest.fixture(autouse=True)
-def openrouter(monkeypatch) -> _OpenRouter:
-    """O provedor do teste na fronteira HTTP: nada chega ao OpenRouter."""
-    duble = _OpenRouter()
-    monkeypatch.setattr(
-        ia,
-        "_cliente",
-        lambda: OpenAI(
-            api_key="chave-de-teste",
-            base_url="https://openrouter.ai/api/v1",
-            http_client=httpx.Client(transport=httpx.MockTransport(duble)),
-            max_retries=0,
-        ),
-    )
+def ia_falsa(monkeypatch) -> _IAFalsa:
+    """O provedor do teste na fronteira HTTP: nada chega à Anthropic."""
+    duble = _IAFalsa()
+    duble.nomes = nomear_schemas(monkeypatch)
+    monkeypatch.setattr(ia, "_cliente", lambda: cliente_por_transporte(duble))
     monkeypatch.setattr(ia, "_esperar", lambda _segundos: None)
     return duble
 
@@ -179,8 +170,8 @@ def _cenario_enviado(**campos: Any) -> dict[str, Any]:
 
 
 class TestCadastroDoCenario:
-    def test_a_ia_preenche_os_campos_e_o_codigo_que_nao_esta_na_tabela_e_apontado(self, openrouter):
-        openrouter.respostas[PROPOSTA] = PROPOSTA_DA_IA
+    def test_a_ia_preenche_os_campos_e_o_codigo_que_nao_esta_na_tabela_e_apontado(self, ia_falsa):
+        ia_falsa.respostas[PROPOSTA] = PROPOSTA_DA_IA
         banco = _banco()
 
         resposta = _cliente(banco, "gestao").post(f"{ROTA}/cenarios/proposta", json={"texto": TEXTO_DO_CENARIO})
@@ -195,7 +186,7 @@ class TestCadastroDoCenario:
         ]
         assert corpo["codigos_fora_da_tabela"] == ["79999999"]
         # O texto da pessoa foi para a IA; nada foi gravado antes de ela conferir.
-        (pedido,) = [c for c in openrouter.corpos if c["response_format"]["json_schema"]["name"] == PROPOSTA]
+        (pedido,) = [c for c in ia_falsa.corpos if c["formato"] == PROPOSTA]
         assert TEXTO_DO_CENARIO in json.dumps(pedido["messages"], ensure_ascii=False)
         assert banco.tabelas.get("cm_cenario", []) == []
 
@@ -255,15 +246,15 @@ class TestCadastroDoCenario:
         assert cliente.put(f"{ROTA}/cenarios/{UM_UUID}", json=_cenario_enviado()).status_code == 404
 
     @pytest.mark.parametrize("quem", ["coordenadora", "faturista"])
-    def test_sem_incluir_regra_operacional_nao_cadastra_nem_pede_a_ia(self, quem, openrouter):
-        openrouter.respostas[PROPOSTA] = PROPOSTA_DA_IA
+    def test_sem_incluir_regra_operacional_nao_cadastra_nem_pede_a_ia(self, quem, ia_falsa):
+        ia_falsa.respostas[PROPOSTA] = PROPOSTA_DA_IA
         banco = _banco()
         cliente = _cliente(banco, quem)
 
         assert cliente.post(f"{ROTA}/cenarios", json=_cenario_enviado()).status_code == 403
         assert cliente.post(f"{ROTA}/cenarios/proposta", json={"texto": TEXTO_DO_CENARIO}).status_code == 403
         assert banco.tabelas.get("cm_cenario", []) == []
-        assert openrouter.requisicoes == 0
+        assert ia_falsa.requisicoes == 0
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -325,8 +316,8 @@ def _banco_com_cenarios() -> _BancoDaCoordenacao:
     return banco
 
 
-def _analisar(banco: _Banco, openrouter: _OpenRouter, *ocorrencias: dict[str, Any]) -> dict:
-    openrouter.respostas[PASSO_C] = {"ocorrencias": list(ocorrencias)}
+def _analisar(banco: _Banco, ia_falsa: _IAFalsa, *ocorrencias: dict[str, Any]) -> dict:
+    ia_falsa.respostas[PASSO_C] = {"ocorrencias": list(ocorrencias)}
     _enviar(banco, _conta(), _prontuario())
     _rodar_o_job(banco)
     (conta,) = banco.tabelas["cm_conta"]
@@ -345,11 +336,11 @@ def _lembretes_por_cenario(corpo: dict) -> dict[str, dict]:
 
 
 class TestPassoC:
-    def test_so_o_insumo_que_falta_vira_lembrete_com_o_valor_da_tabela(self, openrouter):
+    def test_so_o_insumo_que_falta_vira_lembrete_com_o_valor_da_tabela(self, ia_falsa):
         banco = _banco_com_cenarios()
 
         _analisar(
-            banco, openrouter, _ocorrencia("CEN-001"), _ocorrencia("CEN-002"), _ocorrencia("CEN-003", TRECHO_INVENTADO)
+            banco, ia_falsa, _ocorrencia("CEN-001"), _ocorrencia("CEN-002"), _ocorrencia("CEN-003", TRECHO_INVENTADO)
         )
 
         corpo = _conferencia(banco)
@@ -371,44 +362,42 @@ class TestPassoC:
         (conta,) = corpo["contas"]
         assert (conta["numero_atendimento"], conta["operadora"], conta["situacao"]) == ("31245", "ALFA", "A_FAZER")
 
-    def test_a_ia_recebe_so_os_cenarios_ativos_da_operadora_e_nada_disso_entra_no_passo_b(self, openrouter):
+    def test_a_ia_recebe_so_os_cenarios_ativos_da_operadora_e_nada_disso_entra_no_passo_b(self, ia_falsa):
         banco = _banco_com_cenarios()
 
-        _analisar(banco, openrouter)
+        _analisar(banco, ia_falsa)
 
-        (pedido,) = [c for c in openrouter.corpos if c["response_format"]["json_schema"]["name"] == PASSO_C]
+        (pedido,) = [c for c in ia_falsa.corpos if c["formato"] == PASSO_C]
         enviado = json.dumps(pedido["messages"], ensure_ascii=False)
         assert all(codigo in enviado for codigo in ("CEN-001", "CEN-002", "CEN-003"))
         assert "CEN-004" not in enviado and "CEN-005" not in enviado
         # O Passo C vem depois do Passo A, e o Passo B não recebe cenário nenhum.
-        formatos = openrouter.formatos
+        formatos = ia_falsa.formatos
         assert formatos.index("EventosDoProntuario") < formatos.index(PASSO_C)
-        (comparacao,) = [
-            c for c in openrouter.corpos if c["response_format"]["json_schema"]["name"] == "LinhasDaComparacao"
-        ]
+        (comparacao,) = [c for c in ia_falsa.corpos if c["formato"] == "LinhasDaComparacao"]
         assert "CEN-" not in json.dumps(comparacao["messages"], ensure_ascii=False)
 
-    def test_sem_cenario_ativo_a_ia_nao_e_chamada(self, openrouter):
+    def test_sem_cenario_ativo_a_ia_nao_e_chamada(self, ia_falsa):
         banco = _banco()
 
-        _analisar(banco, openrouter)
+        _analisar(banco, ia_falsa)
 
-        assert PASSO_C not in openrouter.formatos
+        assert PASSO_C not in ia_falsa.formatos
 
-    def test_a_ia_fora_do_ar_no_passo_c_nao_derruba_a_conta_da_faturista(self, openrouter):
+    def test_a_ia_fora_do_ar_no_passo_c_nao_derruba_a_conta_da_faturista(self, ia_falsa):
         banco = _banco_com_cenarios()
-        openrouter.fora_do_formato_em = {PASSO_C}
+        ia_falsa.fora_do_formato_em = {PASSO_C}
 
-        conta = _analisar(banco, openrouter, _ocorrencia("CEN-001"))
+        conta = _analisar(banco, ia_falsa, _ocorrencia("CEN-001"))
 
         assert conta["situacao"] == "A_FAZER"
         assert banco.tabelas.get("cm_lembrete", []) == []
 
-    def test_reprocesso_com_a_ia_fora_do_ar_no_passo_c_mantem_os_lembretes_abertos(self, openrouter):
+    def test_reprocesso_com_a_ia_fora_do_ar_no_passo_c_mantem_os_lembretes_abertos(self, ia_falsa):
         banco = _banco_com_cenarios()
-        conta = _analisar(banco, openrouter, _ocorrencia("CEN-001"))
+        conta = _analisar(banco, ia_falsa, _ocorrencia("CEN-001"))
         (lembrete,) = banco.tabelas["cm_lembrete"]
-        openrouter.fora_do_formato_em = {PASSO_C}
+        ia_falsa.fora_do_formato_em = {PASSO_C}
 
         resposta = _cliente(banco, "gestao").post(f"/api/contas-medicas/contas/{conta['id']}/reanalisar")
         assert resposta.status_code == 200, resposta.text
@@ -417,7 +406,7 @@ class TestPassoC:
         assert banco.conta(conta["id"])["situacao"] == "A_FAZER"
         assert [(lb["id"], lb["estado"]) for lb in banco.tabelas["cm_lembrete"]] == [(lembrete["id"], "ABERTO")]
 
-    def test_a_conta_fica_a_fazer_antes_do_passo_c_e_o_tempo_dele_fica_fora_do_total(self, openrouter, monkeypatch):
+    def test_a_conta_fica_a_fazer_antes_do_passo_c_e_o_tempo_dele_fica_fora_do_total(self, ia_falsa, monkeypatch):
         """O Passo C lento não atrasa a faturista nem entra no tempo da conta dela."""
         banco = _banco_com_cenarios()
         relogio = [0.0]
@@ -432,7 +421,7 @@ class TestPassoC:
 
         monkeypatch.setattr(passo_c, "lembrar_a_coordenacao", _passo_c_lento)
 
-        conta = _analisar(banco, openrouter, _ocorrencia("CEN-001"))
+        conta = _analisar(banco, ia_falsa, _ocorrencia("CEN-001"))
 
         assert situacao_no_passo_c == ["A_FAZER"]
         assert conta["faltantes"]["tempos_por_etapa_s"]["total"] == 0
@@ -456,9 +445,9 @@ def _chaves(valor: Any) -> set[str]:
 
 
 class TestFaturistaNaoVe:
-    def test_as_rotas_de_cenario_e_de_lembrete_devolvem_403_sem_dado_nenhum(self, openrouter):
+    def test_as_rotas_de_cenario_e_de_lembrete_devolvem_403_sem_dado_nenhum(self, ia_falsa):
         banco = _banco_com_cenarios()
-        _analisar(banco, openrouter, _ocorrencia("CEN-001"))
+        _analisar(banco, ia_falsa, _ocorrencia("CEN-001"))
         (lembrete,) = banco.tabelas["cm_lembrete"]
         cliente = _cliente(banco, "faturista")
 
@@ -476,9 +465,9 @@ class TestFaturistaNaoVe:
             assert "CEN-" not in resposta.text and "Sondagem" not in resposta.text
         assert banco.tabelas["cm_lembrete"][0]["estado"] == "ABERTO"
 
-    def test_o_guia_da_conta_com_lembrete_nao_traz_nenhum_campo_de_cenario(self, openrouter):
+    def test_o_guia_da_conta_com_lembrete_nao_traz_nenhum_campo_de_cenario(self, ia_falsa):
         banco = _banco_com_cenarios()
-        conta = _analisar(banco, openrouter, _ocorrencia("CEN-001"), _ocorrencia("CEN-003", TRECHO_INVENTADO))
+        conta = _analisar(banco, ia_falsa, _ocorrencia("CEN-001"), _ocorrencia("CEN-003", TRECHO_INVENTADO))
         assert len(banco.tabelas["cm_lembrete"]) == 2, "a conta precisa ter lembrete para o teste valer"
 
         resposta = _cliente(banco, "faturista").get(f"/api/contas-medicas/contas/{conta['id']}/guia")
@@ -509,9 +498,9 @@ class TestFaturistaNaoVe:
 
 
 class TestMarcacao:
-    def test_incluido_e_nao_se_aplica_mudam_o_estado_com_autor_data_e_observacao(self, openrouter):
+    def test_incluido_e_nao_se_aplica_mudam_o_estado_com_autor_data_e_observacao(self, ia_falsa):
         banco = _banco_com_cenarios()
-        _analisar(banco, openrouter, _ocorrencia("CEN-001"), _ocorrencia("CEN-003", TRECHO_INVENTADO))
+        _analisar(banco, ia_falsa, _ocorrencia("CEN-001"), _ocorrencia("CEN-003", TRECHO_INVENTADO))
         lembretes = _lembretes_por_cenario(_conferencia(banco))
         cliente = _cliente(banco, "coordenadora")
 
@@ -554,12 +543,12 @@ class TestMarcacao:
 FUSO = ZoneInfo("America/Sao_Paulo")
 
 
-def _conta_concluida_com_lembrete_incluido(openrouter) -> tuple[_BancoDaCoordenacao, str]:
+def _conta_concluida_com_lembrete_incluido(ia_falsa) -> tuple[_BancoDaCoordenacao, str]:
     """A conta analisada, concluída pela faturista, com o lembrete do CEN-001
     (equipo, R$ 25,00) marcado Incluído pela coordenadora e o do CEN-003
     (R$ 12,50) ainda aberto. Devolve o banco e a semana da marcação."""
     banco = _banco_com_cenarios()
-    conta = _analisar(banco, openrouter, _ocorrencia("CEN-001"), _ocorrencia("CEN-003", TRECHO_INVENTADO))
+    conta = _analisar(banco, ia_falsa, _ocorrencia("CEN-001"), _ocorrencia("CEN-003", TRECHO_INVENTADO))
     faturista = _cliente(banco, "faturista")
     assert faturista.get(f"/api/contas-medicas/contas/{conta['id']}/guia").status_code == 200
     concluida = faturista.post(f"/api/contas-medicas/contas/{conta['id']}/guia/concluir", json={})
@@ -580,8 +569,8 @@ def _painel(banco: _Banco, quem: str, semana: str) -> dict:
 
 
 class TestCartaoDoPainel:
-    def test_o_cartao_traz_o_rs_incluido_pela_coordenacao_so_para_quem_tem_a_permissao(self, openrouter):
-        banco, semana = _conta_concluida_com_lembrete_incluido(openrouter)
+    def test_o_cartao_traz_o_rs_incluido_pela_coordenacao_so_para_quem_tem_a_permissao(self, ia_falsa):
+        banco, semana = _conta_concluida_com_lembrete_incluido(ia_falsa)
 
         coordenadora = _painel(banco, "coordenadora", semana)
         diretoria = _painel(banco, "diretoria", semana)
@@ -592,8 +581,8 @@ class TestCartaoDoPainel:
         assert diretoria["coordenacao"] == coordenadora["coordenacao"]
         assert not {c for c in _chaves(faturista) if "coordena" in c or "lembrete" in c}
 
-    def test_o_cartao_fica_fora_da_nota_e_da_producao(self, openrouter):
-        banco, semana = _conta_concluida_com_lembrete_incluido(openrouter)
+    def test_o_cartao_fica_fora_da_nota_e_da_producao(self, ia_falsa):
+        banco, semana = _conta_concluida_com_lembrete_incluido(ia_falsa)
         com_o_cartao = _painel(banco, "coordenadora", semana)
         assert com_o_cartao["producao"], "a conta concluída precisa estar na produção para o teste valer"
 
@@ -671,11 +660,11 @@ def test_sem_travessao_nem_meia_risca_nos_arquivos(arquivo):
     assert chr(0x2014) not in texto and chr(0x2013) not in texto
 
 
-def test_o_texto_que_a_ia_escreveu_no_lembrete_sai_sem_travessao_nem_meia_risca(openrouter):
+def test_o_texto_que_a_ia_escreveu_no_lembrete_sai_sem_travessao_nem_meia_risca(ia_falsa):
     banco = _banco_com_cenarios()
     setor = f"CTI ADULTO {chr(0x2014)} LEITO 4"
 
-    _analisar(banco, openrouter, {**_ocorrencia("CEN-001"), "setor": setor})
+    _analisar(banco, ia_falsa, {**_ocorrencia("CEN-001"), "setor": setor})
 
     (lembrete,) = _lembretes_por_cenario(_conferencia(banco)).values()
     assert chr(0x2014) not in lembrete["setor"] and lembrete["setor"].startswith("CTI ADULTO")

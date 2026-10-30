@@ -468,7 +468,7 @@ def conversar(
         logger.warning("Modo MOCK ativo para o Assistente de Tecnologia (sem chave LLM)")
         return {"reply": REPLY_MOCK, "rascunho": atual, "demanda_parecida": None}
 
-    client, model, extra = ai_processor._get_llm()
+    client, model = ai_processor._get_llm()
     ai_processor._log_llm_call("assistente-tecnologia", provider, model)
 
     chat_history = "\n".join(_linha_da_conversa(m) for m in messages) or SEM_CONVERSA
@@ -489,17 +489,7 @@ def conversar(
     system_prompt = load_prompt("assistente_tecnologia_system")
 
     try:
-        response = client.chat.completions.create(
-            model=model,
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_content},
-            ],
-            temperature=0.3,
-            response_format={"type": "json_object"},
-            **extra,
-        )
-        parsed = json.loads(response.choices[0].message.content)
+        parsed = json.loads(ai_processor._pedir_json(client, model, system=system_prompt, usuario=user_content))
         if not isinstance(parsed, dict):
             raise ValueError("resposta da IA não é um objeto JSON")
     except Exception as e:
@@ -549,27 +539,22 @@ def descrever_imagem(*, imagem: bytes, extensao: str) -> str | None:
         logger.warning("Modo MOCK ativo para o print do Assistente de Tecnologia (sem chave LLM)")
         return DESCRICAO_MOCK
 
-    client, model, extra = ai_processor._get_llm()
+    client, model = ai_processor._get_llm()
     ai_processor._log_llm_call("assistente-tecnologia/print", provider, model)
 
-    url_da_imagem = f"data:{TIPOS_DE_IMAGEM[extensao]};base64,{base64.b64encode(imagem).decode('ascii')}"
+    imagem_em_base64 = {
+        "type": "image",
+        "source": {
+            "type": "base64",
+            "media_type": TIPOS_DE_IMAGEM[extensao],
+            "data": base64.b64encode(imagem).decode("ascii"),
+        },
+    }
     instrucao = load_prompt("assistente_tecnologia_imagem")
     try:
-        response = client.chat.completions.create(
-            model=model,
-            messages=[
-                {
-                    "role": "user",
-                    "content": [
-                        {"type": "text", "text": instrucao},
-                        {"type": "image_url", "image_url": {"url": url_da_imagem}},
-                    ],
-                }
-            ],
-            temperature=0.2,
-            **extra,
-        )
-        texto = (response.choices[0].message.content or "").strip()
+        texto = ai_processor._pedir_texto(
+            client, model, system=None, conteudo=[imagem_em_base64, {"type": "text", "text": instrucao}]
+        ).strip()
     except Exception as e:
         logger.error(f"Erro ao descrever o print via {provider}: {e}")
         return None
