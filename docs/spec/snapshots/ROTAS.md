@@ -1,6 +1,6 @@
 # ROTAS.md
 <!-- gerado automaticamente por /snapshot — não editar -->
-<!-- last_update: 2026-10-13T07:52+0000 -->
+<!-- last_update: 2026-10-30T15:07+0000 -->
 
 Endpoints HTTP expostos pelo backend FastAPI do Hospital Reuniões.
 
@@ -32,7 +32,6 @@ Endpoints HTTP expostos pelo backend FastAPI do Hospital Reuniões.
 
 | Método | Rota | O que faz | Auth |
 |--------|------|-----------|------|
-| POST | `/auth/invite/{participante_id}` | Envia e-mail de redefinição de senha para um participante. | ✅ |
 | GET | `/auth/me` | Retorna dados do usuário autenticado via JWT. | ✅ |
 
 ## pops (`app/routers/pops/biblioteca.py`)
@@ -515,4 +514,4 @@ Endpoints HTTP expostos pelo backend FastAPI do Hospital Reuniões.
 
 ---
 
-**Totais:** 289 endpoints em 44 routers · 94% exigem auth.
+**Totais:** 288 endpoints em 44 routers · 94% exigem auth.
