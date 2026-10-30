@@ -50,7 +50,7 @@ from datetime import datetime
 
 import anyio.to_thread
 import httpx
-from jose import jwt
+import jwt
 
 from app.config import settings
 from app.services.central_de_comando import cache, provedor_google, provedor_instagram, telas, visao_geral
@@ -188,13 +188,15 @@ def verificar_acesso(token: str | None, jwks: dict, cfg: ConfiguracaoMCP) -> str
     if not token:
         raise AcessoNegadoMCPError("token ausente")
     try:
+        kid = jwt.get_unverified_header(token).get("kid")
+        chave = next(k for k in jwt.PyJWKSet.from_dict(jwks).keys if k.key_id == kid)
         claims = jwt.decode(
             token,
-            jwks,
+            chave.key,
             algorithms=["RS256"],
             audience=cfg.recurso,
             issuer=cfg.emissor,
-            options={"require_exp": True, "require_aud": True, "verify_aud": True, "verify_iss": True},
+            options={"require": ["exp", "aud", "iss"]},
         )
     except Exception as exc:  # noqa: BLE001 - gate de segurança: qualquer erro de decodificação nega
         raise AcessoNegadoMCPError(f"token inválido ({type(exc).__name__})") from exc

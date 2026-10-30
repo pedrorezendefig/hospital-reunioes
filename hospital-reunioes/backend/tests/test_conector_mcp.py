@@ -25,6 +25,8 @@ rede: o `_buscar_jwks` do módulo é dublado, e a fonte do Google é o
 from __future__ import annotations
 
 import base64
+import hashlib
+import hmac
 import json
 import logging
 import os
@@ -33,16 +35,14 @@ import time
 import tomllib
 from pathlib import Path
 
+import jwt as pyjwt
 import pytest
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.testclient import TestClient
-from jose import jwk as jose_jwk
-from jose import jwt as jose_jwt
 from packaging.requirements import Requirement
-from packaging.specifiers import SpecifierSet
 from packaging.version import Version
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
@@ -101,7 +101,7 @@ def _pem_publica(chave: rsa.RSAPrivateKey) -> str:
 
 def jwks_de(chave: rsa.RSAPrivateKey, kid: str = KID) -> dict:
     """O JWKS que o emissor publicaria, montado da chave pública."""
-    jwk_dict = jose_jwk.construct(_pem_publica(chave), algorithm="RS256").to_dict()
+    jwk_dict = json.loads(pyjwt.algorithms.RSAAlgorithm.to_jwk(chave.public_key()))
     jwk_dict.update({"kid": kid, "use": "sig", "alg": "RS256"})
     return {"keys": [jwk_dict]}
 
@@ -133,7 +133,7 @@ def token(
             claims[chave_claim] = valor
     if incluir_exp:
         claims["exp"] = agora + exp_delta
-    return jose_jwt.encode(claims, _pem_privada(chave), algorithm="RS256", headers={"kid": kid})
+    return pyjwt.encode(claims, _pem_privada(chave), algorithm="RS256", headers={"kid": kid})
 
 
 @pytest.fixture
@@ -250,7 +250,7 @@ class TestVerificarAcesso:
 
     def test_escopo_pela_lista_scp_vale(self, cfg, chave_do_emissor):
         # WorkOS pode serializar o escopo como lista `scp` em vez de string.
-        tok = jose_jwt.encode(
+        tok = pyjwt.encode(
             {
                 "sub": "u",
                 "iss": EMISSOR,
@@ -310,7 +310,7 @@ class TestVerificarAcesso:
         """Token HS256 assinado com um segredo qualquer é recusado: com RS256
         fixo, a chave pública do JWKS nunca é usada como segredo HMAC (a confusão
         de algoritmo clássica de resource server)."""
-        tok = jose_jwt.encode(
+        tok = pyjwt.encode(
             {
                 "sub": "u",
                 "iss": EMISSOR,
@@ -323,6 +323,39 @@ class TestVerificarAcesso:
             "segredo-publico-qualquer",
             algorithm="HS256",
         )
+        with pytest.raises(conector_mcp.AcessoNegadoMCPError):
+            conector_mcp.verificar_acesso(tok, jwks_de(chave_do_emissor), cfg)
+
+    def test_hs256_assinado_com_a_chave_publica_recusado(self, cfg, chave_do_emissor):
+        """A confusão de algoritmo de verdade: HMAC cujo segredo é a própria
+        chave pública do emissor (que qualquer um baixa do JWKS)."""
+
+        def _seg(dado: bytes) -> str:
+            return base64.urlsafe_b64encode(dado).rstrip(b"=").decode()
+
+        header = _seg(json.dumps({"alg": "HS256", "typ": "JWT", "kid": KID}).encode())
+        payload = _seg(
+            json.dumps(
+                {
+                    "sub": "u",
+                    "iss": EMISSOR,
+                    "aud": RECURSO,
+                    "email": "super@hsm.com",
+                    "email_verified": True,
+                    "scope": "read:analytics",
+                    "exp": int(time.time()) + 3600,
+                }
+            ).encode()
+        )
+        assinatura = hmac.new(
+            _pem_publica(chave_do_emissor).encode(), f"{header}.{payload}".encode(), hashlib.sha256
+        ).digest()
+        tok = f"{header}.{payload}.{_seg(assinatura)}"
+        with pytest.raises(conector_mcp.AcessoNegadoMCPError):
+            conector_mcp.verificar_acesso(tok, jwks_de(chave_do_emissor), cfg)
+
+    def test_kid_fora_do_jwks_recusado(self, cfg, chave_do_emissor):
+        tok = token(chave_do_emissor, kid="outro-kid")
         with pytest.raises(conector_mcp.AcessoNegadoMCPError):
             conector_mcp.verificar_acesso(tok, jwks_de(chave_do_emissor), cfg)
 
@@ -844,36 +877,32 @@ class TestVersaoDoProtocoloLeniente:
         assert self._linhas_da_versao(caplog) == []
 
 
-# ─── O python-jose sem as versões das CVEs (issue #843) ──────────────────────
+# ─── Sem python-jose: a verificação é do PyJWT (issue #1284) ────────────────
 
 
-class TestPythonJoseSemAsVersoesDasCves:
-    """CVE-2024-33663 (confusão de algoritmo) e CVE-2024-33664 (JWE que infla)
-    não são exploráveis aqui: o conector só aceita RS256 com a chave RSA do
-    JWKS e nunca decifra JWE. O pin `>=3.4.0` trava a regressão mesmo assim,
-    no `pyproject.toml` e no `uv.lock` (de onde a imagem instala, issue #852)."""
+class TestVerificacaoSemPythonJose:
+    """O python-jose está abandonado e tem alerta crítico sem versão corrigida
+    (e o `ecdsa` que ele puxa, alto). A verificação passou para o PyJWT; o lock
+    não pode voltar a resolver nenhum dos dois, nem por dependência transitiva."""
 
     _BACKEND = Path(__file__).resolve().parents[1]
-    _CORRIGIDA = Version("3.4.0")
-    _VULNERAVEL = Version("3.3.0")
 
-    def _pedido_do_pyproject(self) -> Requirement:
+    def test_o_pyproject_pede_pyjwt_com_crypto_e_nao_pede_jose(self):
         projeto = tomllib.loads((self._BACKEND / "pyproject.toml").read_text(encoding="utf-8"))
-        pedidos = [Requirement(dep) for dep in projeto["project"]["dependencies"]]
-        return next(p for p in pedidos if p.name == "python-jose")
+        pedidos = {Requirement(dep).name.lower(): Requirement(dep) for dep in projeto["project"]["dependencies"]}
 
-    def test_o_pyproject_recusa_a_versao_vulneravel(self):
-        pedido = self._pedido_do_pyproject()
+        assert "python-jose" not in pedidos
+        assert "crypto" in pedidos["pyjwt"].extras
+        assert Version("2.10.0") in pedidos["pyjwt"].specifier
 
-        assert self._VULNERAVEL not in pedido.specifier
-        assert self._CORRIGIDA in pedido.specifier
-        assert "cryptography" in pedido.extras
-
-    def test_o_lock_pede_e_resolve_uma_versao_corrigida(self):
+    def test_o_lock_nao_resolve_jose_nem_ecdsa(self):
         lock = tomllib.loads((self._BACKEND / "uv.lock").read_text(encoding="utf-8"))
-        pacotes = {p["name"]: p for p in lock["package"]}
-        raiz = next(p for p in lock["package"] if p.get("source", {}).get("virtual") == ".")
-        pedido_no_lock = next(r for r in raiz["metadata"]["requires-dist"] if r["name"] == "python-jose")
+        nomes = {p["name"] for p in lock["package"]}
 
-        assert SpecifierSet(pedido_no_lock["specifier"]) == self._pedido_do_pyproject().specifier
-        assert Version(pacotes["python-jose"]["version"]) >= self._CORRIGIDA
+        assert "pyjwt" in nomes  # piso de sanidade: o lock foi lido de verdade
+        assert "python-jose" not in nomes
+        assert "ecdsa" not in nomes
+
+    def test_o_conector_nao_importa_jose(self):
+        fonte = Path(conector_mcp.__file__).read_text(encoding="utf-8")
+        assert "from jose" not in fonte and "import jose" not in fonte
