@@ -2,6 +2,56 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-10-30T16:29:09-03:00",
+      "sha": "404b006beba657b92122a2dfa0ae8eaf3d2bb819",
+      "app_version": "0.198.0",
+      "subject": "Onda onda-a-onda2: Contas médicas, Enviar contas e Analisar contas separados, com o perfil Apoio ao faturamento; Contas médicas, devolver a conta à fila",
+      "raw_subject": "chore(deploy): registro da onda onda-a-onda2 (#1322 #1321)",
+      "scope": [
+        "backend",
+        "frontend"
+      ],
+      "prds": [
+        1303
+      ],
+      "result": "healthy",
+      "duration_seconds": 1373,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        },
+        {
+          "service": "frontend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [
+        "121_contas_medicas_enviar_e_analisar.sql"
+      ],
+      "rollback_target_sha": null,
+      "notes": "onda-enxuta onda-a-onda2: PR #1322 (issue #1308), PR #1321 (issue #1309), mergeados PR a PR. Merge pela API do GitHub, um build. Registro pela Action pos-merge depois do health.",
+      "etapas": {
+        "merge_s": 5,
+        "build_s": {
+          "backend": 27,
+          "frontend": 241
+        },
+        "health_s": 0
+      },
+      "responsavel": "pedrorezendefig"
+    },
+    {
       "at": "2026-10-30T15:36:02-03:00",
       "sha": "bd247680b025e72408008d74d2dc3ef90e3106e2",
       "app_version": "0.197.0",
