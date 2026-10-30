@@ -1,0 +1,19 @@
+Quem sobe a conta não é quem confere.
+
+Antes, a conta ficava presa ao login de quem enviou os arquivos. A faturista entrava com o usuário dela e achava a fila vazia.
+
+A Carla, secretária do diretor, ganhou o perfil Apoio ao faturamento. Ela envia, mas não analisa.
+
+Arrasta a conta e o prontuário do eme vê e acompanha em Meus envios até o guia ficar pronto.
+
+Daí a conta entra na Fila, a mesma para todas as faturistas, na ordem de chegada.
+
+A Renata clica em Abrir. Nesse clique, a conta vira dela e some da Fila das colegas.
+
+Se a Juliana tenta no mesmo instante, o aviso diz que outra faturista já pegou.
+
+A Renata marca dois itens e precisa sair mais cedo. Devolve a conta à Fila.
+
+A Juliana pega, encontra as marcações da Renata e segue dali.
+
+Ao concluir, a produção vai para a Juliana. Cada uma trabalha com o próprio login, e o resultado fica com quem conferiu.
