@@ -2,6 +2,49 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-10-30T13:25:57-03:00",
+      "sha": "960a25cf15230228df70901786ba1a3ada13fe56",
+      "app_version": "0.196.4",
+      "subject": "PR #1306, issue #1304: Honorário médico com linha de prestador lido inteiro",
+      "raw_subject": "chore(deploy): registro do PR avulso (#1306)",
+      "scope": [
+        "backend"
+      ],
+      "prds": [],
+      "result": "healthy",
+      "duration_seconds": 47,
+      "services_touched": [
+        "backend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        },
+        {
+          "service": "frontend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "PR avulso: PR #1306, issue #1304. Merge pela API do GitHub, um build. Registro pela Action pos-merge depois do health.",
+      "etapas": {
+        "merge_s": 3,
+        "build_s": {
+          "backend": 21
+        },
+        "health_s": 10
+      },
+      "responsavel": "pedrorezendefig"
+    },
+    {
       "at": "2026-10-30T12:54:44-03:00",
       "sha": "b589413640c15e9c5c371a318c069bfeabcb0f0a",
       "app_version": "0.196.3",
