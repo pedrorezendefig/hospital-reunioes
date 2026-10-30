@@ -1,8 +1,8 @@
 ---
 title: Ler o Painel
 description: Ver a nota da semana, onde a perda da conta nasce e quem corrige.
-prd: [1128]
-draft: false
+prd: [1128, 1303]
+draft: true
 papel: [Coordenadora de faturamento, Gestão de contas médicas, Diretoria]
 sidebar:
   order: 5
@@ -31,7 +31,8 @@ domingo, pelo dia em que a faturista concluiu.
    a farmácia, o cadastro, a enfermagem ou o próprio faturamento.
 5. Leve **Os dez itens que mais faltam** para a consultoria do MV: são os
    itens que o MV deveria lançar sozinho.
-6. Em **Produção por faturista**, compare contas e valor lado a lado.
+6. Em **Produção por faturista**, compare contas e valor lado a lado. Cada
+   conta entra na produção de quem a analisou, não de quem a enviou.
 
    ![Blocos do Painel com a causa-raiz, os itens que faltam e a produção](../../../assets/contas-medicas/painel-blocos.png)
 

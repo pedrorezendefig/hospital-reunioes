@@ -1,7 +1,7 @@
 ---
 title: Contas médicas
 description: Confira a conta de internação contra o prontuário antes de mandar para a operadora.
-prd: [1113, 1128, 1129, 1259]
+prd: [1113, 1128, 1129, 1259, 1303]
 draft: false
 video: o-caminho-de-uma-conta
 sidebar:
@@ -32,8 +32,9 @@ linha começa pelo verbo: **Incluir**, **Ajustar quantidade**, **Retirar**,
 
 ## Quem faz o quê
 
-- **Faturista** envia as contas e corrige cada uma pelo guia. Vê só as contas
-  que ela mesma enviou.
+- **Faturista** envia as contas, pega a próxima da **Fila** e corrige cada
+  uma pelo guia. A Fila é a mesma para todas.
+- **Apoio ao faturamento** só envia as contas e acompanha os próprios envios.
 - **Coordenadora de faturamento** faz a segunda checagem das contas pelos
   lembretes da **Coordenação**.
 - **Gestão de contas médicas** e **Diretoria** carregam e editam a memória e as
@@ -46,8 +47,9 @@ linha começa pelo verbo: **Incluir**, **Ajustar quantidade**, **Retirar**,
 
 ## A tela que reúne tudo
 
-Em **Contas médicas**, no menu da esquerda, fica a área de envio, a **Fila** com
-as contas na ordem em que chegaram e a aba **Concluídas**. No alto, cada pessoa
+Em **Contas médicas**, no menu da esquerda, fica a área de envio e as abas
+**Fila**, com as contas na ordem em que chegaram, **Minhas**, **Meus envios** e
+**Concluídas**. No alto, cada pessoa
 vê os botões do perfil dela: **Painel**, **Validação**, **Coordenação**,
 **Contratos**, **Operadoras** e **Habilitação**.
 
