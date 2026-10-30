@@ -354,7 +354,10 @@ class TestEnvio:
         assert _situacoes(banco, "31302") == ["NA_FILA"]
         assert _situacoes(banco, "31310") == ["NA_FILA", "NA_FILA"]
         assert _situacoes(banco, "31318") == ["AGUARDANDO_ARQUIVO"]
-        assert {c["faturista_id"] for c in banco.tabelas["cm_conta"]} == {"F1"}
+        # Quem envia não vira dono (ADR 0073): a conta nasce sem faturista, e
+        # quem enviou fica no envio.
+        assert {c["faturista_id"] for c in banco.tabelas["cm_conta"]} == {None}
+        assert [e["usuario_id"] for e in banco.tabelas["cm_envio"]] == ["F1"]
 
     @pytest.mark.parametrize("quem", ["credenciamento", "sem_eixo"])
     def test_sem_a_permissao_de_enviar_e_corrigir_contas_recebe_403(self, quem):
@@ -568,7 +571,9 @@ class TestProntuarioNoSistema:
 
         cliente.post(ROTA_ENVIO, files=[_prontuario("31320")])
         espera = banco.contas_do_atendimento("31320")
-        assert [(c["situacao"], c.get("arquivo_id")) for c in espera] == [("AGUARDANDO_ARQUIVO", None)]
+        assert [(c["situacao"], c.get("arquivo_id"), c.get("faturista_id")) for c in espera] == [
+            ("AGUARDANDO_ARQUIVO", None, None)
+        ]
 
         resposta = cliente.post(ROTA_ENVIO, files=[_conta("31320", "48020")])
 
