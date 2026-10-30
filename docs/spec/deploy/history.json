@@ -2,6 +2,49 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-10-30T15:03:46-03:00",
+      "sha": "7a5f7c19f568589b1a25e5fab80ba07819643a11",
+      "app_version": "0.196.8",
+      "subject": "Onda seguranca-jose: Conector MCP confere o token com PyJWT e o python-jose sai",
+      "raw_subject": "chore(deploy): registro da onda seguranca-jose (#1315)",
+      "scope": [
+        "backend"
+      ],
+      "prds": [],
+      "result": "healthy",
+      "duration_seconds": 103,
+      "services_touched": [
+        "backend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        },
+        {
+          "service": "frontend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "onda-enxuta seguranca-jose: PR #1315 (issue #1284), mergeados PR a PR. Merge pela API do GitHub, um build. Registro pela Action pos-merge depois do health.",
+      "etapas": {
+        "merge_s": 3,
+        "build_s": {
+          "backend": 64
+        },
+        "health_s": 10
+      },
+      "responsavel": "pedrorezendefig"
+    },
+    {
       "at": "2026-10-30T14:19:03-03:00",
       "sha": "968c2d5a255a006f5fa4f4832678155287f81c27",
       "app_version": "0.196.7",
