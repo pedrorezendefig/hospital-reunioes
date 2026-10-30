@@ -2,6 +2,49 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-10-30T14:19:03-03:00",
+      "sha": "968c2d5a255a006f5fa4f4832678155287f81c27",
+      "app_version": "0.196.7",
+      "subject": "PR #1297, sem issue: Bump dnspython from 2.8.0 to 2.9.0 in /hospital-reunioes/backend",
+      "raw_subject": "chore(deploy): registro do PR avulso (#1297)",
+      "scope": [
+        "backend"
+      ],
+      "prds": [],
+      "result": "healthy",
+      "duration_seconds": 69,
+      "services_touched": [
+        "backend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        },
+        {
+          "service": "frontend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "PR avulso: PR #1297, sem issue. Merge pela API do GitHub, um build. Registro pela Action pos-merge depois do health.",
+      "etapas": {
+        "merge_s": 4,
+        "build_s": {
+          "backend": 37
+        },
+        "health_s": 10
+      },
+      "responsavel": "pedrorezendefig"
+    },
+    {
       "at": "2026-10-30T14:14:26-03:00",
       "sha": "1f59bb53e2219df09a0e083ba9db3f28eebb58fa",
       "app_version": "0.196.6",
