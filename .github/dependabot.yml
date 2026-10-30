@@ -25,3 +25,12 @@ updates:
     groups:
       actions:
         patterns: ["*"]
+
+  # O site do Manual (Astro Starlight na Vercel) tem lockfile próprio (issue #1316).
+  - package-ecosystem: npm
+    directory: /docs/manual
+    schedule:
+      interval: weekly
+    groups:
+      manual:
+        patterns: ["*"]

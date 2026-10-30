@@ -12,10 +12,10 @@
     "lint": "python3 ../../tools/lint_manual.py --dir src/content/docs"
   },
   "dependencies": {
-    "@astrojs/mdx": "^8.0.1",
-    "@astrojs/starlight": "^0.42.1",
-    "astro": "^7.3.2",
-    "sharp": "^0.34.4"
+    "@astrojs/mdx": "^8.1.2",
+    "@astrojs/starlight": "^0.42.8",
+    "astro": "^7.4.4",
+    "sharp": "^0.35.5"
   },
   "packageManager": "pnpm@9.15.9"
 }
