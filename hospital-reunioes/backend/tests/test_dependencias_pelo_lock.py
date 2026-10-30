@@ -273,7 +273,7 @@ class TestLockSemVersaoVulneravel:
         versoes = _versoes_no_lock()
         for pacote, piso in _PISOS_DE_SEGURANCA.items():
             assert pacote in versoes, f"{pacote} sumiu do uv.lock: confira se o alerta ainda se aplica"
-            assert versoes[pacote] >= Version(piso), f"{pacote} {versoes[pacote]} no uv.lock, abaixo da corrigida {piso}"
+            assert versoes[pacote] >= Version(piso), f"{pacote} {versoes[pacote]} no lock, abaixo da corrigida {piso}"
 
     def test_pyproject_nao_deixa_pillow_voltar_para_versao_vulneravel(self):
         projeto = tomllib.loads((BACKEND / "pyproject.toml").read_text(encoding="utf-8"))["project"]
