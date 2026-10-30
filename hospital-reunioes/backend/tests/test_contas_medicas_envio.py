@@ -779,7 +779,7 @@ class TestArquivoNoBucket:
 # ═══════════════════════════════════════════════════════════════════════════
 
 
-def _c(id_: str, situacao: str, ordem: int, faturista="F1", **campos) -> dict:
+def _c(id_: str, situacao: str, ordem: int, faturista=None, **campos) -> dict:
     base = {
         "id": id_,
         "atendimento_id": f"at-{id_}",
@@ -802,70 +802,162 @@ def _l(conta_id: str, acao: str, estado: str) -> dict:
     return {"id": f"{conta_id}-{acao}-{estado}-{uuid.uuid4()}", "conta_id": conta_id, "acao": acao, "estado": estado}
 
 
+# Quem enviou cada conta. As outras, F1.
+ENVIADA_POR = {"livre-nova": "F2", "livre-antiga": "F2", "da-outra-envio": "F2"}
+
+
 def _fila_semeada() -> _Banco:
     """Contas em todas as situações, semeadas fora de ordem. O valor apontado
-    cresce ao contrário da ordem de envio: ordenar por valor daria outra lista."""
+    cresce ao contrário da ordem de envio: ordenar por valor daria outra lista.
+
+    F1 enviou quase tudo; F2 enviou as duas livres e uma que falta arquivo. A
+    "livre-antiga" é a conta de antes da Fila comum, com F2 no `faturista_id`."""
     contas = [
-        _c("a-fazer", "A_FAZER", 30, valor_apontado=10.0, nota_bruta=90, nota_entrada=90),
+        _c("livre-nova", "A_FAZER", 30, valor_apontado=10.0, nota_bruta=90, nota_entrada=90),
+        _c("livre-antiga", "A_FAZER", 20, faturista="F2", valor_apontado=999.0),
         _c("na-fila", "NA_FILA", 10, valor_apontado=999.0),
-        _c("erro", "ERRO", 20, erro_motivo="Não consegui ler a conta inteira"),
-        _c("da-outra", "AGUARDANDO_ARQUIVO", 15, faturista="F2"),
-        _c("concluida", "CONCLUIDA_COM_PENDENCIA", 5, nota_entrada=80),
-        _c("em-correcao", "EM_CORRECAO", 25),
+        _c("erro", "ERRO", 21, erro_motivo="Não consegui ler a conta inteira"),
+        _c("da-outra-envio", "AGUARDANDO_ARQUIVO", 15),
+        _c("concluida", "CONCLUIDA_COM_PENDENCIA", 5, faturista="F1", nota_entrada=80),
+        _c("concluida-f2", "CONCLUIDA", 3, faturista="F2"),
+        _c("em-correcao", "EM_CORRECAO", 25, faturista="F1"),
+        _c("retorno", "RETORNO", 11, faturista="F1"),
+        _c("da-f2-em-correcao", "EM_CORRECAO", 13, faturista="F2"),
         _c("falta-conta", "AGUARDANDO_ARQUIVO", 40, arquivo_id=None, numero_conta=None),
         _c("processando", "PROCESSANDO", 35),
         _c("falta-prontuario", "AGUARDANDO_ARQUIVO", 12),
     ]
     atendimentos = [{"id": c["atendimento_id"], "numero_atendimento": f"31{n:03d}"} for n, c in enumerate(contas)]
+    envios = [{"id": "env-F1", "usuario_id": "F1"}, {"id": "env-F2", "usuario_id": "F2"}]
+    arquivos = [
+        {
+            "id": c["arquivo_id"],
+            "envio_id": f"env-{ENVIADA_POR.get(c['id'], 'F1')}",
+            "tipo": "CONTA",
+            "atendimento_id": c["atendimento_id"],
+        }
+        for c in contas
+        if c["arquivo_id"]
+    ]
+    # A conta à espera da Conta: quem enviou é quem mandou o Prontuário.
+    arquivos.append({"id": "arq-pront", "envio_id": "env-F1", "tipo": "PRONTUARIO", "atendimento_id": "at-falta-conta"})
     linhas = [
-        _l("a-fazer", "INCLUIR", "FEITO"),
-        _l("a-fazer", "RETIRAR", "ABERTA"),
-        _l("a-fazer", "CORRIGIR_PRECO", "ABERTA"),
-        _l("a-fazer", "VALIDAR", "EM_VALIDACAO"),
+        _l("livre-nova", "INCLUIR", "FEITO"),
+        _l("livre-nova", "RETIRAR", "ABERTA"),
+        _l("livre-nova", "CORRIGIR_PRECO", "ABERTA"),
+        _l("livre-nova", "VALIDAR", "EM_VALIDACAO"),
         _l("concluida", "INCLUIR", "FEITO"),
         _l("concluida", "RETIRAR", "BLOQUEADO"),
     ]
-    return _cenario(cm_conta=contas, cm_atendimento=atendimentos, cm_guia_linha=linhas)
+    return _cenario(
+        cm_conta=contas, cm_atendimento=atendimentos, cm_envio=envios, cm_arquivo=arquivos, cm_guia_linha=linhas
+    )
+
+
+def _ids(corpo: dict, lista: str) -> list[str]:
+    return [c["id"] for c in corpo[lista]]
+
+
+ENVIOS_DE_F1 = ["na-fila", "falta-prontuario", "erro", "processando", "falta-conta"]
 
 
 class TestFila:
-    def test_a_faturista_ve_so_as_proprias_na_ordem_de_envio_e_as_concluidas_a_parte(self):
-        resposta = _cliente("faturista", _fila_semeada()).get(ROTA_FILA)
+    def test_a_fila_e_comum_toda_faturista_ve_as_mesmas_livres_na_ordem_de_envio(self):
+        banco = _fila_semeada()
 
-        assert resposta.status_code == 200, resposta.text
-        corpo = resposta.json()
-        assert [c["id"] for c in corpo["fila"]] == [
-            "na-fila",
-            "falta-prontuario",
-            "erro",
-            "em-correcao",
-            "a-fazer",
-            "processando",
-            "falta-conta",
-        ]
-        assert [c["id"] for c in corpo["concluidas"]] == ["concluida"]
+        for quem in ("faturista", "outra_faturista"):
+            corpo = _cliente(quem, banco).get(ROTA_FILA).json()
+            assert _ids(corpo, "fila") == ["livre-antiga", "livre-nova"], quem
 
-    def test_painel_completo_ve_as_contas_de_todas(self):
-        corpo = _cliente("coordenadora", _fila_semeada()).get(ROTA_FILA).json()
+    def test_conta_enviada_por_uma_pessoa_aparece_na_fila_da_outra(self):
+        banco = _cenario()
+        _cliente("faturista", banco).post(ROTA_ENVIO, files=[_conta("31302", "48001"), _prontuario("31302")])
+        # O processamento deixa o Guia pronto.
+        [conta] = banco.tabelas["cm_conta"]
+        conta["situacao"] = "A_FAZER"
 
-        assert [c["id"] for c in corpo["fila"]][:3] == ["na-fila", "falta-prontuario", "da-outra"]
-        assert len(corpo["fila"]) == 8
+        corpo = _cliente("outra_faturista", banco).get(ROTA_FILA).json()
 
-    def test_a_outra_faturista_nao_ve_as_contas_da_primeira(self):
+        assert _ids(corpo, "fila") == [conta["id"]]
+        assert conta["faturista_id"] is None
+
+    def test_minhas_sao_as_que_a_faturista_puxou_e_nao_concluiu(self):
+        corpo = _cliente("faturista", _fila_semeada()).get(ROTA_FILA).json()
+
+        assert _ids(corpo, "minhas") == ["retorno", "em-correcao"]
+        assert _ids(corpo, "concluidas") == ["concluida"]
+
+    def test_a_conta_que_nao_ficou_pronta_fica_com_quem_enviou_e_fora_da_fila(self):
+        corpo = _cliente("faturista", _fila_semeada()).get(ROTA_FILA).json()
+
+        assert _ids(corpo, "meus_envios") == ENVIOS_DE_F1
+        assert not set(ENVIOS_DE_F1) & set(_ids(corpo, "fila"))
+
+    def test_a_outra_faturista_ve_os_envios_dela_e_nao_as_contas_da_primeira(self):
         corpo = _cliente("outra_faturista", _fila_semeada()).get(ROTA_FILA).json()
 
-        assert [c["id"] for c in corpo["fila"]] == ["da-outra"]
-        assert corpo["concluidas"] == []
+        assert _ids(corpo, "meus_envios") == ["da-outra-envio"]
+        assert _ids(corpo, "minhas") == ["da-f2-em-correcao"]
+        assert _ids(corpo, "concluidas") == ["concluida-f2"]
+        assert corpo["todas"] is False
+
+    def test_painel_completo_ve_todas_com_o_nome_de_quem_esta_com_cada_uma(self):
+        corpo = _cliente("coordenadora", _fila_semeada()).get(ROTA_FILA).json()
+
+        assert corpo["todas"] is True
+        assert [(c["id"], c["com"]) for c in corpo["fila"]] == [("livre-antiga", None), ("livre-nova", None)]
+        assert [(c["id"], c["com"]) for c in corpo["minhas"]] == [
+            ("retorno", "Pessoa F1"),
+            ("da-f2-em-correcao", "Pessoa F2"),
+            ("em-correcao", "Pessoa F1"),
+        ]
+        assert [(c["id"], c["com"]) for c in corpo["meus_envios"]] == [
+            ("na-fila", "Pessoa F1"),
+            ("falta-prontuario", "Pessoa F1"),
+            ("da-outra-envio", "Pessoa F2"),
+            ("erro", "Pessoa F1"),
+            ("processando", "Pessoa F1"),
+            ("falta-conta", "Pessoa F1"),
+        ]
+        assert [(c["id"], c["com"]) for c in corpo["concluidas"]] == [
+            ("concluida", "Pessoa F1"),
+            ("concluida-f2", "Pessoa F2"),
+        ]
+
+    def test_puxar_tira_a_conta_da_fila_de_uma_e_poe_em_minhas_da_outra(self):
+        from app.routers import contas_medicas_guia as guia_router
+
+        banco = _fila_semeada()
+        # A rota do Guia pede UUID.
+        livre = "aaaaaaaa-0000-0000-0000-000000000030"
+        for tabela, coluna in (("cm_conta", "id"), ("cm_guia_linha", "conta_id")):
+            for linha in banco.tabelas[tabela]:
+                if linha[coluna] == "livre-nova":
+                    linha[coluna] = livre
+
+        def cliente(quem: str) -> TestClient:
+            c = _cliente(quem, banco)
+            c.app.include_router(guia_router.router, prefix="/api")
+            return c
+
+        aberta = cliente("outra_faturista").get(f"/api/contas-medicas/contas/{livre}/guia")
+        assert aberta.status_code == 200, aberta.text
+
+        da_primeira = cliente("faturista").get(ROTA_FILA).json()
+        da_segunda = cliente("outra_faturista").get(ROTA_FILA).json()
+        assert _ids(da_primeira, "fila") == ["livre-antiga"]
+        assert livre not in _ids(da_primeira, "minhas")
+        assert _ids(da_segunda, "minhas") == ["da-f2-em-correcao", livre]
 
     def test_cada_conta_traz_o_que_a_situacao_dela_pede(self):
         corpo = _cliente("faturista", _fila_semeada()).get(ROTA_FILA).json()
-        por_id = {c["id"]: c for c in corpo["fila"] + corpo["concluidas"]}
+        por_id = {c["id"]: c for lista in ("fila", "minhas", "meus_envios", "concluidas") for c in corpo[lista]}
 
-        a_fazer = por_id["a-fazer"]
-        assert (a_fazer["situacao"], a_fazer["nota_entrada"], a_fazer["valor_apontado"]) == ("A_FAZER", 90, 10.0)
-        assert (a_fazer["itens_feitos"], a_fazer["itens_total"]) == (1, 3)
-        assert a_fazer["numero_atendimento"] == "31000"
-        assert a_fazer["numero_conta"] == "conta-a-fazer"
+        livre = por_id["livre-nova"]
+        assert (livre["situacao"], livre["nota_entrada"], livre["valor_apontado"]) == ("A_FAZER", 90, 10.0)
+        assert (livre["itens_feitos"], livre["itens_total"]) == (1, 3)
+        assert livre["numero_atendimento"] == "31000"
+        assert livre["numero_conta"] == "conta-livre-nova"
         assert por_id["erro"]["erro_motivo"] == "Não consegui ler a conta inteira"
         assert por_id["falta-prontuario"]["falta"] == "prontuario"
         assert por_id["falta-conta"]["falta"] == "conta"

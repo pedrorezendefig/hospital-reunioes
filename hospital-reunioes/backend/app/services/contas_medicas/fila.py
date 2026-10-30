@@ -8,8 +8,97 @@ seja o `faturista_id`, e ganha dono quando uma faturista abre o Guia dela
 
 from __future__ import annotations
 
+from app.dependencies import selecionar_participantes
+
 # A conta com Guia pronto que ninguém puxou.
 LIVRE = "A_FAZER"
+# As que a faturista puxou e ainda não concluiu.
+COM_A_FATURISTA = ("EM_CORRECAO", "RETORNO")
+# As que ainda não ficaram prontas: ficam com quem enviou, que tem o PDF.
+NAO_PRONTAS = ("AGUARDANDO_ARQUIVO", "NA_FILA", "PROCESSANDO", "ERRO")
+CONCLUIDAS = ("CONCLUIDA", "CONCLUIDA_COM_PENDENCIA")
+# A aba Concluídas mostra as mais recentes; o resto fica no banco para o Painel.
+TETO_DE_CONCLUIDAS = 100
+
+
+def fila_da_pessoa(supabase, me: dict) -> dict:
+    """As quatro listas da tela Contas, em ordem de envio (nunca por valor):
+    a Fila (as livres, a mesma para todas), "Minhas" (as que a pessoa puxou e
+    não concluiu), "Meus envios" (as que ela enviou e não ficaram prontas) e as
+    Concluídas dela, as mais recentes primeiro.
+
+    Quem tem "painel completo" vê todas, e cada conta vem com `com_quem`: o nome
+    da faturista que está com ela, ou o de quem enviou a que não ficou pronta."""
+    todas = "painel_completo" in me["permissoes_cm"]
+    pessoa = me.get("id")
+
+    def contas(situacoes, *, da_pessoa: bool, recentes_primeiro: bool = False) -> list[dict]:
+        consulta = supabase.table("cm_conta").select("*").in_("situacao", list(situacoes))
+        if da_pessoa and not todas:
+            consulta = consulta.eq("faturista_id", pessoa)
+        consulta = consulta.order("ordem_fila", desc=recentes_primeiro)
+        if recentes_primeiro:
+            consulta = consulta.limit(TETO_DE_CONCLUIDAS)
+        return consulta.execute().data or []
+
+    livres = contas((LIVRE,), da_pessoa=False)
+    minhas = contas(COM_A_FATURISTA, da_pessoa=True)
+    concluidas = contas(CONCLUIDAS, da_pessoa=True, recentes_primeiro=True)
+    nao_prontas = contas(NAO_PRONTAS, da_pessoa=False)
+    enviou = _quem_enviou(supabase, nao_prontas)
+    envios = nao_prontas if todas else [c for c in nao_prontas if enviou.get(c["id"]) == pessoa]
+
+    for conta in livres:
+        conta["com_quem"] = None
+    for conta in minhas + concluidas:
+        conta["com_quem"] = conta.get("faturista_id") if todas else None
+    for conta in envios:
+        conta["com_quem"] = enviou.get(conta["id"]) if todas else None
+    if todas:
+        _trocar_id_por_nome(supabase, minhas + concluidas + envios)
+    return {"todas": todas, "fila": livres, "minhas": minhas, "meus_envios": envios, "concluidas": concluidas}
+
+
+def _por_id(supabase, tabela: str, coluna: str, valores, **filtros) -> list[dict]:
+    valores = list(dict.fromkeys(v for v in valores if v))
+    if not valores:
+        return []
+    consulta = supabase.table(tabela).select("*").in_(coluna, valores)
+    for campo, valor in filtros.items():
+        consulta = consulta.eq(campo, valor)
+    return consulta.execute().data or []
+
+
+def _quem_enviou(supabase, contas: list[dict]) -> dict[str, str]:
+    """O `cm_envio.usuario_id` de cada conta, pelo arquivo dela. A conta à
+    espera da Conta ainda não tem arquivo: quem enviou é quem mandou o
+    Prontuário do atendimento."""
+    da_conta = {a["id"]: a for a in _por_id(supabase, "cm_arquivo", "id", (c.get("arquivo_id") for c in contas))}
+    prontuarios = _por_id(
+        supabase,
+        "cm_arquivo",
+        "atendimento_id",
+        (c.get("atendimento_id") for c in contas if not c.get("arquivo_id")),
+        tipo="PRONTUARIO",
+    )
+    do_atendimento = {a["atendimento_id"]: a for a in prontuarios}
+    arquivo_de = {
+        c["id"]: da_conta.get(c["arquivo_id"]) if c.get("arquivo_id") else do_atendimento.get(c.get("atendimento_id"))
+        for c in contas
+    }
+    envios = _por_id(supabase, "cm_envio", "id", (a["envio_id"] for a in arquivo_de.values() if a))
+    usuario_do_envio = {e["id"]: e.get("usuario_id") for e in envios}
+    return {cid: usuario_do_envio.get(a["envio_id"]) for cid, a in arquivo_de.items() if a}
+
+
+def _trocar_id_por_nome(supabase, contas: list[dict]) -> None:
+    ids = list({c["com_quem"] for c in contas if c.get("com_quem")})
+    nomes = {}
+    if ids:
+        pessoas = selecionar_participantes(supabase, "id, nome_completo", lambda q: q.in_("id", ids)).data or []
+        nomes = {p["id"]: p.get("nome_completo") for p in pessoas}
+    for conta in contas:
+        conta["com_quem"] = nomes.get(conta.get("com_quem"))
 
 
 def puxar(supabase, conta_id: str, pessoa_id: str, agora: str) -> bool:
