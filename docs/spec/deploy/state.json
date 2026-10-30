@@ -1,8 +1,8 @@
 {
   "schema_version": "1.0",
-  "updated_at": "2026-10-30T16:29:09-03:00",
-  "updated_by": "onda-enxuta@fechar_onda",
-  "last_app_version": "0.198.0",
+  "updated_at": "2026-10-30T17:52:09-03:00",
+  "updated_by": "pr-avulso@fechar_onda",
+  "last_app_version": "0.198.1",
   "production": {
     "domain_root": "hospitalsaomatheus.cloud",
     "vps_ip": "31.97.29.32",
@@ -21,15 +21,15 @@
       "port": 8000,
       "health_path": "/api/health",
       "status": "healthy",
-      "last_deploy_sha": "404b006beba657b92122a2dfa0ae8eaf3d2bb819",
-      "last_deploy_at": "2026-10-30T16:29:09-03:00",
+      "last_deploy_sha": "3bfe40e9e7d3a9de9e1dc2a28a58248886049c63",
+      "last_deploy_at": "2026-10-30T17:52:09-03:00",
       "last_health_check": {
-        "at": "2026-10-30T16:29:09-03:00",
-        "latency_ms": 203,
+        "at": "2026-10-30T17:52:09-03:00",
+        "latency_ms": 211,
         "http_status": 200,
         "body_ok": true
       },
-      "build_duration_seconds": 27,
+      "build_duration_seconds": 64,
       "env_count": 24
     },
     {
@@ -60,7 +60,7 @@
       "last_deploy_sha": "93870744",
       "last_deploy_at": "2026-09-23T13:21:42-03:00",
       "last_health_check": {
-        "at": "2026-10-30T16:29:09-03:00",
+        "at": "2026-10-30T17:52:09-03:00",
         "latency_ms": null,
         "http_status": null,
         "body_ok": true
@@ -207,9 +207,9 @@
     }
   ],
   "last_run": {
-    "mode": "onda-enxuta",
-    "sha": "404b006beba657b92122a2dfa0ae8eaf3d2bb819",
+    "mode": "pr-avulso",
+    "sha": "3bfe40e9e7d3a9de9e1dc2a28a58248886049c63",
     "result": "healthy",
-    "duration_seconds": 1373
+    "duration_seconds": 99
   }
 }

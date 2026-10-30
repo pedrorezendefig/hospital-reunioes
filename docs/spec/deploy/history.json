@@ -2,6 +2,49 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-10-30T17:52:09-03:00",
+      "sha": "3bfe40e9e7d3a9de9e1dc2a28a58248886049c63",
+      "app_version": "0.198.1",
+      "subject": "PR #1331, issue #1328: Contas médicas, devolver à fila confere a dona, e glossário da faturista atualizado",
+      "raw_subject": "chore(deploy): registro do PR avulso (#1331)",
+      "scope": [
+        "backend"
+      ],
+      "prds": [],
+      "result": "healthy",
+      "duration_seconds": 99,
+      "services_touched": [
+        "backend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        },
+        {
+          "service": "frontend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "PR avulso: PR #1331, issue #1328. Merge pela API do GitHub, um build. Registro pela Action pos-merge depois do health.",
+      "etapas": {
+        "merge_s": 3,
+        "build_s": {
+          "backend": 64
+        },
+        "health_s": 20
+      },
+      "responsavel": "pedrorezendefig"
+    },
+    {
       "at": "2026-10-30T16:29:09-03:00",
       "sha": "404b006beba657b92122a2dfa0ae8eaf3d2bb819",
       "app_version": "0.198.0",
