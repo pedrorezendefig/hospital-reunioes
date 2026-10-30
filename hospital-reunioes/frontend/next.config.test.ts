@@ -140,3 +140,46 @@ describe("corpo dos envios pelo rewrite", () => {
     expect(nextConfig.experimental?.proxyTimeout).toBeGreaterThanOrEqual(10 * 60 * 1000);
   });
 });
+
+/**
+ * Cabeçalhos de segurança (issue #1283).
+ *
+ * Toda resposta do app sai com HSTS, sem farejar tipo, com referer contido e
+ * proibida de abrir dentro de iframe de outro site. A CSP fica só no
+ * `frame-ancestors` por ora; a política completa é outra fatia. O
+ * `X-Powered-By` some para não anunciar o framework.
+ */
+async function cabecalhosDeTodaRota(): Promise<Map<string, string>> {
+  const regras = (await nextConfig.headers?.()) ?? [];
+  return new Map(
+    regras
+      .filter((r) => r.source === "/:path*")
+      .flatMap((r) => r.headers.map((h) => [h.key.toLowerCase(), h.value] as const)),
+  );
+}
+
+describe("cabeçalhos de segurança", () => {
+  it("toda rota sai com HSTS de dois anos incluindo subdomínios", async () => {
+    const h = await cabecalhosDeTodaRota();
+    expect(h.get("strict-transport-security")).toBe("max-age=63072000; includeSubDomains");
+  });
+
+  it("o navegador não fareja o tipo do conteúdo", async () => {
+    const h = await cabecalhosDeTodaRota();
+    expect(h.get("x-content-type-options")).toBe("nosniff");
+  });
+
+  it("o referer vai só com a origem para outro site", async () => {
+    const h = await cabecalhosDeTodaRota();
+    expect(h.get("referrer-policy")).toBe("strict-origin-when-cross-origin");
+  });
+
+  it("nenhum site de fora abre o app dentro de iframe", async () => {
+    const h = await cabecalhosDeTodaRota();
+    expect(h.get("content-security-policy")).toBe("frame-ancestors 'none'");
+  });
+
+  it("a resposta não anuncia o framework no X-Powered-By", () => {
+    expect(nextConfig.poweredByHeader).toBe(false);
+  });
+});
