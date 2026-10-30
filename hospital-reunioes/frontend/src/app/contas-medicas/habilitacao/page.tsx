@@ -35,10 +35,14 @@ const LABEL_PERFIL: Record<string, string> = {
   diretoria_medica: "Diretoria médica",
   diretoria_executiva: "Diretoria executiva",
   credenciamento: "Credenciamento",
+  // Nome de tela ainda à espera da confirmação do diretor (ADR 0073).
+  apoio_faturamento: "Apoio ao faturamento",
 };
 
 const LABEL_PERMISSAO: Record<string, string> = {
-  enviar_corrigir_contas: "Enviar e corrigir contas",
+  enviar_contas: "Enviar contas",
+  // A chave guarda o nome antigo; a tela diz o que ela abre hoje (ADR 0073).
+  enviar_corrigir_contas: "Analisar contas",
   decidir_validacao: "Decidir na validação",
   incluir_regra_operacional: "Incluir regra operacional",
   regra_contratual_tabelas: "Regra contratual e tabelas",

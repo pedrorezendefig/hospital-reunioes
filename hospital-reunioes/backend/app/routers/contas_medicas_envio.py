@@ -5,9 +5,10 @@ hora o "Último envio" por atendimento e vê a fila em ordem de envio. A regra d
 envio mora em `services/contas_medicas/envio`; aqui ficam o gate e o formato.
 
 Router próprio, com o mesmo prefixo do módulo, como o do Guia e o das
-operadoras. Toda rota passa por "enviar e corrigir contas"; quem decide o que
-cada pessoa vê é a Fila de contas, em `services/contas_medicas/fila` (issue
-#1307, ADR 0073).
+operadoras. O envio e "Meus envios" pedem "Enviar contas"; a Fila, "Minhas" e
+as Concluídas pedem "Analisar contas" (a chave `enviar_corrigir_contas`, issue
+#1308, ADR 0073). Quem decide o que cada pessoa vê é a Fila de contas, em
+`services/contas_medicas/fila` (issue #1307).
 """
 
 from __future__ import annotations
@@ -27,12 +28,14 @@ from app.services.contas_medicas.envio import (
     EnvioNaoEncontradoError,
     receber,
 )
-from app.services.contas_medicas.fila import fila_da_pessoa
+from app.services.contas_medicas.fila import envios_da_pessoa, fila_da_pessoa
 from app.services.contas_medicas.guia import MARCADAS, linha_pendente
 
 router = APIRouter(prefix="/contas-medicas", tags=["contas-medicas"])
 
-_PODE_ENVIAR = require_permissao_cm("enviar_corrigir_contas")
+_PODE_ENVIAR = require_permissao_cm("enviar_contas")
+# "Analisar contas" na tela; a chave guarda o nome antigo (ADR 0073).
+_PODE_ANALISAR = require_permissao_cm("enviar_corrigir_contas")
 
 
 @router.post("/envios")
@@ -113,17 +116,7 @@ def _item(conta: dict, atendimento: dict, linhas: list[dict]) -> dict:
     }
 
 
-@router.get("/fila")
-@limiter.limit("120/minute")
-async def ver_fila(
-    request: Request,
-    me: dict = Depends(_PODE_ENVIAR),
-    supabase: Client = Depends(get_supabase_client),
-) -> dict:
-    """A Fila, "Minhas", "Meus envios" e as Concluídas da pessoa. Quem tem
-    "painel completo" vê as de todas, com quem está com cada uma."""
-    listas = fila_da_pessoa(supabase, me)
-    nomes = ("fila", "minhas", "meus_envios", "concluidas")
+def _itens(supabase: Client, listas: dict, nomes: tuple[str, ...]) -> dict:
     todas = [conta for nome in nomes for conta in listas[nome]]
     atendimentos = _por_id(supabase, "cm_atendimento", "id", list({c["atendimento_id"] for c in todas}))
     linhas = _linhas_por_conta(supabase, todas)
@@ -132,3 +125,27 @@ async def ver_fila(
         return [_item(c, atendimentos.get(c["atendimento_id"], {}), linhas.get(c["id"], [])) for c in contas]
 
     return {"todas": listas["todas"], **{nome: itens(listas[nome]) for nome in nomes}}
+
+
+@router.get("/fila")
+@limiter.limit("120/minute")
+async def ver_fila(
+    request: Request,
+    me: dict = Depends(_PODE_ANALISAR),
+    supabase: Client = Depends(get_supabase_client),
+) -> dict:
+    """A Fila, "Minhas" e as Concluídas da pessoa. Quem tem "painel completo"
+    vê as de todas, com quem está com cada uma."""
+    return _itens(supabase, fila_da_pessoa(supabase, me), ("fila", "minhas", "concluidas"))
+
+
+@router.get("/meus-envios")
+@limiter.limit("120/minute")
+async def ver_meus_envios(
+    request: Request,
+    me: dict = Depends(_PODE_ENVIAR),
+    supabase: Client = Depends(get_supabase_client),
+) -> dict:
+    """As contas que a pessoa enviou e ainda não ficaram prontas. Quem tem
+    "painel completo" vê os envios de todos, com quem enviou cada um."""
+    return _itens(supabase, envios_da_pessoa(supabase, me), ("meus_envios",))

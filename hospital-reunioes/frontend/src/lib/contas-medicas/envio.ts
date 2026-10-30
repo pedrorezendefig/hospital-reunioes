@@ -14,6 +14,13 @@
 
 export const ROTA_ENVIO = "/api/contas-medicas/envios";
 export const ROTA_FILA = "/api/contas-medicas/fila";
+export const ROTA_MEUS_ENVIOS = "/api/contas-medicas/meus-envios";
+export const ROTA_ME = "/api/contas-medicas/me";
+
+/** "Enviar contas": o envio e Meus envios (issue #1308, ADR 0073). */
+export const ENVIAR_CONTAS = "enviar_contas";
+/** "Analisar contas" na tela; a chave guarda o nome antigo (ADR 0073). */
+export const ANALISAR_CONTAS = "enviar_corrigir_contas";
 
 export const LIMITE_DE_ARQUIVOS = 30;
 /** 100 MB como o computador mostra o tamanho (mil vezes mil), igual ao backend. */

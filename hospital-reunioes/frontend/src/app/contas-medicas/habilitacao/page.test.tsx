@@ -31,8 +31,10 @@ const PERFIS = [
   "diretoria_medica",
   "diretoria_executiva",
   "credenciamento",
+  "apoio_faturamento",
 ];
 const PERMISSOES = [
+  "enviar_contas",
   "enviar_corrigir_contas",
   "decidir_validacao",
   "incluir_regra_operacional",
@@ -87,7 +89,9 @@ function backend() {
 
 function matrizDaCarga(): Record<string, Record<string, boolean>> {
   const linhas = Object.fromEntries(PERFIS.map((p) => [p, Object.fromEntries(PERMISSOES.map((k) => [k, false]))]));
+  linhas.faturista.enviar_contas = true;
   linhas.faturista.enviar_corrigir_contas = true;
+  linhas.apoio_faturamento.enviar_contas = true;
   linhas.coordenadora.enviar_corrigir_contas = true;
   linhas.coordenadora.painel_completo = true;
   linhas.diretoria_executiva.habilitar_pessoas = true;
@@ -119,7 +123,8 @@ describe("a matriz perfil x permissão", () => {
     const cabecalho = within(tabela).getAllByRole("columnheader").map((th) => th.textContent);
     expect(cabecalho).toEqual([
       "Perfil",
-      "Enviar e corrigir contas",
+      "Enviar contas",
+      "Analisar contas",
       "Decidir na validação",
       "Incluir regra operacional",
       "Regra contratual e tabelas",
@@ -136,6 +141,7 @@ describe("a matriz perfil x permissão", () => {
       "Diretoria médica",
       "Diretoria executiva",
       "Credenciamento",
+      "Apoio ao faturamento",
     ]);
     const painel = within(tabela).getByRole("checkbox", { name: "Painel completo: Coordenadora de faturamento" });
     expect((painel as HTMLInputElement).checked).toBe(true);

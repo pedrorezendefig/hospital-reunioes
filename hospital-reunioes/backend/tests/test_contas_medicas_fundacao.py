@@ -166,12 +166,13 @@ ESPERADO_POR_PERFIL = {
 
 
 class TestSuperAdminPassa:
-    def test_super_admin_sem_perfil_passa_com_as_oito_permissoes(self):
-        """Super admin do app passa, como nos outros modulos (ADR 0070)."""
+    def test_super_admin_sem_perfil_passa_com_todas_as_permissoes(self):
+        """Super admin do app passa, como nos outros modulos (ADR 0070). A
+        primeira e "Enviar contas", que a migration 121 somou (issue #1308)."""
         resposta = _cliente(_pessoa(access_profile="super_admin", is_super_admin=True)).get(ROTA_ME)
 
         assert resposta.status_code == 200
-        assert resposta.json() == {"perfil": None, "permissoes": list(TODAS)}
+        assert resposta.json() == {"perfil": None, "permissoes": ["enviar_contas", *TODAS]}
 
 
 class TestMatrizInicial:

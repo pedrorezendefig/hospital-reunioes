@@ -21,42 +21,55 @@ CONCLUIDAS = ("CONCLUIDA", "CONCLUIDA_COM_PENDENCIA")
 TETO_DE_CONCLUIDAS = 100
 
 
+def _contas(supabase, me: dict, situacoes, *, da_pessoa: bool, recentes_primeiro: bool = False) -> list[dict]:
+    consulta = supabase.table("cm_conta").select("*").in_("situacao", list(situacoes))
+    if da_pessoa and not ve_todas(me):
+        consulta = consulta.eq("faturista_id", me.get("id"))
+    consulta = consulta.order("ordem_fila", desc=recentes_primeiro)
+    if recentes_primeiro:
+        consulta = consulta.limit(TETO_DE_CONCLUIDAS)
+    return consulta.execute().data or []
+
+
+def ve_todas(me: dict) -> bool:
+    """Quem tem "painel completo" vê as listas de todas as pessoas."""
+    return "painel_completo" in me["permissoes_cm"]
+
+
 def fila_da_pessoa(supabase, me: dict) -> dict:
-    """As quatro listas da tela Contas, em ordem de envio (nunca por valor):
-    a Fila (as livres, a mesma para todas), "Minhas" (as que a pessoa puxou e
-    não concluiu), "Meus envios" (as que ela enviou e não ficaram prontas) e as
-    Concluídas dela, as mais recentes primeiro.
+    """As listas de quem analisa, em ordem de envio (nunca por valor): a Fila
+    (as livres, a mesma para todas), "Minhas" (as que a pessoa puxou e não
+    concluiu) e as Concluídas dela, as mais recentes primeiro.
 
     Quem tem "painel completo" vê todas, e cada conta vem com `com_quem`: o nome
-    da faturista que está com ela, ou o de quem enviou a que não ficou pronta."""
-    todas = "painel_completo" in me["permissoes_cm"]
-    pessoa = me.get("id")
-
-    def contas(situacoes, *, da_pessoa: bool, recentes_primeiro: bool = False) -> list[dict]:
-        consulta = supabase.table("cm_conta").select("*").in_("situacao", list(situacoes))
-        if da_pessoa and not todas:
-            consulta = consulta.eq("faturista_id", pessoa)
-        consulta = consulta.order("ordem_fila", desc=recentes_primeiro)
-        if recentes_primeiro:
-            consulta = consulta.limit(TETO_DE_CONCLUIDAS)
-        return consulta.execute().data or []
-
-    livres = contas((LIVRE,), da_pessoa=False)
-    minhas = contas(COM_A_FATURISTA, da_pessoa=True)
-    concluidas = contas(CONCLUIDAS, da_pessoa=True, recentes_primeiro=True)
-    nao_prontas = contas(NAO_PRONTAS, da_pessoa=False)
-    enviou = _quem_enviou(supabase, nao_prontas)
-    envios = nao_prontas if todas else [c for c in nao_prontas if enviou.get(c["id"]) == pessoa]
+    da faturista que está com ela."""
+    todas = ve_todas(me)
+    livres = _contas(supabase, me, (LIVRE,), da_pessoa=False)
+    minhas = _contas(supabase, me, COM_A_FATURISTA, da_pessoa=True)
+    concluidas = _contas(supabase, me, CONCLUIDAS, da_pessoa=True, recentes_primeiro=True)
 
     for conta in livres:
         conta["com_quem"] = None
     for conta in minhas + concluidas:
         conta["com_quem"] = conta.get("faturista_id") if todas else None
+    if todas:
+        _trocar_id_por_nome(supabase, minhas + concluidas)
+    return {"todas": todas, "fila": livres, "minhas": minhas, "concluidas": concluidas}
+
+
+def envios_da_pessoa(supabase, me: dict) -> dict:
+    """ "Meus envios": as contas que a pessoa enviou e ainda não ficaram prontas,
+    em ordem de envio. Quem tem "painel completo" vê as de todos, cada uma com
+    o nome de quem enviou em `com_quem`."""
+    todas = ve_todas(me)
+    nao_prontas = _contas(supabase, me, NAO_PRONTAS, da_pessoa=False)
+    enviou = _quem_enviou(supabase, nao_prontas)
+    envios = nao_prontas if todas else [c for c in nao_prontas if enviou.get(c["id"]) == me.get("id")]
     for conta in envios:
         conta["com_quem"] = enviou.get(conta["id"]) if todas else None
     if todas:
-        _trocar_id_por_nome(supabase, minhas + concluidas + envios)
-    return {"todas": todas, "fila": livres, "minhas": minhas, "meus_envios": envios, "concluidas": concluidas}
+        _trocar_id_por_nome(supabase, envios)
+    return {"todas": todas, "meus_envios": envios}
 
 
 def _por_id(supabase, tabela: str, coluna: str, valores, **filtros) -> list[dict]:

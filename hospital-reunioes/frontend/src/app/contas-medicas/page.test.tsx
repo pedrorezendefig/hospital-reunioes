@@ -3,11 +3,12 @@
  */
 
 /**
- * A tela Contas de Contas médicas (issues #1114 e #1123, PRD #1113).
+ * A tela Contas de Contas médicas (issues #1114, #1123 e #1308, PRD #1113).
  *
  * A tela não decide nada: o servidor pareia, recusa e ordena. O que se trava
- * aqui é o que a faturista vê (a fila, as situações, o "Último envio") e o que
- * soltar os arquivos dispara (a rota e os arquivos no corpo).
+ * aqui é o que a faturista vê (a fila, as situações, o "Último envio"), o que
+ * soltar os arquivos dispara (a rota e os arquivos no corpo) e que cada bloco
+ * aparece pela permissão que `/contas-medicas/me` devolve.
  */
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -87,19 +88,27 @@ const RESPOSTA_DO_ENVIO: RespostaDoEnvio = {
   recusas: [{ arquivo: "conta-unimed.pdf", numero_atendimento: "31399", motivo: "Plano UNIMED RIO ENF ainda não configurado" }],
 };
 
+const ENVIAR = "enviar_contas";
+const ANALISAR = "enviar_corrigir_contas";
+
 let filaDoServidor: Fila;
+let permissoes: string[];
 const chamadas: { url: string; init?: RequestInit }[] = [];
 
 beforeEach(() => {
   filaDoServidor = FILA;
+  permissoes = [ENVIAR, ANALISAR];
   chamadas.length = 0;
   vi.stubGlobal(
     "fetch",
     vi.fn(async (url: string, init?: RequestInit) => {
       chamadas.push({ url, init });
-      if (url === "/api/contas-medicas/fila") return new Response(JSON.stringify(filaDoServidor));
+      // Cada rota devolve só as listas dela, como o backend (issue #1308).
+      const { todas, fila, minhas, meus_envios, concluidas } = filaDoServidor;
+      if (url === "/api/contas-medicas/fila") return new Response(JSON.stringify({ todas, fila, minhas, concluidas }));
+      if (url === "/api/contas-medicas/meus-envios") return new Response(JSON.stringify({ todas, meus_envios }));
       if (url === "/api/contas-medicas/envios") return new Response(JSON.stringify(RESPOSTA_DO_ENVIO));
-      if (url === "/api/contas-medicas/me") return new Response(JSON.stringify({ permissoes: [] }));
+      if (url === "/api/contas-medicas/me") return new Response(JSON.stringify({ perfil: "faturista", permissoes }));
       return new Response("{}", { status: 404 });
     }),
   );
@@ -249,6 +258,52 @@ describe("a fila comum", () => {
   });
 });
 
+describe("cada bloco pela permissão de /contas-medicas/me", () => {
+  it("quem só envia vê o envio e Meus envios, e a tela nem pede a Fila", async () => {
+    permissoes = [ENVIAR];
+    render(<ContasMedicasPage />);
+
+    const itens = await linhas();
+
+    expect(screen.getByRole("region", { name: "Envio de contas" })).toBeTruthy();
+    expect(screen.getAllByRole("tab").map((t) => t.textContent)).toEqual(["Meus envios (4)"]);
+    expect(within(itens[0]).getByText(/^Atendimento /).textContent).toBe("Atendimento 31302");
+    expect(chamadas.some((c) => c.url === "/api/contas-medicas/fila")).toBe(false);
+  });
+
+  it("quem só analisa vê Fila, Minhas e Concluídas, sem o envio e sem Meus envios", async () => {
+    permissoes = [ANALISAR];
+    render(<ContasMedicasPage />);
+
+    await linhas();
+
+    expect(screen.queryByRole("region", { name: "Envio de contas" })).toBeNull();
+    expect(screen.getAllByRole("tab").map((t) => t.textContent)).toEqual(["Fila (2)", "Minhas (2)", "Concluídas (1)"]);
+    expect(chamadas.some((c) => c.url === "/api/contas-medicas/meus-envios")).toBe(false);
+  });
+
+  it("quem não tem nenhuma das duas (o credenciamento) não vê envio nem lista", async () => {
+    permissoes = ["contratos_avisos"];
+    render(<ContasMedicasPage />);
+
+    await waitFor(() => expect(chamadas.some((c) => c.url === "/api/contas-medicas/me")).toBe(true));
+
+    await waitFor(() => expect(screen.queryByText("Carregando a fila")).toBeNull());
+    expect(screen.queryByRole("region", { name: "Envio de contas" })).toBeNull();
+    expect(screen.queryByRole("region", { name: "Fila de contas" })).toBeNull();
+    expect(screen.queryAllByRole("tab")).toHaveLength(0);
+  });
+
+  it("quem tem as duas vê o envio e as quatro abas", async () => {
+    render(<ContasMedicasPage />);
+
+    await linhas();
+
+    expect(screen.getByRole("region", { name: "Envio de contas" })).toBeTruthy();
+    expect(screen.getAllByRole("tab")).toHaveLength(4);
+  });
+});
+
 describe("o envio", () => {
   it("soltar os PDFs envia todos e mostra o Último envio com as recusas", async () => {
     render(<ContasMedicasPage />);
@@ -271,7 +326,7 @@ describe("o envio", () => {
       "conta.pdf",
       "prontuario.pdf",
     ]);
-    await waitFor(() => expect(chamadas.filter((c) => c.url === "/api/contas-medicas/fila")).toHaveLength(2));
+    await waitFor(() => expect(chamadas.filter((c) => c.url === "/api/contas-medicas/meus-envios")).toHaveLength(2));
   });
 
   it("Selecionar arquivos envia o que foi escolhido", async () => {

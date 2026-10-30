@@ -450,10 +450,17 @@ PERFIS_CONTAS_MEDICAS = (
     "diretoria_medica",
     "diretoria_executiva",
     "credenciamento",
+    # Quem só sobe contas, como a secretária (ADR 0073, decisão 4).
+    "apoio_faturamento",
 )
 
 # A ordem é a da spec do diretor, e é nela que `/contas-medicas/me` responde.
 PERMISSOES_CONTAS_MEDICAS = (
+    # "Enviar contas": o envio e "Meus envios" (ADR 0073, decisão 4).
+    "enviar_contas",
+    # "Analisar contas" na tela: a Fila, "Minhas", o Guia e o puxar. A chave
+    # guarda o nome antigo de propósito: renomeá-la tiraria o acesso das
+    # faturistas entre a migration e a subida (ADR 0073).
     "enviar_corrigir_contas",
     "decidir_validacao",
     "incluir_regra_operacional",
@@ -469,7 +476,7 @@ def permissoes_contas_medicas(supabase, participante: dict[str, Any] | None) -> 
     """As permissões ligadas para a pessoa, na ordem da spec.
 
     Super admin do app passa em tudo, como nos outros módulos, e por isso
-    recebe as oito. Sem perfil do eixo, nenhuma.
+    recebe todas. Sem perfil do eixo, nenhuma.
     """
     if is_super_admin(participante):
         return list(PERMISSOES_CONTAS_MEDICAS)

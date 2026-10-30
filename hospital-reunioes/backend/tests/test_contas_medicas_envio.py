@@ -17,7 +17,6 @@ têm CHECK. Violar uma delas estoura como o PostgREST estouraria.
 from __future__ import annotations
 
 import os
-import re
 import sys
 import uuid
 from datetime import UTC, datetime, timedelta
@@ -32,6 +31,8 @@ from postgrest.exceptions import APIError
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
+from contas_medicas_apoio import matriz_aplicada  # noqa: E402
+
 from app.dependencies import get_current_user, get_supabase_client  # noqa: E402
 from app.limiter import limiter  # noqa: E402
 from app.routers import contas_medicas_envio as envio_router  # noqa: E402
@@ -39,10 +40,9 @@ from app.services.contas_medicas import envio as envio_service  # noqa: E402
 from app.services.contas_medicas_extrator import Pagina  # noqa: E402
 from app.services.contas_medicas_retencao import chave_do_texto  # noqa: E402
 
-MIGRATION = Path(__file__).resolve().parents[2] / "supabase" / "migrations" / "116_contas_medicas_fundacao.sql"
-
 ROTA_ENVIO = "/api/contas-medicas/envios"
 ROTA_FILA = "/api/contas-medicas/fila"
+ROTA_MEUS_ENVIOS = "/api/contas-medicas/meus-envios"
 
 
 @pytest.fixture(autouse=True)
@@ -123,11 +123,8 @@ def _prontuario(atendimento: str, nome=None, **kw):
 
 
 def _matriz_da_migration() -> list[dict[str, Any]]:
-    sql = MIGRATION.read_text(encoding="utf-8")
-    bloco = re.search(r"INSERT INTO cm_perfil_permissao\s*\([^)]*\)\s*VALUES(.*?);", sql, flags=re.DOTALL)
-    assert bloco, "a migration 116 nao carrega a matriz"
-    linhas = re.findall(r"\(\s*'(\w+)'\s*,\s*'(\w+)'\s*,\s*(true|false)\s*\)", bloco.group(1))
-    return [{"perfil": p, "permissao": k, "ligada": v == "true"} for p, k, v in linhas]
+    """A matriz depois de todas as migrations: a 121 separa Enviar de Analisar (issue #1308)."""
+    return matriz_aplicada()
 
 
 SITUACOES_DA_CONTA = {
@@ -282,6 +279,7 @@ PESSOAS = {
     "outra_faturista": _pessoa("F2", "faturista"),
     "coordenadora": _pessoa("CO", "coordenadora"),
     "credenciamento": _pessoa("CR", "credenciamento"),
+    "apoio": _pessoa("AP", "apoio_faturamento"),
     "sem_eixo": _pessoa("RG", None, access_profile="regular"),
 }
 
@@ -888,21 +886,25 @@ class TestFila:
         assert _ids(corpo, "concluidas") == ["concluida"]
 
     def test_a_conta_que_nao_ficou_pronta_fica_com_quem_enviou_e_fora_da_fila(self):
-        corpo = _cliente("faturista", _fila_semeada()).get(ROTA_FILA).json()
+        cliente = _cliente("faturista", _fila_semeada())
+        corpo = cliente.get(ROTA_FILA).json()
 
-        assert _ids(corpo, "meus_envios") == ENVIOS_DE_F1
+        assert _ids(cliente.get(ROTA_MEUS_ENVIOS).json(), "meus_envios") == ENVIOS_DE_F1
         assert not set(ENVIOS_DE_F1) & set(_ids(corpo, "fila"))
 
     def test_a_outra_faturista_ve_os_envios_dela_e_nao_as_contas_da_primeira(self):
-        corpo = _cliente("outra_faturista", _fila_semeada()).get(ROTA_FILA).json()
+        cliente = _cliente("outra_faturista", _fila_semeada())
+        corpo = cliente.get(ROTA_FILA).json()
 
-        assert _ids(corpo, "meus_envios") == ["da-outra-envio"]
+        assert _ids(cliente.get(ROTA_MEUS_ENVIOS).json(), "meus_envios") == ["da-outra-envio"]
         assert _ids(corpo, "minhas") == ["da-f2-em-correcao"]
         assert _ids(corpo, "concluidas") == ["concluida-f2"]
         assert corpo["todas"] is False
 
     def test_painel_completo_ve_todas_com_o_nome_de_quem_esta_com_cada_uma(self):
-        corpo = _cliente("coordenadora", _fila_semeada()).get(ROTA_FILA).json()
+        cliente = _cliente("coordenadora", _fila_semeada())
+        corpo = cliente.get(ROTA_FILA).json()
+        envios = cliente.get(ROTA_MEUS_ENVIOS).json()
 
         assert corpo["todas"] is True
         assert [(c["id"], c["com"]) for c in corpo["fila"]] == [("livre-antiga", None), ("livre-nova", None)]
@@ -911,7 +913,8 @@ class TestFila:
             ("da-f2-em-correcao", "Pessoa F2"),
             ("em-correcao", "Pessoa F1"),
         ]
-        assert [(c["id"], c["com"]) for c in corpo["meus_envios"]] == [
+        assert envios["todas"] is True
+        assert [(c["id"], c["com"]) for c in envios["meus_envios"]] == [
             ("na-fila", "Pessoa F1"),
             ("falta-prontuario", "Pessoa F1"),
             ("da-outra-envio", "Pessoa F2"),
@@ -950,7 +953,8 @@ class TestFila:
         assert _ids(da_segunda, "minhas") == ["da-f2-em-correcao", livre]
 
     def test_cada_conta_traz_o_que_a_situacao_dela_pede(self):
-        corpo = _cliente("faturista", _fila_semeada()).get(ROTA_FILA).json()
+        cliente = _cliente("faturista", _fila_semeada())
+        corpo = {**cliente.get(ROTA_FILA).json(), **cliente.get(ROTA_MEUS_ENVIOS).json()}
         por_id = {c["id"]: c for lista in ("fila", "minhas", "meus_envios", "concluidas") for c in corpo[lista]}
 
         livre = por_id["livre-nova"]
@@ -983,6 +987,7 @@ class TestAsRotasEstaoNoApp:
         assert len(caminhos) > 50
         assert "post" in caminhos[ROTA_ENVIO]
         assert "get" in caminhos[ROTA_FILA]
+        assert "get" in caminhos[ROTA_MEUS_ENVIOS]
 
 
 # ═══════════════════════════════════════════════════════════════════════════
