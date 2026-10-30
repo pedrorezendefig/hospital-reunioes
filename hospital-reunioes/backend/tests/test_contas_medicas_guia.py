@@ -156,7 +156,14 @@ class _Consulta:
         return self
 
     def eq(self, coluna, valor):
-        self._filtros.append(lambda linha: linha.get(coluna) == valor)
+        # Como o PostgREST: `eq` com None vira `eq.None`, que compara com a
+        # string "None" e não casa linha nenhuma. Coluna nula só casa por `is_`.
+        self._filtros.append(lambda linha: valor is not None and linha.get(coluna) == valor)
+        return self
+
+    def is_(self, coluna, valor):
+        assert valor == "null", valor
+        self._filtros.append(lambda linha: linha.get(coluna) is None)
         return self
 
     def in_(self, coluna, valores):
@@ -579,6 +586,16 @@ class TestDevolverAFila:
     def test_quem_tem_painel_completo_devolve_a_conta_de_qualquer_faturista(self):
         """A coordenação devolve a conta de quem faltou."""
         banco = _cenario(conta=_em_correcao_de("F2"))
+
+        resposta = _cliente("coordenadora", banco).post(ROTA_DEVOLVER)
+
+        assert resposta.status_code == 200
+        assert (banco.conta(CONTA)["situacao"], banco.conta(CONTA)["faturista_id"]) == ("A_FAZER", None)
+
+    def test_a_coordenacao_devolve_a_conta_em_correcao_cuja_dona_foi_apagada(self):
+        """Apagar a pessoa deixa `faturista_id` nulo (ON DELETE SET NULL) e a
+        conta segue Em correção. Sem a devolução, ninguém mais a tira de lá."""
+        banco = _cenario(conta=_em_correcao_de(None))
 
         resposta = _cliente("coordenadora", banco).post(ROTA_DEVOLVER)
 
