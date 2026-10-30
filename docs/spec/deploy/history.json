@@ -2,6 +2,49 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-10-30T14:14:26-03:00",
+      "sha": "1f59bb53e2219df09a0e083ba9db3f28eebb58fa",
+      "app_version": "0.196.6",
+      "subject": "PR #1298, sem issue: Bump certifi from 2026.7.22 to 2026.10.18 in /hospital-reunioes/backend",
+      "raw_subject": "chore(deploy): registro do PR avulso (#1298)",
+      "scope": [
+        "backend"
+      ],
+      "prds": [],
+      "result": "healthy",
+      "duration_seconds": 72,
+      "services_touched": [
+        "backend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        },
+        {
+          "service": "frontend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "PR avulso: PR #1298, sem issue. Merge pela API do GitHub, um build. Registro pela Action pos-merge depois do health.",
+      "etapas": {
+        "merge_s": 3,
+        "build_s": {
+          "backend": 41
+        },
+        "health_s": 10
+      },
+      "responsavel": "pedrorezendefig"
+    },
+    {
       "at": "2026-10-30T14:09:25-03:00",
       "sha": "0147a1509578681b065adf054cd59c00b0624a2c",
       "app_version": "0.196.5",
