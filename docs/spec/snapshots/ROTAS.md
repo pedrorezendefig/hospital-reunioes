@@ -1,6 +1,6 @@
 # ROTAS.md
 <!-- gerado automaticamente por /snapshot — não editar -->
-<!-- last_update: 2026-10-30T19:25+0000 -->
+<!-- last_update: 2026-10-30T19:26+0000 -->
 
 Endpoints HTTP expostos pelo backend FastAPI do Hospital Reuniões.
 
@@ -113,6 +113,7 @@ Endpoints HTTP expostos pelo backend FastAPI do Hospital Reuniões.
 
 | Método | Rota | O que faz | Auth |
 |--------|------|-----------|------|
+| POST | `/contas-medicas/contas/{conta_id}/devolver` | Devolver à fila (issue #1309, ADR 0073 decisão 5): a conta Em correção | ✅ |
 | GET | `/contas-medicas/contas/{conta_id}/guia` | O Guia da Conta: cabeçalho, os três números e as linhas por dia e setor. | ✅ |
 | POST | `/contas-medicas/contas/{conta_id}/guia/concluir` | Concluir é sempre possível. Sem pendência, a Conta fica Concluída; com | ✅ |
 | POST | `/contas-medicas/contas/{conta_id}/guia/dia/feito` | Feito em todas as linhas abertas do grupo (dia e setor). As já marcadas | ✅ |
@@ -515,4 +516,4 @@ Endpoints HTTP expostos pelo backend FastAPI do Hospital Reuniões.
 
 ---
 
-**Totais:** 289 endpoints em 44 routers · 94% exigem auth.
+**Totais:** 290 endpoints em 44 routers · 94% exigem auth.
