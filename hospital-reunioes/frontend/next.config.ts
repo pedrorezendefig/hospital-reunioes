@@ -38,6 +38,23 @@ const nextConfig: NextConfig = {
     NEXT_PUBLIC_APP_VERSION: APP_VERSION,
   },
   generateBuildId: async () => `v${APP_VERSION}-${Date.now()}`,
+  // Cabeçalhos de segurança (issue #1283). A CSP leva só o `frame-ancestors`
+  // por ora: a política completa pede o inventário de scripts e fica para
+  // outra fatia.
+  poweredByHeader: false,
+  async headers() {
+    return [
+      {
+        source: "/:path*",
+        headers: [
+          { key: "Strict-Transport-Security", value: "max-age=63072000; includeSubDomains" },
+          { key: "X-Content-Type-Options", value: "nosniff" },
+          { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
+          { key: "Content-Security-Policy", value: "frame-ancestors 'none'" },
+        ],
+      },
+    ];
+  },
   experimental: {
     // Envio de Contas médicas (issue #1213). Com o `src/middleware.ts` no app,
     // o Next clona o corpo de toda requisição e corta em 10 MB por padrão: o
