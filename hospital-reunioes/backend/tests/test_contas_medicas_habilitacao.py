@@ -25,6 +25,8 @@ from fastapi.testclient import TestClient
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
+from contas_medicas_apoio import matriz_aplicada  # noqa: E402
+
 from app.dependencies import get_current_user, get_supabase_client, require_permissao_cm  # noqa: E402
 from app.limiter import limiter  # noqa: E402
 from app.routers import contas_medicas as contas_medicas_router  # noqa: E402
@@ -143,12 +145,8 @@ def _reset_rate_limiter():
 
 
 def _matriz_da_migration() -> list[dict[str, Any]]:
-    """As linhas do INSERT em `cm_perfil_permissao` da 116, como o banco as tem."""
-    sql = (MIGRATIONS / "116_contas_medicas_fundacao.sql").read_text(encoding="utf-8")
-    bloco = re.search(r"INSERT INTO cm_perfil_permissao\s*\([^)]*\)\s*VALUES(.*?);", sql, flags=re.DOTALL)
-    assert bloco, "a migration 116 nao carrega a matriz"
-    linhas = re.findall(r"\(\s*'(\w+)'\s*,\s*'(\w+)'\s*,\s*(true|false)\s*\)", bloco.group(1))
-    return [{"perfil": p, "permissao": k, "ligada": v == "true"} for p, k, v in linhas]
+    """A matriz depois de todas as migrations: a 121 separa Enviar de Analisar (issue #1308)."""
+    return matriz_aplicada()
 
 
 # A chave de cada tabela que o duble atualiza por upsert.
@@ -315,7 +313,29 @@ class TestAMatriz:
         assert corpo["matriz"]["coordenadora"]["painel_completo"] is True
         assert corpo["matriz"]["coordenadora"]["incluir_regra_operacional"] is False
         assert corpo["perfis"][0] == "faturista"
-        assert len(corpo["permissoes"]) == 8
+        assert len(corpo["permissoes"]) == 9
+
+
+class TestEnviarEAnalisarNaMatriz:
+    """Issue #1308, ADR 0073 decisão 4: a Habilitação lista o perfil novo e as duas chaves."""
+
+    def test_a_matriz_traz_apoio_ao_faturamento_so_com_enviar_contas(self):
+        corpo = _Hospital(DIRETORA).como(DIRETORA).get(ROTA_MATRIZ).json()
+
+        assert "apoio_faturamento" in corpo["perfis"]
+        assert corpo["permissoes"][:2] == ["enviar_contas", "enviar_corrigir_contas"]
+        assert [p for p, ligada in corpo["matriz"]["apoio_faturamento"].items() if ligada] == ["enviar_contas"]
+        assert corpo["matriz"]["faturista"]["enviar_contas"] is True
+
+    def test_a_diretoria_mexe_em_enviar_contas_e_da_o_perfil_apoio_ao_faturamento(self):
+        hospital = _Hospital(DIRETORA, COORDENADORA)
+        cliente = hospital.como(DIRETORA)
+
+        celula = {"perfil": "apoio_faturamento", "permissao": "enviar_contas", "ligada": False}
+        resposta = cliente.put(ROTA_PERMISSAO, json=celula)
+        assert resposta.status_code == 200, resposta.text
+        resposta = cliente.put(f"{ROTA_PESSOAS}/{COORDENADORA['id']}", json={"perfil": "apoio_faturamento"})
+        assert resposta.status_code == 200, resposta.text
 
 
 class TestAPerdaValeNaHora:

@@ -44,6 +44,7 @@ from postgrest.exceptions import APIError
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from anthropic_apoio import cliente_por_transporte, erro, mensagem, nome_do_schema, nomear_schemas, uso  # noqa: E402
+from contas_medicas_apoio import matriz_aplicada  # noqa: E402
 
 from app.dependencies import get_current_user, get_supabase_client  # noqa: E402
 from app.limiter import limiter  # noqa: E402
@@ -581,10 +582,8 @@ PACOTE_DA_COLECISTECTOMIA = {"codigo": "98005497", "descricao": "PACOTE COLECIST
 
 
 def _matriz_da_migration() -> list[dict[str, Any]]:
-    bloco = re.search(r"INSERT INTO cm_perfil_permissao\s*\([^)]*\)\s*VALUES(.*?);", _SQL, flags=re.DOTALL)
-    assert bloco, "a migration 116 nao carrega a matriz"
-    linhas = re.findall(r"\(\s*'(\w+)'\s*,\s*'(\w+)'\s*,\s*(true|false)\s*\)", bloco.group(1))
-    return [{"perfil": p, "permissao": k, "ligada": v == "true"} for p, k, v in linhas]
+    """A matriz depois de todas as migrations: a 121 separa Enviar de Analisar (issue #1308)."""
+    return matriz_aplicada()
 
 
 def _pessoa(pid: str, perfil: str | None) -> dict[str, Any]:
@@ -1225,7 +1224,9 @@ class TestReanalisar:
 
 
 def _fila(banco: _Banco, lista: str = "fila") -> list[dict]:
-    resposta = _cliente(banco).get("/api/contas-medicas/fila")
+    # "Meus envios" tem rota própria desde a issue #1308.
+    rota = "/api/contas-medicas/meus-envios" if lista == "meus_envios" else "/api/contas-medicas/fila"
+    resposta = _cliente(banco).get(rota)
     assert resposta.status_code == 200, resposta.text
     return resposta.json()[lista]
 

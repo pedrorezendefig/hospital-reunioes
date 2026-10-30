@@ -30,7 +30,7 @@ router = APIRouter(prefix="/contas-medicas", tags=["contas-medicas"])
 
 _PODE_HABILITAR = require_permissao_cm("habilitar_pessoas")
 
-# Os valores dos CHECKs da migration 116, na ordem da spec.
+# Os valores dos CHECKs das migrations 116 e 121, na ordem da spec.
 Perfil = Literal[
     "faturista",
     "coordenadora",
@@ -38,8 +38,10 @@ Perfil = Literal[
     "diretoria_medica",
     "diretoria_executiva",
     "credenciamento",
+    "apoio_faturamento",
 ]
 Permissao = Literal[
+    "enviar_contas",
     "enviar_corrigir_contas",
     "decidir_validacao",
     "incluir_regra_operacional",

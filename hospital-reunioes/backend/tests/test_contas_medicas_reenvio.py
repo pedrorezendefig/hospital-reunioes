@@ -14,7 +14,6 @@ do envio: o extrator é trocado por um dublê.
 from __future__ import annotations
 
 import os
-import re
 import sys
 import uuid
 from pathlib import Path
@@ -26,6 +25,8 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+
+from contas_medicas_apoio import matriz_aplicada  # noqa: E402
 
 from app.dependencies import get_current_user, get_supabase_client  # noqa: E402
 from app.limiter import limiter  # noqa: E402
@@ -128,11 +129,8 @@ def _pdf(conteudo: bytes, nome="conta-corrigida.pdf"):
 
 
 def _matriz_da_migration() -> list[dict[str, Any]]:
-    sql = MIGRATION.read_text(encoding="utf-8")
-    bloco = re.search(r"INSERT INTO cm_perfil_permissao\s*\([^)]*\)\s*VALUES(.*?);", sql, flags=re.DOTALL)
-    assert bloco, "a migration 116 nao carrega a matriz"
-    linhas = re.findall(r"\(\s*'(\w+)'\s*,\s*'(\w+)'\s*,\s*(true|false)\s*\)", bloco.group(1))
-    return [{"perfil": p, "permissao": k, "ligada": v == "true"} for p, k, v in linhas]
+    """A matriz depois de todas as migrations: a 121 separa Enviar de Analisar (issue #1308)."""
+    return matriz_aplicada()
 
 
 class _Consulta:

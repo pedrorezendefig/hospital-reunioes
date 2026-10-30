@@ -101,6 +101,7 @@ class ParticipanteResponse(BaseModel):
             "diretoria_medica",
             "diretoria_executiva",
             "credenciamento",
+            "apoio_faturamento",
         ]
         | None
     ) = None
