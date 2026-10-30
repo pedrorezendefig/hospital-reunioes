@@ -869,15 +869,20 @@ def _contas(n: int, singular: str, plural: str) -> str:
 
 def _avisar_se_o_envio_terminou(supabase, conta: dict) -> None:
     """Quando a última conta do envio sai da fila, um aviso CONTAS_MEDICAS para
-    a faturista no sino, um por envio. A conta à espera do prontuário não
-    segura o aviso: ela não está na fila."""
-    if not conta.get("arquivo_id") or not conta.get("faturista_id"):
+    quem enviou (`cm_envio.usuario_id`), no sino, um por envio. A faturista da
+    conta é quem a puxa da Fila depois (ADR 0073). A conta à espera do
+    prontuário não segura o aviso: ela não está na fila."""
+    if not conta.get("arquivo_id"):
         return
     with _trava_do_aviso:
         arquivo = _primeira(supabase.table("cm_arquivo").select("envio_id").eq("id", conta["arquivo_id"]))
         if arquivo is None:
             return
         envio_id = arquivo["envio_id"]
+        envio = _primeira(supabase.table("cm_envio").select("usuario_id").eq("id", envio_id))
+        quem_enviou = (envio or {}).get("usuario_id")
+        if not quem_enviou:
+            return
         do_envio = supabase.table("cm_arquivo").select("id").eq("envio_id", envio_id).eq("tipo", "CONTA").execute()
         ids = [a["id"] for a in do_envio.data or []]
         contas = supabase.table("cm_conta").select("situacao").in_("arquivo_id", ids).execute()
@@ -891,7 +896,7 @@ def _avisar_se_o_envio_terminou(supabase, conta: dict) -> None:
         ja_avisado = _primeira(
             supabase.table("notificacoes")
             .select("id")
-            .eq("destinatario_id", conta["faturista_id"])
+            .eq("destinatario_id", quem_enviou)
             .eq("tipo", "CONTAS_MEDICAS")
             .eq("referencia_id", envio_id)
         )
@@ -907,7 +912,7 @@ def _avisar_se_o_envio_terminou(supabase, conta: dict) -> None:
             mensagem = "Veja o motivo na fila de Contas médicas."
         supabase.table("notificacoes").insert(
             {
-                "destinatario_id": conta["faturista_id"],
+                "destinatario_id": quem_enviou,
                 "tipo": "CONTAS_MEDICAS",
                 "titulo": titulo,
                 "mensagem": mensagem,
