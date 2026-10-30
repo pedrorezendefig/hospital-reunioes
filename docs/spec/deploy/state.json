@@ -1,8 +1,8 @@
 {
   "schema_version": "1.0",
-  "updated_at": "2026-10-30T15:28:10-03:00",
+  "updated_at": "2026-10-30T15:36:02-03:00",
   "updated_by": "onda-enxuta@fechar_onda",
-  "last_app_version": "0.196.10",
+  "last_app_version": "0.197.0",
   "production": {
     "domain_root": "hospitalsaomatheus.cloud",
     "vps_ip": "31.97.29.32",
@@ -21,15 +21,15 @@
       "port": 8000,
       "health_path": "/api/health",
       "status": "healthy",
-      "last_deploy_sha": "035c46872126bdd1b093d0a456fd9b29c563b44c",
-      "last_deploy_at": "2026-10-30T15:15:50-03:00",
+      "last_deploy_sha": "bd247680b025e72408008d74d2dc3ef90e3106e2",
+      "last_deploy_at": "2026-10-30T15:36:02-03:00",
       "last_health_check": {
-        "at": "2026-10-30T15:15:50-03:00",
-        "latency_ms": 285,
+        "at": "2026-10-30T15:36:02-03:00",
+        "latency_ms": 219,
         "http_status": 200,
         "body_ok": true
       },
-      "build_duration_seconds": 55,
+      "build_duration_seconds": 236,
       "env_count": 24
     },
     {
@@ -39,15 +39,15 @@
       "port": 3000,
       "health_path": null,
       "status": "healthy",
-      "last_deploy_sha": "97f00770d72adfe8a423030b321aa8244973b1fe",
-      "last_deploy_at": "2026-10-30T15:28:10-03:00",
+      "last_deploy_sha": "bd247680b025e72408008d74d2dc3ef90e3106e2",
+      "last_deploy_at": "2026-10-30T15:36:02-03:00",
       "last_health_check": {
-        "at": "2026-10-30T15:28:10-03:00",
-        "latency_ms": 206,
+        "at": "2026-10-30T15:36:02-03:00",
+        "latency_ms": 178,
         "http_status": 200,
         "body_ok": true
       },
-      "build_duration_seconds": 175,
+      "build_duration_seconds": 206,
       "env_count": 5
     },
     {
@@ -56,14 +56,14 @@
       "domain": "studio.hospitalsaomatheus.cloud",
       "port": null,
       "health_path": null,
-      "status": "warning",
+      "status": "healthy",
       "last_deploy_sha": "93870744",
       "last_deploy_at": "2026-09-23T13:21:42-03:00",
       "last_health_check": {
-        "at": "2026-10-30T15:28:10-03:00",
+        "at": "2026-10-30T15:36:02-03:00",
         "latency_ms": null,
         "http_status": null,
-        "body_ok": false
+        "body_ok": true
       },
       "build_duration_seconds": null,
       "env_count": 107
@@ -208,8 +208,8 @@
   ],
   "last_run": {
     "mode": "onda-enxuta",
-    "sha": "97f00770d72adfe8a423030b321aa8244973b1fe",
+    "sha": "bd247680b025e72408008d74d2dc3ef90e3106e2",
     "result": "healthy",
-    "duration_seconds": 469
+    "duration_seconds": 534
   }
 }
