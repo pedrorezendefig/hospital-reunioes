@@ -125,6 +125,8 @@ No rodapé ficam a observação opcional para a gestão e o botão "Concluir e a
 
 Abrir o Guia de uma conta da Fila é puxar a conta: ela muda de A fazer para Em correção e passa a ser de quem abriu. Fora da Fila, a faturista só abre as contas que puxou; quem tem o Painel completo abre a de qualquer uma.
 
+A faturista que pegou uma conta e não vai terminar clica em "Devolver à fila", no topo do Guia, e confirma. A conta volta para A fazer, livre, no mesmo lugar da Fila em que estava pela ordem de envio, e sai da aba Minhas. As marcações que ela já fez continuam na conta: quem pegar depois vê os itens Feito, Não procede e Bloqueado e segue de onde parou. A faturista devolve só a conta dela; quem tem o Painel completo devolve a de qualquer faturista, como a coordenação faz com a conta de quem faltou. Só a conta Em correção volta para a Fila: a conta em Retorno fica com quem analisou, e a concluída não volta.
+
 ## O reenvio da conta corrigida
 
 Depois de corrigir a conta no MV, a faturista pode reenviar só o PDF da conta para ver se a correção pegou. O reenvio é opcional: a conta concluída sem reenvio vale igual para a produção dela.

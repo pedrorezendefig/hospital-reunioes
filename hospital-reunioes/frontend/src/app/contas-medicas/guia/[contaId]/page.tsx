@@ -17,13 +17,14 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
-import { ArrowLeft, RefreshCw, Upload } from "lucide-react";
+import { ArrowLeft, RefreshCw, Undo2, Upload } from "lucide-react";
 
 import { Ditar, juntarDitado } from "@/components/contas-medicas/Ditar";
 import { LinhaDoGuia, type Marcacao } from "@/components/contas-medicas/LinhaDoGuia";
 import { useToast } from "@/components/ui/Toast";
 import {
   CONCLUIDAS,
+  PERGUNTA_DE_DEVOLVER,
   type GrupoGuia,
   type Guia,
   ROTULO_SITUACAO,
@@ -196,6 +197,25 @@ export default function GuiaPage() {
     }
   }
 
+  async function devolver() {
+    if (!token || !window.confirm(PERGUNTA_DE_DEVOLVER)) return;
+    setOcupado(true);
+    try {
+      const resposta = await fetch(`/api/contas-medicas/contas/${contaId}/devolver`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!resposta.ok) {
+        toast(await detalhe(resposta, "Não deu certo. Tente de novo."), "error");
+        return;
+      }
+      toast("A conta voltou para a Fila", "success");
+      router.push("/contas-medicas");
+    } finally {
+      setOcupado(false);
+    }
+  }
+
   async function reenviar(arquivo: File | undefined) {
     if (!token || !arquivo) return;
     const corpo = new FormData();
@@ -275,17 +295,30 @@ export default function GuiaPage() {
               Regra nova desde a análise
             </span>
           )}
-          {guia.pode_reanalisar && (
-            <button
-              type="button"
-              onClick={reanalisar}
-              disabled={ocupado}
-              className="ml-auto inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 bg-white text-sm text-slate-700 hover:border-slate-300 disabled:opacity-50"
-            >
-              <RefreshCw className="w-4 h-4" aria-hidden="true" />
-              {guia.regra_nova_desde_analise ? "Reanalisar com a regra nova" : "Reanalisar"}
-            </button>
-          )}
+          <div className="ml-auto flex flex-wrap items-center gap-2">
+            {cabecalho.situacao === "EM_CORRECAO" && (
+              <button
+                type="button"
+                onClick={devolver}
+                disabled={ocupado}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 bg-white text-sm text-slate-700 hover:border-slate-300 disabled:opacity-50"
+              >
+                <Undo2 className="w-4 h-4" aria-hidden="true" />
+                Devolver à fila
+              </button>
+            )}
+            {guia.pode_reanalisar && (
+              <button
+                type="button"
+                onClick={reanalisar}
+                disabled={ocupado}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 bg-white text-sm text-slate-700 hover:border-slate-300 disabled:opacity-50"
+              >
+                <RefreshCw className="w-4 h-4" aria-hidden="true" />
+                {guia.regra_nova_desde_analise ? "Reanalisar com a regra nova" : "Reanalisar"}
+              </button>
+            )}
+          </div>
         </div>
         <p className="text-sm text-slate-500 break-words">{subtitulo(guia)}</p>
       </header>

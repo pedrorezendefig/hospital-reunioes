@@ -12,8 +12,11 @@ from app.dependencies import selecionar_participantes
 
 # A conta com Guia pronto que ninguém puxou.
 LIVRE = "A_FAZER"
+# A que a faturista puxou e está trabalhando: a única que volta para a Fila.
+EM_CORRECAO = "EM_CORRECAO"
+SO_EM_CORRECAO_VOLTA = "Só a conta Em correção volta para a Fila"
 # As que a faturista puxou e ainda não concluiu.
-COM_A_FATURISTA = ("EM_CORRECAO", "RETORNO")
+COM_A_FATURISTA = (EM_CORRECAO, "RETORNO")
 # As que ainda não ficaram prontas: ficam com quem enviou, que tem o PDF.
 NAO_PRONTAS = ("AGUARDANDO_ARQUIVO", "NA_FILA", "PROCESSANDO", "ERRO")
 CONCLUIDAS = ("CONCLUIDA", "CONCLUIDA_COM_PENDENCIA")
@@ -123,6 +126,23 @@ def puxar(supabase, conta_id: str, pessoa_id: str, agora: str) -> bool:
         .update({"situacao": "EM_CORRECAO", "aberta_em": agora, "faturista_id": pessoa_id})
         .eq("id", conta_id)
         .eq("situacao", LIVRE)
+        .execute()
+        .data
+        or []
+    )
+    return bool(gravadas)
+
+
+def devolver(supabase, conta_id: str) -> bool:
+    """A conta Em correção volta livre para a Fila (issue #1309). Só a dona e
+    a situação mudam: `ordem_fila`, `aberta_em` e as marcações ficam. O UPDATE
+    é condicional na situação: a conta concluída entre a leitura e a escrita
+    não volta."""
+    gravadas = (
+        supabase.table("cm_conta")
+        .update({"situacao": LIVRE, "faturista_id": None})
+        .eq("id", conta_id)
+        .eq("situacao", EM_CORRECAO)
         .execute()
         .data
         or []

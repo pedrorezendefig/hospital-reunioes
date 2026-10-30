@@ -540,6 +540,96 @@ class TestPuxarAConta:
 
 
 # ═══════════════════════════════════════════════════════════════════════════
+# 2c. Devolver à fila (issue #1309, ADR 0073 decisão 5)
+# ═══════════════════════════════════════════════════════════════════════════
+
+ROTA_DEVOLVER = f"/api/contas-medicas/contas/{CONTA}/devolver"
+ABERTA_EM = "2026-10-29T13:00:00+00:00"
+
+
+def _em_correcao_de(faturista: str, **campos) -> dict:
+    return _conta(situacao="EM_CORRECAO", faturista_id=faturista, aberta_em=ABERTA_EM, **campos)
+
+
+class TestDevolverAFila:
+    def test_a_faturista_devolve_a_conta_dela_e_a_conta_volta_livre_na_fila(self):
+        from app.services.contas_medicas.fila import fila_da_pessoa
+
+        anterior = _outra_conta("c-anterior", None, "A_FAZER", 5)
+        posterior = _outra_conta("c-posterior", None, "A_FAZER", 20)
+        banco = _cenario(conta=_em_correcao_de("F1"), outras_contas=(posterior, anterior))
+
+        resposta = _cliente("dona", banco).post(ROTA_DEVOLVER)
+
+        assert resposta.status_code == 200
+        conta = banco.conta(CONTA)
+        assert (conta["situacao"], conta["faturista_id"], conta["aberta_em"]) == ("A_FAZER", None, ABERTA_EM)
+        # Na Fila das outras, no lugar dela na ordem de envio.
+        me = {"id": "F2", "permissoes_cm": ["enviar_corrigir_contas"]}
+        assert [c["id"] for c in fila_da_pessoa(banco, me)["fila"]] == ["c-anterior", CONTA, "c-posterior"]
+
+    def test_a_faturista_recebe_403_ao_devolver_a_conta_de_outra(self):
+        banco = _cenario(conta=_em_correcao_de("F1"))
+
+        resposta = _cliente("outra_faturista", banco).post(ROTA_DEVOLVER)
+
+        assert resposta.status_code == 403
+        assert (banco.conta(CONTA)["situacao"], banco.conta(CONTA)["faturista_id"]) == ("EM_CORRECAO", "F1")
+
+    def test_quem_tem_painel_completo_devolve_a_conta_de_qualquer_faturista(self):
+        """A coordenação devolve a conta de quem faltou."""
+        banco = _cenario(conta=_em_correcao_de("F2"))
+
+        resposta = _cliente("coordenadora", banco).post(ROTA_DEVOLVER)
+
+        assert resposta.status_code == 200
+        assert (banco.conta(CONTA)["situacao"], banco.conta(CONTA)["faturista_id"]) == ("A_FAZER", None)
+
+    def test_as_marcacoes_da_conta_devolvida_continuam_la_para_quem_pegar_depois(self):
+        linhas = _marcadas(_linhas_do_guia(), luva="FEITO", senha="NAO_PROCEDE", fita="BLOQUEADO")
+        banco = _cenario(conta=_em_correcao_de("F1"), linhas=linhas)
+        _cliente("dona", banco).post(ROTA_DEVOLVER)
+
+        guia = _cliente("outra_faturista", banco).get(ROTA_GUIA).json()
+
+        estados = {linha["descricao"]: linha["estado"] for g in guia["grupos"] for linha in g["linhas"]}
+        assert (estados["luva"], estados["senha"], estados["fita"], estados["lanceta"]) == (
+            "FEITO",
+            "NAO_PROCEDE",
+            "BLOQUEADO",
+            "ABERTA",
+        )
+        # Quem pega depois não começa do zero: 3 de 9 já marcados.
+        assert (guia["numeros"]["itens_feitos"], guia["numeros"]["itens_total"]) == (3, 9)
+        assert banco.conta(CONTA)["faturista_id"] == "F2"
+
+    @pytest.mark.parametrize("situacao", ["RETORNO", "CONCLUIDA", "CONCLUIDA_COM_PENDENCIA"])
+    def test_conta_em_retorno_ou_concluida_recebe_409_e_fica_com_quem_analisou(self, situacao):
+        banco = _cenario(conta=_em_correcao_de("F1") | {"situacao": situacao})
+
+        resposta = _cliente("dona", banco).post(ROTA_DEVOLVER)
+
+        assert resposta.status_code == 409
+        assert resposta.json()["detail"] == "Só a conta Em correção volta para a Fila"
+        assert (banco.conta(CONTA)["situacao"], banco.conta(CONTA)["faturista_id"]) == (situacao, "F1")
+
+    def test_a_conta_concluida_entre_a_leitura_e_a_escrita_nao_volta_para_a_fila(self):
+        banco = _cenario(conta=_em_correcao_de("F1"))
+
+        def concluiu_antes(tabela, campos):
+            if tabela == "cm_conta" and campos.get("situacao") == "A_FAZER":
+                banco.antes_de_gravar = None
+                banco.conta(CONTA)["situacao"] = "CONCLUIDA"
+
+        banco.antes_de_gravar = concluiu_antes
+
+        resposta = _cliente("dona", banco).post(ROTA_DEVOLVER)
+
+        assert resposta.status_code == 409
+        assert (banco.conta(CONTA)["situacao"], banco.conta(CONTA)["faturista_id"]) == ("CONCLUIDA", "F1")
+
+
+# ═══════════════════════════════════════════════════════════════════════════
 # 3. Feito, Não procede, Bloqueado e Desfazer
 # ═══════════════════════════════════════════════════════════════════════════
 
@@ -880,6 +970,8 @@ class TestAsRotasEstaoNoApp:
         assert "post" in caminhos[f"{base}/concluir"]
         # Reanalisar (issue #1130).
         assert "post" in caminhos["/api/contas-medicas/contas/{conta_id}/reanalisar"]
+        # Devolver à fila (issue #1309).
+        assert "post" in caminhos["/api/contas-medicas/contas/{conta_id}/devolver"]
 
 
 KIT = Path(__file__).resolve().parents[1] / "app" / "conhecimento" / "contas-medicas.md"
@@ -892,3 +984,13 @@ class TestKitDeConhecimento:
 
         for trecho in ("**Feito**", "**Não procede**", "**Bloqueado**", "Concluir e abrir a próxima", "Validar"):
             assert trecho in secao
+
+    def test_o_texto_do_produto_diz_quem_devolve_a_conta_a_fila(self):
+        """Devolver à fila (issue #1309): quem devolve, o que fica e o que não volta."""
+        texto = KIT.read_text(encoding="utf-8")
+        secao = texto.split("## O Guia", 1)[1].split("\n## ", 1)[0]
+
+        paragrafo = next(p for p in secao.split("\n\n") if '"Devolver à fila"' in p)
+
+        for trecho in ("Painel completo", "marcações", "Retorno"):
+            assert trecho in paragrafo
