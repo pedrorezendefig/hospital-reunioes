@@ -1,5 +1,6 @@
 ---
 status: accepted
+amended_by: 0073
 ---
 
 # Contas médicas: aritmética no código, IA só onde há julgamento, memória da operadora no banco, fila no banco
