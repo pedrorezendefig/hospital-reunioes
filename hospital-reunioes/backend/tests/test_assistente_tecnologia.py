@@ -1691,27 +1691,44 @@ class TestDescreverImagem:
         cliente = _montar(logado=_pessoa("p1"))
         assert cliente.post(DESCREVER, files=_imagem("TELA.PNG")).status_code == 200
 
-    def test_imagem_acima_de_cinco_mega_leva_413(self, monkeypatch):
+    def test_imagem_acima_do_teto_leva_413(self, monkeypatch):
         llm = _stub_llm(monkeypatch, content="a tela do sistema")
         cliente = _montar(logado=_pessoa("p1"))
-        resposta = cliente.post(DESCREVER, files=_imagem("tela.png", b"x" * (5 * 1024 * 1024 + 1)))
+        teto = assistente_tecnologia.LIMITE_DA_IMAGEM
+        resposta = cliente.post(DESCREVER, files=_imagem("tela.png", b"x" * (teto + 1)))
         assert resposta.status_code == 413
         # A frase e a do router, como nos outros dois desfechos de recusa, e nao
         # uma substring: `"5 MB" in detail` passa tambem para "15 MB", que e
         # exatamente o numero do OUTRO teto do assistente (o do documento
         # binario). E o teto citado e UM, e e o que vale: a lista completa dos
-        # numeros da frase e o que distingue 5 de 15, coisa que substring nao faz.
+        # numeros da frase e o que distingue um teto do outro.
         assert resposta.json()["detail"] == tecnologia_router.MOTIVO_IMAGEM_GRANDE
-        assert re.findall(r"\d+ MB", tecnologia_router.MOTIVO_IMAGEM_GRANDE) == ["5 MB"]
+        assert re.findall(r"[\d,]+ MB", tecnologia_router.MOTIVO_IMAGEM_GRANDE) == ["3,75 MB"]
         assert llm.calls == []
 
-    def test_imagem_no_teto_passa(self, monkeypatch):
-        """O par do teste acima: o teto recusa o que PASSA dele, e nao o que o
-        alcanca. Sem este, trocar `>` por `>=` ficava verde."""
-        _stub_llm(monkeypatch, content="a tela do sistema")
+    def test_print_de_cinco_mega_e_recusado_antes_da_ia(self, monkeypatch):
+        """A API da Anthropic recusa imagem acima de 5 MB medidos no base64, que
+        cresce 4/3 (revisao do PR #1313). Um print de 5 MB passava a rota, voltava
+        400 de la e virava 502 com "tente de novo", e o mesmo print falhava de
+        novo. Ele tem que parar na rota, com a frase do teto, sem chamar a IA."""
+        llm = _stub_llm(monkeypatch, content="a tela do sistema")
         cliente = _montar(logado=_pessoa("p1"))
         resposta = cliente.post(DESCREVER, files=_imagem("tela.png", b"x" * (5 * 1024 * 1024)))
+        assert resposta.status_code == 413
+        assert resposta.json()["detail"] == tecnologia_router.MOTIVO_IMAGEM_GRANDE
+        assert llm.calls == []
+
+    def test_imagem_no_teto_passa_e_cabe_no_limite_da_anthropic(self, monkeypatch):
+        """O par dos testes acima: o teto recusa o que PASSA dele, e nao o que o
+        alcanca (sem este, trocar `>` por `>=` ficava verde). E o print no teto,
+        ja em base64, cabe nos 5 MB da API: um teto folgado demais passaria aqui
+        e voltaria 400 de la."""
+        llm = _stub_llm(monkeypatch, content="a tela do sistema")
+        cliente = _montar(logado=_pessoa("p1"))
+        teto = assistente_tecnologia.LIMITE_DA_IMAGEM
+        resposta = cliente.post(DESCREVER, files=_imagem("tela.png", b"x" * teto))
         assert resposta.status_code == 200
+        assert len(_parte_da_imagem(llm)["source"]["data"]) <= 5 * 1024 * 1024
 
     def test_a_imagem_vai_em_base64_como_conteudo_multimodal(self, monkeypatch):
         """O coracao da fatia: a imagem e IMAGEM para o provedor.

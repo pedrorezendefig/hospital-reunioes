@@ -153,9 +153,13 @@ TIPOS_DE_IMAGEM: dict[str, str] = {
     ".webp": "image/webp",
 }
 
-# 5 MB. Print de tela cheia em PNG num monitor grande nao passa de dois; o que
-# passa disto e foto de celular de um monitor, que e outro problema.
-LIMITE_DA_IMAGEM = 5 * 1024 * 1024
+# 3,75 MB. A API da Anthropic recusa imagem acima de 5 MB, e quem ela mede e o
+# `data` em base64, que cresce 4/3: o arquivo maior que 3,75 MB chegaria la, a
+# leitura falharia e a frase de "tente de novo" mandaria o mesmo print para
+# falhar de novo (revisao do PR #1313). Print de tela cheia em PNG num monitor
+# grande nao passa de dois; o que passa disto e foto de celular de um monitor.
+LIMITE_DA_IMAGEM_EM_BASE64 = 5 * 1024 * 1024
+LIMITE_DA_IMAGEM = LIMITE_DA_IMAGEM_EM_BASE64 * 3 // 4
 
 # As duas recusas da imagem, junto da tabela e do teto que elas dizem. Moram
 # aqui, e nao na rota, porque sao duas as portas que recusam imagem: o print
@@ -165,8 +169,10 @@ MOTIVO_IMAGEM_FORA_DA_LISTA = (
     "Só dá para ler print .png, .jpg, .jpeg ou .webp. Salve a imagem em um desses formatos e anexe de novo."
 )
 
+_LIMITE_DA_IMAGEM_EM_MB = f"{LIMITE_DA_IMAGEM / (1024 * 1024):.2f}".replace(".", ",")
+
 MOTIVO_IMAGEM_GRANDE = (
-    f"O print passou do limite de {LIMITE_DA_IMAGEM // (1024 * 1024)} MB. "
+    f"O print passou do limite de {_LIMITE_DA_IMAGEM_EM_MB} MB. "
     "Anexe uma imagem menor, ou escreva o que aparece na tela."
 )
 
