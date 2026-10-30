@@ -122,7 +122,7 @@ async def ver_fila(
 ) -> dict:
     """A Fila, "Minhas", "Meus envios" e as Concluídas da pessoa. Quem tem
     "painel completo" vê as de todas, com quem está com cada uma."""
-    listas = await run_in_threadpool(fila_da_pessoa, supabase, me)
+    listas = fila_da_pessoa(supabase, me)
     nomes = ("fila", "minhas", "meus_envios", "concluidas")
     todas = [conta for nome in nomes for conta in listas[nome]]
     atendimentos = _por_id(supabase, "cm_atendimento", "id", list({c["atendimento_id"] for c in todas}))
