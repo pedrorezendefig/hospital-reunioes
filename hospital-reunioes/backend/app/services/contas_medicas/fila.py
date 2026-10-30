@@ -133,20 +133,24 @@ def puxar(supabase, conta_id: str, pessoa_id: str, agora: str) -> bool:
     return bool(gravadas)
 
 
-def devolver(supabase, conta_id: str) -> bool:
+def devolver(supabase, conta_id: str, dona_lida: str | None) -> bool:
     """A conta Em correção volta livre para a Fila (issue #1309). Só a dona e
     a situação mudam: `ordem_fila`, `aberta_em` e as marcações ficam. O UPDATE
-    é condicional na situação: a conta concluída entre a leitura e a escrita
-    não volta."""
-    gravadas = (
+    é condicional na situação e na dona lida: a conta concluída ou passada a
+    outra faturista entre a leitura e a escrita não volta (issue #1328).
+    A dona lida pode ser nula (pessoa apagada, ON DELETE SET NULL): aí o
+    filtro é `is null`, porque `eq` com None vira `eq.None` e não casa nada."""
+    consulta = (
         supabase.table("cm_conta")
         .update({"situacao": LIVRE, "faturista_id": None})
         .eq("id", conta_id)
         .eq("situacao", EM_CORRECAO)
-        .execute()
-        .data
-        or []
     )
+    if dona_lida is None:
+        consulta = consulta.is_("faturista_id", "null")
+    else:
+        consulta = consulta.eq("faturista_id", dona_lida)
+    gravadas = consulta.execute().data or []
     return bool(gravadas)
 
 

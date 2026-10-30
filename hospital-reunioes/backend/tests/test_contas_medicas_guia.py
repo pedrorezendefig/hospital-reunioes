@@ -156,7 +156,14 @@ class _Consulta:
         return self
 
     def eq(self, coluna, valor):
-        self._filtros.append(lambda linha: linha.get(coluna) == valor)
+        # Como o PostgREST: `eq` com None vira `eq.None`, que compara com a
+        # string "None" e não casa linha nenhuma. Coluna nula só casa por `is_`.
+        self._filtros.append(lambda linha: valor is not None and linha.get(coluna) == valor)
+        return self
+
+    def is_(self, coluna, valor):
+        assert valor == "null", valor
+        self._filtros.append(lambda linha: linha.get(coluna) is None)
         return self
 
     def in_(self, coluna, valores):
@@ -585,6 +592,16 @@ class TestDevolverAFila:
         assert resposta.status_code == 200
         assert (banco.conta(CONTA)["situacao"], banco.conta(CONTA)["faturista_id"]) == ("A_FAZER", None)
 
+    def test_a_coordenacao_devolve_a_conta_em_correcao_cuja_dona_foi_apagada(self):
+        """Apagar a pessoa deixa `faturista_id` nulo (ON DELETE SET NULL) e a
+        conta segue Em correção. Sem a devolução, ninguém mais a tira de lá."""
+        banco = _cenario(conta=_em_correcao_de(None))
+
+        resposta = _cliente("coordenadora", banco).post(ROTA_DEVOLVER)
+
+        assert resposta.status_code == 200
+        assert (banco.conta(CONTA)["situacao"], banco.conta(CONTA)["faturista_id"]) == ("A_FAZER", None)
+
     def test_as_marcacoes_da_conta_devolvida_continuam_la_para_quem_pegar_depois(self):
         linhas = _marcadas(_linhas_do_guia(), luva="FEITO", senha="NAO_PROCEDE", fita="BLOQUEADO")
         banco = _cenario(conta=_em_correcao_de("F1"), linhas=linhas)
@@ -627,6 +644,23 @@ class TestDevolverAFila:
 
         assert resposta.status_code == 409
         assert (banco.conta(CONTA)["situacao"], banco.conta(CONTA)["faturista_id"]) == ("CONCLUIDA", "F1")
+
+    def test_a_conta_que_mudou_de_dona_entre_a_leitura_e_a_escrita_fica_com_a_dona_nova(self):
+        """Issue #1328: lida com a dona F1, a conta passa para F2 (devolvida e
+        puxada de novo) antes da gravação. A devolução de F1 não tira a conta de F2."""
+        banco = _cenario(conta=_em_correcao_de("F1"))
+
+        def mudou_de_dona_antes(tabela, campos):
+            if tabela == "cm_conta" and campos.get("situacao") == "A_FAZER":
+                banco.antes_de_gravar = None
+                banco.conta(CONTA)["faturista_id"] = "F2"
+
+        banco.antes_de_gravar = mudou_de_dona_antes
+
+        resposta = _cliente("dona", banco).post(ROTA_DEVOLVER)
+
+        assert resposta.status_code == 409
+        assert (banco.conta(CONTA)["situacao"], banco.conta(CONTA)["faturista_id"]) == ("EM_CORRECAO", "F2")
 
 
 # ═══════════════════════════════════════════════════════════════════════════

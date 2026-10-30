@@ -137,7 +137,8 @@ Contas concluídas, R$ incluído (diferenças positivas das Linhas Feito), R$ re
 
 Eixo próprio `perfil_contas_medicas` em `participantes`, ortogonal aos eixos de Reuniões, POPs e Ouvidoria. O perfil é um conjunto inicial de **permissões** (enviar e corrigir contas, decidir na validação, incluir regra operacional, regra contratual e tabelas, contratos e avisos, painel completo, habilitar pessoas, conferência da coordenação); a tela de Habilitação liga e desliga cada uma por perfil. Quem não tem a permissão não vê o item no menu, e rota e API recusam (403).
 
-**Faturista**: envia e corrige Contas; vê só as próprias na fila e no Painel.
+**Faturista**: envia e analisa Contas. A Fila é comum: a conta livre ganha dona quando uma faturista abre o Guia dela (puxa a conta), e a dona pode devolver à fila a conta Em correção. Vê a Fila, as que puxou ("Minhas"), os próprios envios e, no Painel, só a produção das contas que concluiu (ADR 0073).
+**Apoio ao faturamento**: só envia Contas e acompanha os próprios envios até a conta ficar pronta; não analisa. Nome de tela a confirmar com o diretor (ADR 0073).
 **Coordenadora de faturamento**: faturista mais Painel completo e Conferência da coordenação.
 **Responsável por gestão de contas médicas**: tudo menos habilitar pessoas.
 **Diretoria médica** e **Diretoria executiva**: tudo.
