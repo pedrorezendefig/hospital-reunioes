@@ -13,14 +13,14 @@
   },
   "dependencies": {
     "@serwist/next": "^9.5.13",
-    "@supabase/ssr": "^0.5.0",
+    "@supabase/ssr": "^0.12.7",
     "@supabase/supabase-js": "^2.118.0",
     "lucide-react": "^1.62.0",
-    "next": "^15.5.28",
+    "next": "^16.4.3",
     "react": "^19.3.1",
     "react-dom": "^19.3.1",
     "react-markdown": "^10.1.0",
-    "recharts": "^2.13.0",
+    "recharts": "^3.10.1",
     "remark-breaks": "^4.0.0",
     "serwist": "^9.5.13"
   },
@@ -29,17 +29,17 @@
     "@tailwindcss/postcss": "^4.3.3",
     "@testing-library/dom": "^10.4.2",
     "@testing-library/react": "^16.3.3",
-    "@types/node": "^22.0.0",
+    "@types/node": "^26.6.5",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
-    "eslint": "^9.0.0",
-    "eslint-config-next": "^15.5.28",
+    "eslint": "^10.13.0",
+    "eslint-config-next": "^16.4.3",
     "jsdom": "^30.1.3",
     "sharp": "^0.35.5",
     "tailwindcss": "^4.3.3",
-    "typescript": "^5.7.0",
-    "vite": "^7.3.7",
-    "vitest": "^4.1.12"
+    "typescript": "^7.0.2",
+    "vite": "^8.3.5",
+    "vitest": "^5.0.5"
   },
   "pnpm": {
     "onlyBuiltDependencies": [
