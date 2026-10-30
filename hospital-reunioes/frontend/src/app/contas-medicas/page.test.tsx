@@ -44,10 +44,8 @@ function conta(campos: Partial<ItemDaFila>): ItemDaFila {
 }
 
 const FILA: Fila = {
+  todas: false,
   fila: [
-    conta({ id: "na-fila", numero_atendimento: "31302", situacao: "NA_FILA" }),
-    conta({ id: "falta", numero_atendimento: "31318", numero_conta: "48018", situacao: "AGUARDANDO_ARQUIVO", falta: "prontuario" }),
-    conta({ id: "rodando", numero_atendimento: "31310", situacao: "PROCESSANDO" }),
     conta({
       id: "a-fazer",
       numero_atendimento: "31245",
@@ -57,7 +55,16 @@ const FILA: Fila = {
       valor_apontado: 584.6,
       itens_total: 9,
     }),
+    conta({ id: "a-fazer-2", numero_atendimento: "31246", situacao: "A_FAZER" }),
+  ],
+  minhas: [
     conta({ id: "em-correcao", numero_atendimento: "31250", situacao: "EM_CORRECAO", itens_feitos: 3, itens_total: 5 }),
+    conta({ id: "retorno", numero_atendimento: "31251", situacao: "RETORNO" }),
+  ],
+  meus_envios: [
+    conta({ id: "na-fila", numero_atendimento: "31302", situacao: "NA_FILA" }),
+    conta({ id: "falta", numero_atendimento: "31318", numero_conta: "48018", situacao: "AGUARDANDO_ARQUIVO", falta: "prontuario" }),
+    conta({ id: "rodando", numero_atendimento: "31310", situacao: "PROCESSANDO" }),
     conta({ id: "erro", numero_atendimento: "31260", situacao: "ERRO", erro_motivo: "Não consegui ler a conta inteira" }),
   ],
   concluidas: [
@@ -113,48 +120,83 @@ async function linhas(): Promise<HTMLElement[]> {
   return within(fila).getAllByRole("listitem");
 }
 
-describe("a fila", () => {
-  it("sem nenhuma conta, diz isso com todas as letras", async () => {
-    filaDoServidor = { fila: [], concluidas: [] };
+function aba(nome: RegExp) {
+  fireEvent.click(screen.getByRole("tab", { name: nome }));
+}
+
+describe("a fila comum", () => {
+  it("sem nenhuma conta livre, diz isso com todas as letras", async () => {
+    filaDoServidor = { todas: false, fila: [], minhas: [], meus_envios: [], concluidas: [] };
     render(<ContasMedicasPage />);
 
     expect(screen.getByRole("heading", { level: 1 }).textContent).toBe("Contas médicas");
     const fila = await screen.findByRole("region", { name: "Fila de contas" });
-    await waitFor(() => expect(fila.textContent).toContain("Nenhuma conta enviada ainda"));
+    await waitFor(() => expect(fila.textContent).toContain("Nenhuma conta livre na fila"));
   });
 
-  it("mostra cada conta pelo atendimento, com a conta ao lado e a situação, na ordem do servidor", async () => {
+  it("as quatro abas trazem a contagem de cada lista", async () => {
     render(<ContasMedicasPage />);
+    await linhas();
+
+    expect(screen.getAllByRole("tab").map((t) => t.textContent)).toEqual([
+      "Fila (2)",
+      "Minhas (2)",
+      "Meus envios (4)",
+      "Concluídas (1)",
+    ]);
+  });
+
+  it("a Fila mostra as livres pelo atendimento, na ordem do servidor, e Abrir puxa a conta pelo Guia", async () => {
+    render(<ContasMedicasPage />);
+
+    const itens = await linhas();
+    expect(itens.map((li) => within(li).getByText(/^Atendimento /).textContent)).toEqual([
+      "Atendimento 31245",
+      "Atendimento 31246",
+    ]);
+    expect(itens[0].textContent).toContain("conta 48811");
+    expect(itens[0].textContent).toContain("A fazer");
+    expect(itens[0].textContent).toContain("Nota 74, R$ 584,60, 0 de 9");
+    expect(within(itens[0]).getByRole("link", { name: "Abrir" }).getAttribute("href")).toBe(
+      "/contas-medicas/guia/a-fazer",
+    );
+  });
+
+  it("Minhas mostra as que a faturista puxou, com Continuar", async () => {
+    render(<ContasMedicasPage />);
+    await linhas();
+
+    aba(/^Minhas/);
+
+    const itens = await linhas();
+    expect(itens.map((li) => within(li).getByText(/^Atendimento /).textContent)).toEqual([
+      "Atendimento 31250",
+      "Atendimento 31251",
+    ]);
+    expect(within(itens[0]).getByRole("link", { name: "Continuar" }).getAttribute("href")).toBe(
+      "/contas-medicas/guia/em-correcao",
+    );
+    expect(itens[1].textContent).toContain("Retorno");
+  });
+
+  it("Meus envios mostra o que ainda não ficou pronto, e o erro traz o motivo com Enviar de novo", async () => {
+    render(<ContasMedicasPage />);
+    await linhas();
+
+    aba(/^Meus envios/);
 
     const itens = await linhas();
     expect(itens.map((li) => within(li).getByText(/^Atendimento /).textContent)).toEqual([
       "Atendimento 31302",
       "Atendimento 31318",
       "Atendimento 31310",
-      "Atendimento 31245",
-      "Atendimento 31250",
       "Atendimento 31260",
     ]);
-    expect(itens[0].textContent).toContain("conta 48001");
     expect(itens[0].textContent).toContain("Na fila");
     expect(itens[1].textContent).toContain("Falta o prontuário");
     expect(itens[2].textContent).toContain("Pronta em instantes");
-    expect(itens[3].textContent).toContain("A fazer");
-    expect(itens[3].textContent).toContain("Nota 74, R$ 584,60, 0 de 9");
-  });
-
-  it("a fazer abre o guia, em correção continua, e o erro mostra o motivo com Enviar de novo", async () => {
-    render(<ContasMedicasPage />);
-    const itens = await linhas();
-
-    expect(within(itens[3]).getByRole("link", { name: "Abrir" }).getAttribute("href")).toBe(
-      "/contas-medicas/guia/a-fazer",
-    );
-    expect(within(itens[4]).getByRole("link", { name: "Continuar" }).getAttribute("href")).toBe(
-      "/contas-medicas/guia/em-correcao",
-    );
-    expect(itens[5].textContent).toContain("Não consegui ler a conta inteira");
-    expect(within(itens[5]).getByRole("button", { name: "Enviar de novo" })).toBeTruthy();
+    expect(itens[3].textContent).toContain("Não consegui ler a conta inteira");
+    expect(within(itens[3]).getByRole("button", { name: "Enviar de novo" })).toBeTruthy();
     expect(within(itens[0]).queryByRole("button", { name: "Enviar de novo" })).toBeNull();
     expect(within(itens[0]).queryByRole("link")).toBeNull();
   });
@@ -162,9 +204,11 @@ describe("a fila", () => {
   it("Enviar de novo abre o seletor de arquivos", async () => {
     const abrir = vi.spyOn(HTMLInputElement.prototype, "click").mockImplementation(() => {});
     render(<ContasMedicasPage />);
+    await linhas();
+    aba(/^Meus envios/);
     const itens = await linhas();
 
-    fireEvent.click(within(itens[5]).getByRole("button", { name: "Enviar de novo" }));
+    fireEvent.click(within(itens[3]).getByRole("button", { name: "Enviar de novo" }));
 
     expect(abrir).toHaveBeenCalled();
     abrir.mockRestore();
@@ -174,13 +218,34 @@ describe("a fila", () => {
     render(<ContasMedicasPage />);
     await linhas();
 
-    fireEvent.click(screen.getByRole("tab", { name: /Concluídas/ }));
+    aba(/Concluídas/);
 
     const itens = await linhas();
     expect(itens).toHaveLength(1);
     expect(itens[0].textContent).toContain("Atendimento 31200");
     expect(itens[0].textContent).toContain("Concluída com pendência");
     expect(itens[0].textContent).toContain("Nota 80, 2 pendências");
+  });
+
+  it("quem tem o painel completo vê com quem está cada conta", async () => {
+    filaDoServidor = {
+      ...FILA,
+      todas: true,
+      minhas: [conta({ id: "da-ana", numero_atendimento: "31250", situacao: "EM_CORRECAO", com: "Ana Faturista" })],
+    };
+    render(<ContasMedicasPage />);
+    await linhas();
+
+    expect(screen.getAllByRole("tab").map((t) => t.textContent)).toEqual([
+      "Fila (2)",
+      "Em análise (1)",
+      "Envios (4)",
+      "Concluídas (1)",
+    ]);
+    aba(/^Em análise/);
+
+    const [item] = await linhas();
+    expect(item.textContent).toContain("com Ana Faturista");
   });
 });
 

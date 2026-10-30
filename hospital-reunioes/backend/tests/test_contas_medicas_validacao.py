@@ -350,9 +350,9 @@ class TestRegraPendente:
             C2: "A_FAZER",
             C3: "RETORNO",
         }
-        # A concluída aparece na fila da faturista, e o Guia dela traz só a linha decidida.
+        # A concluída aparece em "Minhas" da faturista (ADR 0073), e o Guia dela traz só a linha decidida.
         fila = _cliente(banco, "faturista").get("/api/contas-medicas/fila").json()
-        assert (C3, "RETORNO") in {(c["id"], c["situacao"]) for c in fila["fila"]}
+        assert (C3, "RETORNO") in {(c["id"], c["situacao"]) for c in fila["minhas"]}
         linhas = _linhas_do_guia(_guia(banco, C3))
         assert [(linha["codigo"], linha["acao"], linha["estado"]) for linha in linhas] == [
             ("70000010", "INCLUIR", "DECIDIDA")
