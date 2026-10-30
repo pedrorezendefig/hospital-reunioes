@@ -47,7 +47,8 @@ export type PerfilContasMedicas =
   | "gestao_contas_medicas"
   | "diretoria_medica"
   | "diretoria_executiva"
-  | "credenciamento";
+  | "credenciamento"
+  | "apoio_faturamento";
 
 // Contexto POPs — POP, Versão e formulário institucional (issue #82)
 

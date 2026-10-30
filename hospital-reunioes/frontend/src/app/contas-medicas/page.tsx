@@ -6,7 +6,9 @@
  * Quem envia arrasta a conta e o prontuário do MV (ou clica em "Selecionar
  * arquivos"), recebe na hora o "Último envio" por atendimento e acompanha em
  * "Meus envios" o que ainda não ficou pronto. A faturista puxa da Fila comum,
- * em ordem de envio, e segue em "Minhas" (issue #1307, ADR 0073). Quem pareia,
+ * em ordem de envio, e segue em "Minhas" (issue #1307, ADR 0073). Cada bloco
+ * aparece pela permissão: "Enviar contas" dá o envio e "Meus envios", e
+ * "Analisar contas" dá a Fila, "Minhas" e as Concluídas (issue #1308). Quem pareia,
  * recusa, ordena e decide quem vê o quê é o servidor; a tela só confere os
  * limites que dá para conferir antes de subir e manda os arquivos em lotes que
  * cabem no teto do corpo.
@@ -25,10 +27,14 @@ import { LinkParaOperadoras } from "@/components/contas-medicas/LinkParaOperador
 import { LinkParaPainel } from "@/components/contas-medicas/LinkParaPainel";
 import { LinkParaValidacao } from "@/components/contas-medicas/LinkParaValidacao";
 import {
+  ANALISAR_CONTAS,
+  ENVIAR_CONTAS,
   type Fila,
   type ItemDaFila,
   type RespostaDoEnvio,
   ROTA_FILA,
+  ROTA_ME,
+  ROTA_MEUS_ENVIOS,
   detalheDaConta,
   enviarEmLotes,
   rotuloDaSituacao,
@@ -56,6 +62,27 @@ const RELER_A_CADA_MS = 20_000;
 const ESPERANDO_ANALISE = ["NA_FILA", "PROCESSANDO"];
 
 type Aba = "fila" | "minhas" | "meus_envios" | "concluidas";
+
+/** O que a pessoa pode fazer na tela, pela matriz que `/contas-medicas/me` resolve. */
+interface Pode {
+  enviar: boolean;
+  analisar: boolean;
+}
+
+/** As abas na ordem da tela, só as das permissões da pessoa. */
+function abasDe(pode: Pode): Aba[] {
+  const abas: Aba[] = [];
+  if (pode.analisar) abas.push("fila", "minhas");
+  if (pode.enviar) abas.push("meus_envios");
+  if (pode.analisar) abas.push("concluidas");
+  return abas;
+}
+
+async function lerJson(rota: string, token: string) {
+  const resposta = await fetch(rota, { headers: { Authorization: `Bearer ${token}` } });
+  if (!resposta.ok) throw new Error(rota);
+  return resposta.json();
+}
 
 /** O rótulo de cada aba; com o painel completo, as listas são de todas. */
 function rotuloDaAba(aba: Aba, todas: boolean): string {
@@ -163,6 +190,7 @@ function UltimoEnvio({ resposta }: { resposta: RespostaDoEnvio }) {
 
 export default function ContasMedicasPage() {
   const [token, setToken] = useState<string | null>(null);
+  const [pode, setPode] = useState<Pode | null>(null);
   const [fila, setFila] = useState<Fila | null>(null);
   const [erroDaFila, setErroDaFila] = useState<string | null>(null);
   const [aba, setAba] = useState<Aba>("fila");
@@ -171,15 +199,21 @@ export default function ContasMedicasPage() {
   const [ultimo, setUltimo] = useState<RespostaDoEnvio | null>(null);
   const seletor = useRef<HTMLInputElement>(null);
 
-  const carregarFila = useCallback(async (tk: string) => {
+  /** Cada lista vem da rota da permissão dela; a que a pessoa não tem fica vazia. */
+  const carregarFila = useCallback(async (tk: string, quem: Pode) => {
     try {
-      const resposta = await fetch(ROTA_FILA, { headers: { Authorization: `Bearer ${tk}` } });
-      if (!resposta.ok) {
-        setErroDaFila("Não consegui carregar a fila.");
-        return;
-      }
+      const [analise, envios] = await Promise.all([
+        quem.analisar ? lerJson(ROTA_FILA, tk) : null,
+        quem.enviar ? lerJson(ROTA_MEUS_ENVIOS, tk) : null,
+      ]);
       setErroDaFila(null);
-      setFila(await resposta.json());
+      setFila({
+        todas: Boolean(analise?.todas ?? envios?.todas),
+        fila: analise?.fila ?? [],
+        minhas: analise?.minhas ?? [],
+        meus_envios: envios?.meus_envios ?? [],
+        concluidas: analise?.concluidas ?? [],
+      });
     } catch {
       setErroDaFila("Não consegui carregar a fila.");
     }
@@ -194,8 +228,23 @@ export default function ContasMedicasPage() {
       const tk = session?.access_token ?? null;
       if (!vivo) return;
       setToken(tk);
-      if (tk) await carregarFila(tk);
-      else setErroDaFila("Sessão expirada. Entre de novo.");
+      if (!tk) {
+        setErroDaFila("Sessão expirada. Entre de novo.");
+        return;
+      }
+      let quem: Pode;
+      try {
+        const { permissoes } = await lerJson(ROTA_ME, tk);
+        const lista: string[] = Array.isArray(permissoes) ? permissoes : [];
+        quem = { enviar: lista.includes(ENVIAR_CONTAS), analisar: lista.includes(ANALISAR_CONTAS) };
+      } catch {
+        if (vivo) setErroDaFila("Não consegui carregar a fila.");
+        return;
+      }
+      if (!vivo) return;
+      setPode(quem);
+      setAba(abasDe(quem)[0] ?? "fila");
+      await carregarFila(tk, quem);
     }
     iniciar();
     return () => {
@@ -205,14 +254,14 @@ export default function ContasMedicasPage() {
 
   const esperandoAnalise = fila?.meus_envios.some((conta) => ESPERANDO_ANALISE.includes(conta.situacao)) ?? false;
   useEffect(() => {
-    if (!token || !esperandoAnalise) return;
-    const relogio = setInterval(() => carregarFila(token), RELER_A_CADA_MS);
+    if (!token || !pode || !esperandoAnalise) return;
+    const relogio = setInterval(() => carregarFila(token, pode), RELER_A_CADA_MS);
     return () => clearInterval(relogio);
-  }, [token, esperandoAnalise, carregarFila]);
+  }, [token, pode, esperandoAnalise, carregarFila]);
 
   async function enviar(lista: FileList | File[] | null) {
     const arquivos = Array.from(lista ?? []);
-    if (!token || arquivos.length === 0 || enviando !== null) return;
+    if (!token || !pode || arquivos.length === 0 || enviando !== null) return;
     const { aceitos, recusas } = separarArquivos(arquivos);
     setEnviando(aceitos.length);
     try {
@@ -226,10 +275,13 @@ export default function ContasMedicasPage() {
       setEnviando(null);
       if (seletor.current) seletor.current.value = "";
     }
-    await carregarFila(token);
+    await carregarFila(token, pode);
   }
 
   const contas = fila?.[aba];
+  const abas = pode ? abasDe(pode) : [];
+  // Sem nenhuma das duas permissões (o credenciamento), a tela fica só com os atalhos.
+  const semListas = pode !== null && abas.length === 0;
 
   return (
     <div className="space-y-6">
@@ -248,101 +300,105 @@ export default function ContasMedicasPage() {
         </p>
       </div>
 
-      <section
-        aria-label="Envio de contas"
-        onDragOver={(e) => {
-          e.preventDefault();
-          setArrastando(true);
-        }}
-        onDragLeave={() => setArrastando(false)}
-        onDrop={(e) => {
-          e.preventDefault();
-          setArrastando(false);
-          enviar(e.dataTransfer?.files ?? null);
-        }}
-        className={`rounded-2xl border-2 border-dashed p-8 text-center transition-colors ${
-          arrastando ? "border-primary bg-primary/5" : "border-slate-300 bg-white"
-        }`}
-      >
-        {enviando !== null ? (
-          <p className="flex items-center justify-center gap-2 text-sm text-slate-600">
-            <Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" />
-            Enviando {enviando === 1 ? "1 arquivo" : `${enviando} arquivos`} e lendo cada PDF
-          </p>
-        ) : (
-          <>
-            <Upload className="w-8 h-8 text-slate-400 mx-auto mb-3" aria-hidden="true" />
-            <p className="text-sm font-medium text-slate-800">Arraste aqui a conta e o prontuário do MV</p>
-            <p className="text-xs text-slate-500 mt-1">
-              Vários de uma vez, sem renomear: o app lê o tipo e o atendimento dentro de cada PDF. Até 10
-              atendimentos e 30 arquivos por envio, 100 MB por arquivo.
+      {pode?.enviar && (
+        <section
+          aria-label="Envio de contas"
+          onDragOver={(e) => {
+            e.preventDefault();
+            setArrastando(true);
+          }}
+          onDragLeave={() => setArrastando(false)}
+          onDrop={(e) => {
+            e.preventDefault();
+            setArrastando(false);
+            enviar(e.dataTransfer?.files ?? null);
+          }}
+          className={`rounded-2xl border-2 border-dashed p-8 text-center transition-colors ${
+            arrastando ? "border-primary bg-primary/5" : "border-slate-300 bg-white"
+          }`}
+        >
+          {enviando !== null ? (
+            <p className="flex items-center justify-center gap-2 text-sm text-slate-600">
+              <Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" />
+              Enviando {enviando === 1 ? "1 arquivo" : `${enviando} arquivos`} e lendo cada PDF
             </p>
-            <button
-              type="button"
-              onClick={() => seletor.current?.click()}
-              className="mt-4 inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-primary text-white text-sm font-medium"
-            >
-              Selecionar arquivos
-            </button>
-          </>
-        )}
-        <input
-          ref={seletor}
-          type="file"
-          accept="application/pdf,.pdf"
-          multiple
-          hidden
-          aria-label="Arquivos da conta e do prontuário"
-          onChange={(e) => enviar(e.target.files)}
-        />
-      </section>
+          ) : (
+            <>
+              <Upload className="w-8 h-8 text-slate-400 mx-auto mb-3" aria-hidden="true" />
+              <p className="text-sm font-medium text-slate-800">Arraste aqui a conta e o prontuário do MV</p>
+              <p className="text-xs text-slate-500 mt-1">
+                Vários de uma vez, sem renomear: o app lê o tipo e o atendimento dentro de cada PDF. Até 10
+                atendimentos e 30 arquivos por envio, 100 MB por arquivo.
+              </p>
+              <button
+                type="button"
+                onClick={() => seletor.current?.click()}
+                className="mt-4 inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-primary text-white text-sm font-medium"
+              >
+                Selecionar arquivos
+              </button>
+            </>
+          )}
+          <input
+            ref={seletor}
+            type="file"
+            accept="application/pdf,.pdf"
+            multiple
+            hidden
+            aria-label="Arquivos da conta e do prontuário"
+            onChange={(e) => enviar(e.target.files)}
+          />
+        </section>
+      )}
 
       {ultimo && <UltimoEnvio resposta={ultimo} />}
 
-      <div>
-        <div className="flex gap-2 border-b border-border" role="tablist">
-          {(["fila", "minhas", "meus_envios", "concluidas"] as Aba[]).map((id) => (
+      {!semListas && (
+        <div>
+          <div className="flex gap-2 border-b border-border" role="tablist">
+            {abas.map((id) => (
 
-            <button
-              key={id}
-              type="button"
-              role="tab"
-              aria-selected={aba === id}
-              onClick={() => setAba(id)}
-              className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
-                aba === id ? "border-primary text-primary" : "border-transparent text-text-secondary hover:text-text"
-              }`}
-            >
-              {`${rotuloDaAba(id, fila?.todas ?? false)} (${fila?.[id].length ?? 0})`}
-            </button>
-          ))}
-        </div>
-
-        <section aria-label="Fila de contas" className={`${CARTAO} mt-4`}>
-          <div role="tabpanel">
-            {erroDaFila ? (
-              <p role="alert" className="flex items-center gap-2 p-6 text-sm text-red-700">
-                <AlertCircle className="w-4 h-4" aria-hidden="true" /> {erroDaFila}
-              </p>
-            ) : !fila ? (
-              <p className="flex items-center gap-2 p-6 text-sm text-slate-500">
-                <Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" /> Carregando a fila
-              </p>
-            ) : contas && contas.length > 0 ? (
-              <ul className="divide-y divide-border">
-                {contas.map((conta) => (
-                  <LinhaDaFila key={conta.id} conta={conta} onEnviarDeNovo={() => seletor.current?.click()} />
-                ))}
-              </ul>
-            ) : (
-              <div className="p-10 text-center">
-                <ReceiptText className="w-8 h-8 text-slate-300 mx-auto mb-3" aria-hidden="true" />
-                <p className="text-slate-500 text-sm">{VAZIO[aba]}</p>
-              </div>
-            )}
+              <button
+                key={id}
+                type="button"
+                role="tab"
+                aria-selected={aba === id}
+                onClick={() => setAba(id)}
+                className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
+                  aba === id ? "border-primary text-primary" : "border-transparent text-text-secondary hover:text-text"
+                }`}
+              >
+                {`${rotuloDaAba(id, fila?.todas ?? false)} (${fila?.[id].length ?? 0})`}
+              </button>
+            ))}
           </div>
-        </section>
-      </div>
+
+          <section aria-label="Fila de contas" className={`${CARTAO} mt-4`}>
+            <div role="tabpanel">
+              {erroDaFila ? (
+                <p role="alert" className="flex items-center gap-2 p-6 text-sm text-red-700">
+                  <AlertCircle className="w-4 h-4" aria-hidden="true" /> {erroDaFila}
+                </p>
+              ) : !fila ? (
+                <p className="flex items-center gap-2 p-6 text-sm text-slate-500">
+                  <Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" /> Carregando a fila
+                </p>
+              ) : contas && contas.length > 0 ? (
+                <ul className="divide-y divide-border">
+                  {contas.map((conta) => (
+                    <LinhaDaFila key={conta.id} conta={conta} onEnviarDeNovo={() => seletor.current?.click()} />
+                  ))}
+                </ul>
+              ) : (
+                <div className="p-10 text-center">
+                  <ReceiptText className="w-8 h-8 text-slate-300 mx-auto mb-3" aria-hidden="true" />
+                  <p className="text-slate-500 text-sm">{VAZIO[aba]}</p>
+                </div>
+              )}
+            </div>
+          </section>
+        </div>
+      )}
     </div>
   );
 }
