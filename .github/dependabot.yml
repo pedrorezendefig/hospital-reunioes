@@ -1,0 +1,27 @@
+# Atualização de versão semanal, um PR por ecossistema (issue #1287).
+# O PR do Dependabot passa pelo mesmo CI e pela mesma subida de qualquer PR.
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /hospital-reunioes/frontend
+    schedule:
+      interval: weekly
+    groups:
+      frontend:
+        patterns: ["*"]
+
+  - package-ecosystem: uv
+    directory: /hospital-reunioes/backend
+    schedule:
+      interval: weekly
+    groups:
+      backend:
+        patterns: ["*"]
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      actions:
+        patterns: ["*"]

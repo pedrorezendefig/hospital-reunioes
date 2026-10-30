@@ -31,6 +31,8 @@ docs/superpowers/
 !/CONTEXT.md
 # Mapa de contextos (Reuniões × POPs, ADR 0007) — doc vivo, versionar
 !/CONTEXT-MAP.md
+# Como reportar falha de segurança (issue #1287)
+!/SECURITY.md
 # Docs do impeccable (pbakaus/impeccable) — produto + design system
 !/PRODUCT.md
 !/DESIGN.md

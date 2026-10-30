@@ -72,7 +72,7 @@ supabase/
 ├── migrations/      # SQL numerado (001..NNN), aplicado à mão no Studio de produção
 ├── functions/       # Edge Functions (se houver — atualmente vazio ou raro)
 ├── templates/       # fonte dos e-mails do Auth; generate_templates.py gera a cópia servida em frontend/public/email-templates/
-└── snippets/        # queries de diagnóstico (diagnostico-emails.sql, diagnostico-envelopes.sql)
+└── snippets/        # queries de diagnóstico (diagnostico-envelopes.sql)
 ```
 
 <!-- curated:start -->
