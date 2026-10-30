@@ -6,8 +6,9 @@ Feito, Não procede ou Bloqueado e conclui. As linhas já estão gravadas em
 lidas, marcadas e fechadas.
 
 Toda rota passa pelo gate "enviar e corrigir contas" e depois pelo filtro da
-Conta: a faturista só abre a Conta em que é `faturista_id`; quem tem "painel
-completo" abre qualquer uma.
+Conta: a faturista só mexe na Conta em que é `faturista_id`; quem tem "painel
+completo" abre qualquer uma. A conta livre da Fila (`A_FAZER`) é a exceção da
+abertura: quem abre o Guia dela puxa a conta (issue #1307, ADR 0073).
 """
 
 from datetime import UTC, date, datetime
@@ -21,7 +22,7 @@ from supabase import Client
 
 from app.dependencies import get_supabase_client, require_permissao_cm
 from app.limiter import limiter
-from app.services.contas_medicas import reenvio
+from app.services.contas_medicas import fila, reenvio
 from app.services.contas_medicas.envio import LIMITE_POR_ARQUIVO, MENSAGEM_ARQUIVO_GRANDE
 from app.services.contas_medicas.guia import (
     agrupar_por_dia_e_setor,
@@ -70,12 +71,16 @@ def _conta_do_guia(
     me: dict,
     aceitas: tuple[str, ...] = COM_GUIA,
     recusa: str = "O guia desta conta ainda não está pronto",
+    *,
+    abrindo: bool = False,
 ) -> dict:
-    """A Conta, se a pessoa pode abrir o Guia dela, e se o Guia existe."""
+    """A Conta, se a pessoa pode abrir o Guia dela, e se o Guia existe. Na
+    abertura, a conta livre da Fila é de quem chegar."""
     conta = _primeira(supabase, "cm_conta", "id", str(conta_id))
     if not conta:
         raise HTTPException(status_code=404, detail="Conta não encontrada")
-    if conta.get("faturista_id") != me.get("id") and "painel_completo" not in me["permissoes_cm"]:
+    livre = abrindo and conta.get("situacao") == fila.LIVRE
+    if not livre and conta.get("faturista_id") != me.get("id") and "painel_completo" not in me["permissoes_cm"]:
         raise HTTPException(status_code=403, detail="Esta conta é de outra faturista")
     if conta.get("situacao") not in aceitas:
         raise HTTPException(status_code=409, detail=recusa)
@@ -103,13 +108,12 @@ async def abrir_guia(
     supabase: Client = Depends(get_supabase_client),
 ) -> dict:
     """O Guia da Conta: cabeçalho, os três números e as linhas por dia e setor."""
-    conta = _conta_do_guia(supabase, conta_id, me)
-    if conta.get("situacao") == "A_FAZER":
-        # Condicional na situação: duas aberturas ao mesmo tempo carimbam uma vez.
-        supabase.table("cm_conta").update({"situacao": "EM_CORRECAO", "aberta_em": _agora()}).eq("id", conta["id"]).eq(
-            "situacao", "A_FAZER"
-        ).execute()
-        conta["situacao"] = "EM_CORRECAO"
+    conta = _conta_do_guia(supabase, conta_id, me, abrindo=True)
+    if conta.get("situacao") == fila.LIVRE:
+        # Puxar a conta: de duas aberturas ao mesmo tempo, só uma ganha.
+        if not fila.puxar(supabase, conta["id"], me.get("id"), _agora()):
+            raise HTTPException(status_code=409, detail="Outra faturista já pegou esta conta")
+        conta["situacao"], conta["faturista_id"] = "EM_CORRECAO", me.get("id")
 
     atendimento = _primeira(supabase, "cm_atendimento", "id", conta.get("atendimento_id")) or {}
     operadora = _primeira(supabase, "cm_operadora", "id", atendimento.get("operadora_id")) or {}
@@ -309,8 +313,8 @@ async def concluir_guia(
     linha sem marcação, em validação ou bloqueada, Concluída com pendência.
 
     A nota de entrada é recalculada sem as linhas Não procede; a nota bruta
-    fica como o processamento gravou. A resposta traz a próxima Conta A fazer
-    da faturista na ordem de envio, para a tela abrir em seguida.
+    fica como o processamento gravou. A resposta traz a primeira conta livre da
+    Fila, na ordem de envio, para a tela abrir em seguida (e puxar).
     """
     conta = _conta_em_correcao(supabase, conta_id, me)
     linhas = _linhas(supabase, conta["id"])
@@ -338,7 +342,7 @@ async def concluir_guia(
         "pendencias": pendencias,
         "nota_entrada": nota,
         "nota_bruta": conta.get("nota_bruta"),
-        "proxima_conta_id": _proxima_a_fazer(supabase, conta.get("faturista_id")),
+        "proxima_conta_id": fila.primeira_livre(supabase),
     }
 
 
@@ -411,20 +415,3 @@ async def reanalisar_conta(
     if not devolvida:
         raise HTTPException(status_code=409, detail=_SO_REANALISAVEL)
     return {"situacao": "NA_FILA"}
-
-
-def _proxima_a_fazer(supabase: Client, faturista_id: str | None) -> str | None:
-    if not faturista_id:
-        return None
-    proximas = (
-        supabase.table("cm_conta")
-        .select("id")
-        .eq("faturista_id", faturista_id)
-        .eq("situacao", "A_FAZER")
-        .order("ordem_fila")
-        .limit(1)
-        .execute()
-        .data
-        or []
-    )
-    return proximas[0]["id"] if proximas else None
