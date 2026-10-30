@@ -14,3 +14,5 @@
 
 DROP POLICY IF EXISTS "Authenticated Access" ON storage.objects;
 DROP POLICY IF EXISTS "Authenticated Access materiais-pops" ON storage.objects;
+
+INSERT INTO migracoes_aplicadas (numero) VALUES (120) ON CONFLICT (numero) DO NOTHING;

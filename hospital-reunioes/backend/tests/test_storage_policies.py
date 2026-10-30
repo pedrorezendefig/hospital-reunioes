@@ -9,7 +9,8 @@ que a 120 remove.
 
 O teste reconstrói o estado final das policies de `storage.objects` aplicando
 as migrations em ordem (CREATE soma, DROP tira) e falha se sobrar alguma que dê
-leitura a `authenticated` sem filtro de dono (`auth.uid()` no USING).
+leitura a `authenticated` sem filtro de dono (`auth.uid()` comparado com o
+dono do objeto no USING).
 """
 
 from __future__ import annotations
@@ -17,18 +18,28 @@ from __future__ import annotations
 import os
 import re
 
+import pytest
+
 AQUI = os.path.dirname(__file__)
 MIGRATIONS_DIR = os.path.join(AQUI, "..", "..", "supabase", "migrations")
 FRONTEND_SRC = os.path.join(AQUI, "..", "..", "frontend", "src")
 
+# Nome entre aspas (sensível a caixa) ou sem aspas (o Postgres dobra para
+# minúscula), como na 023.
+_NOME = r'(?:"(?P<citado>[^"]+)"|(?P<simples>[A-Za-z_][\w$]*))'
+_TABELA = r'"?storage"?\s*\.\s*"?objects"?(?![\w$])'
 _CREATE = re.compile(
-    r'CREATE\s+POLICY\s+"(?P<nome>[^"]+)"\s+ON\s+storage\.objects\b(?P<corpo>.*?);',
+    rf"CREATE\s+POLICY\s+{_NOME}\s+ON\s+{_TABELA}(?P<corpo>.*?);",
     re.IGNORECASE | re.DOTALL,
 )
 _DROP = re.compile(
-    r'DROP\s+POLICY\s+(?:IF\s+EXISTS\s+)?"(?P<nome>[^"]+)"\s+ON\s+storage\.objects\b',
+    rf"DROP\s+POLICY\s+(?:IF\s+EXISTS\s+)?{_NOME}\s+ON\s+{_TABELA}",
     re.IGNORECASE,
 )
+
+
+def _nome(m: re.Match) -> str:
+    return m.group("citado") if m.group("citado") is not None else m.group("simples").lower()
 
 
 def _sem_comentarios(sql: str) -> str:
@@ -48,9 +59,9 @@ def policies_finais_storage(migrations_dir: str = MIGRATIONS_DIR) -> dict[str, s
         eventos += [(m.start(), "drop", m) for m in _DROP.finditer(sql)]
         for _, tipo, m in sorted(eventos, key=lambda e: e[0]):
             if tipo == "create":
-                vivas[m.group("nome")] = m.group("corpo")
+                vivas[_nome(m)] = m.group("corpo")
             else:
-                vivas.pop(m.group("nome"), None)
+                vivas.pop(_nome(m), None)
     return vivas
 
 
@@ -65,7 +76,19 @@ def _abre_leitura_a_logado(corpo: str) -> bool:
         nomes = {p.strip().lower() for p in papeis.group(1).split(",")}
         if not nomes & {"authenticated", "public"}:
             return False
-    return "auth.uid()" not in corpo.lower()
+    using = re.split(r"\bWITH\s+CHECK\b", corpo, flags=re.IGNORECASE)[0]
+    return not _FILTRO_DE_DONO.search(using)
+
+
+# `auth.uid()` só conta como filtro de dono comparado com uma coluna de dono
+# do objeto (`owner`, `owner_id`) ou com a pasta dele; `IS NOT NULL` só
+# confere que existe sessão.
+_UID = r"\(?\s*(?:select\s+)?auth\.uid\s*\(\s*\)\s*\)?(?:\s*::\s*\w+)?"
+_DONO = (
+    r"(?:(?:storage\s*\.\s*)?(?:objects\s*\.\s*)?owner(?:_id)?(?![\w$])(?:\s*::\s*\w+)?"
+    r"|\(\s*storage\s*\.\s*foldername\s*\(\s*name\s*\)\s*\)\s*\[\s*\d+\s*\])"
+)
+_FILTRO_DE_DONO = re.compile(rf"{_UID}\s*=\s*{_DONO}|{_DONO}\s*=\s*{_UID}", re.IGNORECASE)
 
 
 def test_nenhuma_policy_do_storage_da_leitura_a_qualquer_logado():
@@ -100,3 +123,43 @@ def test_frontend_nao_le_storage_direto_pelo_cliente_supabase():
                 usos.append(os.path.relpath(caminho, FRONTEND_SRC))
     assert os.path.isdir(FRONTEND_SRC)
     assert usos == [], f"Leitura direta do Supabase Storage no frontend: {usos}"
+
+
+def _abertas_em(tmp_path, sql: str) -> list[str]:
+    """Policies abertas a logado depois de aplicar uma migration de teste."""
+    (tmp_path / "001_teste.sql").write_text(sql, encoding="utf-8")
+    vivas = policies_finais_storage(str(tmp_path))
+    return sorted(nome for nome, corpo in vivas.items() if _abre_leitura_a_logado(corpo))
+
+
+def test_policy_sem_aspas_aberta_a_logado_e_acusada(tmp_path):
+    """A 023 já cria policy sem aspas; o parser não pode ficar cego a ela."""
+    sql = "CREATE POLICY leitura_x ON storage.objects FOR SELECT TO authenticated USING (true);"
+    assert _abertas_em(tmp_path, sql) == ["leitura_x"]
+
+
+@pytest.mark.parametrize(
+    "using",
+    [
+        "auth.uid() IS NOT NULL",
+        "bucket_id = 'pdfs' AND (select auth.uid()) IS NOT NULL",
+        "auth.uid() = auth.uid()",
+    ],
+)
+def test_auth_uid_que_so_confere_sessao_nao_conta_como_filtro_de_dono(tmp_path, using):
+    sql = f'CREATE POLICY "leitura y" ON storage.objects FOR SELECT TO authenticated USING ({using});'
+    assert _abertas_em(tmp_path, sql) == ["leitura y"]
+
+
+@pytest.mark.parametrize(
+    "using",
+    [
+        "owner = auth.uid()",
+        "auth.uid() = owner",
+        "owner_id = (select auth.uid())::text",
+        "bucket_id = 'pdfs' AND (storage.foldername(name))[1] = auth.uid()::text",
+    ],
+)
+def test_filtro_de_dono_de_verdade_nao_e_acusado(tmp_path, using):
+    sql = f'CREATE POLICY "leitura z" ON storage.objects FOR SELECT TO authenticated USING ({using});'
+    assert _abertas_em(tmp_path, sql) == []
