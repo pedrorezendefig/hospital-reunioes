@@ -2,6 +2,52 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-10-30T12:18:47-03:00",
+      "sha": "5d49a4ea531be816d012145c482db33c51d68998",
+      "app_version": "0.196.2",
+      "subject": "Onda seguranca-manual: Next 15.5.28, dependências sem alerta alto e cabeçalhos de segurança; Dependências sem alerta crítico ou alto do Dependabot (Pillow, brotli); Convite restrito e teto no acuse da",
+      "raw_subject": "chore(deploy): registro da onda seguranca-manual (#1290 #1289 #1291 #1292)",
+      "scope": [
+        "backend",
+        "frontend"
+      ],
+      "prds": [],
+      "result": "healthy",
+      "duration_seconds": 809,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        },
+        {
+          "service": "frontend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "onda-enxuta seguranca-manual: PR #1290 (issue #1283), PR #1289 (issue #1284), PR #1291 (issue #1286), PR #1292 (issue #1287), mergeados PR a PR. Merge pela API do GitHub, um build. Registro pela Action pos-merge depois do health.",
+      "etapas": {
+        "merge_s": 13,
+        "build_s": {
+          "backend": 40,
+          "frontend": 200
+        },
+        "health_s": 0
+      },
+      "responsavel": "pedrorezendefig"
+    },
+    {
       "at": "2026-10-14T01:52:28-03:00",
       "sha": "577cbcc98955cc56543e96b2c7462324c1fed5f8",
       "app_version": "0.196.1",
