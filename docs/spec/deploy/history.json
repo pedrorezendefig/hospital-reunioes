@@ -2,6 +2,49 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-10-30T15:28:10-03:00",
+      "sha": "97f00770d72adfe8a423030b321aa8244973b1fe",
+      "app_version": "0.196.10",
+      "subject": "Onda onda-b-onda1: Bump the actions group with 9 updates; Fixa o pnpm 9 e refaz as atualizações do Dependabot; Dependências do site sem alerta alto do Dependabot",
+      "raw_subject": "chore(deploy): registro da onda onda-b-onda1 (#1299 #1317 #1318)",
+      "scope": [
+        "frontend"
+      ],
+      "prds": [],
+      "result": "healthy",
+      "duration_seconds": 469,
+      "services_touched": [
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        },
+        {
+          "service": "frontend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "onda-enxuta onda-b-onda1: PR #1299 (sem issue), PR #1317 (issue #1312), PR #1318 (issue #1316), mergeados PR a PR. Merge pela API do GitHub, um build. Registro pela Action pos-merge depois do health.",
+      "etapas": {
+        "merge_s": 9,
+        "build_s": {
+          "frontend": 175
+        },
+        "health_s": 0
+      },
+      "responsavel": "pedrorezendefig"
+    },
+    {
       "at": "2026-10-30T15:15:50-03:00",
       "sha": "035c46872126bdd1b093d0a456fd9b29c563b44c",
       "app_version": "0.196.9",
