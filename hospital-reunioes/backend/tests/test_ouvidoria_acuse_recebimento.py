@@ -219,6 +219,7 @@ class _TabelaFake:
         self._banco = banco
         self._nome = nome
         self._filtros: dict = {}
+        self._pisos: dict = {}
         self._insert: dict | None = None
         self._update: dict | None = None
         # O que o Postgres preenche sozinho na linha nova (sequence, coluna
@@ -238,6 +239,12 @@ class _TabelaFake:
 
     def eq(self, coluna, valor):
         self._filtros[coluna] = valor
+        return self
+
+    def gte(self, coluna, valor):
+        """Comparação de texto: os instantes do dublê saem todos de
+        `isoformat()` em UTC, e aí a ordem do texto é a do relógio."""
+        self._pisos[coluna] = valor
         return self
 
     def limit(self, quantidade: int):
@@ -269,6 +276,11 @@ class _TabelaFake:
             linhas.append(linha)
             return type("R", (), {"data": [dict(linha)]})()
         casadas = [linha for linha in linhas if all(linha.get(c) == v for c, v in self._filtros.items())]
+        casadas = [
+            linha
+            for linha in casadas
+            if all(linha.get(c) is not None and str(linha.get(c)) >= v for c, v in self._pisos.items())
+        ]
         coluna, desc = getattr(self, "_ordem", (None, False))
         if coluna is not None:
             casadas = sorted(casadas, key=lambda linha: str(linha.get(coluna) or ""), reverse=desc)
@@ -845,6 +857,9 @@ class _BancoDaCriacao(_BancoFake):
         tabela = _TabelaFake(self, nome)
         if nome == "ouvidoria_protocolos":
             tabela.defaults_do_insert = self._defaults_do_protocolo
+        if nome == "ouvidoria_notificacoes":
+            # O `DEFAULT now()` da coluna, que é por onde o teto conta a janela.
+            tabela.defaults_do_insert = lambda: {"criada_em": dt.datetime.now(tz=dt.UTC).isoformat()}
         return tabela
 
     def _defaults_do_protocolo(self) -> dict:
@@ -1040,6 +1055,86 @@ class TestFalhaDoAcuseNaoDerrubaAManifestacao:
 
         assert r.status_code == 201
         assert len(banco.casos) == 1
+
+
+class TestTetoDoAcuseNoCanalPublico:
+    """O formulário público não tem login, e o acuse escreve para o endereço
+    que quem preenche digitar (issue #1286). Sem teto, o canal vira um jeito de
+    fazer o remetente do hospital escrever para terceiros. Acima do teto a
+    manifestação nasce igual: só o acuse deixa de sair."""
+
+    def _postar(self, client, contato: str = "joana@exemplo.com"):
+        return client.post(
+            "/api/ouvidoria/publico/manifestacoes",
+            json={"relato": RELATO, "sobre": "mim", "nome": "Joana da Silva", "contato": contato},
+        )
+
+    def test_o_quarto_acuse_do_mesmo_endereco_em_24h_nao_sai(self, emails, caplog):
+        banco = _BancoDaCriacao()
+        client = _app_publico(banco)
+
+        with caplog.at_level(logging.INFO):
+            respostas = [self._postar(client) for _ in range(4)]
+
+        assert [r.status_code for r in respostas] == [201, 201, 201, 201]
+        assert len(banco.casos) == 4, "A manifestação acima do teto tem que nascer igual"
+        assert respostas[3].json()["protocolo"] == "2026-0010"
+        assert len(banco.notificacoes) == 3
+        assert len(emails) == 3
+        assert {n["manifestacao_id"] for n in banco.notificacoes} == {c["id"] for c in banco.casos[:3]}
+        retido = [r for r in caplog.records if "teto" in r.getMessage()]
+        assert len(retido) == 1, "O acuse retido pelo teto tem que deixar rastro no log"
+        assert banco.casos[3]["id"] in retido[0].getMessage()
+        assert "joana@exemplo.com" not in caplog.text
+
+    def _acuses_anteriores(self, banco, quantos: int, *, horas_atras: float, endereco=lambda i: "joana@exemplo.com"):
+        criada_em = (dt.datetime.now(tz=dt.UTC) - dt.timedelta(hours=horas_atras)).isoformat()
+        for i in range(quantos):
+            banco.notificacoes.append(
+                {
+                    "id": f"antiga-{i}",
+                    "manifestacao_id": f"caso-antigo-{i}",
+                    "gatilho": ouvidoria_notificacoes.GATILHO_ACUSAR_RECEBIMENTO,
+                    "destinatario_email": endereco(i),
+                    "status": "enviada",
+                    "criada_em": criada_em,
+                }
+            )
+
+    def test_acuse_de_mais_de_24h_nao_conta_para_o_teto(self, emails):
+        banco = _BancoDaCriacao()
+        self._acuses_anteriores(banco, ouvidoria_acuse.TETO_POR_ENDERECO, horas_atras=25)
+        client = _app_publico(banco)
+
+        r = self._postar(client)
+
+        assert r.status_code == 201
+        assert [destinatario for destinatario, *_ in emails] == ["joana@exemplo.com"]
+
+    def test_o_teto_global_retem_o_acuse_de_endereco_novo(self, emails):
+        banco = _BancoDaCriacao()
+        self._acuses_anteriores(
+            banco, ouvidoria_acuse.TETO_GLOBAL, horas_atras=2, endereco=lambda i: f"pessoa{i}@exemplo.com"
+        )
+        client = _app_publico(banco)
+
+        r = self._postar(client, contato="nunca.recebeu@exemplo.com")
+
+        assert r.status_code == 201
+        assert len(banco.casos) == 1
+        assert emails == []
+
+    def test_o_registro_do_ouvidor_nao_passa_pelo_teto(self, emails, monkeypatch):
+        """O teto é da porta sem login. Quem registra pelo balcão é o ouvidor,
+        e o quarto caso da mesma pessoa no dia ainda leva o aviso."""
+        banco = _BancoDaCriacao()
+        self._acuses_anteriores(banco, ouvidoria_acuse.TETO_POR_ENDERECO, horas_atras=1)
+        client = _app_do_ouvidor(banco, monkeypatch)
+
+        r = client.post("/api/ouvidoria/manifestacoes", json=_registro_manual())
+
+        assert r.status_code == 201
+        assert [destinatario for destinatario, *_ in emails] == ["joana@exemplo.com"]
 
 
 # ---------------------------------------------------------------------------
