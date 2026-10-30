@@ -1015,6 +1015,15 @@ class TestKitDeConhecimento:
         ):
             assert trecho in secao, trecho
 
+    def test_diz_que_a_fila_e_comum_e_que_a_conta_e_de_quem_puxa(self):
+        """Issue #1307, ADR 0073: o texto antigo dizia que a faturista via só as próprias."""
+        texto = KIT.read_text(encoding="utf-8")
+        secao = texto.split("## O envio e a fila", 1)[1].split("\n## ", 1)[0]
+
+        for trecho in ("a mesma Fila", "**Minhas**", "**Meus envios**", "quem enviou", "puxa"):
+            assert trecho in secao, trecho
+        assert "vê só as próprias" not in texto
+
 
 # ═══════════════════════════════════════════════════════════════════════════
 # 11. Tipografia
