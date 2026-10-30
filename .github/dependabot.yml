@@ -9,6 +9,11 @@ updates:
     groups:
       frontend:
         patterns: ["*"]
+    # Versão grande (major) não entra no lote semanal: muda API e quebra o CI
+    # (o #1320 juntou Next 16, TypeScript 7 e mais cinco). Major vira issue planejada.
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
 
   - package-ecosystem: uv
     directory: /hospital-reunioes/backend
@@ -34,3 +39,8 @@ updates:
     groups:
       manual:
         patterns: ["*"]
+    # Versão grande (major) não entra no lote semanal: muda API e quebra o CI
+    # (o #1320 juntou Next 16, TypeScript 7 e mais cinco). Major vira issue planejada.
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
