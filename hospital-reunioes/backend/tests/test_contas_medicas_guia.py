@@ -540,6 +540,36 @@ class TestPuxarAConta:
 
 
 # ═══════════════════════════════════════════════════════════════════════════
+# 2c. Devolver à fila (issue #1309, ADR 0073 decisão 5)
+# ═══════════════════════════════════════════════════════════════════════════
+
+ROTA_DEVOLVER = f"/api/contas-medicas/contas/{CONTA}/devolver"
+ABERTA_EM = "2026-10-29T13:00:00+00:00"
+
+
+def _em_correcao_de(faturista: str, **campos) -> dict:
+    return _conta(situacao="EM_CORRECAO", faturista_id=faturista, aberta_em=ABERTA_EM, **campos)
+
+
+class TestDevolverAFila:
+    def test_a_faturista_devolve_a_conta_dela_e_a_conta_volta_livre_na_fila(self):
+        from app.services.contas_medicas.fila import fila_da_pessoa
+
+        anterior = _outra_conta("c-anterior", None, "A_FAZER", 5)
+        posterior = _outra_conta("c-posterior", None, "A_FAZER", 20)
+        banco = _cenario(conta=_em_correcao_de("F1"), outras_contas=(posterior, anterior))
+
+        resposta = _cliente("dona", banco).post(ROTA_DEVOLVER)
+
+        assert resposta.status_code == 200
+        conta = banco.conta(CONTA)
+        assert (conta["situacao"], conta["faturista_id"], conta["aberta_em"]) == ("A_FAZER", None, ABERTA_EM)
+        # Na Fila das outras, no lugar dela na ordem de envio.
+        me = {"id": "F2", "permissoes_cm": ["enviar_corrigir_contas"]}
+        assert [c["id"] for c in fila_da_pessoa(banco, me)["fila"]] == ["c-anterior", CONTA, "c-posterior"]
+
+
+# ═══════════════════════════════════════════════════════════════════════════
 # 3. Feito, Não procede, Bloqueado e Desfazer
 # ═══════════════════════════════════════════════════════════════════════════
 

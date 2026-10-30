@@ -346,6 +346,25 @@ async def concluir_guia(
     }
 
 
+@router.post("/contas/{conta_id}/devolver")
+@limiter.limit("60/minute")
+async def devolver_conta(
+    request: Request,
+    conta_id: UUID,
+    me: dict = Depends(_PODE_CORRIGIR),
+    supabase: Client = Depends(get_supabase_client),
+) -> dict:
+    """Devolver à fila (issue #1309, ADR 0073 decisão 5): a conta Em correção
+    volta livre para a Fila, no lugar dela na ordem de envio. As marcações e o
+    `aberta_em` ficam; quem pegar depois continua de onde parou. A faturista
+    devolve a dela; quem tem "painel completo", a de qualquer uma. A conta em
+    Retorno fica com quem analisou."""
+    conta = _conta_do_guia(supabase, conta_id, me, (fila.EM_CORRECAO,), fila.SO_EM_CORRECAO_VOLTA)
+    if not fila.devolver(supabase, conta["id"]):
+        raise HTTPException(status_code=409, detail=fila.SO_EM_CORRECAO_VOLTA)
+    return {"situacao": fila.LIVRE}
+
+
 @router.post("/contas/{conta_id}/reenvio")
 @limiter.limit("30/minute")
 async def reenviar_conta(
