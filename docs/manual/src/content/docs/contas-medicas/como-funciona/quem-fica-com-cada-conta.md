@@ -2,7 +2,7 @@
 title: Quem fica com cada conta
 description: Como a conta entra na Fila comum, quando ganha dona, o que acontece quando duas faturistas abrem a mesma conta e para quem vai a produção.
 prd: [1303]
-draft: true
+draft: false
 sidebar:
   order: 33
 ---

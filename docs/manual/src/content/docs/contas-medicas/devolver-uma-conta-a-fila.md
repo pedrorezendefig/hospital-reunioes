@@ -2,7 +2,7 @@
 title: Devolver uma conta à fila
 description: Soltar a conta que você pegou e não vai terminar, para outra faturista continuar de onde você parou.
 prd: [1303]
-draft: true
+draft: false
 papel: [Faturista, Coordenadora de faturamento]
 busca: [soltar conta, largar conta, passar a conta, desistir]
 proximas: [corrigir-uma-conta-pelo-guia]
