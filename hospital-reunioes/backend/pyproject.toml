@@ -47,7 +47,9 @@ dependencies = [
     # Marcações de caixa e botão em Contas médicas (issue #1132): fração de pixels
     # escuros da imagem. Já vinha pelo `pdfplumber`; declarado porque o app passou
     # a importar. Licença MIT-CMU: a referência do diretor usava PyMuPDF (AGPL).
-    "pillow>=11.0",
+    # Piso no 13.0.0: primeira versão sem os alertas críticos e altos do
+    # Dependabot que pegavam a 12.3.0 (issue #1284).
+    "pillow>=13.0.0",
 ]
 
 [project.optional-dependencies]

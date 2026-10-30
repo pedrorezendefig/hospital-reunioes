@@ -25,9 +25,12 @@ sendo a única fonte das versões.
 from __future__ import annotations
 
 import shlex
+import tomllib
 from pathlib import Path
 
 import yaml
+from packaging.requirements import Requirement
+from packaging.version import Version
 
 BACKEND = Path(__file__).resolve().parents[1]
 REPO = BACKEND.parents[1]
@@ -242,3 +245,39 @@ class TestCiReprovaLockForaDeSincronia:
         checagens = self._passos_de_checagem()
         assert checagens, "Nenhum passo do CI roda `uv lock --check`."
         assert min(checagens) < sync, "`uv lock --check` precisa rodar antes do `uv sync`."
+
+
+# ---------------------------------------------------------------------------
+# Versões corrigidas no lock (issue #1284)
+# ---------------------------------------------------------------------------
+
+# Primeira versão corrigida de cada pacote com alerta crítico ou alto do
+# Dependabot no backend, como o próprio alerta informa. Pacote que volta para
+# baixo do piso num `uv lock` reprova aqui, antes de chegar à imagem.
+_PISOS_DE_SEGURANCA = {
+    "pillow": "13.0.0",
+    "brotli": "1.2.1",
+    "brotlicffi": "1.2.1.0",
+}
+
+
+def _versoes_no_lock() -> dict[str, Version]:
+    lock = tomllib.loads((BACKEND / "uv.lock").read_text(encoding="utf-8"))
+    return {p["name"].lower(): Version(p["version"]) for p in lock["package"]}
+
+
+class TestLockSemVersaoVulneravel:
+    """Critério: zero alerta crítico ou alto do Dependabot no backend."""
+
+    def test_lock_traz_a_versao_corrigida_de_cada_pacote_com_alerta(self):
+        versoes = _versoes_no_lock()
+        for pacote, piso in _PISOS_DE_SEGURANCA.items():
+            assert pacote in versoes, f"{pacote} sumiu do uv.lock: confira se o alerta ainda se aplica"
+            assert versoes[pacote] >= Version(piso), f"{pacote} {versoes[pacote]} no lock, abaixo da corrigida {piso}"
+
+    def test_pyproject_nao_deixa_pillow_voltar_para_versao_vulneravel(self):
+        projeto = tomllib.loads((BACKEND / "pyproject.toml").read_text(encoding="utf-8"))["project"]
+        pillow = [r for r in map(Requirement, projeto["dependencies"]) if r.name.lower() == "pillow"]
+        assert pillow, "pillow saiu das dependências diretas do pyproject.toml"
+        assert not pillow[0].specifier.contains("12.3.0"), f"O pyproject ainda aceita pillow 12.3.0: {pillow[0]}"
+        assert pillow[0].specifier.contains("13.0.0"), f"O pyproject não aceita a versão corrigida: {pillow[0]}"
