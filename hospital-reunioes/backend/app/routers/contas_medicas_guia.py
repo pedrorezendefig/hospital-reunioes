@@ -359,9 +359,9 @@ async def devolver_conta(
     `aberta_em` ficam; quem pegar depois continua de onde parou. A faturista
     devolve a dela; quem tem "painel completo", a de qualquer uma. A conta em
     Retorno fica com quem analisou, e a concluída não volta: quem recusa é o
-    UPDATE condicional na situação, que também cobre a corrida."""
+    UPDATE condicional na situação e na dona lida, que também cobre a corrida."""
     conta = _conta_do_guia(supabase, conta_id, me)
-    if not fila.devolver(supabase, conta["id"]):
+    if not fila.devolver(supabase, conta["id"], conta.get("faturista_id")):
         raise HTTPException(status_code=409, detail=fila.SO_EM_CORRECAO_VOLTA)
     return {"situacao": fila.LIVRE}
 

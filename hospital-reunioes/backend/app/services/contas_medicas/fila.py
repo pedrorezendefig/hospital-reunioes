@@ -133,16 +133,17 @@ def puxar(supabase, conta_id: str, pessoa_id: str, agora: str) -> bool:
     return bool(gravadas)
 
 
-def devolver(supabase, conta_id: str) -> bool:
+def devolver(supabase, conta_id: str, dona_lida: str) -> bool:
     """A conta Em correção volta livre para a Fila (issue #1309). Só a dona e
     a situação mudam: `ordem_fila`, `aberta_em` e as marcações ficam. O UPDATE
-    é condicional na situação: a conta concluída entre a leitura e a escrita
-    não volta."""
+    é condicional na situação e na dona lida: a conta concluída ou passada a
+    outra faturista entre a leitura e a escrita não volta (issue #1328)."""
     gravadas = (
         supabase.table("cm_conta")
         .update({"situacao": LIVRE, "faturista_id": None})
         .eq("id", conta_id)
         .eq("situacao", EM_CORRECAO)
+        .eq("faturista_id", dona_lida)
         .execute()
         .data
         or []

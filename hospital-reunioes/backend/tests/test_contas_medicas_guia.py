@@ -628,6 +628,23 @@ class TestDevolverAFila:
         assert resposta.status_code == 409
         assert (banco.conta(CONTA)["situacao"], banco.conta(CONTA)["faturista_id"]) == ("CONCLUIDA", "F1")
 
+    def test_a_conta_que_mudou_de_dona_entre_a_leitura_e_a_escrita_fica_com_a_dona_nova(self):
+        """Issue #1328: lida com a dona F1, a conta passa para F2 (devolvida e
+        puxada de novo) antes da gravação. A devolução de F1 não tira a conta de F2."""
+        banco = _cenario(conta=_em_correcao_de("F1"))
+
+        def mudou_de_dona_antes(tabela, campos):
+            if tabela == "cm_conta" and campos.get("situacao") == "A_FAZER":
+                banco.antes_de_gravar = None
+                banco.conta(CONTA)["faturista_id"] = "F2"
+
+        banco.antes_de_gravar = mudou_de_dona_antes
+
+        resposta = _cliente("dona", banco).post(ROTA_DEVOLVER)
+
+        assert resposta.status_code == 409
+        assert (banco.conta(CONTA)["situacao"], banco.conta(CONTA)["faturista_id"]) == ("EM_CORRECAO", "F2")
+
 
 # ═══════════════════════════════════════════════════════════════════════════
 # 3. Feito, Não procede, Bloqueado e Desfazer
