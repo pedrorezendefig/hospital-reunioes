@@ -2,6 +2,49 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-10-30T14:09:25-03:00",
+      "sha": "0147a1509578681b065adf054cd59c00b0624a2c",
+      "app_version": "0.196.5",
+      "subject": "PR #1313, issue #1302: IA de texto sai do OpenRouter para a API da Anthropic, tudo no Sonnet 5.5",
+      "raw_subject": "chore(deploy): registro do PR avulso (#1313)",
+      "scope": [
+        "backend"
+      ],
+      "prds": [],
+      "result": "healthy",
+      "duration_seconds": 141,
+      "services_touched": [
+        "backend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        },
+        {
+          "service": "frontend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "PR avulso: PR #1313, issue #1302. Merge pela API do GitHub, um build. Registro pela Action pos-merge depois do health.",
+      "etapas": {
+        "merge_s": 3,
+        "build_s": {
+          "backend": 104
+        },
+        "health_s": 20
+      },
+      "responsavel": "pedrorezendefig"
+    },
+    {
       "at": "2026-10-30T13:25:57-03:00",
       "sha": "960a25cf15230228df70901786ba1a3ada13fe56",
       "app_version": "0.196.4",
