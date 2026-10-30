@@ -144,7 +144,7 @@ def versoes_no_lockfile_do_manual() -> dict[str, list[tuple[int, ...]]]:
     texto = (RAIZ / "docs" / "manual" / "pnpm-lock.yaml").read_text(encoding="utf-8")
     pacotes = texto.split("\npackages:\n", 1)[1].split("\nsnapshots:\n", 1)[0]
     versoes: dict[str, list[tuple[int, ...]]] = {}
-    for nome, versao in re.findall(r"^  '?(@?[^@\s']+)@(\d+\.\d+\.\d+)[^:]*'?:$", pacotes, re.M):
+    for nome, versao in re.findall(r"^  '?(@?[^@\s']+)@(\d+\.\d+\.\d+)[^:]*'?:$", pacotes, re.MULTILINE):
         versoes.setdefault(nome, []).append(tuple(int(n) for n in versao.split(".")))
     return versoes
 
