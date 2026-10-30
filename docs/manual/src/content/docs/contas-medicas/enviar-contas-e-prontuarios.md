@@ -13,8 +13,8 @@ sidebar:
 
 Antes de mandar a conta de internação para a operadora. Exporte do MV a conta
 ("Fatura Individual") e o prontuário completo do mesmo atendimento, em PDF.
-Quem envia não fica com a conta: ela entra na **Fila**, e a faturista que
-abrir primeiro corrige.
+A conta que você envia entra na **Fila**, e a faturista que abrir primeiro
+corrige.
 
 ## Passo a passo
 

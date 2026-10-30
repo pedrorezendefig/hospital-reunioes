@@ -12,8 +12,8 @@ sidebar:
 
 ## Quando usar
 
-Quando você abriu uma conta e não vai terminar: vai sair mais cedo, entrou
-de férias ou precisa de ajuda. A conta volta para a **Fila** e o que você já
+Quando você abriu uma conta e não vai terminar, por exemplo porque vai sair
+mais cedo. A conta volta para a **Fila** e o que você já
 marcou fica nela. A coordenação devolve do mesmo jeito a conta de quem faltou,
 pela aba **Em análise**.
 

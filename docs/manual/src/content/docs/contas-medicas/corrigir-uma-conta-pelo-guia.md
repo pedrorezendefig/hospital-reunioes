@@ -12,24 +12,23 @@ sidebar:
 
 ## Quando usar
 
-Quando há conta **A fazer** na **Fila**. A Fila é a mesma para todas as
-faturistas, na ordem de envio. Deixe o guia aberto ao lado do MV: ele cabe em
-meia tela.
+Quando há conta **A fazer** na **Fila**, que é a mesma para todas as
+faturistas. Deixe o guia ao lado do MV: ele cabe em meia tela.
 
 ## Passo a passo
 
-1. Na **Fila**, clique em **Abrir** na primeira conta. Ela passa a ser sua e
-   vai para **Minhas**, onde **Continuar** reabre o guia.
+1. Na **Fila**, clique em **Abrir** na primeira conta. Ela vira sua, em
+   **Minhas**.
 
    ![Fila com o link Abrir na conta A fazer](../../../assets/contas-medicas/fila-abrir.png)
 
 2. Leia o topo: **Nota de entrada**, **R$ a ajustar** e **Itens feitos**.
-   Abaixo vêm as linhas, por dia e setor.
+   As linhas vêm por dia e setor.
 
    ![Topo do guia com os três números e a primeira linha](../../../assets/contas-medicas/guia.png)
 
 3. Clique no código da linha para copiar, corrija no MV e clique em **Feito**.
-   Para conferir a origem, clique em **Ver evidência**.
+   **Ver evidência** mostra a origem.
 
    ![Linha do guia com o código, Ver evidência e o botão Feito](../../../assets/contas-medicas/guia-linha.png)
 
@@ -39,10 +38,10 @@ meia tela.
 
    ![Linha com os quatro motivos do Não procede](../../../assets/contas-medicas/guia-nao-procede.png)
 
-5. A linha **Validar** não tem botão, porque o item já foi para a gestão decidir.
-6. Clique em **Concluir e abrir a próxima**. A primeira conta livre da Fila
-   abre e passa a ser sua. A **Observação para a gestão de contas médicas**
-   vai junto.
+5. Pule a linha **Validar**: quem decide é a gestão.
+6. Clique em **Concluir e abrir a próxima**. A **Observação para a gestão de
+   contas médicas** vai junto, e a primeira conta livre da Fila abre já como
+   sua.
 
    ![Rodapé do guia com a observação e o botão Concluir e abrir a próxima](../../../assets/contas-medicas/guia-concluir.png)
 
@@ -58,9 +57,9 @@ meia tela.
 
 ## Se der errado
 
-- **Aparece "Outra faturista já pegou esta conta":** ela abriu antes. Volte em
-  **Contas médicas** e abra a próxima da Fila.
-- **Aparece "itens sem marcação. Concluir assim mesmo?":** ainda há linha
-  aberta. Confirme para concluir com pendência, ou volte e marque.
-- **O botão Confirmar está apagado:** falta o motivo. Em **Outro**, escrever o
-  texto é obrigatório.
+- **Aparece "Outra faturista já pegou esta conta":** volte em **Contas
+  médicas** e abra a próxima da Fila.
+- **Aparece "itens sem marcação. Concluir assim mesmo?":** confirme para
+  concluir com pendência, ou volte e marque.
+- **O botão Confirmar está apagado:** falta o motivo, ou o texto em
+  **Outro**.
