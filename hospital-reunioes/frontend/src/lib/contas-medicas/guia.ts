@@ -156,6 +156,10 @@ export const ROTULO_SITUACAO: Record<string, string> = {
 
 export const CONCLUIDAS = ["CONCLUIDA", "CONCLUIDA_COM_PENDENCIA"];
 
+/** A confirmação do "Devolver à fila" (issue #1309): a conta Em correção volta livre, com as marcações. */
+export const PERGUNTA_DE_DEVOLVER =
+  "Devolver esta conta à fila? As marcações ficam na conta para quem pegar depois.";
+
 const DINHEIRO = new Intl.NumberFormat("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const PRECO = new Intl.NumberFormat("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 4 });
 const QUANTIDADE = new Intl.NumberFormat("pt-BR", { maximumFractionDigits: 4 });

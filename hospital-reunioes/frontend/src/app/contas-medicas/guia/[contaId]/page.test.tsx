@@ -500,6 +500,44 @@ describe("o botão Reanalisar (issue #1130)", () => {
   });
 });
 
+describe("o botão Devolver à fila (issue #1309)", () => {
+  const PERGUNTA = "Devolver esta conta à fila? As marcações ficam na conta para quem pegar depois.";
+
+  it("pergunta antes; negar não devolve", async () => {
+    const confirmar = vi.spyOn(window, "confirm").mockReturnValue(false);
+    await abrir();
+
+    fireEvent.click(screen.getByRole("button", { name: "Devolver à fila" }));
+
+    expect(confirmar).toHaveBeenCalledWith(PERGUNTA);
+    expect(chamadas.some((c) => c.url.endsWith("/devolver"))).toBe(false);
+    expect(navegacao.push).not.toHaveBeenCalled();
+  });
+
+  it("confirmando, devolve a conta e volta para a tela de contas", async () => {
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+    await abrir();
+
+    fireEvent.click(screen.getByRole("button", { name: "Devolver à fila" }));
+
+    await waitFor(() => expect(navegacao.push).toHaveBeenCalledWith("/contas-medicas"));
+    expect(chamadas[1]).toEqual({
+      url: `/api/contas-medicas/contas/${CONTA}/devolver`,
+      metodo: "POST",
+      corpo: undefined,
+    });
+    expect(await screen.findByText("A conta voltou para a Fila")).toBeTruthy();
+  });
+
+  it.each(["RETORNO", "CONCLUIDA"])("a conta em %s não tem o botão", async (situacao) => {
+    respostaDoGuia = guia({ cabecalho: { ...guia().cabecalho, situacao } });
+    await abrir();
+
+    expect(screen.getByText(situacao === "RETORNO" ? "Retorno" : "Concluída")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Devolver à fila" })).toBeNull();
+  });
+});
+
 describe("o reenvio da conta corrigida (issue #1136)", () => {
   function concluida(campos: Partial<Guia> = {}): Guia {
     return guia({ cabecalho: { ...guia().cabecalho, situacao: "CONCLUIDA" }, pode_reenviar: true, ...campos });
