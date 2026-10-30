@@ -8,8 +8,9 @@ roda de novo e refaz as imagens.
 **Nenhum dado daqui é de paciente.** A conta, o atendimento e o rótulo da
 paciente ("Ana P.") são inventados pelo `--semear`, e a operadora de exemplo
 (AURORA) não existe: o repositório é público, e a memória e as tabelas de
-verdade têm preço de contrato. A fila da faturista só mostra as contas dela,
-então o print da fila nunca alcança conta de outra pessoa.
+verdade têm preço de contrato. A Fila é comum a todas as faturistas (PRD
+#1303): olhe o print da Fila depois de gerar, porque conta A fazer de outro
+roteiro no banco local aparece nele.
 
 Duas telas não dá para mostrar sem fingir o servidor, e o roteiro diz isso em
 voz alta: o quadro **Último envio** só aparece depois de subir conta e
@@ -464,6 +465,13 @@ def semear(base: str = "http://localhost:3000") -> None:
 
     _conta("900377", operadora_id, 4, "ERRO", [], rotulo="Paulo R.", idade=71, numero_conta="51288",
            erro_motivo="Este PDF não tem texto. Exporte de novo pelo MV")
+    # Meus envios mostra a conta de quem a enviou (PRD #1303): a do Erro
+    # também nasce do envio da faturista.
+    conta_com_erro = _rest("cm_conta?numero_conta=eq.51288&faturista_id=eq.P950&select=id,atendimento_id")[0]
+    arquivo = _criar("cm_arquivo", {"envio_id": envio["id"], "tipo": "CONTA",
+                                    "atendimento_id": conta_com_erro["atendimento_id"],
+                                    "numero_atendimento": "900377", "paginas": 3})
+    _rest(f"cm_conta?id=eq.{conta_com_erro['id']}", "PATCH", {"arquivo_id": arquivo["id"]})
     # A conta das telas do reenvio: três linhas Feito, duas que entram e uma
     # diária que sai, mais a linha bloqueada que a Validação abre. Concluída
     # na semana do Painel.
@@ -684,9 +692,19 @@ def _semear_painel(operadora_id: str) -> None:
 def _guia_a_fazer() -> None:
     """Abrir o guia muda A fazer para Em correção: cada print começa do mesmo lugar."""
     _rest(
-        f"cm_conta?faturista_id=eq.{FATURISTA[0]}&numero_conta=eq.51230",
+        "cm_conta?numero_conta=eq.51230",
         "PATCH",
-        {"situacao": "A_FAZER", "aberta_em": None},
+        {"situacao": "A_FAZER", "aberta_em": None, "faturista_id": FATURISTA[0]},
+    )
+
+
+def _minha_em_correcao() -> None:
+    """A conta 51190 fica Em correção com a faturista, mesmo que um print
+    anterior a tenha devolvido à Fila."""
+    _rest(
+        "cm_conta?numero_conta=eq.51190",
+        "PATCH",
+        {"situacao": "EM_CORRECAO", "faturista_id": FATURISTA[0]},
     )
 
 
@@ -762,18 +780,64 @@ def ultimo_envio(page: Page, base: str, saida: Path) -> None:
     limpar_baloes(page)
 
 
-def fila(page: Page, base: str, saida: Path) -> None:
-    """Enviar, passo 4: a fila com uma conta de cada situação."""
+def _aba(page: Page, nome: str):
+    """Abre a aba da tela de contas pelo começo do rótulo ("Minhas (1)")."""
+    aba = page.get_by_role("tab", name=nome)
+    aba.click()
+    page.wait_for_load_state("networkidle")
+    return aba
+
+
+def meus_envios(page: Page, base: str, saida: Path) -> None:
+    """Enviar, passo 4: Meus envios, com o que ainda não ficou pronto (PRD #1303)."""
     _guia_a_fazer()
     _contas(page, base)
+    aba = _aba(page, "Meus envios")
+    page.get_by_text("Atendimento 900431").wait_for()
     sem_foco(page)
     secao = page.get_by_role("region", name="Fila de contas")
-    balao(page, page.get_by_role("tab", name="Fila (4)"), 4)
+    balao(page, aba, 4, "acima")
     caixa = secao.bounding_box()
     page.screenshot(
-        path=str(saida / "fila.png"),
+        path=str(saida / "meus-envios.png"),
+        clip={"x": caixa["x"] - 40, "y": caixa["y"] - 104, "width": caixa["width"] + 60, "height": caixa["height"] + 112},
+    )
+    limpar_baloes(page)
+
+
+def minhas(page: Page, base: str, saida: Path) -> None:
+    """Devolver, passo 1: a aba Minhas e o Continuar da conta Em correção."""
+    _guia_a_fazer()
+    _minha_em_correcao()
+    _contas(page, base)
+    _aba(page, "Minhas")
+    secao = page.get_by_role("region", name="Fila de contas")
+    linha = secao.locator("li").filter(has_text="Atendimento 900398")
+    linha.wait_for()
+    sem_foco(page)
+    balao(page, linha.get_by_role("link", name="Continuar"), 1, "acima")
+    caixa = secao.bounding_box()
+    page.screenshot(
+        path=str(saida / "minhas.png"),
         clip={"x": caixa["x"] - 40, "y": caixa["y"] - 70, "width": caixa["width"] + 60, "height": caixa["height"] + 78},
     )
+    limpar_baloes(page)
+
+
+def guia_devolver(page: Page, base: str, saida: Path) -> None:
+    """Devolver, passo 2: o Devolver à fila no topo do guia, sem clicar."""
+    _guia_a_fazer()
+    _minha_em_correcao()
+    _contas(page, base)
+    _aba(page, "Minhas")
+    page.get_by_role("region", name="Fila de contas").locator("li").filter(
+        has_text="Atendimento 900398"
+    ).get_by_role("link", name="Continuar").click()
+    page.get_by_role("heading", name="Atendimento 900398").wait_for()
+    page.wait_for_load_state("networkidle")
+    sem_foco(page)
+    balao(page, page.get_by_role("button", name="Devolver à fila"), 2)
+    page.screenshot(path=str(saida / "guia-devolver.png"), clip={"x": 0, "y": 0, "width": 1440, "height": 420})
     limpar_baloes(page)
 
 
@@ -1602,8 +1666,10 @@ PRINTS = {
     "contas": contas,
     "envio": envio,
     "ultimo-envio": ultimo_envio,
-    "fila": fila,
+    "meus-envios": meus_envios,
     "fila-abrir": fila_abrir,
+    "minhas": minhas,
+    "guia-devolver": guia_devolver,
     "guia": guia,
     "guia-linha": guia_linha,
     "guia-nao-procede": guia_nao_procede,

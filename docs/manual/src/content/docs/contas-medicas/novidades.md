@@ -1,11 +1,26 @@
 ---
 title: Novidades
 description: O que mudou em Contas médicas, da entrega mais recente para a mais antiga.
-prd: [1113, 1128, 1129]
-draft: false
+prd: [1113, 1128, 1129, 1303]
+draft: true
 sidebar:
   order: 90
 ---
+
+## 30/10/2026 · A fila agora é de todas as faturistas
+
+Qualquer pessoa sobe as contas, inclusive quem só envia, no perfil novo
+**Apoio ao faturamento**. As contas prontas entram numa **Fila** comum, e cada
+faturista pega a próxima ao abrir o guia, com o próprio login. A conta que ela
+não vai terminar volta para a Fila com as marcações, e a produção do
+**Painel** fica com quem analisou a conta.
+
+Tarefas novas: [Devolver uma conta à fila](../devolver-uma-conta-a-fila/)
+
+Tarefas que mudaram: [Enviar contas e prontuários](../enviar-contas-e-prontuarios/),
+[Corrigir uma conta pelo guia](../corrigir-uma-conta-pelo-guia/),
+[Habilitar uma pessoa](../habilitar-uma-pessoa/),
+[Ler o Painel](../ler-o-painel/)
 
 ## 13/10/2026 · Contas médicas: a diretoria edita e ensina regra pela tela, decide pendências na Validação, a coordenação ganha a segunda checagem e os contratos avisam do reajuste
 

@@ -1,9 +1,9 @@
 ---
 title: Enviar contas e prontuários
-description: Mandar a conta e o prontuário do MV para conferência e acompanhar cada uma na fila.
-prd: [1113]
-draft: false
-papel: [Faturista]
+description: Mandar a conta e o prontuário do MV para conferência e acompanhar em Meus envios até o guia ficar pronto.
+prd: [1113, 1303]
+draft: true
+papel: [Faturista, Apoio ao faturamento]
 proximas: [corrigir-uma-conta-pelo-guia]
 sidebar:
   order: 2
@@ -13,6 +13,8 @@ sidebar:
 
 Antes de mandar a conta de internação para a operadora. Exporte do MV a conta
 ("Fatura Individual") e o prontuário completo do mesmo atendimento, em PDF.
+A conta que você envia entra na **Fila**, e a faturista que abrir primeiro
+corrige.
 
 ## Passo a passo
 
@@ -28,10 +30,11 @@ Antes de mandar a conta de internação para a operadora. Exporte do MV a conta
 
    ![Quadro Último envio com um atendimento completo e outro sem prontuário](../../../assets/contas-medicas/ultimo-envio.png)
 
-4. Acompanhe a conta na **Fila**. Ela passa de **Na fila** para **A fazer** em
-   alguns minutos, e o sino avisa quando o guia está pronto.
+4. Acompanhe em **Meus envios** as contas que você mandou e que ainda não
+   ficaram prontas. Quando o guia fica pronto, a conta sai daí e entra na
+   **Fila**, e o sino avisa.
 
-   ![Fila com contas A fazer, Em correção, Falta o prontuário e Erro](../../../assets/contas-medicas/fila.png)
+   ![Aba Meus envios com uma conta Falta o prontuário e outra em Erro](../../../assets/contas-medicas/meus-envios.png)
 
 5. Faltou um arquivo? Mande só o que falta: o sistema junta pelo atendimento.
 
