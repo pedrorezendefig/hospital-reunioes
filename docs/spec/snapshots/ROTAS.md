@@ -1,6 +1,6 @@
 # ROTAS.md
 <!-- gerado automaticamente por /snapshot — não editar -->
-<!-- last_update: 2026-10-30T15:07+0000 -->
+<!-- last_update: 2026-10-30T18:32+0000 -->
 
 Endpoints HTTP expostos pelo backend FastAPI do Hospital Reuniões.
 
@@ -106,7 +106,7 @@ Endpoints HTTP expostos pelo backend FastAPI do Hospital Reuniões.
 | Método | Rota | O que faz | Auth |
 |--------|------|-----------|------|
 | POST | `/contas-medicas/envios` | Um lote de PDFs de um envio. Sem `envio_id`, abre um envio novo; com | ✅ |
-| GET | `/contas-medicas/fila` | A fila em ordem de envio e a aba Concluídas. A faturista vê só as dela; | ✅ |
+| GET | `/contas-medicas/fila` | A Fila, "Minhas", "Meus envios" e as Concluídas da pessoa. Quem tem | ✅ |
 
 ## contas-medicas (`app/routers/contas_medicas_guia.py`)
 
