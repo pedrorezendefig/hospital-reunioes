@@ -47,7 +47,9 @@ Assim que o envio termina, aparece o **Último envio**, uma linha por atendiment
 
 Se o prontuário do atendimento já foi enviado nos últimos sete dias, a conta nova é pareada com ele e não é preciso mandar o prontuário de novo. Quando o período da conta passa da última data desse prontuário, o Último envio avisa para mandar o prontuário atualizado. Enviar de novo a mesma conta do mesmo atendimento não cria outra: a conta volta para a fila e é analisada outra vez. A exceção é a conta já concluída: enviar de novo a conta dela é o reenvio da conta corrigida, descrito abaixo, e o Último envio diz "31302, reenvio da conta 48001: 2 corrigidas no MV, 1 ainda na conta, nota de saída 86".
 
-A tela de contas tem quatro abas. Todas as faturistas veem a mesma Fila: as contas com o Guia pronto que ninguém pegou, em ordem de envio e, dentro do envio, na ordem dos arquivos, não importa quem enviou. A Fila nunca é reordenada por valor. A faturista puxa a conta ao abrir o Guia dela: nesse clique a conta passa a ser dela, sai da Fila das outras e vai para a aba **Minhas**, com as contas que ela puxou e ainda não concluiu. Se duas faturistas abrem a mesma conta ao mesmo tempo, só uma fica com ela; a outra vê "Outra faturista já pegou esta conta" e volta para a Fila.
+Enviar e analisar são permissões separadas. **Enviar contas** abre a área de envio e a aba Meus envios; **Analisar contas** abre a Fila, Minhas, Concluídas e o Guia. A faturista tem as duas. Quem só sobe contas, como a secretária, fica no perfil Apoio ao faturamento: envia e acompanha os próprios envios, mas não vê a Fila nem abre o Guia.
+
+Com as duas permissões, a tela de contas tem quatro abas. Todas as faturistas veem a mesma Fila: as contas com o Guia pronto que ninguém pegou, em ordem de envio e, dentro do envio, na ordem dos arquivos, não importa quem enviou. A Fila nunca é reordenada por valor. A faturista puxa a conta ao abrir o Guia dela: nesse clique a conta passa a ser dela, sai da Fila das outras e vai para a aba **Minhas**, com as contas que ela puxou e ainda não concluiu. Se duas faturistas abrem a mesma conta ao mesmo tempo, só uma fica com ela; a outra vê "Outra faturista já pegou esta conta" e volta para a Fila.
 
 A aba **Meus envios** mostra as contas que a pessoa enviou e que ainda não ficaram prontas. Elas não entram na Fila: ficam com quem enviou, que é quem tem o PDF que falta.
 
@@ -198,15 +200,16 @@ Quando a regra é validada e uma das contas afetadas já estava concluída, ela 
 
 ## Quem vê
 
-O módulo tem perfis próprios, separados dos de Reuniões, POPs e Ouvidoria. São seis: faturista, coordenadora de faturamento, gestão de contas médicas, diretoria médica, diretoria executiva e credenciamento. Quem não tem nenhum deles não vê o item no menu e não consegue abrir a tela. O Super admin do aplicativo entra, como nos outros módulos.
+O módulo tem perfis próprios, separados dos de Reuniões, POPs e Ouvidoria. São sete: faturista, coordenadora de faturamento, gestão de contas médicas, diretoria médica, diretoria executiva, credenciamento e apoio ao faturamento. Quem não tem nenhum deles não vê o item no menu e não consegue abrir a tela. O Super admin do aplicativo entra, como nos outros módulos.
 
 Cada perfil vem com um conjunto inicial de permissões, tirado da especificação do diretor:
 
-- **Faturista**: envia contas, puxa da Fila e corrige as que puxou.
+- **Faturista**: Enviar contas e Analisar contas. Envia, puxa da Fila e corrige as que puxou.
 - **Coordenadora de faturamento**: o mesmo da faturista, mais o Painel completo e a Conferência da coordenação. Incluir regra operacional está desligado para ela, em avaliação pelo diretor.
 - **Gestão de contas médicas**: tudo, menos habilitar pessoas.
 - **Diretoria médica** e **Diretoria executiva**: tudo.
 - **Credenciamento**: só os contratos e o aviso de reajuste.
+- **Apoio ao faturamento**: só Enviar contas. Sobe as contas e vê o que enviou em Meus envios, sem pegar conta para analisar.
 
 Esse conjunto não é fixo. A diretoria muda tudo pela tela de **Habilitação**, sem programador no meio: os perfis ficam nas linhas e as permissões nas colunas, e cada célula liga ou desliga com um clique. Na mesma tela, a busca acha a pessoa pelo nome, e ali se dá, troca ou tira o perfil dela. A mudança vale na hora: quem ganha um perfil passa a ver o item no menu, e quem perde uma permissão deixa de abrir a tela dela já no clique seguinte. Toda mudança fica registrada com quem mudou, quando, como estava antes e como ficou.
 

@@ -244,3 +244,38 @@ class TestCadaRotaPedeASuaChave:
 
         assert cliente.get(ROTA_FILA).status_code == 403
         assert cliente.get(ROTA_MEUS_ENVIOS).status_code == 200
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 3. O texto do Produto no Kit de conhecimento
+# ═══════════════════════════════════════════════════════════════════════════
+
+KIT = MIGRATIONS.parents[1] / "backend" / "app" / "conhecimento" / "contas-medicas.md"
+
+
+def _secao(titulo: str) -> str:
+    return KIT.read_text(encoding="utf-8").split(f"## {titulo}", 1)[1].split("\n## ", 1)[0]
+
+
+class TestKitDizQueEnviarEAnalisarSaoSeparados:
+    """O Assistente de Tecnologia responde Demanda com este texto: se ele
+    disser que quem envia também analisa, a secretária vai pedir a Fila."""
+
+    def test_quem_ve_lista_o_apoio_ao_faturamento_e_as_duas_permissoes(self):
+        quem_ve = _secao("Quem vê")
+
+        for trecho in (
+            "São sete",
+            "apoio ao faturamento",
+            "**Apoio ao faturamento**",
+            "Enviar contas",
+            "Analisar contas",
+        ):
+            assert trecho in quem_ve, trecho
+        assert "São seis" not in quem_ve
+
+    def test_o_envio_diz_que_quem_so_envia_ve_meus_envios_e_nao_a_fila(self):
+        envio = _secao("O envio e a fila")
+
+        for trecho in ("Enviar contas", "Analisar contas", "Apoio ao faturamento", "**Meus envios**"):
+            assert trecho in envio, trecho
