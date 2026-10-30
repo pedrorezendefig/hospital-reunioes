@@ -352,6 +352,27 @@ _Evitar_: "top posts"; incluir Stories.
 Uma direção que a diretoria quer para o ecossistema digital ("Crescer no Instagram", "Gerar mais contatos"), vista por uma lente própria: os números que importam para ela e **sugestões** que sempre dizem o porquê, ou seja, qual dado as disparou. Catálogo fechado; Objetivo sem dado ainda aparece como em construção. Não tem alvo numérico.
 _Evitar_: chamar de meta (o app já usa "metas" no menu de Reuniões, e "Meta" é também o nome da empresa dona do Instagram: nesta seção a empresa não é citada, diz-se "Instagram"); sugestão sem o dado que a justifica.
 
+## Contas médicas
+
+**Envio**:
+O ato de subir para o app os PDFs da Conta e do Prontuário exportados do MV. Quem envia fica gravado no envio (`cm_envio.usuario_id`), não na conta. Qualquer perfil com "Enviar contas" envia, inclusive o [Apoio ao faturamento]. Quem envia acompanha em "Meus envios" o que ainda não ficou pronto (falta o outro arquivo, processando, erro) e recebe o aviso de envio processado (ADR 0073).
+_Evitar_: tratar quem enviou como dono da conta; mandar a faturista resolver arquivo que falta.
+
+**Fila de contas**:
+A lista comum das contas com Guia pronto que ninguém pegou, em ordem de envio, nunca por valor. Toda faturista vê a mesma Fila; ao lado, "Minhas" mostra as que ela puxou e ainda não concluiu. Conta que espera arquivo, processa ou deu erro não entra na Fila (ADR 0073, que emendou a decisão 10 da ADR 0070).
+_Evitar_: fila por faturista; mostrar na Fila conta sem Guia.
+
+**Puxar a conta**:
+Abrir o Guia de uma conta livre da [Fila de contas]: nesse clique a conta passa a ser da faturista, e só um clique ganha. O "Concluir e abrir a próxima" puxa a primeira livre. A faturista pode **devolver à fila** a conta que puxou e não vai terminar, e a coordenação devolve a de qualquer uma; as marcações ficam.
+_Evitar_: distribuir conta antes do trabalho; duas faturistas na mesma conta.
+
+**Faturista da conta**:
+Quem puxou a conta e a analisa (`cm_conta.faturista_id`). É dela o Retorno da Validação e é ela quem conta na Produção do Painel. Não é quem enviou.
+_Evitar_: contar produção para quem enviou.
+
+**Apoio ao faturamento**:
+Perfil de Contas médicas que só envia: sobe Conta e Prontuário, vê "Meus envios", não puxa conta nem aparece na Produção. Nasceu para a secretária do diretor (ADR 0073); o nome de tela espera a confirmação dele.
+
 ## Manual do usuário
 
 **Manual**:
