@@ -47,3 +47,14 @@ def test_package_manager_fixa_o_mesmo_pnpm_do_ci_e_do_dockerfile():
 def test_lockfile_tem_os_mesmos_overrides_do_package_json():
     lock = yaml.safe_load((FRONTEND / "pnpm-lock.yaml").read_text(encoding="utf-8"))
     assert lock.get("overrides") == package_json()["pnpm"]["overrides"]
+
+
+def test_a_guarda_roda_quando_o_pnpm_do_frontend_muda():
+    """Os testes de `tools/` rodam no `manual.yml`: o PR que mexe só no
+    `package.json`, no Dockerfile ou no lockfile do frontend também precisa
+    acordá-los, senão a guarda fica verde sobre nada."""
+    manual = yaml.safe_load((RAIZ / ".github" / "workflows" / "manual.yml").read_text(encoding="utf-8"))
+    on = manual["on"] if "on" in manual else manual[True]
+    for evento in ("push", "pull_request"):
+        for arquivo in ("package.json", "Dockerfile", "pnpm-lock.yaml"):
+            assert f"hospital-reunioes/frontend/{arquivo}" in on[evento]["paths"], (evento, arquivo)

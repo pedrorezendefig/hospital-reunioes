@@ -38,6 +38,9 @@ on:
       - '.gitleaks.toml'
       - 'SECURITY.md'
       - 'hospital-reunioes/backend/app/services/registro_do_deploy.py'
+      - 'hospital-reunioes/frontend/package.json'
+      - 'hospital-reunioes/frontend/Dockerfile'
+      - 'hospital-reunioes/frontend/pnpm-lock.yaml'
   pull_request:
     branches: [main]
     paths:
@@ -84,6 +87,12 @@ on:
       # O aviso da subida ao app (issue #1065): o script de tools/ carrega este
       # leitor do backend pelo caminho, e o teste dele mora em tools/.
       - 'hospital-reunioes/backend/app/services/registro_do_deploy.py'
+      # O pnpm do frontend fixado num major só (issue #1312): o teste em tools/
+      # amarra o packageManager, o Dockerfile e os overrides do lockfile, e o
+      # PR que mexe só neles não toca em tools/.
+      - 'hospital-reunioes/frontend/package.json'
+      - 'hospital-reunioes/frontend/Dockerfile'
+      - 'hospital-reunioes/frontend/pnpm-lock.yaml'
 
 jobs:
   manual:
