@@ -42,7 +42,7 @@ const MARCA: Record<Fase, string> = {
   mergeada: '●',
   em_producao: '✓',
   humana: '!',
-  encerrada_sem_pr: '-',
+  encerrada_sem_pr: '✓',
 }
 
 const NOME: Record<Fase, string> = {
@@ -234,6 +234,9 @@ export type Etapa = { nome: string; estado: EstadoEtapa; ms?: number; cor?: 'war
 export const subidaDoPr = (c: Coleta, pr: number | null): Subida | undefined =>
   pr === null ? undefined : (c.subidas ?? []).filter(s => s.prs.includes(pr)).sort((a, b) => b.inicio - a.inicio)[0]
 
+/** Fatias prontas do PRD: no ar ou fechadas (o passo humano fecha sem PR). */
+export const prontasDoPrd = (prd: Prd) => prd.issues.filter(i => i.fase === 'em_producao' || i.estado === 'CLOSED').length
+
 /** Esteira da fatia: implementar → CI → revisar → (corrigir) → subida → no ar, com o tempo de cada etapa. */
 export const etapas = (
   i: Issue,
@@ -241,6 +244,8 @@ export const etapas = (
   agora: number,
   extra: { ci?: Ci; subida?: Subida; migrationPendente?: boolean } = {},
 ) => {
+  // passo humano fechado (ou issue encerrada sem código): não houve esteira para mostrar
+  if (i.fase === 'encerrada_sem_pr') return [{ nome: 'fechada sem PR', estado: 'feita' as EstadoEtapa }]
   const de = (tipo: string) => ags.filter(a => a.tipo === tipo)
   const estado = (tipo: string, feita: boolean): EstadoEtapa => {
     const lista = de(tipo)
@@ -650,7 +655,7 @@ export const register: Register = on => {
           const fora = prd.issues.filter(i => !emOnda.has(i.n))
           const entregues = fora.filter(i => i.fase === 'em_producao' || i.estado === 'CLOSED')
           const soltas = fora.filter(i => !entregues.includes(i))
-          const feitas = prd.issues.filter(i => i.fase === 'em_producao').length
+          const feitas = prontasDoPrd(prd)
           const semAlvo = ags.filter(a => alvo(a, prd) === null)
 
           return (
@@ -660,7 +665,7 @@ export const register: Register = on => {
                   {prd.n === SEM_PRD ? 'Sem PRD' : <Link href={`https://github.com/${repo}/issues/${prd.n}`} label={`PRD #${prd.n}`} />}
                 </Text>{' '}
                 <Text dimColor>
-                  {feitas}/{prd.issues.length} no ar
+                  {feitas}/{prd.issues.length} prontas
                 </Text>
               </Text>
               <Text dimColor wrap="truncate-end">

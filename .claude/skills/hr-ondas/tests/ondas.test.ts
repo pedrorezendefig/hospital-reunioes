@@ -3,7 +3,7 @@ import { expect, mock, test } from 'claude-code/testing'
 import {
   agentesDoPrd, alvo, assinatura, atividadeDaSessao, comSemPrd, corDaDuracao, declaradasAplicadas, detalhe, duracaoDaOnda, etapas, focoDaSessao, linhagem,
   nomeCurtoDaSessao, ondasDoPrd, pendentes, prdsVisiveis, resumoDaOnda, rotuloDoAlvo, rotuloDoShell, SEM_PRD, sessoesDoPrd,
-  situacaoDaOnda, subidaDoPr,
+  prontasDoPrd, situacaoDaOnda, subidaDoPr,
 } from '../hooks/register'
 import type { Coleta, SubAgente } from '../types'
 
@@ -119,6 +119,14 @@ test('esteira da fatia: implementou, CI vermelho, revisor trabalhando', () => {
   // revisor sem escrever há mais de 10 min não conta como trabalhando
   const velho = etapas(i, [{ ...AGENTES[1]!, fim: AGORA - 11 * 60_000 }], AGORA)
   expect(velho.find(s => s.nome === 'revisar')!.estado).toBe('falta')
+})
+
+test('issue humana fechada sem PR: esteira de uma etapa só, feita, e conta como pronta no PRD', () => {
+  const prd = comEm(COLETA).os!.prds.find(p => p.n === 1128)!
+  const humana = { ...prd.issues.find(x => x.n === 1130)!, estado: 'CLOSED', fase: 'encerrada_sem_pr' as const }
+  expect(etapas(humana, AGENTES, AGORA).map(s => `${s.nome}:${s.estado}`)).toEqual(['fechada sem PR:feita'])
+  const noAr = { ...prd.issues.find(x => x.n === 1131)!, estado: 'CLOSED', fase: 'em_producao' as const }
+  expect(prontasDoPrd({ ...prd, issues: [humana, noAr, prd.issues.find(x => x.n === 1132)!] })).toBe(2)
 })
 
 test('onda com fatia em PR anda; onda só bloqueada fica parada', () => {
