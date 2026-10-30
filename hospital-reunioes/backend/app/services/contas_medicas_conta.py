@@ -79,6 +79,13 @@ _ITEM = re.compile(
     r"^(\d{2}/\d{2}/\d{4})\s+(\d{6,10})\s+(.+?)\s{2,}(\S+(?: \S+)?)\s+(\d{1,3},\d{2})%"
     r"\s+([\d.,]+)\s+([\d.,]+)\s+([\d.,]+)\s*$"
 )
+# Honorário médico no layout real (issue #1304): a linha do procedimento tem a
+# quantidade e nenhum valor; cada prestador vem embaixo, numa linha com nome e
+# CRM, função, unitário e total. Nome e CRM não são guardados.
+_PROCEDIMENTO_DE_HONORARIO = re.compile(
+    r"^(\d{2}/\d{2}/\d{4})\s+(\d{6,10})\s+(.+?)\s{2,}(\S+)\s+(\d{1,3},\d{2})%\s+(\d[\d.,]*)\s*$"
+)
+_PRESTADOR = re.compile(r"^\S.*?\s{2,}([A-Z][A-Z ]*[A-Z])\s{2,}(\d[\d.]*,\d{2})\s+(\d[\d.]*,\d{2})\s*$")
 _SETOR = re.compile(r"^(\d{1,4})\s{2,}(\S.*?)\s*$")
 _GRUPO_DE_PROCEDIMENTO = re.compile(r"^\s*Grupo de Procedimento:\s*(\d+)\s+(.*?)\s*$")
 _FIM_DA_CONTINUACAO = re.compile(r"Total|HOSPITAL|P[áa]gina")
@@ -113,6 +120,7 @@ class ItemConta:
     setor_codigo: str | None
     setor: str | None
     grupo_procedimento: str | None
+    funcao: str | None = None  # função do prestador no honorário (CIRURGIAO, ANESTESISTA...)
 
 
 @dataclass(frozen=True)
@@ -159,19 +167,45 @@ def _itens(texto_por_pagina: Sequence[str]) -> list[ItemConta]:
     grupo = setor_codigo = setor = grupo_procedimento = None
     for numero, texto in enumerate(texto_por_pagina, start=1):
         ultimo = None  # descrição não continua de uma página para a outra
+        procedimento = None  # procedimento de honorário à espera das linhas de prestador
         for bruta in texto.split("\n"):
             linha = bruta.strip()
             if not linha:
                 continue
             if linha in GRUPOS_DA_CONTA:
-                grupo, ultimo = linha, None
+                grupo, ultimo, procedimento = linha, None, None
                 continue
             m = _GRUPO_DE_PROCEDIMENTO.match(bruta)
             if m:
-                grupo_procedimento, ultimo = m.group(2), None
+                grupo_procedimento, ultimo, procedimento = m.group(2), None, None
+                continue
+            m = _PROCEDIMENTO_DE_HONORARIO.match(linha)
+            if m:
+                dia, codigo, descricao, unidade, percentual, quantidade = m.groups()
+                procedimento = {
+                    "pagina": numero,
+                    "data": _data(dia),
+                    "codigo": codigo,
+                    "descricao": descricao.strip(),
+                    "unidade": unidade,
+                    "percentual": _numero(percentual),
+                    "quantidade": _numero(quantidade),
+                    "grupo": grupo,
+                    "setor_codigo": setor_codigo,
+                    "setor": setor,
+                    "grupo_procedimento": grupo_procedimento,
+                }
+                ultimo = procedimento  # a descrição pode continuar na linha de baixo
+                continue
+            m = _PRESTADOR.match(linha) if procedimento else None
+            if m:
+                funcao, unitario, total = m.groups()
+                itens.append({**procedimento, "unitario": _numero(unitario), "total": _numero(total), "funcao": funcao})
+                ultimo = None
                 continue
             m = _ITEM.match(linha)
             if m:
+                procedimento = None
                 dia, codigo, descricao, unidade, percentual, quantidade, unitario, total = m.groups()
                 ultimo = {
                     "pagina": numero,
@@ -198,7 +232,7 @@ def _itens(texto_por_pagina: Sequence[str]) -> list[ItemConta]:
                 ultimo["descricao"] += " " + linha
                 continue
             if linha.startswith("Total"):
-                ultimo = None
+                ultimo = procedimento = None
     return [ItemConta(**i) for i in itens]
 
 
