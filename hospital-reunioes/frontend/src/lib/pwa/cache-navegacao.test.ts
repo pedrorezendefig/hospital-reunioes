@@ -31,7 +31,7 @@ const RAIZ_DO_FRONTEND = process.cwd();
 const require = createRequire(path.join(RAIZ_DO_FRONTEND, "package.json"));
 const SW_ENTRY = path.join(
   path.dirname(require.resolve("@serwist/next/package.json")),
-  "dist/sw-entry.js"
+  "dist/sw-entry.mjs"
 );
 
 const ROTA_DE_TOKEN = "/aceite/token-opaco-do-email";
