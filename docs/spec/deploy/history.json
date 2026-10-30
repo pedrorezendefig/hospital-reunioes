@@ -2,6 +2,51 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-10-30T12:54:44-03:00",
+      "sha": "b589413640c15e9c5c371a318c069bfeabcb0f0a",
+      "app_version": "0.196.3",
+      "subject": "Onda seguranca-storage: Leitura só pelos fluxos do backend",
+      "raw_subject": "chore(deploy): registro da onda seguranca-storage (#1288)",
+      "scope": [
+        "backend"
+      ],
+      "prds": [],
+      "result": "healthy",
+      "duration_seconds": 57,
+      "services_touched": [
+        "backend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        },
+        {
+          "service": "frontend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [
+        "120_storage_leitura_so_pelo_backend.sql"
+      ],
+      "rollback_target_sha": null,
+      "notes": "onda-enxuta seguranca-storage: PR #1288 (issue #1285), mergeados PR a PR. Merge pela API do GitHub, um build. Registro pela Action pos-merge depois do health.",
+      "etapas": {
+        "merge_s": 3,
+        "build_s": {
+          "backend": 21
+        },
+        "health_s": 10
+      },
+      "responsavel": "pedrorezendefig"
+    },
+    {
       "at": "2026-10-30T12:18:47-03:00",
       "sha": "5d49a4ea531be816d012145c482db33c51d68998",
       "app_version": "0.196.2",
