@@ -284,3 +284,121 @@ def test_conta_sem_total_devolve_erro_de_leitura():
     pagina_2 = PAGINA_2.replace("Total da Conta:", "Total geral:")
 
     assert ler_conta([PAGINA_1, pagina_2]) == ErroLeitura("Não consegui ler a conta inteira")
+
+
+# Honorário médico no layout real do MV (issue #1304): a linha do procedimento
+# traz data, código, descrição e quantidade, sem valor; a descrição pode
+# quebrar; cada prestador vem numa linha própria, com nome, CRM, função,
+# unitário e total. Nome e CRM são fictícios.
+CABECALHO_HONORARIO = """\
+Atendimento: 900003          Conta: 700003          Tipo: INTERNACAO
+Plano: Rioserv Max Qc ENF
+
+HONORARIOS MEDICOS
+43  CENTRO CIRURGICO
+    Grupo de Procedimento: 01 PROCEDIMENTOS CIRURGICOS
+Data             Procedimento / Prestador - CRM - CPF                                   HE     %Proc.        . Qtde    Vl Unitario        Vl Total
+"""  # noqa: E501 (layout real do MV, colunas largas)
+
+HONORARIO_UM_PRESTADOR = (
+    CABECALHO_HONORARIO
+    + """\
+18/09/2026       30726018    ARTRITE SEPTICA - TRATAMENTO                               N      100,00%             1
+                           CIRURGICO - JOELHO
+         FULANO FICTICIO DE TAL - 000000                                CIRURGIAO                                   225,00          225,00
+
+                                                                                                    Total Grupo de Procedimento:          225,00
+
+MEDICAMENTOS
+12  ENFERMARIA 3 ANDAR
+    Grupo de Procedimento: 05 MEDICAMENTOS
+18/09/2026  90012345  DIPIRONA SODICA 500MG/ML SOL INJ 2ML    AMP     100,00%    3,00       4,35      13,05
+Total do Setor:                                                                     13,05
+
+Total da Conta:                                                                    238,05
+"""  # noqa: E501
+)
+
+HONORARIO_DOIS_PRESTADORES = (
+    CABECALHO_HONORARIO
+    + """\
+18/09/2026       30726018    ARTRITE SEPTICA - TRATAMENTO                               N      100,00%             1
+                           CIRURGICO - JOELHO
+         FULANO FICTICIO DE TAL - 000000                                CIRURGIAO                                 1.250,00        1.250,00
+         BELTRANA FICTICIA - 111111                                     ANESTESISTA                                 800,00          800,00
+
+                                                                                                    Total Grupo de Procedimento:        2.050,00
+
+Total da Conta:                                                                  2.050,00
+"""  # noqa: E501
+)
+
+PRESTADORES_FICTICIOS = ("FULANO", "BELTRANA", "000000", "111111")
+
+
+def _honorarios(conta: Conta) -> list[tuple]:
+    return [
+        (i.data, i.codigo, i.descricao, i.unidade, i.percentual, i.quantidade, i.unitario, i.total, i.funcao)
+        for i in conta.itens
+        if i.grupo == "HONORARIOS MEDICOS"
+    ]
+
+
+def test_honorario_com_um_prestador_vira_item_com_a_funcao():
+    conta = _conta([HONORARIO_UM_PRESTADOR])
+
+    assert conta.total == Decimal("238.05")
+    assert _honorarios(conta) == [
+        (
+            date(2026, 9, 18),
+            "30726018",
+            "ARTRITE SEPTICA - TRATAMENTO CIRURGICO - JOELHO",
+            "N",
+            Decimal("100.00"),
+            Decimal("1"),
+            Decimal("225.00"),
+            Decimal("225.00"),
+            "CIRURGIAO",
+        )
+    ]
+    honorario = conta.itens[0]
+    assert (honorario.setor_codigo, honorario.setor, honorario.grupo_procedimento) == (
+        "43",
+        "CENTRO CIRURGICO",
+        "PROCEDIMENTOS CIRURGICOS",
+    )
+    assert [i.codigo for i in conta.itens] == ["30726018", "90012345"]
+
+
+def test_honorario_com_dois_prestadores_vira_um_item_por_prestador():
+    conta = _conta([HONORARIO_DOIS_PRESTADORES])
+
+    assert conta.total == Decimal("2050.00")
+    descricao = "ARTRITE SEPTICA - TRATAMENTO CIRURGICO - JOELHO"
+    procedimento = (date(2026, 9, 18), "30726018", descricao, "N", Decimal("100.00"), Decimal("1"))
+    assert _honorarios(conta) == [
+        (*procedimento, Decimal("1250.00"), Decimal("1250.00"), "CIRURGIAO"),
+        (*procedimento, Decimal("800.00"), Decimal("800.00"), "ANESTESISTA"),
+    ]
+
+
+def test_conferencia_da_leitura_fecha_nas_contas_com_honorario():
+    for paginas in ([HONORARIO_UM_PRESTADOR], [HONORARIO_DOIS_PRESTADORES]):
+        conta = _conta(paginas)
+        assert sum(i.total for i in conta.itens) == conta.total
+        assert all(i.quantidade * i.unitario == i.total for i in conta.itens)
+
+
+def test_nome_e_crm_do_prestador_nao_ficam_no_item():
+    for paginas in ([HONORARIO_UM_PRESTADOR], [HONORARIO_DOIS_PRESTADORES]):
+        conta = _conta(paginas)
+        assert conta.itens
+        for item in conta.itens:
+            assert not any(dado in repr(item) for dado in PRESTADORES_FICTICIOS), item
+
+
+def test_honorario_em_linha_unica_nao_ganha_funcao():
+    conta = _conta([PAGINA_1, PAGINA_2])
+
+    assert conta.itens[0].codigo == "31009999"
+    assert all(i.funcao is None for i in conta.itens)
