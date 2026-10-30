@@ -153,9 +153,13 @@ TIPOS_DE_IMAGEM: dict[str, str] = {
     ".webp": "image/webp",
 }
 
-# 5 MB. Print de tela cheia em PNG num monitor grande nao passa de dois; o que
-# passa disto e foto de celular de um monitor, que e outro problema.
-LIMITE_DA_IMAGEM = 5 * 1024 * 1024
+# 3,75 MB. A API da Anthropic recusa imagem acima de 5 MB, e quem ela mede e o
+# `data` em base64, que cresce 4/3: o arquivo maior que 3,75 MB chegaria la, a
+# leitura falharia e a frase de "tente de novo" mandaria o mesmo print para
+# falhar de novo (revisao do PR #1313). Print de tela cheia em PNG num monitor
+# grande nao passa de dois; o que passa disto e foto de celular de um monitor.
+LIMITE_DA_IMAGEM_EM_BASE64 = 5 * 1024 * 1024
+LIMITE_DA_IMAGEM = LIMITE_DA_IMAGEM_EM_BASE64 * 3 // 4
 
 # As duas recusas da imagem, junto da tabela e do teto que elas dizem. Moram
 # aqui, e nao na rota, porque sao duas as portas que recusam imagem: o print
@@ -165,8 +169,10 @@ MOTIVO_IMAGEM_FORA_DA_LISTA = (
     "Só dá para ler print .png, .jpg, .jpeg ou .webp. Salve a imagem em um desses formatos e anexe de novo."
 )
 
+_LIMITE_DA_IMAGEM_EM_MB = f"{LIMITE_DA_IMAGEM / (1024 * 1024):.2f}".replace(".", ",")
+
 MOTIVO_IMAGEM_GRANDE = (
-    f"O print passou do limite de {LIMITE_DA_IMAGEM // (1024 * 1024)} MB. "
+    f"O print passou do limite de {_LIMITE_DA_IMAGEM_EM_MB} MB. "
     "Anexe uma imagem menor, ou escreva o que aparece na tela."
 )
 
@@ -468,7 +474,7 @@ def conversar(
         logger.warning("Modo MOCK ativo para o Assistente de Tecnologia (sem chave LLM)")
         return {"reply": REPLY_MOCK, "rascunho": atual, "demanda_parecida": None}
 
-    client, model, extra = ai_processor._get_llm()
+    client, model = ai_processor._get_llm()
     ai_processor._log_llm_call("assistente-tecnologia", provider, model)
 
     chat_history = "\n".join(_linha_da_conversa(m) for m in messages) or SEM_CONVERSA
@@ -489,17 +495,7 @@ def conversar(
     system_prompt = load_prompt("assistente_tecnologia_system")
 
     try:
-        response = client.chat.completions.create(
-            model=model,
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_content},
-            ],
-            temperature=0.3,
-            response_format={"type": "json_object"},
-            **extra,
-        )
-        parsed = json.loads(response.choices[0].message.content)
+        parsed = json.loads(ai_processor._pedir_json(client, model, system=system_prompt, usuario=user_content))
         if not isinstance(parsed, dict):
             raise ValueError("resposta da IA não é um objeto JSON")
     except Exception as e:
@@ -549,27 +545,22 @@ def descrever_imagem(*, imagem: bytes, extensao: str) -> str | None:
         logger.warning("Modo MOCK ativo para o print do Assistente de Tecnologia (sem chave LLM)")
         return DESCRICAO_MOCK
 
-    client, model, extra = ai_processor._get_llm()
+    client, model = ai_processor._get_llm()
     ai_processor._log_llm_call("assistente-tecnologia/print", provider, model)
 
-    url_da_imagem = f"data:{TIPOS_DE_IMAGEM[extensao]};base64,{base64.b64encode(imagem).decode('ascii')}"
+    imagem_em_base64 = {
+        "type": "image",
+        "source": {
+            "type": "base64",
+            "media_type": TIPOS_DE_IMAGEM[extensao],
+            "data": base64.b64encode(imagem).decode("ascii"),
+        },
+    }
     instrucao = load_prompt("assistente_tecnologia_imagem")
     try:
-        response = client.chat.completions.create(
-            model=model,
-            messages=[
-                {
-                    "role": "user",
-                    "content": [
-                        {"type": "text", "text": instrucao},
-                        {"type": "image_url", "image_url": {"url": url_da_imagem}},
-                    ],
-                }
-            ],
-            temperature=0.2,
-            **extra,
-        )
-        texto = (response.choices[0].message.content or "").strip()
+        texto = ai_processor._pedir_texto(
+            client, model, system=None, conteudo=[imagem_em_base64, {"type": "text", "text": instrucao}]
+        ).strip()
     except Exception as e:
         logger.error(f"Erro ao descrever o print via {provider}: {e}")
         return None

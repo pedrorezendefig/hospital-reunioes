@@ -21,11 +21,10 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Any
 
-import httpx
 import pytest
+from anthropic_apoio import cliente_por_transporte, nomear_schemas, uso
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
-from openai import OpenAI
 from test_contas_medicas_processamento import (
     AGORA,
     EVENTOS_DA_IA,
@@ -39,9 +38,9 @@ from test_contas_medicas_processamento import (
     _enviar,
     _Extrator,
     _guia,
+    _IAFalsa,
     _item_de_tabela,
     _linhas_do_guia,
-    _OpenRouter,
     _paginas_do_prontuario,
     _prontuario,
     _regra,
@@ -71,19 +70,11 @@ def _extrator(monkeypatch) -> _Extrator:
 
 
 @pytest.fixture(autouse=True)
-def openrouter(monkeypatch) -> _OpenRouter:
-    """O provedor do teste na fronteira HTTP: nada chega ao OpenRouter."""
-    duble = _OpenRouter()
-    monkeypatch.setattr(
-        ia,
-        "_cliente",
-        lambda: OpenAI(
-            api_key="chave-de-teste",
-            base_url="https://openrouter.ai/api/v1",
-            http_client=httpx.Client(transport=httpx.MockTransport(duble)),
-            max_retries=0,
-        ),
-    )
+def ia_falsa(monkeypatch) -> _IAFalsa:
+    """O provedor do teste na fronteira HTTP: nada chega à Anthropic."""
+    duble = _IAFalsa()
+    duble.nomes = nomear_schemas(monkeypatch)
+    monkeypatch.setattr(ia, "_cliente", lambda: cliente_por_transporte(duble))
     monkeypatch.setattr(ia, "_esperar", lambda _segundos: None)
     return duble
 
@@ -136,10 +127,10 @@ def _linha_da_ia(**campos: Any) -> dict[str, Any]:
     }
 
 
-def _analisar(banco: _Banco, openrouter, *linhas: dict[str, Any]) -> tuple[dict, list[dict]]:
+def _analisar(banco: _Banco, ia_falsa, *linhas: dict[str, Any]) -> tuple[dict, list[dict]]:
     """Envia o par, roda a fila com o Passo B respondendo `linhas` e devolve a
     conta gravada e as linhas do Guia pela rota."""
-    openrouter.comparacao = {"linhas": list(linhas), "resumo": "Conta comparada com a memória."}
+    ia_falsa.comparacao = {"linhas": list(linhas), "resumo": "Conta comparada com a memória."}
     _enviar(banco, _conta(), _prontuario())
     _rodar_o_job(banco)
     (conta,) = banco.tabelas["cm_conta"]
@@ -148,18 +139,18 @@ def _analisar(banco: _Banco, openrouter, *linhas: dict[str, Any]) -> tuple[dict,
 
 
 class TestConferenciaDasLinhasDaIA:
-    def test_a_linha_boa_entra_no_guia_com_origem_ia_e_o_valor_pela_tabela(self, openrouter):
-        _, linhas = _analisar(_cenario_do_passo_b(), openrouter, _linha_da_ia())
+    def test_a_linha_boa_entra_no_guia_com_origem_ia_e_o_valor_pela_tabela(self, ia_falsa):
+        _, linhas = _analisar(_cenario_do_passo_b(), ia_falsa, _linha_da_ia())
 
         (equipo,) = [linha for linha in linhas if linha["codigo"] == "70000002"]
         assert (equipo["origem"], equipo["acao"], equipo["regra_codigo"]) == ("IA", "INCLUIR", "ALFA-INS-03")
         assert (equipo["preco_tabela"], equipo["valor_diferenca"], equipo["confianca"]) == (12.5, 12.5, "ALTA")
         assert {linha["origem"] for linha in linhas if linha["codigo"] != "70000002"} == {"CODIGO"}
 
-    def test_a_linha_da_ia_com_preco_de_tabela_grava_a_versao_da_tabela(self, openrouter):
+    def test_a_linha_da_ia_com_preco_de_tabela_grava_a_versao_da_tabela(self, ia_falsa):
         """Issue #1206: a versão fica no banco, a rota do Guia não mostra."""
         banco = _cenario_do_passo_b()
-        conta, _ = _analisar(banco, openrouter, _linha_da_ia())
+        conta, _ = _analisar(banco, ia_falsa, _linha_da_ia())
 
         (equipo,) = [
             linha
@@ -168,11 +159,11 @@ class TestConferenciaDasLinhasDaIA:
         ]
         assert (equipo["origem"], equipo["preco_tabela"], equipo["tabela_id"]) == ("IA", 12.5, "tb-mat")
 
-    def test_cada_defeito_da_ia_recebe_a_conferencia_do_codigo(self, openrouter):
+    def test_cada_defeito_da_ia_recebe_a_conferencia_do_codigo(self, ia_falsa):
         banco = _cenario_do_passo_b()
         conta, linhas = _analisar(
             banco,
-            openrouter,
+            ia_falsa,
             _linha_da_ia(),
             _linha_da_ia(codigo="70000005", descricao="LUVA DE PROCEDIMENTO", regra_id="ALFA-INS-99"),
             _linha_da_ia(
@@ -230,7 +221,7 @@ class TestConferenciaDasLinhasDaIA:
         assert motivos["70000005"] == "A regra ALFA-INS-99 não existe na memória."
         assert motivos["70000002"] == "Data fora do período da conta."
 
-    def test_o_teto_da_linha_e_o_das_diarias_pagas_no_periodo_dela(self, openrouter):
+    def test_o_teto_da_linha_e_o_das_diarias_pagas_no_periodo_dela(self, ia_falsa):
         def fralda(data: str, data_fim: str) -> dict[str, Any]:
             return _linha_da_ia(
                 codigo="70000050",
@@ -245,15 +236,15 @@ class TestConferenciaDasLinhasDaIA:
         # (04 e 05/10 pagas; a alta do dia 06 não é diária). Juntas, as 24 da
         # conta inteira, nunca o dobro.
         _, linhas = _analisar(
-            _cenario_do_passo_b(), openrouter, fralda("2026-10-02", "2026-10-03"), fralda("2026-10-04", "2026-10-06")
+            _cenario_do_passo_b(), ia_falsa, fralda("2026-10-02", "2026-10-03"), fralda("2026-10-04", "2026-10-06")
         )
         fraldas = sorted((linha["data"], linha["quantidade_devida"]) for linha in linhas if linha["origem"] == "IA")
         assert fraldas == [("2026-10-02", 12), ("2026-10-04", 12)]
 
-    def test_a_linha_de_um_dia_so_tem_o_teto_de_uma_diaria(self, openrouter):
+    def test_a_linha_de_um_dia_so_tem_o_teto_de_uma_diaria(self, ia_falsa):
         _, linhas = _analisar(
             _cenario_do_passo_b(),
-            openrouter,
+            ia_falsa,
             _linha_da_ia(
                 codigo="70000050", descricao="FRALDA GERIATRICA", quantidade_devida=30, regra_id="ALFA-INS-04"
             ),
@@ -262,10 +253,10 @@ class TestConferenciaDasLinhasDaIA:
         assert (fralda["quantidade_devida"], fralda["valor_diferenca"]) == (6, 12.0)
         assert fralda["motivo"].endswith("Teto pelo código: 6 para 1 diária paga no período.")
 
-    def test_sem_preco_na_tabela_vale_o_unitario_da_conta_e_codigo_nulo_tenta_o_dicionario(self, openrouter):
+    def test_sem_preco_na_tabela_vale_o_unitario_da_conta_e_codigo_nulo_tenta_o_dicionario(self, ia_falsa):
         _, linhas = _analisar(
             _cenario_do_passo_b(),
-            openrouter,
+            ia_falsa,
             # O Clexane não está na tabela da operadora; a conta lançou a 45,00.
             _linha_da_ia(
                 acao="AJUSTAR_QUANTIDADE",
@@ -310,13 +301,13 @@ class TestConferenciaDasLinhasDaIA:
         assert (bolsa["codigo"], bolsa["valor_diferenca"], bolsa["nao_conferido"]) == (None, None, True)
         assert bolsa["motivo"].endswith("Sem código.")
 
-    def test_o_motivo_com_os_acrescimos_do_codigo_fica_em_ate_140_caracteres(self, openrouter):
+    def test_o_motivo_com_os_acrescimos_do_codigo_fica_em_ate_140_caracteres(self, ia_falsa):
         # O motivo da IA já no limite (140), numa linha de regra pendente e sem
         # código: o código acrescenta o "pendente" na frente e o "Sem código." no fim.
         motivo_da_ia = ("Bolsa coletora de urina registrada na evolução de enfermagem, " * 3)[:140]
         _, linhas = _analisar(
             _cenario_do_passo_b(),
-            openrouter,
+            ia_falsa,
             _linha_da_ia(codigo=None, descricao="BOLSA COLETORA DE URINA", regra_id="ALFA-INS-05", motivo=motivo_da_ia),
         )
 
@@ -328,7 +319,7 @@ class TestConferenciaDasLinhasDaIA:
 
 
 class TestNotaComAsLinhasDaIA:
-    def test_a_nota_de_entrada_muda_com_a_linha_da_ia_e_o_rs_em_validacao_soma_a_linha_validar(self, openrouter):
+    def test_a_nota_de_entrada_muda_com_a_linha_da_ia_e_o_rs_em_validacao_soma_a_linha_validar(self, ia_falsa):
         """Sem a IA, o par sintético dá nota 17: R$ 5.500,30 apontados de R$
         6.592,00 devidos (o teste do pipeline do processamento). A IA inclui
         10 equipos a R$ 12,50 (R$ 125,00) e propõe 2 curativos a R$ 5,00 por
@@ -336,7 +327,7 @@ class TestNotaComAsLinhasDaIA:
         banco = _cenario_do_passo_b()
         conta, _ = _analisar(
             banco,
-            openrouter,
+            ia_falsa,
             _linha_da_ia(quantidade_devida=10),
             _linha_da_ia(
                 codigo="70000003", descricao="CURATIVO HIDROCOLOIDE", quantidade_devida=2, regra_id="ALFA-INS-05"
@@ -350,10 +341,8 @@ class TestNotaComAsLinhasDaIA:
 
 
 class TestFalhaDaIA:
-    def test_a_ia_fora_do_ar_deixa_erro_com_a_frase_guarda_as_linhas_do_codigo_e_o_reprocesso_funciona(
-        self, openrouter
-    ):
-        openrouter.fora_do_formato_em = {PASSO_B}
+    def test_a_ia_fora_do_ar_deixa_erro_com_a_frase_guarda_as_linhas_do_codigo_e_o_reprocesso_funciona(self, ia_falsa):
+        ia_falsa.fora_do_formato_em = {PASSO_B}
         banco = _cenario_do_passo_b()
         _enviar(banco, _conta(), _prontuario())
 
@@ -361,7 +350,7 @@ class TestFalhaDaIA:
 
         (conta,) = banco.tabelas["cm_conta"]
         # As três tentativas são do adaptador; a conta não volta para a fila.
-        assert openrouter.formatos.count(PASSO_B) == 3
+        assert ia_falsa.formatos.count(PASSO_B) == 3
         assert (conta["situacao"], conta["erro_motivo"], conta["tentativas"]) == (
             "ERRO",
             "Tente de novo em alguns minutos",
@@ -377,8 +366,8 @@ class TestFalhaDaIA:
         ]
 
         # A IA voltou e a faturista manda a conta de novo pelo botão da conta em Erro.
-        openrouter.fora_do_formato_em = set()
-        openrouter.comparacao = {"linhas": [_linha_da_ia()], "resumo": "Conta comparada com a memória."}
+        ia_falsa.fora_do_formato_em = set()
+        ia_falsa.comparacao = {"linhas": [_linha_da_ia()], "resumo": "Conta comparada com a memória."}
         _enviar(banco, _conta())
         _rodar_o_job(banco)
 
@@ -394,17 +383,11 @@ class TestFalhaDaIA:
 
 
 class TestCustoDoPassoB:
-    def test_a_chamada_do_passo_b_fica_gravada_com_os_tokens_de_cache_e_o_custo(self, openrouter):
-        openrouter.uso = {
-            "prompt_tokens": 2500,
-            "completion_tokens": 300,
-            "total_tokens": 2800,
-            "prompt_tokens_details": {"cached_tokens": 2000},
-            "cost": 0.0123,
-        }
+    def test_a_chamada_do_passo_b_fica_gravada_com_os_tokens_de_cache_e_o_custo(self, ia_falsa):
+        ia_falsa.uso = uso(entrada=500, saida=300, leitura_cache=2000)
         banco = _cenario_do_passo_b()
 
-        conta, _ = _analisar(banco, openrouter)
+        conta, _ = _analisar(banco, ia_falsa)
 
         (chamada,) = [c for c in banco.tabelas["cm_chamada_ia"] if c["passo"] == "B"]
         campos = ("conta_id", "atendimento_id", "tokens_entrada", "tokens_saida", "tokens_cache", "custo_usd")
@@ -414,10 +397,11 @@ class TestCustoDoPassoB:
             "tokens_entrada": 2500,
             "tokens_saida": 300,
             "tokens_cache": 2000,
-            "custo_usd": 0.0123,
+            # 500 x 2 + 300 x 10 + 2000 x 0,20, por milhão (Sonnet 5.5).
+            "custo_usd": 0.0044,
             "sucesso": True,
         }
-        assert chamada["modelo"].startswith("anthropic/")
+        assert chamada["modelo"] == "claude-sonnet-5-5"
 
 
 PROPOSTAS = "PropostasDoDicionario"
@@ -458,21 +442,21 @@ def _lancado_sem_mencao_do_clexane(banco: _Banco) -> list[str]:
 
 
 class TestDicionarioPelaIA:
-    def test_termo_sem_par_vai_uma_vez_a_ia_e_entra_proposto(self, openrouter):
+    def test_termo_sem_par_vai_uma_vez_a_ia_e_entra_proposto(self, ia_falsa):
         """A prescrição diz enoxaparina e a conta lança Clexane: nem o
         dicionário, nem a marca, nem a concentração ligam os dois. A IA
         recebe o termo e os medicamentos da conta e propõe o código. A segunda
         parcial do atendimento tem o mesmo termo e não pergunta de novo."""
-        openrouter.respostas[PROPOSTAS] = {"propostas": [{"termo": ENOXAPARINA, "codigo": "90030001"}]}
+        ia_falsa.respostas[PROPOSTAS] = {"propostas": [{"termo": ENOXAPARINA, "codigo": "90030001"}]}
         banco = _cenario_do_passo_b()
         _enviar(banco, _conta("48811", 2, 3), _conta("48812", 4, 6), _prontuario_com_enoxaparina())
 
         assert _rodar_o_job(banco) == 2
 
         assert [c["situacao"] for c in banco.tabelas["cm_conta"]] == ["A_FAZER", "A_FAZER"]
-        assert openrouter.formatos.count(PROPOSTAS) == 1
-        (corpo,) = [c for c in openrouter.corpos if c["response_format"]["json_schema"]["name"] == PROPOSTAS]
-        pergunta = corpo["messages"][1]["content"][0]["text"]
+        assert ia_falsa.formatos.count(PROPOSTAS) == 1
+        (corpo,) = [c for c in ia_falsa.corpos if c["formato"] == PROPOSTAS]
+        pergunta = corpo["messages"][0]["content"][0]["text"]
         assert ENOXAPARINA in pergunta
         assert "90030001 | CLEXANE 40MG/0,4ML SER PREENCH" in pergunta
         (proposta,) = [t for t in banco.tabelas["cm_item_dicionario"] if t["termo"] == ENOXAPARINA]
@@ -483,13 +467,13 @@ class TestDicionarioPelaIA:
         }
         assert [c["passo"] for c in banco.tabelas["cm_chamada_ia"]].count("DICIONARIO") == 1
 
-    def test_duas_parciais_em_vagas_paralelas_perguntam_o_termo_uma_vez(self, openrouter):
+    def test_duas_parciais_em_vagas_paralelas_perguntam_o_termo_uma_vez(self, ia_falsa):
         """As duas vagas pegam as parciais do envio juntas. A barreira segura a
         primeira na chamada do dicionário até a outra chegar lá: sem a trava do
         atendimento, as duas leram o dicionário sem o termo e as duas perguntam.
         Com a trava, a barreira estoura, a primeira segue sozinha e a segunda lê
         o dicionário já com a proposta."""
-        openrouter.respostas[PROPOSTAS] = {"propostas": [{"termo": ENOXAPARINA, "codigo": "90030001"}]}
+        ia_falsa.respostas[PROPOSTAS] = {"propostas": [{"termo": ENOXAPARINA, "codigo": "90030001"}]}
         banco = _cenario_do_passo_b()
         _enviar(banco, _conta("48811", 2, 3), _conta("48812", 4, 6), _prontuario_com_enoxaparina())
         as_duas_na_ia = threading.Barrier(2, timeout=1)
@@ -501,7 +485,7 @@ class TestDicionarioPelaIA:
                 except threading.BrokenBarrierError:
                     pass
 
-        openrouter.antes_de_responder = esperar_a_outra_vaga
+        ia_falsa.antes_de_responder = esperar_a_outra_vaga
         vagas = ThreadPoolExecutor(max_workers=2)
         try:
             assert processamento.alimentar_fila(banco, AGORA, executor=vagas) == 2
@@ -509,14 +493,14 @@ class TestDicionarioPelaIA:
             vagas.shutdown(wait=True)
 
         assert [c["situacao"] for c in banco.tabelas["cm_conta"]] == ["A_FAZER", "A_FAZER"]
-        assert openrouter.formatos.count(PROPOSTAS) == 1
+        assert ia_falsa.formatos.count(PROPOSTAS) == 1
         assert _lancado_sem_mencao_do_clexane(banco) == []
 
-    def test_o_termo_que_outra_parcial_gravou_antes_vale_nesta_conta(self, openrouter):
+    def test_o_termo_que_outra_parcial_gravou_antes_vale_nesta_conta(self, ia_falsa):
         """Entre a leitura do dicionário e a gravação, outra parcial (outro
         processo, fora da trava) grava o mesmo termo: o insert bate no índice
         único, e a conta é conferida com o dicionário relido, não sem o termo."""
-        openrouter.respostas[PROPOSTAS] = {"propostas": [{"termo": ENOXAPARINA, "codigo": "90030001"}]}
+        ia_falsa.respostas[PROPOSTAS] = {"propostas": [{"termo": ENOXAPARINA, "codigo": "90030001"}]}
         banco = _cenario_do_passo_b()
         _enviar(banco, _conta(), _prontuario_com_enoxaparina())
 
@@ -532,7 +516,7 @@ class TestDicionarioPelaIA:
                     }
                 ).execute()
 
-        openrouter.antes_de_responder = a_outra_parcial_grava_antes
+        ia_falsa.antes_de_responder = a_outra_parcial_grava_antes
         _rodar_o_job(banco)
 
         (conta,) = banco.tabelas["cm_conta"]
@@ -540,19 +524,19 @@ class TestDicionarioPelaIA:
         assert [t["termo"] for t in banco.tabelas["cm_item_dicionario"]].count(ENOXAPARINA) == 1
         assert _lancado_sem_mencao_do_clexane(banco) == []
 
-    def test_termo_que_a_ia_nao_soube_ligar_fica_sem_codigo_e_nao_volta_a_ia(self, openrouter):
+    def test_termo_que_a_ia_nao_soube_ligar_fica_sem_codigo_e_nao_volta_a_ia(self, ia_falsa):
         # Código fora da lista da conta é chute: vale como sem par.
-        openrouter.respostas[PROPOSTAS] = {"propostas": [{"termo": ENOXAPARINA, "codigo": "99999999"}]}
+        ia_falsa.respostas[PROPOSTAS] = {"propostas": [{"termo": ENOXAPARINA, "codigo": "99999999"}]}
         banco = _cenario_do_passo_b()
         _enviar(banco, _conta("48811", 2, 3), _conta("48812", 4, 6), _prontuario_com_enoxaparina())
 
         assert _rodar_o_job(banco) == 2
 
-        assert openrouter.formatos.count(PROPOSTAS) == 1
+        assert ia_falsa.formatos.count(PROPOSTAS) == 1
         (termo,) = [t for t in banco.tabelas["cm_item_dicionario"] if t["termo"] == ENOXAPARINA]
         assert (termo["codigo_conta"], termo["situacao"]) == (None, "PROPOSTO")
 
-    def test_a_gestao_confirma_e_rejeita_a_proposta_pela_rota_e_a_faturista_nao(self, openrouter):
+    def test_a_gestao_confirma_e_rejeita_a_proposta_pela_rota_e_a_faturista_nao(self, ia_falsa):
         banco = _cenario_do_passo_b()
         da_ia = {"situacao": "PROPOSTO", "origem": "IA"}
         banco.tabelas["cm_item_dicionario"] += [
@@ -583,7 +567,7 @@ class TestDicionarioPelaIA:
 
 
 class TestCausaRaiz:
-    def test_a_causa_raiz_da_ia_e_sobreposta_nos_casos_obvios(self, openrouter):
+    def test_a_causa_raiz_da_ia_e_sobreposta_nos_casos_obvios(self, ia_falsa):
         banco = _cenario_do_passo_b()
         banco.tabelas["cm_regra"].append(_regra("ALFA-PRC-05"))
         # O MV não deixou lançar o curativo em outra conta: falta de cadastro.
@@ -593,7 +577,7 @@ class TestCausaRaiz:
 
         _, linhas = _analisar(
             banco,
-            openrouter,
+            ia_falsa,
             # Diária, mesmo que a IA diga lançamento manual: Regra automática.
             _linha_da_ia(
                 acao="VALIDAR",
@@ -651,9 +635,9 @@ def _terapia_da_ia(inicio: str, fim: str | None, descricao: str) -> dict[str, An
 
 
 class TestEntradaDoPassoB:
-    def test_a_entrada_leva_a_memoria_em_cache_os_eventos_do_periodo_os_itens_e_as_linhas_do_codigo(self, openrouter):
+    def test_a_entrada_leva_a_memoria_em_cache_os_eventos_do_periodo_os_itens_e_as_linhas_do_codigo(self, ia_falsa):
         # A conta vai de 02/10 a 06/10: a margem é 01/10 e 07/10.
-        openrouter.eventos = {
+        ia_falsa.eventos = {
             **EVENTOS_DA_IA,
             "prescricoes": [
                 _prescricao_da_ia("2026-09-20", "DIPIRONA FORA ANTES"),
@@ -668,10 +652,10 @@ class TestEntradaDoPassoB:
             ],
         }
 
-        _analisar(_cenario_do_passo_b(), openrouter)
+        _analisar(_cenario_do_passo_b(), ia_falsa)
 
-        (corpo,) = [c for c in openrouter.corpos if c["response_format"]["json_schema"]["name"] == PASSO_B]
-        memoria, eventos, conta, calculos = corpo["messages"][1]["content"]
+        (corpo,) = [c for c in ia_falsa.corpos if c["formato"] == PASSO_B]
+        memoria, eventos, conta, calculos = corpo["messages"][0]["content"]
         assert memoria["cache_control"] == {"type": "ephemeral"}
         assert "# MEMÓRIA DA OPERADORA: Alfa Saúde" in memoria["text"]
         assert "| ALFA-INS-05 | Regra sintética ALFA-INS-05. | CONTRATUAL | PRÁTICA | PENDENTE |" in memoria["text"]
@@ -752,12 +736,12 @@ def test_sem_travessao_nem_meia_risca_nos_arquivos(arquivo):
     assert MEIA_RISCA not in texto
 
 
-def test_o_texto_que_a_ia_escreveu_na_linha_sai_sem_travessao_nem_meia_risca(openrouter):
+def test_o_texto_que_a_ia_escreveu_na_linha_sai_sem_travessao_nem_meia_risca(ia_falsa):
     banco = _cenario_do_passo_b()
 
     _, linhas = _analisar(
         banco,
-        openrouter,
+        ia_falsa,
         _linha_da_ia(motivo=f"Acesso venoso {TRAVESSAO} sem equipo na conta."),
         _linha_da_ia(regra_id="ALFA-INS-99", motivo=f"Luva {MEIA_RISCA} sem regra."),
     )

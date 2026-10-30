@@ -22,11 +22,10 @@ from datetime import date
 from pathlib import Path
 from typing import Any
 
-import httpx
 import pytest
+from anthropic_apoio import cliente_por_transporte
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
-from openai import OpenAI
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
@@ -57,18 +56,10 @@ BLOCO_ALFA = """contrato:
 @pytest.fixture
 def provedor(monkeypatch) -> _Provedor:
     """O duble do provedor de IA do teste do adaptador (#1130): a chamada
-    passa pelo adaptador de verdade (schema estrito, ZDR, custo) e para no HTTP."""
+    passa pelo adaptador de verdade (schema estrito, cache, custo) e para no HTTP."""
     duble = _Provedor()
 
-    def cliente():
-        return OpenAI(
-            api_key="chave-de-teste",
-            base_url="https://openrouter.ai/api/v1",
-            http_client=httpx.Client(transport=httpx.MockTransport(duble)),
-            max_retries=0,
-        )
-
-    monkeypatch.setattr(ia, "_cliente", cliente)
+    monkeypatch.setattr(ia, "_cliente", lambda: cliente_por_transporte(duble))
     monkeypatch.setattr(ia, "_esperar", lambda _segundos: None)
     return duble
 
@@ -494,8 +485,8 @@ class TestEnvioDoContrato:
         }
         assert banco.linhas("cm_contrato") == antes
         [corpo_da_ia] = provedor.corpos
-        assert "TERMO ADITIVO No 13" in corpo_da_ia["messages"][1]["content"][0]["text"]
-        assert corpo_da_ia["provider"]["zdr"] is True
+        assert "TERMO ADITIVO No 13" in corpo_da_ia["messages"][0]["content"][0]["text"]
+        assert corpo_da_ia["output_config"]["format"]["type"] == "json_schema"
         assert corpo["arquivo"] in banco.storage.arquivos
         assert banco.storage.buckets == {"contas-medicas"}
         assert len(banco.linhas("cm_chamada_ia")) == 1

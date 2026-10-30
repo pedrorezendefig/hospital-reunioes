@@ -16,7 +16,6 @@ import json
 import os
 import sys
 from dataclasses import dataclass, field
-from types import SimpleNamespace
 from typing import Any
 
 import pytest
@@ -24,6 +23,8 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+
+from anthropic_apoio import resposta_de_texto  # noqa: E402
 
 from app.dependencies import (  # noqa: E402
     get_current_user,
@@ -199,7 +200,7 @@ def _reset_rate_limiter():
 def _mock_llm_by_default(monkeypatch):
     """O pytest carrega o `.env` real (chave OpenRouter de PROD); sem isso, qualquer
     teste que chegue a `chat_ata_guiada` bateria no serviço real. Força o caminho
-    MOCK por padrão — os testes da IA real sobrescrevem com `_stub_openrouter`."""
+    MOCK por padrão: os testes da IA real sobrescrevem com `_stub_ia`."""
     from app.services import ai_processor
 
     monkeypatch.setattr(ai_processor, "_llm_provider", lambda: "mock")
@@ -263,7 +264,7 @@ def _reuniao_programada(**over) -> dict:
     return base
 
 
-# ─── Fake LLM (nunca toca o OpenRouter real) ─────────────────────────────────
+# ─── Fake LLM (nunca toca a Anthropic real) ─────────────────────────────────
 
 
 class _FakeCompletions:
@@ -276,27 +277,27 @@ class _FakeCompletions:
         self._calls.append(kwargs)
         if self._exc is not None:
             raise self._exc
-        return SimpleNamespace(choices=[SimpleNamespace(message=SimpleNamespace(content=self._content))])
+        return resposta_de_texto(self._content)
 
 
 class _FakeLLMClient:
-    """Cliente OpenAI-like (`.chat.completions.create`) que devolve um `content`
+    """Cliente no formato da Anthropic (`.messages.create`) que devolve um `content`
     canned ou levanta `exc`. `calls` acumula os kwargs de cada chamada — pra checar
-    `temperature`/`response_format` e contar chamadas (sem failover)."""
+    o `system` e as mensagens e contar chamadas (sem failover)."""
 
     def __init__(self, *, content: str | None = None, exc: Exception | None = None):
         self.calls: list[dict] = []
-        self.chat = SimpleNamespace(completions=_FakeCompletions(content=content, exc=exc, calls=self.calls))
+        self.messages = _FakeCompletions(content=content, exc=exc, calls=self.calls)
 
 
-def _stub_openrouter(monkeypatch, *, content: str | None = None, exc: Exception | None = None) -> _FakeLLMClient:
-    """Força o provider 'openrouter' e injeta um cliente fake — sobrescreve o
+def _stub_ia(monkeypatch, *, content: str | None = None, exc: Exception | None = None) -> _FakeLLMClient:
+    """Força o provider 'anthropic' e injeta um cliente fake, que sobrescreve o
     `_mock_llm_by_default`. Devolve o cliente pra inspecionar `client.calls`."""
     from app.services import ai_processor
 
     client = _FakeLLMClient(content=content, exc=exc)
-    monkeypatch.setattr(ai_processor, "_llm_provider", lambda: "openrouter")
-    monkeypatch.setattr(ai_processor, "_get_llm", lambda: (client, "modelo-teste", {}))
+    monkeypatch.setattr(ai_processor, "_llm_provider", lambda: "anthropic")
+    monkeypatch.setattr(ai_processor, "_get_llm", lambda: (client, "modelo-teste"))
     return client
 
 
@@ -481,7 +482,7 @@ class TestChat:
         """CA3 (#58): o endpoint /ata-guiada/chat aceita `section_context` (a seção
         apontada com ⌖) e o repassa ao agente. A sentinela NÃO está nas mensagens —
         prova o caminho schema → endpoint → serviço → prompt."""
-        client_llm = _stub_openrouter(
+        client_llm = _stub_ia(
             monkeypatch,
             content=json.dumps({"reply": "ok", "rascunho": {"resumo_executivo": "r", "quadro_atribuicoes": []}}),
         )
@@ -496,7 +497,7 @@ class TestChat:
             },
         )
         assert r.status_code == 200
-        user_content = client_llm.calls[0]["messages"][1]["content"]
+        user_content = client_llm.calls[0]["messages"][0]["content"]
         assert "SECAO-SENTINELA-ENDPOINT" in user_content
 
     def test_correcao_por_secao_opera_sobre_o_rascunho_via_chat(self, make_client, monkeypatch):
@@ -508,7 +509,7 @@ class TestChat:
             "resumo_executivo": "1-a-1 sobre insumos.",
             "quadro_atribuicoes": [{"acao": "Comprar insumos", "responsavel": "Pedro", "prazo": None}],
         }
-        client_llm = _stub_openrouter(
+        client_llm = _stub_ia(
             monkeypatch,
             content=json.dumps({"reply": "Troquei o responsável.", "rascunho": rascunho_editado}),
         )
@@ -541,7 +542,7 @@ class TestChat:
         # A correção volta no próprio rascunho (mecanismo do chat), com a ação editada.
         assert body["rascunho"]["quadro_atribuicoes"][0]["responsavel"] == "Pedro"
         # O rascunho ATUAL (com "Ana") foi ao agente — opera sobre ele em memória.
-        user_content = client_llm.calls[0]["messages"][1]["content"]
+        user_content = client_llm.calls[0]["messages"][0]["content"]
         assert "Ana" in user_content
 
     def test_chat_secretaria_bloqueada_403(self, make_client):
@@ -614,7 +615,7 @@ class TestServicoAgenteIA:
                 }
             ],
         }
-        _stub_openrouter(
+        _stub_ia(
             monkeypatch,
             content=json.dumps({"reply": "Combinado. Mais alguma ação?", "rascunho": ia_rascunho}),
         )
@@ -635,12 +636,12 @@ class TestServicoAgenteIA:
         assert acao["responsavel"] == "Pedro Rezende"
         assert acao["prazo"] == "2026-06-20"
 
-    def test_ia_real_usa_json_object_e_temperatura_sem_failover(self, monkeypatch):
-        """A chamada usa `response_format=json_object` e `temperature≈0.3`, numa
-        única requisição — OpenRouter-only, sem failover."""
+    def test_ia_real_numa_unica_chamada_a_anthropic_sem_failover(self, monkeypatch):
+        """Uma única requisição, com a instrução em `system` e sem `temperature`,
+        que o Sonnet 5.5 recusa fora do padrão (issue #1302). Sem failover."""
         from app.services import ai_processor
 
-        client = _stub_openrouter(
+        client = _stub_ia(
             monkeypatch,
             content=json.dumps({"reply": "ok", "rascunho": {"resumo_executivo": "r", "quadro_atribuicoes": []}}),
         )
@@ -649,15 +650,17 @@ class TestServicoAgenteIA:
 
         assert len(client.calls) == 1  # sem failover: uma única chamada
         call = client.calls[0]
-        assert call["response_format"] == {"type": "json_object"}
-        assert call["temperature"] == 0.3
+        assert call["model"] == "modelo-teste"
+        assert "temperature" not in call
+        assert call["system"]
+        assert [m["role"] for m in call["messages"]] == ["user"]
 
     def test_ia_indisponivel_devolve_mensagem_clara_e_preserva_rascunho(self, monkeypatch):
         """OpenRouter fora do ar não derruba o request (nada de 500 cru): devolve um
         reply claro e preserva o rascunho atual (o Facilitador não perde o trabalho)."""
         from app.services import ai_processor
 
-        _stub_openrouter(monkeypatch, exc=RuntimeError("502 Bad Gateway"))
+        _stub_ia(monkeypatch, exc=RuntimeError("502 Bad Gateway"))
         rascunho_in = {
             "resumo_executivo": "Trabalho já em andamento.",
             "quadro_atribuicoes": [{"acao": "Comprar insumos", "responsavel": "Pedro"}],
@@ -691,7 +694,7 @@ class TestServicoAgenteIA:
         garante o shape enxuto (quadro continua lista) — preserva o quadro atual."""
         from app.services import ai_processor
 
-        _stub_openrouter(
+        _stub_ia(
             monkeypatch,
             content=json.dumps({"reply": "Anotado.", "rascunho": {"resumo_executivo": "novo resumo"}}),
         )
@@ -710,7 +713,7 @@ class TestServicoAgenteIA:
         erro claro + rascunho preservado."""
         from app.services import ai_processor
 
-        _stub_openrouter(monkeypatch, content="[1, 2, 3]")
+        _stub_ia(monkeypatch, content="[1, 2, 3]")
         rascunho_in = {"resumo_executivo": "em andamento", "quadro_atribuicoes": [{"acao": "X", "responsavel": "Y"}]}
 
         out = ai_processor.chat_ata_guiada(rascunho=rascunho_in, messages=[{"role": "user", "content": "oi"}])
@@ -724,7 +727,7 @@ class TestServicoAgenteIA:
         (string/lista), o normalizador cai no rascunho atual em vez de quebrar."""
         from app.services import ai_processor
 
-        _stub_openrouter(monkeypatch, content=json.dumps({"reply": "ok", "rascunho": "pronto"}))
+        _stub_ia(monkeypatch, content=json.dumps({"reply": "ok", "rascunho": "pronto"}))
         rascunho_in = {"resumo_executivo": "preservar", "quadro_atribuicoes": [{"acao": "X", "responsavel": "Y"}]}
 
         out = ai_processor.chat_ata_guiada(rascunho=rascunho_in, messages=[{"role": "user", "content": "oi"}])
@@ -739,7 +742,7 @@ class TestServicoAgenteIA:
         pelo parâmetro, não por acaso no chat_history."""
         from app.services import ai_processor
 
-        client = _stub_openrouter(
+        client = _stub_ia(
             monkeypatch,
             content=json.dumps({"reply": "ok", "rascunho": {"resumo_executivo": "r", "quadro_atribuicoes": []}}),
         )
@@ -750,7 +753,7 @@ class TestServicoAgenteIA:
             section_context="ALVO-SENTINELA-XYZ",
         )
 
-        user_content = client.calls[0]["messages"][1]["content"]
+        user_content = client.calls[0]["messages"][0]["content"]
         assert "ALVO-SENTINELA-XYZ" in user_content
 
     def test_prompts_da_ata_guiada_versionados(self):
@@ -854,7 +857,7 @@ class TestDocumentoApoioNoChat:
         chega ao prompt enviado à IA, disponível como contexto sob demanda."""
         from app.services import ai_processor
 
-        client = _stub_openrouter(
+        client = _stub_ia(
             monkeypatch,
             content=json.dumps({"reply": "ok", "rascunho": {"resumo_executivo": "r", "quadro_atribuicoes": []}}),
         )
@@ -865,7 +868,7 @@ class TestDocumentoApoioNoChat:
             documento_apoio="ANEXO: comprar 3 monitores até sexta; treinar a equipe.",
         )
 
-        user_content = client.calls[0]["messages"][1]["content"]
+        user_content = client.calls[0]["messages"][0]["content"]
         assert "ANEXO: comprar 3 monitores até sexta; treinar a equipe." in user_content
 
     def test_sem_documento_apoio_nao_polui_o_prompt(self, monkeypatch):
@@ -873,14 +876,14 @@ class TestDocumentoApoioNoChat:
         contrato atual segue intacto, sem cabeçalho de documento sobrando."""
         from app.services import ai_processor
 
-        client = _stub_openrouter(
+        client = _stub_ia(
             monkeypatch,
             content=json.dumps({"reply": "ok", "rascunho": {"resumo_executivo": "r", "quadro_atribuicoes": []}}),
         )
 
         ai_processor.chat_ata_guiada(rascunho={}, messages=[{"role": "user", "content": "relato do 1-a-1"}])
 
-        user_content = client.calls[0]["messages"][1]["content"]
+        user_content = client.calls[0]["messages"][0]["content"]
         assert "DOCUMENTO DE APOIO" not in user_content
 
     def test_system_prompt_trata_documento_como_contexto_sob_demanda(self):
@@ -898,7 +901,7 @@ class TestDocumentoApoioNoChat:
     def test_endpoint_chat_aceita_e_repassa_documento_apoio(self, make_client, monkeypatch):
         """CA3/CA6 ponta-a-ponta: o endpoint do chat aceita `documento_apoio` no body
         (contrato aditivo) e o repassa ao agente — o texto chega ao prompt da IA."""
-        llm = _stub_openrouter(
+        llm = _stub_ia(
             monkeypatch,
             content=json.dumps({"reply": "ok", "rascunho": {"resumo_executivo": "r", "quadro_atribuicoes": []}}),
         )
@@ -915,7 +918,7 @@ class TestDocumentoApoioNoChat:
         )
 
         assert r.status_code == 200
-        user_content = llm.calls[0]["messages"][1]["content"]
+        user_content = llm.calls[0]["messages"][0]["content"]
         assert "TEXTO_DO_ANEXO: contratar fornecedor X até o fim do mês" in user_content
 
     def test_endpoint_chat_sem_documento_apoio_segue_funcionando(self, make_client):
@@ -1057,7 +1060,7 @@ class TestResolucaoAoVivoChat:
         """CA7: o endpoint monta a lista de candidatos (serviço de Resolução, #77)
         e a injeta no prompt — nomes canônicos com cargo/setor chegam ao agente,
         com os Participantes da Reunião na frente (roster primeiro)."""
-        llm = _stub_openrouter(monkeypatch, content=_resposta_ia([]))
+        llm = _stub_ia(monkeypatch, content=_resposta_ia([]))
         sb = _SupabaseMock(
             reunioes=[_reuniao_programada()],
             participantes=_cadastro(),
@@ -1071,7 +1074,7 @@ class TestResolucaoAoVivoChat:
         )
 
         assert r.status_code == 200
-        user_content = llm.calls[0]["messages"][1]["content"]
+        user_content = llm.calls[0]["messages"][0]["content"]
         assert "Lucas Silva" in user_content
         assert "Analista de TI" in user_content
         # Roster primeiro: a Participante da Reunião aparece antes do cadastro geral.
@@ -1081,7 +1084,7 @@ class TestResolucaoAoVivoChat:
         """CA1: "o Lucas faz X" com candidato único → o quadro da resposta volta
         anotado com o vínculo (`responsavel_id`) e o nome/cargo canônicos do
         cadastro — é o ✓ que o Facilitador vê ao vivo."""
-        _stub_openrouter(
+        _stub_ia(
             monkeypatch,
             content=_resposta_ia([{"acao": "Provisionar a VPN", "responsavel": "Lucas", "cargo": None}]),
         )
@@ -1103,7 +1106,7 @@ class TestResolucaoAoVivoChat:
         """CA5: o LLM nunca decide FK. Id forjado — mesmo apontando para um
         candidato VÁLIDO mas errado, ou inexistente — é ignorado e o vínculo é
         recalculado deterministicamente a partir do nome."""
-        _stub_openrouter(
+        _stub_ia(
             monkeypatch,
             content=_resposta_ia(
                 [
@@ -1138,7 +1141,7 @@ class TestResolucaoAoVivoChat:
         sb = _SupabaseMock(reunioes=[_reuniao_programada()], participantes=cadastro)
 
         # Turno 1: ambíguo — o agente anota "Lucas" e o quadro fica sem vínculo.
-        _stub_openrouter(
+        _stub_ia(
             monkeypatch,
             content=_resposta_ia([{"acao": "Treinar a equipe", "responsavel": "Lucas"}], reply="Qual Lucas?"),
         )
@@ -1152,7 +1155,7 @@ class TestResolucaoAoVivoChat:
         assert item1["responsavel"] == "Lucas"
 
         # Turno 2: desambiguado — o agente reescreve com o nome canônico e o quadro vincula.
-        _stub_openrouter(
+        _stub_ia(
             monkeypatch,
             content=_resposta_ia([{"acao": "Treinar a equipe", "responsavel": "Lucas Mendes"}], reply="Anotado."),
         )
@@ -1179,7 +1182,7 @@ class TestResolucaoAoVivoChat:
         cadastro = _cadastro(
             {"id": "P_MENDES", "nome_completo": "Lucas Mendes", "cargo": "Analista de RH", "setor": "RH", "ativo": True}
         )
-        _stub_openrouter(
+        _stub_ia(
             monkeypatch,
             # O LLM troca o nome conforme pedido, mas ecoa o id velho do rascunho.
             content=_resposta_ia(

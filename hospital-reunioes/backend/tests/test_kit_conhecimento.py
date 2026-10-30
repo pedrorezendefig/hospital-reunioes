@@ -31,6 +31,8 @@ from fastapi.testclient import TestClient
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
+from anthropic_apoio import resposta_de_texto  # noqa: E402
+
 from app.dependencies import get_current_user, get_supabase_client  # noqa: E402
 from app.limiter import limiter  # noqa: E402
 from app.routers.admin import tecnologia as tecnologia_router  # noqa: E402
@@ -321,7 +323,7 @@ class _SupabaseMock:
 
 
 class _FakeLLMClient:
-    """Cliente OpenAI-like que devolve um `content` fixo e guarda os kwargs de
+    """Cliente no formato da Anthropic que devolve um `content` fixo e guarda os kwargs de
     cada chamada, para olhar o prompt que o backend montou."""
 
     def __init__(self, content: str):
@@ -329,13 +331,13 @@ class _FakeLLMClient:
 
         def create(**kwargs):
             self.calls.append(kwargs)
-            return SimpleNamespace(choices=[SimpleNamespace(message=SimpleNamespace(content=content))])
+            return resposta_de_texto(content)
 
-        self.chat = SimpleNamespace(completions=SimpleNamespace(create=create))
+        self.messages = SimpleNamespace(create=create)
 
     @property
     def prompt_de_usuario(self) -> str:
-        return self.calls[-1]["messages"][1]["content"]
+        return self.calls[-1]["messages"][0]["content"]
 
 
 def _prompt_de_um_turno(monkeypatch) -> str:
@@ -347,8 +349,8 @@ def _prompt_de_um_turno(monkeypatch) -> str:
         ensure_ascii=False,
     )
     cliente = _FakeLLMClient(resposta)
-    monkeypatch.setattr(ai_processor, "_llm_provider", lambda: "openrouter")
-    monkeypatch.setattr(ai_processor, "_get_llm", lambda: (cliente, "modelo-teste", {}))
+    monkeypatch.setattr(ai_processor, "_llm_provider", lambda: "anthropic")
+    monkeypatch.setattr(ai_processor, "_get_llm", lambda: (cliente, "modelo-teste"))
 
     app = FastAPI()
     app.state.limiter = limiter

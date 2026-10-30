@@ -1,7 +1,7 @@
 """O adaptador de IA de Contas médicas (issue #1130, PRD #1128).
 
-A única porta do módulo para a IA, sobre o cliente do OpenRouter que o app já
-usa. Quatro chamadas:
+A única porta do módulo para a IA, pelo SDK oficial da Anthropic (issue #1302).
+Quatro chamadas:
 
 - `extrair_eventos`: o passo A, que lê o prontuário e lista os eventos
   (Anexo A da spec);
@@ -12,10 +12,11 @@ usa. Quatro chamadas:
 - `propor_regra`: a regra nova que a pessoa escreveu em linguagem comum, no
   formato da memória da operadora (issue #1141).
 
-Toda chamada sai igual: saída estruturada estrita (`json_schema` com
-`strict`), só para provedor que respeita os parâmetros, sem retenção do texto
-(`zdr`) e sem coleta para treino. Quando o modelo é Anthropic, a instrução e a
-memória vão em bloco de cache. A resposta é validada pelo Pydantic.
+Toda chamada sai igual: saída estruturada estrita (`output_config.format` com
+`json_schema`), a instrução e a memória em bloco de cache, e a resposta
+validada pelo Pydantic. A API da Anthropic guarda a requisição por até 30 dias
+e não usa o texto para treino, sem ZDR (ADR 0074, issue #1302). O custo é calculado aqui, pelos tokens da
+resposta e pela tabela de preço, porque a Anthropic não devolve o custo pronto.
 """
 
 from __future__ import annotations
@@ -27,15 +28,15 @@ from dataclasses import dataclass
 from time import perf_counter
 from typing import Any, Literal
 
-from openai import APIError, OpenAI
+import anthropic
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from app.config import settings
-from app.services.ai_processor import _OPENROUTER_HEADERS
 from app.services.prompt_loader import load_prompt
 
 __all__ = [
     "ErroDaIA",
+    "IASemCredito",
     "EventosDoProntuario",
     "LinhasDaComparacao",
     "PropostaDeRegra",
@@ -54,9 +55,28 @@ TENTATIVAS = 3
 ESPERAS_S = (5, 20)
 PRAZO_DA_TENTATIVA_S = 180
 
-# Toda chamada do módulo: só provedor que aceita o schema, sem retenção do
-# texto e sem coleta para treino. O prontuário nunca fica no provedor.
-PROVEDOR = {"require_parameters": True, "zdr": True, "data_collection": "deny"}
+# O teto de saída de cada chamada. O prazo de 180 s por tentativa já limita a
+# resposta a algo nessa ordem; acima disso a chamada sem streaming estoura.
+MAX_TOKENS = 16000
+
+
+@dataclass(frozen=True)
+class Preco:
+    """Dólares por milhão de tokens, de cada parte da chamada."""
+
+    entrada: float
+    saida: float
+    leitura_cache: float
+    escrita_cache: float  # cache de 5 minutos, o padrão do `ephemeral`
+
+
+# A Anthropic devolve os tokens, não o custo. Modelo novo entra aqui junto com
+# a troca da variável; fora da tabela, a chamada grava custo zero e avisa no log.
+PRECO_POR_MILHAO: dict[str, Preco] = {
+    "claude-sonnet-5-5": Preco(entrada=2.00, saida=10.00, leitura_cache=0.20, escrita_cache=2.50),
+}
+
+MENSAGEM_SEM_CREDITO = "A IA está sem crédito. Avise o Pedro."
 
 # O motivo de cada linha do Guia, como a faturista lê: uma frase curta (Anexo B).
 MOTIVO_MAX = 140
@@ -67,6 +87,19 @@ _esperar = time.sleep
 class ErroDaIA(Exception):  # noqa: N818, o nome do domínio
     """A IA não respondeu no formato. A mensagem é técnica e nunca leva texto
     do prontuário; o pipeline transforma em Erro com a frase para a faturista."""
+
+
+class IASemCredito(ErroDaIA):  # noqa: N818, o nome do domínio
+    """A conta da Anthropic ficou sem saldo (400 de saldo ou 402). Não adianta
+    tentar de novo: alguém tem que pôr crédito."""
+
+    def __init__(self):
+        super().__init__(MENSAGEM_SEM_CREDITO)
+
+
+def _sem_credito(erro: anthropic.APIStatusError) -> bool:
+    """402, ou o 400 que a Anthropic devolve quando o saldo acaba."""
+    return erro.status_code == 402 or (erro.status_code == 400 and "credit balance" in str(erro.message).lower())
 
 
 # ----------------------------------------------------------------------------------
@@ -271,12 +304,11 @@ def _schema_estrito(modelo: type[BaseModel]) -> dict[str, Any]:
 # ----------------------------------------------------------------------------------
 
 
-def _cliente() -> OpenAI:
-    if not settings.openrouter_api_key:
-        raise ErroDaIA("OPENROUTER_API_KEY vazia")
-    return OpenAI(
-        api_key=settings.openrouter_api_key,
-        base_url=settings.openrouter_base_url,
+def _cliente() -> anthropic.Anthropic:
+    if not settings.anthropic_api_key:
+        raise ErroDaIA("ANTHROPIC_API_KEY vazia")
+    return anthropic.Anthropic(
+        api_key=settings.anthropic_api_key,
         max_retries=0,  # as três tentativas são deste adaptador
         timeout=PRAZO_DA_TENTATIVA_S,
     )
@@ -299,18 +331,26 @@ class _Uso:
     cache: int = 0
     custo: float = 0.0
 
-    def somar(self, resposta: Any) -> None:
+    def somar(self, resposta: Any, preco: Preco | None) -> None:
+        """`entrada` conta tudo que entrou (sem cache, lido e escrito no
+        cache); `cache` é o que veio lido do cache."""
         uso = getattr(resposta, "usage", None)
         if uso is None:
             return
-        detalhes = getattr(uso, "prompt_tokens_details", None)
-        custo = getattr(uso, "cost", None)
-        if custo is None:
-            custo = (getattr(uso, "model_extra", None) or {}).get("cost")
-        self.entrada += uso.prompt_tokens or 0
-        self.saida += uso.completion_tokens or 0
-        self.cache += (getattr(detalhes, "cached_tokens", None) or 0) if detalhes else 0
-        self.custo += float(custo or 0)
+        sem_cache = uso.input_tokens or 0
+        lidos = uso.cache_read_input_tokens or 0
+        escritos = uso.cache_creation_input_tokens or 0
+        saida = uso.output_tokens or 0
+        self.entrada += sem_cache + lidos + escritos
+        self.saida += saida
+        self.cache += lidos
+        if preco is not None:
+            self.custo += (
+                sem_cache * preco.entrada
+                + saida * preco.saida
+                + lidos * preco.leitura_cache
+                + escritos * preco.escrita_cache
+            ) / 1_000_000
 
 
 @dataclass(frozen=True)
@@ -381,16 +421,13 @@ def _chamar_a_ia[Saida: BaseModel](
     onde: _Onde,
 ) -> Saida:
     """Uma chamada, em até três tentativas. `blocos` é o conteúdo do usuário,
-    cada um com a marca de cache, que só vale quando o modelo é Anthropic."""
-    anthropic = modelo.startswith("anthropic/")
-    mensagens = [
-        {"role": "system", "content": [_bloco(instrucao, cache=anthropic)]},
-        {"role": "user", "content": [_bloco(texto, cache=anthropic and cache) for texto, cache in blocos]},
-    ]
-    formato = {
-        "type": "json_schema",
-        "json_schema": {"name": saida.__name__, "strict": True, "schema": _schema_estrito(saida)},
-    }
+    cada um com a marca de cache; a instrução vai sempre em cache."""
+    sistema = [_bloco(instrucao, cache=True)]
+    mensagens = [{"role": "user", "content": [_bloco(texto, cache=cache) for texto, cache in blocos]}]
+    formato = {"format": {"type": "json_schema", "schema": _schema_estrito(saida)}}
+    preco = PRECO_POR_MILHAO.get(modelo)
+    if preco is None:
+        logger.warning("[ContasMedicas] Modelo %s sem preço na tabela: o custo fica zero", modelo)
     cliente = _cliente()
     uso = _Uso()
     falha = ""
@@ -399,17 +436,27 @@ def _chamar_a_ia[Saida: BaseModel](
         if tentativa > 1:
             _esperar(ESPERAS_S[tentativa - 2])
         try:
-            resposta = cliente.chat.completions.create(
+            resposta = cliente.messages.create(
                 model=modelo,
+                max_tokens=MAX_TOKENS,
+                system=sistema,
                 messages=mensagens,
-                response_format=formato,
-                extra_headers=_OPENROUTER_HEADERS,
-                extra_body={"provider": PROVEDOR, "usage": {"include": True}},
+                output_config=formato,
             )
-            uso.somar(resposta)
-            conteudo = resposta.choices[0].message.content if resposta.choices else None
-            resultado = saida.model_validate_json(conteudo or "")
-        except (APIError, ValidationError) as erro:
+            uso.somar(resposta, preco)
+            conteudo = "".join(bloco.text for bloco in resposta.content if bloco.type == "text")
+            resultado = saida.model_validate_json(conteudo)
+        except anthropic.APIStatusError as erro:
+            if _sem_credito(erro):
+                logger.error(
+                    "[ContasMedicas] IA %s sem crédito (HTTP %s): sem nova tentativa", modelo, erro.status_code
+                )
+                _gravar(onde, modelo, uso, round((perf_counter() - inicio) * 1000), tentativa, sucesso=False)
+                raise IASemCredito() from None
+            falha = type(erro).__name__
+            logger.warning("[ContasMedicas] IA %s, tentativa %s: %s", modelo, tentativa, falha)
+            continue
+        except (anthropic.APIError, ValidationError) as erro:
             # O tipo do erro, nunca a mensagem: a resposta inválida pode citar o prontuário.
             falha = type(erro).__name__
             logger.warning("[ContasMedicas] IA %s, tentativa %s: %s", modelo, tentativa, falha)

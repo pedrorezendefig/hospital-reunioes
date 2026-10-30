@@ -36,6 +36,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 # que existir duas vezes. As FIXTURES, sim, são redeclaradas aqui: importar
 # fixture de outro arquivo de teste funciona no pytest mas é redefinição de
 # nome para o linter, e não há `conftest.py` neste projeto para hospedá-las.
+from anthropic_apoio import ClienteFalso  # noqa: E402
 from test_ouvidoria_relatorio_quinzenal import _caso, _Correio, _pendente, _SupabaseFake  # noqa: E402
 
 from app.services import ai_processor, ouvidoria_relatorio  # noqa: E402
@@ -87,32 +88,23 @@ AGORA = dt.datetime(2026, 9, 1, 10, 30, tzinfo=dt.UTC)
 # ───────────────────────────── dublês da IA ─────────────────────────────
 
 
-class _Completions:
-    def __init__(self, content: str | None, exc: Exception | None, calls: list[dict]):
-        self._content = content
-        self._exc = exc
-        self.calls = calls
-
-    def create(self, **kwargs):
-        self.calls.append(kwargs)
-        if self._exc is not None:
-            raise self._exc
-        message = type("M", (), {"content": self._content})()
-        return type("R", (), {"choices": [type("C", (), {"message": message})()]})()
-
-
-class _ClienteIA:
-    """O cliente do OpenRouter, no lugar do de verdade. Guarda o que foi
+class _ClienteIA(ClienteFalso):
+    """O cliente da Anthropic, no lugar do de verdade. Guarda o que foi
     enviado, que é onde as asserções de vazamento olham."""
 
     def __init__(self, content: str | None = None, exc: Exception | None = None):
-        self.calls: list[dict] = []
-        self.chat = type("Chat", (), {"completions": _Completions(content, exc, self.calls)})()
+        super().__init__(exc if exc is not None else content)
+        self.calls = self.chamadas
 
     @property
     def texto_enviado(self) -> str:
-        """Tudo que saiu do hospital nesta chamada, numa string só."""
-        return "\n".join(m["content"] for chamada in self.calls for m in chamada["messages"])
+        """Tudo que saiu do hospital nesta chamada, numa string só: a
+        instrução e as mensagens."""
+        return "\n".join(
+            parte
+            for chamada in self.calls
+            for parte in (chamada.get("system") or "", *(m["content"] for m in chamada["messages"]))
+        )
 
 
 RESPOSTA_DA_IA = (
@@ -133,16 +125,16 @@ def ia(monkeypatch) -> _ClienteIA:
     """A IA respondendo três sugestões. Devolve o cliente para inspecionar o
     que foi enviado."""
     cliente = _ClienteIA(content=RESPOSTA_DA_IA)
-    monkeypatch.setattr(ai_processor, "_llm_provider", lambda: "openrouter")
-    monkeypatch.setattr(ai_processor, "_get_llm", lambda: (cliente, "modelo-teste", {}))
+    monkeypatch.setattr(ai_processor, "_llm_provider", lambda: "anthropic")
+    monkeypatch.setattr(ai_processor, "_get_llm", lambda: (cliente, "modelo-teste"))
     return cliente
 
 
 @pytest.fixture
 def ia_fora_do_ar(monkeypatch) -> _ClienteIA:
     cliente = _ClienteIA(exc=RuntimeError("502 do provedor"))
-    monkeypatch.setattr(ai_processor, "_llm_provider", lambda: "openrouter")
-    monkeypatch.setattr(ai_processor, "_get_llm", lambda: (cliente, "modelo-teste", {}))
+    monkeypatch.setattr(ai_processor, "_llm_provider", lambda: "anthropic")
+    monkeypatch.setattr(ai_processor, "_get_llm", lambda: (cliente, "modelo-teste"))
     return cliente
 
 
@@ -537,8 +529,8 @@ class TestSugestoesDeAcao:
             '"acao": "Escalar mais um atendente \\u2013 por 30 dias."}]}'
         )
         cliente = _ClienteIA(content=com_travessao)
-        monkeypatch.setattr(ai_processor, "_llm_provider", lambda: "openrouter")
-        monkeypatch.setattr(ai_processor, "_get_llm", lambda: (cliente, "modelo-teste", {}))
+        monkeypatch.setattr(ai_processor, "_llm_provider", lambda: "anthropic")
+        monkeypatch.setattr(ai_processor, "_get_llm", lambda: (cliente, "modelo-teste"))
         supabase = _cenario_do_mes()
 
         ouvidoria_relatorio.gerar_e_enviar(supabase, MES, AGORA, tipo=ouvidoria_relatorio.MENSAL)
@@ -575,7 +567,7 @@ class TestSugestoesDeAcao:
         assert "Reforcar a triagem da Recepcao" in gravado
 
     def test_cliente_de_ia_que_nem_instancia_tambem_cai_no_aviso(self, monkeypatch, correio, impressos):
-        """Achado da review de segurança: `_get_llm` lê `openrouter_base_url` do
+        """Achado da review de segurança: `_get_llm` lê a chave do
         settings, e uma env malformada estoura na instanciação do cliente,
         antes de qualquer chamada.
 
@@ -586,7 +578,7 @@ class TestSugestoesDeAcao:
         def _explode():
             raise ValueError("base_url inválida")
 
-        monkeypatch.setattr(ai_processor, "_llm_provider", lambda: "openrouter")
+        monkeypatch.setattr(ai_processor, "_llm_provider", lambda: "anthropic")
         monkeypatch.setattr(ai_processor, "_get_llm", _explode)
         supabase = _cenario_do_mes()
 
@@ -612,8 +604,8 @@ class TestSugestoesDeAcao:
         """JSON válido com o shape errado não pode virar seção vazia nem
         estourar: é o mesmo modo de falha de a IA estar fora do ar."""
         cliente = _ClienteIA(content='{"resposta": "não sei"}')
-        monkeypatch.setattr(ai_processor, "_llm_provider", lambda: "openrouter")
-        monkeypatch.setattr(ai_processor, "_get_llm", lambda: (cliente, "modelo-teste", {}))
+        monkeypatch.setattr(ai_processor, "_llm_provider", lambda: "anthropic")
+        monkeypatch.setattr(ai_processor, "_get_llm", lambda: (cliente, "modelo-teste"))
         supabase = _cenario_do_mes()
 
         entrega = ouvidoria_relatorio.gerar_e_enviar(supabase, MES, AGORA, tipo=ouvidoria_relatorio.MENSAL)
@@ -623,7 +615,7 @@ class TestSugestoesDeAcao:
         assert "não pôde" in html or "não puderam" in html
 
     def test_sem_chave_de_ia_o_relatorio_sai_com_aviso(self, monkeypatch, correio, impressos):
-        """Ambiente sem `OPENROUTER_API_KEY` (dev, CI) não pode quebrar o job
+        """Ambiente sem `ANTHROPIC_API_KEY` (dev, CI) não pode quebrar o job
         nem imprimir sugestão inventada por mock com cara de análise."""
         monkeypatch.setattr(ai_processor, "_llm_provider", lambda: "mock")
         supabase = _cenario_do_mes()

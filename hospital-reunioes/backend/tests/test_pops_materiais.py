@@ -30,6 +30,8 @@ from fastapi.testclient import TestClient
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
+from anthropic_apoio import resposta_de_texto  # noqa: E402
+
 from app.dependencies import get_current_user, get_supabase_client  # noqa: E402
 from app.routers.pops import elaboracao as elaboracao_router  # noqa: E402
 from app.services import storage  # noqa: E402
@@ -225,7 +227,7 @@ def _reset_rate_limiter():
 @pytest.fixture(autouse=True)
 def _mock_llm_by_default(monkeypatch):
     """O pytest carrega o `.env` real (chave OpenRouter de PROD); força o caminho
-    MOCK por padrão — os testes da IA real sobrescrevem com `_stub_openrouter`."""
+    MOCK por padrão: os testes da IA real sobrescrevem com `_stub_ia`."""
     from app.services import ai_processor
 
     monkeypatch.setattr(ai_processor, "_llm_provider", lambda: "mock")
@@ -336,7 +338,7 @@ def _upload(client: TestClient, *arquivos: tuple[str, bytes, str]):
     )
 
 
-# ─── Fake LLM (nunca toca o OpenRouter real — padrão test_pops_elaboracao) ────
+# ─── Fake LLM (nunca toca a Anthropic real, padrão test_pops_elaboracao) ────
 
 
 class _FakeCompletions:
@@ -349,21 +351,21 @@ class _FakeCompletions:
         self._calls.append(kwargs)
         if self._exc is not None:
             raise self._exc
-        return SimpleNamespace(choices=[SimpleNamespace(message=SimpleNamespace(content=self._content))])
+        return resposta_de_texto(self._content)
 
 
 class _FakeLLMClient:
     def __init__(self, *, content: str | None = None, exc: Exception | None = None):
         self.calls: list[dict] = []
-        self.chat = SimpleNamespace(completions=_FakeCompletions(content=content, exc=exc, calls=self.calls))
+        self.messages = _FakeCompletions(content=content, exc=exc, calls=self.calls)
 
 
-def _stub_openrouter(monkeypatch, *, content: str | None = None, exc: Exception | None = None) -> _FakeLLMClient:
+def _stub_ia(monkeypatch, *, content: str | None = None, exc: Exception | None = None) -> _FakeLLMClient:
     from app.services import ai_processor
 
     client = _FakeLLMClient(content=content, exc=exc)
-    monkeypatch.setattr(ai_processor, "_llm_provider", lambda: "openrouter")
-    monkeypatch.setattr(ai_processor, "_get_llm", lambda: (client, "modelo-teste", {}))
+    monkeypatch.setattr(ai_processor, "_llm_provider", lambda: "anthropic")
+    monkeypatch.setattr(ai_processor, "_get_llm", lambda: (client, "modelo-teste"))
     return client
 
 
@@ -615,7 +617,7 @@ class TestMateriaisNoContextoDoAgente:
         """CA: o texto dos materiais entra no contexto do agente em TODA
         interação (verificável com LLM mockado) — o chat lê da Versão, não
         depende do cliente reenviar."""
-        client_llm = _stub_openrouter(monkeypatch, content=_resposta_ia())
+        client_llm = _stub_ia(monkeypatch, content=_resposta_ia())
         materiais = [
             _material("m-1", filename="POP-antigo.txt", texto="Procedimento antigo de higienizacao das maos."),
             _material("m-2", filename="RDC-63.md", texto="RDC 63 exige paramentacao adequada."),
@@ -627,7 +629,7 @@ class TestMateriaisNoContextoDoAgente:
 
         assert len(client_llm.calls) == 2
         for call in client_llm.calls:
-            user_prompt = call["messages"][1]["content"]
+            user_prompt = call["messages"][0]["content"]
             assert "MATERIAIS DE REFERÊNCIA" in user_prompt
             assert "POP-antigo.txt" in user_prompt
             assert "Procedimento antigo de higienizacao das maos." in user_prompt
@@ -637,7 +639,7 @@ class TestMateriaisNoContextoDoAgente:
     def test_remocao_tira_do_contexto_das_interacoes_seguintes(self, monkeypatch):
         """CA: remover material o tira do contexto das interações seguintes —
         o que ficou continua entrando."""
-        client_llm = _stub_openrouter(monkeypatch, content=_resposta_ia())
+        client_llm = _stub_ia(monkeypatch, content=_resposta_ia())
         materiais = [
             _material("m-1", filename="removido.txt", texto="Conteudo que sera removido."),
             _material("m-2", filename="mantido.txt", texto="Conteudo que permanece."),
@@ -650,30 +652,30 @@ class TestMateriaisNoContextoDoAgente:
 
         _chat(client)
 
-        user_prompt = client_llm.calls[0]["messages"][1]["content"]
+        user_prompt = client_llm.calls[0]["messages"][0]["content"]
         assert "Conteudo que sera removido." not in user_prompt
         assert "removido.txt" not in user_prompt
         assert "Conteudo que permanece." in user_prompt
 
     def test_sem_materiais_prompt_sem_bloco(self, monkeypatch):
         """Sem materiais o bloco some do prompt — o agente não vê seção vazia."""
-        client_llm = _stub_openrouter(monkeypatch, content=_resposta_ia())
+        client_llm = _stub_ia(monkeypatch, content=_resposta_ia())
         client = _client_para(ELABORADOR, _sb())
 
         _chat(client)
 
-        user_prompt = client_llm.calls[0]["messages"][1]["content"]
+        user_prompt = client_llm.calls[0]["messages"][0]["content"]
         assert "MATERIAIS DE REFERÊNCIA" not in user_prompt
 
     def test_system_prompt_orienta_uso_ativo_dos_materiais(self, monkeypatch):
         """Conduta oposta ao Documento de apoio da Guiada (DRF §4.2): ler
         criticamente, apontar lacunas e reescrever sem preservar o original."""
-        client_llm = _stub_openrouter(monkeypatch, content=_resposta_ia())
+        client_llm = _stub_ia(monkeypatch, content=_resposta_ia())
         client = _client_para(ELABORADOR, _sb(materiais=[_material("m-1")]))
 
         _chat(client)
 
-        system_prompt = client_llm.calls[0]["messages"][0]["content"]
+        system_prompt = client_llm.calls[0]["system"]
         assert "Materiais de referência" in system_prompt
         assert "criticamente" in system_prompt
         assert "lacunas" in system_prompt

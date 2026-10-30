@@ -64,7 +64,7 @@ from app.services.contas_medicas.desidentificacao import desidentificar
 from app.services.contas_medicas.dicionario import dicionario_do_banco
 from app.services.contas_medicas.formulario import sem_formulario_em_branco
 from app.services.contas_medicas.guia import nota_de_entrada
-from app.services.contas_medicas.ia import ErroDaIA
+from app.services.contas_medicas.ia import ErroDaIA, IASemCredito
 from app.services.contas_medicas.memoria import MemoriaLida, RegraLida
 from app.services.contas_medicas.operadoras import listar_setores, memoria_vigente
 from app.services.contas_medicas.tabelas import pacote_pelo_tuss, preco
@@ -287,11 +287,11 @@ def processar(supabase, conta: dict) -> None:
                 supabase, conta, {"situacao": "ERRO", "erro_motivo": falha.motivo, "processando_desde": None}
             )
         except ErroDaIA as erro:
-            # O adaptador já tentou três vezes: a conta não volta para a fila.
+            # O adaptador já tentou três vezes, ou viu que a IA está sem
+            # crédito (#1302): a conta não volta para a fila.
             logger.warning("[ContasMedicas] Conta %s sem a IA na etapa %s: %s", conta["id"], cronometro.atual, erro)
-            _fechar_tentativa(
-                supabase, conta, {"situacao": "ERRO", "erro_motivo": MENSAGEM_IA_FORA_DO_AR, "processando_desde": None}
-            )
+            motivo = str(erro) if isinstance(erro, IASemCredito) else MENSAGEM_IA_FORA_DO_AR
+            _fechar_tentativa(supabase, conta, {"situacao": "ERRO", "erro_motivo": motivo, "processando_desde": None})
         except Exception as erro:
             logger.error(
                 "[ContasMedicas] Conta %s falhou na etapa %s, tentativa %s: %s em %s",

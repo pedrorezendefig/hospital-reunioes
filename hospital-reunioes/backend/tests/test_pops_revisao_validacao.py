@@ -26,6 +26,8 @@ from fastapi.testclient import TestClient
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
+from anthropic_apoio import resposta_de_texto  # noqa: E402
+
 from app.dependencies import get_current_user, get_supabase_client  # noqa: E402
 from app.routers.pops import elaboracao as elaboracao_router  # noqa: E402
 from app.routers.pops import revisao as revisao_router  # noqa: E402
@@ -226,7 +228,7 @@ def _reset_rate_limiter():
 @pytest.fixture(autouse=True)
 def _mock_llm_by_default(monkeypatch):
     """O pytest carrega o `.env` real (chave OpenRouter de PROD); força o caminho
-    MOCK por padrão — os testes da IA real sobrescrevem com stub próprio."""
+    MOCK por padrão: os testes da IA real sobrescrevem com stub próprio."""
     from app.services import ai_processor
 
     monkeypatch.setattr(ai_processor, "_llm_provider", lambda: "mock")
@@ -700,20 +702,18 @@ class _FakeCompletions:
 
     def create(self, **kwargs):
         self._calls.append(kwargs)
-        from types import SimpleNamespace
 
-        return SimpleNamespace(choices=[SimpleNamespace(message=SimpleNamespace(content=self._content))])
+        return resposta_de_texto(self._content)
 
 
 class _FakeLLMClient:
     def __init__(self, *, content: str):
-        from types import SimpleNamespace
 
         self.calls: list[dict] = []
-        self.chat = SimpleNamespace(completions=_FakeCompletions(content=content, calls=self.calls))
+        self.messages = _FakeCompletions(content=content, calls=self.calls)
 
 
-def _stub_openrouter(monkeypatch) -> _FakeLLMClient:
+def _stub_ia(monkeypatch) -> _FakeLLMClient:
     import json as _json
 
     from app.services import ai_processor
@@ -722,8 +722,8 @@ def _stub_openrouter(monkeypatch) -> _FakeLLMClient:
         {"reply": "Vou ajustar.", "rascunho": {"objetivo": "Ajustado."}, "periodicidade_sugerida": None}
     )
     client = _FakeLLMClient(content=content)
-    monkeypatch.setattr(ai_processor, "_llm_provider", lambda: "openrouter")
-    monkeypatch.setattr(ai_processor, "_get_llm", lambda: (client, "modelo-teste", {}))
+    monkeypatch.setattr(ai_processor, "_llm_provider", lambda: "anthropic")
+    monkeypatch.setattr(ai_processor, "_get_llm", lambda: (client, "modelo-teste"))
     return client
 
 
@@ -749,7 +749,7 @@ class TestDevolucoesNaElaboracao:
     def test_comentarios_de_devolucao_entram_no_contexto_do_agente(self, monkeypatch):
         """CA: os comentários entram no contexto do agente — o prompt do chat
         carrega a Devolução (autor, etapa e texto) para o ajuste dirigido."""
-        client_llm = _stub_openrouter(monkeypatch)
+        client_llm = _stub_ia(monkeypatch)
         sb = _sb(
             versao=_versao(estado="EM_ELABORACAO", rascunho={"objetivo": "V1."}),
             devolucoes=[
@@ -764,7 +764,7 @@ class TestDevolucoesNaElaboracao:
         )
 
         assert res.status_code == 200
-        user_prompt = client_llm.calls[0]["messages"][1]["content"]
+        user_prompt = client_llm.calls[0]["messages"][0]["content"]
         assert "DEVOLU" in user_prompt.upper()  # bloco presente
         assert "Indicadores genéricos demais." in user_prompt
         assert "Pessoa P3" in user_prompt  # quem devolveu
@@ -773,7 +773,7 @@ class TestDevolucoesNaElaboracao:
     def test_chat_sem_devolucao_nao_inventa_bloco_de_pendencias(self, monkeypatch):
         """Sem Devolução, o prompt deixa claro que não há comentários a
         atender (nenhuma pendência fantasma)."""
-        client_llm = _stub_openrouter(monkeypatch)
+        client_llm = _stub_ia(monkeypatch)
         sb = _sb(versao=_versao(estado="EM_ELABORACAO", rascunho={"objetivo": "V1."}))
         client = _client_para(ELABORADOR, sb)
 
@@ -783,7 +783,7 @@ class TestDevolucoesNaElaboracao:
         )
 
         assert res.status_code == 200
-        user_prompt = client_llm.calls[0]["messages"][1]["content"]
+        user_prompt = client_llm.calls[0]["messages"][0]["content"]
         assert "Nenhuma Devolução" in user_prompt
 
 

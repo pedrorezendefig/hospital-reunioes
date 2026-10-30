@@ -17,11 +17,11 @@ import json
 from pathlib import Path
 from typing import Any
 
-import httpx
+import httpx2
 import pytest
+from anthropic_apoio import cliente_por_transporte, mensagem
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
-from openai import OpenAI
 from test_contas_medicas_memoria_tela import _importar, _operadora_id, _versao, _versoes
 from test_contas_medicas_operadoras import GESTAO, _Banco, _Consulta, _matriz_da_migration, _pessoa
 
@@ -54,46 +54,22 @@ PROPOSTA_DA_IA = {
 
 
 class _Provedor:
-    """O OpenRouter do teste: guarda o corpo de cada requisição e devolve a proposta."""
+    """A Anthropic do teste: guarda o corpo de cada requisição e devolve a proposta."""
 
     def __init__(self):
         self.corpos: list[dict] = []
         self.resposta: dict = PROPOSTA_DA_IA
 
-    def __call__(self, request: httpx.Request) -> httpx.Response:
+    def __call__(self, request: httpx2.Request) -> httpx2.Response:
         self.corpos.append(json.loads(request.content))
-        return httpx.Response(
-            200,
-            json={
-                "id": "gen-1",
-                "object": "chat.completion",
-                "created": 1,
-                "model": self.corpos[-1]["model"],
-                "choices": [
-                    {
-                        "index": 0,
-                        "message": {"role": "assistant", "content": json.dumps(self.resposta)},
-                        "finish_reason": "stop",
-                    }
-                ],
-                "usage": {"prompt_tokens": 900, "completion_tokens": 120, "total_tokens": 1020, "cost": 0.004},
-            },
-        )
+        return httpx2.Response(200, json=mensagem(json.dumps(self.resposta)))
 
 
 @pytest.fixture
 def provedor(monkeypatch) -> _Provedor:
     duble = _Provedor()
 
-    def cliente():
-        return OpenAI(
-            api_key="chave-de-teste",
-            base_url="https://openrouter.ai/api/v1",
-            http_client=httpx.Client(transport=httpx.MockTransport(duble)),
-            max_retries=0,
-        )
-
-    monkeypatch.setattr(ia, "_cliente", cliente)
+    monkeypatch.setattr(ia, "_cliente", lambda: cliente_por_transporte(duble))
     monkeypatch.setattr(ia, "_esperar", lambda _segundos: None)
     return duble
 
@@ -167,7 +143,7 @@ class TestPropostaDaIa:
         conteudo = json.dumps(corpo_da_ia["messages"], ensure_ascii=False)
         assert "transferência antes do meio-dia" in conteudo
         assert "ALFA-DIA-01" in conteudo
-        assert corpo_da_ia["response_format"]["json_schema"]["strict"] is True
+        assert corpo_da_ia["output_config"]["format"]["type"] == "json_schema"
 
 
 # ═══════════════════════════════════════════════════════════════════════════

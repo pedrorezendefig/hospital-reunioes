@@ -20,7 +20,7 @@ def _sem_provedor_de_llm(monkeypatch):
     """Sem chave, `ai_processor._llm_provider()` devolve "mock". Vale só sob o
     pytest: rodar o arquivo à mão continua exercitando o provedor do `.env`,
     que é para isso que o `__main__` lá embaixo existe."""
-    monkeypatch.setattr(ai_processor.settings, "openrouter_api_key", "", raising=False)
+    monkeypatch.setattr(ai_processor.settings, "anthropic_api_key", "", raising=False)
 
 
 def test():

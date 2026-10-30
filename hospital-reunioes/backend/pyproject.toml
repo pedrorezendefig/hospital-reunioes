@@ -11,7 +11,9 @@ dependencies = [
     # o X-Forwarded-For em silêncio e devolveria o balde único (issue #349).
     "uvicorn[standard]>=0.44.0",
     "supabase>=2.10.0",
-    "openai>=1.50.0",
+    # A IA de texto do app (issue #1302). A transcrição de áudio segue no
+    # OpenRouter, pelo httpx, sem SDK.
+    "anthropic>=2.3.0",
     "python-multipart>=0.0.12",
     "pydantic-settings>=2.6.0",
     "jinja2>=3.1.4",

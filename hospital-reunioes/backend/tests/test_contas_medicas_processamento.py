@@ -35,14 +35,15 @@ from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
 
-import httpx
+import httpx2
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
-from openai import OpenAI
 from postgrest.exceptions import APIError
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+
+from anthropic_apoio import cliente_por_transporte, erro, mensagem, nome_do_schema, nomear_schemas, uso  # noqa: E402
 
 from app.dependencies import get_current_user, get_supabase_client  # noqa: E402
 from app.limiter import limiter  # noqa: E402
@@ -998,7 +999,7 @@ class TestProntuarioUmaVez:
             assert len(fisioterapias) == 3
             assert all(conduta in d.linhas for d in fisioterapias)
 
-    def test_duas_parciais_em_vagas_paralelas_gravam_o_prontuario_uma_vez(self, openrouter):
+    def test_duas_parciais_em_vagas_paralelas_gravam_o_prontuario_uma_vez(self, ia_falsa):
         """As duas vagas pegam as parciais do mesmo atendimento juntas. A barreira
         segura a primeira vaga na porta da gravação até a outra chegar lá: sem
         trava por atendimento, as duas já leram `cm_eventos` vazio e apagaram,
@@ -1028,7 +1029,7 @@ class TestProntuarioUmaVez:
         assert gravadas == {"cm_eventos": 1, "cm_prescricao": 4, "cm_cirurgia": 1}
         # A trava do atendimento vale também para o Passo A: a segunda vaga
         # espera a primeira e acha a leitura da IA guardada.
-        assert openrouter.formatos.count(PASSO_A) == 1
+        assert ia_falsa.formatos.count(PASSO_A) == 1
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -1155,22 +1156,20 @@ class TestReanalisar:
         assert len(abertas_depois) == len(abertas_antes)
         assert abertas_antes.isdisjoint(linha["id"] for linha in abertas_depois)
 
-    def test_reanalisar_com_outro_modelo_le_o_prontuario_de_novo_e_preserva_as_marcacoes(self, openrouter, monkeypatch):
+    def test_reanalisar_com_outro_modelo_le_o_prontuario_de_novo_e_preserva_as_marcacoes(self, ia_falsa, monkeypatch):
         """Issue #1197: trocou o modelo do Passo A e reanalisou, a IA lê o
         prontuário de novo com o modelo novo; a linha Feito continua Feito."""
         banco = _cenario()
         conta, _, pacote = _conta_com_uma_linha_feita(banco)
-        assert openrouter.formatos.count(PASSO_A) == 1
+        assert ia_falsa.formatos.count(PASSO_A) == 1
         monkeypatch.setattr(ia.settings, "cm_ia_modelo_passo_a", "anthropic/claude-modelo-novo")
-        openrouter.eventos = {**EVENTOS_DA_IA, "observacoes": ["Lida pelo modelo novo."]}
+        ia_falsa.eventos = {**EVENTOS_DA_IA, "observacoes": ["Lida pelo modelo novo."]}
 
         assert _reanalisar(banco, conta["id"]).status_code == 200
         _rodar_o_job(banco)
 
         assert banco.conta(conta["id"])["situacao"] == "A_FAZER", banco.conta(conta["id"]).get("erro_motivo")
-        lidas_pelo_passo_a = [
-            c["model"] for c in openrouter.corpos if c["response_format"]["json_schema"]["name"] == PASSO_A
-        ]
+        lidas_pelo_passo_a = [c["model"] for c in ia_falsa.corpos if c["formato"] == PASSO_A]
         assert lidas_pelo_passo_a[1:] == ["anthropic/claude-modelo-novo"]
         (eventos,) = banco.tabelas["cm_eventos"]
         assert eventos["eventos_json"]["ia"]["observacoes"] == ["Lida pelo modelo novo."]
@@ -1178,7 +1177,7 @@ class TestReanalisar:
         pacotes = [linha for linha in depois if linha["codigo"] == "98005497"]
         assert [(p["id"], p["estado"], p["marcado_por"]) for p in pacotes] == [(pacote["id"], "FEITO", "F1")]
 
-    def test_reanalisar_com_o_mesmo_modelo_reaproveita_a_leitura(self, openrouter):
+    def test_reanalisar_com_o_mesmo_modelo_reaproveita_a_leitura(self, ia_falsa):
         banco = _cenario()
         conta, _, _ = _conta_com_uma_linha_feita(banco)
 
@@ -1186,7 +1185,7 @@ class TestReanalisar:
         _rodar_o_job(banco)
 
         assert banco.conta(conta["id"])["situacao"] == "A_FAZER"
-        assert openrouter.formatos.count(PASSO_A) == 1
+        assert ia_falsa.formatos.count(PASSO_A) == 1
 
     def test_o_guia_diz_quem_ve_o_botao(self):
         """A tela desenha o botão pelo que o Guia responde, sem perguntar de novo."""
@@ -1320,7 +1319,7 @@ EVENTOS_DA_IA = {
 PASSO_A, PASSO_B = "EventosDoProntuario", "LinhasDaComparacao"
 
 
-class _OpenRouter:
+class _IAFalsa:
     """O provedor do teste, na fronteira HTTP: responde pelo schema pedido
     (`eventos` no formato do Anexo A, `comparacao` no do Anexo B, `respostas`
     para os outros), fora do formato enquanto `fora_do_formato` for verdade
@@ -1334,60 +1333,48 @@ class _OpenRouter:
         self.eventos = EVENTOS_DA_IA
         self.comparacao: dict = {"linhas": [], "resumo": "Conta conferida."}
         self.respostas: dict[str, dict] = {}
-        self.uso: dict = {"prompt_tokens": 10, "completion_tokens": 5, "total_tokens": 15, "cost": 0.001}
+        self.uso: dict = uso(entrada=10, saida=5)
+        # A resposta HTTP que vale para toda requisição, no lugar da do schema
+        # (o erro da API, por exemplo).
+        self.resposta_fixa: httpx2.Response | None = None
         self.formatos: list[str] = []
         self.corpos: list[dict] = []
+        # O nome do modelo Pydantic de cada schema (`nomear_schemas`).
+        self.nomes: dict[str, str] = {}
         # Gancho dos testes de corrida: roda com o schema pedido, antes da resposta.
         self.antes_de_responder = None
 
-    def __call__(self, request: httpx.Request) -> httpx.Response:
+    def __call__(self, request: httpx2.Request) -> httpx2.Response:
         self.requisicoes += 1
         corpo = json.loads(request.content)
-        formato = corpo["response_format"]["json_schema"]["name"]
+        formato = nome_do_schema(self.nomes, corpo)
+        corpo["formato"] = formato
         if self.antes_de_responder:
             self.antes_de_responder(formato)
         self.formatos.append(formato)
         self.corpos.append(corpo)
+        if self.resposta_fixa is not None:
+            return self.resposta_fixa
         resposta = {PASSO_A: self.eventos, PASSO_B: self.comparacao}.get(formato) or self.respostas.get(formato)
         fora = self.fora_do_formato or formato in self.fora_do_formato_em or resposta is None
         conteudo = "não é JSON" if fora else json.dumps(resposta)
-        return httpx.Response(
-            200,
-            json={
-                "id": "gen",
-                "object": "chat.completion",
-                "created": 1,
-                "model": "m",
-                "choices": [
-                    {"index": 0, "message": {"role": "assistant", "content": conteudo}, "finish_reason": "stop"}
-                ],
-                "usage": self.uso,
-            },
-        )
+        return httpx2.Response(200, json=mensagem(conteudo, self.uso, modelo=corpo["model"]))
 
 
 @pytest.fixture(autouse=True)
-def openrouter(monkeypatch) -> _OpenRouter:
-    """Toda conta passa pelo Passo A: sem este dublê, o pipeline falaria com o
-    OpenRouter de verdade (a trava de rede da suíte reprova antes)."""
-    duble = _OpenRouter()
-    monkeypatch.setattr(
-        ia,
-        "_cliente",
-        lambda: OpenAI(
-            api_key="chave-de-teste",
-            base_url="https://openrouter.ai/api/v1",
-            http_client=httpx.Client(transport=httpx.MockTransport(duble)),
-            max_retries=0,
-        ),
-    )
+def ia_falsa(monkeypatch) -> _IAFalsa:
+    """Toda conta passa pelo Passo A: sem este dublê, o pipeline falaria com a
+    Anthropic de verdade (a trava de rede da suíte reprova antes)."""
+    duble = _IAFalsa()
+    duble.nomes = nomear_schemas(monkeypatch)
+    monkeypatch.setattr(ia, "_cliente", lambda: cliente_por_transporte(duble))
     monkeypatch.setattr(ia, "_esperar", lambda _segundos: None)
     return duble
 
 
 class TestIAForaDoFormato:
-    def test_a_conta_fica_em_erro_com_a_frase_e_o_reprocesso_funciona(self, openrouter):
-        openrouter.fora_do_formato = True
+    def test_a_conta_fica_em_erro_com_a_frase_e_o_reprocesso_funciona(self, ia_falsa):
+        ia_falsa.fora_do_formato = True
         banco = _cenario()
         _enviar(banco, _conta(), _prontuario())
 
@@ -1395,7 +1382,7 @@ class TestIAForaDoFormato:
 
         (conta,) = banco.tabelas["cm_conta"]
         # As três tentativas são do adaptador; o pipeline não repete a conta.
-        assert openrouter.formatos == [PASSO_A] * 3
+        assert ia_falsa.formatos == [PASSO_A] * 3
         assert (conta["situacao"], conta["erro_motivo"], conta["tentativas"]) == (
             "ERRO",
             "Tente de novo em alguns minutos",
@@ -1406,28 +1393,43 @@ class TestIAForaDoFormato:
         ]
 
         # O botão da conta em Erro manda a mesma conta de novo; a IA voltou.
-        openrouter.fora_do_formato = False
+        ia_falsa.fora_do_formato = False
         _enviar(banco, _conta())
         _rodar_o_job(banco)
 
-        assert openrouter.formatos.count(PASSO_A) == 4
+        assert ia_falsa.formatos.count(PASSO_A) == 4
         assert banco.conta(conta["id"])["situacao"] == "A_FAZER"
         assert banco.conta(conta["id"])["erro_motivo"] is None
 
+    def test_a_ia_sem_credito_poe_a_conta_em_erro_com_a_frase_do_credito_sem_nova_tentativa(self, ia_falsa):
+        """Issue #1302: o 400 de saldo da Anthropic não é tentado de novo, e a
+        frase diz o que fazer, em vez de mandar esperar."""
+        ia_falsa.resposta_fixa = erro(
+            400, "invalid_request_error", "Your credit balance is too low to access the Anthropic API."
+        )
+        banco = _cenario()
+        _enviar(banco, _conta(), _prontuario())
+
+        _rodar_o_job(banco)
+
+        (conta,) = banco.tabelas["cm_conta"]
+        assert ia_falsa.formatos == [PASSO_A]
+        assert (conta["situacao"], conta["erro_motivo"]) == ("ERRO", "A IA está sem crédito. Avise o Pedro.")
+
 
 class TestPassoANoPipeline:
-    def test_a_segunda_parcial_do_atendimento_nao_chama_o_passo_a(self, openrouter):
+    def test_a_segunda_parcial_do_atendimento_nao_chama_o_passo_a(self, ia_falsa):
         banco = _cenario()
         _duas_parciais(banco)
 
         assert _rodar_o_job(banco) == 2
 
         assert [c["situacao"] for c in banco.tabelas["cm_conta"]] == ["A_FAZER", "A_FAZER"]
-        assert openrouter.formatos.count(PASSO_A) == 1
+        assert ia_falsa.formatos.count(PASSO_A) == 1
         (eventos,) = banco.tabelas["cm_eventos"]
         assert eventos["eventos_json"]["ia"]["atendimento"] == ATENDIMENTO
 
-    def test_o_guia_sai_da_conferencia_com_os_eventos_do_passo_a(self, openrouter, monkeypatch):
+    def test_o_guia_sai_da_conferencia_com_os_eventos_do_passo_a(self, ia_falsa, monkeypatch):
         # A IA recebe os achados da conferência sem os eventos; o guia gravado é
         # o da conferência que roda depois, com os eventos que ela leu (#1134).
         ventilacao = {
@@ -1439,7 +1441,7 @@ class TestPassoANoPipeline:
             "pagina": 5,
             "trecho": "VM",
         }
-        openrouter.eventos = {**EVENTOS_DA_IA, "terapias": [ventilacao]}
+        ia_falsa.eventos = {**EVENTOS_DA_IA, "terapias": [ventilacao]}
         recebidos = []
         original = processamento.conferir
 
@@ -1487,7 +1489,7 @@ class TestPassoANoPipeline:
             "tokens_saida": 5,
         }
 
-    def test_a_divergencia_os_documentos_ausentes_e_as_observacoes_da_ia_entram_no_parecer(self, openrouter):
+    def test_a_divergencia_os_documentos_ausentes_e_as_observacoes_da_ia_entram_no_parecer(self, ia_falsa):
         # O código leu a alta em 06/10 15:20 no resumo de alta; a IA leu 18:00.
         alta = {
             "tipo": "ALTA",
@@ -1497,7 +1499,7 @@ class TestPassoANoPipeline:
             "trecho": "DATA DA ALTA - 06/10/2026",
         }
         meia_risca = chr(0x2013)
-        openrouter.eventos = {
+        ia_falsa.eventos = {
             **EVENTOS_DA_IA,
             "movimentacoes": [alta],
             "documentos_ausentes": ["FICHA ANESTESICA"],
