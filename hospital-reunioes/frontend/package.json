@@ -2,6 +2,7 @@
   "name": "hospital-reunioes-frontend",
   "version": "0.163.2",
   "private": true,
+  "packageManager": "pnpm@9.15.9",
   "scripts": {
     "dev": "next dev --turbopack",
     "build": "next build",
