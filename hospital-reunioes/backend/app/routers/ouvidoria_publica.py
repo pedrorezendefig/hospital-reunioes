@@ -403,7 +403,10 @@ async def registrar_manifestacao_publica(
     # a chamada ao provedor bloqueia por até 30 segundos num backend de event
     # loop único. Dentro da requisição, cada envio deste formulário seria meio
     # minuto de app inteiro parado.
-    ouvidoria_acuse.acusar_recebimento(supabase, row, dt.datetime.now(tz=dt.UTC), tarefas)
+    #
+    # `com_teto`: esta é a única porta sem login, e o endereço é o que quem
+    # preenche digitar (issue #1286).
+    ouvidoria_acuse.acusar_recebimento(supabase, row, dt.datetime.now(tz=dt.UTC), tarefas, com_teto=True)
     return {campo: row.get(campo) for campo in _CAMPOS_RECIBO}
 
 

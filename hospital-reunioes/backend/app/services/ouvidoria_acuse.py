@@ -43,9 +43,21 @@ logger = logging.getLogger(__name__)
 REGISTRADO = "registrado"
 SEM_CONTATO = "sem_contato"
 FALHOU = "falhou"
+RETIDO_PELO_TETO = "retido_pelo_teto"
+
+# O teto do acuse que nasce no formulário público (issue #1286). O formulário
+# não tem login e o acuse escreve para o endereço que quem preenche digitar:
+# sem teto, o canal faria o remetente do hospital escrever para terceiros sem
+# limite. Janela de 24 horas corridas, contada pela `criada_em` das linhas do
+# acuse, de qualquer canal: o que se protege é o endereço e o remetente.
+TETO_POR_ENDERECO = 3
+TETO_GLOBAL = 200
+JANELA_DO_TETO = dt.timedelta(hours=24)
 
 
-def acusar_recebimento(supabase, caso: dict, agora: dt.datetime, tarefas: BackgroundTasks) -> str:
+def acusar_recebimento(
+    supabase, caso: dict, agora: dt.datetime, tarefas: BackgroundTasks, *, com_teto: bool = False
+) -> str:
     """Avisa quem manifestou de que a manifestação chegou. Nunca levanta.
 
     `caso` é a linha recém-inserida em `ouvidoria_protocolos`, com `id`,
@@ -60,9 +72,13 @@ def acusar_recebimento(supabase, caso: dict, agora: dt.datetime, tarefas: Backgr
 
     O registro e o carimbo continuam dentro da requisição: são duas escritas
     curtas no PostgREST, no mesmo padrão do resto do módulo, e é a linha
-    gravada que faz o reenvio existir se o email não sair."""
+    gravada que faz o reenvio existir se o email não sair.
+
+    `com_teto` é do formulário público, e só dele: acima do teto o caso segue
+    sem acuse e sem carimbo, e o desfecho fica no log. Os caminhos com login
+    (registro do ouvidor, API da Ana) não passam por aqui."""
     try:
-        return _acusar(supabase, caso, agora, tarefas)
+        return _acusar(supabase, caso, agora, tarefas, com_teto=com_teto)
     except Exception as exc:  # noqa: BLE001
         # Só o TIPO da exceção, nunca a mensagem e nunca o traceback. O
         # `APIError` do PostgREST carrega `details` com o `Failing row contains
@@ -77,11 +93,20 @@ def acusar_recebimento(supabase, caso: dict, agora: dt.datetime, tarefas: Backgr
         return FALHOU
 
 
-def _acusar(supabase, caso: dict, agora: dt.datetime, tarefas: BackgroundTasks) -> str:
+def _acusar(supabase, caso: dict, agora: dt.datetime, tarefas: BackgroundTasks, *, com_teto: bool) -> str:
     email = destinatario_do_acuse(caso)
     if email is None:
         _carimbar(supabase, caso, {"acuse_sem_contato_em": agora.isoformat()})
         return SEM_CONTATO
+
+    if com_teto and _passou_do_teto(supabase, email, agora):
+        # Só o id do caso: o endereço é de quem está fora do hospital, e é
+        # justamente o endereço que pode não ser de quem preencheu.
+        logger.warning(
+            "[Ouvidoria] Acuse da manifestação %s retido pelo teto do canal público",
+            caso.get("id"),
+        )
+        return RETIDO_PELO_TETO
 
     notificacao = ouvidoria_notificacoes.registrar(
         supabase,
@@ -116,6 +141,33 @@ def _acusar(supabase, caso: dict, agora: dt.datetime, tarefas: BackgroundTasks) 
 
     tarefas.add_task(despachar_acuse, supabase, notificacao, agora)
     return REGISTRADO
+
+
+def _passou_do_teto(supabase, email: str, agora: dt.datetime) -> bool:
+    """Se o acuse deste endereço já chegou ao teto na janela, ou o canal inteiro.
+
+    Lê com `limit` no próprio teto: basta saber se chegou lá, não quantos são."""
+    desde = (agora - JANELA_DO_TETO).isoformat()
+    do_endereco = (
+        supabase.table("ouvidoria_notificacoes")
+        .select("id")
+        .eq("gatilho", ouvidoria_notificacoes.GATILHO_ACUSAR_RECEBIMENTO)
+        .eq("destinatario_email", email)
+        .gte("criada_em", desde)
+        .limit(TETO_POR_ENDERECO)
+        .execute()
+    )
+    if len(do_endereco.data or []) >= TETO_POR_ENDERECO:
+        return True
+    do_canal = (
+        supabase.table("ouvidoria_notificacoes")
+        .select("id")
+        .eq("gatilho", ouvidoria_notificacoes.GATILHO_ACUSAR_RECEBIMENTO)
+        .gte("criada_em", desde)
+        .limit(TETO_GLOBAL)
+        .execute()
+    )
+    return len(do_canal.data or []) >= TETO_GLOBAL
 
 
 def despachar_acuse(supabase, notificacao: dict, agora: dt.datetime) -> None:
