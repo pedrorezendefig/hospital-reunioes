@@ -5,8 +5,9 @@ hora o "Último envio" por atendimento e vê a fila em ordem de envio. A regra d
 envio mora em `services/contas_medicas/envio`; aqui ficam o gate e o formato.
 
 Router próprio, com o mesmo prefixo do módulo, como o do Guia e o das
-operadoras. Toda rota passa por "enviar e corrigir contas"; a fila filtra por
-`faturista_id` no servidor para quem não tem "painel completo".
+operadoras. Toda rota passa por "enviar e corrigir contas"; quem decide o que
+cada pessoa vê é a Fila de contas, em `services/contas_medicas/fila` (issue
+#1307, ADR 0073).
 """
 
 from __future__ import annotations
@@ -26,6 +27,7 @@ from app.services.contas_medicas.envio import (
     EnvioNaoEncontradoError,
     receber,
 )
+from app.services.contas_medicas.fila import fila_da_pessoa
 from app.services.contas_medicas.guia import MARCADAS, linha_pendente
 
 router = APIRouter(prefix="/contas-medicas", tags=["contas-medicas"])
@@ -61,25 +63,6 @@ async def enviar_arquivos(
         )
     except EnvioNaoEncontradoError:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Envio não encontrado") from None
-
-
-CONCLUIDAS = ("CONCLUIDA", "CONCLUIDA_COM_PENDENCIA")
-# Tudo o que não foi concluído fica na fila, inclusive o erro: é dela que sai o
-# "Enviar de novo".
-NA_FILA = ("AGUARDANDO_ARQUIVO", "NA_FILA", "PROCESSANDO", "A_FAZER", "EM_CORRECAO", "RETORNO", "ERRO")
-# A aba Concluídas mostra as mais recentes; o resto fica no banco para o Painel.
-TETO_DE_CONCLUIDAS = 100
-
-
-def _contas(supabase: Client, me: dict, situacoes: tuple[str, ...], *, recentes_primeiro: bool) -> list[dict]:
-    consulta = supabase.table("cm_conta").select("*").in_("situacao", list(situacoes))
-    if "painel_completo" not in me["permissoes_cm"]:
-        consulta = consulta.eq("faturista_id", me.get("id"))
-    # Ordem de envio, nunca por valor.
-    consulta = consulta.order("ordem_fila", desc=recentes_primeiro)
-    if recentes_primeiro:
-        consulta = consulta.limit(TETO_DE_CONCLUIDAS)
-    return consulta.execute().data or []
 
 
 def _por_id(supabase: Client, tabela: str, coluna: str, valores: list) -> dict:
@@ -125,6 +108,8 @@ def _item(conta: dict, atendimento: dict, linhas: list[dict]) -> dict:
         "itens_total": len(da_faturista),
         "pendencias": sum(1 for linha in linhas if linha_pendente(linha)),
         "erro_motivo": conta.get("erro_motivo"),
+        # Só para quem tem "painel completo": quem está com a conta.
+        "com": conta.get("com_quem"),
     }
 
 
@@ -135,15 +120,15 @@ async def ver_fila(
     me: dict = Depends(_PODE_ENVIAR),
     supabase: Client = Depends(get_supabase_client),
 ) -> dict:
-    """A fila em ordem de envio e a aba Concluídas. A faturista vê só as dela;
-    quem tem "painel completo" vê as de todas."""
-    fila = _contas(supabase, me, NA_FILA, recentes_primeiro=False)
-    concluidas = _contas(supabase, me, CONCLUIDAS, recentes_primeiro=True)
-    todas = fila + concluidas
+    """A Fila, "Minhas", "Meus envios" e as Concluídas da pessoa. Quem tem
+    "painel completo" vê as de todas, com quem está com cada uma."""
+    listas = fila_da_pessoa(supabase, me)
+    nomes = ("fila", "minhas", "meus_envios", "concluidas")
+    todas = [conta for nome in nomes for conta in listas[nome]]
     atendimentos = _por_id(supabase, "cm_atendimento", "id", list({c["atendimento_id"] for c in todas}))
     linhas = _linhas_por_conta(supabase, todas)
 
     def itens(contas: list[dict]) -> list[dict]:
         return [_item(c, atendimentos.get(c["atendimento_id"], {}), linhas.get(c["id"], [])) for c in contas]
 
-    return {"fila": itens(fila), "concluidas": itens(concluidas)}
+    return {"todas": listas["todas"], **{nome: itens(listas[nome]) for nome in nomes}}

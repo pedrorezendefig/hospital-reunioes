@@ -70,10 +70,21 @@ export interface ItemDaFila {
   itens_total: number;
   pendencias: number;
   erro_motivo: string | null;
+  /** Só para quem tem "painel completo": quem está com a conta (issue #1307). */
+  com?: string | null;
 }
 
+/**
+ * A tela Contas (issue #1307, ADR 0073): a Fila comum das livres, "Minhas"
+ * (as que a pessoa puxou e não concluiu), "Meus envios" (as que ela enviou e
+ * não ficaram prontas) e as Concluídas. Com `todas`, a pessoa tem o painel
+ * completo e as listas trazem as contas de todas.
+ */
 export interface Fila {
+  todas: boolean;
   fila: ItemDaFila[];
+  minhas: ItemDaFila[];
+  meus_envios: ItemDaFila[];
   concluidas: ItemDaFila[];
 }
 

@@ -3,11 +3,13 @@
 /**
  * A tela Contas de Contas médicas (issues #1114 e #1123, PRD #1113, ADR 0070).
  *
- * A faturista arrasta a conta e o prontuário do MV (ou clica em "Selecionar
- * arquivos"), recebe na hora o "Último envio" por atendimento e acompanha a
- * fila em ordem de envio, com a aba Concluídas ao lado. Quem pareia, recusa e
- * ordena é o servidor; a tela só confere os limites que dá para conferir antes
- * de subir e manda os arquivos em lotes que cabem no teto do corpo.
+ * Quem envia arrasta a conta e o prontuário do MV (ou clica em "Selecionar
+ * arquivos"), recebe na hora o "Último envio" por atendimento e acompanha em
+ * "Meus envios" o que ainda não ficou pronto. A faturista puxa da Fila comum,
+ * em ordem de envio, e segue em "Minhas" (issue #1307, ADR 0073). Quem pareia,
+ * recusa, ordena e decide quem vê o quê é o servidor; a tela só confere os
+ * limites que dá para conferir antes de subir e manda os arquivos em lotes que
+ * cabem no teto do corpo.
  *
  * A conta é sempre identificada pelo atendimento, com a conta como complemento.
  */
@@ -53,7 +55,22 @@ const COR_DA_SITUACAO: Record<string, string> = {
 const RELER_A_CADA_MS = 20_000;
 const ESPERANDO_ANALISE = ["NA_FILA", "PROCESSANDO"];
 
-type Aba = "fila" | "concluidas";
+type Aba = "fila" | "minhas" | "meus_envios" | "concluidas";
+
+/** O rótulo de cada aba; com o painel completo, as listas são de todas. */
+function rotuloDaAba(aba: Aba, todas: boolean): string {
+  if (aba === "fila") return "Fila";
+  if (aba === "minhas") return todas ? "Em análise" : "Minhas";
+  if (aba === "meus_envios") return todas ? "Envios" : "Meus envios";
+  return "Concluídas";
+}
+
+const VAZIO: Record<Aba, string> = {
+  fila: "Nenhuma conta livre na fila",
+  minhas: "Nenhuma conta em análise",
+  meus_envios: "Nenhum envio esperando o guia",
+  concluidas: "Nenhuma conta concluída ainda",
+};
 
 function complemento(conta: ItemDaFila): string {
   const periodo =
@@ -101,6 +118,7 @@ function LinhaDaFila({ conta, onEnviarDeNovo }: { conta: ItemDaFila; onEnviarDeN
       {detalhe && (
         <span className={`text-xs ${conta.situacao === "ERRO" ? "text-red-700" : "text-slate-600"}`}>{detalhe}</span>
       )}
+      {conta.com && <span className="text-xs text-slate-500">com {conta.com}</span>}
       {acao}
     </li>
   );
@@ -185,7 +203,7 @@ export default function ContasMedicasPage() {
     };
   }, [carregarFila]);
 
-  const esperandoAnalise = fila?.fila.some((conta) => ESPERANDO_ANALISE.includes(conta.situacao)) ?? false;
+  const esperandoAnalise = fila?.meus_envios.some((conta) => ESPERANDO_ANALISE.includes(conta.situacao)) ?? false;
   useEffect(() => {
     if (!token || !esperandoAnalise) return;
     const relogio = setInterval(() => carregarFila(token), RELER_A_CADA_MS);
@@ -211,7 +229,7 @@ export default function ContasMedicasPage() {
     await carregarFila(token);
   }
 
-  const contas = aba === "fila" ? fila?.fila : fila?.concluidas;
+  const contas = fila?.[aba];
 
   return (
     <div className="space-y-6">
@@ -283,12 +301,8 @@ export default function ContasMedicasPage() {
 
       <div>
         <div className="flex gap-2 border-b border-border" role="tablist">
-          {(
-            [
-              ["fila", `Fila (${fila?.fila.length ?? 0})`],
-              ["concluidas", `Concluídas (${fila?.concluidas.length ?? 0})`],
-            ] as [Aba, string][]
-          ).map(([id, rotulo]) => (
+          {(["fila", "minhas", "meus_envios", "concluidas"] as Aba[]).map((id) => (
+
             <button
               key={id}
               type="button"
@@ -299,7 +313,7 @@ export default function ContasMedicasPage() {
                 aba === id ? "border-primary text-primary" : "border-transparent text-text-secondary hover:text-text"
               }`}
             >
-              {rotulo}
+              {`${rotuloDaAba(id, fila?.todas ?? false)} (${fila?.[id].length ?? 0})`}
             </button>
           ))}
         </div>
@@ -323,9 +337,7 @@ export default function ContasMedicasPage() {
             ) : (
               <div className="p-10 text-center">
                 <ReceiptText className="w-8 h-8 text-slate-300 mx-auto mb-3" aria-hidden="true" />
-                <p className="text-slate-500 text-sm">
-                  {aba === "fila" ? "Nenhuma conta enviada ainda" : "Nenhuma conta concluída ainda"}
-                </p>
+                <p className="text-slate-500 text-sm">{VAZIO[aba]}</p>
               </div>
             )}
           </div>

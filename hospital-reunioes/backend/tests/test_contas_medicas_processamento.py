@@ -1224,10 +1224,10 @@ class TestReanalisar:
 # ═══════════════════════════════════════════════════════════════════════════
 
 
-def _fila(banco: _Banco) -> list[dict]:
+def _fila(banco: _Banco, lista: str = "fila") -> list[dict]:
     resposta = _cliente(banco).get("/api/contas-medicas/fila")
     assert resposta.status_code == 200, resposta.text
-    return resposta.json()["fila"]
+    return resposta.json()[lista]
 
 
 def _trocar_o_pdf(banco: _Banco, tipo: str, texto: str) -> None:
@@ -1250,7 +1250,8 @@ class TestLeituraQueNaoFecha:
             "Não consegui ler a conta inteira",
             1,
         )
-        assert [(c["situacao"], c["erro_motivo"]) for c in _fila(banco)] == [
+        # O erro fica em "Meus envios" de quem enviou, que tem o PDF (ADR 0073).
+        assert [(c["situacao"], c["erro_motivo"]) for c in _fila(banco, "meus_envios")] == [
             ("ERRO", "Não consegui ler a conta inteira")
         ]
         assert banco.tabelas["cm_guia_linha"] == []
@@ -1388,7 +1389,7 @@ class TestIAForaDoFormato:
             "Tente de novo em alguns minutos",
             1,
         )
-        assert [(c["situacao"], c["erro_motivo"]) for c in _fila(banco)] == [
+        assert [(c["situacao"], c["erro_motivo"]) for c in _fila(banco, "meus_envios")] == [
             ("ERRO", "Tente de novo em alguns minutos")
         ]
 
@@ -1550,6 +1551,18 @@ class TestAvisoNoSino:
             envio["envio_id"],
             False,
         )
+
+    def test_o_aviso_vai_para_quem_enviou_e_nao_para_a_faturista_da_conta(self):
+        """A conta enviada de novo guarda a faturista que a tinha puxado (F2);
+        o aviso do envio é de quem enviou (F1), ADR 0073."""
+        banco = _cenario()
+        envio = _enviar(banco, _conta(), _prontuario())
+        (conta,) = banco.tabelas["cm_conta"]
+        conta["faturista_id"] = "F2"
+
+        _rodar_o_job(banco)
+
+        assert [(a["destinatario_id"], a["referencia_id"]) for a in _avisos(banco)] == [("F1", envio["envio_id"])]
 
     def test_nada_de_aviso_enquanto_uma_conta_do_envio_esta_na_fila(self):
         banco = _cenario()
@@ -1853,6 +1866,8 @@ class TestVersaoDaTabela:
         agulha = _linhas_gravadas(banco, conta["id"])["70000001"]
         assert agulha["tabela_id"] == "tb-mat"
         rota = f"/api/contas-medicas/contas/{conta['id']}/guia/linhas/{agulha['id']}/marcacao"
+        # A faturista puxa a conta ao abrir o Guia (ADR 0073).
+        _guia(banco, conta["id"])
 
         marcada = _cliente(banco).post(rota, json={"estado": "FEITO"})
         desfeita = _cliente(banco).delete(rota)

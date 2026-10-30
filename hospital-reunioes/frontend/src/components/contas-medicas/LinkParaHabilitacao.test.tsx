@@ -28,7 +28,7 @@ function moduloResponde(permissoes: string[]) {
     status: 200,
     json: async () => {
       if (url === "/api/contas-medicas/me") return { perfil: "x", permissoes };
-      if (url === "/api/contas-medicas/fila") return { fila: [], concluidas: [] };
+      if (url === "/api/contas-medicas/fila") return { todas: false, fila: [], minhas: [], meus_envios: [], concluidas: [] };
       return {};
     },
   }));

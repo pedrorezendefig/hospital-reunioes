@@ -16,6 +16,7 @@ import os
 import re
 import sys
 import uuid
+from datetime import datetime
 from decimal import Decimal
 from pathlib import Path
 from types import SimpleNamespace
@@ -134,6 +135,10 @@ def _matriz_da_migration() -> list[dict[str, Any]]:
     return [{"perfil": p, "permissao": k, "ligada": v == "true"} for p, k, v in linhas]
 
 
+def _instante(valor: str) -> datetime:
+    return datetime.fromisoformat(valor)
+
+
 class _Consulta:
     """O pedaço do cliente do Supabase que as rotas do Guia usam."""
 
@@ -145,6 +150,7 @@ class _Consulta:
         self._limite: int | None = None
         self._update: dict | None = None
         self._insert: dict | list | None = None
+        self._recorte: tuple[int, int] | None = None
 
     def select(self, *_a, **_kw):
         return self
@@ -158,8 +164,24 @@ class _Consulta:
         self._filtros.append(lambda linha: linha.get(coluna) in valores)
         return self
 
+    def gte(self, coluna, valor):
+        self._filtros.append(
+            lambda linha: linha.get(coluna) is not None and _instante(linha[coluna]) >= _instante(valor)
+        )
+        return self
+
+    def lt(self, coluna, valor):
+        self._filtros.append(
+            lambda linha: linha.get(coluna) is not None and _instante(linha[coluna]) < _instante(valor)
+        )
+        return self
+
     def order(self, coluna, desc=False):
         self._ordem.append((coluna, desc))
+        return self
+
+    def range(self, inicio, fim):
+        self._recorte = (inicio, fim)
         return self
 
     def limit(self, n):
@@ -176,6 +198,8 @@ class _Consulta:
 
     def execute(self):
         tabela = self._banco.tabelas.setdefault(self._nome, [])
+        if self._update is not None and self._banco.antes_de_gravar:
+            self._banco.antes_de_gravar(self._nome, self._update)
         if self._insert is not None:
             novas = self._insert if isinstance(self._insert, list) else [self._insert]
             gravadas = [{"id": f"{self._nome}-{len(tabela) + i + 1}", **n} for i, n in enumerate(novas)]
@@ -188,6 +212,8 @@ class _Consulta:
             return SimpleNamespace(data=[dict(linha) for linha in casam])
         for coluna, desc in reversed(self._ordem):
             casam.sort(key=lambda linha, c=coluna: (linha.get(c) is None, linha.get(c) or 0), reverse=desc)
+        if self._recorte is not None:
+            casam = casam[self._recorte[0] : self._recorte[1] + 1]
         if self._limite is not None:
             casam = casam[: self._limite]
         return SimpleNamespace(data=[dict(linha) for linha in casam])
@@ -196,6 +222,8 @@ class _Consulta:
 class _Banco:
     def __init__(self, tabelas: dict[str, list[dict]]):
         self.tabelas = tabelas
+        # A corrida: o que outra requisição grava entre a leitura e a escrita desta.
+        self.antes_de_gravar = None
 
     def table(self, nome: str):
         return _Consulta(self, nome)
@@ -379,8 +407,12 @@ class TestAbrirOGuia:
             ("2026-10-05", "CTI", ["diaria-acompanhante", "lanceta"]),
         ]
 
-    def test_faturista_que_nao_e_dona_recebe_403(self):
-        assert _cliente("outra_faturista", _cenario()).get(ROTA_GUIA).status_code == 403
+    @pytest.mark.parametrize("situacao", ["EM_CORRECAO", "RETORNO", "CONCLUIDA"])
+    def test_conta_fora_de_a_fazer_de_outra_faturista_recebe_403(self, situacao):
+        banco = _cenario(conta=_conta(situacao=situacao))
+
+        assert _cliente("outra_faturista", banco).get(ROTA_GUIA).status_code == 403
+        assert banco.conta(CONTA)["faturista_id"] == "F1"
 
     def test_quem_nao_tem_o_eixo_recebe_403(self):
         assert _cliente("sem_eixo", _cenario()).get(ROTA_GUIA).status_code == 403
@@ -440,6 +472,71 @@ class TestAbrirMudaParaEmCorrecao:
         banco = _cenario(conta=_conta(situacao="PROCESSANDO"))
 
         assert _cliente("dona", banco).get(ROTA_GUIA).status_code == 409
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 2b. Puxar a conta da Fila (issue #1307, ADR 0073)
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+class TestPuxarAConta:
+    def test_abrir_conta_livre_grava_quem_abriu_como_faturista_da_conta(self):
+        banco = _cenario(conta=_conta(faturista_id=None))
+
+        resposta = _cliente("outra_faturista", banco).get(ROTA_GUIA)
+
+        assert resposta.status_code == 200
+        assert (banco.conta(CONTA)["situacao"], banco.conta(CONTA)["faturista_id"]) == ("EM_CORRECAO", "F2")
+
+    def test_conta_antiga_a_fazer_com_outra_pessoa_no_faturista_e_livre(self):
+        """As contas que o diretor subiu pelo login da Adriana: em A fazer, livres."""
+        banco = _cenario(conta=_conta(faturista_id="F1"))
+
+        resposta = _cliente("outra_faturista", banco).get(ROTA_GUIA)
+
+        assert resposta.status_code == 200
+        assert banco.conta(CONTA)["faturista_id"] == "F2"
+
+    def test_duas_aberturas_da_mesma_conta_livre_a_que_perde_recebe_409(self):
+        banco = _cenario(conta=_conta(faturista_id=None))
+
+        def a_outra_abriu_antes(tabela, campos):
+            # A outra faturista grava entre a leitura e a escrita desta abertura.
+            if tabela == "cm_conta" and campos.get("situacao") == "EM_CORRECAO":
+                banco.antes_de_gravar = None
+                banco.conta(CONTA).update(situacao="EM_CORRECAO", faturista_id="F2")
+
+        banco.antes_de_gravar = a_outra_abriu_antes
+
+        resposta = _cliente("dona", banco).get(ROTA_GUIA)
+
+        assert resposta.status_code == 409
+        assert resposta.json()["detail"] == "Outra faturista já pegou esta conta"
+        assert banco.conta(CONTA)["faturista_id"] == "F2"
+
+    def test_conta_livre_nao_aceita_marcacao_de_quem_nao_a_puxou(self):
+        banco = _cenario(conta=_conta(faturista_id=None))
+
+        resposta = _cliente("dona", banco).post(f"{ROTA_GUIA}/linhas/{_uid('luva')}/marcacao", json={"estado": "FEITO"})
+
+        assert resposta.status_code == 403
+        assert banco.linha("luva")["estado"] == "ABERTA"
+
+    def test_a_producao_do_painel_conta_quem_analisou_e_nao_quem_enviou(self):
+        """F1 enviou (a conta antiga ainda leva F1); F2 puxou e concluiu."""
+        from zoneinfo import ZoneInfo
+
+        from app.services.contas_medicas.painel import montar_painel
+
+        banco = _cenario(conta=_conta(faturista_id="F1"))
+        cliente = _cliente("outra_faturista", banco)
+        cliente.get(ROTA_GUIA)
+        cliente.post(f"{ROTA_GUIA}/concluir", json={})
+
+        hoje = datetime.now(ZoneInfo("America/Sao_Paulo")).date()
+        producao = montar_painel(banco, semana=hoje)["producao"]
+
+        assert [(linha["faturista_id"], linha["contas"]) for linha in producao] == [("F2", 1)]
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -696,22 +793,23 @@ class TestConcluir:
 
         assert (resposta.json()["situacao"], resposta.json()["pendencias"]) == ("CONCLUIDA_COM_PENDENCIA", 1)
 
-    def test_traz_a_proxima_a_fazer_da_faturista_na_ordem_de_envio(self):
+    def test_traz_a_primeira_livre_da_fila_na_ordem_de_envio_mesmo_enviada_por_outra_pessoa(self):
         outras = [
             _outra_conta("aaaaaaaa-0000-0000-0000-000000000030", "F1", "A_FAZER", 30),
-            _outra_conta("aaaaaaaa-0000-0000-0000-000000000020", "F1", "A_FAZER", 20),
+            _outra_conta("aaaaaaaa-0000-0000-0000-000000000020", None, "A_FAZER", 20),
             _outra_conta("aaaaaaaa-0000-0000-0000-000000000005", "F1", "EM_CORRECAO", 5),
-            _outra_conta("aaaaaaaa-0000-0000-0000-000000000001", "F2", "A_FAZER", 1),
+            _outra_conta("aaaaaaaa-0000-0000-0000-000000000003", "F2", "EM_CORRECAO", 3),
+            _outra_conta("aaaaaaaa-0000-0000-0000-000000000004", "F2", "A_FAZER", 4),
             _outra_conta("aaaaaaaa-0000-0000-0000-000000000002", "F1", "CONCLUIDA", 2),
         ]
         banco = _cenario(conta=_conta(situacao="EM_CORRECAO"), outras_contas=outras)
 
         resposta = _cliente("dona", banco).post(ROTA_CONCLUIR, json={})
 
-        assert resposta.json()["proxima_conta_id"] == "aaaaaaaa-0000-0000-0000-000000000020"
+        assert resposta.json()["proxima_conta_id"] == "aaaaaaaa-0000-0000-0000-000000000004"
 
-    def test_sem_proxima_a_fazer_vem_nulo(self):
-        outras = [_outra_conta("aaaaaaaa-0000-0000-0000-000000000001", "F2", "A_FAZER", 1)]
+    def test_sem_conta_livre_na_fila_a_proxima_vem_nula(self):
+        outras = [_outra_conta("aaaaaaaa-0000-0000-0000-000000000001", "F2", "EM_CORRECAO", 1)]
         banco = _cenario(conta=_conta(situacao="EM_CORRECAO"), outras_contas=outras)
 
         resposta = _cliente("dona", banco).post(ROTA_CONCLUIR, json={})

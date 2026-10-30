@@ -39,7 +39,7 @@ Na conferência, um preço que não pode ser comparado com a tabela sai como "N�
 
 ## O envio e a fila
 
-Na tela de contas, a faturista arrasta os PDFs exportados do MV para a área de envio, ou clica em "Selecionar arquivos", vários de uma vez: a conta e o prontuário completo de cada atendimento. Ela não digita nem renomeia nada. O app lê dentro de cada PDF se ele é conta ou prontuário, pelo conteúdo da primeira página e não pelo nome do arquivo, e lê o número do atendimento. É por esse número que a conta e o prontuário se encontram. Um atendimento pode ter várias contas (as parciais), e todas usam o mesmo prontuário.
+Na tela de contas, quem envia arrasta os PDFs exportados do MV para a área de envio, ou clica em "Selecionar arquivos", vários de uma vez: a conta e o prontuário completo de cada atendimento. Ninguém digita nem renomeia nada. Quem envia não fica dono da conta: qualquer pessoa com a permissão sobe as contas, e as faturistas pegam da Fila. O app lê dentro de cada PDF se ele é conta ou prontuário, pelo conteúdo da primeira página e não pelo nome do arquivo, e lê o número do atendimento. É por esse número que a conta e o prontuário se encontram. Um atendimento pode ter várias contas (as parciais), e todas usam o mesmo prontuário.
 
 Cada envio aceita até 10 atendimentos e 30 arquivos, e cada arquivo pode ter até 100 MB. O que passa disso é recusado com uma frase que diz o limite, e o resto do envio segue. A conta de um plano que ainda não está cadastrado na tela Operadoras é recusada na hora, com o nome do plano: "Plano ASSIM BÁSICO ainda não configurado". A gestão cadastra o plano e a faturista envia a conta de novo. Os outros atendimentos do mesmo envio seguem normalmente.
 
@@ -47,17 +47,21 @@ Assim que o envio termina, aparece o **Último envio**, uma linha por atendiment
 
 Se o prontuário do atendimento já foi enviado nos últimos sete dias, a conta nova é pareada com ele e não é preciso mandar o prontuário de novo. Quando o período da conta passa da última data desse prontuário, o Último envio avisa para mandar o prontuário atualizado. Enviar de novo a mesma conta do mesmo atendimento não cria outra: a conta volta para a fila e é analisada outra vez. A exceção é a conta já concluída: enviar de novo a conta dela é o reenvio da conta corrigida, descrito abaixo, e o Último envio diz "31302, reenvio da conta 48001: 2 corrigidas no MV, 1 ainda na conta, nota de saída 86".
 
-A fila mostra as contas em ordem de envio e, dentro do envio, na ordem dos arquivos. Nunca é reordenada por valor. Cada conta aparece pelo número do atendimento, com o número da conta ao lado, e com a situação:
+A tela de contas tem quatro abas. Todas as faturistas veem a mesma Fila: as contas com o Guia pronto que ninguém pegou, em ordem de envio e, dentro do envio, na ordem dos arquivos, não importa quem enviou. A Fila nunca é reordenada por valor. A faturista puxa a conta ao abrir o Guia dela: nesse clique a conta passa a ser dela, sai da Fila das outras e vai para a aba **Minhas**, com as contas que ela puxou e ainda não concluiu. Se duas faturistas abrem a mesma conta ao mesmo tempo, só uma fica com ela; a outra vê "Outra faturista já pegou esta conta" e volta para a Fila.
+
+A aba **Meus envios** mostra as contas que a pessoa enviou e que ainda não ficaram prontas. Elas não entram na Fila: ficam com quem enviou, que é quem tem o PDF que falta.
+
+Cada conta aparece pelo número do atendimento, com o número da conta ao lado, e com a situação:
 
 - **Falta o prontuário** ou **Falta a conta**: o par ainda não chegou;
 - **Na fila**: esperando a análise;
 - **Pronta em instantes**: a análise está rodando;
-- **A fazer**: o Guia está pronto, com a nota, o R$ a ajustar e quantos itens já foram feitos ("0 de 9");
+- **A fazer**: o Guia está pronto e a conta está livre na Fila, com a nota, o R$ a ajustar e quantos itens já foram feitos ("0 de 9");
 - **Em correção**: o Guia já foi aberto, com o botão "Continuar";
 - **Retorno**: a conta já concluída voltou da Validação com linhas decididas para lançar;
 - **Erro**: a análise não conseguiu ler um dos arquivos, com o motivo em uma frase e o botão "Enviar de novo".
 
-A aba **Concluídas** guarda as contas já concluídas, as mais recentes primeiro, com a contagem de pendências de quem concluiu com pendência. A faturista vê só as próprias contas, na fila e nas Concluídas; quem tem o Painel completo vê as de todas.
+A aba **Concluídas** guarda as contas que a faturista concluiu, as mais recentes primeiro, com a contagem de pendências de quem concluiu com pendência. Quem tem o Painel completo vê as contas de todas em cada aba, com o nome de quem está com cada uma; para essa pessoa, Minhas se chama Em análise, e Meus envios se chama Envios.
 
 ## A análise
 
@@ -65,7 +69,7 @@ Assim que a conta e o prontuário do atendimento estão no sistema, a análise c
 
 O prontuário é lido uma vez por atendimento e serve a todas as parciais: a segunda parcial do mesmo atendimento não espera a leitura de novo. Quando o atendimento recebe um prontuário mais novo, ele substitui o anterior.
 
-Quando as contas de um envio terminam, a faturista recebe um aviso no sino, como "2 contas prontas". Clicar no aviso abre a fila de contas, onde cada uma aparece como A fazer.
+Quando as contas de um envio terminam, quem enviou recebe um aviso no sino, como "2 contas prontas". Clicar no aviso abre a tela de contas, onde cada uma aparece na Fila como A fazer.
 
 Enviar de novo uma conta que já tinha Guia refaz a análise: as linhas que a faturista já marcou (Feito, Não procede ou Bloqueado) ficam como estão, e as que estavam sem marcação são trocadas pelas da análise nova.
 
@@ -115,9 +119,9 @@ Em cada linha, três botões:
 
 Enquanto a conta não foi concluída, toda marcação tem "Desfazer". "Marcar o dia como feito" marca de uma vez as linhas abertas do grupo. A linha Validar não tem botão: o item já foi para a validação da gestão, e a faturista não precisa decidir.
 
-No rodapé ficam a observação opcional para a gestão e o botão "Concluir e abrir a próxima", sempre habilitado. Com item sem marcação, o app pergunta "Concluir assim mesmo?". Concluir abre a próxima conta A fazer da faturista, na ordem de envio. A conta fica Concluída quando tudo foi resolvido, ou Concluída com pendência quando sobrou linha sem marcação, bloqueada ou em validação. Na conclusão a nota de entrada é refeita sem as linhas Não procede; a nota original fica guardada.
+No rodapé ficam a observação opcional para a gestão e o botão "Concluir e abrir a próxima", sempre habilitado. Com item sem marcação, o app pergunta "Concluir assim mesmo?". Concluir abre a primeira conta livre da Fila, na ordem de envio, mesmo que outra pessoa tenha enviado, e essa conta passa a ser da faturista. A conta fica Concluída quando tudo foi resolvido, ou Concluída com pendência quando sobrou linha sem marcação, bloqueada ou em validação. Na conclusão a nota de entrada é refeita sem as linhas Não procede; a nota original fica guardada.
 
-Abrir o Guia pela primeira vez muda a conta de A fazer para Em correção. A faturista só abre as próprias contas; quem tem o Painel completo abre a de qualquer uma.
+Abrir o Guia de uma conta da Fila é puxar a conta: ela muda de A fazer para Em correção e passa a ser de quem abriu. Fora da Fila, a faturista só abre as contas que puxou; quem tem o Painel completo abre a de qualquer uma.
 
 ## O reenvio da conta corrigida
 
@@ -169,7 +173,7 @@ E seis blocos:
 - a nota média por semana, nas oito semanas até a escolhida;
 - o R$ apontado por causa-raiz (dispensação, regra automática, cadastro e preço, registro assistencial, lançamento manual), com o percentual de cada uma: diz quem corrige;
 - os dez itens que mais faltam: os códigos com mais contas com linha Incluir, com o número de contas e o R$. É a fila de parametrização para a consultoria do MV;
-- a produção de cada faturista: contas, contas com pendência, R$ incluído, taxa de Não procede e, em segundo plano, o R$ retirado;
+- a produção de cada faturista, contada para quem puxou e analisou a conta, e não para quem a enviou: contas, contas com pendência, R$ incluído, taxa de Não procede e, em segundo plano, o R$ retirado;
 - o R$ incluído por nível de evidência (Registrado, Prescrito, Prescrito SN, Por regra), por semana, em barras: mostra quanto do valor incluído depende só de prescrição;
 - o custo de inteligência artificial da semana e o custo médio por conta, em dólar.
 
@@ -190,7 +194,7 @@ São quatro tipos de cartão:
 
 Toda decisão grava quem decidiu e quando, e o cartão sai da fila. Mexer na memória pede também a permissão do tipo da regra, como na Memória da operadora.
 
-Quando a regra é validada e uma das contas afetadas já estava concluída, ela volta para a fila da faturista na situação **Retorno**, e o Guia dela mostra só as linhas decididas, para lançar no MV o que a diretoria validou. A linha decidida conta como pendência até a faturista marcar, e a conta é concluída de novo pelo mesmo botão. A conta que ainda estava com a faturista recebe as linhas decididas no próprio Guia.
+Quando a regra é validada e uma das contas afetadas já estava concluída, ela volta para a aba Minhas da faturista que a analisou, na situação **Retorno**, e o Guia dela mostra só as linhas decididas, para lançar no MV o que a diretoria validou. A linha decidida conta como pendência até a faturista marcar, e a conta é concluída de novo pelo mesmo botão. A conta que ainda estava com a faturista recebe as linhas decididas no próprio Guia.
 
 ## Quem vê
 
@@ -198,7 +202,7 @@ O módulo tem perfis próprios, separados dos de Reuniões, POPs e Ouvidoria. S�
 
 Cada perfil vem com um conjunto inicial de permissões, tirado da especificação do diretor:
 
-- **Faturista**: envia e corrige contas, e vê só as próprias.
+- **Faturista**: envia contas, puxa da Fila e corrige as que puxou.
 - **Coordenadora de faturamento**: o mesmo da faturista, mais o Painel completo e a Conferência da coordenação. Incluir regra operacional está desligado para ela, em avaliação pelo diretor.
 - **Gestão de contas médicas**: tudo, menos habilitar pessoas.
 - **Diretoria médica** e **Diretoria executiva**: tudo.

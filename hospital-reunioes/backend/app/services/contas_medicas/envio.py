@@ -145,16 +145,16 @@ def _ler(indice: int, arquivo: ArquivoRecebido, planos: list[dict]) -> _Lido | _
     return _Recusa(arquivo.nome, MENSAGEM_TIPO_DESCONHECIDO)
 
 
-def _envio(supabase, faturista_id: str, envio_id: str | None, agora: datetime) -> dict:
+def _envio(supabase, usuario_id: str, envio_id: str | None, agora: datetime) -> dict:
     if envio_id is None:
         return (
             supabase.table("cm_envio")
-            .insert({"usuario_id": faturista_id, "criado_em": agora.isoformat()})
+            .insert({"usuario_id": usuario_id, "criado_em": agora.isoformat()})
             .execute()
             .data[0]
         )
     achados = supabase.table("cm_envio").select("*").eq("id", envio_id).limit(1).execute().data or []
-    if not achados or achados[0].get("usuario_id") != faturista_id:
+    if not achados or achados[0].get("usuario_id") != usuario_id:
         raise EnvioNaoEncontradoError(envio_id)
     return achados[0]
 
@@ -219,10 +219,13 @@ def _primeira(consulta) -> dict | None:
 
 
 def _gravar_conta(
-    supabase, atendimento_id: str, lido: _Lido, arquivo_id: str, situacao: str, faturista_id: str, ordem: int, agora
+    supabase, atendimento_id: str, lido: _Lido, arquivo_id: str, situacao: str, ordem: int, agora
 ) -> None:
     """Uma `cm_conta` por parcial. A mesma conta de novo é reprocesso; a conta à
-    espera da Conta (deixada pelo Prontuário) é preenchida."""
+    espera da Conta (deixada pelo Prontuário) é preenchida.
+
+    A conta nasce sem faturista: quem enviou fica no envio, e a faturista é
+    quem a puxa da Fila (ADR 0073)."""
     cabecalho = lido.cabecalho
     campos = {
         "arquivo_id": arquivo_id,
@@ -233,7 +236,7 @@ def _gravar_conta(
         "erro_motivo": None,
         "processando_desde": None,
         "tentativas": 0,
-        "faturista_id": faturista_id,
+        "faturista_id": None,
         "ordem_fila": ordem,
         "enviada_em": agora.isoformat(),
     }
@@ -265,7 +268,7 @@ def _conta_concluida(supabase, atendimento_id: str, numero_conta: str | None) ->
 
 
 def _gravar_atendimento(
-    supabase, envio_id: str, numero: str, lidos: list[_Lido], faturista_id: str, ordem_base: int, agora: datetime
+    supabase, envio_id: str, numero: str, lidos: list[_Lido], ordem_base: int, agora: datetime
 ) -> list[_Recusa]:
     atendimento = _atendimento(supabase, numero)
     recusas: list[_Recusa] = []
@@ -309,16 +312,14 @@ def _gravar_atendimento(
     tem_prontuario = bool(_prontuarios_no_sistema(supabase, atendimento["id"], agora))
     situacao = "NA_FILA" if tem_prontuario else "AGUARDANDO_ARQUIVO"
     for lido, arquivo_id in contas:
-        _gravar_conta(
-            supabase, atendimento["id"], lido, arquivo_id, situacao, faturista_id, ordem_base + lido.indice, agora
-        )
+        _gravar_conta(supabase, atendimento["id"], lido, arquivo_id, situacao, ordem_base + lido.indice, agora)
 
     if chegou_prontuario:
-        _liberar_contas_a_espera(supabase, atendimento["id"], faturista_id, ordem_base, lidos, agora)
+        _liberar_contas_a_espera(supabase, atendimento["id"], ordem_base, lidos, agora)
     return recusas
 
 
-def _liberar_contas_a_espera(supabase, atendimento_id: str, faturista_id: str, ordem_base: int, lidos, agora) -> None:
+def _liberar_contas_a_espera(supabase, atendimento_id: str, ordem_base: int, lidos, agora) -> None:
     """O Prontuário chegou: a Conta que esperava por ele entra na fila. Sem
     Conta nenhuma, fica uma conta à espera dela."""
     contas = supabase.table("cm_conta").select("*").eq("atendimento_id", atendimento_id).execute().data or []
@@ -333,7 +334,6 @@ def _liberar_contas_a_espera(supabase, atendimento_id: str, faturista_id: str, o
             {
                 "atendimento_id": atendimento_id,
                 "situacao": "AGUARDANDO_ARQUIVO",
-                "faturista_id": faturista_id,
                 "ordem_fila": ordem_base + primeiro.indice,
                 "enviada_em": agora.isoformat(),
             }
@@ -341,10 +341,10 @@ def _liberar_contas_a_espera(supabase, atendimento_id: str, faturista_id: str, o
 
 
 def receber(
-    supabase, faturista_id: str, envio_id: str | None, arquivos: Sequence[ArquivoRecebido], agora: datetime
+    supabase, usuario_id: str, envio_id: str | None, arquivos: Sequence[ArquivoRecebido], agora: datetime
 ) -> dict:
     """Recebe um lote de arquivos de um envio e devolve o "Último envio" do envio inteiro."""
-    envio = _envio(supabase, faturista_id, envio_id, agora)
+    envio = _envio(supabase, usuario_id, envio_id, agora)
     ja_no_envio = _arquivos_do_envio(supabase, envio["id"])
     atendimentos = {a.get("numero_atendimento") for a in ja_no_envio}
     planos = listar_planos(supabase)
@@ -373,7 +373,7 @@ def receber(
     # A ordem da fila é a do envio e, dentro dele, a dos arquivos.
     ordem_base = int(agora.timestamp() * 1_000_000)
     for numero, lidos in por_atendimento.items():
-        recusas += _gravar_atendimento(supabase, envio["id"], numero, lidos, faturista_id, ordem_base, agora)
+        recusas += _gravar_atendimento(supabase, envio["id"], numero, lidos, ordem_base, agora)
 
     return {
         "envio_id": envio["id"],
