@@ -21,7 +21,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Limpar labels de estado e fechar PRD pai
-        uses: actions/github-script@v7
+        uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7.1.0
         with:
           script: |
             const { owner, repo } = context.repo;
@@ -107,7 +107,7 @@ jobs:
       REVIEWER_LOGINS: ${{ vars.REVIEWER_LOGINS || 'pedrorezendefig' }}
     steps:
       - name: Sinalizar comentário de revisor com a label revisor-comentou
-        uses: actions/github-script@v7
+        uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7.1.0
         with:
           script: |
             const corpo = context.payload.comment.body || '';

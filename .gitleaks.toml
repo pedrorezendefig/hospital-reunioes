@@ -1,0 +1,15 @@
+# Gitleaks do CI (issue #1287): as regras padrão, menos os fixtures de teste
+# que carregam chave falsa de propósito. Allowlist por arquivo, nunca por
+# pasta: um segredo de verdade colado em outro teste continua travando.
+title = "hospital-reunioes"
+
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "Fixtures de teste com chave falsa de propósito"
+paths = [
+  '''^hospital-reunioes/backend/tests/test_contas_medicas_[\w]+\.py$''',
+  '''^hospital-reunioes/backend/tests/test_central_de_comando_visao_geral\.py$''',
+  '''^hospital-reunioes/backend/tests/test_token_fora_do_log\.py$''',
+]

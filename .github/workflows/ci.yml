@@ -27,7 +27,7 @@ jobs:
       frontend: ${{ steps.diff.outputs.frontend }}
       ferramenta: ${{ steps.diff.outputs.ferramenta }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
           fetch-depth: 0
       - name: O PR muda backend, frontend ou ferramenta?
@@ -89,7 +89,7 @@ jobs:
       # que o job de build já passa como build arg.
       ENVIRONMENT: ci
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
           # Histórico completo: a guarda de migration repetida compara a branch
           # com origin/main e precisa do ponto em que elas se separaram.
@@ -104,7 +104,7 @@ jobs:
             echo "::error::Travessão (U+2014) ou meia-risca (U+2013) encontrado nos templates acima. Use vírgula, ou hífen entre números (ADR 0013)."
             exit 1
           fi
-      - uses: actions/setup-python@v6
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
         with:
           python-version: "3.12"
       - name: Migration com número repetido
@@ -171,14 +171,14 @@ jobs:
       run:
         working-directory: hospital-reunioes/frontend
     steps:
-      - uses: actions/checkout@v6
-      - uses: pnpm/action-setup@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
         with:
           # Pin pnpm@9 para bater com o Dockerfile do frontend
           # (corepack prepare pnpm@9 --activate). pnpm@11 trata ERR_PNPM_IGNORED_BUILDS
           # como fatal mesmo com onlyBuiltDependencies declarado no package.json.
           version: 9
-      - uses: actions/setup-node@v6
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
         with:
           node-version: "22"
           cache: "pnpm"
@@ -213,14 +213,14 @@ jobs:
       PUBLICA: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository }}
     steps:
       - name: Checkout do head
-        uses: actions/checkout@v6
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
           # O head do PR, não o merge com a main que o pull_request faria: a
           # imagem leva a tag do head e tem que ter o código dele.
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
-      - uses: docker/setup-buildx-action@v3
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3.12.0
       - name: Login no GHCR
-        uses: docker/login-action@v3
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3.7.0
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
@@ -228,7 +228,7 @@ jobs:
 
       - name: Build backend image
         id: backend
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6.19.2
         with:
           context: hospital-reunioes/backend
           push: ${{ env.PUBLICA == 'true' }}
@@ -251,13 +251,13 @@ jobs:
           printf '%s\n' "$DIGEST" > digest/digest
       - name: Guarda o digest para a subida
         if: env.PUBLICA == 'true'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: digest-backend
           path: digest/digest
 
       - name: Build frontend image
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6.19.2
         with:
           context: hospital-reunioes/frontend
           push: false
@@ -269,3 +269,47 @@ jobs:
             NEXT_PUBLIC_SUPABASE_ANON_KEY=dummy-anon-key-for-ci
             NEXT_PUBLIC_API_URL=http://localhost:8000
             NEXT_PUBLIC_ENVIRONMENT=ci
+
+  # As duas travas de repositório público (issue #1287) olham só o que o PR
+  # traz, então não rodam no push da main. Não dependem do `mudancas`: PR só de
+  # docs também pode trazer segredo ou planilha.
+  gitleaks:
+    name: Segredo nos commits do PR (gitleaks)
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          # Histórico completo: o gitleaks lê cada commit entre a base e o head.
+          fetch-depth: 0
+      - name: Gitleaks nos commits do PR
+        # Só os commits do PR (`base..head`): o histórico antigo não reprova PR
+        # novo. O binário é conferido pelo sha256 do release antes de rodar.
+        # A allowlist dos fixtures de teste fica no .gitleaks.toml.
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          VERSAO: 8.30.1
+          SHA256: 551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb
+        run: |
+          pacote="gitleaks_${VERSAO}_linux_x64.tar.gz"
+          curl -sSfL -o "$RUNNER_TEMP/$pacote" "https://github.com/gitleaks/gitleaks/releases/download/v${VERSAO}/${pacote}"
+          echo "$SHA256  $RUNNER_TEMP/$pacote" | sha256sum -c -
+          tar -xzf "$RUNNER_TEMP/$pacote" -C "$RUNNER_TEMP" gitleaks
+          "$RUNNER_TEMP/gitleaks" git --no-banner --redact --verbose --config .gitleaks.toml --exit-code 1 --log-opts="$BASE_SHA..$HEAD_SHA" .
+
+  arquivo-sensivel:
+    name: Arquivo sensível no PR
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          # Histórico completo: a trava compara o head com o ponto em que ele
+          # saiu da base.
+          fetch-depth: 0
+      - name: Nenhum arquivo de dado fora das pastas liberadas
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: python3 tools/checar_arquivo_sensivel.py --base "$BASE_SHA" --head "$HEAD_SHA"
