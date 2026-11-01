@@ -2289,6 +2289,8 @@ RAIZ_DO_APP = Path(__file__).resolve().parents[2]
 # ninguém vê, e o lint do front já trava o texto visível do sino.
 ARQUIVOS_DA_FATIA = [
     RAIZ_DO_APP / "backend/app/services/contas_medicas/processamento.py",
+    RAIZ_DO_APP / "backend/app/services/contas_medicas/erro_da_conta.py",
+    MIGRATION_122,
     RAIZ_DO_APP / "backend/app/services/contas_medicas/tabelas.py",
     RAIZ_DO_APP / "backend/app/services/contas_medicas/envio.py",
     RAIZ_DO_APP / "backend/app/services/contas_medicas_extrator.py",

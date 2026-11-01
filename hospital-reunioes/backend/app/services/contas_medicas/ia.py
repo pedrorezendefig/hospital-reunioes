@@ -501,7 +501,10 @@ def _chamar_a_ia[Saida: BaseModel](
             causa, http = _causa(erro)
             logger.warning("[ContasMedicas] IA %s, tentativa %s: %s (HTTP %s)", modelo, tentativa, tipo, http)
             falha = ErroDaIA(
-                f"A IA não respondeu em {tentativa} tentativas ({tipo}, HTTP {http})", causa=causa, tipo=tipo, http=http
+                f"A IA falhou na tentativa {tentativa} ({causa}, {tipo}, HTTP {http})",
+                causa=causa,
+                tipo=tipo,
+                http=http,
             )
             if causa in DEFINITIVAS:
                 break
