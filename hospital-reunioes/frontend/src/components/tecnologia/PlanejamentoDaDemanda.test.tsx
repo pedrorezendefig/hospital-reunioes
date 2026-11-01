@@ -17,7 +17,12 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { DemandaModal } from "./DemandaModal";
 import { Demanda, EuNaAba } from "./demandas";
-import { MensagemDoPlanejamento, Planejamento, PLANEJAR_COM_A_IA } from "./planejamento";
+import {
+  CONTINUAR_PLANEJAMENTO,
+  MensagemDoPlanejamento,
+  Planejamento,
+  PLANEJAR_COM_A_IA,
+} from "./planejamento";
 import {
   FECHAR_E_RESUMIR,
   NADA_DECIDIDO,
@@ -118,6 +123,35 @@ describe("O botão Planejar com a IA no card aberto", () => {
 
     expect(screen.getByLabelText("Título")).toBeTruthy();
     expect(botaoDePlanejar()).toBeNull();
+  });
+});
+
+// Os três estados do botão (issue #1348, ADR 0075, decisão 8).
+describe("O botão do card conforme o planejamento", () => {
+  function botaoDeContinuar(): HTMLElement | null {
+    return screen.queryByRole("link", { name: CONTINUAR_PLANEJAMENTO });
+  }
+
+  it("sem planejamento, mostra Planejar com a IA", () => {
+    montarModal(demanda({ tem_planejamento: false }));
+
+    expect(botaoDePlanejar()).not.toBeNull();
+    expect(botaoDeContinuar()).toBeNull();
+  });
+
+  it("com planejamento em andamento, mostra Continuar planejamento e leva à mesma tela", () => {
+    montarModal(demanda({ tem_planejamento: true }));
+
+    expect(botaoDeContinuar()?.getAttribute("href")).toBe("/admin/tecnologia/planejamento/d-1");
+    expect(botaoDePlanejar()).toBeNull();
+  });
+
+  it("com Vínculo, nenhum dos dois, mesmo com planejamento guardado", () => {
+    montarModal(demanda({ tem_planejamento: true, tem_vinculo: true, vinculo: null }));
+
+    expect(screen.getByLabelText("Título")).toBeTruthy();
+    expect(botaoDePlanejar()).toBeNull();
+    expect(botaoDeContinuar()).toBeNull();
   });
 });
 

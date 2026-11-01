@@ -35,6 +35,7 @@ import {
   RespostaDoPlanejamento,
   ResumoDoPlanejamento,
   rotaDoPlanejamento,
+  rotuloDoBotao,
   urlDoNao,
   urlDoPlanejamento,
   urlDoResumo,
@@ -56,7 +57,11 @@ const NAO_ABRIU = "Não foi possível abrir o planejamento desta Demanda. Recarr
 const CORPO_ILEGIVEL = "O servidor respondeu algo que a tela não conseguiu ler. Recarregue a página.";
 const TERMINOU = "A IA já tem o que precisa. Clique em Fechar e resumir para ver as decisões.";
 
-/** O botão do card aberto: só em Novo ou Ajuste, aberta e sem Vínculo. */
+/**
+ * O botão do card aberto: só em Novo ou Ajuste, aberta e sem Vínculo. Com
+ * conversa guardada ele vira "Continuar planejamento", e leva à mesma tela,
+ * que retoma de onde parou.
+ */
 export function BotaoDePlanejar({ demanda }: { demanda: Demanda }) {
   if (!podePlanejar(demanda)) return null;
   return (
@@ -66,7 +71,7 @@ export function BotaoDePlanejar({ demanda }: { demanda: Demanda }) {
         className="inline-flex items-center gap-2 px-3 py-2 rounded-xl border border-primary/40 text-sm font-semibold text-primary hover:bg-primary/5 transition-colors"
       >
         <Bot className="w-4 h-4" />
-        {PLANEJAR_COM_A_IA}
+        {rotuloDoBotao(demanda)}
       </Link>
     </div>
   );
