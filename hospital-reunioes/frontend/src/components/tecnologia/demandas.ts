@@ -121,6 +121,11 @@ export type Demanda = {
    */
   tem_vinculo?: boolean;
   /**
+   * Se há conversa de planejamento guardada (issue #1348). O botão do card
+   * vira "Continuar planejamento" (ADR 0075, decisão 8).
+   */
+  tem_planejamento?: boolean;
+  /**
    * O que a entrega muda para quem pediu (issue #676, ADR 0054, decisão 7).
    *
    * Vem do bloco "Para o diretor" da issue e NUNCA é digitado no app. Nulo é

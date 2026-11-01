@@ -515,6 +515,26 @@ def ler(supabase, demanda_id: str) -> dict | None:
     return (result.data or [None])[0]
 
 
+def demandas_com_planejamento(supabase, demanda_ids: list[str]) -> set[str]:
+    """Quais destas Demandas ja tem conversa guardada (issue #1348).
+
+    E o que faz o botao do card virar "Continuar planejamento". Nunca levanta:
+    sem a resposta daqui o card mostra "Planejar com a IA", que abre a MESMA
+    tela e retoma a conversa do mesmo jeito, e a lista da aba nao pode cair por
+    causa de um rotulo.
+    """
+    if not demanda_ids:
+        return set()
+    try:
+        result = (
+            supabase.table(TABELA_PLANEJAMENTOS).select("demanda_id").in_("demanda_id", sorted(demanda_ids)).execute()
+        )
+    except Exception:
+        logger.exception("Falha ao ler quais Demandas tem planejamento")
+        return set()
+    return {str(linha["demanda_id"]) for linha in (result.data or [])}
+
+
 def gravar(supabase, demanda_id: str, *, atual: dict | None, novo: dict) -> dict | None:
     """O primeiro turno insere; os seguintes atualizam o que foi LIDO.
 

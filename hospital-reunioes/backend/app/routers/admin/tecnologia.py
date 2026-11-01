@@ -516,6 +516,9 @@ def _com_nomes(supabase: Client, demandas: list[dict], *, ator: dict) -> list[di
     nomes_pessoa = _nomes_de_participantes(supabase, {d["responsavel_id"] for d in demandas if d.get("responsavel_id")})
 
     da_vitta = tem_github_login(ator)
+    planejadas = planejamento_demanda.demandas_com_planejamento(
+        supabase, [str(d["id"]) for d in demandas if d.get("id")]
+    )
     return [
         {
             **d,
@@ -523,6 +526,7 @@ def _com_nomes(supabase: Client, demandas: list[dict], *, ator: dict) -> list[di
             "responsavel_nome": nomes_pessoa.get(d.get("responsavel_id")),
             "vinculo": _vinculo_visivel(d) if da_vitta else None,
             "tem_vinculo": bool(d.get("github_issue_numero")),
+            "tem_planejamento": str(d.get("id")) in planejadas,
             "partes": _partes_visiveis(d, da_vitta=da_vitta),
             "versao": versao_da_entrega(d),
         }
