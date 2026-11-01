@@ -258,8 +258,13 @@ export function PlanejamentoDaDemanda({ demandaId, token, onTitulo }: Props) {
   );
 
   const responder = useCallback(
-    async (corpo: RespostaDoPlanejamento): Promise<boolean> =>
-      (await enviar(urlDoPlanejamento(demandaId), corpo)) !== null,
+    async (corpo: RespostaDoPlanejamento): Promise<boolean> => {
+      const novo = await enviar(urlDoPlanejamento(demandaId), corpo);
+      // A IA encerrou: o resumo vem sozinho, sem esperar o clique em Fechar e
+      // resumir. Se ele falhar, o botão continua lá para tentar de novo.
+      if (novo?.estado === "encerrado") await enviar(urlDoResumo(demandaId), {});
+      return novo !== null;
+    },
     [demandaId, enviar],
   );
 

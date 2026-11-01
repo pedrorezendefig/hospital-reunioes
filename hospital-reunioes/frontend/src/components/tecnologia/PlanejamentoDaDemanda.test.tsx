@@ -330,6 +330,27 @@ describe("Fechar e resumir", () => {
     expect(await screen.findByRole("heading", { name: TITULO_DO_RESUMO })).toBeTruthy();
   });
 
+  it("quando a IA encerra, a tela pede o resumo sozinha", async () => {
+    const encerrado = planejamento({
+      estado: "encerrado",
+      mensagens: [
+        PERGUNTA,
+        { tipo: "resposta", opcao: "A", texto: "Só a recepção." },
+        { tipo: "encerrou", contexto: "Já tenho o que preciso para a Vitta planejar." },
+      ],
+    });
+    const pedidos = dublarServidor(planejamento(), [resposta(encerrado), resposta(RESUMIDO)]);
+    montarTela();
+
+    fireEvent.click(await screen.findByRole("button", { name: /Só a recepção\./ }));
+
+    expect(await screen.findByRole("heading", { name: TITULO_DO_RESUMO })).toBeTruthy();
+    expect(posts(pedidos).map((p) => p.url)).toEqual([
+      "/api/admin/tecnologia/demandas/d-1/planejamento",
+      "/api/admin/tecnologia/demandas/d-1/planejamento/resumo",
+    ]);
+  });
+
   it("depois do encerrou, o botão continua lá", async () => {
     dublarServidor(
       planejamento({
