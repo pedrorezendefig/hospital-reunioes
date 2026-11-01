@@ -150,6 +150,9 @@ class DemandaResponse(BaseModel):
     # some quando ha (ADR 0075, decisao 8), e o diretor, que nao recebe o
     # objeto acima, precisa saber disso sem ver numero nem link.
     tem_vinculo: bool = False
+    # Se ha conversa de planejamento guardada (issue #1348): o botao do card
+    # vira "Continuar planejamento" (ADR 0075, decisao 8).
+    tem_planejamento: bool = False
     # ─── O que muda (issue #676, ADR 0054, decisao 7) ───
     #
     # O bloco "Para o diretor" da issue-raiz e o de cada parte, lidos do GitHub

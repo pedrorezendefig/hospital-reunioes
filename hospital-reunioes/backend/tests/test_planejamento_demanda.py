@@ -674,6 +674,31 @@ class TestQuemPodePlanejar:
         assert "673" not in str(por_id["d-2"])
 
 
+class TestOCardSabeDoPlanejamento:
+    """O botao vira "Continuar planejamento" quando ha conversa (issue #1348,
+    ADR 0075, decisao 8). O card nao pede o planejamento de cada Demanda: o
+    booleano vem junto da Demanda, como o `tem_vinculo`."""
+
+    def test_a_lista_diz_quais_demandas_tem_planejamento(self):
+        client, _ = _cenario(
+            demandas=[_demanda_que_se_planeja(), _demanda("d-2", tipo="novo")],
+            planejamentos=[_planejamento_guardado("d-1", perguntas=2)],
+        )
+
+        por_id = {d["id"]: d for d in client.get(f"{BASE}/demandas").json()}
+
+        assert por_id["d-1"]["tem_planejamento"] is True
+        assert por_id["d-2"]["tem_planejamento"] is False
+
+    def test_a_demanda_que_volta_de_uma_edicao_tambem_diz(self):
+        client, _ = _cenario(planejamentos=[_planejamento_guardado("d-1")])
+
+        resposta = client.patch(f"{BASE}/demandas/d-1", json={"prioridade": "alta"})
+
+        assert resposta.status_code == 200
+        assert resposta.json()["tem_planejamento"] is True
+
+
 class TestLerOPlanejamento:
     def test_sem_planejamento_a_conversa_vem_vazia(self):
         client, _ = _cenario()

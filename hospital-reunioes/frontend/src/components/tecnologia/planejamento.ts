@@ -54,6 +54,12 @@ export const TIPOS_QUE_SE_PLANEJAM: TipoDemanda[] = ["novo", "ajuste"];
 const ESTADOS_ENCERRADOS: EstadoDemanda[] = ["concluida", "cancelada"];
 
 export const PLANEJAR_COM_A_IA = "Planejar com a IA";
+export const CONTINUAR_PLANEJAMENTO = "Continuar planejamento";
+
+/** O rótulo do botão do card: quem já começou continua (issue #1348). */
+export function rotuloDoBotao(demanda: Pick<Demanda, "tem_planejamento">): string {
+  return demanda.tem_planejamento ? CONTINUAR_PLANEJAMENTO : PLANEJAR_COM_A_IA;
+}
 
 /**
  * O botão aparece no card de uma Demanda Novo ou Ajuste, aberta e sem Vínculo.

@@ -56,8 +56,8 @@ export default function PlanejamentoPage({ params }: { params: Promise<{ id: str
         <div className="min-w-0">
           <h1 className="text-base font-bold text-text-primary truncate">{titulo || PLANEJAR_COM_A_IA}</h1>
           <p className="text-xs text-text-secondary">
-            A IA faz as perguntas que a Vitta faria antes de começar, uma por vez. Clique numa opção ou escreva a
-            sua resposta. Pode sair quando quiser: a conversa fica guardada na Demanda.
+            A IA faz as perguntas que a Vitta faria antes de começar, uma por vez. Clique numa opção, escreva a sua
+            resposta ou fale no microfone. Pode sair quando quiser: a conversa fica guardada na Demanda.
           </p>
         </div>
       </div>
