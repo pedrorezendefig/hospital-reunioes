@@ -42,6 +42,12 @@ Planejamento da Demanda (issue #1345, ADR 0075):
                                                       responde a pergunta (a
                                                       opcao ou o texto livre),
                                                       e devolve a proxima.
+- POST  /admin/tecnologia/demandas/{id}/planejamento/resumo  Fechar e
+                                                      resumir: as decisoes e o
+                                                      "ficou em aberto" (#1347).
+- POST  /admin/tecnologia/demandas/{id}/planejamento/nao  o que nao bateu no
+                                                      resumo; a conversa volta
+                                                      a em andamento.
 
 Anexo da Demanda (issue #1061, ADR 0069):
 
@@ -123,6 +129,7 @@ from app.models.tecnologia_schemas import (
     MoverPayload,
     PainelResponse,
     PessoaDaAba,
+    PlanejamentoNaoPayload,
     PlanejamentoResponse,
     PlanejamentoRespostaPayload,
     ProdutoCreatePayload,
@@ -2441,6 +2448,7 @@ def _planejamento_para_a_tela(demanda: dict, linha: dict | None) -> dict:
         "estado": linha.get("estado"),
         "mensagens": linha.get("mensagens") or [],
         "decisoes": linha.get("decisoes") or [],
+        "resumo": linha.get("resumo"),
     }
 
 
@@ -2514,6 +2522,97 @@ async def responder_no_planejamento(
             "estado": planejamento_demanda.ESTADO_ENCERRADO if encerrou else planejamento_demanda.ESTADO_EM_ANDAMENTO,
             "mensagens": [*mensagens, resultado.mensagem],
             "decisoes": decisoes,
+            "atualizado_em": _agora(),
+        },
+    )
+    if linha is None:
+        _conflito(MOTIVO_PLANEJAMENTO_MUDOU)
+    return _planejamento_para_a_tela(demanda, linha)
+
+
+@router.post("/demandas/{demanda_id}/planejamento/resumo", response_model=PlanejamentoResponse)
+@limiter.limit(LIMITE_DO_ASSISTENTE)
+async def resumir_planejamento(
+    request: Request,
+    demanda_id: str,
+    _ator: dict = Depends(require_super_admin),
+    supabase: Client = Depends(get_supabase_client),
+):
+    """Fechar e resumir (issue #1347): vale a qualquer altura, da primeira
+    pergunta ao "encerrou". O resumo novo substitui o anterior na mesma coluna,
+    e a conversa fica como estava. Falha da IA devolve 502 sem mexer em nada."""
+    demanda = _buscar_demanda(supabase, demanda_id)
+    motivo = planejamento_demanda.motivo_para_nao_planejar(demanda)
+    if motivo:
+        _conflito(motivo)
+
+    atual = planejamento_demanda.ler(supabase, demanda_id)
+    estado = (atual or {}).get("estado")
+    if estado == planejamento_demanda.ESTADO_RESUMIDO:
+        _conflito(planejamento_demanda.MOTIVO_RESUMO_PRONTO)
+    if estado not in (None, planejamento_demanda.ESTADO_EM_ANDAMENTO, planejamento_demanda.ESTADO_ENCERRADO):
+        _conflito(planejamento_demanda.MOTIVO_PLANEJAMENTO_TERMINOU)
+
+    mensagens = list((atual or {}).get("mensagens") or [])
+    resultado = await ai_processor.chamar_ia_fora_do_loop(
+        planejamento_demanda.resumir, demanda=demanda, mensagens=mensagens, kit=carregar_kit()
+    )
+    if resultado.chamada is not None:
+        planejamento_demanda.gravar_chamada(supabase, resultado.chamada)
+    if resultado.erro:
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=resultado.erro)
+
+    linha = planejamento_demanda.gravar(
+        supabase,
+        demanda_id,
+        atual=atual,
+        novo={
+            "estado": planejamento_demanda.ESTADO_RESUMIDO,
+            "mensagens": mensagens,
+            "decisoes": list((atual or {}).get("decisoes") or []),
+            "resumo": resultado.resumo,
+            "atualizado_em": _agora(),
+        },
+    )
+    if linha is None:
+        _conflito(MOTIVO_PLANEJAMENTO_MUDOU)
+    return _planejamento_para_a_tela(demanda, linha)
+
+
+@router.post("/demandas/{demanda_id}/planejamento/nao", response_model=PlanejamentoResponse)
+@limiter.limit(LIMITE_DO_ASSISTENTE)
+async def recusar_resumo_do_planejamento(
+    request: Request,
+    demanda_id: str,
+    payload: PlanejamentoNaoPayload,
+    _ator: dict = Depends(require_super_admin),
+    supabase: Client = Depends(get_supabase_client),
+):
+    """O "nao" do resumo (issue #1347): o que nao bateu entra na conversa como
+    fala do diretor e o planejamento volta a em andamento. A IA nao e chamada
+    aqui: a tela pede o turno seguinte pela rota do planejamento, que ve a
+    fala no fim da conversa e retoma dali. O resumo fica ate o proximo, que o
+    substitui."""
+    demanda = _buscar_demanda(supabase, demanda_id)
+    motivo = planejamento_demanda.motivo_para_nao_planejar(demanda)
+    if motivo:
+        _conflito(motivo)
+
+    texto = (payload.texto or "").strip()
+    if not texto:
+        _recusar(planejamento_demanda.MOTIVO_NAO_SEM_TEXTO)
+
+    atual = planejamento_demanda.ler(supabase, demanda_id)
+    if atual is None or atual.get("estado") != planejamento_demanda.ESTADO_RESUMIDO:
+        _conflito(planejamento_demanda.MOTIVO_SEM_RESUMO)
+
+    linha = planejamento_demanda.gravar(
+        supabase,
+        demanda_id,
+        atual=atual,
+        novo={
+            "estado": planejamento_demanda.ESTADO_EM_ANDAMENTO,
+            "mensagens": [*(atual.get("mensagens") or []), {"tipo": "nao_bateu", "texto": texto}],
             "atualizado_em": _agora(),
         },
     )

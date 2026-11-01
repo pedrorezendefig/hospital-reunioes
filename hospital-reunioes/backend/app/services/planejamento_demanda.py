@@ -51,6 +51,7 @@ TIPOS_QUE_SE_PLANEJAM = ("novo", "ajuste")
 
 ESTADO_EM_ANDAMENTO = "em_andamento"
 ESTADO_ENCERRADO = "encerrado"
+ESTADO_RESUMIDO = "resumido"
 
 TEXTO_DO_TETO = (
     "Chegamos ao limite de 12 perguntas. O que ficou decidido está no painel ao lado, "
@@ -64,6 +65,9 @@ MOTIVO_PLANEJAMENTO_TERMINOU = "Este planejamento já terminou. Não há pergunt
 MOTIVO_SEM_RESPOSTA = "Escolha uma das opções ou escreva a sua resposta."
 MOTIVO_DUAS_RESPOSTAS = "Escolha uma opção ou escreva a sua resposta, não os dois."
 MOTIVO_RESPOSTA_SEM_PERGUNTA = "Ainda não há pergunta para responder. Recarregue a página."
+MOTIVO_RESUMO_PRONTO = "O resumo deste planejamento já está pronto. Recarregue a página."
+MOTIVO_SEM_RESUMO = "Não há resumo esperando a sua resposta. Recarregue a página."
+MOTIVO_NAO_SEM_TEXTO = "Diga o que não bateu no resumo."
 
 # A frase de quando o turno nao aconteceu: provedor fora do ar, recusa, ou a
 # resposta que nao validou contra o esquema. Ela nao culpa nenhuma das tres,
