@@ -431,9 +431,10 @@ class TestContaPresa:
         processamento.devolver_presas(banco, AGORA)
 
         conta = banco.conta("c1")
-        assert (conta["situacao"], conta["erro_motivo"], conta["processando_desde"]) == (
+        assert (conta["situacao"], conta["erro_codigo"], conta["erro_motivo"], conta["processando_desde"]) == (
             "ERRO",
-            "A análise não terminou em três tentativas. Envie de novo.",
+            "CM-APP-TENTATIVAS",
+            "A análise não terminou em três tentativas: o app reiniciou ou travou na análise.",
             None,
         )
         assert processamento.pegar_da_fila(banco, AGORA) is None
@@ -1246,15 +1247,10 @@ class TestLeituraQueNaoFecha:
         _rodar_o_job(banco)
 
         (conta,) = banco.tabelas["cm_conta"]
-        assert (conta["situacao"], conta["erro_motivo"], conta["tentativas"]) == (
-            "ERRO",
-            "Não consegui ler a conta inteira",
-            1,
-        )
+        frase = "Não consegui ler a conta inteira: os itens lidos somam R$ 3.091,70 e o total da conta é R$ 3.101,70."
+        assert (conta["situacao"], conta["erro_motivo"], conta["tentativas"]) == ("ERRO", frase, 1)
         # O erro fica em "Meus envios" de quem enviou, que tem o PDF (ADR 0073).
-        assert [(c["situacao"], c["erro_motivo"]) for c in _fila(banco, "meus_envios")] == [
-            ("ERRO", "Não consegui ler a conta inteira")
-        ]
+        assert [(c["situacao"], c["erro_motivo"]) for c in _fila(banco, "meus_envios")] == [("ERRO", frase)]
         assert banco.tabelas["cm_guia_linha"] == []
 
     def test_pdf_sem_texto_sai_erro_com_a_frase_de_exportar_de_novo(self):
@@ -1294,9 +1290,10 @@ class TestLeituraQueNaoFecha:
 
         (conta,) = banco.tabelas["cm_conta"]
         assert len(tentativas) == 3
-        assert (conta["situacao"], conta["erro_motivo"], conta["tentativas"]) == (
+        assert (conta["situacao"], conta["erro_codigo"], conta["erro_motivo"], conta["tentativas"]) == (
             "ERRO",
-            "A análise parou na conferência. Envie de novo.",
+            "CM-APP-DEFEITO",
+            "A análise parou na conferência por um defeito do app.",
             3,
         )
 
@@ -1385,23 +1382,29 @@ class TestIAForaDoFormato:
         (conta,) = banco.tabelas["cm_conta"]
         # As três tentativas são do adaptador; o pipeline não repete a conta.
         assert ia_falsa.formatos == [PASSO_A] * 3
-        assert (conta["situacao"], conta["erro_motivo"], conta["tentativas"]) == (
+        assert (conta["situacao"], conta["erro_codigo"], conta["erro_motivo"], conta["tentativas"]) == (
             "ERRO",
-            "Tente de novo em alguns minutos",
+            "CM-IA-FORMATO",
+            "A resposta da IA veio fora do formato combinado.",
             1,
         )
-        assert [(c["situacao"], c["erro_motivo"]) for c in _fila(banco, "meus_envios")] == [
-            ("ERRO", "Tente de novo em alguns minutos")
-        ]
+        assert [(c["situacao"], c["erro_codigo"]) for c in _fila(banco, "meus_envios")] == [("ERRO", "CM-IA-FORMATO")]
 
         # O botão da conta em Erro manda a mesma conta de novo; a IA voltou.
         ia_falsa.fora_do_formato = False
         _enviar(banco, _conta())
+        reenviada = banco.conta(conta["id"])
+        assert (reenviada["situacao"], reenviada["erro_codigo"], reenviada["erro_detalhe"]) == ("NA_FILA", None, None)
         _rodar_o_job(banco)
 
         assert ia_falsa.formatos.count(PASSO_A) == 4
-        assert banco.conta(conta["id"])["situacao"] == "A_FAZER"
-        assert banco.conta(conta["id"])["erro_motivo"] is None
+        pronta = banco.conta(conta["id"])
+        assert (pronta["situacao"], pronta["erro_motivo"], pronta["erro_codigo"], pronta["erro_detalhe"]) == (
+            "A_FAZER",
+            None,
+            None,
+            None,
+        )
 
     def test_a_ia_sem_credito_poe_a_conta_em_erro_com_a_frase_do_credito_sem_nova_tentativa(self, ia_falsa):
         """Issue #1302: o 400 de saldo da Anthropic não é tentado de novo, e a
@@ -1417,6 +1420,36 @@ class TestIAForaDoFormato:
         (conta,) = banco.tabelas["cm_conta"]
         assert ia_falsa.formatos == [PASSO_A]
         assert (conta["situacao"], conta["erro_motivo"]) == ("ERRO", "A IA está sem crédito. Avise o Pedro.")
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 6c. O Código do erro (issue #1337, PRD #1335)
+# ═══════════════════════════════════════════════════════════════════════════
+
+ENVIAR_DE_NOVO, ANALISAR_DE_NOVO = "enviar_de_novo", "analisar_de_novo"
+
+
+def _erro_no_cartao(banco: _Banco) -> tuple[str | None, str | None, str | None, str | None]:
+    """O que o cartão de Meus envios recebe da conta em Erro: o código, a
+    frase, o arquivo afetado e a ação."""
+    (item,) = _fila(banco, "meus_envios")
+    assert item["situacao"] == "ERRO", item
+    return item["erro_codigo"], item["erro_motivo"], item["erro_arquivo"], item["erro_acao"]
+
+
+class TestCodigoDoErroDaLeitura:
+    def test_conta_que_nao_soma_diz_a_soma_lida_e_o_total(self):
+        banco = _cenario()
+        _enviar(banco, _conta(total_errado=True), _prontuario())
+
+        _rodar_o_job(banco)
+
+        assert _erro_no_cartao(banco) == (
+            "CM-ARQ-SOMA",
+            "Não consegui ler a conta inteira: os itens lidos somam R$ 3.091,70 e o total da conta é R$ 3.101,70.",
+            "conta",
+            ENVIAR_DE_NOVO,
+        )
 
 
 class TestPassoANoPipeline:

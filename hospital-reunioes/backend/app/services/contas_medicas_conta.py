@@ -48,6 +48,7 @@ __all__ = [
     "detectar_tipo_do_arquivo",
     "ler_cabecalho_da_conta",
     "ler_conta",
+    "soma_e_total",
 ]
 
 MENSAGEM_CONTA_INCOMPLETA = "Não consegui ler a conta inteira"
@@ -311,6 +312,15 @@ def ler_conta(texto_por_pagina: Sequence[str]) -> Conta | ErroLeitura:
         total=total,
         itens=tuple(itens),
     )
+
+
+def soma_e_total(texto_por_pagina: Sequence[str]) -> tuple[Decimal, Decimal | None]:
+    """A soma dos itens lidos e o total que a conta declara (nulo quando o PDF
+    não traz a linha do total): os dois números da frase do Erro quando a
+    leitura não fecha, para conferir no MV se a exportação saiu cortada (#1337)."""
+    total = _cabecalho("\n".join(texto_por_pagina)).get("total")
+    soma = sum((item.total for item in _itens(texto_por_pagina)), Decimal(0))
+    return soma, _numero(total[0]) if total else None
 
 
 def _normalizar(texto: str) -> str:
