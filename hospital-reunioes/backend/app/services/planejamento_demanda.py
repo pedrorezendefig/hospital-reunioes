@@ -307,7 +307,7 @@ def _mensagem_do_modelo(saida: _SaidaDoTurno, perguntas_feitas: int) -> dict:
     }
 
 
-def _chamar(*, demanda: dict, passo: str, conteudo: str, kit: str, validar):
+def _chamar_o_modelo(*, demanda: dict, passo: str, conteudo: str, kit: str, validar):
     """Uma chamada ao modelo do planejamento: o bloco fixo em cache, o pedido
     que varia, a saida validada e a linha de custo.
 
@@ -365,7 +365,7 @@ def turno(*, demanda: dict, mensagens: list[dict], kit: str) -> ResultadoDoTurno
         logger.warning("Modo MOCK ativo para o Planejamento da Demanda (sem chave LLM)")
         return ResultadoDoTurno(mensagem=dict(PERGUNTA_MOCK), decisao=None, erro=None, chamada=None)
 
-    saida, chamada = _chamar(
+    saida, chamada = _chamar_o_modelo(
         demanda=demanda,
         passo="pergunta",
         conteudo=pedido_do_turno(demanda, mensagens),
@@ -493,7 +493,7 @@ def resumir(*, demanda: dict, mensagens: list[dict], kit: str) -> ResultadoDoRes
         logger.warning("Modo MOCK ativo para o resumo do Planejamento da Demanda (sem chave LLM)")
         return ResultadoDoResumo(resumo=json.loads(json.dumps(RESUMO_MOCK)), erro=None, chamada=None)
 
-    saida, chamada = _chamar(
+    saida, chamada = _chamar_o_modelo(
         demanda=demanda,
         passo="resumo",
         conteudo=pedido_do_resumo(demanda, mensagens),
