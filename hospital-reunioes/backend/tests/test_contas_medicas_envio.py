@@ -968,6 +968,39 @@ class TestFila:
         assert por_id["na-fila"]["falta"] is None
         assert por_id["concluida"]["pendencias"] == 1
 
+    def test_meus_envios_traz_as_paginas_do_prontuario_mais_recente_do_atendimento(self):
+        """Issue #1336: o quadrado do Prontuário mostra o número de páginas;
+        com o prontuário reenviado, vale o último."""
+        banco = _fila_semeada()
+        banco.tabelas["cm_arquivo"] += [
+            {
+                "id": "pront-velho",
+                "envio_id": "env-F1",
+                "tipo": "PRONTUARIO",
+                "atendimento_id": "at-na-fila",
+                "paginas": 180,
+                "criado_em": "2026-10-10T10:00:00+00:00",
+            },
+            {
+                "id": "pront-novo",
+                "envio_id": "env-F1",
+                "tipo": "PRONTUARIO",
+                "atendimento_id": "at-na-fila",
+                "paginas": 212,
+                "criado_em": "2026-10-11T10:00:00+00:00",
+            },
+        ]
+        for arquivo in banco.tabelas["cm_arquivo"]:
+            if arquivo["id"] == "arq-pront":
+                arquivo["paginas"] = 47
+
+        envios = _cliente("faturista", banco).get(ROTA_MEUS_ENVIOS).json()["meus_envios"]
+        paginas = {c["id"]: c["prontuario_paginas"] for c in envios}
+
+        assert paginas["na-fila"] == 212
+        assert paginas["falta-conta"] == 47
+        assert paginas["falta-prontuario"] is None
+
     @pytest.mark.parametrize("quem", ["credenciamento", "sem_eixo"])
     def test_sem_a_permissao_de_enviar_e_corrigir_contas_recebe_403(self, quem):
         assert _cliente(quem, _fila_semeada()).get(ROTA_FILA).status_code == 403

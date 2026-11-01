@@ -86,13 +86,32 @@ def _linhas_por_conta(supabase: Client, contas: list[dict]) -> dict[str, list[di
     return por_conta
 
 
+def _paginas_do_prontuario(supabase: Client, contas: list[dict]) -> dict[str, int | None]:
+    """As páginas do Prontuário de cada atendimento (issue #1336). Com o
+    prontuário reenviado, vale o último que chegou."""
+    ids = list({c["atendimento_id"] for c in contas if c.get("atendimento_id")})
+    if not ids:
+        return {}
+    prontuarios = (
+        supabase.table("cm_arquivo")
+        .select("atendimento_id, paginas, criado_em")
+        .in_("atendimento_id", ids)
+        .eq("tipo", "PRONTUARIO")
+        .order("criado_em")
+        .execute()
+        .data
+    )
+    # Em ordem de chegada: o último de cada atendimento sobrescreve os de antes.
+    return {p["atendimento_id"]: p.get("paginas") for p in prontuarios or []}
+
+
 def _falta(conta: dict) -> str | None:
     if conta.get("situacao") != "AGUARDANDO_ARQUIVO":
         return None
     return "prontuario" if conta.get("arquivo_id") else "conta"
 
 
-def _item(conta: dict, atendimento: dict, linhas: list[dict]) -> dict:
+def _item(conta: dict, atendimento: dict, linhas: list[dict], paginas: int | None) -> dict:
     """A conta como a fila mostra: identificada pelo atendimento, com a conta como complemento."""
     da_faturista = [linha for linha in linhas if linha.get("acao") != "VALIDAR"]
     return {
@@ -103,6 +122,8 @@ def _item(conta: dict, atendimento: dict, linhas: list[dict]) -> dict:
         "falta": _falta(conta),
         "periodo_inicio": conta.get("periodo_inicio"),
         "periodo_fim": conta.get("periodo_fim"),
+        # O quadrado do Prontuário no cartão do envio (issue #1336).
+        "prontuario_paginas": paginas,
         "nota_entrada": conta.get("nota_entrada") if conta.get("nota_entrada") is not None else conta.get("nota_bruta"),
         # A nota depois do reenvio da conta corrigida (issue #1136); nula sem reenvio.
         "nota_saida": conta.get("nota_saida"),
@@ -120,9 +141,18 @@ def _itens(supabase: Client, listas: dict, nomes: tuple[str, ...]) -> dict:
     todas = [conta for nome in nomes for conta in listas[nome]]
     atendimentos = _por_id(supabase, "cm_atendimento", "id", list({c["atendimento_id"] for c in todas}))
     linhas = _linhas_por_conta(supabase, todas)
+    paginas = _paginas_do_prontuario(supabase, todas)
 
     def itens(contas: list[dict]) -> list[dict]:
-        return [_item(c, atendimentos.get(c["atendimento_id"], {}), linhas.get(c["id"], [])) for c in contas]
+        return [
+            _item(
+                c,
+                atendimentos.get(c["atendimento_id"], {}),
+                linhas.get(c["id"], []),
+                paginas.get(c["atendimento_id"]),
+            )
+            for c in contas
+        ]
 
     return {"todas": listas["todas"], **{nome: itens(listas[nome]) for nome in nomes}}
 
