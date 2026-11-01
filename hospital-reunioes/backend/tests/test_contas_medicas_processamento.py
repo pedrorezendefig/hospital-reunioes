@@ -121,7 +121,8 @@ COLUNAS_DA_CONTA = _colunas("cm_conta")
 def _formato_do_codigo_do_erro() -> re.Pattern[str]:
     """O CHECK do Código do erro, como as migrations o deixam (issue #1337)."""
     for migration in sorted(MIGRATION.parent.glob("*.sql"), reverse=True):
-        if achado := re.search(r"CHECK \(erro_codigo IS NULL OR erro_codigo ~ '(.+?)'\)", migration.read_text("utf-8")):
+        sql = migration.read_text(encoding="utf-8")
+        if achado := re.search(r"CHECK \(erro_codigo IS NULL OR erro_codigo ~ '(.+?)'\)", sql):
             return re.compile(achado.group(1))
     raise AssertionError("nenhuma migration tem o CHECK do Código do erro")
 
