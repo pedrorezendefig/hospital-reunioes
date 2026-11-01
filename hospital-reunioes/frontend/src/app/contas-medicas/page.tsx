@@ -42,6 +42,7 @@ import {
   enviarEmLotes,
   rotuloDaSituacao,
   separarArquivos,
+  textoParaATI,
 } from "@/lib/contas-medicas/envio";
 import { dataCurta } from "@/lib/contas-medicas/guia";
 import { createClient } from "@/lib/supabase/client";
@@ -121,28 +122,37 @@ const BORDA_DA_SITUACAO: Record<string, string> = {
   PROCESSANDO: "border-l-emerald-500",
 };
 
+/** O quadrado de cada estado: o que falta, o que chegou e o arquivo em que a análise parou (issue #1337). */
+const COR_DO_QUADRADO = {
+  falta: { caixa: "border-dashed border-slate-300 bg-white", rotulo: "text-slate-500", texto: "text-slate-600" },
+  chegou: { caixa: "border-emerald-200 bg-emerald-50", rotulo: "text-emerald-800", texto: "text-emerald-900" },
+  erro: { caixa: "border-red-300 bg-red-50", rotulo: "text-red-800", texto: "text-red-900" },
+};
+
 function Quadrado({
   nome,
   falta,
+  comErro = false,
   rotuloDoBotao,
   onEnviar,
   children,
 }: {
   nome: "Conta" | "Prontuário";
   falta: boolean;
+  comErro?: boolean;
   rotuloDoBotao: string;
   onEnviar: () => void;
   children: React.ReactNode;
 }) {
+  const estado = falta ? "falta" : comErro ? "erro" : "chegou";
+  const cor = COR_DO_QUADRADO[estado];
   return (
     <section
       aria-label={nome}
-      data-estado={falta ? "falta" : "chegou"}
-      className={`min-w-0 rounded-xl border px-3 py-2.5 ${
-        falta ? "border-dashed border-slate-300 bg-white" : "border-emerald-200 bg-emerald-50"
-      }`}
+      data-estado={estado}
+      className={`min-w-0 rounded-xl border px-3 py-2.5 ${cor.caixa}`}
     >
-      <p className={`text-xs font-semibold uppercase tracking-wide ${falta ? "text-slate-500" : "text-emerald-800"}`}>
+      <p className={`text-xs font-semibold uppercase tracking-wide ${cor.rotulo}`}>
         {nome}
       </p>
       {falta ? (
@@ -158,9 +168,100 @@ function Quadrado({
           </button>
         </>
       ) : (
-        <div className="mt-0.5 text-sm text-emerald-900 break-words">{children}</div>
+        <div className={`mt-0.5 text-sm break-words ${cor.texto}`}>{children}</div>
       )}
     </section>
+  );
+}
+
+/**
+ * A frase da cópia que não aconteceu. O `writeText` falha igual quando a API
+ * não existe e quando o navegador nega: a frase diz o desfecho e a saída, que
+ * é a caixa logo abaixo (o mesmo cuidado do "Copiar para IA" da Tecnologia).
+ */
+const NAO_COPIOU =
+  "O navegador não liberou a cópia automática. O texto está na caixa abaixo, já selecionado: copie com Ctrl+C (ou Cmd+C).";
+
+/**
+ * O Erro do cartão do envio (issue #1337): a frase, o Código do erro, "Ver
+ * detalhes" com o detalhe técnico e "Copiar para a TI", que leva o que a TI
+ * precisa para achar o erro sem ver a tela.
+ */
+function ErroDoEnvio({ conta, onEnviar }: { conta: ItemDaFila; onEnviar: () => void }) {
+  const [aberto, setAberto] = useState(false);
+  const [copiou, setCopiou] = useState(false);
+  const [paraPegarAMao, setParaPegarAMao] = useState<string | null>(null);
+  const caixa = useRef<HTMLTextAreaElement | null>(null);
+
+  useEffect(() => {
+    if (paraPegarAMao) caixa.current?.select();
+  }, [paraPegarAMao]);
+
+  async function copiar() {
+    const texto = textoParaATI(conta);
+    setCopiou(false);
+    setParaPegarAMao(null);
+    try {
+      await navigator.clipboard.writeText(texto);
+      setCopiou(true);
+    } catch (e) {
+      console.error("[contas-medicas] o navegador não copiou", e);
+      setParaPegarAMao(texto);
+    }
+  }
+
+  const idDoDetalhe = `detalhe-do-erro-${conta.id}`;
+  return (
+    <div className="space-y-2">
+      {conta.erro_motivo && <p className="min-w-0 break-words text-sm text-red-700">{conta.erro_motivo}</p>}
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+        {conta.erro_codigo && (
+          <span className="text-xs text-slate-500">
+            Código <span className="font-mono font-semibold text-slate-800">{conta.erro_codigo}</span>
+          </span>
+        )}
+        <button
+          type="button"
+          aria-expanded={aberto}
+          aria-controls={idDoDetalhe}
+          onClick={() => setAberto((valor) => !valor)}
+          className="text-sm font-medium text-primary hover:underline"
+        >
+          Ver detalhes
+        </button>
+        <button type="button" onClick={copiar} className="text-sm font-medium text-primary hover:underline">
+          Copiar para a TI
+        </button>
+        <button type="button" onClick={onEnviar} className="text-sm font-medium text-primary hover:underline">
+          Enviar de novo
+        </button>
+      </div>
+      {aberto && (
+        <p id={idDoDetalhe} className="break-all rounded-lg bg-slate-50 px-3 py-2 font-mono text-xs text-slate-700">
+          {conta.erro_detalhe ?? "Sem detalhe técnico gravado."}
+        </p>
+      )}
+      {copiou && (
+        <p role="status" className="text-xs text-emerald-700">
+          Copiado. Cole na conversa com a TI.
+        </p>
+      )}
+      {paraPegarAMao && (
+        <>
+          <p role="status" className="text-xs text-amber-800">
+            {NAO_COPIOU}
+          </p>
+          <textarea
+            ref={caixa}
+            readOnly
+            value={paraPegarAMao}
+            rows={5}
+            aria-label="Texto para a TI"
+            className="w-full rounded-lg border border-border bg-white px-3 py-2 font-mono text-xs text-slate-800"
+          />
+        </>
+      )}
+    </div>
   );
 }
 
@@ -169,6 +270,7 @@ function CartaoDoEnvio({ conta, onEnviar }: { conta: ItemDaFila; onEnviar: () =>
   const detalhe = detalheDaConta(conta);
   const periodo = periodoDaConta(conta);
   const paginas = conta.prontuario_paginas;
+  const erro = conta.situacao === "ERRO";
   return (
     <li>
       <article
@@ -186,32 +288,30 @@ function CartaoDoEnvio({ conta, onEnviar }: { conta: ItemDaFila; onEnviar: () =>
           {conta.com && <span className="text-xs text-slate-500">com {conta.com}</span>}
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          <Quadrado nome="Conta" falta={conta.falta === "conta"} rotuloDoBotao="Enviar a conta" onEnviar={onEnviar}>
+          <Quadrado
+            nome="Conta"
+            falta={conta.falta === "conta"}
+            comErro={erro && conta.erro_arquivo === "conta"}
+            rotuloDoBotao="Enviar a conta"
+            onEnviar={onEnviar}
+          >
             <p>{conta.numero_conta ? `Conta ${conta.numero_conta}` : "Chegou"}</p>
-            {periodo && <p className="text-xs text-emerald-800">{periodo}</p>}
+            {periodo && <p className="text-xs">{periodo}</p>}
           </Quadrado>
           <Quadrado
             nome="Prontuário"
             falta={conta.falta === "prontuario"}
+            comErro={erro && conta.erro_arquivo === "prontuario"}
             rotuloDoBotao="Enviar o prontuário"
             onEnviar={onEnviar}
           >
             <p>{paginas != null ? `${paginas} ${paginas === 1 ? "página" : "páginas"}` : "Chegou"}</p>
           </Quadrado>
         </div>
-        {(detalhe || conta.situacao === "ERRO") && (
-          <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-            {detalhe && (
-              <span className={`min-w-0 break-words text-xs ${conta.situacao === "ERRO" ? "text-red-700" : "text-slate-600"}`}>
-                {detalhe}
-              </span>
-            )}
-            {conta.situacao === "ERRO" && (
-              <button type="button" onClick={onEnviar} className="text-sm font-medium text-primary hover:underline">
-                Enviar de novo
-              </button>
-            )}
-          </div>
+        {erro ? (
+          <ErroDoEnvio conta={conta} onEnviar={onEnviar} />
+        ) : (
+          detalhe && <p className="min-w-0 break-words text-xs text-slate-600">{detalhe}</p>
         )}
       </article>
     </li>
