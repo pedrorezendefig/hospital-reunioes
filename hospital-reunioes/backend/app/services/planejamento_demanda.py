@@ -27,6 +27,7 @@ from dataclasses import dataclass
 from time import perf_counter
 from typing import Literal
 
+from postgrest.exceptions import APIError
 from pydantic import BaseModel, ConfigDict, model_validator
 
 from app.config import settings
@@ -107,7 +108,9 @@ def pergunta_em_aberto(mensagens: list[dict]) -> dict | None:
     return None
 
 
-def resposta_do_diretor(mensagens: list[dict], *, opcao: str | None, texto: str | None) -> tuple[dict | None, str | None]:
+def resposta_do_diretor(
+    mensagens: list[dict], *, opcao: str | None, texto: str | None
+) -> tuple[dict | None, str | None]:
     """A fala do diretor que entra na conversa, ou a frase da recusa.
 
     Sem pergunta em aberto (a conversa nao comecou), o pedido e "comece", e nao
@@ -336,7 +339,9 @@ def turno(*, demanda: dict, mensagens: list[dict], kit: str) -> ResultadoDoTurno
         saida = _saida_valida(resposta)
     except Exception as erro:
         # O tipo do erro, nunca a mensagem: a resposta invalida pode citar a conversa.
-        logger.error("[Planejamento] Turno da Demanda %s sem resposta valida: %s", demanda.get("id"), type(erro).__name__)
+        logger.error(
+            "[Planejamento] Turno da Demanda %s sem resposta valida: %s", demanda.get("id"), type(erro).__name__
+        )
         saida = None
     duracao_ms = round((perf_counter() - inicio) * 1000)
 
@@ -368,6 +373,36 @@ def turno(*, demanda: dict, mensagens: list[dict], kit: str) -> ResultadoDoTurno
 def ler(supabase, demanda_id: str) -> dict | None:
     """O planejamento da Demanda, ou `None` quando ainda nao comecou."""
     result = supabase.table(TABELA_PLANEJAMENTOS).select("*").eq("demanda_id", demanda_id).execute()
+    return (result.data or [None])[0]
+
+
+def gravar(supabase, demanda_id: str, *, atual: dict | None, novo: dict) -> dict | None:
+    """O primeiro turno insere; os seguintes atualizam o que foi LIDO.
+
+    O update amarra o `atualizado_em` lido, como o `mover` amarra o estado: com
+    o diretor em duas abas, a segunda resposta nao casa linha nenhuma e nao
+    sobrescreve a primeira. O insert concorrente esbarra no UNIQUE da Demanda.
+    Nos dois casos volta `None`, e a rota responde 409.
+    """
+    if atual is None:
+        try:
+            result = (
+                supabase.table(TABELA_PLANEJAMENTOS)
+                .insert({"demanda_id": demanda_id, "modelo": settings.llm_model_planejamento, **novo})
+                .execute()
+            )
+        except APIError as exc:
+            if exc.code == "23505":
+                return None
+            raise
+        return (result.data or [None])[0]
+    result = (
+        supabase.table(TABELA_PLANEJAMENTOS)
+        .update(novo)
+        .eq("demanda_id", demanda_id)
+        .eq("atualizado_em", atual.get("atualizado_em"))
+        .execute()
+    )
     return (result.data or [None])[0]
 
 

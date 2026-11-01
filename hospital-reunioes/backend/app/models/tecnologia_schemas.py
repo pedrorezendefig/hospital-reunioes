@@ -146,6 +146,10 @@ class DemandaResponse(BaseModel):
     # tem `github_login`, e OMITIDO (nulo) para quem nao tem (ADR 0054, decisao
     # 9). O diretor nao ve numero de issue nem link.
     vinculo: VinculoDaDemanda | None = None
+    # Se HA Vinculo, para todo mundo (issue #1345). O botao "Planejar com a IA"
+    # some quando ha (ADR 0075, decisao 8), e o diretor, que nao recebe o
+    # objeto acima, precisa saber disso sem ver numero nem link.
+    tem_vinculo: bool = False
     # ─── O que muda (issue #676, ADR 0054, decisao 7) ───
     #
     # O bloco "Para o diretor" da issue-raiz e o de cada parte, lidos do GitHub
@@ -502,3 +506,52 @@ class AssistenteImagemResponse(BaseModel):
 
     texto: str
     print_id: str | None = None
+
+
+# ─── Planejamento da Demanda (issue #1345, PRD #1344, ADR 0075) ───
+
+
+class OpcaoDoPlanejamento(BaseModel):
+    letra: Literal["A", "B"]
+    texto: str
+
+
+class MensagemDoPlanejamento(BaseModel):
+    """Uma fala da conversa do planejamento.
+
+    `pergunta` e `encerrou` sao da IA; `resposta` e do diretor, com a letra da
+    opcao que ele clicou (nula quando escreveu no campo livre) e o texto.
+    """
+
+    tipo: Literal["pergunta", "encerrou", "resposta"]
+    contexto: str | None = None
+    opcoes: list[OpcaoDoPlanejamento] = []
+    recomendada: Literal["A", "B"] | None = None
+    opcao: Literal["A", "B"] | None = None
+    texto: str | None = None
+
+
+class PlanejamentoResponse(BaseModel):
+    """O planejamento da Demanda como a tela o mostra.
+
+    `estado` nulo e "ainda nao comecou": nao ha linha no banco, e a conversa e
+    as decisoes vem vazias. Tokens e custo nunca saem por aqui (ADR 0075,
+    decisao 7): moram em `tecnologia_chamadas_ia` e nao vao a tela do diretor.
+    """
+
+    demanda_id: str
+    estado: str | None = None
+    mensagens: list[MensagemDoPlanejamento] = []
+    decisoes: list[str] = []
+
+
+class PlanejamentoRespostaPayload(BaseModel):
+    """Corpo do POST /admin/tecnologia/demandas/{id}/planejamento.
+
+    Vazio comeca a conversa. Com pergunta em aberto, leva a letra da opcao
+    clicada OU o texto do campo livre; quem confere qual dos casos vale e a
+    rota, com frase de gente.
+    """
+
+    opcao: Literal["A", "B"] | None = None
+    texto: str | None = Field(default=None, max_length=LIMITE_DA_MENSAGEM)
