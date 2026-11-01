@@ -14,6 +14,9 @@
  * cabem no teto do corpo.
  *
  * A conta é sempre identificada pelo atendimento, com a conta como complemento.
+ * Na aba de envios, cada conta é um cartão com um quadrado para a Conta e outro
+ * para o Prontuário (issue #1336): verde o que chegou, tracejado o que falta,
+ * com o botão para mandar só aquele arquivo.
  */
 
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -99,12 +102,120 @@ const VAZIO: Record<Aba, string> = {
   concluidas: "Nenhuma conta concluída ainda",
 };
 
+function periodoDaConta(conta: ItemDaFila): string | null {
+  return conta.periodo_inicio && conta.periodo_fim
+    ? `${dataCurta(conta.periodo_inicio)} a ${dataCurta(conta.periodo_fim)}`
+    : null;
+}
+
 function complemento(conta: ItemDaFila): string {
-  const periodo =
-    conta.periodo_inicio && conta.periodo_fim
-      ? `${dataCurta(conta.periodo_inicio)} a ${dataCurta(conta.periodo_fim)}`
-      : null;
+  const periodo = periodoDaConta(conta);
   return [conta.numero_conta ? `conta ${conta.numero_conta}` : null, periodo].filter(Boolean).join(" · ");
+}
+
+/** A borda do cartão do envio pela situação, nas cores dos cartões da Ouvidoria. */
+const BORDA_DA_SITUACAO: Record<string, string> = {
+  ERRO: "border-l-red-500",
+  AGUARDANDO_ARQUIVO: "border-l-amber-500",
+  NA_FILA: "border-l-slate-300",
+  PROCESSANDO: "border-l-emerald-500",
+};
+
+function Quadrado({
+  nome,
+  falta,
+  rotuloDoBotao,
+  onEnviar,
+  children,
+}: {
+  nome: "Conta" | "Prontuário";
+  falta: boolean;
+  rotuloDoBotao: string;
+  onEnviar: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <section
+      aria-label={nome}
+      data-estado={falta ? "falta" : "chegou"}
+      className={`min-w-0 rounded-xl border px-3 py-2.5 ${
+        falta ? "border-dashed border-slate-300 bg-white" : "border-emerald-200 bg-emerald-50"
+      }`}
+    >
+      <p className={`text-xs font-semibold uppercase tracking-wide ${falta ? "text-slate-500" : "text-emerald-800"}`}>
+        {nome}
+      </p>
+      {falta ? (
+        <>
+          <p className="mt-0.5 text-sm text-slate-600">Falta enviar</p>
+          <button
+            type="button"
+            onClick={onEnviar}
+            className="mt-2 inline-flex items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-xs font-semibold text-white"
+          >
+            <Upload className="h-3.5 w-3.5" aria-hidden="true" />
+            {rotuloDoBotao}
+          </button>
+        </>
+      ) : (
+        <div className="mt-0.5 text-sm text-emerald-900 break-words">{children}</div>
+      )}
+    </section>
+  );
+}
+
+/** A conta da aba de envios, com o quadrado de cada arquivo (issue #1336). */
+function CartaoDoEnvio({ conta, onEnviar }: { conta: ItemDaFila; onEnviar: () => void }) {
+  const detalhe = detalheDaConta(conta);
+  const periodo = periodoDaConta(conta);
+  const paginas = conta.prontuario_paginas;
+  return (
+    <li>
+      <article
+        className={`rounded-xl border border-border border-l-4 bg-white p-4 space-y-3 ${
+          BORDA_DA_SITUACAO[conta.situacao] ?? "border-l-slate-300"
+        }`}
+      >
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+          <p className="min-w-0 flex-1 text-sm font-semibold text-slate-900">Atendimento {conta.numero_atendimento}</p>
+          <span
+            className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${COR_DA_SITUACAO[conta.situacao] ?? "bg-slate-100 text-slate-600"}`}
+          >
+            {rotuloDaSituacao(conta)}
+          </span>
+          {conta.com && <span className="text-xs text-slate-500">com {conta.com}</span>}
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <Quadrado nome="Conta" falta={conta.falta === "conta"} rotuloDoBotao="Enviar a conta" onEnviar={onEnviar}>
+            <p>{conta.numero_conta ? `Conta ${conta.numero_conta}` : "Chegou"}</p>
+            {periodo && <p className="text-xs text-emerald-800">{periodo}</p>}
+          </Quadrado>
+          <Quadrado
+            nome="Prontuário"
+            falta={conta.falta === "prontuario"}
+            rotuloDoBotao="Enviar o prontuário"
+            onEnviar={onEnviar}
+          >
+            <p>{paginas != null ? `${paginas} ${paginas === 1 ? "página" : "páginas"}` : "Chegou"}</p>
+          </Quadrado>
+        </div>
+        {(detalhe || conta.situacao === "ERRO") && (
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+            {detalhe && (
+              <span className={`min-w-0 break-words text-xs ${conta.situacao === "ERRO" ? "text-red-700" : "text-slate-600"}`}>
+                {detalhe}
+              </span>
+            )}
+            {conta.situacao === "ERRO" && (
+              <button type="button" onClick={onEnviar} className="text-sm font-medium text-primary hover:underline">
+                Enviar de novo
+              </button>
+            )}
+          </div>
+        )}
+      </article>
+    </li>
+  );
 }
 
 function LinhaDaFila({ conta, onEnviarDeNovo }: { conta: ItemDaFila; onEnviarDeNovo: () => void }) {
@@ -383,6 +494,12 @@ export default function ContasMedicasPage() {
                 <p className="flex items-center gap-2 p-6 text-sm text-slate-500">
                   <Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" /> Carregando a fila
                 </p>
+              ) : contas && contas.length > 0 && aba === "meus_envios" ? (
+                <ul className="space-y-3 p-3">
+                  {contas.map((conta) => (
+                    <CartaoDoEnvio key={conta.id} conta={conta} onEnviar={() => seletor.current?.click()} />
+                  ))}
+                </ul>
               ) : contas && contas.length > 0 ? (
                 <ul className="divide-y divide-border">
                   {contas.map((conta) => (

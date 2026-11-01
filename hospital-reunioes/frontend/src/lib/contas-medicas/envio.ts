@@ -69,6 +69,8 @@ export interface ItemDaFila {
   falta: "prontuario" | "conta" | null;
   periodo_inicio: string | null;
   periodo_fim: string | null;
+  /** As páginas do último Prontuário do atendimento (issue #1336); nulas sem prontuário. */
+  prontuario_paginas?: number | null;
   nota_entrada: number | null;
   /** A nota depois do reenvio da conta corrigida (issue #1136); nula sem reenvio. */
   nota_saida?: number | null;

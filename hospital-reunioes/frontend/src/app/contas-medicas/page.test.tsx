@@ -258,6 +258,136 @@ describe("a fila comum", () => {
   });
 });
 
+describe("o cartão do envio (issue #1336)", () => {
+  const ENVIOS: ItemDaFila[] = [
+    conta({ id: "na-fila", numero_atendimento: "31302", numero_conta: "48001", prontuario_paginas: 212 }),
+    conta({
+      id: "falta-pront",
+      numero_atendimento: "31318",
+      numero_conta: "48018",
+      situacao: "AGUARDANDO_ARQUIVO",
+      falta: "prontuario",
+    }),
+    conta({
+      id: "falta-conta",
+      numero_atendimento: "31320",
+      numero_conta: null,
+      periodo_inicio: null,
+      periodo_fim: null,
+      situacao: "AGUARDANDO_ARQUIVO",
+      falta: "conta",
+      prontuario_paginas: 1,
+    }),
+    conta({ id: "rodando", numero_atendimento: "31310", situacao: "PROCESSANDO", prontuario_paginas: 40 }),
+    conta({ id: "erro", numero_atendimento: "31260", situacao: "ERRO", erro_motivo: "Não consegui ler a conta inteira" }),
+  ];
+
+  async function cartoes(): Promise<HTMLElement[]> {
+    filaDoServidor = { ...FILA, meus_envios: ENVIOS };
+    render(<ContasMedicasPage />);
+    await linhas();
+    aba(/^Meus envios/);
+    return linhas();
+  }
+
+  function quadrado(cartao: HTMLElement, nome: "Conta" | "Prontuário"): HTMLElement {
+    return within(cartao).getByRole("region", { name: nome });
+  }
+
+  it("cada conta vira um cartão com o quadrado Conta e o quadrado Prontuário", async () => {
+    const itens = await cartoes();
+
+    for (const cartao of itens) {
+      expect(quadrado(cartao, "Conta")).toBeTruthy();
+      expect(quadrado(cartao, "Prontuário")).toBeTruthy();
+    }
+  });
+
+  it("o arquivo que chegou fica verde, com o número e o período da conta e as páginas do prontuário", async () => {
+    const [chegou] = await cartoes();
+
+    const daConta = quadrado(chegou, "Conta");
+    const doProntuario = quadrado(chegou, "Prontuário");
+    expect(daConta.getAttribute("data-estado")).toBe("chegou");
+    expect(daConta.className).toContain("bg-emerald-50");
+    expect(daConta.textContent).toContain("48001");
+    expect(daConta.textContent).toContain("01/10 a 05/10");
+    expect(doProntuario.getAttribute("data-estado")).toBe("chegou");
+    expect(doProntuario.textContent).toContain("212 páginas");
+    expect(chegou.textContent).not.toContain("Falta enviar");
+    expect(within(chegou).queryByRole("button", { name: /^Enviar (a conta|o prontuário)$/ })).toBeNull();
+  });
+
+  it("uma página só sai no singular", async () => {
+    const itens = await cartoes();
+
+    expect(quadrado(itens[2], "Prontuário").textContent).toContain("1 página");
+    expect(quadrado(itens[2], "Prontuário").textContent).not.toContain("1 páginas");
+  });
+
+  it("o arquivo que falta fica tracejado, diz Falta enviar e tem o botão só dele", async () => {
+    const itens = await cartoes();
+
+    const semProntuario = quadrado(itens[1], "Prontuário");
+    expect(semProntuario.getAttribute("data-estado")).toBe("falta");
+    expect(semProntuario.className).toContain("border-dashed");
+    expect(semProntuario.textContent).toContain("Falta enviar");
+    expect(within(semProntuario).getByRole("button", { name: "Enviar o prontuário" })).toBeTruthy();
+    expect(quadrado(itens[1], "Conta").getAttribute("data-estado")).toBe("chegou");
+    expect(quadrado(itens[1], "Conta").textContent).toContain("48018");
+
+    const semConta = quadrado(itens[2], "Conta");
+    expect(semConta.getAttribute("data-estado")).toBe("falta");
+    expect(semConta.textContent).toContain("Falta enviar");
+    expect(within(semConta).getByRole("button", { name: "Enviar a conta" })).toBeTruthy();
+    expect(within(itens[2]).queryByRole("button", { name: "Enviar o prontuário" })).toBeNull();
+  });
+
+  it("o botão do quadrado que falta abre o seletor de arquivos", async () => {
+    const abrir = vi.spyOn(HTMLInputElement.prototype, "click").mockImplementation(() => {});
+    const itens = await cartoes();
+
+    fireEvent.click(within(quadrado(itens[1], "Prontuário")).getByRole("button", { name: "Enviar o prontuário" }));
+    expect(abrir).toHaveBeenCalledTimes(1);
+    fireEvent.click(within(quadrado(itens[2], "Conta")).getByRole("button", { name: "Enviar a conta" }));
+    expect(abrir).toHaveBeenCalledTimes(2);
+    abrir.mockRestore();
+  });
+
+  it("a borda do cartão segue a situação, nas cores da Ouvidoria", async () => {
+    const itens = await cartoes();
+    const borda = (cartao: HTMLElement) => cartao.querySelector("article")?.className ?? "";
+
+    expect(borda(itens[0])).toContain("border-l-slate-300");
+    expect(borda(itens[1])).toContain("border-l-amber-500");
+    expect(borda(itens[3])).toContain("border-l-emerald-500");
+    expect(borda(itens[4])).toContain("border-l-red-500");
+  });
+
+  it("no celular os quadrados ficam um embaixo do outro, lado a lado só da tela pequena para cima", async () => {
+    const [cartao] = await cartoes();
+
+    const grade = quadrado(cartao, "Conta").parentElement as HTMLElement;
+    expect(grade.className.split(" ")).toEqual(expect.arrayContaining(["grid", "grid-cols-1", "sm:grid-cols-2"]));
+    expect(grade.className).not.toMatch(/(^| )grid-cols-2/);
+  });
+
+  it("Fila, Minhas e Concluídas continuam na linha, sem os quadrados", async () => {
+    filaDoServidor = { ...FILA, meus_envios: ENVIOS };
+    render(<ContasMedicasPage />);
+    await linhas();
+
+    for (const nome of [/^Fila/, /^Minhas/, /Concluídas/]) {
+      aba(nome);
+      const itens = await linhas();
+      for (const item of itens) {
+        expect(within(item).queryByRole("region", { name: "Conta" })).toBeNull();
+        expect(item.querySelector("article")).toBeNull();
+      }
+    }
+  });
+});
+
 describe("cada bloco pela permissão de /contas-medicas/me", () => {
   it("quem só envia vê o envio e Meus envios, e a tela nem pede a Fila", async () => {
     permissoes = [ENVIAR];
