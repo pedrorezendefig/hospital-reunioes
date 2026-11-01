@@ -104,7 +104,7 @@ Uma ação sobre um item da Conta, com verbo na frente: **Incluir**, **Ajustar q
 Aberta → **Feito** (conta para a produção), **Não procede** (com motivo: já está na conta, sem evidência no prontuário, a regra é outra, outro; vai para a Validação), **Bloqueado** (o MV não deixou lançar; vai para a fila do cadastro), **Em validação** (ação Validar, sem botão para a faturista), **Decidida** (pelo validador). Desfazer existe enquanto a Conta não foi concluída.
 
 **Situação da Conta**:
-Aguardando arquivo → Em análise (na fila ou processando) → A fazer (Guia pronto) → Em correção → Concluída ou Concluída com pendência; mais **Retorno** (a Validação decidiu uma Linha de Conta já concluída) e **Erro** (leitura impossível, com motivo em uma frase e "Enviar de novo").
+Aguardando arquivo → Em análise (na fila ou processando) → A fazer (Guia pronto) → Em correção → Concluída ou Concluída com pendência; mais **Retorno** (a Validação decidiu uma Linha de Conta já concluída) e **Erro** (a análise não terminou, com motivo em uma frase, Código do erro e a ação que resolve: "Analisar de novo" ou "Enviar de novo").
 
 **Causa-raiz**:
 Onde o problema nasce e quem corrige: **Dispensação** (farmácia e enfermagem), **Regra automática** (TI e consultoria MV), **Cadastro e preço** (credenciamento e cadastro), **Registro assistencial** (enfermagem e corpo clínico), **Lançamento manual** (faturamento). A IA propõe; o código sobrepõe nos casos óbvios (toda Linha de diária, de preço e Bloqueado).
@@ -129,6 +129,17 @@ Nota recalculada sobre a Conta reenviada depois da correção no MV, só com as 
 
 **Reanalisar**:
 Reprocessar uma Conta A fazer ou Em correção com o modelo ou a Memória atuais, preservando as Linhas já marcadas. Aparece como "Reanalisar com a regra nova" depois de ensinar uma Regra.
+
+**Código do erro**:
+Código curto da Conta em Erro, em quatro famílias: `CM-ARQ-*` (o PDF tem problema, quem enviou manda outro), `CM-CFG-*` (falta configuração que a gestão faz no app), `CM-IA-*` (a IA não respondeu ou recusou) e `CM-APP-*` (defeito do app, para a TI). Vem com a frase para a faturista e um detalhe técnico gravado (tipo do erro, código HTTP, etapa, arquivo e linha), que nunca leva texto do prontuário. "Copiar para a TI" leva código, atendimento e detalhe.
+_Evitar_: mensagem genérica como "tente de novo em alguns minutos" sem dizer a causa.
+
+**Analisar de novo**:
+Refazer a análise de uma Conta em Erro com os PDFs que já estão no sistema, sem anexar nada. Vale para erro de IA e de configuração, enquanto os PDFs estão dentro dos 7 dias; erro de arquivo, ou PDF já apagado, pede "Enviar de novo". Quem enviou e a gestão podem. Diferente de **Reanalisar**, que é sobre Conta com Guia pronto.
+
+**Descartar**:
+Apagar de vez uma Conta em Erro ou Aguardando arquivo: a linha sai do banco e os PDFs saem do bucket na hora, depois de confirmar. O prontuário só sai se nenhuma outra Conta do atendimento usa ele. O custo da IA continua contado. Quem enviou e a gestão podem; Conta processando ou com Guia não se descarta.
+_Evitar_: excluir, cancelar.
 
 **Produção da faturista**:
 Contas concluídas, R$ incluído (diferenças positivas das Linhas Feito), R$ retirado (glosa evitada, em segundo plano) e taxa de Não procede (Linhas Não procede ÷ Linhas apontadas, sem Validar).
