@@ -58,8 +58,7 @@ def descartar(supabase, conta_id: str, me: dict) -> None:
     # A mesma guarda da situação no DELETE: a conta que o Prontuário acabou de
     # liberar para a fila não é apagada no meio da análise.
     apagadas = (
-        supabase.table("cm_conta").delete().eq("id", conta_id).in_("situacao", list(DESCARTAVEIS)).execute().data
-        or []
+        supabase.table("cm_conta").delete().eq("id", conta_id).in_("situacao", list(DESCARTAVEIS)).execute().data or []
     )
     if not apagadas:
         raise NaoDescartavelError(MENSAGEM_SITUACAO)
