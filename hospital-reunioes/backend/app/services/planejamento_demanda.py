@@ -52,6 +52,7 @@ TIPOS_QUE_SE_PLANEJAM = ("novo", "ajuste")
 ESTADO_EM_ANDAMENTO = "em_andamento"
 ESTADO_ENCERRADO = "encerrado"
 ESTADO_RESUMIDO = "resumido"
+ESTADO_ENVIADO = "enviado"
 
 TEXTO_DO_TETO = (
     "Chegamos ao limite de 12 perguntas. O que ficou decidido está no painel ao lado, "
@@ -539,6 +540,22 @@ def gravar(supabase, demanda_id: str, *, atual: dict | None, novo: dict) -> dict
         .update(novo)
         .eq("demanda_id", demanda_id)
         .eq("atualizado_em", atual.get("atualizado_em"))
+        .execute()
+    )
+    return (result.data or [None])[0]
+
+
+def marcar_enviado(supabase, demanda_id: str, *, agora: str) -> dict | None:
+    """O planejamento depois do "sim" (issue #1349): a issue ja nasceu.
+
+    Sem a guarda do `atualizado_em` do `gravar`, de proposito: quando isto
+    roda, a Demanda ja tem Vinculo, e o que outra aba tenha gravado no meio
+    nao desfaz a issue. Nada de "nao" ou resumo novo vale depois do Vinculo.
+    """
+    result = (
+        supabase.table(TABELA_PLANEJAMENTOS)
+        .update({"estado": ESTADO_ENVIADO, "atualizado_em": agora})
+        .eq("demanda_id", demanda_id)
         .execute()
     )
     return (result.data or [None])[0]
