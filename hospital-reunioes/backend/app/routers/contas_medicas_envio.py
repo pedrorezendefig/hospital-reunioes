@@ -224,10 +224,8 @@ async def descartar_conta(
         await run_in_threadpool(descartar, supabase, str(conta_id), me)
     except ContaNaoEncontradaError:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Conta não encontrada") from None
-    except SemPermissaoDeDescartarError:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN, detail="Só quem enviou a conta ou a gestão pode descartar"
-        ) from None
+    except SemPermissaoDeDescartarError as erro:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(erro)) from None
     except NaoDescartavelError as erro:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(erro)) from None
     return {"descartada": str(conta_id)}

@@ -111,6 +111,42 @@ class TestQuemPode:
         assert banco.tabelas["cm_conta"] == []
         assert _chaves(banco) == set()
 
+    def test_o_prontuario_que_outra_pessoa_enviou_fica_para_a_retencao(self):
+        banco = _enviado(_prontuario("31302"), quem="outra_faturista")
+        _enviado(_conta("31302", "48001"), banco=banco)
+        conta = _em_erro(banco)
+        do_prontuario = next(a for a in banco.tabelas["cm_arquivo"] if a["tipo"] == "PRONTUARIO")
+        da_conta = next(a for a in banco.tabelas["cm_arquivo"] if a["tipo"] == "CONTA")
+
+        resposta = _cliente("faturista", banco).post(_rota(conta["id"]))
+
+        assert resposta.status_code == 200, resposta.text
+        assert banco.tabelas["cm_conta"] == []
+        assert banco.tabelas["cm_arquivo"] == [do_prontuario]
+        assert do_prontuario["chave_bucket"] in _chaves(banco)
+        assert da_conta["chave_bucket"] not in _chaves(banco)
+
+    def test_prontuario_de_mais_de_uma_pessoa_sem_conta_so_a_gestao_descarta(self):
+        banco = _enviado(_prontuario("31318"))
+        _enviado(_prontuario("31318"), quem="outra_faturista", banco=banco)
+        [conta] = banco.tabelas["cm_conta"]
+        chaves = _chaves(banco)
+
+        for quem in ("faturista", "outra_faturista"):
+            resposta = _cliente(quem, banco).post(_rota(conta["id"]))
+
+            assert resposta.status_code == 403, quem
+            assert resposta.json()["detail"] == (
+                "Mais de uma pessoa enviou o prontuário deste atendimento. Peça à gestão para descartar."
+            )
+            assert [c["id"] for c in banco.tabelas["cm_conta"]] == [conta["id"]]
+            assert _chaves(banco) == chaves
+
+        assert _cliente("coordenadora", banco).post(_rota(conta["id"])).status_code == 200
+        assert banco.tabelas["cm_conta"] == []
+        assert banco.tabelas["cm_arquivo"] == []
+        assert _chaves(banco) == set()
+
 
 class TestRecusa:
     @pytest.mark.parametrize("situacao", ["NA_FILA", "PROCESSANDO", "A_FAZER", "CONCLUIDA", "CONCLUIDA_COM_PENDENCIA"])

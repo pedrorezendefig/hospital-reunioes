@@ -66,7 +66,7 @@ def envios_da_pessoa(supabase, me: dict) -> dict:
     o nome de quem enviou em `com_quem`."""
     todas = ve_todas(me)
     nao_prontas = _contas(supabase, me, NAO_PRONTAS, da_pessoa=False)
-    enviou = quem_enviou(supabase, nao_prontas)
+    enviou = _quem_enviou(supabase, nao_prontas)
     envios = nao_prontas if todas else [c for c in nao_prontas if enviou.get(c["id"]) == me.get("id")]
     for conta in envios:
         conta["com_quem"] = enviou.get(conta["id"]) if todas else None
@@ -85,7 +85,7 @@ def _por_id(supabase, tabela: str, coluna: str, valores, **filtros) -> list[dict
     return consulta.execute().data or []
 
 
-def quem_enviou(supabase, contas: list[dict]) -> dict[str, str]:
+def _quem_enviou(supabase, contas: list[dict]) -> dict[str, str]:
     """O `cm_envio.usuario_id` de cada conta, pelo arquivo dela. A conta à
     espera da Conta ainda não tem arquivo: quem enviou é quem mandou o
     Prontuário do atendimento."""
