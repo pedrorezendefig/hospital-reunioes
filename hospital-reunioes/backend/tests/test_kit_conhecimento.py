@@ -530,6 +530,18 @@ class TestOTextoDaAbaContaATelaDeHoje:
         for termo in termos:
             assert termo in planejamento, termo
 
+    def test_o_planejamento_avisa_que_ainda_nao_esta_no_aplicativo(self, texto):
+        """PRD #1344. O planejamento foi decidido e sobe em quatro ondas
+        (#1345, #1347, #1348, #1349). Sem a marca, o Assistente manda o
+        diretor clicar num botao que nao existe. Quem subir o envio do sim
+        (#1349) tira a marca e este teste junto."""
+        planejamento = _secao(texto, "O Planejamento da Demanda")
+        assert "ainda não está no aplicativo" in planejamento
+        decidido = _secao(texto, "O que já foi decidido")
+        for item in decidido.splitlines():
+            if "planejamento" in item:
+                assert "ainda não está no aplicativo" in item, item
+
     @pytest.mark.parametrize("aposentado", ["Minha vez", "cinco colunas"])
     def test_sem_o_nome_da_tela_de_antes(self, texto, aposentado):
         assert aposentado not in texto

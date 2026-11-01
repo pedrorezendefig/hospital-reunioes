@@ -117,17 +117,19 @@ No card também aparece **O que muda**: o que aquela entrega acrescenta, em ling
 
 ## O Planejamento da Demanda
 
-O Planejamento da Demanda é uma conversa com a IA que transforma o pedido de uma coisa nova, ou de uma mudança, num plano que a Vitta consegue construir. A IA faz as perguntas que a Vitta faria, uma por vez, e quem decide é você.
+O Planejamento da Demanda é uma conversa com a IA que vai transformar o pedido de uma coisa nova, ou de uma mudança, num plano que a Vitta consegue construir. A IA vai fazer as perguntas que a Vitta faria, uma por vez, e quem decide é você.
 
-O botão **Planejar com a IA** fica no card aberto de uma Demanda do Tipo Novo ou Ajuste que ainda não foi ligada ao desenvolvimento. Nos outros Tipos ele não aparece, e some quando a Demanda já está ligada. Qualquer pessoa com acesso à aba pode planejar.
+O planejamento já foi decidido, mas ainda não está no aplicativo: hoje não há botão nem tela para ele, e quem procurar não vai achar. Ele chega por partes. Primeiro o botão, a tela e as perguntas; depois o **Fechar e resumir**, o resumo e o **não**; depois a resposta por voz e o **Continuar planejamento**; e por último o **sim**, que manda o plano para o desenvolvimento. Até lá, o pedido segue pelo card da Demanda, como qualquer outro.
 
-A IA parte do título e da descrição que já estão na Demanda e não pergunta de novo o que você já escreveu ali. Cada pergunta traz uma ou duas frases de contexto, duas opções para clicar, com a recomendada em destaque, e um campo para responder do seu jeito, por texto ou por voz. Print entra pelos anexos da Demanda. São no máximo 12 perguntas, e o botão **Fechar e resumir** encerra a conversa a qualquer momento.
+O botão **Planejar com a IA** vai ficar no card aberto de uma Demanda do Tipo Novo ou Ajuste que ainda não foi ligada ao desenvolvimento. Nos outros Tipos ele não vai aparecer, e some quando a Demanda já está ligada. Qualquer pessoa com acesso à aba vai poder planejar.
 
-A conversa fica guardada na Demanda. Dá para fechar a tela no meio e voltar depois pelo botão **Continuar planejamento**, que aparece no lugar do primeiro. Quando a Demanda é Concluída ou Cancelada, a conversa é apagada, como os prints.
+A IA vai partir do título e da descrição que já estão na Demanda e não vai perguntar de novo o que você já escreveu ali. Cada pergunta vai trazer uma ou duas frases de contexto, duas opções para clicar, com a recomendada em destaque, e um campo para responder do seu jeito, por texto ou por voz. Print entra pelos anexos da Demanda. Serão no máximo 12 perguntas, e o botão **Fechar e resumir** vai encerrar a conversa a qualquer momento.
 
-No fim, a IA mostra um resumo com as decisões que você tomou e a lista do que ficou em aberto, que são os pontos que ela não chegou a perguntar. O que você não decidiu nunca aparece como decisão. Se o resumo está certo, o **sim** manda o plano para o desenvolvimento da Vitta: a Demanda fica ligada a ele e passa a mostrar a Etapa. Se alguma coisa não bate, o **não** pede para você dizer o quê, a conversa continua de onde parou e o resumo é refeito.
+A conversa vai ficar guardada na Demanda. Vai dar para fechar a tela no meio e voltar depois pelo botão **Continuar planejamento**, que aparece no lugar do primeiro. Quando a Demanda for Concluída ou Cancelada, a conversa será apagada, como os prints.
 
-A IA cuida das decisões de negócio: o problema, quem usa, as regras e o que fica de fora. As decisões técnicas ficam com a Vitta, depois do sim. Quando o pedido esbarra numa regra da casa, a IA avisa e diz de onde tirou, citando a parte "O que já foi decidido" do texto daquele sistema.
+No fim, a IA vai mostrar um resumo com as decisões que você tomou e a lista do que ficou em aberto, que são os pontos que ela não chegou a perguntar. O que você não decidiu nunca vai aparecer como decisão. Se o resumo estiver certo, o **sim** vai mandar o plano para o desenvolvimento da Vitta: a Demanda fica ligada a ele e passa a mostrar a Etapa. Se alguma coisa não bater, o **não** vai pedir para você dizer o quê, a conversa continua de onde parou e o resumo é refeito.
+
+A IA vai cuidar das decisões de negócio: o problema, quem usa, as regras e o que fica de fora. As decisões técnicas ficam com a Vitta, depois do sim. Quando o pedido esbarrar numa regra da casa, a IA vai avisar e dizer de onde tirou, citando a parte "O que já foi decidido" do texto daquele sistema.
 
 ## O que já foi decidido
 
@@ -135,11 +137,11 @@ A IA cuida das decisões de negócio: o problema, quem usa, as regras e o que fi
 - Dentro da aba todos são iguais, e quem entra cria, edita, move, atribui e responde.
 - A lista de Tipos é fechada em sete, e toda Demanda pertence a um Produto, que decide quem responde por ela.
 - O assistente de Nova Demanda monta o rascunho, e a Demanda só nasce quando a pessoa clica em Criar Demanda.
-- A conversa do assistente de Nova Demanda não fica guardada, e o planejamento é a única conversa com a IA que fica na Demanda.
+- A conversa do assistente de Nova Demanda não fica guardada, e o planejamento, que ainda não está no aplicativo, vai ser a única conversa com a IA guardada na Demanda.
 - Uma Demanda se liga a um trabalho de desenvolvimento só, e a Etapa é lida de lá, nunca digitada.
 - O que se escreve do lado do desenvolvimento não volta para a Conversa, e o que volta é a mudança de Etapa.
 - A única troca automática de raia é a volta para quem pediu, em Aguardando, quando a entrega fica Em produção.
 - O texto que sai da Demanda para o material público do desenvolvimento passa por uma peneira que esconde CPF, telefone, nome e outros dados pessoais.
 - Os prints ficam só dentro do aplicativo e são apagados quando a Demanda é Concluída ou Cancelada.
-- No planejamento, a IA cuida só das decisões de negócio, e as decisões técnicas continuam com a Vitta.
+- No planejamento, que ainda não está no aplicativo, a IA vai cuidar só das decisões de negócio, e as decisões técnicas continuam com a Vitta.
 - O Painel não tem número por pessoa nem ranking de ninguém.
