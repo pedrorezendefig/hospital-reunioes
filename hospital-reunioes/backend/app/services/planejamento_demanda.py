@@ -51,6 +51,7 @@ TIPOS_QUE_SE_PLANEJAM = ("novo", "ajuste")
 
 ESTADO_EM_ANDAMENTO = "em_andamento"
 ESTADO_ENCERRADO = "encerrado"
+ESTADO_RESUMIDO = "resumido"
 
 TEXTO_DO_TETO = (
     "Chegamos ao limite de 12 perguntas. O que ficou decidido está no painel ao lado, "
@@ -64,6 +65,9 @@ MOTIVO_PLANEJAMENTO_TERMINOU = "Este planejamento já terminou. Não há pergunt
 MOTIVO_SEM_RESPOSTA = "Escolha uma das opções ou escreva a sua resposta."
 MOTIVO_DUAS_RESPOSTAS = "Escolha uma opção ou escreva a sua resposta, não os dois."
 MOTIVO_RESPOSTA_SEM_PERGUNTA = "Ainda não há pergunta para responder. Recarregue a página."
+MOTIVO_RESUMO_PRONTO = "O resumo deste planejamento já está pronto. Recarregue a página."
+MOTIVO_SEM_RESUMO = "Não há resumo esperando a sua resposta. Recarregue a página."
+MOTIVO_NAO_SEM_TEXTO = "Diga o que não bateu no resumo."
 
 # A frase de quando o turno nao aconteceu: provedor fora do ar, recusa, ou a
 # resposta que nao validou contra o esquema. Ela nao culpa nenhuma das tres,
@@ -227,6 +231,8 @@ def _linha_da_conversa(mensagem: dict) -> str:
         return f"Diretor: {recuar_continuacao(mensagem.get('texto') or '')}"
     if mensagem.get("tipo") == "encerrou":
         return f"IA (encerrou): {mensagem.get('contexto') or ''}"
+    if mensagem.get("tipo") == "nao_bateu":
+        return f"Diretor, sobre o resumo (o que não bateu): {recuar_continuacao(mensagem.get('texto') or '')}"
     opcoes = [f"    {o.get('letra')}) {o.get('texto') or ''}" for o in mensagem.get("opcoes", [])]
     recomendada = f"    (recomendada: {mensagem.get('recomendada')})"
     return "\n".join([f"IA: {mensagem.get('contexto') or ''}", *opcoes, recomendada])
@@ -275,12 +281,12 @@ def _custo(uso, preco: Preco | None) -> tuple[dict, float]:
     return tokens, custo
 
 
-def _saida_valida(resposta) -> _SaidaDoTurno:
+def _json_da_resposta(resposta):
     if resposta.stop_reason in ("refusal", "max_tokens"):
         raise ValueError(f"resposta da IA interrompida ({resposta.stop_reason})")
     texto = "".join(bloco.text for bloco in resposta.content if bloco.type == "text")
     inicio, fim = texto.find("{"), texto.rfind("}")
-    return _SaidaDoTurno.model_validate(json.loads(texto[inicio : fim + 1] if 0 <= inicio < fim else texto))
+    return json.loads(texto[inicio : fim + 1] if 0 <= inicio < fim else texto)
 
 
 def _mensagem_do_modelo(saida: _SaidaDoTurno, perguntas_feitas: int) -> dict:
@@ -301,22 +307,15 @@ def _mensagem_do_modelo(saida: _SaidaDoTurno, perguntas_feitas: int) -> dict:
     }
 
 
-def turno(*, demanda: dict, mensagens: list[dict], kit: str) -> ResultadoDoTurno:
-    """Um turno do planejamento. Sem estado: tudo chega por parametro.
+def _chamar_o_modelo(*, demanda: dict, passo: str, conteudo: str, kit: str, validar):
+    """Uma chamada ao modelo do planejamento: o bloco fixo em cache, o pedido
+    que varia, a saida validada e a linha de custo.
 
-    `mensagens` e a conversa inteira, ja com a resposta do diretor no fim (ou
-    vazia, na primeira pergunta). Ela nao e alterada aqui: quem junta a fala
-    nova e grava e a rota, e so quando o turno deu certo.
-
-    Falha do provedor e resposta que nao valida contra o esquema tem o mesmo
-    desfecho, sem failover (ADR 0075, decisao 7): `erro` com a frase para a
-    tela, e a chamada registrada como sem sucesso, porque o provedor cobra a
-    resposta que voltou fora do formato.
+    Devolve `(saida, chamada)`. `saida` e nula quando o provedor falhou, o
+    modelo recusou ou a resposta nao validou: os tres tem o mesmo desfecho,
+    sem failover (ADR 0075, decisao 7). A chamada fica registrada nos tres,
+    sem sucesso, porque o provedor cobra a resposta que voltou fora do formato.
     """
-    if ai_processor._llm_provider() == "mock":
-        logger.warning("Modo MOCK ativo para o Planejamento da Demanda (sem chave LLM)")
-        return ResultadoDoTurno(mensagem=dict(PERGUNTA_MOCK), decisao=None, erro=None, chamada=None)
-
     client, _modelo_do_resto_do_app = ai_processor._get_llm()
     modelo = settings.llm_model_planejamento
     ai_processor._log_llm_call(f"planejamento/{demanda.get('id')}", "anthropic", modelo)
@@ -331,13 +330,13 @@ def turno(*, demanda: dict, mensagens: list[dict], kit: str) -> ResultadoDoTurno
             model=modelo,
             max_tokens=ai_processor.MAX_TOKENS,
             system=bloco_fixo(kit),
-            messages=[{"role": "user", "content": pedido_do_turno(demanda, mensagens)}],
+            messages=[{"role": "user", "content": conteudo}],
         )
-        saida = _saida_valida(resposta)
+        saida = validar(_json_da_resposta(resposta))
     except Exception as erro:
         # O tipo do erro, nunca a mensagem: a resposta invalida pode citar a conversa.
         logger.error(
-            "[Planejamento] Turno da Demanda %s sem resposta valida: %s", demanda.get("id"), type(erro).__name__
+            "[Planejamento] %s da Demanda %s sem resposta valida: %s", passo, demanda.get("id"), type(erro).__name__
         )
         saida = None
     duracao_ms = round((perf_counter() - inicio) * 1000)
@@ -345,13 +344,34 @@ def turno(*, demanda: dict, mensagens: list[dict], kit: str) -> ResultadoDoTurno
     tokens, custo = _custo(getattr(resposta, "usage", None), preco)
     chamada = {
         "demanda_id": demanda.get("id"),
-        "passo": "pergunta",
+        "passo": passo,
         "modelo": modelo,
         **tokens,
         "custo_usd": round(custo, 6),
         "duracao_ms": duracao_ms,
         "sucesso": saida is not None,
     }
+    return saida, chamada
+
+
+def turno(*, demanda: dict, mensagens: list[dict], kit: str) -> ResultadoDoTurno:
+    """Um turno do planejamento. Sem estado: tudo chega por parametro.
+
+    `mensagens` e a conversa inteira, ja com a resposta do diretor no fim (ou
+    vazia, na primeira pergunta). Ela nao e alterada aqui: quem junta a fala
+    nova e grava e a rota, e so quando o turno deu certo.
+    """
+    if ai_processor._llm_provider() == "mock":
+        logger.warning("Modo MOCK ativo para o Planejamento da Demanda (sem chave LLM)")
+        return ResultadoDoTurno(mensagem=dict(PERGUNTA_MOCK), decisao=None, erro=None, chamada=None)
+
+    saida, chamada = _chamar_o_modelo(
+        demanda=demanda,
+        passo="pergunta",
+        conteudo=pedido_do_turno(demanda, mensagens),
+        kit=kit,
+        validar=_SaidaDoTurno.model_validate,
+    )
     if saida is None:
         return ResultadoDoTurno(mensagem=None, decisao=None, erro=MOTIVO_TURNO_FALHOU, chamada=chamada)
 
@@ -362,6 +382,127 @@ def turno(*, demanda: dict, mensagens: list[dict], kit: str) -> ResultadoDoTurno
         erro=None,
         chamada=chamada,
     )
+
+
+# ─── O resumo (issue #1347) ──────────────────────────────────────────────────
+
+
+class _DecisaoDoModelo(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    pergunta: int
+    porque: str
+
+
+class _SaidaDoResumo(BaseModel):
+    """O esquema do resumo. O modelo diz QUAIS perguntas fecharam decisao e o
+    porque de cada uma; a pergunta e a escolha vem da conversa, nunca dele."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    decisoes: list[_DecisaoDoModelo]
+    em_aberto: list[str]
+
+
+@dataclass(frozen=True)
+class ResultadoDoResumo:
+    """`resumo` e o que vai para a coluna `resumo` e para a tela: `decisoes`
+    (pergunta, escolha, porque) e `em_aberto`. `erro` e a frase da tela quando
+    o resumo nao aconteceu. `chamada` e nula so no modo mock."""
+
+    resumo: dict | None
+    erro: str | None
+    chamada: dict | None
+
+
+RESUMO_MOCK = {"decisoes": [], "em_aberto": ["[MOCK] Resumir exige a IA configurada."]}
+
+
+def perguntas_respondidas(mensagens: list[dict]) -> dict[int, tuple[dict, dict]]:
+    """Numero da pergunta (a partir de 1) -> a pergunta e a resposta do diretor
+    que veio logo depois dela. Pergunta sem resposta nao entra: e por esta
+    lista que o resumo descarta a decisao que o modelo inventar."""
+    respondidas: dict[int, tuple[dict, dict]] = {}
+    numero = 0
+    for i, mensagem in enumerate(mensagens):
+        if mensagem.get("tipo") != "pergunta":
+            continue
+        numero += 1
+        seguinte = mensagens[i + 1] if i + 1 < len(mensagens) else None
+        if seguinte is not None and seguinte.get("tipo") == "resposta":
+            respondidas[numero] = (mensagem, seguinte)
+    return respondidas
+
+
+def pedido_do_resumo(demanda: dict, mensagens: list[dict]) -> str:
+    """O pedido do resumo, com as perguntas numeradas: e pelo numero que o
+    modelo aponta a pergunta de cada decisao."""
+    linhas = []
+    numero = 0
+    for mensagem in mensagens:
+        linha = _linha_da_conversa(mensagem)
+        if mensagem.get("tipo") == "pergunta":
+            numero += 1
+            linha = f"[Pergunta {numero}] {linha.removeprefix('IA: ')}"
+        linhas.append(linha)
+    tipo = str(demanda.get("tipo") or "")
+    return "\n".join(
+        [
+            "PEDIDO: RESUMO",
+            "",
+            "A DEMANDA",
+            f"Tipo: {TIPO_ROTULO.get(tipo, tipo)}",
+            f"Título: {demanda.get('titulo') or ''}",
+            "Descrição:",
+            recuar_continuacao(f"    {demanda.get('descricao') or '(sem descrição)'}"),
+            "",
+            "A CONVERSA ATÉ AQUI",
+            "\n".join(linhas) or "(nenhuma pergunta foi feita)",
+        ]
+    )
+
+
+def _resumo_da_conversa(saida: _SaidaDoResumo, mensagens: list[dict]) -> dict:
+    """O resumo que a tela mostra. A guarda do PRD mora aqui: decisao que
+    aponta para pergunta que nao houve, ou que ficou sem resposta, e
+    descartada, e a escolha e sempre a resposta do proprio diretor."""
+    respondidas = perguntas_respondidas(mensagens)
+    decisoes = []
+    usadas: set[int] = set()
+    for decisao in saida.decisoes:
+        if decisao.pergunta not in respondidas or decisao.pergunta in usadas:
+            logger.warning("[Planejamento] Resumo citou a pergunta %s, que nao foi respondida", decisao.pergunta)
+            continue
+        usadas.add(decisao.pergunta)
+        pergunta, resposta = respondidas[decisao.pergunta]
+        decisoes.append(
+            {
+                "pergunta": pergunta.get("contexto") or "",
+                "escolha": resposta.get("texto") or "",
+                "porque": sanitizar_travessao(decisao.porque.strip()),
+            }
+        )
+    em_aberto = [sanitizar_travessao(item.strip()) for item in saida.em_aberto if item.strip()]
+    return {"decisoes": decisoes, "em_aberto": em_aberto}
+
+
+def resumir(*, demanda: dict, mensagens: list[dict], kit: str) -> ResultadoDoResumo:
+    """O Fechar e resumir. Sem estado, como o turno, e com o mesmo bloco fixo:
+    o cache do prefixo vale para o resumo tambem."""
+    if ai_processor._llm_provider() == "mock":
+        logger.warning("Modo MOCK ativo para o resumo do Planejamento da Demanda (sem chave LLM)")
+        return ResultadoDoResumo(resumo=json.loads(json.dumps(RESUMO_MOCK)), erro=None, chamada=None)
+
+    saida, chamada = _chamar_o_modelo(
+        demanda=demanda,
+        passo="resumo",
+        conteudo=pedido_do_resumo(demanda, mensagens),
+        kit=kit,
+        validar=_SaidaDoResumo.model_validate,
+    )
+    if saida is None:
+        return ResultadoDoResumo(resumo=None, erro=MOTIVO_TURNO_FALHOU, chamada=chamada)
+    return ResultadoDoResumo(resumo=_resumo_da_conversa(saida, mensagens), erro=None, chamada=chamada)
 
 
 # ─── A guarda ────────────────────────────────────────────────────────────────

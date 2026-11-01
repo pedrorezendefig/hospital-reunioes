@@ -411,6 +411,137 @@ class TestFalhaDoTurno:
 
 
 # ═══════════════════════════════════════════════════════════════════════════
+# 2b. O resumo (issue #1347): Fechar e resumir
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+def _resumo(decisoes: list[dict] | None = None, em_aberto: list[str] | None = None) -> str:
+    if decisoes is None:
+        decisoes = [{"pergunta": 1, "porque": "A recepção marca o retorno."}]
+    if em_aberto is None:
+        em_aberto = ["Quem confirma o retorno com o paciente."]
+    return json.dumps({"decisoes": decisoes, "em_aberto": em_aberto}, ensure_ascii=False)
+
+
+def _resumir(mensagens: list[dict] | None = None):
+    return planejamento_demanda.resumir(demanda=DEMANDA, mensagens=mensagens or [], kit=carregar_kit())
+
+
+class TestResumo:
+    def test_a_decisao_traz_a_pergunta_a_escolha_do_diretor_e_o_porque(self, monkeypatch):
+        _ia(monkeypatch, _resumo())
+
+        resultado = _resumir(_conversa_com(1))
+
+        assert resultado.erro is None
+        assert resultado.resumo == {
+            "decisoes": [{"pergunta": "Pergunta 1?", "escolha": "A1", "porque": "A recepção marca o retorno."}],
+            "em_aberto": ["Quem confirma o retorno com o paciente."],
+        }
+
+    def test_o_que_o_agente_nao_perguntou_nunca_vira_decisao(self, monkeypatch):
+        """O modelo inventa uma decisao para a pergunta 5 (que nao existe) e
+        outra para a 2 (feita, mas sem resposta): nenhuma das duas entra."""
+        _ia(
+            monkeypatch,
+            _resumo(
+                decisoes=[
+                    {"pergunta": 1, "porque": "Dito pelo diretor."},
+                    {"pergunta": 2, "porque": "Inventado sobre a pergunta sem resposta."},
+                    {"pergunta": 5, "porque": "Inventado sobre pergunta que nao houve."},
+                ]
+            ),
+        )
+
+        resultado = _resumir([*_conversa_com(1), _pergunta_guardada(2)])
+
+        assert [d["escolha"] for d in resultado.resumo["decisoes"]] == ["A1"]
+
+    def test_a_escolha_e_a_resposta_do_diretor_e_nao_o_que_o_modelo_escreve(self, monkeypatch):
+        _ia(monkeypatch, _resumo(decisoes=[{"pergunta": 1, "escolha": "Outra coisa", "porque": "Porque sim."}]))
+        conversa = [_pergunta_guardada(1), {"tipo": "resposta", "opcao": None, "texto": "Só no plantão da noite."}]
+
+        assert _resumir(conversa).resumo["decisoes"][0]["escolha"] == "Só no plantão da noite."
+
+    def test_na_primeira_pergunta_o_resumo_sai_sem_decisao(self, monkeypatch):
+        _ia(monkeypatch, _resumo(decisoes=[], em_aberto=["Quem usa a agenda."]))
+
+        resultado = _resumir([_pergunta_guardada(1)])
+
+        assert resultado.resumo == {"decisoes": [], "em_aberto": ["Quem usa a agenda."]}
+
+    def test_o_pedido_numera_as_perguntas_e_leva_o_que_nao_bateu(self, monkeypatch):
+        cliente = _ia(monkeypatch, _resumo())
+        conversa = [*_conversa_com(2), {"tipo": "nao_bateu", "texto": "A enfermagem também usa."}]
+
+        _resumir(conversa)
+
+        enviado = cliente.chamadas[0]
+        variavel = enviado["messages"][0]["content"]
+        assert "PEDIDO: RESUMO" in variavel
+        assert "[Pergunta 2] Pergunta 2?" in variavel
+        assert "A enfermagem também usa." in variavel
+        # Mesmo bloco fixo do turno: o cache do prefixo vale para o resumo.
+        assert [bloco.get("cache_control") for bloco in enviado["system"]] == [None, {"type": "ephemeral"}]
+
+    def test_o_custo_do_resumo_e_gravado_como_passo_resumo(self, monkeypatch):
+        _ia(monkeypatch, _resumo(), usage=_uso(entrada=1000, saida=500, lidos=20000, escritos=2000))
+
+        chamada = _resumir(_conversa_com(1)).chamada
+
+        assert chamada["passo"] == "resumo"
+        assert chamada["modelo"] == "claude-opus-5-5"
+        assert chamada["tokens_cache"] == 20000
+        assert chamada["custo_usd"] == 0.028
+        assert chamada["sucesso"] is True
+
+    def test_tira_o_travessao_do_que_o_modelo_escreveu(self, monkeypatch):
+        _ia(
+            monkeypatch,
+            _resumo(decisoes=[{"pergunta": 1, "porque": "Porque \u2014 sim."}], em_aberto=["Prazo \u2013 qual?"]),
+        )
+
+        resumo = json.dumps(_resumir(_conversa_com(1)).resumo, ensure_ascii=False)
+
+        assert "\u2014" not in resumo
+        assert "\u2013" not in resumo
+
+    @pytest.mark.parametrize(
+        "texto",
+        [
+            pytest.param("isto não é JSON", id="nao-e-json"),
+            pytest.param(json.dumps({"decisoes": [{"pergunta": "um"}], "em_aberto": []}), id="decisao-fora"),
+            pytest.param(json.dumps({"decisoes": []}), id="sem-em-aberto"),
+            pytest.param(_erro_do_provedor(), id="provedor-fora"),
+        ],
+    )
+    def test_falha_vira_erro_claro_e_a_chamada_fica_sem_sucesso(self, monkeypatch, texto):
+        _ia(monkeypatch, texto)
+
+        resultado = _resumir(_conversa_com(1))
+
+        assert resultado.resumo is None
+        assert resultado.erro == planejamento_demanda.MOTIVO_TURNO_FALHOU
+        assert resultado.chamada["sucesso"] is False
+
+
+class TestOPromptDoPlanejamento:
+    def test_manda_citar_o_que_ja_foi_decidido_ao_recusar_ou_redirecionar(self, monkeypatch):
+        """A instrucao (o primeiro bloco), e nao o kit: o kit ja traz o titulo
+        da secao em todo arquivo, e um teste que lesse os dois passaria sem
+        instrucao nenhuma."""
+        cliente = _ia(monkeypatch, _pergunta())
+
+        _turno()
+
+        instrucao = cliente.chamadas[0]["system"][0]["text"]
+        trecho = re.search(r"[^\n]*O que já foi decidido[^\n]*", instrucao)
+        assert trecho, "a instrucao nao cita a secao O que já foi decidido"
+        assert "recusar" in trecho.group(0)
+        assert "redirecionar" in trecho.group(0)
+
+
+# ═══════════════════════════════════════════════════════════════════════════
 # 3. As rotas
 # ═══════════════════════════════════════════════════════════════════════════
 
@@ -553,6 +684,7 @@ class TestLerOPlanejamento:
             "estado": None,
             "mensagens": [],
             "decisoes": [],
+            "resumo": None,
         }
 
     def test_devolve_a_conversa_e_as_decisoes_guardadas(self):
@@ -758,6 +890,206 @@ class TestFalhaNaoMexeNaConversa:
 
         assert client.post(ROTA, json={}).status_code == 502
         assert _planejamentos(sb) == []
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 3b. Fechar e resumir e o "não" (issue #1347)
+# ═══════════════════════════════════════════════════════════════════════════
+
+ROTA_RESUMO = f"{ROTA}/resumo"
+ROTA_NAO = f"{ROTA}/nao"
+
+RESUMO_GUARDADO = {
+    "decisoes": [{"pergunta": "Pergunta 1?", "escolha": "A1", "porque": "Primeiro resumo."}],
+    "em_aberto": ["Do primeiro resumo."],
+}
+
+
+def _resumido(**campos) -> dict:
+    """Um planejamento com uma pergunta respondida e o resumo esperando sim ou nao."""
+    return _planejamento_guardado(
+        perguntas=2,
+        estado="resumido",
+        mensagens=_conversa_com(1),
+        resumo=RESUMO_GUARDADO,
+        **campos,
+    )
+
+
+class TestGateDoResumoEDoNao:
+    @pytest.mark.parametrize(
+        "rota,corpo", [pytest.param(ROTA_RESUMO, {}, id="resumo"), pytest.param(ROTA_NAO, {"texto": "x"}, id="nao")]
+    )
+    def test_quem_nao_e_super_admin_leva_403(self, monkeypatch, rota, corpo):
+        cliente = _ia(monkeypatch, _resumo())
+        client, sb = _cenario(logado=QUEM_NAO_E_SUPER_ADMIN, planejamentos=[_resumido()])
+        antes = json.loads(json.dumps(_planejamentos(sb)))
+
+        assert client.post(rota, json=corpo).status_code == 403
+        assert cliente.chamadas == []
+        assert _planejamentos(sb) == antes
+
+    @pytest.mark.parametrize(
+        "rota,corpo", [pytest.param(ROTA_RESUMO, {}, id="resumo"), pytest.param(ROTA_NAO, {"texto": "x"}, id="nao")]
+    )
+    def test_o_decimo_primeiro_pedido_do_minuto_leva_429(self, monkeypatch, rota, corpo):
+        _ia(monkeypatch, _resumo())
+        client, _ = _cenario(planejamentos=[_planejamento_guardado()])
+
+        codigos = [client.post(rota, json=corpo).status_code for _ in range(11)]
+        assert 429 not in codigos[:10]
+        assert codigos[10] == 429
+
+    def test_demanda_com_vinculo_nao_resume(self, monkeypatch):
+        cliente = _ia(monkeypatch, _resumo())
+        client, _ = _cenario(
+            demandas=[_demanda_que_se_planeja(github_issue_numero=900)], planejamentos=[_planejamento_guardado()]
+        )
+
+        resposta = client.post(ROTA_RESUMO, json={})
+
+        assert resposta.status_code == 409
+        assert resposta.json()["detail"] == planejamento_demanda.MOTIVO_JA_VINCULADA
+        assert cliente.chamadas == []
+
+
+class TestFecharEResumir:
+    def test_na_primeira_pergunta_resume_e_guarda(self, monkeypatch):
+        _ia(monkeypatch, _resumo(decisoes=[{"pergunta": 1, "porque": "Inventado."}], em_aberto=["Quem usa."]))
+        client, sb = _cenario(planejamentos=[_planejamento_guardado(perguntas=1)])
+
+        resposta = client.post(ROTA_RESUMO, json={})
+
+        assert resposta.status_code == 200
+        corpo = resposta.json()
+        assert corpo["estado"] == "resumido"
+        # A pergunta 1 nao teve resposta: a decisao que o modelo inventou some.
+        assert corpo["resumo"] == {"decisoes": [], "em_aberto": ["Quem usa."]}
+        [linha] = _planejamentos(sb)
+        assert linha["estado"] == "resumido"
+        assert linha["resumo"] == corpo["resumo"]
+        # A conversa fica como estava.
+        assert [m["tipo"] for m in linha["mensagens"]] == ["pergunta"]
+
+    def test_depois_do_encerrou_tambem_resume(self, monkeypatch):
+        _ia(monkeypatch, _resumo())
+        conversa = [*_conversa_com(2), {"tipo": "encerrou", "contexto": "Tenho o bastante."}]
+        client, _ = _cenario(planejamentos=[_planejamento_guardado(estado="encerrado", mensagens=conversa)])
+
+        corpo = client.post(ROTA_RESUMO, json={}).json()
+
+        assert corpo["estado"] == "resumido"
+        assert corpo["resumo"]["decisoes"] == [
+            {"pergunta": "Pergunta 1?", "escolha": "A1", "porque": "A recepção marca o retorno."}
+        ]
+
+    def test_o_get_devolve_o_resumo_guardado(self):
+        client, _ = _cenario(planejamentos=[_resumido()])
+
+        corpo = client.get(ROTA).json()
+
+        assert corpo["estado"] == "resumido"
+        assert corpo["resumo"] == RESUMO_GUARDADO
+
+    def test_resumo_ja_pronto_nao_chama_a_ia_de_novo(self, monkeypatch):
+        cliente = _ia(monkeypatch, _resumo())
+        client, _ = _cenario(planejamentos=[_resumido()])
+
+        resposta = client.post(ROTA_RESUMO, json={})
+
+        assert resposta.status_code == 409
+        assert resposta.json()["detail"] == planejamento_demanda.MOTIVO_RESUMO_PRONTO
+        assert cliente.chamadas == []
+
+    def test_o_custo_do_resumo_e_gravado(self, monkeypatch):
+        _ia(monkeypatch, _resumo(), usage=_uso(lidos=21000))
+        client, sb = _cenario(planejamentos=[_planejamento_guardado(perguntas=2)])
+
+        client.post(ROTA_RESUMO, json={})
+
+        [chamada] = _chamadas(sb)
+        assert chamada["passo"] == "resumo"
+        assert chamada["tokens_cache"] == 21000
+
+    def test_falha_da_ia_deixa_o_planejamento_como_estava(self, monkeypatch):
+        _ia(monkeypatch, _erro_do_provedor())
+        client, sb = _cenario(planejamentos=[_planejamento_guardado(perguntas=2)])
+        antes = json.loads(json.dumps(_planejamentos(sb)))
+
+        resposta = client.post(ROTA_RESUMO, json={})
+
+        assert resposta.status_code == 502
+        assert resposta.json()["detail"] == planejamento_demanda.MOTIVO_TURNO_FALHOU
+        assert _planejamentos(sb) == antes
+        assert [c["sucesso"] for c in _chamadas(sb)] == [False]
+
+
+class TestONao:
+    @pytest.mark.parametrize("corpo", [{}, {"texto": ""}, {"texto": "   "}], ids=["sem-campo", "vazio", "em-branco"])
+    def test_sem_texto_e_recusado(self, monkeypatch, corpo):
+        cliente = _ia(monkeypatch, _pergunta())
+        client, sb = _cenario(planejamentos=[_resumido()])
+        antes = json.loads(json.dumps(_planejamentos(sb)))
+
+        resposta = client.post(ROTA_NAO, json=corpo)
+
+        assert resposta.status_code == 422
+        assert resposta.json()["detail"] == planejamento_demanda.MOTIVO_NAO_SEM_TEXTO
+        assert _planejamentos(sb) == antes
+        assert cliente.chamadas == []
+
+    def test_com_texto_a_conversa_ganha_a_linha_e_volta_a_em_andamento(self, monkeypatch):
+        _ia(monkeypatch, _pergunta())
+        client, sb = _cenario(planejamentos=[_resumido()])
+
+        corpo = client.post(ROTA_NAO, json={"texto": "  A enfermagem também usa.  "}).json()
+
+        assert corpo["estado"] == "em_andamento"
+        assert corpo["mensagens"][-1]["tipo"] == "nao_bateu"
+        assert corpo["mensagens"][-1]["texto"] == "A enfermagem também usa."
+        [linha] = _planejamentos(sb)
+        assert linha["estado"] == "em_andamento"
+        assert linha["mensagens"][-1] == {"tipo": "nao_bateu", "texto": "A enfermagem também usa."}
+
+    def test_sem_resumo_esperando_o_nao_e_recusado(self, monkeypatch):
+        _ia(monkeypatch, _pergunta())
+        client, _ = _cenario(planejamentos=[_planejamento_guardado()])
+
+        resposta = client.post(ROTA_NAO, json={"texto": "Não bateu."})
+
+        assert resposta.status_code == 409
+        assert resposta.json()["detail"] == planejamento_demanda.MOTIVO_SEM_RESUMO
+
+    def test_o_agente_retoma_de_onde_o_diretor_disse_que_nao_bateu(self, monkeypatch):
+        cliente = _ia(monkeypatch, _pergunta(contexto="Então a enfermagem também marca o retorno?"))
+        client, _ = _cenario(planejamentos=[_resumido()])
+
+        client.post(ROTA_NAO, json={"texto": "A enfermagem também usa."})
+        corpo = client.post(ROTA, json={}).json()
+
+        assert corpo["estado"] == "em_andamento"
+        assert corpo["mensagens"][-1]["contexto"] == "Então a enfermagem também marca o retorno?"
+        assert "o que não bateu): A enfermagem também usa." in cliente.chamadas[0]["messages"][0]["content"]
+
+    def test_o_resumo_refeito_substitui_o_anterior(self, monkeypatch):
+        cliente = _ia(monkeypatch, _encerrou(decisao_fechada=None))
+        client, sb = _cenario(planejamentos=[_resumido()])
+
+        client.post(ROTA_NAO, json={"texto": "Faltou a enfermagem."})
+        client.post(ROTA, json={})
+        cliente.texto = _resumo(
+            decisoes=[{"pergunta": 1, "porque": "Segundo resumo."}], em_aberto=["Do segundo resumo."]
+        )
+        corpo = client.post(ROTA_RESUMO, json={}).json()
+
+        segundo = {
+            "decisoes": [{"pergunta": "Pergunta 1?", "escolha": "A1", "porque": "Segundo resumo."}],
+            "em_aberto": ["Do segundo resumo."],
+        }
+        assert corpo["resumo"] == segundo
+        [linha] = _planejamentos(sb)
+        assert linha["resumo"] == segundo
+        assert "Primeiro resumo." not in json.dumps(linha, ensure_ascii=False)
 
 
 # ═══════════════════════════════════════════════════════════════════════════

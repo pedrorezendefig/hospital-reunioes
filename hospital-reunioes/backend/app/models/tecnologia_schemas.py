@@ -521,14 +521,30 @@ class MensagemDoPlanejamento(BaseModel):
 
     `pergunta` e `encerrou` sao da IA; `resposta` e do diretor, com a letra da
     opcao que ele clicou (nula quando escreveu no campo livre) e o texto.
+    `nao_bateu` tambem e do diretor: o que ele disse ao recusar o resumo
+    (issue #1347).
     """
 
-    tipo: Literal["pergunta", "encerrou", "resposta"]
+    tipo: Literal["pergunta", "encerrou", "resposta", "nao_bateu"]
     contexto: str | None = None
     opcoes: list[OpcaoDoPlanejamento] = []
     recomendada: Literal["A", "B"] | None = None
     opcao: Literal["A", "B"] | None = None
     texto: str | None = None
+
+
+class DecisaoDoResumo(BaseModel):
+    """Uma decisao do resumo: a pergunta da IA, a resposta do diretor e uma
+    linha de porque. As duas primeiras vem da conversa, nunca do modelo."""
+
+    pergunta: str
+    escolha: str
+    porque: str
+
+
+class ResumoDoPlanejamento(BaseModel):
+    decisoes: list[DecisaoDoResumo] = []
+    em_aberto: list[str] = []
 
 
 class PlanejamentoResponse(BaseModel):
@@ -544,6 +560,8 @@ class PlanejamentoResponse(BaseModel):
     estado: str | None = None
     mensagens: list[MensagemDoPlanejamento] = []
     decisoes: list[str] = []
+    # O ultimo resumo do Fechar e resumir (issue #1347); nulo antes do primeiro.
+    resumo: ResumoDoPlanejamento | None = None
 
 
 class PlanejamentoRespostaPayload(BaseModel):
@@ -555,4 +573,11 @@ class PlanejamentoRespostaPayload(BaseModel):
     """
 
     opcao: Literal["A", "B"] | None = None
+    texto: str | None = Field(default=None, max_length=LIMITE_DA_MENSAGEM)
+
+
+class PlanejamentoNaoPayload(BaseModel):
+    """Corpo do POST .../planejamento/nao: o que nao bateu no resumo. O texto
+    vazio e recusado pela rota, com frase de gente."""
+
     texto: str | None = Field(default=None, max_length=LIMITE_DA_MENSAGEM)

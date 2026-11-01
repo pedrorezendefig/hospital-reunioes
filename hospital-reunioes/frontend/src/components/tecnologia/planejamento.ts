@@ -16,15 +16,24 @@ export type OpcaoDoPlanejamento = { letra: LetraDaOpcao; texto: string };
 /**
  * Uma fala da conversa. `pergunta` e `encerrou` são da IA; `resposta` é de
  * quem planeja, com a letra clicada (nula quando escreveu no campo livre).
+ * `nao_bateu` também é de quem planeja: o que não bateu no resumo (#1347).
  */
 export type MensagemDoPlanejamento = {
-  tipo: "pergunta" | "encerrou" | "resposta";
+  tipo: "pergunta" | "encerrou" | "resposta" | "nao_bateu";
   contexto?: string | null;
   opcoes?: OpcaoDoPlanejamento[];
   recomendada?: LetraDaOpcao | null;
   opcao?: LetraDaOpcao | null;
   texto?: string | null;
 };
+
+/**
+ * O resumo do Fechar e resumir (issue #1347). A pergunta e a escolha vêm da
+ * conversa, e o servidor descarta a decisão de pergunta que ficou sem resposta.
+ */
+export type DecisaoDoResumo = { pergunta: string; escolha: string; porque: string };
+
+export type ResumoDoPlanejamento = { decisoes: DecisaoDoResumo[]; em_aberto: string[] };
 
 /** `estado` nulo é "ainda não começou": não há conversa guardada. */
 export type Planejamento = {
@@ -33,6 +42,7 @@ export type Planejamento = {
   estado: string | null;
   mensagens: MensagemDoPlanejamento[];
   decisoes: string[];
+  resumo?: ResumoDoPlanejamento | null;
 };
 
 /** O que vai no POST: vazio começa, a letra ou o texto respondem. */
@@ -65,6 +75,14 @@ export function urlDoPlanejamento(demandaId: string): string {
   return `${BASE_TECNOLOGIA}/demandas/${encodeURIComponent(demandaId)}/planejamento`;
 }
 
+export function urlDoResumo(demandaId: string): string {
+  return `${urlDoPlanejamento(demandaId)}/resumo`;
+}
+
+export function urlDoNao(demandaId: string): string {
+  return `${urlDoPlanejamento(demandaId)}/nao`;
+}
+
 /** A tela do planejamento, que o botão do card abre. */
 export function rotaDoPlanejamento(demandaId: string): string {
   return `${ROTA_TECNOLOGIA}/planejamento/${encodeURIComponent(demandaId)}`;
@@ -74,6 +92,17 @@ export function rotaDoPlanejamento(demandaId: string): string {
 export function perguntaEmAberto(planejamento: Planejamento | null): MensagemDoPlanejamento | null {
   const ultima = planejamento?.mensagens[planejamento.mensagens.length - 1];
   return ultima?.tipo === "pergunta" ? ultima : null;
+}
+
+/**
+ * A conversa espera a IA falar: ainda não começou, ou a última fala é de
+ * quem planeja sem pergunta depois (o "não" do resumo, cuja pergunta seguinte
+ * ainda não veio ou falhou). A tela pede o turno nesses casos.
+ */
+export function esperaAIA(planejamento: Planejamento): boolean {
+  if (planejamento.estado === null) return true;
+  if (planejamento.estado !== "em_andamento") return false;
+  return perguntaEmAberto(planejamento) === null;
 }
 
 function textoOuNulo(valor: unknown): boolean {
@@ -98,12 +127,31 @@ function mensagemValida(item: unknown): boolean {
           typeof (o as Record<string, unknown>).texto === "string",
       ));
   return (
-    (m.tipo === "pergunta" || m.tipo === "encerrou" || m.tipo === "resposta") &&
+    (m.tipo === "pergunta" || m.tipo === "encerrou" || m.tipo === "resposta" || m.tipo === "nao_bateu") &&
     textoOuNulo(m.contexto) &&
     textoOuNulo(m.texto) &&
     letraOuNula(m.recomendada) &&
     letraOuNula(m.opcao) &&
     opcoesValidas
+  );
+}
+
+function listaDeTextos(valor: unknown): boolean {
+  return Array.isArray(valor) && valor.every((t) => typeof t === "string");
+}
+
+function resumoValido(valor: unknown): boolean {
+  if (valor === undefined || valor === null) return true;
+  if (typeof valor !== "object") return false;
+  const r = valor as Record<string, unknown>;
+  return (
+    Array.isArray(r.decisoes) &&
+    r.decisoes.every((d) => {
+      if (typeof d !== "object" || d === null) return false;
+      const campos = d as Record<string, unknown>;
+      return typeof campos.pergunta === "string" && typeof campos.escolha === "string" && typeof campos.porque === "string";
+    }) &&
+    listaDeTextos(r.em_aberto)
   );
 }
 
@@ -117,7 +165,7 @@ export function planejamentoValido(corpo: unknown): corpo is Planejamento {
     textoOuNulo(p.estado) &&
     Array.isArray(p.mensagens) &&
     p.mensagens.every(mensagemValida) &&
-    Array.isArray(p.decisoes) &&
-    p.decisoes.every((d) => typeof d === "string")
+    listaDeTextos(p.decisoes) &&
+    resumoValido(p.resumo)
   );
 }
