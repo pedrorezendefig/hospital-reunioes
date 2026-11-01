@@ -84,6 +84,12 @@ CATALOGO: dict[str, _Linha] = {
         "Não consegui ler a conta inteira: os itens lidos somam R$ {soma} e o PDF não traz o total da conta.",
         ENVIAR_DE_NOVO,
     ),
+    "item": _Linha(
+        "CM-ARQ-SOMA",
+        "Não consegui ler a conta inteira: no item {codigo} da página {pagina}, a quantidade vezes o unitário dá "
+        "R$ {esperado} e a linha traz R$ {linha}.",
+        ENVIAR_DE_NOVO,
+    ),
     "cabecalho": _Linha("CM-ARQ-CABECALHO", "Não achei o atendimento e o plano no cabeçalho da conta.", ENVIAR_DE_NOVO),
     "incompleto": _Linha(
         "CM-ARQ-INCOMPLETO",

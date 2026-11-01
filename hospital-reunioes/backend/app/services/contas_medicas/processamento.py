@@ -71,7 +71,15 @@ from app.services.contas_medicas.memoria import MemoriaLida, RegraLida
 from app.services.contas_medicas.operadoras import listar_setores, memoria_vigente
 from app.services.contas_medicas.tabelas import pacote_pelo_tuss, preco
 from app.services.contas_medicas.validacao import temas_das_linhas_validar
-from app.services.contas_medicas_conta import Conta, ErroLeitura, ler_cabecalho_da_conta, ler_conta, soma_e_total
+from app.services.contas_medicas_conta import (
+    TOLERANCIA,
+    Conta,
+    ErroLeitura,
+    item_que_nao_fecha,
+    ler_cabecalho_da_conta,
+    ler_conta,
+    soma_e_total,
+)
 from app.services.contas_medicas_extrator import (
     MENSAGEM_PDF_GRANDE_DEMAIS,
     Pagina,
@@ -528,13 +536,18 @@ def _pipeline(supabase, conta: dict, cronometro: _Cronometro) -> None:
 
 
 def _leitura_da_conta_que_nao_fecha(textos: list[str]) -> FalhaDeLeitura:
-    """Por que a conta não foi lida: o cabeçalho sem atendimento e plano, ou a
-    soma dos itens que não bate com o total (com os dois números)."""
+    """Por que a conta não foi lida: o cabeçalho sem atendimento e plano, a
+    soma dos itens que não bate com o total (com os dois números) ou, com a
+    soma certa, o item em que quantidade vezes unitário não dá o total da linha."""
     if isinstance(ler_cabecalho_da_conta(textos), ErroLeitura):
         return FalhaDeLeitura("cabecalho")
     soma, total = soma_e_total(textos)
     if total is None:
         return FalhaDeLeitura("sem_total", soma=soma)
+    errado = item_que_nao_fecha(textos) if abs(soma - total) <= TOLERANCIA else None
+    if errado:
+        item, esperado = errado
+        return FalhaDeLeitura("item", codigo=item.codigo, pagina=item.pagina, esperado=esperado, linha=item.total)
     return FalhaDeLeitura("soma", soma=soma, total=total)
 
 

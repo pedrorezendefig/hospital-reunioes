@@ -1564,6 +1564,25 @@ class TestCodigoDoErroDaLeitura:
             ENVIAR_DE_NOVO,
         )
 
+    def test_conta_que_soma_certo_com_um_item_que_nao_fecha_diz_o_item(self):
+        # A soma bate com o total, mas a agulha diz 10 x 0,18 e a linha traz 1,70.
+        texto = _texto_da_conta("48811", 2, 6)
+        com_o_item_errado = texto.replace("0,17        1,70", "0,18        1,70")
+        assert com_o_item_errado != texto
+        banco = _cenario()
+        _enviar(banco, _conta(), _prontuario())
+        _trocar_o_pdf(banco, "CONTA", com_o_item_errado)
+
+        _rodar_o_job(banco)
+
+        assert _erro_no_cartao(banco) == (
+            "CM-ARQ-SOMA",
+            "Não consegui ler a conta inteira: no item 70000001 da página 1, a quantidade vezes o unitário dá "
+            "R$ 1,80 e a linha traz R$ 1,70.",
+            "conta",
+            ENVIAR_DE_NOVO,
+        )
+
     def test_conta_sem_a_linha_do_total_diz_a_soma_lida(self):
         banco = _cenario()
         _enviar(banco, _conta(), _prontuario())
