@@ -2,6 +2,54 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-11-01T19:17:07-03:00",
+      "sha": "8d08676fc19daae17497b3f05e0331efa58f2f1f",
+      "app_version": "0.205.0",
+      "subject": "Onda planejamento-onda2: Planejamento da Demanda, voz na resposta e Continuar planejamento no card",
+      "raw_subject": "chore(deploy): registro da onda planejamento-onda2 (#1357)",
+      "scope": [
+        "backend",
+        "frontend"
+      ],
+      "prds": [
+        1344
+      ],
+      "result": "healthy",
+      "duration_seconds": 197,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        },
+        {
+          "service": "frontend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "onda-enxuta planejamento-onda2: PR #1357 (issue #1348), mergeados PR a PR. Merge pela API do GitHub, um build. Registro pela Action pos-merge depois do health.",
+      "etapas": {
+        "merge_s": 2,
+        "build_s": {
+          "backend": 18,
+          "frontend": 174
+        },
+        "health_s": 0
+      },
+      "responsavel": "pedrorezendefig"
+    },
+    {
       "at": "2026-11-01T19:01:04-03:00",
       "sha": "69998e2f172e4747b8c8dcc19c4751938f23f2e2",
       "app_version": "0.204.0",
