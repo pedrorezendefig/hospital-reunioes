@@ -22,6 +22,13 @@ from supabase import Client
 
 from app.dependencies import get_supabase_client, require_permissao_cm
 from app.limiter import limiter
+from app.services.contas_medicas.descarte import (
+    ContaNaoEncontradaError,
+    NaoDescartavelError,
+    SemPermissaoDeDescartarError,
+    descartar,
+    pode_descartar,
+)
 from app.services.contas_medicas.envio import (
     LIMITE_POR_ARQUIVO,
     ArquivoRecebido,
@@ -37,6 +44,8 @@ router = APIRouter(prefix="/contas-medicas", tags=["contas-medicas"])
 _PODE_ENVIAR = require_permissao_cm("enviar_contas")
 # "Analisar contas" na tela; a chave guarda o nome antigo (ADR 0073).
 _PODE_ANALISAR = require_permissao_cm("enviar_corrigir_contas")
+# Descartar: quem enviou ou quem tem o Painel completo, decidido na regra (issue #1338).
+_TEM_O_EIXO = require_permissao_cm()
 
 
 @router.post("/envios")
@@ -150,6 +159,8 @@ def _item(conta: dict, atendimento: dict, linhas: list[dict], paginas: int | Non
         "pendencias": sum(1 for linha in linhas if linha_pendente(linha)),
         "erro_motivo": conta.get("erro_motivo"),
         **_erro(conta),
+        # O botão Descartar do cartão do envio (issue #1338).
+        "pode_descartar": pode_descartar(conta, linhas),
         # Só para quem tem "painel completo": quem está com a conta.
         "com": conta.get("com_quem"),
     }
@@ -197,3 +208,26 @@ async def ver_meus_envios(
     """As contas que a pessoa enviou e ainda não ficaram prontas. Quem tem
     "painel completo" vê os envios de todos, com quem enviou cada um."""
     return _itens(supabase, envios_da_pessoa(supabase, me), ("meus_envios",))
+
+
+@router.post("/contas/{conta_id}/descartar")
+@limiter.limit("30/minute")
+async def descartar_conta(
+    request: Request,
+    conta_id: UUID,
+    me: dict = Depends(_TEM_O_EIXO),
+    supabase: Client = Depends(get_supabase_client),
+) -> dict:
+    """A conta em Erro ou Aguardando arquivo sai do banco, e os PDFs dela, do
+    bucket (issue #1338). Pode quem enviou e quem tem o Painel completo."""
+    try:
+        await run_in_threadpool(descartar, supabase, str(conta_id), me)
+    except ContaNaoEncontradaError:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Conta não encontrada") from None
+    except SemPermissaoDeDescartarError:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, detail="Só quem enviou a conta ou a gestão pode descartar"
+        ) from None
+    except NaoDescartavelError as erro:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(erro)) from None
+    return {"descartada": str(conta_id)}
