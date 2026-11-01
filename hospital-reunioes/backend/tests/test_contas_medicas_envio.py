@@ -1062,6 +1062,23 @@ class TestKitDeConhecimento:
             assert trecho in secao, trecho
         assert "vê só as próprias" not in texto
 
+    def test_diz_que_cada_envio_e_um_cartao_com_os_quadrados_da_conta_e_do_prontuario(self):
+        """Issue #1336: o cartão do envio, com um quadrado para cada arquivo."""
+        secao = KIT.read_text(encoding="utf-8").split("## O envio e a fila", 1)[1].split("\n## ", 1)[0]
+
+        for trecho in (
+            "cartão",
+            "quadrado",
+            "verde",
+            "tracejado",
+            "Falta enviar",
+            "Enviar a conta",
+            "Enviar o prontuário",
+            "páginas",
+            "um embaixo do outro",
+        ):
+            assert trecho in secao, trecho
+
 
 # ═══════════════════════════════════════════════════════════════════════════
 # 11. Tipografia

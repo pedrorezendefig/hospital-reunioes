@@ -53,6 +53,8 @@ Com as duas permissões, a tela de contas tem quatro abas. Todas as faturistas v
 
 A aba **Meus envios** mostra as contas que a pessoa enviou e que ainda não ficaram prontas. Elas não entram na Fila: ficam com quem enviou, que é quem tem o PDF que falta.
 
+Em Meus envios, cada conta aparece num cartão com dois quadrados, um para a conta e outro para o prontuário. O quadrado do arquivo que chegou fica verde: o da conta mostra o número e o período, e o do prontuário, o número de páginas. O quadrado do arquivo que falta fica tracejado, diz "Falta enviar" e tem o botão "Enviar a conta" ou "Enviar o prontuário", que abre o seletor de arquivos para mandar só aquele PDF. A borda do cartão tem a cor da situação: vermelha no erro, amarela quando falta arquivo, cinza na fila e verde quando a conta fica pronta em instantes. No celular, os dois quadrados ficam um embaixo do outro. A Fila, Minhas e Concluídas continuam com uma linha por conta.
+
 Cada conta aparece pelo número do atendimento, com o número da conta ao lado, e com a situação:
 
 - **Falta o prontuário** ou **Falta a conta**: o par ainda não chegou;
