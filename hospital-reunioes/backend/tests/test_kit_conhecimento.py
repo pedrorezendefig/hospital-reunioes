@@ -509,6 +509,39 @@ class TestOTextoDaAbaContaATelaDeHoje:
     def test_os_produtos_moram_atras_da_engrenagem(self, texto):
         assert "engrenagem" in _secao(texto, "Os Produtos")
 
+    def test_o_planejamento_diz_o_que_e_quando_aparece_e_o_que_o_sim_faz(self, texto):
+        """ADR 0075. As palavras sao as da tela do planejamento: o botao, os
+        dois Tipos em que ele aparece, o teto, o fechar, o retomar, o resumo
+        com o que ficou em aberto e o sim que leva ao desenvolvimento."""
+        planejamento = _secao(texto, "O Planejamento da Demanda")
+        termos = (
+            "Planejar com a IA",
+            "Novo",
+            "Ajuste",
+            "12 perguntas",
+            "Fechar e resumir",
+            "Continuar planejamento",
+            "ficou em aberto",
+            "**sim**",
+            "desenvolvimento",
+            "**não**",
+            "O que já foi decidido",
+        )
+        for termo in termos:
+            assert termo in planejamento, termo
+
+    def test_o_planejamento_avisa_que_ainda_nao_esta_no_aplicativo(self, texto):
+        """PRD #1344. O planejamento foi decidido e sobe em quatro ondas
+        (#1345, #1347, #1348, #1349). Sem a marca, o Assistente manda o
+        diretor clicar num botao que nao existe. Quem subir o envio do sim
+        (#1349) tira a marca e este teste junto."""
+        planejamento = _secao(texto, "O Planejamento da Demanda")
+        assert "ainda não está no aplicativo" in planejamento
+        decidido = _secao(texto, "O que já foi decidido")
+        for item in decidido.splitlines():
+            if "planejamento" in item:
+                assert "ainda não está no aplicativo" in item, item
+
     @pytest.mark.parametrize("aposentado", ["Minha vez", "cinco colunas"])
     def test_sem_o_nome_da_tela_de_antes(self, texto, aposentado):
         assert aposentado not in texto
@@ -525,3 +558,91 @@ class TestOFatiadorDeSecao:
 
     def test_secao_que_nao_existe_e_vazia(self):
         assert _secao("# Aba\n\n## O Quadro\nraias\n", "O Painel") == ""
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 5. "O que já foi decidido" em cada arquivo (ADR 0075, decisao 4)
+# ═══════════════════════════════════════════════════════════════════════════
+#
+# A secao e com o que o Planejamento da Demanda desafia o pedido do diretor:
+# quando o pedido esbarra numa regra da casa, o agente recusa ou redireciona e
+# cita esta secao. Sem ela em algum arquivo, o agente nao tem o que citar sobre
+# aquele modulo e volta a concordar com tudo.
+
+SECAO_DECIDIDO = "O que já foi decidido"
+
+# Piso de decisoes por arquivo. Nao mede qualidade: separa uma secao escrita de
+# uma secao criada com uma linha so para o teste ficar verde.
+PISO_DE_DECISOES = 3
+
+# Uma decisao por item de lista, em UMA frase: fim de frase no meio do item
+# (ponto, interrogacao ou exclamacao seguidos de espaco e maiuscula) e a segunda
+# frase que a regra proibe.
+SEGUNDA_FRASE = re.compile(r"[.!?]\s+[A-ZÁÉÍÓÚÂÊÔÃÕÇ]")
+
+# O vocabulario de quem programa, que o diretor nao fala: o registro de decisao
+# (com ou sem o numero de quatro digitos), o documento de produto, a issue e o
+# que acontece com o codigo. Palavra inteira e sem caixa: "issues" e "Deploy"
+# tambem sao.
+VOCABULARIO_DO_REPOSITORIO = re.compile(
+    r"\b(?:ADRs?|PRDs?|issues?|labels?|pull requests?|commits?|merges?|deploys?)\b|(?<![\d-])\b0\d{3}\b",
+    flags=re.IGNORECASE,
+)
+
+
+def _decisoes(arquivo: str) -> list[str]:
+    """Os itens de lista da secao. Texto corrido fora da lista nao conta como
+    decisao: o agente cita a decisao, e a decisao e o item."""
+    corpo = _secao(_texto(arquivo), SECAO_DECIDIDO)
+    return [linha[2:].strip() for linha in corpo.splitlines() if linha.startswith("- ")]
+
+
+@pytest.mark.parametrize("arquivo", ARQUIVOS_DO_KIT)
+class TestOQueJaFoiDecidido:
+    def test_o_arquivo_tem_a_secao_com_decisoes(self, arquivo):
+        """Mutante: apagar a secao de um dos dez arquivos."""
+        assert len(_decisoes(arquivo)) >= PISO_DE_DECISOES
+
+    def test_cada_decisao_e_uma_frase_so(self, arquivo):
+        """Mutante: emendar duas decisoes no mesmo item."""
+        for decisao in _decisoes(arquivo):
+            assert decisao.endswith("."), decisao
+            assert SEGUNDA_FRASE.search(decisao) is None, decisao
+
+    def test_a_secao_nao_fala_a_lingua_do_repositorio(self, arquivo):
+        """A secao nasce das decisoes registradas para quem programa, e por isso
+        e onde o numero da decisao, a issue e a tabela mais tentam vazar.
+
+        Mutante: escrever "(ADR 0037)" no fim de uma decisao.
+        """
+        secao = _secao(_texto(arquivo), SECAO_DECIDIDO)
+        assert secao.strip()
+        assert VOCABULARIO_DO_REPOSITORIO.search(secao) is None
+        assert NUMERO_DE_ISSUE.search(secao) is None
+        assert [label for label in LABELS_DO_REPO if label in secao] == []
+        assert [tabela for tabela in _tabelas_do_banco() if tabela in secao.lower()] == []
+        assert ROTA_DA_API.search(secao) is None
+        assert NOME_DE_ARQUIVO_DO_CODIGO.search(secao) is None
+
+
+class TestODetectorDeFrase:
+    """O detector de frase tambem e codigo: cego, ele deixaria passar o item
+    com duas decisoes emendadas."""
+
+    def test_pega_a_segunda_frase(self):
+        assert SEGUNDA_FRASE.search("O caso nasce sem tipo. Quem classifica é o ouvidor.") is not None
+
+    def test_numero_com_virgula_e_protocolo_nao_sao_fim_de_frase(self):
+        assert SEGUNDA_FRASE.search("O protocolo é 2026-0007 e custa R$ 1,50 por conta.") is None
+
+    @pytest.mark.parametrize(
+        "frase",
+        ["o tipo decide o sigilo (ADR 0037)", "como na decisão 0054", "veio do PRD da Ouvidoria", "virou Issue"],
+    )
+    def test_o_vocabulario_do_repositorio_e_pego(self, frase):
+        assert VOCABULARIO_DO_REPOSITORIO.search(frase) is not None
+
+    def test_o_protocolo_nao_e_numero_de_decisao(self):
+        """O protocolo da Ouvidoria tem quatro digitos com zero na frente, mas
+        colado ao ano por hifen: e texto de gente, nao vocabulario do repo."""
+        assert VOCABULARIO_DO_REPOSITORIO.search("no formato ano mais número, como 2026-0007") is None

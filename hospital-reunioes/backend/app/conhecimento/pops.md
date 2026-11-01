@@ -38,6 +38,17 @@ Três coisas já foram decididas e ainda não foram construídas. Quem procurar 
 - Não deixa ninguém editar o código do POP: ele nasce na criação e é travado.
 - Não decide sozinho a estrutura do procedimento: ele segue o modelo que foi anexado.
 
+## O que já foi decidido
+
+- POPs mora no mesmo aplicativo das Reuniões com acesso próprio, e quem só tem o acesso de um módulo não vê o outro.
+- Quem dá o acesso de POPs a alguém é o Super admin do aplicativo, na tela de Usuários, ou quem administra o módulo de POPs.
+- O código do POP nasce na criação, com a sigla do setor e um número em sequência, e ninguém edita esse código.
+- Quem elabora, revisa e valida pode ser trocado até o POP ir para assinatura, e depois disso só na revisão seguinte.
+- O agente escreve o POP a partir do material anexado e segue a estrutura do modelo que vier nele, do mesmo jeito para todos os setores.
+- O fluxograma é a única seção que sempre existe, e quem o desenha é o próprio aplicativo, sem mandar o conteúdo do POP para serviço de fora.
+- Revisor e validador podem devolver o POP com comentários quantas vezes precisarem.
+- Publicar exige a assinatura digital das três pessoas do fluxo.
+
 ## O que costuma virar Demanda
 
 - POP saindo com estrutura diferente do modelo anexado (Defeito).
