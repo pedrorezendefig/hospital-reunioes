@@ -42,8 +42,10 @@ volta para `docs/manual/` e fica fora do git.
 ## Quando a publicação para
 
 - **"vídeo que a página usa e não existe":** o MP4 não está em
-  `docs/manual/public/video/` nem em `docs/comunicacao/`. Renderize a composição
-  (`references/video-de-visao-geral.md`) antes de publicar; MP4 não vem no clone.
+  `~/Videos/Hospital/Manual/<modulo>/<slug>.mp4` (ou em `$MANUAL_VIDEOS`), de
+  onde o `publicar.sh` copia para a pasta de montagem. Renderize a composição
+  (`references/video-de-visao-geral.md`) antes de publicar; MP4 não vem no
+  clone e não mora no repositório.
 - **"vídeo acima de 8 MB":** o Vídeo de visão geral passou do teto depois do
   reencode. Encurte a cena ou tire movimento, e renderize de novo.
 - **"mais de um vídeo no módulo":** o Manual tem um vídeo por módulo, na

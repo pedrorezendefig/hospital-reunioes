@@ -50,8 +50,8 @@ def escrever(
 
 
 def mp4(raiz: Path, modulo: str, slug: str) -> Path:
-    """O MP4 renderizado, que não vem no clone e a publicação exige."""
-    arquivo = raiz / "public" / "video" / modulo / f"{slug}.mp4"
+    """O MP4 renderizado, que mora fora do repositório e a publicação exige."""
+    arquivo = raiz / "videos" / modulo / f"{slug}.mp4"
     arquivo.parent.mkdir(parents=True, exist_ok=True)
     arquivo.write_bytes(b"nao e um video de verdade")
     return arquivo
@@ -81,7 +81,12 @@ FERRAMENTAS_OK = caixa_de_ferramentas()
 def rodar(
     raiz: Path, *args: str, path: str | None = None
 ) -> subprocess.CompletedProcess[str]:
-    ambiente = dict(os.environ, PATH=path if path is not None else FERRAMENTAS_OK)
+    # A pasta dos vídeos é a do teste: o ~/Videos de quem roda não decide nada.
+    ambiente = dict(
+        os.environ,
+        PATH=path if path is not None else FERRAMENTAS_OK,
+        MANUAL_VIDEOS=str(raiz / "videos"),
+    )
     return subprocess.run(
         [sys.executable, str(SCRIPT), "--dir", str(raiz), *args],
         capture_output=True,
@@ -308,7 +313,7 @@ def test_resumo_lista_o_que_ficou_em_draft_por_falta_de_mp4(tmp_path):
         in texto
     )
     assert "Saíram do draft" not in texto
-    assert "public/video/ouvidoria/encaminhar.mp4" in texto
+    assert f"{tmp_path}/videos/ouvidoria/encaminhar.mp4" in texto
     assert PROXIMO_PASSO in texto
 
 
@@ -325,7 +330,7 @@ def test_sem_pagina_em_draft_nao_ha_aviso(tmp_path):
 
 def test_pagina_inicial_procura_o_mp4_de_primeiros_passos(tmp_path):
     """A página inicial mostra o Vídeo de visão geral de Primeiros passos
-    (issue #1260): o MP4 dela mora em public/video/primeiros-passos/."""
+    (issue #1260): o MP4 dela mora em <videos>/primeiros-passos/."""
     arquivo = escrever(tmp_path, "index.mdx", "731", video="conheca-a-plataforma")
     mp4(tmp_path, "primeiros-passos", "conheca-a-plataforma")
 

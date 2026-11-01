@@ -8,8 +8,8 @@ Manual mostra o mesmo arquivo. O Admin fica sem vídeo.
 
 **Página de tarefa não tem vídeo.** O Vídeo de tarefa saiu do Manual em
 14/10/2026 (issue #1260): as composições saíram do repositório e os MP4 antigos
-ficam em `local/manual-video-masters/`, guardados para um link externo que é
-outro PRD.
+ficam em `~/Videos/Hospital/Manual/<modulo>/`, guardados para um link externo
+que é outro PRD.
 
 **Vídeo de visão geral não é Vídeo de percepção de valor.** O de percepção mora
 em `docs/comunicacao/`, é do diretor e fala de uma entrega. Este é do usuário e
@@ -36,9 +36,16 @@ como montar, como conferir e como uma nota humana vira regra.
   `tokens.css` (gerado do `globals.css` do app por
   `python3 tools/gerar_tokens_video.py`, nunca à mão), os cards em
   `cards/<card>/` e as Fichas de referência em `references/`.
-- MP4 renderizado: `docs/manual/public/video/<modulo>/<slug>.mp4`, **fora do
-  git** (o `.gitignore` do site já cobre `public/video/`). As strips do gate
-  ficam em `renders/strips/` da composição, também fora do git.
+- MP4 renderizado (o master): `~/Videos/Hospital/Manual/<modulo>/<slug>.mp4`,
+  **fora do repositório**, nem rascunho fica no repo (regra 10 do CLAUDE.md
+  global). O `publicar.sh` copia de lá direto para a pasta de montagem, fora
+  do repositório, sempre por cima, então o que vai ao ar é sempre o master
+  atual. Nada vai para `docs/manual/public/video/`: o `astro dev` mostra o
+  player sem o vídeo. `MANUAL_VIDEOS` troca a pasta dos masters (máquina com os
+  vídeos em outro disco). Master substituído num
+  re-render vai antes para `~/Videos/Hospital/Manual/<modulo>/anteriores/`,
+  nunca é sobrescrito. As strips do gate ficam em `renders/strips/` da
+  composição, fora do git (PNG, não MP4).
 - A abertura do módulo exibe pelo frontmatter `video: <slug>`; o tema monta o
   `<video>` com a capa. "Conheça a plataforma" vai no `index.md` de
   `primeiros-passos/` e no `index.mdx` da página inicial, com o mesmo slug; a
@@ -281,18 +288,25 @@ exibe o vídeo: carimbo do vizinho trava o CI. "Conheça a plataforma" carimba
    20 px de um lado, sem `data-alvo`, ou passando por cima de texto visível de
    fora do alvo. O `check` não vê nada disso: para ele o anel é um elemento
    válido em qualquer lugar do quadro.
-3. **Draft:**
+3. **Draft**, direto no caminho do master. Se já existe um master desse
+   vídeo, ele sai do caminho antes, com a data dele, e nunca é sobrescrito:
 
    ```bash
-   npx --yes hyperframes@0.8.41 render --quality draft \
-     -o ../../../public/video/<modulo>/<slug>.mp4
+   M="$HOME/Videos/Hospital/Manual/<modulo>"; mkdir -p "$M/anteriores"
+   [ -f "$M/<slug>.mp4" ] && mv -n "$M/<slug>.mp4" \
+     "$M/anteriores/$(date -r "$M/<slug>.mp4" +%F)-<slug>.mp4"
+   npx --yes hyperframes@0.8.41 render --quality draft -o "$M/<slug>.mp4"
    ```
+
+   O `mv -n` não apaga nada: se o nome em `anteriores/` já existe, o master
+   fica onde está e o render para por cima dele não pode rodar. Some `-v2` ao
+   nome e mova à mão.
 
 4. **Strips de cada corte:**
 
    ```bash
    python3 tools/strips_video_manual.py \
-     --mp4 docs/manual/public/video/<modulo>/<slug>.mp4 \
+     --mp4 ~/Videos/Hospital/Manual/<modulo>/<slug>.mp4 \
      --composicao docs/manual/video/<modulo>/<slug>/index.html
    ```
 
@@ -310,7 +324,7 @@ exibe o vídeo: carimbo do vizinho trava o CI. "Conheça a plataforma" carimba
    ```markdown
    # VERIFY: <nome do módulo>
 
-   - Draft: docs/manual/public/video/<modulo>/<slug>.mp4, NN s, sha256 <12 primeiros>
+   - Draft: ~/Videos/Hospital/Manual/<modulo>/<slug>.mp4, NN s, sha256 <12 primeiros>
    - Check (HyperFrames 0.8.41): 0 erros, 0 avisos; gate do anel OK
    - Strips: N cortes, gate OK; olhei corte-01 a corte-NN
    - Quadros a cada 3 s: o que conferi (marcador, dedo, legenda, tela igual ao app)
@@ -321,10 +335,10 @@ exibe o vídeo: carimbo do vizinho trava o CI. "Conheça a plataforma" carimba
 
 7. **Conferidor:** `python3 tools/checar_video_manual.py --dir docs/manual`.
 8. **Render final, sem esperar ninguém:** com os gates acima limpos, renderize
-   de novo com `--quality high` no mesmo caminho; é ele que a publicação sobe.
-   Copie o MP4 para `local/manual-video-masters/<modulo>/<slug>.mp4` da árvore
-   principal (o worktree some na subida e o MP4 não vem no clone) e ponha o
-   caminho no corpo do PR. O vídeo não espera OK humano (emenda de 14/10/2026
+   de novo com `--quality high` no mesmo caminho
+   (`~/Videos/Hospital/Manual/<modulo>/<slug>.mp4`); é ele que a publicação
+   sobe. Como o master mora fora do worktree, ele sobrevive à subida, que
+   apaga o worktree. Ponha o caminho e o sha256 no corpo do PR. O vídeo não espera OK humano (emenda de 14/10/2026
    à ADR 0057): o PR sobe como qualquer outro.
 9. **Orçamento:** `bash docs/manual/publicar.sh --dry-run` passa nas três
    travas, e o tamanho do vídeo depois do reencode vai no corpo do PR.

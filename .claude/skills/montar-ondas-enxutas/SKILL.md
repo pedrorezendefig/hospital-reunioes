@@ -169,7 +169,7 @@ Regras:
 2. **Quando cada vídeo pode começar** é decisão do plano, não do humano. Leia as fatias que faltam do PRD:
    - Se as fatias restantes **não mudam tela** (chore, teste, docs, manual): o vídeo começa **agora**, em paralelo com as ondas. O carimbo retrata a versão de prod de hoje e o PRD já está inteiro no app.
    - Se alguma fatia restante **muda tela**: o vídeo espera o deploy da última fatia visual (o carimbo "retrata o app em vX.Y.Z" precisa da versão que tem a tela) e roda em paralelo com o que sobrar (manual, docs).
-3. **Saída padrão é vídeo e página** (o comando sem flag). `--so-video` só se o humano pedir. Contexto com página de módulo (`docs/comunicacao/ouvidoria/modulo/`): o prompt lembra de atualizar a cópia do MP4 lá.
+3. **Saída padrão é vídeo e página** (o comando sem flag). `--so-video` só se o humano pedir. Contexto com página de módulo (`docs/comunicacao/ouvidoria/modulo/`): o prompt lembra de republicar a página de módulo com o MP4 novo de `~/Videos/Hospital/`.
 4. O prompt de divulgação segue o mesmo formato do passo 5 (cabeçalho de leitura fora do bloco, comando na primeira linha do bloco) e diz **o que esperar antes de colar**: "cole depois do deploy verde da onda N da sessão A" ou "pode colar agora". Template:
 
 ```

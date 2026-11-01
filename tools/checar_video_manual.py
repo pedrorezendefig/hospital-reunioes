@@ -323,11 +323,12 @@ def checar(raiz: Path) -> list[str]:
         if any(parte in FORA_DA_VARREDURA for parte in rendido.parts):
             continue
         if rendido.parent.parent == raiz / "public" / "video":
-            continue  # destino do render, fora do git pelo .gitignore do site
+            continue  # destino antigo do render, fora do git pelo .gitignore do site
         problemas.append(
             f"{rendido.relative_to(raiz)}: MP4 dentro da árvore versionada. "
-            "O vídeo renderizado mora em public/video/<modulo>/<slug>.mp4, que "
-            "fica fora do git (ADR 0057, decisão 3)."
+            "O vídeo renderizado mora em ~/Videos/Hospital/Manual/<modulo>/"
+            "<slug>.mp4, fora do repositório, e o publicar.sh copia de lá "
+            "(ADR 0057, decisão 3)."
         )
 
     return problemas

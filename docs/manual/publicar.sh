@@ -67,11 +67,17 @@ if [ -z "$PULAR_BUILD" ]; then
   [ -d "$SITE/.vercel" ] && cp -R "$SITE/.vercel" "$SAIDA/"
 fi
 
-# Os MP4 que as páginas usam. O Vídeo de visão geral nasce em public/video/ e já
-# vem no dist; um vídeo que a página aponte e que só exista em docs/comunicacao/
-# é copiado aqui. O que a página aponta e ninguém acha trava
-# a publicação: subir com o quadro do vídeo quebrado é pior do que não subir.
+# Os MP4 que as páginas usam. Nenhum MP4 mora no repositório (regra 10 do
+# CLAUDE.md global): o master do Vídeo de visão geral fica em
+# ~/Videos/Hospital/Manual/<modulo>/<slug>.mp4 (ou em $MANUAL_VIDEOS) e é
+# copiado daqui direto para a pasta de montagem, que está fora do repositório.
+# O master sempre passa por cima do que já estiver na montagem: é o que impede
+# um MP4 velho de ir ao ar em silêncio depois de um re-render. Sem master, vale
+# o que a montagem já tem (o seam do --pular-build). O que a página aponta e
+# ninguém acha trava a publicação: subir com o quadro do vídeo quebrado é pior
+# do que não subir.
 echo "== vídeos"
+PASTA_VIDEOS="${MANUAL_VIDEOS:-$HOME/Videos/Hospital/Manual}"
 VIDEOS=$(grep -rhoiE 'src="[^"]+\.mp4"' "$SAIDA" --include="*.html" | sed 's/^[Ss][Rr][Cc]="//; s/"$//' | sort -u || true)
 FALTANDO=""
 # `while read`, e não `for` sem aspas: o caminho vem do HTML, e o repositório é
@@ -88,15 +94,13 @@ while IFS= read -r caminho; do
       ;;
   esac
   destino="$SAIDA/${caminho#/}"
-  if [ ! -f "$destino" ]; then
-    origem=$(find "$RAIZ/docs/comunicacao" -name "$(basename "$caminho")" -type f | head -1)
-    if [ -n "$origem" ]; then
-      mkdir -p "$(dirname "$destino")"
-      cp "$origem" "$destino"
-    else
-      FALTANDO="$FALTANDO $(basename "$caminho")"
-      continue
-    fi
+  origem="$PASTA_VIDEOS/${caminho#/video/}"
+  if [ -f "$origem" ]; then
+    mkdir -p "$(dirname "$destino")"
+    cp "$origem" "$destino"
+  elif [ ! -f "$destino" ]; then
+    FALTANDO="$FALTANDO $(basename "$caminho")"
+    continue
   fi
   # 720p H.264 no lugar: vídeo que já é menor não cresce.
   temporario="$destino.720.mp4"
@@ -119,7 +123,7 @@ done <<EOF
 $VIDEOS
 EOF
 if [ -n "$FALTANDO" ]; then
-  echo "vídeo que a página usa e não existe nem em docs/comunicacao:$FALTANDO" >&2
+  echo "vídeo que a página usa e não existe em $PASTA_VIDEOS:$FALTANDO" >&2
   echo "renderize a composição do vídeo antes de publicar." >&2
   exit 1
 fi
