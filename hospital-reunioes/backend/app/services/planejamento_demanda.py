@@ -68,10 +68,7 @@ MOTIVO_RESPOSTA_SEM_PERGUNTA = "Ainda não há pergunta para responder. Recarreg
 # A frase de quando o turno nao aconteceu: provedor fora do ar, recusa, ou a
 # resposta que nao validou contra o esquema. Ela nao culpa nenhuma das tres,
 # porque quem le pode fazer a mesma coisa nas tres: mandar de novo.
-MOTIVO_TURNO_FALHOU = (
-    "A IA não conseguiu responder agora. A sua resposta não foi perdida: a conversa ficou como estava. "
-    "Tente de novo em instantes."
-)
+MOTIVO_TURNO_FALHOU = "A IA não conseguiu responder agora, e a conversa ficou como estava. Tente de novo em instantes."
 
 PERGUNTA_MOCK = {
     "tipo": "pergunta",
