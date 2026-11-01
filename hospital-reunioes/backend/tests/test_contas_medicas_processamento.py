@@ -25,6 +25,7 @@ import json
 import logging
 import os
 import re
+import sqlite3
 import sys
 import threading
 import uuid
@@ -97,23 +98,35 @@ ESTADOS_DA_LINHA = _lista_do_check(_SQL, r"\bestado\s+TEXT NOT NULL DEFAULT 'ABE
 TIPOS_DE_NOTIFICACAO = _lista_do_check(_SQL, r"ADD CONSTRAINT notificacoes_tipo_check")
 
 
-def _colunas_da_linha_do_guia() -> set[str]:
-    """As colunas de `cm_guia_linha`: as do CREATE TABLE da 116 e as que as
-    migrations seguintes acrescentam. Coluna fora delas o PostgREST recusa."""
-    bloco = re.search(r"CREATE TABLE IF NOT EXISTS cm_guia_linha \((.*?)\n\);", _SQL, flags=re.DOTALL)
-    assert bloco, "a migration 116 nao cria cm_guia_linha"
+def _colunas(tabela: str) -> set[str]:
+    """As colunas da tabela: as do CREATE TABLE da 116 e as que as migrations
+    seguintes acrescentam. Coluna fora delas o PostgREST recusa."""
+    bloco = re.search(rf"CREATE TABLE IF NOT EXISTS {tabela} \((.*?)\n\);", _SQL, flags=re.DOTALL)
+    assert bloco, f"a migration 116 nao cria {tabela}"
     colunas = set(re.findall(r"^  (\w+)\s", bloco.group(1), flags=re.MULTILINE))
     for migration in sorted(MIGRATION.parent.glob("*.sql")):
         colunas |= set(
             re.findall(
-                r"ALTER TABLE cm_guia_linha\s+ADD COLUMN IF NOT EXISTS (\w+)",
+                rf"ALTER TABLE {tabela}\s+ADD COLUMN IF NOT EXISTS (\w+)",
                 migration.read_text(encoding="utf-8"),
             )
         )
     return colunas
 
 
-COLUNAS_DA_LINHA = _colunas_da_linha_do_guia()
+COLUNAS_DA_LINHA = _colunas("cm_guia_linha")
+COLUNAS_DA_CONTA = _colunas("cm_conta")
+
+
+def _formato_do_codigo_do_erro() -> re.Pattern[str]:
+    """O CHECK do Código do erro, como as migrations o deixam (issue #1337)."""
+    for migration in sorted(MIGRATION.parent.glob("*.sql"), reverse=True):
+        if achado := re.search(r"CHECK \(erro_codigo IS NULL OR erro_codigo ~ '(.+?)'\)", migration.read_text("utf-8")):
+            return re.compile(achado.group(1))
+    raise AssertionError("nenhuma migration tem o CHECK do Código do erro")
+
+
+FORMATO_DO_CODIGO_DO_ERRO = _formato_do_codigo_do_erro()
 
 
 def test_o_duble_le_os_checks_da_migration():
@@ -123,11 +136,23 @@ def test_o_duble_le_os_checks_da_migration():
     assert {"ABERTA", "FEITO", "NAO_PROCEDE"} <= ESTADOS_DA_LINHA
     assert {"CONTAS_MEDICAS", "MENCAO"} <= TIPOS_DE_NOTIFICACAO
     assert {"conta_id", "acao", "preco_tabela", "criado_em"} <= COLUNAS_DA_LINHA
+    assert {"situacao", "erro_motivo", "faltantes", "nota_saida"} <= COLUNAS_DA_CONTA
+    assert FORMATO_DO_CODIGO_DO_ERRO.match("CM-IA-FORA-DO-AR")
+    assert not FORMATO_DO_CODIGO_DO_ERRO.match("CM-XYZ-1")
+
+
+def _coluna_que_nao_existe(nome: str, campos: dict) -> str | None:
+    """As colunas que o processamento escreve na conta têm de existir no banco."""
+    if nome == "cm_conta" and (desconhecidas := set(campos) - COLUNAS_DA_CONTA):
+        return f"PGRST204: coluna {sorted(desconhecidas)} nao existe em cm_conta"
+    return None
 
 
 def _violacao(nome: str, linha: dict) -> str | None:
     if nome == "cm_conta" and "situacao" in linha and linha["situacao"] not in SITUACOES_DA_CONTA:
         return "cm_conta_situacao_check"
+    if nome == "cm_conta" and linha.get("erro_codigo") and not FORMATO_DO_CODIGO_DO_ERRO.match(linha["erro_codigo"]):
+        return "cm_conta_erro_codigo_check"
     if nome == "cm_guia_linha":
         if desconhecidas := set(linha) - COLUNAS_DA_LINHA:
             return f"PGRST204: coluna {sorted(desconhecidas)} nao existe em cm_guia_linha"
@@ -266,6 +291,8 @@ class _Consulta:
             novas = self._insert if isinstance(self._insert, list) else [self._insert]
             gravadas = []
             for nova in novas:
+                if desconhecida := _coluna_que_nao_existe(self._nome, nova):
+                    raise APIError({"message": desconhecida, "code": "PGRST204"})
                 if violacao := _violacao(self._nome, nova):
                     raise APIError({"message": violacao, "code": "23514"})
                 # O índice único do termo (migration 116).
@@ -287,6 +314,9 @@ class _Consulta:
             self._banco.tabelas[self._nome] = [linha for linha in tabela if linha not in casam]
             return SimpleNamespace(data=[dict(linha) for linha in casam])
         if self._update is not None:
+            # O PostgREST recusa a coluna que não existe mesmo sem linha que case.
+            if desconhecida := _coluna_que_nao_existe(self._nome, self._update):
+                raise APIError({"message": desconhecida, "code": "PGRST204"})
             for linha in casam:
                 if violacao := _violacao(self._nome, {**linha, **self._update}):
                     raise APIError({"message": violacao, "code": "23514"})
@@ -1442,6 +1472,53 @@ class TestIAForaDoFormato:
 # ═══════════════════════════════════════════════════════════════════════════
 
 ENVIAR_DE_NOVO, ANALISAR_DE_NOVO = "enviar_de_novo", "analisar_de_novo"
+
+MIGRATION_122 = MIGRATION.parent / "122_contas_medicas_codigo_do_erro.sql"
+
+
+class TestMigration122:
+    """As duas colunas são conferidas pelo dublê do banco (coluna que não
+    existe é recusada, como o PostgREST faz); aqui, o que ela faz nas contas
+    que já estavam em Erro."""
+
+    def test_cria_o_codigo_e_o_detalhe_na_conta(self):
+        sql = MIGRATION_122.read_text(encoding="utf-8")
+
+        assert re.search(r"ALTER TABLE cm_conta\s+ADD COLUMN IF NOT EXISTS erro_codigo TEXT\b", sql)
+        assert re.search(r"ALTER TABLE cm_conta\s+ADD COLUMN IF NOT EXISTS erro_detalhe JSONB\b", sql)
+
+    def test_marca_cm_ia_antigo_so_nas_contas_em_erro_com_o_motivo_antigo(self):
+        """O UPDATE da migration roda de verdade, num SQLite em memória."""
+        sem_comentarios = re.sub(r"--[^\n]*", "", MIGRATION_122.read_text(encoding="utf-8"))
+        (update,) = re.findall(r"UPDATE cm_conta\b.*?;", sem_comentarios, flags=re.DOTALL)
+        banco = sqlite3.connect(":memory:")
+        banco.execute("CREATE TABLE cm_conta (id TEXT, situacao TEXT, erro_motivo TEXT, erro_codigo TEXT)")
+        banco.executemany(
+            "INSERT INTO cm_conta VALUES (?, ?, ?, ?)",
+            [
+                ("antiga", "ERRO", "Tente de novo em alguns minutos", None),
+                ("outro-motivo", "ERRO", "Este PDF não tem texto. Exporte de novo pelo MV", None),
+                ("ja-tem-codigo", "ERRO", "Tente de novo em alguns minutos", "CM-IA-FORA-DO-AR"),
+                ("reenviada", "NA_FILA", "Tente de novo em alguns minutos", None),
+            ],
+        )
+
+        banco.execute(update)
+        banco.execute(update)  # rodar duas vezes é inofensivo
+
+        assert dict(banco.execute("SELECT id, erro_codigo FROM cm_conta").fetchall()) == {
+            "antiga": "CM-IA-ANTIGO",
+            "outro-motivo": None,
+            "ja-tem-codigo": "CM-IA-FORA-DO-AR",
+            "reenviada": None,
+        }
+
+    def test_termina_com_o_recibo_do_proprio_numero(self):
+        corpo = "\n".join(
+            linha for linha in MIGRATION_122.read_text(encoding="utf-8").splitlines() if not linha.startswith("--")
+        ).strip()
+
+        assert corpo.endswith("INSERT INTO migracoes_aplicadas (numero) VALUES (122) ON CONFLICT (numero) DO NOTHING;")
 
 
 def _erro_no_cartao(banco: _Banco) -> tuple[str | None, str | None, str | None, str | None]:
