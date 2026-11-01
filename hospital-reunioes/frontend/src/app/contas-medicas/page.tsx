@@ -16,7 +16,8 @@
  * A conta é sempre identificada pelo atendimento, com a conta como complemento.
  * Na aba de envios, cada conta é um cartão com um quadrado para a Conta e outro
  * para o Prontuário (issue #1336): verde o que chegou, tracejado o que falta,
- * com o botão para mandar só aquele arquivo.
+ * com o botão para mandar só aquele arquivo. O envio em Erro ou com arquivo
+ * faltando tem ainda "Descartar", que pergunta antes de apagar (issue #1338).
  */
 
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -40,6 +41,8 @@ import {
   ROTA_MEUS_ENVIOS,
   detalheDaConta,
   enviarEmLotes,
+  perguntaDoDescarte,
+  rotaDoDescarte,
   rotuloDaSituacao,
   separarArquivos,
   textoParaATI,
@@ -187,7 +190,15 @@ const NAO_COPIOU =
  * detalhes" com o detalhe técnico e "Copiar para a TI", que leva o que a TI
  * precisa para achar o erro sem ver a tela.
  */
-function ErroDoEnvio({ conta, onEnviar }: { conta: ItemDaFila; onEnviar: () => void }) {
+function ErroDoEnvio({
+  conta,
+  onEnviar,
+  onDescartar,
+}: {
+  conta: ItemDaFila;
+  onEnviar: () => void;
+  onDescartar?: () => void;
+}) {
   const [aberto, setAberto] = useState(false);
   const [copiou, setCopiou] = useState(false);
   const [paraPegarAMao, setParaPegarAMao] = useState<string | null>(null);
@@ -235,6 +246,11 @@ function ErroDoEnvio({ conta, onEnviar }: { conta: ItemDaFila; onEnviar: () => v
         <button type="button" onClick={onEnviar} className="text-sm font-medium text-primary hover:underline">
           Enviar de novo
         </button>
+        {onDescartar && (
+          <button type="button" onClick={onDescartar} className="text-sm font-medium text-red-700 hover:underline">
+            Descartar
+          </button>
+        )}
       </div>
       {aberto && (
         <p id={idDoDetalhe} className="break-all rounded-lg bg-slate-50 px-3 py-2 font-mono text-xs text-slate-700">
@@ -266,7 +282,15 @@ function ErroDoEnvio({ conta, onEnviar }: { conta: ItemDaFila; onEnviar: () => v
 }
 
 /** A conta da aba de envios, com o quadrado de cada arquivo (issue #1336). */
-function CartaoDoEnvio({ conta, onEnviar }: { conta: ItemDaFila; onEnviar: () => void }) {
+function CartaoDoEnvio({
+  conta,
+  onEnviar,
+  onDescartar,
+}: {
+  conta: ItemDaFila;
+  onEnviar: () => void;
+  onDescartar: () => void;
+}) {
   const detalhe = detalheDaConta(conta);
   const periodo = periodoDaConta(conta);
   const paginas = conta.prontuario_paginas;
@@ -309,9 +333,18 @@ function CartaoDoEnvio({ conta, onEnviar }: { conta: ItemDaFila; onEnviar: () =>
           </Quadrado>
         </div>
         {erro ? (
-          <ErroDoEnvio conta={conta} onEnviar={onEnviar} />
+          <ErroDoEnvio conta={conta} onEnviar={onEnviar} onDescartar={conta.pode_descartar ? onDescartar : undefined} />
         ) : (
-          detalhe && <p className="min-w-0 break-words text-xs text-slate-600">{detalhe}</p>
+          (detalhe || conta.pode_descartar) && (
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+              {detalhe && <span className="min-w-0 break-words text-xs text-slate-600">{detalhe}</span>}
+              {conta.pode_descartar && (
+                <button type="button" onClick={onDescartar} className="text-sm font-medium text-red-700 hover:underline">
+                  Descartar
+                </button>
+              )}
+            </div>
+          )
         )}
       </article>
     </li>
@@ -408,6 +441,7 @@ export default function ContasMedicasPage() {
   const [arrastando, setArrastando] = useState(false);
   const [enviando, setEnviando] = useState<number | null>(null);
   const [ultimo, setUltimo] = useState<RespostaDoEnvio | null>(null);
+  const [recusaDoDescarte, setRecusaDoDescarte] = useState<string | null>(null);
   const seletor = useRef<HTMLInputElement>(null);
 
   /** Cada lista vem da rota da permissão dela; a que a pessoa não tem fica vazia. */
@@ -485,6 +519,25 @@ export default function ContasMedicasPage() {
     } finally {
       setEnviando(null);
       if (seletor.current) seletor.current.value = "";
+    }
+    await carregarFila(token, pode);
+  }
+
+  /** Pergunta antes; confirmado, o servidor apaga a conta e os PDFs, e a lista se relê. */
+  async function descartar(conta: ItemDaFila) {
+    if (!token || !pode || !window.confirm(perguntaDoDescarte(conta))) return;
+    setRecusaDoDescarte(null);
+    try {
+      const resposta = await fetch(rotaDoDescarte(conta.id), {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!resposta.ok) {
+        const corpo = await resposta.json().catch(() => null);
+        setRecusaDoDescarte(typeof corpo?.detail === "string" ? corpo.detail : "Não consegui descartar. Tente de novo.");
+      }
+    } catch {
+      setRecusaDoDescarte("Não consegui descartar. Tente de novo.");
     }
     await carregarFila(token, pode);
   }
@@ -584,6 +637,12 @@ export default function ContasMedicasPage() {
             ))}
           </div>
 
+          {recusaDoDescarte && (
+            <p role="alert" className="mt-4 flex items-center gap-2 text-sm text-red-700">
+              <AlertCircle className="w-4 h-4" aria-hidden="true" /> {recusaDoDescarte}
+            </p>
+          )}
+
           <section aria-label="Fila de contas" className={`${CARTAO} mt-4`}>
             <div role="tabpanel">
               {erroDaFila ? (
@@ -597,7 +656,12 @@ export default function ContasMedicasPage() {
               ) : contas && contas.length > 0 && aba === "meus_envios" ? (
                 <ul className="space-y-3 p-3">
                   {contas.map((conta) => (
-                    <CartaoDoEnvio key={conta.id} conta={conta} onEnviar={() => seletor.current?.click()} />
+                    <CartaoDoEnvio
+                      key={conta.id}
+                      conta={conta}
+                      onEnviar={() => seletor.current?.click()}
+                      onDescartar={() => descartar(conta)}
+                    />
                   ))}
                 </ul>
               ) : contas && contas.length > 0 ? (

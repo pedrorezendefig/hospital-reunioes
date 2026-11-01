@@ -157,6 +157,7 @@ class _Consulta:
         self._limite: int | None = None
         self._update: dict | None = None
         self._insert: dict | list | None = None
+        self._delete = False
 
     def select(self, *_a, **_kw):
         return self
@@ -195,6 +196,10 @@ class _Consulta:
         self._insert = linhas
         return self
 
+    def delete(self):
+        self._delete = True
+        return self
+
     def execute(self):
         tabela = self._banco.tabelas.setdefault(self._nome, [])
         if self._insert is not None:
@@ -218,6 +223,9 @@ class _Consulta:
             tabela.extend(gravadas)
             return SimpleNamespace(data=[dict(g) for g in gravadas])
         casam = [linha for linha in tabela if all(f(linha) for f in self._filtros)]
+        if self._delete:
+            tabela[:] = [linha for linha in tabela if linha not in casam]
+            return SimpleNamespace(data=[dict(linha) for linha in casam])
         if self._update is not None:
             for linha in casam:
                 if violacao := _violacao(self._nome, {**linha, **self._update}):
@@ -239,6 +247,11 @@ class _Bucket:
     def upload(self, caminho, conteudo, _opcoes=None):
         self._banco.bucket[(self._nome, caminho)] = conteudo
         return SimpleNamespace(path=caminho)
+
+    def remove(self, caminhos):
+        """Como o Storage: lista o que saiu e omite o que não existia."""
+        saiu = [c for c in caminhos if self._banco.bucket.pop((self._nome, c), None) is not None]
+        return [{"name": c} for c in saiu]
 
 
 class _Banco:

@@ -66,10 +66,13 @@ def envios_da_pessoa(supabase, me: dict) -> dict:
     o nome de quem enviou em `com_quem`."""
     todas = ve_todas(me)
     nao_prontas = _contas(supabase, me, NAO_PRONTAS, da_pessoa=False)
-    enviou = _quem_enviou(supabase, nao_prontas)
+    enviou, ambiguas = _quem_enviou(supabase, nao_prontas)
     envios = nao_prontas if todas else [c for c in nao_prontas if enviou.get(c["id"]) == me.get("id")]
     for conta in envios:
         conta["com_quem"] = enviou.get(conta["id"]) if todas else None
+        # A mesma regra de posse do descarte: com prontuário de mais de uma
+        # pessoa e sem conta, só a gestão descarta (issue #1338).
+        conta["so_a_gestao_descarta"] = not todas and conta["id"] in ambiguas
     if todas:
         _trocar_id_por_nome(supabase, envios)
     return {"todas": todas, "meus_envios": envios}
@@ -85,10 +88,11 @@ def _por_id(supabase, tabela: str, coluna: str, valores, **filtros) -> list[dict
     return consulta.execute().data or []
 
 
-def _quem_enviou(supabase, contas: list[dict]) -> dict[str, str]:
+def _quem_enviou(supabase, contas: list[dict]) -> tuple[dict[str, str], set[str]]:
     """O `cm_envio.usuario_id` de cada conta, pelo arquivo dela. A conta à
     espera da Conta ainda não tem arquivo: quem enviou é quem mandou o
-    Prontuário do atendimento."""
+    Prontuário do atendimento. Junto, as contas à espera da Conta cujo
+    prontuário veio de mais de uma pessoa (a posse ambígua do descarte)."""
     da_conta = {a["id"]: a for a in _por_id(supabase, "cm_arquivo", "id", (c.get("arquivo_id") for c in contas))}
     prontuarios = _por_id(
         supabase,
@@ -102,9 +106,15 @@ def _quem_enviou(supabase, contas: list[dict]) -> dict[str, str]:
         c["id"]: da_conta.get(c["arquivo_id"]) if c.get("arquivo_id") else do_atendimento.get(c.get("atendimento_id"))
         for c in contas
     }
-    envios = _por_id(supabase, "cm_envio", "id", (a["envio_id"] for a in arquivo_de.values() if a))
+    envios = _por_id(supabase, "cm_envio", "id", (a["envio_id"] for a in [*arquivo_de.values(), *prontuarios] if a))
     usuario_do_envio = {e["id"]: e.get("usuario_id") for e in envios}
-    return {cid: usuario_do_envio.get(a["envio_id"]) for cid, a in arquivo_de.items() if a}
+    remetentes: dict[str, set] = {}
+    for p in prontuarios:
+        remetentes.setdefault(p["atendimento_id"], set()).add(usuario_do_envio.get(p.get("envio_id")))
+    ambiguas = {
+        c["id"] for c in contas if not c.get("arquivo_id") and len(remetentes.get(c.get("atendimento_id"), ())) > 1
+    }
+    return {cid: usuario_do_envio.get(a["envio_id"]) for cid, a in arquivo_de.items() if a}, ambiguas
 
 
 def _trocar_id_por_nome(supabase, contas: list[dict]) -> None:
