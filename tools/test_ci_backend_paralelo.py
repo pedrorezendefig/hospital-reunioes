@@ -2,12 +2,12 @@
 
 O job de backend do `ci.yml` roda a suíte com `pytest-xdist` (`-n auto`). Teste
 que só falha em paralelo não ganha retry: ganha o marcador `rodar_sozinho` e
-roda num passo serial à parte, depois do paralelo. Retry esconderia a
+roda em série no job `backend-sozinho`, ao mesmo tempo que o paralelo. Retry esconderia a
 instabilidade, e um teste instável que passa na segunda tentativa vira verde
 sobre nada.
 
 Estes testes leem o `ci.yml` e o `pyproject.toml` como dado: os dois passos
-existem, todo `pytest` do job é um deles, e não há retry em lugar nenhum.
+existem, todo `pytest` dos dois jobs é um deles, e não há retry em lugar nenhum.
 """
 
 from __future__ import annotations
@@ -30,8 +30,16 @@ MARCADOR = "rodar_sozinho"
 RETRY = ("rerunfailures", "pytest-retry", "flaky", "--reruns", "--lf", "--last-failed", "retry")
 
 
+JOBS = ("backend", "backend-sozinho")
+
+
+def jobs() -> dict:
+    return yaml.safe_load(CI.read_text(encoding="utf-8"))["jobs"]
+
+
 def passos_do_backend() -> list[dict]:
-    return yaml.safe_load(CI.read_text(encoding="utf-8"))["jobs"]["backend"]["steps"]
+    """Os passos dos dois jobs de backend, o paralelo antes do sozinho."""
+    return [passo for nome in JOBS for passo in jobs()[nome]["steps"]]
 
 
 def chamadas_do_pytest() -> list[tuple[str, list[str]]]:
@@ -65,16 +73,25 @@ def test_a_suite_roda_em_paralelo_sem_a_lista_de_rodar_sozinho():
     assert filtro(args) == f"not {MARCADOR}", args
 
 
-def test_a_lista_de_rodar_sozinho_roda_num_passo_serial_a_parte_depois_do_paralelo():
+def test_a_lista_de_rodar_sozinho_roda_em_serie_num_job_proprio():
     chamadas = chamadas_do_pytest()
     seriais = [(nome, a) for nome, a in chamadas if filtro(a) == MARCADOR]
     assert len(seriais) == 1, chamadas
-    nome_serial, args = seriais[0]
+    _, args = seriais[0]
     assert not paralela(args), args
-    nomes = [nome for nome, _ in chamadas]
-    nome_paralelo = next(nome for nome, a in chamadas if paralela(a))
-    assert nome_serial != nome_paralelo
-    assert nomes.index(nome_paralelo) < nomes.index(nome_serial), nomes
+    do_sozinho = [linha for p in jobs()["backend-sozinho"]["steps"] for linha in str(p.get("run", "")).splitlines()]
+    assert any(f"pytest -m {MARCADOR}" in linha for linha in do_sozinho), do_sozinho
+    do_backend = [linha for p in jobs()["backend"]["steps"] for linha in str(p.get("run", "")).splitlines()]
+    assert not any(f"-m {MARCADOR}" in linha for linha in do_backend), do_backend
+
+
+def test_o_job_sozinho_roda_quando_o_backend_roda():
+    """Mesma condição e mesmo ambiente do job de backend: pular um e rodar o
+    outro deixaria a lista sem rodar num PR de backend."""
+    backend, sozinho = jobs()["backend"], jobs()["backend-sozinho"]
+    assert sozinho["if"] == backend["if"]
+    assert sozinho["needs"] == backend["needs"]
+    assert sozinho["env"] == backend["env"]
 
 
 def test_todo_pytest_do_job_e_o_paralelo_ou_o_serial():
@@ -96,9 +113,9 @@ def test_lista_vazia_nao_reprova_o_passo_serial():
 def test_nenhum_retry_automatico_no_job_nem_nas_dependencias():
     """Nem plugin de retry instalado, nem flag que repete o que falhou, nem
     passo que segue verde depois de falhar."""
-    job = yaml.safe_load(CI.read_text(encoding="utf-8"))["jobs"]["backend"]
-    assert "continue-on-error" not in job
-    for passo in job["steps"]:
+    for nome in JOBS:
+        assert "continue-on-error" not in jobs()[nome], nome
+    for passo in passos_do_backend():
         assert "continue-on-error" not in passo, passo
         texto = f"{passo.get('uses', '')}\n{passo.get('run', '')}".lower()
         for termo in RETRY:

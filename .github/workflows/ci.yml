@@ -148,9 +148,39 @@ jobs:
         run: ruff format --check .
       - name: Tests (pytest, em paralelo)
         # pytest-xdist, um worker por CPU (issue #971). O que tem o marcador
-        # `rodar_sozinho` fica para o passo de baixo. Nenhum retry: teste que
-        # falha só em paralelo ganha o marcador, não uma segunda tentativa.
+        # `rodar_sozinho` roda no job `backend-sozinho`, ao mesmo tempo que
+        # este. Nenhum retry: teste que falha só em paralelo ganha o marcador,
+        # não uma segunda tentativa.
         run: pytest -n auto -m "not rodar_sozinho" --maxfail=3 -q --no-header
+
+  backend-sozinho:
+    name: Backend Tests (rodar sozinho)
+    needs: mudancas
+    # A lista do marcador `rodar_sozinho` num job próprio, em paralelo com o
+    # job de backend: em série, no mesmo job, ela somava 2,5 min a todo PR do
+    # app. Mesma condição do job de backend.
+    if: ${{ !cancelled() && (needs.mudancas.result != 'success' || needs.mudancas.outputs.backend == 'true') }}
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: hospital-reunioes/backend
+    env:
+      SUPABASE_URL: http://localhost:54321
+      SUPABASE_SERVICE_ROLE_KEY: dummy-key-for-ci
+      ENVIRONMENT: ci
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.12"
+      - name: poppler-utils (pdftotext das Contas médicas)
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq poppler-utils
+      - name: Install uv
+        run: pip install uv
+      - name: Install dependencies (pelo uv.lock)
+        run: |
+          uv sync --frozen --extra dev --python "$(command -v python)"
+          echo "$PWD/.venv/bin" >> "$GITHUB_PATH"
       - name: Tests (pytest, rodar sozinho)
         # A lista do marcador `rodar_sozinho`, em série. Sem teste marcado o
         # pytest sai com 5 (nada coletado): lista vazia é o estado bom, então
