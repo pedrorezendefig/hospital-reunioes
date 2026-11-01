@@ -2,7 +2,7 @@
 title: Descartar um envio
 description: Tirar de Meus envios a conta em Erro ou à espera de um arquivo que não vale mais, junto com os PDFs dela.
 prd: [1335]
-draft: true
+draft: false
 papel: [Faturista, Apoio ao faturamento, Coordenadora de faturamento, Gestão de contas médicas, Diretoria]
 busca: [apagar envio, excluir conta, cancelar envio, remover conta, envio errado]
 proximas: [enviar-contas-e-prontuarios]

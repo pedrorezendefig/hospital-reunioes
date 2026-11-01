@@ -2,7 +2,7 @@
 title: Quando a conta dá erro
 description: O que cada Código do erro quer dizer, quem resolve e o que o Copiar para a TI leva.
 prd: [1335]
-draft: true
+draft: false
 busca: [falha, deu erro, travou, código de erro, não analisou, tente de novo]
 sidebar:
   order: 34
