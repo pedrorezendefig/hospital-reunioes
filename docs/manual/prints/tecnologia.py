@@ -1,26 +1,30 @@
 #!/usr/bin/env python3
-"""Roteiro de prints do manual da aba Tecnologia (issue #1066, PRD #1056).
+"""Roteiro de prints do módulo Tecnologia do Manual (ADR 0057, decisão 3).
 
-A aba Tecnologia fica fora do site do Manual (ADR 0057, decisão 1) e tem
-página própria (`index.html` desta pasta). O print segue a mesma regra dos
-roteiros de `docs/manual/prints/`: tela real do app em localhost, capturada por
-código versionado, nunca recorte à mão.
+A aba Tecnologia entrou no site do Manual como último módulo do menu (issue
+#1367, PRD #1365); até lá ela tinha página própria, e este roteiro veio de lá.
+O print segue a regra dos outros roteiros desta pasta: tela real do app em
+localhost, capturada por código versionado, nunca recorte à mão.
 
 **Dado de exemplo e só ele.** O Quadro mostra TODA Demanda do banco, sem
 filtro, e o repositório é público. Por isso o roteiro recusa capturar se o
 banco local tiver Demanda que ele não semeou (`_conferir_que_so_ha_exemplo`).
 As pessoas são inventadas (`@exemplo.local`), na faixa P950 dos roteiros.
 
+O planejamento é semeado já com uma pergunta da IA guardada: a tela abre a
+conversa que está no banco e não chama a IA, então o print sai sem custo e
+igual a cada rodada.
+
 Receita:
 
-1. Supabase local no ar, com as migrations da aba até a 115 aplicadas.
+1. Supabase local no ar, com as migrations da aba até a 123 aplicadas.
 2. Stack com o código da tela: `bash .claude/skills/atualizar-app/scripts/apply.sh`.
-3. `python3 docs/manual/tecnologia/prints.py --semear` (idempotente, só no
+3. `python3 docs/manual/prints/tecnologia.py --semear` (idempotente, só no
    banco local).
-4. `python3 docs/manual/tecnologia/prints.py`.
+4. `python3 docs/manual/prints/tecnologia.py`.
 
-Uso: python3 docs/manual/tecnologia/prints.py [--base http://localhost:3000]
-     [--saida docs/manual/tecnologia/img] [--print <nome>] [--semear]
+Uso: python3 docs/manual/prints/tecnologia.py [--base http://localhost:3000]
+     [--saida docs/manual/src/assets/tecnologia] [--print <nome>] [--semear]
 """
 
 from __future__ import annotations
@@ -45,6 +49,9 @@ EMAIL = "marina.duarte@exemplo.local"
 SENHA = "ManualTecnologia2026!"
 
 ENV_LOCAL = Path(__file__).resolve().parents[3] / "hospital-reunioes" / ".env"
+# Quem entra para o print do Vínculo: os controles só aparecem para quem tem
+# login no GitHub (ADR 0054, decisão 9), e a Marina não tem.
+EMAIL_DA_VITTA = "rafael.moura@exemplo.local"
 
 # (id, nome, email, login no GitHub). Todos Super admin: é quem entra na aba.
 PESSOAS = [
@@ -62,6 +69,7 @@ DONO_DO_PRODUTO = {
     "Site": "P952",
     "Infra": "P951",
     "Central de Comando": "P952",
+    "Contas médicas": "P951",
 }
 
 
@@ -89,7 +97,48 @@ DEMANDAS = [
      "baixa", 20, "em_producao", "v0.165.0", None, None, 9904),
     (7, "Avaliar a troca do provedor de e-mail", "consultoria", "Infra", "cancelada", "P951",
      "normal", 25, "registrada", None, None, None, None),
+    (8, "Lembrete por e-mail na véspera da reunião", "novo", "Reuniões", "nova", "P952",
+     "normal", 2, "registrada", None, None, None, None),
+    (9, "Mostrar o nome do setor no cartaz do QR da Ouvidoria", "ajuste", "Ouvidoria", "em_andamento", "P951",
+     "normal", 4, "registrada", None, None, None, None),
 ]
+
+# O card que mostra o botão Planejar com a IA (Novo, sem Vínculo, sem
+# conversa) e a Demanda cujo planejamento já começou.
+DEMANDA_DO_BOTAO = _uuid(8)
+DEMANDA_PLANEJADA = _uuid(9)
+# A Demanda sem Vínculo que o print do Vínculo abre.
+DEMANDA_SEM_VINCULO = _uuid(4)
+
+# A conversa guardada: uma pergunta respondida e a seguinte em aberto, que é
+# o que a tela mostra com as duas opções e a recomendada. A tela desenha só o
+# `contexto` da pergunta, então a pergunta vai dentro dele, como a IA faz.
+PLANEJAMENTO = {
+    "mensagens": [
+        {
+            "tipo": "pergunta",
+            "contexto": "O cartaz fica na porta do setor e o QR leva ao formulário da Ouvidoria. "
+            "O nome do setor entra só no cartaz impresso, ou também no formulário que abre pelo QR?",
+            "opcoes": [
+                {"letra": "A", "texto": "Nos dois: quem lê o QR vê de que setor está falando"},
+                {"letra": "B", "texto": "Só no cartaz impresso"},
+            ],
+            "recomendada": "A",
+        },
+        {"tipo": "resposta", "opcao": "A", "texto": "Nos dois: quem lê o QR vê de que setor está falando"},
+        {
+            "tipo": "pergunta",
+            "contexto": "Alguns setores dividem a mesma porta, como a Recepção e a Internação. "
+            "Quando isso acontece, o cartaz mostra os dois nomes ou cada setor tem o seu?",
+            "opcoes": [
+                {"letra": "A", "texto": "Cada setor com o seu cartaz e o seu QR"},
+                {"letra": "B", "texto": "Um cartaz com os dois nomes"},
+            ],
+            "recomendada": "A",
+        },
+    ],
+    "decisoes": ["O nome do setor aparece no cartaz e no formulário que abre pelo QR."],
+}
 
 O_QUE_MUDA = {
     1: "Quando a Ouvidoria encerra um caso, quem manifestou recebe um e-mail avisando, com o resumo da resposta.",
@@ -224,6 +273,7 @@ def semear() -> None:
     # Demandas de exemplo (pelo id), para o print não acumular linhas.
     _rest(url, chave, f"tecnologia_anexos?demanda_id=in.({ids})", "DELETE")
     _rest(url, chave, f"tecnologia_conversas?demanda_id=in.({ids})", "DELETE")
+    _rest(url, chave, f"tecnologia_planejamentos?demanda_id=in.({ids})", "DELETE")
 
     for n, titulo, tipo, produto, estado, resp, prio, dias, etapa, versao, feitas, total, issue in DEMANDAS:
         linha = {
@@ -289,6 +339,13 @@ def semear() -> None:
         "anexado_por": "P950",
         "criado_em": _quando(agora, 8.9),
     }])
+    _rest(url, chave, "tecnologia_planejamentos", "POST", [{
+        "demanda_id": DEMANDA_PLANEJADA,
+        "estado": "em_andamento",
+        "mensagens": PLANEJAMENTO["mensagens"],
+        "decisoes": PLANEJAMENTO["decisoes"],
+        "modelo": "exemplo",
+    }])
     print("dados de exemplo da aba Tecnologia prontos.")
 
 
@@ -311,11 +368,11 @@ def sem_foco(page) -> None:
     page.wait_for_timeout(200)
 
 
-def entrar(page: Page, base: str) -> None:
+def entrar(page: Page, base: str, email: str = EMAIL) -> None:
     if "/login" not in page.url and page.url.startswith(base):
         return
     page.goto(f"{base}/login", wait_until="networkidle")
-    page.get_by_placeholder("seu@email.com").fill(EMAIL)
+    page.get_by_placeholder("seu@email.com").fill(email)
     page.get_by_placeholder("••••••••").fill(SENHA)
     page.get_by_role("button", name="Entrar").click()
     page.wait_for_url(lambda url: "/login" not in url, timeout=30000)
@@ -367,13 +424,74 @@ def produtos(page: Page, base: str, saida: Path) -> None:
     page.set_viewport_size(COMPUTADOR)
 
 
-PRINTS = {"quadro": quadro, "painel": painel, "card": card, "produtos": produtos}
+def formulario(page: Page, base: str, saida: Path) -> None:
+    entrar(page, base)
+    page.set_viewport_size({"width": COMPUTADOR["width"], "height": 1100})
+    page.goto(f"{base}/admin/tecnologia/nova", wait_until="networkidle")
+    page.get_by_text("prefiro preencher à mão").click()
+    page.get_by_text("Abrir Demanda").first.wait_for(timeout=20000)
+    page.wait_for_timeout(500)
+    sem_foco(page)
+    page.screenshot(path=str(saida / "formulario.png"))
+    page.set_viewport_size(COMPUTADOR)
+
+
+def _abrir_o_card(page: Page, base: str, demanda: str, altura: int = 1300) -> None:
+    page.set_viewport_size({"width": COMPUTADOR["width"], "height": altura})
+    page.goto(f"{base}/admin/tecnologia?demanda={demanda}", wait_until="networkidle")
+    page.get_by_role("button", name="Copiar para IA").first.wait_for(timeout=20000)
+    page.wait_for_timeout(800)
+    sem_foco(page)
+
+
+def planejar(page: Page, base: str, saida: Path) -> None:
+    entrar(page, base)
+    _abrir_o_card(page, base, DEMANDA_DO_BOTAO)
+    page.get_by_text("Planejar com a IA").first.wait_for(timeout=20000)
+    page.screenshot(path=str(saida / "planejar.png"))
+    page.set_viewport_size(COMPUTADOR)
+
+
+def planejamento(page: Page, base: str, saida: Path) -> None:
+    entrar(page, base)
+    page.set_viewport_size({"width": COMPUTADOR["width"], "height": 1000})
+    page.goto(f"{base}/admin/tecnologia/planejamento/{DEMANDA_PLANEJADA}", wait_until="networkidle")
+    page.get_by_role("group", name="Opções").wait_for(timeout=20000)
+    page.wait_for_timeout(500)
+    sem_foco(page)
+    page.screenshot(path=str(saida / "planejamento.png"))
+    page.set_viewport_size(COMPUTADOR)
+
+
+def vinculo(page: Page, base: str, saida: Path) -> None:
+    """O card visto por quem tem login no GitHub, num contexto à parte."""
+    contexto = page.context.browser.new_context(viewport=COMPUTADOR, device_scale_factor=ESCALA, locale="pt-BR")
+    outra = contexto.new_page()
+    try:
+        entrar(outra, base, EMAIL_DA_VITTA)
+        _abrir_o_card(outra, base, DEMANDA_SEM_VINCULO)
+        outra.get_by_label("Vincular issue").wait_for(timeout=20000)
+        outra.screenshot(path=str(saida / "vinculo.png"))
+    finally:
+        contexto.close()
+
+
+PRINTS = {
+    "quadro": quadro,
+    "painel": painel,
+    "card": card,
+    "produtos": produtos,
+    "formulario": formulario,
+    "planejar": planejar,
+    "planejamento": planejamento,
+    "vinculo": vinculo,
+}
 
 
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--base", default="http://localhost:3000")
-    ap.add_argument("--saida", default="docs/manual/tecnologia/img")
+    ap.add_argument("--saida", default="docs/manual/src/assets/tecnologia")
     ap.add_argument("--print", dest="escolhido", choices=sorted(PRINTS))
     ap.add_argument("--semear", action="store_true", help="cria os dados de exemplo no Supabase local e sai.")
     args = ap.parse_args()
