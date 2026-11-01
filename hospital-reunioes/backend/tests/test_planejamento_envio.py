@@ -164,15 +164,15 @@ class TestOCorpoDoPrdDoDiretor:
 
     def test_o_corpo_passa_pelo_sanitizador_de_travessao(self):
         corpo = _corpo(
-            descricao="Retorno — hoje no papel",
+            descricao="Retorno \u2014 hoje no papel",
             resumo={
-                "decisoes": [{"pergunta": "Quem – marca?", "escolha": "Recepção — só ela.", "porque": "Ok."}],
-                "em_aberto": ["Faltas — depois."],
+                "decisoes": [{"pergunta": "Quem \u2013 marca?", "escolha": "Recepção \u2014 só ela.", "porque": "Ok."}],
+                "em_aberto": ["Faltas \u2014 depois."],
             },
         )
 
-        assert "—" not in corpo
-        assert "–" not in corpo
+        assert "\u2014" not in corpo
+        assert "\u2013" not in corpo
         assert "Retorno, hoje no papel" in corpo
 
     def test_o_corpo_passa_pela_peneira_de_dado_pessoal(self):
