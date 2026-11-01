@@ -115,6 +115,20 @@ Quando o assunto foi resolvido sem mexer no aplicativo (uma decisão, uma consul
 
 No card também aparece **O que muda**: o que aquela entrega acrescenta, em linguagem de quem usa. Esse texto vem do planejamento da Vitta e não é escrito no aplicativo.
 
+## O Planejamento da Demanda
+
+O Planejamento da Demanda é uma conversa com a IA que transforma o pedido de uma coisa nova, ou de uma mudança, num plano que a Vitta consegue construir. A IA faz as perguntas que a Vitta faria, uma por vez, e quem decide é você.
+
+O botão **Planejar com a IA** fica no card aberto de uma Demanda do Tipo Novo ou Ajuste que ainda não foi ligada ao desenvolvimento. Nos outros Tipos ele não aparece, e some quando a Demanda já está ligada. Qualquer pessoa com acesso à aba pode planejar.
+
+A IA parte do título e da descrição que já estão na Demanda e não pergunta de novo o que você já escreveu ali. Cada pergunta traz uma ou duas frases de contexto, duas opções para clicar, com a recomendada em destaque, e um campo para responder do seu jeito, por texto ou por voz. Print entra pelos anexos da Demanda. São no máximo 12 perguntas, e o botão **Fechar e resumir** encerra a conversa a qualquer momento.
+
+A conversa fica guardada na Demanda. Dá para fechar a tela no meio e voltar depois pelo botão **Continuar planejamento**, que aparece no lugar do primeiro. Quando a Demanda é Concluída ou Cancelada, a conversa é apagada, como os prints.
+
+No fim, a IA mostra um resumo com as decisões que você tomou e a lista do que ficou em aberto, que são os pontos que ela não chegou a perguntar. O que você não decidiu nunca aparece como decisão. Se o resumo está certo, o **sim** manda o plano para o desenvolvimento da Vitta: a Demanda fica ligada a ele e passa a mostrar a Etapa. Se alguma coisa não bate, o **não** pede para você dizer o quê, a conversa continua de onde parou e o resumo é refeito.
+
+A IA cuida das decisões de negócio: o problema, quem usa, as regras e o que fica de fora. As decisões técnicas ficam com a Vitta, depois do sim. Quando o pedido esbarra numa regra da casa, a IA avisa e diz de onde tirou, citando a parte "O que já foi decidido" do texto daquele sistema.
+
 ## O que já foi decidido
 
 - A aba mora dentro do aplicativo e só quem é Super admin a vê, sem papel próprio para o hospital ou para a Vitta.

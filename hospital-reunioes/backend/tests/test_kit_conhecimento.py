@@ -509,6 +509,27 @@ class TestOTextoDaAbaContaATelaDeHoje:
     def test_os_produtos_moram_atras_da_engrenagem(self, texto):
         assert "engrenagem" in _secao(texto, "Os Produtos")
 
+    def test_o_planejamento_diz_o_que_e_quando_aparece_e_o_que_o_sim_faz(self, texto):
+        """ADR 0075. As palavras sao as da tela do planejamento: o botao, os
+        dois Tipos em que ele aparece, o teto, o fechar, o retomar, o resumo
+        com o que ficou em aberto e o sim que leva ao desenvolvimento."""
+        planejamento = _secao(texto, "O Planejamento da Demanda")
+        termos = (
+            "Planejar com a IA",
+            "Novo",
+            "Ajuste",
+            "12 perguntas",
+            "Fechar e resumir",
+            "Continuar planejamento",
+            "ficou em aberto",
+            "**sim**",
+            "desenvolvimento",
+            "**não**",
+            "O que já foi decidido",
+        )
+        for termo in termos:
+            assert termo in planejamento, termo
+
     @pytest.mark.parametrize("aposentado", ["Minha vez", "cinco colunas"])
     def test_sem_o_nome_da_tela_de_antes(self, texto, aposentado):
         assert aposentado not in texto
