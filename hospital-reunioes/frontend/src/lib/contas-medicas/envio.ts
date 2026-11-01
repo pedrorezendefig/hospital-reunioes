@@ -27,6 +27,11 @@ export function perguntaDoDescarte(conta: ItemDaFila): string {
   return `Descartar o atendimento ${conta.numero_atendimento}? Os arquivos serão apagados.`;
 }
 
+/** A conta em Erro da IA volta para a fila sem anexar o PDF (issue #1339). */
+export function rotaAnalisarDeNovo(contaId: string): string {
+  return `/api/contas-medicas/contas/${contaId}/analisar-de-novo`;
+}
+
 /** "Enviar contas": o envio e Meus envios (issue #1308, ADR 0073). */
 export const ENVIAR_CONTAS = "enviar_contas";
 /** "Analisar contas" na tela; a chave guarda o nome antigo (ADR 0073). */
@@ -162,6 +167,30 @@ async function motivoDoErro(resposta: Response): Promise<string> {
 }
 
 type Buscar = (url: string, init?: RequestInit) => Promise<Response>;
+
+/**
+ * Põe a conta em Erro de volta na fila (issue #1339). Devolve nulo quando deu
+ * certo, ou a frase do servidor para mostrar no cartão.
+ */
+export async function analisarDeNovo(contaId: string, token: string, buscar: Buscar = fetch): Promise<string | null> {
+  let resposta: Response;
+  try {
+    resposta = await buscar(rotaAnalisarDeNovo(contaId), {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}` },
+    });
+  } catch {
+    return "Não consegui falar com o servidor. Tente de novo.";
+  }
+  if (resposta.ok) return null;
+  try {
+    const corpo = await resposta.json();
+    if (typeof corpo?.detail === "string") return corpo.detail;
+  } catch {
+    // resposta sem JSON (ex.: 502 do proxy)
+  }
+  return "Não consegui analisar de novo. Tente de novo.";
+}
 
 /**
  * Sobe os arquivos lote a lote, no mesmo envio, e devolve o "Último envio"

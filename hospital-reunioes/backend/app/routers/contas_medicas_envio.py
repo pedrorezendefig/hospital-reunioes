@@ -35,16 +35,27 @@ from app.services.contas_medicas.envio import (
     EnvioNaoEncontradoError,
     receber,
 )
-from app.services.contas_medicas.erro_da_conta import acao_do_codigo, arquivo_da_etapa, detalhe_legivel
+from app.services.contas_medicas.erro_da_conta import arquivo_da_etapa, detalhe_legivel
 from app.services.contas_medicas.fila import envios_da_pessoa, fila_da_pessoa
 from app.services.contas_medicas.guia import MARCADAS, linha_pendente
+from app.services.contas_medicas.reanalise import (
+    ContaNaoEncontradaError as ContaAAnalisarNaoEncontradaError,
+)
+from app.services.contas_medicas.reanalise import (
+    NaoAnalisavelError,
+    SemPermissaoError,
+    acao_do_cartao,
+    analisar_de_novo,
+    com_pdf_guardado,
+)
 
 router = APIRouter(prefix="/contas-medicas", tags=["contas-medicas"])
 
 _PODE_ENVIAR = require_permissao_cm("enviar_contas")
 # "Analisar contas" na tela; a chave guarda o nome antigo (ADR 0073).
 _PODE_ANALISAR = require_permissao_cm("enviar_corrigir_contas")
-# Descartar: quem enviou ou quem tem o Painel completo, decidido na regra (issue #1338).
+# Descartar e Analisar de novo: quem enviou ou quem tem o Painel completo,
+# decidido na regra (issues #1338 e #1339).
 _TEM_O_EIXO = require_permissao_cm()
 
 
@@ -121,10 +132,11 @@ def _falta(conta: dict) -> str | None:
     return "prontuario" if conta.get("arquivo_id") else "conta"
 
 
-def _erro(conta: dict) -> dict:
+def _erro(conta: dict, guardado: bool) -> dict:
     """O Código do erro da conta em Erro (issue #1337): o código, o detalhe
     técnico numa linha, a hora do erro, o quadrado que fica vermelho e a ação
-    que resolve. Fora do Erro, tudo nulo."""
+    que resolve, que vira Enviar de novo com o PDF fora do bucket (issue
+    #1339). Fora do Erro, tudo nulo."""
     if conta.get("situacao") != "ERRO":
         return {"erro_codigo": None, "erro_detalhe": None, "erro_em": None, "erro_arquivo": None, "erro_acao": None}
     detalhe = conta.get("erro_detalhe") or {}
@@ -133,11 +145,11 @@ def _erro(conta: dict) -> dict:
         "erro_detalhe": detalhe_legivel(detalhe),
         "erro_em": detalhe.get("em"),
         "erro_arquivo": arquivo_da_etapa(detalhe.get("etapa")),
-        "erro_acao": acao_do_codigo(conta.get("erro_codigo")),
+        "erro_acao": acao_do_cartao(conta, guardado),
     }
 
 
-def _item(conta: dict, atendimento: dict, linhas: list[dict], paginas: int | None) -> dict:
+def _item(conta: dict, atendimento: dict, linhas: list[dict], paginas: int | None, guardado: bool) -> dict:
     """A conta como a fila mostra: identificada pelo atendimento, com a conta como complemento."""
     da_faturista = [linha for linha in linhas if linha.get("acao") != "VALIDAR"]
     return {
@@ -158,7 +170,7 @@ def _item(conta: dict, atendimento: dict, linhas: list[dict], paginas: int | Non
         "itens_total": len(da_faturista),
         "pendencias": sum(1 for linha in linhas if linha_pendente(linha)),
         "erro_motivo": conta.get("erro_motivo"),
-        **_erro(conta),
+        **_erro(conta, guardado),
         # O botão Descartar do cartão do envio (issue #1338).
         "pode_descartar": pode_descartar(conta, linhas),
         # Só para quem tem "painel completo": quem está com a conta.
@@ -171,6 +183,8 @@ def _itens(supabase: Client, listas: dict, nomes: tuple[str, ...]) -> dict:
     atendimentos = _por_id(supabase, "cm_atendimento", "id", list({c["atendimento_id"] for c in todas}))
     linhas = _linhas_por_conta(supabase, todas)
     paginas = _paginas_do_prontuario(supabase, todas)
+    em_erro = [c for c in todas if c.get("situacao") == "ERRO"]
+    guardadas = com_pdf_guardado(supabase, em_erro, datetime.now(UTC))
 
     def itens(contas: list[dict]) -> list[dict]:
         return [
@@ -179,6 +193,7 @@ def _itens(supabase: Client, listas: dict, nomes: tuple[str, ...]) -> dict:
                 atendimentos.get(c["atendimento_id"], {}),
                 linhas.get(c["id"], []),
                 paginas.get(c["atendimento_id"]),
+                c["id"] in guardadas,
             )
             for c in contas
         ]
@@ -229,3 +244,25 @@ async def descartar_conta(
     except NaoDescartavelError as erro:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(erro)) from None
     return {"descartada": str(conta_id)}
+
+
+@router.post("/contas/{conta_id}/analisar-de-novo")
+@limiter.limit("30/minute")
+async def analisar_conta_de_novo(
+    request: Request,
+    conta_id: UUID,
+    me: dict = Depends(_TEM_O_EIXO),
+    supabase: Client = Depends(get_supabase_client),
+) -> dict:
+    """A conta em Erro da IA, da configuração ou do app volta para a fila com
+    os PDFs que já estão no bucket (issue #1339). Pode quem enviou e quem tem
+    o Painel completo."""
+    try:
+        await run_in_threadpool(analisar_de_novo, supabase, str(conta_id), me, datetime.now(UTC))
+    except ContaAAnalisarNaoEncontradaError:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Conta não encontrada") from None
+    except SemPermissaoError as erro:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(erro)) from None
+    except NaoAnalisavelError as erro:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(erro)) from None
+    return {"situacao": "NA_FILA"}
