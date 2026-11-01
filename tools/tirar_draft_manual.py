@@ -15,6 +15,7 @@ falta, não toca em arquivo nenhum.
 Uso:
     python3 tools/tirar_draft_manual.py --prd 731 [--prd 740]
                                         [--dir docs/manual] [--dry-run]
+                                        [--historico docs/spec/deploy/history.json]
                                         [--resumo aviso.md]
 
 `--resumo` escreve, em Markdown, o aviso que a Action pós-merge deixa no run e
@@ -30,6 +31,7 @@ Códigos de saída:
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import re
 import shutil
@@ -53,11 +55,25 @@ from lint_manual import ler_frontmatter  # noqa: E402
 NODE_MIN = (22, 12)
 
 
-def paginas_em_draft(conteudo: Path, prds: list[int]) -> list[Path]:
+def prds_em_producao(historico: Path) -> set[int]:
+    """Os PRDs de todos os deploys do history.json; vazio se ele não existe.
+
+    Página escrita por PRDs de deploys diferentes (a de [1113, 1303], que
+    ficou presa em 30/10) só sai do draft se o passo souber o que já subiu
+    antes do deploy de agora.
+    """
+    if not historico.is_file():
+        return set()
+    deploys = json.loads(historico.read_text(encoding="utf-8")).get("deploys", [])
+    return {int(n) for d in deploys for n in (d.get("prds") or [])}
+
+
+def paginas_em_draft(conteudo: Path, prds: set[int]) -> list[Path]:
     """As páginas em draft cujos PRDs **todos** já subiram, em ordem.
 
     A regra é subconjunto, não interseção: página escrita por dois PRDs só vai
     ao ar quando o segundo sobe, senão o deploy de um põe no ar a tela do outro.
+    `prds` é o que está em produção: o deploy de agora mais o histórico.
     """
     achadas = []
     for arquivo in sorted(conteudo.rglob("*.md*")):
@@ -204,6 +220,11 @@ def main() -> int:
         help="número do PRD que subiu; repita para vários",
     )
     ap.add_argument("--dry-run", action="store_true")
+    ap.add_argument(
+        "--historico",
+        default="docs/spec/deploy/history.json",
+        help="history.json com os PRDs que já subiram em deploys anteriores",
+    )
     ap.add_argument("--resumo", help="arquivo onde escrever o aviso em Markdown")
     args = ap.parse_args()
 
@@ -218,7 +239,8 @@ def main() -> int:
         return 1
 
     numeros = ", ".join(f"#{n}" for n in args.prd)
-    achadas = paginas_em_draft(conteudo, args.prd)
+    em_producao = set(args.prd) | prds_em_producao(Path(args.historico))
+    achadas = paginas_em_draft(conteudo, em_producao)
     if not achadas:
         print(f"Manual: nenhuma página em draft do PRD {numeros}.")
         return 0

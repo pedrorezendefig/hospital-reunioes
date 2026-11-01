@@ -2,7 +2,7 @@
 title: Corrigir uma conta pelo guia
 description: Puxar a conta da Fila, corrigir no MV o que o guia aponta, marcar cada linha e concluir.
 prd: [1113, 1128, 1303]
-draft: true
+draft: false
 papel: [Faturista]
 busca: [boleto, fatura, pegar conta]
 proximas: [devolver-uma-conta-a-fila, reenviar-a-conta-corrigida, ler-o-painel]

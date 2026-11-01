@@ -2,7 +2,7 @@
 title: Ler o Painel
 description: Ver a nota da semana, onde a perda da conta nasce e quem corrige.
 prd: [1128, 1303]
-draft: true
+draft: false
 papel: [Coordenadora de faturamento, Gestão de contas médicas, Diretoria]
 sidebar:
   order: 5

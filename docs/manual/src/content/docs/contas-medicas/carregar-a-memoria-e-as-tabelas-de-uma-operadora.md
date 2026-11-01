@@ -2,7 +2,7 @@
 title: Carregar a memória e as tabelas de uma operadora
 description: Subir o arquivo de memória e as tabelas de preço de um convênio, sem depender da equipe de tecnologia.
 prd: [1113, 1129]
-draft: true
+draft: false
 papel: [Gestão de contas médicas, Diretoria]
 sidebar:
   order: 6

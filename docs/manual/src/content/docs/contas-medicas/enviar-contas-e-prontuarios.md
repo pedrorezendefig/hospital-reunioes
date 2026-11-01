@@ -2,7 +2,7 @@
 title: Enviar contas e prontuários
 description: Mandar a conta e o prontuário do MV para conferência e acompanhar em Meus envios até o guia ficar pronto.
 prd: [1113, 1303, 1335]
-draft: true
+draft: false
 papel: [Faturista, Apoio ao faturamento]
 proximas: [corrigir-uma-conta-pelo-guia, descartar-um-envio]
 sidebar:

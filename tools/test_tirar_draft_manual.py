@@ -10,6 +10,7 @@ fora do ar.
 
 from __future__ import annotations
 
+import json
 import os
 import subprocess
 import sys
@@ -92,6 +93,9 @@ def rodar(
         capture_output=True,
         text=True,
         env=ambiente,
+        # O history.json padrão é relativo ao cwd: o do repositório real não
+        # pode decidir o que o teste solta.
+        cwd=tempfile.mkdtemp(),
     )
 
 
@@ -178,6 +182,49 @@ def test_pagina_de_dois_prds_espera_os_dois_subirem(tmp_path):
     antes = arquivo.read_text(encoding="utf-8")
 
     saida = rodar(tmp_path, "--prd", "731")
+
+    assert saida.returncode == 0, saida.stderr
+    assert arquivo.read_text(encoding="utf-8") == antes
+
+
+def historico(raiz: Path, *deploys: list[int]) -> str:
+    """O history.json com os PRDs de cada deploy, o mais recente primeiro."""
+    arquivo = raiz / "history.json"
+    corpo = {"deploys": [{"prds": list(d)} for d in deploys]}
+    arquivo.write_text(json.dumps(corpo), encoding="utf-8")
+    return str(arquivo)
+
+
+def test_pagina_de_prd_antigo_e_do_que_subiu_agora_sai_do_draft(tmp_path):
+    """O bug de 30/10: a página de [1113, 1303] ficou em draft porque o deploy
+    do #1303 só trazia o #1303, e o #1113 tinha subido num deploy anterior."""
+    arquivo = escrever(tmp_path, "contas-medicas/corrigir.md", "1113, 1303")
+    hist = historico(tmp_path, [1303], [1113])
+
+    saida = rodar(tmp_path, "--prd", "1303", "--historico", hist)
+
+    assert saida.returncode == 0, saida.stderr
+    assert "draft: false" in arquivo.read_text(encoding="utf-8")
+
+
+def test_pagina_presa_de_prds_ja_em_producao_sai_no_deploy_seguinte(tmp_path):
+    """Página travada por um deploy antigo sai no próximo deploy, de outro PRD."""
+    arquivo = escrever(tmp_path, "contas-medicas/ensinar.md", "1129")
+    hist = historico(tmp_path, [1344], [1129])
+
+    saida = rodar(tmp_path, "--prd", "1344", "--historico", hist)
+
+    assert saida.returncode == 0, saida.stderr
+    assert "draft: false" in arquivo.read_text(encoding="utf-8")
+
+
+def test_historico_nao_solta_pagina_de_prd_que_nao_subiu(tmp_path):
+    """O PRD 740 não está em deploy nenhum: a página continua em draft."""
+    arquivo = escrever(tmp_path, "reunioes/criar-meta.md", "731, 740")
+    antes = arquivo.read_text(encoding="utf-8")
+    hist = historico(tmp_path, [731])
+
+    saida = rodar(tmp_path, "--prd", "731", "--historico", hist)
 
     assert saida.returncode == 0, saida.stderr
     assert arquivo.read_text(encoding="utf-8") == antes

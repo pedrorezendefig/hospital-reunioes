@@ -2,7 +2,7 @@
 title: Ensinar uma regra nova
 description: Escrever uma regra como você falaria, conferir o que a IA propõe e validar na memória da operadora.
 prd: [1129]
-draft: true
+draft: false
 papel: [Gestão de contas médicas, Diretoria]
 sidebar:
   order: 7
