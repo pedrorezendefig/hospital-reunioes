@@ -35,11 +35,11 @@ SECOES_OBRIGATORIAS = ("Decisões de implementação", "Decisões de teste")
 
 def _secao(corpo: str, titulo: str) -> str | None:
     """O texto de uma seção `## titulo` até o próximo `## ` ou o marcador."""
-    m = re.search(rf"^## {re.escape(titulo)}\s*$", corpo, re.M)
+    m = re.search(rf"^## {re.escape(titulo)}\s*$", corpo, re.MULTILINE)
     if not m:
         return None
     resto = corpo[m.end() :]
-    fim = re.search(r"^## |<!--", resto, re.M)
+    fim = re.search(r"^## |<!--", resto, re.MULTILINE)
     return (resto[: fim.start()] if fim else resto).strip()
 
 
@@ -80,7 +80,7 @@ def completar(corpo: str, secoes: str) -> str:
     if "Para o diretor" in secoes:
         raise ValueError('o bloco "Para o diretor" é do app; as seções técnicas não o reescrevem')
     bloco = secoes.strip() + "\n\n"
-    origem = re.search(r"^## Origem\s*$", corpo, re.M) or MARCADOR_DA_DEMANDA.search(corpo)
+    origem = re.search(r"^## Origem\s*$", corpo, re.MULTILINE) or MARCADOR_DA_DEMANDA.search(corpo)
     return corpo[: origem.start()] + bloco + corpo[origem.start() :]
 
 
