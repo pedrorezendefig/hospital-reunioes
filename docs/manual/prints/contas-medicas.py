@@ -463,14 +463,25 @@ def semear(base: str = "http://localhost:3000") -> None:
                                     "numero_atendimento": "900431", "paginas": 4})
     _rest(f"cm_conta?id=eq.{conta_sem_prontuario['id']}", "PATCH", {"arquivo_id": arquivo["id"]})
 
+    # O Erro da IA (PRD #1335): o quadrado do Prontuário fica vermelho, e o
+    # cartão mostra o código e o Analisar de novo, porque os dois PDFs ainda
+    # estão guardados (o `apagar_em` no futuro). Nenhum PDF sobe ao bucket: o
+    # print não clica em Analisar de novo.
     _conta("900377", operadora_id, 4, "ERRO", [], rotulo="Paulo R.", idade=71, numero_conta="51288",
-           erro_motivo="Este PDF não tem texto. Exporte de novo pelo MV")
+           periodo_inicio="2026-10-12", periodo_fim="2026-10-19",
+           erro_motivo="A IA está fora do ar ou sobrecarregada agora.", erro_codigo="CM-IA-FORA-DO-AR",
+           erro_detalhe={"tipo": "OverloadedError", "http": 529, "etapa": "passo_a", "arquivo": "ia.py",
+                         "linha": 498, "em": "2026-11-01T14:32:00-03:00"})
     # Meus envios mostra a conta de quem a enviou (PRD #1303): a do Erro
     # também nasce do envio da faturista.
     conta_com_erro = _rest("cm_conta?numero_conta=eq.51288&faturista_id=eq.P950&select=id,atendimento_id")[0]
+    guardado_ate = "2099-01-01T00:00:00-03:00"
     arquivo = _criar("cm_arquivo", {"envio_id": envio["id"], "tipo": "CONTA",
                                     "atendimento_id": conta_com_erro["atendimento_id"],
-                                    "numero_atendimento": "900377", "paginas": 3})
+                                    "numero_atendimento": "900377", "paginas": 3, "apagar_em": guardado_ate})
+    _criar("cm_arquivo", {"envio_id": envio["id"], "tipo": "PRONTUARIO",
+                          "atendimento_id": conta_com_erro["atendimento_id"],
+                          "numero_atendimento": "900377", "paginas": 214, "apagar_em": guardado_ate})
     _rest(f"cm_conta?id=eq.{conta_com_erro['id']}", "PATCH", {"arquivo_id": arquivo["id"]})
     # A conta das telas do reenvio: três linhas Feito, duas que entram e uma
     # diária que sai, mais a linha bloqueada que a Validação abre. Concluída
@@ -788,21 +799,48 @@ def _aba(page: Page, nome: str):
     return aba
 
 
+def _cartao(page: Page, atendimento: str):
+    """O cartão do envio de um atendimento, na aba de envios (PRD #1335)."""
+    return page.get_by_role("article").filter(has_text=f"Atendimento {atendimento}")
+
+
+def _print_dos_envios(page: Page, saida: Path, arquivo: str) -> None:
+    """Os cartões são mais altos do que a tela de 900: a janela cresce para o
+    cartão do Erro sair inteiro, com o código e as ações."""
+    page.set_viewport_size({"width": COMPUTADOR["width"], "height": 1400})
+    page.wait_for_timeout(300)
+    secao = page.get_by_role("region", name="Fila de contas")
+    caixa = secao.bounding_box()
+    page.screenshot(
+        path=str(saida / arquivo),
+        clip={"x": caixa["x"] - 40, "y": caixa["y"] - 104, "width": caixa["width"] + 60, "height": caixa["height"] + 112},
+    )
+    limpar_baloes(page)
+
+
 def meus_envios(page: Page, base: str, saida: Path) -> None:
-    """Enviar, passo 4: Meus envios, com o que ainda não ficou pronto (PRD #1303)."""
+    """Enviar, passos 4 e 5: Meus envios, um cartão por conta, com o botão do
+    arquivo que falta e a conta em Erro da IA (PRDs #1303 e #1335)."""
     _guia_a_fazer()
     _contas(page, base)
     aba = _aba(page, "Meus envios")
     page.get_by_text("Atendimento 900431").wait_for()
     sem_foco(page)
-    secao = page.get_by_role("region", name="Fila de contas")
     balao(page, aba, 4, "acima")
-    caixa = secao.bounding_box()
-    page.screenshot(
-        path=str(saida / "meus-envios.png"),
-        clip={"x": caixa["x"] - 40, "y": caixa["y"] - 104, "width": caixa["width"] + 60, "height": caixa["height"] + 112},
-    )
-    limpar_baloes(page)
+    balao(page, _cartao(page, "900431").get_by_role("button", name="Enviar o prontuário"), 5)
+    _print_dos_envios(page, saida, "meus-envios.png")
+
+
+def descartar(page: Page, base: str, saida: Path) -> None:
+    """Descartar, passos 1 e 2: a aba Meus envios e o Descartar do cartão (PRD #1335)."""
+    _guia_a_fazer()
+    _contas(page, base)
+    aba = _aba(page, "Meus envios")
+    page.get_by_text("Atendimento 900431").wait_for()
+    sem_foco(page)
+    balao(page, aba, 1, "acima")
+    balao(page, _cartao(page, "900431").get_by_role("button", name="Descartar"), 2)
+    _print_dos_envios(page, saida, "descartar.png")
 
 
 def minhas(page: Page, base: str, saida: Path) -> None:
@@ -1667,6 +1705,7 @@ PRINTS = {
     "envio": envio,
     "ultimo-envio": ultimo_envio,
     "meus-envios": meus_envios,
+    "descartar": descartar,
     "fila-abrir": fila_abrir,
     "minhas": minhas,
     "guia-devolver": guia_devolver,
