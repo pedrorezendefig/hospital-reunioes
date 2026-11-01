@@ -1,7 +1,7 @@
 ---
 status: accepted
 amends: 0044, 0056
-amended_by: 0058, 0062, 0071, 0072
+amended_by: 0058, 0062, 0071, 0072, 0076
 ---
 
 # Manual do usuário: um site por módulo, vídeo por tarefa, fatia de manual por PRD
@@ -85,6 +85,10 @@ Decisão do Pedro, depois do piloto de dois vídeos (#1231, PR #1246): "Eu não 
 ## Emenda a este ADR (14/out/2026, um vídeo por módulo e orçamento de 40 MB, ADR 0072)
 
 Decisão do Pedro (PRD #1259). O vídeo do Manual deixa de ser por tarefa: cada módulo abre com um **Vídeo de visão geral** do caminho principal, "Conheça a plataforma" aparece também na página inicial, e o Admin fica sem vídeo (decisões 3 e 4). As 61 Páginas de tarefa perdem o vídeo, e as composições dos Vídeos de tarefa e dos capítulos da Ouvidoria saem do repositório; os masters ficam em `local/`. O `publicar.sh` ganha três travas depois do reencode: soma dos MP4 até 40 MB, um vídeo por módulo, nenhum acima de 8 MB, com o teto de 90 MB mantido (decisão 6). Novidades levam link para a página de divulgação no lugar do vídeo embutido (decisão 12), e a Fatia de manual só pede vídeo quando o PRD muda o caminho principal do módulo (decisão 8). O detalhe e os rejeitados estão na ADR 0072.
+
+## Emenda a este ADR (01/nov/2026, vídeo narrado em Remotion, refeito a cada PRD, e a Tecnologia no Manual, ADR 0076)
+
+Decisão do Pedro (PRD #1365). **Decisão 1:** a aba Tecnologia entra no Manual como módulo, o último do menu, com abertura, Páginas de tarefa migradas dos 11 capítulos da página separada e Vídeo de visão geral; o `manual-tecnologia-hsm` redireciona para a seção nova. A Central de Comando continua fora. **Decisão 4, na emenda de 13/10/2026:** o Estilo do manual (HyperFrames) sai módulo a módulo; o vídeo do módulo passa a ser narrado e feito em Remotion pela skill `motion`, no molde da `/divulgar`. **Decisão 8:** todo PRD que muda página de um módulo refaz o vídeo daquele módulo, salvo exceção escrita na Fatia de manual. O detalhe e os rejeitados estão na ADR 0076.
 
 ## Consequências
 

@@ -1,6 +1,7 @@
 ---
 status: accepted
 amends: 0054, 0056
+amended_by: 0076
 ---
 
 # Planejamento da Demanda: o grill de negócio roda no app, e o "sim" do diretor cria o PRD do diretor
@@ -38,3 +39,7 @@ Decisão do Pedro (01/11/2026, grilling fechado em lote pelo `/express` e aprova
 - Nasce persistência nova no app (a conversa do planejamento na Demanda), portanto migration e parada humana da regra 9 da ADR 0068.
 - O `/grill-with-docs` precisa aprender a ler uma issue com PRD do diretor e pular o que já foi decidido; o `/to-prd`, a completar uma issue em vez de criar. O `/minhas-issues` precisa distinguir uma `needs-triage` com PRD do diretor de uma comum (é o risco aceito da decisão 6).
 - Risco aceito da decisão 7: se as perguntas saírem rasas no effort padrão, o ajuste é subir para `high`, não trocar de modelo.
+
+## Emenda a esta ADR (01/nov/2026, a Tecnologia no Manual, ADR 0076)
+
+**Decisão 8, a frase "Tecnologia continua fora do Manual":** deixa de valer. A Tecnologia vira módulo do Manual, o último do menu, com as páginas migradas da página separada e um Vídeo de visão geral cuja cena central é o Planejamento da Demanda. O resto da decisão 8 fica (qualquer Super admin da aba planeja, sem papel novo; o botão do card; o teto de taxa), e o kit `tecnologia.md` continua sendo o que o agente lê. O detalhe está na ADR 0076.
