@@ -17,6 +17,16 @@ export const ROTA_FILA = "/api/contas-medicas/fila";
 export const ROTA_MEUS_ENVIOS = "/api/contas-medicas/meus-envios";
 export const ROTA_ME = "/api/contas-medicas/me";
 
+/** Descartar a conta em Erro ou Aguardando arquivo (issue #1338). */
+export function rotaDoDescarte(contaId: string): string {
+  return `/api/contas-medicas/contas/${contaId}/descartar`;
+}
+
+/** A pergunta antes de apagar: o atendimento e o aviso de que os arquivos saem. */
+export function perguntaDoDescarte(conta: ItemDaFila): string {
+  return `Descartar o atendimento ${conta.numero_atendimento}? Os arquivos serão apagados.`;
+}
+
 /** "Enviar contas": o envio e Meus envios (issue #1308, ADR 0073). */
 export const ENVIAR_CONTAS = "enviar_contas";
 /** "Analisar contas" na tela; a chave guarda o nome antigo (ADR 0073). */
@@ -89,6 +99,8 @@ export interface ItemDaFila {
   erro_em?: string | null;
   erro_arquivo?: "conta" | "prontuario" | null;
   erro_acao?: "analisar_de_novo" | "enviar_de_novo" | null;
+  /** O botão Descartar do cartão do envio (issue #1338): o servidor diz quando cabe. */
+  pode_descartar?: boolean;
   /** Só para quem tem "painel completo": quem está com a conta (issue #1307). */
   com?: string | null;
 }

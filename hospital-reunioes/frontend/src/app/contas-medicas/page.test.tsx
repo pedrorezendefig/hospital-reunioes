@@ -93,11 +93,13 @@ const ANALISAR = "enviar_corrigir_contas";
 
 let filaDoServidor: Fila;
 let permissoes: string[];
+let respostaDoDescarte: () => Response;
 const chamadas: { url: string; init?: RequestInit }[] = [];
 
 beforeEach(() => {
   filaDoServidor = FILA;
   permissoes = [ENVIAR, ANALISAR];
+  respostaDoDescarte = () => new Response(JSON.stringify({ descartada: "erro" }));
   chamadas.length = 0;
   vi.stubGlobal(
     "fetch",
@@ -109,6 +111,7 @@ beforeEach(() => {
       if (url === "/api/contas-medicas/meus-envios") return new Response(JSON.stringify({ todas, meus_envios }));
       if (url === "/api/contas-medicas/envios") return new Response(JSON.stringify(RESPOSTA_DO_ENVIO));
       if (url === "/api/contas-medicas/me") return new Response(JSON.stringify({ perfil: "faturista", permissoes }));
+      if (url.endsWith("/descartar")) return respostaDoDescarte();
       return new Response("{}", { status: 404 });
     }),
   );
@@ -509,6 +512,76 @@ describe("o Código do erro no cartão (issue #1337)", () => {
     expect(within(itens[2]).queryByRole("button", { name: "Ver detalhes" })).toBeNull();
     expect(within(itens[2]).queryByRole("button", { name: "Copiar para a TI" })).toBeNull();
     expect(quadrado(itens[2], "Conta").getAttribute("data-estado")).toBe("chegou");
+  });
+});
+
+describe("Descartar um envio (issue #1338)", () => {
+  const ENVIOS: ItemDaFila[] = [
+    conta({ id: "erro", numero_atendimento: "31260", situacao: "ERRO", pode_descartar: true }),
+    conta({ id: "falta-pront", numero_atendimento: "31318", situacao: "AGUARDANDO_ARQUIVO", falta: "prontuario", pode_descartar: true }),
+    conta({ id: "falta-conta", numero_atendimento: "31320", situacao: "AGUARDANDO_ARQUIVO", falta: "conta", pode_descartar: true }),
+    conta({ id: "na-fila", numero_atendimento: "31302", situacao: "NA_FILA", pode_descartar: false }),
+    conta({ id: "rodando", numero_atendimento: "31310", situacao: "PROCESSANDO", pode_descartar: false }),
+    // O envio de outra pessoa que a lista trouxesse sem permissão de descartar.
+    conta({ id: "da-outra", numero_atendimento: "31330", situacao: "ERRO", pode_descartar: false }),
+  ];
+
+  async function cartoes(): Promise<HTMLElement[]> {
+    filaDoServidor = { ...FILA, meus_envios: ENVIOS };
+    render(<ContasMedicasPage />);
+    await linhas();
+    aba(/^Meus envios/);
+    return linhas();
+  }
+
+  const descartes = () => chamadas.filter((c) => c.url.endsWith("/descartar"));
+
+  afterEach(() => vi.restoreAllMocks());
+
+  it("o botão aparece no Erro e no arquivo faltando que a pessoa pode descartar, e em nenhum outro", async () => {
+    const itens = await cartoes();
+    const tem = (cartao: HTMLElement) => within(cartao).queryByRole("button", { name: "Descartar" }) !== null;
+
+    expect(itens.map(tem)).toEqual([true, true, true, false, false, false]);
+  });
+
+  it("pergunta antes de apagar, e cancelar não apaga nada", async () => {
+    const perguntar = vi.spyOn(window, "confirm").mockReturnValue(false);
+    const itens = await cartoes();
+
+    fireEvent.click(within(itens[0]).getByRole("button", { name: "Descartar" }));
+
+    expect(perguntar).toHaveBeenCalledWith("Descartar o atendimento 31260? Os arquivos serão apagados.");
+    await new Promise((r) => setTimeout(r, 0));
+    expect(descartes()).toEqual([]);
+  });
+
+  it("confirmado, chama a rota da conta e relê a lista", async () => {
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+    const itens = await cartoes();
+    const leiturasAntes = chamadas.filter((c) => c.url === "/api/contas-medicas/meus-envios").length;
+
+    fireEvent.click(within(itens[1]).getByRole("button", { name: "Descartar" }));
+
+    await waitFor(() => expect(descartes()).toHaveLength(1));
+    const [descarte] = descartes();
+    expect(descarte.url).toBe("/api/contas-medicas/contas/falta-pront/descartar");
+    expect(descarte.init?.method).toBe("POST");
+    expect(new Headers(descarte.init?.headers).get("Authorization")).toBe("Bearer token-de-teste");
+    await waitFor(() =>
+      expect(chamadas.filter((c) => c.url === "/api/contas-medicas/meus-envios").length).toBeGreaterThan(leiturasAntes),
+    );
+  });
+
+  it("a recusa do servidor aparece com a frase dele", async () => {
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+    respostaDoDescarte = () =>
+      new Response(JSON.stringify({ detail: "A conta já tem Guia e não pode ser descartada." }), { status: 409 });
+    const itens = await cartoes();
+
+    fireEvent.click(within(itens[0]).getByRole("button", { name: "Descartar" }));
+
+    expect((await screen.findByRole("alert")).textContent).toContain("A conta já tem Guia e não pode ser descartada.");
   });
 });
 
