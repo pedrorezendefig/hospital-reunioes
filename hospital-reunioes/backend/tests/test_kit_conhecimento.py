@@ -547,6 +547,15 @@ PISO_DE_DECISOES = 3
 # frase que a regra proibe.
 SEGUNDA_FRASE = re.compile(r"[.!?]\s+[A-ZÁÉÍÓÚÂÊÔÃÕÇ]")
 
+# O vocabulario de quem programa, que o diretor nao fala: o registro de decisao
+# (com ou sem o numero de quatro digitos), o documento de produto, a issue e o
+# que acontece com o codigo. Palavra inteira e sem caixa: "issues" e "Deploy"
+# tambem sao.
+VOCABULARIO_DO_REPOSITORIO = re.compile(
+    r"\b(?:ADRs?|PRDs?|issues?|labels?|pull requests?|commits?|merges?|deploys?)\b|(?<![\d-])\b0\d{3}\b",
+    flags=re.IGNORECASE,
+)
+
 
 def _decisoes(arquivo: str) -> list[str]:
     """Os itens de lista da secao. Texto corrido fora da lista nao conta como
@@ -567,6 +576,21 @@ class TestOQueJaFoiDecidido:
             assert decisao.endswith("."), decisao
             assert SEGUNDA_FRASE.search(decisao) is None, decisao
 
+    def test_a_secao_nao_fala_a_lingua_do_repositorio(self, arquivo):
+        """A secao nasce das decisoes registradas para quem programa, e por isso
+        e onde o numero da decisao, a issue e a tabela mais tentam vazar.
+
+        Mutante: escrever "(ADR 0037)" no fim de uma decisao.
+        """
+        secao = _secao(_texto(arquivo), SECAO_DECIDIDO)
+        assert secao.strip()
+        assert VOCABULARIO_DO_REPOSITORIO.search(secao) is None
+        assert NUMERO_DE_ISSUE.search(secao) is None
+        assert [label for label in LABELS_DO_REPO if label in secao] == []
+        assert [tabela for tabela in _tabelas_do_banco() if tabela in secao.lower()] == []
+        assert ROTA_DA_API.search(secao) is None
+        assert NOME_DE_ARQUIVO_DO_CODIGO.search(secao) is None
+
 
 class TestODetectorDeFrase:
     """O detector de frase tambem e codigo: cego, ele deixaria passar o item
@@ -577,3 +601,15 @@ class TestODetectorDeFrase:
 
     def test_numero_com_virgula_e_protocolo_nao_sao_fim_de_frase(self):
         assert SEGUNDA_FRASE.search("O protocolo é 2026-0007 e custa R$ 1,50 por conta.") is None
+
+    @pytest.mark.parametrize(
+        "frase",
+        ["o tipo decide o sigilo (ADR 0037)", "como na decisão 0054", "veio do PRD da Ouvidoria", "virou Issue"],
+    )
+    def test_o_vocabulario_do_repositorio_e_pego(self, frase):
+        assert VOCABULARIO_DO_REPOSITORIO.search(frase) is not None
+
+    def test_o_protocolo_nao_e_numero_de_decisao(self):
+        """O protocolo da Ouvidoria tem quatro digitos com zero na frente, mas
+        colado ao ano por hifen: e texto de gente, nao vocabulario do repo."""
+        assert VOCABULARIO_DO_REPOSITORIO.search("no formato ano mais número, como 2026-0007") is None
