@@ -2,6 +2,56 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-11-01T18:30:09-03:00",
+      "sha": "11604a8ca4a289422b1cfcc413514346232c4e54",
+      "app_version": "0.202.0",
+      "subject": "Onda planejamento-onda1: Planejamento da Demanda, a primeira pergunta ponta a ponta (botão, tela, turno, persistência, custo); Kit de conhecimento, seção O que já foi decidido em cada Produto e o Plan",
+      "raw_subject": "chore(deploy): registro da onda planejamento-onda1 (#1356 #1354)",
+      "scope": [
+        "backend",
+        "frontend"
+      ],
+      "prds": [
+        1344
+      ],
+      "result": "healthy",
+      "duration_seconds": 738,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        },
+        {
+          "service": "frontend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [
+        "123_tecnologia_planejamento.sql"
+      ],
+      "rollback_target_sha": null,
+      "notes": "onda-enxuta planejamento-onda1: PR #1356 (issue #1345), PR #1354 (issue #1346), mergeados PR a PR. Merge pela API do GitHub, um build. Registro pela Action pos-merge depois do health.",
+      "etapas": {
+        "merge_s": 5,
+        "build_s": {
+          "backend": 24,
+          "frontend": 166
+        },
+        "health_s": 0
+      },
+      "responsavel": "pedrorezendefig"
+    },
+    {
       "at": "2026-11-01T18:16:56-03:00",
       "sha": "18337f9aff2fecfc6550e213fe844fa602514589",
       "app_version": "0.201.0",
