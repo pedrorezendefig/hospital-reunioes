@@ -16,11 +16,17 @@
  * resumo a qualquer altura. Com o planejamento resumido, a tela troca a
  * conversa pelo resumo, com o "sim" (que chega na próxima parte) e o "não",
  * que exige dizer o que não bateu e devolve a conversa à IA.
+ *
+ * A voz (issue #1348) entra pelo microfone do Assistente: o mesmo hook, a
+ * mesma rota de transcrição. O texto transcrito cai no campo livre, editável,
+ * e só vai para a IA quando o diretor envia.
  */
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { Bot, ListChecks, Loader2, Send } from "lucide-react";
+import { Bot, ListChecks, Loader2, Mic, Send, Square } from "lucide-react";
+
+import { useGravacaoVoz } from "@/hooks/useGravacaoVoz";
 
 import { AVISO_DE_IA, corpoValidado, LIMITE_DA_MENSAGEM } from "./assistente";
 import { Demanda, FALHA_DE_CONEXAO, motivoDaRecusa } from "./demandas";
@@ -228,6 +234,14 @@ export function PlanejamentoDaDemanda({ demandaId, token, onTitulo }: Props) {
   const [texto, setTexto] = useState("");
   const fimDaLista = useRef<HTMLDivElement>(null);
 
+  // O texto falado entra DEPOIS do que já estava escrito, nunca no lugar dele.
+  const { gravando, transcrevendo, iniciarGravacao, pararGravacao } = useGravacaoVoz({
+    getToken: () => token,
+    onTexto: (transcrito) => setTexto((atual) => (atual.trim() ? `${atual.trimEnd()} ${transcrito}` : transcrito)),
+  });
+  // Enviar no meio da gravação mandaria a resposta sem a fala.
+  const ocupado = pensando || gravando || transcrevendo;
+
   /** Um POST que devolve o planejamento inteiro; nulo quando não valeu. */
   const enviar = useCallback(
     async (url: string, corpo: unknown): Promise<Planejamento | null> => {
@@ -316,7 +330,7 @@ export function PlanejamentoDaDemanda({ demandaId, token, onTitulo }: Props) {
 
   async function enviarOTexto() {
     const resposta = texto.trim();
-    if (!resposta || pensando) return;
+    if (!resposta || ocupado) return;
     // O texto só sai da caixa quando o turno valeu: se falhar, ele continua lá.
     if (await responder({ texto: resposta })) setTexto("");
   }
@@ -434,7 +448,7 @@ export function PlanejamentoDaDemanda({ demandaId, token, onTitulo }: Props) {
                 aria-label="Sua resposta"
                 rows={1}
                 maxLength={LIMITE_DA_MENSAGEM}
-                placeholder="Ou escreva a sua resposta"
+                placeholder={transcrevendo ? "Transcrevendo a sua fala..." : "Ou responda por escrito ou pelo microfone"}
                 value={texto}
                 onChange={(e) => setTexto(e.target.value)}
                 onKeyDown={(e) => {
@@ -445,10 +459,23 @@ export function PlanejamentoDaDemanda({ demandaId, token, onTitulo }: Props) {
                 }}
                 className="flex-1 px-3 py-2 text-sm border border-slate-200 rounded-xl outline-none focus:border-primary focus:ring-1 focus:ring-primary bg-white resize-none"
               />
+              {/* O microfone fica vivo enquanto grava: é o caminho de volta. */}
+              <button
+                type="button"
+                onClick={() => (gravando ? pararGravacao() : iniciarGravacao())}
+                disabled={!gravando && (ocupado || !pergunta)}
+                aria-label={gravando ? "Parar de gravar" : "Gravar voz"}
+                title={gravando ? "Parar de gravar" : "Gravar voz"}
+                className={`px-3 py-2 rounded-xl border text-text-secondary disabled:opacity-50 ${
+                  gravando ? "border-red-300 bg-red-50 text-red-600" : "border-border hover:border-primary hover:text-primary"
+                } transition-colors`}
+              >
+                {gravando ? <Square className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
+              </button>
               <button
                 type="button"
                 onClick={enviarOTexto}
-                disabled={pensando || !pergunta || !texto.trim()}
+                disabled={ocupado || !pergunta || !texto.trim()}
                 aria-label="Enviar resposta"
                 className="px-3 py-2 rounded-xl bg-primary text-white disabled:opacity-50"
               >

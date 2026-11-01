@@ -15,6 +15,8 @@
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+import { ToastProvider } from "@/components/ui/Toast";
+
 import { DemandaModal } from "./DemandaModal";
 import { Demanda, EuNaAba } from "./demandas";
 import {
@@ -194,14 +196,22 @@ function resposta(corpo: unknown, status = 200): Response {
   return { ok: status < 400, status, json: async () => corpo } as unknown as Response;
 }
 
-/** O servidor de mentira: o GET devolve `lido`, cada POST devolve o próximo de `respostas`. */
+/** O que a rota de voz devolve como texto transcrito, no servidor de mentira. */
+let transcricao = "só a recepção, de manhã";
+
+/**
+ * O servidor de mentira: o GET devolve `lido`, cada POST do planejamento
+ * devolve o próximo de `respostas`, e a rota de voz devolve `transcricao`.
+ */
 function dublarServidor(lido: Planejamento, respostas: Response[] = []): Pedido[] {
   const pedidos: Pedido[] = [];
   vi.stubGlobal(
     "fetch",
     vi.fn(async (url: string, init?: RequestInit) => {
       const metodo = init?.method ?? "GET";
-      pedidos.push({ url, metodo, corpo: init?.body ? JSON.parse(String(init.body)) : undefined });
+      const audio = init?.body instanceof FormData;
+      pedidos.push({ url, metodo, corpo: init?.body && !audio ? JSON.parse(String(init.body)) : undefined });
+      if (url.endsWith("/transcricao/voz")) return resposta({ texto: transcricao });
       if (metodo === "GET") return resposta(lido);
       return respostas.shift() ?? resposta({ detail: "sem resposta preparada" }, 500);
     }),
@@ -209,12 +219,23 @@ function dublarServidor(lido: Planejamento, respostas: Response[] = []): Pedido[
   return pedidos;
 }
 
+/** Os POSTs AO PLANEJAMENTO, isto é, o que foi para a IA. */
 function posts(pedidos: Pedido[]): Pedido[] {
-  return pedidos.filter((p) => p.metodo === "POST");
+  return pedidos.filter((p) => p.metodo === "POST" && !p.url.endsWith("/transcricao/voz"));
 }
 
+function paraVoz(pedidos: Pedido[]): Pedido[] {
+  return pedidos.filter((p) => p.url.endsWith("/transcricao/voz"));
+}
+
+// O ToastProvider é o de verdade: o hook de gravação de voz avisa por toast
+// quando a transcrição falha, e ele exige provider para existir.
 function montarTela() {
-  return render(<PlanejamentoDaDemanda demandaId="d-1" token="token-de-teste" />);
+  return render(
+    <ToastProvider>
+      <PlanejamentoDaDemanda demandaId="d-1" token="token-de-teste" />
+    </ToastProvider>,
+  );
 }
 
 function painelDeDecisoes(): HTMLElement {
@@ -297,6 +318,36 @@ describe("A tela do planejamento", () => {
     montarTela();
 
     expect(await screen.findByText("O retorno precisa de horário marcado?")).toBeTruthy();
+    expect(posts(pedidos)).toEqual([]);
+  });
+
+  it("retomar abre na última pergunta, sem as opções da anterior e com O que já decidimos completo", async () => {
+    const TERCEIRA: MensagemDoPlanejamento = {
+      tipo: "pergunta",
+      contexto: "Quem confirma o retorno com o paciente?",
+      opcoes: [
+        { letra: "A", texto: "A recepção liga." },
+        { letra: "B", texto: "O paciente recebe mensagem." },
+      ],
+      recomendada: "B",
+    };
+    const pedidos = dublarServidor(
+      planejamento({
+        mensagens: [...DEPOIS_DA_RESPOSTA.mensagens, { tipo: "resposta", opcao: "A", texto: "Sim, com hora." }, TERCEIRA],
+        decisoes: ["Só a recepção usa a agenda nova.", "O retorno é marcado com hora."],
+      }),
+    );
+    montarTela();
+
+    // A pergunta que espera resposta é a última, com as duas opções clicáveis.
+    expect(await screen.findByRole("button", { name: /A recepção liga\./ })).toBeTruthy();
+    expect(screen.getByRole("button", { name: /O paciente recebe mensagem\./ })).toBeTruthy();
+    // As anteriores ficam na conversa como histórico, sem opção para clicar de novo.
+    expect(screen.queryByRole("button", { name: /Só a recepção\./ })).toBeNull();
+    expect(screen.queryByRole("button", { name: /Só o dia\./ })).toBeNull();
+    // O painel vem com tudo o que já foi decidido, na ordem.
+    const decisoes = within(painelDeDecisoes()).getAllByRole("listitem").map((li) => li.textContent);
+    expect(decisoes).toEqual(["Só a recepção usa a agenda nova.", "O retorno é marcado com hora."]);
     expect(posts(pedidos)).toEqual([]);
   });
 
@@ -469,5 +520,98 @@ describe("O resumo", () => {
 
     expect(await screen.findByText("O retorno precisa de horário marcado?")).toBeTruthy();
     expect(posts(pedidos).map((p) => p.corpo)).toEqual([{}]);
+  });
+});
+
+// ─── A voz no campo livre (issue #1348) ──────────────────────────────────────
+//
+// O gravador do navegador é falso, e o hook de gravação é o DE VERDADE, o
+// mesmo do Assistente de Tecnologia: dublar o hook provaria que a tela sabe
+// receber um texto, e não que o microfone chega à rota de voz que já existe.
+
+class GravadorFalso {
+  static ultimo: GravadorFalso | null = null;
+  static isTypeSupported = () => true;
+  state = "inactive";
+  mimeType: string;
+  ondataavailable: ((e: { data: Blob }) => void) | null = null;
+  onstop: (() => void) | null = null;
+
+  constructor(_stream: unknown, opcoes?: { mimeType?: string }) {
+    this.mimeType = opcoes?.mimeType ?? "audio/webm";
+    GravadorFalso.ultimo = this;
+  }
+
+  start() {
+    this.state = "recording";
+  }
+
+  stop() {
+    this.state = "inactive";
+    this.ondataavailable?.({ data: new Blob(["bytes-de-audio"], { type: this.mimeType }) });
+    this.onstop?.();
+  }
+}
+
+function plugarOMicrofone() {
+  GravadorFalso.ultimo = null;
+  vi.stubGlobal("MediaRecorder", GravadorFalso);
+  Object.defineProperty(navigator, "mediaDevices", {
+    configurable: true,
+    value: { getUserMedia: async () => ({ getTracks: () => [{ stop: vi.fn() }] }) },
+  });
+}
+
+async function falar() {
+  fireEvent.click(await screen.findByRole("button", { name: "Gravar voz" }));
+  await waitFor(() => expect(GravadorFalso.ultimo).not.toBeNull());
+  fireEvent.click(screen.getByRole("button", { name: "Parar de gravar" }));
+}
+
+function campoLivre(): HTMLTextAreaElement {
+  return screen.getByLabelText("Sua resposta") as HTMLTextAreaElement;
+}
+
+describe("A voz no campo livre", () => {
+  afterEach(() => {
+    transcricao = "só a recepção, de manhã";
+  });
+
+  it("vai pela rota de transcrição que já existe e o texto cai no campo, sem ir para a IA", async () => {
+    plugarOMicrofone();
+    const pedidos = dublarServidor(planejamento());
+    montarTela();
+
+    await falar();
+
+    await waitFor(() => expect(campoLivre().value).toBe("só a recepção, de manhã"));
+    expect(paraVoz(pedidos)).toHaveLength(1);
+    expect(paraVoz(pedidos)[0].metodo).toBe("POST");
+    // Transcrever não é responder: nada foi para a IA ainda.
+    expect(posts(pedidos)).toEqual([]);
+  });
+
+  it("o texto falado só vai para a IA quando o diretor envia, e vai como texto", async () => {
+    plugarOMicrofone();
+    const pedidos = dublarServidor(planejamento(), [resposta(DEPOIS_DA_RESPOSTA)]);
+    montarTela();
+
+    await falar();
+    await waitFor(() => expect(campoLivre().value).toBe("só a recepção, de manhã"));
+    fireEvent.click(screen.getByRole("button", { name: "Enviar resposta" }));
+
+    await waitFor(() => expect(posts(pedidos)).toHaveLength(1));
+    expect(posts(pedidos)[0].corpo).toEqual({ texto: "só a recepção, de manhã" });
+  });
+
+  it("o que já estava escrito fica, e a fala entra depois", async () => {
+    plugarOMicrofone();
+    dublarServidor(planejamento());
+    montarTela();
+
+    fireEvent.change(await screen.findByLabelText("Sua resposta"), { target: { value: "Depende do plantão." } });
+    await falar();
+
+    await waitFor(() => expect(campoLivre().value).toBe("Depende do plantão. só a recepção, de manhã"));
   });
 });
