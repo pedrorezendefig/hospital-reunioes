@@ -2,6 +2,54 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-11-01T17:16:02-03:00",
+      "sha": "21a1f2109fb2d4028e3375f007d1e4c1f7091433",
+      "app_version": "0.199.0",
+      "subject": "Onda onda-cm-onda1: Contas médicas, cartão do envio com um quadrado para a conta e outro para o prontuário",
+      "raw_subject": "chore(deploy): registro da onda onda-cm-onda1 (#1343)",
+      "scope": [
+        "backend",
+        "frontend"
+      ],
+      "prds": [
+        1335
+      ],
+      "result": "healthy",
+      "duration_seconds": 330,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        },
+        {
+          "service": "frontend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "onda-enxuta onda-cm-onda1: PR #1343 (issue #1336), mergeados PR a PR. Merge pela API do GitHub, um build. Registro pela Action pos-merge depois do health.",
+      "etapas": {
+        "merge_s": 3,
+        "build_s": {
+          "backend": 295,
+          "frontend": 211
+        },
+        "health_s": 10
+      },
+      "responsavel": "pedrorezendefig"
+    },
+    {
       "at": "2026-10-30T17:52:09-03:00",
       "sha": "3bfe40e9e7d3a9de9e1dc2a28a58248886049c63",
       "app_version": "0.198.1",
