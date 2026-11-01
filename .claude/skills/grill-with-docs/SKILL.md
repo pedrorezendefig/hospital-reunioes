@@ -35,7 +35,7 @@ If a *fact* can be found by exploring the codebase, look it up rather than askin
 
 Do not enact the plan until I confirm we have reached a shared understanding.
 
-**Modo lote (Hospital Reuniões):** gatilho `/grill-with-docs --lote` ou as frases "responde tudo" / "modo lote". Sem o gatilho, vale o de cima: uma pergunta por vez.
+**Modo lote (Hospital Reuniões):** gatilho `/grill-with-docs --lote` ou as frases "responde tudo" / "modo lote". Sem o gatilho, vale o de cima: uma pergunta por vez. No meio de um grill, `/express` (skill `express`) é o lote do que ainda falta, com as respostas já dadas preservadas e um painel interativo de aprovação no fim.
 
 1. Levante os fatos no código primeiro, como no modo normal.
 2. Liste **todas** as lacunas de uma vez, mesmo que sejam 20, numeradas e agrupadas por tema. Cada uma: a escolha em **negrito**, o porquê em 1 a 2 frases e a alternativa descartada, quando houver.
