@@ -1,10 +1,10 @@
 ---
 title: Enviar contas e prontuários
 description: Mandar a conta e o prontuário do MV para conferência e acompanhar em Meus envios até o guia ficar pronto.
-prd: [1113, 1303]
+prd: [1113, 1303, 1335]
 draft: true
 papel: [Faturista, Apoio ao faturamento]
-proximas: [corrigir-uma-conta-pelo-guia]
+proximas: [corrigir-uma-conta-pelo-guia, descartar-um-envio]
 sidebar:
   order: 2
 ---
@@ -13,8 +13,6 @@ sidebar:
 
 Antes de mandar a conta de internação para a operadora. Exporte do MV a conta
 ("Fatura Individual") e o prontuário completo do mesmo atendimento, em PDF.
-A conta que você envia entra na **Fila**, e a faturista que abrir primeiro
-corrige.
 
 ## Passo a passo
 
@@ -30,19 +28,21 @@ corrige.
 
    ![Quadro Último envio com um atendimento completo e outro sem prontuário](../../../assets/contas-medicas/ultimo-envio.png)
 
-4. Acompanhe em **Meus envios** as contas que você mandou e que ainda não
-   ficaram prontas. Quando o guia fica pronto, a conta sai daí e entra na
-   **Fila**, e o sino avisa.
+4. Acompanhe em **Meus envios** o que ainda não ficou pronto. Cada conta tem
+   um quadrado para a **Conta** e outro para o **Prontuário**, vermelho onde a
+   análise parou. Com o guia pronto, a conta vai para a **Fila** das
+   faturistas.
+5. Faltou um arquivo? Clique em **Enviar o prontuário** ou **Enviar a conta** e
+   escolha o PDF.
 
-   ![Aba Meus envios com uma conta Falta o prontuário e outra em Erro](../../../assets/contas-medicas/meus-envios.png)
-
-5. Faltou um arquivo? Mande só o que falta: o sistema junta pelo atendimento.
+   ![Meus envios com um cartão sem prontuário e outro em Erro](../../../assets/contas-medicas/meus-envios.png)
 
 ## Se der errado
 
+- **A conta ficou em Erro:** clique em **Analisar de novo**, ou exporte o PDF
+  pelo MV e clique em **Enviar de novo**. **Copiar para a TI** leva o erro para
+  a TI. Veja [Quando a conta dá erro](../como-funciona/quando-a-conta-da-erro/).
 - **Aparece "Plano ... ainda não configurado":** o plano da conta não está
   cadastrado. Peça à gestão de contas médicas para cadastrar e envie de novo.
-- **A conta ficou em Erro:** o motivo aparece ao lado. Exporte de novo pelo MV
-  e clique em **Enviar de novo**.
 - **Aparece "Não reconheci o arquivo":** o PDF não é a conta nem o prontuário
   do MV. Confira se exportou o arquivo certo.

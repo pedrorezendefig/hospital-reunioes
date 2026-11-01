@@ -1,11 +1,25 @@
 ---
 title: Novidades
 description: O que mudou em Contas médicas, da entrega mais recente para a mais antiga.
-prd: [1113, 1128, 1129, 1303]
+prd: [1113, 1128, 1129, 1303, 1335]
 draft: true
 sidebar:
   order: 90
 ---
+
+## 01/11/2026 · A conta com erro diz o motivo e tem código para a TI
+
+Cada conta em **Meus envios** virou um cartão com um quadrado para a conta e
+outro para o prontuário, e o arquivo que falta tem botão próprio para enviar.
+A conta em **Erro** mostra o motivo e um código para mandar à TI pelo
+**Copiar para a TI**. Erro da IA se resolve com **Analisar de novo**, sem
+anexar o PDF, e o envio que não vale mais sai com **Descartar**.
+
+Tarefas novas: [Descartar um envio](../descartar-um-envio/)
+
+Tarefas que mudaram: [Enviar contas e prontuários](../enviar-contas-e-prontuarios/)
+
+Como funciona: [Quando a conta dá erro](../como-funciona/quando-a-conta-da-erro/)
 
 ## 30/10/2026 · A fila agora é de todas as faturistas
 
