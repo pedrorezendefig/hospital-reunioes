@@ -797,11 +797,28 @@ class TestKitDeConhecimento:
             "não usa o texto para treinar",
             "A IA está sem crédito. Avise o Pedro.",
             "três vezes",
-            "Tente de novo em alguns minutos",
             "O custo de cada chamada fica gravado",
             "Reanalisar",
         ):
             assert trecho in secao, trecho
+
+    def test_diz_o_codigo_de_cada_falha_da_ia_e_o_que_nao_se_repete(self):
+        """Issue #1337: a frase genérica deu lugar à causa, com o código."""
+        secao = KIT.read_text(encoding="utf-8").split("## A inteligência artificial", 1)[1].split("\n## ", 1)[0]
+
+        for trecho in (
+            "A IA está fora do ar ou sobrecarregada agora",
+            "CM-IA-FORA-DO-AR",
+            "CM-IA-FORMATO",
+            "na primeira tentativa",
+            "A chave da IA não está configurada",
+            "CM-IA-MODELO",
+            "CM-IA-TAMANHO",
+            "CM-IA-CREDITO",
+            "CM-IA-ANTIGO",
+        ):
+            assert trecho in secao, trecho
+        assert 'fica em Erro com "Tente de novo em alguns minutos"' not in secao
 
 
 # ═══════════════════════════════════════════════════════════════════════════

@@ -2251,6 +2251,27 @@ class TestKitDeConhecimento:
         ):
             assert trecho in secao, trecho
 
+    def test_diz_o_codigo_do_erro_o_quadrado_vermelho_e_o_copiar_para_a_ti(self):
+        """Issue #1337: o Erro com a causa, o código e o que vai para a TI."""
+        secao = KIT.read_text(encoding="utf-8").split("## A análise", 1)[1].split("\n## ", 1)[0]
+
+        for trecho in (
+            "Código do erro",
+            "CM-ARQ",
+            "CM-CFG",
+            "CM-IA",
+            "CM-APP",
+            "fica vermelho",
+            "Ver detalhes",
+            "Copiar para a TI",
+            "nunca leva texto do prontuário",
+            "quanto somaram os itens lidos e qual é o total da conta",
+            "quantas páginas",
+            "em qual etapa",
+            "a gestão carrega em Operadoras",
+        ):
+            assert trecho in secao, trecho
+
     def test_nao_promete_mais_a_analise_para_uma_proxima_entrega(self):
         texto = KIT.read_text(encoding="utf-8")
 
