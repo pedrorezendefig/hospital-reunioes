@@ -97,20 +97,22 @@ def gravar_video(destino: Path, altura_em_pixels: int) -> None:
     )
 
 
-def test_saida_acima_de_90_mb_trava(tmp_path):
+def test_site_de_91_mb_trava(tmp_path):
     saida = tmp_path / "publicar"
     saida.mkdir()
     (saida / "index.html").write_text("<html></html>", encoding="utf-8")
     # Escrito de verdade, sem `truncate`: arquivo esparso ocupa zero bloco e a
     # trava (que mede o que o disco gasta, como o deploy) passaria batido.
     with open(saida / "gordo.bin", "wb") as arquivo:
-        arquivo.write(b"\0" * 95 * 1024 * 1024)
+        arquivo.write(b"\0" * 91 * 1024 * 1024)
 
     resultado = publicar(saida)
     assert resultado.returncode == 1
-    # A mensagem do erro, e nao "90 MB", que tambem sai na linha informativa do
-    # caminho feliz: asserir nela deixaria passar um mutante que apaga o aviso.
-    assert "passou do teto" in resultado.stdout + resultado.stderr
+    # A mensagem do erro, e nao "90 MB" solto, que tambem sai na linha
+    # informativa do caminho feliz: asserir nela deixaria passar um mutante que
+    # apaga o aviso. A regra vem na recusa, no stderr.
+    assert "passou do teto" in resultado.stderr
+    assert "limite de 90 MB" in resultado.stderr
 
 
 def test_saida_logo_acima_do_teto_trava(tmp_path):
@@ -288,16 +290,88 @@ def test_video_sem_reencode_tambem_ganha_capa(tmp_path):
     assert codec(saida / "video" / "ouvidoria" / "curto.jpg") == "mjpeg"
 
 
-# --- Orçamento de vídeo (emenda à ADR 0057, issue #1260) ---------------------
+def audio(video: Path) -> tuple[str, int]:
+    """Codec e taxa (bits por segundo) da faixa de áudio."""
+    saida = subprocess.run(
+        [
+            "ffprobe",
+            "-v",
+            "error",
+            "-select_streams",
+            "a:0",
+            "-show_entries",
+            "stream=codec_name,bit_rate",
+            "-of",
+            "csv=p=0",
+            str(video),
+        ],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    nome, taxa = saida.stdout.strip().split(",")
+    return nome, int(taxa)
+
+
+@sem_ffmpeg
+def test_video_narrado_sai_com_audio_aac_de_64_kbps(tmp_path):
+    """O Vídeo de visão geral tem narração (ADR 0076): a voz vai junto, em AAC
+    de 64 kbps, que basta para fala e pesa metade do que pesava a 128."""
+    saida = tmp_path / "publicar"
+    video = saida / "video" / "pops" / "visao-geral.mp4"
+    video.parent.mkdir(parents=True)
+    subprocess.run(
+        [
+            "ffmpeg",
+            "-y",
+            "-f",
+            "lavfi",
+            "-i",
+            "testsrc=size=640x360:rate=12:duration=4",
+            "-f",
+            "lavfi",
+            "-i",
+            "sine=frequency=440:duration=4",
+            "-pix_fmt",
+            "yuv420p",
+            "-c:a",
+            "aac",
+            "-b:a",
+            "192k",
+            "-shortest",
+            str(video),
+        ],
+        capture_output=True,
+        check=True,
+    )
+    pagina_com_videos(saida, ["/video/pops/visao-geral.mp4"])
+
+    resultado = publicar(saida)
+    assert resultado.returncode == 0, resultado.stderr
+    nome, taxa = audio(video)
+    assert nome == "aac"
+    # O AAC do ffmpeg oscila em volta do alvo; a 96 kbps de antes passaria de 80.
+    assert 48_000 <= taxa <= 72_000, taxa
+
+
+# --- Orçamento de vídeo (ADR 0076, que emenda a 0072) ------------------------
 #
-# Depois do reencode 720p, três travas: a soma dos MP4 até 40 MB, no máximo um
-# vídeo por módulo e nenhum vídeo acima de 8 MB. O vídeo de ruído é o único que
+# Depois do reencode 720p, três travas: a soma dos MP4 até 60 MB, no máximo um
+# vídeo por módulo e nenhum vídeo acima de 10 MB. O vídeo de ruído é o único que
 # o reencode não encolhe: cada quadro pesa uns 200 KB em 720p, então o tamanho
 # sai do número de quadros. Como o x264 do CI pode ser outro, cada teste confere
 # depois da publicação que o vídeo montado tem mesmo o tamanho que o caso pede.
 
 MB = 1024 * 1024
-MODULOS = ["primeiros-passos", "reunioes", "ouvidoria", "pops", "contas-medicas", "admin"]
+MODULOS = [
+    "primeiros-passos",
+    "reunioes",
+    "ouvidoria",
+    "pops",
+    "contas-medicas",
+    "admin",
+    "tecnologia",
+]
 
 
 def gravar_ruido(destino: Path, quadros: int) -> None:
@@ -342,20 +416,25 @@ def mp4_montados(saida: Path) -> list[int]:
 
 
 @sem_ffmpeg
-def test_soma_dos_videos_acima_de_40_mb_trava(tmp_path):
-    """Seis vídeos de uns 7 MB, um por módulo: cada um cabe, a soma não."""
+def test_soma_de_61_mb_trava(tmp_path):
+    """Oito vídeos de uns 8 MB, um por pasta: cada um cabe, a soma não.
+
+    Oito pastas e não os seis módulos com vídeo: seis vídeos passariam de 60 MB
+    só com uns 10 MB cada, colados na trava de cada vídeo, e o x264 do CI que
+    gerasse um quadro mais pesado faria o teste cair pela trava errada.
+    """
     saida = tmp_path / "publicar"
-    caminhos = [f"/video/{m}/visao-geral.mp4" for m in MODULOS]
+    caminhos = [f"/video/modulo-{n}/visao-geral.mp4" for n in range(1, 9)]
     for caminho in caminhos:
-        gravar_ruido(saida / caminho.lstrip("/"), 30)
+        gravar_ruido(saida / caminho.lstrip("/"), 36)
     pagina_com_videos(saida, caminhos)
 
     resultado = publicar(saida)
     tamanhos = mp4_montados(saida)
-    assert max(tamanhos) <= 8 * MB and sum(tamanhos) > 40 * MB, tamanhos
+    assert max(tamanhos) <= 10 * MB and sum(tamanhos) > 60 * MB, tamanhos
     assert resultado.returncode == 1
     assert "soma dos vídeos" in resultado.stderr
-    assert "40 MB" in resultado.stderr
+    assert "60 MB" in resultado.stderr
 
 
 @sem_ffmpeg
@@ -373,22 +452,23 @@ def test_dois_videos_no_mesmo_modulo_travam(tmp_path):
 
 
 @sem_ffmpeg
-def test_video_acima_de_8_mb_trava(tmp_path):
+def test_video_de_11_mb_trava(tmp_path):
+    """O Vídeo de visão geral narrado cabe em 10 MB depois do reencode."""
     saida = tmp_path / "publicar"
     caminho = "/video/pops/visao-geral.mp4"
-    gravar_ruido(saida / caminho.lstrip("/"), 45)
+    gravar_ruido(saida / caminho.lstrip("/"), 50)
     pagina_com_videos(saida, [caminho])
 
     resultado = publicar(saida)
-    assert mp4_montados(saida)[0] > 8 * MB
+    assert mp4_montados(saida)[0] > 10 * MB, mp4_montados(saida)
     assert resultado.returncode == 1
-    assert "acima de 8 MB" in resultado.stderr
+    assert "acima de 10 MB" in resultado.stderr
     assert caminho in resultado.stderr
 
 
 @sem_ffmpeg
-def test_cinco_videos_pequenos_um_por_modulo_passam(tmp_path):
-    """O plano do PRD: cinco Vídeos de visão geral, o Admin sem vídeo."""
+def test_seis_videos_pequenos_um_por_modulo_passam(tmp_path):
+    """O plano do PRD #1365: seis Vídeos de visão geral, o Admin sem vídeo."""
     saida = tmp_path / "publicar"
     caminhos = [f"/video/{m}/visao-geral.mp4" for m in MODULOS if m != "admin"]
     for caminho in caminhos:

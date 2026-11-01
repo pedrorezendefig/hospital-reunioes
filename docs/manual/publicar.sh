@@ -17,10 +17,12 @@ set -euo pipefail
 RAIZ="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 SITE="$RAIZ/docs/manual"
 TETO_MB=90
-# Orçamento de vídeo (emenda à ADR 0057, issue #1260): o Manual tem um Vídeo de
-# visão geral por módulo, e a soma deles cabe folgada no plano grátis.
-TETO_SOMA_VIDEOS_MB=40
-TETO_VIDEO_MB=8
+# Orçamento de vídeo (ADR 0076, que emenda a 0072): o Manual tem um Vídeo de
+# visão geral narrado por módulo, de 2 a 3 minutos, e o site sem vídeo mede uns
+# 20 MB. Seis vídeos de até 10 MB somam até 60 MB, e o site inteiro fica nos
+# 90 MB que cabem no limite de 100 MB por deploy do plano grátis.
+TETO_SOMA_VIDEOS_MB=60
+TETO_VIDEO_MB=10
 
 DRY_RUN=""
 PULAR_BUILD=""
@@ -102,7 +104,8 @@ while IFS= read -r caminho; do
     FALTANDO="$FALTANDO $(basename "$caminho")"
     continue
   fi
-  # 720p H.264 no lugar: vídeo que já é menor não cresce.
+  # 720p H.264 no lugar: vídeo que já é menor não cresce. O áudio é a narração
+  # da voz A (ADR 0076): AAC a 64 kbps basta para fala e cabe no orçamento.
   temporario="$destino.720.mp4"
   # `-nostdin`: sem isto o ffmpeg lê do mesmo stdin do `read` deste laço e come a
   # linha do vídeo seguinte. O `read` recebe um pedaço de caminho, não acha o
@@ -110,7 +113,7 @@ while IFS= read -r caminho; do
   # inexistente. Os vídeos passavam alternados, um sim um não.
   ffmpeg -nostdin -y -loglevel error -i "$destino" \
     -vf "scale=-2:'min(720,ih)'" -c:v libx264 -preset veryfast -crf 28 \
-    -movflags +faststart -c:a aac -b:a 96k "$temporario"
+    -movflags +faststart -c:a aac -b:a 64k "$temporario"
   mv "$temporario" "$destino"
   # Capa do vídeo (ADR 0057, emenda de 17/09/2026, decisão 2): o primeiro quadro
   # vira `<mesmo caminho>.jpg`, que é para onde o `poster` do <video> aponta.
