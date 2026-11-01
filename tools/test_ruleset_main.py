@@ -75,9 +75,9 @@ def gatilho(evento: str) -> str:
 
 # ------------------------------------------------------------------ ruleset
 
-def test_ruleset_exige_os_tres_jobs_do_ci_pelo_nome_vindos_do_github_actions():
+def test_ruleset_exige_os_quatro_jobs_do_ci_pelo_nome_vindos_do_github_actions():
     obrigatorios = jobs_obrigatorios()
-    assert sorted(obrigatorios) == ["backend", "build", "frontend-lint"]
+    assert sorted(obrigatorios) == ["backend", "backend-sozinho", "build", "frontend-lint"]
     checks = regra("required_status_checks")["parameters"]["required_status_checks"]
     assert sorted(c["context"] for c in checks) == sorted(nome(b) for b in obrigatorios.values())
     assert {c.get("integration_id") for c in checks} == {GITHUB_ACTIONS_APP}
@@ -126,7 +126,7 @@ def test_jobs_obrigatorios_pulam_por_if_e_rodam_todos_se_o_detector_falhar():
     ferramenta. Se o detector falhar (sem saída nenhuma), os três rodam: pular
     o CI de um PR de código porque o detector quebrou passaria pelo ruleset sem
     teste nenhum. Workflow cancelado não roda nada."""
-    assert len(jobs_obrigatorios()) == 3, sorted(jobs_obrigatorios())
+    assert len(jobs_obrigatorios()) == 4, sorted(jobs_obrigatorios())
     assert jobs_que_rodam("success", {"backend": "false", "frontend": "false", "ferramenta": "true"}) == set()
     assert jobs_que_rodam("failure", {}) == TUDO
     assert jobs_que_rodam("failure", {}, cancelado=True) == set()
@@ -232,8 +232,8 @@ def jobs_que_rodam(resultado: str, saidas_passo: dict[str, str], cancelado: bool
     return rodam
 
 
-TUDO = {"backend", "frontend-lint", "build"}
-BACKEND = {"backend", "build"}
+TUDO = {"backend", "backend-sozinho", "frontend-lint", "build"}
+BACKEND = {"backend", "backend-sozinho", "build"}
 FRONTEND = {"frontend-lint", "build"}
 
 
