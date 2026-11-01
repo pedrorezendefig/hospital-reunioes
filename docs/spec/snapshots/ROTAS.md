@@ -1,6 +1,6 @@
 # ROTAS.md
 <!-- gerado automaticamente por /snapshot — não editar -->
-<!-- last_update: 2026-10-30T19:26+0000 -->
+<!-- last_update: 2026-11-01T21:14+0000 -->
 
 Endpoints HTTP expostos pelo backend FastAPI do Hospital Reuniões.
 
@@ -105,6 +105,7 @@ Endpoints HTTP expostos pelo backend FastAPI do Hospital Reuniões.
 
 | Método | Rota | O que faz | Auth |
 |--------|------|-----------|------|
+| POST | `/contas-medicas/contas/{conta_id}/descartar` | A conta em Erro ou Aguardando arquivo sai do banco, e os PDFs dela, do | ✅ |
 | POST | `/contas-medicas/envios` | Um lote de PDFs de um envio. Sem `envio_id`, abre um envio novo; com | ✅ |
 | GET | `/contas-medicas/fila` | A Fila, "Minhas" e as Concluídas da pessoa. Quem tem "painel completo" | ✅ |
 | GET | `/contas-medicas/meus-envios` | As contas que a pessoa enviou e ainda não ficaram prontas. Quem tem | ✅ |
@@ -516,4 +517,4 @@ Endpoints HTTP expostos pelo backend FastAPI do Hospital Reuniões.
 
 ---
 
-**Totais:** 290 endpoints em 44 routers · 94% exigem auth.
+**Totais:** 291 endpoints em 44 routers · 94% exigem auth.

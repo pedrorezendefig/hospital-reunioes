@@ -1,6 +1,6 @@
 # INTEGRACOES.md
 <!-- gerado automaticamente por /snapshot — não editar -->
-<!-- last_update: 2026-11-01T20:59+0000 -->
+<!-- last_update: 2026-11-01T21:14+0000 -->
 
 Serviços externos usados pelo Hospital Reuniões. Secrets configurados no Coolify (não no git).
 
@@ -16,19 +16,19 @@ Serviços externos usados pelo Hospital Reuniões. Secrets configurados no Cooli
 
 ## ClickSign
 **Pra que serve:** Assinatura digital de atas (sandbox em dev, app em prod)
-**Onde aparece no código:** `app/cron/scheduler.py`, `app/services/reconciliacao_service.py`, `app/services/participantes_ata_service.py`
+**Onde aparece no código:** `app/routers/pops/revisao.py`, `app/routers/pops/assinatura.py`, `app/routers/admin/legacy.py`
 **Secret/env primária:** `CLICKSIGN_API_KEY`
 **Variáveis relacionadas:** `CLICKSIGN_BASE_URL`, `CLICKSIGN_WEBHOOK_SECRET`
 
 ## Resend
 **Pra que serve:** Emails transacionais e SMTP do Supabase Auth
-**Onde aparece no código:** `app/services/tecnologia_email.py`, `app/services/email_service.py`, `app/config.py`
+**Onde aparece no código:** `app/config.py`, `app/services/tecnologia_email.py`, `app/services/email_service.py`
 **Secret/env primária:** `RESEND_API_KEY`
 **Variáveis relacionadas:** `RESEND_FROM_EMAIL`, `RESEND_INBOUND_API_KEY`, `RESEND_INBOUND_BASE_URL`, `RESEND_WEBHOOK_SECRET`
 
 ## Fireflies
 **Pra que serve:** Sync de transcrições via webhook
-**Onde aparece no código:** `app/config.py`, `app/routers/admin/legacy.py`
+**Onde aparece no código:** `app/routers/admin/legacy.py`, `app/config.py`
 **Secret/env primária:** `FIREFLIES_API_KEY`
 
 ---
