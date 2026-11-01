@@ -44,6 +44,10 @@ class Settings(BaseSettings):
     # Contas médicas). Sem chave configurada, os chats caem no mock.
     anthropic_api_key: str = ""
     llm_model: str = "claude-sonnet-5-5"
+    # O Planejamento da Demanda (ADR 0075, decisão 7) roda num modelo próprio,
+    # pelo mesmo cliente e pela mesma chave: o grill de negócio com o diretor
+    # pede mais julgamento que o resto da IA de texto.
+    llm_model_planejamento: str = "claude-opus-5-5"
     # Transcrição de voz (issue #35): endpoint /audio/transcriptions do
     # OpenRouter, que fica só com isso: a API da Anthropic não transcreve
     # áudio. Prefixo `openai/` é a convenção do OpenRouter para o provedor.
