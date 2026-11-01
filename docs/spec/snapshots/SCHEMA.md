@@ -1,6 +1,6 @@
 # SCHEMA.md
 <!-- gerado automaticamente por /snapshot — não editar -->
-<!-- last_update: 2026-11-01T20:56+0000 -->
+<!-- last_update: 2026-11-01T21:24+0000 -->
 
 Diagrama relacional do Hospital Reuniões. Renderiza nativo no GitHub.
 
@@ -107,7 +107,9 @@ erDiagram
     reunioes ||--o{ tokens_validacao : "id_reuniao"
     tecnologia_conversas ||--o{ tecnologia_anexos : "conversa_id"
     tecnologia_demandas ||--o{ tecnologia_anexos : "demanda_id"
+    tecnologia_demandas ||--o{ tecnologia_chamadas_ia : "demanda_id"
     tecnologia_demandas ||--o{ tecnologia_conversas : "demanda_id"
+    tecnologia_demandas ||--o{ tecnologia_planejamentos : "demanda_id"
     tecnologia_produtos ||--o{ tecnologia_demandas : "produto_id"
     tipos_reuniao ||--o{ reunioes : "tipo_id"
 
@@ -837,6 +839,28 @@ erDiagram
         TIMESTAMPTZ enviado_em
         TIMESTAMPTZ criado_em
     }
+    tecnologia_planejamentos {
+        UUID id PK
+        UUID demanda_id FK
+        TEXT estado
+        JSONB mensagens
+        JSONB decisoes
+        JSONB resumo
+        TEXT modelo
+        TIMESTAMPTZ criado_em
+        _ mais_colunas "+1"
+    }
+    tecnologia_chamadas_ia {
+        UUID id PK
+        UUID demanda_id FK
+        TEXT passo
+        TEXT modelo
+        INTEGER tokens_entrada
+        INTEGER tokens_saida
+        INTEGER tokens_cache
+        NUMERIC custo_usd
+        _ mais_colunas "+3"
+    }
 ```
 
 ## Indexes principais
@@ -974,6 +998,8 @@ erDiagram
 | `cm_lembrete` | `idx_cm_lembrete_conta` | `conta_id` | `118_contas_medicas_gestao.sql` |
 | `cm_lembrete` | `idx_cm_lembrete_estado` | `estado, criado_em` | `118_contas_medicas_gestao.sql` |
 | `cm_lembrete_item` | `idx_cm_lembrete_item_lembrete` | `lembrete_id` | `118_contas_medicas_gestao.sql` |
+| `tecnologia_chamadas_ia` | `idx_tecnologia_chamadas_ia_demanda` | `demanda_id` | `123_tecnologia_planejamento.sql` |
+| `tecnologia_chamadas_ia` | `idx_tecnologia_chamadas_ia_criado_em` | `criado_em` | `123_tecnologia_planejamento.sql` |
 
 ---
-**Resumo:** 78 tabelas · 102 relacionamentos FK detectados.
+**Resumo:** 80 tabelas · 104 relacionamentos FK detectados.

@@ -1,6 +1,6 @@
 # ROTAS.md
 <!-- gerado automaticamente por /snapshot — não editar -->
-<!-- last_update: 2026-11-01T21:14+0000 -->
+<!-- last_update: 2026-11-01T21:24+0000 -->
 
 Endpoints HTTP expostos pelo backend FastAPI do Hospital Reuniões.
 
@@ -465,6 +465,8 @@ Endpoints HTTP expostos pelo backend FastAPI do Hospital Reuniões.
 | POST | `/admin/tecnologia/demandas/{demanda_id}/desvincular` | Desfaz o Vinculo: apaga o numero, a Etapa e a foto guardada. | ✅ |
 | POST | `/admin/tecnologia/demandas/{demanda_id}/levar-para-desenvolvimento` | Cria a issue do pedido no GitHub e ja a vincula (ADR 0054, decisao 1). | ✅ |
 | POST | `/admin/tecnologia/demandas/{demanda_id}/mover` | Move a Demanda de coluna, se a maquina de estados permitir. | ✅ |
+| GET | `/admin/tecnologia/demandas/{demanda_id}/planejamento` | A conversa guardada na Demanda, para retomar de onde parou (decisao 3). | ✅ |
+| POST | `/admin/tecnologia/demandas/{demanda_id}/planejamento` | Um turno: a resposta do diretor entra, a proxima pergunta volta. | ✅ |
 | GET | `/admin/tecnologia/demandas/{demanda_id}/texto-para-ia` | A Demanda inteira em texto simples, para colar numa IA (issue #640). | ✅ |
 | POST | `/admin/tecnologia/demandas/{demanda_id}/vincular` | Liga a Demanda a uma issue-raiz do GitHub pelo numero (ADR 0054, decisao 1). | ✅ |
 | GET | `/admin/tecnologia/eu` | Quem esta olhando a aba, do ponto de vista do Vinculo. | ✅ |
@@ -517,4 +519,4 @@ Endpoints HTTP expostos pelo backend FastAPI do Hospital Reuniões.
 
 ---
 
-**Totais:** 291 endpoints em 44 routers · 94% exigem auth.
+**Totais:** 293 endpoints em 44 routers · 94% exigem auth.

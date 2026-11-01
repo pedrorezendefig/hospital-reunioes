@@ -1,6 +1,6 @@
 # ENTIDADES.md
 <!-- gerado automaticamente por /snapshot — não editar -->
-<!-- last_update: 2026-11-01T20:56+0000 -->
+<!-- last_update: 2026-11-01T21:24+0000 -->
 
 Modelo de dados do Hospital Reuniões. Tabelas no Postgres (via Supabase).
 
@@ -1580,6 +1580,44 @@ Modelo de dados do Hospital Reuniões. Tabelas no Postgres (via Supabase).
 | `enviado_em` | `TIMESTAMPTZ` | — | — | — |
 | `criado_em` | `TIMESTAMPTZ` | NOT NULL | `now()` | — |
 
+## tecnologia_planejamentos
+
+> Origem: `123_tecnologia_planejamento.sql`
+
+| Campo | Tipo | Constraints | Default | FK |
+|-------|------|-------------|---------|-----|
+| `id` | `UUID` | PK | `gen_random_uuid()` | — |
+| `demanda_id` | `UUID` | UNIQUE, NOT NULL | — | `tecnologia_demandas.id` |
+| `estado` | `TEXT` | NOT NULL | `'em_andamento'` | — |
+| `mensagens` | `JSONB` | NOT NULL | `'[]'::jsonb` | — |
+| `decisoes` | `JSONB` | NOT NULL | `'[]'::jsonb` | — |
+| `resumo` | `JSONB` | — | — | — |
+| `modelo` | `TEXT` | NOT NULL | — | — |
+| `criado_em` | `TIMESTAMPTZ` | NOT NULL | `now()` | — |
+| `atualizado_em` | `TIMESTAMPTZ` | NOT NULL | `now()` | — |
+
+## tecnologia_chamadas_ia
+
+> Origem: `123_tecnologia_planejamento.sql`
+
+| Campo | Tipo | Constraints | Default | FK |
+|-------|------|-------------|---------|-----|
+| `id` | `UUID` | PK | `gen_random_uuid()` | — |
+| `demanda_id` | `UUID` | — | — | `tecnologia_demandas.id` |
+| `passo` | `TEXT` | NOT NULL | — | — |
+| `modelo` | `TEXT` | NOT NULL | — | — |
+| `tokens_entrada` | `INTEGER` | NOT NULL | `0` | — |
+| `tokens_saida` | `INTEGER` | NOT NULL | `0` | — |
+| `tokens_cache` | `INTEGER` | NOT NULL | `0` | — |
+| `custo_usd` | `NUMERIC(12, 6)` | NOT NULL | `0` | — |
+| `duracao_ms` | `INTEGER` | NOT NULL | `0` | — |
+| `sucesso` | `BOOLEAN` | NOT NULL | `true` | — |
+| `criado_em` | `TIMESTAMPTZ` | NOT NULL | `now()` | — |
+
+**Indexes:**
+- `idx_tecnologia_chamadas_ia_demanda` em `(demanda_id)` (de `123_tecnologia_planejamento.sql`)
+- `idx_tecnologia_chamadas_ia_criado_em` em `(criado_em)` (de `123_tecnologia_planejamento.sql`)
+
 ---
 
-**Resumo:** 78 tabelas vivas.
+**Resumo:** 80 tabelas vivas.

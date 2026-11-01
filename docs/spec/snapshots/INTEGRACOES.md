@@ -1,11 +1,11 @@
 # INTEGRACOES.md
 <!-- gerado automaticamente por /snapshot — não editar -->
-<!-- last_update: 2026-11-01T21:14+0000 -->
+<!-- last_update: 2026-11-01T21:24+0000 -->
 
 Serviços externos usados pelo Hospital Reuniões. Secrets configurados no Coolify (não no git).
 
 ## Anthropic
-**Pra que serve:** IA de texto do app inteiro desde a issue #1302 (Atas, POP, Ouvidoria, Assistente de Tecnologia, Contas médicas), pelo LLM_MODEL e pelos CM_IA_MODELO_PASSO_A/B, todos claude-sonnet-5-5. Retenção padrão da API (até 30 dias, sem treino), sem ZDR (ADR 0074)
+**Pra que serve:** IA de texto do app inteiro desde a issue #1302 (Atas, POP, Ouvidoria, Assistente de Tecnologia, Contas médicas), pelo LLM_MODEL e pelos CM_IA_MODELO_PASSO_A/B, todos claude-sonnet-5-5, e o Planejamento da Demanda pelo LLM_MODEL_PLANEJAMENTO, claude-opus-5-5 (ADR 0075). Retenção padrão da API (até 30 dias, sem treino), sem ZDR (ADR 0074)
 **Onde aparece no código:** `app/services/ai_processor.py`, `app/services/contas_medicas/ia.py`
 **Secret/env primária:** `ANTHROPIC_API_KEY`
 
