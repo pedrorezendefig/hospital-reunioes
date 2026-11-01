@@ -85,21 +85,64 @@ _esperar = time.sleep
 
 
 class ErroDaIA(Exception):  # noqa: N818, o nome do domínio
-    """A IA não respondeu no formato. A mensagem é técnica e nunca leva texto
-    do prontuário; o pipeline transforma em Erro com a frase para a faturista."""
+    """A IA não respondeu no formato. Carrega a causa (o tipo da falha, de que
+    nasce o Código do erro da conta), o tipo do erro da última tentativa e o
+    código HTTP dela. Nunca leva a mensagem da resposta, que pode citar o
+    prontuário (issue #1337); o pipeline transforma em Erro com a frase."""
+
+    def __init__(self, mensagem: str, *, causa: str, tipo: str, http: int | None = None):
+        super().__init__(mensagem)
+        self.causa = causa
+        self.tipo = tipo
+        self.http = http
 
 
 class IASemCredito(ErroDaIA):  # noqa: N818, o nome do domínio
     """A conta da Anthropic ficou sem saldo (400 de saldo ou 402). Não adianta
     tentar de novo: alguém tem que pôr crédito."""
 
-    def __init__(self):
-        super().__init__(MENSAGEM_SEM_CREDITO)
+    def __init__(self, *, tipo: str, http: int):
+        super().__init__(MENSAGEM_SEM_CREDITO, causa="credito", tipo=tipo, http=http)
 
 
 def _sem_credito(erro: anthropic.APIStatusError) -> bool:
     """402, ou o 400 que a Anthropic devolve quando o saldo acaba."""
     return erro.status_code == 402 or (erro.status_code == 400 and "credit balance" in str(erro.message).lower())
+
+
+def _grande_demais(erro: anthropic.APIStatusError) -> bool:
+    """O 400 do contexto excedido (o texto passou do que o modelo aceita) ou o
+    413 da requisição grande demais."""
+    mensagem = str(erro.message).lower()
+    return erro.status_code == 413 or (
+        erro.status_code == 400 and ("too long" in mensagem or "context" in mensagem and "exceed" in mensagem)
+    )
+
+
+# As causas que repetir não resolve: a chave, o modelo e o tamanho não mudam
+# entre uma tentativa e outra (o crédito tem o próprio erro, `IASemCredito`).
+DEFINITIVAS = frozenset({"chave", "modelo", "tamanho"})
+
+
+def _causa(erro: anthropic.APIError | ValidationError) -> tuple[str, int | None]:
+    """A causa da falha e o código HTTP, para o Código do erro. Lê a mensagem
+    da resposta só para separar o 400 de tamanho; ela não sai daqui."""
+    if isinstance(erro, ValidationError):
+        return "formato", 200
+    if isinstance(erro, anthropic.APIStatusError):
+        http = erro.status_code
+        if http == 401:
+            return "chave", http
+        if http == 404:
+            return "modelo", http
+        if _grande_demais(erro):
+            return "tamanho", http
+        if http == 429 or http >= 500:
+            return "fora_do_ar", http
+        return "recusa", http
+    if isinstance(erro, anthropic.APIConnectionError):  # inclui o tempo esgotado
+        return "fora_do_ar", None
+    return "recusa", None
 
 
 # ----------------------------------------------------------------------------------
@@ -306,7 +349,7 @@ def _schema_estrito(modelo: type[BaseModel]) -> dict[str, Any]:
 
 def _cliente() -> anthropic.Anthropic:
     if not settings.anthropic_api_key:
-        raise ErroDaIA("ANTHROPIC_API_KEY vazia")
+        raise ErroDaIA("ANTHROPIC_API_KEY vazia", causa="chave", tipo="ChaveVazia")
     return anthropic.Anthropic(
         api_key=settings.anthropic_api_key,
         max_retries=0,  # as três tentativas são deste adaptador
@@ -430,7 +473,7 @@ def _chamar_a_ia[Saida: BaseModel](
         logger.warning("[ContasMedicas] Modelo %s sem preço na tabela: o custo fica zero", modelo)
     cliente = _cliente()
     uso = _Uso()
-    falha = ""
+    falha = ErroDaIA("A IA não foi chamada", causa="recusa", tipo="SemTentativa")
     inicio = perf_counter()
     for tentativa in range(1, TENTATIVAS + 1):
         if tentativa > 1:
@@ -446,25 +489,27 @@ def _chamar_a_ia[Saida: BaseModel](
             uso.somar(resposta, preco)
             conteudo = "".join(bloco.text for bloco in resposta.content if bloco.type == "text")
             resultado = saida.model_validate_json(conteudo)
-        except anthropic.APIStatusError as erro:
-            if _sem_credito(erro):
+        except (anthropic.APIError, ValidationError) as erro:
+            # O tipo do erro, nunca a mensagem: a resposta inválida pode citar o prontuário.
+            tipo = type(erro).__name__
+            if isinstance(erro, anthropic.APIStatusError) and _sem_credito(erro):
                 logger.error(
                     "[ContasMedicas] IA %s sem crédito (HTTP %s): sem nova tentativa", modelo, erro.status_code
                 )
                 _gravar(onde, modelo, uso, round((perf_counter() - inicio) * 1000), tentativa, sucesso=False)
-                raise IASemCredito() from None
-            falha = type(erro).__name__
-            logger.warning("[ContasMedicas] IA %s, tentativa %s: %s", modelo, tentativa, falha)
-            continue
-        except (anthropic.APIError, ValidationError) as erro:
-            # O tipo do erro, nunca a mensagem: a resposta inválida pode citar o prontuário.
-            falha = type(erro).__name__
-            logger.warning("[ContasMedicas] IA %s, tentativa %s: %s", modelo, tentativa, falha)
+                raise IASemCredito(tipo=tipo, http=erro.status_code) from None
+            causa, http = _causa(erro)
+            logger.warning("[ContasMedicas] IA %s, tentativa %s: %s (HTTP %s)", modelo, tentativa, tipo, http)
+            falha = ErroDaIA(
+                f"A IA não respondeu em {tentativa} tentativas ({tipo}, HTTP {http})", causa=causa, tipo=tipo, http=http
+            )
+            if causa in DEFINITIVAS:
+                break
             continue
         _gravar(onde, modelo, uso, round((perf_counter() - inicio) * 1000), tentativa, sucesso=True)
         return resultado
-    _gravar(onde, modelo, uso, round((perf_counter() - inicio) * 1000), TENTATIVAS, sucesso=False)
-    raise ErroDaIA(f"A IA não respondeu no formato em {TENTATIVAS} tentativas ({falha})")
+    _gravar(onde, modelo, uso, round((perf_counter() - inicio) * 1000), tentativa, sucesso=False)
+    raise falha
 
 
 # ----------------------------------------------------------------------------------
