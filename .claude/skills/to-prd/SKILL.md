@@ -9,6 +9,8 @@ This skill takes the current conversation context and codebase understanding and
 
 Issue tracker = **GitHub Issues** via `gh` (veja `docs/agents/issue-tracker.md`). Triage label = `ready-for-agent` (veja `docs/agents/triage-labels.md`). Se faltar esse contexto, leia os dois arquivos de `docs/agents/`.
 
+A conversa veio de um `/grill-with-docs #N` sobre um PRD do diretor? Não crie issue: siga a seção "PRD do diretor: completar a mesma issue", no fim do processo.
+
 ## Process
 
 1. Explore the repo to understand the current state of the codebase, if you haven't already. Use the project's domain glossary (`CONTEXT.md`) vocabulary throughout the PRD, and respect any ADRs (`docs/adr/`) in the area you're touching.
@@ -37,6 +39,22 @@ Issue tracker = **GitHub Issues** via `gh` (veja `docs/agents/issue-tracker.md`)
    **Humanizer antes do `gh issue create`** (ADR 0071): passe o corpo pela Skill tool com `humanizer` em modo embutido, com atenção ao bloco "Para o diretor", que o app mostra ao diretor. A amostra de voz é o bloco "Para o diretor" de um PRD já publicado: ela manda no tom, o humanizer só tira os cacoetes. O resto do corpo fica neutro e direto; termos do `CONTEXT.md`, títulos do template e histórias no formato "Como `<ator>`" não mudam.
 
    Capture e **anuncie o número** da issue-PRD criada (o `gh issue create` devolve a URL; o número é o último segmento — ex.: `URL=$(gh issue create …); PRD=${URL##*/}`). Diga ao usuário, ex.: _"PRD publicado como **#41**"_. Esse número é o **pai** das fatias: o `/to-issues` o usa pra vincular cada fatia como **sub-issue** nativa. Rodando `/to-issues` em seguida nesta mesma conversa, ele já tem o `#41` no contexto.
+
+## PRD do diretor: completar a mesma issue
+
+Quando a conversa veio de um `/grill-with-docs #N` sobre um **PRD do diretor** (a issue que o "sim" do Planejamento da Demanda cria, ADR 0075; `prd_do_diretor.py ler <N>` confirma), a issue já existe com a metade de negócio. Nesse caso, sem `gh issue create`:
+
+1. Escreva só as seções técnicas do template num arquivo do scratchpad: `## Decisões de implementação` e `## Decisões de teste` (obrigatórias), mais `## Manual: páginas que nascem ou mudam`, `## Fora de escopo` e `## Notas adicionais`. Cada item de "Ficou em aberto" que o grill fechou entra em Decisões de implementação, dizendo de qual item veio.
+2. Não reescreva o bloco "Para o diretor", Problema, Solução, Histórias, Decisões de negócio nem "Ficou em aberto": é o texto que o diretor aprovou no app, palavra por palavra. O script recusa arquivo que traga o bloco.
+3. Passe o arquivo pela Skill tool com `humanizer` em modo embutido, como o corpo de sempre.
+4. Complete a issue:
+
+   ```bash
+   python3 .claude/skills/to-prd/scripts/prd_do_diretor.py completar <N> <arquivo>
+   ```
+
+   O script insere as seções antes da Origem, deixa o resto do corpo byte a byte (o marcador da Demanda, que sustenta o Vínculo, inclusive) e troca `needs-triage` por `ready-for-agent`. O dono já vem do app (`GITHUB_LOGIN_DONO`); não mexa no assignee.
+5. Anuncie: _"PRD do diretor **#N** completado"_. O `#N` é o pai das fatias do `/to-issues`.
 
 <prd-template>
 

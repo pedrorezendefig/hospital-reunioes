@@ -28,6 +28,14 @@ JANELA_DIAS = 45
 SUBIDA = "python3 .claude/skills/onda-enxuta/scripts/fechar_onda.py"
 TRIAGEM = ("ready-for-agent", "ready-for-human", "needs-triage", "needs-info")
 
+# O PRD do diretor (issue #1350, ADR 0075, decisão 6): o "sim" do Planejamento da
+# Demanda cria uma needs-triage sem label própria. O que a distingue é o marcador
+# da Demanda mais a seção "Ficou em aberto"; o "Levar para desenvolvimento" tem
+# só o marcador. Com "Decisões de implementação" no corpo, o /to-prd já passou.
+MARCADOR_DA_DEMANDA = re.compile(r'<!--\s*demanda-vitta id="[^"]*"\s*-->')
+FICOU_EM_ABERTO = re.compile(r"^## Ficou em aberto\s*$", re.M)
+DECISOES_TECNICAS = re.compile(r"^## Decisões de implementação\s*$", re.M)
+
 VEREDITO = {
     "verde": "dá pra desenvolver: sim",
     "amarelo": "dá pra desenvolver: só até o PR (a subida espera)",
@@ -43,6 +51,17 @@ def minhas(issues: list[dict], login: str) -> list[dict]:
         i for i in issues
         if login in i["assignees"] or (not i["assignees"] and i["author"] == login)
     ]
+
+
+def grill_tecnico_pendente(i: dict) -> bool:
+    """needs-triage com PRD do diretor que ainda não ganhou as seções técnicas."""
+    corpo = i.get("body") or ""
+    return (
+        "needs-triage" in i["labels"]
+        and bool(MARCADOR_DA_DEMANDA.search(corpo))
+        and bool(FICOU_EM_ABERTO.search(corpo))
+        and not DECISOES_TECNICAS.search(corpo)
+    )
 
 
 def cancelados_por_runner(runs: list[dict]) -> int:
@@ -268,8 +287,11 @@ def montar(d: dict) -> str:
     saida += ["", "**2. Na fila**", ""]
     if linhas_fila:
         saida += ["| grupo | issues | label | parada |", "|---|---|---|---|", *linhas_fila]
+    grill = [i for i in triagem if grill_tecnico_pendente(i)]
+    for i in grill:
+        saida.append(f"grill técnico pendente: #{i['number']} (`/grill-with-docs #{i['number']}`)")
     for rotulo in ("needs-triage", "needs-info"):
-        dessa = [i for i in triagem if rotulo in i["labels"]]
+        dessa = [i for i in triagem if rotulo in i["labels"] and i not in grill]
         if dessa:
             saida.append(f"{rotulo}: {', '.join('#' + str(i['number']) for i in dessa)} (`/triage`)")
     saida += ["", "**3. Plano**", ""]
@@ -300,7 +322,7 @@ CONSULTA_ISSUES = """
 query($q: String!) {
   search(query: $q, type: ISSUE, first: 100) {
     nodes { ... on Issue {
-      number title createdAt updatedAt author { login }
+      number title body createdAt updatedAt author { login }
       assignees(first: 10) { nodes { login } }
       labels(first: 20) { nodes { name } }
       parent { number title }
@@ -340,6 +362,7 @@ def _issues(repo: str, filtro: str) -> list[dict]:
         {
             "number": n["number"],
             "title": n["title"],
+            "body": n["body"],
             "labels": [l["name"] for l in n["labels"]["nodes"]],
             "assignees": [a["login"] for a in n["assignees"]["nodes"]],
             "author": (n["author"] or {}).get("login"),

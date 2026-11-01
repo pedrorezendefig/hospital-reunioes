@@ -52,6 +52,23 @@ Do not enact the plan until I confirm we have reached a shared understanding.
 
 Não invoque `/to-prd` sem a porta A confirmada.
 
+## PRD do diretor (`/grill-with-docs #N`)
+
+Quando o argumento é uma issue, rode antes da primeira pergunta:
+
+```bash
+python3 .claude/skills/to-prd/scripts/prd_do_diretor.py ler <N>
+```
+
+O script reconhece o **PRD do diretor** (ADR 0075): a issue que o "sim" do Planejamento da Demanda cria na aba Tecnologia, com o marcador da Demanda e a seção "Ficou em aberto". Se a saída diz "Não é PRD do diretor", leia a issue e siga o grill normal. Se é PRD do diretor:
+
+1. Mostre as Decisões de negócio como **já tomadas pelo diretor**, do jeito que o script imprime, e não repergunte nenhuma delas, nem para confirmar, nem com outra redação. Elas entram no grill como premissa.
+2. Comece pelos itens de "Ficou em aberto", um por pergunta, no formato de sempre. Item técnico: você recomenda e o Pedro decide. Item de negócio, que só o diretor sabe: sai marcado "[precisa do diretor]" com a sua sugestão, e o Pedro escolhe entre responder ou levar para a Conversa da Demanda.
+3. Depois, só o técnico: módulos, seams, schema e migration, contrato de API, testes, Manual. Problema, Solução e Histórias já estão na issue.
+4. Se uma decisão técnica contradiz uma decisão do diretor, pare e diga qual, em uma linha. A decisão dele não se reescreve por conta própria.
+
+Fechamento: a porta já é A e a issue já existe, então não classifique a porta de novo nem crie issue nova. O próximo passo é o `/to-prd`, que completa esta mesma issue (seção "PRD do diretor: completar a mesma issue" da skill), e depois o `/to-issues #N`.
+
 </what-to-do>
 
 <supporting-info>
