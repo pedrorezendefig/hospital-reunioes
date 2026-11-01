@@ -302,6 +302,10 @@ function secaoDoManual(pathname: string): string {
   if (pathname.startsWith("/ouvidoria") || pathname === "/manifestacao")
     return "ouvidoria";
   if (pathname.startsWith("/pops")) return "pops";
+  // A aba Tecnologia mora dentro do /admin e tem seção própria no manual
+  // (issue #1367): a regra dela vem antes da do Admin.
+  if (pathname === "/admin/tecnologia" || pathname.startsWith("/admin/tecnologia/"))
+    return "tecnologia";
   if (pathname.startsWith("/admin")) return "admin";
   return "reunioes";
 }

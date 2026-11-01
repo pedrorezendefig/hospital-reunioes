@@ -296,6 +296,31 @@ describe.each([
     );
   });
 
+  // A Tecnologia virou módulo do Manual, último do menu (issue #1367, PRD
+  // #1365). A aba mora dentro do /admin, então sem a regra própria a Ajuda
+  // dela cairia na seção Admin, que não fala de Demanda nenhuma.
+  it("na aba Tecnologia a Ajuda abre a seção Tecnologia do manual", () => {
+    sessao.participante = pessoa("super_admin");
+    rota.atual = "/admin/tecnologia";
+
+    render(<AdminSidebar variant={variant} />);
+
+    expect(ajudaDoMenu().getAttribute("href")).toBe(
+      "https://manual-hsm.vercel.app/tecnologia/",
+    );
+  });
+
+  it("numa tela de dentro da aba Tecnologia a Ajuda também abre a seção Tecnologia", () => {
+    sessao.participante = pessoa("super_admin");
+    rota.atual = "/admin/tecnologia/planejamento/abc";
+
+    render(<AdminSidebar variant={variant} />);
+
+    expect(ajudaDoMenu().getAttribute("href")).toBe(
+      "https://manual-hsm.vercel.app/tecnologia/",
+    );
+  });
+
   it("a Ajuda abre em outra aba, sem passar a aba de origem nem o endereço atual", () => {
     sessao.participante = pessoa("super_admin");
 
