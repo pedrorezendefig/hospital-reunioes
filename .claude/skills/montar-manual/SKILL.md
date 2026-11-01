@@ -43,7 +43,7 @@ JSON
 python3 tools/inventario_manual.py --dir docs/manual --entregues <scratchpad>/entregues.json
 ```
 
-O inventário acusa, por módulo, cinco lacunas: `sem-visao-geral` (módulo sem Vídeo de visão geral na abertura; o Admin fica fora, e Página de tarefa não tem vídeo desde a ADR 0072), `print-faltando` (a página aponta para um print que não existe), `prd-sem-novidades` (PRD em produção cujo número não está no `prd:` do frontmatter do `novidades.md` do módulo, que é como o inventário conta a entrada), `draft-entregue` (página em `draft` de PRD que já está no ar) e `video-desatualizado` (página do módulo com PRD no `prd:` fora dos `prds_cobertos` do `meta.json` do Vídeo de visão geral, ADR 0076; a composição HyperFrames antiga, sem a lista, não é julgada). Ele **sai com código 1** quando a conta não fecha: página fora dos seis módulos (sem terminal que a feche) ou nenhuma página encontrada (varredura que não rodou não pode passar por manual pronto). Nesse caso conserte antes de planejar.
+O inventário acusa, por módulo, cinco lacunas: `sem-visao-geral` (módulo sem Vídeo de visão geral na abertura; o Admin fica fora, e Página de tarefa não tem vídeo desde a ADR 0072), `print-faltando` (a página aponta para um print que não existe), `prd-sem-novidades` (PRD em produção cujo número não está no `prd:` do frontmatter do `novidades.md` do módulo, que é como o inventário conta a entrada), `draft-entregue` (página em `draft` de PRD que já está no ar) e `video-desatualizado` (página do módulo com PRD no `prd:` fora dos `prds_cobertos` do `meta.json` do Vídeo de visão geral, ADR 0076; a composição HyperFrames antiga, sem a lista, não é julgada). Ele **sai com código 1** quando a conta não fecha: página fora dos módulos (sem terminal que a feche) ou nenhuma página encontrada (varredura que não rodou não pode passar por manual pronto). Nesse caso conserte antes de planejar.
 
 Sem `--entregues` o relatório sai, mas declara que dois dos cinco tipos não foram conferidos. Não planeje em cima disso: a lista de PRDs entregues é o passo 1, não um extra.
 
@@ -127,7 +127,7 @@ Regras:
 - Página de coisa que já está no ar sai sem draft; página de PRD que ainda não subiu nasce em draft.
 - NÃO publique: nada de publicar.sh, /manual publicar ou vercel deploy. A publicação é um passo só, meu, depois dos merges.
 - Não toque no tema, no astro.config.mjs, na home, em tools/ nem na pasta de outro módulo. Outro terminal está mexendo neles agora.
-- O site do manual é docs/manual/src/content/docs/. A pasta docs/manual/tecnologia/ é o manual antigo, de página única, e não é sua: não edite nada lá.
+- O site do manual é docs/manual/src/content/docs/.
 - Antes de abrir o PR, os quatro comandos do checklist da /manual:
   python3 tools/lint_manual.py --dir docs/manual/src/content/docs
   python3 tools/checar_video_manual.py --dir docs/manual

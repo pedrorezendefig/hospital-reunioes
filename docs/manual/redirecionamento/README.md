@@ -45,3 +45,27 @@ npx vercel@latest deploy --prod --yes
 
 Depois, abrir `https://manual-ouvidoria-hsm.vercel.app` e conferir que a página
 para em `https://manual-hsm.vercel.app/ouvidoria/`.
+
+## O endereço antigo da Tecnologia
+
+O manual antigo da aba Tecnologia vivia no projeto `manual-tecnologia-hsm`
+(`https://manual-tecnologia-hsm.vercel.app`), uma página única. Desde a issue
+#1367 a aba é a seção `tecnologia` do site novo, e esse projeto passa a só
+redirecionar, em definitivo, para `https://manual-hsm.vercel.app/tecnologia/`.
+O projeto inteiro é o `tecnologia/vercel.json`, com as mesmas duas regras da
+Ouvidoria (a raiz e o resto), pelo mesmo motivo.
+
+Publique **só depois que `/tecnologia/` estiver no ar** no site novo, pelo
+`/manual publicar` que vem depois do merge da #1367. Antes disso, o
+redirecionamento manda quem tem o link antigo para uma página não encontrada.
+
+```bash
+D=$(mktemp -d)
+cp docs/manual/redirecionamento/tecnologia/vercel.json "$D"/
+cd "$D" && npx vercel@latest link --yes --project manual-tecnologia-hsm
+npx vercel@latest deploy --prod --yes
+curl -s -o /dev/null -w "raiz: %{http_code} -> %{redirect_url}\n" https://manual-tecnologia-hsm.vercel.app/
+curl -s -o /dev/null -w "fundo: %{http_code} -> %{redirect_url}\n" https://manual-tecnologia-hsm.vercel.app/qualquer-coisa
+```
+
+Os dois `curl` têm que dizer 308 para `https://manual-hsm.vercel.app/tecnologia/`.

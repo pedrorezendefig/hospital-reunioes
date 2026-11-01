@@ -1,0 +1,14 @@
+{
+  "redirects": [
+    {
+      "source": "/",
+      "destination": "https://manual-hsm.vercel.app/tecnologia/",
+      "permanent": true
+    },
+    {
+      "source": "/:caminho*",
+      "destination": "https://manual-hsm.vercel.app/tecnologia/",
+      "permanent": true
+    }
+  ]
+}

@@ -24,8 +24,7 @@ errou, e o lint trava.
 | `/manual publicar` | Tira o draft que a Action deixou (abertura com vídeo), roda o `publicar.sh` e registra o link. É do humano, depois do deploy que fecha PRD com Fatia de manual. Veja `references/publicar.md`. |
 
 Módulos: `primeiros-passos`, `reunioes`, `ouvidoria`, `pops`, `contas-medicas`,
-`admin`. A aba
-Tecnologia fica fora de propósito (a divulgação do #634 cobre).
+`admin`, `tecnologia` (o último do menu desde a issue #1367).
 
 ## Fontes da verdade (nesta ordem, todas obrigatórias)
 
