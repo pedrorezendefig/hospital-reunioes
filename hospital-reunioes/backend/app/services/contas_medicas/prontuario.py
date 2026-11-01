@@ -41,8 +41,14 @@ from app.services.contas_medicas.marcacoes import so_o_marcado
 
 
 class ErroLeitura(Exception):  # noqa: N818, nome da spec, o mesmo da leitura da Conta (#1116)
-    """Leitura impossível. A mensagem é a frase que a faturista vê na Situação Erro
-    e nunca carrega texto do prontuário."""
+    """Leitura impossível: o rodapé indica mais páginas do que vieram. A
+    mensagem nunca carrega texto do prontuário; os dois números vão para a
+    frase do Erro da conta (#1337)."""
+
+    def __init__(self, motivo: str, *, declarado: int, vieram: int):
+        super().__init__(motivo)
+        self.declarado = declarado
+        self.vieram = vieram
 
 
 @dataclass(frozen=True)
@@ -101,7 +107,9 @@ def _conferir_integridade(paginas: list[str]) -> None:
     if any(total != len(paginas) for total in totais):
         declarado = max(totais)
         raise ErroLeitura(
-            f"Prontuário com arquivo incompleto: o rodapé indica {declarado} páginas e vieram {len(paginas)}."
+            f"Prontuário com arquivo incompleto: o rodapé indica {declarado} páginas e vieram {len(paginas)}.",
+            declarado=declarado,
+            vieram=len(paginas),
         )
 
 

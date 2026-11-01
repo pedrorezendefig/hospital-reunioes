@@ -79,6 +79,16 @@ export interface ItemDaFila {
   itens_total: number;
   pendencias: number;
   erro_motivo: string | null;
+  /**
+   * O Código do erro da conta em Erro (issue #1337), nulo fora dele: o código,
+   * o detalhe técnico numa linha, a hora do erro, o arquivo em que a análise
+   * parou (o quadrado vermelho) e a ação que resolve.
+   */
+  erro_codigo?: string | null;
+  erro_detalhe?: string | null;
+  erro_em?: string | null;
+  erro_arquivo?: "conta" | "prontuario" | null;
+  erro_acao?: "analisar_de_novo" | "enviar_de_novo" | null;
   /** Só para quem tem "painel completo": quem está com a conta (issue #1307). */
   com?: string | null;
 }
@@ -225,4 +235,34 @@ export function detalheDaConta(conta: ItemDaFila): string {
     default:
       return "";
   }
+}
+
+const DATA_E_HORA = new Intl.DateTimeFormat("pt-BR", {
+  timeZone: "America/Sao_Paulo",
+  day: "2-digit",
+  month: "2-digit",
+  year: "numeric",
+  hour: "2-digit",
+  minute: "2-digit",
+});
+
+/** A data e a hora no fuso do hospital, como "01/11/2026 14:32". */
+export function dataEHora(instante: Date): string {
+  return DATA_E_HORA.format(instante).replace(",", "");
+}
+
+/**
+ * O que "Copiar para a TI" leva da conta em Erro (issue #1337): o código, o
+ * atendimento, a conta, a data e a hora do erro e o detalhe técnico, uma linha
+ * cada, para colar no WhatsApp. A conta marcada pela migration (o erro de
+ * antes do código) não tem hora gravada: vale a hora da cópia.
+ */
+export function textoParaATI(conta: ItemDaFila, agora: Date = new Date()): string {
+  return [
+    `Código do erro: ${conta.erro_codigo ?? "sem código"}`,
+    `Atendimento: ${conta.numero_atendimento ?? "sem número"}`,
+    `Conta: ${conta.numero_conta ?? "sem número"}`,
+    `Data e hora: ${dataEHora(conta.erro_em ? new Date(conta.erro_em) : agora)}`,
+    `Detalhe: ${conta.erro_detalhe ?? "sem detalhe técnico gravado"}`,
+  ].join("\n");
 }

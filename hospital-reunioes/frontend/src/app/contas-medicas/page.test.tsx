@@ -388,6 +388,130 @@ describe("o cartão do envio (issue #1336)", () => {
   });
 });
 
+describe("o Código do erro no cartão (issue #1337)", () => {
+  const DETALHE = "OverloadedError, HTTP 529, etapa passo_a (leitura do prontuário pela IA), ia.py:497";
+  const ENVIOS: ItemDaFila[] = [
+    conta({
+      id: "erro-ia",
+      numero_atendimento: "31260",
+      numero_conta: "48001",
+      situacao: "ERRO",
+      prontuario_paginas: 212,
+      erro_motivo: "A IA está fora do ar ou sobrecarregada agora.",
+      erro_codigo: "CM-IA-FORA-DO-AR",
+      erro_detalhe: DETALHE,
+      erro_em: "2026-11-01T17:32:00+00:00",
+      erro_arquivo: "prontuario",
+      erro_acao: "analisar_de_novo",
+    }),
+    conta({
+      id: "erro-conta",
+      numero_atendimento: "31261",
+      numero_conta: "48002",
+      situacao: "ERRO",
+      prontuario_paginas: 40,
+      erro_motivo: "Não consegui ler a conta inteira: os itens lidos somam R$ 3.091,70 e o total da conta é R$ 3.101,70.",
+      erro_codigo: "CM-ARQ-SOMA",
+      erro_detalhe: "FalhaDeLeitura, etapa leitura_da_conta (leitura da conta), processamento.py:396",
+      erro_em: "2026-11-01T12:05:00+00:00",
+      erro_arquivo: "conta",
+      erro_acao: "enviar_de_novo",
+    }),
+    conta({ id: "na-fila", numero_atendimento: "31302", prontuario_paginas: 10 }),
+  ];
+
+  async function cartoes(): Promise<HTMLElement[]> {
+    filaDoServidor = { ...FILA, meus_envios: ENVIOS };
+    render(<ContasMedicasPage />);
+    await linhas();
+    aba(/^Meus envios/);
+    return linhas();
+  }
+
+  function quadrado(cartao: HTMLElement, nome: "Conta" | "Prontuário"): HTMLElement {
+    return within(cartao).getByRole("region", { name: nome });
+  }
+
+  function areaDeTransferencia(writeText: (texto: string) => Promise<void>) {
+    Object.defineProperty(navigator, "clipboard", { value: { writeText }, configurable: true });
+  }
+
+  it("o quadrado do arquivo em que a análise parou fica vermelho, e o outro continua verde", async () => {
+    const [daIA, daConta] = await cartoes();
+
+    expect(quadrado(daIA, "Prontuário").getAttribute("data-estado")).toBe("erro");
+    expect(quadrado(daIA, "Prontuário").className).toContain("bg-red-50");
+    expect(quadrado(daIA, "Prontuário").textContent).toContain("212 páginas");
+    expect(quadrado(daIA, "Conta").getAttribute("data-estado")).toBe("chegou");
+    expect(quadrado(daConta, "Conta").getAttribute("data-estado")).toBe("erro");
+    expect(quadrado(daConta, "Conta").textContent).toContain("48002");
+    expect(quadrado(daConta, "Prontuário").getAttribute("data-estado")).toBe("chegou");
+  });
+
+  it("a frase e o código aparecem embaixo dos quadrados", async () => {
+    const [daIA, daConta] = await cartoes();
+
+    expect(daIA.textContent).toContain("A IA está fora do ar ou sobrecarregada agora.");
+    expect(within(daIA).getByText("CM-IA-FORA-DO-AR")).toBeTruthy();
+    expect(daConta.textContent).toContain("os itens lidos somam R$ 3.091,70 e o total da conta é R$ 3.101,70.");
+    expect(within(daConta).getByText("CM-ARQ-SOMA")).toBeTruthy();
+  });
+
+  it("Ver detalhes abre o detalhe técnico para a TI", async () => {
+    const [daIA] = await cartoes();
+    const ver = within(daIA).getByRole("button", { name: "Ver detalhes" });
+    expect(ver.getAttribute("aria-expanded")).toBe("false");
+    expect(daIA.textContent).not.toContain(DETALHE);
+
+    fireEvent.click(ver);
+
+    expect(ver.getAttribute("aria-expanded")).toBe("true");
+    expect(daIA.textContent).toContain(DETALHE);
+  });
+
+  it("Copiar para a TI leva o código, o atendimento, a conta, a data e a hora e o detalhe", async () => {
+    const writeText = vi.fn<(texto: string) => Promise<void>>(async () => {});
+    areaDeTransferencia(writeText);
+    const [daIA] = await cartoes();
+
+    fireEvent.click(within(daIA).getByRole("button", { name: "Copiar para a TI" }));
+
+    await waitFor(() => expect(writeText).toHaveBeenCalledTimes(1));
+    expect(writeText.mock.calls[0][0]).toBe(
+      [
+        "Código do erro: CM-IA-FORA-DO-AR",
+        "Atendimento: 31260",
+        "Conta: 48001",
+        "Data e hora: 01/11/2026 14:32",
+        `Detalhe: ${DETALHE}`,
+      ].join("\n"),
+    );
+    expect(await within(daIA).findByText("Copiado. Cole na conversa com a TI.")).toBeTruthy();
+  });
+
+  it("quando o navegador não copia, o texto fica numa caixa para copiar à mão", async () => {
+    areaDeTransferencia(async () => {
+      throw new Error("negado");
+    });
+    const [, daConta] = await cartoes();
+
+    fireEvent.click(within(daConta).getByRole("button", { name: "Copiar para a TI" }));
+
+    const caixa = (await within(daConta).findByRole("textbox")) as HTMLTextAreaElement;
+    expect(caixa.value).toContain("Código do erro: CM-ARQ-SOMA");
+    expect(caixa.value).toContain("Data e hora: 01/11/2026 09:05");
+    expect(daConta.textContent).toContain("copie com Ctrl+C");
+  });
+
+  it("a conta que não está em Erro não tem código nem os botões da TI", async () => {
+    const itens = await cartoes();
+
+    expect(within(itens[2]).queryByRole("button", { name: "Ver detalhes" })).toBeNull();
+    expect(within(itens[2]).queryByRole("button", { name: "Copiar para a TI" })).toBeNull();
+    expect(quadrado(itens[2], "Conta").getAttribute("data-estado")).toBe("chegou");
+  });
+});
+
 describe("cada bloco pela permissão de /contas-medicas/me", () => {
   it("quem só envia vê o envio e Meus envios, e a tela nem pede a Fila", async () => {
     permissoes = [ENVIAR];

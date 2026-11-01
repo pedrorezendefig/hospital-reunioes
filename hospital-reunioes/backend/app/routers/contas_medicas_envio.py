@@ -28,6 +28,7 @@ from app.services.contas_medicas.envio import (
     EnvioNaoEncontradoError,
     receber,
 )
+from app.services.contas_medicas.erro_da_conta import acao_do_codigo, arquivo_da_etapa, detalhe_legivel
 from app.services.contas_medicas.fila import envios_da_pessoa, fila_da_pessoa
 from app.services.contas_medicas.guia import MARCADAS, linha_pendente
 
@@ -111,6 +112,22 @@ def _falta(conta: dict) -> str | None:
     return "prontuario" if conta.get("arquivo_id") else "conta"
 
 
+def _erro(conta: dict) -> dict:
+    """O Código do erro da conta em Erro (issue #1337): o código, o detalhe
+    técnico numa linha, a hora do erro, o quadrado que fica vermelho e a ação
+    que resolve. Fora do Erro, tudo nulo."""
+    if conta.get("situacao") != "ERRO":
+        return {"erro_codigo": None, "erro_detalhe": None, "erro_em": None, "erro_arquivo": None, "erro_acao": None}
+    detalhe = conta.get("erro_detalhe") or {}
+    return {
+        "erro_codigo": conta.get("erro_codigo"),
+        "erro_detalhe": detalhe_legivel(detalhe),
+        "erro_em": detalhe.get("em"),
+        "erro_arquivo": arquivo_da_etapa(detalhe.get("etapa")),
+        "erro_acao": acao_do_codigo(conta.get("erro_codigo")),
+    }
+
+
 def _item(conta: dict, atendimento: dict, linhas: list[dict], paginas: int | None) -> dict:
     """A conta como a fila mostra: identificada pelo atendimento, com a conta como complemento."""
     da_faturista = [linha for linha in linhas if linha.get("acao") != "VALIDAR"]
@@ -132,6 +149,7 @@ def _item(conta: dict, atendimento: dict, linhas: list[dict], paginas: int | Non
         "itens_total": len(da_faturista),
         "pendencias": sum(1 for linha in linhas if linha_pendente(linha)),
         "erro_motivo": conta.get("erro_motivo"),
+        **_erro(conta),
         # Só para quem tem "painel completo": quem está com a conta.
         "com": conta.get("com_quem"),
     }

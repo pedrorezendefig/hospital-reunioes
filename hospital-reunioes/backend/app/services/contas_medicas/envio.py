@@ -233,7 +233,10 @@ def _gravar_conta(
         "periodo_inicio": _iso(cabecalho.periodo_inicio),
         "periodo_fim": _iso(cabecalho.periodo_fim),
         "situacao": situacao,
+        # O reenvio apaga o Erro de antes inteiro: a frase, o código e o detalhe.
         "erro_motivo": None,
+        "erro_codigo": None,
+        "erro_detalhe": None,
         "processando_desde": None,
         "tentativas": 0,
         "faturista_id": None,

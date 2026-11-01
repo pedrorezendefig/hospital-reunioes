@@ -63,7 +63,7 @@ Cada conta aparece pelo número do atendimento, com o número da conta ao lado, 
 - **A fazer**: o Guia está pronto e a conta está livre na Fila, com a nota, o R$ a ajustar e quantos itens já foram feitos ("0 de 9");
 - **Em correção**: o Guia já foi aberto, com o botão "Continuar";
 - **Retorno**: a conta já concluída voltou da Validação com linhas decididas para lançar;
-- **Erro**: a análise não conseguiu ler um dos arquivos, com o motivo em uma frase e o botão "Enviar de novo".
+- **Erro**: a análise não terminou, com o motivo em uma frase, o Código do erro e o botão "Enviar de novo".
 
 A aba **Concluídas** guarda as contas que a faturista concluiu, as mais recentes primeiro, com a contagem de pendências de quem concluiu com pendência. Quem tem o Painel completo vê as contas de todas em cada aba, com o nome de quem está com cada uma; para essa pessoa, Minhas se chama Em análise, e Meus envios se chama Envios.
 
@@ -77,11 +77,16 @@ Quando as contas de um envio terminam, quem enviou recebe um aviso no sino, como
 
 Enviar de novo uma conta que já tinha Guia refaz a análise: as linhas que a faturista já marcou (Feito, Não procede ou Bloqueado) ficam como estão, e as que estavam sem marcação são trocadas pelas da análise nova.
 
-Se o app reiniciar no meio de uma análise, a conta volta sozinha para a fila. Depois de três tentativas sem terminar, ela fica em Erro, com o botão "Enviar de novo". Leitura que não fecha também vira Erro na hora, com o motivo em uma frase:
+Toda conta em Erro diz o motivo numa frase e mostra o Código do erro, um código curto como CM-IA-FORA-DO-AR para mandar à TI pelo WhatsApp. São quatro famílias: CM-ARQ quando o problema está no PDF e quem enviou manda outro; CM-CFG quando falta uma configuração que a gestão faz no app; CM-IA quando a IA não respondeu ou recusou; CM-APP quando é defeito do app ou a análise não terminou. No cartão de Meus envios, o quadrado do arquivo em que a análise parou fica vermelho, e a frase e o código aparecem embaixo dos quadrados. "Ver detalhes" abre o detalhe técnico: o tipo do erro, o código HTTP, a etapa e o lugar no código. "Copiar para a TI" copia o código, o atendimento, a conta, a data e a hora e o detalhe, uma linha cada, prontos para colar. O detalhe fica gravado na conta e nunca leva texto do prontuário.
 
-- "Este PDF não tem texto. Exporte de novo pelo MV": o PDF veio como imagem;
-- "Não consegui ler a conta inteira": a soma dos itens lidos não bateu com o total da conta;
-- "Prontuário com arquivo incompleto": o rodapé indica mais páginas do que vieram no arquivo.
+Se o app reiniciar no meio de uma análise, a conta volta sozinha para a fila. Depois de três tentativas sem terminar, ela fica em Erro com CM-APP-TENTATIVAS, e a frase diz em qual etapa o app reiniciou ou travou. Um defeito do app que se repete nas três tentativas fica com CM-APP-DEFEITO e a etapa em que a análise parou. Leitura que não fecha vira Erro na hora, sem nova tentativa:
+
+- "Este PDF não tem texto. Exporte de novo pelo MV" (CM-ARQ-SEM-TEXTO): o PDF veio como imagem;
+- "Não consegui ler a conta inteira" (CM-ARQ-SOMA): a frase diz quanto somaram os itens lidos e qual é o total da conta, para conferir no MV se a exportação saiu cortada;
+- "Prontuário com arquivo incompleto" (CM-ARQ-INCOMPLETO): o rodapé indica mais páginas do que vieram no arquivo;
+- o PDF grande demais para ler de uma vez (CM-ARQ-GRANDE): a frase diz quantas páginas ele tem;
+- o PDF que não abre (CM-ARQ-ILEGIVEL), o cabeçalho da conta sem o atendimento e o plano (CM-ARQ-CABECALHO), o prontuário que não está mais no sistema (CM-ARQ-SEM-PRONTUARIO) e o PDF que passou dos 7 dias (CM-ARQ-VENCIDO): quem enviou manda o arquivo de novo;
+- a operadora sem memória carregada (CM-CFG-MEMORIA): a frase diz qual é a operadora e que a gestão carrega em Operadoras.
 
 O tempo de cada etapa da análise fica guardado, para medir a meta de uma conta de cinco dias pronta em até cinco minutos.
 
@@ -97,7 +102,7 @@ Nenhuma linha da IA chega à faturista sem seis conferências do código. A regr
 
 Quando um medicamento da prescrição não casa com nenhum item da conta, nem pelo dicionário nem pela marca e pela concentração, a IA é perguntada uma vez, com os medicamentos da conta, e propõe o código. A proposta já vale nas contas seguintes, sem IA, e aparece na tela Operadoras, em "Propostas da IA para o dicionário", para a gestão confirmar ou rejeitar. Rejeitar tira o código e deixa o termo decidido, sem par: a IA não é perguntada de novo.
 
-O texto do prontuário vai à IA sem o nome da paciente. O provedor guarda o que recebe por até 30 dias e não usa o texto para treinar modelo. A resposta tem um formato combinado; fora dele, é recusada e pedida de novo, até três vezes, com uma espera maior a cada vez. Depois disso a conta fica em Erro com "Tente de novo em alguns minutos" e o botão "Enviar de novo"; as linhas que o código já achou ficam guardadas, e enviar de novo refaz a análise. Se a IA ficar sem crédito, a conta vai para Erro na primeira tentativa, com "A IA está sem crédito. Avise o Pedro."; enviar de novo só adianta depois que o crédito voltar.
+O texto do prontuário vai à IA sem o nome da paciente. O provedor guarda o que recebe por até 30 dias e não usa o texto para treinar modelo. A resposta tem um formato combinado; fora dele, é recusada e pedida de novo, até três vezes, com uma espera maior a cada vez. O limite de uso, a IA fora do ar ou sobrecarregada e o tempo esgotado também ganham as três vezes. Se nenhuma der certo, a conta fica em Erro com a causa: "A IA está fora do ar ou sobrecarregada agora" (CM-IA-FORA-DO-AR) ou "A resposta da IA veio fora do formato combinado" (CM-IA-FORMATO). As linhas que o código já achou ficam guardadas, e enviar de novo refaz a análise. O que repetir não resolve vai para Erro na primeira tentativa: a chave da IA vazia ou inválida, com "A chave da IA não está configurada" (CM-IA-CHAVE); o modelo da IA que não foi encontrado (CM-IA-MODELO); o prontuário maior do que a IA aceita de uma vez (CM-IA-TAMANHO); e a IA sem crédito, com "A IA está sem crédito. Avise o Pedro." (CM-IA-CREDITO), em que enviar de novo só adianta depois que o crédito voltar. As contas que já estavam em Erro com a frase antiga "Tente de novo em alguns minutos" ganharam o código CM-IA-ANTIGO.
 
 O custo de cada chamada fica gravado: quantos tokens entraram e saíram, quantos vieram do cache e quanto custou, em dólar, e cada conta guarda a soma das chamadas dela, inclusive as de uma nova análise. O modelo de inteligência artificial de cada tarefa é trocado numa configuração do servidor, sem programador.
 
@@ -231,7 +236,8 @@ O módulo não guarda nome completo, CPF, carteira nem data de nascimento de pac
 - Tabela de preço recusada, contagem de itens que não bate com o arquivo, ou preço "Não conferido" onde a tabela tem valor (Defeito, ou Informação se a recusa lista as colunas esperadas ou se o motivo é um dos casos de "Não conferido").
 - Um botão do Guia que não marca, uma conta que não conclui ou uma nota que não bate com as linhas (Defeito).
 - Uma conta que não sai de Na fila ou de "Pronta em instantes", um Erro com motivo que não bate com o PDF, ou o aviso de contas prontas que não chega ao sino (Defeito, ou Informação se o motivo do Erro explica, como o PDF sem texto).
-- Uma conta que volta para Erro com "Tente de novo em alguns minutos" mesmo depois de enviada de novo, ou o botão "Reanalisar" que não aparece para a gestão (Defeito).
+- Uma conta que volta para Erro com CM-IA-FORA-DO-AR mesmo depois de enviada de novo, ou o botão "Reanalisar" que não aparece para a gestão (Defeito).
+- Uma conta em Erro com código CM-APP, CM-IA-CHAVE ou CM-IA-MODELO (Defeito: o texto do "Copiar para a TI" já traz o que a TI precisa), ou com CM-ARQ ou CM-CFG (Informação: quem resolve é quem enviou, mandando outro PDF, ou a gestão, em Operadoras).
 - O aviso de reajuste de contrato que não chegou ao sino, chegou duas vezes ou chegou na data errada, ou um contrato com a situação que não bate com o vencimento (Defeito, ou Informação se a data do aviso explica, como a antecedência da memória).
 - Um número do Painel que não bate com as contas da semana, ou a faturista que vê a produção de outra pessoa (Defeito, ou Informação se a dúvida é sobre a semana de segunda a domingo ou sobre o que entra em cada número).
 - Um lembrete da coordenação para um insumo que já está na conta, um cenário que não gera lembrete quando o prontuário mostra o procedimento, ou a faturista que vê um cenário ou um lembrete (Defeito, ou Informação se a dúvida é sobre o período da conta ou sobre o cenário estar desativado).

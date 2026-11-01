@@ -36,6 +36,9 @@ from app.services.contas_medicas.operadoras import importar_memoria  # noqa: E40
 MIGRATIONS = Path(__file__).resolve().parents[2] / "supabase" / "migrations"
 MIGRATION_117 = MIGRATIONS / "117_contas_medicas_ia.sql"
 
+# O `_cliente` de verdade, antes de o dublê do provedor trocá-lo: o da guarda da chave.
+_CLIENTE_DE_VERDADE = ia._cliente
+
 
 # ═══════════════════════════════════════════════════════════════════════════
 # 1. A migration 117
@@ -182,15 +185,20 @@ class _Provedor:
     def __init__(self):
         self.corpos: list[dict] = []
         self.urls: list[str] = []
-        self.respostas: list[tuple[str, dict] | httpx2.Response] = [(json.dumps(EVENTOS_VALIDOS), USO_PADRAO)]
+        self.respostas: list[tuple[str, dict] | httpx2.Response | Exception] = [
+            (json.dumps(EVENTOS_VALIDOS), USO_PADRAO)
+        ]
 
-    def responder(self, *respostas: tuple[str, dict] | httpx2.Response) -> None:
+    def responder(self, *respostas: tuple[str, dict] | httpx2.Response | Exception) -> None:
         self.respostas = list(respostas)
 
     def __call__(self, request: httpx2.Request) -> httpx2.Response:
         self.corpos.append(json.loads(request.content))
         self.urls.append(str(request.url))
         resposta = self.respostas.pop(0) if len(self.respostas) > 1 else self.respostas[0]
+        if isinstance(resposta, Exception):
+            # A falha do transporte (tempo esgotado, conexão), que o SDK traduz.
+            raise resposta
         if isinstance(resposta, httpx2.Response):
             return resposta
         conteudo, uso_da_resposta = resposta
@@ -494,6 +502,80 @@ class TestIASemCredito:
 
 
 # ═══════════════════════════════════════════════════════════════════════════
+# 3c. O tipo da falha e o código HTTP (issue #1337)
+# ═══════════════════════════════════════════════════════════════════════════
+
+# Um trecho que poderia vir citado na mensagem de erro da Anthropic: não pode
+# sair do adaptador.
+TRECHO_NA_RESPOSTA = "ANTÔNIA MELO FARIAS, evolução de 03/10"
+
+# (resposta da Anthropic, causa, código HTTP, quantas requisições saem)
+FALHAS_DA_IA = {
+    "401": (erro(401, "authentication_error", f"invalid x-api-key {TRECHO_NA_RESPOSTA}"), "chave", 401, 1),
+    "402": (erro(402, "billing_error", f"Payment required {TRECHO_NA_RESPOSTA}"), "credito", 402, 1),
+    "404": (erro(404, "not_found_error", f"model: claude-que-nao-existe {TRECHO_NA_RESPOSTA}"), "modelo", 404, 1),
+    "429": (erro(429, "rate_limit_error", f"Number of requests {TRECHO_NA_RESPOSTA}"), "fora_do_ar", 429, 3),
+    "500": (erro(500, "api_error", f"Internal server error {TRECHO_NA_RESPOSTA}"), "fora_do_ar", 500, 3),
+    "529": (erro(529, "overloaded_error", f"Overloaded {TRECHO_NA_RESPOSTA}"), "fora_do_ar", 529, 3),
+    "tempo-esgotado": (httpx2.ReadTimeout(f"read timed out {TRECHO_NA_RESPOSTA}"), "fora_do_ar", None, 3),
+    "sem-conexao": (httpx2.ConnectError(f"connection refused {TRECHO_NA_RESPOSTA}"), "fora_do_ar", None, 3),
+    "400-tamanho": (
+        erro(400, "invalid_request_error", f"prompt is too long: 215000 tokens > 200000 maximum {TRECHO_NA_RESPOSTA}"),
+        "tamanho",
+        400,
+        1,
+    ),
+    "resposta-invalida": ((f'{{"atendimento": "{TRECHO_NA_RESPOSTA}"', USO_PADRAO), "formato", 200, 3),
+}
+
+
+class TestTipoDaFalha:
+    """O erro que sai do adaptador diz o que falhou (a causa) e o código HTTP
+    da última tentativa, para o Código do erro da conta. Chave, modelo e
+    tamanho são definitivos, como o crédito: repetir não muda a resposta."""
+
+    @pytest.mark.parametrize("nome", list(FALHAS_DA_IA))
+    def test_o_erro_carrega_a_causa_e_o_codigo_http_e_os_definitivos_nao_se_repetem(self, provedor, nome):
+        resposta, causa, http, requisicoes = FALHAS_DA_IA[nome]
+        provedor.responder(resposta)
+
+        with pytest.raises(ia.ErroDaIA) as falha:
+            _extrair()
+
+        assert (falha.value.causa, falha.value.http) == (causa, http)
+        assert len(provedor.corpos) == requisicoes
+
+    @pytest.mark.parametrize("nome", list(FALHAS_DA_IA))
+    def test_o_erro_nao_leva_a_mensagem_da_resposta(self, provedor, nome):
+        provedor.responder(FALHAS_DA_IA[nome][0])
+
+        with pytest.raises(ia.ErroDaIA) as falha:
+            _extrair()
+
+        assert TRECHO_NA_RESPOSTA not in str(falha.value)
+        assert TRECHO_NA_RESPOSTA not in repr(vars(falha.value))
+        assert falha.value.tipo, "o tipo do erro da última tentativa"
+
+    def test_o_tipo_e_o_do_erro_da_ultima_tentativa(self, provedor):
+        provedor.responder(erro(529, "overloaded_error", "Overloaded"), httpx2.ReadTimeout("tempo"))
+
+        with pytest.raises(ia.ErroDaIA) as falha:
+            _extrair()
+
+        assert (falha.value.tipo, falha.value.http) == ("APITimeoutError", None)
+
+    def test_chave_vazia_nao_faz_requisicao_e_diz_a_causa(self, provedor, monkeypatch):
+        monkeypatch.setattr(ia, "_cliente", _CLIENTE_DE_VERDADE)
+        monkeypatch.setattr(ia.settings, "anthropic_api_key", "")
+
+        with pytest.raises(ia.ErroDaIA) as falha:
+            _extrair()
+
+        assert (falha.value.causa, falha.value.http) == ("chave", None)
+        assert provedor.corpos == []
+
+
+# ═══════════════════════════════════════════════════════════════════════════
 # 4. O custo de cada chamada, pelos tokens e pelo preço do Sonnet 5.5
 # ═══════════════════════════════════════════════════════════════════════════
 
@@ -715,11 +797,28 @@ class TestKitDeConhecimento:
             "não usa o texto para treinar",
             "A IA está sem crédito. Avise o Pedro.",
             "três vezes",
-            "Tente de novo em alguns minutos",
             "O custo de cada chamada fica gravado",
             "Reanalisar",
         ):
             assert trecho in secao, trecho
+
+    def test_diz_o_codigo_de_cada_falha_da_ia_e_o_que_nao_se_repete(self):
+        """Issue #1337: a frase genérica deu lugar à causa, com o código."""
+        secao = KIT.read_text(encoding="utf-8").split("## A inteligência artificial", 1)[1].split("\n## ", 1)[0]
+
+        for trecho in (
+            "A IA está fora do ar ou sobrecarregada agora",
+            "CM-IA-FORA-DO-AR",
+            "CM-IA-FORMATO",
+            "na primeira tentativa",
+            "A chave da IA não está configurada",
+            "CM-IA-MODELO",
+            "CM-IA-TAMANHO",
+            "CM-IA-CREDITO",
+            "CM-IA-ANTIGO",
+        ):
+            assert trecho in secao, trecho
+        assert 'fica em Erro com "Tente de novo em alguns minutos"' not in secao
 
 
 # ═══════════════════════════════════════════════════════════════════════════

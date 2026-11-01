@@ -48,6 +48,7 @@ __all__ = [
     "detectar_tipo_do_arquivo",
     "ler_cabecalho_da_conta",
     "ler_conta",
+    "soma_e_total",
 ]
 
 MENSAGEM_CONTA_INCOMPLETA = "Não consegui ler a conta inteira"
@@ -240,11 +241,16 @@ def _fecha(a: Decimal, b: Decimal) -> bool:
     return abs(a - b) <= TOLERANCIA
 
 
+def _esperado(item: ItemConta) -> Decimal:
+    """Quantidade vezes unitário, no centavo: o que o total da linha deveria trazer."""
+    return (item.quantidade * item.unitario).quantize(CENTAVO, ROUND_HALF_UP)
+
+
 def _conferencia_da_leitura(itens: Sequence[ItemConta], total: Decimal) -> bool:
     """Soma dos itens igual ao total e, em cada item, quantidade vezes unitário igual ao total."""
     if not itens or not _fecha(sum((i.total for i in itens), Decimal(0)), total):
         return False
-    return all(_fecha((i.quantidade * i.unitario).quantize(CENTAVO, ROUND_HALF_UP), i.total) for i in itens)
+    return all(_fecha(_esperado(i), i.total) for i in itens)
 
 
 @dataclass(frozen=True)
@@ -311,6 +317,25 @@ def ler_conta(texto_por_pagina: Sequence[str]) -> Conta | ErroLeitura:
         total=total,
         itens=tuple(itens),
     )
+
+
+def soma_e_total(texto_por_pagina: Sequence[str]) -> tuple[Decimal, Decimal | None]:
+    """A soma dos itens lidos e o total que a conta declara (nulo quando o PDF
+    não traz a linha do total): os dois números da frase do Erro quando a
+    leitura não fecha, para conferir no MV se a exportação saiu cortada (#1337)."""
+    total = _cabecalho("\n".join(texto_por_pagina)).get("total")
+    soma = sum((item.total for item in _itens(texto_por_pagina)), Decimal(0))
+    return soma, _numero(total[0]) if total else None
+
+
+def item_que_nao_fecha(texto_por_pagina: Sequence[str]) -> tuple[ItemConta, Decimal] | None:
+    """O primeiro item em que quantidade vezes unitário não dá o total da linha,
+    com o valor que deveria dar: a frase do Erro quando a soma bate com o total
+    e a leitura ainda assim não fecha (#1337)."""
+    for item in _itens(texto_por_pagina):
+        if not _fecha(_esperado(item), item.total):
+            return item, _esperado(item)
+    return None
 
 
 def _normalizar(texto: str) -> str:

@@ -351,9 +351,10 @@ class TestFalhaDaIA:
         (conta,) = banco.tabelas["cm_conta"]
         # As três tentativas são do adaptador; a conta não volta para a fila.
         assert ia_falsa.formatos.count(PASSO_B) == 3
-        assert (conta["situacao"], conta["erro_motivo"], conta["tentativas"]) == (
+        assert (conta["situacao"], conta["erro_codigo"], conta["erro_motivo"], conta["tentativas"]) == (
             "ERRO",
-            "Tente de novo em alguns minutos",
+            "CM-IA-FORMATO",
+            "A resposta da IA veio fora do formato combinado.",
             1,
         )
         # O que o código achou (agulha, diária, pacote e Clexane) ficou no Guia.
