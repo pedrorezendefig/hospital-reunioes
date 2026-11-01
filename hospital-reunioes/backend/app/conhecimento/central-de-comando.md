@@ -33,6 +33,18 @@ Quem é Super admin pode conectar a Central ao próprio Claude e perguntar em po
 
 Para ligar, a pessoa adiciona um conector personalizado nas configurações do Claude e entra com o mesmo e-mail do cadastro no aplicativo: é por ele que a Central reconhece quem é Super admin. O passo a passo está no guia do conector; quem não tiver o guia pede à Vitta por uma Demanda neste Produto. Entrar com outro e-mail não passa, e perder o papel de Super admin corta o conector na hora.
 
+## O que já foi decidido
+
+- A Central mora dentro do aplicativo, só para quem é Super admin, sem lista à parte de quem pode ver.
+- A Central só lê, e nenhuma tela dela escreve no Site nem publica no Instagram.
+- Os números vêm direto do Google Analytics e do Instagram e são desenhados em tela própria, sem painel embutido de outro fornecedor.
+- O menu só lista o que já funciona, e o que ainda vai nascer aparece em O que vem por aí.
+- O conector com o Claude só lê e só funciona para quem é Super admin, reconhecido pelo e-mail do cadastro.
+- Quando uma fonte falha, a tela mantém o último número bom e avisa, em vez de mostrar zero.
+- O tema escuro do painel antigo não veio, porque o aplicativo só tem tema claro.
+- Objetivo nunca é chamado de meta.
+- Escrever post do blog por dentro da Central é o destino combinado, e ainda vai ter planejamento próprio.
+
 ## O que costuma virar Demanda
 
 - Um número que não bate com o que a pessoa vê no Google Analytics ou no Instagram (Defeito).

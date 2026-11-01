@@ -525,3 +525,55 @@ class TestOFatiadorDeSecao:
 
     def test_secao_que_nao_existe_e_vazia(self):
         assert _secao("# Aba\n\n## O Quadro\nraias\n", "O Painel") == ""
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 5. "O que já foi decidido" em cada arquivo (ADR 0075, decisao 4)
+# ═══════════════════════════════════════════════════════════════════════════
+#
+# A secao e com o que o Planejamento da Demanda desafia o pedido do diretor:
+# quando o pedido esbarra numa regra da casa, o agente recusa ou redireciona e
+# cita esta secao. Sem ela em algum arquivo, o agente nao tem o que citar sobre
+# aquele modulo e volta a concordar com tudo.
+
+SECAO_DECIDIDO = "O que já foi decidido"
+
+# Piso de decisoes por arquivo. Nao mede qualidade: separa uma secao escrita de
+# uma secao criada com uma linha so para o teste ficar verde.
+PISO_DE_DECISOES = 3
+
+# Uma decisao por item de lista, em UMA frase: fim de frase no meio do item
+# (ponto, interrogacao ou exclamacao seguidos de espaco e maiuscula) e a segunda
+# frase que a regra proibe.
+SEGUNDA_FRASE = re.compile(r"[.!?]\s+[A-ZÁÉÍÓÚÂÊÔÃÕÇ]")
+
+
+def _decisoes(arquivo: str) -> list[str]:
+    """Os itens de lista da secao. Texto corrido fora da lista nao conta como
+    decisao: o agente cita a decisao, e a decisao e o item."""
+    corpo = _secao(_texto(arquivo), SECAO_DECIDIDO)
+    return [linha[2:].strip() for linha in corpo.splitlines() if linha.startswith("- ")]
+
+
+@pytest.mark.parametrize("arquivo", ARQUIVOS_DO_KIT)
+class TestOQueJaFoiDecidido:
+    def test_o_arquivo_tem_a_secao_com_decisoes(self, arquivo):
+        """Mutante: apagar a secao de um dos dez arquivos."""
+        assert len(_decisoes(arquivo)) >= PISO_DE_DECISOES
+
+    def test_cada_decisao_e_uma_frase_so(self, arquivo):
+        """Mutante: emendar duas decisoes no mesmo item."""
+        for decisao in _decisoes(arquivo):
+            assert decisao.endswith("."), decisao
+            assert SEGUNDA_FRASE.search(decisao) is None, decisao
+
+
+class TestODetectorDeFrase:
+    """O detector de frase tambem e codigo: cego, ele deixaria passar o item
+    com duas decisoes emendadas."""
+
+    def test_pega_a_segunda_frase(self):
+        assert SEGUNDA_FRASE.search("O caso nasce sem tipo. Quem classifica é o ouvidor.") is not None
+
+    def test_numero_com_virgula_e_protocolo_nao_sao_fim_de_frase(self):
+        assert SEGUNDA_FRASE.search("O protocolo é 2026-0007 e custa R$ 1,50 por conta.") is None

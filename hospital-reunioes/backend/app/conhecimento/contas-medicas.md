@@ -221,6 +221,20 @@ Esse conjunto não é fixo. A diretoria muda tudo pela tela de **Habilitação**
 
 O módulo não guarda nome completo, CPF, carteira nem data de nascimento de paciente em lugar nenhum. Da paciente ficam só um rótulo curto, como "Maria S.", e a idade em anos. Os PDFs da conta e do prontuário ficam num depósito privado, que só o aplicativo alcança, e são apagados sete dias depois do envio.
 
+## O que já foi decidido
+
+- Preço, diária, teto, nota e indicadores são calculados pelo código, e a inteligência artificial nunca devolve valor em reais.
+- A inteligência artificial só entra onde há julgamento, como ler o texto livre do prontuário, e toda linha que ela propõe passa pelas conferências do código antes de chegar à faturista.
+- A memória da operadora mora no sistema e é editada pela tela, sem programador no meio.
+- A operadora é reconhecida pelo nome do plano impresso na conta.
+- Da paciente ficam só um rótulo curto e a idade, e o texto do prontuário vai à inteligência artificial sem o nome dela.
+- O fornecedor da inteligência artificial guarda o que recebe por até 30 dias e não usa o texto para treinar modelo.
+- Os PDFs ficam num depósito privado e são apagados sete dias depois do envio.
+- Os perfis do módulo são próprios, separados dos de Reuniões, POPs e Ouvidoria, e a diretoria muda as permissões pela tela de Habilitação.
+- A Fila é comum a todas as faturistas, e a conta passa a ser de quem abre o Guia, nunca de quem enviou.
+- A Fila segue a ordem de envio e nunca é reordenada por valor.
+- O custo de cada chamada da inteligência artificial fica gravado, e o modelo de cada tarefa se troca numa configuração do servidor.
+
 ## O que costuma virar Demanda
 
 - Uma pessoa que deveria ver Contas médicas no menu e não vê, ou o contrário (Defeito, ou Informação se for dúvida sobre o perfil).

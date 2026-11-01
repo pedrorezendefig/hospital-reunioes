@@ -114,3 +114,18 @@ A Etapa é um eixo diferente do estado. O estado diz de quem é a vez na convers
 Quando o assunto foi resolvido sem mexer no aplicativo (uma decisão, uma consultoria), não há o que subir: a Demanda volta para quem pediu já em Entregue.
 
 No card também aparece **O que muda**: o que aquela entrega acrescenta, em linguagem de quem usa. Esse texto vem do planejamento da Vitta e não é escrito no aplicativo.
+
+## O que já foi decidido
+
+- A aba mora dentro do aplicativo e só quem é Super admin a vê, sem papel próprio para o hospital ou para a Vitta.
+- Dentro da aba todos são iguais, e quem entra cria, edita, move, atribui e responde.
+- A lista de Tipos é fechada em sete, e toda Demanda pertence a um Produto, que decide quem responde por ela.
+- O assistente de Nova Demanda monta o rascunho, e a Demanda só nasce quando a pessoa clica em Criar Demanda.
+- A conversa do assistente de Nova Demanda não fica guardada, e o planejamento é a única conversa com a IA que fica na Demanda.
+- Uma Demanda se liga a um trabalho de desenvolvimento só, e a Etapa é lida de lá, nunca digitada.
+- O que se escreve do lado do desenvolvimento não volta para a Conversa, e o que volta é a mudança de Etapa.
+- A única troca automática de raia é a volta para quem pediu, em Aguardando, quando a entrega fica Em produção.
+- O texto que sai da Demanda para o material público do desenvolvimento passa por uma peneira que esconde CPF, telefone, nome e outros dados pessoais.
+- Os prints ficam só dentro do aplicativo e são apagados quando a Demanda é Concluída ou Cancelada.
+- No planejamento, a IA cuida só das decisões de negócio, e as decisões técnicas continuam com a Vitta.
+- O Painel não tem número por pessoa nem ranking de ninguém.

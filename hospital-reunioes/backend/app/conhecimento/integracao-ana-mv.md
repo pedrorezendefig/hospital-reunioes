@@ -33,6 +33,15 @@ Ela é só leitura. O aplicativo não grava, não corrige e não marca nada na a
 - Não copia a agenda para dentro do aplicativo, então não existe versão desatualizada guardada aqui.
 - Não toca o ambiente de verdade dos pacientes enquanto estiver em teste.
 
+## O que já foi decidido
+
+- A Global Health é dona da agenda (especialidades, profissionais, convênios aceitos e horários livres), e o aplicativo é dono do preço particular, do preparo do exame e da estimativa de cirurgia.
+- O espelho da agenda dentro do aplicativo só lê e não guarda cópia, e cada atualização pergunta de novo à agenda.
+- Quando a agenda está fora do ar, a tela diz que falhou em vez de mostrar uma lista vazia.
+- Só o servidor do aplicativo conversa com a Global Health, e a chave de acesso nunca chega ao navegador de quem usa.
+- Enquanto a integração estiver em teste, ela fala só com o ambiente de homologação, nunca com o dos pacientes.
+- O espelho é visto por Super admin, secretária e facilitador, sempre só para leitura.
+
 ## O que costuma virar Demanda
 
 - Especialidade, profissional ou convênio que devia aparecer e não aparece (Terceiro, quando depende da Global Health ou do MV).
