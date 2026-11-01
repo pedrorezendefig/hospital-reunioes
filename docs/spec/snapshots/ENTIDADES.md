@@ -1,6 +1,6 @@
 # ENTIDADES.md
 <!-- gerado automaticamente por /snapshot — não editar -->
-<!-- last_update: 2026-10-13T17:14+0000 -->
+<!-- last_update: 2026-11-01T20:56+0000 -->
 
 Modelo de dados do Hospital Reuniões. Tabelas no Postgres (via Supabase).
 
@@ -1239,7 +1239,7 @@ Modelo de dados do Hospital Reuniões. Tabelas no Postgres (via Supabase).
 
 ## cm_conta
 
-> Origem: `116_contas_medicas_fundacao.sql` (alterada em: 117_contas_medicas_ia.sql)
+> Origem: `116_contas_medicas_fundacao.sql` (alterada em: 117_contas_medicas_ia.sql, 122_contas_medicas_codigo_do_erro.sql)
 
 | Campo | Tipo | Constraints | Default | FK |
 |-------|------|-------------|---------|-----|
@@ -1276,6 +1276,8 @@ Modelo de dados do Hospital Reuniões. Tabelas no Postgres (via Supabase).
 | `criado_em` | `TIMESTAMPTZ` | NOT NULL | `now()` | — |
 | `nota_saida` | `NUMERIC(6, 2)` | — | — | — |
 | `reenviada_em` | `TIMESTAMPTZ` | — | — | — |
+| `erro_codigo` | `TEXT` | — | — | — |
+| `erro_detalhe` | `JSONB` | — | — | — |
 
 **Indexes:**
 - `idx_cm_conta_faturista_situacao_ordem` em `(faturista_id, situacao, ordem_fila)` (de `116_contas_medicas_fundacao.sql`)
