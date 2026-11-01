@@ -1,6 +1,6 @@
 # ROTAS.md
 <!-- gerado automaticamente por /snapshot — não editar -->
-<!-- last_update: 2026-11-01T21:59+0000 -->
+<!-- last_update: 2026-11-01T22:27+0000 -->
 
 Endpoints HTTP expostos pelo backend FastAPI do Hospital Reuniões.
 
@@ -468,6 +468,7 @@ Endpoints HTTP expostos pelo backend FastAPI do Hospital Reuniões.
 | POST | `/admin/tecnologia/demandas/{demanda_id}/mover` | Move a Demanda de coluna, se a maquina de estados permitir. | ✅ |
 | GET | `/admin/tecnologia/demandas/{demanda_id}/planejamento` | A conversa guardada na Demanda, para retomar de onde parou (decisao 3). | ✅ |
 | POST | `/admin/tecnologia/demandas/{demanda_id}/planejamento` | Um turno: a resposta do diretor entra, a proxima pergunta volta. | ✅ |
+| POST | `/admin/tecnologia/demandas/{demanda_id}/planejamento/enviar` | O "sim" do resumo (issue #1349, ADR 0075, decisao 6): cria o PRD do | ✅ |
 | POST | `/admin/tecnologia/demandas/{demanda_id}/planejamento/nao` | O "nao" do resumo (issue #1347): o que nao bateu entra na conversa como | ✅ |
 | POST | `/admin/tecnologia/demandas/{demanda_id}/planejamento/resumo` | Fechar e resumir (issue #1347): vale a qualquer altura, da primeira | ✅ |
 | GET | `/admin/tecnologia/demandas/{demanda_id}/texto-para-ia` | A Demanda inteira em texto simples, para colar numa IA (issue #640). | ✅ |
@@ -522,4 +523,4 @@ Endpoints HTTP expostos pelo backend FastAPI do Hospital Reuniões.
 
 ---
 
-**Totais:** 296 endpoints em 44 routers · 94% exigem auth.
+**Totais:** 297 endpoints em 44 routers · 94% exigem auth.
