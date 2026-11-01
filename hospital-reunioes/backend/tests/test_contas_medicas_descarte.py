@@ -254,6 +254,19 @@ class TestNaLista:
             "falta-conta": True,
         }
 
+    def test_prontuario_de_mais_de_uma_pessoa_sem_conta_so_a_gestao_ve_o_botao(self):
+        banco = _enviado(_prontuario("31318"))
+        _enviado(_prontuario("31318"), quem="outra_faturista", banco=banco)
+        [conta] = banco.tabelas["cm_conta"]
+
+        for quem in ("faturista", "outra_faturista"):
+            envios = _cliente(quem, banco).get(ROTA_MEUS_ENVIOS).json()["meus_envios"]
+            botao = {c["id"]: c["pode_descartar"] for c in envios if c["id"] == conta["id"]}
+            assert botao in ({}, {conta["id"]: False}), quem
+
+        [da_gestao] = _cliente("coordenadora", banco).get(ROTA_MEUS_ENVIOS).json()["meus_envios"]
+        assert da_gestao["pode_descartar"] is True
+
 
 KIT = Path(__file__).resolve().parents[1] / "app" / "conhecimento" / "contas-medicas.md"
 

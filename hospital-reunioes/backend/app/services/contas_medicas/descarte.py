@@ -39,9 +39,10 @@ class NaoDescartavelError(ValueError):
 
 
 def pode_descartar(conta: dict, linhas_do_guia: list[dict]) -> bool:
-    """A situação permite e o Guia ainda não existe. Quem pode é outra
-    pergunta, que a lista já responde ao mostrar só os envios da pessoa."""
-    return conta.get("situacao") in DESCARTAVEIS and not linhas_do_guia
+    """A situação permite, o Guia ainda não existe e a posse não é ambígua.
+    A lista só mostra à pessoa os envios dela; a posse ambígua vem marcada em
+    `so_a_gestao_descarta` por `envios_da_pessoa`, com a regra de `_conferir_posse`."""
+    return conta.get("situacao") in DESCARTAVEIS and not linhas_do_guia and not conta.get("so_a_gestao_descarta")
 
 
 def descartar(supabase, conta_id: str, me: dict) -> None:
