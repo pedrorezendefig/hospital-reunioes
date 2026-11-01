@@ -60,7 +60,7 @@ O PRD traz a seção **"Manual: páginas que nascem ou mudam"**. Quando ela list
 - **Labels:** `type:docs` e `area:docs`, além de `ready-for-agent` e do tamanho.
 - **Bloqueada nativamente por todas as fatias de código** do PRD: a página precisa da tela pronta para o print, então ela roda depois, não no mesmo PR (é isto que emenda a regra "mesmo PR" do ADR 0056).
 - **Corpo:** manda rodar `/manual #<PRD>`, cita a seção "Manual" do PRD como a lista do que escrever e lembra que tudo nasce em `draft: true`, porque quem tira o draft é a Action do push da `main` quando a funcionalidade sobe (ADR 0068).
-- **Vídeo só quando o caminho principal muda** (ADR 0072): Página de tarefa não tem vídeo. A fatia pede para refazer o Vídeo de visão geral do módulo só quando o PRD muda o caminho principal dele (o que a abertura do módulo descreve em "O caminho de ponta a ponta"), e diz isso numa linha do corpo, com o módulo. PRD que mexe numa tarefa do canto não pede vídeo, e o Admin não tem vídeo.
+- **Vídeo do módulo, sempre que o PRD muda página dele** (ADR 0076, que emenda a 0072): para cada módulo que tem página na seção "Manual" do PRD, o corpo traz a linha "Refazer o vídeo do módulo `<modulo>`" e um critério de aceite com o PRD nos `prds_cobertos` do `meta.json` do vídeo. A exceção é escrita na própria fatia, na linha do módulo: "O vídeo do módulo `<modulo>` segue válido porque ...", com o motivo (o PRD só corrige um texto que o vídeo não mostra, por exemplo); aí o PRD entra nos `prds_cobertos` sem render novo e o revisor confere o motivo. O Admin e a Central de Comando não têm vídeo, e Página de tarefa não tem vídeo.
 
 PRD cuja seção "Manual" diz "Nenhuma: este PRD não muda tela" não ganha esta fatia.
 

@@ -1,11 +1,11 @@
 ---
 name: manual
-description: Produz o Manual do usuário em docs/manual/. `/manual <módulo>` escreve a seção, `/manual #PRD` as páginas do PRD em draft, `/manual publicar` publica. Prints por roteiro, vídeo pelos gates do Estilo do manual.
+description: Produz o Manual do usuário em docs/manual/. `/manual <módulo>` escreve a seção, `/manual #PRD` as páginas do PRD em draft, `/manual publicar` publica. Prints por roteiro, vídeo do módulo narrado em Remotion pela skill motion.
 ---
 
 # Manual
 
-Escreve o Manual do usuário da plataforma (ADR 0057, emendada pela 0072) no
+Escreve o Manual do usuário da plataforma (ADR 0057, emendada pelas 0072 e 0076) no
 site que vive em `docs/manual/`: um endereço só, organizado como o menu do
 app, em que quem travou numa tela abre a página da tarefa, segue os passos com
 os prints e faz. Cada módulo abre com um Vídeo de visão geral do caminho
@@ -20,7 +20,7 @@ errou, e o lint trava.
 | Comando | O que faz |
 | --- | --- |
 | `/manual <módulo>` | Escreve a seção inteira de um módulo: Visão geral, Páginas de tarefa, Como funciona e Novidades, com prints e o Vídeo de visão geral na abertura. |
-| `/manual #PRD` | Só as páginas que aquele PRD cria ou muda, todas em `draft: true`, mais a entrada de Novidades, e o Vídeo de visão geral refeito só quando a issue pede (o PRD mudou o caminho principal). É a receita da Fatia de manual. Veja `references/prd-e-novidades.md`. |
+| `/manual #PRD` | Só as páginas que aquele PRD cria ou muda, todas em `draft: true`, mais a entrada de Novidades, e o Vídeo de visão geral do módulo refeito (todo PRD que muda página do módulo refaz o vídeo, salvo a exceção escrita na fatia). É a receita da Fatia de manual. Veja `references/prd-e-novidades.md`. |
 | `/manual publicar` | Tira o draft que a Action deixou (abertura com vídeo), roda o `publicar.sh` e registra o link. É do humano, depois do deploy que fecha PRD com Fatia de manual. Veja `references/publicar.md`. |
 
 Módulos: `primeiros-passos`, `reunioes`, `ouvidoria`, `pops`, `contas-medicas`,
@@ -142,16 +142,18 @@ leva `papel`.
   (`node docs/manual/scripts/gerar-fluxogramas.mjs`, ou
   `node docs/manual/scripts/gerar-fluxogramas.mjs --so <modulo>/<slug>` para
   refazer um só). Nunca em Página de tarefa.
-- **Vídeo de visão geral**: um por módulo, na abertura, mostrando o caminho
-  principal do módulo. Composição HyperFrames versionada em
-  `docs/manual/video/<modulo>/<slug>/`, MP4 fora do git, 90 a 120 s, mudo,
-  com legendas e carimbo de geração, no **Estilo do manual**
-  (`docs/manual/video/_estilo/`: `DESIGN.md`, tokens gerados do app e os cinco
-  cards). Até 8 MB depois do reencode, e a soma do Manual até 40 MB (o
-  `publicar.sh` trava). Passa pelo gate de strips e ganha um `VERIFY.md`. Os
-  gates limpos levam direto ao render final, sem esperar OK humano; nota que o
-  Pedro mandar depois vira regra no PR do conserto. O Admin fica sem vídeo, e
-  Página de tarefa não tem vídeo. Receita em
+- **Vídeo de visão geral**: um por módulo, na abertura, mostrando o módulo
+  ponto a ponto em 2 a 3 min, narrado com a voz A e com a fala escrita na
+  tela, sobre o print real do app animado. Feito em Remotion pela skill global
+  `motion`, no molde da `/divulgar` (ADR 0076): composição versionada em
+  `docs/manual/video/<modulo>/<slug>/` (roteiro, tempos, cenas tsx,
+  `meta.json` com o carimbo e os `prds_cobertos`, `VERIFY.md`), MP4 fora do
+  git. Até 10 MB depois do reencode, a soma do Manual até 60 MB e o site até
+  90 MB (o `publicar.sh` trava). Todo PRD que muda página do módulo refaz o
+  vídeo; o inventário acusa `video-desatualizado` quando ele fica para trás.
+  Os gates limpos levam direto ao render final, sem esperar ninguém; nota que
+  o Pedro mandar depois vira regra no PR do conserto. O Admin fica sem vídeo,
+  e Página de tarefa não tem vídeo. Receita em
   `references/video-de-visao-geral.md`.
 
 ## Antes de entregar
@@ -169,8 +171,9 @@ Checklist:
 2. Toda palavra em negrito existe na tela, com a mesma grafia do frontend.
 3. Todo print veio do roteiro do módulo, e o roteiro roda de ponta a ponta.
 4. `video` só na abertura do módulo (e na página inicial), com composição
-   versionada com carimbo, e o MP4 ficou fora do git.
+   versionada (`meta.json` com carimbo e `prds_cobertos`), e o MP4 ficou fora
+   do git.
 5. O render final saiu depois dos gates limpos, direto em `~/Videos/Hospital/Manual/<modulo>/<slug>.mp4`.
-6. Vídeo novo ou refeito: `tools/strips_video_manual.py` sem achado, `VERIFY.md`
-   ao lado da composição e cada nota recebida virou regra.
+6. Vídeo novo ou refeito: `gate-video.sh` e `publicar.sh --dry-run` passaram,
+   `VERIFY.md` ao lado da composição e cada nota recebida virou regra.
 7. Os quatro comandos acima passam.

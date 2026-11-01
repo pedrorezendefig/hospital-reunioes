@@ -18,10 +18,12 @@ fatia.
    invisibilidade do manual.
 3. **Prints** das páginas novas, pela receita de `prints.md`. Página de tarefa
    não tem vídeo.
-4. **O Vídeo de visão geral do módulo, só se a issue pedir.** A Fatia de manual
-   pede vídeo quando o PRD muda o caminho principal do módulo; aí o vídeo da
-   abertura é refeito pela receita de `video-de-visao-geral.md`. PRD que mexe
-   numa tarefa do canto não toca no vídeo. O Admin não tem vídeo.
+4. **O Vídeo de visão geral do módulo, refeito.** Todo PRD que muda uma página
+   do módulo refaz o vídeo daquele módulo, uma vez por PRD, pela receita de
+   `video-de-visao-geral.md`, e o PRD entra nos `prds_cobertos` do `meta.json`
+   (ADR 0076). A exceção é a fatia dizer por escrito "o vídeo segue válido
+   porque ...": aí o PRD entra na lista sem render novo e o motivo vai no corpo
+   do PR. O Admin não tem vídeo.
 5. **Uma entrada em `novidades.md`** do módulo (formato abaixo).
 6. **Não publique.** A Fatia de manual termina no PR verde (com o caminho do
    MP4 final no corpo, quando refez o vídeo) e sobe pela subida como qualquer
@@ -56,6 +58,6 @@ Tarefas que mudaram: [Encaminhar para outra área](./encaminhar-para-outra-area/
 - Se a entrega tem página de divulgação (o link fica em comentário no PRD, da
   `/divulgar`), ponha o link: "O vídeo desta entrega está na [página de
   divulgação](https://<projeto>.vercel.app)." Não embuta o vídeo: ele pesaria no
-  orçamento de 40 MB do Manual, e o conferidor do build trava `<video>` fora da
+  orçamento de 60 MB do Manual, e o conferidor do build trava `<video>` fora da
   abertura do módulo.
 - Novidades não leva `papel`: não é Página de tarefa e não tem selo.
