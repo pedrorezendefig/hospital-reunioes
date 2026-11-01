@@ -18,7 +18,17 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { DemandaModal } from "./DemandaModal";
 import { Demanda, EuNaAba } from "./demandas";
 import { MensagemDoPlanejamento, Planejamento, PLANEJAR_COM_A_IA } from "./planejamento";
-import { NADA_DECIDIDO, PlanejamentoDaDemanda, TITULO_DAS_DECISOES } from "./PlanejamentoDaDemanda";
+import {
+  FECHAR_E_RESUMIR,
+  NADA_DECIDIDO,
+  O_QUE_NAO_BATEU,
+  PlanejamentoDaDemanda,
+  SIM_MANDAR,
+  TITULO_DAS_DECISOES,
+  TITULO_DAS_DECISOES_DO_RESUMO,
+  TITULO_DO_EM_ABERTO,
+  TITULO_DO_RESUMO,
+} from "./PlanejamentoDaDemanda";
 
 afterEach(() => {
   cleanup();
@@ -285,5 +295,124 @@ describe("A tela do planejamento", () => {
     expect(await screen.findByText("Já tenho o que preciso para a Vitta planejar.")).toBeTruthy();
     expect(screen.queryByRole("button", { name: /Sim, com hora\./ })).toBeNull();
     expect(screen.queryByLabelText("Sua resposta")).toBeNull();
+  });
+});
+
+// ─── Fechar e resumir, o resumo e o "não" (issue #1347) ─────────────────────
+
+const RESUMO = {
+  decisoes: [
+    { pergunta: "Quem vai usar a agenda nova?", escolha: "Só a recepção.", porque: "É a recepção que marca a saída." },
+  ],
+  em_aberto: ["Quem confirma o retorno com o paciente."],
+};
+
+const RESUMIDO = planejamento({
+  estado: "resumido",
+  mensagens: [PERGUNTA, { tipo: "resposta", opcao: "A", texto: "Só a recepção." }],
+  decisoes: ["Só a recepção usa a agenda nova."],
+  resumo: RESUMO,
+});
+
+function regiao(nome: string): HTMLElement {
+  return screen.getByRole("region", { name: nome });
+}
+
+describe("Fechar e resumir", () => {
+  it("já na primeira pergunta, chama a rota do resumo e abre o resumo", async () => {
+    const pedidos = dublarServidor(planejamento(), [resposta(RESUMIDO)]);
+    montarTela();
+
+    fireEvent.click(await screen.findByRole("button", { name: FECHAR_E_RESUMIR }));
+
+    await waitFor(() => expect(posts(pedidos)).toHaveLength(1));
+    expect(posts(pedidos)[0].url).toBe("/api/admin/tecnologia/demandas/d-1/planejamento/resumo");
+    expect(await screen.findByRole("heading", { name: TITULO_DO_RESUMO })).toBeTruthy();
+  });
+
+  it("depois do encerrou, o botão continua lá", async () => {
+    dublarServidor(
+      planejamento({
+        estado: "encerrado",
+        mensagens: [PERGUNTA, { tipo: "encerrou", contexto: "Já tenho o que preciso para a Vitta planejar." }],
+      }),
+    );
+    montarTela();
+
+    expect(await screen.findByRole("button", { name: FECHAR_E_RESUMIR })).toBeTruthy();
+  });
+});
+
+describe("O resumo", () => {
+  it("lista as decisões, com pergunta, escolha e porquê, e o que ficou em aberto", async () => {
+    dublarServidor(RESUMIDO);
+    montarTela();
+
+    await screen.findByRole("heading", { name: TITULO_DO_RESUMO });
+    const decisoes = regiao(TITULO_DAS_DECISOES_DO_RESUMO);
+    expect(within(decisoes).getByText("Quem vai usar a agenda nova?")).toBeTruthy();
+    expect(within(decisoes).getByText("Só a recepção.")).toBeTruthy();
+    expect(within(decisoes).getByText("É a recepção que marca a saída.")).toBeTruthy();
+    expect(within(regiao(TITULO_DO_EM_ABERTO)).getByText("Quem confirma o retorno com o paciente.")).toBeTruthy();
+    // O que ficou em aberto não aparece como decisão.
+    expect(within(decisoes).queryByText("Quem confirma o retorno com o paciente.")).toBeNull();
+  });
+
+  it("o sim ainda não manda nada", async () => {
+    dublarServidor(RESUMIDO);
+    montarTela();
+
+    const sim = (await screen.findByRole("button", { name: SIM_MANDAR })) as HTMLButtonElement;
+    expect(sim.disabled).toBe(true);
+  });
+
+  it("o não sem texto é recusado na tela, sem ir ao servidor", async () => {
+    const pedidos = dublarServidor(RESUMIDO);
+    montarTela();
+
+    fireEvent.click(await screen.findByRole("button", { name: "Não" }));
+    fireEvent.change(screen.getByLabelText(O_QUE_NAO_BATEU), { target: { value: "   " } });
+    fireEvent.click(screen.getByRole("button", { name: "Enviar o que não bateu" }));
+
+    expect((await screen.findByRole("alert")).textContent).toContain("Diga o que não bateu no resumo.");
+    expect(posts(pedidos)).toEqual([]);
+  });
+
+  it("o não com texto vai à rota do não e a conversa retoma com a próxima pergunta", async () => {
+    const depoisDoNao = planejamento({
+      estado: "em_andamento",
+      mensagens: [...RESUMIDO.mensagens, { tipo: "nao_bateu", texto: "A enfermagem também usa." }],
+      resumo: RESUMO,
+    });
+    const retomou = planejamento({ ...depoisDoNao, mensagens: [...depoisDoNao.mensagens, SEGUNDA] });
+    const pedidos = dublarServidor(RESUMIDO, [resposta(depoisDoNao), resposta(retomou)]);
+    montarTela();
+
+    fireEvent.click(await screen.findByRole("button", { name: "Não" }));
+    fireEvent.change(screen.getByLabelText(O_QUE_NAO_BATEU), { target: { value: "A enfermagem também usa." } });
+    fireEvent.click(screen.getByRole("button", { name: "Enviar o que não bateu" }));
+
+    expect(await screen.findByText("O retorno precisa de horário marcado?")).toBeTruthy();
+    expect(posts(pedidos)).toEqual([
+      {
+        url: "/api/admin/tecnologia/demandas/d-1/planejamento/nao",
+        metodo: "POST",
+        corpo: { texto: "A enfermagem também usa." },
+      },
+      { url: "/api/admin/tecnologia/demandas/d-1/planejamento", metodo: "POST", corpo: {} },
+    ]);
+    expect(screen.queryByRole("heading", { name: TITULO_DO_RESUMO })).toBeNull();
+  });
+
+  it("aberta depois de um não cuja pergunta seguinte falhou, a tela pede a pergunta de novo", async () => {
+    const depoisDoNao = planejamento({
+      mensagens: [...RESUMIDO.mensagens, { tipo: "nao_bateu", texto: "A enfermagem também usa." }],
+    });
+    const seguinte = planejamento({ ...depoisDoNao, mensagens: [...depoisDoNao.mensagens, SEGUNDA] });
+    const pedidos = dublarServidor(depoisDoNao, [resposta(seguinte)]);
+    montarTela();
+
+    expect(await screen.findByText("O retorno precisa de horário marcado?")).toBeTruthy();
+    expect(posts(pedidos).map((p) => p.corpo)).toEqual([{}]);
   });
 });
