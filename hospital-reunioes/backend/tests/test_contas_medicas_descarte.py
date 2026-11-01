@@ -11,6 +11,7 @@ from __future__ import annotations
 import os
 import sys
 import uuid
+from pathlib import Path
 
 import pytest
 
@@ -252,3 +253,41 @@ class TestNaLista:
             "processando": False,
             "falta-conta": True,
         }
+
+
+KIT = Path(__file__).resolve().parents[1] / "app" / "conhecimento" / "contas-medicas.md"
+
+
+class TestKitDeConhecimento:
+    def test_diz_quem_descarta_o_que_sai_e_o_que_fica(self):
+        secao = KIT.read_text(encoding="utf-8").split("## O envio e a fila", 1)[1].split("\n## ", 1)[0]
+
+        for trecho in (
+            "Descartar",
+            "Descartar o atendimento 31302? Os arquivos serão apagados.",
+            "Erro",
+            "Falta o prontuário",
+            "Falta a conta",
+            "quem enviou",
+            "Painel completo",
+            "na hora",
+            "outra conta do mesmo atendimento",
+            "custo da IA",
+            "conta nova",
+            "Guia",
+        ):
+            assert trecho in secao, trecho
+
+
+@pytest.mark.parametrize(
+    "arquivo",
+    [
+        Path(__file__).resolve().parents[1] / "app" / "services" / "contas_medicas" / "descarte.py",
+        Path(__file__).resolve(),
+    ],
+    ids=lambda a: a.name,
+)
+def test_sem_travessao_nem_meia_risca(arquivo):
+    texto = arquivo.read_text(encoding="utf-8")
+    assert chr(0x2014) not in texto
+    assert chr(0x2013) not in texto
