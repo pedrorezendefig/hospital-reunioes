@@ -775,6 +775,118 @@ def corpo_da_issue_nova(
     )
 
 
+# ─── 2b. O PRD do diretor (issue #1349, ADR 0075) ────────────────────────────
+
+# O numero de issue escrito no texto (`#42`, `GH-42`), fora de entidade HTML
+# (`&#35;`). Ele sai como `nº 42`: no GitHub, `#42` vira link e menciona outra
+# issue do repositorio publico, e o bloco volta para o card do diretor, onde
+# numero de issue nao aparece (ADR 0054, decisao 9).
+_NUMERO_DE_ISSUE = re.compile(r"(?<!&)(?:#|\bGH-)(\d+)", re.IGNORECASE)
+
+SEM_DECISAO_NO_PRD = "Nenhuma pergunta respondida fechou uma decisão."
+NADA_EM_ABERTO_NO_PRD = "Nada ficou em aberto."
+
+
+def _linha_do_prd(bruto: str | None) -> str:
+    """Um texto do planejamento pronto para UMA linha do PRD: a peneira e o
+    escape do `texto_do_diretor`, o numero de issue sem cerquilha e tudo numa
+    linha so, para nao quebrar o item de lista em que ele entra."""
+    texto = " ".join(texto_do_diretor(bruto).split())
+    return _NUMERO_DE_ISSUE.sub(r"nº \1", texto)
+
+
+def corpo_do_prd_do_diretor(
+    *,
+    demanda_id: str,
+    titulo: str,
+    descricao: str | None,
+    resumo: dict[str, Any],
+    link: str,
+    anexos: int = 0,
+) -> str:
+    """O corpo da issue que o "sim" do resumo cria (ADR 0075, decisao 1).
+
+    E o PRD do diretor, a metade de negocio do PRD: o bloco "Para o diretor",
+    Problema, Solucao, Historias de usuario, Decisoes de negocio e "Ficou em
+    aberto". As secoes tecnicas nascem depois, no terminal, na mesma issue.
+
+    Funcao pura do resumo e da Demanda, sem IA: o que o diretor le na issue e o
+    que ele aprovou na tela, palavra por palavra. Nada aqui e escrito por um
+    modelo que nao foi o do resumo, e nenhuma decisao nasce fora do resumo.
+
+    Todo texto passa pelo `texto_do_diretor` (peneira de dado pessoal, escape
+    de marcador e de estrutura, sanitizador de travessao), como o corpo do
+    "Levar para desenvolvimento". A Origem nao leva login: quem disse "sim"
+    pode ser o diretor, que nao tem um.
+    """
+    o_que_muda = _linha_do_prd(descricao) or _linha_do_prd(titulo)
+    titulo_limpo = _linha_do_prd(titulo)
+    decisoes = [
+        (_linha_do_prd(d.get("pergunta")), _linha_do_prd(d.get("escolha")), _linha_do_prd(d.get("porque")))
+        for d in resumo.get("decisoes") or []
+    ]
+    em_aberto = [item for item in (_linha_do_prd(t) for t in resumo.get("em_aberto") or []) if item]
+
+    precisa_saber = [f"- {escolha}" for _, escolha, _ in decisoes]
+    if em_aberto:
+        pontos = "1 ponto" if len(em_aberto) == 1 else f"{len(em_aberto)} pontos"
+        precisa_saber.append(f"- Ficou em aberto: {pontos}, que a Vitta pergunta depois.")
+    if not precisa_saber:
+        precisa_saber.append(f"- {SEM_DECISAO_NO_PRD}")
+
+    historias = [f"1. Como quem pediu a Demanda, quero {titulo_limpo}, para resolver o problema acima."]
+    historias += [
+        f"{n}. Como quem pediu a Demanda, quero que valha o que decidi: {escolha}"
+        for n, (_, escolha, _) in enumerate(decisoes, start=2)
+    ]
+
+    linhas_das_decisoes: list[str] = []
+    for n, (pergunta, escolha, porque) in enumerate(decisoes, start=1):
+        linhas_das_decisoes += [f"{n}. **{pergunta}**", f"   Escolha: {escolha}", f"   Por quê: {porque}", ""]
+
+    return "\n".join(
+        [
+            CABECALHO_DO_BLOCO,
+            "",
+            f"**O que muda:** {o_que_muda}",
+            "",
+            "**O que você precisa saber:**",
+            *precisa_saber,
+            "",
+            "---",
+            "",
+            "## Problema",
+            "",
+            o_que_muda,
+            "",
+            "## Solução",
+            "",
+            f"{titulo_limpo}, do jeito que o diretor decidiu no planejamento com a IA, na aba Tecnologia. "
+            "As decisões dele estão em Decisões de negócio; as técnicas ficam para o planejamento da Vitta.",
+            "",
+            "## Histórias de usuário",
+            "",
+            *historias,
+            "",
+            "## Decisões de negócio",
+            "",
+            *(linhas_das_decisoes or [SEM_DECISAO_NO_PRD, ""]),
+            "## Ficou em aberto",
+            "",
+            *([f"- {item}" for item in em_aberto] or [NADA_EM_ABERTO_NO_PRD]),
+            "",
+            "## Origem",
+            "",
+            "Planejado com a IA na aba Tecnologia do aplicativo do hospital e mandado para o desenvolvimento "
+            "pelo sim dado no resumo.",
+            f"Abrir a Demanda: {link}",
+            *(["", frase] if (frase := frase_dos_anexos(anexos)) else []),
+            "",
+            marcador_da_demanda(demanda_id),
+        ]
+    )
+
+
 # ─── 2c. A resposta espelhada na issue (issue #680) ──────────────────────────
 #
 # Toda resposta da Conversa de uma Demanda vinculada vira comentario na issue

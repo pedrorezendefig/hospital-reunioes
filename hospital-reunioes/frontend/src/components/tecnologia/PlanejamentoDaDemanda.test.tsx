@@ -34,7 +34,9 @@ import {
   TITULO_DAS_DECISOES,
   TITULO_DAS_DECISOES_DO_RESUMO,
   TITULO_DO_EM_ABERTO,
+  TITULO_DO_ENVIADO,
   TITULO_DO_RESUMO,
+  VOLTAR_PARA_A_TECNOLOGIA,
 } from "./PlanejamentoDaDemanda";
 
 afterEach(() => {
@@ -464,12 +466,45 @@ describe("O resumo", () => {
     expect(within(decisoes).queryByText("Quem confirma o retorno com o paciente.")).toBeNull();
   });
 
-  it("o sim ainda não manda nada", async () => {
-    dublarServidor(RESUMIDO);
+  it("o sim manda para os desenvolvedores e a tela diz que foi", async () => {
+    const enviado = planejamento({ ...RESUMIDO, estado: "enviado" });
+    const pedidos = dublarServidor(RESUMIDO, [resposta(enviado)]);
     montarTela();
 
     const sim = (await screen.findByRole("button", { name: SIM_MANDAR })) as HTMLButtonElement;
-    expect(sim.disabled).toBe(true);
+    expect(sim.disabled).toBe(false);
+    fireEvent.click(sim);
+
+    expect(await screen.findByRole("heading", { name: TITULO_DO_ENVIADO })).toBeTruthy();
+    expect(posts(pedidos)).toEqual([
+      { url: "/api/admin/tecnologia/demandas/d-1/planejamento/enviar", metodo: "POST", corpo: {} },
+    ]);
+    // O estado seguinte: sem resumo para responder, sem sim nem não.
+    expect(screen.queryByRole("heading", { name: TITULO_DO_RESUMO })).toBeNull();
+    expect(screen.queryByRole("button", { name: SIM_MANDAR })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Não" })).toBeNull();
+    expect(screen.getByRole("link", { name: VOLTAR_PARA_A_TECNOLOGIA }).getAttribute("href")).toBe(
+      "/admin/tecnologia",
+    );
+  });
+
+  it("o sim que falha mostra a frase do servidor e o resumo continua", async () => {
+    dublarServidor(RESUMIDO, [resposta({ detail: "O GitHub não respondeu. Tente de novo em alguns instantes." }, 502)]);
+    montarTela();
+
+    fireEvent.click(await screen.findByRole("button", { name: SIM_MANDAR }));
+
+    expect((await screen.findByRole("alert")).textContent).toContain("O GitHub não respondeu.");
+    expect(screen.getByRole("heading", { name: TITULO_DO_RESUMO })).toBeTruthy();
+    expect((screen.getByRole("button", { name: SIM_MANDAR }) as HTMLButtonElement).disabled).toBe(false);
+  });
+
+  it("aberta depois do sim, a tela mostra que já foi, sem chamar a IA", async () => {
+    const pedidos = dublarServidor(planejamento({ ...RESUMIDO, estado: "enviado" }));
+    montarTela();
+
+    expect(await screen.findByRole("heading", { name: TITULO_DO_ENVIADO })).toBeTruthy();
+    expect(posts(pedidos)).toEqual([]);
   });
 
   it("o não sem texto é recusado na tela, sem ir ao servidor", async () => {

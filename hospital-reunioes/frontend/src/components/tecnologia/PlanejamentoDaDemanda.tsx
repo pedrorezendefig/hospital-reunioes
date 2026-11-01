@@ -14,8 +14,9 @@
  *
  * O fim (issue #1347): "Fechar e resumir", fixo no topo da conversa, pede o
  * resumo a qualquer altura. Com o planejamento resumido, a tela troca a
- * conversa pelo resumo, com o "sim" (que chega na próxima parte) e o "não",
- * que exige dizer o que não bateu e devolve a conversa à IA.
+ * conversa pelo resumo, com o "sim" e o "não". O "não" exige dizer o que não
+ * bateu e devolve a conversa à IA. O "sim" (issue #1349) manda o PRD do
+ * diretor para os desenvolvedores, e a tela passa a dizer que foi.
  *
  * A voz (issue #1348) entra pelo microfone do Assistente: o mesmo hook, a
  * mesma rota de transcrição. O texto transcrito cai no campo livre, editável,
@@ -24,12 +25,12 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { Bot, ListChecks, Loader2, Mic, Send, Square } from "lucide-react";
+import { Bot, CheckCircle2, ListChecks, Loader2, Mic, Send, Square } from "lucide-react";
 
 import { useGravacaoVoz } from "@/hooks/useGravacaoVoz";
 
 import { AVISO_DE_IA, corpoValidado, LIMITE_DA_MENSAGEM } from "./assistente";
-import { Demanda, FALHA_DE_CONEXAO, motivoDaRecusa } from "./demandas";
+import { Demanda, FALHA_DE_CONEXAO, motivoDaRecusa, ROTA_TECNOLOGIA } from "./demandas";
 import {
   esperaAIA,
   MensagemDoPlanejamento,
@@ -42,6 +43,7 @@ import {
   ResumoDoPlanejamento,
   rotaDoPlanejamento,
   rotuloDoBotao,
+  urlDoEnvio,
   urlDoNao,
   urlDoPlanejamento,
   urlDoResumo,
@@ -55,8 +57,11 @@ export const TITULO_DAS_DECISOES_DO_RESUMO = "Decisões";
 export const TITULO_DO_EM_ABERTO = "Ficou em aberto";
 export const SIM_MANDAR = "Sim, mandar para os desenvolvedores";
 export const O_QUE_NAO_BATEU = "O que não bateu";
+export const TITULO_DO_ENVIADO = "Mandado para os desenvolvedores";
+export const VOLTAR_PARA_A_TECNOLOGIA = "Voltar para a Tecnologia";
 const NAO_SEM_TEXTO = "Diga o que não bateu no resumo.";
-const SIM_NA_PROXIMA = "O envio para os desenvolvedores chega na próxima versão do aplicativo.";
+const O_QUE_O_SIM_FAZ = "O sim manda as suas decisões e o que ficou em aberto para a Vitta.";
+const ENVIADO = "A Vitta recebeu as suas decisões e o que ficou em aberto. A Demanda agora está Em análise, e o card mostra O que muda com o que você decidiu.";
 const NENHUMA_DECISAO = "Nenhuma pergunta respondida fechou uma decisão.";
 const NADA_EM_ABERTO = "Nada ficou em aberto.";
 const NAO_ABRIU = "Não foi possível abrir o planejamento desta Demanda. Recarregue a página.";
@@ -109,13 +114,15 @@ function Fala({ mensagem }: { mensagem: MensagemDoPlanejamento }) {
 type PropsDoResumo = {
   resumo: ResumoDoPlanejamento;
   pensando: boolean;
+  /** Manda o resumo para os desenvolvedores (o "sim"). */
+  onSim: () => void;
   /** Manda o que não bateu; devolve se o servidor aceitou. */
   onNao: (texto: string) => Promise<boolean>;
   onRecusaNaTela: (motivo: string) => void;
 };
 
 /** O resumo, na tela própria: as decisões, o que ficou em aberto, o sim e o não. */
-function ResumoDaConversa({ resumo, pensando, onNao, onRecusaNaTela }: PropsDoResumo) {
+function ResumoDaConversa({ resumo, pensando, onSim, onNao, onRecusaNaTela }: PropsDoResumo) {
   const [dizendoNao, setDizendoNao] = useState(false);
   const [texto, setTexto] = useState("");
 
@@ -182,7 +189,8 @@ function ResumoDaConversa({ resumo, pensando, onNao, onRecusaNaTela }: PropsDoRe
         <div className="flex flex-wrap gap-2">
           <button
             type="button"
-            disabled
+            onClick={onSim}
+            disabled={pensando}
             className="px-4 py-2 rounded-xl bg-primary text-white text-sm font-semibold disabled:opacity-50"
           >
             {SIM_MANDAR}
@@ -196,7 +204,7 @@ function ResumoDaConversa({ resumo, pensando, onNao, onRecusaNaTela }: PropsDoRe
             Não
           </button>
         </div>
-        <p className="text-xs text-text-secondary">{SIM_NA_PROXIMA}</p>
+        <p className="text-xs text-text-secondary">{O_QUE_O_SIM_FAZ}</p>
       </div>
 
       {dizendoNao && (
@@ -223,6 +231,27 @@ function ResumoDaConversa({ resumo, pensando, onNao, onRecusaNaTela }: PropsDoRe
           </button>
         </div>
       )}
+    </section>
+  );
+}
+
+/** Depois do "sim": o plano já foi, e não há mais o que responder aqui. */
+function PlanejamentoEnviado() {
+  return (
+    <section className="w-full max-w-3xl bg-white rounded-2xl border border-primary/30 shadow-premium p-6 space-y-4">
+      <div className="flex items-center gap-2">
+        <span className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center">
+          <CheckCircle2 className="w-4 h-4 text-primary" />
+        </span>
+        <h2 className="text-base font-bold text-slate-900">{TITULO_DO_ENVIADO}</h2>
+      </div>
+      <p className="text-sm text-text-primary">{ENVIADO}</p>
+      <Link
+        href={ROTA_TECNOLOGIA}
+        className="inline-flex items-center px-4 py-2 rounded-xl border border-border text-sm font-semibold text-text-primary hover:border-primary"
+      >
+        {VOLTAR_PARA_A_TECNOLOGIA}
+      </Link>
     </section>
   );
 }
@@ -352,11 +381,19 @@ export function PlanejamentoDaDemanda({ demandaId, token, onTitulo }: Props) {
     </p>
   );
 
+  if (planejamento?.estado === "enviado") return <PlanejamentoEnviado />;
+
   if (planejamento?.estado === "resumido" && planejamento.resumo) {
     return (
       <div className="space-y-4">
         {aviso}
-        <ResumoDaConversa resumo={planejamento.resumo} pensando={pensando} onNao={dizerNao} onRecusaNaTela={setErro} />
+        <ResumoDaConversa
+          resumo={planejamento.resumo}
+          pensando={pensando}
+          onSim={() => enviar(urlDoEnvio(demandaId), {})}
+          onNao={dizerNao}
+          onRecusaNaTela={setErro}
+        />
       </div>
     );
   }

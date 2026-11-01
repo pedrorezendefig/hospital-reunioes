@@ -48,6 +48,9 @@ Planejamento da Demanda (issue #1345, ADR 0075):
 - POST  /admin/tecnologia/demandas/{id}/planejamento/nao  o que nao bateu no
                                                       resumo; a conversa volta
                                                       a em andamento.
+- POST  /admin/tecnologia/demandas/{id}/planejamento/enviar  o "sim" do
+                                                      resumo: cria o PRD do
+                                                      diretor e vincula (#1349).
 
 Anexo da Demanda (issue #1061, ADR 0069):
 
@@ -112,6 +115,7 @@ from typing import NoReturn
 from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile, status
 from supabase import Client
 
+from app.config import settings
 from app.dependencies import get_supabase_client, require_super_admin, selecionar_participantes
 from app.limiter import limiter
 from app.models.tecnologia_schemas import (
@@ -208,6 +212,7 @@ from app.services.tecnologia_vinculo import (
     TEXTO_VINCULO_DESFEITO,
     corpo_da_issue_nova,
     corpo_do_comentario_espelhado,
+    corpo_do_prd_do_diretor,
     corpo_vinculado,
     foto_mudou,
     labels_da_issue_nova,
@@ -1611,6 +1616,54 @@ async def levar_para_desenvolvimento(
     ja_vinculada = demanda.get("github_issue_numero")
     if ja_vinculada:
         _recusar(motivo_ja_vinculada_para_levar(int(ja_vinculada)))
+
+    def corpo(titulo: str) -> str:
+        legivel = _com_nomes(supabase, [demanda], ator=ator)[0]
+        return corpo_da_issue_nova(
+            demanda_id=demanda_id,
+            titulo=titulo,
+            descricao=demanda.get("descricao"),
+            tipo_rotulo=TIPO_ROTULO.get(str(demanda.get("tipo")), str(demanda.get("tipo") or "")),
+            produto_nome=legivel.get("produto_nome") or SEM_PRODUTO,
+            # Login, e nao nome: nome civil nenhum sai para o repositorio
+            # publico (decisao do diretor). Quem le a issue chega a quem pediu
+            # pelo link da Demanda, que exige o app. O nome de quem levou
+            # continua na Conversa, que e de dentro.
+            levado_por_login=ator.get("github_login"),
+            link=link_da_demanda(demanda_id),
+            # So a contagem: nem URL nem nome de arquivo saem para o
+            # repositorio publico (issue #1062, ADR 0069, decisao 1).
+            anexos=tecnologia_anexos.quantos_guardados(supabase, demanda_id),
+        )
+
+    linha = _criar_issue_e_vincular(
+        supabase,
+        demanda=demanda,
+        ator=ator,
+        corpo=corpo,
+        assignees=_assignees_da_issue_nova(supabase, demanda),
+    )
+    return _com_nomes(supabase, [linha], ator=ator)[0]
+
+
+def _criar_issue_e_vincular(
+    supabase: Client,
+    *,
+    demanda: dict,
+    ator: dict,
+    corpo,
+    assignees: list[str],
+) -> dict:
+    """O servico das duas portas que CRIAM a issue: o "Levar para
+    desenvolvimento" e o "sim" do Planejamento da Demanda (issue #1349).
+
+    Recebe a Demanda ja lida e as guardas de cada porta ja passadas, e faz o
+    que e igual nas duas: a vez de criar, o titulo pela peneira, as labels do
+    tipo, a issue no GitHub, o Vinculo, a linha do fio e a Etapa. O que muda de
+    uma porta para a outra entra por parametro: o `corpo(titulo)` e os
+    `assignees`. Devolve a linha da Demanda ja vinculada.
+    """
+    demanda_id = str(demanda["id"])
     if _criacao_em_andamento(demanda):
         _recusar(MOTIVO_CRIACAO_EM_ANDAMENTO)
 
@@ -1624,31 +1677,13 @@ async def levar_para_desenvolvimento(
     # pela mesma peneira (o corpo ja passava, porque o titulo e o "O que muda"
     # da Demanda sem descricao). Inclusive a de dado pessoal (issue #772).
     titulo = titulo_da_issue(demanda.get("titulo"))
-    legivel = _com_nomes(supabase, [demanda], ator=ator)[0]
-
-    corpo = corpo_da_issue_nova(
-        demanda_id=demanda_id,
-        titulo=titulo,
-        descricao=demanda.get("descricao"),
-        tipo_rotulo=TIPO_ROTULO.get(str(demanda.get("tipo")), str(demanda.get("tipo") or "")),
-        produto_nome=legivel.get("produto_nome") or SEM_PRODUTO,
-        # Login, e nao nome: nome civil nenhum sai para o repositorio publico
-        # (decisao do diretor). Quem le a issue chega a quem pediu pelo link da
-        # Demanda, que exige o app. O nome de quem levou continua na Conversa,
-        # que e de dentro.
-        levado_por_login=ator.get("github_login"),
-        link=link_da_demanda(demanda_id),
-        # So a contagem: nem URL nem nome de arquivo saem para o repositorio
-        # publico (issue #1062, ADR 0069, decisao 1).
-        anexos=tecnologia_anexos.quantos_guardados(supabase, demanda_id),
-    )
 
     try:
         dados = github_client.criar_issue(
             titulo=titulo,
-            corpo=corpo,
+            corpo=corpo(titulo),
             labels=labels_da_issue_nova(demanda.get("tipo")),
-            assignees=_assignees_da_issue_nova(supabase, demanda),
+            assignees=assignees,
         )
         numero = dados.get("number")
         if not isinstance(numero, int):
@@ -1703,7 +1738,7 @@ async def levar_para_desenvolvimento(
         total=total,
     )
 
-    return _com_nomes(supabase, [result.data[0]], ator=ator)[0]
+    return result.data[0]
 
 
 @router.post("/demandas/{demanda_id}/desvincular", response_model=DemandaResponse)
@@ -2623,6 +2658,59 @@ async def recusar_resumo_do_planejamento(
     if linha is None:
         _conflito(MOTIVO_PLANEJAMENTO_MUDOU)
     return _planejamento_para_a_tela(demanda, linha)
+
+
+@router.post("/demandas/{demanda_id}/planejamento/enviar", response_model=PlanejamentoResponse)
+@limiter.shared_limit(LIMITE_DO_VINCULO, ESCOPO_DO_VINCULO)
+async def enviar_planejamento(
+    request: Request,
+    demanda_id: str,
+    ator: dict = Depends(require_super_admin),
+    supabase: Client = Depends(get_supabase_client),
+):
+    """O "sim" do resumo (issue #1349, ADR 0075, decisao 6): cria o PRD do
+    diretor e vincula a Demanda.
+
+    Pelo MESMO servico do "Levar para desenvolvimento" (`_criar_issue_e_vincular`):
+    a identidade no GitHub e a do token da integracao, e a issue nasce com o
+    marcador, `needs-triage`, a label do tipo e a Etapa derivada dela. Duas
+    diferencas, e as duas de proposito:
+
+    * **sem o gate do `github_login`**: quem diz "sim" e quem planejou, e
+      qualquer Super admin da aba planeja (decisao 8), o diretor inclusive;
+    * **a issue nasce atribuida ao dono da empresa** (`GITHUB_LOGIN_DONO`), e
+      nao ao Responsavel da Demanda: e ele quem redistribui.
+
+    A ordem das guardas e a do Levar: o que eu pedi existe e faz sentido (404,
+    409) e so entao o ambiente (503). Falha do GitHub sai como 502 com o resumo
+    intacto, para o "sim" valer de novo.
+    """
+    demanda = _buscar_demanda(supabase, demanda_id)
+    motivo = planejamento_demanda.motivo_para_nao_planejar(demanda)
+    if motivo:
+        _conflito(motivo)
+
+    atual = planejamento_demanda.ler(supabase, demanda_id)
+    resumo = (atual or {}).get("resumo")
+    if atual is None or atual.get("estado") != planejamento_demanda.ESTADO_RESUMIDO or not resumo:
+        _conflito(planejamento_demanda.MOTIVO_SEM_RESUMO)
+    _exigir_integracao()
+
+    def corpo(titulo: str) -> str:
+        return corpo_do_prd_do_diretor(
+            demanda_id=demanda_id,
+            titulo=titulo,
+            descricao=demanda.get("descricao"),
+            resumo=resumo,
+            link=link_da_demanda(demanda_id),
+            anexos=tecnologia_anexos.quantos_guardados(supabase, demanda_id),
+        )
+
+    dono = login_para_publicar(settings.github_login_dono)
+    _criar_issue_e_vincular(supabase, demanda=demanda, ator=ator, corpo=corpo, assignees=[dono] if dono else [])
+
+    linha = planejamento_demanda.marcar_enviado(supabase, demanda_id, agora=_agora())
+    return _planejamento_para_a_tela(demanda, linha or {**atual, "estado": planejamento_demanda.ESTADO_ENVIADO})
 
 
 # A lista de extensoes e os dois tetos vem do EXTRATOR, e nao sao escritos de

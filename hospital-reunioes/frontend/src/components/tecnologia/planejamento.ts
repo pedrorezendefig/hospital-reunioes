@@ -89,6 +89,11 @@ export function urlDoNao(demandaId: string): string {
   return `${urlDoPlanejamento(demandaId)}/nao`;
 }
 
+/** O "sim" do resumo (issue #1349): cria o PRD do diretor e vincula a Demanda. */
+export function urlDoEnvio(demandaId: string): string {
+  return `${urlDoPlanejamento(demandaId)}/enviar`;
+}
+
 /** A tela do planejamento, que o botão do card abre. */
 export function rotaDoPlanejamento(demandaId: string): string {
   return `${ROTA_TECNOLOGIA}/planejamento/${encodeURIComponent(demandaId)}`;

@@ -90,6 +90,11 @@ class Settings(BaseSettings):
     github_integracao_token: str = ""
     github_integracao_repo: str = ""
 
+    # O login do dono da empresa no GitHub (issue #1349, ADR 0075). A issue que
+    # o "sim" do Planejamento da Demanda cria nasce atribuída a ele, e não ao
+    # Responsável da Demanda: é ele quem redistribui.
+    github_login_dono: str = "pedrorezendefig"
+
     # O segredo do webhook do GitHub (issue #678). Ele é o ÚNICO jeito de a rota
     # `/webhooks/github` saber que a entrega veio mesmo do GitHub: a porta é
     # pública e não tem login nenhum na frente.
