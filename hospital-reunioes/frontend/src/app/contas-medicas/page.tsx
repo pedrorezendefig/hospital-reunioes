@@ -39,6 +39,7 @@ import {
   ROTA_FILA,
   ROTA_ME,
   ROTA_MEUS_ENVIOS,
+  analisarDeNovo,
   detalheDaConta,
   enviarEmLotes,
   perguntaDoDescarte,
@@ -188,18 +189,24 @@ const NAO_COPIOU =
 /**
  * O Erro do cartão do envio (issue #1337): a frase, o Código do erro, "Ver
  * detalhes" com o detalhe técnico e "Copiar para a TI", que leva o que a TI
- * precisa para achar o erro sem ver a tela.
+ * precisa para achar o erro sem ver a tela. Quando o servidor diz que a ação é
+ * Analisar de novo (o erro não foi no PDF e ele ainda está guardado), o botão
+ * põe a conta de volta na fila sem anexar nada (issue #1339).
  */
 function ErroDoEnvio({
   conta,
   onEnviar,
+  onAnalisarDeNovo,
   onDescartar,
 }: {
   conta: ItemDaFila;
   onEnviar: () => void;
+  onAnalisarDeNovo: () => Promise<string | null>;
   onDescartar?: () => void;
 }) {
   const [aberto, setAberto] = useState(false);
+  const [analisando, setAnalisando] = useState(false);
+  const [recusa, setRecusa] = useState<string | null>(null);
   const [copiou, setCopiou] = useState(false);
   const [paraPegarAMao, setParaPegarAMao] = useState<string | null>(null);
   const caixa = useRef<HTMLTextAreaElement | null>(null);
@@ -219,6 +226,14 @@ function ErroDoEnvio({
       console.error("[contas-medicas] o navegador não copiou", e);
       setParaPegarAMao(texto);
     }
+  }
+
+  async function analisar() {
+    setAnalisando(true);
+    setRecusa(null);
+    const frase = await onAnalisarDeNovo();
+    setAnalisando(false);
+    setRecusa(frase);
   }
 
   const idDoDetalhe = `detalhe-do-erro-${conta.id}`;
@@ -243,15 +258,31 @@ function ErroDoEnvio({
         <button type="button" onClick={copiar} className="text-sm font-medium text-primary hover:underline">
           Copiar para a TI
         </button>
-        <button type="button" onClick={onEnviar} className="text-sm font-medium text-primary hover:underline">
-          Enviar de novo
-        </button>
+        {conta.erro_acao === "analisar_de_novo" ? (
+          <button
+            type="button"
+            onClick={analisar}
+            disabled={analisando}
+            className="text-sm font-medium text-primary hover:underline disabled:opacity-50"
+          >
+            Analisar de novo
+          </button>
+        ) : (
+          <button type="button" onClick={onEnviar} className="text-sm font-medium text-primary hover:underline">
+            Enviar de novo
+          </button>
+        )}
         {onDescartar && (
           <button type="button" onClick={onDescartar} className="text-sm font-medium text-red-700 hover:underline">
             Descartar
           </button>
         )}
       </div>
+      {recusa && (
+        <p role="alert" className="text-sm text-red-700">
+          {recusa}
+        </p>
+      )}
       {aberto && (
         <p id={idDoDetalhe} className="break-all rounded-lg bg-slate-50 px-3 py-2 font-mono text-xs text-slate-700">
           {conta.erro_detalhe ?? "Sem detalhe técnico gravado."}
@@ -285,10 +316,12 @@ function ErroDoEnvio({
 function CartaoDoEnvio({
   conta,
   onEnviar,
+  onAnalisarDeNovo,
   onDescartar,
 }: {
   conta: ItemDaFila;
   onEnviar: () => void;
+  onAnalisarDeNovo: () => Promise<string | null>;
   onDescartar: () => void;
 }) {
   const detalhe = detalheDaConta(conta);
@@ -333,7 +366,12 @@ function CartaoDoEnvio({
           </Quadrado>
         </div>
         {erro ? (
-          <ErroDoEnvio conta={conta} onEnviar={onEnviar} onDescartar={conta.pode_descartar ? onDescartar : undefined} />
+          <ErroDoEnvio
+            conta={conta}
+            onEnviar={onEnviar}
+            onAnalisarDeNovo={onAnalisarDeNovo}
+            onDescartar={conta.pode_descartar ? onDescartar : undefined}
+          />
         ) : (
           (detalhe || conta.pode_descartar) && (
             <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
@@ -542,6 +580,14 @@ export default function ContasMedicasPage() {
     await carregarFila(token, pode);
   }
 
+  /** A conta volta para a fila e a lista se relê: o cartão passa para Na fila. */
+  async function analisarContaDeNovo(contaId: string): Promise<string | null> {
+    if (!token || !pode) return null;
+    const recusa = await analisarDeNovo(contaId, token);
+    if (recusa === null) await carregarFila(token, pode);
+    return recusa;
+  }
+
   const contas = fila?.[aba];
   const abas = pode ? abasDe(pode) : [];
   // Sem nenhuma das duas permissões (o credenciamento), a tela fica só com os atalhos.
@@ -660,6 +706,7 @@ export default function ContasMedicasPage() {
                       key={conta.id}
                       conta={conta}
                       onEnviar={() => seletor.current?.click()}
+                      onAnalisarDeNovo={() => analisarContaDeNovo(conta.id)}
                       onDescartar={() => descartar(conta)}
                     />
                   ))}

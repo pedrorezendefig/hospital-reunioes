@@ -94,12 +94,15 @@ const ANALISAR = "enviar_corrigir_contas";
 let filaDoServidor: Fila;
 let permissoes: string[];
 let respostaDoDescarte: () => Response;
+/** O que a rota Analisar de novo responde (issue #1339); por padrão, a conta vai para a fila. */
+let aoAnalisarDeNovo: (url: string) => Response;
 const chamadas: { url: string; init?: RequestInit }[] = [];
 
 beforeEach(() => {
   filaDoServidor = FILA;
   permissoes = [ENVIAR, ANALISAR];
   respostaDoDescarte = () => new Response(JSON.stringify({ descartada: "erro" }));
+  aoAnalisarDeNovo = () => new Response(JSON.stringify({ situacao: "NA_FILA" }));
   chamadas.length = 0;
   vi.stubGlobal(
     "fetch",
@@ -112,6 +115,7 @@ beforeEach(() => {
       if (url === "/api/contas-medicas/envios") return new Response(JSON.stringify(RESPOSTA_DO_ENVIO));
       if (url === "/api/contas-medicas/me") return new Response(JSON.stringify({ perfil: "faturista", permissoes }));
       if (url.endsWith("/descartar")) return respostaDoDescarte();
+      if (url.endsWith("/analisar-de-novo")) return aoAnalisarDeNovo(url);
       return new Response("{}", { status: 404 });
     }),
   );
@@ -582,6 +586,98 @@ describe("Descartar um envio (issue #1338)", () => {
     fireEvent.click(within(itens[0]).getByRole("button", { name: "Descartar" }));
 
     expect((await screen.findByRole("alert")).textContent).toContain("A conta já tem Guia e não pode ser descartada.");
+  });
+});
+
+describe("Analisar de novo sem anexar o PDF (issue #1339)", () => {
+  const DA_IA = conta({
+    id: "erro-ia",
+    numero_atendimento: "31260",
+    situacao: "ERRO",
+    erro_motivo: "A IA está fora do ar ou sobrecarregada agora.",
+    erro_codigo: "CM-IA-FORA-DO-AR",
+    erro_arquivo: "prontuario",
+    erro_acao: "analisar_de_novo",
+  });
+  const DO_ARQUIVO = conta({
+    id: "erro-conta",
+    numero_atendimento: "31261",
+    situacao: "ERRO",
+    erro_motivo: "Não consegui ler a conta inteira",
+    erro_codigo: "CM-ARQ-SOMA",
+    erro_arquivo: "conta",
+    erro_acao: "enviar_de_novo",
+  });
+
+  async function cartoes(): Promise<HTMLElement[]> {
+    filaDoServidor = { ...FILA, meus_envios: [DA_IA, DO_ARQUIVO] };
+    render(<ContasMedicasPage />);
+    await linhas();
+    aba(/^Meus envios/);
+    return linhas();
+  }
+
+  it("o erro da IA mostra Analisar de novo no lugar de Enviar de novo, e o erro do arquivo continua com Enviar de novo", async () => {
+    const [daIA, doArquivo] = await cartoes();
+
+    expect(within(daIA).getByRole("button", { name: "Analisar de novo" })).toBeTruthy();
+    expect(within(daIA).queryByRole("button", { name: "Enviar de novo" })).toBeNull();
+    expect(within(doArquivo).getByRole("button", { name: "Enviar de novo" })).toBeTruthy();
+    expect(within(doArquivo).queryByRole("button", { name: "Analisar de novo" })).toBeNull();
+  });
+
+  it("o clique chama a rota da conta, sem arquivo, e o cartão passa para Na fila", async () => {
+    aoAnalisarDeNovo = () => {
+      filaDoServidor = {
+        ...FILA,
+        meus_envios: [conta({ id: "erro-ia", numero_atendimento: "31260", situacao: "NA_FILA" }), DO_ARQUIVO],
+      };
+      return new Response(JSON.stringify({ situacao: "NA_FILA" }));
+    };
+    const [daIA] = await cartoes();
+
+    fireEvent.click(within(daIA).getByRole("button", { name: "Analisar de novo" }));
+
+    await waitFor(async () => expect((await linhas())[0].textContent).toContain("Na fila"));
+    const chamada = chamadas.find((c) => c.url.endsWith("/analisar-de-novo"));
+    expect(chamada?.url).toBe("/api/contas-medicas/contas/erro-ia/analisar-de-novo");
+    expect(chamada?.init?.method).toBe("POST");
+    expect(chamada?.init?.body).toBeUndefined();
+    expect((chamada?.init?.headers as Record<string, string>).Authorization).toBe("Bearer token-de-teste");
+    expect(within((await linhas())[0]).queryByRole("button", { name: "Analisar de novo" })).toBeNull();
+  });
+
+  it("a recusa do servidor aparece no cartão com a frase dele", async () => {
+    aoAnalisarDeNovo = () =>
+      new Response(JSON.stringify({ detail: "O PDF já passou dos 7 dias e saiu do sistema. Envie de novo." }), {
+        status: 409,
+      });
+    const [daIA] = await cartoes();
+
+    fireEvent.click(within(daIA).getByRole("button", { name: "Analisar de novo" }));
+
+    expect((await within(daIA).findByRole("alert")).textContent).toBe(
+      "O PDF já passou dos 7 dias e saiu do sistema. Envie de novo.",
+    );
+  });
+
+  it("Descartar convive com Analisar de novo e com Enviar de novo no cartão em Erro (issues #1338 e #1339)", async () => {
+    filaDoServidor = {
+      ...FILA,
+      meus_envios: [{ ...DA_IA, pode_descartar: true }, { ...DO_ARQUIVO, pode_descartar: true }],
+    };
+    render(<ContasMedicasPage />);
+    await linhas();
+    aba(/^Meus envios/);
+    const [daIA, doArquivo] = await linhas();
+    const botoes = (cartao: HTMLElement) =>
+      within(cartao)
+        .getAllByRole("button")
+        .map((b) => b.textContent)
+        .filter((t) => t === "Analisar de novo" || t === "Enviar de novo" || t === "Descartar");
+
+    expect(botoes(daIA)).toEqual(["Analisar de novo", "Descartar"]);
+    expect(botoes(doArquivo)).toEqual(["Enviar de novo", "Descartar"]);
   });
 });
 
