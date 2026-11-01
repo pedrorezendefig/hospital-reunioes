@@ -13,6 +13,7 @@ Origem e o marcador da Demanda no fim).
 from __future__ import annotations
 
 import importlib.util
+import re
 from pathlib import Path
 
 import pytest
@@ -172,3 +173,42 @@ def test_cli_completar_edita_a_mesma_issue_e_troca_a_triagem(tmp_path):
     assert not any(c[:2] == ("issue", "create") for c in chamadas)
     corpo_gravado = next(c[1] for c in chamadas if c[0] == "corpo")
     assert corpo_gravado.startswith(BLOCO) and "## Decisões de implementação" in corpo_gravado
+
+
+# As skills: o agente só segue o caminho se o SKILL.md disser onde ele passa
+
+
+SKILLS = RAIZ / ".claude" / "skills"
+
+
+def secao_da_skill(skill: str, titulo: str) -> str:
+    texto = (SKILLS / skill / "SKILL.md").read_text(encoding="utf-8")
+    m = re.search(rf"^(#+) {re.escape(titulo)}\s*$", texto, re.MULTILINE)
+    assert m, f"{skill}: seção '{titulo}' não encontrada"
+    resto = texto[m.end() :]
+    fim = re.search(rf"^#{{1,{len(m.group(1))}}} ", resto, re.MULTILINE)
+    return resto[: fim.start()] if fim else resto
+
+
+def test_grill_with_docs_le_o_prd_do_diretor_e_nao_repergunta_o_negocio():
+    trecho = secao_da_skill("grill-with-docs", "PRD do diretor (`/grill-with-docs #N`)")
+    assert "prd_do_diretor.py ler" in trecho
+    assert "não repergunte" in trecho
+    assert "Ficou em aberto" in trecho
+    assert "/to-prd" in trecho
+
+
+def test_to_prd_completa_a_issue_do_diretor_em_vez_de_criar_outra():
+    trecho = secao_da_skill("to-prd", "PRD do diretor: completar a mesma issue")
+    assert "prd_do_diretor.py completar" in trecho
+    assert "sem `gh issue create`" in trecho
+    assert "Para o diretor" in trecho
+    assert "humanizer" in trecho
+
+
+def test_ask_pedro_descreve_o_caminho_do_prd_do_diretor_ate_o_to_issues():
+    trecho = secao_da_skill("ask-pedro", "PRD do diretor (planejado no app)")
+    ordem = ["Planejar com a IA", "/minhas-issues", "/grill-with-docs #N", "/to-prd", "/to-issues"]
+    posicoes = [trecho.find(passo) for passo in ordem]
+    assert -1 not in posicoes, dict(zip(ordem, posicoes))
+    assert posicoes == sorted(posicoes)
