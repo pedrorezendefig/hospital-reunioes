@@ -2,6 +2,54 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-11-01T18:16:56-03:00",
+      "sha": "18337f9aff2fecfc6550e213fe844fa602514589",
+      "app_version": "0.201.0",
+      "subject": "Onda onda-cm-onda2b: Contas médicas, Descartar envio com erro ou arquivo faltando",
+      "raw_subject": "chore(deploy): registro da onda onda-cm-onda2b (#1352)",
+      "scope": [
+        "backend",
+        "frontend"
+      ],
+      "prds": [
+        1335
+      ],
+      "result": "healthy",
+      "duration_seconds": 215,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        },
+        {
+          "service": "frontend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "onda-enxuta onda-cm-onda2b: PR #1352 (issue #1338), mergeados PR a PR. Merge pela API do GitHub, um build. Registro pela Action pos-merge depois do health.",
+      "etapas": {
+        "merge_s": 3,
+        "build_s": {
+          "backend": 20,
+          "frontend": 188
+        },
+        "health_s": 0
+      },
+      "responsavel": "pedrorezendefig"
+    },
+    {
       "at": "2026-11-01T17:58:51-03:00",
       "sha": "7dae93433965c5be8d9e79a4e67817990b3fedc2",
       "app_version": "0.200.0",
