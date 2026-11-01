@@ -9,7 +9,7 @@ bookkeeping, para cada PRD daquele deploy.
 Tirar o draft só vale se a publicação for possível **em seguida**: draft tirado
 e commitado com a publicação falhando deixa a página no repositório e fora do
 ar, que é o pior dos dois mundos. Por isso o script confere antes de escrever
-(MP4 de cada Vídeo de tarefa e ferramentas que o `publicar.sh` usa) e, se algo
+(MP4 de cada Vídeo de visão geral e ferramentas que o `publicar.sh` usa) e, se algo
 falta, não toca em arquivo nenhum.
 
 Uso:
@@ -30,6 +30,7 @@ Códigos de saída:
 from __future__ import annotations
 
 import argparse
+import os
 import re
 import shutil
 import subprocess
@@ -113,13 +114,27 @@ def resumo(numeros: str, paginas: list[str], impedimentos: list[str]) -> str:
     return "\n".join([*linhas, "", PROXIMO_PASSO]) + "\n"
 
 
-def video_sem_mp4(raiz: Path, conteudo: Path, paginas: list[Path]) -> list[str]:
-    """Páginas que exibem vídeo cujo MP4 não existe nesta árvore.
+def pasta_dos_videos() -> Path:
+    """Onde mora o MP4 de cada Vídeo de visão geral: fora do repositório.
 
-    O MP4 é regerável e fica fora do controle de versão, então não vem no
-    clone. O `publicar.sh` sai com erro quando a página aponta para um vídeo
-    que ele não acha, e aí o draft já teria sido tirado.
+    Nenhum MP4 fica no repositório (regra 10 do CLAUDE.md global): o master
+    vive em `~/Videos/Hospital/Manual/<modulo>/<slug>.mp4` e o `publicar.sh`
+    copia de lá. `MANUAL_VIDEOS` troca a pasta (os testes usam, e a máquina que
+    guarda os vídeos em outro disco também).
     """
+    return Path(
+        os.environ.get("MANUAL_VIDEOS", Path.home() / "Videos" / "Hospital" / "Manual")
+    )
+
+
+def video_sem_mp4(conteudo: Path, paginas: list[Path]) -> list[str]:
+    """Páginas que exibem vídeo cujo MP4 não existe nesta máquina.
+
+    O MP4 é regerável e fica fora do repositório, então não vem no clone. O
+    `publicar.sh` sai com erro quando a página aponta para um vídeo que ele
+    não acha, e aí o draft já teria sido tirado.
+    """
+    videos = pasta_dos_videos()
     faltando = []
     for arquivo in paginas:
         relativo = arquivo.relative_to(conteudo)
@@ -128,10 +143,10 @@ def video_sem_mp4(raiz: Path, conteudo: Path, paginas: list[Path]) -> list[str]:
             continue
         # A página inicial mostra o vídeo de Primeiros passos.
         modulo = modulo_da_abertura(relativo) or relativo.parts[0]
-        if not (raiz / "public" / "video" / modulo / f"{slug}.mp4").is_file():
+        if not (videos / modulo / f"{slug}.mp4").is_file():
             faltando.append(
                 f"{relativo}: exibe o vídeo '{slug}' e o MP4 não existe em "
-                f"public/video/{modulo}/{slug}.mp4. Renderize a composição de "
+                f"{videos}/{modulo}/{slug}.mp4. Renderize a composição de "
                 f"video/{modulo}/{slug}/ antes de publicar (a receita está em "
                 ".claude/skills/manual/references/video-de-visao-geral.md)."
             )
@@ -211,7 +226,7 @@ def main() -> int:
     paginas = [str(arquivo.relative_to(conteudo)) for arquivo in achadas]
     # Tudo o que impede a publicação é levantado antes da primeira escrita: ou
     # o PRD inteiro sai do draft, ou nada sai.
-    impedimentos = video_sem_mp4(raiz, conteudo, achadas) + ferramentas_faltando()
+    impedimentos = video_sem_mp4(conteudo, achadas) + ferramentas_faltando()
     novos = []
     for arquivo in achadas:
         novo = sem_draft(arquivo.read_text(encoding="utf-8"))

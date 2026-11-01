@@ -133,7 +133,7 @@ Regras:
   python3 tools/checar_video_manual.py --dir docs/manual
   cd docs/manual && corepack pnpm@9 install --frozen-lockfile && corepack pnpm@9 build
   python3 tools/checar_build_manual.py --dir docs/manual
-- Com os gates limpos, faça o render final sem esperar ninguém, copie o MP4 para local/manual-video-masters/ da árvore principal e ponha o caminho no corpo do PR.
+- Com os gates limpos, faça o render final sem esperar ninguém, direto em ~/Videos/Hospital/Manual/<módulo>/<slug>.mp4 (fora do repositório, sobrevive à subida), e ponha o caminho no corpo do PR.
 - Feche com /ship "docs: manual do módulo <modulo>" --issue <N>
 ```
 

@@ -170,7 +170,7 @@ Checklist:
 3. Todo print veio do roteiro do módulo, e o roteiro roda de ponta a ponta.
 4. `video` só na abertura do módulo (e na página inicial), com composição
    versionada com carimbo, e o MP4 ficou fora do git.
-5. O render final saiu depois dos gates limpos e o MP4 foi copiado para os masters.
+5. O render final saiu depois dos gates limpos, direto em `~/Videos/Hospital/Manual/<modulo>/<slug>.mp4`.
 6. Vídeo novo ou refeito: `tools/strips_video_manual.py` sem achado, `VERIFY.md`
    ao lado da composição e cada nota recebida virou regra.
 7. Os quatro comandos acima passam.

@@ -9,6 +9,7 @@ com `--pular-build`, sem Node e sem rede.
 
 from __future__ import annotations
 
+import os
 import shutil
 import subprocess
 from pathlib import Path
@@ -22,11 +23,16 @@ sem_ffmpeg = pytest.mark.skipif(
 )
 
 
-def publicar(saida: Path) -> subprocess.CompletedProcess[str]:
+def publicar(
+    saida: Path, videos: Path | None = None
+) -> subprocess.CompletedProcess[str]:
+    # A pasta dos masters é a do teste: o ~/Videos de quem roda não decide nada.
+    pasta = videos if videos is not None else saida.parent / "sem-videos"
     return subprocess.run(
         ["bash", str(PUBLICAR), "--dry-run", "--pular-build", "--saida", str(saida)],
         capture_output=True,
         text=True,
+        env=dict(os.environ, MANUAL_VIDEOS=str(pasta)),
     )
 
 
@@ -173,6 +179,41 @@ def test_video_que_a_pagina_usa_e_nao_existe_trava(tmp_path):
     resultado = publicar(saida)
     assert resultado.returncode == 1
     assert "sumido.mp4" in resultado.stdout + resultado.stderr
+
+
+@sem_ffmpeg
+def test_video_que_falta_na_montagem_vem_da_pasta_dos_masters(tmp_path):
+    """O master mora fora do repositório (~/Videos/Hospital/Manual): é de lá
+    que a publicação busca o MP4 que a montagem não trouxe."""
+    saida = tmp_path / "publicar"
+    saida.mkdir()
+    videos = tmp_path / "masters"
+    gravar_video(videos / "ouvidoria" / "registrar.mp4", 360)
+    (saida / "index.html").write_text(
+        '<video><source src="/video/ouvidoria/registrar.mp4"></video>', encoding="utf-8"
+    )
+
+    resultado = publicar(saida, videos)
+    assert resultado.returncode == 0, resultado.stderr
+    assert altura(saida / "video" / "ouvidoria" / "registrar.mp4") == 360
+
+
+@sem_ffmpeg
+def test_master_passa_por_cima_do_mp4_velho_da_montagem(tmp_path):
+    """Re-render não pode ser desfeito em silêncio por uma cópia velha que já
+    estava na montagem: quem vai ao ar é o master."""
+    saida = tmp_path / "publicar"
+    saida.mkdir()
+    gravar_video(saida / "video" / "ouvidoria" / "registrar.mp4", 1080)
+    videos = tmp_path / "masters"
+    gravar_video(videos / "ouvidoria" / "registrar.mp4", 360)
+    (saida / "index.html").write_text(
+        '<video><source src="/video/ouvidoria/registrar.mp4"></video>', encoding="utf-8"
+    )
+
+    resultado = publicar(saida, videos)
+    assert resultado.returncode == 0, resultado.stderr
+    assert altura(saida / "video" / "ouvidoria" / "registrar.mp4") == 360
 
 
 def test_video_apontando_para_fora_da_publicacao_trava(tmp_path):
