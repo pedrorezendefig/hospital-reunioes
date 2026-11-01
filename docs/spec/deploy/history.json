@@ -2,6 +2,56 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-11-01T17:58:51-03:00",
+      "sha": "7dae93433965c5be8d9e79a4e67817990b3fedc2",
+      "app_version": "0.200.0",
+      "subject": "Onda onda-cm-onda2: Contas médicas, Código do erro com a causa real, detalhe gravado e Copiar para a TI",
+      "raw_subject": "chore(deploy): registro da onda onda-cm-onda2 (#1353)",
+      "scope": [
+        "backend",
+        "frontend"
+      ],
+      "prds": [
+        1335
+      ],
+      "result": "healthy",
+      "duration_seconds": 197,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        },
+        {
+          "service": "frontend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [
+        "122_contas_medicas_codigo_do_erro.sql"
+      ],
+      "rollback_target_sha": null,
+      "notes": "onda-enxuta onda-cm-onda2: PR #1353 (issue #1337), mergeados PR a PR. Merge pela API do GitHub, um build. Registro pela Action pos-merge depois do health.",
+      "etapas": {
+        "merge_s": 2,
+        "build_s": {
+          "backend": 20,
+          "frontend": 177
+        },
+        "health_s": 0
+      },
+      "responsavel": "pedrorezendefig"
+    },
+    {
       "at": "2026-11-01T17:16:02-03:00",
       "sha": "21a1f2109fb2d4028e3375f007d1e4c1f7091433",
       "app_version": "0.199.0",
