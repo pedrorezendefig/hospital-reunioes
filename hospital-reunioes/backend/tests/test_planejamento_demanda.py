@@ -411,6 +411,139 @@ class TestFalhaDoTurno:
 
 
 # ═══════════════════════════════════════════════════════════════════════════
+# 2b. O resumo (issue #1347): Fechar e resumir
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+def _resumo(decisoes: list[dict] | None = None, em_aberto: list[str] | None = None) -> str:
+    return json.dumps(
+        {
+            "decisoes": decisoes if decisoes is not None else [{"pergunta": 1, "porque": "A recepção marca o retorno."}],
+            "em_aberto": em_aberto if em_aberto is not None else ["Quem confirma o retorno com o paciente."],
+        },
+        ensure_ascii=False,
+    )
+
+
+def _resumir(mensagens: list[dict] | None = None):
+    return planejamento_demanda.resumir(demanda=DEMANDA, mensagens=mensagens or [], kit=carregar_kit())
+
+
+class TestResumo:
+    def test_a_decisao_traz_a_pergunta_a_escolha_do_diretor_e_o_porque(self, monkeypatch):
+        _ia(monkeypatch, _resumo())
+
+        resultado = _resumir(_conversa_com(1))
+
+        assert resultado.erro is None
+        assert resultado.resumo == {
+            "decisoes": [{"pergunta": "Pergunta 1?", "escolha": "A1", "porque": "A recepção marca o retorno."}],
+            "em_aberto": ["Quem confirma o retorno com o paciente."],
+        }
+
+    def test_o_que_o_agente_nao_perguntou_nunca_vira_decisao(self, monkeypatch):
+        """O modelo inventa uma decisao para a pergunta 5 (que nao existe) e
+        outra para a 2 (feita, mas sem resposta): nenhuma das duas entra."""
+        _ia(
+            monkeypatch,
+            _resumo(
+                decisoes=[
+                    {"pergunta": 1, "porque": "Dito pelo diretor."},
+                    {"pergunta": 2, "porque": "Inventado sobre a pergunta sem resposta."},
+                    {"pergunta": 5, "porque": "Inventado sobre pergunta que nao houve."},
+                ]
+            ),
+        )
+
+        resultado = _resumir([*_conversa_com(1), _pergunta_guardada(2)])
+
+        assert [d["escolha"] for d in resultado.resumo["decisoes"]] == ["A1"]
+
+    def test_a_escolha_e_a_resposta_do_diretor_e_nao_o_que_o_modelo_escreve(self, monkeypatch):
+        _ia(monkeypatch, _resumo(decisoes=[{"pergunta": 1, "escolha": "Outra coisa", "porque": "Porque sim."}]))
+        conversa = [_pergunta_guardada(1), {"tipo": "resposta", "opcao": None, "texto": "Só no plantão da noite."}]
+
+        assert _resumir(conversa).resumo["decisoes"][0]["escolha"] == "Só no plantão da noite."
+
+    def test_na_primeira_pergunta_o_resumo_sai_sem_decisao(self, monkeypatch):
+        _ia(monkeypatch, _resumo(decisoes=[], em_aberto=["Quem usa a agenda."]))
+
+        resultado = _resumir([_pergunta_guardada(1)])
+
+        assert resultado.resumo == {"decisoes": [], "em_aberto": ["Quem usa a agenda."]}
+
+    def test_o_pedido_numera_as_perguntas_e_leva_o_que_nao_bateu(self, monkeypatch):
+        cliente = _ia(monkeypatch, _resumo())
+        conversa = [*_conversa_com(2), {"tipo": "nao_bateu", "texto": "A enfermagem também usa."}]
+
+        _resumir(conversa)
+
+        enviado = cliente.chamadas[0]
+        variavel = enviado["messages"][0]["content"]
+        assert "PEDIDO: RESUMO" in variavel
+        assert "[Pergunta 2] Pergunta 2?" in variavel
+        assert "A enfermagem também usa." in variavel
+        # Mesmo bloco fixo do turno: o cache do prefixo vale para o resumo.
+        assert [bloco.get("cache_control") for bloco in enviado["system"]] == [None, {"type": "ephemeral"}]
+
+    def test_o_custo_do_resumo_e_gravado_como_passo_resumo(self, monkeypatch):
+        _ia(monkeypatch, _resumo(), usage=_uso(entrada=1000, saida=500, lidos=20000, escritos=2000))
+
+        chamada = _resumir(_conversa_com(1)).chamada
+
+        assert chamada["passo"] == "resumo"
+        assert chamada["modelo"] == "claude-opus-5-5"
+        assert chamada["tokens_cache"] == 20000
+        assert chamada["custo_usd"] == 0.028
+        assert chamada["sucesso"] is True
+
+    def test_tira_o_travessao_do_que_o_modelo_escreveu(self, monkeypatch):
+        _ia(
+            monkeypatch,
+            _resumo(decisoes=[{"pergunta": 1, "porque": "Porque \u2014 sim."}], em_aberto=["Prazo \u2013 qual?"]),
+        )
+
+        resumo = json.dumps(_resumir(_conversa_com(1)).resumo, ensure_ascii=False)
+
+        assert "\u2014" not in resumo
+        assert "\u2013" not in resumo
+
+    @pytest.mark.parametrize(
+        "texto",
+        [
+            pytest.param("isto não é JSON", id="nao-e-json"),
+            pytest.param(json.dumps({"decisoes": [{"pergunta": "um"}], "em_aberto": []}), id="decisao-fora"),
+            pytest.param(json.dumps({"decisoes": []}), id="sem-em-aberto"),
+            pytest.param(_erro_do_provedor(), id="provedor-fora"),
+        ],
+    )
+    def test_falha_vira_erro_claro_e_a_chamada_fica_sem_sucesso(self, monkeypatch, texto):
+        _ia(monkeypatch, texto)
+
+        resultado = _resumir(_conversa_com(1))
+
+        assert resultado.resumo is None
+        assert resultado.erro == planejamento_demanda.MOTIVO_TURNO_FALHOU
+        assert resultado.chamada["sucesso"] is False
+
+
+class TestOPromptDoPlanejamento:
+    def test_manda_citar_o_que_ja_foi_decidido_ao_recusar_ou_redirecionar(self, monkeypatch):
+        """A instrucao (o primeiro bloco), e nao o kit: o kit ja traz o titulo
+        da secao em todo arquivo, e um teste que lesse os dois passaria sem
+        instrucao nenhuma."""
+        cliente = _ia(monkeypatch, _pergunta())
+
+        _turno()
+
+        instrucao = cliente.chamadas[0]["system"][0]["text"]
+        trecho = re.search(r"[^\n]*O que já foi decidido[^\n]*", instrucao)
+        assert trecho, "a instrucao nao cita a secao O que já foi decidido"
+        assert "recusar" in trecho.group(0)
+        assert "redirecionar" in trecho.group(0)
+
+
+# ═══════════════════════════════════════════════════════════════════════════
 # 3. As rotas
 # ═══════════════════════════════════════════════════════════════════════════
 
