@@ -1023,6 +1023,7 @@ class _TableQuery:
         self._is_null: set[str] = set()
         self._insert: list[dict] | None = None
         self._update: dict | None = None
+        self._delete = False
         self._order: list[str] = []
         self._range: tuple[int, int] | None = None
 
@@ -1065,6 +1066,11 @@ class _TableQuery:
         self._update = dict(payload)
         return self
 
+    def delete(self):
+        """O planejamento da Demanda sai ao encerrar (issue #1345)."""
+        self._delete = True
+        return self
+
     def _casa(self, linha: dict) -> bool:
         if not all(linha.get(c) == v for c, v in self._eq.items()):
             return False
@@ -1089,6 +1095,10 @@ class _TableQuery:
             gancho()
 
         casadas = [linha for linha in self._rows if self._casa(linha)]
+
+        if self._delete:
+            self._rows[:] = [linha for linha in self._rows if not self._casa(linha)]
+            return _Result(data=[dict(linha) for linha in casadas])
 
         if self._update is not None:
             for linha in casadas:

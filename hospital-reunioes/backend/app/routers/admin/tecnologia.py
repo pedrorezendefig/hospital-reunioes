@@ -34,6 +34,15 @@ Escrita no fio (issue #638):
                                                         resposta, por 10
                                                         minutos.
 
+Planejamento da Demanda (issue #1345, ADR 0075):
+
+- GET   /admin/tecnologia/demandas/{id}/planejamento  a conversa guardada e o
+                                                      "O que ja decidimos".
+- POST  /admin/tecnologia/demandas/{id}/planejamento  comeca a conversa ou
+                                                      responde a pergunta (a
+                                                      opcao ou o texto livre),
+                                                      e devolve a proxima.
+
 Anexo da Demanda (issue #1061, ADR 0069):
 
 - POST  /admin/tecnologia/demandas/{id}/anexos  guarda um print (png, jpg,
@@ -114,6 +123,8 @@ from app.models.tecnologia_schemas import (
     MoverPayload,
     PainelResponse,
     PessoaDaAba,
+    PlanejamentoResponse,
+    PlanejamentoRespostaPayload,
     ProdutoCreatePayload,
     ProdutoResponse,
     ProdutoUpdatePayload,
@@ -121,7 +132,7 @@ from app.models.tecnologia_schemas import (
     TextoParaIaResponse,
     VincularPayload,
 )
-from app.services import ai_processor, assistente_tecnologia, github_client, tecnologia_anexos
+from app.services import ai_processor, assistente_tecnologia, github_client, planejamento_demanda, tecnologia_anexos
 from app.services.conhecimento import carregar_kit
 from app.services.paginacao import ler_tudo
 from app.services.tecnologia import (
@@ -499,6 +510,7 @@ def _com_nomes(supabase: Client, demandas: list[dict], *, ator: dict) -> list[di
             "produto_nome": nomes_produto.get(d.get("produto_id")),
             "responsavel_nome": nomes_pessoa.get(d.get("responsavel_id")),
             "vinculo": _vinculo_visivel(d) if da_vitta else None,
+            "tem_vinculo": bool(d.get("github_issue_numero")),
             "partes": _partes_visiveis(d, da_vitta=da_vitta),
             "versao": versao_da_entrega(d),
         }
@@ -1152,6 +1164,8 @@ async def mover_demanda(
         # assunto encerrado nao pode ficar para tras por causa disso.
         if tecnologia_anexos.apagar_todos(supabase, demanda_id):
             await _contagem_na_issue(supabase, demanda=atual)
+        # O planejamento segue a mesma regra de vida (ADR 0075, decisao 3).
+        planejamento_demanda.apagar(supabase, demanda_id)
 
     _gravar_movimento(
         supabase,
@@ -2408,6 +2422,104 @@ async def assistente_chat(
         # de Sao Paulo o assistente entenderia "hoje" como o dia seguinte.
         hoje_iso=datetime.now(FUSO_HOSPITAL).date().isoformat(),
     )
+
+
+# ─── Planejamento da Demanda (issue #1345, PRD #1344, ADR 0075) ──────────────
+
+# A frase de quando outra aba gravou entre a leitura e a escrita. Ela nao diz
+# o que a outra aba fez: o codigo so sabe que a linha lida mudou.
+MOTIVO_PLANEJAMENTO_MUDOU = "O planejamento mudou em outra aba. Recarregue a página e tente de novo."
+
+
+def _planejamento_para_a_tela(demanda: dict, linha: dict | None) -> dict:
+    """O titulo vem junto para a tela dizer qual Demanda esta sendo planejada
+    sem uma segunda ida a rede."""
+    linha = linha or {}
+    return {
+        "demanda_id": str(demanda["id"]),
+        "titulo": demanda.get("titulo") or "",
+        "estado": linha.get("estado"),
+        "mensagens": linha.get("mensagens") or [],
+        "decisoes": linha.get("decisoes") or [],
+    }
+
+
+def _conflito(motivo: str) -> NoReturn:
+    raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=motivo)
+
+
+@router.get("/demandas/{demanda_id}/planejamento", response_model=PlanejamentoResponse)
+@limiter.limit(LIMITE_DO_ASSISTENTE)
+async def ler_planejamento(
+    request: Request,
+    demanda_id: str,
+    _ator: dict = Depends(require_super_admin),
+    supabase: Client = Depends(get_supabase_client),
+):
+    """A conversa guardada na Demanda, para retomar de onde parou (decisao 3)."""
+    demanda = _buscar_demanda(supabase, demanda_id)
+    return _planejamento_para_a_tela(demanda, planejamento_demanda.ler(supabase, demanda_id))
+
+
+@router.post("/demandas/{demanda_id}/planejamento", response_model=PlanejamentoResponse)
+@limiter.limit(LIMITE_DO_ASSISTENTE)
+async def responder_no_planejamento(
+    request: Request,
+    demanda_id: str,
+    payload: PlanejamentoRespostaPayload,
+    _ator: dict = Depends(require_super_admin),
+    supabase: Client = Depends(get_supabase_client),
+):
+    """Um turno: a resposta do diretor entra, a proxima pergunta volta.
+
+    Corpo vazio comeca a conversa. A conversa so e gravada depois que o turno
+    deu certo: falha do provedor ou resposta fora do esquema devolve 502 com a
+    frase para a tela, e o que estava guardado fica como estava. O custo da
+    chamada e gravado nos dois casos.
+    """
+    demanda = _buscar_demanda(supabase, demanda_id)
+    motivo = planejamento_demanda.motivo_para_nao_planejar(demanda)
+    if motivo:
+        _conflito(motivo)
+
+    atual = planejamento_demanda.ler(supabase, demanda_id)
+    if atual is not None and atual.get("estado") != planejamento_demanda.ESTADO_EM_ANDAMENTO:
+        _conflito(planejamento_demanda.MOTIVO_PLANEJAMENTO_TERMINOU)
+
+    mensagens = list((atual or {}).get("mensagens") or [])
+    resposta, motivo = planejamento_demanda.resposta_do_diretor(mensagens, opcao=payload.opcao, texto=payload.texto)
+    if motivo:
+        _recusar(motivo)
+    if resposta is not None:
+        mensagens.append(resposta)
+
+    # Fora do loop (issue #773, o porque em `ai_processor._EXECUTOR_DA_IA`).
+    resultado = await ai_processor.chamar_ia_fora_do_loop(
+        planejamento_demanda.turno, demanda=demanda, mensagens=mensagens, kit=carregar_kit()
+    )
+    if resultado.chamada is not None:
+        planejamento_demanda.gravar_chamada(supabase, resultado.chamada)
+    if resultado.erro:
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=resultado.erro)
+
+    decisoes = list((atual or {}).get("decisoes") or [])
+    if resultado.decisao:
+        decisoes.append(resultado.decisao)
+    encerrou = resultado.mensagem["tipo"] == "encerrou"
+    linha = planejamento_demanda.gravar(
+        supabase,
+        demanda_id,
+        atual=atual,
+        novo={
+            "estado": planejamento_demanda.ESTADO_ENCERRADO if encerrou else planejamento_demanda.ESTADO_EM_ANDAMENTO,
+            "mensagens": [*mensagens, resultado.mensagem],
+            "decisoes": decisoes,
+            "atualizado_em": _agora(),
+        },
+    )
+    if linha is None:
+        _conflito(MOTIVO_PLANEJAMENTO_MUDOU)
+    return _planejamento_para_a_tela(demanda, linha)
 
 
 # A lista de extensoes e os dois tetos vem do EXTRATOR, e nao sao escritos de
