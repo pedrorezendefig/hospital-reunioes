@@ -26,10 +26,11 @@ EU = "pedrorezendefig"
 AGORA = "2026-10-05T21:00:00Z"
 
 
-def issue(n, titulo="t", labels=(), donos=(), autor=EU, parent=None, upd="2026-10-05T10:00:00Z"):
+def issue(n, titulo="t", labels=(), donos=(), autor=EU, parent=None, upd="2026-10-05T10:00:00Z", corpo=""):
     return {
         "number": n,
         "title": titulo,
+        "body": corpo,
         "labels": list(labels),
         "assignees": list(donos),
         "author": autor,
@@ -304,6 +305,54 @@ def test_needs_info_nao_sai_com_rotulo_de_needs_triage():
     d = dados(issues=[issue(10, "a", ["needs-info"]), issue(11, "b", ["needs-triage"])])
     texto = mi.montar(d)
     assert "needs-info: #10" in texto and "needs-triage: #11" in texto
+
+
+# O PRD do diretor (issue #1350, ADR 0075): o "sim" do Planejamento da Demanda
+# cria uma needs-triage com o marcador e a seção "Ficou em aberto", sem label
+# própria. A fila tem que distingui-la da needs-triage comum.
+
+PRD_DO_DIRETOR = """## 👔 Para o diretor
+
+**O que muda:** o ouvidor vê o prazo na fila.
+
+---
+
+## Decisões de negócio
+
+1. **Quem vê?**
+   Escolha: só o ouvidor
+   Por quê: é dele a fila
+
+## Ficou em aberto
+
+- Se o prazo conta fim de semana.
+
+## Origem
+
+Abrir a Demanda: https://app/x
+
+<!-- demanda-vitta id="d-1" -->"""
+
+LEVAR_PARA_DESENVOLVIMENTO = PRD_DO_DIRETOR.replace("## Ficou em aberto", "## Detalhes")
+
+
+def test_needs_triage_com_prd_do_diretor_sai_como_grill_tecnico_pendente():
+    d = dados(issues=[
+        issue(1400, "Prazo na fila", ["needs-triage"], [EU], corpo=PRD_DO_DIRETOR),
+        issue(1401, "Levar para desenvolvimento", ["needs-triage"], [EU], corpo=LEVAR_PARA_DESENVOLVIMENTO),
+        issue(1402, "Sem marcador", ["needs-triage"], corpo=PRD_DO_DIRETOR.split("<!--")[0]),
+    ])
+    fila = mi.montar(d).split("**2. Na fila**")[1].split("**3. Plano**")[0]
+    assert "grill técnico pendente: #1400 (`/grill-with-docs #1400`)" in fila
+    assert "needs-triage: #1402, #1401 (`/triage`)" in fila
+
+
+def test_prd_do_diretor_ja_completado_volta_a_ser_triagem_comum():
+    completo = PRD_DO_DIRETOR.replace("## Origem", "## Decisões de implementação\n\n- x\n\n## Origem")
+    d = dados(issues=[issue(1400, "Prazo", ["needs-triage"], [EU], corpo=completo)])
+    texto = mi.montar(d)
+    assert "grill técnico pendente" not in texto
+    assert "needs-triage: #1400" in texto
 
 
 def test_plano_poe_um_comando_por_linha():

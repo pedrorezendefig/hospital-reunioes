@@ -65,7 +65,7 @@ Regras:
    - amarelo: `degraded_performance`, status page sem resposta ou algum cancelamento por runner: desenvolve e abre PR; a subida espera.
    - vermelho: `partial_outage` ou `major_outage`: só código local, não abre onda.
 2. **Em andamento**: issue com claim, PR, ou worktree nesta máquina. "Onde parou" diz PR verde esperando a subida, CI cancelado ou vermelho, conflito, must-fix aberto, sem revisão, commit só local e worktree travado.
-3. **Na fila**: uma linha por PRD ou grupo de avulsas, com a idade ("parada há N dias"). `needs-triage` entra só na contagem, com `/triage`.
+3. **Na fila**: uma linha por PRD ou grupo de avulsas, com a idade ("parada há N dias"). `needs-triage` entra só na contagem, com `/triage`. A exceção é a `needs-triage` com **PRD do diretor** (o "sim" do Planejamento da Demanda, ADR 0075): ela sai numa linha própria, "grill técnico pendente: #N", com `/grill-with-docs #N`. O script a reconhece pelo marcador da Demanda mais a seção "Ficou em aberto", sem label nova; depois que o `/to-prd` acrescenta "Decisões de implementação", ela volta a ser uma needs-triage comum.
 4. **Plano**: até 3 passos, um por nível, nesta ordem fixa:
    1. PR verde esperando a subida (`fechar_onda.py --prs <N> --dry-run`);
    2. trabalho que pode se perder (commit sem push);
