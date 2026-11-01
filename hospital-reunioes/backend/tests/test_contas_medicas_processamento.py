@@ -58,7 +58,14 @@ from app.services.contas_medicas.memoria import MemoriaLida, RegraLida, parametr
 from app.services.contas_medicas.prontuario import MARCA_DO_OCR, ler_prontuario  # noqa: E402
 from app.services.contas_medicas.tabelas import NAO_CONFERIDO, Pacote  # noqa: E402
 from app.services.contas_medicas_conta import ler_conta  # noqa: E402
-from app.services.contas_medicas_extrator import ErroLeitura, Pagina, Palavra, digitalizadas  # noqa: E402
+from app.services.contas_medicas_extrator import (  # noqa: E402
+    MENSAGEM_PDF_GRANDE_DEMAIS,
+    MENSAGEM_PDF_ILEGIVEL,
+    ErroLeitura,
+    Pagina,
+    Palavra,
+    digitalizadas,
+)
 
 MIGRATION = Path(__file__).resolve().parents[2] / "supabase" / "migrations" / "116_contas_medicas_fundacao.sql"
 
@@ -717,10 +724,14 @@ class _Extrator:
 
     def __init__(self):
         self.chamadas: list[str] = []
+        # A leitura que o `pdftotext` recusa (PDF ilegível ou grande demais).
+        self.falha: ErroLeitura | None = None
 
     def __call__(self, pdf: bytes):
         texto = pdf.decode("utf-8")
         self.chamadas.append("PRONTUARIO" if "DECLARAÇÃO DE RECEBIMENTO" in texto else "CONTA")
+        if self.falha is not None:
+            return self.falha
         return [Pagina(numero=n, texto=t, sem_texto=not t.strip()) for n, t in enumerate(texto.split("\f"), start=1)]
 
 
@@ -1335,7 +1346,9 @@ class _IAFalsa:
         self.uso: dict = uso(entrada=10, saida=5)
         # A resposta HTTP que vale para toda requisição, no lugar da do schema
         # (o erro da API, por exemplo).
-        self.resposta_fixa: httpx2.Response | None = None
+        # A resposta HTTP, ou a falha do transporte (tempo esgotado), que vale
+        # para toda requisição.
+        self.resposta_fixa: httpx2.Response | Exception | None = None
         self.formatos: list[str] = []
         self.corpos: list[dict] = []
         # O nome do modelo Pydantic de cada schema (`nomear_schemas`).
@@ -1352,6 +1365,8 @@ class _IAFalsa:
             self.antes_de_responder(formato)
         self.formatos.append(formato)
         self.corpos.append(corpo)
+        if isinstance(self.resposta_fixa, Exception):
+            raise self.resposta_fixa
         if self.resposta_fixa is not None:
             return self.resposta_fixa
         resposta = {PASSO_A: self.eventos, PASSO_B: self.comparacao}.get(formato) or self.respostas.get(formato)
@@ -1437,7 +1452,27 @@ def _erro_no_cartao(banco: _Banco) -> tuple[str | None, str | None, str | None, 
     return item["erro_codigo"], item["erro_motivo"], item["erro_arquivo"], item["erro_acao"]
 
 
+def _sem_a_linha(texto: str, comeco: str) -> str:
+    return "\n".join(linha for linha in texto.splitlines() if not linha.startswith(comeco))
+
+
+def _apagar_do_sistema(banco: _Banco, tipo: str) -> None:
+    """O arquivo do tipo pedido como a retenção dos 7 dias o deixa."""
+    arquivo = next(a for a in banco.tabelas["cm_arquivo"] if a["tipo"] == tipo)
+    arquivo["apagado_em"] = AGORA.isoformat()
+
+
+def _sem_o_texto_guardado(banco: _Banco, tipo: str) -> None:
+    """O PDF do tipo pedido sem o texto ao lado: a fila lê o PDF de novo."""
+    arquivo = next(a for a in banco.tabelas["cm_arquivo"] if a["tipo"] == tipo)
+    banco.bucket.pop(("contas-medicas", arquivo["chave_bucket"] + ".txt"))
+
+
 class TestCodigoDoErroDaLeitura:
+    """Cada leitura que não fecha, provocada no arquivo, termina em Erro com o
+    código, a frase, o quadrado que fica vermelho e a ação (Enviar de novo,
+    menos a operadora sem memória, que a gestão resolve no app)."""
+
     def test_conta_que_nao_soma_diz_a_soma_lida_e_o_total(self):
         banco = _cenario()
         _enviar(banco, _conta(total_errado=True), _prontuario())
@@ -1450,6 +1485,361 @@ class TestCodigoDoErroDaLeitura:
             "conta",
             ENVIAR_DE_NOVO,
         )
+
+    def test_conta_sem_a_linha_do_total_diz_a_soma_lida(self):
+        banco = _cenario()
+        _enviar(banco, _conta(), _prontuario())
+        _trocar_o_pdf(banco, "CONTA", _sem_a_linha(_texto_da_conta("48811", 2, 6), "Total da Conta"))
+
+        _rodar_o_job(banco)
+
+        assert _erro_no_cartao(banco) == (
+            "CM-ARQ-SOMA",
+            "Não consegui ler a conta inteira: os itens lidos somam R$ 3.091,70 e o PDF não traz o total da conta.",
+            "conta",
+            ENVIAR_DE_NOVO,
+        )
+
+    def test_conta_sem_o_plano_no_cabecalho(self):
+        banco = _cenario()
+        _enviar(banco, _conta(), _prontuario())
+        _trocar_o_pdf(banco, "CONTA", _sem_a_linha(_texto_da_conta("48811", 2, 6), "Plano:"))
+
+        _rodar_o_job(banco)
+
+        assert _erro_no_cartao(banco) == (
+            "CM-ARQ-CABECALHO",
+            "Não achei o atendimento e o plano no cabeçalho da conta.",
+            "conta",
+            ENVIAR_DE_NOVO,
+        )
+
+    def test_prontuario_sem_texto(self):
+        banco = _cenario()
+        _enviar(banco, _conta(), _prontuario())
+        _trocar_o_pdf(banco, "PRONTUARIO", "\f   \f\f")
+
+        _rodar_o_job(banco)
+
+        assert _erro_no_cartao(banco) == (
+            "CM-ARQ-SEM-TEXTO",
+            "Este PDF não tem texto. Exporte de novo pelo MV",
+            "prontuario",
+            ENVIAR_DE_NOVO,
+        )
+
+    def test_conta_ilegivel(self, extrator):
+        banco = _cenario()
+        _enviar(banco, _conta(), _prontuario())
+        _sem_o_texto_guardado(banco, "CONTA")
+        extrator.falha = ErroLeitura(MENSAGEM_PDF_ILEGIVEL)
+
+        _rodar_o_job(banco)
+
+        assert _erro_no_cartao(banco) == (
+            "CM-ARQ-ILEGIVEL",
+            "Não consegui ler o PDF. Confira se ele abre no computador e envie de novo.",
+            "conta",
+            ENVIAR_DE_NOVO,
+        )
+
+    def test_prontuario_grande_demais_diz_as_paginas(self, extrator):
+        banco = _cenario()
+        _enviar(banco, _conta(), _prontuario())
+        _sem_o_texto_guardado(banco, "PRONTUARIO")
+        extrator.falha = ErroLeitura(MENSAGEM_PDF_GRANDE_DEMAIS)
+
+        _rodar_o_job(banco)
+
+        assert _erro_no_cartao(banco) == (
+            "CM-ARQ-GRANDE",
+            "O PDF tem 8 páginas e é grande demais para ler de uma vez.",
+            "prontuario",
+            ENVIAR_DE_NOVO,
+        )
+
+    def test_prontuario_incompleto(self):
+        banco = _cenario()
+        _enviar(banco, _conta(), _arquivo_do_envio("prontuario.pdf", "\f".join(_paginas_do_prontuario()[:-1])))
+
+        _rodar_o_job(banco)
+
+        assert _erro_no_cartao(banco) == (
+            "CM-ARQ-INCOMPLETO",
+            "Prontuário com arquivo incompleto: o rodapé indica 8 páginas e vieram 7.",
+            "prontuario",
+            ENVIAR_DE_NOVO,
+        )
+
+    def test_prontuario_que_saiu_do_sistema(self):
+        banco = _cenario()
+        _enviar(banco, _conta(), _prontuario())
+        _apagar_do_sistema(banco, "PRONTUARIO")
+
+        _rodar_o_job(banco)
+
+        assert _erro_no_cartao(banco) == (
+            "CM-ARQ-SEM-PRONTUARIO",
+            "O prontuário deste atendimento não está no sistema. Envie o prontuário de novo.",
+            "prontuario",
+            ENVIAR_DE_NOVO,
+        )
+
+    def test_conta_que_passou_dos_7_dias(self):
+        banco = _cenario()
+        _enviar(banco, _conta(), _prontuario())
+        _apagar_do_sistema(banco, "CONTA")
+
+        _rodar_o_job(banco)
+
+        assert _erro_no_cartao(banco) == (
+            "CM-ARQ-VENCIDO",
+            "O PDF já passou dos 7 dias e saiu do sistema.",
+            "conta",
+            ENVIAR_DE_NOVO,
+        )
+
+    def test_operadora_sem_memoria_diz_qual_e_quem_carrega(self):
+        banco = _cenario()
+        banco.tabelas["cm_memoria_versao"][0]["vigente"] = False
+        _enviar(banco, _conta(), _prontuario())
+
+        _rodar_o_job(banco)
+
+        assert _erro_no_cartao(banco) == (
+            "CM-CFG-MEMORIA",
+            "A operadora ALFA está sem memória carregada. A gestão carrega em Operadoras.",
+            "conta",
+            ANALISAR_DE_NOVO,
+        )
+
+
+# (resposta da Anthropic, código, frase, ação, quantas requisições saem). Toda
+# mensagem de erro cita o prontuário: ela não pode chegar à conta.
+FALHAS_DA_IA = {
+    "401": (
+        erro(401, "authentication_error", f"invalid x-api-key {TRECHO_DO_PRONTUARIO}"),
+        "CM-IA-CHAVE",
+        "A chave da IA não está configurada.",
+        ANALISAR_DE_NOVO,
+        1,
+    ),
+    "402": (
+        erro(402, "billing_error", f"Payment required {TRECHO_DO_PRONTUARIO}"),
+        "CM-IA-CREDITO",
+        "A IA está sem crédito. Avise o Pedro.",
+        ANALISAR_DE_NOVO,
+        1,
+    ),
+    "400-saldo": (
+        erro(400, "invalid_request_error", f"Your credit balance is too low {TRECHO_DO_PRONTUARIO}"),
+        "CM-IA-CREDITO",
+        "A IA está sem crédito. Avise o Pedro.",
+        ANALISAR_DE_NOVO,
+        1,
+    ),
+    "404": (
+        erro(404, "not_found_error", f"model: claude-que-nao-existe {TRECHO_DO_PRONTUARIO}"),
+        "CM-IA-MODELO",
+        "O modelo da IA não foi encontrado.",
+        ANALISAR_DE_NOVO,
+        1,
+    ),
+    "429": (
+        erro(429, "rate_limit_error", f"Number of requests {TRECHO_DO_PRONTUARIO}"),
+        "CM-IA-FORA-DO-AR",
+        "A IA está fora do ar ou sobrecarregada agora.",
+        ANALISAR_DE_NOVO,
+        3,
+    ),
+    "500": (
+        erro(500, "api_error", f"Internal server error {TRECHO_DO_PRONTUARIO}"),
+        "CM-IA-FORA-DO-AR",
+        "A IA está fora do ar ou sobrecarregada agora.",
+        ANALISAR_DE_NOVO,
+        3,
+    ),
+    "529": (
+        erro(529, "overloaded_error", f"Overloaded {TRECHO_DO_PRONTUARIO}"),
+        "CM-IA-FORA-DO-AR",
+        "A IA está fora do ar ou sobrecarregada agora.",
+        ANALISAR_DE_NOVO,
+        3,
+    ),
+    "tempo-esgotado": (
+        httpx2.ReadTimeout(f"read timed out {TRECHO_DO_PRONTUARIO}"),
+        "CM-IA-FORA-DO-AR",
+        "A IA está fora do ar ou sobrecarregada agora.",
+        ANALISAR_DE_NOVO,
+        3,
+    ),
+    "400-tamanho": (
+        erro(400, "invalid_request_error", f"prompt is too long: 215000 tokens > 200000 {TRECHO_DO_PRONTUARIO}"),
+        "CM-IA-TAMANHO",
+        "O prontuário é maior do que a IA aceita de uma vez.",
+        None,
+        1,
+    ),
+    "resposta-invalida": (
+        httpx2.Response(200, json=mensagem(f'{{"atendimento": "{TRECHO_DO_PRONTUARIO}"', uso(entrada=10, saida=5))),
+        "CM-IA-FORMATO",
+        "A resposta da IA veio fora do formato combinado.",
+        ANALISAR_DE_NOVO,
+        3,
+    ),
+    "400-outro": (
+        erro(400, "invalid_request_error", f"messages: campo inválido {TRECHO_DO_PRONTUARIO}"),
+        "CM-APP-DEFEITO",
+        "A análise parou na leitura do prontuário pela IA por um defeito do app.",
+        ANALISAR_DE_NOVO,
+        3,
+    ),
+}
+
+# O `_cliente` de verdade, antes de o dublê da IA trocá-lo: o da guarda da chave.
+_CLIENTE_DE_VERDADE = ia._cliente
+
+
+class TestCodigoDoErroDaIA:
+    """O erro da IA nasce na chamada, com o código HTTP da Anthropic: a conta
+    termina em Erro com o código, a frase e a ação, e o quadrado vermelho é o
+    do arquivo da etapa (o Passo A lê o prontuário)."""
+
+    @pytest.mark.parametrize("nome", list(FALHAS_DA_IA))
+    def test_cada_codigo_http_vira_o_codigo_do_erro(self, ia_falsa, nome):
+        resposta, codigo, frase, acao, requisicoes = FALHAS_DA_IA[nome]
+        ia_falsa.resposta_fixa = resposta
+        banco = _cenario()
+        _enviar(banco, _conta(), _prontuario())
+
+        _rodar_o_job(banco)
+
+        assert _erro_no_cartao(banco) == (codigo, frase, "prontuario", acao)
+        assert ia_falsa.formatos == [PASSO_A] * requisicoes
+        (conta,) = banco.tabelas["cm_conta"]
+        assert conta["tentativas"] == 1, "a falha da IA não devolve a conta para a fila"
+        gravado = json.dumps({c: conta[c] for c in ("erro_motivo", "erro_codigo", "erro_detalhe")}, ensure_ascii=False)
+        assert TRECHO_DO_PRONTUARIO not in gravado
+        assert TRECHO_DO_PRONTUARIO not in json.dumps(_fila(banco, "meus_envios"), ensure_ascii=False)
+
+    def test_chave_vazia_nao_chama_a_ia(self, ia_falsa, monkeypatch):
+        monkeypatch.setattr(ia, "_cliente", _CLIENTE_DE_VERDADE)
+        monkeypatch.setattr(ia.settings, "anthropic_api_key", "")
+        banco = _cenario()
+        _enviar(banco, _conta(), _prontuario())
+
+        _rodar_o_job(banco)
+
+        assert _erro_no_cartao(banco) == (
+            "CM-IA-CHAVE",
+            "A chave da IA não está configurada.",
+            "prontuario",
+            ANALISAR_DE_NOVO,
+        )
+        assert ia_falsa.requisicoes == 0
+
+    def test_o_erro_no_passo_b_pinta_o_quadrado_da_conta(self, ia_falsa):
+        ia_falsa.fora_do_formato_em = {PASSO_B}
+        banco = _cenario()
+        _enviar(banco, _conta(), _prontuario())
+
+        _rodar_o_job(banco)
+
+        assert _erro_no_cartao(banco) == (
+            "CM-IA-FORMATO",
+            "A resposta da IA veio fora do formato combinado.",
+            "conta",
+            ANALISAR_DE_NOVO,
+        )
+
+    def test_o_detalhe_gravado_tem_tipo_http_etapa_arquivo_e_linha(self, ia_falsa):
+        ia_falsa.resposta_fixa = erro(529, "overloaded_error", f"Overloaded {TRECHO_DO_PRONTUARIO}")
+        banco = _cenario()
+        _enviar(banco, _conta(), _prontuario())
+
+        _rodar_o_job(banco)
+
+        (conta,) = banco.tabelas["cm_conta"]
+        detalhe = conta["erro_detalhe"]
+        assert {chave: detalhe[chave] for chave in ("tipo", "http", "etapa", "arquivo")} == {
+            "tipo": "OverloadedError",
+            "http": 529,
+            "etapa": "passo_a",
+            "arquivo": "ia.py",
+        }
+        assert isinstance(detalhe["linha"], int)
+        assert datetime.fromisoformat(detalhe["em"]).tzinfo is not None
+        (item,) = _fila(banco, "meus_envios")
+        assert item["erro_detalhe"] == (
+            f"OverloadedError, HTTP 529, etapa passo_a (leitura do prontuário pela IA), ia.py:{detalhe['linha']}"
+        )
+        assert item["erro_em"] == detalhe["em"]
+
+
+class _Reinicio(BaseException):  # noqa: N818, o processo morrendo no meio da análise
+    """O app reiniciando: nada no processamento pega uma `BaseException`."""
+
+
+class TestCodigoDoErroDoApp:
+    def test_defeito_diz_a_etapa_o_tipo_e_o_lugar_do_defeito(self, monkeypatch):
+        def conferir_quebrado(*_a, **_kw):
+            raise RuntimeError(f"PostgREST fora do ar {TRECHO_DO_PRONTUARIO}")
+
+        monkeypatch.setattr(processamento, "conferir", conferir_quebrado)
+        banco = _cenario()
+        _enviar(banco, _conta(), _prontuario())
+
+        _rodar_o_job(banco)
+
+        assert _erro_no_cartao(banco) == (
+            "CM-APP-DEFEITO",
+            "A análise parou na conferência por um defeito do app.",
+            "conta",
+            ANALISAR_DE_NOVO,
+        )
+        (conta,) = banco.tabelas["cm_conta"]
+        assert {chave: conta["erro_detalhe"][chave] for chave in ("tipo", "http", "etapa", "arquivo")} == {
+            "tipo": "RuntimeError",
+            "http": None,
+            "etapa": "conferencia",
+            "arquivo": Path(__file__).name,
+        }
+        assert TRECHO_DO_PRONTUARIO not in json.dumps(conta["erro_detalhe"], ensure_ascii=False)
+
+    def test_tres_reinicios_no_meio_dizem_que_o_app_reiniciou_e_em_qual_etapa(self, ia_falsa):
+        def reiniciar(_formato):
+            raise _Reinicio()
+
+        ia_falsa.antes_de_responder = reiniciar
+        banco = _cenario()
+        _enviar(banco, _conta(), _prontuario())
+
+        agora = AGORA
+        for _ in range(3):
+            with pytest.raises(_Reinicio):
+                processamento.alimentar_fila(banco, agora, executor=_NaHora())
+            agora += timedelta(minutes=16)
+        processamento.devolver_presas(banco, agora)
+
+        assert _erro_no_cartao(banco) == (
+            "CM-APP-TENTATIVAS",
+            "A análise não terminou em três tentativas: o app reiniciou ou travou na leitura do prontuário pela IA.",
+            "prontuario",
+            ANALISAR_DE_NOVO,
+        )
+        (conta,) = banco.tabelas["cm_conta"]
+        assert conta["tentativas"] == 3
+        assert conta["erro_detalhe"]["etapa"] == "passo_a"
+
+    def test_a_conta_com_o_motivo_antigo_tem_analisar_de_novo(self):
+        """A migration 122 marca `CM-IA-ANTIGO` nas contas que já estavam em
+        Erro com "Tente de novo em alguns minutos", sem detalhe nem etapa."""
+        banco = _cenario()
+        _enviar(banco, _conta(), _prontuario())
+        (conta,) = banco.tabelas["cm_conta"]
+        conta |= {"situacao": "ERRO", "erro_motivo": "Tente de novo em alguns minutos", "erro_codigo": "CM-IA-ANTIGO"}
+
+        assert _erro_no_cartao(banco) == ("CM-IA-ANTIGO", "Tente de novo em alguns minutos", None, ANALISAR_DE_NOVO)
 
 
 class TestPassoANoPipeline:
