@@ -10,7 +10,7 @@ Responde "qual skill eu uso agora?" apontando a skill certa e o porquê. Não ex
 
 ## Qual porta? (antes de tudo)
 
-Nem todo trabalho é PRD. Classifique primeiro; o `/grill-with-docs` faz isso no fechamento e o `/express` já nasce na porta C.
+Nem todo trabalho é PRD. Classifique primeiro; o `/grill-with-docs` faz isso no fechamento, e o `/express` (que fecha o grill em lote) classifica junto com as outras decisões.
 
 | Porta | Quando | Caminho | Por que esse peso |
 |---|---|---|---|
@@ -22,7 +22,7 @@ Teste rápido entre B e C: **alguém precisa conferir que fez o que foi pedido?*
 
 ## Fluxo principal (planejar → desenvolver → entregar)
 
-1. **Planejar**: `/grill-with-docs` desafia o plano contra o domínio (uma pergunta por vez, recomendação destacada em cada decisão; atualiza `CONTEXT.md`/ADR via `domain-modeling`). Modo lote (`--lote`, "responde tudo"): todas as lacunas já decididas de uma vez, fecha com "ok" ou "N: correção". Dúvida factual de serviço externo no meio do grilling → `/research` em background.
+1. **Planejar**: `/grill-with-docs` desafia o plano contra o domínio (uma pergunta por vez, recomendação destacada em cada decisão; atualiza `CONTEXT.md`/ADR via `domain-modeling`). Modo lote (`--lote`, "responde tudo"): todas as lacunas já decididas de uma vez, fecha com "ok" ou "N: correção". No meio do grill, `/express` fecha o resto em lote e publica o painel de aprovação. Dúvida factual de serviço externo no meio do grilling → `/research` em background.
 2. **Especificar**: `/to-prd` vira PRD (1 issue `ready-for-agent`, com a seção "Manual: páginas que nascem ou mudam") → `/to-issues` quebra em fatias verticais com label `fatia:P/M/G` e, em PRD com tela, fecha com a **Fatia de manual** (`docs: manual do PRD #N`, bloqueada pelas fatias de código; ADR 0057).
 3. **Desenvolver**: `/pegar-issue <N>` (claim atômico + branch; sem argumento, lista a fila) → `/tdd` (red → green → refactor). Issue cujo corpo diz "Anexos" traz prints da Demanda, que vivem só no app (ADR 0069): a boca única para baixá-los é `python3 .claude/skills/pegar-issue/scripts/anexos.py <N>` (chave `TECNOLOGIA_AUTOMACAO_API_KEY` no `tokens/.env`), chamada pelo `/pegar-issue`, pelo `hr-implementador` e pelo `hr-corretor`; nenhuma outra skill chama a API do seu jeito, e o `/ship` apaga `local/anexos/<N>/` ao abrir o PR.
 4. **Entregar**: `/ship` leva até o **PR verde** (ferramenta, nada em `hospital-reunioes/`: só o CI; app: `hr-revisor` uma vez, com a lente de segurança se o `sensivel.py` acusar e spec × diff se houver issue, mais o CI; must-fix ou CI vermelho chamam o `hr-corretor`) e roda a subida sozinho, sem parada até produção, exceto migration. **Subida única** (ADR 0068): `python3 .claude/skills/onda-enxuta/scripts/fechar_onda.py --prs <N>` mergeia PR a PR pela API (squash), define a versão pelo tipo dos commits sem commit (`APP_VERSION` no Coolify e tag), um build, health e registro gravado pela Action pós-merge (só `history.json` e `state.json`); nenhum push. Serve a um PR avulso ou ao lote de uma onda; quem roda é o `/ship` do autor do PR ou o fechamento da onda. Conflito na subida chama o `hr-corretor` com a `/resolver-conflitos` e conta tentativa; a terceira falha vai para `ready-for-human`. `/deploy` só opera produção (status, rollback, setup Coolify); `/deploy ship` aponta para a subida e sai. O snapshot e o `draft` das páginas do Manual dos PRDs que subiram saem numa Action no push da `main`, depois do registro. A Action não publica: ela avisa no PRD fechado o que saiu e o que ficou em draft, e o humano roda `/manual publicar` da máquina com os MP4, que tira o draft das aberturas com Vídeo de visão geral e republica o site (issue #951).
@@ -36,7 +36,8 @@ Teste rápido entre B e C: **alguém precisa conferir que fez o que foi pedido?*
 
 ## On-ramps (como o trabalho entra)
 
-- Ideia pequena, "dá pra fazer X?", print com uma vontade → `/express`: uma rodada só, olha o código, propõe a ponte mínima, e com o "siga" implementa e verifica. É a entrada da porta C; se a conversa pedir 5 decisões encadeadas, ele mesmo manda para o `/grill-with-docs`.
+- Ideia pequena, "dá pra fazer X?", print com uma vontade → `/grill-with-docs --lote`: levanta os fatos no código e decide tudo de uma vez; o que cair na porta C sai dali para o `/ship --from-diff` na mesma sessão.
+- Grill em andamento que o Pedro quer fechar agora → `/express`: responde o que falta com a recomendação do agente, entrega a tabela no terminal e um painel interativo (Artifact) com Concordo/Discordo por linha e botão de aprovar, espera a aprovação (no painel ou "ok" no terminal) e só então classifica a porta e segue ao `/to-prd`. Não implementa nada.
 
 - `/triage`: criar/triar issues pelos papéis canônicos de label (`docs/agents/triage-labels.md`).
 - Bug difícil ou regressão de performance → `/diagnose`.
