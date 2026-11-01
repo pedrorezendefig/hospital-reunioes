@@ -26,6 +26,7 @@ import { AnexosDaDemanda } from "./AnexosDaDemanda";
 import { ConversaDaDemanda } from "./ConversaDaDemanda";
 import { CopiarDaDemanda } from "./CopiarDaDemanda";
 import { OQueMudaDaDemanda } from "./OQueMudaDaDemanda";
+import { BotaoDePlanejar } from "./PlanejamentoDaDemanda";
 import { TipoIcone } from "./TipoIcone";
 import { VinculoDaDemanda } from "./VinculoDaDemanda";
 import {
@@ -262,6 +263,10 @@ export function DemandaModal({ demanda, produtos, pessoas, token, eu, onFechar, 
               lê os dois seguidos. Ele não é editável, e some inteiro quando não
               há Vínculo. */}
           <OQueMudaDaDemanda demanda={demanda} />
+
+          {/* Logo abaixo do pedido que ele planeja (issue #1345, ADR 0075).
+              Some sozinho fora de Novo e Ajuste, com Vínculo ou encerrada. */}
+          <BotaoDePlanejar demanda={demanda} />
 
           <Select
             label="Tipo"

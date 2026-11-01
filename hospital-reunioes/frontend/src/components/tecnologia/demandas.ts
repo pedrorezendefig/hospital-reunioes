@@ -116,6 +116,11 @@ export type Demanda = {
    */
   vinculo?: VinculoDaDemanda | null;
   /**
+   * Se HÁ Vínculo, para todo mundo (issue #1345). É por ele que o botão
+   * "Planejar com a IA" some: o `vinculo` acima vem nulo para o diretor.
+   */
+  tem_vinculo?: boolean;
+  /**
    * O que a entrega muda para quem pediu (issue #676, ADR 0054, decisão 7).
    *
    * Vem do bloco "Para o diretor" da issue e NUNCA é digitado no app. Nulo é

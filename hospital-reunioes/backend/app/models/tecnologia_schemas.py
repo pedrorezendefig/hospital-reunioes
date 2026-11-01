@@ -540,6 +540,7 @@ class PlanejamentoResponse(BaseModel):
     """
 
     demanda_id: str
+    titulo: str = ""
     estado: str | None = None
     mensagens: list[MensagemDoPlanejamento] = []
     decisoes: list[str] = []

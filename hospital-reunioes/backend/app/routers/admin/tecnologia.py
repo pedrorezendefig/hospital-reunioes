@@ -2431,11 +2431,13 @@ async def assistente_chat(
 MOTIVO_PLANEJAMENTO_MUDOU = "O planejamento mudou em outra aba. Recarregue a página e tente de novo."
 
 
-def _planejamento_para_a_tela(demanda_id: str, linha: dict | None) -> dict:
-    if linha is None:
-        return {"demanda_id": demanda_id, "estado": None, "mensagens": [], "decisoes": []}
+def _planejamento_para_a_tela(demanda: dict, linha: dict | None) -> dict:
+    """O titulo vem junto para a tela dizer qual Demanda esta sendo planejada
+    sem uma segunda ida a rede."""
+    linha = linha or {}
     return {
-        "demanda_id": demanda_id,
+        "demanda_id": str(demanda["id"]),
+        "titulo": demanda.get("titulo") or "",
         "estado": linha.get("estado"),
         "mensagens": linha.get("mensagens") or [],
         "decisoes": linha.get("decisoes") or [],
@@ -2455,8 +2457,8 @@ async def ler_planejamento(
     supabase: Client = Depends(get_supabase_client),
 ):
     """A conversa guardada na Demanda, para retomar de onde parou (decisao 3)."""
-    _buscar_demanda(supabase, demanda_id)
-    return _planejamento_para_a_tela(demanda_id, planejamento_demanda.ler(supabase, demanda_id))
+    demanda = _buscar_demanda(supabase, demanda_id)
+    return _planejamento_para_a_tela(demanda, planejamento_demanda.ler(supabase, demanda_id))
 
 
 @router.post("/demandas/{demanda_id}/planejamento", response_model=PlanejamentoResponse)
@@ -2517,7 +2519,7 @@ async def responder_no_planejamento(
     )
     if linha is None:
         _conflito(MOTIVO_PLANEJAMENTO_MUDOU)
-    return _planejamento_para_a_tela(demanda_id, linha)
+    return _planejamento_para_a_tela(demanda, linha)
 
 
 # A lista de extensoes e os dois tetos vem do EXTRATOR, e nao sao escritos de

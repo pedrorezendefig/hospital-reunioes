@@ -547,7 +547,13 @@ class TestLerOPlanejamento:
     def test_sem_planejamento_a_conversa_vem_vazia(self):
         client, _ = _cenario()
 
-        assert client.get(ROTA).json() == {"demanda_id": "d-1", "estado": None, "mensagens": [], "decisoes": []}
+        assert client.get(ROTA).json() == {
+            "demanda_id": "d-1",
+            "titulo": DEMANDA["titulo"],
+            "estado": None,
+            "mensagens": [],
+            "decisoes": [],
+        }
 
     def test_devolve_a_conversa_e_as_decisoes_guardadas(self):
         client, _ = _cenario(planejamentos=[_planejamento_guardado(perguntas=2)])
