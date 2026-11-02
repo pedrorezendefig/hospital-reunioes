@@ -240,8 +240,8 @@ class ResultadoDoTurno:
 
     `mensagem` e a fala da IA, pronta para entrar na conversa. `resumo` vem so
     quando o Roteiro do bug terminou. `caminho` e "planejamento" quando a
-    melhoria foi confirmada e segue pelo Planejamento da Demanda (nesta fatia,
-    o caminho da melhoria e o de antes). `erro` e a frase da tela quando o turno
+    melhoria foi confirmada e segue, no proprio chat, pelo Planejamento da
+    Demanda (issue #1383). `erro` e a frase da tela quando o turno
     nao aconteceu, e entao o resto e nulo. `chamada` e a linha de custo, nula so
     no modo mock.
     """

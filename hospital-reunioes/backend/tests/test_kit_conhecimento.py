@@ -518,39 +518,33 @@ class TestOTextoDaAbaContaATelaDeHoje:
     def test_os_produtos_moram_atras_da_engrenagem(self, texto):
         assert "engrenagem" in _secao(texto, "Os Produtos")
 
-    def test_o_planejamento_diz_o_que_e_quando_aparece_e_o_que_o_sim_faz(self, texto):
-        """ADR 0075. As palavras sao as da tela do planejamento: o botao, os
-        dois Tipos em que ele aparece, o teto, o fechar, o retomar, o resumo
-        com o que ficou em aberto e o sim que leva ao desenvolvimento."""
+    def test_o_planejamento_diz_o_que_e_quando_aparece_e_o_que_o_card_faz(self, texto):
+        """ADR 0077, issue #1383. O planejamento e o caminho da melhoria dentro
+        do chat: o teto, o fechar, o resumo com o que ficou em aberto, o Criar
+        o card que leva ao desenvolvimento e o Nao bateu. O botao do card de
+        antes saiu, e o texto nao o cita mais."""
         planejamento = _secao(texto, "O Planejamento da Demanda")
         termos = (
-            "Planejar com a IA",
-            "Novo",
-            "Ajuste",
+            "melhoria",
             "12 perguntas",
             "Fechar e resumir",
-            "Continuar planejamento",
             "ficou em aberto",
-            "**sim**",
+            "**Criar o card**",
             "desenvolvimento",
-            "**não**",
+            "**Não bateu**",
             "O que já foi decidido",
         )
         for termo in termos:
             assert termo in planejamento, termo
+        for aposentado in ("Planejar com a IA", "Continuar planejamento", "Sim, mandar para os desenvolvedores"):
+            assert aposentado not in texto, aposentado
 
-    def test_o_sim_diz_o_que_acontece_com_a_demanda(self, texto):
-        """Issue #1349. O sim manda o plano com as decisoes e o que ficou em
-        aberto, a Demanda ganha a Etapa Em analise, o card mostra O que muda e
-        o botao de planejar some. As palavras sao as da tela e do card."""
+    def test_o_card_diz_o_que_acontece_com_a_demanda(self, texto):
+        """Issue #1349. O plano vai com as decisoes e o que ficou em aberto, a
+        Demanda ganha a Etapa Em analise e o card mostra O que muda. As
+        palavras sao as da tela e do card."""
         planejamento = _secao(texto, "O Planejamento da Demanda")
-        for termo in (
-            "Sim, mandar para os desenvolvedores",
-            "**Em análise**",
-            "**O que muda**",
-            "o que ficou em aberto",
-            "O botão de planejar some",
-        ):
+        for termo in ("**Em análise**", "**O que muda**", "o que ficou em aberto"):
             assert termo in planejamento, termo
 
     def test_o_planejamento_ja_esta_no_aplicativo(self, texto):

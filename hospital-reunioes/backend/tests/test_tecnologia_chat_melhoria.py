@@ -29,6 +29,7 @@ from test_tecnologia_chat import (  # noqa: E402
 )
 from test_tecnologia_vinculo import BASE  # noqa: E402
 
+from app.services.conhecimento import CONHECIMENTO_DIR  # noqa: E402
 from app.services.tecnologia_vinculo import bloco_para_o_diretor  # noqa: E402
 
 CHAT = f"{BASE}/chat"
@@ -331,3 +332,20 @@ class TestCriarOCardDaMelhoria:
 
         assert "Para o glossário" not in gh.criadas[0]["corpo"]
         assert "type:fix" in gh.criadas[0]["labels"]
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 5. O Kit de conhecimento
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+class TestKitDaTecnologia:
+    def test_o_texto_da_tecnologia_no_kit_diz_o_caminho_da_melhoria_no_chat(self):
+        """O kit e a lingua em que o Assistente fala com o diretor: sem o
+        caminho novo escrito, ele mandaria o diretor a um botao que saiu."""
+        texto = (CONHECIMENTO_DIR / "tecnologia.md").read_text(encoding="utf-8")
+
+        secao = texto.split("## A conversa com o Assistente", 1)[1].split("\n## ", 1)[0]
+        for trecho in ("no máximo 12 perguntas", "**Fechar e resumir**", "ficou em aberto", "recomendada"):
+            assert trecho in secao, trecho
+        assert "Planejar com a IA" not in texto
