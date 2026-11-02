@@ -405,10 +405,11 @@ def checar_video_da_pagina(relativo: Path, campos: dict[str, str], html: Path) -
     elif f'poster="{capa}"' not in texto:
         falta = f"a capa {capa}"
     else:
+        videos = atributos_dos_videos(texto)
         sobra = [
             atributo
             for atributo in ATRIBUTOS_PROIBIDOS_NO_PLAYER
-            if any(atributo in video for video in atributos_dos_videos(texto))
+            if any(atributo in video for video in videos)
         ]
         if not sobra:
             return []
