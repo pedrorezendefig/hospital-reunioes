@@ -247,6 +247,9 @@ def _linha_da_conversa(mensagem: dict) -> str:
         return f"IA (encerrou): {mensagem.get('contexto') or ''}"
     if mensagem.get("tipo") == "nao_bateu":
         return f"Diretor, sobre o resumo (o que não bateu): {recuar_continuacao(mensagem.get('texto') or '')}"
+    if mensagem.get("tipo") == "ia":
+        # O aviso do pedido parecido, que o chat poe depois do resumo (issue #1385).
+        return recuar_continuacao(f"IA: {mensagem.get('texto') or ''}")
     opcoes = [f"    {o.get('letra')}) {o.get('texto') or ''}" for o in mensagem.get("opcoes", [])]
     recomendada = f"    (recomendada: {mensagem.get('recomendada')})"
     return "\n".join([f"IA: {mensagem.get('contexto') or ''}", *opcoes, recomendada])
@@ -432,7 +435,9 @@ def chamar_o_modelo(
     return saida, chamada
 
 
-def turno(*, demanda: dict, mensagens: list[dict], kit: str) -> ResultadoDoTurno:
+def turno(
+    *, demanda: dict, mensagens: list[dict], kit: str, consultas: ferramentas_do_codigo.Consultas | None = None
+) -> ResultadoDoTurno:
     """Um turno do planejamento. Sem estado: tudo chega por parametro.
 
     `mensagens` e a conversa inteira, ja com a resposta do diretor no fim (ou
@@ -449,6 +454,7 @@ def turno(*, demanda: dict, mensagens: list[dict], kit: str) -> ResultadoDoTurno
         conteudo=pedido_do_turno(demanda, mensagens),
         kit=kit,
         validar=_SaidaDoTurno.model_validate,
+        consultas=consultas,
     )
     if saida is None:
         return ResultadoDoTurno(mensagem=None, decisao=None, erro=MOTIVO_TURNO_FALHOU, chamada=chamada)
@@ -486,6 +492,11 @@ class _SaidaDoResumo(BaseModel):
     titulo: str | None = None
     termos: list[str] = []
     candidatas_a_adr: list[str] = []
+    # O que o agente leu do codigo (issue #1385, ADR 0077, decisao 7): as
+    # Decisoes de implementacao e de teste do PRD, e o pedido aberto parecido.
+    decisoes_de_implementacao: list[str] = []
+    decisoes_de_teste: list[str] = []
+    parecida: int | None = None
 
 
 @dataclass(frozen=True)
@@ -500,6 +511,9 @@ class ResultadoDoResumo:
     erro: str | None
     chamada: dict | None
     titulo: str | None = None
+    # O titulo do pedido aberto parecido (issue #1385), so quando o modelo o
+    # viu na lista das issues abertas neste resumo.
+    parecida: str | None = None
 
 
 RESUMO_MOCK = {"decisoes": [], "em_aberto": ["[MOCK] Resumir exige a IA configurada."]}
@@ -569,19 +583,27 @@ def _resumo_da_conversa(saida: _SaidaDoResumo, mensagens: list[dict]) -> dict:
                 "porque": sanitizar_travessao(decisao.porque.strip()),
             }
         )
-    return {
+    resumo = {
         "decisoes": decisoes,
         "em_aberto": _itens(saida.em_aberto),
         "termos": _itens(saida.termos),
         "candidatas_a_adr": _itens(saida.candidatas_a_adr),
     }
+    # As decisoes lidas do codigo (issue #1385) so entram quando existem: o
+    # planejamento sem ferramentas guarda o resumo na forma de antes.
+    for campo in ("decisoes_de_implementacao", "decisoes_de_teste"):
+        if itens := _itens(getattr(saida, campo)):
+            resumo[campo] = itens
+    return resumo
 
 
 def _itens(lista: list[str]) -> list[str]:
     return [sanitizar_travessao(item.strip()) for item in lista if item.strip()]
 
 
-def resumir(*, demanda: dict, mensagens: list[dict], kit: str) -> ResultadoDoResumo:
+def resumir(
+    *, demanda: dict, mensagens: list[dict], kit: str, consultas: ferramentas_do_codigo.Consultas | None = None
+) -> ResultadoDoResumo:
     """O Fechar e resumir. Sem estado, como o turno, e com o mesmo bloco fixo:
     o cache do prefixo vale para o resumo tambem."""
     if ai_processor._llm_provider() == "mock":
@@ -594,11 +616,15 @@ def resumir(*, demanda: dict, mensagens: list[dict], kit: str) -> ResultadoDoRes
         conteudo=pedido_do_resumo(demanda, mensagens),
         kit=kit,
         validar=_SaidaDoResumo.model_validate,
+        consultas=consultas,
     )
     if saida is None:
         return ResultadoDoResumo(resumo=None, erro=MOTIVO_TURNO_FALHOU, chamada=chamada)
     titulo = sanitizar_travessao(" ".join((saida.titulo or "").split()))[:200].strip() or None
-    return ResultadoDoResumo(resumo=_resumo_da_conversa(saida, mensagens), erro=None, chamada=chamada, titulo=titulo)
+    parecida = consultas.issues_vistas.get(saida.parecida) if consultas and saida.parecida is not None else None
+    return ResultadoDoResumo(
+        resumo=_resumo_da_conversa(saida, mensagens), erro=None, chamada=chamada, titulo=titulo, parecida=parecida
+    )
 
 
 # ─── A guarda ────────────────────────────────────────────────────────────────

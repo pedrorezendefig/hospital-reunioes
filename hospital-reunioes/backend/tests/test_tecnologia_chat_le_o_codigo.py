@@ -10,15 +10,18 @@ o que tem. Tudo pela ROTA, com o modelo e o adapter do GitHub falsificados.
 from __future__ import annotations
 
 import base64
+import json
 import os
 import sys
 from types import SimpleNamespace
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
+from test_planejamento_demanda import _ia, _pergunta  # noqa: E402
 from test_tecnologia_chat import (  # noqa: E402
     _cenario,
     _chamadas,
+    _conversas,
     _integracao_configurada,  # noqa: F401
     _llm_em_mock,  # noqa: F401
     _reset_rate_limiter,  # noqa: F401
@@ -328,3 +331,89 @@ class TestCusto:
         assert chamada["tokens_saida"] == 400
         # Opus 5.5: 3000 x US$ 4 + 400 x US$ 20, por milhão.
         assert chamada["custo_usd"] == 0.02
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 5. Com uma issue aberta parecida, o agente avisa antes de criar o card
+# ═══════════════════════════════════════════════════════════════════════════
+
+PARECIDA = {"numero": 1290, "titulo": "Responder manifestação direto da lista da Ouvidoria"}
+OUTRA = {"numero": 1301, "titulo": "Exportar a ata em Word"}
+
+RESUMO_PRONTO = {
+    "pronto": True,
+    "mensagem": "Montei o resumo. Confira.",
+    "campos": {"onde": "Ouvidoria", "o_que_aconteceu": "O botão sumiu", "o_que_esperava": "Ver o botão"},
+}
+
+
+def _bug_no_resumo(client, monkeypatch, *, parecida) -> dict:
+    _ia(monkeypatch, _turno())
+    demanda_id = client.post(CHAT, json={"escolha": "bug"}).json()["demanda_id"]
+    _modelo(monkeypatch, [[("listar_issues_abertas", {})]], _turno(**RESUMO_PRONTO, parecida=parecida))
+    resposta = client.post(f"{CHAT}/{demanda_id}", json={"texto": "O botão de responder sumiu"})
+    assert resposta.status_code == 200, resposta.text
+    return resposta.json()
+
+
+class TestAPedidoParecido:
+    def test_no_bug_o_agente_avisa_do_pedido_aberto_parecido_pelo_titulo(self, monkeypatch):
+        client, _, _ = _cenario(monkeypatch)
+        _repositorio(monkeypatch, issues=[OUTRA, PARECIDA])
+
+        corpo = _bug_no_resumo(client, monkeypatch, parecida=1290)
+
+        assert corpo["estado"] == "resumido"
+        fala = corpo["mensagens"][-1]["texto"]
+        assert fala.startswith("Montei o resumo. Confira.")
+        assert f'"{PARECIDA["titulo"]}"' in fala
+        # Com o diretor, sem número de issue.
+        assert "1290" not in fala
+
+    def test_numero_que_o_modelo_nao_viu_na_lista_nao_vira_aviso(self, monkeypatch):
+        client, _, _ = _cenario(monkeypatch)
+        _repositorio(monkeypatch, issues=[OUTRA])
+
+        corpo = _bug_no_resumo(client, monkeypatch, parecida=1290)
+
+        assert corpo["mensagens"][-1]["texto"] == "Montei o resumo. Confira."
+
+    def test_na_melhoria_o_aviso_vem_com_o_resumo_antes_do_criar_o_card(self, monkeypatch):
+        client, sb, gh = _cenario(monkeypatch)
+        _repositorio(monkeypatch, issues=[PARECIDA])
+        _ia(monkeypatch, _pergunta())
+        demanda_id = client.post(CHAT, json={"escolha": "melhoria"}).json()["demanda_id"]
+        _ia(monkeypatch, _pergunta(contexto="E quem confirma?"))
+        client.post(f"{CHAT}/{demanda_id}", json={"opcao": "A"})
+        _modelo(monkeypatch, [[("listar_issues_abertas", {})]], _resumo_da_melhoria(parecida=1290))
+
+        resposta = client.post(f"{CHAT}/{demanda_id}/resumo")
+
+        assert resposta.status_code == 200, resposta.text
+        corpo = resposta.json()
+        assert corpo["estado"] == "resumido"
+        fala = corpo["mensagens"][-1]
+        assert fala["autor"] == "ia"
+        assert f'"{PARECIDA["titulo"]}"' in fala["texto"]
+        assert gh.criadas == []
+        # O "Não bateu" depois do aviso: o planejamento lê a fala da IA como fala.
+        client.post(f"{CHAT}/{demanda_id}/nao-bateu", json={"texto": "Não é o mesmo pedido."})
+        cliente = _ia(monkeypatch, _pergunta(contexto="Então o que muda?"))
+        assert client.post(f"{CHAT}/{demanda_id}", json={}).status_code == 200
+        assert "IA: Antes de criar o card" in cliente.chamadas[0]["messages"][0]["content"]
+        assert len(_conversas(sb)) == 1
+
+
+def _resumo_da_melhoria(**campos) -> str:
+    base = {
+        "titulo": "Responder direto da lista",
+        "decisoes": [{"pergunta": 1, "porque": "A recepção responde."}],
+        "em_aberto": [],
+        "termos": [],
+        "candidatas_a_adr": [],
+        "decisoes_de_implementacao": [],
+        "decisoes_de_teste": [],
+        "parecida": None,
+    }
+    base.update(campos)
+    return json.dumps(base, ensure_ascii=False)

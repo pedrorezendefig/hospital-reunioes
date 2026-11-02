@@ -3245,6 +3245,10 @@ async def fechar_e_resumir_a_melhoria(
         planejamento_demanda.gravar_chamada(supabase, resultado.chamada)
     if resultado.erro:
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=resultado.erro)
+    if resultado.parecida:
+        # O pedido aberto parecido (issue #1385): o aviso vem com o resumo,
+        # antes do Criar o card.
+        mensagens.append(chat_tecnologia.fala_do_aviso(resultado.parecida))
 
     linha = planejamento_demanda.gravar(
         supabase,
