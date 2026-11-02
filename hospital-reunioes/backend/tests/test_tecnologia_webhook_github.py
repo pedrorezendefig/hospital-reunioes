@@ -8,8 +8,9 @@ Tres seams, e cada um existe porque o anterior nao alcanca o proximo:
   teste de recusa desta secao termina olhando o banco: 401 que grava e 401 que
   nao serve para nada.
 * **A sincronizacao**, tambem pela rota, com o cliente do GitHub dublado. E ela
-  que decide se a linha entra no fio do diretor, e a guarda da foto igual e
-  criterio de aceite: a entrega repetida do GitHub nao pode virar duas linhas.
+  que deriva a Etapa, e a guarda da foto igual e criterio de aceite: a entrega
+  repetida do GitHub nao reescreve nada. Desde a issue #1386 (ADR 0077) ela nao
+  escreve na Conversa da Demanda, aposentada.
 * **A reconciliacao**, pela funcao do job com o Supabase dublado, mais o
   registro dela no scheduler. O intervalo de uma hora nao se testa esperando uma
   hora: o que se testa e que o job registrado APONTA para a rotina, e que a
@@ -51,14 +52,12 @@ from app.dependencies import get_supabase_client  # noqa: E402
 from app.limiter import limiter  # noqa: E402
 from app.routers import webhooks as webhooks_router  # noqa: E402
 from app.services import github_client, tecnologia_sincronizacao  # noqa: E402
-from app.services.tecnologia import ESTADOS_ABERTOS, ESTADOS_FECHADOS  # noqa: E402
+from app.services.tecnologia import ESTADOS_FECHADOS  # noqa: E402
 from app.services.tecnologia_vinculo import (  # noqa: E402
     ETAPA_EM_ANALISE,
     ETAPA_EM_DESENVOLVIMENTO,
     ETAPA_ENTREGUE,
-    ETAPA_NAO_SERA_FEITA,
     ETAPA_PLANEJADA,
-    ETAPAS,
 )
 
 ROTA = "/api/webhooks/github"
@@ -1164,7 +1163,7 @@ class TestRepositorioDaEntrega:
 
 
 class TestSincronizacaoPeloWebhook:
-    def test_a_etapa_e_a_linha_do_fio_mudam_juntas(self, monkeypatch):
+    def test_a_etapa_muda_e_a_conversa_aposentada_nao_ganha_linha(self, monkeypatch):
         gh = _GithubFalso({673: _issue(673, labels=("in-progress",))})
         cliente, sb, _ = _montar(
             demandas=[_demanda("D1", github_issue_numero=673, etapa=ETAPA_PLANEJADA)],
@@ -1177,11 +1176,7 @@ class TestSincronizacaoPeloWebhook:
         demanda = _demandas(sb)[0]
         assert demanda["etapa"] == ETAPA_EM_DESENVOLVIMENTO
         assert demanda["github_sincronizado_em"]
-        assert [linha["texto"] for linha in _fio(sb)] == ["Etapa: Em desenvolvimento"]
-        assert _fio(sb)[0]["movimento_campo"] == "etapa"
-        assert _fio(sb)[0]["movimento_de"] == ETAPA_PLANEJADA
-        assert _fio(sb)[0]["movimento_para"] == ETAPA_EM_DESENVOLVIMENTO
-        assert _fio(sb)[0]["autor_id"] is None, "ninguem AGIU no app: quem mudou foi o GitHub"
+        assert _fio(sb) == [], "a Conversa da Demanda saiu com a ADR 0077: ninguem a le"
 
     def test_a_entrega_guarda_a_foto_e_as_partes(self, monkeypatch):
         gh = _GithubFalso(
@@ -1196,7 +1191,7 @@ class TestSincronizacaoPeloWebhook:
         assert demanda["partes_entregues"] == 3
         assert demanda["partes_total"] == 7
         assert demanda["github_foto"]["partes"][0]["numero"] == 678
-        assert [linha["texto"] for linha in _fio(sb)] == ["Etapa: Em desenvolvimento (3 de 7 partes)"]
+        assert demanda["etapa"] == ETAPA_EM_DESENVOLVIMENTO
 
     def test_foto_igual_e_derivado_igual_nao_escrevem_nada(self, monkeypatch):
         """Criterio de aceite: foto igual a guardada nao grava linha nem mexe na
@@ -1250,19 +1245,26 @@ class TestSincronizacaoPeloWebhook:
         assert demanda["o_que_muda"] == "O selo se atualiza sozinho."
         assert _fio(sb) == [], "a Etapa nao mudou: o fio fica calado"
 
-    def test_a_entrega_repetida_nao_duplica_a_linha(self, monkeypatch):
-        """O GitHub reentrega, e a mesma entrega duas vezes nao pode virar duas
-        linhas no fio. A guarda e a foto, e nao o id da entrega: quem chega pela
-        reconciliacao nao tem id de entrega nenhum e precisa da mesma protecao."""
+    def test_a_entrega_repetida_nao_reescreve_a_demanda(self, monkeypatch):
+        """O GitHub reentrega, e a mesma entrega duas vezes so escreve uma. A
+        guarda e a foto, e nao o id da entrega: quem chega pela reconciliacao
+        nao tem id de entrega nenhum e precisa da mesma protecao."""
         gh = _GithubFalso({673: _issue(673, labels=("in-progress",))})
-        cliente, sb, _ = _montar(demandas=[_demanda("D1", github_issue_numero=673)], github=gh, monkeypatch=monkeypatch)
+        updates: list[str] = []
+        cliente, sb, _ = _montar(
+            demandas=[_demanda("D1", github_issue_numero=673)],
+            github=gh,
+            antes_do_update=lambda nome, _update, _linhas: updates.append(nome),
+            monkeypatch=monkeypatch,
+        )
         corpo = _corpo()
 
         primeira = _entregar(cliente, corpo)
         segunda = _entregar(cliente, corpo)
 
         assert (primeira.status_code, segunda.status_code) == (200, 200)
-        assert len(_fio(sb)) == 1
+        assert updates == ["tecnologia_demandas"]
+        assert _demandas(sb)[0]["etapa"] == ETAPA_EM_DESENVOLVIMENTO
 
     def test_a_etapa_igual_nao_grava_linha_mesmo_com_a_foto_diferente(self, monkeypatch):
         """Editar o corpo da issue muda a foto sem mudar a Etapa. O cache e
@@ -1368,8 +1370,7 @@ class TestARegraQueMudaAlcancaQuemNaoTeveNovidade:
 
     def test_a_etapa_da_regra_velha_e_reescrita_com_a_foto_igual(self, monkeypatch):
         """O caso do criterio de aceite: a Etapa volta a bater com a regra de
-        hoje, e o fio ganha a linha, na primeira sincronizacao depois da
-        mudanca."""
+        hoje na primeira sincronizacao depois da mudanca."""
         gh = _GithubFalso({673: _issue(673, labels=("in-progress",))})
         cliente, sb, _ = _montar(
             # A regra de ontem lia esta MESMA foto como "Em análise".
@@ -1384,7 +1385,6 @@ class TestARegraQueMudaAlcancaQuemNaoTeveNovidade:
         assert resposta.json()["sincronizada"] is True
         assert demanda["etapa"] == ETAPA_EM_DESENVOLVIMENTO
         assert demanda["github_sincronizado_em"] != CARIMBO_ANTERIOR
-        assert [linha["texto"] for linha in _fio(sb)] == ["Etapa: Em desenvolvimento"]
 
     def test_o_bloco_do_diretor_da_regra_velha_e_reescrito_sem_linha_no_fio(self, monkeypatch):
         """A regra do "Para o diretor" muda sem mexer na Etapa: o cache
@@ -1506,7 +1506,7 @@ class TestOEventLoopNaoFicaBloqueado:
 class TestCorridaEntreOJobEOWebhook:
     """O job roda numa THREAD do `BackgroundScheduler` e o webhook roda no event
     loop (agora tambem numa thread, pelo `run_in_threadpool`): entre o `select` de
-    um e o `insert` do outro ha uma janela sem trava, e os dois leriam a mesma
+    um e o `update` do outro ha uma janela sem trava, e os dois leriam a mesma
     Etapa antiga.
 
     A corrida e encenada de forma DETERMINISTICA: as duas leituras acontecem
@@ -1526,7 +1526,7 @@ class TestCorridaEntreOJobEOWebhook:
         guardada = sb.tabelas["tecnologia_demandas"][0]
         return sb, dict(guardada), dict(guardada)
 
-    def test_a_linha_da_etapa_nao_sai_duas_vezes(self, monkeypatch):
+    def test_a_etapa_e_movida_por_um_so(self, monkeypatch):
         sb, pelo_webhook, pelo_job = self._dois_leitores(monkeypatch)
 
         primeira = tecnologia_sincronizacao.sincronizar_demanda(sb, pelo_webhook)
@@ -1534,19 +1534,7 @@ class TestCorridaEntreOJobEOWebhook:
 
         assert primeira is True
         assert segunda is False, "o segundo leitor achou que ainda era ele quem movia a Etapa"
-        assert [linha["texto"] for linha in _fio(sb)] == ["Etapa: Em desenvolvimento"]
         assert _demandas(sb)[0]["etapa"] == ETAPA_EM_DESENVOLVIMENTO
-
-    def test_quem_perde_a_corrida_deixa_rastro(self, monkeypatch, caplog):
-        """Silencio aqui seria indistinguivel de "nada mudou", e quem for
-        investigar uma linha faltando no fio precisa achar o motivo."""
-        sb, pelo_webhook, pelo_job = self._dois_leitores(monkeypatch)
-        tecnologia_sincronizacao.sincronizar_demanda(sb, pelo_webhook)
-
-        with caplog.at_level(logging.INFO, logger="app.services.tecnologia_sincronizacao"):
-            tecnologia_sincronizacao.sincronizar_demanda(sb, pelo_job)
-
-        assert "já tinha sido movida" in caplog.text
 
     def test_o_detector_da_corrida_nao_e_vacuo(self, monkeypatch):
         """O piso: os dois leitores precisam MESMO chegar com a Etapa antiga na
@@ -1666,7 +1654,7 @@ class TestReconciliacao:
         assert gh.leituras == [673]
         assert contagem["lidas"] == 1
         assert contagem["mudadas"] == 1
-        assert [linha["demanda_id"] for linha in _fio(sb)] == ["D1"]
+        assert [d["id"] for d in _demandas(sb) if d["etapa"] == ETAPA_EM_DESENVOLVIMENTO] == ["D1"]
 
     def test_aguardando_entra_no_lote(self, monkeypatch):
         """`aguardando` e o estado em que a Demanda cai quando a Entrega a
@@ -1950,7 +1938,6 @@ class TestOPrQueFechaARaiz:
         demanda = _demandas(sb)[0]
         assert demanda["etapa"] == ETAPA_EM_DESENVOLVIMENTO
         assert demanda["github_foto"]["prs_abertos"] == [1100]
-        assert [linha["texto"] for linha in _fio(sb)] == ["Etapa: Em desenvolvimento"]
 
     def test_pr_fechado_sem_merge_limpa_o_fato_e_a_etapa_volta_as_labels(self, monkeypatch):
         """Criterio de aceite: o PR some, e quem manda de novo e a label."""
@@ -1967,7 +1954,6 @@ class TestOPrQueFechaARaiz:
         assert demanda["etapa"] == ETAPA_PLANEJADA
         assert "prs_abertos" not in demanda["github_foto"]
         assert "fechada_por_pr" not in demanda["github_foto"]
-        assert [linha["texto"] for linha in _fio(sb)] == ["Etapa: Em desenvolvimento", "Etapa: Planejada"]
 
     def test_fechar_um_pr_sem_merge_nao_apaga_o_outro_pr_aberto(self, monkeypatch):
         gh = _GithubFalso({673: _issue(673)})
@@ -2074,12 +2060,6 @@ class TestOPrQueFechaARaiz:
         assert _demandas(sb)[0]["etapa"] == ETAPA_PLANEJADA
 
 
-def _linhas_da_etapa(sb: _SupabaseMock) -> list[str]:
-    """So as linhas da Etapa: a devolucao a quem pediu, que a Entrega dispara,
-    escreve as dela, e nao e o que estes casos contam."""
-    return [linha["texto"] for linha in _fio(sb) if linha["texto"].startswith("Etapa:")]
-
-
 class TestOMergeChegaJuntoComOFechamentoDaIssue:
     """O merge de um PR com `Closes #N` manda `pull_request.closed` e
     `issues.closed` quase no mesmo segundo, e cada handler le a Demanda ANTES
@@ -2138,7 +2118,7 @@ class TestOMergeChegaJuntoComOFechamentoDaIssue:
         assert demanda["github_foto"].get("fechada_por_pr") == 1100, "o merge perdeu a corrida e o fato junto"
         assert "prs_abertos" not in demanda["github_foto"]
         assert demanda["etapa"] == ETAPA_ENTREGUE
-        assert _linhas_da_etapa(sb) == ["Etapa: Entregue"], "a linha da Etapa saiu duas vezes"
+        assert _demandas(sb)[0]["etapa"] == ETAPA_ENTREGUE
 
     def test_merge_escrevendo_antes_do_issues_que_moveria_a_etapa_mantem_o_fato(self, monkeypatch):
         sb, pelo_pr, pelo_issues = self._dois_leitores(monkeypatch, _entregue(), ETAPA_EM_DESENVOLVIMENTO)
@@ -2149,7 +2129,7 @@ class TestOMergeChegaJuntoComOFechamentoDaIssue:
         demanda = _demandas(sb)[0]
         assert demanda["github_foto"].get("fechada_por_pr") == 1100
         assert "prs_abertos" not in demanda["github_foto"]
-        assert _linhas_da_etapa(sb) == ["Etapa: Entregue"]
+        assert _demandas(sb)[0]["etapa"] == ETAPA_ENTREGUE
 
     def test_o_detector_da_corrida_nao_e_vacuo(self, monkeypatch):
         """O piso: o leitor do `issues` chega MESMO com a foto sem o fato e com

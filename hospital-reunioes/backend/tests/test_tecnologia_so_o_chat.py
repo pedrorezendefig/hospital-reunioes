@@ -61,4 +61,3 @@ def test_o_webhook_da_etapa_e_a_automacao_dos_anexos_continuam_no_app():
 
     for rota in ROTAS_QUE_FICAM:
         assert rota in caminhos, rota
-

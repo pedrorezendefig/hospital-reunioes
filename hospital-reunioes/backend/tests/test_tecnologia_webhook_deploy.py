@@ -2,13 +2,13 @@
 
 A Action pós-merge chama `POST /webhooks/deploy` depois do registro da subida,
 com a versão, a data e os PRs do lote (cada um com as issues que fecha). O app
-marca Em produção as Demandas vinculadas a essas issues, escreve a linha
-automática "Em produção na vX.Y.Z" e, quando a issue fechou por PR, devolve a
-Demanda a quem pediu (ADR 0069, decisões 4 e 5).
+marca Em produção as Demandas vinculadas a essas issues (ADR 0069, decisão 4).
+A linha na Conversa e a devolução a quem pediu, com o e-mail, saíram na issue
+#1386 (ADR 0077): a Etapa é o que a lista do chat mostra.
 
 Os dublês são os do webhook do GitHub (`test_tecnologia_webhook_github`): o
 mesmo Supabase em memória, o mesmo GitHub falso e as mesmas travas autouse
-contra rede e e-mail de verdade, importadas para valerem aqui também.
+contra rede, importadas para valerem aqui também.
 
 O segredo usado aqui é um valor FALSO deste arquivo. O de produção mora no
 Coolify e nos secrets do repositório, e não entra em teste, log, commit nem
@@ -30,7 +30,6 @@ from test_tecnologia_webhook_github import (  # noqa: E402
     REPO,
     _assinar,
     _corpo,
-    _corpo_pr,
     _demanda,
     _demandas,
     _entregar,
@@ -51,7 +50,6 @@ from test_tecnologia_webhook_github import (  # noqa: E402
 from app.config import settings  # noqa: E402
 from app.cron import scheduler as scheduler_mod  # noqa: E402
 from app.services import github_client, tecnologia_sincronizacao  # noqa: E402
-from app.services.tecnologia import RECADO_DA_ENTREGA  # noqa: E402
 from app.services.tecnologia_vinculo import (  # noqa: E402
     ETAPA_EM_DESENVOLVIMENTO,
     ETAPA_EM_PRODUCAO,
@@ -64,21 +62,6 @@ ROTA = "/api/webhooks/deploy"
 SEGREDO_DO_DEPLOY = "segredo-falso-do-deploy-1065"
 
 DATA_DA_SUBIDA = "2026-10-07T18:00:00-03:00"
-
-
-@pytest.fixture(autouse=True)
-def avisos(monkeypatch) -> list[dict]:
-    """Nenhum teste daqui manda e-mail, e todos podem tentar: o carimbo de Em
-    produção devolve o card e chama o aviso de atribuição, e o `.env` dos
-    testes tem credencial de verdade. Devolve os avisos pedidos."""
-    pedidos: list[dict] = []
-
-    def _registrar(supabase, **argumentos):
-        pedidos.append(argumentos)
-        return True
-
-    monkeypatch.setattr(tecnologia_sincronizacao, "avisar_atribuicao", _registrar)
-    return pedidos
 
 
 @pytest.fixture(autouse=True)
@@ -137,11 +120,9 @@ class TestOWebhookMarcaEmProducao:
         assert d2.get("versao_em_producao") is None
         assert gh.leituras == [], "o webhook de deploy não relê o GitHub"
 
-    def test_a_linha_em_producao_entra_na_conversa_e_nao_e_espelhada(self, monkeypatch):
-        """Critério de aceite: "Em produção na v0.169.0" no fio do diretor, como
-        linha automática (sem autor), e nada publicado na issue."""
-        publicados: list = []
-        monkeypatch.setattr(github_client, "criar_comentario", lambda *a, **kw: publicados.append(a) or 1)
+    def test_em_producao_nao_escreve_na_conversa_aposentada(self, monkeypatch):
+        """A Conversa da Demanda saiu com a ADR 0077: a subida move a Etapa e a
+        resposta conta a marcada, e nenhuma linha vai para o fio."""
         gh = _GithubFalso({673: _entregue(673)})
         cliente, sb, _ = _montar(
             demandas=[_entregue_por_pr(gh, 673, "D1")],
@@ -153,173 +134,8 @@ class TestOWebhookMarcaEmProducao:
         resposta = _avisar(cliente, _corpo_do_deploy())
 
         assert resposta.json() == {"recebido": True, "versao": "v0.169.0", "marcadas": 1, "falhas": 0}
-        linha = _fio(sb)[0]
-        assert linha["texto"] == "Em produção na v0.169.0"
-        assert (linha["linha"], linha["autor_id"]) == ("movimento", None)
-        assert (linha["movimento_campo"], linha["movimento_de"], linha["movimento_para"]) == (
-            "etapa",
-            ETAPA_ENTREGUE,
-            ETAPA_EM_PRODUCAO,
-        )
-        assert publicados == [], "a linha automática não vira comentário na issue"
-
-
-def _quem_tem_o_card(sb) -> tuple[str, str]:
-    demanda = _demandas(sb)[0]
-    return demanda["estado"], demanda["responsavel_id"]
-
-
-class TestADevolucaoEsperaAProducao:
-    """O gatilho da devolução a quem pediu (ADR 0069, decisão 5): Em produção
-    quando a issue fechou por PR, Entregue quando fechou sem PR. Nunca as duas.
-
-    Pelas DUAS rotas de verdade, na ordem em que os eventos chegam: o merge pelo
-    webhook do GitHub, depois o aviso da subida pelo webhook de deploy.
-    """
-
-    def _em_desenvolvimento_com_pr(self, monkeypatch):
-        gh = _GithubFalso({673: _issue(673, labels=("in-progress",))})
-        foto = {**_foto_guardada(gh, 673), "prs_abertos": [1100]}
-        demanda = _demanda(
-            "D1",
-            github_issue_numero=673,
-            etapa=ETAPA_EM_DESENVOLVIMENTO,
-            github_foto=foto,
-            estado="em_andamento",
-            autor_id="P1",
-            responsavel_id="P2",
-        )
-        cliente, sb, _ = _montar(
-            demandas=[demanda],
-            participantes=[_pessoa("P1")],
-            produtos=[{"id": "prod-1", "nome": "Prontuário"}],
-            github=gh,
-            monkeypatch=monkeypatch,
-        )
-        gh.issues[673] = _entregue(673)
-        return cliente, sb
-
-    def test_fechada_por_pr_volta_a_quem_pediu_so_em_producao(self, monkeypatch, avisos):
-        """Critério de aceite: o merge leva a Entregue e o card fica com a Vitta;
-        a subida leva a Em produção e só então o card volta para quem pediu
-        (Aguardando, Responsável o autor, e-mail de atribuição)."""
-        cliente, sb = self._em_desenvolvimento_com_pr(monkeypatch)
-
-        _entregar(cliente, _corpo_pr(acao="closed", merged=True), evento="pull_request")
-
-        assert _demandas(sb)[0]["etapa"] == ETAPA_ENTREGUE
-        assert _quem_tem_o_card(sb) == ("em_andamento", "P2"), "o merge não devolve: o código ainda não está no ar"
-        assert avisos == []
-
-        _avisar(cliente, _corpo_do_deploy())
-
         assert _demandas(sb)[0]["etapa"] == ETAPA_EM_PRODUCAO
-        assert _quem_tem_o_card(sb) == ("aguardando", "P1")
-        assert [(aviso["destinatario_id"], aviso["trecho"]) for aviso in avisos] == [("P1", RECADO_DA_ENTREGA)]
-        assert avisos[0]["demanda"]["produto_nome"] == "Prontuário"
-
-    def test_o_fechamento_que_chega_antes_do_merge_tambem_espera_a_producao(self, monkeypatch, avisos):
-        """No merge, `issues.closed` pode chegar ANTES do `pull_request.closed`:
-        a foto ainda diz "PR aberto" e não tem `fechada_por_pr`. O PR a caminho
-        já diz que o fechamento é por PR, e a devolução espera a subida."""
-        cliente, sb = self._em_desenvolvimento_com_pr(monkeypatch)
-
-        _entregar(cliente, _corpo(acao="closed"))
-        _entregar(cliente, _corpo_pr(acao="closed", merged=True), evento="pull_request")
-
-        assert _demandas(sb)[0]["etapa"] == ETAPA_ENTREGUE
-        assert _quem_tem_o_card(sb) == ("em_andamento", "P2")
-        assert avisos == []
-
-        _avisar(cliente, _corpo_do_deploy())
-
-        assert _quem_tem_o_card(sb) == ("aguardando", "P1")
-        assert len(avisos) == 1
-
-    def test_fechada_sem_pr_volta_em_entregue_e_nao_de_novo_em_producao(self, monkeypatch, avisos):
-        """Critério de aceite: a issue fechada à mão (decisão, consultoria)
-        devolve em Entregue, como hoje. Se uma subida a listar depois, a
-        Demanda ganha Em produção sem ser devolvida outra vez."""
-        gh = _GithubFalso({673: _issue(673, labels=("in-progress",))})
-        cliente, sb, _ = _montar(
-            demandas=[
-                _demanda(
-                    "D1",
-                    github_issue_numero=673,
-                    etapa=ETAPA_EM_DESENVOLVIMENTO,
-                    github_foto=_foto_guardada(gh, 673),
-                    estado="em_andamento",
-                    autor_id="P1",
-                    responsavel_id="P2",
-                )
-            ],
-            participantes=[_pessoa("P1")],
-            github=gh,
-            monkeypatch=monkeypatch,
-        )
-        gh.issues[673] = _entregue(673)
-
-        _entregar(cliente, _corpo(acao="closed"))
-
-        assert _demandas(sb)[0]["etapa"] == ETAPA_ENTREGUE
-        assert _quem_tem_o_card(sb) == ("aguardando", "P1")
-        assert len(avisos) == 1
-
-        # O diretor conferiu e passou a bola adiante; a subida chega depois.
-        _demandas(sb)[0].update(estado="em_andamento", responsavel_id="P2")
-        _avisar(cliente, _corpo_do_deploy())
-
-        assert _demandas(sb)[0]["etapa"] == ETAPA_EM_PRODUCAO
-        assert _quem_tem_o_card(sb) == ("em_andamento", "P2"), "devolvida duas vezes"
-        assert len(avisos) == 1
-
-
-class TestOPrDeFerramentaNaoEsperaSubida:
-    """O PR que não toca em `hospital-reunioes/` (uma Demanda resolvida só no
-    `docs/manual/`, por exemplo) é lote de ferramenta: o `fechar_onda.py` só
-    mergeia, sem build, sem entrada no `history.json` e sem webhook de deploy.
-    Não há subida a esperar, e a devolução volta a Entregue (ADR 0069, decisão
-    5). Revisão do PR #1100."""
-
-    def _sem_app(self, monkeypatch) -> list[int]:
-        lidos: list[int] = []
-
-        def _ler(numero):
-            lidos.append(numero)
-            return False
-
-        monkeypatch.setattr(github_client, "pr_toca_o_app", _ler)
-        return lidos
-
-    def test_o_merge_de_um_pr_de_ferramenta_devolve_em_entregue(self, monkeypatch, avisos):
-        cliente, sb = TestADevolucaoEsperaAProducao()._em_desenvolvimento_com_pr(monkeypatch)
-        lidos = self._sem_app(monkeypatch)
-
-        _entregar(cliente, _corpo_pr(acao="closed", merged=True), evento="pull_request")
-
-        assert lidos == [1100]
-        assert _demandas(sb)[0]["etapa"] == ETAPA_ENTREGUE
-        assert _quem_tem_o_card(sb) == ("aguardando", "P1")
-        assert [aviso["destinatario_id"] for aviso in avisos] == ["P1"]
-
-    def test_o_fechamento_que_chega_antes_do_merge_de_ferramenta_tambem_devolve(self, monkeypatch, avisos):
-        """O `issues.closed` chega primeiro, com o PR ainda aberto na foto: a
-        devolução espera. O `pull_request.closed` diz que o PR não leva subida,
-        e a Demanda, que segue Entregue, volta a quem pediu uma vez só."""
-        cliente, sb = TestADevolucaoEsperaAProducao()._em_desenvolvimento_com_pr(monkeypatch)
-        self._sem_app(monkeypatch)
-
-        _entregar(cliente, _corpo(acao="closed"))
-        assert _quem_tem_o_card(sb) == ("em_andamento", "P2"), "o piso: o PR aberto ainda segura a devolução"
-
-        _entregar(cliente, _corpo_pr(acao="closed", merged=True), evento="pull_request")
-
-        assert _demandas(sb)[0]["etapa"] == ETAPA_ENTREGUE
-        assert _quem_tem_o_card(sb) == ("aguardando", "P1")
-        assert len(avisos) == 1
-
-        _entregar(cliente, _corpo(acao="edited"))
-        assert len(avisos) == 1, "devolvida de novo numa releitura da issue"
+        assert _fio(sb) == []
 
 
 _PR_TOCA_O_APP_DE_VERDADE = github_client.pr_toca_o_app
@@ -353,26 +169,11 @@ class TestOClienteDizSeOPrLevaSubida:
 
         assert _PR_TOCA_O_APP_DE_VERDADE(1105) is True
 
-    def test_falha_ao_ler_os_arquivos_devolve_no_merge(self, monkeypatch, avisos):
-        """ "Não sei" vale "sem subida": esperar uma subida que talvez não venha
-        deixaria o card com a Vitta para sempre."""
-        cliente, sb = TestADevolucaoEsperaAProducao()._em_desenvolvimento_com_pr(monkeypatch)
-
-        def _fora_do_ar(numero):
-            raise github_client.GithubIndisponivelError("timeout")
-
-        monkeypatch.setattr(github_client, "pr_toca_o_app", _fora_do_ar)
-
-        _entregar(cliente, _corpo_pr(acao="closed", merged=True), evento="pull_request")
-
-        assert _quem_tem_o_card(sb) == ("aguardando", "P1")
-        assert len(avisos) == 1
-
 
 class TestAMesmaVersaoNaoRegrava:
-    def test_a_mesma_versao_duas_vezes_nao_grava_nem_avisa_de_novo(self, monkeypatch, avisos):
+    def test_a_mesma_versao_duas_vezes_nao_grava_de_novo(self, monkeypatch):
         """Critério de aceite: a Action reexecutada (ou o aviso repetido) não
-        escreve nada na segunda vez: nem a Demanda, nem o fio, nem o e-mail."""
+        escreve nada na segunda vez."""
         gh = _GithubFalso({673: _entregue(673)})
         cliente, sb, _ = _montar(
             demandas=[_entregue_por_pr(gh, 673, "D1", responsavel_id="P2")],
@@ -382,19 +183,16 @@ class TestAMesmaVersaoNaoRegrava:
         )
         _avisar(cliente, _corpo_do_deploy())
         depois_da_primeira = dict(_demandas(sb)[0])
-        linhas = len(_fio(sb))
-        assert len(avisos) == 1, "o piso: a primeira chamada devolveu"
+        assert depois_da_primeira["etapa"] == ETAPA_EM_PRODUCAO, "o piso: a primeira chamada marcou"
 
         resposta = _avisar(cliente, _corpo_do_deploy())
 
         assert resposta.json()["marcadas"] == 0
         assert _demandas(sb)[0] == depois_da_primeira
-        assert len(_fio(sb)) == linhas
-        assert len(avisos) == 1
 
     def test_a_releitura_da_issue_depois_da_subida_mantem_em_producao(self, monkeypatch):
         """A reconciliação de hora em hora relê a issue, que segue fechada: a
-        Etapa fica Em produção, sem linha nova. Sem isto, a passagem seguinte
+        Etapa fica Em produção. Sem isto, a passagem seguinte
         derivaria Entregue da foto e o selo voltaria para trás."""
         gh = _GithubFalso({673: _entregue(673)})
         cliente, sb, _ = _montar(
@@ -404,12 +202,10 @@ class TestAMesmaVersaoNaoRegrava:
             monkeypatch=monkeypatch,
         )
         _avisar(cliente, _corpo_do_deploy())
-        linhas = len(_fio(sb))
 
         tecnologia_sincronizacao.reconciliar_vinculos(sb)
 
         assert _demandas(sb)[0]["etapa"] == ETAPA_EM_PRODUCAO
-        assert len(_fio(sb)) == linhas
 
     def test_a_issue_reaberta_sai_de_em_producao_e_o_novo_fechamento_espera_a_subida(self, monkeypatch):
         """O diretor pediu ajuste: a issue reabre e a Etapa volta a andar. O
@@ -589,11 +385,10 @@ class TestAReconciliacaoCarimbaEmProducao:
         scheduler_mod.reconciliar_vinculos_tecnologia()
         return leituras
 
-    def test_o_job_de_hora_em_hora_carimba_o_que_o_webhook_nao_entregou(self, monkeypatch, avisos):
+    def test_o_job_de_hora_em_hora_carimba_o_que_o_webhook_nao_entregou(self, monkeypatch):
         """Critério de aceite: o aviso da Action não chegou, e a passagem de
         hora em hora lê o `history.json` da `main` e marca Em produção, com a
-        versão mais nova que lista a issue e a data dela, a linha no fio e a
-        devolução a quem pediu."""
+        versão mais nova que lista a issue e a data dela."""
         gh = _GithubFalso({673: _fechada_em(673, "2026-10-08T12:30:00Z"), 999: _entregue(999)})
         _, sb, _ = _montar(
             demandas=[
@@ -613,16 +408,14 @@ class TestAReconciliacaoCarimbaEmProducao:
             "v0.169.0",
             "2026-10-08T10:00:00-03:00",
         )
-        assert [linha["texto"] for linha in _fio(sb) if linha["demanda_id"] == "D1"][0] == "Em produção na v0.169.0"
-        assert (d1["estado"], d1["responsavel_id"]) == ("aguardando", "P1")
         assert d2["etapa"] == ETAPA_ENTREGUE, "a issue que nenhuma subida lista continua Entregue"
 
-    def test_a_issue_reaberta_nao_herda_a_subida_do_fechamento_anterior(self, monkeypatch, avisos):
+    def test_a_issue_reaberta_nao_herda_a_subida_do_fechamento_anterior(self, monkeypatch):
         """O caso da revisão do PR #1100: a 673 subiu na v0.169.0, reabriu para
         um ajuste e o PR do ajuste foi mergeado. Até a subida do ajuste entrar
         no `history.json`, a v0.169.0 é a única entrada que lista a 673, e ela é
         de ANTES do fechamento atual: a passagem de hora em hora não carimba
-        nada, e o card fica com a Vitta. A subida seguinte carimba a dela."""
+        nada. A subida seguinte carimba a dela."""
         gh = _GithubFalso({673: _fechada_em(673, "2026-10-08T15:00:00Z")})
         _, sb, _ = _montar(
             demandas=[_entregue_por_pr(gh, 673, "D1", estado="em_andamento", responsavel_id="P2")],
@@ -635,9 +428,6 @@ class TestAReconciliacaoCarimbaEmProducao:
 
         assert _demandas(sb)[0]["etapa"] == ETAPA_ENTREGUE, "carimbou a subida de antes do fechamento"
         assert _demandas(sb)[0].get("versao_em_producao") is None
-        assert _quem_tem_o_card(sb) == ("em_andamento", "P2")
-        assert _fio(sb) == []
-        assert avisos == []
 
         subida_do_ajuste = {
             "app_version": "0.170.0",
@@ -648,8 +438,6 @@ class TestAReconciliacaoCarimbaEmProducao:
 
         demanda = _demandas(sb)[0]
         assert (demanda["etapa"], demanda["versao_em_producao"]) == (ETAPA_EM_PRODUCAO, "v0.170.0")
-        assert _quem_tem_o_card(sb) == ("aguardando", "P1")
-        assert len(avisos) == 1
 
     def test_sem_demanda_entregue_o_history_json_nem_e_lido(self, monkeypatch):
         """A cota do GitHub é uma só: sem Demanda à espera da subida, não há o
