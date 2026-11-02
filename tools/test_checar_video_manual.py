@@ -120,7 +120,7 @@ def test_abertura_com_video_sem_composicao_trava(tmp_path):
     problemas = checar_video_manual.checar(tmp_path)
     assert len(problemas) == 1
     assert "não tem composição" in problemas[0]
-    assert "video/ouvidoria/visao-geral/index.html" in problemas[0]
+    assert "video/ouvidoria/visao-geral/" in problemas[0]
 
 
 def test_composicao_sem_carimbo_de_geracao_trava(tmp_path):
@@ -294,7 +294,7 @@ def test_pagina_inicial_com_video_sem_composicao_trava(tmp_path):
     )
     problemas = checar_video_manual.checar(tmp_path)
     assert len(problemas) == 1
-    assert "video/primeiros-passos/conheca-a-plataforma/index.html" in problemas[0]
+    assert "video/primeiros-passos/conheca-a-plataforma/" in problemas[0]
 
 
 def rodar(raiz: Path) -> subprocess.CompletedProcess[str]:
@@ -543,5 +543,123 @@ def test_classe_da_replica_com_nome_proprio_passa(tmp_path):
     montar_com_estilo_na_raiz(
         tmp_path,
         "@font-face { src: url('assets/fonts/x.ttf'); } .ap-placa { opacity: .5; }",
+    )
+    assert checar_video_manual.checar(tmp_path) == []
+
+
+# --- A composição nova, em Remotion (ADR 0076, issue #1366) ------------------
+#
+# O Vídeo de visão geral passa a ser feito pela skill `motion`, no molde da
+# `/divulgar`: a pasta guarda o roteiro, as cenas tsx, o `meta.json` com o
+# carimbo e os PRDs que o vídeo cobre, e o `VERIFY.md`. Sem `index.html` é
+# composição nova; com ele, é HyperFrames antiga, aceita até o módulo trocar.
+
+META = {
+    "modulo": "ouvidoria",
+    "slug": "visao-geral",
+    "pagina": "ouvidoria/index.md",
+    "prds_cobertos": [731],
+    "app_version": "0.206.0",
+    "gerado_em": "2026-11-02T10:00:00-03:00",
+}
+
+
+def montar_nova(
+    raiz: Path,
+    *,
+    meta: dict | None = META,
+    com_roteiro: bool = True,
+    com_cena: bool = True,
+    com_verify: bool = True,
+) -> Path:
+    """A abertura da Ouvidoria exibindo uma composição Remotion completa."""
+    pasta = montar(raiz, com_composicao=False)
+    pasta.mkdir(parents=True)
+    if meta is not None:
+        (pasta / "meta.json").write_text(
+            json.dumps(meta, ensure_ascii=False), encoding="utf-8"
+        )
+    if com_roteiro:
+        (pasta / "roteiro.md").write_text("# Roteiro\n\nGancho.\n", encoding="utf-8")
+    if com_cena:
+        (pasta / "cena").mkdir()
+        (pasta / "cena" / "VisaoGeral.tsx").write_text(
+            "export const VisaoGeral = () => null;\n", encoding="utf-8"
+        )
+    if com_verify:
+        (pasta / "VERIFY.md").write_text("# VERIFY\n\nGates OK.\n", encoding="utf-8")
+    return pasta
+
+
+def test_composicao_nova_completa_passa(tmp_path):
+    montar_nova(tmp_path)
+    assert checar_video_manual.checar(tmp_path) == []
+
+
+def test_composicao_nova_sem_meta_json_trava(tmp_path):
+    montar_nova(tmp_path, meta=None)
+    problemas = checar_video_manual.checar(tmp_path)
+    assert len(problemas) == 1
+    assert "video/ouvidoria/visao-geral" in problemas[0]
+    assert "meta.json" in problemas[0]
+
+
+def test_composicao_nova_sem_prds_cobertos_trava(tmp_path):
+    """Sem a lista, ninguém sabe que PRD o vídeo já mostra e qual ficou de fora."""
+    sem_lista = {c: v for c, v in META.items() if c != "prds_cobertos"}
+    montar_nova(tmp_path, meta=sem_lista)
+    problemas = checar_video_manual.checar(tmp_path)
+    assert len(problemas) == 1
+    assert "prds_cobertos" in problemas[0]
+
+
+def test_composicao_nova_com_prds_cobertos_vazio_trava(tmp_path):
+    montar_nova(tmp_path, meta={**META, "prds_cobertos": []})
+    problemas = checar_video_manual.checar(tmp_path)
+    assert len(problemas) == 1
+    assert "prds_cobertos" in problemas[0]
+
+
+def test_composicao_nova_sem_a_versao_do_app_trava(tmp_path):
+    montar_nova(tmp_path, meta={**META, "app_version": ""})
+    problemas = checar_video_manual.checar(tmp_path)
+    assert len(problemas) == 1
+    assert "video/ouvidoria/visao-geral/meta.json" in problemas[0]
+    assert "app_version" in problemas[0]
+
+
+def test_composicao_nova_com_carimbo_de_outro_modulo_trava(tmp_path):
+    montar_nova(tmp_path, meta={**META, "modulo": "pops"})
+    problemas = checar_video_manual.checar(tmp_path)
+    assert len(problemas) == 1
+    assert "carimbo de outra página" in problemas[0]
+
+
+def test_composicao_nova_sem_roteiro_trava(tmp_path):
+    montar_nova(tmp_path, com_roteiro=False)
+    problemas = checar_video_manual.checar(tmp_path)
+    assert len(problemas) == 1
+    assert "roteiro.md" in problemas[0]
+
+
+def test_composicao_nova_sem_cenas_trava(tmp_path):
+    montar_nova(tmp_path, com_cena=False)
+    problemas = checar_video_manual.checar(tmp_path)
+    assert len(problemas) == 1
+    assert "cena/*.tsx" in problemas[0]
+
+
+def test_composicao_nova_sem_verify_trava(tmp_path):
+    montar_nova(tmp_path, com_verify=False)
+    problemas = checar_video_manual.checar(tmp_path)
+    assert len(problemas) == 1
+    assert "VERIFY.md" in problemas[0]
+
+
+def test_composicao_nova_nao_passa_pelos_gates_do_hyperframes(tmp_path):
+    """Cor em hex e timeline são do HyperFrames: a cena tsx tem os gates dela."""
+    pasta = montar_nova(tmp_path)
+    (pasta / "cena" / "tema.ts").write_text(
+        'export const PALETA = { fundo: "#1E1D57" };\n', encoding="utf-8"
     )
     assert checar_video_manual.checar(tmp_path) == []

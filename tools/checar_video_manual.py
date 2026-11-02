@@ -8,11 +8,17 @@ composição dela mora em `video/primeiros-passos/`. Página de tarefa não exib
 vídeo: o campo `video` fora da abertura é recusado, porque o tema não o
 desenha e ele sumiria calado.
 
+Desde a ADR 0076 (issue #1366) o vídeo é feito em Remotion pela skill
+`motion`, e a composição nova (pasta sem `index.html`) tem `roteiro.md`, as
+cenas em `cena/*.tsx`, o `meta.json` com o carimbo e os `prds_cobertos`, e o
+`VERIFY.md`. A composição HyperFrames antiga (com `index.html`) continua
+aceita, com os gates de antes, até o vídeo do módulo ser refeito.
+
 Desde a emenda de 13/10/2026 à ADR 0057 (issue #1230), confere também o
-Estilo do manual em toda composição que não está na lista de pendentes de
-rerender (`video/_estilo/pendentes-de-rerender.txt`) e nos cards de
-`video/_estilo/cards/`: `VERIFY.md` ao lado da composição, nenhuma cor em hex
-nem fonte fora dos tokens, e todo timeline pelo menos do tamanho do slot.
+Estilo do manual em toda composição HyperFrames que não está na lista de
+pendentes de rerender (`video/_estilo/pendentes-de-rerender.txt`) e nos cards
+de `video/_estilo/cards/`: `VERIFY.md` ao lado da composição, nenhuma cor em
+hex nem fonte fora dos tokens, e todo timeline pelo menos do tamanho do slot.
 
 Uso: python3 tools/checar_video_manual.py [--dir docs/manual]
 Sai com código 1 se houver qualquer violação.
@@ -222,6 +228,110 @@ def modulo_da_abertura(relativo: Path) -> str | None:
     return None
 
 
+def _carimbo(
+    carimbo: dict, rotulo: str, modulo: str, slug: str, paginas: list[str]
+) -> list[str]:
+    """Os cinco campos do carimbo de geração, e todos do vídeo certo."""
+    problemas: list[str] = []
+    faltando = [c for c in CAMPOS_DO_CARIMBO if not carimbo.get(c)]
+    if faltando:
+        problemas.append(
+            f"{rotulo}: carimbo de geração sem {', '.join(faltando)}. Sem ele "
+            "ninguém sabe que tela e que versão do app o vídeo retrata (ADR "
+            "0057, decisão 3)."
+        )
+
+    # Compor um vídeo novo começa copiando a pasta de um pronto, e o carimbo
+    # vem colado junto. Preenchido com os dados do vídeo antigo, ele passa
+    # por completo e mente sobre que tela o vídeo retrata.
+    # A página inicial divide o vídeo com a abertura de Primeiros passos: o
+    # carimbo aponta uma das duas.
+    esperado = {"modulo": modulo, "slug": slug}
+    divergentes = [
+        f"{campo}: '{carimbo[campo]}' no lugar de '{valor}'"
+        for campo, valor in esperado.items()
+        if carimbo.get(campo) and carimbo[campo] != valor
+    ]
+    if carimbo.get("pagina") and carimbo["pagina"] not in paginas:
+        divergentes.append(
+            f"pagina: '{carimbo['pagina']}' no lugar de '{' ou '.join(paginas)}'"
+        )
+    if divergentes:
+        problemas.append(
+            f"{rotulo}: carimbo de outra página ({'; '.join(divergentes)}). "
+            "Copiar a pasta de uma composição pronta traz o carimbo do vídeo "
+            "antigo: troque os campos pelos deste vídeo (ADR 0057, decisão 3)."
+        )
+    return problemas
+
+
+def _lista_de_prds(valor: object) -> bool:
+    return (
+        isinstance(valor, list)
+        and bool(valor)
+        and all(isinstance(n, int) and not isinstance(n, bool) for n in valor)
+    )
+
+
+def _composicao_nova(
+    pasta: Path, modulo: str, slug: str, paginas: list[str]
+) -> list[str]:
+    """A composição Remotion do Vídeo de visão geral (ADR 0076).
+
+    Na pasta: `roteiro.md`, as cenas em `cena/*.tsx`, o `meta.json` com o
+    carimbo e os `prds_cobertos`, e o `VERIFY.md` com o que os gates viram.
+    """
+    rotulo = f"video/{modulo}/{slug}"
+    receita = ".claude/skills/manual/references/video-de-visao-geral.md"
+    problemas: list[str] = []
+
+    arquivo_meta = pasta / "meta.json"
+    if not arquivo_meta.is_file():
+        problemas.append(
+            f"{rotulo}: composição sem meta.json. É ele que guarda o carimbo "
+            "(que tela e que versão do app o vídeo retrata) e os prds_cobertos, "
+            f"a lista dos PRDs que o vídeo já mostra (ADR 0076; {receita})."
+        )
+    else:
+        try:
+            meta = json.loads(arquivo_meta.read_text(encoding="utf-8"))
+        except ValueError:
+            meta = None
+        if not isinstance(meta, dict):
+            problemas.append(
+                f"{rotulo}/meta.json: não é um objeto JSON. Copie o modelo da "
+                f"receita ({receita})."
+            )
+        else:
+            problemas += _carimbo(meta, f"{rotulo}/meta.json", modulo, slug, paginas)
+            if not _lista_de_prds(meta.get("prds_cobertos")):
+                problemas.append(
+                    f"{rotulo}/meta.json: sem prds_cobertos, a lista com o "
+                    "número de cada PRD que o vídeo mostra (todo PRD citado no "
+                    "`prd:` das páginas do módulo). Sem ela a /montar-manual "
+                    "não sabe quando o vídeo ficou para trás (ADR 0076)."
+                )
+
+    if not (pasta / "roteiro.md").is_file():
+        problemas.append(
+            f"{rotulo}: composição sem roteiro.md (briefing da copy, ganchos, "
+            f"narração e a tabela de cenas). Sem ele ninguém refaz o vídeo ({receita})."
+        )
+    if not any((pasta / "cena").glob("*.tsx")):
+        problemas.append(
+            f"{rotulo}: composição sem as cenas em cena/*.tsx. O projeto de "
+            "trabalho do Remotion é descartável: o que não volta para cena/ se "
+            f"perde ({receita})."
+        )
+    if not (pasta / "VERIFY.md").is_file():
+        problemas.append(
+            f"{rotulo}: sem VERIFY.md. Grave ao lado da composição a saída dos "
+            "gates (tsc, ffprobe, freezedetect, orçamento, Chrome real) antes do "
+            f"render final ({receita})."
+        )
+    return problemas
+
+
 def checar(raiz: Path) -> list[str]:
     conteudo = raiz / "src" / "content" / "docs"
     problemas: list[str] = []
@@ -248,48 +358,29 @@ def checar(raiz: Path) -> list[str]:
         exibidas.setdefault((modulo, slug), []).append(str(relativo))
 
     for (modulo, slug), paginas in sorted(exibidas.items()):
-        composicao = raiz / "video" / modulo / slug / "index.html"
-        if not composicao.is_file():
+        pasta = raiz / "video" / modulo / slug
+        if not pasta.is_dir():
             problemas.append(
                 f"{', '.join(paginas)}: exibe o vídeo '{slug}' e não tem "
-                f"composição em video/{modulo}/{slug}/index.html. O MP4 fica "
-                "fora do git: sem a composição, ninguém regera o vídeo (ADR "
-                "0057, decisão 3)."
+                f"composição em video/{modulo}/{slug}/. O MP4 fica fora do "
+                "git: sem a composição, ninguém regera o vídeo (ADR 0057, "
+                "decisão 3). A receita está em .claude/skills/manual/"
+                "references/video-de-visao-geral.md."
             )
             continue
 
+        composicao = pasta / "index.html"
+        if not composicao.is_file():
+            # Sem `index.html` é a composição nova, em Remotion (ADR 0076).
+            problemas += _composicao_nova(pasta, modulo, slug, paginas)
+            continue
+
+        # HyperFrames antiga: aceita até o vídeo do módulo ser refeito.
         achado = RE_CARIMBO.search(composicao.read_text(encoding="utf-8"))
         carimbo = json.loads(achado.group(1)) if achado else {}
-        faltando = [c for c in CAMPOS_DO_CARIMBO if not carimbo.get(c)]
-        if faltando:
-            problemas.append(
-                f"video/{modulo}/{slug}/index.html: carimbo de geração sem "
-                f"{', '.join(faltando)}. Sem ele ninguém sabe que tela e que "
-                "versão do app o vídeo retrata (ADR 0057, decisão 3)."
-            )
-
-        # Compor um vídeo novo começa copiando a pasta de um pronto, e o carimbo
-        # vem colado junto. Preenchido com os dados do vídeo antigo, ele passa
-        # por completo e mente sobre que tela o vídeo retrata.
-        # A página inicial divide o vídeo com a abertura de Primeiros passos: o
-        # carimbo aponta uma das duas.
-        esperado = {"modulo": modulo, "slug": slug}
-        divergentes = [
-            f"{campo}: '{carimbo[campo]}' no lugar de '{valor}'"
-            for campo, valor in esperado.items()
-            if carimbo.get(campo) and carimbo[campo] != valor
-        ]
-        if carimbo.get("pagina") and carimbo["pagina"] not in paginas:
-            divergentes.append(
-                f"pagina: '{carimbo['pagina']}' no lugar de '{' ou '.join(paginas)}'"
-            )
-        if divergentes:
-            problemas.append(
-                f"video/{modulo}/{slug}/index.html: carimbo de outra página "
-                f"({'; '.join(divergentes)}). Copiar a pasta de uma composição "
-                "pronta traz o carimbo do vídeo antigo: troque os campos pelos "
-                "deste vídeo (ADR 0057, decisão 3)."
-            )
+        problemas += _carimbo(
+            carimbo, f"video/{modulo}/{slug}/index.html", modulo, slug, paginas
+        )
 
         if (modulo, slug) in pendentes:
             continue  # vídeo de antes do estilo: a campanha de rerender refaz

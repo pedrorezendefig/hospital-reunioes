@@ -9,7 +9,7 @@ Planejador da `/manual`, como a `/montar-ondas-enxutas` é da `/onda-enxuta`. A 
 
 A meta é sair com **toda lacuna do manual em exatamente um lugar**: dentro do prompt de um módulo, ou na lista curta do que só o humano faz. Lacuna sem dono no fim do plano é falha do plano.
 
-> **Por que um terminal por módulo:** o conflito do manual é de pasta, não de arquivo. Cada módulo mexe em `docs/manual/src/content/docs/<modulo>/`, `src/assets/<modulo>/`, `video/<modulo>/` e `prints/<modulo>.py`, e nada mais. Dois terminais no mesmo módulo brigam pelo `novidades.md` e pelo roteiro de prints; dois em módulos diferentes não se encontram. O teto de 3 é de CPU: render de vídeo do HyperFrames ocupa a máquina inteira (ADR 0057, decisão 9).
+> **Por que um terminal por módulo:** o conflito do manual é de pasta, não de arquivo. Cada módulo mexe em `docs/manual/src/content/docs/<modulo>/`, `src/assets/<modulo>/`, `video/<modulo>/` e `prints/<modulo>.py`, e nada mais. Dois terminais no mesmo módulo brigam pelo `novidades.md` e pelo roteiro de prints; dois em módulos diferentes não se encontram. O teto de 3 é de CPU: render de vídeo ocupa a máquina inteira, e dois renders do Remotion ao mesmo tempo já são o máximo (ADR 0057, decisão 9; ADR 0076).
 
 ## Sintaxe
 
@@ -43,9 +43,9 @@ JSON
 python3 tools/inventario_manual.py --dir docs/manual --entregues <scratchpad>/entregues.json
 ```
 
-O inventário acusa, por módulo, quatro lacunas: `sem-visao-geral` (módulo sem Vídeo de visão geral na abertura; o Admin fica fora, e Página de tarefa não tem vídeo desde a ADR 0072), `print-faltando` (a página aponta para um print que não existe), `prd-sem-novidades` (PRD em produção cujo número não está no `prd:` do frontmatter do `novidades.md` do módulo, que é como o inventário conta a entrada) e `draft-entregue` (página em `draft` de PRD que já está no ar). Ele **sai com código 1** quando a conta não fecha: página fora dos seis módulos (sem terminal que a feche) ou nenhuma página encontrada (varredura que não rodou não pode passar por manual pronto). Nesse caso conserte antes de planejar.
+O inventário acusa, por módulo, cinco lacunas: `sem-visao-geral` (módulo sem Vídeo de visão geral na abertura; o Admin fica fora, e Página de tarefa não tem vídeo desde a ADR 0072), `print-faltando` (a página aponta para um print que não existe), `prd-sem-novidades` (PRD em produção cujo número não está no `prd:` do frontmatter do `novidades.md` do módulo, que é como o inventário conta a entrada), `draft-entregue` (página em `draft` de PRD que já está no ar) e `video-desatualizado` (página do módulo com PRD no `prd:` fora dos `prds_cobertos` do `meta.json` do Vídeo de visão geral, ADR 0076; a composição HyperFrames antiga, sem a lista, não é julgada). Ele **sai com código 1** quando a conta não fecha: página fora dos seis módulos (sem terminal que a feche) ou nenhuma página encontrada (varredura que não rodou não pode passar por manual pronto). Nesse caso conserte antes de planejar.
 
-Sem `--entregues` o relatório sai, mas declara que dois dos quatro tipos não foram conferidos. Não planeje em cima disso: a lista de PRDs entregues é o passo 1, não um extra.
+Sem `--entregues` o relatório sai, mas declara que dois dos cinco tipos não foram conferidos. Não planeje em cima disso: a lista de PRDs entregues é o passo 1, não um extra.
 
 ### 2. Inventário do que o repositório não prova: tela sem página
 
@@ -63,7 +63,7 @@ Regras de recorte, para a lista não inchar: uma tarefa é **uma ação** ("Regi
 
 | Balde | O que cai aqui | Destino |
 |---|---|---|
-| Terminal do módulo | tudo que tem módulo dono: página que falta, `sem-visao-geral`, `print-faltando`, `prd-sem-novidades`, `draft-entregue` | um prompt por módulo (passo 5) |
+| Terminal do módulo | tudo que tem módulo dono: página que falta, `sem-visao-geral`, `video-desatualizado`, `print-faltando`, `prd-sem-novidades`, `draft-entregue` | um prompt por módulo (passo 5) |
 | Só você | registro de DNS, troca do QR da apresentação, publicação na Vercel depois dos merges | lista "precisa de você" (passo 6) |
 
 A regra de desempate é a pasta: a lacuna pertence ao módulo da página. Lacuna sem módulo não existe por construção, e é isso que o código de saída 1 do inventário garante.
@@ -119,7 +119,7 @@ Pastas que você pode tocar, e nenhuma outra:
 A produzir:
 - Páginas de tarefa que faltam: <lista, uma por linha, com o título no infinitivo>
 - Prints: <lista> (entram no Roteiro de prints do módulo, nunca recortados à mão)
-- Vídeo de visão geral: <slug> (composição em docs/manual/video/<modulo>/<slug>/, receita em .claude/skills/manual/references/video-de-visao-geral.md; só se o inventário acusou sem-visao-geral). Página de tarefa não tem vídeo.
+- Vídeo de visão geral: <slug> (composição em docs/manual/video/<modulo>/<slug>/, receita em .claude/skills/manual/references/video-de-visao-geral.md; só se o inventário acusou sem-visao-geral ou video-desatualizado, e com os PRDs que faltavam nos prds_cobertos do meta.json). Página de tarefa não tem vídeo.
 - Novidades: entrada do PRD #<N> com a data do deploy (history.json), não a de hoje, E o número no frontmatter do novidades.md (prd: [<N>, ...]), senão o inventário continua acusando a entrada que você acabou de escrever
 - Draft a tirar: <páginas em draft cujo PRD já está em produção>
 

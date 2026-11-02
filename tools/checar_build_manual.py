@@ -357,6 +357,27 @@ def checar_home(conteudo: Path, dist: Path) -> list[str]:
 
 
 RE_VIDEO = re.compile(r"<video\b", re.IGNORECASE)
+# O Vídeo de visão geral é narrado (ADR 0076): `muted` calaria a voz até a
+# pessoa achar o botão de som, e `autoplay` tocaria a narração sem ninguém pedir.
+ATRIBUTOS_PROIBIDOS_NO_PLAYER = ("muted", "autoplay")
+
+
+class ColetorDeVideos(HTMLParser):
+    """Os atributos de cada `<video>` da página, já sem maiúscula."""
+
+    def __init__(self) -> None:
+        super().__init__(convert_charrefs=True)
+        self.videos: list[set[str]] = []
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        if tag == "video":
+            self.videos.append({nome.lower() for nome, _ in attrs})
+
+
+def atributos_dos_videos(html: str) -> list[set[str]]:
+    coletor = ColetorDeVideos()
+    coletor.feed(html)
+    return coletor.videos
 
 
 def checar_video_da_pagina(relativo: Path, campos: dict[str, str], html: Path) -> list[str]:
@@ -384,7 +405,20 @@ def checar_video_da_pagina(relativo: Path, campos: dict[str, str], html: Path) -
     elif f'poster="{capa}"' not in texto:
         falta = f"a capa {capa}"
     else:
-        return []
+        videos = atributos_dos_videos(texto)
+        sobra = [
+            atributo
+            for atributo in ATRIBUTOS_PROIBIDOS_NO_PLAYER
+            if any(atributo in video for video in videos)
+        ]
+        if not sobra:
+            return []
+        return [
+            f"{relativo}: o player do vídeo saiu com {' e '.join(sobra)}. O Vídeo "
+            "de visão geral é narrado: o player toca com som e só quando a "
+            "pessoa dá o play (ADR 0076). Ele sai de "
+            "src/components/MarkdownContent.astro."
+        ]
     return [
         f"{relativo}: declara video: {slug} e a página saiu sem {falta}. O "
         "player e a capa saem de src/components/MarkdownContent.astro."

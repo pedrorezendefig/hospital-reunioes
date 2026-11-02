@@ -1,382 +1,260 @@
 # Vídeo de visão geral
 
-Um vídeo por módulo, na abertura do módulo (`<modulo>/index.md`): o caminho
-principal do módulo de ponta a ponta, com dados de exemplo, para quem quer
-entender o módulo inteiro antes de abrir uma tarefa (ADR 0072, que emenda a
-0057). "Conheça a plataforma" é o de Primeiros passos, e a página inicial do
-Manual mostra o mesmo arquivo. O Admin fica sem vídeo.
+Um vídeo por módulo, na abertura do módulo (`<modulo>/index.md`): o módulo
+ponto a ponto, cada funcionalidade relevante uma vez, na ordem em que a pessoa
+usa, com dados de exemplo. Narrado com a voz A, com a fala escrita na tela
+palavra a palavra, sobre o print real do app animado. Feito em Remotion pela
+skill global `motion`, no molde da `/divulgar` (ADR 0076, que emenda a 0072).
+"Conheça a plataforma" é o de Primeiros passos, e a página inicial do Manual
+mostra o mesmo arquivo. O Admin e a Central de Comando ficam sem vídeo.
 
-**Página de tarefa não tem vídeo.** O Vídeo de tarefa saiu do Manual em
-14/10/2026 (issue #1260): as composições saíram do repositório e os MP4 antigos
-ficam em `~/Videos/Hospital/Manual/<modulo>/`, guardados para um link externo
-que é outro PRD.
+**Página de tarefa não tem vídeo** (ADR 0072). O Vídeo de tarefa saiu do
+Manual em 14/10/2026.
 
 **Vídeo de visão geral não é Vídeo de percepção de valor.** O de percepção mora
-em `docs/comunicacao/`, é do diretor e fala de uma entrega. Este é do usuário e
-fala do módulo como ele está no ar.
+em `docs/comunicacao/`, é do diretor e fala de uma entrega. Este é de quem usa
+e fala do módulo como ele está no ar.
 
-**Quando refazer.** Só quando um PRD muda o caminho principal do módulo (o
-`/to-issues` diz isso na Fatia de manual). PRD que mexe numa tarefa do canto
-muda a página, não o vídeo.
+**Quando refazer.** Todo PRD que muda uma página de um módulo refaz o vídeo
+daquele módulo, uma vez por PRD, na Fatia de manual. A exceção é escrita na
+fatia ("o vídeo segue válido porque ...") e o revisor confere; nesse caso o PRD
+entra em `prds_cobertos` do `meta.json` sem render novo, e o motivo vai no
+corpo do PR. O `meta.json` guarda a lista dos PRDs que o vídeo cobre, e a
+`/montar-manual` acusa `video-desatualizado` quando uma página do módulo cita
+no `prd:` um PRD fora da lista.
 
-Todo vídeo novo, e todo vídeo refeito, segue o **Estilo do manual**
-(`docs/manual/video/_estilo/DESIGN.md`, emenda de 13/10/2026 à ADR 0057): leia o
-`DESIGN.md` antes de compor. Ele diz a paleta e o papel de cada cor, a fonte, o
-vocabulário de movimento, os cinco cards e o que não fazer. Esta receita diz
-como montar, como conferir e como uma nota humana vira regra.
+**A composição HyperFrames antiga** (pasta com `index.html`, no Estilo do
+manual de `docs/manual/video/_estilo/`) continua aceita pelo conferidor, com
+os gates de antes, até o vídeo do módulo ser refeito por esta receita. A fatia
+que sobe o vídeo novo apaga, no mesmo PR, a pasta HyperFrames do módulo e a
+linha dele em `_estilo/pendentes-de-rerender.txt`, se houver; o `_estilo/` sai
+com o último módulo. A receita HyperFrames está no histórico do git deste
+arquivo (`git log -- .claude/skills/manual/references/video-de-visao-geral.md`).
 
 ## Onde cada coisa mora
 
-- Composição (a fonte, versionada): `docs/manual/video/<modulo>/<slug>/`, com
-  `index.html`, `hyperframes.json`, `package.json`, `meta.json`, `VERIFY.md`,
-  `compositions/` (as cópias dos cards que o vídeo usa) e dois links:
-  `assets -> ../../../../comunicacao/_assets` (fonte e logo únicos, ADR 0044) e
-  `tokens.css -> ../../_estilo/tokens.css`.
-- Estilo do manual: `docs/manual/video/_estilo/`, com o `DESIGN.md`, o
-  `tokens.css` (gerado do `globals.css` do app por
-  `python3 tools/gerar_tokens_video.py`, nunca à mão), os cards em
-  `cards/<card>/` e as Fichas de referência em `references/`.
-- MP4 renderizado (o master): `~/Videos/Hospital/Manual/<modulo>/<slug>.mp4`,
+- **Composição (a fonte, versionada):** `docs/manual/video/<modulo>/<slug>/`,
+  no molde da `video/` da `/divulgar`:
+  - `roteiro.md`: o briefing da skill `copy`, os três ganchos e o escolhido, a
+    narração final e a tabela de cenas (fala, tela, transição de entrada,
+    paradas planejadas em segundos).
+  - `narracao.txt`: o texto que a voz A lê, um parágrafo por cena.
+  - `tempos.json`: o tempo de cada palavra no formato da skill `motion`
+    (`references/tempos.md`).
+  - `cena/`: a composição Remotion (`src/videos/<Nome>/` do projeto de
+    trabalho, com o `<Nome>.tsx` e o que mais a cena usar).
+  - `meta.json`: o carimbo e os `prds_cobertos` (abaixo).
+  - `VERIFY.md`: a saída de cada gate.
+- **Telas:** saem do Roteiro de prints do módulo (`docs/manual/prints/<modulo>.py`,
+  ADR 0057, decisão 7), uma função `video-NN-<passo>` por tela no `PRINTS`, em
+  1920x1080 e sem balão numerado (no vídeo, quem aponta é o cursor e o
+  destaque). Elas caem em `docs/manual/src/assets/<modulo>/` com os prints das
+  páginas, versionadas, e o projeto de trabalho copia de lá. Print novo entra
+  no roteiro, nunca à mão.
+- **Projeto de trabalho do Remotion:** `${TMPDIR}manual-video/<modulo>/`, uma
+  cópia do projeto modelo da skill `motion` com `node_modules`,
+  `public/narracao.wav` e `out/`. É descartável: tudo que precisa voltar fica
+  na composição.
+- **MP4 renderizado (o master):** `~/Videos/Hospital/Manual/<modulo>/<slug>.mp4`,
   **fora do repositório**, nem rascunho fica no repo (regra 10 do CLAUDE.md
-  global). O `publicar.sh` copia de lá direto para a pasta de montagem, fora
-  do repositório, sempre por cima, então o que vai ao ar é sempre o master
-  atual. Nada vai para `docs/manual/public/video/`: o `astro dev` mostra o
-  player sem o vídeo. `MANUAL_VIDEOS` troca a pasta dos masters (máquina com os
-  vídeos em outro disco). Master substituído num
-  re-render vai antes para `~/Videos/Hospital/Manual/<modulo>/anteriores/`,
-  nunca é sobrescrito. As strips do gate ficam em `renders/strips/` da
-  composição, fora do git (PNG, não MP4).
+  global). O `publicar.sh` copia de lá direto para a pasta de montagem, sempre
+  por cima, então o que vai ao ar é sempre o master atual. `MANUAL_VIDEOS`
+  troca a pasta dos masters. Master substituído num re-render vai antes para
+  `~/Videos/Hospital/Manual/<modulo>/anteriores/`, nunca é sobrescrito.
 - A abertura do módulo exibe pelo frontmatter `video: <slug>`; o tema monta o
-  `<video>` com a capa. "Conheça a plataforma" vai no `index.md` de
-  `primeiros-passos/` e no `index.mdx` da página inicial, com o mesmo slug; a
-  composição e o MP4 moram em `primeiros-passos/`. O campo em Página de tarefa
-  trava o conferidor.
-- O HyperFrames Student Kit mora em `~/PedroDev/hyperframes-student-kit`, só
-  para leitura. Nenhuma skill dele é instalada (três têm o nome das skills
-  globais de HyperFrames). O HyperFrames do manual fica na 0.8.41.
+  `<video>` com a capa, com som e sem autoplay. "Conheça a plataforma" vai no
+  `index.md` de `primeiros-passos/` e no `index.mdx` da página inicial, com o
+  mesmo slug; a composição e o MP4 moram em `primeiros-passos/`.
 
 `python3 tools/checar_video_manual.py --dir docs/manual` trava se a abertura
 exibe vídeo sem composição, se uma página que não é abertura declara vídeo, se
-falta carimbo, se algum MP4 foi parar na árvore
-versionada e, em todo vídeo fora de `_estilo/pendentes-de-rerender.txt`, se
-falta o `VERIFY.md`, se há cor em hex ou fonte fora dos tokens, ou se algum
-timeline (da raiz ou de um card montado) é mais curto que o slot. Os mesmos
-gates de cor, fonte e timeline valem para os cards de `_estilo/cards/`.
+algum MP4 foi parar na árvore versionada e, na composição nova, se falta o
+`roteiro.md`, as cenas em `cena/*.tsx`, o `VERIFY.md` ou o `meta.json`, se o
+carimbo está incompleto ou é de outra página, ou se faltam os `prds_cobertos`.
+
+### O `meta.json`
+
+```json
+{"modulo": "contas-medicas", "slug": "o-caminho-de-uma-conta",
+ "pagina": "contas-medicas/index.md",
+ "prds_cobertos": [1080, 1150, 1259, 1303],
+ "app_version": "0.206.0", "gerado_em": "<ISO-8601 com timezone>",
+ "duracao_s": 165, "paradas": ["161-165"]}
+```
+
+- `pagina` é a abertura que exibe o vídeo ("Conheça a plataforma" carimba
+  `primeiros-passos/index.md`). Copiou a pasta de outro vídeo? Troque
+  `modulo`, `slug` e `pagina` primeiro: carimbo do vizinho trava o CI.
+- `app_version` é a versão em produção, `last_app_version` de
+  `docs/spec/deploy/state.json`.
+- `prds_cobertos` é todo PRD citado no `prd:` das páginas do módulo na hora do
+  render (abertura, tarefas, Como funciona e Novidades), mais o PRD da fatia:
+
+  ```bash
+  grep -rh '^prd:' docs/manual/src/content/docs/<modulo>/ | sed 's/#.*//' \
+    | grep -oE '[0-9]+' | sort -nu | paste -sd, -
+  ```
+
+- `paradas` são as janelas de imagem parada planejada (a assinatura), as
+  mesmas que o gate anti-travamento recebe.
+
+O carimbo é só este arquivo: nada de versão, PRD ou data escritos no vídeo.
 
 ## Especificação
 
-1920x1080, 30 fps, **90 a 120 s**, sem voz: o vídeo funciona no mudo, com a
-legenda de passo na tela. Réplica do app real, com as cores e a fonte do
-`tokens.css`. Na dúvida entre bonito e fiel, fiel vence.
+1920x1080, 30 fps constante, **2 a 3 min** (Tecnologia até 3 min e meio),
+narrado com a voz A e legível no mudo: a fala aparece na tela como texto
+cinético, palavra a palavra, quando é dita (`<Fala>` da skill motion). Print
+real do app animado (zoom, foco, cursor, destaque) entre cenas de tipografia
+cinética. Identidade da `marca-hsm` e dos tokens do app (HP Simplified,
+azul-marinho, logo), sem grão de filme.
 
-**Orçamento.** Depois do reencode 720p do `publicar.sh`, o vídeo cabe em
-**8 MB**, a soma dos vídeos do Manual cabe em **40 MB** e cada módulo tem um
-vídeo só. As três travas estão no `publicar.sh` e a recusa diz a regra e o
-vídeo. Confira antes do PR com
+**Orçamento.** O `publicar.sh` reencoda cada vídeo para 720p H.264 com áudio
+AAC de 64 kbps e trava, com a regra e o vídeo na mensagem: **até 10 MB por
+vídeo**, **até 60 MB somando** os vídeos, um vídeo por módulo e o site inteiro
+**até 90 MB** (o site sem vídeo mede uns 20 MB). Confira antes do PR com
 `bash docs/manual/publicar.sh --dry-run`: ele monta, reencoda, mede e para.
-Vídeo que passa de 8 MB é vídeo longo demais ou com movimento demais; encurte
+Vídeo que passa de 10 MB é vídeo longo demais ou com movimento demais; encurte
 a cena, não a qualidade.
 
-Do kit vem a disciplina, não a cara: push-in no elemento do passo, câmera que
-nunca para, transição com rastro entre telas, legenda que troca sem pop,
-abertura e carimbo de 3 a 5 s e timeline que preenche o slot. Nada de canvas
-preto, tipo cromado ou cena de 1,5 s: o vídeo tem que parecer o app.
+**Roteiro fixo:**
 
-Roteiro fixo:
+1. **Gancho (2 a 4 s):** o momento do dia a dia que o módulo resolve, em uma
+   frase falada e escrita. Nada de tela de título com metadado.
+2. **O módulo ponto a ponto (o vídeo é isso):** cada funcionalidade relevante
+   aparece uma vez, na ordem em que a pessoa usa. A fonte é a abertura do
+   módulo ("O caminho de ponta a ponta"), as Páginas de tarefa e o
+   `novidades.md`; fato só com fonte. Um caso de exemplo anda do começo ao fim;
+   quem muda de papel no meio (o setor que responde, o facilitador que assina)
+   é dito pelo nome do papel. Uma frase por cena.
+3. **Fecho:** uma virada curta (o que a pessoa ganha) e a assinatura com a logo
+   do hospital **inteira e parada** (`marca-hsm`), a única parada planejada.
 
-1. **Abertura (3 a 5 s):** card `abertura`, com o nome do módulo como no
-   menu do app.
-2. **O caminho principal (o vídeo é isso):** os passos de "O caminho de ponta
-   a ponta" da abertura do módulo, na mesma ordem e com as mesmas palavras de
-   tela, cada um com o seu card `legenda-de-passo`. Um caso de exemplo anda do
-   começo ao fim; quem muda de papel no meio (o setor que responde, o
-   facilitador que assina) aparece no `lower-third`. Dedo fantasma toca, campo
-   preenche, tela reage como o app reagiria.
-3. **Fecho (3 a 5 s):** card `carimbo`, com a linha do carimbo de geração.
-
-Do caminho principal ficam de fora os desvios e as telas de configuração: eles
-têm a sua Página de tarefa, com texto e prints.
-
-**Carimbo, dois níveis.** Visível no fecho, no slot `carimbo`:
-`Manual · retrata o app em v<X.Y.Z> · gerado em DD/MM/AAAA` (a versão em
-produção, `last_app_version` de `docs/spec/deploy/state.json`; o
-`package.json` do frontend parou na 0.163.2 quando a versão passou a ser da
-subida). Legível por
-máquina, no `<head>` da composição, com os cinco campos que o conferidor cobra:
-
-```html
-<script type="application/json" id="manual-video-meta">
-{"modulo": "ouvidoria", "slug": "<slug>",
- "pagina": "ouvidoria/index.md", "prd": 731, "issues": [736],
- "app_version": "0.136.0", "gerado_em": "<ISO-8601 com timezone>"}
-</script>
-```
+Configuração que só o admin faz fica na Página de tarefa, fora do vídeo.
 
 ## Montar
 
-Leia as skills globais na ordem `/hyperframes` → `/hyperframes-core` →
-`/hyperframes-animation`, e o `DESIGN.md` do estilo.
+**Antes de tudo, leia as skills globais:** `motion` (o `SKILL.md` e, inteiros,
+`references/guia-motion.md`, `references/catalogo.md` e `references/tempos.md`),
+`narracao`, `copy` e `marca-hsm`. Os valores do guia (ritmo, easing,
+transições, checklist) são o padrão; esta receita só diz o que muda no Manual.
+O passo a passo da `/divulgar` (`.claude/skills/divulgar/SKILL.md`, "Passo 1:
+o vídeo") é o molde: o que estiver lá e não for contrariado aqui vale.
 
-```bash
-cd docs/manual/video/<modulo>/<slug>
-ln -s ../../../../comunicacao/_assets assets
-ln -s ../../_estilo/tokens.css tokens.css
-mkdir -p compositions
-cp ../../_estilo/cards/abertura/index.html compositions/abertura.html
-cp ../../_estilo/cards/legenda-de-passo/index.html compositions/legenda-de-passo.html
-cp ../../_estilo/cards/carimbo/index.html compositions/carimbo.html
-# lower-third e callout só se o vídeo usar
-```
+1. **Copy e roteiro.** Briefing e três ganchos pela skill `copy` (nota mínima
+   12 de 14): quem vê é quem usa o módulo no hospital, a ideia é o que o
+   módulo faz por ele, a prova são as páginas do módulo. Depois, a narração e
+   todo texto de tela passam pela skill `humanizer` em modo embutido (ADR
+   0071); a amostra de voz é o `roteiro.md` de outro Vídeo de visão geral já
+   refeito (na falta, o de uma entrega em `docs/comunicacao/` feita em
+   motion). Vocabulário do `CONTEXT.md`, nome de botão e de tela igual ao app.
+   Gate anti-técnica no falado e no escrito: `migration, endpoint, API, PR,
+   pull request, deploy, RLS, schema, backend, frontend, commit, branch, merge,
+   token, env, SQL, Supabase, Coolify, prompt`, mais travessão e meia-risca.
+   Grave `roteiro.md` e `narracao.txt`.
+2. **Telas.** Acrescente ao Roteiro de prints do módulo as funções
+   `video-NN-<passo>` e rode o roteiro (receita em `prints.md`), com o app
+   local na versão de produção e os dados de exemplo da faixa de id do módulo
+   (os roteiros dividem o mesmo Supabase local). Confira a versão no rodapé do
+   app antes de capturar: tela de versão velha mostra o app errado.
+3. **Narração e tempos.**
+   `python3 ~/.claude/voz/narrar.py --file <composição>/narracao.txt --output "$W/public/narracao.wav"`
+   (voz A, skill `narracao`). Se o VoiceStudio falhar, pare e avise: nunca
+   outra voz. Converta o `narracao.json` para o `tempos.json` da skill motion
+   (uma cena por parágrafo; corrija a grafia, não os tempos) e grave na
+   composição.
+4. **Composição em Remotion**, no projeto de trabalho:
 
-O card entra copiado e inteiro: a cópia dentro do projeto é o que o empacotador
-do HyperFrames aceita (link para fora do projeto ele pula). Não mexa na cópia;
-card que precisa mudar muda em `_estilo/cards/`, e a nota vira regra.
+   ```bash
+   W="${TMPDIR}manual-video/<modulo>"
+   mkdir -p "$W" && cp -R ~/.claude/skills/motion/projeto/. "$W"/ && rm -rf "$W/node_modules"
+   cp docs/comunicacao/_assets/fonts/HPSimplified_Rg.ttf "$W/public/fonts/"
+   cp docs/comunicacao/_assets/logo-hsm.png "$W/public/"
+   cp docs/manual/src/assets/<modulo>/video-*.png "$W/public/"
+   (cd "$W" && npm install)
+   ```
 
-A raiz carrega os tokens e monta cada card como sub-composição, com o texto nos
-slots por `data-variable-values`. O mesmo card entra quantas vezes for preciso
-com o mesmo `data-composition-id`, um host por instância:
+   `Config.setChromiumOpenGlRenderer('swangle')` no `remotion.config.ts`
+   (skill `narracao`: sem isso o texto treme). A identidade do Hospital entra
+   no projeto de trabalho como na `/divulgar` (HP Simplified em todo texto,
+   `PALETA` com as cores do app e da `marca-hsm`, um acento só, logo só na
+   assinatura). Uma cena por frase; cada tela entra na `<Camera>` com push-in,
+   cursor fantasma e destaque no elemento que a fala cita. Nada parado mais de
+   0,5 s, todo evento preso a uma palavra, uma transição diferente do catálogo
+   em cada corte, `audio="narracao.wav"` no `<VideoMontado>`.
+5. **Volta para o repo:** copie `src/videos/<Nome>/` para `cena/` da
+   composição e grave o `meta.json`.
 
-```html
-<head>
-  <link rel="stylesheet" href="tokens.css" />
-  <!-- GSAP e o carimbo legível por máquina, como acima -->
-</head>
-<body>
-<div id="main" data-composition-id="main" data-start="0" data-width="1920" data-height="1080" data-duration="42">
-  <div id="slot-abertura" data-composition-id="abertura" data-composition-src="compositions/abertura.html"
-    data-variable-values='{"secao":"Manual · Ouvidoria","titulo":"Registrar uma manifestação pelo formulário","papel":"Sem login"}'
-    data-start="0" data-duration="4" data-track-index="1" data-width="1920" data-height="1080"></div>
-
-  <section id="c-tarefa" class="clip" data-start="4" data-duration="33" data-track-index="2">
-    <!-- a réplica da tela, dentro de um .camera -->
-  </section>
-
-  <div id="slot-passo-1" data-composition-id="legenda-de-passo" data-composition-src="compositions/legenda-de-passo.html"
-    data-variable-values='{"numero":"1","texto":"Abra o formulário pelo **QR do cartaz**."}'
-    data-start="4" data-duration="5" data-track-index="3" data-width="1920" data-height="1080"></div>
-  <div id="slot-passo-2" data-composition-id="legenda-de-passo" data-composition-src="compositions/legenda-de-passo.html"
-    data-variable-values='{"numero":"2","texto":"Escreva o relato em **O que aconteceu?**."}'
-    data-start="9" data-duration="5" data-track-index="4" data-width="1920" data-height="1080"></div>
-
-  <div id="slot-carimbo" data-composition-id="carimbo" data-composition-src="compositions/carimbo.html"
-    data-variable-values='{"titulo":"Registrar uma manifestação pelo formulário","carimbo":"Manual · retrata o app em v0.195.1 · gerado em 13/10/2026"}'
-    data-start="37" data-duration="5" data-track-index="1" data-width="1920" data-height="1080"></div>
-</div>
-<script>
-window.__timelines = window.__timelines || {};
-const tl = gsap.timeline({ paused: true });
-/* ... os movimentos da tarefa ... */
-tl.to({}, { duration: 42 }, 0); // âncora: o timeline preenche o slot inteiro
-window.__timelines["main"] = tl;
-</script>
-</body>
-```
-
-- Os passos encostam: o `data-start` de um é o fim do anterior, alternando
-  entre duas trilhas. A placa fica no lugar e só o texto troca.
-- O slot de um card de apoio vai até 60 s (a âncora do card); o de abertura e
-  carimbo, até 5 s. Slot maior que a âncora trava o conferidor.
-- `**palavra**` no slot sai em negrito: é a palavra da tela, como na página.
-- Cor e fonte só por `var(--...)`. Na réplica, a cor é a da classe do app:
-  `var(--color-slate-500)` para `text-slate-500`.
-
-**Movimento, em GSAP** (o porquê de cada um está no `DESIGN.md`):
-
-```js
-/* Push-in no elemento do passo: o wrapper .camera (com
-   data-layout-allow-overflow) aproxima e centraliza o botão citado. */
-tl.fromTo("#camera", { scale: 1, x: 0, y: 0 },
-  { scale: 1.08, x: 120, y: 40, duration: 2.5, ease: "power1.inOut" }, 4);
-/* Câmera que nunca para: deriva lenta até o próximo movimento. */
-tl.to("#camera", { scale: 1.11, duration: 3, ease: "none" }, 6.5);
-/* Transição com rastro: a tela A sai, a B entra pelo lado oposto. */
-tl.fromTo("#tela-a", { x: 0, filter: "blur(0px)", opacity: 1 },
-  { x: -300, filter: "blur(24px)", opacity: 0, duration: 0.35, ease: "power2.in" }, 8.8);
-tl.fromTo("#tela-b", { x: 300, filter: "blur(24px)", opacity: 0 },
-  { x: 0, filter: "blur(0px)", opacity: 1, duration: 0.6, ease: "power2.out" }, 9);
-```
-
-- O primeiro movimento de um alvo é `fromTo`; os seguintes do mesmo alvo são
-  `to`. Dois `fromTo` no mesmo alvo dão o aviso
-  `gsap_repeated_fromto_without_baseline` no `check`.
-- Cor que muda (botão que acende, campo que ganha borda) vira duas camadas, uma
-  com o token de cada estado, e um fade de `opacity` entre elas. Tween de cor
-  com `var()` ou com o `oklch` do Tailwind não interpola de forma confiável.
-
-**Os pilotos são o molde.** `contas-medicas/decidir-na-validacao` e
-`ouvidoria/redirecionar-o-caso-para-outra-area` (issue #1231) foram os
-primeiros no estilo: a janela do navegador, a casca do app (barra lateral e
-topo) desenhada em 1280x643 e ampliada 1,25x, a câmera, o marcador e o dedo.
-As composições dos Vídeos de tarefa saíram do repositório na issue #1260, e
-continuam no histórico do git: o último commit com elas é `72a3781f`.
-
-```bash
-git show 72a3781f:docs/manual/video/<modulo>/<slug>/index.html > /tmp/molde.html
-git ls-tree -r --name-only 72a3781f -- docs/manual/video/<modulo>/  # o que havia
-```
-
-Comece pelo piloto e pelas telas do seu módulo. O que os pilotos ensinaram:
-
-- A tela sai do código do frontend e do print atual do roteiro, nesta ordem.
-  A tela de um vídeo antigo é rascunho: a do Redirecionar estava 54 versões
-  atrás (botão desligado cinza no lugar do apagado, ajuda dos campos faltando).
-- Medida pelo `offsetLeft`/`offsetTop` até a raiz do app, que ignora a câmera e
-  a rolagem; a rolagem entra na conta à mão. A medida nunca é feita na
-  montagem (veja a regra de 14/10/2026 no fim deste arquivo): o alvo é uma
-  função, e o GSAP a chama quando o tween começa.
-- Tela que muda de estado (fila relida, janela que abre, campo preenchido) é
-  um quadro por estado, um em cima do outro, e a troca é de `opacity`. Nada de
-  `display` no timeline (o `check` trava) e nada de layout que reflui no meio
-  do vídeo.
-- Helper do timeline sem `if`: o `check` lê os dois ramos e acusa `fromTo`
-  repetido e tween sobreposto que não existem. Estado inicial escondido vai no
-  CSS (`opacity: 0`), e a câmera ganha um `tl.set("#camera", { scale: 1, x: 0,
-  y: 0 }, 0)` de base; daí em diante, só `to`.
-- A composição tem no máximo 300 linhas fora do `<style>` (aviso
-  `composition_file_too_large`). Junte em linhas longas o HTML da réplica.
-- Classe da réplica não repete classe de card (`.tela`, `.cartao`, `.cabeca`,
-  `.titulo`, `.texto`): depois de montado, o card divide a página com a
-  réplica e a regra pega os dois. O conferidor trava.
-- Popup do navegador (lista do seletor, aviso de download) fica fora da caixa
-  que corta, por cima do app, como o navegador desenha.
-
-**Réplica a partir dos vídeos antigos.** As composições antigas (as de
-`_estilo/pendentes-de-rerender.txt` e os sete capítulos da Ouvidoria, também
-no `72a3781f`) já têm as telas desenhadas (palco de 960x540 ampliado 2x,
-celular, janela, dedo, marcadores). Elas servem de ponto de partida para o que
-os pilotos não têm (celular, e-mail, portal do setor): confira contra o código
-e troque cada hex pelo token. Os hex mais comuns:
-
-| Hex antigo | Token |
-| --- | --- |
-| `#2B2E7E` | `var(--color-primary)` |
-| `#3B6FB6` | `var(--color-primary-light)` |
-| `#1E293B` | `var(--color-text)` |
-| `#64748B` | `var(--color-text-secondary)` |
-| `#E2E8F0` | `var(--color-border)` |
-| `#0F172A` | `var(--color-slate-900)` |
-| `#334155` | `var(--color-slate-700)` |
-| `#475569` | `var(--color-slate-600)` |
-| `#94A3B8` | `var(--color-slate-400)` |
-| `#F1F5F9` | `var(--color-slate-100)` |
-| `#F8FAFC` | `var(--color-slate-50)` |
-| `#EEF1F6` (palco) | `var(--video-palco)` |
-
-**Copiou pasta? Troque o carimbo primeiro.** `modulo`, `slug` e `pagina` vêm
-colados do vídeo antigo, e o conferidor compara os três com a abertura que
-exibe o vídeo: carimbo do vizinho trava o CI. "Conheça a plataforma" carimba
-`primeiros-passos/index.md`.
+Render disputa a CPU: no máximo dois renders ao mesmo tempo na mesma máquina.
 
 ## Os gates, nesta ordem
 
-1. **Texto da tela (antes de renderizar):** todo texto visível (slots, réplica)
-   passa pelo humanizer (ADR 0071) e pela varredura anti-técnica:
-   `migration, endpoint, API, PR, pull request, deploy, RLS, schema, backend,
-   frontend, commit, branch, merge, token, env, SQL, Supabase, Coolify, prompt`,
-   mais travessão e meia-risca. Cada ocorrência vira linguagem funcional ou sai.
-2. **Check e anel:** `npx --yes hyperframes@0.8.41 check` na pasta da
-   composição, com 0 erros e 0 avisos. Depois o gate do anel:
-
-   ```bash
-   python3 tools/anel_video_manual.py \
-     --composicao docs/manual/video/<modulo>/<slug>/index.html
-   ```
-
-   Ele abre a composição no navegador, espera a fonte como o render espera e,
-   de 0,1 em 0,1 s, compara o anel aceso (`#mk`) com o alvo que o `marca()`
-   declara em `data-alvo`. Reprova o anel fora do alvo, com folga de mais de
-   20 px de um lado, sem `data-alvo`, ou passando por cima de texto visível de
-   fora do alvo. O `check` não vê nada disso: para ele o anel é um elemento
-   válido em qualquer lugar do quadro.
-3. **Draft**, direto no caminho do master. Se já existe um master desse
-   vídeo, ele sai do caminho antes, com a data dele, e nunca é sobrescrito:
+1. **Tipos:** `npx tsc --noEmit` no projeto de trabalho, sem erro.
+2. **Stills e draft:** stills no meio de cada cena, no pico de cada transição e
+   dois quadros depois de cada palavra-chave
+   (`node scripts/stills.mjs <Comp> out/stills 0.5 <quadros>`), e um draft
+   (`npx remotion render src/index.ts <Comp> out/draft.mp4 --scale=0.5`).
+   Abra e passe o checklist da seção 9 do guia da skill motion: telas iguais
+   ao app, cada funcionalidade do módulo aparece, texto legível, zero jargão,
+   zero travessão, o destaque em cima do elemento que a fala cita.
+3. **Render final, direto no caminho do master,** sem esperar ninguém. Se já
+   existe um master desse vídeo, ele sai do caminho antes, com a data dele:
 
    ```bash
    M="$HOME/Videos/Hospital/Manual/<modulo>"; mkdir -p "$M/anteriores"
    [ -f "$M/<slug>.mp4" ] && mv -n "$M/<slug>.mp4" \
      "$M/anteriores/$(date -r "$M/<slug>.mp4" +%F)-<slug>.mp4"
-   npx --yes hyperframes@0.8.41 render --quality draft -o "$M/<slug>.mp4"
+   (cd "$W" && npx remotion render src/index.ts <Comp> "$M/<slug>.mp4")
+   rm -f "$W/out/draft.mp4"
    ```
 
    O `mv -n` não apaga nada: se o nome em `anteriores/` já existe, o master
-   fica onde está e o render para por cima dele não pode rodar. Some `-v2` ao
-   nome e mova à mão.
-
-4. **Strips de cada corte:**
+   fica onde está. Some `-v2` ao nome e mova à mão antes de renderizar.
+4. **Anti-travamento:** fps constante 30, nenhum congelamento de 0,5 s ou mais
+   fora das `paradas` do `meta.json` e o MP4 tocando no Chrome real:
 
    ```bash
-   python3 tools/strips_video_manual.py \
-     --mp4 ~/Videos/Hospital/Manual/<modulo>/<slug>.mp4 \
-     --composicao docs/manual/video/<modulo>/<slug>/index.html
+   bash .claude/skills/divulgar/scripts/gate-video.sh "$M/<slug>.mp4" --parada <ini>-<fim>
    ```
 
-   O gate tira dez quadros de cada lado de cada corte (início e fim de cada
-   clipe e de cada card) e reprova quadro preto e legenda sem fundo (quadro com
-   card de legenda e sem a placa no retângulo do `tokens.css`). Passou? Olhe as
-   strips mesmo assim: a de cima é antes do corte, a de baixo é depois. A placa
-   fica parada enquanto o texto troca? A transição tem rastro? O dedo está no
-   botão que a legenda cita?
-5. **Quadros a cada 3 s:** `ffmpeg -i <mp4> -vf fps=1/3 frames/%02d.png` e olhe.
-   Marcador em cima do elemento certo, texto legível, a tela batendo com o app
-   real. O `check` não vê nada disso.
+   Falhou, não entrega: conserte a cena, renderize de novo, rode de novo.
+5. **Orçamento:** `bash docs/manual/publicar.sh --dry-run` passa nas travas, e
+   o tamanho do vídeo depois do reencode vai no corpo do PR.
 6. **`VERIFY.md`** ao lado da composição, com o que foi conferido de verdade:
 
    ```markdown
    # VERIFY: <nome do módulo>
 
-   - Draft: ~/Videos/Hospital/Manual/<modulo>/<slug>.mp4, NN s, sha256 <12 primeiros>
-   - Check (HyperFrames 0.8.41): 0 erros, 0 avisos; gate do anel OK
-   - Strips: N cortes, gate OK; olhei corte-01 a corte-NN
-   - Quadros a cada 3 s: o que conferi (marcador, dedo, legenda, tela igual ao app)
-   - Texto da tela: humanizer e varredura anti-técnica, sem achados
+   - tsc: 0 erros
+   - Stills e draft: o que conferi (telas iguais ao app, destaque, fala, legibilidade)
+   - Copy: nota N de 14; humanizer e varredura anti-técnica sem achados
+   - gate-video.sh: fps 30/1, sem congelamento fora de <paradas>, tocou no Chrome
+   - Orçamento: NN MB depois do reencode (teto 10 MB); soma NN MB (teto 60 MB)
+   - Render final: ~/Videos/Hospital/Manual/<modulo>/<slug>.mp4, NN s, sha256 <12 primeiros>
    - Ressalvas: o que não deu para conferir, e por quê
-   - Render final: caminho, NN s, sha256 <12 primeiros>
    ```
 
-7. **Conferidor:** `python3 tools/checar_video_manual.py --dir docs/manual`.
-8. **Render final, sem esperar ninguém:** com os gates acima limpos, renderize
-   de novo com `--quality high` no mesmo caminho
-   (`~/Videos/Hospital/Manual/<modulo>/<slug>.mp4`); é ele que a publicação
-   sobe. Como o master mora fora do worktree, ele sobrevive à subida, que
-   apaga o worktree. Ponha o caminho e o sha256 no corpo do PR. O vídeo não espera OK humano (emenda de 14/10/2026
-   à ADR 0057): o PR sobe como qualquer outro.
-9. **Orçamento:** `bash docs/manual/publicar.sh --dry-run` passa nas três
-   travas, e o tamanho do vídeo depois do reencode vai no corpo do PR.
+7. **Conferidores:** `python3 tools/checar_video_manual.py --dir docs/manual`
+   e `python3 tools/inventario_manual.py --dir docs/manual`, sem
+   `video-desatualizado` no módulo.
+
+O master mora fora do worktree e sobrevive à subida, que apaga o worktree.
+Ponha o caminho e o sha256 no corpo do PR; o PR sobe como qualquer outro.
 
 ## Nota vira regra
 
-Toda nota humana sobre um vídeo, que agora chega com ele já no ar, vira duas
-coisas no mesmo PR: o conserto neste vídeo
-e uma regra, para a nota não voltar no próximo. Nota de cor, fonte ou card vai
-para o `DESIGN.md` ou para o card em `_estilo/cards/`. Nota de ritmo, montagem
-ou gate vai para a lista abaixo, com a data e o vídeo de origem. Se a regra dá
-para checar por máquina, ela vira teste em `tools/` em vez de linha aqui. Antes
-de compor um vídeo novo, leia a lista.
+Toda nota humana sobre um vídeo, que chega com ele já no ar, vira duas coisas
+no mesmo PR: o conserto neste vídeo e uma regra, para a nota não voltar no
+próximo. Nota de ritmo, montagem ou gate vai para a lista abaixo, com a data e
+o vídeo de origem. Se a regra dá para checar por máquina, ela vira teste em
+`tools/` em vez de linha aqui. Antes de compor um vídeo novo, leia a lista.
 
 ## Regras que vieram de nota
 
 Formato: `- DD/MM/AAAA, <modulo>/<slug>: a regra, no imperativo.`
 
 - 14/10/2026, contas-medicas/decidir-na-validacao e
-  ouvidoria/redirecionar-o-caso-para-outra-area: nunca meça o layout na
-  montagem. O script da composição roda antes de a fonte do app carregar, o
-  layout ainda está na fonte de reserva (mais larga), e toda medida feita ali
-  sai errada: o anel caiu ao lado do botão Validação, cortando "Painel", e
-  desceu abaixo da Leitura da IA, que quebrava em mais linhas. Valem o anel,
-  o dedo, a câmera, a rolagem e a posição de popup. Declare o alvo como
-  função (`alvo("id", rolagem)` dos pilotos) e passe ao GSAP valores-função
-  (`x: () => a.caixa().x`), que ele calcula quando o tween começa; o render
-  só busca o primeiro quadro depois da fonte. Popup que depende do layout
-  ganha a posição num `tl.set` com valor-função, não num `style.top` solto.
-- 14/10/2026, mesmos vídeos: o anel contorna o que a pessoa lê, inteiro, com
-  ar em volta. Campo é rótulo e valor juntos (o anel só no valor cortou o
-  rótulo "SETOR"); texto curto num bloco de largura cheia ganha
-  `width: fit-content` para o anel não sobrar pela linha toda; e a folga do
-  anel (8 px vezes o zoom) não pode cair em cima de vizinho: o aviso de
-  download afinou para o anel não cortar o número do sino. O gate do anel
-  (`tools/anel_video_manual.py`) trava os três casos.
-- 14/10/2026, ouvidoria/redirecionar-o-caso-para-outra-area: a faixa azul de
-  item escolhido numa lista é filha da lista e herda o `padding` das linhas
-  (`.lista-sel div`); zere o `padding` dela, ou o texto da faixa desce e
-  anda para a direita da linha que ela cobre. Confira a faixa no quadro em
-  que ela acende.
+  ouvidoria/redirecionar-o-caso-para-outra-area (vídeos HyperFrames): o
+  destaque contorna o que a pessoa lê, inteiro, com ar em volta. Campo é
+  rótulo e valor juntos (o anel só no valor cortou o rótulo "SETOR"), e a
+  folga do destaque não pode cair em cima de vizinho.

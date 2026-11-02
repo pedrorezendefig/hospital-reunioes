@@ -32,8 +32,8 @@ aviso dela no PRD fechado lista o que saiu e o que ficou em draft (issue #951).
    `<!-- automacao -->` na primeira linha.
 
 O `publicar.sh` faz, nesta ordem: lint do texto, build do Starlight, conferidor
-do draft, reencode de cada MP4 para 720p, as três travas do orçamento de vídeo
-(ADR 0072: soma dos MP4 até 40 MB, um vídeo por módulo, nenhum acima de 8 MB),
+do draft, reencode de cada MP4 para 720p (áudio AAC de 64 kbps), as três travas do orçamento de vídeo
+(ADR 0076: soma dos MP4 até 60 MB, um vídeo por módulo, nenhum acima de 10 MB),
 trava de 90 MB do site inteiro e deploy de uma cópia
 **fora do repo** (a Vercel recusa publicar de dentro de um repositório com
 outro projeto vinculado, a mesma pedra da `/divulgar`). O vínculo `.vercel/`
@@ -46,12 +46,12 @@ volta para `docs/manual/` e fica fora do git.
   onde o `publicar.sh` copia para a pasta de montagem. Renderize a composição
   (`references/video-de-visao-geral.md`) antes de publicar; MP4 não vem no
   clone e não mora no repositório.
-- **"vídeo acima de 8 MB":** o Vídeo de visão geral passou do teto depois do
+- **"vídeo acima de 10 MB":** o Vídeo de visão geral passou do teto depois do
   reencode. Encurte a cena ou tire movimento, e renderize de novo.
 - **"mais de um vídeo no módulo":** o Manual tem um vídeo por módulo, na
   abertura. A mensagem diz os dois; o que sobra sai da página (a página inicial
   usa o mesmo arquivo de Primeiros passos e conta uma vez só).
-- **"a soma dos vídeos passou de 40 MB":** a mensagem lista os vídeos da conta.
+- **"a soma dos vídeos passou de 60 MB":** a mensagem lista os vídeos da conta.
   Encurte o maior.
 - **Trava de 90 MB:** o plano onde o site mora recusa acima de 100 MB. Corte ou
   encurte vídeo. Hospedar vídeo fora do site é decisão nova, com ADR próprio.

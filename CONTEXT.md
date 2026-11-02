@@ -384,7 +384,7 @@ Perfil de Contas médicas que só envia: sobe Conta e Prontuário, vê "Meus env
 ## Manual do usuário
 
 **Manual**:
-O site único de documentação da plataforma para quem usa o app no hospital (decisão de 15/09/2026, grilling; ADR 0057). Um endereço só, organizado **por módulo, na ordem do menu do app** (Primeiros passos, Reuniões e metas, Ouvidoria, POPs, Admin), e dentro de cada módulo uma [Visão geral do módulo], as [Páginas de tarefa], as páginas [Como funciona] e as [Novidades]. Publica **só o que está em produção**: o que ainda não subiu fica escrito, mas invisível, até o deploy. A aba Tecnologia fica fora (ferramenta da Diretoria com a Vitta), e a [Central de Comando] também (só o Super admin vê, e é leitura, não tarefa; ADR 0058). O app aponta para ele por um item **Ajuda** no menu, que abre a seção do módulo em que a pessoa está.
+O site único de documentação da plataforma para quem usa o app no hospital (decisão de 15/09/2026, grilling; ADR 0057). Um endereço só, organizado **por módulo, na ordem do menu do app** (Primeiros passos, Reuniões e metas, Ouvidoria, POPs, Contas médicas, Admin e, por último, Tecnologia), e dentro de cada módulo uma [Visão geral do módulo], as [Páginas de tarefa], as páginas [Como funciona] e as [Novidades]. Publica **só o que está em produção**: o que ainda não subiu fica escrito, mas invisível, até o deploy. Desde 01/11/2026 (ADR 0076) a aba Tecnologia é módulo do Manual, com as páginas que moravam numa página separada e um vídeo cuja cena central é o [Planejamento da Demanda]. A [Central de Comando] fica fora (só o Super admin vê, e é leitura, não tarefa; ADR 0058). O app aponta para ele por um item **Ajuda** no menu, que abre a seção do módulo em que a pessoa está.
 _Evitar_: um manual por módulo em endereços separados; manual por papel (o papel é selo, não estrutura); selo "em desenvolvimento" ou "planejado" para o usuário; capítulo técnico (endpoint, gatilho de e-mail, variável) dentro do manual.
 
 **Página de tarefa**:
@@ -417,20 +417,20 @@ Página de cada módulo com **uma entrada por PRD entregue**, da mais nova para 
 _Evitar_: uma entrada por deploy ou por fix (isso é o changelog, que é doc de engenharia); vídeo embutido na página (pesa no orçamento do Manual; ADR 0072).
 
 **Vídeo de visão geral**:
-O vídeo de um módulo do [Manual], um por módulo, na [Visão geral do módulo]: 90 a 120 s, mudo, com legendas, mostrando o caminho principal do módulo de ponta a ponta com dados de exemplo, no [Estilo do manual] (ADR 0072, emenda à 0057). "Conheça a plataforma" é o de Primeiros passos, e a página inicial do Manual mostra o mesmo arquivo. O Admin fica sem vídeo. Até 8 MB depois do reencode, e a soma do Manual até 40 MB: o `publicar.sh` trava. É refeito só quando um PRD muda o caminho principal do módulo.
-_Evitar_: vídeo em [Página de tarefa]; dois vídeos no mesmo módulo; refazer o vídeo por PRD que mexe numa tarefa do canto.
+O vídeo de um módulo do [Manual], um por módulo, na [Visão geral do módulo]: de 2 a 3 min (a Tecnologia, até 3 min e meio), o módulo ponto a ponto, cada funcionalidade relevante uma vez, na ordem em que a pessoa usa, com dados de exemplo. Narrado com a voz A, com a fala escrita na tela palavra a palavra, sobre o print real do app animado, e feito em Remotion pela skill `motion`, no molde da `/divulgar` (ADR 0076, que emenda a 0072). "Conheça a plataforma" é o de Primeiros passos, e a página inicial do Manual mostra o mesmo arquivo. Admin e [Central de Comando] ficam sem vídeo. Até 10 MB depois do reencode, a soma do Manual até 60 MB e o site até 90 MB: o `publicar.sh` trava. Todo PRD que muda página do módulo refaz o vídeo, salvo exceção escrita na [Fatia de manual]; o `meta.json` do vídeo guarda os PRDs que ele cobre, e a `/montar-manual` acusa o vídeo desatualizado.
+_Evitar_: vídeo em [Página de tarefa]; dois vídeos no mesmo módulo; vídeo mudo; versão, PRD ou data escritos no vídeo (o carimbo é o `meta.json`).
 
 **Vídeo de tarefa** (fora do Manual):
-O vídeo de 30 a 60 s de uma [Página de tarefa], que o [Manual] teve de setembro a 14/10/2026. Saiu do Manual pelo orçamento do plano grátis da Vercel (ADR 0072): as composições saíram do repositório (ficam no histórico do git) e os MP4 ficam em `local/manual-video-masters/`, guardados para um link externo, fora do deploy, que é outro PRD.
+O vídeo de 30 a 60 s de uma [Página de tarefa], que o [Manual] teve de setembro a 14/10/2026. Saiu do Manual pelo orçamento do plano grátis da Vercel (ADR 0072): as composições saíram do repositório (ficam no histórico do git). Os MP4, que ficaram guardados para um link externo, são apagados de `~/Videos/Hospital/Manual/` depois que os seis vídeos narrados estão no ar (ADR 0076).
 _Evitar_: usar o termo para o vídeo do Manual de hoje (é o [Vídeo de visão geral]).
 
 **Régua de texto**:
 A passagem obrigatória de todo texto que alguém de fora vai ler (página do [Manual], texto de tela, PDF, hover do Hospital OS, mensagem, legenda de vídeo) pela skill `humanizer` antes de gravar, mais o lint que trava no CI os cacoetes que dão para pegar por regex (ADR 0071). A voz é a do canal: a amostra aprovada manda no tom, a skill só tira o cacoete.
 _Evitar_: "não é X, é Y"; fecho de uma linha que repete o parágrafo; tríade forçada; rótulo em negrito em tudo; texto para fora gravado sem a passagem.
 
-**Estilo do manual**:
-O contrato visual compartilhado dos vídeos do [Manual] (hoje o [Vídeo de visão geral]), em `docs/manual/video/_estilo/`: `DESIGN.md`, `tokens.css` com as cores e a fonte do app, e cards reusáveis (legenda de passo, callout, lower-third, abertura, carimbo) como sub-composições com slots de texto. Veio do formato da style-library do HyperFrames Student Kit; o corpo do vídeo continua réplica fiel do app, mudo (emenda de 13/10/2026 ao ADR 0057).
-_Evitar_: cor ou fonte fixa dentro de um vídeo (vem dos tokens); canvas preto e tipo cromado do kit; vídeo que não preenche o slot inteiro do timeline.
+**Estilo do manual** (saindo):
+O contrato visual dos vídeos HyperFrames do [Manual], em `docs/manual/video/_estilo/`: `DESIGN.md`, `tokens.css` com as cores e a fonte do app, e cards reusáveis (legenda de passo, callout, lower-third, abertura, carimbo) como sub-composições com slots de texto (emenda de 13/10/2026 ao ADR 0057). Desde 01/11/2026 (ADR 0076) o [Vídeo de visão geral] é feito em Remotion pela skill `motion`, com a identidade da `marca-hsm` e dos tokens do app: o estilo continua valendo só para as composições HyperFrames que ainda estão no ar, e sai com o último módulo refeito.
+_Evitar_: compor vídeo novo no Estilo do manual (a receita é a do Remotion); cor ou fonte fixa dentro de um vídeo HyperFrames (vem dos tokens).
 
 **Ficha de referência**:
 A nota curta, uma por vídeo de referência (os gerados pelo Opus 5.5 ficam em `local/manual-video-referencias/`, fora do git), em `_estilo/references/`: o que copiar daquele vídeo (uma transição, um ritmo, um card) e o que não copiar. O `DESIGN.md` do [Estilo do manual] cita as fichas, para cada sessão tirar a mesma coisa da mesma referência.
@@ -446,7 +446,7 @@ O script versionado, um por módulo, que abre o app local com dados de exemplo, 
 _Evitar_: print tirado à mão sem roteiro; quadro extraído do vídeo no lugar do print; balão fora do roteiro.
 
 **Fatia de manual**:
-A issue que todo PRD com tela ganha no fim, bloqueada pelas fatias de código: escreve ou muda as [Páginas de tarefa], roda o [Roteiro de prints], escreve a entrada de [Novidades] e refaz o [Vídeo de visão geral] do módulo só quando o PRD muda o caminho principal dele. Nasce invisível e aparece no deploy do PRD. É o par do vídeo de divulgação: uma entrega, uma fatia de manual.
+A issue que todo PRD com tela ganha no fim, bloqueada pelas fatias de código: escreve ou muda as [Páginas de tarefa], roda o [Roteiro de prints], escreve a entrada de [Novidades] e refaz o [Vídeo de visão geral] de cada módulo que o PRD muda, salvo a exceção escrita na própria fatia ("o vídeo segue válido porque ...", ADR 0076). Nasce invisível e aparece no deploy do PRD. É o par do vídeo de divulgação: uma entrega, uma fatia de manual.
 _Evitar_: manual dentro do PR de código (a tela ainda não existe para o print); manual fora da fila de issues (some da cobrança).
 
 ## Diálogo de exemplo

@@ -232,6 +232,75 @@ def test_prd_nao_sai_dos_numeros_do_comentario(tmp_path):
     assert "#57" in lacunas[0]
 
 
+# --- Vídeo desatualizado (ADR 0076, issue #1366) -----------------------------
+#
+# Todo PRD que muda uma página do módulo refaz o vídeo do módulo. O `meta.json`
+# da composição guarda os `prds_cobertos`, e o PRD citado no `prd:` de uma
+# página do módulo que não está na lista é vídeo que ficou para trás.
+
+
+def video_cobrindo(raiz: Path, prds: list[int]) -> None:
+    pasta = raiz / "video" / "ouvidoria" / "visao-geral"
+    pasta.mkdir(parents=True)
+    (pasta / "meta.json").write_text(
+        json.dumps({"modulo": "ouvidoria", "slug": "visao-geral", "prds_cobertos": prds}),
+        encoding="utf-8",
+    )
+
+
+PAUSAR = """---
+title: Pausar o caso quando falta informação
+description: Como parar o prazo enquanto o paciente não responde.
+prd: [731, 1400]
+draft: false
+papel: [Ouvidoria]
+---
+
+1. Clique em **Pausar**.
+"""
+
+
+def test_pagina_com_prd_fora_dos_prds_cobertos_acusa_video_desatualizado(tmp_path):
+    """O PRD #1400 mudou a página e o vídeo da Ouvidoria só cobre o #731."""
+    montar(tmp_path)
+    video_cobrindo(tmp_path, [731])
+    pausar = tmp_path / "src" / "content" / "docs" / "ouvidoria" / "pausar.md"
+    pausar.write_text(PAUSAR, encoding="utf-8")
+
+    inventario = inventario_manual.inventariar(tmp_path, {"ouvidoria": [731]})
+    assert tipos(inventario, "ouvidoria") == ["video-desatualizado"]
+    detalhe = inventario.modulos["ouvidoria"][0].detalhe
+    assert "#1400" in detalhe
+    assert "ouvidoria/pausar.md" in detalhe
+    # O #731, que o vídeo cobre e as outras páginas citam, não é acusado.
+    assert "#731" not in detalhe
+
+
+def test_modulo_com_todos_os_prds_cobertos_nao_acusa_video_desatualizado(tmp_path):
+    montar(tmp_path)
+    video_cobrindo(tmp_path, [731, 1400])
+    pausar = tmp_path / "src" / "content" / "docs" / "ouvidoria" / "pausar.md"
+    pausar.write_text(PAUSAR, encoding="utf-8")
+
+    inventario = inventario_manual.inventariar(tmp_path, {"ouvidoria": [731]})
+    assert tipos(inventario, "ouvidoria") == []
+
+
+def test_video_hyperframes_antigo_sem_prds_cobertos_nao_e_julgado(tmp_path):
+    """A composição antiga não tem a lista: ela é aceita até o módulo trocar."""
+    montar(tmp_path)
+    pasta = tmp_path / "video" / "ouvidoria" / "visao-geral"
+    pasta.mkdir(parents=True)
+    (pasta / "meta.json").write_text(
+        '{"id": "manual-ouvidoria-visao-geral", "name": "Manual"}', encoding="utf-8"
+    )
+    pausar = tmp_path / "src" / "content" / "docs" / "ouvidoria" / "pausar.md"
+    pausar.write_text(PAUSAR, encoding="utf-8")
+
+    inventario = inventario_manual.inventariar(tmp_path, {"ouvidoria": [731]})
+    assert tipos(inventario, "ouvidoria") == []
+
+
 def test_pagina_fora_dos_seis_modulos_nao_fecha_a_conta(tmp_path):
     """Sem módulo, não há terminal que feche a lacuna: a conta não fecha."""
     montar(tmp_path)

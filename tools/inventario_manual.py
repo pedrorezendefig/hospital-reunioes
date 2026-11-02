@@ -11,7 +11,7 @@ Uso:
 
 O arquivo de `--entregues` é `{"<modulo>": [<PRD>, ...]}`, os PRDs daquele
 módulo que já estão em produção. A skill monta esse arquivo do GitHub e do
-`docs/spec/deploy/history.json`; sem ele, dois dos quatro tipos de lacuna não
+`docs/spec/deploy/history.json`; sem ele, dois dos cinco tipos de lacuna não
 são conferidos e o relatório diz isso.
 
 Sai com código 1 quando a conta não fecha: página fora dos seis módulos, ou
@@ -80,6 +80,22 @@ def prds_da_pagina(campos: dict[str, str]) -> list[int]:
     return [int(n) for n in RE_NUMERO.findall(valor_do_campo(campos, "prd"))]
 
 
+def prds_cobertos(raiz: Path, modulo: str, slug: str) -> list[int] | None:
+    """Os PRDs que o Vídeo de visão geral do módulo mostra (ADR 0076).
+
+    None quando a composição não traz a lista: a HyperFrames antiga não tem, e
+    é aceita até o módulo trocar. Composição nova sem a lista quem trava é o
+    `checar_video_manual.py`.
+    """
+    arquivo = raiz / "video" / modulo / slug / "meta.json"
+    try:
+        meta = json.loads(arquivo.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    lista = meta.get("prds_cobertos") if isinstance(meta, dict) else None
+    return lista if isinstance(lista, list) else None
+
+
 def inventariar(
     raiz: Path, entregues: dict[str, list[int]] | None = None
 ) -> Inventario:
@@ -95,7 +111,10 @@ def inventariar(
         modulo for modulo in entregues if modulo not in MODULOS
     ]
     novidades: dict[str, list[int]] = {}
-    com_visao_geral: set[str] = set()
+    # módulo -> slug do Vídeo de visão geral da abertura
+    com_visao_geral: dict[str, str] = {}
+    # módulo -> PRD -> páginas que o citam no `prd:`
+    citados: dict[str, dict[int, list[str]]] = {modulo: {} for modulo in MODULOS}
 
     for arquivo in sorted(conteudo.rglob("*.md*")):
         if arquivo.suffix not in (".md", ".mdx"):
@@ -116,7 +135,10 @@ def inventariar(
             novidades[modulo] = prds_da_pagina(campos)
 
         if relativo.stem == "index" and len(relativo.parts) == 2 and campos.get("video"):
-            com_visao_geral.add(modulo)
+            com_visao_geral[modulo] = valor_do_campo(campos, "video")
+
+        for prd in prds_da_pagina(campos):
+            citados[modulo].setdefault(prd, []).append(str(relativo))
 
         for alvo in RE_IMAGEM.findall(texto):
             if alvo.startswith(("http://", "https://", "/")):
@@ -147,6 +169,25 @@ def inventariar(
                 )
 
     for modulo in MODULOS:
+        cobertos = (
+            prds_cobertos(raiz, modulo, com_visao_geral[modulo])
+            if modulo in com_visao_geral
+            else None
+        )
+        for prd, paginas in sorted(citados[modulo].items()):
+            if cobertos is None or prd in cobertos:
+                continue
+            inventario.modulos[modulo].append(
+                Lacuna(
+                    modulo,
+                    "video-desatualizado",
+                    f"PRD #{prd} está no `prd:` de {', '.join(paginas)} e fora "
+                    f"dos prds_cobertos de video/{modulo}/"
+                    f"{com_visao_geral[modulo]}/meta.json. Refaça o Vídeo de "
+                    "visão geral do módulo; se ele segue válido, ponha o PRD na "
+                    "lista e escreva o porquê na Fatia de manual (ADR 0076).",
+                )
+            )
         if modulo not in com_visao_geral and modulo not in SEM_VIDEO:
             inventario.modulos[modulo].append(
                 Lacuna(

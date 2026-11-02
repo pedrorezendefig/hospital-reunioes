@@ -612,9 +612,9 @@ def test_home_sem_a_barra_trava(tmp_path):
 
 
 def player(modulo: str, slug: str) -> str:
-    """O player como o MarkdownContent.astro desenha: capa e fonte."""
+    """O player como o MarkdownContent.astro desenha: capa e fonte, com som."""
     return (
-        '<div class="abertura-video"><video controls muted playsinline '
+        '<div class="abertura-video"><video controls playsinline '
         f'preload="metadata" poster="/video/{modulo}/{slug}.jpg">'
         f'<source src="/video/{modulo}/{slug}.mp4" type="video/mp4"></video></div>'
     )
@@ -684,3 +684,41 @@ def test_pagina_de_tarefa_com_video_no_html_trava(tmp_path):
     assert len(problemas) == 1
     assert "reunioes/marcar-uma-reuniao.md" in problemas[0]
     assert "vídeo" in problemas[0]
+
+
+# --- O player da abertura tem som (ADR 0076) -------------------------------
+#
+# O Vídeo de visão geral passou a ser narrado na voz A. O player sai sem
+# `muted`, que calaria a narração até a pessoa achar o botão de som, e
+# continua sem `autoplay`: quem abre a página dá o play.
+
+
+def test_player_da_abertura_com_muted_trava(tmp_path):
+    montar(tmp_path)
+    publicar(
+        tmp_path,
+        "reunioes/index.md",
+        ABERTURA_COM_VIDEO,
+        corpo_html=player("reunioes", "visao-geral").replace(
+            "<video controls", "<video controls muted"
+        ),
+    )
+    problemas = checar_build_manual.checar(tmp_path)
+    assert len(problemas) == 1
+    assert "reunioes/index.md" in problemas[0]
+    assert "muted" in problemas[0]
+
+
+def test_player_da_abertura_com_autoplay_trava(tmp_path):
+    montar(tmp_path)
+    publicar(
+        tmp_path,
+        "reunioes/index.md",
+        ABERTURA_COM_VIDEO,
+        corpo_html=player("reunioes", "visao-geral").replace(
+            "<video controls", "<video autoplay controls"
+        ),
+    )
+    problemas = checar_build_manual.checar(tmp_path)
+    assert len(problemas) == 1
+    assert "autoplay" in problemas[0]

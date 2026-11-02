@@ -78,14 +78,16 @@ function classeDoSelo(selo: string) {
 
      A capa é o primeiro quadro do MP4, gerada pelo `publicar.sh`. No `pnpm dev`
      ela não existe, e o navegador simplesmente ignora um `poster` que não
-     carrega. */
+     carrega.
+
+     Sem `muted` e sem `autoplay`: o vídeo é narrado (ADR 0076), toca com som e
+     só quando a pessoa dá o play. O `checar_build_manual.py` confere. */
 }
 {
   eAbertura && dados.video && (
     <div class="abertura-video">
       <video
         controls
-        muted
         playsinline
         preload="metadata"
         poster={`/video/${pastaDoVideo}/${dados.video}.jpg`}
