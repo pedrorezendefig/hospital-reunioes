@@ -1,0 +1,53 @@
+O pedido que ia pelo WhatsApp agora tem lugar.
+
+Na aba Tecnologia, cada assunto dos sistemas é uma Demanda.
+
+Para registrar a sua, abra Nova Demanda.
+
+Conte o que precisa do seu jeito: escrevendo, falando ou com um print da tela.
+
+O assistente faz no máximo três perguntas, e o Rascunho da Demanda se monta ao lado.
+
+Confira e clique em Criar Demanda.
+
+Ela nasce em Nova, com o dono do Produto como responsável, e ele recebe um e-mail.
+
+Entre Nova, Em andamento e Aguardando, quem move é gente.
+
+Dentro do card fica a Conversa. Digite arroba e escolha o nome, e a pessoa é avisada.
+
+O que se combina ali fica guardado, com autor, data e hora.
+
+Numa Demanda do tipo Novo ou Ajuste, aparece o botão Planejar com a IA.
+
+A IA faz as perguntas que a Vitta faria antes de começar, uma de cada vez.
+
+Cada pergunta traz o contexto e duas opções, com a recomendada marcada.
+
+Escolha uma delas. Se nenhuma serve, responda falando no microfone.
+
+À direita, O que já decidimos ganha uma linha a cada decisão fechada.
+
+Quando quiser parar, use Fechar e resumir.
+
+O resumo traz o porquê de cada decisão e o que ficou em aberto.
+
+Algo não bateu? Diga o quê, e as perguntas seguem.
+
+Se está certo, o sim manda o plano para os desenvolvedores.
+
+A Demanda passa para Em análise, e o card mostra O que muda com o que você decidiu.
+
+Nas outras Demandas, quem faz o Vínculo é a Vitta.
+
+Pelo número do trabalho, ou criando na hora, em Levar para desenvolvimento.
+
+Daí em diante, o selo da Etapa anda sozinho: Planejada, Em desenvolvimento, Em produção.
+
+Quando a entrega chega ao app, a Demanda volta para você, no Com você do Painel.
+
+Teste o que mudou e, se está bom, clique em Concluir.
+
+Se faltou algo, avise na Conversa, e a Vitta refaz.
+
+O pedido saiu do WhatsApp, ganhou um plano e voltou entregue a quem pediu.
