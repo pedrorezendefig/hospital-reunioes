@@ -12,6 +12,7 @@ from __future__ import annotations
 import base64
 import json
 import os
+import re
 import sys
 from types import SimpleNamespace
 
@@ -417,3 +418,40 @@ def _resumo_da_melhoria(**campos) -> str:
     }
     base.update(campos)
     return json.dumps(base, ensure_ascii=False)
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 6. O card de melhoria traz as Decisões de implementação e de teste
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+class TestOCardDaMelhoria:
+    def test_o_prd_do_diretor_leva_as_decisoes_lidas_do_codigo(self, monkeypatch):
+        client, _, gh = _cenario(monkeypatch)
+        _repositorio(monkeypatch, arquivos={ARQUIVO_DA_OUVIDORIA: "export function Lista() {}"})
+        _ia(monkeypatch, _pergunta())
+        demanda_id = client.post(CHAT, json={"escolha": "melhoria"}).json()["demanda_id"]
+        _ia(monkeypatch, _pergunta(contexto="E quem confirma?"))
+        client.post(f"{CHAT}/{demanda_id}", json={"opcao": "A"})
+        _modelo(
+            monkeypatch,
+            [[("ler_arquivo", {"caminho": ARQUIVO_DA_OUVIDORIA})]],
+            _resumo_da_melhoria(
+                decisoes_de_implementacao=["A lista da Ouvidoria ganha o botão Responder em cada linha."],
+                decisoes_de_teste=["Teste de rota: responder pela lista grava a resposta da manifestação."],
+            ),
+        )
+        assert client.post(f"{CHAT}/{demanda_id}/resumo").status_code == 200
+
+        assert client.post(f"{CHAT}/{demanda_id}/criar-card").status_code == 200
+
+        corpo = gh.criadas[0]["corpo"]
+        cabecalhos = re.findall(r"^## (.+)$", corpo, re.MULTILINE)
+        assert cabecalhos[cabecalhos.index("Decisões de negócio") + 1 :][:2] == [
+            "Decisões de implementação",
+            "Decisões de teste",
+        ]
+        implementacao = corpo.split("## Decisões de implementação", 1)[1].split("\n## ", 1)[0]
+        teste = corpo.split("## Decisões de teste", 1)[1].split("\n## ", 1)[0]
+        assert "- A lista da Ouvidoria ganha o botão Responder em cada linha." in implementacao
+        assert "- Teste de rota: responder pela lista grava a resposta da manifestação." in teste

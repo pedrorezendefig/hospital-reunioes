@@ -787,6 +787,7 @@ SEM_DECISAO_NO_PRD = "Nenhuma pergunta respondida fechou uma decisão."
 NADA_EM_ABERTO_NO_PRD = "Nada ficou em aberto."
 SEM_TERMO_NO_PRD = "Nenhum termo novo."
 SEM_CANDIDATA_NO_PRD = "Nenhuma decisão candidata a ADR."
+SEM_LEITURA_DO_CODIGO_NO_PRD = "Nenhuma lida do código nesta conversa: o planejamento técnico completa."
 
 
 def _linha_do_prd(bruto: str | None) -> str:
@@ -808,11 +809,12 @@ def corpo_do_prd_do_diretor(
 ) -> str:
     """O corpo da issue que o "sim" do resumo cria (ADR 0075, decisao 1).
 
-    E o PRD do diretor, a metade de negocio do PRD: o bloco "Para o diretor",
-    Problema, Solucao, Historias de usuario, Decisoes de negocio, "Ficou em
+    E o PRD do diretor: o bloco "Para o diretor", Problema, Solucao, Historias
+    de usuario, Decisoes de negocio, as Decisoes de implementacao e de teste
+    que o agente leu do codigo (issue #1385), "Ficou em
     aberto" e "Para o glossario" (issue #1383, ADR 0077, decisao 7: os termos e
     as decisoes candidatas a ADR, que o terminal grava no `CONTEXT.md` e nas
-    ADRs). As secoes tecnicas nascem depois, no terminal, na mesma issue.
+    ADRs). O resto do planejamento tecnico nasce depois, no terminal.
     Tambem e o corpo do "Criar o card" da melhoria no chat.
 
     Funcao pura do resumo e da Demanda, sem IA: o que o diretor le na issue e o
@@ -833,6 +835,9 @@ def corpo_do_prd_do_diretor(
     em_aberto = [item for item in (_linha_do_prd(t) for t in resumo.get("em_aberto") or []) if item]
     termos = [item for item in (_linha_do_prd(t) for t in resumo.get("termos") or []) if item]
     candidatas = [item for item in (_linha_do_prd(t) for t in resumo.get("candidatas_a_adr") or []) if item]
+    # O que o agente leu do codigo (issue #1385, ADR 0077, decisao 7).
+    implementacao = [item for item in (_linha_do_prd(t) for t in resumo.get("decisoes_de_implementacao") or []) if item]
+    teste = [item for item in (_linha_do_prd(t) for t in resumo.get("decisoes_de_teste") or []) if item]
 
     precisa_saber = [f"- {escolha}" for _, escolha, _ in decisoes]
     if em_aberto:
@@ -869,7 +874,8 @@ def corpo_do_prd_do_diretor(
             "## Solução",
             "",
             f"{titulo_limpo}, do jeito que o diretor decidiu no planejamento com a IA, na aba Tecnologia. "
-            "As decisões dele estão em Decisões de negócio; as técnicas ficam para o planejamento da Vitta.",
+            "As decisões dele estão em Decisões de negócio; as de implementação e de teste vêm do que a IA "
+            "leu do código, e o planejamento da Vitta completa o resto.",
             "",
             "## Histórias de usuário",
             "",
@@ -878,6 +884,14 @@ def corpo_do_prd_do_diretor(
             "## Decisões de negócio",
             "",
             *(linhas_das_decisoes or [SEM_DECISAO_NO_PRD, ""]),
+            "## Decisões de implementação",
+            "",
+            *([f"- {item}" for item in implementacao] or [SEM_LEITURA_DO_CODIGO_NO_PRD]),
+            "",
+            "## Decisões de teste",
+            "",
+            *([f"- {item}" for item in teste] or [SEM_LEITURA_DO_CODIGO_NO_PRD]),
+            "",
             "## Ficou em aberto",
             "",
             *([f"- {item}" for item in em_aberto] or [NADA_EM_ABERTO_NO_PRD]),
