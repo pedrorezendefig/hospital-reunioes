@@ -46,6 +46,7 @@ from app.routers import contas_medicas_coordenacao as coordenacao_router
 from app.routers import contas_medicas_envio as envio_router
 from app.routers import contas_medicas_guia as guia_router
 from app.routers import contas_medicas_painel as painel_router
+from app.services.contas_medicas import coordenacao as coordenacao_service
 from app.services.contas_medicas import envio as envio_service
 from app.services.contas_medicas import ia, passo_c, processamento
 
@@ -593,6 +594,20 @@ class TestCartaoDoPainel:
         assert sem_lembrete.pop("coordenacao") == {"valor_incluido": 0, "lembretes_incluidos": 0}
         com_o_cartao.pop("coordenacao")
         assert com_o_cartao == sem_lembrete
+
+    def test_domingo_a_noite_conta_na_semana_do_fuso_do_hospital(self, ia_falsa, monkeypatch):
+        # Domingo 01/11, 21h09 em São Paulo, já segunda 02/11 em UTC: a hora
+        # em que o CI do PR #1376 rodou. A semana é a de 26/10 a 01/11.
+        domingo_a_noite = "2026-11-02T00:09:00+00:00"
+        monkeypatch.setattr(guia_router, "_agora", lambda: domingo_a_noite)
+        monkeypatch.setattr(coordenacao_service, "_agora", lambda: domingo_a_noite)
+
+        banco, semana = _conta_concluida_com_lembrete_incluido(ia_falsa)
+        painel = _painel(banco, "coordenadora", semana)
+
+        assert (semana, painel["semana"]) == ("2026-11-01", {"inicio": "2026-10-26", "fim": "2026-11-01"})
+        assert painel["coordenacao"] == {"valor_incluido": 25.0, "lembretes_incluidos": 1}
+        assert painel["contas_concluidas"] == {"total": 1}
 
 
 # ═══════════════════════════════════════════════════════════════════════════
