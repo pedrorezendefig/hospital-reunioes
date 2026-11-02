@@ -32,6 +32,7 @@ from test_tecnologia_vinculo import BASE  # noqa: E402
 
 from app.config import settings  # noqa: E402
 from app.services import github_client  # noqa: E402
+from app.services.conhecimento import CONHECIMENTO_DIR  # noqa: E402
 
 CHAT = f"{BASE}/chat"
 
@@ -455,3 +456,17 @@ class TestOCardDaMelhoria:
         teste = corpo.split("## Decisões de teste", 1)[1].split("\n## ", 1)[0]
         assert "- A lista da Ouvidoria ganha o botão Responder em cada linha." in implementacao
         assert "- Teste de rota: responder pela lista grava a resposta da manifestação." in teste
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 7. O Kit de conhecimento diz o comportamento novo
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+class TestKitDaTecnologia:
+    def test_o_texto_da_tecnologia_no_kit_diz_que_a_ia_consulta_a_plataforma_e_avisa_do_parecido(self):
+        texto = (CONHECIMENTO_DIR / "tecnologia.md").read_text(encoding="utf-8")
+
+        secao = texto.split("## A conversa com o Assistente", 1)[1].split("\n## ", 1)[0]
+        for trecho in ("consulta o que já existe na plataforma", "pedido aberto parecido", "como fazer e como testar"):
+            assert trecho in secao, trecho
