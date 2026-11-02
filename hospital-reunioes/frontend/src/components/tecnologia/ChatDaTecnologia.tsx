@@ -52,8 +52,12 @@ import {
   urlDoNaoBateu,
   urlDoResumoDaMelhoria,
 } from "./chat";
-import { FALHA_DE_CONEXAO, motivoDaRecusa } from "./demandas";
-import { rotaDoPlanejamento } from "./planejamento";
+import { FALHA_DE_CONEXAO, motivoDaRecusa, ROTA_TECNOLOGIA } from "./demandas";
+
+/** A tela do Planejamento de antes, onde segue a conversa que não é do chat. */
+function rotaDoPlanejamento(demandaId: string): string {
+  return `${ROTA_TECNOLOGIA}/planejamento/${encodeURIComponent(demandaId)}`;
+}
 
 // A mesma pergunta que o backend guarda como primeira fala da conversa.
 export const ABERTURA = "Isso é um bug, algo que não funciona como deveria, ou uma melhoria?";
