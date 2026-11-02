@@ -487,3 +487,74 @@ class TestPeneiraPublicaEAnexos:
         for vestigio in (*caminhos, "Captura de tela", "storage", "base64", ".png"):
             assert vestigio not in corpo, vestigio
 
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 4. O modelo, o custo e a falha do provedor
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+class TestModeloECusto:
+    def test_a_conversa_usa_o_modelo_do_planejamento_com_o_prefixo_em_cache(self, monkeypatch):
+        client, _, _ = _cenario(monkeypatch)
+        monkeypatch.setattr(settings, "llm_model_planejamento", "claude-opus-5-5")
+        cliente = _ia(monkeypatch, _turno())
+
+        assert client.post(CHAT, json={"texto": "O botão sumiu da Ouvidoria"}).status_code == 201
+
+        enviado = cliente.chamadas[0]
+        assert enviado["model"] == "claude-opus-5-5"
+        sistema = enviado["system"]
+        assert [bloco.get("cache_control") for bloco in sistema] == [None, {"type": "ephemeral"}]
+        assert "Roteiro do bug" in sistema[0]["text"]
+        # O que o diretor escreveu vem depois do prefixo fixo, nunca dentro dele.
+        assert "O botão sumiu da Ouvidoria" not in json.dumps(sistema, ensure_ascii=False)
+        assert "O botão sumiu da Ouvidoria" in enviado["messages"][0]["content"]
+
+    def test_o_custo_de_cada_chamada_e_gravado_na_demanda(self, monkeypatch):
+        from test_planejamento_demanda import _uso
+
+        client, sb, _ = _cenario(monkeypatch)
+        monkeypatch.setattr(settings, "llm_model_planejamento", "claude-opus-5-5")
+        _ia(monkeypatch, _turno(), usage=_uso(entrada=1000, saida=500, lidos=20000, escritos=2000))
+        demanda_id = client.post(CHAT, json={"escolha": "bug"}).json()["demanda_id"]
+        _responder(client, monkeypatch, demanda_id, "Na Ouvidoria")
+
+        chamadas = _chamadas(sb)
+        assert [c["demanda_id"] for c in chamadas] == [demanda_id, demanda_id]
+        primeira = chamadas[0]
+        assert primeira["modelo"] == "claude-opus-5-5"
+        assert primeira["passo"] == "pergunta"
+        assert primeira["tokens_cache"] == 20000
+        # 1000*4 + 500*20 + 20000*0,20 + 2000*5 = 28000 por milhão (Opus 5.5)
+        assert primeira["custo_usd"] == 0.028
+        assert primeira["sucesso"] is True
+
+
+class TestFalhaDoProvedor:
+    def test_a_falha_do_provedor_mostra_erro_claro_e_nao_perde_a_conversa(self, monkeypatch):
+        client, sb, _ = _cenario(monkeypatch)
+        demanda_id = _comecar(client, monkeypatch, mensagem="Onde isso aconteceu?")
+        antes = [dict(m) for m in _conversas(sb)[0]["mensagens"]]
+        _ia(monkeypatch, RuntimeError("provedor fora do ar"))
+
+        resposta = client.post(f"{CHAT}/{demanda_id}", json={"texto": "Na Ouvidoria"})
+
+        assert resposta.status_code == 502
+        assert resposta.json()["detail"] == (
+            "A IA não conseguiu responder agora, e a conversa ficou como estava. Tente de novo em instantes."
+        )
+        assert _conversas(sb)[0]["mensagens"] == antes
+        assert client.get(f"{CHAT}/{demanda_id}").json()["mensagens"][-1]["texto"] == "Onde isso aconteceu?"
+        # O provedor cobra a chamada que falhou: ela fica gravada, sem sucesso.
+        assert _chamadas(sb)[-1]["sucesso"] is False
+
+    def test_a_falha_no_primeiro_turno_nao_deixa_demanda_vazia(self, monkeypatch):
+        client, sb, _ = _cenario(monkeypatch)
+        _ia(monkeypatch, RuntimeError("provedor fora do ar"))
+
+        resposta = client.post(CHAT, json={"texto": "O botão sumiu"})
+
+        assert resposta.status_code == 502
+        assert _demandas(sb) == []
+        assert _conversas(sb) == []
+
