@@ -4,7 +4,21 @@ A aba Tecnologia é onde o hospital e a Vitta (a empresa que cuida dos sistemas 
 
 Só quem tem acesso de administrador do aplicativo enxerga a aba. Os dois lados usam a mesma tela: o hospital pede para a Vitta, e a Vitta também pede para o hospital.
 
-A aba tem duas abas no alto: o **Quadro**, onde o trabalho do dia anda, e o **Painel**, onde se lê o que está com você, o que a Vitta está entregando e o que já fechou.
+A aba tem três abas no alto. Ela abre no **Assistente**, a conversa com a IA em que você relata um bug ou pede uma melhoria. Ao lado ficam o **Quadro**, onde o trabalho do dia anda, e o **Painel**, onde se lê o que está com você, o que a Vitta está entregando e o que já fechou.
+
+## A conversa com o Assistente
+
+Ao abrir a aba Tecnologia, você cai direto numa conversa com a IA. Ela pergunta se é um bug ou uma melhoria: bug é algo que não funciona como deveria, e melhoria é algo novo ou uma mudança no que já existe. Dá para clicar num dos dois botões ou escrever do seu jeito. Se você só descrever, a IA diz o que entendeu e pergunta se é isso antes de seguir.
+
+Se for uma dúvida que o material da Vitta responde (como uma tela funciona, onde fica um botão), a IA responde ali mesmo e diz de onde tirou a resposta. Dúvida respondida não vira pedido para a Vitta.
+
+No bug, a IA faz no máximo cinco perguntas, uma por vez: onde aconteceu, o que aconteceu, o que você esperava, como repetir e, se você tiver, o print da tela. Ela pula o que você já contou. O print vai pelo botão de imagem da conversa e fica guardado como anexo na hora em que você manda, sem nunca sair do aplicativo. O que você não respondeu aparece como "não informado".
+
+No fim, a IA mostra um resumo com o que você disse e com os critérios que dizem como se sabe que o bug foi resolvido. Se estiver certo, o botão **Criar o card** manda o bug para o desenvolvimento da Vitta, que começa a trabalhar nele sem ninguém precisar assumir antes. Se alguma coisa estiver errada, o botão **Não bateu** pede para você dizer o quê, a conversa continua e o resumo é refeito. Nada vai para a Vitta antes do clique em Criar o card.
+
+Na melhoria, a IA pergunta em poucas palavras o que você quer e leva o pedido para o Planejamento da Demanda, onde as perguntas sobre ele continuam.
+
+A conversa fica guardada. Se a IA não conseguir responder, a tela avisa, a conversa continua como estava e o que você escreveu fica na caixa: é só mandar de novo.
 
 ## O que é uma Demanda
 
@@ -79,10 +93,11 @@ Clicar numa linha abre o mesmo card do Quadro. O Painel não tem número por pes
 
 Os anexos são prints de tela guardados junto da Demanda, para quem vai resolver ver o que a pessoa viu. Aceita imagem PNG, JPG ou WEBP, de até 5 MB cada, e até 10 imagens por Demanda.
 
-Dá para anexar por três caminhos:
+Dá para anexar por quatro caminhos:
 
+- **Na conversa com o Assistente**, pelo botão de imagem: o print vira anexo na hora em que você manda.
 - **No formulário**, pelo botão **Anexar prints (até 10)**.
-- **No assistente**, mandando o print na conversa: se você clicar em **Criar Demanda**, o print vira anexo. Se não clicar, ele some com a conversa.
+- **No assistente de Nova Demanda**, mandando o print na conversa: se você clicar em **Criar Demanda**, o print vira anexo. Se não clicar, ele some com a conversa.
 - **Na Conversa** do card, pelo botão de imagem ao lado de **Responder**: a imagem entra junto da resposta.
 
 Os anexos aparecem no card aberto, em **Imagens**, com quem anexou e quando. Clicar na miniatura abre a imagem em tamanho real.
@@ -141,7 +156,10 @@ O Manual do usuário tem uma seção da Tecnologia, com o passo a passo de cada 
 - Dentro da aba todos são iguais, e quem entra cria, edita, move, atribui e responde.
 - A lista de Tipos é fechada em sete, e toda Demanda pertence a um Produto, que decide quem responde por ela.
 - O assistente de Nova Demanda monta o rascunho, e a Demanda só nasce quando a pessoa clica em Criar Demanda.
-- A conversa do assistente de Nova Demanda não fica guardada, e a do planejamento é a única conversa com a IA guardada na Demanda.
+- A aba abre na conversa com o Assistente, que pergunta se é bug ou melhoria e confirma antes de seguir.
+- No bug, a IA faz no máximo cinco perguntas, e o pedido só vai para a Vitta no clique em Criar o card.
+- O bug que sai do Criar o card vai direto para o desenvolvimento, sem ninguém da Vitta precisar assumir antes.
+- A conversa do assistente de Nova Demanda não fica guardada; a conversa com o Assistente e a do planejamento ficam guardadas na Demanda.
 - Uma Demanda se liga a um trabalho de desenvolvimento só, e a Etapa é lida de lá, nunca digitada.
 - O que se escreve do lado do desenvolvimento não volta para a Conversa, e o que volta é a mudança de Etapa.
 - A única troca automática de raia é a volta para quem pediu, em Aguardando, quando a entrega fica Em produção.

@@ -52,6 +52,17 @@ Planejamento da Demanda (issue #1345, ADR 0075):
                                                       resumo: cria o PRD do
                                                       diretor e vincula (#1349).
 
+O chat da aba, com o Roteiro do bug (issue #1381, ADR 0077):
+
+- POST  /admin/tecnologia/chat                  o primeiro turno: a Demanda
+                                                nasce aqui.
+- GET   /admin/tecnologia/chat/{id}             a conversa guardada.
+- POST  /admin/tecnologia/chat/{id}             um turno: a fala do diretor
+                                                entra, a da IA volta.
+- POST  /admin/tecnologia/chat/{id}/nao-bateu   o que nao bateu no resumo.
+- POST  /admin/tecnologia/chat/{id}/criar-card  cria a issue do bug, pronta
+                                                para a onda, e vincula.
+
 Anexo da Demanda (issue #1061, ADR 0069):
 
 - POST  /admin/tecnologia/demandas/{id}/anexos  guarda um print (png, jpg,
@@ -125,6 +136,10 @@ from app.models.tecnologia_schemas import (
     AssistenteDocumentoResponse,
     AssistenteImagemResponse,
     AtribuirPayload,
+    ChatNaoBateuPayload,
+    ChatPrimeiroTurnoPayload,
+    ChatResponse,
+    ChatTurnoPayload,
     ConversaLinhaResponse,
     DemandaCreatePayload,
     DemandaResponse,
@@ -143,7 +158,14 @@ from app.models.tecnologia_schemas import (
     TextoParaIaResponse,
     VincularPayload,
 )
-from app.services import ai_processor, assistente_tecnologia, github_client, planejamento_demanda, tecnologia_anexos
+from app.services import (
+    ai_processor,
+    assistente_tecnologia,
+    chat_tecnologia,
+    github_client,
+    planejamento_demanda,
+    tecnologia_anexos,
+)
 from app.services.conhecimento import carregar_kit
 from app.services.paginacao import ler_tudo
 from app.services.tecnologia import (
@@ -202,6 +224,7 @@ from app.services.tecnologia_email import avisar_atribuicao, avisar_mencao, avis
 from app.services.tecnologia_sincronizacao import mudanca_da_foto
 from app.services.tecnologia_vinculo import (
     ETAPA_REGISTRADA,
+    LABELS_DO_BUG,
     MOTIVO_CRIACAO_EM_ANDAMENTO,
     MOTIVO_GITHUB_INDISPONIVEL,
     MOTIVO_INTEGRACAO_DESLIGADA,
@@ -210,6 +233,7 @@ from app.services.tecnologia_vinculo import (
     MOTIVO_SEM_VINCULO_PARA_DESFAZER,
     TEXTO_VINCULO_CRIADO,
     TEXTO_VINCULO_DESFEITO,
+    corpo_da_issue_do_bug,
     corpo_da_issue_nova,
     corpo_do_comentario_espelhado,
     corpo_do_prd_do_diretor,
@@ -1653,15 +1677,18 @@ def _criar_issue_e_vincular(
     ator: dict,
     corpo,
     assignees: list[str],
+    labels: list[str] | None = None,
 ) -> dict:
-    """O servico das duas portas que CRIAM a issue: o "Levar para
-    desenvolvimento" e o "sim" do Planejamento da Demanda (issue #1349).
+    """O servico das portas que CRIAM a issue: o "Levar para
+    desenvolvimento", o "sim" do Planejamento da Demanda (issue #1349) e o
+    "Criar o card" do chat (issue #1381).
 
     Recebe a Demanda ja lida e as guardas de cada porta ja passadas, e faz o
-    que e igual nas duas: a vez de criar, o titulo pela peneira, as labels do
-    tipo, a issue no GitHub, o Vinculo, a linha do fio e a Etapa. O que muda de
-    uma porta para a outra entra por parametro: o `corpo(titulo)` e os
-    `assignees`. Devolve a linha da Demanda ja vinculada.
+    que e igual nas tres: a vez de criar, o titulo pela peneira, a issue no
+    GitHub, o Vinculo, a linha do fio e a Etapa. O que muda de uma porta para a
+    outra entra por parametro: o `corpo(titulo)`, os `assignees` e as `labels`
+    (sem elas, as do tipo, com `needs-triage`). Devolve a linha da Demanda ja
+    vinculada.
     """
     demanda_id = str(demanda["id"])
     if _criacao_em_andamento(demanda):
@@ -1682,7 +1709,7 @@ def _criar_issue_e_vincular(
         dados = github_client.criar_issue(
             titulo=titulo,
             corpo=corpo(titulo),
-            labels=labels_da_issue_nova(demanda.get("tipo")),
+            labels=labels if labels is not None else labels_da_issue_nova(demanda.get("tipo")),
             assignees=assignees,
         )
         numero = dados.get("number")
@@ -2495,6 +2522,26 @@ def _conflito(motivo: str) -> NoReturn:
     raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=motivo)
 
 
+MOTIVO_CONVERSA_DO_CHAT = (
+    "Esta Demanda tem uma conversa em andamento com o Assistente. Continue por lá, na aba Tecnologia."
+)
+
+
+def _planejamento_guardado(supabase: Client, demanda_id: str) -> dict | None:
+    """O planejamento da Demanda, ou `None`, e 409 se a conversa guardada for a
+    do chat da aba (issue #1381).
+
+    As duas moram na mesma tabela (ADR 0077, decisao 2), e a melhoria que o
+    chat classificou ja e uma Demanda Novo, que se planeja. Sem esta guarda, o
+    planejamento leria as falas do chat contra o esquema dele (500) e gravaria
+    as dele por cima.
+    """
+    linha = planejamento_demanda.ler(supabase, demanda_id)
+    if planejamento_demanda.e_conversa_do_chat(linha):
+        _conflito(MOTIVO_CONVERSA_DO_CHAT)
+    return linha
+
+
 @router.get("/demandas/{demanda_id}/planejamento", response_model=PlanejamentoResponse)
 @limiter.limit(LIMITE_DO_ASSISTENTE)
 async def ler_planejamento(
@@ -2505,7 +2552,7 @@ async def ler_planejamento(
 ):
     """A conversa guardada na Demanda, para retomar de onde parou (decisao 3)."""
     demanda = _buscar_demanda(supabase, demanda_id)
-    return _planejamento_para_a_tela(demanda, planejamento_demanda.ler(supabase, demanda_id))
+    return _planejamento_para_a_tela(demanda, _planejamento_guardado(supabase, demanda_id))
 
 
 @router.post("/demandas/{demanda_id}/planejamento", response_model=PlanejamentoResponse)
@@ -2529,7 +2576,7 @@ async def responder_no_planejamento(
     if motivo:
         _conflito(motivo)
 
-    atual = planejamento_demanda.ler(supabase, demanda_id)
+    atual = _planejamento_guardado(supabase, demanda_id)
     if atual is not None and atual.get("estado") != planejamento_demanda.ESTADO_EM_ANDAMENTO:
         _conflito(planejamento_demanda.MOTIVO_PLANEJAMENTO_TERMINOU)
 
@@ -2585,7 +2632,7 @@ async def resumir_planejamento(
     if motivo:
         _conflito(motivo)
 
-    atual = planejamento_demanda.ler(supabase, demanda_id)
+    atual = _planejamento_guardado(supabase, demanda_id)
     estado = (atual or {}).get("estado")
     if estado == planejamento_demanda.ESTADO_RESUMIDO:
         _conflito(planejamento_demanda.MOTIVO_RESUMO_PRONTO)
@@ -2641,7 +2688,7 @@ async def recusar_resumo_do_planejamento(
     if not texto:
         _recusar(planejamento_demanda.MOTIVO_NAO_SEM_TEXTO)
 
-    atual = planejamento_demanda.ler(supabase, demanda_id)
+    atual = _planejamento_guardado(supabase, demanda_id)
     if atual is None or atual.get("estado") != planejamento_demanda.ESTADO_RESUMIDO:
         _conflito(planejamento_demanda.MOTIVO_SEM_RESUMO)
 
@@ -2690,7 +2737,7 @@ async def enviar_planejamento(
     if motivo:
         _conflito(motivo)
 
-    atual = planejamento_demanda.ler(supabase, demanda_id)
+    atual = _planejamento_guardado(supabase, demanda_id)
     resumo = (atual or {}).get("resumo")
     if atual is None or atual.get("estado") != planejamento_demanda.ESTADO_RESUMIDO or not resumo:
         _conflito(planejamento_demanda.MOTIVO_SEM_RESUMO)
@@ -2711,6 +2758,340 @@ async def enviar_planejamento(
 
     linha = planejamento_demanda.marcar_enviado(supabase, demanda_id, agora=_agora())
     return _planejamento_para_a_tela(demanda, linha or {**atual, "estado": planejamento_demanda.ESTADO_ENVIADO})
+
+
+# ─── O chat da aba (issue #1381, PRD #1380, ADR 0077) ────────────────────────
+
+
+def _produtos_ativos(supabase: Client) -> list[dict]:
+    """Os Produtos que o agente pode escolher, na ordem da lista."""
+    result = supabase.table(TABELA_PRODUTOS).select("*").order("ordem").execute()
+    return [
+        {"id": p["id"], "nome": p.get("nome") or "", "dono_id": p.get("dono_id")}
+        for p in (result.data or [])
+        if p.get("ativo")
+    ]
+
+
+def _chat_para_a_tela(
+    supabase: Client,
+    demanda_id: str,
+    linha: dict | None,
+    *,
+    planejamento: bool = False,
+    aviso_dos_anexos: str | None = None,
+) -> dict:
+    linha = linha or {}
+    return {
+        "demanda_id": str(demanda_id),
+        "estado": linha.get("estado"),
+        "mensagens": chat_tecnologia.para_a_tela(linha.get("mensagens") or []),
+        "resumo": linha.get("resumo"),
+        "anexos": tecnologia_anexos.quantos_guardados(supabase, demanda_id),
+        "planejamento": planejamento,
+        "aviso_dos_anexos": aviso_dos_anexos,
+    }
+
+
+def _prints_do_turno(supabase: Client, *, demanda: dict, print_ids: list[str], ator: dict) -> str | None:
+    """Os prints que a fala do diretor trouxe viram Anexo da Demanda na hora
+    (ADR 0077, decisao 8), e so quando a fala entrou na conversa: o turno que
+    falhou devolve o 502 antes de chegar aqui, e o print espera o reenvio."""
+    if not print_ids:
+        return None
+    return tecnologia_anexos.anexar_prints(supabase, demanda=demanda, print_ids=print_ids, quem_id=ator["id"])
+
+
+def _passar_ao_planejamento(supabase: Client, demanda_id: str, mensagens: list[dict]) -> dict:
+    """A melhoria confirmada segue pelo Planejamento da Demanda de antes.
+
+    O que o diretor disse vira a descricao da Demanda, que e de onde o
+    planejamento parte, e a conversa do chat sai da tabela que as duas
+    dividem: o planejamento comeca do zero, sem tropecar numa conversa que nao
+    e a dele. Devolve a conversa para a tela mostrar o ultimo turno.
+    """
+    descricao = "\n\n".join(chat_tecnologia.textos_do_diretor(mensagens)).strip() or None
+    supabase.table(TABELA_DEMANDAS).update({"descricao": descricao}).eq("id", demanda_id).execute()
+    planejamento_demanda.apagar(supabase, demanda_id)
+    return {"estado": None, "mensagens": mensagens}
+
+
+def _estado_depois_do_turno(resultado: chat_tecnologia.ResultadoDoTurno) -> str:
+    return planejamento_demanda.ESTADO_RESUMIDO if resultado.resumo else planejamento_demanda.ESTADO_EM_ANDAMENTO
+
+
+@router.post("/chat", response_model=ChatResponse, status_code=status.HTTP_201_CREATED)
+@limiter.limit(LIMITE_DO_ASSISTENTE)
+async def comecar_o_chat(
+    request: Request,
+    payload: ChatPrimeiroTurnoPayload,
+    ator: dict = Depends(require_super_admin),
+    supabase: Client = Depends(get_supabase_client),
+):
+    """O primeiro turno: a Demanda nasce aqui (ADR 0077, decisao 2).
+
+    O botao da abertura ou o texto livre entram na conversa depois da pergunta
+    "bug ou melhoria?", e o agente responde. So entao a Demanda e gravada, com
+    o Tipo da classificacao (Defeito para bug, Novo para melhoria), o Produto
+    que o agente escolheu pelo Kit e o titulo dele: um turno que falhou nao
+    deixa Demanda vazia para tras, e o texto continua na caixa da tela.
+    """
+    texto = (payload.texto or "").strip()
+    if not payload.escolha and not texto:
+        _recusar(chat_tecnologia.MOTIVO_SEM_TEXTO)
+
+    produtos = _produtos_ativos(supabase)
+    falas = [chat_tecnologia.mensagem_de_abertura()]
+    if payload.escolha:
+        falas.append(chat_tecnologia.fala_do_diretor(chat_tecnologia.ESCOLHAS[payload.escolha]))
+    if texto:
+        falas.append(chat_tecnologia.fala_do_diretor(texto))
+
+    # Fora do loop (issue #773, o porque em `ai_processor._EXECUTOR_DA_IA`).
+    resultado = await ai_processor.chamar_ia_fora_do_loop(
+        chat_tecnologia.turno, mensagens=falas, kit=carregar_kit(), produtos=produtos, escolha=payload.escolha
+    )
+    if resultado.erro:
+        if resultado.chamada is not None:
+            planejamento_demanda.gravar_chamada(supabase, resultado.chamada)
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=resultado.erro)
+
+    produto = next((p for p in produtos if p["id"] == resultado.produto_id), produtos[0])
+    criada = (
+        supabase.table(TABELA_DEMANDAS)
+        .insert(
+            {
+                "titulo": resultado.titulo,
+                "descricao": None,
+                "tipo": chat_tecnologia.TIPO_DA_CLASSIFICACAO[resultado.classificacao],
+                "produto_id": produto["id"],
+                "estado": "nova",
+                "responsavel_id": produto.get("dono_id"),
+                "autor_id": ator["id"],
+                "prioridade": "normal",
+            }
+        )
+        .execute()
+    )
+    if not criada.data:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Falha ao criar a Demanda")
+    demanda = criada.data[0]
+    demanda_id = str(demanda["id"])
+    if resultado.chamada is not None:
+        planejamento_demanda.gravar_chamada(supabase, {**resultado.chamada, "demanda_id": demanda_id})
+
+    aviso = _prints_do_turno(supabase, demanda=demanda, print_ids=payload.prints, ator=ator)
+    if resultado.caminho == chat_tecnologia.CAMINHO_DO_PLANEJAMENTO:
+        linha = _passar_ao_planejamento(supabase, demanda_id, [*falas, resultado.mensagem])
+        return _chat_para_a_tela(supabase, demanda_id, linha, planejamento=True, aviso_dos_anexos=aviso)
+
+    linha = planejamento_demanda.gravar(
+        supabase,
+        demanda_id,
+        atual=None,
+        novo={
+            "estado": _estado_depois_do_turno(resultado),
+            "mensagens": [*falas, resultado.mensagem],
+            "resumo": resultado.resumo,
+            "atualizado_em": _agora(),
+        },
+    )
+    return _chat_para_a_tela(supabase, demanda_id, linha, aviso_dos_anexos=aviso)
+
+
+MOTIVO_CHAT_NAO_ENCONTRADO = "Esta conversa não foi encontrada. Comece uma nova na aba Tecnologia."
+MOTIVO_CHAT_NO_RESUMO = "O resumo já está pronto. Clique em Criar o card, ou em Não bateu para corrigir."
+MOTIVO_CHAT_TERMINOU = "Esta conversa já virou card. Comece uma nova na aba Tecnologia."
+MOTIVO_CHAT_MUDOU = "A conversa mudou em outra aba. Recarregue a página e tente de novo."
+
+
+def _chat_guardado(supabase: Client, demanda_id: str) -> tuple[dict, dict]:
+    """A Demanda e a conversa do chat dela, ou 404.
+
+    A conversa do Planejamento mora na mesma tabela (ADR 0077, decisao 2), e
+    nao e um chat: abri-la por aqui misturaria as duas conversas.
+    """
+    demanda = _buscar_demanda(supabase, demanda_id)
+    linha = planejamento_demanda.ler(supabase, demanda_id)
+    if not chat_tecnologia.e_do_chat(linha):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=MOTIVO_CHAT_NAO_ENCONTRADO)
+    return demanda, linha
+
+
+def _acompanhar_o_turno(supabase: Client, demanda: dict, resultado: chat_tecnologia.ResultadoDoTurno) -> None:
+    """A Demanda acompanha a conversa: o Tipo da classificacao, o Produto que o
+    agente escolheu e o titulo. So o que mudou e escrito."""
+    novo = {
+        "tipo": chat_tecnologia.TIPO_DA_CLASSIFICACAO[resultado.classificacao],
+        "produto_id": resultado.produto_id or demanda.get("produto_id"),
+        "titulo": resultado.titulo or demanda.get("titulo"),
+    }
+    mudancas = {campo: valor for campo, valor in novo.items() if valor != demanda.get(campo)}
+    if mudancas:
+        supabase.table(TABELA_DEMANDAS).update(mudancas).eq("id", demanda["id"]).execute()
+
+
+@router.get("/chat/{demanda_id}", response_model=ChatResponse)
+async def ler_o_chat(
+    demanda_id: str,
+    _ator: dict = Depends(require_super_admin),
+    supabase: Client = Depends(get_supabase_client),
+):
+    """A conversa guardada, para retomar de onde parou."""
+    _demanda, linha = _chat_guardado(supabase, demanda_id)
+    return _chat_para_a_tela(supabase, demanda_id, linha)
+
+
+@router.post("/chat/{demanda_id}", response_model=ChatResponse)
+@limiter.limit(LIMITE_DO_ASSISTENTE)
+async def responder_no_chat(
+    request: Request,
+    demanda_id: str,
+    payload: ChatTurnoPayload,
+    ator: dict = Depends(require_super_admin),
+    supabase: Client = Depends(get_supabase_client),
+):
+    """Um turno: a fala do diretor entra, a da IA volta.
+
+    A conversa so e gravada depois que o turno deu certo: falha do provedor ou
+    resposta fora do esquema devolve 502 com a frase para a tela, e o que
+    estava guardado fica como estava. O custo da chamada e gravado nos dois
+    casos.
+    """
+    demanda, atual = _chat_guardado(supabase, demanda_id)
+    if atual.get("estado") == planejamento_demanda.ESTADO_RESUMIDO:
+        _conflito(MOTIVO_CHAT_NO_RESUMO)
+    if atual.get("estado") != planejamento_demanda.ESTADO_EM_ANDAMENTO:
+        _conflito(MOTIVO_CHAT_TERMINOU)
+
+    mensagens = list(atual.get("mensagens") or [])
+    texto = (payload.texto or "").strip()
+    if texto:
+        mensagens.append(chat_tecnologia.fala_do_diretor(texto))
+    elif mensagens[-1].get("tipo") == "ia":
+        # Sem texto e sem fala do diretor esperando: nao ha o que a IA responder.
+        _recusar(chat_tecnologia.MOTIVO_SEM_TEXTO)
+
+    resultado = await ai_processor.chamar_ia_fora_do_loop(
+        chat_tecnologia.turno,
+        mensagens=mensagens,
+        kit=carregar_kit(),
+        produtos=_produtos_ativos(supabase),
+        titulo_atual=demanda.get("titulo"),
+        demanda_id=demanda_id,
+    )
+    if resultado.chamada is not None:
+        planejamento_demanda.gravar_chamada(supabase, resultado.chamada)
+    if resultado.erro:
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=resultado.erro)
+
+    if resultado.caminho == chat_tecnologia.CAMINHO_DO_PLANEJAMENTO:
+        _acompanhar_o_turno(supabase, demanda, resultado)
+        linha = _passar_ao_planejamento(supabase, demanda_id, [*mensagens, resultado.mensagem])
+        aviso = _prints_do_turno(supabase, demanda=demanda, print_ids=payload.prints, ator=ator)
+        return _chat_para_a_tela(supabase, demanda_id, linha, planejamento=True, aviso_dos_anexos=aviso)
+
+    linha = planejamento_demanda.gravar(
+        supabase,
+        demanda_id,
+        atual=atual,
+        novo={
+            "estado": _estado_depois_do_turno(resultado),
+            "mensagens": [*mensagens, resultado.mensagem],
+            "resumo": resultado.resumo or atual.get("resumo"),
+            "atualizado_em": _agora(),
+        },
+    )
+    if linha is None:
+        _conflito(MOTIVO_CHAT_MUDOU)
+    _acompanhar_o_turno(supabase, demanda, resultado)
+    aviso = _prints_do_turno(supabase, demanda=demanda, print_ids=payload.prints, ator=ator)
+    return _chat_para_a_tela(supabase, demanda_id, linha, aviso_dos_anexos=aviso)
+
+
+MOTIVO_CHAT_SEM_RESUMO = "Ainda não há resumo para virar card. Responda às perguntas até o resumo aparecer."
+
+
+@router.post("/chat/{demanda_id}/nao-bateu", response_model=ChatResponse)
+@limiter.limit(LIMITE_DO_ASSISTENTE)
+async def resumo_do_chat_nao_bateu(
+    request: Request,
+    demanda_id: str,
+    payload: ChatNaoBateuPayload,
+    _ator: dict = Depends(require_super_admin),
+    supabase: Client = Depends(get_supabase_client),
+):
+    """O "Nao bateu" do resumo: o que nao bateu entra na conversa como fala do
+    diretor e ela volta a em andamento. A IA nao e chamada aqui: a tela pede o
+    turno seguinte sem texto, e a IA retoma da fala, refazendo o resumo. O
+    resumo velho fica ate o novo o substituir, como no planejamento."""
+    _demanda, atual = _chat_guardado(supabase, demanda_id)
+    texto = (payload.texto or "").strip()
+    if not texto:
+        _recusar(planejamento_demanda.MOTIVO_NAO_SEM_TEXTO)
+    if atual.get("estado") != planejamento_demanda.ESTADO_RESUMIDO:
+        _conflito(MOTIVO_CHAT_SEM_RESUMO)
+
+    linha = planejamento_demanda.gravar(
+        supabase,
+        demanda_id,
+        atual=atual,
+        novo={
+            "estado": planejamento_demanda.ESTADO_EM_ANDAMENTO,
+            "mensagens": [*(atual.get("mensagens") or []), {"tipo": "nao_bateu", "texto": texto}],
+            "atualizado_em": _agora(),
+        },
+    )
+    if linha is None:
+        _conflito(MOTIVO_CHAT_MUDOU)
+    return _chat_para_a_tela(supabase, demanda_id, linha)
+
+
+@router.post("/chat/{demanda_id}/criar-card", response_model=ChatResponse)
+@limiter.shared_limit(LIMITE_DO_VINCULO, ESCOPO_DO_VINCULO)
+async def criar_o_card(
+    request: Request,
+    demanda_id: str,
+    ator: dict = Depends(require_super_admin),
+    supabase: Client = Depends(get_supabase_client),
+):
+    """O "Criar o card" do resumo do bug (ADR 0077, decisoes 6 e 7).
+
+    Pelo MESMO servico do "Levar para desenvolvimento" e do "sim" do
+    planejamento (`_criar_issue_e_vincular`): a vez de criar, a peneira no
+    titulo, o Vinculo e a Etapa. O que e do bug entra por parametro: o corpo
+    com os rotulos do roteiro e os criterios de aceite, as labels que fazem a
+    onda pegar sozinha (`ready-for-agent`, sem `needs-triage`) e nenhum
+    assignee, porque assignee e claim.
+
+    Sem o gate do `github_login`: quem cria o card e o diretor que relatou. A
+    ordem das guardas e a do Levar: o que eu pedi existe e faz sentido (404,
+    409) e so entao o ambiente (503). Falha do GitHub sai como 502 com o resumo
+    intacto, para o clique valer de novo.
+    """
+    demanda, atual = _chat_guardado(supabase, demanda_id)
+    if demanda.get("github_issue_numero") or atual.get("estado") == planejamento_demanda.ESTADO_ENVIADO:
+        _conflito(MOTIVO_CHAT_TERMINOU)
+    resumo = atual.get("resumo")
+    if atual.get("estado") != planejamento_demanda.ESTADO_RESUMIDO or not resumo:
+        _conflito(MOTIVO_CHAT_SEM_RESUMO)
+    _exigir_integracao()
+
+    produtos = supabase.table(TABELA_PRODUTOS).select("id, nome").eq("id", demanda.get("produto_id")).execute()
+    produto_nome = (produtos.data or [{}])[0].get("nome") or SEM_PRODUTO
+
+    def corpo(_titulo: str) -> str:
+        return corpo_da_issue_do_bug(
+            demanda_id=demanda_id,
+            resumo=resumo,
+            produto_nome=produto_nome,
+            link=link_da_demanda(demanda_id),
+            anexos=tecnologia_anexos.quantos_guardados(supabase, demanda_id),
+        )
+
+    _criar_issue_e_vincular(supabase, demanda=demanda, ator=ator, corpo=corpo, assignees=[], labels=LABELS_DO_BUG)
+    linha = planejamento_demanda.marcar_enviado(supabase, demanda_id, agora=_agora())
+    return _chat_para_a_tela(supabase, demanda_id, linha or {**atual, "estado": planejamento_demanda.ESTADO_ENVIADO})
 
 
 # A lista de extensoes e os dois tetos vem do EXTRATOR, e nao sao escritos de

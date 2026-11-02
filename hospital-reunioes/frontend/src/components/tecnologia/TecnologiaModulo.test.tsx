@@ -13,6 +13,9 @@
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { ToastProvider } from "@/components/ui/Toast";
+
+import { ABERTURA } from "./ChatDaTecnologia";
 import { TecnologiaModulo } from "./TecnologiaModulo";
 import { EU_DESCONHECIDO, EuNaAba, FALHA_DE_CONEXAO } from "./demandas";
 
@@ -115,7 +118,16 @@ function montar(
     }),
   );
 
-  render(<TecnologiaModulo />);
+  render(
+    <ToastProvider>
+      <TecnologiaModulo />
+    </ToastProvider>,
+  );
+}
+
+/** O Quadro deixou de ser a aba de abertura (issue #1381): quem o testa, abre. */
+async function abrirOQuadro() {
+  fireEvent.click(await screen.findByRole("tab", { name: "Quadro" }));
 }
 
 beforeEach(() => {
@@ -134,24 +146,17 @@ afterEach(() => {
 });
 
 describe("A casca da aba", () => {
-  it("tem só duas abas: Quadro e Painel", async () => {
-    // Issue #1059: o Painel entra no lugar de "Minha vez" e do Histórico.
+  it("tem três abas: o Assistente, o Quadro e o Painel", async () => {
+    // Issue #1381 (ADR 0077): o chat do Assistente entra na frente; o Quadro e
+    // o Painel saem numa fatia própria, depois.
     montar([]);
 
-    await waitFor(() => expect(screen.getAllByRole("tab")).toHaveLength(2));
-    expect(screen.getAllByRole("tab").map((t) => t.textContent)).toEqual(["Quadro", "Painel"]);
+    await waitFor(() => expect(screen.getAllByRole("tab")).toHaveLength(3));
+    expect(screen.getAllByRole("tab").map((t) => t.textContent)).toEqual(["Assistente", "Quadro", "Painel"]);
   });
 });
 
-describe("A aba com que a Tecnologia abre (issue #1059)", () => {
-  /** A tela finge ser de celular (ou não) pela mesma pergunta que o navegador responde. */
-  function telaDeCelular(celular: boolean) {
-    vi.stubGlobal(
-      "matchMedia",
-      vi.fn((consulta: string) => ({ matches: celular && consulta.includes("max-width"), media: consulta })),
-    );
-  }
-
+describe("A aba com que a Tecnologia abre (issue #1381, ADR 0077)", () => {
   const selecionada = () =>
     screen
       .getAllByRole("tab")
@@ -162,27 +167,18 @@ describe("A aba com que a Tecnologia abre (issue #1059)", () => {
     window.history.replaceState({}, "", "/");
   });
 
-  it("no celular, abre no Painel, e o Quadro nem é pedido", async () => {
-    telaDeCelular(true);
+  it("abre no chat, com a pergunta bug ou melhoria, e o Quadro e o Painel nem são pedidos", async () => {
     montar([]);
 
-    await waitFor(() => expect(selecionada()).toEqual(["Painel"]));
-    await waitFor(() => expect(chamadas.some((c) => c.url.includes("/painel"))).toBe(true));
-    expect(chamadas.some((c) => c.url.includes("/demandas"))).toBe(false);
+    await waitFor(() => expect(selecionada()).toEqual(["Assistente"]));
+    expect(screen.getByText(ABERTURA)).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Bug" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Melhoria" })).toBeTruthy();
+    expect(screen.getByLabelText("Sua mensagem")).toBeTruthy();
+    expect(chamadas.some((c) => c.url.includes("/demandas") || c.url.includes("/painel"))).toBe(false);
   });
 
-  it("fora do celular, abre no Quadro", async () => {
-    // A irmã do de cima, com a MESMA pergunta respondida ao contrário: sem ela,
-    // uma tela que abrisse sempre no Painel passaria naquele.
-    telaDeCelular(false);
-    montar([]);
-
-    await waitFor(() => expect(selecionada()).toEqual(["Quadro"]));
-    expect(await screen.findByRole("link", { name: /Nova Demanda/ })).toBeTruthy();
-  });
-
-  it("no celular, o link de uma Demanda abre o Quadro, que é quem abre o card", async () => {
-    telaDeCelular(true);
+  it("o link de uma Demanda abre o Quadro, que é quem abre o card", async () => {
     window.history.replaceState({}, "", "/admin/tecnologia?demanda=d7");
     montar([]);
 
@@ -193,6 +189,7 @@ describe("A aba com que a Tecnologia abre (issue #1059)", () => {
 describe("Produtos em tela própria (issue #1060)", () => {
   it("o Quadro não renderiza mais a seção Produtos", async () => {
     montar([produto("p1", "Ana", 1, { dono_id: "P1", dono_nome: "Pedro Vitta" })]);
+    await abrirOQuadro();
 
     // A irmã de presença: o Quadro está de pé, com o botão de Nova Demanda.
     expect(await screen.findByRole("link", { name: /Nova Demanda/ })).toBeTruthy();
@@ -229,7 +226,7 @@ describe("O aviso do módulo, acima das abas (issue #1060)", () => {
     sessao.token = null;
     montar([produto("p1", "Ana", 1, { dono_id: "P1" })]);
 
-    await waitFor(() => expect(screen.getAllByRole("tab")).toHaveLength(2));
+    await waitFor(() => expect(screen.getAllByRole("tab")).toHaveLength(3));
     expect(await screen.findByRole("tabpanel")).toBeTruthy();
     expect(screen.queryAllByRole("alert")).toHaveLength(0);
     // E ninguém foi à rede antes de saber se existe sessão.
@@ -246,6 +243,7 @@ describe("Sem filtros no módulo (issue #1058)", () => {
 
   it("nenhuma das abas tem filtro por tipo, Produto ou responsável", async () => {
     montar([produto("p1", "Ana", 1, { dono_id: "P1" })]);
+    await abrirOQuadro();
 
     // Cada aba de pé (a irmã de presença), e sem barra de filtros nenhuma.
     expect(await screen.findByRole("link", { name: /Nova Demanda/ })).toBeTruthy();
@@ -294,6 +292,7 @@ describe("Quem está olhando, do ponto de vista do Vínculo (issue #674)", () =>
     // vermelho porque essa rota caiu seria desproporcional. Sem resposta, vale
     // o default restrito e o resto da tela continua funcionando.
     montar([produto("prod-1", "Ana", 1)], { euFalha: true });
+    await abrirOQuadro();
 
     expect(await screen.findByRole("link", { name: /Nova Demanda/ })).toBeTruthy();
     expect(screen.queryByRole("alert")).toBeNull();

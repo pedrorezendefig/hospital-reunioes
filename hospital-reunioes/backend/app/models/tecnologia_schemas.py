@@ -584,3 +584,74 @@ class PlanejamentoNaoPayload(BaseModel):
     vazio e recusado pela rota, com frase de gente."""
 
     texto: str | None = Field(default=None, max_length=LIMITE_DA_MENSAGEM)
+
+
+# ─── O chat da aba (issue #1381, PRD #1380, ADR 0077) ────────────────────────
+
+
+class ChatPrimeiroTurnoPayload(BaseModel):
+    """Corpo do POST /admin/tecnologia/chat: o primeiro turno, que faz a
+    Demanda nascer. Leva o botao da abertura ("bug" ou "melhoria"), o texto
+    livre, ou os dois; quem recusa o corpo vazio e a rota, com frase de gente.
+
+    `prints` sao os identificadores efemeros dos prints que a rota
+    `descrever-imagem` leu: viram Anexo da Demanda na hora em que o turno entra.
+    """
+
+    escolha: Literal["bug", "melhoria"] | None = None
+    texto: str | None = Field(default=None, max_length=LIMITE_DA_MENSAGEM)
+    prints: list[str] = Field(default_factory=list, max_length=10)
+
+
+class ChatTurnoPayload(BaseModel):
+    """Corpo do POST /admin/tecnologia/chat/{id}: a fala do diretor.
+
+    Sem texto, o turno e o "tente de novo" da IA: vale so quando a ultima fala
+    guardada e do diretor (o "nao bateu")."""
+
+    texto: str | None = Field(default=None, max_length=LIMITE_DA_MENSAGEM)
+    prints: list[str] = Field(default_factory=list, max_length=10)
+
+
+class ChatNaoBateuPayload(BaseModel):
+    """Corpo do POST .../chat/{id}/nao-bateu: o que nao bateu no resumo."""
+
+    texto: str | None = Field(default=None, max_length=LIMITE_DA_MENSAGEM)
+
+
+class FalaDoChat(BaseModel):
+    autor: Literal["ia", "diretor"]
+    texto: str
+    fonte: str | None = None
+    opcoes: list[str] = []
+    nao_bateu: bool = False
+
+
+class ResumoDoBug(BaseModel):
+    """O resumo do Roteiro do bug, como o diretor o confere."""
+
+    titulo: str
+    onde: str
+    o_que_aconteceu: str
+    o_que_esperava: str
+    como_repetir: str
+    criterios: list[str]
+
+
+class ChatResponse(BaseModel):
+    """A conversa do chat como a tela a mostra.
+
+    `estado` segue o do planejamento: `em_andamento`, `resumido` (o resumo do
+    bug esperando "Criar o card" ou "Nao bateu") e `enviado` (o card nasceu).
+    `planejamento` verdadeiro e a melhoria confirmada, que segue pela tela do
+    Planejamento da Demanda (nesta fatia, o caminho da melhoria e o de antes).
+    Tokens e custo nunca saem por aqui (ADR 0077, decisao 9).
+    """
+
+    demanda_id: str
+    estado: str | None = None
+    mensagens: list[FalaDoChat] = []
+    resumo: ResumoDoBug | None = None
+    anexos: int = 0
+    planejamento: bool = False
+    aviso_dos_anexos: str | None = None

@@ -758,26 +758,19 @@ export function fraseDasEntregasVazias(): string {
   return "Nenhuma Demanda aberta está com a Vitta em desenvolvimento agora.";
 }
 
-/** As duas abas da Tecnologia (issue #1059). */
-export type AbaDaTecnologia = "quadro" | "painel";
+/** As abas da Tecnologia: o chat do Assistente (issue #1381), o Quadro e o Painel (issue #1059). */
+export type AbaDaTecnologia = "assistente" | "quadro" | "painel";
 
 /**
- * Até onde a tela conta como celular: abaixo do `md` do Tailwind, o mesmo
- * ponto em que o Quadro deixa de ter três colunas lado a lado.
- */
-export const CONSULTA_DO_CELULAR = "(max-width: 767px)";
-
-/**
- * A aba com que a Tecnologia abre (issue #1059).
+ * A aba com que a Tecnologia abre (issue #1381, ADR 0077).
  *
- * No celular é o Painel: três raias empilhadas numa tela estreita são uma
- * rolagem longa, e quem abre pelo telefone quer saber o que espera por ele.
+ * É o chat do Assistente, no celular e fora dele: é ali que o diretor relata
+ * um bug ou pede uma melhoria.
  *
- * O link de uma Demanda (`?demanda=`) abre sempre o Quadro, inclusive no
- * celular: é o Quadro quem lê o link e abre o card, e abrir no Painel
- * deixaria o link do e-mail sem card nenhum.
+ * O link de uma Demanda (`?demanda=`) abre o Quadro: é o Quadro quem lê o
+ * link e abre o card, e abrir no chat deixaria o link do e-mail sem card
+ * nenhum.
  */
-export function abaInicial(celular: boolean, busca: string): AbaDaTecnologia {
-  if (demandaIdDaUrl(busca)) return "quadro";
-  return celular ? "painel" : "quadro";
+export function abaInicial(busca: string): AbaDaTecnologia {
+  return demandaIdDaUrl(busca) ? "quadro" : "assistente";
 }
