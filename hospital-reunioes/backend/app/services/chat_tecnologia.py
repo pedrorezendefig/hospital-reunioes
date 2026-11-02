@@ -193,7 +193,6 @@ class ResultadoDoTurno:
 
     mensagem: dict | None
     classificacao: str | None
-    confirmada: bool
     produto_id: str | None
     titulo: str | None
     resumo: dict | None
@@ -267,7 +266,6 @@ def _mock(escolha: str | None, produtos: list[dict], titulo_atual: str | None) -
     return ResultadoDoTurno(
         mensagem={"tipo": "ia", "texto": FALA_MOCK, "fonte": None, "opcoes": [], "classificacao": classificacao},
         classificacao=classificacao,
-        confirmada=escolha is not None,
         produto_id=produtos[0]["id"] if produtos else None,
         titulo=titulo_atual or TITULO_SEM_RESPOSTA,
         resumo=None,
@@ -307,7 +305,6 @@ def turno(
         return ResultadoDoTurno(
             mensagem=None,
             classificacao=None,
-            confirmada=False,
             produto_id=None,
             titulo=None,
             resumo=None,
@@ -345,7 +342,6 @@ def turno(
     return ResultadoDoTurno(
         mensagem=mensagem,
         classificacao=classificacao,
-        confirmada=confirmada,
         produto_id=saida.produto_id if saida.produto_id in ids else None,
         titulo=titulo,
         resumo=resumo,

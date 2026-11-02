@@ -52,6 +52,17 @@ Planejamento da Demanda (issue #1345, ADR 0075):
                                                       resumo: cria o PRD do
                                                       diretor e vincula (#1349).
 
+O chat da aba, com o Roteiro do bug (issue #1381, ADR 0077):
+
+- POST  /admin/tecnologia/chat                  o primeiro turno: a Demanda
+                                                nasce aqui.
+- GET   /admin/tecnologia/chat/{id}             a conversa guardada.
+- POST  /admin/tecnologia/chat/{id}             um turno: a fala do diretor
+                                                entra, a da IA volta.
+- POST  /admin/tecnologia/chat/{id}/nao-bateu   o que nao bateu no resumo.
+- POST  /admin/tecnologia/chat/{id}/criar-card  cria a issue do bug, pronta
+                                                para a onda, e vincula.
+
 Anexo da Demanda (issue #1061, ADR 0069):
 
 - POST  /admin/tecnologia/demandas/{id}/anexos  guarda um print (png, jpg,
