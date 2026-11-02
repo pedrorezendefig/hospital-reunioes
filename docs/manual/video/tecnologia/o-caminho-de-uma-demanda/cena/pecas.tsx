@@ -150,12 +150,15 @@ export const TelaNaJanela: React.FC<{ planos: Plano[]; deriva?: number }> = ({ p
         boxShadow: `0 30px 80px rgba(0,0,0,.55), 0 0 0 1px rgba(${RGB.claro},.28), 0 0 60px rgba(${RGB.acento},.18)`,
       }}
     >
+      {/* O print vai no tamanho final, sem transform: escalado pelo transform, o navegador às vezes
+          entrega o quadro com a camada ainda em baixa resolução, e some o que é claro e fino (a data
+          da Conversa, a borda dos campos). */}
+      {telas.map((t, i) => {
+        const op = i === 0 ? 1 : janelaM(f, t.desde, t.desde + 12, 'sai');
+        if (op <= 0) return null;
+        return <Img key={t.tela} src={staticFile(`${t.tela}.png`)} style={{ position: 'absolute', left: tx, top: ty, width: TELA.w * s, height: TELA.h * s, opacity: op }} />;
+      })}
       <div style={{ position: 'absolute', left: 0, top: 0, width: TELA.w, height: TELA.h, transformOrigin: '0 0', transform: `translate(${tx}px, ${ty}px) scale(${s})` }}>
-        {telas.map((t, i) => {
-          const op = i === 0 ? 1 : janelaM(f, t.desde, t.desde + 12, 'sai');
-          if (op <= 0) return null;
-          return <Img key={t.tela} src={staticFile(`${t.tela}.png`)} style={{ position: 'absolute', left: 0, top: 0, width: TELA.w, height: TELA.h, opacity: op }} />;
-        })}
         <Destaques planos={planos} k={k} f={f} s={s} />
         <Cursor planos={planos} f={f} s={s} />
       </div>

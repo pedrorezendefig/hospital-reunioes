@@ -150,7 +150,16 @@ diff -ruN a/src/transicoes/flash.tsx b/src/transicoes/flash.tsx
     verde no centro). q2 (o corte, início da fala): a cena que entra aparece superexposta e desce ao
     normal em 4 quadros, com um leve recuo de escala 1,05 → 1. */
  import React from 'react';
-@@ -26,7 +26,7 @@
+@@ -20,13 +20,15 @@
+   const qFlash = p.k - 1;
+   if (presentationDirection === 'exiting') {
+     if (q >= qFlash) return <AbsoluteFill style={{ visibility: 'hidden' }}>{children}</AbsoluteFill>;
+-    return <AbsoluteFill style={{ filter: q === qFlash - 1 ? 'brightness(1.8)' : undefined }}>{children}</AbsoluteFill>;
++    // Fora da janela da transição o TransitionSeries embrulha a cena que sai com progresso 0, e
++    // q = 0 é justamente qFlash - 1 quando k = 2: sem a guarda, a cena inteira saía clareada.
++    return <AbsoluteFill style={{ filter: q === qFlash - 1 && presentationProgress > 0 ? 'brightness(1.8)' : undefined }}>{children}</AbsoluteFill>;
+   }
+   if (q >= p.T) return <AbsoluteFill>{children}</AbsoluteFill>;
    if (q < qFlash) return <AbsoluteFill style={{ visibility: 'hidden' }}>{children}</AbsoluteFill>;
    if (q === qFlash) {
      return (
@@ -221,7 +230,17 @@ diff -ruN a/src/transicoes/pontosSimbolo.tsx b/src/transicoes/pontosSimbolo.tsx
 diff -ruN a/src/transicoes/pulsoJanela.tsx b/src/transicoes/pulsoJanela.tsx
 --- a/src/transicoes/pulsoJanela.tsx
 +++ b/src/transicoes/pulsoJanela.tsx
-@@ -56,7 +56,7 @@
+@@ -30,6 +30,9 @@
+   const cy = p.de.y + p.de.h / 2;
+   if (presentationDirection === 'exiting') {
+     if (q >= p.k) return <AbsoluteFill style={{ visibility: 'hidden' }}>{children}</AbsoluteFill>;
++    // Fora da janela da transição a cena que sai chega aqui com progresso 0: o pulso de luz de
++    // q = 0 clareava a cena inteira.
++    if (presentationProgress <= 0) return <AbsoluteFill>{children}</AbsoluteFill>;
+     const m = ease.entra(clamp01(q / p.k));
+     return <AbsoluteFill style={{ transformOrigin: `${cx}px ${cy}px`, transform: `scale(${1 + 0.5 * m})`, filter: `brightness(${1 + 0.6 * clamp01(1 - q / 3) - 0.75 * m})` }}>{children}</AbsoluteFill>;
+   }
+@@ -56,7 +59,7 @@
              width: (q >= p.k ? p.para : jan).w,
              height: (q >= p.k ? p.para : jan).h,
              borderRadius: (q >= p.k ? p.para : jan).r,

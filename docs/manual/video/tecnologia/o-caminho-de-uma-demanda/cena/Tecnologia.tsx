@@ -424,7 +424,8 @@ const C1: React.FC = () => {
   // as mensagens chegam soltas; no "agora" elas viram o card que cai na raia Nova
   const m1 = mola(f, 'estalo', qPedido - 6);
   const m2 = mola(f, 'estalo', qWhats - 2);
-  const vira = janelaM(f, qAgora - 2, qLugar + 4, 'corte');
+  // as mensagens somem antes de o card chegar: as duas juntas na tela embolam o gancho
+  const vira = janelaM(f, qAgora - 6, qAgora + 6, 'entra');
   const quadro = janelaM(f, qAgora - 4, qAgora + 14, 'sai');
   const pousa = mola(f, 'assenta', qLugar - 2);
   // tudo segue empurrando devagar até o corte: nada fica parado antes da cena 2
@@ -454,7 +455,7 @@ const C1: React.FC = () => {
           escala={(0.9 + 0.1 * m2) * (1 - 0.4 * vira)}
           rot={-1}
         />
-        <Cartao x={cartaoX} y={cartaoY} w={MINI.w - 40 + 280 * (1 - pousa)} escala={0.9 + 0.1 * vira} op={clamp01((f - qAgora) / 6)} />
+        <Cartao x={cartaoX} y={cartaoY} w={MINI.w - 40 + 280 * (1 - pousa)} escala={0.9 + 0.1 * vira} op={clamp01((f - qAgora - 2) / 6)} />
       </AbsoluteFill>
       <Legenda palavras={fala} destaque={marcar(fala, 'lugar')} centro largura={1600} estilo={ESTILO_GRANDE} base={1010} />
     </AbsoluteFill>
