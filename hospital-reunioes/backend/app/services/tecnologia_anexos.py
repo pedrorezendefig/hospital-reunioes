@@ -145,9 +145,10 @@ def anexar(supabase, *, demanda: dict, nome: str, conteudo: bytes, quem_id: str)
 def apagar_todos(supabase, demanda_id: str) -> int:
     """Tira do bucket os binarios da Demanda e marca cada registro apagado.
 
-    Chamado SO por Concluir e Cancelar, o ato humano que encerra (ADR 0069,
-    decisao 3). Mudanca de Etapa nunca chega aqui: em Entregue o diretor ainda
-    confere com o print na mao.
+    Chamado por Concluir e Cancelar, o ato humano que encerra (ADR 0069,
+    decisao 3), e pelo cron em `apagar_vencidos` (ADR 0077). A sincronizacao da
+    Etapa nunca chega aqui: em Entregue o diretor ainda confere com o print na
+    mao.
 
     A marca de cada anexo entra logo depois da confirmacao DELE, e nao todas no
     fim (a regra do `storage.delete_file`): uma falha no meio deixa marcados so
@@ -163,13 +164,13 @@ def apagar_todos(supabase, demanda_id: str) -> int:
     try:
         guardados = [linha for linha in ler(supabase, demanda_id) if not linha.get("apagado_em")]
     except Exception:
-        logger.exception("Falha ao ler os anexos da Demanda %s para apagar ao encerrar", demanda_id)
+        logger.exception("Falha ao ler os anexos da Demanda %s para apagar", demanda_id)
         return 0
     sairam = 0
     for linha in guardados:
         path = linha["storage_path"]
         if not storage.delete_file(supabase, _bucket(), path):
-            logger.error("Anexo da Demanda %s não saiu do bucket ao encerrar: %s", demanda_id, path)
+            logger.error("Anexo da Demanda %s não saiu do bucket ao apagar: %s", demanda_id, path)
             continue
         sairam += 1
         try:

@@ -501,6 +501,15 @@ class TestOTextoDaAbaContaATelaDeHoje:
         for termo in ("formulário", "assistente", "Conversa", "até 10", "Concluída", "Cancelada", "apagad"):
             assert termo in anexos, termo
 
+    def test_os_anexos_dizem_o_prazo_depois_de_em_producao(self, texto):
+        """Issue #1382: o print sai 30 dias depois de Em produção, e logo
+        quando a entrega fica Não será feita. É o que o diretor pergunta."""
+        anexos = _secao(texto, "Os anexos da Demanda")
+        for termo in ("30 dias depois", "**Em produção**", "**Não será feita**"):
+            assert termo in anexos, termo
+        decidido = _secao(texto, "O que já foi decidido")
+        assert "30 dias depois de Em produção" in decidido
+
     def test_a_etapa_tem_em_producao_e_devolve_nela(self, texto):
         etapa = _secao(texto, "A Etapa")
         assert "**Em produção**" in etapa

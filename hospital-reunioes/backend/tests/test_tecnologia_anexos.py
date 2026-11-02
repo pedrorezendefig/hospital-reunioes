@@ -3,7 +3,8 @@
 O print de tela que o diretor anexa vive SO no app: bucket privado
 `anexos-tecnologia`, caminho sorteado, leitura por URL assinada de vida curta.
 Concluir e Cancelar apagam o binario e deixam o registro (nome, quem, quando)
-marcado apagado; mudanca de Etapa nunca apaga.
+marcado apagado; a sincronizacao da Etapa nunca apaga. O cron apaga 30 dias
+depois de Em producao e na rodada em que a Etapa e Nao sera feita (#1382).
 
 Tudo pela ROTA de verdade, com o Supabase e o storage dublados no molde dos
 anexos da Ouvidoria (`test_ouvidoria_registro_manual.py`). O cenario do Quadro
@@ -443,6 +444,36 @@ class TestOPrintVenceDepoisDeEmProducao:
         assert sb.storage.arquivos == {}, "o binario ficou no bucket 31 dias depois de Em producao"
         assert [linha["nome_original"] for linha in _anexos(sb)] == ["tela.png"]
         assert _anexos(sb)[0]["apagado_em"]
+
+    @pytest.mark.parametrize(
+        "etapa,dias",
+        [("em_producao", 29), ("entregue", 60)],
+        ids=["em-producao-ha-29-dias", "entregue-ha-60-dias"],
+    )
+    def test_antes_do_prazo_o_print_continua(self, monkeypatch, etapa, dias):
+        """Em producao ha menos de 30 dias o diretor ainda confere com o print
+        na mao. Entregue nao conta o prazo: a correcao ainda nem subiu."""
+        client, sb, _ = _cenario(demandas=[_demanda("d-1")])
+        _anexar(client, nome="tela.png")
+        sb.tabelas["tecnologia_demandas"][0].update(etapa=etapa, entregue_em=_ha_dias(dias))
+
+        _rodada_do_cron(monkeypatch, sb)
+
+        assert len(sb.storage.arquivos) == 1
+        assert _anexos(sb)[0]["apagado_em"] is None
+
+    def test_nao_sera_feita_apaga_na_rodada_seguinte(self, monkeypatch):
+        client, sb, _ = _cenario(demandas=[_demanda("d-1"), _demanda("d-2")])
+        _anexar(client, demanda_id="d-1", nome="recusada.png")
+        _anexar(client, demanda_id="d-2", nome="aberta.png")
+        sb.tabelas["tecnologia_demandas"][0].update(etapa="nao_sera_feita")
+
+        _rodada_do_cron(monkeypatch, sb)
+
+        apagados = {linha["nome_original"]: bool(linha["apagado_em"]) for linha in _anexos(sb)}
+        assert apagados == {"recusada.png": True, "aberta.png": False}
+        restante = next(linha for linha in _anexos(sb) if linha["nome_original"] == "aberta.png")
+        assert list(sb.storage.arquivos) == [f"{BUCKET}/{restante['storage_path']}"]
 
 
 # ─── 4. O espelho: nada do anexo sai para a issue nesta fatia ────────────────
