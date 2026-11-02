@@ -122,3 +122,62 @@ class TestPrimeiroTurno:
         [conversa] = _conversas(sb)
         assert conversa["demanda_id"] == demanda["id"]
         assert len(conversa["mensagens"]) == 3
+
+
+CONFIRMAR = ["Sim, é um bug", "Não, é uma melhoria"]
+
+
+def _comecar(client, monkeypatch, **campos_do_modelo):
+    """O primeiro turno pelo botão "Bug", e a Demanda que ele fez nascer."""
+    _ia(monkeypatch, _turno(**campos_do_modelo))
+    resposta = client.post(CHAT, json={"escolha": "bug"})
+    assert resposta.status_code == 201, resposta.text
+    return resposta.json()["demanda_id"]
+
+
+class TestDescricaoLivre:
+    def test_o_assistente_classifica_e_confirma_antes_de_seguir(self, monkeypatch):
+        """O modelo já quer fechar o resumo, mas o diretor ainda não confirmou
+        que é um bug: o roteiro não começa, e a pergunta de confirmação vem com
+        os dois botões."""
+        client, sb, _ = _cenario(monkeypatch)
+        _ia(
+            monkeypatch,
+            _turno(
+                confirmada=False,
+                mensagem="Pelo que você contou, é um bug na Ouvidoria. É isso?",
+                opcoes=CONFIRMAR,
+                pronto=True,
+                campos={"onde": "Ouvidoria", "o_que_aconteceu": "O botão sumiu"},
+            ),
+        )
+
+        resposta = client.post(CHAT, json={"texto": "O botão de responder sumiu da Ouvidoria"})
+
+        assert resposta.status_code == 201, resposta.text
+        corpo = resposta.json()
+        assert corpo["estado"] == "em_andamento"
+        assert corpo["resumo"] is None
+        assert corpo["mensagens"][-1]["opcoes"] == CONFIRMAR
+        assert _demandas(sb)[0]["tipo"] == "defeito"
+
+    def test_a_melhoria_classificada_faz_nascer_a_demanda_novo(self, monkeypatch):
+        client, sb, _ = _cenario(monkeypatch)
+        _ia(monkeypatch, _turno(classificacao="melhoria", confirmada=False, opcoes=["Sim", "Não"]))
+
+        assert client.post(CHAT, json={"texto": "Queria um aviso quando a ata sair"}).status_code == 201
+
+        assert _demandas(sb)[0]["tipo"] == "novo"
+
+    def test_confirmado_o_bug_vem_a_primeira_pergunta_do_roteiro(self, monkeypatch):
+        client, sb, _ = _cenario(monkeypatch)
+        _ia(monkeypatch, _turno(confirmada=False, opcoes=CONFIRMAR))
+        demanda_id = client.post(CHAT, json={"texto": "O botão sumiu"}).json()["demanda_id"]
+        _ia(monkeypatch, _turno(confirmada=True, mensagem="Em que tela isso aconteceu?"))
+
+        resposta = client.post(f"{CHAT}/{demanda_id}", json={"texto": "Sim, é um bug"})
+
+        assert resposta.status_code == 200, resposta.text
+        falas = resposta.json()["mensagens"]
+        assert [f["texto"] for f in falas[-2:]] == ["Sim, é um bug", "Em que tela isso aconteceu?"]
+        assert len(_conversas(sb)[0]["mensagens"]) == 5

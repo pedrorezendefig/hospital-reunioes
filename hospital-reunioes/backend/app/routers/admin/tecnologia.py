@@ -2835,6 +2835,109 @@ async def comecar_o_chat(
     return _chat_para_a_tela(supabase, demanda_id, linha)
 
 
+MOTIVO_CHAT_NAO_ENCONTRADO = "Esta conversa não foi encontrada. Comece uma nova na aba Tecnologia."
+MOTIVO_CHAT_NO_RESUMO = "O resumo já está pronto. Clique em Criar o card, ou em Não bateu para corrigir."
+MOTIVO_CHAT_TERMINOU = "Esta conversa já virou card. Comece uma nova na aba Tecnologia."
+MOTIVO_CHAT_MUDOU = "A conversa mudou em outra aba. Recarregue a página e tente de novo."
+
+
+def _chat_guardado(supabase: Client, demanda_id: str) -> tuple[dict, dict]:
+    """A Demanda e a conversa do chat dela, ou 404.
+
+    A conversa do Planejamento mora na mesma tabela (ADR 0077, decisao 2), e
+    nao e um chat: abri-la por aqui misturaria as duas conversas.
+    """
+    demanda = _buscar_demanda(supabase, demanda_id)
+    linha = planejamento_demanda.ler(supabase, demanda_id)
+    if not chat_tecnologia.e_do_chat(linha):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=MOTIVO_CHAT_NAO_ENCONTRADO)
+    return demanda, linha
+
+
+def _acompanhar_o_turno(supabase: Client, demanda: dict, resultado: chat_tecnologia.ResultadoDoTurno) -> None:
+    """A Demanda acompanha a conversa: o Tipo da classificacao, o Produto que o
+    agente escolheu e o titulo. So o que mudou e escrito."""
+    novo = {
+        "tipo": chat_tecnologia.TIPO_DA_CLASSIFICACAO[resultado.classificacao],
+        "produto_id": resultado.produto_id or demanda.get("produto_id"),
+        "titulo": resultado.titulo or demanda.get("titulo"),
+    }
+    mudancas = {campo: valor for campo, valor in novo.items() if valor != demanda.get(campo)}
+    if mudancas:
+        supabase.table(TABELA_DEMANDAS).update(mudancas).eq("id", demanda["id"]).execute()
+
+
+@router.get("/chat/{demanda_id}", response_model=ChatResponse)
+async def ler_o_chat(
+    demanda_id: str,
+    _ator: dict = Depends(require_super_admin),
+    supabase: Client = Depends(get_supabase_client),
+):
+    """A conversa guardada, para retomar de onde parou."""
+    _demanda, linha = _chat_guardado(supabase, demanda_id)
+    return _chat_para_a_tela(supabase, demanda_id, linha)
+
+
+@router.post("/chat/{demanda_id}", response_model=ChatResponse)
+@limiter.limit(LIMITE_DO_ASSISTENTE)
+async def responder_no_chat(
+    request: Request,
+    demanda_id: str,
+    payload: ChatTurnoPayload,
+    ator: dict = Depends(require_super_admin),
+    supabase: Client = Depends(get_supabase_client),
+):
+    """Um turno: a fala do diretor entra, a da IA volta.
+
+    A conversa so e gravada depois que o turno deu certo: falha do provedor ou
+    resposta fora do esquema devolve 502 com a frase para a tela, e o que
+    estava guardado fica como estava. O custo da chamada e gravado nos dois
+    casos.
+    """
+    demanda, atual = _chat_guardado(supabase, demanda_id)
+    if atual.get("estado") == planejamento_demanda.ESTADO_RESUMIDO:
+        _conflito(MOTIVO_CHAT_NO_RESUMO)
+    if atual.get("estado") != planejamento_demanda.ESTADO_EM_ANDAMENTO:
+        _conflito(MOTIVO_CHAT_TERMINOU)
+
+    mensagens = list(atual.get("mensagens") or [])
+    texto = (payload.texto or "").strip()
+    if texto:
+        mensagens.append(chat_tecnologia.fala_do_diretor(texto))
+    elif mensagens[-1].get("tipo") == "ia":
+        # Sem texto e sem fala do diretor esperando: nao ha o que a IA responder.
+        _recusar(chat_tecnologia.MOTIVO_SEM_TEXTO)
+
+    resultado = await ai_processor.chamar_ia_fora_do_loop(
+        chat_tecnologia.turno,
+        mensagens=mensagens,
+        kit=carregar_kit(),
+        produtos=_produtos_ativos(supabase),
+        titulo_atual=demanda.get("titulo"),
+        demanda_id=demanda_id,
+    )
+    if resultado.chamada is not None:
+        planejamento_demanda.gravar_chamada(supabase, resultado.chamada)
+    if resultado.erro:
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=resultado.erro)
+
+    linha = planejamento_demanda.gravar(
+        supabase,
+        demanda_id,
+        atual=atual,
+        novo={
+            "estado": _estado_depois_do_turno(resultado),
+            "mensagens": [*mensagens, resultado.mensagem],
+            "resumo": resultado.resumo or atual.get("resumo"),
+            "atualizado_em": _agora(),
+        },
+    )
+    if linha is None:
+        _conflito(MOTIVO_CHAT_MUDOU)
+    _acompanhar_o_turno(supabase, demanda, resultado)
+    return _chat_para_a_tela(supabase, demanda_id, linha)
+
+
 # A lista de extensoes e os dois tetos vem do EXTRATOR, e nao sao escritos de
 # novo aqui: e o mesmo modulo que le o arquivo depois, e duas copias da regra
 # divergiriam calado (o 413 recusaria o que o 422 aceitaria, ou o contrario).
