@@ -36,7 +36,8 @@ function itemValido(item: unknown): item is Demanda {
 
 /**
  * A Etapa na lista. Aqui "Registrada" aparece escrita: é a conversa sem card,
- * e a lista mostra a Etapa de toda conversa (no Quadro ela é a ausência de selo).
+ * e a lista mostra a Etapa de toda conversa (na conversa aberta ela é a
+ * ausência de selo).
  */
 function EtapaNaLista({ demanda }: { demanda: Demanda }) {
   const comSelo = temSelo(demanda);
