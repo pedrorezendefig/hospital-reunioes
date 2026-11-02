@@ -2,6 +2,54 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-11-02T20:02:28-03:00",
+      "sha": "0d5a8399e18faec292a2eed8bfdf6cc8a22e6347",
+      "app_version": "0.209.0",
+      "subject": "Onda tecnologia-chat-onda2: A lista lateral das conversas da Tecnologia, retomar e acompanhar",
+      "raw_subject": "chore(deploy): registro da onda tecnologia-chat-onda2 (#1391)",
+      "scope": [
+        "backend",
+        "frontend"
+      ],
+      "prds": [
+        1380
+      ],
+      "result": "healthy",
+      "duration_seconds": 244,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        },
+        {
+          "service": "frontend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "onda-enxuta tecnologia-chat-onda2: PR #1391 (issue #1384), mergeados PR a PR. Merge pela API do GitHub, um build. Registro pela Action pos-merge depois do health.",
+      "etapas": {
+        "merge_s": 2,
+        "build_s": {
+          "backend": 207,
+          "frontend": 183
+        },
+        "health_s": 20
+      },
+      "responsavel": "pedrorezendefig"
+    },
+    {
       "at": "2026-11-02T19:49:32-03:00",
       "sha": "d5392128b70fc5c7d425e6240b6683d702c13e2a",
       "app_version": "0.208.0",
