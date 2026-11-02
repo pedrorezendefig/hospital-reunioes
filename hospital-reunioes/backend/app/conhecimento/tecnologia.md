@@ -20,7 +20,9 @@ Na melhoria, a conversa vira o Planejamento da Demanda ali mesmo, sem trocar de 
 
 O resumo da melhoria mostra as decisões que você tomou e o que ficou em aberto, que são os pontos que a IA não chegou a perguntar. O que você não decidiu nunca aparece como decisão. Os botões são os mesmos do bug: **Criar o card** manda o pedido completo para a Vitta, que ainda planeja a parte técnica antes de começar, e **Não bateu** volta à conversa para acertar o que estiver errado.
 
-A conversa fica guardada. Se a IA não conseguir responder, a tela avisa, a conversa continua como estava e o que você escreveu fica na caixa: é só mandar de novo.
+Se a IA não conseguir responder, a tela avisa, a conversa continua como estava e o que você escreveu fica na caixa: é só mandar de novo.
+
+A conversa fica guardada. Ao lado dela fica a lista de tudo o que você já pediu, do mais recente para o mais antigo, com o título e a Etapa de cada pedido. Uma conversa que ficou no meio aparece como Registrada: clique nela e você continua de onde parou. Num pedido que já foi para a Vitta, o clique mostra a conversa e O que muda, que é o que a entrega acrescenta para você; enquanto a Vitta não escreve esse texto, aparece "Descrição em preparação". O botão **Nova conversa**, no alto da lista, começa um pedido do zero. No celular a lista abre primeiro, e o botão Voltar às conversas leva de volta a ela.
 
 ## O que é uma Demanda
 
@@ -161,6 +163,7 @@ O Manual do usuário tem uma seção da Tecnologia, com o passo a passo de cada 
 - O bug que sai do Criar o card vai direto para o desenvolvimento, sem ninguém da Vitta precisar assumir antes.
 - Na melhoria, a IA faz no máximo 12 perguntas, e a melhoria que sai do Criar o card ainda passa pelo planejamento técnico da Vitta antes de começar.
 - A conversa do assistente de Nova Demanda não fica guardada; a conversa com o Assistente e a do planejamento ficam guardadas na Demanda.
+- A lista ao lado da conversa mostra os pedidos de quem está olhando, e a Etapa de cada um vem do desenvolvimento, sem ninguém escrever à mão.
 - Uma Demanda se liga a um trabalho de desenvolvimento só, e a Etapa é lida de lá, nunca digitada.
 - O que se escreve do lado do desenvolvimento não volta para a Conversa, e o que volta é a mudança de Etapa.
 - A única troca automática de raia é a volta para quem pediu, em Aguardando, quando a entrega fica Em produção.

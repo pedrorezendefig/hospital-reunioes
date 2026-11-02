@@ -764,3 +764,12 @@ class TestKitDaTecnologia:
         secao = texto.split("## A conversa com o Assistente", 1)[1].split("\n## ", 1)[0]
         for trecho in ("bug ou uma melhoria", "no máximo cinco perguntas", "Criar o card", "Não bateu"):
             assert trecho in secao, trecho
+
+    def test_o_kit_diz_que_a_lista_ao_lado_retoma_e_acompanha(self):
+        """Issue #1384: sem a lista no kit, o Assistente diria ao diretor que
+        a conversa não volta, ou não saberia onde ele acompanha o pedido."""
+        texto = (CONHECIMENTO_DIR / "tecnologia.md").read_text(encoding="utf-8")
+
+        secao = texto.split("## A conversa com o Assistente", 1)[1].split("\n## ", 1)[0]
+        for trecho in ("lista", "Nova conversa", "de onde parou", "O que muda", "Descrição em preparação"):
+            assert trecho in secao, trecho
