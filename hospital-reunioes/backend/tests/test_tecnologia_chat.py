@@ -162,6 +162,42 @@ class TestDescricaoLivre:
         assert corpo["mensagens"][-1]["opcoes"] == CONFIRMAR
         assert _demandas(sb)[0]["tipo"] == "defeito"
 
+    def test_o_modelo_nao_confirma_pelo_diretor_no_primeiro_turno(self, monkeypatch):
+        """O diretor ainda não viu classificação nenhuma: o `confirmada` do
+        modelo não vale, e o resumo pronto no mesmo turno não sai. A regra é
+        do código, e não do prompt."""
+        client, sb, gh = _cenario(monkeypatch)
+        _ia(
+            monkeypatch,
+            _turno(
+                confirmada=True,
+                mensagem="Pelo que você contou, é um bug na Ouvidoria. É isso?",
+                opcoes=CONFIRMAR,
+                pronto=True,
+                campos={"onde": "Ouvidoria", "o_que_aconteceu": "O botão sumiu"},
+            ),
+        )
+
+        resposta = client.post(CHAT, json={"texto": "O botão de responder sumiu da Ouvidoria"})
+
+        assert resposta.status_code == 201, resposta.text
+        corpo = resposta.json()
+        assert corpo["estado"] == "em_andamento"
+        assert corpo["resumo"] is None
+        assert _conversas(sb)[0]["mensagens"][-1]["confirmada"] is False
+        assert client.post(f"{CHAT}/{corpo['demanda_id']}/criar-card").status_code == 409
+        assert gh.criadas == []
+
+    def test_a_melhoria_nao_vai_ao_planejamento_sem_o_diretor_confirmar(self, monkeypatch):
+        client, sb, _ = _cenario(monkeypatch)
+        _ia(monkeypatch, _turno(classificacao="melhoria", confirmada=True, pronto=True, opcoes=["Sim", "Não"]))
+
+        resposta = client.post(CHAT, json={"texto": "Queria um aviso quando a ata sair"})
+
+        assert resposta.status_code == 201, resposta.text
+        assert resposta.json()["planejamento"] is False
+        assert len(_conversas(sb)) == 1
+
     def test_a_melhoria_classificada_faz_nascer_a_demanda_novo(self, monkeypatch):
         client, sb, _ = _cenario(monkeypatch)
         _ia(monkeypatch, _turno(classificacao="melhoria", confirmada=False, opcoes=["Sim", "Não"]))
@@ -595,6 +631,55 @@ class TestMelhoriaVaiAoPlanejamento:
         planejamento = client.get(f"{BASE}/demandas/{demanda_id}/planejamento")
         assert planejamento.status_code == 200
         assert planejamento.json()["estado"] is None
+
+
+class TestConversaDoChatNaoEPlanejamento:
+    """A melhoria classificada e ainda não confirmada já é uma Demanda Novo,
+    que se planeja, com a conversa do chat na tabela do planejamento (ADR
+    0077, decisão 2). Se o diretor sai da aba nesse ponto, o lado do
+    planejamento não pode tomar a conversa do chat por sua."""
+
+    def _melhoria_em_andamento(self, client, monkeypatch) -> str:
+        _ia(monkeypatch, _turno(classificacao="melhoria", confirmada=False, opcoes=["Sim", "Não"]))
+        resposta = client.post(CHAT, json={"texto": "Queria um aviso quando a ata sair"})
+        assert resposta.status_code == 201, resposta.text
+        return resposta.json()["demanda_id"]
+
+    def test_o_card_nao_mostra_continuar_planejamento(self, monkeypatch):
+        client, sb, _ = _cenario(monkeypatch)
+        demanda_id = self._melhoria_em_andamento(client, monkeypatch)
+        assert _demandas(sb)[0]["tipo"] == "novo"
+
+        por_id = {d["id"]: d for d in client.get(f"{BASE}/demandas").json()}
+
+        assert por_id[demanda_id]["tem_planejamento"] is False
+
+    def test_abrir_o_planejamento_diz_que_a_conversa_e_do_chat(self, monkeypatch):
+        client, _, _ = _cenario(monkeypatch)
+        demanda_id = self._melhoria_em_andamento(client, monkeypatch)
+
+        resposta = client.get(f"{BASE}/demandas/{demanda_id}/planejamento")
+
+        assert resposta.status_code == 409, resposta.text
+        assert "Assistente" in resposta.json()["detail"]
+
+    @pytest.mark.parametrize(
+        ("sufixo", "corpo"),
+        [("", {}), ("/resumo", None), ("/nao", {"texto": "não bateu"}), ("/enviar", None)],
+    )
+    def test_o_planejamento_nao_grava_por_cima_da_conversa_do_chat(self, monkeypatch, sufixo, corpo):
+        client, sb, gh = _cenario(monkeypatch)
+        demanda_id = self._melhoria_em_andamento(client, monkeypatch)
+        antes = json.loads(json.dumps(_conversas(sb)))
+        _ia(monkeypatch, json.dumps({"tipo": "pergunta", "contexto": "Qual o objetivo?", "opcoes": []}))
+
+        resposta = client.post(f"{BASE}/demandas/{demanda_id}/planejamento{sufixo}", json=corpo)
+
+        assert resposta.status_code == 409, resposta.text
+        assert _conversas(sb) == antes
+        assert gh.criadas == []
+        # E o chat segue de onde parou.
+        assert client.get(f"{CHAT}/{demanda_id}").status_code == 200
 
 
 # ═══════════════════════════════════════════════════════════════════════════

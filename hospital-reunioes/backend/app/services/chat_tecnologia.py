@@ -97,12 +97,10 @@ def fala_do_diretor(texto: str) -> dict:
 def e_do_chat(linha: dict | None) -> bool:
     """Se a conversa guardada e a do chat, e nao a de um Planejamento.
 
-    As duas moram na mesma tabela (ADR 0077, decisao 2). A do chat sempre abre
-    pela pergunta "bug ou melhoria?", que e uma fala `ia`; a do planejamento
-    abre por uma `pergunta`.
+    A regra mora no planejamento, que e quem precisa dela para nao tomar a
+    conversa do chat por sua (`planejamento_demanda.e_conversa_do_chat`).
     """
-    mensagens = (linha or {}).get("mensagens") or []
-    return bool(mensagens) and mensagens[0].get("tipo") == "ia"
+    return planejamento_demanda.e_conversa_do_chat(linha)
 
 
 def classificacao_atual(mensagens: list[dict]) -> tuple[str | None, bool]:
@@ -315,7 +313,14 @@ def turno(
 
     anterior, confirmada_antes = classificacao_atual(mensagens)
     classificacao = escolha or saida.classificacao
-    confirmada = escolha is not None or saida.confirmada or (confirmada_antes and classificacao == anterior)
+    # So o diretor confirma. O botao da abertura ja e a confirmacao; fora dele,
+    # o `confirmada` do modelo so vale quando o diretor ja viu uma
+    # classificacao numa fala anterior da IA e respondeu a ela. No primeiro
+    # turno de texto livre ele nao viu nenhuma, e o modelo nao confirma por ele.
+    ja_viu = anterior is not None
+    confirmada = escolha is not None or (
+        ja_viu and (saida.confirmada or (confirmada_antes and classificacao == anterior))
+    )
     ids = {p["id"] for p in produtos}
     titulo = _texto_limpo(saida.titulo, LIMITE_DO_TITULO) or titulo_atual or TITULO_SEM_RESPOSTA
 

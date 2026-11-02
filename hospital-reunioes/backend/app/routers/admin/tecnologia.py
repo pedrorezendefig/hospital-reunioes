@@ -2522,6 +2522,26 @@ def _conflito(motivo: str) -> NoReturn:
     raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=motivo)
 
 
+MOTIVO_CONVERSA_DO_CHAT = (
+    "Esta Demanda tem uma conversa em andamento com o Assistente. Continue por lá, na aba Tecnologia."
+)
+
+
+def _planejamento_guardado(supabase: Client, demanda_id: str) -> dict | None:
+    """O planejamento da Demanda, ou `None`, e 409 se a conversa guardada for a
+    do chat da aba (issue #1381).
+
+    As duas moram na mesma tabela (ADR 0077, decisao 2), e a melhoria que o
+    chat classificou ja e uma Demanda Novo, que se planeja. Sem esta guarda, o
+    planejamento leria as falas do chat contra o esquema dele (500) e gravaria
+    as dele por cima.
+    """
+    linha = planejamento_demanda.ler(supabase, demanda_id)
+    if planejamento_demanda.e_conversa_do_chat(linha):
+        _conflito(MOTIVO_CONVERSA_DO_CHAT)
+    return linha
+
+
 @router.get("/demandas/{demanda_id}/planejamento", response_model=PlanejamentoResponse)
 @limiter.limit(LIMITE_DO_ASSISTENTE)
 async def ler_planejamento(
@@ -2532,7 +2552,7 @@ async def ler_planejamento(
 ):
     """A conversa guardada na Demanda, para retomar de onde parou (decisao 3)."""
     demanda = _buscar_demanda(supabase, demanda_id)
-    return _planejamento_para_a_tela(demanda, planejamento_demanda.ler(supabase, demanda_id))
+    return _planejamento_para_a_tela(demanda, _planejamento_guardado(supabase, demanda_id))
 
 
 @router.post("/demandas/{demanda_id}/planejamento", response_model=PlanejamentoResponse)
@@ -2556,7 +2576,7 @@ async def responder_no_planejamento(
     if motivo:
         _conflito(motivo)
 
-    atual = planejamento_demanda.ler(supabase, demanda_id)
+    atual = _planejamento_guardado(supabase, demanda_id)
     if atual is not None and atual.get("estado") != planejamento_demanda.ESTADO_EM_ANDAMENTO:
         _conflito(planejamento_demanda.MOTIVO_PLANEJAMENTO_TERMINOU)
 
@@ -2612,7 +2632,7 @@ async def resumir_planejamento(
     if motivo:
         _conflito(motivo)
 
-    atual = planejamento_demanda.ler(supabase, demanda_id)
+    atual = _planejamento_guardado(supabase, demanda_id)
     estado = (atual or {}).get("estado")
     if estado == planejamento_demanda.ESTADO_RESUMIDO:
         _conflito(planejamento_demanda.MOTIVO_RESUMO_PRONTO)
@@ -2668,7 +2688,7 @@ async def recusar_resumo_do_planejamento(
     if not texto:
         _recusar(planejamento_demanda.MOTIVO_NAO_SEM_TEXTO)
 
-    atual = planejamento_demanda.ler(supabase, demanda_id)
+    atual = _planejamento_guardado(supabase, demanda_id)
     if atual is None or atual.get("estado") != planejamento_demanda.ESTADO_RESUMIDO:
         _conflito(planejamento_demanda.MOTIVO_SEM_RESUMO)
 
@@ -2717,7 +2737,7 @@ async def enviar_planejamento(
     if motivo:
         _conflito(motivo)
 
-    atual = planejamento_demanda.ler(supabase, demanda_id)
+    atual = _planejamento_guardado(supabase, demanda_id)
     resumo = (atual or {}).get("resumo")
     if atual is None or atual.get("estado") != planejamento_demanda.ESTADO_RESUMIDO or not resumo:
         _conflito(planejamento_demanda.MOTIVO_SEM_RESUMO)

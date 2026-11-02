@@ -526,24 +526,41 @@ def ler(supabase, demanda_id: str) -> dict | None:
     return (result.data or [None])[0]
 
 
-def demandas_com_planejamento(supabase, demanda_ids: list[str]) -> set[str]:
-    """Quais destas Demandas ja tem conversa guardada (issue #1348).
+def e_conversa_do_chat(linha: dict | None) -> bool:
+    """Se a conversa guardada e a do chat da aba, e nao a de um Planejamento.
 
-    E o que faz o botao do card virar "Continuar planejamento". Nunca levanta:
-    sem a resposta daqui o card mostra "Planejar com a IA", que abre a MESMA
-    tela e retoma a conversa do mesmo jeito, e a lista da aba nao pode cair por
-    causa de um rotulo.
+    As duas moram nesta tabela (ADR 0077, decisao 2). A do chat sempre abre
+    pela pergunta "bug ou melhoria?", que e uma fala `ia`; a do planejamento
+    abre por uma `pergunta`. Uma melhoria classificada ainda e Demanda Novo,
+    que se planeja: sem esta regra, o lado do planejamento leria (e gravaria
+    por cima de) uma conversa que nao e a dele.
+    """
+    mensagens = (linha or {}).get("mensagens") or []
+    return bool(mensagens) and mensagens[0].get("tipo") == "ia"
+
+
+def demandas_com_planejamento(supabase, demanda_ids: list[str]) -> set[str]:
+    """Quais destas Demandas ja tem conversa de planejamento guardada (issue #1348).
+
+    E o que faz o botao do card virar "Continuar planejamento". A conversa do
+    chat da aba nao conta: ela e retomada pelo chat, e nao pelo planejamento.
+    Nunca levanta: sem a resposta daqui o card mostra "Planejar com a IA", que
+    abre a MESMA tela e retoma a conversa do mesmo jeito, e a lista da aba nao
+    pode cair por causa de um rotulo.
     """
     if not demanda_ids:
         return set()
     try:
         result = (
-            supabase.table(TABELA_PLANEJAMENTOS).select("demanda_id").in_("demanda_id", sorted(demanda_ids)).execute()
+            supabase.table(TABELA_PLANEJAMENTOS)
+            .select("demanda_id, mensagens")
+            .in_("demanda_id", sorted(demanda_ids))
+            .execute()
         )
     except Exception:
         logger.exception("Falha ao ler quais Demandas tem planejamento")
         return set()
-    return {str(linha["demanda_id"]) for linha in (result.data or [])}
+    return {str(linha["demanda_id"]) for linha in (result.data or []) if not e_conversa_do_chat(linha)}
 
 
 def gravar(supabase, demanda_id: str, *, atual: dict | None, novo: dict) -> dict | None:
