@@ -434,3 +434,56 @@ class TestCriarOCard:
 
         assert len(gh.criadas) == 1
 
+
+CPF = "529.982.247-25"
+NOME = "maria aparecida ferreira"
+
+
+class TestPeneiraPublicaEAnexos:
+    def test_a_peneira_publica_roda_no_texto_antes_da_criacao(self, monkeypatch):
+        """O repositório é público: o CPF e o nome que o diretor transcreveu
+        de uma tela saem como marcador, no corpo e no título."""
+        client, _, gh = _cenario(monkeypatch)
+        demanda_id = _comecar(client, monkeypatch, titulo=f"Ficha de {NOME} não abre")
+        _responder(
+            client,
+            monkeypatch,
+            demanda_id,
+            "Não abre",
+            titulo=f"Ficha de {NOME} não abre",
+            pronto=True,
+            campos={**CAMPOS_RESPONDIDOS, "o_que_aconteceu": f"A ficha de {NOME}, CPF {CPF}, não abre"},
+        )
+
+        assert client.post(f"{CHAT}/{demanda_id}/criar-card").status_code == 200
+
+        [issue] = gh.criadas
+        for dado in (CPF, NOME, "maria", "ferreira"):
+            assert dado not in issue["corpo"].lower(), dado
+            assert dado not in issue["titulo"].lower(), dado
+        assert "- **O que aconteceu:** A ficha de [NOME], CPF [CPF], não abre" in issue["corpo"]
+        assert issue["titulo"] == "Ficha de [NOME] não abre"
+
+    @pytest.mark.usefixtures("_visao_dublada")
+    def test_a_issue_diz_quantas_imagens_ha_na_demanda_sem_nenhum_binario(self, monkeypatch):
+        client, sb, gh = _cenario(monkeypatch)
+        demanda_id = _comecar(client, monkeypatch)
+        prints = [_print_lido(client) for _ in range(2)]
+        _ia(monkeypatch, _turno(mensagem="Como repetir?"))
+        assert (
+            client.post(
+                f"{CHAT}/{demanda_id}",
+                json={"texto": "[print] Tela sem o botão", "prints": [p["print_id"] for p in prints]},
+            ).status_code
+            == 200
+        )
+        _responder(client, monkeypatch, demanda_id, "Abrindo o caso", pronto=True, campos=CAMPOS_RESPONDIDOS)
+
+        assert client.post(f"{CHAT}/{demanda_id}/criar-card").status_code == 200
+
+        corpo = gh.criadas[0]["corpo"]
+        assert "Anexos: 2 imagens na Demanda" in corpo
+        caminhos = [a["storage_path"] for a in sb.tabelas["tecnologia_anexos"]]
+        for vestigio in (*caminhos, "Captura de tela", "storage", "base64", ".png"):
+            assert vestigio not in corpo, vestigio
+
