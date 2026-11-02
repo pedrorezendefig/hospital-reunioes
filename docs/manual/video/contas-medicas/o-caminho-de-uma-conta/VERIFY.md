@@ -1,9 +1,34 @@
-# VERIFY: O caminho de uma conta (Vídeo de visão geral de Contas médicas)
+# VERIFY: Contas médicas
 
-- Draft: docs/manual/public/video/contas-medicas/o-caminho-de-uma-conta.mp4 em --quality draft, 96 s, sha256 51fcd454087f; conferido pelo anel, pelas strips e pelos quadros; o render final ocupou o mesmo caminho
-- Check (HyperFrames 0.8.41): 0 erros, 0 avisos (lint, runtime, layout, motion; contraste AA 10/10); gate do anel OK (`tools/anel_video_manual.py`)
-- Strips: 21 cortes, gate OK no draft e no final; olhei corte-01 a corte-21. A placa da legenda fica parada na troca de passo e só número e texto trocam; a janela entra com rastro saindo do branco da abertura; as trocas de tela (Contas médicas da Renata para a da Marta, Contas médicas para Painel, Painel para a Fila, Fila para o guia, guia para a próxima conta, próxima conta para Contas médicas da Marta, Contas médicas para Validação) têm rastro, a que sai desfoca para a esquerda e a que entra vem da direita; o nome no alto troca de renata.lima para marta.queiroz no corte-06; o fecho corta para o cartão branco do carimbo, sem quadro preto.
-- Quadros a cada 3 s: a ordem é enviar contas e prontuários, ler o Painel, corrigir pelo guia e decidir na Validação. Anel na área tracejada, no Último envio, na linha do atendimento 900412 em Na fila e depois em A fazer, em Painel, nos quatro cartões do topo e depois em Nota média de entrada e em R$ apontado, em R$ apontado por causa-raiz, na linha 900412 da Fila, nos três números do guia, na linha Não procede da agulha, em Atendimento 900398 (a próxima conta), em Validação, nos três números da Validação antes e depois da decisão. O dedo toca Painel, Abrir, o código 90123456 (aviso Código copiado), Feito, Não procede, A regra é outra, Confirmar, Concluir e abrir a próxima (aviso Conta concluída), Validação, Validar regra e Confirmar e validar. O arrasto mostra um cartão de arquivo com o número 3; a área acende, mostra Enviando 3 arquivos e lendo cada PDF e o Último envio aparece com as frases do servidor (conta e prontuário, falta o prontuário). Os números da Validação vão de 4 / 3 / R$ 2.813,00 para 3 / 1 / R$ 389,00. Telas conferidas contra as composições de Contas médicas do commit 72a3781f (feitas em 14/10/2026 contra a v0.196.1, a mesma em produção, sem mudança no frontend desde então) e contra `app/contas-medicas/page.tsx`, `lib/contas-medicas/envio.ts` (rótulos Na fila e A fazer) e `services/contas_medicas/envio.py` (frases do Último envio).
-- Texto da tela: as 12 legendas, os 4 lower-thirds, a abertura e o carimbo passaram pelo humanizer e pela varredura anti-técnica, sem achados; sem travessão nem meia-risca. Toda palavra em negrito existe na tela.
-- Ressalvas: duas pessoas de exemplo, porque o caminho muda de papel: a Renata (faturista) envia e corrige, a Marta (gestão de contas médicas) lê o Painel e decide; o lower-third diz quem está na tela, e a casca é a mesma porque as duas veem o mesmo menu. O tempo entre Na fila e A fazer (minutos no app) vira um corte de estado, e a legenda 3 diz isso. A volta à tela Contas médicas não mostra mais o Último envio, como o app, que esquece o quadro ao sair da tela. Os números do Painel e da Validação são de exemplo, coerentes com o guia (a diária em validação de R$ 1.212,00 é metade dos R$ 2.424,00 da regra pendente, duas contas).
-- Render final: docs/manual/public/video/contas-medicas/o-caminho-de-uma-conta.mp4 (--quality high), 96 s, sha256 2476e6d62e27; strips refeitas no final, gate OK; master em local/manual-video-masters/contas-medicas/o-caminho-de-uma-conta.mp4
+- tsc: 0 erros no projeto de trabalho, e 0 erros num projeto refeito do zero
+  pelo "Como refazer" do `roteiro.md` (modelo da skill motion +
+  `cena/projeto/identidade.patch` + `cena/*.tsx` + `tempos.json` + o
+  `video-alvos.json` do roteiro de prints).
+- Stills e draft: folhas de contato do draft (meio de cada cena e cortes) e
+  quadros avulsos; telas iguais ao app de produção (0.206.x) na faixa de id de
+  Contas médicas, o destaque azul contorna o elemento que a fala cita (envio,
+  cartão e os dois quadrados, Abrir, nota de entrada, verbo, Feito, Ver
+  evidência, Não procede, Bloqueado, Concluir, Devolver à fila, Erro, Analisar
+  de novo, Copiar para a TI, Validação, lembretes, Painel), fala legível
+  palavra a palavra, logo inteira e parada só na assinatura.
+- Copy: nota 13 de 14 (`roteiro.md`); humanizer e varredura anti-técnica
+  (narração e texto de tela) sem achados; sem travessão nem meia-risca.
+- gate-video.sh `--parada 139-141.9`: fps 30/1,30/1; sem congelamento fora da
+  parada (parada medida de 139,33 s a 141,89 s); tocou no Chrome real
+  (`duracao` 141.888, sem erro).
+  - Primeiro render reprovou: 11 congelamentos de 0,5 a 1,1 s no fim de cada
+    cena (o empurrão da câmera tinha easing e assentava antes da saída; na
+    cena 1 a lista assentava parada). Consertado com o empurrão em velocidade
+    constante até o fim da sequência (`pecas.tsx`) e na lista do gancho.
+  - O passo de fps do `gate-video.sh` reprovava todo MP4 do Remotion: o
+    `side_data` vazio deixa o csv do ffprobe em `30/1,30/1,`. O script agora
+    corta nos dois primeiros campos (conferido: 25 fps continua reprovando).
+- Orçamento (`bash docs/manual/publicar.sh --dry-run`): 5,5 MB depois do
+  reencode (teto 10 MB); vídeos somam 21 MB (teto 60 MB); publicação 43 MB
+  (teto 90 MB).
+- Render final: ~/Videos/Hospital/Manual/contas-medicas/o-caminho-de-uma-conta.mp4,
+  141,9 s, 63,6 MB, sha256 ae7f166faaed. O master de 14/10 foi para
+  `anteriores/2026-10-14-o-caminho-de-uma-conta.mp4`.
+- Ressalvas: o ok do Pedro no rascunho (parada humana da decisão 14 do grill)
+  ainda não veio; o ajuste de estilo que ele pedir entra na receita e neste
+  vídeo antes da subida.

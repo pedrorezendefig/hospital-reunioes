@@ -1,5 +1,10 @@
 {
-  "id": "manual-contas-medicas-o-caminho-de-uma-conta",
-  "name": "Manual · Contas médicas · O caminho de uma conta",
-  "createdAt": "2026-10-14T06:00:00-03:00"
+  "modulo": "contas-medicas",
+  "slug": "o-caminho-de-uma-conta",
+  "pagina": "contas-medicas/index.md",
+  "prds_cobertos": [1113, 1128, 1129, 1259, 1303, 1335, 1365],
+  "app_version": "0.206.2",
+  "gerado_em": "2026-11-02T11:45:00-03:00",
+  "duracao_s": 142,
+  "paradas": ["139-141.9"]
 }

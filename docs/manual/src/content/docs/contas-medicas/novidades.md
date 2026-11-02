@@ -1,11 +1,20 @@
 ---
 title: Novidades
 description: O que mudou em Contas médicas, da entrega mais recente para a mais antiga.
-prd: [1113, 1128, 1129, 1303, 1335]
-draft: false
+prd: [1113, 1128, 1129, 1303, 1335, 1365]
+draft: true
 sidebar:
   order: 90
 ---
+
+## 02/11/2026 · O vídeo da abertura mostra o módulo inteiro, com narração
+
+O vídeo no alto da página [Contas médicas](../) foi refeito. Em menos de três
+minutos, com voz e com a fala escrita na tela, ele segue uma conta do envio ao
+Painel: o cartão com um quadrado para a conta e outro para o prontuário, a
+Fila de todas as faturistas, o guia e as marcações, o **Devolver à fila**, a
+conta em **Erro** com o **Analisar de novo**, a **Validação**, a
+**Coordenação** e o **Painel**.
 
 ## 01/11/2026 · A conta com erro diz o motivo e tem código para a TI
 

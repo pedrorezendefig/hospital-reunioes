@@ -30,7 +30,8 @@ FALHOU=""
 
 echo "== 1. fps constante 30"
 FPS=$(ffprobe -v error -select_streams v:0 \
-  -show_entries stream=r_frame_rate,avg_frame_rate -of csv=p=0 "$VIDEO")
+  -show_entries stream=r_frame_rate,avg_frame_rate -of csv=p=0 "$VIDEO" | cut -d, -f1-2)
+# cut: o MP4 do Remotion traz um side_data vazio e o csv sai "30/1,30/1," (vírgula sobrando)
 if [ "$FPS" = "30/1,30/1" ]; then
   echo "ok ($FPS)"
 else
