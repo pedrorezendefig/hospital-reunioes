@@ -3,6 +3,7 @@ title: Tecnologia
 description: Onde o hospital e a Vitta conversam sobre os sistemas, cada pedido com dono, raia e resposta guardada.
 prd: [634, 673, 726, 1056, 1344]
 draft: false
+video: o-caminho-de-uma-demanda
 sidebar:
   order: 1
 ---
