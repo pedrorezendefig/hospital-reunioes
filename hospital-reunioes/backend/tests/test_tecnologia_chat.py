@@ -20,7 +20,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from test_planejamento_demanda import _ia  # noqa: E402
 from test_tecnologia_anexos import PNG, _StorageFake  # noqa: E402
-from test_tecnologia_vinculo import BASE, DIRETOR, _montar  # noqa: E402
+from test_tecnologia_vinculo import BASE, DIRETOR, PEDRO, _demanda, _montar  # noqa: E402
 
 from app.config import settings  # noqa: E402
 from app.limiter import limiter  # noqa: E402
@@ -686,7 +686,72 @@ class TestConversaDoChatNaoEPlanejamento:
 
 
 # ═══════════════════════════════════════════════════════════════════════════
-# 6. O Kit de conhecimento
+# 6. A lista lateral das conversas (issue #1384)
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+class TestListaDasConversas:
+    """A lista ao lado do chat: as Demandas de quem está logado, com o título e
+    a Etapa, da mais recente para a mais antiga."""
+
+    def test_lista_so_as_demandas_do_logado_da_mais_recente_para_a_mais_antiga(self, monkeypatch):
+        demandas = [
+            _demanda("d-velha", titulo="O relatório some", autor_id=DIRETOR["id"], criado_em="2026-10-01T10:00:00Z"),
+            _demanda(
+                "d-nova",
+                titulo="Aviso quando a ata sair",
+                autor_id=DIRETOR["id"],
+                criado_em="2026-11-01T10:00:00Z",
+                github_issue_numero=900,
+                etapa="em_desenvolvimento",
+            ),
+            _demanda("d-do-pedro", titulo="Pedido da Vitta", autor_id=PEDRO["id"], criado_em="2026-11-02T10:00:00Z"),
+            _demanda("d-meio", titulo="O botão sumiu", autor_id=DIRETOR["id"], criado_em="2026-10-15T10:00:00Z"),
+        ]
+        client, _, _ = _cenario(monkeypatch, demandas=demandas)
+
+        resposta = client.get(CHAT)
+
+        assert resposta.status_code == 200, resposta.text
+        lista = resposta.json()
+        assert [(d["titulo"], d["etapa"]) for d in lista] == [
+            ("Aviso quando a ata sair", "em_desenvolvimento"),
+            ("O botão sumiu", "registrada"),
+            ("O relatório some", "registrada"),
+        ]
+
+    def test_a_conversa_que_nasce_no_chat_entra_na_lista(self, monkeypatch):
+        client, _, _ = _cenario(monkeypatch)
+        demanda_id = _comecar(client, monkeypatch)
+
+        [item] = client.get(CHAT).json()
+
+        assert item["id"] == demanda_id
+        assert item["titulo"] == "Botão de responder some na Ouvidoria"
+        assert item["etapa"] == "registrada"
+
+    def test_o_diretor_ve_o_que_muda_sem_numero_nem_link_da_issue(self, monkeypatch):
+        demandas = [
+            _demanda(
+                "d-1",
+                autor_id=DIRETOR["id"],
+                github_issue_numero=900,
+                github_foto={"url": "https://github.com/x/y/issues/900"},
+                etapa="em_producao",
+                o_que_muda="Agora o aviso chega por e-mail.",
+            )
+        ]
+        client, _, _ = _cenario(monkeypatch, demandas=demandas)
+
+        [item] = client.get(CHAT).json()
+
+        assert item["o_que_muda"] == "Agora o aviso chega por e-mail."
+        assert item["tem_vinculo"] is True
+        assert item["vinculo"] is None
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 7. O Kit de conhecimento
 # ═══════════════════════════════════════════════════════════════════════════
 
 
@@ -698,4 +763,13 @@ class TestKitDaTecnologia:
 
         secao = texto.split("## A conversa com o Assistente", 1)[1].split("\n## ", 1)[0]
         for trecho in ("bug ou uma melhoria", "no máximo cinco perguntas", "Criar o card", "Não bateu"):
+            assert trecho in secao, trecho
+
+    def test_o_kit_diz_que_a_lista_ao_lado_retoma_e_acompanha(self):
+        """Issue #1384: sem a lista no kit, o Assistente diria ao diretor que
+        a conversa não volta, ou não saberia onde ele acompanha o pedido."""
+        texto = (CONHECIMENTO_DIR / "tecnologia.md").read_text(encoding="utf-8")
+
+        secao = texto.split("## A conversa com o Assistente", 1)[1].split("\n## ", 1)[0]
+        for trecho in ("lista", "Nova conversa", "de onde parou", "O que muda", "Descrição em preparação"):
             assert trecho in secao, trecho

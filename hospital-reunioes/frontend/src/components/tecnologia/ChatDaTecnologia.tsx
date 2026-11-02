@@ -13,9 +13,14 @@
  * Planejamento da Demanda: cada pergunta com duas opções e a recomendada em
  * destaque, o campo livre, "Fechar e resumir" fixo no alto, e o resumo com as
  * decisões e o que ficou em aberto, com os mesmos dois botões.
+ *
+ * Com `demandaId`, a conversa vem do servidor e continua de onde parou: é o
+ * clique numa conversa da lista lateral (issue #1384). `onMudou` avisa a lista
+ * a cada turno que valeu, para a Demanda que acabou de nascer aparecer nela.
  */
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import Link from "next/link";
 import { Bot, CheckCircle2, ImagePlus, ListChecks, Loader2, Mic, Send, Square } from "lucide-react";
 
 import { useGravacaoVoz } from "@/hooks/useGravacaoVoz";
@@ -47,7 +52,12 @@ import {
   urlDoNaoBateu,
   urlDoResumoDaMelhoria,
 } from "./chat";
-import { FALHA_DE_CONEXAO, motivoDaRecusa } from "./demandas";
+import { FALHA_DE_CONEXAO, motivoDaRecusa, ROTA_TECNOLOGIA } from "./demandas";
+
+/** A tela do Planejamento de antes, onde segue a conversa que não é do chat. */
+function rotaDoPlanejamento(demandaId: string): string {
+  return `${ROTA_TECNOLOGIA}/planejamento/${encodeURIComponent(demandaId)}`;
+}
 
 // A mesma pergunta que o backend guarda como primeira fala da conversa.
 export const ABERTURA = "Isso é um bug, algo que não funciona como deveria, ou uma melhoria?";
@@ -68,6 +78,7 @@ const ENCERRADO = "A IA já tem o que precisa. O resumo aparece em seguida; se n
 const NENHUMA_DECISAO = "Nenhuma pergunta respondida fechou uma decisão.";
 const NADA_EM_ABERTO = "Nada ficou em aberto.";
 const NAO_SEM_TEXTO = "Diga o que não bateu no resumo.";
+const SEGUE_NO_PLANEJAMENTO = "A conversa deste pedido continua no Planejamento da Demanda, numa tela própria.";
 const CORPO_ILEGIVEL = "O servidor respondeu algo que a tela não conseguiu ler. Recarregue a página.";
 
 const ABERTURA_NA_TELA: FalaDoChat = {
@@ -85,7 +96,7 @@ const ROTULOS_DO_RESUMO: [keyof ResumoDoBug, string][] = [
   ["como_repetir", "Como repetir"],
 ];
 
-function Fala({ fala }: { fala: FalaDoChat }) {
+export function Fala({ fala }: { fala: FalaDoChat }) {
   if (fala.autor === "diretor") {
     return (
       <p className="ml-auto max-w-[85%] px-3 py-2 rounded-2xl bg-primary text-white text-sm whitespace-pre-line">
@@ -279,8 +290,20 @@ function Fechamento({ texto, children }: { texto: string; children?: React.React
   );
 }
 
-export function ChatDaTecnologia({ token }: { token: string | null }) {
+type PropsDoChat = {
+  token: string | null;
+  /** A conversa da lista a retomar; sem ela, o chat abre do zero. */
+  demandaId?: string | null;
+  /** Um turno valeu: a Demanda nasceu ou mudou de título. */
+  onMudou?: (demandaId: string) => void;
+};
+
+/** Como está a leitura da conversa guardada, quando há uma a retomar. */
+type Carga = "carregando" | "pronta" | "sem_chat" | "falhou";
+
+export function ChatDaTecnologia({ token, demandaId = null, onMudou }: PropsDoChat) {
   const [conversa, setConversa] = useState<ConversaDoChat | null>(null);
+  const [carga, setCarga] = useState<Carga>(demandaId ? "carregando" : "pronta");
   const [pensando, setPensando] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
   const [texto, setTexto] = useState("");
@@ -317,6 +340,7 @@ export function ChatDaTecnologia({ token }: { token: string | null }) {
         }
         setConversa(nova);
         if (nova.aviso_dos_anexos) setErro(nova.aviso_dos_anexos);
+        onMudou?.(nova.demanda_id);
         return nova;
       } catch (e) {
         console.error("[admin/tecnologia] falha no chat", e);
@@ -326,7 +350,7 @@ export function ChatDaTecnologia({ token }: { token: string | null }) {
         setPensando(false);
       }
     },
-    [token],
+    [token, onMudou],
   );
 
   /**
@@ -355,6 +379,47 @@ export function ChatDaTecnologia({ token }: { token: string | null }) {
     },
     [enviar, seguir],
   );
+
+  /**
+   * A conversa guardada, para retomar de onde parou. Sem conversa do chat
+   * (404) é a melhoria que já passou ao Planejamento: o caminho segue lá.
+   */
+  useEffect(() => {
+    if (!demandaId || !token) return;
+    let viva = true;
+    (async () => {
+      try {
+        const resposta = await fetch(urlDaConversa(demandaId), { headers: { Authorization: `Bearer ${token}` } });
+        if (!viva) return;
+        if (resposta.status === 404) {
+          setCarga("sem_chat");
+          return;
+        }
+        if (!resposta.ok) {
+          setErro(await motivoDaRecusa(resposta));
+          setCarga("falhou");
+          return;
+        }
+        const guardada = await corpoValidado(resposta, conversaValida);
+        if (!viva) return;
+        if (guardada === null) {
+          setErro(CORPO_ILEGIVEL);
+          setCarga("falhou");
+          return;
+        }
+        setConversa(guardada);
+        setCarga("pronta");
+      } catch (e) {
+        console.error("[admin/tecnologia] falha ao abrir a conversa", e);
+        if (!viva) return;
+        setErro(FALHA_DE_CONEXAO);
+        setCarga("falhou");
+      }
+    })();
+    return () => {
+      viva = false;
+    };
+  }, [demandaId, token]);
 
   /** A fala do diretor: o primeiro turno faz a Demanda nascer, os outros seguem nela. */
   const falar = useCallback(
@@ -434,6 +499,30 @@ export function ChatDaTecnologia({ token }: { token: string | null }) {
       {erro}
     </p>
   );
+
+  if (carga === "carregando") {
+    return (
+      <p role="status" className="flex items-center gap-2 text-sm text-text-secondary">
+        <Loader2 className="w-4 h-4 animate-spin" />
+        Abrindo a conversa...
+      </p>
+    );
+  }
+
+  if (carga === "falhou") return aviso || null;
+
+  if (carga === "sem_chat" && demandaId) {
+    return (
+      <Fechamento texto={SEGUE_NO_PLANEJAMENTO}>
+        <Link
+          href={rotaDoPlanejamento(demandaId)}
+          className="inline-flex items-center px-4 py-2 rounded-xl bg-primary text-white text-sm font-semibold"
+        >
+          Continuar no planejamento
+        </Link>
+      </Fechamento>
+    );
+  }
 
   if (conversa?.estado === "enviado") {
     return (
