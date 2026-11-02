@@ -9,6 +9,7 @@ o que tem. Tudo pela ROTA, com o modelo e o adapter do GitHub falsificados.
 
 from __future__ import annotations
 
+import base64
 import os
 import sys
 from types import SimpleNamespace
@@ -17,6 +18,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from test_tecnologia_chat import (  # noqa: E402
     _cenario,
+    _chamadas,
     _integracao_configurada,  # noqa: F401
     _llm_em_mock,  # noqa: F401
     _reset_rate_limiter,  # noqa: F401
@@ -24,6 +26,7 @@ from test_tecnologia_chat import (  # noqa: E402
 )
 from test_tecnologia_vinculo import BASE  # noqa: E402
 
+from app.config import settings  # noqa: E402
 from app.services import github_client  # noqa: E402
 
 CHAT = f"{BASE}/chat"
@@ -148,3 +151,180 @@ class TestAsQuatroFerramentas:
         assert resultado["tool_use_id"] == "consulta-0-0"
         assert "export function Responder() {}" in resultado["content"]
         assert resposta.json()["mensagens"][-1]["texto"] == "Onde isso aconteceu?"
+
+    def test_buscar_ler_o_contexto_e_a_adr_aceita_chegam_ao_modelo(self, monkeypatch):
+        client, _, _ = _cenario(monkeypatch)
+        repo = _repositorio(
+            monkeypatch,
+            arquivos={
+                "CONTEXT.md": "Demanda: o registro de cada conversa.",
+                "docs/adr/0077-tecnologia-vira-o-chat.md": "---\nstatus: accepted\n---\n# O chat do agente",
+                "docs/adr/0075-planejamento.md": "---\nstatus: superseded\n---\n# O planejamento antigo",
+            },
+            busca=["hospital-reunioes/backend/app/services/chat_tecnologia.py"],
+        )
+        modelo = _modelo(
+            monkeypatch,
+            [
+                [
+                    ("buscar_no_codigo", {"termo": "Roteiro do bug"}),
+                    ("ler_contexto_ou_adr", {}),
+                    ("ler_contexto_ou_adr", {"adr": 77}),
+                    ("ler_contexto_ou_adr", {"adr": 75}),
+                ]
+            ],
+            _turno(),
+        )
+
+        assert client.post(CHAT, json={"escolha": "bug"}).status_code == 201
+
+        assert repo.buscas == ["Roteiro do bug"]
+        busca, contexto, aceita, superada = (r["content"] for r in _resultados(modelo.chamadas[1]))
+        assert "chat_tecnologia.py" in busca
+        assert "Demanda: o registro de cada conversa." in contexto
+        assert "# O chat do agente" in aceita
+        # A ADR que não está aceita não vale como decisão da casa.
+        assert "# O planejamento antigo" not in superada
+
+    def test_o_github_fora_do_ar_nao_derruba_o_turno(self, monkeypatch):
+        client, _, _ = _cenario(monkeypatch)
+        repo = _repositorio(monkeypatch)
+
+        def _fora(_caminho):
+            raise github_client.GithubIndisponivelError("timeout")
+
+        monkeypatch.setattr(github_client, "ler_do_repositorio", _fora)
+        modelo = _modelo(monkeypatch, [[("ler_arquivo", {"caminho": "CONTEXT.md"})]], _turno())
+
+        resposta = client.post(CHAT, json={"escolha": "bug"})
+
+        assert resposta.status_code == 201, resposta.text
+        [resultado] = _resultados(modelo.chamadas[1])
+        assert resultado["is_error"] is True
+        assert repo.lidos == []
+
+    def test_sem_a_integracao_do_github_o_turno_roda_sem_ferramentas(self, monkeypatch):
+        client, _, _ = _cenario(monkeypatch)
+        monkeypatch.setattr(settings, "github_integracao_token", "")
+        modelo = _modelo(monkeypatch, [], _turno())
+
+        assert client.post(CHAT, json={"escolha": "bug"}).status_code == 201
+
+        assert "tools" not in modelo.chamadas[0]
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 2. Os tetos: consultas por turno e tamanho por arquivo
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+class TestOsTetos:
+    def test_o_turno_para_de_consultar_no_teto_e_responde_com_o_que_tem(self, monkeypatch):
+        """O modelo quer consultar vinte vezes; o turno executa oito, e a
+        rodada seguinte vai sem ferramenta, para ele responder."""
+        client, _, _ = _cenario(monkeypatch)
+        repo = _repositorio(monkeypatch, arquivos={"CONTEXT.md": "glossário"})
+        modelo = _modelo(monkeypatch, [[("ler_arquivo", {"caminho": "CONTEXT.md"})]] * 20, _turno())
+
+        resposta = client.post(CHAT, json={"escolha": "bug"})
+
+        assert resposta.status_code == 201, resposta.text
+        assert len(repo.lidos) == 8
+        assert modelo.chamadas[-1]["tool_choice"] == {"type": "none"}
+        assert resposta.json()["mensagens"][-1]["texto"] == "Onde isso aconteceu?"
+
+    def test_o_arquivo_grande_chega_cortado_ao_modelo(self, monkeypatch):
+        client, _, _ = _cenario(monkeypatch)
+        _repositorio(monkeypatch, arquivos={ARQUIVO_DA_OUVIDORIA: "x" * 50_000})
+        modelo = _modelo(monkeypatch, [[("ler_arquivo", {"caminho": ARQUIVO_DA_OUVIDORIA})]], _turno())
+
+        assert client.post(CHAT, json={"escolha": "bug"}).status_code == 201
+
+        [resultado] = _resultados(modelo.chamadas[1])
+        assert resultado["content"].count("x") == 20_000
+        assert "(arquivo cortado em 20000 caracteres)" in resultado["content"]
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 3. Nenhuma ferramenta escreve no repositório
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+def _em_base64(texto: str) -> dict:
+    return {"encoding": "base64", "content": base64.b64encode(texto.encode()).decode()}
+
+
+class _TransporteDoGithub:
+    """O `httpx.request` do adapter, gravando método e URL de cada chamada:
+    a prova de que nenhuma ferramenta escreve é o que sai pelo fio."""
+
+    RESPOSTAS = {
+        "/contents/CONTEXT.md?ref=main": _em_base64("glossário"),
+        "/contents/docs/adr?ref=main": [{"name": "0077-o-chat.md"}],
+        "/contents/docs/adr/0077-o-chat.md?ref=main": _em_base64("---\nstatus: accepted\n---\n# ADR"),
+        "/contents/hospital-reunioes/README.md?ref=main": _em_base64("leia-me"),
+        "/issues?state=open&per_page=100": [{"number": 42, "title": "Aviso da ata"}],
+    }
+
+    def __init__(self):
+        self.pedidos: list[tuple[str, str]] = []
+
+    def __call__(self, metodo, url, **_kw):
+        self.pedidos.append((metodo, url))
+        caminho = url.split("/repos/pedrorezendefig/hospital-reunioes", 1)[-1]
+        if caminho.startswith("https://api.github.com/search/code"):
+            dados = {"items": [{"path": "hospital-reunioes/README.md"}]}
+        else:
+            dados = self.RESPOSTAS[caminho]
+        return SimpleNamespace(status_code=200, json=lambda: dados)
+
+
+class TestNenhumaFerramentaEscreve:
+    def test_as_quatro_ferramentas_so_fazem_get_no_github(self, monkeypatch):
+        client, _, _ = _cenario(monkeypatch)
+        transporte = _TransporteDoGithub()
+        monkeypatch.setattr(github_client.httpx, "request", transporte)
+        _modelo(
+            monkeypatch,
+            [
+                [
+                    ("ler_arquivo", {"caminho": "hospital-reunioes/README.md"}),
+                    ("buscar_no_codigo", {"termo": "Roteiro"}),
+                    ("ler_contexto_ou_adr", {}),
+                    ("ler_contexto_ou_adr", {"adr": 77}),
+                    ("listar_issues_abertas", {}),
+                ]
+            ],
+            _turno(),
+        )
+
+        assert client.post(CHAT, json={"escolha": "bug"}).status_code == 201
+
+        assert len(transporte.pedidos) == 6
+        assert {metodo for metodo, _ in transporte.pedidos} == {"GET"}
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 4. O custo gravado soma as rodadas de ferramenta
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+class TestCusto:
+    def test_o_custo_gravado_soma_as_rodadas_de_consulta(self, monkeypatch):
+        client, sb, _ = _cenario(monkeypatch)
+        monkeypatch.setattr(settings, "llm_model_planejamento", "claude-opus-5-5")
+        _repositorio(monkeypatch, arquivos={"CONTEXT.md": "glossário"})
+        _modelo(
+            monkeypatch,
+            [[("ler_arquivo", {"caminho": "CONTEXT.md"})]],
+            _turno(),
+            usos=[_uso(entrada=1000, saida=100), _uso(entrada=2000, saida=300)],
+        )
+
+        assert client.post(CHAT, json={"escolha": "bug"}).status_code == 201
+
+        [chamada] = _chamadas(sb)
+        assert chamada["tokens_entrada"] == 3000
+        assert chamada["tokens_saida"] == 400
+        # Opus 5.5: 3000 x US$ 4 + 400 x US$ 20, por milhão.
+        assert chamada["custo_usd"] == 0.02
