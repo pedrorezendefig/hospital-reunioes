@@ -785,6 +785,8 @@ _NUMERO_DE_ISSUE = re.compile(r"(?<!&)(?:#|\bGH-)(\d+)", re.IGNORECASE)
 
 SEM_DECISAO_NO_PRD = "Nenhuma pergunta respondida fechou uma decisão."
 NADA_EM_ABERTO_NO_PRD = "Nada ficou em aberto."
+SEM_TERMO_NO_PRD = "Nenhum termo novo."
+SEM_CANDIDATA_NO_PRD = "Nenhuma decisão candidata a ADR."
 
 
 def _linha_do_prd(bruto: str | None) -> str:
@@ -807,8 +809,11 @@ def corpo_do_prd_do_diretor(
     """O corpo da issue que o "sim" do resumo cria (ADR 0075, decisao 1).
 
     E o PRD do diretor, a metade de negocio do PRD: o bloco "Para o diretor",
-    Problema, Solucao, Historias de usuario, Decisoes de negocio e "Ficou em
-    aberto". As secoes tecnicas nascem depois, no terminal, na mesma issue.
+    Problema, Solucao, Historias de usuario, Decisoes de negocio, "Ficou em
+    aberto" e "Para o glossario" (issue #1383, ADR 0077, decisao 7: os termos e
+    as decisoes candidatas a ADR, que o terminal grava no `CONTEXT.md` e nas
+    ADRs). As secoes tecnicas nascem depois, no terminal, na mesma issue.
+    Tambem e o corpo do "Criar o card" da melhoria no chat.
 
     Funcao pura do resumo e da Demanda, sem IA: o que o diretor le na issue e o
     que ele aprovou na tela, palavra por palavra. Nada aqui e escrito por um
@@ -826,6 +831,8 @@ def corpo_do_prd_do_diretor(
         for d in resumo.get("decisoes") or []
     ]
     em_aberto = [item for item in (_linha_do_prd(t) for t in resumo.get("em_aberto") or []) if item]
+    termos = [item for item in (_linha_do_prd(t) for t in resumo.get("termos") or []) if item]
+    candidatas = [item for item in (_linha_do_prd(t) for t in resumo.get("candidatas_a_adr") or []) if item]
 
     precisa_saber = [f"- {escolha}" for _, escolha, _ in decisoes]
     if em_aberto:
@@ -875,10 +882,18 @@ def corpo_do_prd_do_diretor(
             "",
             *([f"- {item}" for item in em_aberto] or [NADA_EM_ABERTO_NO_PRD]),
             "",
+            "## Para o glossário",
+            "",
+            "Termos:",
+            *([f"- {item}" for item in termos] or [f"- {SEM_TERMO_NO_PRD}"]),
+            "",
+            "Decisões candidatas a ADR:",
+            *([f"- {item}" for item in candidatas] or [f"- {SEM_CANDIDATA_NO_PRD}"]),
+            "",
             "## Origem",
             "",
             "Planejado com a IA na aba Tecnologia do aplicativo do hospital e mandado para o desenvolvimento "
-            "pelo sim dado no resumo.",
+            "por quem planejou, depois de conferir o resumo.",
             f"Abrir a Demanda: {link}",
             *(["", frase] if (frase := frase_dos_anexos(anexos)) else []),
             "",

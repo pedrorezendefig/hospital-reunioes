@@ -16,7 +16,9 @@ No bug, a IA faz no máximo cinco perguntas, uma por vez: onde aconteceu, o que 
 
 No fim, a IA mostra um resumo com o que você disse e com os critérios que dizem como se sabe que o bug foi resolvido. Se estiver certo, o botão **Criar o card** manda o bug para o desenvolvimento da Vitta, que começa a trabalhar nele sem ninguém precisar assumir antes. Se alguma coisa estiver errada, o botão **Não bateu** pede para você dizer o quê, a conversa continua e o resumo é refeito. Nada vai para a Vitta antes do clique em Criar o card.
 
-Na melhoria, a IA pergunta em poucas palavras o que você quer e leva o pedido para o Planejamento da Demanda, onde as perguntas sobre ele continuam.
+Na melhoria, a conversa vira o Planejamento da Demanda ali mesmo, sem trocar de tela: a IA faz as perguntas que a Vitta faria, uma por vez. Cada pergunta traz uma ou duas frases de contexto, duas opções para clicar, com a recomendada em destaque, e um campo para responder do seu jeito, por texto ou por voz. São no máximo 12 perguntas, e o botão **Fechar e resumir**, no alto da conversa, encerra a qualquer momento.
+
+O resumo da melhoria mostra as decisões que você tomou e o que ficou em aberto, que são os pontos que a IA não chegou a perguntar. O que você não decidiu nunca aparece como decisão. Os botões são os mesmos do bug: **Criar o card** manda o pedido completo para a Vitta, que ainda planeja a parte técnica antes de começar, e **Não bateu** volta à conversa para acertar o que estiver errado.
 
 A conversa fica guardada. Se a IA não conseguir responder, a tela avisa, a conversa continua como estava e o que você escreveu fica na caixa: é só mandar de novo.
 
@@ -132,17 +134,15 @@ No card também aparece **O que muda**: o que aquela entrega acrescenta, em ling
 
 ## O Planejamento da Demanda
 
-O Planejamento da Demanda é uma conversa com a IA que transforma o pedido de uma coisa nova, ou de uma mudança, num plano que a Vitta consegue construir. A IA faz as perguntas que a Vitta faria, uma por vez, e quem decide é você.
+O Planejamento da Demanda é o caminho da melhoria na conversa com o Assistente: transforma o pedido de uma coisa nova, ou de uma mudança, num plano que a Vitta consegue construir. A IA faz as perguntas que a Vitta faria, uma por vez, e quem decide é você. Ele não tem mais botão próprio no card: começa quando você escolhe melhoria na conversa.
 
-O botão **Planejar com a IA** fica no card aberto de uma Demanda do Tipo Novo ou Ajuste que ainda não foi ligada ao desenvolvimento. Nos outros Tipos ele não aparece, e some quando a Demanda já está ligada. Qualquer pessoa com acesso à aba pode planejar.
+A IA parte do que você já contou e não pergunta de novo. Cada pergunta traz uma ou duas frases de contexto, duas opções para clicar, com a recomendada em destaque, e um campo para responder do seu jeito, por texto ou por voz. São no máximo 12 perguntas, e o botão **Fechar e resumir** encerra a conversa a qualquer momento.
 
-A IA parte do título e da descrição que já estão na Demanda e não pergunta de novo o que você já escreveu ali. Cada pergunta traz uma ou duas frases de contexto, duas opções para clicar, com a recomendada em destaque, e um campo para responder do seu jeito, por texto ou por voz. Print entra pelos anexos da Demanda. São no máximo 12 perguntas, e o botão **Fechar e resumir** encerra a conversa a qualquer momento.
+A conversa fica guardada na Demanda. Quando a Demanda é Concluída ou Cancelada, a conversa é apagada, como os prints.
 
-A conversa fica guardada na Demanda. Dá para fechar a tela no meio e voltar depois pelo botão **Continuar planejamento**, que aparece no lugar do primeiro. Quando a Demanda é Concluída ou Cancelada, a conversa é apagada, como os prints.
+No fim, a IA mostra um resumo com as decisões que você tomou e a lista do que ficou em aberto, que são os pontos que ela não chegou a perguntar. O que você não decidiu nunca aparece como decisão. Se alguma coisa não bater, o **Não bateu** pede para você dizer o quê, a conversa continua de onde parou e o resumo é refeito.
 
-No fim, a IA mostra um resumo com as decisões que você tomou e a lista do que ficou em aberto, que são os pontos que ela não chegou a perguntar. O que você não decidiu nunca aparece como decisão. Se alguma coisa não bater, o **não** pede para você dizer o quê, a conversa continua de onde parou e o resumo é refeito.
-
-Se o resumo estiver certo, o **sim**, no botão **Sim, mandar para os desenvolvedores**, manda o plano para o desenvolvimento da Vitta com as suas decisões e com o que ficou em aberto, que a Vitta pergunta depois. A Demanda fica ligada ao desenvolvimento, passa para a Etapa **Em análise** e o card mostra **O que muda** com o que você decidiu. O botão de planejar some, porque o plano já foi. Do lado da Vitta, o plano chega primeiro ao Pedro, que distribui o trabalho.
+Se o resumo estiver certo, o **Criar o card** manda o plano para o desenvolvimento da Vitta com as suas decisões e com o que ficou em aberto, que a Vitta pergunta depois. A Demanda fica ligada ao desenvolvimento, passa para a Etapa **Em análise** e o card mostra **O que muda** com o que você decidiu. Do lado da Vitta, o plano chega primeiro ao Pedro, que distribui o trabalho.
 
 A IA cuida das decisões de negócio: o problema, quem usa, as regras e o que fica de fora. As decisões técnicas ficam com a Vitta, depois do sim. Quando o pedido esbarra numa regra da casa, a IA avisa e diz de onde tirou, citando a parte "O que já foi decidido" do texto daquele sistema.
 
@@ -159,6 +159,7 @@ O Manual do usuário tem uma seção da Tecnologia, com o passo a passo de cada 
 - A aba abre na conversa com o Assistente, que pergunta se é bug ou melhoria e confirma antes de seguir.
 - No bug, a IA faz no máximo cinco perguntas, e o pedido só vai para a Vitta no clique em Criar o card.
 - O bug que sai do Criar o card vai direto para o desenvolvimento, sem ninguém da Vitta precisar assumir antes.
+- Na melhoria, a IA faz no máximo 12 perguntas, e a melhoria que sai do Criar o card ainda passa pelo planejamento técnico da Vitta antes de começar.
 - A conversa do assistente de Nova Demanda não fica guardada; a conversa com o Assistente e a do planejamento ficam guardadas na Demanda.
 - Uma Demanda se liga a um trabalho de desenvolvimento só, e a Etapa é lida de lá, nunca digitada.
 - O que se escreve do lado do desenvolvimento não volta para a Conversa, e o que volta é a mudança de Etapa.

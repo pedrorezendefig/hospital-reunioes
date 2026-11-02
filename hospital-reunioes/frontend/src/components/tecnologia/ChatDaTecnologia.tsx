@@ -9,12 +9,13 @@
  * conversa da tela fica como estava, e o texto digitado também.
  *
  * No bug, o resumo troca a caixa de mensagem por "Criar o card" e "Não
- * bateu". Na melhoria, o caminho desta fatia é o Planejamento da Demanda de
- * antes, numa tela própria.
+ * bateu". Na melhoria (issue #1383), a conversa segue ali mesmo pelo
+ * Planejamento da Demanda: cada pergunta com duas opções e a recomendada em
+ * destaque, o campo livre, "Fechar e resumir" fixo no alto, e o resumo com as
+ * decisões e o que ficou em aberto, com os mesmos dois botões.
  */
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import Link from "next/link";
 import { Bot, CheckCircle2, ImagePlus, ListChecks, Loader2, Mic, Send, Square } from "lucide-react";
 
 import { useGravacaoVoz } from "@/hooks/useGravacaoVoz";
@@ -33,28 +34,39 @@ import {
 import {
   ConversaDoChat,
   conversaValida,
+  esperaAPergunta,
   FalaDoChat,
   frasesDosPrints,
+  LETRAS,
+  LetraDaOpcao,
+  ResumoDaMelhoria,
   ResumoDoBug,
   URL_DO_CHAT_DA_ABA,
   urlDaConversa,
   urlDoCriarOCard,
   urlDoNaoBateu,
+  urlDoResumoDaMelhoria,
 } from "./chat";
 import { FALHA_DE_CONEXAO, motivoDaRecusa } from "./demandas";
-import { rotaDoPlanejamento } from "./planejamento";
 
 // A mesma pergunta que o backend guarda como primeira fala da conversa.
 export const ABERTURA = "Isso é um bug, algo que não funciona como deveria, ou uma melhoria?";
 export const CRIAR_O_CARD = "Criar o card";
 export const NAO_BATEU = "Não bateu";
 export const TITULO_DO_CHAT = "Assistente de Tecnologia";
+export const FECHAR_E_RESUMIR = "Fechar e resumir";
 const TITULO_DO_RESUMO = "Resumo do bug";
+const TITULO_DO_RESUMO_DA_MELHORIA = "Resumo da melhoria";
 const O_QUE_O_CARD_FAZ = "Criar o card manda o bug para o desenvolvimento da Vitta, que começa a trabalhar nele.";
+const O_QUE_O_CARD_DA_MELHORIA_FAZ =
+  "Criar o card manda o pedido para a Vitta, com as suas decisões e o que ficou em aberto. A parte técnica a Vitta planeja antes de começar.";
 const ENVIADO =
   "A Vitta recebeu o seu relato e o bug já está na fila do desenvolvimento. Os prints ficaram guardados no aplicativo.";
-const MELHORIA =
-  "Anotei a melhoria. As perguntas sobre o pedido continuam no Planejamento da Demanda, numa tela própria.";
+const ENVIADO_DA_MELHORIA =
+  "A Vitta recebeu o seu pedido, com as suas decisões e o que ficou em aberto. Ela planeja a parte técnica e depois começa a construir.";
+const ENCERRADO = "A IA já tem o que precisa. O resumo aparece em seguida; se não aparecer, clique em Fechar e resumir.";
+const NENHUMA_DECISAO = "Nenhuma pergunta respondida fechou uma decisão.";
+const NADA_EM_ABERTO = "Nada ficou em aberto.";
 const NAO_SEM_TEXTO = "Diga o que não bateu no resumo.";
 const CORPO_ILEGIVEL = "O servidor respondeu algo que a tela não conseguiu ler. Recarregue a página.";
 
@@ -90,40 +102,9 @@ function Fala({ fala }: { fala: FalaDoChat }) {
   );
 }
 
-type PropsDoResumo = {
-  resumo: ResumoDoBug;
-  anexos: number;
-  pensando: boolean;
-  onCriar: () => void;
-  /** Manda o que não bateu; devolve se o servidor aceitou. */
-  onNaoBateu: (texto: string) => Promise<boolean>;
-  onRecusaNaTela: (motivo: string) => void;
-};
-
-function ResumoNaTela({ resumo, anexos, pensando, onCriar, onNaoBateu, onRecusaNaTela }: PropsDoResumo) {
-  const [dizendo, setDizendo] = useState(false);
-  const [texto, setTexto] = useState("");
-
-  async function enviar() {
-    const oQue = texto.trim();
-    if (!oQue) {
-      onRecusaNaTela(NAO_SEM_TEXTO);
-      return;
-    }
-    if (await onNaoBateu(oQue)) setTexto("");
-  }
-
+function CorpoDoResumoDoBug({ resumo, anexos }: { resumo: ResumoDoBug; anexos: number }) {
   return (
-    <section
-      aria-label={TITULO_DO_RESUMO}
-      className="w-full bg-white rounded-2xl border border-primary/30 shadow-premium p-6 space-y-5"
-    >
-      <div className="flex items-center gap-2">
-        <span className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center">
-          <ListChecks className="w-4 h-4 text-primary" />
-        </span>
-        <h2 className="text-base font-bold text-slate-900">{TITULO_DO_RESUMO}</h2>
-      </div>
+    <>
       <p className="text-sm font-semibold text-text-primary">{resumo.titulo}</p>
 
       <dl className="space-y-3 text-sm">
@@ -147,6 +128,92 @@ function ResumoNaTela({ resumo, anexos, pensando, onCriar, onNaoBateu, onRecusaN
           ))}
         </ul>
       </div>
+    </>
+  );
+}
+
+/** O resumo da melhoria: as decisões do diretor e o que ficou em aberto. */
+function CorpoDoResumoDaMelhoria({ resumo }: { resumo: ResumoDaMelhoria }) {
+  return (
+    <>
+      <div className="space-y-3">
+        <h3 className="text-sm font-bold text-text-primary">Decisões</h3>
+        {resumo.decisoes.length > 0 ? (
+          <ol className="space-y-3">
+            {resumo.decisoes.map((d, i) => (
+              <li key={i} className="rounded-xl border border-border p-3 space-y-1 text-sm">
+                <p className="text-text-secondary">{d.pergunta}</p>
+                <p className="text-text-primary">
+                  <span className="font-semibold">Escolha: </span>
+                  <span>{d.escolha}</span>
+                </p>
+                <p className="text-text-primary">
+                  <span className="font-semibold">Por quê: </span>
+                  <span>{d.porque}</span>
+                </p>
+              </li>
+            ))}
+          </ol>
+        ) : (
+          <p className="text-sm text-text-secondary">{NENHUMA_DECISAO}</p>
+        )}
+      </div>
+
+      <div className="space-y-3">
+        <h3 className="text-sm font-bold text-text-primary">Ficou em aberto</h3>
+        {resumo.em_aberto.length > 0 ? (
+          <ul className="list-disc pl-5 space-y-1 text-sm text-text-primary">
+            {resumo.em_aberto.map((item, i) => (
+              <li key={i}>{item}</li>
+            ))}
+          </ul>
+        ) : (
+          <p className="text-sm text-text-secondary">{NADA_EM_ABERTO}</p>
+        )}
+      </div>
+    </>
+  );
+}
+
+type PropsDoResumo = {
+  titulo: string;
+  /** A frase debaixo dos botões, que diz o que o Criar o card faz. */
+  oQueOCardFaz: string;
+  pensando: boolean;
+  onCriar: () => void;
+  /** Manda o que não bateu; devolve se o servidor aceitou. */
+  onNaoBateu: (texto: string) => Promise<boolean>;
+  onRecusaNaTela: (motivo: string) => void;
+  children: React.ReactNode;
+};
+
+/** A caixa do resumo, do bug ou da melhoria, com Criar o card e Não bateu. */
+function ResumoNaTela({ titulo, oQueOCardFaz, pensando, onCriar, onNaoBateu, onRecusaNaTela, children }: PropsDoResumo) {
+  const [dizendo, setDizendo] = useState(false);
+  const [texto, setTexto] = useState("");
+
+  async function enviar() {
+    const oQue = texto.trim();
+    if (!oQue) {
+      onRecusaNaTela(NAO_SEM_TEXTO);
+      return;
+    }
+    if (await onNaoBateu(oQue)) setTexto("");
+  }
+
+  return (
+    <section
+      aria-label={titulo}
+      className="w-full bg-white rounded-2xl border border-primary/30 shadow-premium p-6 space-y-5"
+    >
+      <div className="flex items-center gap-2">
+        <span className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center">
+          <ListChecks className="w-4 h-4 text-primary" />
+        </span>
+        <h2 className="text-base font-bold text-slate-900">{titulo}</h2>
+      </div>
+
+      {children}
 
       <div className="space-y-2 border-t border-slate-100 pt-4">
         <div className="flex flex-wrap gap-2">
@@ -167,7 +234,7 @@ function ResumoNaTela({ resumo, anexos, pensando, onCriar, onNaoBateu, onRecusaN
             {NAO_BATEU}
           </button>
         </div>
-        <p className="text-xs text-text-secondary">{O_QUE_O_CARD_FAZ}</p>
+        <p className="text-xs text-text-secondary">{oQueOCardFaz}</p>
       </div>
 
       {dizendo && (
@@ -262,13 +329,40 @@ export function ChatDaTecnologia({ token }: { token: string | null }) {
     [token],
   );
 
+  /**
+   * O que a melhoria pede sozinha depois de um turno (issue #1383): a pergunta
+   * seguinte quando ainda não há pergunta esperando (a passagem ao
+   * planejamento, o "Não bateu"), e o resumo quando as perguntas acabaram.
+   */
+  const seguir = useCallback(
+    async (nova: ConversaDoChat | null): Promise<void> => {
+      let atual = nova;
+      if (atual && esperaAPergunta(atual)) atual = await enviar(urlDaConversa(atual.demanda_id), {});
+      if (atual?.planejamento && atual.estado === "encerrado") {
+        await enviar(urlDoResumoDaMelhoria(atual.demanda_id), {});
+      }
+    },
+    [enviar],
+  );
+
+  /** Um turno que, valendo, deixa a melhoria seguir sozinha; diz se valeu. */
+  const turno = useCallback(
+    async (url: string, corpo: unknown): Promise<boolean> => {
+      const nova = await enviar(url, corpo);
+      if (nova === null) return false;
+      await seguir(nova);
+      return true;
+    },
+    [enviar, seguir],
+  );
+
   /** A fala do diretor: o primeiro turno faz a Demanda nascer, os outros seguem nela. */
   const falar = useCallback(
     async (fala: string, prints: string[] = []): Promise<boolean> => {
       const url = conversa ? urlDaConversa(conversa.demanda_id) : URL_DO_CHAT_DA_ABA;
-      return (await enviar(url, { texto: fala, prints })) !== null;
+      return turno(url, { texto: fala, prints });
     },
-    [conversa, enviar],
+    [conversa, turno],
   );
 
   useEffect(() => {
@@ -285,10 +379,16 @@ export function ChatDaTecnologia({ token }: { token: string | null }) {
   async function escolher(opcao: string) {
     if (ocupado) return;
     if (conversa === null) {
-      await enviar(URL_DO_CHAT_DA_ABA, { escolha: opcao === "Bug" ? "bug" : "melhoria" });
+      await turno(URL_DO_CHAT_DA_ABA, { escolha: opcao === "Bug" ? "bug" : "melhoria" });
       return;
     }
     await falar(opcao);
+  }
+
+  /** A opção da pergunta da melhoria vai pela letra: o texto o servidor tira da própria pergunta. */
+  async function escolherALetra(letra: LetraDaOpcao) {
+    if (ocupado || !conversa) return;
+    await turno(urlDaConversa(conversa.demanda_id), { opcao: letra });
   }
 
   /** O print vira a descrição lida pelo servidor, e a fala leva o identificador que o faz Anexo. */
@@ -319,7 +419,7 @@ export function ChatDaTecnologia({ token }: { token: string | null }) {
     const voltou = await enviar(urlDoNaoBateu(conversa.demanda_id), { texto: oQue });
     if (voltou === null) return false;
     // A conversa voltou a em andamento com a fala no fim: a IA retoma dali.
-    await enviar(urlDaConversa(voltou.demanda_id), {});
+    await turno(urlDaConversa(voltou.demanda_id), {});
     return true;
   }
 
@@ -335,25 +435,9 @@ export function ChatDaTecnologia({ token }: { token: string | null }) {
     </p>
   );
 
-  if (conversa?.planejamento) {
-    return (
-      <div className="space-y-4">
-        {aviso}
-        <Fechamento texto={MELHORIA}>
-          <Link
-            href={rotaDoPlanejamento(conversa.demanda_id)}
-            className="inline-flex items-center px-4 py-2 rounded-xl bg-primary text-white text-sm font-semibold"
-          >
-            Continuar no planejamento
-          </Link>
-        </Fechamento>
-      </div>
-    );
-  }
-
   if (conversa?.estado === "enviado") {
     return (
-      <Fechamento texto={ENVIADO}>
+      <Fechamento texto={conversa.planejamento ? ENVIADO_DA_MELHORIA : ENVIADO}>
         <button
           type="button"
           onClick={recomecar}
@@ -370,13 +454,33 @@ export function ChatDaTecnologia({ token }: { token: string | null }) {
       <div className="space-y-4">
         {aviso}
         <ResumoNaTela
-          resumo={conversa.resumo}
-          anexos={conversa.anexos}
+          titulo={TITULO_DO_RESUMO}
+          oQueOCardFaz={O_QUE_O_CARD_FAZ}
           pensando={pensando}
           onCriar={() => enviar(urlDoCriarOCard(conversa.demanda_id), {})}
           onNaoBateu={naoBateu}
           onRecusaNaTela={setErro}
-        />
+        >
+          <CorpoDoResumoDoBug resumo={conversa.resumo} anexos={conversa.anexos} />
+        </ResumoNaTela>
+      </div>
+    );
+  }
+
+  if (conversa?.estado === "resumido" && conversa.resumo_da_melhoria) {
+    return (
+      <div className="space-y-4">
+        {aviso}
+        <ResumoNaTela
+          titulo={TITULO_DO_RESUMO_DA_MELHORIA}
+          oQueOCardFaz={O_QUE_O_CARD_DA_MELHORIA_FAZ}
+          pensando={pensando}
+          onCriar={() => enviar(urlDoCriarOCard(conversa.demanda_id), {})}
+          onNaoBateu={naoBateu}
+          onRecusaNaTela={setErro}
+        >
+          <CorpoDoResumoDaMelhoria resumo={conversa.resumo_da_melhoria} />
+        </ResumoNaTela>
       </div>
     );
   }
@@ -384,8 +488,14 @@ export function ChatDaTecnologia({ token }: { token: string | null }) {
   const falas = conversa?.mensagens ?? [ABERTURA_NA_TELA];
   const ultima = falas[falas.length - 1];
   const opcoes = ultima?.autor === "ia" ? ultima.opcoes : [];
-  // A última fala é do diretor e nada respondeu: o "não bateu" cuja retomada falhou.
-  const esperaAIA = conversa !== null && ultima?.autor === "diretor" && !pensando;
+  const recomendada = ultima?.autor === "ia" ? ultima.recomendada : null;
+  const naMelhoria = conversa?.planejamento ?? false;
+  const encerrado = naMelhoria && conversa?.estado === "encerrado";
+  const podeResumir = naMelhoria && (conversa?.estado === "em_andamento" || encerrado);
+  // Nada respondeu à última fala: o "não bateu" cuja retomada falhou, ou a
+  // pergunta da melhoria que não veio.
+  const esperaAIA =
+    conversa !== null && !pensando && (naMelhoria ? esperaAPergunta(conversa) : ultima?.autor === "diretor");
 
   return (
     <div className="space-y-4">
@@ -396,6 +506,17 @@ export function ChatDaTecnologia({ token }: { token: string | null }) {
             <Bot className="w-4 h-4 text-primary" />
           </span>
           <h2 className="text-sm font-bold text-slate-900">{TITULO_DO_CHAT}</h2>
+          {podeResumir && conversa && (
+            <button
+              type="button"
+              onClick={() => enviar(urlDoResumoDaMelhoria(conversa.demanda_id), {})}
+              disabled={ocupado}
+              className="ml-auto inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-primary/40 text-xs font-semibold text-primary hover:bg-primary/5 disabled:opacity-50"
+            >
+              <ListChecks className="w-3.5 h-3.5" />
+              {FECHAR_E_RESUMIR}
+            </button>
+          )}
         </div>
 
         <div role="log" className="flex-1 overflow-y-auto px-5 py-4 space-y-3 overscroll-contain">
@@ -403,7 +524,36 @@ export function ChatDaTecnologia({ token }: { token: string | null }) {
             <Fala key={i} fala={fala} />
           ))}
 
-          {opcoes.length > 0 && !pensando && (
+          {opcoes.length > 0 && !pensando && recomendada && (
+            <div role="group" aria-label="Opções" className="flex flex-col gap-2 max-w-[85%]">
+              {opcoes.map((opcao, i) => {
+                const letra = LETRAS[i];
+                const destaque = letra === recomendada;
+                return (
+                  <button
+                    key={letra}
+                    type="button"
+                    onClick={() => escolherALetra(letra)}
+                    className={`text-left px-3 py-2 rounded-xl border text-sm transition-colors ${
+                      destaque
+                        ? "border-primary bg-primary/5 text-slate-900 ring-1 ring-primary"
+                        : "border-border text-slate-800 hover:border-primary"
+                    }`}
+                  >
+                    <span className="font-semibold">{letra}) </span>
+                    {opcao}
+                    {destaque && (
+                      <span className="ml-2 inline-block px-2 py-0.5 rounded-full bg-primary text-white text-xs font-semibold">
+                        Recomendada
+                      </span>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+          )}
+
+          {opcoes.length > 0 && !pensando && !recomendada && (
             <div role="group" aria-label="Opções" className="flex flex-wrap gap-2 max-w-[85%]">
               {opcoes.map((opcao) => (
                 <button
@@ -418,6 +568,12 @@ export function ChatDaTecnologia({ token }: { token: string | null }) {
             </div>
           )}
 
+          {encerrado && !pensando && (
+            <p role="status" className="text-xs text-text-secondary">
+              {ENCERRADO}
+            </p>
+          )}
+
           {pensando && (
             <p role="status" className="flex items-center gap-2 text-xs text-slate-400">
               <Loader2 className="w-3.5 h-3.5 animate-spin" />
@@ -428,7 +584,7 @@ export function ChatDaTecnologia({ token }: { token: string | null }) {
           {esperaAIA && (
             <button
               type="button"
-              onClick={() => conversa && enviar(urlDaConversa(conversa.demanda_id), {})}
+              onClick={() => conversa && turno(urlDaConversa(conversa.demanda_id), {})}
               className="px-3 py-2 rounded-xl border border-primary/40 text-sm font-semibold text-primary hover:bg-primary/5"
             >
               Tentar de novo
@@ -491,7 +647,7 @@ export function ChatDaTecnologia({ token }: { token: string | null }) {
             <button
               type="button"
               onClick={enviarOTexto}
-              disabled={ocupado || !texto.trim()}
+              disabled={ocupado || encerrado || !texto.trim()}
               aria-label="Enviar mensagem"
               className="px-3 py-2 rounded-xl bg-primary text-white disabled:opacity-50"
             >

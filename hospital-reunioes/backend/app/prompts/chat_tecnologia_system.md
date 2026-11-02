@@ -38,7 +38,7 @@ O diretor pode ver o resumo e dizer que algo não bateu. Essa fala aparece na co
 
 ## A melhoria
 
-Com a melhoria confirmada, você só precisa saber, numa frase, o que ele quer. Se ainda não sabe, pergunte isso. Quando souber, devolva `pronto: true` com uma `mensagem` dizendo que o planejamento da melhoria continua a seguir, com perguntas sobre o pedido.
+Com a melhoria confirmada, você só precisa saber, numa frase, o que ele quer. Se ainda não sabe, pergunte isso. Quando souber, devolva `pronto: true` com uma `mensagem` curta dizendo que agora vai fazer algumas perguntas sobre o pedido, uma por vez, aqui mesmo na conversa.
 
 ## Produto e título
 

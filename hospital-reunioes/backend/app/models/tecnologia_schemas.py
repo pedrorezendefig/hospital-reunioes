@@ -548,6 +548,9 @@ class DecisaoDoResumo(BaseModel):
 class ResumoDoPlanejamento(BaseModel):
     decisoes: list[DecisaoDoResumo] = []
     em_aberto: list[str] = []
+    # A secao "Para o glossario" do PRD do diretor (issue #1383).
+    termos: list[str] = []
+    candidatas_a_adr: list[str] = []
 
 
 class PlanejamentoResponse(BaseModel):
@@ -607,8 +610,11 @@ class ChatTurnoPayload(BaseModel):
     """Corpo do POST /admin/tecnologia/chat/{id}: a fala do diretor.
 
     Sem texto, o turno e o "tente de novo" da IA: vale so quando a ultima fala
-    guardada e do diretor (o "nao bateu")."""
+    guardada e do diretor (o "nao bateu"). No planejamento da melhoria (issue
+    #1383), `opcao` e a letra da opcao clicada, e a resposta e ela OU o texto.
+    """
 
+    opcao: Literal["A", "B"] | None = None
     texto: str | None = Field(default=None, max_length=LIMITE_DA_MENSAGEM)
     prints: list[str] = Field(default_factory=list, max_length=10)
 
@@ -624,6 +630,9 @@ class FalaDoChat(BaseModel):
     texto: str
     fonte: str | None = None
     opcoes: list[str] = []
+    # A letra da opcao recomendada, so na pergunta do planejamento da melhoria
+    # (issue #1383): as `opcoes` vem na ordem A e B.
+    recomendada: Literal["A", "B"] | None = None
     nao_bateu: bool = False
 
 
@@ -643,8 +652,9 @@ class ChatResponse(BaseModel):
 
     `estado` segue o do planejamento: `em_andamento`, `resumido` (o resumo do
     bug esperando "Criar o card" ou "Nao bateu") e `enviado` (o card nasceu).
-    `planejamento` verdadeiro e a melhoria confirmada, que segue pela tela do
-    Planejamento da Demanda (nesta fatia, o caminho da melhoria e o de antes).
+    `planejamento` verdadeiro e a melhoria confirmada, que segue no proprio
+    chat pelo Planejamento da Demanda (issue #1383); o estado `encerrado` e o
+    teto ou o fim das perguntas, esperando o "Fechar e resumir".
     Tokens e custo nunca saem por aqui (ADR 0077, decisao 9).
     """
 
@@ -652,6 +662,9 @@ class ChatResponse(BaseModel):
     estado: str | None = None
     mensagens: list[FalaDoChat] = []
     resumo: ResumoDoBug | None = None
+    # O resumo do planejamento da melhoria (issue #1383), com `planejamento`
+    # verdadeiro: as decisoes e o que ficou em aberto.
+    resumo_da_melhoria: ResumoDoPlanejamento | None = None
     anexos: int = 0
     planejamento: bool = False
     aviso_dos_anexos: str | None = None

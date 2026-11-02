@@ -30,7 +30,7 @@ import { Bot, CheckCircle2, ListChecks, Loader2, Mic, Send, Square } from "lucid
 import { useGravacaoVoz } from "@/hooks/useGravacaoVoz";
 
 import { AVISO_DE_IA, corpoValidado, LIMITE_DA_MENSAGEM } from "./assistente";
-import { Demanda, FALHA_DE_CONEXAO, motivoDaRecusa, ROTA_TECNOLOGIA } from "./demandas";
+import { FALHA_DE_CONEXAO, motivoDaRecusa, ROTA_TECNOLOGIA } from "./demandas";
 import {
   esperaAIA,
   MensagemDoPlanejamento,
@@ -38,11 +38,8 @@ import {
   Planejamento,
   planejamentoValido,
   PLANEJAR_COM_A_IA,
-  podePlanejar,
   RespostaDoPlanejamento,
   ResumoDoPlanejamento,
-  rotaDoPlanejamento,
-  rotuloDoBotao,
   urlDoEnvio,
   urlDoNao,
   urlDoPlanejamento,
@@ -67,26 +64,6 @@ const NADA_EM_ABERTO = "Nada ficou em aberto.";
 const NAO_ABRIU = "Não foi possível abrir o planejamento desta Demanda. Recarregue a página.";
 const CORPO_ILEGIVEL = "O servidor respondeu algo que a tela não conseguiu ler. Recarregue a página.";
 const TERMINOU = "A IA já tem o que precisa. Clique em Fechar e resumir para ver as decisões.";
-
-/**
- * O botão do card aberto: só em Novo ou Ajuste, aberta e sem Vínculo. Com
- * conversa guardada ele vira "Continuar planejamento", e leva à mesma tela,
- * que retoma de onde parou.
- */
-export function BotaoDePlanejar({ demanda }: { demanda: Demanda }) {
-  if (!podePlanejar(demanda)) return null;
-  return (
-    <div className="md:col-span-2">
-      <Link
-        href={rotaDoPlanejamento(demanda.id)}
-        className="inline-flex items-center gap-2 px-3 py-2 rounded-xl border border-primary/40 text-sm font-semibold text-primary hover:bg-primary/5 transition-colors"
-      >
-        <Bot className="w-4 h-4" />
-        {rotuloDoBotao(demanda)}
-      </Link>
-    </div>
-  );
-}
 
 type Props = {
   demandaId: string;

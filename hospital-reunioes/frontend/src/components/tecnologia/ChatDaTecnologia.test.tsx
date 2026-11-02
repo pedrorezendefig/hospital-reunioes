@@ -15,7 +15,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { ToastProvider } from "@/components/ui/Toast";
 
-import { ABERTURA, ChatDaTecnologia, CRIAR_O_CARD, NAO_BATEU } from "./ChatDaTecnologia";
+import { ABERTURA, ChatDaTecnologia, CRIAR_O_CARD, FECHAR_E_RESUMIR, NAO_BATEU } from "./ChatDaTecnologia";
 import { ConversaDoChat, FalaDoChat } from "./chat";
 
 afterEach(() => {
@@ -227,13 +227,130 @@ describe("A falha do provedor", () => {
   });
 });
 
+// ─── A melhoria dentro do chat (issue #1383) ─────────────────────────────────
+
+const PERGUNTA: FalaDoChat = {
+  autor: "ia",
+  texto: "Preciso entender o problema. Ele acontece na recepção?",
+  fonte: null,
+  opcoes: ["Sim, na recepção.", "Não, na enfermagem."],
+  recomendada: "B",
+  nao_bateu: false,
+};
+
+function melhoria(extra: Partial<ConversaDoChat> = {}): ConversaDoChat {
+  return conversa({
+    planejamento: true,
+    mensagens: [ABERTURA_GUARDADA, { autor: "diretor", texto: "Melhoria", fonte: null, opcoes: [], nao_bateu: false }, PERGUNTA],
+    ...extra,
+  });
+}
+
+const RESUMO_DA_MELHORIA = {
+  decisoes: [{ pergunta: "Quem usa?", escolha: "Só a recepção.", porque: "É ela quem marca o retorno." }],
+  em_aberto: ["Quem confirma o retorno com o paciente."],
+  termos: [],
+  candidatas_a_adr: [],
+};
+
 describe("A melhoria", () => {
-  it("segue para o Planejamento da Demanda", async () => {
-    montar([{ status: 201, corpo: conversa({ estado: null, planejamento: true }) }]);
+  it("o botão Melhoria abre a pergunta com contexto, duas opções, a recomendada destacada e o campo livre", async () => {
+    const chamadas = montar([{ status: 201, corpo: melhoria() }]);
 
     fireEvent.click(screen.getByRole("button", { name: "Melhoria" }));
 
-    const link = await screen.findByRole("link", { name: "Continuar no planejamento" });
-    expect(link.getAttribute("href")).toBe("/admin/tecnologia/planejamento/d-1");
+    expect(await screen.findByText(PERGUNTA.texto)).toBeTruthy();
+    const opcoes = within(screen.getByRole("group", { name: "Opções" })).getAllByRole("button");
+    expect(opcoes).toHaveLength(2);
+    expect(opcoes[0].textContent).toContain("Sim, na recepção.");
+    expect(opcoes[0].textContent).not.toContain("Recomendada");
+    expect(opcoes[1].textContent).toContain("Não, na enfermagem.");
+    expect(opcoes[1].textContent).toContain("Recomendada");
+    expect(screen.getByLabelText("Sua mensagem")).toBeTruthy();
+    expect(chamadas[0].corpo).toEqual({ escolha: "melhoria" });
+  });
+
+  it("clicar numa opção manda a letra dela", async () => {
+    const chamadas = montar([{ status: 201, corpo: melhoria() }, { status: 200, corpo: melhoria() }]);
+    fireEvent.click(screen.getByRole("button", { name: "Melhoria" }));
+
+    fireEvent.click(await screen.findByRole("button", { name: /Sim, na recepção/ }));
+
+    await waitFor(() => expect(chamadas).toHaveLength(2));
+    expect(chamadas[1]).toMatchObject({ url: "/api/admin/tecnologia/chat/d-1", corpo: { opcao: "A" } });
+  });
+
+  it("Fechar e resumir fica à mão e pede o resumo, que traz o que ficou em aberto", async () => {
+    const chamadas = montar([
+      { status: 201, corpo: melhoria() },
+      { status: 200, corpo: melhoria({ estado: "resumido", resumo_da_melhoria: RESUMO_DA_MELHORIA }) },
+    ]);
+    fireEvent.click(screen.getByRole("button", { name: "Melhoria" }));
+
+    fireEvent.click(await screen.findByRole("button", { name: FECHAR_E_RESUMIR }));
+
+    const resumo = await screen.findByRole("region", { name: "Resumo da melhoria" });
+    expect(chamadas[1]).toMatchObject({ url: "/api/admin/tecnologia/chat/d-1/resumo", metodo: "POST" });
+    expect(within(resumo).getByText("Ficou em aberto")).toBeTruthy();
+    expect(within(resumo).getByText("Quem confirma o retorno com o paciente.")).toBeTruthy();
+    expect(within(resumo).getByText("Só a recepção.")).toBeTruthy();
+    expect(within(resumo).getByRole("button", { name: CRIAR_O_CARD })).toBeTruthy();
+    expect(within(resumo).getByRole("button", { name: NAO_BATEU })).toBeTruthy();
+  });
+
+  it("o bug não tem Fechar e resumir", async () => {
+    montar([{ status: 201, corpo: conversa() }]);
+
+    fireEvent.click(screen.getByRole("button", { name: "Bug" }));
+
+    await screen.findByText("Onde isso aconteceu?");
+    expect(screen.queryByRole("button", { name: FECHAR_E_RESUMIR })).toBeNull();
+  });
+
+  it("a melhoria contada em texto pede a primeira pergunta sozinha, sem o diretor clicar", async () => {
+    const passou = conversa({
+      planejamento: true,
+      mensagens: [
+        ...conversa().mensagens.slice(0, 2),
+        { autor: "ia", texto: "Agora umas perguntas sobre o pedido.", fonte: null, opcoes: [], nao_bateu: false },
+      ],
+    });
+    const chamadas = montar([{ status: 201, corpo: passou }, { status: 200, corpo: melhoria() }]);
+
+    escrever("Queria um aviso quando a ata sair");
+
+    expect(await screen.findByText(PERGUNTA.texto)).toBeTruthy();
+    expect(chamadas[1]).toMatchObject({ url: "/api/admin/tecnologia/chat/d-1", metodo: "POST", corpo: {} });
+  });
+
+  it("com as perguntas encerradas, o resumo vem sozinho", async () => {
+    const encerrado = melhoria({
+      estado: "encerrado",
+      mensagens: [...melhoria().mensagens, { autor: "ia", texto: "Já tenho o que preciso.", fonte: null, opcoes: [], nao_bateu: false }],
+    });
+    const chamadas = montar([
+      { status: 201, corpo: melhoria() },
+      { status: 200, corpo: encerrado },
+      { status: 200, corpo: melhoria({ estado: "resumido", resumo_da_melhoria: RESUMO_DA_MELHORIA }) },
+    ]);
+    fireEvent.click(screen.getByRole("button", { name: "Melhoria" }));
+
+    fireEvent.click(await screen.findByRole("button", { name: /Sim, na recepção/ }));
+
+    expect(await screen.findByRole("region", { name: "Resumo da melhoria" })).toBeTruthy();
+    expect(chamadas[2]).toMatchObject({ url: "/api/admin/tecnologia/chat/d-1/resumo", metodo: "POST" });
+  });
+
+  it("Criar o card manda a melhoria e a tela diz que foi", async () => {
+    const chamadas = montar([
+      { status: 201, corpo: melhoria({ estado: "resumido", resumo_da_melhoria: RESUMO_DA_MELHORIA }) },
+      { status: 200, corpo: melhoria({ estado: "enviado", resumo_da_melhoria: RESUMO_DA_MELHORIA }) },
+    ]);
+    fireEvent.click(screen.getByRole("button", { name: "Melhoria" }));
+
+    fireEvent.click(await screen.findByRole("button", { name: CRIAR_O_CARD }));
+
+    expect(await screen.findByText(/A Vitta recebeu o seu pedido/)).toBeTruthy();
+    expect(chamadas[1]).toMatchObject({ url: "/api/admin/tecnologia/chat/d-1/criar-card", metodo: "POST" });
   });
 });

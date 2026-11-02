@@ -54,9 +54,14 @@ ESCOLHAS: dict[str, str] = {"bug": "Bug", "melhoria": "Melhoria"}
 # Tipo de antes: bug e Defeito, melhoria e Novo.
 TIPO_DA_CLASSIFICACAO: dict[str, str] = {"bug": "defeito", "melhoria": "novo"}
 
-# A melhoria confirmada segue pelo Planejamento da Demanda de antes: nesta
-# fatia, o caminho dela no chat e o da issue seguinte do PRD #1380.
+# A melhoria confirmada segue, no proprio chat, pelo Planejamento da Demanda
+# (issue #1383): a conversa continua guardada, e dali em diante as falas sao as
+# do planejamento (pergunta, resposta, encerrou), com as regras dele.
 CAMINHO_DO_PLANEJAMENTO = "planejamento"
+
+# As falas que so o planejamento escreve. A primeira delas, ou a fala da IA que
+# passou a conversa ao planejamento (`planejar`), marca onde ele comeca.
+TIPOS_DO_PLANEJAMENTO = ("pergunta", "resposta", "encerrou")
 
 TITULO_SEM_RESPOSTA = "Conversa na aba Tecnologia"
 LIMITE_DO_TITULO = 200
@@ -125,13 +130,65 @@ def textos_do_diretor(mensagens: list[dict]) -> list[str]:
     ]
 
 
+def inicio_do_planejamento(mensagens: list[dict]) -> int | None:
+    """Onde o planejamento da melhoria comeca na conversa, ou `None` se ele
+    ainda nao comecou (a conversa e do bug, ou ainda nao foi classificada).
+
+    O que vem antes e a abertura e o que o diretor contou ao Assistente; o que
+    vem dali em diante e o planejamento, lido pelas regras dele.
+    """
+    for i, mensagem in enumerate(mensagens):
+        if mensagem.get("tipo") == "ia" and mensagem.get("planejar"):
+            return i + 1
+        if mensagem.get("tipo") in TIPOS_DO_PLANEJAMENTO:
+            return i
+    return None
+
+
+def em_planejamento(mensagens: list[dict]) -> bool:
+    return inicio_do_planejamento(mensagens) is not None
+
+
+def partes_da_melhoria(mensagens: list[dict]) -> tuple[list[dict], list[dict]]:
+    """O que o diretor contou antes do planejamento, e o planejamento."""
+    inicio = inicio_do_planejamento(mensagens)
+    if inicio is None:
+        inicio = len(mensagens)
+    return mensagens[:inicio], mensagens[inicio:]
+
+
+def descricao_da_melhoria(mensagens: list[dict]) -> str | None:
+    """O que o diretor disse antes do planejamento: e de onde ele parte."""
+    antes, _ = partes_da_melhoria(mensagens)
+    return "\n\n".join(textos_do_diretor(antes)).strip() or None
+
+
+def _fala_do_planejamento_para_a_tela(m: dict) -> dict:
+    if m.get("tipo") == "pergunta":
+        return {
+            "autor": "ia",
+            "texto": m.get("contexto") or "",
+            "fonte": None,
+            "opcoes": [o.get("texto") or "" for o in m.get("opcoes") or []],
+            "recomendada": m.get("recomendada"),
+            "nao_bateu": False,
+        }
+    if m.get("tipo") == "encerrou":
+        return {"autor": "ia", "texto": m.get("contexto") or "", "fonte": None, "opcoes": [], "nao_bateu": False}
+    return {"autor": "diretor", "texto": m.get("texto") or "", "fonte": None, "opcoes": [], "nao_bateu": False}
+
+
 def para_a_tela(mensagens: list[dict]) -> list[dict]:
     """A conversa como a tela a mostra: quem falou, o texto, a fonte e as opcoes.
 
-    A classificacao e a marca do roteiro sao do backend, e nao saem daqui.
+    A classificacao e a marca do roteiro sao do backend, e nao saem daqui. A
+    pergunta do planejamento sai com as duas opcoes na ordem A e B e a letra da
+    recomendada, que e o que a tela destaca e o que o clique devolve.
     """
     return [
-        {
+        _fala_do_planejamento_para_a_tela(m)
+        if m.get("tipo") in TIPOS_DO_PLANEJAMENTO
+        else {
             "autor": "ia" if m.get("tipo") == "ia" else "diretor",
             "texto": m.get("texto") or "",
             "fonte": m.get("fonte") if m.get("tipo") == "ia" else None,
@@ -183,8 +240,8 @@ class ResultadoDoTurno:
 
     `mensagem` e a fala da IA, pronta para entrar na conversa. `resumo` vem so
     quando o Roteiro do bug terminou. `caminho` e "planejamento" quando a
-    melhoria foi confirmada e segue pelo Planejamento da Demanda (nesta fatia,
-    o caminho da melhoria e o de antes). `erro` e a frase da tela quando o turno
+    melhoria foi confirmada e segue, no proprio chat, pelo Planejamento da
+    Demanda (issue #1383). `erro` e a frase da tela quando o turno
     nao aconteceu, e entao o resto e nulo. `chamada` e a linha de custo, nula so
     no modo mock.
     """
@@ -353,4 +410,50 @@ def turno(
         caminho=caminho,
         erro=None,
         chamada=chamada,
+    )
+
+
+# ─── A melhoria (issue #1383) ────────────────────────────────────────────────
+
+
+def demanda_da_melhoria(mensagens: list[dict], *, demanda_id: str | None, titulo: str | None) -> dict:
+    """A Demanda como o planejamento a le: o que o diretor contou e o titulo,
+    menos o titulo provisorio, que nao diz nada ao modelo."""
+    return {
+        "id": demanda_id,
+        "tipo": TIPO_DA_CLASSIFICACAO["melhoria"],
+        "titulo": "" if titulo in (None, TITULO_SEM_RESPOSTA) else titulo,
+        "descricao": descricao_da_melhoria(mensagens),
+    }
+
+
+def turno_da_melhoria(
+    *, mensagens: list[dict], kit: str, demanda_id: str | None = None, titulo: str | None = None
+) -> planejamento_demanda.ResultadoDoTurno:
+    """Um turno do planejamento da melhoria dentro do chat. Sem estado.
+
+    `mensagens` e a conversa inteira, ja com a resposta do diretor no fim. O
+    turno e o do Planejamento da Demanda, com as regras dele (uma pergunta,
+    duas opcoes, a recomendada, o teto de 12), sobre a parte da conversa que e
+    do planejamento.
+    """
+    _, planejamento = partes_da_melhoria(mensagens)
+    return planejamento_demanda.turno(
+        demanda=demanda_da_melhoria(mensagens, demanda_id=demanda_id, titulo=titulo),
+        mensagens=planejamento,
+        kit=kit,
+    )
+
+
+def resumo_da_melhoria(
+    *, mensagens: list[dict], kit: str, demanda_id: str, titulo: str | None
+) -> planejamento_demanda.ResultadoDoResumo:
+    """O "Fechar e resumir" da melhoria: o resumo do Planejamento da Demanda,
+    com o que ficou em aberto e a secao do glossario, sobre a parte da conversa
+    que e do planejamento."""
+    _, planejamento = partes_da_melhoria(mensagens)
+    return planejamento_demanda.resumir(
+        demanda=demanda_da_melhoria(mensagens, demanda_id=demanda_id, titulo=titulo),
+        mensagens=planejamento,
+        kit=kit,
     )

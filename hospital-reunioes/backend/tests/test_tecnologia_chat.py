@@ -395,6 +395,7 @@ class TestNaoBateu:
             "texto": "Não foi na Ouvidoria, foi nas Reuniões",
             "fonte": None,
             "opcoes": [],
+            "recomendada": None,
             "nao_bateu": True,
         }
 
@@ -598,39 +599,41 @@ class TestFalhaDoProvedor:
 
 
 # ═══════════════════════════════════════════════════════════════════════════
-# 5. A melhoria cai no Planejamento da Demanda de antes
+# 5. A melhoria segue no próprio chat (issue #1383)
 # ═══════════════════════════════════════════════════════════════════════════
 
 
 class TestMelhoriaVaiAoPlanejamento:
     def test_a_melhoria_confirmada_passa_ao_planejamento_com_o_que_o_diretor_disse(self, monkeypatch):
-        """Nesta fatia o caminho da melhoria é o Planejamento da Demanda de
-        hoje: a Demanda fica Novo, com a fala do diretor na descrição, e a
-        conversa do chat sai da frente para o planejamento começar do zero."""
+        """A melhoria contada em texto livre e confirmada segue no próprio
+        chat: a Demanda fica Novo, com a fala do diretor na descrição, e a
+        conversa continua guardada, agora no planejamento."""
         client, sb, _ = _cenario(monkeypatch)
-        _ia(monkeypatch, _turno(classificacao="melhoria", mensagem="O que você quer melhorar?"))
-        demanda_id = client.post(CHAT, json={"escolha": "melhoria"}).json()["demanda_id"]
+        _ia(monkeypatch, _turno(classificacao="melhoria", confirmada=False, opcoes=["Sim", "Não"]))
+        demanda_id = client.post(CHAT, json={"texto": "Queria um aviso por e-mail quando a ata sair"}).json()[
+            "demanda_id"
+        ]
 
         corpo = _responder(
             client,
             monkeypatch,
             demanda_id,
-            "Queria um aviso por e-mail quando a ata sair",
+            "Sim",
             classificacao="melhoria",
+            confirmada=True,
             titulo="Aviso quando a ata sair",
             pronto=True,
             mensagem="Entendi. Vamos planejar essa melhoria.",
         )
 
         assert corpo["planejamento"] is True
+        assert corpo["estado"] == "em_andamento"
         [demanda] = _demandas(sb)
         assert demanda["tipo"] == "novo"
         assert demanda["titulo"] == "Aviso quando a ata sair"
-        assert demanda["descricao"] == "Queria um aviso por e-mail quando a ata sair"
-        assert _conversas(sb) == []
-        planejamento = client.get(f"{BASE}/demandas/{demanda_id}/planejamento")
-        assert planejamento.status_code == 200
-        assert planejamento.json()["estado"] is None
+        assert demanda["descricao"] == "Queria um aviso por e-mail quando a ata sair\n\nSim"
+        [conversa] = _conversas(sb)
+        assert conversa["mensagens"][-1]["texto"] == "Entendi. Vamos planejar essa melhoria."
 
 
 class TestConversaDoChatNaoEPlanejamento:
