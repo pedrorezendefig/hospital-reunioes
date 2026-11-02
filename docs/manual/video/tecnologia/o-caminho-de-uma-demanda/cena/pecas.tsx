@@ -85,12 +85,16 @@ const MARGEM = 48;
 const ANTES = 9;
 const DUR = 22;
 
-const camera = (planos: Plano[], f: number): Cam => {
+/** o empurrão lento, por segundo: a mesma velocidade em cena curta e em cena longa */
+const DERIVA_POR_S = 0.008;
+
+const camera = (planos: Plano[], f: number, folga: number): Cam => {
   const alvoDe = (p: Plano): Cam => {
     const c = caixaDoFoco(p);
     if (!c) return { z: p.zoom ?? 1, fx: TELA.w / 2, fy: TELA.h / 2 };
     // o zoom pedido nunca corta o foco: cabe inteiro, com MARGEM, na janela
-    const cabe = Math.min((JANELA.w - 2 * MARGEM) / (c[2] * BASE), (JANELA.h - 2 * MARGEM) / (c[3] * BASE));
+    // o empurrão ainda cresce até o fim da cena: o foco cabe com ele no máximo (folga)
+    const cabe = Math.min((JANELA.w - 2 * MARGEM) / (c[2] * BASE), (JANELA.h - 2 * MARGEM) / (c[3] * BASE)) / folga;
     return { z: Math.max(1, Math.min(p.zoom ?? 1, cabe)), fx: c[0] + c[2] / 2, fy: c[1] + c[3] / 2 };
   };
   let cam = alvoDe(planos[0]);
@@ -119,13 +123,14 @@ const indiceAtivo = (planos: Plano[], f: number) => {
 
 /* ---------------------------------------------------------------- a tela na janela */
 
-export const TelaNaJanela: React.FC<{ planos: Plano[]; deriva?: number }> = ({ planos, deriva = 0.05 }) => {
+export const TelaNaJanela: React.FC<{ planos: Plano[] }> = ({ planos }) => {
   const c = useCenaM();
   const f = c.frame;
-  const cam = camera(planos, f);
+  const folga = 1 + DERIVA_POR_S * (c.seqDuracao / 30);
+  const cam = camera(planos, f, folga);
   // o empurrão lento, em velocidade constante até o fim da sequência: com easing ele assentava
   // antes da saída e o freezedetect acusava 0,5 a 1 s de tela parada no fim de cada cena
-  const empurra = 1 + deriva * clamp01(f / Math.max(1, c.seqDuracao));
+  const empurra = 1 + DERIVA_POR_S * (clamp01(f / Math.max(1, c.seqDuracao)) * c.seqDuracao / 30);
   const { s, tx, ty } = transformar({ ...cam, z: cam.z * empurra });
 
   // as telas: a que muda entra por cima da anterior em 12 quadros

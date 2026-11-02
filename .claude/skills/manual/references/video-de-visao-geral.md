@@ -182,6 +182,10 @@ o vídeo") é o molde: o que estiver lá e não for contrariado aqui vale.
    cursor fantasma e destaque no elemento que a fala cita. Nada parado mais de
    0,5 s, todo evento preso a uma palavra, uma transição diferente do catálogo
    em cada corte, `audio="narracao.wav"` no `<VideoMontado>`.
+   Parta do `cena/projeto/identidade.patch` do vídeo da Tecnologia: nele o
+   `flash` e o `pulsoJanela` não clareiam a cena que sai fora da janela da
+   transição (com o patch do piloto, a tela da cena antes deles sai inteira
+   clara, sem as bordas e o texto cinza).
 5. **Volta para o repo:** copie `src/videos/<Nome>/` para `cena/` da
    composição e grave o `meta.json`.
 

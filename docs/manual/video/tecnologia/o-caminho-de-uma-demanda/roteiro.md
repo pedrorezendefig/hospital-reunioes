@@ -69,7 +69,27 @@ Destaque é o contorno azul com o resto da tela velado; cursor é a seta
 branca, com o anel no clique. O caso de exemplo é a Demanda "Mostrar o nome
 do setor no cartaz do QR da Ouvidoria", do assistente ao sim.
 
-TABELA_DE_CENAS
+| Cena | Tempo (s) | Fala | Tela | Entrada |
+| --- | --- | --- | --- | --- |
+| 1 | 0.0 a 3.9 | O pedido que ia pelo WhatsApp agora tem lugar. | tipografia: as mensagens soltas viram o card que cai na raia Nova | (abre) |
+| 2 | 3.9 a 12.3 | Na aba Tecnologia, cada assunto dos sistemas é uma Demanda. Para registrar a sua, abra Nova Demanda. | video-01-quadro | pontoAbre |
+| 3 | 12.3 a 28.0 | Conte o que precisa do seu jeito: escrevendo, falando ou com um print da tela. O assistente faz no máximo três perguntas, e o Rascunho da Demanda se monta ao lado. Confira e clique em Criar Demanda. | video-02-assistente | fusao |
+| 4 | 28.0 a 38.9 | Ela nasce em Nova, com o dono do Produto como responsável, e ele recebe um e-mail. Entre Nova, Em andamento e Aguardando, quem move é gente. | video-01-quadro | chicoteLuz |
+| 5 | 38.9 a 50.2 | Dentro do card fica a Conversa. Digite arroba e escolha o nome, e a pessoa é avisada. O que se combina ali fica guardado, com autor, data e hora. | video-03-conversa | estica |
+| 6 | 50.2 a 55.8 | Numa Demanda do tipo Novo ou Ajuste, aparece o botão Planejar com a IA. | video-04-planejar | flash |
+| 7 | 55.8 a 78.2 | A IA faz as perguntas que a Vitta faria antes de começar, uma de cada vez. Cada pergunta traz o contexto e duas opções, com a recomendada marcada. Escolha uma delas. Se nenhuma serve, responda falando no microfone. À direita, O que já decidimos ganha uma linha a cada decisão fechada. | video-05-planejamento | tunel |
+| 8 | 78.2 a 90.9 | Quando quiser parar, use Fechar e resumir. O resumo traz o porquê de cada decisão e o que ficou em aberto. Algo não bateu? Diga o quê, e as perguntas seguem. | video-05-planejamento, video-06-resumo | peliculaGira |
+| 9 | 90.9 a 102.1 | Se está certo, o sim manda o plano para os desenvolvedores. A Demanda passa para Em análise, e o card mostra O que muda com o que você decidiu. | video-06-resumo, video-07-enviado, video-08-em-analise, video-09-o-que-muda | retangulo |
+| 10 | 102.1 a 112.2 | Nas outras Demandas, quem faz o Vínculo é a Vitta. Pelo número do trabalho, ou criando na hora, em Levar para desenvolvimento. | video-10-vinculo | glitchRGB |
+| 11 | 112.2 a 119.1 | Daí em diante, o selo da Etapa anda sozinho: Planejada, Em desenvolvimento, Em produção. | video-01-quadro | flood |
+| 12 | 119.1 a 125.3 | Quando a entrega chega ao app, a Demanda volta para você, no Com você do Painel. | video-11-painel | pulsoJanela |
+| 13 | 125.3 a 133.8 | Teste o que mudou e, se está bom, clique em Concluir. Se faltou algo, avise na Conversa, e a Vitta refaz. | video-12-entrega, video-13-entrega-conversa | corteBatida |
+| 14 | 133.8 a 138.6 | O pedido saiu do WhatsApp, ganhou um plano e voltou entregue a quem pediu. | tipografia: o card ganha O que muda e o selo Em produção, e a logo | despenca |
+
+O Planejamento da Demanda (cenas 6 a 9) vai de 50,2 s a 102,1 s: 52 s dos
+142 s do vídeo, o maior trecho. Parada planejada: de 139,2 s ao fim (142,0 s),
+a logo do hospital inteira e parada na assinatura. Fora dela, nada fica
+parado: a câmera empurra devagar dentro de cada tela e a grade do fundo corre.
 
 ## Como refazer
 
@@ -84,7 +104,8 @@ TABELA_DE_CENAS
    (`.claude/skills/manual/references/video-de-visao-geral.md`), mais
    `patch -p1 -d "$W" < cena/projeto/identidade.patch` (fonte HP Simplified,
    paleta azul-marinho, sem grão, `swangle`, as transições sem o verde do
-   modelo e a composição registrada no `Root.tsx`), as cenas
+   modelo, o `flash` e o `pulsoJanela` sem clarear a cena que sai inteira, e a
+   composição registrada no `Root.tsx`), as cenas
    (`mkdir -p "$W/src/videos/Tecnologia" && cp cena/*.tsx tempos.json "$W/src/videos/Tecnologia/"`),
    as telas (`cp docs/manual/src/assets/tecnologia/video-*.png "$W/public/"`
    e `cp docs/manual/src/assets/tecnologia/video-alvos.json "$W/src/videos/Tecnologia/alvos.json"`),
