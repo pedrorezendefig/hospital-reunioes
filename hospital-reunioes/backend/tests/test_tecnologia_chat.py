@@ -25,6 +25,7 @@ from test_tecnologia_vinculo import BASE, DIRETOR, _montar  # noqa: E402
 from app.config import settings  # noqa: E402
 from app.limiter import limiter  # noqa: E402
 from app.services import tecnologia_anexos  # noqa: E402
+from app.services.conhecimento import CONHECIMENTO_DIR  # noqa: E402
 
 CHAT = f"{BASE}/chat"
 
@@ -594,3 +595,19 @@ class TestMelhoriaVaiAoPlanejamento:
         planejamento = client.get(f"{BASE}/demandas/{demanda_id}/planejamento")
         assert planejamento.status_code == 200
         assert planejamento.json()["estado"] is None
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 6. O Kit de conhecimento
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+class TestKitDaTecnologia:
+    def test_o_texto_da_tecnologia_no_kit_diz_o_comportamento_novo(self):
+        """O kit e a lingua em que o Assistente fala com o diretor: sem o
+        comportamento novo escrito, ele descreveria a aba de antes."""
+        texto = (CONHECIMENTO_DIR / "tecnologia.md").read_text(encoding="utf-8")
+
+        secao = texto.split("## A conversa com o Assistente", 1)[1].split("\n## ", 1)[0]
+        for trecho in ("bug ou uma melhoria", "no máximo cinco perguntas", "Criar o card", "Não bateu"):
+            assert trecho in secao, trecho
