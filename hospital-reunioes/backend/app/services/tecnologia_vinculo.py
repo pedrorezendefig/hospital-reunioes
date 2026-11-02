@@ -887,6 +887,81 @@ def corpo_do_prd_do_diretor(
     )
 
 
+# ─── 2b. A issue do bug (issue #1381, ADR 0077) ──────────────────────────────
+
+# Os rotulos do Roteiro do bug, na ordem em que o Assistente pergunta e em que a
+# issue os escreve. Moram aqui, e nao no chat, porque e a issue que os publica:
+# o chat os pergunta pela mesma lista.
+ROTULOS_DO_BUG: dict[str, str] = {
+    "onde": "Onde",
+    "o_que_aconteceu": "O que aconteceu",
+    "o_que_esperava": "O que esperava",
+    "como_repetir": "Como repetir",
+}
+
+# O rotulo que o diretor nao respondeu (ADR 0077, Roteiro do bug).
+NAO_INFORMADO = "não informado"
+
+LABEL_PRONTA_PARA_AGENTE = "ready-for-agent"
+
+# O bug nasce pronto para a onda pegar sem ninguem da Vitta assumir (ADR 0077,
+# decisao 7), e por isso sem `needs-triage` e sem assignee: assignee e claim. A
+# label de tipo e a de sempre do Defeito, `type:fix`, a que o pipeline le como
+# PR do app (`LABELS_DO_APP` do painel, `docs/agents/triage-labels.md`).
+LABELS_DO_BUG = [LABEL_PRONTA_PARA_AGENTE, LABEL_DO_TIPO["defeito"]]
+
+
+def corpo_da_issue_do_bug(
+    *,
+    demanda_id: str,
+    resumo: dict[str, Any],
+    produto_nome: str,
+    link: str,
+    anexos: int = 0,
+) -> str:
+    """O corpo da issue que o "Criar o card" do Roteiro do bug cria.
+
+    Funcao pura do resumo que o diretor conferiu: o que sai na issue e o que ele
+    leu na tela, rotulo por rotulo, com os criterios de aceite que ele viu.
+    Todo texto passa pela peneira publica do `texto_do_diretor` (dado pessoal,
+    marcador, estrutura e travessao). O print nunca: so a contagem, na Origem
+    (ADR 0069, decisao 1).
+    """
+    rotulos = [(rotulo, _linha_do_prd(resumo.get(campo))) for campo, rotulo in ROTULOS_DO_BUG.items()]
+    esperado = dict(rotulos)["O que esperava"]
+    o_que_muda = esperado if esperado and esperado != NAO_INFORMADO else _linha_do_prd(resumo.get("titulo"))
+    criterios = [item for item in (_linha_do_prd(c) for c in resumo.get("criterios") or []) if item]
+    return "\n".join(
+        [
+            CABECALHO_DO_BLOCO,
+            "",
+            f"**O que muda:** {o_que_muda}",
+            "",
+            "**O que você precisa saber:**",
+            f"- Bug relatado pelo diretor na aba Tecnologia, em {_linha_do_prd(produto_nome)}.",
+            "",
+            "---",
+            "",
+            "## O bug",
+            "",
+            *[f"- **{rotulo}:** {texto}" for rotulo, texto in rotulos],
+            "",
+            "## Critérios de aceite",
+            "",
+            *[f"- [ ] {criterio}" for criterio in criterios],
+            "",
+            "## Origem",
+            "",
+            "Relatado na conversa com o Assistente de Tecnologia, no aplicativo do hospital, e mandado para o "
+            'desenvolvimento pelo clique em "Criar o card".',
+            f"Abrir a Demanda: {link}",
+            *(["", frase] if (frase := frase_dos_anexos(anexos)) else []),
+            "",
+            marcador_da_demanda(demanda_id),
+        ]
+    )
+
+
 # ─── 2c. A resposta espelhada na issue (issue #680) ──────────────────────────
 #
 # Toda resposta da Conversa de uma Demanda vinculada vira comentario na issue

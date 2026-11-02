@@ -181,3 +181,29 @@ class TestDescricaoLivre:
         falas = resposta.json()["mensagens"]
         assert [f["texto"] for f in falas[-2:]] == ["Sim, é um bug", "Em que tela isso aconteceu?"]
         assert len(_conversas(sb)[0]["mensagens"]) == 5
+
+
+class TestDuvidaRespondidaPeloKit:
+    def test_a_duvida_respondida_diz_de_onde_veio_e_nao_cria_card(self, monkeypatch):
+        client, sb, gh = _cenario(monkeypatch)
+        _ia(
+            monkeypatch,
+            _turno(
+                confirmada=False,
+                fonte="Reuniões",
+                mensagem="Pelo material da Vitta sobre Reuniões, a ata sai em PDF depois da assinatura. Resolveu?",
+            ),
+        )
+
+        resposta = client.post(CHAT, json={"texto": "Como eu baixo a ata em PDF?"})
+
+        assert resposta.status_code == 201, resposta.text
+        corpo = resposta.json()
+        assert corpo["mensagens"][-1]["fonte"] == "Reuniões"
+        assert corpo["resumo"] is None
+        # Sem resumo não há card: o botão "Criar o card" é recusado, e nada
+        # chega ao GitHub.
+        criar = client.post(f"{CHAT}/{corpo['demanda_id']}/criar-card")
+        assert criar.status_code == 409
+        assert gh.criadas == []
+        assert _demandas(sb)[0].get("github_issue_numero") is None

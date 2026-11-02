@@ -220,7 +220,9 @@ from app.services.tecnologia_vinculo import (
     MOTIVO_SEM_GITHUB_LOGIN,
     MOTIVO_SEM_VINCULO_PARA_DESFAZER,
     TEXTO_VINCULO_CRIADO,
+    LABELS_DO_BUG,
     TEXTO_VINCULO_DESFEITO,
+    corpo_da_issue_do_bug,
     corpo_da_issue_nova,
     corpo_do_comentario_espelhado,
     corpo_do_prd_do_diretor,
@@ -1664,15 +1666,18 @@ def _criar_issue_e_vincular(
     ator: dict,
     corpo,
     assignees: list[str],
+    labels: list[str] | None = None,
 ) -> dict:
-    """O servico das duas portas que CRIAM a issue: o "Levar para
-    desenvolvimento" e o "sim" do Planejamento da Demanda (issue #1349).
+    """O servico das portas que CRIAM a issue: o "Levar para
+    desenvolvimento", o "sim" do Planejamento da Demanda (issue #1349) e o
+    "Criar o card" do chat (issue #1381).
 
     Recebe a Demanda ja lida e as guardas de cada porta ja passadas, e faz o
-    que e igual nas duas: a vez de criar, o titulo pela peneira, as labels do
-    tipo, a issue no GitHub, o Vinculo, a linha do fio e a Etapa. O que muda de
-    uma porta para a outra entra por parametro: o `corpo(titulo)` e os
-    `assignees`. Devolve a linha da Demanda ja vinculada.
+    que e igual nas tres: a vez de criar, o titulo pela peneira, a issue no
+    GitHub, o Vinculo, a linha do fio e a Etapa. O que muda de uma porta para a
+    outra entra por parametro: o `corpo(titulo)`, os `assignees` e as `labels`
+    (sem elas, as do tipo, com `needs-triage`). Devolve a linha da Demanda ja
+    vinculada.
     """
     demanda_id = str(demanda["id"])
     if _criacao_em_andamento(demanda):
@@ -1693,7 +1698,7 @@ def _criar_issue_e_vincular(
         dados = github_client.criar_issue(
             titulo=titulo,
             corpo=corpo(titulo),
-            labels=labels_da_issue_nova(demanda.get("tipo")),
+            labels=labels if labels is not None else labels_da_issue_nova(demanda.get("tipo")),
             assignees=assignees,
         )
         numero = dados.get("number")
@@ -2936,6 +2941,56 @@ async def responder_no_chat(
         _conflito(MOTIVO_CHAT_MUDOU)
     _acompanhar_o_turno(supabase, demanda, resultado)
     return _chat_para_a_tela(supabase, demanda_id, linha)
+
+
+MOTIVO_CHAT_SEM_RESUMO = "Ainda não há resumo para virar card. Responda às perguntas até o resumo aparecer."
+
+
+@router.post("/chat/{demanda_id}/criar-card", response_model=ChatResponse)
+@limiter.shared_limit(LIMITE_DO_VINCULO, ESCOPO_DO_VINCULO)
+async def criar_o_card(
+    request: Request,
+    demanda_id: str,
+    ator: dict = Depends(require_super_admin),
+    supabase: Client = Depends(get_supabase_client),
+):
+    """O "Criar o card" do resumo do bug (ADR 0077, decisoes 6 e 7).
+
+    Pelo MESMO servico do "Levar para desenvolvimento" e do "sim" do
+    planejamento (`_criar_issue_e_vincular`): a vez de criar, a peneira no
+    titulo, o Vinculo e a Etapa. O que e do bug entra por parametro: o corpo
+    com os rotulos do roteiro e os criterios de aceite, as labels que fazem a
+    onda pegar sozinha (`ready-for-agent`, sem `needs-triage`) e nenhum
+    assignee, porque assignee e claim.
+
+    Sem o gate do `github_login`: quem cria o card e o diretor que relatou. A
+    ordem das guardas e a do Levar: o que eu pedi existe e faz sentido (404,
+    409) e so entao o ambiente (503). Falha do GitHub sai como 502 com o resumo
+    intacto, para o clique valer de novo.
+    """
+    demanda, atual = _chat_guardado(supabase, demanda_id)
+    if demanda.get("github_issue_numero") or atual.get("estado") == planejamento_demanda.ESTADO_ENVIADO:
+        _conflito(MOTIVO_CHAT_TERMINOU)
+    resumo = atual.get("resumo")
+    if atual.get("estado") != planejamento_demanda.ESTADO_RESUMIDO or not resumo:
+        _conflito(MOTIVO_CHAT_SEM_RESUMO)
+    _exigir_integracao()
+
+    produtos = supabase.table(TABELA_PRODUTOS).select("id, nome").eq("id", demanda.get("produto_id")).execute()
+    produto_nome = (produtos.data or [{}])[0].get("nome") or SEM_PRODUTO
+
+    def corpo(_titulo: str) -> str:
+        return corpo_da_issue_do_bug(
+            demanda_id=demanda_id,
+            resumo=resumo,
+            produto_nome=produto_nome,
+            link=link_da_demanda(demanda_id),
+            anexos=tecnologia_anexos.quantos_guardados(supabase, demanda_id),
+        )
+
+    _criar_issue_e_vincular(supabase, demanda=demanda, ator=ator, corpo=corpo, assignees=[], labels=LABELS_DO_BUG)
+    linha = planejamento_demanda.marcar_enviado(supabase, demanda_id, agora=_agora())
+    return _chat_para_a_tela(supabase, demanda_id, linha or {**atual, "estado": planejamento_demanda.ESTADO_ENVIADO})
 
 
 # A lista de extensoes e os dois tetos vem do EXTRATOR, e nao sao escritos de

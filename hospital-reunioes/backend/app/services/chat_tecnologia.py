@@ -32,6 +32,7 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from app.services import ai_processor, assistente_tecnologia, planejamento_demanda
 from app.services.tecnologia import recuar_continuacao
+from app.services.tecnologia_vinculo import NAO_INFORMADO, ROTULOS_DO_BUG
 from app.utils.text_sanitizer import sanitizar_travessao
 
 logger = logging.getLogger(__name__)
@@ -58,16 +59,10 @@ LIMITE_DO_TITULO = 200
 LIMITE_DO_CAMPO = 2000
 LIMITE_DE_CRITERIOS = 8
 
-NAO_INFORMADO = "não informado"
-
-# Os rotulos do Roteiro do bug, na ordem da issue. O print e a quinta pergunta,
-# mas nao e texto: ele vira Anexo da Demanda e a issue diz so quantos ha.
-CAMPOS_DO_BUG: dict[str, str] = {
-    "onde": "Onde",
-    "o_que_aconteceu": "O que aconteceu",
-    "o_que_esperava": "O que esperava",
-    "como_repetir": "Como repetir",
-}
+# Os rotulos do Roteiro do bug, os mesmos que a issue publica. O print e a
+# quinta pergunta, mas nao e texto: ele vira Anexo da Demanda e a issue diz so
+# quantos ha.
+CAMPOS_DO_BUG = ROTULOS_DO_BUG
 
 TEXTO_DO_TETO = "Já tenho o que preciso. Confira o resumo e diga se ele bate com o que aconteceu."
 
