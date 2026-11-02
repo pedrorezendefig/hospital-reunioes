@@ -251,8 +251,9 @@ class TestPrintNoChat:
         client, sb, _ = _cenario(monkeypatch)
         lido = _print_lido(client)
         _ia(monkeypatch, _turno())
+        corpo = {"escolha": "bug", "texto": f"[print] {lido['texto']}", "prints": [lido["print_id"]]}
 
-        resposta = client.post(CHAT, json={"escolha": "bug", "texto": f"[print] {lido['texto']}", "prints": [lido["print_id"]]})
+        resposta = client.post(CHAT, json=corpo)
 
         assert resposta.status_code == 201, resposta.text
         [anexo] = sb.tabelas["tecnologia_anexos"]
@@ -558,3 +559,38 @@ class TestFalhaDoProvedor:
         assert _demandas(sb) == []
         assert _conversas(sb) == []
 
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 5. A melhoria cai no Planejamento da Demanda de antes
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+class TestMelhoriaVaiAoPlanejamento:
+    def test_a_melhoria_confirmada_passa_ao_planejamento_com_o_que_o_diretor_disse(self, monkeypatch):
+        """Nesta fatia o caminho da melhoria é o Planejamento da Demanda de
+        hoje: a Demanda fica Novo, com a fala do diretor na descrição, e a
+        conversa do chat sai da frente para o planejamento começar do zero."""
+        client, sb, _ = _cenario(monkeypatch)
+        _ia(monkeypatch, _turno(classificacao="melhoria", mensagem="O que você quer melhorar?"))
+        demanda_id = client.post(CHAT, json={"escolha": "melhoria"}).json()["demanda_id"]
+
+        corpo = _responder(
+            client,
+            monkeypatch,
+            demanda_id,
+            "Queria um aviso por e-mail quando a ata sair",
+            classificacao="melhoria",
+            titulo="Aviso quando a ata sair",
+            pronto=True,
+            mensagem="Entendi. Vamos planejar essa melhoria.",
+        )
+
+        assert corpo["planejamento"] is True
+        [demanda] = _demandas(sb)
+        assert demanda["tipo"] == "novo"
+        assert demanda["titulo"] == "Aviso quando a ata sair"
+        assert demanda["descricao"] == "Queria um aviso por e-mail quando a ata sair"
+        assert _conversas(sb) == []
+        planejamento = client.get(f"{BASE}/demandas/{demanda_id}/planejamento")
+        assert planejamento.status_code == 200
+        assert planejamento.json()["estado"] is None

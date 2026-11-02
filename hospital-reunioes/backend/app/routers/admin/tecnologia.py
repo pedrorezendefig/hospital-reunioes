@@ -213,6 +213,7 @@ from app.services.tecnologia_email import avisar_atribuicao, avisar_mencao, avis
 from app.services.tecnologia_sincronizacao import mudanca_da_foto
 from app.services.tecnologia_vinculo import (
     ETAPA_REGISTRADA,
+    LABELS_DO_BUG,
     MOTIVO_CRIACAO_EM_ANDAMENTO,
     MOTIVO_GITHUB_INDISPONIVEL,
     MOTIVO_INTEGRACAO_DESLIGADA,
@@ -220,7 +221,6 @@ from app.services.tecnologia_vinculo import (
     MOTIVO_SEM_GITHUB_LOGIN,
     MOTIVO_SEM_VINCULO_PARA_DESFAZER,
     TEXTO_VINCULO_CRIADO,
-    LABELS_DO_BUG,
     TEXTO_VINCULO_DESFEITO,
     corpo_da_issue_do_bug,
     corpo_da_issue_nova,
@@ -2771,6 +2771,20 @@ def _prints_do_turno(supabase: Client, *, demanda: dict, print_ids: list[str], a
     return tecnologia_anexos.anexar_prints(supabase, demanda=demanda, print_ids=print_ids, quem_id=ator["id"])
 
 
+def _passar_ao_planejamento(supabase: Client, demanda_id: str, mensagens: list[dict]) -> dict:
+    """A melhoria confirmada segue pelo Planejamento da Demanda de antes.
+
+    O que o diretor disse vira a descricao da Demanda, que e de onde o
+    planejamento parte, e a conversa do chat sai da tabela que as duas
+    dividem: o planejamento comeca do zero, sem tropecar numa conversa que nao
+    e a dele. Devolve a conversa para a tela mostrar o ultimo turno.
+    """
+    descricao = "\n\n".join(chat_tecnologia.textos_do_diretor(mensagens)).strip() or None
+    supabase.table(TABELA_DEMANDAS).update({"descricao": descricao}).eq("id", demanda_id).execute()
+    planejamento_demanda.apagar(supabase, demanda_id)
+    return {"estado": None, "mensagens": mensagens}
+
+
 def _estado_depois_do_turno(resultado: chat_tecnologia.ResultadoDoTurno) -> str:
     return planejamento_demanda.ESTADO_RESUMIDO if resultado.resumo else planejamento_demanda.ESTADO_EM_ANDAMENTO
 
@@ -2835,6 +2849,11 @@ async def comecar_o_chat(
     if resultado.chamada is not None:
         planejamento_demanda.gravar_chamada(supabase, {**resultado.chamada, "demanda_id": demanda_id})
 
+    aviso = _prints_do_turno(supabase, demanda=demanda, print_ids=payload.prints, ator=ator)
+    if resultado.caminho == chat_tecnologia.CAMINHO_DO_PLANEJAMENTO:
+        linha = _passar_ao_planejamento(supabase, demanda_id, [*falas, resultado.mensagem])
+        return _chat_para_a_tela(supabase, demanda_id, linha, planejamento=True, aviso_dos_anexos=aviso)
+
     linha = planejamento_demanda.gravar(
         supabase,
         demanda_id,
@@ -2846,7 +2865,6 @@ async def comecar_o_chat(
             "atualizado_em": _agora(),
         },
     )
-    aviso = _prints_do_turno(supabase, demanda=demanda, print_ids=payload.prints, ator=ator)
     return _chat_para_a_tela(supabase, demanda_id, linha, aviso_dos_anexos=aviso)
 
 
@@ -2936,6 +2954,12 @@ async def responder_no_chat(
     if resultado.erro:
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=resultado.erro)
 
+    if resultado.caminho == chat_tecnologia.CAMINHO_DO_PLANEJAMENTO:
+        _acompanhar_o_turno(supabase, demanda, resultado)
+        linha = _passar_ao_planejamento(supabase, demanda_id, [*mensagens, resultado.mensagem])
+        aviso = _prints_do_turno(supabase, demanda=demanda, print_ids=payload.prints, ator=ator)
+        return _chat_para_a_tela(supabase, demanda_id, linha, planejamento=True, aviso_dos_anexos=aviso)
+
     linha = planejamento_demanda.gravar(
         supabase,
         demanda_id,
@@ -2990,8 +3014,6 @@ async def resumo_do_chat_nao_bateu(
     if linha is None:
         _conflito(MOTIVO_CHAT_MUDOU)
     return _chat_para_a_tela(supabase, demanda_id, linha)
-
-
 
 
 @router.post("/chat/{demanda_id}/criar-card", response_model=ChatResponse)

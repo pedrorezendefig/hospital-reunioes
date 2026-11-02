@@ -54,6 +54,10 @@ ESCOLHAS: dict[str, str] = {"bug": "Bug", "melhoria": "Melhoria"}
 # Tipo de antes: bug e Defeito, melhoria e Novo.
 TIPO_DA_CLASSIFICACAO: dict[str, str] = {"bug": "defeito", "melhoria": "novo"}
 
+# A melhoria confirmada segue pelo Planejamento da Demanda de antes: nesta
+# fatia, o caminho dela no chat e o da issue seguinte do PRD #1380.
+CAMINHO_DO_PLANEJAMENTO = "planejamento"
+
 TITULO_SEM_RESPOSTA = "Conversa na aba Tecnologia"
 LIMITE_DO_TITULO = 200
 LIMITE_DO_CAMPO = 2000
@@ -217,7 +221,8 @@ def pedido_do_turno(mensagens: list[dict], produtos: list[dict]) -> str:
     if classificacao is None:
         onde_esta = "ainda não classificada"
     else:
-        onde_esta = f"{classificacao}, {'confirmada pelo diretor' if confirmada else 'ainda sem a confirmação do diretor'}"
+        situacao = "confirmada pelo diretor" if confirmada else "ainda sem a confirmação do diretor"
+        onde_esta = f"{classificacao}, {situacao}"
     feitas = perguntas_do_roteiro(mensagens)
     linhas = [
         "PRODUTOS (use o identificador exato em produto_id)",
@@ -326,7 +331,7 @@ def turno(
         if not saida.pronto:
             texto = TEXTO_DO_TETO
     elif classificacao == "melhoria" and confirmada and saida.pronto:
-        caminho = "planejamento"
+        caminho = CAMINHO_DO_PLANEJAMENTO
 
     mensagem = {
         "tipo": "ia",
