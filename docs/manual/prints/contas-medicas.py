@@ -1829,6 +1829,11 @@ def video_04_guia(page: Page, base: str, saida: Path) -> None:
         "devolver": page.get_by_role("button", name="Devolver à fila"),
         "grupo": grupo,
         "linha": _linha_do_guia(page, "Pantoprazol 40 mg injetável"),
+        # A etiqueta do verbo (Incluir, Corrigir preço, Validar) é o primeiro
+        # span de cada linha.
+        "verbo_incluir": _linha_do_guia(page, "Pantoprazol 40 mg injetável").locator("span").first,
+        "verbo_preco": _linha_do_guia(page, "Agulha hipodérmica 25 x 7").locator("span").first,
+        "verbo_validar": _linha_do_guia(page, "Diária de CTI adulto").locator("span").first,
     })
 
 
@@ -1846,6 +1851,7 @@ def video_05_guia_linhas(page: Page, base: str, saida: Path) -> None:
         "codigo": linha.get_by_role("button", name="Copiar código 90123456"),
         "feito": linha.get_by_role("button", name="Feito"),
         "evidencia": linha.get_by_role("button", name="Ver evidência"),
+        "trecho": linha.locator("blockquote").locator(".."),
         "agulha": _linha_do_guia(page, "Agulha hipodérmica 25 x 7"),
     })
 
@@ -1944,26 +1950,12 @@ def video_10_coordenacao(page: Page, base: str, saida: Path) -> None:
 
 
 def video_11_painel(page: Page, base: str, saida: Path) -> None:
-    """O Painel: a nota média da semana e os cartões do topo."""
+    """O Painel: a nota média da semana e o R$ apontado por causa-raiz."""
     page.set_viewport_size(VIDEO)
     _painel(page, base)
     _tela_do_video(page, saida, "video-11-painel", {
         "nota": page.get_by_role("region", name="Nota média de entrada"),
         "causa": page.get_by_role("region", name="R$ apontado por causa-raiz"),
-    })
-
-
-def video_12_painel_causa(page: Page, base: str, saida: Path) -> None:
-    """O Painel rolado até o R$ apontado por causa-raiz."""
-    page.set_viewport_size(VIDEO)
-    _painel(page, base)
-    causa = page.get_by_role("region", name="R$ apontado por causa-raiz")
-    causa.evaluate("(el) => el.scrollIntoView({block: 'start'})")
-    page.mouse.wheel(0, -80)
-    page.wait_for_timeout(400)
-    _tela_do_video(page, saida, "video-12-painel-causa", {
-        "causa": causa,
-        "itens": page.get_by_role("region", name="Os dez itens que mais faltam"),
     })
 
 
@@ -2027,7 +2019,6 @@ PRINTS = {
     "video-09-validacao": video_09_validacao,
     "video-10-coordenacao": video_10_coordenacao,
     "video-11-painel": video_11_painel,
-    "video-12-painel-causa": video_12_painel_causa,
 }
 
 
