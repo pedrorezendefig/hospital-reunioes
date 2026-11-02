@@ -13,8 +13,10 @@ nesta fatia; o Assistente e a resposta da Conversa nas seguintes):
 - **listar**: o que o card mostra, com URL assinada de vida curta para o que
   ainda esta guardado;
 - **apagar todos**: Concluir e Cancelar tiram os binarios do bucket e deixam o
-  registro (nome, quem, quando) marcado apagado. Mudanca de Etapa nunca chega
-  aqui (ADR 0069, decisao 3).
+  registro (nome, quem, quando) marcado apagado (ADR 0069, decisao 3);
+- **apagar os vencidos**: o cron tira os binarios 30 dias depois de a Etapa
+  chegar a Em producao, e na rodada seguinte quando ela e Nao sera feita (ADR
+  0077, issue #1382). Fica o mesmo registro marcado apagado.
 """
 
 from __future__ import annotations
@@ -25,7 +27,7 @@ import threading
 import time
 import uuid
 from collections import OrderedDict
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 from app.config import settings
 from app.services import storage
@@ -35,7 +37,8 @@ from app.services.assistente_tecnologia import (
     MOTIVO_IMAGEM_GRANDE,
     TIPOS_DE_IMAGEM,
 )
-from app.services.tecnologia import ESTADOS_FECHADOS
+from app.services.tecnologia import ESTADOS_FECHADOS, instante_do_banco
+from app.services.tecnologia_vinculo import ETAPA_EM_PRODUCAO, ETAPA_NAO_SERA_FEITA
 
 logger = logging.getLogger(__name__)
 
@@ -59,6 +62,11 @@ MOTIVO_IMAGEM_DA_RESPOSTA = (
 # clica. Link colado fora do app morre antes de virar acesso permanente ao
 # print. A tela pede a lista de novo a cada vez que o card abre.
 EXPIRACAO_DA_URL_SEGUNDOS = 600
+
+# Em producao, o diretor ainda confere a correcao com o print na mao: o binario
+# so sai 30 dias depois da subida (ADR 0077). O relogio e o `entregue_em`, que a
+# subida reescreve com a data dela (`tecnologia_sincronizacao`).
+PRAZO_DEPOIS_DE_EM_PRODUCAO = timedelta(days=30)
 
 
 class AnexoRecusadoError(Exception):
@@ -176,6 +184,39 @@ def apagar_todos(supabase, demanda_id: str) -> int:
                 path,
             )
     return sairam
+
+
+def _print_venceu(demanda: dict, agora: datetime) -> bool:
+    etapa = demanda.get("etapa")
+    if etapa == ETAPA_NAO_SERA_FEITA:
+        return True
+    if etapa != ETAPA_EM_PRODUCAO:
+        return False
+    # Sem data legivel, fica: apagar e definitivo, e a duvida protege o print.
+    subiu_em = instante_do_banco(demanda.get("entregue_em"))
+    return subiu_em is not None and agora - subiu_em >= PRAZO_DEPOIS_DE_EM_PRODUCAO
+
+
+def apagar_vencidos(supabase, agora: datetime | None = None) -> int:
+    """A passada do cron: apaga os prints das Demandas em Em producao ha 30
+    dias ou mais e das em Nao sera feita (ADR 0077, issue #1382).
+
+    Parte dos anexos ainda guardados, e nao das Demandas: quase toda Demanda
+    entregue ja nao tem o que apagar, e a passada de hora em hora fica do
+    tamanho do que sobrou no bucket. Cada Demanda vencida passa pelo mesmo
+    `apagar_todos` do Concluir, com a mesma regra de marca e de log.
+
+    Devolve quantos binarios sairam.
+    """
+    agora = agora or datetime.now(UTC)
+    guardados = supabase.table(TABELA_ANEXOS).select("demanda_id").is_("apagado_em", "null").execute().data or []
+    ids = sorted({str(linha["demanda_id"]) for linha in guardados})
+    if not ids:
+        return 0
+    demandas = (
+        supabase.table("tecnologia_demandas").select("id, etapa, entregue_em").in_("id", ids).execute().data or []
+    )
+    return sum(apagar_todos(supabase, str(d["id"])) for d in demandas if _print_venceu(d, agora))
 
 
 def quantos_guardados(supabase, demanda_id: str) -> int:

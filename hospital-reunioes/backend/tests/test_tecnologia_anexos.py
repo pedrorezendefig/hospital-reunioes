@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import os
 import sys
+from datetime import UTC, datetime, timedelta
 
 import pytest
 
@@ -23,6 +24,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 from test_tecnologia_vinculo import BASE, PEDRO, _demanda, _GithubFalso, _issue, _montar  # noqa: E402
 
 from app.config import settings  # noqa: E402
+from app.cron import scheduler  # noqa: E402
 from app.limiter import limiter  # noqa: E402
 from app.routers.admin import tecnologia as tecnologia_router  # noqa: E402
 from app.services import tecnologia_email, tecnologia_sincronizacao  # noqa: E402
@@ -408,6 +410,39 @@ class TestSoEncerrarApaga:
         assert sb.tabelas["tecnologia_demandas"][0]["etapa"] != demanda["etapa"], "a Etapa nao mudou"
         assert len(sb.storage.arquivos) == 1
         assert _anexos(sb)[0]["apagado_em"] is None
+
+
+# ─── 3b. O prazo depois de Em produção (issue #1382, ADR 0077) ─────────────
+
+
+def _ha_dias(dias: int) -> str:
+    return (datetime.now(UTC) - timedelta(days=dias)).isoformat()
+
+
+def _rodada_do_cron(monkeypatch, sb) -> None:
+    """A rodada de hora em hora da Tecnologia, pela porta do scheduler. As duas
+    releituras do GitHub ficam de fora: este teste e sobre o que vem depois."""
+    monkeypatch.setattr(scheduler, "_supabase", lambda: sb)
+    monkeypatch.setattr(tecnologia_sincronizacao, "reconciliar_vinculos", lambda _sb: {})
+    monkeypatch.setattr(tecnologia_sincronizacao, "reconciliar_em_producao", lambda _sb: {})
+    scheduler.reconciliar_vinculos_tecnologia()
+
+
+class TestOPrintVenceDepoisDeEmProducao:
+    """Sem o Concluir humano, o binario sai 30 dias depois de a Etapa chegar a
+    Em producao, e na rodada seguinte quando a Etapa e Nao sera feita. O
+    registro fica, marcado apagado."""
+
+    def test_em_producao_ha_mais_de_30_dias_apaga_o_binario_e_marca_o_registro(self, monkeypatch):
+        client, sb, _ = _cenario(demandas=[_demanda("d-1")])
+        _anexar(client, nome="tela.png")
+        sb.tabelas["tecnologia_demandas"][0].update(etapa="em_producao", entregue_em=_ha_dias(31))
+
+        _rodada_do_cron(monkeypatch, sb)
+
+        assert sb.storage.arquivos == {}, "o binario ficou no bucket 31 dias depois de Em producao"
+        assert [linha["nome_original"] for linha in _anexos(sb)] == ["tela.png"]
+        assert _anexos(sb)[0]["apagado_em"]
 
 
 # ─── 4. O espelho: nada do anexo sai para a issue nesta fatia ────────────────
