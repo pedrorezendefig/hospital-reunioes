@@ -93,11 +93,11 @@ Parada planejada: de 139,0 s ao fim (141,8 s), a logo do hospital inteira e para
    `patch -p1 -d "$W" < cena/projeto/identidade.patch` (fonte HP Simplified,
    paleta azul-marinho, sem grão, `swangle`, as transições sem o verde do
    modelo e a composição registrada no `Root.tsx`), as cenas
-   (`mkdir -p "$W/src/videos/ContasMedicas" && cp cena/*.tsx cena/*.json "$W/src/videos/ContasMedicas/"`),
-   as telas (`cp docs/manual/src/assets/contas-medicas/video-*.png "$W/public/"`,
-   e o `video-alvos.json` por cima de `alvos.json` quando o roteiro de prints
-   rodar de novo) e a logo branca da `marca-hsm` em
-   `public/logo-hsm-branca.png`.
+   (`mkdir -p "$W/src/videos/ContasMedicas" && cp cena/*.tsx tempos.json "$W/src/videos/ContasMedicas/"`),
+   as telas (`cp docs/manual/src/assets/contas-medicas/video-*.png "$W/public/"`
+   e `cp docs/manual/src/assets/contas-medicas/video-alvos.json "$W/src/videos/ContasMedicas/alvos.json"`),
+   o roteiro dos tempos (`cp cena/projeto/tempos-da-narracao.mjs "$W/scripts/"`)
+   e a logo branca da `marca-hsm` em `public/logo-hsm-branca.png`.
 3. Narração: `python3 ~/.claude/voz/narrar.py --file narracao.txt --output "$W/public/narracao.wav"`.
-4. Tempos: `node cena/projeto/tempos-da-narracao.mjs "$W/public/narracao.json" narracao.txt "1|2,3|4,5,6|7,8|9,10|11,12|13|14|15,16|17,18,19|20,21|22,23|24,25|26" > "$W/src/videos/ContasMedicas/tempos.json"`.
+4. Tempos: `node cena/projeto/tempos-da-narracao.mjs "$W/public/narracao.json" narracao.txt "1|2,3|4,5,6|7,8|9,10|11,12|13|14|15,16|17,18,19|20,21|22,23|24,25|26" > tempos.json`, e copie de novo para `$W/src/videos/ContasMedicas/`.
 5. `npx tsc --noEmit`, stills, draft e render (receita), composição `ContasMedicas`.
