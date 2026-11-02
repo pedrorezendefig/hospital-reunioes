@@ -1174,8 +1174,8 @@ async def mover_demanda(
 
     if para in ESTADOS_FECHADOS:
         # Concluir e Cancelar apagam os prints do bucket (ADR 0069, decisao
-        # 3), e so eles: mover entre colunas abertas e mudar de Etapa nunca
-        # apagam. Antes da linha do fio, e nao depois: se ela falhar, o 500 do
+        # 3), e no Quadro so eles: mover entre colunas abertas nunca apaga. O
+        # prazo depois de Em producao e Nao sera feita sao do cron (ADR 0077). Antes da linha do fio, e nao depois: se ela falhar, o 500 do
         # `_gravar_movimento` sai com a Demanda ja encerrada, e o binario de
         # assunto encerrado nao pode ficar para tras por causa disso.
         if tecnologia_anexos.apagar_todos(supabase, demanda_id):
