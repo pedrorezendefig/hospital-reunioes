@@ -1,6 +1,6 @@
 ---
 status: accepted
-amended_by: 0057, 0075
+amended_by: 0057, 0075, 0077
 ---
 
 # Assistente de Tecnologia: rascunho confirmado por gente, kit próprio embarcado, responde do kit ou registra
