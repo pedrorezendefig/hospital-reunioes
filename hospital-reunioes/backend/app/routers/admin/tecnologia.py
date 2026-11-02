@@ -2957,6 +2957,43 @@ async def responder_no_chat(
 MOTIVO_CHAT_SEM_RESUMO = "Ainda não há resumo para virar card. Responda às perguntas até o resumo aparecer."
 
 
+@router.post("/chat/{demanda_id}/nao-bateu", response_model=ChatResponse)
+@limiter.limit(LIMITE_DO_ASSISTENTE)
+async def resumo_do_chat_nao_bateu(
+    request: Request,
+    demanda_id: str,
+    payload: ChatNaoBateuPayload,
+    _ator: dict = Depends(require_super_admin),
+    supabase: Client = Depends(get_supabase_client),
+):
+    """O "Nao bateu" do resumo: o que nao bateu entra na conversa como fala do
+    diretor e ela volta a em andamento. A IA nao e chamada aqui: a tela pede o
+    turno seguinte sem texto, e a IA retoma da fala, refazendo o resumo. O
+    resumo velho fica ate o novo o substituir, como no planejamento."""
+    _demanda, atual = _chat_guardado(supabase, demanda_id)
+    texto = (payload.texto or "").strip()
+    if not texto:
+        _recusar(planejamento_demanda.MOTIVO_NAO_SEM_TEXTO)
+    if atual.get("estado") != planejamento_demanda.ESTADO_RESUMIDO:
+        _conflito(MOTIVO_CHAT_SEM_RESUMO)
+
+    linha = planejamento_demanda.gravar(
+        supabase,
+        demanda_id,
+        atual=atual,
+        novo={
+            "estado": planejamento_demanda.ESTADO_EM_ANDAMENTO,
+            "mensagens": [*(atual.get("mensagens") or []), {"tipo": "nao_bateu", "texto": texto}],
+            "atualizado_em": _agora(),
+        },
+    )
+    if linha is None:
+        _conflito(MOTIVO_CHAT_MUDOU)
+    return _chat_para_a_tela(supabase, demanda_id, linha)
+
+
+
+
 @router.post("/chat/{demanda_id}/criar-card", response_model=ChatResponse)
 @limiter.shared_limit(LIMITE_DO_VINCULO, ESCOPO_DO_VINCULO)
 async def criar_o_card(

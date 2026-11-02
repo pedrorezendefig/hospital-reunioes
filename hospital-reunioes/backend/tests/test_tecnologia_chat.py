@@ -341,3 +341,48 @@ class TestRoteiroDoBug:
 
         assert resposta.status_code == 409
 
+
+class TestNaoBateu:
+    def test_nao_bateu_volta_a_conversa_e_o_resumo_e_refeito(self, monkeypatch):
+        client, sb, gh = _cenario(monkeypatch)
+        demanda_id = _ate_o_resumo(client, monkeypatch)
+
+        voltou = client.post(f"{CHAT}/{demanda_id}/nao-bateu", json={"texto": "Não foi na Ouvidoria, foi nas Reuniões"})
+
+        assert voltou.status_code == 200, voltou.text
+        assert voltou.json()["estado"] == "em_andamento"
+        ultima = voltou.json()["mensagens"][-1]
+        assert ultima == {
+            "autor": "diretor",
+            "texto": "Não foi na Ouvidoria, foi nas Reuniões",
+            "fonte": None,
+            "opcoes": [],
+            "nao_bateu": True,
+        }
+
+        # A tela pede o turno seguinte sem texto: a IA retoma da fala do diretor.
+        _ia(
+            monkeypatch,
+            _turno(
+                pronto=True,
+                mensagem="Corrigi. Confere agora?",
+                campos={**CAMPOS_RESPONDIDOS, "onde": "Reuniões, na ata"},
+                criterios=CRITERIOS,
+            ),
+        )
+        refeito = client.post(f"{CHAT}/{demanda_id}", json={})
+
+        assert refeito.status_code == 200, refeito.text
+        assert refeito.json()["estado"] == "resumido"
+        assert refeito.json()["resumo"]["onde"] == "Reuniões, na ata"
+        assert gh.criadas == []
+
+    def test_nao_bateu_sem_dizer_o_que_e_recusado(self, monkeypatch):
+        client, _, _ = _cenario(monkeypatch)
+        demanda_id = _ate_o_resumo(client, monkeypatch)
+
+        resposta = client.post(f"{CHAT}/{demanda_id}/nao-bateu", json={"texto": "  "})
+
+        assert resposta.status_code == 422
+        assert client.get(f"{CHAT}/{demanda_id}").json()["estado"] == "resumido"
+
