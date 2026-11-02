@@ -2,6 +2,51 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-11-02T20:13:43-03:00",
+      "sha": "bd1c9bcb8454f928f4dbd99690713d8a4edc9558",
+      "app_version": "0.210.0",
+      "subject": "Onda tecnologia-chat-onda3: O agente da Tecnologia lê o código",
+      "raw_subject": "chore(deploy): registro da onda tecnologia-chat-onda3 (#1393)",
+      "scope": [
+        "backend"
+      ],
+      "prds": [
+        1380
+      ],
+      "result": "healthy",
+      "duration_seconds": 57,
+      "services_touched": [
+        "backend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        },
+        {
+          "service": "frontend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "onda-enxuta tecnologia-chat-onda3: PR #1393 (issue #1385), mergeados PR a PR. Merge pela API do GitHub, um build. Registro pela Action pos-merge depois do health.",
+      "etapas": {
+        "merge_s": 3,
+        "build_s": {
+          "backend": 23
+        },
+        "health_s": 10
+      },
+      "responsavel": "pedrorezendefig"
+    },
+    {
       "at": "2026-11-02T20:02:28-03:00",
       "sha": "0d5a8399e18faec292a2eed8bfdf6cc8a22e6347",
       "app_version": "0.209.0",
