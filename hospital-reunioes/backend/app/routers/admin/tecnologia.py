@@ -2779,19 +2779,100 @@ def _chat_para_a_tela(
     demanda_id: str,
     linha: dict | None,
     *,
-    planejamento: bool = False,
     aviso_dos_anexos: str | None = None,
 ) -> dict:
+    """A conversa para a tela. `planejamento` diz que a conversa esta no
+    planejamento da melhoria (issue #1383): o resumo dela tem outra forma, e
+    sai em `resumo_da_melhoria`."""
     linha = linha or {}
+    mensagens = linha.get("mensagens") or []
+    planejamento = chat_tecnologia.em_planejamento(mensagens)
     return {
         "demanda_id": str(demanda_id),
         "estado": linha.get("estado"),
-        "mensagens": chat_tecnologia.para_a_tela(linha.get("mensagens") or []),
-        "resumo": linha.get("resumo"),
+        "mensagens": chat_tecnologia.para_a_tela(mensagens),
+        "resumo": None if planejamento else linha.get("resumo"),
+        "resumo_da_melhoria": linha.get("resumo") if planejamento else None,
         "anexos": tecnologia_anexos.quantos_guardados(supabase, demanda_id),
         "planejamento": planejamento,
         "aviso_dos_anexos": aviso_dos_anexos,
     }
+
+
+def _nascer_a_demanda(supabase: Client, *, ator: dict, titulo: str, tipo: str, produto: dict) -> dict:
+    """A Demanda que o primeiro turno do chat faz nascer (ADR 0077, decisao 2)."""
+    criada = (
+        supabase.table(TABELA_DEMANDAS)
+        .insert(
+            {
+                "titulo": titulo,
+                "descricao": None,
+                "tipo": tipo,
+                "produto_id": produto["id"],
+                "estado": "nova",
+                "responsavel_id": produto.get("dono_id"),
+                "autor_id": ator["id"],
+                "prioridade": "normal",
+            }
+        )
+        .execute()
+    )
+    if not criada.data:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Falha ao criar a Demanda")
+    return criada.data[0]
+
+
+def _estado_do_planejamento(mensagem: dict) -> str:
+    if mensagem.get("tipo") == "encerrou":
+        return planejamento_demanda.ESTADO_ENCERRADO
+    return planejamento_demanda.ESTADO_EM_ANDAMENTO
+
+
+async def _comecar_a_melhoria(
+    supabase: Client, *, ator: dict, falas: list[dict], produtos: list[dict], prints: list[str]
+) -> dict:
+    """O botao "Melhoria" abre o planejamento na hora (issue #1383): a primeira
+    fala da IA ja e a primeira pergunta, com as duas opcoes e a recomendada.
+
+    A Demanda nasce depois do turno, como no bug: um turno que falhou nao deixa
+    Demanda vazia. Ela nasce Novo, no primeiro Produto e com o titulo
+    provisorio; o titulo de verdade vem do resumo.
+    """
+    resultado = await ai_processor.chamar_ia_fora_do_loop(
+        chat_tecnologia.turno_da_melhoria, mensagens=falas, kit=carregar_kit()
+    )
+    if resultado.erro:
+        if resultado.chamada is not None:
+            planejamento_demanda.gravar_chamada(supabase, resultado.chamada)
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=resultado.erro)
+
+    demanda = _nascer_a_demanda(
+        supabase,
+        ator=ator,
+        titulo=chat_tecnologia.TITULO_SEM_RESPOSTA,
+        tipo=chat_tecnologia.TIPO_DA_CLASSIFICACAO["melhoria"],
+        produto=produtos[0],
+    )
+    demanda_id = str(demanda["id"])
+    if resultado.chamada is not None:
+        planejamento_demanda.gravar_chamada(supabase, {**resultado.chamada, "demanda_id": demanda_id})
+    descricao = chat_tecnologia.descricao_da_melhoria(falas)
+    if descricao:
+        supabase.table(TABELA_DEMANDAS).update({"descricao": descricao}).eq("id", demanda_id).execute()
+
+    aviso = _prints_do_turno(supabase, demanda=demanda, print_ids=prints, ator=ator)
+    linha = planejamento_demanda.gravar(
+        supabase,
+        demanda_id,
+        atual=None,
+        novo={
+            "estado": _estado_do_planejamento(resultado.mensagem),
+            "mensagens": [*falas, resultado.mensagem],
+            "decisoes": [resultado.decisao] if resultado.decisao else [],
+            "atualizado_em": _agora(),
+        },
+    )
+    return _chat_para_a_tela(supabase, demanda_id, linha, aviso_dos_anexos=aviso)
 
 
 def _prints_do_turno(supabase: Client, *, demanda: dict, print_ids: list[str], ator: dict) -> str | None:
@@ -2803,18 +2884,28 @@ def _prints_do_turno(supabase: Client, *, demanda: dict, print_ids: list[str], a
     return tecnologia_anexos.anexar_prints(supabase, demanda=demanda, print_ids=print_ids, quem_id=ator["id"])
 
 
-def _passar_ao_planejamento(supabase: Client, demanda_id: str, mensagens: list[dict]) -> dict:
-    """A melhoria confirmada segue pelo Planejamento da Demanda de antes.
+def _passar_ao_planejamento(
+    supabase: Client, demanda_id: str, *, atual: dict | None, mensagens: list[dict]
+) -> dict | None:
+    """A melhoria confirmada segue, no proprio chat, pelo planejamento (issue
+    #1383).
 
     O que o diretor disse vira a descricao da Demanda, que e de onde o
-    planejamento parte, e a conversa do chat sai da tabela que as duas
-    dividem: o planejamento comeca do zero, sem tropecar numa conversa que nao
-    e a dele. Devolve a conversa para a tela mostrar o ultimo turno.
+    planejamento parte, e a ultima fala da IA leva a marca `planejar`: dali em
+    diante a conversa e do planejamento, e a tela pede o turno seguinte, que
+    traz a primeira pergunta. Devolve a linha gravada, ou `None` se outra aba
+    gravou no meio.
     """
-    descricao = "\n\n".join(chat_tecnologia.textos_do_diretor(mensagens)).strip() or None
+    *anteriores, ultima = mensagens
+    mensagens = [*anteriores, {**ultima, "planejar": True}]
+    descricao = chat_tecnologia.descricao_da_melhoria(mensagens)
     supabase.table(TABELA_DEMANDAS).update({"descricao": descricao}).eq("id", demanda_id).execute()
-    planejamento_demanda.apagar(supabase, demanda_id)
-    return {"estado": None, "mensagens": mensagens}
+    return planejamento_demanda.gravar(
+        supabase,
+        demanda_id,
+        atual=atual,
+        novo={"estado": planejamento_demanda.ESTADO_EM_ANDAMENTO, "mensagens": mensagens, "atualizado_em": _agora()},
+    )
 
 
 def _estado_depois_do_turno(resultado: chat_tecnologia.ResultadoDoTurno) -> str:
@@ -2848,6 +2939,9 @@ async def comecar_o_chat(
     if texto:
         falas.append(chat_tecnologia.fala_do_diretor(texto))
 
+    if payload.escolha == "melhoria":
+        return await _comecar_a_melhoria(supabase, ator=ator, falas=falas, produtos=produtos, prints=payload.prints)
+
     # Fora do loop (issue #773, o porque em `ai_processor._EXECUTOR_DA_IA`).
     resultado = await ai_processor.chamar_ia_fora_do_loop(
         chat_tecnologia.turno, mensagens=falas, kit=carregar_kit(), produtos=produtos, escolha=payload.escolha
@@ -2858,33 +2952,21 @@ async def comecar_o_chat(
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=resultado.erro)
 
     produto = next((p for p in produtos if p["id"] == resultado.produto_id), produtos[0])
-    criada = (
-        supabase.table(TABELA_DEMANDAS)
-        .insert(
-            {
-                "titulo": resultado.titulo,
-                "descricao": None,
-                "tipo": chat_tecnologia.TIPO_DA_CLASSIFICACAO[resultado.classificacao],
-                "produto_id": produto["id"],
-                "estado": "nova",
-                "responsavel_id": produto.get("dono_id"),
-                "autor_id": ator["id"],
-                "prioridade": "normal",
-            }
-        )
-        .execute()
+    demanda = _nascer_a_demanda(
+        supabase,
+        ator=ator,
+        titulo=resultado.titulo,
+        tipo=chat_tecnologia.TIPO_DA_CLASSIFICACAO[resultado.classificacao],
+        produto=produto,
     )
-    if not criada.data:
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Falha ao criar a Demanda")
-    demanda = criada.data[0]
     demanda_id = str(demanda["id"])
     if resultado.chamada is not None:
         planejamento_demanda.gravar_chamada(supabase, {**resultado.chamada, "demanda_id": demanda_id})
 
     aviso = _prints_do_turno(supabase, demanda=demanda, print_ids=payload.prints, ator=ator)
     if resultado.caminho == chat_tecnologia.CAMINHO_DO_PLANEJAMENTO:
-        linha = _passar_ao_planejamento(supabase, demanda_id, [*falas, resultado.mensagem])
-        return _chat_para_a_tela(supabase, demanda_id, linha, planejamento=True, aviso_dos_anexos=aviso)
+        linha = _passar_ao_planejamento(supabase, demanda_id, atual=None, mensagens=[*falas, resultado.mensagem])
+        return _chat_para_a_tela(supabase, demanda_id, linha, aviso_dos_anexos=aviso)
 
     linha = planejamento_demanda.gravar(
         supabase,
@@ -2987,10 +3069,12 @@ async def responder_no_chat(
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=resultado.erro)
 
     if resultado.caminho == chat_tecnologia.CAMINHO_DO_PLANEJAMENTO:
+        linha = _passar_ao_planejamento(supabase, demanda_id, atual=atual, mensagens=[*mensagens, resultado.mensagem])
+        if linha is None:
+            _conflito(MOTIVO_CHAT_MUDOU)
         _acompanhar_o_turno(supabase, demanda, resultado)
-        linha = _passar_ao_planejamento(supabase, demanda_id, [*mensagens, resultado.mensagem])
         aviso = _prints_do_turno(supabase, demanda=demanda, print_ids=payload.prints, ator=ator)
-        return _chat_para_a_tela(supabase, demanda_id, linha, planejamento=True, aviso_dos_anexos=aviso)
+        return _chat_para_a_tela(supabase, demanda_id, linha, aviso_dos_anexos=aviso)
 
     linha = planejamento_demanda.gravar(
         supabase,

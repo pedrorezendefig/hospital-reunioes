@@ -624,6 +624,9 @@ class FalaDoChat(BaseModel):
     texto: str
     fonte: str | None = None
     opcoes: list[str] = []
+    # A letra da opcao recomendada, so na pergunta do planejamento da melhoria
+    # (issue #1383): as `opcoes` vem na ordem A e B.
+    recomendada: Literal["A", "B"] | None = None
     nao_bateu: bool = False
 
 
@@ -643,8 +646,9 @@ class ChatResponse(BaseModel):
 
     `estado` segue o do planejamento: `em_andamento`, `resumido` (o resumo do
     bug esperando "Criar o card" ou "Nao bateu") e `enviado` (o card nasceu).
-    `planejamento` verdadeiro e a melhoria confirmada, que segue pela tela do
-    Planejamento da Demanda (nesta fatia, o caminho da melhoria e o de antes).
+    `planejamento` verdadeiro e a melhoria confirmada, que segue no proprio
+    chat pelo Planejamento da Demanda (issue #1383); o estado `encerrado` e o
+    teto ou o fim das perguntas, esperando o "Fechar e resumir".
     Tokens e custo nunca saem por aqui (ADR 0077, decisao 9).
     """
 
@@ -652,6 +656,9 @@ class ChatResponse(BaseModel):
     estado: str | None = None
     mensagens: list[FalaDoChat] = []
     resumo: ResumoDoBug | None = None
+    # O resumo do planejamento da melhoria (issue #1383), com `planejamento`
+    # verdadeiro: as decisoes e o que ficou em aberto.
+    resumo_da_melhoria: ResumoDoPlanejamento | None = None
     anexos: int = 0
     planejamento: bool = False
     aviso_dos_anexos: str | None = None
