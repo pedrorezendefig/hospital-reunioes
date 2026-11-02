@@ -185,6 +185,25 @@ def _contem(valor: Any, parte: Any) -> bool:
     return valor == parte
 
 
+def _instante(valor) -> datetime | None:
+    try:
+        instante = datetime.fromisoformat(str(valor))
+    except ValueError:
+        return None
+    return instante if instante.tzinfo is not None else None
+
+
+def _comparaveis(a, b) -> tuple:
+    """Como o Postgres compara timestamptz: pelo instante, não pelo texto.
+    "2026-11-02T00:09+00:00" é antes de "2026-11-02T00:00-03:00", e a
+    comparação de strings diz o contrário (domingo à noite no fuso do
+    hospital caía na semana seguinte, CI do PR #1376)."""
+    ia, ib = _instante(a), _instante(b)
+    if ia is not None and ib is not None:
+        return ia, ib
+    return str(a), str(b)
+
+
 class _Consulta:
     def __init__(self, banco: _Banco, nome: str):
         self._banco = banco
@@ -220,7 +239,9 @@ class _Consulta:
         return self
 
     def _compara(self, coluna, valor, teste):
-        self._filtros.append(lambda linha: linha.get(coluna) is not None and teste(str(linha.get(coluna)), str(valor)))
+        self._filtros.append(
+            lambda linha: linha.get(coluna) is not None and teste(*_comparaveis(linha.get(coluna), valor))
+        )
         return self
 
     def gt(self, coluna, valor):

@@ -76,7 +76,7 @@ papel: [Qualquer pessoa]
 
 
 def montar(raiz: Path) -> None:
-    """Um manual sem lacuna: os seis módulos, e a Ouvidoria escrita inteira.
+    """Um manual sem lacuna: os sete módulos, e a Ouvidoria escrita inteira.
 
     Cada abertura tem o Vídeo de visão geral, menos a do Admin, que fica sem.
     """
@@ -301,14 +301,14 @@ def test_video_hyperframes_antigo_sem_prds_cobertos_nao_e_julgado(tmp_path):
     assert tipos(inventario, "ouvidoria") == []
 
 
-def test_pagina_fora_dos_seis_modulos_nao_fecha_a_conta(tmp_path):
+def test_pagina_fora_dos_modulos_nao_fecha_a_conta(tmp_path):
     """Sem módulo, não há terminal que feche a lacuna: a conta não fecha."""
     montar(tmp_path)
-    solta = tmp_path / "src" / "content" / "docs" / "tecnologia"
+    solta = tmp_path / "src" / "content" / "docs" / "central-de-comando"
     solta.mkdir()
     (solta / "index.md").write_text(VISAO_GERAL, encoding="utf-8")
     inventario = inventario_manual.inventariar(tmp_path, {"ouvidoria": [731]})
-    assert inventario.fora_de_balde == ["tecnologia/index.md"]
+    assert inventario.fora_de_balde == ["central-de-comando/index.md"]
 
 
 def test_modulo_que_nao_existe_em_entregues_e_acusado(tmp_path):
@@ -339,17 +339,17 @@ def test_manual_com_lacunas_sai_com_codigo_0(tmp_path):
     resultado = rodar(tmp_path, entregues)
     assert resultado.returncode == 0, resultado.stderr
     assert "prd-sem-novidades" in resultado.stdout
-    assert "6 módulos" in resultado.stdout
+    assert "7 módulos" in resultado.stdout
 
 
-def test_pagina_fora_dos_seis_modulos_sai_com_codigo_1(tmp_path):
+def test_pagina_fora_dos_modulos_sai_com_codigo_1(tmp_path):
     montar(tmp_path)
-    solta = tmp_path / "src" / "content" / "docs" / "tecnologia"
+    solta = tmp_path / "src" / "content" / "docs" / "central-de-comando"
     solta.mkdir()
     (solta / "index.md").write_text(VISAO_GERAL, encoding="utf-8")
     resultado = rodar(tmp_path)
     assert resultado.returncode == 1
-    assert "fora dos seis módulos" in resultado.stderr
+    assert "fora dos módulos" in resultado.stderr
 
 
 def test_manual_sem_pagina_nenhuma_sai_com_codigo_1(tmp_path):

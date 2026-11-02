@@ -1,5 +1,5 @@
-// Seções na ordem do menu do app (ADR 0057, decisão 1). A aba Tecnologia fica
-// fora de propósito. Uma lista só para o menu (`astro.config.mjs`) e para o
+// Seções na ordem do menu do app (ADR 0057, decisão 1). A Tecnologia entrou
+// como último módulo (issue #1367, PRD #1365). Uma lista só para o menu (`astro.config.mjs`) e para o
 // módulo que o resultado da busca mostra (`MarkdownContent.astro`): o nome que
 // a pessoa lê no resultado é o mesmo do menu.
 export const modulos = [
@@ -9,4 +9,5 @@ export const modulos = [
   { label: "POPs", pasta: "pops" },
   { label: "Contas médicas", pasta: "contas-medicas" },
   { label: "Admin", pasta: "admin" },
+  { label: "Tecnologia", pasta: "tecnologia" },
 ];

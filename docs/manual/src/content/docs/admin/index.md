@@ -53,7 +53,8 @@ Sob o título **Administração**:
 - **Atendimento**: **Dados do Atendimento**, os preços, preparos e estimativas
   que a Ana lê, mais o **Espelho da Global Health**.
 - **Tecnologia**: o Quadro de Demandas entre o hospital e a empresa que cuida
-  do sistema. É do Super Admin e fica fora deste manual.
+  do sistema. É do Super Admin e tem seção própria neste manual,
+  [Tecnologia](../tecnologia/).
 
 No pé da barra, **Voltar ao app** devolve você ao painel de reuniões.
 
