@@ -104,7 +104,7 @@ Os anexos aparecem no card aberto, em **Imagens**, com quem anexou e quando. Cli
 
 Os prints ficam só dentro do aplicativo. Eles nunca vão para o material público do desenvolvimento, porque um print do hospital pode ter nome de paciente ou de colaborador; quem desenvolve busca as imagens pelo aplicativo.
 
-Quando a Demanda é Concluída ou Cancelada, as imagens são apagadas. Fica no card o registro de que existiram (o nome, quem anexou e quando), marcado como apagado. Por isso, enquanto a entrega está sendo conferida, a Demanda continua aberta e o print continua lá.
+As imagens são apagadas 30 dias depois de a entrega ficar **Em produção**, o que dá tempo de conferir a correção com o print na mão. Se a entrega fica **Não será feita**, elas são apagadas logo, em até uma hora. Quando a Demanda é Concluída ou Cancelada, as imagens também saem na hora. Em todos os casos fica no card o registro de que existiram (o nome, quem anexou e quando), marcado como apagado.
 
 ## Quem vê
 
@@ -164,6 +164,6 @@ O Manual do usuário tem uma seção da Tecnologia, com o passo a passo de cada 
 - O que se escreve do lado do desenvolvimento não volta para a Conversa, e o que volta é a mudança de Etapa.
 - A única troca automática de raia é a volta para quem pediu, em Aguardando, quando a entrega fica Em produção.
 - O texto que sai da Demanda para o material público do desenvolvimento passa por uma peneira que esconde CPF, telefone, nome e outros dados pessoais.
-- Os prints ficam só dentro do aplicativo e são apagados quando a Demanda é Concluída ou Cancelada.
+- Os prints ficam só dentro do aplicativo e são apagados 30 dias depois de Em produção, ou logo quando a entrega fica Não será feita ou a Demanda é Concluída ou Cancelada.
 - No planejamento, a IA cuida só das decisões de negócio, e as decisões técnicas continuam com a Vitta.
 - O Painel não tem número por pessoa nem ranking de ninguém.
