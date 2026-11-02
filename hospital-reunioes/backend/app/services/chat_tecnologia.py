@@ -30,7 +30,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from app.services import ai_processor, assistente_tecnologia, planejamento_demanda
+from app.services import ai_processor, assistente_tecnologia, ferramentas_do_codigo, planejamento_demanda
 from app.services.tecnologia import recuar_continuacao
 from app.services.tecnologia_vinculo import NAO_INFORMADO, ROTULOS_DO_BUG
 from app.utils.text_sanitizer import sanitizar_travessao
@@ -348,6 +348,7 @@ def turno(
     if ai_processor._llm_provider() == "mock":
         return _mock(escolha, produtos, titulo_atual)
 
+    consultas = ferramentas_do_codigo.Consultas()
     saida, chamada = planejamento_demanda.chamar_o_modelo(
         demanda={"id": demanda_id},
         passo="pergunta",
@@ -355,6 +356,7 @@ def turno(
         kit=kit,
         validar=_SaidaDoTurno.model_validate,
         prompt=PROMPT,
+        consultas=consultas,
     )
     if saida is None:
         return ResultadoDoTurno(

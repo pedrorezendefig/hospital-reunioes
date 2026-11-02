@@ -543,8 +543,11 @@ class TestModeloECusto:
         enviado = cliente.chamadas[0]
         assert enviado["model"] == "claude-opus-5-5"
         sistema = enviado["system"]
-        assert [bloco.get("cache_control") for bloco in sistema] == [None, {"type": "ephemeral"}]
+        # A instrução, a das ferramentas de leitura do código (issue #1385) e o
+        # kit: a marca de cache fica no último bloco do prefixo fixo.
+        assert [bloco.get("cache_control") for bloco in sistema] == [None, None, {"type": "ephemeral"}]
         assert "Roteiro do bug" in sistema[0]["text"]
+        assert "listar_issues_abertas" in sistema[1]["text"]
         # O que o diretor escreveu vem depois do prefixo fixo, nunca dentro dele.
         assert "O botão sumiu da Ouvidoria" not in json.dumps(sistema, ensure_ascii=False)
         assert "O botão sumiu da Ouvidoria" in enviado["messages"][0]["content"]
