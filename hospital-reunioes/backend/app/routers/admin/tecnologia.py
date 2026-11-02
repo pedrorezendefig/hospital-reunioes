@@ -3272,6 +3272,34 @@ async def criar_o_card(
         _conflito(MOTIVO_CHAT_SEM_RESUMO)
     _exigir_integracao()
 
+    if chat_tecnologia.em_planejamento(atual.get("mensagens") or []):
+        # A melhoria (issue #1383): o PRD do diretor, que nasce na triagem
+        # (`needs-triage` e `type:feature`) porque ainda passa pelo
+        # `/to-issues`, atribuido ao dono da empresa, como o "sim" de antes.
+        def corpo_do_prd(titulo: str) -> str:
+            return corpo_do_prd_do_diretor(
+                demanda_id=demanda_id,
+                titulo=titulo,
+                descricao=demanda.get("descricao"),
+                resumo=resumo,
+                link=link_da_demanda(demanda_id),
+                anexos=tecnologia_anexos.quantos_guardados(supabase, demanda_id),
+            )
+
+        dono = login_para_publicar(settings.github_login_dono)
+        _criar_issue_e_vincular(
+            supabase,
+            demanda=demanda,
+            ator=ator,
+            corpo=corpo_do_prd,
+            assignees=[dono] if dono else [],
+            labels=labels_da_issue_nova(chat_tecnologia.TIPO_DA_CLASSIFICACAO["melhoria"]),
+        )
+        linha = planejamento_demanda.marcar_enviado(supabase, demanda_id, agora=_agora())
+        return _chat_para_a_tela(
+            supabase, demanda_id, linha or {**atual, "estado": planejamento_demanda.ESTADO_ENVIADO}
+        )
+
     produtos = supabase.table(TABELA_PRODUTOS).select("id, nome").eq("id", demanda.get("produto_id")).execute()
     produto_nome = (produtos.data or [{}])[0].get("nome") or SEM_PRODUTO
 

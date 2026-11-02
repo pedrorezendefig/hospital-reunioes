@@ -14,19 +14,17 @@ import os
 import re
 import sys
 
-import pytest
-
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from test_planejamento_demanda import _encerrou, _ia, _pergunta  # noqa: E402
+from test_planejamento_demanda import _ia, _pergunta  # noqa: E402
 from test_tecnologia_chat import (  # noqa: E402
-    _reset_rate_limiter,  # noqa: F401
     _cenario,
     _chamadas,
     _conversas,
     _demandas,
     _integracao_configurada,  # noqa: F401
     _llm_em_mock,  # noqa: F401
+    _reset_rate_limiter,  # noqa: F401
     _turno,
 )
 from test_tecnologia_vinculo import BASE  # noqa: E402
@@ -207,3 +205,129 @@ class TestTetoEFecharEResumir:
         demanda_id = client.post(CHAT, json={"escolha": "bug"}).json()["demanda_id"]
 
         assert client.post(f"{CHAT}/{demanda_id}/resumo").status_code == 409
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 3. O resumo traz o que ficou em aberto, e o "Não bateu" volta à conversa
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+def _ate_o_resumo(client, sb, monkeypatch, **campos_do_resumo) -> str:
+    demanda_id = _abrir_pelo_botao(client, monkeypatch)["demanda_id"]
+    _com_perguntas(sb, 1)
+    _ia(monkeypatch, _resumo_do_modelo(**campos_do_resumo))
+    resposta = client.post(f"{CHAT}/{demanda_id}/resumo")
+    assert resposta.status_code == 200, resposta.text
+    return demanda_id
+
+
+class TestResumoDaMelhoria:
+    def test_o_resumo_traz_o_que_ficou_em_aberto(self, monkeypatch):
+        client, sb, _ = _cenario(monkeypatch)
+        demanda_id = _ate_o_resumo(client, sb, monkeypatch)
+
+        resumo = client.get(f"{CHAT}/{demanda_id}").json()["resumo_da_melhoria"]
+
+        assert resumo["em_aberto"] == ["Quem confirma o retorno com o paciente."]
+
+    def test_o_que_nao_foi_perguntado_nunca_vira_decisao(self, monkeypatch):
+        """O modelo aponta uma decisão para a pergunta 2, que não houve: ela
+        some do resumo. O que não foi perguntado só cabe em "ficou em aberto"."""
+        client, sb, _ = _cenario(monkeypatch)
+        demanda_id = _ate_o_resumo(
+            client,
+            sb,
+            monkeypatch,
+            decisoes=[{"pergunta": 1, "porque": "Dito."}, {"pergunta": 2, "porque": "Inventado."}],
+        )
+
+        resumo = client.get(f"{CHAT}/{demanda_id}").json()["resumo_da_melhoria"]
+
+        assert [d["porque"] for d in resumo["decisoes"]] == ["Dito."]
+
+    def test_nao_bateu_volta_ao_planejamento_e_a_ia_retoma_dali(self, monkeypatch):
+        client, sb, gh = _cenario(monkeypatch)
+        demanda_id = _ate_o_resumo(client, sb, monkeypatch)
+
+        voltou = client.post(f"{CHAT}/{demanda_id}/nao-bateu", json={"texto": "A enfermagem também marca."})
+        assert voltou.status_code == 200, voltou.text
+        assert voltou.json()["estado"] == "em_andamento"
+        cliente = _ia(monkeypatch, _pergunta(contexto="A enfermagem marca em que momento?"))
+
+        retomou = client.post(f"{CHAT}/{demanda_id}", json={})
+
+        assert retomou.status_code == 200, retomou.text
+        assert retomou.json()["mensagens"][-1]["texto"] == "A enfermagem marca em que momento?"
+        assert "A enfermagem também marca." in cliente.chamadas[0]["messages"][0]["content"]
+        assert gh.criadas == []
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 4. "Criar o card" cria o PRD do diretor
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+class TestCriarOCardDaMelhoria:
+    def test_criar_o_card_cria_o_prd_do_diretor_para_a_triagem(self, monkeypatch):
+        client, sb, gh = _cenario(monkeypatch)
+        demanda_id = _ate_o_resumo(client, sb, monkeypatch)
+
+        resposta = client.post(f"{CHAT}/{demanda_id}/criar-card")
+
+        assert resposta.status_code == 200, resposta.text
+        assert resposta.json()["estado"] == "enviado"
+        [issue] = gh.criadas
+        assert sorted(issue["labels"]) == ["needs-triage", "type:feature"]
+        assert issue["titulo"] == "Agenda de retorno na recepção"
+        cabecalhos = re.findall(r"^## (.+)$", issue["corpo"], re.MULTILINE)
+        assert cabecalhos == [
+            "👔 Para o diretor",
+            "Problema",
+            "Solução",
+            "Histórias de usuário",
+            "Decisões de negócio",
+            "Ficou em aberto",
+            "Para o glossário",
+            "Origem",
+        ]
+        assert _demandas(sb)[0]["github_issue_numero"] is not None
+
+    def test_o_glossario_traz_os_termos_e_as_decisoes_candidatas_a_adr(self, monkeypatch):
+        client, sb, gh = _cenario(monkeypatch)
+        demanda_id = _ate_o_resumo(client, sb, monkeypatch)
+
+        client.post(f"{CHAT}/{demanda_id}/criar-card")
+
+        glossario = gh.criadas[0]["corpo"].split("## Para o glossário", 1)[1].split("\n## ", 1)[0]
+        assert "Agenda de retorno: a marcação do retorno feita na saída." in glossario
+        assert "Só a recepção marca o retorno." in glossario
+
+    def test_o_bloco_para_o_diretor_nao_tem_numero_de_issue(self, monkeypatch):
+        client, sb, gh = _cenario(monkeypatch)
+        demanda_id = _abrir_pelo_botao(client, monkeypatch)["demanda_id"]
+        [conversa] = _conversas(sb)
+        conversa["mensagens"] = [
+            *conversa["mensagens"][:2],
+            _pergunta_guardada(1),
+            {"tipo": "resposta", "opcao": None, "texto": "Igual ao pedido #1380, mas na recepção"},
+        ]
+        _ia(monkeypatch, _resumo_do_modelo(titulo="Retorno como no #1380"))
+        assert client.post(f"{CHAT}/{demanda_id}/resumo").status_code == 200
+
+        client.post(f"{CHAT}/{demanda_id}/criar-card")
+
+        bloco = bloco_para_o_diretor(gh.criadas[0]["corpo"])
+        assert "1380" in bloco
+        assert re.search(r"#\d", bloco) is None
+
+    def test_o_card_do_bug_continua_sem_glossario(self, monkeypatch):
+        client, _, gh = _cenario(monkeypatch)
+        _ia(monkeypatch, _turno(pronto=True, mensagem="Montei o resumo."))
+        demanda_id = client.post(CHAT, json={"escolha": "bug"}).json()["demanda_id"]
+        _ia(monkeypatch, _turno(pronto=True, mensagem="Montei o resumo."))
+        client.post(f"{CHAT}/{demanda_id}", json={"texto": "Na Ouvidoria"})
+
+        assert client.post(f"{CHAT}/{demanda_id}/criar-card").status_code == 200
+
+        assert "Para o glossário" not in gh.criadas[0]["corpo"]
+        assert "type:fix" in gh.criadas[0]["labels"]
