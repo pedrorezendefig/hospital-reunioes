@@ -42,8 +42,13 @@ O cenário é preenchido à mão, sem o "Preencher com a IA".
 O balão numerado é o do roteiro do Admin, importado dele: é o mesmo círculo em
 todo o manual.
 
+As telas do Vídeo de visão geral (`video-NN-<passo>`) saem em 1920x1080, sem
+balão, com as caixas dos elementos citados em `video-alvos.json`:
+`python3 docs/manual/prints/contas-medicas.py --video`.
+
 Uso: python3 docs/manual/prints/contas-medicas.py [--base http://localhost:3000]
      [--saida docs/manual/src/assets/contas-medicas] [--print <nome>] [--semear]
+     [--video]
 """
 
 from __future__ import annotations
@@ -1700,6 +1705,268 @@ def ditar(page: Page, base: str, saida: Path) -> None:
     limpar_baloes(page)
 
 
+# --------------------------------------------------------------------------
+# As telas do Vídeo de visão geral (ADR 0076)
+# --------------------------------------------------------------------------
+#
+# Janela inteira de 1920x1080, sem balão: no vídeo quem aponta é o cursor e o
+# destaque. Cada tela grava em `video-alvos.json` a caixa (x, y, largura,
+# altura, em pixels da janela) de cada elemento que a fala cita, e a cena do
+# Remotion põe o destaque em cima dela sem medir a olho.
+
+VIDEO = {"width": 1920, "height": 1080}
+
+
+def _caixa(alvo) -> list[float]:
+    caixa = alvo.bounding_box()
+    return [round(caixa[k], 1) for k in ("x", "y", "width", "height")]
+
+
+def _tela_do_video(page: Page, saida: Path, nome: str, alvos: dict) -> None:
+    """Captura a janela e grava as caixas dos alvos ao lado das telas."""
+    page.wait_for_load_state("networkidle")
+    sem_foco(page)
+    # O vídeo não escreve versão (o carimbo mora no meta.json), e o build
+    # local mostra a versão do package.json, não a de produção.
+    page.evaluate(
+        "document.querySelectorAll(\"span[aria-label^='Versão']\").forEach((e) => { e.style.visibility = 'hidden'; })"
+    )
+    page.wait_for_timeout(400)
+    caixas = {chave: _caixa(alvo) for chave, alvo in alvos.items()}
+    page.screenshot(path=str(saida / f"{nome}.png"))
+    arquivo = saida / "video-alvos.json"
+    dados = json.loads(arquivo.read_text(encoding="utf-8")) if arquivo.is_file() else {}
+    dados[nome] = caixas
+    arquivo.write_text(json.dumps(dados, indent=2, ensure_ascii=False, sort_keys=True) + "\n", encoding="utf-8")
+
+
+def _contas_no_video(page: Page, base: str, email: str = FATURISTA[2]) -> None:
+    page.set_viewport_size(VIDEO)
+    _contas(page, base, email)
+
+
+def video_01_contas(page: Page, base: str, saida: Path) -> None:
+    """Gancho, envio e Fila: a tela da faturista com a área de envio e a Fila."""
+    _guia_a_fazer()
+    _contas_no_video(page, base)
+    fila = page.get_by_role("region", name="Fila de contas")
+    linha = fila.locator("li").filter(has_text=f"Atendimento {ATENDIMENTO_DO_GUIA}")
+    _tela_do_video(page, saida, "video-01-contas", {
+        "envio": page.get_by_role("region", name="Envio de contas"),
+        "selecionar": page.get_by_role("button", name="Selecionar arquivos"),
+        "abas": page.get_by_role("tablist"),
+        "aba_fila": page.get_by_role("tab", name="Fila"),
+        "linha": linha,
+        "abrir": linha.get_by_role("link", name="Abrir"),
+    })
+
+
+def video_02_ultimo_envio(page: Page, base: str, saida: Path) -> None:
+    """O Último envio junta conta e prontuário pelo atendimento (resposta de exemplo)."""
+    _guia_a_fazer()
+    _contas_no_video(page, base)
+    page.route(
+        "**/api/contas-medicas/envios",
+        lambda rota: rota.fulfill(status=200, content_type="application/json", body=json.dumps(RESPOSTA_DO_ENVIO)),
+    )
+    pdf = b"%PDF-1.4\n%exemplo do manual\n"
+    page.locator("input[type=file][aria-label='Arquivos da conta e do prontuário']").set_input_files(
+        [
+            {"name": "conta-900412.pdf", "mimeType": "application/pdf", "buffer": pdf},
+            {"name": "prontuario-900412.pdf", "mimeType": "application/pdf", "buffer": pdf},
+            {"name": "conta-900450.pdf", "mimeType": "application/pdf", "buffer": pdf},
+        ]
+    )
+    quadro = page.get_by_role("region", name="Último envio")
+    quadro.wait_for()
+    _tela_do_video(page, saida, "video-02-ultimo-envio", {
+        "envio": page.get_by_role("region", name="Envio de contas"),
+        "quadro": quadro,
+        "completo": quadro.locator("li").filter(has_text="900412").first,
+    })
+
+
+def video_03_meus_envios(page: Page, base: str, saida: Path) -> None:
+    """O cartão com os dois quadrados, o botão do arquivo que falta e a conta em Erro."""
+    _guia_a_fazer()
+    _contas_no_video(page, base)
+    aba = _aba(page, "Meus envios")
+    falta = _cartao(page, "900431")
+    erro = _cartao(page, "900377")
+    erro.wait_for()
+    page.get_by_role("tablist").scroll_into_view_if_needed()
+    page.mouse.wheel(0, 220)
+    page.wait_for_timeout(400)
+    _tela_do_video(page, saida, "video-03-meus-envios", {
+        "aba": aba,
+        "cartao": falta,
+        "conta": falta.get_by_role("region", name="Conta"),
+        "prontuario": falta.get_by_role("region", name="Prontuário"),
+        "enviar": falta.get_by_role("button", name="Enviar o prontuário"),
+        "erro": erro,
+        "motivo": erro.get_by_text("A IA está fora do ar ou sobrecarregada agora."),
+        "codigo": erro.get_by_text("CM-IA-FORA-DO-AR"),
+        "analisar": erro.get_by_role("button", name="Analisar de novo"),
+        "copiar": erro.get_by_role("button", name="Copiar para a TI"),
+    })
+
+
+def _guia_no_video(page: Page, base: str) -> None:
+    page.set_viewport_size(VIDEO)
+    _guia(page, base)
+
+
+def video_04_guia(page: Page, base: str, saida: Path) -> None:
+    """O topo do guia: os três números, o Devolver à fila e o primeiro grupo."""
+    _guia_no_video(page, base)
+    numeros = page.get_by_role("region", name="Números do guia")
+    grupo = page.locator("main section[aria-label] h2").first
+    _tela_do_video(page, saida, "video-04-guia", {
+        "numeros": numeros,
+        "nota": numeros.locator("> *").nth(0),
+        "ajustar": numeros.locator("> *").nth(1),
+        "feitos": numeros.locator("> *").nth(2),
+        "devolver": page.get_by_role("button", name="Devolver à fila"),
+        "grupo": grupo,
+        "linha": _linha_do_guia(page, "Pantoprazol 40 mg injetável"),
+    })
+
+
+def video_05_guia_linhas(page: Page, base: str, saida: Path) -> None:
+    """As linhas por dia e setor, cada uma começando pelo verbo, e a evidência aberta."""
+    _guia_no_video(page, base)
+    linha = _linha_do_guia(page, "Pantoprazol 40 mg injetável")
+    linha.get_by_role("button", name="Ver evidência").click()
+    page.wait_for_timeout(300)
+    linha.evaluate("(el) => el.scrollIntoView({block: 'start'})")
+    page.mouse.wheel(0, -120)
+    page.wait_for_timeout(400)
+    _tela_do_video(page, saida, "video-05-guia-linhas", {
+        "linha": linha,
+        "codigo": linha.get_by_role("button", name="Copiar código 90123456"),
+        "feito": linha.get_by_role("button", name="Feito"),
+        "evidencia": linha.get_by_role("button", name="Ver evidência"),
+        "agulha": _linha_do_guia(page, "Agulha hipodérmica 25 x 7"),
+    })
+
+
+def video_06_nao_procede(page: Page, base: str, saida: Path) -> None:
+    """O Não procede aberto com os motivos, e o Bloqueado ao lado."""
+    _guia_no_video(page, base)
+    linha = _linha_do_guia(page, "Agulha hipodérmica 25 x 7")
+    linha.get_by_role("button", name="Não procede").click()
+    linha.get_by_label("A regra é outra").check()
+    linha.evaluate("(el) => el.scrollIntoView({block: 'center'})")
+    page.wait_for_timeout(400)
+    _tela_do_video(page, saida, "video-06-nao-procede", {
+        "linha": linha,
+        "motivos": linha.locator("fieldset"),
+        "confirmar": linha.get_by_role("button", name="Confirmar Não procede"),
+        "bloqueado": linha.get_by_role("button", name="Bloqueado"),
+    })
+
+
+def video_07_concluir(page: Page, base: str, saida: Path) -> None:
+    """O rodapé do guia com a observação e o Concluir e abrir a próxima."""
+    _guia_no_video(page, base)
+    rodape = page.locator("footer").filter(has_text="Concluir e abrir a próxima")
+    rodape.locator("#observacao-gestao").fill("A ficha anestésica cita um segundo cateter que não achei na conta.")
+    rodape.evaluate("(el) => el.scrollIntoView({block: 'end'})")
+    page.wait_for_timeout(400)
+    _tela_do_video(page, saida, "video-07-concluir", {
+        "rodape": rodape,
+        "observacao": rodape.locator("#observacao-gestao"),
+        "concluir": rodape.get_by_role("button", name="Concluir e abrir a próxima"),
+    })
+
+
+def video_08_fila_devolvida(page: Page, base: str, saida: Path) -> None:
+    """A conta devolvida volta para a Fila com as marcações de quem a tinha.
+
+    O roteiro clica de verdade em Devolver à fila e, no fim, a conta volta a
+    ser da faturista de exemplo, como os outros prints esperam.
+    """
+    _guia_a_fazer()
+    _minha_em_correcao()
+    try:
+        _contas_no_video(page, base)
+        _aba(page, "Minhas")
+        page.get_by_role("region", name="Fila de contas").locator("li").filter(
+            has_text="Atendimento 900398"
+        ).get_by_role("link", name="Continuar").click()
+        page.get_by_role("heading", name="Atendimento 900398").wait_for()
+        page.once("dialog", lambda dialogo: dialogo.accept())
+        page.get_by_role("button", name="Devolver à fila").click()
+        page.wait_for_url(lambda url: "/guia/" not in url, timeout=30000)
+        page.get_by_text("Atendimento 900398").wait_for()
+        fila = page.get_by_role("region", name="Fila de contas")
+        linha = fila.locator("li").filter(has_text="Atendimento 900398")
+        page.get_by_role("tablist").scroll_into_view_if_needed()
+        _tela_do_video(page, saida, "video-08-fila-devolvida", {
+            "aba_fila": page.get_by_role("tab", name="Fila"),
+            "fila": fila,
+            "linha": linha,
+            "abrir": linha.get_by_role("link", name="Abrir"),
+        })
+    finally:
+        _minha_em_correcao()
+
+
+def video_09_validacao(page: Page, base: str, saida: Path) -> None:
+    """A Validação: os três números e os temas, do maior valor para o menor."""
+    entrar(page, base, GESTORA[2])
+    page.set_viewport_size(VIDEO)
+    page.goto(f"{base}/contas-medicas/validacao", wait_until="networkidle")
+    regra = page.get_by_role("article", name="Regra AURORA-DIA-02")
+    regra.wait_for()
+    _tela_do_video(page, saida, "video-09-validacao", {
+        "aguardando": page.get_by_text("Aguardando decisão", exact=True),
+        "regra": regra,
+        "bloqueado": page.get_by_role("article", name=f"Código {CODIGO_BLOQUEADO} bloqueado"),
+        "observacao": page.get_by_role("article", name="Observações sobre a regra AURORA-MED-02"),
+    })
+
+
+def video_10_coordenacao(page: Page, base: str, saida: Path) -> None:
+    """A Coordenação: a conta com o lembrete do insumo que falta."""
+    entrar(page, base, COORDENADORA[2])
+    page.set_viewport_size(VIDEO)
+    page.goto(f"{base}/contas-medicas/coordenacao", wait_until="networkidle")
+    conta = page.get_by_role("region", name="Atendimento 900355")
+    conta.wait_for()
+    lembrete = conta.locator("article").first
+    _tela_do_video(page, saida, "video-10-coordenacao", {
+        "conta": conta,
+        "lembrete": lembrete,
+        "insumos": lembrete.get_by_role("list", name="Insumos que faltam"),
+        "incluido": conta.get_by_role("button", name="Incluído").first,
+    })
+
+
+def video_11_painel(page: Page, base: str, saida: Path) -> None:
+    """O Painel: a nota média da semana e os cartões do topo."""
+    page.set_viewport_size(VIDEO)
+    _painel(page, base)
+    _tela_do_video(page, saida, "video-11-painel", {
+        "nota": page.get_by_role("region", name="Nota média de entrada"),
+        "causa": page.get_by_role("region", name="R$ apontado por causa-raiz"),
+    })
+
+
+def video_12_painel_causa(page: Page, base: str, saida: Path) -> None:
+    """O Painel rolado até o R$ apontado por causa-raiz."""
+    page.set_viewport_size(VIDEO)
+    _painel(page, base)
+    causa = page.get_by_role("region", name="R$ apontado por causa-raiz")
+    causa.evaluate("(el) => el.scrollIntoView({block: 'start'})")
+    page.mouse.wheel(0, -80)
+    page.wait_for_timeout(400)
+    _tela_do_video(page, saida, "video-12-painel-causa", {
+        "causa": causa,
+        "itens": page.get_by_role("region", name="Os dez itens que mais faltam"),
+    })
+
+
 PRINTS = {
     "contas": contas,
     "envio": envio,
@@ -1749,6 +2016,18 @@ PRINTS = {
     "habilitacao-pessoa": habilitacao_pessoa,
     "habilitacao-matriz": habilitacao_matriz,
     "ditar": ditar,
+    "video-01-contas": video_01_contas,
+    "video-02-ultimo-envio": video_02_ultimo_envio,
+    "video-03-meus-envios": video_03_meus_envios,
+    "video-04-guia": video_04_guia,
+    "video-05-guia-linhas": video_05_guia_linhas,
+    "video-06-nao-procede": video_06_nao_procede,
+    "video-07-concluir": video_07_concluir,
+    "video-08-fila-devolvida": video_08_fila_devolvida,
+    "video-09-validacao": video_09_validacao,
+    "video-10-coordenacao": video_10_coordenacao,
+    "video-11-painel": video_11_painel,
+    "video-12-painel-causa": video_12_painel_causa,
 }
 
 
@@ -1758,6 +2037,7 @@ def main() -> int:
     ap.add_argument("--saida", default="docs/manual/src/assets/contas-medicas")
     ap.add_argument("--print", dest="escolhido", choices=list(PRINTS), help="captura só um print.")
     ap.add_argument("--semear", action="store_true", help="cria os dados de exemplo no Supabase local e sai.")
+    ap.add_argument("--video", action="store_true", help="captura só as telas do Vídeo de visão geral.")
     args = ap.parse_args()
 
     if args.semear:
@@ -1767,6 +2047,8 @@ def main() -> int:
     saida = Path(args.saida)
     saida.mkdir(parents=True, exist_ok=True)
     escolhidos = [args.escolhido] if args.escolhido else list(PRINTS)
+    if args.video:
+        escolhidos = [nome for nome in escolhidos if nome.startswith("video-")]
 
     from playwright.sync_api import sync_playwright
 
