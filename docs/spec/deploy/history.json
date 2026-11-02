@@ -2,6 +2,54 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-11-02T10:58:55-03:00",
+      "sha": "20596e1a1360d3dd9e3f794ce2ab691de5098139",
+      "app_version": "0.206.2",
+      "subject": "Onda manual-video-onda1: Tecnologia vira módulo do Manual, com as páginas migradas",
+      "raw_subject": "chore(deploy): registro da onda manual-video-onda1 (#1376)",
+      "scope": [
+        "backend",
+        "frontend"
+      ],
+      "prds": [
+        1365
+      ],
+      "result": "healthy",
+      "duration_seconds": 283,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        },
+        {
+          "service": "frontend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "onda-enxuta manual-video-onda1: PR #1376 (issue #1367), mergeados PR a PR. Merge pela API do GitHub, um build. Registro pela Action pos-merge depois do health.",
+      "etapas": {
+        "merge_s": 3,
+        "build_s": {
+          "backend": 238,
+          "frontend": 210
+        },
+        "health_s": 20
+      },
+      "responsavel": "pedrorezendefig"
+    },
+    {
       "at": "2026-11-01T21:26:58-03:00",
       "sha": "ca723da0bd96068b2f14dc72371ee2fef7b0c76b",
       "app_version": "0.206.1",
