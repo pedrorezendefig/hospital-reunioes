@@ -2,10 +2,19 @@
 title: Novidades
 description: O que mudou na aba Tecnologia, da entrega mais recente para a mais antiga.
 prd: [634, 673, 726, 1056, 1344, 1365]
-draft: false
+draft: true
 sidebar:
   order: 90
 ---
+
+## 02/11/2026 · A abertura ganha um vídeo com o caminho de uma Demanda
+
+A página [Tecnologia](../) agora abre com um vídeo narrado, com a fala escrita
+na tela. Ele acompanha um pedido do assistente até a entrega, e a maior parte
+do tempo fica no **Planejar com a IA**: a pergunta com o contexto, as duas
+opções com a **Recomendada**, a resposta pelo microfone, o **Fechar e resumir**
+e o sim que manda o plano para a Vitta. Depois vêm o Vínculo, os selos da Etapa
+e o **Concluir** da entrega.
 
 ## 01/11/2026 · A Tecnologia entra no Manual
 
