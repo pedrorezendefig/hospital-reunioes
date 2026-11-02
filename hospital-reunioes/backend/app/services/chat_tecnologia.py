@@ -1,0 +1,355 @@
+"""O chat da aba Tecnologia, com o Roteiro do bug (issue #1381, PRD #1380, ADR 0077).
+
+A aba abre na conversa com o Assistente de Tecnologia: "bug ou melhoria?", dois
+botoes e um campo livre. O diretor relata, o Assistente classifica e confirma,
+e no bug segue o Roteiro do bug: uma pergunta por vez, no maximo cinco (onde, o
+que aconteceu, o que esperava, como repetir, o print). Termina num resumo com
+"Criar o card" e "Nao bateu".
+
+Mesma separacao do Planejamento da Demanda, e pelo mesmo motivo:
+
+* **o turno** (`turno`) e sem estado: recebe a conversa, o kit e os Produtos e
+  devolve a fala da IA, a classificacao e, no fim do roteiro, o resumo. Nao le
+  nem grava nada;
+* **a guarda** e a do planejamento (`planejamento_demanda.ler`, `gravar`,
+  `gravar_chamada`): a conversa mora na mesma tabela, uma por Demanda (ADR 0077,
+  decisao 2), e a rota costura.
+
+O modelo e o do planejamento (`LLM_MODEL_PLANEJAMENTO`, decisao 9), pelo mesmo
+`chamar_o_modelo`: o prefixo fixo em cache e o custo gravado por chamada.
+
+As regras que a IA nao decide moram aqui, em codigo: o teto de cinco perguntas,
+a confirmacao antes do roteiro e o "nao informado" de rotulo sem resposta.
+"""
+
+from __future__ import annotations
+
+import logging
+from dataclasses import dataclass
+from typing import Literal
+
+from pydantic import BaseModel, ConfigDict, Field, model_validator
+
+from app.services import ai_processor, assistente_tecnologia, planejamento_demanda
+from app.services.tecnologia import recuar_continuacao
+from app.utils.text_sanitizer import sanitizar_travessao
+
+logger = logging.getLogger(__name__)
+
+PROMPT = "chat_tecnologia_system"
+
+# O teto do Roteiro do bug (ADR 0077, decisao 4). Quem decide parar antes e o
+# modelo; passar daqui, nunca: com cinco perguntas feitas o resumo sai do que
+# ja se sabe, queira o modelo perguntar mais ou nao.
+TETO_DO_ROTEIRO = 5
+
+ABERTURA = "Isso é um bug, algo que não funciona como deveria, ou uma melhoria?"
+OPCOES_DA_ABERTURA = ["Bug", "Melhoria"]
+
+# O botao da abertura vira a fala do diretor, com o texto do proprio botao.
+ESCOLHAS: dict[str, str] = {"bug": "Bug", "melhoria": "Melhoria"}
+
+# A Demanda continua no banco como o registro da conversa (decisao 2), com o
+# Tipo de antes: bug e Defeito, melhoria e Novo.
+TIPO_DA_CLASSIFICACAO: dict[str, str] = {"bug": "defeito", "melhoria": "novo"}
+
+TITULO_SEM_RESPOSTA = "Conversa na aba Tecnologia"
+LIMITE_DO_TITULO = 200
+LIMITE_DO_CAMPO = 2000
+LIMITE_DE_CRITERIOS = 8
+
+NAO_INFORMADO = "não informado"
+
+# Os rotulos do Roteiro do bug, na ordem da issue. O print e a quinta pergunta,
+# mas nao e texto: ele vira Anexo da Demanda e a issue diz so quantos ha.
+CAMPOS_DO_BUG: dict[str, str] = {
+    "onde": "Onde",
+    "o_que_aconteceu": "O que aconteceu",
+    "o_que_esperava": "O que esperava",
+    "como_repetir": "Como repetir",
+}
+
+TEXTO_DO_TETO = "Já tenho o que preciso. Confira o resumo e diga se ele bate com o que aconteceu."
+
+# O criterio de aceite de quando o modelo nao escreveu nenhum: o que o diretor
+# esperava, que e a unica coisa que ele disse sobre o "pronto". Sem nem isso, a
+# frase nao inventa comportamento: so diz que o problema relatado deixa de
+# acontecer.
+CRITERIO_SEM_O_ESPERADO = "O problema descrito em O que aconteceu deixa de acontecer."
+
+MOTIVO_SEM_TEXTO = "Escreva a sua mensagem ou escolha uma das opções."
+MOTIVO_TURNO_FALHOU = planejamento_demanda.MOTIVO_TURNO_FALHOU
+
+FALA_MOCK = "[MOCK] Conversar com o Assistente de Tecnologia exige a IA configurada."
+
+
+# ─── As falas guardadas ──────────────────────────────────────────────────────
+
+
+def mensagem_de_abertura() -> dict:
+    """A pergunta com que a aba abre. Nao passa pelo modelo: e sempre a mesma."""
+    return {"tipo": "ia", "texto": ABERTURA, "fonte": None, "opcoes": list(OPCOES_DA_ABERTURA)}
+
+
+def fala_do_diretor(texto: str) -> dict:
+    return {"tipo": "diretor", "texto": texto}
+
+
+def e_do_chat(linha: dict | None) -> bool:
+    """Se a conversa guardada e a do chat, e nao a de um Planejamento.
+
+    As duas moram na mesma tabela (ADR 0077, decisao 2). A do chat sempre abre
+    pela pergunta "bug ou melhoria?", que e uma fala `ia`; a do planejamento
+    abre por uma `pergunta`.
+    """
+    mensagens = (linha or {}).get("mensagens") or []
+    return bool(mensagens) and mensagens[0].get("tipo") == "ia"
+
+
+def classificacao_atual(mensagens: list[dict]) -> tuple[str | None, bool]:
+    """A classificacao da ultima fala da IA que tinha uma, e se ja foi confirmada."""
+    for mensagem in reversed(mensagens):
+        if mensagem.get("tipo") == "ia" and mensagem.get("classificacao"):
+            return mensagem["classificacao"], bool(mensagem.get("confirmada"))
+    return None, False
+
+
+def perguntas_do_roteiro(mensagens: list[dict]) -> int:
+    """Quantas perguntas do Roteiro do bug a IA ja fez."""
+    return sum(1 for m in mensagens if m.get("tipo") == "ia" and m.get("roteiro"))
+
+
+def textos_do_diretor(mensagens: list[dict]) -> list[str]:
+    """O que o diretor escreveu, sem as falas que sao so o botao da abertura."""
+    return [
+        m.get("texto") or ""
+        for m in mensagens
+        if m.get("tipo") in ("diretor", "nao_bateu") and (m.get("texto") or "") not in ESCOLHAS.values()
+    ]
+
+
+def para_a_tela(mensagens: list[dict]) -> list[dict]:
+    """A conversa como a tela a mostra: quem falou, o texto, a fonte e as opcoes.
+
+    A classificacao e a marca do roteiro sao do backend, e nao saem daqui.
+    """
+    return [
+        {
+            "autor": "ia" if m.get("tipo") == "ia" else "diretor",
+            "texto": m.get("texto") or "",
+            "fonte": m.get("fonte") if m.get("tipo") == "ia" else None,
+            "opcoes": list(m.get("opcoes") or []) if m.get("tipo") == "ia" else [],
+            "nao_bateu": m.get("tipo") == "nao_bateu",
+        }
+        for m in mensagens
+    ]
+
+
+# ─── O turno ─────────────────────────────────────────────────────────────────
+
+
+class _CamposDoBug(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    onde: str | None = None
+    o_que_aconteceu: str | None = None
+    o_que_esperava: str | None = None
+    como_repetir: str | None = None
+
+
+class _SaidaDoTurno(BaseModel):
+    """O esquema da resposta do modelo. O que nao valida aqui e falha do turno."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    classificacao: Literal["bug", "melhoria"]
+    confirmada: bool = False
+    produto_id: str | None = None
+    titulo: str | None = None
+    mensagem: str
+    fonte: str | None = None
+    opcoes: list[str] = Field(default_factory=list)
+    campos: _CamposDoBug = Field(default_factory=_CamposDoBug)
+    criterios: list[str] = Field(default_factory=list)
+    pronto: bool = False
+
+    @model_validator(mode="after")
+    def _fala_inteira(self):
+        if not self.mensagem.strip():
+            raise ValueError("mensagem vazia")
+        return self
+
+
+@dataclass(frozen=True)
+class ResultadoDoTurno:
+    """O que um turno produziu.
+
+    `mensagem` e a fala da IA, pronta para entrar na conversa. `resumo` vem so
+    quando o Roteiro do bug terminou. `caminho` e "planejamento" quando a
+    melhoria foi confirmada e segue pelo Planejamento da Demanda (nesta fatia,
+    o caminho da melhoria e o de antes). `erro` e a frase da tela quando o turno
+    nao aconteceu, e entao o resto e nulo. `chamada` e a linha de custo, nula so
+    no modo mock.
+    """
+
+    mensagem: dict | None
+    classificacao: str | None
+    confirmada: bool
+    produto_id: str | None
+    titulo: str | None
+    resumo: dict | None
+    caminho: str | None
+    erro: str | None
+    chamada: dict | None
+
+
+def _linha_da_conversa(mensagem: dict) -> str:
+    """Uma fala como ela entra no pedido. O que veio de fora (print, documento,
+    audio) entra cercado, pela mesma regra do Assistente."""
+    texto = mensagem.get("texto") or ""
+    if mensagem.get("tipo") == "ia":
+        return recuar_continuacao(f"IA: {texto}")
+    rotulo = "Diretor, sobre o resumo (o que não bateu)" if mensagem.get("tipo") == "nao_bateu" else "Diretor"
+    if assistente_tecnologia.PREFIXO_DE_ORIGEM.match(texto):
+        cercada = assistente_tecnologia._linha_da_conversa({"role": "user", "content": texto})
+        return cercada.replace("Pessoa: ", f"{rotulo}: ", 1)
+    return recuar_continuacao(f"{rotulo}: {texto}")
+
+
+def pedido_do_turno(mensagens: list[dict], produtos: list[dict]) -> str:
+    """O que varia de um turno para outro. Vai DEPOIS do bloco fixo em cache."""
+    classificacao, confirmada = classificacao_atual(mensagens)
+    if classificacao is None:
+        onde_esta = "ainda não classificada"
+    else:
+        onde_esta = f"{classificacao}, {'confirmada pelo diretor' if confirmada else 'ainda sem a confirmação do diretor'}"
+    feitas = perguntas_do_roteiro(mensagens)
+    linhas = [
+        "PRODUTOS (use o identificador exato em produto_id)",
+        *[f"- {p['id']}: {p.get('nome') or ''}" for p in produtos],
+        "",
+        "A CONVERSA ATÉ AQUI",
+        "\n".join(_linha_da_conversa(m) for m in mensagens),
+        "",
+        "ONDE A CONVERSA ESTÁ",
+        f"Classificação: {onde_esta}",
+        f"Perguntas do Roteiro do bug já feitas: {feitas} de {TETO_DO_ROTEIRO}",
+    ]
+    if feitas >= TETO_DO_ROTEIRO:
+        linhas.append("Não pergunte mais nada: monte o resumo agora, com pronto true.")
+    return "\n".join(linhas)
+
+
+def _texto_limpo(valor: str | None, teto: int) -> str:
+    return sanitizar_travessao(" ".join((valor or "").split()))[:teto].strip()
+
+
+def resumo_do_bug(campos: _CamposDoBug, criterios: list[str], *, titulo: str) -> dict:
+    """O resumo que o diretor confere: os quatro rotulos e os criterios.
+
+    Rotulo sem resposta sai "nao informado" (ADR 0077, Roteiro do bug): o card
+    nao deixa de nascer por falta de informacao, e o que faltou fica dito.
+    """
+    resumo: dict = {"titulo": titulo}
+    for campo in CAMPOS_DO_BUG:
+        resumo[campo] = _texto_limpo(getattr(campos, campo), LIMITE_DO_CAMPO) or NAO_INFORMADO
+    limpos = [c for c in (_texto_limpo(c, LIMITE_DO_CAMPO) for c in criterios) if c][:LIMITE_DE_CRITERIOS]
+    if not limpos:
+        esperado = resumo["o_que_esperava"]
+        limpos = [esperado if esperado != NAO_INFORMADO else CRITERIO_SEM_O_ESPERADO]
+    resumo["criterios"] = limpos
+    return resumo
+
+
+def _mock(escolha: str | None, produtos: list[dict], titulo_atual: str | None) -> ResultadoDoTurno:
+    logger.warning("Modo MOCK ativo para o chat da Tecnologia (sem chave LLM)")
+    classificacao = escolha or "bug"
+    return ResultadoDoTurno(
+        mensagem={"tipo": "ia", "texto": FALA_MOCK, "fonte": None, "opcoes": [], "classificacao": classificacao},
+        classificacao=classificacao,
+        confirmada=escolha is not None,
+        produto_id=produtos[0]["id"] if produtos else None,
+        titulo=titulo_atual or TITULO_SEM_RESPOSTA,
+        resumo=None,
+        caminho=None,
+        erro=None,
+        chamada=None,
+    )
+
+
+def turno(
+    *,
+    mensagens: list[dict],
+    kit: str,
+    produtos: list[dict],
+    escolha: str | None = None,
+    titulo_atual: str | None = None,
+    demanda_id: str | None = None,
+) -> ResultadoDoTurno:
+    """Um turno do chat. Sem estado: tudo chega por parametro.
+
+    `mensagens` e a conversa inteira, ja com a fala nova do diretor no fim.
+    `escolha` e o botao da abertura ("bug" ou "melhoria"): quem clicou ja
+    confirmou, e o modelo nao desdiz.
+    """
+    if ai_processor._llm_provider() == "mock":
+        return _mock(escolha, produtos, titulo_atual)
+
+    saida, chamada = planejamento_demanda.chamar_o_modelo(
+        demanda={"id": demanda_id},
+        passo="pergunta",
+        conteudo=pedido_do_turno(mensagens, produtos),
+        kit=kit,
+        validar=_SaidaDoTurno.model_validate,
+        prompt=PROMPT,
+    )
+    if saida is None:
+        return ResultadoDoTurno(
+            mensagem=None,
+            classificacao=None,
+            confirmada=False,
+            produto_id=None,
+            titulo=None,
+            resumo=None,
+            caminho=None,
+            erro=MOTIVO_TURNO_FALHOU,
+            chamada=chamada,
+        )
+
+    anterior, confirmada_antes = classificacao_atual(mensagens)
+    classificacao = escolha or saida.classificacao
+    confirmada = escolha is not None or saida.confirmada or (confirmada_antes and classificacao == anterior)
+    ids = {p["id"] for p in produtos}
+    titulo = _texto_limpo(saida.titulo, LIMITE_DO_TITULO) or titulo_atual or TITULO_SEM_RESPOSTA
+
+    no_roteiro = classificacao == "bug" and confirmada
+    resumo = None
+    caminho = None
+    texto = saida.mensagem
+    if no_roteiro and (saida.pronto or perguntas_do_roteiro(mensagens) >= TETO_DO_ROTEIRO):
+        resumo = resumo_do_bug(saida.campos, saida.criterios, titulo=titulo)
+        if not saida.pronto:
+            texto = TEXTO_DO_TETO
+    elif classificacao == "melhoria" and confirmada and saida.pronto:
+        caminho = "planejamento"
+
+    mensagem = {
+        "tipo": "ia",
+        "texto": sanitizar_travessao(texto.strip()),
+        "fonte": _texto_limpo(saida.fonte, LIMITE_DO_TITULO) or None,
+        "opcoes": [o for o in (_texto_limpo(o, LIMITE_DO_TITULO) for o in saida.opcoes) if o][:2],
+        "classificacao": classificacao,
+        "confirmada": confirmada,
+        "roteiro": no_roteiro and resumo is None,
+    }
+    return ResultadoDoTurno(
+        mensagem=mensagem,
+        classificacao=classificacao,
+        confirmada=confirmada,
+        produto_id=saida.produto_id if saida.produto_id in ids else None,
+        titulo=titulo,
+        resumo=resumo,
+        caminho=caminho,
+        erro=None,
+        chamada=chamada,
+    )

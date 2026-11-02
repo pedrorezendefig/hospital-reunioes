@@ -125,6 +125,10 @@ from app.models.tecnologia_schemas import (
     AssistenteDocumentoResponse,
     AssistenteImagemResponse,
     AtribuirPayload,
+    ChatNaoBateuPayload,
+    ChatPrimeiroTurnoPayload,
+    ChatResponse,
+    ChatTurnoPayload,
     ConversaLinhaResponse,
     DemandaCreatePayload,
     DemandaResponse,
@@ -143,7 +147,14 @@ from app.models.tecnologia_schemas import (
     TextoParaIaResponse,
     VincularPayload,
 )
-from app.services import ai_processor, assistente_tecnologia, github_client, planejamento_demanda, tecnologia_anexos
+from app.services import (
+    ai_processor,
+    assistente_tecnologia,
+    chat_tecnologia,
+    github_client,
+    planejamento_demanda,
+    tecnologia_anexos,
+)
 from app.services.conhecimento import carregar_kit
 from app.services.paginacao import ler_tudo
 from app.services.tecnologia import (
@@ -2711,6 +2722,117 @@ async def enviar_planejamento(
 
     linha = planejamento_demanda.marcar_enviado(supabase, demanda_id, agora=_agora())
     return _planejamento_para_a_tela(demanda, linha or {**atual, "estado": planejamento_demanda.ESTADO_ENVIADO})
+
+
+# ─── O chat da aba (issue #1381, PRD #1380, ADR 0077) ────────────────────────
+
+
+def _produtos_ativos(supabase: Client) -> list[dict]:
+    """Os Produtos que o agente pode escolher, na ordem da lista."""
+    result = supabase.table(TABELA_PRODUTOS).select("*").order("ordem").execute()
+    return [
+        {"id": p["id"], "nome": p.get("nome") or "", "dono_id": p.get("dono_id")}
+        for p in (result.data or [])
+        if p.get("ativo")
+    ]
+
+
+def _chat_para_a_tela(
+    supabase: Client,
+    demanda_id: str,
+    linha: dict | None,
+    *,
+    planejamento: bool = False,
+    aviso_dos_anexos: str | None = None,
+) -> dict:
+    linha = linha or {}
+    return {
+        "demanda_id": str(demanda_id),
+        "estado": linha.get("estado"),
+        "mensagens": chat_tecnologia.para_a_tela(linha.get("mensagens") or []),
+        "resumo": linha.get("resumo"),
+        "anexos": tecnologia_anexos.quantos_guardados(supabase, demanda_id),
+        "planejamento": planejamento,
+        "aviso_dos_anexos": aviso_dos_anexos,
+    }
+
+
+def _estado_depois_do_turno(resultado: chat_tecnologia.ResultadoDoTurno) -> str:
+    return planejamento_demanda.ESTADO_RESUMIDO if resultado.resumo else planejamento_demanda.ESTADO_EM_ANDAMENTO
+
+
+@router.post("/chat", response_model=ChatResponse, status_code=status.HTTP_201_CREATED)
+@limiter.limit(LIMITE_DO_ASSISTENTE)
+async def comecar_o_chat(
+    request: Request,
+    payload: ChatPrimeiroTurnoPayload,
+    ator: dict = Depends(require_super_admin),
+    supabase: Client = Depends(get_supabase_client),
+):
+    """O primeiro turno: a Demanda nasce aqui (ADR 0077, decisao 2).
+
+    O botao da abertura ou o texto livre entram na conversa depois da pergunta
+    "bug ou melhoria?", e o agente responde. So entao a Demanda e gravada, com
+    o Tipo da classificacao (Defeito para bug, Novo para melhoria), o Produto
+    que o agente escolheu pelo Kit e o titulo dele: um turno que falhou nao
+    deixa Demanda vazia para tras, e o texto continua na caixa da tela.
+    """
+    texto = (payload.texto or "").strip()
+    if not payload.escolha and not texto:
+        _recusar(chat_tecnologia.MOTIVO_SEM_TEXTO)
+
+    produtos = _produtos_ativos(supabase)
+    falas = [chat_tecnologia.mensagem_de_abertura()]
+    if payload.escolha:
+        falas.append(chat_tecnologia.fala_do_diretor(chat_tecnologia.ESCOLHAS[payload.escolha]))
+    if texto:
+        falas.append(chat_tecnologia.fala_do_diretor(texto))
+
+    # Fora do loop (issue #773, o porque em `ai_processor._EXECUTOR_DA_IA`).
+    resultado = await ai_processor.chamar_ia_fora_do_loop(
+        chat_tecnologia.turno, mensagens=falas, kit=carregar_kit(), produtos=produtos, escolha=payload.escolha
+    )
+    if resultado.erro:
+        if resultado.chamada is not None:
+            planejamento_demanda.gravar_chamada(supabase, resultado.chamada)
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=resultado.erro)
+
+    produto = next((p for p in produtos if p["id"] == resultado.produto_id), produtos[0])
+    criada = (
+        supabase.table(TABELA_DEMANDAS)
+        .insert(
+            {
+                "titulo": resultado.titulo,
+                "descricao": None,
+                "tipo": chat_tecnologia.TIPO_DA_CLASSIFICACAO[resultado.classificacao],
+                "produto_id": produto["id"],
+                "estado": "nova",
+                "responsavel_id": produto.get("dono_id"),
+                "autor_id": ator["id"],
+                "prioridade": "normal",
+            }
+        )
+        .execute()
+    )
+    if not criada.data:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Falha ao criar a Demanda")
+    demanda = criada.data[0]
+    demanda_id = str(demanda["id"])
+    if resultado.chamada is not None:
+        planejamento_demanda.gravar_chamada(supabase, {**resultado.chamada, "demanda_id": demanda_id})
+
+    linha = planejamento_demanda.gravar(
+        supabase,
+        demanda_id,
+        atual=None,
+        novo={
+            "estado": _estado_depois_do_turno(resultado),
+            "mensagens": [*falas, resultado.mensagem],
+            "resumo": resultado.resumo,
+            "atualizado_em": _agora(),
+        },
+    )
+    return _chat_para_a_tela(supabase, demanda_id, linha)
 
 
 # A lista de extensoes e os dois tetos vem do EXTRATOR, e nao sao escritos de
