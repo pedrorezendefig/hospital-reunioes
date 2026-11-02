@@ -2,6 +2,54 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-11-02T19:49:32-03:00",
+      "sha": "d5392128b70fc5c7d425e6240b6683d702c13e2a",
+      "app_version": "0.208.0",
+      "subject": "Onda tecnologia-chat-onda2: O caminho da melhoria dentro do chat da Tecnologia",
+      "raw_subject": "chore(deploy): registro da onda tecnologia-chat-onda2 (#1392)",
+      "scope": [
+        "backend",
+        "frontend"
+      ],
+      "prds": [
+        1380
+      ],
+      "result": "healthy",
+      "duration_seconds": 239,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        },
+        {
+          "service": "frontend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "onda-enxuta tecnologia-chat-onda2: PR #1392 (issue #1383), mergeados PR a PR. Merge pela API do GitHub, um build. Registro pela Action pos-merge depois do health.",
+      "etapas": {
+        "merge_s": 2,
+        "build_s": {
+          "backend": 26,
+          "frontend": 213
+        },
+        "health_s": 0
+      },
+      "responsavel": "pedrorezendefig"
+    },
+    {
       "at": "2026-11-02T19:16:07-03:00",
       "sha": "6130f61d8eb408bbf279970849af022599e36731",
       "app_version": "0.207.0",
