@@ -19,12 +19,7 @@ import { ToastProvider } from "@/components/ui/Toast";
 
 import { DemandaModal } from "./DemandaModal";
 import { Demanda, EuNaAba } from "./demandas";
-import {
-  CONTINUAR_PLANEJAMENTO,
-  MensagemDoPlanejamento,
-  Planejamento,
-  PLANEJAR_COM_A_IA,
-} from "./planejamento";
+import { MensagemDoPlanejamento, Planejamento, PLANEJAR_COM_A_IA } from "./planejamento";
 import {
   FECHAR_E_RESUMIR,
   NADA_DECIDIDO,
@@ -94,68 +89,19 @@ function montarModal(d: Demanda) {
   );
 }
 
-function botaoDePlanejar(): HTMLElement | null {
-  return screen.queryByRole("link", { name: PLANEJAR_COM_A_IA });
-}
+// O planejamento virou o caminho da melhoria dentro do chat (issue #1383, ADR
+// 0077, decisão 4): o card antigo não oferece mais planejar, em Tipo nenhum.
+describe("O card antigo sem o botão de planejar", () => {
+  it.each([
+    ["novo", false],
+    ["ajuste", false],
+    ["novo", true],
+  ] as const)("uma Demanda %s (planejamento guardado: %s) não mostra Planejar com a IA", (tipo, tem_planejamento) => {
+    montarModal(demanda({ tipo, tem_planejamento }));
 
-describe("O botão Planejar com a IA no card aberto", () => {
-  it.each(["novo", "ajuste"] as const)("aparece numa Demanda %s sem Vínculo e leva à tela do planejamento", (tipo) => {
-    montarModal(demanda({ tipo }));
-
-    expect(botaoDePlanejar()?.getAttribute("href")).toBe("/admin/tecnologia/planejamento/d-1");
-  });
-
-  it.each(["defeito", "decisao", "informacao", "terceiro", "consultoria"] as const)(
-    "não aparece numa Demanda %s",
-    (tipo) => {
-      montarModal(demanda({ tipo }));
-
-      expect(screen.getByLabelText("Título")).toBeTruthy(); // o card montou
-      expect(botaoDePlanejar()).toBeNull();
-    },
-  );
-
-  it("não aparece quando a Demanda já tem Vínculo, mesmo para o diretor, que não vê o número", () => {
-    montarModal(demanda({ tem_vinculo: true, vinculo: null }));
-
-    expect(screen.getByLabelText("Título")).toBeTruthy();
-    expect(botaoDePlanejar()).toBeNull();
-  });
-
-  it.each(["concluida", "cancelada"] as const)("não aparece numa Demanda %s", (estado) => {
-    montarModal(demanda({ estado }));
-
-    expect(screen.getByLabelText("Título")).toBeTruthy();
-    expect(botaoDePlanejar()).toBeNull();
-  });
-});
-
-// Os três estados do botão (issue #1348, ADR 0075, decisão 8).
-describe("O botão do card conforme o planejamento", () => {
-  function botaoDeContinuar(): HTMLElement | null {
-    return screen.queryByRole("link", { name: CONTINUAR_PLANEJAMENTO });
-  }
-
-  it("sem planejamento, mostra Planejar com a IA", () => {
-    montarModal(demanda({ tem_planejamento: false }));
-
-    expect(botaoDePlanejar()).not.toBeNull();
-    expect(botaoDeContinuar()).toBeNull();
-  });
-
-  it("com planejamento em andamento, mostra Continuar planejamento e leva à mesma tela", () => {
-    montarModal(demanda({ tem_planejamento: true }));
-
-    expect(botaoDeContinuar()?.getAttribute("href")).toBe("/admin/tecnologia/planejamento/d-1");
-    expect(botaoDePlanejar()).toBeNull();
-  });
-
-  it("com Vínculo, nenhum dos dois, mesmo com planejamento guardado", () => {
-    montarModal(demanda({ tem_planejamento: true, tem_vinculo: true, vinculo: null }));
-
-    expect(screen.getByLabelText("Título")).toBeTruthy();
-    expect(botaoDePlanejar()).toBeNull();
-    expect(botaoDeContinuar()).toBeNull();
+    expect(screen.getByLabelText("Título")).toBeTruthy(); // o card montou
+    expect(screen.queryByText(PLANEJAR_COM_A_IA)).toBeNull();
+    expect(screen.queryByText("Continuar planejamento")).toBeNull();
   });
 });
 

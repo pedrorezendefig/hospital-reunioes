@@ -22,12 +22,32 @@ export function urlDoCriarOCard(demandaId: string): string {
   return `${urlDaConversa(demandaId)}/criar-card`;
 }
 
+/** O "Fechar e resumir" da melhoria (issue #1383). */
+export function urlDoResumoDaMelhoria(demandaId: string): string {
+  return `${urlDaConversa(demandaId)}/resumo`;
+}
+
+export type LetraDaOpcao = "A" | "B";
+
+/**
+ * `recomendada` só vem na pergunta do planejamento da melhoria: as `opcoes`
+ * chegam na ordem A e B, e o clique manda a letra.
+ */
 export type FalaDoChat = {
   autor: "ia" | "diretor";
   texto: string;
   fonte: string | null;
   opcoes: string[];
+  recomendada?: LetraDaOpcao | null;
   nao_bateu: boolean;
+};
+
+export const LETRAS: LetraDaOpcao[] = ["A", "B"];
+
+/** O resumo do planejamento da melhoria: as decisões e o que ficou em aberto. */
+export type ResumoDaMelhoria = {
+  decisoes: { pergunta: string; escolha: string; porque: string }[];
+  em_aberto: string[];
 };
 
 export type ResumoDoBug = {
@@ -40,19 +60,33 @@ export type ResumoDoBug = {
 };
 
 /**
- * `estado`: `em_andamento`, `resumido` (o resumo esperando o clique) e
- * `enviado` (o card nasceu). `planejamento` é a melhoria confirmada, que
- * segue pela tela do Planejamento da Demanda.
+ * `estado`: `em_andamento`, `encerrado` (as perguntas da melhoria acabaram e o
+ * resumo vem a seguir), `resumido` (o resumo esperando o clique) e `enviado`
+ * (o card nasceu). `planejamento` é a melhoria confirmada, que segue no próprio
+ * chat pelo Planejamento da Demanda (issue #1383), com o resumo em
+ * `resumo_da_melhoria`.
  */
 export type ConversaDoChat = {
   demanda_id: string;
   estado: string | null;
   mensagens: FalaDoChat[];
   resumo: ResumoDoBug | null;
+  resumo_da_melhoria?: ResumoDaMelhoria | null;
   anexos: number;
   planejamento: boolean;
   aviso_dos_anexos: string | null;
 };
+
+/**
+ * A melhoria espera a IA falar: a conversa acabou de passar ao planejamento,
+ * ou o "Não bateu" entrou, e ainda não há pergunta esperando resposta. A tela
+ * pede o turno seguinte sozinha.
+ */
+export function esperaAPergunta(conversa: ConversaDoChat): boolean {
+  if (!conversa.planejamento || conversa.estado !== "em_andamento") return false;
+  const ultima = conversa.mensagens[conversa.mensagens.length - 1];
+  return !(ultima?.autor === "ia" && ultima.recomendada);
+}
 
 /** O que vai no primeiro POST: o botão da abertura ou o texto livre. */
 export type PrimeiroTurno = { escolha: "bug" | "melhoria" } | { texto: string; prints: string[] };
@@ -72,7 +106,23 @@ function falaValida(item: unknown): boolean {
     (f.autor === "ia" || f.autor === "diretor") &&
     typeof f.texto === "string" &&
     textoOuNulo(f.fonte) &&
-    listaDeTextos(f.opcoes)
+    listaDeTextos(f.opcoes) &&
+    (f.recomendada === undefined || f.recomendada === null || f.recomendada === "A" || f.recomendada === "B")
+  );
+}
+
+function resumoDaMelhoriaValido(valor: unknown): boolean {
+  if (valor === undefined || valor === null) return true;
+  if (typeof valor !== "object") return false;
+  const r = valor as Record<string, unknown>;
+  return (
+    Array.isArray(r.decisoes) &&
+    r.decisoes.every((d) => {
+      if (typeof d !== "object" || d === null) return false;
+      const c = d as Record<string, unknown>;
+      return typeof c.pergunta === "string" && typeof c.escolha === "string" && typeof c.porque === "string";
+    }) &&
+    listaDeTextos(r.em_aberto)
   );
 }
 
@@ -95,7 +145,8 @@ export function conversaValida(corpo: unknown): corpo is ConversaDoChat {
     textoOuNulo(c.estado) &&
     Array.isArray(c.mensagens) &&
     c.mensagens.every(falaValida) &&
-    resumoValido(c.resumo)
+    resumoValido(c.resumo) &&
+    resumoDaMelhoriaValido(c.resumo_da_melhoria)
   );
 }
 
