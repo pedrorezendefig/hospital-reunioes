@@ -207,3 +207,53 @@ class TestDuvidaRespondidaPeloKit:
         assert criar.status_code == 409
         assert gh.criadas == []
         assert _demandas(sb)[0].get("github_issue_numero") is None
+
+
+@pytest.fixture
+def _visao_dublada(monkeypatch):
+    """A leitura do print fica de fora: o que se prova aqui é o que o app
+    guarda, e não o que o modelo enxerga."""
+    from app.services import assistente_tecnologia
+
+    monkeypatch.setattr(assistente_tecnologia, "descrever_imagem", lambda **kw: "Tela da Ouvidoria sem o botão.")
+    tecnologia_anexos.esquecer_prints()
+    yield
+    tecnologia_anexos.esquecer_prints()
+
+
+def _print_lido(client) -> dict:
+    resposta = client.post(
+        f"{BASE}/assistente/descrever-imagem", files={"imagem": ("Captura de tela.png", PNG, "image/png")}
+    )
+    assert resposta.status_code == 200, resposta.text
+    return resposta.json()
+
+
+@pytest.mark.usefixtures("_visao_dublada")
+class TestPrintNoChat:
+    def test_o_print_mandado_no_chat_vira_anexo_da_demanda_na_hora(self, monkeypatch):
+        client, sb, _ = _cenario(monkeypatch)
+        demanda_id = _comecar(client, monkeypatch, mensagem="Tem um print da tela?")
+        lido = _print_lido(client)
+        _ia(monkeypatch, _turno(mensagem="Obrigado. Como repetir o problema?"))
+
+        resposta = client.post(
+            f"{CHAT}/{demanda_id}", json={"texto": f"[print] {lido['texto']}", "prints": [lido["print_id"]]}
+        )
+
+        assert resposta.status_code == 200, resposta.text
+        assert resposta.json()["anexos"] == 1
+        [anexo] = sb.tabelas["tecnologia_anexos"]
+        assert anexo["demanda_id"] == demanda_id
+        assert sb.storage.arquivos == {f"anexos-tecnologia/{anexo['storage_path']}": PNG}
+
+    def test_o_print_do_primeiro_turno_vira_anexo_da_demanda_que_nasceu(self, monkeypatch):
+        client, sb, _ = _cenario(monkeypatch)
+        lido = _print_lido(client)
+        _ia(monkeypatch, _turno())
+
+        resposta = client.post(CHAT, json={"escolha": "bug", "texto": f"[print] {lido['texto']}", "prints": [lido["print_id"]]})
+
+        assert resposta.status_code == 201, resposta.text
+        [anexo] = sb.tabelas["tecnologia_anexos"]
+        assert anexo["demanda_id"] == resposta.json()["demanda_id"]

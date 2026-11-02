@@ -2762,6 +2762,15 @@ def _chat_para_a_tela(
     }
 
 
+def _prints_do_turno(supabase: Client, *, demanda: dict, print_ids: list[str], ator: dict) -> str | None:
+    """Os prints que a fala do diretor trouxe viram Anexo da Demanda na hora
+    (ADR 0077, decisao 8), e so quando a fala entrou na conversa: o turno que
+    falhou devolve o 502 antes de chegar aqui, e o print espera o reenvio."""
+    if not print_ids:
+        return None
+    return tecnologia_anexos.anexar_prints(supabase, demanda=demanda, print_ids=print_ids, quem_id=ator["id"])
+
+
 def _estado_depois_do_turno(resultado: chat_tecnologia.ResultadoDoTurno) -> str:
     return planejamento_demanda.ESTADO_RESUMIDO if resultado.resumo else planejamento_demanda.ESTADO_EM_ANDAMENTO
 
@@ -2837,7 +2846,8 @@ async def comecar_o_chat(
             "atualizado_em": _agora(),
         },
     )
-    return _chat_para_a_tela(supabase, demanda_id, linha)
+    aviso = _prints_do_turno(supabase, demanda=demanda, print_ids=payload.prints, ator=ator)
+    return _chat_para_a_tela(supabase, demanda_id, linha, aviso_dos_anexos=aviso)
 
 
 MOTIVO_CHAT_NAO_ENCONTRADO = "Esta conversa não foi encontrada. Comece uma nova na aba Tecnologia."
@@ -2940,7 +2950,8 @@ async def responder_no_chat(
     if linha is None:
         _conflito(MOTIVO_CHAT_MUDOU)
     _acompanhar_o_turno(supabase, demanda, resultado)
-    return _chat_para_a_tela(supabase, demanda_id, linha)
+    aviso = _prints_do_turno(supabase, demanda=demanda, print_ids=payload.prints, ator=ator)
+    return _chat_para_a_tela(supabase, demanda_id, linha, aviso_dos_anexos=aviso)
 
 
 MOTIVO_CHAT_SEM_RESUMO = "Ainda não há resumo para virar card. Responda às perguntas até o resumo aparecer."
