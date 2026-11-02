@@ -9,6 +9,10 @@ Tres invariantes que o resto do app herda:
 
 - **So este repositorio.** O repositorio vem de `GITHUB_INTEGRACAO_REPO` e
   entra no caminho da URL uma vez so, aqui.
+- **Leitura do codigo so com GET** (issue #1385, ADR 0077, decisao 5): o
+  agente da aba le arquivo, pasta, busca e issues abertas por
+  `ler_do_repositorio`, `buscar_no_codigo` e `listar_issues_abertas`, e
+  nenhuma delas escreve.
 - **Escrita minima.** Quatro verbos de escrita, e so quatro: o PATCH da
   issue, que serve ao marcador do Vinculo e a designacao do responsavel; o POST que abre a issue do "Levar
   para desenvolvimento" (issue #677); e o par POST/PATCH do comentario
@@ -33,6 +37,7 @@ import json
 import logging
 import re
 from typing import Any
+from urllib.parse import quote, urlencode
 
 import httpx
 
@@ -91,7 +96,7 @@ def _headers(token: str) -> dict[str, str]:
     }
 
 
-def _chamar(metodo: str, caminho: str, *, json: dict | None = None) -> Any:
+def _chamar(metodo: str, caminho: str, *, json: dict | None = None, no_repositorio: bool = True) -> Any:
     """Uma chamada a API, com a traducao de erro da casa.
 
     O 404 e o unico status que vira excecao PROPRIA: ele e uma resposta ("esse
@@ -100,7 +105,9 @@ def _chamar(metodo: str, caminho: str, *, json: dict | None = None) -> Any:
     resposta, e a pessoa precisa saber que o app nao conseguiu conferir.
     """
     token, repo = _exigir_configuracao()
-    url = f"{BASE_URL}/repos/{repo}{caminho}"
+    # A busca de codigo e a unica rota fora de `/repos/{repo}`: ela recebe o
+    # repositorio dentro da consulta (`buscar_no_codigo`).
+    url = f"{BASE_URL}/repos/{repo}{caminho}" if no_repositorio else f"{BASE_URL}{caminho}"
     try:
         resposta = httpx.request(metodo, url, headers=_headers(token), json=json, timeout=_TIMEOUT)
     except httpx.HTTPError as exc:
@@ -251,6 +258,63 @@ def ler_historico_de_deploys() -> list[dict[str, Any]]:
     if not isinstance(deploys, list):
         raise GithubIndisponivelError("O history.json da main nao tem a lista de deploys")
     return deploys
+
+
+# ─── A leitura do codigo pelo agente da aba (issue #1385, ADR 0077, decisao 5) ─
+
+
+def _caminho_do_repositorio(caminho: str) -> str:
+    """O caminho relativo a raiz, sem barra nas pontas e sem `..`: o caminho
+    entra na URL, e quem o escreve e o modelo."""
+    limpo = (caminho or "").strip().strip("/")
+    if any(parte in ("", ".", "..") for parte in limpo.split("/")) and limpo:
+        raise IssueNaoEncontradaError(caminho)
+    return limpo
+
+
+def ler_do_repositorio(caminho: str) -> str | list[str]:
+    """O texto de um arquivo da `main`, ou os nomes de uma pasta.
+
+    Pela API de conteudo, so GET. Arquivo que nao e texto (imagem, binario)
+    volta como indisponivel: o agente segue sem ele.
+    """
+    dados = _chamar("GET", f"/contents/{quote(_caminho_do_repositorio(caminho))}?ref=main")
+    if isinstance(dados, list):
+        return [str(item.get("name")) for item in dados if isinstance(item, dict) and item.get("name")]
+    if not isinstance(dados, dict) or dados.get("encoding") != "base64" or not isinstance(dados.get("content"), str):
+        raise GithubIndisponivelError("GitHub respondeu o arquivo fora do formato")
+    try:
+        return base64.b64decode(dados["content"]).decode("utf-8")
+    except (ValueError, binascii.Error) as exc:
+        raise GithubIndisponivelError("O arquivo nao e texto") from exc
+
+
+# A primeira pagina da busca basta para o agente escolher o que abrir.
+_RESULTADOS_DA_BUSCA = 20
+
+
+def buscar_no_codigo(termo: str) -> list[str]:
+    """Os caminhos dos arquivos da `main` onde o termo aparece, pela busca de
+    codigo do GitHub restrita a este repositorio."""
+    _, repo = _exigir_configuracao()
+    consulta = urlencode({"q": f"{termo} repo:{repo}", "per_page": _RESULTADOS_DA_BUSCA})
+    dados = _chamar("GET", f"/search/code?{consulta}", no_repositorio=False)
+    itens = dados.get("items") if isinstance(dados, dict) else None
+    if not isinstance(itens, list):
+        raise GithubIndisponivelError("GitHub respondeu a busca fora do formato")
+    return [str(item["path"]) for item in itens if isinstance(item, dict) and item.get("path")]
+
+
+def listar_issues_abertas() -> list[dict[str, Any]]:
+    """As issues abertas (sem os PRs), numero e titulo, a primeira pagina."""
+    dados = _chamar("GET", "/issues?state=open&per_page=100")
+    if not isinstance(dados, list):
+        raise GithubIndisponivelError("GitHub respondeu a lista de issues fora do formato")
+    return [
+        {"numero": issue.get("number"), "titulo": str(issue.get("title") or "")}
+        for issue in dados
+        if isinstance(issue, dict) and isinstance(issue.get("number"), int) and not e_pull_request(issue)
+    ]
 
 
 def e_pull_request(dados: dict[str, Any]) -> bool:

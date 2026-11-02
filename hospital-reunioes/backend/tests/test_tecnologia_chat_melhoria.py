@@ -287,6 +287,8 @@ class TestCriarOCardDaMelhoria:
             "Solução",
             "Histórias de usuário",
             "Decisões de negócio",
+            "Decisões de implementação",
+            "Decisões de teste",
             "Ficou em aberto",
             "Para o glossário",
             "Origem",

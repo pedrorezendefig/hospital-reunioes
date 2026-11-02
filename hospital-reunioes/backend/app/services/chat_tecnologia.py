@@ -30,7 +30,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from app.services import ai_processor, assistente_tecnologia, planejamento_demanda
+from app.services import ai_processor, assistente_tecnologia, ferramentas_do_codigo, planejamento_demanda
 from app.services.tecnologia import recuar_continuacao
 from app.services.tecnologia_vinculo import NAO_INFORMADO, ROTULOS_DO_BUG
 from app.utils.text_sanitizer import sanitizar_travessao
@@ -97,6 +97,20 @@ def mensagem_de_abertura() -> dict:
 
 def fala_do_diretor(texto: str) -> dict:
     return {"tipo": "diretor", "texto": texto}
+
+
+def aviso_da_parecida(titulo: str) -> str:
+    """O aviso do pedido aberto parecido (issue #1385, ADR 0077, decisao 6):
+    pelo titulo, nunca pelo numero, que e vocabulario do repositorio."""
+    return (
+        f'Antes de criar o card: já existe um pedido aberto parecido, "{_texto_limpo(titulo, LIMITE_DO_TITULO)}". '
+        "Veja se não é o mesmo antes de clicar em Criar o card."
+    )
+
+
+def fala_do_aviso(titulo: str) -> dict:
+    """O aviso como fala da IA, para o resumo da melhoria, que nao tem fala."""
+    return {"tipo": "ia", "texto": aviso_da_parecida(titulo), "fonte": None, "opcoes": []}
 
 
 def e_do_chat(linha: dict | None) -> bool:
@@ -226,6 +240,9 @@ class _SaidaDoTurno(BaseModel):
     campos: _CamposDoBug = Field(default_factory=_CamposDoBug)
     criterios: list[str] = Field(default_factory=list)
     pronto: bool = False
+    # O numero do pedido aberto parecido (issue #1385), que o turno so aceita
+    # se o modelo o viu na lista das issues abertas neste mesmo turno.
+    parecida: int | None = None
 
     @model_validator(mode="after")
     def _fala_inteira(self):
@@ -348,6 +365,7 @@ def turno(
     if ai_processor._llm_provider() == "mock":
         return _mock(escolha, produtos, titulo_atual)
 
+    consultas = ferramentas_do_codigo.Consultas()
     saida, chamada = planejamento_demanda.chamar_o_modelo(
         demanda={"id": demanda_id},
         passo="pergunta",
@@ -355,6 +373,7 @@ def turno(
         kit=kit,
         validar=_SaidaDoTurno.model_validate,
         prompt=PROMPT,
+        consultas=consultas,
     )
     if saida is None:
         return ResultadoDoTurno(
@@ -389,6 +408,9 @@ def turno(
         resumo = resumo_do_bug(saida.campos, saida.criterios, titulo=titulo)
         if not saida.pronto:
             texto = TEXTO_DO_TETO
+        parecida = consultas.issues_vistas.get(saida.parecida) if saida.parecida is not None else None
+        if parecida:
+            texto = f"{texto.strip()} {aviso_da_parecida(parecida)}"
     elif classificacao == "melhoria" and confirmada and saida.pronto:
         caminho = CAMINHO_DO_PLANEJAMENTO
 
@@ -442,6 +464,7 @@ def turno_da_melhoria(
         demanda=demanda_da_melhoria(mensagens, demanda_id=demanda_id, titulo=titulo),
         mensagens=planejamento,
         kit=kit,
+        consultas=ferramentas_do_codigo.Consultas(),
     )
 
 
@@ -456,4 +479,5 @@ def resumo_da_melhoria(
         demanda=demanda_da_melhoria(mensagens, demanda_id=demanda_id, titulo=titulo),
         mensagens=planejamento,
         kit=kit,
+        consultas=ferramentas_do_codigo.Consultas(),
     )
