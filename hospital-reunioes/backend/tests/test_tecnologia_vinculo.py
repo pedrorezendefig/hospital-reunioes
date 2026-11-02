@@ -1024,14 +1024,14 @@ class _TableQuery:
         self._insert: list[dict] | None = None
         self._update: dict | None = None
         self._delete = False
-        self._order: list[str] = []
+        self._order: list[tuple[str, bool]] = []
         self._range: tuple[int, int] | None = None
 
     def select(self, *_a, **_kw):
         return self
 
-    def order(self, coluna, **_kw):
-        self._order.append(coluna)
+    def order(self, coluna, *, desc: bool = False, **_kw):
+        self._order.append((coluna, desc))
         return self
 
     def range(self, inicio, fim):
@@ -1105,8 +1105,11 @@ class _TableQuery:
                 linha.update(self._update)
             return _Result(data=[dict(linha) for linha in casadas])
 
-        for coluna in reversed(self._order):
-            casadas.sort(key=lambda linha, c=coluna: (linha.get(c) is None, linha.get(c)))
+        for coluna, desc in reversed(self._order):
+            com_valor = [linha for linha in casadas if linha.get(coluna) is not None]
+            sem_valor = [linha for linha in casadas if linha.get(coluna) is None]
+            com_valor.sort(key=lambda linha, c=coluna: linha.get(c), reverse=desc)
+            casadas = com_valor + sem_valor
         if self._range is not None:
             inicio, fim = self._range
             casadas = casadas[inicio : fim + 1]

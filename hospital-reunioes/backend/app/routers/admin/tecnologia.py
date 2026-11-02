@@ -54,6 +54,10 @@ Planejamento da Demanda (issue #1345, ADR 0075):
 
 O chat da aba, com o Roteiro do bug (issue #1381, ADR 0077):
 
+- GET   /admin/tecnologia/chat                  a lista lateral: as Demandas
+                                                de quem esta logado, da mais
+                                                recente para a mais antiga
+                                                (issue #1384).
 - POST  /admin/tecnologia/chat                  o primeiro turno: a Demanda
                                                 nasce aqui.
 - GET   /admin/tecnologia/chat/{id}             a conversa guardada.
@@ -2910,6 +2914,24 @@ def _passar_ao_planejamento(
 
 def _estado_depois_do_turno(resultado: chat_tecnologia.ResultadoDoTurno) -> str:
     return planejamento_demanda.ESTADO_RESUMIDO if resultado.resumo else planejamento_demanda.ESTADO_EM_ANDAMENTO
+
+
+@router.get("/chat", response_model=list[DemandaResponse])
+async def listar_as_conversas(
+    ator: dict = Depends(require_super_admin),
+    supabase: Client = Depends(get_supabase_client),
+):
+    """A lista ao lado do chat (issue #1384): as Demandas que o Super admin
+    logado pediu, com o titulo e a Etapa, a mais recente primeiro.
+
+    Sai pelo `_com_nomes`, o funil de toda Demanda desta API: e la que se
+    decide quem ve numero e endereco da issue, e o diretor le aqui a Etapa e
+    O que muda sem nenhum dos dois.
+    """
+    result = (
+        supabase.table(TABELA_DEMANDAS).select("*").eq("autor_id", ator["id"]).order("criado_em", desc=True).execute()
+    )
+    return _com_nomes(supabase, list(result.data or []), ator=ator)
 
 
 @router.post("/chat", response_model=ChatResponse, status_code=status.HTTP_201_CREATED)
