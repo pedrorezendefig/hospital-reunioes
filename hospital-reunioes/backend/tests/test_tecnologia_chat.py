@@ -257,3 +257,87 @@ class TestPrintNoChat:
         assert resposta.status_code == 201, resposta.text
         [anexo] = sb.tabelas["tecnologia_anexos"]
         assert anexo["demanda_id"] == resposta.json()["demanda_id"]
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 2. O Roteiro do bug e o resumo
+# ═══════════════════════════════════════════════════════════════════════════
+
+CAMPOS_RESPONDIDOS = {
+    "onde": "Ouvidoria, no caso aberto",
+    "o_que_aconteceu": "O botão Responder sumiu",
+    "o_que_esperava": "Ver o botão Responder no caso",
+    "como_repetir": None,
+}
+CRITERIOS = ["O botão Responder aparece no caso aberto da Ouvidoria"]
+
+
+def _responder(client, monkeypatch, demanda_id: str, texto: str, **campos_do_modelo):
+    _ia(monkeypatch, _turno(**campos_do_modelo))
+    resposta = client.post(f"{CHAT}/{demanda_id}", json={"texto": texto})
+    assert resposta.status_code == 200, resposta.text
+    return resposta.json()
+
+
+def _ate_o_resumo(client, monkeypatch) -> str:
+    """Um bug inteiro: a primeira pergunta e o resumo logo na resposta."""
+    demanda_id = _comecar(client, monkeypatch)
+    corpo = _responder(
+        client,
+        monkeypatch,
+        demanda_id,
+        "Na Ouvidoria, o botão Responder sumiu",
+        pronto=True,
+        mensagem="Montei o resumo. Confere?",
+        campos=CAMPOS_RESPONDIDOS,
+        criterios=CRITERIOS,
+    )
+    assert corpo["estado"] == "resumido"
+    return demanda_id
+
+
+class TestRoteiroDoBug:
+    def test_o_roteiro_para_na_quinta_pergunta_e_monta_o_resumo(self, monkeypatch):
+        """Respondidas as cinco, o modelo ainda quer perguntar: a sexta não
+        sai, e o resumo nasce do que o diretor já disse."""
+        client, _, _ = _cenario(monkeypatch)
+        demanda_id = _comecar(client, monkeypatch, mensagem="Pergunta 1?")
+        for n in range(2, 6):
+            corpo = _responder(client, monkeypatch, demanda_id, f"Resposta {n - 1}", mensagem=f"Pergunta {n}?")
+            assert corpo["estado"] == "em_andamento"
+
+        corpo = _responder(
+            client, monkeypatch, demanda_id, "Resposta 5", mensagem="Pergunta 6?", campos=CAMPOS_RESPONDIDOS
+        )
+
+        assert corpo["estado"] == "resumido"
+        perguntas = [m["texto"] for m in corpo["mensagens"] if m["autor"] == "ia" and m["texto"].startswith("Pergunta")]
+        assert perguntas == ["Pergunta 1?", "Pergunta 2?", "Pergunta 3?", "Pergunta 4?", "Pergunta 5?"]
+        assert corpo["resumo"]["onde"] == "Ouvidoria, no caso aberto"
+        # Rótulo sem resposta sai "não informado", e o critério vem do que ele esperava.
+        assert corpo["resumo"]["como_repetir"] == "não informado"
+        assert corpo["resumo"]["criterios"] == ["Ver o botão Responder no caso"]
+
+    def test_o_resumo_traz_o_que_o_diretor_disse_e_os_criterios(self, monkeypatch):
+        client, _, _ = _cenario(monkeypatch)
+
+        demanda_id = _ate_o_resumo(client, monkeypatch)
+
+        resumo = client.get(f"{CHAT}/{demanda_id}").json()["resumo"]
+        assert resumo == {
+            "titulo": "Botão de responder some na Ouvidoria",
+            "onde": "Ouvidoria, no caso aberto",
+            "o_que_aconteceu": "O botão Responder sumiu",
+            "o_que_esperava": "Ver o botão Responder no caso",
+            "como_repetir": "não informado",
+            "criterios": CRITERIOS,
+        }
+
+    def test_com_o_resumo_na_tela_a_conversa_espera_o_clique(self, monkeypatch):
+        client, _, _ = _cenario(monkeypatch)
+        demanda_id = _ate_o_resumo(client, monkeypatch)
+
+        resposta = client.post(f"{CHAT}/{demanda_id}", json={"texto": "mais uma coisa"})
+
+        assert resposta.status_code == 409
+
