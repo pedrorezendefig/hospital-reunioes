@@ -316,7 +316,7 @@ def audio(video: Path) -> tuple[str, int]:
 @sem_ffmpeg
 def test_video_narrado_sai_com_audio_aac_de_64_kbps(tmp_path):
     """O Vídeo de visão geral tem narração (ADR 0076): a voz vai junto, em AAC
-    de 64 kbps, que basta para fala e pesa metade do que pesava a 128."""
+    de 64 kbps, que basta para fala e pesa dois terços do que pesava a 96."""
     saida = tmp_path / "publicar"
     video = saida / "video" / "pops" / "visao-geral.mp4"
     video.parent.mkdir(parents=True)
