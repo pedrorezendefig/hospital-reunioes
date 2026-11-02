@@ -1,19 +1,18 @@
-"""O Planejamento da Demanda (issue #1345, PRD #1344, ADR 0075).
+"""O Planejamento da Demanda (issue #1345, PRD #1344; ADR 0077).
 
-Numa Demanda de tipo Novo ou Ajuste ainda sem Vinculo, a IA faz ao diretor as
-perguntas de negocio que a Vitta faria, uma por vez, cada uma com duas opcoes e
-a recomendada marcada. A conversa fica guardada na Demanda (decisao 3) e some
-quando ela e Concluida ou Cancelada, pelo mesmo gancho dos Anexos.
+O caminho da melhoria no chat da aba: a IA faz ao diretor as perguntas de
+negocio que a Vitta faria, uma por vez, cada uma com duas opcoes e a
+recomendada marcada. A conversa fica guardada na Demanda, na mesma tabela da
+conversa do chat (ADR 0077, decisao 2).
 
 Duas metades, e a separacao e de proposito:
 
-* **o turno** (`turno`) e sem estado, como o Assistente de Tecnologia: recebe a
-  Demanda, a conversa e o kit, e devolve a proxima pergunta ou "encerrou". Nao
-  le nem grava nada;
-* **a guarda** (`ler`, `gravar_chamada`, `apagar`) e o que toca o banco, para a
+* **o turno** (`turno`) e sem estado: recebe a Demanda, a conversa e o kit, e
+  devolve a proxima pergunta ou "encerrou". Nao le nem grava nada;
+* **a guarda** (`ler`, `gravar`, `gravar_chamada`) e o que toca o banco, para a
   rota costurar.
 
-O cliente do LLM vem por `ai_processor` pelo MODULO, como no Assistente: e o
+O cliente do LLM vem por `ai_processor` pelo MODULO: e o
 que mantem o dublê dos testes (`ai_processor._get_llm`) valendo aqui. O modelo
 e outro (`LLM_MODEL_PLANEJAMENTO`, decisao 7), com o thinking e o effort
 padrao do modelo: nada de desligar o pensamento nem de escolher o esforco.
@@ -35,7 +34,7 @@ from app.config import settings
 from app.services import ai_processor, ferramentas_do_codigo
 from app.services.assistente_tecnologia import MARCA_FIM_KIT, MARCA_INICIO_KIT, TITULO_DO_KIT
 from app.services.prompt_loader import load_prompt
-from app.services.tecnologia import ESTADOS_FECHADOS, TIPO_ROTULO, recuar_continuacao
+from app.services.tecnologia import TIPO_ROTULO, recuar_continuacao
 from app.utils.text_sanitizer import sanitizar_travessao
 
 logger = logging.getLogger(__name__)
@@ -47,8 +46,6 @@ TABELA_CHAMADAS_IA = "tecnologia_chamadas_ia"
 # daqui, nunca: o turno encerra mesmo que o modelo ainda queira perguntar.
 TETO_DE_PERGUNTAS = 12
 
-# So Novo e Ajuste se planejam (decisao 2): sao os Tipos que viram codigo.
-TIPOS_QUE_SE_PLANEJAM = ("novo", "ajuste")
 
 ESTADO_EM_ANDAMENTO = "em_andamento"
 ESTADO_ENCERRADO = "encerrado"
@@ -60,15 +57,9 @@ TEXTO_DO_TETO = (
     "e o que faltou perguntar a Vitta vê com você depois."
 )
 
-MOTIVO_TIPO_FORA = "Só dá para planejar com a IA uma Demanda de tipo Novo ou Ajuste."
-MOTIVO_JA_VINCULADA = "Esta Demanda já foi para o desenvolvimento, e o planejamento agora segue com a Vitta."
-MOTIVO_ENCERRADA = "Esta Demanda está encerrada e não pode mais ser planejada."
-MOTIVO_PLANEJAMENTO_TERMINOU = "Este planejamento já terminou. Não há pergunta esperando resposta."
 MOTIVO_SEM_RESPOSTA = "Escolha uma das opções ou escreva a sua resposta."
 MOTIVO_DUAS_RESPOSTAS = "Escolha uma opção ou escreva a sua resposta, não os dois."
 MOTIVO_RESPOSTA_SEM_PERGUNTA = "Ainda não há pergunta para responder. Recarregue a página."
-MOTIVO_RESUMO_PRONTO = "O resumo deste planejamento já está pronto. Recarregue a página."
-MOTIVO_SEM_RESUMO = "Não há resumo esperando a sua resposta. Recarregue a página."
 MOTIVO_NAO_SEM_TEXTO = "Diga o que não bateu no resumo."
 
 # A frase de quando o turno nao aconteceu: provedor fora do ar, recusa, ou a
@@ -85,23 +76,6 @@ PERGUNTA_MOCK = {
 
 
 # ─── Quem pode planejar ──────────────────────────────────────────────────────
-
-
-def motivo_para_nao_planejar(demanda: dict) -> str | None:
-    """A frase do 409, ou `None` quando a Demanda pode ser planejada.
-
-    Vinculo e o `github_issue_numero`: com ele, a Demanda ja foi para o
-    desenvolvimento e o PRD do diretor ja nasceu (ADR 0075, decisao 2).
-    Encerrada tambem fica de fora: o planejamento some ao encerrar, e um que
-    nascesse depois nao teria quem o apagasse.
-    """
-    if demanda.get("tipo") not in TIPOS_QUE_SE_PLANEJAM:
-        return MOTIVO_TIPO_FORA
-    if demanda.get("github_issue_numero"):
-        return MOTIVO_JA_VINCULADA
-    if demanda.get("estado") in ESTADOS_FECHADOS:
-        return MOTIVO_ENCERRADA
-    return None
 
 
 def pergunta_em_aberto(mensagens: list[dict]) -> dict | None:
@@ -649,35 +623,11 @@ def e_conversa_do_chat(linha: dict | None) -> bool:
     return bool(mensagens) and mensagens[0].get("tipo") == "ia"
 
 
-def demandas_com_planejamento(supabase, demanda_ids: list[str]) -> set[str]:
-    """Quais destas Demandas ja tem conversa de planejamento guardada (issue #1348).
-
-    E o que faz o botao do card virar "Continuar planejamento". A conversa do
-    chat da aba nao conta: ela e retomada pelo chat, e nao pelo planejamento.
-    Nunca levanta: sem a resposta daqui o card mostra "Planejar com a IA", que
-    abre a MESMA tela e retoma a conversa do mesmo jeito, e a lista da aba nao
-    pode cair por causa de um rotulo.
-    """
-    if not demanda_ids:
-        return set()
-    try:
-        result = (
-            supabase.table(TABELA_PLANEJAMENTOS)
-            .select("demanda_id, mensagens")
-            .in_("demanda_id", sorted(demanda_ids))
-            .execute()
-        )
-    except Exception:
-        logger.exception("Falha ao ler quais Demandas tem planejamento")
-        return set()
-    return {str(linha["demanda_id"]) for linha in (result.data or []) if not e_conversa_do_chat(linha)}
-
-
 def gravar(supabase, demanda_id: str, *, atual: dict | None, novo: dict) -> dict | None:
     """O primeiro turno insere; os seguintes atualizam o que foi LIDO.
 
-    O update amarra o `atualizado_em` lido, como o `mover` amarra o estado: com
-    o diretor em duas abas, a segunda resposta nao casa linha nenhuma e nao
+    O update amarra o `atualizado_em` lido (trava otimista): com o diretor em
+    duas abas, a segunda resposta nao casa linha nenhuma e nao
     sobrescreve a primeira. O insert concorrente esbarra no UNIQUE da Demanda.
     Nos dois casos volta `None`, e a rota responde 409.
     """
@@ -704,7 +654,8 @@ def gravar(supabase, demanda_id: str, *, atual: dict | None, novo: dict) -> dict
 
 
 def marcar_enviado(supabase, demanda_id: str, *, agora: str) -> dict | None:
-    """O planejamento depois do "sim" (issue #1349): a issue ja nasceu.
+    """A conversa depois do "Criar o card" (issues #1349 e #1381): a issue ja
+    nasceu.
 
     Sem a guarda do `atualizado_em` do `gravar`, de proposito: quando isto
     roda, a Demanda ja tem Vinculo, e o que outra aba tenha gravado no meio
@@ -728,16 +679,3 @@ def gravar_chamada(supabase, chamada: dict) -> None:
         logger.error(
             "[Planejamento] Custo da IA da Demanda %s sem gravação: %s", chamada.get("demanda_id"), type(erro).__name__
         )
-
-
-def apagar(supabase, demanda_id: str) -> None:
-    """Tira o planejamento da Demanda que chegou a Concluida ou Cancelada.
-
-    Chamado so por Concluir e Cancelar, ao lado do apagamento dos Anexos
-    (ADR 0075, decisao 3). Nunca levanta: quem chama ja encerrou a Demanda, e o
-    encerramento vale com ou sem o banco respondendo aqui.
-    """
-    try:
-        supabase.table(TABELA_PLANEJAMENTOS).delete().eq("demanda_id", demanda_id).execute()
-    except Exception:
-        logger.exception("Falha ao apagar o planejamento da Demanda %s ao encerrar", demanda_id)

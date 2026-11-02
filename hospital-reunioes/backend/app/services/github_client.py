@@ -1,7 +1,7 @@
 """O unico ponto do app que fala com a API do GitHub (issue #674, ADR 0054).
 
 Modulo profundo, porta estreita: quem chama pede "a foto da issue #673" ou
-"marque esta issue com o id desta Demanda", e recebe dado pronto ou uma
+"crie a issue desta Demanda", e recebe dado pronto ou uma
 excecao. Base, header, timeout e traducao de erro moram aqui; nenhum outro
 modulo importa `httpx` para falar com o GitHub.
 
@@ -13,13 +13,11 @@ Tres invariantes que o resto do app herda:
   agente da aba le arquivo, pasta, busca e issues abertas por
   `ler_do_repositorio`, `buscar_no_codigo` e `listar_issues_abertas`, e
   nenhuma delas escreve.
-- **Escrita minima.** Quatro verbos de escrita, e so quatro: o PATCH da
-  issue, que serve ao marcador do Vinculo e a designacao do responsavel; o POST que abre a issue do "Levar
-  para desenvolvimento" (issue #677); e o par POST/PATCH do comentario
-  espelhado da Conversa (issue #680). Nenhum verbo de LEITURA de comentario:
-  nada do GitHub volta para a Conversa (ADR 0054, decisao 5). O token
-  fine-grained do Pedro tem Issues: write neste repositorio e mais nada
-  (ADR 0054, decisao 8).
+- **Escrita minima.** So o "Criar o card" do chat escreve (ADR 0077, decisao
+  6): o POST que abre a issue e o PATCH que a designa. Nenhum verbo de LEITURA de
+  comentario: nada do GitHub volta para o app alem da foto da issue (ADR 0054,
+  decisao 5). O token fine-grained do Pedro tem Issues: write neste
+  repositorio e mais nada (ADR 0054, decisao 8).
 - **Falha e falha.** Timeout, 5xx e erro de rede viram `GithubIndisponivelError`;
   404 vira `IssueNaoEncontradaError`. Sem token ou sem repositorio configurado e
   `GithubNaoConfiguradoError`, que a rota traduz em 503: o app nao FINGE que leu.
@@ -343,11 +341,6 @@ def ler_sub_issues(numero: int) -> list[dict[str, Any]]:
     return dados if isinstance(dados, list) else []
 
 
-def atualizar_corpo(numero: int, corpo: str) -> None:
-    """Reescreve o `body` da issue."""
-    _chamar("PATCH", f"/issues/{numero}", json={"body": corpo})
-
-
 def criar_issue(*, titulo: str, corpo: str, labels: list[str], assignees: list[str] | None = None) -> dict[str, Any]:
     """Abre uma issue nova no repositorio da integracao (issue #677).
 
@@ -379,39 +372,6 @@ def criar_issue(*, titulo: str, corpo: str, labels: list[str], assignees: list[s
         except (GithubIndisponivelError, IssueNaoEncontradaError) as exc:
             logger.warning("[github] a issue #%s nasceu sem assignee (%s): %s", numero, assignees, exc)
     return dados
-
-
-def criar_comentario(numero: int, corpo: str) -> int:
-    """Publica um comentario na issue e devolve o id que o GitHub lhe deu
-    (issue #680).
-
-    So o id, e nao o JSON inteiro: e a unica coisa que o app guarda dele, na
-    linha da Conversa, para a correcao da resposta editar o MESMO comentario.
-    Vale em issue fechada tambem, e e de proposito (ADR 0054, decisao 6): a
-    resposta do diretor numa Demanda entregue e o que reabre o trabalho.
-
-    Um 404 aqui e a issue que sumiu (apagada, ou o token que perdeu o
-    repositorio), e sobe como esta: quem chama trata qualquer erro do mesmo
-    jeito, logando sem desfazer a resposta.
-
-    Resposta sem `id` inteiro vira indisponibilidade: gravar `None` no lugar do
-    id faria a correcao seguinte publicar um segundo comentario em vez de
-    editar o primeiro, e ninguem saberia por que.
-    """
-    dados = _chamar("POST", f"/issues/{numero}/comments", json={"body": corpo})
-    comentario_id = dados.get("id") if isinstance(dados, dict) else None
-    if not isinstance(comentario_id, int):
-        raise GithubIndisponivelError("GitHub criou o comentario sem devolver o id")
-    return comentario_id
-
-
-def editar_comentario(comentario_id: int, corpo: str) -> None:
-    """Reescreve o corpo de um comentario ja publicado (issue #680).
-
-    O caminho e o do comentario, sem numero de issue: e assim que a API do
-    GitHub endereca comentarios, pelo id que `criar_comentario` devolveu.
-    """
-    _chamar("PATCH", f"/issues/comments/{comentario_id}", json={"body": corpo})
 
 
 def montar_foto(dados: dict[str, Any], partes: list[dict[str, Any]]) -> dict[str, Any]:

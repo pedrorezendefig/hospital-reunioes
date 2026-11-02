@@ -1,38 +1,26 @@
-"""Planejamento da Demanda: o "sim" cria o PRD do diretor (issue #1349, PRD #1344, ADR 0075).
+"""O PRD do diretor, o corpo da issue da melhoria (issue #1349, PRD #1344; ADR 0077).
 
-O "sim" do resumo manda a Demanda para o desenvolvimento pelo mesmo caminho do
-"Levar para desenvolvimento": a mesma issue com marcador, `needs-triage`,
-`type:feature` e o bloco "Para o diretor", mas com o PRD do diretor no corpo e
-atribuida ao dono da empresa, e nao ao Responsavel da Demanda. Aqui:
-
-* **O corpo**, direto na funcao pura: as seis secoes, o sanitizador de
-  travessao e a peneira de dado pessoal.
-* **A rota**, pelo router de verdade, com o Supabase e o GitHub dublados do
-  `test_tecnologia_vinculo`. Nenhum teste fala com a IA nem com o GitHub de
-  verdade.
+O "Criar o card" da melhoria no chat manda a Demanda para o desenvolvimento com
+o PRD do diretor no corpo: a issue com marcador, `needs-triage`, `type:feature`
+e o bloco "Para o diretor". Aqui o corpo, direto na funcao pura: as secoes, o
+sanitizador de travessao e a peneira de dado pessoal. A rota mora em
+`test_tecnologia_chat_melhoria.py`; a rota "enviar" da tela antiga do
+Planejamento saiu na issue #1386.
 """
 
 from __future__ import annotations
 
 import os
+import re
 import sys
-
-import pytest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from test_tecnologia_vinculo import BASE, DIRETOR, PEDRO, _demanda, _GithubFalso, _montar, _pessoa  # noqa: E402
 
-from app.config import settings  # noqa: E402
-from app.limiter import limiter  # noqa: E402
-from app.services import github_client, planejamento_demanda, tecnologia_email  # noqa: E402
 from app.services.tecnologia_vinculo import (  # noqa: E402
     CABECALHO_DO_BLOCO,
-    ETAPA_EM_ANALISE,
-    LABEL_TRIAGEM,
     bloco_para_o_diretor,
     corpo_do_prd_do_diretor,
-    demanda_id_do_marcador,
 )
 
 RESUMO = {
@@ -63,6 +51,11 @@ def _corpo(**campos) -> str:
     }
     argumentos.update(campos)
     return corpo_do_prd_do_diretor(**argumentos)
+
+
+def _demandas_do_marcador(corpo: str) -> list[str]:
+    """Os ids de Demanda que os marcadores do corpo apontam, na ordem."""
+    return re.findall(r'<!--\s*demanda-vitta id="([^"]*)"\s*-->', corpo)
 
 
 def _secao(corpo: str, titulo: str) -> str:
@@ -138,7 +131,7 @@ class TestOCorpoDoPrdDoDiretor:
     def test_o_marcador_da_demanda_fecha_o_corpo(self):
         corpo = _corpo()
 
-        assert demanda_id_do_marcador(corpo) == "d-1"
+        assert _demandas_do_marcador(corpo) == ["d-1"]
         assert corpo.rstrip().endswith('<!-- demanda-vitta id="d-1" -->')
 
     def test_o_numero_de_issue_que_o_diretor_escreve_sai_como_numero_sem_cerquilha(self):
@@ -201,179 +194,5 @@ class TestOCorpoDoPrdDoDiretor:
             }
         )
 
-        assert demanda_id_do_marcador(corpo) == "d-1"
+        assert _demandas_do_marcador(corpo) == ["d-1"]
         assert "\n## Origem\n<!--" not in corpo
-
-
-# ═══════════════════════════════════════════════════════════════════════════
-# 2. A rota "enviar"
-# ═══════════════════════════════════════════════════════════════════════════
-
-ROTA = f"{BASE}/demandas/d-1/planejamento/enviar"
-LUCAS = _pessoa("P3", "Lucas Sampaio", github_login="lucas-sampaio")
-QUEM_NAO_E_SUPER_ADMIN = _pessoa("P9", "Sem acesso", access_profile="regular")
-
-
-@pytest.fixture(autouse=True)
-def _reset_rate_limiter():
-    limiter._storage.reset()
-    yield
-    limiter._storage.reset()
-
-
-@pytest.fixture(autouse=True)
-def _sem_rede(monkeypatch):
-    """Nem GitHub, nem e-mail, nem IA de verdade: o `.env` carregado e o de
-    producao. As trocas sao as do `test_tecnologia_vinculo` e do
-    `test_planejamento_demanda`, que nao valem fora do proprio arquivo."""
-    from app.services import ai_processor
-
-    def _proibido(*a, **kw):
-        raise AssertionError("O cliente do GitHub foi chamado de verdade neste teste. Duble-o.")
-
-    monkeypatch.setattr(github_client.httpx, "request", _proibido)
-    monkeypatch.setattr(tecnologia_email, "_enviar_email", lambda *a, **kw: True)
-    monkeypatch.setattr(tecnologia_email, "transporte_configurado", lambda: True)
-    monkeypatch.setattr(ai_processor, "_llm_provider", lambda: "mock")
-    monkeypatch.setattr(settings, "github_integracao_token", "token-de-teste")
-    monkeypatch.setattr(settings, "github_integracao_repo", "pedrorezendefig/hospital-reunioes")
-
-
-def _demanda_planejada(**campos) -> dict:
-    base = {
-        "tipo": "novo",
-        "titulo": "Agenda de retorno na recepção",
-        "descricao": "Hoje o retorno é marcado no papel e se perde.",
-        "responsavel_id": "P3",
-    }
-    base.update(campos)
-    return _demanda("d-1", **base)
-
-
-def _planejamento(**campos) -> dict:
-    linha = {
-        "id": "pl-d-1",
-        "demanda_id": "d-1",
-        "estado": "resumido",
-        "mensagens": [],
-        "decisoes": [],
-        "resumo": RESUMO,
-        "modelo": "claude-opus-5-5",
-        "criado_em": "2026-11-01T12:00:00Z",
-        "atualizado_em": "2026-11-01T12:05:00Z",
-    }
-    linha.update(campos)
-    return linha
-
-
-def _cenario(monkeypatch, *, logado=DIRETOR, demanda=None, planejamento=None, github=None):
-    client, sb, gh = _montar(
-        logado=logado,
-        participantes=[PEDRO, DIRETOR, LUCAS],
-        demandas=[demanda or _demanda_planejada()],
-        github=github or _GithubFalso({}),
-        monkeypatch=monkeypatch,
-    )
-    sb.tabelas.setdefault("tecnologia_planejamentos", []).extend([planejamento] if planejamento else [])
-    return client, sb, gh
-
-
-class TestEnviar:
-    def test_sem_resumo_leva_409_e_nao_cria_issue(self, monkeypatch):
-        client, sb, gh = _cenario(monkeypatch, planejamento=_planejamento(estado="em_andamento", resumo=None))
-
-        resposta = client.post(ROTA)
-
-        assert resposta.status_code == 409
-        assert resposta.json()["detail"] == planejamento_demanda.MOTIVO_SEM_RESUMO
-        assert gh.criadas == []
-        assert sb.tabelas["tecnologia_demandas"][0]["github_issue_numero"] is None
-
-    def test_sem_planejamento_leva_409(self, monkeypatch):
-        client, _, gh = _cenario(monkeypatch)
-
-        assert client.post(ROTA).status_code == 409
-        assert gh.criadas == []
-
-    def test_o_sim_cria_a_issue_com_marcador_labels_e_o_prd_do_diretor(self, monkeypatch):
-        client, _, gh = _cenario(monkeypatch, planejamento=_planejamento())
-
-        resposta = client.post(ROTA)
-
-        assert resposta.status_code == 200, resposta.text
-        assert len(gh.criadas) == 1
-        criada = gh.criadas[0]
-        assert criada["titulo"] == "Agenda de retorno na recepção"
-        assert criada["labels"] == [LABEL_TRIAGEM, "type:feature"]
-        assert demanda_id_do_marcador(criada["corpo"]) == "d-1"
-        assert "- Só a recepção." in bloco_para_o_diretor(criada["corpo"])
-        assert "## Ficou em aberto" in criada["corpo"]
-
-    def test_a_issue_nasce_atribuida_ao_dono_e_nao_ao_responsavel(self, monkeypatch):
-        monkeypatch.setattr(settings, "github_login_dono", "dono-da-vitta")
-        client, sb, gh = _cenario(monkeypatch, planejamento=_planejamento())
-
-        assert client.post(ROTA).status_code == 200
-        # O Responsavel da Demanda (Lucas) tem login, e mesmo assim nao e ele.
-        assert sb.tabelas["tecnologia_demandas"][0]["responsavel_id"] == "P3"
-        assert gh.criadas[0]["assignees"] == ["dono-da-vitta"]
-
-    def test_o_dono_padrao_e_o_pedro(self):
-        assert type(settings).model_fields["github_login_dono"].default == "pedrorezendefig"
-
-    def test_depois_do_sim_o_planejamento_esta_enviado_e_a_demanda_tem_vinculo_em_analise(self, monkeypatch):
-        client, sb, _ = _cenario(monkeypatch, planejamento=_planejamento())
-
-        resposta = client.post(ROTA)
-
-        assert resposta.json()["estado"] == planejamento_demanda.ESTADO_ENVIADO
-        assert sb.tabelas["tecnologia_planejamentos"][0]["estado"] == planejamento_demanda.ESTADO_ENVIADO
-        demanda = sb.tabelas["tecnologia_demandas"][0]
-        assert demanda["github_issue_numero"] == 900
-        assert demanda["etapa"] == ETAPA_EM_ANALISE
-        # O card que o diretor le: com Vinculo, e o botao de planejar some.
-        card = client.get(f"{BASE}/demandas").json()[0]
-        assert card["tem_vinculo"] is True
-        assert planejamento_demanda.motivo_para_nao_planejar(demanda) == planejamento_demanda.MOTIVO_JA_VINCULADA
-
-    def test_o_diretor_sem_login_no_github_manda(self, monkeypatch):
-        """O "sim" e do diretor (ADR 0075, decisao 8): o gate do `github_login`
-        do Levar nao vale aqui, e a identidade no GitHub e a do token."""
-        client, _, gh = _cenario(monkeypatch, logado=DIRETOR, planejamento=_planejamento())
-
-        assert client.post(ROTA).status_code == 200
-        assert len(gh.criadas) == 1
-
-    def test_quem_nao_e_super_admin_leva_403(self, monkeypatch):
-        client, _, gh = _cenario(monkeypatch, logado=QUEM_NAO_E_SUPER_ADMIN, planejamento=_planejamento())
-
-        assert client.post(ROTA).status_code == 403
-        assert gh.criadas == []
-
-    def test_demanda_ja_vinculada_leva_409(self, monkeypatch):
-        client, _, gh = _cenario(
-            monkeypatch, demanda=_demanda_planejada(github_issue_numero=673), planejamento=_planejamento()
-        )
-
-        resposta = client.post(ROTA)
-
-        assert resposta.status_code == 409
-        assert resposta.json()["detail"] == planejamento_demanda.MOTIVO_JA_VINCULADA
-        assert gh.criadas == []
-
-    def test_sem_integracao_leva_503_e_o_resumo_fica(self, monkeypatch):
-        monkeypatch.setattr(settings, "github_integracao_token", "")
-        client, sb, gh = _cenario(monkeypatch, planejamento=_planejamento())
-
-        assert client.post(ROTA).status_code == 503
-        assert gh.criadas == []
-        assert sb.tabelas["tecnologia_planejamentos"][0]["estado"] == "resumido"
-
-    def test_github_fora_do_ar_leva_502_e_o_resumo_fica(self, monkeypatch):
-        gh = _GithubFalso({}, erro_ao_criar=github_client.GithubIndisponivelError("fora"))
-        client, sb, _ = _cenario(monkeypatch, planejamento=_planejamento(), github=gh)
-
-        assert client.post(ROTA).status_code == 502
-        assert sb.tabelas["tecnologia_planejamentos"][0]["estado"] == "resumido"
-        assert sb.tabelas["tecnologia_demandas"][0]["github_issue_numero"] is None
-        assert sb.tabelas["tecnologia_demandas"][0]["github_sincronizado_em"] is None
