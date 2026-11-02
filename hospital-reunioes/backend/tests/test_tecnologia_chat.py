@@ -386,3 +386,51 @@ class TestNaoBateu:
         assert resposta.status_code == 422
         assert client.get(f"{CHAT}/{demanda_id}").json()["estado"] == "resumido"
 
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 3. Criar o card
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+class TestCriarOCard:
+    def test_criar_o_card_cria_a_issue_do_bug_pronta_para_a_onda(self, monkeypatch):
+        """O diretor (sem login no GitHub) clica em Criar o card: a issue nasce
+        com a label de bug e `ready-for-agent`, sem `needs-triage` e sem
+        ninguém designado, porque designar é tomar a issue."""
+        client, sb, gh = _cenario(monkeypatch)
+        demanda_id = _ate_o_resumo(client, monkeypatch)
+
+        resposta = client.post(f"{CHAT}/{demanda_id}/criar-card")
+
+        assert resposta.status_code == 200, resposta.text
+        assert resposta.json()["estado"] == "enviado"
+        [issue] = gh.criadas
+        assert sorted(issue["labels"]) == ["ready-for-agent", "type:fix"]
+        assert issue["assignees"] == []
+        assert issue["titulo"] == "Botão de responder some na Ouvidoria"
+        assert _demandas(sb)[0]["github_issue_numero"] == 900
+
+    def test_a_issue_traz_os_rotulos_do_roteiro_e_os_criterios_de_aceite(self, monkeypatch):
+        client, _, gh = _cenario(monkeypatch)
+        demanda_id = _ate_o_resumo(client, monkeypatch)
+
+        assert client.post(f"{CHAT}/{demanda_id}/criar-card").status_code == 200
+
+        corpo = gh.criadas[0]["corpo"]
+        assert "- **Onde:** Ouvidoria, no caso aberto" in corpo
+        assert "- **O que aconteceu:** O botão Responder sumiu" in corpo
+        assert "- **O que esperava:** Ver o botão Responder no caso" in corpo
+        assert "- **Como repetir:** não informado" in corpo
+        assert "## Critérios de aceite\n\n- [ ] O botão Responder aparece no caso aberto da Ouvidoria" in corpo
+        assert "**O que muda:** Ver o botão Responder no caso" in corpo
+        assert f'<!-- demanda-vitta id="{demanda_id}" -->' in corpo
+
+    def test_o_segundo_clique_nao_cria_outra_issue(self, monkeypatch):
+        client, _, gh = _cenario(monkeypatch)
+        demanda_id = _ate_o_resumo(client, monkeypatch)
+        assert client.post(f"{CHAT}/{demanda_id}/criar-card").status_code == 200
+
+        assert client.post(f"{CHAT}/{demanda_id}/criar-card").status_code == 409
+
+        assert len(gh.criadas) == 1
+
