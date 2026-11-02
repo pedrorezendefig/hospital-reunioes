@@ -4,7 +4,7 @@
  * O módulo da aba Tecnologia (issue #636, PRD #634, ADR 0050).
  *
  * As três abas: o chat do Assistente, que é onde a aba abre (issue #1381, ADR
- * 0077), o Quadro e o Painel, que saem numa fatia própria depois. O gate de verdade é o `require_super_admin`
+ * 0077), com a lista lateral das conversas (issue #1384), o Quadro e o Painel, que saem numa fatia própria depois. O gate de verdade é o `require_super_admin`
  * do backend; a sidebar apenas esconde o item. O cadastro de Produtos saiu do
  * rodapé do Quadro na issue #1060 e mora em tela própria
  * (`ProdutosDaTecnologia`, atrás da engrenagem ao lado de "Nova Demanda").
@@ -19,7 +19,7 @@ import { AlertCircle, Cpu } from "lucide-react";
 
 import { useAuth } from "@/hooks/useAuth";
 
-import { ChatDaTecnologia } from "./ChatDaTecnologia";
+import { ConversasDaTecnologia } from "./ConversasDaTecnologia";
 import { PainelDemandas } from "./PainelDemandas";
 import { QuadroDemandas } from "./QuadroDemandas";
 import {
@@ -189,7 +189,7 @@ export function TecnologiaModulo() {
       </div>
 
       <div role="tabpanel">
-        {aba === "assistente" && <ChatDaTecnologia token={token} />}
+        {aba === "assistente" && <ConversasDaTecnologia token={token} />}
         {aba === "quadro" && (
           <QuadroDemandas
             token={token}

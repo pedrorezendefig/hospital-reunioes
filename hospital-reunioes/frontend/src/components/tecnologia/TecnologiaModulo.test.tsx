@@ -92,7 +92,8 @@ function montar(
 
       // As duas abas (o Quadro da issue #637 e o Painel da #1059) carregam o
       // que mostram e têm teste só delas: aqui elas ficam vazias.
-      if (url.includes("/demandas")) {
+      // A lista lateral do Assistente (issue #1384) tem teste próprio.
+      if (url.includes("/demandas") || url.endsWith("/chat")) {
         return { ok: true, status: 200, json: async () => [] } as unknown as Response;
       }
       if (url.includes("/painel")) {
