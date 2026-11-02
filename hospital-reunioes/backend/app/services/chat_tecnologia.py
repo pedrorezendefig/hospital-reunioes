@@ -443,3 +443,17 @@ def turno_da_melhoria(
         mensagens=planejamento,
         kit=kit,
     )
+
+
+def resumo_da_melhoria(
+    *, mensagens: list[dict], kit: str, demanda_id: str, titulo: str | None
+) -> planejamento_demanda.ResultadoDoResumo:
+    """O "Fechar e resumir" da melhoria: o resumo do Planejamento da Demanda,
+    com o que ficou em aberto e a secao do glossario, sobre a parte da conversa
+    que e do planejamento."""
+    _, planejamento = partes_da_melhoria(mensagens)
+    return planejamento_demanda.resumir(
+        demanda=demanda_da_melhoria(mensagens, demanda_id=demanda_id, titulo=titulo),
+        mensagens=planejamento,
+        kit=kit,
+    )

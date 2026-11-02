@@ -2986,6 +2986,8 @@ MOTIVO_CHAT_NAO_ENCONTRADO = "Esta conversa não foi encontrada. Comece uma nova
 MOTIVO_CHAT_NO_RESUMO = "O resumo já está pronto. Clique em Criar o card, ou em Não bateu para corrigir."
 MOTIVO_CHAT_TERMINOU = "Esta conversa já virou card. Comece uma nova na aba Tecnologia."
 MOTIVO_CHAT_MUDOU = "A conversa mudou em outra aba. Recarregue a página e tente de novo."
+MOTIVO_MELHORIA_ENCERRADA = "A IA já tem o que precisa. Clique em Fechar e resumir para ver as decisões."
+MOTIVO_RESUMO_SO_DA_MELHORIA = "Fechar e resumir vale para uma melhoria, depois que as perguntas começaram."
 
 
 def _chat_guardado(supabase: Client, demanda_id: str) -> tuple[dict, dict]:
@@ -3012,6 +3014,57 @@ def _acompanhar_o_turno(supabase: Client, demanda: dict, resultado: chat_tecnolo
     mudancas = {campo: valor for campo, valor in novo.items() if valor != demanda.get(campo)}
     if mudancas:
         supabase.table(TABELA_DEMANDAS).update(mudancas).eq("id", demanda["id"]).execute()
+
+
+async def _turno_da_melhoria(
+    supabase: Client, *, demanda: dict, atual: dict, payload: ChatTurnoPayload, ator: dict
+) -> dict:
+    """Um turno do planejamento da melhoria dentro do chat (issue #1383).
+
+    As regras sao as do Planejamento da Demanda: com pergunta em aberto, a
+    resposta e a letra da opcao OU o texto livre; sem pergunta (a passagem do
+    chat ao planejamento, ou o "Nao bateu"), o corpo vazio pede a pergunta
+    seguinte. A conversa so e gravada depois que o turno deu certo.
+    """
+    demanda_id = str(demanda["id"])
+    mensagens = list(atual.get("mensagens") or [])
+    _, planejamento = chat_tecnologia.partes_da_melhoria(mensagens)
+    resposta, motivo = planejamento_demanda.resposta_do_diretor(planejamento, opcao=payload.opcao, texto=payload.texto)
+    if motivo:
+        _recusar(motivo)
+    if resposta is not None:
+        mensagens.append(resposta)
+
+    resultado = await ai_processor.chamar_ia_fora_do_loop(
+        chat_tecnologia.turno_da_melhoria,
+        mensagens=mensagens,
+        kit=carregar_kit(),
+        demanda_id=demanda_id,
+        titulo=demanda.get("titulo"),
+    )
+    if resultado.chamada is not None:
+        planejamento_demanda.gravar_chamada(supabase, resultado.chamada)
+    if resultado.erro:
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=resultado.erro)
+
+    decisoes = list(atual.get("decisoes") or [])
+    if resultado.decisao:
+        decisoes.append(resultado.decisao)
+    linha = planejamento_demanda.gravar(
+        supabase,
+        demanda_id,
+        atual=atual,
+        novo={
+            "estado": _estado_do_planejamento(resultado.mensagem),
+            "mensagens": [*mensagens, resultado.mensagem],
+            "decisoes": decisoes,
+            "atualizado_em": _agora(),
+        },
+    )
+    if linha is None:
+        _conflito(MOTIVO_CHAT_MUDOU)
+    aviso = _prints_do_turno(supabase, demanda=demanda, print_ids=payload.prints, ator=ator)
+    return _chat_para_a_tela(supabase, demanda_id, linha, aviso_dos_anexos=aviso)
 
 
 @router.get("/chat/{demanda_id}", response_model=ChatResponse)
@@ -3044,10 +3097,14 @@ async def responder_no_chat(
     demanda, atual = _chat_guardado(supabase, demanda_id)
     if atual.get("estado") == planejamento_demanda.ESTADO_RESUMIDO:
         _conflito(MOTIVO_CHAT_NO_RESUMO)
+    if atual.get("estado") == planejamento_demanda.ESTADO_ENCERRADO:
+        _conflito(MOTIVO_MELHORIA_ENCERRADA)
     if atual.get("estado") != planejamento_demanda.ESTADO_EM_ANDAMENTO:
         _conflito(MOTIVO_CHAT_TERMINOU)
 
     mensagens = list(atual.get("mensagens") or [])
+    if chat_tecnologia.em_planejamento(mensagens):
+        return await _turno_da_melhoria(supabase, demanda=demanda, atual=atual, payload=payload, ator=ator)
     texto = (payload.texto or "").strip()
     if texto:
         mensagens.append(chat_tecnologia.fala_do_diretor(texto))
@@ -3129,6 +3186,59 @@ async def resumo_do_chat_nao_bateu(
     )
     if linha is None:
         _conflito(MOTIVO_CHAT_MUDOU)
+    return _chat_para_a_tela(supabase, demanda_id, linha)
+
+
+@router.post("/chat/{demanda_id}/resumo", response_model=ChatResponse)
+@limiter.limit(LIMITE_DO_ASSISTENTE)
+async def fechar_e_resumir_a_melhoria(
+    request: Request,
+    demanda_id: str,
+    _ator: dict = Depends(require_super_admin),
+    supabase: Client = Depends(get_supabase_client),
+):
+    """O "Fechar e resumir" da melhoria (issue #1383): vale a qualquer altura do
+    planejamento, da primeira pergunta ao "encerrou". O resumo traz as decisoes,
+    o que ficou em aberto (o que nao foi perguntado nunca vira decisao) e o
+    glossario. O titulo provisorio da Demanda da lugar ao do resumo. Falha da
+    IA devolve 502 sem mexer em nada."""
+    demanda, atual = _chat_guardado(supabase, demanda_id)
+    mensagens = list(atual.get("mensagens") or [])
+    if not chat_tecnologia.em_planejamento(mensagens):
+        _conflito(MOTIVO_RESUMO_SO_DA_MELHORIA)
+    estado = atual.get("estado")
+    if estado == planejamento_demanda.ESTADO_RESUMIDO:
+        _conflito(MOTIVO_CHAT_NO_RESUMO)
+    if estado not in (planejamento_demanda.ESTADO_EM_ANDAMENTO, planejamento_demanda.ESTADO_ENCERRADO):
+        _conflito(MOTIVO_CHAT_TERMINOU)
+
+    resultado = await ai_processor.chamar_ia_fora_do_loop(
+        chat_tecnologia.resumo_da_melhoria,
+        mensagens=mensagens,
+        kit=carregar_kit(),
+        demanda_id=demanda_id,
+        titulo=demanda.get("titulo"),
+    )
+    if resultado.chamada is not None:
+        planejamento_demanda.gravar_chamada(supabase, resultado.chamada)
+    if resultado.erro:
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=resultado.erro)
+
+    linha = planejamento_demanda.gravar(
+        supabase,
+        demanda_id,
+        atual=atual,
+        novo={
+            "estado": planejamento_demanda.ESTADO_RESUMIDO,
+            "mensagens": mensagens,
+            "resumo": resultado.resumo,
+            "atualizado_em": _agora(),
+        },
+    )
+    if linha is None:
+        _conflito(MOTIVO_CHAT_MUDOU)
+    if resultado.titulo and resultado.titulo != demanda.get("titulo"):
+        supabase.table(TABELA_DEMANDAS).update({"titulo": resultado.titulo}).eq("id", demanda_id).execute()
     return _chat_para_a_tela(supabase, demanda_id, linha)
 
 

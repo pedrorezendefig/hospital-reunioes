@@ -437,6 +437,8 @@ class TestResumo:
         assert resultado.resumo == {
             "decisoes": [{"pergunta": "Pergunta 1?", "escolha": "A1", "porque": "A recepção marca o retorno."}],
             "em_aberto": ["Quem confirma o retorno com o paciente."],
+            "termos": [],
+            "candidatas_a_adr": [],
         }
 
     def test_o_que_o_agente_nao_perguntou_nunca_vira_decisao(self, monkeypatch):
@@ -468,7 +470,12 @@ class TestResumo:
 
         resultado = _resumir([_pergunta_guardada(1)])
 
-        assert resultado.resumo == {"decisoes": [], "em_aberto": ["Quem usa a agenda."]}
+        assert resultado.resumo == {
+            "decisoes": [],
+            "em_aberto": ["Quem usa a agenda."],
+            "termos": [],
+            "candidatas_a_adr": [],
+        }
 
     def test_o_pedido_numera_as_perguntas_e_leva_o_que_nao_bateu(self, monkeypatch):
         cliente = _ia(monkeypatch, _resumo())
@@ -989,7 +996,7 @@ class TestFecharEResumir:
         corpo = resposta.json()
         assert corpo["estado"] == "resumido"
         # A pergunta 1 nao teve resposta: a decisao que o modelo inventou some.
-        assert corpo["resumo"] == {"decisoes": [], "em_aberto": ["Quem usa."]}
+        assert corpo["resumo"] == {"decisoes": [], "em_aberto": ["Quem usa."], "termos": [], "candidatas_a_adr": []}
         [linha] = _planejamentos(sb)
         assert linha["estado"] == "resumido"
         assert linha["resumo"] == corpo["resumo"]
@@ -1014,7 +1021,7 @@ class TestFecharEResumir:
         corpo = client.get(ROTA).json()
 
         assert corpo["estado"] == "resumido"
-        assert corpo["resumo"] == RESUMO_GUARDADO
+        assert corpo["resumo"] == {**RESUMO_GUARDADO, "termos": [], "candidatas_a_adr": []}
 
     def test_resumo_ja_pronto_nao_chama_a_ia_de_novo(self, monkeypatch):
         cliente = _ia(monkeypatch, _resumo())
@@ -1110,6 +1117,8 @@ class TestONao:
         segundo = {
             "decisoes": [{"pergunta": "Pergunta 1?", "escolha": "A1", "porque": "Segundo resumo."}],
             "em_aberto": ["Do segundo resumo."],
+            "termos": [],
+            "candidatas_a_adr": [],
         }
         assert corpo["resumo"] == segundo
         [linha] = _planejamentos(sb)

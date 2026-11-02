@@ -548,6 +548,9 @@ class DecisaoDoResumo(BaseModel):
 class ResumoDoPlanejamento(BaseModel):
     decisoes: list[DecisaoDoResumo] = []
     em_aberto: list[str] = []
+    # A secao "Para o glossario" do PRD do diretor (issue #1383).
+    termos: list[str] = []
+    candidatas_a_adr: list[str] = []
 
 
 class PlanejamentoResponse(BaseModel):
@@ -607,8 +610,11 @@ class ChatTurnoPayload(BaseModel):
     """Corpo do POST /admin/tecnologia/chat/{id}: a fala do diretor.
 
     Sem texto, o turno e o "tente de novo" da IA: vale so quando a ultima fala
-    guardada e do diretor (o "nao bateu")."""
+    guardada e do diretor (o "nao bateu"). No planejamento da melhoria (issue
+    #1383), `opcao` e a letra da opcao clicada, e a resposta e ela OU o texto.
+    """
 
+    opcao: Literal["A", "B"] | None = None
     texto: str | None = Field(default=None, max_length=LIMITE_DA_MENSAGEM)
     prints: list[str] = Field(default_factory=list, max_length=10)
 

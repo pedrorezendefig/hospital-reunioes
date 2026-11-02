@@ -414,17 +414,26 @@ class _SaidaDoResumo(BaseModel):
 
     decisoes: list[_DecisaoDoModelo]
     em_aberto: list[str]
+    # O titulo curto da melhoria e a secao "Para o glossario" do PRD do
+    # diretor (issue #1383, ADR 0077, decisao 7): os termos e as decisoes
+    # candidatas a ADR. Opcionais, para o resumo de antes continuar valendo.
+    titulo: str | None = None
+    termos: list[str] = []
+    candidatas_a_adr: list[str] = []
 
 
 @dataclass(frozen=True)
 class ResultadoDoResumo:
     """`resumo` e o que vai para a coluna `resumo` e para a tela: `decisoes`
-    (pergunta, escolha, porque) e `em_aberto`. `erro` e a frase da tela quando
-    o resumo nao aconteceu. `chamada` e nula so no modo mock."""
+    (pergunta, escolha, porque), `em_aberto` e os dois itens do glossario.
+    `titulo` e o titulo curto que o modelo deu ao pedido, quando deu. `erro` e
+    a frase da tela quando o resumo nao aconteceu. `chamada` e nula so no modo
+    mock."""
 
     resumo: dict | None
     erro: str | None
     chamada: dict | None
+    titulo: str | None = None
 
 
 RESUMO_MOCK = {"decisoes": [], "em_aberto": ["[MOCK] Resumir exige a IA configurada."]}
@@ -494,8 +503,16 @@ def _resumo_da_conversa(saida: _SaidaDoResumo, mensagens: list[dict]) -> dict:
                 "porque": sanitizar_travessao(decisao.porque.strip()),
             }
         )
-    em_aberto = [sanitizar_travessao(item.strip()) for item in saida.em_aberto if item.strip()]
-    return {"decisoes": decisoes, "em_aberto": em_aberto}
+    return {
+        "decisoes": decisoes,
+        "em_aberto": _itens(saida.em_aberto),
+        "termos": _itens(saida.termos),
+        "candidatas_a_adr": _itens(saida.candidatas_a_adr),
+    }
+
+
+def _itens(lista: list[str]) -> list[str]:
+    return [sanitizar_travessao(item.strip()) for item in lista if item.strip()]
 
 
 def resumir(*, demanda: dict, mensagens: list[dict], kit: str) -> ResultadoDoResumo:
@@ -514,7 +531,8 @@ def resumir(*, demanda: dict, mensagens: list[dict], kit: str) -> ResultadoDoRes
     )
     if saida is None:
         return ResultadoDoResumo(resumo=None, erro=MOTIVO_TURNO_FALHOU, chamada=chamada)
-    return ResultadoDoResumo(resumo=_resumo_da_conversa(saida, mensagens), erro=None, chamada=chamada)
+    titulo = sanitizar_travessao(" ".join((saida.titulo or "").split()))[:200].strip() or None
+    return ResultadoDoResumo(resumo=_resumo_da_conversa(saida, mensagens), erro=None, chamada=chamada, titulo=titulo)
 
 
 # ─── A guarda ────────────────────────────────────────────────────────────────
