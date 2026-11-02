@@ -3,7 +3,8 @@
 /**
  * O módulo da aba Tecnologia (issue #636, PRD #634, ADR 0050).
  *
- * As duas abas (Quadro e Painel). O gate de verdade é o `require_super_admin`
+ * As três abas: o chat do Assistente, que é onde a aba abre (issue #1381, ADR
+ * 0077), o Quadro e o Painel, que saem numa fatia própria depois. O gate de verdade é o `require_super_admin`
  * do backend; a sidebar apenas esconde o item. O cadastro de Produtos saiu do
  * rodapé do Quadro na issue #1060 e mora em tela própria
  * (`ProdutosDaTecnologia`, atrás da engrenagem ao lado de "Nova Demanda").
@@ -18,13 +19,13 @@ import { AlertCircle, Cpu } from "lucide-react";
 
 import { useAuth } from "@/hooks/useAuth";
 
+import { ChatDaTecnologia } from "./ChatDaTecnologia";
 import { PainelDemandas } from "./PainelDemandas";
 import { QuadroDemandas } from "./QuadroDemandas";
 import {
   AbaDaTecnologia,
   abaInicial,
   BASE_TECNOLOGIA,
-  CONSULTA_DO_CELULAR,
   EU_DESCONHECIDO,
   EuNaAba,
   FALHA_DE_CONEXAO,
@@ -42,14 +43,10 @@ type Produto = {
 };
 
 const ABAS: { id: AbaDaTecnologia; label: string }[] = [
+  { id: "assistente", label: "Assistente" },
   { id: "quadro", label: "Quadro" },
   { id: "painel", label: "Painel" },
 ];
-
-/** Se a tela é de celular. Sem `matchMedia` (ambiente sem tela), não é. */
-function ehCelular(): boolean {
-  return typeof window.matchMedia === "function" && window.matchMedia(CONSULTA_DO_CELULAR).matches;
-}
 
 /**
  * A frase de quando `useAuth` não devolve token.
@@ -70,15 +67,15 @@ export function TecnologiaModulo() {
   /**
    * A aba à vista, ou `null` antes de saber qual abre (issue #1059).
    *
-   * A escolha depende da largura da tela e do link, que só existem no
-   * navegador: decidida no primeiro render, ela divergiria da página que o
-   * servidor pré-renderizou. E nenhuma aba monta antes da escolha, para o
-   * celular não pedir o Quadro inteiro à rede só para desmontá-lo em seguida.
+   * A escolha depende do link, que só existe no navegador: decidida no
+   * primeiro render, ela divergiria da página que o servidor pré-renderizou.
+   * E nenhuma aba monta antes da escolha, para o chat não pedir o Quadro
+   * inteiro à rede só para desmontá-lo em seguida.
    */
   const [aba, setAba] = useState<AbaDaTecnologia | null>(null);
 
   useEffect(() => {
-    setAba(abaInicial(ehCelular(), window.location.search));
+    setAba(abaInicial(window.location.search));
   }, []);
   const [produtos, setProdutos] = useState<Produto[]>([]);
   const [pessoas, setPessoas] = useState<Pessoa[]>([]);
@@ -155,7 +152,7 @@ export function TecnologiaModulo() {
         <div>
           <h1 className="text-2xl font-bold text-text">Tecnologia</h1>
           <p className="text-sm text-text-secondary">
-            As Demandas entre o hospital e a Vitta sobre os sistemas.
+            Conte um bug ou peça uma melhoria nos sistemas que a Vitta cuida.
           </p>
         </div>
       </div>
@@ -192,6 +189,7 @@ export function TecnologiaModulo() {
       </div>
 
       <div role="tabpanel">
+        {aba === "assistente" && <ChatDaTecnologia token={token} />}
         {aba === "quadro" && (
           <QuadroDemandas
             token={token}
