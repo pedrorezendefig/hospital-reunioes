@@ -1,6 +1,6 @@
 # ROTAS.md
 <!-- gerado automaticamente por /snapshot — não editar -->
-<!-- last_update: 2026-11-01T22:27+0000 -->
+<!-- last_update: 2026-11-02T22:09+0000 -->
 
 Endpoints HTTP expostos pelo backend FastAPI do Hospital Reuniões.
 
@@ -454,6 +454,11 @@ Endpoints HTTP expostos pelo backend FastAPI do Hospital Reuniões.
 | POST | `/admin/tecnologia/assistente/chat` | Um turno da conversa que monta a Demanda (ADR 0056, decisao 1). | ✅ |
 | POST | `/admin/tecnologia/assistente/descrever-imagem` | O print anexado vira descricao, e a imagem some (ADR 0056, decisao 4). | ✅ |
 | POST | `/admin/tecnologia/assistente/extrair-documento` | O documento anexado vira texto, e o texto some (ADR 0056, decisao 4). | ✅ |
+| POST | `/admin/tecnologia/chat` | O primeiro turno: a Demanda nasce aqui (ADR 0077, decisao 2). | ✅ |
+| GET | `/admin/tecnologia/chat/{demanda_id}` | A conversa guardada, para retomar de onde parou. | ✅ |
+| POST | `/admin/tecnologia/chat/{demanda_id}` | Um turno: a fala do diretor entra, a da IA volta. | ✅ |
+| POST | `/admin/tecnologia/chat/{demanda_id}/criar-card` | O "Criar o card" do resumo do bug (ADR 0077, decisoes 6 e 7). | ✅ |
+| POST | `/admin/tecnologia/chat/{demanda_id}/nao-bateu` | O "Nao bateu" do resumo: o que nao bateu entra na conversa como fala do | ✅ |
 | GET | `/admin/tecnologia/demandas` | As Demandas do Quadro, com os filtros da PRD. | ✅ |
 | POST | `/admin/tecnologia/demandas` | Abre uma Demanda: ela nasce em `nova`, com o dono do Produto. | ✅ |
 | PATCH | `/admin/tecnologia/demandas/{demanda_id}` | Edita os campos do modal. Campo ausente fica como esta. | ✅ |
@@ -523,4 +528,4 @@ Endpoints HTTP expostos pelo backend FastAPI do Hospital Reuniões.
 
 ---
 
-**Totais:** 297 endpoints em 44 routers · 94% exigem auth.
+**Totais:** 302 endpoints em 44 routers · 94% exigem auth.
