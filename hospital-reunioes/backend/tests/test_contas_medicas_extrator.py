@@ -130,7 +130,7 @@ def escrever(texto, confianca=90):
         return
     with open(sys.argv[2] + ".txt", "w", encoding="utf-8") as f:
         f.write(texto)
-    linhas = ["level\\tpage_num\\tblock_num\\tpar_num\\tline_num\\tword_num\\tleft\\ttop\\twidth\\theight\\tconf\\ttext"]
+    linhas = ["\\t".join("level page_num block_num par_num line_num word_num left top width height conf text".split())]
     linhas += [f"5\\t1\\t1\\t1\\t1\\t{i}\\t0\\t0\\t9\\t9\\t{confianca}\\t{p}" for i, p in enumerate(texto.split())]
     with open(sys.argv[2] + ".tsv", "w", encoding="utf-8") as f:
         f.write("\\n".join(linhas) + "\\n")
@@ -228,12 +228,28 @@ def test_ocr_de_todas_as_paginas_cabe_num_prazo_da_leitura(tmp_path, monkeypatch
     ]
     # Um prazo por página levaria três; o vigia do PDF inteiro corta em um.
     assert time.monotonic() - inicio < 2 * 3.0
+    # As que o prazo cortou saem não lidas (#1398); as de texto, sem qualidade.
+    assert [p.qualidade for p in paginas] == [None, "nao_lida", "nao_lida", "nao_lida", None]
+
+
+@pytest.mark.parametrize(
+    ("confianca", "qualidade"),
+    [(95, "legivel"), (70, "legivel"), (69, "duvidosa"), (50, "duvidosa"), (49, "ilegivel"), (12, "ilegivel")],
+)
+def test_cada_digitalizada_sai_com_a_faixa_da_confianca_do_ocr(tmp_path, monkeypatch, confianca, qualidade):
+    _tesseract_falso(tmp_path, monkeypatch, f"escrever({LIDO_PELO_OCR!r}, {confianca})")
+
+    paginas = _ler(CAPA_DO_PRONTUARIO, "", PAGINA_COM_TEXTO)
+
+    assert [(p.numero, p.qualidade) for p in paginas] == [(1, None), (2, qualidade), (3, None)]
+    assert LIDO_PELO_OCR in paginas[1].texto
 
 
 # Folha impressa e digitalizada de cabeça para baixo (achada num Prontuário
 # real): o OCR da página virada sai lixo. O falso responde à
 # pergunta da orientação (`--psm 0`) com o giro pedido e, no OCR, diz onde está a
-# faixa escura que a página tem no topo, lendo a imagem que recebeu.
+# faixa escura que a página tem no topo, lendo a imagem que recebeu, com a
+# confiança pedida para cada lado em que ela está (90 se não pedida).
 TESSERACT_QUE_VE_A_FAIXA = """\
 from PIL import Image
 if "--psm" in sys.argv:
@@ -249,7 +265,7 @@ lados = {{
 }}
 escura = min(lados, key=lambda lado: imagem.crop(lados[lado]).resize((1, 1)).getpixel((0, 0)))
 dpi = Image.open(sys.argv[1]).info.get("dpi", (0, 0))[0]
-escrever(f"{{escura}} DPI {{round(dpi)}}")
+escrever(f"{{escura}} DPI {{round(dpi)}}", {confiancas!r}.get(escura, 90))
 """
 
 
@@ -274,7 +290,7 @@ def _pdf_com_faixa_no_topo() -> bytes:
     ],
 )
 def test_pagina_digitalizada_virada_e_desvirada_antes_do_ocr(tmp_path, monkeypatch, giro, lido):
-    _tesseract_falso(tmp_path, monkeypatch, TESSERACT_QUE_VE_A_FAIXA.format(giro=giro))
+    _tesseract_falso(tmp_path, monkeypatch, TESSERACT_QUE_VE_A_FAIXA.format(giro=giro, confiancas={}))
     pdf = _pdf_com_faixa_no_topo()
 
     paginas = ler_digitalizadas(pdf, extrair_paginas(pdf))
@@ -282,6 +298,28 @@ def test_pagina_digitalizada_virada_e_desvirada_antes_do_ocr(tmp_path, monkeypat
     assert paginas[1].ocr
     # A imagem desvirada mantém o DPI da rasterização: sem ele o OCR lê pior.
     assert paginas[1].texto.split(extrator.MARCA_DO_OCR)[1].strip() == f"{lido} DPI 300"
+
+
+@pytest.mark.parametrize(
+    ("confiancas", "lido", "qualidade"),
+    [
+        # O OSD diz 0°, a folha está de cabeça para baixo e sai ilegível: girada
+        # 180°, ela sai legível, e fica essa leitura.
+        pytest.param({"FAIXA NO TOPO": 20, "FAIXA EMBAIXO": 80}, "FAIXA EMBAIXO", "legivel", id="virada"),
+        # A legível não é girada, mesmo que a girada lesse ainda melhor.
+        pytest.param({"FAIXA NO TOPO": 75, "FAIXA EMBAIXO": 95}, "FAIXA NO TOPO", "legivel", id="legivel"),
+        # Girada também não lê: fica a leitura de maior confiança, a de antes.
+        pytest.param({"FAIXA NO TOPO": 30, "FAIXA EMBAIXO": 10}, "FAIXA NO TOPO", "ilegivel", id="manuscrita"),
+    ],
+)
+def test_folha_ilegivel_que_o_osd_nao_gira_e_lida_de_novo_girada(tmp_path, monkeypatch, confiancas, lido, qualidade):
+    _tesseract_falso(tmp_path, monkeypatch, TESSERACT_QUE_VE_A_FAIXA.format(giro="0", confiancas=confiancas))
+    pdf = _pdf_com_faixa_no_topo()
+
+    paginas = ler_digitalizadas(pdf, extrair_paginas(pdf))
+
+    assert paginas[1].texto.split(extrator.MARCA_DO_OCR)[1].strip() == f"{lido} DPI 300"
+    assert paginas[1].qualidade == qualidade
 
 
 @SO_UNIX_OCR

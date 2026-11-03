@@ -26,7 +26,7 @@ PR quando o MV mudar de versão (ADR 0070, decisão 7).
 import re
 import unicodedata
 from collections import Counter
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import date, datetime, time
 
@@ -65,6 +65,8 @@ class Documento:
     # cobrança e nas que o código estrutura sozinho (prescrição, balanço, ficha
     # anestésica, aferição, guia TISS), que leem as páginas pelo número.
     linhas: tuple[str, ...]
+    # Só no DIGITALIZADO lido por OCR: legível, duvidosa, ilegível ou não lida (#1398).
+    qualidade: str | None = None
 
     @property
     def pagina_inicial(self) -> int:
@@ -85,8 +87,8 @@ class Prontuario:
     paciente_rotulo: str | None
     idade_anos: int | None
     documentos: tuple[Documento, ...]
-    # Páginas do Atendimento digitalizadas que o OCR não leu (#1191): o Guia lista, a faturista
-    # confere à mão se precisar.
+    # Páginas do Atendimento digitalizadas que o OCR não leu (#1191), ou leu ilegíveis
+    # (#1398): o Guia lista, a faturista confere à mão se precisar.
     paginas_sem_texto: tuple[int, ...]
     # Uma frase por motivo; vazio quer dizer que o Guia não é parcial.
     parecer_parcial: tuple[str, ...]
@@ -609,6 +611,8 @@ class _Pagina:
     campos: _Campos
     # O texto da imagem lido por OCR (#1191), só na página digitalizada.
     ocr: str = ""
+    # A qualidade da leitura do OCR (#1398), só na página digitalizada que foi a ele.
+    qualidade: str | None = None
 
 
 def _paginas_do_atendimento(paginas: list[_Pagina], atendimento: str) -> list[_Pagina]:
@@ -740,23 +744,58 @@ def atendimento_do_prontuario(texto_por_pagina: Sequence[str | None]) -> str | N
     return contagem.most_common(1)[0][0] if contagem else None
 
 
-def ler_prontuario(texto_por_pagina: Sequence[str | None], atendimento: str | int) -> Prontuario:
+def _do_atendimento(
+    separados: list[tuple[str, str]], capa: _Capa, atendimento: str, qualidades: Mapping[int, str]
+) -> tuple[list[_Pagina], list[tuple[list[_Pagina], _Campos]]]:
+    """As páginas do Atendimento e os documentos delas, em ordem de data, pela
+    estrutura que só o texto do PDF dá."""
+    paginas = []
+    for numero, (texto, ocr) in enumerate(separados[capa.paginas :], start=capa.paginas + 1):
+        familia = _familia(texto)
+        campos = _campos(texto, familia)
+        paginas.append(_Pagina(numero, texto, familia, _paginacao(texto), campos, ocr, qualidades.get(numero)))
+    do_atendimento = _paginas_do_atendimento(paginas, atendimento)
+    agrupados = [(grupo, _juntar_campos(grupo)) for grupo in _montar_documentos(do_atendimento)]
+    return do_atendimento, _ordenar_por_data(agrupados)
+
+
+def digitalizadas_da_conta(
+    texto_por_pagina: Sequence[str | None], atendimento: str | int, inicio: date | None, fim: date | None
+) -> tuple[int, ...]:
+    """As digitalizadas do Atendimento da conta com data no período dela, pela mesma
+    atribuição de atendimento e data da leitura, que saem do texto do PDF, antes do
+    OCR: sob o prazo, o OCR lê essas primeiro (#1398). Sem data, conta como do período."""
+    separados = [_separar_ocr(texto or "") for texto in texto_por_pagina]
+    capa = _ler_capa([do_pdf for do_pdf, _ in separados])
+    _, documentos = _do_atendimento(separados, capa, str(atendimento), {})
+    return tuple(
+        sorted(
+            pagina.numero
+            for grupo, campos in documentos
+            if grupo[0].familia == "DIGITALIZADO"
+            and (
+                campos.data is None
+                or ((inicio is None or inicio <= campos.data) and (fim is None or campos.data <= fim))
+            )
+            for pagina in grupo
+        )
+    )
+
+
+def ler_prontuario(
+    texto_por_pagina: Sequence[str | None], atendimento: str | int, qualidades: Mapping[int, str] | None = None
+) -> Prontuario:
+    """`qualidades` é a da leitura de cada digitalizada que foi ao OCR (#1398)."""
     # A estrutura sai só do texto do PDF; o lido por OCR vai à IA e a mais nada.
     separados = [_separar_ocr(texto or "") for texto in texto_por_pagina]
     textos = [do_pdf for do_pdf, _ in separados]
     _conferir_integridade(textos)
     capa = _ler_capa(textos)
 
-    paginas = []
-    for numero, (texto, ocr) in enumerate(separados[capa.paginas :], start=capa.paginas + 1):
-        familia = _familia(texto)
-        paginas.append(_Pagina(numero, texto, familia, _paginacao(texto), _campos(texto, familia), ocr))
-
-    do_atendimento = _paginas_do_atendimento(paginas, str(atendimento))
-    agrupados = [(grupo, _juntar_campos(grupo)) for grupo in _montar_documentos(do_atendimento)]
+    do_atendimento, ordenados = _do_atendimento(separados, capa, str(atendimento), qualidades or {})
     documentos = []
     anteriores: dict[str, list[str]] = {}
-    for grupo, campos in _ordenar_por_data(agrupados):
+    for grupo, campos in ordenados:
         familia = grupo[0].familia
         linhas = _linhas_para_ia(grupo, campos)
         if linhas and familia in _SO_O_QUE_MUDOU:
@@ -772,9 +811,15 @@ def ler_prontuario(texto_por_pagina: Sequence[str | None], atendimento: str | in
                 conselho=campos.conselho,
                 subtipo=campos.subtipo,
                 linhas=tuple(desidentificar(linhas, capa.identificacao)),
+                qualidade=grupo[0].qualidade if familia == "DIGITALIZADO" else None,
             )
         )
-    sem_texto = tuple(p.numero for p in do_atendimento if p.familia == "DIGITALIZADO" and not p.ocr.strip())
+    # A ilegível e a não lida contam como sem texto: o OCR sempre devolve alguma coisa.
+    sem_texto = tuple(
+        p.numero
+        for p in do_atendimento
+        if p.familia == "DIGITALIZADO" and (not p.ocr.strip() or p.qualidade in (ILEGIVEL, NAO_LIDA))
+    )
     parecer_parcial = [
         _grupos_que_faltam(capa, "\n".join(textos[capa.paginas :])),
         _paginas_sem_texto_demais(len(sem_texto), len(do_atendimento)),
