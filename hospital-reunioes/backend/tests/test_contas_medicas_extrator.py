@@ -214,6 +214,60 @@ def test_ocr_de_todas_as_paginas_cabe_num_prazo_da_leitura(tmp_path, monkeypatch
     assert time.monotonic() - inicio < 2 * 3.0
 
 
+# Folha impressa e digitalizada de cabeça para baixo (achada num Prontuário
+# real): o OCR da página virada sai lixo. O falso responde à
+# pergunta da orientação (`--psm 0`) com o giro pedido e, no OCR, diz onde está a
+# faixa escura que a página tem no topo, lendo a imagem que recebeu.
+TESSERACT_QUE_VE_A_FAIXA = """\
+from PIL import Image
+if "--psm" in sys.argv:
+    sys.stdout.write("Page number: 0\\nRotate: {giro}\\nOrientation confidence: 0.30\\n")
+    sys.exit(0)
+imagem = Image.open(sys.argv[1]).convert("L")
+w, h = imagem.size
+lados = {{
+    "FAIXA NO TOPO": (0, 0, w, h // 4),
+    "FAIXA EMBAIXO": (0, h - h // 4, w, h),
+    "FAIXA NA ESQUERDA": (0, 0, w // 4, h),
+    "FAIXA NA DIREITA": (w - w // 4, 0, w, h),
+}}
+escura = min(lados, key=lambda lado: imagem.crop(lados[lado]).resize((1, 1)).getpixel((0, 0)))
+dpi = Image.open(sys.argv[1]).info.get("dpi", (0, 0))[0]
+sys.stdout.write(f"{{escura}} DPI {{round(dpi)}}")
+"""
+
+
+def _pdf_com_faixa_no_topo() -> bytes:
+    from weasyprint import HTML
+
+    capa = f"<p>{CAPA_DO_PRONTUARIO}</p>"
+    faixa = '<div style="height: 8cm; background: black"></div>'
+    paginas = "".join(f'<div style="page-break-before: always">{corpo}</div>' for corpo in (capa, faixa))
+    return HTML(string=f"<html><body>{paginas}</body></html>").write_pdf()
+
+
+@pytest.mark.parametrize(
+    ("giro", "lido"),
+    [
+        ("0", "FAIXA NO TOPO"),
+        # O `Rotate` do tesseract é o giro anti-horário que a página levou; desvirar
+        # é girar de volta no horário, e a faixa do topo vai para o lado oposto.
+        ("90", "FAIXA NA DIREITA"),
+        ("180", "FAIXA EMBAIXO"),
+        ("270", "FAIXA NA ESQUERDA"),
+    ],
+)
+def test_pagina_digitalizada_virada_e_desvirada_antes_do_ocr(tmp_path, monkeypatch, giro, lido):
+    _tesseract_falso(tmp_path, monkeypatch, TESSERACT_QUE_VE_A_FAIXA.format(giro=giro))
+    pdf = _pdf_com_faixa_no_topo()
+
+    paginas = ler_digitalizadas(pdf, extrair_paginas(pdf))
+
+    assert paginas[1].ocr
+    # A imagem desvirada mantém o DPI da rasterização: sem ele o OCR lê pior.
+    assert paginas[1].texto.split(extrator.MARCA_DO_OCR)[1].strip() == f"{lido} DPI 300"
+
+
 @SO_UNIX_OCR
 def test_filho_do_ocr_morto_deixa_a_pagina_sem_texto_e_a_leitura_continua(tmp_path, monkeypatch, caplog):
     # O `pdftoppm` falso mata o filho que o chamou, como o OOM do cgroup faria.

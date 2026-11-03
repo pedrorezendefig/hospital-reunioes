@@ -82,11 +82,12 @@ _ITEM = re.compile(
 )
 # Honorário médico no layout real (issue #1304): a linha do procedimento tem a
 # quantidade e nenhum valor; cada prestador vem embaixo, numa linha com nome e
-# CRM, função, unitário e total. Nome e CRM não são guardados.
+# CRM, função, unitário e total. Nome e CRM não são guardados. A função do
+# auxiliar vem com a ordem na frente ("1 AUXILIAR"), e a ordem fica na função.
 _PROCEDIMENTO_DE_HONORARIO = re.compile(
     r"^(\d{2}/\d{2}/\d{4})\s+(\d{6,10})\s+(.+?)\s{2,}(\S+)\s+(\d{1,3},\d{2})%\s+(\d[\d.,]*)\s*$"
 )
-_PRESTADOR = re.compile(r"^\S.*?\s{2,}([A-Z][A-Z ]*[A-Z])\s{2,}(\d[\d.]*,\d{2})\s+(\d[\d.]*,\d{2})\s*$")
+_PRESTADOR = re.compile(r"^\S.*?\s{2,}((?:\d+ )?[A-Z][A-Z ]*[A-Z])\s{2,}(\d[\d.]*,\d{2})\s+(\d[\d.]*,\d{2})\s*$")
 _SETOR = re.compile(r"^(\d{1,4})\s{2,}(\S.*?)\s*$")
 _GRUPO_DE_PROCEDIMENTO = re.compile(r"^\s*Grupo de Procedimento:\s*(\d+)\s+(.*?)\s*$")
 _FIM_DA_CONTINUACAO = re.compile(r"Total|HOSPITAL|P[áa]gina")
