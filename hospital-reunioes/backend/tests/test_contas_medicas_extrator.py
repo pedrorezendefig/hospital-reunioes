@@ -18,6 +18,7 @@ from pathlib import Path
 import pytest
 
 from app.services import contas_medicas_extrator as extrator
+from app.services import contas_medicas_extrator_filho as filho
 from app.services import transcricao_extractor
 from app.services.contas_medicas_extrator import (
     ErroLeitura,
@@ -110,8 +111,9 @@ def test_palavras_de_arquivo_que_nao_e_pdf_voltam_erro_de_leitura():
 
 
 # OCR das páginas digitalizadas do Prontuário (issue #1191). A máquina de quem
-# testa não tem `tesseract`: um falso entra na frente do PATH e faz o papel dele,
-# com o form feed no fim, como o de verdade imprime.
+# testa não tem `tesseract`: um falso entra na frente do PATH e faz o papel dele.
+# O `escrever` do falso grava o texto e o TSV em `<base>.txt` e `<base>.tsv`, como
+# o de verdade faz com `txt tsv` (#1398), cada palavra com a confiança pedida.
 CAPA_DO_PRONTUARIO = "DECLARAÇÃO DE RECEBIMENTO DE PRONTUÁRIO " + " ".join(
     f"Grupo: {grupo} Quantidade: 1"
     for grupo in ("EVOLUÇÃO MEDICA", "PRESCRICAO MEDICA", "ANOTAÇÕES DE ENFERMAGEM", "TERMOS DIGITALIZADOS")
@@ -121,9 +123,23 @@ LIDO_PELO_OCR = "TERMO DE CONSENTIMENTO LIVRE E ESCLARECIDO"
 SO_UNIX_OCR = pytest.mark.so_unix("PATH só com o poppler por symlink, e o filho morto por SIGKILL")
 
 
+ESCREVER_COMO_O_TESSERACT = """\
+def escrever(texto, confianca=90):
+    if sys.argv[2] == "stdout":
+        sys.stdout.write(texto)
+        return
+    with open(sys.argv[2] + ".txt", "w", encoding="utf-8") as f:
+        f.write(texto)
+    linhas = ["level\\tpage_num\\tblock_num\\tpar_num\\tline_num\\tword_num\\tleft\\ttop\\twidth\\theight\\tconf\\ttext"]
+    linhas += [f"5\\t1\\t1\\t1\\t1\\t{i}\\t0\\t0\\t9\\t9\\t{confianca}\\t{p}" for i, p in enumerate(texto.split())]
+    with open(sys.argv[2] + ".tsv", "w", encoding="utf-8") as f:
+        f.write("\\n".join(linhas) + "\\n")
+"""
+
+
 def _tesseract_falso(pasta: Path, monkeypatch: pytest.MonkeyPatch, corpo: str) -> None:
     falso = pasta / "tesseract"
-    falso.write_text(f"#!{sys.executable}\nimport sys, time\n{corpo}\n", encoding="utf-8")
+    falso.write_text(f"#!{sys.executable}\nimport sys, time\n{ESCREVER_COMO_O_TESSERACT}\n{corpo}\n", encoding="utf-8")
     falso.chmod(falso.stat().st_mode | stat.S_IXUSR)
     monkeypatch.setenv("PATH", f"{pasta}{os.pathsep}{os.environ['PATH']}")
 
@@ -135,7 +151,7 @@ def _ler(*paginas: str) -> list[Pagina]:
 
 
 def test_pagina_digitalizada_do_prontuario_ganha_o_texto_do_ocr_marcada_como_ocr(tmp_path, monkeypatch):
-    _tesseract_falso(tmp_path, monkeypatch, f"sys.stdout.write({LIDO_PELO_OCR!r} + '\\n\\f')")
+    _tesseract_falso(tmp_path, monkeypatch, f"escrever({LIDO_PELO_OCR!r} + '\\n\\f')")
 
     paginas = _ler(CAPA_DO_PRONTUARIO, "", PAGINA_COM_TEXTO)
 
@@ -162,7 +178,7 @@ def test_o_envio_nao_passa_pelo_ocr_e_o_texto_guardado_fica_sem_ele(tmp_path, mo
 
 
 def test_pagina_sem_texto_da_conta_nao_passa_pelo_ocr(tmp_path, monkeypatch):
-    _tesseract_falso(tmp_path, monkeypatch, f"sys.stdout.write({LIDO_PELO_OCR!r})")
+    _tesseract_falso(tmp_path, monkeypatch, f"escrever({LIDO_PELO_OCR!r})")
 
     paginas = _ler("Atendimento:900001 Paciente: FULANO Conta:12345 Fatura Individual", "")
 
@@ -174,7 +190,7 @@ def test_pagina_sem_texto_da_conta_nao_passa_pelo_ocr(tmp_path, monkeypatch):
     "tesseract",
     [
         pytest.param("sys.stderr.write('Error during processing.')\nsys.exit(1)", id="ilegivel"),
-        pytest.param("sys.stdout.write('  \\n\\f')", id="imagem-sem-letra"),
+        pytest.param("escrever('  \\n\\f')", id="imagem-sem-letra"),
         pytest.param(None, id="ausente"),
     ],
 )
@@ -233,7 +249,7 @@ lados = {{
 }}
 escura = min(lados, key=lambda lado: imagem.crop(lados[lado]).resize((1, 1)).getpixel((0, 0)))
 dpi = Image.open(sys.argv[1]).info.get("dpi", (0, 0))[0]
-sys.stdout.write(f"{{escura}} DPI {{round(dpi)}}")
+escrever(f"{{escura}} DPI {{round(dpi)}}")
 """
 
 
@@ -275,9 +291,65 @@ def test_filho_do_ocr_morto_deixa_a_pagina_sem_texto_e_a_leitura_continua(tmp_pa
     corpo = "import os, signal\nos.kill(os.getppid(), signal.SIGKILL)"
     falso.write_text(f"#!{sys.executable}\n{corpo}\n", encoding="utf-8")
     falso.chmod(falso.stat().st_mode | stat.S_IXUSR)
-    _tesseract_falso(tmp_path, monkeypatch, f"sys.stdout.write({LIDO_PELO_OCR!r})")
+    _tesseract_falso(tmp_path, monkeypatch, f"escrever({LIDO_PELO_OCR!r})")
 
     paginas = _ler(CAPA_DO_PRONTUARIO, "", PAGINA_COM_TEXTO)
 
     assert [(p.numero, p.ocr, p.sem_texto) for p in paginas] == [(1, False, False), (2, False, True), (3, False, False)]
     assert "OCR das paginas digitalizadas falhou" in caplog.text
+
+
+# Qualidade da leitura de cada folha digitalizada (issue #1398). O `tesseract` de
+# verdade lê imagens desenhadas aqui mesmo, pelo Pillow: uma folha impressa, uma
+# de ruído e a mesma impressa de cabeça para baixo. Nada de PDF real.
+FOLHA_IMPRESSA = (
+    "PRESCRICAO MEDICA DO PACIENTE INTERNADO",
+    "Dipirona sodica quinhentos miligramas",
+    "Administrar conforme orientacao medica",
+    "Controle de sinais vitais a cada seis horas",
+)
+
+
+def _tesseract_com_portugues() -> bool:
+    import subprocess
+
+    if shutil.which("tesseract") is None:
+        return False
+    idiomas = subprocess.run(["tesseract", "--list-langs"], capture_output=True, text=True).stdout.split()
+    return "por" in idiomas
+
+
+COM_TESSERACT = pytest.mark.skipif(
+    not _tesseract_com_portugues(), reason="sem tesseract com o idioma por (o CI instala os dois)"
+)
+
+
+def _folhas_desenhadas(caminho: Path) -> None:
+    import random
+
+    from PIL import Image, ImageDraw, ImageFont
+
+    impressa = Image.new("L", (1240, 600), 255)
+    desenho = ImageDraw.Draw(impressa)
+    fonte = ImageFont.load_default(size=36)
+    for i, linha in enumerate(FOLHA_IMPRESSA):
+        desenho.text((60, 60 + i * 110), linha, fill=0, font=fonte)
+    sorteio = random.Random(1398)
+    ruido = Image.frombytes("L", impressa.size, bytes(sorteio.choice((0, 255)) for _ in range(1240 * 600)))
+    impressa.save(caminho, save_all=True, append_images=[ruido, impressa.rotate(180)], resolution=150)
+
+
+@COM_TESSERACT
+def test_filho_do_ocr_devolve_texto_e_confianca_de_cada_folha(tmp_path):
+    pdf = tmp_path / "folhas.pdf"
+    _folhas_desenhadas(pdf)
+
+    lidas = filho.ocr(str(pdf), [1, 2, 3], prazo=60.0)
+
+    assert set(lidas) == {"1", "2", "3"}
+    impressa, ruido, virada = lidas["1"], lidas["2"], lidas["3"]
+    assert "PRESCRICAO MEDICA" in impressa["texto"]
+    assert impressa["confianca"] >= 70
+    assert ruido["confianca"] < 50
+    assert "PRESCRICAO MEDICA" in virada["texto"]
+    assert virada["confianca"] >= 70

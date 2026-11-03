@@ -458,6 +458,16 @@ def e_digitalizada(texto: str) -> bool:
 MARCA_DO_OCR = "<<<TEXTO LIDO POR OCR>>>"
 
 
+# Qualidade da folha digitalizada (#1398): a faixa da confiança do OCR, ou não lida
+# quando o OCR não chegou nela (prazo, falha). Ilegível e não lida contam como
+# página sem texto na regra dos 10%.
+LEGIVEL = "legivel"
+DUVIDOSA = "duvidosa"
+ILEGIVEL = "ilegivel"
+NAO_LIDA = "nao_lida"
+QUALIDADES = (LEGIVEL, DUVIDOSA, ILEGIVEL, NAO_LIDA)
+
+
 def _separar_ocr(texto: str) -> tuple[str, str]:
     """(texto do PDF, texto do OCR); o segundo vazio na página sem OCR."""
     do_pdf, _, do_ocr = texto.partition(MARCA_DO_OCR)
