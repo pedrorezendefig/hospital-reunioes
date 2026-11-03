@@ -1,53 +1,47 @@
 ---
 title: Tecnologia
-description: Onde o hospital e a Vitta conversam sobre os sistemas, cada pedido com dono, raia e resposta guardada.
-prd: [634, 673, 726, 1056, 1344]
-draft: false
+description: Onde você conta à Vitta um bug ou uma melhoria nos sistemas, numa conversa com a IA, e acompanha cada pedido.
+prd: [634, 673, 726, 1056, 1344, 1380]
+draft: true
 video: o-caminho-de-uma-demanda
 sidebar:
   order: 1
 ---
 
-A aba **Tecnologia** é onde o hospital e a Vitta, a empresa que cuida dos
-sistemas, tratam de tudo que envolve os sistemas. O pedido que antes ia pelo
-WhatsApp vira uma Demanda, com dono, lugar no Quadro e a conversa guardada.
+A aba **Tecnologia** é onde você conta à Vitta, a empresa que cuida dos
+sistemas, um bug ou uma melhoria que quer nos sistemas. O pedido que antes ia
+pelo WhatsApp vira uma conversa com a IA, que faz as perguntas que a Vitta
+faria e monta o pedido com você.
 
 ## Onde fica e quem entra
 
 Entre no app com o login de sempre, abra **Admin** e, na barra da esquerda,
-clique em **Tecnologia**. Só quem é Super Admin vê o item. Lá dentro há duas
-abas, **Quadro** e **Painel**, e a engrenagem ao lado de **Nova Demanda** abre
-a lista de Produtos.
-
-Nenhum painel, relatório ou e-mail das Pendências das atas mostra uma Demanda.
+clique em **Tecnologia**. Só quem é Super Admin vê o item. A aba é uma tela
+só: a conversa com o **Assistente de Tecnologia** e, ao lado, a lista dos seus
+pedidos.
 
 ## As palavras que você vai ver o tempo todo
 
-**Demanda** é qualquer pedido sobre os sistemas: uma decisão, um defeito, um
-ajuste, uma ideia nova, uma cobrança a alguém de fora.
+**Bug** é algo que não funciona como deveria. **Melhoria** é algo novo, ou
+uma mudança no que já existe.
 
-**Produto** é o sistema que o pedido toca, como Ana, Reuniões ou Ouvidoria.
-Cada Produto tem um dono do lado da Vitta.
+**Demanda** é o seu pedido: a conversa, os prints que você mandou e, depois do
+**Criar o card**, a ligação com o trabalho da Vitta. Na lista, cada uma
+aparece com o título e a Etapa.
 
-**Raia** é onde a Demanda aberta está no Quadro: **Nova**, **Em andamento** ou
-**Aguardando**. Quem move é gente.
+**Etapa** é o pé em que está o pedido, de **Registrada** a **Em produção**. O
+app a lê sozinho, sem ninguém digitar.
 
-**Etapa** é o pé em que está o desenvolvimento, mostrado como um selo no card.
-O app lê a Etapa sozinho, sem ninguém digitar.
+**O que muda** é o que a entrega acrescenta para você, em linguagem de quem
+usa. Aparece ao abrir um pedido que já foi para a Vitta.
 
-**Vínculo** é a ligação entre a Demanda e o trabalho da Vitta. É ele que faz o
-selo aparecer.
+## O caminho de um pedido
 
-**Conversa** é o fio dentro do card, com as respostas e as linhas automáticas
-de cada movimento. Nada ali é apagado.
-
-## O caminho de uma Demanda
-
-1. Alguém [registra a Demanda](registrar-uma-demanda-pelo-assistente/). Ela
-   nasce em **Nova**, com o dono do Produto como responsável.
-2. As pessoas [conversam no card](conversar-na-demanda/), e quem pediu pode
-   [planejar a Demanda com a IA](planejar-a-demanda-com-a-ia/).
-3. A Vitta [leva a Demanda para o desenvolvimento](levar-a-demanda-para-o-desenvolvimento/),
-   e o card passa a mostrar a Etapa e o **O que muda**.
-4. Quando a entrega chega ao app, a Demanda volta para quem pediu, que
-   [confere e conclui](conferir-e-concluir-uma-entrega/).
+1. Você clica em **Nova conversa** e diz se é bug ou melhoria.
+2. A IA faz as perguntas, uma por vez. No bug são até cinco
+   ([Relatar um bug](relatar-um-bug/)); na melhoria, até 12, com duas opções
+   e a recomendada marcada ([Pedir uma melhoria](pedir-uma-melhoria/)).
+3. Você confere o resumo e clica em **Criar o card**. Só aí o pedido vai para a
+   Vitta.
+4. A lista mostra a Etapa até a entrega chegar ao app
+   ([Acompanhar um pedido](acompanhar-um-pedido/)).
