@@ -14,8 +14,9 @@ A aba Tecnologia agora é uma conversa: conte o problema ou a melhoria, responda
 pedido.
 
 Nada vai para a Vitta antes do clique em **Criar o card**, e o print que você
-manda fica guardado no app. O vídeo da [abertura](../) foi refeito com a
-conversa no centro.
+manda fica guardado no app. O Quadro, o Painel, a lista de Produtos e o
+formulário saíram da aba, e as entregas mais antigas abaixo falam deles como
+eram. O vídeo da [abertura](../) foi refeito com a conversa no centro.
 
 Tarefas que mudaram: [Relatar um bug](../relatar-um-bug/),
 [Pedir uma melhoria](../pedir-uma-melhoria/),
