@@ -2,6 +2,54 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-11-02T21:07:52-03:00",
+      "sha": "42195327e0e990bcc1ea1f1f213c3d027d2acefd",
+      "app_version": "0.210.1",
+      "subject": "Onda tecnologia-chat-onda4: A aba Tecnologia só com o chat, sem o código antigo",
+      "raw_subject": "chore(deploy): registro da onda tecnologia-chat-onda4 (#1394)",
+      "scope": [
+        "backend",
+        "frontend"
+      ],
+      "prds": [
+        1380
+      ],
+      "result": "healthy",
+      "duration_seconds": 337,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        },
+        {
+          "service": "frontend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "onda-enxuta tecnologia-chat-onda4: PR #1394 (issue #1386), mergeados PR a PR. Merge pela API do GitHub, um build. Registro pela Action pos-merge depois do health.",
+      "etapas": {
+        "merge_s": 3,
+        "build_s": {
+          "backend": 120,
+          "frontend": 315
+        },
+        "health_s": 0
+      },
+      "responsavel": "pedrorezendefig"
+    },
+    {
       "at": "2026-11-02T20:13:43-03:00",
       "sha": "bd1c9bcb8454f928f4dbd99690713d8a4edc9558",
       "app_version": "0.210.0",
