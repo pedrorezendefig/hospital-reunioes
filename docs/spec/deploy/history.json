@@ -2,6 +2,49 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-11-03T12:47:34-03:00",
+      "sha": "d79e53ee78de061d9d09f064e0925223f201fb99",
+      "app_version": "0.210.2",
+      "subject": "PR #1396, sem issue: Auxiliar do honorário entra na leitura da conta e folha virada é desvirada antes do OCR",
+      "raw_subject": "chore(deploy): registro do PR avulso (#1396)",
+      "scope": [
+        "backend"
+      ],
+      "prds": [],
+      "result": "healthy",
+      "duration_seconds": 172,
+      "services_touched": [
+        "backend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        },
+        {
+          "service": "frontend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "PR avulso: PR #1396, sem issue. Merge pela API do GitHub, um build. Registro pela Action pos-merge depois do health.",
+      "etapas": {
+        "merge_s": 3,
+        "build_s": {
+          "backend": 139
+        },
+        "health_s": 10
+      },
+      "responsavel": "pedrorezendefig"
+    },
+    {
       "at": "2026-11-02T21:07:52-03:00",
       "sha": "42195327e0e990bcc1ea1f1f213c3d027d2acefd",
       "app_version": "0.210.1",
