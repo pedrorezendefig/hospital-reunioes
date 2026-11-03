@@ -2,7 +2,7 @@
 title: Pedir uma melhoria
 description: Responder às perguntas da IA sobre o que você quer mudar e mandar o pedido, com as suas decisões, para a Vitta.
 prd: [1380]
-draft: true
+draft: false
 papel: [Quem pede]
 busca: [ideia, sugestão, mudança, novidade, plano, planejamento, pedir ajuste]
 proximas: [acompanhar-um-pedido, relatar-um-bug]

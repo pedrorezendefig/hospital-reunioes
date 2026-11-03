@@ -2,7 +2,7 @@
 title: O que vai para a Vitta
 description: O que sai da conversa quando você clica em Criar o card, e o que acontece com os prints que você mandou.
 prd: [1380]
-draft: true
+draft: false
 sidebar:
   order: 22
 ---

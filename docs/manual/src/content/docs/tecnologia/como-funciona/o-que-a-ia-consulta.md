@@ -2,7 +2,7 @@
 title: O que a IA consulta
 description: De onde a IA tira o que sabe sobre os sistemas, e por que às vezes ela avisa que algo já foi decidido.
 prd: [1380]
-draft: true
+draft: false
 sidebar:
   order: 21
 ---

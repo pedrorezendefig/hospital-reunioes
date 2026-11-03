@@ -2,7 +2,7 @@
 title: Relatar um bug
 description: Contar à IA o que não funcionou, responder às perguntas dela e mandar o problema para a Vitta consertar.
 prd: [1380]
-draft: true
+draft: false
 papel: [Quem pede]
 busca: [erro, defeito, problema, quebrou, não funciona, travou, chamado]
 proximas: [acompanhar-um-pedido, pedir-uma-melhoria]

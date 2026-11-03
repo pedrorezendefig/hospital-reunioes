@@ -2,7 +2,7 @@
 title: Acompanhar um pedido
 description: Ver em que pé está cada pedido na lista ao lado da conversa, continuar uma conversa parada e ler o que a entrega muda.
 prd: [1380]
-draft: true
+draft: false
 papel: [Quem pede]
 busca: [status, andamento, situação, histórico, meus pedidos, etapa, quando fica pronto]
 proximas: [relatar-um-bug, pedir-uma-melhoria]
