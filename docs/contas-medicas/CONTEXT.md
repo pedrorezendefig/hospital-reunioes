@@ -24,8 +24,12 @@ _Evitar_: PEP, evolução (que é um dos documentos, não o todo).
 **Família de documento**:
 Layout reconhecido por assinatura de texto dentro do Prontuário (capa, prescrição, evolução, anotação de enfermagem, balanço hídrico, resumo de alta, admissão de unidade, ficha anestésica, descrição cirúrgica, fisioterapia, guia TISS, anexo, digitalizado, não reconhecido). Cada Família tem o seu tratamento: estruturar por código, mandar o texto à IA, ou descartar.
 
+**Qualidade da folha digitalizada**:
+O quanto o OCR conseguiu ler de uma folha escaneada do Prontuário (Família digitalizado), pela confiança média do `tesseract` nas palavras de 4 letras ou mais: **legível** de 70 para cima, **duvidosa** de 50 a 69, **ilegível** abaixo de 50. A folha que o OCR não alcançou no prazo, ou em que ele falhou, fica **não lida**. A folha abaixo de 50 é girada 180° e lida de novo, e fica a leitura melhor (recupera o formulário impresso escaneado de cabeça para baixo). O detalhe técnico da conta guarda quantas folhas saíram em cada faixa (#1398).
+_Evitar_: dar como lida toda folha em que o OCR devolveu algum texto.
+
 **Parecer parcial**:
-Marca do Guia quando o Prontuário não trouxe um grupo essencial que a capa declara, termina antes do fim do período da Conta, ou tem mais de 10% de páginas sem texto. O Guia sai mesmo assim, com a lista do que faltou.
+Marca do Guia quando o Prontuário não trouxe um grupo essencial que a capa declara, termina antes do fim do período da Conta, ou tem mais de 10% de páginas sem texto. A folha digitalizada ilegível ou não lida conta como página sem texto. O Guia sai mesmo assim, com a lista do que faltou.
 
 **Operadora**:
 Convênio com contrato próprio com o hospital (ASSIM, Unimed, Leve, Porto, Amil, Oplan, Klini). Reconhecida pelo nome do **Plano** impresso na Conta, por uma tabela de planos mantida pela gestão. Plano desconhecido: a Conta é recusada com o nome do plano, nunca analisada com regra de outra Operadora.
