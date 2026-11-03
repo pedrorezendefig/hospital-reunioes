@@ -232,6 +232,26 @@ def test_ocr_de_todas_as_paginas_cabe_num_prazo_da_leitura(tmp_path, monkeypatch
     assert [p.qualidade for p in paginas] == [None, "nao_lida", "nao_lida", "nao_lida", None]
 
 
+def test_com_prazo_curto_as_digitalizadas_da_conta_sao_lidas_antes_das_outras(tmp_path, monkeypatch):
+    # Cada leitura leva 1,5 s e o filho tem 2,7 s: cabe uma página só. A que vai
+    # primeiro é a da conta (a 4), não a primeira do arquivo (#1398).
+    _tesseract_falso(
+        tmp_path, monkeypatch, f"if '--psm' not in sys.argv:\n    time.sleep(1.5)\nescrever({LIDO_PELO_OCR!r})"
+    )
+    monkeypatch.setattr(extrator, "PRAZO_DA_LEITURA", 3.0)
+    pdf = _pdf(CAPA_DO_PRONTUARIO, "", "", "", PAGINA_COM_TEXTO)
+
+    paginas = ler_digitalizadas(pdf, extrair_paginas(pdf), primeiro=[4])
+
+    assert [(p.numero, p.qualidade) for p in paginas] == [
+        (1, None),
+        (2, "nao_lida"),
+        (3, "nao_lida"),
+        (4, "legivel"),
+        (5, None),
+    ]
+
+
 @pytest.mark.parametrize(
     ("confianca", "qualidade"),
     [(95, "legivel"), (70, "legivel"), (69, "duvidosa"), (50, "duvidosa"), (49, "ilegivel"), (12, "ilegivel")],
