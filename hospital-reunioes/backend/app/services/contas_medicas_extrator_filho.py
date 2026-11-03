@@ -70,6 +70,7 @@ def ocr(entrada: str, paginas: set[int], prazo: float) -> dict[str, str]:
                     check=True,
                     timeout=max(fim - time.monotonic(), 0.001),
                 )
+                _desvirar(f"{imagem}.png", ambiente, fim)
                 lido = subprocess.run(
                     ["tesseract", f"{imagem}.png", "stdout", "-l", "por"],
                     capture_output=True,
@@ -89,6 +90,33 @@ def ocr(entrada: str, paginas: set[int], prazo: float) -> dict[str, str]:
             if texto:
                 lidas[str(numero)] = texto
     return lidas
+
+
+def _desvirar(imagem: str, ambiente: dict[str, str], fim: float) -> None:
+    """Gira a imagem para a posição de leitura quando o `tesseract --psm 0` diz que
+    ela está virada: folha impressa digitalizada de cabeça para baixo sai lixo no
+    OCR. O `--psm 1` faz o mesmo, mas só gira com confiança alta e deixa virada a
+    página de pouca confiança. Sem resposta (página com pouca letra), fica como veio."""
+    import re
+    import subprocess
+    import time
+
+    osd = subprocess.run(
+        ["tesseract", imagem, "stdout", "--psm", "0"],
+        capture_output=True,
+        timeout=max(fim - time.monotonic(), 0.001),
+        env=ambiente,
+    )
+    giro = re.search(r"Rotate:\s*(90|180|270)\b", osd.stdout.decode("utf-8", errors="replace"))
+    if osd.returncode != 0 or giro is None:
+        return
+    from PIL import Image
+
+    with Image.open(imagem) as original:
+        desvirada = original.rotate(-int(giro.group(1)), expand=True)
+        # Sem o DPI da rasterização, o `tesseract` supõe resolução baixa e lê pior.
+        desvirada.info["dpi"] = original.info.get("dpi", (300, 300))
+    desvirada.save(imagem, dpi=desvirada.info["dpi"])
 
 
 def main(argv: list[str]) -> int:

@@ -333,7 +333,24 @@ Total da Conta:                                                                 
 """  # noqa: E501
 )
 
-PRESTADORES_FICTICIOS = ("FULANO", "BELTRANA", "000000", "111111")
+# Auxiliar no layout real do MV: a função vem com a ordem na frente
+# ("1 AUXILIAR"), e a linha sumia da leitura (achado numa conta real).
+HONORARIO_COM_AUXILIAR = (
+    CABECALHO_HONORARIO
+    + """\
+18/09/2026       30726018    ARTRITE SEPTICA - TRATAMENTO                               N      100,00%             1
+                           CIRURGICO - JOELHO
+         FULANO FICTICIO DE TAL - 000000                                CIRURGIAO                                   500,00          500,00
+         BELTRANA FICTICIA - 111111                                     1 AUXILIAR                                  148,04          148,04
+         CICRANO FICTICIO - 222222                                      2 AUXILIAR                                   98,70           98,70
+
+                                                                                                    Total Grupo de Procedimento:          746,74
+
+Total da Conta:                                                                    746,74
+"""  # noqa: E501
+)
+
+PRESTADORES_FICTICIOS = ("FULANO", "BELTRANA", "CICRANO", "000000", "111111", "222222")
 
 
 def _honorarios(conta: Conta) -> list[tuple]:
@@ -382,15 +399,25 @@ def test_honorario_com_dois_prestadores_vira_um_item_por_prestador():
     ]
 
 
+def test_auxiliar_com_a_ordem_na_frente_vira_item_com_a_ordem_na_funcao():
+    conta = _conta([HONORARIO_COM_AUXILIAR])
+
+    assert [(i.total, i.funcao) for i in conta.itens] == [
+        (Decimal("500.00"), "CIRURGIAO"),
+        (Decimal("148.04"), "1 AUXILIAR"),
+        (Decimal("98.70"), "2 AUXILIAR"),
+    ]
+
+
 def test_conferencia_da_leitura_fecha_nas_contas_com_honorario():
-    for paginas in ([HONORARIO_UM_PRESTADOR], [HONORARIO_DOIS_PRESTADORES]):
+    for paginas in ([HONORARIO_UM_PRESTADOR], [HONORARIO_DOIS_PRESTADORES], [HONORARIO_COM_AUXILIAR]):
         conta = _conta(paginas)
         assert sum(i.total for i in conta.itens) == conta.total
         assert all(i.quantidade * i.unitario == i.total for i in conta.itens)
 
 
 def test_nome_e_crm_do_prestador_nao_ficam_no_item():
-    for paginas in ([HONORARIO_UM_PRESTADOR], [HONORARIO_DOIS_PRESTADORES]):
+    for paginas in ([HONORARIO_UM_PRESTADOR], [HONORARIO_DOIS_PRESTADORES], [HONORARIO_COM_AUXILIAR]):
         conta = _conta(paginas)
         assert conta.itens
         for item in conta.itens:

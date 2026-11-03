@@ -439,6 +439,12 @@ class TestPdftotextNaImagem:
         linhas = [linha.strip() for linha in DOCKERFILE.read_text(encoding="utf-8").splitlines()]
         assert "RUN pdftoppm -v && tesseract --version && tesseract --list-langs | grep -qx por" in linhas
 
+    def test_o_build_reprova_a_imagem_sem_a_orientacao_da_pagina(self):
+        """Mutante: tirar a linha do `osd`. Sem ele o `tesseract --psm 0` não diz
+        se a folha digitalizada está de cabeça para baixo, e ela vai virada ao OCR."""
+        linhas = [linha.strip() for linha in DOCKERFILE.read_text(encoding="utf-8").splitlines()]
+        assert "RUN tesseract --list-langs | grep -qx osd" in linhas
+
 
 class TestOMenuSabeDoEixo:
     def test_participantes_me_devolve_o_perfil_de_contas_medicas(self):
