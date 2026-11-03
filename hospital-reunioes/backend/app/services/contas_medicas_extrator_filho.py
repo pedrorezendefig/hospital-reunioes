@@ -73,6 +73,7 @@ def ocr(entrada: str, paginas: Sequence[int], prazo: float) -> dict[str, dict]:
         for numero in paginas:
             imagem = os.path.join(pasta, str(numero))
             lida = None
+            esgotado = False
             try:
                 subprocess.run(
                     ["pdftoppm", "-f", str(numero), "-l", str(numero), "-r", "300", "-gray", "-png", "-singlefile"]
@@ -89,16 +90,18 @@ def ocr(entrada: str, paginas: Sequence[int], prazo: float) -> dict[str, dict]:
                     _girar(f"{imagem}.png", 180)
                     lida = max(lida, _ler(imagem, ambiente, fim), key=lambda par: par[1])
             except subprocess.TimeoutExpired:
-                if lida is not None:
-                    lidas[str(numero)] = {"texto": lida[0], "confianca": lida[1]}
-                break
+                esgotado = True
             except (OSError, subprocess.SubprocessError):
-                continue
+                pass
             finally:
                 for sufixo in (".png", ".txt", ".tsv"):
                     if os.path.exists(f"{imagem}{sufixo}"):
                         os.remove(f"{imagem}{sufixo}")
-            lidas[str(numero)] = {"texto": lida[0], "confianca": lida[1]}
+            # A segunda leitura que falha ou passa do prazo não apaga a primeira.
+            if lida is not None:
+                lidas[str(numero)] = {"texto": lida[0], "confianca": lida[1]}
+            if esgotado:
+                break
     return lidas
 
 
