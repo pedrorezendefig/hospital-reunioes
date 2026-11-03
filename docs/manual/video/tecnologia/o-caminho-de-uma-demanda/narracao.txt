@@ -1,53 +1,47 @@
-O pedido que ia pelo WhatsApp agora tem lugar.
+Isso é um bug ou uma melhoria?
 
-Na aba Tecnologia, cada assunto dos sistemas é uma Demanda.
+É com essa pergunta que a aba Tecnologia abre a conversa.
 
-Para registrar a sua, abra Nova Demanda.
+Clique em Nova conversa e escolha Bug ou Melhoria.
 
-Conte o que precisa do seu jeito: escrevendo, falando ou com um print da tela.
+Dá pra escrever, falar no microfone ou mandar o print da tela.
 
-O assistente faz no máximo três perguntas, e o Rascunho da Demanda se monta ao lado.
+Se for só uma dúvida, a IA responde ali mesmo e diz de onde tirou.
 
-Confira e clique em Criar Demanda.
+No bug, ela pergunta uma coisa de cada vez, no máximo cinco.
 
-Ela nasce em Nova, com o dono do Produto como responsável, e ele recebe um e-mail.
+Onde foi, o que aconteceu, o que você esperava e como repetir.
 
-Entre Nova, Em andamento e Aguardando, quem move é gente.
+O print entra pelo botão de imagem e fica guardado no app.
 
-Dentro do card fica a Conversa. Digite arroba e escolha o nome, e a pessoa é avisada.
+No fim vem o resumo, com o jeito de saber que foi resolvido.
 
-O que se combina ali fica guardado, com autor, data e hora.
+Algo errado? Clique em Não bateu e diga o quê.
 
-Numa Demanda do tipo Novo ou Ajuste, aparece o botão Planejar com a IA.
+Se está certo, Criar o card manda o bug pra Vitta.
 
-A IA faz as perguntas que a Vitta faria antes de começar, uma de cada vez.
+Ele entra na fila do desenvolvimento, sem ninguém precisar assumir antes.
 
-Cada pergunta traz o contexto e duas opções, com a recomendada marcada.
+Na melhoria, a IA pergunta o que a Vitta perguntaria antes de começar.
 
-Escolha uma delas. Se nenhuma serve, responda falando no microfone.
+Ela consulta o que já foi decidido e avisa se o pedido esbarra numa regra.
 
-À direita, O que já decidimos ganha uma linha a cada decisão fechada.
+Cada pergunta traz duas opções, com a recomendada marcada.
 
-Quando quiser parar, use Fechar e resumir.
+Escolha uma, ou responda do seu jeito, por escrito ou por voz.
 
-O resumo traz o porquê de cada decisão e o que ficou em aberto.
+São no máximo doze perguntas, e Fechar e resumir encerra quando você quiser.
 
-Algo não bateu? Diga o quê, e as perguntas seguem.
+O resumo mostra cada decisão com o porquê, e o que ficou em aberto.
 
-Se está certo, o sim manda o plano para os desenvolvedores.
+Nada sai do app antes do seu clique em Criar o card.
 
-A Demanda passa para Em análise, e o card mostra O que muda com o que você decidiu.
+Ao lado da conversa fica a lista dos seus pedidos.
 
-Nas outras Demandas, quem faz o Vínculo é a Vitta.
+A conversa parada aparece como Registrada: clique e continue de onde parou.
 
-Pelo número do trabalho, ou criando na hora, em Levar para desenvolvimento.
+As outras mostram a Etapa, que anda sozinha: Em análise, Em desenvolvimento, Em produção.
 
-Daí em diante, o selo da Etapa anda sozinho: Planejada, Em desenvolvimento, Em produção.
+Abra um pedido e leia O que muda, o que a entrega traz pra você.
 
-Quando a entrega chega ao app, a Demanda volta para você, no Com você do Painel.
-
-Teste o que mudou e, se está bom, clique em Concluir.
-
-Se faltou algo, avise na Conversa, e a Vitta refaz.
-
-O pedido saiu do WhatsApp, ganhou um plano e voltou entregue a quem pediu.
+Começou com uma pergunta e chegou à Vitta do jeito que você decidiu.

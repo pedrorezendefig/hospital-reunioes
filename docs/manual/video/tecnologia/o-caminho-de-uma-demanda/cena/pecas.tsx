@@ -1,5 +1,6 @@
 /* =====================================================================================
-   videos/Tecnologia/pecas.tsx: as peças do Vídeo de visão geral da Tecnologia (o molde é o de
+   videos/Tecnologia/pecas.tsx: as peças do Vídeo de visão geral da Tecnologia, o chat do
+   Assistente (PRD #1380; o molde é o de
    Contas médicas, o piloto do estilo).
 
    A tela do app mora numa JANELA fixa (1440x810, no alto do quadro). Dentro dela, a câmera anda
@@ -347,9 +348,9 @@ export const Legenda: React.FC<{ palavras: Palavra[]; destaque?: number[]; ate?:
 
 /* ---------------------------------------------------------------- capítulo */
 
-export const CAPITULOS = ['Registrar', 'Quadro', 'Conversa', 'Planejamento', 'Vínculo', 'Etapa', 'Entrega'];
+export const CAPITULOS = ['Conversa', 'Bug', 'Melhoria', 'Acompanhar'];
 
-/** O capítulo no alto, à esquerda, e os sete pontos do caminho, à direita. */
+/** O capítulo no alto, à esquerda, e os pontos do caminho, à direita. */
 export const Capitulo: React.FC<{ n: number }> = ({ n }) => {
   const f = useCurrentFrame();
   const nome = `${n}  ·  ${CAPITULOS[n - 1]}`.toUpperCase();

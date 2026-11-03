@@ -1,20 +1,26 @@
 ---
 title: Novidades
 description: O que mudou na aba Tecnologia, da entrega mais recente para a mais antiga.
-prd: [634, 673, 726, 1056, 1344, 1365]
+prd: [634, 673, 726, 1056, 1344, 1365, 1380]
 draft: true
 sidebar:
   order: 90
 ---
 
-## 02/11/2026 · A abertura ganha um vídeo com o caminho de uma Demanda
+## 02/11/2026 · A aba Tecnologia agora é uma conversa
 
-A página [Tecnologia](../) agora abre com um vídeo narrado, com a fala escrita
-na tela. Ele acompanha um pedido do assistente até a entrega, e a maior parte
-do tempo fica no **Planejar com a IA**: a pergunta com o contexto, as duas
-opções com a **Recomendada**, a resposta pelo microfone, o **Fechar e resumir**
-e o sim que manda o plano para a Vitta. Depois vêm o Vínculo, os selos da Etapa
-e o **Concluir** da entrega.
+A aba Tecnologia agora é uma conversa: conte o problema ou a melhoria, responda
+às perguntas e confirme o resumo. A lista ao lado mostra em que pé está cada
+pedido.
+
+Nada vai para a Vitta antes do clique em **Criar o card**, e o print que você
+manda fica guardado no app. O Quadro, o Painel, a lista de Produtos e o
+formulário saíram da aba, e as entregas mais antigas abaixo falam deles como
+eram. O vídeo da [abertura](../) foi refeito com a conversa no centro.
+
+Tarefas que mudaram: [Relatar um bug](../relatar-um-bug/),
+[Pedir uma melhoria](../pedir-uma-melhoria/),
+[Acompanhar um pedido](../acompanhar-um-pedido/)
 
 ## 01/11/2026 · A Tecnologia entra no Manual
 
@@ -29,8 +35,6 @@ uma conversa em que a IA faz as perguntas que a Vitta faria, uma por vez, com
 duas opções e a recomendada destacada. No fim, você confere o resumo das suas
 decisões, e o sim manda o plano para a Vitta.
 
-Tarefas que mudaram: [Planejar a Demanda com a IA](../planejar-a-demanda-com-a-ia/)
-
 ## 07/10/2026 · Painel, prints na Demanda e a entrega em produção
 
 O Quadro ficou com três raias, e Concluir e Cancelar viraram botões do card. A
@@ -38,28 +42,18 @@ aba ganhou o **Painel**, com o que está com você, as entregas e o Histórico.
 A Demanda passou a guardar até 10 prints, e a entrega volta para quem pediu
 quando já está no app.
 
-Tarefas que mudaram: [Ler o Painel](../ler-o-painel/),
-[Conferir e concluir uma entrega](../conferir-e-concluir-uma-entrega/),
-[Mover, concluir ou cancelar uma Demanda](../mover-concluir-ou-cancelar-uma-demanda/)
-
 ## 17/09/2026 · A Demanda nasce conversando
 
 **Nova Demanda** passou a abrir um assistente: você conta o que precisa e o
 pedido se monta ao lado, antes de criar. Ele avisa quando já existe Demanda
 aberta sobre o mesmo assunto.
 
-Tarefas que mudaram: [Registrar uma Demanda pelo assistente](../registrar-uma-demanda-pelo-assistente/)
-
 ## 11/09/2026 · O card acompanha o desenvolvimento
 
 A Demanda pode ser ligada ao trabalho da Vitta. A partir daí, o card mostra a
 Etapa e o **O que muda** sozinho.
 
-Tarefas que mudaram: [Levar a Demanda para o desenvolvimento](../levar-a-demanda-para-o-desenvolvimento/)
-
 ## 10/09/2026 · A aba Tecnologia chega ao app
 
 Os pedidos sobre os sistemas saíram do WhatsApp e ganharam um Quadro, com dono,
 tipo, Produto e a conversa guardada no card.
-
-Tarefas que mudaram: [Acompanhar o Quadro](../acompanhar-o-quadro/)

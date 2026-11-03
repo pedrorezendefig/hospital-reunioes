@@ -29,31 +29,33 @@ DESTINO = "https://manual-hsm.vercel.app/tecnologia/"
 sys.path.insert(0, str(RAIZ / "tools"))
 
 import inventario_manual  # noqa: E402
-
-# O de/para dos capítulos da página antiga (a mesma tabela do PR). A chave é
-# o capítulo como estava no sumário; o valor, as páginas que o recebem.
-DESTINO_DO_CAPITULO = {
-    "0 Como funciona, em uma página": ["index"],
-    "1 Onde fica e quem entra": ["index", "cadastrar-um-produto-e-o-dono"],
-    "2 Registrar o pedido": [
-        "registrar-uma-demanda-pelo-assistente",
-        "registrar-uma-demanda-pelo-formulario",
-        "como-funciona/os-sete-tipos",
-    ],
-    "3 O Quadro e o card": ["acompanhar-o-quadro", "mover-concluir-ou-cancelar-uma-demanda"],
-    "4 A Conversa dentro do card": ["conversar-na-demanda", "copiar-a-demanda-para-uma-ia"],
-    "5 Do pedido ao desenvolvimento": [
-        "levar-a-demanda-para-o-desenvolvimento",
-        "como-funciona/o-que-vai-para-a-pagina-publica",
-    ],
-    "6 A Etapa e o O que muda": ["como-funciona/a-etapa-e-o-que-muda"],
-    "7 A entrega volta para quem pediu": ["conferir-e-concluir-uma-entrega"],
-    "8 O Painel e os e-mails": ["ler-o-painel", "como-funciona/os-e-mails-da-aba"],
-    "9 Onde o Quadro para, hoje": ["como-funciona/onde-a-aba-para-hoje"],
-    "+ Todos os vídeos": ["index"],
-}
+import lint_manual  # noqa: E402
 
 RE_IMAGEM = re.compile(r"!\[[^\]]*\]\(([^)\s]+)\)")
+RE_NUMERO = re.compile(r"\d+")
+
+# As três Páginas de tarefa que o PRD #1380 manda nascer.
+TAREFAS_DO_CHAT = ["relatar-um-bug", "pedir-uma-melhoria", "acompanhar-um-pedido"]
+# O Como funciona que o PRD pede: o que a IA consulta, o que vai para a Vitta e o print.
+COMO_FUNCIONA_DO_CHAT = ["o-que-a-ia-consulta", "o-que-vai-para-a-vitta"]
+NOVIDADE_DO_PRD = (
+    "A aba Tecnologia agora é uma conversa: conte o problema ou a melhoria, responda às perguntas "
+    "e confirme o resumo. A lista ao lado mostra em que pé está cada pedido."
+)
+# A tela que saiu no #1386, pelo nome que a página antiga usava.
+TELAS_ANTIGAS = {
+    "Quadro": re.compile(r"\bQuadro\b"),
+    "Painel": re.compile(r"\bPainel\b"),
+    "Produtos": re.compile(r"\bProdutos?\b"),
+    "formulário": re.compile(r"\bformulário\b", re.IGNORECASE),
+    "raia": re.compile(r"\braias?\b", re.IGNORECASE),
+    "Planejar com a IA": re.compile(r"Planejar com a IA"),
+    "Nova Demanda": re.compile(r"Nova Demanda"),
+}
+
+
+def _telas_antigas(texto: str) -> list[str]:
+    return [nome for nome, regra in TELAS_ANTIGAS.items() if regra.search(texto)]
 
 
 def _pastas_do_menu() -> list[str]:
@@ -81,22 +83,61 @@ class TestASecaoNoMenu:
         assert (SECAO / pagina).is_file()
 
 
-class TestOsCapitulosAntigos:
-    @pytest.mark.parametrize("capitulo", sorted(DESTINO_DO_CAPITULO))
-    def test_cada_capitulo_tem_destino_numa_pagina_que_existe(self, capitulo):
-        faltando = [p for p in DESTINO_DO_CAPITULO[capitulo] if not (SECAO / f"{p}.md").is_file()]
-        assert faltando == []
+class TestASecaoDoChat:
+    """PRD #1380 (ADR 0077): a aba virou o chat do Assistente, e o módulo do
+    Manual ensina só ele. As Páginas de tarefa do Quadro, do Painel, dos
+    Produtos, do formulário, da Conversa espelhada e do Planejar com a IA saem."""
 
-    def test_o_planejamento_da_demanda_tem_pagina_propria(self):
-        """PRD #1344: a página que a página antiga não tinha."""
-        assert (SECAO / "planejar-a-demanda-com-a-ia.md").is_file()
+    @pytest.mark.parametrize("pagina", TAREFAS_DO_CHAT)
+    def test_a_tarefa_do_chat_existe_em_draft_e_cita_o_prd(self, pagina):
+        campos = lint_manual.ler_frontmatter((SECAO / f"{pagina}.md").read_text(encoding="utf-8"))
+        assert campos.get("draft") == "true"
+        assert "1380" in RE_NUMERO.findall(campos.get("prd", ""))
+
+    def test_as_tarefas_do_modulo_sao_as_do_chat(self):
+        assert [p.stem for p in _paginas_de_tarefa()] == sorted(TAREFAS_DO_CHAT)
+
+    def test_o_detector_de_tela_antiga_ve_cada_termo(self):
+        """Piso do detector: cada termo aposentado, escrito como a página
+        antiga escrevia, é achado."""
+        amostra = (
+            "No **Quadro**, abra o **Painel** e a lista de Produtos; preencha o formulário, "
+            "mova de raia e clique em **Planejar com a IA**, ou em **Nova Demanda**."
+        )
+        assert len(_telas_antigas(amostra)) == len(TELAS_ANTIGAS)
+
+    @pytest.mark.parametrize(
+        "pagina",
+        [str(p.relative_to(SECAO)) for p in sorted(SECAO.rglob("*.md")) if p.name != "novidades.md"] or ["(nenhuma)"],
+    )
+    def test_nenhuma_pagina_descreve_a_tela_antiga(self, pagina):
+        """Novidades fica de fora: é a linha do tempo, e as entregas antigas
+        contam o que a aba era quando subiram."""
+        visivel = lint_manual.texto_visivel((SECAO / pagina).read_text(encoding="utf-8"))
+        assert _telas_antigas(visivel) == []
+
+    @pytest.mark.parametrize("pagina", COMO_FUNCIONA_DO_CHAT)
+    def test_o_como_funciona_do_prd_existe_e_cita_o_prd(self, pagina):
+        campos = lint_manual.ler_frontmatter((SECAO / "como-funciona" / f"{pagina}.md").read_text(encoding="utf-8"))
+        assert "1380" in RE_NUMERO.findall(campos.get("prd", ""))
+
+    def test_novidades_traz_o_texto_do_prd(self):
+        texto = (SECAO / "novidades.md").read_text(encoding="utf-8")
+        assert "1380" in RE_NUMERO.findall(lint_manual.ler_frontmatter(texto).get("prd", ""))
+        corrido = " ".join(lint_manual.texto_visivel(texto).split())
+        assert NOVIDADE_DO_PRD in corrido
+
+    def test_o_video_da_abertura_cobre_o_prd(self):
+        slug = lint_manual.ler_frontmatter((SECAO / "index.md").read_text(encoding="utf-8")).get("video", "").strip()
+        meta = json.loads((MANUAL / "video" / "tecnologia" / slug / "meta.json").read_text(encoding="utf-8"))
+        assert 1380 in meta["prds_cobertos"]
 
 
 class TestOsPrints:
     def test_ha_paginas_de_tarefa(self):
         """Piso: uma seção sem tarefa nenhuma deixaria o teste de baixo verde
         sem ter olhado para nada."""
-        assert len(_paginas_de_tarefa()) >= 10
+        assert len(_paginas_de_tarefa()) >= 3
 
     @pytest.mark.parametrize("pagina", [p.stem for p in _paginas_de_tarefa()] or ["(nenhuma)"])
     def test_toda_pagina_de_tarefa_tem_print_que_existe(self, pagina):

@@ -1,16 +1,15 @@
 /* =====================================================================================
-   videos/Tecnologia: o Vídeo de visão geral da Tecnologia (Manual, ADR 0076, issue #1373).
+   videos/Tecnologia: o Vídeo de visão geral da Tecnologia (Manual, ADR 0076; refeito no PRD #1380,
+   ADR 0077, com a conversa do Assistente como cena central).
 
-   14 cenas, uma por tela do app (as frases da mesma tela dividem a cena e a câmera anda de um
-   alvo ao outro), narradas com a voz A e com a fala escrita na tela palavra a palavra. A cena
-   central é o Planejamento da Demanda (6 a 9):
-     1 gancho (a mensagem solta vira card)   8 Fechar e resumir, o resumo e o não
-     2 o Quadro e Nova Demanda               9 o sim, Em análise e O que muda
-     3 o assistente e o Rascunho             10 o Vínculo
-     4 Nova, o dono e as raias               11 a Etapa nos selos do Quadro
-     5 a Conversa                            12 Com você, no Painel
-     6 o botão Planejar com a IA             13 Concluir e a Conversa da entrega
-     7 a pergunta, as opções e o microfone   14 virada e assinatura (logo inteira e parada)
+   9 cenas, uma por tela do app (as frases da mesma tela dividem a cena e a câmera anda de um alvo
+   ao outro), narradas com a voz A e com a fala escrita na tela palavra a palavra:
+     1 gancho: a pergunta que abre a conversa   6 o resumo da melhoria e o Criar o card
+     2 a aba aberta: Nova conversa, Bug ou      7 a lista: Registrada e a Etapa que anda
+       Melhoria, a caixa, o microfone, o print   8 o pedido aberto e O que muda
+     3 o bug: as perguntas e o print            9 virada e assinatura (logo inteira e parada)
+     4 o resumo do bug, Não bateu, Criar o card
+     5 a melhoria: a pergunta, as opções, a Recomendada, Fechar e resumir
    Telas: docs/manual/src/assets/tecnologia/video-*.png (roteiro de prints, --video), copiadas
    para public/. Tempos: tempos.json, de scripts/tempos-da-narracao.mjs.
    ===================================================================================== */
@@ -104,236 +103,197 @@ const cenaDeTela = (n: number, capitulo: number, planos: (q: ReturnType<typeof u
   return Cena;
 };
 
-const QUADRO = 'video-01-quadro';
-const ASSISTENTE = 'video-02-assistente';
-const CONVERSA = 'video-03-conversa';
-const PLANEJAR = 'video-04-planejar';
-const PLANEJAMENTO = 'video-05-planejamento';
-const RESUMO = 'video-06-resumo';
-const ENVIADO = 'video-07-enviado';
-const EM_ANALISE = 'video-08-em-analise';
-const O_QUE_MUDA = 'video-09-o-que-muda';
-const VINCULO = 'video-10-vinculo';
-const PAINEL = 'video-11-painel';
-const ENTREGA = 'video-12-entrega';
-const ENTREGA_CONVERSA = 'video-13-entrega-conversa';
+const ABERTURA = 'video-01-abertura';
+const BUG = 'video-02-bug';
+const RESUMO_DO_BUG = 'video-03-resumo-do-bug';
+const ENVIADO = 'video-04-enviado';
+const MELHORIA = 'video-05-melhoria';
+const RESUMO_DA_MELHORIA = 'video-06-resumo-da-melhoria';
+const LISTA = 'video-07-lista';
+const ACOMPANHAMENTO = 'video-08-acompanhamento';
 
 const C2 = cenaDeTela(
   2,
   1,
   (q) => [
-    { em: 0, tela: QUADRO, zoom: 1 },
-    { em: q('Demanda'), tela: QUADRO, foco: 'raias', zoom: 1.1, destaque: ['raias'] },
-    { em: q('abra'), tela: QUADRO, foco: 'nova_demanda', zoom: 2.2, destaque: ['nova_demanda'], cursor: 'nova_demanda' },
-    { em: q('Demanda', 'Nova'), tela: QUADRO, foco: 'nova_demanda', zoom: 2.2, destaque: ['nova_demanda'], cursor: 'nova_demanda', clique: true },
+    { em: 0, tela: ABERTURA, zoom: 1 },
+    { em: q('pergunta'), tela: ABERTURA, foco: ['pergunta', 'opcoes'], zoom: 1.7, destaque: ['pergunta'] },
+    { em: q('Nova'), tela: ABERTURA, foco: ['nova_conversa', 'opcoes'], zoom: 1.5, destaque: ['nova_conversa'], cursor: 'nova_conversa' },
+    { em: q('conversa', 'Nova'), tela: ABERTURA, foco: ['nova_conversa', 'opcoes'], zoom: 1.5, destaque: ['nova_conversa'], cursor: 'nova_conversa', clique: true },
+    { em: q('escolha'), tela: ABERTURA, foco: ['pergunta', 'opcoes'], zoom: 1.9, destaque: ['bug', 'melhoria'], cursor: 'bug' },
+    { em: q('escrever'), tela: ABERTURA, foco: ['mensagem', 'microfone'], zoom: 1.9, destaque: ['mensagem'] },
+    { em: q('microfone'), tela: ABERTURA, foco: ['mensagem', 'microfone'], zoom: 1.9, destaque: ['microfone'], cursor: 'microfone' },
+    { em: q('print'), tela: ABERTURA, foco: ['mensagem', 'microfone'], zoom: 1.9, destaque: ['print'], cursor: 'print' },
+    { em: q('dúvida'), tela: ABERTURA, foco: 'chat', zoom: 1.15, destaque: ['chat'] },
   ],
-  [['Demanda'], ['Nova', 'Demanda']],
+  [['pergunta'], ['Nova', 'conversa'], ['microfone', 'print'], ['dúvida']],
 );
 
 const C3 = cenaDeTela(
   3,
-  1,
+  2,
   (q) => [
-    { em: 0, tela: ASSISTENTE, zoom: 1 },
-    { em: q('escrevendo'), tela: ASSISTENTE, foco: 'mensagem', zoom: 2.2, destaque: ['mensagem'] },
-    { em: q('falando'), tela: ASSISTENTE, foco: 'mensagem', zoom: 2.2, destaque: ['microfone'], cursor: 'microfone' },
-    { em: q('print'), tela: ASSISTENTE, foco: 'mensagem', zoom: 2.2, destaque: ['print'], cursor: 'print' },
-    { em: q('assistente'), tela: ASSISTENTE, foco: 'conversa', zoom: 1.2, destaque: ['conversa'] },
-    { em: q('Rascunho'), tela: ASSISTENTE, foco: 'rascunho', zoom: 1.3, destaque: ['rascunho'] },
-    { em: q('Criar'), tela: ASSISTENTE, foco: 'criar', zoom: 2.4, destaque: ['criar'], cursor: 'criar' },
-    { em: q('Demanda', 'Criar'), tela: ASSISTENTE, foco: 'criar', zoom: 2.4, destaque: ['criar'], cursor: 'criar', clique: true },
+    { em: 0, tela: BUG, foco: 'conversa', zoom: 1.1 },
+    { em: q('cinco'), tela: BUG, foco: 'conversa', zoom: 1.2, destaque: ['onde', 'o_que'] },
+    { em: q('Onde'), tela: BUG, foco: ['onde', 'o_que'], zoom: 1.6, destaque: ['onde'] },
+    { em: q('aconteceu'), tela: BUG, foco: ['onde', 'o_que'], zoom: 1.6, destaque: ['o_que'] },
+    { em: q('print'), tela: BUG, foco: ['pede_print', 'print'], zoom: 1.4, destaque: ['pede_print'] },
+    { em: q('botão'), tela: BUG, foco: ['mensagem', 'microfone'], zoom: 1.9, destaque: ['print'], cursor: 'print' },
+    { em: q('imagem'), tela: BUG, foco: ['mensagem', 'microfone'], zoom: 1.9, destaque: ['print'], cursor: 'print', clique: true },
+    { em: q('guardado'), tela: BUG, foco: 'conversa', zoom: 1.15 },
   ],
-  [['seu', 'jeito'], ['Rascunho'], ['Criar', 'Demanda']],
+  [['cinco'], ['repetir'], ['guardado']],
 );
 
 const C4 = cenaDeTela(
   4,
   2,
   (q) => [
-    { em: 0, tela: QUADRO, foco: 'raias', zoom: 1.1 },
-    { em: q('Nova'), tela: QUADRO, foco: 'raia_nova', zoom: 1.5, destaque: ['raia_nova'] },
-    { em: q('dono'), tela: QUADRO, foco: 'cartao_nova', zoom: 2.3, destaque: ['dono_nova'] },
-    { em: q('Entre'), tela: QUADRO, foco: 'raias', zoom: 1.1, destaque: ['raia_nova'] },
-    { em: q('andamento'), tela: QUADRO, foco: 'raias', zoom: 1.1, destaque: ['raia_andamento'] },
-    { em: q('Aguardando'), tela: QUADRO, foco: 'raias', zoom: 1.1, destaque: ['raia_aguardando'] },
-    { em: q('gente'), tela: QUADRO, foco: 'raias', zoom: 1.15 },
+    { em: 0, tela: RESUMO_DO_BUG, foco: 'resumo', zoom: 1.05 },
+    { em: q('resumo'), tela: RESUMO_DO_BUG, foco: 'campos', zoom: 1.5, destaque: ['campos'] },
+    { em: q('resolvido'), tela: RESUMO_DO_BUG, foco: 'criterios', zoom: 1.8, destaque: ['criterios'] },
+    { em: q('Não'), tela: RESUMO_DO_BUG, foco: ['criar', 'nao_bateu'], zoom: 2.4, destaque: ['nao_bateu'], cursor: 'nao_bateu' },
+    { em: q('Criar'), tela: RESUMO_DO_BUG, foco: ['criar', 'nao_bateu'], zoom: 2.4, destaque: ['criar'], cursor: 'criar' },
+    { em: q('Vitta'), tela: RESUMO_DO_BUG, foco: ['criar', 'nao_bateu'], zoom: 2.4, destaque: ['criar'], cursor: 'criar', clique: true },
+    { em: q('fila'), tela: ENVIADO, foco: 'enviado', zoom: 1.5, destaque: ['enviado'] },
   ],
-  [['Nova'], ['gente']],
+  [['resolvido'], ['Não', 'bateu'], ['Criar', 'o', 'card'], ['fila']],
 );
 
 const C5 = cenaDeTela(
   5,
   3,
   (q) => [
-    { em: 0, tela: CONVERSA, foco: 'conversa', zoom: 1.15 },
-    { em: q('Conversa'), tela: CONVERSA, foco: 'conversa', zoom: 1.25, destaque: ['conversa'] },
-    { em: q('arroba'), tela: CONVERSA, foco: 'linha_mencao', zoom: 1.7, destaque: ['linha_mencao'] },
-    { em: q('combina'), tela: CONVERSA, foco: 'linhas', zoom: 1.45, destaque: ['linhas'] },
-    { em: q('autor'), tela: CONVERSA, foco: 'linha_mencao', zoom: 1.8, destaque: ['linha_mencao'] },
+    { em: 0, tela: MELHORIA, foco: 'conversa', zoom: 1.05 },
+    { em: q('Vitta'), tela: MELHORIA, foco: 'pergunta', zoom: 1.8, destaque: ['pergunta'] },
+    { em: q('decidido'), tela: MELHORIA, foco: 'pergunta', zoom: 1.9, destaque: ['pergunta'] },
+    { em: q('opções'), tela: MELHORIA, foco: ['pergunta', 'opcoes'], zoom: 1.6, destaque: ['opcoes'] },
+    { em: q('recomendada'), tela: MELHORIA, foco: ['pergunta', 'opcoes'], zoom: 1.6, destaque: ['selo_recomendada'] },
+    { em: q('Escolha'), tela: MELHORIA, foco: ['pergunta', 'opcoes'], zoom: 1.6, destaque: ['recomendada'], cursor: 'recomendada' },
+    { em: q('voz'), tela: MELHORIA, foco: ['mensagem', 'microfone'], zoom: 1.9, destaque: ['microfone'], cursor: 'microfone' },
+    { em: q('Fechar'), tela: MELHORIA, foco: 'fechar', zoom: 2.4, destaque: ['fechar'], cursor: 'fechar' },
+    { em: q('encerra'), tela: MELHORIA, foco: 'fechar', zoom: 2.4, destaque: ['fechar'], cursor: 'fechar', clique: true },
   ],
-  [['arroba'], ['guardado']],
+  [['Vitta'], ['decidido'], ['recomendada'], ['seu', 'jeito'], ['Fechar', 'e', 'resumir']],
 );
 
 const C6 = cenaDeTela(
   6,
-  4,
+  3,
   (q) => [
-    { em: 0, tela: PLANEJAR, foco: ['titulo', 'planejar'], zoom: 1.15 },
-    { em: q('Planejar'), tela: PLANEJAR, foco: 'planejar', zoom: 2.4, destaque: ['planejar'], cursor: 'planejar' },
-    { em: q('IA'), tela: PLANEJAR, foco: 'planejar', zoom: 2.4, destaque: ['planejar'], cursor: 'planejar', clique: true },
+    { em: 0, tela: RESUMO_DA_MELHORIA, foco: 'resumo', zoom: 1.05 },
+    { em: q('decisão'), tela: RESUMO_DA_MELHORIA, foco: 'decisoes', zoom: 1.4, destaque: ['decisoes'] },
+    { em: q('porquê'), tela: RESUMO_DA_MELHORIA, foco: 'decisoes', zoom: 1.4, destaque: ['porque'] },
+    { em: q('aberto'), tela: RESUMO_DA_MELHORIA, foco: ['em_aberto', 'criar'], zoom: 1.6, destaque: ['em_aberto'] },
+    { em: q('Nada'), tela: RESUMO_DA_MELHORIA, foco: ['criar', 'nao_bateu'], zoom: 2.4 },
+    { em: q('clique'), tela: RESUMO_DA_MELHORIA, foco: ['criar', 'nao_bateu'], zoom: 2.4, destaque: ['criar'], cursor: 'criar' },
+    { em: q('card'), tela: RESUMO_DA_MELHORIA, foco: ['criar', 'nao_bateu'], zoom: 2.4, destaque: ['criar'], cursor: 'criar', clique: true },
   ],
-  [['Planejar', 'com', 'a', 'IA']],
+  [['porquê'], ['Criar', 'o', 'card']],
 );
 
 const C7 = cenaDeTela(
   7,
   4,
   (q) => [
-    { em: 0, tela: PLANEJAMENTO, zoom: 1 },
-    { em: q('perguntas'), tela: PLANEJAMENTO, foco: 'pergunta', zoom: 1.5, destaque: ['pergunta'] },
-    { em: q('opções'), tela: PLANEJAMENTO, foco: ['pergunta', 'opcoes'], zoom: 1.5, destaque: ['opcoes'] },
-    { em: q('recomendada'), tela: PLANEJAMENTO, foco: ['pergunta', 'opcoes'], zoom: 1.5, destaque: ['recomendada'] },
-    { em: q('Escolha'), tela: PLANEJAMENTO, foco: ['pergunta', 'opcoes'], zoom: 1.5, destaque: ['opcoes'], cursor: 'recomendada' },
-    { em: q('microfone'), tela: PLANEJAMENTO, foco: ['resposta', 'microfone'], zoom: 1.8, destaque: ['microfone'], cursor: 'microfone', clique: true },
-    { em: q('direita'), tela: PLANEJAMENTO, foco: 'decididos', zoom: 2.2, destaque: ['decididos'] },
+    { em: 0, tela: LISTA, foco: 'lista', zoom: 1.2 },
+    { em: q('lista'), tela: LISTA, foco: 'lista', zoom: 1.3, destaque: ['lista'] },
+    { em: q('Registrada'), tela: LISTA, foco: 'pedido_registrado', zoom: 2.4, destaque: ['registrada'], cursor: 'pedido_registrado' },
+    { em: q('continue'), tela: LISTA, foco: 'pedido_registrado', zoom: 2.4, destaque: ['pedido_registrado'], cursor: 'pedido_registrado', clique: true },
+    { em: q('Etapa'), tela: LISTA, foco: 'lista', zoom: 1.5 },
+    { em: q('análise'), tela: LISTA, foco: 'lista', zoom: 1.5, destaque: ['em_analise'] },
+    { em: q('desenvolvimento'), tela: LISTA, foco: 'lista', zoom: 1.5, destaque: ['em_desenvolvimento'] },
+    { em: q('produção'), tela: LISTA, foco: 'lista', zoom: 1.5, destaque: ['em_producao'] },
   ],
-  [['Vitta'], ['recomendada'], ['microfone'], ['O', 'que', 'já', 'decidimos']],
+  [['lista'], ['Registrada'], ['sozinha']],
 );
 
 const C8 = cenaDeTela(
   8,
   4,
   (q) => [
-    { em: 0, tela: PLANEJAMENTO, foco: ['fechar', 'decididos'], zoom: 1.3 },
-    { em: q('Fechar'), tela: PLANEJAMENTO, foco: 'fechar', zoom: 2.4, destaque: ['fechar'], cursor: 'fechar' },
-    { em: q('resumir'), tela: PLANEJAMENTO, foco: 'fechar', zoom: 2.4, destaque: ['fechar'], cursor: 'fechar', clique: true },
-    { em: q('resumo'), tela: RESUMO, foco: 'resumo', zoom: 1.25 },
-    { em: q('porquê'), tela: RESUMO, foco: 'decisoes', zoom: 1.5, destaque: ['decisoes'] },
-    { em: q('aberto'), tela: RESUMO, foco: ['decisoes', 'em_aberto'], zoom: 1.4, destaque: ['em_aberto'] },
-    { em: q('bateu'), tela: RESUMO, foco: ['sim', 'nao'], zoom: 2.2, destaque: ['nao'], cursor: 'nao' },
+    { em: 0, tela: ACOMPANHAMENTO, foco: ['pedido_na_lista', 'o_que_muda'], zoom: 1.1 },
+    { em: q('Abra'), tela: ACOMPANHAMENTO, foco: ['pedido_na_lista', 'o_que_muda'], zoom: 1.2, destaque: ['pedido_na_lista'], cursor: 'pedido_na_lista' },
+    { em: q('pedido'), tela: ACOMPANHAMENTO, foco: ['pedido_na_lista', 'o_que_muda'], zoom: 1.2, destaque: ['pedido_na_lista'], cursor: 'pedido_na_lista', clique: true },
+    { em: q('muda'), tela: ACOMPANHAMENTO, foco: ['selo', 'o_que_muda'], zoom: 1.6, destaque: ['selo', 'o_que_muda'] },
   ],
-  [['Fechar', 'e', 'resumir'], ['porquê'], ['bateu']],
-);
-
-const C9 = cenaDeTela(
-  9,
-  4,
-  (q) => [
-    { em: 0, tela: RESUMO, foco: ['sim', 'nao'], zoom: 2.0 },
-    { em: q('sim'), tela: RESUMO, foco: ['sim', 'nao'], zoom: 2.0, destaque: ['sim'], cursor: 'sim' },
-    { em: q('manda'), tela: RESUMO, foco: ['sim', 'nao'], zoom: 2.0, destaque: ['sim'], cursor: 'sim', clique: true },
-    { em: q('desenvolvedores'), tela: ENVIADO, foco: 'enviado', zoom: 1.6, destaque: ['enviado'] },
-    { em: q('Demanda'), tela: EM_ANALISE, foco: 'cartao', zoom: 2.0 },
-    { em: q('análise'), tela: EM_ANALISE, foco: 'cartao', zoom: 2.0, destaque: ['selo'] },
-    { em: q('card'), tela: O_QUE_MUDA, foco: 'o_que_muda', zoom: 1.3 },
-    { em: q('muda'), tela: O_QUE_MUDA, foco: 'o_que_muda', zoom: 1.3, destaque: ['o_que_muda'] },
-  ],
-  [['sim'], ['Em', 'análise']],
-);
-
-const C10 = cenaDeTela(
-  10,
-  5,
-  (q) => [
-    { em: 0, tela: VINCULO, foco: 'vinculo', zoom: 1.2 },
-    { em: q('Vínculo'), tela: VINCULO, foco: 'vinculo', zoom: 1.3, destaque: ['vinculo'] },
-    { em: q('número'), tela: VINCULO, foco: ['numero', 'levar'], zoom: 2.0, destaque: ['numero', 'vincular'], cursor: 'numero' },
-    { em: q('Levar'), tela: VINCULO, foco: ['numero', 'levar'], zoom: 2.0, destaque: ['levar'], cursor: 'levar' },
-  ],
-  [['Vínculo'], ['Levar', 'para', 'desenvolvimento']],
-);
-
-const C11 = cenaDeTela(
-  11,
-  6,
-  (q) => [
-    { em: 0, tela: QUADRO, foco: 'raias', zoom: 1.1 },
-    { em: q('selo'), tela: QUADRO, foco: 'raias', zoom: 1.15 },
-    { em: q('Planejada'), tela: QUADRO, foco: 'selo_planejada', zoom: 2.4, destaque: ['selo_planejada'] },
-    { em: q('desenvolvimento'), tela: QUADRO, foco: 'selo_desenvolvimento', zoom: 2.4, destaque: ['selo_desenvolvimento'] },
-    { em: q('produção'), tela: QUADRO, foco: 'selo_producao', zoom: 2.4, destaque: ['selo_producao'] },
-  ],
-  [['sozinho']],
-);
-
-const C12 = cenaDeTela(
-  12,
-  7,
-  (q) => [
-    { em: 0, tela: PAINEL, foco: 'com_voce', zoom: 1.15 },
-    { em: q('entrega'), tela: PAINEL, foco: 'entregue', zoom: 1.3, destaque: ['entregue'] },
-    { em: q('volta'), tela: PAINEL, foco: 'recado', zoom: 2.4, destaque: ['recado'] },
-    { em: q('Painel'), tela: PAINEL, foco: 'com_voce', zoom: 1.2, destaque: ['com_voce'] },
-  ],
-  [['Com', 'você']],
-);
-
-const C13 = cenaDeTela(
-  13,
-  7,
-  (q) => [
-    { em: 0, tela: ENTREGA, foco: 'o_que_muda', zoom: 1.3 },
-    { em: q('Teste'), tela: ENTREGA, foco: 'o_que_muda', zoom: 1.35, destaque: ['o_que_muda'] },
-    { em: q('Concluir'), tela: ENTREGA, foco: 'mover', zoom: 2.2, destaque: ['concluir'], cursor: 'concluir', clique: true },
-    { em: q('faltou'), tela: ENTREGA_CONVERSA, foco: 'conversa', zoom: 1.2 },
-    { em: q('Conversa'), tela: ENTREGA_CONVERSA, foco: ['caixa', 'responder'], zoom: 1.6, destaque: ['caixa'], cursor: 'responder' },
-    { em: q('refaz'), tela: ENTREGA_CONVERSA, foco: 'conversa', zoom: 1.25 },
-  ],
-  [['Concluir'], ['Conversa']],
+  [['O', 'que', 'muda']],
 );
 
 /* ---------------------------------------------------------------- gancho e virada */
 
-const TITULO_DO_EXEMPLO = 'Mostrar o nome do setor no cartaz do QR da Ouvidoria';
-const RAIAS = ['Nova', 'Em andamento', 'Aguardando'];
-/** o quadro de mentira do gancho: três colunas no meio da tela */
-const MINI = { x: 960 - 690, y: 150, w: 440, h: 560, gap: 35 };
+const PERGUNTA = 'Isso é um bug, algo que não funciona como deveria, ou uma melhoria?';
+const TITULO_DO_EXEMPLO = 'Nome do setor no cartaz do QR da Ouvidoria';
 
-/** Um balão de mensagem solta (sem marca de aplicativo nenhum). */
-const Balao: React.FC<{ texto: string; hora: string; x: number; y: number; op: number; escala: number; rot: number }> = ({ texto, hora, x, y, op, escala, rot }) => (
-  <div
-    style={{
-      position: 'absolute',
-      left: x,
-      top: y,
-      maxWidth: 820,
-      padding: '22px 30px 16px',
-      borderRadius: '28px 28px 28px 8px',
-      background: '#FFFFFF',
-      color: '#1E293B',
-      fontFamily: 'HP Simplified',
-      fontSize: 40,
-      lineHeight: 1.22,
-      opacity: op,
-      transform: `rotate(${rot}deg) scale(${escala})`,
-      transformOrigin: '0 100%',
-      boxShadow: '0 24px 60px rgba(0,0,0,.45)',
-    }}
-  >
-    {texto}
-    <div style={{ marginTop: 6, textAlign: 'right', fontSize: 28, color: '#64748B' }}>{hora}</div>
-  </div>
-);
-
-/** O card de uma Demanda, no desenho do Quadro do app. */
-const Cartao: React.FC<{
-  x: number;
-  y: number;
-  w: number;
-  escala: number;
-  op: number;
-  selo?: { texto: string; acende: number };
-  oQueMuda?: number;
-  brilho?: number;
-}> = ({ x, y, w, escala, op, selo, oQueMuda = 0, brilho = 0 }) => (
+/** A fala da IA, no desenho do chat do app. */
+const FalaDaIA: React.FC<{ texto: string; x: number; y: number; w: number; op: number; escala: number }> = ({ texto, x, y, w, op, escala }) => (
   <div
     style={{
       position: 'absolute',
       left: x,
       top: y,
       width: w,
-      padding: '20px 24px',
-      borderRadius: 18,
+      padding: '26px 34px',
+      borderRadius: 30,
+      background: '#F1F5F9',
+      color: '#1E293B',
+      fontFamily: 'HP Simplified',
+      fontSize: 44,
+      lineHeight: 1.22,
+      opacity: op,
+      transform: `scale(${escala})`,
+      transformOrigin: '0 50%',
+      boxShadow: '0 24px 60px rgba(0,0,0,.45)',
+    }}
+  >
+    {texto}
+  </div>
+);
+
+/** Um dos dois botões da pergunta, no desenho do app. */
+const Botao: React.FC<{ texto: string; x: number; y: number; op: number; escala: number; aceso: number }> = ({ texto, x, y, op, escala, aceso }) => (
+  <div
+    style={{
+      position: 'absolute',
+      left: x,
+      top: y,
+      padding: '18px 40px',
+      borderRadius: 22,
+      background: '#FFFFFF',
+      border: `3px solid rgba(${RGB.acento},${0.55 + 0.45 * aceso})`,
+      color: '#2B2E7E',
+      fontFamily: 'HP Simplified',
+      fontSize: 46,
+      fontWeight: 700,
+      opacity: op,
+      transform: `scale(${escala})`,
+      transformOrigin: '0 50%',
+      boxShadow: `0 20px 50px rgba(0,0,0,.4), 0 0 ${50 * aceso}px rgba(${RGB.acento},${0.8 * aceso})`,
+    }}
+  >
+    {texto}
+  </div>
+);
+
+/** O pedido que chegou à Vitta: o título, O que muda e a Etapa. */
+const Pedido: React.FC<{ x: number; y: number; w: number; escala: number; op: number; oQueMuda: number; selo: number; brilho: number }> = ({
+  x,
+  y,
+  w,
+  escala,
+  op,
+  oQueMuda,
+  selo,
+  brilho,
+}) => (
+  <div
+    style={{
+      position: 'absolute',
+      left: x,
+      top: y,
+      width: w,
+      padding: '24px 30px',
+      borderRadius: 22,
       background: '#FFFFFF',
       fontFamily: 'HP Simplified',
       opacity: op,
@@ -342,72 +302,42 @@ const Cartao: React.FC<{
       boxShadow: `0 24px 60px rgba(0,0,0,.45), 0 0 ${60 * brilho}px rgba(${RGB.acento},${0.8 * brilho}), 0 0 0 ${1.5 + 2 * brilho}px rgba(${RGB.acento},${0.25 + 0.6 * brilho})`,
     }}
   >
-    <div style={{ fontSize: 34, lineHeight: 1.2, color: '#1E293B' }}>{TITULO_DO_EXEMPLO}</div>
-    <div style={{ marginTop: 10, fontSize: 28, color: '#64748B' }}>Ouvidoria · Rafael Moura</div>
+    <div style={{ display: 'flex', alignItems: 'center', gap: 18 }}>
+      <div style={{ fontSize: 40, lineHeight: 1.2, color: '#1E293B', fontWeight: 700 }}>{TITULO_DO_EXEMPLO}</div>
+      <div
+        style={{
+          padding: '6px 16px',
+          borderRadius: 10,
+          background: '#F1F5F9',
+          color: '#475569',
+          fontSize: 30,
+          whiteSpace: 'nowrap',
+          opacity: clamp01(selo * 3),
+          transform: `scale(${0.6 + 0.4 * selo})`,
+          transformOrigin: '0 50%',
+        }}
+      >
+        Em análise
+      </div>
+    </div>
     {oQueMuda > 0 ? (
       <div
         style={{
-          marginTop: 16 * oQueMuda,
-          maxHeight: 190 * oQueMuda,
+          marginTop: 18 * oQueMuda,
+          maxHeight: 220 * oQueMuda,
           overflow: 'hidden',
           opacity: oQueMuda,
-          padding: `${14 * oQueMuda}px 18px`,
-          borderRadius: 12,
-          background: '#F1F5F9',
+          padding: `${16 * oQueMuda}px 22px`,
+          borderRadius: 14,
+          background: '#F8FAFC',
           border: '1.5px solid #E2E8F0',
         }}
       >
         <div style={{ fontSize: 28, letterSpacing: '0.06em', color: '#64748B' }}>O QUE MUDA</div>
-        <div style={{ marginTop: 6, fontSize: 30, lineHeight: 1.25, color: '#1E293B' }}>O nome do setor no cartaz e no formulário do QR.</div>
-      </div>
-    ) : null}
-    {selo ? (
-      <div
-        style={{
-          display: 'inline-block',
-          marginTop: 14,
-          padding: '6px 16px',
-          borderRadius: 10,
-          background: PALETA.florestaClara,
-          color: '#FFFFFF',
-          fontSize: 28,
-          opacity: clamp01(selo.acende * 3),
-          transform: `scale(${0.6 + 0.4 * selo.acende})`,
-          transformOrigin: '0 50%',
-        }}
-      >
-        {selo.texto}
+        <div style={{ marginTop: 8, fontSize: 34, lineHeight: 1.25, color: '#1E293B' }}>O cartaz com o QR e a página de manifestação passam a mostrar o nome do setor.</div>
       </div>
     ) : null}
   </div>
-);
-
-/** As três raias do Quadro, desenhadas como no app. */
-const MiniQuadro: React.FC<{ op: number; sobe: number }> = ({ op, sobe }) => (
-  <>
-    {RAIAS.map((nome, i) => (
-      <div
-        key={nome}
-        style={{
-          position: 'absolute',
-          left: MINI.x + i * (MINI.w + MINI.gap),
-          top: MINI.y + 40 * (1 - sobe),
-          width: MINI.w,
-          height: MINI.h,
-          borderRadius: 22,
-          background: 'rgba(238,242,250,.96)',
-          opacity: op * clamp01(sobe * 1.4 - i * 0.12),
-          boxShadow: '0 24px 60px rgba(0,0,0,.4)',
-          padding: '22px 24px',
-          fontFamily: 'HP Simplified',
-          fontSize: 34,
-          color: PALETA.florestaClara,
-        }}
-      >
-        {nome}
-      </div>
-    ))}
-  </>
 );
 
 const ESTILO_GRANDE = { ...ESTILO_LEGENDA, tamanho: 76, entrelinha: 1.12 };
@@ -417,86 +347,81 @@ const C1: React.FC = () => {
   const f = c.frame;
   const q = useQuando(1);
   const { fala } = useFrases(1);
-  const qPedido = q('pedido');
-  const qWhats = q('WhatsApp');
-  const qAgora = q('agora');
-  const qLugar = q('lugar');
-  // as mensagens chegam soltas; no "agora" elas viram o card que cai na raia Nova
-  const m1 = mola(f, 'estalo', qPedido - 6);
-  const m2 = mola(f, 'estalo', qWhats - 2);
-  // as mensagens somem antes de o card chegar: as duas juntas na tela embolam o gancho
-  const vira = janelaM(f, qAgora - 6, qAgora + 6, 'entra');
-  const quadro = janelaM(f, qAgora - 4, qAgora + 14, 'sai');
-  const pousa = mola(f, 'assenta', qLugar - 2);
-  // tudo segue empurrando devagar até o corte: nada fica parado antes da cena 2
+  const qIsso = q('Isso');
+  const qBug = q('bug');
+  const qMelhoria = q('melhoria');
+  const entra = mola(f, 'estalo', qIsso - 6);
+  const b1 = mola(f, 'estalo', qBug - 2);
+  const b2 = mola(f, 'estalo', qMelhoria - 2);
+  // os dois botões acendem na palavra deles e seguem respirando até o corte: nada fica parado
+  const respira = 0.5 + 0.5 * Math.sin(f / 9);
   const empurra = 1 + 0.05 * clamp01(f / Math.max(1, c.seqDuracao));
-  const cartaoX = lerp(600, MINI.x + 20, pousa);
-  const cartaoY = lerp(330, MINI.y + 90, pousa);
   return (
     <AbsoluteFill>
       <Fundo />
       <AbsoluteFill style={{ transform: `scale(${empurra})` }}>
-        <MiniQuadro op={quadro} sobe={quadro} />
-        <Balao
-          texto="Oi! Dá pra mostrar o nome do setor no cartaz do QR?"
-          hora="09:14"
-          x={330}
-          y={260 + 30 * (1 - m1) - 120 * vira}
-          op={clamp01((f - qPedido + 6) / 4) * (1 - vira)}
-          escala={(0.9 + 0.1 * m1) * (1 - 0.4 * vira)}
-          rot={-2}
+        <FalaDaIA texto={PERGUNTA} x={300} y={250 + 30 * (1 - entra)} w={1320} op={clamp01((f - qIsso + 6) / 4)} escala={0.94 + 0.06 * entra} />
+        <Botao texto="Bug" x={300} y={500 + 24 * (1 - b1)} op={clamp01((f - qBug + 2) / 4)} escala={0.9 + 0.1 * b1} aceso={clamp01((f - qBug) / 6) * (0.6 + 0.4 * respira)} />
+        <Botao
+          texto="Melhoria"
+          x={520}
+          y={500 + 24 * (1 - b2)}
+          op={clamp01((f - qMelhoria + 2) / 4)}
+          escala={0.9 + 0.1 * b2}
+          aceso={clamp01((f - qMelhoria) / 6) * (0.6 + 0.4 * (1 - respira))}
         />
-        <Balao
-          texto="Alguém viu?"
-          hora="11:40"
-          x={330}
-          y={470 + 30 * (1 - m2) - 120 * vira}
-          op={clamp01((f - qWhats + 2) / 4) * (1 - vira)}
-          escala={(0.9 + 0.1 * m2) * (1 - 0.4 * vira)}
-          rot={-1}
-        />
-        <Cartao x={cartaoX} y={cartaoY} w={MINI.w - 40 + 280 * (1 - pousa)} escala={0.9 + 0.1 * vira} op={clamp01((f - qAgora - 2) / 6)} />
       </AbsoluteFill>
-      <Legenda palavras={fala} destaque={marcar(fala, 'lugar')} centro largura={1600} estilo={ESTILO_GRANDE} base={1010} />
+      <Legenda palavras={fala} destaque={marcar(fala, 'bug', 'melhoria')} centro largura={1600} estilo={ESTILO_GRANDE} base={1010} />
     </AbsoluteFill>
   );
 };
 
-const C14: React.FC = () => {
+const C9: React.FC = () => {
   const c = useCenaM();
   const f = c.frame;
-  const q = useQuando(14);
-  const { fala } = useFrases(14);
+  const q = useQuando(9);
+  const { fala } = useFrases(9);
   const fimFala = c.local(T.fimFala);
-  const qWhats = q('WhatsApp');
-  const qPlano = q('plano');
-  const qEntregue = q('entregue');
+  const qPergunta = q('pergunta');
+  const qVitta = q('Vitta');
+  const qDecidiu = q('decidiu');
   const logoQ = fimFala + Math.round(LOGO_ENTRA_S * FPS);
   const some = janelaM(f, logoQ - 10, logoQ, 'entra');
-  const entra = mola(f, 'estalo', 0);
   const logo = janelaM(f, logoQ, logoQ + Math.round((LOGO_ASSENTA_S - LOGO_ENTRA_S) * FPS), 'sai');
-  const balao = clamp01((f - qWhats + 4) / 5) * (1 - janelaM(f, qWhats + 8, qWhats + 24, 'entra'));
-  const plano = janelaM(f, qPlano - 2, qPlano + 12, 'sai');
-  const selo = mola(f, 'estalo', qEntregue - 2);
-  const brilho = clamp01((f - qEntregue) / 6) * (1 - janelaM(f, qEntregue + 8, qEntregue + 30, 'sai') * 0.6);
+  // a pergunta abre a virada (já no primeiro quadro) e sobe; o pedido chega na Vitta e ganha
+  // O que muda no "decidiu"
+  const fala1 = clamp01(f / 6);
+  const acende = clamp01((f - qPergunta + 2) / 6) * (1 - janelaM(f, qPergunta + 10, qPergunta + 30, 'sai'));
+  const sobe = janelaM(f, qVitta - 6, qVitta + 14, 'sai');
+  const chega = mola(f, 'estalo', qVitta - 2);
+  const muda = janelaM(f, qDecidiu - 4, qDecidiu + 12, 'sai');
+  const brilho = clamp01((f - qDecidiu) / 6) * (1 - janelaM(f, qDecidiu + 8, qDecidiu + 30, 'sai') * 0.6);
   return (
     <AbsoluteFill>
       {/* o fundo da virada não deriva: a assinatura é a única parada do vídeo */}
       <AbsoluteFill style={{ background: `radial-gradient(ellipse 80% 70% at 50% 44%, ${PALETA.halo} 0%, ${PALETA.fundo} 72%)` }} />
-      <AbsoluteFill style={{ opacity: 1 - some }}>
-        {/* o card empurra devagar até a logo: nada fica parado antes da assinatura */}
-        <Balao texto="Alguém viu?" hora="11:40" x={300} y={170 - 40 * janelaM(f, qWhats, qWhats + 24, 'sai')} op={balao * 0.85} escala={0.9} rot={-2} />
-        <Cartao
-          x={960 - 450}
-          y={250 - 60 * plano}
-          w={900}
-          escala={(0.92 + 0.08 * entra) * (1 + 0.04 * janelaM(f, 0, logoQ, 'suave'))}
-          op={clamp01(f / 6)}
-          oQueMuda={plano}
-          selo={{ texto: 'Em produção', acende: selo }}
+      {/* tudo empurra devagar até a logo: nada fica parado antes da assinatura */}
+      <AbsoluteFill style={{ opacity: 1 - some, transform: `scale(${1 + 0.06 * janelaM(f, 0, logoQ, 'linear')})` }}>
+        <FalaDaIA
+          texto="Isso é um bug ou uma melhoria?"
+          x={lerp(460, 300, sobe)}
+          y={lerp(300, 110, sobe)}
+          w={1000}
+          op={fala1 * (1 - 0.45 * sobe)}
+          escala={(1 - 0.25 * sobe) * (1 + 0.03 * acende)}
+        />
+        {/* o pedido empurra devagar até a logo: nada fica parado antes da assinatura */}
+        <Pedido
+          x={960 - 560}
+          y={lerp(380, 300, sobe)}
+          w={1120}
+          escala={(0.9 + 0.1 * chega) * (1 + 0.04 * janelaM(f, 0, logoQ, 'suave'))}
+          op={clamp01((f - qVitta + 2) / 6)}
+          oQueMuda={muda}
+          selo={mola(f, 'estalo', qDecidiu - 2)}
           brilho={brilho}
         />
-        <Legenda palavras={fala} destaque={marcar(fala, 'entregue')} centro largura={1600} estilo={ESTILO_GRANDE} base={1010} />
+        <Legenda palavras={fala} destaque={marcar(fala, 'decidiu')} centro largura={1600} estilo={ESTILO_GRANDE} base={1010} />
       </AbsoluteFill>
       <AbsoluteFill style={{ alignItems: 'center', justifyContent: 'center' }}>
         <Img src={staticFile('logo-hsm-branca.png')} style={{ width: 620, opacity: logo, transform: `scale(${0.96 + 0.04 * logo})` }} />
@@ -515,24 +440,19 @@ const CENAS = montarRoteiro({
     null,
     entrada('pontoAbre', { origem: [960, 420] }),
     entrada('fusao'),
-    entrada('chicoteLuz', { yLuz: 475 }),
     entrada('estica', { de: JANELA_T }),
-    entrada('flash'),
     entrada('tunel', { de: JANELA_T }),
-    entrada('peliculaGira'),
     entrada('retangulo', { de: JANELA_T }),
-    entrada('glitchRGB'),
-    entrada('flood'),
-    entrada('pulsoJanela', { de: { x: 860, y: 375, w: 200, h: 200, r: 20 }, para: JANELA_T }),
-    entrada('corteBatida'),
+    entrada('chicoteLuz', { yLuz: 475 }),
+    entrada('peliculaGira'),
     entrada('despenca', { caixas: [JANELA_T], semente: 'virada' }),
   ],
-  nomes: ['gancho', 'quadro', 'assistente', 'raias', 'conversa', 'planejar', 'pergunta', 'resumo', 'sim', 'vinculo', 'etapa', 'painel', 'entrega', 'virada'],
+  nomes: ['gancho', 'abertura', 'bug', 'resumo-do-bug', 'melhoria', 'resumo-da-melhoria', 'lista', 'pedido', 'virada'],
   duracao: DURACAO,
 });
 
 export const Tecnologia: React.FC = () => (
-  <VideoMontado cenas={CENAS} componentes={[C1, C2, C3, C4, C5, C6, C7, C8, C9, C10, C11, C12, C13, C14]} audio="narracao.wav" />
+  <VideoMontado cenas={CENAS} componentes={[C1, C2, C3, C4, C5, C6, C7, C8, C9]} audio="narracao.wav" />
 );
 
 export const ComposicaoTecnologia: React.FC = () => (
@@ -541,4 +461,3 @@ export const ComposicaoTecnologia: React.FC = () => (
 
 /** Para o meta.json: a janela da assinatura parada, em segundos (da entrada da logo ao fim). */
 export const PARADA_S = [T.fimFala + LOGO_ENTRA_S, DURACAO / FPS];
-

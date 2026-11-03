@@ -1,43 +1,46 @@
 # VERIFY: Tecnologia
 
+Refeito na Fatia de manual do PRD #1380 (issue #1387): a aba virou o chat do
+Assistente de Tecnologia (ADR 0077), e o vídeo segue um bug e uma melhoria da
+pergunta inicial ao Criar o card, e depois a lista com a Etapa.
+
 - tsc: 0 erros no projeto de trabalho (`npx tsc --noEmit`), depois de cada
-  mudança nas cenas e no patch.
-- Stills e draft: 50 stills (meio de cada cena, cada corte e dois quadros
-  depois de cada palavra-chave) e um draft em meia escala. Telas iguais ao app
-  local (0.206.x) na faixa de id da Tecnologia, com a Demanda de exemplo do
-  cartaz do QR do assistente ao sim; o destaque azul contorna o que a fala
-  cita (Nova Demanda, a caixa de mensagem, o microfone, o print, o Rascunho,
-  Criar Demanda, a raia Nova e o dono, as três raias, a Conversa e a menção,
-  Planejar com a IA, a pergunta, as opções, a Recomendada, o microfone, O que
-  já decidimos, Fechar e resumir, as decisões, Ficou em aberto, o Não, o sim,
-  Mandado para os desenvolvedores, o selo Em análise, O que muda, o Vínculo,
-  Levar para desenvolvimento, os selos Planejada, Em desenvolvimento e Em
-  produção, Com você e Entregue, confira e conclua, Concluir, a caixa de
-  resposta); fala legível palavra a palavra; logo inteira e parada só na
-  assinatura. O Planejamento da Demanda (cenas 6 a 9) ocupa 52 s dos 142 s.
-  - Os stills acharam a tela da Conversa e a da Etapa inteiras claras, sem as
-    bordas, a data das respostas e o véu do destaque. Causa: fora da janela da
-    transição o `TransitionSeries` embrulha a cena que sai com progresso 0, e
-    o `flash` (q = 0 é o quadro do clarão quando k = 2) e o `pulsoJanela` (o
-    pulso de luz de q = 0) clareavam a cena inteira. Consertado no
-    `identidade.patch` com a guarda de progresso; a data da Conversa voltou
-    (o mesmo recorte foi de 255 para 148 no cinza).
-  - O primeiro draft deu seis congelamentos de 0,5 a 0,6 s nas cenas longas
-    (a pergunta do Planejamento tem 22 s): o empurrão da câmera era 5% por
-    cena. Passou a 0,8% por segundo, e o foco cabe na janela já com o
-    empurrão do fim da cena.
+  mudança nas cenas.
+- Stills e draft: 49 stills (um a cada 3 s e o começo de cada cena, cinco
+  quadros depois do corte) e um draft em meia escala. Telas iguais ao app
+  local com o código da produção (v0.210.1), a lista e a conversa trocadas no
+  navegador pelo roteiro de prints, sem falar com a IA. O destaque azul
+  contorna o que a fala cita: a pergunta, Nova conversa, Bug e Melhoria, a
+  caixa de mensagem, o microfone, o botão de imagem, as perguntas do bug, o
+  resumo e o Como saber que foi resolvido, Não bateu, Criar o card, o recado
+  da fila, a pergunta da melhoria, as opções, a Recomendada, Fechar e resumir,
+  as Decisões e o porquê, Ficou em aberto, a lista, o Registrada, as Etapas
+  Em análise, Em desenvolvimento e Em produção, a Etapa e O que muda do pedido
+  aberto. Fala legível palavra a palavra; logo inteira e parada só na
+  assinatura. A conversa (cenas 2 a 6) ocupa de 3,0 s a 91,7 s dos 121,7 s.
+  - Os stills acharam a virada vazia no primeiro segundo (só a legenda
+    "Começou" no fundo azul): a fala da IA entrava na palavra "pergunta". Ela
+    passou a entrar no primeiro quadro da cena e acende na palavra.
+  - O draft deu um congelamento de 0,6 s no começo da virada (113,9 s), antes
+    de a fala da IA mexer. A cena da virada ganhou o empurrão lento até a
+    logo, como as cenas de tela; no render final não há mais congelamento fora
+    da assinatura.
 - Copy: nota 13 de 14 (`roteiro.md`); humanizer e varredura anti-técnica
   (narração e texto de tela) sem achados; sem travessão nem meia-risca.
-- gate-video.sh `--parada 139.2-142.1`: fps 30/1,30/1; um congelamento só, de
-  139,53 s ao fim (a assinatura, dentro da parada); tocou no Chrome real
-  (`duracao` 142.08, sem erro). `GATE OK`.
-- Orçamento: 6,2 MB depois do reencode do `publicar.sh` (teto 10 MB). Com os
-  outros masters desta máquina os vídeos somam 23,6 MB (teto 60 MB) e a
-  publicação, 46 MB (teto 90 MB). O `publicar.sh --dry-run` para antes da
-  conta porque o master de `reunioes/visao-geral.mp4` não está nesta máquina
-  (lacuna anterior a esta fatia); a medida acima repete o reencode dele.
+- gate-video.sh `--parada 118.8-121.8`: fps 30/1,30/1; um congelamento só, de
+  119,17 s ao fim (a assinatura, dentro da parada); tocou no Chrome real
+  (`duracao` 121.728, sem erro). `GATE OK`.
+- Orçamento: 4,9 MB depois do reencode do `publicar.sh` (mesmo comando
+  `ffmpeg`, teto 10 MB), 1,3 MB a menos que o vídeo anterior (6,2 MB). A soma
+  dos vídeos cai na mesma medida em relação à conta do render anterior
+  (23,6 MB, teto 60 MB). O `publicar.sh --dry-run` não foi rodado inteiro: ele
+  para antes da conta porque o master de `reunioes/visao-geral.mp4` não está
+  nesta máquina (lacuna anterior a esta fatia, já anotada no render anterior).
+- Strips: o `tools/strips_video_manual.py` lê os cortes de uma composição
+  HyperFrames (`index.html`); esta é Remotion, e os cortes foram conferidos
+  nos stills do começo de cada cena.
 - Render final: ~/Videos/Hospital/Manual/tecnologia/o-caminho-de-uma-demanda.mp4,
-  142,1 s, 64,2 MB, sha256 68c614b378db.
-- Ressalvas: o vídeo de Contas médicas (piloto) usa o patch antigo e tem o
-  mesmo clarão nas cenas que saem por `flash` e por `pulsoJanela`; fica para
-  o próximo render dele.
+  121,7 s, 53,6 MB, sha256 8c33981fe4b6. O master anterior foi para
+  `anteriores/2026-11-02-o-caminho-de-uma-demanda.mp4`.
+- Ressalvas: o vídeo não tem efeito sonoro nem música, como o anterior; só a
+  narração da voz A.
