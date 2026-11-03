@@ -27,8 +27,10 @@ from test_tecnologia_chat import (  # noqa: E402
     _reset_rate_limiter,  # noqa: F401
     _turno,
 )
-from test_tecnologia_vinculo import BASE  # noqa: E402
+from test_tecnologia_vinculo import _CRIAR_ISSUE_DE_VERDADE, BASE, _TransporteGithub  # noqa: E402
 
+from app.config import settings  # noqa: E402
+from app.services import github_client  # noqa: E402
 from app.services.conhecimento import CONHECIMENTO_DIR  # noqa: E402
 from app.services.tecnologia_vinculo import bloco_para_o_diretor  # noqa: E402
 
@@ -339,6 +341,40 @@ class TestCriarOCardDaMelhoria:
 # ═══════════════════════════════════════════════════════════════════════════
 # 5. O Kit de conhecimento
 # ═══════════════════════════════════════════════════════════════════════════
+
+
+class TestOPrdNasceDesignadoAoDono:
+    """O PRD do diretor nasce designado ao dono da empresa, que redistribui
+    (issue #1349): antes provado pela rota "enviar" da tela antiga."""
+
+    def test_a_issue_nasce_atribuida_ao_dono(self, monkeypatch):
+        monkeypatch.setattr(settings, "github_login_dono", "dono-da-vitta")
+        client, sb, gh = _cenario(monkeypatch)
+        demanda_id = _ate_o_resumo(client, sb, monkeypatch)
+
+        assert client.post(f"{CHAT}/{demanda_id}/criar-card").status_code == 200
+
+        assert gh.criadas[0]["assignees"] == ["dono-da-vitta"]
+
+    def test_o_dono_padrao_e_o_pedro(self):
+        assert type(settings).model_fields["github_login_dono"].default == "pedrorezendefig"
+
+    def test_o_assignee_que_o_github_recusa_ainda_vincula(self, monkeypatch):
+        """O assignee e conveniencia: login que o GitHub recusa nao pode virar
+        "GitHub indisponivel" no botao (must-fix da revisao do PR #1050). O
+        caminho inteiro, com o `criar_issue` de verdade e so a rede falsa."""
+        monkeypatch.setattr(settings, "github_login_dono", "login-recusado")
+        client, sb, _ = _cenario(monkeypatch)
+        demanda_id = _ate_o_resumo(client, sb, monkeypatch)
+        monkeypatch.setattr(github_client, "criar_issue", _CRIAR_ISSUE_DE_VERDADE)
+        transporte = _TransporteGithub(status_da_designacao=422, numero=902)
+        monkeypatch.setattr(github_client.httpx, "request", transporte)
+
+        resposta = client.post(f"{CHAT}/{demanda_id}/criar-card")
+
+        assert resposta.status_code == 200, resposta.text
+        assert _demandas(sb)[0]["github_issue_numero"] == 902
+        assert transporte.chamadas[1][2] == {"assignees": ["login-recusado"]}
 
 
 class TestKitDaTecnologia:

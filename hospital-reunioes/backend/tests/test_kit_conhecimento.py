@@ -16,26 +16,18 @@ sobre o prompt, nao sobre os arquivos.
 
 from __future__ import annotations
 
-import json
 import os
 import re
 import sys
 import textwrap
 from pathlib import Path
-from types import SimpleNamespace
-from typing import Any
 
 import pytest
-from fastapi import FastAPI
-from fastapi.testclient import TestClient
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from anthropic_apoio import resposta_de_texto  # noqa: E402
 
-from app.dependencies import get_current_user, get_supabase_client  # noqa: E402
 from app.limiter import limiter  # noqa: E402
-from app.routers.admin import tecnologia as tecnologia_router  # noqa: E402
 from app.services import assistente_tecnologia  # noqa: E402
 from app.services.conhecimento import CONHECIMENTO_DIR, carregar_kit  # noqa: E402
 
@@ -247,128 +239,24 @@ class TestOsDetectoresMordem:
 # 3. Os nove arquivos chegam ao prompt do chat
 # ═══════════════════════════════════════════════════════════════════════════
 
-ROTA = "/api/admin/tecnologia/assistente/chat"
-
-PRODUTO_ATIVO = {"id": "prod-ouvidoria", "nome": "Ouvidoria", "ativo": True, "ordem": 1, "dono_id": "p1"}
-
-PESSOA = {
-    "id": "p1",
-    "auth_user_id": "auth-p1",
-    "nome_completo": "p1",
-    "email": "p1@hsm.com",
-    "cargo": None,
-    "area": None,
-    "setor": None,
-    "role": None,
-    "ativo": True,
-    "is_externo": False,
-    "is_super_admin": True,
-    "access_profile": "super_admin",
-    "perfil_pop": None,
-    "perfil_ouvidoria": None,
-    "github_login": None,
-    "data_cadastro": "2026-01-01",
-}
-
-
-class _TableQuery:
-    def __init__(self, rows: list[dict]):
-        self._rows = rows
-        self._eq: dict[str, Any] = {}
-        self._in: dict[str, list] = {}
-        self._range: tuple[int, int] | None = None
-
-    def select(self, *_a, **_kw):
-        return self
-
-    def order(self, *_a, **_kw):
-        return self
-
-    def eq(self, coluna, valor):
-        self._eq[coluna] = valor
-        return self
-
-    def in_(self, coluna, valores):
-        self._in[coluna] = list(valores)
-        return self
-
-    def range(self, inicio, fim):
-        """A leitura das Demandas abertas do Assistente e PAGINADA (issue #732).
-
-        Sem o recorte o dublê devolveria a lista inteira em toda pagina e o
-        `ler_paginado` giraria ate o teto de mil linhas.
-        """
-        self._range = (inicio, fim)
-        return self
-
-    def _casa(self, linha: dict) -> bool:
-        if not all(linha.get(c) == v for c, v in self._eq.items()):
-            return False
-        return all(linha.get(c) in v for c, v in self._in.items())
-
-    def execute(self):
-        casam = [dict(linha) for linha in self._rows if self._casa(linha)]
-        if self._range is not None:
-            inicio, fim = self._range
-            casam = casam[inicio : fim + 1]
-        return SimpleNamespace(data=casam)
-
-
-class _SupabaseMock:
-    def __init__(self, tabelas: dict[str, list[dict]]):
-        self.tabelas = tabelas
-
-    def table(self, nome: str):
-        return _TableQuery(self.tabelas.setdefault(nome, []))
-
-
-class _FakeLLMClient:
-    """Cliente no formato da Anthropic que devolve um `content` fixo e guarda os kwargs de
-    cada chamada, para olhar o prompt que o backend montou."""
-
-    def __init__(self, content: str):
-        self.calls: list[dict] = []
-
-        def create(**kwargs):
-            self.calls.append(kwargs)
-            return resposta_de_texto(content)
-
-        self.messages = SimpleNamespace(create=create)
-
-    @property
-    def prompt_de_usuario(self) -> str:
-        return self.calls[-1]["messages"][0]["content"]
-
 
 def _prompt_de_um_turno(monkeypatch) -> str:
-    """Um turno de verdade pela rota, com o cliente do LLM substituido."""
-    from app.services import ai_processor
+    """Um turno de verdade pela rota do chat, com o cliente do LLM substituido.
 
-    resposta = json.dumps(
-        {"reply": "Entendi.", "rascunho": {"titulo": "", "tipo": None, "produto_id": None, "descricao": ""}},
-        ensure_ascii=False,
-    )
-    cliente = _FakeLLMClient(resposta)
-    monkeypatch.setattr(ai_processor, "_llm_provider", lambda: "anthropic")
-    monkeypatch.setattr(ai_processor, "_get_llm", lambda: (cliente, "modelo-teste"))
+    O kit vai no bloco fixo do sistema (ADR 0077, decisao 9, com o
+    `cache_control`), e e de la que o teste o le.
+    """
+    from test_planejamento_demanda import _ia
+    from test_tecnologia_chat import _turno
+    from test_tecnologia_vinculo import DIRETOR, _montar
 
-    app = FastAPI()
-    app.state.limiter = limiter
-    app.include_router(tecnologia_router.router, prefix="/api")
+    cliente = _ia(monkeypatch, _turno())
+    client, _, _ = _montar(logado=DIRETOR, monkeypatch=monkeypatch)
 
-    sb = _SupabaseMock(tabelas={"participantes": [PESSOA], "tecnologia_produtos": [PRODUTO_ATIVO]})
+    resposta = client.post("/api/admin/tecnologia/chat", json={"escolha": "bug"})
 
-    async def _usuario() -> dict[str, Any]:
-        return {"id": PESSOA["auth_user_id"], "email": PESSOA["email"], "metadata": {}}
-
-    app.dependency_overrides[get_current_user] = _usuario
-    app.dependency_overrides[get_supabase_client] = lambda: sb
-
-    resposta_http = TestClient(app).post(
-        ROTA, json={"rascunho": {}, "messages": [{"role": "user", "content": "como funciona a Ouvidoria?"}]}
-    )
-    assert resposta_http.status_code == 200
-    return cliente.prompt_de_usuario
+    assert resposta.status_code == 201, resposta.text
+    return "\n".join(bloco["text"] for bloco in cliente.chamadas[-1]["system"])
 
 
 def _secoes_do_kit(prompt: str) -> dict[str, str]:
@@ -376,10 +264,9 @@ def _secoes_do_kit(prompt: str) -> dict[str, str]:
 
     O corte na marca de FIM do kit nao e detalhe. `tecnologia.md` e o ultimo em
     ordem alfabetica, entao sem ele a fatia do ultimo arquivo engole tudo o que
-    vem depois no prompt (a cerca, os Produtos, as Demandas abertas, o rascunho,
-    a conversa e a data). Hoje isso ainda daria menos que o piso, mas a margem
-    cresce sozinha a cada Produto ativo e a cada Demanda aberta: seria uma
-    asserção que passa a medir o resto do prompt sem ninguem ter mexido nela.
+    vem depois no prompt (as regras de leitura do codigo, por exemplo): seria
+    uma asserção que passa a medir o resto do prompt sem ninguem ter mexido
+    nela.
     """
     prompt = prompt.split(assistente_tecnologia.MARCA_FIM_KIT)[0]
     secoes: dict[str, str] = {}
@@ -426,7 +313,7 @@ class TestNoveArquivosNoPrompt:
     def test_o_fatiador_para_na_marca_de_fim_do_kit(self):
         """Mutante no proprio detector: tirar o corte faz a fatia do ULTIMO
         arquivo engolir o resto do prompt, e a asserção de tamanho acima passa
-        a medir a cerca, os Produtos e as Demandas em vez do material."""
+        a medir o resto do prompt em vez do material."""
         prompt = "\n".join(
             [
                 "    # tecnologia.md",
@@ -478,27 +365,59 @@ def _secao(texto: str, titulo: str) -> str:
     return "\n".join(corpo)
 
 
+# O que saiu da aba com a ADR 0077 (issue #1386), com as palavras da TELA de
+# antes: e com elas que o diretor pergunta, e um kit que ainda as cita faz o
+# Assistente descrever uma tela que nao existe mais.
+APOSENTADOS_DA_ABA = (
+    "Quadro",
+    "Painel",
+    "engrenagem",
+    "formulário",
+    "Nova Demanda",
+    "Criar Demanda",
+    "Copiar para IA",
+    "Levar para desenvolvimento",
+    "Minha vez",
+    "Histórico",
+    "Concluir",
+    "Cancelar",
+    "Mover",
+    "raia",
+    "esponsável",
+    "rioridade",
+    "menç",
+    "mencion",
+    "arroba",
+    "e-mail",
+    "Tipos",
+    "Aguardando",
+    "dono",
+    "card aberto",
+    "Planejar com a IA",
+)
+
+
 class TestOTextoDaAbaContaATelaDeHoje:
     @pytest.fixture
     def texto(self) -> str:
         return _texto(ARQUIVO_DA_ABA)
 
-    def test_o_quadro_desenha_so_as_tres_raias_vivas(self, texto):
-        """Concluir e Cancelar sairam das colunas e viraram botao do card."""
-        quadro = _secao(texto, "O Quadro")
-        for termo in ("Nova", "Em andamento", "Aguardando", "Concluir", "Cancelar", "Painel"):
-            assert termo in quadro, termo
+    @pytest.mark.parametrize("aposentado", APOSENTADOS_DA_ABA)
+    def test_o_texto_da_aba_nao_cita_o_que_saiu(self, texto, aposentado):
+        """Criterio 4 da issue #1386: o Quadro, o Painel, os Produtos, o
+        formulario, a Conversa do card, as mencoes e o e-mail da aba sairam do
+        codigo, e o texto que o Assistente le tambem nao os cita."""
+        assert aposentado not in texto
 
-    def test_o_painel_tem_os_tres_blocos_e_os_quatro_numeros(self, texto):
-        painel = _secao(texto, "O Painel")
-        blocos = ("Com você", "Entregas", "Histórico")
-        numeros = ("Abertas", "Com o hospital", "Em desenvolvimento", "Entregues em 30 dias")
-        for termo in (*blocos, *numeros):
-            assert termo in painel, termo
+    def test_o_detector_morde_a_tela_de_antes(self):
+        """O detector tambem e codigo: o texto de antes desta fatia, com o
+        Quadro e o Painel, tem que reprovar nele."""
+        antes = "A aba tem o **Quadro**, o **Painel** e a Conversa do card aberto, com menção."
+        assert [termo for termo in APOSENTADOS_DA_ABA if termo in antes] == ["Quadro", "Painel", "menç", "card aberto"]
 
-    def test_os_anexos_dizem_portas_limite_e_apagamento(self, texto):
+    def test_os_anexos_dizem_a_porta_o_limite_e_o_apagamento(self, texto):
         anexos = _secao(texto, "Os anexos da Demanda")
-        for termo in ("formulário", "assistente", "Conversa", "até 10", "Concluída", "Cancelada", "apagad"):
+        for termo in ("botão de imagem", "até 10", "apagad"):
             assert termo in anexos, termo
 
     def test_os_anexos_dizem_o_prazo_depois_de_em_producao(self, texto):
@@ -510,19 +429,28 @@ class TestOTextoDaAbaContaATelaDeHoje:
         decidido = _secao(texto, "O que já foi decidido")
         assert "30 dias depois de Em produção" in decidido
 
-    def test_a_etapa_tem_em_producao_e_devolve_nela(self, texto):
+    def test_a_etapa_tem_as_sete_e_nunca_se_digita(self, texto):
         etapa = _secao(texto, "A Etapa")
-        assert "**Em produção**" in etapa
-        assert "quando a entrega fica **Em produção**" in etapa
+        for termo in (
+            "**Registrada**",
+            "**Em análise**",
+            "**Planejada**",
+            "**Em desenvolvimento**",
+            "**Entregue**",
+            "**Em produção**",
+            "**Não será feita**",
+            "nunca é digitada",
+        ):
+            assert termo in etapa, termo
 
-    def test_os_produtos_moram_atras_da_engrenagem(self, texto):
-        assert "engrenagem" in _secao(texto, "Os Produtos")
+    def test_os_pedidos_ao_hospital_voltaram_para_o_whatsapp(self, texto):
+        """ADR 0077, decisao 3: a aba e so de um sentido, o diretor relata."""
+        assert "WhatsApp" in _secao(texto, "O que é uma Demanda")
 
     def test_o_planejamento_diz_o_que_e_quando_aparece_e_o_que_o_card_faz(self, texto):
         """ADR 0077, issue #1383. O planejamento e o caminho da melhoria dentro
         do chat: o teto, o fechar, o resumo com o que ficou em aberto, o Criar
-        o card que leva ao desenvolvimento e o Nao bateu. O botao do card de
-        antes saiu, e o texto nao o cita mais."""
+        o card que leva ao desenvolvimento e o Nao bateu."""
         planejamento = _secao(texto, "O Planejamento da Demanda")
         termos = (
             "melhoria",
@@ -533,19 +461,13 @@ class TestOTextoDaAbaContaATelaDeHoje:
             "desenvolvimento",
             "**Não bateu**",
             "O que já foi decidido",
+            "**Em análise**",
+            "**O que muda**",
         )
         for termo in termos:
             assert termo in planejamento, termo
-        for aposentado in ("Planejar com a IA", "Continuar planejamento", "Sim, mandar para os desenvolvedores"):
+        for aposentado in ("Continuar planejamento", "Sim, mandar para os desenvolvedores"):
             assert aposentado not in texto, aposentado
-
-    def test_o_card_diz_o_que_acontece_com_a_demanda(self, texto):
-        """Issue #1349. O plano vai com as decisoes e o que ficou em aberto, a
-        Demanda ganha a Etapa Em analise e o card mostra O que muda. As
-        palavras sao as da tela e do card."""
-        planejamento = _secao(texto, "O Planejamento da Demanda")
-        for termo in ("**Em análise**", "**O que muda**", "o que ficou em aberto"):
-            assert termo in planejamento, termo
 
     def test_o_planejamento_ja_esta_no_aplicativo(self, texto):
         """PRD #1344 entregue: a marca "ainda nao esta no aplicativo" das ondas

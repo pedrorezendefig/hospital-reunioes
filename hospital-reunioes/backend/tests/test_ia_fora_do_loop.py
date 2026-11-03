@@ -38,7 +38,7 @@ from slowapi.errors import RateLimitExceeded
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from anthropic_apoio import resposta_de_texto  # noqa: E402
-from test_assistente_tecnologia import _corpo, _imagem, _montar, _pessoa  # noqa: E402
+from test_assistente_tecnologia import _imagem, _montar, _pessoa  # noqa: E402
 from test_ata_guiada import CURRENT_USER, FACILITADOR, _reuniao_programada, _SupabaseMock  # noqa: E402
 from test_pops_elaboracao import ELABORADOR, _chat, _client_para, _resposta_ia, _sb, _versao  # noqa: E402
 
@@ -48,7 +48,6 @@ from app.middleware.request_context import get_request_id, get_user_id, request_
 from app.routers import reunioes as reunioes_router  # noqa: E402
 from app.services import ai_processor  # noqa: E402
 
-CHAT_DO_ASSISTENTE = "/api/admin/tecnologia/assistente/chat"
 LEITURA_DO_PRINT = "/api/admin/tecnologia/assistente/descrever-imagem"
 CHAT_DE_CORRECAO = "/api/reunioes/R1/chat-correcao"
 CHAT_DA_ATA_GUIADA = "/api/reunioes/R1/ata-guiada/chat"
@@ -140,12 +139,6 @@ class TestPortaDaIa:
 
 
 class TestRotasChamamAIaForaDoLoop:
-    def test_chat_do_assistente_de_tecnologia(self, provedor):
-        cliente = _montar(logado=_pessoa("p1"))
-        resposta = cliente.post(CHAT_DO_ASSISTENTE, json=_corpo())
-        assert resposta.status_code == 200, resposta.text
-        _correu_no_executor_da_ia(provedor)
-
     def test_leitura_do_print_do_assistente(self, provedor):
         """A mais longa das quatro: visão leva dezenas de segundos."""
         cliente = _montar(logado=_pessoa("p1"))
@@ -338,7 +331,7 @@ class TestTravaDaClasse:
     def test_a_varredura_enxerga_as_quatro_funcoes_da_issue(self):
         """Sem isto, uma varredura cega (conjunto vazio) passaria o teste acima."""
         chegam = funcoes_que_chegam_ao_provedor(APP)
-        assert {"conversar", "descrever_imagem", "chat_correcao", "chat_ata_guiada"} <= chegam
+        assert {"chamar_o_modelo", "descrever_imagem", "chat_correcao", "chat_ata_guiada"} <= chegam
 
     def test_rota_de_exemplo_escrita_do_jeito_errado_e_pega(self, tmp_path):
         (tmp_path / "servico.py").write_text(SERVICO_DE_EXEMPLO, encoding="utf-8")

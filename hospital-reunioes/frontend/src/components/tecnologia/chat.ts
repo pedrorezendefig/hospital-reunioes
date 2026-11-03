@@ -88,9 +88,6 @@ export function esperaAPergunta(conversa: ConversaDoChat): boolean {
   return !(ultima?.autor === "ia" && ultima.recomendada);
 }
 
-/** O que vai no primeiro POST: o botão da abertura ou o texto livre. */
-export type PrimeiroTurno = { escolha: "bug" | "melhoria" } | { texto: string; prints: string[] };
-
 function textoOuNulo(valor: unknown): boolean {
   return valor === undefined || valor === null || typeof valor === "string";
 }

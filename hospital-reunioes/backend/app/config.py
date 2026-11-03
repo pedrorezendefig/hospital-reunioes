@@ -84,15 +84,14 @@ class Settings(BaseSettings):
     # fine-grained, só neste repositório, só Issues: write. Nunca `GITHUB_TOKEN`,
     # que é reservado das Actions.
     #
-    # Vazio = integração desligada: a API responde 503 com frase de gente e a
-    # tela desenha os controles do Vínculo desabilitados, em vez de deixar
-    # alguém digitar um número de issue que ninguém vai ler.
+    # Vazio = integração desligada: o "Criar o card" do chat responde 503 com
+    # frase de gente.
     github_integracao_token: str = ""
     github_integracao_repo: str = ""
 
-    # O login do dono da empresa no GitHub (issue #1349, ADR 0075). A issue que
-    # o "sim" do Planejamento da Demanda cria nasce atribuída a ele, e não ao
-    # Responsável da Demanda: é ele quem redistribui.
+    # O login do dono da empresa no GitHub (issue #1349, ADR 0075). O PRD do
+    # diretor que o "Criar o card" da melhoria cria nasce atribuído a ele: é ele
+    # quem redistribui.
     github_login_dono: str = "pedrorezendefig"
 
     # O segredo do webhook do GitHub (issue #678). Ele é o ÚNICO jeito de a rota

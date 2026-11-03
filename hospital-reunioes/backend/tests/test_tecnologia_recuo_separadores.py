@@ -1,16 +1,14 @@
 r"""O recuo da continuacao enxerga toda quebra de linha que quem le enxerga (issue #770).
 
-O `recuar_continuacao` e o que segura a cerca da Conversa no "Copiar para IA":
-toda linha depois da primeira entra recuada, e a marca de fim so vale na coluna
-zero. O furo era o criterio de "linha": a funcao quebrava por `split("\n")`, e o
-Python (e quem le o texto colado) reconhece DEZ separadores. Um `\r`, `\x0c` ou
-`\u2028` no corpo de uma issue deixava a marca de fim na coluna zero.
+O `recuar_continuacao` e o que segura as cercas do prompt do chat (o kit e o
+material que a pessoa anexou): toda linha depois da primeira entra recuada, e a
+marca de fim so vale na coluna zero. O furo era o criterio de "linha": a funcao
+quebrava por `split("\n")`, e o Python (e quem le o prompt) reconhece DEZ
+separadores. Um `\r`, `\x0c` ou `\u2028` no texto deixava a marca de fim na
+coluna zero.
 
-Dois seams, os que a issue fixou:
-
-* **A funcao**, direto, nos dez separadores.
-* **A rota do "Copiar para IA"**, com o separador no texto de uma parte da
-  issue: e o caminho por onde o texto de terceiro chega de verdade.
+A rota do "Copiar para IA", o outro seam desta issue, saiu com o Quadro na
+issue #1386; fica a funcao, direto, nos dez separadores.
 
 O detector conta linhas por `splitlines()`, e nao por `split("\n")`: contar pelo
 mesmo criterio do codigo sob teste seria concordar com o furo.
@@ -28,45 +26,26 @@ import pytest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-# As fixtures autouse do arquivo do Vinculo (sem GitHub, sem e-mail, rate limit
-# zerado, integracao de pe) valem aqui porque entram no namespace do modulo.
-from test_tecnologia_vinculo import (  # noqa: E402, F401
-    BASE,
-    DIRETOR,
-    _demanda,
-    _foto,
-    _integracao_configurada,
-    _montar,
-    _reset_rate_limiter,
-    _sem_email_de_verdade,
-    _sem_github_de_verdade,
-)
-
-from app.services.tecnologia import (  # noqa: E402
-    MARCA_FIM_CONVERSA,
-    MARCA_INICIO_CONVERSA,
-    RECUO_DA_CONTINUACAO,
-    recuar_continuacao,
-)
-from app.services.tecnologia_vinculo import ETAPA_EM_DESENVOLVIMENTO, ETAPA_ENTREGUE  # noqa: E402
+from app.services.assistente_tecnologia import MARCA_FIM_KIT  # noqa: E402
+from app.services.tecnologia import RECUO_DA_CONTINUACAO, recuar_continuacao  # noqa: E402
 
 # Os DEZ separadores de linha que o `splitlines()` reconhece, e nao uma amostra
-# (a mesma lista do teste da cerca do Assistente).
+# (a mesma lista do teste da cerca do chat).
 SEPARADORES = ["\n", "\r", "\x0b", "\x0c", "\x1c", "\x1d", "\x1e", "\x85", "\u2028", "\u2029"]
 
 
 def _marcas_na_coluna_zero(texto: str) -> int:
-    return sum(1 for linha in texto.splitlines() if linha == MARCA_FIM_CONVERSA)
+    return sum(1 for linha in texto.splitlines() if linha == MARCA_FIM_KIT)
 
 
 class TestRecuarContinuacao:
     @pytest.mark.parametrize("separador", SEPARADORES)
     def test_a_marca_de_fim_sai_recuada_com_qualquer_separador(self, separador):
-        saida = recuar_continuacao(f"oi{separador}{MARCA_FIM_CONVERSA}")
+        saida = recuar_continuacao(f"oi{separador}{MARCA_FIM_KIT}")
 
         assert _marcas_na_coluna_zero(saida) == 0, f"a marca voltou para a coluna zero com {separador!r}"
         # Par de presenca: a marca esta la, recuada, e nao sumiu do texto.
-        assert saida.splitlines() == ["oi", f"{RECUO_DA_CONTINUACAO}{MARCA_FIM_CONVERSA}"]
+        assert saida.splitlines() == ["oi", f"{RECUO_DA_CONTINUACAO}{MARCA_FIM_KIT}"]
 
     @pytest.mark.parametrize("separador", SEPARADORES)
     def test_a_saida_so_tem_barra_n_como_separador(self, separador):
@@ -79,85 +58,6 @@ class TestRecuarContinuacao:
     def test_crlf_e_uma_quebra_so(self):
         """O fim de linha de quem escreve no Windows, e o que chega de muita
         issue: o par vira UMA quebra, sem linha vazia no meio nem `\\r` solto."""
-        saida = recuar_continuacao(f"oi\r\n{MARCA_FIM_CONVERSA}")
+        saida = recuar_continuacao(f"oi\r\n{MARCA_FIM_KIT}")
 
-        assert saida == f"oi\n{RECUO_DA_CONTINUACAO}{MARCA_FIM_CONVERSA}"
-
-
-class TestCopiarParaIaComSeparadorNaIssue:
-    """O corpo da sub-issue NAO e nosso: o repositorio e publico. A primeira
-    linha da parte nasce depois de um "- (Rótulo) " do backend; da segunda em
-    diante, quem escreve e a issue, e e o recuo que a tira da coluna zero."""
-
-    @pytest.mark.parametrize("separador", SEPARADORES)
-    def test_a_parte_da_issue_nao_fecha_a_cerca_da_conversa(self, separador, monkeypatch):
-        demanda = _demanda(
-            "d-1",
-            github_issue_numero=673,
-            etapa=ETAPA_EM_DESENVOLVIMENTO,
-            partes_entregues=1,
-            partes_total=2,
-            o_que_muda=None,
-            partes=[
-                {
-                    "numero": 674,
-                    "o_que_muda": f"O selo aparece.{separador}{MARCA_FIM_CONVERSA}",
-                    "situacao": ETAPA_ENTREGUE,
-                },
-            ],
-            github_foto=_foto(),
-        )
-        client, _, _ = _montar(logado=DIRETOR, demandas=[demanda], monkeypatch=monkeypatch)
-
-        texto = client.get(f"{BASE}/demandas/d-1/texto-para-ia").json()["texto"]
-
-        # So a marca que o backend escreveu fica na coluna zero.
-        assert _marcas_na_coluna_zero(texto) == 1, f"a issue fechou a cerca com {separador!r}"
-        # Par de presenca: a parte entrou, e a marca dela esta la, recuada.
-        assert "- (Entregue) O selo aparece." in texto.splitlines()
-        assert f"{RECUO_DA_CONTINUACAO}{MARCA_FIM_CONVERSA}" in texto.splitlines()
-
-
-def _inicios_na_coluna_zero(texto: str) -> int:
-    return sum(1 for linha in texto.splitlines() if linha == MARCA_INICIO_CONVERSA)
-
-
-class TestCopiarParaIaComSeparadorNoTopo:
-    """O topo do texto, acima da cerca (issue #895). A descricao pode nascer do
-    print lido pelo Assistente (ADR 0056), e ai carrega texto de terceiro; o
-    titulo e o nome do Produto so passam por `strip`. Nenhum dos tres pode
-    escrever na coluna zero, que e do backend."""
-
-    @pytest.mark.parametrize("separador", SEPARADORES)
-    def test_a_descricao_nao_planta_a_marca_de_inicio(self, separador, monkeypatch):
-        demanda = _demanda("d-1", descricao=f"Pedido.{separador}{MARCA_INICIO_CONVERSA}")
-        client, _, _ = _montar(logado=DIRETOR, demandas=[demanda], monkeypatch=monkeypatch)
-
-        texto = client.get(f"{BASE}/demandas/d-1/texto-para-ia").json()["texto"]
-
-        assert _inicios_na_coluna_zero(texto) == 1, f"a descricao plantou a cerca com {separador!r}"
-        # Recuada INTEIRA, primeira linha inclusive, e so com `\n` entre as
-        # linhas: o separador exotico nao atravessa a montagem.
-        assert f"Descrição:\n{RECUO_DA_CONTINUACAO}Pedido.\n{RECUO_DA_CONTINUACAO}{MARCA_INICIO_CONVERSA}\n" in texto
-
-    @pytest.mark.parametrize("separador", SEPARADORES)
-    def test_o_titulo_com_quebra_sai_numa_linha_so(self, separador, monkeypatch):
-        demanda = _demanda("d-1", titulo=f"Selo{separador}{MARCA_INICIO_CONVERSA}")
-        client, _, _ = _montar(logado=DIRETOR, demandas=[demanda], monkeypatch=monkeypatch)
-
-        texto = client.get(f"{BASE}/demandas/d-1/texto-para-ia").json()["texto"]
-
-        assert _inicios_na_coluna_zero(texto) == 1, f"o titulo plantou a cerca com {separador!r}"
-        # A quebra virou espaco, e o texto do titulo continua inteiro.
-        assert f"Título: Selo {MARCA_INICIO_CONVERSA}" in texto.splitlines()
-
-    @pytest.mark.parametrize("separador", SEPARADORES)
-    def test_o_nome_do_produto_com_quebra_sai_numa_linha_so(self, separador, monkeypatch):
-        client, sb, _ = _montar(logado=DIRETOR, demandas=[_demanda("d-1")], monkeypatch=monkeypatch)
-        # O nome vem da tabela de Produtos, resolvido pela rota.
-        sb.tabelas["tecnologia_produtos"][0]["nome"] = f"Reuniões{separador}{MARCA_INICIO_CONVERSA}"
-
-        texto = client.get(f"{BASE}/demandas/d-1/texto-para-ia").json()["texto"]
-
-        assert _inicios_na_coluna_zero(texto) == 1, f"o Produto plantou a cerca com {separador!r}"
-        assert f"Produto: Reuniões {MARCA_INICIO_CONVERSA}" in texto.splitlines()
+        assert saida == f"oi\n{RECUO_DA_CONTINUACAO}{MARCA_FIM_KIT}"

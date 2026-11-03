@@ -11,9 +11,8 @@ Os tetos são iguais nas três rotas e folgados para o uso de verdade (uma
 Transcrição ou um Documento de apoio colado). O que fecham é o abuso de dezenas
 de MB.
 
-A recusa sai daqui, e não de `max_length` do pydantic, no molde do
-`assistente_tecnologia.motivo_rascunho_grande`: o pydantic responde ANTES da
-rota com `detail` em LISTA, que a tela mostraria como JSON cru. Devolvendo a
+A recusa sai daqui, e não de `max_length` do pydantic: o pydantic responde
+ANTES da rota com `detail` em LISTA, que a tela mostraria como JSON cru. Devolvendo a
 frase, a recusa chega legível.
 """
 

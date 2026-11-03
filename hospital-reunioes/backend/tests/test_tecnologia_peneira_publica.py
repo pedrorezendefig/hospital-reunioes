@@ -1,49 +1,31 @@
 """Dado pessoal nao sai para a issue publica (issue #772, ADR 0060).
 
 Todo texto da Tecnologia que vai para o repositorio publico passa pelo
-`pseudonimizar` da Ouvidoria antes de chegar ao GitHub: o titulo e a descricao
-da issue que o "Levar para desenvolvimento" cria, e o texto do comentario
-espelhado (envio e correcao). Desde o #730 a descricao pode ser a transcricao
-de um print de sistema hospitalar, e o diretor tambem digita.
+`pseudonimizar` da Ouvidoria antes de chegar ao GitHub: o titulo e o corpo da
+issue que o "Criar o card" do chat cria (ADR 0077). Desde o #730 o texto pode
+ser a transcricao de um print de sistema hospitalar, e o diretor tambem digita.
 
 Duas seams:
 
-* **As tres portas de escrita**, pela rota, com o cliente do GitHub dublado: o
-  teste le o que CHEGOU ao duble, e nao a funcao de formatacao. E o que um
-  mutante que tira a peneira da rota deixa vermelho.
+* **O corpo e o titulo da issue**, pelas funcoes puras que o "Criar o card"
+  usa (`corpo_da_issue_do_bug`, `titulo_da_issue`). A porta pela rota mora em
+  `test_tecnologia_chat.py`, no teste da peneira publica.
 * **O `texto_do_diretor`**, funcao pura, so para a ordem: a peneira roda sobre
   o texto cru e o escape vem depois, e nenhum marcador vira sintaxe de link.
 
-Os dubles sao os do teste do Vinculo, importados de la, pelo mesmo motivo do
-teste da Conversa espelhada: um duble proprio divergiria em silencio.
+O comentario espelhado e o "Levar para desenvolvimento" sairam na issue #1386.
 """
 
 from __future__ import annotations
 
 import os
 import sys
-from datetime import UTC, datetime
 
 import pytest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from test_tecnologia_vinculo import (  # noqa: E402
-    BASE,
-    DIRETOR,
-    PEDRO,
-    _demanda,
-    _fio,
-    _montar,
-)
-from test_tecnologia_vinculo import _integracao_configurada as _integracao_configurada  # noqa: E402, F401
-from test_tecnologia_vinculo import _reset_rate_limiter as _reset_rate_limiter  # noqa: E402, F401
-from test_tecnologia_vinculo import _sem_email_de_verdade as _sem_email_de_verdade  # noqa: E402, F401
-from test_tecnologia_vinculo import _sem_github_de_verdade as _sem_github_de_verdade  # noqa: E402, F401
-
-from app.services.tecnologia_vinculo import texto_do_diretor  # noqa: E402
-
-ROTA_LEVAR = f"{BASE}/demandas/d-1/levar-para-desenvolvimento"
+from app.services.tecnologia_vinculo import corpo_da_issue_do_bug, texto_do_diretor, titulo_da_issue  # noqa: E402
 
 # Um dado de cada tipo que a issue #772 lista, no desenho em que um print de
 # sistema hospitalar os traria. O nome esta todo em minusculas e sem pista: so
@@ -67,131 +49,53 @@ def _vazou(texto: str) -> list[str]:
     return [dado for dado in DADOS if dado in texto.lower()]
 
 
-class TestLevarParaDesenvolvimento:
-    def test_a_descricao_chega_ao_github_com_marcadores_no_lugar_do_paciente(self, monkeypatch):
-        demanda = _demanda("d-1", descricao=DESCRICAO_COM_PACIENTE)
-        client, _, gh = _montar(logado=PEDRO, demandas=[demanda], monkeypatch=monkeypatch)
+RESUMO_DO_BUG = {
+    "titulo": "Ficha some da fila",
+    "onde": "Recepção",
+    "o_que_aconteceu": "A ficha some",
+    "o_que_esperava": "Ver a ficha na fila",
+    "como_repetir": "Abrir a fila",
+    "criterios": ["A ficha aparece na fila"],
+}
 
-        assert client.post(ROTA_LEVAR).status_code == 200
 
-        corpo = gh.criadas[0]["corpo"]
+def _corpo_do_bug(**campos) -> str:
+    return corpo_da_issue_do_bug(
+        demanda_id="d-1",
+        resumo={**RESUMO_DO_BUG, **campos},
+        produto_nome="Reuniões",
+        link="https://app.hsm.com/admin/tecnologia?demanda=d-1",
+    )
+
+
+class TestAIssueDoBug:
+    def test_o_que_o_diretor_contou_chega_com_marcadores_no_lugar_do_paciente(self):
+        corpo = _corpo_do_bug(o_que_aconteceu=DESCRICAO_COM_PACIENTE)
+
         assert _vazou(corpo) == []
         for marcador in ("[NOME]", "[CPF]", "[CNS]", "[TELEFONE]", "[EMAIL]", "[DATA_NASCIMENTO]"):
             assert marcador in corpo
         assert "O campo do prontuario corta o nome." in corpo
 
-    def test_o_titulo_chega_ao_github_com_marcadores_no_titulo_e_no_corpo(self, monkeypatch):
-        """O titulo vai para dois lugares publicos: o titulo da issue e, com a
-        descricao vazia, o "O que muda" do corpo."""
-        demanda = _demanda("d-1", titulo=f"Cadastro de {NOME} ({CPF}) some da fila", descricao=None)
-        client, _, gh = _montar(logado=PEDRO, demandas=[demanda], monkeypatch=monkeypatch)
+    def test_o_titulo_da_issue_sai_com_marcadores(self):
+        assert titulo_da_issue(f"Cadastro de {NOME} ({CPF}) some da fila") == "Cadastro de [NOME] ([CPF]) some da fila"
 
-        assert client.post(ROTA_LEVAR).status_code == 200
-
-        criada = gh.criadas[0]
-        assert criada["titulo"] == "Cadastro de [NOME] ([CPF]) some da fila"
-        assert _vazou(criada["corpo"]) == []
-        assert "**O que muda:** Cadastro de [NOME] ([CPF]) some da fila" in criada["corpo"]
-
-    def test_o_titulo_da_issue_nao_leva_a_barra_do_marcador(self, monkeypatch):
+    def test_o_titulo_da_issue_nao_leva_a_barra_do_marcador(self):
         """O titulo da issue no GitHub e texto puro, e nao Markdown: la a barra
         que desliga o link apareceria ("\\[NOME]: leito 12"). Ela so vale no
-        corpo, onde o "O que muda" repete o titulo quando nao ha descricao."""
-        demanda = _demanda("d-1", titulo="Maria Silva: leito 12", descricao=None)
-        client, _, gh = _montar(logado=PEDRO, demandas=[demanda], monkeypatch=monkeypatch)
+        corpo."""
+        assert titulo_da_issue("Maria Silva: leito 12") == "[NOME]: leito 12"
+        assert texto_do_diretor("Maria Silva: leito 12") == "\\[NOME]: leito 12"
 
-        assert client.post(ROTA_LEVAR).status_code == 200
-
-        criada = gh.criadas[0]
-        assert criada["titulo"] == "[NOME]: leito 12"
-        assert "**O que muda:** \\[NOME]: leito 12" in criada["corpo"]
-
-    def test_arroba_seguido_de_digito_chega_ao_github_sem_mencao_viva(self, monkeypatch):
+    def test_arroba_seguido_de_digito_sai_sem_mencao_viva(self):
         """Issue #888: a peneira troca o `@` seguido de letra, mas `@1abc`
-        notificava a conta `1abc`. Descricao e titulo ganham o mesmo espaco
-        depois do `@` do comentario espelhado."""
-        demanda = _demanda("d-1", titulo="Avisar @2fulano", descricao="Fala com @1abc amanha")
-        client, _, gh = _montar(logado=PEDRO, demandas=[demanda], monkeypatch=monkeypatch)
-
-        assert client.post(ROTA_LEVAR).status_code == 200
-
-        criada = gh.criadas[0]
-        assert "**O que muda:** Fala com @ 1abc amanha" in criada["corpo"]
-        assert criada["titulo"] == "Avisar @ 2fulano"
-
-    def test_a_demanda_no_app_mantem_titulo_e_descricao_originais(self, monkeypatch):
-        """A peneira age so no que sai para o GitHub. A Demanda e o card
-        continuam com o texto de quem escreveu."""
-        titulo = f"Cadastro de {NOME} some da fila"
-        demanda = _demanda("d-1", titulo=titulo, descricao=DESCRICAO_COM_PACIENTE)
-        client, sb, _ = _montar(logado=PEDRO, demandas=[demanda], monkeypatch=monkeypatch)
-
-        resposta = client.post(ROTA_LEVAR)
-
-        assert resposta.status_code == 200
-        assert resposta.json()["titulo"] == titulo
-        assert resposta.json()["descricao"] == DESCRICAO_COM_PACIENTE
-        gravada = sb.tabelas["tecnologia_demandas"][0]
-        assert gravada["titulo"] == titulo
-        assert gravada["descricao"] == DESCRICAO_COM_PACIENTE
+        notificava a conta `1abc`. Corpo e titulo ganham um espaco depois do
+        `@`."""
+        assert texto_do_diretor("Fala com @1abc amanha") == "Fala com @ 1abc amanha"
+        assert titulo_da_issue("Avisar @2fulano") == "Avisar @ 2fulano"
 
 
-# ─── 2. O comentario espelhado ───────────────────────────────────────────────
-
-
-def _vinculada() -> dict:
-    return _demanda("d-1", github_issue_numero=673, etapa="planejada")
-
-
-def _texto_do_comentario(corpo: str) -> str:
-    """O texto do autor: tudo depois do cabecalho e da linha em branco."""
-    return corpo.split("\n", 3)[3]
-
-
-class TestComentarioEspelhado:
-    def test_responder_publica_o_comentario_com_marcadores(self, monkeypatch):
-        client, sb, gh = _montar(logado=DIRETOR, demandas=[_vinculada()], monkeypatch=monkeypatch)
-
-        resposta = client.post(f"{BASE}/demandas/d-1/conversa", json={"texto": DESCRICAO_COM_PACIENTE})
-
-        assert resposta.status_code == 201
-        texto = _texto_do_comentario(gh.comentarios_criados[0]["corpo"])
-        assert _vazou(texto) == []
-        for marcador in ("[NOME]", "[CPF]", "[CNS]", "[TELEFONE]", "[EMAIL]", "[DATA_NASCIMENTO]"):
-            assert marcador in texto
-        # A Conversa, que e de dentro, guarda o que a pessoa escreveu.
-        assert _fio(sb)[0]["texto"] == DESCRICAO_COM_PACIENTE
-
-    def test_corrigir_edita_o_comentario_com_marcadores(self, monkeypatch):
-        client, sb, gh = _montar(logado=DIRETOR, demandas=[_vinculada()], monkeypatch=monkeypatch)
-        linha_id = client.post(f"{BASE}/demandas/d-1/conversa", json={"texto": "Versao com erro"}).json()["id"]
-        _fio(sb)[0]["criado_em"] = datetime.now(UTC).isoformat()
-
-        resposta = client.patch(f"{BASE}/demandas/d-1/conversa/{linha_id}", json={"texto": DESCRICAO_COM_PACIENTE})
-
-        assert resposta.status_code == 200
-        texto = _texto_do_comentario(gh.comentarios_editados[0]["corpo"])
-        assert _vazou(texto) == []
-        assert "[CPF]" in texto
-        assert "[NOME]" in texto
-
-    def test_a_mencao_do_app_continua_virando_login_e_o_perfil_do_paciente_some(self, monkeypatch):
-        """A peneira roda nos trechos ENTRE as mencoes do app: o `@login` que
-        o app poe no lugar do "@Pedro Vitta" nao passa por ela, senao sairia
-        como perfil de rede social. O `@` digitado a mao, esse sim, e perfil,
-        e pode ser o do paciente."""
-        client, _, gh = _montar(logado=DIRETOR, demandas=[_vinculada()], monkeypatch=monkeypatch)
-
-        client.post(
-            f"{BASE}/demandas/d-1/conversa",
-            json={"texto": f"@Pedro Vitta, {NOME} reclamou no perfil @maria.silva88", "mencoes": ["P1"]},
-        )
-
-        texto = _texto_do_comentario(gh.comentarios_criados[0]["corpo"])
-        assert texto == "@pedrorezendefig, [NOME] reclamou no perfil [REDE_SOCIAL]"
-
-
-# ─── 3. A ordem: peneira sobre o texto cru, escape depois ────────────────────
+# ─── 2. A ordem da peneira e do escape ───────────────────────────────────────
 
 
 class TestAOrdemDaPeneiraEDoEscape:
@@ -228,15 +132,15 @@ class TestAOrdemDaPeneiraEDoEscape:
         assert texto_do_diretor(f"{NOME}[1]") == "\\[NOME][1]"
 
     def test_aplicar_duas_vezes_da_o_mesmo_texto(self):
-        """A rota passa o titulo pelo funil, e o `corpo_da_issue_nova` o passa
-        de novo quando a descricao esta vazia. Uma segunda barra desligaria a
-        primeira, e o link voltaria."""
+        """O mesmo texto pode passar pelo funil duas vezes (o titulo e o "O que
+        muda" que o repete). Uma segunda barra desligaria a primeira, e o link
+        voltaria."""
         for bruto in (DESCRICAO_COM_PACIENTE, f"Maria Silva: {TELEFONE}", "ligar 11987654321(celular)", f"# {NOME}"):
             uma_vez = texto_do_diretor(bruto)
             assert texto_do_diretor(uma_vez) == uma_vez
 
 
-# ─── 4. Ruido: texto tecnico sai intacto ─────────────────────────────────────
+# ─── 3. Ruido: texto tecnico sai intacto ─────────────────────────────────────
 
 
 class TestTextoTecnicoSaiIntacto:
@@ -260,7 +164,7 @@ class TestTextoTecnicoSaiIntacto:
                 "    dados = github_client.criar_issue(titulo=titulo)\n"
                 "httpx.ReadTimeout: timed out"
             ),
-            "Na aba Minha vez e no Histórico o botão Levar para desenvolvimento some.",
+            "Na conversa do Assistente o botão Criar o card some.",
             "Erro 404 em /api/admin/tecnologia/demandas, id 3f2a9c1e-7b4d-4e2a-9c1e-7b4d4e2a9c1e.",
             "Issue #772, PR #771, ADR 0054.",
             "Pediram no Hospital São Matheus, setor Centro Cirúrgico, pelo Pronto Socorro.",
@@ -269,10 +173,7 @@ class TestTextoTecnicoSaiIntacto:
     def test_sai_como_entrou(self, texto):
         assert texto_do_diretor(texto) == texto
 
-    def test_pela_rota_o_texto_tecnico_chega_intacto_ao_github(self, monkeypatch):
+    def test_no_corpo_do_bug_o_texto_tecnico_chega_intacto(self):
         descricao = "Depois do deploy da v0.156.0 a tela devolve HTTP 502 na porta 8000."
-        client, _, gh = _montar(logado=PEDRO, demandas=[_demanda("d-1", descricao=descricao)], monkeypatch=monkeypatch)
 
-        client.post(ROTA_LEVAR)
-
-        assert f"**O que muda:** {descricao}" in gh.criadas[0]["corpo"]
+        assert f"- **O que aconteceu:** {descricao}" in _corpo_do_bug(o_que_aconteceu=descricao)

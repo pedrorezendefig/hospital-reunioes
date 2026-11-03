@@ -1,8 +1,8 @@
 """O Vinculo da Demanda com a issue do GitHub, sem I/O (issue #674, ADR 0054).
 
-Tudo aqui e funcao pura: a tabela de Etapas, o marcador oculto que a issue
-carrega no corpo, a comparacao entre a foto nova e a guardada, e os textos das
-linhas automaticas da Conversa.
+Tudo aqui e funcao pura: a tabela de Etapas, o bloco "Para o diretor", o
+marcador oculto que a issue carrega no corpo e os corpos das issues que o
+"Criar o card" do chat escreve.
 
 O I/O mora ao lado, no `github_client.py`. A separacao nao e gosto de arquivo:
 a Etapa e a regra que o diretor le na tela, e ela precisa ser testavel nas sete
@@ -14,7 +14,9 @@ from __future__ import annotations
 
 import re
 from typing import Any
+from urllib.parse import quote
 
+from app.config import settings
 from app.services.ouvidoria_pseudonimizacao import (
     MARCADOR_CEP,
     MARCADOR_CNS,
@@ -54,17 +56,6 @@ ETAPAS = (
     ETAPA_NAO_SERA_FEITA,
 )
 
-# O rotulo em palavras do diretor. Ele NAO ve label, numero nem estado de issue:
-# ve estas sete frases (ADR 0054, decisao 9).
-ETAPA_ROTULO: dict[str, str] = {
-    ETAPA_REGISTRADA: "Registrada",
-    ETAPA_EM_ANALISE: "Em análise",
-    ETAPA_PLANEJADA: "Planejada",
-    ETAPA_EM_DESENVOLVIMENTO: "Em desenvolvimento",
-    ETAPA_ENTREGUE: "Entregue",
-    ETAPA_EM_PRODUCAO: "Em produção",
-    ETAPA_NAO_SERA_FEITA: "Não será feita",
-}
 
 # As labels que a Etapa le. Sao as do protocolo de triagem
 # (docs/agents/triage-labels.md), e nao uma lista nova.
@@ -104,8 +95,7 @@ def _entregue(no: dict[str, Any] | None) -> bool:
     escolher "nao planejada" ao fechar, entao quem recusa marca a label e clica
     no botao padrao do GitHub, que fecha como CONCLUIDA. A label e a decisao; o
     motivo do fechamento e so como o botao foi clicado. Sem isto, a issue
-    recusada aparecia como Entregue, e Entregue nao para no selo: dispara a
-    devolucao a quem pediu e o e-mail "Entregue, confira e conclua".
+    recusada aparecia como Entregue para o diretor.
 
     Uma funcao so para a raiz e para as partes: "entregue" nao pode significar
     duas coisas diferentes no mesmo modulo, senao a Etapa e o "X de Y partes"
@@ -303,8 +293,8 @@ def bloco_para_o_diretor(corpo: str | None) -> str | None:
     em branco: os tres significam a mesma coisa para quem le ("ainda nao
     escreveram isto"), e a tela os traduz numa frase so.
 
-    O texto sai SANITIZADO: ele nasce fora do app e vai para a tela do diretor e
-    para o "Copiar para IA", onde a regra da casa contra travessao vale igual.
+    O texto sai SANITIZADO: ele nasce fora do app e vai para a tela do diretor,
+    onde a regra da casa contra travessao vale.
     """
     texto = _COMENTARIO_HTML.sub("", corpo or "")
     achado = _CABECALHO_DO_DIRETOR.search(texto)
@@ -417,101 +407,27 @@ def motivo_github_login_repetido(login: str, nome: str | None) -> str:
     return f"O login {login} já está em {de_quem}. Um login do GitHub responde por uma pessoa só."
 
 
-def tem_github_login(participante: dict[str, Any] | None) -> bool:
-    """Se esta pessoa e da Vitta (ADR 0054, decisao 9).
-
-    Le o dict do participante como ele vem do banco. Coluna ausente (backend
-    que subiu antes da migration 103) conta como NAO tem, que e o lado seguro:
-    os controles do Vinculo somem em vez de aparecerem e falharem.
-    """
-    if not participante:
-        return False
-    return bool(str(participante.get("github_login") or "").strip())
-
-
 # ─── 2. O marcador oculto no corpo da issue ──────────────────────────────────
 
 # O par do Vinculo e guardado nos dois lados (ADR 0054, decisao 1): a Demanda
 # guarda o numero da issue, a issue guarda o id da Demanda AQUI. Comentario HTML
-# porque ele sobrevive no `body` e nao aparece renderizado em lugar nenhum.
-_MARCADOR_RE = re.compile(r"<!--\s*demanda-vitta id=\"[^\"]*\"\s*-->")
+# porque ele sobrevive no `body` e nao aparece renderizado em lugar nenhum. E
+# por ele que o `anexos.py` de quem desenvolve acha a Demanda dos prints.
 
 
 def marcador_da_demanda(demanda_id: str) -> str:
     return f'<!-- demanda-vitta id="{demanda_id}" -->'
 
 
-def demanda_id_do_marcador(corpo: str | None) -> str | None:
-    """O id da Demanda que este corpo diz carregar, ou `None`."""
-    achado = re.search(r"<!--\s*demanda-vitta id=\"([^\"]*)\"\s*-->", corpo or "")
-    return achado.group(1) if achado else None
-
-
-def corpo_com_marcador(corpo: str | None, demanda_id: str) -> str:
-    """O corpo da issue com o marcador no fim, sem tocar no resto.
-
-    Idempotente por construcao: um marcador que ja esteja no corpo e RETIRADO
-    antes de o novo entrar, entao vincular duas vezes o mesmo numero deixa o
-    corpo exatamente igual, e vincular uma issue que sobrou marcada de outra
-    Demanda nao acumula dois donos.
-
-    O texto do autor nao e reescrito: so se corta o marcador antigo e o espaco
-    em branco que ele deixou no fim.
-    """
-    limpo = _MARCADOR_RE.sub("", corpo or "").rstrip()
-    marcador = marcador_da_demanda(demanda_id)
-    return f"{limpo}\n\n{marcador}" if limpo else marcador
-
-
 # A frase dos Anexos da Demanda na issue (issue #1062, ADR 0069, decisao 1).
 # So a CONTAGEM sai para o repositorio publico: nem URL (a assinada expira e,
 # enquanto vale, abre o print para qualquer um), nem nome de arquivo (o nome
 # pode ser "prontuario do Joao.png"). Quem desenvolve busca as imagens pelo app.
-#
-# A frase entra no FIM do corpo, e o corpo que termina no bloco "Para o
-# diretor" (o formato que o `_COMENTARIO_HTML` documenta) seria lido ate o fim
-# pelo `bloco_para_o_diretor`: a frase voltaria para o card do diretor e para o
-# "Copiar para IA". Nesse caso ela vem atras de um `---`, que fecha o bloco, e
-# o separador sai junto com ela quando a contagem muda ou vai a zero.
-_FRASE_DOS_ANEXOS_RE = re.compile(
-    r"(?:^-{3,}[ \t\r]*\n\s*)?^Anexos: \d+ image(?:m|ns) na Demanda[ \t\r]*$", re.MULTILINE
-)
-
-
 def frase_dos_anexos(quantos: int) -> str | None:
     """A frase "Anexos: N imagens na Demanda", ou `None` sem imagem guardada."""
     if quantos <= 0:
         return None
     return f"Anexos: {quantos} {'imagem' if quantos == 1 else 'imagens'} na Demanda"
-
-
-def corpo_vinculado(corpo: str | None, demanda_id: str, *, anexos: int) -> str:
-    """O corpo da issue com a frase dos Anexos (se houver) e o marcador no fim.
-
-    Mesma disciplina do `corpo_com_marcador`: a frase antiga e retirada antes
-    de a nova entrar, entao rodar duas vezes com a mesma contagem deixa o corpo
-    igual, e a contagem que muda substitui em vez de acumular. Sem imagem, a
-    frase sai e nada entra no lugar.
-    """
-    limpo = _MARCADOR_RE.sub("", corpo or "")
-    limpo = _FRASE_DOS_ANEXOS_RE.sub("", limpo).rstrip()
-    frase = frase_dos_anexos(anexos)
-    if frase:
-        com_frase = f"{limpo}\n\n{frase}" if limpo else frase
-        if frase in (bloco_para_o_diretor(com_frase) or ""):
-            com_frase = f"{limpo}\n\n---\n\n{frase}"
-        limpo = com_frase
-    return corpo_com_marcador(limpo, demanda_id)
-
-
-def corpo_precisa_do_marcador(corpo: str | None, demanda_id: str) -> bool:
-    """Se vale a pena escrever no GitHub.
-
-    O corpo que ja termina exatamente como `corpo_com_marcador` o deixaria nao
-    tem o que ganhar com um PATCH: a chamada gastaria cota e faria o GitHub
-    disparar `issues.edited` a toa.
-    """
-    return corpo_com_marcador(corpo, demanda_id) != (corpo or "")
 
 
 # ─── 2b. A issue que o app CRIA (issue #677) ─────────────────────────────────
@@ -529,8 +445,8 @@ def corpo_precisa_do_marcador(corpo: str | None, demanda_id: str) -> bool:
 #    apontaria a issue nova para outra Demanda, e nada quebraria. Vale igual
 #    para o `<!-- revisor-app -->`, que acende a `revisor-comentou` na Action, e
 #    para o `<!-- automacao -->`, que a faz calar.
-# 2. **A primeira coluna e do backend.** E a mesma disciplina do "Copiar para
-#    IA" (`recuar_continuacao`, no `tecnologia.py`), pela mesma razao: cabecalho
+# 2. **A primeira coluna e do backend.** E a mesma disciplina das cercas do
+#    prompt (`recuar_continuacao`, no `tecnologia.py`), pela mesma razao: cabecalho
 #    e separador so valem no comeco da linha, e e por eles que o corpo se
 #    divide entre o que e do diretor e o que e da Vitta. Um "## Origem" digitado
 #    na descricao fabricaria uma segunda secao dizendo que quem pediu foi outra
@@ -634,8 +550,7 @@ def texto_do_diretor(bruto: str | None) -> str:
     A Demanda no app guarda o texto original: a peneira age so no que sai.
 
     **E o `@` que a peneira nao pega** (o seguido de digito, issue #888) sai com
-    um espaco depois, a mesma neutralizacao do comentario espelhado
-    (`_trecho_do_autor`): `@1abc` notificaria a conta `1abc`.
+    um espaco depois (`_trecho_do_autor`): `@1abc` notificaria a conta `1abc`.
     """
     texto = _QUEBRA_DE_LINHA.sub("\n", bruto or "")
     return _escapar_para_o_github(_trecho_do_autor(texto))
@@ -658,10 +573,6 @@ def titulo_da_issue(bruto: str | None) -> str:
 def _escapar_para_o_github(texto: str, *, marcador_vira_link: bool = True) -> str:
     """O escape do `texto_do_diretor`, sem a peneira: `<` vira `&lt;`,
     estrutura em coluna zero desligada, travessao sanitizado.
-
-    Existe separado porque o `texto_espelhado` peneira TRECHO a trecho, entre
-    as mencoes do app, e o `@login` que ele poe no lugar de cada mencao nao
-    pode passar pela peneira depois: ela o leria como perfil de rede social.
 
     `marcador_vira_link=False` e so para o titulo da issue, que nao e Markdown
     (`titulo_da_issue`).
@@ -704,82 +615,23 @@ def login_para_publicar(bruto: str | None) -> str | None:
     return login
 
 
-def corpo_da_issue_nova(
-    *,
-    demanda_id: str,
-    titulo: str,
-    descricao: str | None,
-    tipo_rotulo: str,
-    produto_nome: str,
-    levado_por_login: str | None,
-    link: str,
-    anexos: int = 0,
-) -> str:
-    """O corpo da issue que o botao "Levar para desenvolvimento" cria.
+# O endereco da aba no app. Escrito aqui de novo porque o backend nao le o
+# frontend (`demandas.ts`); o id da Demanda vai no parametro para quem abre a
+# issue saber de qual conversa ela nasceu.
+ROTA_TECNOLOGIA = "/admin/tecnologia"
+PARAM_DEMANDA = "demanda"
 
-    Tres partes, e cada uma com um leitor diferente:
 
-    - o bloco **"Para o diretor"**, que e o que volta para o card pelo
-      `bloco_para_o_diretor` (ADR 0054, decisao 7). Ele acaba no separador, e
-      por isso nada abaixo dele chega ao diretor;
-    - a **Origem**, para quem for curar a issue: o endereco da Demanda no app e
-      quem a levou;
-    - o **marcador**, o lado da issue do par do Vinculo.
-
-    **Nome civil nenhum sai daqui** (decisao do diretor, rodada de seguranca do
-    PR #688). A issue #677 pedia a Origem "com o autor", e a Origem levava o
-    nome completo de quem pediu para um repositorio publico a cada clique. O
-    que ficou no lugar responde a mesma pergunta sem publicar pessoa:
-
-    - o **link da Demanda** e a rastreabilidade de verdade. Quem le a issue tem
-      acesso ao app, e la esta o autor, o fio inteiro e o resto;
-    - o **`@login`** e de quem LEVOU, nao de quem pediu, e e identificador que a
-      propria pessoa ja tornou publico no GitHub. Ele existe sempre, porque a
-      rota devolve 403 para quem nao tem `github_login`.
-
-    **Dado de paciente tambem nao sai** (issue #772, ADR 0060): titulo e
-    descricao passam pela peneira do `texto_do_diretor`. O "O que muda" volta
-    ao card pelo `bloco_para_o_diretor` com os marcadores no lugar do dado, e
-    isso e aceito: a Demanda guarda o texto original.
-
-    Descricao vazia usa o TITULO: uma issue cujo "O que muda" viesse em branco
-    mostraria "Descrição em preparação" no card de quem acabou de pedir.
-
-    Os Anexos da Demanda entram so como contagem, na Origem (`frase_dos_anexos`,
-    issue #1062): fora do bloco do diretor, que volta para o card.
-    """
-    o_que_muda = texto_do_diretor(descricao) or texto_do_diretor(titulo)
-    login = login_para_publicar(levado_por_login)
-    origem = "Pedido registrado na aba Tecnologia do aplicativo do hospital"
-    origem = f"{origem}, levado para o desenvolvimento por @{login}." if login else f"{origem}."
-    return "\n".join(
-        [
-            CABECALHO_DO_BLOCO,
-            "",
-            f"**O que muda:** {o_que_muda}",
-            "",
-            "**O que você precisa saber:**",
-            f"- Tipo do pedido: {tipo_rotulo}",
-            f"- Produto: {produto_nome}",
-            "",
-            "---",
-            "",
-            "## Origem",
-            "",
-            origem,
-            f"Abrir a Demanda: {link}",
-            *(["", frase] if (frase := frase_dos_anexos(anexos)) else []),
-            "",
-            marcador_da_demanda(demanda_id),
-        ]
-    )
+def link_da_demanda(demanda_id: str) -> str:
+    """O endereco da Demanda no app, que o corpo da issue leva na Origem."""
+    return f"{settings.frontend_url}{ROTA_TECNOLOGIA}?{PARAM_DEMANDA}={quote(str(demanda_id))}"
 
 
 # ─── 2b. O PRD do diretor (issue #1349, ADR 0075) ────────────────────────────
 
 # O numero de issue escrito no texto (`#42`, `GH-42`), fora de entidade HTML
 # (`&#35;`). Ele sai como `nº 42`: no GitHub, `#42` vira link e menciona outra
-# issue do repositorio publico, e o bloco volta para o card do diretor, onde
+# issue do repositorio publico, e o bloco volta para a tela do diretor, onde
 # numero de issue nao aparece (ADR 0054, decisao 9).
 _NUMERO_DE_ISSUE = re.compile(r"(?<!&)(?:#|\bGH-)(\d+)", re.IGNORECASE)
 
@@ -822,9 +674,9 @@ def corpo_do_prd_do_diretor(
     modelo que nao foi o do resumo, e nenhuma decisao nasce fora do resumo.
 
     Todo texto passa pelo `texto_do_diretor` (peneira de dado pessoal, escape
-    de marcador e de estrutura, sanitizador de travessao), como o corpo do
-    "Levar para desenvolvimento". A Origem nao leva login: quem disse "sim"
-    pode ser o diretor, que nao tem um.
+    de marcador e de estrutura, sanitizador de travessao), como o corpo da
+    issue do bug. A Origem nao leva login: quem clicou e o diretor, que nao tem
+    um.
     """
     o_que_muda = _linha_do_prd(descricao) or _linha_do_prd(titulo)
     titulo_limpo = _linha_do_prd(titulo)
@@ -991,38 +843,8 @@ def corpo_da_issue_do_bug(
     )
 
 
-# ─── 2c. A resposta espelhada na issue (issue #680) ──────────────────────────
-#
-# Toda resposta da Conversa de uma Demanda vinculada vira comentario na issue
-# (ADR 0054, decisao 4). Do lado do GitHub o autor do comentario e SEMPRE a
-# integracao, entao quem diz de quem e a voz e o marcador que abre o corpo, e
-# nao o login de quem publicou. A Action de higiene le os dois:
-#
-# - `<!-- automacao -->` para quem tem `github_login`: e a Vitta respondendo ao
-#   diretor, e a Action ja ignora esse marcador (senao o "vou ver" do Pedro
-#   acenderia `revisor-comentou` e travaria a `/onda`);
-# - `<!-- revisor-app autor="..." demanda="id" -->` para quem nao tem: e o
-#   diretor, e a Action acende a label por ele (emenda ao ADR 0020, decisao 5).
-#
-# A forma do marcador do revisor e LITERAL, um espaco depois de `<!--`: o
-# matcher da Action aceita exatamente esse espaco, e dois falhariam em
-# silencio, sem label e sem erro. E ele sai em linha propria, como PRIMEIRA
-# coisa do corpo, porque a Action o ancora ali (emenda de 10/09/2026 na issue
-# #680): um comentario de curadoria que cite o marcador no meio do texto nao
-# pode acender a label.
-#
-# **Nome civil nenhum sai daqui**, o mesmo invariante do `corpo_da_issue_nova`
-# (decisao do diretor na review do PR #688, estendida a esta fatia na rodada 1
-# do PR #696): o repositorio e publico. Quem tem login sai como `@login`, que a
-# propria pessoa ja tornou publico no GitHub; quem nao tem sai com o rotulo
-# neutro, no cabecalho e no `autor` do marcador. Quem tem acesso ao app ve o
-# autor pelo link da Demanda, que ja esta no corpo da issue.
-MARCADOR_AUTOMACAO = "<!-- automacao -->"
+# ─── 2c. A mencao do GitHub no texto do diretor (issues #680 e #772) ─────────
 
-# O rotulo de quem nao tem login publicavel. Uma frase so, porque e o que fica
-# no lugar do nome em TODOS os pontos (cabecalho, marcador, mencao no texto): a
-# pessoa sem login e, por definicao, do lado do hospital (ADR 0054, decisao 4).
-ROTULO_SEM_LOGIN = "Pessoa do hospital"
 
 # O que o GitHub le como mencao: `@` no inicio ou depois de algo que nao e
 # letra nem digito, seguido do login (letras, digitos, hifen, sublinhado) e,
@@ -1035,28 +857,6 @@ ROTULO_SEM_LOGIN = "Pessoa do hospital"
 # tratar os dois casos igual custa um espaco num texto que ninguem escreve e
 # evita depender de onde o CommonMark decide abrir enfase.
 _MENCAO_DO_GITHUB = re.compile(r"(?<![A-Za-z0-9])@[A-Za-z0-9][A-Za-z0-9_-]*(?:/[A-Za-z0-9_-]+)?")
-
-# Depois do nome mencionado tem de vir algo que nao continua um login: nem
-# letra, nem digito, nem hifen (ou o fim). Sem isso, "Ana" mencionada casaria
-# o comeco de "@Anastácia", e "Ana Silva" (login `ana`) em `@Ana Silva-bob`
-# sairia `@ana-bob`, mencao viva a uma conta que ninguem escolheu (issue #888).
-_FIM_DO_NOME = r"(?![^\W_]|-)"
-
-# O texto montado que termina num `@` (seguido ou nao de um login) emenda no
-# rotulo que vem depois e acende mencao a uma conta que ninguem escolheu.
-_COLA_NO_ROTULO = re.compile(r"@[A-Za-z0-9_-]*\Z")
-
-
-def rotulo_no_github(participante: dict[str, Any] | None) -> str:
-    """Como esta pessoa aparece num texto publicado no GitHub: `@login` quando
-    ha login publicavel (`login_para_publicar`, alfabeto fechado), senao o
-    rotulo neutro. Nunca o nome."""
-    login = login_para_publicar((participante or {}).get("github_login"))
-    return f"@{login}" if login else ROTULO_SEM_LOGIN
-
-
-def marcador_do_revisor_no_app(*, demanda_id: str) -> str:
-    return f'<!-- revisor-app autor="{ROTULO_SEM_LOGIN}" demanda="{demanda_id}" -->'
 
 
 def _neutralizar_mencoes(texto: str) -> str:
@@ -1080,246 +880,33 @@ def _neutralizar_mencoes(texto: str) -> str:
     return _MENCAO_DO_GITHUB.sub(lambda m: f"@ {m.group(0)[1:]}", texto)
 
 
-def texto_espelhado(bruto: str | None, *, mencionados: list[dict[str, Any]]) -> str:
-    """O texto da resposta, pronto para um comentario em repositorio publico.
-
-    O mesmo funil do `texto_do_diretor` (peneira de dado pessoal, `<` vira
-    `&lt;`, estrutura em coluna zero desligada, travessao sanitizado, `@`
-    solto com espaco), com a mencao do app tratada no meio, que aquele funil
-    nao conhece porque no corpo da issue nova nao ha mencao do app:
-
-    1. a **mencao do app** (o `@Nome Completo` que o autocomplete grava, com o
-       id da pessoa em `mencoes`) vira o rotulo dessa pessoa: `@login` quando
-       ela tem, que e mencao de verdade no GitHub e chama quem o autor quis
-       chamar, ou o rotulo neutro. O nome civil do mencionado nao sai;
-    2. o texto **entre** as mencoes passa pela peneira (`_trecho_do_autor`,
-       issue #772): o `@fulano` digitado a mao vira `[REDE_SOCIAL]`, o e-mail
-       vira `[EMAIL]`. O que a peneira nao pega (o `@` seguido de digito) sai
-       com um espaco depois do `@`, que e o que desliga o filtro de mencao do
-       GitHub sem criar delimitador no texto do autor. O rotulo do passo 1 nao
-       passa pela peneira: ela leria o `@login` como perfil.
-
-    A troca do passo 1 roda sobre o texto BRUTO, antes do `texto_do_diretor`:
-    e o nome do cadastro que tem de casar, e o funil transforma o texto (`<`
-    vira `&lt;`, travessao vira virgula) sem transformar o nome. E e feita por
-    trechos, com o passo 2 aplicado so ao que esta ENTRE as mencoes: aplicado
-    ao texto inteiro depois, ele poria em crase o `@login` que o passo 1
-    acabou de por. O nome mais longo ganha quando um e prefixo do outro ("Ana
-    Paula" antes de "Ana"), e depois do nome tem de vir algo que nao e letra.
-    """
-    texto = _QUEBRA_DE_LINHA.sub("\n", bruto or "")
-    rotulos = {
-        nome: rotulo_no_github(pessoa)
-        for pessoa in mencionados
-        if (nome := str((pessoa or {}).get("nome_completo") or "").strip())
-    }
-    if not rotulos:
-        return _escapar_para_o_github(_trecho_do_autor(texto))
-    padrao = re.compile(
-        "|".join(re.escape(f"@{nome}") + _FIM_DO_NOME for nome in sorted(rotulos, key=len, reverse=True))
-    )
-    partes: list[str] = []
-    fim = 0
-    for achado in padrao.finditer(texto):
-        partes.append(_trecho_do_autor(texto[fim : achado.start()]))
-        # Um `@` solto, ou o `@login` da mencao anterior, colado ao rotulo
-        # neutro sairia `@Pessoa` ou `@anaPessoa`, mencao viva (issue #888).
-        # Quem decide e o texto ja montado, nao so o trecho do autor. O espaco
-        # e o mesmo do `_neutralizar_mencoes`.
-        if _COLA_NO_ROTULO.search("".join(partes)):
-            partes.append(" ")
-        partes.append(rotulos[achado.group(0)[1:]])
-        fim = achado.end()
-    partes.append(_trecho_do_autor(texto[fim:]))
-    return _escapar_para_o_github("".join(partes))
-
-
 def _trecho_do_autor(trecho: str) -> str:
-    """Um trecho do texto ENTRE as mencoes do app: peneira de dado pessoal
-    (issue #772) e depois o `@` solto com espaco.
+    """O texto de quem escreveu, para o repositorio publico: peneira de dado
+    pessoal (issue #772) e depois o `@` solto com espaco.
 
     A peneira vem primeiro porque ela le o `@` cru: um `@maria.silva88` pode ser
     o perfil do paciente, e vira `[REDE_SOCIAL]`. Com o espaco posto antes, o
     handle sairia inteiro ("@ maria.silva88"). O custo e que o `@login` do
     GitHub digitado a mao tambem vira marcador: a peneira nao sabe distinguir
-    os dois, e a regra do modulo e perder contexto, nunca vazar pessoa. Quem
-    quer chamar alguem usa a mencao do app, que vira `@login` fora daqui.
+    os dois, e a regra do modulo e perder contexto, nunca vazar pessoa.
     """
     return _neutralizar_mencoes(pseudonimizar(trecho))
 
 
-def corpo_do_comentario_espelhado(
-    *,
-    texto: str,
-    autor: dict[str, Any] | None,
-    demanda_id: str,
-    mencionados: list[dict[str, Any]] | None = None,
-    imagens: int = 0,
-) -> str:
-    """O comentario que o app publica na issue quando alguem responde no card.
+# ─── 3. As frases de recusa ──────────────────────────────────────────────────
 
-    A resposta que levou imagem ganha "(1 imagem na Demanda)" depois do texto
-    (issue #1062): so a contagem. A imagem fica no app, e nem a URL nem o nome
-    do arquivo saem para o repositorio publico (ADR 0069, decisao 1).
-
-    O marcador vai pelo FATO de ter login (`tem_github_login`): e ele que separa
-    a Vitta do hospital para a Action. O cabecalho vai pelo login PUBLICAVEL
-    (`rotulo_no_github`): uma linha antiga com login fora do alfabeto ainda e
-    da Vitta para o marcador, mas o cabecalho nao publica o que ninguem sabe o
-    que e.
-
-    O texto passa pelo `texto_espelhado`: sem isso, bastaria alguem digitar o
-    marcador do revisor dentro da resposta para a Action acender a label em
-    nome de outra pessoa (o teto de `author_association` do GitHub nao
-    protegeria nada, porque o autor do comentario e a integracao), e um
-    `@fulano` digitado a mao notificaria conta alheia.
-
-    Uma linha em branco entre o cabecalho e o texto, para o Markdown nao colar
-    os dois num paragrafo so.
-    """
-    marcador = MARCADOR_AUTOMACAO if tem_github_login(autor) else marcador_do_revisor_no_app(demanda_id=demanda_id)
-    return "\n".join(
-        [
-            marcador,
-            f"**{rotulo_no_github(autor)}** escreveu na Demanda:",
-            "",
-            texto_espelhado(texto, mencionados=list(mencionados or [])),
-            *(["", f"({imagens} {'imagem' if imagens == 1 else 'imagens'} na Demanda)"] if imagens > 0 else []),
-        ]
-    )
-
-
-# ─── 3. A foto mudou? ────────────────────────────────────────────────────────
-
-
-def foto_mudou(antiga: dict[str, Any] | None, nova: dict[str, Any] | None) -> bool:
-    """Se a foto nova diz algo diferente da guardada.
-
-    Foto igual nao escreve NADA: nem a linha da Conversa, nem o UPDATE da
-    Demanda. Sem esta guarda, a reconciliacao de hora em hora (a fatia seguinte)
-    encheria o fio do diretor de linhas repetidas dizendo a mesma coisa.
-    """
-    return antiga != nova
-
-
-# ─── 4. As linhas automaticas do fio ─────────────────────────────────────────
-
-
-def texto_partes(entregues: int | None, total: int | None) -> str:
-    """ "3 de 7 partes", ou vazio quando nao ha partes."""
-    if not isinstance(entregues, int) or not isinstance(total, int) or total <= 0:
-        return ""
-    return f"{entregues} de {total} partes"
-
-
-def texto_movimento_etapa(*, para: str, entregues: int | None = None, total: int | None = None) -> str:
-    """A linha que o diretor le quando o desenvolvimento anda.
-
-    Sem nome de quem agiu, e de proposito: ninguem AGIU no app. Quem mudou foi o
-    GitHub, e a linha diz o fato.
-    """
-    rotulo = ETAPA_ROTULO.get(para, para)
-    partes = texto_partes(entregues, total)
-    return f"Etapa: {rotulo} ({partes})" if partes else f"Etapa: {rotulo}"
-
-
-def texto_em_producao(versao: str) -> str:
-    """A linha do fio quando a subida leva a entrega ao ar (ADR 0069, decisão 4).
-
-    Com a versão, e não "Etapa: Em produção": a versão é a resposta que o
-    diretor procura ("já posso usar?"), e é a mesma que o selo mostra. Sem nome
-    de quem agiu, como a linha da Etapa: quem subiu foi a Action, e a linha diz
-    o fato.
-    """
-    return f"{ETAPA_ROTULO[ETAPA_EM_PRODUCAO]} na {versao}"
-
-
-# As duas linhas do Vinculo, SEM o numero da issue.
-#
-# O texto da Conversa e lido pelo diretor e sai do app inteiro dentro do
-# "Copiar para IA": e a superficie mais larga que existe, e ela nao passa pelo
-# funil que omite o Vinculo (`_com_nomes`). Um "#673" aqui furaria a decisao 9
-# do ADR 0054 pela porta dos fundos, e o proprio bloco "Para o diretor" da issue
-# #674 ("Você não vê número, link nem botão técnico") junto.
-#
-# Quem precisa do numero para rastrear le `movimento_de` e `movimento_para`, que
-# o router omite para quem nao tem `github_login`.
-TEXTO_VINCULO_CRIADO = "Vínculo com o desenvolvimento criado"
-TEXTO_VINCULO_DESFEITO = "Vínculo com o desenvolvimento desfeito"
-
-
-def texto_levou_para_desenvolvimento(nome: str | None) -> str:
-    """A linha do fio quando alguem da Vitta leva o pedido para o
-    desenvolvimento (issue #677).
-
-    Esta tem NOME, ao contrario da linha da Etapa: aqui alguem agiu, e no app.
-    Sem numero de issue, pelo mesmo motivo das duas acima.
-    """
-    return f"{nome or 'Alguém'} levou para o desenvolvimento"
-
-
-# ─── 5. As frases de recusa ──────────────────────────────────────────────────
-
-# Cada uma tem a SUA causa e a SUA saida: uma frase generica ("nao foi possivel
-# vincular") mandaria a pessoa adivinhar entre digitar outro numero, procurar a
-# outra Demanda e pedir acesso.
-MOTIVO_SEM_GITHUB_LOGIN = (
-    "O Vínculo com o desenvolvimento é de quem trabalha no GitHub. "
-    "Preencha o campo Login no GitHub na tela de Usuários para usar este controle."
-)
 
 MOTIVO_INTEGRACAO_DESLIGADA = (
     "A integração com o GitHub não está configurada neste ambiente. "
-    "Sem ela o app não consegue ler nem marcar a issue: peça para configurar antes de vincular."
+    "Sem ela o app não consegue criar o card: peça para configurar e tente de novo."
 )
-
-MOTIVO_NUMERO_INVALIDO = "O número da issue precisa ser um inteiro maior que zero."
-
-
-def motivo_issue_inexistente(numero: int) -> str:
-    return f"A issue #{numero} não existe no repositório da integração. Confira o número e tente de novo."
-
-
-def motivo_e_pull_request(numero: int) -> str:
-    return (
-        f"O número #{numero} é de um pull request, e o Vínculo é com a issue-raiz. "
-        "Use o número do PRD ou da issue de correção."
-    )
-
-
-def motivo_numero_ja_usado(numero: int, titulo: str) -> str:
-    return (
-        f'A issue #{numero} já está vinculada à Demanda "{titulo}". '
-        "Uma issue responde por uma Demanda só: desfaça o Vínculo lá antes de criar este."
-    )
-
-
-def motivo_demanda_ja_vinculada(numero: int) -> str:
-    return (
-        f"Esta Demanda já está vinculada à issue #{numero}. Clique em Desvincular antes de apontá-la para outra issue."
-    )
 
 
 MOTIVO_CRIACAO_EM_ANDAMENTO = (
-    "Esta Demanda já está sendo levada para o desenvolvimento neste instante. "
-    "Espere alguns segundos e recarregue o Quadro para ver a issue que nasceu."
+    "O card desta conversa já está sendo criado neste instante. "
+    "Espere alguns segundos e recarregue a página para ver o card que nasceu."
 )
 
-
-def motivo_ja_vinculada_para_levar(numero: int) -> str:
-    """A recusa de levar duas vezes (issue #677).
-
-    Frase propria, e nao a do `vincular`: ali a saida e apontar para outra
-    issue, aqui e nao criar uma SEGUNDA issue para o mesmo pedido, que e o dano
-    que ninguem desfaz sozinho depois.
-    """
-    return (
-        f"A Demanda já está vinculada à issue #{numero}. "
-        "Desfaça o Vínculo antes de levá-la para o desenvolvimento de novo."
-    )
-
-
-MOTIVO_SEM_VINCULO_PARA_DESFAZER = "Esta Demanda não tem Vínculo com o desenvolvimento para desfazer."
 
 MOTIVO_GITHUB_INDISPONIVEL = (
     "O GitHub não respondeu agora. O Vínculo não foi criado: tente de novo em alguns instantes."

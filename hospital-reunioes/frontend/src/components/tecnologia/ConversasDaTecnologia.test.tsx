@@ -16,7 +16,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { ToastProvider } from "@/components/ui/Toast";
 
-import { ABERTURA } from "./ChatDaTecnologia";
+import { ABERTURA, SEM_CONVERSA_GUARDADA } from "./ChatDaTecnologia";
 import { ConversasDaTecnologia, NOVA_CONVERSA, VOLTAR_PARA_A_LISTA } from "./ConversasDaTecnologia";
 import { ConversaDoChat, FalaDoChat } from "./chat";
 import { Demanda } from "./demandas";
@@ -33,19 +33,7 @@ function demanda(id: string, titulo: string, extra: Partial<Demanda> = {}): Dema
   return {
     id,
     titulo,
-    descricao: null,
-    tipo: "defeito",
-    produto_id: "prod-1",
-    produto_nome: "Ouvidoria",
-    estado: "nova",
-    responsavel_id: null,
-    responsavel_nome: null,
-    autor_id: "P2",
-    prioridade: "normal",
-    prazo: null,
     criado_em: "2026-11-01T10:00:00Z",
-    concluida_em: null,
-    cancelada_em: null,
     etapa: "registrada",
     tem_vinculo: false,
     o_que_muda: null,
@@ -114,7 +102,6 @@ function lista() {
 
 const SEM_CARD = demanda("d-1", "Botão de responder some na Ouvidoria");
 const COM_VINCULO = demanda("d-2", "Aviso quando a ata sair", {
-  tipo: "novo",
   etapa: "em_producao",
   versao: "v0.207.0",
   tem_vinculo: true,
@@ -166,6 +153,21 @@ describe("Retomar", () => {
       url: `${LISTA}/d-1`,
       corpo: { texto: "Na Ouvidoria", prints: [] },
     });
+  });
+});
+
+describe("O pedido de antes do chat (issue #1386)", () => {
+  it("sem conversa guardada, diz que ela não ficou aqui e não manda a tela nenhuma", async () => {
+    montar((url, metodo) => {
+      if (url === LISTA && metodo === "GET") return { status: 200, corpo: [SEM_CARD] };
+      return { status: 404, corpo: { detail: "Esta conversa não foi encontrada." } };
+    });
+
+    fireEvent.click(await within(lista()).findByRole("button", { name: /Botão de responder some/ }));
+
+    expect(await screen.findByText(SEM_CONVERSA_GUARDADA)).toBeTruthy();
+    // A tela do Planejamento de antes saiu: nenhum link leva a ela.
+    expect(screen.queryByRole("link")).toBeNull();
   });
 });
 

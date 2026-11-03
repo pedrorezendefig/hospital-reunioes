@@ -20,7 +20,6 @@
  */
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import Link from "next/link";
 import { Bot, CheckCircle2, ImagePlus, ListChecks, Loader2, Mic, Send, Square } from "lucide-react";
 
 import { useGravacaoVoz } from "@/hooks/useGravacaoVoz";
@@ -52,12 +51,7 @@ import {
   urlDoNaoBateu,
   urlDoResumoDaMelhoria,
 } from "./chat";
-import { FALHA_DE_CONEXAO, motivoDaRecusa, ROTA_TECNOLOGIA } from "./demandas";
-
-/** A tela do Planejamento de antes, onde segue a conversa que não é do chat. */
-function rotaDoPlanejamento(demandaId: string): string {
-  return `${ROTA_TECNOLOGIA}/planejamento/${encodeURIComponent(demandaId)}`;
-}
+import { FALHA_DE_CONEXAO, motivoDaRecusa } from "./demandas";
 
 // A mesma pergunta que o backend guarda como primeira fala da conversa.
 export const ABERTURA = "Isso é um bug, algo que não funciona como deveria, ou uma melhoria?";
@@ -78,7 +72,7 @@ const ENCERRADO = "A IA já tem o que precisa. O resumo aparece em seguida; se n
 const NENHUMA_DECISAO = "Nenhuma pergunta respondida fechou uma decisão.";
 const NADA_EM_ABERTO = "Nada ficou em aberto.";
 const NAO_SEM_TEXTO = "Diga o que não bateu no resumo.";
-const SEGUE_NO_PLANEJAMENTO = "A conversa deste pedido continua no Planejamento da Demanda, numa tela própria.";
+export const SEM_CONVERSA_GUARDADA = "Este pedido é de antes do chat, e a conversa dele não ficou guardada aqui.";
 const CORPO_ILEGIVEL = "O servidor respondeu algo que a tela não conseguiu ler. Recarregue a página.";
 
 const ABERTURA_NA_TELA: FalaDoChat = {
@@ -382,7 +376,8 @@ export function ChatDaTecnologia({ token, demandaId = null, onMudou }: PropsDoCh
 
   /**
    * A conversa guardada, para retomar de onde parou. Sem conversa do chat
-   * (404) é a melhoria que já passou ao Planejamento: o caminho segue lá.
+   * (404) é um pedido de antes do chat (ADR 0077): não há o que retomar, e a
+   * tela da conversa que ele tinha saiu na issue #1386.
    */
   useEffect(() => {
     if (!demandaId || !token) return;
@@ -511,16 +506,11 @@ export function ChatDaTecnologia({ token, demandaId = null, onMudou }: PropsDoCh
 
   if (carga === "falhou") return aviso || null;
 
-  if (carga === "sem_chat" && demandaId) {
+  if (carga === "sem_chat") {
     return (
-      <Fechamento texto={SEGUE_NO_PLANEJAMENTO}>
-        <Link
-          href={rotaDoPlanejamento(demandaId)}
-          className="inline-flex items-center px-4 py-2 rounded-xl bg-primary text-white text-sm font-semibold"
-        >
-          Continuar no planejamento
-        </Link>
-      </Fechamento>
+      <p role="status" className="px-4 py-3 rounded-xl bg-slate-50 border border-slate-200 text-sm text-text-secondary">
+        {SEM_CONVERSA_GUARDADA}
+      </p>
     );
   }
 
