@@ -1,6 +1,6 @@
 # ROTAS.md
 <!-- gerado automaticamente por /snapshot — não editar -->
-<!-- last_update: 2026-11-02T22:59+0000 -->
+<!-- last_update: 2026-11-03T00:03+0000 -->
 
 Endpoints HTTP expostos pelo backend FastAPI do Hospital Reuniões.
 
@@ -451,41 +451,14 @@ Endpoints HTTP expostos pelo backend FastAPI do Hospital Reuniões.
 
 | Método | Rota | O que faz | Auth |
 |--------|------|-----------|------|
-| POST | `/admin/tecnologia/assistente/chat` | Um turno da conversa que monta a Demanda (ADR 0056, decisao 1). | ✅ |
 | POST | `/admin/tecnologia/assistente/descrever-imagem` | O print anexado vira descricao, e a imagem some (ADR 0056, decisao 4). | ✅ |
-| POST | `/admin/tecnologia/assistente/extrair-documento` | O documento anexado vira texto, e o texto some (ADR 0056, decisao 4). | ✅ |
 | GET | `/admin/tecnologia/chat` | A lista ao lado do chat (issue #1384): as Demandas que o Super admin | ✅ |
 | POST | `/admin/tecnologia/chat` | O primeiro turno: a Demanda nasce aqui (ADR 0077, decisao 2). | ✅ |
 | GET | `/admin/tecnologia/chat/{demanda_id}` | A conversa guardada, para retomar de onde parou. | ✅ |
 | POST | `/admin/tecnologia/chat/{demanda_id}` | Um turno: a fala do diretor entra, a da IA volta. | ✅ |
-| POST | `/admin/tecnologia/chat/{demanda_id}/criar-card` | O "Criar o card" do resumo do bug (ADR 0077, decisoes 6 e 7). | ✅ |
+| POST | `/admin/tecnologia/chat/{demanda_id}/criar-card` | O "Criar o card" do resumo (ADR 0077, decisoes 6 e 7). | ✅ |
 | POST | `/admin/tecnologia/chat/{demanda_id}/nao-bateu` | O "Nao bateu" do resumo: o que nao bateu entra na conversa como fala do | ✅ |
 | POST | `/admin/tecnologia/chat/{demanda_id}/resumo` | O "Fechar e resumir" da melhoria (issue #1383): vale a qualquer altura do | ✅ |
-| GET | `/admin/tecnologia/demandas` | As Demandas do Quadro, com os filtros da PRD. | ✅ |
-| POST | `/admin/tecnologia/demandas` | Abre uma Demanda: ela nasce em `nova`, com o dono do Produto. | ✅ |
-| PATCH | `/admin/tecnologia/demandas/{demanda_id}` | Edita os campos do modal. Campo ausente fica como esta. | ✅ |
-| GET | `/admin/tecnologia/demandas/{demanda_id}/anexos` | Os anexos do card, com URL assinada de vida curta (ADR 0069). | ✅ |
-| POST | `/admin/tecnologia/demandas/{demanda_id}/anexos` | Guarda um print junto da Demanda (ADR 0069, decisao 1). | ✅ |
-| POST | `/admin/tecnologia/demandas/{demanda_id}/atribuir` | Troca o responsavel, entre as pessoas com acesso a aba. | ✅ |
-| GET | `/admin/tecnologia/demandas/{demanda_id}/conversa` | O fio da Demanda em ordem cronologica, respostas e movimentos juntos. | ✅ |
-| POST | `/admin/tecnologia/demandas/{demanda_id}/conversa` | Responde dentro do card: uma linha `resposta`, assinada por quem escreve. | ✅ |
-| PATCH | `/admin/tecnologia/demandas/{demanda_id}/conversa/{linha_id}` | Corrige a PROPRIA resposta, dentro da janela de 10 minutos. | ✅ |
-| POST | `/admin/tecnologia/demandas/{demanda_id}/desvincular` | Desfaz o Vinculo: apaga o numero, a Etapa e a foto guardada. | ✅ |
-| POST | `/admin/tecnologia/demandas/{demanda_id}/levar-para-desenvolvimento` | Cria a issue do pedido no GitHub e ja a vincula (ADR 0054, decisao 1). | ✅ |
-| POST | `/admin/tecnologia/demandas/{demanda_id}/mover` | Move a Demanda de coluna, se a maquina de estados permitir. | ✅ |
-| GET | `/admin/tecnologia/demandas/{demanda_id}/planejamento` | A conversa guardada na Demanda, para retomar de onde parou (decisao 3). | ✅ |
-| POST | `/admin/tecnologia/demandas/{demanda_id}/planejamento` | Um turno: a resposta do diretor entra, a proxima pergunta volta. | ✅ |
-| POST | `/admin/tecnologia/demandas/{demanda_id}/planejamento/enviar` | O "sim" do resumo (issue #1349, ADR 0075, decisao 6): cria o PRD do | ✅ |
-| POST | `/admin/tecnologia/demandas/{demanda_id}/planejamento/nao` | O "nao" do resumo (issue #1347): o que nao bateu entra na conversa como | ✅ |
-| POST | `/admin/tecnologia/demandas/{demanda_id}/planejamento/resumo` | Fechar e resumir (issue #1347): vale a qualquer altura, da primeira | ✅ |
-| GET | `/admin/tecnologia/demandas/{demanda_id}/texto-para-ia` | A Demanda inteira em texto simples, para colar numa IA (issue #640). | ✅ |
-| POST | `/admin/tecnologia/demandas/{demanda_id}/vincular` | Liga a Demanda a uma issue-raiz do GitHub pelo numero (ADR 0054, decisao 1). | ✅ |
-| GET | `/admin/tecnologia/eu` | Quem esta olhando a aba, do ponto de vista do Vinculo. | ✅ |
-| GET | `/admin/tecnologia/painel` | O Painel da aba Tecnologia (issue #1059), no lugar de "Minha vez" e do | ✅ |
-| GET | `/admin/tecnologia/pessoas` | Quem tem acesso a aba: participante ativo com Super admin. | ✅ |
-| GET | `/admin/tecnologia/produtos` | Todos os Produtos, ativos e inativos, na ordem de exibicao. | ✅ |
-| POST | `/admin/tecnologia/produtos` | Cria Produto. Nasce ativo, e ativo exige dono. | ✅ |
-| PATCH | `/admin/tecnologia/produtos/{produto_id}` | Renomeia, ativa, desativa, troca o dono e a ordem. | ✅ |
 
 ## automacao (`app/routers/tecnologia_automacao.py`)
 
@@ -530,4 +503,4 @@ Endpoints HTTP expostos pelo backend FastAPI do Hospital Reuniões.
 
 ---
 
-**Totais:** 304 endpoints em 44 routers · 94% exigem auth.
+**Totais:** 277 endpoints em 44 routers · 94% exigem auth.
