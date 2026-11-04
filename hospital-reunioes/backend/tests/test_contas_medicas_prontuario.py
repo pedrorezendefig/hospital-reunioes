@@ -460,7 +460,7 @@ def test_digitalizadas_da_conta_sao_as_do_atendimento_com_data_no_periodo():
         ("FOLHA DE SALA\nMateriais utilizados na cirurgia", "folha de sala ou de consumo do centro cirúrgico", "pesa"),
         ("CONTROLE DE FIOS CIRURGICOS\nvicryl 2-0 nylon 3-0", "controle de fios", "pesa"),
         ("CONTROLE DE OPME\netiqueta lote ref", "controle de OPME e etiquetas", "pesa"),
-        ("REGISTRO DE HORARIOS CIRURGICOS\nentrada do paciente na sala 07:40", "registro de horários cirúrgicos", "pesa"),
+        ("REGISTRO DE HORARIOS CIRURGICOS\nentrada na sala 07:40", "registro de horários cirúrgicos", "pesa"),
         ("RELATORIO DE USO DE EQUIPAMENTO\nvideolaparoscopia", "relatório de uso de equipamento", "pesa"),
         ("DESCRICAO CIRURGICA\nachados operatorios: vesicula", "descrição cirúrgica manuscrita", "pesa"),
         ("PRESCRICAO MEDICA\nchecagem e aprazamento", "prescrição ou checagem manuscrita", "pesa"),
@@ -543,14 +543,10 @@ def test_paginas_seguidas_do_mesmo_documento_vao_numa_linha_so():
 @pytest.mark.parametrize(
     ("partes", "lidas", "qualidades"),
     [
-        pytest.param(
-            [folha()], {4: CONSENTIMENTO_LIDO_POR_OCR}, {4: "ilegivel"}, id="familia_que_nao_pesa"
-        ),
+        pytest.param([folha()], {4: CONSENTIMENTO_LIDO_POR_OCR}, {4: "ilegivel"}, id="familia_que_nao_pesa"),
         pytest.param([folha()], {4: FICHA_LIDA_POR_OCR}, {4: "legivel"}, id="pagina_legivel"),
         # as páginas 4 e 5 são do pronto-socorro, e a 6 herda o Atendimento dele
-        pytest.param(
-            ["outro_atendimento", folha()], {6: FICHA_LIDA_POR_OCR}, {6: "ilegivel"}, id="outro_atendimento"
-        ),
+        pytest.param(["outro_atendimento", folha()], {6: FICHA_LIDA_POR_OCR}, {6: "ilegivel"}, id="outro_atendimento"),
         pytest.param([folha("12/10/2026")], {4: FICHA_LIDA_POR_OCR}, {4: "ilegivel"}, id="fora_do_periodo"),
     ],
 )

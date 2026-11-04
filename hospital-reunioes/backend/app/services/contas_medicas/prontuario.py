@@ -493,7 +493,13 @@ _FAMILIAS_DA_FOLHA: list[tuple[str, str, tuple[str, ...]]] = [
     (
         "folha de sala ou de consumo do centro cirúrgico",
         PESA,
-        (r"FOLHA\s+DE\s+SALA", r"CONSUMO", r"GASTO", r"DEBITO\s+DE\s+SALA", r"MATERIAIS?\s+(E\s+MEDICAMENTOS\s+)?UTILIZAD"),
+        (
+            r"FOLHA\s+DE\s+SALA",
+            r"CONSUMO",
+            r"GASTO",
+            r"DEBITO\s+DE\s+SALA",
+            r"MATERIAIS?\s+(E\s+MEDICAMENTOS\s+)?UTILIZAD",
+        ),
     ),
     ("controle de fios", PESA, (r"FIOS\s+CIRURG",)),
     ("controle de OPME e etiquetas", PESA, (r"\bOPME\b", r"ETIQUETA", r"\bLOTE\b.*\bREF\b", r"IMPLANT")),
@@ -528,7 +534,11 @@ _FAMILIAS_DA_FOLHA: list[tuple[str, str, tuple[str, ...]]] = [
         (r"TERMO\s+DE\s+(CONSENTIMENTO|CIENCIA|RESPONSABILIDADE|AUTORIZA)", r"CONSENTIMENTO", r"DECLARO", r"AUTORIZO"),
     ),
     ("receituário", NAO_PESA, (r"RECEITUARIO", r"RECEITA")),
-    ("integrador químico e caixa de instrumental", NAO_PESA, (r"INTEGRADOR", r"ESTERILIZ", r"INSTRUMENTAL|PECAS\s+PARA\s+USO")),
+    (
+        "integrador químico e caixa de instrumental",
+        NAO_PESA,
+        (r"INTEGRADOR", r"ESTERILIZ", r"INSTRUMENTAL|PECAS\s+PARA\s+USO"),
+    ),
     ("escala de risco", NAO_PESA, (r"ESCALA", r"ALGORITMO", r"RISCO\s+DE\s+(QUEDA|LESAO)|BRADEN|MORSE", r"AVALIACAO")),
     (
         "documento pessoal",
