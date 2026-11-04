@@ -2,6 +2,54 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-11-03T22:27:12-03:00",
+      "sha": "08e54a614e5fb89017784e839fcc959049ad3663",
+      "app_version": "0.214.0",
+      "subject": "Onda cm-ocr-onda4: Analisar assim mesmo na conta parada por folha escaneada ilegível",
+      "raw_subject": "chore(deploy): registro da onda cm-ocr-onda4 (#1406)",
+      "scope": [
+        "backend",
+        "frontend"
+      ],
+      "prds": [
+        1397
+      ],
+      "result": "healthy",
+      "duration_seconds": 192,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        },
+        {
+          "service": "frontend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "onda-enxuta cm-ocr-onda4: PR #1406 (issue #1401), mergeados PR a PR. Merge pela API do GitHub, um build. Registro pela Action pos-merge depois do health.",
+      "etapas": {
+        "merge_s": 2,
+        "build_s": {
+          "backend": 18,
+          "frontend": 170
+        },
+        "health_s": 0
+      },
+      "responsavel": "pedrorezendefig"
+    },
+    {
       "at": "2026-11-03T22:06:32-03:00",
       "sha": "d726f38ef78b76f018e4a6e554be60a46a1ae78c",
       "app_version": "0.213.0",
