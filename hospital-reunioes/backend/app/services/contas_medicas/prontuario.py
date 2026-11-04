@@ -938,9 +938,11 @@ _ITENS_DO_CENTRO_CIRURGICO: tuple[Callable[[str, str, str, str], bool], ...] = (
     lambda grupo, descricao, _s, _g: grupo == "MEDICAMENTOS" and _ANESTESICO.search(descricao) is not None,
 )
 
-# A folha ruim na conta cirúrgica: duvidosa entra, a não lida conta como ilegível.
-# Na regra do quarto das páginas, só a ilegível e a não lida.
-_ILEGIVEIS = (ILEGIVEL, NAO_LIDA)
+# A folha ruim na conta cirúrgica: duvidosa ou ilegível. Na regra do quarto das
+# páginas, só a ilegível. A não lida fica de fora das duas: é falha da leitura
+# (PDF que falta, fila cheia, prazo, filho que morreu), não da folha, e segue só
+# na ressalva "Confira à mão".
+_RUINS = (DUVIDOSA, ILEGIVEL)
 _QUARTO_DAS_PAGINAS = 0.25
 _FOLHAS_DA_CIRURGIA = (FICHA_DE_ANESTESIA, DESCRICAO_CIRURGICA)
 _FEMININAS = ("ficha", "folha", "descrição", "prescrição", "hemoterapia")
@@ -984,12 +986,13 @@ def bloqueio_das_digitalizadas(
     """A causa e os dados do Erro CM-ARQ-DIGITALIZADO da conta do período, ou None
     quando ela segue (#1400). Para em dois casos: (a) conta cirúrgica sem ficha de
     anestesia nem descrição cirúrgica legíveis no período, em texto ou em OCR
-    legível, e com folha digitalizada ruim que pesa (ou não identificada); (b) mais
-    de um quarto das páginas do período são digitalizadas ilegíveis que pesam."""
+    legível, e com folha digitalizada duvidosa ou ilegível que pesa (ou não
+    identificada); (b) mais de um quarto das páginas do período são digitalizadas
+    ilegíveis que pesam. A não lida não entra em nenhum dos dois."""
     do_periodo = [d for d in prontuario.documentos if _no_periodo(d.data, inicio, fim)]
     digitalizadas = [d for d in do_periodo if d.familia == "DIGITALIZADO"]
     que_pesam = [d for d in digitalizadas if PESO_DA_FOLHA.get(d.subtipo or NAO_IDENTIFICADA) == PESA]
-    ruins = [d for d in que_pesam if d.qualidade in _LIDAS_MAL]
+    ruins = [d for d in que_pesam if d.qualidade in _RUINS]
     legivel = any(d.subtipo in _FOLHAS_DA_CIRURGIA and d.qualidade == LEGIVEL for d in digitalizadas) or any(
         d.familia == "FICHA_ANESTESICA" or _descricao_em_texto(d, texto_por_pagina) for d in do_periodo
     )
@@ -999,7 +1002,7 @@ def bloqueio_das_digitalizadas(
         documento = folha.subtipo or NAO_IDENTIFICADA
         return "digitalizada_da_cirurgia", {"folha": f"{_com_artigo(documento)} (página {folha.pagina_inicial})"}
     paginas = sum(len(d.paginas) for d in do_periodo)
-    ilegiveis = sum(len(d.paginas) for d in que_pesam if d.qualidade in _ILEGIVEIS)
+    ilegiveis = sum(len(d.paginas) for d in que_pesam if d.qualidade == ILEGIVEL)
     if paginas and ilegiveis / paginas > _QUARTO_DAS_PAGINAS:
         return "digitalizadas_ilegiveis", {"ilegiveis": ilegiveis, "paginas": paginas}
     return None

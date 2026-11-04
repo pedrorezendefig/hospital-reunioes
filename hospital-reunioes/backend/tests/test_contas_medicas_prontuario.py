@@ -657,7 +657,7 @@ def frase_da_cirurgia(folha_ruim: str) -> str:
     )
 
 
-@pytest.mark.parametrize("qualidade", ["ilegivel", "duvidosa", "nao_lida"])
+@pytest.mark.parametrize("qualidade", ["ilegivel", "duvidosa"])
 def test_conta_cirurgica_sem_ficha_nem_descricao_legiveis_para_na_ficha_ruim(qualidade):
     frase = bloqueio([CAPA_QUE_BATE, *EM_TEXTO, folha()], {6: FICHA_LIDA_POR_OCR}, {6: qualidade})
 
@@ -744,6 +744,14 @@ def test_cada_item_do_centro_cirurgico_faz_a_conta_cirurgica(cirurgico):
             (TAXA_DE_SALA,),
             id="folha_ruim_que_nao_pesa",
         ),
+        # a não lida é falha da leitura (fila cheia, prazo, PDF que falta), não da folha
+        pytest.param(
+            [*EM_TEXTO, folha()],
+            {6: FICHA_LIDA_POR_OCR},
+            {6: "nao_lida"},
+            (TAXA_DE_SALA,),
+            id="ficha_nao_lida",
+        ),
     ],
 )
 def test_conta_segue_sem_o_bloqueio_da_cirurgia(partes, lidas, qualidades, itens):
@@ -762,7 +770,7 @@ def test_mais_de_um_quarto_das_paginas_do_periodo_ilegiveis_para_a_conta():
     # 2 de 7 (28%), numa conta sem cirurgia; a folha de fora do período não conta.
     partes = [CAPA_QUE_BATE, *EM_TEXTO, folha(), folha(), "evolucao", folha("12/10/2026")]
     lidas = {6: SUJEIRA_DO_OCR, 7: OPME_LIDO_POR_OCR, 9: SUJEIRA_DO_OCR}
-    qualidades = {6: "ilegivel", 7: "nao_lida", 9: "ilegivel"}
+    qualidades = {6: "ilegivel", 7: "ilegivel", 9: "ilegivel"}
 
     assert bloqueio(partes, lidas, qualidades, (DIARIA,)) == frase_das_paginas(2, 7)
 
@@ -790,6 +798,13 @@ def test_mais_de_um_quarto_das_paginas_do_periodo_ilegiveis_para_a_conta():
             {6: SUJEIRA_DO_OCR, 7: SUJEIRA_DO_OCR},
             {6: "duvidosa", 7: "duvidosa"},
             id="duvidosas",
+        ),
+        # não lida é falha da leitura, não da folha: 2 de 7 não lidas seguem
+        pytest.param(
+            [*EM_TEXTO, folha(), folha(), "evolucao"],
+            {6: SUJEIRA_DO_OCR, 7: OPME_LIDO_POR_OCR},
+            {6: "nao_lida", 7: "nao_lida"},
+            id="nao_lidas",
         ),
     ],
 )
