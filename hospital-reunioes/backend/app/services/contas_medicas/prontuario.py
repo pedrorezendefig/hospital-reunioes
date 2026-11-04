@@ -470,6 +470,96 @@ NAO_LIDA = "nao_lida"
 QUALIDADES = (LEGIVEL, DUVIDOSA, ILEGIVEL, NAO_LIDA)
 
 
+# Família da folha digitalizada (#1399): o texto do PDF dela só tem rodapé e
+# assinatura, então ela sai do título que o OCR leu. Vira o subtipo do documento
+# DIGITALIZADO. O peso diz se a folha sustenta item da conta (pesa), ajuda com data
+# e setor (ajuda) ou não tem valor de cobrança (não pesa). As assinaturas vêm do
+# microteste dos dez pares (`local/contas-medicas/microtestes/classificar_dig.py`),
+# sobre o OCR sem acento e em maiúsculas.
+PESA = "pesa"
+AJUDA = "ajuda"
+NAO_PESA = "nao_pesa"
+FICHA_DE_ANESTESIA = "ficha de anestesia"
+DESCRICAO_CIRURGICA = "descrição cirúrgica manuscrita"
+NAO_IDENTIFICADA = "documento não identificado"
+
+_FAMILIAS_DA_FOLHA: list[tuple[str, str, tuple[str, ...]]] = [
+    # o verso da ficha traz os sinais vitais e as medicações do intraoperatório
+    (
+        FICHA_DE_ANESTESIA,
+        PESA,
+        (r"FICHA\s+(DE\s+)?ANEST", r"TECNICA\s+ANEST", r"AGENTES?\s+ANEST", r"INTRA\s*-?\s*OPERAT"),
+    ),
+    (
+        "folha de sala ou de consumo do centro cirúrgico",
+        PESA,
+        (r"FOLHA\s+DE\s+SALA", r"CONSUMO", r"GASTO", r"DEBITO\s+DE\s+SALA", r"MATERIAIS?\s+(E\s+MEDICAMENTOS\s+)?UTILIZAD"),
+    ),
+    ("controle de fios", PESA, (r"FIOS\s+CIRURG",)),
+    ("controle de OPME e etiquetas", PESA, (r"\bOPME\b", r"ETIQUETA", r"\bLOTE\b.*\bREF\b", r"IMPLANT")),
+    (
+        "registro de horários cirúrgicos",
+        PESA,
+        (r"HORARIOS\s+CIRURG", r"ENTRADA\s+(DO\s+)?PACIENTE.*SALA", r"INICIO\s+DA\s+CIRURGIA"),
+    ),
+    ("relatório de uso de equipamento", PESA, (r"RELATORIO\s+DE\s+USO", r"VIDEO\s*(LAPARO|CIRURG)?")),
+    (DESCRICAO_CIRURGICA, PESA, (r"DESCRICAO\s+(DA\s+)?CIRURG", r"ACHADOS\s+OPERAT")),
+    ("prescrição ou checagem manuscrita", PESA, (r"PRESCRICAO", r"CHECAGEM", r"APRAZAMENTO")),
+    ("hemoterapia", PESA, (r"HEMOTERAP|TRANSFUS|HEMOCOMPONENTE|CONCENTRADO\s+DE\s+HEMACIAS",)),
+    ("boletim de internação", AJUDA, (r"BOLETIM\s+DE\s+INTERNA",)),
+    ("laudo de exame", AJUDA, (r"LAUDO", r"RESULTADO", r"RADIOLOG|TOMOGRAF|ULTRASSON")),
+    (
+        "guia da operadora",
+        AJUDA,
+        (
+            r"GUIA\s+DE\s+(SOLICITA|SP/SADT|INTERNA|HONOR)",
+            r"AUTORIZACAO\s+(PREVIA|DA\s+OPERADORA)",
+            r"SENHA\s+DE\s+AUTORIZA",
+        ),
+    ),
+    (
+        "checklist de cirurgia segura",
+        NAO_PESA,
+        (r"CIRURGIA\s+SEGURA", r"SIGN\s*(IN|OUT)|TIME\s*OUT", r"LATERALIDADE|LATERAL\s*:|\bLATER\b", r"IDENTIFICACAO"),
+    ),
+    (
+        "termo de consentimento",
+        NAO_PESA,
+        (r"TERMO\s+DE\s+(CONSENTIMENTO|CIENCIA|RESPONSABILIDADE|AUTORIZA)", r"CONSENTIMENTO", r"DECLARO", r"AUTORIZO"),
+    ),
+    ("receituário", NAO_PESA, (r"RECEITUARIO", r"RECEITA")),
+    ("integrador químico e caixa de instrumental", NAO_PESA, (r"INTEGRADOR", r"ESTERILIZ", r"INSTRUMENTAL|PECAS\s+PARA\s+USO")),
+    ("escala de risco", NAO_PESA, (r"ESCALA", r"ALGORITMO", r"RISCO\s+DE\s+(QUEDA|LESAO)|BRADEN|MORSE", r"AVALIACAO")),
+    (
+        "documento pessoal",
+        NAO_PESA,
+        (r"REPUBLICA\s+FEDERATIVA|CARTEIRA\s+DE\s+IDENTIDADE|CARTEIRINHA|CARTAO\s+NACIONAL",),
+    ),
+    ("eletrocardiograma", NAO_PESA, (r"ELETROCARDIO", r"\bECG\b")),
+]
+
+# Sem título reconhecido, a folha conta como se pesasse: melhor a faturista
+# conferir à toa do que uma ficha que o código não reconheceu passar sem ressalva.
+PESO_DA_FOLHA = {nome: peso for nome, peso, _ in _FAMILIAS_DA_FOLHA} | {NAO_IDENTIFICADA: PESA}
+
+# O título fica no topo da folha: o que casa ali vale três vezes.
+_TOPO_DA_FOLHA = 900
+
+
+def familia_da_folha(ocr: str) -> str:
+    """A família da folha digitalizada pelo que o OCR leu: a que mais casa, com o
+    topo valendo mais. No empate fica a de cima da tabela, que começa pelas que
+    pesam: na dúvida, a folha entra na ressalva."""
+    texto = _sem_acento(ocr).upper()
+    topo = texto[:_TOPO_DA_FOLHA]
+    melhor, maior = NAO_IDENTIFICADA, 0
+    for nome, _, padroes in _FAMILIAS_DA_FOLHA:
+        pontos = sum(len(re.findall(p, texto)) + 2 * len(re.findall(p, topo)) for p in padroes)
+        if pontos > maior:
+            melhor, maior = nome, pontos
+    return melhor
+
+
 def _separar_ocr(texto: str) -> tuple[str, str]:
     """(texto do PDF, texto do OCR); o segundo vazio na página sem OCR."""
     do_pdf, _, do_ocr = texto.partition(MARCA_DO_OCR)

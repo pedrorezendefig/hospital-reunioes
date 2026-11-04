@@ -18,7 +18,14 @@ from pathlib import Path
 
 import pytest
 
-from app.services.contas_medicas.prontuario import MARCA_DO_OCR, ErroLeitura, digitalizadas_da_conta, ler_prontuario
+from app.services.contas_medicas.prontuario import (
+    MARCA_DO_OCR,
+    PESO_DA_FOLHA,
+    ErroLeitura,
+    digitalizadas_da_conta,
+    familia_da_folha,
+    ler_prontuario,
+)
 
 FIXTURES = Path(__file__).parent / "fixtures" / "contas_medicas" / "prontuario"
 QUEBRA = "<<<QUEBRA DE PÁGINA>>>"
@@ -439,3 +446,38 @@ def test_digitalizadas_da_conta_sao_as_do_atendimento_com_data_no_periodo():
 
     assert digitalizadas_da_conta(paginas, ATENDIMENTO, date(2026, 10, 1), date(2026, 10, 5)) == (6,)
     assert digitalizadas_da_conta(paginas, ATENDIMENTO, date(2026, 10, 1), None) == (6, 7)
+
+
+# Família da folha digitalizada (issue #1399): o texto do PDF dessas páginas só tem
+# rodapé e assinatura, então ela sai do título que o OCR leu. OCR sintético, como o
+# tesseract devolve: acento faltando, caixa misturada, sujeira entre as palavras.
+@pytest.mark.parametrize(
+    ("ocr", "familia", "peso"),
+    [
+        ("FICHA DE ANESTESIA\nTecnica anestesica: geral balanceada", "ficha de anestesia", "pesa"),
+        ("SINAIS VITAIS E MEDICACOES DO INTRA-OPERATORIO\nPA FC SpO2", "ficha de anestesia", "pesa"),
+        ("FOLHA DE SALA\nMateriais utilizados na cirurgia", "folha de sala ou de consumo do centro cirúrgico", "pesa"),
+        ("CONTROLE DE FIOS CIRURGICOS\nvicryl 2-0 nylon 3-0", "controle de fios", "pesa"),
+        ("CONTROLE DE OPME\netiqueta lote ref", "controle de OPME e etiquetas", "pesa"),
+        ("REGISTRO DE HORARIOS CIRURGICOS\nentrada do paciente na sala 07:40", "registro de horários cirúrgicos", "pesa"),
+        ("RELATORIO DE USO DE EQUIPAMENTO\nvideolaparoscopia", "relatório de uso de equipamento", "pesa"),
+        ("DESCRICAO CIRURGICA\nachados operatorios: vesicula", "descrição cirúrgica manuscrita", "pesa"),
+        ("PRESCRICAO MEDICA\nchecagem e aprazamento", "prescrição ou checagem manuscrita", "pesa"),
+        ("SOLICITACAO DE HEMOCOMPONENTE\nconcentrado de hemacias 1 bolsa", "hemoterapia", "pesa"),
+        ("BOLETIM DE INTERNACAO\nhora da internacao", "boletim de internação", "ajuda"),
+        ("LAUDO DE TOMOGRAFIA\nimpressao diagnostica", "laudo de exame", "ajuda"),
+        ("GUIA DE SOLICITACAO DE INTERNACAO\nsenha de autorizacao", "guia da operadora", "ajuda"),
+        ("LISTA DE VERIFICACAO CIRURGIA SEGURA\nsign in time out", "checklist de cirurgia segura", "nao_pesa"),
+        ("TERMO DE CONSENTIMENTO INFORMADO\ndeclaro que fui informado", "termo de consentimento", "nao_pesa"),
+        ("RECEITUARIO\nuso oral", "receituário", "nao_pesa"),
+        ("INTEGRADOR QUIMICO\nesterilizacao a vapor", "integrador químico e caixa de instrumental", "nao_pesa"),
+        ("ESCALA DE BRADEN\nrisco de lesao por pressao", "escala de risco", "nao_pesa"),
+        ("REPUBLICA FEDERATIVA DO BRASIL\ncarteira de identidade", "documento pessoal", "nao_pesa"),
+        ("ELETROCARDIOGRAMA\nritmo sinusal ECG 12 derivacoes", "eletrocardiograma", "nao_pesa"),
+        ("~~ ;; .. rr !! ii ll", "documento não identificado", "pesa"),
+        ("", "documento não identificado", "pesa"),
+    ],
+)
+def test_a_folha_digitalizada_ganha_familia_e_peso_pelo_titulo_que_o_ocr_leu(ocr, familia, peso):
+    assert familia_da_folha(ocr) == familia
+    assert PESO_DA_FOLHA[familia] == peso
