@@ -116,6 +116,7 @@ beforeEach(() => {
       if (url === "/api/contas-medicas/me") return new Response(JSON.stringify({ perfil: "faturista", permissoes }));
       if (url.endsWith("/descartar")) return respostaDoDescarte();
       if (url.endsWith("/analisar-de-novo")) return aoAnalisarDeNovo(url);
+      if (url.endsWith("/analisar-assim-mesmo")) return aoAnalisarDeNovo(url);
       return new Response("{}", { status: 404 });
     }),
   );
@@ -712,6 +713,84 @@ describe("Analisar de novo sem anexar o PDF (issue #1339)", () => {
 
     expect(botoes(daIA)).toEqual(["Analisar de novo", "Descartar"]);
     expect(botoes(doArquivo)).toEqual(["Enviar de novo", "Descartar"]);
+  });
+});
+
+describe("Analisar assim mesmo a conta parada por folha escaneada ilegível (issue #1401)", () => {
+  const DIGITALIZADO = conta({
+    id: "erro-digitalizado",
+    numero_atendimento: "31262",
+    situacao: "ERRO",
+    erro_motivo: "Não dá para analisar esta conta: 3 das 10 páginas do prontuário deste período são folhas digitalizadas que não consegui ler.",
+    erro_codigo: "CM-ARQ-DIGITALIZADO",
+    erro_arquivo: "prontuario",
+    erro_acao: "enviar_de_novo",
+    pode_analisar_assim_mesmo: true,
+  });
+  const SEM_PODER = { ...DIGITALIZADO, id: "erro-vencido", numero_atendimento: "31263", pode_analisar_assim_mesmo: false };
+  const DO_ARQUIVO = conta({
+    id: "erro-conta",
+    numero_atendimento: "31261",
+    situacao: "ERRO",
+    erro_motivo: "Não consegui ler a conta inteira",
+    erro_codigo: "CM-ARQ-SOMA",
+    erro_arquivo: "conta",
+    erro_acao: "enviar_de_novo",
+  });
+
+  async function cartoes(): Promise<HTMLElement[]> {
+    filaDoServidor = { ...FILA, meus_envios: [DIGITALIZADO, SEM_PODER, DO_ARQUIVO] };
+    render(<ContasMedicasPage />);
+    await linhas();
+    aba(/^Meus envios/);
+    return linhas();
+  }
+
+  const botoes = (cartao: HTMLElement) =>
+    within(cartao)
+      .getAllByRole("button")
+      .map((b) => b.textContent)
+      .filter((t) => t === "Analisar assim mesmo" || t === "Analisar de novo" || t === "Enviar de novo");
+
+  it("aparece ao lado de Enviar de novo só quando o servidor deixa", async () => {
+    const [digitalizado, semPoder, doArquivo] = await cartoes();
+
+    expect(botoes(digitalizado)).toEqual(["Enviar de novo", "Analisar assim mesmo"]);
+    expect(botoes(semPoder)).toEqual(["Enviar de novo"]);
+    expect(botoes(doArquivo)).toEqual(["Enviar de novo"]);
+  });
+
+  it("o clique chama a rota da conta, sem arquivo, e o cartão passa para Na fila", async () => {
+    aoAnalisarDeNovo = () => {
+      filaDoServidor = {
+        ...FILA,
+        meus_envios: [conta({ id: "erro-digitalizado", numero_atendimento: "31262", situacao: "NA_FILA" })],
+      };
+      return new Response(JSON.stringify({ situacao: "NA_FILA" }));
+    };
+    const [digitalizado] = await cartoes();
+
+    fireEvent.click(within(digitalizado).getByRole("button", { name: "Analisar assim mesmo" }));
+
+    await waitFor(async () => expect((await linhas())[0].textContent).toContain("Na fila"));
+    const chamada = chamadas.find((c) => c.init?.method === "POST");
+    expect(chamada?.url).toBe("/api/contas-medicas/contas/erro-digitalizado/analisar-assim-mesmo");
+    expect(chamada?.init?.body).toBeUndefined();
+    expect((chamada?.init?.headers as Record<string, string>).Authorization).toBe("Bearer token-de-teste");
+  });
+
+  it("a recusa do servidor aparece no cartão com a frase dele", async () => {
+    aoAnalisarDeNovo = () =>
+      new Response(JSON.stringify({ detail: "O PDF já passou dos 7 dias e saiu do sistema. Envie de novo." }), {
+        status: 409,
+      });
+    const [digitalizado] = await cartoes();
+
+    fireEvent.click(within(digitalizado).getByRole("button", { name: "Analisar assim mesmo" }));
+
+    expect((await within(digitalizado).findByRole("alert")).textContent).toBe(
+      "O PDF já passou dos 7 dias e saiu do sistema. Envie de novo.",
+    );
   });
 });
 
