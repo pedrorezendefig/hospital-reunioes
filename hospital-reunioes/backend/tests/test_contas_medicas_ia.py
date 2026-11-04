@@ -462,6 +462,23 @@ class TestRespostaForaDoFormato:
         (chamada,) = banco.tabelas["cm_chamada_ia"]
         assert (chamada["tokens_saida"], chamada["sucesso"]) == (200, False)
 
+    def test_resposta_cortada_na_janela_do_modelo_nao_se_repete_diz_a_causa_e_grava_o_custo(self, provedor):
+        # Entrada mais saída passou da janela de contexto: o JSON também veio pela
+        # metade, e repetir pagaria a saída longa outra vez para o mesmo corte.
+        banco = _BancoDeCusto()
+        cortada = mensagem(
+            '{"atendimento": "31245", "movimentacoes": [', USO_PADRAO, parada="model_context_window_exceeded"
+        )
+        provedor.responder(httpx2.Response(200, json=cortada))
+
+        with pytest.raises(ia.ErroDaIA) as falha:
+            _extrair(banco)
+
+        assert len(provedor.corpos) == 1
+        assert falha.value.causa == "tamanho"
+        (chamada,) = banco.tabelas["cm_chamada_ia"]
+        assert (chamada["tokens_saida"], chamada["sucesso"]) == (200, False)
+
     def test_nenhum_schema_enviado_passa_de_16_parametros_com_uniao(self, provedor):
         # A saída estrita da Anthropic recusa com 400 o schema com mais de 16
         # parâmetros anuláveis ou com `anyOf`. O passo A tinha 20 e toda conta

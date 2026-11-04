@@ -505,11 +505,18 @@ def _chamar_a_ia[Saida: BaseModel](
             ) as stream:
                 resposta = stream.get_final_message()
             uso.somar(resposta, preco)
-            if resposta.stop_reason == "max_tokens":
-                # Cortada no teto: o JSON veio pela metade, e repetir dá o mesmo corte.
-                logger.warning("[ContasMedicas] IA %s, tentativa %s: resposta cortada no teto", modelo, tentativa)
+            if resposta.stop_reason in ("max_tokens", "model_context_window_exceeded"):
+                # Cortada no teto de saída ou na janela de contexto do modelo: o JSON
+                # veio pela metade, e repetir dá o mesmo corte.
+                logger.warning(
+                    "[ContasMedicas] IA %s, tentativa %s: resposta cortada (%s)",
+                    modelo,
+                    tentativa,
+                    resposta.stop_reason,
+                )
+                limite = f"teto de {MAX_TOKENS} tokens" if resposta.stop_reason == "max_tokens" else "janela do modelo"
                 falha = ErroDaIA(
-                    f"A resposta da IA passou do teto de {MAX_TOKENS} tokens",
+                    f"A resposta da IA passou do {limite}",
                     causa="tamanho",
                     tipo="RespostaCortada",
                     http=200,
