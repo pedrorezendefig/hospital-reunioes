@@ -510,6 +510,40 @@ describe("o Código do erro no cartão (issue #1337)", () => {
     expect(daConta.textContent).toContain("copie com Ctrl+C");
   });
 
+  it("a folha digitalizada que não deu para ler deixa o prontuário vermelho, com a frase, o código e Enviar de novo (issue #1400)", async () => {
+    const frase =
+      "Não dá para analisar esta conta: a ficha de anestesia (página 214) é uma folha digitalizada que não consegui ler. Digitalize de novo, com a folha em pé, e envie o prontuário de novo.";
+    filaDoServidor = {
+      ...FILA,
+      meus_envios: [
+        conta({
+          id: "erro-digitalizada",
+          numero_atendimento: "31262",
+          numero_conta: "48003",
+          situacao: "ERRO",
+          prontuario_paginas: 300,
+          erro_motivo: frase,
+          erro_codigo: "CM-ARQ-DIGITALIZADO",
+          erro_detalhe: "FalhaDeLeitura, etapa leitura_do_prontuario (leitura do prontuário), processamento.py:441",
+          erro_em: "2026-11-03T12:05:00+00:00",
+          erro_arquivo: "prontuario",
+          erro_acao: "enviar_de_novo",
+        }),
+      ],
+    };
+    render(<ContasMedicasPage />);
+    await linhas();
+    aba(/^Meus envios/);
+    const [cartao] = await linhas();
+
+    expect(quadrado(cartao, "Prontuário").getAttribute("data-estado")).toBe("erro");
+    expect(quadrado(cartao, "Conta").getAttribute("data-estado")).toBe("chegou");
+    expect(cartao.textContent).toContain(frase);
+    expect(within(cartao).getByText("CM-ARQ-DIGITALIZADO")).toBeTruthy();
+    expect(within(cartao).getByRole("button", { name: "Enviar de novo" })).toBeTruthy();
+    expect(within(cartao).queryByRole("button", { name: "Analisar de novo" })).toBeNull();
+  });
+
   it("a conta que não está em Erro não tem código nem os botões da TI", async () => {
     const itens = await cartoes();
 

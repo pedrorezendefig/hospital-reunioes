@@ -1209,7 +1209,9 @@ class TestOcrNaFila:
     def test_o_guia_mostra_no_parecer_parcial_a_ressalva_das_folhas_da_propria_parcial(self, monkeypatch):
         """Ressalva no Parecer parcial (#1399). As três digitalizadas (3, 4 e 5) são
         fichas de anestesia de 02/10, data que herdam da admissão: entram só na
-        parcial de 02 a 04/10. A 3 saiu legível e fica de fora."""
+        parcial de 02 a 04/10. A 3 saiu legível e fica de fora. As duas fisioterapias
+        de 03/10 deixam as ilegíveis em 2 das 9 páginas do período, abaixo do quarto
+        que para a conta (#1400)."""
         qualidades = {3: "legivel", 4: "ilegivel", 5: "nao_lida"}
         ficha = f"\n{MARCA_DO_OCR}\nFICHA DE ANESTESIA\nTecnica anestesica: geral balanceada\n"
 
@@ -1223,7 +1225,7 @@ class TestOcrNaFila:
 
         monkeypatch.setattr(processamento, "ler_digitalizadas", ocr)
         banco = _cenario()
-        _enviar(banco, _conta("48811", 2, 4), _conta("48812", 5, 6), _prontuario(digitalizadas=3))
+        _enviar(banco, _conta("48811", 2, 4), _conta("48812", 5, 6), _prontuario(fisioterapias=2, digitalizadas=3))
 
         _rodar_o_job(banco)
 
@@ -1236,6 +1238,39 @@ class TestOcrNaFila:
             "é uma folha digitalizada que não consegui ler bem.",
         ]
         assert [f for f in segunda["faltantes"] if f.startswith("Confira à mão")] == []
+
+    def test_folhas_digitalizadas_ilegiveis_demais_param_a_conta_antes_do_dicionario_e_da_ia(
+        self, monkeypatch, ia_falsa
+    ):
+        """Bloqueio CM-ARQ-DIGITALIZADO (#1400): as três digitalizadas (3, 4 e 5),
+        sem título que o OCR leia, saem ilegíveis. São 3 das 10 páginas do período
+        (02 a 06/10), mais de um quarto: a conta para na leitura do prontuário."""
+        sujeira = f"\n{MARCA_DO_OCR}\n~~ ;; .. rr !! ii ll\n"
+
+        def ocr(_pdf: bytes, paginas, primeiro=()):
+            return [
+                Pagina(p.numero, p.texto + sujeira, False, True, "ilegivel") if p.numero in (3, 4, 5) else p
+                for p in paginas
+            ]
+
+        monkeypatch.setattr(processamento, "ler_digitalizadas", ocr)
+        banco = _cenario()
+        banco.tabelas["cm_item_dicionario"] = []  # o Clexane sem par iria à IA no dicionário
+        _enviar(banco, _conta(), _prontuario(digitalizadas=3))
+
+        _rodar_o_job(banco)
+
+        assert _erro_no_cartao(banco) == (
+            "CM-ARQ-DIGITALIZADO",
+            "Não dá para analisar esta conta: 3 das 10 páginas do prontuário deste período são folhas "
+            "digitalizadas que não consegui ler. Digitalize de novo essas folhas, em pé, e envie o prontuário de "
+            "novo.",
+            "prontuario",
+            ENVIAR_DE_NOVO,
+        )
+        (conta,) = banco.tabelas["cm_conta"]
+        assert conta["erro_detalhe"]["etapa"] == "leitura_do_prontuario"
+        assert ia_falsa.requisicoes == 0
 
 
 class TestReprocesso:
