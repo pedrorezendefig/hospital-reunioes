@@ -15,6 +15,7 @@ as parciais e ao reenvio.
 from __future__ import annotations
 
 from collections.abc import Callable, Mapping, Sequence
+from concurrent.futures import ThreadPoolExecutor
 from datetime import date, datetime, time
 from difflib import SequenceMatcher
 from typing import Any
@@ -525,12 +526,18 @@ def _ler_pela_ia(
     orientacoes = orientacoes_de_leitura(list(regras))
     # A instrução, as orientações e os rótulos dos blocos vão em toda chamada.
     reserva = len(load_prompt("contas_medicas_passo_a")) + len(orientacoes) + _ROTULOS_DOS_BLOCOS
-    partes = [
-        ia.extrair_eventos(
+    entradas = montar_entradas(prontuario, achados, reserva=reserva)
+
+    def ler(entrada: str) -> dict[str, Any]:
+        return ia.extrair_eventos(
             entrada, orientacoes, supabase=supabase, conta_id=conta_id, atendimento_id=atendimento_id
         ).model_dump()
-        for entrada in montar_entradas(prontuario, achados, reserva=reserva)
-    ]
+
+    # As janelas vão à IA ao mesmo tempo: cada leitura leva minutos, e lidas
+    # uma depois da outra o prontuário grande dobrava o tempo da análise. A
+    # ordem das partes fica a das janelas, que a união espera.
+    with ThreadPoolExecutor(max_workers=len(entradas), thread_name_prefix="passo-a") as janelas:
+        partes = list(janelas.map(ler, entradas))
     eventos = unir_eventos(partes)
     _conferir_evidencias(eventos, _texto_da_pagina(prontuario, _identificacao(prontuario)))
     _prevalecer_o_codigo(eventos, prontuario.conteudo.movimentacoes)

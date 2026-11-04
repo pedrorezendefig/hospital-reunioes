@@ -41,7 +41,7 @@ Jobs:
      o PDF e o texto extraído de todo arquivo com `apagar_em` vencido e carimba
      `apagado_em` (issue #1125). Idempotente: o carimbo tira a linha da varredura.
  11. processar_fila_contas_medicas: a cada 10 segundos, devolve à fila a conta presa
-     em PROCESSANDO e entrega as contas NA_FILA ao executor de 2 vagas (issue #1124,
+     em PROCESSANDO e entrega as contas NA_FILA ao executor de `CM_VAGAS` vagas (issue #1124,
      ADR 0070, decisão 5). O claim é atômico: duas passadas não pegam a mesma conta.
  12. avisar_contratos_contas_medicas: 07:15 diário, avisa no sino o reajuste de cada
      contrato de operadora na data do aviso (vencimento menos a antecedência), issue

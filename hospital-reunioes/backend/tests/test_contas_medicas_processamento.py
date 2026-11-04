@@ -47,6 +47,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 from anthropic_apoio import cliente_por_transporte, erro, mensagem, nome_do_schema, nomear_schemas, uso  # noqa: E402
 from contas_medicas_apoio import matriz_aplicada  # noqa: E402
 
+from app.config import Settings, settings  # noqa: E402
 from app.dependencies import get_current_user, get_supabase_client  # noqa: E402
 from app.limiter import limiter  # noqa: E402
 from app.routers import contas_medicas_envio as envio_router  # noqa: E402
@@ -2425,10 +2426,37 @@ class TestJobNoScheduler:
         assert entregues == [(banco, True)]
 
 
-class TestDuasVagas:
-    def test_o_job_entrega_no_maximo_duas_contas_enquanto_as_duas_vagas_estao_ocupadas(self, monkeypatch):
+class TestVagas:
+    def test_sem_a_variavel_sao_quatro_vagas(self):
+        assert Settings.model_fields["cm_vagas"].default == 4
+        assert processamento.VAGAS == settings.cm_vagas
+
+    def test_as_vagas_seguem_a_variavel_cm_vagas(self):
+        """Num processo novo, para não recarregar `settings` nem `processamento`
+        dentro da suíte: com `CM_VAGAS=3`, a fila tem três vagas e três workers."""
+        import subprocess
+
+        ambiente = {**os.environ, "CM_VAGAS": "3"}
+        codigo = (
+            "from app.services.contas_medicas import processamento as p; "
+            "print(p.VAGAS, p._vagas._value, p._executor._max_workers)"
+        )
+        processo = subprocess.run(
+            [sys.executable, "-c", codigo],
+            capture_output=True,
+            text=True,
+            env=ambiente,
+            cwd=Path(__file__).resolve().parents[1],
+            timeout=120,
+        )
+
+        assert processo.returncode == 0, processo.stderr[-600:]
+        assert processo.stdout.split() == ["3", "3", "3"]
+
+    def test_o_job_entrega_no_maximo_uma_conta_por_vaga_enquanto_as_vagas_estao_ocupadas(self, monkeypatch):
         monkeypatch.setattr(processamento, "processar", lambda _sb, _conta: None)
-        banco = _Banco({"cm_conta": [_conta_na_fila(f"c{n}", n) for n in (1, 2, 3)]})
+        vagas = processamento.VAGAS
+        banco = _Banco({"cm_conta": [_conta_na_fila(f"c{n}", n) for n in range(1, vagas + 2)]})
         guardadas = []
 
         class _Guardado:
@@ -2436,15 +2464,15 @@ class TestDuasVagas:
                 guardadas.append((funcao, args))
 
         try:
-            assert processamento.alimentar_fila(banco, AGORA, executor=_Guardado()) == 2
+            assert processamento.alimentar_fila(banco, AGORA, executor=_Guardado()) == vagas
             assert processamento.alimentar_fila(banco, AGORA, executor=_Guardado()) == 0
-            assert [c["situacao"] for c in banco.tabelas["cm_conta"]] == ["PROCESSANDO", "PROCESSANDO", "NA_FILA"]
+            assert [c["situacao"] for c in banco.tabelas["cm_conta"]] == ["PROCESSANDO"] * vagas + ["NA_FILA"]
         finally:
             for funcao, args in guardadas:
                 funcao(*args)  # a análise termina e devolve a vaga
 
         assert processamento.alimentar_fila(banco, AGORA, executor=_Guardado()) == 1
-        for funcao, args in guardadas[2:]:
+        for funcao, args in guardadas[vagas:]:
             funcao(*args)
 
 
@@ -2465,7 +2493,7 @@ class TestKitDeConhecimento:
         for trecho in (
             "segundo plano",
             "sino",
-            "duas contas ao mesmo tempo",
+            "quatro contas ao mesmo tempo",
             "três tentativas",
             "Este PDF não tem texto",
             "Não consegui ler a conta inteira",
