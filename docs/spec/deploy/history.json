@@ -2,6 +2,49 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-11-04T17:14:04-03:00",
+      "sha": "cd44a5832a9142e4657c0760036ccc4e8e965fb0",
+      "app_version": "0.216.0",
+      "subject": "PR #1414, sem issue: Contas médicas, quatro análises ao mesmo tempo (CM_VAGAS) e janelas do prontuário em paralelo",
+      "raw_subject": "chore(deploy): registro do PR avulso (#1414)",
+      "scope": [
+        "backend"
+      ],
+      "prds": [],
+      "result": "healthy",
+      "duration_seconds": 70,
+      "services_touched": [
+        "backend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        },
+        {
+          "service": "frontend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "PR avulso: PR #1414, sem issue. Merge pela API do GitHub, um build. Registro pela Action pos-merge depois do health.",
+      "etapas": {
+        "merge_s": 3,
+        "build_s": {
+          "backend": 27
+        },
+        "health_s": 20
+      },
+      "responsavel": "pedrorezendefig"
+    },
+    {
       "at": "2026-11-04T16:09:40-03:00",
       "sha": "c425120722d5b03b75e975543cd97d8b20b58991",
       "app_version": "0.215.1",
