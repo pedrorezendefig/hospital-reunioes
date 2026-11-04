@@ -11,6 +11,14 @@ de novo: o cartão mostra esse botão e a rota recusa com a frase.
 
 Pode quem enviou a conta e quem tem o Painel completo, a mesma regra do
 descarte.
+
+Analisar assim mesmo (issue #1401, PRD #1397): a conta parada em
+`CM-ARQ-DIGITALIZADO` volta para a fila com as mesmas guardas e uma marca que
+faz a análise pular o bloqueio das folhas digitalizadas e seguir com a
+ressalva "Confira à mão" no Parecer parcial. A marca mora em `faltantes`, que
+já guarda o que não é coluna (o tempo das etapas, o reenvio), e é o id do
+prontuário da análise: o prontuário novo do atendimento é outro arquivo, e a
+marca deixa de valer sozinha.
 """
 
 from __future__ import annotations
@@ -30,6 +38,12 @@ MENSAGEM_SEM_PERMISSAO = "Só quem enviou a conta ou a gestão pode analisar de 
 MENSAGEM_FORA_DO_ERRO = "Só a conta em Erro pode ser analisada de novo."
 MENSAGEM_ERRO_DO_ARQUIVO = "O problema está no PDF. Envie o arquivo de novo."
 MENSAGEM_VENCIDO = f"{CATALOGO['vencido'].frase} Envie de novo."
+MENSAGEM_SEM_PERMISSAO_ASSIM_MESMO = "Só quem enviou a conta ou a gestão pode analisar assim mesmo."
+MENSAGEM_SO_DIGITALIZADO = "Analisar assim mesmo é só para a conta parada por folha digitalizada que não deu para ler."
+
+# O Erro das folhas digitalizadas que sustentam a conta (#1400) e a marca que o pula.
+DIGITALIZADO = CATALOGO["digitalizadas_ilegiveis"].codigo
+MARCA_ASSIM_MESMO = "analisar_assim_mesmo"
 
 
 class ContaNaoEncontradaError(LookupError):
@@ -85,6 +99,18 @@ def acao_do_cartao(conta: dict, guardado: bool) -> Acao | None:
     return acao
 
 
+def pode_analisar_assim_mesmo(conta: dict, guardado: bool) -> bool:
+    """O botão Analisar assim mesmo do cartão: a conta em Erro por folha
+    digitalizada, com os PDFs ainda no sistema."""
+    return conta.get("situacao") == "ERRO" and conta.get("erro_codigo") == DIGITALIZADO and guardado
+
+
+def marca_assim_mesmo(conta: dict) -> str | None:
+    """O id do prontuário com que a pessoa mandou analisar assim mesmo, ou None."""
+    faltantes = conta.get("faltantes")
+    return faltantes.get(MARCA_ASSIM_MESMO) if isinstance(faltantes, dict) else None
+
+
 def _quem_enviou(supabase, conta: dict) -> str | None:
     """O `cm_envio.usuario_id` do PDF da conta."""
     if not conta.get("arquivo_id"):
@@ -97,23 +123,22 @@ def _quem_enviou(supabase, conta: dict) -> str | None:
     return envios[0].get("usuario_id") if envios else None
 
 
-def analisar_de_novo(supabase, conta_id: str, me: dict, agora: datetime) -> None:
-    """A conta volta para a fila com as tentativas zeradas e o Erro limpo."""
+def _conta_da_pessoa(supabase, conta_id: str, me: dict, sem_permissao: str) -> dict:
     contas = supabase.table("cm_conta").select("*").eq("id", conta_id).limit(1).execute().data or []
     if not contas:
         raise ContaNaoEncontradaError(conta_id)
     conta = contas[0]
     if not ve_todas(me) and _quem_enviou(supabase, conta) != me.get("id"):
-        raise SemPermissaoError(MENSAGEM_SEM_PERMISSAO)
+        raise SemPermissaoError(sem_permissao)
     if conta.get("situacao") != "ERRO":
         raise NaoAnalisavelError(MENSAGEM_FORA_DO_ERRO)
-    if acao_do_codigo(conta.get("erro_codigo")) != ANALISAR_DE_NOVO:
-        raise NaoAnalisavelError(MENSAGEM_ERRO_DO_ARQUIVO)
-    if conta_id not in com_pdf_guardado(supabase, [conta], agora):
-        raise NaoAnalisavelError(MENSAGEM_VENCIDO)
+    return conta
 
-    # A mesma guarda da situação no UPDATE: duas abas que clicam juntas põem
-    # a conta na fila uma vez só.
+
+def _de_volta_para_a_fila(supabase, conta_id: str, campos: dict | None = None) -> None:
+    """A conta na fila com as tentativas zeradas e o Erro limpo, com a mesma
+    guarda da situação no UPDATE: duas abas que clicam juntas põem a conta na
+    fila uma vez só."""
     voltou = (
         supabase.table("cm_conta")
         .update(
@@ -124,6 +149,7 @@ def analisar_de_novo(supabase, conta_id: str, me: dict, agora: datetime) -> None
                 "erro_codigo": None,
                 "erro_detalhe": None,
                 "processando_desde": None,
+                **(campos or {}),
             }
         )
         .eq("id", conta_id)
@@ -134,3 +160,44 @@ def analisar_de_novo(supabase, conta_id: str, me: dict, agora: datetime) -> None
     )
     if not voltou:
         raise NaoAnalisavelError(MENSAGEM_FORA_DO_ERRO)
+
+
+def analisar_de_novo(supabase, conta_id: str, me: dict, agora: datetime) -> None:
+    """A conta volta para a fila com as tentativas zeradas e o Erro limpo."""
+    conta = _conta_da_pessoa(supabase, conta_id, me, MENSAGEM_SEM_PERMISSAO)
+    if acao_do_codigo(conta.get("erro_codigo")) != ANALISAR_DE_NOVO:
+        raise NaoAnalisavelError(MENSAGEM_ERRO_DO_ARQUIVO)
+    if conta_id not in com_pdf_guardado(supabase, [conta], agora):
+        raise NaoAnalisavelError(MENSAGEM_VENCIDO)
+    _de_volta_para_a_fila(supabase, conta_id)
+
+
+def analisar_assim_mesmo(supabase, conta_id: str, me: dict, agora: datetime) -> None:
+    """A conta em `CM-ARQ-DIGITALIZADO` volta para a fila com a marca no
+    prontuário da análise: a próxima análise não para nas folhas digitalizadas."""
+    conta = _conta_da_pessoa(supabase, conta_id, me, MENSAGEM_SEM_PERMISSAO_ASSIM_MESMO)
+    if conta.get("erro_codigo") != DIGITALIZADO:
+        raise NaoAnalisavelError(MENSAGEM_SO_DIGITALIZADO)
+    if conta_id not in com_pdf_guardado(supabase, [conta], agora):
+        raise NaoAnalisavelError(MENSAGEM_VENCIDO)
+    faltantes = conta.get("faltantes")
+    guardado = dict(faltantes) if isinstance(faltantes, dict) else {"itens": faltantes or []}
+    guardado[MARCA_ASSIM_MESMO] = prontuario_da_analise(supabase, conta["atendimento_id"])["id"]
+    _de_volta_para_a_fila(supabase, conta_id, {"faltantes": guardado})
+
+
+def prontuario_da_analise(supabase, atendimento_id: str) -> dict | None:
+    """O prontuário que a análise lê: o mais novo do atendimento ainda no bucket."""
+    achados = (
+        supabase.table("cm_arquivo")
+        .select("*")
+        .eq("atendimento_id", atendimento_id)
+        .eq("tipo", "PRONTUARIO")
+        .is_("apagado_em", "null")
+        .order("criado_em", desc=True)
+        .limit(1)
+        .execute()
+        .data
+        or []
+    )
+    return achados[0] if achados else None
