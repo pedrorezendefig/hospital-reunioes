@@ -57,10 +57,9 @@ faturistas. Deixe o guia ao lado do MV: ele cabe em meia tela.
 
 ## Quando o topo diz PARECER PARCIAL
 
-A faixa amarela no topo lista o que o prontuário não trouxe. As linhas
-"Confira à mão no prontuário a página ..." são folhas escaneadas que o sistema
-não leu bem: abra o PDF do prontuário nessas páginas e confira à mão, porque o
-que está nelas pode faltar no guia.
+As linhas "Confira à mão no prontuário a página ..." apontam folhas escaneadas
+que o sistema leu mal. Abra o PDF do prontuário nessas páginas e confira, porque
+o que está nelas pode faltar no guia.
 
 ![Topo do guia com a faixa Parecer parcial e as páginas a conferir à mão](../../../assets/contas-medicas/guia-ressalva.png)
 

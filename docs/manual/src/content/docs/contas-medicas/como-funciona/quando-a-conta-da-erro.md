@@ -1,9 +1,9 @@
 ---
 title: Quando a conta dá erro
 description: O que cada Código do erro quer dizer, quem resolve e o que o Copiar para a TI leva.
-prd: [1335]
-draft: false
-busca: [falha, deu erro, travou, código de erro, não analisou, tente de novo]
+prd: [1335, 1397]
+draft: true
+busca: [falha, deu erro, travou, código de erro, não analisou, tente de novo, folha ilegível, escaneada]
 sidebar:
   order: 34
 ---
@@ -20,6 +20,8 @@ O botão do cartão diz o que fazer:
   análise com os arquivos que já estão no sistema, sem anexar nada.
 - **Enviar de novo**: o problema está no PDF, ou ele já passou dos 7 dias e
   saiu do sistema. Exporte de novo pelo MV e envie.
+- **Analisar assim mesmo**: só na conta parada em `CM-ARQ-DIGITALIZADO`, ao
+  lado de **Enviar de novo**. Veja a seção abaixo.
 
 Nada se repete sozinho: a conta fica em **Erro** até alguém clicar.
 
@@ -40,6 +42,7 @@ exemplo).
 | `CM-ARQ-CABECALHO` | `Não achei o atendimento e o plano no cabeçalho da conta.` | O cabeçalho da conta veio cortado ou fora do modelo do MV. | Quem enviou, com **Enviar de novo**. |
 | `CM-ARQ-INCOMPLETO` | `Prontuário com arquivo incompleto: o rodapé indica N páginas e vieram N.` | Faltam páginas no prontuário. | Quem enviou exporta o prontuário completo e usa **Enviar de novo**. |
 | `CM-ARQ-SEM-PRONTUARIO` | `O prontuário deste atendimento não está no sistema. Envie o prontuário de novo.` | O prontuário do atendimento não chegou ou já saiu do sistema. | Quem enviou, mandando o prontuário de novo. |
+| `CM-ARQ-DIGITALIZADO` | `Não dá para analisar esta conta: a ficha de anestesia (página N) é uma folha digitalizada que não consegui ler.` | Folhas escaneadas do prontuário que sustentam a conta não deram para ler. A frase diz qual página, ou quantas são. | Quem enviou, com **Enviar de novo** ou **Analisar assim mesmo**. |
 | `CM-ARQ-VENCIDO` | `O PDF já passou dos 7 dias e saiu do sistema.` | O sistema guarda os PDFs por 7 dias. | Quem enviou, com **Enviar de novo**. |
 | `CM-CFG-MEMORIA` | `A operadora N está sem memória carregada. A gestão carrega em Operadoras.` | A operadora da conta ainda não tem memória. | A gestão carrega a memória em **Operadoras**, e depois quem enviou clica em **Analisar de novo**. |
 | `CM-IA-CHAVE` | `A chave da IA não está configurada.` | O acesso do app à IA não está configurado. | A TI. Depois, **Analisar de novo**. |
@@ -51,6 +54,29 @@ exemplo).
 | `CM-IA-ANTIGO` | `Tente de novo em alguns minutos` | Erro gravado antes de existirem os códigos, sem a causa. | Quem enviou, com **Analisar de novo**. |
 | `CM-APP-DEFEITO` | `A análise parou na [etapa] por um defeito do app.` | Um defeito do app interrompeu a análise. | Quem enviou tenta **Analisar de novo**. Se repetir, a TI. |
 | `CM-APP-TENTATIVAS` | `A análise não terminou em três tentativas: o app reiniciou ou travou na [etapa].` | O app reiniciou ou travou três vezes durante a análise. | Quem enviou tenta **Analisar de novo**. Se repetir, a TI. |
+
+## Folhas escaneadas que não deram para ler
+
+Parte do prontuário chega escaneada, como imagem. O sistema tenta ler essas
+folhas e mede o quanto conseguiu (veja
+[Como a conta é conferida](../como-a-conta-e-conferida/#parecer-parcial)). A
+conta para em `CM-ARQ-DIGITALIZADO` em dois casos, sempre olhando só o
+período dela:
+
+- A conta tem cirurgia (taxa de sala, honorário de procedimento
+  cirúrgico, gás do centro cirúrgico ou anestésico) e nem a ficha de anestesia
+  nem a descrição cirúrgica deram para ler, e há folha escaneada que pesa na
+  cobrança mal lida. A frase aponta a folha.
+- Mais de um quarto das páginas do período são folhas escaneadas que
+  pesam e não deram para ler. A frase diz quantas.
+
+A conta para antes da leitura pela IA e não gasta crédito. Há duas saídas:
+
+- **Enviar de novo**: digitalize de novo as folhas apontadas, com a folha em
+  pé, e envie o prontuário. Quando der, prefira esta: o guia sai mais completo.
+- **Analisar assim mesmo**: quando não há como digitalizar de novo. A análise
+  segue e o guia sai com as páginas a conferir à mão. Veja
+  [Analisar uma conta assim mesmo](../../analisar-uma-conta-assim-mesmo/).
 
 ## O que vai para a TI
 

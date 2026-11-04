@@ -1,11 +1,26 @@
 ---
 title: Novidades
 description: O que mudou em Contas médicas, da entrega mais recente para a mais antiga.
-prd: [1113, 1128, 1129, 1303, 1335, 1365]
-draft: false
+prd: [1113, 1128, 1129, 1303, 1335, 1365, 1397]
+draft: true
 sidebar:
   order: 90
 ---
+
+## 03/11/2026 · O guia aponta as folhas escaneadas para conferir à mão
+
+As folhas escaneadas do prontuário que pesam na cobrança e não deram para ler
+bem aparecem no topo do guia, na faixa **PARECER PARCIAL**, com o número da
+página. A conta que não dá para analisar por causa delas para em **Erro** com
+o código `CM-ARQ-DIGITALIZADO`, e você escolhe entre digitalizar de novo e
+**Analisar assim mesmo**.
+
+Tarefas novas: [Analisar uma conta assim mesmo](../analisar-uma-conta-assim-mesmo/)
+
+Tarefas que mudaram: [Corrigir uma conta pelo guia](../corrigir-uma-conta-pelo-guia/)
+
+Como funciona: [Quando a conta dá erro](../como-funciona/quando-a-conta-da-erro/),
+[Como a conta é conferida](../como-funciona/como-a-conta-e-conferida/)
 
 ## 02/11/2026 · O vídeo da abertura mostra o módulo inteiro, com narração
 

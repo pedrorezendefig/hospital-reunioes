@@ -27,7 +27,7 @@ Quem pode é quem enviou a conta ou a gestão de contas médicas.
    ![Cartão em Erro com o código CM-ARQ-DIGITALIZADO e os botões Enviar de novo e Analisar assim mesmo](../../../assets/contas-medicas/erro-digitalizado.png)
 
 3. Quando a conta chegar na **Fila**, abra o guia. A faixa **PARECER PARCIAL**
-   lista as páginas que não deram para ler: confira cada uma no PDF do
+   lista as páginas que não deram para ler. Confira cada uma no PDF do
    prontuário antes de marcar as linhas.
 
    ![Topo do guia com a faixa Parecer parcial e as páginas a conferir à mão](../../../assets/contas-medicas/guia-ressalva.png)
