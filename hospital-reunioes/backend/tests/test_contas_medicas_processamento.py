@@ -468,8 +468,8 @@ def _presa(minutos: int, tentativas: int) -> dict:
 
 
 class TestContaPresa:
-    def test_processando_ha_16_minutos_volta_para_a_fila_e_o_claim_seguinte_e_a_tentativa_2(self):
-        banco = _Banco({"cm_conta": [_presa(16, tentativas=1)]})
+    def test_processando_ha_31_minutos_volta_para_a_fila_e_o_claim_seguinte_e_a_tentativa_2(self):
+        banco = _Banco({"cm_conta": [_presa(31, tentativas=1)]})
 
         processamento.devolver_presas(banco, AGORA)
 
@@ -477,15 +477,15 @@ class TestContaPresa:
         assert (conta["situacao"], conta["processando_desde"], conta["tentativas"]) == ("NA_FILA", None, 1)
         assert processamento.pegar_da_fila(banco, AGORA)["tentativas"] == 2
 
-    def test_processando_ha_14_minutos_segue_processando(self):
-        banco = _Banco({"cm_conta": [_presa(14, tentativas=1)]})
+    def test_processando_ha_29_minutos_segue_processando(self):
+        banco = _Banco({"cm_conta": [_presa(29, tentativas=1)]})
 
         processamento.devolver_presas(banco, AGORA)
 
-        assert banco.conta("c1") == _presa(14, tentativas=1)
+        assert banco.conta("c1") == _presa(29, tentativas=1)
 
     def test_na_terceira_tentativa_presa_vira_erro_com_a_mensagem(self):
-        banco = _Banco({"cm_conta": [_presa(16, tentativas=3)]})
+        banco = _Banco({"cm_conta": [_presa(31, tentativas=3)]})
 
         processamento.devolver_presas(banco, AGORA)
 
@@ -2117,7 +2117,7 @@ class TestCodigoDoErroDoApp:
         for _ in range(3):
             with pytest.raises(_Reinicio):
                 processamento.alimentar_fila(banco, agora, executor=_NaHora())
-            agora += timedelta(minutes=16)
+            agora += timedelta(minutes=31)
         processamento.devolver_presas(banco, agora)
 
         assert _erro_no_cartao(banco) == (

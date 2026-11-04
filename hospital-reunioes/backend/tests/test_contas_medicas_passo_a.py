@@ -319,18 +319,19 @@ class TestEntrada:
 
 
 # ═══════════════════════════════════════════════════════════════════════════
-# 2. O prontuário acima do limite do modelo pequeno
+# 2. O prontuário acima do limite de uma leitura
 # ═══════════════════════════════════════════════════════════════════════════
 
-# 100 mil tokens a 3,5 caracteres por token (adendo v1.3, item 10).
-LIMITE_EM_CARACTERES = 350_000
+# 100 mil tokens a 1,7 caractere por token, o que a contagem da API deu no
+# texto real do prontuário (issue #1412).
+LIMITE_EM_CARACTERES = 170_000
 
 
 def _evolucao_longa(dia: int) -> str:
-    """Uma evolução de uns 120 mil caracteres: quatro delas passam do limite."""
+    """Uma evolução de uns 60 mil caracteres: três delas passam do limite."""
     corpo = [
         f"Dia {dia:02d}/10, registro {n:04d}: paciente estável no leito, sem queixas, sinais vitais estáveis."
-        for n in range(1300)
+        for n in range(650)
     ]
     if dia == 2:
         corpo.append("Realizado curativo em região sacral com cobertura de hidrocoloide.")

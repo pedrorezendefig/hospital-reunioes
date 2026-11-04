@@ -35,10 +35,12 @@ __all__ = ["eventos_do_atendimento", "montar_entradas", "parecer", "unir_eventos
 
 SEPARADOR = " · "
 
-# O modelo pequeno cobra por faixa até 100 mil tokens de entrada (adendo v1.3,
-# item 10). A estimativa é a do diretor: 3,5 caracteres por token.
+# Até 100 mil tokens de entrada por leitura: a saída cresce com a entrada, e a
+# leitura de um prontuário maior fica longa demais numa chamada só. A contagem
+# da API no texto real do prontuário deu 1,7 caractere por token (issue #1412;
+# a estimativa antiga, de 3,5, deixava passar janelas de quase 200 mil).
 LIMITE_DE_TOKENS = 100_000
-CARACTERES_POR_TOKEN = 3.5
+CARACTERES_POR_TOKEN = 1.7
 # Folga para a linha que abre cada janela e para os rótulos que o adaptador
 # põe antes das orientações e do texto.
 _CABECALHO_DA_JANELA = 200
