@@ -141,6 +141,7 @@ Reprocessar uma Conta A fazer ou Em correção com o modelo ou a Memória atuais
 
 **Código do erro**:
 Código curto da Conta em Erro, em quatro famílias: `CM-ARQ-*` (o PDF tem problema, quem enviou manda outro), `CM-CFG-*` (falta configuração que a gestão faz no app), `CM-IA-*` (a IA não respondeu ou recusou) e `CM-APP-*` (defeito do app, para a TI). Vem com a frase para a faturista e um detalhe técnico gravado (tipo do erro, código HTTP, etapa, arquivo e linha), que nunca leva texto do prontuário. "Copiar para a TI" leva código, atendimento e detalhe.
+`CM-ARQ-DIGITALIZADO` é o das folhas digitalizadas que sustentam a Conta e não deram para ler: Conta com item do centro cirúrgico no período (taxa de sala, honorário de procedimento cirúrgico, gás do centro cirúrgico, anestésico) sem ficha de anestesia nem descrição cirúrgica legíveis, em texto ou em OCR legível, e com folha digitalizada duvidosa ou ilegível que pesa; ou mais de 25% das páginas do período em folhas digitalizadas ilegíveis que pesam. A folha não lida conta como ilegível. Para na leitura do prontuário, antes do dicionário e da IA, com a frase que diz qual página (ou quantas) digitalizar de novo (#1400).
 _Evitar_: mensagem genérica como "tente de novo em alguns minutos" sem dizer a causa.
 
 **Analisar de novo**:

@@ -19,6 +19,7 @@ from pathlib import Path
 
 import pytest
 
+from app.services.contas_medicas.erro_da_conta import ENVIAR_DE_NOVO, FalhaDeLeitura, classificar
 from app.services.contas_medicas.prontuario import (
     MARCA_DO_OCR,
     PESO_DA_FOLHA,
@@ -29,7 +30,6 @@ from app.services.contas_medicas.prontuario import (
     ler_prontuario,
     ressalva_das_digitalizadas,
 )
-from app.services.contas_medicas.erro_da_conta import ENVIAR_DE_NOVO, FalhaDeLeitura, classificar
 from app.services.contas_medicas_conta import ItemConta
 
 FIXTURES = Path(__file__).parent / "fixtures" / "contas_medicas" / "prontuario"

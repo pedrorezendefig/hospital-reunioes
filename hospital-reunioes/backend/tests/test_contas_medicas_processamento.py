@@ -2438,6 +2438,20 @@ class TestKitDeConhecimento:
         ):
             assert trecho in secao, trecho
 
+    def test_diz_quando_a_conta_para_por_folha_escaneada_ilegivel(self):
+        """Issue #1400: o Erro CM-ARQ-DIGITALIZADO, os dois casos e que não gasta IA."""
+        secao = KIT.read_text(encoding="utf-8").split("## A análise", 1)[1].split("\n## ", 1)[0]
+        (linha,) = [linha for linha in secao.splitlines() if "CM-ARQ-DIGITALIZADO" in linha]
+
+        for trecho in (
+            "folhas escaneadas",
+            "ficha de anestesia",
+            "descrição cirúrgica",
+            "mais de um quarto das páginas",
+            "antes da leitura pela IA",
+        ):
+            assert trecho in linha, trecho
+
     def test_nao_promete_mais_a_analise_para_uma_proxima_entrega(self):
         texto = KIT.read_text(encoding="utf-8")
 
