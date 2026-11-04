@@ -11,6 +11,11 @@ Thumbs.db
 .claude/*
 !.claude/skills/
 !.claude/skills/**
+# O fluxo da Onda: config e notas que o instalador do PedroOS gera, e os agentes
+!.claude/fluxo.json
+!.claude/fluxo-notas.md
+!.claude/agents/
+!.claude/agents/**
 
 # Superpowers (plugin local)
 .superpowers/

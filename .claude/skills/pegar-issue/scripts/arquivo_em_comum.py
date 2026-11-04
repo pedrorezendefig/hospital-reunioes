@@ -43,7 +43,7 @@ CITACAO = re.compile(r"`(?:\./)?([\w.\-/]+\.[A-Za-z]\w*)(?::\d+(?:-\d+)?)?`")
 
 def gh(*args: str) -> str:
     return subprocess.run(
-        ["gh", *args], capture_output=True, text=True, check=True
+        ["gh", *args], capture_output=True, text=True, encoding="utf-8", check=True
     ).stdout
 
 
@@ -89,4 +89,6 @@ def main(argv: list[str]) -> int:
 
 
 if __name__ == "__main__":
+    for fluxo in (sys.stdout, sys.stderr):  # Windows: o pipe sai em cp1252
+        fluxo.reconfigure(encoding="utf-8")
     sys.exit(main(sys.argv[1:]))

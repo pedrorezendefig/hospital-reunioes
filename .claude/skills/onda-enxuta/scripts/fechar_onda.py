@@ -10,23 +10,28 @@ A ordem dos PRs e a ordem de merge. O script nunca toca na arvore principal
 (ela pode estar suja): todo o trabalho acontece num worktree descartavel de
 caminho curto (`~/wt-<sessao>`, por causa do MAX_PATH do Windows).
 
-A main e protegida por ruleset (issue #910, ADR 0068): PR
+A main e protegida por ruleset (issue #910, decisão do fluxo): PR
 obrigatorio, CI obrigatorio no head do PR, sem exigir a branch em dia com a
 base (ADR 0068), sem push direto. Por isso o
 script nunca empurra na main: cada PR do lote entra pela API do GitHub com
 squash (o unico metodo que o repositorio permite), no proprio numero, em ordem,
 como o PR avulso (ADR 0068). A onda e o avulso com mais PRs.
 
-Classe do lote, pelos arquivos (issue #965): "app" se algum esta em
-`hospital-reunioes/`, "ferramenta" se nenhum esta. Lote misto e app. Os
-arquivos sao os do `git diff --no-renames` de cada PR, como no detector do CI:
-mover codigo para fora de `hospital-reunioes/` conta como app. Classe, versao
+Classe do lote, pelos arquivos (issue #965): "app" se algum esta na pasta do
+app (`app` no `.claude/fluxo.json`), "ferramenta" se nenhum esta. Lote misto e
+app. Os arquivos sao os do `git diff --no-renames` de cada PR, como no detector
+do CI: mover codigo para fora da pasta do app conta como app. Classe, versao
 e servicos saem do lote inteiro, antes do primeiro merge.
   - app: a sequencia inteira abaixo.
   - ferramenta: so merge pela API depois do CI verde (passos 1 a 4 e 9). Sem
     versao nova, sem APP_VERSION, sem tag, sem esperar build, sem health e sem
     registro (nenhuma entrada no history.json). Se o webhook do Coolify disparar
     build em algum merge, a subida o cancela, como faz com o do commit do registro.
+Sem plataforma: enquanto o `services` do project.json estiver
+vazio, todo lote e ferramenta, inclusive o que toca a pasta do app. A subida
+termina no merge: o CLI do Coolify nao e pre-condicao e a espera da migration
+nao roda. Quando o primeiro servico entrar no project.json, a sequencia inteira
+volta a valer.
 
 Sequencia (cada passo imprime no maximo uma linha, o 4 uma por PR; sucesso
 cabe em 10 linhas mais uma por PR, fora as da migration):
@@ -56,7 +61,7 @@ cabe em 10 linhas mais uma por PR, fora as da migration):
   4. PR a PR, na ordem, num worktree descartavel na branch do PR: o head com
      que o PR chegou, sem a origin/main trazida e sem push, mesmo atras da main
      (o merge do PR anterior do lote deixa o seguinte atras; o ruleset nao exige
-     em dia com a base, ADR 0068), so com a conferencia local, sem
+     em dia com a base, decisão do fluxo), so com a conferencia local, sem
      commit, de que a main entra sem conflito; o CI verde que o head ja tinha e
      merge pela API (squash, conferindo o sha do head); logo depois, as caixas
      vazias da issue que ele fecha viram `- [x]`, menos a riscada
@@ -99,8 +104,8 @@ cabe em 10 linhas mais uma por PR, fora as da migration):
      dois num arquivo `~/registro-<chave>-<sha>.json` e
      dispara a Action pos-merge na main por workflow_dispatch, com o arquivo
      no input `registro`. Ela commita os dois JSONs na main pela deploy key,
-     como github-actions[bot], e no mesmo run tira o draft do Manual dos PRDs
-     do lote e roda o snapshot (ADR 0068). A subida espera a entrada
+     como github-actions[bot], e no mesmo run roda o snapshot e o que mais o
+     pos-merge.yml do Projeto fizer (ADR 0068). A subida espera a entrada
      aparecer no history.json da main, e nao so o fim do run: um push que
      chega com o disparo na fila do grupo pos-merge o cancela, e a subida
      dispara de novo. O build que o webhook do Coolify dispara para o commit do
@@ -110,8 +115,8 @@ cabe em 10 linhas mais uma por PR, fora as da migration):
 Commits que chegam a main:
   - um squash por PR que entrou, "<titulo do PR> (#N)", no PR avulso e na onda;
     a versao nao vira commit: vive no APP_VERSION do Coolify e na tag
-  - o do bot da Action pos-merge, com o registro, o snapshot e o draft do
-    Manual: "chore(spec): registro vX.Y.Z, snapshot e draft do Manual
+  - o do bot da Action pos-merge, com o registro e o snapshot (e o que mais o
+    pos-merge.yml do Projeto gravar): "chore(spec): registro vX.Y.Z ...
     pos-merge <sha> [skip ci]"
 No PR avulso, o registro do history.json nomeia PR e issue, sem a onda; na
 onda, cada PR e a issue dele. O campo `sha` do history.json e o do squash do
@@ -150,7 +155,7 @@ Codigos de saida:
   7  migration vencida: o /api/health nao devolveu o numero da migration do lote
      em 24 h: nada entrou na main, o semaforo nao chegou a ser pego e os PRs
      seguem abertos; quem chamou notifica, e a subida roda de novo depois que a
-     migration for colada no Studio
+     migration for aplicada (`migrations.aplicar` do fluxo.json)
   8  parada: a trava esta parada (a subida que a segura saiu com 3 ou 4) ou velha
      (mais de 60 min), e prod espera rollback humano. Sai na hora, sem pegar o
      semaforo: nada entrou na main e os PRs seguem abertos. A linha `parada:`
@@ -194,6 +199,17 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[4] / "tools"))
 import checar_migration_repetida  # noqa: E402
 import ci_sem_runner  # noqa: E402
 
+# A configuracao do Projeto (pasta do app, como aplicar migration): `.claude/fluxo.json`.
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import fluxo as config_do_fluxo  # noqa: E402
+
+
+def tem_plataforma(projeto: dict) -> bool:
+    """Sem servico no project.json, nao ha plataforma: a subida termina no merge.
+    A regra e a mesma do `/deploy status`."""
+    return bool(projeto.get("services"))
+
+
 EXIT_PRECOND = 1
 EXIT_MERGE = 2
 EXIT_BUILD = 3
@@ -207,7 +223,13 @@ SEMAFORO = ".claude/skills/deploy/scripts/semaforo.sh"
 SPEC = "docs/spec"
 HISTORY = f"{SPEC}/deploy/history.json"
 STATE = f"{SPEC}/deploy/state.json"
-APP = "hospital-reunioes/"
+try:
+    _CFG = config_do_fluxo.carregar(Path(__file__).resolve().parents[4])
+except config_do_fluxo.Erro as _e:
+    print(f"pre-condicao: {_e}", file=sys.stderr)
+    sys.exit(EXIT_PRECOND)
+APP = _CFG["app"]
+APLICAR_MIGRACAO = (_CFG.get("migrations") or {}).get("aplicar") or "aplique no banco"
 BUILD_WAIT_WEBHOOK_S = 120
 BUILD_POLL_S = 10
 BUILD_TIMEOUT_S = 40 * 60
@@ -226,7 +248,7 @@ REGISTRO_JANELA_S = 90  # o webhook do Coolify dispara em segundos
 POS_MERGE_WORKFLOW = "pos-merge.yml"  # grava o registro na main pela deploy key (ADR 0068)
 REGISTRO_TIMEOUT_S = 15 * 60  # o run do push do squash na fila do grupo pos-merge, mais o do registro
 REGISTRO_POLL_S = 15
-MIGRACAO_TIMEOUT_S = 24 * 60 * 60  # teto da espera pela migration colada no Studio (issue #969)
+MIGRACAO_TIMEOUT_S = 24 * 60 * 60  # teto da espera pela migration aplicada pelo humano (issue #969)
 MIGRACAO_POLL_S = 60
 SEM_CAMPO = "sem-campo"  # o /api/health no ar e anterior ao #969: nao informa a migration
 VERDE = ("SUCCESS", "NEUTRAL", "SKIPPED")
@@ -285,11 +307,13 @@ def bash_path(p: Path) -> str:
 
 # ------------------------------------------------------------- pre-condicoes
 
-def checar_pre_condicoes(raiz: Path, prs: list[int], dry: bool) -> tuple[list[dict], list[tuple[str, str]]]:
-    """Devolve as infos dos PRs e (head, caminho) de cada migration nova do lote."""
+def checar_pre_condicoes(raiz: Path, prs: list[int], dry: bool,
+                         plataforma: bool = True) -> tuple[list[dict], list[tuple[str, str]]]:
+    """Devolve as infos dos PRs e (head, caminho) de cada migration nova do lote.
+    Sem plataforma, o CLI do Coolify nao e pre-condicao: a subida so mergeia."""
     if run(["gh", "auth", "status"], check=False).returncode != 0:
         falhar("pre-condicao: `gh auth status` falhou.", EXIT_PRECOND)
-    if not shutil.which("coolify"):
+    if plataforma and not shutil.which("coolify"):
         if dry:
             print("aviso: `coolify` nao esta no PATH (o dry-run segue; o fechamento real precisa dele).")
         else:
@@ -358,7 +382,7 @@ def conferir_hash_das_migrations(raiz: Path, n: int, head: str, corpo: str) -> l
     """Para se o corpo do PR nao traz o sha256 de cada migration nova do head.
     Devolve o caminho de cada uma.
 
-    O SQL que o humano cola no Studio e o que a review leu no corpo do PR, e o
+    O SQL que o humano aplica e o que a review leu no corpo do PR, e o
     hash do corpo e a prova de que e o mesmo arquivo que vai entrar na main.
     """
     novas = run(["git", "diff", "--name-only", "-M", "--diff-filter=A", f"origin/main...{head}", "--",
@@ -446,20 +470,20 @@ def esperar_migrations_do_lote(raiz: Path, backend: dict, novas: list[tuple[str,
         arquivo = pasta / Path(caminho).name
         arquivo.write_bytes(conteudo)
         linhas = conteudo.count(b"\n")
-        print(f"migration: cole no Studio {arquivo}:1 ({linhas} linhas, sha256 "
+        print(f"migration: {APLICAR_MIGRACAO} {arquivo}:1 ({linhas} linhas, sha256 "
               f"{hashlib.sha256(conteudo).hexdigest()[:12]}); a subida espera o {numero} no /api/health",
               flush=True)
     t = time.time()
     status, ultimo = esperar_migracao(url_do_health(backend), numero)
     if status == SEM_CAMPO:
         print(f"migration: o /api/health no ar nao informa a migration aplicada (backend anterior ao #969); "
-              f"a subida segue sem esperar, confira que a {numero} foi colada no Studio.", flush=True)
+              f"a subida segue sem esperar, confira que a {numero} foi aplicada.", flush=True)
     elif status == "aplicada":
         print(f"migration: {numero} aplicada, o /api/health devolveu {ultimo} em {dur(time.time() - t)}", flush=True)
     else:
         print(f"migration: vencida, o /api/health nao chegou a {numero} em {MIGRACAO_TIMEOUT_S // 3600} h "
               f"(ultimo: {ultimo}). Nada entrou na main e o semaforo nao foi pego; PRs {prs_txt} seguem abertos. "
-              "Cole a migration no Studio e rode a subida de novo.")
+              "Aplique a migration e rode a subida de novo.")
         return False
     return True
 
@@ -693,7 +717,7 @@ def preparar_pr(raiz: Path, wt: Path, info: dict) -> str:
 # --------------------------------------------------------------------- bump
 
 def classe_do_lote(caminhos) -> str:
-    """"app" se algum arquivo esta em hospital-reunioes/, "ferramenta" se nenhum
+    """"app" se algum arquivo esta na pasta do app, "ferramenta" se nenhum
     esta (issue #965). Lote misto e app."""
     return "app" if any(c.startswith(APP) for c in caminhos) else "ferramenta"
 
@@ -768,7 +792,7 @@ def humanizar(subject: str) -> str:
 
 
 def sem_travessao(s: str) -> str:
-    """Travessao e meia-risca viram hifen entre numeros e virgula no resto (ADR 0013)."""
+    """Travessao e meia-risca viram hifen entre numeros e virgula no resto (regra do travessao)."""
     s = re.sub(r"(\d)\s*[\u2013\u2014]\s*(\d)", r"\1-\2", s)
     return re.sub(r"\s*[\u2013\u2014]\s*", ", ", s)
 
@@ -1538,8 +1562,9 @@ def main() -> int:
         run(["git", "rev-parse", "--show-toplevel"]).stdout.strip()).resolve()
     projeto = ler_json(raiz / SPEC / "deploy" / "project.json")
     servicos_cfg = {s["id"]: s for s in projeto["services"]}
+    plataforma = tem_plataforma(projeto)
 
-    infos, novas = checar_pre_condicoes(raiz, args.prs, args.dry_run)
+    infos, novas = checar_pre_condicoes(raiz, args.prs, args.dry_run, plataforma)
     de_fork = " ".join(f"#{i['number']}" for i in infos if i.get("isCrossRepository"))
     if de_fork:
         falhar(f"pre-condicao: {de_fork} vem de um fork; a main entra na branch do PR, "
@@ -1549,7 +1574,7 @@ def main() -> int:
           + (" (dry-run)" if args.dry_run else ""), flush=True)
     numeros = [n for n in (checar_migration_repetida._numero(Path(c).name) for _, c in novas) if n is not None]
     # antes do semaforo: a espera pode levar horas (issue #969)
-    if numeros and not args.dry_run and not esperar_migrations_do_lote(
+    if numeros and plataforma and not args.dry_run and not esperar_migrations_do_lote(
             raiz, servicos_cfg["backend"], novas, max(numeros), args.sessao, prs_txt):
         return EXIT_MIGRACAO
 
@@ -1581,10 +1606,11 @@ def main() -> int:
             arquivos.update(run(["git", "diff", "--no-renames", "--name-only", f"{base}...{i['head_conferido']}"],
                                 cwd=wt).stdout.split())
             arquivos.update(f["path"] for f in i.get("files") or [])
-        ferramenta = classe_do_lote(arquivos) == "ferramenta"
+        # sem plataforma todo lote e ferramenta: so merge
+        ferramenta = not plataforma or classe_do_lote(arquivos) == "ferramenta"
         tipo = None if ferramenta else tipo_de_bump(infos)
         versao_nova = proxima_versao(versao_antiga, tipo) if tipo else None
-        # supabase nao tem build: migration se aplica a mao no Studio (o deploy nao aplica SQL)
+        # supabase nao tem build: migration se aplica a mao (o deploy nao aplica SQL)
         servicos = [sid for sid, s in servicos_cfg.items()
                     if s.get("type") != "supabase" and any(re.match(tp.replace("**", ".*").replace("*", "[^/]*"), a)
                            for a in arquivos for tp in (s.get("diff_routing") or {}).get("trigger_paths") or [])]

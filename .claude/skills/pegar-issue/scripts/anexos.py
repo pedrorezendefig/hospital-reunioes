@@ -3,7 +3,7 @@
 
 O print que o diretor anexa à Demanda vive só no app e nunca vai para o GitHub
 (o repositório é público). Quem desenvolve busca por aqui, a boca única: o
-`/pegar-issue`, o `hr-implementador` e o `hr-corretor` chamam este script quando
+`/pegar-issue`, o `onda-implementador` e o `onda-corretor` chamam este script quando
 o corpo da issue diz "Anexos".
 
 Uso:
@@ -18,7 +18,7 @@ arquivo. O `/ship` apaga a pasta ao abrir o PR.
 
 Saída 0 com os caminhos, ou com "sem anexos" quando a issue não tem Demanda ou a
 Demanda não tem imagem guardada. Saída 1 com o motivo no stderr quando não deu
-para baixar (chave ausente, ponte desligada no servidor, app fora do ar): quem
+para baixar (id da Demanda inválido, chave ausente, ponte desligada, app fora do ar): quem
 chama segue sem as imagens e cita o motivo no relatório. A chave nunca é
 impressa.
 
@@ -34,6 +34,7 @@ import re
 import subprocess
 import sys
 import urllib.error
+import urllib.parse
 import urllib.request
 from pathlib import Path
 
@@ -41,6 +42,8 @@ RAIZ_DO_SCRIPT = Path(__file__).resolve().parents[4]
 PROJECT = RAIZ_DO_SCRIPT / "docs" / "spec" / "deploy" / "project.json"
 CHAVE = "TECNOLOGIA_AUTOMACAO_API_KEY"
 MARCADOR = re.compile(r"<!--\s*demanda-vitta id=\"([^\"]+)\"\s*-->")
+# O id vai na URL que leva a chave: só letras, números, _ e -, nada de / ou ..
+ID_VALIDO = re.compile(r"\A[A-Za-z0-9_-]{1,64}\Z")
 TIMEOUT_S = 30
 
 
@@ -87,7 +90,7 @@ def demanda_da_issue(numero: str) -> str | None:
 
 def listar(base: str, demanda: str, chave_api: str) -> list[dict]:
     pedido = urllib.request.Request(
-        f"{base}/automacao/tecnologia/demandas/{demanda}/anexos", headers={"X-API-Key": chave_api}
+        f"{base}/automacao/tecnologia/demandas/{urllib.parse.quote(demanda, safe='')}/anexos", headers={"X-API-Key": chave_api}
     )
     try:
         with urllib.request.urlopen(pedido, timeout=TIMEOUT_S) as resposta:
@@ -118,6 +121,9 @@ def main(argv: list[str], env=os.environ) -> int:
     if not demanda:
         print("sem anexos")
         return 0
+    if not ID_VALIDO.match(demanda):
+        print("Anexos não baixados: o id da Demanda no corpo da issue não é válido.", file=sys.stderr)
+        return 1
     chave_api = chave(env)
     if not chave_api:
         print(

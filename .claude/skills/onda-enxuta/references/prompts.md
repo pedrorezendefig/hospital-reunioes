@@ -4,7 +4,7 @@ Use literalmente, preenchendo `<...>`. Cada agente já tem o contrato no própri
 
 **A primeira linha de todo prompt é `[papel: <nome>]`** (`implementador`, `corretor`, `revisor`): é por ela que o `medir_onda.py` atribui o custo de cada sub-agente ao papel certo.
 
-## hr-implementador
+## onda-implementador
 
 ```
 [papel: implementador]
@@ -14,15 +14,15 @@ Tentativa <k> de 3.
 <Se a issue cria migration: "o número é <0XX>; a <0XX-1> já existe em origin/main".>
 ```
 
-## hr-revisor
+## onda-revisor
 
 ```
 [papel: revisor]
 PR #<PR>, issue #<N>. Ache problemas, não aprove, não edite. Revisão única: ninguém revisa a correção.
-<Se o sensivel.py acusou: "Sensível: <arquivos de rota sem login ou de migration, um por linha>".>
+<Se o sensivel.py acusou: "Sensível: <arquivos que ele imprimiu, um por linha>".>
 ```
 
-## hr-corretor
+## onda-corretor
 
 ```
 [papel: corretor]
@@ -35,7 +35,7 @@ PR #<PR>, issue #<N>. Motivo: <revisao|ci|conflito|retomar>.
 
 ## Passagem (prompt da próxima sessão)
 
-Salve em `%TEMP%\onda-enxuta\<nome>-onda<N+1>.md`. A primeira linha precisa ser o comando, para a skill disparar.
+Salve em `$TMPDIR/onda-enxuta/<nome>-onda<N+1>.md`. A primeira linha precisa ser o comando, para a skill disparar.
 
 ```
 /onda-enxuta --sessao <nome> --onda <N+1> --paralelo <P>
@@ -56,4 +56,4 @@ Baixas até aqui (ready-for-human): <issue e motivo, ou "nenhuma">.
 Prod hoje: v<antiga>; a onda <N> leva a v<nova>. Última migration: <0XX>, contando a da onda em deploy.
 ```
 
-A fila leva a dependência de cada issue ("#945, depois da #944"), nunca arquivo em comum (ADR 0068). `<P>` é o número de issues da fila desbloqueadas, com teto 3. A passagem é escrita uma vez e não muda: o resultado da subida vai no comentário da onda.
+A fila leva a dependência de cada issue ("#945, depois da #944"), nunca arquivo em comum (decisão do fluxo). `<P>` é o número de issues da fila desbloqueadas, com teto 3. A passagem é escrita uma vez e não muda: o resultado da subida vai no comentário da onda.

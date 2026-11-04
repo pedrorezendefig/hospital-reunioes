@@ -179,10 +179,12 @@ def test_cli_completar_edita_a_mesma_issue_e_troca_a_triagem(tmp_path):
 
 
 SKILLS = RAIZ / ".claude" / "skills"
+# As regras só do Hospital nas skills do fluxo moram nas notas, uma seção `## <skill>` cada
+NOTAS = RAIZ / ".claude" / "fluxo-notas.md"
 
 
-def secao_da_skill(skill: str, titulo: str) -> str:
-    texto = (SKILLS / skill / "SKILL.md").read_text(encoding="utf-8")
+def secao_da_skill(skill: str, titulo: str, arquivo: Path | None = None) -> str:
+    texto = (arquivo or SKILLS / skill / "SKILL.md").read_text(encoding="utf-8")
     m = re.search(rf"^(#+) {re.escape(titulo)}\s*$", texto, re.MULTILINE)
     assert m, f"{skill}: seção '{titulo}' não encontrada"
     resto = texto[m.end() :]
@@ -191,7 +193,7 @@ def secao_da_skill(skill: str, titulo: str) -> str:
 
 
 def test_grill_with_docs_le_o_prd_do_diretor_e_nao_repergunta_o_negocio():
-    trecho = secao_da_skill("grill-with-docs", "PRD do diretor (`/grill-with-docs #N`)")
+    trecho = secao_da_skill("grill-with-docs", "PRD do diretor (`/grill-with-docs #N`)", NOTAS)
     assert "prd_do_diretor.py ler" in trecho
     assert "não repergunte" in trecho
     assert "Ficou em aberto" in trecho
@@ -199,7 +201,7 @@ def test_grill_with_docs_le_o_prd_do_diretor_e_nao_repergunta_o_negocio():
 
 
 def test_to_prd_completa_a_issue_do_diretor_em_vez_de_criar_outra():
-    trecho = secao_da_skill("to-prd", "PRD do diretor: completar a mesma issue")
+    trecho = secao_da_skill("to-prd", "PRD do diretor: completar a mesma issue", NOTAS)
     assert "prd_do_diretor.py completar" in trecho
     assert "sem `gh issue create`" in trecho
     assert "Para o diretor" in trecho

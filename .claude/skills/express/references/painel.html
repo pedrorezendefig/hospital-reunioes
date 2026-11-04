@@ -1,4 +1,4 @@
-<title>Planejamento na Tecnologia</title>
+<title>Painel do grill</title>
 <meta name="claude:viewport-fit-sides" content="cover">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Newsreader:opsz,wght@6..72,500;6..72,600&family=Public+Sans:wght@400;500;600&display=swap">
 <style>
@@ -110,19 +110,19 @@ footer.fim p { margin: 0; color: var(--muted); font-size: 0.92rem; }
 
 <div class="wrap">
   <header class="top">
-    <h1>Agente de planejamento na aba Tecnologia</h1>
-    <div class="placar"><span id="placar-txt">0 de 20 avaliadas</span><div class="barra"><i id="placar-barra"></i></div></div>
+    <h1>&lt;nome do plano&gt;</h1>
+    <div class="placar"><span id="placar-txt">0 de 3 avaliadas</span><div class="barra"><i id="placar-barra"></i></div></div>
     <button class="principal" id="btn-tudo">Concordar com tudo</button>
   </header>
 
-  <p class="intro">Grill de 01/11/2026. <strong>P1 a P5</strong> você respondeu no terminal; as outras quinze foram fechadas com a recomendação. Cada miniatura mostra a escolha inteira; clique para ver o porquê, a outra opção e discordar com uma nota. "Concordar com tudo" marca o que ainda não foi avaliado e não mexe no que você já discordou.</p>
+  <p class="intro">Grill de &lt;data&gt;. <strong>&lt;P1 a Pn&gt;</strong> você respondeu no terminal; as outras foram fechadas com a recomendação. Cada miniatura mostra a escolha inteira; clique para ver o porquê, a outra opção e discordar com uma nota.</p>
   <div class="aviso" id="aviso-sem-db" hidden>Este navegador não está gravando as respostas (sem acesso ao armazenamento do artefato). Pode marcar mesmo assim e responder "ok" ou "N: correção" no terminal.</div>
 
   <div id="temas"></div>
 
   <footer class="fim">
     <h2>Fechar o grill</h2>
-    <p>Porta <b>A</b> (PRD + fatias): tem migration, o diretor precisa saber e o kit muda. Ao aprovar, o terminal roda o <code>/to-prd</code> e depois o <code>/to-issues</code>. Discordou de alguma? Mande para revisão que eu reajusto só as que mudam.</p>
+    <p>Porta <b>&lt;A, B ou C&gt;</b>: &lt;o motivo&gt;. Ao aprovar, o terminal roda o <code>/to-prd</code> e depois o <code>/to-issues</code>. Discordou de alguma? Mande para revisão que eu reajusto só as que mudam.</p>
     <div class="acoes">
       <button class="principal" id="btn-aprovar">Aprovar e seguir para o PRD</button>
       <button id="btn-revisar">Mandar para revisão</button>
@@ -137,37 +137,13 @@ footer.fim p { margin: 0; color: var(--muted); font-size: 0.92rem; }
 <script>
 const DECISOES = [
   { tema: "Produto", itens: [
-    { id: "p1", t: "O que sai do agente", e: "O PRD do diretor: bloco Para o diretor, Problema, Solução, Histórias de usuário e Decisões de negócio. Vira a issue-raiz vinculada à Demanda.", p: "O que o diretor decide fica inteiro; o que depende de código (implementação e teste) continua no terminal, onde o código está.", o: "O PRD inteiro no formato do /to-prd, com o modelo chutando as decisões técnicas a partir do kit. Inventaria módulo e seam sem ver o código.", you: true },
-    { id: "p2", t: "Onde o planejamento começa", e: "Botão \"Planejar com a IA\" no card aberto de uma Demanda de tipo Novo ou Ajuste, ainda sem Vínculo.", p: "A Demanda é o registro e já tem o caminho de Vínculo pronto; o diretor escolhe quando planejar.", o: "Emendar o grill na conversa do assistente de Nova Demanda. Puxa o diretor para 15 perguntas quando ele só queria registrar.", you: true },
-    { id: "p9", t: "O que o \"sim\" faz", e: "Cria a issue pelo mesmo caminho do \"Levar para desenvolvimento\" (needs-triage, type:feature, marcador, bloco Para o diretor), com o PRD do diretor no corpo e uma seção \"Ficou em aberto\". Sem label nova.", p: "Reaproveita a rota, a identidade e a Etapa que já existem (ADR 0054).", o: "Label nova \"planejado-no-app\" para o terminal achar a issue. Uma label a mais para manter; o marcador e a seção no corpo já dizem de onde veio.", risco: "Sem label, o /minhas-issues precisa aprender a distinguir uma needs-triage com PRD do diretor de uma comum." },
-    { id: "p10", t: "O que o \"não\" faz", e: "Abre um campo \"o que não bateu\", volta para a conversa com essa resposta, e o resumo é refeito.", p: "Mantém o diretor no mesmo fluxo e deixa o modelo corrigir o que ouviu errado.", o: "Editar o resumo à mão. Mais rápido para quem sabe o que quer, mas descola o resumo da conversa que o justifica." },
-    { id: "p17", t: "O que sobra para o terminal", e: "/grill-with-docs #N lê a issue, pula o que o diretor já decidiu e pergunta só o técnico; o /to-prd completa Decisões de implementação e de teste na mesma issue, sem criar outra.", p: "Um PRD só, um Vínculo só, e o grill técnico começa com as decisões de negócio já fechadas.", o: "PRD novo criado pelo terminal e Vínculo refeito. Duplica a issue e quebra o par Demanda x issue." }
-  ]},
-  { tema: "Conversa", itens: [
-    { id: "p3", t: "A conversa persiste?", e: "Persiste na Demanda, um planejamento por Demanda, retomável; some quando a Demanda chega a Concluída ou Cancelada (regra do Anexo, ADR 0069).", p: "O grill é longo e o diretor é interrompido; a conversa é o porquê das decisões que ele vai reler na entrega.", o: "Efêmera, como o assistente de hoje. Fechar a aba no meio joga 10 respostas fora.", you: true },
-    { id: "p5", t: "Quando o grill acaba", e: "O modelo decide, com teto de 12 perguntas e o botão \"Fechar e resumir\" sempre à mão; o que não foi perguntado sai como \"ficou em aberto\".", p: "Mesmo princípio do Roteiro por Tipo: rótulo sem resposta nunca vira decisão inventada.", o: "Roteiro fixo de perguntas por tipo. Previsível, mas pergunta o que o diretor já respondeu na descrição.", you: true },
-    { id: "p6", t: "A tela de cada pergunta", e: "Contexto de uma ou duas frases, duas opções clicáveis com a recomendada destacada, e um campo livre para responder com as próprias palavras.", p: "É o formato que já funciona no terminal, e clicar é mais rápido que digitar no celular.", o: "Só texto livre. Mais flexível, mas o diretor precisa ler e repetir a opção na resposta." },
-    { id: "p12", t: "Como o diretor responde", e: "Texto e voz (a rota de voz já existe). Imagem continua entrando pelo Anexo da Demanda, fora do planejamento.", p: "Voz é o jeito do diretor; print já tem lugar e regra própria.", o: "Imagem dentro do chat do planejamento. Repete o caminho multimodal do assistente para um ganho pequeno." },
-    { id: "p14", t: "O que o card mostra", e: "Nada no card fechado. No card aberto, o botão vira \"Continuar planejamento\" quando há conversa e some quando há Vínculo.", p: "O Quadro recusa selo que não é exceção (decisão de 07/10/2026).", o: "Selo \"planejando\" no card fechado. Mais uma informação num card que já luta para ter quatro." }
-  ]},
-  { tema: "Conhecimento", itens: [
-    { id: "p4", t: "De onde vêm as regras da casa", e: "Só o kit, e cada arquivo de Produto ganha a seção \"O que já foi decidido\" em linguagem de diretor, mantida pela regra de sincronia do kit.", p: "Curadoria humana é a regra desde a ADR 0056; é o que o grill usa para desafiar o pedido.", o: "Kit mais uma versão peneirada das ADRs gerada por script no deploy. Rejeitado na 0056: um filtro em que ninguém confia.", you: true },
-    { id: "p15", t: "Manual e kit", e: "Tecnologia fica fora do Manual (ADR 0057). O kit tecnologia.md ganha o planejamento, no mesmo PR da fatia.", p: "Quem usa a aba é a diretoria com a Vitta; o kit é a doc que o próprio agente lê.", o: "Página de Manual para o planejamento. Contraria a 0057 e explica para quem não vai usar." }
-  ]},
-  { tema: "Modelo e custo", itens: [
-    { id: "p7", t: "Qual modelo", e: "Opus 5.5 só no planejamento (variável própria, LLM_MODEL_PLANEJAMENTO), effort padrão (medium). Assistente, Atas, POP, Ouvidoria e Contas médicas seguem em Sonnet 5.5.", p: "É onde o julgamento vale o preço; ~US$ 1,50 por planejamento com cache, ~US$ 3 sem.", o: "Opus em tudo. Dobra o custo das chamadas em volume (Contas médicas) sem ganho medido.", risco: "Opus 5.5 não deixa desligar o thinking e o effort padrão é medium; se as perguntas saírem rasas, o ajuste é subir para high, não trocar de modelo." },
-    { id: "p8", t: "Cache do prefixo fixo", e: "cache_control no bloco fixo (prompt de sistema mais kit, ~30 mil tokens), primeira vez no assistente; conferir por cache_read_input_tokens.", p: "Corta o custo de entrada pela metade e a conta de Contas médicas já faz igual (ADR 0074).", o: "Sem cache, como o assistente de hoje. Simples, e paga ~US$ 3 por grill em vez de ~US$ 1,50." },
-    { id: "p13", t: "Custo medido", e: "Tokens e custo gravados por chamada, no molde de Contas médicas; nunca aparecem na tela do diretor.", p: "Sem medir, a estimativa desta página nunca vira número de verdade.", o: "Não medir. Fica cego ao dia em que o diretor fizer 20 planejamentos." },
-    { id: "p19", t: "Quando o provedor falha", e: "Erro claro na tela, conversa intacta, sem failover, como no assistente.", p: "Um 502 não pode apagar 10 respostas; e failover muda o modelo no meio da conversa.", o: "Failover para Sonnet 5.5. Esconde a falha e troca o julgamento no meio do grill." }
+    { id: "p1", t: "<título curto da decisão>", e: "<a escolha inteira, como o painel mostra na miniatura>", p: "<o porquê, em uma ou duas frases>", o: "<a outra opção e o que ela custaria>", you: true },
+    { id: "p2", t: "<título>", e: "<escolha>", p: "<porquê>", o: "<outra opção>", risco: "<onde eu posso estar errado>" }
   ]},
   { tema: "Governança", itens: [
-    { id: "p11", t: "Quem pode planejar", e: "Qualquer Super admin da aba, sem papel novo (mesma troca da ADR 0050).", p: "Toda a aba já é Super admin; papel novo para cinco pessoas é engrenagem.", o: "Só o autor da Demanda. Trava o sócio que quer planejar a Demanda que o diretor abriu." },
-    { id: "p16", t: "Registro da decisão", e: "ADR nova emendando a 0054 (decisão 1: o app passa a criar PRD do diretor) e a 0056 (decisão 4: conversa de planejamento persiste).", p: "As duas ADRs dizem o contrário do que este plano faz; sem emenda, o próximo agente lê a regra antiga.", o: "Só atualizar o CONTEXT.md. O glossário não guarda o porquê nem o que foi rejeitado." },
-    { id: "p18", t: "Qual porta", e: "A: PRD + fatias.", p: "Tem migration (persistência), o diretor precisa saber, e o kit muda.", o: "B, issue única. Não cabe numa sessão: tela, rota, persistência, kit e ADR." },
-    { id: "p20", t: "Teto de taxa", e: "O mesmo teto dos outros chats do app.", p: "Uma pessoa, uma conversa por vez; o teto existente já cobre.", o: "Teto próprio por Demanda. Mais uma regra para um abuso que não acontece com cinco usuários." }
+    { id: "p3", t: "Qual porta", e: "A: PRD + fatias.", p: "<o motivo da porta>", o: "B, issue única. <por que não>" }
   ]}
 ];
-
 const TODAS = DECISOES.flatMap(g => g.itens);
 const TOTAL = TODAS.length;
 let respostas = {};

@@ -62,7 +62,7 @@ def test_manual_manda_para_a_receita_nova():
 
 def test_to_issues_pede_o_video_do_modulo_na_fatia_de_manual():
     fatia = secao(
-        (SKILLS / "to-issues" / "SKILL.md").read_text(encoding="utf-8"),
+        (RAIZ / ".claude" / "fluxo-notas.md").read_text(encoding="utf-8"),
         "A Fatia de manual (todo PRD com tela)",
     )
     assert '"Refazer o vídeo do módulo `<modulo>`"' in fatia

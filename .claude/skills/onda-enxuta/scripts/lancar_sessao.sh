@@ -12,8 +12,9 @@
 # --strict-mcp-config sem --mcp-config = nenhum servidor MCP; --no-chrome tira a
 # integração com o Chrome (aparecia como 1 MCP na sessão de fundo); --settings
 # onda-settings.json desliga os plugins (lista de skills cai de 136 para 78). O pipeline da onda
-# só usa `gh` e o CLI do Coolify; a bagagem de Vercel, Notion, Figma, Gmail,
-# Resend e Supabase não entra. Conectores da conta claude.ai: se ainda aparecerem,
+# só usa `gh` e o CLI da plataforma de deploy; a bagagem de conectores e plugins
+# não entra. O PushNotification do aviso no celular é ferramenta do Claude Code,
+# não MCP: continua disponível. Conectores da conta claude.ai: se ainda aparecerem,
 # desligue-os para este projeto nas configurações da conta (uma vez só).
 #
 # Saída: o id curto que `claude attach <id>`, `claude logs <id>` e `claude stop <id>` usam.
