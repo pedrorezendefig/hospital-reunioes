@@ -2,6 +2,49 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-11-04T14:26:23-03:00",
+      "sha": "cf97cd1c6a170d3906ac559c1d04b01eceaa7d1e",
+      "app_version": "0.214.2",
+      "subject": "PR #1409, sem issue: Contas médicas, conta em Retorno ganha o Continuar na lista",
+      "raw_subject": "chore(deploy): registro do PR avulso (#1409)",
+      "scope": [
+        "frontend"
+      ],
+      "prds": [],
+      "result": "healthy",
+      "duration_seconds": 232,
+      "services_touched": [
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        },
+        {
+          "service": "frontend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "PR avulso: PR #1409, sem issue. Merge pela API do GitHub, um build. Registro pela Action pos-merge depois do health.",
+      "etapas": {
+        "merge_s": 3,
+        "build_s": {
+          "frontend": 208
+        },
+        "health_s": 0
+      },
+      "responsavel": "pedrorezendefig"
+    },
+    {
       "at": "2026-11-04T14:17:52-03:00",
       "sha": "06bb0df6492da9f2b49dc205a6d1212971998fc7",
       "app_version": "0.214.1",
