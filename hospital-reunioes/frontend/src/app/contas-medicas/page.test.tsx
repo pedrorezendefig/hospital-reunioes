@@ -194,6 +194,9 @@ describe("a fila comum", () => {
       "/contas-medicas/guia/em-correcao",
     );
     expect(itens[1].textContent).toContain("Retorno");
+    expect(within(itens[1]).getByRole("link", { name: "Continuar" }).getAttribute("href")).toBe(
+      "/contas-medicas/guia/retorno",
+    );
   });
 
   it("Meus envios mostra o que ainda não ficou pronto, e o erro traz o motivo com Enviar de novo", async () => {

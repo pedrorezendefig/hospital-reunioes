@@ -417,7 +417,7 @@ function LinhaDaFila({ conta, onEnviarDeNovo }: { conta: ItemDaFila; onEnviarDeN
         Abrir
       </Link>
     );
-  } else if (conta.situacao === "EM_CORRECAO") {
+  } else if (conta.situacao === "EM_CORRECAO" || conta.situacao === "RETORNO") {
     acao = (
       <Link href={guia} className="text-sm font-medium text-primary hover:underline">
         Continuar
