@@ -2,6 +2,51 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-11-03T21:32:44-03:00",
+      "sha": "5ff29600dffa6e71e45a3655e82c7effe0c7107e",
+      "app_version": "0.212.0",
+      "subject": "Onda cm-ocr-onda2: Ressalva no Guia com as folhas escaneadas que pesam e não foram bem lidas",
+      "raw_subject": "chore(deploy): registro da onda cm-ocr-onda2 (#1404)",
+      "scope": [
+        "backend"
+      ],
+      "prds": [
+        1397
+      ],
+      "result": "healthy",
+      "duration_seconds": 48,
+      "services_touched": [
+        "backend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        },
+        {
+          "service": "frontend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "onda-enxuta cm-ocr-onda2: PR #1404 (issue #1399), mergeados PR a PR. Merge pela API do GitHub, um build. Registro pela Action pos-merge depois do health.",
+      "etapas": {
+        "merge_s": 2,
+        "build_s": {
+          "backend": 19
+        },
+        "health_s": 10
+      },
+      "responsavel": "pedrorezendefig"
+    },
+    {
       "at": "2026-11-03T21:10:59-03:00",
       "sha": "cd21b0dd6ac3e179dee1d8a2cf76a051c1d437e8",
       "app_version": "0.211.0",
