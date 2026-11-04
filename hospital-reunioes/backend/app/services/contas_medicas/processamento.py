@@ -103,10 +103,10 @@ logger = logging.getLogger(__name__)
 _CANDIDATAS = 5
 
 # A conta em PROCESSANDO há mais que isto ficou para trás (restart do app no
-# meio da análise): volta para a fila. A leitura de um prontuário de 552
-# páginas leva uns 4 minutos e a comparação outro tanto, por janela (issue
-# #1412), então 30 minutos não cortam análise viva.
-PRAZO_DA_ANALISE = timedelta(minutes=30)
+# meio da análise): volta para a fila. Uma comparação de 57,6 mil tokens levou
+# quase 8 minutos, e no teto de saída (128 mil) uma chamada passa de 15; com a
+# leitura antes, 60 minutos não cortam análise viva.
+PRAZO_DA_ANALISE = timedelta(minutes=60)
 MAXIMO_DE_TENTATIVAS = 3
 
 # Quantas análises ao mesmo tempo, no máximo (`CM_VAGAS`). A extração do PDF
@@ -194,7 +194,7 @@ def _devolver(supabase, conta: dict, erro: ErroDaConta) -> None:
 
 
 def devolver_presas(supabase, agora: datetime) -> int:
-    """As contas em PROCESSANDO há mais de 30 minutos voltam para a fila; na
+    """As contas em PROCESSANDO há mais de 60 minutos voltam para a fila; na
     terceira tentativa, Erro, com a etapa em que a análise estava quando o app
     reiniciou ou travou. Devolve quantas foram mexidas."""
     presas = (
@@ -322,7 +322,7 @@ def processar(supabase, conta: dict) -> None:
         _avisar_se_o_envio_terminou(supabase, conta)
     except Exception as erro:
         # O banco falhou no fechamento: a conta fica PROCESSANDO e volta pela
-        # devolução das presas, em 30 minutos.
+        # devolução das presas, em 60 minutos.
         logger.error("[ContasMedicas] Conta %s sem fechamento: %s em %s", conta["id"], type(erro).__name__, _onde(erro))
 
 

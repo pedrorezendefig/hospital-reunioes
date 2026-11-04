@@ -444,12 +444,31 @@ class TestRespostaForaDoFormato:
 
         (corpo,) = provedor.corpos
         assert corpo["stream"] is True
-        assert corpo["max_tokens"] >= 64000
+        # O teto dos dois modelos: a comparação de uma conta de 265 itens já deu
+        # 57,6 mil tokens, perto dos 64 mil de antes.
+        assert corpo["max_tokens"] == 128000
         assert resultado.atendimento == "31245"
 
     def test_resposta_cortada_no_teto_nao_se_repete_diz_a_causa_e_grava_o_custo(self, provedor):
         banco = _BancoDeCusto()
         cortada = mensagem('{"atendimento": "31245", "movimentacoes": [', USO_PADRAO, parada="max_tokens")
+        provedor.responder(httpx2.Response(200, json=cortada))
+
+        with pytest.raises(ia.ErroDaIA) as falha:
+            _extrair(banco)
+
+        assert len(provedor.corpos) == 1
+        assert falha.value.causa == "tamanho"
+        (chamada,) = banco.tabelas["cm_chamada_ia"]
+        assert (chamada["tokens_saida"], chamada["sucesso"]) == (200, False)
+
+    def test_resposta_cortada_na_janela_do_modelo_nao_se_repete_diz_a_causa_e_grava_o_custo(self, provedor):
+        # Entrada mais saída passou da janela de contexto: o JSON também veio pela
+        # metade, e repetir pagaria a saída longa outra vez para o mesmo corte.
+        banco = _BancoDeCusto()
+        cortada = mensagem(
+            '{"atendimento": "31245", "movimentacoes": [', USO_PADRAO, parada="model_context_window_exceeded"
+        )
         provedor.responder(httpx2.Response(200, json=cortada))
 
         with pytest.raises(ia.ErroDaIA) as falha:
