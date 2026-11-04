@@ -1023,6 +1023,73 @@ def guia_se_necessario(page: Page, base: str, saida: Path) -> None:
     )
 
 
+# As folhas escaneadas do prontuário (PRD #1397). As frases são as do servidor
+# (`services/contas_medicas/prontuario.py` e `erro_da_conta.py`); as páginas e
+# os documentos são inventados.
+RESSALVA_DO_GUIA = [
+    "Confira à mão no prontuário a página 214 (ficha de anestesia): "
+    "é uma folha digitalizada que não consegui ler bem.",
+    "Confira à mão no prontuário as páginas 231 e 232 (controle de OPME e etiquetas): "
+    "são folhas digitalizadas que não consegui ler bem.",
+]
+ERRO_DIGITALIZADO = {
+    "erro_codigo": "CM-ARQ-DIGITALIZADO",
+    "erro_motivo": "Não dá para analisar esta conta: a ficha de anestesia (página 214) é uma folha "
+    "digitalizada que não consegui ler. Digitalize de novo, com a folha em pé, e envie o prontuário de novo.",
+    "erro_detalhe": {"tipo": "FalhaDeLeitura", "etapa": "leitura_do_prontuario", "arquivo": "processamento.py",
+                     "linha": 441, "em": "2026-11-03T14:05:00-03:00"},
+}
+
+
+def guia_ressalva(page: Page, base: str, saida: Path) -> None:
+    """O topo do guia com o PARECER PARCIAL e as folhas a conferir à mão. A
+    ressalva entra só na resposta do guia que o print recebe: os outros prints
+    do guia seguem sem a faixa."""
+
+    def com_a_ressalva(rota):
+        resposta = rota.fetch()
+        guia = resposta.json()
+        guia["cabecalho"].update(parecer_parcial=True, faltantes=RESSALVA_DO_GUIA)
+        rota.fulfill(response=resposta, json=guia)
+
+    page.route("**/api/contas-medicas/contas/*/guia", com_a_ressalva)
+    _guia(page, base)
+    nota = page.get_by_role("note", name="Parecer parcial")
+    nota.wait_for()
+    sem_foco(page)
+    caixa = nota.bounding_box()
+    page.screenshot(
+        path=str(saida / "guia-ressalva.png"),
+        clip={"x": 0, "y": 0, "width": 1440, "height": caixa["y"] + caixa["height"] + 24},
+    )
+
+
+def _conta_do_erro(campos: dict) -> None:
+    _rest("cm_conta?numero_conta=eq.51288&faturista_id=eq.P950", "PATCH", campos)
+
+
+def erro_digitalizado(page: Page, base: str, saida: Path) -> None:
+    """Analisar assim mesmo, passos 1 e 2: o cartão parado em
+    CM-ARQ-DIGITALIZADO com Enviar de novo e Analisar assim mesmo, sem clicar.
+    A conta do Erro da IA vira a das folhas só durante o print: o botão é o
+    servidor que decide, pelo código gravado e pelos PDFs guardados."""
+    do_seed = _rest("cm_conta?numero_conta=eq.51288&faturista_id=eq.P950&select=erro_codigo,erro_motivo,erro_detalhe")
+    _conta_do_erro(ERRO_DIGITALIZADO)
+    try:
+        _guia_a_fazer()
+        _contas(page, base)
+        aba = _aba(page, "Meus envios")
+        cartao = _cartao(page, "900377")
+        botao = cartao.get_by_role("button", name="Analisar assim mesmo")
+        botao.wait_for()
+        sem_foco(page)
+        balao(page, aba, 1, "acima")
+        balao(page, botao, 2, "acima")
+        _print_dos_envios(page, saida, "erro-digitalizado.png")
+    finally:
+        _conta_do_erro(do_seed[0])
+
+
 def _concluidas(page: Page, base: str) -> None:
     _contas(page, base)
     page.get_by_role("tab", name="Concluídas (1)").click()
@@ -1973,6 +2040,8 @@ PRINTS = {
     "guia-nao-procede": guia_nao_procede,
     "guia-concluir": guia_concluir,
     "guia-se-necessario": guia_se_necessario,
+    "guia-ressalva": guia_ressalva,
+    "erro-digitalizado": erro_digitalizado,
     "concluidas-abrir": concluidas_abrir,
     "reenviar": reenviar,
     "reenvio-resultado": reenvio_resultado,

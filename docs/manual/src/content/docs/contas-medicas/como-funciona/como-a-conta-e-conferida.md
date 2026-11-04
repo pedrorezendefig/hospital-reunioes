@@ -1,8 +1,8 @@
 ---
 title: Como a conta é conferida
 description: Como o sistema junta conta e prontuário, conta as diárias, decide o que vai para validação e o que guarda da paciente.
-prd: [1113, 1128]
-draft: false
+prd: [1113, 1128, 1397]
+draft: true
 sidebar:
   order: 30
 ---
@@ -29,10 +29,40 @@ contra o mesmo prontuário.
 ## Parecer parcial
 
 Às vezes o prontuário chega incompleto: falta um grupo de documentos que a capa
-diz que existe, ele termina antes do fim do período da conta, ou tem muitas
-páginas sem texto (digitalizadas). O guia sai mesmo assim, com a faixa
+diz que existe, ele termina antes do fim do período da conta, ou mais de 10%
+das páginas ficam sem texto. O guia sai mesmo assim, com a faixa
 **PARECER PARCIAL** no topo e a lista do que faltou. O que depende do pedaço que
 faltou pode não aparecer no guia.
+
+### Folhas digitalizadas
+
+Algumas folhas do prontuário chegam escaneadas, como imagem, como a ficha
+de anestesia preenchida em papel. O sistema lê
+o texto dessas folhas e mede o quanto conseguiu: **legível**, **duvidosa** ou
+**ilegível**. A folha ilegível conta como página sem texto. A folha impressa
+escaneada de cabeça para baixo é virada e lida de novo.
+
+Pelo título, o sistema sabe que documento é a folha e se ela pesa na
+cobrança:
+
+- Pesam: ficha de anestesia, folha de sala ou de consumo do centro
+  cirúrgico, controle de fios, controle de OPME e etiquetas, horários
+  cirúrgicos, uso de equipamento, descrição cirúrgica e prescrição escritas à
+  mão, hemoterapia. A folha sem título reconhecido entra como
+  **documento não identificado** e também pesa.
+- Ficam de fora o checklist de cirurgia segura, o termo de consentimento, o
+  receituário, a escala de risco, o eletrocardiograma, o documento pessoal, o
+  boletim de internação, o laudo de exame e a guia da operadora.
+
+Cada folha que pesa e não saiu legível, do período da conta, vira uma linha no
+**PARECER PARCIAL**: "Confira à mão no prontuário a página 214 (ficha de
+anestesia): é uma folha digitalizada que não consegui ler bem." Páginas
+seguidas do mesmo documento vão numa linha só. É uma ressalva: o guia sai
+normal, e você confere essas páginas no PDF do prontuário.
+
+Quando as folhas ruins são as que sustentam a conta, ela para em
+`CM-ARQ-DIGITALIZADO`: veja
+[Quando a conta dá erro](../quando-a-conta-da-erro/#folhas-escaneadas-que-não-deram-para-ler).
 
 ## A linha Validar
 
