@@ -1,10 +1,10 @@
 ---
 title: Corrigir uma conta pelo guia
 description: Puxar a conta da Fila, corrigir no MV o que o guia aponta, marcar cada linha e concluir.
-prd: [1113, 1128, 1303]
-draft: false
+prd: [1113, 1128, 1303, 1397]
+draft: true
 papel: [Faturista]
-busca: [boleto, fatura, pegar conta]
+busca: [boleto, fatura, pegar conta, folha escaneada, parecer parcial]
 proximas: [devolver-uma-conta-a-fila, reenviar-a-conta-corrigida, ler-o-painel]
 sidebar:
   order: 3
@@ -54,6 +54,15 @@ faturistas. Deixe o guia ao lado do MV: ele cabe em meia tela.
 
 - **conferir evidência** ou **Conferir classe de UTI**: confira o prontuário
   antes.
+
+## Quando o topo diz PARECER PARCIAL
+
+A faixa amarela no topo lista o que o prontuário não trouxe. As linhas
+"Confira à mão no prontuário a página ..." são folhas escaneadas que o sistema
+não leu bem: abra o PDF do prontuário nessas páginas e confira à mão, porque o
+que está nelas pode faltar no guia.
+
+![Topo do guia com a faixa Parecer parcial e as páginas a conferir à mão](../../../assets/contas-medicas/guia-ressalva.png)
 
 ## Se der errado
 
