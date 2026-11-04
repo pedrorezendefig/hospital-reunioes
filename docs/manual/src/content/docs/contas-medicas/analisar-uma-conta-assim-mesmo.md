@@ -2,7 +2,7 @@
 title: Analisar uma conta assim mesmo
 description: Pôr de volta na análise a conta parada por folha escaneada que não deu para ler, quando não há como digitalizar a folha de novo.
 prd: [1397]
-draft: true
+draft: false
 papel: [Faturista, Apoio ao faturamento, Coordenadora de faturamento, Gestão de contas médicas, Diretoria]
 busca: [folha ilegível, escaneada, digitalizada, ficha de anestesia, não dá para analisar, CM-ARQ-DIGITALIZADO]
 proximas: [corrigir-uma-conta-pelo-guia, enviar-contas-e-prontuarios]
