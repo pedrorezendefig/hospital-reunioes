@@ -1,4 +1,4 @@
-# Caminhos que põem a linha `Sensível:` no prompt do hr-revisor.
+# Caminhos que põem a linha `Sensível:` no prompt do onda-revisor.
 # Um glob por linha, relativo à raiz do repositório. Linhas com # são comentário.
 # Prefixo "+" = só dispara quando o PR CRIA o arquivo (status "added" em
 #   gh api repos/{owner}/{repo}/pulls/<N>/files), não quando só edita.

@@ -235,6 +235,7 @@ def _pr_de_mentira(tmp_path: Path, router: str) -> tuple[Path, dict]:
     scripts.mkdir(parents=True)
     shutil.copy(SKILLS / "onda-enxuta" / "scripts" / "sensivel.py", scripts)
     shutil.copy(LISTA_SENSIVEL, scripts.parent)
+    shutil.copy(RAIZ / ".claude" / "fluxo.json", repo / ".claude")
     arquivos = {
         "hospital-reunioes/supabase/migrations/200_x.sql": "select 1;\n",
         "hospital-reunioes/backend/app/routers/novo.py": router,

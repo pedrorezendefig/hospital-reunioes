@@ -48,11 +48,10 @@ O agente faz: <os passos que esta sessão roda se a pessoa disser "vai"> · Só 
 
 Regras:
 
-- **Motivo real, não o label.** Classifique pelo que trava de fato. Os motivos que se repetem:
-  - *conta pessoal* (projeto Vercel, chave ou máquina que só uma pessoa tem): diga qual conta e confira se esta máquina tem o vínculo (ex.: `docs/manual/.vercel/project.json`);
-  - *decisão de domínio* (pacote grande, perguntas abertas na triagem, emenda de ADR): o caminho é `/grill-with-docs #<N> --lote`, e o passo 1 é juntar o insumo externo que falta (organograma, número, resposta do diretor) antes de abrir o grill;
-  - *divulgação* (`type:divulgacao`): a pessoa aprova vídeo e página; o resto é `/divulgar`;
-  - *as três paradas da regra 9 da ADR 0068* (migration no Studio, rollback, baixa `ready-for-human`): siga as memórias do projeto (migration pelo caminho clicável, segredo só na tela do Coolify).
+- **Motivo real, não o label.** Classifique pelo que trava de fato. Os motivos que se repetem (o que `python3 .claude/skills/onda-enxuta/scripts/fluxo.py notas minhas-issues` imprimir completa cada um com o caso do Projeto):
+  - *conta pessoal* (chave, acesso ou máquina que só uma pessoa tem): diga qual conta e confira se esta máquina tem o vínculo;
+  - *decisão de domínio* (pacote grande, perguntas abertas na triagem, emenda de ADR): o caminho é `/grill-with-docs #<N> --lote`, e o passo 1 é juntar o insumo externo que falta (número, documento, resposta de quem decide) antes de abrir o grill;
+  - *as três paradas da regra 9 da decisão do fluxo* (migration, rollback, baixa `ready-for-human`): siga as memórias do projeto (segredo só na tela da plataforma de deploy).
 - **Confira se já foi feito** antes de mandar fazer: `curl` no endereço público procurando a frase velha, `gh pr list --search <N>`, estado do deploy. Se já foi, o passo a passo vira "fechar com `gh issue close <N> --comment ...`".
 - **O caminho mais curto**: reaproveite o que a issue já traz (bloco `O que fazer`, perguntas da triagem com recomendação). Prefira `--dry-run` primeiro quando o script tiver. Não invente passo que a issue não pede.
 - **Separe o que é do agente.** Quase sempre só uma parte é humana (aprovar, decidir, logar numa conta); o resto o agente roda nesta máquina. Diga qual parte é qual.
@@ -65,7 +64,7 @@ Regras:
    - amarelo: `degraded_performance`, status page sem resposta ou algum cancelamento por runner: desenvolve e abre PR; a subida espera.
    - vermelho: `partial_outage` ou `major_outage`: só código local, não abre onda.
 2. **Em andamento**: issue com claim, PR, ou worktree nesta máquina. "Onde parou" diz PR verde esperando a subida, CI cancelado ou vermelho, conflito, must-fix aberto, sem revisão, commit só local e worktree travado.
-3. **Na fila**: uma linha por PRD ou grupo de avulsas, com a idade ("parada há N dias"). `needs-triage` entra só na contagem, com `/triage`. A exceção é a `needs-triage` com **PRD do diretor** (o "sim" do Planejamento da Demanda, ADR 0075): ela sai numa linha própria, "grill técnico pendente: #N", com `/grill-with-docs #N`. O script a reconhece pelo marcador da Demanda mais a seção "Ficou em aberto", sem label nova; depois que o `/to-prd` acrescenta "Decisões de implementação", ela volta a ser uma needs-triage comum.
+3. **Na fila**: uma linha por PRD ou grupo de avulsas, com a idade ("parada há N dias"). `needs-triage` entra só na contagem, com `/triage`. A exceção é a `needs-triage` com **PRD do leitor** (`prd_do_leitor` no `fluxo.py`): a issue que nasce fora do repo com a metade de negócio do PRD. Ela sai numa linha própria, "grill técnico pendente: #N", com `/grill-with-docs #N`. O script a reconhece pelo marcador do Projeto mais a seção "Ficou em aberto", sem label nova; depois que o `/to-prd` acrescenta "Decisões de implementação", ela volta a ser uma needs-triage comum.
 4. **Plano**: até 3 passos, um por nível, nesta ordem fixa:
    1. PR verde esperando a subida (`fechar_onda.py --prs <N> --dry-run`);
    2. trabalho que pode se perder (commit sem push);

@@ -8,7 +8,7 @@ Uso:
   python3 minhas_issues.py            login do `gh api user`
   python3 minhas_issues.py @login     fila de outra pessoa
 
-"Minha" segue a regra do filtro de responsável do Hospital OS (issue #1039):
+"Minha" segue a regra do filtro de responsável do PedroOS (issue #1039):
 atribuída à pessoa; sem ninguém atribuído, quem criou.
 """
 
@@ -21,6 +21,10 @@ import subprocess
 import sys
 import urllib.request
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "onda-enxuta" / "scripts"))
+import fluxo as config_do_fluxo  # noqa: E402
 
 STATUS_PAGE = "https://www.githubstatus.com/api/v2/components.json"
 SEM_RUNNER = "not acquired by Runner"
@@ -28,13 +32,24 @@ JANELA_DIAS = 45
 SUBIDA = "python3 .claude/skills/onda-enxuta/scripts/fechar_onda.py"
 TRIAGEM = ("ready-for-agent", "ready-for-human", "needs-triage", "needs-info")
 
-# O PRD do diretor (issue #1350, ADR 0075, decisão 6): o "sim" do Planejamento da
-# Demanda cria uma needs-triage sem label própria. O que a distingue é o marcador
-# da Demanda mais a seção "Ficou em aberto"; o "Levar para desenvolvimento" tem
-# só o marcador. Com "Decisões de implementação" no corpo, o /to-prd já passou.
-MARCADOR_DA_DEMANDA = re.compile(r'<!--\s*demanda-vitta id="[^"]*"\s*-->')
+# O PRD do leitor (`prd_do_leitor` no .claude/fluxo.json):
+# uma needs-triage criada fora do repo com a metade de negócio do PRD, sem label própria.
+# O que a distingue é o marcador do Projeto mais a seção "Ficou em aberto"; com
+# "Decisões de implementação" no corpo, o /to-prd já passou. Sem a chave, nada muda.
 FICOU_EM_ABERTO = re.compile(r"^## Ficou em aberto\s*$", re.M)
 DECISOES_TECNICAS = re.compile(r"^## Decisões de implementação\s*$", re.M)
+
+
+def _marcador_do_prd_do_leitor() -> re.Pattern | None:
+    try:
+        cfg = config_do_fluxo.carregar(Path(__file__).resolve().parents[4])
+    except config_do_fluxo.Erro:
+        return None
+    padrao = (cfg.get("prd_do_leitor") or {}).get("marcador")
+    return re.compile(padrao) if padrao else None
+
+
+MARCADOR_DO_PRD_DO_LEITOR = _marcador_do_prd_do_leitor()
 
 VEREDITO = {
     "verde": "dá pra desenvolver: sim",
@@ -54,11 +69,12 @@ def minhas(issues: list[dict], login: str) -> list[dict]:
 
 
 def grill_tecnico_pendente(i: dict) -> bool:
-    """needs-triage com PRD do diretor que ainda não ganhou as seções técnicas."""
+    """needs-triage com PRD do leitor que ainda não ganhou as seções técnicas."""
     corpo = i.get("body") or ""
     return (
-        "needs-triage" in i["labels"]
-        and bool(MARCADOR_DA_DEMANDA.search(corpo))
+        MARCADOR_DO_PRD_DO_LEITOR is not None
+        and "needs-triage" in i["labels"]
+        and bool(MARCADOR_DO_PRD_DO_LEITOR.search(corpo))
         and bool(FICOU_EM_ABERTO.search(corpo))
         and not DECISOES_TECNICAS.search(corpo)
     )
@@ -311,11 +327,11 @@ def montar(d: dict) -> str:
 
 
 def gh(*args: str) -> str:
-    return subprocess.run(["gh", *args], capture_output=True, text=True, check=True).stdout
+    return subprocess.run(["gh", *args], capture_output=True, text=True, encoding="utf-8", check=True).stdout
 
 
 def git(*args: str) -> str:
-    return subprocess.run(["git", *args], capture_output=True, text=True, check=True).stdout
+    return subprocess.run(["git", *args], capture_output=True, text=True, encoding="utf-8", check=True).stdout
 
 
 CONSULTA_ISSUES = """
@@ -488,6 +504,8 @@ def coletar(login: str | None) -> dict:
 
 
 if __name__ == "__main__":
+    for fluxo in (sys.stdout, sys.stderr):  # Windows: o pipe sai em cp1252
+        fluxo.reconfigure(encoding="utf-8")
     alvo = sys.argv[1].lstrip("@") if len(sys.argv) > 1 else None
     try:
         print(montar(coletar(alvo)))

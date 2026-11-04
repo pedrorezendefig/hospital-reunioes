@@ -17,29 +17,29 @@ The disclaimer doubles as an **automation marker**: the hygiene Action (`.github
 
 ## Reference docs
 
-- [AGENT-BRIEF.md](AGENT-BRIEF.md) — how to write durable agent briefs
-- [OUT-OF-SCOPE.md](OUT-OF-SCOPE.md) — how the `.out-of-scope/` knowledge base works
+- [AGENT-BRIEF.md](AGENT-BRIEF.md): how to write durable agent briefs
+- [OUT-OF-SCOPE.md](OUT-OF-SCOPE.md): how the `.out-of-scope/` knowledge base works
 
 ## Roles
 
 Two **category** roles:
 
-- `bug` — something is broken
-- `enhancement` — new feature or improvement
+- `bug`: something is broken
+- `enhancement`: new feature or improvement
 
 Five **state** roles:
 
-- `needs-triage` — maintainer needs to evaluate
-- `needs-info` — waiting on reporter for more information
-- `ready-for-agent` — fully specified, ready for an AFK agent
-- `ready-for-human` — needs human implementation
-- `wontfix` — will not be actioned
+- `needs-triage`: maintainer needs to evaluate
+- `needs-info`: waiting on reporter for more information
+- `ready-for-agent`: fully specified, ready for an AFK agent
+- `ready-for-human`: needs human implementation
+- `wontfix`: will not be actioned
 
 Every triaged issue should carry exactly one category role and one state role. If state roles conflict, flag it and ask the maintainer before doing anything else.
 
-These are canonical role names — the actual label strings used in the issue tracker may differ. The mapping lives in `docs/agents/triage-labels.md` — read it if it was not provided.
+These are canonical role names, the actual label strings used in the issue tracker may differ. The mapping lives in `docs/agents/triage-labels.md`, read it if it was not provided.
 
-State transitions: an unlabeled issue normally goes to `needs-triage` first; from there it moves to `needs-info`, `ready-for-agent`, `ready-for-human`, or `wontfix`. `needs-info` returns to `needs-triage` once the reporter replies. The maintainer can override at any time — flag transitions that look unusual and ask before proceeding.
+State transitions: an unlabeled issue normally goes to `needs-triage` first; from there it moves to `needs-info`, `ready-for-agent`, `ready-for-human`, or `wontfix`. `needs-info` returns to `needs-triage` once the reporter replies. The maintainer can override at any time, flag transitions that look unusual and ask before proceeding.
 
 ## Invocation
 
@@ -54,28 +54,28 @@ The maintainer invokes `/triage` and describes what they want in natural languag
 
 Query the issue tracker and present four buckets, oldest first:
 
-1. **`revisor-comentou`** — a reviewer commented; curation pending (see the reviewer comment loop below). Query with `--state all`: closed issues matter here — a change request on a closed issue reopens it.
-2. **Unlabeled** — never triaged.
-3. **`needs-triage`** — evaluation in progress.
-4. **`needs-info` with reporter activity since the last triage notes** — needs re-evaluation.
+1. **`revisor-comentou`**: a reviewer commented; curation pending (see the reviewer comment loop below). Query with `--state all`: closed issues matter here, a change request on a closed issue reopens it.
+2. **Unlabeled**: never triaged.
+3. **`needs-triage`**: evaluation in progress.
+4. **`needs-info` with reporter activity since the last triage notes**: needs re-evaluation.
 
 Show counts and a one-line summary per issue. Let the maintainer pick.
 
 ## Reviewer comment loop (`revisor-comentou`)
 
-The hygiene Action labels any issue where a login from `REVIEWER_LOGINS` commented (ADR 0068). The Action only signals; judging and acting happens here, with the maintainer in the loop. What triggers the loop is **the comment and the context it adds**, not who left it; who counts as reviewer is configuration (the `REVIEWER_LOGINS` repository variable).
+The hygiene Action labels any issue where a login from `REVIEWER_LOGINS` commented (decisão do fluxo). The Action only signals; judging and acting happens here, with the maintainer in the loop. What triggers the loop is **the comment and the context it adds**, not who left it; who counts as reviewer is configuration (the `REVIEWER_LOGINS` repository variable).
 
 For each labeled issue:
 
 1. **Read the reviewer's comment(s)** and extract the context/change they add.
 2. **Classify:** change request vs. praise/observation.
 3. **Act, with maintainer approval:**
-   - **Open issue + change request** — propose editing the user story/acceptance criteria to absorb the context; apply once approved.
-   - **Closed issue + change request**: reopen, add the new criterion **unchecked** while keeping delivered ones checked (honest count, e.g. 6/7), and return it to the flow (`ready-for-agent` or `ready-for-human`). The redo is a follow-up ship; reopening never undoes the deploy (ADR 0068).
-   - **Praise/observation** — no reopening, no edits.
+   - **Open issue + change request**: propose editing the user story/acceptance criteria to absorb the context; apply once approved.
+   - **Closed issue + change request**: reopen, add the new criterion **unchecked** while keeping delivered ones checked (honest count, e.g. 6/7), and return it to the flow (`ready-for-agent` or `ready-for-human`). The redo is a follow-up ship; reopening never undoes the deploy (decisão do fluxo).
+   - **Praise/observation**: no reopening, no edits.
 
-   When editing a body, keep the **Para o diretor** block at the top intact (ADR 0068).
-4. **Always finish by removing `revisor-comentou`** — the label means "curation pending", and curation just happened.
+   When editing a body, keep the lay-reader block at the top intact (its title is `bloco` in `python3 .claude/skills/onda-enxuta/scripts/fluxo.py`; decisão do fluxo). Project-only rules come from `python3 .claude/skills/onda-enxuta/scripts/fluxo.py notas triage`.
+4. **Always finish by removing `revisor-comentou`**: the label means "curation pending", and curation just happened.
 
 Reply to the reviewer summarizing what was done with their comment. The reply carries the triage disclaimer (see top), which also keeps the Action from re-flagging it.
 
@@ -90,23 +90,14 @@ Reply to the reviewer summarizing what was done with their comment. The reply ca
 4. **Grill (if needed).** If the issue needs fleshing out, run a `/grill-with-docs` session.
 
 5. **Apply the outcome:**
-   - `ready-for-agent` — post an agent brief comment ([AGENT-BRIEF.md](AGENT-BRIEF.md)).
-   - `ready-for-human` — same structure as an agent brief, but note why it can't be delegated (judgment calls, external access, design decisions, manual testing).
-   - `needs-info` — post triage notes (template below).
+   - `ready-for-agent`: post an agent brief comment ([AGENT-BRIEF.md](AGENT-BRIEF.md)).
+   - `ready-for-human`: same structure as an agent brief, but note why it can't be delegated (judgment calls, external access, design decisions, manual testing).
+   - `needs-info`: post triage notes (template below).
    - `wontfix`: close, with the comment depending on *why*:
      - **Already implemented**: the change already exists in the codebase. Point to where it lives; do **not** write to `.out-of-scope/` (that KB is for *rejected* requests, not built ones).
      - **Rejected (bug)**: polite explanation, then close.
      - **Rejected (enhancement)**: write to `.out-of-scope/`, link to it from a comment, then close ([OUT-OF-SCOPE.md](OUT-OF-SCOPE.md)).
-   - `needs-triage` — apply the role. Optional comment if there's partial progress.
-
-## Issue born from a Demanda (aba Tecnologia)
-
-An issue whose body carries `<!-- demanda-vitta id="..." -->` was created by the app's **Levar para desenvolvimento** button (ADR 0054). Treat it differently in two places:
-
-- **Context.** The "Para o diretor" block is the director's own words, already PII-filtered (ADR 0060); the Origem line links to the Demanda in the app, where the full Conversa lives. Say upfront "veio da Demanda, responsável @login" so the maintainer knows who owns it on the app side. Reply to the director through the Demanda's Conversa, never by GitHub comment (comments don't flow back to the app).
-- **Assignee.** The issue is born assigned to the Demanda's responsável. In `needs-triage` that assignee is **responsibility, not claim** (same reading as the PRD owner, ADR 0068). When you move it to `ready-for-agent`, **remove the assignee** (`gh issue edit <N> --remove-assignee <login>`): the pool is `no:assignee`, and a kept assignee hides the issue from `/pegar-issue` and the `/onda`. `ready-for-human` keeps it.
-
-The port (A/B/C) is still the triage's call: the button only opens the door.
+   - `needs-triage`: apply the role. Optional comment if there's partial progress.
 
 ## Quick state override
 

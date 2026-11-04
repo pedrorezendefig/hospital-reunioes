@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Cruza os arquivos de um PR com a lista revisao-sensivel.txt da skill e varre o head.
+"""Cruza os arquivos de um PR com a lista `revisao-sensivel.txt` do Projeto e varre o head.
 
 Uso: python sensivel.py <PR> [--lista <arquivo>]
 Saída: um arquivo sensível por linha (com o glob ou o motivo que casou). Exit 0
@@ -10,7 +10,9 @@ quando o PR criou o arquivo (status "added" na API do GitHub).
 Além da lista, a varredura (ADR 0068): router de backend tocado pelo
 PR com rota cuja cadeia de Depends não chega a get_current_user, lido no head
 do PR, e arquivo do frontend tocado que é route handler (route.ts) ou server
-action ("use server"). Rota nova com login segue fora.
+action ("use server"). Rota nova com login segue fora. As pastas do backend e
+do frontend vêm de `varredura` no `.claude/fluxo.json`; sem ela, a varredura fica
+parada e quem decide é a lista.
 """
 from __future__ import annotations
 
@@ -28,8 +30,23 @@ from pathlib import Path
 sys.stdout.reconfigure(encoding="utf-8")
 
 RAIZ = Path(__file__).resolve().parents[4]
-APP = "hospital-reunioes/backend/app"
-FRONT = "hospital-reunioes/frontend/src"
+FLUXO_JSON = RAIZ / ".claude" / "fluxo.json"
+
+
+def _ler_varredura() -> dict | None:
+    """O bloco `varredura` do fluxo.json; None se o arquivo não existe (o main sai 2)."""
+    try:
+        return json.loads(FLUXO_JSON.read_text(encoding="utf-8")).get("varredura") or {}
+    except FileNotFoundError:
+        return None
+
+
+_VARREDURA = _ler_varredura() or {}
+# Sem varredura, nenhum caminho começa com estes prefixos: só a lista decide.
+APP = (_VARREDURA.get("backend") or "\0sem-backend").rstrip("/")
+FRONT = (_VARREDURA.get("frontend") or "\0sem-frontend").rstrip("/")
+# A lista é do Projeto: o instalador do PedroOS a grava aqui a partir de projetos/<nome>/.
+LISTA = Path(__file__).resolve().parent.parent / "revisao-sensivel.txt"
 METODOS_DE_ROTA = {"get", "post", "put", "patch", "delete", "head", "options", "api_route", "websocket"}
 # Rota sem login que não precisa do revisor de segurança por PR (caminho relativo a APP).
 FORA_DA_LISTA = {"routers/health.py"}
@@ -170,9 +187,12 @@ def main() -> int:
     if sys.version_info < (3, 12):
         print(f"sensivel.py exige Python 3.12 ou mais novo (este é {sys.version.split()[0]})", file=sys.stderr)
         return 2
+    if _ler_varredura() is None:  # falha fechada: sem configuração não vira "não sensível"
+        print(f"sensivel.py: {FLUXO_JSON} não existe; rode o instalador do PedroOS", file=sys.stderr)
+        return 2
     ap = argparse.ArgumentParser()
     ap.add_argument("pr", type=int)
-    ap.add_argument("--lista", default=str(Path(__file__).resolve().parent.parent / "revisao-sensivel.txt"))
+    ap.add_argument("--lista", default=str(LISTA))
     args = ap.parse_args()
 
     def gh(*argumentos: str) -> str:
@@ -188,7 +208,7 @@ def main() -> int:
 
         def fontes_do_head(caminhos: list[str]) -> dict[str, str]:
             subprocess.run(["git", "-C", str(RAIZ), "fetch", "--quiet", "--no-write-fetch-head", "origin", head],
-                           capture_output=True, text=True, check=True)
+                           capture_output=True, text=True, encoding="utf-8", check=True)
             return fontes_do_commit(head, caminhos)
 
         achados = sensiveis(arquivos, globs, fontes_do_head)
