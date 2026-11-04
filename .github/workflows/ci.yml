@@ -120,10 +120,12 @@ jobs:
         # /api/health devolve esse número, e sem o insert esperaria 24 h.
         if: github.event_name == 'pull_request'
         run: python ../../tools/checar_recibo_da_migration.py --base origin/main
-      - name: poppler-utils (pdftotext das Contas médicas)
+      - name: poppler-utils e tesseract (pdftotext e OCR das Contas médicas)
         # A leitura de PDF das Contas médicas roda o `pdftotext -layout` de
         # verdade nos testes (issue #1116, ADR 0070); a imagem leva o mesmo pacote.
-        run: sudo apt-get update -qq && sudo apt-get install -y -qq poppler-utils
+        # O `tesseract` com o português lê as folhas desenhadas no teste da
+        # confiança do OCR (issue #1398), como a imagem lê as digitalizadas.
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq poppler-utils tesseract-ocr tesseract-ocr-por
       - name: Install uv
         run: pip install uv
       - name: Lock em sincronia (uv.lock x pyproject.toml)

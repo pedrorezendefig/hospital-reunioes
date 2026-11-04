@@ -247,6 +247,9 @@ class _Cronometro:
     def __init__(self, ao_entrar: Callable[[str], None] | None = None):
         self.tempos: dict[str, float] = {}
         self.atual: str | None = None
+        # Quantas digitalizadas o OCR leu por faixa (#1398), depois do OCR: vai
+        # para o detalhe técnico da conta, pronta ou em Erro.
+        self.digitalizadas: dict[str, int] | None = None
         self._inicio = perf_counter()
         self._ao_entrar = ao_entrar
 
@@ -271,6 +274,13 @@ def _onde(erro: BaseException) -> str:
     return f"{Path(quadros[-1].filename).name}:{quadros[-1].lineno}"
 
 
+def _com_digitalizadas(erro: ErroDaConta, cronometro: _Cronometro) -> ErroDaConta:
+    """O erro com a contagem das digitalizadas no detalhe, quando o OCR já rodou (#1398)."""
+    if cronometro.digitalizadas is None:
+        return erro
+    return replace(erro, detalhe={**erro.detalhe, "digitalizadas": cronometro.digitalizadas})
+
+
 def _marcar_etapa(supabase, conta: dict, etapa: str) -> None:
     """A etapa que começa, no detalhe da conta em PROCESSANDO: se o app
     reiniciar no meio, a devolução das presas sabe onde a análise parou."""
@@ -286,12 +296,12 @@ def processar(supabase, conta: dict) -> None:
             _pipeline(supabase, conta, cronometro)
         except FalhaDeLeitura as falha:
             logger.warning("[ContasMedicas] Conta %s com erro de leitura na etapa %s", conta["id"], cronometro.atual)
-            _gravar_erro(supabase, conta, classificar(falha, cronometro.atual))
+            _gravar_erro(supabase, conta, _com_digitalizadas(classificar(falha, cronometro.atual), cronometro))
         except ErroDaIA as erro:
             # O adaptador já tentou o que fazia sentido tentar (três vezes, ou
             # uma, nas falhas definitivas): a conta não volta para a fila.
             logger.warning("[ContasMedicas] Conta %s sem a IA na etapa %s: %s", conta["id"], cronometro.atual, erro)
-            _gravar_erro(supabase, conta, classificar(erro, cronometro.atual))
+            _gravar_erro(supabase, conta, _com_digitalizadas(classificar(erro, cronometro.atual), cronometro))
         except Exception as erro:
             logger.error(
                 "[ContasMedicas] Conta %s falhou na etapa %s, tentativa %s: %s em %s",
@@ -301,7 +311,7 @@ def processar(supabase, conta: dict) -> None:
                 type(erro).__name__,
                 _onde(erro),
             )
-            _devolver(supabase, conta, classificar(erro, cronometro.atual))
+            _devolver(supabase, conta, _com_digitalizadas(classificar(erro, cronometro.atual), cronometro))
             if (conta.get("tentativas") or 0) < MAXIMO_DE_TENTATIVAS:
                 return  # voltou para a fila: o envio ainda não terminou
         _avisar_se_o_envio_terminou(supabase, conta)
@@ -352,18 +362,30 @@ def _texto(supabase, arquivo: dict) -> list[Pagina]:
     return paginas
 
 
-def _com_ocr(supabase, arquivo: dict, paginas: list[Pagina]) -> list[Pagina]:
-    """As páginas digitalizadas do Prontuário com o texto lido por OCR (#1191).
-    Roda aqui, na fila, e não no envio: o OCR de um prontuário real passa dos
-    30 s do proxy. O texto do OCR não vai para o texto guardado no bucket, que
-    fica no formato que a versão anterior lê. Sem o PDF, seguem sem texto."""
-    if not digitalizadas(paginas):
+def _com_ocr(supabase, arquivo: dict, paginas: list[Pagina], lida) -> list[Pagina]:
+    """As páginas digitalizadas do Prontuário com o texto lido por OCR (#1191) e a
+    qualidade da leitura (#1398). As do Atendimento e do período da conta vão
+    primeiro: sob o prazo, o corte cai nas que não importam para ela. Roda aqui,
+    na fila, e não no envio: o OCR de um prontuário real passa dos 30 s do proxy.
+    O texto do OCR não vai para o texto guardado no bucket, que fica no formato
+    que a versão anterior lê. Sem o PDF, seguem sem texto e não lidas."""
+    pedidas = digitalizadas(paginas)
+    if not pedidas:
         return paginas
     pdf = _baixar(supabase, arquivo["chave_bucket"])
     if pdf is None:
         logger.warning("[ContasMedicas] OCR sem o PDF no bucket: as paginas digitalizadas seguem sem texto")
-        return paginas
-    return ler_digitalizadas(bytes(pdf), paginas)
+        return [replace(p, qualidade=leitura_do_prontuario.NAO_LIDA) if p.numero in pedidas else p for p in paginas]
+    primeiro = leitura_do_prontuario.digitalizadas_da_conta(
+        [p.texto for p in paginas], lida.atendimento, lida.periodo_inicio, lida.periodo_fim
+    )
+    return ler_digitalizadas(bytes(pdf), paginas, primeiro=primeiro)
+
+
+def _contagem_das_digitalizadas(qualidades: dict[int, str]) -> dict[str, int]:
+    """Quantas digitalizadas saíram em cada faixa, para o detalhe técnico da conta
+    (#1398): só números, nunca texto do prontuário."""
+    return {faixa: sum(1 for q in qualidades.values() if q == faixa) for faixa in leitura_do_prontuario.QUALIDADES}
 
 
 def _palavras_da_prescricao(supabase, arquivo: dict, estrutura) -> dict[int, list[Palavra]]:
@@ -407,12 +429,15 @@ def _pipeline(supabase, conta: dict, cronometro: _Cronometro) -> None:
         )
         if arquivo_do_prontuario is None:
             raise FalhaDeLeitura("sem_prontuario")
-        paginas_do_prontuario = _texto(supabase, arquivo_do_prontuario)
-        textos = [pagina.texto for pagina in _com_ocr(supabase, arquivo_do_prontuario, paginas_do_prontuario)]
+        paginas_do_prontuario = _com_ocr(supabase, arquivo_do_prontuario, _texto(supabase, arquivo_do_prontuario), lida)
+        textos = [pagina.texto for pagina in paginas_do_prontuario]
+        qualidades = {p.numero: p.qualidade for p in paginas_do_prontuario if p.qualidade}
+        # Prontuário sem digitalizada fica sem a contagem: zeros só poluiriam o detalhe.
+        cronometro.digitalizadas = _contagem_das_digitalizadas(qualidades) if qualidades else None
 
     with cronometro.etapa("leitura_do_prontuario"):
         try:
-            estrutura = leitura_do_prontuario.ler_prontuario(textos, lida.atendimento)
+            estrutura = leitura_do_prontuario.ler_prontuario(textos, lida.atendimento, qualidades)
         except leitura_do_prontuario.ErroLeitura as erro:
             raise FalhaDeLeitura("incompleto", declarado=erro.declarado, vieram=erro.vieram) from None
         palavras = _palavras_da_prescricao(supabase, arquivo_do_prontuario, estrutura)
@@ -515,7 +540,12 @@ def _pipeline(supabase, conta: dict, cronometro: _Cronometro) -> None:
             "valor_em_validacao": float(nota.em_validacao),
             "parecer_parcial": bool(parecer),
             # A linha da IA que as conferências derrubaram fica registrada, com o motivo.
-            "faltantes": {"itens": parecer, "tempos_por_etapa_s": tempos, "descartadas_ia": list(da_ia.descartadas)},
+            "faltantes": {
+                "itens": parecer,
+                "tempos_por_etapa_s": tempos,
+                "descartadas_ia": list(da_ia.descartadas),
+                "digitalizadas": cronometro.digitalizadas,
+            },
             "memoria_versao_id": memoria["memoria_versao_id"],
             "pronta_em": datetime.now(UTC).isoformat(),
         },

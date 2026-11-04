@@ -18,7 +18,7 @@ from pathlib import Path
 
 import pytest
 
-from app.services.contas_medicas.prontuario import MARCA_DO_OCR, ErroLeitura, ler_prontuario
+from app.services.contas_medicas.prontuario import MARCA_DO_OCR, ErroLeitura, digitalizadas_da_conta, ler_prontuario
 
 FIXTURES = Path(__file__).parent / "fixtures" / "contas_medicas" / "prontuario"
 QUEBRA = "<<<QUEBRA DE PÁGINA>>>"
@@ -390,3 +390,52 @@ def test_rodape_de_outro_arquivo_lido_por_ocr_nao_vira_arquivo_incompleto():
     paginas[2] = com_ocr(paginas[2], "Impressão de Prontuário - Página 7 de 300")
 
     assert ler_prontuario(paginas, ATENDIMENTO).total_paginas == 4
+
+
+# Qualidade da leitura de cada folha digitalizada (issue #1398): a faixa vem do
+# extrator, por página, e o OCR sempre devolve alguma coisa, até da folha ilegível.
+PRONTUARIO_COM_DUAS_DIGITALIZADAS = [CAPA_QUE_BATE, "evolucao", "digitalizado", "digitalizado", "prescricao_medica"]
+
+
+@pytest.mark.parametrize(
+    ("qualidade", "parecer_parcial"),
+    [
+        ("ilegivel", ("O arquivo tem 1 de 6 páginas sem texto, mais de 10%.",)),
+        ("nao_lida", ("O arquivo tem 1 de 6 páginas sem texto, mais de 10%.",)),
+        ("duvidosa", ()),
+        ("legivel", ()),
+    ],
+)
+def test_folha_ilegivel_ou_nao_lida_conta_como_sem_texto_na_regra_dos_10_por_cento(qualidade, parecer_parcial):
+    # As duas digitalizadas têm texto do OCR: o teto só passa pela qualidade da página 3.
+    paginas = montar(*PRONTUARIO_COM_DUAS_DIGITALIZADAS, "anotacao_enf")
+    paginas[2] = com_ocr(paginas[2], TERMO_LIDO_POR_OCR)
+    paginas[3] = com_ocr(paginas[3], TERMO_LIDO_POR_OCR)
+
+    resultado = ler_prontuario(paginas, ATENDIMENTO, {3: qualidade, 4: "legivel"})
+
+    assert resultado.paginas_sem_texto == ((3,) if parecer_parcial else ())
+    assert resultado.parecer_parcial == parecer_parcial
+
+
+def test_a_faixa_de_cada_folha_digitalizada_chega_ao_documento():
+    paginas = montar(*PRONTUARIO_COM_DUAS_DIGITALIZADAS, "anotacao_enf")
+    paginas[2] = com_ocr(paginas[2], TERMO_LIDO_POR_OCR)
+
+    resultado = ler_prontuario(paginas, ATENDIMENTO, {3: "duvidosa", 4: "nao_lida"})
+
+    assert {d.paginas: d.qualidade for d in resultado.documentos if d.familia == "DIGITALIZADO"} == {
+        (3,): "duvidosa",
+        (4,): "nao_lida",
+    }
+    assert {d.qualidade for d in resultado.documentos if d.familia != "DIGITALIZADO"} == {None}
+
+
+def test_digitalizadas_da_conta_sao_as_do_atendimento_com_data_no_periodo():
+    fora_do_periodo = [paginas_da_fixture("digitalizado")[0].replace("03/10/2026", "12/10/2026")]
+    # 2 e 3: pronto-socorro; 4: digitalizada que herda o Atendimento do pronto-socorro;
+    # 6: digitalizada da conta no período; 7: digitalizada da conta fora do período.
+    paginas = montar(CAPA_QUE_BATE, "outro_atendimento", "digitalizado", "evolucao", "digitalizado", fora_do_periodo)
+
+    assert digitalizadas_da_conta(paginas, ATENDIMENTO, date(2026, 10, 1), date(2026, 10, 5)) == (6,)
+    assert digitalizadas_da_conta(paginas, ATENDIMENTO, date(2026, 10, 1), None) == (6, 7)

@@ -212,7 +212,8 @@ def acao_do_codigo(codigo: str | None) -> Acao | None:
 
 def detalhe_legivel(detalhe: dict[str, Any] | None) -> str | None:
     """O detalhe técnico numa linha, como "Ver detalhes" mostra e "Copiar para
-    a TI" leva: o tipo, o código HTTP, a etapa e o lugar no código."""
+    a TI" leva: o tipo, o código HTTP, a etapa, o lugar no código e, depois do
+    OCR, quantas folhas digitalizadas saíram em cada faixa (#1398)."""
     if not detalhe:
         return None
     partes = [detalhe.get("tipo") or "Erro"]
@@ -222,4 +223,10 @@ def detalhe_legivel(detalhe: dict[str, Any] | None) -> str | None:
         partes.append(f"etapa {detalhe['etapa']} ({_rotulo_da_etapa(detalhe['etapa'])})")
     if detalhe.get("arquivo"):
         partes.append(f"{detalhe['arquivo']}:{detalhe.get('linha')}")
+    if contagem := detalhe.get("digitalizadas"):
+        faixas = ", ".join(f"{_FAIXA_NO_DETALHE.get(faixa, faixa)} {n}" for faixa, n in contagem.items())
+        partes.append(f"digitalizadas: {faixas}")
     return ", ".join(partes)
+
+
+_FAIXA_NO_DETALHE = {"legivel": "legível", "duvidosa": "duvidosa", "ilegivel": "ilegível", "nao_lida": "não lida"}

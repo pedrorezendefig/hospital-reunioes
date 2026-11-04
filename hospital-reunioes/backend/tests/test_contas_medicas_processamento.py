@@ -1111,7 +1111,7 @@ class TestOcrNaFila:
     ):
         pedidas: list[tuple[bytes, list[int]]] = []
 
-        def ocr(pdf: bytes, paginas):
+        def ocr(pdf: bytes, paginas, primeiro=()):
             numeros = digitalizadas(paginas)
             pedidas.append((pdf, numeros))
             lido = f"\n{MARCA_DO_OCR}\n{self.TERMO}\n"
@@ -1138,7 +1138,7 @@ class TestOcrNaFila:
         assert all(MARCA_DO_OCR.encode() not in conteudo for conteudo in guardados)
 
     def test_sem_o_ocr_a_folha_digitalizada_conta_como_sem_texto(self, monkeypatch):
-        monkeypatch.setattr(processamento, "ler_digitalizadas", lambda _pdf, paginas: list(paginas))
+        monkeypatch.setattr(processamento, "ler_digitalizadas", lambda _pdf, paginas, primeiro=(): list(paginas))
         banco = _cenario()
         _enviar(banco, _conta(), _prontuario(digitalizadas=1))
 
@@ -1146,6 +1146,61 @@ class TestOcrNaFila:
 
         (eventos,) = banco.tabelas["cm_eventos"]
         assert eventos["eventos_json"]["paginas_sem_texto"] == [3]
+
+    # Qualidade da leitura de cada folha (#1398): as três digitalizadas (3, 4 e 5)
+    # saem legível, ilegível e não lida, e as duas primeiras com texto do OCR.
+    QUALIDADES = {3: "legivel", 4: "ilegivel", 5: "nao_lida"}
+
+    def _ocr_com_qualidade(self, monkeypatch) -> list[tuple[int, ...]]:
+        primeiros: list[tuple[int, ...]] = []
+
+        def ocr(_pdf: bytes, paginas, primeiro=()):
+            primeiros.append(tuple(primeiro))
+            lido = f"\n{MARCA_DO_OCR}\n{self.TERMO}\n"
+            return [
+                Pagina(p.numero, p.texto + lido, False, True, self.QUALIDADES[p.numero])
+                if self.QUALIDADES.get(p.numero) in ("legivel", "ilegivel")
+                else Pagina(p.numero, p.texto, p.sem_texto, False, self.QUALIDADES.get(p.numero))
+                for p in paginas
+            ]
+
+        monkeypatch.setattr(processamento, "ler_digitalizadas", ocr)
+        return primeiros
+
+    def test_a_conta_pronta_guarda_a_contagem_das_digitalizadas_e_a_ilegivel_conta_como_sem_texto(self, monkeypatch):
+        primeiros = self._ocr_com_qualidade(monkeypatch)
+        banco = _cenario()
+        _enviar(banco, _conta(), _prontuario(digitalizadas=3))
+
+        _rodar_o_job(banco)
+
+        # As três são do Atendimento e do período da conta (02 a 06/10): vão primeiro.
+        assert primeiros == [(3, 4, 5)]
+        (conta,) = banco.tabelas["cm_conta"]
+        assert conta["situacao"] == "A_FAZER"
+        assert conta["faltantes"]["digitalizadas"] == {"legivel": 1, "duvidosa": 0, "ilegivel": 1, "nao_lida": 1}
+        (eventos,) = banco.tabelas["cm_eventos"]
+        assert eventos["eventos_json"]["paginas_sem_texto"] == [4, 5]
+
+    def test_a_conta_em_erro_depois_do_ocr_leva_a_contagem_no_detalhe_sem_texto_do_prontuario(self, monkeypatch):
+        self._ocr_com_qualidade(monkeypatch)
+
+        def conferir_quebrado(*_a, **_kw):
+            raise RuntimeError("PostgREST fora do ar")
+
+        monkeypatch.setattr(processamento, "conferir", conferir_quebrado)
+        banco = _cenario()
+        _enviar(banco, _conta(), _prontuario(digitalizadas=3))
+
+        _rodar_o_job(banco)
+
+        (conta,) = banco.tabelas["cm_conta"]
+        assert conta["situacao"] == "ERRO"
+        contagem = {"legivel": 1, "duvidosa": 0, "ilegivel": 1, "nao_lida": 1}
+        assert conta["erro_detalhe"]["digitalizadas"] == contagem
+        (item,) = _fila(banco, "meus_envios")
+        assert item["erro_detalhe"].endswith("digitalizadas: legível 1, duvidosa 0, ilegível 1, não lida 1")
+        assert self.TERMO not in json.dumps(conta["erro_detalhe"], ensure_ascii=False)
 
 
 class TestReprocesso:

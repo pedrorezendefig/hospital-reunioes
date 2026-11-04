@@ -17,10 +17,11 @@ pela coordenada das colunas. O `pdfplumber` é importado depois do limite.
 
 Com `--ocr <páginas> <prazo>`, o filho rasteriza cada página pedida pelo
 `pdftoppm` e lê a imagem pelo `tesseract` (issue #1191), e devolve em JSON o
-texto de cada uma. As páginas digitalizadas do Prontuário são as únicas que
-chegam aqui.
+texto e a confiança da leitura de cada uma (issue #1398), na ordem pedida. As
+páginas digitalizadas do Prontuário são as únicas que chegam aqui.
 
-Topo em stdlib pura: o pai importa este módulo só para saber o caminho.
+Topo em stdlib pura: o pai importa este módulo para saber o caminho e as faixas
+da confiança.
 """
 
 from __future__ import annotations
@@ -28,8 +29,15 @@ from __future__ import annotations
 import json
 import os
 import sys
+from collections.abc import Sequence
 
 SAIDA_SEM_PDFTOTEXT = 127
+
+# Faixas da qualidade da folha digitalizada (#1398), pela confiança do OCR:
+# legível de 70 para cima, duvidosa de 50 a 69, ilegível abaixo de 50. Vêm do
+# microteste dos dez pares e batem com a leitura visual das páginas.
+LEGIVEL_A_PARTIR_DE = 70
+ILEGIVEL_ABAIXO_DE = 50
 
 
 def palavras(entrada: str, paginas: set[int]) -> dict[str, list[list]]:
@@ -47,10 +55,12 @@ def palavras(entrada: str, paginas: set[int]) -> dict[str, list[list]]:
     return achadas
 
 
-def ocr(entrada: str, paginas: set[int], prazo: float) -> dict[str, str]:
-    """Página (a primeira é 1) -> texto lido pelo `tesseract -l por` na imagem que o
-    `pdftoppm` rasterizou (issue #1191). Os dois herdam o `RLIMIT_AS` deste processo.
-    Página que não sai (ilegível, binário ausente, prazo esgotado) fica de fora."""
+def ocr(entrada: str, paginas: Sequence[int], prazo: float) -> dict[str, dict]:
+    """Página (a primeira é 1) -> {"texto", "confianca"} da imagem que o `pdftoppm`
+    rasterizou, lida pelo `tesseract -l por` (issues #1191 e #1398), na ordem
+    pedida: quem chama põe primeiro as páginas que importam. Os dois herdam o
+    `RLIMIT_AS` deste processo. Página que não sai (binário ausente, falha, prazo
+    esgotado) fica de fora, e quem chama a dá como não lida."""
     import subprocess
     import tempfile
     import time
@@ -58,10 +68,12 @@ def ocr(entrada: str, paginas: set[int], prazo: float) -> dict[str, str]:
     fim = time.monotonic() + prazo
     # Uma thread só: cada thread do OpenMP reserva pilha, e isso conta no `RLIMIT_AS`.
     ambiente = {**os.environ, "OMP_THREAD_LIMIT": "1"}
-    lidas: dict[str, str] = {}
+    lidas: dict[str, dict] = {}
     with tempfile.TemporaryDirectory(prefix="ocr-") as pasta:
-        for numero in sorted(paginas):
+        for numero in paginas:
             imagem = os.path.join(pasta, str(numero))
+            lida = None
+            esgotado = False
             try:
                 subprocess.run(
                     ["pdftoppm", "-f", str(numero), "-l", str(numero), "-r", "300", "-gray", "-png", "-singlefile"]
@@ -71,25 +83,52 @@ def ocr(entrada: str, paginas: set[int], prazo: float) -> dict[str, str]:
                     timeout=max(fim - time.monotonic(), 0.001),
                 )
                 _desvirar(f"{imagem}.png", ambiente, fim)
-                lido = subprocess.run(
-                    ["tesseract", f"{imagem}.png", "stdout", "-l", "por"],
-                    capture_output=True,
-                    check=True,
-                    timeout=max(fim - time.monotonic(), 0.001),
-                    env=ambiente,
-                )
+                lida = _ler(imagem, ambiente, fim)
+                if lida[1] < ILEGIVEL_ABAIXO_DE:
+                    # O OSD erra o formulário impresso de cabeça para baixo e diz 0°:
+                    # girado, ele passa de ilegível a legível. Fica a leitura melhor.
+                    _girar(f"{imagem}.png", 180)
+                    lida = max(lida, _ler(imagem, ambiente, fim), key=lambda par: par[1])
             except subprocess.TimeoutExpired:
-                break
+                esgotado = True
             except (OSError, subprocess.SubprocessError):
-                continue
+                pass
             finally:
-                if os.path.exists(f"{imagem}.png"):
-                    os.remove(f"{imagem}.png")
-            # O `tesseract` fecha a página com form feed, que no texto guardado abre página nova.
-            texto = lido.stdout.decode("utf-8", errors="replace").replace("\f", "").strip()
-            if texto:
-                lidas[str(numero)] = texto
+                for sufixo in (".png", ".txt", ".tsv"):
+                    if os.path.exists(f"{imagem}{sufixo}"):
+                        os.remove(f"{imagem}{sufixo}")
+            # A segunda leitura que falha ou passa do prazo não apaga a primeira.
+            if lida is not None:
+                lidas[str(numero)] = {"texto": lida[0], "confianca": lida[1]}
+            if esgotado:
+                break
     return lidas
+
+
+def _ler(base: str, ambiente: dict[str, str], fim: float) -> tuple[str, int]:
+    """(texto, confiança) de `<base>.png`, numa passada só do `tesseract` com saída
+    texto e TSV. A confiança é a média, de 0 a 100, das palavras de 4 letras ou
+    mais: as curtas puxam a média para cima até no ruído. Sem palavra, zero."""
+    import subprocess
+    import time
+
+    subprocess.run(
+        ["tesseract", f"{base}.png", base, "-l", "por", "txt", "tsv"],
+        capture_output=True,
+        check=True,
+        timeout=max(fim - time.monotonic(), 0.001),
+        env=ambiente,
+    )
+    with open(f"{base}.txt", encoding="utf-8", errors="replace") as f:
+        # O `tesseract` fecha a página com form feed, que no texto guardado abre página nova.
+        texto = f.read().replace("\f", "").strip()
+    confiancas = []
+    with open(f"{base}.tsv", encoding="utf-8", errors="replace") as f:
+        for linha in f.read().splitlines()[1:]:
+            colunas = linha.split("\t")
+            if len(colunas) == 12 and len(colunas[11]) >= 4 and float(colunas[10]) >= 0:
+                confiancas.append(float(colunas[10]))
+    return texto, round(sum(confiancas) / len(confiancas)) if confiancas else 0
 
 
 def _desvirar(imagem: str, ambiente: dict[str, str], fim: float) -> None:
@@ -110,13 +149,18 @@ def _desvirar(imagem: str, ambiente: dict[str, str], fim: float) -> None:
     giro = re.search(r"Rotate:\s*(90|180|270)\b", osd.stdout.decode("utf-8", errors="replace"))
     if osd.returncode != 0 or giro is None:
         return
+    _girar(imagem, int(giro.group(1)))
+
+
+def _girar(imagem: str, graus: int) -> None:
+    """Gira a imagem `graus` no sentido horário, no lugar."""
     from PIL import Image
 
     with Image.open(imagem) as original:
-        desvirada = original.rotate(-int(giro.group(1)), expand=True)
+        girada = original.rotate(-graus, expand=True)
         # Sem o DPI da rasterização, o `tesseract` supõe resolução baixa e lê pior.
-        desvirada.info["dpi"] = original.info.get("dpi", (300, 300))
-    desvirada.save(imagem, dpi=desvirada.info["dpi"])
+        girada.info["dpi"] = original.info.get("dpi", (300, 300))
+    girada.save(imagem, dpi=girada.info["dpi"])
 
 
 def main(argv: list[str]) -> int:
@@ -130,7 +174,7 @@ def main(argv: list[str]) -> int:
         print(f"RLIMIT_AS indisponivel em {sys.platform}: quem segura e o vigia do pai", file=sys.stderr)
 
     if len(argv) > 3 and argv[3] == "--ocr":
-        lidas = ocr(entrada, {int(n) for n in argv[4].split(",") if n}, float(argv[5]))
+        lidas = ocr(entrada, [int(n) for n in argv[4].split(",") if n], float(argv[5]))
         sys.stdout.write(json.dumps(lidas, ensure_ascii=False))
         return 0
 
