@@ -93,6 +93,7 @@ Se o app reiniciar no meio de uma análise, a conta volta sozinha para a fila. D
 - "Não consegui ler a conta inteira" (CM-ARQ-SOMA): a frase diz quanto somaram os itens lidos e qual é o total da conta, para conferir no MV se a exportação saiu cortada;
 - "Prontuário com arquivo incompleto" (CM-ARQ-INCOMPLETO): o rodapé indica mais páginas do que vieram no arquivo;
 - o PDF grande demais para ler de uma vez (CM-ARQ-GRANDE): a frase diz quantas páginas ele tem;
+- "Não dá para analisar esta conta" (CM-ARQ-DIGITALIZADO): as folhas escaneadas que sustentam a conta não deram para ler. A conta para quando tem cirurgia no período (taxa de sala, honorário de procedimento cirúrgico, gás do centro cirúrgico ou anestésico) e nem a ficha de anestesia nem a descrição cirúrgica dão para ler, ou quando mais de um quarto das páginas do prontuário no período da conta são folhas escaneadas ilegíveis que pesam na cobrança. A frase diz qual página digitalizar de novo, ou quantas são. Esse aviso sai antes da leitura pela IA e não gasta crédito;
 - o PDF que não abre (CM-ARQ-ILEGIVEL), o cabeçalho da conta sem o atendimento e o plano (CM-ARQ-CABECALHO), o prontuário que não está mais no sistema (CM-ARQ-SEM-PRONTUARIO) e o PDF que passou dos 7 dias (CM-ARQ-VENCIDO): quem enviou manda o arquivo de novo;
 - a operadora sem memória carregada (CM-CFG-MEMORIA): a frase diz qual é a operadora e que a gestão carrega em Operadoras.
 

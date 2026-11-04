@@ -30,6 +30,7 @@ from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import date, datetime, time
 
+from app.services.contas_medicas.cirurgia import MARCA_DA_DESCRICAO
 from app.services.contas_medicas.desidentificacao import (
     Identificacao,
     desidentificar,
@@ -921,6 +922,90 @@ def _linha_da_ressalva(paginas: list[int], documento: str) -> str:
         f"Confira à mão no prontuário as páginas {paginas[0]}{juncao}{paginas[-1]} ({documento}): "
         "são folhas digitalizadas que não consegui ler bem."
     )
+
+
+# Bloqueio pelas folhas digitalizadas (#1400). O item da conta que diz que houve
+# cirurgia no período: taxa de sala, honorário de procedimento cirúrgico, gás do
+# centro cirúrgico e anestésico.
+_ANESTESICO = re.compile(
+    r"SEVOFLURAN|ISOFLURAN|DESFLURAN|PROPOFOL|DIPRIVAN|ETOMIDAT|CETAMIN|KETAMIN|BUPIVACAIN|ROPIVACAIN"
+)
+_ITENS_DO_CENTRO_CIRURGICO: tuple[Callable[[str, str, str, str], bool], ...] = (
+    # (grupo, descrição, setor, grupo de procedimento), sem acento e em maiúsculas
+    lambda grupo, descricao, _s, _g: grupo == "TAXAS" and "SALA" in descricao,
+    lambda grupo, _d, _s, procedimento: grupo == "HONORARIOS MEDICOS" and "CIRURG" in procedimento,
+    lambda grupo, _d, setor, _g: grupo == "GASES MEDICINAIS" and "CIRURG" in setor,
+    lambda grupo, descricao, _s, _g: grupo == "MEDICAMENTOS" and _ANESTESICO.search(descricao) is not None,
+)
+
+# A folha ruim na conta cirúrgica: duvidosa ou ilegível. Na regra do quarto das
+# páginas, só a ilegível. A não lida fica de fora das duas: é falha da leitura
+# (PDF que falta, fila cheia, prazo, filho que morreu), não da folha, e segue só
+# na ressalva "Confira à mão".
+_RUINS = (DUVIDOSA, ILEGIVEL)
+_QUARTO_DAS_PAGINAS = 0.25
+_FOLHAS_DA_CIRURGIA = (FICHA_DE_ANESTESIA, DESCRICAO_CIRURGICA)
+_FEMININAS = ("ficha", "folha", "descrição", "prescrição", "hemoterapia")
+
+
+def _conta_cirurgica(itens: Sequence, inicio: date | None, fim: date | None) -> bool:
+    """Se a conta tem item do centro cirúrgico no período. `itens` são os
+    `ItemConta` da leitura da conta."""
+
+    def normal(texto: str | None) -> str:
+        return _sem_acento(texto or "").upper()
+
+    return any(
+        _no_periodo(i.data, inicio, fim)
+        and any(
+            casa(normal(i.grupo), normal(i.descricao), normal(i.setor), normal(i.grupo_procedimento))
+            for casa in _ITENS_DO_CENTRO_CIRURGICO
+        )
+        for i in itens
+    )
+
+
+def _descricao_em_texto(documento: Documento, texto_por_pagina: Sequence[str | None]) -> bool:
+    if documento.familia != "DOC_EDITOR":
+        return False
+    texto = "\n".join(_separar_ocr(texto_por_pagina[n - 1] or "")[0] for n in documento.paginas)
+    return MARCA_DA_DESCRICAO.search(texto) is not None
+
+
+def _com_artigo(documento: str) -> str:
+    return f"{'a' if documento.startswith(_FEMININAS) else 'o'} {documento}"
+
+
+def bloqueio_das_digitalizadas(
+    prontuario: Prontuario,
+    texto_por_pagina: Sequence[str | None],
+    itens: Sequence,
+    inicio: date | None,
+    fim: date | None,
+) -> tuple[str, dict[str, object]] | None:
+    """A causa e os dados do Erro CM-ARQ-DIGITALIZADO da conta do período, ou None
+    quando ela segue (#1400). Para em dois casos: (a) conta cirúrgica sem ficha de
+    anestesia nem descrição cirúrgica legíveis no período, em texto ou em OCR
+    legível, e com folha digitalizada duvidosa ou ilegível que pesa (ou não
+    identificada); (b) mais de um quarto das páginas do período são digitalizadas
+    ilegíveis que pesam. A não lida não entra em nenhum dos dois."""
+    do_periodo = [d for d in prontuario.documentos if _no_periodo(d.data, inicio, fim)]
+    digitalizadas = [d for d in do_periodo if d.familia == "DIGITALIZADO"]
+    que_pesam = [d for d in digitalizadas if PESO_DA_FOLHA.get(d.subtipo or NAO_IDENTIFICADA) == PESA]
+    ruins = [d for d in que_pesam if d.qualidade in _RUINS]
+    legivel = any(d.subtipo in _FOLHAS_DA_CIRURGIA and d.qualidade == LEGIVEL for d in digitalizadas) or any(
+        d.familia == "FICHA_ANESTESICA" or _descricao_em_texto(d, texto_por_pagina) for d in do_periodo
+    )
+    if ruins and not legivel and _conta_cirurgica(itens, inicio, fim):
+        # A frase aponta a folha que mais pesa: a ficha, depois a descrição.
+        folha = min(ruins, key=lambda d: (_FOLHAS_DA_CIRURGIA + (d.subtipo,)).index(d.subtipo))
+        documento = folha.subtipo or NAO_IDENTIFICADA
+        return "digitalizada_da_cirurgia", {"folha": f"{_com_artigo(documento)} (página {folha.pagina_inicial})"}
+    paginas = sum(len(d.paginas) for d in do_periodo)
+    ilegiveis = sum(len(d.paginas) for d in que_pesam if d.qualidade == ILEGIVEL)
+    if paginas and ilegiveis / paginas > _QUARTO_DAS_PAGINAS:
+        return "digitalizadas_ilegiveis", {"ilegiveis": ilegiveis, "paginas": paginas}
+    return None
 
 
 def ler_prontuario(

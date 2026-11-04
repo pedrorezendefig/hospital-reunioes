@@ -440,6 +440,13 @@ def _pipeline(supabase, conta: dict, cronometro: _Cronometro) -> None:
             estrutura = leitura_do_prontuario.ler_prontuario(textos, lida.atendimento, qualidades)
         except leitura_do_prontuario.ErroLeitura as erro:
             raise FalhaDeLeitura("incompleto", declarado=erro.declarado, vieram=erro.vieram) from None
+        # As folhas digitalizadas que sustentam a conta não deram para ler (#1400):
+        # Erro antes do dicionário, sem gastar IA. É por conta, com o período dela.
+        if bloqueio := leitura_do_prontuario.bloqueio_das_digitalizadas(
+            estrutura, textos, lida.itens, lida.periodo_inicio, lida.periodo_fim
+        ):
+            causa, dados = bloqueio
+            raise FalhaDeLeitura(causa, **dados)
         palavras = _palavras_da_prescricao(supabase, arquivo_do_prontuario, estrutura)
         conteudo = ler_conteudo(textos, estrutura, palavras)
         prontuario = ProntuarioLido(estrutura, conteudo, textos)

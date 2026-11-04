@@ -14,19 +14,23 @@ import logging
 import re
 import unicodedata
 from datetime import date, time
+from decimal import Decimal
 from pathlib import Path
 
 import pytest
 
+from app.services.contas_medicas.erro_da_conta import ENVIAR_DE_NOVO, FalhaDeLeitura, classificar
 from app.services.contas_medicas.prontuario import (
     MARCA_DO_OCR,
     PESO_DA_FOLHA,
     ErroLeitura,
+    bloqueio_das_digitalizadas,
     digitalizadas_da_conta,
     familia_da_folha,
     ler_prontuario,
     ressalva_das_digitalizadas,
 )
+from app.services.contas_medicas_conta import ItemConta
 
 FIXTURES = Path(__file__).parent / "fixtures" / "contas_medicas" / "prontuario"
 QUEBRA = "<<<QUEBRA DE PÁGINA>>>"
@@ -592,3 +596,217 @@ def test_a_familia_da_folha_vira_o_subtipo_do_documento_digitalizado():
     (digitalizado,) = [d for d in ler_prontuario(paginas, ATENDIMENTO).documentos if d.familia == "DIGITALIZADO"]
 
     assert digitalizado.subtipo == "ficha de anestesia"
+
+
+# Bloqueio pelas folhas digitalizadas (issue #1400): a conta para em Erro
+# CM-ARQ-DIGITALIZADO quando as folhas escaneadas que sustentam a cobrança não dão
+# para ler. A frase sai do catálogo do Código do erro, como o cartão mostra.
+DESCRICAO_EM_TEXTO = [
+    p.strip("\n")
+    for p in (FIXTURES.parent / "conteudo" / "descricao_cirurgica.txt").read_text(encoding="utf-8").split(QUEBRA)
+]
+OPME_LIDO_POR_OCR = "CONTROLE DE OPME\netiqueta lote ref"
+ECG_LIDO_POR_OCR = "ELETROCARDIOGRAMA\nritmo sinusal ECG 12 derivacoes"
+SUJEIRA_DO_OCR = "~~ ;; .. rr !! ii ll"
+# Quatro páginas em texto do período: com uma folha ruim, 1 de 5 fica abaixo dos 25%.
+EM_TEXTO = ["evolucao", "anotacao_enf", "evolucao", "anotacao_enf"]
+
+
+def item(grupo: str, descricao: str, *, setor: str = "CTI ADULTO", grupo_procedimento: str = "GERAL", dia: int = 3):
+    return ItemConta(
+        pagina=1,
+        data=date(2026, 10, dia),
+        codigo="10000001",
+        descricao=descricao,
+        unidade="UN",
+        percentual=Decimal(100),
+        quantidade=Decimal(1),
+        unitario=Decimal(10),
+        total=Decimal(10),
+        grupo=grupo,
+        setor_codigo="1",
+        setor=setor,
+        grupo_procedimento=grupo_procedimento,
+    )
+
+
+TAXA_DE_SALA = item("TAXAS", "TAXA DE SALA CIRURGICA PORTE 3", setor="CENTRO CIRURGICO")
+DIARIA = item("DIARIAS", "DIARIA DE UTI ADULTO")
+
+
+def bloqueio(partes: list, lidas: dict[int, str], qualidades: dict[int, str], itens=(TAXA_DE_SALA,)) -> str | None:
+    """Monta o prontuário com o OCR de cada página de `lidas` e devolve a frase do
+    Erro da conta de 01 a 05/10 com os `itens`, ou None quando ela segue."""
+    paginas = montar(*partes)
+    for numero, lido in lidas.items():
+        paginas[numero - 1] = com_ocr(paginas[numero - 1], lido)
+    prontuario = ler_prontuario(paginas, ATENDIMENTO, qualidades)
+    achado = bloqueio_das_digitalizadas(prontuario, paginas, itens, OUTUBRO_1, OUTUBRO_5)
+    if achado is None:
+        return None
+    causa, dados = achado
+    erro = classificar(FalhaDeLeitura(causa, **dados), "leitura_do_prontuario")
+    assert (erro.codigo, erro.arquivo, erro.acao) == ("CM-ARQ-DIGITALIZADO", "prontuario", ENVIAR_DE_NOVO)
+    return erro.frase
+
+
+def frase_da_cirurgia(folha_ruim: str) -> str:
+    return (
+        f"Não dá para analisar esta conta: {folha_ruim} é uma folha digitalizada que não consegui ler. "
+        "Digitalize de novo, com a folha em pé, e envie o prontuário de novo."
+    )
+
+
+@pytest.mark.parametrize("qualidade", ["ilegivel", "duvidosa"])
+def test_conta_cirurgica_sem_ficha_nem_descricao_legiveis_para_na_ficha_ruim(qualidade):
+    frase = bloqueio([CAPA_QUE_BATE, *EM_TEXTO, folha()], {6: FICHA_LIDA_POR_OCR}, {6: qualidade})
+
+    assert frase == frase_da_cirurgia("a ficha de anestesia (página 6)")
+
+
+def test_conta_cirurgica_com_folha_ruim_sem_titulo_aponta_o_documento_nao_identificado():
+    frase = bloqueio([CAPA_QUE_BATE, *EM_TEXTO, folha()], {6: SUJEIRA_DO_OCR}, {6: "ilegivel"})
+
+    assert frase == frase_da_cirurgia("o documento não identificado (página 6)")
+
+
+def test_entre_as_folhas_ruins_a_frase_aponta_a_ficha_de_anestesia():
+    partes = [CAPA_QUE_BATE, *EM_TEXTO, folha(), folha(), *EM_TEXTO]
+    lidas = {6: OPME_LIDO_POR_OCR, 7: FICHA_LIDA_POR_OCR}
+
+    frase = bloqueio(partes, lidas, {6: "ilegivel", 7: "duvidosa"})
+
+    assert frase == frase_da_cirurgia("a ficha de anestesia (página 7)")
+
+
+@pytest.mark.parametrize(
+    "cirurgico",
+    [
+        pytest.param(TAXA_DE_SALA, id="taxa_de_sala"),
+        pytest.param(
+            item("HONORARIOS MEDICOS", "COLECISTECTOMIA", grupo_procedimento="PROCEDIMENTOS CIRURGICOS"),
+            id="honorario_de_procedimento_cirurgico",
+        ),
+        pytest.param(
+            item("GASES MEDICINAIS", "OXIGENIO POR HORA", setor="CENTRO CIRURGICO"), id="gas_do_centro_cirurgico"
+        ),
+        pytest.param(item("MEDICAMENTOS", "SEVOFLURANO 100ML FR"), id="anestesico"),
+    ],
+)
+def test_cada_item_do_centro_cirurgico_faz_a_conta_cirurgica(cirurgico):
+    frase = bloqueio([CAPA_QUE_BATE, *EM_TEXTO, folha()], {6: FICHA_LIDA_POR_OCR}, {6: "ilegivel"}, (DIARIA, cirurgico))
+
+    assert frase == frase_da_cirurgia("a ficha de anestesia (página 6)")
+
+
+@pytest.mark.parametrize(
+    ("partes", "lidas", "qualidades", "itens"),
+    [
+        pytest.param(
+            [*EM_TEXTO, folha(), DESCRICAO_EM_TEXTO],
+            {6: FICHA_LIDA_POR_OCR},
+            {6: "ilegivel"},
+            (TAXA_DE_SALA,),
+            id="descricao_cirurgica_em_texto",
+        ),
+        pytest.param(
+            [*EM_TEXTO, folha(), folha(), *EM_TEXTO],
+            {6: FICHA_LIDA_POR_OCR, 7: OPME_LIDO_POR_OCR},
+            {6: "legivel", 7: "ilegivel"},
+            (TAXA_DE_SALA,),
+            id="ficha_digitalizada_legivel",
+        ),
+        pytest.param(
+            [*EM_TEXTO, folha("12/10/2026")],
+            {6: FICHA_LIDA_POR_OCR},
+            {6: "ilegivel"},
+            (TAXA_DE_SALA,),
+            id="pagina_ruim_fora_do_periodo",
+        ),
+        pytest.param(
+            [*EM_TEXTO, folha()],
+            {6: FICHA_LIDA_POR_OCR},
+            {6: "ilegivel"},
+            (item("TAXAS", "TAXA DE SALA CIRURGICA PORTE 3", setor="CENTRO CIRURGICO", dia=12),),
+            id="item_do_centro_cirurgico_fora_do_periodo",
+        ),
+        pytest.param(
+            [*EM_TEXTO, folha()],
+            {6: FICHA_LIDA_POR_OCR},
+            {6: "ilegivel"},
+            (DIARIA, item("MEDICAMENTOS", "DIPIRONA 500MG"), item("TAXAS", "TAXA DE ENFERMAGEM")),
+            id="conta_sem_item_do_centro_cirurgico",
+        ),
+        pytest.param(
+            [*EM_TEXTO, folha()],
+            {6: ECG_LIDO_POR_OCR},
+            {6: "ilegivel"},
+            (TAXA_DE_SALA,),
+            id="folha_ruim_que_nao_pesa",
+        ),
+        # a não lida é falha da leitura (fila cheia, prazo, PDF que falta), não da folha
+        pytest.param(
+            [*EM_TEXTO, folha()],
+            {6: FICHA_LIDA_POR_OCR},
+            {6: "nao_lida"},
+            (TAXA_DE_SALA,),
+            id="ficha_nao_lida",
+        ),
+    ],
+)
+def test_conta_segue_sem_o_bloqueio_da_cirurgia(partes, lidas, qualidades, itens):
+    assert bloqueio([CAPA_QUE_BATE, *partes], lidas, qualidades, itens) is None
+
+
+def frase_das_paginas(ilegiveis: int, paginas: int) -> str:
+    return (
+        f"Não dá para analisar esta conta: {ilegiveis} das {paginas} páginas do prontuário deste período são "
+        "folhas digitalizadas que não consegui ler. Digitalize de novo essas folhas, em pé, e envie o prontuário "
+        "de novo."
+    )
+
+
+def test_mais_de_um_quarto_das_paginas_do_periodo_ilegiveis_para_a_conta():
+    # 2 de 7 (28%), numa conta sem cirurgia; a folha de fora do período não conta.
+    partes = [CAPA_QUE_BATE, *EM_TEXTO, folha(), folha(), "evolucao", folha("12/10/2026")]
+    lidas = {6: SUJEIRA_DO_OCR, 7: OPME_LIDO_POR_OCR, 9: SUJEIRA_DO_OCR}
+    qualidades = {6: "ilegivel", 7: "ilegivel", 9: "ilegivel"}
+
+    assert bloqueio(partes, lidas, qualidades, (DIARIA,)) == frase_das_paginas(2, 7)
+
+
+@pytest.mark.parametrize(
+    ("partes", "lidas", "qualidades"),
+    [
+        # 2 de 8 é 25% em ponto
+        pytest.param(
+            [*EM_TEXTO, folha(), folha(), "evolucao", "anotacao_enf"],
+            {6: SUJEIRA_DO_OCR, 7: SUJEIRA_DO_OCR},
+            {6: "ilegivel", 7: "ilegivel"},
+            id="25_por_cento",
+        ),
+        # contando o eletrocardiograma seriam 2 de 7
+        pytest.param(
+            [*EM_TEXTO, folha(), folha(), "evolucao"],
+            {6: SUJEIRA_DO_OCR, 7: ECG_LIDO_POR_OCR},
+            {6: "ilegivel", 7: "ilegivel"},
+            id="eletrocardiograma_ilegivel",
+        ),
+        # duvidosa não é ilegível: 2 de 7 duvidosas seguem
+        pytest.param(
+            [*EM_TEXTO, folha(), folha(), "evolucao"],
+            {6: SUJEIRA_DO_OCR, 7: SUJEIRA_DO_OCR},
+            {6: "duvidosa", 7: "duvidosa"},
+            id="duvidosas",
+        ),
+        # não lida é falha da leitura, não da folha: 2 de 7 não lidas seguem
+        pytest.param(
+            [*EM_TEXTO, folha(), folha(), "evolucao"],
+            {6: SUJEIRA_DO_OCR, 7: OPME_LIDO_POR_OCR},
+            {6: "nao_lida", 7: "nao_lida"},
+            id="nao_lidas",
+        ),
+    ],
+)
+def test_um_quarto_ou_menos_das_paginas_ilegiveis_segue(partes, lidas, qualidades):
+    assert bloqueio([CAPA_QUE_BATE, *partes], lidas, qualidades, (DIARIA,)) is None
