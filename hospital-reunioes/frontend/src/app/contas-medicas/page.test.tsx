@@ -179,6 +179,15 @@ describe("a fila comum", () => {
     );
   });
 
+  it("o Atendimento N de cada linha da lista sai em caixa alta, a pedido do diretor (PR #1411)", async () => {
+    render(<ContasMedicasPage />);
+
+    const itens = await linhas();
+    for (const item of itens) {
+      expect(within(item).getByText(/^Atendimento /).className.split(" ")).toContain("uppercase");
+    }
+  });
+
   it("Minhas mostra as que a faturista puxou, com Continuar", async () => {
     render(<ContasMedicasPage />);
     await linhas();
@@ -311,6 +320,14 @@ describe("o cartão do envio (issue #1336)", () => {
     for (const cartao of itens) {
       expect(quadrado(cartao, "Conta")).toBeTruthy();
       expect(quadrado(cartao, "Prontuário")).toBeTruthy();
+    }
+  });
+
+  it("o Atendimento N de cada cartão sai em caixa alta, a pedido do diretor (PR #1411)", async () => {
+    const itens = await cartoes();
+
+    for (const cartao of itens) {
+      expect(within(cartao).getByText(/^Atendimento /).className.split(" ")).toContain("uppercase");
     }
   });
 
