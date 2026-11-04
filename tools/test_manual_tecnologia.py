@@ -89,9 +89,10 @@ class TestASecaoDoChat:
     Produtos, do formulário, da Conversa espelhada e do Planejar com a IA saem."""
 
     @pytest.mark.parametrize("pagina", TAREFAS_DO_CHAT)
-    def test_a_tarefa_do_chat_existe_em_draft_e_cita_o_prd(self, pagina):
+    def test_a_tarefa_do_chat_existe_e_cita_o_prd(self, pagina):
+        """O draft não entra aqui: quem tira é a Action pós-merge quando o PRD
+        sobe (ADR 0068), e a página publicada continua sendo a do PRD."""
         campos = lint_manual.ler_frontmatter((SECAO / f"{pagina}.md").read_text(encoding="utf-8"))
-        assert campos.get("draft") == "true"
         assert "1380" in RE_NUMERO.findall(campos.get("prd", ""))
 
     def test_as_tarefas_do_modulo_sao_as_do_chat(self):
