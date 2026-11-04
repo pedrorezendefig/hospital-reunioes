@@ -2,6 +2,51 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-11-03T21:10:59-03:00",
+      "sha": "cd21b0dd6ac3e179dee1d8a2cf76a051c1d437e8",
+      "app_version": "0.211.0",
+      "subject": "Onda cm-ocr-onda1: Qualidade da leitura de cada folha escaneada do prontuário, com giro de 180° e prioridade no prazo",
+      "raw_subject": "chore(deploy): registro da onda cm-ocr-onda1 (#1403)",
+      "scope": [
+        "backend"
+      ],
+      "prds": [
+        1397
+      ],
+      "result": "healthy",
+      "duration_seconds": 161,
+      "services_touched": [
+        "backend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        },
+        {
+          "service": "frontend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "onda-enxuta cm-ocr-onda1: PR #1403 (issue #1398), mergeados PR a PR. Merge pela API do GitHub, um build. Registro pela Action pos-merge depois do health.",
+      "etapas": {
+        "merge_s": 3,
+        "build_s": {
+          "backend": 130
+        },
+        "health_s": 10
+      },
+      "responsavel": "pedrorezendefig"
+    },
+    {
       "at": "2026-11-03T12:47:34-03:00",
       "sha": "d79e53ee78de061d9d09f064e0925223f201fb99",
       "app_version": "0.210.2",
