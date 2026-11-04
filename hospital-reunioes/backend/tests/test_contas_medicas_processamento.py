@@ -2431,6 +2431,28 @@ class TestVagas:
         assert Settings.model_fields["cm_vagas"].default == 4
         assert processamento.VAGAS == settings.cm_vagas
 
+    def test_as_vagas_seguem_a_variavel_cm_vagas(self):
+        """Num processo novo, para não recarregar `settings` nem `processamento`
+        dentro da suíte: com `CM_VAGAS=3`, a fila tem três vagas e três workers."""
+        import subprocess
+
+        ambiente = {**os.environ, "CM_VAGAS": "3"}
+        codigo = (
+            "from app.services.contas_medicas import processamento as p; "
+            "print(p.VAGAS, p._vagas._value, p._executor._max_workers)"
+        )
+        processo = subprocess.run(
+            [sys.executable, "-c", codigo],
+            capture_output=True,
+            text=True,
+            env=ambiente,
+            cwd=Path(__file__).resolve().parents[1],
+            timeout=120,
+        )
+
+        assert processo.returncode == 0, processo.stderr[-600:]
+        assert processo.stdout.split() == ["3", "3", "3"]
+
     def test_o_job_entrega_no_maximo_uma_conta_por_vaga_enquanto_as_vagas_estao_ocupadas(self, monkeypatch):
         monkeypatch.setattr(processamento, "processar", lambda _sb, _conta: None)
         vagas = processamento.VAGAS
