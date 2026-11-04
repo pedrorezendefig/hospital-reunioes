@@ -74,6 +74,7 @@ class Preco:
 # a troca da variável; fora da tabela, a chamada grava custo zero e avisa no log.
 PRECO_POR_MILHAO: dict[str, Preco] = {
     "claude-sonnet-5-5": Preco(entrada=2.00, saida=10.00, leitura_cache=0.20, escrita_cache=2.50),
+    "claude-opus-5-5": Preco(entrada=4.00, saida=20.00, leitura_cache=0.20, escrita_cache=5.00),
 }
 
 MENSAGEM_SEM_CREDITO = "A IA está sem crédito. Avise o Pedro."

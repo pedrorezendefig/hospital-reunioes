@@ -635,6 +635,12 @@ class TestCustoDaChamada:
 
         assert (preco.entrada, preco.saida, preco.leitura_cache, preco.escrita_cache) == (2.00, 10.00, 0.20, 2.50)
 
+    def test_o_preco_do_opus_5_5_por_milhao_de_tokens(self):
+        # Para trocar o modelo pela variável sem a conta gravar custo zero.
+        preco = ia.PRECO_POR_MILHAO["claude-opus-5-5"]
+
+        assert (preco.entrada, preco.saida, preco.leitura_cache, preco.escrita_cache) == (4.00, 20.00, 0.20, 5.00)
+
     def test_a_chamada_grava_tokens_cache_custo_e_duracao(self, provedor, monkeypatch):
         relogio = iter([100.0, 100.25])
         monkeypatch.setattr(ia, "perf_counter", lambda: next(relogio))

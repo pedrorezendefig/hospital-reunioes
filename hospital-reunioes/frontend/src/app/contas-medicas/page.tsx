@@ -353,7 +353,7 @@ function CartaoDoEnvio({
         }`}
       >
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-          <p className="min-w-0 flex-1 text-sm font-semibold text-slate-900">Atendimento {conta.numero_atendimento}</p>
+          <p className="min-w-0 flex-1 text-sm font-semibold uppercase text-slate-900">Atendimento {conta.numero_atendimento}</p>
           <span
             className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${COR_DA_SITUACAO[conta.situacao] ?? "bg-slate-100 text-slate-600"}`}
           >
@@ -434,7 +434,7 @@ function LinhaDaFila({ conta, onEnviarDeNovo }: { conta: ItemDaFila; onEnviarDeN
   return (
     <li className="flex flex-wrap items-center gap-x-4 gap-y-1 px-5 py-3">
       <div className="min-w-0 flex-1">
-        <p className="text-sm font-semibold text-slate-900">Atendimento {conta.numero_atendimento}</p>
+        <p className="text-sm font-semibold uppercase text-slate-900">Atendimento {conta.numero_atendimento}</p>
         {complemento(conta) && <p className="text-xs text-slate-500">{complemento(conta)}</p>}
       </div>
       <span
