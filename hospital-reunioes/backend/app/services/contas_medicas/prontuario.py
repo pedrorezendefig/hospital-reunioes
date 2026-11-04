@@ -862,13 +862,54 @@ def digitalizadas_da_conta(
         sorted(
             pagina.numero
             for grupo, campos in documentos
-            if grupo[0].familia == "DIGITALIZADO"
-            and (
-                campos.data is None
-                or ((inicio is None or inicio <= campos.data) and (fim is None or campos.data <= fim))
-            )
+            if grupo[0].familia == "DIGITALIZADO" and _no_periodo(campos.data, inicio, fim)
             for pagina in grupo
         )
+    )
+
+
+def _no_periodo(data: date | None, inicio: date | None, fim: date | None) -> bool:
+    """Sem data, conta como do período: na dúvida, a folha é da conta."""
+    return data is None or ((inicio is None or inicio <= data) and (fim is None or data <= fim))
+
+
+# A folha lida mal: a não lida (prazo, falha) conta como ilegível.
+_LIDAS_MAL = (DUVIDOSA, ILEGIVEL, NAO_LIDA)
+
+
+def ressalva_das_digitalizadas(prontuario: Prontuario, inicio: date | None, fim: date | None) -> tuple[str, ...]:
+    """As linhas do Parecer parcial da conta com as folhas digitalizadas a conferir
+    à mão (#1399): do Atendimento (a leitura já deixou só as dele) e do período da
+    conta, que pesam ou não foram identificadas, e saíram duvidosas ou ilegíveis.
+    A estrutura serve a todas as parciais do Atendimento; o período é o da conta.
+    Páginas seguidas do mesmo documento vão numa linha só."""
+    folhas = sorted(
+        (d.pagina_inicial, d.subtipo or NAO_IDENTIFICADA)
+        for d in prontuario.documentos
+        if d.familia == "DIGITALIZADO"
+        and d.qualidade in _LIDAS_MAL
+        and PESO_DA_FOLHA.get(d.subtipo or NAO_IDENTIFICADA) == PESA
+        and _no_periodo(d.data, inicio, fim)
+    )
+    blocos: list[tuple[list[int], str]] = []
+    for pagina, documento in folhas:
+        if blocos and blocos[-1][1] == documento and blocos[-1][0][-1] == pagina - 1:
+            blocos[-1][0].append(pagina)
+        else:
+            blocos.append(([pagina], documento))
+    return tuple(_linha_da_ressalva(paginas, documento) for paginas, documento in blocos)
+
+
+def _linha_da_ressalva(paginas: list[int], documento: str) -> str:
+    if len(paginas) == 1:
+        return (
+            f"Confira à mão no prontuário a página {paginas[0]} ({documento}): "
+            "é uma folha digitalizada que não consegui ler bem."
+        )
+    juncao = " e " if len(paginas) == 2 else " a "
+    return (
+        f"Confira à mão no prontuário as páginas {paginas[0]}{juncao}{paginas[-1]} ({documento}): "
+        "são folhas digitalizadas que não consegui ler bem."
     )
 
 
@@ -899,7 +940,8 @@ def ler_prontuario(
                 hora=campos.hora,
                 setor=campos.setor,
                 conselho=campos.conselho,
-                subtipo=campos.subtipo,
+                # a da digitalizada é a família da folha pelo título do OCR (#1399)
+                subtipo=familia_da_folha(grupo[0].ocr) if familia == "DIGITALIZADO" else campos.subtipo,
                 linhas=tuple(desidentificar(linhas, capa.identificacao)),
                 qualidade=grupo[0].qualidade if familia == "DIGITALIZADO" else None,
             )

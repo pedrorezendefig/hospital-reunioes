@@ -25,6 +25,7 @@ from app.services.contas_medicas.prontuario import (
     digitalizadas_da_conta,
     familia_da_folha,
     ler_prontuario,
+    ressalva_das_digitalizadas,
 )
 
 FIXTURES = Path(__file__).parent / "fixtures" / "contas_medicas" / "prontuario"
@@ -481,3 +482,117 @@ def test_digitalizadas_da_conta_sao_as_do_atendimento_com_data_no_periodo():
 def test_a_folha_digitalizada_ganha_familia_e_peso_pelo_titulo_que_o_ocr_leu(ocr, familia, peso):
     assert familia_da_folha(ocr) == familia
     assert PESO_DA_FOLHA[familia] == peso
+
+
+# Ressalva no Parecer parcial (issue #1399): a digitalizada do Atendimento e do
+# período da conta, que pesa (ou não foi identificada) e saiu duvidosa ou ilegível.
+FICHA_LIDA_POR_OCR = "FICHA DE ANESTESIA\nTecnica anestesica: geral balanceada"
+HORARIOS_LIDOS_POR_OCR = "REGISTRO DE HORARIOS CIRURGICOS\nentrada do paciente na sala 07:40"
+CONSENTIMENTO_LIDO_POR_OCR = "TERMO DE CONSENTIMENTO INFORMADO\ndeclaro que fui informado"
+OUTUBRO_1, OUTUBRO_5 = date(2026, 10, 1), date(2026, 10, 5)
+
+
+def folha(dia: str = "03/10/2026") -> list[str]:
+    """A folha digitalizada da fixture, assinada no dia pedido."""
+    return [paginas_da_fixture("digitalizado")[0].replace("03/10/2026", dia)]
+
+
+def ressalva(partes: list, lidas: dict[int, str], qualidades: dict[int, str], inicio=OUTUBRO_1, fim=OUTUBRO_5):
+    """Monta o prontuário, põe o OCR em cada página de `lidas` e devolve a ressalva da conta do período."""
+    paginas = montar(*partes)
+    for numero, lido in lidas.items():
+        paginas[numero - 1] = com_ocr(paginas[numero - 1], lido)
+    return ressalva_das_digitalizadas(ler_prontuario(paginas, ATENDIMENTO, qualidades), inicio, fim)
+
+
+def linha_da_ressalva(pagina: int, documento: str) -> str:
+    return (
+        f"Confira à mão no prontuário a página {pagina} ({documento}): "
+        "é uma folha digitalizada que não consegui ler bem."
+    )
+
+
+def test_a_ressalva_lista_a_folha_que_pesa_e_saiu_duvidosa_ou_ilegivel_com_pagina_e_documento():
+    resultado = ressalva(
+        [CAPA_QUE_BATE, "evolucao", folha(), "anotacao_enf", folha()],
+        {3: FICHA_LIDA_POR_OCR, 5: HORARIOS_LIDOS_POR_OCR},
+        {3: "duvidosa", 5: "ilegivel"},
+    )
+
+    assert resultado == (
+        linha_da_ressalva(3, "ficha de anestesia"),
+        linha_da_ressalva(5, "registro de horários cirúrgicos"),
+    )
+
+
+def test_paginas_seguidas_do_mesmo_documento_vao_numa_linha_so():
+    resultado = ressalva(
+        [CAPA_QUE_BATE, "evolucao", folha(), folha(), "anotacao_enf"],
+        {3: FICHA_LIDA_POR_OCR, 4: FICHA_LIDA_POR_OCR},
+        {3: "ilegivel", 4: "duvidosa"},
+    )
+
+    assert resultado == (
+        "Confira à mão no prontuário as páginas 3 e 4 (ficha de anestesia): "
+        "são folhas digitalizadas que não consegui ler bem.",
+    )
+
+
+# Em cada caso a página 3, ficha de anestesia ilegível do período, entra: a ressalva
+# não está vazia por outro motivo. O que muda é a outra folha, que fica de fora.
+@pytest.mark.parametrize(
+    ("partes", "lidas", "qualidades"),
+    [
+        pytest.param(
+            [folha()], {4: CONSENTIMENTO_LIDO_POR_OCR}, {4: "ilegivel"}, id="familia_que_nao_pesa"
+        ),
+        pytest.param([folha()], {4: FICHA_LIDA_POR_OCR}, {4: "legivel"}, id="pagina_legivel"),
+        # as páginas 4 e 5 são do pronto-socorro, e a 6 herda o Atendimento dele
+        pytest.param(
+            ["outro_atendimento", folha()], {6: FICHA_LIDA_POR_OCR}, {6: "ilegivel"}, id="outro_atendimento"
+        ),
+        pytest.param([folha("12/10/2026")], {4: FICHA_LIDA_POR_OCR}, {4: "ilegivel"}, id="fora_do_periodo"),
+    ],
+)
+def test_nao_entram_na_ressalva(partes, lidas, qualidades):
+    resultado = ressalva(
+        [CAPA_QUE_BATE, "evolucao", folha(), *partes, "anotacao_enf"],
+        {3: FICHA_LIDA_POR_OCR, **lidas},
+        {3: "ilegivel", **qualidades},
+    )
+
+    assert resultado == (linha_da_ressalva(3, "ficha de anestesia"),)
+
+
+@pytest.mark.parametrize(
+    ("lidas", "qualidade"),
+    [
+        pytest.param({3: "~~ ;; .. rr !! ii ll"}, "ilegivel", id="ilegivel_sem_titulo"),
+        pytest.param({}, "nao_lida", id="nao_lida_por_prazo"),
+    ],
+)
+def test_pagina_ilegivel_sem_titulo_entra_como_documento_nao_identificado(lidas, qualidade):
+    resultado = ressalva([CAPA_QUE_BATE, "evolucao", folha(), "anotacao_enf"], lidas, {3: qualidade})
+
+    assert resultado == (linha_da_ressalva(3, "documento não identificado"),)
+
+
+def test_cada_parcial_do_mesmo_atendimento_lista_so_as_paginas_do_proprio_periodo():
+    partes = [CAPA_QUE_BATE, "evolucao", folha("03/10/2026"), "anotacao_enf", folha("05/10/2026")]
+    lidas = {3: FICHA_LIDA_POR_OCR, 5: FICHA_LIDA_POR_OCR}
+    qualidades = {3: "ilegivel", 5: "ilegivel"}
+
+    primeira = ressalva(partes, lidas, qualidades, date(2026, 10, 2), date(2026, 10, 4))
+    segunda = ressalva(partes, lidas, qualidades, date(2026, 10, 5), date(2026, 10, 6))
+
+    assert primeira == (linha_da_ressalva(3, "ficha de anestesia"),)
+    assert segunda == (linha_da_ressalva(5, "ficha de anestesia"),)
+
+
+def test_a_familia_da_folha_vira_o_subtipo_do_documento_digitalizado():
+    paginas = montar(CAPA_QUE_BATE, "evolucao", folha(), "anotacao_enf")
+    paginas[2] = com_ocr(paginas[2], FICHA_LIDA_POR_OCR)
+
+    (digitalizado,) = [d for d in ler_prontuario(paginas, ATENDIMENTO).documentos if d.familia == "DIGITALIZADO"]
+
+    assert digitalizado.subtipo == "ficha de anestesia"
