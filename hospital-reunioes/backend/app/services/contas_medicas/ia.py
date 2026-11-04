@@ -56,10 +56,11 @@ ESPERAS_S = (5, 20)
 # manda eventos o tempo todo), não para a resposta inteira.
 PRAZO_DA_TENTATIVA_S = 180
 
-# O teto de saída de cada chamada, raciocínio incluído (issue #1412). A leitura
-# de um prontuário de 331 páginas deu 21 mil tokens e a de 552 páginas, 25 mil;
-# com o teto antigo, de 16 mil, toda leitura grande saía cortada.
-MAX_TOKENS = 64000
+# O teto de saída de cada chamada, raciocínio incluído: o máximo do Sonnet 5.5
+# e do Opus 5.5. A leitura de um prontuário de 660 páginas deu 40 mil tokens e
+# a comparação de uma conta de 265 itens, 57,6 mil (issues #1412 e o lote de
+# 04/11/2026); com o teto antigo, de 16 mil, toda leitura grande saía cortada.
+MAX_TOKENS = 128000
 
 
 @dataclass(frozen=True)
