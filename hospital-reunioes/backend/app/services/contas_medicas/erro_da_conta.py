@@ -102,6 +102,20 @@ CATALOGO: dict[str, _Linha] = {
         ENVIAR_DE_NOVO,
     ),
     "vencido": _Linha("CM-ARQ-VENCIDO", "O PDF já passou dos 7 dias e saiu do sistema.", ENVIAR_DE_NOVO),
+    # As folhas digitalizadas que sustentam a conta não deram para ler (#1400).
+    "digitalizada_da_cirurgia": _Linha(
+        "CM-ARQ-DIGITALIZADO",
+        "Não dá para analisar esta conta: {folha} é uma folha digitalizada que não consegui ler. "
+        "Digitalize de novo, com a folha em pé, e envie o prontuário de novo.",
+        ENVIAR_DE_NOVO,
+    ),
+    "digitalizadas_ilegiveis": _Linha(
+        "CM-ARQ-DIGITALIZADO",
+        "Não dá para analisar esta conta: {ilegiveis} das {paginas} páginas do prontuário deste período são "
+        "folhas digitalizadas que não consegui ler. Digitalize de novo essas folhas, em pé, e envie o "
+        "prontuário de novo.",
+        ENVIAR_DE_NOVO,
+    ),
     # A configuração: a gestão carrega, e a conta é analisada de novo.
     "sem_memoria": _Linha(
         "CM-CFG-MEMORIA",
