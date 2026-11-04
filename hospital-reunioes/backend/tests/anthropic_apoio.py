@@ -79,13 +79,34 @@ def _eventos_do_stream(corpo: dict) -> bytes:
     return "".join(f"event: {nome}\ndata: {json.dumps(dados)}\n\n" for nome, dados in eventos).encode()
 
 
+class _StreamQueCai(httpx2.SyncByteStream):
+    def __init__(self, erro: Exception):
+        self._erro = erro
+
+    def __iter__(self):
+        inicio = {"type": "message_start", "message": {**mensagem(""), "content": [], "stop_reason": None}}
+        yield f"event: message_start\ndata: {json.dumps(inicio)}\n\n".encode()
+        raise self._erro
+
+
+def stream_que_cai(erro: Exception) -> httpx2.Response:
+    """O stream que começa (a API já mandou o `message_start`) e cai no meio
+    da leitura com `erro`, como a conexão perdida ou o prazo de leitura
+    esgotado numa resposta longa. Uma resposta nova por requisição: o corpo
+    em stream só se lê uma vez."""
+    return httpx2.Response(200, headers={"content-type": "text/event-stream"}, stream=_StreamQueCai(erro))
+
+
 def cliente_por_transporte(duble) -> anthropic.Anthropic:
     """O dublê responde sempre a mensagem inteira em JSON; quando a chamada pede
-    `stream: true`, a mensagem de sucesso vira os eventos SSE que a API mandaria."""
+    `stream: true`, a mensagem de sucesso vira os eventos SSE que a API mandaria.
+    A resposta que já vem em SSE (`stream_que_cai`) passa como está."""
 
     def transporte(request: httpx2.Request) -> httpx2.Response:
         resposta = duble(request)
         if not json.loads(request.content or b"{}").get("stream") or resposta.status_code != 200:
+            return resposta
+        if resposta.headers.get("content-type") == "text/event-stream":
             return resposta
         corpo = json.loads(resposta.content)
         if corpo.get("type") != "message":

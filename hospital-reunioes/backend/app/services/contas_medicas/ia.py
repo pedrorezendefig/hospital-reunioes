@@ -29,6 +29,7 @@ from time import perf_counter
 from typing import Annotated, Any, Literal
 
 import anthropic
+import httpx2
 from pydantic import BaseModel, BeforeValidator, ConfigDict, Field, ValidationError, WithJsonSchema
 
 from app.config import settings
@@ -126,7 +127,7 @@ def _grande_demais(erro: anthropic.APIStatusError) -> bool:
 DEFINITIVAS = frozenset({"chave", "modelo", "tamanho"})
 
 
-def _causa(erro: anthropic.APIError | ValidationError) -> tuple[str, int | None]:
+def _causa(erro: anthropic.APIError | httpx2.HTTPError | ValidationError) -> tuple[str, int | None]:
     """A causa da falha e o código HTTP, para o Código do erro. Lê a mensagem
     da resposta só para separar o 400 de tamanho; ela não sai daqui."""
     if isinstance(erro, ValidationError):
@@ -143,6 +144,8 @@ def _causa(erro: anthropic.APIError | ValidationError) -> tuple[str, int | None]
             return "fora_do_ar", http
         return "recusa", http
     if isinstance(erro, anthropic.APIConnectionError):  # inclui o tempo esgotado
+        return "fora_do_ar", None
+    if isinstance(erro, httpx2.HTTPError):  # a conexão ou o prazo que cai no meio do stream
         return "fora_do_ar", None
     return "recusa", None
 
@@ -513,7 +516,9 @@ def _chamar_a_ia[Saida: BaseModel](
                 break
             conteudo = "".join(bloco.text for bloco in resposta.content if bloco.type == "text")
             resultado = saida.model_validate_json(conteudo)
-        except (anthropic.APIError, ValidationError) as erro:
+        except (anthropic.APIError, httpx2.HTTPError, ValidationError) as erro:
+            # O SDK só traduz o erro do envio; o que cai na leitura do stream (conexão
+            # perdida, prazo de leitura esgotado) sobe cru do httpx2, o transporte dele.
             # O tipo do erro, nunca a mensagem: a resposta inválida pode citar o prontuário.
             tipo = type(erro).__name__
             if isinstance(erro, anthropic.APIStatusError) and _sem_credito(erro):

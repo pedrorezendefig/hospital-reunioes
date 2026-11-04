@@ -16,6 +16,7 @@ import json
 import os
 import re
 import sys
+from collections.abc import Callable
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -25,7 +26,7 @@ from pydantic import BaseModel
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from anthropic_apoio import cliente_por_transporte, erro, mensagem, uso  # noqa: E402
+from anthropic_apoio import cliente_por_transporte, erro, mensagem, stream_que_cai, uso  # noqa: E402
 
 from app.config import Settings  # noqa: E402
 from app.services.contas_medicas import ia  # noqa: E402
@@ -189,13 +190,16 @@ class _Provedor:
             (json.dumps(EVENTOS_VALIDOS), USO_PADRAO)
         ]
 
-    def responder(self, *respostas: tuple[str, dict] | httpx2.Response | Exception) -> None:
+    def responder(self, *respostas: tuple[str, dict] | httpx2.Response | Exception | Callable) -> None:
         self.respostas = list(respostas)
 
     def __call__(self, request: httpx2.Request) -> httpx2.Response:
         self.corpos.append(json.loads(request.content))
         self.urls.append(str(request.url))
         resposta = self.respostas.pop(0) if len(self.respostas) > 1 else self.respostas[0]
+        if callable(resposta):
+            # Uma resposta nova a cada requisição (o stream só se lê uma vez).
+            resposta = resposta()
         if isinstance(resposta, Exception):
             # A falha do transporte (tempo esgotado, conexão), que o SDK traduz.
             raise resposta
@@ -578,6 +582,12 @@ FALHAS_DA_IA = {
     "529": (erro(529, "overloaded_error", f"Overloaded {TRECHO_NA_RESPOSTA}"), "fora_do_ar", 529, 3),
     "tempo-esgotado": (httpx2.ReadTimeout(f"read timed out {TRECHO_NA_RESPOSTA}"), "fora_do_ar", None, 3),
     "sem-conexao": (httpx2.ConnectError(f"connection refused {TRECHO_NA_RESPOSTA}"), "fora_do_ar", None, 3),
+    "stream-cai-no-meio": (
+        lambda: stream_que_cai(httpx2.ReadTimeout(f"read timed out {TRECHO_NA_RESPOSTA}")),
+        "fora_do_ar",
+        None,
+        3,
+    ),
     "400-tamanho": (
         erro(400, "invalid_request_error", f"prompt is too long: 215000 tokens > 200000 maximum {TRECHO_NA_RESPOSTA}"),
         "tamanho",
@@ -614,6 +624,20 @@ class TestTipoDaFalha:
         assert TRECHO_NA_RESPOSTA not in str(falha.value)
         assert TRECHO_NA_RESPOSTA not in repr(vars(falha.value))
         assert falha.value.tipo, "o tipo do erro da última tentativa"
+
+    def test_o_stream_que_cai_no_meio_tenta_tres_vezes_e_grava_o_custo(self, provedor):
+        # O SDK só traduz o erro do envio; o que cai na leitura do stream sobe
+        # cru do transporte (PR #1413).
+        banco = _BancoDeCusto()
+        provedor.responder(lambda: stream_que_cai(httpx2.RemoteProtocolError("peer closed connection")))
+
+        with pytest.raises(ia.ErroDaIA) as falha:
+            _extrair(banco)
+
+        assert len(provedor.corpos) == 3
+        assert (falha.value.causa, falha.value.tipo, falha.value.http) == ("fora_do_ar", "RemoteProtocolError", None)
+        (chamada,) = banco.tabelas["cm_chamada_ia"]
+        assert (chamada["passo"], chamada["tentativas"], chamada["sucesso"]) == ("A", 3, False)
 
     def test_o_tipo_e_o_do_erro_da_ultima_tentativa(self, provedor):
         provedor.responder(erro(529, "overloaded_error", "Overloaded"), httpx2.ReadTimeout("tempo"))
