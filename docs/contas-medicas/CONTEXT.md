@@ -91,6 +91,20 @@ Chamada de IA que lê o texto livre do Prontuário (evoluções, anotações, fo
 **Passo B**:
 Chamada de IA que compara os eventos com a Conta aplicando a Memória inteira e devolve Linhas com Regra, motivo e evidência. Não devolve valor em reais e não trata de preço nem de quantidade de diárias.
 
+**Processamento**:
+O trabalho do Motor sobre uma Conta, da vaga aberta até o Guia pronto. Na tela, a Conta nessa situação mostra a pílula **Processando**, com a Etapa do processamento e a Previsão ("Processando, IA lendo o prontuário, parte 3 de 7, faltam ~8 min"). Rodam duas Contas ao mesmo tempo, em ordem de envio. Quando passa de duas vezes a Previsão, a pílula avisa "demorando mais que o normal"; se a Conta voltar à fila por prazo, o cartão mostra a tentativa ("tentativa 2 de 3").
+_Evitar_: "analisando" ou "em análise" para o trabalho da máquina (análise é da faturista); "pronta em instantes".
+
+**Etapa do processamento**:
+Uma das cinco fases que a tela mostra: **Lendo a conta**, **Lendo o prontuário** (texto e OCR das folhas digitalizadas), **IA lendo o prontuário** (o Passo A, com "parte X de N" por faixa de dias), **Conferindo** (as Conferências por código) e **IA montando o Guia** (o Passo B). Cobrem as etapas internas do Motor sem os nomes técnicos.
+
+**Previsão**:
+Quanto falta para a Conta ficar pronta: segundos por página do Prontuário (média das últimas 20 Contas prontas) vezes as páginas desta Conta. Na fila, a Previsão simula as duas vagas e diz quando a Conta começa e quando fica pronta. Só aparece com pelo menos 5 Contas prontas nos últimos 7 dias; antes disso, só o tempo decorrido.
+
+**Tempo do envio à Fila** e **Tempo de processamento**:
+Os dois tempos médios da aba Envios, dos últimos 7 dias. O primeiro vai do envio até a Conta entrar na Fila de contas e inclui a espera por vaga; o segundo é só o Processamento. Espera grande com processamento curto quer dizer falta de vaga, não lentidão do Motor.
+_Evitar_: um "tempo médio" sem dizer qual dos dois.
+
 **Evidência**:
 Página do PDF original e trecho literal de até 300 caracteres que sustentam uma Linha. O código confere que o trecho existe na página citada; sem conferência, a Linha ganha a etiqueta "conferir evidência". Nível: **Registrado** (uso escrito), **Prescrito** (prescrição de horário fixo sem checagem), **Prescrito SN** ("se necessário" sem registro), **Por regra** (por tempo ou teto).
 
@@ -113,7 +127,7 @@ Uma ação sobre um item da Conta, com verbo na frente: **Incluir**, **Ajustar q
 Aberta → **Feito** (conta para a produção), **Não procede** (com motivo: já está na conta, sem evidência no prontuário, a regra é outra, outro; vai para a Validação), **Bloqueado** (o MV não deixou lançar; vai para a fila do cadastro), **Em validação** (ação Validar, sem botão para a faturista), **Decidida** (pelo validador). Desfazer existe enquanto a Conta não foi concluída.
 
 **Situação da Conta**:
-Aguardando arquivo → Em análise (na fila ou processando) → A fazer (Guia pronto) → Em correção → Concluída ou Concluída com pendência; mais **Retorno** (a Validação decidiu uma Linha de Conta já concluída) e **Erro** (a análise não terminou, com motivo em uma frase, Código do erro e a ação que resolve: "Analisar de novo" ou "Enviar de novo").
+Aguardando arquivo → Na fila → Processando → A fazer (Guia pronto) → Em correção → Concluída ou Concluída com pendência; mais **Retorno** (a Validação decidiu uma Linha de Conta já concluída) e **Erro** (a análise não terminou, com motivo em uma frase, Código do erro e a ação que resolve: "Analisar de novo" ou "Enviar de novo").
 
 **Causa-raiz**:
 Onde o problema nasce e quem corrige: **Dispensação** (farmácia e enfermagem), **Regra automática** (TI e consultoria MV), **Cadastro e preço** (credenciamento e cadastro), **Registro assistencial** (enfermagem e corpo clínico), **Lançamento manual** (faturamento). A IA propõe; o código sobrepõe nos casos óbvios (toda Linha de diária, de preço e Bloqueado).
@@ -173,6 +187,7 @@ Eixo próprio `perfil_contas_medicas` em `participantes`, ortogonal aos eixos de
 - **Atendimento** (este contexto) ≠ **Dados do Atendimento** (Reuniões / Ana). Homônimos, conceitos distintos.
 - **Setor** (este contexto: nome no MV → acomodação) ≠ Setor dos POPs ≠ setor das Reuniões. Sem FK entre eles.
 - **Guia** é a lista de ações da faturista. A "guia" da Conta do MV (campo `Guia:` do cabeçalho, autorização da operadora) chama-se **guia de autorização** quando precisar ser citada.
+- **Processando** (o Motor trabalhando na Conta) ≠ **Em análise** (aba da faturista: Contas que ela puxou e corrige). A máquina processa, a faturista analisa.
 - **Conferência** é sempre por código. O que a IA faz chama-se Passo A e Passo B, nunca conferência.
 - **Validar** (ação da Linha, para a diretoria) ≠ validar a leitura (teste de soma da Conta). O segundo chama-se **conferência da leitura**.
 
