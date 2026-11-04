@@ -1272,6 +1272,62 @@ class TestOcrNaFila:
         assert conta["erro_detalhe"]["etapa"] == "leitura_do_prontuario"
         assert ia_falsa.requisicoes == 0
 
+    def _parada_por_folha_digitalizada(self, monkeypatch) -> tuple[_Banco, dict]:
+        """A conta do teste acima, parada em CM-ARQ-DIGITALIZADO pelas três
+        digitalizadas ilegíveis (3, 4 e 5)."""
+        sujeira = f"\n{MARCA_DO_OCR}\n~~ ;; .. rr !! ii ll\n"
+
+        def ocr(_pdf: bytes, paginas, primeiro=()):
+            return [
+                Pagina(p.numero, p.texto + sujeira, False, True, "ilegivel") if p.numero in (3, 4, 5) else p
+                for p in paginas
+            ]
+
+        monkeypatch.setattr(processamento, "ler_digitalizadas", ocr)
+        banco = _cenario()
+        _enviar(banco, _conta(), _prontuario(digitalizadas=3))
+        _rodar_o_job(banco)
+        (conta,) = banco.tabelas["cm_conta"]
+        assert (conta["situacao"], conta["erro_codigo"]) == ("ERRO", "CM-ARQ-DIGITALIZADO")
+        return banco, conta
+
+    @staticmethod
+    def _analisar_assim_mesmo(banco: _Banco, conta: dict) -> None:
+        resposta = _cliente(banco).post(f"/api/contas-medicas/contas/{conta['id']}/analisar-assim-mesmo")
+        assert resposta.status_code == 200, resposta.text
+
+    def test_analisar_assim_mesmo_pula_o_bloqueio_e_o_guia_sai_com_a_ressalva(self, monkeypatch, ia_falsa):
+        """Issue #1401: a conta volta para a fila, a análise não para nas folhas
+        digitalizadas e o Parecer parcial diz quais páginas conferir à mão. A
+        escolha vale enquanto o prontuário for o mesmo: a conta enviada de novo
+        sem prontuário segue sem parar."""
+        banco, conta = self._parada_por_folha_digitalizada(monkeypatch)
+
+        self._analisar_assim_mesmo(banco, conta)
+        _rodar_o_job(banco)
+
+        assert (conta["situacao"], conta["erro_codigo"], conta["parecer_parcial"]) == ("A_FAZER", None, True)
+        assert [f for f in conta["faltantes"]["itens"] if f.startswith("Confira à mão")] == [
+            "Confira à mão no prontuário as páginas 3 a 5 (documento não identificado): "
+            "são folhas digitalizadas que não consegui ler bem."
+        ]
+
+        _enviar(banco, _conta())
+        _rodar_o_job(banco)
+
+        assert (conta["situacao"], conta["erro_codigo"]) == ("A_FAZER", None)
+
+    def test_prontuario_novo_do_atendimento_apaga_a_marca_e_a_analise_volta_a_parar(self, monkeypatch, ia_falsa):
+        """Issue #1401: a marca é do prontuário que estava no sistema. Chegou
+        outro, com as mesmas folhas ilegíveis: a conta para de novo."""
+        banco, conta = self._parada_por_folha_digitalizada(monkeypatch)
+        self._analisar_assim_mesmo(banco, conta)
+
+        _enviar(banco, _conta(), _prontuario(digitalizadas=3))
+        _rodar_o_job(banco)
+
+        assert (conta["situacao"], conta["erro_codigo"]) == ("ERRO", "CM-ARQ-DIGITALIZADO")
+
 
 class TestReprocesso:
     def test_preserva_as_linhas_marcadas_e_substitui_as_abertas(self):

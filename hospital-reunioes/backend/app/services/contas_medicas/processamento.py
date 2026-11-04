@@ -69,6 +69,7 @@ from app.services.contas_medicas.guia import nota_de_entrada
 from app.services.contas_medicas.ia import ErroDaIA
 from app.services.contas_medicas.memoria import MemoriaLida, RegraLida
 from app.services.contas_medicas.operadoras import listar_setores, memoria_vigente
+from app.services.contas_medicas.reanalise import MARCA_ASSIM_MESMO, marca_assim_mesmo, prontuario_da_analise
 from app.services.contas_medicas.tabelas import pacote_pelo_tuss, preco
 from app.services.contas_medicas.validacao import temas_das_linhas_validar
 from app.services.contas_medicas_conta import (
@@ -419,14 +420,7 @@ def _pipeline(supabase, conta: dict, cronometro: _Cronometro) -> None:
         _gravar_itens(supabase, conta["id"], lida)
 
     with cronometro.etapa("texto_do_prontuario"):
-        arquivo_do_prontuario = _primeira(
-            supabase.table("cm_arquivo")
-            .select("*")
-            .eq("atendimento_id", conta["atendimento_id"])
-            .eq("tipo", "PRONTUARIO")
-            .is_("apagado_em", "null")
-            .order("criado_em", desc=True)
-        )
+        arquivo_do_prontuario = prontuario_da_analise(supabase, conta["atendimento_id"])
         if arquivo_do_prontuario is None:
             raise FalhaDeLeitura("sem_prontuario")
         paginas_do_prontuario = _com_ocr(supabase, arquivo_do_prontuario, _texto(supabase, arquivo_do_prontuario), lida)
@@ -442,8 +436,13 @@ def _pipeline(supabase, conta: dict, cronometro: _Cronometro) -> None:
             raise FalhaDeLeitura("incompleto", declarado=erro.declarado, vieram=erro.vieram) from None
         # As folhas digitalizadas que sustentam a conta não deram para ler (#1400):
         # Erro antes do dicionário, sem gastar IA. É por conta, com o período dela.
-        if bloqueio := leitura_do_prontuario.bloqueio_das_digitalizadas(
-            estrutura, textos, lida.itens, lida.periodo_inicio, lida.periodo_fim
+        # "Analisar assim mesmo" (#1401) pula o bloqueio enquanto o prontuário
+        # for o mesmo do clique; a ressalva "Confira à mão" sai no Parecer parcial.
+        assim_mesmo = marca_assim_mesmo(conta) == arquivo_do_prontuario["id"]
+        if not assim_mesmo and (
+            bloqueio := leitura_do_prontuario.bloqueio_das_digitalizadas(
+                estrutura, textos, lida.itens, lida.periodo_inicio, lida.periodo_fim
+            )
         ):
             causa, dados = bloqueio
             raise FalhaDeLeitura(causa, **dados)
@@ -557,6 +556,8 @@ def _pipeline(supabase, conta: dict, cronometro: _Cronometro) -> None:
                 "tempos_por_etapa_s": tempos,
                 "descartadas_ia": list(da_ia.descartadas),
                 "digitalizadas": cronometro.digitalizadas,
+                # A marca do "Analisar assim mesmo" segue com o mesmo prontuário (#1401).
+                **({MARCA_ASSIM_MESMO: arquivo_do_prontuario["id"]} if assim_mesmo else {}),
             },
             "memoria_versao_id": memoria["memoria_versao_id"],
             "pronta_em": datetime.now(UTC).isoformat(),
