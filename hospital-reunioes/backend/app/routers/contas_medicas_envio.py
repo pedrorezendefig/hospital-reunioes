@@ -45,8 +45,10 @@ from app.services.contas_medicas.reanalise import (
     NaoAnalisavelError,
     SemPermissaoError,
     acao_do_cartao,
+    analisar_assim_mesmo,
     analisar_de_novo,
     com_pdf_guardado,
+    pode_analisar_assim_mesmo,
 )
 
 router = APIRouter(prefix="/contas-medicas", tags=["contas-medicas"])
@@ -171,6 +173,8 @@ def _item(conta: dict, atendimento: dict, linhas: list[dict], paginas: int | Non
         "pendencias": sum(1 for linha in linhas if linha_pendente(linha)),
         "erro_motivo": conta.get("erro_motivo"),
         **_erro(conta, guardado),
+        # O botão Analisar assim mesmo, ao lado de Enviar de novo (issue #1401).
+        "pode_analisar_assim_mesmo": pode_analisar_assim_mesmo(conta, guardado),
         # O botão Descartar do cartão do envio (issue #1338).
         "pode_descartar": pode_descartar(conta, linhas),
         # Só para quem tem "painel completo": quem está com a conta.
@@ -259,6 +263,28 @@ async def analisar_conta_de_novo(
     o Painel completo."""
     try:
         await run_in_threadpool(analisar_de_novo, supabase, str(conta_id), me, datetime.now(UTC))
+    except ContaAAnalisarNaoEncontradaError:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Conta não encontrada") from None
+    except SemPermissaoError as erro:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(erro)) from None
+    except NaoAnalisavelError as erro:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(erro)) from None
+    return {"situacao": "NA_FILA"}
+
+
+@router.post("/contas/{conta_id}/analisar-assim-mesmo")
+@limiter.limit("30/minute")
+async def analisar_conta_assim_mesmo(
+    request: Request,
+    conta_id: UUID,
+    me: dict = Depends(_TEM_O_EIXO),
+    supabase: Client = Depends(get_supabase_client),
+) -> dict:
+    """A conta parada por folha digitalizada que não deu para ler
+    (CM-ARQ-DIGITALIZADO) volta para a fila e a análise segue com a ressalva
+    no Parecer parcial (issue #1401). As guardas do Analisar de novo."""
+    try:
+        await run_in_threadpool(analisar_assim_mesmo, supabase, str(conta_id), me, datetime.now(UTC))
     except ContaAAnalisarNaoEncontradaError:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Conta não encontrada") from None
     except SemPermissaoError as erro:

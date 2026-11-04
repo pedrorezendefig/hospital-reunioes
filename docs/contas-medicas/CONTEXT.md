@@ -147,6 +147,9 @@ _Evitar_: mensagem genérica como "tente de novo em alguns minutos" sem dizer a 
 **Analisar de novo**:
 Refazer a análise de uma Conta em Erro com os PDFs que já estão no sistema, sem anexar nada. Vale para erro de IA e de configuração, enquanto os PDFs estão dentro dos 7 dias; erro de arquivo, ou PDF já apagado, pede "Enviar de novo". Quem enviou e a gestão podem. Diferente de **Reanalisar**, que é sobre Conta com Guia pronto.
 
+**Analisar assim mesmo**:
+Pôr de volta na fila a Conta em Erro com `CM-ARQ-DIGITALIZADO` quando não há como digitalizar de novo as folhas: a análise pula esse bloqueio e o Guia sai com as folhas a conferir à mão no Parecer parcial. Mesmas regras do **Analisar de novo** (quem enviou ou a gestão, PDFs dentro dos 7 dias). A escolha vale para o prontuário daquela análise: prontuário novo do atendimento volta a poder parar a Conta (#1401).
+
 **Descartar**:
 Apagar de vez uma Conta em Erro ou Aguardando arquivo: a linha sai do banco e os PDFs saem do bucket na hora, depois de confirmar. O prontuário só sai se nenhuma outra Conta do atendimento usa ele. O custo da IA continua contado. Quem enviou e a gestão podem; Conta processando ou com Guia não se descarta.
 _Evitar_: excluir, cancelar.

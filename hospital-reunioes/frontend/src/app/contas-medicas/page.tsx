@@ -39,6 +39,7 @@ import {
   ROTA_FILA,
   ROTA_ME,
   ROTA_MEUS_ENVIOS,
+  analisarAssimMesmo,
   analisarDeNovo,
   detalheDaConta,
   enviarEmLotes,
@@ -191,17 +192,21 @@ const NAO_COPIOU =
  * detalhes" com o detalhe técnico e "Copiar para a TI", que leva o que a TI
  * precisa para achar o erro sem ver a tela. Quando o servidor diz que a ação é
  * Analisar de novo (o erro não foi no PDF e ele ainda está guardado), o botão
- * põe a conta de volta na fila sem anexar nada (issue #1339).
+ * põe a conta de volta na fila sem anexar nada (issue #1339). Na conta parada
+ * por folha escaneada ilegível, "Analisar assim mesmo" fica ao lado de "Enviar
+ * de novo" quando o servidor deixa (issue #1401).
  */
 function ErroDoEnvio({
   conta,
   onEnviar,
   onAnalisarDeNovo,
+  onAnalisarAssimMesmo,
   onDescartar,
 }: {
   conta: ItemDaFila;
   onEnviar: () => void;
   onAnalisarDeNovo: () => Promise<string | null>;
+  onAnalisarAssimMesmo: () => Promise<string | null>;
   onDescartar?: () => void;
 }) {
   const [aberto, setAberto] = useState(false);
@@ -228,10 +233,10 @@ function ErroDoEnvio({
     }
   }
 
-  async function analisar() {
+  async function analisar(pedir: () => Promise<string | null>) {
     setAnalisando(true);
     setRecusa(null);
-    const frase = await onAnalisarDeNovo();
+    const frase = await pedir();
     setAnalisando(false);
     setRecusa(frase);
   }
@@ -261,7 +266,7 @@ function ErroDoEnvio({
         {conta.erro_acao === "analisar_de_novo" ? (
           <button
             type="button"
-            onClick={analisar}
+            onClick={() => analisar(onAnalisarDeNovo)}
             disabled={analisando}
             className="text-sm font-medium text-primary hover:underline disabled:opacity-50"
           >
@@ -270,6 +275,16 @@ function ErroDoEnvio({
         ) : (
           <button type="button" onClick={onEnviar} className="text-sm font-medium text-primary hover:underline">
             Enviar de novo
+          </button>
+        )}
+        {conta.pode_analisar_assim_mesmo && (
+          <button
+            type="button"
+            onClick={() => analisar(onAnalisarAssimMesmo)}
+            disabled={analisando}
+            className="text-sm font-medium text-primary hover:underline disabled:opacity-50"
+          >
+            Analisar assim mesmo
           </button>
         )}
         {onDescartar && (
@@ -317,11 +332,13 @@ function CartaoDoEnvio({
   conta,
   onEnviar,
   onAnalisarDeNovo,
+  onAnalisarAssimMesmo,
   onDescartar,
 }: {
   conta: ItemDaFila;
   onEnviar: () => void;
   onAnalisarDeNovo: () => Promise<string | null>;
+  onAnalisarAssimMesmo: () => Promise<string | null>;
   onDescartar: () => void;
 }) {
   const detalhe = detalheDaConta(conta);
@@ -370,6 +387,7 @@ function CartaoDoEnvio({
             conta={conta}
             onEnviar={onEnviar}
             onAnalisarDeNovo={onAnalisarDeNovo}
+            onAnalisarAssimMesmo={onAnalisarAssimMesmo}
             onDescartar={conta.pode_descartar ? onDescartar : undefined}
           />
         ) : (
@@ -580,10 +598,13 @@ export default function ContasMedicasPage() {
     await carregarFila(token, pode);
   }
 
-  /** A conta volta para a fila e a lista se relê: o cartão passa para Na fila. */
-  async function analisarContaDeNovo(contaId: string): Promise<string | null> {
+  /**
+   * A conta volta para a fila e a lista se relê: o cartão passa para Na fila.
+   * `assimMesmo` é a conta parada por folha escaneada ilegível (issue #1401).
+   */
+  async function analisarContaDeNovo(contaId: string, assimMesmo = false): Promise<string | null> {
     if (!token || !pode) return null;
-    const recusa = await analisarDeNovo(contaId, token);
+    const recusa = await (assimMesmo ? analisarAssimMesmo : analisarDeNovo)(contaId, token);
     if (recusa === null) await carregarFila(token, pode);
     return recusa;
   }
@@ -707,6 +728,7 @@ export default function ContasMedicasPage() {
                       conta={conta}
                       onEnviar={() => seletor.current?.click()}
                       onAnalisarDeNovo={() => analisarContaDeNovo(conta.id)}
+                      onAnalisarAssimMesmo={() => analisarContaDeNovo(conta.id, true)}
                       onDescartar={() => descartar(conta)}
                     />
                   ))}

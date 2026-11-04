@@ -32,6 +32,11 @@ export function rotaAnalisarDeNovo(contaId: string): string {
   return `/api/contas-medicas/contas/${contaId}/analisar-de-novo`;
 }
 
+/** A conta parada por folha escaneada ilegível segue mesmo assim (issue #1401). */
+export function rotaAnalisarAssimMesmo(contaId: string): string {
+  return `/api/contas-medicas/contas/${contaId}/analisar-assim-mesmo`;
+}
+
 /** "Enviar contas": o envio e Meus envios (issue #1308, ADR 0073). */
 export const ENVIAR_CONTAS = "enviar_contas";
 /** "Analisar contas" na tela; a chave guarda o nome antigo (ADR 0073). */
@@ -104,6 +109,11 @@ export interface ItemDaFila {
   erro_em?: string | null;
   erro_arquivo?: "conta" | "prontuario" | null;
   erro_acao?: "analisar_de_novo" | "enviar_de_novo" | null;
+  /**
+   * O botão "Analisar assim mesmo" ao lado de "Enviar de novo" (issue #1401):
+   * o servidor diz quando cabe (CM-ARQ-DIGITALIZADO com os PDFs guardados).
+   */
+  pode_analisar_assim_mesmo?: boolean;
   /** O botão Descartar do cartão do envio (issue #1338): o servidor diz quando cabe. */
   pode_descartar?: boolean;
   /** Só para quem tem "painel completo": quem está com a conta (issue #1307). */
@@ -168,14 +178,10 @@ async function motivoDoErro(resposta: Response): Promise<string> {
 
 type Buscar = (url: string, init?: RequestInit) => Promise<Response>;
 
-/**
- * Põe a conta em Erro de volta na fila (issue #1339). Devolve nulo quando deu
- * certo, ou a frase do servidor para mostrar no cartão.
- */
-export async function analisarDeNovo(contaId: string, token: string, buscar: Buscar = fetch): Promise<string | null> {
+async function analisarPelaRota(rota: string, token: string, buscar: Buscar): Promise<string | null> {
   let resposta: Response;
   try {
-    resposta = await buscar(rotaAnalisarDeNovo(contaId), {
+    resposta = await buscar(rota, {
       method: "POST",
       headers: { Authorization: `Bearer ${token}` },
     });
@@ -190,6 +196,27 @@ export async function analisarDeNovo(contaId: string, token: string, buscar: Bus
     // resposta sem JSON (ex.: 502 do proxy)
   }
   return "Não consegui analisar de novo. Tente de novo.";
+}
+
+/**
+ * Põe a conta em Erro de volta na fila (issue #1339). Devolve nulo quando deu
+ * certo, ou a frase do servidor para mostrar no cartão.
+ */
+export async function analisarDeNovo(contaId: string, token: string, buscar: Buscar = fetch): Promise<string | null> {
+  return analisarPelaRota(rotaAnalisarDeNovo(contaId), token, buscar);
+}
+
+/**
+ * Põe a conta parada em CM-ARQ-DIGITALIZADO de volta na fila, para a análise
+ * seguir com as folhas a conferir à mão (issue #1401). Nulo quando deu certo,
+ * ou a frase do servidor.
+ */
+export async function analisarAssimMesmo(
+  contaId: string,
+  token: string,
+  buscar: Buscar = fetch,
+): Promise<string | null> {
+  return analisarPelaRota(rotaAnalisarAssimMesmo(contaId), token, buscar);
 }
 
 /**

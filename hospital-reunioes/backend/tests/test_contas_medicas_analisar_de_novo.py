@@ -171,9 +171,158 @@ class TestAnalisarDeNovo:
         assert resposta.status_code == 404
 
 
+# ═══════════════════════════════════════════════════════════════════════════
+# Analisar assim mesmo (issue #1401, PRD #1397)
+# ═══════════════════════════════════════════════════════════════════════════
+
+DIGITALIZADO = "CM-ARQ-DIGITALIZADO"
+FRASE_DIGITALIZADO = (
+    "Não dá para analisar esta conta: 3 das 10 páginas do prontuário deste período são folhas digitalizadas "
+    "que não consegui ler. Digitalize de novo essas folhas, em pé, e envie o prontuário de novo."
+)
+
+
+def _rota_assim_mesmo(conta_id: str) -> str:
+    return f"/api/contas-medicas/contas/{conta_id}/analisar-assim-mesmo"
+
+
+class TestOCartaoComAnalisarAssimMesmo:
+    def test_a_conta_parada_por_folha_digitalizada_mostra_analisar_assim_mesmo_ao_lado_de_enviar_de_novo(self):
+        banco, _ = _em_erro(DIGITALIZADO, FRASE_DIGITALIZADO)
+
+        for quem in ("faturista", "coordenadora"):
+            cartao = _cartao(banco, quem)
+            assert cartao["erro_acao"] == "enviar_de_novo"
+            assert cartao["pode_analisar_assim_mesmo"] is True
+
+    @pytest.mark.parametrize("codigo", ["CM-ARQ-SOMA", "CM-IA-FORA-DO-AR"])
+    def test_outro_erro_nao_mostra(self, codigo):
+        banco, _ = _em_erro(codigo)
+
+        assert _cartao(banco)["pode_analisar_assim_mesmo"] is False
+
+    def test_pdf_que_passou_dos_7_dias_nao_mostra(self):
+        banco, _ = _em_erro(DIGITALIZADO, FRASE_DIGITALIZADO)
+        _arquivo(banco, "PRONTUARIO")["apagar_em"] = "2026-10-01T10:00:00+00:00"
+
+        assert _cartao(banco)["pode_analisar_assim_mesmo"] is False
+
+    def test_conta_fora_do_erro_nao_mostra(self):
+        banco, conta = _em_erro(DIGITALIZADO, FRASE_DIGITALIZADO)
+        conta["situacao"] = "NA_FILA"
+
+        assert _cartao(banco)["pode_analisar_assim_mesmo"] is False
+
+
+class TestAnalisarAssimMesmo:
+    def test_quem_enviou_poe_a_conta_na_fila_zerada_sem_novo_upload(self):
+        banco, conta = _em_erro(DIGITALIZADO, FRASE_DIGITALIZADO)
+        arquivos = [dict(a) for a in banco.tabelas["cm_arquivo"]]
+
+        resposta = _cliente("faturista", banco).post(_rota_assim_mesmo(conta["id"]))
+
+        assert resposta.status_code == 200, resposta.text
+        assert (conta["situacao"], conta["tentativas"]) == ("NA_FILA", 0)
+        assert (conta["erro_codigo"], conta["erro_motivo"], conta["erro_detalhe"]) == (None, None, None)
+        assert banco.tabelas["cm_arquivo"] == arquivos
+        pega = pegar_da_fila(banco, datetime.now(UTC))
+        assert pega is not None and pega["id"] == conta["id"]
+
+    def test_a_gestao_com_o_painel_completo_analisa_assim_mesmo_o_envio_de_outra_pessoa(self):
+        banco, conta = _em_erro(DIGITALIZADO, FRASE_DIGITALIZADO)
+
+        resposta = _cliente("coordenadora", banco).post(_rota_assim_mesmo(conta["id"]))
+
+        assert resposta.status_code == 200, resposta.text
+        assert conta["situacao"] == "NA_FILA"
+
+    def test_outra_pessoa_recebe_403_e_a_conta_fica_em_erro(self):
+        banco, conta = _em_erro(DIGITALIZADO, FRASE_DIGITALIZADO)
+
+        resposta = _cliente("outra_faturista", banco).post(_rota_assim_mesmo(conta["id"]))
+
+        assert resposta.status_code == 403
+        assert resposta.json()["detail"] == "Só quem enviou a conta ou a gestão pode analisar assim mesmo."
+        assert (conta["situacao"], conta["erro_codigo"]) == ("ERRO", DIGITALIZADO)
+
+    @pytest.mark.parametrize("codigo", ["CM-ARQ-SOMA", "CM-IA-FORA-DO-AR"])
+    def test_outro_erro_recusa_com_a_frase_e_a_conta_fica_em_erro(self, codigo):
+        banco, conta = _em_erro(codigo)
+
+        resposta = _cliente("faturista", banco).post(_rota_assim_mesmo(conta["id"]))
+
+        assert resposta.status_code == 409
+        assert resposta.json()["detail"] == (
+            "Analisar assim mesmo é só para a conta parada por folha digitalizada que não deu para ler."
+        )
+        assert (conta["situacao"], conta["erro_codigo"]) == ("ERRO", codigo)
+
+    def test_conta_fora_do_erro_recusa(self):
+        banco, conta = _em_erro(DIGITALIZADO, FRASE_DIGITALIZADO)
+        conta["situacao"] = "A_FAZER"
+
+        resposta = _cliente("faturista", banco).post(_rota_assim_mesmo(conta["id"]))
+
+        assert resposta.status_code == 409
+        assert resposta.json()["detail"] == "Só a conta em Erro pode ser analisada de novo."
+        assert conta["situacao"] == "A_FAZER"
+
+    @pytest.mark.parametrize("tipo", ["CONTA", "PRONTUARIO"])
+    def test_pdf_vencido_recusa_com_a_frase_e_a_conta_fica_em_erro(self, tipo):
+        banco, conta = _em_erro(DIGITALIZADO, FRASE_DIGITALIZADO)
+        _arquivo(banco, tipo)["apagado_em"] = "2026-11-01T03:00:00+00:00"
+
+        resposta = _cliente("faturista", banco).post(_rota_assim_mesmo(conta["id"]))
+
+        assert resposta.status_code == 409
+        assert resposta.json()["detail"] == "O PDF já passou dos 7 dias e saiu do sistema. Envie de novo."
+        assert (conta["situacao"], conta["tentativas"]) == ("ERRO", 3)
+
+    def test_conta_que_nao_existe_da_404(self):
+        banco, _ = _em_erro(DIGITALIZADO, FRASE_DIGITALIZADO)
+
+        resposta = _cliente("faturista", banco).post(_rota_assim_mesmo("00000000-0000-0000-0000-000000000000"))
+
+        assert resposta.status_code == 404
+
+    def test_duas_chamadas_juntas_poem_a_conta_na_fila_uma_vez_so(self):
+        """As duas leram a conta em Erro; a outra aba gravou primeiro e a análise
+        já pegou a conta. A que perdeu recebe 409 e não devolve a conta à fila."""
+        banco, conta = _em_erro(DIGITALIZADO, FRASE_DIGITALIZADO)
+        tabela = banco.table
+
+        def com_a_outra_aba_na_frente(nome):
+            consulta = tabela(nome)
+            gravar = consulta.update
+
+            def update(campos):
+                if nome == "cm_conta" and campos.get("situacao") == "NA_FILA":
+                    banco.table = tabela
+                    conta.update(situacao="PROCESSANDO", tentativas=1)
+                return gravar(campos)
+
+            consulta.update = update
+            return consulta
+
+        banco.table = com_a_outra_aba_na_frente
+
+        resposta = _cliente("faturista", banco).post(_rota_assim_mesmo(conta["id"]))
+
+        assert resposta.status_code == 409
+        assert (conta["situacao"], conta["tentativas"]) == ("PROCESSANDO", 1)
+
+
 class TestKitDeConhecimento:
     def test_diz_quando_aparece_analisar_de_novo_e_quando_fica_enviar_de_novo(self):
         secao = KIT.read_text(encoding="utf-8").split("## O envio e a fila", 1)[1].split("\n## ", 1)[0]
 
         for trecho in ("Analisar de novo", "sem anexar", "7 dias", "Na fila", "Tente de novo em alguns minutos"):
             assert trecho in secao, trecho
+
+    def test_diz_quando_usar_analisar_assim_mesmo(self):
+        """Issue #1401: o botão da conta parada por folha escaneada que não deu para ler."""
+        secao = KIT.read_text(encoding="utf-8").split("## O envio e a fila", 1)[1].split("\n## ", 1)[0]
+        (linha,) = [linha for linha in secao.splitlines() if "Analisar assim mesmo" in linha]
+
+        for trecho in ("CM-ARQ-DIGITALIZADO", "não há como digitalizar de novo", "Confira à mão", "7 dias"):
+            assert trecho in linha, trecho
