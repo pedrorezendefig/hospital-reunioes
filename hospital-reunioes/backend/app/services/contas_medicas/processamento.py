@@ -2,7 +2,8 @@
 
 A fila vive em `cm_conta` (ADR 0070, decisão 5): o envio deixa a conta
 `NA_FILA` e um job do APScheduler, a cada 10 segundos, devolve à fila o que
-ficou preso, faz o claim e entrega a conta a um executor próprio com 2 vagas.
+ficou preso, faz o claim e entrega a conta a um executor próprio com
+`CM_VAGAS` vagas (4 sem a variável).
 Tudo no processo do app: sobrevive a restart porque o estado está no banco.
 
 O pipeline de uma conta, em etapas cronometradas:
@@ -55,6 +56,7 @@ from pathlib import Path
 from time import perf_counter
 from typing import Any
 
+from app.config import settings
 from app.services import storage
 from app.services import transcricao_extractor as orcamento
 from app.services.contas_medicas import dicionario_ia, passo_a, passo_b, passo_c
@@ -107,8 +109,9 @@ _CANDIDATAS = 5
 PRAZO_DA_ANALISE = timedelta(minutes=30)
 MAXIMO_DE_TENTATIVAS = 3
 
-# Duas análises ao mesmo tempo, no máximo: as mesmas 2 vagas do extrator.
-VAGAS = 2
+# Quantas análises ao mesmo tempo, no máximo (`CM_VAGAS`). A extração do PDF
+# tem as próprias vagas: a análise que precisar extrair espera a vez dela.
+VAGAS = settings.cm_vagas
 _vagas = threading.BoundedSemaphore(VAGAS)
 _executor = ThreadPoolExecutor(max_workers=VAGAS, thread_name_prefix="contas-medicas")
 
@@ -776,7 +779,7 @@ def _eventos_json(arquivo_id: str, prontuario: ProntuarioLido) -> dict[str, Any]
     }
 
 
-# As duas vagas pegam juntas as parciais do mesmo atendimento (o caso normal
+# As vagas pegam juntas as parciais do mesmo atendimento (o caso normal
 # de um envio): sem trava, as duas leem `cm_eventos` vazio e as duas gravam o
 # prontuário. Uma trava por atendimento, que some quando ninguém a segura.
 _travas_do_prontuario: weakref.WeakValueDictionary[str, threading.Lock] = weakref.WeakValueDictionary()
@@ -929,7 +932,7 @@ def _gravar_glicemias(supabase, atendimento_id: str, conteudo: Conteudo) -> None
 # ----------------------------------------------------------------------------------
 
 
-# As duas vagas podem terminar as duas últimas contas de um envio juntas: a
+# Duas vagas podem terminar as duas últimas contas de um envio juntas: a
 # trava do processo faz uma delas ver o aviso da outra e não repetir.
 _trava_do_aviso = threading.Lock()
 

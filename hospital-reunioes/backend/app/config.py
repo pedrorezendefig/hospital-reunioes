@@ -60,6 +60,10 @@ class Settings(BaseSettings):
     # mudar a variável e reiniciar, sem deploy de código.
     cm_ia_modelo_passo_a: str = "claude-sonnet-5-5"
     cm_ia_modelo_passo_b: str = "claude-sonnet-5-5"
+    # Quantas contas a fila analisa ao mesmo tempo. A análise passa quase todo o
+    # tempo esperando a IA; a extração do PDF, que pesa na memória, tem as
+    # próprias 2 vagas (`VAGAS_DE_EXTRACAO`) e não muda com este número.
+    cm_vagas: int = 4
 
     # Fireflies
     fireflies_api_key: str = ""
