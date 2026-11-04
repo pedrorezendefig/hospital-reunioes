@@ -5,6 +5,7 @@ import { requireContasMedicasAccess } from "@/lib/contas-medicas/guard";
  * Layout da área /contas-medicas (ADR 0070): AppShell e o gate do módulo no
  * servidor, antes de a página existir. Quem não tem perfil no módulo (nem é
  * super admin) volta ao início; a API do módulo recusa o mesmo com 403.
+ * Títulos e subtítulos do módulo em caixa alta, a pedido do diretor.
  */
 export default async function ContasMedicasLayout({
   children,
@@ -20,7 +21,7 @@ export default async function ContasMedicasLayout({
 
   return (
     <AppShell userName={nome} userEmail={user.email}>
-      {children}
+      <div className="[&_h1]:uppercase [&_h2]:uppercase [&_h3]:uppercase">{children}</div>
     </AppShell>
   );
 }
