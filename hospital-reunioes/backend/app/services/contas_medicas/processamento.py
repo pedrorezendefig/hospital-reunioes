@@ -522,8 +522,13 @@ def _pipeline(supabase, conta: dict, cronometro: _Cronometro) -> None:
 
     # A 116 não tem coluna para o tempo das etapas, e o PRD tem migration única:
     # ele vai em `faltantes`, ao lado dos itens que o prontuário não trouxe.
-    # O parecer junta o que a leitura por código não teve e o que a IA apontou.
-    parecer = [*estrutura.parecer_parcial, *passo_a.parecer(eventos)]
+    # O parecer junta o que a leitura por código não teve, as folhas digitalizadas
+    # da conta a conferir à mão (#1399, pelo período desta parcial) e o que a IA apontou.
+    parecer = [
+        *estrutura.parecer_parcial,
+        *leitura_do_prontuario.ressalva_das_digitalizadas(estrutura, lida.periodo_inicio, lida.periodo_fim),
+        *passo_a.parecer(eventos),
+    ]
     tempos = {**cronometro.tempos, "total": cronometro.total()}
     _fechar_tentativa(
         supabase,
