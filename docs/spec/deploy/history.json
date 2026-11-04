@@ -2,6 +2,52 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-11-04T15:13:28-03:00",
+      "sha": "33b5b0a5c2b713ec8eacc996bbdb68336ef067c1",
+      "app_version": "0.215.0",
+      "subject": "PR #1411, sem issue: Contas médicas, títulos em caixa alta e preço do Opus 5.5 na tabela de custo",
+      "raw_subject": "chore(deploy): registro do PR avulso (#1411)",
+      "scope": [
+        "backend",
+        "frontend"
+      ],
+      "prds": [],
+      "result": "healthy",
+      "duration_seconds": 308,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        },
+        {
+          "service": "frontend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "PR avulso: PR #1411, sem issue. Merge pela API do GitHub, um build. Registro pela Action pos-merge depois do health.",
+      "etapas": {
+        "merge_s": 3,
+        "build_s": {
+          "backend": 273,
+          "frontend": 223
+        },
+        "health_s": 10
+      },
+      "responsavel": "pedrorezendefig"
+    },
+    {
       "at": "2026-11-04T14:26:23-03:00",
       "sha": "cf97cd1c6a170d3906ac559c1d04b01eceaa7d1e",
       "app_version": "0.214.2",

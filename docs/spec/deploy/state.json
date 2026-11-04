@@ -1,8 +1,8 @@
 {
   "schema_version": "1.0",
-  "updated_at": "2026-11-04T14:26:23-03:00",
+  "updated_at": "2026-11-04T15:13:28-03:00",
   "updated_by": "pr-avulso@fechar_onda",
-  "last_app_version": "0.214.2",
+  "last_app_version": "0.215.0",
   "production": {
     "domain_root": "hospitalsaomatheus.cloud",
     "vps_ip": "31.97.29.32",
@@ -21,15 +21,15 @@
       "port": 8000,
       "health_path": "/api/health",
       "status": "healthy",
-      "last_deploy_sha": "06bb0df6492da9f2b49dc205a6d1212971998fc7",
-      "last_deploy_at": "2026-11-04T14:17:52-03:00",
+      "last_deploy_sha": "33b5b0a5c2b713ec8eacc996bbdb68336ef067c1",
+      "last_deploy_at": "2026-11-04T15:13:28-03:00",
       "last_health_check": {
-        "at": "2026-11-04T14:17:52-03:00",
-        "latency_ms": 102,
+        "at": "2026-11-04T15:13:28-03:00",
+        "latency_ms": 142,
         "http_status": 200,
         "body_ok": true
       },
-      "build_duration_seconds": 25,
+      "build_duration_seconds": 273,
       "env_count": 24
     },
     {
@@ -39,15 +39,15 @@
       "port": 3000,
       "health_path": null,
       "status": "healthy",
-      "last_deploy_sha": "cf97cd1c6a170d3906ac559c1d04b01eceaa7d1e",
-      "last_deploy_at": "2026-11-04T14:26:23-03:00",
+      "last_deploy_sha": "33b5b0a5c2b713ec8eacc996bbdb68336ef067c1",
+      "last_deploy_at": "2026-11-04T15:13:28-03:00",
       "last_health_check": {
-        "at": "2026-11-04T14:26:23-03:00",
-        "latency_ms": 232,
+        "at": "2026-11-04T15:13:28-03:00",
+        "latency_ms": 292,
         "http_status": 200,
         "body_ok": true
       },
-      "build_duration_seconds": 208,
+      "build_duration_seconds": 223,
       "env_count": 5
     },
     {
@@ -56,14 +56,14 @@
       "domain": "studio.hospitalsaomatheus.cloud",
       "port": null,
       "health_path": null,
-      "status": "warning",
+      "status": "healthy",
       "last_deploy_sha": "93870744",
       "last_deploy_at": "2026-09-23T13:21:42-03:00",
       "last_health_check": {
-        "at": "2026-11-04T14:26:23-03:00",
+        "at": "2026-11-04T15:13:28-03:00",
         "latency_ms": null,
         "http_status": null,
-        "body_ok": false
+        "body_ok": true
       },
       "build_duration_seconds": null,
       "env_count": 107
@@ -208,8 +208,8 @@
   ],
   "last_run": {
     "mode": "pr-avulso",
-    "sha": "cf97cd1c6a170d3906ac559c1d04b01eceaa7d1e",
+    "sha": "33b5b0a5c2b713ec8eacc996bbdb68336ef067c1",
     "result": "healthy",
-    "duration_seconds": 232
+    "duration_seconds": 308
   }
 }
