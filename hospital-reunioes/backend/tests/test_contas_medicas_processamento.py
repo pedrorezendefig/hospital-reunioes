@@ -994,6 +994,10 @@ class TestPrescricaoPorColuna:
 
 def _duas_parciais(banco: _Banco) -> list[dict]:
     _enviar(banco, _conta("48811", 2, 4), _conta("48812", 5, 6), _prontuario())
+    return _duas_parciais_gravadas(banco)
+
+
+def _duas_parciais_gravadas(banco: _Banco) -> list[dict]:
     return sorted(banco.tabelas["cm_conta"], key=lambda c: c["numero_conta"])
 
 
@@ -1201,6 +1205,37 @@ class TestOcrNaFila:
         (item,) = _fila(banco, "meus_envios")
         assert item["erro_detalhe"].endswith("digitalizadas: legível 1, duvidosa 0, ilegível 1, não lida 1")
         assert self.TERMO not in json.dumps(conta["erro_detalhe"], ensure_ascii=False)
+
+    def test_o_guia_mostra_no_parecer_parcial_a_ressalva_das_folhas_da_propria_parcial(self, monkeypatch):
+        """Ressalva no Parecer parcial (#1399). As três digitalizadas (3, 4 e 5) são
+        fichas de anestesia de 02/10, data que herdam da admissão: entram só na
+        parcial de 02 a 04/10. A 3 saiu legível e fica de fora."""
+        qualidades = {3: "legivel", 4: "ilegivel", 5: "nao_lida"}
+        ficha = f"\n{MARCA_DO_OCR}\nFICHA DE ANESTESIA\nTecnica anestesica: geral balanceada\n"
+
+        def ocr(_pdf: bytes, paginas, primeiro=()):
+            return [
+                Pagina(p.numero, p.texto + ficha, False, True, qualidades[p.numero])
+                if qualidades.get(p.numero) in ("legivel", "ilegivel")
+                else Pagina(p.numero, p.texto, p.sem_texto, False, qualidades.get(p.numero))
+                for p in paginas
+            ]
+
+        monkeypatch.setattr(processamento, "ler_digitalizadas", ocr)
+        banco = _cenario()
+        _enviar(banco, _conta("48811", 2, 4), _conta("48812", 5, 6), _prontuario(digitalizadas=3))
+
+        _rodar_o_job(banco)
+
+        primeira, segunda = (_guia(banco, c["id"])["cabecalho"] for c in _duas_parciais_gravadas(banco))
+        assert primeira["parecer_parcial"] is True
+        assert [f for f in primeira["faltantes"] if f.startswith("Confira à mão")] == [
+            "Confira à mão no prontuário a página 4 (ficha de anestesia): "
+            "é uma folha digitalizada que não consegui ler bem.",
+            "Confira à mão no prontuário a página 5 (documento não identificado): "
+            "é uma folha digitalizada que não consegui ler bem.",
+        ]
+        assert [f for f in segunda["faltantes"] if f.startswith("Confira à mão")] == []
 
 
 class TestReprocesso:
