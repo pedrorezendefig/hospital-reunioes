@@ -37,15 +37,18 @@ def uso(entrada: int = 1000, saida: int = 200, leitura_cache: int = 0, escrita_c
     }
 
 
-def mensagem(texto: str, uso_da_resposta: dict | None = None, *, modelo: str = MODELO, numero: int = 1) -> dict:
-    """O corpo JSON de uma resposta de `POST /v1/messages` com um bloco de texto."""
+def mensagem(
+    texto: str, uso_da_resposta: dict | None = None, *, modelo: str = MODELO, numero: int = 1, parada: str = "end_turn"
+) -> dict:
+    """O corpo JSON de uma resposta de `POST /v1/messages` com um bloco de texto.
+    `parada` é o `stop_reason` (`max_tokens` quando a resposta foi cortada no teto)."""
     return {
         "id": f"msg_{numero}",
         "type": "message",
         "role": "assistant",
         "model": modelo,
         "content": [{"type": "text", "text": texto}],
-        "stop_reason": "end_turn",
+        "stop_reason": parada,
         "stop_sequence": None,
         "usage": uso_da_resposta or uso(),
     }
@@ -56,10 +59,42 @@ def erro(status: int, tipo: str, mensagem_do_erro: str) -> httpx2.Response:
     return httpx2.Response(status, json={"type": "error", "error": {"type": tipo, "message": mensagem_do_erro}})
 
 
+def _eventos_do_stream(corpo: dict) -> bytes:
+    """A mensagem inteira nos eventos SSE de `stream: true`, na ordem da API."""
+    vazia = {**corpo, "content": [], "stop_reason": None}
+    eventos = [("message_start", {"type": "message_start", "message": vazia})]
+    for indice, bloco in enumerate(corpo["content"]):
+        inicio = {"type": "content_block_start", "index": indice, "content_block": {**bloco, "text": ""}}
+        trecho = {"type": "text_delta", "text": bloco["text"]}
+        eventos += [
+            ("content_block_start", inicio),
+            ("content_block_delta", {"type": "content_block_delta", "index": indice, "delta": trecho}),
+            ("content_block_stop", {"type": "content_block_stop", "index": indice}),
+        ]
+    parada = {"stop_reason": corpo["stop_reason"], "stop_sequence": None}
+    eventos += [
+        ("message_delta", {"type": "message_delta", "delta": parada, "usage": corpo["usage"]}),
+        ("message_stop", {"type": "message_stop"}),
+    ]
+    return "".join(f"event: {nome}\ndata: {json.dumps(dados)}\n\n" for nome, dados in eventos).encode()
+
+
 def cliente_por_transporte(duble) -> anthropic.Anthropic:
+    """O dublê responde sempre a mensagem inteira em JSON; quando a chamada pede
+    `stream: true`, a mensagem de sucesso vira os eventos SSE que a API mandaria."""
+
+    def transporte(request: httpx2.Request) -> httpx2.Response:
+        resposta = duble(request)
+        if not json.loads(request.content or b"{}").get("stream") or resposta.status_code != 200:
+            return resposta
+        corpo = json.loads(resposta.content)
+        if corpo.get("type") != "message":
+            return resposta
+        return httpx2.Response(200, headers={"content-type": "text/event-stream"}, content=_eventos_do_stream(corpo))
+
     return anthropic.Anthropic(
         api_key="chave-de-teste",
-        http_client=anthropic.DefaultHttpxClient(transport=httpx2.MockTransport(duble)),
+        http_client=anthropic.DefaultHttpxClient(transport=httpx2.MockTransport(transporte)),
         max_retries=0,
     )
 

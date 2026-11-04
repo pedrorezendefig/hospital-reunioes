@@ -431,6 +431,31 @@ class TestRespostaForaDoFormato:
         assert len(esperas) == 2
         assert 0 < esperas[0] < esperas[1]
 
+    def test_a_chamada_sai_com_streaming_e_teto_que_cabe_a_leitura_de_um_prontuario_grande(self, provedor):
+        # A leitura de 331 páginas deu 21 mil tokens de saída (raciocínio mais
+        # JSON); com o teto de 16 mil, toda leitura grande saía cortada.
+        provedor.responder((json.dumps(EVENTOS_VALIDOS), USO_PADRAO))
+
+        resultado = _extrair()
+
+        (corpo,) = provedor.corpos
+        assert corpo["stream"] is True
+        assert corpo["max_tokens"] >= 64000
+        assert resultado.atendimento == "31245"
+
+    def test_resposta_cortada_no_teto_nao_se_repete_diz_a_causa_e_grava_o_custo(self, provedor):
+        banco = _BancoDeCusto()
+        cortada = mensagem('{"atendimento": "31245", "movimentacoes": [', USO_PADRAO, parada="max_tokens")
+        provedor.responder(httpx2.Response(200, json=cortada))
+
+        with pytest.raises(ia.ErroDaIA) as falha:
+            _extrair(banco)
+
+        assert len(provedor.corpos) == 1
+        assert falha.value.causa == "tamanho"
+        (chamada,) = banco.tabelas["cm_chamada_ia"]
+        assert (chamada["tokens_saida"], chamada["sucesso"]) == (200, False)
+
     def test_nenhum_schema_enviado_passa_de_16_parametros_com_uniao(self, provedor):
         # A saída estrita da Anthropic recusa com 400 o schema com mais de 16
         # parâmetros anuláveis ou com `anyOf`. O passo A tinha 20 e toda conta

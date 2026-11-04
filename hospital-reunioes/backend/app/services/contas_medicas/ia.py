@@ -48,16 +48,17 @@ __all__ = [
 
 logger = logging.getLogger(__name__)
 
-# Três tentativas, com espera crescente entre elas. Uma chamada inteira (três
-# prazos e as duas esperas) fica abaixo de 10 minutos, dentro dos 15 em que o
-# processamento considera a conta presa e a devolve para a fila.
+# Três tentativas, com espera crescente entre elas.
 TENTATIVAS = 3
 ESPERAS_S = (5, 20)
+# A chamada sai em streaming: o prazo vale para cada leitura do stream (a API
+# manda eventos o tempo todo), não para a resposta inteira.
 PRAZO_DA_TENTATIVA_S = 180
 
-# O teto de saída de cada chamada. O prazo de 180 s por tentativa já limita a
-# resposta a algo nessa ordem; acima disso a chamada sem streaming estoura.
-MAX_TOKENS = 16000
+# O teto de saída de cada chamada, raciocínio incluído (issue #1412). A leitura
+# de um prontuário de 331 páginas deu 21 mil tokens e a de 552 páginas, 25 mil;
+# com o teto antigo, de 16 mil, toda leitura grande saía cortada.
+MAX_TOKENS = 64000
 
 
 @dataclass(frozen=True)
@@ -491,14 +492,25 @@ def _chamar_a_ia[Saida: BaseModel](
         if tentativa > 1:
             _esperar(ESPERAS_S[tentativa - 2])
         try:
-            resposta = cliente.messages.create(
+            with cliente.messages.stream(
                 model=modelo,
                 max_tokens=MAX_TOKENS,
                 system=sistema,
                 messages=mensagens,
                 output_config=formato,
-            )
+            ) as stream:
+                resposta = stream.get_final_message()
             uso.somar(resposta, preco)
+            if resposta.stop_reason == "max_tokens":
+                # Cortada no teto: o JSON veio pela metade, e repetir dá o mesmo corte.
+                logger.warning("[ContasMedicas] IA %s, tentativa %s: resposta cortada no teto", modelo, tentativa)
+                falha = ErroDaIA(
+                    f"A resposta da IA passou do teto de {MAX_TOKENS} tokens",
+                    causa="tamanho",
+                    tipo="RespostaCortada",
+                    http=200,
+                )
+                break
             conteudo = "".join(bloco.text for bloco in resposta.content if bloco.type == "text")
             resultado = saida.model_validate_json(conteudo)
         except (anthropic.APIError, ValidationError) as erro:
