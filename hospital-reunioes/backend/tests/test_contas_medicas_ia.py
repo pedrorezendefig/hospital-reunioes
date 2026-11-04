@@ -315,6 +315,16 @@ def _objetos_do_schema(no):
             yield from _objetos_do_schema(valor)
 
 
+def _parametros_com_uniao(no) -> int:
+    """Quantos nós do schema têm `anyOf` ou lista de tipos, como a Anthropic conta."""
+    if isinstance(no, dict):
+        proprio = 1 if "anyOf" in no or isinstance(no.get("type"), list) else 0
+        return proprio + sum(_parametros_com_uniao(v) for v in no.values())
+    if isinstance(no, list):
+        return sum(_parametros_com_uniao(v) for v in no)
+    return 0
+
+
 # ═══════════════════════════════════════════════════════════════════════════
 # 2. A requisição à Anthropic
 # ═══════════════════════════════════════════════════════════════════════════
@@ -420,6 +430,30 @@ class TestRespostaForaDoFormato:
         assert len(provedor.corpos) == 3
         assert len(esperas) == 2
         assert 0 < esperas[0] < esperas[1]
+
+    def test_nenhum_schema_enviado_passa_de_16_parametros_com_uniao(self, provedor):
+        # A saída estrita da Anthropic recusa com 400 o schema com mais de 16
+        # parâmetros anuláveis ou com `anyOf`. O passo A tinha 20 e toda conta
+        # parava na leitura do prontuário (CM-APP-DEFEITO).
+        provedor.responder((json.dumps(EVENTOS_VALIDOS), USO_PADRAO), (json.dumps(LINHAS_VALIDAS), USO_PADRAO))
+
+        _extrair()
+        _comparar()
+
+        for corpo in provedor.corpos:
+            assert _parametros_com_uniao(corpo["output_config"]["format"]["schema"]) <= 16
+
+    def test_o_texto_opcional_do_passo_a_vai_como_string_e_o_vazio_volta_como_none(self, provedor):
+        (movimentacao,) = EVENTOS_VALIDOS["movimentacoes"]
+        sem_setor = {**EVENTOS_VALIDOS, "movimentacoes": [{**movimentacao, "setor": ""}]}
+        provedor.responder((json.dumps(sem_setor), USO_PADRAO))
+
+        resultado = _extrair()
+
+        enviado = provedor.corpos[0]["output_config"]["format"]["schema"]
+        setor = enviado["properties"]["movimentacoes"]["items"]["properties"]["setor"]
+        assert setor["type"] == "string"
+        assert resultado.movimentacoes[0].setor is None
 
     def test_a_segunda_tentativa_no_formato_vale(self, provedor):
         provedor.responder(("isto não é JSON", USO_PADRAO), (json.dumps(LINHAS_VALIDAS), USO_PADRAO))

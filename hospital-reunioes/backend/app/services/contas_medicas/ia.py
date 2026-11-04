@@ -26,10 +26,10 @@ import logging
 import time
 from dataclasses import dataclass
 from time import perf_counter
-from typing import Any, Literal
+from typing import Annotated, Any, Literal
 
 import anthropic
-from pydantic import BaseModel, ConfigDict, Field, ValidationError
+from pydantic import BaseModel, BeforeValidator, ConfigDict, Field, ValidationError, WithJsonSchema
 
 from app.config import settings
 from app.services.prompt_loader import load_prompt
@@ -154,10 +154,21 @@ class _Estrito(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
 
+# A saída estrita da Anthropic recusa com 400 o schema com mais de 16
+# parâmetros anuláveis ("too many parameters with union types"), e o passo A
+# tinha 20. O texto opcional do passo A sai para a IA como string, vazia quando
+# o prontuário não diz, e volta aqui como None: quem consome não muda.
+TextoOpcional = Annotated[
+    str | None,
+    BeforeValidator(lambda valor: valor or None),
+    WithJsonSchema({"type": "string", "description": "Vazio quando o prontuário não disser."}),
+]
+
+
 class Movimentacao(_Estrito):
     tipo: Literal["INTERNACAO", "TRANSFERENCIA_SETOR", "TRANSFERENCIA_HOSPITAL", "ALTA", "OBITO"]
-    data_hora: str | None
-    setor: str | None
+    data_hora: TextoOpcional
+    setor: TextoOpcional
     pagina: int
     trecho: str
 
@@ -181,23 +192,23 @@ class Terapia(_Estrito):
         "OUTRA",
     ]
     descricao: str
-    setor: str | None
-    inicio: str | None
-    fim: str | None
+    setor: TextoOpcional
+    inicio: TextoOpcional
+    fim: TextoOpcional
     pagina: int
     trecho: str
 
 
 class Prescricao(_Estrito):
     data: str
-    setor: str | None
+    setor: TextoOpcional
     item: str
-    via: str | None
+    via: TextoOpcional
     doses_no_dia: float | None
     se_necessario: bool
-    indicio_de_uso: str | None
+    indicio_de_uso: TextoOpcional
     suspenso: bool
-    diluente: str | None
+    diluente: TextoOpcional
     em_bomba: bool
     pagina: int
     trecho: str
@@ -221,9 +232,9 @@ class Procedimento(_Estrito):
         "HEMOTRANSFUSAO",
         "OUTRO",
     ]
-    data_hora: str | None
-    setor: str | None
-    detalhe: str | None
+    data_hora: TextoOpcional
+    setor: TextoOpcional
+    detalhe: TextoOpcional
     quantidade: float | None
     pagina: int
     trecho: str
@@ -231,11 +242,11 @@ class Procedimento(_Estrito):
 
 class Cirurgia(_Estrito):
     data: str
-    inicio: str | None
-    fim: str | None
+    inicio: TextoOpcional
+    fim: TextoOpcional
     procedimento: str
-    codigo: str | None
-    anestesia: str | None
+    codigo: TextoOpcional
+    anestesia: TextoOpcional
     cobranca_honorario: Literal["VIA_HOSPITAL", "VIA_EQUIPE", "NAO_SINALIZADO"]
     equipamentos: list[str]
     pagina: int
@@ -245,7 +256,7 @@ class Cirurgia(_Estrito):
 class EventosDoProntuario(_Estrito):
     """A saída do passo A (Anexo A)."""
 
-    atendimento: str | None
+    atendimento: TextoOpcional
     idade_anos: int | None
     movimentacoes: list[Movimentacao]
     terapias: list[Terapia]
