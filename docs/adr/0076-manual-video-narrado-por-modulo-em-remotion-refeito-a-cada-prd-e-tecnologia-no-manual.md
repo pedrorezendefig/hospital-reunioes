@@ -1,7 +1,8 @@
 ---
-status: accepted
+status: superseded
 amends: 0057, 0072, 0075
 amended_by: 0077
+superseded_by: 0078
 ---
 
 # Manual: um vídeo narrado por módulo, em Remotion, refeito a cada PRD, e a Tecnologia no Manual

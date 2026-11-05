@@ -1,7 +1,8 @@
 ---
-status: accepted
+status: superseded
 amends: 0044, 0056
 amended_by: 0058, 0062, 0071, 0072, 0076
+superseded_by: 0078
 ---
 
 # Manual do usuário: um site por módulo, vídeo por tarefa, fatia de manual por PRD

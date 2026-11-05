@@ -40,4 +40,3 @@ Várias sessões Claude Code rodam issues `ready-for-agent` distintas ao mesmo t
 - `docs/spec/deploy/`: contrato e estado de deploy (`project.json` · `state.json` · `history.json`, a timeline de todos os deploys) · `docs/spec/VERSIONING.md`: versão semântica.
 - Layout do repo (o que fica no git, `local/` fora, `docs/comunicacao/`, `references/` nas skills): ADR 0044.
 - `docs/ARQUITETURA.md`: visão de arquitetura com blocos auto-gerados pelo `/snapshot` · `docs/onboarding/`: setup de máquina e fluxo do dia a dia (`/setup-maquina` confere).
-- `docs/manual/`: o **site do Manual do usuário** (Astro Starlight, um endereço só, seções na ordem do menu do app), escrito pela `/manual` e publicado na Vercel. Só entra no ar o que está em produção: a página nasce em `draft` e quem tira é a Action do push da `main` (ADRs 0057 e 0068). Não é doc de estado: quem diz o estado das issues é o GitHub.

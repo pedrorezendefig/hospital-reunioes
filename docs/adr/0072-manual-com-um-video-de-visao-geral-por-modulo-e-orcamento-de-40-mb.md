@@ -1,7 +1,8 @@
 ---
-status: accepted
+status: superseded
 amends: 0057
 amended_by: 0076
+superseded_by: 0078
 ---
 
 # Manual com um Vídeo de visão geral por módulo e orçamento de 40 MB

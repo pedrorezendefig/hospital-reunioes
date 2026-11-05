@@ -58,7 +58,7 @@ chave_preenchida() { # arquivo chave -> 0 se existe, não está vazia e não é 
 }
 versao_min() { # atual minima -> 0 se atual >= minima, comparando por número
   # `sort -V` e não ordem alfabética: 22.9 vem depois de 22.12 no alfabeto e
-  # aprovaria um Node que não builda o site do Manual.
+  # aprovaria um Node que não builda o frontend.
   [ "$(printf '%s\n%s\n' "$2" "$1" | sort -V | head -1)" = "$2" ]
 }
 checa_claude_versao() { # OK se claude --version >= CLAUDE_MIN; FALTA abaixo ou se não responde
@@ -118,7 +118,6 @@ DENY
   done <<'AUTO'
 environment|repositório|pedrorezendefig/hospital-reunioes
 environment|Coolify|coolify
-environment|Vercel|manual-hsm.vercel.app
 allow|fechar_onda.py|fechar_onda.py
 allow|minhas_issues.py|minhas_issues.py
 allow|gh issue|gh issue
@@ -398,22 +397,20 @@ else
   falta "hospital-reunioes/.env existe" "printf '%s\\n' $ENV_MIN > hospital-reunioes/.env (três valores fictícios; nada real)"
 fi
 
-# A subida (fechar_onda.py) publica o Manual quando o deploy tira alguma página do draft
-# (tools/tirar_draft_manual.py): o site é Starlight, buildado por `corepack pnpm@9` com Node >=
-# 22.12, e a publicação reencoda cada vídeo com ffmpeg. Por isso os três são
-# nível 2, o mesmo do deploy, e não opcionais.
+# O frontend builda com `corepack pnpm@9` e Node >= 22.12, e o vídeo da /divulgar
+# passa pelo ffmpeg.
 NODE_MIN=22.12
 if no_path_do_shell node; then
   nodev="$(PATH="$PATH_SHELL" node -v 2>/dev/null)"; nodev="${nodev#v}"
   if versao_min "$nodev" "$NODE_MIN"; then
-    ok "node >= $NODE_MIN (manual)" "v$nodev"
+    ok "node >= $NODE_MIN" "v$nodev"
   else
-    falta "node >= $NODE_MIN (manual)" "tem v$nodev; o site do Manual não builda: brew install node@22 e ponha no PATH do ~/.zshrc"
+    falta "node >= $NODE_MIN" "tem v$nodev: brew install node@22 e ponha no PATH do ~/.zshrc"
   fi
 else
-  falta "node >= $NODE_MIN (manual)" "brew install node@22 (a subida publica o Manual e o site exige $NODE_MIN)"
+  falta "node >= $NODE_MIN" "brew install node@22"
 fi
-bin_ok corepack "npm i -g corepack (o site do Manual builda com corepack pnpm@9)"
+bin_ok corepack "npm i -g corepack (o frontend builda com corepack pnpm@9)"
 # No Windows o `pnpm` não entra no PATH: o caminho é `corepack pnpm@9`, e sem o
 # prompt desligado o corepack para perguntando se pode baixar (issue #844).
 if PATH="$PATH_SHELL" COREPACK_ENABLE_DOWNLOAD_PROMPT=0 corepack pnpm@9 --version >/dev/null 2>&1; then
@@ -421,7 +418,7 @@ if PATH="$PATH_SHELL" COREPACK_ENABLE_DOWNLOAD_PROMPT=0 corepack pnpm@9 --versio
 else
   falta "pnpm (corepack)" "o corepack não entregou o pnpm: rode COREPACK_ENABLE_DOWNLOAD_PROMPT=0 corepack pnpm@9 --version e chame o pnpm sempre assim"
 fi
-bin_ok ffmpeg "brew install ffmpeg (a publicação do Manual reencoda os vídeos)"
+bin_ok ffmpeg "brew install ffmpeg (o vídeo da /divulgar)"
 
 fi
 
@@ -430,7 +427,7 @@ if [ "$NIVEL" -ge 3 ]; then
 titulo "Nível 3: app local (opcional, hoje ninguém usa)"
 if tem_bin docker && docker ps >/dev/null 2>&1; then ok "docker no ar"; else opc "docker no ar" "instale o Docker Desktop e abra"; fi
 no_path_do_shell supabase && ok "supabase" || opc "supabase" "brew install supabase/tap/supabase (se já instalou, adicione ao PATH do ~/.zshrc)"
-# node e corepack são conferidos no nível 2: o deploy publica o Manual.
+# node e corepack são conferidos no nível 2.
 [ -f "$APP/frontend/.env.local" ] && ok "frontend/.env.local" || opc "frontend/.env.local" "cp hospital-reunioes/frontend/.env.example hospital-reunioes/frontend/.env.local"
 fi
 
@@ -439,12 +436,6 @@ if [ "$NIVEL" -ge 4 ]; then
 titulo "Nível 4: produzir vídeo e print (opcional)"
 [ -d "/Applications/Google Chrome.app" ] && ok "Google Chrome" || opc "Google Chrome" "brew install --cask google-chrome"
 [ -d "$HOME/.claude/skills/hyperframes" ] && ok "skills globais hyperframes" || opc "skills globais hyperframes" "npx skills add heygen-com/hyperframes --all (skills globais, fora do repo; ver /divulgar)"
-# Roteiro de prints do manual: Playwright em Python, com o Chromium baixado.
-if PATH="$PATH_SHELL" python3 -c "import playwright" >/dev/null 2>&1; then
-  ok "playwright (roteiro de prints)"
-else
-  opc "playwright (roteiro de prints)" "pip install playwright && python3 -m playwright install chromium"
-fi
 # Verificação de tela pelo agente (/express e fatias de frontend): Playwright CLI.
 PATH="$PATH_SHELL" command -v playwright-cli >/dev/null 2>&1 && ok "playwright-cli (verificar tela)" || opc "playwright-cli (verificar tela)" "npm i -g @playwright/cli && playwright-cli install --skills"
 fi
@@ -456,7 +447,7 @@ desconhecidas=""
 # Pastas de nível 1 e 2 que o git conhece (honra o .gitignore: sem node_modules, caches, local/, worktrees)
 # contra a lista de cobertura do mapa, por caminho exato.
 cobertas="$(sed -n '/cobertura:start/,/cobertura:end/p' "$MAPA" 2>/dev/null | grep -E '^[a-zA-Z.]')"
-for d in $(git ls-files -co --exclude-standard | awk -F/ 'NF>1{print $1} NF>2{print $1"/"$2}' | sort -u | grep -vE '^(\.claude/skills|docs/adr|docs/comunicacao|docs/manual)/'); do
+for d in $(git ls-files -co --exclude-standard | awk -F/ 'NF>1{print $1} NF>2{print $1"/"$2}' | sort -u | grep -vE '^(\.claude/skills|docs/adr|docs/comunicacao)/'); do
   printf '%s\n' "$cobertas" | grep -qxF "$d" || desconhecidas="$desconhecidas $d"
 done
 [ -z "$desconhecidas" ] && ok "toda pasta de nível 1 e 2 está no mapa" || aviso "pastas fora do mapa" "atualize README.md:$desconhecidas"

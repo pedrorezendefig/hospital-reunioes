@@ -78,10 +78,6 @@ Se o resumo estiver certo, o **Criar o card** manda o plano para o desenvolvimen
 
 A IA cuida das decisões de negócio: o problema, quem usa, as regras e o que fica de fora. As decisões técnicas ficam com a Vitta, depois do sim. Quando o pedido esbarra numa regra da casa, a IA avisa e diz de onde tirou, citando a parte "O que já foi decidido" do texto daquele sistema.
 
-## O Manual da aba
-
-O Manual do usuário tem uma seção da Tecnologia, com o passo a passo de cada tarefa da aba: relatar um bug, pedir uma melhoria e acompanhar a entrega pela lista. O endereço é https://manual-hsm.vercel.app/tecnologia/ e o item **Ajuda**, no fim do menu da área admin, abre essa seção direto.
-
 ## O que já foi decidido
 
 - A aba mora dentro do aplicativo e só quem é Super admin a vê.

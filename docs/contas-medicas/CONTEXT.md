@@ -2,7 +2,7 @@
 
 Confere a conta hospitalar de internação antes do envio à operadora: a faturista envia a conta e o prontuário completo exportados do MV, o módulo cruza os dois com a memória da operadora e devolve um Guia de ações. O que ela corrige vira indicador de onde a perda nasce. Terceiro contexto do repositório (ver [CONTEXT-MAP.md](../../CONTEXT-MAP.md)); nasceu da especificação do Diretor Executivo (v1.0 e adendos v1.1 a v1.3, outubro/2026) e do grilling de 12/10/2026 ([ADR 0070](../adr/0070-contas-medicas-aritmetica-no-codigo-ia-no-julgamento-memoria-no-banco.md)). Curado por humano daqui em diante.
 
-**Nome do módulo:** Contas médicas. A palavra "auditoria" não aparece em tela, rota, texto, Manual nem nome de tabela deste módulo (decisão do diretor).
+**Nome do módulo:** Contas médicas. A palavra "auditoria" não aparece em tela, rota, texto nem nome de tabela deste módulo (decisão do diretor).
 
 ## Atendimento, conta e prontuário
 

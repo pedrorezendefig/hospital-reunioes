@@ -41,15 +41,14 @@ A Action `.github/workflows/higiene-issues.yml` dispara no evento `issues.closed
 
 Nenhuma skill ou passo manual cuida disso — a higiene é event-driven de propósito.
 
-## Snapshot e draft do Manual (GitHub Action)
+## Snapshot e registro (GitHub Action)
 
 A Action `.github/workflows/pos-merge.yml` dispara em todo push na `main` e faz o que saiu da subida (ADR 0068): o `fechar_onda.py` grava só `history.json` e `state.json`, e o resto é dela.
 
-1. Tira do `draft` as páginas do Manual dos PRDs do último deploy do `history.json` (`tools/tirar_draft_manual.py`). Deploy sem PRD (PR avulso) pula o passo; página com Vídeo de tarefa fica em draft com um aviso no run, porque o MP4 não vem no clone (issue #951).
-2. Regenera o mapa factual (`docs/spec/snapshots/` e os blocos AUTO do `docs/ARQUITETURA.md`) com o backend montado como no CI, sem o modo parcial da máquina local.
-3. Com diff, commita direto na `main` como `github-actions[bot]`, com `[skip ci]`. Quem empurra é a deploy key da Action, num job separado que não instala nada; o ruleset da `main` dá bypass a ela e a mais ninguém (`.github/rulesets/main.json`, ADR 0068).
+1. Regenera o mapa factual (`docs/spec/snapshots/` e os blocos AUTO do `docs/ARQUITETURA.md`) com o backend montado como no CI, sem o modo parcial da máquina local.
+2. Com diff, commita direto na `main` como `github-actions[bot]`, com `[skip ci]`. Quem empurra é a deploy key da Action, num job separado que não instala nada; o ruleset da `main` dá bypass a ela e a mais ninguém (`.github/rulesets/main.json`, ADR 0068).
 
-O `[skip ci]` impede o push do bot de redisparar workflow, e o filtro de caminhos da Action ignora o que ela mesma escreve. Nenhuma skill nem a subida roda snapshot ou draft.
+O `[skip ci]` impede o push do bot de redisparar workflow, e o filtro de caminhos da Action ignora o que ela mesma escreve. Nenhuma skill nem a subida roda o snapshot.
 
 ## Loop do revisor (ADR 0068)
 

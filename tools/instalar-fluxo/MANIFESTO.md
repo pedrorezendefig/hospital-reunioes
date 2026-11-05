@@ -13,7 +13,7 @@ O agente lê esta tabela na Fase 3 do `ROTEIRO.md` e executa linha a linha. Um a
 
 | Caminho | Ação | Nota de adaptação |
 |---|---|---|
-| `CLAUDE.md` | adaptar | Título do projeto; `/ask-pedro` vira `/ask-<nome>`; caminho do app (`hospital-reunioes/`) vira o do DESTINO; remover as linhas de `docs/manual/`, `docs/comunicacao/` e Vercel; manter as seções Idioma, Tipografia, Fluxo de trabalho, Agent skills, Desenvolvimento paralelo, Proibido criar, Docs vivos. Se o DESTINO já tem `CLAUDE.md`, fundir: as regras dele ficam, as do fluxo entram como seções novas. |
+| `CLAUDE.md` | adaptar | Título do projeto; `/ask-pedro` vira `/ask-<nome>`; caminho do app (`hospital-reunioes/`) vira o do DESTINO; remover as linhas de `docs/comunicacao/` e Vercel; manter as seções Idioma, Tipografia, Fluxo de trabalho, Agent skills, Desenvolvimento paralelo, Proibido criar, Docs vivos. Se o DESTINO já tem `CLAUDE.md`, fundir: as regras dele ficam, as do fluxo entram como seções novas. |
 | `README.md` | gerar | Mapa de pastas no formato da ORIGEM (tabela "Pasta, O que é, Por que existe, O que tem, Quando abrir" e bloco `cobertura`), com as pastas do DESTINO. Se já existe README, acrescentar a seção "Mapa do repositório" no fim. |
 | `CONTEXT.md` | gerar | Fase 5 do roteiro: glossário rascunho a partir do código do DESTINO, no formato de `.claude/skills/domain-modeling/CONTEXT-FORMAT.md`. |
 | `CONTEXT-MAP.md` | excluir | Só existe porque o Hospital tem dois contextos. O DESTINO começa com um. |
@@ -36,7 +36,6 @@ Toda skill vai com a pasta inteira (`SKILL.md`, `references/`, `scripts/`, arqui
 | `setup-maquina` | adaptar | `scripts/diagnostico.sh` confere binários, `gh`, tokens e plataforma do DESTINO; `references/chaves.md` lista as chaves do DESTINO e de onde vêm (o cofre que a pessoa usar, sem citar 1Password se ela não usa). `--mapa` continua lendo o `README.md` da raiz. |
 | `express`, `minhas-issues`, `retro-onda` | adaptar | Processo neutro. Trocar as citações ao Hospital e ao `/ask-pedro` pelo nome do DESTINO e pelo `/ask-<nome>`. |
 | `divulgar`, `mensagem-prd` | excluir | Entrega de vídeo, página e mensagem para o diretor do hospital. Não é framework. |
-| `manual`, `montar-manual` | excluir | O Manual do usuário do Hospital (Astro Starlight na Vercel). |
 | `hr-ondas` | excluir | Mod do Claude Code com a URL do Supabase Studio do Hospital fixa no código. |
 | `supabase-postgres-best-practices` | excluir | Cita o Supabase do Hospital. Se o DESTINO usa Postgres, a pessoa instala a versão upstream. |
 
@@ -67,7 +66,7 @@ Os papéis que a `/onda-enxuta` e o `/ship` disparam pelo nome. Sem eles a onda 
 | `docs/spec/snapshots/*.md` | gerar | Saída do `/snapshot` adaptado, rodado uma vez na Fase 5. |
 | `docs/onboarding/dev.md` | adaptar | Nome do projeto, `/ask-<nome>`, cenários A a D ficam. |
 | `docs/onboarding/claude-setup.md` | adaptar | Pré-requisitos e acessos externos da plataforma do DESTINO. Seção do Coolify sai se não for Coolify. |
-| `docs/manual/`, `docs/comunicacao/`, `docs/pops/` | excluir | Conteúdo do Hospital. |
+| `docs/comunicacao/`, `docs/pops/` | excluir | Conteúdo do Hospital. |
 
 ## `.github/`
 
@@ -75,7 +74,7 @@ Os papéis que a `/onda-enxuta` e o `/ship` disparam pelo nome. Sem eles a onda 
 |---|---|---|
 | `.github/workflows/lint-adr.yml` | copiar | Junto com `tools/lint_adr.py`. |
 | `.github/workflows/lint-skills.yml` | copiar | Junto com `tools/lint_skills.py`. |
-| `.github/workflows/pos-merge.yml` | adaptar | A Action que grava na `main` o registro que a subida manda (`history.json`, `state.json`) e roda o snapshot, junto com `tools/aplicar_registro.py` (copiar). Tirar o job do draft do Manual e o `avisar` do PRD; a instalação do backend vira a do DESTINO. Precisa da deploy key no Environment `pos-merge` quando a `main` é protegida; sem proteção, o `GITHUB_TOKEN` basta. Ver Fase 4.4. |
+| `.github/workflows/pos-merge.yml` | adaptar | A Action que grava na `main` o registro que a subida manda (`history.json`, `state.json`) e roda o snapshot, junto com `tools/aplicar_registro.py` (copiar). A instalação do backend vira a do DESTINO. Precisa da deploy key no Environment `pos-merge` quando a `main` é protegida; sem proteção, o `GITHUB_TOKEN` basta. Ver Fase 4.4. |
 | `.github/workflows/higiene-issues.yml` | copiar | Neutro: limpa labels de estado no fechamento, fecha PRD pai, sinaliza `revisor-comentou`. |
 | `.github/workflows/ci.yml` | gerar | Um job por gate do DESTINO (lint, testes, build), mais o passo "Lint travessão" apontado para a pasta de templates que o usuário final lê no DESTINO. Se o DESTINO já tem CI, acrescentar só o passo do travessão. Se o DESTINO não tem templates lidos por usuário, o passo cobre `docs/` e o `README.md`. |
 | `.github/ISSUE_TEMPLATE/`, `.github/PULL_REQUEST_TEMPLATE.md` | copiar | Se existirem na ORIGEM. Se o DESTINO já tem, perguntar. |
@@ -90,7 +89,7 @@ Os papéis que a `/onda-enxuta` e o `/ship` disparam pelo nome. Sem eles a onda 
 | `tools/workflow-dashboard/serve.py`, `fases.py`, `areas.py`, `diagramas.py`, `static/ui.js`, `static/diagramas.js`, `static/prs.js`, `static/ondas.js`, `static/router.js`, `static/decisoes.js`, `static/vendor/` | copiar | O coração do painel. Não editar a lógica. Onde um comentário diz "Hospital OS", trocar por "<Nome> OS". |
 | `tools/workflow-dashboard/collect.py` | adaptar | Usa o `gh` do diretório corrente, então lê o repositório do DESTINO sozinho. Dois pontos têm o Hospital no código: o prefixo `hospital-reunioes/` que separa PR do app de PR de ferramenta (o mesmo critério do `fechar_onda.py`) vira a pasta do app do DESTINO; o repo de reserva `pedrorezendefig/hospital-reunioes` vira o `owner/repo` do DESTINO. `LABELS_DO_APP` (`type:feature`, `type:fix`) fica igual. |
 | `tools/workflow-dashboard/static/app.js` | adaptar | O rodapé "Hospital OS · somente leitura" vira "<Nome> OS"; o comentário do prefixo `hospital-reunioes/` e o cabeçalho que cita o `/ask-pedro` viram a pasta do app e o `/ask-<nome>`. |
-| `tools/workflow-dashboard/static/fluxo.json` | adaptar | O desenho do fluxo na sub-aba Fluxo. Trocar `/ask-pedro` por `/ask-<nome>`, "hospital" pelo nome do DESTINO e o prefixo `hospital-reunioes/` pela pasta do app. Tirar os nós das skills excluídas (`/divulgar`, `/manual`). |
+| `tools/workflow-dashboard/static/fluxo.json` | adaptar | O desenho do fluxo na sub-aba Fluxo. Trocar `/ask-pedro` por `/ask-<nome>`, "hospital" pelo nome do DESTINO e o prefixo `hospital-reunioes/` pela pasta do app. Tirar os nós das skills excluídas (`/divulgar`). |
 | `tools/workflow-dashboard/static/style.css` | adaptar | **Só o bloco `:root`** (paleta, tints, raios, status, fontes) e o comentário da linha 1. Nenhuma outra linha. |
 | `tools/workflow-dashboard/static/index.html` | adaptar | `<title>` ("<Nome> OS"), o `<h1>` ("<Nome> <span class="accent">OS</span>"), o `eyebrow` se quiser, e as duas cores do favicon (fundo = `--navy`, círculo = `--brand-light` da paleta escolhida). |
 | `tools/workflow-dashboard/static/areas.js` | adaptar | `ORDEM_DOM_ROTAS`, as descrições por área, os regex que classificam rota e entidade por área, e o nome do app no diagrama de contexto. Usar as áreas decididas na entrevista. |

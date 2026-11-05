@@ -295,8 +295,7 @@ O modo auto não lê `autoMode` do settings do projeto, então estas regras vão
     "environment": [
       "$defaults",
       "**Source control**: o repositório confiável é pedrorezendefig/hospital-reunioes e o origin dele. Ele é público: texto em issue, PR e comentário é publicação, e nada de tokens/.env, .env ou dado de paciente entra lá",
-      "**CI/CD deploy targets**: Coolify do hospital (https://coolify.hospitalsaomatheus.cloud), deploy de produção só pelo fechar_onda.py",
-      "**Trusted internal domains**: manual-hsm.vercel.app, o Manual do usuário publicado pela subida. Nenhum outro endereço vercel.app é confiável: qualquer conta registra um"
+      "**CI/CD deploy targets**: Coolify do hospital (https://coolify.hospitalsaomatheus.cloud), deploy de produção só pelo fechar_onda.py"
     ],
     "allow": [
       "$defaults",

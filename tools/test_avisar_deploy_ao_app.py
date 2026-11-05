@@ -180,9 +180,9 @@ def test_o_job_chama_o_app_depois_do_registro_e_nao_falha_o_run():
 
 def test_o_script_roda_quando_o_leitor_do_registro_muda():
     """O script carrega o leitor do registro do backend pelo caminho, e os
-    testes de `tools/` rodam no `manual.yml`: o PR que mexe só no leitor
+    testes de `tools/` rodam no `ferramentas.yml`: o PR que mexe só no leitor
     também precisa acordá-los."""
-    manual = yaml.safe_load((RAIZ / ".github" / "workflows" / "manual.yml").read_text(encoding="utf-8"))
+    manual = yaml.safe_load((RAIZ / ".github" / "workflows" / "ferramentas.yml").read_text(encoding="utf-8"))
     on = manual["on"] if "on" in manual else manual[True]
     for evento in ("push", "pull_request"):
         assert "hospital-reunioes/backend/app/services/registro_do_deploy.py" in on[evento]["paths"], evento

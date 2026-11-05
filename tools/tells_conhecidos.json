@@ -1,4 +1,0 @@
-{
-  "sobre": "Cacoetes de texto gerado que já estavam no Manual quando a trava do tools/lint_manual.py nasceu (issue #1218, ADR 0071). Eles não reprovam o build; cacoete novo reprova. A reescrita de cada módulo (issues #1223 a #1228) tira os da sua pasta e apaga as linhas daqui; o lint avisa quando uma linha ficou sem cacoete na página.",
-  "paginas": {}
-}

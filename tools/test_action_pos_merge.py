@@ -1,8 +1,7 @@
-"""A Action pós-merge: snapshot e draft do Manual direto na `main` (issue #940).
+"""A Action pós-merge: snapshot e registro do deploy direto na `main` (issue #940).
 
-ADR 0062, decisão 10: a subida deixou de rodar o `snapshot.py` e o
-`tirar_draft_manual.py` (#939), e quem roda os dois é um workflow no push da
-`main`, que commita como `github-actions[bot]` pelo bypass do ruleset. A ADR
+ADR 0062, decisão 10: a subida deixou de rodar o `snapshot.py` (#939), e
+quem roda é um workflow no push da `main`, que commita como `github-actions[bot]` pelo bypass do ruleset. A ADR
 0065 separou o workflow em dois jobs: o `gerar` instala e roda tudo sem
 credencial e entrega um patch por artefato; o `commitar`, que não instala
 nada, aplica o patch e empurra com a deploy key de um Environment restrito à
@@ -25,9 +24,6 @@ from pathlib import Path
 
 import pytest
 import yaml
-
-sys.path.insert(0, str(Path(__file__).resolve().parent))
-from tirar_draft_manual import sem_draft  # noqa: E402
 
 RAIZ = Path(__file__).resolve().parent.parent
 WORKFLOW = RAIZ / ".github" / "workflows" / "pos-merge.yml"
@@ -60,10 +56,9 @@ def test_credencial_de_escrita_so_no_job_que_nao_instala_nada():
     só usa checkout, download do artefato e git."""
     w = workflow()
     assert w["permissions"] == {"contents": "read"}
-    # O terceiro job, `avisar`, só escreve em issue (issue #951); o quarto,
-    # `em-producao`, só chama o app com o segredo do webhook de deploy (issue
+    # O terceiro job, `em-producao`, só chama o app com o segredo do webhook de deploy (issue
     # #1065, contrato em `test_avisar_deploy_ao_app.py`).
-    assert set(w["jobs"]) == {"gerar", "commitar", "avisar", "em-producao"}
+    assert set(w["jobs"]) == {"gerar", "commitar", "em-producao"}
     gerar, commitar = w["jobs"]["gerar"], w["jobs"]["commitar"]
     for nome, job in (("gerar", gerar), ("commitar", commitar)):
         assert "permissions" not in job, nome
@@ -86,7 +81,6 @@ def test_credencial_de_escrita_so_no_job_que_nao_instala_nada():
     texto = WORKFLOW.read_text(encoding="utf-8")
     assert texto.count("secrets.") == 2
     assert texto.count("secrets.POS_MERGE_DEPLOY_KEY") == 1
-    assert "secrets." not in yaml.safe_dump(w["jobs"]["avisar"])
     assert "POS_MERGE_DEPLOY_KEY" not in yaml.safe_dump(w["jobs"]["em-producao"])
 
 
@@ -115,14 +109,12 @@ def acorda(mudados: list[str]) -> bool:
 
 
 def test_push_que_so_toca_o_que_a_action_escreve_nao_acorda_a_action():
-    """Snapshot, página do Manual e o registro do deploy. O push da deploy key
+    """Snapshot e o registro do deploy. O push da deploy key
     dispara workflow: o filtro e o `[skip ci]` impedem o loop."""
     assert not acorda(["docs/spec/snapshots/ROTAS.md", "docs/spec/snapshots/SCHEMA.md"])
     assert not acorda(["docs/ARQUITETURA.md"])
-    assert not acorda(["docs/manual/src/content/docs/ouvidoria/manifestacoes/registrar.mdx"])
     assert not acorda(["docs/spec/deploy/history.json", "docs/spec/deploy/state.json"])
-    assert not acorda(["docs/spec/snapshots/ROTAS.md", "docs/ARQUITETURA.md",
-                       "docs/manual/src/content/docs/index.mdx", "docs/spec/deploy/history.json"])
+    assert not acorda(["docs/spec/snapshots/ROTAS.md", "docs/ARQUITETURA.md", "docs/spec/deploy/history.json"])
 
 
 def test_merge_de_codigo_e_de_outro_arquivo_de_deploy_acordam_a_action():
@@ -132,7 +124,7 @@ def test_merge_de_codigo_e_de_outro_arquivo_de_deploy_acordam_a_action():
     assert acorda(["docs/spec/deploy/history.json", "docs/spec/deploy/project.json"])
     assert acorda(["hospital-reunioes/backend/app/routers/atas.py"])
     assert acorda(["docs/spec/snapshots/ROTAS.md", "hospital-reunioes/supabase/migrations/115_x.sql"])
-    assert acorda(["docs/manual/video/ouvidoria/registrar/index.html"])
+    assert acorda(["docs/adr/README.md"])
 
 
 # --------------------------------------------------- os passos de shell, rodados
@@ -176,138 +168,21 @@ def rodar(trecho: str, cwd: Path, env: dict[str, str] | None = None,
                           capture_output=True, text=True, errors="surrogateescape", check=False)
 
 
-TIRAR_DRAFT_FALSO = """\
-import os, sys
-from pathlib import Path
-Path("chamadas.txt").open("a").write(" ".join(sys.argv[1:]) + "\\n")
-if "--resumo" in sys.argv and os.environ.get("AVISO_DO_DRAFT"):
-    Path(sys.argv[sys.argv.index("--resumo") + 1]).write_text(os.environ["AVISO_DO_DRAFT"])
-sys.exit(int(os.environ.get("SAIDA_DO_DRAFT", "0")))
-"""
-
-
-def arvore_do_draft(tmp_path: Path, prds: list[int]) -> Path:
+def arvore_do_deploy(tmp_path: Path, prds: list[int]) -> Path:
     raiz = tmp_path / "repo"
     (raiz / "docs" / "spec" / "deploy").mkdir(parents=True)
     (raiz / "tools").mkdir()
     deploys = [{"app_version": "0.2.0", "prds": prds}, {"app_version": "0.1.0", "prds": [700]}]
     (raiz / "docs" / "spec" / "deploy" / "history.json").write_text(
         json.dumps({"schema_version": 1, "deploys": deploys}), encoding="utf-8")
-    (raiz / "tools" / "tirar_draft_manual.py").write_text(TIRAR_DRAFT_FALSO, encoding="utf-8")
     return raiz
-
-
-def chamadas(raiz: Path) -> list[str]:
-    """Os `--prd` de cada chamada ao tirar-draft; o `--resumo` aponta para a
-    pasta temporária do runner e é conferido pelo aviso que ele escreve."""
-    arq = raiz / "chamadas.txt"
-    linhas = arq.read_text(encoding="utf-8").splitlines() if arq.exists() else []
-    return [re.sub(r" --resumo \S+", "", linha) for linha in linhas]
-
-
-def rodar_draft(raiz: Path, env: dict[str, str] | None = None) -> subprocess.CompletedProcess:
-    """O passo do draft com os arquivos que o runner dá a todo passo."""
-    temp = raiz.parent / "runner-temp"
-    temp.mkdir(exist_ok=True)
-    return rodar("Tirar do draft", raiz, {
-        "RUNNER_TEMP": str(temp),
-        "GITHUB_STEP_SUMMARY": str(raiz.parent / "resumo-do-run.md"),
-        "GITHUB_OUTPUT": str(raiz.parent / "saidas.txt"),
-        **(env or {}),
-    })
-
-
-def resumo_do_run(raiz: Path) -> str:
-    arq = raiz.parent / "resumo-do-run.md"
-    return arq.read_text(encoding="utf-8") if arq.exists() else ""
-
-
-def saidas(raiz: Path) -> dict[str, str]:
-    """O `GITHUB_OUTPUT` lido como o runner lê: `chave=valor`, ou
-    `chave<<FIM` com as linhas até a que é só `FIM`."""
-    arq = raiz.parent / "saidas.txt"
-    linhas = arq.read_text(encoding="utf-8").split("\n") if arq.exists() else []
-    lidas, i = {}, 0
-    while i < len(linhas):
-        chave, sep, valor = linhas[i].partition("=")
-        if "<<" in chave or not sep:
-            chave, _, fim = linhas[i].partition("<<")
-            if not fim:
-                i += 1
-                continue
-            j = linhas.index(fim, i + 1)
-            lidas[chave] = "\n".join(linhas[i + 1:j])
-            i = j + 1
-        else:
-            lidas[chave] = valor
-            i += 1
-    return lidas
-
-
-def test_draft_sai_para_os_prds_do_ultimo_deploy(tmp_path):
-    raiz = arvore_do_draft(tmp_path, [963, 646])
-    proc = rodar_draft(raiz)
-    assert proc.returncode == 0, proc.stderr
-    assert chamadas(raiz) == ["--prd 963 --prd 646"]
-
-
-def test_ultimo_deploy_sem_prd_nao_chama_o_tirar_draft(tmp_path):
-    """PR avulso registra `prds: []`. Sem `--prd` o argparse sai com 2, e o
-    passo não pode confundir isso com o bloqueio do MP4. O resumo do run diz
-    isso, e não há aviso para comentar em PRD nenhum."""
-    raiz = arvore_do_draft(tmp_path, [])
-    proc = rodar_draft(raiz)
-    assert proc.returncode == 0, proc.stderr
-    assert chamadas(raiz) == []
-    assert "nenhuma página a tirar do draft" in resumo_do_run(raiz)
-    assert "aviso" not in saidas(raiz)
-
-
-def test_bloqueio_do_mp4_avisa_e_nao_derruba_a_action(tmp_path):
-    """Saída 2: o tirar-draft não escreveu nada (o MP4 do Vídeo de tarefa não
-    vem no clone, issue #951). A página fica em draft e o snapshot segue."""
-    raiz = arvore_do_draft(tmp_path, [963])
-    proc = rodar_draft(raiz, {"SAIDA_DO_DRAFT": "2"})
-    assert proc.returncode == 0, proc.stderr
-    assert "::warning::" in proc.stdout
-    assert chamadas(raiz) == ["--prd 963"]
-
-
-def test_pasta_errada_do_manual_derruba_a_action(tmp_path):
-    raiz = arvore_do_draft(tmp_path, [963])
-    proc = rodar_draft(raiz, {"SAIDA_DO_DRAFT": "1"})
-    assert proc.returncode == 1
-
-
-# O que o `tirar_draft_manual.py --resumo` escreve quando a página com Vídeo
-# de tarefa fica em draft (o formato é dele; aqui só importa que passe inteiro).
-AVISO = ("## Manual do PRD #963\n\nFicaram em draft:\n- `ouvidoria/registrar.mdx`\n\n"
-         "Próximo passo: rode `/manual publicar` da sua máquina.\n")
-
-
-@pytest.mark.parametrize("saida_do_draft", ["0", "2"], ids=["saiu-do-draft", "ficou-em-draft"])
-def test_aviso_do_manual_vai_para_o_resumo_do_run_e_para_o_job_que_comenta(tmp_path, saida_do_draft):
-    """Issue #951: a Action não publica. Ela diz no run o que saiu e o que
-    ficou em draft, e passa o aviso, os PRDs e a versão ao job `avisar`."""
-    raiz = arvore_do_draft(tmp_path, [963, 646])
-    proc = rodar_draft(raiz, {"SAIDA_DO_DRAFT": saida_do_draft, "AVISO_DO_DRAFT": AVISO})
-    assert proc.returncode == 0, proc.stderr
-    assert AVISO in resumo_do_run(raiz)
-    assert saidas(raiz) == {"prds": "963 646", "versao": "0.2.0", "aviso": AVISO.rstrip("\n")}
-
-
-def test_sem_pagina_em_draft_nao_ha_aviso_para_comentar(tmp_path):
-    raiz = arvore_do_draft(tmp_path, [963])
-    proc = rodar_draft(raiz)
-    assert proc.returncode == 0, proc.stderr
-    assert "aviso" not in saidas(raiz)
 
 
 # ------------------------------------------ o registro do deploy (#1000)
 
 # ADR 0064, decisão 6b: a subida termina no health e dispara a Action na `main`
 # com o registro no input `registro`, a entrada nova do history.json e o
-# state.json inteiro. O `gerar` aplica antes do draft, que lê o `deploys[0]`.
+# state.json inteiro.
 DEPLOY_ANTERIOR = {
     "at": "2026-10-06T13:38:54-03:00", "sha": "9" * 40, "app_version": "0.163.4",
     "subject": "PR #1007, issue #1006: Uma thread por tick",
@@ -353,9 +228,8 @@ def registro(entrada=None, state=None) -> str:
 
 
 def arvore_do_registro(tmp_path: Path) -> Path:
-    """O checkout do `gerar`: os dois JSONs da `main`, o script do registro e o
-    tirar-draft falso."""
-    raiz = arvore_do_draft(tmp_path, [])
+    """O checkout do `gerar`: os dois JSONs da `main` e o script do registro."""
+    raiz = arvore_do_deploy(tmp_path, [])
     escrever(raiz, "docs/spec/deploy/history.json", json_da_subida(HISTORY_ANTES))
     escrever(raiz, "docs/spec/deploy/state.json", json_da_subida(STATE_ANTES))
     shutil.copy(RAIZ / "tools" / "aplicar_registro.py", raiz / "tools" / "aplicar_registro.py")
@@ -370,10 +244,9 @@ def deploy_json(raiz: Path, nome: str) -> str:
     return (raiz / "docs" / "spec" / "deploy" / nome).read_text(encoding="utf-8")
 
 
-def test_registro_entra_no_topo_do_history_e_o_draft_sai_para_os_prds_dele(tmp_path):
+def test_registro_entra_no_topo_do_history(tmp_path):
     """A entrada nova vai para o topo de `deploys` (o mais novo primeiro), as
-    antigas ficam como estão, o state.json passa a ser o do registro, e o
-    passo do draft, que vem depois, lê os PRDs e a versão do deploy novo."""
+    antigas ficam como estão e o state.json passa a ser o do registro."""
     raiz = arvore_do_registro(tmp_path)
 
     proc = rodar_registro(raiz, registro())
@@ -382,17 +255,13 @@ def test_registro_entra_no_topo_do_history_e_o_draft_sai_para_os_prds_dele(tmp_p
     assert deploy_json(raiz, "history.json") == json_da_subida(
         {"schema_version": "1.0", "deploys": [ENTRADA, *HISTORY_ANTES["deploys"]]})
     assert deploy_json(raiz, "state.json") == json_da_subida(STATE_DO_REGISTRO)
-    assert rodar_draft(raiz, {"AVISO_DO_DRAFT": AVISO}).returncode == 0
-    assert chamadas(raiz) == ["--prd 963 --prd 646"]
-    assert saidas(raiz)["versao"] == "0.163.5"
 
 
 def sem(dado: dict, chave: str) -> dict:
     return {k: v for k, v in dado.items() if k != chave}
 
 
-# O draft põe `prds` e `app_version` no GITHUB_OUTPUT e passa os PRDs sem aspas
-# ao tirar-draft: valor fora do esquema vira argumento ou saída injetada.
+# Valor fora do esquema é recusado antes de qualquer escrita.
 FORA_DO_ESQUEMA = {
     "nao-e-json": "{entrada:",
     "vazio": "",
@@ -448,7 +317,7 @@ def test_registro_que_ja_esta_no_history_nao_muda_nada(tmp_path):
     assert (deploy_json(raiz, "history.json"), deploy_json(raiz, "state.json")) == depois
 
 
-def test_registro_so_no_run_do_rabo_lido_por_env_e_antes_do_draft():
+def test_registro_so_no_run_da_subida_lido_por_env():
     """O input do `workflow_dispatch` é texto de quem disparou: entra no passo
     por `env`, nunca interpolado no `run`, e só existe no run disparado."""
     on = gatilhos()
@@ -463,105 +332,6 @@ def test_registro_so_no_run_do_rabo_lido_por_env_e_antes_do_draft():
         for p in job["steps"]:
             assert "${{" not in p.get("run", ""), p.get("name")
     assert texto.count("inputs.registro") == 3  # o env do `gerar`, o do `commitar` e o do `em-producao`
-    ordem = [p.get("name") for p in workflow()["jobs"]["gerar"]["steps"]]
-    assert ordem.index(aplicar["name"]) < ordem.index(passo("Tirar do draft")["name"])
-
-
-# ------------------------------------------------- o aviso no PRD (#951)
-
-GH_FALSO = """\
-#!/usr/bin/env python3
-# O gh de mentira: o estado e os comentários de cada issue moram em arquivos
-# ao lado dele; o comentário novo é acrescentado ao arquivo da issue.
-import sys
-from pathlib import Path
-pasta = Path(__file__).parent
-args = sys.argv[1:]
-n = args[2]
-comentarios = pasta / f"comentarios-{n}.txt"
-if args[:2] == ["issue", "view"] and "state" in args:
-    print((pasta / f"estado-{n}.txt").read_text())
-elif args[:2] == ["issue", "view"] and "comments" in args:
-    print(comentarios.read_text() if comentarios.exists() else "")
-elif args[:2] == ["issue", "comment"]:
-    if "--body-file" in args:
-        arquivo = args[args.index("--body-file") + 1]
-        corpo = sys.stdin.read() if arquivo == "-" else Path(arquivo).read_text()
-    else:
-        corpo = args[args.index("--body") + 1]
-    (pasta / f"novos-{n}.txt").open("a").write(corpo + "\\0")
-    with comentarios.open("a") as f:
-        f.write(corpo + "\\n")
-else:
-    sys.exit(f"gh inesperado: {args}")
-"""
-
-
-def github_de_brinquedo(tmp_path: Path, estados: dict[int, str]) -> Path:
-    pasta = tmp_path / "gh"
-    pasta.mkdir()
-    (pasta / "gh").write_text(GH_FALSO, encoding="utf-8")
-    (pasta / "gh").chmod(0o755)
-    for n, estado in estados.items():
-        (pasta / f"estado-{n}.txt").write_text(estado, encoding="utf-8")
-    return pasta
-
-
-def avisar(tmp_path: Path, gh: Path, prds: str, versao: str = "0.2.0") -> subprocess.CompletedProcess:
-    """O passo do job `avisar`, com as saídas do `gerar` no ambiente."""
-    cwd = tmp_path / f"avisar-{versao}"
-    cwd.mkdir(exist_ok=True)
-    return rodar("Comentar", cwd, {"PATH": f"{gh}{os.pathsep}{os.environ['PATH']}",
-                                   "AVISO": AVISO.rstrip("\n"), "PRDS": prds, "VERSAO": versao},
-                 job="avisar")
-
-
-def novos(gh: Path, n: int) -> list[str]:
-    arq = gh / f"novos-{n}.txt"
-    return arq.read_text(encoding="utf-8").split("\0")[:-1] if arq.exists() else []
-
-
-def test_prd_fechado_ganha_o_aviso_marcado_como_automacao(tmp_path):
-    """Só o PRD fechado: o aberto ainda tem fatia por vir. A primeira linha
-    `<!-- automacao -->` é o que impede a Action de higiene de tomar o aviso
-    por comentário de revisor."""
-    gh = github_de_brinquedo(tmp_path, {963: "CLOSED", 646: "OPEN"})
-    proc = avisar(tmp_path, gh, "963 646")
-    assert proc.returncode == 0, proc.stderr
-    [comentario] = novos(gh, 963)
-    assert comentario.splitlines()[0] == "<!-- automacao -->"
-    assert AVISO.rstrip("\n") in comentario
-    assert novos(gh, 646) == []
-
-
-def test_aviso_sai_uma_vez_por_deploy(tmp_path):
-    """A Action roda em todo push na `main`, e a página com vídeo segue em
-    draft até alguém publicar: sem a trava, cada merge comentaria de novo."""
-    gh = github_de_brinquedo(tmp_path, {963: "CLOSED"})
-    for _ in range(2):
-        assert avisar(tmp_path, gh, "963").returncode == 0
-    assert len(novos(gh, 963)) == 1
-    assert avisar(tmp_path, gh, "963", versao="0.3.0").returncode == 0
-    assert len(novos(gh, 963)) == 2
-
-
-def test_o_job_que_comenta_so_escreve_em_issue_e_nao_roda_codigo_do_repo():
-    """O `GITHUB_TOKEN` com `issues: write` fica num job sem checkout e sem
-    instalação. O aviso vem do passo do draft, que roda antes do `uv sync`:
-    pacote de terceiros não escreve no PRD."""
-    w = workflow()
-    job = w["jobs"]["avisar"]
-    assert job["permissions"] == {"issues": "write"}
-    assert set(job["needs"]) == {"gerar", "commitar"}
-    assert job["if"] == ("${{ !cancelled() && needs.commitar.result == 'success'"
-                         " && needs.gerar.outputs.aviso != '' }}")
-    assert all("uses" not in p for p in job["steps"])
-    comentar = passo("Comentar", "avisar")
-    assert "${{" not in comentar["run"]
-    draft = passo("Tirar do draft")["id"]
-    for chave, var in (("aviso", "AVISO"), ("prds", "PRDS"), ("versao", "VERSAO")):
-        assert w["jobs"]["gerar"]["outputs"][chave] == f"${{{{ steps.{draft}.outputs.{chave} }}}}"
-        assert comentar["env"][var] == f"${{{{ needs.gerar.outputs.{chave} }}}}"
 
 
 SNAPSHOT_FALSO = """\
@@ -604,14 +374,11 @@ def target_files() -> list[str]:
     raise AssertionError("TARGET_FILES sumiu do snapshot.py")
 
 
-# O que a Action escreve: os arquivos do TARGET_FILES, o ARQUITETURA.md e a
-# página do Manual, que só muda pelo draft (o resto dela é o que o PR revisado
-# deixou na `main`). Os curados o snapshot só lê.
+# O que a Action escreve: os arquivos do TARGET_FILES e o ARQUITETURA.md. Os
+# curados o snapshot só lê.
 SNAPSHOTS = [*(f"docs/spec/snapshots/{nome}.md" for nome in target_files()), "docs/ARQUITETURA.md"]
 CURADOS = ["docs/spec/snapshots/ESTRUTURA.md", "docs/spec/snapshots/FLUXOGRAMAS.md"]
-PAGINA = "docs/manual/src/content/docs/ouvidoria/index.mdx"
-ESCRITOS = [*SNAPSHOTS, PAGINA]
-PAGINA_EM_DRAFT = "---\ntitle: Ouvidoria\nprd: [646]\ndraft: true\n---\n\nTexto da página.\n"
+ESCRITOS = [*SNAPSHOTS]
 CODIGO = "hospital-reunioes/backend/app/main.py"
 HISTORY = "docs/spec/deploy/history.json"
 STATE = "docs/spec/deploy/state.json"
@@ -639,7 +406,6 @@ def main_de_brinquedo(tmp_path: Path) -> tuple[Path, Path]:
     git(tmp_path, "clone", "-q", str(origem), str(outro))
     for caminho in [*SNAPSHOTS, *CURADOS, CODIGO, "hospital-reunioes/backend/uv.lock"]:
         escrever(outro, caminho, "antes\n")
-    escrever(outro, PAGINA, PAGINA_EM_DRAFT)
     escrever(outro, HISTORY, json_da_subida(HISTORY_ANTES))
     escrever(outro, STATE, json_da_subida(STATE_ANTES))
     escrever(outro, PROJECT, "{}\n")
@@ -713,7 +479,6 @@ def test_commit_do_bot_com_skip_ci_so_do_que_a_action_escreve(tmp_path):
     def mexer(gerador: Path) -> None:
         for caminho in SNAPSHOTS:
             escrever(gerador, caminho, "novo\n")
-        escrever(gerador, PAGINA, sem_draft(PAGINA_EM_DRAFT))
         escrever(gerador, "hospital-reunioes/backend/uv.lock", "mexido pelo ambiente\n")
         escrever(gerador, "lixo-do-runner.txt", "fora do git\n")
 
@@ -726,7 +491,6 @@ def test_commit_do_bot_com_skip_ci_so_do_que_a_action_escreve(tmp_path):
     assert "[skip ci]" in assunto
     arquivos = git(origem, "show", "--name-only", "--format=", "main").splitlines()
     assert sorted(arquivos) == sorted(ESCRITOS)
-    assert git(origem, "show", f"main:{PAGINA}") + "\n" == PAGINA_EM_DRAFT.replace("draft: true", "draft: false")
     assert not acorda(arquivos), "o commit do bot acordaria a própria Action"
 
 
@@ -898,23 +662,6 @@ def test_nome_com_byte_invalido_nao_passa_pelo_filtro(tmp_path, depois):
     assert git(origem, "rev-parse", "main") == antes
 
 
-def test_pagina_com_acento_no_nome_sai_do_draft(tmp_path):
-    """Com o `LC_ALL=C` o grep compara byte a byte: o `.+` da página casa os
-    dois bytes do acento, e a troca do draft legítima continua entrando."""
-    origem, outro = main_de_brinquedo(tmp_path)
-    pagina = "docs/manual/src/content/docs/ouvidoria/manifestação.mdx"
-    escrever(outro, pagina, PAGINA_EM_DRAFT)
-    git(outro, "add", "-A")
-    git(outro, "commit", "-q", "-m", "página com acento")
-    git(outro, "push", "-q", "origin", "HEAD:main")
-
-    proc = gerar_e_commitar(tmp_path, origem, lambda g: escrever(g, pagina, sem_draft(PAGINA_EM_DRAFT)))
-
-    assert proc.returncode == 0, proc.stdout + proc.stderr
-    assert git(origem, "log", "-1", "--format=%an", "main") == "github-actions[bot]"
-    assert git(origem, "show", f"main:{pagina}") + "\n" == PAGINA_EM_DRAFT.replace("draft: true", "draft: false")
-
-
 def test_bit_de_executavel_num_snapshot_e_recusado(tmp_path):
     """A troca só de modo aparece como `M` no `--name-status`: quem recusa é
     a checagem do modo, e não a dos nomes."""
@@ -932,65 +679,11 @@ def test_bit_de_executavel_num_snapshot_e_recusado(tmp_path):
     assert git(origem, "rev-parse", "main") == antes
 
 
-# O que executa no `pnpm build` de quem roda o `publicar.sh` depois do draft.
-CODIGO_NA_MDX = {
-    "import": 'import { execSync } from "node:child_process";\nexport const x = execSync("id");\n',
-    "expressao": '{require("node:child_process").execSync("id")}\n',
-}
-
-
-@pytest.mark.parametrize("codigo", CODIGO_NA_MDX.values(), ids=CODIGO_NA_MDX.keys())
-def test_pagina_do_manual_que_muda_alem_do_draft_e_recusada(tmp_path, codigo):
-    """O `tirar_draft_manual.py` só troca `true` por `false` na linha
-    `draft:`. Qualquer outra linha que o patch traga para a MDX é código no
-    build de quem publica, com o login da Vercel e o `gh` na máquina."""
-    origem, _ = main_de_brinquedo(tmp_path)
-    antes = git(origem, "rev-parse", "main")
-
-    def adulterar(gerador: Path) -> None:
-        escrever(gerador, PAGINA, sem_draft(PAGINA_EM_DRAFT) + codigo)
-
-    proc = commitar_patch_adulterado(tmp_path, origem, adulterar)
-
-    assert proc.returncode != 0
-    assert PAGINA in proc.stdout
-    assert git(origem, "rev-parse", "main") == antes
-
-
-def nova_pagina(gerador: Path) -> None:
-    escrever(gerador, "docs/manual/src/content/docs/ouvidoria/nova.mdx",
-             "---\ntitle: Nova\ndraft: false\n---\n\n" + CODIGO_NA_MDX["import"])
-
-
-def apagar_pagina(gerador: Path) -> None:
-    (gerador / PAGINA).unlink()
-
-
-def muitas_paginas(gerador: Path) -> None:
-    for i in range(MUITOS):
-        escrever(gerador, f"docs/manual/src/content/docs/ouvidoria/nova-{i:04d}.mdx",
-                 "---\ntitle: Nova\ndraft: false\n---\n\n" + CODIGO_NA_MDX["import"])
-
-
-@pytest.mark.parametrize("adulterar", [nova_pagina, apagar_pagina, muitas_paginas],
-                         ids=["nova", "apagada", "muitas"])
-def test_pagina_nova_ou_apagada_no_manual_e_recusada(tmp_path, adulterar):
-    """Página do Manual nasce e morre por PR revisado; a Action só tira draft."""
-    origem, _ = main_de_brinquedo(tmp_path)
-    antes = git(origem, "rev-parse", "main")
-
-    proc = commitar_patch_adulterado(tmp_path, origem, adulterar)
-
-    assert proc.returncode != 0
-    assert "cria ou apaga" in proc.stdout
-    assert git(origem, "rev-parse", "main") == antes
-
-
 # ------------------------------------------ o registro no `commitar` (#1000)
 
 def aplicar_o_registro(valor: str, snapshot: bool = True):
     """O `gerar` do run disparado pela subida: o passo do registro de verdade e,
-    depois do draft, o snapshot reescrito."""
+    depois, o snapshot reescrito."""
     def mexer(gerador: Path) -> None:
         (gerador / "tools").mkdir(exist_ok=True)
         shutil.copy(RAIZ / "tools" / "aplicar_registro.py", gerador / "tools" / "aplicar_registro.py")
@@ -1178,18 +871,16 @@ def test_merge_que_entra_durante_a_action_nao_derruba_o_push(tmp_path):
     assert git(origem, "show", "main:docs/ARQUITETURA.md") == "bloco AUTO novo"
 
 
-def test_um_run_por_vez_e_o_draft_nao_se_perde_com_o_snapshot_vermelho():
+def test_um_run_por_vez_e_o_registro_nao_se_perde_com_o_snapshot_vermelho():
     """Runs na fila partem da ponta da `main` (o commit do run anterior), não
-    do commit do evento. O draft vem antes do backend e o patch sai e é
-    commitado mesmo com o snapshot vermelho: o próximo registro troca os PRDs
-    do último deploy, e o draft que não entrou agora não entraria mais."""
+    do commit do evento. O patch sai e é commitado mesmo com o snapshot
+    vermelho: o registro do deploy não se perde."""
     w = workflow()
     assert w["concurrency"]["cancel-in-progress"] is False
     passos = w["jobs"]["gerar"]["steps"]
     assert passos[0]["uses"].startswith("actions/checkout@") and passos[0]["with"]["ref"] == "main"
     ordem = [p.get("name") for p in passos]
-    assert (ordem.index(passo("Tirar do draft")["name"])
-            < ordem.index(passo("backend")["name"])
+    assert (ordem.index(passo("backend")["name"])
             < ordem.index(passo("Snapshot")["name"])
             < ordem.index(passo("Empacotar")["name"]))
     sempre = "${{ !cancelled() }}"
@@ -1200,8 +891,8 @@ def test_um_run_por_vez_e_o_draft_nao_se_perde_com_o_snapshot_vermelho():
 
 
 def test_estes_testes_rodam_quando_so_o_workflow_muda():
-    """Os testes de `tools/` rodam no `manual.yml`, que só acorda pelos caminhos
+    """Os testes de `tools/` rodam no `ferramentas.yml`, que só acorda pelos caminhos
     dele: PR que mexesse só no YAML entraria sem este contrato rodar."""
-    on = gatilhos(RAIZ / ".github" / "workflows" / "manual.yml")
+    on = gatilhos(RAIZ / ".github" / "workflows" / "ferramentas.yml")
     for evento in ("push", "pull_request"):
         assert ".github/workflows/pos-merge.yml" in on[evento]["paths"], evento

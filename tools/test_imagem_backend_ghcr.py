@@ -22,7 +22,7 @@ import yaml
 RAIZ = Path(__file__).resolve().parent.parent
 WORKFLOWS = RAIZ / ".github" / "workflows"
 CI = WORKFLOWS / "ci.yml"
-MANUAL = WORKFLOWS / "manual.yml"
+MANUAL = WORKFLOWS / "ferramentas.yml"
 PROJECT = RAIZ / "docs" / "spec" / "deploy" / "project.json"
 SKILL_DEPLOY = RAIZ / ".claude" / "skills" / "deploy"
 
@@ -279,7 +279,7 @@ def test_retag_recusa_entrada_que_nao_e_sha_completo_ou_origem_sem_digest(tmp_pa
 # --------------------------------------------------------- texto e gatilho
 
 def test_tools_rodam_quando_o_workflow_de_imagem_muda():
-    """Os testes de `tools/` rodam no `manual.yml`, que só acorda pelos caminhos dele."""
+    """Os testes de `tools/` rodam no `ferramentas.yml`, que só acorda pelos caminhos dele."""
     on = workflow(MANUAL)["on"]
     caminho = f".github/workflows/{backend()['build']['publish_workflow']}"
     for evento in ("push", "pull_request"):

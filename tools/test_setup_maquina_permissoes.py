@@ -44,7 +44,6 @@ AMBIENTE = [
     "$defaults",
     "**Source control**: o repositório confiável é pedrorezendefig/hospital-reunioes, público",
     "**CI/CD deploy targets**: Coolify (coolify.exemplo.test), deploy de produção pelo fechar_onda.py",
-    "**Trusted internal domains**: manual-hsm.vercel.app",
 ]
 AUTO_ALLOW = [
     "$defaults",
@@ -81,7 +80,7 @@ ABERTAS = [
     "Bash",
 ]
 ROTULOS_DENY = [f"deny {r[5:-1]}" for r in DENY]
-ROTULOS_AMBIENTE = ["repositório", "Coolify", "Vercel"]
+ROTULOS_AMBIENTE = ["repositório", "Coolify"]
 ROTULOS_AUTO = ["fechar_onda.py", "minhas_issues.py", "gh issue", "gh pr"]
 LINHAS = (
     len(DENY) + len(ROTULOS_AMBIENTE) + len(ROTULOS_AUTO) + 1
@@ -126,11 +125,10 @@ def test_settings_incompleto_aponta_cada_regra_que_falta_e_o_conserto(tmp_path):
     arquivo = settings(
         tmp_path,
         deny=[r for r in DENY if r != "Bash(git push *+*main*)"],
-        ambiente=[a for a in AMBIENTE if "vercel" not in a],
         auto=[a for a in AUTO_ALLOW if "gh issue" not in a],
     )
     saida = confere(tmp_path, arquivo)
-    assert len(faltas(saida)) == 3, saida
+    assert len(faltas(saida)) == 2, saida
 
     mais = linha(saida, "deny git push *+*main*")
     assert mais.startswith("FALTA")
@@ -141,29 +139,12 @@ def test_settings_incompleto_aponta_cada_regra_que_falta_e_o_conserto(tmp_path):
         "o arquivo é o do usuário, não o do projeto"
     )
 
-    vercel = linha(saida, "autoMode.environment: Vercel")
-    assert vercel.startswith("FALTA") and "manual-hsm.vercel.app" in vercel, (
-        "pede o host exato"
-    )
-    assert "não lê autoMode do settings do projeto" in vercel, (
-        "diz por que tem de ser no do usuário"
-    )
-
     issue = linha(saida, "autoMode.allow: gh issue")
     assert issue.startswith("FALTA") and "classificador" in issue
 
     assert linha(saida, "deny git push *-f* main*").startswith("OK")
     assert linha(saida, "autoMode.environment: Coolify").startswith("OK")
     assert linha(saida, "autoMode.allow: gh pr").startswith("OK")
-
-
-def test_vercel_generico_nao_basta(tmp_path):
-    """`*.vercel.app` qualquer conta registra; só o host do Manual é confiável."""
-    ambiente = AMBIENTE[:3] + [
-        "**Trusted internal domains**: os projetos do time na Vercel"
-    ]
-    saida = confere(tmp_path, settings(tmp_path, ambiente=ambiente))
-    assert linha(saida, "autoMode.environment: Vercel").startswith("FALTA")
 
 
 def test_nao_ha_mais_regra_de_ruleset(tmp_path):
@@ -508,7 +489,7 @@ def test_nao_imprime_valor_do_env_nem_grava_o_arquivo(tmp_path):
     )
     antes = arquivo.read_bytes()
     saida = confere(tmp_path, arquivo)
-    assert len(faltas(saida)) == 3, saida
+    assert len(faltas(saida)) == 2, saida
     assert SEGREDO not in saida
     assert arquivo.read_bytes() == antes, "nunca grava a configuração sozinho"
     assert list((tmp_path / "casa").iterdir()) == [], (
@@ -552,7 +533,7 @@ def test_o_script_confere_o_settings_do_usuario_no_nivel_2(tmp_path):
     saida = roda_script(tmp_path, "2")
     for rotulo in ROTULOS_DENY:
         assert linha(saida, rotulo).split()[0] == "OK", saida
-    assert linha(saida, "autoMode.environment: Vercel").split()[0] == "OK", saida
+    assert linha(saida, "autoMode.environment: Coolify").split()[0] == "OK", saida
     assert linha(saida, "autoMode.allow: gh pr").split()[0] == "OK", saida
     assert SEGREDO not in saida
 

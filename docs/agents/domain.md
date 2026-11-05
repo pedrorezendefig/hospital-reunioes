@@ -38,8 +38,6 @@ Cada arquivo tem a seção **"O que já foi decidido"** (ADR 0075, decisão 4): 
 
 O que **não** entra num texto do kit, porque o leitor é o diretor (ADR 0054, decisão 9): número de issue, label do repositório, nome de tabela, rota da API, nome de arquivo do código, travessão e meia-risca. Também não entra README nem nota para quem programa: **todo `.md` dessa pasta vai inteiro para o prompt** e seria citado como material de consulta. O teste de sanidade do kit vive em `backend/tests/test_kit_conhecimento.py`.
 
-**Manual do usuário** (`docs/manual/`): segue outra regra, e essa é a exceção: a página nasce numa **fatia própria**, a última do PRD, bloqueada pelas fatias de código, porque ela precisa da tela pronta para o print e o vídeo (ADR 0057, decisão 8, que emenda a regra "mesmo PR" do ADR 0056 só para o manual).
-
 ## Status de uma ADR
 
 Toda ADR tem frontmatter com `status:` de um conjunto fechado:
