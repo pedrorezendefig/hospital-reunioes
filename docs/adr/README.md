@@ -107,6 +107,7 @@ Só `status: accepted` vale como decisão; `superseded` é histórico (CLAUDE.md
 | [0013](0013-saida-ia-sem-travessao-sanitizador.md) | accepted | Saída da IA sem travessão: sanitizador determinístico + convenção nos prompts |
 | [0025](0025-dashboard-diagramas-renderer-proprio.md) | accepted | Dashboard desenha os diagramas com renderer próprio; mermaid.js sai do painel |
 | [0033](0033-role-etiqueta-interna-invisivel-ao-usuario.md) | accepted | Role é etiqueta interna: o próprio usuário nunca vê o seu role |
+| [0080](0080-caixa-alta-por-tipo-de-elemento-so-na-exibicao.md) | accepted | Caixa alta por tipo de elemento, só na exibição: CSS na tela, `text-transform` nos PDFs, `upper` no título dos e-mails |
 
 ## Comunicação e layout do repo
 
