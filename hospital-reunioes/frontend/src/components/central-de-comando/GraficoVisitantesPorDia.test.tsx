@@ -180,8 +180,8 @@ describe("GraficoVisitantesPorDia", () => {
     const { container } = render(<GraficoVisitantesPorDia pontos={TRES_DIAS} />);
 
     // 360 px de largura: o eixo dos Visitantes ocupa os primeiros 48 e a
-    // margem os últimos 12, então 340 cai sobre o último dia.
-    fireEvent.mouseMove(container.querySelector(".recharts-wrapper")!, { clientX: 340, clientY: 100 });
+    // margem os últimos 24 (#1459), então o último dia fica em 336.
+    fireEvent.mouseMove(container.querySelector(".recharts-wrapper")!, { clientX: 330, clientY: 100 });
 
     expect(screen.getByText("ontem · qua, 16 set")).toBeTruthy();
     expect(screen.getByText("1.200 visitantes")).toBeTruthy();
@@ -193,7 +193,7 @@ describe("GraficoVisitantesPorDia", () => {
     relogioEm("2026-09-16T22:00:00-03:00");
     const { container } = render(<GraficoVisitantesPorDia pontos={TRES_DIAS} />);
 
-    fireEvent.mouseMove(container.querySelector(".recharts-wrapper")!, { clientX: 340, clientY: 100 });
+    fireEvent.mouseMove(container.querySelector(".recharts-wrapper")!, { clientX: 330, clientY: 100 });
 
     // Na dica, o 16 sai sem "ontem". No eixo, quem é "ontem" é o 15.
     expect(screen.getByText("qua, 16 set")).toBeTruthy();
