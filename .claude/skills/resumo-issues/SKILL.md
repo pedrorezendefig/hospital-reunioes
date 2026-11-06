@@ -1,13 +1,13 @@
 ---
 name: resumo-issues
-description: "Resumo das issues abertas do Hospital por pessoa (Pedro, Rib, Lucas, sem responsável), com os cards agrupados embaixo do título do PRD e uma linha do que cada card muda. Para ter uma ideia rápida de quem tem o quê, sem semáforo nem plano. Gatilhos: resumo das issues, quantos cards cada um tem, cards do Rib, cards do Lucas, o que tem aberto por pessoa, /resumo-issues. Só leitura."
+description: "Resumo das issues abertas do repositório atual por pessoa (com quem está cada uma, e as sem responsável), com os cards agrupados embaixo do título do PRD e uma linha do que cada card muda. Para ter uma ideia rápida de quem tem o quê, sem semáforo nem plano. Gatilhos: resumo das issues, quantos cards cada um tem, cards de fulano, o que tem aberto por pessoa, /resumo-issues. Só leitura."
 ---
 
 # Resumo das issues
 
 Uma tela com o total de issues abertas, quantas tem cada pessoa e, para cada pessoa, os cards agrupados pelo PRD (pela sub-issue do GitHub), cada um com uma linha de resumo. **Só leitura.**
 
-Para a fila de uma pessoa com semáforo e plano, use `/minhas-issues`. Para todos os Projetos do PedroOS, use `/todas-issues`.
+Vale só para o repositório onde roda; o PedroOS instala a mesma skill em cada Projeto do fluxo. Para a fila de uma pessoa com semáforo e plano, use `/minhas-issues`. Para todos os Projetos de uma vez, com as Ondas, use `/todas-issues`.
 
 ## Fluxo
 
@@ -33,6 +33,7 @@ Para a fila de uma pessoa com semáforo e plano, use `/minhas-issues`. Para todo
 ## Limites
 
 - O agrupamento usa a sub-issue nativa do GitHub (`parent`). Issue que cita o PRD só no corpo, sem ser sub-issue, cai em Avulsas.
+- O cabeçalho usa o `nome` do `.claude/fluxo.json`; sem ele, o nome do repositório.
 - O nome curto vem de `APELIDOS` no script; login fora dele aparece como está.
 - Até 100 issues abertas (o script avisa se passar).
-- Testes em `tools/test_resumo_issues.py`.
+- Fonte no PedroOS (`skills/fluxo/skills/resumo-issues`), testes em `tests/test_resumo_issues.py` de lá. Não edite a cópia do Projeto: o instalador sobrescreve.
