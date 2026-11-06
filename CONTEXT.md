@@ -371,6 +371,17 @@ _Evitar_: citar o Manual como destino de texto ou de link; criar página em `doc
 A passagem obrigatória de todo texto que alguém de fora vai ler (texto de tela, PDF, hover do Hospital OS, mensagem, legenda de vídeo, página de divulgação) pela skill `humanizer` antes de gravar, mais o lint que trava no CI os cacoetes que dão para pegar por regex (ADR 0071). A voz é a do canal: a amostra aprovada manda no tom, a skill só tira o cacoete.
 _Evitar_: "não é X, é Y"; fecho de uma linha que repete o parágrafo; tríade forçada; rótulo em negrito em tudo; texto para fora gravado sem a passagem.
 
+**Caixa alta**:
+Texto todo em letra maiúscula, aplicado só na exibição (CSS na tela, `text-transform` nos PDFs, filtro `upper` no título dos e-mails), nunca gravado assim no banco (ADR 0080). Vale para o Texto curto que vem pronto no aplicativo e para os títulos escritos pela IA; o que a equipe digita aparece como foi escrito.
+_Evitar_: gravar o texto em maiúscula; assunto de e-mail em caixa alta.
+
+**Texto curto**:
+O texto que fica em Caixa alta, definido pelo tipo de elemento e não pelo número de palavras: item de menu, título e subtítulo, botão, aba, nome de campo, cabeçalho de coluna e etiqueta de situação.
+_Evitar_: decidir pelo tamanho da frase.
+
+**Texto corrido**:
+O texto com maiúscula e minúscula: parágrafo, aviso (toast), mensagem de erro, texto de ajuda, placeholder, corpo de diálogo, o texto de cada aviso do sino e a conversa da Tecnologia.
+
 **Vídeo de percepção de valor**:
 O vídeo de uma entrega (PRD) feito para o diretor ver o sistema funcionando (ADR 0026, ADR 0045): a unidade é o que mudou, não a tarefa.
 
