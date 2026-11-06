@@ -115,3 +115,28 @@ class TestClassificacaoNaLista:
             # O Tipo de antes do chat nao e bug nem melhoria: fica sem selo.
             ("d-antiga", None),
         ]
+
+
+class TestOPromptPedeOTitulo:
+    def test_o_prompt_pede_o_titulo_curto_ja_na_primeira_pergunta(self):
+        """Sem o pedido no prompt, o modelo não manda `titulo` no turno e a
+        Demanda fica com o título provisório até o resumo."""
+        prompt = load_prompt("planejamento_demanda_system")
+
+        secao = prompt.split("## O título do pedido", 1)[1].split("\n## ", 1)[0]
+        assert "primeira pergunta" in secao
+        assert "`titulo`" in secao
+        # O formato da pergunta leva o campo, que é o que o modelo copia.
+        formato = prompt.split("Para fazer uma pergunta:", 1)[1].split("Para encerrar:", 1)[0]
+        assert '"titulo":' in formato
+
+
+class TestKitDaTecnologia:
+    def test_o_kit_diz_o_titulo_desde_a_primeira_resposta_e_o_selo_na_lista(self):
+        """O kit é a língua em que o Assistente fala com o diretor: sem o
+        comportamento novo escrito, ele descreveria a lista de antes."""
+        texto = (CONHECIMENTO_DIR / "tecnologia.md").read_text(encoding="utf-8")
+
+        secao = texto.split("## A conversa com o Assistente", 1)[1].split("\n## ", 1)[0]
+        for trecho in ("título desde a primeira resposta", "**Bug** ou **Melhoria**"):
+            assert trecho in secao, trecho
