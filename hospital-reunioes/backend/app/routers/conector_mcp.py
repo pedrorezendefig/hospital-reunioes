@@ -95,6 +95,11 @@ async def transporte_mcp(request: Request, supabase=Depends(get_supabase_client)
             headers={"WWW-Authenticate": conector_mcp.desafio_www_authenticate(cfg)},
         )
 
+    # Quem acessou, para auditoria e para ler o `client_id` real do claude.ai
+    # antes de travar a lista de clientes (#1448). Sem e-mail nesta linha.
+    cliente = conector_mcp.identificacao_do_cliente(token)
+    logger.info("[ConectorMCP] acesso aceito: client_id=%r sid=%r", cliente["client_id"], cliente["sid"])
+
     versao = request.headers.get("mcp-protocol-version")
     if versao != conector_mcp.PROTOCOLO_MCP:
         logger.info(
