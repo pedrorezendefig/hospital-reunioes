@@ -83,7 +83,7 @@ export function CartaoDoLembrete({ lembrete, ocupado, onMarcar, onCopiar }: Prop
               type="button"
               aria-label={`Copiar código ${insumo.codigo}`}
               onClick={() => onCopiar(insumo.codigo)}
-              className="inline-flex items-center gap-1 font-mono text-xs text-primary hover:underline"
+              className="inline-flex items-center gap-1 font-mono text-xs normal-case text-primary hover:underline"
             >
               {insumo.codigo}
               <Copy className="w-3 h-3" aria-hidden="true" />

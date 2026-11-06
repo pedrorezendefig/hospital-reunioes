@@ -250,6 +250,7 @@ O módulo não guarda nome completo, CPF, carteira nem data de nascimento de pac
 - A Fila é comum a todas as faturistas, e a conta passa a ser de quem abre o Guia, nunca de quem enviou.
 - A Fila segue a ordem de envio e nunca é reordenada por valor.
 - O custo de cada chamada da inteligência artificial fica gravado, e o modelo de cada tarefa se troca numa configuração do servidor.
+- Títulos, botões, abas, nomes de campo e cabeçalhos de coluna aparecem em caixa alta só na tela, os nomes de operadora, de paciente e de pessoa aparecem como foram escritos, e códigos e siglas ficam como estão.
 
 ## O que costuma virar Demanda
 

@@ -15,6 +15,7 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-li
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { ToastProvider } from "@/components/ui/Toast";
+import { caixaDoDado } from "@/lib/testes/caixaDoDado";
 
 import { ABERTURA, SEM_CONVERSA_GUARDADA } from "./ChatDaTecnologia";
 import { ConversasDaTecnologia, NOVA_CONVERSA, VOLTAR_PARA_A_LISTA } from "./ConversasDaTecnologia";
@@ -256,6 +257,23 @@ describe("Nova conversa", () => {
     fireEvent.click(screen.getByRole("button", { name: "Bug" }));
     expect(await within(lista()).findByText("O relatório some")).toBeTruthy();
     expect(chamadas.find((c) => c.metodo === "POST")).toMatchObject({ url: LISTA, corpo: { escolha: "bug" } });
+  });
+});
+
+describe("Caixa alta (ADR 0080, issue #1455)", () => {
+  it("o título da Demanda aparece como foi escrito, na lista e no alto da conversa", async () => {
+    montar((url) => {
+      if (url === LISTA) return { status: 200, corpo: [COM_VINCULO] };
+      if (url === `${LISTA}/d-2`) return { status: 200, corpo: conversa("d-2", { estado: "enviado" }) };
+      return { status: 404, corpo: {} };
+    });
+
+    const naLista = await within(lista()).findByText("Aviso quando a ata sair");
+    expect(caixaDoDado(naLista)).toBe("normal-case");
+
+    fireEvent.click(within(lista()).getByRole("button", { name: /Aviso quando a ata sair/ }));
+    const titulo = await screen.findByRole("heading", { level: 2, name: "Aviso quando a ata sair" });
+    expect(caixaDoDado(titulo)).toBe("normal-case");
   });
 });
 

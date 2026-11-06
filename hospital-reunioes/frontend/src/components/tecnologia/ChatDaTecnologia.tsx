@@ -119,12 +119,12 @@ function CorpoDoResumoDoBug({ resumo, anexos }: { resumo: ResumoDoBug; anexos: n
       <dl className="space-y-3 text-sm">
         {ROTULOS_DO_RESUMO.map(([campo, rotulo]) => (
           <div key={campo}>
-            <dt className="font-semibold text-text-primary">{rotulo}</dt>
+            <dt className="font-semibold uppercase text-text-primary">{rotulo}</dt>
             <dd className="text-text-secondary whitespace-pre-line">{resumo[campo] as string}</dd>
           </div>
         ))}
         <div>
-          <dt className="font-semibold text-text-primary">Prints</dt>
+          <dt className="font-semibold uppercase text-text-primary">Prints</dt>
           <dd className="text-text-secondary">{frasesDosPrints(anexos)}</dd>
         </div>
       </dl>
@@ -718,7 +718,7 @@ export function ChatDaTecnologia({ token, demandaId = null, onMudou }: PropsDoCh
                     }`}
                   >
                     <span className="font-semibold">{letra}) </span>
-                    {opcao}
+                    <span className="normal-case">{opcao}</span>
                     {destaque && (
                       <span className="ml-2 inline-block px-2 py-0.5 rounded-full bg-primary text-white text-xs font-semibold">
                         Recomendada
@@ -737,7 +737,7 @@ export function ChatDaTecnologia({ token, demandaId = null, onMudou }: PropsDoCh
                   key={opcao}
                   type="button"
                   onClick={() => escolher(opcao)}
-                  className="px-4 py-2 rounded-xl border border-primary/40 text-sm font-semibold text-primary hover:bg-primary/5"
+                  className="normal-case px-4 py-2 rounded-xl border border-primary/40 text-sm font-semibold text-primary hover:bg-primary/5"
                 >
                   {opcao}
                 </button>

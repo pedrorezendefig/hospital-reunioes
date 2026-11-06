@@ -83,7 +83,7 @@ export function MultiSelectFilter({
         <button
           type="button"
           onClick={() => setOpen((o) => !o)}
-          className="w-full flex items-center justify-between gap-2 text-sm border border-slate-200 rounded-lg p-2 bg-white text-left outline-none hover:border-slate-300 focus:border-primary focus:ring-1 focus:ring-primary"
+          className="w-full flex items-center justify-between gap-2 normal-case text-sm border border-slate-200 rounded-lg p-2 bg-white text-left outline-none hover:border-slate-300 focus:border-primary focus:ring-1 focus:ring-primary"
           aria-haspopup="listbox"
           aria-expanded={open}
         >
@@ -131,7 +131,7 @@ export function MultiSelectFilter({
                     role="option"
                     aria-selected={checked}
                     onClick={() => toggle(opt.value)}
-                    className={`w-full flex items-center gap-2 px-3 py-2 text-sm text-left hover:bg-slate-50 ${
+                    className={`w-full flex items-center gap-2 px-3 py-2 normal-case text-sm text-left hover:bg-slate-50 ${
                       checked ? "bg-primary/5 text-slate-800" : "text-slate-700"
                     }`}
                   >

@@ -14,6 +14,7 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-li
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { ToastProvider } from "@/components/ui/Toast";
+import { caixaDoDado } from "@/lib/testes/caixaDoDado";
 
 import {
   ABERTURA,
@@ -484,5 +485,57 @@ describe("O resumo com lacuna traz o Continuar respondendo", () => {
     expect(within(resumo).getByText("Nada ficou em aberto.")).toBeTruthy();
     expect(screen.queryByRole("button", { name: CONTINUAR_RESPONDENDO })).toBeNull();
     expect(within(resumo).getByRole("button", { name: CRIAR_O_CARD })).toBeTruthy();
+  });
+});
+
+// ─── Caixa alta (ADR 0080, issue #1455) ──────────────────────────────────────
+
+describe("Caixa alta na conversa e no resumo", () => {
+  it("as opções da conversa ficam corridas, mesmo dentro do botão", async () => {
+    montar([{ status: 201, corpo: melhoria() }]);
+    fireEvent.click(screen.getByRole("button", { name: "Melhoria" }));
+
+    const opcao = await screen.findByRole("button", { name: /Não, na enfermagem/ });
+    expect(caixaDoDado(within(opcao).getByText(/Não, na enfermagem/))).toBe("normal-case");
+  });
+
+  it("a confirmação de bug ou melhoria fica corrida no botão", async () => {
+    const confirmacao = conversa({
+      mensagens: [
+        ABERTURA_GUARDADA,
+        { autor: "diretor", texto: "O botão sumiu", fonte: null, opcoes: [], nao_bateu: false },
+        { autor: "ia", texto: "É um bug?", fonte: null, opcoes: ["Sim, é um bug"], nao_bateu: false },
+      ],
+    });
+    montar([{ status: 201, corpo: confirmacao }]);
+
+    escrever("O botão sumiu");
+
+    expect(caixaDoDado(await screen.findByRole("button", { name: "Sim, é um bug" }))).toBe("normal-case");
+  });
+
+  it("no resumo do bug, os subtítulos ficam em caixa alta e o texto fica corrido", async () => {
+    montar([{ status: 201, corpo: conversa({ estado: "resumido", resumo: RESUMO }) }]);
+    fireEvent.click(screen.getByRole("button", { name: "Bug" }));
+    const resumo = await screen.findByRole("region", { name: "Resumo do bug" });
+
+    for (const subtitulo of ["Onde", "O que aconteceu", "O que esperava", "Como repetir", "Prints"]) {
+      expect(caixaDoDado(within(resumo).getByText(subtitulo))).toBe("uppercase");
+    }
+    expect(within(resumo).getByRole("heading", { level: 3, name: "Como saber que foi resolvido" })).toBeTruthy();
+    expect(caixaDoDado(within(resumo).getByText(RESUMO.titulo))).toBeNull();
+    expect(caixaDoDado(within(resumo).getByText(RESUMO.onde))).toBeNull();
+    expect(caixaDoDado(within(resumo).getByText(RESUMO.criterios[0]))).toBeNull();
+  });
+
+  it("no resumo da melhoria, os subtítulos são títulos e as decisões ficam corridas", async () => {
+    montar([{ status: 201, corpo: melhoria({ estado: "resumido", resumo_da_melhoria: RESUMO_DA_MELHORIA }) }]);
+    fireEvent.click(screen.getByRole("button", { name: "Melhoria" }));
+    const resumo = await screen.findByRole("region", { name: "Resumo da melhoria" });
+
+    expect(within(resumo).getByRole("heading", { level: 3, name: "Decisões" })).toBeTruthy();
+    expect(within(resumo).getByRole("heading", { level: 3, name: "Ficou em aberto" })).toBeTruthy();
+    expect(caixaDoDado(within(resumo).getByText("Só a recepção."))).toBeNull();
+    expect(caixaDoDado(within(resumo).getByText("Quem confirma o retorno com o paciente."))).toBeNull();
   });
 });

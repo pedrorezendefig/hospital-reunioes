@@ -95,7 +95,7 @@ function Acompanhamento({ demanda, token }: { demanda: Demanda; token: string | 
   return (
     <section className="w-full bg-white rounded-2xl border border-primary/30 shadow-premium p-5 space-y-4">
       <div className="flex flex-wrap items-center gap-2 text-xs">
-        <h2 className="text-base font-bold text-slate-900">{demanda.titulo}</h2>
+        <h2 className="normal-case text-base font-bold text-slate-900">{demanda.titulo}</h2>
         <SeloDeEtapa demanda={demanda} />
       </div>
       <OQueMudaDaDemanda demanda={demanda} />
@@ -201,7 +201,7 @@ export function ConversasDaTecnologia({ token }: { token: string | null }) {
                         : "border-transparent hover:border-border hover:bg-slate-50"
                     }`}
                   >
-                    <span className="font-medium text-text-primary line-clamp-2">{demanda.titulo}</span>
+                    <span className="normal-case font-medium text-text-primary line-clamp-2">{demanda.titulo}</span>
                     <span className="flex flex-wrap items-center gap-1.5">
                       <EtapaNaLista demanda={demanda} />
                       <ClassificacaoNaLista demanda={demanda} />
