@@ -153,3 +153,66 @@ def test_secao_escrita_pela_ia_chega_ao_pop_como_foi_gravada(htmls):
 
     assert f"<h2>2. {SECAO_DO_MODELO}</h2>" in htmls[-1]
     assert f">{SUBTITULO_DA_IA}</h2>" in htmls[-1]
+
+
+# ───────────────────────── relatório da Ouvidoria ─────────────────────────
+
+SUGESTAO_DA_IA = "Reforçar a triagem da Recepção"
+PORQUE_DA_SUGESTAO = "A Recepção concentra o volume e estoura o prazo da área."
+
+
+def _registro_mensal() -> dict:
+    """Um relatório mensal congelado, no formato que o banco guarda, com uma
+    sugestão escrita pela IA."""
+    contagem = {"itens": [], "classificados": 0, "nao_classificados": 0}
+    return {
+        "id": "rel-1456",
+        "tipo": "mensal",
+        "competencia": "2026-10",
+        "medido_em": "2026-11-01T09:00:00+00:00",
+        "dados": {
+            "periodo": {"inicio": "2026-10-01", "fim": "2026-10-31"},
+            "periodo_anterior": {"inicio": "2026-08-31", "fim": "2026-09-30"},
+            "degradado": [],
+            "volume": {"total": 3, "anterior": 2, "variacao_pct": 50.0, "novos": 3, "reincidentes": 0},
+            "prazo": {"trechos": []},
+            "pendencias_por_area": [],
+            "ranking_areas": [],
+            "prorrogacao": {"casos": 0, "com_a_area": 0, "taxa_pct": 0.0, "por_area": []},
+            "reincidencia": {"casos": 0, "taxa_pct": 0.0},
+            "tempo_pausado": {"casos_com_pausa": 0, "dias_uteis_medios": 0.0},
+            "top_temas": contagem,
+            "top_areas": contagem,
+        },
+        "sugestoes": {
+            "itens": [{"titulo": SUGESTAO_DA_IA, "porque": PORQUE_DA_SUGESTAO, "acao": "Escalar mais um atendente."}]
+        },
+    }
+
+
+def test_titulos_do_relatorio_da_ouvidoria_saem_em_caixa_alta_no_pdf():
+    from app.services import ouvidoria_relatorio
+
+    texto = _texto_do_pdf(ouvidoria_relatorio.renderizar_pdf(_registro_mensal()))
+
+    assert "RELATÓRIO MENSAL DA OUVIDORIA" in texto
+    assert "VOLUME POR CANAL" in texto
+    assert "SUGESTÕES DE AÇÃO CORRETIVA" in texto
+    assert SUGESTAO_DA_IA.upper() in texto
+
+
+def test_texto_corrido_do_relatorio_da_ouvidoria_continua_com_maiuscula_e_minuscula():
+    from app.services import ouvidoria_relatorio
+
+    texto = _texto_do_pdf(ouvidoria_relatorio.renderizar_pdf(_registro_mensal()))
+
+    assert PORQUE_DA_SUGESTAO in texto
+    assert "Período de 01/10/2026 a 31/10/2026" in texto
+
+
+def test_sugestao_escrita_pela_ia_chega_ao_relatorio_como_foi_gravada():
+    from app.services import ouvidoria_relatorio
+
+    html = ouvidoria_relatorio.montar_html(_registro_mensal())
+
+    assert f'<div class="titulo">{SUGESTAO_DA_IA}</div>' in html
