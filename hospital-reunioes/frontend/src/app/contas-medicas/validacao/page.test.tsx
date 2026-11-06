@@ -14,6 +14,7 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-li
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ToastProvider } from "@/components/ui/Toast";
+import { caixaDoDado } from "@/lib/testes/caixaDoDado";
 import type { FilaDeValidacao, Tema } from "@/lib/contas-medicas/validacao";
 
 import ValidacaoPage from "./page";
@@ -292,6 +293,16 @@ describe("a fila de Validação", () => {
     expect(await screen.findByRole("alert")).toBeTruthy();
     expect(screen.getByRole("alert").textContent).toContain("decidir na validação");
     expect(screen.queryAllByRole("article")).toHaveLength(0);
+  });
+
+  it("o título do cartão mostra o termo e o código como estão gravados, fora da caixa alta (issue #1455)", async () => {
+    servidor();
+
+    abrir();
+
+    const termo = await screen.findByRole("heading", { level: 2, name: "Termo SERINGA PRONTA no dicionário" });
+    expect(caixaDoDado(termo)).toBe("normal-case");
+    expect(caixaDoDado(screen.getByRole("heading", { level: 2, name: "Regra ALFA-PRI-03" }))).toBe("normal-case");
   });
 });
 

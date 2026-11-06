@@ -63,7 +63,7 @@ export function CartaoDeTema({ tema, ocupado, falhaDaLeitura, onDecidir, onEnvia
       <div className="flex flex-wrap items-start gap-2">
         <div className="min-w-0 flex-1 space-y-1">
           <span className={`${ETIQUETA} ${COR_DO_TIPO[tema.tipo]}`}>{ROTULO_DO_TIPO[tema.tipo]}</span>
-          <h2 className="text-base font-semibold text-slate-900 break-words">{tema.titulo}</h2>
+          <h2 className="normal-case text-base font-semibold text-slate-900 break-words">{tema.titulo}</h2>
           <p className="text-xs text-slate-500">{detalhes.join(" · ")}</p>
         </div>
         {tema.tipo !== "DICIONARIO" && (
