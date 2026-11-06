@@ -2,6 +2,54 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-11-06T18:01:09-03:00",
+      "sha": "ab2262cba3399aa2b4cb96973d2670885cce54b3",
+      "app_version": "0.222.2",
+      "subject": "Onda caixa-alta-onda2: Lista de conferência da caixa alta para o aceite do diretor",
+      "raw_subject": "chore(deploy): registro da onda caixa-alta-onda2 (#1468)",
+      "scope": [
+        "backend",
+        "frontend"
+      ],
+      "prds": [
+        1428
+      ],
+      "result": "healthy",
+      "duration_seconds": 240,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        },
+        {
+          "service": "frontend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "onda-enxuta caixa-alta-onda2: PR #1468 (issue #1458), mergeados PR a PR. Merge pela API do GitHub, um build. Registro pela Action pos-merge depois do health.",
+      "etapas": {
+        "merge_s": 2,
+        "build_s": {
+          "backend": 16,
+          "frontend": 217
+        },
+        "health_s": 0
+      },
+      "responsavel": "pedrorezendefig"
+    },
+    {
       "at": "2026-11-06T17:41:45-03:00",
       "sha": "bfd0d3f81389806445c582116561e005631610ef",
       "app_version": "0.222.1",
