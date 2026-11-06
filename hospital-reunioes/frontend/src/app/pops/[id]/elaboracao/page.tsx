@@ -251,7 +251,7 @@ export default function ElaboracaoPopPage() {
       </header>
 
       {/* POP vivo (esquerda) + chat (direita) */}
-      <main className="flex-1 max-w-7xl mx-auto w-full px-6 py-6 grid lg:grid-cols-[1fr_minmax(360px,400px)] gap-6 items-start">
+      <main className="flex-1 max-w-7xl mx-auto w-full px-6 py-6 grid grid-cols-1 lg:grid-cols-[1fr_minmax(360px,400px)] gap-6 items-start">
         <div className="space-y-4">
           {/* Devoluções (issue #85): os comentários do Revisor/Validador — o
               agente já os recebe como contexto em cada turno do chat */}
