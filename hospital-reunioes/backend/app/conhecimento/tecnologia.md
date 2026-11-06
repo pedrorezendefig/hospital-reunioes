@@ -24,6 +24,8 @@ Antes do resumo, no bug e na melhoria, a IA confere os pedidos que já estão na
 
 Se a IA não conseguir responder, a tela avisa, a conversa continua como estava e o que você escreveu fica na caixa: é só mandar de novo.
 
+O modelo de IA que está respondendo e quanto a conversa já custou em dólar aparecem no alto da conversa aberta, por exemplo "Opus 5.5 · US$ 1,84 até agora". O valor soma tudo o que a IA fez naquela conversa (as perguntas, o resumo, a leitura do código e a dos prints) e muda a cada resposta. Quando aparece "custo não medido", o modelo usado está sem preço cadastrado e o sistema não tem como fazer a conta, então ele avisa em vez de mostrar zero. Enquanto a IA não respondeu nada, não aparece custo. O custo não está na lista ao lado, só na conversa aberta.
+
 A conversa fica guardada. Ao lado dela fica a lista de tudo o que você já pediu, do mais recente para o mais antigo, com o título e a Etapa de cada pedido. Uma conversa que ficou no meio aparece como Registrada: clique nela e você continua de onde parou. Num pedido que já foi para a Vitta, o clique mostra a conversa e O que muda, que é o que a entrega acrescenta para você; enquanto a Vitta não escreve esse texto, aparece "Descrição em preparação". O botão **Nova conversa**, no alto da lista, começa um pedido do zero. No celular a lista abre primeiro, e o botão Voltar às conversas leva de volta a ela.
 
 ## O que é uma Demanda
@@ -87,6 +89,7 @@ A IA cuida das decisões de negócio: o problema, quem usa, as regras e o que fi
 - O bug que sai do Criar o card vai direto para o desenvolvimento, sem ninguém da Vitta precisar assumir antes.
 - Na melhoria, a IA faz no máximo 12 perguntas, e a melhoria que sai do Criar o card ainda passa pelo planejamento técnico da Vitta antes de começar.
 - A conversa com o Assistente fica guardada na Demanda e se retoma pela lista ao lado.
+- O modelo de IA e o custo da conversa em dólar aparecem só no alto da conversa aberta, nunca na lista, e quando o custo não dá para calcular a tela diz "custo não medido".
 - A lista ao lado da conversa mostra os pedidos de quem está olhando, e a Etapa de cada um vem do desenvolvimento, sem ninguém escrever à mão.
 - Uma Demanda se liga a um trabalho de desenvolvimento só, e a Etapa é lida de lá, nunca digitada.
 - O texto que sai da Demanda para o material público do desenvolvimento passa por uma peneira que esconde CPF, telefone, nome e outros dados pessoais.

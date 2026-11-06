@@ -22,6 +22,7 @@ from test_tecnologia_chat import CHAT, _cenario, _chamadas, _comecar, _turno  # 
 
 from app.config import settings  # noqa: E402
 from app.limiter import limiter  # noqa: E402
+from app.services.conhecimento import CONHECIMENTO_DIR  # noqa: E402
 
 
 @pytest.fixture(autouse=True)
@@ -130,6 +131,18 @@ class TestCustoEmCadaTurno:
 
         assert resposta.status_code == 200, resposta.text
         assert resposta.json()["custo"] == {"modelo": "Opus 5.5", "custo_usd": 1.84}
+
+
+class TestKitDizOCusto:
+    def test_o_kit_diz_o_custo_no_alto_da_conversa_e_o_que_e_custo_nao_medido(self):
+        """O kit é a língua do Assistente: sem o custo escrito, ele não saberia
+        explicar ao diretor o número no alto da conversa."""
+        texto = (CONHECIMENTO_DIR / "tecnologia.md").read_text(encoding="utf-8")
+
+        secao = texto.split("## A conversa com o Assistente", 1)[1].split("\n## ", 1)[0]
+        paragrafo = next(p for p in secao.split("\n\n") if "custo não medido" in p)
+        for trecho in ("no alto da conversa", "dólar", "não está na lista", "sem preço"):
+            assert trecho in paragrafo, trecho
 
 
 class TestCustoForaDaLista:
