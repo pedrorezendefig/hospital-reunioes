@@ -120,6 +120,21 @@ describe("A lista", () => {
     ]);
   });
 
+  it("mostra o selo Bug ou Melhoria ao lado da Etapa (issue #1438)", async () => {
+    const bug = demanda("d-3", "O relatório some", { classificacao: "bug" });
+    const melhoria = demanda("d-4", "Aviso quando a ata sair", { classificacao: "melhoria" });
+    const antiga = demanda("d-5", "Pedido de antes do chat", { classificacao: null });
+    montar((url) => (url === LISTA ? { status: 200, corpo: [bug, melhoria, antiga] } : { status: 404, corpo: {} }));
+
+    await within(lista()).findByText("O relatório some");
+    const itens = within(lista()).getAllByRole("listitem");
+    expect(itens.map((item) => item.textContent)).toEqual([
+      "O relatório someRegistradaBug",
+      "Aviso quando a ata sairRegistradaMelhoria",
+      "Pedido de antes do chatRegistrada",
+    ]);
+  });
+
   it("sem conversa nenhuma, diz que ainda não há", async () => {
     montar(() => ({ status: 200, corpo: [] }));
 
