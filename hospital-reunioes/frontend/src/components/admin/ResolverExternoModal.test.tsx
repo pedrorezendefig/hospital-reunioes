@@ -31,9 +31,9 @@ function pessoa(id: string, nome: string, extra: Partial<AdminUsuario> = {}): Ad
     ativo: true,
     is_externo: false,
     is_super_admin: false,
-    access_profile: "padrao",
+    access_profile: "regular",
     ...extra,
-  } as AdminUsuario;
+  };
 }
 
 const EXTERNO = pessoa("e-1", "João da Silva", { is_externo: true });

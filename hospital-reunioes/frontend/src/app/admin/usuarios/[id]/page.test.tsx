@@ -42,12 +42,12 @@ const DETALHE: AdminUsuarioDetalhe = {
     email: "ana@example.com",
     cargo: "Enfermeira",
     setor: "CTI Adulto",
-    role: "facilitador",
+    role: "gerente",
     ativo: true,
     is_externo: false,
     is_super_admin: true,
-    access_profile: "padrao",
-  } as AdminUsuarioDetalhe["usuario"],
+    access_profile: "super_admin",
+  },
   audit_logs: [],
 };
 
