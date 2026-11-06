@@ -88,3 +88,10 @@ def test_muda_longo_e_cortado_e_ausente_nao_gera_linha():
 def test_card_com_dois_responsaveis_conta_para_os_dois():
     saida = ri.montar([issue(5, donos=["pedroribbe", "lucassampaioc1"])])
     assert "\nRib (1)\n" in saida and "\nLucas (1)\n" in saida
+
+
+def test_caractere_de_controle_no_titulo_e_no_muda_vira_espaco():
+    corpo = "**O que muda:** linha\x1b[31m vermelha"
+    saida = ri.montar([issue(7, "Título\x07 com sino", corpo=corpo)])
+    assert "\x1b" not in saida and "\x07" not in saida
+    assert "    #7 Título  com sino\n      muda: linha [31m vermelha" in saida

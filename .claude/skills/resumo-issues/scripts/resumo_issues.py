@@ -15,6 +15,12 @@ APELIDOS = {"pedrorezendefig": "Pedro", "pedroribbe": "Rib", "lucassampaioc1": "
 SEM_DONO = "Sem responsável"
 RE_O_QUE_MUDA = re.compile(r"\*\*O que muda:\*\*\s*(.+)")
 LARGURA = 110
+RE_CONTROLE = re.compile(r"[\x00-\x1f\x7f]")
+
+
+def limpo(t: str) -> str:
+    """Texto de issue é de terceiros: sem caracteres de controle nem quebra de linha."""
+    return RE_CONTROLE.sub(" ", t).strip()
 
 
 def nome(login: str) -> str:
@@ -30,12 +36,12 @@ def o_que_muda(i: dict) -> str | None:
     m = RE_O_QUE_MUDA.search(i.get("body") or "")
     if not m:
         return None
-    texto = m.group(1).strip()
+    texto = limpo(m.group(1))
     return texto if len(texto) <= LARGURA else texto[: LARGURA - 3].rstrip() + "..."
 
 
 def _titulo_prd(t: str) -> str:
-    t = re.sub(r"^PRD:\s*", "", t)
+    t = re.sub(r"^PRD:\s*", "", limpo(t))
     return t if len(t) <= 80 else t[:77].rstrip() + "..."
 
 
@@ -70,10 +76,10 @@ def montar(issues: list[dict]) -> str:
             else:
                 linhas.append(f"  PRD #{chave} {_titulo_prd(titulos[chave])}")
             for i in sorted(grupos[chave], key=lambda x: x["number"]):
-                titulo = "(o PRD)" if i["number"] == chave else i["title"]
+                titulo = "(o PRD)" if i["number"] == chave else limpo(i["title"])
                 linhas.append(f"    #{i['number']} {titulo}")
                 muda = o_que_muda(i)
-                if muda and muda != i["title"]:
+                if muda and muda != limpo(i["title"]):
                     linhas.append(f"      muda: {muda}")
         linhas.append("")
     return "\n".join(linhas).rstrip() + "\n"
