@@ -15,9 +15,13 @@ from app.utils.text_sanitizer import sanitizar_estrutura, sanitizar_travessao
 
 logger = logging.getLogger(__name__)
 
-# O teto de saída de cada chamada dos chats e da Ata. Acima de ~21 mil tokens o
-# SDK exige streaming; a maior resposta do app (a Ata inteira) fica bem abaixo.
+# O teto de saída de cada chamada dos chats. Acima de ~21 mil tokens o SDK
+# exige streaming.
 MAX_TOKENS = 16000
+# O teto da Ata inteira (gerar e corrigir), raciocínio incluído: o máximo do
+# Sonnet 5.5, em streaming. Com 16 mil, a Ata da Diretoria de 04/11/2026 saiu
+# cortada (issue #1429), como as leituras de Contas médicas antes do #1412.
+MAX_TOKENS_ATA = 128000
 
 
 def _llm_provider() -> str:
@@ -36,28 +40,29 @@ def _get_llm() -> tuple[anthropic.Anthropic, str]:
     return anthropic.Anthropic(api_key=settings.anthropic_api_key), settings.llm_model
 
 
-def _pedir_texto(client, model: str, *, system: str | None, conteudo) -> str:
+def _pedir_texto(client, model: str, *, system: str | None, conteudo, ata: bool = False) -> str:
     """Uma chamada à IA, com a instrução em `system` e uma mensagem do usuário.
     Devolve o texto da resposta. Recusa e resposta cortada no teto viram erro,
-    que cada chamador trata do seu jeito (nenhum deles levanta para a tela)."""
+    que cada chamador trata do seu jeito (nenhum deles levanta para a tela).
+    Com `ata`, sai em streaming com o teto da Ata (`MAX_TOKENS_ATA`)."""
     kwargs = {"system": system} if system else {}
-    resposta = client.messages.create(
-        model=model,
-        max_tokens=MAX_TOKENS,
-        messages=[{"role": "user", "content": conteudo}],
-        **kwargs,
-    )
+    mensagens = [{"role": "user", "content": conteudo}]
+    if ata:
+        with client.messages.stream(model=model, max_tokens=MAX_TOKENS_ATA, messages=mensagens, **kwargs) as stream:
+            resposta = stream.get_final_message()
+    else:
+        resposta = client.messages.create(model=model, max_tokens=MAX_TOKENS, messages=mensagens, **kwargs)
     if resposta.stop_reason in ("refusal", "max_tokens"):
         raise ValueError(f"resposta da IA interrompida ({resposta.stop_reason})")
     return "".join(bloco.text for bloco in resposta.content if bloco.type == "text")
 
 
-def _pedir_json(client, model: str, *, system: str, usuario: str) -> str:
+def _pedir_json(client, model: str, *, system: str, usuario: str, ata: bool = False) -> str:
     """Como `_pedir_texto`, para os prompts que pedem um objeto JSON. Sem o
     `json_object` do OpenAI, o modelo às vezes cerca o JSON com ```json ou
     fala antes dele: o texto volta só do primeiro `{` ao último `}`, e quem
     chama faz o `json.loads` como antes."""
-    texto = _pedir_texto(client, model, system=system, conteudo=usuario)
+    texto = _pedir_texto(client, model, system=system, conteudo=usuario, ata=ata)
     inicio, fim = texto.find("{"), texto.rfind("}")
     return texto[inicio : fim + 1] if 0 <= inicio < fim else texto
 
@@ -207,7 +212,7 @@ def process_transcricao(
     )
 
     try:
-        raw = _pedir_json(client, model, system=_build_system_prompt(hoje_iso), usuario=user_content)
+        raw = _pedir_json(client, model, system=_build_system_prompt(hoje_iso), usuario=user_content, ata=True)
         parsed = json.loads(raw)
         # ADR 0013: a saída da IA vira Ata (e Pendência/email) sem travessão.
         parsed = sanitizar_estrutura(parsed)
@@ -266,7 +271,7 @@ def process_correcao(
     )
 
     try:
-        raw = _pedir_json(client, model, system=load_prompt("correcao_ata"), usuario=user_content)
+        raw = _pedir_json(client, model, system=load_prompt("correcao_ata"), usuario=user_content, ata=True)
         parsed = json.loads(raw)
         # ADR 0013: ata corrigida também sai sem travessão.
         parsed = sanitizar_estrutura(parsed)
