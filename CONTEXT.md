@@ -226,7 +226,7 @@ _Evitar_: paginação; cortar a lista para caber; supor que a mesma chamada devo
 Desde 02/11/2026 (ADR 0077) a aba Tecnologia é uma tela só: o chat do [Assistente de Tecnologia], em que o diretor relata um bug ou pede uma melhoria e o card nasce no GitHub. Só o Super admin vê (ADR 0050). Os pedidos da Vitta ao hospital voltaram para o WhatsApp.
 
 **Demanda**:
-Um bug ou uma melhoria que o diretor relatou ao [Assistente de Tecnologia]. É o registro de uma conversa: o que foi dito, os [Anexos da Demanda] e, depois do clique "Criar o card", o [Vínculo com o desenvolvimento]. Na tela aparece só como uma linha na lista lateral, com o título e a [Etapa]. Fica **totalmente apartada** das Pendências de Ata: Demanda é assunto de tecnologia entre o hospital e a Vitta, Pendência é compromisso operacional do hospital.
+Um bug ou uma melhoria que o diretor relatou ao [Assistente de Tecnologia]. É o registro de uma conversa: o que foi dito, os [Anexos da Demanda] e, depois do clique "Criar o card", o [Vínculo com o desenvolvimento]. Na tela aparece só como uma linha na lista lateral, com o título que o agente dá desde a primeira resposta, o selo Bug ou Melhoria e a [Etapa] (ADR 0079). Fica **totalmente apartada** das Pendências de Ata: Demanda é assunto de tecnologia entre o hospital e a Vitta, Pendência é compromisso operacional do hospital.
 _Evitar_: chamar de Pendência, tarefa ou ticket; tipo além de bug ou melhoria; Responsável, Prioridade, Prazo ou raia (aposentados em 02/11/2026); "Demandas TI" (TI é o analista de TI do hospital, um terceiro).
 
 **Assistente de Tecnologia**:
@@ -238,8 +238,8 @@ O caminho curto do [Assistente de Tecnologia] quando o diretor relata um bug: um
 _Evitar_: o grill longo da melhoria num bug; critério de aceite inventado além do que o diretor descreveu; print no corpo da issue.
 
 **Planejamento da Demanda**:
-O caminho da melhoria no [Assistente de Tecnologia] (ADR 0077, que substituiu a 0075): o grill do terminal feito com o diretor. Uma pergunta por vez, contexto curto, duas opções clicáveis com a recomendada destacada, campo livre, por texto ou voz. O modelo decide quando acabou, com teto de 12 perguntas e "Fechar e resumir" sempre à mão; o que não foi perguntado vira "ficou em aberto", nunca decisão inventada. Termina no [PRD do diretor].
-_Evitar_: perguntar o que o diretor já disse; decisão inventada no lugar do "ficou em aberto"; botão "Planejar com a IA" no card (era a 0075).
+O caminho da melhoria no [Assistente de Tecnologia] (ADR 0077, que substituiu a 0075): o grill do terminal feito com o diretor. Uma pergunta por vez, contexto curto, duas opções clicáveis com a recomendada destacada, campo livre, por texto ou voz. Sem teto de perguntas (ADR 0079): o agente só encerra quando nada ficaria em aberto, e o campo livre segue ativo até "Criar o card". "Ficou em aberto" só existe quando o diretor usa "Fechar e resumir" antes, e aí vem com "Continuar respondendo"; nunca decisão inventada. O cabeçalho da conversa mostra o modelo e o custo acumulado em dólar ("custo não medido" quando falta preço). Termina no [PRD do diretor].
+_Evitar_: perguntar o que o diretor já disse; decisão inventada no lugar do "ficou em aberto"; teto de perguntas, visível ou escondido; encerrar com lacuna sem o diretor pedir; custo zero no lugar de não medido; botão "Planejar com a IA" no card (era a 0075).
 
 **PRD do diretor**:
 O card de uma melhoria: o PRD inteiro escrito pelo [Planejamento da Demanda] na issue-raiz. Bloco "Para o diretor", Problema, Solução, Histórias de usuário, Decisões de negócio, Decisões de implementação e de teste lidas do código, "Ficou em aberto" e uma seção "Para o glossário" com os termos e as decisões candidatas a ADR. Nasce `needs-triage`, porque ainda passa pelo `/to-issues`; quem grava `CONTEXT.md` e ADR é o terminal, a partir da seção "Para o glossário".

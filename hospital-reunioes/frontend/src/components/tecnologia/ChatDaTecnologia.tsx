@@ -68,7 +68,9 @@ const ENVIADO =
   "A Vitta recebeu o seu relato e o bug já está na fila do desenvolvimento. Os prints ficaram guardados no aplicativo.";
 const ENVIADO_DA_MELHORIA =
   "A Vitta recebeu o seu pedido, com as suas decisões e o que ficou em aberto. Ela planeja a parte técnica e depois começa a construir.";
-const ENCERRADO = "A IA já tem o que precisa. O resumo aparece em seguida; se não aparecer, clique em Fechar e resumir.";
+const ENCERRADO =
+  "A IA já tem o que precisa. O resumo aparece em seguida; se não aparecer, clique em Fechar e resumir. Se quiser acrescentar algo, é só escrever.";
+const CONTINUAR_ESCREVENDO = "Quer acrescentar alguma coisa? Escreva aqui, e a IA volta a perguntar.";
 const NENHUMA_DECISAO = "Nenhuma pergunta respondida fechou uma decisão.";
 const NADA_EM_ABERTO = "Nada ficou em aberto.";
 const NAO_SEM_TEXTO = "Diga o que não bateu no resumo.";
@@ -546,6 +548,71 @@ export function ChatDaTecnologia({ token, demandaId = null, onMudou }: PropsDoCh
     );
   }
 
+  // O campo livre da conversa. Na melhoria ele segue ativo depois do
+  // encerramento e do resumo, até o Criar o card (ADR 0079, decisão 3).
+  const campoLivre = (
+    <div className="flex gap-2">
+      <textarea
+        aria-label="Sua mensagem"
+        rows={1}
+        maxLength={LIMITE_DA_MENSAGEM}
+        placeholder={transcrevendo ? "Transcrevendo a sua fala..." : "Escreva, fale no microfone ou mande um print"}
+        value={texto}
+        onChange={(e) => setTexto(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" && !e.shiftKey) {
+            e.preventDefault();
+            enviarOTexto();
+          }
+        }}
+        className="flex-1 px-3 py-2 text-sm border border-slate-200 rounded-xl outline-none focus:border-primary focus:ring-1 focus:ring-primary bg-white resize-none"
+      />
+      <input
+        ref={entradaDeImagem}
+        type="file"
+        accept={IMAGENS_ACEITAS.join(",")}
+        className="hidden"
+        onChange={(e) => {
+          const arquivo = e.target.files?.[0];
+          e.target.value = "";
+          if (arquivo) void anexarOPrint(arquivo);
+        }}
+      />
+      <button
+        type="button"
+        onClick={() => entradaDeImagem.current?.click()}
+        disabled={ocupado}
+        aria-label="Mandar um print"
+        title="Mandar um print"
+        className="px-3 py-2 rounded-xl border border-border text-text-secondary hover:border-primary hover:text-primary disabled:opacity-50 transition-colors"
+      >
+        <ImagePlus className="w-4 h-4" />
+      </button>
+      {/* O microfone fica vivo enquanto grava: é o caminho de volta. */}
+      <button
+        type="button"
+        onClick={() => (gravando ? pararGravacao() : iniciarGravacao())}
+        disabled={!gravando && ocupado}
+        aria-label={gravando ? "Parar de gravar" : "Gravar voz"}
+        title={gravando ? "Parar de gravar" : "Gravar voz"}
+        className={`px-3 py-2 rounded-xl border text-text-secondary disabled:opacity-50 ${
+          gravando ? "border-red-300 bg-red-50 text-red-600" : "border-border hover:border-primary hover:text-primary"
+        } transition-colors`}
+      >
+        {gravando ? <Square className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
+      </button>
+      <button
+        type="button"
+        onClick={enviarOTexto}
+        disabled={ocupado || !texto.trim()}
+        aria-label="Enviar mensagem"
+        className="px-3 py-2 rounded-xl bg-primary text-white disabled:opacity-50"
+      >
+        <Send className="w-4 h-4" />
+      </button>
+    </div>
+  );
+
   if (conversa?.estado === "resumido" && conversa.resumo_da_melhoria) {
     return (
       <div className="space-y-4">
@@ -560,6 +627,13 @@ export function ChatDaTecnologia({ token, demandaId = null, onMudou }: PropsDoCh
         >
           <CorpoDoResumoDaMelhoria resumo={conversa.resumo_da_melhoria} />
         </ResumoNaTela>
+        <section
+          aria-label="Continuar a conversa"
+          className="w-full bg-white rounded-2xl border border-primary/30 shadow-premium px-5 py-3 space-y-2"
+        >
+          <p className="text-xs text-text-secondary">{CONTINUAR_ESCREVENDO}</p>
+          {campoLivre}
+        </section>
       </div>
     );
   }
@@ -673,66 +747,7 @@ export function ChatDaTecnologia({ token, demandaId = null, onMudou }: PropsDoCh
         </div>
 
         <div className="px-5 py-3 border-t border-slate-100 flex-shrink-0">
-          <div className="flex gap-2">
-            <textarea
-              aria-label="Sua mensagem"
-              rows={1}
-              maxLength={LIMITE_DA_MENSAGEM}
-              placeholder={transcrevendo ? "Transcrevendo a sua fala..." : "Escreva, fale no microfone ou mande um print"}
-              value={texto}
-              onChange={(e) => setTexto(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" && !e.shiftKey) {
-                  e.preventDefault();
-                  enviarOTexto();
-                }
-              }}
-              className="flex-1 px-3 py-2 text-sm border border-slate-200 rounded-xl outline-none focus:border-primary focus:ring-1 focus:ring-primary bg-white resize-none"
-            />
-            <input
-              ref={entradaDeImagem}
-              type="file"
-              accept={IMAGENS_ACEITAS.join(",")}
-              className="hidden"
-              onChange={(e) => {
-                const arquivo = e.target.files?.[0];
-                e.target.value = "";
-                if (arquivo) void anexarOPrint(arquivo);
-              }}
-            />
-            <button
-              type="button"
-              onClick={() => entradaDeImagem.current?.click()}
-              disabled={ocupado}
-              aria-label="Mandar um print"
-              title="Mandar um print"
-              className="px-3 py-2 rounded-xl border border-border text-text-secondary hover:border-primary hover:text-primary disabled:opacity-50 transition-colors"
-            >
-              <ImagePlus className="w-4 h-4" />
-            </button>
-            {/* O microfone fica vivo enquanto grava: é o caminho de volta. */}
-            <button
-              type="button"
-              onClick={() => (gravando ? pararGravacao() : iniciarGravacao())}
-              disabled={!gravando && ocupado}
-              aria-label={gravando ? "Parar de gravar" : "Gravar voz"}
-              title={gravando ? "Parar de gravar" : "Gravar voz"}
-              className={`px-3 py-2 rounded-xl border text-text-secondary disabled:opacity-50 ${
-                gravando ? "border-red-300 bg-red-50 text-red-600" : "border-border hover:border-primary hover:text-primary"
-              } transition-colors`}
-            >
-              {gravando ? <Square className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
-            </button>
-            <button
-              type="button"
-              onClick={enviarOTexto}
-              disabled={ocupado || encerrado || !texto.trim()}
-              aria-label="Enviar mensagem"
-              className="px-3 py-2 rounded-xl bg-primary text-white disabled:opacity-50"
-            >
-              <Send className="w-4 h-4" />
-            </button>
-          </div>
+          {campoLivre}
           <p className="mt-1.5 text-xs text-slate-400">{AVISO_DE_IA}</p>
         </div>
       </section>

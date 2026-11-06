@@ -449,12 +449,13 @@ class TestOTextoDaAbaContaATelaDeHoje:
 
     def test_o_planejamento_diz_o_que_e_quando_aparece_e_o_que_o_card_faz(self, texto):
         """ADR 0077, issue #1383. O planejamento e o caminho da melhoria dentro
-        do chat: o teto, o fechar, o resumo com o que ficou em aberto, o Criar
+        do chat: sem teto de perguntas (ADR 0079), o fechar, o resumo com o que ficou em aberto, o Criar
         o card que leva ao desenvolvimento e o Nao bateu."""
         planejamento = _secao(texto, "O Planejamento da Demanda")
         termos = (
             "melhoria",
-            "12 perguntas",
+            "não tem limite de perguntas",
+            "o campo de texto continua aberto até o clique em Criar o card",
             "Fechar e resumir",
             "ficou em aberto",
             "**Criar o card**",
@@ -466,7 +467,7 @@ class TestOTextoDaAbaContaATelaDeHoje:
         )
         for termo in termos:
             assert termo in planejamento, termo
-        for aposentado in ("Continuar planejamento", "Sim, mandar para os desenvolvedores"):
+        for aposentado in ("Continuar planejamento", "Sim, mandar para os desenvolvedores", "12 perguntas"):
             assert aposentado not in texto, aposentado
 
     def test_o_planejamento_ja_esta_no_aplicativo(self, texto):

@@ -456,7 +456,7 @@ def turno_da_melhoria(
 
     `mensagens` e a conversa inteira, ja com a resposta do diretor no fim. O
     turno e o do Planejamento da Demanda, com as regras dele (uma pergunta,
-    duas opcoes, a recomendada, o teto de 12), sobre a parte da conversa que e
+    duas opcoes, a recomendada, sem teto de perguntas), sobre a parte da conversa que e
     do planejamento.
     """
     _, planejamento = partes_da_melhoria(mensagens)
