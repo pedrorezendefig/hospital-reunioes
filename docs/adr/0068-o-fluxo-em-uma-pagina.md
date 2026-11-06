@@ -32,7 +32,7 @@ O que o pipeline faz hoje, de issue a produção. O histórico de como se chegou
 
 ## Regra de casa
 
-12. **Cada regra tem uma casa:** script ou skill, nunca as duas. Decisão de ferramenta vai no corpo do PR, não em ADR nova; ADR é para o app e para mudança deste fluxo inteiro. As skills de `.claude/skills/` são o kit completo do fluxo e a fonte de verdade do Hospital; a cópia global é outra linhagem, e a duplicata é intencional. O fluxo é exportável pelo roteiro versionado em `tools/instalar-fluxo/` (`ROTEIRO.md` e `MANIFESTO.md`), que copia a árvore viva, nunca por prompt solto; skill do pipeline criada, renomeada ou apagada atualiza o `MANIFESTO.md` e o `/ask-pedro` no mesmo commit.
+12. **Cada regra tem uma casa:** script ou skill, nunca as duas. Decisão de ferramenta vai no corpo do PR, não em ADR nova; ADR é para o app e para mudança deste fluxo inteiro. As skills de `.claude/skills/` são o kit completo do fluxo e a fonte de verdade do Hospital; a cópia global é outra linhagem, e a duplicata é intencional. O fluxo chega a outro Projeto pelo instalador do PedroOS (`skills/fluxo/` de lá); skill do pipeline criada, renomeada ou apagada atualiza o `/ask-pedro` no mesmo commit.
 
 ## Emenda (14/out/2026, o draft do Vídeo de tarefa deixa de esperar o humano)
 
