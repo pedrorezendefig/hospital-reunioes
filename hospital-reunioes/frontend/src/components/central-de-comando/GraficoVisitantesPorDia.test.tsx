@@ -131,6 +131,21 @@ describe("GraficoVisitantesPorDia", () => {
     expect(rotulos).toEqual(["21 ago", "30 ago", "8 set", "ontem"]);
   });
 
+  it("no celular, o rótulo 'ontem' cabe inteiro dentro do gráfico (#1459)", () => {
+    relogioEm("2026-09-18T22:00:00-03:00");
+
+    const { container } = render(<GraficoVisitantesPorDia pontos={vinteEOitoDias()} />);
+
+    // O rótulo é centralizado no último ponto: metade dele fica à direita do
+    // ponto. Em 12px, "ontem" mede uns 16px de cada lado (medido no Chrome a
+    // 370px de largura); a estimativa de 0,6em por letra dá 18px, com folga.
+    const largura = 360;
+    const metadeDoRotulo = ("ontem".length * 12 * 0.6) / 2;
+    const ultimo = [...container.querySelectorAll(".recharts-xAxis .recharts-cartesian-axis-tick-value")].at(-1)!;
+    expect(ultimo.textContent).toBe("ontem");
+    expect(largura - Number(ultimo.getAttribute("x"))).toBeGreaterThanOrEqual(metadeDoRotulo);
+  });
+
   it("às 22h de Brasília, o último dia que ainda é o hoje de Brasília não é 'ontem'", () => {
     // 22h de 17/09 em Brasília já é 18/09 em UTC: o dia 17 está pela metade.
     relogioEm("2026-09-17T22:00:00-03:00");
