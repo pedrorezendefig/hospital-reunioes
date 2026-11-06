@@ -2,6 +2,49 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-11-06T15:50:48-03:00",
+      "sha": "059b4e95b23daca79f6c9d18152fc92a08928ecc",
+      "app_version": "0.219.1",
+      "subject": "PR #1451, issue #1429: Ata de reunião longa sai em stream com o teto do modelo",
+      "raw_subject": "chore(deploy): registro do PR avulso (#1451)",
+      "scope": [
+        "backend"
+      ],
+      "prds": [],
+      "result": "healthy",
+      "duration_seconds": 516,
+      "services_touched": [
+        "backend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        },
+        {
+          "service": "frontend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "PR avulso: PR #1451, issue #1429. Merge pela API do GitHub, um build. Registro pela Action pos-merge depois do health.",
+      "etapas": {
+        "merge_s": 4,
+        "build_s": {
+          "backend": 17
+        },
+        "health_s": 18
+      },
+      "responsavel": "pedrorezendefig"
+    },
+    {
       "at": "2026-11-06T15:45:51-03:00",
       "sha": "8fb3c87d17514e5974cdd69783a349678a8fce94",
       "app_version": "0.219.0",
