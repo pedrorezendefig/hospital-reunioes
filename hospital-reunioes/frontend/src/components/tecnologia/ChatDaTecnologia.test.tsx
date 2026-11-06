@@ -135,6 +135,39 @@ describe("A abertura", () => {
   });
 });
 
+describe("O modelo e o custo no cabeçalho (issue #1439)", () => {
+  it("mostra o modelo e o custo em dólar no formato brasileiro, e atualiza a cada resposta", async () => {
+    montar([
+      { status: 201, corpo: conversa({ custo: { modelo: "Opus 5.5", custo_usd: 1.8371 } }) },
+      { status: 200, corpo: conversa({ custo: { modelo: "Opus 5.5", custo_usd: 12.5 } }) },
+    ]);
+
+    fireEvent.click(screen.getByRole("button", { name: "Bug" }));
+
+    expect(await screen.findByText("Opus 5.5 · US$ 1,84 até agora")).toBeTruthy();
+    escrever("Na Ouvidoria");
+    expect(await screen.findByText("Opus 5.5 · US$ 12,50 até agora")).toBeTruthy();
+  });
+
+  it("com o custo nulo, diz custo não medido, nunca zero", async () => {
+    montar([{ status: 201, corpo: conversa({ custo: { modelo: "Opus 5.5", custo_usd: null } }) }]);
+
+    fireEvent.click(screen.getByRole("button", { name: "Bug" }));
+
+    expect(await screen.findByText("Opus 5.5 · custo não medido")).toBeTruthy();
+    expect(screen.queryByText(/US\$/)).toBeNull();
+  });
+
+  it("sem chamada nenhuma, o cabeçalho não mostra custo", async () => {
+    montar([{ status: 201, corpo: conversa({ custo: null }) }]);
+
+    fireEvent.click(screen.getByRole("button", { name: "Bug" }));
+
+    expect(await screen.findByText("Onde isso aconteceu?")).toBeTruthy();
+    expect(screen.queryByText(/US\$|custo não medido/)).toBeNull();
+  });
+});
+
 describe("A dúvida que o material responde", () => {
   it("a resposta diz de onde veio", async () => {
     const respondida = conversa({
@@ -352,5 +385,58 @@ describe("A melhoria", () => {
 
     expect(await screen.findByText(/A Vitta recebeu o seu pedido/)).toBeTruthy();
     expect(chamadas[1]).toMatchObject({ url: "/api/admin/tecnologia/chat/d-1/criar-card", metodo: "POST" });
+  });
+});
+
+// ─── A conversa aberta até o card (issue #1437, ADR 0079, decisão 3) ─────────
+
+describe("A melhoria segue aberta até o Criar o card", () => {
+  it("depois do resumo, o campo livre está habilitado e a fala traz nova pergunta", async () => {
+    const nova: FalaDoChat = { ...PERGUNTA, texto: "Quem confirma o retorno com o paciente?" };
+    const chamadas = montar([
+      { status: 201, corpo: melhoria({ estado: "resumido", resumo_da_melhoria: RESUMO_DA_MELHORIA }) },
+      { status: 200, corpo: melhoria({ mensagens: [...melhoria().mensagens, nova] }) },
+    ]);
+    fireEvent.click(screen.getByRole("button", { name: "Melhoria" }));
+    await screen.findByRole("region", { name: "Resumo da melhoria" });
+
+    escrever("Falta dizer quem confirma.");
+
+    expect(await screen.findByText(nova.texto)).toBeTruthy();
+    expect(chamadas[1]).toMatchObject({
+      url: "/api/admin/tecnologia/chat/d-1",
+      metodo: "POST",
+      corpo: { texto: "Falta dizer quem confirma." },
+    });
+  });
+
+  it("encerrado, o campo livre está habilitado e a fala volta às perguntas", async () => {
+    const encerrado = melhoria({
+      estado: "encerrado",
+      mensagens: [
+        ...melhoria().mensagens,
+        { autor: "ia", texto: "Já tenho o que preciso.", fonte: null, opcoes: [], nao_bateu: false },
+      ],
+    });
+    const nova: FalaDoChat = { ...PERGUNTA, texto: "O médico também vê o aviso?" };
+    const chamadas = montar([
+      { status: 201, corpo: melhoria() },
+      { status: 200, corpo: encerrado },
+      // O resumo automático falha, e a conversa fica encerrada na tela.
+      { status: 502, corpo: { detail: "A IA não conseguiu responder agora." } },
+      { status: 200, corpo: melhoria({ mensagens: [...encerrado.mensagens, nova] }) },
+    ]);
+    fireEvent.click(screen.getByRole("button", { name: "Melhoria" }));
+    fireEvent.click(await screen.findByRole("button", { name: /Sim, na recepção/ }));
+    await screen.findByText("Já tenho o que preciso.");
+    await waitFor(() => expect(chamadas).toHaveLength(3));
+
+    escrever("Esqueci: o médico também precisa ver.");
+
+    expect(await screen.findByText(nova.texto)).toBeTruthy();
+    expect(chamadas[3]).toMatchObject({
+      url: "/api/admin/tecnologia/chat/d-1",
+      corpo: { texto: "Esqueci: o médico também precisa ver." },
+    });
   });
 });

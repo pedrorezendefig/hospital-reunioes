@@ -2,6 +2,54 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-11-06T15:24:42-03:00",
+      "sha": "68e1b2fb8ed3b6494ba25e7fcb32204f6c95f4ad",
+      "app_version": "0.217.0",
+      "subject": "Onda onda-tec-onda1: Planejamento da Demanda sem teto de perguntas e conversa aberta até o card; Modelo e custo da conversa no cabeçalho",
+      "raw_subject": "chore(deploy): registro da onda onda-tec-onda1 (#1445 #1443)",
+      "scope": [
+        "backend",
+        "frontend"
+      ],
+      "prds": [
+        1436
+      ],
+      "result": "healthy",
+      "duration_seconds": 368,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        },
+        {
+          "service": "frontend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "onda-enxuta onda-tec-onda1: PR #1445 (issue #1437), PR #1443 (issue #1439), mergeados PR a PR. Merge pela API do GitHub, um build. Registro pela Action pos-merge depois do health.",
+      "etapas": {
+        "merge_s": 11,
+        "build_s": {
+          "backend": 42,
+          "frontend": 241
+        },
+        "health_s": 3
+      },
+      "responsavel": "pedrorezendefig"
+    },
+    {
       "at": "2026-11-06T12:46:01-03:00",
       "sha": "f940c7b04c43a9a8a20f0f91ea11e0e02dcce1cb",
       "app_version": "0.216.2",

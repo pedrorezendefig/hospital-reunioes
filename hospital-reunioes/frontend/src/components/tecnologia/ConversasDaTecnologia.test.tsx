@@ -171,6 +171,23 @@ describe("Retomar", () => {
   });
 });
 
+describe("O custo da conversa (issue #1439)", () => {
+  it("aparece no alto da conversa aberta, e nunca na lista", async () => {
+    montar((url) => {
+      if (url === LISTA) return { status: 200, corpo: [SEM_CARD] };
+      if (url === `${LISTA}/d-1`) {
+        return { status: 200, corpo: conversa("d-1", { custo: { modelo: "Opus 5.5", custo_usd: 1.84 } }) };
+      }
+      return { status: 404, corpo: {} };
+    });
+
+    fireEvent.click(await within(lista()).findByRole("button", { name: /Botão de responder some/ }));
+
+    expect(await screen.findByText("Opus 5.5 · US$ 1,84 até agora")).toBeTruthy();
+    expect(within(lista()).queryByText(/US\$|Opus/)).toBeNull();
+  });
+});
+
 describe("O pedido de antes do chat (issue #1386)", () => {
   it("sem conversa guardada, diz que ela não ficou aqui e não manda a tela nenhuma", async () => {
     montar((url, metodo) => {

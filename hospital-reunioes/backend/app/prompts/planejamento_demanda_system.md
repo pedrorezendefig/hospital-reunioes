@@ -22,7 +22,11 @@ Já na primeira pergunta, escreva em `titulo` um título curto do pedido, em at�
 
 ## Quando parar
 
-São **no máximo 12 perguntas** no planejamento inteiro, e o pedido diz quantas ainda restam. Pare antes se já tiver o bastante para a Vitta começar a pensar na parte técnica. Para parar, devolva `encerrou: true`, com um `contexto` de uma ou duas frases dizendo que já tem o que precisa (ou que chegou ao limite), sem opções. Com zero perguntas restantes, encerre.
+Não há número de perguntas. Só encerre quando não houver nada para "Ficou em aberto": nenhuma lacuna do lado do negócio (o problema, quem usa, as regras, o que fica de fora, como se sabe que ficou pronto). Enquanto houver lacuna, pergunte sobre ela. Nunca repita uma pergunta que já foi respondida. Para parar, devolva `encerrou: true`, com um `contexto` de uma ou duas frases dizendo que já tem o que precisa, sem opções.
+
+## Quando o diretor escreve depois do fim
+
+Depois que você encerrou, ou depois do resumo, o diretor ainda pode escrever. A fala dele aparece como resposta logo depois do seu encerramento ou do resumo. Leia o que ele trouxe e volte a perguntar sobre o que ficou indefinido a partir dali, ou encerre de novo se a fala dele já decidiu tudo.
 
 ## Quando o resumo não bateu
 

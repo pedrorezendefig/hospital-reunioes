@@ -161,6 +161,15 @@ class ResumoDoBug(BaseModel):
     criterios: list[str]
 
 
+class CustoDaConversa(BaseModel):
+    """O modelo da chamada mais recente, no nome de exibicao ("Opus 5.5"), e a
+    soma em dolar das chamadas de IA da Demanda. `custo_usd` nulo = nao medido:
+    alguma chamada com tokens gravou custo zero (modelo sem preco)."""
+
+    modelo: str
+    custo_usd: float | None = None
+
+
 class ChatResponse(BaseModel):
     """A conversa do chat como a tela a mostra.
 
@@ -169,7 +178,9 @@ class ChatResponse(BaseModel):
     `planejamento` verdadeiro e a melhoria confirmada, que segue no proprio
     chat pelo Planejamento da Demanda (issue #1383); o estado `encerrado` e o
     teto ou o fim das perguntas, esperando o "Fechar e resumir".
-    Tokens e custo nunca saem por aqui (ADR 0077, decisao 9).
+    Tokens nunca saem por aqui (ADR 0077, decisao 9). O custo sai, so na
+    conversa aberta e nunca na lista: `custo` e nulo sem chamada nenhuma
+    (ADR 0079, decisao 6, issue #1439).
     """
 
     demanda_id: str
@@ -182,3 +193,4 @@ class ChatResponse(BaseModel):
     anexos: int = 0
     planejamento: bool = False
     aviso_dos_anexos: str | None = None
+    custo: CustoDaConversa | None = None

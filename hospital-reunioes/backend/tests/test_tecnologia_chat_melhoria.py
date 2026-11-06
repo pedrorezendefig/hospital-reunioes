@@ -1,8 +1,8 @@
 """O caminho da melhoria dentro do chat (issue #1383, PRD #1380, ADR 0077, decisão 4).
 
 Escolhida a melhoria, o chat segue o Planejamento da Demanda: uma pergunta por
-vez, contexto curto, duas opções com a recomendada marcada, campo livre, teto de
-12 perguntas e "Fechar e resumir" a qualquer altura. O resumo traz o que ficou
+vez, contexto curto, duas opções com a recomendada marcada, campo livre, sem
+teto de perguntas (ADR 0079) e "Fechar e resumir" a qualquer altura. O resumo traz o que ficou
 em aberto, e "Criar o card" cria o PRD do diretor. Tudo pela ROTA, com o modelo
 e o GitHub dublados no molde de `test_tecnologia_chat`.
 """
@@ -16,7 +16,7 @@ import sys
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from test_planejamento_demanda import _ia, _pergunta  # noqa: E402
+from test_planejamento_demanda import _encerrou, _ia, _pergunta  # noqa: E402
 from test_tecnologia_chat import (  # noqa: E402
     _cenario,
     _chamadas,
@@ -131,7 +131,7 @@ class TestEscolherMelhoriaAbreOGrill:
 
 
 # ═══════════════════════════════════════════════════════════════════════════
-# 2. O teto de 12 perguntas e o "Fechar e resumir"
+# 2. Sem teto de perguntas, e o "Fechar e resumir"
 # ═══════════════════════════════════════════════════════════════════════════
 
 
@@ -168,21 +168,21 @@ def _resumo_do_modelo(**campos) -> str:
 
 
 class TestTetoEFecharEResumir:
-    def test_o_grill_para_na_decima_segunda_pergunta_mesmo_que_o_modelo_queira_mais(self, monkeypatch):
+    def test_sem_teto_a_decima_terceira_pergunta_vem_quando_o_modelo_ainda_pergunta(self, monkeypatch):
+        """ADR 0079, decisao 1: nao ha teto de perguntas. Com 12 respondidas e o
+        modelo ainda perguntando, a 13a chega ao diretor."""
         client, sb, _ = _cenario(monkeypatch)
         demanda_id = _abrir_pelo_botao(client, monkeypatch)["demanda_id"]
         _com_perguntas(sb, 12, ultima_respondida=False)
-        _ia(monkeypatch, _pergunta(contexto="Mais uma pergunta?"))
+        _ia(monkeypatch, _pergunta(contexto="Quem confirma o retorno com o paciente?"))
 
         resposta = client.post(f"{CHAT}/{demanda_id}", json={"opcao": "B"})
 
         assert resposta.status_code == 200, resposta.text
         corpo = resposta.json()
-        assert corpo["estado"] == "encerrado"
-        assert corpo["mensagens"][-1]["opcoes"] == []
-        assert "Mais uma pergunta?" not in [f["texto"] for f in corpo["mensagens"]]
-        # Encerrado, a conversa espera o resumo: outra resposta é recusada.
-        assert client.post(f"{CHAT}/{demanda_id}", json={"texto": "e mais isto"}).status_code == 409
+        assert corpo["estado"] == "em_andamento"
+        assert corpo["mensagens"][-1]["texto"] == "Quem confirma o retorno com o paciente?"
+        assert len(corpo["mensagens"][-1]["opcoes"]) == 2
 
     def test_fechar_e_resumir_encerra_a_qualquer_momento_com_o_resumo(self, monkeypatch):
         client, sb, _ = _cenario(monkeypatch)
@@ -263,6 +263,62 @@ class TestResumoDaMelhoria:
         assert retomou.json()["mensagens"][-1]["texto"] == "A enfermagem marca em que momento?"
         assert "A enfermagem também marca." in cliente.chamadas[0]["messages"][0]["content"]
         assert gh.criadas == []
+
+
+class TestConversaAbertaAteOCard:
+    """ADR 0079, decisao 3: depois do encerramento ou do resumo, o diretor
+    ainda escreve, e o agente volta a perguntar, ate o Criar o card."""
+
+    def test_fala_livre_depois_de_encerrado_traz_nova_pergunta(self, monkeypatch):
+        client, sb, _ = _cenario(monkeypatch)
+        demanda_id = _abrir_pelo_botao(client, monkeypatch)["demanda_id"]
+        _ia(monkeypatch, _encerrou())
+        assert client.post(f"{CHAT}/{demanda_id}", json={"opcao": "A"}).json()["estado"] == "encerrado"
+        cliente = _ia(monkeypatch, _pergunta(contexto="O aviso vale também no fim de semana?"))
+
+        resposta = client.post(f"{CHAT}/{demanda_id}", json={"texto": "Esqueci: o médico também precisa ver."})
+
+        assert resposta.status_code == 200, resposta.text
+        corpo = resposta.json()
+        assert corpo["estado"] == "em_andamento"
+        assert [f["texto"] for f in corpo["mensagens"][-2:]] == [
+            "Esqueci: o médico também precisa ver.",
+            "O aviso vale também no fim de semana?",
+        ]
+        assert corpo["mensagens"][-2]["autor"] == "diretor"
+        assert "Esqueci: o médico também precisa ver." in cliente.chamadas[0]["messages"][0]["content"]
+
+    def test_fala_livre_depois_do_resumo_traz_nova_pergunta(self, monkeypatch):
+        client, sb, gh = _cenario(monkeypatch)
+        demanda_id = _ate_o_resumo(client, sb, monkeypatch)
+        _ia(monkeypatch, _pergunta(contexto="Quem confirma o retorno com o paciente?"))
+
+        resposta = client.post(f"{CHAT}/{demanda_id}", json={"texto": "Falta dizer quem confirma."})
+
+        assert resposta.status_code == 200, resposta.text
+        corpo = resposta.json()
+        assert corpo["estado"] == "em_andamento"
+        assert corpo["mensagens"][-1]["texto"] == "Quem confirma o retorno com o paciente?"
+        assert gh.criadas == []
+
+    def test_depois_do_fim_so_vale_texto(self, monkeypatch):
+        client, sb, _ = _cenario(monkeypatch)
+        demanda_id = _ate_o_resumo(client, sb, monkeypatch)
+
+        assert client.post(f"{CHAT}/{demanda_id}", json={}).status_code == 422
+        assert client.post(f"{CHAT}/{demanda_id}", json={"opcao": "A"}).status_code == 422
+        assert _conversas(sb)[0]["estado"] == "resumido"
+
+    def test_fala_livre_depois_de_enviado_e_recusada(self, monkeypatch):
+        client, sb, gh = _cenario(monkeypatch)
+        demanda_id = _ate_o_resumo(client, sb, monkeypatch)
+        assert client.post(f"{CHAT}/{demanda_id}/criar-card").status_code == 200
+        _ia(monkeypatch, _pergunta())
+
+        resposta = client.post(f"{CHAT}/{demanda_id}", json={"texto": "Mais uma coisa."})
+
+        assert resposta.status_code == 409
+        assert _conversas(sb)[0]["estado"] == "enviado"
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -384,6 +440,13 @@ class TestKitDaTecnologia:
         texto = (CONHECIMENTO_DIR / "tecnologia.md").read_text(encoding="utf-8")
 
         secao = texto.split("## A conversa com o Assistente", 1)[1].split("\n## ", 1)[0]
-        for trecho in ("no máximo 12 perguntas", "**Fechar e resumir**", "ficou em aberto", "recomendada"):
+        for trecho in (
+            "não tem limite de perguntas",
+            "o campo de texto continua aberto até o clique em Criar o card",
+            "**Fechar e resumir**",
+            "ficou em aberto",
+            "recomendada",
+        ):
             assert trecho in secao, trecho
+        assert "12 perguntas" not in texto
         assert "Planejar com a IA" not in texto

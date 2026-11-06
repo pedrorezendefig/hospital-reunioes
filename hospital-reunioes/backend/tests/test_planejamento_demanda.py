@@ -248,28 +248,24 @@ class TestTurno:
         assert resultado.mensagem == {"tipo": "encerrou", "contexto": "Já tenho o que preciso para a Vitta planejar."}
         assert resultado.decisao == "A enfermagem também usa."
 
-    def test_nunca_passa_de_doze_perguntas(self, monkeypatch):
-        """Com a 12a respondida, o modelo ainda quer perguntar: o turno encerra
-        assim mesmo, e a decisao da 12a resposta nao se perde."""
+    def test_sem_teto_o_turno_pergunta_a_decima_terceira(self, monkeypatch):
+        """ADR 0079, decisao 1: com 12 respondidas e o modelo ainda perguntando,
+        o turno devolve a pergunta, e a decisao da 12a resposta nao se perde."""
         _ia(monkeypatch, _pergunta(decisao_fechada="Decidido na 12a."))
 
         resultado = _turno(_conversa_com(12))
 
-        assert resultado.mensagem["tipo"] == "encerrou"
-        assert resultado.mensagem["contexto"] == planejamento_demanda.TEXTO_DO_TETO
+        assert resultado.mensagem["tipo"] == "pergunta"
         assert resultado.decisao == "Decidido na 12a."
 
-    def test_com_onze_perguntas_ainda_pergunta_a_decima_segunda(self, monkeypatch):
-        _ia(monkeypatch, _pergunta())
-
-        assert _turno(_conversa_com(11)).mensagem["tipo"] == "pergunta"
-
-    def test_o_prompt_diz_quantas_perguntas_restam(self, monkeypatch):
+    def test_o_pedido_nao_conta_perguntas_restantes(self, monkeypatch):
         cliente = _ia(monkeypatch, _pergunta())
 
         _turno(_conversa_com(9))
 
-        assert "PERGUNTAS QUE AINDA RESTAM: 3" in cliente.chamadas[0]["messages"][0]["content"]
+        pedido = cliente.chamadas[0]["messages"][0]["content"]
+        assert "RESTAM" not in pedido.upper()
+        assert re.search(r"\bperguntas? (que )?(ainda )?resta", pedido, re.IGNORECASE) is None
 
     def test_o_servico_e_sem_estado_e_nao_mexe_na_conversa_que_recebeu(self, monkeypatch):
         _ia(monkeypatch, _pergunta())
@@ -544,3 +540,26 @@ class TestOPromptDoPlanejamento:
         assert trecho, "a instrucao nao cita a secao O que já foi decidido"
         assert "recusar" in trecho.group(0)
         assert "redirecionar" in trecho.group(0)
+
+    def test_nao_fala_em_numero_maximo_de_perguntas(self, monkeypatch):
+        """ADR 0079, decisao 1: sem teto, nem visivel nem escondido."""
+        cliente = _ia(monkeypatch, _pergunta())
+
+        _turno()
+
+        instrucao = cliente.chamadas[0]["system"][0]["text"]
+        assert re.search(r"no máximo \d+ perguntas", instrucao) is None
+        assert re.search(r"\d+ perguntas", instrucao) is None
+        assert "restam" not in instrucao.lower()
+
+    def test_so_encerra_quando_nada_iria_para_ficou_em_aberto(self, monkeypatch):
+        """ADR 0079, decisao 2: a regra de parada e "nada em aberto", e a regra
+        antiga ("pare quando ja tiver o bastante") saiu."""
+        cliente = _ia(monkeypatch, _pergunta())
+
+        _turno()
+
+        instrucao = cliente.chamadas[0]["system"][0]["text"]
+        secao = instrucao.split("## Quando parar", 1)[1].split("\n## ", 1)[0]
+        assert 'Só encerre quando não houver nada para "Ficou em aberto"' in secao
+        assert "já tiver o bastante" not in instrucao
