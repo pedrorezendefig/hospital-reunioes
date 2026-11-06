@@ -1090,7 +1090,7 @@ def test_history_da_onda_lista_os_prs_e_as_issues_do_lote(tmp_path, monkeypatch)
     assert entrada["sha"] == c.merges[1]["main"] and entrada["app_version"] == "0.10.1"
     assert entrada["subject"].startswith("Onda onda-x: "), entrada["subject"]
     assert "Limite de anexos por caso" in entrada["subject"], entrada["subject"]
-    # contrato do painel (`tools/workflow-dashboard/collect.py`, `_correlate`): cada
+    # contrato do painel (`coletor/collect.py` do PedroOS, `_correlate`): cada
     # PR e cada issue do lote achados nas notas
     assert {int(n) for n in re.findall(r"PRs? #(\d+)", entrada["notes"])} == {7, 8}, entrada["notes"]
     assert {int(n) for n in re.findall(r"(?:[Ii]ssues? |Closes )#(\d+)", entrada["notes"])} == {5, 6}, entrada["notes"]
@@ -1235,7 +1235,7 @@ def test_registro_do_pr_avulso_nomeia_pr_e_issue_sem_onda_e_sem_travessao(
     assert "PR #7" in entrada["subject"] and "issue #5" in entrada["subject"], entrada["subject"]
     assert TRAVESSAO not in entrada["subject"] and MEIA_RISCA not in entrada["subject"]
     assert "Prazo do caso, conta dias uteis" in entrada["subject"], entrada["subject"]
-    # contrato do painel (`tools/workflow-dashboard/collect.py`, `_correlate`)
+    # contrato do painel (`coletor/collect.py` do PedroOS, `_correlate`)
     assert re.search(r"\(#7\)", entrada["raw_subject"]), entrada["raw_subject"]
     assert re.search(r"PRs? #7\b", entrada["notes"]), entrada["notes"]
     assert re.search(r"(?:[Ii]ssues? |Closes )#5\b", entrada["notes"]), entrada["notes"]

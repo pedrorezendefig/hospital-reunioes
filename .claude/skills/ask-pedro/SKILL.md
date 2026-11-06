@@ -59,7 +59,7 @@ O diretor faz a metade de negócio do grill no app (ADR 0075). No card aberto de
 - `/mensagem-prd <PRD>`: a mensagem de WhatsApp que o Pedro manda ao diretor e aos usuários do módulo quando o PRD sobe: o que mudou e para que serve, texto corrido sem jargão, só o que já está em produção, com o link da página do `/divulgar` quando existir. Sai em bloco para copiar e fica registrada como comentário no PRD. O envio é do Pedro.
 - `/snapshot`: mapa factual da app (roda sozinho numa Action no push da `main`, depois do registro da subida, ADR 0068).
 - `/atualizar-app`: rebuild local docker-compose (não toca produção).
-- **Pendência humana pós-ciclo** (import na virada, credencial, ato externo): vira issue `ready-for-human` ligada ao PRD (`/ship` Passo 10); o Pedro acompanha no card **Humana** da aba Issues do **Hospital OS** (`python3 tools/workflow-dashboard/serve.py`) e fecha a issue ao concluir.
+- **Pendência humana pós-ciclo** (import na virada, credencial, ato externo): vira issue `ready-for-human` ligada ao PRD (`/ship` Passo 10); o Pedro acompanha pelo label `ready-for-human` (`/minhas-issues`) e fecha a issue ao concluir.
 
 ## Máquina nova
 

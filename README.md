@@ -33,7 +33,7 @@ Tudo que está na árvore é código, doc viva, decisão ou material de comunica
 | `hospital-reunioes/` | O app | Ver seção abaixo | `backend/`, `frontend/`, `supabase/` | Onde o código mora |
 | `local/` | **Fora do git.** Insumo humano | PDFs, transcrições e dumps não podem ir para o GitHub | `insumos/<assunto>/` que cada máquina cria | Colocar aqui o que o hospital manda |
 | `tokens/` | Tokens da **máquina**, não do app | O `/deploy` e o `/ship` falam com o Coolify | `.env.example` (versionado) e `.env` (fora do git, permissão 600) | Preencher uma vez por máquina |
-| `tools/` | Ferramentas de repo | Gates de ADR no CI, o Hospital OS e exportação do fluxo | `lint_adr.py` e os outros conferidores, com o teste de cada um ao lado; `workflow-dashboard/` (o Hospital OS, painel read-only das issues e do deploy); `instalar-fluxo/` (roteiro para instalar o fluxo em outro projeto, ADR 0068) | `python3 tools/workflow-dashboard/serve.py`; o prompt de 3 linhas está em `tools/instalar-fluxo/README.md` |
+| `tools/` | Ferramentas de repo | Gates de ADR no CI e exportação do fluxo | `lint_adr.py` e os outros conferidores, com o teste de cada um ao lado; `instalar-fluxo/` (roteiro para instalar o fluxo em outro projeto, ADR 0068) | O prompt de 3 linhas está em `tools/instalar-fluxo/README.md` |
 
 ## `docs/`
 
@@ -97,7 +97,6 @@ hospital-reunioes/supabase
 tokens
 tools
 tools/instalar-fluxo
-tools/workflow-dashboard
 ```
 <!-- cobertura:end -->
 
