@@ -2,6 +2,51 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-11-06T16:45:40-03:00",
+      "sha": "2c6894cf890a2e896cd03b86ced4ad2415dc503e",
+      "app_version": "0.220.1",
+      "subject": "PR #1465, issue #1459: O rótulo \"ontem\" do gráfico de visitantes cabe inteiro no celular",
+      "raw_subject": "chore(deploy): registro do PR avulso (#1465)",
+      "scope": [
+        "frontend"
+      ],
+      "prds": [
+        809
+      ],
+      "result": "healthy",
+      "duration_seconds": 220,
+      "services_touched": [
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        },
+        {
+          "service": "frontend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "PR avulso: PR #1465, issue #1459. Merge pela API do GitHub, um build. Registro pela Action pos-merge depois do health.",
+      "etapas": {
+        "merge_s": 3,
+        "build_s": {
+          "frontend": 181
+        },
+        "health_s": 0
+      },
+      "responsavel": "pedroribbe"
+    },
+    {
       "at": "2026-11-06T16:35:48-03:00",
       "sha": "ff43a3e0a791bbbed66c726cc292fd953d0b2a5a",
       "app_version": "0.220.0",
