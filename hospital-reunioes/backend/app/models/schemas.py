@@ -267,6 +267,10 @@ class TipoNotificacao(StrEnum):
     COMENTARIO = "COMENTARIO"
     PRAZO_PROXIMO = "PRAZO_PROXIMO"
     RESPONSAVEL_ATRIBUIDO = "RESPONSAVEL_ATRIBUIDO"
+    # Os dois que o banco aceita desde a 060 e a 116: fora daqui, a lista do
+    # sino dava 500 e o painel abria vazio com o contador marcando (#1430).
+    ACEITE_INTERNO = "ACEITE_INTERNO"
+    CONTAS_MEDICAS = "CONTAS_MEDICAS"
 
 
 class NotificacaoResponse(BaseModel):

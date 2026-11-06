@@ -34,6 +34,9 @@ export function NotificacoesDropdown() {
   const [notificacoes, setNotificacoes] = useState<Notificacao[]>([]);
   const [count, setCount] = useState(0);
   const [loading, setLoading] = useState(false);
+  // A lista falhou: o painel diz isso, e não "Sem notificações" com o sino
+  // marcando avisos (issue #1430).
+  const [erroNaLista, setErroNaLista] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
   // Guard contra o double-effect do React StrictMode em dev — o useEffect de
   // polling roda 2× no mount e sem esse ref o primeiro fetchCount sai duas
@@ -71,13 +74,16 @@ export function NotificacoesDropdown() {
   // Fetch notifications list
   const fetchNotificacoes = useCallback(async () => {
     setLoading(true);
+    setErroNaLista(false);
     try {
       const headers = await getAuthHeaders();
       if (!headers) return;
       const res = await fetch("/api/notificacoes?limit=20", { headers });
       if (res.ok) setNotificacoes(await res.json());
+      else setErroNaLista(true);
     } catch (e) {
       console.error("Erro ao buscar notificações:", e);
+      setErroNaLista(true);
     } finally {
       setLoading(false);
     }
@@ -245,6 +251,17 @@ export function NotificacoesDropdown() {
             {loading ? (
               <div className="flex items-center justify-center py-10">
                 <div className="w-5 h-5 border-2 border-slate-200 border-t-primary rounded-full animate-spin" />
+              </div>
+            ) : erroNaLista ? (
+              <div className="text-center py-10 text-slate-400">
+                <Bell className="w-8 h-8 mx-auto mb-2 text-slate-200" />
+                <p className="text-sm">Não foi possível carregar os avisos.</p>
+                <button
+                  onClick={fetchNotificacoes}
+                  className="mt-2 text-xs text-primary hover:text-primary-dark font-medium"
+                >
+                  Tentar de novo
+                </button>
               </div>
             ) : notificacoes.length === 0 ? (
               <div className="text-center py-10 text-slate-400">
