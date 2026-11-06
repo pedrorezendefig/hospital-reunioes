@@ -132,7 +132,7 @@ function IntegrationCard({
     <div className="bg-slate-50 rounded-xl border border-border/50 p-4 flex flex-col gap-3">
       {/* Top row: name + badge */}
       <div className="flex items-center justify-between">
-        <h3 className="text-sm font-bold text-text">{integration.nome}</h3>
+        <h3 className="normal-case text-sm font-bold text-text">{integration.nome}</h3>
         {integration.conectado ? (
           <span className="flex items-center gap-1 text-xs font-medium text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full">
             <CheckCircle className="w-3 h-3" />
