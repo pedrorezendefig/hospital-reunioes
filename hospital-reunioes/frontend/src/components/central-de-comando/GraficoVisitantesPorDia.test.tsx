@@ -131,18 +131,22 @@ describe("GraficoVisitantesPorDia", () => {
     expect(rotulos).toEqual(["21 ago", "30 ago", "8 set", "ontem"]);
   });
 
-  it("no celular, o rótulo 'ontem' cabe inteiro dentro do gráfico (#1459)", () => {
-    relogioEm("2026-09-18T22:00:00-03:00");
+  it.each([
+    { quando: "2026-09-18T22:00:00-03:00", ultimoRotulo: "ontem" },
+    // Às 22h o último dia ainda é o hoje de Brasília: vem a data, mais larga que "ontem".
+    { quando: "2026-09-17T22:00:00-03:00", ultimoRotulo: "17 set" },
+  ])("no celular, o último rótulo do eixo ($ultimoRotulo) cabe inteiro dentro do gráfico (#1459)", ({ quando, ultimoRotulo }) => {
+    relogioEm(quando);
 
     const { container } = render(<GraficoVisitantesPorDia pontos={vinteEOitoDias()} />);
 
     // O rótulo é centralizado no último ponto: metade dele fica à direita do
     // ponto. Em 12px, "ontem" mede uns 16px de cada lado (medido no Chrome a
-    // 370px de largura); a estimativa de 0,6em por letra dá 18px, com folga.
-    const largura = 360;
-    const metadeDoRotulo = ("ontem".length * 12 * 0.6) / 2;
+    // 370px de largura); a estimativa de 0,6em por letra fica acima disso, com folga.
+    const largura = Number(container.querySelector("svg.recharts-surface")!.getAttribute("width"));
+    const metadeDoRotulo = (ultimoRotulo.length * 12 * 0.6) / 2;
     const ultimo = [...container.querySelectorAll(".recharts-xAxis .recharts-cartesian-axis-tick-value")].at(-1)!;
-    expect(ultimo.textContent).toBe("ontem");
+    expect(ultimo.textContent).toBe(ultimoRotulo);
     expect(largura - Number(ultimo.getAttribute("x"))).toBeGreaterThanOrEqual(metadeDoRotulo);
   });
 
