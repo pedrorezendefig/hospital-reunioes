@@ -20,7 +20,16 @@ import { ChatDaTecnologia, Fala } from "./ChatDaTecnologia";
 import { OQueMudaDaDemanda } from "./OQueMudaDaDemanda";
 import { SeloDeEtapa } from "./SeloDeEtapa";
 import { conversaValida, FalaDoChat, URL_DO_CHAT_DA_ABA, urlDaConversa } from "./chat";
-import { Demanda, ETAPA_CLASSE, ETAPA_ROTULO, FALHA_DE_CONEXAO, temSelo, textoDoSelo } from "./demandas";
+import {
+  CLASSIFICACAO_CLASSE,
+  CLASSIFICACAO_ROTULO,
+  Demanda,
+  ETAPA_CLASSE,
+  ETAPA_ROTULO,
+  FALHA_DE_CONEXAO,
+  temSelo,
+  textoDoSelo,
+} from "./demandas";
 
 export const NOVA_CONVERSA = "Nova conversa";
 export const VOLTAR_PARA_A_LISTA = "Voltar às conversas";
@@ -43,8 +52,18 @@ function EtapaNaLista({ demanda }: { demanda: Demanda }) {
   const comSelo = temSelo(demanda);
   const classe = comSelo && demanda.etapa ? ETAPA_CLASSE[demanda.etapa] : ETAPA_CLASSE.registrada;
   return (
-    <span className={`self-start px-2 py-0.5 rounded text-xs font-medium ${classe}`}>
+    <span className={`px-2 py-0.5 rounded text-xs font-medium ${classe}`}>
       {comSelo ? textoDoSelo(demanda) : ETAPA_ROTULO.registrada}
+    </span>
+  );
+}
+
+/** Bug ou Melhoria, ao lado da Etapa (issue #1438). O pedido de antes do chat fica sem. */
+function ClassificacaoNaLista({ demanda }: { demanda: Demanda }) {
+  if (!demanda.classificacao) return null;
+  return (
+    <span className={`px-2 py-0.5 rounded text-xs font-medium ${CLASSIFICACAO_CLASSE[demanda.classificacao]}`}>
+      {CLASSIFICACAO_ROTULO[demanda.classificacao]}
     </span>
   );
 }
@@ -183,7 +202,10 @@ export function ConversasDaTecnologia({ token }: { token: string | null }) {
                     }`}
                   >
                     <span className="font-medium text-text-primary line-clamp-2">{demanda.titulo}</span>
-                    <EtapaNaLista demanda={demanda} />
+                    <span className="flex flex-wrap items-center gap-1.5">
+                      <EtapaNaLista demanda={demanda} />
+                      <ClassificacaoNaLista demanda={demanda} />
+                    </span>
                   </button>
                 </li>
               ))}

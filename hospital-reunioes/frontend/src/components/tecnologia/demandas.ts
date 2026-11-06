@@ -65,6 +65,24 @@ export type Demanda = {
    * veio e não repete a regra.
    */
   versao?: string | null;
+  /**
+   * Se o pedido é bug ou melhoria (issue #1438), já traduzido do Tipo pelo
+   * backend. Nulo, ou ausente, é o pedido de antes do chat: fica sem selo.
+   */
+  classificacao?: Classificacao | null;
+};
+
+export type Classificacao = "bug" | "melhoria";
+
+/** O selo da lista ao lado da Etapa (issue #1438). */
+export const CLASSIFICACAO_ROTULO: Record<Classificacao, string> = {
+  bug: "Bug",
+  melhoria: "Melhoria",
+};
+
+export const CLASSIFICACAO_CLASSE: Record<Classificacao, string> = {
+  bug: "bg-rose-50 text-rose-700",
+  melhoria: "bg-violet-50 text-violet-700",
 };
 
 /** Uma parte da entrega: o que ela muda e em que pé está. */

@@ -127,6 +127,7 @@ def _para_a_lista(demandas: list[dict]) -> list[dict]:
             "tem_vinculo": bool(d.get("github_issue_numero")),
             "partes": _partes_visiveis(d),
             "versao": versao_da_entrega(d),
+            "classificacao": chat_tecnologia.CLASSIFICACAO_DO_TIPO.get(str(d.get("tipo") or "")),
         }
         for d in demandas
     ]
@@ -398,8 +399,9 @@ async def _comecar_a_melhoria(
     fala da IA ja e a primeira pergunta, com as duas opcoes e a recomendada.
 
     A Demanda nasce depois do turno, como no bug: um turno que falhou nao deixa
-    Demanda vazia. Ela nasce Novo, no primeiro Produto e com o titulo
-    provisorio; o titulo de verdade vem do resumo.
+    Demanda vazia. Ela nasce Novo, no primeiro Produto e com o titulo que o
+    modelo deu ja na primeira pergunta (issue #1438); sem ele, com o titulo
+    provisorio. Os turnos seguintes e o resumo podem refinar.
     """
     resultado = await ai_processor.chamar_ia_fora_do_loop(
         chat_tecnologia.turno_da_melhoria, mensagens=falas, kit=carregar_kit()
@@ -412,7 +414,7 @@ async def _comecar_a_melhoria(
     demanda = _nascer_a_demanda(
         supabase,
         ator=ator,
-        titulo=chat_tecnologia.TITULO_SEM_RESPOSTA,
+        titulo=resultado.titulo or chat_tecnologia.TITULO_SEM_RESPOSTA,
         tipo=chat_tecnologia.TIPO_DA_CLASSIFICACAO["melhoria"],
         produto=produtos[0],
     )
@@ -649,6 +651,10 @@ async def _turno_da_melhoria(
     )
     if linha is None:
         _conflito(MOTIVO_CHAT_MUDOU)
+    # O titulo acompanha a conversa a cada turno em que o modelo o der (issue
+    # #1438); o turno sem titulo deixa o que a Demanda tem.
+    if resultado.titulo and resultado.titulo != demanda.get("titulo"):
+        supabase.table(TABELA_DEMANDAS).update({"titulo": resultado.titulo}).eq("id", demanda_id).execute()
     aviso = _prints_do_turno(supabase, demanda=demanda, print_ids=payload.prints, ator=ator)
     return _chat_para_a_tela(supabase, demanda_id, linha, aviso_dos_anexos=aviso)
 
