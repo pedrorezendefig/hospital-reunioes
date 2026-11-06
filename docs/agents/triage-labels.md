@@ -38,7 +38,7 @@ Família **descritiva de tamanho** (não de estado), aplicada pelo `/to-issues` 
 | `fatia:M` | Média — meio período típico (fatia vertical completa, escopo conhecido) |
 | `fatia:G` | Grande — dia cheio ou mais; maior risco/incerteza (muitas camadas, UI nova, integração externa) |
 
-O Hospital OS agrupa esses labels no filtro `fatia:` da aba Issues, e a `/onda-enxuta` escolhe por eles o esforço do implementador. Tempo típico, lead time por tamanho e caminho crítico saíram com o Plano (ADR 0068). O vocabulário do painel (fase, funil, raia, tentativa) fica no README de `tools/workflow-dashboard/`.
+A `/onda-enxuta` escolhe por esses labels o esforço do implementador. Tempo típico, lead time por tamanho e caminho crítico saíram com o Plano (ADR 0068).
 
 ## Labels ortogonais (mantidas do fluxo anterior)
 

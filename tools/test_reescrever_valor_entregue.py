@@ -16,9 +16,6 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import reescrever_valor_entregue as rv  # noqa: E402
 
-sys.path.insert(0, str(Path(__file__).resolve().parent / "workflow-dashboard"))
-from collect import resumo_funcional  # noqa: E402
-
 PARAGRAFO = "o secretário baixa a Ata pronta em PDF com um clique e manda por email."
 
 CABECA = "<!-- automacao -->\nCloses #812\n\n"
@@ -37,8 +34,6 @@ def test_antes_e_depois_viram_o_que_muda_e_o_resto_fica_igual():
     novo = rv.reescrever_corpo(CORPO_ANTIGO, PARAGRAFO)
 
     assert novo == CABECA + "## 💬 Valor entregue\n\n**O que muda:** " + PARAGRAFO + "\n\n" + RESTO
-    # o hover do Hospital OS lê o parágrafo novo
-    assert resumo_funcional(novo)["o_que_muda"] == PARAGRAFO
 
 
 def test_antes_e_depois_separados_por_linha_em_branco_viram_um_paragrafo_so():
@@ -59,7 +54,6 @@ def test_pr_sem_a_secao_ganha_valor_entregue_logo_abaixo_do_marcador():
         + PARAGRAFO
         + "\n\nRegistro do deploy de producao.\n\nCloses #942\n"
     )
-    assert resumo_funcional(novo)["o_que_muda"] == PARAGRAFO
 
 
 class GhFalso:
@@ -92,7 +86,7 @@ def test_pr_ja_reescrito_e_pulado_na_segunda_execucao(tmp_path, capsys):
 
     assert rv.main(["--paragrafos", _paragrafos(tmp_path)], gh=gh) == 0
     assert gh.escritas == [812]
-    assert resumo_funcional(gh.corpos[812])["o_que_muda"] == PARAGRAFO
+    assert gh.corpos[812] == rv.reescrever_corpo(CORPO_ANTIGO, PARAGRAFO)
     assert gh.corpos[900] == ja_feito
 
     # segunda execução: os dois já têm o parágrafo, ninguém é gravado
