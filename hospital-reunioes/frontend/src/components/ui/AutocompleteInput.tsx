@@ -162,7 +162,7 @@ export function AutocompleteInput({
                   aria-selected={isSelected}
                   onMouseEnter={() => setHighlight(idx)}
                   onClick={() => handleSelect(opt)}
-                  className={`w-full px-3 py-2 text-sm text-left transition-colors ${
+                  className={`w-full px-3 py-2 text-sm text-left normal-case transition-colors ${
                     isHighlighted ? "bg-slate-50" : "hover:bg-slate-50"
                   } ${isSelected ? "text-slate-900 font-medium" : "text-slate-700"}`}
                 >

@@ -20,9 +20,11 @@
  *    tela anuncia "Encerrar" em vez de soletrar, a busca da página acha
  *    "encerrar" e a tradução do navegador não recebe uma sopa de maiúsculas.
  *    Escrever "ENCERRAR" no JSX perderia tudo isso, e sem volta.
- * 2. Navegação fica de fora. A porta para outra tela não é dado nem ação, no
- *    resto da casa nenhuma navegação é caixa alta, e a barra de atalhos ainda
- *    é a única linha do módulo sem folga de largura (RN-77, D-16).
+ * 2. Desde a ADR 0080 o menu do aplicativo sai em caixa alta pela regra base
+ *    do `globals.css`. A barra de atalhos é a exceção e leva `normal-case`:
+ *    é a única linha do módulo sem folga de largura (RN-77, D-16), e medida
+ *    no navegador com a fonte da casa ela passa de 564px para 619px em caixa
+ *    alta, contra os 616px que sobram a 1024px (issue #1454).
  */
 
 /**

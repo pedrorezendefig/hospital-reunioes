@@ -254,7 +254,7 @@ export default function PerfilPage() {
 
           {/* Name & badges */}
           <div className="flex-1 min-w-0">
-            <h1 className="text-2xl font-bold text-text truncate">
+            <h1 className="text-2xl font-bold text-text truncate normal-case">
               {participante.nome_completo}
             </h1>
             <p className="text-text-secondary mt-0.5">

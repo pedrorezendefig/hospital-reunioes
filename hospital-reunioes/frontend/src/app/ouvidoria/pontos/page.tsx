@@ -273,7 +273,7 @@ export default function PontosDeEscutaPage() {
       ) : (
         grupos.map((grupo) => (
           <section key={grupo.setor} className="mb-6">
-            <h2 className="text-sm font-bold text-slate-700 mb-2">{grupo.setor}</h2>
+            <h2 className="text-sm font-bold text-slate-700 mb-2 normal-case">{grupo.setor}</h2>
             <div className="space-y-3">
               {grupo.pontos.map((ponto) => (
                 <div
@@ -314,7 +314,7 @@ export default function PontosDeEscutaPage() {
                           setEditando(ponto.id);
                           setRotuloEditado(ponto.ponto);
                         }}
-                        className="text-left font-semibold text-slate-800 hover:text-primary"
+                        className="text-left normal-case font-semibold text-slate-800 hover:text-primary"
                       >
                         {ponto.ponto}
                       </button>

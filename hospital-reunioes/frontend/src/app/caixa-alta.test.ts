@@ -16,6 +16,8 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { afterEach, beforeAll, describe, expect, it } from "vitest";
 
+import { SELETOR_DO_TEXTO_CURTO, apareceComoFoiEscrito } from "@/lib/caixa-alta";
+
 const CSS = readFileSync(resolve(process.cwd(), "src/app/globals.css"), "utf8");
 
 /** O miolo de cada `@layer base { ... }` do arquivo, pelas chaves casadas. */
@@ -74,6 +76,16 @@ describe("a regra base existe no globals.css", () => {
     // Sem este piso, um extrator que devolvesse vazio deixaria todo teste de
     // "fica em caixa mista" verde sem ter olhado para nada.
     expect(regras.length).toBeGreaterThanOrEqual(3);
+  });
+
+  it("o seletor da regra é o mesmo que os testes de componente usam", () => {
+    // `lib/caixa-alta` guarda a lista para o teste de componente saber o que
+    // grita. Se o CSS ganhar ou perder um elemento sem ela, o teste do dado
+    // passa a olhar para a regra errada.
+    const normalizar = (seletor: string) =>
+      seletor.split(",").map((parte) => parte.trim().replace(/'/g, '"')).sort();
+    const daRegra = regras.find((regra) => regra.style.getPropertyValue("text-transform") === "uppercase");
+    expect(normalizar(daRegra!.selectorText)).toEqual(normalizar(SELETOR_DO_TEXTO_CURTO));
   });
 
   it("não muda o tamanho da fonte", () => {
@@ -135,5 +147,20 @@ describe("o Texto corrido fica com maiúscula e minúscula", () => {
   it.each(["input", "textarea", "select"])("o que se digita no %s dentro do rótulo", (campo) => {
     montar(`<label>Nome <${campo} id='alvo'></${campo}></label>`);
     expect(caixaEfetiva(document.getElementById("alvo")!)).toBe("none");
+  });
+});
+
+describe("apareceComoFoiEscrito, a régua dos testes de componente", () => {
+  it.each([
+    ["dado com normal-case dentro do título", "<h1>Reunião <span class='normal-case' id='alvo'>Comitê de Ética</span></h1>", true],
+    ["dado solto dentro do título", "<h1>Reunião <span id='alvo'>Comitê de Ética</span></h1>", false],
+    ["dado no botão inteiro com normal-case", "<button class='normal-case'><span id='alvo'>Maria Souza</span></button>", true],
+    ["dado no parágrafo do cartão clicável", "<button><p id='alvo'>Maria Souza</p></button>", true],
+    ["dado sob a classe uppercase", "<p class='uppercase'><span id='alvo'>Maria Souza</span></p>", false],
+    ["dado em texto corrido", "<div><span id='alvo'>Maria Souza</span></div>", true],
+    ["etiqueta dentro de um botão com normal-case", "<button class='normal-case'><span class='etiqueta' id='alvo'>Novo</span></button>", false],
+  ])("%s", (_nome, html, esperado) => {
+    montar(html);
+    expect(apareceComoFoiEscrito(document.getElementById("alvo")!)).toBe(esperado);
   });
 });

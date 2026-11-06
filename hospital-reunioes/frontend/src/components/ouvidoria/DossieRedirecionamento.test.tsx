@@ -324,7 +324,7 @@ describe("a linha do tempo distingue o redirecionamento da devolução (ADR 0055
       movimentoDeRedirecionamento(),
     ]);
 
-    await waitFor(() => expect(screen.getByText("Devolvido pela área Recepcao")).toBeTruthy());
+    await waitFor(() => expect(screen.getByRole("heading", { name: /Devolvido pela área Recepcao/ })).toBeTruthy());
     const trilha = await screen.findByRole("list", { name: "Linha do tempo do caso" });
     expect(within(trilha).getByText("Redirecionado pelo ouvidor (de Recepcao)")).toBeTruthy();
   });

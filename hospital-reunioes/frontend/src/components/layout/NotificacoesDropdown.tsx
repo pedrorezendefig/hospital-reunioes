@@ -277,7 +277,7 @@ export function NotificacoesDropdown() {
                   <button
                     key={notif.id}
                     onClick={() => handleMarkRead(notif)}
-                    className={`flex items-start gap-3 w-full px-4 py-3 text-left transition-colors hover:bg-slate-50 border-b border-slate-50 last:border-0 ${
+                    className={`flex items-start gap-3 w-full px-4 py-3 text-left normal-case transition-colors hover:bg-slate-50 border-b border-slate-50 last:border-0 ${
                       !notif.lida ? "bg-primary/[0.02]" : ""
                     }`}
                   >

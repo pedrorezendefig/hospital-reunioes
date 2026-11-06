@@ -159,7 +159,7 @@ export function ResponsavelInlineCombobox({
           setTermo("");
         }}
         disabled={disabled}
-        className={`group w-full text-left rounded-lg px-2 py-1 -mx-2 -my-1 border border-transparent transition-colors ${
+        className={`group w-full text-left normal-case rounded-lg px-2 py-1 -mx-2 -my-1 border border-transparent transition-colors ${
           disabled
             ? "cursor-not-allowed opacity-60"
             : "hover:bg-primary/5 hover:border-primary/20 cursor-pointer"
@@ -223,7 +223,7 @@ export function ResponsavelInlineCombobox({
                         type="button"
                         onClick={() => escolherParticipante(p)}
                         onMouseEnter={() => setHighlight(i)}
-                        className={`w-full flex items-center gap-2 px-3 py-1.5 text-left text-xs transition-colors ${
+                        className={`w-full flex items-center gap-2 px-3 py-1.5 text-left normal-case text-xs transition-colors ${
                           isHighlighted ? "bg-primary/5" : "hover:bg-slate-50"
                         }`}
                       >

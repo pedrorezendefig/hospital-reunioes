@@ -1083,7 +1083,7 @@ export function Dossie({ protocolo, token }: DossieProps) {
                   corrente já usa neste arquivo. */}
               <div className="min-w-0">
                 <h3 className="font-medium">
-                  {`Devolvido pela área ${devolucao.setor}`}
+                  Devolvido pela área <span className="normal-case">{devolucao.setor}</span>
                   {devolucao.vezes > 1 && (
                     <span className="font-normal">{` (devolvido ${devolucao.vezes} vezes)`}</span>
                   )}
@@ -1391,7 +1391,7 @@ export function Dossie({ protocolo, token }: DossieProps) {
               />
               <span>
                 <span className="font-semibold">Sigilo reforçado</span>
-                <span className="block text-xs text-slate-500 mt-0.5">
+                <span className="block text-xs text-slate-500 mt-0.5 normal-case">
                   {tipoEscolhido !== "" && ehSigilosoPorNatureza(tipoEscolhido)
                     ? "Este tipo é sigiloso por natureza e o sigilo não pode ser retirado."
                     : "Marque para restringir o caso ao Ouvidor e à Diretoria Executiva. Desmarque para devolver o caso ao painel de todos."}
@@ -1483,7 +1483,7 @@ export function Dossie({ protocolo, token }: DossieProps) {
                     <button
                       onClick={() => abrirAnexo(anexo)}
                       disabled={abrindoAnexo === anexo.id}
-                      className="flex items-center gap-2 w-full text-left text-sm text-slate-700 px-3 py-2 rounded-lg bg-slate-50 hover:bg-slate-100 disabled:opacity-50 transition-colors"
+                      className="flex items-center gap-2 w-full text-left normal-case text-sm text-slate-700 px-3 py-2 rounded-lg bg-slate-50 hover:bg-slate-100 disabled:opacity-50 transition-colors"
                     >
                       {abrindoAnexo === anexo.id ? (
                         <Loader2 className="w-3.5 h-3.5 shrink-0 animate-spin text-slate-400" />

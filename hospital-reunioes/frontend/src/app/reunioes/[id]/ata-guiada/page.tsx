@@ -205,7 +205,7 @@ export default function AtaGuiadaPage() {
                 <Sparkles className="w-3.5 h-3.5" strokeWidth={2} />
                 <span className="text-xs font-semibold uppercase tracking-wide">Ata Guiada</span>
               </div>
-              <h1 className="text-base font-bold text-slate-900 truncate">
+              <h1 className="text-base font-bold text-slate-900 truncate normal-case">
                 {titulo}
                 {dataFmt && <span className="text-slate-400 font-normal"> · {dataFmt}</span>}
               </h1>
