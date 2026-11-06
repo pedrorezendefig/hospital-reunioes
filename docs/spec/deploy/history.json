@@ -2,6 +2,54 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-11-06T15:37:13-03:00",
+      "sha": "fa8a038f1cc5ce700b41ece40f478347833edcef",
+      "app_version": "0.218.0",
+      "subject": "Onda onda-tec-onda1: Titulo da melhoria desde a primeira resposta e selo Bug ou Melhoria na lista",
+      "raw_subject": "chore(deploy): registro da onda onda-tec-onda1 (#1444)",
+      "scope": [
+        "backend",
+        "frontend"
+      ],
+      "prds": [
+        1436
+      ],
+      "result": "healthy",
+      "duration_seconds": 262,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        },
+        {
+          "service": "frontend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "onda-enxuta onda-tec-onda1: PR #1444 (issue #1438), mergeados PR a PR. Merge pela API do GitHub, um build. Registro pela Action pos-merge depois do health.",
+      "etapas": {
+        "merge_s": 3,
+        "build_s": {
+          "backend": 17,
+          "frontend": 204
+        },
+        "health_s": 2
+      },
+      "responsavel": "pedrorezendefig"
+    },
+    {
       "at": "2026-11-06T15:31:26-03:00",
       "sha": "32a9709c39285ccfdc2d22ba25bf74221c9c212d",
       "app_version": "0.217.1",

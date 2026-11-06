@@ -1,8 +1,8 @@
 {
   "schema_version": "1.0",
-  "updated_at": "2026-11-06T15:31:26-03:00",
-  "updated_by": "pr-avulso@fechar_onda",
-  "last_app_version": "0.217.1",
+  "updated_at": "2026-11-06T15:37:13-03:00",
+  "updated_by": "onda-enxuta@fechar_onda",
+  "last_app_version": "0.218.0",
   "production": {
     "domain_root": "hospitalsaomatheus.cloud",
     "vps_ip": "31.97.29.32",
@@ -21,11 +21,11 @@
       "port": 8000,
       "health_path": "/api/health",
       "status": "healthy",
-      "last_deploy_sha": "32a9709c39285ccfdc2d22ba25bf74221c9c212d",
-      "last_deploy_at": "2026-11-06T15:31:26-03:00",
+      "last_deploy_sha": "fa8a038f1cc5ce700b41ece40f478347833edcef",
+      "last_deploy_at": "2026-11-06T15:37:13-03:00",
       "last_health_check": {
-        "at": "2026-11-06T15:31:26-03:00",
-        "latency_ms": 80,
+        "at": "2026-11-06T15:37:13-03:00",
+        "latency_ms": 624,
         "http_status": 200,
         "body_ok": true
       },
@@ -39,15 +39,15 @@
       "port": 3000,
       "health_path": null,
       "status": "healthy",
-      "last_deploy_sha": "68e1b2fb8ed3b6494ba25e7fcb32204f6c95f4ad",
-      "last_deploy_at": "2026-11-06T15:24:42-03:00",
+      "last_deploy_sha": "fa8a038f1cc5ce700b41ece40f478347833edcef",
+      "last_deploy_at": "2026-11-06T15:37:13-03:00",
       "last_health_check": {
-        "at": "2026-11-06T15:24:42-03:00",
-        "latency_ms": 2475,
+        "at": "2026-11-06T15:37:13-03:00",
+        "latency_ms": 1508,
         "http_status": 200,
         "body_ok": true
       },
-      "build_duration_seconds": 241,
+      "build_duration_seconds": 204,
       "env_count": 5
     },
     {
@@ -60,7 +60,7 @@
       "last_deploy_sha": "93870744",
       "last_deploy_at": "2026-09-23T13:21:42-03:00",
       "last_health_check": {
-        "at": "2026-11-06T15:31:26-03:00",
+        "at": "2026-11-06T15:37:13-03:00",
         "latency_ms": null,
         "http_status": null,
         "body_ok": true
@@ -207,9 +207,9 @@
     }
   ],
   "last_run": {
-    "mode": "pr-avulso",
-    "sha": "32a9709c39285ccfdc2d22ba25bf74221c9c212d",
+    "mode": "onda-enxuta",
+    "sha": "fa8a038f1cc5ce700b41ece40f478347833edcef",
     "result": "healthy",
-    "duration_seconds": 64
+    "duration_seconds": 262
   }
 }
