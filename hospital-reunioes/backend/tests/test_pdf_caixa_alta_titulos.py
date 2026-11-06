@@ -89,3 +89,67 @@ def test_topico_escrito_pela_ia_chega_a_ata_como_foi_gravado(htmls):
     _ata_pdf()
 
     assert f"4.1 {TOPICO_DA_IA}</p>" in htmls[-1]
+
+
+# ─────────────────────────────── POP ───────────────────────────────
+
+# A seção vem do modelo de POP que o hospital anexou: o agente segue a
+# estrutura dele, e o título chega com a grafia do modelo. O subtítulo dentro
+# do conteúdo é o `##` que o agente usa em sub-blocos.
+SECAO_DO_MODELO = "Objetivo e campo de aplicação"
+SUBTITULO_DA_IA = "Quando lavar as mãos"
+PARAGRAFO_DA_SECAO = "Padronizar a higienização das mãos nas unidades assistenciais."
+
+
+def _pop_pdf() -> bytes:
+    from app.services.pops_pdf_service import gerar_pdf_pop
+
+    versao = {
+        "id": "v-1",
+        "pop_id": "pop-1",
+        "numero_versao": "1.0",
+        "estado": "EM_REVISAO",
+        "rascunho": {
+            "secoes": [
+                {
+                    "id": "sec-obj",
+                    "titulo": SECAO_DO_MODELO,
+                    "tipo": "texto",
+                    "conteudo": f"{PARAGRAFO_DA_SECAO}\n\n## {SUBTITULO_DA_IA}\n\nAntes de tocar o paciente.",
+                },
+            ]
+        },
+    }
+    pop = {
+        "codigo": "HSM_CTI-001",
+        "nome": "Higienização das Mãos",
+        "criticidade": "CRITICA",
+        "periodicidade_revisao": "1_ano",
+        "elaborador_id": "P1",
+        "created_at": "2026-06-10T12:00:00+00:00",
+    }
+    setor = {"id": "s-cti", "nome": "Coordenação do CTI", "sigla": "CTI"}
+    return gerar_pdf_pop(pop=pop, setor=setor, versao=versao, nomes_designados={"P1": "Pessoa P1"})
+
+
+def test_titulos_do_pop_saem_em_caixa_alta_no_pdf(htmls):
+    texto = _texto_do_pdf(_pop_pdf())
+
+    assert "PROCEDIMENTO OPERACIONAL PADRÃO" in texto
+    assert "1. IDENTIFICAÇÃO" in texto
+    assert f"2. {SECAO_DO_MODELO.upper()}" in texto
+    assert SUBTITULO_DA_IA.upper() in texto
+
+
+def test_texto_corrido_do_pop_continua_com_maiuscula_e_minuscula(htmls):
+    texto = _texto_do_pdf(_pop_pdf())
+
+    assert PARAGRAFO_DA_SECAO in texto
+    assert "Antes de tocar o paciente." in texto
+
+
+def test_secao_escrita_pela_ia_chega_ao_pop_como_foi_gravada(htmls):
+    _pop_pdf()
+
+    assert f"<h2>2. {SECAO_DO_MODELO}</h2>" in htmls[-1]
+    assert f">{SUBTITULO_DA_IA}</h2>" in htmls[-1]
