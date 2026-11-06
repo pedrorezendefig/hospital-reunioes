@@ -72,3 +72,73 @@ class TestCustoAoAbrirAConversa:
         custo = client.get(f"{CHAT}/{demanda_id}").json()["custo"]
 
         assert custo["custo_usd"] == 1.84
+
+    def test_chamada_com_tokens_e_custo_zero_deixa_o_custo_nulo(self, monkeypatch):
+        """Custo zero com tokens é o modelo sem preço na tabela: somar o zero
+        daria um valor menor que o de verdade, com cara de exato."""
+        client, _, demanda_id = _conversa_com(
+            monkeypatch,
+            lambda d: _chamada(d, custo=1.20, criado_em="2026-11-06T10:00:00Z"),
+            lambda d: _chamada(d, custo=0, modelo="claude-fable-6-0", criado_em="2026-11-06T10:05:00Z"),
+        )
+
+        custo = client.get(f"{CHAT}/{demanda_id}").json()["custo"]
+
+        assert custo == {"modelo": "Fable 6.0", "custo_usd": None}
+
+    def test_chamadas_de_outra_demanda_nao_entram_na_soma(self, monkeypatch):
+        client, sb, demanda_id = _conversa_com(
+            monkeypatch,
+            lambda d: _chamada(d, custo=0.50, criado_em="2026-11-06T10:00:00Z"),
+        )
+        _chamadas(sb).append(_chamada("outra-demanda", custo=9.99, criado_em="2026-11-06T10:01:00Z"))
+        _chamadas(sb).append(_chamada(None, custo=3.00, criado_em="2026-11-06T10:02:00Z"))
+
+        custo = client.get(f"{CHAT}/{demanda_id}").json()["custo"]
+
+        assert custo["custo_usd"] == 0.5
+
+    def test_o_modelo_exibido_e_o_da_chamada_mais_recente(self, monkeypatch):
+        """A gravação fora de ordem no banco não engana: vale o `criado_em`."""
+        client, _, demanda_id = _conversa_com(
+            monkeypatch,
+            lambda d: _chamada(d, custo=0.10, modelo="claude-opus-5-5", criado_em="2026-11-06T10:05:00Z"),
+            lambda d: _chamada(d, custo=0.10, modelo="claude-sonnet-5-5", criado_em="2026-11-06T10:00:00Z"),
+        )
+
+        custo = client.get(f"{CHAT}/{demanda_id}").json()["custo"]
+
+        assert custo["modelo"] == "Opus 5.5"
+
+    def test_sem_chamada_nenhuma_nao_ha_custo(self, monkeypatch):
+        client, _, demanda_id = _conversa_com(monkeypatch)
+
+        assert client.get(f"{CHAT}/{demanda_id}").json()["custo"] is None
+
+
+class TestCustoEmCadaTurno:
+    def test_o_turno_devolve_o_custo_ja_com_a_chamada_dele(self, monkeypatch):
+        client, _, demanda_id = _conversa_com(
+            monkeypatch,
+            lambda d: _chamada(d, custo=1.812, criado_em="2026-11-06T10:00:00Z"),
+        )
+        monkeypatch.setattr(settings, "llm_model_planejamento", "claude-opus-5-5")
+        # 1000*4 + 500*20 + 20000*0,20 + 2000*5 = 28000 por milhão (Opus 5.5)
+        _ia(monkeypatch, _turno(), usage=_uso(entrada=1000, saida=500, lidos=20000, escritos=2000))
+
+        resposta = client.post(f"{CHAT}/{demanda_id}", json={"texto": "Na Ouvidoria"})
+
+        assert resposta.status_code == 200, resposta.text
+        assert resposta.json()["custo"] == {"modelo": "Opus 5.5", "custo_usd": 1.84}
+
+
+class TestCustoForaDaLista:
+    def test_a_lista_lateral_nao_traz_custo(self, monkeypatch):
+        client, _, _ = _conversa_com(
+            monkeypatch,
+            lambda d: _chamada(d, custo=1.84, criado_em="2026-11-06T10:00:00Z"),
+        )
+
+        [item] = client.get(CHAT).json()
+
+        assert not any("custo" in chave or "modelo" in chave for chave in item)
