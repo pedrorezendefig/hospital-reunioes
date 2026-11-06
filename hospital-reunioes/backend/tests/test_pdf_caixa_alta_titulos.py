@@ -216,3 +216,28 @@ def test_sugestao_escrita_pela_ia_chega_ao_relatorio_como_foi_gravada():
     html = ouvidoria_relatorio.montar_html(_registro_mensal())
 
     assert f'<div class="titulo">{SUGESTAO_DA_IA}</div>' in html
+
+
+# ───────────────────────── cartaz da Ouvidoria ─────────────────────────
+
+PONTO_DE_ESCUTA = {"codigo": "AB2CD3", "setor": "Recepção Central", "ponto": "Poltrona 12"}
+
+
+def test_titulo_do_cartaz_da_ouvidoria_sai_em_caixa_alta_no_pdf():
+    from app.services.ouvidoria_pontos import pdf_do_cartaz
+
+    texto = _texto_do_pdf(pdf_do_cartaz(PONTO_DE_ESCUTA))
+
+    assert "SUA OPINIÃO MELHORA NOSSO ATENDIMENTO." in texto
+
+
+def test_texto_corrido_do_cartaz_da_ouvidoria_continua_com_maiuscula_e_minuscula():
+    from app.services.ouvidoria_pontos import html_do_cartaz, pdf_do_cartaz
+
+    texto = _texto_do_pdf(pdf_do_cartaz(PONTO_DE_ESCUTA))
+
+    assert "Fale com a gente. Leva menos de um minuto, e você pode ser anônimo." in texto
+    assert "Aponte a câmera do celular para o código acima." in texto
+    # O setor é digitado pela equipe: sai como foi escrito.
+    assert "Recepção Central" in texto
+    assert "Sua opinião melhora nosso atendimento." in html_do_cartaz(PONTO_DE_ESCUTA)
