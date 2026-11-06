@@ -76,7 +76,7 @@ Regras da pasta mãe: uma subpasta por contexto de domínio (`reunioes/`, `pops/
 
 ### 2. Telas reais
 
-Capture as telas com o **`playwright-cli`** contra o app local com o código do PRD, com **dados de exemplo** do hospital, verossímeis e fictícios (CME, Farmácia, UTI; nomes que não existem). Nunca dado real: o repositório é público. O preparo do app local (Supabase, `/atualizar-app`, login, seed) é o da `/manual`: `.claude/skills/manual/references/prints.md`.
+Capture as telas com o **`playwright-cli`** contra o app local com o código do PRD, com **dados de exemplo** do hospital, verossímeis e fictícios (CME, Farmácia, UTI; nomes que não existem). Nunca dado real: o repositório é público. Antes de capturar: Supabase local no ar (`supabase start` em `hospital-reunioes/`; se o PostgREST não subir, `supabase stop` e `supabase start`), a stack com o código do PRD (`bash .claude/skills/atualizar-app/scripts/apply.sh`, conferindo que a tela nova está no build) e, para tela de dentro do app, login com a senha do `DEFAULT_USER_PASSWORD` do `.env` local, nunca a de produção.
 
 ```bash
 playwright-cli open http://localhost:3000/<rota>

@@ -36,7 +36,7 @@ jobs:
         # qualquer um dos dois. Ferramenta é o que fica fora de
         # hospital-reunioes/, a mesma fronteira da subida (fechar_onda.py);
         # nenhum job daqui a consome, porque os testes de tools/ rodam no
-        # manual.yml. Se o git diff falhar, o passo falha e os jobs rodam (ver
+        # ferramentas.yml. Se o git diff falhar, o passo falha e os jobs rodam (ver
         # o if deles).
         id: diff
         env:

@@ -114,9 +114,10 @@ Só `status: accepted` vale como decisão; `superseded` é histórico (CLAUDE.md
 | [0026](0026-percepcao-de-valor-em-video-hyperframes.md) | accepted | Percepção de Valor passa a ser vídeo renderizado (HyperFrames); o HTML interativo com stepper é aposentado |
 | [0044](0044-layout-do-repositorio.md) | accepted | Layout do repositório: o que fica no git, onde fica, e o que vive fora |
 | [0045](0045-video-e-pagina-de-divulgacao-sao-uma-entrega-so.md) | accepted | Vídeo de percepção e página de divulgação são uma entrega só, numa pasta só por PRD |
-| [0057](0057-manual-do-usuario-site-unico-por-modulo-e-fatia-de-manual-por-prd.md) | accepted | Manual do usuário: um site por módulo, vídeo por tarefa, fatia de manual por PRD (emenda 0044 e 0056) |
-| [0072](0072-manual-com-um-video-de-visao-geral-por-modulo-e-orcamento-de-40-mb.md) | accepted | Manual com um Vídeo de visão geral por módulo e orçamento de 40 MB (emenda 0057) |
-| [0076](0076-manual-video-narrado-por-modulo-em-remotion-refeito-a-cada-prd-e-tecnologia-no-manual.md) | accepted | Manual: um vídeo narrado por módulo, em Remotion, refeito a cada PRD, e a Tecnologia no Manual (emenda 0057, 0072 e 0075) |
+| [0057](0057-manual-do-usuario-site-unico-por-modulo-e-fatia-de-manual-por-prd.md) | superseded | Manual do usuário: um site por módulo, vídeo por tarefa, fatia de manual por PRD (emenda 0044 e 0056) |
+| [0072](0072-manual-com-um-video-de-visao-geral-por-modulo-e-orcamento-de-40-mb.md) | superseded | Manual com um Vídeo de visão geral por módulo e orçamento de 40 MB (emenda 0057) |
+| [0076](0076-manual-video-narrado-por-modulo-em-remotion-refeito-a-cada-prd-e-tecnologia-no-manual.md) | superseded | Manual: um vídeo narrado por módulo, em Remotion, refeito a cada PRD, e a Tecnologia no Manual (emenda 0057, 0072 e 0075) |
+| [0078](0078-manual-do-usuario-aposentado.md) | accepted | Manual do usuário aposentado: site, item Ajuda, skills e Fatia de manual saem da plataforma (substitui 0057, 0072 e 0076) |
 | [0046](0046-readme-e-o-mapa-do-repositorio.md) | accepted | O `README.md` da raiz é o mapa do repositório |
 | [0047](0047-apagar-manifestacao-e-retencao-antecipada-nao-delete.md) | accepted | Apagar manifestação é retenção antecipada, não DELETE |
 

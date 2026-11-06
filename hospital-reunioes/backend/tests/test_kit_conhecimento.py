@@ -478,14 +478,11 @@ class TestOTextoDaAbaContaATelaDeHoje:
             if "planejamento" in item:
                 assert "ainda não está no aplicativo" not in item, item
 
-    def test_o_texto_aponta_a_secao_tecnologia_do_manual(self, texto):
-        """Issue #1367. A aba entrou no Manual do usuario, e e para la que o
-        assistente manda quem quer o passo a passo. O endereco vai inteiro: a
-        pagina separada de antes passa a so redirecionar."""
-        manual = _secao(texto, "O Manual da aba")
-        assert "https://manual-hsm.vercel.app/tecnologia/" in manual
-        assert "**Ajuda**" in manual
-        assert "manual-tecnologia-hsm" not in texto
+    def test_o_texto_nao_manda_para_o_manual_que_saiu_do_ar(self, texto):
+        """ADR 0078. O Manual do usuario saiu da plataforma: o assistente nao
+        pode mandar o diretor para um endereco que nao existe mais."""
+        assert "vercel.app" not in texto
+        assert "Manual" not in texto
 
     @pytest.mark.parametrize("aposentado", ["Minha vez", "cinco colunas"])
     def test_sem_o_nome_da_tela_de_antes(self, texto, aposentado):

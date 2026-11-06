@@ -116,7 +116,6 @@ docs/onboarding/              # setup de máquina e fluxo do dia a dia
 docs/spec/                    # deploy/*.json, snapshots/, VERSIONING
 docs/pops/                    # glossário POPs + materiais reais de referência
 docs/comunicacao/             # material do diretor: <contexto>/<PRD>-<slug>/ com video/ + index.html (ADR 0045); _assets/ (fonte + logo únicos)
-docs/manual/                  # manual do usuário (Vercel)
 local/                        # FORA DO GIT: PDFs, transcrições, rascunhos, dumps (cada máquina cria a sua)
 tokens/.env                   # FORA DO GIT: chaves da máquina (molde em tokens/.env.example)
 ```

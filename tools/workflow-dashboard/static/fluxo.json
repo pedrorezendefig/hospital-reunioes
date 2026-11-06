@@ -15,17 +15,17 @@
       "detalhe": "Tudo começa com um pedido: do diretor, de um sócio, de uma reclamação no app ou de uma ideia num print. O primeiro passo é decidir por qual porta ele entra." },
     { "id": "porta", "x": 6, "y": 1.1, "w": 280, "classe": "decisao", "titulo": "Qual porta?", "sub": "o tamanho do pedido decide",
       "porque": "Pedido pequeno não precisa do processo inteiro. A porta deixa o esforço do processo do tamanho da mudança.",
-      "detalhe": "Porta A: pedido grande, que vira várias tarefas, mexe no banco de dados, mexe no Manual, o diretor precisa saber ou não cabe num dia de trabalho. Porta B: uma tarefa só, e alguém vai conferir se ficou como pedido. Porta C: ajuste de ferramenta ou de texto, que não muda o que o app faz." },
+      "detalhe": "Porta A: pedido grande, que vira várias tarefas, mexe no banco de dados, o diretor precisa saber ou não cabe num dia de trabalho. Porta B: uma tarefa só, e alguém vai conferir se ficou como pedido. Porta C: ajuste de ferramenta ou de texto, que não muda o que o app faz." },
 
     { "id": "grill", "x": 2, "y": 3.0, "w": 240, "classe": "auto", "skill": "grill-with-docs", "titulo": "/grill-with-docs", "sub": ["perguntas até o plano ficar claro", "anota o que foi decidido"],
       "porque": "É mais barato achar um mal-entendido numa conversa do que no código pronto.",
       "detalhe": "O agente faz uma pergunta por vez sobre o plano e já diz qual resposta recomenda. Cada decisão fica anotada no glossário do projeto. Projeto grande demais para uma conversa vai antes para o /wayfinder." },
     { "id": "toprd", "x": 2, "y": 4.0, "w": 240, "classe": "auto", "skill": "to-prd", "titulo": "/to-prd", "sub": "escreve o plano e publica",
       "porque": "Assim o diretor enxerga o que vai mudar sem ler código.",
-      "detalhe": "Transforma a conversa num plano escrito (o PRD) e publica no GitHub. O topo tem um resumo em linguagem simples para o diretor, que ele também lê na aba Tecnologia do app. O plano lista as páginas do Manual que vão nascer ou mudar." },
+      "detalhe": "Transforma a conversa num plano escrito (o PRD) e publica no GitHub. O topo tem um resumo em linguagem simples para o diretor, que ele também lê na aba Tecnologia do app." },
     { "id": "toissues", "x": 2, "y": 5.0, "w": 240, "classe": "auto", "skill": "to-issues", "titulo": "/to-issues", "sub": "quebra o plano em tarefas",
       "porque": "Cada tarefa pequena pode ser entregue sozinha. O GitHub sabe qual depende de qual e libera a próxima quando a anterior termina.",
-      "detalhe": "Divide o plano em tarefas pequenas, e cada uma entrega algo que funciona de ponta a ponta. Cada tarefa recebe um tamanho (P, M ou G) e a lista do que precisa estar pronto antes dela. Se o plano tem tela nova, a última tarefa é atualizar o Manual." },
+      "detalhe": "Divide o plano em tarefas pequenas, e cada uma entrega algo que funciona de ponta a ponta. Cada tarefa recebe um tamanho (P, M ou G) e a lista do que precisa estar pronto antes dela." },
     { "id": "onda", "x": 2, "y": 6.0, "w": 240, "classe": "auto", "skill": "onda-enxuta", "titulo": "/onda-enxuta ou /pegar-issue", "sub": ["o agente faz sozinho, em lotes,", "ou uma tarefa por vez"],
       "porque": "A parte repetitiva fica com o agente. As pessoas só entram para decidir.",
       "detalhe": "Dois jeitos. Sozinho: o /onda-enxuta trabalha em segundo plano, até 3 tarefas ao mesmo tempo, e abre um PR para cada uma. Na mão: o /pegar-issue N faz uma tarefa por vez, igual à porta B. Uma tarefa só espera outra quando depende dela." },
@@ -77,7 +77,7 @@
       "detalhe": "O app no ar tem que responder com a versão nova. Se não responder, a subida volta para a versão anterior sozinha e reabre a tarefa. Se o lote tem mudança no banco, ela espera até 24 h alguém aplicar." },
     { "id": "registro", "x": 10.8, "y": 11.55, "w": 190, "classe": "auto", "titulo": "anota a entrega", "sub": "o GitHub grava sozinho",
       "porque": "Anotar dentro da subida custava uma rodada inteira de testes. Uma automação do GitHub faz isso depois, e só grava o que o GitHub não sabe.",
-      "detalhe": "Depois que o código entra, uma automação do GitHub anota a versão no histórico de entregas e atualiza o retrato do app e deixa em rascunho as páginas do Manual que mudaram, avisando no plano." },
+      "detalhe": "Depois que o código entra, uma automação do GitHub anota a versão no histórico de entregas e atualiza o retrato do app." },
 
     { "id": "migration", "x": 3.6, "y": 12.8, "w": 220, "classe": "humano", "titulo": "mudança no banco", "sub": ["alguém aplica no Supabase;", "a subida espera até 24 h"],
       "porque": "Mudança no banco de dados não tem volta automática. Por isso é uma das poucas paradas que pedem uma pessoa.",
@@ -92,7 +92,7 @@
   ],
   "arestas": [
     { "de": "ideia", "para": "porta" },
-    { "de": "porta", "para": "grill", "meio": 0.3, "rotulo": ["A: pedido grande, mexe no banco,", "Manual ou o diretor precisa saber"] },
+    { "de": "porta", "para": "grill", "meio": 0.3, "rotulo": ["A: pedido grande, mexe no banco", "ou o diretor precisa saber"] },
     { "de": "porta", "para": "triage", "rotulo": ["B: uma tarefa só,", "cabe numa sessão"] },
     { "de": "porta", "para": "express", "meio": 0.3, "rotulo": ["C: ferramenta ou ajuste", "que não muda o que o app faz"] },
     { "de": "grill", "para": "toprd" },
@@ -124,8 +124,8 @@
     { "classe": "decisao", "texto": "decisão: uma pergunta escolhe o caminho" }
   ],
   "portas": [
-    { "porta": "A. PRD + fatias", "quando": "Pedido grande: vira várias tarefas, mexe no banco de dados, muda o Manual, o diretor precisa saber ou não cabe numa sessão", "caminho": "/grill-with-docs, /to-prd, /to-issues, /onda-enxuta ou /pegar-issue" },
-    { "porta": "B. Issue única, sem PRD", "quando": "Uma tarefa só no app, cabe numa sessão, sem diretor e sem Manual", "caminho": "/triage ou gh issue create com critérios de aceite, /pegar-issue N, /tdd, /ship" },
+    { "porta": "A. PRD + fatias", "quando": "Pedido grande: vira várias tarefas, mexe no banco de dados, o diretor precisa saber ou não cabe numa sessão", "caminho": "/grill-with-docs, /to-prd, /to-issues, /onda-enxuta ou /pegar-issue" },
+    { "porta": "B. Issue única, sem PRD", "quando": "Uma tarefa só no app, cabe numa sessão, sem diretor", "caminho": "/triage ou gh issue create com critérios de aceite, /pegar-issue N, /tdd, /ship" },
     { "porta": "C. PR direto, sem issue", "quando": "Ajuste de ferramenta, documentação ou texto, que não muda o que o app faz", "caminho": "Muda na branch, /ship \"<descrição>\" --from-diff, subida" }
   ]
 }

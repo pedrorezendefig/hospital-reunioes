@@ -592,7 +592,7 @@ for PR in $(git log --format=%s "$ANTERIOR"..HEAD | grep -oE '#[0-9]+' | tr -d '
 done | tr -d '#' | sort -un
 ```
 
-**O campo é obrigatório, e `[]` não é o mesmo que ausente.** `"prds": []` é a declaração de que este deploy não carrega PRD nenhum (fatia avulsa, deploy só de bookkeeping) e o Passo 9.6 não faz nada. Entrada **sem** o campo é entrada malfeita: o 9.6 lê `deploys[0]['prds']` direto e estoura, de propósito, porque o silêncio custa caro (página em draft de PRD já em produção some do site e da busca, e só o inventário da `/montar-manual` acusaria, semanas depois). O campo existe porque o número do PRD só vivia na prosa do `notes`: quem precisa dele (o Passo 9.6 e o inventário da `/montar-manual`) tinha que adivinhar por leitura. Continue citando o PRD no `notes` em prosa; o campo é o que máquina lê.
+**O campo é obrigatório, e `[]` não é o mesmo que ausente.** `"prds": []` é a declaração de que este deploy não carrega PRD nenhum (fatia avulsa, deploy só de bookkeeping). O campo existe porque o número do PRD só vivia na prosa do `notes`, e quem precisa dele tinha que adivinhar por leitura. Continue citando o PRD no `notes` em prosa; o campo é o que máquina lê.
 
 #### 9.3 — (removido) Chronicles aposentados
 
@@ -626,7 +626,7 @@ Se mudou, a skill:
    ```
 4. **Não dispara novo `/deploy ship`** — o `commit_inference.scope_map` no `project.json` mapeia `docs/spec/snapshots/**` pra escopo `spec`, e commits `chore(spec):` que tocam só `.md` não geram trigger de service (heurística no Passo 5 do ship).
 
-Se a skill `/snapshot` falhar (ex: parser SQL quebrou em migration nova), **não bloqueia o deploy**: registra warning no output do `/deploy` e segue pra 9.6. O usuário pode rodar `/snapshot --check` depois pra diagnosticar.
+Se a skill `/snapshot` falhar (ex: parser SQL quebrou em migration nova), **não bloqueia o deploy**: registra warning no output do `/deploy` e segue pro Passo 10. O usuário pode rodar `/snapshot --check` depois pra diagnosticar.
 
 Detalhes da skill: `.claude/skills/snapshot/SKILL.md`.
 
@@ -634,34 +634,6 @@ Detalhes da skill: `.claude/skills/snapshot/SKILL.md`.
 
 > A timeline dos deploys é o `history.json` (9.2), com todos os deploys, e o painel a
 > desenha (ADR 0068). Não criar arquivo de cronologia em `docs/spec/`.
-
-#### 9.6 Manual do usuário: tirar o draft do que subiu
-
-O Manual só mostra o que está no ar: página de funcionalidade que ainda não subiu nasce em `draft: true` e some do site e da busca (ADR 0057, decisão 5). Quem apaga essa marca é este passo, com os `prds` que o 9.2 levantou. **Uma chamada só, com todos os PRDs do deploy juntos**: página escrita por dois PRDs só vai ao ar quando os dois subiram, e uma chamada por PRD nunca a liberaria.
-
-```bash
-ARGS=""
-for PRD in $(python3 -c "import json;print(*json.load(open('docs/spec/deploy/history.json'))['deploys'][0]['prds'])"); do
-  ARGS="$ARGS --prd $PRD"
-done
-[ -n "$ARGS" ] && python3 tools/tirar_draft_manual.py $ARGS
-```
-
-Três saídas, e só uma delas mexe em arquivo:
-
-- **0, sem página em draft** (o caso normal, a maioria dos deploys): o script diz "nenhuma página em draft do PRD #N" e não escreve nada. Nada a commitar, nada a publicar; siga para o Passo 10.
-- **2, bloqueado**: o script **não tocou em arquivo nenhum** e listou o que falta. São dois motivos: MP4 de Vídeo de visão geral que não existe nesta árvore (ele é regerável, fica fora do controle de versão e não vem no clone: renderize a composição de `docs/manual/video/<modulo>/<slug>/` pela receita em `.claude/skills/manual/references/video-de-visao-geral.md` e rode o passo de novo) ou ferramenta de publicação ausente na máquina (Node >= 22.12, corepack, ffmpeg, todos nível 2 do `/setup-maquina`). **Não dispare rollback:** o app está no ar e saudável, o que ficou pendente é o manual. Termine o bookkeeping e registre a pendência como issue `ready-for-human` (Passo 10.5 do `/ship`), dizendo qual página e qual vídeo faltam.
-- **0, com páginas listadas**: elas saíram do draft. Entra tudo no **mesmo commit e no mesmo push do bookkeeping** (9.1 a 9.4), e só então o site republica:
-
-  ```bash
-  bash docs/manual/publicar.sh
-  ```
-
-  O `publicar.sh` roda lint, build, conferidor de draft, reencode dos MP4 e a trava de 90 MB (`.claude/skills/manual/references/publicar.md`). Não pule o passo com `--pular-build`.
-
-**Por que conferir antes de escrever:** o `publicar.sh` sai com erro quando a página aponta para um vídeo que ele não acha, e o build do site exige Node novo. Tirar o draft, commitar e só então descobrir isso deixaria a página publicada no repositório e fora do ar, que é o pior dos dois mundos e exatamente o que a decisão 5 do ADR 0057 quer evitar.
-
-Publicar **não** roda em `rollback`: voltar código não esconde página que já foi lida.
 
 ---
 
@@ -751,4 +723,3 @@ Usada no gate de migrations do ship (SAFE | DESTRUCTIVE). Padrões em `reference
 ## Relação com outras skills
 
 - Hooks PostToolUse não disparam esta skill — invocação sempre manual.
-- `/manual`: o Passo 9.6 tira o `draft` das páginas dos PRDs que subiram e chama o `docs/manual/publicar.sh`. É o único caminho automático de publicação do Manual; o `/manual publicar` é o mesmo script, quando o humano quer republicar sem deploy.

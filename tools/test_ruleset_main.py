@@ -26,7 +26,7 @@ import pytest
 
 RAIZ = Path(__file__).resolve().parent.parent
 CI = RAIZ / ".github" / "workflows" / "ci.yml"
-MANUAL = RAIZ / ".github" / "workflows" / "manual.yml"
+FERRAMENTAS = RAIZ / ".github" / "workflows" / "ferramentas.yml"
 RULESET = RAIZ / ".github" / "rulesets" / "main.json"
 GITHUB_ACTIONS_APP = 15368  # integration_id do GitHub Actions
 
@@ -101,7 +101,7 @@ def test_ruleset_exige_o_ci_verde_no_head_sem_exigir_a_branch_em_dia_com_a_base(
 
 
 def test_bypass_so_da_deploy_key_nenhuma_pessoa_nem_equipe():
-    """A Action pós-merge commita snapshot e draft do Manual direto na `main`
+    """A Action pós-merge commita o snapshot e o registro direto na `main`
     (issue #940, ADR 0065, que emenda a decisão 10 da ADR 0062). O bypass é da
     deploy key, cujo secret vive num Environment restrito à `main` e só o job
     que não instala nada lê. O GitHub Actions (integration 15368) não entra:
@@ -239,7 +239,7 @@ FRONTEND = {"frontend-lint", "build"}
 
 @pytest.mark.parametrize("mudados, rodam, ferramenta", [
     (["docs/spec/deploy/history.json", "docs/spec/deploy/state.json", "docs/ARQUITETURA.md"], set(), "true"),
-    (["docs/manual/src/content/docs/ouvidoria/index.mdx"], set(), "true"),
+    (["docs/comunicacao/ouvidoria/modulo/index.html"], set(), "true"),
     ([".claude/skills/onda-enxuta/scripts/fechar_onda.py"], set(), "true"),
     (["docs/adr/0061-x.md", "tools/checar_migration_repetida.py"], set(), "true"),
     ([".github/rulesets/main.json"], set(), "true"),
@@ -258,7 +258,7 @@ FRONTEND = {"frontend-lint", "build"}
     (["hospital-reunioes/backend/README.md", "hospital-reunioes/frontend/src/app/page.tsx"], TUDO, "false"),
     (["tools/x.py", "hospital-reunioes/frontend/package.json"], FRONTEND, "true"),
     ([".github/workflows/ci.yml"], TUDO, "true"),
-    ([".github/workflows/manual.yml"], TUDO, "true"),
+    ([".github/workflows/ferramentas.yml"], TUDO, "true"),
     ([], TUDO, "true"),
 ])
 def test_cada_pasta_liga_so_os_jobs_dela(tmp_path, mudados, rodam, ferramenta):
@@ -266,7 +266,7 @@ def test_cada_pasta_liga_so_os_jobs_dela(tmp_path, mudados, rodam, ferramenta):
     `supabase/`, frontend com `frontend/`, docker build com qualquer um dos
     dois, `.github/workflows/` roda tudo. Ferramenta (fora de
     `hospital-reunioes/`, a mesma fronteira da subida) não liga job nenhum daqui:
-    os testes de `tools/` rodam no `manual.yml`."""
+    os testes de `tools/` rodam no `ferramentas.yml`."""
     proc = rodar_detector(tmp_path, mudados)
     assert proc.returncode == 0, proc.stderr
     saidas = saidas_do_passo(proc)
@@ -300,10 +300,10 @@ def test_detector_que_nao_acha_a_base_falha_e_roda_tudo(tmp_path):
 
 
 def test_estes_testes_rodam_quando_tools_o_ci_ou_o_ruleset_mudam():
-    """Os testes de `tools/` rodam no `manual.yml`, que só acorda pelos caminhos
+    """Os testes de `tools/` rodam no `ferramentas.yml`, que só acorda pelos caminhos
     dele. O `ci.yml` pula PR só de ferramenta (issue #966): sem `tools/**` aqui,
     mudança em `tools/` entraria sem teste nenhum."""
-    texto = MANUAL.read_text(encoding="utf-8")
+    texto = FERRAMENTAS.read_text(encoding="utf-8")
     on = texto.split("\non:\n", 1)[1].split("\njobs:\n", 1)[0]
     for evento in ("push", "pull_request"):
         bloco = re.search(rf"^  {evento}:\n((?:    .*\n|\n)*)", on, re.M).group(1)

@@ -50,10 +50,10 @@ def test_lockfile_tem_os_mesmos_overrides_do_package_json():
 
 
 def test_a_guarda_roda_quando_o_pnpm_do_frontend_muda():
-    """Os testes de `tools/` rodam no `manual.yml`: o PR que mexe só no
+    """Os testes de `tools/` rodam no `ferramentas.yml`: o PR que mexe só no
     `package.json`, no Dockerfile ou no lockfile do frontend também precisa
     acordá-los, senão a guarda fica verde sobre nada."""
-    manual = yaml.safe_load((RAIZ / ".github" / "workflows" / "manual.yml").read_text(encoding="utf-8"))
+    manual = yaml.safe_load((RAIZ / ".github" / "workflows" / "ferramentas.yml").read_text(encoding="utf-8"))
     on = manual["on"] if "on" in manual else manual[True]
     for evento in ("push", "pull_request"):
         for arquivo in ("package.json", "Dockerfile", "pnpm-lock.yaml"):

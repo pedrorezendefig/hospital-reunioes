@@ -30,17 +30,3 @@ updates:
     groups:
       actions:
         patterns: ["*"]
-
-  # O site do Manual (Astro Starlight na Vercel) tem lockfile próprio (issue #1316).
-  - package-ecosystem: npm
-    directory: /docs/manual
-    schedule:
-      interval: weekly
-    groups:
-      manual:
-        patterns: ["*"]
-    # Versão grande (major) não entra no lote semanal: muda API e quebra o CI
-    # (o #1320 juntou Next 16, TypeScript 7 e mais cinco). Major vira issue planejada.
-    ignore:
-      - dependency-name: "*"
-        update-types: ["version-update:semver-major"]

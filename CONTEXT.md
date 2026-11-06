@@ -361,73 +361,18 @@ _Evitar_: contar produção para quem enviou.
 **Apoio ao faturamento**:
 Perfil de Contas médicas que só envia: sobe Conta e Prontuário, vê "Meus envios", não puxa conta nem aparece na Produção. Nasceu para a secretária do diretor (ADR 0073); o nome de tela espera a confirmação dele.
 
-## Manual do usuário
+## Texto e comunicação
 
-**Manual**:
-O site único de documentação da plataforma para quem usa o app no hospital (decisão de 15/09/2026, grilling; ADR 0057). Um endereço só, organizado **por módulo, na ordem do menu do app** (Primeiros passos, Reuniões e metas, Ouvidoria, POPs, Contas médicas, Admin e, por último, Tecnologia), e dentro de cada módulo uma [Visão geral do módulo], as [Páginas de tarefa], as páginas [Como funciona] e as [Novidades]. Publica **só o que está em produção**: o que ainda não subiu fica escrito, mas invisível, até o deploy. Desde 01/11/2026 (ADR 0076) a aba Tecnologia é módulo do Manual, com as páginas que moravam numa página separada e um vídeo cuja cena central é o [Assistente de Tecnologia] (reescritos pela ADR 0077). A [Central de Comando] fica fora (só o Super admin vê, e é leitura, não tarefa; ADR 0058). O app aponta para ele por um item **Ajuda** no menu, que abre a seção do módulo em que a pessoa está.
-_Evitar_: um manual por módulo em endereços separados; manual por papel (o papel é selo, não estrutura); selo "em desenvolvimento" ou "planejado" para o usuário; capítulo técnico (endpoint, gatilho de e-mail, variável) dentro do manual.
-
-**Página de tarefa**:
-A unidade do [Manual]: uma ação que alguém faz no app, com o título no infinitivo ("Registrar uma manifestação", "Assinar a ata"). Molde fixo e curto: **quando usar** (uma frase), **quem faz** (selos), **passo a passo** (até 6 passos, com um [Print de passo] por mudança de tela e no máximo um [Aviso destacado]) e **se der errado** (2 a 4 situações). Tratamento "você", passos no imperativo, e a palavra é sempre a que aparece na tela. Cabe numa tela de celular; passou disso, são duas tarefas. Não tem vídeo: o vídeo do módulo é o [Vídeo de visão geral], na abertura (ADR 0072).
-_Evitar_: "por que existe", histórico, conceito (isso é [Como funciona]); "o usuário deverá"; sinônimo inventado para o nome do botão; aviso "vídeo em produção" na tela do usuário.
-
-**Print de passo**:
-A imagem que fica logo abaixo de um passo da [Página de tarefa]: a tela real do app, capturada pelo [Roteiro de prints], com **balões numerados** desenhados pelo próprio roteiro por cima da tela, cada balão com o número do passo que ele ilustra. Um por **mudança de tela**, não por passo: passos na mesma tela dividem um print com vários balões. O texto alternativo é curto e não conta no teto de palavras.
-_Evitar_: balão desenhado em editor de imagem (não regera quando a tela muda); um print por passo na mesma tela; seta ou destaque que não seja o balão numerado.
-
-**Aviso destacado**:
-O callout (`:::caution[Título]`) que uma [Página de tarefa] pode ter, no máximo um, antes do passo que dispara uma ação sem volta ou que a pessoa precisa saber antes de clicar ("Finalizar sem assinatura não tem volta", "a senha aparece uma vez só"). "Se der errado" continua lista.
-_Evitar_: callout em toda ressalva; callout em [Como funciona] ou em [Visão geral do módulo].
-
-**Fluxograma de caminho**:
-O desenho do caminho ou dos estados de um tema, só em [Visão geral do módulo] ("O caminho de ponta a ponta") e em [Como funciona] que descreve estados ou desvios, no máximo um por página, com as palavras da tela e do glossário. Fonte em texto versionado (`docs/manual/fluxogramas/<modulo>/<slug>.mmd`), SVG gerado por script do site com as cores do app. Não é o fluxograma do POP, que é seção do documento gerado pelo app.
-_Evitar_: fluxograma em [Página de tarefa] (a tarefa é linear, o [Print de passo] cobre); SVG desenhado à mão; renderização no build.
-
-**Selo**:
-Marcação curta na [Página de tarefa] que diz quem faz (Ouvidoria, Gestor do setor, Facilitador, Secretária), **Só admin** para o que só o Super admin vê, e **Sem login** para as telas que a pessoa abre por link ou QR sem entrar no app (formulário público, portal do setor, aceite da Ata). Telas sem login moram dentro do módulo delas, com o selo, não numa seção à parte.
-
-**Visão geral do módulo**:
-A página de abertura de cada módulo do [Manual]: o que o módulo é em poucas linhas, as palavras que a pessoa vai ver o tempo todo, o caminho de ponta a ponta (o caminho de um caso, o caminho de uma Ata) e o [Vídeo de visão geral] do módulo. É o único lugar do módulo onde conceito tem vez.
-
-**Como funciona**:
-Página de um tema do módulo que não é ação de ninguém, mas que a pessoa precisa entender para não estranhar o app ("Como o prazo é contado", "O que o sistema apaga sozinho"). Fica fora da lista de tarefas, no fim do módulo.
-
-**Novidades**:
-Página de cada módulo com **uma entrada por PRD entregue**, da mais nova para a mais antiga: título em linguagem de usuário, mês e ano do deploy, duas linhas do que mudou, o link para a página de divulgação da entrega quando existe (com o [Vídeo de percepção de valor]), e links para as [Páginas de tarefa] que nasceram ou mudaram.
-_Evitar_: uma entrada por deploy ou por fix (isso é o changelog, que é doc de engenharia); vídeo embutido na página (pesa no orçamento do Manual; ADR 0072).
-
-**Vídeo de visão geral**:
-O vídeo de um módulo do [Manual], um por módulo, na [Visão geral do módulo]: de 2 a 3 min (a Tecnologia, até 3 min e meio), o módulo ponto a ponto, cada funcionalidade relevante uma vez, na ordem em que a pessoa usa, com dados de exemplo. Narrado com a voz A, com a fala escrita na tela palavra a palavra, sobre o print real do app animado, e feito em Remotion pela skill `motion`, no molde da `/divulgar` (ADR 0076, que emenda a 0072). "Conheça a plataforma" é o de Primeiros passos, e a página inicial do Manual mostra o mesmo arquivo. Admin e [Central de Comando] ficam sem vídeo. Até 10 MB depois do reencode, a soma do Manual até 60 MB e o site até 90 MB: o `publicar.sh` trava. Todo PRD que muda página do módulo refaz o vídeo, salvo exceção escrita na [Fatia de manual]; o `meta.json` do vídeo guarda os PRDs que ele cobre, e a `/montar-manual` acusa o vídeo desatualizado.
-_Evitar_: vídeo em [Página de tarefa]; dois vídeos no mesmo módulo; vídeo mudo; versão, PRD ou data escritos no vídeo (o carimbo é o `meta.json`).
-
-**Vídeo de tarefa** (fora do Manual):
-O vídeo de 30 a 60 s de uma [Página de tarefa], que o [Manual] teve de setembro a 14/10/2026. Saiu do Manual pelo orçamento do plano grátis da Vercel (ADR 0072): as composições saíram do repositório (ficam no histórico do git). Os MP4, que ficaram guardados para um link externo, são apagados de `~/Videos/Hospital/Manual/` depois que os seis vídeos narrados estão no ar (ADR 0076).
-_Evitar_: usar o termo para o vídeo do Manual de hoje (é o [Vídeo de visão geral]).
+**Manual do usuário**:
+Aposentado em 05/11/2026 (ADR 0078): o site, o item Ajuda do app, as Páginas de tarefa, os vídeos do módulo e a Fatia de manual saíram da plataforma. Um manual novo, com outra abordagem, será decisão nova.
+_Evitar_: citar o Manual como destino de texto ou de link; criar página em `docs/manual/`.
 
 **Régua de texto**:
-A passagem obrigatória de todo texto que alguém de fora vai ler (página do [Manual], texto de tela, PDF, hover do Hospital OS, mensagem, legenda de vídeo) pela skill `humanizer` antes de gravar, mais o lint que trava no CI os cacoetes que dão para pegar por regex (ADR 0071). A voz é a do canal: a amostra aprovada manda no tom, a skill só tira o cacoete.
+A passagem obrigatória de todo texto que alguém de fora vai ler (texto de tela, PDF, hover do Hospital OS, mensagem, legenda de vídeo, página de divulgação) pela skill `humanizer` antes de gravar, mais o lint que trava no CI os cacoetes que dão para pegar por regex (ADR 0071). A voz é a do canal: a amostra aprovada manda no tom, a skill só tira o cacoete.
 _Evitar_: "não é X, é Y"; fecho de uma linha que repete o parágrafo; tríade forçada; rótulo em negrito em tudo; texto para fora gravado sem a passagem.
 
-**Estilo do manual** (saindo):
-O contrato visual dos vídeos HyperFrames do [Manual], em `docs/manual/video/_estilo/`: `DESIGN.md`, `tokens.css` com as cores e a fonte do app, e cards reusáveis (legenda de passo, callout, lower-third, abertura, carimbo) como sub-composições com slots de texto (emenda de 13/10/2026 ao ADR 0057). Desde 01/11/2026 (ADR 0076) o [Vídeo de visão geral] é feito em Remotion pela skill `motion`, com a identidade da `marca-hsm` e dos tokens do app: o estilo continua valendo só para as composições HyperFrames que ainda estão no ar, e sai com o último módulo refeito.
-_Evitar_: compor vídeo novo no Estilo do manual (a receita é a do Remotion); cor ou fonte fixa dentro de um vídeo HyperFrames (vem dos tokens).
-
-**Ficha de referência**:
-A nota curta, uma por vídeo de referência (os gerados pelo Opus 5.5 ficam em `local/manual-video-referencias/`, fora do git), em `_estilo/references/`: o que copiar daquele vídeo (uma transição, um ritmo, um card) e o que não copiar. O `DESIGN.md` do [Estilo do manual] cita as fichas, para cada sessão tirar a mesma coisa da mesma referência.
-
-**Folha de contato**:
-O que o agente põe no corpo do PR, como evidência, na campanha de rerender dos [Vídeos de tarefa]: os quadros-chave de todos os vídeos do módulo numa imagem só, mais um MP4 inteiro. Desde 14/10/2026 nenhum vídeo espera OK humano, nem por módulo nem no draft (emenda à ADR 0057).
-
 **Vídeo de percepção de valor**:
-O vídeo de uma entrega (PRD) feito para o diretor ver o sistema funcionando (ADR 0026, ADR 0045): a unidade é o que mudou, não a tarefa. No [Manual] ele entra em [Novidades] por link para a página de divulgação, sem ser embutido (ADR 0072).
-
-**Roteiro de prints**:
-O script versionado, um por módulo, que abre o app local com dados de exemplo, navega e captura os prints que as páginas daquele módulo usam, desenhando os balões numerados do [Print de passo] por cima da tela antes de capturar. Print do [Manual] é sempre tela real do app, nunca desenho; mudou a tela, roda o roteiro de novo.
-_Evitar_: print tirado à mão sem roteiro; quadro extraído do vídeo no lugar do print; balão fora do roteiro.
-
-**Fatia de manual**:
-A issue que todo PRD com tela ganha no fim, bloqueada pelas fatias de código: escreve ou muda as [Páginas de tarefa], roda o [Roteiro de prints], escreve a entrada de [Novidades] e refaz o [Vídeo de visão geral] de cada módulo que o PRD muda, salvo a exceção escrita na própria fatia ("o vídeo segue válido porque ...", ADR 0076). Nasce invisível e aparece no deploy do PRD. É o par do vídeo de divulgação: uma entrega, uma fatia de manual.
-_Evitar_: manual dentro do PR de código (a tela ainda não existe para o print); manual fora da fila de issues (some da cobrança).
+O vídeo de uma entrega (PRD) feito para o diretor ver o sistema funcionando (ADR 0026, ADR 0045): a unidade é o que mudou, não a tarefa.
 
 ## Diálogo de exemplo
 

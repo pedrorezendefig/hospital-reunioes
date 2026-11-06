@@ -52,5 +52,5 @@ Se tiver qualquer dúvida ou algo parecer estranho, me chama 🙂
 ## O que esta skill não faz
 
 - Não manda a mensagem: o envio é do Pedro.
-- Não gera vídeo nem página (`/divulgar`), nem escreve manual (`/manual`).
+- Não gera vídeo nem página (`/divulgar`).
 - Não descreve o que ainda não subiu.

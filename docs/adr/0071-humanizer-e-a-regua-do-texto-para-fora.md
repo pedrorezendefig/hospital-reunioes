@@ -1,6 +1,7 @@
 ---
 status: accepted
 amends: 0057
+amended_by: 0078
 ---
 
 # Humanizer é a régua de todo texto para fora; o manual e o Hospital OS são reescritos por ela

@@ -3,7 +3,7 @@
 O repositório é público: PDF, planilha, dump ou `.env` que entra por engano
 fica no histórico para sempre. A trava olha só o que o PR ADICIONA e recusa as
 extensões de arquivo de dado fora das pastas que existem para isso (migration,
-manual, comunicação, fixture de teste, materiais reais dos POPs). Os testes
+comunicação, fixture de teste, materiais reais dos POPs). Os testes
 montam um repositório `git` de verdade em `tmp_path`, com uma `main` de base e
 uma branch por cima, e rodam o script como o CI roda.
 """
@@ -110,7 +110,6 @@ def test_pastas_liberadas_passam(tmp_path):
     repo = repo_com_base(tmp_path)
     for caminho in [
         "hospital-reunioes/supabase/migrations/200_nova.sql",
-        "docs/manual/public/guia.pdf",
         "docs/comunicacao/central/folheto.PDF",
         "hospital-reunioes/backend/tests/fixtures/contas_medicas/tabela.csv",
         "docs/pops/materiais-reais/pop.docx",
@@ -125,7 +124,7 @@ def test_pastas_liberadas_passam(tmp_path):
 
 def test_pasta_com_nome_parecido_com_a_liberada_nao_passa(tmp_path):
     repo = repo_com_base(tmp_path)
-    escrever(repo, "docs/manual-antigo/guia.pdf")
+    escrever(repo, "docs/comunicacao-antiga/guia.pdf")
     commitar(repo, "vizinha")
 
     assert rodar(repo).returncode == 1
