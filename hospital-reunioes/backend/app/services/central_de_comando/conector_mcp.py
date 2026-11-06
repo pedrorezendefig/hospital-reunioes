@@ -15,8 +15,13 @@ do gate de sessão do app:
 **O gate, em duas etapas.** Primeiro o token do AuthKit: assinatura contra o
 JWKS do emissor, `iss`, `aud` (o Resource Indicator), expiração e
 `email_verified` verdadeiro. Escopo não entra no gate (#1442): o cliente do
-claude.ai se registra por DCR/CIMD, e o WorkOS só concede a esses clientes os
-escopos OIDC padrão. Quem barra o token de outro app do mesmo AuthKit é o `aud`. Depois o participante: o e-mail
+claude.ai se registra por DCR/CIMD, e o WorkOS dá a todo cliente assim os
+mesmos escopos OIDC padrão, então escopo nenhum o separa de outro cliente. O
+`aud` barra token emitido para outro recurso (a Central antiga, ou token sem
+resource, cujo `aud` é o client id do ambiente), mas NÃO barra outro cliente
+DCR/CIMD que peça este mesmo resource: o resource é o cliente quem pede. Quem
+segura esse caso é a segunda etapa (amarrar ao `client_id` do claude.ai fica
+para issue própria). Depois o participante: o e-mail
 verificado do token acha a pessoa no cadastro, e ela precisa estar ativa e ser
 Super admin. Rebaixou ou desligou, o conector para na hora, sem editar lista
 nenhuma. A lista de e-mails em variável de ambiente do conector antigo NÃO foi
@@ -120,8 +125,8 @@ class ConectorNaoConfiguradoError(RuntimeError):
 
 
 class AcessoNegadoMCPError(Exception):
-    """Qualquer falha de autorização do conector: token ausente, inválido, sem
-    escopo, e-mail não verificado, e-mail sem participante, participante inativo
+    """Qualquer falha de autorização do conector: token ausente, inválido,
+    e-mail não verificado, e-mail sem participante, participante inativo
     ou que não é Super admin. Sempre 401 (nunca 403): o cliente MCP responde ao
     401 refazendo o login. O motivo fica no log, não no corpo ao cliente."""
 
@@ -186,8 +191,9 @@ def verificar_acesso(token: str | None, jwks: dict, cfg: ConfiguracaoMCP) -> str
     `AcessoNegadoMCPError`.
 
     Todas têm de valer: assinatura RS256 contra o JWKS do emissor, `iss`, `aud`
-    (o recurso), `exp` presente e `email_verified` verdadeiro. O `aud` é a
-    barreira contra token de outro app do mesmo AuthKit (#1442). O algoritmo é fixado em RS256 de propósito: sem
+    (o recurso), `exp` presente e `email_verified` verdadeiro. O `aud` barra
+    token de outro recurso, não outro cliente que peça este (#1442; ver o
+    docstring do módulo). O algoritmo é fixado em RS256 de propósito: sem
     isso, um token `alg: none` ou HS256 assinado com um segredo público passaria.
     """
     if not token:

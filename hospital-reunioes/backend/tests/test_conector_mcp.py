@@ -249,9 +249,15 @@ class TestVerificarAcesso:
         tok = token(chave_do_emissor, scope=_OMITIR)
         assert conector_mcp.verificar_acesso(tok, jwks_de(chave_do_emissor), cfg) == "super@hsm.com"
 
-    def test_token_do_conector_antigo_continua_negado(self, cfg, chave_do_emissor):
-        # Mesmo AuthKit, outro resource indicator: o `aud` barra.
-        tok = token(chave_do_emissor, aud="https://central.mala-ia.cloud")
+    def test_token_sem_resource_nega(self, cfg, chave_do_emissor):
+        # Sem resource no authorize, o AuthKit põe no `aud` o client id do
+        # ambiente: não é este recurso, então nega (#1442).
+        tok = token(chave_do_emissor, aud="client_do_ambiente_de_teste")
+        with pytest.raises(conector_mcp.AcessoNegadoMCPError):
+            conector_mcp.verificar_acesso(tok, jwks_de(chave_do_emissor), cfg)
+
+    def test_token_sem_aud_nega(self, cfg, chave_do_emissor):
+        tok = token(chave_do_emissor, aud=_OMITIR)
         with pytest.raises(conector_mcp.AcessoNegadoMCPError):
             conector_mcp.verificar_acesso(tok, jwks_de(chave_do_emissor), cfg)
 
@@ -543,11 +549,12 @@ class TestTransporteRecusaCom401:
         "tok_kwargs",
         [
             {"aud": "https://central.mala-ia.cloud"},
+            {"aud": "client_do_ambiente_de_teste"},
             {"iss": "https://outro.authkit.app"},
             {"exp_delta": -60},
             {"email_verified": False},
         ],
-        ids=["audiencia", "emissor", "expirado", "email-nao-verificado"],
+        ids=["audiencia", "sem-resource", "emissor", "expirado", "email-nao-verificado"],
     )
     def test_token_ruim_e_401(self, chave_do_emissor, tok_kwargs):
         resposta = _rpc(_cliente_mcp(), INIT, token(chave_do_emissor, **tok_kwargs))
