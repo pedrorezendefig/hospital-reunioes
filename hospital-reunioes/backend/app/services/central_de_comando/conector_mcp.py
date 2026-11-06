@@ -13,8 +13,10 @@ do gate de sessão do app:
   token do WorkOS e do gate de Super admin.
 
 **O gate, em duas etapas.** Primeiro o token do AuthKit: assinatura contra o
-JWKS do emissor, `iss`, `aud` (o Resource Indicator), expiração, o escopo de
-leitura e `email_verified` verdadeiro. Depois o participante: o e-mail
+JWKS do emissor, `iss`, `aud` (o Resource Indicator), expiração e
+`email_verified` verdadeiro. Escopo não entra no gate (#1442): o cliente do
+claude.ai se registra por DCR/CIMD, e o WorkOS só concede a esses clientes os
+escopos OIDC padrão. Quem barra o token de outro app do mesmo AuthKit é o `aud`. Depois o participante: o e-mail
 verificado do token acha a pessoa no cadastro, e ela precisa estar ativa e ser
 Super admin. Rebaixou ou desligou, o conector para na hora, sem editar lista
 nenhuma. A lista de e-mails em variável de ambiente do conector antigo NÃO foi
@@ -62,11 +64,14 @@ logger = logging.getLogger(__name__)
 # do domínio, nunca sob `/api`: é ali que o cliente MCP procura.
 CAMINHO_DO_METADATA = "/.well-known/oauth-protected-resource"
 
-# O escopo de leitura que o token precisa carregar. O mesmo nome que o conector
-# antigo concedia; o claude.ai o pede porque o metadata o anuncia, e o WorkOS o
-# emite no claim `scope` do token. Sem ele, o token é negado (um token de outro
-# app do mesmo AuthKit não abre a Central).
-ESCOPO_DE_LEITURA = "read:analytics"
+# Os escopos que o metadata anuncia: só os OIDC padrão, os únicos que o WorkOS
+# concede a cliente registrado por DCR/CIMD, como o do claude.ai. Escopo fora
+# disso o authorize do AuthKit recusa com `invalid_scope` antes do login (#1442;
+# o `read:analytics` do conector antigo era rótulo interno, nunca pedido ao
+# AuthKit). O `email` e o `email_verified` do token vêm do JWT template do
+# ambiente, não do escopo; o `offline_access` deixa o Claude renovar o token sem
+# pedir login de novo.
+ESCOPOS_ANUNCIADOS = ("openid", "profile", "email", "offline_access")
 
 # A versão do protocolo MCP que este servidor fala. Portado read-only: sem
 # batching (removido na 2025-06-18), sem escrita, sem stream iniciado pelo
@@ -151,11 +156,11 @@ def configuracao_mcp(cfg=settings) -> ConfiguracaoMCP:
 
 def metadados_do_recurso(cfg: ConfiguracaoMCP) -> dict:
     """O documento que o cliente MCP lê no caminho bem conhecido: o recurso, o
-    servidor de login (o emissor do AuthKit) e o escopo de leitura."""
+    servidor de login (o emissor do AuthKit) e os escopos OIDC padrão."""
     return {
         "resource": cfg.recurso,
         "authorization_servers": [cfg.emissor],
-        "scopes_supported": [ESCOPO_DE_LEITURA],
+        "scopes_supported": list(ESCOPOS_ANUNCIADOS),
         "bearer_methods_supported": ["header"],
     }
 
@@ -181,8 +186,8 @@ def verificar_acesso(token: str | None, jwks: dict, cfg: ConfiguracaoMCP) -> str
     `AcessoNegadoMCPError`.
 
     Todas têm de valer: assinatura RS256 contra o JWKS do emissor, `iss`, `aud`
-    (o recurso), `exp` presente, o escopo de leitura no claim `scope`/`scp` e
-    `email_verified` verdadeiro. O algoritmo é fixado em RS256 de propósito: sem
+    (o recurso), `exp` presente e `email_verified` verdadeiro. O `aud` é a
+    barreira contra token de outro app do mesmo AuthKit (#1442). O algoritmo é fixado em RS256 de propósito: sem
     isso, um token `alg: none` ou HS256 assinado com um segredo público passaria.
     """
     if not token:
@@ -201,9 +206,6 @@ def verificar_acesso(token: str | None, jwks: dict, cfg: ConfiguracaoMCP) -> str
     except Exception as exc:  # noqa: BLE001 - gate de segurança: qualquer erro de decodificação nega
         raise AcessoNegadoMCPError(f"token inválido ({type(exc).__name__})") from exc
 
-    if ESCOPO_DE_LEITURA not in _escopos(claims):
-        raise AcessoNegadoMCPError("token sem o escopo de leitura")
-
     verificado = claims.get("email_verified")
     if verificado is not True and verificado != "true":
         # Fail-closed: claim ausente ou falso nega. Estar no cadastro não basta.
@@ -213,19 +215,6 @@ def verificar_acesso(token: str | None, jwks: dict, cfg: ConfiguracaoMCP) -> str
     if not isinstance(email, str) or not email.strip():
         raise AcessoNegadoMCPError("token sem e-mail")
     return email.strip().lower()
-
-
-def _escopos(claims: dict) -> list[str]:
-    """Os escopos do token, do `scope` (string separada por espaço, padrão
-    OAuth) ou do `scp` (lista). Claim ausente ou malformado é lista vazia, e a
-    verificação nega por falta de escopo."""
-    escopo = claims.get("scope")
-    if isinstance(escopo, str):
-        return escopo.split()
-    scp = claims.get("scp")
-    if isinstance(scp, list):
-        return [s for s in scp if isinstance(s, str)]
-    return []
 
 
 # ─── O JWKS do emissor ───────────────────────────────────────────────────────
