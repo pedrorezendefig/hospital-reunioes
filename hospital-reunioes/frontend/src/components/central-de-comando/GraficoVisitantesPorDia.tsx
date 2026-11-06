@@ -104,7 +104,10 @@ export function GraficoVisitantesPorDia({ pontos }: { pontos: PontoDoMovimento[]
       </ul>
       <div role="img" aria-label={rotulo}>
         <ResponsiveContainer width="100%" height={ALTURA}>
-          <LineChart data={pontos} margin={{ top: 8, right: 12, bottom: 0, left: 0 }}>
+          {/* Margem direita de 24: o rótulo do último dia é centralizado no último
+              ponto, e metade dele ("ontem", ou uma data como "17 set" depois das 21h)
+              não cabia nos 12 de antes (#1459). */}
+          <LineChart data={pontos} margin={{ top: 8, right: 24, bottom: 0, left: 0 }}>
             <CartesianGrid vertical={false} stroke={COR_DA_GRADE} />
             <XAxis
               dataKey="data"
