@@ -2,6 +2,52 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-11-06T12:46:01-03:00",
+      "sha": "f940c7b04c43a9a8a20f0f91ea11e0e02dcce1cb",
+      "app_version": "0.216.2",
+      "subject": "PR #1425, sem issue: Manual do usuário sai da plataforma (ADR 0078)",
+      "raw_subject": "chore(deploy): registro do PR avulso (#1425)",
+      "scope": [
+        "backend",
+        "frontend"
+      ],
+      "prds": [],
+      "result": "healthy",
+      "duration_seconds": 317,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        },
+        {
+          "service": "frontend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "PR avulso: PR #1425, sem issue. Merge pela API do GitHub, um build. Registro pela Action pos-merge depois do health.",
+      "etapas": {
+        "merge_s": 4,
+        "build_s": {
+          "backend": 105,
+          "frontend": 291
+        },
+        "health_s": 0
+      },
+      "responsavel": "pedrorezendefig"
+    },
+    {
       "at": "2026-11-04T17:26:22-03:00",
       "sha": "1d4f2c7d0e1187bfc4afce76c770fbc25d73422a",
       "app_version": "0.216.1",
