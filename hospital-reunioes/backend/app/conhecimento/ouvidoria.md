@@ -74,6 +74,7 @@ Arquivar é outra coisa: só tira da lista o caso que já foi encerrado, para or
 - O relato do caso encerrado é apagado sozinho depois de cinco anos, e antes disso só a diretoria executiva apaga, um caso por vez e com motivo escrito.
 - Caso apagado não tem volta e não reabre, e arquivar só organiza a lista e vale apenas para caso encerrado.
 - Linha da trilha nunca é apagada, e erro se conserta com um registro novo.
+- Os títulos do PDF do relatório e do cartaz da Ouvidoria saem em caixa alta, inclusive o título das sugestões escritas pela inteligência artificial, e o resto do texto continua com maiúscula e minúscula.
 
 ## O que costuma virar Demanda
 

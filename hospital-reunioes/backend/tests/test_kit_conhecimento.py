@@ -568,6 +568,26 @@ class TestOQueJaFoiDecidido:
         assert NOME_DE_ARQUIVO_DO_CODIGO.search(secao) is None
 
 
+# Os títulos dos PDFs saem em caixa alta (issue #1456): o diretor pergunta ao
+# assistente por que a ata saiu "gritando", e a resposta tem que estar na seção
+# que o agente cita. Um documento por arquivo do kit, cada um com a palavra que
+# o diretor usa para ele.
+DOCUMENTOS_EM_CAIXA_ALTA = {
+    "reunioes.md": ("ata",),
+    "pops.md": ("POP", "modelo do hospital"),
+    "ouvidoria.md": ("relatório", "cartaz"),
+}
+
+
+@pytest.mark.parametrize("arquivo", sorted(DOCUMENTOS_EM_CAIXA_ALTA))
+def test_o_kit_diz_que_os_titulos_dos_documentos_saem_em_caixa_alta(arquivo):
+    """Mutante: apagar a decisão da caixa alta de um dos três arquivos."""
+    decisoes = [d for d in _decisoes(arquivo) if "caixa alta" in d]
+    assert len(decisoes) == 1, decisoes
+    for termo in (*DOCUMENTOS_EM_CAIXA_ALTA[arquivo], "títulos", "PDF", "maiúscula e minúscula"):
+        assert termo in decisoes[0], termo
+
+
 class TestODetectorDeFrase:
     """O detector de frase tambem e codigo: cego, ele deixaria passar o item
     com duas decisoes emendadas."""
