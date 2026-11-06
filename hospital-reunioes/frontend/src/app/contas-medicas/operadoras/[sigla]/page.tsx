@@ -334,7 +334,9 @@ function Cabecalho({ memoria, aoExportar }: { memoria: Memoria; aoExportar: () =
     <section aria-label="Cabeçalho da memória" className={CARTAO}>
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900">Memória da operadora {memoria.sigla}</h1>
+          <h1 className="text-2xl font-bold text-slate-900">
+            Memória da operadora <span className="normal-case">{memoria.sigla}</span>
+          </h1>
           <p className="text-slate-500 text-sm mt-0.5">{memoria.nome}</p>
         </div>
         {memoria.versao && (
@@ -856,7 +858,8 @@ function PropostaDaRegra({
       {parametro && (
         <label className="flex items-center gap-2 text-sm text-slate-700">
           <input type="checkbox" checked={comParametro} onChange={(e) => setComParametro(e.target.checked)} />
-          Mudar também o parâmetro {parametro.chave} para {valorLegivel(parametro.depois)}
+          Mudar também o parâmetro <span className="normal-case">{parametro.chave}</span> para{" "}
+          <span className="normal-case">{valorLegivel(parametro.depois)}</span>
         </label>
       )}
       <p className="text-xs text-slate-500">
