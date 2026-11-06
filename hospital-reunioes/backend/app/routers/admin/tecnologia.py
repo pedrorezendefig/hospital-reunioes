@@ -643,6 +643,10 @@ async def _turno_da_melhoria(
     )
     if linha is None:
         _conflito(MOTIVO_CHAT_MUDOU)
+    # O titulo acompanha a conversa a cada turno em que o modelo o der (issue
+    # #1438); o turno sem titulo deixa o que a Demanda tem.
+    if resultado.titulo and resultado.titulo != demanda.get("titulo"):
+        supabase.table(TABELA_DEMANDAS).update({"titulo": resultado.titulo}).eq("id", demanda_id).execute()
     aviso = _prints_do_turno(supabase, demanda=demanda, print_ids=payload.prints, ator=ator)
     return _chat_para_a_tela(supabase, demanda_id, linha, aviso_dos_anexos=aviso)
 

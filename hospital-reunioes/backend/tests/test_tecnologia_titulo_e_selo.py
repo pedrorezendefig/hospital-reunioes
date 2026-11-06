@@ -52,3 +52,46 @@ class TestTituloDaMelhoria:
 
         assert _demandas(sb)[0]["titulo"] == "Aviso por e-mail quando a ata sair"
         assert _titulo_na_lista(client, demanda_id) == "Aviso por e-mail quando a ata sair"
+
+    def test_o_turno_seguinte_que_traz_titulo_ajusta_o_da_demanda(self, monkeypatch):
+        client, sb, _ = _cenario(monkeypatch)
+        demanda_id = _abrir_a_melhoria(client, monkeypatch, titulo="Aviso da ata")
+        _ia(monkeypatch, _pergunta(contexto="Quem recebe o aviso?", titulo="Aviso por e-mail quando a ata sair"))
+
+        resposta = client.post(f"{CHAT}/{demanda_id}", json={"opcao": "A"})
+
+        assert resposta.status_code == 200, resposta.text
+        assert _demandas(sb)[0]["titulo"] == "Aviso por e-mail quando a ata sair"
+        assert _titulo_na_lista(client, demanda_id) == "Aviso por e-mail quando a ata sair"
+
+    def test_o_titulo_tem_a_limpeza_do_titulo_do_bug(self, monkeypatch):
+        """Uma linha só, sem travessão e no teto de 200 caracteres."""
+        client, sb, _ = _cenario(monkeypatch)
+
+        _abrir_a_melhoria(client, monkeypatch, titulo="Aviso  da ata\n— por e-mail " + "x" * 300)
+
+        titulo = _demandas(sb)[0]["titulo"]
+        assert titulo.startswith("Aviso da ata")
+        assert "\n" not in titulo
+        assert "—" not in titulo
+        assert len(titulo) == 200
+
+
+class TestTurnoSemTitulo:
+    def test_o_turno_sem_titulo_mantem_o_titulo_atual(self, monkeypatch):
+        client, sb, _ = _cenario(monkeypatch)
+        demanda_id = _abrir_a_melhoria(client, monkeypatch, titulo="Aviso da ata")
+        _ia(monkeypatch, _pergunta(contexto="Quem recebe o aviso?"))
+
+        resposta = client.post(f"{CHAT}/{demanda_id}", json={"opcao": "A"})
+
+        assert resposta.status_code == 200, resposta.text
+        assert _demandas(sb)[0]["titulo"] == "Aviso da ata"
+        assert _titulo_na_lista(client, demanda_id) == "Aviso da ata"
+
+    def test_a_primeira_pergunta_sem_titulo_nasce_com_o_provisorio(self, monkeypatch):
+        client, sb, _ = _cenario(monkeypatch)
+
+        _abrir_a_melhoria(client, monkeypatch)
+
+        assert _demandas(sb)[0]["titulo"] == "Conversa na aba Tecnologia"
