@@ -2,6 +2,52 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-11-06T15:58:02-03:00",
+      "sha": "f55c35f7dd37933381cc8a75880b94aba5a6acc2",
+      "app_version": "0.219.2",
+      "subject": "PR #1450, issue #1430: Sino lista os avisos de Contas médicas e de aceite interno",
+      "raw_subject": "chore(deploy): registro do PR avulso (#1450)",
+      "scope": [
+        "backend",
+        "frontend"
+      ],
+      "prds": [],
+      "result": "healthy",
+      "duration_seconds": 529,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        },
+        {
+          "service": "frontend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "PR avulso: PR #1450, issue #1430. Merge pela API do GitHub, um build. Registro pela Action pos-merge depois do health.",
+      "etapas": {
+        "merge_s": 4,
+        "build_s": {
+          "backend": 18,
+          "frontend": 193
+        },
+        "health_s": 4
+      },
+      "responsavel": "pedrorezendefig"
+    },
+    {
       "at": "2026-11-06T15:50:48-03:00",
       "sha": "059b4e95b23daca79f6c9d18152fc92a08928ecc",
       "app_version": "0.219.1",

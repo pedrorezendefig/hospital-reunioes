@@ -1,8 +1,8 @@
 {
   "schema_version": "1.0",
-  "updated_at": "2026-11-06T15:50:48-03:00",
+  "updated_at": "2026-11-06T15:58:02-03:00",
   "updated_by": "pr-avulso@fechar_onda",
-  "last_app_version": "0.219.1",
+  "last_app_version": "0.219.2",
   "production": {
     "domain_root": "hospitalsaomatheus.cloud",
     "vps_ip": "31.97.29.32",
@@ -21,15 +21,15 @@
       "port": 8000,
       "health_path": "/api/health",
       "status": "healthy",
-      "last_deploy_sha": "059b4e95b23daca79f6c9d18152fc92a08928ecc",
-      "last_deploy_at": "2026-11-06T15:50:48-03:00",
+      "last_deploy_sha": "f55c35f7dd37933381cc8a75880b94aba5a6acc2",
+      "last_deploy_at": "2026-11-06T15:58:02-03:00",
       "last_health_check": {
-        "at": "2026-11-06T15:50:48-03:00",
-        "latency_ms": 5009,
+        "at": "2026-11-06T15:58:02-03:00",
+        "latency_ms": 3029,
         "http_status": 200,
         "body_ok": true
       },
-      "build_duration_seconds": 17,
+      "build_duration_seconds": 18,
       "env_count": 24
     },
     {
@@ -39,15 +39,15 @@
       "port": 3000,
       "health_path": null,
       "status": "healthy",
-      "last_deploy_sha": "8fb3c87d17514e5974cdd69783a349678a8fce94",
-      "last_deploy_at": "2026-11-06T15:45:51-03:00",
+      "last_deploy_sha": "f55c35f7dd37933381cc8a75880b94aba5a6acc2",
+      "last_deploy_at": "2026-11-06T15:58:02-03:00",
       "last_health_check": {
-        "at": "2026-11-06T15:45:51-03:00",
-        "latency_ms": 871,
+        "at": "2026-11-06T15:58:02-03:00",
+        "latency_ms": 1386,
         "http_status": 200,
         "body_ok": true
       },
-      "build_duration_seconds": 213,
+      "build_duration_seconds": 193,
       "env_count": 5
     },
     {
@@ -60,7 +60,7 @@
       "last_deploy_sha": "93870744",
       "last_deploy_at": "2026-09-23T13:21:42-03:00",
       "last_health_check": {
-        "at": "2026-11-06T15:50:48-03:00",
+        "at": "2026-11-06T15:58:02-03:00",
         "latency_ms": null,
         "http_status": null,
         "body_ok": true
@@ -208,8 +208,8 @@
   ],
   "last_run": {
     "mode": "pr-avulso",
-    "sha": "059b4e95b23daca79f6c9d18152fc92a08928ecc",
+    "sha": "f55c35f7dd37933381cc8a75880b94aba5a6acc2",
     "result": "healthy",
-    "duration_seconds": 516
+    "duration_seconds": 529
   }
 }
