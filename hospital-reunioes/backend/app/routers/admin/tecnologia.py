@@ -396,8 +396,9 @@ async def _comecar_a_melhoria(
     fala da IA ja e a primeira pergunta, com as duas opcoes e a recomendada.
 
     A Demanda nasce depois do turno, como no bug: um turno que falhou nao deixa
-    Demanda vazia. Ela nasce Novo, no primeiro Produto e com o titulo
-    provisorio; o titulo de verdade vem do resumo.
+    Demanda vazia. Ela nasce Novo, no primeiro Produto e com o titulo que o
+    modelo deu ja na primeira pergunta (issue #1438); sem ele, com o titulo
+    provisorio. Os turnos seguintes e o resumo podem refinar.
     """
     resultado = await ai_processor.chamar_ia_fora_do_loop(
         chat_tecnologia.turno_da_melhoria, mensagens=falas, kit=carregar_kit()
@@ -410,7 +411,7 @@ async def _comecar_a_melhoria(
     demanda = _nascer_a_demanda(
         supabase,
         ator=ator,
-        titulo=chat_tecnologia.TITULO_SEM_RESPOSTA,
+        titulo=resultado.titulo or chat_tecnologia.TITULO_SEM_RESPOSTA,
         tipo=chat_tecnologia.TIPO_DA_CLASSIFICACAO["melhoria"],
         produto=produtos[0],
     )

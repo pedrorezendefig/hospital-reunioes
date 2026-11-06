@@ -125,6 +125,9 @@ class _SaidaDoTurno(BaseModel):
     opcao_a: str | None = None
     opcao_b: str | None = None
     recomendada: Literal["A", "B"] | None = None
+    # O titulo curto da melhoria desde a primeira resposta (issue #1438, ADR
+    # 0079, decisao 5). Opcional: o turno sem titulo mantem o que a Demanda tem.
+    titulo: str | None = None
 
     @model_validator(mode="after")
     def _pergunta_inteira(self):
@@ -164,13 +167,25 @@ class ResultadoDoTurno:
     `decisao` e a frase do que a resposta anterior fechou. `erro` e a frase
     para a tela quando o turno nao aconteceu (e entao `mensagem` e nula).
     `chamada` e a linha de `tecnologia_chamadas_ia`, nula so no modo mock, em
-    que nao houve chamada.
+    que nao houve chamada. `titulo` e o titulo curto que o modelo deu ao pedido
+    neste turno, ja limpo, ou nulo quando nao deu.
     """
 
     mensagem: dict | None
     decisao: str | None
     erro: str | None
     chamada: dict | None
+    titulo: str | None = None
+
+
+# O teto do titulo, o mesmo do titulo do bug (`chat_tecnologia.LIMITE_DO_TITULO`).
+LIMITE_DO_TITULO = 200
+
+
+def titulo_limpo(valor: str | None) -> str | None:
+    """O titulo que o modelo deu, com a limpeza do titulo do bug: uma linha
+    so, sem travessao e no teto. Vazio vira nulo, que e "nao deu titulo"."""
+    return sanitizar_travessao(" ".join((valor or "").split()))[:LIMITE_DO_TITULO].strip() or None
 
 
 def _cercar_o_kit(kit: str) -> str:
@@ -439,6 +454,7 @@ def turno(
         decisao=decisao,
         erro=None,
         chamada=chamada,
+        titulo=titulo_limpo(saida.titulo),
     )
 
 
@@ -594,7 +610,7 @@ def resumir(
     )
     if saida is None:
         return ResultadoDoResumo(resumo=None, erro=MOTIVO_TURNO_FALHOU, chamada=chamada)
-    titulo = sanitizar_travessao(" ".join((saida.titulo or "").split()))[:200].strip() or None
+    titulo = titulo_limpo(saida.titulo)
     parecida = consultas.issues_vistas.get(saida.parecida) if consultas and saida.parecida is not None else None
     return ResultadoDoResumo(
         resumo=_resumo_da_conversa(saida, mensagens), erro=None, chamada=chamada, titulo=titulo, parecida=parecida
