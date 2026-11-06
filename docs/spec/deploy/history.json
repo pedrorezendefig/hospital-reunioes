@@ -2,6 +2,54 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-11-06T16:48:48-03:00",
+      "sha": "bc75cb73f8126b4a6a891358839a0e13ab30f78b",
+      "app_version": "0.221.0",
+      "subject": "Onda caixa-alta-onda1: Dado digitado fora da caixa alta em Contas médicas, Central, Tecnologia, Admin e Configurações",
+      "raw_subject": "chore(deploy): registro da onda caixa-alta-onda1 (#1463)",
+      "scope": [
+        "backend",
+        "frontend"
+      ],
+      "prds": [
+        1428
+      ],
+      "result": "healthy",
+      "duration_seconds": 275,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        },
+        {
+          "service": "frontend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "onda-enxuta caixa-alta-onda1: PR #1463 (issue #1455), mergeados PR a PR. Merge pela API do GitHub, um build. Registro pela Action pos-merge depois do health.",
+      "etapas": {
+        "merge_s": 2,
+        "build_s": {
+          "backend": 76,
+          "frontend": 247
+        },
+        "health_s": 1
+      },
+      "responsavel": "pedrorezendefig"
+    },
+    {
       "at": "2026-11-06T16:45:40-03:00",
       "sha": "2c6894cf890a2e896cd03b86ced4ad2415dc503e",
       "app_version": "0.220.1",
