@@ -2,6 +2,51 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-11-06T15:31:26-03:00",
+      "sha": "32a9709c39285ccfdc2d22ba25bf74221c9c212d",
+      "app_version": "0.217.1",
+      "subject": "PR #1446, issue #1442: Conector MCP para de exigir o escopo read:analytics que o AuthKit recusa",
+      "raw_subject": "chore(deploy): registro do PR avulso (#1446)",
+      "scope": [
+        "backend"
+      ],
+      "prds": [
+        809
+      ],
+      "result": "healthy",
+      "duration_seconds": 64,
+      "services_touched": [
+        "backend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        },
+        {
+          "service": "frontend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "PR avulso: PR #1446, issue #1442. Merge pela API do GitHub, um build. Registro pela Action pos-merge depois do health.",
+      "etapas": {
+        "merge_s": 3,
+        "build_s": {
+          "backend": 17
+        },
+        "health_s": 20
+      },
+      "responsavel": "pedroribbe"
+    },
+    {
       "at": "2026-11-06T15:24:42-03:00",
       "sha": "68e1b2fb8ed3b6494ba25e7fcb32204f6c95f4ad",
       "app_version": "0.217.0",
