@@ -234,7 +234,7 @@ export default function ElaboracaoPopPage() {
               </div>
               <h1 className="text-base font-bold text-slate-900 truncate">
                 {dados.pop.codigo}
-                <span className="text-slate-400 font-normal"> · {dados.pop.nome}</span>
+                <span className="text-slate-400 font-normal normal-case"> · {dados.pop.nome}</span>
               </h1>
             </div>
           </div>

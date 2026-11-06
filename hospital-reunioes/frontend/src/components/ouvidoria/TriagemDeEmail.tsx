@@ -331,7 +331,7 @@ export function TriagemDeEmail({ token }: { token: string }) {
                   type="button"
                   aria-pressed={selecionado === email.id}
                   onClick={() => abrir(email.id)}
-                  className={`w-full text-left px-4 py-3 rounded-xl border transition-colors ${
+                  className={`w-full text-left normal-case px-4 py-3 rounded-xl border transition-colors ${
                     selecionado === email.id
                       ? "border-primary bg-primary/5"
                       : "border-border bg-white hover:bg-slate-50"
@@ -351,7 +351,7 @@ export function TriagemDeEmail({ token }: { token: string }) {
                     </span>
                     <MarcasDoEmail email={email} />
                     {rotuloDoEstado(email.estado) && (
-                      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-50 text-emerald-700">
+                      <span className="etiqueta inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-50 text-emerald-700">
                         {rotuloDoEstado(email.estado)}
                       </span>
                     )}
@@ -388,7 +388,7 @@ export function TriagemDeEmail({ token }: { token: string }) {
         {aberto && (
           <div className="space-y-4">
             <div>
-              <h2 className="text-lg font-semibold text-slate-900 break-words">
+              <h2 className="text-lg font-semibold text-slate-900 break-words normal-case">
                 {aberto.assunto || "Sem assunto"}
               </h2>
               <p className="text-sm text-slate-700 mt-1 break-words">
@@ -544,7 +544,7 @@ export function TriagemDeEmail({ token }: { token: string }) {
                           type="button"
                           onClick={() => abrirAnexo(aberto.id, anexo)}
                           disabled={abrindoAnexo === anexo.id}
-                          className="flex items-center gap-2 w-full text-left text-sm text-slate-700 px-3 py-2 rounded-lg bg-slate-50 hover:bg-slate-100 disabled:opacity-50 transition-colors"
+                          className="flex items-center gap-2 w-full text-left normal-case text-sm text-slate-700 px-3 py-2 rounded-lg bg-slate-50 hover:bg-slate-100 disabled:opacity-50 transition-colors"
                         >
                           {abrindoAnexo === anexo.id ? (
                             <Loader2 className="w-3.5 h-3.5 shrink-0 animate-spin text-slate-400" />

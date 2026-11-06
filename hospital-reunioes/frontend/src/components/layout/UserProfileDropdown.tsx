@@ -51,7 +51,7 @@ export function UserProfileDropdown({ nome, email }: UserProfileDropdownProps) {
         onClick={() => setOpen(!open)}
         className="flex items-center gap-3 hover:bg-slate-100 p-1.5 rounded-xl transition-all duration-200 group"
       >
-        <div className="text-right hidden sm:block">
+        <div className="text-right hidden sm:block normal-case">
           <div className="text-sm font-semibold text-slate-700 group-hover:text-primary transition-colors inline-flex items-center gap-1.5 justify-end">
             <span>{nome}</span>
             <SuperAdminBadge visible={isSuperAdminUser} size={14} />

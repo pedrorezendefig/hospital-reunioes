@@ -244,7 +244,7 @@ export function ParticipanteCombobox({
               className="w-full border-t border-slate-100 px-3 py-2.5 text-xs font-medium text-left text-amber-700 hover:bg-amber-50 inline-flex items-center gap-1.5 transition-colors"
             >
               <UserPlus className="w-3.5 h-3.5" />
-              Cadastrar &quot;{termo.trim()}&quot; como externo
+              Cadastrar <span className="normal-case">&quot;{termo.trim()}&quot;</span> como externo
             </button>
           )}
 
@@ -338,7 +338,7 @@ function GrupoResultados({
               key={p.id}
               type="button"
               onClick={() => onEscolher(p)}
-              className={`w-full flex items-center gap-3 px-3 py-2 text-left text-sm transition-colors ${
+              className={`w-full flex items-center gap-3 px-3 py-2 text-left normal-case text-sm transition-colors ${
                 isHighlighted ? "bg-slate-50" : "hover:bg-slate-50"
               }`}
             >

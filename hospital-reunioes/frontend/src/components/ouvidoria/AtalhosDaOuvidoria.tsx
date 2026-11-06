@@ -67,7 +67,11 @@ export function AtalhosDaOuvidoria({ perfil }: { perfil: string | null | undefin
 
   return (
     <>
-      {/* Uma linha só, sem `flex-wrap`: o que garante que ela caiba é o rótulo
+      {/* A pílula leva `normal-case`: a regra base põe todo link de `nav` em
+          caixa alta (ADR 0080), e em maiúscula esta barra não cabe na linha
+          a 1024px (`lib/ouvidoria/tipografia`, nota 2).
+
+          Uma linha só, sem `flex-wrap`: o que garante que ela caiba é o rótulo
           curto, e não a permissão de quebrar (RN-77).
 
           Ela aparece do `lg` para cima, e não do `md`: o sidebar do AppShell é
@@ -87,7 +91,7 @@ export function AtalhosDaOuvidoria({ perfil }: { perfil: string | null | undefin
               // O rótulo curto é o que se lê; o nome inteiro é o que se ouve.
               aria-label={atalho.nome}
               title={atalho.nome}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium whitespace-nowrap bg-slate-100 text-slate-700 hover:bg-slate-200 transition-colors"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium normal-case tracking-normal whitespace-nowrap bg-slate-100 text-slate-700 hover:bg-slate-200 transition-colors"
             >
               <Icone className="w-4 h-4 shrink-0" />
               {atalho.rotulo}

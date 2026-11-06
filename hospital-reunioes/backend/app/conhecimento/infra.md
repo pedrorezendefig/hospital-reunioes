@@ -41,6 +41,7 @@ Endereço novo na internet e mudança de configuração sensível são ato human
 - Todo e-mail do sistema sai por um serviço de entrega de terceiros, com servidores fora do Brasil, e o hospital não vai operar servidor de e-mail próprio.
 - O fornecedor da inteligência artificial que escreve texto no aplicativo guarda o que recebe por até 30 dias e não usa esse texto para treinar modelo.
 - Nada que o aplicativo mostra ou gera leva travessão, nem o texto escrito pela inteligência artificial, que passa por uma limpeza antes de sair.
+- Na tela, título, item de menu, botão, aba, nome de campo, cabeçalho de coluna e etiqueta de situação aparecem em caixa alta, enquanto frase, texto longo e o que a equipe digita aparecem com maiúscula e minúscula, e nada é gravado em maiúscula no banco.
 - Mudança no banco de dados é aplicada à mão por uma pessoa da Vitta, antes da versão que depende dela.
 - Endereço novo e configuração sensível são feitos à mão e conferidos, separados da subida de versão.
 

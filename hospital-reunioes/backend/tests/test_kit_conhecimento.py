@@ -568,6 +568,26 @@ class TestOQueJaFoiDecidido:
         assert NOME_DE_ARQUIVO_DO_CODIGO.search(secao) is None
 
 
+# Os títulos dos PDFs saem em caixa alta (issue #1456): o diretor pergunta ao
+# assistente por que a ata saiu "gritando", e a resposta tem que estar na seção
+# que o agente cita. Um documento por arquivo do kit, cada um com a palavra que
+# o diretor usa para ele.
+DOCUMENTOS_EM_CAIXA_ALTA = {
+    "reunioes.md": ("ata",),
+    "pops.md": ("POP", "modelo do hospital"),
+    "ouvidoria.md": ("relatório", "cartaz"),
+}
+
+
+@pytest.mark.parametrize("arquivo", sorted(DOCUMENTOS_EM_CAIXA_ALTA))
+def test_o_kit_diz_que_os_titulos_dos_documentos_saem_em_caixa_alta(arquivo):
+    """Mutante: apagar a decisão da caixa alta de um dos três arquivos."""
+    decisoes = [d for d in _decisoes(arquivo) if "caixa alta" in d]
+    assert len(decisoes) == 1, decisoes
+    for termo in (*DOCUMENTOS_EM_CAIXA_ALTA[arquivo], "títulos", "PDF", "maiúscula e minúscula"):
+        assert termo in decisoes[0], termo
+
+
 class TestODetectorDeFrase:
     """O detector de frase tambem e codigo: cego, ele deixaria passar o item
     com duas decisoes emendadas."""
@@ -589,6 +609,36 @@ class TestODetectorDeFrase:
         """O protocolo da Ouvidoria tem quatro digitos com zero na frente, mas
         colado ao ano por hifen: e texto de gente, nao vocabulario do repo."""
         assert VOCABULARIO_DO_REPOSITORIO.search("no formato ano mais número, como 2026-0007") is None
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 5. A regra da caixa alta no texto geral do aplicativo (issue #1454)
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+class TestACaixaAltaNoTextoGeral:
+    """O texto de Infra guarda as decisoes que valem para o aplicativo inteiro
+    (o travessao esta la). A caixa alta das telas e uma delas: o diretor
+    pergunta ao Assistente por que o nome da reuniao nao saiu em maiuscula, e a
+    resposta tem que estar no que ele le."""
+
+    @pytest.fixture
+    def decisao(self) -> str:
+        decisoes = _decisoes("infra.md")
+        achadas = [d for d in decisoes if "caixa alta" in d]
+        assert len(achadas) == 1, decisoes
+        return achadas[0]
+
+    @pytest.mark.parametrize(
+        "termo",
+        ["menu", "botão", "aba", "nome de campo", "cabeçalho de coluna", "etiqueta de situação"],
+    )
+    def test_diz_o_que_vai_para_caixa_alta(self, decisao, termo):
+        assert termo in decisao
+
+    @pytest.mark.parametrize("termo", ["frase", "texto longo", "o que a equipe digita", "nada é gravado em maiúscula"])
+    def test_diz_o_que_fica_com_maiuscula_e_minuscula(self, decisao, termo):
+        assert termo in decisao
 
 
 # ═══════════════════════════════════════════════════════════════════════════

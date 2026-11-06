@@ -48,6 +48,7 @@ Três coisas já foram decididas e ainda não foram construídas. Quem procurar 
 - O fluxograma é a única seção que sempre existe, e quem o desenha é o próprio aplicativo, sem mandar o conteúdo do POP para serviço de fora.
 - Revisor e validador podem devolver o POP com comentários quantas vezes precisarem.
 - Publicar exige a assinatura digital das três pessoas do fluxo.
+- Os títulos e subtítulos do PDF do POP saem em caixa alta, inclusive as seções que a inteligência artificial escreve a partir do modelo do hospital, e o resto do texto continua com maiúscula e minúscula.
 
 ## O que costuma virar Demanda
 

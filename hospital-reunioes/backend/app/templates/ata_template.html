@@ -119,7 +119,11 @@
             letter-spacing: 0.02em;
         }
 
-        /* headings */
+        /* headings. Títulos em caixa alta só na exibição (ADR 0080): o texto
+           gravado, inclusive o tópico escrito pela IA, fica como veio. */
+        h1, h2, h3, .topico-titulo {
+            text-transform: uppercase;
+        }
         h1, h2, h3 {
             break-after: avoid;
             page-break-after: avoid;

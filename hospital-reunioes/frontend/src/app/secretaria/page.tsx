@@ -137,7 +137,7 @@ export default function SecretariaHome() {
       <header className="flex items-start justify-between gap-4 flex-wrap">
         <div>
           <h1 className="text-2xl font-semibold text-slate-900">
-            Olá, {primeiroNome}!
+            Olá, <span className="normal-case">{primeiroNome}</span>!
           </h1>
           <p className="text-sm text-slate-500 mt-1">
             Reuniões agendadas que ainda vão acontecer. Você pode editar ou cancelar
@@ -187,7 +187,7 @@ export default function SecretariaHome() {
               >
                 <div className="flex items-start justify-between gap-4">
                   <div className="flex-1 min-w-0">
-                    <h2 className="font-semibold text-slate-900 truncate">
+                    <h2 className="font-semibold text-slate-900 truncate normal-case">
                       {r.titulo || "Sem título"}
                     </h2>
                     {r.objetivo ? (

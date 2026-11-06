@@ -122,7 +122,12 @@
             margin: 0 0 22px 0;
         }
 
-        /* headings */
+        /* headings. Títulos em caixa alta só na exibição (ADR 0080): o título
+           da seção e o subtítulo do conteúdo, escritos pela IA a partir do
+           modelo do hospital, ficam gravados como vieram. */
+        h1, h2, h3, h4, h5, h6 {
+            text-transform: uppercase;
+        }
         h1, h2 {
             break-after: avoid;
             page-break-after: avoid;

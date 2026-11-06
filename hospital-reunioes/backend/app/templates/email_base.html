@@ -21,7 +21,8 @@
             <td style="background:#ffffff;padding:32px 40px 24px;text-align:center;border-bottom:1px solid #e8edf5;">
               <img src="{{ logo_base64 }}" alt="Hospital São Matheus" width="160" style="max-width:160px;height:auto;display:block;margin:0 auto;" />
               <p style="color:#64748b;margin:10px 0 0;font-size:12px;font-weight:500;letter-spacing:.8px;text-transform:uppercase;">
-                {% block header_subtitle %}Gestão de Atas e Decisões com IA{% endblock %}
+                {# Caixa alta pelo filtro, e não só pelo CSS: há cliente de e-mail que ignora text-transform (ADR 0080). #}
+                {% filter upper %}{% block header_subtitle %}Gestão de Atas e Decisões com IA{% endblock %}{% endfilter %}
               </p>
             </td>
           </tr>
