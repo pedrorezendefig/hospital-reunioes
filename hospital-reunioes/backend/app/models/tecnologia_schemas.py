@@ -50,6 +50,9 @@ class DemandaResponse(BaseModel):
     # quando a Etapa e Em producao (`versao_da_entrega`), e o selo a mostra
     # ("Em producao desde v0.165.0", issue #1065). A tela nao repete a regra.
     versao: str | None = None
+    # O selo ao lado da Etapa (issue #1438): o Tipo da Demanda traduzido de
+    # volta para a pergunta do chat. Nulo no Tipo de antes do chat.
+    classificacao: Literal["bug", "melhoria"] | None = None
 
 
 # O teto de uma fala do chat. E do pydantic, e nao do router, porque aqui nao

@@ -54,6 +54,10 @@ ESCOLHAS: dict[str, str] = {"bug": "Bug", "melhoria": "Melhoria"}
 # Tipo de antes: bug e Defeito, melhoria e Novo.
 TIPO_DA_CLASSIFICACAO: dict[str, str] = {"bug": "defeito", "melhoria": "novo"}
 
+# O caminho de volta, para o selo da lista (issue #1438): o Tipo que nao veio do
+# chat (os de antes dele) nao e bug nem melhoria, e fica sem selo.
+CLASSIFICACAO_DO_TIPO: dict[str, str] = {tipo: c for c, tipo in TIPO_DA_CLASSIFICACAO.items()}
+
 # A melhoria confirmada segue, no proprio chat, pelo Planejamento da Demanda
 # (issue #1383): a conversa continua guardada, e dali em diante as falas sao as
 # do planejamento (pergunta, resposta, encerrou), com as regras dele.

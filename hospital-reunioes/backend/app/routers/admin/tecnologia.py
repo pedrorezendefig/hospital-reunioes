@@ -126,6 +126,7 @@ def _para_a_lista(demandas: list[dict]) -> list[dict]:
             "tem_vinculo": bool(d.get("github_issue_numero")),
             "partes": _partes_visiveis(d),
             "versao": versao_da_entrega(d),
+            "classificacao": chat_tecnologia.CLASSIFICACAO_DO_TIPO.get(str(d.get("tipo") or "")),
         }
         for d in demandas
     ]

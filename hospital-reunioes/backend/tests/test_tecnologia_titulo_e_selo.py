@@ -95,3 +95,23 @@ class TestTurnoSemTitulo:
         _abrir_a_melhoria(client, monkeypatch)
 
         assert _demandas(sb)[0]["titulo"] == "Conversa na aba Tecnologia"
+
+
+class TestClassificacaoNaLista:
+    def test_a_lista_devolve_bug_para_defeito_e_melhoria_para_novo(self, monkeypatch):
+        demandas = [
+            _demanda("d-bug", tipo="defeito", autor_id=DIRETOR["id"], criado_em="2026-11-02T10:00:00Z"),
+            _demanda("d-melhoria", tipo="novo", autor_id=DIRETOR["id"], criado_em="2026-11-01T10:00:00Z"),
+            _demanda("d-antiga", tipo="consultoria", autor_id=DIRETOR["id"], criado_em="2026-10-01T10:00:00Z"),
+        ]
+        client, _, _ = _cenario(monkeypatch, demandas=demandas)
+
+        resposta = client.get(CHAT)
+
+        assert resposta.status_code == 200, resposta.text
+        assert [(d["id"], d["classificacao"]) for d in resposta.json()] == [
+            ("d-bug", "bug"),
+            ("d-melhoria", "melhoria"),
+            # O Tipo de antes do chat nao e bug nem melhoria: fica sem selo.
+            ("d-antiga", None),
+        ]
