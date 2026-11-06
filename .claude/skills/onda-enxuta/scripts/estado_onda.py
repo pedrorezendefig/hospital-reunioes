@@ -11,7 +11,7 @@ Uso (sempre da raiz do repositório do Projeto, que tem o `.claude/fluxo.json`):
     estado_onda.py iniciar --sessao onda-a --onda 1 [--prd 12] [--issues 40 41] [--attach <id>]
     estado_onda.py issue   --sessao onda-a --onda 1 --numero 40 [--pr 77] [--status verde]
     estado_onda.py evento  --sessao onda-a --onda 1 --tipo erro --texto "..." [--pr 77]
-    estado_onda.py fim     --sessao onda-a --onda 1 [--retro "dispensável"]
+    estado_onda.py fim     --sessao onda-a --onda 1 [--proxima 2 | --ultima] [--retro "dispensável"]
     estado_onda.py ler     --sessao onda-a --onda 1
 
 `evento` de tipo `erro` ou `pronto-para-voce`, novo e com `aviso_celular` ligado no
@@ -110,6 +110,7 @@ def novo_estado(cfg: dict, base: Path, sessao: str, onda: int, prd: int | None, 
         "issues": [{"numero": n, "pr": None, "status": "fila"} for n in issues],
         "eventos": [],
         "retro": None,
+        "proxima": None,
     }
 
 
@@ -158,6 +159,9 @@ def main(argv: list[str]) -> int:
     p.add_argument("--pr", type=int)
     p = sub.add_parser("fim", parents=[comuns])
     p.add_argument("--retro")
+    seguinte = p.add_mutually_exclusive_group()
+    seguinte.add_argument("--proxima", type=int, help="número da onda seguinte, já lançada")
+    seguinte.add_argument("--ultima", action="store_true", help="fila vazia: não há onda seguinte")
     sub.add_parser("ler", parents=[comuns])
     args = ap.parse_args(argv)
 
@@ -202,7 +206,14 @@ def main(argv: list[str]) -> int:
         if args.cmd == "fim":
             estado["fim"] = agora()
             estado["retro"] = args.retro
-            registrar_evento(estado, "terminada", f"onda {args.onda} terminada", None)
+            # O PedroOS fala o fim da onda dizendo se a seguinte começou ou se esta foi a última.
+            estado["proxima"] = args.proxima if args.proxima is not None else (False if args.ultima else None)
+            texto = f"onda {args.onda} terminada"
+            if args.proxima is not None:
+                texto += f", onda {args.proxima} começou"
+            elif args.ultima:
+                texto += ", foi a última"
+            registrar_evento(estado, "terminada", texto, None)
             gravar(arq, estado)
             return 0
     except (config_do_fluxo.Erro, json.JSONDecodeError) as e:
