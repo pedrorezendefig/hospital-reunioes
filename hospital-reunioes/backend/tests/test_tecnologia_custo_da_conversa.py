@@ -111,6 +111,22 @@ class TestCustoAoAbrirAConversa:
 
         assert custo["modelo"] == "Opus 5.5"
 
+    def test_conversa_com_print_deixa_o_custo_nulo(self, monkeypatch):
+        """A leitura do print chama a IA e não grava a chamada em lugar nenhum:
+        somar só o resto daria um valor menor que o de verdade, com cara de
+        exato (revisão do PR #1443)."""
+        client, sb, demanda_id = _conversa_com(
+            monkeypatch,
+            lambda d: _chamada(d, custo=1.20, criado_em="2026-11-06T10:00:00Z"),
+        )
+        sb.tabelas.setdefault("tecnologia_anexos", []).append(
+            {"demanda_id": demanda_id, "ordem": 1, "storage_path": "x/print.png", "apagado_em": None}
+        )
+
+        custo = client.get(f"{CHAT}/{demanda_id}").json()["custo"]
+
+        assert custo == {"modelo": "Opus 5.5", "custo_usd": None}
+
     def test_sem_chamada_nenhuma_nao_ha_custo(self, monkeypatch):
         client, _, demanda_id = _conversa_com(monkeypatch)
 
@@ -141,7 +157,7 @@ class TestKitDizOCusto:
 
         secao = texto.split("## A conversa com o Assistente", 1)[1].split("\n## ", 1)[0]
         paragrafo = next(p for p in secao.split("\n\n") if "custo não medido" in p)
-        for trecho in ("no alto da conversa", "dólar", "não está na lista", "sem preço"):
+        for trecho in ("no alto da conversa", "dólar", "não está na lista", "sem preço", "a conversa tem print"):
             assert trecho in paragrafo, trecho
 
 
