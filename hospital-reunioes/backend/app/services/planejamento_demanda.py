@@ -55,6 +55,7 @@ MOTIVO_DUAS_RESPOSTAS = "Escolha uma opção ou escreva a sua resposta, não os 
 MOTIVO_RESPOSTA_SEM_PERGUNTA = "Ainda não há pergunta para responder. Recarregue a página."
 MOTIVO_NAO_SEM_TEXTO = "Diga o que não bateu no resumo."
 MOTIVO_FALA_DEPOIS_DO_FIM = "Escreva o que quer acrescentar, e a IA volta a perguntar."
+MOTIVO_NADA_EM_ABERTO = "Nada ficou em aberto no resumo. Clique em Criar o card, ou escreva o que quer acrescentar."
 
 # A frase de quando o turno nao aconteceu: provedor fora do ar, recusa, ou a
 # resposta que nao validou contra o esquema. Ela nao culpa nenhuma das tres,
@@ -110,6 +111,20 @@ def resposta_do_diretor(
     if texto:
         return {"tipo": "resposta", "opcao": None, "texto": texto}, None
     return None, MOTIVO_SEM_RESPOSTA
+
+
+def fala_de_continuar(resumo: dict | None) -> tuple[dict | None, str | None]:
+    """O "Continuar respondendo" do resumo (ADR 0079, decisao 4): a fala do
+    diretor que traz as lacunas do "Ficou em aberto" para o pedido, para a
+    proxima pergunta ser sobre a primeira delas. Sem lacuna, a recusa."""
+    lacunas = [item.strip() for item in (resumo or {}).get("em_aberto") or [] if item.strip()]
+    if not lacunas:
+        return None, MOTIVO_NADA_EM_ABERTO
+    texto = "\n".join(
+        ["Quero continuar respondendo o que ficou em aberto, começando pelo primeiro item:"]
+        + [f"- {lacuna}" for lacuna in lacunas]
+    )
+    return {"tipo": "resposta", "opcao": None, "texto": texto}, None
 
 
 # ─── O turno ─────────────────────────────────────────────────────────────────
