@@ -54,6 +54,7 @@ MOTIVO_SEM_RESPOSTA = "Escolha uma das opções ou escreva a sua resposta."
 MOTIVO_DUAS_RESPOSTAS = "Escolha uma opção ou escreva a sua resposta, não os dois."
 MOTIVO_RESPOSTA_SEM_PERGUNTA = "Ainda não há pergunta para responder. Recarregue a página."
 MOTIVO_NAO_SEM_TEXTO = "Diga o que não bateu no resumo."
+MOTIVO_FALA_DEPOIS_DO_FIM = "Escreva o que quer acrescentar, e a IA volta a perguntar."
 
 # A frase de quando o turno nao aconteceu: provedor fora do ar, recusa, ou a
 # resposta que nao validou contra o esquema. Ela nao culpa nenhuma das tres,
@@ -79,7 +80,7 @@ def pergunta_em_aberto(mensagens: list[dict]) -> dict | None:
 
 
 def resposta_do_diretor(
-    mensagens: list[dict], *, opcao: str | None, texto: str | None
+    mensagens: list[dict], *, opcao: str | None, texto: str | None, depois_do_fim: bool = False
 ) -> tuple[dict | None, str | None]:
     """A fala do diretor que entra na conversa, ou a frase da recusa.
 
@@ -87,8 +88,15 @@ def resposta_do_diretor(
     leva resposta. Com pergunta em aberto, leva exatamente uma: a letra da
     opcao (o texto vem da propria pergunta, que e o que o modelo leu) ou o
     texto livre.
+
+    `depois_do_fim` e a conversa encerrada ou resumida (ADR 0079, decisao 3):
+    nao ha opcao para clicar, e so o texto livre reabre as perguntas.
     """
     texto = (texto or "").strip()
+    if depois_do_fim:
+        if opcao or not texto:
+            return None, MOTIVO_FALA_DEPOIS_DO_FIM
+        return {"tipo": "resposta", "opcao": None, "texto": texto}, None
     pergunta = pergunta_em_aberto(mensagens)
     if pergunta is None:
         return (None, MOTIVO_RESPOSTA_SEM_PERGUNTA) if (opcao or texto) else (None, None)

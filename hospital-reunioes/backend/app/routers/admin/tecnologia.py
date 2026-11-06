@@ -565,7 +565,7 @@ MOTIVO_CHAT_NAO_ENCONTRADO = "Esta conversa não foi encontrada. Comece uma nova
 MOTIVO_CHAT_NO_RESUMO = "O resumo já está pronto. Clique em Criar o card, ou em Não bateu para corrigir."
 MOTIVO_CHAT_TERMINOU = "Esta conversa já virou card. Comece uma nova na aba Tecnologia."
 MOTIVO_CHAT_MUDOU = "A conversa mudou em outra aba. Recarregue a página e tente de novo."
-MOTIVO_MELHORIA_ENCERRADA = "A IA já tem o que precisa. Clique em Fechar e resumir para ver as decisões."
+ESTADOS_DEPOIS_DO_FIM = (planejamento_demanda.ESTADO_ENCERRADO, planejamento_demanda.ESTADO_RESUMIDO)
 MOTIVO_RESUMO_SO_DA_MELHORIA = "Fechar e resumir vale para uma melhoria, depois que as perguntas começaram."
 
 
@@ -596,19 +596,24 @@ def _acompanhar_o_turno(supabase: Client, demanda: dict, resultado: chat_tecnolo
 
 
 async def _turno_da_melhoria(
-    supabase: Client, *, demanda: dict, atual: dict, payload: ChatTurnoPayload, ator: dict
+    supabase: Client, *, demanda: dict, atual: dict, payload: ChatTurnoPayload, ator: dict, depois_do_fim: bool
 ) -> dict:
     """Um turno do planejamento da melhoria dentro do chat (issue #1383).
 
     As regras sao as do Planejamento da Demanda: com pergunta em aberto, a
     resposta e a letra da opcao OU o texto livre; sem pergunta (a passagem do
     chat ao planejamento, ou o "Nao bateu"), o corpo vazio pede a pergunta
-    seguinte. A conversa so e gravada depois que o turno deu certo.
+    seguinte. Depois do encerramento ou do resumo (`depois_do_fim`), so o
+    texto livre vale, e ele volta o planejamento a em andamento com a pergunta
+    seguinte (ADR 0079, decisao 3). A conversa so e gravada depois que o turno
+    deu certo.
     """
     demanda_id = str(demanda["id"])
     mensagens = list(atual.get("mensagens") or [])
     _, planejamento = chat_tecnologia.partes_da_melhoria(mensagens)
-    resposta, motivo = planejamento_demanda.resposta_do_diretor(planejamento, opcao=payload.opcao, texto=payload.texto)
+    resposta, motivo = planejamento_demanda.resposta_do_diretor(
+        planejamento, opcao=payload.opcao, texto=payload.texto, depois_do_fim=depois_do_fim
+    )
     if motivo:
         _recusar(motivo)
     if resposta is not None:
@@ -674,16 +679,21 @@ async def responder_no_chat(
     casos.
     """
     demanda, atual = _chat_guardado(supabase, demanda_id)
-    if atual.get("estado") == planejamento_demanda.ESTADO_RESUMIDO:
+    estado = atual.get("estado")
+    mensagens = list(atual.get("mensagens") or [])
+    na_melhoria = chat_tecnologia.em_planejamento(mensagens)
+    # A melhoria segue aberta depois do encerramento e do resumo, ate o Criar
+    # o card (ADR 0079, decisao 3); o Roteiro do bug, nao.
+    depois_do_fim = na_melhoria and estado in ESTADOS_DEPOIS_DO_FIM
+    if estado == planejamento_demanda.ESTADO_RESUMIDO and not depois_do_fim:
         _conflito(MOTIVO_CHAT_NO_RESUMO)
-    if atual.get("estado") == planejamento_demanda.ESTADO_ENCERRADO:
-        _conflito(MOTIVO_MELHORIA_ENCERRADA)
-    if atual.get("estado") != planejamento_demanda.ESTADO_EM_ANDAMENTO:
+    if estado != planejamento_demanda.ESTADO_EM_ANDAMENTO and not depois_do_fim:
         _conflito(MOTIVO_CHAT_TERMINOU)
 
-    mensagens = list(atual.get("mensagens") or [])
-    if chat_tecnologia.em_planejamento(mensagens):
-        return await _turno_da_melhoria(supabase, demanda=demanda, atual=atual, payload=payload, ator=ator)
+    if na_melhoria:
+        return await _turno_da_melhoria(
+            supabase, demanda=demanda, atual=atual, payload=payload, ator=ator, depois_do_fim=depois_do_fim
+        )
     texto = (payload.texto or "").strip()
     if texto:
         mensagens.append(chat_tecnologia.fala_do_diretor(texto))

@@ -16,7 +16,7 @@ import sys
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from test_planejamento_demanda import _ia, _pergunta  # noqa: E402
+from test_planejamento_demanda import _encerrou, _ia, _pergunta  # noqa: E402
 from test_tecnologia_chat import (  # noqa: E402
     _cenario,
     _chamadas,
@@ -263,6 +263,62 @@ class TestResumoDaMelhoria:
         assert retomou.json()["mensagens"][-1]["texto"] == "A enfermagem marca em que momento?"
         assert "A enfermagem também marca." in cliente.chamadas[0]["messages"][0]["content"]
         assert gh.criadas == []
+
+
+class TestConversaAbertaAteOCard:
+    """ADR 0079, decisao 3: depois do encerramento ou do resumo, o diretor
+    ainda escreve, e o agente volta a perguntar, ate o Criar o card."""
+
+    def test_fala_livre_depois_de_encerrado_traz_nova_pergunta(self, monkeypatch):
+        client, sb, _ = _cenario(monkeypatch)
+        demanda_id = _abrir_pelo_botao(client, monkeypatch)["demanda_id"]
+        _ia(monkeypatch, _encerrou())
+        assert client.post(f"{CHAT}/{demanda_id}", json={"opcao": "A"}).json()["estado"] == "encerrado"
+        cliente = _ia(monkeypatch, _pergunta(contexto="O aviso vale também no fim de semana?"))
+
+        resposta = client.post(f"{CHAT}/{demanda_id}", json={"texto": "Esqueci: o médico também precisa ver."})
+
+        assert resposta.status_code == 200, resposta.text
+        corpo = resposta.json()
+        assert corpo["estado"] == "em_andamento"
+        assert [f["texto"] for f in corpo["mensagens"][-2:]] == [
+            "Esqueci: o médico também precisa ver.",
+            "O aviso vale também no fim de semana?",
+        ]
+        assert corpo["mensagens"][-2]["autor"] == "diretor"
+        assert "Esqueci: o médico também precisa ver." in cliente.chamadas[0]["messages"][0]["content"]
+
+    def test_fala_livre_depois_do_resumo_traz_nova_pergunta(self, monkeypatch):
+        client, sb, gh = _cenario(monkeypatch)
+        demanda_id = _ate_o_resumo(client, sb, monkeypatch)
+        _ia(monkeypatch, _pergunta(contexto="Quem confirma o retorno com o paciente?"))
+
+        resposta = client.post(f"{CHAT}/{demanda_id}", json={"texto": "Falta dizer quem confirma."})
+
+        assert resposta.status_code == 200, resposta.text
+        corpo = resposta.json()
+        assert corpo["estado"] == "em_andamento"
+        assert corpo["mensagens"][-1]["texto"] == "Quem confirma o retorno com o paciente?"
+        assert gh.criadas == []
+
+    def test_depois_do_fim_so_vale_texto(self, monkeypatch):
+        client, sb, _ = _cenario(monkeypatch)
+        demanda_id = _ate_o_resumo(client, sb, monkeypatch)
+
+        assert client.post(f"{CHAT}/{demanda_id}", json={}).status_code == 422
+        assert client.post(f"{CHAT}/{demanda_id}", json={"opcao": "A"}).status_code == 422
+        assert _conversas(sb)[0]["estado"] == "resumido"
+
+    def test_fala_livre_depois_de_enviado_e_recusada(self, monkeypatch):
+        client, sb, gh = _cenario(monkeypatch)
+        demanda_id = _ate_o_resumo(client, sb, monkeypatch)
+        assert client.post(f"{CHAT}/{demanda_id}/criar-card").status_code == 200
+        _ia(monkeypatch, _pergunta())
+
+        resposta = client.post(f"{CHAT}/{demanda_id}", json={"texto": "Mais uma coisa."})
+
+        assert resposta.status_code == 409
+        assert _conversas(sb)[0]["estado"] == "enviado"
 
 
 # ═══════════════════════════════════════════════════════════════════════════
