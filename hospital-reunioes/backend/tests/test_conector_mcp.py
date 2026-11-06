@@ -112,7 +112,7 @@ def token(
     kid: str = KID,
     email: object = "super@hsm.com",
     email_verified: object = True,
-    scope: object = "openid email read:analytics",
+    scope: object = "openid profile email offline_access",
     aud: object = RECURSO,
     iss: object = EMISSOR,
     exp_delta: int = 3600,
@@ -238,33 +238,28 @@ class TestVerificarAcesso:
         with pytest.raises(conector_mcp.AcessoNegadoMCPError):
             conector_mcp.verificar_acesso(tok, jwks_de(chave_do_emissor), cfg)
 
-    def test_sem_escopo_de_leitura_nega(self, cfg, chave_do_emissor):
-        tok = token(chave_do_emissor, scope="openid email")
-        with pytest.raises(conector_mcp.AcessoNegadoMCPError):
-            conector_mcp.verificar_acesso(tok, jwks_de(chave_do_emissor), cfg)
-
-    def test_escopo_ausente_nega(self, cfg, chave_do_emissor):
-        tok = token(chave_do_emissor, scope=_OMITIR)
-        with pytest.raises(conector_mcp.AcessoNegadoMCPError):
-            conector_mcp.verificar_acesso(tok, jwks_de(chave_do_emissor), cfg)
-
-    def test_escopo_pela_lista_scp_vale(self, cfg, chave_do_emissor):
-        # WorkOS pode serializar o escopo como lista `scp` em vez de string.
-        tok = pyjwt.encode(
-            {
-                "sub": "u",
-                "iss": EMISSOR,
-                "aud": RECURSO,
-                "email": "super@hsm.com",
-                "email_verified": True,
-                "scp": ["read:analytics"],
-                "exp": int(time.time()) + 3600,
-            },
-            _pem_privada(chave_do_emissor),
-            algorithm="RS256",
-            headers={"kid": KID},
-        )
+    def test_escopos_padrao_do_authkit_bastam(self, cfg, chave_do_emissor):
+        # Cliente do claude.ai registrado por DCR/CIMD só recebe os escopos OIDC
+        # padrão (doc do WorkOS); o token dele tem de abrir a Central (#1442).
+        tok = token(chave_do_emissor, scope="openid profile email offline_access")
         assert conector_mcp.verificar_acesso(tok, jwks_de(chave_do_emissor), cfg) == "super@hsm.com"
+
+    def test_sem_claim_de_escopo_vale(self, cfg, chave_do_emissor):
+        # A barreira contra token de outro app é a audiência, não o escopo.
+        tok = token(chave_do_emissor, scope=_OMITIR)
+        assert conector_mcp.verificar_acesso(tok, jwks_de(chave_do_emissor), cfg) == "super@hsm.com"
+
+    def test_token_sem_resource_nega(self, cfg, chave_do_emissor):
+        # Sem resource no authorize, o AuthKit põe no `aud` o client id do
+        # ambiente: não é este recurso, então nega (#1442).
+        tok = token(chave_do_emissor, aud="client_do_ambiente_de_teste")
+        with pytest.raises(conector_mcp.AcessoNegadoMCPError):
+            conector_mcp.verificar_acesso(tok, jwks_de(chave_do_emissor), cfg)
+
+    def test_token_sem_aud_nega(self, cfg, chave_do_emissor):
+        tok = token(chave_do_emissor, aud=_OMITIR)
+        with pytest.raises(conector_mcp.AcessoNegadoMCPError):
+            conector_mcp.verificar_acesso(tok, jwks_de(chave_do_emissor), cfg)
 
     def test_email_nao_verificado_nega(self, cfg, chave_do_emissor):
         tok = token(chave_do_emissor, email_verified=False)
@@ -299,7 +294,7 @@ class TestVerificarAcesso:
             "aud": RECURSO,
             "email": "super@hsm.com",
             "email_verified": True,
-            "scope": "read:analytics",
+            "scope": "openid email",
             "exp": int(time.time()) + 3600,
         }
         tok = f"{_seg({'alg': 'none', 'typ': 'JWT'})}.{_seg(payload)}."
@@ -317,7 +312,7 @@ class TestVerificarAcesso:
                 "aud": RECURSO,
                 "email": "super@hsm.com",
                 "email_verified": True,
-                "scope": "read:analytics",
+                "scope": "openid email",
                 "exp": int(time.time()) + 3600,
             },
             "segredo-publico-qualquer",
@@ -342,7 +337,7 @@ class TestVerificarAcesso:
                     "aud": RECURSO,
                     "email": "super@hsm.com",
                     "email_verified": True,
-                    "scope": "read:analytics",
+                    "scope": "openid email",
                     "exp": int(time.time()) + 3600,
                 }
             ).encode()
@@ -413,7 +408,10 @@ class TestMetadataDoRecurso:
         corpo = resposta.json()
         assert corpo["resource"] == RECURSO
         assert corpo["authorization_servers"] == [EMISSOR]
-        assert conector_mcp.ESCOPO_DE_LEITURA in corpo["scopes_supported"]
+        # Só o que o AuthKit concede a cliente de DCR/CIMD: escopo fora disso o
+        # authorize recusa com invalid_scope antes do login (#1442).
+        assert set(corpo["scopes_supported"]) <= {"openid", "profile", "email", "offline_access"}
+        assert "read:analytics" not in corpo["scopes_supported"]
 
     def test_metadata_vem_com_cors(self, mcp_configurado):
         """O claude.ai lê o metadata de outra origem: o cabeçalho de CORS sobra
@@ -551,12 +549,12 @@ class TestTransporteRecusaCom401:
         "tok_kwargs",
         [
             {"aud": "https://central.mala-ia.cloud"},
+            {"aud": "client_do_ambiente_de_teste"},
             {"iss": "https://outro.authkit.app"},
             {"exp_delta": -60},
-            {"scope": "openid email"},
             {"email_verified": False},
         ],
-        ids=["audiencia", "emissor", "expirado", "sem-escopo", "email-nao-verificado"],
+        ids=["audiencia", "sem-resource", "emissor", "expirado", "email-nao-verificado"],
     )
     def test_token_ruim_e_401(self, chave_do_emissor, tok_kwargs):
         resposta = _rpc(_cliente_mcp(), INIT, token(chave_do_emissor, **tok_kwargs))
