@@ -109,3 +109,23 @@ describe("aviso de Contas médicas no sino", () => {
     await waitFor(() => expect(navegacao.push).toHaveBeenCalledWith("/pendencias/kanban?highlight=A-0042"));
   });
 });
+
+describe("painel do sino quando a lista falha (#1430)", () => {
+  it("não diz 'Sem notificações' com o sino marcando avisos", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string) =>
+        url.includes("/count")
+          ? new Response(JSON.stringify({ nao_lidas: 3 }), { status: 200 })
+          : new Response("Internal Server Error", { status: 500 }),
+      ),
+    );
+
+    render(<NotificacoesDropdown />);
+    await screen.findByText("3");
+    fireEvent.click(screen.getByRole("button", { name: "Notificações" }));
+
+    await screen.findByText("Não foi possível carregar os avisos.");
+    expect(screen.queryByText("Sem notificações")).toBeNull();
+  });
+});
