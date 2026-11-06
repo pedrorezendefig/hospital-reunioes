@@ -45,6 +45,7 @@ import {
   LetraDaOpcao,
   ResumoDaMelhoria,
   ResumoDoBug,
+  textoDoCusto,
   URL_DO_CHAT_DA_ABA,
   urlDaConversa,
   urlDoCriarOCard,
@@ -659,6 +660,7 @@ export function ChatDaTecnologia({ token, demandaId = null, onMudou }: PropsDoCh
             <Bot className="w-4 h-4 text-primary" />
           </span>
           <h2 className="text-sm font-bold text-slate-900">{TITULO_DO_CHAT}</h2>
+          {conversa?.custo && <span className="text-xs text-text-secondary">{textoDoCusto(conversa.custo)}</span>}
           {podeResumir && conversa && (
             <button
               type="button"

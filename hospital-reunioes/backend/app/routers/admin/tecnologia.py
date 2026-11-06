@@ -64,6 +64,7 @@ from app.services import (
     ai_processor,
     assistente_tecnologia,
     chat_tecnologia,
+    custo_da_conversa,
     github_client,
     planejamento_demanda,
     tecnologia_anexos,
@@ -357,6 +358,7 @@ def _chat_para_a_tela(
         "anexos": tecnologia_anexos.quantos_guardados(supabase, demanda_id),
         "planejamento": planejamento,
         "aviso_dos_anexos": aviso_dos_anexos,
+        "custo": custo_da_conversa.da_demanda(supabase, demanda_id),
     }
 
 
