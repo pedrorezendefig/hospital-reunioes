@@ -2,6 +2,51 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-11-06T17:41:45-03:00",
+      "sha": "bfd0d3f81389806445c582116561e005631610ef",
+      "app_version": "0.222.1",
+      "subject": "PR #1467, issue #1448: Conector MCP aceita só o cliente do claude.ai",
+      "raw_subject": "chore(deploy): registro do PR avulso (#1467)",
+      "scope": [
+        "backend"
+      ],
+      "prds": [
+        809
+      ],
+      "result": "healthy",
+      "duration_seconds": 153,
+      "services_touched": [
+        "backend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        },
+        {
+          "service": "frontend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "PR avulso: PR #1467, issue #1448. Merge pela API do GitHub, um build. Registro pela Action pos-merge depois do health.",
+      "etapas": {
+        "merge_s": 3,
+        "build_s": {
+          "backend": 105
+        },
+        "health_s": 10
+      },
+      "responsavel": "pedroribbe"
+    },
+    {
       "at": "2026-11-06T17:04:29-03:00",
       "sha": "33975e38016b16d6155fe7515c371186db042cd5",
       "app_version": "0.222.0",
