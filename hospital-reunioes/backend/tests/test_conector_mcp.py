@@ -160,6 +160,8 @@ def mcp_configurado(monkeypatch) -> conector_mcp.ConfiguracaoMCP:
     monkeypatch.setattr(settings, "mcp_auth_issuer", EMISSOR)
     monkeypatch.setattr(settings, "mcp_resource_url", RECURSO)
     monkeypatch.setattr(settings, "mcp_auth_jwks_uri", "")
+    # Fixa o padrão: um `.env` local com a lista preenchida não muda o teste.
+    monkeypatch.setattr(settings, "mcp_clientes_permitidos", "")
     return conector_mcp.configuracao_mcp()
 
 
@@ -753,6 +755,18 @@ class TestTransporteRecusaCom401:
 
         assert resposta.status_code == 401
 
+    def test_cliente_fora_da_lista_e_401_com_cabecalho_e_fica_no_log(self, chave_do_emissor, caplog):
+        # O Claude Code, com o login de um Super admin, não abre a Central
+        # (#1448). A linha do log é a que o guia de revogação cita.
+        caplog.set_level(logging.INFO, logger="app.routers.conector_mcp")
+
+        resposta = _rpc(_cliente_mcp(), INIT, token(chave_do_emissor, client_id=CLIENTE_CLAUDE_CODE))
+
+        assert resposta.status_code == 401
+        assert "resource_metadata=" in resposta.headers["www-authenticate"]
+        negados = [r.getMessage() for r in caplog.records if "acesso negado" in r.getMessage()]
+        assert any("cliente fora da lista" in m and CLIENTE_CLAUDE_CODE in m for m in negados)
+
 
 class TestTransporteSemConfig:
     def test_config_ausente_e_503_e_a_ferramenta_nao_roda(self, monkeypatch, chave_do_emissor):
@@ -980,8 +994,7 @@ class TestVersaoDoProtocoloLeniente:
 @pytest.mark.usefixtures("mcp_configurado", "jwks_no_emissor")
 class TestLogDeQuemAcessa:
     """Todo acesso aceito deixa no log o `client_id` e o `sid` do token (#1448),
-    para auditoria e para ler o `client_id` real do claude.ai antes de travar a
-    lista de clientes. Sem e-mail nessa linha."""
+    para auditoria. Sem e-mail nessa linha."""
 
     _LOGGER = "app.routers.conector_mcp"
 

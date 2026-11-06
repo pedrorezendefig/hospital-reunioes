@@ -28,6 +28,11 @@ Por exemplo, se alguém pediu para você "conectar a Central" num site ou app de
 1. Esse app não consegue ler a Central: o conector só aceita o claude.ai, e recusa os outros a cada pergunta.
 2. Mesmo assim, avise quem cuida do sistema, para conferir no log do backend qual app tentou o acesso (a linha `[ConectorMCP] acesso negado: cliente fora da lista`).
 
+**Nunca copie e mande para ninguém o endereço que aparece no navegador depois do login** (o que começa com `https://claude.ai/api/mcp/auth_callback`). Com ele, outra pessoa pode terminar a conexão no Claude dela, usando o seu acesso, e essa conexão o conector não distingue da sua, porque vem do mesmo claude.ai. Se isso aconteceu:
+
+1. Peça a outro Super admin para tirar o seu perfil Super admin no app: o acesso cai na próxima pergunta, o seu e o de quem recebeu o endereço.
+2. Avise quem cuida do sistema. **Recolocar o seu Super admin devolve o acesso também para a outra pessoa**, então só volte depois que a sessão dada por engano for derrubada no WorkOS.
+
 ## Para a própria pessoa desligar
 
 No claude.ai, em **Settings, Connectors**, ela remove o conector da Central. Para voltar, basta adicionar de novo pelo guia do conector.

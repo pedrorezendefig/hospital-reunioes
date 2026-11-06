@@ -13,15 +13,15 @@ do gate de sessão do app:
   token do WorkOS e do gate de Super admin.
 
 **O gate, em duas etapas.** Primeiro o token do AuthKit: assinatura contra o
-JWKS do emissor, `iss`, `aud` (o Resource Indicator), expiração e
-`email_verified` verdadeiro. Escopo não entra no gate (#1442): o cliente do
+JWKS do emissor, `iss`, `aud` (o Resource Indicator), expiração, `client_id`
+na lista de clientes permitidos e `email_verified` verdadeiro. Escopo não entra no gate (#1442): o cliente do
 claude.ai se registra por DCR/CIMD, e o WorkOS dá a todo cliente assim os
 mesmos escopos OIDC padrão, então escopo nenhum o separa de outro cliente. O
 `aud` barra token emitido para outro recurso (a Central antiga, ou token sem
 resource, cujo `aud` é o client id do ambiente), mas NÃO barra outro cliente
 DCR/CIMD que peça este mesmo resource: o resource é o cliente quem pede. Quem
-segura esse caso é a segunda etapa (amarrar ao `client_id` do claude.ai fica
-para issue própria). Depois o participante: o e-mail
+barra esse caso é o `client_id` (#1448): só o do claude.ai passa, salvo o que
+`MCP_CLIENTES_PERMITIDOS` acrescentar. Depois o participante: o e-mail
 verificado do token acha a pessoa no cadastro, e ela precisa estar ativa e ser
 Super admin. Rebaixou ou desligou, o conector para na hora, sem editar lista
 nenhuma. A lista de e-mails em variável de ambiente do conector antigo NÃO foi
@@ -255,8 +255,8 @@ def identificacao_do_cliente(token: str) -> dict:
 
     `campos` traz os NOMES dos claims do token, sem valores: se o WorkOS puser
     o cliente noutro claim (como `azp`), o log mostra onde procurar. Só para
-    log: a trava por cliente (segundo PR da #1448) tem de ler as claims
-    VERIFICADAS do `verificar_acesso`, nunca esta leitura."""
+    log: a trava por cliente lê as claims VERIFICADAS do `verificar_acesso`,
+    nunca esta leitura (#1448)."""
     try:
         claims = jwt.decode(token, options={"verify_signature": False})
     except Exception:  # noqa: BLE001 - só para log: claims ilegíveis viram vazio
