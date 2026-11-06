@@ -40,3 +40,8 @@ Várias sessões Claude Code rodam issues `ready-for-agent` distintas ao mesmo t
 - `docs/spec/deploy/`: contrato e estado de deploy (`project.json` · `state.json` · `history.json`, a timeline de todos os deploys) · `docs/spec/VERSIONING.md`: versão semântica.
 - Layout do repo (o que fica no git, `local/` fora, `docs/comunicacao/`, `references/` nas skills): ADR 0044.
 - `docs/ARQUITETURA.md`: visão de arquitetura com blocos auto-gerados pelo `/snapshot` · `docs/onboarding/`: setup de máquina e fluxo do dia a dia (`/setup-maquina` confere).
+
+<!-- claude-reflect: learned rules (saved from the band; edit freely) -->
+## Learned rules
+- Before closing any issue, verify every acceptance criterion is actually met and check them off; never close an issue with unchecked criteria.
+<!-- end claude-reflect -->
