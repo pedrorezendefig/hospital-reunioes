@@ -147,6 +147,23 @@ def test_settings_incompleto_aponta_cada_regra_que_falta_e_o_conserto(tmp_path):
     assert linha(saida, "autoMode.allow: gh pr").startswith("OK")
 
 
+def test_host_do_manual_aposentado_no_ambiente_acusa(tmp_path):
+    """O projeto manual-hsm saiu da Vercel (ADR 0078): o subdomínio ficou livre
+    para qualquer conta, e confiar nele abre caminho de exfiltração."""
+    antiga = "**Trusted internal domains**: manual-hsm.vercel.app, o Manual do usuário publicado pela subida"
+    saida = confere(tmp_path, settings(tmp_path, ambiente=AMBIENTE + [antiga]))
+    assert len(faltas(saida)) == 1, saida
+    host = linha(saida, "autoMode.environment sem manual-hsm.vercel.app")
+    assert host.startswith("FALTA"), host
+    assert "remova manual-hsm.vercel.app do autoMode.environment" in host, host
+    assert "~/.claude/settings.json" in host, host
+
+    limpo = confere(tmp_path, settings(tmp_path))
+    assert linha(limpo, "autoMode.environment sem manual-hsm.vercel.app").startswith(
+        "OK"
+    ), limpo
+
+
 def test_nao_ha_mais_regra_de_ruleset(tmp_path):
     """A trava do ruleset é o token sem Administration, não um deny que se contorna."""
     saida = confere(tmp_path, settings(tmp_path))
@@ -535,6 +552,10 @@ def test_o_script_confere_o_settings_do_usuario_no_nivel_2(tmp_path):
         assert linha(saida, rotulo).split()[0] == "OK", saida
     assert linha(saida, "autoMode.environment: Coolify").split()[0] == "OK", saida
     assert linha(saida, "autoMode.allow: gh pr").split()[0] == "OK", saida
+    assert (
+        linha(saida, "autoMode.environment sem manual-hsm.vercel.app").split()[0]
+        == "OK"
+    ), saida
     assert SEGREDO not in saida
 
 

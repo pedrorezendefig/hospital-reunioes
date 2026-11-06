@@ -314,6 +314,7 @@ Por que assim:
 - **O deny de force push é só contra a `main`.** O corretor sobe rebase com `--force-with-lease` na branch do próprio PR, e isso continua. Na `main` a trava de verdade é o ruleset (sem force push, sem apagar, sem bypass); o deny é um alarme a mais e não pega forma escrita de outro jeito, como `git -C <pasta> push`.
 - **Não existe regra de deny para o ruleset.** Regra de deny casa pelo começo do texto do comando e se contorna com `-X DELETE`, `--method=PUT`, `gh api graphql` ou `curl`. A trava é o token sem Administration do passo 1.
 - **`"$defaults"`** mantém as regras de fábrica do modo auto; sem ele, a lista substitui as de fábrica.
+- **Nenhum `vercel.app` é confiável.** Quem montou a máquina antes de 06/11/2026 tem `manual-hsm.vercel.app` em `autoMode.environment`: remova a linha. O projeto do Manual saiu da Vercel (ADR 0078), o subdomínio ficou livre e qualquer conta pode registrá-lo. O `/setup-maquina` acusa enquanto a linha estiver lá.
 
 ---
 

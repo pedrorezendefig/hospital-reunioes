@@ -123,6 +123,13 @@ allow|minhas_issues.py|minhas_issues.py
 allow|gh issue|gh issue
 allow|gh pr|gh pr
 AUTO
+  # O projeto manual-hsm saiu da Vercel (ADR 0078): o subdomínio ficou livre para qualquer conta
+  # registrar, e um domínio confiável para o classificador é caminho de exfiltração.
+  if jq -e '[.autoMode.environment // empty | .. | strings] | join(" ") | ascii_downcase | contains("manual-hsm.vercel.app")' "$cfg" >/dev/null 2>&1; then
+    falta "autoMode.environment sem manual-hsm.vercel.app" "remova manual-hsm.vercel.app do autoMode.environment do ~/.claude/settings.json: o Manual saiu da Vercel (ADR 0078) e o subdomínio ficou livre para qualquer conta registrar"
+  else
+    ok "autoMode.environment sem manual-hsm.vercel.app"
+  fi
   # Todo allow de Bash com curinga que não é só leitura tira o classificador de quem publica (gh,
   # git push, curl e coolify num repositório público e em produção) ou roda código do repositório
   # (num worktree, o agente roda a versão que ele mesmo editou). Comando exato, sem curinga, fica.

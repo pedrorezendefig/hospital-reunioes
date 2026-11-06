@@ -25,4 +25,5 @@ Decisão do Pedro (05/11/2026). O Manual do usuário sai da plataforma inteiro, 
 - As ADRs 0057, 0072 e 0076 passam a `superseded`. O que a 0076 decidiu sobre a Tecnologia (decisão 5) era sobre a Tecnologia dentro do Manual e cai junto; o kit de conhecimento continua sendo o que o Assistente de Tecnologia lê.
 - A régua de texto da ADR 0071 continua valendo para todo texto para fora (tela, PDF, mensagem, PR, página de divulgação); o lint dela que morava no Manual sai, e ficam o ESLint do front e o teste dos templates do backend.
 - Emenda a 0068 (a Fatia de manual some do fluxo e da lista do que sobe sem parada humana), a 0071 (o lint do Manual sai da régua) e a 0077 (a decisão 10, de reescrever o módulo Tecnologia do Manual, cai).
+- Cada máquina tira `manual-hsm.vercel.app` do `autoMode.environment` do próprio `~/.claude/settings.json`: com o projeto apagado, o subdomínio ficou livre para qualquer conta registrar e não pode seguir confiável para o modo auto. O `/setup-maquina` acusa no nível 2 enquanto o host estiver lá.
 - O Manual novo, quando vier, é decisão nova, com ADR própria.
