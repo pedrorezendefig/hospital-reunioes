@@ -500,3 +500,12 @@ class TestKitDaTecnologia:
             assert trecho in secao, trecho
         assert "12 perguntas" not in texto
         assert "Planejar com a IA" not in texto
+
+    def test_o_texto_da_tecnologia_no_kit_diz_o_continuar_respondendo(self):
+        """ADR 0079, decisao 4 (issue #1440): o resumo com lacuna traz o botao
+        Continuar respondendo, e o Criar o card com lacuna segue permitido."""
+        texto = (CONHECIMENTO_DIR / "tecnologia.md").read_text(encoding="utf-8")
+
+        for titulo in ("## A conversa com o Assistente", "## O Planejamento da Demanda"):
+            secao = texto.split(titulo, 1)[1].split("\n## ", 1)[0]
+            assert "**Continuar respondendo**" in secao, titulo
