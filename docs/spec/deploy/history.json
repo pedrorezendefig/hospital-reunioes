@@ -2,6 +2,49 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-11-06T17:04:29-03:00",
+      "sha": "33975e38016b16d6155fe7515c371186db042cd5",
+      "app_version": "0.222.0",
+      "subject": "PR #1466, sem issue: Conector MCP loga o client_id e o sid de todo acesso aceito",
+      "raw_subject": "chore(deploy): registro do PR avulso (#1466)",
+      "scope": [
+        "backend"
+      ],
+      "prds": [],
+      "result": "healthy",
+      "duration_seconds": 64,
+      "services_touched": [
+        "backend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        },
+        {
+          "service": "frontend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "PR avulso: PR #1466, sem issue. Merge pela API do GitHub, um build. Registro pela Action pos-merge depois do health.",
+      "etapas": {
+        "merge_s": 2,
+        "build_s": {
+          "backend": 18
+        },
+        "health_s": 20
+      },
+      "responsavel": "pedroribbe"
+    },
+    {
       "at": "2026-11-06T16:48:48-03:00",
       "sha": "bc75cb73f8126b4a6a891358839a0e13ab30f78b",
       "app_version": "0.221.0",
