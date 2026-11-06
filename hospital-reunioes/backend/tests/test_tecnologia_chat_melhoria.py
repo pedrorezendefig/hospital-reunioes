@@ -1,8 +1,8 @@
 """O caminho da melhoria dentro do chat (issue #1383, PRD #1380, ADR 0077, decisão 4).
 
 Escolhida a melhoria, o chat segue o Planejamento da Demanda: uma pergunta por
-vez, contexto curto, duas opções com a recomendada marcada, campo livre, teto de
-12 perguntas e "Fechar e resumir" a qualquer altura. O resumo traz o que ficou
+vez, contexto curto, duas opções com a recomendada marcada, campo livre, sem
+teto de perguntas (ADR 0079) e "Fechar e resumir" a qualquer altura. O resumo traz o que ficou
 em aberto, e "Criar o card" cria o PRD do diretor. Tudo pela ROTA, com o modelo
 e o GitHub dublados no molde de `test_tecnologia_chat`.
 """
@@ -131,7 +131,7 @@ class TestEscolherMelhoriaAbreOGrill:
 
 
 # ═══════════════════════════════════════════════════════════════════════════
-# 2. O teto de 12 perguntas e o "Fechar e resumir"
+# 2. Sem teto de perguntas, e o "Fechar e resumir"
 # ═══════════════════════════════════════════════════════════════════════════
 
 
@@ -168,21 +168,21 @@ def _resumo_do_modelo(**campos) -> str:
 
 
 class TestTetoEFecharEResumir:
-    def test_o_grill_para_na_decima_segunda_pergunta_mesmo_que_o_modelo_queira_mais(self, monkeypatch):
+    def test_sem_teto_a_decima_terceira_pergunta_vem_quando_o_modelo_ainda_pergunta(self, monkeypatch):
+        """ADR 0079, decisao 1: nao ha teto de perguntas. Com 12 respondidas e o
+        modelo ainda perguntando, a 13a chega ao diretor."""
         client, sb, _ = _cenario(monkeypatch)
         demanda_id = _abrir_pelo_botao(client, monkeypatch)["demanda_id"]
         _com_perguntas(sb, 12, ultima_respondida=False)
-        _ia(monkeypatch, _pergunta(contexto="Mais uma pergunta?"))
+        _ia(monkeypatch, _pergunta(contexto="Quem confirma o retorno com o paciente?"))
 
         resposta = client.post(f"{CHAT}/{demanda_id}", json={"opcao": "B"})
 
         assert resposta.status_code == 200, resposta.text
         corpo = resposta.json()
-        assert corpo["estado"] == "encerrado"
-        assert corpo["mensagens"][-1]["opcoes"] == []
-        assert "Mais uma pergunta?" not in [f["texto"] for f in corpo["mensagens"]]
-        # Encerrado, a conversa espera o resumo: outra resposta é recusada.
-        assert client.post(f"{CHAT}/{demanda_id}", json={"texto": "e mais isto"}).status_code == 409
+        assert corpo["estado"] == "em_andamento"
+        assert corpo["mensagens"][-1]["texto"] == "Quem confirma o retorno com o paciente?"
+        assert len(corpo["mensagens"][-1]["opcoes"]) == 2
 
     def test_fechar_e_resumir_encerra_a_qualquer_momento_com_o_resumo(self, monkeypatch):
         client, sb, _ = _cenario(monkeypatch)

@@ -42,20 +42,13 @@ logger = logging.getLogger(__name__)
 TABELA_PLANEJAMENTOS = "tecnologia_planejamentos"
 TABELA_CHAMADAS_IA = "tecnologia_chamadas_ia"
 
-# O teto da decisao 5 da ADR 0075. Quem decide parar antes e o modelo; passar
-# daqui, nunca: o turno encerra mesmo que o modelo ainda queira perguntar.
-TETO_DE_PERGUNTAS = 12
-
+# Sem teto de perguntas (ADR 0079, decisao 1): quem decide parar e o modelo,
+# pela regra "nada em aberto" do prompt, ou o diretor, no "Fechar e resumir".
 
 ESTADO_EM_ANDAMENTO = "em_andamento"
 ESTADO_ENCERRADO = "encerrado"
 ESTADO_RESUMIDO = "resumido"
 ESTADO_ENVIADO = "enviado"
-
-TEXTO_DO_TETO = (
-    "Chegamos ao limite de 12 perguntas. O que ficou decidido está no painel ao lado, "
-    "e o que faltou perguntar a Vitta vê com você depois."
-)
 
 MOTIVO_SEM_RESPOSTA = "Escolha uma das opções ou escreva a sua resposta."
 MOTIVO_DUAS_RESPOSTAS = "Escolha uma opção ou escreva a sua resposta, não os dois."
@@ -229,18 +222,14 @@ def _linha_da_conversa(mensagem: dict) -> str:
     return "\n".join([f"IA: {mensagem.get('contexto') or ''}", *opcoes, recomendada])
 
 
-def _quantas_perguntas(mensagens: list[dict]) -> int:
-    return sum(1 for m in mensagens if m.get("tipo") == "pergunta")
-
-
 def pedido_do_turno(demanda: dict, mensagens: list[dict]) -> str:
-    """O que varia de um turno para outro: a Demanda, a conversa e o quanto
-    resta. Vai na mensagem do usuario, DEPOIS do bloco fixo."""
+    """O que varia de um turno para outro: a Demanda e a conversa. Vai na
+    mensagem do usuario, DEPOIS do bloco fixo. Sem a conta de perguntas
+    restantes: nao ha teto (ADR 0079, decisao 1)."""
     tipo = str(demanda.get("tipo") or "")
     conversa = "\n".join(_linha_da_conversa(m) for m in mensagens) or (
         "(a conversa ainda não começou: faça a primeira pergunta)"
     )
-    restantes = max(TETO_DE_PERGUNTAS - _quantas_perguntas(mensagens), 0)
     return "\n".join(
         [
             "A DEMANDA",
@@ -251,8 +240,6 @@ def pedido_do_turno(demanda: dict, mensagens: list[dict]) -> str:
             "",
             "A CONVERSA ATÉ AQUI",
             conversa,
-            "",
-            f"PERGUNTAS QUE AINDA RESTAM: {restantes}",
         ]
     )
 
@@ -280,11 +267,9 @@ def _json_da_resposta(resposta):
     return json.loads(texto[inicio : fim + 1] if 0 <= inicio < fim else texto)
 
 
-def _mensagem_do_modelo(saida: _SaidaDoTurno, perguntas_feitas: int) -> dict:
-    """A fala da IA que entra na conversa. Aqui mora o teto: com 12 perguntas
-    ja feitas, a resposta e "encerrou", queira o modelo ou nao."""
-    if perguntas_feitas >= TETO_DE_PERGUNTAS:
-        return {"tipo": "encerrou", "contexto": TEXTO_DO_TETO}
+def _mensagem_do_modelo(saida: _SaidaDoTurno) -> dict:
+    """A fala da IA que entra na conversa: a pergunta, ou o "encerrou" quando
+    o modelo diz que nada ficou em aberto (ADR 0079, decisao 2)."""
     if saida.encerrou:
         return {"tipo": "encerrou", "contexto": sanitizar_travessao(saida.contexto.strip())}
     return {
@@ -435,7 +420,7 @@ def turno(
 
     decisao = sanitizar_travessao(saida.decisao_fechada.strip()) if (saida.decisao_fechada or "").strip() else None
     return ResultadoDoTurno(
-        mensagem=_mensagem_do_modelo(saida, _quantas_perguntas(mensagens)),
+        mensagem=_mensagem_do_modelo(saida),
         decisao=decisao,
         erro=None,
         chamada=chamada,
