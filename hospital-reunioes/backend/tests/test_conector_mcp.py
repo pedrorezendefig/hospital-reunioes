@@ -920,13 +920,30 @@ class TestLogDeQuemAcessa:
         assert len(linhas) == 1
         assert "client_id=None" in linhas[0]
 
-    def test_valor_comprido_no_claim_e_cortado(self, chave_do_emissor, caplog):
-        caplog.set_level(logging.INFO, logger=self._LOGGER)
+    def test_valor_comprido_no_claim_e_cortado_em_200(self, chave_do_emissor):
         tok = token(chave_do_emissor, extras={"client_id": "x" * 5000})
+
+        assert conector_mcp.identificacao_do_cliente(tok)["client_id"] == "x" * 200
+
+    def test_client_id_que_nao_e_texto_vira_none(self, chave_do_emissor):
+        tok = token(chave_do_emissor, extras={"client_id": {"url": "https://cliente.exemplo"}, "sid": 42})
+
+        assert conector_mcp.identificacao_do_cliente(tok)["client_id"] is None
+        assert conector_mcp.identificacao_do_cliente(tok)["sid"] is None
+
+    def test_log_traz_os_nomes_dos_claims_sem_os_valores(self, chave_do_emissor, caplog):
+        # Se o cliente vier noutro claim (azp), o nome aparece no log e mostra
+        # onde procurar; o valor do e-mail, não.
+        caplog.set_level(logging.INFO, logger=self._LOGGER)
+        tok = token(chave_do_emissor, extras={"azp": "https://cliente.exemplo/meta"})
 
         self._pedido(tok)
 
-        assert len(self._linhas(caplog)[0]) < 600
+        linha = self._linhas(caplog)[0]
+        assert "azp" in linha
+        assert "email_verified" in linha
+        assert "https://cliente.exemplo/meta" not in linha
+        assert "super@hsm.com" not in linha
 
     def test_acesso_negado_nao_vai_ao_log_de_aceito(self, caplog):
         caplog.set_level(logging.INFO, logger=self._LOGGER)

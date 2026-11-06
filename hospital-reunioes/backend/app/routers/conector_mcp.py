@@ -98,7 +98,12 @@ async def transporte_mcp(request: Request, supabase=Depends(get_supabase_client)
     # Quem acessou, para auditoria e para ler o `client_id` real do claude.ai
     # antes de travar a lista de clientes (#1448). Sem e-mail nesta linha.
     cliente = conector_mcp.identificacao_do_cliente(token)
-    logger.info("[ConectorMCP] acesso aceito: client_id=%r sid=%r", cliente["client_id"], cliente["sid"])
+    logger.info(
+        "[ConectorMCP] acesso aceito: client_id=%r sid=%r campos=%r",
+        cliente["client_id"],
+        cliente["sid"],
+        cliente["campos"],
+    )
 
     versao = request.headers.get("mcp-protocol-version")
     if versao != conector_mcp.PROTOCOLO_MCP:
