@@ -15,7 +15,14 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { ToastProvider } from "@/components/ui/Toast";
 
-import { ABERTURA, ChatDaTecnologia, CRIAR_O_CARD, FECHAR_E_RESUMIR, NAO_BATEU } from "./ChatDaTecnologia";
+import {
+  ABERTURA,
+  ChatDaTecnologia,
+  CONTINUAR_RESPONDENDO,
+  CRIAR_O_CARD,
+  FECHAR_E_RESUMIR,
+  NAO_BATEU,
+} from "./ChatDaTecnologia";
 import { ConversaDoChat, FalaDoChat } from "./chat";
 
 afterEach(() => {
@@ -438,5 +445,44 @@ describe("A melhoria segue aberta até o Criar o card", () => {
       url: "/api/admin/tecnologia/chat/d-1",
       corpo: { texto: "Esqueci: o médico também precisa ver." },
     });
+  });
+});
+
+// ─── Continuar respondendo (issue #1440, ADR 0079, decisão 4) ────────────────
+
+describe("O resumo com lacuna traz o Continuar respondendo", () => {
+  it("com algo em aberto, o botão aparece e o clique volta às perguntas", async () => {
+    const nova: FalaDoChat = { ...PERGUNTA, texto: "Quem confirma o retorno com o paciente?" };
+    const chamadas = montar([
+      { status: 201, corpo: melhoria({ estado: "resumido", resumo_da_melhoria: RESUMO_DA_MELHORIA }) },
+      { status: 200, corpo: melhoria({ mensagens: [...melhoria().mensagens, nova] }) },
+    ]);
+    fireEvent.click(screen.getByRole("button", { name: "Melhoria" }));
+    const resumo = await screen.findByRole("region", { name: "Resumo da melhoria" });
+
+    fireEvent.click(within(resumo).getByRole("button", { name: CONTINUAR_RESPONDENDO }));
+
+    expect(await screen.findByText(nova.texto)).toBeTruthy();
+    expect(screen.queryByRole("region", { name: "Resumo da melhoria" })).toBeNull();
+    expect(chamadas[1]).toMatchObject({
+      url: "/api/admin/tecnologia/chat/d-1",
+      metodo: "POST",
+      corpo: { continuar: true },
+    });
+  });
+
+  it("com Nada ficou em aberto, o botão não aparece", async () => {
+    montar([
+      {
+        status: 201,
+        corpo: melhoria({ estado: "resumido", resumo_da_melhoria: { ...RESUMO_DA_MELHORIA, em_aberto: [] } }),
+      },
+    ]);
+    fireEvent.click(screen.getByRole("button", { name: "Melhoria" }));
+    const resumo = await screen.findByRole("region", { name: "Resumo da melhoria" });
+
+    expect(within(resumo).getByText("Nada ficou em aberto.")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: CONTINUAR_RESPONDENDO })).toBeNull();
+    expect(within(resumo).getByRole("button", { name: CRIAR_O_CARD })).toBeTruthy();
   });
 });

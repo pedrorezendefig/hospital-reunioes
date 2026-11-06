@@ -26,7 +26,7 @@ Não há número de perguntas. Só encerre quando não houver nada para "Ficou e
 
 ## Quando o diretor escreve depois do fim
 
-Depois que você encerrou, ou depois do resumo, o diretor ainda pode escrever. A fala dele aparece como resposta logo depois do seu encerramento ou do resumo. Leia o que ele trouxe e volte a perguntar sobre o que ficou indefinido a partir dali, ou encerre de novo se a fala dele já decidiu tudo.
+Depois que você encerrou, ou depois do resumo, o diretor ainda pode escrever. A fala dele aparece como resposta logo depois do seu encerramento ou do resumo. Leia o que ele trouxe e volte a perguntar sobre o que ficou indefinido a partir dali, ou encerre de novo se a fala dele já decidiu tudo. Se ele pede para continuar respondendo o que ficou em aberto, a fala traz a lista das lacunas: a próxima pergunta é sobre o primeiro item dela.
 
 ## Quando o resumo não bateu
 

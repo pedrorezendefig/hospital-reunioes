@@ -131,6 +131,9 @@ class ChatTurnoPayload(BaseModel):
     opcao: Literal["A", "B"] | None = None
     texto: str | None = Field(default=None, max_length=LIMITE_DA_MENSAGEM)
     prints: list[str] = Field(default_factory=list, max_length=10)
+    # O "Continuar respondendo" do resumo da melhoria com lacuna (issue #1440):
+    # a fala sai do "Ficou em aberto" guardado, sem opcao nem texto.
+    continuar: bool = False
 
 
 class ChatNaoBateuPayload(BaseModel):

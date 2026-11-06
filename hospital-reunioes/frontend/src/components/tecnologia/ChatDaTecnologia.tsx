@@ -57,6 +57,7 @@ import { FALHA_DE_CONEXAO, motivoDaRecusa } from "./demandas";
 // A mesma pergunta que o backend guarda como primeira fala da conversa.
 export const ABERTURA = "Isso é um bug, algo que não funciona como deveria, ou uma melhoria?";
 export const CRIAR_O_CARD = "Criar o card";
+export const CONTINUAR_RESPONDENDO = "Continuar respondendo";
 export const NAO_BATEU = "Não bateu";
 export const TITULO_DO_CHAT = "Assistente de Tecnologia";
 export const FECHAR_E_RESUMIR = "Fechar e resumir";
@@ -140,8 +141,15 @@ function CorpoDoResumoDoBug({ resumo, anexos }: { resumo: ResumoDoBug; anexos: n
   );
 }
 
+type PropsDoResumoDaMelhoria = {
+  resumo: ResumoDaMelhoria;
+  pensando: boolean;
+  /** Volta às perguntas pelo que ficou em aberto (ADR 0079, decisão 4). */
+  onContinuar: () => void;
+};
+
 /** O resumo da melhoria: as decisões do diretor e o que ficou em aberto. */
-function CorpoDoResumoDaMelhoria({ resumo }: { resumo: ResumoDaMelhoria }) {
+function CorpoDoResumoDaMelhoria({ resumo, pensando, onContinuar }: PropsDoResumoDaMelhoria) {
   return (
     <>
       <div className="space-y-3">
@@ -170,11 +178,21 @@ function CorpoDoResumoDaMelhoria({ resumo }: { resumo: ResumoDaMelhoria }) {
       <div className="space-y-3">
         <h3 className="text-sm font-bold text-text-primary">Ficou em aberto</h3>
         {resumo.em_aberto.length > 0 ? (
-          <ul className="list-disc pl-5 space-y-1 text-sm text-text-primary">
-            {resumo.em_aberto.map((item, i) => (
-              <li key={i}>{item}</li>
-            ))}
-          </ul>
+          <>
+            <ul className="list-disc pl-5 space-y-1 text-sm text-text-primary">
+              {resumo.em_aberto.map((item, i) => (
+                <li key={i}>{item}</li>
+              ))}
+            </ul>
+            <button
+              type="button"
+              onClick={onContinuar}
+              disabled={pensando}
+              className="px-4 py-2 rounded-xl border border-primary text-sm font-semibold text-primary hover:bg-primary/5 disabled:opacity-50"
+            >
+              {CONTINUAR_RESPONDENDO}
+            </button>
+          </>
         ) : (
           <p className="text-sm text-text-secondary">{NADA_EM_ABERTO}</p>
         )}
@@ -626,7 +644,11 @@ export function ChatDaTecnologia({ token, demandaId = null, onMudou }: PropsDoCh
           onNaoBateu={naoBateu}
           onRecusaNaTela={setErro}
         >
-          <CorpoDoResumoDaMelhoria resumo={conversa.resumo_da_melhoria} />
+          <CorpoDoResumoDaMelhoria
+            resumo={conversa.resumo_da_melhoria}
+            pensando={pensando}
+            onContinuar={() => void turno(urlDaConversa(conversa.demanda_id), { continuar: true })}
+          />
         </ResumoNaTela>
         <section
           aria-label="Continuar a conversa"

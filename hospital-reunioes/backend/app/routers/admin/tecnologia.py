@@ -615,11 +615,16 @@ async def _turno_da_melhoria(
     demanda_id = str(demanda["id"])
     mensagens = list(atual.get("mensagens") or [])
     _, planejamento = chat_tecnologia.partes_da_melhoria(mensagens)
-    resposta, motivo = planejamento_demanda.resposta_do_diretor(
-        planejamento, opcao=payload.opcao, texto=payload.texto, depois_do_fim=depois_do_fim
-    )
-    if motivo:
-        _recusar(motivo)
+    if payload.continuar:
+        resposta, motivo = planejamento_demanda.fala_de_continuar(atual.get("resumo"))
+        if motivo:
+            _conflito(motivo)
+    else:
+        resposta, motivo = planejamento_demanda.resposta_do_diretor(
+            planejamento, opcao=payload.opcao, texto=payload.texto, depois_do_fim=depois_do_fim
+        )
+        if motivo:
+            _recusar(motivo)
     if resposta is not None:
         mensagens.append(resposta)
 
@@ -697,6 +702,9 @@ async def responder_no_chat(
         _conflito(MOTIVO_CHAT_NO_RESUMO)
     if estado != planejamento_demanda.ESTADO_EM_ANDAMENTO and not depois_do_fim:
         _conflito(MOTIVO_CHAT_TERMINOU)
+    # O "Continuar respondendo" vale so no resumo da melhoria (issue #1440).
+    if payload.continuar and not (depois_do_fim and estado == planejamento_demanda.ESTADO_RESUMIDO):
+        _conflito(planejamento_demanda.MOTIVO_NADA_EM_ABERTO)
 
     if na_melhoria:
         return await _turno_da_melhoria(

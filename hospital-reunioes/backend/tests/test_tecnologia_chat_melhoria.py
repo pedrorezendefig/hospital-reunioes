@@ -321,6 +321,56 @@ class TestConversaAbertaAteOCard:
         assert _conversas(sb)[0]["estado"] == "enviado"
 
 
+class TestContinuarRespondendo:
+    """ADR 0079, decisao 4: o resumo com "Ficou em aberto" traz o "Continuar
+    respondendo", que volta as perguntas pelas lacunas (issue #1440)."""
+
+    def test_continuar_respondendo_pede_a_pergunta_pelas_lacunas_do_resumo(self, monkeypatch):
+        client, sb, gh = _cenario(monkeypatch)
+        demanda_id = _ate_o_resumo(
+            client,
+            sb,
+            monkeypatch,
+            em_aberto=["Quem confirma o retorno com o paciente.", "Se o aviso vale no fim de semana."],
+        )
+        cliente = _ia(monkeypatch, _pergunta(contexto="Quem confirma o retorno com o paciente?"))
+
+        resposta = client.post(f"{CHAT}/{demanda_id}", json={"continuar": True})
+
+        assert resposta.status_code == 200, resposta.text
+        pedido = cliente.chamadas[0]["messages"][0]["content"]
+        assert "Quem confirma o retorno com o paciente." in pedido
+        assert "Se o aviso vale no fim de semana." in pedido
+        corpo = resposta.json()
+        assert corpo["estado"] == "em_andamento"
+        assert corpo["mensagens"][-1]["texto"] == "Quem confirma o retorno com o paciente?"
+        assert len(corpo["mensagens"][-1]["opcoes"]) == 2
+        assert _conversas(sb)[0]["estado"] == "em_andamento"
+        assert gh.criadas == []
+
+    def test_sem_nada_em_aberto_continuar_respondendo_e_recusado(self, monkeypatch):
+        client, sb, _ = _cenario(monkeypatch)
+        demanda_id = _ate_o_resumo(client, sb, monkeypatch, em_aberto=[])
+        cliente = _ia(monkeypatch, _pergunta())
+
+        resposta = client.post(f"{CHAT}/{demanda_id}", json={"continuar": True})
+
+        assert resposta.status_code == 409
+        assert cliente.chamadas == []
+        assert _conversas(sb)[0]["estado"] == "resumido"
+
+    def test_criar_o_card_com_lacuna_continua_permitido(self, monkeypatch):
+        client, sb, gh = _cenario(monkeypatch)
+        demanda_id = _ate_o_resumo(client, sb, monkeypatch, em_aberto=["Quem confirma o retorno com o paciente."])
+
+        resposta = client.post(f"{CHAT}/{demanda_id}/criar-card")
+
+        assert resposta.status_code == 200, resposta.text
+        assert resposta.json()["estado"] == "enviado"
+        aberto = gh.criadas[0]["corpo"].split("## Ficou em aberto", 1)[1].split("\n## ", 1)[0]
+        assert "Quem confirma o retorno com o paciente." in aberto
+
+
 # ═══════════════════════════════════════════════════════════════════════════
 # 4. "Criar o card" cria o PRD do diretor
 # ═══════════════════════════════════════════════════════════════════════════
@@ -450,3 +500,12 @@ class TestKitDaTecnologia:
             assert trecho in secao, trecho
         assert "12 perguntas" not in texto
         assert "Planejar com a IA" not in texto
+
+    def test_o_texto_da_tecnologia_no_kit_diz_o_continuar_respondendo(self):
+        """ADR 0079, decisao 4 (issue #1440): o resumo com lacuna traz o botao
+        Continuar respondendo, e o Criar o card com lacuna segue permitido."""
+        texto = (CONHECIMENTO_DIR / "tecnologia.md").read_text(encoding="utf-8")
+
+        for titulo in ("## A conversa com o Assistente", "## O Planejamento da Demanda"):
+            secao = texto.split(titulo, 1)[1].split("\n## ", 1)[0]
+            assert "**Continuar respondendo**" in secao, titulo
