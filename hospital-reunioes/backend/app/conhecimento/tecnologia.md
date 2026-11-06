@@ -95,3 +95,5 @@ A IA cuida das decisões de negócio: o problema, quem usa, as regras e o que fi
 - O texto que sai da Demanda para o material público do desenvolvimento passa por uma peneira que esconde CPF, telefone, nome e outros dados pessoais.
 - Os prints ficam só dentro do aplicativo e são apagados 30 dias depois de Em produção, ou logo quando a entrega fica Não será feita.
 - No planejamento, a IA cuida só das decisões de negócio, e as decisões técnicas continuam com a Vitta.
+- Títulos, botões e abas aparecem em caixa alta só na tela, e o título de cada Demanda aparece como foi escrito.
+- Dentro da aba, a conversa e o texto dos resumos ficam com maiúscula e minúscula, e só os subtítulos do resumo ficam em caixa alta.

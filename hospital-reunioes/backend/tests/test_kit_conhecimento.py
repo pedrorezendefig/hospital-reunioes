@@ -589,3 +589,33 @@ class TestODetectorDeFrase:
         """O protocolo da Ouvidoria tem quatro digitos com zero na frente, mas
         colado ao ano por hifen: e texto de gente, nao vocabulario do repo."""
         assert VOCABULARIO_DO_REPOSITORIO.search("no formato ano mais número, como 2026-0007") is None
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 6. A Caixa alta no texto dos modulos (ADR 0080, issue #1455)
+# ═══════════════════════════════════════════════════════════════════════════
+#
+# O diretor pergunta por que o titulo esta em maiuscula e o nome da operadora
+# nao: o "O que ja foi decidido" de cada modulo diz a regra, para o Assistente
+# responder sem contradizer a tela.
+
+
+@pytest.mark.parametrize("arquivo", ["contas-medicas.md", "central-de-comando.md", ARQUIVO_DA_ABA])
+def test_o_decidido_diz_que_a_caixa_alta_e_so_na_tela(arquivo):
+    assert "caixa alta só na tela" in _secao(_texto(arquivo), SECAO_DECIDIDO)
+
+
+def test_contas_medicas_diz_que_o_nome_e_o_codigo_ficam_como_estao():
+    decidido = _secao(_texto("contas-medicas.md"), SECAO_DECIDIDO)
+    for termo in ("aparecem como foram escritos", "códigos e siglas ficam como estão"):
+        assert termo in decidido, termo
+
+
+def test_a_aba_diz_que_a_conversa_fica_corrida_e_os_subtitulos_em_caixa_alta():
+    decidido = _secao(_texto(ARQUIVO_DA_ABA), SECAO_DECIDIDO)
+    for termo in (
+        "a conversa e o texto dos resumos ficam com maiúscula e minúscula",
+        "os subtítulos do resumo ficam em caixa alta",
+        "o título de cada Demanda aparece como foi escrito",
+    ):
+        assert termo in decidido, termo

@@ -44,6 +44,7 @@ Para ligar, a pessoa adiciona um conector personalizado nas configurações do C
 - O tema escuro do painel antigo não veio, porque o aplicativo só tem tema claro.
 - Objetivo nunca é chamado de meta.
 - Escrever post do blog por dentro da Central é o destino combinado, e ainda vai ter planejamento próprio.
+- Títulos, botões e abas aparecem em caixa alta só na tela, e os números e nomes que vêm do Google e do Instagram aparecem como chegam.
 
 ## O que costuma virar Demanda
 
