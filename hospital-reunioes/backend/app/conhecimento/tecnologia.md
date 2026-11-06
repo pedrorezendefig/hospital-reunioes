@@ -16,7 +16,7 @@ No bug, a IA faz no máximo cinco perguntas, uma por vez: onde aconteceu, o que 
 
 No fim, a IA mostra um resumo com o que você disse e com os critérios que dizem como se sabe que o bug foi resolvido. Se estiver certo, o botão **Criar o card** manda o bug para o desenvolvimento da Vitta, que começa a trabalhar nele sem ninguém precisar assumir antes. Se alguma coisa estiver errada, o botão **Não bateu** pede para você dizer o quê, a conversa continua e o resumo é refeito. Nada vai para a Vitta antes do clique em Criar o card.
 
-Na melhoria, a conversa vira o Planejamento da Demanda ali mesmo, sem trocar de tela: a IA faz as perguntas que a Vitta faria, uma por vez. Cada pergunta traz uma ou duas frases de contexto, duas opções para clicar, com a recomendada em destaque, e um campo para responder do seu jeito, por texto ou por voz. São no máximo 12 perguntas, e o botão **Fechar e resumir**, no alto da conversa, encerra a qualquer momento.
+Na melhoria, a conversa vira o Planejamento da Demanda ali mesmo, sem trocar de tela: a IA faz as perguntas que a Vitta faria, uma por vez. Cada pergunta traz uma ou duas frases de contexto, duas opções para clicar, com a recomendada em destaque, e um campo para responder do seu jeito, por texto ou por voz. A melhoria não tem limite de perguntas: a IA segue até não sobrar nada indefinido no seu pedido, e o botão **Fechar e resumir**, no alto da conversa, encerra a qualquer momento. Depois que a IA encerra, ou depois do resumo, o campo de texto continua aberto até o clique em Criar o card: você escreve e ela volta a perguntar.
 
 O resumo da melhoria mostra as decisões que você tomou e o que ficou em aberto, que são os pontos que a IA não chegou a perguntar. O que você não decidiu nunca aparece como decisão. Os botões são os mesmos do bug: **Criar o card** manda o pedido completo para a Vitta, já com o que a IA viu no sistema sobre como fazer e como testar, e **Não bateu** volta à conversa para acertar o que estiver errado. A Vitta ainda planeja o resto da parte técnica antes de começar.
 
@@ -68,7 +68,7 @@ Ao abrir um pedido que já foi para a Vitta, aparece também **O que muda**: o q
 
 O Planejamento da Demanda é o caminho da melhoria na conversa com o Assistente: transforma o pedido de uma coisa nova, ou de uma mudança, num plano que a Vitta consegue construir. A IA faz as perguntas que a Vitta faria, uma por vez, e quem decide é você. Ele começa quando você escolhe melhoria na conversa.
 
-A IA parte do que você já contou e não pergunta de novo. Cada pergunta traz uma ou duas frases de contexto, duas opções para clicar, com a recomendada em destaque, e um campo para responder do seu jeito, por texto ou por voz. São no máximo 12 perguntas, e o botão **Fechar e resumir** encerra a conversa a qualquer momento.
+A IA parte do que você já contou e não pergunta de novo. Cada pergunta traz uma ou duas frases de contexto, duas opções para clicar, com a recomendada em destaque, e um campo para responder do seu jeito, por texto ou por voz. O planejamento não tem limite de perguntas: a IA só encerra quando não falta nada do seu pedido, e o botão **Fechar e resumir** encerra a conversa a qualquer momento. Mesmo depois que a IA encerra, ou depois do resumo, o campo de texto continua aberto até o clique em Criar o card: você escreve e ela volta a perguntar.
 
 A conversa fica guardada na Demanda, e a lista ao lado do chat a traz de volta.
 
@@ -85,7 +85,7 @@ A IA cuida das decisões de negócio: o problema, quem usa, as regras e o que fi
 - A aba vai num sentido só, do diretor para a Vitta, e os pedidos da Vitta ao hospital voltaram para o WhatsApp.
 - No bug, a IA faz no máximo cinco perguntas, e o pedido só vai para a Vitta no clique em Criar o card.
 - O bug que sai do Criar o card vai direto para o desenvolvimento, sem ninguém da Vitta precisar assumir antes.
-- Na melhoria, a IA faz no máximo 12 perguntas, e a melhoria que sai do Criar o card ainda passa pelo planejamento técnico da Vitta antes de começar.
+- Na melhoria, a IA não tem limite de perguntas e só encerra quando nada fica em aberto, e a melhoria que sai do Criar o card ainda passa pelo planejamento técnico da Vitta antes de começar.
 - A conversa com o Assistente fica guardada na Demanda e se retoma pela lista ao lado.
 - A lista ao lado da conversa mostra os pedidos de quem está olhando, e a Etapa de cada um vem do desenvolvimento, sem ninguém escrever à mão.
 - Uma Demanda se liga a um trabalho de desenvolvimento só, e a Etapa é lida de lá, nunca digitada.

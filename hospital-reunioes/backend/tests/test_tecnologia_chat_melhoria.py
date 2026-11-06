@@ -440,6 +440,13 @@ class TestKitDaTecnologia:
         texto = (CONHECIMENTO_DIR / "tecnologia.md").read_text(encoding="utf-8")
 
         secao = texto.split("## A conversa com o Assistente", 1)[1].split("\n## ", 1)[0]
-        for trecho in ("no máximo 12 perguntas", "**Fechar e resumir**", "ficou em aberto", "recomendada"):
+        for trecho in (
+            "não tem limite de perguntas",
+            "o campo de texto continua aberto até o clique em Criar o card",
+            "**Fechar e resumir**",
+            "ficou em aberto",
+            "recomendada",
+        ):
             assert trecho in secao, trecho
+        assert "12 perguntas" not in texto
         assert "Planejar com a IA" not in texto
