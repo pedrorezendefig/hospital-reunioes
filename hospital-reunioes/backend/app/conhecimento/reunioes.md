@@ -50,6 +50,7 @@ A coleta de assinaturas também tem prazo: são 30 dias. Vencido o prazo, a ata 
 - O aplicativo não grava a reunião, e o áudio do ditado é descartado assim que vira texto.
 - As notas avulsas e a importação de atas antigas foram retiradas do aplicativo.
 - O papel interno de cada facilitador é uma etiqueta da administração, e a própria pessoa não vê o dela.
+- Os títulos e subtítulos do PDF da ata saem em caixa alta, inclusive os tópicos escritos pela inteligência artificial, e o resto do texto continua com maiúscula e minúscula.
 
 ## O que costuma virar Demanda
 
