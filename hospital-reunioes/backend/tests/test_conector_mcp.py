@@ -117,11 +117,13 @@ def token(
     iss: object = EMISSOR,
     exp_delta: int = 3600,
     incluir_exp: bool = True,
+    extras: dict | None = None,
 ) -> str:
     """Um token do AuthKit assinado no teste. Cada parâmetro isola um claim para
-    a recusa; `_OMITIR` deixa o claim de fora."""
+    a recusa; `_OMITIR` deixa o claim de fora. `extras` acrescenta claims (o
+    `client_id` e o `sid` do Connect)."""
     agora = int(time.time())
-    claims: dict = {"sub": "user_123", "iat": agora}
+    claims: dict = {"sub": "user_123", "iat": agora, **(extras or {})}
     for chave_claim, valor in (
         ("iss", iss),
         ("aud", aud),
@@ -873,6 +875,83 @@ class TestVersaoDoProtocoloLeniente:
 
         assert resposta.status_code == 401
         assert self._linhas_da_versao(caplog) == []
+
+
+@pytest.mark.usefixtures("mcp_configurado", "jwks_no_emissor")
+class TestLogDeQuemAcessa:
+    """Todo acesso aceito deixa no log o `client_id` e o `sid` do token (#1448),
+    para auditoria e para ler o `client_id` real do claude.ai antes de travar a
+    lista de clientes. Sem e-mail nessa linha."""
+
+    _LOGGER = "app.routers.conector_mcp"
+
+    def _linhas(self, caplog) -> list[str]:
+        return [r.getMessage() for r in caplog.records if r.name == self._LOGGER and "acesso aceito" in r.getMessage()]
+
+    def _pedido(self, tok: str):
+        return _cliente_mcp().post(
+            CAMINHO_MCP,
+            json={"jsonrpc": "2.0", "id": 2, "method": "tools/list"},
+            headers={"Authorization": f"Bearer {tok}"},
+        )
+
+    def test_acesso_aceito_loga_client_id_e_sid(self, chave_do_emissor, caplog):
+        caplog.set_level(logging.INFO, logger=self._LOGGER)
+        tok = token(chave_do_emissor, extras={"client_id": "https://cliente.exemplo/meta", "sid": "consent_01ABC"})
+
+        resposta = self._pedido(tok)
+
+        assert resposta.status_code == 200, resposta.text
+        linhas = self._linhas(caplog)
+        assert len(linhas) == 1
+        assert "https://cliente.exemplo/meta" in linhas[0]
+        assert "consent_01ABC" in linhas[0]
+        assert "super@hsm.com" not in linhas[0]
+
+    def test_token_sem_client_id_passa_e_loga_ausente(self, chave_do_emissor, caplog):
+        # Por enquanto só registra (a trava vem quando o client_id real do
+        # claude.ai estiver confirmado no log de produção).
+        caplog.set_level(logging.INFO, logger=self._LOGGER)
+
+        resposta = self._pedido(token(chave_do_emissor))
+
+        assert resposta.status_code == 200, resposta.text
+        linhas = self._linhas(caplog)
+        assert len(linhas) == 1
+        assert "client_id=None" in linhas[0]
+
+    def test_valor_comprido_no_claim_e_cortado_em_200(self, chave_do_emissor):
+        tok = token(chave_do_emissor, extras={"client_id": "x" * 5000})
+
+        assert conector_mcp.identificacao_do_cliente(tok)["client_id"] == "x" * 200
+
+    def test_client_id_que_nao_e_texto_vira_none(self, chave_do_emissor):
+        tok = token(chave_do_emissor, extras={"client_id": {"url": "https://cliente.exemplo"}, "sid": 42})
+
+        assert conector_mcp.identificacao_do_cliente(tok)["client_id"] is None
+        assert conector_mcp.identificacao_do_cliente(tok)["sid"] is None
+
+    def test_log_traz_os_nomes_dos_claims_sem_os_valores(self, chave_do_emissor, caplog):
+        # Se o cliente vier noutro claim (azp), o nome aparece no log e mostra
+        # onde procurar; o valor do e-mail, não.
+        caplog.set_level(logging.INFO, logger=self._LOGGER)
+        tok = token(chave_do_emissor, extras={"azp": "https://cliente.exemplo/meta"})
+
+        self._pedido(tok)
+
+        linha = self._linhas(caplog)[0]
+        assert "azp" in linha
+        assert "email_verified" in linha
+        assert "https://cliente.exemplo/meta" not in linha
+        assert "super@hsm.com" not in linha
+
+    def test_acesso_negado_nao_vai_ao_log_de_aceito(self, caplog):
+        caplog.set_level(logging.INFO, logger=self._LOGGER)
+
+        resposta = _cliente_mcp().post(CAMINHO_MCP, json={"jsonrpc": "2.0", "id": 2, "method": "tools/list"})
+
+        assert resposta.status_code == 401
+        assert self._linhas(caplog) == []
 
 
 # ─── Sem python-jose: a verificação é do PyJWT (issue #1284) ────────────────

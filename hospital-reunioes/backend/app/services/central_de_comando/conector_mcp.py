@@ -223,6 +223,32 @@ def verificar_acesso(token: str | None, jwks: dict, cfg: ConfiguracaoMCP) -> str
     return email.strip().lower()
 
 
+_TAMANHO_MAXIMO_NO_LOG = 200
+
+
+def identificacao_do_cliente(token: str) -> dict:
+    """O `client_id` (qual app pediu o token) e o `sid` (o consentimento) de um
+    token que o `autorizar` JÁ aceitou, para o log de auditoria (#1448). Lê sem
+    conferir a assinatura de novo porque só é chamada depois do gate; valor que
+    não é texto vira `None`, e texto comprido é cortado (o log não infla com um
+    claim gigante). Nunca devolve o e-mail.
+
+    `campos` traz os NOMES dos claims do token, sem valores: se o WorkOS puser
+    o cliente noutro claim (como `azp`), o log mostra onde procurar. Só para
+    log: a trava por cliente (segundo PR da #1448) tem de ler as claims
+    VERIFICADAS do `verificar_acesso`, nunca esta leitura."""
+    try:
+        claims = jwt.decode(token, options={"verify_signature": False})
+    except Exception:  # noqa: BLE001 - só para log: claims ilegíveis viram vazio
+        claims = {}
+
+    def _texto(valor: object) -> str | None:
+        return valor[:_TAMANHO_MAXIMO_NO_LOG] if isinstance(valor, str) else None
+
+    campos = ",".join(sorted(str(nome)[:40] for nome in claims))[:_TAMANHO_MAXIMO_NO_LOG]
+    return {"client_id": _texto(claims.get("client_id")), "sid": _texto(claims.get("sid")), "campos": campos}
+
+
 # ─── O JWKS do emissor ───────────────────────────────────────────────────────
 
 # O JWKS por emissor, em memória do processo, com validade curta. O cache serve
