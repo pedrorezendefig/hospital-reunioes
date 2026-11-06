@@ -43,6 +43,7 @@ CHAVES_SEM_PADRAO = (
     "MCP_AUTH_ISSUER",
     "MCP_AUTH_JWKS_URI",
     "MCP_RESOURCE_URL",
+    "MCP_CLIENTES_PERMITIDOS",
 )
 
 # Os eventos que o Site dispara quando alguém clica para falar com o hospital.

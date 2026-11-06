@@ -13,15 +13,15 @@ do gate de sessão do app:
   token do WorkOS e do gate de Super admin.
 
 **O gate, em duas etapas.** Primeiro o token do AuthKit: assinatura contra o
-JWKS do emissor, `iss`, `aud` (o Resource Indicator), expiração e
-`email_verified` verdadeiro. Escopo não entra no gate (#1442): o cliente do
+JWKS do emissor, `iss`, `aud` (o Resource Indicator), expiração, `client_id`
+na lista de clientes permitidos e `email_verified` verdadeiro. Escopo não entra no gate (#1442): o cliente do
 claude.ai se registra por DCR/CIMD, e o WorkOS dá a todo cliente assim os
 mesmos escopos OIDC padrão, então escopo nenhum o separa de outro cliente. O
 `aud` barra token emitido para outro recurso (a Central antiga, ou token sem
 resource, cujo `aud` é o client id do ambiente), mas NÃO barra outro cliente
 DCR/CIMD que peça este mesmo resource: o resource é o cliente quem pede. Quem
-segura esse caso é a segunda etapa (amarrar ao `client_id` do claude.ai fica
-para issue própria). Depois o participante: o e-mail
+barra esse caso é o `client_id` (#1448): só o do claude.ai passa, salvo o que
+`MCP_CLIENTES_PERMITIDOS` acrescentar. Depois o participante: o e-mail
 verificado do token acha a pessoa no cadastro, e ela precisa estar ativa e ser
 Super admin. Rebaixou ou desligou, o conector para na hora, sem editar lista
 nenhuma. A lista de e-mails em variável de ambiente do conector antigo NÃO foi
@@ -77,6 +77,12 @@ CAMINHO_DO_METADATA = "/.well-known/oauth-protected-resource"
 # ambiente, não do escopo; o `offline_access` deixa o Claude renovar o token sem
 # pedir login de novo.
 ESCOPOS_ANUNCIADOS = ("openid", "profile", "email", "offline_access")
+
+# O `client_id` que o claude.ai (web, Desktop e celular) manda por CIMD, lido no
+# log de produção em 06/11/2026 (#1448). É o único cliente que abre a Central
+# quando `MCP_CLIENTES_PERMITIDOS` está vazia (decisão A da #1448: o Claude Code,
+# `https://claude.ai/oauth/claude-code-client-metadata`, fica de fora).
+CLIENTES_PADRAO = ("https://claude.ai/oauth/mcp-oauth-client-metadata",)
 
 # A versão do protocolo MCP que este servidor fala. Portado read-only: sem
 # batching (removido na 2025-06-18), sem escrita, sem stream iniciado pelo
@@ -139,6 +145,8 @@ class ConfiguracaoMCP:
     emissor: str
     jwks_uri: str
     recurso: str
+    # Os `client_id` que podem abrir o conector (#1448).
+    clientes: tuple[str, ...] = ()
 
 
 def configuracao_mcp(cfg=settings) -> ConfiguracaoMCP:
@@ -153,7 +161,11 @@ def configuracao_mcp(cfg=settings) -> ConfiguracaoMCP:
     jwks_uri = (cfg.mcp_auth_jwks_uri or "").strip() or (f"{emissor}/oauth2/jwks" if emissor else "")
     if not emissor or not recurso or not jwks_uri:
         raise ConectorNaoConfiguradoError("O conector MCP da Central ainda não está configurado no backend.")
-    return ConfiguracaoMCP(emissor=emissor, jwks_uri=jwks_uri, recurso=recurso)
+    # Vazio (inclusive a linha vazia que vem do `.env.example`) é o padrão, só
+    # o claude.ai: nunca "qualquer cliente".
+    clientes = tuple(c.strip() for c in (cfg.mcp_clientes_permitidos or "").split(",") if c.strip())
+    clientes = clientes or CLIENTES_PADRAO
+    return ConfiguracaoMCP(emissor=emissor, jwks_uri=jwks_uri, recurso=recurso, clientes=clientes)
 
 
 # ─── O metadata do recurso protegido (RFC 9728) ──────────────────────────────
@@ -191,9 +203,9 @@ def verificar_acesso(token: str | None, jwks: dict, cfg: ConfiguracaoMCP) -> str
     `AcessoNegadoMCPError`.
 
     Todas têm de valer: assinatura RS256 contra o JWKS do emissor, `iss`, `aud`
-    (o recurso), `exp` presente e `email_verified` verdadeiro. O `aud` barra
-    token de outro recurso, não outro cliente que peça este (#1442; ver o
-    docstring do módulo). O algoritmo é fixado em RS256 de propósito: sem
+    (o recurso), `exp` presente, `client_id` na lista de clientes permitidos e
+    `email_verified` verdadeiro. O `aud` barra token de outro recurso; o
+    `client_id` barra outro cliente que peça este (#1442, #1448). O algoritmo é fixado em RS256 de propósito: sem
     isso, um token `alg: none` ou HS256 assinado com um segredo público passaria.
     """
     if not token:
@@ -211,6 +223,14 @@ def verificar_acesso(token: str | None, jwks: dict, cfg: ConfiguracaoMCP) -> str
         )
     except Exception as exc:  # noqa: BLE001 - gate de segurança: qualquer erro de decodificação nega
         raise AcessoNegadoMCPError(f"token inválido ({type(exc).__name__})") from exc
+
+    # Só os clientes da lista (#1448): o `aud` não separa o claude.ai de outro
+    # cliente DCR/CIMD que peça este mesmo recurso. Igualdade exata contra as
+    # claims JÁ verificadas acima; a URL do `client_id` nunca é buscada (SSRF).
+    cliente = claims.get("client_id")
+    if not isinstance(cliente, str) or cliente not in cfg.clientes:
+        citado = cliente[:200] if isinstance(cliente, str) else type(cliente).__name__
+        raise AcessoNegadoMCPError(f"cliente fora da lista ({citado!r})")
 
     verificado = claims.get("email_verified")
     if verificado is not True and verificado != "true":
@@ -235,8 +255,8 @@ def identificacao_do_cliente(token: str) -> dict:
 
     `campos` traz os NOMES dos claims do token, sem valores: se o WorkOS puser
     o cliente noutro claim (como `azp`), o log mostra onde procurar. Só para
-    log: a trava por cliente (segundo PR da #1448) tem de ler as claims
-    VERIFICADAS do `verificar_acesso`, nunca esta leitura."""
+    log: a trava por cliente lê as claims VERIFICADAS do `verificar_acesso`,
+    nunca esta leitura (#1448)."""
     try:
         claims = jwt.decode(token, options={"verify_signature": False})
     except Exception:  # noqa: BLE001 - só para log: claims ilegíveis viram vazio

@@ -151,6 +151,14 @@ class Settings(BaseSettings):
     mcp_auth_issuer: str = ""
     mcp_auth_jwks_uri: str = ""
     mcp_resource_url: str = ""
+    # Os clientes OAuth que podem abrir o conector, separados por vírgula
+    # (#1448). Vazio = só o claude.ai (web, Desktop e celular), pelo
+    # `client_id` que ele manda por CIMD; nunca "qualquer cliente". Preenchida,
+    # a lista SUBSTITUI o padrão: ponha o claude.ai nela também. Cuidado ao
+    # liberar o Claude Code (`https://claude.ai/oauth/claude-code-client-metadata`):
+    # o login dele volta para `localhost`, e um programa na máquina, ou alguém
+    # que receba o endereço de retorno colado, pode ficar com o acesso.
+    mcp_clientes_permitidos: str = ""
     # Aquecimento do cache no boot (issue #867, ADR 0059): logo depois de subir,
     # o backend lê uma vez, numa thread, o período padrão de cada tela, para a
     # primeira abertura depois do deploy não esperar a fonte. Ausente = true.
