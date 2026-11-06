@@ -60,11 +60,29 @@ export type ResumoDoBug = {
 };
 
 /**
+ * O modelo da chamada mais recente, no nome de exibição ("Opus 5.5"), e o que
+ * a conversa já custou em dólar (issue #1439, ADR 0079, decisão 6).
+ * `custo_usd` nulo é custo não medido: o modelo estava sem preço.
+ */
+export type CustoDaConversa = {
+  modelo: string;
+  custo_usd: number | null;
+};
+
+const DOLAR = new Intl.NumberFormat("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+/** "Opus 5.5 · US$ 1,84 até agora", ou "Opus 5.5 · custo não medido". */
+export function textoDoCusto(custo: CustoDaConversa): string {
+  if (custo.custo_usd === null) return `${custo.modelo} · custo não medido`;
+  return `${custo.modelo} · US$ ${DOLAR.format(custo.custo_usd)} até agora`;
+}
+
+/**
  * `estado`: `em_andamento`, `encerrado` (as perguntas da melhoria acabaram e o
  * resumo vem a seguir), `resumido` (o resumo esperando o clique) e `enviado`
  * (o card nasceu). `planejamento` é a melhoria confirmada, que segue no próprio
  * chat pelo Planejamento da Demanda (issue #1383), com o resumo em
- * `resumo_da_melhoria`.
+ * `resumo_da_melhoria`. `custo` é nulo enquanto não houve chamada à IA.
  */
 export type ConversaDoChat = {
   demanda_id: string;
@@ -75,6 +93,7 @@ export type ConversaDoChat = {
   anexos: number;
   planejamento: boolean;
   aviso_dos_anexos: string | null;
+  custo?: CustoDaConversa | null;
 };
 
 /**
@@ -133,6 +152,13 @@ function resumoValido(valor: unknown): boolean {
   );
 }
 
+function custoValido(valor: unknown): boolean {
+  if (valor === undefined || valor === null) return true;
+  if (typeof valor !== "object") return false;
+  const c = valor as Record<string, unknown>;
+  return typeof c.modelo === "string" && (c.custo_usd === null || typeof c.custo_usd === "number");
+}
+
 /** O corpo serve para a tela usar? Mesma fronteira dos outros corpos da aba. */
 export function conversaValida(corpo: unknown): corpo is ConversaDoChat {
   if (typeof corpo !== "object" || corpo === null) return false;
@@ -143,7 +169,8 @@ export function conversaValida(corpo: unknown): corpo is ConversaDoChat {
     Array.isArray(c.mensagens) &&
     c.mensagens.every(falaValida) &&
     resumoValido(c.resumo) &&
-    resumoDaMelhoriaValido(c.resumo_da_melhoria)
+    resumoDaMelhoriaValido(c.resumo_da_melhoria) &&
+    custoValido(c.custo)
   );
 }
 
