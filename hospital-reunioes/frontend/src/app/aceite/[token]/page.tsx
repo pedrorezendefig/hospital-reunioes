@@ -132,7 +132,7 @@ export default function AceiteInternoPage() {
               <p className="text-[10px] uppercase tracking-wider font-semibold text-slate-400 mb-1">
                 Ata de reunião para aceite
               </p>
-              <h1 className="text-xl font-bold text-slate-900">
+              <h1 className="text-xl font-bold text-slate-900 normal-case">
                 {data.reuniao.titulo || "Reunião sem título"}
               </h1>
               <p className="text-sm text-slate-500 mt-1">
@@ -219,7 +219,7 @@ export default function AceiteInternoPage() {
                   <span>{erro}</span>
                 </div>
               )}
-              <label className="flex items-start gap-3 cursor-pointer select-none">
+              <label className="flex items-start gap-3 cursor-pointer select-none normal-case">
                 <input
                   type="checkbox"
                   checked={confirmado}

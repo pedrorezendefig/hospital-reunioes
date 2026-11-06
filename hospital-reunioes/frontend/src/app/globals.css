@@ -71,6 +71,39 @@ h1, h2, h3, h4, h5, h6 {
   font-family: "HP Simplified", system-ui, -apple-system, sans-serif;
 }
 
+/* ─── Caixa alta do Texto curto (ADR 0080) ─────────────────────────────
+   O tipo de elemento decide, nunca o tamanho da frase. Fica no `@layer base`
+   para que o `normal-case` do Tailwind (camada utilities) vença: é com ele que
+   o dado digitado dentro de um título ou botão aparece como foi escrito.
+   Só a exibição muda; o texto da fonte e do banco segue em caixa mista.
+   O teste desta regra é `app/caixa-alta.test.ts`. */
+@layer base {
+  h1, h2, h3,
+  button,
+  label,
+  th,
+  [role="tab"],
+  nav a,
+  .etiqueta {
+    text-transform: uppercase;
+    letter-spacing: 0.02em;
+  }
+
+  /* Texto corrido dentro de um Texto curto (cartão clicável, rótulo com
+     explicação) continua em caixa mista. */
+  :is(h1, h2, h3, button, label, th, [role="tab"], nav a, .etiqueta) p {
+    text-transform: none;
+    letter-spacing: normal;
+  }
+
+  /* O que se digita num campo, e o placeholder dele, nunca herda a caixa
+     alta do rótulo que embrulha o campo. */
+  input, textarea, select {
+    text-transform: none;
+    letter-spacing: normal;
+  }
+}
+
 /* Glass card utility */
 .glass-card {
   background: rgba(255, 255, 255, 0.8);

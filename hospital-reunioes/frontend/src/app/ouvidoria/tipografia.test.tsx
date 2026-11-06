@@ -22,6 +22,7 @@ import { act, cleanup, fireEvent, render, screen, within } from "@testing-librar
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { Dossie } from "@/components/ouvidoria/Dossie";
+import { apareceComoFoiEscrito } from "@/lib/caixa-alta";
 import { BREAKPOINT_DA_BARRA, CSS_DO_ORCAMENTO } from "@/lib/ouvidoria/atalhos";
 import { ehRotuloCurto } from "@/lib/ouvidoria/tipografia";
 
@@ -459,15 +460,16 @@ describe("a barra de atalhos continua em caixa mista (RN-77, D-16)", () => {
   });
 
   it("nenhuma pílula de navegação vai para caixa alta", async () => {
-    // Porta para outra tela não é dado nem ação: no resto da casa nenhuma
-    // navegação é caixa alta, e esta barra ainda é a única linha do módulo sem
-    // folga de largura, onde os 10% que a maiúscula alarga custam caro.
+    // Desde a ADR 0080 a regra base do globals.css põe todo link de `nav` em
+    // caixa alta. Esta barra é a exceção: é a única linha do módulo sem folga
+    // de largura, e medida no navegador em maiúscula ela passa dos 616px que
+    // sobram a 1024px (issue #1454). A pílula leva `normal-case`.
     sessao.perfilOuvidoria = "diretoria_executiva";
     await montarFila();
 
     const nav = screen.getByRole("navigation", { name: /atalhos da ouvidoria/i });
     for (const pilula of within(nav).getAllByRole("link")) {
-      expect(saiEmCaixaAlta(pilula)).toBe(false);
+      expect(apareceComoFoiEscrito(pilula)).toBe(true);
     }
   });
 });

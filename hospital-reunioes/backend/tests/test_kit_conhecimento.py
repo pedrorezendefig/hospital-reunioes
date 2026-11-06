@@ -589,3 +589,33 @@ class TestODetectorDeFrase:
         """O protocolo da Ouvidoria tem quatro digitos com zero na frente, mas
         colado ao ano por hifen: e texto de gente, nao vocabulario do repo."""
         assert VOCABULARIO_DO_REPOSITORIO.search("no formato ano mais número, como 2026-0007") is None
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 5. A regra da caixa alta no texto geral do aplicativo (issue #1454)
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+class TestACaixaAltaNoTextoGeral:
+    """O texto de Infra guarda as decisoes que valem para o aplicativo inteiro
+    (o travessao esta la). A caixa alta das telas e uma delas: o diretor
+    pergunta ao Assistente por que o nome da reuniao nao saiu em maiuscula, e a
+    resposta tem que estar no que ele le."""
+
+    @pytest.fixture
+    def decisao(self) -> str:
+        decisoes = _decisoes("infra.md")
+        achadas = [d for d in decisoes if "caixa alta" in d]
+        assert len(achadas) == 1, decisoes
+        return achadas[0]
+
+    @pytest.mark.parametrize(
+        "termo",
+        ["menu", "botão", "aba", "nome de campo", "cabeçalho de coluna", "etiqueta de situação"],
+    )
+    def test_diz_o_que_vai_para_caixa_alta(self, decisao, termo):
+        assert termo in decisao
+
+    @pytest.mark.parametrize("termo", ["frase", "texto longo", "o que a equipe digita", "nada é gravado em maiúscula"])
+    def test_diz_o_que_fica_com_maiuscula_e_minuscula(self, decisao, termo):
+        assert termo in decisao

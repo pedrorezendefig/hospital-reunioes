@@ -166,7 +166,7 @@ export function MultiSelect({
                       e.stopPropagation();
                       toggle(opt.value);
                     }}
-                    className={`flex items-center gap-2.5 w-full px-3 py-2.5 text-sm text-left hover:bg-slate-50 transition-colors ${
+                    className={`flex items-center gap-2.5 w-full px-3 py-2.5 text-sm text-left normal-case hover:bg-slate-50 transition-colors ${
                       checked ? "font-medium text-primary bg-primary/5" : "text-slate-700"
                     }`}
                   >

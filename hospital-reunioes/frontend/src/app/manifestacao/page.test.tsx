@@ -25,6 +25,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 // está na tela não prova que a frase certa sumiu, prova que aquele literal não
 // está lá). Toda asserção de PRESENÇA usa o texto exato que a pessoa lê.
 import { FALTA_DIZER_SOBRE_QUEM } from "@/lib/ouvidoria/publico";
+import { apareceComoFoiEscrito } from "@/lib/caixa-alta";
 import ManifestacaoPage from "./page";
 
 vi.mock("next/navigation", () => ({
@@ -387,5 +388,15 @@ describe("a recusa do envio na tela do formulário (issue #666)", () => {
     expect((screen.getByLabelText("O que aconteceu?") as HTMLTextAreaElement).value).toBe(
       "Minha mãe esperou duas horas na recepção."
     );
+  });
+});
+
+describe("caixa alta no formulário público (ADR 0080)", () => {
+  it("a frase do anonimato, dentro do rótulo, fica com maiúscula e minúscula", () => {
+    render(<ManifestacaoPage />);
+
+    const frase = screen.getByText("Quero registrar de forma anônima.");
+    expect(frase.closest("label")).not.toBeNull();
+    expect(apareceComoFoiEscrito(frase)).toBe(true);
   });
 });

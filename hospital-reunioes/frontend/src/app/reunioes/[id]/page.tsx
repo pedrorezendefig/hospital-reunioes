@@ -1251,7 +1251,7 @@ export default function ReuniaoDetailPage() {
                 </span>
               </div>
               <h1 className="text-2xl font-bold text-slate-900">
-                {reuniao.tipo ?? "Reunião"},{" "}
+                <span className="normal-case">{reuniao.tipo ?? "Reunião"}</span>,{" "}
                 {mounted ? new Date(reuniao.data + "T12:00:00").toLocaleDateString("pt-BR", {
                   day: "2-digit", month: "long", year: "numeric",
                 }) : "-"}
@@ -1616,7 +1616,7 @@ export default function ReuniaoDetailPage() {
               </div>
             )}
             <h1 className="text-2xl font-bold text-slate-900">
-              {reuniao.tipo ?? "Reunião"},{" "}
+              <span className="normal-case">{reuniao.tipo ?? "Reunião"}</span>,{" "}
               {mounted ? new Date(reuniao.data + "T12:00:00").toLocaleDateString("pt-BR", {
                 day: "2-digit", month: "long", year: "numeric",
               }) : "-"}

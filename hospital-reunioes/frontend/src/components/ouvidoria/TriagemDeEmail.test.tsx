@@ -15,6 +15,8 @@
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { apareceComoFoiEscrito } from "@/lib/caixa-alta";
+
 import { TriagemDeEmail } from "./TriagemDeEmail";
 
 function respostaJson(body: unknown, status = 200) {
@@ -151,6 +153,20 @@ describe("o painel do item", () => {
     expect(within(painel).getByText("joana.silva@gmail.com")).toBeTruthy();
     expect(within(painel).getByRole("button", { name: /laudo\.pdf/ })).toBeTruthy();
     expect(chamadas).toContain("/api/ouvidoria/triagem-email/e1");
+  });
+
+  it("remetente, assunto e nome do anexo aparecem como foram escritos (ADR 0080)", async () => {
+    montar({ e1: item(JOANA) });
+
+    const joana = await linhaDe("Demora na recepção do ambulatório");
+    expect(apareceComoFoiEscrito(within(joana).getByText("Joana da Silva"))).toBe(true);
+    expect(apareceComoFoiEscrito(within(joana).getByText("Demora na recepção do ambulatório"))).toBe(true);
+
+    fireEvent.click(joana);
+    const painel = await screen.findByRole("region", { name: "E-mail recebido" });
+    const titulo = within(painel).getByRole("heading", { name: "Demora na recepção do ambulatório" });
+    expect(apareceComoFoiEscrito(titulo)).toBe(true);
+    expect(apareceComoFoiEscrito(within(painel).getByText("laudo.pdf"))).toBe(true);
   });
 
   it("um corpo com HTML malicioso aparece como texto e não executa nada", async () => {

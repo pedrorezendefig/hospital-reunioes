@@ -13,9 +13,10 @@
  * inteira verde.
  */
 
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { apareceComoFoiEscrito } from "@/lib/caixa-alta";
 import { PREFIXO_DA_DEVOLUCAO_A_OUVIDORIA } from "@/lib/ouvidoria/devolucao-a-ouvidoria";
 import { Dossie } from "./Dossie";
 
@@ -143,6 +144,14 @@ describe("o Dossiê do caso devolvido à Ouvidoria (issue #601)", () => {
     const titulo = await screen.findByRole("heading", { name: /Devolvido pela área Centro Medico/ });
 
     expect(titulo.textContent).toContain("devolvido 2 vezes");
+  });
+
+  it("o nome da área no título aparece como foi escrito (ADR 0080)", async () => {
+    montar(caso(), [movimentoDeDevolucao("Centro Medico", MOTIVO, "2026-08-26T17:00:00+00:00", "Carlos Titular")]);
+
+    const titulo = await screen.findByRole("heading", { name: /Devolvido pela área Centro Medico/ });
+
+    expect(apareceComoFoiEscrito(within(titulo).getByText("Centro Medico"))).toBe(true);
   });
 
   it("caso que nunca foi devolvido não mostra o bloco", async () => {

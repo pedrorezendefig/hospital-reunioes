@@ -725,7 +725,7 @@ export function PendenciaDetailModal({
                       <button
                         key={p.id}
                         onClick={() => insertMention(p.nome_completo)}
-                        className={`flex items-center gap-3 w-full px-4 py-2 text-sm text-left transition-colors ${
+                        className={`flex items-center gap-3 w-full px-4 py-2 text-sm text-left normal-case transition-colors ${
                           i === mentionIndex ? "bg-primary/5 border-l-2 border-primary" : "border-l-2 border-transparent hover:bg-slate-50"
                         }`}
                       >

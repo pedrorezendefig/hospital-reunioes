@@ -10,9 +10,10 @@
  * contas, e não ao kanban de pendências, que é para onde vão os outros tipos.
  * O irmão de presença: a menção continua indo para o kanban.
  */
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { apareceComoFoiEscrito } from "@/lib/caixa-alta";
 import type { Notificacao } from "@/types";
 
 import { NotificacoesDropdown } from "./NotificacoesDropdown";
@@ -127,5 +128,22 @@ describe("painel do sino quando a lista falha (#1430)", () => {
 
     await screen.findByText("Não foi possível carregar os avisos.");
     expect(screen.queryByText("Sem notificações")).toBeNull();
+  });
+});
+
+describe("caixa alta no painel do sino (ADR 0080)", () => {
+  it("o título do painel é Texto curto e o aviso inteiro fica corrido", async () => {
+    notificacoes = [aviso({})];
+    render(<NotificacoesDropdown />);
+    fireEvent.click(screen.getByRole("button", { name: "Notificações" }));
+
+    const titulo = await screen.findByRole("heading", { name: "Notificações" });
+    expect(apareceComoFoiEscrito(titulo)).toBe(false);
+
+    const textoDoAviso = await screen.findByText("2 contas prontas");
+    const item = textoDoAviso.closest("button")!;
+    expect(apareceComoFoiEscrito(textoDoAviso)).toBe(true);
+    expect(apareceComoFoiEscrito(within(item).getByText("Os guias estão na fila de Contas médicas."))).toBe(true);
+    expect(apareceComoFoiEscrito(within(item).getByText("agora"))).toBe(true);
   });
 });

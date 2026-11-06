@@ -531,7 +531,7 @@ function FacilitadorCombobox({
         type="button"
         onClick={() => setOpen((v) => !v)}
         disabled={loading}
-        className="w-full px-4 py-2.5 border border-slate-200 rounded-xl text-sm bg-white text-left flex items-center justify-between gap-2 focus:outline-none focus:ring-2 focus:ring-indigo-300 focus:border-indigo-400 transition-all disabled:opacity-60"
+        className="w-full px-4 py-2.5 border border-slate-200 rounded-xl text-sm bg-white text-left normal-case flex items-center justify-between gap-2 focus:outline-none focus:ring-2 focus:ring-indigo-300 focus:border-indigo-400 transition-all disabled:opacity-60"
       >
         <span
           className={`truncate ${selected ? "text-slate-900" : "text-slate-400"}`}
@@ -583,7 +583,7 @@ function FacilitadorCombobox({
                         setOpen(false);
                         setSearch("");
                       }}
-                      className={`w-full text-left px-3 py-2 text-sm flex items-center gap-2 hover:bg-slate-50 ${
+                      className={`w-full text-left normal-case px-3 py-2 text-sm flex items-center gap-2 hover:bg-slate-50 ${
                         isSelected ? "bg-indigo-50 text-indigo-700" : "text-slate-700"
                       }`}
                     >
