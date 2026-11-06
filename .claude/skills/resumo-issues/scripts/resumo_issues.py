@@ -45,7 +45,7 @@ def _titulo_prd(t: str) -> str:
     return t if len(t) <= 80 else t[:77].rstrip() + "..."
 
 
-def montar(issues: list[dict]) -> str:
+def montar(issues: list[dict], projeto: str = "Projeto") -> str:
     pais = {i["parent"]["number"] for i in issues if i.get("parent")}
     pessoas: dict[str, list[dict]] = {}
     for i in issues:
@@ -54,7 +54,7 @@ def montar(issues: list[dict]) -> str:
 
     # Pessoas com mais cards primeiro; quem não tem dono vai por último.
     ordem = sorted(pessoas, key=lambda p: (p == SEM_DONO, -len(pessoas[p]), p))
-    linhas = [f"Hospital: {len(issues)} abertas", ""]
+    linhas = [f"{projeto}: {len(issues)} abertas", ""]
     for p in ordem:
         cards = pessoas[p]
         linhas.append(f"{p} ({len(cards)})")
@@ -99,7 +99,17 @@ query($q: String!) {
 """
 
 
-def coletar() -> list[dict]:
+def nome_do_projeto(repo: str) -> str:
+    """O `nome` do .claude/fluxo.json que o instalador gera; sem ele, o nome do repo."""
+    try:
+        raiz = subprocess.run(["git", "rev-parse", "--show-toplevel"], capture_output=True, text=True, check=True).stdout.strip()
+        with open(f"{raiz}/.claude/fluxo.json", encoding="utf-8") as f:
+            return json.load(f)["nome"]
+    except (OSError, subprocess.CalledProcessError, KeyError, ValueError):
+        return repo.split("/")[-1]
+
+
+def coletar() -> tuple[list[dict], str]:
     repo = subprocess.run(
         ["gh", "repo", "view", "--json", "nameWithOwner", "--jq", ".nameWithOwner"],
         capture_output=True, text=True, encoding="utf-8", check=True,
@@ -111,7 +121,7 @@ def coletar() -> list[dict]:
     busca = json.loads(saida)["data"]["search"]
     if busca["issueCount"] > 100:
         print(f"Aviso: {busca['issueCount']} abertas, o resumo mostra só as 100 mais recentes.", file=sys.stderr)
-    return [
+    issues = [
         {
             "number": n["number"],
             "title": n["title"],
@@ -121,7 +131,9 @@ def coletar() -> list[dict]:
         }
         for n in busca["nodes"]
     ]
+    return issues, nome_do_projeto(repo)
 
 
 if __name__ == "__main__":
-    print(montar(coletar()), end="")
+    issues, projeto = coletar()
+    print(montar(issues, projeto), end="")
