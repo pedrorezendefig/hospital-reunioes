@@ -34,6 +34,7 @@ import { PainelDoProcessamento } from "@/components/contas-medicas/PainelDoProce
 import {
   ANALISAR_CONTAS,
   ENVIAR_CONTAS,
+  type BarraDosEnvios,
   type Fila,
   type ItemDaFila,
   type RespostaDoEnvio,
@@ -50,6 +51,7 @@ import {
   rotuloDaSituacao,
   separarArquivos,
   textoParaATI,
+  textosDaBarra,
 } from "@/lib/contas-medicas/envio";
 import { dataCurta } from "@/lib/contas-medicas/guia";
 import { createClient } from "@/lib/supabase/client";
@@ -345,6 +347,32 @@ function ErroDoEnvio({
   );
 }
 
+/** A pílula âmbar da conta que passou de 2 vezes a Previsão (issue #1417). */
+const COR_DA_DEMORA = "bg-amber-100 text-amber-900";
+
+/** A cor da pílula: a da situação, ou âmbar na conta demorando mais que o normal. */
+function corDaPilula(conta: ItemDaFila): string {
+  if (conta.demorando) return COR_DA_DEMORA;
+  return COR_DA_SITUACAO[conta.situacao] ?? "bg-slate-100 text-slate-600";
+}
+
+/**
+ * A barra fina no topo da aba Envios (issue #1417): quantas contas estão sendo
+ * lidas e quantas esperam, os tempos médios da semana e a hora em que a fila
+ * deve esvaziar.
+ */
+function BarraDeTempos({ barra }: { barra: BarraDosEnvios }) {
+  return (
+    <div role="status" aria-label="Tempos da fila" className="border-b border-border px-1 py-2">
+      <ul className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-600">
+        {textosDaBarra(barra).map((texto) => (
+          <li key={texto}>{texto}</li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
 /**
  * A conta da aba de envios, com o quadrado de cada arquivo (issue #1336). O
  * clique no cartão abre o painel lateral do Processamento (issue #1418); o
@@ -391,9 +419,7 @@ function CartaoDoEnvio({
           >
             Atendimento {conta.numero_atendimento}
           </button>
-          <span
-            className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${COR_DA_SITUACAO[conta.situacao] ?? "bg-slate-100 text-slate-600"}`}
-          >
+          <span className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${corDaPilula(conta)}`}>
             {rotuloDaSituacao(conta)}
           </span>
           {conta.com && <span className="text-xs text-slate-500">com {conta.com}</span>}
@@ -575,6 +601,7 @@ export default function ContasMedicasPage() {
         minhas: analise?.minhas ?? [],
         meus_envios: envios?.meus_envios ?? [],
         concluidas: analise?.concluidas ?? [],
+        barra: envios?.barra ?? null,
       });
     } catch {
       setErroDaFila("Não consegui carregar a fila.");
@@ -793,6 +820,8 @@ export default function ContasMedicasPage() {
               </button>
             ))}
           </div>
+
+          {aba === "meus_envios" && fila?.barra && <BarraDeTempos barra={fila.barra} />}
 
           {recusaDoDescarte && (
             <p role="alert" className="mt-4 flex items-center gap-2 text-sm text-red-700">
