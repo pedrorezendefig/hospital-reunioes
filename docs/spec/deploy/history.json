@@ -2,6 +2,57 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-11-07T18:22:17-03:00",
+      "sha": "09a62424fd9ca6ae12feab242a67bc98542df1d9",
+      "app_version": "0.223.0",
+      "subject": "Onda onda-a-onda1: Processamento visível, etapa gravada e pílula Processando; Trocar a memória vigente numa operação só",
+      "raw_subject": "chore(deploy): registro da onda onda-a-onda1 (#1477 #1476)",
+      "scope": [
+        "backend",
+        "frontend"
+      ],
+      "prds": [
+        1415
+      ],
+      "result": "healthy",
+      "duration_seconds": 7908,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        },
+        {
+          "service": "frontend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [
+        "124_contas_medicas_etapa_do_processamento.sql",
+        "125_contas_medicas_troca_da_memoria_vigente.sql"
+      ],
+      "rollback_target_sha": null,
+      "notes": "onda-enxuta onda-a-onda1: PR #1477 (issue #1416), PR #1476 (issue #1471), mergeados PR a PR. Merge pela API do GitHub, um build. Registro pela Action pos-merge depois do health.",
+      "etapas": {
+        "merge_s": 5,
+        "build_s": {
+          "backend": 17,
+          "frontend": 183
+        },
+        "health_s": 0
+      },
+      "responsavel": "pedrorezendefig"
+    },
+    {
       "at": "2026-11-07T16:07:55-03:00",
       "sha": "2ee45edd304517e1cd66b24ab37f52a8a21df31f",
       "app_version": "0.222.3",
