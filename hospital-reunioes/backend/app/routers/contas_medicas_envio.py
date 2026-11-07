@@ -20,6 +20,7 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, Uplo
 from fastapi.concurrency import run_in_threadpool
 from supabase import Client
 
+from app.config import settings
 from app.dependencies import get_supabase_client, require_permissao_cm
 from app.limiter import limiter
 from app.services.contas_medicas.descarte import (
@@ -42,6 +43,7 @@ from app.services.contas_medicas.painel_do_processamento import (
     ContaNaoEncontradaError as ContaDoPainelNaoEncontradaError,
 )
 from app.services.contas_medicas.painel_do_processamento import detalhe as detalhe_do_processamento
+from app.services.contas_medicas.previsao import JANELA, ContaEmAndamento, ContaPronta, prever
 from app.services.contas_medicas.reanalise import (
     ContaNaoEncontradaError as ContaAAnalisarNaoEncontradaError,
 )
@@ -259,6 +261,94 @@ def _itens(supabase: Client, listas: dict, nomes: tuple[str, ...]) -> dict:
     return {"todas": listas["todas"], **{nome: itens(listas[nome]) for nome in nomes}}
 
 
+def _quando(valor: str | None) -> datetime | None:
+    return datetime.fromisoformat(valor) if valor else None
+
+
+def _hora(valor: datetime | None) -> str | None:
+    return valor.isoformat() if valor else None
+
+
+def _processamento_s(conta: dict) -> float | None:
+    """A soma de `tempos_por_etapa_s` da conta pronta, sem o `total` do Motor,
+    que já é a soma das etapas."""
+    tempos = (conta.get("faltantes") or {}).get("tempos_por_etapa_s")
+    if not isinstance(tempos, dict):
+        return None
+    return sum(float(segundos or 0) for etapa, segundos in tempos.items() if etapa != "total")
+
+
+def _previsao(supabase: Client, agora: datetime) -> tuple[dict, dict]:
+    """A Previsão de toda conta Na fila e Processando, de quem quer que tenha
+    enviado: a vaga de uma pessoa depende das contas de todas (issue #1417).
+    Devolve a Previsão por conta e o resumo da barra da aba Envios."""
+    andamento = (
+        supabase.table("cm_conta")
+        .select("id, atendimento_id, situacao, ordem_fila, processando_desde")
+        .in_("situacao", ["NA_FILA", "PROCESSANDO"])
+        .execute()
+        .data
+        or []
+    )
+    prontas = (
+        supabase.table("cm_conta")
+        .select("id, atendimento_id, enviada_em, pronta_em, faltantes")
+        .gt("pronta_em", (agora - JANELA).isoformat())
+        .execute()
+        .data
+        or []
+    )
+    paginas = _paginas_do_prontuario(supabase, andamento + prontas)
+
+    def paginas_de(conta: dict) -> int | None:
+        return paginas.get(conta.get("atendimento_id"), {}).get("paginas")
+
+    previsoes, resumo = prever(
+        [
+            ContaEmAndamento(
+                id=c["id"],
+                situacao=c["situacao"],
+                ordem_fila=c.get("ordem_fila") or 0,
+                paginas=paginas_de(c),
+                processando_desde=_quando(c.get("processando_desde")),
+            )
+            for c in andamento
+        ],
+        [
+            ContaPronta(
+                enviada_em=_quando(c.get("enviada_em")),
+                pronta_em=datetime.fromisoformat(c["pronta_em"]),
+                processamento_s=_processamento_s(c),
+                paginas=paginas_de(c),
+            )
+            for c in prontas
+        ],
+        agora,
+        settings.cm_vagas,
+    )
+    barra = {
+        "processando": resumo.processando,
+        "na_fila": resumo.na_fila,
+        "tempo_envio_a_fila_s": resumo.tempo_envio_a_fila_s,
+        "tempo_processamento_s": resumo.tempo_processamento_s,
+        "fila_esvazia_em": _hora(resumo.fila_esvazia_em),
+    }
+    return previsoes, barra
+
+
+def _previsao_da_conta(previsao) -> dict:
+    """A posição na fila, as horas previstas de início e de pronta e a demora.
+    A conta fora da fila do Motor (Erro, Aguardando arquivo) fica com tudo nulo."""
+    if previsao is None:
+        return {"posicao_na_fila": None, "previsao_inicio_em": None, "previsao_pronta_em": None, "demorando": False}
+    return {
+        "posicao_na_fila": previsao.posicao,
+        "previsao_inicio_em": _hora(previsao.inicio),
+        "previsao_pronta_em": _hora(previsao.pronta),
+        "demorando": previsao.demorando,
+    }
+
+
 @router.get("/fila")
 @limiter.limit("120/minute")
 async def ver_fila(
@@ -280,7 +370,11 @@ async def ver_meus_envios(
 ) -> dict:
     """As contas que a pessoa enviou e ainda não ficaram prontas. Quem tem
     "painel completo" vê os envios de todos, com quem enviou cada um."""
-    return _itens(supabase, envios_da_pessoa(supabase, me), ("meus_envios",))
+    resposta = _itens(supabase, envios_da_pessoa(supabase, me), ("meus_envios",))
+    previsoes, barra = _previsao(supabase, datetime.now(UTC))
+    for item in resposta["meus_envios"]:
+        item |= _previsao_da_conta(previsoes.get(item["id"]))
+    return resposta | {"barra": barra}
 
 
 @router.get("/contas/{conta_id}/processamento")
