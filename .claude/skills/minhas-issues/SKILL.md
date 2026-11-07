@@ -1,6 +1,6 @@
 ---
 name: minhas-issues
-description: "Check de um minuto das minhas issues abertas: semáforo do Actions, onde parou, fila por PRD, plano com comandos e passo a passo das humanas. Gatilhos: minhas issues, onde parei, o que tem pra mim, check das minhas issues, status do Actions. Só leitura. Sintaxe `/minhas-issues [@login] [--curto]`."
+description: "Check de um minuto das minhas issues abertas: semáforo do Actions, onde parou, fila por PRD, plano com comandos e passo a passo das humanas. O fluxo e os botões ficam na aba Issues, não no terminal. Gatilhos: minhas issues, onde parei, o que tem pra mim, check das minhas issues, status do Actions. Só leitura. Sintaxe `/minhas-issues [@login] [--visual]`."
 ---
 
 # Minhas issues: check de um minuto
@@ -10,10 +10,10 @@ Mostra numa tela só o que está aberto com quem pede, onde cada coisa parou, se
 ## Sintaxe
 
 ```
-/minhas-issues [@login] [--curto]
+/minhas-issues [@login] [--visual]
 ```
 
-Sem argumento, a pessoa é o login do `gh api user`. Com `@login`, mostra a fila de outra pessoa (cobrar alguém, cobrir férias). A tela padrão é a visual (fluxogramas, selos e a seção da Tecnologia); `--curto` devolve só os blocos de texto.
+Sem argumento, a pessoa é o login do `gh api user`. Com `@login`, mostra a fila de outra pessoa (cobrar alguém, cobrir férias). A tela padrão é a compacta, só os blocos de texto: o caminho, a árvore dos PRDs, os selos e a Tecnologia moram na **aba Issues** (mod `hr-issues`), com os números como botões. Fluxograma no terminal só com `--visual`, quando a pessoa pedir com essas palavras (`--curto` segue aceito e é o mesmo que o padrão).
 
 "Minha" é o que a pessoa tem que fazer: atribuída a ela; sem ninguém atribuído, quem criou. O painel filtrado pela pessoa mostra também o que ela criou e outro assumiu, então lá o total pode ser maior.
 
@@ -22,10 +22,10 @@ Sem argumento, a pessoa é o login do `gh api user`. Com `@login`, mostra a fila
 1. Rode o script e mostre a saída **como veio**, sem reescrever:
 
    ```bash
-   python3 .claude/skills/minhas-issues/scripts/minhas_issues.py [@login] [--curto]
+   python3 .claude/skills/minhas-issues/scripts/minhas_issues.py [@login]
    ```
 
-   Os blocos ` ```mermaid ` vão na resposta do jeito que vieram: o terminal desenha os fluxogramas.
+   Não desenhe fluxograma nem árvore no terminal, nem em Mermaid feito à mão: o fluxo está na aba Issues, ao lado. A última linha da saída já aponta para ela (`/issues`).
 
 2. Acrescente no máximo **duas linhas** suas, e só se mudarem a decisão (por exemplo: o mesmo arquivo em dois PRs do plano, ou um PR verde cuja issue já fechou). Nada de recapitular a tabela.
 
@@ -77,7 +77,7 @@ Regras:
 
    A estimativa é a mediana de PR aberto até o merge pelo tamanho da fatia (`fatia:P/M/G`), calculada na hora sobre os últimos 45 dias. O lead time abertura-fechamento não entra: mede espera na fila, não esforço. **Melhor** é o passo 1 (a ordem já põe primeiro o que destrava mais); **mais rápido** é o de menor estimativa; quando coincidem, sai numa linha.
 
-### O que a tela visual soma (padrão)
+### O que a tela visual soma (`--visual`, e sempre na aba Issues)
 
 - **Caminho das issues**, logo abaixo do total: um fluxograma com as caixas Triagem, Fila de agente, Humana, Em andamento, PR aberto e Entregue nos últimos 14 dias. Cada caixa traz a contagem e até 6 números.
 - **Árvore de cada PRD** que tem fatia sua aberta: o PRD, as fatias com a fase e uma seta pontilhada "trava" para cada bloqueio nativo do GitHub ("blocked by"). Uma fatia travada se liga à fatia que a trava, e não ao PRD.
