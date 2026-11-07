@@ -617,6 +617,20 @@ FALHAS_DA_IA = {
 }
 
 
+# O 400 do PR #1408: o schema do Passo A passou do limite de uniões.
+MENSAGEM_DE_SCHEMA = (
+    "Schemas contains too many parameters with union types (20 parameters with type arrays or anyOf). "
+    "(limit: 16 parameters with unions)."
+)
+
+
+def _erro_com_request_id(status: int, tipo: str, mensagem_do_erro: str) -> httpx2.Response:
+    """O erro da API com o cabeçalho `request-id`, como a Anthropic devolve."""
+    resposta = erro(status, tipo, mensagem_do_erro)
+    resposta.headers["request-id"] = "req_011CVteste"
+    return resposta
+
+
 class TestTipoDaFalha:
     """O erro que sai do adaptador diz o que falhou (a causa) e o código HTTP
     da última tentativa, para o Código do erro da conta. Chave, modelo e
@@ -643,6 +657,44 @@ class TestTipoDaFalha:
         assert TRECHO_NA_RESPOSTA not in str(falha.value)
         assert TRECHO_NA_RESPOSTA not in repr(vars(falha.value))
         assert falha.value.tipo, "o tipo do erro da última tentativa"
+
+    def test_o_400_de_schema_leva_a_mensagem_da_api_e_o_request_id_ao_erro_e_ao_log(self, provedor, caplog):
+        # O 400 do PR #1408: fala do pedido que o app montou, não do prontuário (#1410).
+        provedor.responder(_erro_com_request_id(400, "invalid_request_error", MENSAGEM_DE_SCHEMA))
+
+        with caplog.at_level("WARNING"), pytest.raises(ia.ErroDaIA) as falha:
+            _extrair()
+
+        assert (falha.value.mensagem_da_api, falha.value.request_id) == (MENSAGEM_DE_SCHEMA, "req_011CVteste")
+        assert any(MENSAGEM_DE_SCHEMA in r.getMessage() and "req_011CVteste" in r.getMessage() for r in caplog.records)
+
+    def test_a_mensagem_da_api_tem_teto_e_nao_leva_o_corpo_do_pedido(self, provedor):
+        longa = "output_config.format.schema: " + "x" * 2000
+        provedor.responder(_erro_com_request_id(400, "invalid_request_error", longa))
+
+        with pytest.raises(ia.ErroDaIA) as falha:
+            _extrair()
+
+        assert falha.value.mensagem_da_api == longa[:500]
+        assert "Admitido no CTI" not in repr(vars(falha.value)), "o texto enviado não volta no erro"
+
+    @pytest.mark.parametrize(
+        "resposta",
+        [
+            (f'{{"atendimento": "{TRECHO_NA_RESPOSTA}"', USO_PADRAO),
+            _erro_com_request_id(400, "invalid_request_error", f"messages.0.content.0.text: {TRECHO_NA_RESPOSTA}"),
+        ],
+        ids=["resposta-invalida", "400-sobre-messages"],
+    )
+    def test_a_resposta_que_pode_citar_o_prontuario_continua_sem_mensagem(self, provedor, caplog, resposta):
+        provedor.responder(resposta)
+
+        with caplog.at_level("WARNING"), pytest.raises(ia.ErroDaIA) as falha:
+            _extrair()
+
+        assert falha.value.mensagem_da_api is None
+        assert TRECHO_NA_RESPOSTA not in repr(vars(falha.value))
+        assert all(TRECHO_NA_RESPOSTA not in r.getMessage() for r in caplog.records)
 
     def test_o_stream_que_cai_no_meio_tenta_tres_vezes_e_grava_o_custo(self, provedor):
         # O SDK só traduz o erro do envio; o que cai na leitura do stream sobe
