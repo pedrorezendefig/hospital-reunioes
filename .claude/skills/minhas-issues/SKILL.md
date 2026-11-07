@@ -84,6 +84,10 @@ Regras:
 - **Selos** nos números: `[Humana]` para `ready-for-human` e `[Diretor]` para a issue que nasceu na aba Tecnologia.
 - **Chegou da Tecnologia**, antes do plano: as issues do diretor separadas em Bug (`type:fix` ou `type:bug`) e Melhoria. Entram as abertas e as fechadas nos últimos 14 dias, de qualquer responsável, com a fase e a pessoa responsável. A origem vem do marcador `<!-- demanda-vitta id="..." -->` que a aba grava no corpo da issue. Não existe label para isso.
 
+### A aba Issues (mod `hr-issues`)
+
+A mesma visão fica num painel à direita, numa aba ao lado da "Ondas" do `hr-ondas`. O mod roda `minhas_issues.py --json` com cache de 5 min compartilhado entre as sessões e se atualiza depois de um `gh` que muda issue ou PR. `/issues` abre a aba e atualiza na hora. O passo a passo das humanas continua só no `/minhas-issues`.
+
 ## Limites
 
 - Worktree e commit sem push só aparecem para a máquina onde roda; claim sem PR nem worktree aqui sai como "claim sem PR nem worktree nesta máquina".
