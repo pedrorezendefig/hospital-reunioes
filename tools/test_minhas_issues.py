@@ -425,6 +425,9 @@ def test_o_compacto_nao_ganha_selo_nem_fluxograma():
     d = dados([issue(1, labels=["ready-for-human"], corpo=MARCA)])
     saida = mi.montar(d)
     assert "[Humana]" not in saida and "```mermaid" not in saida and "Tecnologia" not in saida
+    # o fluxo mora no painel: o compacto termina apontando para a aba
+    assert saida.splitlines()[-1].startswith("O caminho, a árvore dos PRDs e os botões")
+    assert "aba Issues" not in mi.montar(d, visual=True)
 
 
 def test_selos_humana_e_diretor_aparecem_na_fila():
