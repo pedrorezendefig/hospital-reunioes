@@ -349,9 +349,12 @@ function CartaoDoEnvio({
   onAnalisarAssimMesmo: () => Promise<string | null>;
   onDescartar: () => void;
 }) {
-  const detalhe = detalheDaConta(conta);
+  // O valor da conta fica fora do cartão (issue #1419): a Fila nunca anda por valor.
+  const detalhe = detalheDaConta({ ...conta, valor_apontado: null });
   const periodo = periodoDaConta(conta);
   const paginas = conta.prontuario_paginas;
+  const ocr = conta.prontuario_paginas_ocr;
+  const dias = conta.dias_internacao;
   const erro = conta.situacao === "ERRO";
   return (
     <li>
@@ -379,6 +382,16 @@ function CartaoDoEnvio({
           >
             <p>{conta.numero_conta ? `Conta ${conta.numero_conta}` : "Chegou"}</p>
             {periodo && <p className="text-xs">{periodo}</p>}
+            {(conta.operadora || dias != null) && (
+              <p className="text-xs">
+                {[conta.operadora, dias != null ? `${dias} ${dias === 1 ? "dia" : "dias"} de internação` : null]
+                  .filter(Boolean)
+                  .join(", ")}
+              </p>
+            )}
+            {conta.itens_lidos != null && (
+              <p className="text-xs">{`${conta.itens_lidos} ${conta.itens_lidos === 1 ? "item" : "itens"}`}</p>
+            )}
           </Quadrado>
           <Quadrado
             nome="Prontuário"
@@ -388,6 +401,16 @@ function CartaoDoEnvio({
             onEnviar={onEnviar}
           >
             <p>{paginas != null ? `${paginas} ${paginas === 1 ? "página" : "páginas"}` : "Chegou"}</p>
+            {ocr != null && (
+              <p className="text-xs">{ocr === 0
+                  ? "nenhuma escaneada"
+                  : ocr === 1
+                    ? "1 escaneada, lida por OCR"
+                    : `${ocr} escaneadas, lidas por OCR`}</p>
+            )}
+            {conta.eventos_lidos != null && (
+              <p className="text-xs">{`${conta.eventos_lidos} ${conta.eventos_lidos === 1 ? "evento" : "eventos"}`}</p>
+            )}
           </Quadrado>
         </div>
         {erro ? (
