@@ -1,0 +1,822 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=1920, height=1080" />
+<title>Contas médicas · A conta é de quem abre</title>
+<script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js" integrity="sha384-sG0Hv1tP1lZCk9KQmrIbY/XNwi+OY84GQqhMscbnsoBFqAz8KNCil1kvfL3Hbbk2" crossorigin="anonymous"></script>
+<script type="application/json" id="percepcao-meta">
+{
+ "prd": 1303,
+ "issues": [1307, 1308, 1309, 1310],
+ "contexto": "contas-medicas",
+ "titulo": "Contas médicas: a conta é de quem abre",
+ "app_version": "0.198.0",
+ "gerado_em": "2026-10-30T18:00:00-03:00"
+}
+</script>
+<style>
+  @font-face {
+    font-family: "HP Simplified";
+    src: url("assets/fonts/HPSimplified_Rg.ttf") format("truetype");
+    font-weight: 400;
+    font-style: normal;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { width: 1920px; height: 1080px; overflow: hidden; background: #fff; }
+  body { font-family: "HP Simplified", system-ui, sans-serif; }
+
+  :root {
+    --navy: #2B2E7E; --navy-light: #3B6FB6; --navy-dark: #1A1C4E;
+    --app-text: #1E293B; --app-sec: #64748B; --app-border: #E2E8F0;
+    --shadow-premium: 0 10px 25px -5px rgba(0,0,0,.08), 0 8px 10px -6px rgba(0,0,0,.08);
+    --shadow-premium-strong: 0 20px 25px -5px rgba(0,0,0,.12), 0 8px 10px -6px rgba(0,0,0,.12);
+  }
+
+  #root { position: relative; width: 1920px; height: 1080px; overflow: hidden; }
+  .scene { position: absolute; inset: 0; background: #fff; overflow: hidden; }
+
+  /* réplica do app desenhada em 960x540 (1440 px reais x 0,667) e ampliada 2x */
+  .screen { position: relative; width: 960px; height: 540px; transform: scale(2); transform-origin: top left; font-size: 9.3px; color: var(--app-text); background: #F8FAFC; overflow: hidden; }
+
+  /* ===== slides ===== */
+  .slide { display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding: 0 150px; }
+  .eyebrow { font-size: 26px; letter-spacing: .22em; text-transform: uppercase; color: var(--navy-light); font-weight: 700; }
+  .titulo { font-size: 92px; line-height: 1.1; color: var(--navy); font-weight: 700; max-width: 1520px; margin: 32px 0 28px; }
+  .sub { font-size: 40px; color: var(--app-sec); max-width: 1360px; line-height: 1.45; }
+  .fecho-titulo { font-size: 50px; color: var(--navy); font-weight: 700; margin-bottom: 38px; }
+  .carimbo { font-size: 29px; color: var(--app-sec); }
+  .fecho-org { font-size: 25px; color: #64748B; margin-top: 16px; }
+
+  /* ===== antes e agora ===== */
+  .comp { display: grid; grid-template-columns: 1fr 1fr; gap: 90px; width: 1640px; align-items: start; }
+  .lado { display: flex; flex-direction: column; gap: 24px; text-align: left; }
+  .lado-t { font-size: 24px; letter-spacing: .18em; text-transform: uppercase; font-weight: 700; }
+  .lado.antes .lado-t { color: #6C7786; }
+  .lado.agora .lado-t { color: var(--navy); }
+  .lado-d { font-size: 30px; color: var(--app-text); line-height: 1.4; min-height: 84px; }
+  .mini { background: #fff; border: 2px solid var(--app-border); border-radius: 20px; padding: 22px 24px; display: flex; flex-direction: column; gap: 14px; box-shadow: 0 18px 40px -24px rgba(0,0,0,.2); }
+  .mini .mq { font-size: 19px; color: var(--app-sec); display: flex; align-items: center; gap: 10px; }
+  .mini .mq .av { width: 34px; height: 34px; border-radius: 50%; background: var(--navy-dark); color: #fff; font-size: 16px; font-weight: 700; display: flex; align-items: center; justify-content: center; }
+  .mini .mabas { display: flex; gap: 22px; font-size: 19px; color: #64748B; border-bottom: 1.5px solid var(--app-border); padding-bottom: 8px; }
+  .mini .mabas b { color: var(--navy); }
+  .mini .mrow { display: flex; align-items: center; justify-content: space-between; border: 1.5px solid var(--app-border); border-radius: 12px; padding: 10px 14px; font-size: 19px; color: var(--app-text); }
+  .mini .mrow i { font-style: normal; font-size: 15px; border-radius: 999px; padding: 2px 10px; background: #FEE2E2; color: #991B1B; }
+  .mini .mvazio { font-size: 19px; color: var(--app-sec); text-align: center; padding: 18px 0; }
+  .mini.apagado { opacity: .55; }
+
+  /* ===== casca do app ===== */
+  .app { position: absolute; inset: 0; display: flex; background: #F8FAFC; }
+  .side { width: 181px; flex-shrink: 0; background: #fff; border-right: 1px solid #EEF2F7; }
+  .side .marca { height: 88px; display: flex; flex-direction: column; justify-content: center; padding-left: 46px; border-bottom: 1px solid #EEF2F7; gap: 2px; }
+  .side .marca .nm { font-size: 12.5px; font-weight: 700; color: var(--navy); line-height: 1.08; letter-spacing: .01em; }
+  .side nav { padding: 12px 11px; display: flex; flex-direction: column; gap: 4px; }
+  .side a { display: flex; align-items: center; gap: 9px; padding: 7px 9px; border-radius: 6px; font-size: 9.6px; color: #475569; }
+  .side a.sub { padding-left: 30px; }
+  .side a.on { background: #EEF0FB; color: var(--navy); font-weight: 700; border-left: 2px solid var(--navy); }
+  .side a .seta { margin-left: auto; color: #94A3B8; }
+  .main { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+  .top { height: 45px; border-bottom: 1px solid #EEF2F7; background: #F8FAFC; display: flex; align-items: center; gap: 10px; padding: 0 22px 0 18px; flex-shrink: 0; }
+  .top .busca { width: 180px; height: 26px; border: 1px solid var(--app-border); border-radius: 5px; display: flex; align-items: center; gap: 6px; padding: 0 9px; font-size: 9.3px; color: #94A3B8; background: #fff; }
+  .top .sino { margin-left: auto; position: relative; color: #64748B; padding-right: 14px; border-right: 1px solid #E2E8F0; height: 24px; display: flex; align-items: center; }
+  .top .sino .pt { position: absolute; top: -3px; right: 8px; width: 10px; height: 10px; border-radius: 50%; background: #EF4444; color: #fff; font-size: 6.5px; font-weight: 700; display: flex; align-items: center; justify-content: center; opacity: 0; }
+  .top .quem { display: flex; align-items: center; gap: 8px; padding-left: 4px; }
+  .top .quem .tx { text-align: right; }
+  .top .quem .tx b { display: block; font-size: 9.6px; color: var(--app-text); }
+  .top .quem .tx span { font-size: 8.4px; color: var(--app-sec); }
+  .top .quem .av { width: 28px; height: 28px; border-radius: 50%; background: var(--navy-dark); color: #fff; font-size: 11px; font-weight: 700; display: flex; align-items: center; justify-content: center; }
+  .conteudo { flex: 1; padding: 20px 22px; overflow: hidden; position: relative; }
+
+  /* ===== tela Contas médicas ===== */
+  .cm-cab { display: flex; align-items: center; justify-content: space-between; }
+  .cm-cab h1 { font-size: 16px; font-weight: 700; color: #0F172A; }
+  .btn-claro { display: inline-flex; align-items: center; gap: 5px; border: 1px solid var(--app-border); border-radius: 5px; background: #fff; padding: 6px 10px; font-size: 9.3px; color: var(--app-text); }
+  .cm-sub { font-size: 9.3px; color: var(--app-sec); margin-top: 3px; }
+  .drop { margin-top: 14px; border: 1.4px dashed #CBD5E1; border-radius: 8px; background: #fff; padding: 16px; text-align: center; display: flex; flex-direction: column; align-items: center; gap: 4px; }
+  .drop.alvo { border-color: var(--navy); background: #F4F5FB; }
+  .drop .t1 { font-size: 9.3px; font-weight: 500; color: #1E293B; }
+  .drop .t2 { font-size: 8px; color: var(--app-sec); }
+  .drop .bt { margin-top: 6px; background: var(--navy); color: #fff; border-radius: 5px; padding: 6px 12px; font-size: 9.3px; font-weight: 500; }
+  .drop .env { font-size: 9.3px; color: #475569; display: flex; align-items: center; gap: 6px; }
+  .cartao { background: #fff; border: 1px solid var(--app-border); border-radius: 8px; box-shadow: var(--shadow-premium); }
+  .ultimo { margin-top: 12px; padding: 12px 14px; }
+  .ultimo h2 { font-size: 9.3px; font-weight: 700; color: #0F172A; margin-bottom: 7px; }
+  .ultimo p { font-size: 9.3px; color: #1E293B; }
+  .abas { display: flex; gap: 5px; border-bottom: 1px solid var(--app-border); margin-top: 14px; }
+  .abas .ab { padding: 6px 11px; font-size: 9.3px; font-weight: 500; color: var(--app-sec); border-bottom: 2px solid transparent; }
+  .abas .ab.on { color: var(--navy); border-bottom-color: var(--navy); }
+  .lista { margin-top: 11px; overflow: hidden; }
+  .linha { display: flex; align-items: center; gap: 11px; padding: 9px 13px; border-bottom: 1px solid var(--app-border); background: #fff; }
+  .linha:last-child { border-bottom: none; }
+  .linha .id { flex: 1; min-width: 0; }
+  .linha .id b { display: block; font-size: 9.3px; font-weight: 700; color: #0F172A; }
+  .linha .id span { font-size: 8px; color: var(--app-sec); }
+  .pill { border-radius: 999px; padding: 2px 7px; font-size: 8px; font-weight: 500; white-space: nowrap; }
+  .p-afazer { background: #FEE2E2; color: #991B1B; }
+  .p-corr { background: #FEF3C7; color: #92400E; }
+  .p-proc { background: #DBEAFE; color: #1E40AF; }
+  .linha .det { font-size: 8px; color: #475569; }
+  .linha .acao { font-size: 9.3px; font-weight: 500; color: var(--navy); }
+  .vazio-l { padding: 22px; text-align: center; font-size: 9.3px; color: var(--app-sec); background: #fff; }
+
+  /* ===== Guia ===== */
+  .guia { width: 512px; margin: 0 auto; }
+  .voltar { display: inline-flex; align-items: center; gap: 5px; font-size: 9.3px; color: var(--app-sec); margin-bottom: 6px; }
+  .g-cab { display: flex; align-items: center; gap: 6px; }
+  .g-cab h1 { font-size: 16px; font-weight: 700; color: #0F172A; }
+  .g-cab .dir { margin-left: auto; }
+  .btn-dev { display: inline-flex; align-items: center; gap: 4px; border: 1px solid var(--app-border); border-radius: 5px; background: #fff; padding: 4px 8px; font-size: 9.3px; color: #334155; }
+  .g-sub { font-size: 9.3px; color: var(--app-sec); margin-top: 4px; }
+  .g-num { display: grid; grid-template-columns: repeat(3, 1fr); gap: 9px; margin-top: 12px; }
+  .g-num .cx { background: #fff; border: 1px solid var(--app-border); border-radius: 8px; box-shadow: var(--shadow-premium); padding: 10px 12px; }
+  .g-num .cx .k { font-size: 8px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--app-sec); }
+  .g-num .cx .v { font-size: 19px; font-weight: 700; color: var(--navy); margin-top: 2px; }
+  .g-num .cx .s { font-size: 7.4px; color: var(--app-sec); }
+  .g-dia { display: flex; justify-content: space-between; margin: 13px 0 7px; font-size: 8px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--app-sec); }
+  .g-dia a { text-transform: none; letter-spacing: 0; color: var(--navy); font-weight: 600; }
+  .lg { background: #fff; border: 1px solid var(--app-border); border-radius: 8px; padding: 9px 12px; margin-bottom: 6px; position: relative; }
+  .etq { display: inline-flex; align-items: center; padding: 1.5px 6px; border-radius: 999px; font-size: 7.4px; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; background: #EEF0FB; color: var(--navy); }
+  .lg .vl { position: absolute; right: 12px; top: 10px; font-size: 9.3px; font-weight: 700; color: #0F172A; }
+  .lg .nm { font-size: 9.6px; font-weight: 700; color: #0F172A; margin-top: 5px; }
+  .lg .ac { font-size: 9.3px; color: #1E293B; margin-top: 3px; }
+  .lg .pq { font-size: 8px; color: var(--app-sec); margin-top: 3px; }
+  .lg .cod { font-size: 8.4px; color: var(--navy); margin-top: 3px; font-family: ui-monospace, monospace; }
+  .lg .bts { display: flex; gap: 6px; margin-top: 7px; }
+  .lg .bts span { border: 1px solid var(--app-border); border-radius: 5px; padding: 5px 9px; font-size: 8.4px; font-weight: 600; letter-spacing: .04em; color: #334155; text-transform: uppercase; background: #fff; }
+  .lg .bts span.f { background: var(--navy); border-color: var(--navy); color: #fff; }
+  .lf { display: flex; align-items: center; gap: 7px; border: 1px solid #BBF7D0; background: #F0FDF4; border-radius: 8px; padding: 6px 10px; margin-bottom: 6px; }
+  .lf .etq { background: #DCFCE7; color: #166534; }
+  .lf .nm { font-size: 9.3px; color: #334155; }
+  .lf .vl { margin-left: auto; font-size: 9.3px; color: var(--app-sec); }
+  .lf .dz { font-size: 8px; font-weight: 600; color: var(--navy); }
+  .rodape { background: #fff; border: 1px solid var(--app-border); border-radius: 8px; box-shadow: var(--shadow-premium); padding: 10px 12px; margin-top: 8px; }
+  .rodape .k { font-size: 8px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--app-sec); }
+  .rodape .ta { border: 1px solid var(--app-border); border-radius: 5px; height: 30px; margin-top: 5px; font-size: 9.3px; color: #94A3B8; padding: 5px 8px; }
+  .rodape .bt { display: inline-block; margin-top: 8px; background: var(--navy); color: #fff; border-radius: 8px; padding: 6px 11px; font-size: 9.3px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; }
+  .rodape .ob { font-size: 8px; color: var(--app-sec); margin-top: 5px; }
+  .erro-g { background: #fff; border: 1px solid var(--app-border); border-radius: 8px; padding: 16px; font-size: 9.3px; color: #475569; }
+
+  /* ===== Habilitação ===== */
+  .hab h1 { font-size: 16px; font-weight: 700; color: #0F172A; }
+  .hab .hs { font-size: 9.3px; color: var(--app-sec); margin-top: 3px; }
+  .hab .bloco { background: #fff; border: 1px solid var(--app-border); border-radius: 8px; box-shadow: var(--shadow-premium); padding: 12px 16px; margin-top: 12px; }
+  .hab h2 { font-size: 10.7px; font-weight: 700; color: #0F172A; }
+  .hab .bs { font-size: 9.3px; color: var(--app-sec); margin: 2px 0 8px; }
+  .matriz { width: 100%; border-collapse: collapse; }
+  .matriz th { font-size: 7.6px; font-weight: 400; color: var(--app-sec); text-align: center; padding: 0 2px 5px; line-height: 1.25; vertical-align: bottom; }
+  .matriz th:first-child { text-align: left; }
+  .matriz td { font-size: 8.6px; color: #0F172A; border-top: 1px solid #EEF2F7; padding: 3.4px 2px; text-align: center; }
+  .matriz td:first-child { text-align: left; }
+  .ck { display: inline-block; width: 10px; height: 10px; border-radius: 2px; border: 1px solid #94A3B8; background: #fff; vertical-align: middle; position: relative; }
+  .ck.on { background: var(--navy); border-color: var(--navy); }
+  .ck.on::after { content: ""; position: absolute; left: 3px; top: 1px; width: 3px; height: 5px; border: solid #fff; border-width: 0 1.4px 1.4px 0; transform: rotate(45deg); }
+  .pessoa { display: flex; align-items: flex-end; justify-content: space-between; }
+  .pessoa b { display: block; font-size: 9.6px; font-weight: 700; color: #0F172A; }
+  .pessoa span { font-size: 8.4px; color: var(--app-sec); }
+  .pessoa .k { font-size: 8px; color: var(--app-sec); text-transform: uppercase; margin-bottom: 3px; }
+  .sel { width: 200px; border: 1px solid var(--app-border); border-radius: 5px; padding: 6px 9px; font-size: 9.6px; color: #1E293B; display: flex; justify-content: space-between; align-items: center; background: #fff; position: relative; }
+  .opcoes { position: absolute; right: 0; top: 30px; width: 200px; background: #fff; border: 1px solid var(--app-border); border-radius: 6px; box-shadow: var(--shadow-premium-strong); padding: 3px; z-index: 30; opacity: 0; }
+  .opcoes div { font-size: 9.3px; padding: 5px 8px; border-radius: 4px; color: #1E293B; }
+  .opcoes div.on { background: #EEF0FB; color: var(--navy); font-weight: 700; }
+
+  /* ===== Painel ===== */
+  .pn h1 { font-size: 16px; font-weight: 700; color: #0F172A; }
+  .pn .hs { font-size: 9.3px; color: var(--app-sec); margin-top: 3px; }
+  .pn .bloco { background: #fff; border: 1px solid var(--app-border); border-radius: 8px; box-shadow: var(--shadow-premium); padding: 14px 16px; margin-top: 14px; }
+  .pn h2 { font-size: 9.3px; font-weight: 600; color: #334155; margin-bottom: 8px; }
+  .prod { width: 100%; border-collapse: collapse; }
+  .prod th { font-size: 8px; font-weight: 500; color: var(--app-sec); text-align: right; padding: 4px 0; }
+  .prod th:first-child, .prod td:first-child { text-align: left; }
+  .prod td { font-size: 9.3px; border-top: 1px solid #F1F5F9; padding: 6px 0; text-align: right; color: #334155; }
+  .prod td.n { color: var(--navy); font-weight: 700; }
+  .prod td.r { color: #94A3B8; }
+  .prod tr.dest td { background: rgba(43,46,126,.0); }
+
+  /* ===== sobreposições ===== */
+  .toast { position: absolute; right: 11px; bottom: 11px; display: flex; align-items: center; gap: 8px; min-width: 200px; padding: 8px 11px; border-radius: 10px; border: 1px solid #D1FAE5; background: #ECFDF5; box-shadow: var(--shadow-premium-strong); font-size: 9.3px; font-weight: 500; color: #1E293B; opacity: 0; z-index: 35; }
+  .dialogo { position: absolute; left: 330px; top: 8px; width: 300px; background: #fff; border-radius: 8px; box-shadow: 0 12px 34px -8px rgba(0,0,0,.4); padding: 14px 16px 12px; opacity: 0; z-index: 36; }
+  .dialogo p { font-size: 9.6px; color: #1F2937; line-height: 1.4; }
+  .dialogo .bts { display: flex; justify-content: flex-end; gap: 6px; margin-top: 12px; }
+  .dialogo .bts span { font-size: 9px; border-radius: 999px; padding: 5px 14px; border: 1px solid #DADCE0; color: #1A73E8; }
+  .dialogo .bts span.ok { background: #1A73E8; color: #fff; border-color: #1A73E8; }
+  .veu { position: absolute; inset: 0; background: rgba(15,23,42,.18); opacity: 0; z-index: 34; }
+  .anot { position: absolute; background: var(--navy); color: #fff; font-size: 12px; font-weight: 500; line-height: 1.35; padding: 7px 11px; border-radius: 8px; box-shadow: 0 10px 24px -10px rgba(0,0,0,.5); opacity: 0; z-index: 40; max-width: 300px; }
+  .ghost { position: absolute; left: 0; top: 0; width: 15px; height: 20px; z-index: 50; opacity: 0; }
+  .ghost .pulse { position: absolute; left: -11px; top: -11px; width: 22px; height: 22px; border-radius: 50%; background: rgba(43,46,126,.32); opacity: 0; }
+  .marcador { position: absolute; border: 2px solid var(--navy); border-radius: 6px; box-shadow: 0 0 0 3px rgba(43,46,126,.16); z-index: 28; opacity: 0; }
+  .quemve { position: absolute; left: 196px; top: 54px; background: #fff; border: 1px solid var(--app-border); border-radius: 999px; padding: 3px 10px 3px 4px; display: flex; align-items: center; gap: 6px; font-size: 9px; color: var(--app-sec); box-shadow: var(--shadow-premium); z-index: 20; display: none; }
+  .arq { position: absolute; display: flex; align-items: center; gap: 5px; background: #fff; border: 1px solid var(--app-border); border-radius: 6px; padding: 5px 8px; font-size: 8.6px; color: #1E293B; box-shadow: var(--shadow-premium-strong); z-index: 45; opacity: 0; }
+  .inset { position: absolute; left: 196px; bottom: 16px; width: 270px; background: #fff; border: 1.5px solid var(--navy); border-radius: 8px; box-shadow: var(--shadow-premium-strong); padding: 9px 11px; z-index: 38; opacity: 0; }
+  .inset .t { font-size: 8.6px; font-weight: 700; color: var(--navy); margin-bottom: 5px; }
+  .inset .r { font-size: 8.6px; color: #1E293B; padding: 4px 0; border-top: 1px solid #F1F5F9; display: flex; justify-content: space-between; }
+  .camada { position: absolute; inset: 0; }
+</style>
+</head>
+<body>
+<div id="root" data-composition-id="main" data-start="0" data-width="1920" data-height="1080" data-duration="70" data-fps="30">
+
+  <audio id="narracao" class="clip" src="narracao.mp3" data-start="0.5" data-duration="64.66" data-track-index="0" data-volume="1"></audio>
+
+  <!-- 1 · Abertura -->
+  <section id="c-abertura" class="clip scene slide" data-start="0" data-duration="3.4" data-track-index="1" data-track-kind="graphics">
+    <div class="eyebrow" id="ab-eyebrow">Aplicativo do Hospital · Contas médicas</div>
+    <h1 class="titulo" id="ab-titulo">A conta é de quem abre</h1>
+    <p class="sub" id="ab-sub">Quem sobe a conta não é quem confere.</p>
+  </section>
+
+  <!-- 2 · Antes e agora -->
+  <section id="c-antes" class="clip scene slide" data-start="3.4" data-duration="9.2" data-track-index="1" data-track-kind="graphics">
+    <div class="comp">
+      <div class="lado antes" id="an-esq">
+        <div class="lado-t">Antes</div>
+        <div class="lado-d">A conta ficava presa ao login de quem enviou os arquivos.</div>
+        <div class="mini">
+          <div class="mq"><span class="av">E</span>Login de quem enviou</div>
+          <div class="mabas"><b>Fila (3)</b></div>
+          <div class="mrow">Atendimento 900412<i>A fazer</i></div>
+          <div class="mrow">Atendimento 900431<i>A fazer</i></div>
+          <div class="mrow">Atendimento 900445<i>A fazer</i></div>
+        </div>
+        <div class="mini" id="an-vazia">
+          <div class="mq"><span class="av">F</span>Login da faturista</div>
+          <div class="mabas"><b>Fila (0)</b></div>
+          <div class="mvazio">Nenhuma conta livre na fila</div>
+        </div>
+      </div>
+      <div class="lado agora" id="an-dir">
+        <div class="lado-t">Agora</div>
+        <div class="lado-d">Uma Fila só para todas as faturistas. A conta passa a ser de quem abre.</div>
+        <div class="mini">
+          <div class="mq"><span class="av">R</span><span class="av">J</span>Renata e Juliana veem a mesma Fila</div>
+          <div class="mabas"><b>Fila (3)</b><span>Minhas</span><span>Concluídas</span></div>
+          <div class="mrow">Atendimento 900412<i>A fazer</i></div>
+          <div class="mrow">Atendimento 900431<i>A fazer</i></div>
+          <div class="mrow">Atendimento 900445<i>A fazer</i></div>
+        </div>
+        <div class="mini">
+          <div class="mq"><span class="av">C</span>Carla, Apoio ao faturamento</div>
+          <div class="mabas"><b>Meus envios</b></div>
+          <div class="mvazio">Envia e acompanha, sem pegar conta</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 3 · Habilitação: o perfil da Carla -->
+  <section id="c-hab" class="clip scene" data-start="12.6" data-duration="7.4" data-track-index="1" data-track-kind="graphics">
+    <div class="screen" id="scr-hab"></div>
+  </section>
+
+  <!-- 4 · A Carla envia -->
+  <section id="c-envio" class="clip scene" data-start="20" data-duration="7" data-track-index="1" data-track-kind="graphics">
+    <div class="screen" id="scr-envio"></div>
+  </section>
+
+  <!-- 5 · A Fila da Renata -->
+  <section id="c-fila" class="clip scene" data-start="27" data-duration="6.4" data-track-index="1" data-track-kind="graphics">
+    <div class="screen" id="scr-fila"></div>
+  </section>
+
+  <!-- 6 · A Renata abre o Guia -->
+  <section id="c-abre" class="clip scene" data-start="33.4" data-duration="6.1" data-track-index="1" data-track-kind="graphics">
+    <div class="screen" id="scr-abre"></div>
+  </section>
+
+  <!-- 7 · A Juliana chega um instante depois -->
+  <section id="c-corrida" class="clip scene" data-start="39.5" data-duration="6" data-track-index="1" data-track-kind="graphics">
+    <div class="screen" id="scr-corrida"></div>
+  </section>
+
+  <!-- 8 · A Renata marca e devolve -->
+  <section id="c-devolve" class="clip scene" data-start="45.5" data-duration="6.1" data-track-index="1" data-track-kind="graphics">
+    <div class="screen" id="scr-devolve"></div>
+  </section>
+
+  <!-- 9 · A Juliana pega -->
+  <section id="c-pega" class="clip scene" data-start="51.6" data-duration="5" data-track-index="1" data-track-kind="graphics">
+    <div class="screen" id="scr-pega"></div>
+  </section>
+
+  <!-- 10 · Concluir e a Produção -->
+  <section id="c-producao" class="clip scene" data-start="56.6" data-duration="2.6" data-track-index="1" data-track-kind="graphics">
+    <div class="screen" id="scr-producao"></div>
+  </section>
+
+  <!-- 10b · O Painel da coordenação -->
+  <section id="c-painel" class="clip scene" data-start="59.2" data-duration="6.4" data-track-index="1" data-track-kind="graphics">
+    <div class="screen" id="scr-painel"></div>
+  </section>
+
+  <!-- 11 · Fecho -->
+  <section id="c-fecho" class="clip scene slide" data-start="65.6" data-duration="4.4" data-track-index="1" data-track-kind="graphics">
+    <div class="fecho-titulo" id="fc-titulo">Contas médicas: a conta é de quem abre</div>
+    <div class="carimbo" id="fc-carimbo">PRD #1303 · retrata o app em v0.198.0 · gerado em 30/10/2026</div>
+    <div class="fecho-org" id="fc-org">Hospital São Matheus · Vitta</div>
+  </section>
+
+</div>
+
+<script>
+/* ============================================================
+   Ícones de traço (lucide, os mesmos do app)
+   ============================================================ */
+function ic(nome, s) {
+  const P = {
+    alvo: '<circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/>',
+    grade: '<rect width="7" height="9" x="3" y="3" rx="1"/><rect width="7" height="5" x="14" y="3" rx="1"/><rect width="7" height="9" x="14" y="12" rx="1"/><rect width="7" height="5" x="3" y="16" rx="1"/>',
+    calendario: '<path d="M8 2v4"/><path d="M16 2v4"/><rect width="18" height="18" x="3" y="4" rx="2"/><path d="M3 10h18"/>',
+    relogio: '<circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/>',
+    megafone: '<path d="m3 11 18-5v12L3 14v-3z"/><path d="M11.6 16.8a3 3 0 1 1-5.8-1.6"/>',
+    recibo: '<path d="M4 2v20l2-1 2 1 2-1 2 1 2-1 2 1 2-1 2 1V2l-2 1-2-1-2 1-2-1-2 1-2-1-2 1Z"/><path d="M16 8h-6a2 2 0 1 0 0 4h4a2 2 0 1 1 0 4H8"/><path d="M12 17.5v-11"/>',
+    escudo: '<path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/><path d="m9 12 2 2 4-4"/>',
+    ajuda: '<circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><path d="M12 17h.01"/>',
+    lupa: '<circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/>',
+    sino: '<path d="M10.268 21a2 2 0 0 0 3.464 0"/><path d="M3.262 15.326A1 1 0 0 0 4 17h16a1 1 0 0 0 .74-1.673C19.41 13.956 18 12.499 18 8A6 6 0 0 0 6 8c0 4.499-1.411 5.956-2.738 7.326"/>',
+    baixo: '<path d="m6 9 6 6 6-6"/>',
+    direita: '<path d="m9 18 6-6-6-6"/>',
+    voltar: '<path d="m12 19-7-7 7-7"/><path d="M19 12H5"/>',
+    desfazer: '<path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 5.5 5.5a5.5 5.5 0 0 1-5.5 5.5H11"/>',
+    upload: '<path d="M12 3v12"/><path d="m17 8-5-5-5 5"/><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>',
+    barras: '<path d="M3 3v16a2 2 0 0 0 2 2h16"/><path d="M18 17V9"/><path d="M13 17V5"/><path d="M8 17v-3"/>',
+    ok: '<circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/>',
+    arquivo: '<path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/>',
+    copiar: '<rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/>',
+    giro: '<path d="M21 12a9 9 0 1 1-6.219-8.56"/>'
+  };
+  return `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0">${P[nome]}</svg>`;
+}
+
+/* Logo do hospital: os dois arcos, como no topo da barra lateral */
+function logo(w) {
+  const h = Math.round(w * 0.42);
+  return `<svg width="${w}" height="${h}" viewBox="0 0 100 42" fill="none" style="flex-shrink:0">
+    <path d="M8 40 A24 24 0 0 1 56 40" stroke="#2B2E7E" stroke-width="7" stroke-linecap="round"/>
+    <path d="M44 40 A24 24 0 0 1 92 40" stroke="#3B6FB6" stroke-width="7" stroke-linecap="round"/>
+  </svg>`;
+}
+
+const CURSOR = `<svg width="15" height="20" viewBox="0 0 15 20"><path d="M1 1 L1 16 L5 12.5 L8 19 L10.5 18 L7.6 11.6 L13 11.6 Z" fill="#0F172A" stroke="#fff" stroke-width="1.3" stroke-linejoin="round"/></svg>`;
+const ghost = (id) => `<div class="ghost" id="${id}"><div class="pulse"></div>${CURSOR}</div>`;
+
+/* Casca do app (barra lateral e topo), igual aos prints do Manual */
+function casca(login, inicial, dentro, extra) {
+  const it = (nome, icone, cls, seta) => `<a class="${cls || ""}">${ic(icone, 12)}<span>${nome}</span>${seta ? `<span class="seta">${ic(seta, 10)}</span>` : ""}</a>`;
+  return `<div class="app">
+    <div class="side">
+      <div class="marca">${logo(78)}<div class="nm">HOSPITAL<br>SÃO MATHEUS</div></div>
+      <nav>
+        ${it("Reuniões e metas", "alvo", "", "baixo")}
+        ${it("Dashboard", "grade", "sub")}
+        ${it("Calendário", "calendario", "sub")}
+        ${it("Pendências", "relogio", "sub", "direita")}
+        ${it("Ouvidoria", "megafone", "")}
+        ${it("Contas médicas", "recibo", "on")}
+        ${it("Admin", "escudo", "")}
+        ${it("Ajuda", "ajuda", "")}
+      </nav>
+    </div>
+    <div class="main">
+      <div class="top">
+        <div class="busca">${ic("lupa", 11)}<span>Buscar...</span></div>
+        <div class="sino">${ic("sino", 13)}<span class="pt" id="${(extra && extra.sino) || ""}">1</span></div>
+        <div class="quem">
+          <div class="tx"><b>${login}</b><span>${login}@exemplo.com.br</span></div>
+          <div class="av">${inicial}</div>
+        </div>
+      </div>
+      <div class="conteudo">${dentro}</div>
+    </div>
+  </div>`;
+}
+
+/* Tela Contas médicas (page.tsx): cabeçalho, envio e abas pela permissão */
+function cabContas() {
+  return `<div class="cm-cab"><h1>Contas médicas</h1><span class="btn-claro">${ic("barras", 11)} Painel</span></div>
+    <p class="cm-sub">Envie a conta e o prontuário do MV e receba a lista do que corrigir antes de mandar para a operadora.</p>`;
+}
+function drop(id) {
+  return `<div class="drop" id="${id || ""}">
+    <span style="color:#94A3B8">${ic("upload", 18)}</span>
+    <div class="t1">Arraste aqui a conta e o prontuário do MV</div>
+    <div class="t2">Vários de uma vez, sem renomear: o app lê o tipo e o atendimento dentro de cada PDF. Até 10 atendimentos e 30 arquivos por envio, 100 MB por arquivo.</div>
+    <div class="bt">Selecionar arquivos</div>
+  </div>`;
+}
+function abas(lista, on) {
+  return `<div class="abas">${lista.map(([nome, n]) => `<div class="ab ${nome === on ? "on" : ""}">${nome} (${n})</div>`).join("")}</div>`;
+}
+function linha(c) {
+  return `<div class="linha" ${c.id ? `id="${c.id}"` : ""}>
+    <div class="id"><b>Atendimento ${c.at}</b><span>conta ${c.conta} · ${c.per}</span></div>
+    <span class="pill ${c.cls}">${c.sit}</span>
+    ${c.det ? `<span class="det">${c.det}</span>` : ""}
+    ${c.acao ? `<span class="acao" ${c.acaoId ? `id="${c.acaoId}"` : ""}>${c.acao}</span>` : ""}
+  </div>`;
+}
+const FAT_ABAS = (fila, minhas, conc) => [["Fila", fila], ["Minhas", minhas], ["Meus envios", 0], ["Concluídas", conc]];
+const C412 = { at: "900412", conta: "51230", per: "03/10 a 08/10", cls: "p-afazer", sit: "A fazer", det: "Nota 97, R$ 581,45, 0 de 5", acao: "Abrir" };
+const C431 = { at: "900431", conta: "51302", per: "05/10 a 09/10", cls: "p-afazer", sit: "A fazer", det: "Nota 92, R$ 1.104,20, 0 de 7", acao: "Abrir" };
+const C445 = { at: "900445", conta: "51317", per: "06/10 a 10/10", cls: "p-afazer", sit: "A fazer", det: "Nota 99, R$ 46,80, 0 de 2", acao: "Abrir" };
+
+/* O Guia (guia/[contaId]/page.tsx) */
+function cabGuia(at, sitCls, sit, devolverId, numFeitos, total, sub, nota, valor) {
+  return `<div class="voltar">${ic("voltar", 11)} Contas médicas</div>
+    <div class="g-cab"><h1>Atendimento ${at}</h1><span class="pill ${sitCls}" style="font-weight:600">${sit}</span>
+      <span class="dir">${devolverId !== null ? `<span class="btn-dev" id="${devolverId}">${ic("desfazer", 11)} Devolver à fila</span>` : ""}</span></div>
+    <p class="g-sub">${sub}</p>
+    <div class="g-num">
+      <div class="cx"><div class="k">Nota de entrada</div><div class="v">${nota || 97}</div></div>
+      <div class="cx"><div class="k">R$ a ajustar</div><div class="v">${valor || "R$ 581,45"}</div><div class="s">em ${total} itens</div></div>
+      <div class="cx"><div class="k">Itens feitos</div><div class="v">${numFeitos} de ${total}</div></div>
+    </div>`;
+}
+const SUB412 = "Ana P. · conta 51230 · coluna Comum · parcial de 03/10 a 08/10";
+const L1 = { tipo: "Incluir", nome: "Pantoprazol 40 mg injetável", acao: "Incluir 3, de 03/10 a 05/10", pq: "Prescrito em 6 dias, lançado em 3.", cod: "90123456", vl: "+R$ 68,40" };
+const L2 = { tipo: "Corrigir preço", nome: "Agulha hipodérmica 25 x 7", acao: "Corrigir preço de R$ 1,42 para R$ 0,95, em 03/10", pq: "Coluna errada: o lançado é o preço da outra coluna.", cod: "70031245", vl: "-R$ 4,70" };
+function linhaAberta(l, id, feitoId) {
+  return `<div class="lg" id="${id}"><span class="etq">${l.tipo}</span><span class="vl">${l.vl}</span>
+    <div class="nm">${l.nome}</div><div class="ac">${l.acao}</div><div class="pq">${l.pq}</div>
+    <div class="cod">${l.cod}</div>
+    <div class="bts"><span class="f" id="${feitoId}">Feito</span><span>Não procede</span><span>Bloqueado</span></div></div>`;
+}
+function linhaFeita(l, id, oculta) {
+  return `<div class="lf" id="${id}" ${oculta ? `style="display:none"` : ""}><span class="etq">Feito</span><span class="nm">${l.nome}</span><span class="vl">${l.vl}</span><span class="dz">Desfazer</span></div>`;
+}
+const toast = (id, txt) => `<div class="toast" id="${id}"><span style="color:#10B981">${ic("ok", 13)}</span>${txt}</div>`;
+const anot = (id, txt, x, y, w) => `<div class="anot" id="${id}" style="left:${x}px;top:${y}px;${w ? `max-width:${w}px` : ""}">${txt}</div>`;
+
+/* ===== 3 · Habilitação ===== */
+const COLS = ["Enviar contas", "Analisar contas", "Decidir na validação", "Incluir regra operacional", "Regra contratual e tabelas", "Contratos e avisos", "Painel completo", "Habilitar pessoas", "Conferência da coordenação"];
+const PERFIS = [
+  ["Faturista", "110000000"],
+  ["Coordenadora de faturamento", "110000101"],
+  ["Gestão de contas médicas", "111111101"],
+  ["Diretoria médica", "111111111"],
+  ["Diretoria executiva", "111111111"],
+  ["Credenciamento", "000001000"],
+  ["Apoio ao faturamento", "100000000"]
+];
+document.getElementById("scr-hab").innerHTML = casca("marta.queiroz", "M", `
+  <div class="hab">
+    <div class="voltar">${ic("voltar", 11)} Contas médicas</div>
+    <h1>Habilitação</h1>
+    <p class="hs">O que cada perfil pode fazer no módulo e quem tem cada perfil. A mudança vale na hora e fica registrada.</p>
+    <div class="bloco">
+      <h2>Perfis e permissões</h2>
+      <p class="bs">Cada célula liga ou desliga a permissão para todas as pessoas do perfil.</p>
+      <table class="matriz"><tr><th style="width:150px">Perfil</th>${COLS.map((c) => `<th>${c}</th>`).join("")}</tr>
+        ${PERFIS.map(([p, m], i) => `<tr ${i === 6 ? `id="hb-apoio"` : ""}><td>${p}</td>${m.split("").map((b) => `<td><span class="ck ${b === "1" ? "on" : ""}"></span></td>`).join("")}</tr>`).join("")}
+      </table>
+    </div>
+    <div class="bloco">
+      <h2>Pessoas</h2>
+      <div class="pessoa" style="margin-top:6px">
+        <div><b>Carla Souza</b><span>Secretária, Diretoria</span></div>
+        <div><div class="k">Perfil</div>
+          <div class="sel" id="hb-sel"><span id="hb-v0">Sem perfil no módulo</span><span id="hb-v1" style="display:none">Apoio ao faturamento</span><span style="color:#94A3B8">${ic("baixo", 10)}</span>
+            <div class="opcoes" id="hb-op"><div>Sem perfil no módulo</div><div>Faturista</div><div class="on" id="hb-opt">Apoio ao faturamento</div><div>Coordenadora de faturamento</div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>`) +
+  `<div class="marcador" id="hb-mk" style="left:218px;width:720px"></div>` +
+  anot("hb-n1", "Perfil novo: Apoio ao faturamento", 560, 330, 260) +
+  anot("hb-n2", "Enviar contas ligado, Analisar contas desligado", 300, 330, 300) +
+  toast("hb-t", "Perfil atualizado") +
+  ghost("hb-g");
+
+/* ===== 4 · A Carla envia ===== */
+document.getElementById("scr-envio").innerHTML = casca("carla.souza", "C", `
+  ${cabContas()}
+  ${drop("ev-drop")}
+  <div id="ev-enviando" class="drop" style="display:none"><div class="env">${ic("giro", 12)} Enviando 2 arquivos e lendo cada PDF</div></div>
+  <div class="cartao ultimo" id="ev-ultimo" style="display:none"><h2>Último envio</h2><p>900412, conta e prontuário</p></div>
+  ${abas([["Meus envios", "<span id='ev-n'>0</span>"]], "Meus envios")}
+  <div class="cartao lista">
+    <div id="ev-row" style="display:none">${linha({ at: "900412", conta: "51230", per: "03/10 a 08/10", cls: "p-proc", sit: "Pronta em instantes" })}</div>
+    <div class="vazio-l" id="ev-vazio">Nenhum envio esperando o guia</div>
+  </div>`, { sino: "ev-sino" }) +
+  `<div class="arq" data-layout-allow-overlap id="ev-a1" style="left:620px;top:120px">${ic("arquivo", 11)} conta-51230.pdf</div>
+   <div class="arq" data-layout-allow-overlap id="ev-a2" style="left:640px;top:146px">${ic("arquivo", 11)} prontuario-900412.pdf</div>` +
+  anot("ev-n1", "Só o envio e Meus envios: a Carla não vê a Fila", 420, 470, 300) +
+  anot("ev-n2", "O guia ficou pronto e o sino avisa a Carla", 560, 60, 260) +
+  ghost("ev-g");
+
+/* ===== 5 · A Fila da Renata ===== */
+document.getElementById("scr-fila").innerHTML = casca("renata.lima", "R", `
+  ${cabContas()}
+  ${drop()}
+  ${abas(FAT_ABAS("<span id='fl-n'>0</span>", 0, 4), "Fila")}
+  <div class="cartao lista">
+    <div id="fl-r1" style="opacity:0">${linha(C412)}</div>
+    <div id="fl-r2" style="opacity:0">${linha(C431)}</div>
+    <div id="fl-r3" style="opacity:0">${linha(C445)}</div>
+  </div>`) +
+  anot("fl-n1", "A mesma Fila para todas as faturistas", 420, 300, 280) +
+  anot("fl-n2", "Na ordem de envio, nunca pelo valor", 420, 300, 280);
+
+/* ===== 6 · A Renata abre o Guia ===== */
+document.getElementById("scr-abre").innerHTML = casca("renata.lima", "R", `
+  <div class="camada" id="ab-lista" style="padding:20px 22px">
+    ${cabContas()}
+    ${drop()}
+    ${abas(FAT_ABAS(3, 0, 4), "Fila")}
+    <div class="cartao lista">${linha({ ...C412, acaoId: "ab-abrir" })}${linha(C431)}${linha(C445)}</div>
+  </div>
+  <div class="camada" id="ab-guia" style="padding:20px 22px;opacity:0">
+    <div class="guia">${cabGuia("900412", "p-corr", "Em correção", "ab-dev", 0, 5, SUB412)}
+      <div class="g-dia"><span>03/10 · CTI adulto</span><a>Marcar o dia como feito</a></div>
+      ${linhaAberta(L1, "ab-l1", "ab-f1")}${linhaAberta(L2, "ab-l2", "ab-f2")}
+    </div>
+  </div>`) +
+  anot("ab-n1", "Abriu o guia: a conta agora é da Renata", 188, 130, 120) +
+  `<div class="inset" id="ab-inset"><div class="t">Fila da Juliana (2)</div>
+     <div class="r"><span>Atendimento 900431</span><span class="pill p-afazer">A fazer</span></div>
+     <div class="r"><span>Atendimento 900445</span><span class="pill p-afazer">A fazer</span></div></div>` +
+  ghost("ab-g");
+
+/* ===== 7 · A Juliana chega um instante depois ===== */
+document.getElementById("scr-corrida").innerHTML = casca("juliana.alves", "J", `
+  <div class="camada" id="cr-lista" style="padding:20px 22px">
+    ${cabContas()}
+    ${drop()}
+    ${abas(FAT_ABAS(3, 0, 6), "Fila")}
+    <div class="cartao lista">${linha({ ...C412, acaoId: "cr-abrir" })}${linha(C431)}${linha(C445)}</div>
+  </div>
+  <div class="camada" id="cr-erro" style="padding:20px 22px;opacity:0">
+    <div class="guia"><div class="voltar">${ic("voltar", 11)} Contas médicas</div>
+      <p class="erro-g" id="cr-msg">Outra faturista já pegou esta conta</p></div>
+  </div>`) +
+  anot("cr-n1", "Só um clique ganha. A Juliana volta e pega a próxima", 330, 130, 300) +
+  ghost("cr-g");
+
+/* ===== 8 · A Renata marca e devolve ===== */
+document.getElementById("scr-devolve").innerHTML = casca("renata.lima", "R", `
+  <div class="guia">
+    ${cabGuia("900412", "p-corr", "Em correção", "dv-dev", "<span id='dv-n'>0</span>", 5, SUB412)}
+    <div class="g-dia"><span>03/10 · CTI adulto</span><a>Marcar o dia como feito</a></div>
+    ${linhaFeita(L1, "dv-l1f", true)}${linhaAberta(L1, "dv-l1", "dv-f1")}
+    ${linhaFeita(L2, "dv-l2f", true)}${linhaAberta(L2, "dv-l2", "dv-f2")}
+  </div>`) +
+  `<div class="veu" id="dv-veu"></div>
+   <div class="dialogo" id="dv-dlg"><p>Devolver esta conta à fila? As marcações ficam na conta para quem pegar depois.</p>
+     <div class="bts"><span>Cancelar</span><span class="ok" id="dv-ok">OK</span></div></div>` +
+  toast("dv-t", "A conta voltou para a Fila") +
+  ghost("dv-g");
+
+/* ===== 9 · A Juliana pega ===== */
+document.getElementById("scr-pega").innerHTML = casca("juliana.alves", "J", `
+  <div class="camada" id="pg-lista" style="padding:20px 22px">
+    ${cabContas()}
+    ${drop()}
+    ${abas(FAT_ABAS(3, 0, 6), "Fila")}
+    <div class="cartao lista">${linha({ ...C412, det: "Nota 97, R$ 581,45, 2 de 5", acaoId: "pg-abrir" })}${linha(C431)}${linha(C445)}</div>
+  </div>
+  <div class="camada" id="pg-guia" style="padding:20px 22px;opacity:0">
+    <div class="guia">${cabGuia("900412", "p-corr", "Em correção", "pg-dev", 2, 5, SUB412)}
+      <div class="g-dia"><span>03/10 · CTI adulto</span><a>Marcar o dia como feito</a></div>
+      <div id="pg-feitas">${linhaFeita(L1, "pg-l1")}${linhaFeita(L2, "pg-l2")}</div>
+      <div class="g-dia"><span>04/10 · CTI adulto</span><a>Marcar o dia como feito</a></div>
+      ${linhaAberta({ tipo: "Incluir", nome: "Fita de glicemia", acao: "Incluir 4, em 04/10", pq: "Quatro glicemias no prontuário, nenhuma fita lançada.", cod: "80014422", vl: "+R$ 22,00" }, "pg-l3", "pg-f3")}
+    </div>
+  </div>`) +
+  anot("pg-n1", "As marcações da Renata ficaram na conta", 560, 250, 240) +
+  ghost("pg-g");
+
+/* ===== 10 · Concluir e a Produção ===== */
+const FEITAS5 = [L1, L2,
+  { nome: "Fita de glicemia", vl: "+R$ 22,00" },
+  { nome: "Lanceta descartável", vl: "+R$ 9,60" },
+  { nome: "Diária de CTI adulto", vl: "+R$ 486,15" }];
+document.getElementById("scr-producao").innerHTML = casca("juliana.alves", "J", `
+  <div class="camada" id="pr-guia" style="padding:20px 22px">
+    <div class="guia">${cabGuia("900412", "p-corr", "Em correção", null, 5, 5, SUB412)}
+      <div style="margin-top:10px">${FEITAS5.map((l, i) => linhaFeita(l, `pr-l${i}`)).join("")}</div>
+      <div class="rodape"><div class="k">Observação para a gestão de contas médicas</div><div class="ta">Opcional</div>
+        <span class="bt" id="pr-concluir">Concluir e abrir a próxima</span>
+        <p class="ob">Você pode concluir com pendência. Os itens em validação e os bloqueados seguem para a gestão, e a conta já entra na sua produção.</p></div>
+    </div>
+  </div>
+  <div class="camada" id="pr-prox" style="padding:20px 22px;opacity:0">
+    <div class="guia">${cabGuia("900431", "p-corr", "Em correção", "pr-dev", 0, 7, "Luiz F. · conta 51302 · coluna Comum · parcial de 05/10 a 09/10", 92, "R$ 1.104,20")}</div>
+  </div>`) +
+  toast("pr-t", "Conta concluída") +
+  ghost("pr-g");
+
+document.getElementById("scr-painel").innerHTML = casca("marta.queiroz", "M", `
+    <div class="pn">
+      <div class="voltar">${ic("voltar", 11)} Contas médicas</div>
+      <h1>Painel</h1>
+      <p class="hs">A nota da semana e onde a perda da conta nasce, pelas contas concluídas de segunda a domingo.</p>
+      <div class="bloco" id="pr-bloco">
+        <h2>Produção por faturista</h2>
+        <table class="prod">
+          <tr><th>Faturista</th><th>Contas</th><th>Com pendência</th><th>R$ incluído</th><th>Não procede</th><th>R$ retirado</th></tr>
+          <tr id="pr-ju"><td>Juliana Alves</td><td class="n"><span id="pr-c0">5</span><span id="pr-c1" style="display:none">6</span></td><td>0</td><td class="n"><span id="pr-v0">R$ 1.120,40</span><span id="pr-v1" style="display:none">R$ 1.706,55</span></td><td>4,2%</td><td class="r">R$ 96,30</td></tr>
+          <tr><td>Renata Lima</td><td class="n">4</td><td>1</td><td class="n">R$ 845,10</td><td>3,1%</td><td class="r">R$ 120,00</td></tr>
+          <tr><td>Patrícia Ramos</td><td class="n">3</td><td>0</td><td class="n">R$ 612,75</td><td>0,0%</td><td class="r">R$ 0,00</td></tr>
+        </table>
+      </div>
+    </div>`) +
+  `<div class="marcador" id="pr-mk"></div>` +
+  anot("pr-n1", "A conta entra na produção de quem concluiu", 520, 300, 280) +
+  anot("pr-n2", "Quem só envia, como a Carla, não aparece aqui", 520, 300, 280);
+
+/* ============================================================
+   Posição de um elemento no espaço 960x540 da tela (sem a escala)
+   ============================================================ */
+function pos(sel, dx, dy) {
+  let el = document.querySelector(sel), x = 0, y = 0;
+  const w = el.offsetWidth, h = el.offsetHeight;
+  while (el && !el.classList.contains("screen")) { x += el.offsetLeft; y += el.offsetTop; el = el.offsetParent; }
+  return { x: x + w / 2 + (dx || 0), y: y + h / 2 + (dy || 0), l: x, t: y, w, h };
+}
+function caixa(sel, pad) {
+  const p = pos(sel); pad = pad || 3;
+  return { left: p.l - pad, top: p.t - pad, width: p.w + pad * 2, height: p.h + pad * 2 };
+}
+/* posição de um elemento que só aparece depois (mostra, mede, esconde) */
+function posDepois(mostrar, esconder, sel, dx, dy) {
+  mostrar.forEach((s) => document.querySelector(s).style.display = "");
+  esconder.forEach((s) => document.querySelector(s).style.display = "none");
+  const p = pos(sel, dx, dy);
+  mostrar.forEach((s) => document.querySelector(s).style.display = "none");
+  esconder.forEach((s) => document.querySelector(s).style.display = "");
+  return p;
+}
+
+/* ============================================================
+   Timeline: uma só, pausada, com tempos absolutos
+   ============================================================ */
+window.__timelines = window.__timelines || {};
+const tl = gsap.timeline({ paused: true });
+const IR = { immediateRender: false };
+const surge = (sel, t, y) => tl.fromTo(sel, { opacity: 0, y: y === undefined ? 8 : y }, { opacity: 1, y: 0, duration: 0.4, ease: "power2.out", ...IR }, t);
+const entra = (sel, t, x) => tl.fromTo(sel, { opacity: 0, x: x === undefined ? -18 : x }, { opacity: 1, x: 0, duration: 0.5, ease: "power2.out", ...IR }, t);
+const some = (sel, t) => tl.to(sel, { opacity: 0, duration: 0.25 }, t);
+const nota = (sel, t, ate) => { surge(sel, t); some(sel, ate); };
+const troca = (a, b, t) => { tl.to(a, { opacity: 0, duration: 0.2 }, t); tl.fromTo(b, { opacity: 0 }, { opacity: 1, duration: 0.3, ...IR }, t + 0.1); };
+const clique = (g, t) => tl.fromTo(`${g} .pulse`, { opacity: 0.9, scale: 0.4 }, { opacity: 0, scale: 1.3, duration: 0.42, ease: "power1.out", ...IR }, t);
+const poe = (g, p, t) => tl.set(g, { x: p.x, y: p.y, opacity: 1 }, t);
+const vai = (g, p, t, d) => tl.to(g, { x: p.x, y: p.y, duration: d || 0.6, ease: "power2.inOut" }, t);
+const mostra = (sel, t, disp) => tl.set(sel, { display: disp || "" }, t);
+const esconde = (sel, t) => tl.set(sel, { display: "none" }, t);
+const marcar = (id, box, t, ate) => { tl.set(id, box, t); tl.fromTo(id, { opacity: 0 }, { opacity: 1, duration: 0.3, ...IR }, t); some(id, ate); };
+
+/* 1 · Abertura (0 a 3.4) */
+surge("#ab-eyebrow", 0.15, 22);
+tl.fromTo("#ab-titulo", { opacity: 0, y: 28 }, { opacity: 1, y: 0, duration: 0.6, ease: "power3.out", ...IR }, 0.3);
+surge("#ab-sub", 0.6, 18);
+
+/* 2 · Antes e agora (3.4 a 12.6): o lado de antes com a fala do antes, o de agora depois */
+entra("#an-esq", 3.6, -22);
+tl.fromTo("#an-vazia", { opacity: 0.2 }, { opacity: 1, duration: 0.4, ...IR }, 8.2);
+entra("#an-dir", 9.6, 22);
+
+/* 3 · Habilitação (12.6 a 20) */
+{
+  const s = pos("#hb-sel", 60), o = pos("#hb-opt", 50);
+  poe("#hb-g", { x: s.x - 160, y: s.y - 70 }, 12.7);
+  vai("#hb-g", s, 12.8, 0.8);
+  clique("#hb-g", 13.7);
+  tl.fromTo("#hb-op", { opacity: 0, y: -4 }, { opacity: 1, y: 0, duration: 0.2, ...IR }, 13.75);
+  vai("#hb-g", o, 14.0, 0.45);
+  clique("#hb-g", 14.6);
+  some("#hb-op", 14.7);
+  esconde("#hb-v0", 14.7); mostra("#hb-v1", 14.7, "inline");
+  tl.fromTo("#hb-t", { opacity: 0, x: 20 }, { opacity: 1, x: 0, duration: 0.3, ...IR }, 14.8);
+  some("#hb-t", 16.6);
+  nota("#hb-n1", 14.9, 16.4);
+  some("#hb-g", 15.6);
+  marcar("#hb-mk", caixa("#hb-apoio", 2), 16.6, 19.8);
+  const r = pos("#hb-apoio");
+  tl.set("#hb-n2", { top: r.t + r.h + 10 }, 16.6);
+  nota("#hb-n2", 16.8, 19.8);
+}
+
+/* 4 · A Carla envia (20 a 27) */
+{
+  const d = pos("#ev-drop");
+  tl.fromTo(["#ev-a1", "#ev-a2"], { opacity: 0 }, { opacity: 1, duration: 0.25, ...IR }, 20.15);
+  poe("#ev-g", { x: 700, y: 132 }, 20.15);
+  tl.to(["#ev-a1", "#ev-a2"], { x: d.x - 650, y: d.y - 150, duration: 0.9, ease: "power2.inOut" }, 20.5);
+  vai("#ev-g", { x: d.x + 50, y: d.y - 8 }, 20.5, 0.9);
+  tl.to("#ev-drop", { borderColor: "#2B2E7E", backgroundColor: "#F4F5FB", duration: 0.2 }, 21.0);
+  some(["#ev-a1", "#ev-a2"], 21.5);
+  esconde("#ev-drop", 21.6); mostra("#ev-enviando", 21.6, "flex");
+  some("#ev-g", 21.7);
+  esconde("#ev-enviando", 22.5); mostra("#ev-drop", 22.5, "flex");
+  tl.set("#ev-drop", { borderColor: "#CBD5E1", backgroundColor: "#FFFFFF" }, 22.5);
+  mostra("#ev-ultimo", 22.5, "block");
+  tl.fromTo("#ev-ultimo", { opacity: 0 }, { opacity: 1, duration: 0.3, ...IR }, 22.5);
+  esconde("#ev-vazio", 22.6); mostra("#ev-row", 22.6, "block");
+  tl.set("#ev-n", { innerHTML: "1" }, 22.6);
+  tl.fromTo("#ev-row", { opacity: 0 }, { opacity: 1, duration: 0.3, ...IR }, 22.6);
+  nota("#ev-n1", 23.1, 25.2);
+  esconde("#ev-row", 25.6); mostra("#ev-vazio", 25.6, "block");
+  tl.set("#ev-n", { innerHTML: "0" }, 25.6);
+  tl.fromTo("#ev-sino", { opacity: 0, scale: 0.4 }, { opacity: 1, scale: 1, duration: 0.3, ease: "back.out(2)", ...IR }, 25.7);
+  nota("#ev-n2", 25.8, 26.9);
+}
+
+/* 5 · A Fila da Renata (27 a 33.4) */
+surge("#fl-r1", 27.5, 6); tl.set("#fl-n", { innerHTML: "1" }, 27.5);
+surge("#fl-r2", 28.1, 6); tl.set("#fl-n", { innerHTML: "2" }, 28.1);
+surge("#fl-r3", 28.7, 6); tl.set("#fl-n", { innerHTML: "3" }, 28.7);
+{
+  const r = pos("#fl-r3");
+  tl.set(["#fl-n1", "#fl-n2"], { top: r.t + r.h + 16 }, 27);
+}
+nota("#fl-n1", 29.3, 31.0);
+nota("#fl-n2", 31.2, 33.3);
+
+/* 6 · A Renata abre o Guia (33.4 a 39.5) */
+{
+  const a = pos("#ab-abrir");
+  poe("#ab-g", { x: a.x - 140, y: a.y + 70 }, 33.45);
+  vai("#ab-g", a, 33.6, 0.8);
+  clique("#ab-g", 34.6);
+  troca("#ab-lista", "#ab-guia", 34.85);
+  some("#ab-g", 35.2);
+  nota("#ab-n1", 35.6, 37.2);
+  tl.fromTo("#ab-inset", { opacity: 0, y: 10 }, { opacity: 1, y: 0, duration: 0.4, ...IR }, 37.3);
+}
+
+/* 7 · A Juliana chega um instante depois (39.5 a 45.5) */
+{
+  const a = pos("#cr-abrir");
+  poe("#cr-g", { x: a.x - 160, y: a.y + 80 }, 39.55);
+  vai("#cr-g", a, 39.8, 0.9);
+  clique("#cr-g", 41.3);
+  troca("#cr-lista", "#cr-erro", 41.55);
+  some("#cr-g", 41.9);
+  tl.fromTo("#cr-msg", { borderColor: "#2B2E7E" }, { borderColor: "#E2E8F0", duration: 1.2, ...IR }, 41.9);
+  nota("#cr-n1", 42.5, 45.3);
+}
+
+/* 8 · A Renata marca e devolve (45.5 a 51.6) */
+{
+  const f1 = pos("#dv-f1");
+  const f2 = posDepois(["#dv-l1f"], ["#dv-l1"], "#dv-f2");
+  const dv = pos("#dv-dev"), ok = pos("#dv-ok");
+  poe("#dv-g", { x: f1.x + 120, y: f1.y + 60 }, 45.55);
+  vai("#dv-g", f1, 45.7, 0.6);
+  clique("#dv-g", 46.4);
+  esconde("#dv-l1", 46.5); mostra("#dv-l1f", 46.5, "flex"); tl.set("#dv-n", { innerHTML: "1" }, 46.5);
+  vai("#dv-g", f2, 46.6, 0.5);
+  clique("#dv-g", 47.2);
+  esconde("#dv-l2", 47.3); mostra("#dv-l2f", 47.3, "flex"); tl.set("#dv-n", { innerHTML: "2" }, 47.3);
+  vai("#dv-g", dv, 47.8, 0.7);
+  clique("#dv-g", 49.1);
+  tl.fromTo("#dv-veu", { opacity: 0 }, { opacity: 1, duration: 0.2, ...IR }, 49.25);
+  tl.fromTo("#dv-dlg", { opacity: 0, y: -6 }, { opacity: 1, y: 0, duration: 0.25, ...IR }, 49.25);
+  vai("#dv-g", ok, 49.5, 0.6);
+  clique("#dv-g", 50.25);
+  some(["#dv-dlg", "#dv-veu"], 50.35);
+  some("#dv-g", 50.5);
+  tl.fromTo("#dv-t", { opacity: 0, x: 20 }, { opacity: 1, x: 0, duration: 0.3, ...IR }, 50.5);
+}
+
+/* 9 · A Juliana pega (51.6 a 56.6) */
+{
+  const a = pos("#pg-abrir");
+  poe("#pg-g", { x: a.x - 120, y: a.y + 70 }, 51.65);
+  vai("#pg-g", a, 51.8, 0.6);
+  clique("#pg-g", 52.5);
+  troca("#pg-lista", "#pg-guia", 52.75);
+  some("#pg-g", 53.0);
+  const f = pos("#pg-feitas");
+  tl.set("#pg-n1", { top: f.t - 4, left: 188, maxWidth: 120 }, 51.6);
+  nota("#pg-n1", 53.4, 56.4);
+}
+
+/* 10 · Concluir e a Produção (56.6 a 65.6) */
+{
+  const c = pos("#pr-concluir");
+  poe("#pr-g", { x: c.x + 110, y: c.y + 50 }, 56.65);
+  vai("#pr-g", c, 56.8, 0.6);
+  clique("#pr-g", 57.5);
+  tl.fromTo("#pr-t", { opacity: 0, x: 20 }, { opacity: 1, x: 0, duration: 0.3, ...IR }, 57.65);
+  troca("#pr-guia", "#pr-prox", 57.75);
+  some("#pr-g", 57.8);
+  const ju = caixa("#pr-ju", 2);
+  marcar("#pr-mk", ju, 59.6, 65.4);
+  esconde("#pr-c0", 59.9); mostra("#pr-c1", 59.9, "inline");
+  esconde("#pr-v0", 59.9); mostra("#pr-v1", 59.9, "inline");
+  tl.fromTo(["#pr-c1", "#pr-v1"], { color: "#16A34A" }, { color: "#2B2E7E", duration: 1.2, ...IR }, 59.9);
+  const b = pos("#pr-bloco");
+  tl.set(["#pr-n1", "#pr-n2"], { top: b.t + b.h + 14, left: b.l + 10 }, 59);
+  nota("#pr-n1", 60.0, 62.2);
+  nota("#pr-n2", 62.4, 65.4);
+}
+
+/* 11 · Fecho (65.6 a 70) */
+surge("#fc-titulo", 65.8, 18);
+tl.fromTo("#fc-carimbo", { opacity: 0 }, { opacity: 1, duration: 0.5, ...IR }, 66.3);
+tl.fromTo("#fc-org", { opacity: 0 }, { opacity: 1, duration: 0.5, ...IR }, 66.6);
+
+window.__timelines["main"] = tl;
+</script>
+</body>
+</html>
