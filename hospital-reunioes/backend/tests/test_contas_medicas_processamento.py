@@ -53,7 +53,7 @@ from app.limiter import limiter  # noqa: E402
 from app.routers import contas_medicas_envio as envio_router  # noqa: E402
 from app.routers import contas_medicas_guia as guia_router  # noqa: E402
 from app.services.contas_medicas import envio as envio_service  # noqa: E402
-from app.services.contas_medicas import ia, processamento  # noqa: E402
+from app.services.contas_medicas import ia, passo_a, processamento  # noqa: E402
 from app.services.contas_medicas.conferencia import ProntuarioLido, conferir  # noqa: E402
 from app.services.contas_medicas.conteudo import ler_conteudo  # noqa: E402
 from app.services.contas_medicas.memoria import MemoriaLida, RegraLida, parametros_lidos  # noqa: E402
@@ -70,6 +70,8 @@ from app.services.contas_medicas_extrator import (  # noqa: E402
 )
 
 MIGRATION = Path(__file__).resolve().parents[2] / "supabase" / "migrations" / "116_contas_medicas_fundacao.sql"
+# A Etapa do processamento (issue #1416): as colunas e o CHECK da etapa da tela.
+MIGRATION_124 = MIGRATION.parent / "124_contas_medicas_etapa_do_processamento.sql"
 
 AGORA = datetime(2026, 10, 12, 10, 0, tzinfo=UTC)
 
@@ -129,6 +131,10 @@ def _formato_do_codigo_do_erro() -> re.Pattern[str]:
 
 
 FORMATO_DO_CODIGO_DO_ERRO = _formato_do_codigo_do_erro()
+# As cinco Etapas do processamento que o CHECK da 124 aceita (issue #1416).
+ETAPAS_DA_TELA = _lista_do_check(
+    MIGRATION_124.read_text(encoding="utf-8"), r"ADD CONSTRAINT cm_conta_etapa_atual_check"
+)
 
 
 def test_o_duble_le_os_checks_da_migration():
@@ -141,6 +147,8 @@ def test_o_duble_le_os_checks_da_migration():
     assert {"situacao", "erro_motivo", "faltantes", "nota_saida"} <= COLUNAS_DA_CONTA
     assert FORMATO_DO_CODIGO_DO_ERRO.match("CM-IA-FORA-DO-AR")
     assert not FORMATO_DO_CODIGO_DO_ERRO.match("CM-XYZ-1")
+    assert {"LENDO_CONTA", "IA_MONTANDO_GUIA"} <= ETAPAS_DA_TELA
+    assert {"etapa_atual", "etapa_desde", "etapa_parte", "etapa_partes"} <= COLUNAS_DA_CONTA
 
 
 def _coluna_que_nao_existe(nome: str, campos: dict) -> str | None:
@@ -155,6 +163,8 @@ def _violacao(nome: str, linha: dict) -> str | None:
         return "cm_conta_situacao_check"
     if nome == "cm_conta" and linha.get("erro_codigo") and not FORMATO_DO_CODIGO_DO_ERRO.match(linha["erro_codigo"]):
         return "cm_conta_erro_codigo_check"
+    if nome == "cm_conta" and linha.get("etapa_atual") and linha["etapa_atual"] not in ETAPAS_DA_TELA:
+        return "cm_conta_etapa_atual_check"
     if nome == "cm_guia_linha":
         if desconhecidas := set(linha) - COLUNAS_DA_LINHA:
             return f"PGRST204: coluna {sorted(desconhecidas)} nao existe em cm_guia_linha"
@@ -344,6 +354,8 @@ class _Consulta:
                 if violacao := _violacao(self._nome, {**linha, **self._update}):
                     raise APIError({"message": violacao, "code": "23514"})
                 linha.update(self._update)
+            if self._nome == "cm_conta" and casam:
+                self._banco.escritas_na_conta.append(([linha["id"] for linha in casam], dict(self._update)))
             return SimpleNamespace(data=[dict(linha) for linha in casam])
         for coluna, desc in reversed(self._ordem):
             casam.sort(key=lambda linha, c=coluna: (linha.get(c) is None, str(linha.get(c) or "")), reverse=desc)
@@ -380,6 +392,9 @@ class _Banco:
         # Gancho do teste das duas parciais em paralelo: roda fora da trava,
         # antes de cada gravação em `cm_eventos`.
         self.antes_de_gravar_eventos = None
+        # Cada UPDATE que casou alguma conta, na ordem, com os ids que casou: a
+        # sequência das Etapas do processamento (issue #1416).
+        self.escritas_na_conta: list[tuple[list[str], dict]] = []
         self.storage = SimpleNamespace(from_=lambda nome: _Bucket(self, nome))
 
     def table(self, nome: str):
@@ -2754,3 +2769,173 @@ class TestVersaoDaTabela:
         assert (velha["preco_tabela"], velha["tabela_id"]) == (0.20, "tb-mat")
         agulha = _linhas_gravadas(banco, seguinte["id"])["70000001"]
         assert (agulha["preco_tabela"], agulha["tabela_id"]) == (0.30, nova["id"])
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 15. A Etapa do processamento (issue #1416, PRD #1415)
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+class TestMigration124:
+    """A única migration do PRD: as colunas são conferidas pelo dublê do banco
+    (coluna que não existe é recusada, como o PostgREST faz); aqui, que ela só
+    acrescenta."""
+
+    def test_acrescenta_as_quatro_colunas_da_etapa_e_as_paginas_por_ocr_sem_mexer_nas_que_existem(self):
+        sql = re.sub(r"--[^\n]*", "", MIGRATION_124.read_text(encoding="utf-8"))
+
+        assert re.findall(r"ALTER TABLE cm_conta\s+ADD COLUMN IF NOT EXISTS (\w+) (\w+)", sql) == [
+            ("etapa_atual", "TEXT"),
+            ("etapa_desde", "TIMESTAMPTZ"),
+            ("etapa_parte", "INTEGER"),
+            ("etapa_partes", "INTEGER"),
+        ]
+        assert re.findall(r"ALTER TABLE cm_arquivo\s+ADD COLUMN IF NOT EXISTS (\w+) (\w+)", sql) == [
+            ("paginas_ocr", "INTEGER")
+        ]
+        # Só acrescenta: nenhuma coluna que já existe muda, sai ou troca de nome,
+        # nenhum dado é reescrito, e coluna nova não nasce obrigatória.
+        assert not re.search(r"\b(ALTER COLUMN|DROP COLUMN|RENAME|UPDATE|DELETE|NOT NULL)\b", sql, flags=re.I)
+
+    def test_termina_com_o_recibo_do_proprio_numero(self):
+        corpo = "\n".join(
+            linha for linha in MIGRATION_124.read_text(encoding="utf-8").splitlines() if not linha.startswith("--")
+        ).strip()
+
+        assert corpo.endswith("INSERT INTO migracoes_aplicadas (numero) VALUES (124) ON CONFLICT (numero) DO NOTHING;")
+
+
+CINCO_ETAPAS = ["LENDO_CONTA", "LENDO_PRONTUARIO", "IA_LENDO_PRONTUARIO", "CONFERINDO", "IA_MONTANDO_GUIA"]
+
+
+def _etapas_gravadas(banco: _Banco, conta_id: str | None = None) -> list[str]:
+    """As Etapas do processamento na ordem em que o Motor as gravou na conta,
+    com a parte do Passo A como a tela diz ("parte 2 de 3")."""
+    marcos = []
+    for ids, campos in banco.escritas_na_conta:
+        if conta_id is not None and conta_id not in ids:
+            continue
+        if campos.get("etapa_atual"):
+            marcos.append(campos["etapa_atual"])
+        if campos.get("etapa_parte"):
+            marcos.append(f"parte {campos['etapa_parte']} de {campos['etapa_partes']}")
+    return marcos
+
+
+class TestEtapaDoProcessamento:
+    def test_a_conta_passa_pelas_cinco_etapas_da_tela_na_ordem(self):
+        banco = _cenario()
+        _enviar(banco, _conta(), _prontuario())
+
+        _rodar_o_job(banco)
+
+        (conta,) = banco.tabelas["cm_conta"]
+        assert conta["situacao"] == "A_FAZER", conta.get("erro_motivo")
+        assert _etapas_gravadas(banco) == CINCO_ETAPAS
+        # Cada troca de etapa grava desde quando ela está em curso.
+        assert all(campos.get("etapa_desde") for _, campos in banco.escritas_na_conta if campos.get("etapa_atual"))
+
+    def test_o_passo_a_com_tres_janelas_grava_parte_1_2_e_3_de_3_e_o_do_cache_nao_grava_partes(
+        self, monkeypatch, ia_falsa
+    ):
+        """Acima do limite de uma leitura, o prontuário vai à IA em janelas de
+        dias: com a avaliação de fisioterapia de 03/10, são quatro dias e três
+        janelas. A segunda parcial do atendimento lê os eventos do cache."""
+        monkeypatch.setattr(passo_a, "LIMITE_DE_TOKENS", 1)
+        banco = _cenario()
+        _enviar(banco, _conta("48811", 2, 4), _conta("48812", 5, 6), _prontuario(fisioterapias=1))
+        primeira, segunda = _duas_parciais_gravadas(banco)
+
+        assert _rodar_o_job(banco) == 2
+
+        assert ia_falsa.formatos.count(PASSO_A) == 3
+        assert [c["situacao"] for c in _duas_parciais_gravadas(banco)] == ["A_FAZER", "A_FAZER"]
+        assert _etapas_gravadas(banco, primeira["id"]) == [
+            "LENDO_CONTA",
+            "LENDO_PRONTUARIO",
+            "IA_LENDO_PRONTUARIO",
+            "parte 1 de 3",
+            "parte 2 de 3",
+            "parte 3 de 3",
+            "CONFERINDO",
+            "IA_MONTANDO_GUIA",
+        ]
+        assert _etapas_gravadas(banco, segunda["id"]) == CINCO_ETAPAS
+
+    def test_a_etapa_fica_nula_quando_a_conta_fica_pronta_vai_para_erro_ou_volta_presa_para_a_fila(self):
+        sem_etapa = dict.fromkeys(("etapa_atual", "etapa_desde", "etapa_parte", "etapa_partes"))
+
+        def etapa(conta: dict) -> dict:
+            return {coluna: conta.get(coluna) for coluna in sem_etapa}
+
+        pronta = _cenario()
+        _enviar(pronta, _conta(), _prontuario())
+        _rodar_o_job(pronta)
+        (conta,) = pronta.tabelas["cm_conta"]
+        assert conta["situacao"] == "A_FAZER"
+        assert _etapas_gravadas(pronta) == CINCO_ETAPAS
+        assert etapa(conta) == sem_etapa
+
+        com_erro = _cenario()
+        _enviar(com_erro, _conta(total_errado=True), _prontuario())
+        _rodar_o_job(com_erro)
+        (conta,) = com_erro.tabelas["cm_conta"]
+        assert conta["situacao"] == "ERRO"
+        assert _etapas_gravadas(com_erro) == ["LENDO_CONTA"]
+        assert etapa(conta) == sem_etapa
+
+        no_meio_da_ia = {
+            "etapa_atual": "IA_LENDO_PRONTUARIO",
+            "etapa_desde": _ha(70),
+            "etapa_parte": 3,
+            "etapa_partes": 7,
+        }
+        presa = _Banco({"cm_conta": [{**_presa(61, tentativas=1), **no_meio_da_ia}]})
+        processamento.devolver_presas(presa, AGORA)
+        assert presa.conta("c1")["situacao"] == "NA_FILA"
+        assert etapa(presa.conta("c1")) == sem_etapa
+
+    def test_a_listagem_dos_envios_traz_a_etapa_a_parte_o_inicio_e_a_tentativa(self):
+        banco = _cenario()
+        _enviar(banco, _conta(), _prontuario())
+        (conta,) = banco.tabelas["cm_conta"]
+        # A segunda tentativa, no meio do Passo A de um prontuário em 7 partes.
+        conta.update(
+            situacao="PROCESSANDO",
+            processando_desde=_ha(12),
+            tentativas=2,
+            etapa_atual="IA_LENDO_PRONTUARIO",
+            etapa_desde=_ha(4),
+            etapa_parte=3,
+            etapa_partes=7,
+        )
+
+        (item,) = _fila(banco, "meus_envios")
+
+        campos = ("etapa", "parte", "partes", "etapa_desde", "processando_desde", "tentativa")
+        assert {campo: item[campo] for campo in campos} == {
+            "etapa": "IA_LENDO_PRONTUARIO",
+            "parte": 3,
+            "partes": 7,
+            "etapa_desde": _ha(4),
+            "processando_desde": _ha(12),
+            "tentativa": 2,
+        }
+
+    def test_o_kit_de_conhecimento_diz_a_pilula_processando_a_tentativa_e_o_aviso_de_pronta(self):
+        texto = KIT.read_text(encoding="utf-8")
+
+        assert "Pronta em instantes" not in texto
+        for trecho in (
+            "Processando",
+            "Lendo a conta",
+            "Lendo o prontuário",
+            "IA lendo o prontuário",
+            "Conferindo",
+            "IA montando o Guia",
+            "parte 3 de 7",
+            "tentativa 2 de 3",
+            "a cada 5 segundos",
+            "Atendimento 31310 pronto, foi para a Fila",
+        ):
+            assert trecho in texto, trecho

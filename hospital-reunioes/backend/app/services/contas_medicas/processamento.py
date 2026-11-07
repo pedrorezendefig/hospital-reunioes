@@ -160,6 +160,11 @@ def pegar_da_fila(supabase, agora: datetime) -> dict | None:
     return None
 
 
+# A conta que sai de PROCESSANDO (pronta, Erro ou de volta à fila) fica sem
+# Etapa do processamento (#1416).
+SEM_ETAPA = {"etapa_atual": None, "etapa_desde": None, "etapa_parte": None, "etapa_partes": None}
+
+
 def _fechar_tentativa(supabase, conta: dict, campos: dict) -> None:
     """O UPDATE que só vale para esta tentativa: a conta que voltou para a fila
     e outra vaga já pegou de novo não é sobrescrita."""
@@ -180,6 +185,7 @@ def _gravar_erro(supabase, conta: dict, erro: ErroDaConta) -> None:
             "erro_codigo": erro.codigo,
             "erro_detalhe": {**erro.detalhe, "em": datetime.now(UTC).isoformat()},
             "processando_desde": None,
+            **SEM_ETAPA,
         },
     )
 
@@ -190,7 +196,7 @@ def _devolver(supabase, conta: dict, erro: ErroDaConta) -> None:
     if (conta.get("tentativas") or 0) >= MAXIMO_DE_TENTATIVAS:
         _gravar_erro(supabase, conta, erro)
     else:
-        _fechar_tentativa(supabase, conta, {"situacao": "NA_FILA", "processando_desde": None})
+        _fechar_tentativa(supabase, conta, {"situacao": "NA_FILA", "processando_desde": None, **SEM_ETAPA})
 
 
 def devolver_presas(supabase, agora: datetime) -> int:
@@ -244,12 +250,32 @@ def _na_vaga(supabase, conta: dict) -> None:
 # ----------------------------------------------------------------------------------
 
 
+# As etapas internas do Motor nas cinco Etapas do processamento da tela
+# (issue #1416), o único lugar do backend que faz esse mapa. A primeira
+# conferência por código e o dicionário rodam antes do Passo A e levam
+# segundos: ficam em "Lendo o prontuário", para a tela andar sempre para a
+# frente. "Conferindo" é a conferência com os eventos que a IA leu.
+ETAPA_DA_TELA = {
+    "texto_da_conta": "LENDO_CONTA",
+    "leitura_da_conta": "LENDO_CONTA",
+    "texto_do_prontuario": "LENDO_PRONTUARIO",
+    "leitura_do_prontuario": "LENDO_PRONTUARIO",
+    "dicionario": "LENDO_PRONTUARIO",
+    "conferencia": "LENDO_PRONTUARIO",
+    "passo_a": "IA_LENDO_PRONTUARIO",
+    "conferencia_com_eventos": "CONFERINDO",
+    "passo_b": "IA_MONTANDO_GUIA",
+    "gravacao": "IA_MONTANDO_GUIA",
+}
+
+
 class _Cronometro:
     """O tempo de cada etapa e a etapa em que a análise está (a do erro).
-    `ao_entrar` recebe cada etapa que começa: o processamento a grava na conta,
-    para a análise que o restart interrompeu dizer onde parou (#1337)."""
+    `ao_entrar` recebe cada etapa que começa e a anterior: o processamento a
+    grava na conta, para a análise que o restart interrompeu dizer onde parou
+    (#1337) e a tela mostrar a Etapa do processamento (#1416)."""
 
-    def __init__(self, ao_entrar: Callable[[str], None] | None = None):
+    def __init__(self, ao_entrar: Callable[[str, str | None], None] | None = None):
         self.tempos: dict[str, float] = {}
         self.atual: str | None = None
         # Quantas digitalizadas o OCR leu por faixa (#1398), depois do OCR: vai
@@ -260,9 +286,9 @@ class _Cronometro:
 
     @contextmanager
     def etapa(self, nome: str) -> Iterator[None]:
-        self.atual = nome
+        anterior, self.atual = self.atual, nome
         if self._ao_entrar:
-            self._ao_entrar(nome)
+            self._ao_entrar(nome, anterior)
         inicio = perf_counter()
         yield
         self.tempos[nome] = round(perf_counter() - inicio, 3)
@@ -286,16 +312,35 @@ def _com_digitalizadas(erro: ErroDaConta, cronometro: _Cronometro) -> ErroDaCont
     return replace(erro, detalhe={**erro.detalhe, "digitalizadas": cronometro.digitalizadas})
 
 
-def _marcar_etapa(supabase, conta: dict, etapa: str) -> None:
+def _marcar_etapa(supabase, conta: dict, etapa: str, anterior: str | None) -> None:
     """A etapa que começa, no detalhe da conta em PROCESSANDO: se o app
-    reiniciar no meio, a devolução das presas sabe onde a análise parou."""
-    _fechar_tentativa(supabase, conta, {"erro_detalhe": {"etapa": etapa}})
+    reiniciar no meio, a devolução das presas sabe onde a análise parou. Na
+    troca de Etapa do processamento, no mesmo UPDATE, a etapa da tela, desde
+    quando, e as partes do Passo A zeradas (#1416)."""
+    campos: dict[str, Any] = {"erro_detalhe": {"etapa": etapa}}
+    if anterior is None or ETAPA_DA_TELA[etapa] != ETAPA_DA_TELA[anterior]:
+        campos |= {
+            "etapa_atual": ETAPA_DA_TELA[etapa],
+            "etapa_desde": datetime.now(UTC).isoformat(),
+            "etapa_parte": None,
+            "etapa_partes": None,
+        }
+    _fechar_tentativa(supabase, conta, campos)
+
+
+def _marcar_parte(supabase, conta: dict, parte: int, partes: int) -> None:
+    """A parte do Passo A em leitura, na conta (#1416). A falha só vai para o
+    log: a tela fica sem a parte, e a leitura da IA, que já está paga, segue."""
+    try:
+        _fechar_tentativa(supabase, conta, {"etapa_parte": parte, "etapa_partes": partes})
+    except Exception as erro:
+        logger.warning("[ContasMedicas] Conta %s sem a parte do Passo A: %s", conta["id"], type(erro).__name__)
 
 
 def processar(supabase, conta: dict) -> None:
     """O pipeline de uma conta que o claim pegou. Nunca levanta: o fim é
     `A_FAZER`, `ERRO` ou a volta para a fila."""
-    cronometro = _Cronometro(ao_entrar=lambda etapa: _marcar_etapa(supabase, conta, etapa))
+    cronometro = _Cronometro(ao_entrar=lambda etapa, anterior: _marcar_etapa(supabase, conta, etapa, anterior))
     try:
         try:
             _pipeline(supabase, conta, cronometro)
@@ -496,6 +541,7 @@ def _pipeline(supabase, conta: dict, cronometro: _Cronometro) -> None:
                 prontuario=prontuario,
                 achados=conferencia.linhas,
                 regras=memoria["regras"],
+                ao_avancar=lambda parte, partes: _marcar_parte(supabase, conta, parte, partes),
             )
 
         with cronometro.etapa("conferencia_com_eventos"):
@@ -565,6 +611,7 @@ def _pipeline(supabase, conta: dict, cronometro: _Cronometro) -> None:
             },
             "memoria_versao_id": memoria["memoria_versao_id"],
             "pronta_em": datetime.now(UTC).isoformat(),
+            **SEM_ETAPA,
         },
     )
     logger.info("[ContasMedicas] Conta %s pronta em %ss", conta["id"], tempos["total"])

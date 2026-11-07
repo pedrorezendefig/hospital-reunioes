@@ -151,6 +151,22 @@ def _erro(conta: dict, guardado: bool) -> dict:
     }
 
 
+def _processamento(conta: dict) -> dict:
+    """A Etapa do processamento da conta em Processando (issue #1416): a etapa
+    da tela, a parte do Passo A, desde quando, o início do processamento e a
+    tentativa. Fora de Processando, tudo nulo."""
+    if conta.get("situacao") != "PROCESSANDO":
+        return dict.fromkeys(("etapa", "parte", "partes", "etapa_desde", "processando_desde", "tentativa"))
+    return {
+        "etapa": conta.get("etapa_atual"),
+        "parte": conta.get("etapa_parte"),
+        "partes": conta.get("etapa_partes"),
+        "etapa_desde": conta.get("etapa_desde"),
+        "processando_desde": conta.get("processando_desde"),
+        "tentativa": conta.get("tentativas"),
+    }
+
+
 def _item(conta: dict, atendimento: dict, linhas: list[dict], paginas: int | None, guardado: bool) -> dict:
     """A conta como a fila mostra: identificada pelo atendimento, com a conta como complemento."""
     da_faturista = [linha for linha in linhas if linha.get("acao") != "VALIDAR"]
@@ -173,6 +189,7 @@ def _item(conta: dict, atendimento: dict, linhas: list[dict], paginas: int | Non
         "pendencias": sum(1 for linha in linhas if linha_pendente(linha)),
         "erro_motivo": conta.get("erro_motivo"),
         **_erro(conta, guardado),
+        **_processamento(conta),
         # O botão Analisar assim mesmo, ao lado de Enviar de novo (issue #1401).
         "pode_analisar_assim_mesmo": pode_analisar_assim_mesmo(conta, guardado),
         # O botão Descartar do cartão do envio (issue #1338).
