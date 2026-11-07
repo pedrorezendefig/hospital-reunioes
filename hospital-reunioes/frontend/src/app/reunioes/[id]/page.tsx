@@ -2049,6 +2049,7 @@ export default function ReuniaoDetailPage() {
               {reprocessando ? <Loader2 className="w-4 h-4 animate-spin" /> : <Repeat2 className="w-4 h-4" />}
               Gerar a ata de novo
             </button>
+            {erroReprocessar && <p role="alert">{erroReprocessar}</p>}
           </div>
         </div>
       )}

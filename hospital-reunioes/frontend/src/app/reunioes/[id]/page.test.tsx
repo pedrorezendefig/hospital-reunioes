@@ -172,4 +172,23 @@ describe("Gerar a ata de novo", () => {
     const posts = chamadas.filter((c) => c.method === "POST");
     expect(posts).toEqual([{ url: "/api/reunioes/REU_TESTE/reprocessar", method: "POST" }]);
   });
+
+  // As frases são do backend: `detail` da rota em reunioes.py (404 e 400) e o
+  // `error` que o slowapi devolve no 429 do limite de 3 por minuto.
+  it.each([
+    [404, { detail: "Arquivo de transcrição não encontrado no Storage" }, "Arquivo de transcrição não encontrado no Storage"],
+    [400, { detail: "Reunião já assinada não pode ser reprocessada" }, "Reunião já assinada não pode ser reprocessada"],
+    [429, { error: "Rate limit exceeded: 3 per 1 minute" }, "Rate limit exceeded: 3 per 1 minute"],
+  ])("falha %i mostra a mensagem do backend e o botão volta a ficar clicável", async (status, corpo, frase) => {
+    servir("ERRO", { status, corpo });
+    montar();
+    await esperarCarregar();
+
+    const botao = screen.getByRole("button", { name: BOTAO }) as HTMLButtonElement;
+    fireEvent.click(botao);
+
+    await screen.findByText(frase);
+    expect(screen.getByRole("button", { name: BOTAO })).toBe(botao);
+    await waitFor(() => expect(botao.disabled).toBe(false));
+  });
 });
