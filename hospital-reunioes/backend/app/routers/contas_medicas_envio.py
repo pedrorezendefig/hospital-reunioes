@@ -38,6 +38,10 @@ from app.services.contas_medicas.envio import (
 from app.services.contas_medicas.erro_da_conta import arquivo_da_etapa, detalhe_legivel
 from app.services.contas_medicas.fila import envios_da_pessoa, fila_da_pessoa
 from app.services.contas_medicas.guia import MARCADAS, linha_pendente
+from app.services.contas_medicas.painel_do_processamento import (
+    ContaNaoEncontradaError as ContaDoPainelNaoEncontradaError,
+)
+from app.services.contas_medicas.painel_do_processamento import detalhe as detalhe_do_processamento
 from app.services.contas_medicas.reanalise import (
     ContaNaoEncontradaError as ContaAAnalisarNaoEncontradaError,
 )
@@ -244,6 +248,23 @@ async def ver_meus_envios(
     """As contas que a pessoa enviou e ainda não ficaram prontas. Quem tem
     "painel completo" vê os envios de todos, com quem enviou cada um."""
     return _itens(supabase, envios_da_pessoa(supabase, me), ("meus_envios",))
+
+
+@router.get("/contas/{conta_id}/processamento")
+@limiter.limit("120/minute")
+async def ver_processamento(
+    request: Request,
+    conta_id: UUID,
+    me: dict = Depends(_PODE_ENVIAR),
+    supabase: Client = Depends(get_supabase_client),
+) -> dict:
+    """O painel lateral do cartão do envio (issue #1418): as cinco etapas com o
+    tempo de cada uma, a tentativa e a posição na fila; o custo da IA, só para
+    quem tem "painel completo". A conta de outra pessoa dá 404."""
+    try:
+        return detalhe_do_processamento(supabase, str(conta_id), me, datetime.now(UTC))
+    except ContaDoPainelNaoEncontradaError:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Conta não encontrada") from None
 
 
 @router.post("/contas/{conta_id}/descartar")

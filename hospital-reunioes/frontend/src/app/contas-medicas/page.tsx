@@ -30,6 +30,7 @@ import { LinkParaHabilitacao } from "@/components/contas-medicas/LinkParaHabilit
 import { LinkParaOperadoras } from "@/components/contas-medicas/LinkParaOperadoras";
 import { LinkParaPainel } from "@/components/contas-medicas/LinkParaPainel";
 import { LinkParaValidacao } from "@/components/contas-medicas/LinkParaValidacao";
+import { PainelDoProcessamento } from "@/components/contas-medicas/PainelDoProcessamento";
 import {
   ANALISAR_CONTAS,
   ENVIAR_CONTAS,
@@ -335,15 +336,21 @@ function ErroDoEnvio({
   );
 }
 
-/** A conta da aba de envios, com o quadrado de cada arquivo (issue #1336). */
+/**
+ * A conta da aba de envios, com o quadrado de cada arquivo (issue #1336). O
+ * clique no cartão abre o painel lateral do Processamento (issue #1418); o
+ * clique nos botões e links de dentro faz só o que eles fazem.
+ */
 function CartaoDoEnvio({
   conta,
+  onAbrir,
   onEnviar,
   onAnalisarDeNovo,
   onAnalisarAssimMesmo,
   onDescartar,
 }: {
   conta: ItemDaFila;
+  onAbrir: () => void;
   onEnviar: () => void;
   onAnalisarDeNovo: () => Promise<string | null>;
   onAnalisarAssimMesmo: () => Promise<string | null>;
@@ -356,12 +363,22 @@ function CartaoDoEnvio({
   return (
     <li>
       <article
-        className={`rounded-xl border border-border border-l-4 bg-white p-4 space-y-3 ${
+        onClick={(e) => {
+          if (!(e.target as HTMLElement).closest("button, a, textarea")) onAbrir();
+        }}
+        className={`cursor-pointer rounded-xl border border-border border-l-4 bg-white p-4 space-y-3 hover:shadow-premium ${
           BORDA_DA_SITUACAO[conta.situacao] ?? "border-l-slate-300"
         }`}
       >
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-          <p className="min-w-0 flex-1 text-sm font-semibold uppercase text-slate-900">Atendimento {conta.numero_atendimento}</p>
+          <button
+            type="button"
+            onClick={onAbrir}
+            aria-haspopup="dialog"
+            className="min-w-0 flex-1 text-left text-sm font-semibold uppercase text-slate-900 hover:underline"
+          >
+            Atendimento {conta.numero_atendimento}
+          </button>
           <span
             className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${COR_DA_SITUACAO[conta.situacao] ?? "bg-slate-100 text-slate-600"}`}
           >
@@ -507,6 +524,8 @@ export default function ContasMedicasPage() {
   const [ultimo, setUltimo] = useState<RespostaDoEnvio | null>(null);
   const [recusaDoDescarte, setRecusaDoDescarte] = useState<string | null>(null);
   const [prontas, setProntas] = useState<string[]>([]);
+  /** A conta do painel lateral do Processamento (issue #1418). */
+  const [painel, setPainel] = useState<string | null>(null);
   const seletor = useRef<HTMLInputElement>(null);
   /** Os envios da leitura anterior: a conta Processando que sumiu ficou pronta. */
   const enviosAntes = useRef<ItemDaFila[] | null>(null);
@@ -638,6 +657,9 @@ export default function ContasMedicasPage() {
   }
 
   const contas = fila?.[aba];
+  // A conta que ficou pronta sai dos envios, e o painel dela fecha junto.
+  const contaDoPainel = painel ? envios.find((conta) => conta.id === painel) : undefined;
+  const fecharOPainel = useCallback(() => setPainel(null), []);
   const abas = pode ? abasDe(pode) : [];
   // Sem nenhuma das duas permissões (o credenciamento), a tela fica só com os atalhos.
   const semListas = pode !== null && abas.length === 0;
@@ -722,6 +744,10 @@ export default function ContasMedicasPage() {
         </div>
       )}
 
+      {contaDoPainel && token && (
+        <PainelDoProcessamento conta={contaDoPainel} token={token} onFechar={fecharOPainel} />
+      )}
+
       {!semListas && (
         <div>
           <div className="flex gap-2 border-b border-border" role="tablist">
@@ -764,6 +790,7 @@ export default function ContasMedicasPage() {
                     <CartaoDoEnvio
                       key={conta.id}
                       conta={conta}
+                      onAbrir={() => setPainel(conta.id)}
                       onEnviar={() => seletor.current?.click()}
                       onAnalisarDeNovo={() => analisarContaDeNovo(conta.id)}
                       onAnalisarAssimMesmo={() => analisarContaDeNovo(conta.id, true)}

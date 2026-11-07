@@ -57,6 +57,8 @@ Enquanto alguma conta enviada está Processando, a tela se atualiza sozinha a ca
 
 Em Meus envios, cada conta aparece num cartão com dois quadrados, um para a conta e outro para o prontuário. O quadrado do arquivo que chegou fica verde: o da conta mostra o número e o período, e o do prontuário, o número de páginas. O quadrado do arquivo que falta fica tracejado, diz "Falta enviar" e tem o botão "Enviar a conta" ou "Enviar o prontuário", que abre o seletor de arquivos para mandar só aquele PDF. A borda do cartão tem a cor da situação: vermelha no erro, amarela quando falta arquivo, cinza na fila e verde enquanto a conta está Processando. No celular, os dois quadrados ficam um embaixo do outro. A Fila, Minhas e Concluídas continuam com uma linha por conta.
 
+Clicando no cartão de uma conta em Meus envios, abre um painel lateral com o Processamento dela: as cinco etapas, cada uma marcada como feita, em curso ou por fazer, o tempo de cada etapa (a em curso conta desde que começou), a tentativa, como "tentativa 2 de 3", e, na conta Na fila, a posição na fila, como "2ª na fila". Quem tem o Painel completo vê também o custo da IA daquela conta: o modelo, o número de chamadas, os tokens de entrada, de saída e lidos do cache, e o valor em dólar. Quem não tem o Painel completo, como o Apoio ao faturamento, não vê essa parte. Cada pessoa abre o painel só das contas que enviou; quem tem o Painel completo abre o de todas.
+
 Cada conta aparece pelo número do atendimento, com o número da conta ao lado, e com a situação:
 
 - **Falta o prontuário** ou **Falta a conta**: o par ainda não chegou;

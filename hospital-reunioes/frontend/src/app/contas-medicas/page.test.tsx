@@ -13,7 +13,7 @@
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import type { Fila, ItemDaFila, RespostaDoEnvio } from "@/lib/contas-medicas/envio";
+import type { DetalheDoProcessamento, Fila, ItemDaFila, RespostaDoEnvio } from "@/lib/contas-medicas/envio";
 
 import ContasMedicasPage from "./page";
 
@@ -97,6 +97,8 @@ let respostaDoDescarte: () => Response;
 /** O que a rota Analisar de novo responde (issue #1339); por padrão, a conta vai para a fila. */
 let aoAnalisarDeNovo: (url: string) => Response;
 const chamadas: { url: string; init?: RequestInit }[] = [];
+/** O que a rota do painel lateral responde (issue #1418). */
+let detalheDoServidor: DetalheDoProcessamento;
 
 beforeEach(() => {
   filaDoServidor = FILA;
@@ -117,6 +119,7 @@ beforeEach(() => {
       if (url.endsWith("/descartar")) return respostaDoDescarte();
       if (url.endsWith("/analisar-de-novo")) return aoAnalisarDeNovo(url);
       if (url.endsWith("/analisar-assim-mesmo")) return aoAnalisarDeNovo(url);
+      if (url.endsWith("/processamento")) return new Response(JSON.stringify(detalheDoServidor));
       return new Response("{}", { status: 404 });
     }),
   );
@@ -933,6 +936,100 @@ describe("o Processamento visível (issue #1416)", () => {
     await vi.advanceTimersByTimeAsync(5_000);
 
     expect((await screen.findByText(/foi para a Fila/)).textContent).toBe("Atendimento 31310 pronto, foi para a Fila");
+  });
+});
+
+describe("o painel lateral do Processamento (issue #1418)", () => {
+  const RODANDO = conta({
+    id: "rodando",
+    numero_atendimento: "31310",
+    situacao: "PROCESSANDO",
+    etapa: "IA_LENDO_PRONTUARIO",
+    tentativa: 2,
+    pode_descartar: false,
+  });
+  /** A resposta de quem não tem "painel completo": sem as chaves do custo. */
+  const SEM_CUSTO: DetalheDoProcessamento = {
+    id: "rodando",
+    situacao: "PROCESSANDO",
+    etapas: [
+      { etapa: "LENDO_CONTA", estado: "feita", tempo_s: 3 },
+      { etapa: "LENDO_PRONTUARIO", estado: "feita", tempo_s: 65 },
+      { etapa: "IA_LENDO_PRONTUARIO", estado: "atual", tempo_s: 245 },
+      { etapa: "CONFERINDO", estado: "falta", tempo_s: null },
+      { etapa: "IA_MONTANDO_GUIA", estado: "falta", tempo_s: null },
+    ],
+    parte: 3,
+    partes: 7,
+    tentativa: 2,
+    posicao_na_fila: null,
+  };
+  const COM_CUSTO: DetalheDoProcessamento = {
+    ...SEM_CUSTO,
+    modelo: "claude-sonnet-5-5",
+    chamadas: 4,
+    tokens_entrada: 3300,
+    tokens_saida: 640,
+    tokens_cache: 150,
+    custo_usd: 0.0371,
+  };
+
+  async function abrirOPainel(): Promise<HTMLElement> {
+    filaDoServidor = { ...FILA, meus_envios: [RODANDO] };
+    render(<ContasMedicasPage />);
+    await linhas();
+    aba(/^Meus envios/);
+    const [cartao] = await linhas();
+    fireEvent.click(within(cartao).getByRole("article"));
+    return screen.findByRole("dialog", { name: "Processamento do atendimento 31310" });
+  }
+
+  it("o clique no cartão abre o painel com as cinco etapas, o tempo de cada uma e a tentativa", async () => {
+    detalheDoServidor = SEM_CUSTO;
+
+    const painel = await abrirOPainel();
+
+    expect(chamadas.some((c) => c.url === "/api/contas-medicas/contas/rodando/processamento")).toBe(true);
+    await waitFor(() => expect(within(painel).getAllByRole("listitem")).toHaveLength(5));
+    const etapas = within(painel).getAllByRole("listitem").map((li) => li.textContent);
+    expect(etapas).toEqual([
+      "Lendo a conta3 s",
+      "Lendo o prontuário1 min 5 s",
+      "IA lendo o prontuário, parte 3 de 7em curso, 4 min 5 s",
+      "Conferindopor fazer",
+      "IA montando o Guiapor fazer",
+    ]);
+    expect(painel.textContent).toContain("tentativa 2 de 3");
+  });
+
+  it("sem os campos de custo na resposta, a seção de custo não aparece", async () => {
+    detalheDoServidor = SEM_CUSTO;
+
+    const painel = await abrirOPainel();
+
+    await waitFor(() => expect(within(painel).getAllByRole("listitem")).toHaveLength(5));
+    expect(within(painel).queryByRole("region", { name: "Custo da IA" })).toBeNull();
+    expect(painel.textContent).not.toContain("US$");
+  });
+
+  it("com os campos de custo, a seção mostra o modelo, as chamadas, os tokens e o custo", async () => {
+    detalheDoServidor = COM_CUSTO;
+
+    const painel = await abrirOPainel();
+
+    const custo = await within(painel).findByRole("region", { name: "Custo da IA" });
+    for (const trecho of ["claude-sonnet-5-5", "4", "3.300", "640", "150", "US$ 0,0371"]) {
+      expect(custo.textContent).toContain(trecho);
+    }
+  });
+
+  it("Fechar fecha o painel", async () => {
+    detalheDoServidor = SEM_CUSTO;
+    const painel = await abrirOPainel();
+
+    fireEvent.click(within(painel).getByRole("button", { name: "Fechar" }));
+
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
   });
 });
 
