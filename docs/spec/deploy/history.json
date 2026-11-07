@@ -2,6 +2,51 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-11-07T16:07:55-03:00",
+      "sha": "2ee45edd304517e1cd66b24ab37f52a8a21df31f",
+      "app_version": "0.222.3",
+      "subject": "Onda onda-b-onda1: Gravar a mensagem dos 400 da IA que não citam o prontuário; Encurtar os testes rodar_sozinho da extração isolada sem perder a prova",
+      "raw_subject": "chore(deploy): registro da onda onda-b-onda1 (#1474 #1475)",
+      "scope": [
+        "backend"
+      ],
+      "prds": [
+        1360
+      ],
+      "result": "healthy",
+      "duration_seconds": 157,
+      "services_touched": [
+        "backend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        },
+        {
+          "service": "frontend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "onda-enxuta onda-b-onda1: PR #1474 (issue #1410), PR #1475 (issue #1362), mergeados PR a PR. Merge pela API do GitHub, um build. Registro pela Action pos-merge depois do health.",
+      "etapas": {
+        "merge_s": 5,
+        "build_s": {
+          "backend": 104
+        },
+        "health_s": 10
+      },
+      "responsavel": "pedrorezendefig"
+    },
+    {
       "at": "2026-11-06T18:01:09-03:00",
       "sha": "ab2262cba3399aa2b4cb96973d2670885cce54b3",
       "app_version": "0.222.2",
