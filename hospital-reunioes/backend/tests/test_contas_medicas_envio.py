@@ -1103,6 +1103,8 @@ class TestFila:
         contas["falta-conta"].update(periodo_inicio=None, periodo_fim=None)
         contas["livre-nova"]["faltantes"] = {"itens": [], "contagens": {"itens": 42, "eventos": 15}}
         contas["livre-antiga"]["faltantes"] = {"itens": []}
+        # A conta que voltou para a fila guarda as contagens da análise de antes.
+        contas["na-fila"]["faltantes"] = {"itens": [], "contagens": {"itens": 40, "eventos": 9}}
         banco.tabelas["cm_arquivo"] += [
             {
                 "id": "pront-na-fila",
@@ -1210,6 +1212,24 @@ class TestKitDeConhecimento:
             "Enviar o prontuário",
             "páginas",
             "um embaixo do outro",
+        ):
+            assert trecho in secao, trecho
+
+
+    def test_diz_o_que_o_cartao_mostra_da_conta_e_do_prontuario(self):
+        """Issue #1419: Operadora, dias de internação, páginas por OCR e, na
+        conta pronta, os itens e os eventos. O valor da conta fica de fora."""
+        secao = KIT.read_text(encoding="utf-8").split("## O envio e a fila", 1)[1].split("\n## ", 1)[0]
+
+        for trecho in (
+            "operadora",
+            "dias de internação",
+            "escaneadas",
+            "OCR",
+            "mais lenta",
+            "itens",
+            "eventos",
+            "O valor da conta não aparece no cartão",
         ):
             assert trecho in secao, trecho
 
