@@ -1,6 +1,6 @@
 # MIGRATIONS.md
 <!-- gerado automaticamente por /snapshot — não editar -->
-<!-- last_update: 2026-11-01T21:24+0000 -->
+<!-- last_update: 2026-11-07T21:16+0000 -->
 
 Ordem cronológica das migrations do Postgres do Hospital Reuniões.
 
@@ -125,6 +125,7 @@ Ordem cronológica das migrations do Postgres do Hospital Reuniões.
 | 121 | `121_contas_medicas_enviar_e_analisar.sql` | Contas medicas, Enviar contas e Analisar contas separados | 0 | 0 | 0 | 0 |
 | 122 | `122_contas_medicas_codigo_do_erro.sql` | Contas medicas, o Codigo do erro da conta | 0 | 2 | 0 | 0 |
 | 123 | `123_tecnologia_planejamento.sql` | Planejamento da Demanda (issue #1345, PRD #1344, ADR 0075) | 2 | 0 | 2 | 0 |
+| 124 | `124_contas_medicas_etapa_do_processamento.sql` | Contas medicas, a Etapa do processamento | 0 | 5 | 0 | 0 |
 
 **Legenda:** C = CREATE TABLE · A = ALTER TABLE · I = CREATE INDEX · D = DROP.
-**Total:** 119 migrations.
+**Total:** 120 migrations.

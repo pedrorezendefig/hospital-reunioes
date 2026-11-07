@@ -1,6 +1,6 @@
 # ENTIDADES.md
 <!-- gerado automaticamente por /snapshot — não editar -->
-<!-- last_update: 2026-11-01T21:24+0000 -->
+<!-- last_update: 2026-11-07T21:16+0000 -->
 
 Modelo de dados do Hospital Reuniões. Tabelas no Postgres (via Supabase).
 
@@ -1133,7 +1133,7 @@ Modelo de dados do Hospital Reuniões. Tabelas no Postgres (via Supabase).
 
 ## cm_arquivo
 
-> Origem: `116_contas_medicas_fundacao.sql`
+> Origem: `116_contas_medicas_fundacao.sql` (alterada em: 124_contas_medicas_etapa_do_processamento.sql)
 
 | Campo | Tipo | Constraints | Default | FK |
 |-------|------|-------------|---------|-----|
@@ -1148,6 +1148,7 @@ Modelo de dados do Hospital Reuniões. Tabelas no Postgres (via Supabase).
 | `apagar_em` | `TIMESTAMPTZ` | — | — | — |
 | `apagado_em` | `TIMESTAMPTZ` | — | — | — |
 | `criado_em` | `TIMESTAMPTZ` | NOT NULL | `now()` | — |
+| `paginas_ocr` | `INTEGER` | — | — | — |
 
 **Indexes:**
 - `idx_cm_arquivo_apagar_em` em `(apagar_em)` (de `116_contas_medicas_fundacao.sql`)
@@ -1239,7 +1240,7 @@ Modelo de dados do Hospital Reuniões. Tabelas no Postgres (via Supabase).
 
 ## cm_conta
 
-> Origem: `116_contas_medicas_fundacao.sql` (alterada em: 117_contas_medicas_ia.sql, 122_contas_medicas_codigo_do_erro.sql)
+> Origem: `116_contas_medicas_fundacao.sql` (alterada em: 117_contas_medicas_ia.sql, 122_contas_medicas_codigo_do_erro.sql, 124_contas_medicas_etapa_do_processamento.sql)
 
 | Campo | Tipo | Constraints | Default | FK |
 |-------|------|-------------|---------|-----|
@@ -1278,6 +1279,10 @@ Modelo de dados do Hospital Reuniões. Tabelas no Postgres (via Supabase).
 | `reenviada_em` | `TIMESTAMPTZ` | — | — | — |
 | `erro_codigo` | `TEXT` | — | — | — |
 | `erro_detalhe` | `JSONB` | — | — | — |
+| `etapa_atual` | `TEXT` | — | — | — |
+| `etapa_desde` | `TIMESTAMPTZ` | — | — | — |
+| `etapa_parte` | `INTEGER` | — | — | — |
+| `etapa_partes` | `INTEGER` | — | — | — |
 
 **Indexes:**
 - `idx_cm_conta_faturista_situacao_ordem` em `(faturista_id, situacao, ordem_fila)` (de `116_contas_medicas_fundacao.sql`)
