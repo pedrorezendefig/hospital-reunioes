@@ -627,8 +627,13 @@ class TestOsDoisAtaquesMedidos:
 
 
 class TestEntradaLegitimaAtravessa:
-    # Rodar sozinho (issue #971): PDF honesto pela rota, contra o prazo de 45 s.
-    # O motivo esta em `test_o_resto_do_app_responde_durante_uma_extracao_longa`.
+    # Rodar sozinho (issue #971): o PDF honesto leva 7 s numa CPU livre e passa
+    # pela rota com o prazo de verdade (`PRAZO_DA_EXTRACAO`, 45 s). Com `-n auto`
+    # no runner do Actions, disputando CPU com os outros workers, a leitura
+    # passou dos 45 s e o filho foi morto por tempo (run 37411095749).
+    # Fica com o arquivo e o prazo de verdade (issue #1362): o que se prova é que
+    # a ata de ~740 mil caracteres cabe no prazo real, e um PDF menor ou um prazo
+    # encolhido provariam outra coisa.
     @pytest.mark.rodar_sozinho
     def test_pdf_honesto_grande_atravessa_inteiro(self, client, pdf_honesto):
         """O PDF honesto de centenas de páginas continua passando, e passa

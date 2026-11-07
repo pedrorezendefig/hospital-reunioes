@@ -186,10 +186,11 @@ jobs:
       - name: Tests (pytest, rodar sozinho)
         # A lista do marcador `rodar_sozinho`, em série. Sem teste marcado o
         # pytest sai com 5 (nada coletado): lista vazia é o estado bom, então
-        # só o 5 vira verde; qualquer outro código reprova.
+        # só o 5 vira verde; qualquer outro código reprova. O `--durations=0`
+        # deixa no log o tempo de cada um, que é o que diz qual pesa (#1362).
         run: |
           set +e
-          pytest -m rodar_sozinho --maxfail=3 -q --no-header
+          pytest -m rodar_sozinho --maxfail=3 -q --no-header --durations=0
           codigo=$?
           if [ "$codigo" -eq 5 ]; then exit 0; fi
           exit "$codigo"
