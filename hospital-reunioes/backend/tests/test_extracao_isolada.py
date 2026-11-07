@@ -662,17 +662,6 @@ class TestEntradaLegitimaAtravessa:
         )
 
 
-def _pico_de_tempo_de_uma_leitura(dados: bytes) -> float:
-    """Quanto UMA leitura deste arquivo custa, medido na hora.
-
-    Um número fixo aqui envelheceria com a máquina do CI; o que importa é a
-    razão entre uma leitura e três, e a razão se mede no mesmo lugar.
-    """
-    t0 = time.monotonic()
-    _rodar_filho(".pdf", dados, extrator.LIMITE_DE_ENDERECAMENTO)
-    return time.monotonic() - t0
-
-
 def _rodar_filho(ext: str, dados: bytes, limite: int, teto_do_texto: int | None = None) -> subprocess.CompletedProcess:
     """Roda o processo filho de verdade, com os mesmos argumentos que o extrator passa."""
     import tempfile
@@ -913,35 +902,48 @@ class TestAsGuardasDoIsolamento:
         assert apertado.returncode != 0
         assert folgado.stdout.startswith(b"OK"), folgado.stderr.decode()[-400:]
 
-    # Rodar sozinho (issue #971): PDF honesto pela rota, contra o prazo de 45 s.
-    # O motivo esta em `test_o_resto_do_app_responde_durante_uma_extracao_longa`.
-    @pytest.mark.rodar_sozinho
-    async def test_uploads_simultaneos_nao_multiplicam_o_orcamento(self, app, pdf_honesto):
+    async def test_uploads_simultaneos_nao_multiplicam_o_orcamento(self, app, monkeypatch, tmp_path):
         """Teto por filho não é teto da máquina.
 
         O `@limiter.limit` das rotas conta requisições por MINUTO, não ao mesmo
         tempo: dez uploads disparados juntos passam pelos "5/minute" e seriam dez
-        filhos de até 512 MB cada. Três leituras de 7,5 s entrando juntas contra
-        duas vagas têm que sair em duas rodadas, não em uma, e as três têm que
-        SAIR (fila que recusa vira indisponibilidade, não guarda).
+        filhos de até 512 MB cada. Três leituras entrando juntas contra duas
+        vagas têm que sair em duas rodadas, não em uma, e as três têm que SAIR
+        (fila que recusa vira indisponibilidade, não guarda).
+
+        O programa do filho é trocado por um que dorme (issue #1362): quem conta
+        as rodadas é o semáforo do PAI, e ele conta igual um filho que lê e um
+        que dorme. Com o PDF honesto eram quatro leituras de 7,5 s, 33 s de
+        teste, e três delas disputando CPU, o que deixava a razão entre uma e
+        três refém da máquina. Um filho que dorme não disputa nada.
         """
         import httpx
 
         assert extrator.VAGAS_DE_EXTRACAO == 2, "este teste conta rodadas para duas vagas"
         quantas = extrator.VAGAS_DE_EXTRACAO + 1
 
-        uma_so = _pico_de_tempo_de_uma_leitura(pdf_honesto)
+        dorminhoco = tmp_path / "filho_que_demora.py"
+        dorminhoco.write_text(
+            "import sys, time\ntime.sleep(1.5)\nsys.stdout.buffer.write(b'OK\\nAta lida devagar.')\n",
+            encoding="utf-8",
+        )
+        monkeypatch.setattr(extrator, "_CAMINHO_DO_FILHO", str(dorminhoco))
 
         transporte = httpx.ASGITransport(app=app)
         async with httpx.AsyncClient(transport=transporte, base_url="http://teste", timeout=120) as ac:
             rota = "/api/reunioes/R1/ata-guiada/extrair-documento"
+
+            def _upload():
+                return ac.post(rota, files={"file": ("ata-longa.pdf", b"tanto faz", "application/pdf")})
+
+            # Quanto UMA leitura custa, medido na hora e pela mesma rota. Um
+            # numero fixo envelheceria com a maquina; a razao se mede no lugar.
             t0 = time.monotonic()
-            respostas = await asyncio.gather(
-                *[
-                    ac.post(rota, files={"file": ("ata-longa.pdf", pdf_honesto, "application/pdf")})
-                    for _ in range(quantas)
-                ]
-            )
+            assert (await _upload()).status_code == 200
+            uma_so = time.monotonic() - t0
+
+            t0 = time.monotonic()
+            respostas = await asyncio.gather(*[_upload() for _ in range(quantas)])
             juntas = time.monotonic() - t0
 
         assert all(r.status_code == 200 for r in respostas), [r.status_code for r in respostas]
