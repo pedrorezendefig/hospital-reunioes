@@ -122,9 +122,18 @@ function periodoDaConta(conta: ItemDaFila): string | null {
     : null;
 }
 
+/** Quantos itens e eventos a análise achou, só na conta pronta (issue #1419). */
+function contagensDaConta(conta: ItemDaFila): string | null {
+  if (conta.itens_lidos == null || conta.eventos_lidos == null) return null;
+  const itens = `${conta.itens_lidos} ${conta.itens_lidos === 1 ? "item" : "itens"}`;
+  return `${itens}, ${conta.eventos_lidos} ${conta.eventos_lidos === 1 ? "evento" : "eventos"}`;
+}
+
 function complemento(conta: ItemDaFila): string {
   const periodo = periodoDaConta(conta);
-  return [conta.numero_conta ? `conta ${conta.numero_conta}` : null, periodo].filter(Boolean).join(" · ");
+  return [conta.numero_conta ? `conta ${conta.numero_conta}` : null, periodo, contagensDaConta(conta)]
+    .filter(Boolean)
+    .join(" · ");
 }
 
 /** A borda do cartão do envio pela situação, nas cores dos cartões da Ouvidoria. */

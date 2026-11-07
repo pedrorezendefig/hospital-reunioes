@@ -480,6 +480,21 @@ describe("os dados da conta e do prontuário no cartão (issue #1419)", () => {
     expect(quadrado(deAntes, "Prontuário").textContent).not.toMatch(/escanead|OCR/);
   });
 
+  it("a conta pronta vai para a Fila com as contagens na linha, sem desenhar nada na que veio antes desta fatia", async () => {
+    filaDoServidor = {
+      ...FILA,
+      fila: [
+        conta({ id: "pronta", numero_atendimento: "31304", situacao: "A_FAZER", itens_lidos: 42, eventos_lidos: 15 }),
+        conta({ id: "de-antes", numero_atendimento: "31303", situacao: "A_FAZER" }),
+      ],
+    };
+    render(<ContasMedicasPage />);
+
+    const [pronta, deAntes] = await linhas();
+    expect(pronta.textContent).toContain("42 itens, 15 eventos");
+    expect(deAntes.textContent).not.toMatch(/itens|eventos/);
+  });
+
   it("o prontuário sem folha escaneada diz que nenhuma vai por OCR", async () => {
     const itens = await cartoes();
 
