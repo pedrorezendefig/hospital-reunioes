@@ -4,11 +4,15 @@
 # só recoleta com mais de 5 min; com --fresco (um gh que mudou issue ou PR), com mais de 30 s.
 # Uma trava faz uma sessão só buscar; as outras leem o cache. Imprime o JSON numa linha.
 export PATH="$HOME/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin"
-TMP="${TMPDIR:-/tmp}"; TMP="${TMP%/}"
-CACHE_DIR="${HR_ISSUES_CACHE:-$TMP/hr-issues}"; CACHE="$CACHE_DIR/visao.json"; TRAVA="$CACHE_DIR/trava"
+umask 077
+# $TMPDIR do macOS já é do usuário; sem ele, ~/.cache (nunca o /tmp compartilhado)
+BASE="${TMPDIR:-$HOME/.cache}"; BASE="${BASE%/}"
+CACHE_DIR="${HR_ISSUES_CACHE:-$BASE/hr-issues}"; CACHE="$CACHE_DIR/visao.json"; TRAVA="$CACHE_DIR/trava"
 RAIZ="$(cd "$(dirname "$0")/../../../.." && pwd)"
 SCRIPT="$RAIZ/.claude/skills/minhas-issues/scripts/minhas_issues.py"
 mkdir -p "$CACHE_DIR"
+# pasta de outro dono ou link simbólico: não escreve nada nela
+if [ -L "$CACHE_DIR" ] || [ ! -O "$CACHE_DIR" ]; then echo "cache $CACHE_DIR não é do usuário" >&2; exit 2; fi
 
 limite=300
 [ "$1" = "--fresco" ] && limite=30
