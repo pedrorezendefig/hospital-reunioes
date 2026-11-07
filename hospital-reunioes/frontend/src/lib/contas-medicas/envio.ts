@@ -343,6 +343,61 @@ export function avisosDeProntas(antes: ItemDaFila[], depois: ItemDaFila[]): stri
 
 const DINHEIRO = new Intl.NumberFormat("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
+/** O detalhe do Processamento de uma conta, para o painel lateral (issue #1418). */
+export function rotaDoProcessamento(contaId: string): string {
+  return `/api/contas-medicas/contas/${contaId}/processamento`;
+}
+
+/** Uma das cinco etapas no painel: feita, em curso ou por fazer, com o tempo em segundos. */
+export interface EtapaNoPainel {
+  etapa: EtapaDoProcessamento;
+  estado: "feita" | "atual" | "falta";
+  tempo_s: number | null;
+}
+
+/**
+ * O que a rota do painel devolve. O custo da IA (modelo, chamadas, tokens e
+ * dólares) só vem para quem tem "painel completo": para os outros, as chaves
+ * não existem.
+ */
+export interface DetalheDoProcessamento {
+  id: string;
+  situacao: SituacaoDaConta;
+  etapas: EtapaNoPainel[];
+  parte: number | null;
+  partes: number | null;
+  tentativa: number | null;
+  posicao_na_fila: number | null;
+  modelo?: string | null;
+  chamadas?: number;
+  tokens_entrada?: number;
+  tokens_saida?: number;
+  tokens_cache?: number;
+  custo_usd?: number;
+}
+
+/** O nome da etapa como a tela mostra. */
+export function nomeDaEtapa(etapa: EtapaDoProcessamento): string {
+  return NOME_DA_ETAPA[etapa];
+}
+
+/** Quanto a etapa levou: "3 s", "4 min 5 s", "1 h 2 min". */
+export function duracao(segundos: number): string {
+  const total = Math.round(segundos);
+  if (total < 60) return `${total} s`;
+  if (total < 3600) {
+    const resto = total % 60;
+    return `${Math.floor(total / 60)} min` + (resto ? ` ${resto} s` : "");
+  }
+  const minutos = Math.floor((total % 3600) / 60);
+  return `${Math.floor(total / 3600)} h` + (minutos ? ` ${minutos} min` : "");
+}
+
+/** O custo da conta em dólar, com as casas que uma conta barata precisa. */
+export function dolares(valor: number): string {
+  return `US$ ${valor.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 4 })}`;
+}
+
 /** O que vem ao lado da situação: a nota, o R$ e os itens; o motivo do erro; as pendências. */
 export function detalheDaConta(conta: ItemDaFila): string {
   const nota = conta.nota_entrada != null ? `Nota ${conta.nota_entrada}` : null;
