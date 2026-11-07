@@ -111,9 +111,9 @@ beforeEach(() => {
     vi.fn(async (url: string, init?: RequestInit) => {
       chamadas.push({ url, init });
       // Cada rota devolve só as listas dela, como o backend (issue #1308).
-      const { todas, fila, minhas, meus_envios, concluidas } = filaDoServidor;
+      const { todas, fila, minhas, meus_envios, concluidas, barra } = filaDoServidor;
       if (url === "/api/contas-medicas/fila") return new Response(JSON.stringify({ todas, fila, minhas, concluidas }));
-      if (url === "/api/contas-medicas/meus-envios") return new Response(JSON.stringify({ todas, meus_envios }));
+      if (url === "/api/contas-medicas/meus-envios") return new Response(JSON.stringify({ todas, meus_envios, barra }));
       if (url === "/api/contas-medicas/envios") return new Response(JSON.stringify(RESPOSTA_DO_ENVIO));
       if (url === "/api/contas-medicas/me") return new Response(JSON.stringify({ perfil: "faturista", permissoes }));
       if (url.endsWith("/descartar")) return respostaDoDescarte();
@@ -1031,6 +1031,91 @@ describe("o Processamento visível (issue #1416)", () => {
     await vi.advanceTimersByTimeAsync(5_000);
 
     expect((await screen.findByText(/foi para a Fila/)).textContent).toBe("Atendimento 31310 pronto, foi para a Fila");
+  });
+});
+
+describe("a Previsão e a barra de tempos (issue #1417)", () => {
+  const minutos = (n: number) => new Date(Date.now() + n * 60_000 + 30_000).toISOString();
+  const RODANDO = conta({
+    id: "rodando",
+    numero_atendimento: "31310",
+    situacao: "PROCESSANDO",
+    etapa: "CONFERINDO",
+    processando_desde: new Date(Date.now() - 4 * 60_000).toISOString(),
+    previsao_pronta_em: minutos(7),
+    demorando: false,
+  });
+  const DEMORANDO = conta({
+    ...RODANDO,
+    id: "demorando",
+    numero_atendimento: "31311",
+    processando_desde: new Date(Date.now() - 30 * 60_000).toISOString(),
+    previsao_pronta_em: new Date().toISOString(),
+    demorando: true,
+  });
+  const ESPERANDO = conta({
+    id: "na-fila",
+    numero_atendimento: "31302",
+    situacao: "NA_FILA",
+    posicao_na_fila: 3,
+    previsao_inicio_em: "2026-11-07T14:16:00Z",
+    previsao_pronta_em: "2026-11-07T14:21:40Z",
+  });
+  const BARRA = {
+    processando: 2,
+    na_fila: 3,
+    tempo_envio_a_fila_s: 1500,
+    tempo_processamento_s: 600,
+    fila_esvazia_em: "2026-11-07T15:42:00Z",
+  };
+
+  async function cartoes(): Promise<HTMLElement[]> {
+    filaDoServidor = { ...FILA, meus_envios: [RODANDO, DEMORANDO, ESPERANDO], barra: BARRA };
+    render(<ContasMedicasPage />);
+    await linhas();
+    aba(/^Meus envios/);
+    return linhas();
+  }
+
+  function pilula(cartao: HTMLElement): HTMLElement {
+    return within(cartao).getByText(/^(Processando|Na fila)/);
+  }
+
+  it("a pílula Processando diz quanto falta, e a que passou de 2 vezes a Previsão fica âmbar", async () => {
+    const [rodando, demorando] = await cartoes();
+
+    expect(pilula(rodando).textContent).toBe("Processando, Conferindo, faltam ~8 min");
+    expect(pilula(rodando).className).not.toContain("amber");
+    expect(pilula(demorando).textContent).toBe("Processando, Conferindo, há 30 min, demorando mais que o normal");
+    expect(pilula(demorando).className).toContain("bg-amber-100");
+  });
+
+  it("a conta Na fila mostra a posição e as duas horas previstas", async () => {
+    const [, , esperando] = await cartoes();
+
+    expect(pilula(esperando).textContent).toBe("Na fila, 3ª");
+    expect(esperando.textContent).toContain("começa por volta de 11:16, pronta por volta de 11:21");
+  });
+
+  it("a barra no topo da aba Envios mostra as contagens, os dois tempos e a hora em que a fila esvazia", async () => {
+    await cartoes();
+
+    const barra = screen.getByRole("status", { name: "Tempos da fila" });
+    expect(within(barra).getAllByRole("listitem").map((item) => item.textContent)).toEqual([
+      "2 sendo lidas",
+      "3 na fila",
+      "do envio à Fila: ~25 min",
+      "processamento: ~10 min",
+      "a fila esvazia por volta de 12:42",
+    ]);
+  });
+
+  it("a barra fica só na aba Envios", async () => {
+    filaDoServidor = { ...FILA, barra: BARRA };
+    render(<ContasMedicasPage />);
+    await linhas();
+
+    expect(screen.queryByRole("status", { name: "Tempos da fila" })).toBeNull();
   });
 });
 

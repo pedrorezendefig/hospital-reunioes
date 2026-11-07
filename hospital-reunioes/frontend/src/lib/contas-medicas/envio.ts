@@ -146,8 +146,31 @@ export interface ItemDaFila {
   etapa_desde?: string | null;
   processando_desde?: string | null;
   tentativa?: number | null;
+  /**
+   * A Previsão (issue #1417): a vez da conta Na fila (contando de 1), as horas
+   * previstas em que ela começa e fica pronta e se a conta Processando passou
+   * de 2 vezes a Previsão. Sem Previsão (menos de 5 contas prontas na semana),
+   * as horas vêm nulas; fora da fila do Motor, tudo nulo.
+   */
+  posicao_na_fila?: number | null;
+  previsao_inicio_em?: string | null;
+  previsao_pronta_em?: string | null;
+  demorando?: boolean;
   /** Só para quem tem "painel completo": quem está com a conta (issue #1307). */
   com?: string | null;
+}
+
+/**
+ * A barra fina no topo da aba Envios (issue #1417): quantas contas estão
+ * sendo lidas e quantas esperam (de todos), os dois tempos médios dos últimos
+ * 7 dias, em segundos, e a hora em que a fila deve esvaziar.
+ */
+export interface BarraDosEnvios {
+  processando: number;
+  na_fila: number;
+  tempo_envio_a_fila_s: number | null;
+  tempo_processamento_s: number | null;
+  fila_esvazia_em: string | null;
 }
 
 /**
@@ -162,6 +185,8 @@ export interface Fila {
   minhas: ItemDaFila[];
   meus_envios: ItemDaFila[];
   concluidas: ItemDaFila[];
+  /** A barra da aba Envios (issue #1417); só vem com "Meus envios". */
+  barra?: BarraDosEnvios | null;
 }
 
 /** Os arquivos que sobem e os que ficam de fora, com a frase de cada um. */
@@ -315,9 +340,27 @@ function tempoDecorrido(desde: string, agora: Date): string {
   return `há ${Math.floor(minutos / 60)} h` + (resto ? ` ${resto} min` : "");
 }
 
+/** Uma duração em minutos: "menos de 1 min", "10 min", "1 h 15 min". */
+function minutos(segundos: number): string {
+  const total = Math.round(segundos / 60);
+  if (total < 1) return "menos de 1 min";
+  if (total < 60) return `${total} min`;
+  const resto = total % 60;
+  return `${Math.floor(total / 60)} h` + (resto ? ` ${resto} min` : "");
+}
+
+const HORA = new Intl.DateTimeFormat("pt-BR", { timeZone: "America/Sao_Paulo", hour: "2-digit", minute: "2-digit" });
+
+/** A hora no fuso do hospital, como "14:32". */
+function hora(instante: string): string {
+  return HORA.format(new Date(instante));
+}
+
 /**
  * A pílula da conta em Processando (issue #1416): "Processando", a Etapa do
- * processamento com a parte do Passo A quando houver, e o tempo decorrido.
+ * processamento com a parte do Passo A quando houver e o tempo. Com Previsão,
+ * quanto falta (issue #1417); sem ela, o tempo decorrido; passada de 2 vezes
+ * a Previsão, o tempo decorrido e o aviso de demora.
  */
 function rotuloDoProcessamento(conta: ItemDaFila, agora: Date): string {
   const partes = ["Processando"];
@@ -325,7 +368,13 @@ function rotuloDoProcessamento(conta: ItemDaFila, agora: Date): string {
     const parte = conta.parte && conta.partes ? `, parte ${conta.parte} de ${conta.partes}` : "";
     partes.push(NOME_DA_ETAPA[conta.etapa] + parte);
   }
-  if (conta.processando_desde) partes.push(tempoDecorrido(conta.processando_desde, agora));
+  if (conta.previsao_pronta_em && !conta.demorando) {
+    const falta = Math.ceil((new Date(conta.previsao_pronta_em).getTime() - agora.getTime()) / 60_000);
+    partes.push(`faltam ~${Math.max(falta, 1)} min`);
+  } else if (conta.processando_desde) {
+    partes.push(tempoDecorrido(conta.processando_desde, agora));
+  }
+  if (conta.demorando) partes.push("demorando mais que o normal");
   return partes.join(", ");
 }
 
@@ -335,7 +384,22 @@ export function rotuloDaSituacao(conta: ItemDaFila, agora: Date = new Date()): s
     if (conta.falta === "prontuario") return "Falta o prontuário";
   }
   if (conta.situacao === "PROCESSANDO") return rotuloDoProcessamento(conta, agora);
+  // A vez na fila do Motor, de todos os envios (issue #1417).
+  if (conta.situacao === "NA_FILA" && conta.posicao_na_fila) return `Na fila, ${conta.posicao_na_fila}ª`;
   return ROTULO[conta.situacao] ?? conta.situacao;
+}
+
+/**
+ * O que a barra da aba Envios diz (issue #1417), um pedaço por item. Sem
+ * conta pronta na semana, sem os tempos médios; sem Previsão, sem a hora em
+ * que a fila esvazia.
+ */
+export function textosDaBarra(barra: BarraDosEnvios): string[] {
+  const textos = [`${barra.processando} ${barra.processando === 1 ? "sendo lida" : "sendo lidas"}`, `${barra.na_fila} na fila`];
+  if (barra.tempo_envio_a_fila_s != null) textos.push(`do envio à Fila: ~${minutos(barra.tempo_envio_a_fila_s)}`);
+  if (barra.tempo_processamento_s != null) textos.push(`processamento: ~${minutos(barra.tempo_processamento_s)}`);
+  if (barra.fila_esvazia_em) textos.push(`a fila esvazia por volta de ${hora(barra.fila_esvazia_em)}`);
+  return textos;
 }
 
 /**
@@ -424,6 +488,11 @@ export function detalheDaConta(conta: ItemDaFila): string {
         .join(", ");
     case "ERRO":
       return conta.erro_motivo ?? "";
+    case "NA_FILA":
+      // As horas da Previsão (issue #1417).
+      return conta.previsao_inicio_em && conta.previsao_pronta_em
+        ? `começa por volta de ${hora(conta.previsao_inicio_em)}, pronta por volta de ${hora(conta.previsao_pronta_em)}`
+        : "";
     case "PROCESSANDO":
       // A conta que voltou para a fila por prazo e foi pega de novo (issue #1416).
       return conta.tentativa && conta.tentativa > 1 ? `tentativa ${conta.tentativa} de ${MAXIMO_DE_TENTATIVAS}` : "";

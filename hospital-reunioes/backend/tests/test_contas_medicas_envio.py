@@ -1137,6 +1137,61 @@ class TestFila:
         assert fila["livre-nova"]["operadora"] == "ASSIM"
         assert (fila["livre-antiga"]["itens_lidos"], fila["livre-antiga"]["eventos_lidos"]) == (None, None)
 
+    def test_meus_envios_traz_a_previsao_de_cada_conta_e_a_barra_de_tempos(self, monkeypatch):
+        """Issue #1417: a Previsão simula a fila de todos, não só a de quem pede.
+        Uma vaga, 6 s por página. A conta Processando (100 pág.) começou há 4
+        min; antes da "na-fila" de F1 (50 pág.) está uma de F2 (100 pág.)."""
+        monkeypatch.setattr(envio_router.settings, "cm_vagas", 1)
+        agora = datetime.now(UTC)
+        banco = _fila_semeada()
+        contas = {c["id"]: c for c in banco.tabelas["cm_conta"]}
+        contas["processando"]["processando_desde"] = (agora - timedelta(minutes=4)).isoformat()
+        banco.tabelas["cm_conta"].append(_c("da-f2-na-fila", "NA_FILA", 5))
+        # Cinco prontas da semana com 10 min de processamento e 5 de espera; a
+        # de 8 dias atrás ficaria nas médias. O `total` do Motor não soma.
+        for n in range(6):
+            pronta_em = agora - (timedelta(days=8) if n == 5 else timedelta(hours=n + 1))
+            banco.tabelas["cm_conta"].append(
+                _c(
+                    f"pronta-{n}",
+                    "CONCLUIDA",
+                    n + 100,
+                    faturista="F1",
+                    enviada_em=(pronta_em - timedelta(minutes=15 if n < 5 else 300)).isoformat(),
+                    pronta_em=pronta_em.isoformat(),
+                    faltantes={"tempos_por_etapa_s": {"passo_a": 400, "passo_b": 200, "total": 600}},
+                )
+            )
+        paginas = {"processando": 100, "da-f2-na-fila": 100, "na-fila": 50} | {f"pronta-{n}": 100 for n in range(6)}
+        banco.tabelas["cm_arquivo"] += [
+            {"id": f"pront-{i}", "tipo": "PRONTUARIO", "atendimento_id": f"at-{i}", "paginas": p}
+            for i, p in paginas.items()
+        ]
+
+        corpo = _cliente("faturista", banco).get(ROTA_MEUS_ENVIOS).json()
+        envios = {c["id"]: c for c in corpo["meus_envios"]}
+
+        def hora(conta: str, campo: str) -> datetime:
+            return datetime.fromisoformat(envios[conta][campo])
+
+        processando, na_fila = envios["processando"], envios["na-fila"]
+        assert "da-f2-na-fila" not in envios
+        assert hora("processando", "previsao_pronta_em") - hora("processando", "processando_desde") == timedelta(
+            minutes=10
+        )
+        assert processando["demorando"] is False
+        assert (processando["posicao_na_fila"], na_fila["posicao_na_fila"]) == (None, 2)
+        assert hora("na-fila", "previsao_inicio_em") - hora("processando", "previsao_pronta_em") == timedelta(
+            minutes=10
+        )
+        assert hora("na-fila", "previsao_pronta_em") - hora("na-fila", "previsao_inicio_em") == timedelta(minutes=5)
+        # A conta que espera arquivo não está na fila do Motor.
+        assert envios["falta-conta"]["previsao_pronta_em"] is None
+        barra = corpo["barra"]
+        assert (barra["processando"], barra["na_fila"]) == (1, 2)
+        assert (barra["tempo_processamento_s"], barra["tempo_envio_a_fila_s"]) == (600, 900)
+        assert barra["fila_esvazia_em"] == na_fila["previsao_pronta_em"]
+
     @pytest.mark.parametrize("quem", ["credenciamento", "sem_eixo"])
     def test_sem_a_permissao_de_enviar_e_corrigir_contas_recebe_403(self, quem):
         assert _cliente(quem, _fila_semeada()).get(ROTA_FILA).status_code == 403
@@ -1229,6 +1284,28 @@ class TestKitDeConhecimento:
             "itens",
             "eventos",
             "O valor da conta não aparece no cartão",
+        ):
+            assert trecho in secao, trecho
+
+    def test_diz_a_previsao_a_barra_de_tempos_e_a_demora(self):
+        """Issue #1417: quanto falta, a vez e as horas na fila, a barra da aba
+        Envios, o aviso de demora e as 5 contas prontas antes da Previsão."""
+        secao = KIT.read_text(encoding="utf-8").split("## O envio e a fila", 1)[1].split("\n## ", 1)[0]
+
+        for trecho in (
+            "faltam ~8 min",
+            "Na fila, 2ª",
+            "começa por volta de",
+            "pronta por volta de",
+            "páginas do prontuário",
+            "últimas 20 contas prontas",
+            "do envio à Fila",
+            "processamento",
+            "a fila esvazia por volta de",
+            "demorando mais que o normal",
+            "amarela",
+            "5 contas prontas",
+            "últimos 7 dias",
         ):
             assert trecho in secao, trecho
 
