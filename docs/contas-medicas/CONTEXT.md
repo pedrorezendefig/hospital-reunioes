@@ -56,7 +56,7 @@ Linha da Memória com identificador (`ASSIM-DIA-01`), seção (PRI, PRC, DIA, PA
 Regra sem validação da diretoria ou da gestão de contas médicas. Nunca gera ordem para a faturista: gera a ação Validar. Regra que a diretoria ou a gestão ensina ou importa nasce Vigente; Pendente fica para a Regra técnica HSM copiada e para a Regra proposta por quem não decide (faturista, coordenadora, sugestão da IA).
 
 **Auditor**:
-O agente com quem a gestão e a diretoria conversam sobre uma Operadora ou uma Conta. Recebe texto, tabela e contrato e sempre devolve **proposta** (Regra nova ou alterada, Tabela de preço, parâmetro, card para a Tecnologia), que só vale depois do Confirmar. Há duas conversas: a da Operadora (ensinar) e a da Conta (aberta do Guia, para explicar um erro). A conversa não é memória: o que pesa na análise é só o que foi confirmado e virou Regra; a conversa fica como histórico da versão que gerou.
+O agente com quem a gestão e a diretoria conversam sobre uma Operadora ou uma Conta. Recebe texto, tabela e contrato e sempre devolve **propostas** (Regra nova ou alterada, Tabela de preço, parâmetro, card para a Tecnologia) em lote, já decididas e provadas; quem decide responde "ok" ou "corrige o item N". Também chega com a Validação já decidida, para aprovação em lote. Há duas conversas: a da Operadora (ensinar) e a da Conta (aberta do Guia, para explicar um erro). A conversa não é memória: o que pesa na análise é só o que foi confirmado e virou Regra; a conversa fica como histórico da versão que gerou.
 _Evitar_: Sandra ou outro nome de pessoa; "o chat" como se fosse a Memória.
 
 **Prova da regra**:
@@ -140,7 +140,7 @@ Aguardando arquivo → Na fila → Processando → A fazer (Guia pronto) → Em 
 Onde o problema nasce e quem corrige: **Dispensação** (farmácia e enfermagem), **Regra automática** (TI e consultoria MV), **Cadastro e preço** (credenciamento e cadastro), **Registro assistencial** (enfermagem e corpo clínico), **Lançamento manual** (faturamento). A IA propõe; o código sobrepõe nos casos óbvios (toda Linha de diária, de preço e Bloqueado).
 
 **Faltou isto**:
-Apontamento de omissão no Guia: alguém que conferiu a Conta diz o item e a página que o módulo não achou. Abre a conversa da Conta, em que o Auditor explica por que não achou e classifica a origem: **regra** (vira proposta de Regra), **leitura** (a página não foi lida, OCR ou folha digitalizada) ou **defeito** (do código); leitura e defeito viram card na Tecnologia. É contado no Painel por semana e por origem.
+Apontamento de omissão no Guia: alguém que conferiu a Conta diz o item e a página que o módulo não achou. Abre a conversa da Conta, em que o Auditor explica por que não achou e classifica a origem: **regra** (vira proposta de Regra), **leitura** (a página não foi lida, OCR ou folha digitalizada) ou **defeito** (do código); leitura e defeito viram card na Tecnologia. Vem de uma pessoa ou do **segundo agente**, que toda semana relê uma amostra de Contas concluídas procurando o que foi dado e não está na conta. É contado no Painel por semana e por origem.
 _Evitar_: tratar como Não procede, que é o contrário (a Linha existe e não devia).
 
 **Validação**:
