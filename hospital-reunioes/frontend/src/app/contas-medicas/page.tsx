@@ -41,6 +41,7 @@ import {
   ROTA_MEUS_ENVIOS,
   analisarAssimMesmo,
   analisarDeNovo,
+  avisosDeProntas,
   detalheDaConta,
   enviarEmLotes,
   perguntaDoDescarte,
@@ -66,9 +67,16 @@ const COR_DA_SITUACAO: Record<string, string> = {
   RETORNO: "bg-[#FEF3C7] text-[#92400E]",
 };
 
-/** Enquanto houver conta esperando a análise, a fila se relê sozinha. */
+/**
+ * Enquanto houver conta esperando a análise, a fila se relê sozinha: a cada
+ * 5 s com conta Processando, para a etapa andar na tela, e a cada 20 s só com
+ * conta Na fila (issue #1416).
+ */
 const RELER_A_CADA_MS = 20_000;
+const RELER_PROCESSANDO_A_CADA_MS = 5_000;
 const ESPERANDO_ANALISE = ["NA_FILA", "PROCESSANDO"];
+/** Quanto tempo o aviso "Atendimento N pronto, foi para a Fila" fica na tela. */
+const AVISO_DE_PRONTA_MS = 10_000;
 
 type Aba = "fila" | "minhas" | "meus_envios" | "concluidas";
 
@@ -498,7 +506,10 @@ export default function ContasMedicasPage() {
   const [enviando, setEnviando] = useState<number | null>(null);
   const [ultimo, setUltimo] = useState<RespostaDoEnvio | null>(null);
   const [recusaDoDescarte, setRecusaDoDescarte] = useState<string | null>(null);
+  const [prontas, setProntas] = useState<string[]>([]);
   const seletor = useRef<HTMLInputElement>(null);
+  /** Os envios da leitura anterior: a conta Processando que sumiu ficou pronta. */
+  const enviosAntes = useRef<ItemDaFila[] | null>(null);
 
   /** Cada lista vem da rota da permissão dela; a que a pessoa não tem fica vazia. */
   const carregarFila = useCallback(async (tk: string, quem: Pode) => {
@@ -508,6 +519,11 @@ export default function ContasMedicasPage() {
         quem.enviar ? lerJson(ROTA_MEUS_ENVIOS, tk) : null,
       ]);
       setErroDaFila(null);
+      if (envios) {
+        const avisos = enviosAntes.current ? avisosDeProntas(enviosAntes.current, envios.meus_envios ?? []) : [];
+        if (avisos.length > 0) setProntas(avisos);
+        enviosAntes.current = envios.meus_envios ?? [];
+      }
       setFila({
         todas: Boolean(analise?.todas ?? envios?.todas),
         fila: analise?.fila ?? [],
@@ -553,12 +569,24 @@ export default function ContasMedicasPage() {
     };
   }, [carregarFila]);
 
-  const esperandoAnalise = fila?.meus_envios.some((conta) => ESPERANDO_ANALISE.includes(conta.situacao)) ?? false;
+  const envios = fila?.meus_envios ?? [];
+  const intervalo = envios.some((conta) => conta.situacao === "PROCESSANDO")
+    ? RELER_PROCESSANDO_A_CADA_MS
+    : envios.some((conta) => ESPERANDO_ANALISE.includes(conta.situacao))
+      ? RELER_A_CADA_MS
+      : null;
   useEffect(() => {
-    if (!token || !pode || !esperandoAnalise) return;
-    const relogio = setInterval(() => carregarFila(token, pode), RELER_A_CADA_MS);
+    if (!token || !pode || intervalo === null) return;
+    const relogio = setInterval(() => carregarFila(token, pode), intervalo);
     return () => clearInterval(relogio);
-  }, [token, pode, esperandoAnalise, carregarFila]);
+  }, [token, pode, intervalo, carregarFila]);
+
+  /** O aviso de que a conta foi para a Fila some sozinho depois de uns segundos. */
+  useEffect(() => {
+    if (prontas.length === 0) return;
+    const relogio = setTimeout(() => setProntas([]), AVISO_DE_PRONTA_MS);
+    return () => clearTimeout(relogio);
+  }, [prontas]);
 
   async function enviar(lista: FileList | File[] | null) {
     const arquivos = Array.from(lista ?? []);
@@ -683,6 +711,16 @@ export default function ContasMedicasPage() {
       )}
 
       {ultimo && <UltimoEnvio resposta={ultimo} />}
+
+      {prontas.length > 0 && (
+        <div role="status" className="space-y-1 rounded-2xl border border-emerald-100 bg-emerald-50 px-5 py-3">
+          {prontas.map((aviso) => (
+            <p key={aviso} className="text-sm font-medium text-emerald-800">
+              {aviso}
+            </p>
+          ))}
+        </div>
+      )}
 
       {!semListas && (
         <div>

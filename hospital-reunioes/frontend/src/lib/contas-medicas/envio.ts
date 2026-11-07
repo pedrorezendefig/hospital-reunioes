@@ -81,6 +81,14 @@ export type SituacaoDaConta =
   | "RETORNO"
   | "ERRO";
 
+/** As cinco Etapas do processamento da tela (issue #1416), na ordem. */
+export type EtapaDoProcessamento =
+  | "LENDO_CONTA"
+  | "LENDO_PRONTUARIO"
+  | "IA_LENDO_PRONTUARIO"
+  | "CONFERINDO"
+  | "IA_MONTANDO_GUIA";
+
 export interface ItemDaFila {
   id: string;
   numero_atendimento: string | null;
@@ -116,6 +124,17 @@ export interface ItemDaFila {
   pode_analisar_assim_mesmo?: boolean;
   /** O botão Descartar do cartão do envio (issue #1338): o servidor diz quando cabe. */
   pode_descartar?: boolean;
+  /**
+   * A conta em Processando (issue #1416), nulo fora dele: a Etapa do
+   * processamento, a parte do Passo A ("parte 3 de 7"), desde quando a etapa
+   * e o processamento começaram e a tentativa (1 a 3).
+   */
+  etapa?: EtapaDoProcessamento | null;
+  parte?: number | null;
+  partes?: number | null;
+  etapa_desde?: string | null;
+  processando_desde?: string | null;
+  tentativa?: number | null;
   /** Só para quem tem "painel completo": quem está com a conta (issue #1307). */
   com?: string | null;
 }
@@ -256,7 +275,7 @@ export async function enviarEmLotes(arquivos: File[], token: string, buscar: Bus
 const ROTULO: Record<SituacaoDaConta, string> = {
   AGUARDANDO_ARQUIVO: "Falta arquivo",
   NA_FILA: "Na fila",
-  PROCESSANDO: "Pronta em instantes",
+  PROCESSANDO: "Processando",
   A_FAZER: "A fazer",
   EM_CORRECAO: "Em correção",
   CONCLUIDA: "Concluída",
@@ -265,12 +284,61 @@ const ROTULO: Record<SituacaoDaConta, string> = {
   ERRO: "Erro",
 };
 
-export function rotuloDaSituacao(conta: ItemDaFila): string {
+const NOME_DA_ETAPA: Record<EtapaDoProcessamento, string> = {
+  LENDO_CONTA: "Lendo a conta",
+  LENDO_PRONTUARIO: "Lendo o prontuário",
+  IA_LENDO_PRONTUARIO: "IA lendo o prontuário",
+  CONFERINDO: "Conferindo",
+  IA_MONTANDO_GUIA: "IA montando o Guia",
+};
+
+/** Quantas tentativas a análise tem antes de virar Erro (o Motor, `MAXIMO_DE_TENTATIVAS`). */
+export const MAXIMO_DE_TENTATIVAS = 3;
+
+/** Quanto tempo passou desde `desde`: "há menos de 1 min", "há 4 min", "há 1 h 5 min". */
+function tempoDecorrido(desde: string, agora: Date): string {
+  const minutos = Math.floor((agora.getTime() - new Date(desde).getTime()) / 60_000);
+  if (minutos < 1) return "há menos de 1 min";
+  if (minutos < 60) return `há ${minutos} min`;
+  const resto = minutos % 60;
+  return `há ${Math.floor(minutos / 60)} h` + (resto ? ` ${resto} min` : "");
+}
+
+/**
+ * A pílula da conta em Processando (issue #1416): "Processando", a Etapa do
+ * processamento com a parte do Passo A quando houver, e o tempo decorrido.
+ */
+function rotuloDoProcessamento(conta: ItemDaFila, agora: Date): string {
+  const partes = ["Processando"];
+  if (conta.etapa) {
+    const parte = conta.parte && conta.partes ? `, parte ${conta.parte} de ${conta.partes}` : "";
+    partes.push(NOME_DA_ETAPA[conta.etapa] + parte);
+  }
+  if (conta.processando_desde) partes.push(tempoDecorrido(conta.processando_desde, agora));
+  return partes.join(", ");
+}
+
+export function rotuloDaSituacao(conta: ItemDaFila, agora: Date = new Date()): string {
   if (conta.situacao === "AGUARDANDO_ARQUIVO") {
     if (conta.falta === "conta") return "Falta a conta";
     if (conta.falta === "prontuario") return "Falta o prontuário";
   }
+  if (conta.situacao === "PROCESSANDO") return rotuloDoProcessamento(conta, agora);
   return ROTULO[conta.situacao] ?? conta.situacao;
+}
+
+/**
+ * O aviso de cada conta que estava Processando e sumiu da lista de envios
+ * (issue #1416): sair de Processando sem ir para Erro nem para a fila é ficar
+ * pronta, e a conta pronta sai dos envios e vai para a Fila. Um aviso por
+ * atendimento, mesmo com duas parciais prontas juntas.
+ */
+export function avisosDeProntas(antes: ItemDaFila[], depois: ItemDaFila[]): string[] {
+  const ficaram = new Set(depois.map((conta) => conta.id));
+  const atendimentos = antes
+    .filter((conta) => conta.situacao === "PROCESSANDO" && !ficaram.has(conta.id))
+    .map((conta) => conta.numero_atendimento);
+  return [...new Set(atendimentos)].map((numero) => `Atendimento ${numero} pronto, foi para a Fila`);
 }
 
 const DINHEIRO = new Intl.NumberFormat("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -290,6 +358,9 @@ export function detalheDaConta(conta: ItemDaFila): string {
         .join(", ");
     case "ERRO":
       return conta.erro_motivo ?? "";
+    case "PROCESSANDO":
+      // A conta que voltou para a fila por prazo e foi pega de novo (issue #1416).
+      return conta.tentativa && conta.tentativa > 1 ? `tentativa ${conta.tentativa} de ${MAXIMO_DE_TENTATIVAS}` : "";
     case "CONCLUIDA":
     case "CONCLUIDA_COM_PENDENCIA": {
       const pendencias =

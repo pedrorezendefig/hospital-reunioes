@@ -223,7 +223,7 @@ describe("a fila comum", () => {
     ]);
     expect(itens[0].textContent).toContain("Na fila");
     expect(itens[1].textContent).toContain("Falta o prontuário");
-    expect(itens[2].textContent).toContain("Pronta em instantes");
+    expect(itens[2].textContent).toContain("Processando");
     expect(itens[3].textContent).toContain("Não consegui ler a conta inteira");
     expect(within(itens[3]).getByRole("button", { name: "Enviar de novo" })).toBeTruthy();
     expect(within(itens[0]).queryByRole("button", { name: "Enviar de novo" })).toBeNull();
@@ -857,6 +857,82 @@ describe("cada bloco pela permissão de /contas-medicas/me", () => {
 
     expect(screen.getByRole("region", { name: "Envio de contas" })).toBeTruthy();
     expect(screen.getAllByRole("tab")).toHaveLength(4);
+  });
+});
+
+describe("o Processamento visível (issue #1416)", () => {
+  // Quatro minutos e uns segundos antes: a pílula diz "há 4 min".
+  const DESDE = new Date(Date.now() - 4 * 60_000 - 5_000).toISOString();
+  const RODANDO = conta({
+    id: "rodando",
+    numero_atendimento: "31310",
+    situacao: "PROCESSANDO",
+    etapa: "IA_LENDO_PRONTUARIO",
+    parte: 3,
+    partes: 7,
+    processando_desde: DESDE,
+    tentativa: 2,
+  });
+  const ESPERANDO = conta({ id: "na-fila", numero_atendimento: "31302", situacao: "NA_FILA" });
+
+  function leiturasDosEnvios(): number {
+    return chamadas.filter((c) => c.url === "/api/contas-medicas/meus-envios").length;
+  }
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("a pílula diz Processando, a etapa, a parte e o tempo, e o cartão diz a tentativa", async () => {
+    filaDoServidor = { ...FILA, meus_envios: [RODANDO] };
+    render(<ContasMedicasPage />);
+    await linhas();
+    aba(/^Meus envios/);
+
+    const [cartao] = await linhas();
+
+    expect(cartao.textContent).toContain("Processando, IA lendo o prontuário, parte 3 de 7, há 4 min");
+    expect(cartao.textContent).toContain("tentativa 2 de 3");
+    expect(cartao.textContent).not.toContain("Pronta em instantes");
+  });
+
+  it("com conta Processando, a tela relê a cada 5 s", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    filaDoServidor = { ...FILA, meus_envios: [RODANDO, ESPERANDO] };
+    render(<ContasMedicasPage />);
+    await linhas();
+    const antes = leiturasDosEnvios();
+
+    await vi.advanceTimersByTimeAsync(5_000);
+
+    expect(leiturasDosEnvios()).toBe(antes + 1);
+  });
+
+  it("sem nenhuma conta Processando, a tela relê a cada 20 s", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    filaDoServidor = { ...FILA, meus_envios: [ESPERANDO] };
+    render(<ContasMedicasPage />);
+    await linhas();
+    const antes = leiturasDosEnvios();
+
+    await vi.advanceTimersByTimeAsync(5_000);
+    expect(leiturasDosEnvios()).toBe(antes);
+
+    await vi.advanceTimersByTimeAsync(15_000);
+    expect(leiturasDosEnvios()).toBe(antes + 1);
+  });
+
+  it("a conta que some da lista por ter ficado pronta avisa que foi para a Fila", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    filaDoServidor = { ...FILA, meus_envios: [RODANDO, ESPERANDO] };
+    render(<ContasMedicasPage />);
+    await linhas();
+    expect(screen.queryByText(/foi para a Fila/)).toBeNull();
+
+    filaDoServidor = { ...FILA, meus_envios: [ESPERANDO] };
+    await vi.advanceTimersByTimeAsync(5_000);
+
+    expect((await screen.findByText(/foi para a Fila/)).textContent).toBe("Atendimento 31310 pronto, foi para a Fila");
   });
 });
 

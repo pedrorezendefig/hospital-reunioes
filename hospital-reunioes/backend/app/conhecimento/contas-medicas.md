@@ -53,13 +53,15 @@ Com as duas permissões, a tela de contas tem quatro abas. Todas as faturistas v
 
 A aba **Meus envios** mostra as contas que a pessoa enviou e que ainda não ficaram prontas. Elas não entram na Fila: ficam com quem enviou, que é quem tem o PDF que falta.
 
-Em Meus envios, cada conta aparece num cartão com dois quadrados, um para a conta e outro para o prontuário. O quadrado do arquivo que chegou fica verde: o da conta mostra o número e o período, e o do prontuário, o número de páginas. O quadrado do arquivo que falta fica tracejado, diz "Falta enviar" e tem o botão "Enviar a conta" ou "Enviar o prontuário", que abre o seletor de arquivos para mandar só aquele PDF. A borda do cartão tem a cor da situação: vermelha no erro, amarela quando falta arquivo, cinza na fila e verde quando a conta fica pronta em instantes. No celular, os dois quadrados ficam um embaixo do outro. A Fila, Minhas e Concluídas continuam com uma linha por conta.
+Enquanto alguma conta enviada está Processando, a tela se atualiza sozinha a cada 5 segundos; com contas só Na fila, a cada 20 segundos. Quando uma conta fica pronta, ela sai de Meus envios e a tela avisa, por exemplo, "Atendimento 31310 pronto, foi para a Fila".
+
+Em Meus envios, cada conta aparece num cartão com dois quadrados, um para a conta e outro para o prontuário. O quadrado do arquivo que chegou fica verde: o da conta mostra o número e o período, e o do prontuário, o número de páginas. O quadrado do arquivo que falta fica tracejado, diz "Falta enviar" e tem o botão "Enviar a conta" ou "Enviar o prontuário", que abre o seletor de arquivos para mandar só aquele PDF. A borda do cartão tem a cor da situação: vermelha no erro, amarela quando falta arquivo, cinza na fila e verde enquanto a conta está Processando. No celular, os dois quadrados ficam um embaixo do outro. A Fila, Minhas e Concluídas continuam com uma linha por conta.
 
 Cada conta aparece pelo número do atendimento, com o número da conta ao lado, e com a situação:
 
 - **Falta o prontuário** ou **Falta a conta**: o par ainda não chegou;
 - **Na fila**: esperando a análise;
-- **Pronta em instantes**: a análise está rodando;
+- **Processando**: a análise está rodando. A pílula diz a etapa e há quanto tempo a análise começou, como "Processando, IA lendo o prontuário, parte 3 de 7, há 4 min". São cinco etapas, nesta ordem: Lendo a conta, Lendo o prontuário, IA lendo o prontuário, Conferindo e IA montando o Guia. A parte aparece quando o prontuário é grande e a IA o lê em pedaços; a segunda parcial do mesmo atendimento passa por "IA lendo o prontuário" sem partes, porque aproveita a leitura da primeira. Se a análise travou e a conta voltou para a fila, o cartão mostra a tentativa, como "tentativa 2 de 3";
 - **A fazer**: o Guia está pronto e a conta está livre na Fila, com a nota, o R$ a ajustar e quantos itens já foram feitos ("0 de 9");
 - **Em correção**: o Guia já foi aberto, com o botão "Continuar";
 - **Retorno**: a conta já concluída voltou da Validação com linhas decididas para lançar;
@@ -261,7 +263,7 @@ O módulo não guarda nome completo, CPF, carteira nem data de nascimento de pac
 - Uma regra editada ou decidida que não gera versão nova, o botão Editar ou Decidir que some para quem tem a permissão, ou a memória exportada que não volta igual quando enviada de novo (Defeito).
 - Tabela de preço recusada, contagem de itens que não bate com o arquivo, ou preço "Não conferido" onde a tabela tem valor (Defeito, ou Informação se a recusa lista as colunas esperadas ou se o motivo é um dos casos de "Não conferido").
 - Um botão do Guia que não marca, uma conta que não conclui ou uma nota que não bate com as linhas (Defeito).
-- Uma conta que não sai de Na fila ou de "Pronta em instantes", um Erro com motivo que não bate com o PDF, ou o aviso de contas prontas que não chega ao sino (Defeito, ou Informação se o motivo do Erro explica, como o PDF sem texto).
+- Uma conta que não sai de Na fila ou de Processando, um Erro com motivo que não bate com o PDF, ou o aviso de contas prontas que não chega ao sino (Defeito, ou Informação se o motivo do Erro explica, como o PDF sem texto).
 - Uma conta que volta para Erro com CM-IA-FORA-DO-AR mesmo depois de enviada de novo, ou o botão "Reanalisar" que não aparece para a gestão (Defeito).
 - Uma conta em Erro com código CM-APP, CM-IA-CHAVE ou CM-IA-MODELO (Defeito: o texto do "Copiar para a TI" já traz o que a TI precisa), ou com CM-ARQ ou CM-CFG (Informação: quem resolve é quem enviou, mandando outro PDF, ou a gestão, em Operadoras).
 - O aviso de reajuste de contrato que não chegou ao sino, chegou duas vezes ou chegou na data errada, ou um contrato com a situação que não bate com o vencimento (Defeito, ou Informação se a data do aviso explica, como a antecedência da memória).

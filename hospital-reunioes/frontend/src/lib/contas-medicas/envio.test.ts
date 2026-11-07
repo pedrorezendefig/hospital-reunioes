@@ -161,7 +161,7 @@ describe("o que a fila mostra de cada conta", () => {
     expect(rotuloDaSituacao(item({ situacao: "AGUARDANDO_ARQUIVO", falta: "prontuario" }))).toBe("Falta o prontuário");
     expect(rotuloDaSituacao(item({ situacao: "AGUARDANDO_ARQUIVO", falta: "conta" }))).toBe("Falta a conta");
     expect(rotuloDaSituacao(item({ situacao: "NA_FILA" }))).toBe("Na fila");
-    expect(rotuloDaSituacao(item({ situacao: "PROCESSANDO" }))).toBe("Pronta em instantes");
+    expect(rotuloDaSituacao(item({ situacao: "PROCESSANDO" }))).toBe("Processando");
     expect(rotuloDaSituacao(item({ situacao: "A_FAZER" }))).toBe("A fazer");
     expect(rotuloDaSituacao(item({ situacao: "EM_CORRECAO" }))).toBe("Em correção");
     expect(rotuloDaSituacao(item({ situacao: "ERRO" }))).toBe("Erro");
@@ -189,5 +189,48 @@ describe("o que a fila mostra de cada conta", () => {
       detalheDaConta(item({ situacao: "CONCLUIDA_COM_PENDENCIA", nota_entrada: 79, nota_saida: 86, pendencias: 1 })),
     ).toBe("Nota de entrada 79, nota de saída 86, 1 pendência");
     expect(detalheDaConta(item({ situacao: "CONCLUIDA", nota_entrada: 79, nota_saida: null }))).toBe("Nota 79");
+  });
+});
+
+describe("a pílula Processando (issue #1416)", () => {
+  const AGORA = new Date("2026-11-07T14:10:30Z");
+
+  it("diz a etapa, a parte do Passo A e o tempo que já passou", () => {
+    const conta = item({
+      situacao: "PROCESSANDO",
+      etapa: "IA_LENDO_PRONTUARIO",
+      parte: 3,
+      partes: 7,
+      processando_desde: "2026-11-07T14:06:00Z",
+    });
+
+    expect(rotuloDaSituacao(conta, AGORA)).toBe("Processando, IA lendo o prontuário, parte 3 de 7, há 4 min");
+  });
+
+  it("cada uma das cinco etapas tem o seu nome, sem parte fora do Passo A", () => {
+    const pilula = (etapa: ItemDaFila["etapa"]) =>
+      rotuloDaSituacao(item({ situacao: "PROCESSANDO", etapa, processando_desde: "2026-11-07T14:10:00Z" }), AGORA);
+
+    expect(
+      (["LENDO_CONTA", "LENDO_PRONTUARIO", "IA_LENDO_PRONTUARIO", "CONFERINDO", "IA_MONTANDO_GUIA"] as const).map(pilula),
+    ).toEqual([
+      "Processando, Lendo a conta, há menos de 1 min",
+      "Processando, Lendo o prontuário, há menos de 1 min",
+      "Processando, IA lendo o prontuário, há menos de 1 min",
+      "Processando, Conferindo, há menos de 1 min",
+      "Processando, IA montando o Guia, há menos de 1 min",
+    ]);
+  });
+
+  it("passada uma hora, o tempo vem em horas e minutos", () => {
+    const conta = item({ situacao: "PROCESSANDO", etapa: "CONFERINDO", processando_desde: "2026-11-07T13:05:00Z" });
+
+    expect(rotuloDaSituacao(conta, AGORA)).toBe("Processando, Conferindo, há 1 h 5 min");
+  });
+
+  it("a conta na segunda ou na terceira tentativa diz qual é", () => {
+    expect(detalheDaConta(item({ situacao: "PROCESSANDO", tentativa: 2 }))).toBe("tentativa 2 de 3");
+    expect(detalheDaConta(item({ situacao: "PROCESSANDO", tentativa: 3 }))).toBe("tentativa 3 de 3");
+    expect(detalheDaConta(item({ situacao: "PROCESSANDO", tentativa: 1 }))).toBe("");
   });
 });

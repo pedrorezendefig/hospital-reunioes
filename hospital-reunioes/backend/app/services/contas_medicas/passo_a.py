@@ -14,6 +14,7 @@ as parciais e ao reenvio.
 
 from __future__ import annotations
 
+import threading
 from collections.abc import Callable, Mapping, Sequence
 from concurrent.futures import ThreadPoolExecutor
 from datetime import date, datetime, time
@@ -459,6 +460,7 @@ def eventos_do_atendimento(
     prontuario: ProntuarioLido,
     achados: Sequence[Mapping[str, Any]],
     regras: Sequence[Mapping[str, Any]],
+    ao_avancar: Callable[[int, int], None] | None = None,
 ) -> dict[str, Any]:
     """Os eventos do prontuário do atendimento: os guardados em `cm_eventos`
     para este arquivo ou, na primeira parcial, a leitura pela IA, que fica
@@ -469,7 +471,12 @@ def eventos_do_atendimento(
     guardada sem o modelo, de antes do #1197, conta como de outro modelo.
 
     Quem chama segura a trava do atendimento: duas parciais ao mesmo tempo
-    pagariam a mesma leitura duas vezes."""
+    pagariam a mesma leitura duas vezes.
+
+    `ao_avancar(parte, partes)` recebe a parte em leitura (#1416) quando o
+    prontuário vai em mais de uma janela: a primeira antes de qualquer chamada
+    e a seguinte a cada janela que termina. Os eventos que vêm de `cm_eventos`
+    não passam por ele."""
     gravados = (
         supabase.table("cm_eventos")
         .select("id, eventos_json")
@@ -492,6 +499,7 @@ def eventos_do_atendimento(
         prontuario=prontuario,
         achados=achados,
         regras=regras,
+        ao_avancar=ao_avancar,
     )
     if linha:
         supabase.table("cm_eventos").update(
@@ -519,6 +527,7 @@ def _ler_pela_ia(
     prontuario: ProntuarioLido,
     achados: Sequence[Mapping[str, Any]],
     regras: Sequence[Mapping[str, Any]],
+    ao_avancar: Callable[[int, int], None] | None = None,
 ) -> dict[str, Any]:
     """A chamada (uma por janela), a união, a evidência conferida e as
     movimentações do código no lugar. O texto que a IA escreveu sai sem
@@ -527,11 +536,23 @@ def _ler_pela_ia(
     # A instrução, as orientações e os rótulos dos blocos vão em toda chamada.
     reserva = len(load_prompt("contas_medicas_passo_a")) + len(orientacoes) + _ROTULOS_DOS_BLOCOS
     entradas = montar_entradas(prontuario, achados, reserva=reserva)
+    # Uma janela só não tem partes: a tela diz só "IA lendo o prontuário".
+    avancar = ao_avancar if ao_avancar and len(entradas) > 1 else (lambda _parte, _partes: None)
+    avancar(1, len(entradas))
+    # As janelas rodam juntas: a parte que a tela mostra é a das que já
+    # terminaram mais um, e a trava mantém a ordem 1, 2, 3 na gravação.
+    terminadas = [0]
+    trava = threading.Lock()
 
     def ler(entrada: str) -> dict[str, Any]:
-        return ia.extrair_eventos(
+        eventos = ia.extrair_eventos(
             entrada, orientacoes, supabase=supabase, conta_id=conta_id, atendimento_id=atendimento_id
         ).model_dump()
+        with trava:
+            terminadas[0] += 1
+            if terminadas[0] < len(entradas):
+                avancar(terminadas[0] + 1, len(entradas))
+        return eventos
 
     # As janelas vão à IA ao mesmo tempo: cada leitura leva minutos, e lidas
     # uma depois da outra o prontuário grande dobrava o tempo da análise. A
