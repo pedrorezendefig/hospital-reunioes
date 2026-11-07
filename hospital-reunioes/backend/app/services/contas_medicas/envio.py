@@ -43,7 +43,7 @@ from app.services.contas_medicas_conta import (
     ler_cabecalho_da_conta,
     ler_conta,
 )
-from app.services.contas_medicas_extrator import extrair_paginas, texto_para_guardar
+from app.services.contas_medicas_extrator import digitalizadas, extrair_paginas, texto_para_guardar
 from app.services.contas_medicas_retencao import BUCKET, chave_do_texto
 
 LIMITE_DE_ATENDIMENTOS = 10
@@ -96,6 +96,8 @@ class _Lido:
     textos: tuple[str, ...] = ()
     cabecalho: CabecalhoDaConta | None = None
     plano: dict | None = None
+    # No Prontuário, as páginas digitalizadas, que a fila vai ler por OCR (#1419).
+    paginas_ocr: int | None = None
 
 
 @dataclass(frozen=True)
@@ -141,7 +143,7 @@ def _ler(indice: int, arquivo: ArquivoRecebido, planos: list[dict]) -> _Lido | _
         numero = atendimento_do_prontuario(textos)
         if numero is None:
             return _Recusa(arquivo.nome, MENSAGEM_PRONTUARIO_SEM_ATENDIMENTO)
-        return _Lido(**base, tipo="PRONTUARIO", numero_atendimento=numero)
+        return _Lido(**base, tipo="PRONTUARIO", numero_atendimento=numero, paginas_ocr=len(digitalizadas(paginas)))
     return _Recusa(arquivo.nome, MENSAGEM_TIPO_DESCONHECIDO)
 
 
@@ -205,6 +207,7 @@ def _guardar(supabase, envio_id: str, atendimento: dict, lido: _Lido, agora: dat
             "atendimento_id": atendimento["id"],
             "numero_atendimento": lido.numero_atendimento,
             "paginas": lido.paginas,
+            "paginas_ocr": lido.paginas_ocr,
             "chave_bucket": chave,
             "hash": hashlib.sha256(lido.conteudo).hexdigest(),
             "apagar_em": (agora + timedelta(days=DIAS_NO_BUCKET)).isoformat(),

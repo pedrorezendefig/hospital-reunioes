@@ -433,6 +433,82 @@ class TestTipoPeloConteudo:
 
 
 # ═══════════════════════════════════════════════════════════════════════════
+# 2b. As páginas do Prontuário e as que vão por OCR (issue #1419)
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+def _folha_escaneada() -> str:
+    """Uma folha digitalizada: a imagem da página, com só o rodapé em texto."""
+    import base64
+    import io
+
+    from PIL import Image, ImageDraw
+
+    imagem = Image.new("L", (600, 800), 255)
+    ImageDraw.Draw(imagem).rectangle((40, 40, 560, 760), outline=0, width=6)
+    png = io.BytesIO()
+    imagem.save(png, format="PNG")
+    dados = base64.b64encode(png.getvalue()).decode()
+    return f'<img src="data:image/png;base64,{dados}" style="width: 14cm"><p>Pág. digitalizada</p>'
+
+
+def _evolucao_com_texto(atendimento: str, dia: str) -> str:
+    """A evolução digitada, com texto que basta para não ser lida como digitalizada."""
+    return _pagina_de_evolucao(atendimento, dia) + "Sem queixas. Aceitando dieta, deambulando, diurese presente.\n" * 3
+
+
+def _prontuario_com_escaneadas(atendimento: str) -> bytes:
+    """PDF de verdade: capa, duas evoluções digitadas, duas folhas escaneadas e uma página em branco."""
+    from html import escape
+
+    from weasyprint import HTML
+
+    digitadas = [CAPA, _evolucao_com_texto(atendimento, "02/10/2026"), _evolucao_com_texto(atendimento, "03/10/2026")]
+    paginas = [f'<pre style="font-size: 7pt">{escape(texto)}</pre>' for texto in digitadas]
+    paginas += [_folha_escaneada(), _folha_escaneada(), ""]
+    corpo = "".join(f'<div style="page-break-before: always">{pagina}</div>' for pagina in paginas)
+    return HTML(string=f"<html><body>{corpo}</body></html>").write_pdf()
+
+
+def _paginas_do_pdf(pdf: bytes) -> int:
+    """O total de páginas do PDF por outro leitor, sem passar pelo `pdftotext`."""
+    import io
+
+    import pdfplumber
+
+    with pdfplumber.open(io.BytesIO(pdf)) as aberto:
+        return len(aberto.pages)
+
+
+class TestPaginasDoProntuario:
+    def test_o_extrator_grava_as_paginas_por_ocr_e_o_total_bate_com_o_do_pdf(self, monkeypatch):
+        """Sem o dublê: o PDF com folhas escaneadas atravessa o extrator isolado.
+        A folha escaneada e a página em branco vão por OCR; as digitadas, não."""
+        from app.services import contas_medicas_extrator
+
+        monkeypatch.setattr(envio_service, "extrair_paginas", contas_medicas_extrator.extrair_paginas)
+        banco = _cenario()
+        conta = _pdf_de_verdade(_texto_da_conta("31302", "48001", "01/10/2026", "05/10/2026"))
+        prontuario = _prontuario_com_escaneadas("31302")
+
+        resposta = _cliente("faturista", banco).post(
+            ROTA_ENVIO,
+            files=[
+                ("arquivos", ("c.pdf", conta, "application/pdf")),
+                ("arquivos", ("p.pdf", prontuario, "application/pdf")),
+            ],
+        )
+
+        assert resposta.status_code == 200, resposta.text
+        por_tipo = {a["tipo"]: a for a in banco.tabelas["cm_arquivo"]}
+        assert _paginas_do_pdf(prontuario) == 6
+        assert por_tipo["PRONTUARIO"]["paginas"] == 6
+        assert por_tipo["PRONTUARIO"]["paginas_ocr"] == 3
+        # A Conta não passa por OCR: fica sem a contagem.
+        assert por_tipo["CONTA"]["paginas_ocr"] is None
+
+
+# ═══════════════════════════════════════════════════════════════════════════
 # 3. Plano sem par
 # ═══════════════════════════════════════════════════════════════════════════
 
