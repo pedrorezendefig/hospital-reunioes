@@ -23,7 +23,7 @@ from typing import Any
 
 from app.services.contas_medicas.memoria import _CPF
 from app.services.contas_medicas.memoria_texto import gerar_texto_memoria
-from app.services.contas_medicas.operadoras import listar_operadoras
+from app.services.contas_medicas.operadoras import listar_operadoras, trocar_vigente
 
 __all__ = [
     "PERMISSOES_DA_TELA",
@@ -221,10 +221,7 @@ def _gravar_versao(
 
     texto_md = gerar_texto_memoria(supabase, operadora_id, nova["id"])
     supabase.table("cm_memoria_versao").update({"texto_md": texto_md}).eq("id", nova["id"]).execute()
-    supabase.table("cm_memoria_versao").update({"vigente": False}).eq("operadora_id", operadora_id).eq(
-        "vigente", True
-    ).execute()
-    supabase.table("cm_memoria_versao").update({"vigente": True}).eq("id", nova["id"]).execute()
+    trocar_vigente(supabase, operadora_id, nova["id"])
     return {**nova, "texto_md": texto_md, "vigente": True}
 
 
