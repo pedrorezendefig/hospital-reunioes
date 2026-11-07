@@ -28,6 +28,17 @@ export type Visao = {
   plano: string[]
 }
 
+/** Uma sessão que o clique num número abriu (hooks/lancar.sh). */
+export type Lancamento = {
+  tipo: 'prd' | 'issue' | 'humana' | 'triagem'
+  n: number
+  nome: string
+  estado: 'abrindo' | 'aberta' | 'falhou'
+  /** A linha do `claude --bg` (id e nome), ou o erro. */
+  detalhe: string
+  em: number
+}
+
 declare module 'claude-code' {
   interface PluginState {
     'hr-issues': {
@@ -35,6 +46,8 @@ declare module 'claude-code' {
       erro: string | null
       /** Hora (ms) em que a visão chegou. */
       em: number | null
+      /** Sessões abertas pelo clique, por `<tipo>-<n>`: o segundo clique não abre outra. */
+      lancadas: Record<string, Lancamento>
     }
   }
 }

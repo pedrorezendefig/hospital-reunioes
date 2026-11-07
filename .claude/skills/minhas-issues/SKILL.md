@@ -86,7 +86,9 @@ Regras:
 
 ### A aba Issues (mod `hr-issues`)
 
-A mesma visão fica num painel à direita, numa aba ao lado da "Ondas" do `hr-ondas`. O mod roda `minhas_issues.py --json` com cache de 5 min compartilhado entre as sessões e se atualiza depois de um `gh` que muda issue ou PR. `/issues` abre a aba e atualiza na hora. O passo a passo das humanas continua só no `/minhas-issues`.
+A mesma visão fica num painel à direita, numa aba ao lado da "Ondas" do `hr-ondas`. O mod roda `minhas_issues.py --json` com cache de 5 min compartilhado entre as sessões e se atualiza depois de um `gh` que muda issue ou PR. `/issues` abre a aba e atualiza na hora.
+
+Cada número é um botão, sem URL ao lado (o Terminal do Mac não abre link OSC 8). O número em negrito abre uma sessão de fundo pelo `hooks/lancar.sh`, que aparece no `claude agents`: na fila, a `/montar-ondas-enxutas` só daquele PRD (ou só da issue, quando o PRD tem uma fatia aberta), parada no "Posso lançar?"; na humana, o guia passo a passo; na triagem, o `/triage`. Nenhuma roda trabalho sem o OK. Em andamento, PR e entregue abrem no GitHub. O segundo clique na mesma onda não abre outra sessão.
 
 ## Limites
 
