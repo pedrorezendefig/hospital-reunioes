@@ -1090,6 +1090,51 @@ class TestFila:
         assert paginas["falta-conta"] == 47
         assert paginas["falta-prontuario"] is None
 
+    def test_a_listagem_traz_operadora_dias_paginas_por_ocr_e_as_contagens_da_conta_pronta(self):
+        """Issue #1419: os dados do cartão. O arquivo e a conta de antes desta
+        fatia, sem as colunas novas, voltam nulos."""
+        banco = _fila_semeada()
+        atendimentos = {a["id"]: a for a in banco.tabelas["cm_atendimento"]}
+        atendimentos["at-na-fila"]["operadora_id"] = "op-1"
+        atendimentos["at-livre-nova"]["operadora_id"] = "op-1"
+        contas = {c["id"]: c for c in banco.tabelas["cm_conta"]}
+        contas["na-fila"].update(periodo_inicio="2026-10-01", periodo_fim="2026-10-05")
+        # A conta à espera da Conta ainda não tem período.
+        contas["falta-conta"].update(periodo_inicio=None, periodo_fim=None)
+        contas["livre-nova"]["faltantes"] = {"itens": [], "contagens": {"itens": 42, "eventos": 15}}
+        contas["livre-antiga"]["faltantes"] = {"itens": []}
+        banco.tabelas["cm_arquivo"] += [
+            {
+                "id": "pront-na-fila",
+                "envio_id": "env-F1",
+                "tipo": "PRONTUARIO",
+                "atendimento_id": "at-na-fila",
+                "paginas": 1946,
+                "paginas_ocr": 37,
+                "criado_em": "2026-10-11T10:00:00+00:00",
+            },
+        ]
+        for arquivo in banco.tabelas["cm_arquivo"]:
+            if arquivo["id"] == "arq-pront":
+                arquivo["paginas"] = 47
+        cliente = _cliente("faturista", banco)
+
+        envios = {c["id"]: c for c in cliente.get(ROTA_MEUS_ENVIOS).json()["meus_envios"]}
+        fila = {c["id"]: c for c in cliente.get(ROTA_FILA).json()["fila"]}
+
+        na_fila = envios["na-fila"]
+        assert (na_fila["operadora"], na_fila["dias_internacao"]) == ("ASSIM", 4)
+        assert (na_fila["prontuario_paginas"], na_fila["prontuario_paginas_ocr"]) == (1946, 37)
+        # Ainda não ficou pronta: sem as contagens.
+        assert (na_fila["itens_lidos"], na_fila["eventos_lidos"]) == (None, None)
+        # Sem operadora no atendimento, sem o período da Conta, sem a contagem de OCR.
+        sem_conta = envios["falta-conta"]
+        assert (sem_conta["operadora"], sem_conta["dias_internacao"]) == (None, None)
+        assert (sem_conta["prontuario_paginas"], sem_conta["prontuario_paginas_ocr"]) == (47, None)
+        assert (fila["livre-nova"]["itens_lidos"], fila["livre-nova"]["eventos_lidos"]) == (42, 15)
+        assert fila["livre-nova"]["operadora"] == "ASSIM"
+        assert (fila["livre-antiga"]["itens_lidos"], fila["livre-antiga"]["eventos_lidos"]) == (None, None)
+
     @pytest.mark.parametrize("quem", ["credenciamento", "sem_eixo"])
     def test_sem_a_permissao_de_enviar_e_corrigir_contas_recebe_403(self, quem):
         assert _cliente(quem, _fila_semeada()).get(ROTA_FILA).status_code == 403
