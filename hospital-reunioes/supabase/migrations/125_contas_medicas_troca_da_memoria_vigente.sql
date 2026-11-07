@@ -34,7 +34,9 @@
 -- transacao. Nenhuma tabela nova nasce aqui, nada de RLS a ligar.
 --
 -- Reaplicavel: CREATE OR REPLACE, REVOKE e GRANT sao declaracoes de estado
--- final, e nenhuma linha de dado e tocada pela aplicacao desta migration.
+-- final, e o recibo no fim usa ON CONFLICT DO NOTHING. A unica linha de dado
+-- que a aplicacao toca e o recibo em `migracoes_aplicadas` (issue #969);
+-- nenhuma linha de `cm_memoria_versao` muda.
 -- =====================================================
 
 CREATE OR REPLACE FUNCTION cm_trocar_memoria_vigente(
@@ -81,3 +83,5 @@ REVOKE EXECUTE ON FUNCTION cm_trocar_memoria_vigente(UUID, UUID)
   FROM PUBLIC, anon, authenticated;
 
 GRANT EXECUTE ON FUNCTION cm_trocar_memoria_vigente(UUID, UUID) TO service_role;
+
+INSERT INTO migracoes_aplicadas (numero) VALUES (125) ON CONFLICT (numero) DO NOTHING;
