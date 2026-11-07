@@ -2,6 +2,54 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-11-07T19:42:39-03:00",
+      "sha": "672b442f2be820e2feff3d197917fbc61e49c749",
+      "app_version": "0.226.0",
+      "subject": "Onda onda-a-onda3: Previsão, barra de tempos e horas na fila",
+      "raw_subject": "chore(deploy): registro da onda onda-a-onda3 (#1497)",
+      "scope": [
+        "backend",
+        "frontend"
+      ],
+      "prds": [
+        1415
+      ],
+      "result": "healthy",
+      "duration_seconds": 202,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        },
+        {
+          "service": "frontend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "onda-enxuta onda-a-onda3: PR #1497 (issue #1417), mergeados PR a PR. Merge pela API do GitHub, um build. Registro pela Action pos-merge depois do health.",
+      "etapas": {
+        "merge_s": 2,
+        "build_s": {
+          "backend": 16,
+          "frontend": 174
+        },
+        "health_s": 0
+      },
+      "responsavel": "pedrorezendefig"
+    },
+    {
       "at": "2026-11-07T19:21:26-03:00",
       "sha": "fe53b74cb1e065c78d30445feba6f7164b323cb4",
       "app_version": "0.225.0",
