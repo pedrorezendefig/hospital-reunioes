@@ -146,4 +146,30 @@ describe("Gerar a ata de novo", () => {
     await esperarCarregar();
     expect(screen.queryByRole("button", { name: BOTAO })).toBeNull();
   });
+
+  it("o clique chama o reprocessar uma vez, com o botão desabilitado, e a tela passa a processar", async () => {
+    let responder: (r: Resposta) => void = () => {};
+    const pendente = new Promise<Resposta>((resolve) => { responder = resolve; });
+    const chamadas = servir("ERRO", pendente);
+    montar();
+    await esperarCarregar();
+
+    const botao = screen.getByRole("button", { name: BOTAO }) as HTMLButtonElement;
+    fireEvent.click(botao);
+    await waitFor(() => expect(botao.disabled).toBe(true));
+    // Clique repetido durante a espera não dispara outra chamada.
+    fireEvent.click(botao);
+
+    await act(async () => {
+      responder({
+        status: 200,
+        corpo: { id_reuniao: "REU_TESTE", status: "PROCESSANDO", message: "Reprocessamento iniciado" },
+      });
+    });
+
+    await screen.findByText("A IA está processando a transcrição...");
+    expect(screen.queryByRole("button", { name: BOTAO })).toBeNull();
+    const posts = chamadas.filter((c) => c.method === "POST");
+    expect(posts).toEqual([{ url: "/api/reunioes/REU_TESTE/reprocessar", method: "POST" }]);
+  });
 });

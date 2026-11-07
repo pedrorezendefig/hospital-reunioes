@@ -694,6 +694,8 @@ export default function ReuniaoDetailPage() {
   // Desmarcar reunião
   const [showDesmarcarModal, setShowDesmarcarModal] = useState(false);
   const [desmarcando, setDesmarcando] = useState(false);
+  const [reprocessando, setReprocessando] = useState(false);
+  const [erroReprocessar, setErroReprocessar] = useState<string | null>(null);
   const [showTrocarFacilitador, setShowTrocarFacilitador] = useState(false);
 
   // Participant management
@@ -1022,6 +1024,33 @@ export default function ReuniaoDetailPage() {
       return;
     }
     setShowDesmarcarModal(true);
+  };
+
+  // Reunião parada no ERRO (#1498): a rota relê a transcrição do Storage e roda
+  // o pipeline de novo. Sucesso põe a tela em PROCESSANDO, que liga o polling.
+  const handleReprocessar = async () => {
+    if (reprocessando) return;
+    setReprocessando(true);
+    setErroReprocessar(null);
+    try {
+      const token = await getToken();
+      const res = await fetch(`/api/reunioes/${id}/reprocessar`, {
+        method: "POST",
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+      const corpo = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setErroReprocessar(corpo.detail || corpo.error || "Não foi possível gerar a ata de novo.");
+        return;
+      }
+      if (corpo.status === "PROCESSANDO") {
+        setReuniao((r) => (r ? { ...r, status_ata: "PROCESSANDO" } : r));
+      }
+    } catch (err: unknown) {
+      setErroReprocessar(getErrorMessage(err));
+    } finally {
+      setReprocessando(false);
+    }
   };
 
   // ── Super admin (Fase 04): force delete + force status ──
@@ -2013,9 +2042,11 @@ export default function ReuniaoDetailPage() {
             </div>
             <button
               type="button"
+              onClick={handleReprocessar}
+              disabled={reprocessando}
               className="flex items-center gap-2 px-4 py-2 rounded-xl bg-white border border-red-200 text-red-700 text-sm font-medium hover:bg-red-100 transition-all disabled:opacity-60 disabled:cursor-not-allowed"
             >
-              <Repeat2 className="w-4 h-4" />
+              {reprocessando ? <Loader2 className="w-4 h-4 animate-spin" /> : <Repeat2 className="w-4 h-4" />}
               Gerar a ata de novo
             </button>
           </div>
