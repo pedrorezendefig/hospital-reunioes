@@ -2,7 +2,7 @@
 
 Confere a conta hospitalar de internação antes do envio à operadora: a faturista envia a conta e o prontuário completo exportados do MV, o módulo cruza os dois com a memória da operadora e devolve um Guia de ações. O que ela corrige vira indicador de onde a perda nasce. Terceiro contexto do repositório (ver [CONTEXT-MAP.md](../../CONTEXT-MAP.md)); nasceu da especificação do Diretor Executivo (v1.0 e adendos v1.1 a v1.3, outubro/2026) e do grilling de 12/10/2026 ([ADR 0070](../adr/0070-contas-medicas-aritmetica-no-codigo-ia-no-julgamento-memoria-no-banco.md)). Curado por humano daqui em diante.
 
-**Nome do módulo:** Contas médicas. A palavra "auditoria" não aparece em tela, rota, texto nem nome de tabela deste módulo (decisão do diretor).
+**Nome do módulo:** Contas médicas. "Auditor" é só o nome do agente com quem se conversa (decisão do diretor, 07/11/2026, que revogou a proibição da palavra); Guia, Linha, Memória e Validação continuam com esses nomes, e rotas e tabelas continuam `cm_`.
 
 ## Atendimento, conta e prontuário
 
@@ -53,7 +53,14 @@ _Evitar_: base de auditoria, configuração da operadora.
 Linha da Memória com identificador (`ASSIM-DIA-01`), seção (PRI, PRC, DIA, PAC, TAX, CC, HON, INS, MED), texto, tipo (**Contratual**: preço, diária, deflator, pacote, tabela; **Operacional**: quantidade, padrão de lançamento, orientação), origem e **Status** Vigente ou Pendente. Prática validada ganha do contrato; o que o contrato diz fica registrado na frase, para sustentar recurso de glosa.
 
 **Regra pendente**:
-Regra sem validação da diretoria ou da gestão de contas médicas. Nunca gera ordem para a faturista: gera a ação Validar.
+Regra sem validação da diretoria ou da gestão de contas médicas. Nunca gera ordem para a faturista: gera a ação Validar. Regra que a diretoria ou a gestão ensina ou importa nasce Vigente; Pendente fica para a Regra técnica HSM copiada e para a Regra proposta por quem não decide (faturista, coordenadora, sugestão da IA).
+
+**Auditor**:
+O agente com quem a gestão e a diretoria conversam sobre uma Operadora ou uma Conta. Recebe texto, tabela e contrato e sempre devolve **proposta** (Regra nova ou alterada, Tabela de preço, parâmetro, card para a Tecnologia), que só vale depois do Confirmar. Há duas conversas: a da Operadora (ensinar) e a da Conta (aberta do Guia, para explicar um erro). A conversa não é memória: o que pesa na análise é só o que foi confirmado e virou Regra; a conversa fica como histórico da versão que gerou.
+_Evitar_: Sandra ou outro nome de pessoa; "o chat" como se fosse a Memória.
+
+**Prova da regra**:
+Antes do Confirmar, o Auditor refaz o Passo B nas Contas concluídas recentes da Operadora com a Regra proposta, sem mexer nelas, e mostra o que o Guia teria dito de diferente. Serve para ver se a Regra pega onde se espera e se não muda o que não devia.
 
 **Diretriz geral HSM**:
 Decisão do hospital sobre como ler o prontuário e montar a conta (identificar pelo Atendimento, prescrição plena, "se necessário" sempre incluído, regras de diária e de acomodação contratada). Entra Vigente em toda Operadora nova, copiada com o identificador dela.
@@ -131,6 +138,10 @@ Aguardando arquivo → Na fila → Processando → A fazer (Guia pronto) → Em 
 
 **Causa-raiz**:
 Onde o problema nasce e quem corrige: **Dispensação** (farmácia e enfermagem), **Regra automática** (TI e consultoria MV), **Cadastro e preço** (credenciamento e cadastro), **Registro assistencial** (enfermagem e corpo clínico), **Lançamento manual** (faturamento). A IA propõe; o código sobrepõe nos casos óbvios (toda Linha de diária, de preço e Bloqueado).
+
+**Faltou isto**:
+Apontamento de omissão no Guia: alguém que conferiu a Conta diz o item e a página que o módulo não achou. Abre a conversa da Conta, em que o Auditor explica por que não achou e classifica a origem: **regra** (vira proposta de Regra), **leitura** (a página não foi lida, OCR ou folha digitalizada) ou **defeito** (do código); leitura e defeito viram card na Tecnologia. É contado no Painel por semana e por origem.
+_Evitar_: tratar como Não procede, que é o contrário (a Linha existe e não devia).
 
 **Validação**:
 Fila da diretoria e da gestão de contas médicas: Regras pendentes agrupadas por Regra, Bloqueados agrupados por código, observações do time. Decidir uma Regra gera versão nova da Memória e devolve as Linhas afetadas; Conta já concluída volta à faturista em Retorno só com essas Linhas.
