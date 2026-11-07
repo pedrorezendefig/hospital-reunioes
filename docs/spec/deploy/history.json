@@ -2,6 +2,54 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-11-07T19:21:26-03:00",
+      "sha": "fe53b74cb1e065c78d30445feba6f7164b323cb4",
+      "app_version": "0.225.0",
+      "subject": "Onda onda-a-onda2b: Operadora, dias e páginas por OCR no cartão do envio",
+      "raw_subject": "chore(deploy): registro da onda onda-a-onda2b (#1482)",
+      "scope": [
+        "backend",
+        "frontend"
+      ],
+      "prds": [
+        1415
+      ],
+      "result": "healthy",
+      "duration_seconds": 209,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        },
+        {
+          "service": "frontend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "onda-enxuta onda-a-onda2b: PR #1482 (issue #1419), mergeados PR a PR. Merge pela API do GitHub, um build. Registro pela Action pos-merge depois do health.",
+      "etapas": {
+        "merge_s": 3,
+        "build_s": {
+          "backend": 18,
+          "frontend": 178
+        },
+        "health_s": 0
+      },
+      "responsavel": "pedrorezendefig"
+    },
+    {
       "at": "2026-11-07T18:51:56-03:00",
       "sha": "bc8159f5c7442f7bbe66f1aed1dcf1ec9215172f",
       "app_version": "0.224.0",
