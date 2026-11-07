@@ -1,7 +1,7 @@
 """O unico ponto do app que fala com a API do GitHub (issue #674, ADR 0054).
 
 Modulo profundo, porta estreita: quem chama pede "a foto da issue #673" ou
-"marque esta issue com o id desta Demanda", e recebe dado pronto ou uma
+"crie a issue desta Demanda", e recebe dado pronto ou uma
 excecao. Base, header, timeout e traducao de erro moram aqui; nenhum outro
 modulo importa `httpx` para falar com o GitHub.
 
@@ -9,13 +9,15 @@ Tres invariantes que o resto do app herda:
 
 - **So este repositorio.** O repositorio vem de `GITHUB_INTEGRACAO_REPO` e
   entra no caminho da URL uma vez so, aqui.
-- **Escrita minima.** Quatro verbos de escrita, e so quatro: o PATCH da
-  issue, que serve ao marcador do Vinculo e a designacao do responsavel; o POST que abre a issue do "Levar
-  para desenvolvimento" (issue #677); e o par POST/PATCH do comentario
-  espelhado da Conversa (issue #680). Nenhum verbo de LEITURA de comentario:
-  nada do GitHub volta para a Conversa (ADR 0054, decisao 5). O token
-  fine-grained do Pedro tem Issues: write neste repositorio e mais nada
-  (ADR 0054, decisao 8).
+- **Leitura do codigo so com GET** (issue #1385, ADR 0077, decisao 5): o
+  agente da aba le arquivo, pasta, busca e issues abertas por
+  `ler_do_repositorio`, `buscar_no_codigo` e `listar_issues_abertas`, e
+  nenhuma delas escreve.
+- **Escrita minima.** So o "Criar o card" do chat escreve (ADR 0077, decisao
+  6): o POST que abre a issue e o PATCH que a designa. Nenhum verbo de LEITURA de
+  comentario: nada do GitHub volta para o app alem da foto da issue (ADR 0054,
+  decisao 5). O token fine-grained do Pedro tem Issues: write neste
+  repositorio e mais nada (ADR 0054, decisao 8).
 - **Falha e falha.** Timeout, 5xx e erro de rede viram `GithubIndisponivelError`;
   404 vira `IssueNaoEncontradaError`. Sem token ou sem repositorio configurado e
   `GithubNaoConfiguradoError`, que a rota traduz em 503: o app nao FINGE que leu.
@@ -33,6 +35,7 @@ import json
 import logging
 import re
 from typing import Any
+from urllib.parse import quote, urlencode
 
 import httpx
 
@@ -91,7 +94,7 @@ def _headers(token: str) -> dict[str, str]:
     }
 
 
-def _chamar(metodo: str, caminho: str, *, json: dict | None = None) -> Any:
+def _chamar(metodo: str, caminho: str, *, json: dict | None = None, no_repositorio: bool = True) -> Any:
     """Uma chamada a API, com a traducao de erro da casa.
 
     O 404 e o unico status que vira excecao PROPRIA: ele e uma resposta ("esse
@@ -100,7 +103,9 @@ def _chamar(metodo: str, caminho: str, *, json: dict | None = None) -> Any:
     resposta, e a pessoa precisa saber que o app nao conseguiu conferir.
     """
     token, repo = _exigir_configuracao()
-    url = f"{BASE_URL}/repos/{repo}{caminho}"
+    # A busca de codigo e a unica rota fora de `/repos/{repo}`: ela recebe o
+    # repositorio dentro da consulta (`buscar_no_codigo`).
+    url = f"{BASE_URL}/repos/{repo}{caminho}" if no_repositorio else f"{BASE_URL}{caminho}"
     try:
         resposta = httpx.request(metodo, url, headers=_headers(token), json=json, timeout=_TIMEOUT)
     except httpx.HTTPError as exc:
@@ -253,6 +258,63 @@ def ler_historico_de_deploys() -> list[dict[str, Any]]:
     return deploys
 
 
+# ─── A leitura do codigo pelo agente da aba (issue #1385, ADR 0077, decisao 5) ─
+
+
+def _caminho_do_repositorio(caminho: str) -> str:
+    """O caminho relativo a raiz, sem barra nas pontas e sem `..`: o caminho
+    entra na URL, e quem o escreve e o modelo."""
+    limpo = (caminho or "").strip().strip("/")
+    if any(parte in ("", ".", "..") for parte in limpo.split("/")) and limpo:
+        raise IssueNaoEncontradaError(caminho)
+    return limpo
+
+
+def ler_do_repositorio(caminho: str) -> str | list[str]:
+    """O texto de um arquivo da `main`, ou os nomes de uma pasta.
+
+    Pela API de conteudo, so GET. Arquivo que nao e texto (imagem, binario)
+    volta como indisponivel: o agente segue sem ele.
+    """
+    dados = _chamar("GET", f"/contents/{quote(_caminho_do_repositorio(caminho))}?ref=main")
+    if isinstance(dados, list):
+        return [str(item.get("name")) for item in dados if isinstance(item, dict) and item.get("name")]
+    if not isinstance(dados, dict) or dados.get("encoding") != "base64" or not isinstance(dados.get("content"), str):
+        raise GithubIndisponivelError("GitHub respondeu o arquivo fora do formato")
+    try:
+        return base64.b64decode(dados["content"]).decode("utf-8")
+    except (ValueError, binascii.Error) as exc:
+        raise GithubIndisponivelError("O arquivo nao e texto") from exc
+
+
+# A primeira pagina da busca basta para o agente escolher o que abrir.
+_RESULTADOS_DA_BUSCA = 20
+
+
+def buscar_no_codigo(termo: str) -> list[str]:
+    """Os caminhos dos arquivos da `main` onde o termo aparece, pela busca de
+    codigo do GitHub restrita a este repositorio."""
+    _, repo = _exigir_configuracao()
+    consulta = urlencode({"q": f"{termo} repo:{repo}", "per_page": _RESULTADOS_DA_BUSCA})
+    dados = _chamar("GET", f"/search/code?{consulta}", no_repositorio=False)
+    itens = dados.get("items") if isinstance(dados, dict) else None
+    if not isinstance(itens, list):
+        raise GithubIndisponivelError("GitHub respondeu a busca fora do formato")
+    return [str(item["path"]) for item in itens if isinstance(item, dict) and item.get("path")]
+
+
+def listar_issues_abertas() -> list[dict[str, Any]]:
+    """As issues abertas (sem os PRs), numero e titulo, a primeira pagina."""
+    dados = _chamar("GET", "/issues?state=open&per_page=100")
+    if not isinstance(dados, list):
+        raise GithubIndisponivelError("GitHub respondeu a lista de issues fora do formato")
+    return [
+        {"numero": issue.get("number"), "titulo": str(issue.get("title") or "")}
+        for issue in dados
+        if isinstance(issue, dict) and isinstance(issue.get("number"), int) and not e_pull_request(issue)
+    ]
+
+
 def e_pull_request(dados: dict[str, Any]) -> bool:
     """A API de issues tambem responde por PR, e o `pull_request` e o que os
     separa (o Vinculo e com a issue-raiz, ADR 0054, decisao 1)."""
@@ -277,11 +339,6 @@ def ler_sub_issues(numero: int) -> list[dict[str, Any]]:
     except IssueNaoEncontradaError:
         return []
     return dados if isinstance(dados, list) else []
-
-
-def atualizar_corpo(numero: int, corpo: str) -> None:
-    """Reescreve o `body` da issue."""
-    _chamar("PATCH", f"/issues/{numero}", json={"body": corpo})
 
 
 def criar_issue(*, titulo: str, corpo: str, labels: list[str], assignees: list[str] | None = None) -> dict[str, Any]:
@@ -315,39 +372,6 @@ def criar_issue(*, titulo: str, corpo: str, labels: list[str], assignees: list[s
         except (GithubIndisponivelError, IssueNaoEncontradaError) as exc:
             logger.warning("[github] a issue #%s nasceu sem assignee (%s): %s", numero, assignees, exc)
     return dados
-
-
-def criar_comentario(numero: int, corpo: str) -> int:
-    """Publica um comentario na issue e devolve o id que o GitHub lhe deu
-    (issue #680).
-
-    So o id, e nao o JSON inteiro: e a unica coisa que o app guarda dele, na
-    linha da Conversa, para a correcao da resposta editar o MESMO comentario.
-    Vale em issue fechada tambem, e e de proposito (ADR 0054, decisao 6): a
-    resposta do diretor numa Demanda entregue e o que reabre o trabalho.
-
-    Um 404 aqui e a issue que sumiu (apagada, ou o token que perdeu o
-    repositorio), e sobe como esta: quem chama trata qualquer erro do mesmo
-    jeito, logando sem desfazer a resposta.
-
-    Resposta sem `id` inteiro vira indisponibilidade: gravar `None` no lugar do
-    id faria a correcao seguinte publicar um segundo comentario em vez de
-    editar o primeiro, e ninguem saberia por que.
-    """
-    dados = _chamar("POST", f"/issues/{numero}/comments", json={"body": corpo})
-    comentario_id = dados.get("id") if isinstance(dados, dict) else None
-    if not isinstance(comentario_id, int):
-        raise GithubIndisponivelError("GitHub criou o comentario sem devolver o id")
-    return comentario_id
-
-
-def editar_comentario(comentario_id: int, corpo: str) -> None:
-    """Reescreve o corpo de um comentario ja publicado (issue #680).
-
-    O caminho e o do comentario, sem numero de issue: e assim que a API do
-    GitHub endereca comentarios, pelo id que `criar_comentario` devolveu.
-    """
-    _chamar("PATCH", f"/issues/comments/{comentario_id}", json={"body": corpo})
 
 
 def montar_foto(dados: dict[str, Any], partes: list[dict[str, Any]]) -> dict[str, Any]:

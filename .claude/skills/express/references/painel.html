@@ -1,0 +1,338 @@
+<title>Painel do grill</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Newsreader:opsz,wght@6..72,500;6..72,600&family=Public+Sans:wght@400;500;600&display=swap">
+<style>
+/* Layout: visão ampla. Cabeçalho fixo com placar e "Concordar com tudo"; por tema, uma faixa com "Concordar com o tema" e uma grade de miniaturas (número, título, escolha em duas linhas, estado). Clicar na miniatura abre a gaveta lateral com tudo. */
+:root {
+  --bg: #f7f6f2;
+  --surface: #ffffff;
+  --fg: #1d1f1b;
+  --muted: #5f635a;
+  --line: #d9d8cf;
+  --accent: #1f5f4a;
+  --accent-soft: #e3efe8;
+  --warn: #8a5a0b;
+  --warn-soft: #f6ead2;
+  --no: #8f2f2a;
+  --no-soft: #f4dedb;
+  --veil: rgba(29, 31, 27, .45);
+  --display: "Newsreader", Georgia, "Times New Roman", serif;
+  --body: "Public Sans", "Helvetica Neue", Arial, sans-serif;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #15171a; --surface: #1e2125; --fg: #e8e7e1; --muted: #a3a79d; --line: #343840;
+    --accent: #7fc3a6; --accent-soft: #1f3a30; --warn: #e0b35a; --warn-soft: #3a2f16;
+    --no: #e08a84; --no-soft: #3d2220; --veil: rgba(0,0,0,.6); color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #15171a; --surface: #1e2125; --fg: #e8e7e1; --muted: #a3a79d; --line: #343840;
+  --accent: #7fc3a6; --accent-soft: #1f3a30; --warn: #e0b35a; --warn-soft: #3a2f16;
+  --no: #e08a84; --no-soft: #3d2220; --veil: rgba(0,0,0,.6); color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--fg); font-family: var(--body); line-height: 1.45; }
+body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 10; background: var(--bg); }
+.wrap { max-width: 1180px; margin: 0 auto; padding-block: 0 64px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+header.top { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5; background: var(--bg); border-bottom: 1px solid var(--line); padding-block: 12px; display: flex; flex-wrap: wrap; align-items: center; gap: 10px 18px; }
+header.top h1 { font-family: var(--display); font-weight: 500; font-size: 1.45rem; margin: 0; line-height: 1.15; text-wrap: balance; flex: 1 1 240px; min-width: 0; }
+.placar { display: flex; align-items: center; gap: 10px; font-variant-numeric: tabular-nums; font-size: 0.88rem; color: var(--muted); }
+.barra { width: 110px; height: 6px; background: var(--line); border-radius: 3px; overflow: hidden; }
+.barra i { display: block; height: 100%; width: 0; background: var(--accent); transition: width .25s; }
+.intro { margin-block: 16px 4px; color: var(--muted); max-width: 70ch; font-size: 0.92rem; }
+.intro strong { color: var(--fg); font-weight: 600; }
+.aviso { margin-top: 8px; font-size: 0.85rem; padding: 8px 12px; border: 1px dashed var(--line); border-radius: 6px; color: var(--muted); }
+.aviso[hidden] { display: none; }
+
+button { font: inherit; font-size: 0.86rem; font-weight: 500; padding: 6px 12px; border-radius: 6px; border: 1px solid var(--line); background: var(--surface); color: var(--fg); cursor: pointer; }
+button:hover { border-color: var(--muted); }
+button:disabled { opacity: .55; cursor: default; }
+button.principal { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
+button.principal:hover { filter: brightness(1.08); }
+button.b-ok.ativo { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); }
+button.b-nao.ativo { background: var(--no-soft); border-color: var(--no); color: var(--no); }
+button:focus-visible, .mini:focus-visible, textarea:focus-visible, details summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+.tema-cab { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; margin: 26px 0 10px; }
+.tema-cab h2 { font-family: var(--display); font-weight: 600; font-size: 1.15rem; margin: 0; }
+.tema-cab small { font-size: 0.78rem; color: var(--muted); font-variant-numeric: tabular-nums; }
+.tema-cab button { margin-left: auto; }
+.grade { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 10px; }
+.mini { position: relative; text-align: left; background: var(--surface); border: 1px solid var(--line); border-left: 4px solid var(--line); border-radius: 8px; padding: 10px 12px 10px 12px; display: grid; gap: 4px; align-content: start; cursor: pointer; min-width: 0; font: inherit; color: var(--fg); }
+.mini:hover { border-color: var(--muted); border-left-color: var(--muted); }
+.mini.ok { border-left-color: var(--accent); }
+.mini.ok:hover { border-left-color: var(--accent); }
+.mini.nao { border-left-color: var(--no); background: var(--no-soft); }
+.mini .lin { display: flex; align-items: center; gap: 6px; font-size: 0.72rem; color: var(--muted); font-variant-numeric: tabular-nums; }
+.mini .lin b { font-weight: 600; }
+.mini .marca { margin-left: auto; font-weight: 600; }
+.mini.ok .marca { color: var(--accent); }
+.mini.nao .marca { color: var(--no); }
+.mini .risco { font-size: 0.62rem; font-weight: 600; letter-spacing: .05em; text-transform: uppercase; color: var(--warn); background: var(--warn-soft); padding: 1px 6px; border-radius: 4px; }
+.mini .t { font-weight: 600; font-size: 0.93rem; line-height: 1.25; }
+.mini .e { font-size: 0.82rem; color: var(--muted); }
+.mini .nota-mini { font-size: 0.78rem; color: var(--no); }
+.mini .nota-mini:empty { display: none; }
+
+footer.fim { margin-top: 30px; padding: 16px 18px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); display: grid; gap: 8px; }
+footer.fim h2 { font-family: var(--display); font-weight: 600; font-size: 1.2rem; margin: 0; }
+footer.fim p { margin: 0; color: var(--muted); font-size: 0.92rem; }
+.acoes { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.final-estado { font-weight: 500; font-size: 0.9rem; }
+.final-estado.aprovado { color: var(--accent); }
+.final-estado.revisar { color: var(--no); }
+
+/* gaveta de detalhe */
+.veu { position: fixed; inset: 0; background: var(--veil); z-index: 20; }
+.veu[hidden] { display: none; }
+.gaveta { position: fixed; top: 0; right: 0; bottom: 0; width: min(520px, 100%); background: var(--surface); border-left: 1px solid var(--line); z-index: 21; overflow-y: auto; padding-block: calc(16px + env(safe-area-inset-top, 0px)) calc(24px + env(safe-area-inset-bottom, 0px)); padding-left: 20px; padding-right: max(20px, env(safe-area-inset-right, 0px)); display: grid; gap: 12px; align-content: start; }
+.gaveta[hidden] { display: none; }
+.gaveta .cab { display: flex; align-items: flex-start; gap: 10px; }
+.gaveta .cab .num { font-size: 0.78rem; color: var(--muted); font-weight: 600; padding-top: 4px; }
+.gaveta h3 { font-family: var(--display); font-weight: 600; font-size: 1.3rem; margin: 0; line-height: 1.2; flex: 1; text-wrap: balance; }
+.gaveta .fechar { padding: 4px 9px; }
+.gaveta .rot { font-size: 0.72rem; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); margin: 0 0 2px; }
+.gaveta p { margin: 0; }
+.gaveta .escolha { padding: 10px 12px; border-radius: 6px; background: var(--accent-soft); border-left: 3px solid var(--accent); }
+.gaveta .outra { padding: 10px 12px; border-left: 3px solid var(--line); color: var(--muted); }
+.gaveta .riscobox { padding: 10px 12px; border-radius: 6px; background: var(--warn-soft); color: var(--fg); }
+.gaveta textarea { width: 100%; min-height: 72px; font: inherit; font-size: 0.9rem; padding: 8px 10px; border: 1px solid var(--line); border-radius: 6px; background: var(--bg); color: var(--fg); resize: vertical; }
+.nota-box { display: grid; gap: 6px; }
+.nota-box[hidden] { display: none; }
+.estado { font-size: 0.82rem; color: var(--muted); }
+.nav { display: flex; gap: 8px; justify-content: space-between; margin-top: 6px; }
+@media (max-width: 560px) { .grade { grid-template-columns: 1fr 1fr; } .tema-cab button { margin-left: 0; } }
+@media (max-width: 380px) { .grade { grid-template-columns: 1fr; } }
+@media (prefers-reduced-motion: reduce) { .barra i { transition: none; } }
+</style>
+
+<div class="wrap">
+  <header class="top">
+    <h1>&lt;nome do plano&gt;</h1>
+    <div class="placar"><span id="placar-txt">0 de 3 avaliadas</span><div class="barra"><i id="placar-barra"></i></div></div>
+    <button class="principal" id="btn-tudo">Concordar com tudo</button>
+  </header>
+
+  <p class="intro">Grill de &lt;data&gt;. <strong>&lt;P1 a Pn&gt;</strong> você respondeu no terminal; as outras foram fechadas com a recomendação. Cada miniatura mostra a escolha inteira; clique para ver o porquê, a outra opção e discordar com uma nota.</p>
+  <div class="aviso" id="aviso-sem-db" hidden>Este navegador não está gravando as respostas (sem acesso ao armazenamento do artefato). Pode marcar mesmo assim e responder "ok" ou "N: correção" no terminal.</div>
+
+  <div id="temas"></div>
+
+  <footer class="fim">
+    <h2>Fechar o grill</h2>
+    <p>Porta <b>&lt;A, B ou C&gt;</b>: &lt;o motivo&gt;. Ao aprovar, o terminal roda o <code>/to-prd</code> e depois o <code>/to-issues</code>. Discordou de alguma? Mande para revisão que eu reajusto só as que mudam.</p>
+    <div class="acoes">
+      <button class="principal" id="btn-aprovar">Aprovar e seguir para o PRD</button>
+      <button id="btn-revisar">Mandar para revisão</button>
+      <span class="final-estado" id="final-estado"></span>
+    </div>
+  </footer>
+</div>
+
+<div class="veu" id="veu" hidden></div>
+<aside class="gaveta" id="gaveta" hidden aria-label="Detalhe da decisão"></aside>
+
+<script>
+const DECISOES = [
+  { tema: "Produto", itens: [
+    { id: "p1", t: "<título curto da decisão>", e: "<a escolha inteira, como o painel mostra na miniatura>", p: "<o porquê, em uma ou duas frases>", o: "<a outra opção e o que ela custaria>", you: true },
+    { id: "p2", t: "<título>", e: "<escolha>", p: "<porquê>", o: "<outra opção>", risco: "<onde eu posso estar errado>" }
+  ]},
+  { tema: "Governança", itens: [
+    { id: "p3", t: "Qual porta", e: "A: PRD + fatias.", p: "<o motivo da porta>", o: "B, issue única. <por que não>" }
+  ]}
+];
+const TODAS = DECISOES.flatMap(g => g.itens);
+const TOTAL = TODAS.length;
+let respostas = {};
+let final = null;
+let db = null;
+let podeEscrever = true;
+let aberta = null;
+
+function el(tag, attrs, ...kids) {
+  const n = document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs || {})) {
+    if (k === "class") n.className = v; else if (k.startsWith("on")) n.addEventListener(k.slice(2), v); else n.setAttribute(k, v);
+  }
+  for (const c of kids) if (c != null) n.append(c);
+  return n;
+}
+
+function render() {
+  const host = document.getElementById("temas");
+  host.replaceChildren();
+  for (const g of DECISOES) {
+    const slug = g.tema.toLowerCase().replace(/[^a-z]+/g, "-");
+    host.append(el("div", { class: "tema-cab" },
+      el("h2", {}, g.tema),
+      el("small", { id: "cont-" + slug }, ""),
+      el("button", { id: "tema-" + slug, onclick: () => concordarTodas(g.itens) }, "Concordar com o tema")));
+    const grade = el("div", { class: "grade" });
+    for (const d of g.itens) grade.append(mini(d));
+    host.append(grade);
+  }
+  atualizarTudo();
+}
+
+function mini(d) {
+  const b = el("button", { class: "mini", id: "mini-" + d.id, onclick: () => abrir(d.id), type: "button" });
+  const lin = el("div", { class: "lin" }, el("b", {}, d.id.toUpperCase()));
+  if (d.you) lin.append(el("span", {}, "você escolheu"));
+  if (d.risco) lin.append(el("span", { class: "risco" }, "risco"));
+  lin.append(el("span", { class: "marca", id: "marca-" + d.id }, ""));
+  b.append(lin, el("div", { class: "t" }, d.t), el("div", { class: "e" }, d.e), el("div", { class: "nota-mini", id: "notamini-" + d.id }, ""));
+  return b;
+}
+
+function atualizarMini(id) {
+  const r = respostas[id] || {};
+  const b = document.getElementById("mini-" + id);
+  if (!b) return;
+  b.className = "mini " + (r.resposta || "");
+  document.getElementById("marca-" + id).textContent = r.resposta === "ok" ? "✓ aceita" : r.resposta === "nao" ? "✕ em revisão" : "";
+  document.getElementById("notamini-" + id).textContent = r.resposta === "nao" && r.nota ? "Nota: " + r.nota : "";
+}
+
+function atualizarTudo() {
+  for (const d of TODAS) atualizarMini(d.id);
+  for (const g of DECISOES) {
+    const slug = g.tema.toLowerCase().replace(/[^a-z]+/g, "-");
+    const n = g.itens.filter(d => respostas[d.id]?.resposta).length;
+    document.getElementById("cont-" + slug).textContent = n + " de " + g.itens.length;
+    const btn = document.getElementById("tema-" + slug);
+    const faltam = g.itens.filter(d => !respostas[d.id]?.resposta).length;
+    btn.disabled = !podeEscrever || faltam === 0;
+    btn.textContent = faltam === 0 ? "Tema avaliado" : "Concordar com o tema";
+  }
+  const n = Object.values(respostas).filter(r => r.resposta).length;
+  document.getElementById("placar-txt").textContent = n + " de " + TOTAL + " avaliadas";
+  document.getElementById("placar-barra").style.width = Math.round(100 * n / TOTAL) + "%";
+  const faltamTudo = TODAS.filter(d => !respostas[d.id]?.resposta).length;
+  const bt = document.getElementById("btn-tudo");
+  bt.disabled = !podeEscrever || faltamTudo === 0;
+  bt.textContent = faltamTudo === 0 ? "Tudo avaliado" : "Concordar com tudo";
+  finalEstado();
+  if (aberta) preencherGaveta(aberta);
+}
+
+function finalEstado() {
+  const s = document.getElementById("final-estado");
+  s.className = "final-estado " + (final?.status || "");
+  s.textContent = final?.status === "aprovado" ? "Aprovado. O terminal segue para o PRD." : final?.status === "revisar" ? "Enviado para revisão." : "";
+}
+
+async function gravar(id, novo) {
+  respostas = { ...respostas, [id]: novo };
+  atualizarTudo();
+  if (!db) return;
+  try { await db.doc("respostas/" + id).set(novo); }
+  catch (e) { marcarSomenteLeitura(e); }
+}
+
+function responder(id, resposta) {
+  const atual = respostas[id] || {};
+  return gravar(id, { resposta, nota: atual.nota || "", at: new Date().toISOString() });
+}
+
+async function concordarTodas(itens) {
+  const pendentes = itens.filter(d => !respostas[d.id]?.resposta);
+  for (const d of pendentes) await responder(d.id, "ok");
+}
+
+async function salvarNota(id, texto, st) {
+  const atual = respostas[id] || { resposta: "nao" };
+  await gravar(id, { ...atual, resposta: "nao", nota: texto, at: new Date().toISOString() });
+  st.textContent = db ? (podeEscrever ? "guardada" : "não gravou") : "só nesta tela";
+}
+
+async function fechar(status) {
+  final = { status, at: new Date().toISOString(), avaliadas: Object.values(respostas).filter(r => r.resposta).length };
+  finalEstado();
+  if (!db) return;
+  try { await db.doc("aprovacao/final").set(final); }
+  catch (e) { marcarSomenteLeitura(e); }
+}
+
+function marcarSomenteLeitura(e) {
+  if (e && e.code === "invalid_argument") { podeEscrever = false; atualizarTudo(); }
+  console.error(e);
+}
+
+/* gaveta */
+function abrir(id) {
+  aberta = id;
+  document.getElementById("veu").hidden = false;
+  const g = document.getElementById("gaveta");
+  g.hidden = false;
+  preencherGaveta(id);
+  g.scrollTop = 0;
+  g.querySelector(".fechar").focus();
+}
+function fecharGaveta() {
+  aberta = null;
+  document.getElementById("veu").hidden = true;
+  document.getElementById("gaveta").hidden = true;
+}
+function preencherGaveta(id) {
+  const d = TODAS.find(x => x.id === id);
+  const r = respostas[id] || {};
+  const g = document.getElementById("gaveta");
+  const taAntes = g.querySelector("textarea");
+  const foco = taAntes && document.activeElement === taAntes;
+  const rascunho = foco ? taAntes.value : null;
+  g.replaceChildren();
+  g.append(el("div", { class: "cab" }, el("span", { class: "num" }, d.id.toUpperCase()), el("h3", {}, d.t), el("button", { class: "fechar", onclick: fecharGaveta, "aria-label": "Fechar" }, "✕")));
+  g.append(el("p", { class: "rot" }, d.you ? "Você escolheu" : "Escolha"), el("p", { class: "escolha" }, d.e));
+  g.append(el("p", { class: "rot" }, "Por quê"), el("p", {}, d.p));
+  g.append(el("p", { class: "rot" }, "A outra opção"), el("p", { class: "outra" }, d.o));
+  if (d.risco) g.append(el("p", { class: "rot" }, "Onde posso estar errado"), el("p", { class: "riscobox" }, d.risco));
+
+  const bOk = el("button", { class: "b-ok" + (r.resposta === "ok" ? " ativo" : ""), onclick: () => responder(id, "ok") }, "Concordo");
+  const bNao = el("button", { class: "b-nao" + (r.resposta === "nao" ? " ativo" : ""), onclick: () => responder(id, "nao") }, "Discordo");
+  const estado = el("span", { class: "estado" }, r.resposta === "ok" ? "aceita" : r.resposta === "nao" ? "em revisão" : "sem resposta");
+  if (!podeEscrever) { bOk.disabled = true; bNao.disabled = true; }
+  g.append(el("div", { class: "acoes" }, bOk, bNao, estado));
+
+  const nota = el("div", { class: "nota-box" });
+  nota.hidden = r.resposta !== "nao";
+  const ta = el("textarea", { id: "ta-" + id, placeholder: "O que não bateu? Uma ou duas frases bastam." });
+  ta.value = rascunho ?? (r.nota || "");
+  const st = el("span", { class: "estado" }, "");
+  nota.append(ta, el("div", { class: "acoes" }, el("button", { onclick: () => salvarNota(id, ta.value, st) }, "Guardar nota"), st));
+  g.append(nota);
+  if (foco) ta.focus();
+
+  const i = TODAS.findIndex(x => x.id === id);
+  const nav = el("div", { class: "nav" });
+  nav.append(el("button", { onclick: () => abrir(TODAS[i - 1].id), disabled: i === 0 ? "" : null }, "← anterior"));
+  nav.append(el("button", { onclick: () => abrir(TODAS[i + 1].id), disabled: i === TODAS.length - 1 ? "" : null }, "próxima →"));
+  for (const b of nav.querySelectorAll("button")) if (b.getAttribute("disabled") === null) b.removeAttribute("disabled");
+  g.append(nav);
+}
+
+document.getElementById("veu").addEventListener("click", fecharGaveta);
+document.addEventListener("keydown", e => { if (e.key === "Escape" && aberta) fecharGaveta(); });
+document.getElementById("btn-tudo").addEventListener("click", () => concordarTodas(TODAS));
+document.getElementById("btn-aprovar").addEventListener("click", () => fechar("aprovado"));
+document.getElementById("btn-revisar").addEventListener("click", () => fechar("revisar"));
+
+render();
+
+(async () => {
+  db = await window.claude?.use?.("db");
+  if (!db) { document.getElementById("aviso-sem-db").hidden = false; return; }
+  const aviso = document.getElementById("aviso-sem-db");
+  const timer = setTimeout(() => { aviso.textContent = "Ainda carregando o que já foi respondido; o que você marcar agora pode ser sobrescrito."; aviso.hidden = false; }, 10000);
+  db.collection("respostas").onSnapshot(snap => {
+    if (!snap.metadata.fromCache) { clearTimeout(timer); aviso.hidden = true; }
+    const novo = {};
+    for (const doc of snap.docs) novo[doc.id] = doc.data();
+    respostas = novo;
+    atualizarTudo();
+  }, e => { clearTimeout(timer); marcarSomenteLeitura(e); });
+  db.doc("aprovacao/final").onSnapshot(snap => { final = snap.exists ? snap.data() : null; finalEstado(); }, e => console.error(e));
+})();
+</script>

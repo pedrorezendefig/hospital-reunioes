@@ -3,11 +3,11 @@ name: tdd
 description: Test-driven development em loop red-green-refactor. Use para construir feature ou corrigir bug com o teste primeiro, ou quando pedirem testes de integração.
 ---
 
-> **Hospital Reuniões:** os critérios de aceite da issue (`gh issue view <N>`) são a lista de testes a escrever (cada critério → um teste RED). Nomes de teste descrevem o comportamento de domínio em **pt-BR** (ex.: `test_facilitador_ve_status_de_assinatura`). Backend = `pytest` (TestClient/endpoints reais); frontend segue o padrão já existente no repo. Use a terminologia de `CONTEXT.md`.
+> **Projeto:** os critérios de aceite da issue (`gh issue view <N>`) são a lista de testes a escrever (cada critério → um teste RED). Nomes de teste descrevem o comportamento de domínio em **pt-BR** (ex.: `test_gestor_ve_quem_pegou_o_pedido`). Ferramenta (`tools/`) = `pytest`; a pasta do app (`app` no `fluxo.py`) segue o padrão de teste já existente nela. Use a terminologia de `CONTEXT.md`. Rode `python3 .claude/skills/onda-enxuta/scripts/fluxo.py notas tdd`: a stack de teste e os linters do Projeto vêm de lá.
 
-> **Prova por mutação (Hospital Reuniões, ADR 0068):** teste verde não prova nada. Prove cada critério com um mutante: quebre no código a coisa que o critério promete, rode o teste e veja o vermelho, depois restaure. O teto é um mutante por critério de aceite, não por teste. Cada mutante mexe em uma coisa só (dois cortes juntos não dizem qual deles o teste pegou), e quando o teste do critério tem detector próprio (varredura, regex, fuzz) o mutante é o efeito que o detector deve pegar, para provar que ele não é cego.
+> **Prova por mutação (decisão do fluxo):** teste verde não prova nada. Prove cada critério com um mutante: quebre no código a coisa que o critério promete, rode o teste e veja o vermelho, depois restaure. O teto é um mutante por critério de aceite, não por teste. Cada mutante mexe em uma coisa só (dois cortes juntos não dizem qual deles o teste pegou), e quando o teste do critério tem detector próprio (varredura, regex, fuzz) o mutante é o efeito que o detector deve pegar, para provar que ele não é cego.
 
-> **Cadência de verificação (Hospital Reuniões):** durante o ciclo, rode só o arquivo de teste em que está mexendo. Rode os linters com regularidade, não só no fim (backend `ruff check` + `ruff format --check`; frontend `tsc`/lint): `pytest` local não pega lint e o gate de CI pega. A suíte completa roda uma vez, antes de invocar `/ship`, que vem em seguida, sem esperar mensagem (ADR 0068).
+> **Cadência de verificação:** durante o ciclo, rode só o arquivo de teste em que está mexendo. Rode os linters da stack com regularidade, não só no fim: `pytest` local não pega lint e o gate de CI pega. A suíte completa roda uma vez, antes de invocar `/ship`, que vem em seguida, sem esperar mensagem (decisão do fluxo).
 
 # Test-Driven Development
 

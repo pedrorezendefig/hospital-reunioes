@@ -342,7 +342,7 @@ function FormularioPublico() {
         </div>
       )}
 
-      <label className="flex items-start gap-2.5 cursor-pointer select-none">
+      <label className="flex items-start gap-2.5 cursor-pointer select-none normal-case">
         <input
           type="checkbox"
           checked={anonimo}

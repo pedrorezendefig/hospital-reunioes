@@ -1550,8 +1550,8 @@ class TestRenderReal:
         # A contagem de críticos sai numa tabela só dela, e por isso é
         # conferida dentro do recorte da seção: "Recepcao 4" solto no documento
         # casaria com a linha da prorrogação, que traz o mesmo par.
-        _linha_igual(texto.partition(SECAO_CRITICOS)[2], "Recepcao", igual_a="Recepcao 4")
-        assert "Tempo médio de resposta por área" in texto
+        _linha_igual(texto.partition(SECAO_CRITICOS.upper())[2], "Recepcao", igual_a="Recepcao 4")
+        assert "TEMPO MÉDIO DE RESPOSTA POR ÁREA" in texto
         # As três linhas que começam por "Recepcao", cada uma achada pelo número
         # que só ela tem.
         _linha_igual(texto, "Recepcao", "+200,0%", igual_a="Recepcao 3 1 +200,0%")
@@ -1576,7 +1576,7 @@ class TestRenderReal:
             SECAO_CRITICOS,
             "Prorrogação por área",
         ):
-            assert secao in texto, f"seção ausente do PDF impresso: {secao}"
+            assert secao.upper() in texto, f"seção ausente do PDF impresso: {secao}"
         # As duas frases de denominador chegaram inteiras ao papel. Os números
         # em destaque e as células das tabelas têm teste próprio, acima.
         assert "1 tema mais frequente entre os 3 casos já classificados de 43" in texto
@@ -2363,7 +2363,7 @@ class TestNotaExterna:
         ouvidoria_relatorio.gerar_e_enviar(supabase, PERIODO, AGORA)
         texto = _texto_do_pdf(ouvidoria_relatorio.renderizar_pdf(impressos[-1]))
 
-        assert "Retrato externo" in texto
+        assert "RETRATO EXTERNO" in texto
         # As âncoras levam o valor junto: a frase do bloco também nomeia as
         # duas fontes, e ancorar só no nome acharia a frase, não a linha.
         _linha_igual(texto, "Google", "de 5", igual_a="Google 4,3 de 5 14/08/2026")
@@ -2426,7 +2426,7 @@ class TestNotaExterna:
 
         texto = _texto_do_pdf(ouvidoria_relatorio.renderizar_pdf(antigo))
 
-        assert "Retrato externo" not in texto
+        assert "RETRATO EXTERNO" not in texto
         assert "não pôde ser lida" not in texto
 
     def test_leitura_que_falha_continua_dizendo_que_falhou(self):
@@ -2434,7 +2434,7 @@ class TestNotaExterna:
         acima verde e a degradação sumiria do papel."""
         texto = _texto_do_pdf(ouvidoria_relatorio.renderizar_pdf(_registro_de_teste(nota_externa=None)))
 
-        assert "Retrato externo" in texto
+        assert "RETRATO EXTERNO" in texto
         assert "não pôde ser lida" in texto
 
 

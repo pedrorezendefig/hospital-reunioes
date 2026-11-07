@@ -39,14 +39,22 @@ import sys
 import tempfile
 import threading
 from collections.abc import Iterable, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import NamedTuple
 
 from app.services import contas_medicas_extrator_filho as filho
 from app.services import contas_medicas_marcacoes_filho as filho_das_marcacoes
 from app.services import transcricao_extractor as orcamento
 from app.services.contas_medicas.marcacoes import inserir_nas_paginas
-from app.services.contas_medicas.prontuario import MARCA_DO_OCR, e_digitalizada, e_formulario
+from app.services.contas_medicas.prontuario import (
+    DUVIDOSA,
+    ILEGIVEL,
+    LEGIVEL,
+    MARCA_DO_OCR,
+    NAO_LIDA,
+    e_digitalizada,
+    e_formulario,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -81,12 +89,24 @@ class ErroLeitura:
 @dataclass(frozen=True)
 class Pagina:
     """Texto de uma página, com a numeração do PDF (a primeira é 1). `ocr` diz que
-    a página é digitalizada e o texto da imagem veio do `tesseract` (#1191)."""
+    a página é digitalizada e o texto da imagem veio do `tesseract` (#1191).
+    `qualidade` é a da leitura da digitalizada que foi ao OCR (#1398): legível,
+    duvidosa, ilegível ou não lida; nas outras páginas, None."""
 
     numero: int
     texto: str
     sem_texto: bool
     ocr: bool = False
+    qualidade: str | None = None
+
+
+def qualidade_da_confianca(confianca: float) -> str:
+    """A faixa da folha digitalizada pela confiança do OCR, de 0 a 100 (#1398)."""
+    if confianca >= filho.LEGIVEL_A_PARTIR_DE:
+        return LEGIVEL
+    if confianca >= filho.ILEGIVEL_ABAIXO_DE:
+        return DUVIDOSA
+    return ILEGIVEL
 
 
 def _paginas(texto: str) -> list[Pagina]:
@@ -213,32 +233,43 @@ def digitalizadas(paginas: Sequence[Pagina]) -> list[int]:
     return [p.numero for p in paginas if e_digitalizada(p.texto)]
 
 
-def ler_digitalizadas(pdf: bytes, paginas: Sequence[Pagina]) -> list[Pagina]:
+def ler_digitalizadas(pdf: bytes, paginas: Sequence[Pagina], primeiro: Iterable[int] = ()) -> list[Pagina]:
     """As páginas com o texto das digitalizadas lido pelo `tesseract` (#1191), num
-    filho só e com um `PRAZO_DA_LEITURA` para todas. Chamada pela fila da análise,
-    fora da requisição do envio. Se a leitura falhar ou passar do prazo, as
-    páginas que não saíram seguem sem texto."""
+    filho só e com um `PRAZO_DA_LEITURA` para todas, e a qualidade da leitura de
+    cada uma (#1398). As de `primeiro` vão antes: sob o prazo, o corte cai nas
+    outras. Chamada pela fila da análise, fora da requisição do envio. Se a
+    leitura falhar ou passar do prazo, as páginas que não saíram seguem sem texto
+    e não lidas."""
     pedidas = digitalizadas(paginas)
     if not pedidas:
         return list(paginas)
+    antes = set(primeiro)
+    ordem = [n for n in pedidas if n in antes] + [n for n in pedidas if n not in antes]
     # O filho para antes do vigia, para devolver o que já leu em vez de morrer.
     prazo = str(PRAZO_DA_LEITURA * 0.9)
-    bruto = _no_filho(pdf, "--ocr", ",".join(map(str, pedidas)), prazo)
+    bruto = _no_filho(pdf, "--ocr", ",".join(map(str, ordem)), prazo)
+    lidas: dict[int, dict] = {}
     if isinstance(bruto, ErroLeitura):
         logger.warning("OCR das paginas digitalizadas falhou (%s): elas seguem sem texto", bruto.motivo)
-        return list(paginas)
-    try:
-        lidas = {int(numero): texto for numero, texto in json.loads(bruto).items()}
-    except (ValueError, AttributeError):
-        logger.warning("OCR das paginas digitalizadas devolveu saida ilegivel: elas seguem sem texto")
-        return list(paginas)
-    return [_com_ocr(p, lidas[p.numero]) if p.numero in lidas else p for p in paginas]
+    else:
+        try:
+            lidas = {int(numero): lida for numero, lida in json.loads(bruto).items()}
+        except (ValueError, AttributeError):
+            logger.warning("OCR das paginas digitalizadas devolveu saida ilegivel: elas seguem sem texto")
+    return [_com_ocr(p, lidas.get(p.numero)) if p.numero in pedidas else p for p in paginas]
 
 
-def _com_ocr(pagina: Pagina, lido: str) -> Pagina:
+def _com_ocr(pagina: Pagina, lida: dict | None) -> Pagina:
     """O texto do OCR vai depois do que o `pdftotext` leu (rodapé e assinatura), atrás
-    da marca: a leitura do Prontuário estrutura a página só pelo que vem antes dela."""
-    return Pagina(pagina.numero, f"{pagina.texto}\n{MARCA_DO_OCR}\n{lido}\n", sem_texto=False, ocr=True)
+    da marca: a leitura do Prontuário estrutura a página só pelo que vem antes dela.
+    A imagem sem letra nenhuma fica sem texto, ilegível."""
+    if lida is None:
+        return replace(pagina, qualidade=NAO_LIDA)
+    qualidade = qualidade_da_confianca(lida["confianca"])
+    if not lida["texto"]:
+        return replace(pagina, qualidade=qualidade)
+    texto = f"{pagina.texto}\n{MARCA_DO_OCR}\n{lida['texto']}\n"
+    return Pagina(pagina.numero, texto, sem_texto=False, ocr=True, qualidade=qualidade)
 
 
 def _no_filho(pdf: bytes, *argumentos: str) -> bytes | ErroLeitura:

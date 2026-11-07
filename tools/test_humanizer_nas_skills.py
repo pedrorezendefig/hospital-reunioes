@@ -20,14 +20,12 @@ SKILLS = RAIZ / ".claude" / "skills"
 # Skills cujo texto vai para leitor de fora (ADR 0071, decisão 1). Quem cria
 # skill nova que escreve para o hospital entra aqui junto com o passo.
 TEXTO_PARA_FORA = {
-    "manual",
     "divulgar",
     "mensagem-prd",
     "to-prd",
     "to-issues",
     "ship",
     "ask-pedro",
-    "montar-manual",
 }
 
 
@@ -54,7 +52,6 @@ def passos_do_humanizer(trecho: str) -> list[str]:
 @pytest.mark.parametrize(
     ("skill", "titulo"),
     [
-        ("manual", "A régua de linguagem"),
         ("divulgar", "Passo 1: o vídeo"),
         ("divulgar", "Passo 2: a página"),
         ("mensagem-prd", "Fluxo"),
@@ -76,13 +73,6 @@ def test_skill_de_texto_para_fora_passa_o_texto_pelo_humanizer_onde_ele_e_gravad
     assert "amostra" in passo, (
         f"/{skill}: o passo não diz qual amostra de voz manda no tom"
     )
-
-
-def test_manual_passa_pelo_humanizer_antes_do_lint() -> None:
-    regua = secao(ler("manual"), "A régua de linguagem")
-
-    passo = passos_do_humanizer(regua)[0]
-    assert "antes" in passo and "lint_manual.py" in passo, passo
 
 
 def test_ask_pedro_cita_a_adr_0071_na_regua_de_texto() -> None:

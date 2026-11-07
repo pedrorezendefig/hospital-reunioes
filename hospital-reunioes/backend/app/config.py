@@ -44,6 +44,10 @@ class Settings(BaseSettings):
     # Contas médicas). Sem chave configurada, os chats caem no mock.
     anthropic_api_key: str = ""
     llm_model: str = "claude-sonnet-5-5"
+    # O Planejamento da Demanda (ADR 0075, decisão 7) roda num modelo próprio,
+    # pelo mesmo cliente e pela mesma chave: o grill de negócio com o diretor
+    # pede mais julgamento que o resto da IA de texto.
+    llm_model_planejamento: str = "claude-opus-5-5"
     # Transcrição de voz (issue #35): endpoint /audio/transcriptions do
     # OpenRouter, que fica só com isso: a API da Anthropic não transcreve
     # áudio. Prefixo `openai/` é a convenção do OpenRouter para o provedor.
@@ -56,6 +60,10 @@ class Settings(BaseSettings):
     # mudar a variável e reiniciar, sem deploy de código.
     cm_ia_modelo_passo_a: str = "claude-sonnet-5-5"
     cm_ia_modelo_passo_b: str = "claude-sonnet-5-5"
+    # Quantas contas a fila analisa ao mesmo tempo. A análise passa quase todo o
+    # tempo esperando a IA; a extração do PDF, que pesa na memória, tem as
+    # próprias 2 vagas (`VAGAS_DE_EXTRACAO`) e não muda com este número.
+    cm_vagas: int = 4
 
     # Fireflies
     fireflies_api_key: str = ""
@@ -80,11 +88,15 @@ class Settings(BaseSettings):
     # fine-grained, só neste repositório, só Issues: write. Nunca `GITHUB_TOKEN`,
     # que é reservado das Actions.
     #
-    # Vazio = integração desligada: a API responde 503 com frase de gente e a
-    # tela desenha os controles do Vínculo desabilitados, em vez de deixar
-    # alguém digitar um número de issue que ninguém vai ler.
+    # Vazio = integração desligada: o "Criar o card" do chat responde 503 com
+    # frase de gente.
     github_integracao_token: str = ""
     github_integracao_repo: str = ""
+
+    # O login do dono da empresa no GitHub (issue #1349, ADR 0075). O PRD do
+    # diretor que o "Criar o card" da melhoria cria nasce atribuído a ele: é ele
+    # quem redistribui.
+    github_login_dono: str = "pedrorezendefig"
 
     # O segredo do webhook do GitHub (issue #678). Ele é o ÚNICO jeito de a rota
     # `/webhooks/github` saber que a entrega veio mesmo do GitHub: a porta é
@@ -139,6 +151,14 @@ class Settings(BaseSettings):
     mcp_auth_issuer: str = ""
     mcp_auth_jwks_uri: str = ""
     mcp_resource_url: str = ""
+    # Os clientes OAuth que podem abrir o conector, separados por vírgula
+    # (#1448). Vazio = só o claude.ai (web, Desktop e celular), pelo
+    # `client_id` que ele manda por CIMD; nunca "qualquer cliente". Preenchida,
+    # a lista SUBSTITUI o padrão: ponha o claude.ai nela também. Cuidado ao
+    # liberar o Claude Code (`https://claude.ai/oauth/claude-code-client-metadata`):
+    # o login dele volta para `localhost`, e um programa na máquina, ou alguém
+    # que receba o endereço de retorno colado, pode ficar com o acesso.
+    mcp_clientes_permitidos: str = ""
     # Aquecimento do cache no boot (issue #867, ADR 0059): logo depois de subir,
     # o backend lê uma vez, numa thread, o período padrão de cada tela, para a
     # primeira abertura depois do deploy não esperar a fonte. Ausente = true.

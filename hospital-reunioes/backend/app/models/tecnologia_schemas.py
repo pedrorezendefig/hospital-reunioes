@@ -1,8 +1,7 @@
 """Schemas Pydantic da aba Tecnologia (PRD #634, ADR 0050).
 
-Arquivo proprio, e nao mais um bloco em `admin_schemas.py`, porque a aba
-Tecnologia e um contexto inteiro (Produto, Demanda, Conversa) que cresce nas
-fatias seguintes.
+Desde a ADR 0077 a aba e o chat do agente e mais nada: aqui ficam a lista das
+conversas, os turnos do chat e a leitura do print (issue #1386).
 """
 
 from __future__ import annotations
@@ -12,493 +11,189 @@ from typing import Literal
 from pydantic import BaseModel, Field
 
 
-class PessoaDaAba(BaseModel):
-    """Alguem com acesso a aba: participante ativo com Super admin.
-
-    A mesma lista serve para dono de Produto, responsavel de Demanda e
-    @mencao (PRD #634).
-    """
-
-    id: str
-    nome_completo: str
-    email: str
-    # Se esta pessoa e da Vitta (ADR 0054, decisao 9). Vai o BOOLEANO, e nao o
-    # login: quem le esta lista e a tela de escolha de dono, responsavel e
-    # @mencao, e ela nao tem nada que fazer com a identidade de ninguem no
-    # GitHub. O que ela precisa saber e se o Vinculo existe para essa pessoa.
-    tem_github_login: bool = False
-
-
-class ProdutoResponse(BaseModel):
-    """Produto como a tela o le."""
-
-    id: str
-    nome: str
-    ativo: bool
-    ordem: int
-    dono_id: str | None = None
-    # Resolvido pelo backend: o dono pode ter deixado de ser Super admin, e ai
-    # o nome dele nao estaria na lista de pessoas que a tela carrega.
-    dono_nome: str | None = None
-
-
-class ProdutoCreatePayload(BaseModel):
-    nome: str = Field(..., min_length=1, max_length=120)
-    dono_id: str | None = None
-    ordem: int | None = None
-
-
-class ProdutoUpdatePayload(BaseModel):
-    """Campos ausentes ficam como estao.
-
-    `dono_id: null` explicito no JSON tira o dono, e por isso o router olha
-    `model_fields_set` em vez de tratar `None` como "nao informado".
-    """
-
-    nome: str | None = Field(default=None, min_length=1, max_length=120)
-    ativo: bool | None = None
-    dono_id: str | None = None
-    ordem: int | None = None
-
-
-# ─── Demanda e Conversa (issue #637) ─────────────────────────────────────────
-
-# As tres listas fechadas, como o payload as ve. Sao os mesmos valores das
-# tuplas do servico e do CHECK da migration 102; `Literal` aqui e o que faz o
-# FastAPI recusar com 422 um tipo, estado ou prioridade fora da lista, antes de
-# a linha chegar ao banco. O teste amarra as duas pontas.
-TipoDemanda = Literal["decisao", "informacao", "terceiro", "ajuste", "novo", "defeito", "consultoria"]
-EstadoDemanda = Literal["nova", "em_andamento", "aguardando", "concluida", "cancelada"]
-PrioridadeDemanda = Literal["baixa", "normal", "alta"]
-
-
-class VinculoDaDemanda(BaseModel):
-    """O que so quem e da Vitta ve do Vinculo (issue #674, ADR 0054).
-
-    Numero e endereco da issue-raiz. Fica num OBJETO, e nao em dois campos
-    soltos da Demanda, porque e assim que a omissao vira uma decisao so: sem
-    `github_login`, o objeto inteiro nao vai, e nao ha campo tecnico algum na
-    resposta que o diretor recebe.
-    """
-
-    numero: int
-    url: str | None = None
-
-
 class ParteDaEntrega(BaseModel):
     """Uma parte da entrega como o diretor a le (issue #676, ADR 0054, decisao 7).
 
     Duas coisas, e nada mais: o que aquela parte muda para ele e em que pe ela
-    esta. O titulo da fatia NAO entra, porque e tecnico; o `numero` e interno e
-    vem preenchido so para quem tem `github_login` (decisao 9), pelo mesmo funil
-    que omite o objeto do Vinculo.
+    esta. O titulo e o numero da fatia NAO entram, porque sao tecnicos.
 
     `situacao` e opcional porque uma linha gravada antes desta fatia nao a tem: a
-    tela desenha o texto sem selo em vez de derrubar o modal inteiro.
+    tela desenha o texto sem selo em vez de derrubar a conversa inteira.
     """
 
-    numero: int | None = None
     o_que_muda: str | None = None
     situacao: str | None = None
 
 
 class DemandaResponse(BaseModel):
-    """Demanda como o card e o modal a leem.
+    """Uma conversa da lista lateral do chat (issue #1384, ADR 0077).
 
-    `produto_nome` e `responsavel_nome` sao resolvidos pelo backend: o card
-    mostra os dois, e cruzar tabela na tela deixaria o nome em branco toda vez
-    que a pessoa saisse da lista de quem tem acesso a aba.
-
-    Os campos de estado e prioridade sao `str`, e nao `Literal`: aqui se le o
-    que o banco tem. Uma linha antiga com valor fora da lista fechada deve
-    aparecer na tela, e nao derrubar a listagem inteira com erro de validacao.
+    So o que o diretor le: o titulo, a Etapa (com as partes e a versao) e O que
+    muda. Numero e endereco da issue nao saem daqui (ADR 0054, decisao 9);
+    `tem_vinculo` diz so que o card ja nasceu.
     """
 
     id: str
     titulo: str
-    descricao: str | None = None
-    tipo: str
-    produto_id: str
-    produto_nome: str | None = None
-    estado: str
-    responsavel_id: str | None = None
-    responsavel_nome: str | None = None
-    autor_id: str | None = None
-    prioridade: str
-    prazo: str | None = None
     criado_em: str | None = None
-    atualizado_em: str | None = None
-    concluida_em: str | None = None
-    concluida_por: str | None = None
-    cancelada_em: str | None = None
-    cancelada_por: str | None = None
-    # ─── Vinculo com o desenvolvimento (issue #674, ADR 0054) ───
-    #
-    # A Etapa e os numeros das partes vao para TODO MUNDO: e por eles que o
-    # diretor ve em que ponto a Vitta esta, e sao palavras, nao nada tecnico.
-    # `registrada` (o default do banco) e a ausencia de Vinculo, e o card nao
-    # desenha selo nenhum nela.
+    # `registrada` (o default do banco) e a conversa sem card.
     etapa: str = "registrada"
     partes_entregues: int | None = None
     partes_total: int | None = None
-    github_sincronizado_em: str | None = None
-    # O que e da Vitta: numero e endereco da issue. Vem preenchido so para quem
-    # tem `github_login`, e OMITIDO (nulo) para quem nao tem (ADR 0054, decisao
-    # 9). O diretor nao ve numero de issue nem link.
-    vinculo: VinculoDaDemanda | None = None
-    # ─── O que muda (issue #676, ADR 0054, decisao 7) ───
-    #
+    tem_vinculo: bool = False
     # O bloco "Para o diretor" da issue-raiz e o de cada parte, lidos do GitHub
-    # e NUNCA digitados no app. Vao para todo mundo: e este texto que explica ao
-    # diretor o que a entrega muda para ele.
-    #
-    # `o_que_muda` nulo e "a Vitta ainda nao escreveu", e a tela o traduz numa
-    # frase; nulo NAO e o corpo tecnico da issue, que nao sai do GitHub.
+    # e NUNCA digitados no app (ADR 0054, decisao 7). Nulo e "a Vitta ainda nao
+    # escreveu", e a tela o traduz numa frase.
     o_que_muda: str | None = None
     partes: list[ParteDaEntrega] = []
     # A versao em que a Demanda subiu, RESOLVIDA pelo backend: vem preenchida so
-    # quando a Etapa e Em producao (`versao_da_entrega`), e o selo a mostra em
-    # todo lugar ("Em producao desde v0.165.0", issue #1065). A tela nao repete
-    # a regra.
+    # quando a Etapa e Em producao (`versao_da_entrega`), e o selo a mostra
+    # ("Em producao desde v0.165.0", issue #1065). A tela nao repete a regra.
     versao: str | None = None
-    # A frase de "isto valeu, mas o aviso por e-mail nao saiu" (issue #642), ou
-    # `None` quando nao houve nada a avisar ou o aviso saiu.
-    #
-    # Vem MONTADA do backend, e nao como um booleano: a tela nao tem como
-    # escrever essa frase sem repetir a regra de quem devia receber, e uma
-    # segunda versao do texto divergiria da primeira.
-    aviso_por_email: str | None = None
-    # A frase dos prints do Assistente que nao viraram Anexo na criacao (issue
-    # #1062), ou `None` quando todos entraram ou nao havia print.
-    aviso_dos_anexos: str | None = None
-
-
-class DemandaCreatePayload(BaseModel):
-    """A Demanda nasce com o que da para preencher em menos de um minuto.
-
-    Nao ha `estado` nem `responsavel_id`: a Demanda nasce em `nova` e atribuida
-    ao dono do Produto (ADR 0050, decisao 4). Quem manda esses campos na criacao
-    estaria escolhendo por uma regra que e do backend.
-    """
-
-    # Sem `min_length` NEM `max_length`: quem cuida dos dois limites do titulo
-    # e o router (`_titulo_valido`), com frase de gente. O pydantic responde
-    # ANTES dele e devolve `detail` em LISTA, que a tela mostra como JSON cru
-    # no alerta vermelho. Vale para os dois extremos: apagar o campo e colar um
-    # texto de 300 caracteres sao enganos igualmente comuns.
-    titulo: str
-    tipo: TipoDemanda
-    produto_id: str = Field(..., min_length=1)
-    descricao: str | None = None
-    prioridade: PrioridadeDemanda = "normal"
-    # Texto ISO (`2026-10-01`) ou vazio. O router normaliza e valida: `""` nao e
-    # NULL, e gravado numa coluna DATE seria erro de banco, nao 422.
-    prazo: str | None = None
-    # Os identificadores efemeros dos prints que o Assistente descreveu (issue
-    # #1062): viram Anexo na mesma chamada que cria a Demanda. O formulario nao
-    # manda nada aqui; ele anexa depois, uma imagem por vez.
-    prints: list[str] = []
-
-
-class DemandaUpdatePayload(BaseModel):
-    """Os campos que o modal edita. Campo ausente fica como esta.
-
-    `estado` e `responsavel_id` NAO entram: as portas deles sao `mover` e
-    `atribuir`, que gravam a linha de movimento na Conversa. Aceitar os dois
-    aqui moveria a Demanda sem deixar rastro no fio.
-
-    `prazo: null` explicito limpa o prazo, e por isso o router olha
-    `model_fields_set` em vez de tratar `None` como "nao informado".
-    """
-
-    # Sem limite de tamanho, pelo mesmo motivo do payload de criacao: apagar o
-    # Título no modal, ou colar um texto longo nele, tem que devolver a frase
-    # de gente, e nao o JSON do pydantic.
-    titulo: str | None = None
-    descricao: str | None = None
-    tipo: TipoDemanda | None = None
-    produto_id: str | None = Field(default=None, min_length=1)
-    prioridade: PrioridadeDemanda | None = None
-    prazo: str | None = None
-
-
-class MoverPayload(BaseModel):
-    """A coluna de destino. A maquina de estados decide se o caminho existe."""
-
-    estado: EstadoDemanda
-
-
-class AtribuirPayload(BaseModel):
-    """Quem passa a responder pela Demanda, entre as pessoas com acesso a aba."""
-
-    responsavel_id: str = Field(..., min_length=1)
-
-
-class EuNaAbaResponse(BaseModel):
-    """Quem esta olhando a aba, do ponto de vista do Vinculo (issue #674).
-
-    Duas perguntas que a tela nao tem como responder sozinha:
-
-    * `tem_github_login`: o `useAuth` do front carrega o id do Supabase Auth, e
-      nao o `participantes.id`, entao a tela nao consegue se achar na lista de
-      pessoas para ler o proprio login.
-    * `integracao_configurada`: e uma variavel de ambiente do backend. Sem esta
-      resposta, o campo de vincular so descobriria no clique que nao ha
-      integracao, depois de a pessoa digitar o numero.
-    """
-
-    id: str
-    nome_completo: str | None = None
-    tem_github_login: bool = False
-    integracao_configurada: bool = False
-
-
-class VincularPayload(BaseModel):
-    """O numero da issue-raiz, como a pessoa o digita.
-
-    Sem `ge=1` no pydantic de proposito, no mesmo espirito do titulo da Demanda:
-    quem recusa numero zero ou negativo e o router, com frase de gente. O
-    `detail` do pydantic vem em LISTA e a tela mostraria o JSON cru no alerta.
-    """
-
-    numero: int
-
-
-class ConversaLinhaResponse(BaseModel):
-    """Uma linha do fio: resposta de gente ou movimento automatico.
-
-    `autor_nome` vem nulo na linha de movimento, que nao tem autor no banco: o
-    nome de quem moveu ja esta no `texto` montado pelo backend.
-    """
-
-    id: str
-    demanda_id: str
-    autor_id: str | None = None
-    autor_nome: str | None = None
-    linha: str
-    texto: str
-    mencoes: list[str] = []
-    movimento_campo: str | None = None
-    movimento_de: str | None = None
-    movimento_para: str | None = None
-    criado_em: str | None = None
-    editado_em: str | None = None
-    # Ate quando ESTA pessoa pode corrigir ESTA linha, ou `None` quando ela nao
-    # pode (linha de movimento, resposta de outra pessoa, data ilegivel).
-    #
-    # Quem calcula e o backend porque a tela nao sabe qual participante e o
-    # usuario logado: o `useAuth` do front carrega o id do Supabase Auth, e nao
-    # o `participantes.id` que assina a linha. Vai o INSTANTE, e nao um booleano
-    # "pode": o modal fica aberto enquanto a janela corre, e um booleano
-    # congelado no carregamento continuaria dizendo "pode" dez minutos depois.
-    editavel_ate: str | None = None
-    # O mesmo aviso da `DemandaResponse` (issue #642): responder dispara os
-    # gatilhos de menção e de resposta, e quem escreveu precisa saber se eles
-    # saíram. Sempre `None` na LEITURA do fio: ali ninguém acabou de agir.
-    aviso_por_email: str | None = None
-    # A imagem que a resposta levou (issue #1062), com a URL assinada de vida
-    # curta, ou `None`. Movimento nunca leva imagem.
-    imagem: AnexoDaDemandaResponse | None = None
-
-
-class AnexoDaDemandaResponse(BaseModel):
-    """Um Anexo da Demanda como o card o mostra (issue #1061, ADR 0069).
-
-    Sem o caminho no storage: o acesso ao binario e so pela `url`, assinada e
-    de vida curta. Ela vem nula no anexo apagado (Demanda Concluida ou
-    Cancelada), que continua aparecendo com nome, quem e quando.
-    """
-
-    id: str
-    nome: str
-    anexado_por_nome: str | None = None
-    criado_em: str | None = None
-    apagado_em: str | None = None
-    # A resposta da Conversa que trouxe a imagem (issue #1062), ou nulo quando
-    # ela veio pelo formulario ou pelo Assistente.
-    conversa_id: str | None = None
-    url: str | None = None
-
-
-class TextoParaIaResponse(BaseModel):
-    """O texto do "Copiar para IA", ja montado (issue #640).
-
-    O corpo e um objeto, e nao a string solta, porque uma resposta que e so um
-    texto nao tem onde crescer: qualquer coisa que venha junto depois (um aviso
-    de fio grande, por exemplo) quebraria quem le.
-    """
-
-    texto: str
-
-
-class RespostaPayload(BaseModel):
-    """O que a caixa de resposta manda, ao enviar e ao corrigir.
-
-    `mencoes` sao os ids escolhidos no autocomplete do @, e nao um texto para o
-    backend adivinhar: casar "@Fulano de Tal" dentro da frase por conta propria
-    erraria em nome com espaco e em nome que e prefixo de outro. Quem escolheu
-    na lista sabe de quem se trata; o backend confere se essa pessoa tem acesso
-    a aba (a mesma regra da porta de atribuir) e grava.
-
-    Sem `min_length`/`max_length`: os dois limites do texto saem do servico com
-    frase de gente, porque o `detail` do pydantic vem em LISTA e a tela mostra o
-    JSON cru no alerta vermelho.
-    """
-
-    texto: str
-    mencoes: list[str] | None = None
-    # A imagem que vai junto da resposta (issue #1062): o id do anexo que a
-    # tela acabou de subir pela porta do formulario. So vale no envio; a
-    # correcao reescreve o texto e nao troca a imagem.
-    anexo_id: str | None = None
-
-
-# ─── O Painel (issue #1059, PRD #1056; antes "Minha vez" e Historico, #641) ─
-
-
-class DemandaComVoceResponse(DemandaResponse):
-    """A Demanda como o bloco "Com voce" do Painel a le.
-
-    O `motivo` e o par na tela da regra do backend: o bloco traz tanto o que e
-    meu quanto o que me chamaram, e sem ele quem abre ve um card cujo
-    responsavel e OUTRA pessoa e nao descobre por que ele esta ali.
-    """
-
-    # `responsavel` ou `mencao` (constantes do servico). E `str`, e nao
-    # `Literal`, pelo mesmo motivo de `estado` e `prioridade`: aqui se le, nao
-    # se recusa.
-    motivo: str
-
-
-class DemandaDoHistoricoResponse(DemandaResponse):
-    """A Demanda como o bloco Historico do Painel a le.
-
-    Os tres campos de desfecho sao RESOLVIDOS pelo backend, a partir do estado:
-    a tela mostra "quando e por quem" numa linha so, e escolher entre
-    `concluida_em` e `cancelada_em` na tela seria uma segunda copia da regra,
-    que divergiria da primeira na primeira mudanca.
-    """
-
-    fechada_em: str | None = None
-    fechada_por_id: str | None = None
-    fechada_por_nome: str | None = None
-
-
-class DemandaDaEntregaResponse(DemandaResponse):
-    """A Demanda como o bloco Entregas do Painel a le (issue #1059).
-
-    A `versao` deixou de ser so deste bloco (issue #1065): ela vem em toda
-    Demanda (`DemandaResponse`), porque o selo a mostra no Quadro tambem.
-    """
-
-
-class NumerosDoPainel(BaseModel):
-    """Os quatro numeros do topo do Painel. Nenhum e por pessoa (ADR 0061)."""
-
-    abertas: int
-    com_o_hospital: int
-    em_desenvolvimento: int
-    entregues_30_dias: int
-
-
-class PainelResponse(BaseModel):
-    """O Painel inteiro numa resposta so (issue #1059).
-
-    Uma rota, e nao uma por bloco: os quatro numeros e os tres blocos saem da
-    MESMA leitura das Demandas, e tres leituras em tempos diferentes deixariam
-    o numero do topo discordar da lista logo abaixo dele.
-    """
-
-    numeros: NumerosDoPainel
-    com_voce: list[DemandaComVoceResponse]
-    entregas: list[DemandaDaEntregaResponse]
-    historico: list[DemandaDoHistoricoResponse]
-
-
-# ─── Assistente de Tecnologia (PRD #726, ADR 0056) ───────────────────────────
-
-# Os dois tetos do corpo do chat. Sao do pydantic, e nao do router, porque aqui
-# nao ha frase de gente a preservar: um corpo com 200 mensagens ou com um texto
-# de 50 mil caracteres nao veio da tela, veio de um cliente que resolveu mandar
-# o que quisesse para uma rota que gasta token de LLM a cada chamada.
-LIMITE_DE_MENSAGENS = 40
+    # O selo ao lado da Etapa (issue #1438): o Tipo da Demanda traduzido de
+    # volta para a pergunta do chat. Nulo no Tipo de antes do chat.
+    classificacao: Literal["bug", "melhoria"] | None = None
+
+
+# O teto de uma fala do chat. E do pydantic, e nao do router, porque aqui nao
+# ha frase de gente a preservar: um texto de 50 mil caracteres nao veio da tela,
+# veio de um cliente que resolveu mandar o que quisesse para uma rota que gasta
+# token de LLM a cada chamada.
 LIMITE_DA_MENSAGEM = 5000
 
 
-class AssistenteMensagem(BaseModel):
-    """Uma fala do historico. Espelha o `ChatMessageSchema` dos outros chats."""
-
-    role: Literal["user", "assistant"]
-    content: str = Field(..., max_length=LIMITE_DA_MENSAGEM)
-
-
-class AssistenteChatPayload(BaseModel):
-    """Corpo do POST /admin/tecnologia/assistente/chat.
-
-    Sem estado no servidor (ADR 0056, decisao 4): o rascunho e a conversa vivem
-    na aba do navegador e voltam inteiros a cada turno. O rascunho chega como
-    `dict` cru porque quem o peneira e o servico, contra as listas fechadas e
-    os Produtos ativos, e um `Literal` aqui recusaria com 422 o que a regra
-    manda apenas ignorar.
-    """
-
-    rascunho: dict = Field(default_factory=dict)
-    messages: list[AssistenteMensagem] = Field(..., min_length=1, max_length=LIMITE_DE_MENSAGENS)
-
-
-class AssistenteDemandaParecida(BaseModel):
-    """O aviso de Demanda parecida, como a faixa da tela o consome (issue #732).
-
-    Ele e um MODELO, e nao um `dict`, porque o recorte de quatro campos e o que
-    mantem a descricao (que pode ter dado pessoal transcrito de um print) fora
-    de uma resposta que a tela mostra antes de a pessoa abrir a Demanda. Com
-    `dict`, o corte dependia de quem produz; aqui ele e estrutural: campo que
-    nao esta escrito abaixo nao sai desta rota, venha de onde vier.
-    """
-
-    id: str
-    titulo: str
-    estado: str
-    responsavel_nome: str | None = None
-
-
-class AssistenteChatResponse(BaseModel):
-    """Resposta do turno: a fala, o rascunho novo e o aviso de Demanda parecida.
-
-    `demanda_parecida` vem preenchida quando o assistente reconhece o pedido
-    como o mesmo assunto de uma Demanda ABERTA do Quadro (issue #732).
-    """
-
-    reply: str
-    rascunho: dict
-    demanda_parecida: AssistenteDemandaParecida | None = None
-
-
-class AssistenteDocumentoResponse(BaseModel):
-    """Resposta do POST /admin/tecnologia/assistente/extrair-documento.
-
-    O `filename` volta junto com o texto porque e ele que vira o prefixo de
-    origem da mensagem na tela (`[documento nota.pdf] `): quem escolheu o
-    arquivo precisa VER, na conversa, qual arquivo o assistente leu. Nada aqui
-    e gravado: o arquivo vira texto e some (ADR 0056, decisao 4).
-    """
-
-    texto: str
-    filename: str
+# ─── A leitura do print (PRD #726, ADR 0056) ─────────────────────────────────
 
 
 class AssistenteImagemResponse(BaseModel):
     """Resposta do POST /admin/tecnologia/assistente/descrever-imagem.
 
-    So o texto, e nao o nome do arquivo como na extracao: o prefixo de origem do
-    print e `[print] ` seco, sem nome. O nome de um print e "Captura de tela
+    So o texto, e nao o nome do arquivo: o prefixo de origem do print e
+    `[print] ` seco, sem nome. O nome de um print e "Captura de tela
     2026-09-17 as 14.02.11.png", que nao diz nada a quem le a conversa, e a
     imagem nao e guardada em lugar nenhum para alguem querer achar depois
     (ADR 0056, decisao 4).
 
     `print_id` e o identificador efemero do print (issue #1062): a imagem fica
-    so na memoria do backend e vira Anexo se a pessoa clicar "Criar Demanda".
+    so na memoria do backend e vira Anexo quando a fala do chat que o leva entra
+    na conversa.
     """
 
     texto: str
     print_id: str | None = None
+
+
+# ─── O resumo da melhoria (issue #1383, ADR 0077) ───────────────────────────
+
+
+class DecisaoDoResumo(BaseModel):
+    """Uma decisao do resumo: a pergunta da IA, a resposta do diretor e uma
+    linha de porque. As duas primeiras vem da conversa, nunca do modelo."""
+
+    pergunta: str
+    escolha: str
+    porque: str
+
+
+class ResumoDoPlanejamento(BaseModel):
+    decisoes: list[DecisaoDoResumo] = []
+    em_aberto: list[str] = []
+    # A secao "Para o glossario" do PRD do diretor (issue #1383).
+    termos: list[str] = []
+    candidatas_a_adr: list[str] = []
+
+
+# ─── O chat da aba (issue #1381, PRD #1380, ADR 0077) ────────────────────────
+
+
+class ChatPrimeiroTurnoPayload(BaseModel):
+    """Corpo do POST /admin/tecnologia/chat: o primeiro turno, que faz a
+    Demanda nascer. Leva o botao da abertura ("bug" ou "melhoria"), o texto
+    livre, ou os dois; quem recusa o corpo vazio e a rota, com frase de gente.
+
+    `prints` sao os identificadores efemeros dos prints que a rota
+    `descrever-imagem` leu: viram Anexo da Demanda na hora em que o turno entra.
+    """
+
+    escolha: Literal["bug", "melhoria"] | None = None
+    texto: str | None = Field(default=None, max_length=LIMITE_DA_MENSAGEM)
+    prints: list[str] = Field(default_factory=list, max_length=10)
+
+
+class ChatTurnoPayload(BaseModel):
+    """Corpo do POST /admin/tecnologia/chat/{id}: a fala do diretor.
+
+    Sem texto, o turno e o "tente de novo" da IA: vale so quando a ultima fala
+    guardada e do diretor (o "nao bateu"). No planejamento da melhoria (issue
+    #1383), `opcao` e a letra da opcao clicada, e a resposta e ela OU o texto.
+    """
+
+    opcao: Literal["A", "B"] | None = None
+    texto: str | None = Field(default=None, max_length=LIMITE_DA_MENSAGEM)
+    prints: list[str] = Field(default_factory=list, max_length=10)
+    # O "Continuar respondendo" do resumo da melhoria com lacuna (issue #1440):
+    # a fala sai do "Ficou em aberto" guardado, sem opcao nem texto.
+    continuar: bool = False
+
+
+class ChatNaoBateuPayload(BaseModel):
+    """Corpo do POST .../chat/{id}/nao-bateu: o que nao bateu no resumo."""
+
+    texto: str | None = Field(default=None, max_length=LIMITE_DA_MENSAGEM)
+
+
+class FalaDoChat(BaseModel):
+    autor: Literal["ia", "diretor"]
+    texto: str
+    fonte: str | None = None
+    opcoes: list[str] = []
+    # A letra da opcao recomendada, so na pergunta do planejamento da melhoria
+    # (issue #1383): as `opcoes` vem na ordem A e B.
+    recomendada: Literal["A", "B"] | None = None
+    nao_bateu: bool = False
+
+
+class ResumoDoBug(BaseModel):
+    """O resumo do Roteiro do bug, como o diretor o confere."""
+
+    titulo: str
+    onde: str
+    o_que_aconteceu: str
+    o_que_esperava: str
+    como_repetir: str
+    criterios: list[str]
+
+
+class CustoDaConversa(BaseModel):
+    """O modelo da chamada mais recente, no nome de exibicao ("Opus 5.5"), e a
+    soma em dolar das chamadas de IA da Demanda. `custo_usd` nulo = nao medido:
+    alguma chamada com tokens gravou custo zero (modelo sem preco)."""
+
+    modelo: str
+    custo_usd: float | None = None
+
+
+class ChatResponse(BaseModel):
+    """A conversa do chat como a tela a mostra.
+
+    `estado` segue o do planejamento: `em_andamento`, `resumido` (o resumo do
+    bug esperando "Criar o card" ou "Nao bateu") e `enviado` (o card nasceu).
+    `planejamento` verdadeiro e a melhoria confirmada, que segue no proprio
+    chat pelo Planejamento da Demanda (issue #1383); o estado `encerrado` e o
+    teto ou o fim das perguntas, esperando o "Fechar e resumir".
+    Tokens nunca saem por aqui (ADR 0077, decisao 9). O custo sai, so na
+    conversa aberta e nunca na lista: `custo` e nulo sem chamada nenhuma
+    (ADR 0079, decisao 6, issue #1439).
+    """
+
+    demanda_id: str
+    estado: str | None = None
+    mensagens: list[FalaDoChat] = []
+    resumo: ResumoDoBug | None = None
+    # O resumo do planejamento da melhoria (issue #1383), com `planejamento`
+    # verdadeiro: as decisoes e o que ficou em aberto.
+    resumo_da_melhoria: ResumoDoPlanejamento | None = None
+    anexos: int = 0
+    planejamento: bool = False
+    aviso_dos_anexos: str | None = None
+    custo: CustoDaConversa | None = None

@@ -3,9 +3,11 @@ name: to-prd
 description: Transforma o contexto da conversa num PRD e publica como issue no GitHub. Use quando o usuário quiser criar um PRD a partir do que foi discutido.
 ---
 
-This skill takes the current conversation context and codebase understanding and produces a PRD. Do NOT interview the user — just synthesize what you already know.
+This skill takes the current conversation context and codebase understanding and produces a PRD. Do NOT interview the user; just synthesize what you already know.
 
-> **Idioma (Hospital Reuniões):** o PRD inteiro é escrito em **pt-BR** — título da issue, problema, solução, histórias de usuário, decisões. Use a terminologia de `CONTEXT.md` (Reunião, Ata, Pendência, Facilitador, Colaborador, Envelope…). Veja a regra de idioma no `CLAUDE.md`.
+> **Idioma:** o PRD inteiro é escrito em **pt-BR**: título da issue, problema, solução, histórias de usuário, decisões. Use a terminologia de `CONTEXT.md`. Veja a regra de idioma no `CLAUDE.md`.
+
+> **Projeto:** esta skill é a mesma em todo Projeto. Use a terminologia do `CONTEXT.md` do Projeto e rode `python3 .claude/skills/onda-enxuta/scripts/fluxo.py notas to-prd`: o que ele imprimir vale por cima desta skill. O `bloco` e o `leitor` do `fluxo.py` dizem o título do bloco leigo (`<bloco>` abaixo) e para quem ele é escrito.
 
 Issue tracker = **GitHub Issues** via `gh` (veja `docs/agents/issue-tracker.md`). Triage label = `ready-for-agent` (veja `docs/agents/triage-labels.md`). Se faltar esse contexto, leia os dois arquivos de `docs/agents/`.
 
@@ -19,33 +21,31 @@ Issue tracker = **GitHub Issues** via `gh` (veja `docs/agents/issue-tracker.md`)
 
    Check with the user that these modules and seams match their expectations before writing the PRD.
 
-3. Write the PRD using the template below (**in pt-BR**), then publish it with `gh issue create`. Apply the `ready-for-agent` label — no need for additional triage.
+3. Write the PRD using the template below (**in pt-BR**), then publish it with `gh issue create`. Apply the `ready-for-agent` label; no need for additional triage.
 
    ```bash
    URL=$(gh issue create --title "<título pt-BR>" --body "<corpo>" --label ready-for-agent --assignee @me)
    ```
 
-   O `--assignee @me` faz o PRD nascer com dono: quem rodou o `/to-prd` (ADR 0068). Não é claim; as fatias que o `/to-issues` cria continuam sem assignee até alguém pegar, e o `/pegar-issue` avisa quem pega fatia de PRD alheio.
+   O `--assignee @me` faz o PRD nascer com dono: quem rodou o `/to-prd` (decisão do fluxo). Não é claim; as fatias que o `/to-issues` cria continuam sem assignee até alguém pegar, e o `/pegar-issue` avisa quem pega fatia de PRD alheio.
 
-   **Todo PRD abre com o bloco "Para o diretor"** (ADR 0068): um resumo em linguagem simples, no topo do corpo, antes da parte técnica. É a porta de entrada do revisor não-técnico, que lê as issues direto no GitHub. Formato fixo, mínimo de palavras, zero jargão:
+   **Todo PRD abre com o bloco "<bloco>"** (decisão do fluxo): um resumo em linguagem simples, no topo do corpo, antes da parte técnica. É a porta de entrada de quem lê as issues direto no GitHub sem abrir o código. Formato fixo, mínimo de palavras, zero jargão:
 
-   - **O que muda:** uma frase de valor, não-técnica — o que o sistema passa a fazer pelo hospital.
-   - **O que você precisa saber:** 2–3 regras simples que deixem o revisor reconhecer a feature funcionando.
+   - **O que muda:** uma frase de valor, não-técnica: o que o sistema passa a fazer por <leitor>.
+   - **O que você precisa saber:** de 2 a 3 regras simples que deixem o leitor reconhecer a feature funcionando.
 
-   **Nunca cite número de issue ou de PR dentro deste bloco** (nada de "o PRD #469", "a #430 entregou"). O bloco é a única parte do corpo que o app lê e mostra ao diretor na aba Tecnologia, e o ADR 0054, decisão 9, diz que ele não vê número de issue. O código não raspa número de texto livre (raspar mutilaria "40 mil" e "3 partes"), então a regra vale aqui, na escrita. Precisa referenciar outro trabalho? Descreva pelo nome ("o PRD da Ouvidoria"), ou deixe a referência na parte técnica, abaixo do bloco.
+   **Humanizer antes do `gh issue create`** (ADR 0071 da origem do fluxo): passe o corpo pela Skill tool com `humanizer` em modo embutido, com atenção ao bloco "<bloco>". A amostra de voz é o bloco "<bloco>" de um PRD já publicado: ela manda no tom, o humanizer só tira os cacoetes. O resto do corpo fica neutro e direto; termos do `CONTEXT.md`, títulos do template e histórias no formato "Como `<ator>`" não mudam.
 
-   **Humanizer antes do `gh issue create`** (ADR 0071): passe o corpo pela Skill tool com `humanizer` em modo embutido, com atenção ao bloco "Para o diretor", que o app mostra ao diretor. A amostra de voz é o bloco "Para o diretor" de um PRD já publicado: ela manda no tom, o humanizer só tira os cacoetes. O resto do corpo fica neutro e direto; termos do `CONTEXT.md`, títulos do template e histórias no formato "Como `<ator>`" não mudam.
-
-   Capture e **anuncie o número** da issue-PRD criada (o `gh issue create` devolve a URL; o número é o último segmento — ex.: `URL=$(gh issue create …); PRD=${URL##*/}`). Diga ao usuário, ex.: _"PRD publicado como **#41**"_. Esse número é o **pai** das fatias: o `/to-issues` o usa pra vincular cada fatia como **sub-issue** nativa. Rodando `/to-issues` em seguida nesta mesma conversa, ele já tem o `#41` no contexto.
+   Capture e **anuncie o número** da issue-PRD criada (o `gh issue create` devolve a URL; o número é o último segmento, ex.: `URL=$(gh issue create …); PRD=${URL##*/}`). Diga ao usuário, ex.: _"PRD publicado como **#41**"_. Esse número é o **pai** das fatias: o `/to-issues` o usa pra vincular cada fatia como **sub-issue** nativa. Rodando `/to-issues` em seguida nesta mesma conversa, ele já tem o `#41` no contexto.
 
 <prd-template>
 
-## 👔 Para o diretor
+## <bloco>
 
 **O que muda:** uma frase de valor, não-técnica.
 
 **O que você precisa saber:**
-- 2–3 regras simples, sem jargão, que deixem o revisor reconhecer a feature.
+- De 2 a 3 regras simples, sem jargão, que deixem o leitor reconhecer a feature.
 
 ---
 
@@ -64,7 +64,7 @@ Uma lista LONGA e numerada de histórias de usuário, cada uma no formato:
 1. Como `<ator>`, quero `<funcionalidade>`, para `<benefício>`
 
 <exemplo>
-1. Como facilitador, quero ver o status de assinatura de cada participante, para saber quem ainda não assinou a ata e cobrar só essa pessoa.
+1. Como gestor, quero ver quem pegou cada pedido, para saber de quem cobrar o andamento.
 </exemplo>
 
 A lista deve ser bem extensa e cobrir todos os aspectos da funcionalidade.
@@ -73,21 +73,11 @@ A lista deve ser bem extensa e cobrir todos os aspectos da funcionalidade.
 
 Lista de decisões tomadas. Pode incluir: módulos a construir/modificar, as interfaces desses módulos, esclarecimentos técnicos do desenvolvedor, decisões arquiteturais, mudanças de schema, contratos de API, interações específicas.
 
-NÃO inclua caminhos de arquivo nem trechos de código — envelhecem rápido. Exceção: se um protótipo produziu um trecho que codifica uma decisão melhor que prosa (máquina de estados, reducer, schema, shape de tipo), inclua só a parte essencial e diga brevemente que veio de um protótipo.
+NÃO inclua caminhos de arquivo nem trechos de código: envelhecem rápido. Exceção: se um protótipo produziu um trecho que codifica uma decisão melhor que prosa (máquina de estados, reducer, schema, shape de tipo), inclua só a parte essencial e diga brevemente que veio de um protótipo.
 
 ## Decisões de teste
 
 Lista de decisões de teste. Inclua: o que faz um bom teste (testar só comportamento externo, não detalhes de implementação), em quais **seams** os testes observam o comportamento (os acordados no passo 2), quais módulos serão testados, e exemplos análogos já existentes no código.
-
-## Manual: páginas que nascem ou mudam
-
-As páginas do Manual do usuário (`docs/manual/`) que esta entrega cria ou altera. É desta seção que a Fatia de manual tira o trabalho dela, então ela é lista, não promessa:
-
-- **Páginas de tarefa** (uma ação cada, título no infinitivo): qual nasce, qual muda e em que módulo (`primeiros-passos`, `reunioes`, `ouvidoria`, `pops`, `contas-medicas`, `admin`).
-- **Como funciona**: o que a entrega muda no comportamento que não é ação de ninguém (como o prazo é contado, o que o sistema apaga sozinho).
-- **Novidades**: a entrada que este PRD gera no `novidades.md` do módulo, na língua do usuário.
-
-PRD que não toca tela nenhuma escreve **"Nenhuma: este PRD não muda tela"**. É o que diz ao `/to-issues` para não criar a Fatia de manual (ADR 0057, decisão 8).
 
 ## Fora de escopo
 

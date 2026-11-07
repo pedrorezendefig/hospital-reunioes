@@ -15,6 +15,7 @@ import {
   lotes,
   rotuloDaSituacao,
   separarArquivos,
+  textosDaBarra,
   type ItemDaFila,
 } from "./envio";
 
@@ -161,7 +162,7 @@ describe("o que a fila mostra de cada conta", () => {
     expect(rotuloDaSituacao(item({ situacao: "AGUARDANDO_ARQUIVO", falta: "prontuario" }))).toBe("Falta o prontuário");
     expect(rotuloDaSituacao(item({ situacao: "AGUARDANDO_ARQUIVO", falta: "conta" }))).toBe("Falta a conta");
     expect(rotuloDaSituacao(item({ situacao: "NA_FILA" }))).toBe("Na fila");
-    expect(rotuloDaSituacao(item({ situacao: "PROCESSANDO" }))).toBe("Pronta em instantes");
+    expect(rotuloDaSituacao(item({ situacao: "PROCESSANDO" }))).toBe("Processando");
     expect(rotuloDaSituacao(item({ situacao: "A_FAZER" }))).toBe("A fazer");
     expect(rotuloDaSituacao(item({ situacao: "EM_CORRECAO" }))).toBe("Em correção");
     expect(rotuloDaSituacao(item({ situacao: "ERRO" }))).toBe("Erro");
@@ -189,5 +190,137 @@ describe("o que a fila mostra de cada conta", () => {
       detalheDaConta(item({ situacao: "CONCLUIDA_COM_PENDENCIA", nota_entrada: 79, nota_saida: 86, pendencias: 1 })),
     ).toBe("Nota de entrada 79, nota de saída 86, 1 pendência");
     expect(detalheDaConta(item({ situacao: "CONCLUIDA", nota_entrada: 79, nota_saida: null }))).toBe("Nota 79");
+  });
+});
+
+describe("a pílula Processando (issue #1416)", () => {
+  const AGORA = new Date("2026-11-07T14:10:30Z");
+
+  it("diz a etapa, a parte do Passo A e o tempo que já passou", () => {
+    const conta = item({
+      situacao: "PROCESSANDO",
+      etapa: "IA_LENDO_PRONTUARIO",
+      parte: 3,
+      partes: 7,
+      processando_desde: "2026-11-07T14:06:00Z",
+    });
+
+    expect(rotuloDaSituacao(conta, AGORA)).toBe("Processando, IA lendo o prontuário, parte 3 de 7, há 4 min");
+  });
+
+  it("cada uma das cinco etapas tem o seu nome, sem parte fora do Passo A", () => {
+    const pilula = (etapa: ItemDaFila["etapa"]) =>
+      rotuloDaSituacao(item({ situacao: "PROCESSANDO", etapa, processando_desde: "2026-11-07T14:10:00Z" }), AGORA);
+
+    expect(
+      (["LENDO_CONTA", "LENDO_PRONTUARIO", "IA_LENDO_PRONTUARIO", "CONFERINDO", "IA_MONTANDO_GUIA"] as const).map(pilula),
+    ).toEqual([
+      "Processando, Lendo a conta, há menos de 1 min",
+      "Processando, Lendo o prontuário, há menos de 1 min",
+      "Processando, IA lendo o prontuário, há menos de 1 min",
+      "Processando, Conferindo, há menos de 1 min",
+      "Processando, IA montando o Guia, há menos de 1 min",
+    ]);
+  });
+
+  it("passada uma hora, o tempo vem em horas e minutos", () => {
+    const conta = item({ situacao: "PROCESSANDO", etapa: "CONFERINDO", processando_desde: "2026-11-07T13:05:00Z" });
+
+    expect(rotuloDaSituacao(conta, AGORA)).toBe("Processando, Conferindo, há 1 h 5 min");
+  });
+
+  it("a conta na segunda ou na terceira tentativa diz qual é", () => {
+    expect(detalheDaConta(item({ situacao: "PROCESSANDO", tentativa: 2 }))).toBe("tentativa 2 de 3");
+    expect(detalheDaConta(item({ situacao: "PROCESSANDO", tentativa: 3 }))).toBe("tentativa 3 de 3");
+    expect(detalheDaConta(item({ situacao: "PROCESSANDO", tentativa: 1 }))).toBe("");
+  });
+});
+
+describe("a Previsão no cartão do envio (issue #1417)", () => {
+  // 11:10:30 em Brasília.
+  const AGORA = new Date("2026-11-07T14:10:30Z");
+  const RODANDO = {
+    situacao: "PROCESSANDO" as const,
+    etapa: "IA_LENDO_PRONTUARIO" as const,
+    parte: 3,
+    partes: 7,
+    processando_desde: "2026-11-07T14:06:00Z",
+  };
+
+  it("com Previsão, a pílula diz quanto falta no lugar do tempo decorrido", () => {
+    const conta = item({ ...RODANDO, previsao_pronta_em: "2026-11-07T14:18:10Z" });
+
+    expect(rotuloDaSituacao(conta, AGORA)).toBe("Processando, IA lendo o prontuário, parte 3 de 7, faltam ~8 min");
+  });
+
+  it("perto do fim, ou já passada a Previsão, falta ~1 min", () => {
+    expect(rotuloDaSituacao(item({ ...RODANDO, previsao_pronta_em: "2026-11-07T14:10:30Z" }), AGORA)).toBe(
+      "Processando, IA lendo o prontuário, parte 3 de 7, faltam ~1 min",
+    );
+  });
+
+  it("sem Previsão, a pílula continua com o tempo decorrido", () => {
+    expect(rotuloDaSituacao(item({ ...RODANDO, previsao_pronta_em: null }), AGORA)).toBe(
+      "Processando, IA lendo o prontuário, parte 3 de 7, há 4 min",
+    );
+  });
+
+  it("acima de 2 vezes a Previsão, a pílula diz que está demorando mais que o normal", () => {
+    const conta = item({ ...RODANDO, previsao_pronta_em: "2026-11-07T14:10:30Z", demorando: true });
+
+    expect(rotuloDaSituacao(conta, AGORA)).toBe(
+      "Processando, IA lendo o prontuário, parte 3 de 7, há 4 min, demorando mais que o normal",
+    );
+  });
+
+  it("a conta Na fila diz a posição e as horas em que começa e fica pronta", () => {
+    const conta = item({
+      situacao: "NA_FILA",
+      posicao_na_fila: 2,
+      previsao_inicio_em: "2026-11-07T14:16:00Z",
+      previsao_pronta_em: "2026-11-07T14:21:40Z",
+    });
+
+    expect(rotuloDaSituacao(conta, AGORA)).toBe("Na fila, 2ª");
+    expect(detalheDaConta(conta)).toBe("começa por volta de 11:16, pronta por volta de 11:21");
+  });
+
+  it("Na fila sem Previsão, só a posição", () => {
+    const conta = item({ situacao: "NA_FILA", posicao_na_fila: 1, previsao_inicio_em: null, previsao_pronta_em: null });
+
+    expect(rotuloDaSituacao(conta, AGORA)).toBe("Na fila, 1ª");
+    expect(detalheDaConta(conta)).toBe("");
+  });
+});
+
+describe("a barra de tempos da aba Envios (issue #1417)", () => {
+  it("diz as contagens, os dois tempos médios e a hora em que a fila esvazia", () => {
+    expect(
+      textosDaBarra({
+        processando: 2,
+        na_fila: 3,
+        tempo_envio_a_fila_s: 4500,
+        tempo_processamento_s: 610,
+        fila_esvazia_em: "2026-11-07T15:42:00Z",
+      }),
+    ).toEqual([
+      "2 sendo lidas",
+      "3 na fila",
+      "do envio à Fila: ~1 h 15 min",
+      "processamento: ~10 min",
+      "a fila esvazia por volta de 12:42",
+    ]);
+  });
+
+  it("no singular, sem histórico e sem fila, só as contagens", () => {
+    expect(
+      textosDaBarra({
+        processando: 1,
+        na_fila: 0,
+        tempo_envio_a_fila_s: null,
+        tempo_processamento_s: null,
+        fila_esvazia_em: null,
+      }),
+    ).toEqual(["1 sendo lida", "0 na fila"]);
   });
 });

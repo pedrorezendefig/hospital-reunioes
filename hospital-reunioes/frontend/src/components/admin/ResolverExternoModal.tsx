@@ -128,7 +128,7 @@ function TabButton({
         <Icon className="w-4 h-4" />
         <span className="font-semibold text-sm">{label}</span>
       </div>
-      <p className="text-xs text-slate-400 mt-1">{hint}</p>
+      <p className="text-xs normal-case text-slate-400 mt-1">{hint}</p>
     </button>
   );
 }
@@ -271,7 +271,7 @@ function MergeTab({
                 <button
                   type="button"
                   onClick={() => setSelected(r)}
-                  className="w-full text-left px-3 py-2 hover:bg-slate-50"
+                  className="w-full text-left normal-case px-3 py-2 hover:bg-slate-50"
                 >
                   <div className="text-sm font-medium text-text">
                     {r.nome_completo}

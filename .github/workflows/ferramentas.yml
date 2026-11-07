@@ -1,0 +1,100 @@
+name: Ferramentas
+
+# Os testes de tools/ (os conferidores, a subida, o pós-merge, o ruleset e as
+# travas de repositório público). O ci.yml não roda tools/, então este workflow
+# acorda pelos caminhos que esses testes leem.
+permissions:
+  contents: read
+
+on:
+  push:
+    branches: [main]
+    paths:
+      # A pasta inteira, e não arquivo por arquivo: a lista explícita esquece,
+      # e um PR que mexesse só num teste fora dela deixaria o CI verde sobre
+      # nada. Errar para o lado de rodar demais é o lado seguro.
+      - 'tools/**'
+      - '.claude/skills/to-prd/**'
+      - '.claude/skills/to-issues/**'
+      - '.claude/agents/**'
+      - '.claude/skills/deploy/**'
+      - '.claude/skills/setup-maquina/**'
+      - '.claude/skills/ask-pedro/**'
+      - '.claude/skills/onda-enxuta/**'
+      - '.claude/skills/pegar-issue/**'
+      - '.github/workflows/ferramentas.yml'
+      - '.github/workflows/ci.yml'
+      - '.github/workflows/pos-merge.yml'
+      - '.github/workflows/imagem-backend.yml'
+      - '.github/rulesets/**'
+      - '.github/workflows/**'
+      - '.github/dependabot.yml'
+      - '.gitleaks.toml'
+      - 'SECURITY.md'
+      - 'hospital-reunioes/backend/app/services/registro_do_deploy.py'
+      - 'hospital-reunioes/frontend/package.json'
+      - 'hospital-reunioes/frontend/Dockerfile'
+      - 'hospital-reunioes/frontend/pnpm-lock.yaml'
+  pull_request:
+    branches: [main]
+    paths:
+      # Mesmo curinga da seção de push, pelo mesmo motivo.
+      - 'tools/**'
+      # As skills do fluxo que os testes de tools/ leem.
+      - '.claude/skills/to-prd/**'
+      - '.claude/skills/to-issues/**'
+      - '.claude/agents/**'
+      - '.claude/skills/deploy/**'
+      - '.claude/skills/setup-maquina/**'
+      - '.claude/skills/ask-pedro/**'
+      # O fechar_onda.py chama a guarda de migration repetida nas pré-condições
+      # (issue #903), e o teste que prova a chamada mora em tools/.
+      - '.claude/skills/onda-enxuta/**'
+      # O dono do PRD (issue #904): o teste em tools/ roda o script da skill e
+      # lê o SKILL.md dela; um PR que mexa só na skill também acorda o job.
+      - '.claude/skills/pegar-issue/**'
+      - '.github/workflows/ferramentas.yml'
+      # O ruleset da main exige os jobs do ci.yml pelo nome (issue #910): o
+      # teste em tools/ que amarra os dois roda quando qualquer um muda.
+      - '.github/workflows/ci.yml'
+      # A Action pós-merge (issue #940): o contrato dela mora em tools/.
+      - '.github/workflows/pos-merge.yml'
+      # A imagem do backend no GHCR (issue #1001): o teste em tools/ amarra o
+      # workflow que a subida dispara ao ci.yml e ao project.json.
+      - '.github/workflows/imagem-backend.yml'
+      - '.github/rulesets/**'
+      # As travas de repositório público (issue #1287): o teste em tools/ varre
+      # todo workflow atrás de action sem SHA, então qualquer um deles acorda o job.
+      - '.github/workflows/**'
+      - '.github/dependabot.yml'
+      - '.gitleaks.toml'
+      - 'SECURITY.md'
+      # O aviso da subida ao app (issue #1065): o script de tools/ carrega este
+      # leitor do backend pelo caminho, e o teste dele mora em tools/.
+      - 'hospital-reunioes/backend/app/services/registro_do_deploy.py'
+      # O pnpm do frontend fixado num major só (issue #1312): o teste em tools/
+      # amarra o packageManager, o Dockerfile e os overrides do lockfile, e o
+      # PR que mexe só neles não toca em tools/.
+      - 'hospital-reunioes/frontend/package.json'
+      - 'hospital-reunioes/frontend/Dockerfile'
+      - 'hospital-reunioes/frontend/pnpm-lock.yaml'
+
+jobs:
+  ferramentas:
+    name: Testes das ferramentas
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.12"
+
+      - name: Testes de tools/
+        # `tools/` inteiro em vez da lista de arquivos: quem cria um conferidor
+        # novo ganha o teste dele no CI sem lembrar de editar este arquivo.
+        # O `pyyaml` é do `tools/lint_skills.py` (issue #807), que também mora
+        # em tools/ e tem o teste pego por este curinga.
+        run: |
+          pip install pytest pyyaml
+          python -m pytest tools/ -q

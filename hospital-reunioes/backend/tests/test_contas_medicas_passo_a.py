@@ -17,6 +17,7 @@ import json
 import os
 import re
 import sys
+import threading
 import unicodedata
 from pathlib import Path
 from types import SimpleNamespace
@@ -153,15 +154,28 @@ class _Provedor:
     def __init__(self):
         self.corpos: list[dict] = []
         self.respostas: list[dict] = [_resposta()]
+        # As janelas vão em paralelo: com `por_parte`, a resposta é a da parte
+        # que a requisição leva ("[[PARTE n DE m"), e não a da ordem de chegada.
+        self.por_parte: dict[int, dict] = {}
+        self.antes_de_responder = lambda: None
+        self._trava = threading.Lock()
 
     def __call__(self, request: httpx2.Request) -> httpx2.Response:
-        self.corpos.append(json.loads(request.content))
-        resposta = self.respostas.pop(0) if len(self.respostas) > 1 else self.respostas[0]
+        corpo = json.loads(request.content)
+        with self._trava:
+            self.corpos.append(corpo)
+            parte = re.search(r"\[\[PARTE (\d+) DE", corpo["messages"][0]["content"][1]["text"])
+            if parte and self.por_parte:
+                resposta = self.por_parte[int(parte.group(1))]
+            else:
+                resposta = self.respostas.pop(0) if len(self.respostas) > 1 else self.respostas[0]
+        self.antes_de_responder()
         return httpx2.Response(200, json=mensagem(json.dumps(resposta), uso(entrada=900, saida=300)))
 
     def textos_do_prontuario(self) -> list[str]:
-        """O bloco TEXTO DO PRONTUÁRIO de cada requisição."""
-        return [corpo["messages"][0]["content"][1]["text"] for corpo in self.corpos]
+        """O bloco TEXTO DO PRONTUÁRIO de cada requisição, na ordem das partes."""
+        textos = [corpo["messages"][0]["content"][1]["text"] for corpo in self.corpos]
+        return sorted(textos, key=lambda t: int(m.group(1)) if (m := re.search(r"\[\[PARTE (\d+) DE", t)) else 0)
 
 
 @pytest.fixture
@@ -319,18 +333,19 @@ class TestEntrada:
 
 
 # ═══════════════════════════════════════════════════════════════════════════
-# 2. O prontuário acima do limite do modelo pequeno
+# 2. O prontuário acima do limite de uma leitura
 # ═══════════════════════════════════════════════════════════════════════════
 
-# 100 mil tokens a 3,5 caracteres por token (adendo v1.3, item 10).
-LIMITE_EM_CARACTERES = 350_000
+# 100 mil tokens a 1,7 caractere por token, o que a contagem da API deu no
+# texto real do prontuário (issue #1412).
+LIMITE_EM_CARACTERES = 170_000
 
 
 def _evolucao_longa(dia: int) -> str:
-    """Uma evolução de uns 120 mil caracteres: quatro delas passam do limite."""
+    """Uma evolução de uns 60 mil caracteres: três delas passam do limite."""
     corpo = [
         f"Dia {dia:02d}/10, registro {n:04d}: paciente estável no leito, sem queixas, sinais vitais estáveis."
-        for n in range(1300)
+        for n in range(650)
     ]
     if dia == 2:
         corpo.append("Realizado curativo em região sacral com cobertura de hidrocoloide.")
@@ -380,11 +395,11 @@ class TestJanelas:
             "trecho": "Realizado curativo em região sacral com cobertura de hidrocoloide.",
         }
         bomba_relida = {**bomba, "descricao": "noradrenalina em BIC", "inicio": "2026-10-02", "fim": "2026-10-03T10:00"}
-        provedor.respostas = [
-            _resposta(procedimentos=[_curativo(2, 3)], terapias=[bomba]),
-            _resposta(procedimentos=[curativo_relido], terapias=[bomba_relida]),
-            _resposta(procedimentos=[_curativo(4, 5)]),
-        ]
+        provedor.por_parte = {
+            1: _resposta(procedimentos=[_curativo(2, 3)], terapias=[bomba]),
+            2: _resposta(procedimentos=[curativo_relido], terapias=[bomba_relida]),
+            3: _resposta(procedimentos=[_curativo(4, 5)]),
+        }
 
         eventos = _passo_a(_Banco(), _lido(paginas), achados=())
 
@@ -404,6 +419,18 @@ class TestJanelas:
         assert [(t["descricao"], t["fim"]) for t in eventos["terapias"]] == [
             ("noradrenalina em bomba", "2026-10-03T10:00"),
         ]
+
+    def test_as_janelas_vao_a_ia_ao_mesmo_tempo(self, provedor):
+        # Três janelas: a resposta só sai quando as três chegaram juntas. Lidas
+        # uma depois da outra, a primeira espera em vão e a barreira quebra.
+        paginas = _com_rodape([*_fixture("prontuario/capa"), *(_evolucao_longa(dia) for dia in (1, 2, 3, 4))])
+        juntas = threading.Barrier(3, timeout=5)
+        provedor.antes_de_responder = juntas.wait
+        provedor.por_parte = {n: _resposta() for n in (1, 2, 3)}
+
+        _passo_a(_Banco(), _lido(paginas), achados=())
+
+        assert len(provedor.corpos) == 3
 
     def test_bombas_que_comecam_juntas_nao_viram_uma_e_cada_uma_ganha_o_seu_fim(self):
         def bomba(descricao: str, fim: str | None) -> dict:

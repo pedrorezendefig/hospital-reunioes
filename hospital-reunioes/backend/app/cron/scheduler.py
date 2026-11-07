@@ -34,11 +34,14 @@ Jobs:
      foto igual à guardada não escreve nada. Depois, marca Em produção as Demandas
      Entregues cujas issues aparecem no history.json da main (issue #1065), a rede
      de proteção do webhook de deploy. Idempotente: só a Entregue sobe.
+     Por fim, apaga o print (Anexo da Demanda) 30 dias depois de Em produção, ou
+     já na rodada em que a Etapa é Não será feita (issue #1382, ADR 0077), e
+     deixa o registro marcado apagado. Idempotente: o apagado sai da varredura.
  10. expurgar_arquivos_contas_medicas: 04:30 diário, tira do bucket `contas-medicas`
      o PDF e o texto extraído de todo arquivo com `apagar_em` vencido e carimba
      `apagado_em` (issue #1125). Idempotente: o carimbo tira a linha da varredura.
  11. processar_fila_contas_medicas: a cada 10 segundos, devolve à fila a conta presa
-     em PROCESSANDO e entrega as contas NA_FILA ao executor de 2 vagas (issue #1124,
+     em PROCESSANDO e entrega as contas NA_FILA ao executor de `CM_VAGAS` vagas (issue #1124,
      ADR 0070, decisão 5). O claim é atômico: duas passadas não pegam a mesma conta.
  12. avisar_contratos_contas_medicas: 07:15 diário, avisa no sino o reajuste de cada
      contrato de operadora na data do aviso (vencimento menos a antecedência), issue
@@ -195,6 +198,15 @@ def reconciliar_vinculos_tecnologia() -> None:
         tecnologia_sincronizacao.reconciliar_em_producao(_supabase())
     except Exception as e:
         logger.error(f"[Cron] Erro em reconciliar_em_producao: {e}", exc_info=True)
+
+    # Por ultimo, e de novo em separado: a Demanda que esta rodada acabou de
+    # levar a Nao sera feita ja perde o print agora (ADR 0077, issue #1382).
+    from app.services import tecnologia_anexos
+
+    try:
+        tecnologia_anexos.apagar_vencidos(_supabase())
+    except Exception as e:
+        logger.error(f"[Cron] Erro em apagar os anexos vencidos da Tecnologia: {e}", exc_info=True)
 
 
 def despachar_notificacoes_ouvidoria() -> None:

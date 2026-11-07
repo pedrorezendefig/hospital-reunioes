@@ -206,7 +206,7 @@ export default function AdminUsuarioDetailPage({
           </div>
           <div>
             <h1 className="text-xl font-bold text-text flex items-center gap-2">
-              {u.nome_completo}
+              <span className="normal-case">{u.nome_completo}</span>
               {u.is_super_admin && (
                 <span
                   className="inline-flex items-center gap-1 text-xs font-medium text-primary bg-primary/10 px-2 py-0.5 rounded-full"

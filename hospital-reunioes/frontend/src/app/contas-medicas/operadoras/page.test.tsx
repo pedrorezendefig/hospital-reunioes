@@ -15,6 +15,8 @@
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { caixaDoDado } from "@/lib/testes/caixaDoDado";
+
 import OperadorasPage from "./page";
 
 vi.mock("@/lib/supabase/client", () => ({
@@ -279,6 +281,13 @@ describe("a lista das operadoras", () => {
     ]);
     const gama = within(biblioteca).getByRole("table", { name: "Tabelas de preço de GAMA" });
     expect(within(gama).getAllByRole("row")).toHaveLength(2);
+  });
+
+  it("na biblioteca, a sigla de cada operadora aparece como está gravada (issue #1455)", async () => {
+    render(<OperadorasPage />);
+
+    const biblioteca = await screen.findByRole("region", { name: "Biblioteca de tabelas" });
+    expect(caixaDoDado(within(biblioteca).getByRole("heading", { level: 3, name: "ALFA" }))).toBe("normal-case");
   });
 
   it("Nova versão abre o envio de tabela com a operadora e a categoria escolhidas", async () => {

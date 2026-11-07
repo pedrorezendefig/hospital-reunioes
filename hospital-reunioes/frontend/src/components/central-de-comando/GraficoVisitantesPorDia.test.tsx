@@ -131,6 +131,25 @@ describe("GraficoVisitantesPorDia", () => {
     expect(rotulos).toEqual(["21 ago", "30 ago", "8 set", "ontem"]);
   });
 
+  it.each([
+    { quando: "2026-09-18T22:00:00-03:00", ultimoRotulo: "ontem" },
+    // Às 22h o último dia ainda é o hoje de Brasília: vem a data, mais larga que "ontem".
+    { quando: "2026-09-17T22:00:00-03:00", ultimoRotulo: "17 set" },
+  ])("no celular, o último rótulo do eixo ($ultimoRotulo) cabe inteiro dentro do gráfico (#1459)", ({ quando, ultimoRotulo }) => {
+    relogioEm(quando);
+
+    const { container } = render(<GraficoVisitantesPorDia pontos={vinteEOitoDias()} />);
+
+    // O rótulo é centralizado no último ponto: metade dele fica à direita do
+    // ponto. Em 12px, "ontem" mede uns 16px de cada lado (medido no Chrome a
+    // 370px de largura); a estimativa de 0,6em por letra fica acima disso, com folga.
+    const largura = Number(container.querySelector("svg.recharts-surface")!.getAttribute("width"));
+    const metadeDoRotulo = (ultimoRotulo.length * 12 * 0.6) / 2;
+    const ultimo = [...container.querySelectorAll(".recharts-xAxis .recharts-cartesian-axis-tick-value")].at(-1)!;
+    expect(ultimo.textContent).toBe(ultimoRotulo);
+    expect(largura - Number(ultimo.getAttribute("x"))).toBeGreaterThanOrEqual(metadeDoRotulo);
+  });
+
   it("às 22h de Brasília, o último dia que ainda é o hoje de Brasília não é 'ontem'", () => {
     // 22h de 17/09 em Brasília já é 18/09 em UTC: o dia 17 está pela metade.
     relogioEm("2026-09-17T22:00:00-03:00");
@@ -161,8 +180,8 @@ describe("GraficoVisitantesPorDia", () => {
     const { container } = render(<GraficoVisitantesPorDia pontos={TRES_DIAS} />);
 
     // 360 px de largura: o eixo dos Visitantes ocupa os primeiros 48 e a
-    // margem os últimos 12, então 340 cai sobre o último dia.
-    fireEvent.mouseMove(container.querySelector(".recharts-wrapper")!, { clientX: 340, clientY: 100 });
+    // margem os últimos 24 (#1459), então o último dia fica em 336.
+    fireEvent.mouseMove(container.querySelector(".recharts-wrapper")!, { clientX: 330, clientY: 100 });
 
     expect(screen.getByText("ontem · qua, 16 set")).toBeTruthy();
     expect(screen.getByText("1.200 visitantes")).toBeTruthy();
@@ -174,7 +193,7 @@ describe("GraficoVisitantesPorDia", () => {
     relogioEm("2026-09-16T22:00:00-03:00");
     const { container } = render(<GraficoVisitantesPorDia pontos={TRES_DIAS} />);
 
-    fireEvent.mouseMove(container.querySelector(".recharts-wrapper")!, { clientX: 340, clientY: 100 });
+    fireEvent.mouseMove(container.querySelector(".recharts-wrapper")!, { clientX: 330, clientY: 100 });
 
     // Na dica, o 16 sai sem "ontem". No eixo, quem é "ontem" é o 15.
     expect(screen.getByText("qua, 16 set")).toBeTruthy();

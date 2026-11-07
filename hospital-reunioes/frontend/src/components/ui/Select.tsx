@@ -199,7 +199,7 @@ export function Select({
           open && activeIndex >= 0 ? optionId(activeIndex) : undefined
         }
         className={`
-          relative min-h-[38px] flex items-center gap-1.5 px-3 py-1.5 w-full text-left
+          relative min-h-[38px] flex items-center gap-1.5 px-3 py-1.5 w-full text-left normal-case
           border border-slate-200 rounded-lg cursor-pointer select-none
           transition-all duration-150
           ${open ? "border-primary ring-1 ring-primary" : "hover:border-slate-300"}

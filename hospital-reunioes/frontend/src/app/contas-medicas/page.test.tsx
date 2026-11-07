@@ -13,7 +13,7 @@
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import type { Fila, ItemDaFila, RespostaDoEnvio } from "@/lib/contas-medicas/envio";
+import type { DetalheDoProcessamento, Fila, ItemDaFila, RespostaDoEnvio } from "@/lib/contas-medicas/envio";
 
 import ContasMedicasPage from "./page";
 
@@ -93,22 +93,33 @@ const ANALISAR = "enviar_corrigir_contas";
 
 let filaDoServidor: Fila;
 let permissoes: string[];
+let respostaDoDescarte: () => Response;
+/** O que a rota Analisar de novo responde (issue #1339); por padrão, a conta vai para a fila. */
+let aoAnalisarDeNovo: (url: string) => Response;
 const chamadas: { url: string; init?: RequestInit }[] = [];
+/** O que a rota do painel lateral responde (issue #1418). */
+let detalheDoServidor: DetalheDoProcessamento;
 
 beforeEach(() => {
   filaDoServidor = FILA;
   permissoes = [ENVIAR, ANALISAR];
+  respostaDoDescarte = () => new Response(JSON.stringify({ descartada: "erro" }));
+  aoAnalisarDeNovo = () => new Response(JSON.stringify({ situacao: "NA_FILA" }));
   chamadas.length = 0;
   vi.stubGlobal(
     "fetch",
     vi.fn(async (url: string, init?: RequestInit) => {
       chamadas.push({ url, init });
       // Cada rota devolve só as listas dela, como o backend (issue #1308).
-      const { todas, fila, minhas, meus_envios, concluidas } = filaDoServidor;
+      const { todas, fila, minhas, meus_envios, concluidas, barra } = filaDoServidor;
       if (url === "/api/contas-medicas/fila") return new Response(JSON.stringify({ todas, fila, minhas, concluidas }));
-      if (url === "/api/contas-medicas/meus-envios") return new Response(JSON.stringify({ todas, meus_envios }));
+      if (url === "/api/contas-medicas/meus-envios") return new Response(JSON.stringify({ todas, meus_envios, barra }));
       if (url === "/api/contas-medicas/envios") return new Response(JSON.stringify(RESPOSTA_DO_ENVIO));
       if (url === "/api/contas-medicas/me") return new Response(JSON.stringify({ perfil: "faturista", permissoes }));
+      if (url.endsWith("/descartar")) return respostaDoDescarte();
+      if (url.endsWith("/analisar-de-novo")) return aoAnalisarDeNovo(url);
+      if (url.endsWith("/analisar-assim-mesmo")) return aoAnalisarDeNovo(url);
+      if (url.endsWith("/processamento")) return new Response(JSON.stringify(detalheDoServidor));
       return new Response("{}", { status: 404 });
     }),
   );
@@ -171,6 +182,15 @@ describe("a fila comum", () => {
     );
   });
 
+  it("o Atendimento N de cada linha da lista sai em caixa alta, a pedido do diretor (PR #1411)", async () => {
+    render(<ContasMedicasPage />);
+
+    const itens = await linhas();
+    for (const item of itens) {
+      expect(within(item).getByText(/^Atendimento /).className.split(" ")).toContain("uppercase");
+    }
+  });
+
   it("Minhas mostra as que a faturista puxou, com Continuar", async () => {
     render(<ContasMedicasPage />);
     await linhas();
@@ -186,6 +206,9 @@ describe("a fila comum", () => {
       "/contas-medicas/guia/em-correcao",
     );
     expect(itens[1].textContent).toContain("Retorno");
+    expect(within(itens[1]).getByRole("link", { name: "Continuar" }).getAttribute("href")).toBe(
+      "/contas-medicas/guia/retorno",
+    );
   });
 
   it("Meus envios mostra o que ainda não ficou pronto, e o erro traz o motivo com Enviar de novo", async () => {
@@ -203,7 +226,7 @@ describe("a fila comum", () => {
     ]);
     expect(itens[0].textContent).toContain("Na fila");
     expect(itens[1].textContent).toContain("Falta o prontuário");
-    expect(itens[2].textContent).toContain("Pronta em instantes");
+    expect(itens[2].textContent).toContain("Processando");
     expect(itens[3].textContent).toContain("Não consegui ler a conta inteira");
     expect(within(itens[3]).getByRole("button", { name: "Enviar de novo" })).toBeTruthy();
     expect(within(itens[0]).queryByRole("button", { name: "Enviar de novo" })).toBeNull();
@@ -258,6 +281,637 @@ describe("a fila comum", () => {
   });
 });
 
+describe("o cartão do envio (issue #1336)", () => {
+  const ENVIOS: ItemDaFila[] = [
+    conta({ id: "na-fila", numero_atendimento: "31302", numero_conta: "48001", prontuario_paginas: 212 }),
+    conta({
+      id: "falta-pront",
+      numero_atendimento: "31318",
+      numero_conta: "48018",
+      situacao: "AGUARDANDO_ARQUIVO",
+      falta: "prontuario",
+    }),
+    conta({
+      id: "falta-conta",
+      numero_atendimento: "31320",
+      numero_conta: null,
+      periodo_inicio: null,
+      periodo_fim: null,
+      situacao: "AGUARDANDO_ARQUIVO",
+      falta: "conta",
+      prontuario_paginas: 1,
+    }),
+    conta({ id: "rodando", numero_atendimento: "31310", situacao: "PROCESSANDO", prontuario_paginas: 40 }),
+    conta({ id: "erro", numero_atendimento: "31260", situacao: "ERRO", erro_motivo: "Não consegui ler a conta inteira" }),
+  ];
+
+  async function cartoes(): Promise<HTMLElement[]> {
+    filaDoServidor = { ...FILA, meus_envios: ENVIOS };
+    render(<ContasMedicasPage />);
+    await linhas();
+    aba(/^Meus envios/);
+    return linhas();
+  }
+
+  function quadrado(cartao: HTMLElement, nome: "Conta" | "Prontuário"): HTMLElement {
+    return within(cartao).getByRole("region", { name: nome });
+  }
+
+  it("cada conta vira um cartão com o quadrado Conta e o quadrado Prontuário", async () => {
+    const itens = await cartoes();
+
+    for (const cartao of itens) {
+      expect(quadrado(cartao, "Conta")).toBeTruthy();
+      expect(quadrado(cartao, "Prontuário")).toBeTruthy();
+    }
+  });
+
+  it("o Atendimento N de cada cartão sai em caixa alta, a pedido do diretor (PR #1411)", async () => {
+    const itens = await cartoes();
+
+    for (const cartao of itens) {
+      expect(within(cartao).getByText(/^Atendimento /).className.split(" ")).toContain("uppercase");
+    }
+  });
+
+  it("o arquivo que chegou fica verde, com o número e o período da conta e as páginas do prontuário", async () => {
+    const [chegou] = await cartoes();
+
+    const daConta = quadrado(chegou, "Conta");
+    const doProntuario = quadrado(chegou, "Prontuário");
+    expect(daConta.getAttribute("data-estado")).toBe("chegou");
+    expect(daConta.className).toContain("bg-emerald-50");
+    expect(daConta.textContent).toContain("48001");
+    expect(daConta.textContent).toContain("01/10 a 05/10");
+    expect(doProntuario.getAttribute("data-estado")).toBe("chegou");
+    expect(doProntuario.textContent).toContain("212 páginas");
+    expect(chegou.textContent).not.toContain("Falta enviar");
+    expect(within(chegou).queryByRole("button", { name: /^Enviar (a conta|o prontuário)$/ })).toBeNull();
+  });
+
+  it("uma página só sai no singular", async () => {
+    const itens = await cartoes();
+
+    expect(quadrado(itens[2], "Prontuário").textContent).toContain("1 página");
+    expect(quadrado(itens[2], "Prontuário").textContent).not.toContain("1 páginas");
+  });
+
+  it("o arquivo que falta fica tracejado, diz Falta enviar e tem o botão só dele", async () => {
+    const itens = await cartoes();
+
+    const semProntuario = quadrado(itens[1], "Prontuário");
+    expect(semProntuario.getAttribute("data-estado")).toBe("falta");
+    expect(semProntuario.className).toContain("border-dashed");
+    expect(semProntuario.textContent).toContain("Falta enviar");
+    expect(within(semProntuario).getByRole("button", { name: "Enviar o prontuário" })).toBeTruthy();
+    expect(quadrado(itens[1], "Conta").getAttribute("data-estado")).toBe("chegou");
+    expect(quadrado(itens[1], "Conta").textContent).toContain("48018");
+
+    const semConta = quadrado(itens[2], "Conta");
+    expect(semConta.getAttribute("data-estado")).toBe("falta");
+    expect(semConta.textContent).toContain("Falta enviar");
+    expect(within(semConta).getByRole("button", { name: "Enviar a conta" })).toBeTruthy();
+    expect(within(itens[2]).queryByRole("button", { name: "Enviar o prontuário" })).toBeNull();
+  });
+
+  it("o botão do quadrado que falta abre o seletor de arquivos", async () => {
+    const abrir = vi.spyOn(HTMLInputElement.prototype, "click").mockImplementation(() => {});
+    const itens = await cartoes();
+
+    fireEvent.click(within(quadrado(itens[1], "Prontuário")).getByRole("button", { name: "Enviar o prontuário" }));
+    expect(abrir).toHaveBeenCalledTimes(1);
+    fireEvent.click(within(quadrado(itens[2], "Conta")).getByRole("button", { name: "Enviar a conta" }));
+    expect(abrir).toHaveBeenCalledTimes(2);
+    abrir.mockRestore();
+  });
+
+  it("a borda do cartão segue a situação, nas cores da Ouvidoria", async () => {
+    const itens = await cartoes();
+    const borda = (cartao: HTMLElement) => cartao.querySelector("article")?.className ?? "";
+
+    expect(borda(itens[0])).toContain("border-l-slate-300");
+    expect(borda(itens[1])).toContain("border-l-amber-500");
+    expect(borda(itens[3])).toContain("border-l-emerald-500");
+    expect(borda(itens[4])).toContain("border-l-red-500");
+  });
+
+  it("no celular os quadrados ficam um embaixo do outro, lado a lado só da tela pequena para cima", async () => {
+    const [cartao] = await cartoes();
+
+    const grade = quadrado(cartao, "Conta").parentElement as HTMLElement;
+    expect(grade.className.split(" ")).toEqual(expect.arrayContaining(["grid", "grid-cols-1", "sm:grid-cols-2"]));
+    expect(grade.className).not.toMatch(/(^| )grid-cols-2/);
+  });
+
+  it("Fila, Minhas e Concluídas continuam na linha, sem os quadrados", async () => {
+    filaDoServidor = { ...FILA, meus_envios: ENVIOS };
+    render(<ContasMedicasPage />);
+    await linhas();
+
+    for (const nome of [/^Fila/, /^Minhas/, /Concluídas/]) {
+      aba(nome);
+      const itens = await linhas();
+      for (const item of itens) {
+        expect(within(item).queryByRole("region", { name: "Conta" })).toBeNull();
+        expect(item.querySelector("article")).toBeNull();
+      }
+    }
+  });
+});
+
+describe("os dados da conta e do prontuário no cartão (issue #1419)", () => {
+  const ENVIOS: ItemDaFila[] = [
+    conta({
+      id: "na-fila",
+      numero_atendimento: "31302",
+      operadora: "ASSIM",
+      dias_internacao: 4,
+      prontuario_paginas: 1946,
+      prontuario_paginas_ocr: 37,
+    }),
+    conta({
+      id: "de-antes",
+      numero_atendimento: "31303",
+      operadora: "ASSIM",
+      dias_internacao: 1,
+      prontuario_paginas: 212,
+      prontuario_paginas_ocr: null,
+    }),
+    // A conta que voltou para a fila guarda a nota e o valor da análise de
+    // antes; as contagens o backend só manda na conta pronta, que não fica aqui.
+    conta({
+      id: "de-volta",
+      numero_atendimento: "31304",
+      operadora: "ASSIM",
+      dias_internacao: 4,
+      prontuario_paginas: 300,
+      prontuario_paginas_ocr: 1,
+      nota_entrada: 74,
+      valor_apontado: 584.6,
+      itens_total: 9,
+    }),
+    conta({ id: "sem-escaneada", numero_atendimento: "31305", prontuario_paginas: 80, prontuario_paginas_ocr: 0 }),
+  ];
+
+  async function cartoes(): Promise<HTMLElement[]> {
+    filaDoServidor = { ...FILA, meus_envios: ENVIOS };
+    render(<ContasMedicasPage />);
+    await linhas();
+    aba(/^Meus envios/);
+    return linhas();
+  }
+
+  function quadrado(cartao: HTMLElement, nome: "Conta" | "Prontuário"): HTMLElement {
+    return within(cartao).getByRole("region", { name: nome });
+  }
+
+  it("o quadrado da Conta mostra a operadora e os dias de internação", async () => {
+    const [naFila, deAntes] = await cartoes();
+
+    expect(quadrado(naFila, "Conta").textContent).toContain("ASSIM");
+    expect(quadrado(naFila, "Conta").textContent).toContain("4 dias de internação");
+    expect(quadrado(deAntes, "Conta").textContent).toContain("1 dia de internação");
+  });
+
+  it("o quadrado do Prontuário mostra as páginas escaneadas, e o de antes desta fatia não desenha a linha", async () => {
+    const [naFila, deAntes, deVolta] = await cartoes();
+
+    expect(quadrado(naFila, "Prontuário").textContent).toContain("37 escaneadas, lidas por OCR");
+    expect(quadrado(deVolta, "Prontuário").textContent).toContain("1 escaneada, lida por OCR");
+    expect(quadrado(deAntes, "Prontuário").textContent).toContain("212 páginas");
+    expect(quadrado(deAntes, "Prontuário").textContent).not.toMatch(/escanead|OCR/);
+  });
+
+  it("a conta pronta vai para a Fila com as contagens na linha, sem desenhar nada na que veio antes desta fatia", async () => {
+    filaDoServidor = {
+      ...FILA,
+      fila: [
+        conta({ id: "pronta", numero_atendimento: "31304", situacao: "A_FAZER", itens_lidos: 42, eventos_lidos: 15 }),
+        conta({ id: "de-antes", numero_atendimento: "31303", situacao: "A_FAZER" }),
+      ],
+    };
+    render(<ContasMedicasPage />);
+
+    const [pronta, deAntes] = await linhas();
+    expect(pronta.textContent).toContain("42 itens, 15 eventos");
+    expect(deAntes.textContent).not.toMatch(/itens|eventos/);
+  });
+
+  it("o prontuário sem folha escaneada diz que nenhuma vai por OCR", async () => {
+    const itens = await cartoes();
+
+    expect(quadrado(itens[3], "Prontuário").textContent).toContain("nenhuma escaneada");
+    expect(quadrado(itens[3], "Prontuário").textContent).not.toContain("0 escaneadas");
+  });
+
+  it("nenhum valor em reais aparece no cartão", async () => {
+    const itens = await cartoes();
+
+    for (const cartao of itens) {
+      expect(cartao.textContent).not.toContain("R$");
+      expect(cartao.textContent).not.toContain("584,60");
+    }
+  });
+});
+
+describe("o Código do erro no cartão (issue #1337)", () => {
+  const DETALHE = "OverloadedError, HTTP 529, etapa passo_a (leitura do prontuário pela IA), ia.py:497";
+  const ENVIOS: ItemDaFila[] = [
+    conta({
+      id: "erro-ia",
+      numero_atendimento: "31260",
+      numero_conta: "48001",
+      situacao: "ERRO",
+      prontuario_paginas: 212,
+      erro_motivo: "A IA está fora do ar ou sobrecarregada agora.",
+      erro_codigo: "CM-IA-FORA-DO-AR",
+      erro_detalhe: DETALHE,
+      erro_em: "2026-11-01T17:32:00+00:00",
+      erro_arquivo: "prontuario",
+      erro_acao: "analisar_de_novo",
+    }),
+    conta({
+      id: "erro-conta",
+      numero_atendimento: "31261",
+      numero_conta: "48002",
+      situacao: "ERRO",
+      prontuario_paginas: 40,
+      erro_motivo: "Não consegui ler a conta inteira: os itens lidos somam R$ 3.091,70 e o total da conta é R$ 3.101,70.",
+      erro_codigo: "CM-ARQ-SOMA",
+      erro_detalhe: "FalhaDeLeitura, etapa leitura_da_conta (leitura da conta), processamento.py:396",
+      erro_em: "2026-11-01T12:05:00+00:00",
+      erro_arquivo: "conta",
+      erro_acao: "enviar_de_novo",
+    }),
+    conta({ id: "na-fila", numero_atendimento: "31302", prontuario_paginas: 10 }),
+  ];
+
+  async function cartoes(): Promise<HTMLElement[]> {
+    filaDoServidor = { ...FILA, meus_envios: ENVIOS };
+    render(<ContasMedicasPage />);
+    await linhas();
+    aba(/^Meus envios/);
+    return linhas();
+  }
+
+  function quadrado(cartao: HTMLElement, nome: "Conta" | "Prontuário"): HTMLElement {
+    return within(cartao).getByRole("region", { name: nome });
+  }
+
+  function areaDeTransferencia(writeText: (texto: string) => Promise<void>) {
+    Object.defineProperty(navigator, "clipboard", { value: { writeText }, configurable: true });
+  }
+
+  it("o quadrado do arquivo em que a análise parou fica vermelho, e o outro continua verde", async () => {
+    const [daIA, daConta] = await cartoes();
+
+    expect(quadrado(daIA, "Prontuário").getAttribute("data-estado")).toBe("erro");
+    expect(quadrado(daIA, "Prontuário").className).toContain("bg-red-50");
+    expect(quadrado(daIA, "Prontuário").textContent).toContain("212 páginas");
+    expect(quadrado(daIA, "Conta").getAttribute("data-estado")).toBe("chegou");
+    expect(quadrado(daConta, "Conta").getAttribute("data-estado")).toBe("erro");
+    expect(quadrado(daConta, "Conta").textContent).toContain("48002");
+    expect(quadrado(daConta, "Prontuário").getAttribute("data-estado")).toBe("chegou");
+  });
+
+  it("a frase e o código aparecem embaixo dos quadrados", async () => {
+    const [daIA, daConta] = await cartoes();
+
+    expect(daIA.textContent).toContain("A IA está fora do ar ou sobrecarregada agora.");
+    expect(within(daIA).getByText("CM-IA-FORA-DO-AR")).toBeTruthy();
+    expect(daConta.textContent).toContain("os itens lidos somam R$ 3.091,70 e o total da conta é R$ 3.101,70.");
+    expect(within(daConta).getByText("CM-ARQ-SOMA")).toBeTruthy();
+  });
+
+  it("Ver detalhes abre o detalhe técnico para a TI", async () => {
+    const [daIA] = await cartoes();
+    const ver = within(daIA).getByRole("button", { name: "Ver detalhes" });
+    expect(ver.getAttribute("aria-expanded")).toBe("false");
+    expect(daIA.textContent).not.toContain(DETALHE);
+
+    fireEvent.click(ver);
+
+    expect(ver.getAttribute("aria-expanded")).toBe("true");
+    expect(daIA.textContent).toContain(DETALHE);
+  });
+
+  it("Copiar para a TI leva o código, o atendimento, a conta, a data e a hora e o detalhe", async () => {
+    const writeText = vi.fn<(texto: string) => Promise<void>>(async () => {});
+    areaDeTransferencia(writeText);
+    const [daIA] = await cartoes();
+
+    fireEvent.click(within(daIA).getByRole("button", { name: "Copiar para a TI" }));
+
+    await waitFor(() => expect(writeText).toHaveBeenCalledTimes(1));
+    expect(writeText.mock.calls[0][0]).toBe(
+      [
+        "Código do erro: CM-IA-FORA-DO-AR",
+        "Atendimento: 31260",
+        "Conta: 48001",
+        "Data e hora: 01/11/2026 14:32",
+        `Detalhe: ${DETALHE}`,
+      ].join("\n"),
+    );
+    expect(await within(daIA).findByText("Copiado. Cole na conversa com a TI.")).toBeTruthy();
+  });
+
+  it("quando o navegador não copia, o texto fica numa caixa para copiar à mão", async () => {
+    areaDeTransferencia(async () => {
+      throw new Error("negado");
+    });
+    const [, daConta] = await cartoes();
+
+    fireEvent.click(within(daConta).getByRole("button", { name: "Copiar para a TI" }));
+
+    const caixa = (await within(daConta).findByRole("textbox")) as HTMLTextAreaElement;
+    expect(caixa.value).toContain("Código do erro: CM-ARQ-SOMA");
+    expect(caixa.value).toContain("Data e hora: 01/11/2026 09:05");
+    expect(daConta.textContent).toContain("copie com Ctrl+C");
+  });
+
+  it("a folha digitalizada que não deu para ler deixa o prontuário vermelho, com a frase, o código e Enviar de novo (issue #1400)", async () => {
+    const frase =
+      "Não dá para analisar esta conta: a ficha de anestesia (página 214) é uma folha digitalizada que não consegui ler. Digitalize de novo, com a folha em pé, e envie o prontuário de novo.";
+    filaDoServidor = {
+      ...FILA,
+      meus_envios: [
+        conta({
+          id: "erro-digitalizada",
+          numero_atendimento: "31262",
+          numero_conta: "48003",
+          situacao: "ERRO",
+          prontuario_paginas: 300,
+          erro_motivo: frase,
+          erro_codigo: "CM-ARQ-DIGITALIZADO",
+          erro_detalhe: "FalhaDeLeitura, etapa leitura_do_prontuario (leitura do prontuário), processamento.py:441",
+          erro_em: "2026-11-03T12:05:00+00:00",
+          erro_arquivo: "prontuario",
+          erro_acao: "enviar_de_novo",
+        }),
+      ],
+    };
+    render(<ContasMedicasPage />);
+    await linhas();
+    aba(/^Meus envios/);
+    const [cartao] = await linhas();
+
+    expect(quadrado(cartao, "Prontuário").getAttribute("data-estado")).toBe("erro");
+    expect(quadrado(cartao, "Conta").getAttribute("data-estado")).toBe("chegou");
+    expect(cartao.textContent).toContain(frase);
+    expect(within(cartao).getByText("CM-ARQ-DIGITALIZADO")).toBeTruthy();
+    expect(within(cartao).getByRole("button", { name: "Enviar de novo" })).toBeTruthy();
+    expect(within(cartao).queryByRole("button", { name: "Analisar de novo" })).toBeNull();
+  });
+
+  it("a conta que não está em Erro não tem código nem os botões da TI", async () => {
+    const itens = await cartoes();
+
+    expect(within(itens[2]).queryByRole("button", { name: "Ver detalhes" })).toBeNull();
+    expect(within(itens[2]).queryByRole("button", { name: "Copiar para a TI" })).toBeNull();
+    expect(quadrado(itens[2], "Conta").getAttribute("data-estado")).toBe("chegou");
+  });
+});
+
+describe("Descartar um envio (issue #1338)", () => {
+  const ENVIOS: ItemDaFila[] = [
+    conta({ id: "erro", numero_atendimento: "31260", situacao: "ERRO", pode_descartar: true }),
+    conta({ id: "falta-pront", numero_atendimento: "31318", situacao: "AGUARDANDO_ARQUIVO", falta: "prontuario", pode_descartar: true }),
+    conta({ id: "falta-conta", numero_atendimento: "31320", situacao: "AGUARDANDO_ARQUIVO", falta: "conta", pode_descartar: true }),
+    conta({ id: "na-fila", numero_atendimento: "31302", situacao: "NA_FILA", pode_descartar: false }),
+    conta({ id: "rodando", numero_atendimento: "31310", situacao: "PROCESSANDO", pode_descartar: false }),
+    // O envio de outra pessoa que a lista trouxesse sem permissão de descartar.
+    conta({ id: "da-outra", numero_atendimento: "31330", situacao: "ERRO", pode_descartar: false }),
+  ];
+
+  async function cartoes(): Promise<HTMLElement[]> {
+    filaDoServidor = { ...FILA, meus_envios: ENVIOS };
+    render(<ContasMedicasPage />);
+    await linhas();
+    aba(/^Meus envios/);
+    return linhas();
+  }
+
+  const descartes = () => chamadas.filter((c) => c.url.endsWith("/descartar"));
+
+  afterEach(() => vi.restoreAllMocks());
+
+  it("o botão aparece no Erro e no arquivo faltando que a pessoa pode descartar, e em nenhum outro", async () => {
+    const itens = await cartoes();
+    const tem = (cartao: HTMLElement) => within(cartao).queryByRole("button", { name: "Descartar" }) !== null;
+
+    expect(itens.map(tem)).toEqual([true, true, true, false, false, false]);
+  });
+
+  it("pergunta antes de apagar, e cancelar não apaga nada", async () => {
+    const perguntar = vi.spyOn(window, "confirm").mockReturnValue(false);
+    const itens = await cartoes();
+
+    fireEvent.click(within(itens[0]).getByRole("button", { name: "Descartar" }));
+
+    expect(perguntar).toHaveBeenCalledWith("Descartar o atendimento 31260? Os arquivos serão apagados.");
+    await new Promise((r) => setTimeout(r, 0));
+    expect(descartes()).toEqual([]);
+  });
+
+  it("confirmado, chama a rota da conta e relê a lista", async () => {
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+    const itens = await cartoes();
+    const leiturasAntes = chamadas.filter((c) => c.url === "/api/contas-medicas/meus-envios").length;
+
+    fireEvent.click(within(itens[1]).getByRole("button", { name: "Descartar" }));
+
+    await waitFor(() => expect(descartes()).toHaveLength(1));
+    const [descarte] = descartes();
+    expect(descarte.url).toBe("/api/contas-medicas/contas/falta-pront/descartar");
+    expect(descarte.init?.method).toBe("POST");
+    expect(new Headers(descarte.init?.headers).get("Authorization")).toBe("Bearer token-de-teste");
+    await waitFor(() =>
+      expect(chamadas.filter((c) => c.url === "/api/contas-medicas/meus-envios").length).toBeGreaterThan(leiturasAntes),
+    );
+  });
+
+  it("a recusa do servidor aparece com a frase dele", async () => {
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+    respostaDoDescarte = () =>
+      new Response(JSON.stringify({ detail: "A conta já tem Guia e não pode ser descartada." }), { status: 409 });
+    const itens = await cartoes();
+
+    fireEvent.click(within(itens[0]).getByRole("button", { name: "Descartar" }));
+
+    expect((await screen.findByRole("alert")).textContent).toContain("A conta já tem Guia e não pode ser descartada.");
+  });
+});
+
+describe("Analisar de novo sem anexar o PDF (issue #1339)", () => {
+  const DA_IA = conta({
+    id: "erro-ia",
+    numero_atendimento: "31260",
+    situacao: "ERRO",
+    erro_motivo: "A IA está fora do ar ou sobrecarregada agora.",
+    erro_codigo: "CM-IA-FORA-DO-AR",
+    erro_arquivo: "prontuario",
+    erro_acao: "analisar_de_novo",
+  });
+  const DO_ARQUIVO = conta({
+    id: "erro-conta",
+    numero_atendimento: "31261",
+    situacao: "ERRO",
+    erro_motivo: "Não consegui ler a conta inteira",
+    erro_codigo: "CM-ARQ-SOMA",
+    erro_arquivo: "conta",
+    erro_acao: "enviar_de_novo",
+  });
+
+  async function cartoes(): Promise<HTMLElement[]> {
+    filaDoServidor = { ...FILA, meus_envios: [DA_IA, DO_ARQUIVO] };
+    render(<ContasMedicasPage />);
+    await linhas();
+    aba(/^Meus envios/);
+    return linhas();
+  }
+
+  it("o erro da IA mostra Analisar de novo no lugar de Enviar de novo, e o erro do arquivo continua com Enviar de novo", async () => {
+    const [daIA, doArquivo] = await cartoes();
+
+    expect(within(daIA).getByRole("button", { name: "Analisar de novo" })).toBeTruthy();
+    expect(within(daIA).queryByRole("button", { name: "Enviar de novo" })).toBeNull();
+    expect(within(doArquivo).getByRole("button", { name: "Enviar de novo" })).toBeTruthy();
+    expect(within(doArquivo).queryByRole("button", { name: "Analisar de novo" })).toBeNull();
+  });
+
+  it("o clique chama a rota da conta, sem arquivo, e o cartão passa para Na fila", async () => {
+    aoAnalisarDeNovo = () => {
+      filaDoServidor = {
+        ...FILA,
+        meus_envios: [conta({ id: "erro-ia", numero_atendimento: "31260", situacao: "NA_FILA" }), DO_ARQUIVO],
+      };
+      return new Response(JSON.stringify({ situacao: "NA_FILA" }));
+    };
+    const [daIA] = await cartoes();
+
+    fireEvent.click(within(daIA).getByRole("button", { name: "Analisar de novo" }));
+
+    await waitFor(async () => expect((await linhas())[0].textContent).toContain("Na fila"));
+    const chamada = chamadas.find((c) => c.url.endsWith("/analisar-de-novo"));
+    expect(chamada?.url).toBe("/api/contas-medicas/contas/erro-ia/analisar-de-novo");
+    expect(chamada?.init?.method).toBe("POST");
+    expect(chamada?.init?.body).toBeUndefined();
+    expect((chamada?.init?.headers as Record<string, string>).Authorization).toBe("Bearer token-de-teste");
+    expect(within((await linhas())[0]).queryByRole("button", { name: "Analisar de novo" })).toBeNull();
+  });
+
+  it("a recusa do servidor aparece no cartão com a frase dele", async () => {
+    aoAnalisarDeNovo = () =>
+      new Response(JSON.stringify({ detail: "O PDF já passou dos 7 dias e saiu do sistema. Envie de novo." }), {
+        status: 409,
+      });
+    const [daIA] = await cartoes();
+
+    fireEvent.click(within(daIA).getByRole("button", { name: "Analisar de novo" }));
+
+    expect((await within(daIA).findByRole("alert")).textContent).toBe(
+      "O PDF já passou dos 7 dias e saiu do sistema. Envie de novo.",
+    );
+  });
+
+  it("Descartar convive com Analisar de novo e com Enviar de novo no cartão em Erro (issues #1338 e #1339)", async () => {
+    filaDoServidor = {
+      ...FILA,
+      meus_envios: [{ ...DA_IA, pode_descartar: true }, { ...DO_ARQUIVO, pode_descartar: true }],
+    };
+    render(<ContasMedicasPage />);
+    await linhas();
+    aba(/^Meus envios/);
+    const [daIA, doArquivo] = await linhas();
+    const botoes = (cartao: HTMLElement) =>
+      within(cartao)
+        .getAllByRole("button")
+        .map((b) => b.textContent)
+        .filter((t) => t === "Analisar de novo" || t === "Enviar de novo" || t === "Descartar");
+
+    expect(botoes(daIA)).toEqual(["Analisar de novo", "Descartar"]);
+    expect(botoes(doArquivo)).toEqual(["Enviar de novo", "Descartar"]);
+  });
+});
+
+describe("Analisar assim mesmo a conta parada por folha escaneada ilegível (issue #1401)", () => {
+  const DIGITALIZADO = conta({
+    id: "erro-digitalizado",
+    numero_atendimento: "31262",
+    situacao: "ERRO",
+    erro_motivo: "Não dá para analisar esta conta: 3 das 10 páginas do prontuário deste período são folhas digitalizadas que não consegui ler.",
+    erro_codigo: "CM-ARQ-DIGITALIZADO",
+    erro_arquivo: "prontuario",
+    erro_acao: "enviar_de_novo",
+    pode_analisar_assim_mesmo: true,
+  });
+  const SEM_PODER = { ...DIGITALIZADO, id: "erro-vencido", numero_atendimento: "31263", pode_analisar_assim_mesmo: false };
+  const DO_ARQUIVO = conta({
+    id: "erro-conta",
+    numero_atendimento: "31261",
+    situacao: "ERRO",
+    erro_motivo: "Não consegui ler a conta inteira",
+    erro_codigo: "CM-ARQ-SOMA",
+    erro_arquivo: "conta",
+    erro_acao: "enviar_de_novo",
+  });
+
+  async function cartoes(): Promise<HTMLElement[]> {
+    filaDoServidor = { ...FILA, meus_envios: [DIGITALIZADO, SEM_PODER, DO_ARQUIVO] };
+    render(<ContasMedicasPage />);
+    await linhas();
+    aba(/^Meus envios/);
+    return linhas();
+  }
+
+  const botoes = (cartao: HTMLElement) =>
+    within(cartao)
+      .getAllByRole("button")
+      .map((b) => b.textContent)
+      .filter((t) => t === "Analisar assim mesmo" || t === "Analisar de novo" || t === "Enviar de novo");
+
+  it("aparece ao lado de Enviar de novo só quando o servidor deixa", async () => {
+    const [digitalizado, semPoder, doArquivo] = await cartoes();
+
+    expect(botoes(digitalizado)).toEqual(["Enviar de novo", "Analisar assim mesmo"]);
+    expect(botoes(semPoder)).toEqual(["Enviar de novo"]);
+    expect(botoes(doArquivo)).toEqual(["Enviar de novo"]);
+  });
+
+  it("o clique chama a rota da conta, sem arquivo, e o cartão passa para Na fila", async () => {
+    aoAnalisarDeNovo = () => {
+      filaDoServidor = {
+        ...FILA,
+        meus_envios: [conta({ id: "erro-digitalizado", numero_atendimento: "31262", situacao: "NA_FILA" })],
+      };
+      return new Response(JSON.stringify({ situacao: "NA_FILA" }));
+    };
+    const [digitalizado] = await cartoes();
+
+    fireEvent.click(within(digitalizado).getByRole("button", { name: "Analisar assim mesmo" }));
+
+    await waitFor(async () => expect((await linhas())[0].textContent).toContain("Na fila"));
+    const chamada = chamadas.find((c) => c.init?.method === "POST");
+    expect(chamada?.url).toBe("/api/contas-medicas/contas/erro-digitalizado/analisar-assim-mesmo");
+    expect(chamada?.init?.body).toBeUndefined();
+    expect((chamada?.init?.headers as Record<string, string>).Authorization).toBe("Bearer token-de-teste");
+  });
+
+  it("a recusa do servidor aparece no cartão com a frase dele", async () => {
+    aoAnalisarDeNovo = () =>
+      new Response(JSON.stringify({ detail: "O PDF já passou dos 7 dias e saiu do sistema. Envie de novo." }), {
+        status: 409,
+      });
+    const [digitalizado] = await cartoes();
+
+    fireEvent.click(within(digitalizado).getByRole("button", { name: "Analisar assim mesmo" }));
+
+    expect((await within(digitalizado).findByRole("alert")).textContent).toBe(
+      "O PDF já passou dos 7 dias e saiu do sistema. Envie de novo.",
+    );
+  });
+});
+
 describe("cada bloco pela permissão de /contas-medicas/me", () => {
   it("quem só envia vê o envio e Meus envios, e a tela nem pede a Fila", async () => {
     permissoes = [ENVIAR];
@@ -301,6 +955,261 @@ describe("cada bloco pela permissão de /contas-medicas/me", () => {
 
     expect(screen.getByRole("region", { name: "Envio de contas" })).toBeTruthy();
     expect(screen.getAllByRole("tab")).toHaveLength(4);
+  });
+});
+
+describe("o Processamento visível (issue #1416)", () => {
+  // Quatro minutos e uns segundos antes: a pílula diz "há 4 min".
+  const DESDE = new Date(Date.now() - 4 * 60_000 - 5_000).toISOString();
+  const RODANDO = conta({
+    id: "rodando",
+    numero_atendimento: "31310",
+    situacao: "PROCESSANDO",
+    etapa: "IA_LENDO_PRONTUARIO",
+    parte: 3,
+    partes: 7,
+    processando_desde: DESDE,
+    tentativa: 2,
+  });
+  const ESPERANDO = conta({ id: "na-fila", numero_atendimento: "31302", situacao: "NA_FILA" });
+
+  function leiturasDosEnvios(): number {
+    return chamadas.filter((c) => c.url === "/api/contas-medicas/meus-envios").length;
+  }
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("a pílula diz Processando, a etapa, a parte e o tempo, e o cartão diz a tentativa", async () => {
+    filaDoServidor = { ...FILA, meus_envios: [RODANDO] };
+    render(<ContasMedicasPage />);
+    await linhas();
+    aba(/^Meus envios/);
+
+    const [cartao] = await linhas();
+
+    expect(cartao.textContent).toContain("Processando, IA lendo o prontuário, parte 3 de 7, há 4 min");
+    expect(cartao.textContent).toContain("tentativa 2 de 3");
+    expect(cartao.textContent).not.toContain("Pronta em instantes");
+  });
+
+  it("com conta Processando, a tela relê a cada 5 s", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    filaDoServidor = { ...FILA, meus_envios: [RODANDO, ESPERANDO] };
+    render(<ContasMedicasPage />);
+    await linhas();
+    const antes = leiturasDosEnvios();
+
+    await vi.advanceTimersByTimeAsync(5_000);
+
+    expect(leiturasDosEnvios()).toBe(antes + 1);
+  });
+
+  it("sem nenhuma conta Processando, a tela relê a cada 20 s", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    filaDoServidor = { ...FILA, meus_envios: [ESPERANDO] };
+    render(<ContasMedicasPage />);
+    await linhas();
+    const antes = leiturasDosEnvios();
+
+    await vi.advanceTimersByTimeAsync(5_000);
+    expect(leiturasDosEnvios()).toBe(antes);
+
+    await vi.advanceTimersByTimeAsync(15_000);
+    expect(leiturasDosEnvios()).toBe(antes + 1);
+  });
+
+  it("a conta que some da lista por ter ficado pronta avisa que foi para a Fila", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    filaDoServidor = { ...FILA, meus_envios: [RODANDO, ESPERANDO] };
+    render(<ContasMedicasPage />);
+    await linhas();
+    expect(screen.queryByText(/foi para a Fila/)).toBeNull();
+
+    filaDoServidor = { ...FILA, meus_envios: [ESPERANDO] };
+    await vi.advanceTimersByTimeAsync(5_000);
+
+    expect((await screen.findByText(/foi para a Fila/)).textContent).toBe("Atendimento 31310 pronto, foi para a Fila");
+  });
+});
+
+describe("a Previsão e a barra de tempos (issue #1417)", () => {
+  const minutos = (n: number) => new Date(Date.now() + n * 60_000 + 30_000).toISOString();
+  const RODANDO = conta({
+    id: "rodando",
+    numero_atendimento: "31310",
+    situacao: "PROCESSANDO",
+    etapa: "CONFERINDO",
+    processando_desde: new Date(Date.now() - 4 * 60_000).toISOString(),
+    previsao_pronta_em: minutos(7),
+    demorando: false,
+  });
+  const DEMORANDO = conta({
+    ...RODANDO,
+    id: "demorando",
+    numero_atendimento: "31311",
+    processando_desde: new Date(Date.now() - 30 * 60_000).toISOString(),
+    previsao_pronta_em: new Date().toISOString(),
+    demorando: true,
+  });
+  const ESPERANDO = conta({
+    id: "na-fila",
+    numero_atendimento: "31302",
+    situacao: "NA_FILA",
+    posicao_na_fila: 3,
+    previsao_inicio_em: "2026-11-07T14:16:00Z",
+    previsao_pronta_em: "2026-11-07T14:21:40Z",
+  });
+  const BARRA = {
+    processando: 2,
+    na_fila: 3,
+    tempo_envio_a_fila_s: 1500,
+    tempo_processamento_s: 600,
+    fila_esvazia_em: "2026-11-07T15:42:00Z",
+  };
+
+  async function cartoes(): Promise<HTMLElement[]> {
+    filaDoServidor = { ...FILA, meus_envios: [RODANDO, DEMORANDO, ESPERANDO], barra: BARRA };
+    render(<ContasMedicasPage />);
+    await linhas();
+    aba(/^Meus envios/);
+    return linhas();
+  }
+
+  function pilula(cartao: HTMLElement): HTMLElement {
+    return within(cartao).getByText(/^(Processando|Na fila)/);
+  }
+
+  it("a pílula Processando diz quanto falta, e a que passou de 2 vezes a Previsão fica âmbar", async () => {
+    const [rodando, demorando] = await cartoes();
+
+    expect(pilula(rodando).textContent).toBe("Processando, Conferindo, faltam ~8 min");
+    expect(pilula(rodando).className).not.toContain("amber");
+    expect(pilula(demorando).textContent).toBe("Processando, Conferindo, há 30 min, demorando mais que o normal");
+    expect(pilula(demorando).className).toContain("bg-amber-100");
+  });
+
+  it("a conta Na fila mostra a posição e as duas horas previstas", async () => {
+    const [, , esperando] = await cartoes();
+
+    expect(pilula(esperando).textContent).toBe("Na fila, 3ª");
+    expect(esperando.textContent).toContain("começa por volta de 11:16, pronta por volta de 11:21");
+  });
+
+  it("a barra no topo da aba Envios mostra as contagens, os dois tempos e a hora em que a fila esvazia", async () => {
+    await cartoes();
+
+    const barra = screen.getByRole("status", { name: "Tempos da fila" });
+    expect(within(barra).getAllByRole("listitem").map((item) => item.textContent)).toEqual([
+      "2 sendo lidas",
+      "3 na fila",
+      "do envio à Fila: ~25 min",
+      "processamento: ~10 min",
+      "a fila esvazia por volta de 12:42",
+    ]);
+  });
+
+  it("a barra fica só na aba Envios", async () => {
+    filaDoServidor = { ...FILA, barra: BARRA };
+    render(<ContasMedicasPage />);
+    await linhas();
+
+    expect(screen.queryByRole("status", { name: "Tempos da fila" })).toBeNull();
+  });
+});
+
+describe("o painel lateral do Processamento (issue #1418)", () => {
+  const RODANDO = conta({
+    id: "rodando",
+    numero_atendimento: "31310",
+    situacao: "PROCESSANDO",
+    etapa: "IA_LENDO_PRONTUARIO",
+    tentativa: 2,
+    pode_descartar: false,
+  });
+  /** A resposta de quem não tem "painel completo": sem as chaves do custo. */
+  const SEM_CUSTO: DetalheDoProcessamento = {
+    id: "rodando",
+    situacao: "PROCESSANDO",
+    etapas: [
+      { etapa: "LENDO_CONTA", estado: "feita", tempo_s: 3 },
+      { etapa: "LENDO_PRONTUARIO", estado: "feita", tempo_s: 65 },
+      { etapa: "IA_LENDO_PRONTUARIO", estado: "atual", tempo_s: 245 },
+      { etapa: "CONFERINDO", estado: "falta", tempo_s: null },
+      { etapa: "IA_MONTANDO_GUIA", estado: "falta", tempo_s: null },
+    ],
+    parte: 3,
+    partes: 7,
+    tentativa: 2,
+    posicao_na_fila: null,
+  };
+  const COM_CUSTO: DetalheDoProcessamento = {
+    ...SEM_CUSTO,
+    modelo: "claude-sonnet-5-5",
+    chamadas: 4,
+    tokens_entrada: 3300,
+    tokens_saida: 640,
+    tokens_cache: 150,
+    custo_usd: 0.0371,
+  };
+
+  async function abrirOPainel(): Promise<HTMLElement> {
+    filaDoServidor = { ...FILA, meus_envios: [RODANDO] };
+    render(<ContasMedicasPage />);
+    await linhas();
+    aba(/^Meus envios/);
+    const [cartao] = await linhas();
+    fireEvent.click(within(cartao).getByRole("article"));
+    return screen.findByRole("dialog", { name: "Processamento do atendimento 31310" });
+  }
+
+  it("o clique no cartão abre o painel com as cinco etapas, o tempo de cada uma e a tentativa", async () => {
+    detalheDoServidor = SEM_CUSTO;
+
+    const painel = await abrirOPainel();
+
+    expect(chamadas.some((c) => c.url === "/api/contas-medicas/contas/rodando/processamento")).toBe(true);
+    await waitFor(() => expect(within(painel).getAllByRole("listitem")).toHaveLength(5));
+    const etapas = within(painel).getAllByRole("listitem").map((li) => li.textContent);
+    expect(etapas).toEqual([
+      "Lendo a conta3 s",
+      "Lendo o prontuário1 min 5 s",
+      "IA lendo o prontuário, parte 3 de 7em curso, 4 min 5 s",
+      "Conferindopor fazer",
+      "IA montando o Guiapor fazer",
+    ]);
+    expect(painel.textContent).toContain("tentativa 2 de 3");
+  });
+
+  it("sem os campos de custo na resposta, a seção de custo não aparece", async () => {
+    detalheDoServidor = SEM_CUSTO;
+
+    const painel = await abrirOPainel();
+
+    await waitFor(() => expect(within(painel).getAllByRole("listitem")).toHaveLength(5));
+    expect(within(painel).queryByRole("region", { name: "Custo da IA" })).toBeNull();
+    expect(painel.textContent).not.toContain("US$");
+  });
+
+  it("com os campos de custo, a seção mostra o modelo, as chamadas, os tokens e o custo", async () => {
+    detalheDoServidor = COM_CUSTO;
+
+    const painel = await abrirOPainel();
+
+    const custo = await within(painel).findByRole("region", { name: "Custo da IA" });
+    for (const trecho of ["claude-sonnet-5-5", "4", "3.300", "640", "150", "US$ 0,0371"]) {
+      expect(custo.textContent).toContain(trecho);
+    }
+  });
+
+  it("Fechar fecha o painel", async () => {
+    detalheDoServidor = SEM_CUSTO;
+    const painel = await abrirOPainel();
+
+    fireEvent.click(within(painel).getByRole("button", { name: "Fechar" }));
+
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
   });
 });
 

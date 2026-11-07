@@ -48,6 +48,7 @@ __all__ = [
     "detectar_tipo_do_arquivo",
     "ler_cabecalho_da_conta",
     "ler_conta",
+    "soma_e_total",
 ]
 
 MENSAGEM_CONTA_INCOMPLETA = "Não consegui ler a conta inteira"
@@ -81,11 +82,12 @@ _ITEM = re.compile(
 )
 # Honorário médico no layout real (issue #1304): a linha do procedimento tem a
 # quantidade e nenhum valor; cada prestador vem embaixo, numa linha com nome e
-# CRM, função, unitário e total. Nome e CRM não são guardados.
+# CRM, função, unitário e total. Nome e CRM não são guardados. A função do
+# auxiliar vem com a ordem na frente ("1 AUXILIAR"), e a ordem fica na função.
 _PROCEDIMENTO_DE_HONORARIO = re.compile(
     r"^(\d{2}/\d{2}/\d{4})\s+(\d{6,10})\s+(.+?)\s{2,}(\S+)\s+(\d{1,3},\d{2})%\s+(\d[\d.,]*)\s*$"
 )
-_PRESTADOR = re.compile(r"^\S.*?\s{2,}([A-Z][A-Z ]*[A-Z])\s{2,}(\d[\d.]*,\d{2})\s+(\d[\d.]*,\d{2})\s*$")
+_PRESTADOR = re.compile(r"^\S.*?\s{2,}((?:\d+ )?[A-Z][A-Z ]*[A-Z])\s{2,}(\d[\d.]*,\d{2})\s+(\d[\d.]*,\d{2})\s*$")
 _SETOR = re.compile(r"^(\d{1,4})\s{2,}(\S.*?)\s*$")
 _GRUPO_DE_PROCEDIMENTO = re.compile(r"^\s*Grupo de Procedimento:\s*(\d+)\s+(.*?)\s*$")
 _FIM_DA_CONTINUACAO = re.compile(r"Total|HOSPITAL|P[áa]gina")
@@ -240,11 +242,16 @@ def _fecha(a: Decimal, b: Decimal) -> bool:
     return abs(a - b) <= TOLERANCIA
 
 
+def _esperado(item: ItemConta) -> Decimal:
+    """Quantidade vezes unitário, no centavo: o que o total da linha deveria trazer."""
+    return (item.quantidade * item.unitario).quantize(CENTAVO, ROUND_HALF_UP)
+
+
 def _conferencia_da_leitura(itens: Sequence[ItemConta], total: Decimal) -> bool:
     """Soma dos itens igual ao total e, em cada item, quantidade vezes unitário igual ao total."""
     if not itens or not _fecha(sum((i.total for i in itens), Decimal(0)), total):
         return False
-    return all(_fecha((i.quantidade * i.unitario).quantize(CENTAVO, ROUND_HALF_UP), i.total) for i in itens)
+    return all(_fecha(_esperado(i), i.total) for i in itens)
 
 
 @dataclass(frozen=True)
@@ -311,6 +318,25 @@ def ler_conta(texto_por_pagina: Sequence[str]) -> Conta | ErroLeitura:
         total=total,
         itens=tuple(itens),
     )
+
+
+def soma_e_total(texto_por_pagina: Sequence[str]) -> tuple[Decimal, Decimal | None]:
+    """A soma dos itens lidos e o total que a conta declara (nulo quando o PDF
+    não traz a linha do total): os dois números da frase do Erro quando a
+    leitura não fecha, para conferir no MV se a exportação saiu cortada (#1337)."""
+    total = _cabecalho("\n".join(texto_por_pagina)).get("total")
+    soma = sum((item.total for item in _itens(texto_por_pagina)), Decimal(0))
+    return soma, _numero(total[0]) if total else None
+
+
+def item_que_nao_fecha(texto_por_pagina: Sequence[str]) -> tuple[ItemConta, Decimal] | None:
+    """O primeiro item em que quantidade vezes unitário não dá o total da linha,
+    com o valor que deveria dar: a frase do Erro quando a soma bate com o total
+    e a leitura ainda assim não fecha (#1337)."""
+    for item in _itens(texto_por_pagina):
+        if not _fecha(_esperado(item), item.total):
+            return item, _esperado(item)
+    return None
 
 
 def _normalizar(texto: str) -> str:

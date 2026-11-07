@@ -64,6 +64,10 @@ EMISSOR = "https://hsm-teste.authkit.app"
 RECURSO = "https://api.hsm-teste.cloud"
 KID = "chave-de-teste-1"
 _OMITIR = object()  # sentinela: claim que o token NÃO traz
+# Os `client_id` que o claude.ai e o Claude Code mandam por CIMD: o primeiro
+# lido no log de produção em 06/11/2026 (#1448), o segundo da doc da Anthropic.
+CLIENTE_CLAUDE_AI = "https://claude.ai/oauth/mcp-oauth-client-metadata"
+CLIENTE_CLAUDE_CODE = "https://claude.ai/oauth/claude-code-client-metadata"
 
 
 # ─── Chaves e tokens montados no teste (sem rede) ────────────────────────────
@@ -112,14 +116,18 @@ def token(
     kid: str = KID,
     email: object = "super@hsm.com",
     email_verified: object = True,
-    scope: object = "openid email read:analytics",
+    scope: object = "openid profile email offline_access",
     aud: object = RECURSO,
     iss: object = EMISSOR,
     exp_delta: int = 3600,
     incluir_exp: bool = True,
+    client_id: object = CLIENTE_CLAUDE_AI,
+    extras: dict | None = None,
 ) -> str:
     """Um token do AuthKit assinado no teste. Cada parâmetro isola um claim para
-    a recusa; `_OMITIR` deixa o claim de fora."""
+    a recusa; `_OMITIR` deixa o claim de fora. O `client_id` padrão é o do
+    claude.ai, o único que o conector aceita (#1448). `extras` acrescenta ou
+    sobrescreve claims (o `sid` do Connect, um `client_id` fora do padrão)."""
     agora = int(time.time())
     claims: dict = {"sub": "user_123", "iat": agora}
     for chave_claim, valor in (
@@ -128,9 +136,11 @@ def token(
         ("email", email),
         ("email_verified", email_verified),
         ("scope", scope),
+        ("client_id", client_id),
     ):
         if valor is not _OMITIR:
             claims[chave_claim] = valor
+    claims.update(extras or {})
     if incluir_exp:
         claims["exp"] = agora + exp_delta
     return pyjwt.encode(claims, _pem_privada(chave), algorithm="RS256", headers={"kid": kid})
@@ -138,7 +148,9 @@ def token(
 
 @pytest.fixture
 def cfg() -> conector_mcp.ConfiguracaoMCP:
-    return conector_mcp.ConfiguracaoMCP(emissor=EMISSOR, jwks_uri=f"{EMISSOR}/oauth2/jwks", recurso=RECURSO)
+    return conector_mcp.ConfiguracaoMCP(
+        emissor=EMISSOR, jwks_uri=f"{EMISSOR}/oauth2/jwks", recurso=RECURSO, clientes=(CLIENTE_CLAUDE_AI,)
+    )
 
 
 @pytest.fixture
@@ -148,6 +160,8 @@ def mcp_configurado(monkeypatch) -> conector_mcp.ConfiguracaoMCP:
     monkeypatch.setattr(settings, "mcp_auth_issuer", EMISSOR)
     monkeypatch.setattr(settings, "mcp_resource_url", RECURSO)
     monkeypatch.setattr(settings, "mcp_auth_jwks_uri", "")
+    # Fixa o padrão: um `.env` local com a lista preenchida não muda o teste.
+    monkeypatch.setattr(settings, "mcp_clientes_permitidos", "")
     return conector_mcp.configuracao_mcp()
 
 
@@ -238,33 +252,28 @@ class TestVerificarAcesso:
         with pytest.raises(conector_mcp.AcessoNegadoMCPError):
             conector_mcp.verificar_acesso(tok, jwks_de(chave_do_emissor), cfg)
 
-    def test_sem_escopo_de_leitura_nega(self, cfg, chave_do_emissor):
-        tok = token(chave_do_emissor, scope="openid email")
-        with pytest.raises(conector_mcp.AcessoNegadoMCPError):
-            conector_mcp.verificar_acesso(tok, jwks_de(chave_do_emissor), cfg)
-
-    def test_escopo_ausente_nega(self, cfg, chave_do_emissor):
-        tok = token(chave_do_emissor, scope=_OMITIR)
-        with pytest.raises(conector_mcp.AcessoNegadoMCPError):
-            conector_mcp.verificar_acesso(tok, jwks_de(chave_do_emissor), cfg)
-
-    def test_escopo_pela_lista_scp_vale(self, cfg, chave_do_emissor):
-        # WorkOS pode serializar o escopo como lista `scp` em vez de string.
-        tok = pyjwt.encode(
-            {
-                "sub": "u",
-                "iss": EMISSOR,
-                "aud": RECURSO,
-                "email": "super@hsm.com",
-                "email_verified": True,
-                "scp": ["read:analytics"],
-                "exp": int(time.time()) + 3600,
-            },
-            _pem_privada(chave_do_emissor),
-            algorithm="RS256",
-            headers={"kid": KID},
-        )
+    def test_escopos_padrao_do_authkit_bastam(self, cfg, chave_do_emissor):
+        # Cliente do claude.ai registrado por DCR/CIMD só recebe os escopos OIDC
+        # padrão (doc do WorkOS); o token dele tem de abrir a Central (#1442).
+        tok = token(chave_do_emissor, scope="openid profile email offline_access")
         assert conector_mcp.verificar_acesso(tok, jwks_de(chave_do_emissor), cfg) == "super@hsm.com"
+
+    def test_sem_claim_de_escopo_vale(self, cfg, chave_do_emissor):
+        # A barreira contra token de outro app é a audiência, não o escopo.
+        tok = token(chave_do_emissor, scope=_OMITIR)
+        assert conector_mcp.verificar_acesso(tok, jwks_de(chave_do_emissor), cfg) == "super@hsm.com"
+
+    def test_token_sem_resource_nega(self, cfg, chave_do_emissor):
+        # Sem resource no authorize, o AuthKit põe no `aud` o client id do
+        # ambiente: não é este recurso, então nega (#1442).
+        tok = token(chave_do_emissor, aud="client_do_ambiente_de_teste")
+        with pytest.raises(conector_mcp.AcessoNegadoMCPError):
+            conector_mcp.verificar_acesso(tok, jwks_de(chave_do_emissor), cfg)
+
+    def test_token_sem_aud_nega(self, cfg, chave_do_emissor):
+        tok = token(chave_do_emissor, aud=_OMITIR)
+        with pytest.raises(conector_mcp.AcessoNegadoMCPError):
+            conector_mcp.verificar_acesso(tok, jwks_de(chave_do_emissor), cfg)
 
     def test_email_nao_verificado_nega(self, cfg, chave_do_emissor):
         tok = token(chave_do_emissor, email_verified=False)
@@ -299,7 +308,7 @@ class TestVerificarAcesso:
             "aud": RECURSO,
             "email": "super@hsm.com",
             "email_verified": True,
-            "scope": "read:analytics",
+            "scope": "openid email",
             "exp": int(time.time()) + 3600,
         }
         tok = f"{_seg({'alg': 'none', 'typ': 'JWT'})}.{_seg(payload)}."
@@ -317,7 +326,7 @@ class TestVerificarAcesso:
                 "aud": RECURSO,
                 "email": "super@hsm.com",
                 "email_verified": True,
-                "scope": "read:analytics",
+                "scope": "openid email",
                 "exp": int(time.time()) + 3600,
             },
             "segredo-publico-qualquer",
@@ -342,7 +351,7 @@ class TestVerificarAcesso:
                     "aud": RECURSO,
                     "email": "super@hsm.com",
                     "email_verified": True,
-                    "scope": "read:analytics",
+                    "scope": "openid email",
                     "exp": int(time.time()) + 3600,
                 }
             ).encode()
@@ -361,6 +370,96 @@ class TestVerificarAcesso:
 
 
 # ─── 3. resolver_super_admin: o gate pelo participante ───────────────────────
+
+
+class TestClientesPermitidos:
+    """Só o cliente do claude.ai abre a Central (#1448, decisão A): qualquer
+    outro cliente registrado no mesmo AuthKit que peça este recurso é negado,
+    mesmo com o login de um Super admin. Igualdade exata, sem buscar a URL do
+    `client_id` (nada de SSRF), e claim ausente nega (fail-closed)."""
+
+    def test_cliente_do_claude_ai_passa(self, cfg, chave_do_emissor):
+        tok = token(chave_do_emissor)
+        assert conector_mcp.verificar_acesso(tok, jwks_de(chave_do_emissor), cfg) == "super@hsm.com"
+
+    @pytest.mark.parametrize(
+        "client_id",
+        [
+            CLIENTE_CLAUDE_CODE,
+            "client_01OUTROAPPDEDCR",
+            CLIENTE_CLAUDE_AI + "/",
+            CLIENTE_CLAUDE_AI.upper(),
+            CLIENTE_CLAUDE_AI + "?x=1",
+            "",
+            {"url": CLIENTE_CLAUDE_AI},
+            [CLIENTE_CLAUDE_AI],
+            _OMITIR,
+        ],
+        ids=[
+            "claude-code",
+            "outro-dcr",
+            "barra-final",
+            "maiusculas",
+            "query",
+            "vazio",
+            "objeto",
+            "lista",
+            "ausente",
+        ],
+    )
+    def test_cliente_fora_da_lista_nega(self, cfg, chave_do_emissor, client_id):
+        tok = token(chave_do_emissor, client_id=client_id)
+        with pytest.raises(conector_mcp.AcessoNegadoMCPError, match="cliente"):
+            conector_mcp.verificar_acesso(tok, jwks_de(chave_do_emissor), cfg)
+
+    def test_a_lista_se_amplia_por_configuracao(self, monkeypatch, chave_do_emissor):
+        monkeypatch.setattr(settings, "mcp_auth_issuer", EMISSOR)
+        monkeypatch.setattr(settings, "mcp_resource_url", RECURSO)
+        monkeypatch.setattr(settings, "mcp_clientes_permitidos", f"{CLIENTE_CLAUDE_AI}, {CLIENTE_CLAUDE_CODE}")
+        cfg = conector_mcp.configuracao_mcp()
+
+        tok = token(chave_do_emissor, client_id=CLIENTE_CLAUDE_CODE)
+
+        assert cfg.clientes == (CLIENTE_CLAUDE_AI, CLIENTE_CLAUDE_CODE)
+        assert conector_mcp.verificar_acesso(tok, jwks_de(chave_do_emissor), cfg) == "super@hsm.com"
+
+    def test_sem_a_variavel_o_padrao_e_so_o_claude_ai(self, mcp_configurado):
+        assert conector_mcp.configuracao_mcp().clientes == (CLIENTE_CLAUDE_AI,)
+
+    @pytest.mark.parametrize("valor", ["", "   ", " , "])
+    def test_lista_vazia_no_env_usa_o_padrao_e_nunca_abre(self, monkeypatch, chave_do_emissor, valor):
+        # Quem copia o `.env.example` leva a linha vazia: vale o padrão (só o
+        # claude.ai), e o Claude Code continua de fora.
+        monkeypatch.setattr(settings, "mcp_auth_issuer", EMISSOR)
+        monkeypatch.setattr(settings, "mcp_resource_url", RECURSO)
+        monkeypatch.setattr(settings, "mcp_clientes_permitidos", valor)
+        cfg = conector_mcp.configuracao_mcp()
+
+        assert cfg.clientes == (CLIENTE_CLAUDE_AI,)
+        with pytest.raises(conector_mcp.AcessoNegadoMCPError):
+            conector_mcp.verificar_acesso(
+                token(chave_do_emissor, client_id=CLIENTE_CLAUDE_CODE), jwks_de(chave_do_emissor), cfg
+            )
+
+    def test_configuracao_sem_lista_explicita_nao_aceita_ninguem(self, chave_do_emissor):
+        # A ConfiguracaoMCP montada à mão sem clientes (só em teste) nega tudo.
+        cfg = conector_mcp.ConfiguracaoMCP(emissor=EMISSOR, jwks_uri=f"{EMISSOR}/oauth2/jwks", recurso=RECURSO)
+        with pytest.raises(conector_mcp.AcessoNegadoMCPError):
+            conector_mcp.verificar_acesso(token(chave_do_emissor), jwks_de(chave_do_emissor), cfg)
+
+    def test_a_recusa_cita_o_cliente_lido_do_token_verificado_e_cortado(self, cfg, chave_do_emissor):
+        tok = token(chave_do_emissor, client_id="https://intruso.exemplo/meta" + "x" * 500)
+        with pytest.raises(conector_mcp.AcessoNegadoMCPError) as erro:
+            conector_mcp.verificar_acesso(tok, jwks_de(chave_do_emissor), cfg)
+        assert "https://intruso.exemplo/meta" in str(erro.value)
+        assert len(str(erro.value)) < 300
+
+    def test_token_forjado_nao_chega_a_citar_o_cliente(self, cfg, chave_do_emissor, outra_chave):
+        # Assinado por outra chave: nega pela assinatura, antes de olhar o cliente.
+        tok = token(outra_chave, client_id="https://forjado.exemplo/meta")
+        with pytest.raises(conector_mcp.AcessoNegadoMCPError) as erro:
+            conector_mcp.verificar_acesso(tok, jwks_de(chave_do_emissor), cfg)
+        assert "forjado" not in str(erro.value)
 
 
 class TestResolverSuperAdmin:
@@ -413,7 +512,10 @@ class TestMetadataDoRecurso:
         corpo = resposta.json()
         assert corpo["resource"] == RECURSO
         assert corpo["authorization_servers"] == [EMISSOR]
-        assert conector_mcp.ESCOPO_DE_LEITURA in corpo["scopes_supported"]
+        # Só o que o AuthKit concede a cliente de DCR/CIMD: escopo fora disso o
+        # authorize recusa com invalid_scope antes do login (#1442).
+        assert set(corpo["scopes_supported"]) <= {"openid", "profile", "email", "offline_access"}
+        assert "read:analytics" not in corpo["scopes_supported"]
 
     def test_metadata_vem_com_cors(self, mcp_configurado):
         """O claude.ai lê o metadata de outra origem: o cabeçalho de CORS sobra
@@ -551,12 +653,12 @@ class TestTransporteRecusaCom401:
         "tok_kwargs",
         [
             {"aud": "https://central.mala-ia.cloud"},
+            {"aud": "client_do_ambiente_de_teste"},
             {"iss": "https://outro.authkit.app"},
             {"exp_delta": -60},
-            {"scope": "openid email"},
             {"email_verified": False},
         ],
-        ids=["audiencia", "emissor", "expirado", "sem-escopo", "email-nao-verificado"],
+        ids=["audiencia", "sem-resource", "emissor", "expirado", "email-nao-verificado"],
     )
     def test_token_ruim_e_401(self, chave_do_emissor, tok_kwargs):
         resposta = _rpc(_cliente_mcp(), INIT, token(chave_do_emissor, **tok_kwargs))
@@ -652,6 +754,18 @@ class TestTransporteRecusaCom401:
         resposta = _rpc(_cliente_mcp([quem]), INIT, token(chave_do_emissor, email=quem["email"]))
 
         assert resposta.status_code == 401
+
+    def test_cliente_fora_da_lista_e_401_com_cabecalho_e_fica_no_log(self, chave_do_emissor, caplog):
+        # O Claude Code, com o login de um Super admin, não abre a Central
+        # (#1448). A linha do log é a que o guia de revogação cita.
+        caplog.set_level(logging.INFO, logger="app.routers.conector_mcp")
+
+        resposta = _rpc(_cliente_mcp(), INIT, token(chave_do_emissor, client_id=CLIENTE_CLAUDE_CODE))
+
+        assert resposta.status_code == 401
+        assert "resource_metadata=" in resposta.headers["www-authenticate"]
+        negados = [r.getMessage() for r in caplog.records if "acesso negado" in r.getMessage()]
+        assert any("cliente fora da lista" in m and CLIENTE_CLAUDE_CODE in m for m in negados)
 
 
 class TestTransporteSemConfig:
@@ -875,6 +989,80 @@ class TestVersaoDoProtocoloLeniente:
 
         assert resposta.status_code == 401
         assert self._linhas_da_versao(caplog) == []
+
+
+@pytest.mark.usefixtures("mcp_configurado", "jwks_no_emissor")
+class TestLogDeQuemAcessa:
+    """Todo acesso aceito deixa no log o `client_id` e o `sid` do token (#1448),
+    para auditoria. Sem e-mail nessa linha."""
+
+    _LOGGER = "app.routers.conector_mcp"
+
+    def _linhas(self, caplog) -> list[str]:
+        return [r.getMessage() for r in caplog.records if r.name == self._LOGGER and "acesso aceito" in r.getMessage()]
+
+    def _pedido(self, tok: str):
+        return _cliente_mcp().post(
+            CAMINHO_MCP,
+            json={"jsonrpc": "2.0", "id": 2, "method": "tools/list"},
+            headers={"Authorization": f"Bearer {tok}"},
+        )
+
+    def test_acesso_aceito_loga_client_id_e_sid(self, chave_do_emissor, caplog):
+        caplog.set_level(logging.INFO, logger=self._LOGGER)
+        tok = token(chave_do_emissor, extras={"sid": "consent_01ABC"})
+
+        resposta = self._pedido(tok)
+
+        assert resposta.status_code == 200, resposta.text
+        linhas = self._linhas(caplog)
+        assert len(linhas) == 1
+        assert CLIENTE_CLAUDE_AI in linhas[0]
+        assert "consent_01ABC" in linhas[0]
+        assert "super@hsm.com" not in linhas[0]
+
+    def test_acesso_do_claude_ai_loga_o_client_id_dele(self, chave_do_emissor, caplog):
+        caplog.set_level(logging.INFO, logger=self._LOGGER)
+
+        resposta = self._pedido(token(chave_do_emissor))
+
+        assert resposta.status_code == 200, resposta.text
+        linhas = self._linhas(caplog)
+        assert len(linhas) == 1
+        assert CLIENTE_CLAUDE_AI in linhas[0]
+
+    def test_valor_comprido_no_claim_e_cortado_em_200(self, chave_do_emissor):
+        tok = token(chave_do_emissor, extras={"client_id": "x" * 5000})
+
+        assert conector_mcp.identificacao_do_cliente(tok)["client_id"] == "x" * 200
+
+    def test_client_id_que_nao_e_texto_vira_none(self, chave_do_emissor):
+        tok = token(chave_do_emissor, extras={"client_id": {"url": "https://cliente.exemplo"}, "sid": 42})
+
+        assert conector_mcp.identificacao_do_cliente(tok)["client_id"] is None
+        assert conector_mcp.identificacao_do_cliente(tok)["sid"] is None
+
+    def test_log_traz_os_nomes_dos_claims_sem_os_valores(self, chave_do_emissor, caplog):
+        # Se o cliente vier noutro claim (azp), o nome aparece no log e mostra
+        # onde procurar; o valor do e-mail, não.
+        caplog.set_level(logging.INFO, logger=self._LOGGER)
+        tok = token(chave_do_emissor, extras={"azp": "https://cliente.exemplo/meta"})
+
+        self._pedido(tok)
+
+        linha = self._linhas(caplog)[0]
+        assert "azp" in linha
+        assert "email_verified" in linha
+        assert "https://cliente.exemplo/meta" not in linha
+        assert "super@hsm.com" not in linha
+
+    def test_acesso_negado_nao_vai_ao_log_de_aceito(self, caplog):
+        caplog.set_level(logging.INFO, logger=self._LOGGER)
+
+        resposta = _cliente_mcp().post(CAMINHO_MCP, json={"jsonrpc": "2.0", "id": 2, "method": "tools/list"})
+
+        assert resposta.status_code == 401
+        assert self._linhas(caplog) == []
 
 
 # ─── Sem python-jose: a verificação é do PyJWT (issue #1284) ────────────────

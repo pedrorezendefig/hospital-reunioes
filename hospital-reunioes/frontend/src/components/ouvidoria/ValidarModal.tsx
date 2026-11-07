@@ -389,7 +389,7 @@ export function ValidarModal({
             />
             <span>
               <span className="font-semibold">Sigilo reforçado</span>
-              <span className="block text-xs text-slate-500 mt-0.5">
+              <span className="block text-xs text-slate-500 mt-0.5 normal-case">
                 {sigiloTravado
                   ? "Este tipo é sigiloso por natureza e o sigilo não pode ser retirado."
                   : "Marque para restringir o caso ao Ouvidor e à Diretoria Executiva. Desmarque para devolver o caso ao painel de todos."}
@@ -495,7 +495,7 @@ export function ValidarModal({
                 }`}
               >
                 <span className="block text-sm font-semibold">{LABEL_GRAVIDADE[nivel]}</span>
-                <span className="block text-xs mt-0.5 opacity-80">{AJUDA_GRAVIDADE[nivel]}</span>
+                <span className="block text-xs mt-0.5 opacity-80 normal-case">{AJUDA_GRAVIDADE[nivel]}</span>
               </button>
             ))}
           </div>

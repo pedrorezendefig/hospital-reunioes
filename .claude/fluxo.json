@@ -1,0 +1,28 @@
+{
+  "contrato": 1,
+  "nome": "Hospital",
+  "slug": "hospital",
+  "app": "hospital-reunioes/",
+  "leitor": "o diretor",
+  "bloco": "👔 Para o diretor",
+  "humano": "Pedro",
+  "ask": "ask-pedro",
+  "designado_tira_da_fila": true,
+  "dado_sensivel": "dado de paciente ou de outro Facilitador",
+  "migrations": {
+    "pasta": "hospital-reunioes/supabase/migrations",
+    "aplicar": "cole no Studio"
+  },
+  "testes": "ferramenta: `uv run --no-project --python \">=3.12\" --with pytest --with pyyaml python -m pytest tools/ -q`; app: a suíte do backend ou do frontend que o diff toca",
+  "varredura": {
+    "backend": "hospital-reunioes/backend/app",
+    "frontend": "hospital-reunioes/frontend/src"
+  },
+  "decisoes": {
+    "fluxo": "docs/adr/0068-o-fluxo-em-uma-pagina.md"
+  },
+  "prd_do_leitor": {
+    "marcador": "<!--\\s*demanda-vitta id=\"[^\"]*\"\\s*-->"
+  },
+  "aviso_celular": true
+}

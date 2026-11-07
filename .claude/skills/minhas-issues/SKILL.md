@@ -1,6 +1,6 @@
 ---
 name: minhas-issues
-description: "Check de um minuto das minhas issues abertas: semáforo do Actions, onde parou, fila por PRD, plano com comandos e passo a passo das humanas. Gatilhos: minhas issues, onde parei, o que tem pra mim, check das minhas issues, status do Actions. Só leitura. Sintaxe `/minhas-issues [@login]`."
+description: "Check de um minuto das minhas issues abertas: semáforo do Actions, onde parou, fila por PRD, plano com comandos e passo a passo das humanas. O fluxo sai com --visual; os botões que abrem a onda ficam no PedroOS. Gatilhos: minhas issues, onde parei, o que tem pra mim, check das minhas issues, status do Actions. Só leitura. Sintaxe `/minhas-issues [@login] [--visual]`."
 ---
 
 # Minhas issues: check de um minuto
@@ -10,10 +10,10 @@ Mostra numa tela só o que está aberto com quem pede, onde cada coisa parou, se
 ## Sintaxe
 
 ```
-/minhas-issues [@login]
+/minhas-issues [@login] [--visual]
 ```
 
-Sem argumento, a pessoa é o login do `gh api user`. Com `@login`, mostra a fila de outra pessoa (cobrar alguém, cobrir férias).
+Sem argumento, a pessoa é o login do `gh api user`. Com `@login`, mostra a fila de outra pessoa (cobrar alguém, cobrir férias). A tela padrão é a compacta, só os blocos de texto. O caminho, a árvore dos PRDs, os selos e a Tecnologia saem só com `--visual`, quando a pessoa pedir com essas palavras (`--curto` segue aceito e é o mesmo que o padrão).
 
 "Minha" é o que a pessoa tem que fazer: atribuída a ela; sem ninguém atribuído, quem criou. O painel filtrado pela pessoa mostra também o que ela criou e outro assumiu, então lá o total pode ser maior.
 
@@ -24,6 +24,8 @@ Sem argumento, a pessoa é o login do `gh api user`. Com `@login`, mostra a fila
    ```bash
    python3 .claude/skills/minhas-issues/scripts/minhas_issues.py [@login]
    ```
+
+   Não desenhe fluxograma nem árvore no terminal, nem em Mermaid feito à mão: o fluxo sai com `--visual`. A última linha da saída já aponta para ele.
 
 2. Acrescente no máximo **duas linhas** suas, e só se mudarem a decisão (por exemplo: o mesmo arquivo em dois PRs do plano, ou um PR verde cuja issue já fechou). Nada de recapitular a tabela.
 
@@ -48,11 +50,10 @@ O agente faz: <os passos que esta sessão roda se a pessoa disser "vai"> · Só 
 
 Regras:
 
-- **Motivo real, não o label.** Classifique pelo que trava de fato. Os motivos que se repetem:
-  - *conta pessoal* (projeto Vercel, chave ou máquina que só uma pessoa tem): diga qual conta e confira se esta máquina tem o vínculo (ex.: `docs/manual/.vercel/project.json`);
-  - *decisão de domínio* (pacote grande, perguntas abertas na triagem, emenda de ADR): o caminho é `/grill-with-docs #<N> --lote`, e o passo 1 é juntar o insumo externo que falta (organograma, número, resposta do diretor) antes de abrir o grill;
-  - *divulgação* (`type:divulgacao`): a pessoa aprova vídeo e página; o resto é `/divulgar`;
-  - *as três paradas da regra 9 da ADR 0068* (migration no Studio, rollback, baixa `ready-for-human`): siga as memórias do projeto (migration pelo caminho clicável, segredo só na tela do Coolify).
+- **Motivo real, não o label.** Classifique pelo que trava de fato. Os motivos que se repetem (o que `python3 .claude/skills/onda-enxuta/scripts/fluxo.py notas minhas-issues` imprimir completa cada um com o caso do Projeto):
+  - *conta pessoal* (chave, acesso ou máquina que só uma pessoa tem): diga qual conta e confira se esta máquina tem o vínculo;
+  - *decisão de domínio* (pacote grande, perguntas abertas na triagem, emenda de ADR): o caminho é `/grill-with-docs #<N> --lote`, e o passo 1 é juntar o insumo externo que falta (número, documento, resposta de quem decide) antes de abrir o grill;
+  - *as três paradas da regra 9 da decisão do fluxo* (migration, rollback, baixa `ready-for-human`): siga as memórias do projeto (segredo só na tela da plataforma de deploy).
 - **Confira se já foi feito** antes de mandar fazer: `curl` no endereço público procurando a frase velha, `gh pr list --search <N>`, estado do deploy. Se já foi, o passo a passo vira "fechar com `gh issue close <N> --comment ...`".
 - **O caminho mais curto**: reaproveite o que a issue já traz (bloco `O que fazer`, perguntas da triagem com recomendação). Prefira `--dry-run` primeiro quando o script tiver. Não invente passo que a issue não pede.
 - **Separe o que é do agente.** Quase sempre só uma parte é humana (aprovar, decidir, logar numa conta); o resto o agente roda nesta máquina. Diga qual parte é qual.
@@ -65,7 +66,7 @@ Regras:
    - amarelo: `degraded_performance`, status page sem resposta ou algum cancelamento por runner: desenvolve e abre PR; a subida espera.
    - vermelho: `partial_outage` ou `major_outage`: só código local, não abre onda.
 2. **Em andamento**: issue com claim, PR, ou worktree nesta máquina. "Onde parou" diz PR verde esperando a subida, CI cancelado ou vermelho, conflito, must-fix aberto, sem revisão, commit só local e worktree travado.
-3. **Na fila**: uma linha por PRD ou grupo de avulsas, com a idade ("parada há N dias"). `needs-triage` entra só na contagem, com `/triage`.
+3. **Na fila**: uma linha por PRD ou grupo de avulsas, com a idade ("parada há N dias"). `needs-triage` entra só na contagem, com `/triage`. A exceção é a `needs-triage` com **PRD do leitor** (`prd_do_leitor` no `fluxo.py`): a issue que nasce fora do repo com a metade de negócio do PRD. Ela sai numa linha própria, "grill técnico pendente: #N", com `/grill-with-docs #N`. O script a reconhece pelo marcador do Projeto mais a seção "Ficou em aberto", sem label nova; depois que o `/to-prd` acrescenta "Decisões de implementação", ela volta a ser uma needs-triage comum.
 4. **Plano**: até 3 passos, um por nível, nesta ordem fixa:
    1. PR verde esperando a subida (`fechar_onda.py --prs <N> --dry-run`);
    2. trabalho que pode se perder (commit sem push);
@@ -75,6 +76,13 @@ Regras:
    6. fila de agente em ondas: devolve `/montar-ondas-enxutas` com `--exceto #PRD` para o PRD que já tem fatia andando. Esta skill não monta ondas.
 
    A estimativa é a mediana de PR aberto até o merge pelo tamanho da fatia (`fatia:P/M/G`), calculada na hora sobre os últimos 45 dias. O lead time abertura-fechamento não entra: mede espera na fila, não esforço. **Melhor** é o passo 1 (a ordem já põe primeiro o que destrava mais); **mais rápido** é o de menor estimativa; quando coincidem, sai numa linha.
+
+### O que a tela visual soma (`--visual`)
+
+- **Caminho das issues**, logo abaixo do total: um fluxograma com as caixas Triagem, Fila de agente, Humana, Em andamento, PR aberto e Entregue nos últimos 14 dias. Cada caixa traz a contagem e até 6 números.
+- **Árvore de cada PRD** que tem fatia sua aberta: o PRD, as fatias com a fase e uma seta pontilhada "trava" para cada bloqueio nativo do GitHub ("blocked by"). Uma fatia travada se liga à fatia que a trava, e não ao PRD.
+- **Selos** nos números: `[Humana]` para `ready-for-human` e `[Diretor]` para a issue que nasceu na aba Tecnologia.
+- **Chegou da Tecnologia**, antes do plano: as issues do diretor separadas em Bug (`type:fix` ou `type:bug`) e Melhoria. Entram as abertas e as fechadas nos últimos 14 dias, de qualquer responsável, com a fase e a pessoa responsável. A origem vem do marcador `<!-- demanda-vitta id="..." -->` que a aba grava no corpo da issue. Não existe label para isso.
 
 ## Limites
 

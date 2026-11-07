@@ -56,6 +56,9 @@
         .header-logo { display: table-cell; vertical-align: middle; width: 110px; }
         .header-logo img { width: 96px; }
         .header-text { display: table-cell; vertical-align: middle; padding-left: 16px; }
+        /* Títulos em caixa alta só na exibição (ADR 0080): o título da
+           sugestão, escrito pela IA, fica gravado como veio. */
+        h1, h2, .sugestao .titulo { text-transform: uppercase; }
         .header-text h1 { font-size: 16pt; margin: 0 0 4px 0; color: #2B2E7E; }
         .header-text .periodo { font-size: 10.5pt; color: #334155; }
         .header-text .comparacao { font-size: 9pt; color: #64748B; }

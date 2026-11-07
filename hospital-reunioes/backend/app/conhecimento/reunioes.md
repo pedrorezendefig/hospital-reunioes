@@ -37,6 +37,21 @@ A coleta de assinaturas também tem prazo: são 30 dias. Vencido o prazo, a ata 
 - Não gera PDF da ata guiada, e não a manda para assinatura.
 - Não desfaz uma ata finalizada pelo caminho normal: quem administra o aplicativo consegue apagar ou corrigir uma ata já finalizada, com motivo obrigatório e registro de quem fez, e isso é exceção pedida caso a caso, não botão de uso corrente.
 
+## O que já foi decidido
+
+- Uma reunião tem no máximo uma ata, feita por transcrição ou pela ata guiada.
+- A ata guiada não gera PDF e não vai para assinatura.
+- Depois de revisar a ata, o facilitador escolhe entre enviar para assinatura e finalizar sem assinatura, e a escolha é definitiva.
+- No caminho da assinatura, a pendência de cada pessoa nasce quando ela assina, ou quando dá o "li e aceito" pelo link, sem esperar as outras.
+- A coleta de assinaturas dura até 30 dias, e depois disso a ata fecha com as assinaturas que tiver.
+- A inteligência artificial pergunta quando não tem certeza de quem é o responsável, e quem liga a ação a uma pessoa do cadastro é o aplicativo.
+- Quem é de fora do cadastro fica na ata só como nome, sem cobrança.
+- A lista de participantes da ata é proposta pela inteligência artificial uma vez só, e daí em diante só o facilitador mexe nela.
+- O aplicativo não grava a reunião, e o áudio do ditado é descartado assim que vira texto.
+- As notas avulsas e a importação de atas antigas foram retiradas do aplicativo.
+- O papel interno de cada facilitador é uma etiqueta da administração, e a própria pessoa não vê o dela.
+- Os títulos e subtítulos do PDF da ata saem em caixa alta, inclusive os tópicos escritos pela inteligência artificial, e o resto do texto continua com maiúscula e minúscula.
+
 ## O que costuma virar Demanda
 
 - Ata saindo com erro de conteúdo, ou perdendo uma decisão que foi tomada (Defeito).

@@ -1,6 +1,6 @@
 """A fundacao da aba Tecnologia (issue #636, PRD #634, ADR 0050).
 
-Tres blocos, tres seams:
+Dois blocos, dois seams:
 
 * **A migration 102**, lida como texto. O repo nao tem Postgres na suite e a
   migration e aplicada a mao no Studio, entao o que da para provar aqui e o que
@@ -9,8 +9,9 @@ Tres blocos, tres seams:
 * **O gate**, pela ROTA de verdade, com `require_super_admin` de pe. So
   `get_current_user` e `get_supabase_client` sao dublados: trocar a guarda por
   um dublê deixaria o teste verde sobre nada.
-* **As regras de Produto**, tambem pela rota, com o Supabase dublado. A regra
-  pura ("ativo exige dono") tem ainda o seu teste direto, sem HTTP.
+
+As regras de Produto e a tela de Produtos sairam com a ADR 0077 (issue #1386):
+a aba e o chat do agente.
 """
 
 from __future__ import annotations
@@ -33,20 +34,16 @@ from slowapi.errors import RateLimitExceeded  # noqa: E402
 from app.dependencies import get_current_user, get_supabase_client  # noqa: E402
 from app.limiter import limiter  # noqa: E402
 from app.routers.admin import tecnologia as tecnologia_router  # noqa: E402
-from app.services.tecnologia import (  # noqa: E402
-    e_pessoa_da_aba,
-    edicao_deixa_produto_ativo_sem_dono,
-    produto_ativo_sem_dono,
-)
+from app.services.tecnologia import ESTADOS_ABERTOS, ESTADOS_FECHADOS  # noqa: E402
 
 
 @pytest.fixture(autouse=True)
 def _reset_rate_limiter():
-    """O slowapi guarda a contagem num storage de PROCESSO (issue #642).
+    """O slowapi guarda a contagem num storage de PROCESSO.
 
-    As tres rotas de gatilho ganharam `@limiter.limit`, e o `TestClient` sempre
-    chega do mesmo endereco: sem este reset, o 61o request do ARQUIVO leva 429 e
-    o teste que quebra e o proximo da fila, nao o que estourou o teto.
+    As rotas do chat tem `@limiter.limit`, e o `TestClient` sempre chega do
+    mesmo endereco: sem este reset, o request que passa do teto leva 429 e o
+    teste que quebra e o proximo da fila, nao o que estourou o teto.
     """
     limiter._storage.reset()
     yield
@@ -188,7 +185,7 @@ def _montar(
     produtos: list[dict] | None = None,
 ) -> tuple[TestClient, _SupabaseMock]:
     app = FastAPI()
-    # O limitador das rotas de gatilho precisa do `app.state` (o `main.py` faz o
+    # O limitador das rotas do chat precisa do `app.state` (o `main.py` faz o
     # mesmo): sem ele, `@limiter.limit` estoura em vez de limitar.
     app.state.limiter = limiter
     app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
@@ -298,6 +295,15 @@ class TestMigration:
     def test_estado_da_demanda_e_a_lista_fechada_de_cinco(self, comandos):
         for estado in ("nova", "em_andamento", "aguardando", "concluida", "cancelada"):
             assert f"'{estado}'" in comandos
+
+    def test_abertos_e_fechados_sao_o_complemento_um_do_outro(self):
+        """O estado de antes da ADR 0077 fica congelado na coluna, e a
+        sincronizacao da Etapa e o apagamento dos prints ainda o leem pelos dois
+        grupos. Um estado que ficasse de fora dos dois sumiria da reconciliacao
+        em silencio; um que estivesse nos dois seria lido como aberto e
+        fechado."""
+        assert set(ESTADOS_ABERTOS) == {"nova", "em_andamento", "aguardando"}
+        assert set(ESTADOS_FECHADOS) == {"concluida", "cancelada"}
 
     def test_produto_com_demanda_nao_e_apagado(self, comandos):
         """ON DELETE RESTRICT: a saida do Produto e desativar, nao apagar."""
@@ -409,7 +415,7 @@ def _rotas_da_aba() -> list[tuple[str, str, dict | None]]:
     for caminho, operacoes in caminhos.items():
         if not caminho.startswith(PREFIXO):
             continue
-        # `{produto_id}` e afins viram um id qualquer: o que se mede aqui e o
+        # `{demanda_id}` e afins viram um id qualquer: o que se mede aqui e o
         # gate, que responde antes de o id existir ou nao.
         concreto = re.sub(r"\{[^}]+\}", "prod-1", caminho)
         for metodo in operacoes:
@@ -426,22 +432,17 @@ def test_a_varredura_enxerga_as_rotas_da_aba():
     """Controle, antes de qualquer asserção sobre a matriz: varredura vazia
     satisfaz "toda rota responde 403" sem olhar rota nenhuma.
 
-    O piso é o número de operações que a aba publica hoje: 4 de Produto
-    (issue #636), mais 6 de Demanda e Conversa (issue #637), mais 2 de escrita
-    no fio (issue #638: responder e editar a própria resposta), mais 1 do texto
-    para IA (issue #640), mais 2 dos recortes da lista (issue #641: "Minha vez"
-    e Histórico). Ele acompanha a aba de propósito. Um piso que ficasse para
-    trás deixaria de guardar as rotas novas: bastaria um refactor mover as
-    Demandas para outro prefixo para a varredura cair para 4, este teste
-    continuar VERDE e onze rotas saírem da matriz de 403 em silêncio, que é a
-    morte por varredura parcial das issues #542 e #546. Fatia que acrescentar
-    rota sobe o número junto.
-
-    A issue #674 somou 3: o "eu" da aba, vincular e desvincular. A issue #677
-    somou 1: levar para desenvolvimento. A issue #1059 trocou os 2 recortes da
-    #641 por 1, o Painel.
+    O piso é o número de operações que a aba publica hoje, desde que ela virou
+    o chat do agente (issue #1386, ADR 0077): a lista e o primeiro turno, ler e
+    responder a conversa, o "Não bateu", o "Fechar e resumir", o "Criar o card"
+    e a leitura do print. Ele acompanha a aba de propósito. Um piso que ficasse
+    para trás deixaria de guardar as rotas novas: bastaria um refactor mover o
+    chat para outro prefixo para a varredura cair, este teste continuar VERDE e
+    as rotas saírem da matriz de 403 em silêncio, que é a morte por varredura
+    parcial das issues #542 e #546. Fatia que acrescentar rota sobe o número
+    junto.
     """
-    assert len(ROTAS) >= 18, f"a varredura só achou {len(ROTAS)} rotas em {PREFIXO}: {ROTAS}"
+    assert len(ROTAS) >= 8, f"a varredura só achou {len(ROTAS)} rotas em {PREFIXO}: {ROTAS}"
 
 
 PERSONAS_SEM_ACESSO = {
@@ -467,16 +468,9 @@ def test_quem_nao_e_super_admin_leva_403(persona, metodo, caminho, corpo):
 @pytest.mark.parametrize("metodo,caminho,corpo", ROTAS, ids=lambda v: v if isinstance(v, str) else "")
 def test_super_admin_passa_em_todas(metodo, caminho, corpo):
     """O par de presenca do teste acima: sem ele, um 403 cravado em toda rota
-    passaria pelos dois.
-
-    A persona vem COM `github_login` porque o que esta matriz mede e o gate de
-    PAPEL, e as portas do Vinculo (issue #674) tem um segundo gate, ortogonal a
-    ele: quem nao trabalha no GitHub leva 403 mesmo sendo Super admin. Sem o
-    login aqui, o 403 dessa segunda guarda seria lido como falha do gate de
-    papel, e o teste apontaria para o lugar errado. Quem prova o gate do login
-    e o `test_tecnologia_vinculo.py`.
-    """
-    dono = _pessoa("P1", "Dona Vitta", github_login="donavitta")
+    passaria pelos dois. A persona e o diretor, sem `github_login`: o chat nao
+    tem segundo gate (ADR 0077)."""
+    dono = _pessoa("P1", "Diretor do Hospital")
     client, _ = _montar(
         logado=dono,
         participantes=[dono],
@@ -485,317 +479,3 @@ def test_super_admin_passa_em_todas(metodo, caminho, corpo):
     resposta = client.request(metodo, caminho, json=corpo)
     assert resposta.status_code != 403
     assert resposta.status_code < 500
-
-
-# ─── 3. A lista de pessoas com acesso a aba ──────────────────────────────────
-
-
-class TestPessoasDaAba:
-    def test_so_participante_ativo_com_super_admin(self):
-        dentro = _pessoa("P1", "Ativa Super")
-        fora = [
-            _pessoa("P2", "Inativa Super", ativo=False),
-            _pessoa("P3", "Facilitador", access_profile="regular"),
-            _pessoa("P4", "Secretaria", access_profile="secretaria"),
-        ]
-        client, _ = _montar(logado=dentro, participantes=[dentro, *fora])
-
-        corpo = client.get("/api/admin/tecnologia/pessoas").json()
-
-        assert [p["id"] for p in corpo] == ["P1"]
-        assert corpo[0]["nome_completo"] == "Ativa Super"
-
-    def test_ativo_nulo_conta_como_ativo(self):
-        """`ativo` nasceu com DEFAULT TRUE e linha antiga pode estar NULL.
-        Tratar NULL como inativo tiraria da lista gente que usa o app."""
-        assert e_pessoa_da_aba(_pessoa("P1", "Sem carimbo", ativo=None)) is True
-
-    def test_desativado_fica_de_fora_mesmo_com_super_admin(self):
-        assert e_pessoa_da_aba(_pessoa("P1", "Saiu", ativo=False)) is False
-
-    def test_regular_ativo_fica_de_fora(self):
-        assert e_pessoa_da_aba(_pessoa("P1", "Facilitador", access_profile="regular")) is False
-
-
-# ─── 4. A regra pura do dono ─────────────────────────────────────────────────
-
-
-class TestRegraDoDono:
-    def test_ativo_sem_dono_e_recusado(self):
-        assert produto_ativo_sem_dono(ativo=True, dono_id=None) is True
-
-    def test_ativo_com_dono_passa(self):
-        assert produto_ativo_sem_dono(ativo=True, dono_id="P1") is False
-
-    def test_inativo_pode_ficar_sem_dono(self):
-        assert produto_ativo_sem_dono(ativo=False, dono_id=None) is False
-
-    def test_a_edicao_que_tira_o_dono_do_ativo_e_recusada(self):
-        assert (
-            edicao_deixa_produto_ativo_sem_dono(
-                antes_ativo=True,
-                antes_dono="P1",
-                depois_ativo=True,
-                depois_dono=None,
-            )
-            is True
-        )
-
-    def test_a_edicao_que_reativa_sem_dono_e_recusada(self):
-        assert (
-            edicao_deixa_produto_ativo_sem_dono(
-                antes_ativo=False,
-                antes_dono=None,
-                depois_ativo=True,
-                depois_dono=None,
-            )
-            is True
-        )
-
-    def test_a_edicao_que_apenas_herda_o_estado_ruim_passa(self):
-        """O estado dos sete Produtos do seed: ativos e sem dono, porque foi a
-        migration que mandou cria-los assim. Renomear um deles nao e o ato que
-        os deixou sem ninguem, e recusar culparia o Super admin por uma falta
-        que ele nao provocou."""
-        assert (
-            edicao_deixa_produto_ativo_sem_dono(
-                antes_ativo=True,
-                antes_dono=None,
-                depois_ativo=True,
-                depois_dono=None,
-            )
-            is False
-        )
-
-
-# ─── 5. Produtos pela tela ───────────────────────────────────────────────────
-
-
-class TestProdutos:
-    def test_lista_traz_os_produtos_na_ordem_de_exibicao(self):
-        dono = _pessoa("P1", "Dona Vitta")
-        client, _ = _montar(
-            logado=dono,
-            produtos=[
-                _produto("prod-3", "Reuniões", ordem=3, dono_id="P1"),
-                _produto("prod-1", "Ana", ordem=1, dono_id="P1"),
-                _produto("prod-2", "Integração Ana x MV", ordem=2, dono_id="P1"),
-            ],
-        )
-
-        corpo = client.get("/api/admin/tecnologia/produtos").json()
-
-        assert [p["nome"] for p in corpo] == ["Ana", "Integração Ana x MV", "Reuniões"]
-
-    def test_lista_resolve_o_nome_do_dono(self):
-        dono = _pessoa("P1", "Dona Vitta")
-        client, _ = _montar(logado=dono, produtos=[_produto("prod-1", "Ana", ordem=1, dono_id="P1")])
-
-        corpo = client.get("/api/admin/tecnologia/produtos").json()
-
-        assert corpo[0]["dono_nome"] == "Dona Vitta"
-
-    def test_produto_sem_dono_volta_sem_nome_de_dono(self):
-        """O par de presenca do teste acima: `dono_nome` nulo aqui e o mesmo
-        campo que resolve la, entao um `dono_nome` cravado quebraria um dos
-        dois."""
-        dono = _pessoa("P1", "Dona Vitta")
-        client, _ = _montar(logado=dono, produtos=[_produto("prod-1", "Ana", ordem=1)])
-
-        corpo = client.get("/api/admin/tecnologia/produtos").json()
-
-        assert corpo[0]["dono_nome"] is None
-
-    def test_cria_produto_com_dono(self):
-        dono = _pessoa("P1", "Dona Vitta")
-        client, sb = _montar(logado=dono)
-
-        resposta = client.post(
-            "/api/admin/tecnologia/produtos",
-            json={"nome": "  Portal   do   Paciente ", "dono_id": "P1", "ordem": 8},
-        )
-
-        assert resposta.status_code == 201
-        assert resposta.json()["nome"] == "Portal do Paciente"
-        assert resposta.json()["dono_nome"] == "Dona Vitta"
-        assert [p["nome"] for p in sb.tabelas["tecnologia_produtos"]] == ["Portal do Paciente"]
-
-    def test_cria_produto_sem_dono_e_recusado_com_o_motivo(self):
-        dono = _pessoa("P1", "Dona Vitta")
-        client, sb = _montar(logado=dono)
-
-        resposta = client.post("/api/admin/tecnologia/produtos", json={"nome": "Portal"})
-
-        assert resposta.status_code == 422
-        assert "precisa de dono" in resposta.json()["detail"]
-        assert sb.tabelas["tecnologia_produtos"] == []
-
-    def test_dono_precisa_estar_na_lista_da_aba(self):
-        dono = _pessoa("P1", "Dona Vitta")
-        forasteiro = _pessoa("P9", "Facilitador", access_profile="regular")
-        client, sb = _montar(logado=dono, participantes=[dono, forasteiro])
-
-        resposta = client.post("/api/admin/tecnologia/produtos", json={"nome": "Portal", "dono_id": "P9"})
-
-        assert resposta.status_code == 422
-        assert "Super admin" in resposta.json()["detail"]
-        assert sb.tabelas["tecnologia_produtos"] == []
-
-    def test_nome_repetido_e_recusado_sem_distinguir_maiusculas(self):
-        dono = _pessoa("P1", "Dona Vitta")
-        client, _ = _montar(logado=dono, produtos=[_produto("prod-1", "Ana", ordem=1, dono_id="P1")])
-
-        resposta = client.post("/api/admin/tecnologia/produtos", json={"nome": "ana", "dono_id": "P1"})
-
-        assert resposta.status_code == 409
-
-    def test_renomeia_produto(self):
-        dono = _pessoa("P1", "Dona Vitta")
-        client, sb = _montar(logado=dono, produtos=[_produto("prod-1", "Ana", ordem=1, dono_id="P1")])
-
-        resposta = client.patch("/api/admin/tecnologia/produtos/prod-1", json={"nome": "Ana WhatsApp"})
-
-        assert resposta.status_code == 200
-        assert sb.tabelas["tecnologia_produtos"][0]["nome"] == "Ana WhatsApp"
-
-    def test_desativar_nao_apaga_nem_esconde(self):
-        """Criterio da issue: a linha continua no banco e volta na lista
-        marcada como inativa."""
-        dono = _pessoa("P1", "Dona Vitta")
-        client, sb = _montar(logado=dono, produtos=[_produto("prod-1", "Ana", ordem=1, dono_id="P1")])
-
-        assert client.patch("/api/admin/tecnologia/produtos/prod-1", json={"ativo": False}).status_code == 200
-
-        assert len(sb.tabelas["tecnologia_produtos"]) == 1
-        lista = client.get("/api/admin/tecnologia/produtos").json()
-        assert [(p["nome"], p["ativo"]) for p in lista] == [("Ana", False)]
-
-    def test_define_o_dono_pela_tela(self):
-        dono = _pessoa("P1", "Dona Vitta")
-        outro = _pessoa("P2", "Outro Socio")
-        client, sb = _montar(
-            logado=dono,
-            participantes=[dono, outro],
-            produtos=[_produto("prod-1", "Ana", ordem=1, ativo=False)],
-        )
-
-        resposta = client.patch(
-            "/api/admin/tecnologia/produtos/prod-1",
-            json={"dono_id": "P2", "ativo": True},
-        )
-
-        assert resposta.status_code == 200
-        assert resposta.json()["dono_nome"] == "Outro Socio"
-        assert sb.tabelas["tecnologia_produtos"][0]["dono_id"] == "P2"
-
-    def test_tirar_o_dono_de_produto_ativo_e_recusado(self):
-        dono = _pessoa("P1", "Dona Vitta")
-        client, sb = _montar(logado=dono, produtos=[_produto("prod-1", "Ana", ordem=1, dono_id="P1")])
-
-        resposta = client.patch("/api/admin/tecnologia/produtos/prod-1", json={"dono_id": None})
-
-        assert resposta.status_code == 422
-        assert "precisa de dono" in resposta.json()["detail"]
-        assert sb.tabelas["tecnologia_produtos"][0]["dono_id"] == "P1"
-
-    def test_reativar_produto_sem_dono_e_recusado(self):
-        """A regra vale sobre o RESULTADO da edicao: nem o corpo trouxe dono,
-        nem a linha tinha um."""
-        dono = _pessoa("P1", "Dona Vitta")
-        client, sb = _montar(logado=dono, produtos=[_produto("prod-1", "Ana", ordem=1, ativo=False)])
-
-        resposta = client.patch("/api/admin/tecnologia/produtos/prod-1", json={"ativo": True})
-
-        assert resposta.status_code == 422
-        assert sb.tabelas["tecnologia_produtos"][0]["ativo"] is False
-
-    def test_desativar_produto_sem_dono_passa(self):
-        """O par de presenca: a recusa e do ATIVO sem dono, nao de todo Produto
-        sem dono."""
-        dono = _pessoa("P1", "Dona Vitta")
-        client, _ = _montar(logado=dono, produtos=[_produto("prod-1", "Ana", ordem=1)])
-
-        assert client.patch("/api/admin/tecnologia/produtos/prod-1", json={"ativo": False}).status_code == 200
-
-    def test_renomear_produto_do_seed_passa(self):
-        """Os sete do seed nascem ativos e SEM dono. Se a guarda do dono olhasse
-        so o estado final, a primeira abertura do sistema devolveria 422 em todo
-        renomear, e o criterio "cria, renomeia e desativa pela tela" morreria no
-        estado que a propria issue manda criar."""
-        dono = _pessoa("P1", "Dona Vitta")
-        client, sb = _montar(logado=dono, produtos=[_produto("prod-1", "Ana", ordem=1)])
-
-        resposta = client.patch("/api/admin/tecnologia/produtos/prod-1", json={"nome": "Ana WhatsApp"})
-
-        assert resposta.status_code == 200
-        assert sb.tabelas["tecnologia_produtos"][0]["nome"] == "Ana WhatsApp"
-
-    def test_definir_o_dono_de_produto_do_seed_passa(self):
-        dono = _pessoa("P1", "Dona Vitta")
-        client, sb = _montar(logado=dono, produtos=[_produto("prod-1", "Ana", ordem=1)])
-
-        resposta = client.patch("/api/admin/tecnologia/produtos/prod-1", json={"dono_id": "P1"})
-
-        assert resposta.status_code == 200
-        assert sb.tabelas["tecnologia_produtos"][0]["dono_id"] == "P1"
-
-    def test_produto_novo_entra_no_fim_da_lista(self):
-        """Sem ordem no corpo, o novo nasce depois dos sete do seed, e nao na
-        frente deles."""
-        dono = _pessoa("P1", "Dona Vitta")
-        client, sb = _montar(
-            logado=dono,
-            produtos=[_produto("prod-1", "Ana", ordem=1), _produto("prod-7", "Infra", ordem=7)],
-        )
-
-        resposta = client.post("/api/admin/tecnologia/produtos", json={"nome": "Portal", "dono_id": "P1"})
-
-        assert resposta.status_code == 201
-        assert resposta.json()["ordem"] == 8
-        assert [p["nome"] for p in client.get("/api/admin/tecnologia/produtos").json()] == [
-            "Ana",
-            "Infra",
-            "Portal",
-        ]
-
-    def test_dono_vazio_vira_nulo_em_vez_de_ir_para_o_banco(self):
-        """`""` nao e NULL e nao existe em `participantes(id)`: gravado, seria
-        violacao de chave estrangeira e 500. Quem manda dono vazio esta dizendo
-        "sem dono", e e isso que a linha guarda."""
-        dono = _pessoa("P1", "Dona Vitta")
-        client, sb = _montar(
-            logado=dono,
-            produtos=[_produto("prod-1", "Ana", ordem=1, dono_id="P1", ativo=False)],
-        )
-
-        resposta = client.patch("/api/admin/tecnologia/produtos/prod-1", json={"dono_id": ""})
-
-        assert resposta.status_code == 200
-        assert sb.tabelas["tecnologia_produtos"][0]["dono_id"] is None
-
-    def test_dono_vazio_em_produto_ativo_e_recusado(self):
-        """O par do teste acima: vazio vira "sem dono", e sem dono no ativo e
-        justamente o que a API recusa."""
-        dono = _pessoa("P1", "Dona Vitta")
-        client, sb = _montar(logado=dono, produtos=[_produto("prod-1", "Ana", ordem=1, dono_id="P1")])
-
-        resposta = client.patch("/api/admin/tecnologia/produtos/prod-1", json={"dono_id": "   "})
-
-        assert resposta.status_code == 422
-        assert "precisa de dono" in resposta.json()["detail"]
-        assert sb.tabelas["tecnologia_produtos"][0]["dono_id"] == "P1"
-
-    def test_criar_com_dono_vazio_e_recusado(self):
-        dono = _pessoa("P1", "Dona Vitta")
-        client, sb = _montar(logado=dono)
-
-        resposta = client.post("/api/admin/tecnologia/produtos", json={"nome": "Portal", "dono_id": "  "})
-
-        assert resposta.status_code == 422
-        assert sb.tabelas["tecnologia_produtos"] == []
-
-    def test_produto_inexistente_da_404(self):
-        dono = _pessoa("P1", "Dona Vitta")
-        client, _ = _montar(logado=dono)
-
-        assert client.patch("/api/admin/tecnologia/produtos/nao-existe", json={"nome": "X"}).status_code == 404

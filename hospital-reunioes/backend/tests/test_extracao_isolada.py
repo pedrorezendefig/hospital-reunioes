@@ -431,30 +431,36 @@ class TestOsDoisAtaquesMedidos:
             f"o worker cresceu {crescimento // (1024 * 1024)} MB: a extracao nao foi isolada"
         )
 
-    # Rodar sozinho (issue #971): o PDF honesto leva 7 s numa CPU livre e passa
-    # pela rota com o prazo de verdade (`PRAZO_DA_EXTRACAO`, 45 s). Com `-n auto`
-    # no runner do Actions, disputando CPU com os outros workers, a leitura
-    # passou dos 45 s e o filho foi morto por tempo (run 37411095749). Os testes
-    # que mandam o PDF honesto pela rota vao juntos.
-    @pytest.mark.rodar_sozinho
-    async def test_o_resto_do_app_responde_durante_uma_extracao_longa(self, app, pdf_honesto):
+    async def test_o_resto_do_app_responde_durante_uma_extracao_longa(self, app, monkeypatch, tmp_path):
         """O worker é um só, e o event loop dele não pode ficar preso na leitura.
 
         Até esta fatia as quatro rotas chamavam o extrator DENTRO do loop: um PDF
         de 7,5 s congelava a Ouvidoria pública, as Reuniões, as Atas e os POPs por
-        7,5 s mesmo sem estourar memória nenhuma. Aqui o PDF honesto (que leva os
-        mesmos 7,5 s) roda no filho enquanto outra requisição entra e sai.
+        7,5 s mesmo sem estourar memória nenhuma. Aqui uma extração de 2 s roda
+        no filho enquanto outra requisição entra e sai.
+
+        O programa do filho é trocado por um que dorme (issue #1362): o que se
+        prova é o que o PAI faz enquanto espera, e o pai espera igual um filho
+        que lê e um que dorme. Com o PDF honesto de verdade o teste levava 11 s e
+        ficava refém da CPU livre, o que o prendia na lista de rodar sozinho.
         """
         import httpx
+
+        dorminhoco = tmp_path / "filho_que_demora.py"
+        dorminhoco.write_text(
+            "import sys, time\ntime.sleep(2.0)\nsys.stdout.buffer.write(b'OK\\nAta lida devagar.')\n",
+            encoding="utf-8",
+        )
+        monkeypatch.setattr(extrator, "_CAMINHO_DO_FILHO", str(dorminhoco))
 
         transporte = httpx.ASGITransport(app=app)
         async with httpx.AsyncClient(transport=transporte, base_url="http://teste") as ac:
             rota = "/api/reunioes/R1/ata-guiada/extrair-documento"
             lenta = asyncio.create_task(
-                ac.post(rota, files={"file": ("ata-longa.pdf", pdf_honesto, "application/pdf")})
+                ac.post(rota, files={"file": ("ata-longa.pdf", b"tanto faz", "application/pdf")})
             )
-            await asyncio.sleep(1.0)  # a extracao longa ja esta em andamento
-            assert not lenta.done(), "o PDF honesto tinha que estar sendo lido ainda"
+            await asyncio.sleep(0.5)  # a extracao longa ja esta em andamento
+            assert not lenta.done(), "a extracao longa tinha que estar em andamento ainda"
 
             t0 = time.monotonic()
             rapida = await ac.post(rota, files={"file": ("bilhete.txt", b"Anotacao curta da reuniao.")})
@@ -621,8 +627,13 @@ class TestOsDoisAtaquesMedidos:
 
 
 class TestEntradaLegitimaAtravessa:
-    # Rodar sozinho (issue #971): PDF honesto pela rota, contra o prazo de 45 s.
-    # O motivo esta em `test_o_resto_do_app_responde_durante_uma_extracao_longa`.
+    # Rodar sozinho (issue #971): o PDF honesto leva 7 s numa CPU livre e passa
+    # pela rota com o prazo de verdade (`PRAZO_DA_EXTRACAO`, 45 s). Com `-n auto`
+    # no runner do Actions, disputando CPU com os outros workers, a leitura
+    # passou dos 45 s e o filho foi morto por tempo (run 37411095749).
+    # Fica com o arquivo e o prazo de verdade (issue #1362): o que se prova é que
+    # a ata de ~740 mil caracteres cabe no prazo real, e um PDF menor ou um prazo
+    # encolhido provariam outra coisa.
     @pytest.mark.rodar_sozinho
     def test_pdf_honesto_grande_atravessa_inteiro(self, client, pdf_honesto):
         """O PDF honesto de centenas de páginas continua passando, e passa
@@ -654,17 +665,6 @@ class TestEntradaLegitimaAtravessa:
             f"o PDF honesto custa {pico // (1024 * 1024)} MB contra um teto de "
             f"{extrator.TETO_DE_MEMORIA_DO_FILHO // (1024 * 1024)} MB: folga pequena demais"
         )
-
-
-def _pico_de_tempo_de_uma_leitura(dados: bytes) -> float:
-    """Quanto UMA leitura deste arquivo custa, medido na hora.
-
-    Um número fixo aqui envelheceria com a máquina do CI; o que importa é a
-    razão entre uma leitura e três, e a razão se mede no mesmo lugar.
-    """
-    t0 = time.monotonic()
-    _rodar_filho(".pdf", dados, extrator.LIMITE_DE_ENDERECAMENTO)
-    return time.monotonic() - t0
 
 
 def _rodar_filho(ext: str, dados: bytes, limite: int, teto_do_texto: int | None = None) -> subprocess.CompletedProcess:
@@ -907,35 +907,48 @@ class TestAsGuardasDoIsolamento:
         assert apertado.returncode != 0
         assert folgado.stdout.startswith(b"OK"), folgado.stderr.decode()[-400:]
 
-    # Rodar sozinho (issue #971): PDF honesto pela rota, contra o prazo de 45 s.
-    # O motivo esta em `test_o_resto_do_app_responde_durante_uma_extracao_longa`.
-    @pytest.mark.rodar_sozinho
-    async def test_uploads_simultaneos_nao_multiplicam_o_orcamento(self, app, pdf_honesto):
+    async def test_uploads_simultaneos_nao_multiplicam_o_orcamento(self, app, monkeypatch, tmp_path):
         """Teto por filho não é teto da máquina.
 
         O `@limiter.limit` das rotas conta requisições por MINUTO, não ao mesmo
         tempo: dez uploads disparados juntos passam pelos "5/minute" e seriam dez
-        filhos de até 512 MB cada. Três leituras de 7,5 s entrando juntas contra
-        duas vagas têm que sair em duas rodadas, não em uma, e as três têm que
-        SAIR (fila que recusa vira indisponibilidade, não guarda).
+        filhos de até 512 MB cada. Três leituras entrando juntas contra duas
+        vagas têm que sair em duas rodadas, não em uma, e as três têm que SAIR
+        (fila que recusa vira indisponibilidade, não guarda).
+
+        O programa do filho é trocado por um que dorme (issue #1362): quem conta
+        as rodadas é o semáforo do PAI, e ele conta igual um filho que lê e um
+        que dorme. Com o PDF honesto eram quatro leituras de 7,5 s, 33 s de
+        teste, e três delas disputando CPU, o que deixava a razão entre uma e
+        três refém da máquina. Um filho que dorme não disputa nada.
         """
         import httpx
 
         assert extrator.VAGAS_DE_EXTRACAO == 2, "este teste conta rodadas para duas vagas"
         quantas = extrator.VAGAS_DE_EXTRACAO + 1
 
-        uma_so = _pico_de_tempo_de_uma_leitura(pdf_honesto)
+        dorminhoco = tmp_path / "filho_que_demora.py"
+        dorminhoco.write_text(
+            "import sys, time\ntime.sleep(1.5)\nsys.stdout.buffer.write(b'OK\\nAta lida devagar.')\n",
+            encoding="utf-8",
+        )
+        monkeypatch.setattr(extrator, "_CAMINHO_DO_FILHO", str(dorminhoco))
 
         transporte = httpx.ASGITransport(app=app)
         async with httpx.AsyncClient(transport=transporte, base_url="http://teste", timeout=120) as ac:
             rota = "/api/reunioes/R1/ata-guiada/extrair-documento"
+
+            def _upload():
+                return ac.post(rota, files={"file": ("ata-longa.pdf", b"tanto faz", "application/pdf")})
+
+            # Quanto UMA leitura custa, medido na hora e pela mesma rota. Um
+            # numero fixo envelheceria com a maquina; a razao se mede no lugar.
             t0 = time.monotonic()
-            respostas = await asyncio.gather(
-                *[
-                    ac.post(rota, files={"file": ("ata-longa.pdf", pdf_honesto, "application/pdf")})
-                    for _ in range(quantas)
-                ]
-            )
+            assert (await _upload()).status_code == 200
+            uma_so = time.monotonic() - t0
+
+            t0 = time.monotonic()
+            respostas = await asyncio.gather(*[_upload() for _ in range(quantas)])
             juntas = time.monotonic() - t0
 
         assert all(r.status_code == 200 for r in respostas), [r.status_code for r in respostas]

@@ -33,6 +33,18 @@ Endereço novo na internet e mudança de configuração sensível são ato human
 - Não tem contrato de disponibilidade de terceiro por trás do banco. Quem responde é a Vitta.
 - Não guarda conteúdo de paciente fora do que os módulos já guardam.
 
+## O que já foi decidido
+
+- O banco de dados e o login rodam no servidor alugado, instalados e mantidos pela Vitta, por causa do tipo de dado que o hospital guarda.
+- Cópia de segurança, atualização e monitoramento do banco são responsabilidade da Vitta, sem contrato de terceiro por trás.
+- Quem pode ver o quê é conferido pelo servidor do aplicativo a cada pedido, e a tela nunca fala direto com o banco de dados.
+- Todo e-mail do sistema sai por um serviço de entrega de terceiros, com servidores fora do Brasil, e o hospital não vai operar servidor de e-mail próprio.
+- O fornecedor da inteligência artificial que escreve texto no aplicativo guarda o que recebe por até 30 dias e não usa esse texto para treinar modelo.
+- Nada que o aplicativo mostra ou gera leva travessão, nem o texto escrito pela inteligência artificial, que passa por uma limpeza antes de sair.
+- Na tela, título, item de menu, botão, aba, nome de campo, cabeçalho de coluna e etiqueta de situação aparecem em caixa alta, enquanto frase, texto longo e o que a equipe digita aparecem com maiúscula e minúscula, e nada é gravado em maiúscula no banco.
+- Mudança no banco de dados é aplicada à mão por uma pessoa da Vitta, antes da versão que depende dela.
+- Endereço novo e configuração sensível são feitos à mão e conferidos, separados da subida de versão.
+
 ## O que costuma virar Demanda
 
 - Aplicativo fora do ar, lento ou reiniciando sozinho (Defeito).

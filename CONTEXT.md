@@ -221,66 +221,54 @@ A seção somente leitura da tela Dados do Atendimento que mostra ao vivo o que 
 _Evitar_: chamar de integração de agendamento (não agenda nada), gravar o que a Global Health respondeu.
 _Evitar_: paginação; cortar a lista para caber; supor que a mesma chamada devolve sempre a mesma forma.
 
-## Tecnologia (Demandas entre o hospital e a Vitta)
+## Tecnologia (o chat do diretor com o agente)
+
+Desde 02/11/2026 (ADR 0077) a aba Tecnologia é uma tela só: o chat do [Assistente de Tecnologia], em que o diretor relata um bug ou pede uma melhoria e o card nasce no GitHub. Só o Super admin vê (ADR 0050). Os pedidos da Vitta ao hospital voltaram para o WhatsApp.
 
 **Demanda**:
-Um pedido entre o hospital e a Vitta sobre as aplicações que a Vitta mantém para o hospital (Ana, Reuniões, Ouvidoria, POPs). Vai nos dois sentidos: o diretor pede à Vitta (ajuste, dúvida, consultoria) e a Vitta pede ao diretor (decisão, resposta, acesso). Vive na aba **Tecnologia** da área admin, que só o Super admin vê, e fica **totalmente apartada** das Pendências de Ata: Demanda é assunto de tecnologia entre fornecedor e cliente, Pendência é compromisso operacional do hospital. Nasceu em 08/09/2026 para tirar do WhatsApp a conversa entre o Pedro e o diretor, que se perdia.
-_Evitar_: chamar de Pendência, tarefa ou ticket; misturar no painel de Pendências; "Demandas TI" (TI, no vocabulário do programa Ana, é o analista de TI do hospital, um terceiro).
+Um bug ou uma melhoria que o diretor relatou ao [Assistente de Tecnologia]. É o registro de uma conversa: o que foi dito, os [Anexos da Demanda] e, depois do clique "Criar o card", o [Vínculo com o desenvolvimento]. Na tela aparece só como uma linha na lista lateral, com o título que o agente dá desde a primeira resposta, o selo Bug ou Melhoria e a [Etapa] (ADR 0079). Fica **totalmente apartada** das Pendências de Ata: Demanda é assunto de tecnologia entre o hospital e a Vitta, Pendência é compromisso operacional do hospital.
+_Evitar_: chamar de Pendência, tarefa ou ticket; tipo além de bug ou melhoria; Responsável, Prioridade, Prazo ou raia (aposentados em 02/11/2026); "Demandas TI" (TI é o analista de TI do hospital, um terceiro).
 
-**Tipo da Demanda**:
-Lista fechada de sete, cada um com o seu símbolo desenhado: **Decisão** (a Vitta precisa que o hospital escolha), **Informação** (a Vitta precisa de um dado do hospital), **Terceiro** (depende de alguém de fora: Global Health, analista de TI, MV), **Ajuste** (o hospital quer mudar algo que existe), **Novo** (o hospital quer algo que não existe), **Defeito** (algo quebrado) e **Consultoria** (opinião ou estudo da Vitta, sem código).
-_Evitar_: tipo fora da lista; usar o tipo para dizer de quem é a vez (isso é o estado e o responsável).
+**Assistente de Tecnologia**:
+O agente de IA que é a aba Tecnologia inteira (ADRs 0056 e 0077). Abre perguntando "bug ou melhoria?", com dois botões e um campo livre; se o diretor só descreve, ele classifica e confirma. No bug segue o [Roteiro do bug]; na melhoria conduz o [Planejamento da Demanda]. Dúvida que o [Kit de conhecimento] responde, ele responde ali, dizendo de onde tirou, sem card. Conhece a casa pelo Kit e **lê o código**: ferramentas de leitura do repositório pela API do GitHub (arquivo, busca, `CONTEXT.md`, ADRs aceitas, issues abertas), para desafiar o pedido contra o que já está decidido, falando com o diretor na língua do Kit. Não roda teste nem grava no repositório. Recebe texto, voz e imagem a qualquer momento. A conversa **persiste** e se retoma pela lista. Termina num resumo com "Criar o card" ou "Não bateu"; antes de criar, avisa se já existe issue aberta parecida. Roda no Opus 5.5, só aqui. Sem nome próprio: nome próprio compete com a Ana.
+_Evitar_: nome de persona; agente que cria o card sem o clique; jargão do repositório na conversa com o diretor (número de issue, label, tabela); "grill" na tela (palavra do terminal).
 
-**Produto**:
-Cada coisa que a Vitta mantém para o hospital, com um **dono** do lado da Vitta: Ana (WhatsApp), Integração Ana x MV, Reuniões, Ouvidoria, POPs, Site, Infra. Lista editável pelo Super admin numa tela própria, fora do Quadro (decisão de 07/10/2026: cadastro que muda uma vez por semestre não divide a tela com o trabalho do dia). Toda Demanda pertence a um Produto e nasce atribuída ao dono dele, que pode repassar.
-_Evitar_: "aplicação" como eixo separado (é o mesmo eixo, agora com dono); Produto sem dono; cadastro de Produtos no rodapé do Quadro.
+**Roteiro do bug**:
+O caminho curto do [Assistente de Tecnologia] quando o diretor relata um bug: uma pergunta por vez, no máximo cinco, Onde, O que aconteceu, O que esperava, Como repetir e o print. Sem desafio de negócio. Vira uma issue única `type:bug`, com esses rótulos e critérios de aceite, que nasce `ready-for-agent`: a onda pega sem ninguém da Vitta assumir. Só entra o que o diretor disse; rótulo sem resposta sai "não informado".
+_Evitar_: o grill longo da melhoria num bug; critério de aceite inventado além do que o diretor descreveu; print no corpo da issue.
 
-**Estado da Demanda**:
-Cinco estados: **Nova**, **Em andamento**, **Aguardando**, **Concluída**, **Cancelada**. O [Quadro] desenha só as três raias vivas (Nova, Em andamento, Aguardando); Concluída e Cancelada são ações do card, e a Demanda encerrada passa a viver no [Painel] (decisão de 07/10/2026, grilling). "Aguardando" é a única raia que diz "a bola não está com a Vitta": o hospital decidindo, um terceiro respondendo ou o autor conferindo uma entrega; o Responsável diz com quem. Quem move é quem atende ou quem pediu. Além do estado, a Demanda tem **Responsável** (uma pessoa), **Prioridade** (Baixa, Normal, Alta) e **Prazo** opcional, só quando existe de verdade; sem prazo o card não atrasa, só envelhece (idade em dias, vermelha a partir de 14).
-_Evitar_: estado por arrastar sem responsável; prazo inventado para preencher campo; coluna de encerradas no Quadro (é o mesmo dado do Painel duas vezes).
+**Planejamento da Demanda**:
+O caminho da melhoria no [Assistente de Tecnologia] (ADR 0077, que substituiu a 0075): o grill do terminal feito com o diretor. Uma pergunta por vez, contexto curto, duas opções clicáveis com a recomendada destacada, campo livre, por texto ou voz. Sem teto de perguntas (ADR 0079): o agente só encerra quando nada ficaria em aberto, e o campo livre segue ativo até "Criar o card". "Ficou em aberto" só existe quando o diretor usa "Fechar e resumir" antes, e aí vem com "Continuar respondendo"; nunca decisão inventada. O cabeçalho da conversa mostra o modelo e o custo acumulado em dólar ("custo não medido" quando falta preço). Termina no [PRD do diretor].
+_Evitar_: perguntar o que o diretor já disse; decisão inventada no lugar do "ficou em aberto"; teto de perguntas, visível ou escondido; encerrar com lacuna sem o diretor pedir; custo zero no lugar de não medido; botão "Planejar com a IA" no card (era a 0075).
 
-**Quadro**:
-A primeira aba da Tecnologia: as três raias vivas do [Estado da Demanda], em largura cheia, sem filtros (voltam como uma busca por texto só se o Quadro passar de uns vinte cards). O card fechado mostra o símbolo do tipo, o título e, embaixo, Produto e Responsável; o resto só aparece quando é exceção: a [Etapa] sempre que há Vínculo, a Prioridade só quando Alta, a idade só quando já está vermelha ou com prazo vencido. Mover, Concluir e Cancelar ficam no card aberto; arrastar continua.
-_Evitar_: card com nove informações para quatro Demandas; botão no card fechado; selo de prioridade Normal.
-
-**Painel**:
-A segunda aba da Tecnologia, de leitura, no lugar de "Minha vez" e "Histórico" (decisão de 07/10/2026). Todo mundo que entra na aba é Super admin, então o Painel já é compartilhado por construção. Três blocos: **Com você** (as Demandas abertas de que você é Responsável e as em que foi mencionado e ainda não respondeu; vazio diz "Nada esperando por você"), **Entregas** (as Demandas com [Vínculo com o desenvolvimento], uma linha cada, com a Etapa e as partes, pela última mudança: é onde o diretor vê o que a Vitta está fazendo sem abrir card) e **Histórico** (Concluídas e Canceladas, com busca). No topo, quatro números derivados do que já existe (abertas, com o hospital, em desenvolvimento, entregues nos últimos 30 dias). Nada por pessoa.
-_Evitar_: "Minha vez" (nome que não diz o que a lista é); métrica por pessoa (ADR 0061 recusou comparar gente); número que não deriva de um estado já existente.
+**PRD do diretor**:
+O card de uma melhoria: o PRD inteiro escrito pelo [Planejamento da Demanda] na issue-raiz. Bloco "Para o diretor", Problema, Solução, Histórias de usuário, Decisões de negócio, Decisões de implementação e de teste lidas do código, "Ficou em aberto" e uma seção "Para o glossário" com os termos e as decisões candidatas a ADR. Nasce `needs-triage`, porque ainda passa pelo `/to-issues`; quem grava `CONTEXT.md` e ADR é o terminal, a partir da seção "Para o glossário".
+_Evitar_: o app gravando `CONTEXT.md` ou ADR; PRD novo criado pelo terminal (quebra o par Demanda x issue); número de issue dentro do bloco "Para o diretor".
 
 **Vínculo com o desenvolvimento**:
-A ligação de uma Demanda com **uma** issue-raiz do GitHub (o PRD, ou uma issue simples de correção); as fatias são as sub-issues dessa raiz e nunca se vinculam uma a uma. Nasce por número (o PRD já existia) ou pelo botão **Levar para desenvolvimento**, que cria a issue com o texto do diretor. Só quem tem login no GitHub vê número, link e botão; o diretor vê a Etapa e O que muda. Nem toda Demanda tem Vínculo: Decisão, Informação, Terceiro e Consultoria quase nunca viram código.
-_Evitar_: vincular fatia em vez do PRD; Demanda com mais de uma issue; mostrar número de issue ao diretor.
+A ligação de uma Demanda com **uma** issue-raiz do GitHub (o PRD do diretor ou a issue do bug), criada pelo clique "Criar o card". As fatias são sub-issues dessa raiz e nunca se vinculam uma a uma. O diretor vê a Etapa e O que muda, nunca número nem link.
+_Evitar_: vincular fatia em vez da raiz; Demanda com mais de uma issue; vínculo digitado por número (aposentado).
 
 **Etapa**:
-Onde a Demanda vinculada está na entrega, em palavras do diretor, sempre derivada do GitHub e nunca editada à mão: **Registrada** (sem Vínculo), **Em análise**, **Planejada**, **Em desenvolvimento**, **Entregue**, **Em produção** e **Não será feita**. É um eixo à parte do Estado da Demanda: o Estado diz de quem é a vez na conversa, a Etapa diz o que o desenvolvimento já fez. Num PRD, vem com "X de Y partes entregues". **Entregue** é o fechamento da issue (o merge); **Em produção** é a [Subida] que levou aquele fechamento ao ar, e vem com a versão ("Em produção desde v0.165.0"; ADR 0069). Um PR aberto já conta como Em desenvolvimento, label nenhuma precisa. Só uma Etapa mexe no Estado: a que devolve a Demanda a quem pediu (Aguardando, responsável o autor) para ele conferir e concluir, e essa é **Em produção** quando a issue fechou por PR, porque ninguém confere o que ainda não subiu; issue fechada à mão, sem PR, devolve em Entregue.
-_Evitar_: Etapa digitada; confundir Etapa com Estado; concluir a Demanda sozinho na entrega; Entregue como "deploy confirmado" (é o fechamento da issue; o deploy é Em produção); devolver ao diretor no merge o que só sobe na subida.
+Onde a Demanda está na entrega, em palavras do diretor, sempre derivada do GitHub e nunca editada à mão: **Registrada** (conversa sem card), **Em análise**, **Planejada**, **Em desenvolvimento**, **Entregue**, **Em produção** e **Não será feita**. Num PRD, vem com "X de Y partes entregues". **Entregue** é o fechamento da issue (o merge); **Em produção** é a [Subida] que levou aquele fechamento ao ar, com a versão ("Em produção desde v0.165.0"; ADR 0069). Um PR aberto já conta como Em desenvolvimento. É o que a lista lateral mostra em cada conversa.
+_Evitar_: Etapa digitada; Entregue como "deploy confirmado" (é o fechamento; o deploy é Em produção).
 
 **Subida**:
 O passo que leva PRs verdes até produção (`fechar_onda.py`): merge pela API, versão, build, health, registro. Antes chamado de rabo.
 
 **O que muda**:
-O que a entrega acrescenta para quem pediu, em linguagem de leigo. O card da Demanda vinculada mostra o texto da entrega inteira e, embaixo, o de cada parte dela com a situação (Planejada, Em desenvolvimento, Entregue). Vem do bloco "Para o diretor" da issue e **nunca é digitado no app**: quem escreve é o planejamento da Vitta, e o app só lê (ADR 0054, decisão 7). Sem o bloco escrito, o card diz "Descrição em preparação". O botão **Copiar para IA** leva esse texto junto.
-_Evitar_: reescrever o valor na descrição da Demanda (duplica e apodrece); mostrar o corpo técnico da issue no lugar do bloco; título de parte, número de issue, link ou label na tela de quem não trabalha no GitHub.
-
-**Conversa da Demanda**:
-O fio de respostas dentro do card, com @menção a quem tem acesso à aba. É onde a decisão evolui; o botão **Copiar para IA** copia a Demanda inteira (título, tipo, produto, descrição e a Conversa até ali) em texto simples, pronto para colar numa IA. E-mail sai em três gatilhos: atribuição (inclui a criação), @menção e resposta nova numa Demanda de que você é o responsável. Numa Demanda com [Vínculo com o desenvolvimento], toda resposta é espelhada como comentário na issue (ADR 0054, decisão 4): a de quem tem login no GitHub leva o marcador de automação, a de quem não tem leva o marcador do revisor e acende `revisor-comentou`; nome civil nenhum sai (só `@login` ou o rótulo "Pessoa do hospital", inclusive nas @menções do texto), e a caixa de resposta avisa que a resposta é pública; corrigir a resposta nos 10 minutos edita o comentário; linhas automáticas nunca são espelhadas e nenhum comentário do GitHub volta para o fio. Uma resposta pode levar um [Anexo da Demanda]; no espelho sai só o texto mais "(1 imagem na Demanda)". A chegada em produção entra como linha automática ("Em produção na v0.165.0").
-_Evitar_: e-mail por mudança de coluna; resumo diário; copiar sem a Conversa; imagem no comentário espelhado.
+O que a entrega acrescenta para quem pediu, em linguagem de leigo, vindo do bloco "Para o diretor" da issue e **nunca digitado no app** (ADR 0054, decisão 7). Aparece ao abrir uma conversa da lista; sem o bloco, "Descrição em preparação".
+_Evitar_: título de parte, número de issue, link ou label na tela do diretor.
 
 **Anexo da Demanda**:
-Uma imagem (print de tela) guardada junto da Demanda, até dez por Demanda, anexada no formulário, no [Assistente de Tecnologia] ou numa resposta da Conversa (decisão de 07/10/2026, ADR 0069). Vive só no app, em guarda privada, e **nunca vai para o GitHub**: o repositório é público e print do hospital é dado pessoal. A issue vinculada ganha só a frase "Anexos: N imagens na Demanda"; quem desenvolve busca as imagens pelo app na hora de pegar a issue, no terminal ou na onda, e elas chegam ao agente como arquivo que ele enxerga. O binário é apagado quando a Demanda chega a Concluída ou Cancelada (o ato humano que encerra, nunca a Etapa: em Em produção o diretor ainda confere com o print na mão); fica o registro de que existiu, marcado apagado.
-_Evitar_: imagem no corpo ou no comentário da issue; link assinado na issue (expira, e enquanto vale é público); apagar na Etapa; binário de Demanda encerrada parado na guarda; anexo que não é imagem nesta leva.
-
-**Assistente de Tecnologia**:
-O agente de IA que abre quando alguém da aba Tecnologia clica em "Nova Demanda" (decisão de 15/09/2026): numa tela dedicada, o diretor conversa por texto, voz, arquivo de texto, imagem ou áudio, e do outro lado o **Rascunho da Demanda** toma forma ao vivo, com os mesmos campos do formulário (título, tipo, produto, prioridade, descrição), todos editáveis à mão. O agente **nunca grava sozinho**: a Demanda só nasce no botão "Criar Demanda", pela mesma porta e com as mesmas regras de sempre (nasce Nova, com o dono do Produto), e o botão nunca é segurado por falta de informação. Ele conhece a casa pelo [Kit de conhecimento] e as Demandas abertas do Quadro: responde ali mesmo o que está escrito no kit, dizendo de onde tirou, e oferece registrar mesmo assim; o que não está no kit ele não responde, registra. Avisa quando já existe Demanda aberta sobre o mesmo assunto. Áudio, arquivo de texto e a própria conversa são **efêmeros**, não persistem; o print que o diretor manda vira [Anexo da Demanda] se ele clicar "Criar Demanda" (decisão de 07/10/2026), e some com a conversa se não clicar. O produto é a Demanda com a descrição no [Roteiro por Tipo]. Sem nome próprio: nome próprio compete com a Ana. O formulário antigo continua a um clique ("prefiro preencher à mão").
-_Evitar_: nome de persona; agente que cria Demanda sem clique humano; guardar a conversa na Conversa da Demanda ou em tabela própria; segurar a criação até o roteiro estar completo; responder de cabeça o que não está no kit.
+Uma imagem (print de tela) mandada no chat e guardada junto da Demanda, até dez por Demanda (ADR 0069). Vive só no app, em guarda privada, e **nunca vai para o GitHub**: o repositório é público e print do hospital é dado pessoal. A issue ganha só a frase "Anexos: N imagens na Demanda"; quem desenvolve busca as imagens pelo app (a rota de automação entrega ao agente que pega a issue). O binário é apagado 30 dias depois de Em produção ou quando a issue fecha como Não será feita (ADR 0077); fica o registro de que existiu, marcado apagado.
+_Evitar_: imagem no corpo ou no comentário da issue; link assinado na issue; binário parado na guarda depois do prazo.
 
 **Kit de conhecimento**:
-O conjunto de textos que o [Assistente de Tecnologia] recebe inteiro a cada conversa: um arquivo por Produto (Ana, Integração Ana x MV, Reuniões, Ouvidoria, POPs, Site, Infra) mais um sobre a própria aba Tecnologia. Escrito para o leitor diretor, em linguagem de uso, sem número de issue, label, nome de tabela ou vocabulário interno do repositório. Vive no código do backend e viaja no deploy; é um documento **curado por gente**, com regra própria de sincronia: mudou o comportamento de um módulo, o arquivo dele muda no mesmo PR (o [Manual] segue outra regra: página própria na fatia de manual do mesmo PRD, ADR 0057). Não é o glossário nem o manual copiados: é uma terceira escrita, para outro leitor.
-_Evitar_: mandar `CONTEXT.md` ou o manual em HTML ao modelo; busca vetorial; gerar o kit por script a partir do glossário; kit desatualizado (vira agente mentindo).
+O conjunto de textos que o [Assistente de Tecnologia] recebe inteiro a cada conversa: um arquivo por módulo (Ana, Integração Ana x MV, Reuniões, Ouvidoria, POPs, Contas médicas, Central de Comando, Site, Infra) mais um sobre a própria aba Tecnologia, cada um com a seção **"O que já foi decidido"**. Escrito para o leitor diretor, em linguagem de uso, sem número de issue, label, nome de tabela ou vocabulário interno. Vive no código do backend e viaja no deploy; é **curado por gente**: mudou o comportamento de um módulo, o arquivo dele muda no mesmo PR. É a língua em que o agente fala; o código e as ADRs, que ele lê pelas ferramentas, são o que ele consulta por trás.
+_Evitar_: gerar o kit por script a partir do glossário; busca vetorial; kit desatualizado (vira agente mentindo).
 
-**Roteiro por Tipo**:
-A forma da descrição que o [Assistente de Tecnologia] monta, em texto puro com rótulos fixos por [Tipo da Demanda]: Defeito (Onde, O que aconteceu, O que esperava, Quando, Como repetir), Novo e Ajuste (O que precisa, Por quê, Quem usa, Hoje é assim), Informação e Consultoria (Pergunta, Contexto, O que já sei), Terceiro (Quem de fora, O que falta dele). Só entra o que o diretor disse; rótulo sem resposta não aparece, e se ele criar antes de responder tudo, o rótulo sai como "não informado". Prioridade nasce Normal e só sobe se o diretor disser que é urgente; prazo só quando ele disser uma data de verdade. O roteiro é também a lista do que o agente ainda pergunta.
-_Evitar_: markdown na descrição; inventar prioridade ou prazo; rótulo preenchido com suposição do modelo.
+**Aposentados em 02/11/2026** (ADR 0077): Tipo da Demanda (os sete), Produto com dono, Estado da Demanda, Responsável, Prioridade, Prazo, Quadro, Painel, Conversa da Demanda (espelhada com a issue), o formulário à mão, o Roteiro por Tipo e o botão "Planejar com a IA". Quem ler esses nomes em ADR antiga (0050, 0054, 0056, 0069, 0075) está lendo histórico.
 
 ## Central de Comando (números do ecossistema digital)
 
@@ -373,73 +361,29 @@ _Evitar_: contar produção para quem enviou.
 **Apoio ao faturamento**:
 Perfil de Contas médicas que só envia: sobe Conta e Prontuário, vê "Meus envios", não puxa conta nem aparece na Produção. Nasceu para a secretária do diretor (ADR 0073); o nome de tela espera a confirmação dele.
 
-## Manual do usuário
+## Texto e comunicação
 
-**Manual**:
-O site único de documentação da plataforma para quem usa o app no hospital (decisão de 15/09/2026, grilling; ADR 0057). Um endereço só, organizado **por módulo, na ordem do menu do app** (Primeiros passos, Reuniões e metas, Ouvidoria, POPs, Admin), e dentro de cada módulo uma [Visão geral do módulo], as [Páginas de tarefa], as páginas [Como funciona] e as [Novidades]. Publica **só o que está em produção**: o que ainda não subiu fica escrito, mas invisível, até o deploy. A aba Tecnologia fica fora (ferramenta da Diretoria com a Vitta), e a [Central de Comando] também (só o Super admin vê, e é leitura, não tarefa; ADR 0058). O app aponta para ele por um item **Ajuda** no menu, que abre a seção do módulo em que a pessoa está.
-_Evitar_: um manual por módulo em endereços separados; manual por papel (o papel é selo, não estrutura); selo "em desenvolvimento" ou "planejado" para o usuário; capítulo técnico (endpoint, gatilho de e-mail, variável) dentro do manual.
-
-**Página de tarefa**:
-A unidade do [Manual]: uma ação que alguém faz no app, com o título no infinitivo ("Registrar uma manifestação", "Assinar a ata"). Molde fixo e curto: **quando usar** (uma frase), **quem faz** (selos), **passo a passo** (até 6 passos, com um [Print de passo] por mudança de tela e no máximo um [Aviso destacado]) e **se der errado** (2 a 4 situações). Tratamento "você", passos no imperativo, e a palavra é sempre a que aparece na tela. Cabe numa tela de celular; passou disso, são duas tarefas. Não tem vídeo: o vídeo do módulo é o [Vídeo de visão geral], na abertura (ADR 0072).
-_Evitar_: "por que existe", histórico, conceito (isso é [Como funciona]); "o usuário deverá"; sinônimo inventado para o nome do botão; aviso "vídeo em produção" na tela do usuário.
-
-**Print de passo**:
-A imagem que fica logo abaixo de um passo da [Página de tarefa]: a tela real do app, capturada pelo [Roteiro de prints], com **balões numerados** desenhados pelo próprio roteiro por cima da tela, cada balão com o número do passo que ele ilustra. Um por **mudança de tela**, não por passo: passos na mesma tela dividem um print com vários balões. O texto alternativo é curto e não conta no teto de palavras.
-_Evitar_: balão desenhado em editor de imagem (não regera quando a tela muda); um print por passo na mesma tela; seta ou destaque que não seja o balão numerado.
-
-**Aviso destacado**:
-O callout (`:::caution[Título]`) que uma [Página de tarefa] pode ter, no máximo um, antes do passo que dispara uma ação sem volta ou que a pessoa precisa saber antes de clicar ("Finalizar sem assinatura não tem volta", "a senha aparece uma vez só"). "Se der errado" continua lista.
-_Evitar_: callout em toda ressalva; callout em [Como funciona] ou em [Visão geral do módulo].
-
-**Fluxograma de caminho**:
-O desenho do caminho ou dos estados de um tema, só em [Visão geral do módulo] ("O caminho de ponta a ponta") e em [Como funciona] que descreve estados ou desvios, no máximo um por página, com as palavras da tela e do glossário. Fonte em texto versionado (`docs/manual/fluxogramas/<modulo>/<slug>.mmd`), SVG gerado por script do site com as cores do app. Não é o fluxograma do POP, que é seção do documento gerado pelo app.
-_Evitar_: fluxograma em [Página de tarefa] (a tarefa é linear, o [Print de passo] cobre); SVG desenhado à mão; renderização no build.
-
-**Selo**:
-Marcação curta na [Página de tarefa] que diz quem faz (Ouvidoria, Gestor do setor, Facilitador, Secretária), **Só admin** para o que só o Super admin vê, e **Sem login** para as telas que a pessoa abre por link ou QR sem entrar no app (formulário público, portal do setor, aceite da Ata). Telas sem login moram dentro do módulo delas, com o selo, não numa seção à parte.
-
-**Visão geral do módulo**:
-A página de abertura de cada módulo do [Manual]: o que o módulo é em poucas linhas, as palavras que a pessoa vai ver o tempo todo, o caminho de ponta a ponta (o caminho de um caso, o caminho de uma Ata) e o [Vídeo de visão geral] do módulo. É o único lugar do módulo onde conceito tem vez.
-
-**Como funciona**:
-Página de um tema do módulo que não é ação de ninguém, mas que a pessoa precisa entender para não estranhar o app ("Como o prazo é contado", "O que o sistema apaga sozinho"). Fica fora da lista de tarefas, no fim do módulo.
-
-**Novidades**:
-Página de cada módulo com **uma entrada por PRD entregue**, da mais nova para a mais antiga: título em linguagem de usuário, mês e ano do deploy, duas linhas do que mudou, o link para a página de divulgação da entrega quando existe (com o [Vídeo de percepção de valor]), e links para as [Páginas de tarefa] que nasceram ou mudaram.
-_Evitar_: uma entrada por deploy ou por fix (isso é o changelog, que é doc de engenharia); vídeo embutido na página (pesa no orçamento do Manual; ADR 0072).
-
-**Vídeo de visão geral**:
-O vídeo de um módulo do [Manual], um por módulo, na [Visão geral do módulo]: 90 a 120 s, mudo, com legendas, mostrando o caminho principal do módulo de ponta a ponta com dados de exemplo, no [Estilo do manual] (ADR 0072, emenda à 0057). "Conheça a plataforma" é o de Primeiros passos, e a página inicial do Manual mostra o mesmo arquivo. O Admin fica sem vídeo. Até 8 MB depois do reencode, e a soma do Manual até 40 MB: o `publicar.sh` trava. É refeito só quando um PRD muda o caminho principal do módulo.
-_Evitar_: vídeo em [Página de tarefa]; dois vídeos no mesmo módulo; refazer o vídeo por PRD que mexe numa tarefa do canto.
-
-**Vídeo de tarefa** (fora do Manual):
-O vídeo de 30 a 60 s de uma [Página de tarefa], que o [Manual] teve de setembro a 14/10/2026. Saiu do Manual pelo orçamento do plano grátis da Vercel (ADR 0072): as composições saíram do repositório (ficam no histórico do git) e os MP4 ficam em `local/manual-video-masters/`, guardados para um link externo, fora do deploy, que é outro PRD.
-_Evitar_: usar o termo para o vídeo do Manual de hoje (é o [Vídeo de visão geral]).
+**Manual do usuário**:
+Aposentado em 05/11/2026 (ADR 0078): o site, o item Ajuda do app, as Páginas de tarefa, os vídeos do módulo e a Fatia de manual saíram da plataforma. Um manual novo, com outra abordagem, será decisão nova.
+_Evitar_: citar o Manual como destino de texto ou de link; criar página em `docs/manual/`.
 
 **Régua de texto**:
-A passagem obrigatória de todo texto que alguém de fora vai ler (página do [Manual], texto de tela, PDF, hover do Hospital OS, mensagem, legenda de vídeo) pela skill `humanizer` antes de gravar, mais o lint que trava no CI os cacoetes que dão para pegar por regex (ADR 0071). A voz é a do canal: a amostra aprovada manda no tom, a skill só tira o cacoete.
+A passagem obrigatória de todo texto que alguém de fora vai ler (texto de tela, PDF, hover do Hospital OS, mensagem, legenda de vídeo, página de divulgação) pela skill `humanizer` antes de gravar, mais o lint que trava no CI os cacoetes que dão para pegar por regex (ADR 0071). A voz é a do canal: a amostra aprovada manda no tom, a skill só tira o cacoete.
 _Evitar_: "não é X, é Y"; fecho de uma linha que repete o parágrafo; tríade forçada; rótulo em negrito em tudo; texto para fora gravado sem a passagem.
 
-**Estilo do manual**:
-O contrato visual compartilhado dos vídeos do [Manual] (hoje o [Vídeo de visão geral]), em `docs/manual/video/_estilo/`: `DESIGN.md`, `tokens.css` com as cores e a fonte do app, e cards reusáveis (legenda de passo, callout, lower-third, abertura, carimbo) como sub-composições com slots de texto. Veio do formato da style-library do HyperFrames Student Kit; o corpo do vídeo continua réplica fiel do app, mudo (emenda de 13/10/2026 ao ADR 0057).
-_Evitar_: cor ou fonte fixa dentro de um vídeo (vem dos tokens); canvas preto e tipo cromado do kit; vídeo que não preenche o slot inteiro do timeline.
+**Caixa alta**:
+Texto todo em letra maiúscula, aplicado só na exibição (CSS na tela, `text-transform` nos PDFs, filtro `upper` no título dos e-mails), nunca gravado assim no banco (ADR 0080). Vale para o Texto curto que vem pronto no aplicativo e para os títulos escritos pela IA; o que a equipe digita aparece como foi escrito.
+_Evitar_: gravar o texto em maiúscula; assunto de e-mail em caixa alta.
 
-**Ficha de referência**:
-A nota curta, uma por vídeo de referência (os gerados pelo Opus 5.5 ficam em `local/manual-video-referencias/`, fora do git), em `_estilo/references/`: o que copiar daquele vídeo (uma transição, um ritmo, um card) e o que não copiar. O `DESIGN.md` do [Estilo do manual] cita as fichas, para cada sessão tirar a mesma coisa da mesma referência.
+**Texto curto**:
+O texto que fica em Caixa alta, definido pelo tipo de elemento e não pelo número de palavras: item de menu, título e subtítulo, botão, aba, nome de campo, cabeçalho de coluna e etiqueta de situação.
+_Evitar_: decidir pelo tamanho da frase.
 
-**Folha de contato**:
-O que o agente põe no corpo do PR, como evidência, na campanha de rerender dos [Vídeos de tarefa]: os quadros-chave de todos os vídeos do módulo numa imagem só, mais um MP4 inteiro. Desde 14/10/2026 nenhum vídeo espera OK humano, nem por módulo nem no draft (emenda à ADR 0057).
+**Texto corrido**:
+O texto com maiúscula e minúscula: parágrafo, aviso (toast), mensagem de erro, texto de ajuda, placeholder, corpo de diálogo, o texto de cada aviso do sino e a conversa da Tecnologia.
 
 **Vídeo de percepção de valor**:
-O vídeo de uma entrega (PRD) feito para o diretor ver o sistema funcionando (ADR 0026, ADR 0045): a unidade é o que mudou, não a tarefa. No [Manual] ele entra em [Novidades] por link para a página de divulgação, sem ser embutido (ADR 0072).
-
-**Roteiro de prints**:
-O script versionado, um por módulo, que abre o app local com dados de exemplo, navega e captura os prints que as páginas daquele módulo usam, desenhando os balões numerados do [Print de passo] por cima da tela antes de capturar. Print do [Manual] é sempre tela real do app, nunca desenho; mudou a tela, roda o roteiro de novo.
-_Evitar_: print tirado à mão sem roteiro; quadro extraído do vídeo no lugar do print; balão fora do roteiro.
-
-**Fatia de manual**:
-A issue que todo PRD com tela ganha no fim, bloqueada pelas fatias de código: escreve ou muda as [Páginas de tarefa], roda o [Roteiro de prints], escreve a entrada de [Novidades] e refaz o [Vídeo de visão geral] do módulo só quando o PRD muda o caminho principal dele. Nasce invisível e aparece no deploy do PRD. É o par do vídeo de divulgação: uma entrega, uma fatia de manual.
-_Evitar_: manual dentro do PR de código (a tela ainda não existe para o print); manual fora da fila de issues (some da cobrança).
+O vídeo de uma entrega (PRD) feito para o diretor ver o sistema funcionando (ADR 0026, ADR 0045): a unidade é o que mudou, não a tarefa.
 
 ## Diálogo de exemplo
 

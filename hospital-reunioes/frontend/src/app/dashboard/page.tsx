@@ -422,7 +422,7 @@ export default function DashboardPage() {
       {/* Welcome */}
       <div className="mb-8 flex justify-between items-end">
         <div>
-          <h1 className="text-3xl font-bold text-text">Olá, {nome}</h1>
+          <h1 className="text-3xl font-bold text-text">Olá, <span className="normal-case">{nome}</span></h1>
           <p className="text-text-secondary mt-1 capitalize">
             {mounted ? today : ""}
           </p>

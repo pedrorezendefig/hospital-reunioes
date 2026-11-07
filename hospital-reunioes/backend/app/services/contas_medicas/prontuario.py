@@ -26,10 +26,11 @@ PR quando o MV mudar de versão (ADR 0070, decisão 7).
 import re
 import unicodedata
 from collections import Counter
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import date, datetime, time
 
+from app.services.contas_medicas.cirurgia import MARCA_DA_DESCRICAO
 from app.services.contas_medicas.desidentificacao import (
     Identificacao,
     desidentificar,
@@ -41,8 +42,14 @@ from app.services.contas_medicas.marcacoes import so_o_marcado
 
 
 class ErroLeitura(Exception):  # noqa: N818, nome da spec, o mesmo da leitura da Conta (#1116)
-    """Leitura impossível. A mensagem é a frase que a faturista vê na Situação Erro
-    e nunca carrega texto do prontuário."""
+    """Leitura impossível: o rodapé indica mais páginas do que vieram. A
+    mensagem nunca carrega texto do prontuário; os dois números vão para a
+    frase do Erro da conta (#1337)."""
+
+    def __init__(self, motivo: str, *, declarado: int, vieram: int):
+        super().__init__(motivo)
+        self.declarado = declarado
+        self.vieram = vieram
 
 
 @dataclass(frozen=True)
@@ -59,6 +66,8 @@ class Documento:
     # cobrança e nas que o código estrutura sozinho (prescrição, balanço, ficha
     # anestésica, aferição, guia TISS), que leem as páginas pelo número.
     linhas: tuple[str, ...]
+    # Só no DIGITALIZADO lido por OCR: legível, duvidosa, ilegível ou não lida (#1398).
+    qualidade: str | None = None
 
     @property
     def pagina_inicial(self) -> int:
@@ -79,8 +88,8 @@ class Prontuario:
     paciente_rotulo: str | None
     idade_anos: int | None
     documentos: tuple[Documento, ...]
-    # Páginas do Atendimento digitalizadas que o OCR não leu (#1191): o Guia lista, a faturista
-    # confere à mão se precisar.
+    # Páginas do Atendimento digitalizadas que o OCR não leu (#1191), ou leu ilegíveis
+    # (#1398): o Guia lista, a faturista confere à mão se precisar.
     paginas_sem_texto: tuple[int, ...]
     # Uma frase por motivo; vazio quer dizer que o Guia não é parcial.
     parecer_parcial: tuple[str, ...]
@@ -101,7 +110,9 @@ def _conferir_integridade(paginas: list[str]) -> None:
     if any(total != len(paginas) for total in totais):
         declarado = max(totais)
         raise ErroLeitura(
-            f"Prontuário com arquivo incompleto: o rodapé indica {declarado} páginas e vieram {len(paginas)}."
+            f"Prontuário com arquivo incompleto: o rodapé indica {declarado} páginas e vieram {len(paginas)}.",
+            declarado=declarado,
+            vieram=len(paginas),
         )
 
 
@@ -450,6 +461,116 @@ def e_digitalizada(texto: str) -> bool:
 MARCA_DO_OCR = "<<<TEXTO LIDO POR OCR>>>"
 
 
+# Qualidade da folha digitalizada (#1398): a faixa da confiança do OCR, ou não lida
+# quando o OCR não chegou nela (prazo, falha). Ilegível e não lida contam como
+# página sem texto na regra dos 10%.
+LEGIVEL = "legivel"
+DUVIDOSA = "duvidosa"
+ILEGIVEL = "ilegivel"
+NAO_LIDA = "nao_lida"
+QUALIDADES = (LEGIVEL, DUVIDOSA, ILEGIVEL, NAO_LIDA)
+
+
+# Família da folha digitalizada (#1399): o texto do PDF dela só tem rodapé e
+# assinatura, então ela sai do título que o OCR leu. Vira o subtipo do documento
+# DIGITALIZADO. O peso diz se a folha sustenta item da conta (pesa), ajuda com data
+# e setor (ajuda) ou não tem valor de cobrança (não pesa). As assinaturas vêm do
+# microteste dos dez pares (`local/contas-medicas/microtestes/classificar_dig.py`),
+# sobre o OCR sem acento e em maiúsculas.
+PESA = "pesa"
+AJUDA = "ajuda"
+NAO_PESA = "nao_pesa"
+FICHA_DE_ANESTESIA = "ficha de anestesia"
+DESCRICAO_CIRURGICA = "descrição cirúrgica manuscrita"
+NAO_IDENTIFICADA = "documento não identificado"
+
+_FAMILIAS_DA_FOLHA: list[tuple[str, str, tuple[str, ...]]] = [
+    # o verso da ficha traz os sinais vitais e as medicações do intraoperatório
+    (
+        FICHA_DE_ANESTESIA,
+        PESA,
+        (r"FICHA\s+(DE\s+)?ANEST", r"TECNICA\s+ANEST", r"AGENTES?\s+ANEST", r"INTRA\s*-?\s*OPERAT"),
+    ),
+    (
+        "folha de sala ou de consumo do centro cirúrgico",
+        PESA,
+        (
+            r"FOLHA\s+DE\s+SALA",
+            r"CONSUMO",
+            r"GASTO",
+            r"DEBITO\s+DE\s+SALA",
+            r"MATERIAIS?\s+(E\s+MEDICAMENTOS\s+)?UTILIZAD",
+        ),
+    ),
+    ("controle de fios", PESA, (r"FIOS\s+CIRURG",)),
+    ("controle de OPME e etiquetas", PESA, (r"\bOPME\b", r"ETIQUETA", r"\bLOTE\b.*\bREF\b", r"IMPLANT")),
+    (
+        "registro de horários cirúrgicos",
+        PESA,
+        (r"HORARIOS\s+CIRURG", r"ENTRADA\s+(DO\s+)?PACIENTE.*SALA", r"INICIO\s+DA\s+CIRURGIA"),
+    ),
+    ("relatório de uso de equipamento", PESA, (r"RELATORIO\s+DE\s+USO", r"VIDEO\s*(LAPARO|CIRURG)?")),
+    (DESCRICAO_CIRURGICA, PESA, (r"DESCRICAO\s+(DA\s+)?CIRURG", r"ACHADOS\s+OPERAT")),
+    ("prescrição ou checagem manuscrita", PESA, (r"PRESCRICAO", r"CHECAGEM", r"APRAZAMENTO")),
+    ("hemoterapia", PESA, (r"HEMOTERAP|TRANSFUS|HEMOCOMPONENTE|CONCENTRADO\s+DE\s+HEMACIAS",)),
+    ("boletim de internação", AJUDA, (r"BOLETIM\s+DE\s+INTERNA",)),
+    ("laudo de exame", AJUDA, (r"LAUDO", r"RESULTADO", r"RADIOLOG|TOMOGRAF|ULTRASSON")),
+    (
+        "guia da operadora",
+        AJUDA,
+        (
+            r"GUIA\s+DE\s+(SOLICITA|SP/SADT|INTERNA|HONOR)",
+            r"AUTORIZACAO\s+(PREVIA|DA\s+OPERADORA)",
+            r"SENHA\s+DE\s+AUTORIZA",
+        ),
+    ),
+    (
+        "checklist de cirurgia segura",
+        NAO_PESA,
+        (r"CIRURGIA\s+SEGURA", r"SIGN\s*(IN|OUT)|TIME\s*OUT", r"LATERALIDADE|LATERAL\s*:|\bLATER\b", r"IDENTIFICACAO"),
+    ),
+    (
+        "termo de consentimento",
+        NAO_PESA,
+        (r"TERMO\s+DE\s+(CONSENTIMENTO|CIENCIA|RESPONSABILIDADE|AUTORIZA)", r"CONSENTIMENTO", r"DECLARO", r"AUTORIZO"),
+    ),
+    ("receituário", NAO_PESA, (r"RECEITUARIO", r"RECEITA")),
+    (
+        "integrador químico e caixa de instrumental",
+        NAO_PESA,
+        (r"INTEGRADOR", r"ESTERILIZ", r"INSTRUMENTAL|PECAS\s+PARA\s+USO"),
+    ),
+    ("escala de risco", NAO_PESA, (r"ESCALA", r"ALGORITMO", r"RISCO\s+DE\s+(QUEDA|LESAO)|BRADEN|MORSE", r"AVALIACAO")),
+    (
+        "documento pessoal",
+        NAO_PESA,
+        (r"REPUBLICA\s+FEDERATIVA|CARTEIRA\s+DE\s+IDENTIDADE|CARTEIRINHA|CARTAO\s+NACIONAL",),
+    ),
+    ("eletrocardiograma", NAO_PESA, (r"ELETROCARDIO", r"\bECG\b")),
+]
+
+# Sem título reconhecido, a folha conta como se pesasse: melhor a faturista
+# conferir à toa do que uma ficha que o código não reconheceu passar sem ressalva.
+PESO_DA_FOLHA = {nome: peso for nome, peso, _ in _FAMILIAS_DA_FOLHA} | {NAO_IDENTIFICADA: PESA}
+
+# O título fica no topo da folha: o que casa ali vale três vezes.
+_TOPO_DA_FOLHA = 900
+
+
+def familia_da_folha(ocr: str) -> str:
+    """A família da folha digitalizada pelo que o OCR leu: a que mais casa, com o
+    topo valendo mais. No empate fica a de cima da tabela, que começa pelas que
+    pesam: na dúvida, a folha entra na ressalva."""
+    texto = _sem_acento(ocr).upper()
+    topo = texto[:_TOPO_DA_FOLHA]
+    melhor, maior = NAO_IDENTIFICADA, 0
+    for nome, _, padroes in _FAMILIAS_DA_FOLHA:
+        pontos = sum(len(re.findall(p, texto)) + 2 * len(re.findall(p, topo)) for p in padroes)
+        if pontos > maior:
+            melhor, maior = nome, pontos
+    return melhor
+
+
 def _separar_ocr(texto: str) -> tuple[str, str]:
     """(texto do PDF, texto do OCR); o segundo vazio na página sem OCR."""
     do_pdf, _, do_ocr = texto.partition(MARCA_DO_OCR)
@@ -591,6 +712,8 @@ class _Pagina:
     campos: _Campos
     # O texto da imagem lido por OCR (#1191), só na página digitalizada.
     ocr: str = ""
+    # A qualidade da leitura do OCR (#1398), só na página digitalizada que foi a ele.
+    qualidade: str | None = None
 
 
 def _paginas_do_atendimento(paginas: list[_Pagina], atendimento: str) -> list[_Pagina]:
@@ -722,23 +845,183 @@ def atendimento_do_prontuario(texto_por_pagina: Sequence[str | None]) -> str | N
     return contagem.most_common(1)[0][0] if contagem else None
 
 
-def ler_prontuario(texto_por_pagina: Sequence[str | None], atendimento: str | int) -> Prontuario:
+def _do_atendimento(
+    separados: list[tuple[str, str]], capa: _Capa, atendimento: str, qualidades: Mapping[int, str]
+) -> tuple[list[_Pagina], list[tuple[list[_Pagina], _Campos]]]:
+    """As páginas do Atendimento e os documentos delas, em ordem de data, pela
+    estrutura que só o texto do PDF dá."""
+    paginas = []
+    for numero, (texto, ocr) in enumerate(separados[capa.paginas :], start=capa.paginas + 1):
+        familia = _familia(texto)
+        campos = _campos(texto, familia)
+        paginas.append(_Pagina(numero, texto, familia, _paginacao(texto), campos, ocr, qualidades.get(numero)))
+    do_atendimento = _paginas_do_atendimento(paginas, atendimento)
+    agrupados = [(grupo, _juntar_campos(grupo)) for grupo in _montar_documentos(do_atendimento)]
+    return do_atendimento, _ordenar_por_data(agrupados)
+
+
+def digitalizadas_da_conta(
+    texto_por_pagina: Sequence[str | None], atendimento: str | int, inicio: date | None, fim: date | None
+) -> tuple[int, ...]:
+    """As digitalizadas do Atendimento da conta com data no período dela, pela mesma
+    atribuição de atendimento e data da leitura, que saem do texto do PDF, antes do
+    OCR: sob o prazo, o OCR lê essas primeiro (#1398). Sem data, conta como do período."""
+    separados = [_separar_ocr(texto or "") for texto in texto_por_pagina]
+    capa = _ler_capa([do_pdf for do_pdf, _ in separados])
+    _, documentos = _do_atendimento(separados, capa, str(atendimento), {})
+    return tuple(
+        sorted(
+            pagina.numero
+            for grupo, campos in documentos
+            if grupo[0].familia == "DIGITALIZADO" and _no_periodo(campos.data, inicio, fim)
+            for pagina in grupo
+        )
+    )
+
+
+def _no_periodo(data: date | None, inicio: date | None, fim: date | None) -> bool:
+    """Sem data, conta como do período: na dúvida, a folha é da conta."""
+    return data is None or ((inicio is None or inicio <= data) and (fim is None or data <= fim))
+
+
+# A folha lida mal: a não lida (prazo, falha) conta como ilegível.
+_LIDAS_MAL = (DUVIDOSA, ILEGIVEL, NAO_LIDA)
+
+
+def ressalva_das_digitalizadas(prontuario: Prontuario, inicio: date | None, fim: date | None) -> tuple[str, ...]:
+    """As linhas do Parecer parcial da conta com as folhas digitalizadas a conferir
+    à mão (#1399): do Atendimento (a leitura já deixou só as dele) e do período da
+    conta, que pesam ou não foram identificadas, e saíram duvidosas ou ilegíveis.
+    A estrutura serve a todas as parciais do Atendimento; o período é o da conta.
+    Páginas seguidas do mesmo documento vão numa linha só."""
+    folhas = sorted(
+        (d.pagina_inicial, d.subtipo or NAO_IDENTIFICADA)
+        for d in prontuario.documentos
+        if d.familia == "DIGITALIZADO"
+        and d.qualidade in _LIDAS_MAL
+        and PESO_DA_FOLHA.get(d.subtipo or NAO_IDENTIFICADA) == PESA
+        and _no_periodo(d.data, inicio, fim)
+    )
+    blocos: list[tuple[list[int], str]] = []
+    for pagina, documento in folhas:
+        if blocos and blocos[-1][1] == documento and blocos[-1][0][-1] == pagina - 1:
+            blocos[-1][0].append(pagina)
+        else:
+            blocos.append(([pagina], documento))
+    return tuple(_linha_da_ressalva(paginas, documento) for paginas, documento in blocos)
+
+
+def _linha_da_ressalva(paginas: list[int], documento: str) -> str:
+    if len(paginas) == 1:
+        return (
+            f"Confira à mão no prontuário a página {paginas[0]} ({documento}): "
+            "é uma folha digitalizada que não consegui ler bem."
+        )
+    juncao = " e " if len(paginas) == 2 else " a "
+    return (
+        f"Confira à mão no prontuário as páginas {paginas[0]}{juncao}{paginas[-1]} ({documento}): "
+        "são folhas digitalizadas que não consegui ler bem."
+    )
+
+
+# Bloqueio pelas folhas digitalizadas (#1400). O item da conta que diz que houve
+# cirurgia no período: taxa de sala, honorário de procedimento cirúrgico, gás do
+# centro cirúrgico e anestésico.
+_ANESTESICO = re.compile(
+    r"SEVOFLURAN|ISOFLURAN|DESFLURAN|PROPOFOL|DIPRIVAN|ETOMIDAT|CETAMIN|KETAMIN|BUPIVACAIN|ROPIVACAIN"
+)
+_ITENS_DO_CENTRO_CIRURGICO: tuple[Callable[[str, str, str, str], bool], ...] = (
+    # (grupo, descrição, setor, grupo de procedimento), sem acento e em maiúsculas
+    lambda grupo, descricao, _s, _g: grupo == "TAXAS" and "SALA" in descricao,
+    lambda grupo, _d, _s, procedimento: grupo == "HONORARIOS MEDICOS" and "CIRURG" in procedimento,
+    lambda grupo, _d, setor, _g: grupo == "GASES MEDICINAIS" and "CIRURG" in setor,
+    lambda grupo, descricao, _s, _g: grupo == "MEDICAMENTOS" and _ANESTESICO.search(descricao) is not None,
+)
+
+# A folha ruim na conta cirúrgica: duvidosa ou ilegível. Na regra do quarto das
+# páginas, só a ilegível. A não lida fica de fora das duas: é falha da leitura
+# (PDF que falta, fila cheia, prazo, filho que morreu), não da folha, e segue só
+# na ressalva "Confira à mão".
+_RUINS = (DUVIDOSA, ILEGIVEL)
+_QUARTO_DAS_PAGINAS = 0.25
+_FOLHAS_DA_CIRURGIA = (FICHA_DE_ANESTESIA, DESCRICAO_CIRURGICA)
+_FEMININAS = ("ficha", "folha", "descrição", "prescrição", "hemoterapia")
+
+
+def _conta_cirurgica(itens: Sequence, inicio: date | None, fim: date | None) -> bool:
+    """Se a conta tem item do centro cirúrgico no período. `itens` são os
+    `ItemConta` da leitura da conta."""
+
+    def normal(texto: str | None) -> str:
+        return _sem_acento(texto or "").upper()
+
+    return any(
+        _no_periodo(i.data, inicio, fim)
+        and any(
+            casa(normal(i.grupo), normal(i.descricao), normal(i.setor), normal(i.grupo_procedimento))
+            for casa in _ITENS_DO_CENTRO_CIRURGICO
+        )
+        for i in itens
+    )
+
+
+def _descricao_em_texto(documento: Documento, texto_por_pagina: Sequence[str | None]) -> bool:
+    if documento.familia != "DOC_EDITOR":
+        return False
+    texto = "\n".join(_separar_ocr(texto_por_pagina[n - 1] or "")[0] for n in documento.paginas)
+    return MARCA_DA_DESCRICAO.search(texto) is not None
+
+
+def _com_artigo(documento: str) -> str:
+    return f"{'a' if documento.startswith(_FEMININAS) else 'o'} {documento}"
+
+
+def bloqueio_das_digitalizadas(
+    prontuario: Prontuario,
+    texto_por_pagina: Sequence[str | None],
+    itens: Sequence,
+    inicio: date | None,
+    fim: date | None,
+) -> tuple[str, dict[str, object]] | None:
+    """A causa e os dados do Erro CM-ARQ-DIGITALIZADO da conta do período, ou None
+    quando ela segue (#1400). Para em dois casos: (a) conta cirúrgica sem ficha de
+    anestesia nem descrição cirúrgica legíveis no período, em texto ou em OCR
+    legível, e com folha digitalizada duvidosa ou ilegível que pesa (ou não
+    identificada); (b) mais de um quarto das páginas do período são digitalizadas
+    ilegíveis que pesam. A não lida não entra em nenhum dos dois."""
+    do_periodo = [d for d in prontuario.documentos if _no_periodo(d.data, inicio, fim)]
+    digitalizadas = [d for d in do_periodo if d.familia == "DIGITALIZADO"]
+    que_pesam = [d for d in digitalizadas if PESO_DA_FOLHA.get(d.subtipo or NAO_IDENTIFICADA) == PESA]
+    ruins = [d for d in que_pesam if d.qualidade in _RUINS]
+    legivel = any(d.subtipo in _FOLHAS_DA_CIRURGIA and d.qualidade == LEGIVEL for d in digitalizadas) or any(
+        d.familia == "FICHA_ANESTESICA" or _descricao_em_texto(d, texto_por_pagina) for d in do_periodo
+    )
+    if ruins and not legivel and _conta_cirurgica(itens, inicio, fim):
+        # A frase aponta a folha que mais pesa: a ficha, depois a descrição.
+        folha = min(ruins, key=lambda d: (_FOLHAS_DA_CIRURGIA + (d.subtipo,)).index(d.subtipo))
+        documento = folha.subtipo or NAO_IDENTIFICADA
+        return "digitalizada_da_cirurgia", {"folha": f"{_com_artigo(documento)} (página {folha.pagina_inicial})"}
+    paginas = sum(len(d.paginas) for d in do_periodo)
+    ilegiveis = sum(len(d.paginas) for d in que_pesam if d.qualidade == ILEGIVEL)
+    if paginas and ilegiveis / paginas > _QUARTO_DAS_PAGINAS:
+        return "digitalizadas_ilegiveis", {"ilegiveis": ilegiveis, "paginas": paginas}
+    return None
+
+
+def ler_prontuario(
+    texto_por_pagina: Sequence[str | None], atendimento: str | int, qualidades: Mapping[int, str] | None = None
+) -> Prontuario:
+    """`qualidades` é a da leitura de cada digitalizada que foi ao OCR (#1398)."""
     # A estrutura sai só do texto do PDF; o lido por OCR vai à IA e a mais nada.
     separados = [_separar_ocr(texto or "") for texto in texto_por_pagina]
     textos = [do_pdf for do_pdf, _ in separados]
     _conferir_integridade(textos)
     capa = _ler_capa(textos)
 
-    paginas = []
-    for numero, (texto, ocr) in enumerate(separados[capa.paginas :], start=capa.paginas + 1):
-        familia = _familia(texto)
-        paginas.append(_Pagina(numero, texto, familia, _paginacao(texto), _campos(texto, familia), ocr))
-
-    do_atendimento = _paginas_do_atendimento(paginas, str(atendimento))
-    agrupados = [(grupo, _juntar_campos(grupo)) for grupo in _montar_documentos(do_atendimento)]
+    do_atendimento, ordenados = _do_atendimento(separados, capa, str(atendimento), qualidades or {})
     documentos = []
     anteriores: dict[str, list[str]] = {}
-    for grupo, campos in _ordenar_por_data(agrupados):
+    for grupo, campos in ordenados:
         familia = grupo[0].familia
         linhas = _linhas_para_ia(grupo, campos)
         if linhas and familia in _SO_O_QUE_MUDOU:
@@ -752,11 +1035,18 @@ def ler_prontuario(texto_por_pagina: Sequence[str | None], atendimento: str | in
                 hora=campos.hora,
                 setor=campos.setor,
                 conselho=campos.conselho,
-                subtipo=campos.subtipo,
+                # a da digitalizada é a família da folha pelo título do OCR (#1399)
+                subtipo=familia_da_folha(grupo[0].ocr) if familia == "DIGITALIZADO" else campos.subtipo,
                 linhas=tuple(desidentificar(linhas, capa.identificacao)),
+                qualidade=grupo[0].qualidade if familia == "DIGITALIZADO" else None,
             )
         )
-    sem_texto = tuple(p.numero for p in do_atendimento if p.familia == "DIGITALIZADO" and not p.ocr.strip())
+    # A ilegível e a não lida contam como sem texto: o OCR sempre devolve alguma coisa.
+    sem_texto = tuple(
+        p.numero
+        for p in do_atendimento
+        if p.familia == "DIGITALIZADO" and (not p.ocr.strip() or p.qualidade in (ILEGIVEL, NAO_LIDA))
+    )
     parecer_parcial = [
         _grupos_que_faltam(capa, "\n".join(textos[capa.paginas :])),
         _paginas_sem_texto_demais(len(sem_texto), len(do_atendimento)),

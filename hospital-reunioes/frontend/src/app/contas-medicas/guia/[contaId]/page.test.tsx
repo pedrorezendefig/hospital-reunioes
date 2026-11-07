@@ -16,6 +16,7 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-li
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ToastProvider } from "@/components/ui/Toast";
+import { caixaDoDado } from "@/lib/testes/caixaDoDado";
 import type { Guia, LinhaGuia } from "@/lib/contas-medicas/guia";
 
 import GuiaPage from "./page";
@@ -323,6 +324,14 @@ describe("o código copia com um clique", () => {
 
     expect(writeText).toHaveBeenCalledWith("70012345");
     expect(await screen.findByText("Código copiado")).toBeTruthy();
+  });
+});
+
+describe("caixa alta (issue #1455)", () => {
+  it("o código da linha aparece como está gravado, mesmo sendo um botão", async () => {
+    await abrir();
+
+    expect(caixaDoDado(screen.getByRole("button", { name: "Copiar código 70012345" }))).toBe("normal-case");
   });
 });
 

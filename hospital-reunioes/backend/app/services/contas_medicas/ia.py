@@ -26,10 +26,11 @@ import logging
 import time
 from dataclasses import dataclass
 from time import perf_counter
-from typing import Any, Literal
+from typing import Annotated, Any, Literal
 
 import anthropic
-from pydantic import BaseModel, ConfigDict, Field, ValidationError
+import httpx2
+from pydantic import BaseModel, BeforeValidator, ConfigDict, Field, ValidationError, WithJsonSchema
 
 from app.config import settings
 from app.services.prompt_loader import load_prompt
@@ -48,16 +49,18 @@ __all__ = [
 
 logger = logging.getLogger(__name__)
 
-# Três tentativas, com espera crescente entre elas. Uma chamada inteira (três
-# prazos e as duas esperas) fica abaixo de 10 minutos, dentro dos 15 em que o
-# processamento considera a conta presa e a devolve para a fila.
+# Três tentativas, com espera crescente entre elas.
 TENTATIVAS = 3
 ESPERAS_S = (5, 20)
+# A chamada sai em streaming: o prazo vale para cada leitura do stream (a API
+# manda eventos o tempo todo), não para a resposta inteira.
 PRAZO_DA_TENTATIVA_S = 180
 
-# O teto de saída de cada chamada. O prazo de 180 s por tentativa já limita a
-# resposta a algo nessa ordem; acima disso a chamada sem streaming estoura.
-MAX_TOKENS = 16000
+# O teto de saída de cada chamada, raciocínio incluído: o máximo do Sonnet 5.5
+# e do Opus 5.5. A leitura de um prontuário de 660 páginas deu 40 mil tokens e
+# a comparação de uma conta de 265 itens, 57,6 mil (issues #1412 e o lote de
+# 04/11/2026); com o teto antigo, de 16 mil, toda leitura grande saía cortada.
+MAX_TOKENS = 128000
 
 
 @dataclass(frozen=True)
@@ -74,6 +77,7 @@ class Preco:
 # a troca da variável; fora da tabela, a chamada grava custo zero e avisa no log.
 PRECO_POR_MILHAO: dict[str, Preco] = {
     "claude-sonnet-5-5": Preco(entrada=2.00, saida=10.00, leitura_cache=0.20, escrita_cache=2.50),
+    "claude-opus-5-5": Preco(entrada=4.00, saida=20.00, leitura_cache=0.20, escrita_cache=5.00),
 }
 
 MENSAGEM_SEM_CREDITO = "A IA está sem crédito. Avise o Pedro."
@@ -85,21 +89,98 @@ _esperar = time.sleep
 
 
 class ErroDaIA(Exception):  # noqa: N818, o nome do domínio
-    """A IA não respondeu no formato. A mensagem é técnica e nunca leva texto
-    do prontuário; o pipeline transforma em Erro com a frase para a faturista."""
+    """A IA não respondeu no formato. Carrega a causa (o tipo da falha, de que
+    nasce o Código do erro da conta), o tipo do erro da última tentativa, o
+    código HTTP e o `request_id` dela. A mensagem da API só vem no 4xx de
+    validação do pedido (`_mensagem_da_api`); toda outra resposta pode citar o
+    prontuário e fica sem ela (issues #1337 e #1410). O pipeline transforma em
+    Erro com a frase."""
+
+    def __init__(
+        self,
+        mensagem: str,
+        *,
+        causa: str,
+        tipo: str,
+        http: int | None = None,
+        mensagem_da_api: str | None = None,
+        request_id: str | None = None,
+    ):
+        super().__init__(mensagem)
+        self.causa = causa
+        self.tipo = tipo
+        self.http = http
+        self.mensagem_da_api = mensagem_da_api
+        self.request_id = request_id
 
 
 class IASemCredito(ErroDaIA):  # noqa: N818, o nome do domínio
     """A conta da Anthropic ficou sem saldo (400 de saldo ou 402). Não adianta
     tentar de novo: alguém tem que pôr crédito."""
 
-    def __init__(self):
-        super().__init__(MENSAGEM_SEM_CREDITO)
+    def __init__(self, *, tipo: str, http: int):
+        super().__init__(MENSAGEM_SEM_CREDITO, causa="credito", tipo=tipo, http=http)
 
 
 def _sem_credito(erro: anthropic.APIStatusError) -> bool:
     """402, ou o 400 que a Anthropic devolve quando o saldo acaba."""
     return erro.status_code == 402 or (erro.status_code == 400 and "credit balance" in str(erro.message).lower())
+
+
+def _grande_demais(erro: anthropic.APIStatusError) -> bool:
+    """O 400 do contexto excedido (o texto passou do que o modelo aceita) ou o
+    413 da requisição grande demais."""
+    mensagem = str(erro.message).lower()
+    return erro.status_code == 413 or (
+        erro.status_code == 400 and ("too long" in mensagem or "context" in mensagem and "exceed" in mensagem)
+    )
+
+
+# As causas que repetir não resolve: a chave, o modelo e o tamanho não mudam
+# entre uma tentativa e outra (o crédito tem o próprio erro, `IASemCredito`).
+DEFINITIVAS = frozenset({"chave", "modelo", "tamanho"})
+
+
+def _causa(erro: anthropic.APIError | httpx2.HTTPError | ValidationError) -> tuple[str, int | None]:
+    """A causa da falha e o código HTTP, para o Código do erro. Lê a mensagem
+    da resposta só para separar o 400 de tamanho; ela não sai daqui."""
+    if isinstance(erro, ValidationError):
+        return "formato", 200
+    if isinstance(erro, anthropic.APIStatusError):
+        http = erro.status_code
+        if http == 401:
+            return "chave", http
+        if http == 404:
+            return "modelo", http
+        if _grande_demais(erro):
+            return "tamanho", http
+        if http == 429 or http >= 500:
+            return "fora_do_ar", http
+        return "recusa", http
+    if isinstance(erro, anthropic.APIConnectionError):  # inclui o tempo esgotado
+        return "fora_do_ar", None
+    if isinstance(erro, httpx2.HTTPError):  # a conexão ou o prazo que cai no meio do stream
+        return "fora_do_ar", None
+    return "recusa", None
+
+
+# O teto da mensagem da API que vai para o detalhe da conta e para o log.
+MENSAGEM_DA_API_MAX = 500
+
+
+def _mensagem_da_api(erro: anthropic.APIStatusError, causa: str) -> str | None:
+    """A mensagem do 4xx de validação do pedido (schema, parâmetro, modelo),
+    que fala do pedido que o app montou e não do prontuário (issue #1410). Sai
+    só o campo `error.message` da resposta, nunca o corpo do pedido, e com teto.
+    A que fala de `messages`, o campo que leva o prontuário, fica de fora, como
+    as de chave, modelo inexistente, tamanho e fora do ar (issue #1337)."""
+    if causa != "recusa" or erro.type != "invalid_request_error" or not 400 <= erro.status_code < 500:
+        return None
+    falha = erro.body.get("error") if isinstance(erro.body, dict) else None
+    mensagem = falha.get("message") if isinstance(falha, dict) else None
+    if not isinstance(mensagem, str) or "messages" in mensagem.lower():
+        return None
+    return mensagem[:MENSAGEM_DA_API_MAX]
 
 
 # ----------------------------------------------------------------------------------
@@ -111,10 +192,21 @@ class _Estrito(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
 
+# A saída estrita da Anthropic recusa com 400 o schema com mais de 16
+# parâmetros anuláveis ("too many parameters with union types"), e o passo A
+# tinha 20. O texto opcional do passo A sai para a IA como string, vazia quando
+# o prontuário não diz, e volta aqui como None: quem consome não muda.
+TextoOpcional = Annotated[
+    str | None,
+    BeforeValidator(lambda valor: valor or None),
+    WithJsonSchema({"type": "string", "description": "Vazio quando o prontuário não disser."}),
+]
+
+
 class Movimentacao(_Estrito):
     tipo: Literal["INTERNACAO", "TRANSFERENCIA_SETOR", "TRANSFERENCIA_HOSPITAL", "ALTA", "OBITO"]
-    data_hora: str | None
-    setor: str | None
+    data_hora: TextoOpcional
+    setor: TextoOpcional
     pagina: int
     trecho: str
 
@@ -138,23 +230,23 @@ class Terapia(_Estrito):
         "OUTRA",
     ]
     descricao: str
-    setor: str | None
-    inicio: str | None
-    fim: str | None
+    setor: TextoOpcional
+    inicio: TextoOpcional
+    fim: TextoOpcional
     pagina: int
     trecho: str
 
 
 class Prescricao(_Estrito):
     data: str
-    setor: str | None
+    setor: TextoOpcional
     item: str
-    via: str | None
+    via: TextoOpcional
     doses_no_dia: float | None
     se_necessario: bool
-    indicio_de_uso: str | None
+    indicio_de_uso: TextoOpcional
     suspenso: bool
-    diluente: str | None
+    diluente: TextoOpcional
     em_bomba: bool
     pagina: int
     trecho: str
@@ -178,9 +270,9 @@ class Procedimento(_Estrito):
         "HEMOTRANSFUSAO",
         "OUTRO",
     ]
-    data_hora: str | None
-    setor: str | None
-    detalhe: str | None
+    data_hora: TextoOpcional
+    setor: TextoOpcional
+    detalhe: TextoOpcional
     quantidade: float | None
     pagina: int
     trecho: str
@@ -188,11 +280,11 @@ class Procedimento(_Estrito):
 
 class Cirurgia(_Estrito):
     data: str
-    inicio: str | None
-    fim: str | None
+    inicio: TextoOpcional
+    fim: TextoOpcional
     procedimento: str
-    codigo: str | None
-    anestesia: str | None
+    codigo: TextoOpcional
+    anestesia: TextoOpcional
     cobranca_honorario: Literal["VIA_HOSPITAL", "VIA_EQUIPE", "NAO_SINALIZADO"]
     equipamentos: list[str]
     pagina: int
@@ -202,7 +294,7 @@ class Cirurgia(_Estrito):
 class EventosDoProntuario(_Estrito):
     """A saída do passo A (Anexo A)."""
 
-    atendimento: str | None
+    atendimento: TextoOpcional
     idade_anos: int | None
     movimentacoes: list[Movimentacao]
     terapias: list[Terapia]
@@ -306,7 +398,7 @@ def _schema_estrito(modelo: type[BaseModel]) -> dict[str, Any]:
 
 def _cliente() -> anthropic.Anthropic:
     if not settings.anthropic_api_key:
-        raise ErroDaIA("ANTHROPIC_API_KEY vazia")
+        raise ErroDaIA("ANTHROPIC_API_KEY vazia", causa="chave", tipo="ChaveVazia")
     return anthropic.Anthropic(
         api_key=settings.anthropic_api_key,
         max_retries=0,  # as três tentativas são deste adaptador
@@ -430,41 +522,80 @@ def _chamar_a_ia[Saida: BaseModel](
         logger.warning("[ContasMedicas] Modelo %s sem preço na tabela: o custo fica zero", modelo)
     cliente = _cliente()
     uso = _Uso()
-    falha = ""
+    falha = ErroDaIA("A IA não foi chamada", causa="recusa", tipo="SemTentativa")
     inicio = perf_counter()
     for tentativa in range(1, TENTATIVAS + 1):
         if tentativa > 1:
             _esperar(ESPERAS_S[tentativa - 2])
         try:
-            resposta = cliente.messages.create(
+            with cliente.messages.stream(
                 model=modelo,
                 max_tokens=MAX_TOKENS,
                 system=sistema,
                 messages=mensagens,
                 output_config=formato,
-            )
+            ) as stream:
+                resposta = stream.get_final_message()
             uso.somar(resposta, preco)
+            if resposta.stop_reason in ("max_tokens", "model_context_window_exceeded"):
+                # Cortada no teto de saída ou na janela de contexto do modelo: o JSON
+                # veio pela metade, e repetir dá o mesmo corte.
+                logger.warning(
+                    "[ContasMedicas] IA %s, tentativa %s: resposta cortada (%s)",
+                    modelo,
+                    tentativa,
+                    resposta.stop_reason,
+                )
+                limite = f"teto de {MAX_TOKENS} tokens" if resposta.stop_reason == "max_tokens" else "janela do modelo"
+                falha = ErroDaIA(
+                    f"A resposta da IA passou do {limite}",
+                    causa="tamanho",
+                    tipo="RespostaCortada",
+                    http=200,
+                )
+                break
             conteudo = "".join(bloco.text for bloco in resposta.content if bloco.type == "text")
             resultado = saida.model_validate_json(conteudo)
-        except anthropic.APIStatusError as erro:
-            if _sem_credito(erro):
+        except (anthropic.APIError, httpx2.HTTPError, ValidationError) as erro:
+            # O SDK só traduz o erro do envio; o que cai na leitura do stream (conexão
+            # perdida, prazo de leitura esgotado) sobe cru do httpx2, o transporte dele.
+            # O tipo do erro e, só no 400 de validação do pedido, a mensagem da API:
+            # a resposta inválida pode citar o prontuário.
+            tipo = type(erro).__name__
+            if isinstance(erro, anthropic.APIStatusError) and _sem_credito(erro):
                 logger.error(
                     "[ContasMedicas] IA %s sem crédito (HTTP %s): sem nova tentativa", modelo, erro.status_code
                 )
                 _gravar(onde, modelo, uso, round((perf_counter() - inicio) * 1000), tentativa, sucesso=False)
-                raise IASemCredito() from None
-            falha = type(erro).__name__
-            logger.warning("[ContasMedicas] IA %s, tentativa %s: %s", modelo, tentativa, falha)
-            continue
-        except (anthropic.APIError, ValidationError) as erro:
-            # O tipo do erro, nunca a mensagem: a resposta inválida pode citar o prontuário.
-            falha = type(erro).__name__
-            logger.warning("[ContasMedicas] IA %s, tentativa %s: %s", modelo, tentativa, falha)
+                raise IASemCredito(tipo=tipo, http=erro.status_code) from None
+            causa, http = _causa(erro)
+            status = isinstance(erro, anthropic.APIStatusError)
+            mensagem_da_api = _mensagem_da_api(erro, causa) if status else None
+            request_id = erro.request_id if status else None
+            logger.warning(
+                "[ContasMedicas] IA %s, tentativa %s: %s (HTTP %s, request_id %s)%s",
+                modelo,
+                tentativa,
+                tipo,
+                http,
+                request_id,
+                f": {mensagem_da_api}" if mensagem_da_api else "",
+            )
+            falha = ErroDaIA(
+                f"A IA falhou na tentativa {tentativa} ({causa}, {tipo}, HTTP {http})",
+                causa=causa,
+                tipo=tipo,
+                http=http,
+                mensagem_da_api=mensagem_da_api,
+                request_id=request_id,
+            )
+            if causa in DEFINITIVAS:
+                break
             continue
         _gravar(onde, modelo, uso, round((perf_counter() - inicio) * 1000), tentativa, sucesso=True)
         return resultado
-    _gravar(onde, modelo, uso, round((perf_counter() - inicio) * 1000), TENTATIVAS, sucesso=False)
-    raise ErroDaIA(f"A IA não respondeu no formato em {TENTATIVAS} tentativas ({falha})")
+    _gravar(onde, modelo, uso, round((perf_counter() - inicio) * 1000), tentativa, sucesso=False)
+    raise falha
 
 
 # ----------------------------------------------------------------------------------

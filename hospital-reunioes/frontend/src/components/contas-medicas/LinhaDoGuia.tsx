@@ -70,7 +70,7 @@ export function LinhaDoGuia({ linha, concluida, ocupado, onMarcar, onDesfazer, o
       type="button"
       aria-label={`Copiar código ${linha.codigo}`}
       onClick={() => onCopiar(linha.codigo as string)}
-      className="inline-flex items-center gap-1 font-mono text-xs text-primary hover:underline"
+      className="inline-flex items-center gap-1 font-mono text-xs normal-case text-primary hover:underline"
     >
       {linha.codigo}
       <Copy className="w-3 h-3" aria-hidden="true" />

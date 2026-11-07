@@ -358,7 +358,7 @@ function BibliotecaDeTabelas({
       </p>
       {operadoras.map((op) => (
         <div key={op.sigla} className="mt-4">
-          <h3 className="text-sm font-semibold text-slate-800">{op.sigla}</h3>
+          <h3 className="normal-case text-sm font-semibold text-slate-800">{op.sigla}</h3>
           <TabelasDePreco
             rotulo={`Tabelas de preço de ${op.sigla}`}
             tabelas={op.tabelas}

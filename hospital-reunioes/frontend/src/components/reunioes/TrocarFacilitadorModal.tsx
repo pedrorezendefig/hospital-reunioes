@@ -153,7 +153,7 @@ export default function TrocarFacilitadorModal({
                 key={sa.id}
                 type="button"
                 onClick={() => setSelectedId(sa.id)}
-                className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl border text-left transition-all ${
+                className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl border text-left normal-case transition-all ${
                   selected
                     ? "bg-amber-50 border-amber-300"
                     : "bg-white border-slate-200 hover:bg-slate-50"

@@ -29,6 +29,7 @@ Só `status: accepted` vale como decisão; `superseded` é histórico (CLAUDE.md
 | [0070](0070-contas-medicas-aritmetica-no-codigo-ia-no-julgamento-memoria-no-banco.md) | accepted | Contas médicas: aritmética no código, IA só onde há julgamento, memória da operadora no banco, fila no banco |
 | [0073](0073-contas-medicas-fila-comum-quem-envia-nao-e-quem-analisa.md) | accepted | Contas médicas: fila comum, e quem envia não é quem analisa |
 | [0074](0074-contas-medicas-ia-na-api-da-anthropic-sem-zdr.md) | accepted | Contas médicas: IA na API da Anthropic, com a retenção padrão e sem ZDR |
+| [0081](0081-contas-medicas-auditor-conversa-que-propoe-prova-e-faltou-isto.md) | accepted | Contas médicas: o Auditor é uma conversa que só propõe, toda regra passa por prova, e o "Faltou isto" entra no Guia |
 | [0071](0071-humanizer-e-a-regua-do-texto-para-fora.md) | accepted | Humanizer é a régua de todo texto para fora; manual e Hospital OS reescritos por ela (emenda 0057) |
 
 ## Tecnologia (Demandas Vitta x Hospital)
@@ -38,6 +39,9 @@ Só `status: accepted` vale como decisão; `superseded` é histórico (CLAUDE.md
 | [0050](0050-demandas-de-tecnologia-moram-no-app-apartadas-das-pendencias.md) | accepted | Demandas de tecnologia moram no app do hospital, só para Super admin, apartadas das Pendências |
 | [0054](0054-demanda-vinculada-a-issue-etapa-derivada-e-revisor-no-app.md) | accepted | Demanda vinculada a issue do GitHub: Etapa derivada, comentário do diretor espelhado e a bola volta a quem pediu (emenda 0020) |
 | [0056](0056-assistente-de-tecnologia-rascunho-confirmado-kit-proprio.md) | accepted | Assistente de Tecnologia: rascunho confirmado por gente, kit próprio embarcado, responde do kit ou registra |
+| [0075](0075-planejamento-da-demanda-grill-no-app-e-prd-do-diretor.md) | superseded | Planejamento da Demanda: o grill de negócio roda no app, e o "sim" do diretor cria o PRD do diretor (emenda 0054 e 0056) |
+| [0077](0077-tecnologia-vira-o-chat-do-agente-bug-ou-melhoria.md) | accepted | Tecnologia vira o chat do agente: bug ou melhoria, com Opus lendo o código, e o card nasce no GitHub (substitui 0075; emenda 0050, 0054, 0056, 0069 e 0076) |
+| [0079](0079-planejamento-sem-teto-e-custo-na-tela.md) | accepted | Planejamento da Demanda sem teto de perguntas, parada por "nada em aberto" e o custo da conversa na tela (emenda 0077) |
 | [0060](0060-texto-que-sai-para-a-issue-publica-passa-pela-peneira-de-dado-pessoal.md) | accepted | Texto que sai para a issue pública passa pela peneira de dado pessoal (emenda 0054) |
 | [0069](0069-anexo-da-demanda-fica-no-app-e-em-producao-devolve-ao-diretor.md) | accepted | Anexo da Demanda fica no app e quem desenvolve busca; Em produção é a Etapa que devolve ao diretor (emenda 0054) |
 
@@ -104,6 +108,7 @@ Só `status: accepted` vale como decisão; `superseded` é histórico (CLAUDE.md
 | [0013](0013-saida-ia-sem-travessao-sanitizador.md) | accepted | Saída da IA sem travessão: sanitizador determinístico + convenção nos prompts |
 | [0025](0025-dashboard-diagramas-renderer-proprio.md) | accepted | Dashboard desenha os diagramas com renderer próprio; mermaid.js sai do painel |
 | [0033](0033-role-etiqueta-interna-invisivel-ao-usuario.md) | accepted | Role é etiqueta interna: o próprio usuário nunca vê o seu role |
+| [0080](0080-caixa-alta-por-tipo-de-elemento-so-na-exibicao.md) | accepted | Caixa alta por tipo de elemento, só na exibição: CSS na tela, `text-transform` nos PDFs, `upper` no título dos e-mails |
 
 ## Comunicação e layout do repo
 
@@ -112,8 +117,10 @@ Só `status: accepted` vale como decisão; `superseded` é histórico (CLAUDE.md
 | [0026](0026-percepcao-de-valor-em-video-hyperframes.md) | accepted | Percepção de Valor passa a ser vídeo renderizado (HyperFrames); o HTML interativo com stepper é aposentado |
 | [0044](0044-layout-do-repositorio.md) | accepted | Layout do repositório: o que fica no git, onde fica, e o que vive fora |
 | [0045](0045-video-e-pagina-de-divulgacao-sao-uma-entrega-so.md) | accepted | Vídeo de percepção e página de divulgação são uma entrega só, numa pasta só por PRD |
-| [0057](0057-manual-do-usuario-site-unico-por-modulo-e-fatia-de-manual-por-prd.md) | accepted | Manual do usuário: um site por módulo, vídeo por tarefa, fatia de manual por PRD (emenda 0044 e 0056) |
-| [0072](0072-manual-com-um-video-de-visao-geral-por-modulo-e-orcamento-de-40-mb.md) | accepted | Manual com um Vídeo de visão geral por módulo e orçamento de 40 MB (emenda 0057) |
+| [0057](0057-manual-do-usuario-site-unico-por-modulo-e-fatia-de-manual-por-prd.md) | superseded | Manual do usuário: um site por módulo, vídeo por tarefa, fatia de manual por PRD (emenda 0044 e 0056) |
+| [0072](0072-manual-com-um-video-de-visao-geral-por-modulo-e-orcamento-de-40-mb.md) | superseded | Manual com um Vídeo de visão geral por módulo e orçamento de 40 MB (emenda 0057) |
+| [0076](0076-manual-video-narrado-por-modulo-em-remotion-refeito-a-cada-prd-e-tecnologia-no-manual.md) | superseded | Manual: um vídeo narrado por módulo, em Remotion, refeito a cada PRD, e a Tecnologia no Manual (emenda 0057, 0072 e 0075) |
+| [0078](0078-manual-do-usuario-aposentado.md) | accepted | Manual do usuário aposentado: site, item Ajuda, skills e Fatia de manual saem da plataforma (substitui 0057, 0072 e 0076) |
 | [0046](0046-readme-e-o-mapa-do-repositorio.md) | accepted | O `README.md` da raiz é o mapa do repositório |
 | [0047](0047-apagar-manifestacao-e-retencao-antecipada-nao-delete.md) | accepted | Apagar manifestação é retenção antecipada, não DELETE |
 

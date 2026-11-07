@@ -2,7 +2,8 @@
 
 A fila vive em `cm_conta` (ADR 0070, decisão 5): o envio deixa a conta
 `NA_FILA` e um job do APScheduler, a cada 10 segundos, devolve à fila o que
-ficou preso, faz o claim e entrega a conta a um executor próprio com 2 vagas.
+ficou preso, faz o claim e entrega a conta a um executor próprio com
+`CM_VAGAS` vagas (4 sem a variável).
 Tudo no processo do app: sobrevive a restart porque o estado está no banco.
 
 O pipeline de uma conta, em etapas cronometradas:
@@ -29,10 +30,11 @@ O pipeline de uma conta, em etapas cronometradas:
    parecer parcial e o tempo de cada etapa.
 
 Leitura que não fecha (PDF sem texto, conta que não soma, prontuário
-incompleto) vira `ERRO` com a frase da etapa, sem nova tentativa: o mesmo
-arquivo daria o mesmo erro. A IA fora do ar depois das três tentativas do
-adaptador também vira `ERRO`, com o Guia do código gravado. Falha inesperada
-volta para a fila; na terceira tentativa, `ERRO`.
+incompleto) vira `ERRO` na hora, sem nova tentativa: o mesmo arquivo daria o
+mesmo erro. A IA que falhou no adaptador também vira `ERRO`, com o Guia do
+código gravado. Falha inesperada volta para a fila; na terceira tentativa,
+`ERRO`. Todo `ERRO` passa pelo classificador (`erro_da_conta`, issue #1337),
+que dá o Código do erro, a frase e o detalhe técnico gravados na conta.
 
 O texto dos PDFs é prontuário: o log leva a etapa, a conta e o tipo do erro
 com o lugar no código, nunca a mensagem da exceção, que pode citar o texto.
@@ -44,7 +46,7 @@ import logging
 import threading
 import traceback
 import weakref
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager
 from dataclasses import replace
@@ -54,6 +56,7 @@ from pathlib import Path
 from time import perf_counter
 from typing import Any
 
+from app.config import settings
 from app.services import storage
 from app.services import transcricao_extractor as orcamento
 from app.services.contas_medicas import dicionario_ia, passo_a, passo_b, passo_c
@@ -62,15 +65,26 @@ from app.services.contas_medicas.conferencia import Conferencia, ProntuarioLido,
 from app.services.contas_medicas.conteudo import Conteudo, ler_conteudo
 from app.services.contas_medicas.desidentificacao import desidentificar
 from app.services.contas_medicas.dicionario import dicionario_do_banco
+from app.services.contas_medicas.erro_da_conta import ErroDaConta, FalhaDeLeitura, classificar, tentativas_esgotadas
 from app.services.contas_medicas.formulario import sem_formulario_em_branco
 from app.services.contas_medicas.guia import nota_de_entrada
-from app.services.contas_medicas.ia import ErroDaIA, IASemCredito
+from app.services.contas_medicas.ia import ErroDaIA
 from app.services.contas_medicas.memoria import MemoriaLida, RegraLida
 from app.services.contas_medicas.operadoras import listar_setores, memoria_vigente
+from app.services.contas_medicas.reanalise import MARCA_ASSIM_MESMO, marca_assim_mesmo, prontuario_da_analise
 from app.services.contas_medicas.tabelas import pacote_pelo_tuss, preco
 from app.services.contas_medicas.validacao import temas_das_linhas_validar
-from app.services.contas_medicas_conta import Conta, ErroLeitura, ler_conta
+from app.services.contas_medicas_conta import (
+    TOLERANCIA,
+    Conta,
+    ErroLeitura,
+    item_que_nao_fecha,
+    ler_cabecalho_da_conta,
+    ler_conta,
+    soma_e_total,
+)
 from app.services.contas_medicas_extrator import (
+    MENSAGEM_PDF_GRANDE_DEMAIS,
     Pagina,
     Palavra,
     digitalizadas,
@@ -89,51 +103,17 @@ logger = logging.getLogger(__name__)
 _CANDIDATAS = 5
 
 # A conta em PROCESSANDO há mais que isto ficou para trás (restart do app no
-# meio da análise): volta para a fila. A leitura de um prontuário de 900
-# páginas tem prazo de 120 segundos, então 15 minutos não cortam análise viva.
-PRAZO_DA_ANALISE = timedelta(minutes=15)
+# meio da análise): volta para a fila. Uma comparação de 57,6 mil tokens levou
+# quase 8 minutos, e no teto de saída (128 mil) uma chamada passa de 15; com a
+# leitura antes, 60 minutos não cortam análise viva.
+PRAZO_DA_ANALISE = timedelta(minutes=60)
 MAXIMO_DE_TENTATIVAS = 3
 
-# Duas análises ao mesmo tempo, no máximo: as mesmas 2 vagas do extrator.
-VAGAS = 2
+# Quantas análises ao mesmo tempo, no máximo (`CM_VAGAS`). A extração do PDF
+# tem as próprias vagas: a análise que precisar extrair espera a vez dela.
+VAGAS = settings.cm_vagas
 _vagas = threading.BoundedSemaphore(VAGAS)
 _executor = ThreadPoolExecutor(max_workers=VAGAS, thread_name_prefix="contas-medicas")
-
-MENSAGEM_TENTATIVAS_ESGOTADAS = "A análise não terminou em três tentativas. Envie de novo."
-MENSAGEM_PDF_SEM_TEXTO = "Este PDF não tem texto. Exporte de novo pelo MV"
-MENSAGEM_ARQUIVO_FORA_DO_SISTEMA = "O arquivo já saiu do sistema. Envie de novo."
-MENSAGEM_SEM_PRONTUARIO = "O prontuário deste atendimento não está no sistema. Envie o prontuário de novo."
-MENSAGEM_SEM_MEMORIA = "A operadora desta conta está sem memória carregada."
-# A IA fora do ar ou fora do formato depois das três tentativas do adaptador
-# (spec 9.9): Erro na hora, e a faturista reprocessa pelo botão da conta.
-MENSAGEM_IA_FORA_DO_AR = "Tente de novo em alguns minutos"
-
-# A etapa como a faturista lê, na frase do Erro depois da terceira tentativa.
-ETAPAS = {
-    "texto_da_conta": "leitura do PDF da conta",
-    "leitura_da_conta": "leitura da conta",
-    "texto_do_prontuario": "leitura do PDF do prontuário",
-    "leitura_do_prontuario": "leitura do prontuário",
-    "dicionario": "consulta do dicionário",
-    "conferencia": "conferência",
-    "passo_a": "leitura do prontuário pela IA",
-    "conferencia_com_eventos": "conferência com a leitura da IA",
-    "passo_b": "comparação com a memória pela IA",
-    "gravacao": "gravação do guia",
-}
-
-
-def mensagem_da_etapa(etapa: str) -> str:
-    return f"A análise parou na {ETAPAS.get(etapa, 'análise')}. Envie de novo."
-
-
-class _Falha(Exception):  # noqa: N818, a leitura que não fecha, não um defeito
-    """Leitura que não fecha: Erro na hora, com a frase para a faturista."""
-
-    def __init__(self, motivo: str):
-        super().__init__(motivo)
-        self.motivo = motivo
-
 
 # ----------------------------------------------------------------------------------
 # A fila
@@ -180,6 +160,11 @@ def pegar_da_fila(supabase, agora: datetime) -> dict | None:
     return None
 
 
+# A conta que sai de PROCESSANDO (pronta, Erro ou de volta à fila) fica sem
+# Etapa do processamento (#1416).
+SEM_ETAPA = {"etapa_atual": None, "etapa_desde": None, "etapa_parte": None, "etapa_partes": None}
+
+
 def _fechar_tentativa(supabase, conta: dict, campos: dict) -> None:
     """O UPDATE que só vale para esta tentativa: a conta que voltou para a fila
     e outra vaga já pegou de novo não é sobrescrita."""
@@ -188,21 +173,39 @@ def _fechar_tentativa(supabase, conta: dict, campos: dict) -> None:
     ).execute()
 
 
-def _devolver(supabase, conta: dict, erro_motivo: str) -> None:
+def _gravar_erro(supabase, conta: dict, erro: ErroDaConta) -> None:
+    """A conta em Erro com a frase, o Código do erro e o detalhe técnico, que
+    leva a hora do erro para a TI achar o momento no log."""
+    _fechar_tentativa(
+        supabase,
+        conta,
+        {
+            "situacao": "ERRO",
+            "erro_motivo": erro.frase,
+            "erro_codigo": erro.codigo,
+            "erro_detalhe": {**erro.detalhe, "em": datetime.now(UTC).isoformat()},
+            "processando_desde": None,
+            **SEM_ETAPA,
+        },
+    )
+
+
+def _devolver(supabase, conta: dict, erro: ErroDaConta) -> None:
     """Fim de uma tentativa que não deu certo: volta para a fila, ou, na
-    terceira, Erro com a frase."""
+    terceira, Erro."""
     if (conta.get("tentativas") or 0) >= MAXIMO_DE_TENTATIVAS:
-        _fechar_tentativa(supabase, conta, {"situacao": "ERRO", "erro_motivo": erro_motivo, "processando_desde": None})
+        _gravar_erro(supabase, conta, erro)
     else:
-        _fechar_tentativa(supabase, conta, {"situacao": "NA_FILA", "processando_desde": None})
+        _fechar_tentativa(supabase, conta, {"situacao": "NA_FILA", "processando_desde": None, **SEM_ETAPA})
 
 
 def devolver_presas(supabase, agora: datetime) -> int:
-    """As contas em PROCESSANDO há mais de 15 minutos voltam para a fila; na
-    terceira tentativa, Erro. Devolve quantas foram mexidas."""
+    """As contas em PROCESSANDO há mais de 60 minutos voltam para a fila; na
+    terceira tentativa, Erro, com a etapa em que a análise estava quando o app
+    reiniciou ou travou. Devolve quantas foram mexidas."""
     presas = (
         supabase.table("cm_conta")
-        .select("id, tentativas")
+        .select("id, tentativas, erro_detalhe")
         .eq("situacao", "PROCESSANDO")
         .lt("processando_desde", (agora - PRAZO_DA_ANALISE).isoformat())
         .execute()
@@ -210,7 +213,7 @@ def devolver_presas(supabase, agora: datetime) -> int:
         or []
     )
     for conta in presas:
-        _devolver(supabase, conta, MENSAGEM_TENTATIVAS_ESGOTADAS)
+        _devolver(supabase, conta, tentativas_esgotadas((conta.get("erro_detalhe") or {}).get("etapa")))
     return len(presas)
 
 
@@ -247,17 +250,45 @@ def _na_vaga(supabase, conta: dict) -> None:
 # ----------------------------------------------------------------------------------
 
 
-class _Cronometro:
-    """O tempo de cada etapa e a etapa em que a análise está (a do erro)."""
+# As etapas internas do Motor nas cinco Etapas do processamento da tela
+# (issue #1416), o único lugar do backend que faz esse mapa. A primeira
+# conferência por código e o dicionário rodam antes do Passo A e levam
+# segundos: ficam em "Lendo o prontuário", para a tela andar sempre para a
+# frente. "Conferindo" é a conferência com os eventos que a IA leu.
+ETAPA_DA_TELA = {
+    "texto_da_conta": "LENDO_CONTA",
+    "leitura_da_conta": "LENDO_CONTA",
+    "texto_do_prontuario": "LENDO_PRONTUARIO",
+    "leitura_do_prontuario": "LENDO_PRONTUARIO",
+    "dicionario": "LENDO_PRONTUARIO",
+    "conferencia": "LENDO_PRONTUARIO",
+    "passo_a": "IA_LENDO_PRONTUARIO",
+    "conferencia_com_eventos": "CONFERINDO",
+    "passo_b": "IA_MONTANDO_GUIA",
+    "gravacao": "IA_MONTANDO_GUIA",
+}
 
-    def __init__(self):
+
+class _Cronometro:
+    """O tempo de cada etapa e a etapa em que a análise está (a do erro).
+    `ao_entrar` recebe cada etapa que começa e a anterior: o processamento a
+    grava na conta, para a análise que o restart interrompeu dizer onde parou
+    (#1337) e a tela mostrar a Etapa do processamento (#1416)."""
+
+    def __init__(self, ao_entrar: Callable[[str, str | None], None] | None = None):
         self.tempos: dict[str, float] = {}
         self.atual: str | None = None
+        # Quantas digitalizadas o OCR leu por faixa (#1398), depois do OCR: vai
+        # para o detalhe técnico da conta, pronta ou em Erro.
+        self.digitalizadas: dict[str, int] | None = None
         self._inicio = perf_counter()
+        self._ao_entrar = ao_entrar
 
     @contextmanager
     def etapa(self, nome: str) -> Iterator[None]:
-        self.atual = nome
+        anterior, self.atual = self.atual, nome
+        if self._ao_entrar:
+            self._ao_entrar(nome, anterior)
         inicio = perf_counter()
         yield
         self.tempos[nome] = round(perf_counter() - inicio, 3)
@@ -274,24 +305,56 @@ def _onde(erro: BaseException) -> str:
     return f"{Path(quadros[-1].filename).name}:{quadros[-1].lineno}"
 
 
+def _com_digitalizadas(erro: ErroDaConta, cronometro: _Cronometro) -> ErroDaConta:
+    """O erro com a contagem das digitalizadas no detalhe, quando o OCR já rodou (#1398)."""
+    if cronometro.digitalizadas is None:
+        return erro
+    return replace(erro, detalhe={**erro.detalhe, "digitalizadas": cronometro.digitalizadas})
+
+
+def _marcar_etapa(supabase, conta: dict, etapa: str, anterior: str | None, tempos: dict[str, float]) -> None:
+    """A etapa que começa, no detalhe da conta em PROCESSANDO: se o app
+    reiniciar no meio, a devolução das presas sabe onde a análise parou. Junto,
+    o tempo das etapas já feitas, que o painel lateral mostra antes de a conta
+    ficar pronta (#1418). Na troca de Etapa do processamento, no mesmo UPDATE,
+    a etapa da tela, desde quando, e as partes do Passo A zeradas (#1416)."""
+    campos: dict[str, Any] = {"erro_detalhe": {"etapa": etapa, "tempos_por_etapa_s": dict(tempos)}}
+    if anterior is None or ETAPA_DA_TELA[etapa] != ETAPA_DA_TELA[anterior]:
+        campos |= {
+            "etapa_atual": ETAPA_DA_TELA[etapa],
+            "etapa_desde": datetime.now(UTC).isoformat(),
+            "etapa_parte": None,
+            "etapa_partes": None,
+        }
+    _fechar_tentativa(supabase, conta, campos)
+
+
+def _marcar_parte(supabase, conta: dict, parte: int, partes: int) -> None:
+    """A parte do Passo A em leitura, na conta (#1416). A falha só vai para o
+    log: a tela fica sem a parte, e a leitura da IA, que já está paga, segue."""
+    try:
+        _fechar_tentativa(supabase, conta, {"etapa_parte": parte, "etapa_partes": partes})
+    except Exception as erro:
+        logger.warning("[ContasMedicas] Conta %s sem a parte do Passo A: %s", conta["id"], type(erro).__name__)
+
+
 def processar(supabase, conta: dict) -> None:
     """O pipeline de uma conta que o claim pegou. Nunca levanta: o fim é
     `A_FAZER`, `ERRO` ou a volta para a fila."""
-    cronometro = _Cronometro()
+    cronometro = _Cronometro(
+        ao_entrar=lambda etapa, anterior: _marcar_etapa(supabase, conta, etapa, anterior, cronometro.tempos)
+    )
     try:
         try:
             _pipeline(supabase, conta, cronometro)
-        except _Falha as falha:
+        except FalhaDeLeitura as falha:
             logger.warning("[ContasMedicas] Conta %s com erro de leitura na etapa %s", conta["id"], cronometro.atual)
-            _fechar_tentativa(
-                supabase, conta, {"situacao": "ERRO", "erro_motivo": falha.motivo, "processando_desde": None}
-            )
+            _gravar_erro(supabase, conta, _com_digitalizadas(classificar(falha, cronometro.atual), cronometro))
         except ErroDaIA as erro:
-            # O adaptador já tentou três vezes, ou viu que a IA está sem
-            # crédito (#1302): a conta não volta para a fila.
+            # O adaptador já tentou o que fazia sentido tentar (três vezes, ou
+            # uma, nas falhas definitivas): a conta não volta para a fila.
             logger.warning("[ContasMedicas] Conta %s sem a IA na etapa %s: %s", conta["id"], cronometro.atual, erro)
-            motivo = str(erro) if isinstance(erro, IASemCredito) else MENSAGEM_IA_FORA_DO_AR
-            _fechar_tentativa(supabase, conta, {"situacao": "ERRO", "erro_motivo": motivo, "processando_desde": None})
+            _gravar_erro(supabase, conta, _com_digitalizadas(classificar(erro, cronometro.atual), cronometro))
         except Exception as erro:
             logger.error(
                 "[ContasMedicas] Conta %s falhou na etapa %s, tentativa %s: %s em %s",
@@ -301,13 +364,13 @@ def processar(supabase, conta: dict) -> None:
                 type(erro).__name__,
                 _onde(erro),
             )
-            _devolver(supabase, conta, mensagem_da_etapa(cronometro.atual or ""))
+            _devolver(supabase, conta, _com_digitalizadas(classificar(erro, cronometro.atual), cronometro))
             if (conta.get("tentativas") or 0) < MAXIMO_DE_TENTATIVAS:
                 return  # voltou para a fila: o envio ainda não terminou
         _avisar_se_o_envio_terminou(supabase, conta)
     except Exception as erro:
         # O banco falhou no fechamento: a conta fica PROCESSANDO e volta pela
-        # devolução das presas, em 15 minutos.
+        # devolução das presas, em 60 minutos.
         logger.error("[ContasMedicas] Conta %s sem fechamento: %s em %s", conta["id"], type(erro).__name__, _onde(erro))
 
 
@@ -331,7 +394,7 @@ def _texto(supabase, arquivo: dict) -> list[Pagina]:
     extraído agora, que fica guardado para a próxima parcial."""
     chave = arquivo.get("chave_bucket")
     if not chave or arquivo.get("apagado_em"):
-        raise _Falha(MENSAGEM_ARQUIVO_FORA_DO_SISTEMA)
+        raise FalhaDeLeitura("vencido")
     guardado = _baixar(supabase, chave_do_texto(chave))
     if guardado is not None:
         paginas = paginas_do_texto_guardado(guardado)
@@ -343,25 +406,39 @@ def _texto(supabase, arquivo: dict) -> list[Pagina]:
         if isinstance(paginas, ErroLeitura):
             if paginas.motivo == orcamento.MENSAGEM_FILA_CHEIA:
                 raise RuntimeError("extrator sem vaga")
-            raise _Falha(paginas.motivo)
+            if paginas.motivo == MENSAGEM_PDF_GRANDE_DEMAIS:
+                raise FalhaDeLeitura("grande", paginas=arquivo.get("paginas") or "muitas")
+            raise FalhaDeLeitura("ilegivel")
         storage.upload_private(supabase, BUCKET, chave_do_texto(chave), texto_para_guardar(paginas), "text/plain")
     if all(pagina.sem_texto for pagina in paginas):
-        raise _Falha(MENSAGEM_PDF_SEM_TEXTO)
+        raise FalhaDeLeitura("sem_texto")
     return paginas
 
 
-def _com_ocr(supabase, arquivo: dict, paginas: list[Pagina]) -> list[Pagina]:
-    """As páginas digitalizadas do Prontuário com o texto lido por OCR (#1191).
-    Roda aqui, na fila, e não no envio: o OCR de um prontuário real passa dos
-    30 s do proxy. O texto do OCR não vai para o texto guardado no bucket, que
-    fica no formato que a versão anterior lê. Sem o PDF, seguem sem texto."""
-    if not digitalizadas(paginas):
+def _com_ocr(supabase, arquivo: dict, paginas: list[Pagina], lida) -> list[Pagina]:
+    """As páginas digitalizadas do Prontuário com o texto lido por OCR (#1191) e a
+    qualidade da leitura (#1398). As do Atendimento e do período da conta vão
+    primeiro: sob o prazo, o corte cai nas que não importam para ela. Roda aqui,
+    na fila, e não no envio: o OCR de um prontuário real passa dos 30 s do proxy.
+    O texto do OCR não vai para o texto guardado no bucket, que fica no formato
+    que a versão anterior lê. Sem o PDF, seguem sem texto e não lidas."""
+    pedidas = digitalizadas(paginas)
+    if not pedidas:
         return paginas
     pdf = _baixar(supabase, arquivo["chave_bucket"])
     if pdf is None:
         logger.warning("[ContasMedicas] OCR sem o PDF no bucket: as paginas digitalizadas seguem sem texto")
-        return paginas
-    return ler_digitalizadas(bytes(pdf), paginas)
+        return [replace(p, qualidade=leitura_do_prontuario.NAO_LIDA) if p.numero in pedidas else p for p in paginas]
+    primeiro = leitura_do_prontuario.digitalizadas_da_conta(
+        [p.texto for p in paginas], lida.atendimento, lida.periodo_inicio, lida.periodo_fim
+    )
+    return ler_digitalizadas(bytes(pdf), paginas, primeiro=primeiro)
+
+
+def _contagem_das_digitalizadas(qualidades: dict[int, str]) -> dict[str, int]:
+    """Quantas digitalizadas saíram em cada faixa, para o detalhe técnico da conta
+    (#1398): só números, nunca texto do prontuário."""
+    return {faixa: sum(1 for q in qualidades.values() if q == faixa) for faixa in leitura_do_prontuario.QUALIDADES}
 
 
 def _palavras_da_prescricao(supabase, arquivo: dict, estrutura) -> dict[int, list[Palavra]]:
@@ -384,34 +461,43 @@ def _pipeline(supabase, conta: dict, cronometro: _Cronometro) -> None:
     with cronometro.etapa("texto_da_conta"):
         arquivo_da_conta = _primeira(supabase.table("cm_arquivo").select("*").eq("id", conta.get("arquivo_id")))
         if arquivo_da_conta is None:
-            raise _Falha(MENSAGEM_ARQUIVO_FORA_DO_SISTEMA)
+            raise FalhaDeLeitura("vencido")
         paginas_da_conta = _texto(supabase, arquivo_da_conta)
 
     with cronometro.etapa("leitura_da_conta"):
-        lida = ler_conta([pagina.texto for pagina in paginas_da_conta])
+        textos_da_conta = [pagina.texto for pagina in paginas_da_conta]
+        lida = ler_conta(textos_da_conta)
         if isinstance(lida, ErroLeitura):
-            raise _Falha(lida.motivo)
+            raise _leitura_da_conta_que_nao_fecha(textos_da_conta)
         _gravar_itens(supabase, conta["id"], lida)
 
     with cronometro.etapa("texto_do_prontuario"):
-        arquivo_do_prontuario = _primeira(
-            supabase.table("cm_arquivo")
-            .select("*")
-            .eq("atendimento_id", conta["atendimento_id"])
-            .eq("tipo", "PRONTUARIO")
-            .is_("apagado_em", "null")
-            .order("criado_em", desc=True)
-        )
+        arquivo_do_prontuario = prontuario_da_analise(supabase, conta["atendimento_id"])
         if arquivo_do_prontuario is None:
-            raise _Falha(MENSAGEM_SEM_PRONTUARIO)
-        paginas_do_prontuario = _texto(supabase, arquivo_do_prontuario)
-        textos = [pagina.texto for pagina in _com_ocr(supabase, arquivo_do_prontuario, paginas_do_prontuario)]
+            raise FalhaDeLeitura("sem_prontuario")
+        paginas_do_prontuario = _com_ocr(supabase, arquivo_do_prontuario, _texto(supabase, arquivo_do_prontuario), lida)
+        textos = [pagina.texto for pagina in paginas_do_prontuario]
+        qualidades = {p.numero: p.qualidade for p in paginas_do_prontuario if p.qualidade}
+        # Prontuário sem digitalizada fica sem a contagem: zeros só poluiriam o detalhe.
+        cronometro.digitalizadas = _contagem_das_digitalizadas(qualidades) if qualidades else None
 
     with cronometro.etapa("leitura_do_prontuario"):
         try:
-            estrutura = leitura_do_prontuario.ler_prontuario(textos, lida.atendimento)
+            estrutura = leitura_do_prontuario.ler_prontuario(textos, lida.atendimento, qualidades)
         except leitura_do_prontuario.ErroLeitura as erro:
-            raise _Falha(str(erro)) from None
+            raise FalhaDeLeitura("incompleto", declarado=erro.declarado, vieram=erro.vieram) from None
+        # As folhas digitalizadas que sustentam a conta não deram para ler (#1400):
+        # Erro antes do dicionário, sem gastar IA. É por conta, com o período dela.
+        # "Analisar assim mesmo" (#1401) pula o bloqueio enquanto o prontuário
+        # for o mesmo do clique; a ressalva "Confira à mão" sai no Parecer parcial.
+        assim_mesmo = marca_assim_mesmo(conta) == arquivo_do_prontuario["id"]
+        if not assim_mesmo and (
+            bloqueio := leitura_do_prontuario.bloqueio_das_digitalizadas(
+                estrutura, textos, lida.itens, lida.periodo_inicio, lida.periodo_fim
+            )
+        ):
+            causa, dados = bloqueio
+            raise FalhaDeLeitura(causa, **dados)
         palavras = _palavras_da_prescricao(supabase, arquivo_do_prontuario, estrutura)
         conteudo = ler_conteudo(textos, estrutura, palavras)
         prontuario = ProntuarioLido(estrutura, conteudo, textos)
@@ -435,7 +521,7 @@ def _pipeline(supabase, conta: dict, cronometro: _Cronometro) -> None:
         operadora_id = atendimento.get("operadora_id")
         memoria = memoria_vigente(supabase, operadora_id) if operadora_id else None
         if memoria is None:
-            raise _Falha(MENSAGEM_SEM_MEMORIA)
+            raise FalhaDeLeitura("sem_memoria", operadora=_sigla(supabase, operadora_id))
         memoria_lida = _memoria_lida(memoria)
         busca_de_preco = _busca_de_preco(supabase, operadora_id)
         buscas = {
@@ -458,6 +544,7 @@ def _pipeline(supabase, conta: dict, cronometro: _Cronometro) -> None:
                 prontuario=prontuario,
                 achados=conferencia.linhas,
                 regras=memoria["regras"],
+                ao_avancar=lambda parte, partes: _marcar_parte(supabase, conta, parte, partes),
             )
 
         with cronometro.etapa("conferencia_com_eventos"):
@@ -494,8 +581,13 @@ def _pipeline(supabase, conta: dict, cronometro: _Cronometro) -> None:
 
     # A 116 não tem coluna para o tempo das etapas, e o PRD tem migration única:
     # ele vai em `faltantes`, ao lado dos itens que o prontuário não trouxe.
-    # O parecer junta o que a leitura por código não teve e o que a IA apontou.
-    parecer = [*estrutura.parecer_parcial, *passo_a.parecer(eventos)]
+    # O parecer junta o que a leitura por código não teve, as folhas digitalizadas
+    # da conta a conferir à mão (#1399, pelo período desta parcial) e o que a IA apontou.
+    parecer = [
+        *estrutura.parecer_parcial,
+        *leitura_do_prontuario.ressalva_das_digitalizadas(estrutura, lida.periodo_inicio, lida.periodo_fim),
+        *passo_a.parecer(eventos),
+    ]
     tempos = {**cronometro.tempos, "total": cronometro.total()}
     _fechar_tentativa(
         supabase,
@@ -503,6 +595,8 @@ def _pipeline(supabase, conta: dict, cronometro: _Cronometro) -> None:
         {
             "situacao": "A_FAZER",
             "erro_motivo": None,
+            "erro_codigo": None,
+            "erro_detalhe": None,
             "total_lancado": float(lida.total),
             "nota_bruta": nota.nota,
             "nota_entrada": nota.nota,
@@ -510,9 +604,19 @@ def _pipeline(supabase, conta: dict, cronometro: _Cronometro) -> None:
             "valor_em_validacao": float(nota.em_validacao),
             "parecer_parcial": bool(parecer),
             # A linha da IA que as conferências derrubaram fica registrada, com o motivo.
-            "faltantes": {"itens": parecer, "tempos_por_etapa_s": tempos, "descartadas_ia": list(da_ia.descartadas)},
+            "faltantes": {
+                "itens": parecer,
+                "tempos_por_etapa_s": tempos,
+                "descartadas_ia": list(da_ia.descartadas),
+                "digitalizadas": cronometro.digitalizadas,
+                # O que o cartão do envio mostra da conta pronta (#1419).
+                "contagens": {"itens": len(lida.itens), "eventos": passo_a.quantos_eventos(eventos)},
+                # A marca do "Analisar assim mesmo" segue com o mesmo prontuário (#1401).
+                **({MARCA_ASSIM_MESMO: arquivo_do_prontuario["id"]} if assim_mesmo else {}),
+            },
             "memoria_versao_id": memoria["memoria_versao_id"],
             "pronta_em": datetime.now(UTC).isoformat(),
+            **SEM_ETAPA,
         },
     )
     logger.info("[ContasMedicas] Conta %s pronta em %ss", conta["id"], tempos["total"])
@@ -528,6 +632,30 @@ def _pipeline(supabase, conta: dict, cronometro: _Cronometro) -> None:
         preco=busca_de_preco,
         coluna=conferencia.coluna,
     )
+
+
+def _leitura_da_conta_que_nao_fecha(textos: list[str]) -> FalhaDeLeitura:
+    """Por que a conta não foi lida: o cabeçalho sem atendimento e plano, a
+    soma dos itens que não bate com o total (com os dois números) ou, com a
+    soma certa, o item em que quantidade vezes unitário não dá o total da linha."""
+    if isinstance(ler_cabecalho_da_conta(textos), ErroLeitura):
+        return FalhaDeLeitura("cabecalho")
+    soma, total = soma_e_total(textos)
+    if total is None:
+        return FalhaDeLeitura("sem_total", soma=soma)
+    errado = item_que_nao_fecha(textos) if abs(soma - total) <= TOLERANCIA else None
+    if errado:
+        item, esperado = errado
+        return FalhaDeLeitura("item", codigo=item.codigo, pagina=item.pagina, esperado=esperado, linha=item.total)
+    return FalhaDeLeitura("soma", soma=soma, total=total)
+
+
+def _sigla(supabase, operadora_id: str | None) -> str:
+    """A sigla da operadora, para a frase da operadora sem memória."""
+    operadora = (
+        _primeira(supabase.table("cm_operadora").select("sigla").eq("id", operadora_id)) if operadora_id else None
+    )
+    return (operadora or {}).get("sigla") or "desta conta"
 
 
 def _lembrar_a_coordenacao(
@@ -703,7 +831,7 @@ def _eventos_json(arquivo_id: str, prontuario: ProntuarioLido) -> dict[str, Any]
     }
 
 
-# As duas vagas pegam juntas as parciais do mesmo atendimento (o caso normal
+# As vagas pegam juntas as parciais do mesmo atendimento (o caso normal
 # de um envio): sem trava, as duas leem `cm_eventos` vazio e as duas gravam o
 # prontuário. Uma trava por atendimento, que some quando ninguém a segura.
 _travas_do_prontuario: weakref.WeakValueDictionary[str, threading.Lock] = weakref.WeakValueDictionary()
@@ -856,7 +984,7 @@ def _gravar_glicemias(supabase, atendimento_id: str, conteudo: Conteudo) -> None
 # ----------------------------------------------------------------------------------
 
 
-# As duas vagas podem terminar as duas últimas contas de um envio juntas: a
+# Duas vagas podem terminar as duas últimas contas de um envio juntas: a
 # trava do processo faz uma delas ver o aviso da outra e não repetir.
 _trava_do_aviso = threading.Lock()
 

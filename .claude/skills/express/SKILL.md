@@ -1,68 +1,76 @@
 ---
 name: express
-description: 'Grill rápido de uma ideia ou possibilidade ("dá pra fazer X?", "discute comigo Y", print de tela com uma vontade). Em vez de entrevista longa, faz uma rodada só: olha o código, diz o que já existe, propõe a ponte mínima, entrega uma decisão com no máximo 2 opções e uma recomendação. Quando o usuário diz "siga suas recomendações", implementa, verifica de verdade (navegador, teste, comando) e fecha com um resumo organizado por tema das questões que apareceram. Use quando o usuário disser "/express", "discute comigo a possibilidade de", "dá pra ter", "queria um link/botão/atalho que", "faz sentido X?", ou mandar um print e uma vontade. Não é o grill-with-docs (esse é longo, uma pergunta por vez, e não implementa).'
+description: 'Fecha um grill em andamento em lote, com painel de aprovação. No meio de um `/grill-with-docs`, a pessoa diz "/express" e o agente responde todas as perguntas que faltam com a própria recomendação, entrega a tabela decisão por decisão (escolha, por quê, a outra opção) no terminal e num painel interativo publicado como Artifact (Concordo ou Discordo por linha, nota, botão de aprovar), e espera a aprovação antes de classificar a porta e chamar `/to-prd`. Use quando o usuário disser "/express", "fecha o grill com as suas recomendações", "responde o resto você e me mostra a tabela", "segue com todas as recomendações e me pede aprovação". Não implementa nada e não chama `/ship`: o grill de uma rodada que implementava a ponte mínima morreu em 01/11/2026 (ideia pequena vai para `/grill-with-docs --lote`).'
 ---
 
-# Express grill
+# Express: fechar o grill em lote, com painel
 
-Grill de uma rodada. Termina em código, não em ata.
+O `/grill-with-docs` pergunta uma coisa por vez. O `/express` é o atalho para quando a pessoa já viu o rumo e quer o resto fechado com a recomendação do agente, revisado numa tela só, e aprovado em um clique.
 
-> **Idioma:** o do `CLAUDE.md` do projeto (default pt-BR). Sem travessão nem meia-risca.
+> **Idioma:** o do `CLAUDE.md` do projeto (default pt-BR). Sem travessão nem meia-risca, no terminal e no painel.
 
-## Fase 1: olhar antes de falar
+> **Projeto:** `<leitor>` é o `leitor` de `python3 .claude/skills/onda-enxuta/scripts/fluxo.py leitor`. O que `fluxo.py notas express` imprimir vale por cima desta skill.
 
-Antes de responder qualquer coisa, procure no código o que a ideia precisa. Fatos vêm do repositório, não do usuário.
+## Quando entra
 
-Procure três coisas:
+- No meio de um `/grill-with-docs`, depois de uma ou mais perguntas respondidas. As respostas que a pessoa já deu valem como dadas; o `/express` fecha só o que falta.
+- Sem grill em andamento, o `/express` faz o levantamento de fatos e o lote inteiro (é o `/grill-with-docs --lote` com o painel no fim).
 
-1. **O que já existe** que faz metade do caminho (um campo já guardado, uma chave que os dois lados compartilham, uma página que já sabe abrir aquilo).
-2. **O que falta**, a ponte mínima entre o que existe e o que o usuário quer.
-3. **O que pode quebrar** (um filtro que esconde o alvo, uma rota que não existe sem servidor, um estado que não sobrevive à navegação).
+## Fase 1: fechar o lote
 
-Não pergunte o que dá para descobrir com `grep`.
+As regras são as do modo lote do `grill-with-docs` (seção "Modo lote"). O que importa aqui:
 
-## Fase 2: responder curto
+1. **Fatos vêm do código, não da pessoa.** Antes de decidir, procure o que já existe (`CONTEXT.md`, ADRs aceitas, `history.json`, o serviço ou a tela que a ideia toca). Dúvida de serviço externo vai para o `/research` em background.
+2. **Liste todas as lacunas**, numeradas na mesma sequência do grill (se a pessoa respondeu P1 a P5, o lote começa em P6), agrupadas por tema. Cada lacuna: a escolha, o porquê em uma ou duas frases, e a alternativa descartada com o que ela custaria.
+3. **Não chute preferência de negócio, o que <leitor> quer, dinheiro nem texto com a voz de quem assina.** Essas linhas saem marcadas "[precisa de você]", com no máximo uma sugestão de rascunho.
+4. As decisões que a pessoa já tomou entram na tabela marcadas "você escolheu", para o painel mostrar o conjunto inteiro.
+5. Classifique a porta (A, B ou C) como uma das decisões, com o motivo.
 
-Uma resposta só, nesta ordem:
+## Fase 2: a tabela no terminal
 
-- **Dá ou não dá**, na primeira linha. Se dá, diga se é barato.
-- **O que já existe**, com `arquivo:linha` de cada peça.
-- **Como seria a ponte**, em passos numerados. No máximo 5.
-- **Uma decisão do usuário**, só se houver escolha de verdade. No máximo 2 opções, uma linha de contexto para cada, e qual você escolheria. Se não houver escolha, não invente uma.
+Uma tabela `# | decisão | escolha | por quê`, agrupada por tema, seguida de:
 
-Termine com uma pergunta só: "Quer que eu faça a A?".
+- "Onde eu mais posso estar errado:" com as 2 escolhas mais arriscadas e o porquê.
+- A porta recomendada e o comando que vem depois.
+- O link do painel (Fase 3) e a frase: aprovar no painel ou responder "ok" / "N: correção" aqui.
 
-Não implemente nada nesta fase.
+## Fase 3: o painel (Artifact)
 
-## Fase 3: quando ele disser "siga"
+O painel é a mesma tabela, em HTML interativo, publicada pela ferramenta `Artifact` com as capacidades `db` e `user`. O molde está em `references/painel.html` (o do grill do agente de planejamento, 01/11/2026): copie a estrutura e troque só o `<title>`, a frase de abertura, a constante `DECISOES` e o texto do rodapé (porta e próximo comando).
 
-"Siga suas recomendações", "faz a A", "vai" liberam a execução inteira. Não pergunte de novo.
+O que o painel tem, e por quê (visão ampla: o Pedro pediu em 01/11/2026 "ver tudo de uma vez, em miniatura", e não questão por questão):
 
-1. Implemente a ponte mínima. Nada especulativo. Toque só o que a ideia pede.
-2. **Verifique de verdade**, não por leitura. Se é tela, abra no navegador e clique: `playwright-cli` (`open <url>`, `snapshot` com refs, `click`, `screenshot`) é a ferramenta padrão para tela no localhost, mais barata que o MCP do Chrome e sem a trava de viewport do Chrome headless. Se é comando, rode. Se é dado, olhe o arquivo gerado. Uma aba de navegador em segundo plano congela rolagem e animação; traga para a frente antes de julgar.
-3. Se algo saiu diferente do esperado no teste, corrija e teste de novo antes de reportar.
-4. Se o projeto tem página de Ajuda ou doc de uso e a mudança cria um botão, link ou gesto novo, acrescente uma linha lá.
-5. Feche recursos que abriu (abas, servidores de teste).
+- **Cabeçalho fixo** com o nome do plano, o placar ("N de M avaliadas", barra) e o botão **"Concordar com tudo"**, que marca só o que ainda não foi avaliado e nunca mexe num Discordo.
+- **Uma faixa por tema** com o nome, "N de M" e o botão **"Concordar com o tema"**.
+- **Grade de miniaturas** (3 a 4 por linha no desktop, 2 no celular): número, "você escolheu" quando a pessoa respondeu no terminal, chip "risco" nas duas arriscadas, título e a escolha inteira (sem reticências: o Pedro quer ler a decisão sem abrir o card). A borda esquerda diz o estado (verde aceita, vermelha em revisão). O painel inteiro cabe em uma ou duas telas.
+- **Gaveta lateral** ao clicar na miniatura: escolha destacada, por quê, a outra opção, "onde posso estar errado", Concordo / Discordo, campo "O que não bateu?" com "Guardar nota", e anterior / próxima para percorrer sem fechar. Esc fecha.
+- **Rodapé** com a porta recomendada, o próximo comando e dois botões: "Aprovar e seguir para o PRD" e "Mandar para revisão".
+- **Sem agente dentro da tela.** A capacidade `sample` permitiria um chat na página, mas ele não lê o repositório nem a conversa; quem responde pergunta é o terminal. Fica fora até fazer falta.
 
-## Fase 4: resumo por tema
+Onde o painel guarda o que a pessoa marca (coleções do `db`):
 
-Feche com um resumo organizado por **categoria de tema** das questões que apareceram no grill. Os temas nascem da conversa, não de um molde fixo. Exemplos de temas que costumam aparecer:
+- `respostas/<pN>`: `{resposta: "ok" | "nao", nota, at}`.
+- `aprovacao/final`: `{status: "aprovado" | "revisar", at, avaliadas}`.
 
-- **Dados**: o que já era guardado, o que precisou ser guardado a mais.
-- **Navegação / ligação**: como um lado acha o outro.
-- **Tela**: o que o usuário vê e clica.
-- **Casos de borda**: filtro escondendo o alvo, alvo inexistente, estado perdido.
-- **Verificação**: o que foi testado, como, e o que não foi.
-- **Fora do escopo**: o que ficou de fora de propósito e por quê.
+Antes de escrever o HTML, carregue as skills `artifact-design` e `artifact-capabilities` (regra da ferramenta). Depois do primeiro publish, uma leitura com `ArtifactData` (`list` em `respostas`) prova que o armazenamento responde; diga em uma linha o que foi exercitado. O artefato nasce privado; quem está no grill é o dono e o único que escreve.
 
-Regras do resumo:
+## Fase 4: a aprovação
 
-- Cada tema: título em negrito e 1 a 3 frases, ou uma lista curta.
-- Diga o que funcionou e o que não foi testado. Sem enfeite.
-- Termine com "o que você faz agora": um ou dois comandos exatos, ou "nada".
+Espere. A aprovação chega por um dos dois caminhos, e os dois valem igual:
+
+- **No terminal:** "ok" aceita tudo; "N: correção" corrige só aquela linha.
+- **No painel:** leia `aprovacao/final` e `respostas` com `ArtifactData` quando a pessoa disser que marcou (ou "lê o painel"). `status: "aprovado"` é o "ok"; cada `respostas/<pN>` com `resposta: "nao"` é um "N: correção" com a nota como texto da correção.
+
+Com correções: reajuste as decisões que dependem delas, mostre no terminal só as linhas que mudaram, republique o painel com as linhas novas (mesmo `file_path`, mesma URL) e espere de novo.
+
+Com o "ok" (ou `aprovado`): o fechamento é o do `grill-with-docs`. `CONTEXT.md` e ADR só mudam agora, nunca no meio do lote. Classifique a porta e diga o comando:
+
+- **A** → `/to-prd` → `/to-issues`. Só invoque o `/to-prd` com a porta A confirmada.
+- **B** → `/triage` ou `gh issue create` com critérios de aceite → `/pegar-issue`.
+- **C** → `/ship "<descrição>" --from-diff`, feito nesta sessão.
 
 ## O que este skill não faz
 
-- Não faz entrevista longa. Se a ideia precisa de 5 decisões encadeadas, diga isso e sugira `/grill-with-docs`.
-- Não escreve ADR nem mexe em `CONTEXT.md` por conta própria. Se uma decisão merecer ADR, diga em uma linha e deixe o usuário pedir.
-- Commit e PR saem pela Skill `ship`, sem perguntar: no Hospital Reuniões, depois do "siga" e da verificação, a entrega é a porta C do `/ask-pedro`, e o Pedro já disse que confia (06/10/2026). Chame a Skill tool com `ship` (argumentos `"<descrição>" --from-diff`), que abre o PR e roda a subida; o "o que você faz agora" do resumo vira o resultado do ship. Única parada: se a ponte mudou comportamento do app que alguém precisa conferir antes, diga que é porta B e pare na proposta da issue.
+- Não implementa nada e não chama `/ship` por conta própria: o produto é a decisão aprovada.
+- Não grava `CONTEXT.md` nem ADR antes da aprovação.
+- Não decide dinheiro, preferência de <leitor> nem texto na voz de quem assina: essas linhas ficam "[precisa de você]".

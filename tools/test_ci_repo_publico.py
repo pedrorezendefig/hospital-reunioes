@@ -115,16 +115,6 @@ def test_dependabot_semanal_e_agrupado_nos_tres_ecossistemas():
         assert any(g.get("patterns") == ["*"] for g in u["groups"].values()), chave
 
 
-def test_dependabot_vigia_o_site_do_manual_semanal_e_agrupado():
-    config = yaml.safe_load((RAIZ / ".github" / "dependabot.yml").read_text(encoding="utf-8"))
-    manual = [u for u in config["updates"] if u["directory"] == "/docs/manual"]
-    assert len(manual) == 1
-    assert manual[0]["package-ecosystem"] == "npm"
-    assert manual[0]["schedule"]["interval"] == "weekly"
-    assert manual[0]["groups"]["manual"]["patterns"] == ["*"]
-    assert (RAIZ / "docs" / "manual" / "pnpm-lock.yaml").exists()
-
-
 # Versão corrigida de cada aviso que o Dependabot abriu contra o lockfile do
 # site do Manual (issue #1316). Abaixo dela, o alerta volta a abrir.
 CORRIGIDA_NO_MANUAL = {
@@ -138,26 +128,6 @@ CORRIGIDA_NO_MANUAL = {
     "smol-toml": (1, 9, 0),
     "postcss-selector-parser": (6, 1, 5),
 }
-
-
-def versoes_no_lockfile_do_manual() -> dict[str, list[tuple[int, ...]]]:
-    texto = (RAIZ / "docs" / "manual" / "pnpm-lock.yaml").read_text(encoding="utf-8")
-    pacotes = texto.split("\npackages:\n", 1)[1].split("\nsnapshots:\n", 1)[0]
-    versoes: dict[str, list[tuple[int, ...]]] = {}
-    for nome, versao in re.findall(r"^  '?(@?[^@\s']+)@(\d+\.\d+\.\d+)[^:]*'?:$", pacotes, re.MULTILINE):
-        versoes.setdefault(nome, []).append(tuple(int(n) for n in versao.split(".")))
-    return versoes
-
-
-def test_lockfile_do_manual_sem_versao_com_alerta_do_dependabot():
-    versoes = versoes_no_lockfile_do_manual()
-    assert len(versoes) > 100, "a leitura do lockfile não achou os pacotes"
-    assert "sharp" in versoes and "undici" in versoes
-    abaixo = {
-        nome: [v for v in versoes.get(nome, []) if v < minima]
-        for nome, minima in CORRIGIDA_NO_MANUAL.items()
-    }
-    assert {nome: vs for nome, vs in abaixo.items() if vs} == {}
 
 
 # ------------------------------------------------------------- SECURITY

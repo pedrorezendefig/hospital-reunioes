@@ -34,9 +34,9 @@ Se algum desses arquivos não existir, **siga em silêncio**. Não sinalize a au
 
 **Kit de conhecimento** (`hospital-reunioes/backend/app/conhecimento/`): um `.md` por Produto da aba Tecnologia (Ana, Integração Ana x MV, Reuniões, Ouvidoria, POPs, Site, Infra) mais um da própria aba. É o que o Assistente de Tecnologia lê inteiro a cada conversa, e é ele que o diretor ouve de volta. Regra (ADR 0056, decisão 2): **fatia que muda comportamento visível de um módulo atualiza o arquivo do Produto dele no mesmo PR.** Kit desatualizado não quebra teste nenhum: vira assistente afirmando ao diretor o que deixou de ser verdade.
 
-O que **não** entra num texto do kit, porque o leitor é o diretor (ADR 0054, decisão 9): número de issue, label do repositório, nome de tabela, rota da API, nome de arquivo do código, travessão e meia-risca. Também não entra README nem nota para quem programa: **todo `.md` dessa pasta vai inteiro para o prompt** e seria citado como material de consulta. O teste de sanidade do kit vive em `backend/tests/test_kit_conhecimento.py`.
+Cada arquivo tem a seção **"O que já foi decidido"** (ADR 0075, decisão 4): as decisões firmes daquele módulo, uma por item de lista, cada uma em uma frase, em linguagem de diretor. É com ela que o Planejamento da Demanda desafia o pedido e é ela que o agente cita ao recusar ou redirecionar. Mesma regra de sincronia: ADR aceita que muda uma regra do módulo atualiza a seção no mesmo PR.
 
-**Manual do usuário** (`docs/manual/`): segue outra regra, e essa é a exceção: a página nasce numa **fatia própria**, a última do PRD, bloqueada pelas fatias de código, porque ela precisa da tela pronta para o print e o vídeo (ADR 0057, decisão 8, que emenda a regra "mesmo PR" do ADR 0056 só para o manual).
+O que **não** entra num texto do kit, porque o leitor é o diretor (ADR 0054, decisão 9): número de issue, label do repositório, nome de tabela, rota da API, nome de arquivo do código, travessão e meia-risca. Também não entra README nem nota para quem programa: **todo `.md` dessa pasta vai inteiro para o prompt** e seria citado como material de consulta. O teste de sanidade do kit vive em `backend/tests/test_kit_conhecimento.py`.
 
 ## Status de uma ADR
 

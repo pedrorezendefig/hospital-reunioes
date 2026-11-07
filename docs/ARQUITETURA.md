@@ -11,7 +11,7 @@ Hospital Reuniões é um app com três contextos de domínio (mapa em [`CONTEXT-
 
 - **Reuniões e Atas:** gravação → transcrição por IA → geração da Ata → assinatura digital → acompanhamento de Pendências. Glossário em [`CONTEXT.md`](../CONTEXT.md).
 - **POPs:** elaboração assistida, revisão, validação, assinatura e biblioteca de Procedimentos Operacionais Padrão, com fluxograma desenhado pelo sistema. Glossário em [`docs/pops/CONTEXT.md`](pops/CONTEXT.md).
-- **Ouvidoria:** manifestação (formulário público e QR por ponto de escuta), tramitação com prazos, portal do setor, relatórios; a agente Ana consome a API. Manual em [`manual-hsm.vercel.app/ouvidoria/`](https://manual-hsm.vercel.app/ouvidoria/).
+- **Ouvidoria:** manifestação (formulário público e QR por ponto de escuta), tramitação com prazos, portal do setor, relatórios; a agente Ana consome a API.
 
 - **Quem usa:** facilitadores e diretoria nas Reuniões; setores e ouvidor na Ouvidoria; elaboradores e validadores nos POPs. Colaboradores das Reuniões **não logam**: recebem e-mails da ClickSign e links diretos para suas pendências.
 - **Stack:** backend FastAPI (Python 3.12), frontend Next.js 15, banco Supabase self-hosted, deploy via Coolify (VPS Hostinger), PDF via WeasyPrint.
@@ -68,19 +68,19 @@ sequenceDiagram
 ## 3. Rotas (API) (auto)
 
 <!-- AUTO:rotas:start -->
-**290 endpoints** em 22 áreas:
+**279 endpoints** em 22 áreas:
 
 | Área | Endpoints |
 |---|---|
 | `aceite` | 3 |
-| `admin` | 78 |
+| `admin` | 63 |
 | `ana` | 5 |
 | `auth` | 1 |
 | `automacao` | 1 |
 | `comentarios` | 4 |
 | `conector-mcp` | 2 |
 | `configuracoes` | 2 |
-| `contas-medicas` | 50 |
+| `contas-medicas` | 54 |
 | `health` | 1 |
 | `notificacoes` | 4 |
 | `ouvidoria` | 47 |
@@ -101,7 +101,7 @@ _Lista completa: `docs/spec/snapshots/ROTAS.md`._
 ## 4. Dados (auto)
 
 <!-- AUTO:dados:start -->
-**78 tabelas:** `participantes` · `reunioes` · `reuniao_participantes` · `pendencias` · `agendamentos_email` · `tokens_validacao` · `comentarios_pendencias` · `notificacoes` · `user_preferences` · `audit_log` · `bulk_jobs` · `cargos` · `tipos_reuniao` · `pops_setores` · `pops_setores_participantes` · `pops` · `pops_versoes` · `pops_devolucoes` · `pops_materiais_referencia` · `reuniao_aceites` · `reuniao_aceite_tokens` · `consultas_particulares` · `exames` · `cirurgias_estimativas` · `ouvidoria_movimentos` · `ouvidoria_acessos` · `ouvidoria_prazos` · `ouvidoria_prazos_historico` · `ouvidoria_feriados` · `ouvidoria_anexos` · `ouvidoria_setor_responsaveis` · `ouvidoria_notificacoes` · `ouvidoria_setor_tokens` · `ouvidoria_prorrogacoes` · `ouvidoria_tentativas_contato` · `ouvidoria_relatorios` · `ouvidoria_nota_externa` · `ouvidoria_pontos` · `tecnologia_produtos` · `tecnologia_demandas` · `tecnologia_conversas` · `ouvidoria_emails_recebidos_anexos` · `migracoes_aplicadas` · `tecnologia_anexos` · `cm_perfil_permissao` · `cm_operadora` · `cm_operadora_plano` · `cm_memoria_versao` · `cm_regra` · `cm_tabela_preco` · `cm_tabela_preco_item` · `cm_operadora_tabela` · `cm_setor` · `cm_item_dicionario` · `cm_envio` · `cm_atendimento` · `cm_arquivo` · `cm_eventos` · `cm_prescricao` · `cm_prescricao_item` · `cm_cirurgia` · `cm_glicemia_dia` · `cm_conta` · `cm_conta_item` · `cm_guia_linha` · `cm_observacao` · `cm_chamada_ia` · `cm_linha_formulario` · `cm_registro` · `cm_regra_historico` · `cm_validacao_tema` · `cm_validacao_tema_linha` · `cm_cenario` · `cm_cenario_item` · `cm_lembrete` · `cm_lembrete_item` · `cm_contrato` · `cm_aviso`
+**80 tabelas:** `participantes` · `reunioes` · `reuniao_participantes` · `pendencias` · `agendamentos_email` · `tokens_validacao` · `comentarios_pendencias` · `notificacoes` · `user_preferences` · `audit_log` · `bulk_jobs` · `cargos` · `tipos_reuniao` · `pops_setores` · `pops_setores_participantes` · `pops` · `pops_versoes` · `pops_devolucoes` · `pops_materiais_referencia` · `reuniao_aceites` · `reuniao_aceite_tokens` · `consultas_particulares` · `exames` · `cirurgias_estimativas` · `ouvidoria_movimentos` · `ouvidoria_acessos` · `ouvidoria_prazos` · `ouvidoria_prazos_historico` · `ouvidoria_feriados` · `ouvidoria_anexos` · `ouvidoria_setor_responsaveis` · `ouvidoria_notificacoes` · `ouvidoria_setor_tokens` · `ouvidoria_prorrogacoes` · `ouvidoria_tentativas_contato` · `ouvidoria_relatorios` · `ouvidoria_nota_externa` · `ouvidoria_pontos` · `tecnologia_produtos` · `tecnologia_demandas` · `tecnologia_conversas` · `ouvidoria_emails_recebidos_anexos` · `migracoes_aplicadas` · `tecnologia_anexos` · `cm_perfil_permissao` · `cm_operadora` · `cm_operadora_plano` · `cm_memoria_versao` · `cm_regra` · `cm_tabela_preco` · `cm_tabela_preco_item` · `cm_operadora_tabela` · `cm_setor` · `cm_item_dicionario` · `cm_envio` · `cm_atendimento` · `cm_arquivo` · `cm_eventos` · `cm_prescricao` · `cm_prescricao_item` · `cm_cirurgia` · `cm_glicemia_dia` · `cm_conta` · `cm_conta_item` · `cm_guia_linha` · `cm_observacao` · `cm_chamada_ia` · `cm_linha_formulario` · `cm_registro` · `cm_regra_historico` · `cm_validacao_tema` · `cm_validacao_tema_linha` · `cm_cenario` · `cm_cenario_item` · `cm_lembrete` · `cm_lembrete_item` · `cm_contrato` · `cm_aviso` · `tecnologia_planejamentos` · `tecnologia_chamadas_ia`
 
 _Colunas, FKs e diagrama ER: `docs/spec/snapshots/ENTIDADES.md` e `SCHEMA.md`._
 <!-- AUTO:dados:end -->
@@ -113,7 +113,7 @@ _Colunas, FKs e diagrama ER: `docs/spec/snapshots/ENTIDADES.md` e `SCHEMA.md`._
 <!-- AUTO:integracoes:start -->
 | Serviço | Para quê |
 |---|---|
-| **Anthropic** | IA de texto do app inteiro desde a issue #1302 (Atas, POP, Ouvidoria, Assistente de Tecnologia, Contas médicas), pelo LLM_MODEL e pelos CM_IA_MODELO_PASSO_A/B, todos claude-sonnet-5-5. Retenção padrão da API (até 30 dias, sem treino), sem ZDR (ADR 0074) |
+| **Anthropic** | IA de texto do app inteiro desde a issue #1302 (Atas, POP, Ouvidoria, Assistente de Tecnologia, Contas médicas), pelo LLM_MODEL e pelos CM_IA_MODELO_PASSO_A/B, todos claude-sonnet-5-5, e o Planejamento da Demanda pelo LLM_MODEL_PLANEJAMENTO, claude-opus-5-5 (ADR 0075). Retenção padrão da API (até 30 dias, sem treino), sem ZDR (ADR 0074) |
 | **OpenRouter** | Só a transcrição de voz, pelo TRANSCRICAO_MODEL (default: openai/gpt-4o-mini-transcribe) |
 | **ClickSign** | Assinatura digital de atas (sandbox em dev, app em prod) |
 | **Resend** | Emails transacionais e SMTP do Supabase Auth |
@@ -127,9 +127,9 @@ hospital-reunioes/
 ├── backend/   FastAPI — app/{routers,services,models,pipeline,middleware,cron}
 ├── frontend/  Next.js 15 — src/{app,components,hooks,lib,types}
 └── supabase/  migrations/ (schema) · templates/ (e-mails do Auth) · snippets/ (SQL de diagnóstico) · seed.sql
-docs/          ARQUITETURA.md · adr/ · agents/ · spec/ · onboarding/ · pops/ · comunicacao/ · manual/
+docs/          ARQUITETURA.md · adr/ · agents/ · spec/ · onboarding/ · pops/ · comunicacao/
 CONTEXT.md · CONTEXT-MAP.md   glossário e mapa dos contextos (raiz)
-.claude/skills/ skills do time (workflow) · local/ insumo humano fora do git · tools/ lint de ADR e Hospital OS
+.claude/skills/ skills do time (workflow) · local/ insumo humano fora do git · tools/ lint de ADR e conferidores
 ```
 
 - **`backend/pipeline/`** é o coração: transcrição → LLM (extração → resumo → estrutura → ata PT) → PDF.
@@ -138,7 +138,7 @@ CONTEXT.md · CONTEXT-MAP.md   glossário e mapa dos contextos (raiz)
 
 ## 7. Skills & Workflow (como desenvolvemos)
 
-O desenvolvimento é **GitHub-issue-centric** (modelo Matt Pocock). Issues, PRs e deploys ao vivo ficam no Hospital OS, o painel local: `python3 tools/workflow-dashboard/serve.py`. O método de trabalho vive em `docs/onboarding/`.
+O desenvolvimento é **GitHub-issue-centric** (modelo Matt Pocock). Issues, PRs e deploys ao vivo aparecem na Página do Projeto do Hospital, no PedroOS. O método de trabalho vive em `docs/onboarding/`.
 
 **Fluxo:** `/grill-with-docs` → `/to-prd` → `/to-issues` → `/pegar-issue` → `/tdd` → `/ship` → `/deploy`.
 

@@ -22,6 +22,13 @@ Como o site funciona por dentro (quem edita o conteúdo, com que ferramenta, o q
 
 Quando a pergunta for sobre isso, o certo é registrar uma Demanda neste Produto em vez de arriscar uma resposta. A Vitta responde, e este texto passa a dizer.
 
+## O que já foi decidido
+
+- O Site e o aplicativo são sistemas separados, em endereços diferentes, e o único caminho entre os dois é o formulário público da Ouvidoria.
+- O caso que chega pelo formulário sem código de cartaz é carimbado como vindo do site, e por isso esse número não mede visita ao site.
+- Quem manifesta pelo site recebe o protocolo na tela, e o caso entra na Ouvidoria sem área, esperando o ouvidor classificar.
+- Os números de visita do Site se leem na Central de Comando, que só lê e nunca escreve no Site.
+
 ## O que costuma virar Demanda
 
 - Conteúdo errado ou desatualizado numa página (Ajuste).

@@ -10,9 +10,10 @@
  * contas, e não ao kanban de pendências, que é para onde vão os outros tipos.
  * O irmão de presença: a menção continua indo para o kanban.
  */
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { apareceComoFoiEscrito } from "@/lib/caixa-alta";
 import type { Notificacao } from "@/types";
 
 import { NotificacoesDropdown } from "./NotificacoesDropdown";
@@ -107,5 +108,42 @@ describe("aviso de Contas médicas no sino", () => {
     await clicarNoAviso("Ana mencionou você");
 
     await waitFor(() => expect(navegacao.push).toHaveBeenCalledWith("/pendencias/kanban?highlight=A-0042"));
+  });
+});
+
+describe("painel do sino quando a lista falha (#1430)", () => {
+  it("não diz 'Sem notificações' com o sino marcando avisos", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string) =>
+        url.includes("/count")
+          ? new Response(JSON.stringify({ nao_lidas: 3 }), { status: 200 })
+          : new Response("Internal Server Error", { status: 500 }),
+      ),
+    );
+
+    render(<NotificacoesDropdown />);
+    await screen.findByText("3");
+    fireEvent.click(screen.getByRole("button", { name: "Notificações" }));
+
+    await screen.findByText("Não foi possível carregar os avisos.");
+    expect(screen.queryByText("Sem notificações")).toBeNull();
+  });
+});
+
+describe("caixa alta no painel do sino (ADR 0080)", () => {
+  it("o título do painel é Texto curto e o aviso inteiro fica corrido", async () => {
+    notificacoes = [aviso({})];
+    render(<NotificacoesDropdown />);
+    fireEvent.click(screen.getByRole("button", { name: "Notificações" }));
+
+    const titulo = await screen.findByRole("heading", { name: "Notificações" });
+    expect(apareceComoFoiEscrito(titulo)).toBe(false);
+
+    const textoDoAviso = await screen.findByText("2 contas prontas");
+    const item = textoDoAviso.closest("button")!;
+    expect(apareceComoFoiEscrito(textoDoAviso)).toBe(true);
+    expect(apareceComoFoiEscrito(within(item).getByText("Os guias estão na fila de Contas médicas."))).toBe(true);
+    expect(apareceComoFoiEscrito(within(item).getByText("agora"))).toBe(true);
   });
 });

@@ -11,6 +11,11 @@ Thumbs.db
 .claude/*
 !.claude/skills/
 !.claude/skills/**
+# O fluxo da Onda: config e notas que o instalador do PedroOS gera, e os agentes
+!.claude/fluxo.json
+!.claude/fluxo-notas.md
+!.claude/agents/
+!.claude/agents/**
 
 # Superpowers (plugin local)
 .superpowers/
@@ -68,3 +73,7 @@ hospital-reunioes/supabase/.branches/
 # apresentação da Ouvidoria: só o gerador e o modelo ficam no git (ADR 0044)
 docs/comunicacao/ouvidoria/apresentacao/ouvidoria-apresentacao.pptx
 docs/comunicacao/ouvidoria/apresentacao/videos/
+
+# Sobra do Manual aposentado (ADR 0078) e prints do playwright-cli
+docs/manual/
+.playwright-cli/

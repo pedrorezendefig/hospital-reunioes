@@ -18,6 +18,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type { AbaDeCenarios, Conferencia } from "@/lib/contas-medicas/coordenacao";
 
 import { ToastProvider } from "@/components/ui/Toast";
+import { caixaDoDado } from "@/lib/testes/caixaDoDado";
 
 import CoordenacaoPage from "./page";
 
@@ -299,5 +300,15 @@ describe("o Ditar na Coordenação (issue #1145)", () => {
 
     const botao = screen.getByRole("button", { name: "Ditar: Cenário" });
     expect(botao.parentElement?.textContent).toContain("Não dite nome nem dado de paciente.");
+  });
+});
+
+describe("caixa alta (issue #1455)", () => {
+  it("o código do insumo aparece como está gravado, mesmo sendo um botão", async () => {
+    servidor();
+    abrir();
+
+    const botao = await screen.findByRole("button", { name: "Copiar código 70000002" });
+    expect(caixaDoDado(botao)).toBe("normal-case");
   });
 });

@@ -27,7 +27,6 @@ EXTENSOES = {
 
 PASTAS_LIBERADAS = (
     "hospital-reunioes/supabase/migrations/",
-    "docs/manual/",
     "docs/comunicacao/",
     "hospital-reunioes/backend/tests/fixtures/",
     "docs/pops/materiais-reais/",

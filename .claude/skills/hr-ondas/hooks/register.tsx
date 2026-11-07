@@ -414,7 +414,7 @@ async function coletar($: EngineInterface, fresco = false) {
     if (ultimaAssinatura !== null && a !== ultimaAssinatura) frescoPendente = true
     ultimaAssinatura = a
     await update($, coleta, () => c)
-    await update($, erro, () => (c.os ? null : 'Hospital OS fora do ar em 127.0.0.1:8799'))
+    await update($, erro, () => (c.os ? null : 'Coletor do PedroOS sem resposta'))
 
     const novasSessoes = c.agentes.filter(a => !sessoesVistas.has(a.nome))
     novasSessoes.forEach(a => sessoesVistas.add(a.nome))

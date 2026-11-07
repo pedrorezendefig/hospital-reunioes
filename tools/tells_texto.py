@@ -4,7 +4,7 @@ A lista única dos tells mecânicos: o contraste "não é X, é Y" e as variante
 dele, e o fecho de uma linha repetido ao fim de seções consecutivas. O que não
 cabe numa regex (tríade, inflação, abertura encenada) fica com o humanizer.
 
-Quem usa: o `tools/lint_manual.py` (reprova o build do Manual). A regra do
+Quem usa: o teste dos templates do backend. A regra do
 ESLint do front (`hospital-reunioes/frontend/eslint-rules/tells.mjs`) tem as
 mesmas regexes, e os dois leem os casos do `tools/tells_casos.json` nos testes,
 para concordarem. Mudou um padrão aqui, mude lá e acrescente o caso no JSON.

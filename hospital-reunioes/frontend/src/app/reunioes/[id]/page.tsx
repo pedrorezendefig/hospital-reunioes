@@ -694,6 +694,8 @@ export default function ReuniaoDetailPage() {
   // Desmarcar reunião
   const [showDesmarcarModal, setShowDesmarcarModal] = useState(false);
   const [desmarcando, setDesmarcando] = useState(false);
+  const [reprocessando, setReprocessando] = useState(false);
+  const [erroReprocessar, setErroReprocessar] = useState<string | null>(null);
   const [showTrocarFacilitador, setShowTrocarFacilitador] = useState(false);
 
   // Participant management
@@ -1024,6 +1026,33 @@ export default function ReuniaoDetailPage() {
     setShowDesmarcarModal(true);
   };
 
+  // Reunião parada no ERRO (#1498): a rota relê a transcrição do Storage e roda
+  // o pipeline de novo. Sucesso põe a tela em PROCESSANDO, que liga o polling.
+  const handleReprocessar = async () => {
+    if (reprocessando) return;
+    setReprocessando(true);
+    setErroReprocessar(null);
+    try {
+      const token = await getToken();
+      const res = await fetch(`/api/reunioes/${id}/reprocessar`, {
+        method: "POST",
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+      const corpo = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setErroReprocessar(corpo.detail || corpo.error || "Não foi possível gerar a ata de novo.");
+        return;
+      }
+      if (corpo.status === "PROCESSANDO") {
+        setReuniao((r) => (r ? { ...r, status_ata: "PROCESSANDO" } : r));
+      }
+    } catch (err: unknown) {
+      setErroReprocessar(getErrorMessage(err));
+    } finally {
+      setReprocessando(false);
+    }
+  };
+
   // ── Super admin (Fase 04): force delete + force status ──
   async function handleForceDelete(reason?: string) {
     const token = await getToken();
@@ -1251,7 +1280,7 @@ export default function ReuniaoDetailPage() {
                 </span>
               </div>
               <h1 className="text-2xl font-bold text-slate-900">
-                {reuniao.tipo ?? "Reunião"},{" "}
+                <span className="normal-case">{reuniao.tipo ?? "Reunião"}</span>,{" "}
                 {mounted ? new Date(reuniao.data + "T12:00:00").toLocaleDateString("pt-BR", {
                   day: "2-digit", month: "long", year: "numeric",
                 }) : "-"}
@@ -1616,7 +1645,7 @@ export default function ReuniaoDetailPage() {
               </div>
             )}
             <h1 className="text-2xl font-bold text-slate-900">
-              {reuniao.tipo ?? "Reunião"},{" "}
+              <span className="normal-case">{reuniao.tipo ?? "Reunião"}</span>,{" "}
               {mounted ? new Date(reuniao.data + "T12:00:00").toLocaleDateString("pt-BR", {
                 day: "2-digit", month: "long", year: "numeric",
               }) : "-"}
@@ -2004,10 +2033,24 @@ export default function ReuniaoDetailPage() {
       )}
 
       {/* Erro */}
-      {reuniao.status_ata === "ERRO" && ata?.error && !hideAtaSections && (
+      {reuniao.status_ata === "ERRO" && !hideAtaSections && (
         <div className="flex items-start gap-3 px-5 py-4 rounded-2xl bg-red-50 border border-red-100 text-red-700 text-sm">
           <XCircle className="w-5 h-5 flex-shrink-0 mt-0.5" />
-          <div><strong>Erro no processamento:</strong> {ata.error}</div>
+          <div className="flex-1 space-y-3">
+            <div>
+              <strong>Erro no processamento{ata?.error ? ":" : "."}</strong> {ata?.error}
+            </div>
+            <button
+              type="button"
+              onClick={handleReprocessar}
+              disabled={reprocessando}
+              className="flex items-center gap-2 px-4 py-2 rounded-xl bg-white border border-red-200 text-red-700 text-sm font-medium hover:bg-red-100 transition-all disabled:opacity-60 disabled:cursor-not-allowed"
+            >
+              {reprocessando ? <Loader2 className="w-4 h-4 animate-spin" /> : <Repeat2 className="w-4 h-4" />}
+              Gerar a ata de novo
+            </button>
+            {erroReprocessar && <p role="alert">{erroReprocessar}</p>}
+          </div>
         </div>
       )}
 

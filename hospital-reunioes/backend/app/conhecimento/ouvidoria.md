@@ -52,6 +52,30 @@ Arquivar é outra coisa: só tira da lista o caso que já foi encerrado, para or
 - Não apaga linha de trilha: erro se conserta com registro novo, nunca apagando o anterior.
 - Não mede sozinho a nota do hospital no Google nem no Reclame Aqui: alguém abre as duas páginas e digita o que leu.
 
+## O que já foi decidido
+
+- Quem classifica o caso (tipo, gravidade e área) é só o ouvidor, e nenhum processo automático despacha caso para ninguém.
+- O tipo é uma lista fechada de seis (denúncia, reclamação, sugestão, elogio, relato de conduta e informação), e é ele que decide o sigilo.
+- Denúncia, relato de conduta e caso ainda sem tipo são sigilosos em qualquer canal, sem ninguém precisar marcar.
+- O que a pessoa indica no formulário público sobre o próprio relato é só indicação, e não classifica nem mexe no sigilo.
+- O protocolo é ano mais número, numa sequência que nunca recomeça.
+- Administrar o aplicativo não dá acesso ao relato, que só o ouvidor e a diretoria executiva abrem.
+- A área recebe o caso por um link sem senha, que abre no celular.
+- Acionar a área exige uma nota escrita pelo ouvidor, e no caso sigiloso é só essa nota que sai.
+- No caso anônimo, o nome de quem manifestou nunca vai para a área, e o paciente do caso vai, quando foi informado.
+- O prazo sai da gravidade e corre em horário útil, de segunda a sexta, das 8h às 17h, sem contar feriado.
+- A cobrança sobe em degraus, do responsável do setor ao gestor da área e depois à diretoria executiva.
+- A área que recebe um caso que não é dela devolve com o motivo e não escolhe o destino, que é decisão do ouvidor, com prazo cheio para a área certa.
+- O ouvidor pode redirecionar o caso para outra área num ato só, e a área antiga é avisada.
+- O cartaz de QR leva o código curto de um ponto de escuta, e o setor do cartaz é a origem do relato, nunca a área responsável.
+- Ponto de escuta se desativa e nunca se apaga, porque os casos antigos apontam para ele.
+- O manifestante recebe dois e-mails, o acuse na abertura e o aviso no encerramento, e só quando deixou um e-mail utilizável.
+- A caixa de e-mail da ouvidoria vai passar por uma triagem dentro do aplicativo antes de virar caso, e essa triagem ainda não foi construída.
+- O relato do caso encerrado é apagado sozinho depois de cinco anos, e antes disso só a diretoria executiva apaga, um caso por vez e com motivo escrito.
+- Caso apagado não tem volta e não reabre, e arquivar só organiza a lista e vale apenas para caso encerrado.
+- Linha da trilha nunca é apagada, e erro se conserta com um registro novo.
+- Os títulos do PDF do relatório e do cartaz da Ouvidoria saem em caixa alta, inclusive o título das sugestões escritas pela inteligência artificial, e o resto do texto continua com maiúscula e minúscula.
+
 ## O que costuma virar Demanda
 
 - Prazo, cobrança ou e-mail saindo diferente do combinado (Defeito).

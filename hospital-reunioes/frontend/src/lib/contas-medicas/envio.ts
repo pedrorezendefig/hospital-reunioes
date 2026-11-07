@@ -17,6 +17,26 @@ export const ROTA_FILA = "/api/contas-medicas/fila";
 export const ROTA_MEUS_ENVIOS = "/api/contas-medicas/meus-envios";
 export const ROTA_ME = "/api/contas-medicas/me";
 
+/** Descartar a conta em Erro ou Aguardando arquivo (issue #1338). */
+export function rotaDoDescarte(contaId: string): string {
+  return `/api/contas-medicas/contas/${contaId}/descartar`;
+}
+
+/** A pergunta antes de apagar: o atendimento e o aviso de que os arquivos saem. */
+export function perguntaDoDescarte(conta: ItemDaFila): string {
+  return `Descartar o atendimento ${conta.numero_atendimento}? Os arquivos serão apagados.`;
+}
+
+/** A conta em Erro da IA volta para a fila sem anexar o PDF (issue #1339). */
+export function rotaAnalisarDeNovo(contaId: string): string {
+  return `/api/contas-medicas/contas/${contaId}/analisar-de-novo`;
+}
+
+/** A conta parada por folha escaneada ilegível segue mesmo assim (issue #1401). */
+export function rotaAnalisarAssimMesmo(contaId: string): string {
+  return `/api/contas-medicas/contas/${contaId}/analisar-assim-mesmo`;
+}
+
 /** "Enviar contas": o envio e Meus envios (issue #1308, ADR 0073). */
 export const ENVIAR_CONTAS = "enviar_contas";
 /** "Analisar contas" na tela; a chave guarda o nome antigo (ADR 0073). */
@@ -61,6 +81,14 @@ export type SituacaoDaConta =
   | "RETORNO"
   | "ERRO";
 
+/** As cinco Etapas do processamento da tela (issue #1416), na ordem. */
+export type EtapaDoProcessamento =
+  | "LENDO_CONTA"
+  | "LENDO_PRONTUARIO"
+  | "IA_LENDO_PRONTUARIO"
+  | "CONFERINDO"
+  | "IA_MONTANDO_GUIA";
+
 export interface ItemDaFila {
   id: string;
   numero_atendimento: string | null;
@@ -69,6 +97,19 @@ export interface ItemDaFila {
   falta: "prontuario" | "conta" | null;
   periodo_inicio: string | null;
   periodo_fim: string | null;
+  /** As páginas do último Prontuário do atendimento (issue #1336); nulas sem prontuário. */
+  prontuario_paginas?: number | null;
+  /**
+   * Os dados do cartão do envio (issue #1419): a sigla da Operadora, os dias do
+   * período da Conta, as páginas do Prontuário que vão por OCR (nulas no
+   * prontuário enviado antes dela) e, só na conta pronta, quantos itens da
+   * conta e quantos eventos do prontuário o Motor achou.
+   */
+  operadora?: string | null;
+  dias_internacao?: number | null;
+  prontuario_paginas_ocr?: number | null;
+  itens_lidos?: number | null;
+  eventos_lidos?: number | null;
   nota_entrada: number | null;
   /** A nota depois do reenvio da conta corrigida (issue #1136); nula sem reenvio. */
   nota_saida?: number | null;
@@ -77,8 +118,59 @@ export interface ItemDaFila {
   itens_total: number;
   pendencias: number;
   erro_motivo: string | null;
+  /**
+   * O Código do erro da conta em Erro (issue #1337), nulo fora dele: o código,
+   * o detalhe técnico numa linha, a hora do erro, o arquivo em que a análise
+   * parou (o quadrado vermelho) e a ação que resolve.
+   */
+  erro_codigo?: string | null;
+  erro_detalhe?: string | null;
+  erro_em?: string | null;
+  erro_arquivo?: "conta" | "prontuario" | null;
+  erro_acao?: "analisar_de_novo" | "enviar_de_novo" | null;
+  /**
+   * O botão "Analisar assim mesmo" ao lado de "Enviar de novo" (issue #1401):
+   * o servidor diz quando cabe (CM-ARQ-DIGITALIZADO com os PDFs guardados).
+   */
+  pode_analisar_assim_mesmo?: boolean;
+  /** O botão Descartar do cartão do envio (issue #1338): o servidor diz quando cabe. */
+  pode_descartar?: boolean;
+  /**
+   * A conta em Processando (issue #1416), nulo fora dele: a Etapa do
+   * processamento, a parte do Passo A ("parte 3 de 7"), desde quando a etapa
+   * e o processamento começaram e a tentativa (1 a 3).
+   */
+  etapa?: EtapaDoProcessamento | null;
+  parte?: number | null;
+  partes?: number | null;
+  etapa_desde?: string | null;
+  processando_desde?: string | null;
+  tentativa?: number | null;
+  /**
+   * A Previsão (issue #1417): a vez da conta Na fila (contando de 1), as horas
+   * previstas em que ela começa e fica pronta e se a conta Processando passou
+   * de 2 vezes a Previsão. Sem Previsão (menos de 5 contas prontas na semana),
+   * as horas vêm nulas; fora da fila do Motor, tudo nulo.
+   */
+  posicao_na_fila?: number | null;
+  previsao_inicio_em?: string | null;
+  previsao_pronta_em?: string | null;
+  demorando?: boolean;
   /** Só para quem tem "painel completo": quem está com a conta (issue #1307). */
   com?: string | null;
+}
+
+/**
+ * A barra fina no topo da aba Envios (issue #1417): quantas contas estão
+ * sendo lidas e quantas esperam (de todos), os dois tempos médios dos últimos
+ * 7 dias, em segundos, e a hora em que a fila deve esvaziar.
+ */
+export interface BarraDosEnvios {
+  processando: number;
+  na_fila: number;
+  tempo_envio_a_fila_s: number | null;
+  tempo_processamento_s: number | null;
+  fila_esvazia_em: string | null;
 }
 
 /**
@@ -93,6 +185,8 @@ export interface Fila {
   minhas: ItemDaFila[];
   meus_envios: ItemDaFila[];
   concluidas: ItemDaFila[];
+  /** A barra da aba Envios (issue #1417); só vem com "Meus envios". */
+  barra?: BarraDosEnvios | null;
 }
 
 /** Os arquivos que sobem e os que ficam de fora, com a frase de cada um. */
@@ -139,6 +233,47 @@ async function motivoDoErro(resposta: Response): Promise<string> {
 
 type Buscar = (url: string, init?: RequestInit) => Promise<Response>;
 
+async function analisarPelaRota(rota: string, token: string, buscar: Buscar): Promise<string | null> {
+  let resposta: Response;
+  try {
+    resposta = await buscar(rota, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}` },
+    });
+  } catch {
+    return "Não consegui falar com o servidor. Tente de novo.";
+  }
+  if (resposta.ok) return null;
+  try {
+    const corpo = await resposta.json();
+    if (typeof corpo?.detail === "string") return corpo.detail;
+  } catch {
+    // resposta sem JSON (ex.: 502 do proxy)
+  }
+  return "Não consegui analisar de novo. Tente de novo.";
+}
+
+/**
+ * Põe a conta em Erro de volta na fila (issue #1339). Devolve nulo quando deu
+ * certo, ou a frase do servidor para mostrar no cartão.
+ */
+export async function analisarDeNovo(contaId: string, token: string, buscar: Buscar = fetch): Promise<string | null> {
+  return analisarPelaRota(rotaAnalisarDeNovo(contaId), token, buscar);
+}
+
+/**
+ * Põe a conta parada em CM-ARQ-DIGITALIZADO de volta na fila, para a análise
+ * seguir com as folhas a conferir à mão (issue #1401). Nulo quando deu certo,
+ * ou a frase do servidor.
+ */
+export async function analisarAssimMesmo(
+  contaId: string,
+  token: string,
+  buscar: Buscar = fetch,
+): Promise<string | null> {
+  return analisarPelaRota(rotaAnalisarAssimMesmo(contaId), token, buscar);
+}
+
 /**
  * Sobe os arquivos lote a lote, no mesmo envio, e devolve o "Último envio"
  * do envio inteiro com as recusas de todos os lotes. Lote que o servidor
@@ -176,7 +311,7 @@ export async function enviarEmLotes(arquivos: File[], token: string, buscar: Bus
 const ROTULO: Record<SituacaoDaConta, string> = {
   AGUARDANDO_ARQUIVO: "Falta arquivo",
   NA_FILA: "Na fila",
-  PROCESSANDO: "Pronta em instantes",
+  PROCESSANDO: "Processando",
   A_FAZER: "A fazer",
   EM_CORRECAO: "Em correção",
   CONCLUIDA: "Concluída",
@@ -185,15 +320,158 @@ const ROTULO: Record<SituacaoDaConta, string> = {
   ERRO: "Erro",
 };
 
-export function rotuloDaSituacao(conta: ItemDaFila): string {
+const NOME_DA_ETAPA: Record<EtapaDoProcessamento, string> = {
+  LENDO_CONTA: "Lendo a conta",
+  LENDO_PRONTUARIO: "Lendo o prontuário",
+  IA_LENDO_PRONTUARIO: "IA lendo o prontuário",
+  CONFERINDO: "Conferindo",
+  IA_MONTANDO_GUIA: "IA montando o Guia",
+};
+
+/** Quantas tentativas a análise tem antes de virar Erro (o Motor, `MAXIMO_DE_TENTATIVAS`). */
+export const MAXIMO_DE_TENTATIVAS = 3;
+
+/** Quanto tempo passou desde `desde`: "há menos de 1 min", "há 4 min", "há 1 h 5 min". */
+function tempoDecorrido(desde: string, agora: Date): string {
+  const minutos = Math.floor((agora.getTime() - new Date(desde).getTime()) / 60_000);
+  if (minutos < 1) return "há menos de 1 min";
+  if (minutos < 60) return `há ${minutos} min`;
+  const resto = minutos % 60;
+  return `há ${Math.floor(minutos / 60)} h` + (resto ? ` ${resto} min` : "");
+}
+
+/** Uma duração em minutos: "menos de 1 min", "10 min", "1 h 15 min". */
+function minutos(segundos: number): string {
+  const total = Math.round(segundos / 60);
+  if (total < 1) return "menos de 1 min";
+  if (total < 60) return `${total} min`;
+  const resto = total % 60;
+  return `${Math.floor(total / 60)} h` + (resto ? ` ${resto} min` : "");
+}
+
+const HORA = new Intl.DateTimeFormat("pt-BR", { timeZone: "America/Sao_Paulo", hour: "2-digit", minute: "2-digit" });
+
+/** A hora no fuso do hospital, como "14:32". */
+function hora(instante: string): string {
+  return HORA.format(new Date(instante));
+}
+
+/**
+ * A pílula da conta em Processando (issue #1416): "Processando", a Etapa do
+ * processamento com a parte do Passo A quando houver e o tempo. Com Previsão,
+ * quanto falta (issue #1417); sem ela, o tempo decorrido; passada de 2 vezes
+ * a Previsão, o tempo decorrido e o aviso de demora.
+ */
+function rotuloDoProcessamento(conta: ItemDaFila, agora: Date): string {
+  const partes = ["Processando"];
+  if (conta.etapa) {
+    const parte = conta.parte && conta.partes ? `, parte ${conta.parte} de ${conta.partes}` : "";
+    partes.push(NOME_DA_ETAPA[conta.etapa] + parte);
+  }
+  if (conta.previsao_pronta_em && !conta.demorando) {
+    const falta = Math.ceil((new Date(conta.previsao_pronta_em).getTime() - agora.getTime()) / 60_000);
+    partes.push(`faltam ~${Math.max(falta, 1)} min`);
+  } else if (conta.processando_desde) {
+    partes.push(tempoDecorrido(conta.processando_desde, agora));
+  }
+  if (conta.demorando) partes.push("demorando mais que o normal");
+  return partes.join(", ");
+}
+
+export function rotuloDaSituacao(conta: ItemDaFila, agora: Date = new Date()): string {
   if (conta.situacao === "AGUARDANDO_ARQUIVO") {
     if (conta.falta === "conta") return "Falta a conta";
     if (conta.falta === "prontuario") return "Falta o prontuário";
   }
+  if (conta.situacao === "PROCESSANDO") return rotuloDoProcessamento(conta, agora);
+  // A vez na fila do Motor, de todos os envios (issue #1417).
+  if (conta.situacao === "NA_FILA" && conta.posicao_na_fila) return `Na fila, ${conta.posicao_na_fila}ª`;
   return ROTULO[conta.situacao] ?? conta.situacao;
 }
 
+/**
+ * O que a barra da aba Envios diz (issue #1417), um pedaço por item. Sem
+ * conta pronta na semana, sem os tempos médios; sem Previsão, sem a hora em
+ * que a fila esvazia.
+ */
+export function textosDaBarra(barra: BarraDosEnvios): string[] {
+  const textos = [`${barra.processando} ${barra.processando === 1 ? "sendo lida" : "sendo lidas"}`, `${barra.na_fila} na fila`];
+  if (barra.tempo_envio_a_fila_s != null) textos.push(`do envio à Fila: ~${minutos(barra.tempo_envio_a_fila_s)}`);
+  if (barra.tempo_processamento_s != null) textos.push(`processamento: ~${minutos(barra.tempo_processamento_s)}`);
+  if (barra.fila_esvazia_em) textos.push(`a fila esvazia por volta de ${hora(barra.fila_esvazia_em)}`);
+  return textos;
+}
+
+/**
+ * O aviso de cada conta que estava Processando e sumiu da lista de envios
+ * (issue #1416): sair de Processando sem ir para Erro nem para a fila é ficar
+ * pronta, e a conta pronta sai dos envios e vai para a Fila. Um aviso por
+ * atendimento, mesmo com duas parciais prontas juntas.
+ */
+export function avisosDeProntas(antes: ItemDaFila[], depois: ItemDaFila[]): string[] {
+  const ficaram = new Set(depois.map((conta) => conta.id));
+  const atendimentos = antes
+    .filter((conta) => conta.situacao === "PROCESSANDO" && !ficaram.has(conta.id))
+    .map((conta) => conta.numero_atendimento);
+  return [...new Set(atendimentos)].map((numero) => `Atendimento ${numero} pronto, foi para a Fila`);
+}
+
 const DINHEIRO = new Intl.NumberFormat("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+/** O detalhe do Processamento de uma conta, para o painel lateral (issue #1418). */
+export function rotaDoProcessamento(contaId: string): string {
+  return `/api/contas-medicas/contas/${contaId}/processamento`;
+}
+
+/** Uma das cinco etapas no painel: feita, em curso ou por fazer, com o tempo em segundos. */
+export interface EtapaNoPainel {
+  etapa: EtapaDoProcessamento;
+  estado: "feita" | "atual" | "falta";
+  tempo_s: number | null;
+}
+
+/**
+ * O que a rota do painel devolve. O custo da IA (modelo, chamadas, tokens e
+ * dólares) só vem para quem tem "painel completo": para os outros, as chaves
+ * não existem.
+ */
+export interface DetalheDoProcessamento {
+  id: string;
+  situacao: SituacaoDaConta;
+  etapas: EtapaNoPainel[];
+  parte: number | null;
+  partes: number | null;
+  tentativa: number | null;
+  posicao_na_fila: number | null;
+  modelo?: string | null;
+  chamadas?: number;
+  tokens_entrada?: number;
+  tokens_saida?: number;
+  tokens_cache?: number;
+  custo_usd?: number;
+}
+
+/** O nome da etapa como a tela mostra. */
+export function nomeDaEtapa(etapa: EtapaDoProcessamento): string {
+  return NOME_DA_ETAPA[etapa];
+}
+
+/** Quanto a etapa levou: "3 s", "4 min 5 s", "1 h 2 min". */
+export function duracao(segundos: number): string {
+  const total = Math.round(segundos);
+  if (total < 60) return `${total} s`;
+  if (total < 3600) {
+    const resto = total % 60;
+    return `${Math.floor(total / 60)} min` + (resto ? ` ${resto} s` : "");
+  }
+  const minutos = Math.floor((total % 3600) / 60);
+  return `${Math.floor(total / 3600)} h` + (minutos ? ` ${minutos} min` : "");
+}
+
+/** O custo da conta em dólar, com as casas que uma conta barata precisa. */
+export function dolares(valor: number): string {
+  return `US$ ${valor.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 4 })}`;
+}
 
 /** O que vem ao lado da situação: a nota, o R$ e os itens; o motivo do erro; as pendências. */
 export function detalheDaConta(conta: ItemDaFila): string {
@@ -210,6 +488,14 @@ export function detalheDaConta(conta: ItemDaFila): string {
         .join(", ");
     case "ERRO":
       return conta.erro_motivo ?? "";
+    case "NA_FILA":
+      // As horas da Previsão (issue #1417).
+      return conta.previsao_inicio_em && conta.previsao_pronta_em
+        ? `começa por volta de ${hora(conta.previsao_inicio_em)}, pronta por volta de ${hora(conta.previsao_pronta_em)}`
+        : "";
+    case "PROCESSANDO":
+      // A conta que voltou para a fila por prazo e foi pega de novo (issue #1416).
+      return conta.tentativa && conta.tentativa > 1 ? `tentativa ${conta.tentativa} de ${MAXIMO_DE_TENTATIVAS}` : "";
     case "CONCLUIDA":
     case "CONCLUIDA_COM_PENDENCIA": {
       const pendencias =
@@ -223,4 +509,34 @@ export function detalheDaConta(conta: ItemDaFila): string {
     default:
       return "";
   }
+}
+
+const DATA_E_HORA = new Intl.DateTimeFormat("pt-BR", {
+  timeZone: "America/Sao_Paulo",
+  day: "2-digit",
+  month: "2-digit",
+  year: "numeric",
+  hour: "2-digit",
+  minute: "2-digit",
+});
+
+/** A data e a hora no fuso do hospital, como "01/11/2026 14:32". */
+export function dataEHora(instante: Date): string {
+  return DATA_E_HORA.format(instante).replace(",", "");
+}
+
+/**
+ * O que "Copiar para a TI" leva da conta em Erro (issue #1337): o código, o
+ * atendimento, a conta, a data e a hora do erro e o detalhe técnico, uma linha
+ * cada, para colar no WhatsApp. A conta marcada pela migration (o erro de
+ * antes do código) não tem hora gravada: vale a hora da cópia.
+ */
+export function textoParaATI(conta: ItemDaFila, agora: Date = new Date()): string {
+  return [
+    `Código do erro: ${conta.erro_codigo ?? "sem código"}`,
+    `Atendimento: ${conta.numero_atendimento ?? "sem número"}`,
+    `Conta: ${conta.numero_conta ?? "sem número"}`,
+    `Data e hora: ${dataEHora(conta.erro_em ? new Date(conta.erro_em) : agora)}`,
+    `Detalhe: ${conta.erro_detalhe ?? "sem detalhe técnico gravado"}`,
+  ].join("\n");
 }

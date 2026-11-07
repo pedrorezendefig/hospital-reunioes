@@ -14,6 +14,7 @@ import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ToastProvider } from "@/components/ui/Toast";
+import { apareceComoFoiEscrito } from "@/lib/caixa-alta";
 
 import NovaReuniaoSecretaria from "./page";
 
@@ -108,5 +109,30 @@ describe("Nova reunião pré-preenchida pelo link", () => {
     await waitFor(() => expect(campoData().value).toBe("2026-10-15"));
     expect(campoInicio().value).toBe("09:00");
     expect((screen.getByDisplayValue("Diretoria de outubro") as HTMLInputElement).value).toBe("Diretoria de outubro");
+  });
+});
+
+describe("o nome do facilitador aparece como foi escrito (ADR 0080)", () => {
+  it("o botão do seletor fica em caixa alta, o nome dentro dele não", async () => {
+    url.params = new URLSearchParams("edit=RD_1");
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (endereco: string) => {
+        const corpo = endereco.startsWith("/api/reunioes/")
+          ? REUNIAO_EXISTENTE
+          : endereco.includes("access_profile=super_admin")
+            ? [{ id: "P_FACIL", nome_completo: "Ana de Souza", cargo: null }]
+            : [];
+        return { ok: true, status: 200, json: async () => corpo } as unknown as Response;
+      }),
+    );
+    render(
+      <ToastProvider>
+        <NovaReuniaoSecretaria />
+      </ToastProvider>,
+    );
+
+    const nome = await screen.findByText("Ana de Souza");
+    expect(apareceComoFoiEscrito(nome)).toBe(true);
   });
 });

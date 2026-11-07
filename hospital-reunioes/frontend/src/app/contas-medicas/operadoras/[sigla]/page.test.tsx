@@ -16,6 +16,7 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-li
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ToastProvider } from "@/components/ui/Toast";
+import { caixaDoDado } from "@/lib/testes/caixaDoDado";
 
 import MemoriaDaOperadoraPage from "./page";
 
@@ -267,6 +268,13 @@ describe("o cabeçalho", () => {
     );
 
     expect(await screen.findByText(/não tem permissão para mudar as regras da memória/)).toBeTruthy();
+  });
+
+  it("a sigla da operadora no título aparece como está gravada (issue #1455)", async () => {
+    await abrir();
+
+    const titulo = screen.getByRole("heading", { level: 1, name: "Memória da operadora ALFA" });
+    expect(caixaDoDado(within(titulo).getByText("ALFA"))).toBe("normal-case");
   });
 });
 
@@ -524,6 +532,13 @@ describe("ensinar uma regra nova (issue #1141)", () => {
       parametro: { chave: "diaria.hora_vencimento", valor: "12:00" },
     });
     await waitFor(() => expect(leiturasDaMemoria()).toBe(2));
+  });
+
+  it("a chave do parâmetro no nome do campo aparece como está gravada (issue #1455)", async () => {
+    const proposta = await proporRegra();
+
+    const campo = within(proposta).getByText(/Mudar também o parâmetro/);
+    expect(caixaDoDado(within(campo).getByText("diaria.hora_vencimento"))).toBe("normal-case");
   });
 
   it("sem marcar o parâmetro, a regra vai sem ele; Descartar fecha sem gravar", async () => {

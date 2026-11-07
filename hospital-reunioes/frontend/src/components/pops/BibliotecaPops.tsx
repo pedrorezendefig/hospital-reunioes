@@ -156,7 +156,7 @@ export function BibliotecaPops() {
       ) : (
         porSetor.map((grupo) => (
           <div key={grupo.titulo} className="space-y-2">
-            <h2 className="text-sm font-semibold text-text-secondary uppercase tracking-wide px-1">
+            <h2 className="text-sm font-semibold text-text-secondary normal-case px-1">
               {grupo.titulo}
             </h2>
             <DataTable<BibliotecaItem>
@@ -230,7 +230,7 @@ function FichaPopModal({
         <div className="flex items-center justify-between">
           <div>
             <p className="font-mono text-xs font-semibold text-text-secondary">{item.codigo}</p>
-            <h3 className="text-lg font-bold text-text">{item.nome}</h3>
+            <h3 className="text-lg font-bold text-text normal-case">{item.nome}</h3>
             <p className="text-xs text-text-secondary">
               {item.setor_nome}
               {item.setor_sigla ? ` · ${item.setor_sigla}` : ""} · v{item.numero_versao} ·{" "}

@@ -240,6 +240,30 @@ class _Banco:
         self._validar(tabela, {**linha, **mudancas}, ignorar=linha)
         linha.update(mudancas)
 
+    def rpc(self, nome: str, params: dict):
+        assert nome == "cm_trocar_memoria_vigente", f"RPC sem dublê: {nome}"
+        return SimpleNamespace(execute=lambda: self._trocar_vigente(params["p_operadora_id"], params["p_versao_id"]))
+
+    def _trocar_vigente(self, operadora_id: str, versao_id: str):
+        """A função da migration 125 (issue #1471): recusa versão de outra
+        operadora e troca a vigente numa transação, então uma falha no meio
+        devolve a vigente anterior."""
+        versoes = self.linhas("cm_memoria_versao")
+        alvo = next((v for v in versoes if v["id"] == versao_id), None)
+        if alvo is None or alvo["operadora_id"] != operadora_id:
+            raise _erro("P0001", f"A versao {versao_id} nao e da operadora {operadora_id}")
+        antes = [(v, v["vigente"]) for v in versoes]
+        try:
+            for v in versoes:
+                if v["operadora_id"] == operadora_id and v["vigente"] and v is not alvo:
+                    self.atualizar("cm_memoria_versao", v, {"vigente": False})
+            self.atualizar("cm_memoria_versao", alvo, {"vigente": True})
+        except Exception:
+            for v, vigente in antes:
+                v["vigente"] = vigente
+            raise
+        return SimpleNamespace(data=[{"versao_vigente": versao_id}], count=1)
+
 
 def _pessoa(**campos) -> dict[str, Any]:
     base = {

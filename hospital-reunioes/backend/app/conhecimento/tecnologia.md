@@ -1,116 +1,99 @@
 # A aba Tecnologia
 
-A aba Tecnologia é onde o hospital e a Vitta (a empresa que cuida dos sistemas do hospital) conversam sobre os sistemas. Antes ela era o WhatsApp, e o que se combinava lá se perdia. Aqui cada assunto vira uma Demanda, com um lugar fixo para ficar até alguém resolver.
+A aba Tecnologia é onde o diretor conta à Vitta (a empresa que cuida dos sistemas do hospital) um bug ou uma melhoria que quer nos sistemas. Antes isso era o WhatsApp, e o que se combinava lá se perdia. Aqui cada pedido vira uma Demanda, guardada com a conversa que a originou.
 
-Só quem tem acesso de administrador do aplicativo enxerga a aba. Os dois lados usam a mesma tela: o hospital pede para a Vitta, e a Vitta também pede para o hospital.
+Só quem tem acesso de administrador do aplicativo enxerga a aba. Ela é uma tela só: a conversa com o **Assistente**, a IA que entende o pedido, com a lista dos seus pedidos ao lado.
 
-A aba tem duas abas no alto: o **Quadro**, onde o trabalho do dia anda, e o **Painel**, onde se lê o que está com você, o que a Vitta está entregando e o que já fechou.
+## A conversa com o Assistente
+
+Ao abrir a aba Tecnologia, você cai direto numa conversa com a IA. Ela pergunta se é um bug ou uma melhoria: bug é algo que não funciona como deveria, e melhoria é algo novo ou uma mudança no que já existe. Dá para clicar num dos dois botões ou escrever do seu jeito. Se você só descrever, a IA diz o que entendeu e pergunta se é isso antes de seguir.
+
+Se for uma dúvida que o material da Vitta responde (como uma tela funciona, onde fica um botão), a IA responde ali mesmo e diz de onde tirou a resposta. Dúvida respondida não vira pedido para a Vitta.
+
+Para responder e para perguntar, a IA consulta o que já existe na plataforma: como as telas funcionam de verdade e o que a Vitta já decidiu. Se o seu pedido esbarra em algo já decidido, ela avisa e explica em palavras simples, sem termos de programador. Ela só lê: nada que ela consulta muda o aplicativo.
+
+No bug, a IA faz no máximo cinco perguntas, uma por vez: onde aconteceu, o que aconteceu, o que você esperava, como repetir e, se você tiver, o print da tela. Ela pula o que você já contou. O print vai pelo botão de imagem da conversa e fica guardado como anexo na hora em que você manda, sem nunca sair do aplicativo. O que você não respondeu aparece como "não informado".
+
+No fim, a IA mostra um resumo com o que você disse e com os critérios que dizem como se sabe que o bug foi resolvido. Se estiver certo, o botão **Criar o card** manda o bug para o desenvolvimento da Vitta, que começa a trabalhar nele sem ninguém precisar assumir antes. Se alguma coisa estiver errada, o botão **Não bateu** pede para você dizer o quê, a conversa continua e o resumo é refeito. Nada vai para a Vitta antes do clique em Criar o card.
+
+Na melhoria, a conversa vira o Planejamento da Demanda ali mesmo, sem trocar de tela: a IA faz as perguntas que a Vitta faria, uma por vez. Cada pergunta traz uma ou duas frases de contexto, duas opções para clicar, com a recomendada em destaque, e um campo para responder do seu jeito, por texto ou por voz. A melhoria não tem limite de perguntas: a IA segue até não sobrar nada indefinido no seu pedido, e o botão **Fechar e resumir**, no alto da conversa, encerra a qualquer momento. Depois que a IA encerra, ou depois do resumo, o campo de texto continua aberto até o clique em Criar o card: você escreve e ela volta a perguntar. A melhoria ganha um título desde a primeira resposta da IA, e ele se ajusta enquanto a conversa avança.
+
+O resumo da melhoria mostra as decisões que você tomou e o que ficou em aberto, que são os pontos que a IA não chegou a perguntar. O que você não decidiu nunca aparece como decisão. Os botões são os mesmos do bug: **Criar o card** manda o pedido completo para a Vitta, já com o que a IA viu no sistema sobre como fazer e como testar, e **Não bateu** volta à conversa para acertar o que estiver errado. A Vitta ainda planeja o resto da parte técnica antes de começar. Se você fechou antes da hora e sobrou algo em aberto, o resumo traz também o botão **Continuar respondendo**: a IA volta a perguntar, começando pelo primeiro ponto em aberto. Dá para clicar em Criar o card mesmo com algo em aberto.
+
+Antes do resumo, no bug e na melhoria, a IA confere os pedidos que já estão na fila da Vitta. Se houver um pedido aberto parecido, ela avisa com o título dele, para você ver se não é o mesmo antes de clicar em Criar o card.
+
+Se a IA não conseguir responder, a tela avisa, a conversa continua como estava e o que você escreveu fica na caixa: é só mandar de novo.
+
+O modelo de IA que está respondendo e quanto a conversa já custou em dólar aparecem no alto da conversa aberta, por exemplo "Opus 5.5 · US$ 1,84 até agora". O valor soma o que a IA fez naquela conversa (as perguntas, o resumo e a leitura do código) e muda a cada resposta. Aparece "custo não medido" em dois casos em que o sistema não tem como fazer a conta inteira: quando o modelo usado está sem preço cadastrado e quando a conversa tem print, porque a leitura do print ainda não fica registrada. Nesses casos ele avisa em vez de mostrar um valor menor que o de verdade. Enquanto a IA não respondeu nada, não aparece custo. O custo não está na lista ao lado, só na conversa aberta.
+
+A conversa fica guardada. Ao lado dela fica a lista de tudo o que você já pediu, do mais recente para o mais antigo, com o título e a Etapa de cada pedido. Ao lado da Etapa, o selo **Bug** ou **Melhoria** diz o que o pedido é. Uma conversa que ficou no meio aparece como Registrada: clique nela e você continua de onde parou. Num pedido que já foi para a Vitta, o clique mostra a conversa e O que muda, que é o que a entrega acrescenta para você; enquanto a Vitta não escreve esse texto, aparece "Descrição em preparação". O botão **Nova conversa**, no alto da lista, começa um pedido do zero. No celular a lista abre primeiro, e o botão Voltar às conversas leva de volta a ela.
 
 ## O que é uma Demanda
 
-Uma Demanda é um pedido sobre um dos sistemas. Ela vai nos dois sentidos: o diretor pede à Vitta (um ajuste, uma dúvida, um estudo) e a Vitta pede ao diretor (uma decisão, um dado, um acesso).
+Uma Demanda é um pedido sobre um dos sistemas: um bug ou uma melhoria. Ela nasce na primeira resposta da conversa com o Assistente e guarda o que você disse, os prints que você mandou e, depois do clique em Criar o card, a ligação com o trabalho de desenvolvimento.
 
-Toda Demanda tem título, Tipo, Produto, prioridade, descrição e, quando existe de verdade, um prazo. A descrição é texto livre, sem limite de tamanho. Ela também pode levar prints da tela, que são os anexos da Demanda.
+A aba vai num sentido só: você conta à Vitta. Quando é a Vitta que precisa de uma decisão, de um dado ou de um acesso do hospital, ela pede pelo WhatsApp.
 
 Não chame de pendência, tarefa nem chamado. Pendência é outra coisa no aplicativo: é o compromisso operacional que sai de uma reunião do hospital, e mora em outro lugar.
 
-## Os sete Tipos
-
-A lista de Tipos é fechada. São sete:
-
-- **Decisão**: a Vitta precisa que o hospital escolha uma coisa. Exemplo: "a Vitta quer saber se o relatório da Ouvidoria sai mensal ou trimestral".
-- **Informação**: a Vitta precisa de um dado do hospital. Exemplo: "a Vitta pede a lista atualizada de setores para cadastrar na Ouvidoria".
-- **Terceiro**: o assunto depende de alguém de fora do hospital e da Vitta, como a Global Health, o analista de TI do hospital ou a MV. Exemplo: "o relatório novo depende de a Global Health liberar um acesso".
-- **Ajuste**: o hospital quer mudar algo que já existe. Exemplo: "a tela de Demandas devia mostrar quem é o responsável antes da prioridade".
-- **Novo**: o hospital quer algo que ainda não existe. Exemplo: "queria um aviso por e-mail quando a Ouvidoria encerrar um caso".
-- **Defeito**: algo está quebrado, ou funciona diferente do que deveria. Exemplo: "o botão de salvar o POP não faz nada".
-- **Consultoria**: o hospital quer uma opinião ou um estudo da Vitta, sem que isso vire código agora. Exemplo: "vale a pena trocar o provedor de e-mail?".
-
-O Tipo não diz de quem é a vez de responder. Isso é o estado e o responsável.
-
-## Os Produtos
-
-Produto é cada coisa que a Vitta mantém para o hospital: Ana (o WhatsApp), Integração Ana x MV, Reuniões, Ouvidoria, POPs, Site, Infra e Central de Comando (o painel dos números do Site e do Instagram, só para Super admin). Cada Produto tem um dono do lado da Vitta.
-
-Toda Demanda pertence a um Produto. É o Produto que decide quem responde por ela.
-
-A lista de Produtos tem tela própria: o botão da engrenagem, ao lado de **Nova Demanda** no alto do Quadro, abre a tela **Produtos**. Lá dá para criar um Produto, renomear, trocar o dono e desativar. Desativar não apaga nada: as Demandas daquele Produto continuam onde estão, ele só sai da lista de escolha.
-
-## O que acontece depois de criar
-
-A Demanda nasce na raia **Nova**, já atribuída ao dono do Produto escolhido. Quem virou responsável recebe um e-mail avisando.
-
-Além do estado, a Demanda tem um responsável (uma pessoa), uma prioridade (Baixa, Normal ou Alta) e um prazo opcional. Sem prazo, o card não atrasa: ele só envelhece, e a idade em dias fica vermelha a partir de 14 dias.
-
-Dentro do card existe a **Conversa**: um fio de respostas, onde a decisão evolui. Dá para mencionar alguém com arroba, e essa pessoa recebe um e-mail. O responsável também recebe e-mail quando alguém responde.
-
-## O Quadro
-
-O Quadro é a primeira aba. Ele mostra só as três raias vivas, uma ao lado da outra:
-
-- **Nova**: acabou de ser aberta, ninguém pegou ainda.
-- **Em andamento**: alguém está tocando o assunto.
-- **Aguardando**: a bola está com o hospital, ou com alguém de fora, ou com quem pediu conferindo uma entrega. É a única raia em que a vez não é da Vitta, e o responsável diz com quem está.
-
-A Demanda termina de dois jeitos: **Concluída** (o assunto acabou) ou **Cancelada** (o assunto não vai acontecer). Esses dois não são raias: são os botões **Concluir** e **Cancelar**, dentro do card aberto, em **Mover**. A Demanda encerrada sai do Quadro e passa a morar no Histórico do Painel.
-
-O card fechado é curto: o símbolo do Tipo, o título e, embaixo, o Produto e o responsável. O resto só aparece quando é exceção: o selo da Etapa quando a Demanda está ligada ao desenvolvimento, a prioridade só quando é Alta, e a idade só quando já está vermelha ou com o prazo vencido. Para ver tudo, clique no card. Arrastar o card de uma raia para outra continua valendo, e dá no mesmo que usar Mover.
-
-## O Painel
-
-O Painel é a segunda aba, só de leitura. É o lugar para responder "o que está comigo?", "o que está com o hospital?" e "o que a Vitta está fazendo?" sem abrir card nenhum.
-
-No topo ficam quatro números, os mesmos para quem estiver olhando:
-
-- **Abertas**: as Demandas em Nova, Em andamento ou Aguardando.
-- **Com o hospital**: as que estão em Aguardando, a raia em que a vez não é da Vitta.
-- **Em desenvolvimento**: as abertas que a Vitta já planejou ou está construindo.
-- **Entregues em 30 dias**: as que chegaram a Entregue ou Em produção no último mês, mesmo que já tenham sido concluídas.
-
-Embaixo vêm três blocos, que abrem e fecham com um clique no título:
-
-- **Com você**: as Demandas abertas de que você é o responsável e as em que mencionaram você e você ainda não respondeu. Cada linha diz o motivo: "Você é o responsável", "Mencionaram você" ou, quando a entrega volta para você conferir, "Entregue, confira e conclua". Vazio é boa notícia: a tela diz "Nada esperando por você agora".
-- **Entregas**: as Demandas abertas ligadas ao desenvolvimento, uma linha cada, com a Etapa e as partes, a da última mudança primeiro. É onde se vê o que a Vitta está fazendo.
-- **Histórico**: as Demandas Concluídas e Canceladas, com quem fechou e quando, e uma busca por título, descrição ou texto da Conversa.
-
-Clicar numa linha abre o mesmo card do Quadro. O Painel não tem número por pessoa nem ranking de ninguém.
-
 ## Os anexos da Demanda
 
-Os anexos são prints de tela guardados junto da Demanda, para quem vai resolver ver o que a pessoa viu. Aceita imagem PNG, JPG ou WEBP, de até 5 MB cada, e até 10 imagens por Demanda.
+Os anexos são prints de tela guardados junto da Demanda, para quem vai resolver ver o que você viu. Aceita imagem PNG, JPG ou WEBP, de até 5 MB cada, e até 10 imagens por Demanda.
 
-Dá para anexar por três caminhos:
-
-- **No formulário**, pelo botão **Anexar prints (até 10)**.
-- **No assistente**, mandando o print na conversa: se você clicar em **Criar Demanda**, o print vira anexo. Se não clicar, ele some com a conversa.
-- **Na Conversa** do card, pelo botão de imagem ao lado de **Responder**: a imagem entra junto da resposta.
-
-Os anexos aparecem no card aberto, em **Imagens**, com quem anexou e quando. Clicar na miniatura abre a imagem em tamanho real.
+O print entra pelo botão de imagem da conversa com o Assistente e vira anexo na hora em que você manda. Se algum não entrar, a tela avisa, e é só mandar de novo na conversa.
 
 Os prints ficam só dentro do aplicativo. Eles nunca vão para o material público do desenvolvimento, porque um print do hospital pode ter nome de paciente ou de colaborador; quem desenvolve busca as imagens pelo aplicativo.
 
-Quando a Demanda é Concluída ou Cancelada, as imagens são apagadas. Fica no card o registro de que existiram (o nome, quem anexou e quando), marcado como apagado. Por isso, enquanto a entrega está sendo conferida, a Demanda continua aberta e o print continua lá.
+As imagens são apagadas 30 dias depois de a entrega ficar **Em produção**, o que dá tempo de conferir a correção com o print na mão. Se a entrega fica **Não será feita**, elas são apagadas logo, em até uma hora. Fica o registro de que existiram (o nome, quem mandou e quando), marcado como apagado.
 
 ## Quem vê
 
-Todo mundo que tem acesso à aba vê todas as Demandas, dos dois lados. Não existe Demanda privada nem escondida: o Quadro é compartilhado de propósito, para ninguém precisar perguntar em que pé está.
+Cada pessoa vê, na lista ao lado da conversa, os pedidos que ela fez. Quem desenvolve vê o pedido pelo material de desenvolvimento, sem os prints, que ficam no aplicativo.
 
 ## A Etapa
 
-Quando uma Demanda vira trabalho de desenvolvimento, ela ganha uma **Etapa**, que conta em que pé está a entrega, em palavras de quem pediu:
+Quando o pedido vira trabalho de desenvolvimento, ele ganha uma **Etapa**, que conta em que pé está a entrega, em palavras de quem pediu:
 
-- **Registrada**: o pedido está anotado, a entrega ainda não começou.
+- **Registrada**: a conversa ainda não virou card.
 - **Em análise**: a Vitta está entendendo o que precisa ser feito.
 - **Planejada**: já se sabe o que fazer, o trabalho está na fila.
 - **Em desenvolvimento**: está sendo feito agora.
 - **Entregue**: está pronto, mas ainda não chegou ao aplicativo que você usa.
-- **Em produção**: já está no ar, e dá para usar. O selo diz desde qual versão do aplicativo.
+- **Em produção**: já está no ar, e dá para usar. A lista diz desde qual versão do aplicativo.
 - **Não será feita**: decidiu-se não fazer.
 
-A Etapa nunca é digitada à mão: ela é lida do planejamento da Vitta e aparece sozinha no card. Quando a entrega tem partes, o card mostra quantas já foram entregues. Assim que a Vitta começa a construir, a Etapa passa sozinha para Em desenvolvimento.
+A Etapa nunca é digitada à mão: ela é lida do planejamento da Vitta e aparece sozinha na lista. Quando a entrega tem partes, a lista mostra quantas já foram entregues. Assim que a Vitta começa a construir, a Etapa passa sozinha para Em desenvolvimento, e quando a versão nova do aplicativo sobe, passa para Em produção.
 
-A Etapa é um eixo diferente do estado. O estado diz de quem é a vez na conversa; a Etapa diz o que o desenvolvimento já fez. Só uma Etapa mexe no estado: quando a entrega fica **Em produção**, a Demanda volta para quem pediu, em Aguardando, com um e-mail, para a pessoa conferir no aplicativo e então concluir. Na Conversa aparece a linha "Em produção na" seguida da versão. Entre Entregue e Em produção costuma passar pouco tempo, mas ninguém confere o que ainda não subiu, e por isso a devolução espera o Em produção.
+Ao abrir um pedido que já foi para a Vitta, aparece também **O que muda**: o que aquela entrega acrescenta, em linguagem de quem usa. Esse texto vem do planejamento da Vitta, ou das suas decisões quando a melhoria foi planejada com a IA, e não se edita no aplicativo.
 
-Quando o assunto foi resolvido sem mexer no aplicativo (uma decisão, uma consultoria), não há o que subir: a Demanda volta para quem pediu já em Entregue.
+## O Planejamento da Demanda
 
-No card também aparece **O que muda**: o que aquela entrega acrescenta, em linguagem de quem usa. Esse texto vem do planejamento da Vitta e não é escrito no aplicativo.
+O Planejamento da Demanda é o caminho da melhoria na conversa com o Assistente: transforma o pedido de uma coisa nova, ou de uma mudança, num plano que a Vitta consegue construir. A IA faz as perguntas que a Vitta faria, uma por vez, e quem decide é você. Ele começa quando você escolhe melhoria na conversa.
+
+A IA parte do que você já contou e não pergunta de novo. Cada pergunta traz uma ou duas frases de contexto, duas opções para clicar, com a recomendada em destaque, e um campo para responder do seu jeito, por texto ou por voz. O planejamento não tem limite de perguntas: a IA só encerra quando não falta nada do seu pedido, e o botão **Fechar e resumir** encerra a conversa a qualquer momento. Mesmo depois que a IA encerra, ou depois do resumo, o campo de texto continua aberto até o clique em Criar o card: você escreve e ela volta a perguntar.
+
+A conversa fica guardada na Demanda, e a lista ao lado do chat a traz de volta.
+
+No fim, a IA mostra um resumo com as decisões que você tomou e a lista do que ficou em aberto, que são os pontos que ela não chegou a perguntar. O que você não decidiu nunca aparece como decisão. Se alguma coisa não bater, o **Não bateu** pede para você dizer o quê, a conversa continua de onde parou e o resumo é refeito. Quando sobra algo em aberto, o botão **Continuar respondendo** aparece embaixo da lista e faz a IA voltar às perguntas por esses pontos, um de cada vez. Com nada em aberto, o botão não aparece.
+
+Se o resumo estiver certo, o **Criar o card** manda o plano para o desenvolvimento da Vitta com as suas decisões e com o que ficou em aberto, que a Vitta pergunta depois. A Demanda fica ligada ao desenvolvimento, passa para a Etapa **Em análise** e, na lista, mostra **O que muda** com o que você decidiu. Do lado da Vitta, o plano chega primeiro ao Pedro, que distribui o trabalho.
+
+A IA cuida das decisões de negócio: o problema, quem usa, as regras e o que fica de fora. As decisões técnicas ficam com a Vitta, depois do sim. Quando o pedido esbarra numa regra da casa, a IA avisa e diz de onde tirou, citando a parte "O que já foi decidido" do texto daquele sistema.
+
+## O que já foi decidido
+
+- A aba mora dentro do aplicativo e só quem é Super admin a vê.
+- A aba é uma tela só, a conversa com o Assistente, que pergunta se é bug ou melhoria e confirma antes de seguir.
+- A aba vai num sentido só, do diretor para a Vitta, e os pedidos da Vitta ao hospital voltaram para o WhatsApp.
+- No bug, a IA faz no máximo cinco perguntas, e o pedido só vai para a Vitta no clique em Criar o card.
+- O bug que sai do Criar o card vai direto para o desenvolvimento, sem ninguém da Vitta precisar assumir antes.
+- Na melhoria, a IA não tem limite de perguntas e só encerra quando nada fica em aberto, e a melhoria que sai do Criar o card ainda passa pelo planejamento técnico da Vitta antes de começar.
+- A conversa com o Assistente fica guardada na Demanda e se retoma pela lista ao lado.
+- O modelo de IA e o custo da conversa em dólar aparecem só no alto da conversa aberta, nunca na lista, e quando o custo não dá para calcular a tela diz "custo não medido".
+- A lista ao lado da conversa mostra os pedidos de quem está olhando, e a Etapa de cada um vem do desenvolvimento, sem ninguém escrever à mão.
+- Uma Demanda se liga a um trabalho de desenvolvimento só, e a Etapa é lida de lá, nunca digitada.
+- O texto que sai da Demanda para o material público do desenvolvimento passa por uma peneira que esconde CPF, telefone, nome e outros dados pessoais.
+- Os prints ficam só dentro do aplicativo e são apagados 30 dias depois de Em produção, ou logo quando a entrega fica Não será feita.
+- No planejamento, a IA cuida só das decisões de negócio, e as decisões técnicas continuam com a Vitta.
+- Títulos, botões e abas aparecem em caixa alta só na tela, e o título de cada Demanda aparece como foi escrito.
+- Dentro da aba, a conversa e o texto dos resumos ficam com maiúscula e minúscula, e só os subtítulos do resumo ficam em caixa alta.

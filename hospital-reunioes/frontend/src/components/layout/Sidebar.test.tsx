@@ -14,7 +14,6 @@
 
 import {
   cleanup,
-  fireEvent,
   render,
   screen,
   within,
@@ -185,116 +184,30 @@ describe("a largura do sidebar é a que o orçamento da Ouvidoria supõe", () =>
 });
 
 /**
- * O item Ajuda do menu (issue #734, PRD #731, ADR 0057 decisão 11).
- *
- * O manual é um site à parte, então o endereço não passa pelo roteador do app:
- * quem decide a seção é o prefixo da rota em que a pessoa está. O teste ancora
- * no href inteiro de propósito. Conferir só o fim ("termina em /pops/") deixaria
- * passar uma base errada, e conferir só a base deixaria passar a seção errada.
+ * O menu sem o item Ajuda: o Manual do usuário saiu da plataforma em
+ * 05/11/2026 e o site dele saiu do ar. Cada caso confere a lista inteira de
+ * links do menu, porque é a lista que prova que a montagem esperada foi a que
+ * rodou e que nenhum link para o site apagado sobrou no fim.
  */
-describe("Sidebar com o item Ajuda", () => {
-  function hrefDaAjuda(): string {
-    const menu = screen.getByRole("navigation");
-    return within(menu)
-      .getByRole("link", { name: "Ajuda" })
-      .getAttribute("href")!;
-  }
-
-  it("na Ouvidoria a Ajuda abre a seção da Ouvidoria", () => {
-    rota.atual = "/ouvidoria";
-
-    render(<Sidebar />);
-
-    expect(hrefDaAjuda()).toBe("https://manual-hsm.vercel.app/ouvidoria/");
-  });
-
-  it("o formulário de manifestação também cai na seção da Ouvidoria", () => {
-    rota.atual = "/manifestacao";
-
-    render(<Sidebar />);
-
-    expect(hrefDaAjuda()).toBe("https://manual-hsm.vercel.app/ouvidoria/");
-  });
-
-  it("nos POPs a Ajuda abre a seção dos POPs", () => {
-    rota.atual = "/pops";
-
-    render(<Sidebar />);
-
-    expect(hrefDaAjuda()).toBe("https://manual-hsm.vercel.app/pops/");
-  });
-
-  it("numa tela interna do Admin a Ajuda abre a seção do Admin", () => {
-    rota.atual = "/admin/usuarios";
-
-    render(<Sidebar />);
-
-    expect(hrefDaAjuda()).toBe("https://manual-hsm.vercel.app/admin/");
-  });
-
-  it("fora dos módulos com seção própria a Ajuda cai em Reuniões e metas", () => {
-    rota.atual = "/dashboard";
-
-    render(<Sidebar />);
-
-    expect(hrefDaAjuda()).toBe("https://manual-hsm.vercel.app/reunioes/");
-  });
-
-  // O `.env.example` promete que a variável vazia vale o padrão, e uma variável
-  // declarada sem valor no Coolify chega como string vazia, não como ausente.
-  it("variável do manual declarada vazia continua caindo no endereço de produção", () => {
-    vi.stubEnv("NEXT_PUBLIC_MANUAL_URL", "");
-
-    render(<Sidebar />);
-
-    expect(hrefDaAjuda()).toBe("https://manual-hsm.vercel.app/ouvidoria/");
-  });
-
-  it("variável do manual preenchida troca a base do endereço", () => {
-    vi.stubEnv("NEXT_PUBLIC_MANUAL_URL", "https://previa.manual.hsm");
-
-    render(<Sidebar />);
-
-    expect(hrefDaAjuda()).toBe("https://previa.manual.hsm/ouvidoria/");
-  });
-
-  // O `rel` vai inteiro na asserção, não por `toContain`. O `noreferrer` não é
-  // enfeite do `noopener`: o menu também é renderizado em rotas que carregam
-  // identificador na URL (/ouvidoria/m/[protocolo], /pops/[id]/elaboracao,
-  // /reunioes/[id], /admin/usuarios/[id]), e sem ele o clique na Ajuda entrega
-  // o protocolo da manifestação a um domínio externo pelo cabeçalho Referer.
-  it("a Ajuda abre em outra aba, sem passar a aba de origem nem o endereço atual", () => {
-    render(<Sidebar />);
-
-    const menu = screen.getByRole("navigation");
-    const ajuda = within(menu).getByRole("link", { name: "Ajuda" });
-    expect(ajuda.getAttribute("target")).toBe("_blank");
-    expect(ajuda.getAttribute("rel")).toBe("noopener noreferrer");
-  });
-
-  // O menu tem três montagens diferentes e a Ajuda não pertence a nenhum
-  // módulo: ela tem que sobreviver às três. Cada caso confere a lista inteira
-  // de links do menu, e não só a presença da Ajuda, porque é a lista que prova
-  // que a montagem esperada foi a que rodou: um participante mal montado cairia
-  // noutra variante e o teste continuaria verde procurando só pela Ajuda.
+describe("Sidebar sem o item Ajuda", () => {
   it.each([
     [
       "padrão",
       { access_profile: "regular", perfil_ouvidoria: "ouvidor" },
-      ["Dashboard", "Calendário", "Ouvidoria", "Admin", "Ajuda"],
+      ["Dashboard", "Calendário", "Ouvidoria", "Admin"],
     ],
     [
       "Secretária",
       { access_profile: "secretaria" },
-      ["Início", "Nova reunião", "Calendário", "Ouvidoria", "Admin", "Ajuda"],
+      ["Início", "Nova reunião", "Calendário", "Ouvidoria", "Admin"],
     ],
     [
       "só POPs",
       { access_profile: null, perfil_pop: "leitor" },
-      ["POPs", "Ajuda"],
+      ["POPs"],
     ],
   ] as const)(
-    "no menu %s a Ajuda é o último item, e o resto do menu é o da variante",
+    "no menu %s não há item Ajuda, e o resto do menu é o da variante",
     (_nome, papeis, linksEsperados) => {
       sessao.participante = {
         id: "p1",
@@ -313,25 +226,6 @@ describe("Sidebar com o item Ajuda", () => {
       ).toEqual([...linksEsperados]);
     }
   );
-
-  /**
-   * A dívida era herdada: o item Ajuda nasceu na issue #734 com
-   * `onClick={onNavigate}` e sem teste nenhum que clicasse nele, então apagar o
-   * `onClick` deixava a suíte verde. Só a gaveta recebe a prop da `AppShell`, e
-   * é ela que fecha a gaveta depois do clique. Como a Ajuda abre em outra aba,
-   * quem não fecha a gaveta deixa a pessoa voltando para o app com o menu por
-   * cima da tela.
-   */
-  it("na gaveta do celular, clicar na Ajuda avisa a casca para fechar", () => {
-    const fecharAGaveta = vi.fn();
-
-    render(<Sidebar variant="drawer" onNavigate={fecharAGaveta} />);
-
-    const menu = screen.getByRole("navigation");
-    fireEvent.click(within(menu).getByRole("link", { name: "Ajuda" }));
-
-    expect(fecharAGaveta).toHaveBeenCalledTimes(1);
-  });
 });
 
 /**
@@ -390,7 +284,7 @@ describe("Sidebar com o item Contas médicas", () => {
 
     // Controle positivo: o menu montou, e o item é que não está nele.
     const menu = screen.getByRole("navigation");
-    expect(within(menu).getByRole("link", { name: "Ajuda" })).not.toBeNull();
+    expect(within(menu).getAllByRole("link").length).toBeGreaterThan(0);
     expect(linkDeContasMedicas()).toBeUndefined();
   });
 });

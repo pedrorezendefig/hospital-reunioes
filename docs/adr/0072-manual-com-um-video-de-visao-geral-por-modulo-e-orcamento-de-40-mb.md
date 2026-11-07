@@ -1,6 +1,8 @@
 ---
-status: accepted
+status: superseded
 amends: 0057
+amended_by: 0076
+superseded_by: 0078
 ---
 
 # Manual com um Vídeo de visão geral por módulo e orçamento de 40 MB
@@ -27,3 +29,14 @@ Decisão do Pedro (14/out/2026, PRD #1259). O Manual tinha 61 Vídeos de tarefa,
 - A `/montar-manual` troca a lacuna `sem-video` por tarefa pela `sem-visao-geral` por módulo, com o Admin isento. A receita da `/manual` passa a ser `references/video-de-visao-geral.md`.
 - O Manual fica sem vídeo até as cinco fatias de vídeo do PRD #1259 subirem, uma por módulo.
 - O termo "Vídeo de tarefa" fica no `CONTEXT.md` marcado como fora do Manual; o vídeo do Manual de hoje é o "Vídeo de visão geral".
+
+## Emenda a esta ADR (01/nov/2026, ADR 0076)
+
+Decisão do Pedro (PRD #1365). O vídeo de 14/10 envelheceu sem ninguém ver e não cobria o módulo.
+
+- **Decisão 1, o formato:** o Vídeo de visão geral passa a ter de 2 a 3 min (a Tecnologia, até 3 min e meio), mostra o módulo ponto a ponto, é narrado com a voz A com a fala escrita na tela e é feito em Remotion pela skill `motion`. O player perde o `muted` e continua sem autoplay. A Tecnologia ganha vídeo; Admin e Central de Comando continuam sem.
+- **Decisão 2, os masters dos Vídeos de tarefa:** deixam de ser guardados para um link externo. Depois que os seis vídeos novos estão no ar, um script idempotente que o Pedro roda apaga os Vídeos de tarefa e os vídeos substituídos de `~/Videos/Hospital/Manual/`.
+- **Decisão 4, o orçamento:** até 10 MB por vídeo e até 60 MB somando, com o site inteiro até 90 MB, depois do reencode 720p H.264 com áudio AAC de 64 kbps. Um vídeo por módulo continua.
+- **Decisão 6, quando refazer:** todo PRD que muda página de um módulo refaz o vídeo daquele módulo, salvo exceção escrita na Fatia de manual. O `meta.json` do vídeo guarda os `prds_cobertos`, e a `/montar-manual` acusa `video-desatualizado`.
+
+O detalhe e os rejeitados estão na ADR 0076.

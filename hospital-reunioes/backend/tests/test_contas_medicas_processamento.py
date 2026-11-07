@@ -25,6 +25,7 @@ import json
 import logging
 import os
 import re
+import sqlite3
 import sys
 import threading
 import uuid
@@ -46,21 +47,31 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 from anthropic_apoio import cliente_por_transporte, erro, mensagem, nome_do_schema, nomear_schemas, uso  # noqa: E402
 from contas_medicas_apoio import matriz_aplicada  # noqa: E402
 
+from app.config import Settings, settings  # noqa: E402
 from app.dependencies import get_current_user, get_supabase_client  # noqa: E402
 from app.limiter import limiter  # noqa: E402
 from app.routers import contas_medicas_envio as envio_router  # noqa: E402
 from app.routers import contas_medicas_guia as guia_router  # noqa: E402
 from app.services.contas_medicas import envio as envio_service  # noqa: E402
-from app.services.contas_medicas import ia, processamento  # noqa: E402
+from app.services.contas_medicas import ia, passo_a, processamento  # noqa: E402
 from app.services.contas_medicas.conferencia import ProntuarioLido, conferir  # noqa: E402
 from app.services.contas_medicas.conteudo import ler_conteudo  # noqa: E402
 from app.services.contas_medicas.memoria import MemoriaLida, RegraLida, parametros_lidos  # noqa: E402
 from app.services.contas_medicas.prontuario import MARCA_DO_OCR, ler_prontuario  # noqa: E402
 from app.services.contas_medicas.tabelas import NAO_CONFERIDO, Pacote  # noqa: E402
 from app.services.contas_medicas_conta import ler_conta  # noqa: E402
-from app.services.contas_medicas_extrator import ErroLeitura, Pagina, Palavra, digitalizadas  # noqa: E402
+from app.services.contas_medicas_extrator import (  # noqa: E402
+    MENSAGEM_PDF_GRANDE_DEMAIS,
+    MENSAGEM_PDF_ILEGIVEL,
+    ErroLeitura,
+    Pagina,
+    Palavra,
+    digitalizadas,
+)
 
 MIGRATION = Path(__file__).resolve().parents[2] / "supabase" / "migrations" / "116_contas_medicas_fundacao.sql"
+# A Etapa do processamento (issue #1416): as colunas e o CHECK da etapa da tela.
+MIGRATION_124 = MIGRATION.parent / "124_contas_medicas_etapa_do_processamento.sql"
 
 AGORA = datetime(2026, 10, 12, 10, 0, tzinfo=UTC)
 
@@ -90,23 +101,40 @@ ESTADOS_DA_LINHA = _lista_do_check(_SQL, r"\bestado\s+TEXT NOT NULL DEFAULT 'ABE
 TIPOS_DE_NOTIFICACAO = _lista_do_check(_SQL, r"ADD CONSTRAINT notificacoes_tipo_check")
 
 
-def _colunas_da_linha_do_guia() -> set[str]:
-    """As colunas de `cm_guia_linha`: as do CREATE TABLE da 116 e as que as
-    migrations seguintes acrescentam. Coluna fora delas o PostgREST recusa."""
-    bloco = re.search(r"CREATE TABLE IF NOT EXISTS cm_guia_linha \((.*?)\n\);", _SQL, flags=re.DOTALL)
-    assert bloco, "a migration 116 nao cria cm_guia_linha"
+def _colunas(tabela: str) -> set[str]:
+    """As colunas da tabela: as do CREATE TABLE da 116 e as que as migrations
+    seguintes acrescentam. Coluna fora delas o PostgREST recusa."""
+    bloco = re.search(rf"CREATE TABLE IF NOT EXISTS {tabela} \((.*?)\n\);", _SQL, flags=re.DOTALL)
+    assert bloco, f"a migration 116 nao cria {tabela}"
     colunas = set(re.findall(r"^  (\w+)\s", bloco.group(1), flags=re.MULTILINE))
     for migration in sorted(MIGRATION.parent.glob("*.sql")):
         colunas |= set(
             re.findall(
-                r"ALTER TABLE cm_guia_linha\s+ADD COLUMN IF NOT EXISTS (\w+)",
+                rf"ALTER TABLE {tabela}\s+ADD COLUMN IF NOT EXISTS (\w+)",
                 migration.read_text(encoding="utf-8"),
             )
         )
     return colunas
 
 
-COLUNAS_DA_LINHA = _colunas_da_linha_do_guia()
+COLUNAS_DA_LINHA = _colunas("cm_guia_linha")
+COLUNAS_DA_CONTA = _colunas("cm_conta")
+
+
+def _formato_do_codigo_do_erro() -> re.Pattern[str]:
+    """O CHECK do Código do erro, como as migrations o deixam (issue #1337)."""
+    for migration in sorted(MIGRATION.parent.glob("*.sql"), reverse=True):
+        sql = migration.read_text(encoding="utf-8")
+        if achado := re.search(r"CHECK \(erro_codigo IS NULL OR erro_codigo ~ '(.+?)'\)", sql):
+            return re.compile(achado.group(1))
+    raise AssertionError("nenhuma migration tem o CHECK do Código do erro")
+
+
+FORMATO_DO_CODIGO_DO_ERRO = _formato_do_codigo_do_erro()
+# As cinco Etapas do processamento que o CHECK da 124 aceita (issue #1416).
+ETAPAS_DA_TELA = _lista_do_check(
+    MIGRATION_124.read_text(encoding="utf-8"), r"ADD CONSTRAINT cm_conta_etapa_atual_check"
+)
 
 
 def test_o_duble_le_os_checks_da_migration():
@@ -116,11 +144,27 @@ def test_o_duble_le_os_checks_da_migration():
     assert {"ABERTA", "FEITO", "NAO_PROCEDE"} <= ESTADOS_DA_LINHA
     assert {"CONTAS_MEDICAS", "MENCAO"} <= TIPOS_DE_NOTIFICACAO
     assert {"conta_id", "acao", "preco_tabela", "criado_em"} <= COLUNAS_DA_LINHA
+    assert {"situacao", "erro_motivo", "faltantes", "nota_saida"} <= COLUNAS_DA_CONTA
+    assert FORMATO_DO_CODIGO_DO_ERRO.match("CM-IA-FORA-DO-AR")
+    assert not FORMATO_DO_CODIGO_DO_ERRO.match("CM-XYZ-1")
+    assert {"LENDO_CONTA", "IA_MONTANDO_GUIA"} <= ETAPAS_DA_TELA
+    assert {"etapa_atual", "etapa_desde", "etapa_parte", "etapa_partes"} <= COLUNAS_DA_CONTA
+
+
+def _coluna_que_nao_existe(nome: str, campos: dict) -> str | None:
+    """As colunas que o processamento escreve na conta têm de existir no banco."""
+    if nome == "cm_conta" and (desconhecidas := set(campos) - COLUNAS_DA_CONTA):
+        return f"PGRST204: coluna {sorted(desconhecidas)} nao existe em cm_conta"
+    return None
 
 
 def _violacao(nome: str, linha: dict) -> str | None:
     if nome == "cm_conta" and "situacao" in linha and linha["situacao"] not in SITUACOES_DA_CONTA:
         return "cm_conta_situacao_check"
+    if nome == "cm_conta" and linha.get("erro_codigo") and not FORMATO_DO_CODIGO_DO_ERRO.match(linha["erro_codigo"]):
+        return "cm_conta_erro_codigo_check"
+    if nome == "cm_conta" and linha.get("etapa_atual") and linha["etapa_atual"] not in ETAPAS_DA_TELA:
+        return "cm_conta_etapa_atual_check"
     if nome == "cm_guia_linha":
         if desconhecidas := set(linha) - COLUNAS_DA_LINHA:
             return f"PGRST204: coluna {sorted(desconhecidas)} nao existe em cm_guia_linha"
@@ -150,6 +194,25 @@ def _contem(valor: Any, parte: Any) -> bool:
     if isinstance(parte, list):
         return isinstance(valor, list) and all(any(_contem(v, p) for v in valor) for p in parte)
     return valor == parte
+
+
+def _instante(valor) -> datetime | None:
+    try:
+        instante = datetime.fromisoformat(str(valor))
+    except ValueError:
+        return None
+    return instante if instante.tzinfo is not None else None
+
+
+def _comparaveis(a, b) -> tuple:
+    """Como o Postgres compara timestamptz: pelo instante, não pelo texto.
+    "2026-11-02T00:09+00:00" é antes de "2026-11-02T00:00-03:00", e a
+    comparação de strings diz o contrário (domingo à noite no fuso do
+    hospital caía na semana seguinte, CI do PR #1376)."""
+    ia, ib = _instante(a), _instante(b)
+    if ia is not None and ib is not None:
+        return ia, ib
+    return str(a), str(b)
 
 
 class _Consulta:
@@ -187,7 +250,9 @@ class _Consulta:
         return self
 
     def _compara(self, coluna, valor, teste):
-        self._filtros.append(lambda linha: linha.get(coluna) is not None and teste(str(linha.get(coluna)), str(valor)))
+        self._filtros.append(
+            lambda linha: linha.get(coluna) is not None and teste(*_comparaveis(linha.get(coluna), valor))
+        )
         return self
 
     def gt(self, coluna, valor):
@@ -259,6 +324,8 @@ class _Consulta:
             novas = self._insert if isinstance(self._insert, list) else [self._insert]
             gravadas = []
             for nova in novas:
+                if desconhecida := _coluna_que_nao_existe(self._nome, nova):
+                    raise APIError({"message": desconhecida, "code": "PGRST204"})
                 if violacao := _violacao(self._nome, nova):
                     raise APIError({"message": violacao, "code": "23514"})
                 # O índice único do termo (migration 116).
@@ -280,10 +347,15 @@ class _Consulta:
             self._banco.tabelas[self._nome] = [linha for linha in tabela if linha not in casam]
             return SimpleNamespace(data=[dict(linha) for linha in casam])
         if self._update is not None:
+            # O PostgREST recusa a coluna que não existe mesmo sem linha que case.
+            if desconhecida := _coluna_que_nao_existe(self._nome, self._update):
+                raise APIError({"message": desconhecida, "code": "PGRST204"})
             for linha in casam:
                 if violacao := _violacao(self._nome, {**linha, **self._update}):
                     raise APIError({"message": violacao, "code": "23514"})
                 linha.update(self._update)
+            if self._nome == "cm_conta" and casam:
+                self._banco.escritas_na_conta.append(([linha["id"] for linha in casam], dict(self._update)))
             return SimpleNamespace(data=[dict(linha) for linha in casam])
         for coluna, desc in reversed(self._ordem):
             casam.sort(key=lambda linha, c=coluna: (linha.get(c) is None, str(linha.get(c) or "")), reverse=desc)
@@ -320,10 +392,22 @@ class _Banco:
         # Gancho do teste das duas parciais em paralelo: roda fora da trava,
         # antes de cada gravação em `cm_eventos`.
         self.antes_de_gravar_eventos = None
+        # Cada UPDATE que casou alguma conta, na ordem, com os ids que casou: a
+        # sequência das Etapas do processamento (issue #1416).
+        self.escritas_na_conta: list[tuple[list[str], dict]] = []
         self.storage = SimpleNamespace(from_=lambda nome: _Bucket(self, nome))
 
     def table(self, nome: str):
         return _Consulta(self, nome)
+
+    def rpc(self, nome: str, params: dict):
+        """A troca da vigente da migration 125, sem a falha no meio (essa é de
+        `test_contas_medicas_memoria_vigente.py`)."""
+        assert nome == "cm_trocar_memoria_vigente", f"RPC sem dublê: {nome}"
+        for versao in self.tabelas.get("cm_memoria_versao", []):
+            if versao["operadora_id"] == params["p_operadora_id"]:
+                versao["vigente"] = versao["id"] == params["p_versao_id"]
+        return SimpleNamespace(execute=lambda: SimpleNamespace(data=[{"versao_vigente": params["p_versao_id"]}]))
 
     def conta(self, conta_id: str) -> dict:
         return next(c for c in self.tabelas["cm_conta"] if c["id"] == conta_id)
@@ -409,8 +493,8 @@ def _presa(minutos: int, tentativas: int) -> dict:
 
 
 class TestContaPresa:
-    def test_processando_ha_16_minutos_volta_para_a_fila_e_o_claim_seguinte_e_a_tentativa_2(self):
-        banco = _Banco({"cm_conta": [_presa(16, tentativas=1)]})
+    def test_processando_ha_61_minutos_volta_para_a_fila_e_o_claim_seguinte_e_a_tentativa_2(self):
+        banco = _Banco({"cm_conta": [_presa(61, tentativas=1)]})
 
         processamento.devolver_presas(banco, AGORA)
 
@@ -418,22 +502,23 @@ class TestContaPresa:
         assert (conta["situacao"], conta["processando_desde"], conta["tentativas"]) == ("NA_FILA", None, 1)
         assert processamento.pegar_da_fila(banco, AGORA)["tentativas"] == 2
 
-    def test_processando_ha_14_minutos_segue_processando(self):
-        banco = _Banco({"cm_conta": [_presa(14, tentativas=1)]})
+    def test_processando_ha_59_minutos_segue_processando(self):
+        banco = _Banco({"cm_conta": [_presa(59, tentativas=1)]})
 
         processamento.devolver_presas(banco, AGORA)
 
-        assert banco.conta("c1") == _presa(14, tentativas=1)
+        assert banco.conta("c1") == _presa(59, tentativas=1)
 
     def test_na_terceira_tentativa_presa_vira_erro_com_a_mensagem(self):
-        banco = _Banco({"cm_conta": [_presa(16, tentativas=3)]})
+        banco = _Banco({"cm_conta": [_presa(61, tentativas=3)]})
 
         processamento.devolver_presas(banco, AGORA)
 
         conta = banco.conta("c1")
-        assert (conta["situacao"], conta["erro_motivo"], conta["processando_desde"]) == (
+        assert (conta["situacao"], conta["erro_codigo"], conta["erro_motivo"], conta["processando_desde"]) == (
             "ERRO",
-            "A análise não terminou em três tentativas. Envie de novo.",
+            "CM-APP-TENTATIVAS",
+            "A análise não terminou em três tentativas: o app reiniciou ou travou na análise.",
             None,
         )
         assert processamento.pegar_da_fila(banco, AGORA) is None
@@ -603,7 +688,12 @@ def _pessoa(pid: str, perfil: str | None) -> dict[str, Any]:
     }
 
 
-PESSOAS = {"faturista": _pessoa("F1", "faturista"), "gestao": _pessoa("G1", "gestao_contas_medicas")}
+PESSOAS = {
+    "faturista": _pessoa("F1", "faturista"),
+    "gestao": _pessoa("G1", "gestao_contas_medicas"),
+    # Quem só sobe contas, sem "painel completo" (issue #1418).
+    "apoio": _pessoa("A1", "apoio_faturamento"),
+}
 
 
 def _regra(codigo: str) -> dict[str, Any]:
@@ -716,10 +806,14 @@ class _Extrator:
 
     def __init__(self):
         self.chamadas: list[str] = []
+        # A leitura que o `pdftotext` recusa (PDF ilegível ou grande demais).
+        self.falha: ErroLeitura | None = None
 
     def __call__(self, pdf: bytes):
         texto = pdf.decode("utf-8")
         self.chamadas.append("PRONTUARIO" if "DECLARAÇÃO DE RECEBIMENTO" in texto else "CONTA")
+        if self.falha is not None:
+            return self.falha
         return [Pagina(numero=n, texto=t, sem_texto=not t.strip()) for n, t in enumerate(texto.split("\f"), start=1)]
 
 
@@ -771,8 +865,8 @@ class _NaHora:
         funcao(*args, **kwargs)
 
 
-def _enviar(banco: _Banco, *arquivos) -> dict:
-    resposta = _cliente(banco).post("/api/contas-medicas/envios", files=list(arquivos))
+def _enviar(banco: _Banco, *arquivos, quem: str = "faturista") -> dict:
+    resposta = _cliente(banco, quem).post("/api/contas-medicas/envios", files=list(arquivos))
     assert resposta.status_code == 200, resposta.text
     assert resposta.json()["recusas"] == []
     return resposta.json()
@@ -930,6 +1024,10 @@ class TestPrescricaoPorColuna:
 
 def _duas_parciais(banco: _Banco) -> list[dict]:
     _enviar(banco, _conta("48811", 2, 4), _conta("48812", 5, 6), _prontuario())
+    return _duas_parciais_gravadas(banco)
+
+
+def _duas_parciais_gravadas(banco: _Banco) -> list[dict]:
     return sorted(banco.tabelas["cm_conta"], key=lambda c: c["numero_conta"])
 
 
@@ -1047,7 +1145,7 @@ class TestOcrNaFila:
     ):
         pedidas: list[tuple[bytes, list[int]]] = []
 
-        def ocr(pdf: bytes, paginas):
+        def ocr(pdf: bytes, paginas, primeiro=()):
             numeros = digitalizadas(paginas)
             pedidas.append((pdf, numeros))
             lido = f"\n{MARCA_DO_OCR}\n{self.TERMO}\n"
@@ -1074,7 +1172,7 @@ class TestOcrNaFila:
         assert all(MARCA_DO_OCR.encode() not in conteudo for conteudo in guardados)
 
     def test_sem_o_ocr_a_folha_digitalizada_conta_como_sem_texto(self, monkeypatch):
-        monkeypatch.setattr(processamento, "ler_digitalizadas", lambda _pdf, paginas: list(paginas))
+        monkeypatch.setattr(processamento, "ler_digitalizadas", lambda _pdf, paginas, primeiro=(): list(paginas))
         banco = _cenario()
         _enviar(banco, _conta(), _prontuario(digitalizadas=1))
 
@@ -1082,6 +1180,183 @@ class TestOcrNaFila:
 
         (eventos,) = banco.tabelas["cm_eventos"]
         assert eventos["eventos_json"]["paginas_sem_texto"] == [3]
+
+    # Qualidade da leitura de cada folha (#1398): as três digitalizadas (3, 4 e 5)
+    # saem legível, ilegível e não lida, e as duas primeiras com texto do OCR.
+    QUALIDADES = {3: "legivel", 4: "ilegivel", 5: "nao_lida"}
+
+    def _ocr_com_qualidade(self, monkeypatch) -> list[tuple[int, ...]]:
+        primeiros: list[tuple[int, ...]] = []
+
+        def ocr(_pdf: bytes, paginas, primeiro=()):
+            primeiros.append(tuple(primeiro))
+            lido = f"\n{MARCA_DO_OCR}\n{self.TERMO}\n"
+            return [
+                Pagina(p.numero, p.texto + lido, False, True, self.QUALIDADES[p.numero])
+                if self.QUALIDADES.get(p.numero) in ("legivel", "ilegivel")
+                else Pagina(p.numero, p.texto, p.sem_texto, False, self.QUALIDADES.get(p.numero))
+                for p in paginas
+            ]
+
+        monkeypatch.setattr(processamento, "ler_digitalizadas", ocr)
+        return primeiros
+
+    def test_a_conta_pronta_guarda_a_contagem_das_digitalizadas_e_a_ilegivel_conta_como_sem_texto(self, monkeypatch):
+        primeiros = self._ocr_com_qualidade(monkeypatch)
+        banco = _cenario()
+        _enviar(banco, _conta(), _prontuario(digitalizadas=3))
+
+        _rodar_o_job(banco)
+
+        # As três são do Atendimento e do período da conta (02 a 06/10): vão primeiro.
+        assert primeiros == [(3, 4, 5)]
+        (conta,) = banco.tabelas["cm_conta"]
+        assert conta["situacao"] == "A_FAZER"
+        assert conta["faltantes"]["digitalizadas"] == {"legivel": 1, "duvidosa": 0, "ilegivel": 1, "nao_lida": 1}
+        (eventos,) = banco.tabelas["cm_eventos"]
+        assert eventos["eventos_json"]["paginas_sem_texto"] == [4, 5]
+
+    def test_a_conta_em_erro_depois_do_ocr_leva_a_contagem_no_detalhe_sem_texto_do_prontuario(self, monkeypatch):
+        self._ocr_com_qualidade(monkeypatch)
+
+        def conferir_quebrado(*_a, **_kw):
+            raise RuntimeError("PostgREST fora do ar")
+
+        monkeypatch.setattr(processamento, "conferir", conferir_quebrado)
+        banco = _cenario()
+        _enviar(banco, _conta(), _prontuario(digitalizadas=3))
+
+        _rodar_o_job(banco)
+
+        (conta,) = banco.tabelas["cm_conta"]
+        assert conta["situacao"] == "ERRO"
+        contagem = {"legivel": 1, "duvidosa": 0, "ilegivel": 1, "nao_lida": 1}
+        assert conta["erro_detalhe"]["digitalizadas"] == contagem
+        (item,) = _fila(banco, "meus_envios")
+        assert item["erro_detalhe"].endswith("digitalizadas: legível 1, duvidosa 0, ilegível 1, não lida 1")
+        assert self.TERMO not in json.dumps(conta["erro_detalhe"], ensure_ascii=False)
+
+    def test_o_guia_mostra_no_parecer_parcial_a_ressalva_das_folhas_da_propria_parcial(self, monkeypatch):
+        """Ressalva no Parecer parcial (#1399). As três digitalizadas (3, 4 e 5) são
+        fichas de anestesia de 02/10, data que herdam da admissão: entram só na
+        parcial de 02 a 04/10. A 3 saiu legível e fica de fora. As duas fisioterapias
+        de 03/10 deixam as ilegíveis em 2 das 9 páginas do período, abaixo do quarto
+        que para a conta (#1400)."""
+        qualidades = {3: "legivel", 4: "ilegivel", 5: "nao_lida"}
+        ficha = f"\n{MARCA_DO_OCR}\nFICHA DE ANESTESIA\nTecnica anestesica: geral balanceada\n"
+
+        def ocr(_pdf: bytes, paginas, primeiro=()):
+            return [
+                Pagina(p.numero, p.texto + ficha, False, True, qualidades[p.numero])
+                if qualidades.get(p.numero) in ("legivel", "ilegivel")
+                else Pagina(p.numero, p.texto, p.sem_texto, False, qualidades.get(p.numero))
+                for p in paginas
+            ]
+
+        monkeypatch.setattr(processamento, "ler_digitalizadas", ocr)
+        banco = _cenario()
+        _enviar(banco, _conta("48811", 2, 4), _conta("48812", 5, 6), _prontuario(fisioterapias=2, digitalizadas=3))
+
+        _rodar_o_job(banco)
+
+        primeira, segunda = (_guia(banco, c["id"])["cabecalho"] for c in _duas_parciais_gravadas(banco))
+        assert primeira["parecer_parcial"] is True
+        assert [f for f in primeira["faltantes"] if f.startswith("Confira à mão")] == [
+            "Confira à mão no prontuário a página 4 (ficha de anestesia): "
+            "é uma folha digitalizada que não consegui ler bem.",
+            "Confira à mão no prontuário a página 5 (documento não identificado): "
+            "é uma folha digitalizada que não consegui ler bem.",
+        ]
+        assert [f for f in segunda["faltantes"] if f.startswith("Confira à mão")] == []
+
+    def test_folhas_digitalizadas_ilegiveis_demais_param_a_conta_antes_do_dicionario_e_da_ia(
+        self, monkeypatch, ia_falsa
+    ):
+        """Bloqueio CM-ARQ-DIGITALIZADO (#1400): as três digitalizadas (3, 4 e 5),
+        sem título que o OCR leia, saem ilegíveis. São 3 das 10 páginas do período
+        (02 a 06/10), mais de um quarto: a conta para na leitura do prontuário."""
+        sujeira = f"\n{MARCA_DO_OCR}\n~~ ;; .. rr !! ii ll\n"
+
+        def ocr(_pdf: bytes, paginas, primeiro=()):
+            return [
+                Pagina(p.numero, p.texto + sujeira, False, True, "ilegivel") if p.numero in (3, 4, 5) else p
+                for p in paginas
+            ]
+
+        monkeypatch.setattr(processamento, "ler_digitalizadas", ocr)
+        banco = _cenario()
+        banco.tabelas["cm_item_dicionario"] = []  # o Clexane sem par iria à IA no dicionário
+        _enviar(banco, _conta(), _prontuario(digitalizadas=3))
+
+        _rodar_o_job(banco)
+
+        assert _erro_no_cartao(banco) == (
+            "CM-ARQ-DIGITALIZADO",
+            "Não dá para analisar esta conta: 3 das 10 páginas do prontuário deste período são folhas "
+            "digitalizadas que não consegui ler. Digitalize de novo essas folhas, em pé, e envie o prontuário de "
+            "novo.",
+            "prontuario",
+            ENVIAR_DE_NOVO,
+        )
+        (conta,) = banco.tabelas["cm_conta"]
+        assert conta["erro_detalhe"]["etapa"] == "leitura_do_prontuario"
+        assert ia_falsa.requisicoes == 0
+
+    def _parada_por_folha_digitalizada(self, monkeypatch) -> tuple[_Banco, dict]:
+        """A conta do teste acima, parada em CM-ARQ-DIGITALIZADO pelas três
+        digitalizadas ilegíveis (3, 4 e 5)."""
+        sujeira = f"\n{MARCA_DO_OCR}\n~~ ;; .. rr !! ii ll\n"
+
+        def ocr(_pdf: bytes, paginas, primeiro=()):
+            return [
+                Pagina(p.numero, p.texto + sujeira, False, True, "ilegivel") if p.numero in (3, 4, 5) else p
+                for p in paginas
+            ]
+
+        monkeypatch.setattr(processamento, "ler_digitalizadas", ocr)
+        banco = _cenario()
+        _enviar(banco, _conta(), _prontuario(digitalizadas=3))
+        _rodar_o_job(banco)
+        (conta,) = banco.tabelas["cm_conta"]
+        assert (conta["situacao"], conta["erro_codigo"]) == ("ERRO", "CM-ARQ-DIGITALIZADO")
+        return banco, conta
+
+    @staticmethod
+    def _analisar_assim_mesmo(banco: _Banco, conta: dict) -> None:
+        resposta = _cliente(banco).post(f"/api/contas-medicas/contas/{conta['id']}/analisar-assim-mesmo")
+        assert resposta.status_code == 200, resposta.text
+
+    def test_analisar_assim_mesmo_pula_o_bloqueio_e_o_guia_sai_com_a_ressalva(self, monkeypatch, ia_falsa):
+        """Issue #1401: a conta volta para a fila, a análise não para nas folhas
+        digitalizadas e o Parecer parcial diz quais páginas conferir à mão. A
+        escolha vale enquanto o prontuário for o mesmo: a conta enviada de novo
+        sem prontuário segue sem parar."""
+        banco, conta = self._parada_por_folha_digitalizada(monkeypatch)
+
+        self._analisar_assim_mesmo(banco, conta)
+        _rodar_o_job(banco)
+
+        assert (conta["situacao"], conta["erro_codigo"], conta["parecer_parcial"]) == ("A_FAZER", None, True)
+        assert [f for f in conta["faltantes"]["itens"] if f.startswith("Confira à mão")] == [
+            "Confira à mão no prontuário as páginas 3 a 5 (documento não identificado): "
+            "são folhas digitalizadas que não consegui ler bem."
+        ]
+
+        _enviar(banco, _conta())
+        _rodar_o_job(banco)
+
+        assert (conta["situacao"], conta["erro_codigo"]) == ("A_FAZER", None)
+
+    def test_prontuario_novo_do_atendimento_apaga_a_marca_e_a_analise_volta_a_parar(self, monkeypatch, ia_falsa):
+        """Issue #1401: a marca é do prontuário que estava no sistema. Chegou
+        outro, com as mesmas folhas ilegíveis: a conta para de novo."""
+        banco, conta = self._parada_por_folha_digitalizada(monkeypatch)
+        self._analisar_assim_mesmo(banco, conta)
+
+        _enviar(banco, _conta(), _prontuario(digitalizadas=3))
+        _rodar_o_job(banco)
+
+        assert (conta["situacao"], conta["erro_codigo"]) == ("ERRO", "CM-ARQ-DIGITALIZADO")
 
 
 class TestReprocesso:
@@ -1246,15 +1521,10 @@ class TestLeituraQueNaoFecha:
         _rodar_o_job(banco)
 
         (conta,) = banco.tabelas["cm_conta"]
-        assert (conta["situacao"], conta["erro_motivo"], conta["tentativas"]) == (
-            "ERRO",
-            "Não consegui ler a conta inteira",
-            1,
-        )
+        frase = "Não consegui ler a conta inteira: os itens lidos somam R$ 3.091,70 e o total da conta é R$ 3.101,70."
+        assert (conta["situacao"], conta["erro_motivo"], conta["tentativas"]) == ("ERRO", frase, 1)
         # O erro fica em "Meus envios" de quem enviou, que tem o PDF (ADR 0073).
-        assert [(c["situacao"], c["erro_motivo"]) for c in _fila(banco, "meus_envios")] == [
-            ("ERRO", "Não consegui ler a conta inteira")
-        ]
+        assert [(c["situacao"], c["erro_motivo"]) for c in _fila(banco, "meus_envios")] == [("ERRO", frase)]
         assert banco.tabelas["cm_guia_linha"] == []
 
     def test_pdf_sem_texto_sai_erro_com_a_frase_de_exportar_de_novo(self):
@@ -1294,9 +1564,10 @@ class TestLeituraQueNaoFecha:
 
         (conta,) = banco.tabelas["cm_conta"]
         assert len(tentativas) == 3
-        assert (conta["situacao"], conta["erro_motivo"], conta["tentativas"]) == (
+        assert (conta["situacao"], conta["erro_codigo"], conta["erro_motivo"], conta["tentativas"]) == (
             "ERRO",
-            "A análise parou na conferência. Envie de novo.",
+            "CM-APP-DEFEITO",
+            "A análise parou na conferência por um defeito do app.",
             3,
         )
 
@@ -1338,7 +1609,9 @@ class _IAFalsa:
         self.uso: dict = uso(entrada=10, saida=5)
         # A resposta HTTP que vale para toda requisição, no lugar da do schema
         # (o erro da API, por exemplo).
-        self.resposta_fixa: httpx2.Response | None = None
+        # A resposta HTTP, ou a falha do transporte (tempo esgotado), que vale
+        # para toda requisição.
+        self.resposta_fixa: httpx2.Response | Exception | None = None
         self.formatos: list[str] = []
         self.corpos: list[dict] = []
         # O nome do modelo Pydantic de cada schema (`nomear_schemas`).
@@ -1355,6 +1628,8 @@ class _IAFalsa:
             self.antes_de_responder(formato)
         self.formatos.append(formato)
         self.corpos.append(corpo)
+        if isinstance(self.resposta_fixa, Exception):
+            raise self.resposta_fixa
         if self.resposta_fixa is not None:
             return self.resposta_fixa
         resposta = {PASSO_A: self.eventos, PASSO_B: self.comparacao}.get(formato) or self.respostas.get(formato)
@@ -1385,23 +1660,29 @@ class TestIAForaDoFormato:
         (conta,) = banco.tabelas["cm_conta"]
         # As três tentativas são do adaptador; o pipeline não repete a conta.
         assert ia_falsa.formatos == [PASSO_A] * 3
-        assert (conta["situacao"], conta["erro_motivo"], conta["tentativas"]) == (
+        assert (conta["situacao"], conta["erro_codigo"], conta["erro_motivo"], conta["tentativas"]) == (
             "ERRO",
-            "Tente de novo em alguns minutos",
+            "CM-IA-FORMATO",
+            "A resposta da IA veio fora do formato combinado.",
             1,
         )
-        assert [(c["situacao"], c["erro_motivo"]) for c in _fila(banco, "meus_envios")] == [
-            ("ERRO", "Tente de novo em alguns minutos")
-        ]
+        assert [(c["situacao"], c["erro_codigo"]) for c in _fila(banco, "meus_envios")] == [("ERRO", "CM-IA-FORMATO")]
 
         # O botão da conta em Erro manda a mesma conta de novo; a IA voltou.
         ia_falsa.fora_do_formato = False
         _enviar(banco, _conta())
+        reenviada = banco.conta(conta["id"])
+        assert (reenviada["situacao"], reenviada["erro_codigo"], reenviada["erro_detalhe"]) == ("NA_FILA", None, None)
         _rodar_o_job(banco)
 
         assert ia_falsa.formatos.count(PASSO_A) == 4
-        assert banco.conta(conta["id"])["situacao"] == "A_FAZER"
-        assert banco.conta(conta["id"])["erro_motivo"] is None
+        pronta = banco.conta(conta["id"])
+        assert (pronta["situacao"], pronta["erro_motivo"], pronta["erro_codigo"], pronta["erro_detalhe"]) == (
+            "A_FAZER",
+            None,
+            None,
+            None,
+        )
 
     def test_a_ia_sem_credito_poe_a_conta_em_erro_com_a_frase_do_credito_sem_nova_tentativa(self, ia_falsa):
         """Issue #1302: o 400 de saldo da Anthropic não é tentado de novo, e a
@@ -1417,6 +1698,506 @@ class TestIAForaDoFormato:
         (conta,) = banco.tabelas["cm_conta"]
         assert ia_falsa.formatos == [PASSO_A]
         assert (conta["situacao"], conta["erro_motivo"]) == ("ERRO", "A IA está sem crédito. Avise o Pedro.")
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 6c. O Código do erro (issue #1337, PRD #1335)
+# ═══════════════════════════════════════════════════════════════════════════
+
+ENVIAR_DE_NOVO, ANALISAR_DE_NOVO = "enviar_de_novo", "analisar_de_novo"
+
+MIGRATION_122 = MIGRATION.parent / "122_contas_medicas_codigo_do_erro.sql"
+
+
+class TestMigration122:
+    """As duas colunas são conferidas pelo dublê do banco (coluna que não
+    existe é recusada, como o PostgREST faz); aqui, o que ela faz nas contas
+    que já estavam em Erro."""
+
+    def test_cria_o_codigo_e_o_detalhe_na_conta(self):
+        sql = MIGRATION_122.read_text(encoding="utf-8")
+
+        assert re.search(r"ALTER TABLE cm_conta\s+ADD COLUMN IF NOT EXISTS erro_codigo TEXT\b", sql)
+        assert re.search(r"ALTER TABLE cm_conta\s+ADD COLUMN IF NOT EXISTS erro_detalhe JSONB\b", sql)
+
+    def test_marca_cm_ia_antigo_so_nas_contas_em_erro_com_o_motivo_antigo(self):
+        """O UPDATE da migration roda de verdade, num SQLite em memória."""
+        sem_comentarios = re.sub(r"--[^\n]*", "", MIGRATION_122.read_text(encoding="utf-8"))
+        (update,) = re.findall(r"UPDATE cm_conta\b.*?;", sem_comentarios, flags=re.DOTALL)
+        banco = sqlite3.connect(":memory:")
+        banco.execute("CREATE TABLE cm_conta (id TEXT, situacao TEXT, erro_motivo TEXT, erro_codigo TEXT)")
+        banco.executemany(
+            "INSERT INTO cm_conta VALUES (?, ?, ?, ?)",
+            [
+                ("antiga", "ERRO", "Tente de novo em alguns minutos", None),
+                ("outro-motivo", "ERRO", "Este PDF não tem texto. Exporte de novo pelo MV", None),
+                ("ja-tem-codigo", "ERRO", "Tente de novo em alguns minutos", "CM-IA-FORA-DO-AR"),
+                ("reenviada", "NA_FILA", "Tente de novo em alguns minutos", None),
+            ],
+        )
+
+        banco.execute(update)
+        banco.execute(update)  # rodar duas vezes é inofensivo
+
+        assert dict(banco.execute("SELECT id, erro_codigo FROM cm_conta").fetchall()) == {
+            "antiga": "CM-IA-ANTIGO",
+            "outro-motivo": None,
+            "ja-tem-codigo": "CM-IA-FORA-DO-AR",
+            "reenviada": None,
+        }
+
+    def test_termina_com_o_recibo_do_proprio_numero(self):
+        corpo = "\n".join(
+            linha for linha in MIGRATION_122.read_text(encoding="utf-8").splitlines() if not linha.startswith("--")
+        ).strip()
+
+        assert corpo.endswith("INSERT INTO migracoes_aplicadas (numero) VALUES (122) ON CONFLICT (numero) DO NOTHING;")
+
+
+def _erro_no_cartao(banco: _Banco) -> tuple[str | None, str | None, str | None, str | None]:
+    """O que o cartão de Meus envios recebe da conta em Erro: o código, a
+    frase, o arquivo afetado e a ação."""
+    (item,) = _fila(banco, "meus_envios")
+    assert item["situacao"] == "ERRO", item
+    return item["erro_codigo"], item["erro_motivo"], item["erro_arquivo"], item["erro_acao"]
+
+
+def _sem_a_linha(texto: str, comeco: str) -> str:
+    return "\n".join(linha for linha in texto.splitlines() if not linha.startswith(comeco))
+
+
+def _apagar_do_sistema(banco: _Banco, tipo: str) -> None:
+    """O arquivo do tipo pedido como a retenção dos 7 dias o deixa."""
+    arquivo = next(a for a in banco.tabelas["cm_arquivo"] if a["tipo"] == tipo)
+    arquivo["apagado_em"] = AGORA.isoformat()
+
+
+def _sem_o_texto_guardado(banco: _Banco, tipo: str) -> None:
+    """O PDF do tipo pedido sem o texto ao lado: a fila lê o PDF de novo."""
+    arquivo = next(a for a in banco.tabelas["cm_arquivo"] if a["tipo"] == tipo)
+    banco.bucket.pop(("contas-medicas", arquivo["chave_bucket"] + ".txt"))
+
+
+class TestCodigoDoErroDaLeitura:
+    """Cada leitura que não fecha, provocada no arquivo, termina em Erro com o
+    código, a frase, o quadrado que fica vermelho e a ação (Enviar de novo,
+    menos a operadora sem memória, que a gestão resolve no app)."""
+
+    def test_conta_que_nao_soma_diz_a_soma_lida_e_o_total(self):
+        banco = _cenario()
+        _enviar(banco, _conta(total_errado=True), _prontuario())
+
+        _rodar_o_job(banco)
+
+        assert _erro_no_cartao(banco) == (
+            "CM-ARQ-SOMA",
+            "Não consegui ler a conta inteira: os itens lidos somam R$ 3.091,70 e o total da conta é R$ 3.101,70.",
+            "conta",
+            ENVIAR_DE_NOVO,
+        )
+
+    def test_conta_que_soma_certo_com_um_item_que_nao_fecha_diz_o_item(self):
+        # A soma bate com o total, mas a agulha diz 10 x 0,18 e a linha traz 1,70.
+        texto = _texto_da_conta("48811", 2, 6)
+        com_o_item_errado = texto.replace("0,17        1,70", "0,18        1,70")
+        assert com_o_item_errado != texto
+        banco = _cenario()
+        _enviar(banco, _conta(), _prontuario())
+        _trocar_o_pdf(banco, "CONTA", com_o_item_errado)
+
+        _rodar_o_job(banco)
+
+        assert _erro_no_cartao(banco) == (
+            "CM-ARQ-SOMA",
+            "Não consegui ler a conta inteira: no item 70000001 da página 1, a quantidade vezes o unitário dá "
+            "R$ 1,80 e a linha traz R$ 1,70.",
+            "conta",
+            ENVIAR_DE_NOVO,
+        )
+
+    def test_conta_sem_a_linha_do_total_diz_a_soma_lida(self):
+        banco = _cenario()
+        _enviar(banco, _conta(), _prontuario())
+        _trocar_o_pdf(banco, "CONTA", _sem_a_linha(_texto_da_conta("48811", 2, 6), "Total da Conta"))
+
+        _rodar_o_job(banco)
+
+        assert _erro_no_cartao(banco) == (
+            "CM-ARQ-SOMA",
+            "Não consegui ler a conta inteira: os itens lidos somam R$ 3.091,70 e o PDF não traz o total da conta.",
+            "conta",
+            ENVIAR_DE_NOVO,
+        )
+
+    def test_conta_sem_o_plano_no_cabecalho(self):
+        banco = _cenario()
+        _enviar(banco, _conta(), _prontuario())
+        _trocar_o_pdf(banco, "CONTA", _sem_a_linha(_texto_da_conta("48811", 2, 6), "Plano:"))
+
+        _rodar_o_job(banco)
+
+        assert _erro_no_cartao(banco) == (
+            "CM-ARQ-CABECALHO",
+            "Não achei o atendimento e o plano no cabeçalho da conta.",
+            "conta",
+            ENVIAR_DE_NOVO,
+        )
+
+    def test_prontuario_sem_texto(self):
+        banco = _cenario()
+        _enviar(banco, _conta(), _prontuario())
+        _trocar_o_pdf(banco, "PRONTUARIO", "\f   \f\f")
+
+        _rodar_o_job(banco)
+
+        assert _erro_no_cartao(banco) == (
+            "CM-ARQ-SEM-TEXTO",
+            "Este PDF não tem texto. Exporte de novo pelo MV",
+            "prontuario",
+            ENVIAR_DE_NOVO,
+        )
+
+    def test_conta_ilegivel(self, extrator):
+        banco = _cenario()
+        _enviar(banco, _conta(), _prontuario())
+        _sem_o_texto_guardado(banco, "CONTA")
+        extrator.falha = ErroLeitura(MENSAGEM_PDF_ILEGIVEL)
+
+        _rodar_o_job(banco)
+
+        assert _erro_no_cartao(banco) == (
+            "CM-ARQ-ILEGIVEL",
+            "Não consegui ler o PDF. Confira se ele abre no computador e envie de novo.",
+            "conta",
+            ENVIAR_DE_NOVO,
+        )
+
+    def test_prontuario_grande_demais_diz_as_paginas(self, extrator):
+        banco = _cenario()
+        _enviar(banco, _conta(), _prontuario())
+        _sem_o_texto_guardado(banco, "PRONTUARIO")
+        extrator.falha = ErroLeitura(MENSAGEM_PDF_GRANDE_DEMAIS)
+
+        _rodar_o_job(banco)
+
+        assert _erro_no_cartao(banco) == (
+            "CM-ARQ-GRANDE",
+            "O PDF tem 8 páginas e é grande demais para ler de uma vez.",
+            "prontuario",
+            ENVIAR_DE_NOVO,
+        )
+
+    def test_prontuario_incompleto(self):
+        banco = _cenario()
+        _enviar(banco, _conta(), _arquivo_do_envio("prontuario.pdf", "\f".join(_paginas_do_prontuario()[:-1])))
+
+        _rodar_o_job(banco)
+
+        assert _erro_no_cartao(banco) == (
+            "CM-ARQ-INCOMPLETO",
+            "Prontuário com arquivo incompleto: o rodapé indica 8 páginas e vieram 7.",
+            "prontuario",
+            ENVIAR_DE_NOVO,
+        )
+
+    def test_prontuario_que_saiu_do_sistema(self):
+        banco = _cenario()
+        _enviar(banco, _conta(), _prontuario())
+        _apagar_do_sistema(banco, "PRONTUARIO")
+
+        _rodar_o_job(banco)
+
+        assert _erro_no_cartao(banco) == (
+            "CM-ARQ-SEM-PRONTUARIO",
+            "O prontuário deste atendimento não está no sistema. Envie o prontuário de novo.",
+            "prontuario",
+            ENVIAR_DE_NOVO,
+        )
+
+    def test_conta_que_passou_dos_7_dias(self):
+        banco = _cenario()
+        _enviar(banco, _conta(), _prontuario())
+        _apagar_do_sistema(banco, "CONTA")
+
+        _rodar_o_job(banco)
+
+        assert _erro_no_cartao(banco) == (
+            "CM-ARQ-VENCIDO",
+            "O PDF já passou dos 7 dias e saiu do sistema.",
+            "conta",
+            ENVIAR_DE_NOVO,
+        )
+
+    def test_operadora_sem_memoria_diz_qual_e_quem_carrega(self):
+        banco = _cenario()
+        banco.tabelas["cm_memoria_versao"][0]["vigente"] = False
+        _enviar(banco, _conta(), _prontuario())
+
+        _rodar_o_job(banco)
+
+        assert _erro_no_cartao(banco) == (
+            "CM-CFG-MEMORIA",
+            "A operadora ALFA está sem memória carregada. A gestão carrega em Operadoras.",
+            "conta",
+            ANALISAR_DE_NOVO,
+        )
+
+
+# (resposta da Anthropic, código, frase, ação, quantas requisições saem). Toda
+# mensagem de erro cita o prontuário: ela não pode chegar à conta.
+FALHAS_DA_IA = {
+    "401": (
+        erro(401, "authentication_error", f"invalid x-api-key {TRECHO_DO_PRONTUARIO}"),
+        "CM-IA-CHAVE",
+        "A chave da IA não está configurada.",
+        ANALISAR_DE_NOVO,
+        1,
+    ),
+    "402": (
+        erro(402, "billing_error", f"Payment required {TRECHO_DO_PRONTUARIO}"),
+        "CM-IA-CREDITO",
+        "A IA está sem crédito. Avise o Pedro.",
+        ANALISAR_DE_NOVO,
+        1,
+    ),
+    "400-saldo": (
+        erro(400, "invalid_request_error", f"Your credit balance is too low {TRECHO_DO_PRONTUARIO}"),
+        "CM-IA-CREDITO",
+        "A IA está sem crédito. Avise o Pedro.",
+        ANALISAR_DE_NOVO,
+        1,
+    ),
+    "404": (
+        erro(404, "not_found_error", f"model: claude-que-nao-existe {TRECHO_DO_PRONTUARIO}"),
+        "CM-IA-MODELO",
+        "O modelo da IA não foi encontrado.",
+        ANALISAR_DE_NOVO,
+        1,
+    ),
+    "429": (
+        erro(429, "rate_limit_error", f"Number of requests {TRECHO_DO_PRONTUARIO}"),
+        "CM-IA-FORA-DO-AR",
+        "A IA está fora do ar ou sobrecarregada agora.",
+        ANALISAR_DE_NOVO,
+        3,
+    ),
+    "500": (
+        erro(500, "api_error", f"Internal server error {TRECHO_DO_PRONTUARIO}"),
+        "CM-IA-FORA-DO-AR",
+        "A IA está fora do ar ou sobrecarregada agora.",
+        ANALISAR_DE_NOVO,
+        3,
+    ),
+    "529": (
+        erro(529, "overloaded_error", f"Overloaded {TRECHO_DO_PRONTUARIO}"),
+        "CM-IA-FORA-DO-AR",
+        "A IA está fora do ar ou sobrecarregada agora.",
+        ANALISAR_DE_NOVO,
+        3,
+    ),
+    "tempo-esgotado": (
+        httpx2.ReadTimeout(f"read timed out {TRECHO_DO_PRONTUARIO}"),
+        "CM-IA-FORA-DO-AR",
+        "A IA está fora do ar ou sobrecarregada agora.",
+        ANALISAR_DE_NOVO,
+        3,
+    ),
+    "400-tamanho": (
+        erro(400, "invalid_request_error", f"prompt is too long: 215000 tokens > 200000 {TRECHO_DO_PRONTUARIO}"),
+        "CM-IA-TAMANHO",
+        "O prontuário é maior do que a IA aceita de uma vez.",
+        None,
+        1,
+    ),
+    "resposta-invalida": (
+        httpx2.Response(200, json=mensagem(f'{{"atendimento": "{TRECHO_DO_PRONTUARIO}"', uso(entrada=10, saida=5))),
+        "CM-IA-FORMATO",
+        "A resposta da IA veio fora do formato combinado.",
+        ANALISAR_DE_NOVO,
+        3,
+    ),
+    "400-outro": (
+        erro(400, "invalid_request_error", f"messages: campo inválido {TRECHO_DO_PRONTUARIO}"),
+        "CM-APP-DEFEITO",
+        "A análise parou na leitura do prontuário pela IA por um defeito do app.",
+        ANALISAR_DE_NOVO,
+        3,
+    ),
+}
+
+# O `_cliente` de verdade, antes de o dublê da IA trocá-lo: o da guarda da chave.
+_CLIENTE_DE_VERDADE = ia._cliente
+
+
+class TestCodigoDoErroDaIA:
+    """O erro da IA nasce na chamada, com o código HTTP da Anthropic: a conta
+    termina em Erro com o código, a frase e a ação, e o quadrado vermelho é o
+    do arquivo da etapa (o Passo A lê o prontuário)."""
+
+    @pytest.mark.parametrize("nome", list(FALHAS_DA_IA))
+    def test_cada_codigo_http_vira_o_codigo_do_erro(self, ia_falsa, nome):
+        resposta, codigo, frase, acao, requisicoes = FALHAS_DA_IA[nome]
+        ia_falsa.resposta_fixa = resposta
+        banco = _cenario()
+        _enviar(banco, _conta(), _prontuario())
+
+        _rodar_o_job(banco)
+
+        assert _erro_no_cartao(banco) == (codigo, frase, "prontuario", acao)
+        assert ia_falsa.formatos == [PASSO_A] * requisicoes
+        (conta,) = banco.tabelas["cm_conta"]
+        assert conta["tentativas"] == 1, "a falha da IA não devolve a conta para a fila"
+        gravado = json.dumps({c: conta[c] for c in ("erro_motivo", "erro_codigo", "erro_detalhe")}, ensure_ascii=False)
+        assert TRECHO_DO_PRONTUARIO not in gravado
+        assert TRECHO_DO_PRONTUARIO not in json.dumps(_fila(banco, "meus_envios"), ensure_ascii=False)
+
+    def test_chave_vazia_nao_chama_a_ia(self, ia_falsa, monkeypatch):
+        monkeypatch.setattr(ia, "_cliente", _CLIENTE_DE_VERDADE)
+        monkeypatch.setattr(ia.settings, "anthropic_api_key", "")
+        banco = _cenario()
+        _enviar(banco, _conta(), _prontuario())
+
+        _rodar_o_job(banco)
+
+        assert _erro_no_cartao(banco) == (
+            "CM-IA-CHAVE",
+            "A chave da IA não está configurada.",
+            "prontuario",
+            ANALISAR_DE_NOVO,
+        )
+        assert ia_falsa.requisicoes == 0
+
+    def test_o_erro_no_passo_b_pinta_o_quadrado_da_conta(self, ia_falsa):
+        ia_falsa.fora_do_formato_em = {PASSO_B}
+        banco = _cenario()
+        _enviar(banco, _conta(), _prontuario())
+
+        _rodar_o_job(banco)
+
+        assert _erro_no_cartao(banco) == (
+            "CM-IA-FORMATO",
+            "A resposta da IA veio fora do formato combinado.",
+            "conta",
+            ANALISAR_DE_NOVO,
+        )
+
+    def test_o_detalhe_gravado_tem_tipo_http_etapa_arquivo_e_linha(self, ia_falsa):
+        ia_falsa.resposta_fixa = erro(529, "overloaded_error", f"Overloaded {TRECHO_DO_PRONTUARIO}")
+        banco = _cenario()
+        _enviar(banco, _conta(), _prontuario())
+
+        _rodar_o_job(banco)
+
+        (conta,) = banco.tabelas["cm_conta"]
+        detalhe = conta["erro_detalhe"]
+        assert {chave: detalhe[chave] for chave in ("tipo", "http", "etapa", "arquivo")} == {
+            "tipo": "OverloadedError",
+            "http": 529,
+            "etapa": "passo_a",
+            "arquivo": "ia.py",
+        }
+        assert isinstance(detalhe["linha"], int)
+        assert datetime.fromisoformat(detalhe["em"]).tzinfo is not None
+        (item,) = _fila(banco, "meus_envios")
+        assert item["erro_detalhe"] == (
+            f"OverloadedError, HTTP 529, etapa passo_a (leitura do prontuário pela IA), ia.py:{detalhe['linha']}"
+        )
+        assert item["erro_em"] == detalhe["em"]
+
+    def test_o_400_de_schema_leva_a_mensagem_da_api_e_o_request_id_para_a_ti(self, ia_falsa):
+        """O 400 de validação do pedido não cita o prontuário: a mensagem da API
+        e o `request_id` vão para o detalhe e para o "Copiar para a TI" (#1410)."""
+        ia_falsa.resposta_fixa = httpx2.Response(
+            400,
+            json={"type": "error", "error": {"type": "invalid_request_error", "message": MENSAGEM_DE_SCHEMA}},
+            headers={"request-id": "req_011CVschema"},
+        )
+        banco = _cenario()
+        _enviar(banco, _conta(), _prontuario())
+
+        _rodar_o_job(banco)
+
+        (conta,) = banco.tabelas["cm_conta"]
+        detalhe = conta["erro_detalhe"]
+        assert (detalhe["mensagem_da_api"], detalhe["request_id"]) == (MENSAGEM_DE_SCHEMA, "req_011CVschema")
+        (item,) = _fila(banco, "meus_envios")
+        assert item["erro_detalhe"] == (
+            f"BadRequestError, HTTP 400, etapa passo_a (leitura do prontuário pela IA), ia.py:{detalhe['linha']}, "
+            f'mensagem da API "{MENSAGEM_DE_SCHEMA}", request_id req_011CVschema'
+        )
+
+
+# O 400 do PR #1408: o schema do Passo A passou do limite de uniões.
+MENSAGEM_DE_SCHEMA = (
+    "Schemas contains too many parameters with union types (20 parameters with type arrays or anyOf). "
+    "(limit: 16 parameters with unions)."
+)
+
+
+class _Reinicio(BaseException):  # noqa: N818, o processo morrendo no meio da análise
+    """O app reiniciando: nada no processamento pega uma `BaseException`."""
+
+
+class TestCodigoDoErroDoApp:
+    def test_defeito_diz_a_etapa_o_tipo_e_o_lugar_do_defeito(self, monkeypatch):
+        def conferir_quebrado(*_a, **_kw):
+            raise RuntimeError(f"PostgREST fora do ar {TRECHO_DO_PRONTUARIO}")
+
+        monkeypatch.setattr(processamento, "conferir", conferir_quebrado)
+        banco = _cenario()
+        _enviar(banco, _conta(), _prontuario())
+
+        _rodar_o_job(banco)
+
+        assert _erro_no_cartao(banco) == (
+            "CM-APP-DEFEITO",
+            "A análise parou na conferência por um defeito do app.",
+            "conta",
+            ANALISAR_DE_NOVO,
+        )
+        (conta,) = banco.tabelas["cm_conta"]
+        assert {chave: conta["erro_detalhe"][chave] for chave in ("tipo", "http", "etapa", "arquivo")} == {
+            "tipo": "RuntimeError",
+            "http": None,
+            "etapa": "conferencia",
+            "arquivo": Path(__file__).name,
+        }
+        assert TRECHO_DO_PRONTUARIO not in json.dumps(conta["erro_detalhe"], ensure_ascii=False)
+
+    def test_tres_reinicios_no_meio_dizem_que_o_app_reiniciou_e_em_qual_etapa(self, ia_falsa):
+        def reiniciar(_formato):
+            raise _Reinicio()
+
+        ia_falsa.antes_de_responder = reiniciar
+        banco = _cenario()
+        _enviar(banco, _conta(), _prontuario())
+
+        agora = AGORA
+        for _ in range(3):
+            with pytest.raises(_Reinicio):
+                processamento.alimentar_fila(banco, agora, executor=_NaHora())
+            agora += timedelta(minutes=61)
+        processamento.devolver_presas(banco, agora)
+
+        assert _erro_no_cartao(banco) == (
+            "CM-APP-TENTATIVAS",
+            "A análise não terminou em três tentativas: o app reiniciou ou travou na leitura do prontuário pela IA.",
+            "prontuario",
+            ANALISAR_DE_NOVO,
+        )
+        (conta,) = banco.tabelas["cm_conta"]
+        assert conta["tentativas"] == 3
+        assert conta["erro_detalhe"]["etapa"] == "passo_a"
+
+    def test_a_conta_com_o_motivo_antigo_tem_analisar_de_novo(self):
+        """A migration 122 marca `CM-IA-ANTIGO` nas contas que já estavam em
+        Erro com "Tente de novo em alguns minutos", sem detalhe nem etapa."""
+        banco = _cenario()
+        _enviar(banco, _conta(), _prontuario())
+        (conta,) = banco.tabelas["cm_conta"]
+        conta |= {"situacao": "ERRO", "erro_motivo": "Tente de novo em alguns minutos", "erro_codigo": "CM-IA-ANTIGO"}
+
+        assert _erro_no_cartao(banco) == ("CM-IA-ANTIGO", "Tente de novo em alguns minutos", None, ANALISAR_DE_NOVO)
 
 
 class TestPassoANoPipeline:
@@ -1630,6 +2411,35 @@ class TestTempoDasEtapas:
         assert tempos["total"] >= max(segundos for etapa, segundos in tempos.items() if etapa != "total")
 
 
+class TestContagensDaContaPronta:
+    def test_a_conta_pronta_guarda_quantos_itens_e_quantos_eventos_o_motor_gravou(self, ia_falsa):
+        """Issue #1419: o cartão do envio mostra as contagens sem ler as tabelas a cada consulta."""
+        ventilacao = {
+            "tipo": "VENTILACAO_MECANICA",
+            "descricao": "VM",
+            "setor": "CTI ADULTO",
+            "inicio": "2026-10-03T08:00",
+            "fim": None,
+            "pagina": 5,
+            "trecho": "VM",
+        }
+        ia_falsa.eventos = {**EVENTOS_DA_IA, "terapias": [ventilacao]}
+        banco = _cenario()
+        _enviar(banco, _conta(), _prontuario())
+
+        _rodar_o_job(banco)
+
+        (conta,) = banco.tabelas["cm_conta"]
+        assert conta["situacao"] == "A_FAZER", conta.get("erro_motivo")
+        itens = [i for i in banco.tabelas["cm_conta_item"] if i["conta_id"] == conta["id"]]
+        (gravados,) = banco.tabelas["cm_eventos"]
+        lidos = gravados["eventos_json"]["ia"]
+        # As duas movimentações do código e a terapia da IA.
+        assert (len(lidos["movimentacoes"]), len(lidos["terapias"])) == (2, 1)
+        assert conta["faltantes"]["contagens"] == {"itens": len(itens), "eventos": 3}
+        assert len(itens) > 0
+
+
 # ═══════════════════════════════════════════════════════════════════════════
 # 9. O log não leva texto de prontuário
 # ═══════════════════════════════════════════════════════════════════════════
@@ -1703,10 +2513,37 @@ class TestJobNoScheduler:
         assert entregues == [(banco, True)]
 
 
-class TestDuasVagas:
-    def test_o_job_entrega_no_maximo_duas_contas_enquanto_as_duas_vagas_estao_ocupadas(self, monkeypatch):
+class TestVagas:
+    def test_sem_a_variavel_sao_quatro_vagas(self):
+        assert Settings.model_fields["cm_vagas"].default == 4
+        assert processamento.VAGAS == settings.cm_vagas
+
+    def test_as_vagas_seguem_a_variavel_cm_vagas(self):
+        """Num processo novo, para não recarregar `settings` nem `processamento`
+        dentro da suíte: com `CM_VAGAS=3`, a fila tem três vagas e três workers."""
+        import subprocess
+
+        ambiente = {**os.environ, "CM_VAGAS": "3"}
+        codigo = (
+            "from app.services.contas_medicas import processamento as p; "
+            "print(p.VAGAS, p._vagas._value, p._executor._max_workers)"
+        )
+        processo = subprocess.run(
+            [sys.executable, "-c", codigo],
+            capture_output=True,
+            text=True,
+            env=ambiente,
+            cwd=Path(__file__).resolve().parents[1],
+            timeout=120,
+        )
+
+        assert processo.returncode == 0, processo.stderr[-600:]
+        assert processo.stdout.split() == ["3", "3", "3"]
+
+    def test_o_job_entrega_no_maximo_uma_conta_por_vaga_enquanto_as_vagas_estao_ocupadas(self, monkeypatch):
         monkeypatch.setattr(processamento, "processar", lambda _sb, _conta: None)
-        banco = _Banco({"cm_conta": [_conta_na_fila(f"c{n}", n) for n in (1, 2, 3)]})
+        vagas = processamento.VAGAS
+        banco = _Banco({"cm_conta": [_conta_na_fila(f"c{n}", n) for n in range(1, vagas + 2)]})
         guardadas = []
 
         class _Guardado:
@@ -1714,15 +2551,15 @@ class TestDuasVagas:
                 guardadas.append((funcao, args))
 
         try:
-            assert processamento.alimentar_fila(banco, AGORA, executor=_Guardado()) == 2
+            assert processamento.alimentar_fila(banco, AGORA, executor=_Guardado()) == vagas
             assert processamento.alimentar_fila(banco, AGORA, executor=_Guardado()) == 0
-            assert [c["situacao"] for c in banco.tabelas["cm_conta"]] == ["PROCESSANDO", "PROCESSANDO", "NA_FILA"]
+            assert [c["situacao"] for c in banco.tabelas["cm_conta"]] == ["PROCESSANDO"] * vagas + ["NA_FILA"]
         finally:
             for funcao, args in guardadas:
                 funcao(*args)  # a análise termina e devolve a vaga
 
         assert processamento.alimentar_fila(banco, AGORA, executor=_Guardado()) == 1
-        for funcao, args in guardadas[2:]:
+        for funcao, args in guardadas[vagas:]:
             funcao(*args)
 
 
@@ -1743,13 +2580,48 @@ class TestKitDeConhecimento:
         for trecho in (
             "segundo plano",
             "sino",
-            "duas contas ao mesmo tempo",
+            "quatro contas ao mesmo tempo",
             "três tentativas",
             "Este PDF não tem texto",
             "Não consegui ler a conta inteira",
             "arquivo incompleto",
         ):
             assert trecho in secao, trecho
+
+    def test_diz_o_codigo_do_erro_o_quadrado_vermelho_e_o_copiar_para_a_ti(self):
+        """Issue #1337: o Erro com a causa, o código e o que vai para a TI."""
+        secao = KIT.read_text(encoding="utf-8").split("## A análise", 1)[1].split("\n## ", 1)[0]
+
+        for trecho in (
+            "Código do erro",
+            "CM-ARQ",
+            "CM-CFG",
+            "CM-IA",
+            "CM-APP",
+            "fica vermelho",
+            "Ver detalhes",
+            "Copiar para a TI",
+            "nunca leva texto do prontuário",
+            "quanto somaram os itens lidos e qual é o total da conta",
+            "quantas páginas",
+            "em qual etapa",
+            "a gestão carrega em Operadoras",
+        ):
+            assert trecho in secao, trecho
+
+    def test_diz_quando_a_conta_para_por_folha_escaneada_ilegivel(self):
+        """Issue #1400: o Erro CM-ARQ-DIGITALIZADO, os dois casos e que não gasta IA."""
+        secao = KIT.read_text(encoding="utf-8").split("## A análise", 1)[1].split("\n## ", 1)[0]
+        (linha,) = [linha for linha in secao.splitlines() if "CM-ARQ-DIGITALIZADO" in linha]
+
+        for trecho in (
+            "folhas escaneadas",
+            "ficha de anestesia",
+            "descrição cirúrgica",
+            "mais de um quarto das páginas",
+            "antes da leitura pela IA",
+        ):
+            assert trecho in linha, trecho
 
     def test_nao_promete_mais_a_analise_para_uma_proxima_entrega(self):
         texto = KIT.read_text(encoding="utf-8")
@@ -1768,6 +2640,8 @@ RAIZ_DO_APP = Path(__file__).resolve().parents[2]
 # ninguém vê, e o lint do front já trava o texto visível do sino.
 ARQUIVOS_DA_FATIA = [
     RAIZ_DO_APP / "backend/app/services/contas_medicas/processamento.py",
+    RAIZ_DO_APP / "backend/app/services/contas_medicas/erro_da_conta.py",
+    MIGRATION_122,
     RAIZ_DO_APP / "backend/app/services/contas_medicas/tabelas.py",
     RAIZ_DO_APP / "backend/app/services/contas_medicas/envio.py",
     RAIZ_DO_APP / "backend/app/services/contas_medicas_extrator.py",
@@ -1938,3 +2812,374 @@ class TestVersaoDaTabela:
         assert (velha["preco_tabela"], velha["tabela_id"]) == (0.20, "tb-mat")
         agulha = _linhas_gravadas(banco, seguinte["id"])["70000001"]
         assert (agulha["preco_tabela"], agulha["tabela_id"]) == (0.30, nova["id"])
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 15. A Etapa do processamento (issue #1416, PRD #1415)
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+class TestMigration124:
+    """A única migration do PRD: as colunas são conferidas pelo dublê do banco
+    (coluna que não existe é recusada, como o PostgREST faz); aqui, que ela só
+    acrescenta."""
+
+    def test_acrescenta_as_quatro_colunas_da_etapa_e_as_paginas_por_ocr_sem_mexer_nas_que_existem(self):
+        sql = re.sub(r"--[^\n]*", "", MIGRATION_124.read_text(encoding="utf-8"))
+
+        assert re.findall(r"ALTER TABLE cm_conta\s+ADD COLUMN IF NOT EXISTS (\w+) (\w+)", sql) == [
+            ("etapa_atual", "TEXT"),
+            ("etapa_desde", "TIMESTAMPTZ"),
+            ("etapa_parte", "INTEGER"),
+            ("etapa_partes", "INTEGER"),
+        ]
+        assert re.findall(r"ALTER TABLE cm_arquivo\s+ADD COLUMN IF NOT EXISTS (\w+) (\w+)", sql) == [
+            ("paginas_ocr", "INTEGER")
+        ]
+        # Só acrescenta: nenhuma coluna que já existe muda, sai ou troca de nome,
+        # nenhum dado é reescrito, e coluna nova não nasce obrigatória.
+        assert not re.search(r"\b(ALTER COLUMN|DROP COLUMN|RENAME|UPDATE|DELETE|NOT NULL)\b", sql, flags=re.I)
+
+    def test_termina_com_o_recibo_do_proprio_numero(self):
+        corpo = "\n".join(
+            linha for linha in MIGRATION_124.read_text(encoding="utf-8").splitlines() if not linha.startswith("--")
+        ).strip()
+
+        assert corpo.endswith("INSERT INTO migracoes_aplicadas (numero) VALUES (124) ON CONFLICT (numero) DO NOTHING;")
+
+
+CINCO_ETAPAS = ["LENDO_CONTA", "LENDO_PRONTUARIO", "IA_LENDO_PRONTUARIO", "CONFERINDO", "IA_MONTANDO_GUIA"]
+
+
+def _etapas_gravadas(banco: _Banco, conta_id: str | None = None) -> list[str]:
+    """As Etapas do processamento na ordem em que o Motor as gravou na conta,
+    com a parte do Passo A como a tela diz ("parte 2 de 3")."""
+    marcos = []
+    for ids, campos in banco.escritas_na_conta:
+        if conta_id is not None and conta_id not in ids:
+            continue
+        if campos.get("etapa_atual"):
+            marcos.append(campos["etapa_atual"])
+        if campos.get("etapa_parte"):
+            marcos.append(f"parte {campos['etapa_parte']} de {campos['etapa_partes']}")
+    return marcos
+
+
+class TestEtapaDoProcessamento:
+    def test_a_conta_passa_pelas_cinco_etapas_da_tela_na_ordem(self):
+        banco = _cenario()
+        _enviar(banco, _conta(), _prontuario())
+
+        _rodar_o_job(banco)
+
+        (conta,) = banco.tabelas["cm_conta"]
+        assert conta["situacao"] == "A_FAZER", conta.get("erro_motivo")
+        assert _etapas_gravadas(banco) == CINCO_ETAPAS
+        # Cada troca de etapa grava desde quando ela está em curso.
+        assert all(campos.get("etapa_desde") for _, campos in banco.escritas_na_conta if campos.get("etapa_atual"))
+
+    def test_o_passo_a_com_tres_janelas_grava_parte_1_2_e_3_de_3_e_o_do_cache_nao_grava_partes(
+        self, monkeypatch, ia_falsa
+    ):
+        """Acima do limite de uma leitura, o prontuário vai à IA em janelas de
+        dias: com a avaliação de fisioterapia de 03/10, são quatro dias e três
+        janelas. A segunda parcial do atendimento lê os eventos do cache."""
+        monkeypatch.setattr(passo_a, "LIMITE_DE_TOKENS", 1)
+        banco = _cenario()
+        _enviar(banco, _conta("48811", 2, 4), _conta("48812", 5, 6), _prontuario(fisioterapias=1))
+        primeira, segunda = _duas_parciais_gravadas(banco)
+
+        assert _rodar_o_job(banco) == 2
+
+        assert ia_falsa.formatos.count(PASSO_A) == 3
+        assert [c["situacao"] for c in _duas_parciais_gravadas(banco)] == ["A_FAZER", "A_FAZER"]
+        assert _etapas_gravadas(banco, primeira["id"]) == [
+            "LENDO_CONTA",
+            "LENDO_PRONTUARIO",
+            "IA_LENDO_PRONTUARIO",
+            "parte 1 de 3",
+            "parte 2 de 3",
+            "parte 3 de 3",
+            "CONFERINDO",
+            "IA_MONTANDO_GUIA",
+        ]
+        assert _etapas_gravadas(banco, segunda["id"]) == CINCO_ETAPAS
+
+    def test_a_etapa_fica_nula_quando_a_conta_fica_pronta_vai_para_erro_ou_volta_presa_para_a_fila(self):
+        sem_etapa = dict.fromkeys(("etapa_atual", "etapa_desde", "etapa_parte", "etapa_partes"))
+
+        def etapa(conta: dict) -> dict:
+            return {coluna: conta.get(coluna) for coluna in sem_etapa}
+
+        pronta = _cenario()
+        _enviar(pronta, _conta(), _prontuario())
+        _rodar_o_job(pronta)
+        (conta,) = pronta.tabelas["cm_conta"]
+        assert conta["situacao"] == "A_FAZER"
+        assert _etapas_gravadas(pronta) == CINCO_ETAPAS
+        assert etapa(conta) == sem_etapa
+
+        com_erro = _cenario()
+        _enviar(com_erro, _conta(total_errado=True), _prontuario())
+        _rodar_o_job(com_erro)
+        (conta,) = com_erro.tabelas["cm_conta"]
+        assert conta["situacao"] == "ERRO"
+        assert _etapas_gravadas(com_erro) == ["LENDO_CONTA"]
+        assert etapa(conta) == sem_etapa
+
+        no_meio_da_ia = {
+            "etapa_atual": "IA_LENDO_PRONTUARIO",
+            "etapa_desde": _ha(70),
+            "etapa_parte": 3,
+            "etapa_partes": 7,
+        }
+        presa = _Banco({"cm_conta": [{**_presa(61, tentativas=1), **no_meio_da_ia}]})
+        processamento.devolver_presas(presa, AGORA)
+        assert presa.conta("c1")["situacao"] == "NA_FILA"
+        assert etapa(presa.conta("c1")) == sem_etapa
+
+    def test_a_listagem_dos_envios_traz_a_etapa_a_parte_o_inicio_e_a_tentativa(self):
+        banco = _cenario()
+        _enviar(banco, _conta(), _prontuario())
+        (conta,) = banco.tabelas["cm_conta"]
+        # A segunda tentativa, no meio do Passo A de um prontuário em 7 partes.
+        conta.update(
+            situacao="PROCESSANDO",
+            processando_desde=_ha(12),
+            tentativas=2,
+            etapa_atual="IA_LENDO_PRONTUARIO",
+            etapa_desde=_ha(4),
+            etapa_parte=3,
+            etapa_partes=7,
+        )
+
+        (item,) = _fila(banco, "meus_envios")
+
+        campos = ("etapa", "parte", "partes", "etapa_desde", "processando_desde", "tentativa")
+        assert {campo: item[campo] for campo in campos} == {
+            "etapa": "IA_LENDO_PRONTUARIO",
+            "parte": 3,
+            "partes": 7,
+            "etapa_desde": _ha(4),
+            "processando_desde": _ha(12),
+            "tentativa": 2,
+        }
+
+    def test_o_kit_de_conhecimento_diz_a_pilula_processando_a_tentativa_e_o_aviso_de_pronta(self):
+        texto = KIT.read_text(encoding="utf-8")
+
+        assert "Pronta em instantes" not in texto
+        for trecho in (
+            "Processando",
+            "Lendo a conta",
+            "Lendo o prontuário",
+            "IA lendo o prontuário",
+            "Conferindo",
+            "IA montando o Guia",
+            "parte 3 de 7",
+            "tentativa 2 de 3",
+            "a cada 5 segundos",
+            "Atendimento 31310 pronto, foi para a Fila",
+        ):
+            assert trecho in texto, trecho
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 16. O painel lateral do Processamento (issue #1418, PRD #1415)
+# ═══════════════════════════════════════════════════════════════════════════
+
+# Os tempos do Motor (as etapas internas) como `tempos_por_etapa_s` grava.
+TEMPOS_DO_MOTOR = {
+    "texto_da_conta": 1.0,
+    "leitura_da_conta": 2.0,
+    "texto_do_prontuario": 3.0,
+    "leitura_do_prontuario": 4.0,
+    "dicionario": 0.5,
+    "conferencia": 0.5,
+    "passo_a": 30.0,
+    "conferencia_com_eventos": 1.5,
+    "passo_b": 20.0,
+    "gravacao": 0.25,
+    "total": 62.75,
+}
+CAMPOS_DO_CUSTO = {"modelo", "chamadas", "tokens_entrada", "tokens_saida", "tokens_cache", "custo_usd"}
+
+
+def _detalhe(banco: _Banco, conta_id: str, quem: str = "faturista"):
+    return _cliente(banco, quem).get(f"/api/contas-medicas/contas/{conta_id}/processamento")
+
+
+def _etapas(resposta) -> list[tuple]:
+    assert resposta.status_code == 200, resposta.text
+    return [(e["etapa"], e["estado"], e["tempo_s"]) for e in resposta.json()["etapas"]]
+
+
+def _ha_de_verdade(minutos: int) -> str:
+    """A rota lê o relógio de verdade: a etapa atual conta a partir dele."""
+    return (datetime.now(UTC) - timedelta(minutes=minutos)).isoformat()
+
+
+class TestPainelDoProcessamento:
+    def test_a_conta_pronta_traz_as_cinco_etapas_feitas_com_o_tempo_de_cada_uma_na_tela(self):
+        banco = _cenario()
+        _enviar(banco, _conta(), _prontuario())
+        _rodar_o_job(banco)
+        (conta,) = banco.tabelas["cm_conta"]
+        assert conta["situacao"] == "A_FAZER", conta.get("erro_motivo")
+        conta["faltantes"] = {**conta["faltantes"], "tempos_por_etapa_s": TEMPOS_DO_MOTOR}
+
+        resposta = _detalhe(banco, conta["id"])
+
+        # As internas somadas nas cinco da tela; o "total" não é etapa.
+        assert _etapas(resposta) == [
+            ("LENDO_CONTA", "feita", 3.0),
+            ("LENDO_PRONTUARIO", "feita", 8.0),
+            ("IA_LENDO_PRONTUARIO", "feita", 30.0),
+            ("CONFERINDO", "feita", 1.5),
+            ("IA_MONTANDO_GUIA", "feita", 20.25),
+        ]
+        corpo = resposta.json()
+        assert (corpo["situacao"], corpo["tentativa"], corpo["posicao_na_fila"]) == ("A_FAZER", 1, None)
+
+    def test_a_conta_processando_traz_as_feitas_com_tempo_a_atual_desde_quando_e_as_que_faltam(self):
+        banco = _cenario()
+        _enviar(banco, _conta(), _prontuario())
+        (conta,) = banco.tabelas["cm_conta"]
+        ate_o_passo_a = {k: v for k, v in TEMPOS_DO_MOTOR.items() if k in list(TEMPOS_DO_MOTOR)[:6]}
+        conta.update(
+            situacao="PROCESSANDO",
+            processando_desde=_ha_de_verdade(12),
+            tentativas=2,
+            etapa_atual="IA_LENDO_PRONTUARIO",
+            etapa_desde=_ha_de_verdade(4),
+            etapa_parte=3,
+            etapa_partes=7,
+            erro_detalhe={"etapa": "passo_a", "tempos_por_etapa_s": ate_o_passo_a},
+        )
+
+        resposta = _detalhe(banco, conta["id"])
+
+        etapas = _etapas(resposta)
+        assert etapas[:2] == [("LENDO_CONTA", "feita", 3.0), ("LENDO_PRONTUARIO", "feita", 8.0)]
+        etapa, estado, tempo = etapas[2]
+        assert (etapa, estado) == ("IA_LENDO_PRONTUARIO", "atual")
+        assert 240 <= tempo < 250
+        assert etapas[3:] == [("CONFERINDO", "falta", None), ("IA_MONTANDO_GUIA", "falta", None)]
+        corpo = resposta.json()
+        assert {k: corpo[k] for k in ("situacao", "tentativa", "parte", "partes", "posicao_na_fila")} == {
+            "situacao": "PROCESSANDO",
+            "tentativa": 2,
+            "parte": 3,
+            "partes": 7,
+            "posicao_na_fila": None,
+        }
+
+    def test_o_motor_grava_o_tempo_das_etapas_feitas_a_cada_troca_de_etapa(self):
+        """A conta Processando ainda não tem `faltantes`: o tempo das feitas vem
+        do detalhe que o Motor grava a cada etapa que começa."""
+        banco = _cenario()
+        _enviar(banco, _conta(), _prontuario())
+
+        _rodar_o_job(banco)
+
+        no_passo_a = next(c for _, c in banco.escritas_na_conta if c.get("etapa_atual") == "IA_LENDO_PRONTUARIO")
+        tempos = no_passo_a["erro_detalhe"]["tempos_por_etapa_s"]
+        assert set(tempos) == {
+            "texto_da_conta",
+            "leitura_da_conta",
+            "texto_do_prontuario",
+            "leitura_do_prontuario",
+            "dicionario",
+            "conferencia",
+        }
+        assert no_passo_a["erro_detalhe"]["etapa"] == "passo_a"
+
+    def test_as_contas_na_fila_trazem_a_posicao_e_as_cinco_etapas_por_fazer(self):
+        banco = _cenario()
+        _enviar(banco, _conta("48811", 2, 4), _conta("48812", 5, 6), _prontuario())
+        primeira, segunda = _duas_parciais_gravadas(banco)
+        assert (primeira["situacao"], segunda["situacao"]) == ("NA_FILA", "NA_FILA")
+
+        resposta = _detalhe(banco, segunda["id"])
+
+        assert _etapas(resposta) == [(etapa, "falta", None) for etapa in CINCO_ETAPAS]
+        assert resposta.json()["posicao_na_fila"] == 2
+        assert _detalhe(banco, primeira["id"]).json()["posicao_na_fila"] == 1
+
+    def test_com_painel_completo_traz_modelo_chamadas_tokens_e_custo_somados_das_chamadas_da_conta(self):
+        banco = _cenario()
+        _enviar(banco, _conta(), _prontuario())
+        (conta,) = banco.tabelas["cm_conta"]
+
+        def chamada(conta_id, modelo, entrada, saida, cache, custo, criado_em):
+            return {
+                "conta_id": conta_id,
+                "modelo": modelo,
+                "tokens_entrada": entrada,
+                "tokens_saida": saida,
+                "tokens_cache": cache,
+                "custo_usd": custo,
+                "criado_em": criado_em,
+            }
+
+        banco.tabelas["cm_chamada_ia"] = [
+            chamada(conta["id"], "claude-sonnet-5-5", 1000, 200, 50, 0.012, "2026-10-12T10:00:00+00:00"),
+            chamada(conta["id"], "claude-haiku-5", 300, 40, 0, 0.0011, "2026-10-12T10:01:00+00:00"),
+            chamada(conta["id"], "claude-sonnet-5-5", 2000, 400, 100, 0.024, "2026-10-12T10:02:00+00:00"),
+            # A chamada de outra conta não entra na soma.
+            chamada("outra", "claude-opus-5-5", 9999, 9999, 9999, 9.9, "2026-10-12T10:03:00+00:00"),
+        ]
+
+        resposta = _detalhe(banco, conta["id"], "gestao")
+
+        assert resposta.status_code == 200, resposta.text
+        corpo = resposta.json()
+        assert {k: corpo[k] for k in CAMPOS_DO_CUSTO} == {
+            "modelo": "claude-sonnet-5-5, claude-haiku-5",
+            "chamadas": 3,
+            "tokens_entrada": 3300,
+            "tokens_saida": 640,
+            "tokens_cache": 150,
+            "custo_usd": 0.0371,
+        }
+
+    def test_para_o_apoio_ao_faturamento_a_resposta_nao_tem_as_chaves_do_custo(self):
+        banco = _cenario()
+        _enviar(banco, _conta(), _prontuario(), quem="apoio")
+        (conta,) = banco.tabelas["cm_conta"]
+        banco.tabelas["cm_chamada_ia"] = [
+            {"conta_id": conta["id"], "modelo": "claude-sonnet-5-5", "tokens_entrada": 1, "custo_usd": 0.5}
+        ]
+
+        resposta = _detalhe(banco, conta["id"], "apoio")
+
+        assert resposta.status_code == 200, resposta.text
+        corpo = resposta.json()
+        assert "etapas" in corpo
+        # A ausência da chave, não um valor vazio.
+        assert not CAMPOS_DO_CUSTO & set(corpo), sorted(CAMPOS_DO_CUSTO & set(corpo))
+
+    def test_a_conta_de_outra_pessoa_nao_e_devolvida_para_quem_nao_tem_painel_completo(self):
+        banco = _cenario()
+        _enviar(banco, _conta(), _prontuario(), quem="faturista")
+        (conta,) = banco.tabelas["cm_conta"]
+
+        resposta = _detalhe(banco, conta["id"], "apoio")
+
+        assert resposta.status_code == 404
+        assert "etapas" not in resposta.json()
+        # Quem enviou e a gestão veem.
+        assert _detalhe(banco, conta["id"], "faturista").status_code == 200
+        assert _detalhe(banco, conta["id"], "gestao").status_code == 200
+
+    def test_o_kit_de_conhecimento_diz_o_painel_lateral_e_quem_ve_o_custo(self):
+        texto = KIT.read_text(encoding="utf-8")
+
+        for trecho in (
+            "Clicando no cartão",
+            "o tempo de cada etapa",
+            "a posição na fila",
+            "o custo da IA",
+            "como o Apoio ao faturamento, não vê",
+        ):
+            assert trecho in texto, trecho

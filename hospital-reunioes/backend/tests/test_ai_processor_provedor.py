@@ -10,6 +10,7 @@ Nenhum chega à rede (a trava da suíte, `conftest.py`, reprova quem tentar).
 
 from __future__ import annotations
 
+import json
 import os
 import sys
 
@@ -19,7 +20,7 @@ import pytest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from anthropic_apoio import mensagem  # noqa: E402
+from anthropic_apoio import cliente_por_transporte, mensagem  # noqa: E402
 
 from app.config import settings  # noqa: E402
 from app.services import ai_processor  # noqa: E402
@@ -89,3 +90,65 @@ class TestLlmProvider:
         monkeypatch.setattr(settings, "anthropic_api_key", "")
         monkeypatch.setattr(settings, "openrouter_api_key", "")
         assert ai_processor._llm_provider() == "mock"
+
+
+ATA = '{"objetivo": "Rever metas", "discussao": [], "quadro_atribuicoes": []}'
+
+
+def _ia_respondendo(monkeypatch, corpo: dict) -> list[httpx2.Request]:
+    """O `_get_llm` devolve o SDK de verdade com o transporte trocado, que
+    responde `corpo`; quando o pedido sai em stream, a mensagem vira os eventos
+    SSE que a API mandaria."""
+    pedidos: list[httpx2.Request] = []
+
+    def duble(pedido: httpx2.Request) -> httpx2.Response:
+        pedidos.append(pedido)
+        return httpx2.Response(200, json=corpo)
+
+    monkeypatch.setattr(ai_processor, "_get_llm", lambda: (cliente_por_transporte(duble), settings.llm_model))
+    return pedidos
+
+
+class TestAtaDeReuniaoLonga:
+    """Issue #1429: a Ata da Diretoria de 04/11/2026 parou em Erro com "resposta
+    da IA interrompida (max_tokens)". O teto de 16 mil tokens conta o raciocínio
+    do Sonnet 5.5 junto com o JSON da Ata, e numa reunião longa a soma passa.
+    A Ata, e a correção dela, que devolve a Ata inteira, saem em stream com o
+    teto do modelo, como a leitura de Contas médicas (#1412)."""
+
+    def test_gerar_a_ata_pede_o_teto_do_modelo_em_stream(self, chaves, monkeypatch):
+        pedidos = _ia_respondendo(monkeypatch, mensagem(ATA))
+
+        ata = ai_processor.process_transcricao("fala longa " * 5000, "reuniao-1429", "Diretoria")
+
+        assert ata["objetivo"] == "Rever metas"
+        corpo = json.loads(pedidos[0].content)
+        assert corpo["max_tokens"] == 128000
+        assert corpo["stream"] is True
+
+    def test_corrigir_a_ata_pede_o_teto_do_modelo_em_stream(self, chaves, monkeypatch):
+        pedidos = _ia_respondendo(monkeypatch, mensagem(ATA))
+
+        ata = ai_processor.process_correcao("fala", {"objetivo": "x"}, "troque o objetivo", "reuniao-1429")
+
+        assert ata["objetivo"] == "Rever metas"
+        corpo = json.loads(pedidos[0].content)
+        assert corpo["max_tokens"] == 128000
+        assert corpo["stream"] is True
+
+    def test_ata_cortada_no_teto_novo_ainda_vira_erro(self, chaves, monkeypatch):
+        _ia_respondendo(monkeypatch, mensagem(ATA[:20], parada="max_tokens"))
+
+        ata = ai_processor.process_transcricao("fala", "reuniao-1429", "Diretoria")
+
+        assert ata == {"error": "resposta da IA interrompida (max_tokens)"}
+
+    def test_os_chats_seguem_sem_stream_no_teto_curto(self, chaves, monkeypatch):
+        pedidos = _trocar_transporte(monkeypatch)
+
+        client, model = ai_processor._get_llm()
+        ai_processor._pedir_texto(client, model, system="instrucao", conteudo="oi")
+
+        corpo = json.loads(pedidos[0].content)
+        assert corpo["max_tokens"] == ai_processor.MAX_TOKENS == 16000
+        assert "stream" not in corpo

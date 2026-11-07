@@ -72,7 +72,7 @@ def apagar_arquivos_vencidos(supabase, agora: dt.datetime) -> Rodada:
 
     apagados = ausentes = falhas = 0
     for arquivo in vencidos:
-        saiu = _tirar_do_bucket(supabase, arquivo.get("chave_bucket"))
+        saiu = tirar_do_bucket(supabase, arquivo.get("chave_bucket"))
         if saiu is None:
             falhas += 1
             continue
@@ -88,7 +88,7 @@ def apagar_arquivos_vencidos(supabase, agora: dt.datetime) -> Rodada:
     return Rodada(apagados=apagados, ausentes=ausentes, falhas=falhas)
 
 
-def _tirar_do_bucket(supabase, chave_bucket: str | None) -> bool | None:
+def tirar_do_bucket(supabase, chave_bucket: str | None) -> bool | None:
     """Remove o PDF e o texto ao lado. Devolve True se algo saiu, False se o
     bucket já não tinha nenhum dos dois, e None se o Storage falhou.
 

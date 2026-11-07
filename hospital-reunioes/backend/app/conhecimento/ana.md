@@ -40,6 +40,16 @@ A Ana pede nome completo e CPF, numa mensagem só, e apenas nos momentos em que 
 
 O relato e os dados pessoais ficam na conversa, com a equipe. O que vai para o aplicativo é o índice do caso, não o dossiê.
 
+## O que já foi decidido
+
+- Os valores de consulta, exame e cirurgia que a Ana responde moram no aplicativo, e o que se edita lá vale na conversa seguinte, sem espera.
+- A resposta que o aplicativo dá à Ana cabe sempre no que a plataforma dela consegue ler, resumida quando a tabela é grande, para ela não dizer que um item não existe só porque a lista chegou cortada.
+- Quais convênios e especialidades existem quem diz é a agenda online, e o aplicativo não guarda lista própria de convênios.
+- O número do protocolo de ouvidoria é sempre gerado pelo aplicativo, e a Ana só repete o número que recebeu.
+- A Ana registra a manifestação e nunca decide tipo, gravidade, sigilo nem área, que são escolhas do ouvidor.
+- Cirurgia, procedimento e negociação de valor sempre passam para uma pessoa do hospital.
+- A Ana pede só nome completo e CPF, numa mensagem, e apenas quando a conversa vai passar para uma pessoa.
+
 ## O que costuma virar Demanda
 
 - Valor, preparo ou diferencial errado ou desatualizado (Defeito ou Ajuste).

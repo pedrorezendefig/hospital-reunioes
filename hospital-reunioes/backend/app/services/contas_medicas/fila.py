@@ -66,13 +66,23 @@ def envios_da_pessoa(supabase, me: dict) -> dict:
     o nome de quem enviou em `com_quem`."""
     todas = ve_todas(me)
     nao_prontas = _contas(supabase, me, NAO_PRONTAS, da_pessoa=False)
-    enviou = _quem_enviou(supabase, nao_prontas)
+    enviou, ambiguas = _quem_enviou(supabase, nao_prontas)
     envios = nao_prontas if todas else [c for c in nao_prontas if enviou.get(c["id"]) == me.get("id")]
     for conta in envios:
         conta["com_quem"] = enviou.get(conta["id"]) if todas else None
+        # A mesma regra de posse do descarte: com prontuário de mais de uma
+        # pessoa e sem conta, só a gestão descarta (issue #1338).
+        conta["so_a_gestao_descarta"] = not todas and conta["id"] in ambiguas
     if todas:
         _trocar_id_por_nome(supabase, envios)
     return {"todas": todas, "meus_envios": envios}
+
+
+def quem_enviou(supabase, conta: dict) -> str | None:
+    """O `cm_envio.usuario_id` de quem enviou a conta, pela regra de "Meus
+    envios", em qualquer situação (o painel lateral, issue #1418)."""
+    enviou, _ = _quem_enviou(supabase, [conta])
+    return enviou.get(conta["id"])
 
 
 def _por_id(supabase, tabela: str, coluna: str, valores, **filtros) -> list[dict]:
@@ -85,10 +95,11 @@ def _por_id(supabase, tabela: str, coluna: str, valores, **filtros) -> list[dict
     return consulta.execute().data or []
 
 
-def _quem_enviou(supabase, contas: list[dict]) -> dict[str, str]:
+def _quem_enviou(supabase, contas: list[dict]) -> tuple[dict[str, str], set[str]]:
     """O `cm_envio.usuario_id` de cada conta, pelo arquivo dela. A conta à
     espera da Conta ainda não tem arquivo: quem enviou é quem mandou o
-    Prontuário do atendimento."""
+    Prontuário do atendimento. Junto, as contas à espera da Conta cujo
+    prontuário veio de mais de uma pessoa (a posse ambígua do descarte)."""
     da_conta = {a["id"]: a for a in _por_id(supabase, "cm_arquivo", "id", (c.get("arquivo_id") for c in contas))}
     prontuarios = _por_id(
         supabase,
@@ -102,9 +113,15 @@ def _quem_enviou(supabase, contas: list[dict]) -> dict[str, str]:
         c["id"]: da_conta.get(c["arquivo_id"]) if c.get("arquivo_id") else do_atendimento.get(c.get("atendimento_id"))
         for c in contas
     }
-    envios = _por_id(supabase, "cm_envio", "id", (a["envio_id"] for a in arquivo_de.values() if a))
+    envios = _por_id(supabase, "cm_envio", "id", (a["envio_id"] for a in [*arquivo_de.values(), *prontuarios] if a))
     usuario_do_envio = {e["id"]: e.get("usuario_id") for e in envios}
-    return {cid: usuario_do_envio.get(a["envio_id"]) for cid, a in arquivo_de.items() if a}
+    remetentes: dict[str, set] = {}
+    for p in prontuarios:
+        remetentes.setdefault(p["atendimento_id"], set()).add(usuario_do_envio.get(p.get("envio_id")))
+    ambiguas = {
+        c["id"] for c in contas if not c.get("arquivo_id") and len(remetentes.get(c.get("atendimento_id"), ())) > 1
+    }
+    return {cid: usuario_do_envio.get(a["envio_id"]) for cid, a in arquivo_de.items() if a}, ambiguas
 
 
 def _trocar_id_por_nome(supabase, contas: list[dict]) -> None:
@@ -133,20 +150,24 @@ def puxar(supabase, conta_id: str, pessoa_id: str, agora: str) -> bool:
     return bool(gravadas)
 
 
-def devolver(supabase, conta_id: str) -> bool:
+def devolver(supabase, conta_id: str, dona_lida: str | None) -> bool:
     """A conta Em correção volta livre para a Fila (issue #1309). Só a dona e
     a situação mudam: `ordem_fila`, `aberta_em` e as marcações ficam. O UPDATE
-    é condicional na situação: a conta concluída entre a leitura e a escrita
-    não volta."""
-    gravadas = (
+    é condicional na situação e na dona lida: a conta concluída ou passada a
+    outra faturista entre a leitura e a escrita não volta (issue #1328).
+    A dona lida pode ser nula (pessoa apagada, ON DELETE SET NULL): aí o
+    filtro é `is null`, porque `eq` com None vira `eq.None` e não casa nada."""
+    consulta = (
         supabase.table("cm_conta")
         .update({"situacao": LIVRE, "faturista_id": None})
         .eq("id", conta_id)
         .eq("situacao", EM_CORRECAO)
-        .execute()
-        .data
-        or []
     )
+    if dona_lida is None:
+        consulta = consulta.is_("faturista_id", "null")
+    else:
+        consulta = consulta.eq("faturista_id", dona_lida)
+    gravadas = consulta.execute().data or []
     return bool(gravadas)
 
 
