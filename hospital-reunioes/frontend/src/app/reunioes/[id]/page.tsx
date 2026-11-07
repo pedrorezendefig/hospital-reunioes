@@ -2004,10 +2004,21 @@ export default function ReuniaoDetailPage() {
       )}
 
       {/* Erro */}
-      {reuniao.status_ata === "ERRO" && ata?.error && !hideAtaSections && (
+      {reuniao.status_ata === "ERRO" && !hideAtaSections && (
         <div className="flex items-start gap-3 px-5 py-4 rounded-2xl bg-red-50 border border-red-100 text-red-700 text-sm">
           <XCircle className="w-5 h-5 flex-shrink-0 mt-0.5" />
-          <div><strong>Erro no processamento:</strong> {ata.error}</div>
+          <div className="flex-1 space-y-3">
+            <div>
+              <strong>Erro no processamento{ata?.error ? ":" : "."}</strong> {ata?.error}
+            </div>
+            <button
+              type="button"
+              className="flex items-center gap-2 px-4 py-2 rounded-xl bg-white border border-red-200 text-red-700 text-sm font-medium hover:bg-red-100 transition-all disabled:opacity-60 disabled:cursor-not-allowed"
+            >
+              <Repeat2 className="w-4 h-4" />
+              Gerar a ata de novo
+            </button>
+          </div>
         </div>
       )}
 
