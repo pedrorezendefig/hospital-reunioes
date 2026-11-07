@@ -1,6 +1,6 @@
 ---
 name: minhas-issues
-description: "Check de um minuto das minhas issues abertas: semáforo do Actions, onde parou, fila por PRD, plano com comandos e passo a passo das humanas. O fluxo e os botões ficam na aba Issues, não no terminal. Gatilhos: minhas issues, onde parei, o que tem pra mim, check das minhas issues, status do Actions. Só leitura. Sintaxe `/minhas-issues [@login] [--visual]`."
+description: "Check de um minuto das minhas issues abertas: semáforo do Actions, onde parou, fila por PRD, plano com comandos e passo a passo das humanas. O fluxo sai com --visual; os botões que abrem a onda ficam no PedroOS. Gatilhos: minhas issues, onde parei, o que tem pra mim, check das minhas issues, status do Actions. Só leitura. Sintaxe `/minhas-issues [@login] [--visual]`."
 ---
 
 # Minhas issues: check de um minuto
@@ -13,7 +13,7 @@ Mostra numa tela só o que está aberto com quem pede, onde cada coisa parou, se
 /minhas-issues [@login] [--visual]
 ```
 
-Sem argumento, a pessoa é o login do `gh api user`. Com `@login`, mostra a fila de outra pessoa (cobrar alguém, cobrir férias). A tela padrão é a compacta, só os blocos de texto: o caminho, a árvore dos PRDs, os selos e a Tecnologia moram na **aba Issues** (mod `hr-issues`), com os números como botões. Fluxograma no terminal só com `--visual`, quando a pessoa pedir com essas palavras (`--curto` segue aceito e é o mesmo que o padrão).
+Sem argumento, a pessoa é o login do `gh api user`. Com `@login`, mostra a fila de outra pessoa (cobrar alguém, cobrir férias). A tela padrão é a compacta, só os blocos de texto. O caminho, a árvore dos PRDs, os selos e a Tecnologia saem só com `--visual`, quando a pessoa pedir com essas palavras (`--curto` segue aceito e é o mesmo que o padrão).
 
 "Minha" é o que a pessoa tem que fazer: atribuída a ela; sem ninguém atribuído, quem criou. O painel filtrado pela pessoa mostra também o que ela criou e outro assumiu, então lá o total pode ser maior.
 
@@ -25,7 +25,7 @@ Sem argumento, a pessoa é o login do `gh api user`. Com `@login`, mostra a fila
    python3 .claude/skills/minhas-issues/scripts/minhas_issues.py [@login]
    ```
 
-   Não desenhe fluxograma nem árvore no terminal, nem em Mermaid feito à mão: o fluxo está na aba Issues, ao lado. A última linha da saída já aponta para ela (`/issues`).
+   Não desenhe fluxograma nem árvore no terminal, nem em Mermaid feito à mão: o fluxo sai com `--visual`. A última linha da saída já aponta para ele.
 
 2. Acrescente no máximo **duas linhas** suas, e só se mudarem a decisão (por exemplo: o mesmo arquivo em dois PRs do plano, ou um PR verde cuja issue já fechou). Nada de recapitular a tabela.
 
@@ -77,18 +77,12 @@ Regras:
 
    A estimativa é a mediana de PR aberto até o merge pelo tamanho da fatia (`fatia:P/M/G`), calculada na hora sobre os últimos 45 dias. O lead time abertura-fechamento não entra: mede espera na fila, não esforço. **Melhor** é o passo 1 (a ordem já põe primeiro o que destrava mais); **mais rápido** é o de menor estimativa; quando coincidem, sai numa linha.
 
-### O que a tela visual soma (`--visual`, e sempre na aba Issues)
+### O que a tela visual soma (`--visual`)
 
 - **Caminho das issues**, logo abaixo do total: um fluxograma com as caixas Triagem, Fila de agente, Humana, Em andamento, PR aberto e Entregue nos últimos 14 dias. Cada caixa traz a contagem e até 6 números.
 - **Árvore de cada PRD** que tem fatia sua aberta: o PRD, as fatias com a fase e uma seta pontilhada "trava" para cada bloqueio nativo do GitHub ("blocked by"). Uma fatia travada se liga à fatia que a trava, e não ao PRD.
 - **Selos** nos números: `[Humana]` para `ready-for-human` e `[Diretor]` para a issue que nasceu na aba Tecnologia.
 - **Chegou da Tecnologia**, antes do plano: as issues do diretor separadas em Bug (`type:fix` ou `type:bug`) e Melhoria. Entram as abertas e as fechadas nos últimos 14 dias, de qualquer responsável, com a fase e a pessoa responsável. A origem vem do marcador `<!-- demanda-vitta id="..." -->` que a aba grava no corpo da issue. Não existe label para isso.
-
-### A aba Issues (mod `hr-issues`)
-
-A mesma visão fica num painel à direita, numa aba ao lado da "Ondas" do `hr-ondas`. O mod roda `minhas_issues.py --json` com cache de 5 min compartilhado entre as sessões e se atualiza depois de um `gh` que muda issue ou PR. `/issues` abre a aba e atualiza na hora.
-
-Cada número é um botão, sem URL ao lado (o Terminal do Mac não abre link OSC 8). O número em negrito abre uma sessão de fundo pelo `hooks/lancar.sh`, que aparece no `claude agents`: na fila, a `/montar-ondas-enxutas` só daquele PRD (ou só da issue, quando o PRD tem uma fatia aberta), parada no "Posso lançar?"; na humana, o guia passo a passo; na triagem, o `/triage`. Nenhuma roda trabalho sem o OK. Em andamento, PR e entregue abrem no GitHub. O segundo clique na mesma onda não abre outra sessão.
 
 ## Limites
 

@@ -425,9 +425,9 @@ def test_o_compacto_nao_ganha_selo_nem_fluxograma():
     d = dados([issue(1, labels=["ready-for-human"], corpo=MARCA)])
     saida = mi.montar(d)
     assert "[Humana]" not in saida and "```mermaid" not in saida and "Tecnologia" not in saida
-    # o fluxo mora no painel: o compacto termina apontando para a aba
-    assert saida.splitlines()[-1].startswith("O caminho, a árvore dos PRDs e os botões")
-    assert "aba Issues" not in mi.montar(d, visual=True)
+    # o compacto termina apontando para o --visual e para o PedroOS
+    assert saida.splitlines()[-1].startswith("O caminho e a árvore dos PRDs saem com `--visual`")
+    assert "PedroOS" not in mi.montar(d, visual=True)
 
 
 def test_selos_humana_e_diretor_aparecem_na_fila():
@@ -498,7 +498,7 @@ def test_mermaid_nao_quebra_com_aspas_no_titulo():
     assert "tem 'aspas'" in saida and "PRD 'x'" in saida
 
 
-# --json: a visão que o painel do mod hr-issues desenha
+# --json: a visão da tela visual em dados
 
 
 def test_visao_traz_caixas_prds_tecnologia_e_plano():

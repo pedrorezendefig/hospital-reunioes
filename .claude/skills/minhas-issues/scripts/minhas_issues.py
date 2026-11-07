@@ -5,10 +5,10 @@ Só leitura: consulta gh, git e a status page do GitHub e imprime 4 blocos
 nada é executado aqui.
 
 Uso:
-  python3 minhas_issues.py            login do `gh api user`, tela compacta (o fluxo fica na aba Issues)
+  python3 minhas_issues.py            login do `gh api user`, tela compacta (o fluxo sai com --visual)
   python3 minhas_issues.py @login     fila de outra pessoa
   python3 minhas_issues.py --visual   soma os fluxogramas Mermaid e a Tecnologia no terminal
-  python3 minhas_issues.py --json     a mesma visão em JSON, para o painel do mod hr-issues
+  python3 minhas_issues.py --json     a mesma visão em JSON
 
 A tela visual soma ao compacto: o caminho das issues em Mermaid, a árvore de
 cada PRD com os bloqueios nativos, os selos Humana e Diretor e a seção do que
@@ -359,7 +359,7 @@ def montar(d: dict, visual: bool = False) -> str:
             else f"Melhor: passo 1. Mais rápido: passo {rapido}."
         )
     if not visual:
-        saida += ["", "O caminho, a árvore dos PRDs e os botões que abrem a onda ficam na aba Issues (`/issues`)."]
+        saida += ["", "O caminho e a árvore dos PRDs saem com `--visual`. Os botões que abrem a onda ficam na Página do Projeto do PedroOS."]
     return "\n".join(saida)
 
 
@@ -480,7 +480,7 @@ def secao_tecnologia(d: dict, pr_de: dict, agora: datetime) -> list[str]:
     return saida[:-1]
 
 
-# JSON para o painel (mod hr-issues)
+# JSON da tela visual
 
 
 def _item(i: dict, pr_de: dict, em_andamento: bool = False) -> dict:
@@ -749,7 +749,7 @@ if __name__ == "__main__":
     for fluxo in (sys.stdout, sys.stderr):  # Windows: o pipe sai em cp1252
         fluxo.reconfigure(encoding="utf-8")
     args = sys.argv[1:]
-    # o fluxo mora na aba Issues; no terminal, só com --visual (--curto segue aceito, é o padrão)
+    # o fluxo só sai com --visual (--curto segue aceito, é o padrão)
     visual = "--visual" in args
     alvo = next((a.lstrip("@") for a in args if not a.startswith("--")), None)
     try:
