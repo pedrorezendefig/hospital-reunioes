@@ -1287,6 +1287,28 @@ class TestKitDeConhecimento:
         ):
             assert trecho in secao, trecho
 
+    def test_diz_a_previsao_a_barra_de_tempos_e_a_demora(self):
+        """Issue #1417: quanto falta, a vez e as horas na fila, a barra da aba
+        Envios, o aviso de demora e as 5 contas prontas antes da Previsão."""
+        secao = KIT.read_text(encoding="utf-8").split("## O envio e a fila", 1)[1].split("\n## ", 1)[0]
+
+        for trecho in (
+            "faltam ~8 min",
+            "Na fila, 2ª",
+            "começa por volta de",
+            "pronta por volta de",
+            "páginas do prontuário",
+            "últimas 20 contas prontas",
+            "do envio à Fila",
+            "processamento",
+            "a fila esvazia por volta de",
+            "demorando mais que o normal",
+            "amarela",
+            "5 contas prontas",
+            "últimos 7 dias",
+        ):
+            assert trecho in secao, trecho
+
 
 # ═══════════════════════════════════════════════════════════════════════════
 # 11. Tipografia
