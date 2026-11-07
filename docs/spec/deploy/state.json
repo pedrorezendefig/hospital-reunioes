@@ -1,8 +1,8 @@
 {
   "schema_version": "1.0",
-  "updated_at": "2026-11-07T18:22:17-03:00",
+  "updated_at": "2026-11-07T18:51:56-03:00",
   "updated_by": "onda-enxuta@fechar_onda",
-  "last_app_version": "0.223.0",
+  "last_app_version": "0.224.0",
   "production": {
     "domain_root": "hospitalsaomatheus.cloud",
     "vps_ip": "31.97.29.32",
@@ -21,11 +21,11 @@
       "port": 8000,
       "health_path": "/api/health",
       "status": "healthy",
-      "last_deploy_sha": "09a62424fd9ca6ae12feab242a67bc98542df1d9",
-      "last_deploy_at": "2026-11-07T18:22:17-03:00",
+      "last_deploy_sha": "bc8159f5c7442f7bbe66f1aed1dcf1ec9215172f",
+      "last_deploy_at": "2026-11-07T18:51:56-03:00",
       "last_health_check": {
-        "at": "2026-11-07T18:22:17-03:00",
-        "latency_ms": 178,
+        "at": "2026-11-07T18:51:56-03:00",
+        "latency_ms": 235,
         "http_status": 200,
         "body_ok": true
       },
@@ -39,15 +39,15 @@
       "port": 3000,
       "health_path": null,
       "status": "healthy",
-      "last_deploy_sha": "09a62424fd9ca6ae12feab242a67bc98542df1d9",
-      "last_deploy_at": "2026-11-07T18:22:17-03:00",
+      "last_deploy_sha": "bc8159f5c7442f7bbe66f1aed1dcf1ec9215172f",
+      "last_deploy_at": "2026-11-07T18:51:56-03:00",
       "last_health_check": {
-        "at": "2026-11-07T18:22:17-03:00",
-        "latency_ms": 375,
+        "at": "2026-11-07T18:51:56-03:00",
+        "latency_ms": 476,
         "http_status": 200,
         "body_ok": true
       },
-      "build_duration_seconds": 183,
+      "build_duration_seconds": 175,
       "env_count": 5
     },
     {
@@ -60,7 +60,7 @@
       "last_deploy_sha": "93870744",
       "last_deploy_at": "2026-09-23T13:21:42-03:00",
       "last_health_check": {
-        "at": "2026-11-07T18:22:17-03:00",
+        "at": "2026-11-07T18:51:56-03:00",
         "latency_ms": null,
         "http_status": null,
         "body_ok": true
@@ -208,8 +208,8 @@
   ],
   "last_run": {
     "mode": "onda-enxuta",
-    "sha": "09a62424fd9ca6ae12feab242a67bc98542df1d9",
+    "sha": "bc8159f5c7442f7bbe66f1aed1dcf1ec9215172f",
     "result": "healthy",
-    "duration_seconds": 7908
+    "duration_seconds": 211
   }
 }
