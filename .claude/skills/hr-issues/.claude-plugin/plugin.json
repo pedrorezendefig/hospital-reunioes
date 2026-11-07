@@ -1,0 +1,1 @@
+{ "name": "hr-issues", "version": "0.1.0", "description": "Aba Issues ao lado das Ondas: o caminho das minhas issues, a árvore de cada PRD, os selos Humana e Diretor e o que chegou da Tecnologia", "types": "./types/index.d.ts" }

@@ -493,3 +493,34 @@ def test_mermaid_nao_quebra_com_aspas_no_titulo():
     pai = {"number": 50, "title": 'PRD "x"'}
     saida = mi.montar(dados([issue(51, 'tem "aspas"', labels=["ready-for-agent"], parent=pai)]), visual=True)
     assert "tem 'aspas'" in saida and "PRD 'x'" in saida
+
+
+# --json: a visão que o painel do mod hr-issues desenha
+
+
+def test_visao_traz_caixas_prds_tecnologia_e_plano():
+    pai = {"number": 50, "title": "PRD: algo"}
+    d = dados(
+        [
+            issue(1, labels=["needs-triage"], corpo=MARCA),
+            issue(3, labels=["ready-for-human"]),
+            issue(51, labels=["ready-for-agent"], parent=pai),
+            {**issue(52, labels=["ready-for-agent"], parent=pai), "blockedBy": [51]},
+            issue(5),
+        ],
+        prs=[pr(90, 5)],
+    )
+    d["fechadas"] = [fechada(6)]
+    d["tecnologia"] = [issue(1, "pedido", labels=["needs-triage"], corpo=MARCA), fechada(7, "bug", labels=["type:fix"], corpo=MARCA)]
+    v = mi.visao(d)
+    assert [i["n"] for i in v["caminho"]["triagem"]] == [1]
+    assert v["caminho"]["triagem"][0]["selos"] == ["Diretor"]
+    assert [i["n"] for i in v["caminho"]["humana"]] == [3]
+    assert [i["n"] for i in v["caminho"]["fila"]] == [52, 51]
+    assert [i["n"] for i in v["caminho"]["pr"]] == [5]
+    assert [i["n"] for i in v["caminho"]["entregue"]] == [6]
+    assert (v["prds"][0]["fatias"][1]["n"], v["prds"][0]["fatias"][1]["travadaPor"]) == (52, [51])
+    assert [i["n"] for i in v["tecnologia"]["melhoria"]] == [1]
+    assert v["tecnologia"]["bug"][0]["fase"] == "entregue 04/10"
+    assert v["plano"][0].startswith("1. ")
+    assert v["semaforo"]["cor"] == "verde"

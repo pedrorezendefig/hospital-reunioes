@@ -8,6 +8,7 @@ Uso:
   python3 minhas_issues.py            login do `gh api user`, tela visual
   python3 minhas_issues.py @login     fila de outra pessoa
   python3 minhas_issues.py --curto    a tela compacta, sem fluxograma nem Tecnologia
+  python3 minhas_issues.py --json     a mesma visão em JSON, para o painel do mod hr-issues
 
 A tela visual soma ao compacto: o caminho das issues em Mermaid, a árvore de
 cada PRD com os bloqueios nativos, os selos Humana e Diretor e a seção do que
@@ -477,6 +478,76 @@ def secao_tecnologia(d: dict, pr_de: dict, agora: datetime) -> list[str]:
     return saida[:-1]
 
 
+# JSON para o painel (mod hr-issues)
+
+
+def _item(i: dict, pr_de: dict, em_andamento: bool = False) -> dict:
+    return {
+        "n": i["number"],
+        "titulo": i["title"],
+        "fase": fase(i, pr_de, em_andamento),
+        "selos": selos(i),
+        "quem": i["assignees"],
+        "fechada": i.get("state") == "CLOSED",
+    }
+
+
+def visao(d: dict) -> dict:
+    """O que a tela visual mostra, em dados: o painel desenha, não recalcula."""
+    cor, detalhe = semaforo(d["actions"])
+    agora = _quando(d["agora"])
+    mias = minhas(d["issues"], d["login"])
+    pr_de = {n: p for p in d["prs"] for n in p["closes"] if n in {i["number"] for i in mias}}
+    andamento = [
+        i for i in mias
+        if i["number"] in pr_de or "in-progress" in i["labels"]
+        or any(w["branch"] and w["branch"].endswith(f"-{i['number']}") for w in d["worktrees"])
+    ]
+    fila = [i for i in mias if i not in andamento]
+    caixas: dict[str, list[dict]] = {k: [] for k in ("triagem", "fila", "humana", "andamento", "pr", "entregue")}
+    for i in sorted(fila, key=lambda i: -i["number"]):
+        if _eh_prd(i):
+            continue
+        f = fase(i, pr_de)
+        caixas["humana" if f == "humana" else "fila" if f == "fila de agente" else "triagem"].append(_item(i, pr_de))
+    for i in sorted(andamento, key=lambda i: -i["number"]):
+        caixas["pr" if i["number"] in pr_de else "andamento"].append(_item(i, pr_de, True))
+    desde = agora - timedelta(days=JANELA_TECNOLOGIA_DIAS)
+    caixas["entregue"] = [
+        _item(i, pr_de)
+        for i in sorted(minhas(d.get("fechadas", []), d["login"]), key=lambda i: i.get("closedAt") or "", reverse=True)
+        if i.get("closedAt") and _quando(i["closedAt"]) >= desde
+        and i.get("stateReason") != "NOT_PLANNED" and not _eh_prd(i)
+    ]
+    prds: dict[int, dict] = {}
+    for i in sorted(mias, key=lambda i: i["number"]):
+        if i["parent"]:
+            prd = prds.setdefault(i["parent"]["number"], {"n": i["parent"]["number"], "titulo": i["parent"]["title"], "fatias": []})
+            prd["fatias"].append({**_item(i, pr_de, i in andamento), "travadaPor": list(i.get("blockedBy", []))})
+    pr_todas = pr_de_todas(d["prs"])
+    vistos, tec = set(), {"bug": [], "melhoria": []}
+    for i in sorted(d.get("tecnologia", []), key=lambda i: (i.get("state") == "CLOSED", -i["number"])):
+        recente = i.get("state") != "CLOSED" or (i.get("closedAt") and _quando(i["closedAt"]) >= desde)
+        if not do_diretor(i) or not recente or i["number"] in vistos:
+            continue
+        vistos.add(i["number"])
+        tipo = "bug" if {"type:fix", "type:bug"} & set(i["labels"]) else "melhoria"
+        tec[tipo].append(_item(i, pr_todas))
+    texto = montar(d)
+    return {
+        "login": d["login"],
+        "repo": d.get("repo"),
+        "agora": d["agora"],
+        "semaforo": {"cor": cor, "detalhe": detalhe},
+        "abertas": len(mias),
+        "caminho": caixas,
+        "prds": list(prds.values()),
+        "tecnologia": tec,
+        "janelaDias": JANELA_TECNOLOGIA_DIAS,
+        "plano": texto.split("**3. Plano**", 1)[1].strip().splitlines() if "**3. Plano**" in texto else [],
+    }
+
+
 # Coleta (só leitura)
 
 
@@ -661,6 +732,7 @@ def coletar(login: str | None, visual: bool = True) -> dict:
         ]
     return {
         **extra,
+        "repo": repo,
         "login": login,
         "agora": agora.isoformat(),
         "issues": issues,
@@ -676,9 +748,12 @@ if __name__ == "__main__":
         fluxo.reconfigure(encoding="utf-8")
     args = sys.argv[1:]
     visual = "--curto" not in args
-    alvo = next((a.lstrip("@") for a in args if a != "--curto"), None)
+    alvo = next((a.lstrip("@") for a in args if not a.startswith("--")), None)
     try:
-        print(montar(coletar(alvo, visual), visual))
+        if "--json" in args:
+            print(json.dumps(visao(coletar(alvo, True)), ensure_ascii=False))
+        else:
+            print(montar(coletar(alvo, visual), visual))
     except subprocess.CalledProcessError as erro:
         motivo = (erro.stderr or "").strip().splitlines()
         sys.exit(f"falha ao consultar o GitHub ({' '.join(erro.cmd[:3])}): {motivo[0] if motivo else erro}")
