@@ -1,6 +1,6 @@
 # ROTAS.md
 <!-- gerado automaticamente por /snapshot — não editar -->
-<!-- last_update: 2026-11-04T01:24+0000 -->
+<!-- last_update: 2026-11-07T21:49+0000 -->
 
 Endpoints HTTP expostos pelo backend FastAPI do Hospital Reuniões.
 
@@ -108,6 +108,7 @@ Endpoints HTTP expostos pelo backend FastAPI do Hospital Reuniões.
 | POST | `/contas-medicas/contas/{conta_id}/analisar-assim-mesmo` | A conta parada por folha digitalizada que não deu para ler | ✅ |
 | POST | `/contas-medicas/contas/{conta_id}/analisar-de-novo` | A conta em Erro da IA, da configuração ou do app volta para a fila com | ✅ |
 | POST | `/contas-medicas/contas/{conta_id}/descartar` | A conta em Erro ou Aguardando arquivo sai do banco, e os PDFs dela, do | ✅ |
+| GET | `/contas-medicas/contas/{conta_id}/processamento` | O painel lateral do cartão do envio (issue #1418): as cinco etapas com o | ✅ |
 | POST | `/contas-medicas/envios` | Um lote de PDFs de um envio. Sem `envio_id`, abre um envio novo; com | ✅ |
 | GET | `/contas-medicas/fila` | A Fila, "Minhas" e as Concluídas da pessoa. Quem tem "painel completo" | ✅ |
 | GET | `/contas-medicas/meus-envios` | As contas que a pessoa enviou e ainda não ficaram prontas. Quem tem | ✅ |
@@ -504,4 +505,4 @@ Endpoints HTTP expostos pelo backend FastAPI do Hospital Reuniões.
 
 ---
 
-**Totais:** 278 endpoints em 44 routers · 94% exigem auth.
+**Totais:** 279 endpoints em 44 routers · 94% exigem auth.
