@@ -1,6 +1,6 @@
 import { expect, test } from 'claude-code/testing'
 
-import { arvore, marcaDaFase, prontas } from '../hooks/register'
+import { acaoDe, acaoDoPrd, arvore, marcaDaFase, prontas } from '../hooks/register'
 import type { Fatia, Item, Visao } from '../types'
 
 const item = (n: number, fase: string, x: Partial<Item> = {}): Item => ({
@@ -84,15 +84,61 @@ test('o painel desenha o caminho, a árvore, os selos e a Tecnologia', async ($,
 
   const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
   const texto = async (re: RegExp) => (await ui.find({ type: 'Text', text: re }))?.text ?? ''
+  const linha = async (key: string) => (await ui.find({ type: 'Box', key }))?.text ?? ''
 
-  expect(await texto(/Humana\s+1/)).toContain('#1453 Humana')
-  expect(await texto(/Triagem/)).toContain('#1427 Diretor')
-  expect(await texto(/#1417/)).toContain('└ ')
-  expect(await texto(/#1417/)).toContain('travada')
-  expect(await texto(/#1053/)).toContain('pedroribbe')
-  expect(await texto(/#1053/)).toContain('Humana')
-  expect(await texto(/#1053/)).not.toContain('Diretor')
+  expect(await linha('chumana')).toMatch(/Humana\s+1\s*#1453 Humana/)
+  expect(await linha('ctriagem')).toContain('#1427 Diretor')
+  // fila inteira, sem corte, e sem URL nenhuma no painel
+  expect(await linha('cfila')).toMatch(/#1471.*#1416/)
+  expect(await ui.findAll({ type: 'Link' })).toHaveLength(0)
+  expect(await linha('i61417')).toContain('└ ')
+  expect(await linha('i61417')).toContain('travada')
+  expect(await linha('i31053')).toContain('pedroribbe')
+  expect(await linha('i31053')).toContain('Humana')
+  expect(await linha('i31053')).not.toContain('Diretor')
   expect(await texto(/Tarefa humana/)).toContain('#1453')
+  await ui.unmount()
+})
+
+test('o clique decide: fila de PRD com várias fatias monta a onda do PRD, sozinha a da issue', () => {
+  const [triagem, fila1471, fila1416] = [VISAO.caminho.triagem[0]!, VISAO.caminho.fila[0]!, VISAO.caminho.fila[1]!]
+  expect(acaoDe(fila1416, VISAO)).toEqual({ tipo: 'prd', n: 1415 })
+  expect(acaoDe(fila1471, VISAO)).toEqual({ tipo: 'issue', n: 1471 })
+  expect(acaoDe(VISAO.caminho.humana[0]!, VISAO)).toEqual({ tipo: 'humana', n: 1453 })
+  expect(acaoDe(triagem, VISAO)).toEqual({ tipo: 'triagem', n: 1427 })
+  expect(acaoDe(VISAO.caminho.entregue[0]!, VISAO)).toEqual({ abrir: 1458 })
+  expect(acaoDe(item(9, 'PR #90'), VISAO)).toEqual({ abrir: 9 })
+  expect(acaoDoPrd(VISAO.prds[0]!, VISAO)).toEqual({ tipo: 'prd', n: 1415 })
+  // PRD com uma fatia só aberta: a onda é a da issue, não a do PRD
+  const umaSo = { n: 7, titulo: 'x', fatias: [fatia(8, 'entregue 06/11', [], { fechada: true }), fatia(9, 'fila de agente')] }
+  const v = { ...VISAO, prds: [umaSo] }
+  expect(acaoDoPrd(umaSo, v)).toEqual({ tipo: 'issue', n: 9 })
+  expect(acaoDe(umaSo.fatias[1]!, v)).toEqual({ tipo: 'issue', n: 9 })
+  expect(acaoDoPrd({ n: 7, titulo: 'x', fatias: [umaSo.fatias[0]!] }, v)).toEqual({ abrir: 7 })
+})
+
+test('clicar num número da fila abre a sessão da onda uma vez só; entregue abre no GitHub', async ($, on) => {
+  on('state.get', (_, e, next) => (e.key === 'visao' ? { value: { value: VISAO, version: 1 } } : next(e)))
+  on('clock.now', () => ({ value: Date.parse(VISAO.agora) }))
+  const chamadas: string[][] = []
+  on('process.run', (_, e) => {
+    chamadas.push([...e.argv])
+    return { value: { exitCode: 0, stdout: 'backgrounded · a1b2 · onda-prd-1415\n', stderr: '', isStdoutTruncated: false, isStderrTruncated: false } }
+  })
+  on('ui.notify', () => ({ value: { isSent: true, channel: 'terminal_bell' } }))
+
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  await ui.press({ key: 'cfila#1416' })
+  expect(chamadas).toHaveLength(1)
+  expect(chamadas[0]!.slice(1).map(a => a.replace(/.*\/hooks\//, ''))).toEqual(['lancar.sh', 'prd', '1415'])
+  expect((await ui.find({ type: 'Text', text: /onda-prd-1415/ }))?.text).toContain('a1b2')
+
+  // a outra fatia do mesmo PRD é a mesma onda: não abre segunda sessão
+  await ui.press({ key: 'i2#1416' })
+  expect(chamadas).toHaveLength(1)
+
+  await ui.press({ key: 'centregue#1458' })
+  expect(chamadas[1]).toEqual(['open', 'https://github.com/pedrorezendefig/hospital-reunioes/issues/1458'])
   await ui.unmount()
 })
 
