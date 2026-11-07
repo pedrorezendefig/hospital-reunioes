@@ -434,10 +434,11 @@ describe("os dados da conta e do prontuário no cartão (issue #1419)", () => {
       prontuario_paginas: 212,
       prontuario_paginas_ocr: null,
     }),
+    // A conta que voltou para a fila guarda a nota e o valor da análise de
+    // antes; as contagens o backend só manda na conta pronta, que não fica aqui.
     conta({
-      id: "pronta",
+      id: "de-volta",
       numero_atendimento: "31304",
-      situacao: "A_FAZER",
       operadora: "ASSIM",
       dias_internacao: 4,
       prontuario_paginas: 300,
@@ -445,8 +446,6 @@ describe("os dados da conta e do prontuário no cartão (issue #1419)", () => {
       nota_entrada: 74,
       valor_apontado: 584.6,
       itens_total: 9,
-      itens_lidos: 42,
-      eventos_lidos: 15,
     }),
     conta({ id: "sem-escaneada", numero_atendimento: "31305", prontuario_paginas: 80, prontuario_paginas_ocr: 0 }),
   ];
@@ -472,10 +471,10 @@ describe("os dados da conta e do prontuário no cartão (issue #1419)", () => {
   });
 
   it("o quadrado do Prontuário mostra as páginas escaneadas, e o de antes desta fatia não desenha a linha", async () => {
-    const [naFila, deAntes, pronta] = await cartoes();
+    const [naFila, deAntes, deVolta] = await cartoes();
 
     expect(quadrado(naFila, "Prontuário").textContent).toContain("37 escaneadas, lidas por OCR");
-    expect(quadrado(pronta, "Prontuário").textContent).toContain("1 escaneada, lida por OCR");
+    expect(quadrado(deVolta, "Prontuário").textContent).toContain("1 escaneada, lida por OCR");
     expect(quadrado(deAntes, "Prontuário").textContent).toContain("212 páginas");
     expect(quadrado(deAntes, "Prontuário").textContent).not.toMatch(/escanead|OCR/);
   });
@@ -500,14 +499,6 @@ describe("os dados da conta e do prontuário no cartão (issue #1419)", () => {
 
     expect(quadrado(itens[3], "Prontuário").textContent).toContain("nenhuma escaneada");
     expect(quadrado(itens[3], "Prontuário").textContent).not.toContain("0 escaneadas");
-  });
-
-  it("a conta pronta mostra quantos itens e quantos eventos foram achados; a que não ficou pronta, não", async () => {
-    const [naFila, , pronta] = await cartoes();
-
-    expect(quadrado(pronta, "Conta").textContent).toContain("42 itens");
-    expect(quadrado(pronta, "Prontuário").textContent).toContain("15 eventos");
-    expect(naFila.textContent).not.toMatch(/itens|eventos/);
   });
 
   it("nenhum valor em reais aparece no cartão", async () => {

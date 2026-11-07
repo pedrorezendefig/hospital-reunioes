@@ -1215,7 +1215,6 @@ class TestKitDeConhecimento:
         ):
             assert trecho in secao, trecho
 
-
     def test_diz_o_que_o_cartao_mostra_da_conta_e_do_prontuario(self):
         """Issue #1419: Operadora, dias de internação, páginas por OCR e, na
         conta pronta, os itens e os eventos. O valor da conta fica de fora."""

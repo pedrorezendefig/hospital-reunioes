@@ -398,9 +398,6 @@ function CartaoDoEnvio({
                   .join(", ")}
               </p>
             )}
-            {conta.itens_lidos != null && (
-              <p className="text-xs">{`${conta.itens_lidos} ${conta.itens_lidos === 1 ? "item" : "itens"}`}</p>
-            )}
           </Quadrado>
           <Quadrado
             nome="Prontuário"
@@ -416,9 +413,6 @@ function CartaoDoEnvio({
                   : ocr === 1
                     ? "1 escaneada, lida por OCR"
                     : `${ocr} escaneadas, lidas por OCR`}</p>
-            )}
-            {conta.eventos_lidos != null && (
-              <p className="text-xs">{`${conta.eventos_lidos} ${conta.eventos_lidos === 1 ? "evento" : "eventos"}`}</p>
             )}
           </Quadrado>
         </div>
