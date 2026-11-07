@@ -409,3 +409,87 @@ def test_o_subprocess_so_entra_pelos_helpers():
 
 
 # A skill
+
+
+
+# Tela visual (padrão): caminho, árvore do PRD, selos e Tecnologia
+
+MARCA = '<!-- demanda-vitta id="abc" -->\ncorpo'
+
+
+def fechada(n, titulo="t", quando="2026-10-04T10:00:00Z", motivo="COMPLETED", **kw):
+    return {**issue(n, titulo, **kw), "state": "CLOSED", "closedAt": quando, "stateReason": motivo}
+
+
+def test_o_compacto_nao_ganha_selo_nem_fluxograma():
+    d = dados([issue(1, labels=["ready-for-human"], corpo=MARCA)])
+    saida = mi.montar(d)
+    assert "[Humana]" not in saida and "```mermaid" not in saida and "Tecnologia" not in saida
+
+
+def test_selos_humana_e_diretor_aparecem_na_fila():
+    d = dados([issue(1, labels=["ready-for-human"]), issue(2, labels=["ready-for-agent"], corpo=MARCA)])
+    saida = mi.montar(d, visual=True)
+    assert "| avulsa · ready-for-human | 1 [Humana] |" in saida
+    assert "| avulsa · ready-for-agent | 2 [Diretor] |" in saida
+
+
+def test_marcador_do_diretor_exige_o_comentario_da_tecnologia():
+    assert mi.do_diretor({"body": MARCA})
+    assert not mi.do_diretor({"body": "fala de demanda-vitta no texto"})
+
+
+def test_caminho_poe_cada_issue_na_caixa_da_fase():
+    d = dados(
+        [issue(1, labels=["needs-triage"]), issue(2, labels=["ready-for-agent"]),
+         issue(3, labels=["ready-for-human"]), issue(4, labels=["in-progress"]), issue(5)],
+        prs=[pr(90, 5)],
+    )
+    d["fechadas"] = [fechada(6), fechada(7, motivo="NOT_PLANNED"), fechada(8, quando="2026-09-01T10:00:00Z")]
+    saida = mi.montar(d, visual=True)
+    assert 'T["Triagem (1)<br/>#1"]' in saida
+    assert 'A["Fila de agente (1)<br/>#2"]' in saida
+    assert 'H["Humana (1)<br/>#3 [Humana]"]' in saida
+    assert 'E["Em andamento (1)<br/>#4"]' in saida
+    assert 'P["PR aberto (1)<br/>#5"]' in saida
+    assert 'F["Entregue em 14 dias (1)<br/>#6"]' in saida
+
+
+def test_caixa_cheia_corta_e_conta_o_resto():
+    d = dados([issue(n, labels=["ready-for-agent"]) for n in range(1, 10)])
+    assert "Fila de agente (9)<br/>#9<br/>#8<br/>#7<br/>#6<br/>#5<br/>#4<br/>+3" in mi.montar(d, visual=True)
+
+
+def test_arvore_do_prd_desenha_o_bloqueio_nativo_e_liga_so_a_raiz_livre():
+    pai = {"number": 50, "title": "PRD: algo"}
+    d = dados([
+        issue(51, "fatia um", labels=["ready-for-agent"], parent=pai),
+        {**issue(52, "fatia dois", labels=["ready-for-agent"], parent=pai), "blockedBy": [51]},
+    ])
+    saida = mi.montar(d, visual=True)
+    assert "I51 -. trava .-> I52" in saida
+    assert "P50 --> I51" in saida
+    assert "P50 --> I52" not in saida
+
+
+def test_tecnologia_separa_bug_de_melhoria_e_tira_fechada_velha():
+    d = dados()
+    d["tecnologia"] = [
+        issue(10, "bug aberto", labels=["type:fix", "ready-for-agent"], corpo=MARCA),
+        issue(11, "melhoria humana", labels=["ready-for-human"], donos=["outro"], corpo=MARCA),
+        fechada(12, "bug entregue", labels=["type:fix"], corpo=MARCA),
+        fechada(13, "velha", corpo=MARCA, quando="2026-09-01T10:00:00Z"),
+        issue(14, "sem marcador", corpo="demanda-vitta"),
+    ]
+    saida = mi.montar(d, visual=True)
+    bug, melhoria = saida.split("Bug (2)")[1].split("Melhoria (1)")
+    assert "| 10 | bug aberto | fila de agente | sem responsável |" in bug
+    assert "| 12 | bug entregue | entregue 04/10 |" in bug
+    assert "| 11 [Humana] | melhoria humana | humana | outro |" in melhoria
+    assert "velha" not in saida and "sem marcador" not in saida
+
+
+def test_mermaid_nao_quebra_com_aspas_no_titulo():
+    pai = {"number": 50, "title": 'PRD "x"'}
+    saida = mi.montar(dados([issue(51, 'tem "aspas"', labels=["ready-for-agent"], parent=pai)]), visual=True)
+    assert "tem 'aspas'" in saida and "PRD 'x'" in saida
