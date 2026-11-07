@@ -138,4 +138,12 @@ describe("Gerar a ata de novo", () => {
       expect(screen.queryByRole("button", { name: BOTAO })).toBeNull();
     },
   );
+
+  it("a Secretária não vê o botão na reunião em ERRO", async () => {
+    perfil.participante = SECRETARIA;
+    servir("ERRO");
+    montar();
+    await esperarCarregar();
+    expect(screen.queryByRole("button", { name: BOTAO })).toBeNull();
+  });
 });
