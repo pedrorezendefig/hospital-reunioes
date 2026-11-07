@@ -2,6 +2,49 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-11-07T20:05:09-03:00",
+      "sha": "20aa9b42bf6a527ff0c015dac5b3eff6cb431b50",
+      "app_version": "0.227.0",
+      "subject": "Onda onda-a-1498: Botão Gerar a ata de novo na reunião em Erro",
+      "raw_subject": "chore(deploy): registro da onda onda-a-1498 (#1499)",
+      "scope": [
+        "frontend"
+      ],
+      "prds": [],
+      "result": "healthy",
+      "duration_seconds": 189,
+      "services_touched": [
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        },
+        {
+          "service": "frontend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "onda-enxuta onda-a-1498: PR #1499 (issue #1498), mergeados PR a PR. Merge pela API do GitHub, um build. Registro pela Action pos-merge depois do health.",
+      "etapas": {
+        "merge_s": 2,
+        "build_s": {
+          "frontend": 165
+        },
+        "health_s": 0
+      },
+      "responsavel": "pedrorezendefig"
+    },
+    {
       "at": "2026-11-07T19:42:39-03:00",
       "sha": "672b442f2be820e2feff3d197917fbc61e49c749",
       "app_version": "0.226.0",
