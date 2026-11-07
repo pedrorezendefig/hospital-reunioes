@@ -33,7 +33,7 @@ from app.services.contas_medicas.prescricao import ItemConsolidado
 from app.services.prompt_loader import load_prompt
 from app.utils.text_sanitizer import sanitizar_estrutura
 
-__all__ = ["eventos_do_atendimento", "montar_entradas", "parecer", "unir_eventos"]
+__all__ = ["eventos_do_atendimento", "montar_entradas", "parecer", "quantos_eventos", "unir_eventos"]
 
 SEPARADOR = " · "
 
@@ -262,6 +262,12 @@ def _semelhanca(a: Mapping[str, Any], b: Mapping[str, Any], momento: str, texto:
     hora_a, hora_b = _hora(a.get(momento)), _hora(b.get(momento))
     mesma_hora = hora_a is None or hora_b is None or hora_a == hora_b
     return mesma_hora, SequenceMatcher(None, _chave(a.get(texto)), _chave(b.get(texto))).ratio()
+
+
+def quantos_eventos(eventos: Mapping[str, Any]) -> int:
+    """Quantos eventos a leitura do prontuário achou, somadas as listas de
+    eventos (o cartão do envio, issue #1419). Ausências e observações não contam."""
+    return sum(len(eventos.get(lista) or []) for lista in _MESMO_EVENTO)
 
 
 def unir_eventos(partes: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
