@@ -48,7 +48,7 @@ const SECRETARIA = { id: "P_SECRE", nome_completo: "Secretária", email: "s@hsm.
 
 const BOTAO = "Gerar a ata de novo";
 
-function reuniao(status_ata: string) {
+function reuniao(status_ata: string, json_ata: unknown) {
   return {
     id_reuniao: "REU_TESTE",
     data: "2026-11-04",
@@ -60,7 +60,7 @@ function reuniao(status_ata: string) {
     acoes_concluidas: 0,
     hora_inicio: null,
     hora_fim: null,
-    json_ata: status_ata === "ERRO" ? { error: "Falha na IA" } : null,
+    json_ata,
     url_pdf_preliminar: null,
     url_pdf_assinado: null,
     url_transcricao: null,
@@ -79,7 +79,11 @@ type Resposta = { status: number; corpo: unknown };
  * Responde o GET da reunião com o status pedido e o POST do reprocessar com a
  * resposta dada (ou com uma promessa que o teste resolve quando quiser).
  */
-function servir(status_ata: string, reprocessar?: Resposta | Promise<Resposta>) {
+function servir(
+  status_ata: string,
+  reprocessar?: Resposta | Promise<Resposta>,
+  json_ata: unknown = status_ata === "ERRO" ? { error: "Falha na IA" } : null,
+) {
   const chamadas: Array<{ url: string; method: string }> = [];
   const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
     const method = init?.method ?? "GET";
@@ -89,7 +93,7 @@ function servir(status_ata: string, reprocessar?: Resposta | Promise<Resposta>) 
       return { ok: r.status < 400, status: r.status, json: async () => r.corpo } as unknown as Response;
     }
     if (url === "/api/reunioes/REU_TESTE" && method === "GET") {
-      return { ok: true, status: 200, json: async () => reuniao(status_ata) } as unknown as Response;
+      return { ok: true, status: 200, json: async () => reuniao(status_ata, json_ata) } as unknown as Response;
     }
     return { ok: true, status: 200, json: async () => [] } as unknown as Response;
   });
@@ -126,6 +130,16 @@ describe("Gerar a ata de novo", () => {
     servir("ERRO");
     montar();
     await esperarCarregar();
+    expect(screen.getByRole("button", { name: BOTAO })).toBeTruthy();
+  });
+
+  // O orchestrator grava ERRO sem `json_ata.error` em vários caminhos (timeout,
+  // falha do pipeline); é o caso comum em produção e também precisa do botão.
+  it("a reunião em ERRO sem json_ata mostra o aviso e o botão", async () => {
+    servir("ERRO", undefined, null);
+    montar();
+    await esperarCarregar();
+    expect(screen.getByText("Erro no processamento.")).toBeTruthy();
     expect(screen.getByRole("button", { name: BOTAO })).toBeTruthy();
   });
 
