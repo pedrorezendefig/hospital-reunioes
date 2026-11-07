@@ -688,7 +688,12 @@ def _pessoa(pid: str, perfil: str | None) -> dict[str, Any]:
     }
 
 
-PESSOAS = {"faturista": _pessoa("F1", "faturista"), "gestao": _pessoa("G1", "gestao_contas_medicas")}
+PESSOAS = {
+    "faturista": _pessoa("F1", "faturista"),
+    "gestao": _pessoa("G1", "gestao_contas_medicas"),
+    # Quem só sobe contas, sem "painel completo" (issue #1418).
+    "apoio": _pessoa("A1", "apoio_faturamento"),
+}
 
 
 def _regra(codigo: str) -> dict[str, Any]:
@@ -860,8 +865,8 @@ class _NaHora:
         funcao(*args, **kwargs)
 
 
-def _enviar(banco: _Banco, *arquivos) -> dict:
-    resposta = _cliente(banco).post("/api/contas-medicas/envios", files=list(arquivos))
+def _enviar(banco: _Banco, *arquivos, quem: str = "faturista") -> dict:
+    resposta = _cliente(banco, quem).post("/api/contas-medicas/envios", files=list(arquivos))
     assert resposta.status_code == 200, resposta.text
     assert resposta.json()["recusas"] == []
     return resposta.json()
@@ -2946,5 +2951,206 @@ class TestEtapaDoProcessamento:
             "tentativa 2 de 3",
             "a cada 5 segundos",
             "Atendimento 31310 pronto, foi para a Fila",
+        ):
+            assert trecho in texto, trecho
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 16. O painel lateral do Processamento (issue #1418, PRD #1415)
+# ═══════════════════════════════════════════════════════════════════════════
+
+# Os tempos do Motor (as etapas internas) como `tempos_por_etapa_s` grava.
+TEMPOS_DO_MOTOR = {
+    "texto_da_conta": 1.0,
+    "leitura_da_conta": 2.0,
+    "texto_do_prontuario": 3.0,
+    "leitura_do_prontuario": 4.0,
+    "dicionario": 0.5,
+    "conferencia": 0.5,
+    "passo_a": 30.0,
+    "conferencia_com_eventos": 1.5,
+    "passo_b": 20.0,
+    "gravacao": 0.25,
+    "total": 62.75,
+}
+CAMPOS_DO_CUSTO = {"modelo", "chamadas", "tokens_entrada", "tokens_saida", "tokens_cache", "custo_usd"}
+
+
+def _detalhe(banco: _Banco, conta_id: str, quem: str = "faturista"):
+    return _cliente(banco, quem).get(f"/api/contas-medicas/contas/{conta_id}/processamento")
+
+
+def _etapas(resposta) -> list[tuple]:
+    assert resposta.status_code == 200, resposta.text
+    return [(e["etapa"], e["estado"], e["tempo_s"]) for e in resposta.json()["etapas"]]
+
+
+def _ha_de_verdade(minutos: int) -> str:
+    """A rota lê o relógio de verdade: a etapa atual conta a partir dele."""
+    return (datetime.now(UTC) - timedelta(minutes=minutos)).isoformat()
+
+
+class TestPainelDoProcessamento:
+    def test_a_conta_pronta_traz_as_cinco_etapas_feitas_com_o_tempo_de_cada_uma_na_tela(self):
+        banco = _cenario()
+        _enviar(banco, _conta(), _prontuario())
+        _rodar_o_job(banco)
+        (conta,) = banco.tabelas["cm_conta"]
+        assert conta["situacao"] == "A_FAZER", conta.get("erro_motivo")
+        conta["faltantes"] = {**conta["faltantes"], "tempos_por_etapa_s": TEMPOS_DO_MOTOR}
+
+        resposta = _detalhe(banco, conta["id"])
+
+        # As internas somadas nas cinco da tela; o "total" não é etapa.
+        assert _etapas(resposta) == [
+            ("LENDO_CONTA", "feita", 3.0),
+            ("LENDO_PRONTUARIO", "feita", 8.0),
+            ("IA_LENDO_PRONTUARIO", "feita", 30.0),
+            ("CONFERINDO", "feita", 1.5),
+            ("IA_MONTANDO_GUIA", "feita", 20.25),
+        ]
+        corpo = resposta.json()
+        assert (corpo["situacao"], corpo["tentativa"], corpo["posicao_na_fila"]) == ("A_FAZER", 1, None)
+
+    def test_a_conta_processando_traz_as_feitas_com_tempo_a_atual_desde_quando_e_as_que_faltam(self):
+        banco = _cenario()
+        _enviar(banco, _conta(), _prontuario())
+        (conta,) = banco.tabelas["cm_conta"]
+        ate_o_passo_a = {k: v for k, v in TEMPOS_DO_MOTOR.items() if k in list(TEMPOS_DO_MOTOR)[:6]}
+        conta.update(
+            situacao="PROCESSANDO",
+            processando_desde=_ha_de_verdade(12),
+            tentativas=2,
+            etapa_atual="IA_LENDO_PRONTUARIO",
+            etapa_desde=_ha_de_verdade(4),
+            etapa_parte=3,
+            etapa_partes=7,
+            erro_detalhe={"etapa": "passo_a", "tempos_por_etapa_s": ate_o_passo_a},
+        )
+
+        resposta = _detalhe(banco, conta["id"])
+
+        etapas = _etapas(resposta)
+        assert etapas[:2] == [("LENDO_CONTA", "feita", 3.0), ("LENDO_PRONTUARIO", "feita", 8.0)]
+        etapa, estado, tempo = etapas[2]
+        assert (etapa, estado) == ("IA_LENDO_PRONTUARIO", "atual")
+        assert 240 <= tempo < 250
+        assert etapas[3:] == [("CONFERINDO", "falta", None), ("IA_MONTANDO_GUIA", "falta", None)]
+        corpo = resposta.json()
+        assert {k: corpo[k] for k in ("situacao", "tentativa", "parte", "partes", "posicao_na_fila")} == {
+            "situacao": "PROCESSANDO",
+            "tentativa": 2,
+            "parte": 3,
+            "partes": 7,
+            "posicao_na_fila": None,
+        }
+
+    def test_o_motor_grava_o_tempo_das_etapas_feitas_a_cada_troca_de_etapa(self):
+        """A conta Processando ainda não tem `faltantes`: o tempo das feitas vem
+        do detalhe que o Motor grava a cada etapa que começa."""
+        banco = _cenario()
+        _enviar(banco, _conta(), _prontuario())
+
+        _rodar_o_job(banco)
+
+        no_passo_a = next(c for _, c in banco.escritas_na_conta if c.get("etapa_atual") == "IA_LENDO_PRONTUARIO")
+        tempos = no_passo_a["erro_detalhe"]["tempos_por_etapa_s"]
+        assert set(tempos) == {
+            "texto_da_conta",
+            "leitura_da_conta",
+            "texto_do_prontuario",
+            "leitura_do_prontuario",
+            "dicionario",
+            "conferencia",
+        }
+        assert no_passo_a["erro_detalhe"]["etapa"] == "passo_a"
+
+    def test_as_contas_na_fila_trazem_a_posicao_e_as_cinco_etapas_por_fazer(self):
+        banco = _cenario()
+        _enviar(banco, _conta("48811", 2, 4), _conta("48812", 5, 6), _prontuario())
+        primeira, segunda = _duas_parciais_gravadas(banco)
+        assert (primeira["situacao"], segunda["situacao"]) == ("NA_FILA", "NA_FILA")
+
+        resposta = _detalhe(banco, segunda["id"])
+
+        assert _etapas(resposta) == [(etapa, "falta", None) for etapa in CINCO_ETAPAS]
+        assert resposta.json()["posicao_na_fila"] == 2
+        assert _detalhe(banco, primeira["id"]).json()["posicao_na_fila"] == 1
+
+    def test_com_painel_completo_traz_modelo_chamadas_tokens_e_custo_somados_das_chamadas_da_conta(self):
+        banco = _cenario()
+        _enviar(banco, _conta(), _prontuario())
+        (conta,) = banco.tabelas["cm_conta"]
+
+        def chamada(conta_id, modelo, entrada, saida, cache, custo, criado_em):
+            return {
+                "conta_id": conta_id,
+                "modelo": modelo,
+                "tokens_entrada": entrada,
+                "tokens_saida": saida,
+                "tokens_cache": cache,
+                "custo_usd": custo,
+                "criado_em": criado_em,
+            }
+
+        banco.tabelas["cm_chamada_ia"] = [
+            chamada(conta["id"], "claude-sonnet-5-5", 1000, 200, 50, 0.012, "2026-10-12T10:00:00+00:00"),
+            chamada(conta["id"], "claude-haiku-5", 300, 40, 0, 0.0011, "2026-10-12T10:01:00+00:00"),
+            chamada(conta["id"], "claude-sonnet-5-5", 2000, 400, 100, 0.024, "2026-10-12T10:02:00+00:00"),
+            # A chamada de outra conta não entra na soma.
+            chamada("outra", "claude-opus-5-5", 9999, 9999, 9999, 9.9, "2026-10-12T10:03:00+00:00"),
+        ]
+
+        resposta = _detalhe(banco, conta["id"], "gestao")
+
+        assert resposta.status_code == 200, resposta.text
+        corpo = resposta.json()
+        assert {k: corpo[k] for k in CAMPOS_DO_CUSTO} == {
+            "modelo": "claude-sonnet-5-5, claude-haiku-5",
+            "chamadas": 3,
+            "tokens_entrada": 3300,
+            "tokens_saida": 640,
+            "tokens_cache": 150,
+            "custo_usd": 0.0371,
+        }
+
+    def test_para_o_apoio_ao_faturamento_a_resposta_nao_tem_as_chaves_do_custo(self):
+        banco = _cenario()
+        _enviar(banco, _conta(), _prontuario(), quem="apoio")
+        (conta,) = banco.tabelas["cm_conta"]
+        banco.tabelas["cm_chamada_ia"] = [
+            {"conta_id": conta["id"], "modelo": "claude-sonnet-5-5", "tokens_entrada": 1, "custo_usd": 0.5}
+        ]
+
+        resposta = _detalhe(banco, conta["id"], "apoio")
+
+        assert resposta.status_code == 200, resposta.text
+        corpo = resposta.json()
+        assert "etapas" in corpo
+        # A ausência da chave, não um valor vazio.
+        assert not CAMPOS_DO_CUSTO & set(corpo), sorted(CAMPOS_DO_CUSTO & set(corpo))
+
+    def test_a_conta_de_outra_pessoa_nao_e_devolvida_para_quem_nao_tem_painel_completo(self):
+        banco = _cenario()
+        _enviar(banco, _conta(), _prontuario(), quem="faturista")
+        (conta,) = banco.tabelas["cm_conta"]
+
+        resposta = _detalhe(banco, conta["id"], "apoio")
+
+        assert resposta.status_code == 404
+        assert "etapas" not in resposta.json()
+        # Quem enviou e a gestão veem.
+        assert _detalhe(banco, conta["id"], "faturista").status_code == 200
+        assert _detalhe(banco, conta["id"], "gestao").status_code == 200
+
+    def test_o_kit_de_conhecimento_diz_o_painel_lateral_e_quem_ve_o_custo(self):
+        texto = KIT.read_text(encoding="utf-8")
+
+        for trecho in (
+            "Clicando no cartão",
+            "o tempo de cada etapa",
+            "a posição na fila",
+            "o custo da IA",
+            "como o Apoio ao faturamento, não vê",
         ):
             assert trecho in texto, trecho

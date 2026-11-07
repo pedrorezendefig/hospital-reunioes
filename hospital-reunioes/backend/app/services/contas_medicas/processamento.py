@@ -312,12 +312,13 @@ def _com_digitalizadas(erro: ErroDaConta, cronometro: _Cronometro) -> ErroDaCont
     return replace(erro, detalhe={**erro.detalhe, "digitalizadas": cronometro.digitalizadas})
 
 
-def _marcar_etapa(supabase, conta: dict, etapa: str, anterior: str | None) -> None:
+def _marcar_etapa(supabase, conta: dict, etapa: str, anterior: str | None, tempos: dict[str, float]) -> None:
     """A etapa que começa, no detalhe da conta em PROCESSANDO: se o app
-    reiniciar no meio, a devolução das presas sabe onde a análise parou. Na
-    troca de Etapa do processamento, no mesmo UPDATE, a etapa da tela, desde
-    quando, e as partes do Passo A zeradas (#1416)."""
-    campos: dict[str, Any] = {"erro_detalhe": {"etapa": etapa}}
+    reiniciar no meio, a devolução das presas sabe onde a análise parou. Junto,
+    o tempo das etapas já feitas, que o painel lateral mostra antes de a conta
+    ficar pronta (#1418). Na troca de Etapa do processamento, no mesmo UPDATE,
+    a etapa da tela, desde quando, e as partes do Passo A zeradas (#1416)."""
+    campos: dict[str, Any] = {"erro_detalhe": {"etapa": etapa, "tempos_por_etapa_s": dict(tempos)}}
     if anterior is None or ETAPA_DA_TELA[etapa] != ETAPA_DA_TELA[anterior]:
         campos |= {
             "etapa_atual": ETAPA_DA_TELA[etapa],
@@ -340,7 +341,9 @@ def _marcar_parte(supabase, conta: dict, parte: int, partes: int) -> None:
 def processar(supabase, conta: dict) -> None:
     """O pipeline de uma conta que o claim pegou. Nunca levanta: o fim é
     `A_FAZER`, `ERRO` ou a volta para a fila."""
-    cronometro = _Cronometro(ao_entrar=lambda etapa, anterior: _marcar_etapa(supabase, conta, etapa, anterior))
+    cronometro = _Cronometro(
+        ao_entrar=lambda etapa, anterior: _marcar_etapa(supabase, conta, etapa, anterior, cronometro.tempos)
+    )
     try:
         try:
             _pipeline(supabase, conta, cronometro)

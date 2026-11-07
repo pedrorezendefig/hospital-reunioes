@@ -78,6 +78,13 @@ def envios_da_pessoa(supabase, me: dict) -> dict:
     return {"todas": todas, "meus_envios": envios}
 
 
+def quem_enviou(supabase, conta: dict) -> str | None:
+    """O `cm_envio.usuario_id` de quem enviou a conta, pela regra de "Meus
+    envios", em qualquer situação (o painel lateral, issue #1418)."""
+    enviou, _ = _quem_enviou(supabase, [conta])
+    return enviou.get(conta["id"])
+
+
 def _por_id(supabase, tabela: str, coluna: str, valores, **filtros) -> list[dict]:
     valores = list(dict.fromkeys(v for v in valores if v))
     if not valores:
