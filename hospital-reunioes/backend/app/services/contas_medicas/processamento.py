@@ -609,6 +609,8 @@ def _pipeline(supabase, conta: dict, cronometro: _Cronometro) -> None:
                 "tempos_por_etapa_s": tempos,
                 "descartadas_ia": list(da_ia.descartadas),
                 "digitalizadas": cronometro.digitalizadas,
+                # O que o cartão do envio mostra da conta pronta (#1419).
+                "contagens": {"itens": len(lida.itens), "eventos": passo_a.quantos_eventos(eventos)},
                 # A marca do "Analisar assim mesmo" segue com o mesmo prontuário (#1401).
                 **({MARCA_ASSIM_MESMO: arquivo_do_prontuario["id"]} if assim_mesmo else {}),
             },

@@ -2411,6 +2411,35 @@ class TestTempoDasEtapas:
         assert tempos["total"] >= max(segundos for etapa, segundos in tempos.items() if etapa != "total")
 
 
+class TestContagensDaContaPronta:
+    def test_a_conta_pronta_guarda_quantos_itens_e_quantos_eventos_o_motor_gravou(self, ia_falsa):
+        """Issue #1419: o cartão do envio mostra as contagens sem ler as tabelas a cada consulta."""
+        ventilacao = {
+            "tipo": "VENTILACAO_MECANICA",
+            "descricao": "VM",
+            "setor": "CTI ADULTO",
+            "inicio": "2026-10-03T08:00",
+            "fim": None,
+            "pagina": 5,
+            "trecho": "VM",
+        }
+        ia_falsa.eventos = {**EVENTOS_DA_IA, "terapias": [ventilacao]}
+        banco = _cenario()
+        _enviar(banco, _conta(), _prontuario())
+
+        _rodar_o_job(banco)
+
+        (conta,) = banco.tabelas["cm_conta"]
+        assert conta["situacao"] == "A_FAZER", conta.get("erro_motivo")
+        itens = [i for i in banco.tabelas["cm_conta_item"] if i["conta_id"] == conta["id"]]
+        (gravados,) = banco.tabelas["cm_eventos"]
+        lidos = gravados["eventos_json"]["ia"]
+        # As duas movimentações do código e a terapia da IA.
+        assert (len(lidos["movimentacoes"]), len(lidos["terapias"])) == (2, 1)
+        assert conta["faltantes"]["contagens"] == {"itens": len(itens), "eventos": 3}
+        assert len(itens) > 0
+
+
 # ═══════════════════════════════════════════════════════════════════════════
 # 9. O log não leva texto de prontuário
 # ═══════════════════════════════════════════════════════════════════════════

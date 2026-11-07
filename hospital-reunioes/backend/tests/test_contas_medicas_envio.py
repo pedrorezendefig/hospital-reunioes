@@ -433,6 +433,82 @@ class TestTipoPeloConteudo:
 
 
 # ═══════════════════════════════════════════════════════════════════════════
+# 2b. As páginas do Prontuário e as que vão por OCR (issue #1419)
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+def _folha_escaneada() -> str:
+    """Uma folha digitalizada: a imagem da página, com só o rodapé em texto."""
+    import base64
+    import io
+
+    from PIL import Image, ImageDraw
+
+    imagem = Image.new("L", (600, 800), 255)
+    ImageDraw.Draw(imagem).rectangle((40, 40, 560, 760), outline=0, width=6)
+    png = io.BytesIO()
+    imagem.save(png, format="PNG")
+    dados = base64.b64encode(png.getvalue()).decode()
+    return f'<img src="data:image/png;base64,{dados}" style="width: 14cm"><p>Pág. digitalizada</p>'
+
+
+def _evolucao_com_texto(atendimento: str, dia: str) -> str:
+    """A evolução digitada, com texto que basta para não ser lida como digitalizada."""
+    return _pagina_de_evolucao(atendimento, dia) + "Sem queixas. Aceitando dieta, deambulando, diurese presente.\n" * 3
+
+
+def _prontuario_com_escaneadas(atendimento: str) -> bytes:
+    """PDF de verdade: capa, duas evoluções digitadas, duas folhas escaneadas e uma página em branco."""
+    from html import escape
+
+    from weasyprint import HTML
+
+    digitadas = [CAPA, _evolucao_com_texto(atendimento, "02/10/2026"), _evolucao_com_texto(atendimento, "03/10/2026")]
+    paginas = [f'<pre style="font-size: 7pt">{escape(texto)}</pre>' for texto in digitadas]
+    paginas += [_folha_escaneada(), _folha_escaneada(), ""]
+    corpo = "".join(f'<div style="page-break-before: always">{pagina}</div>' for pagina in paginas)
+    return HTML(string=f"<html><body>{corpo}</body></html>").write_pdf()
+
+
+def _paginas_do_pdf(pdf: bytes) -> int:
+    """O total de páginas do PDF por outro leitor, sem passar pelo `pdftotext`."""
+    import io
+
+    import pdfplumber
+
+    with pdfplumber.open(io.BytesIO(pdf)) as aberto:
+        return len(aberto.pages)
+
+
+class TestPaginasDoProntuario:
+    def test_o_extrator_grava_as_paginas_por_ocr_e_o_total_bate_com_o_do_pdf(self, monkeypatch):
+        """Sem o dublê: o PDF com folhas escaneadas atravessa o extrator isolado.
+        A folha escaneada e a página em branco vão por OCR; as digitadas, não."""
+        from app.services import contas_medicas_extrator
+
+        monkeypatch.setattr(envio_service, "extrair_paginas", contas_medicas_extrator.extrair_paginas)
+        banco = _cenario()
+        conta = _pdf_de_verdade(_texto_da_conta("31302", "48001", "01/10/2026", "05/10/2026"))
+        prontuario = _prontuario_com_escaneadas("31302")
+
+        resposta = _cliente("faturista", banco).post(
+            ROTA_ENVIO,
+            files=[
+                ("arquivos", ("c.pdf", conta, "application/pdf")),
+                ("arquivos", ("p.pdf", prontuario, "application/pdf")),
+            ],
+        )
+
+        assert resposta.status_code == 200, resposta.text
+        por_tipo = {a["tipo"]: a for a in banco.tabelas["cm_arquivo"]}
+        assert _paginas_do_pdf(prontuario) == 6
+        assert por_tipo["PRONTUARIO"]["paginas"] == 6
+        assert por_tipo["PRONTUARIO"]["paginas_ocr"] == 3
+        # A Conta não passa por OCR: fica sem a contagem.
+        assert por_tipo["CONTA"]["paginas_ocr"] is None
+
+
+# ═══════════════════════════════════════════════════════════════════════════
 # 3. Plano sem par
 # ═══════════════════════════════════════════════════════════════════════════
 
@@ -1014,6 +1090,53 @@ class TestFila:
         assert paginas["falta-conta"] == 47
         assert paginas["falta-prontuario"] is None
 
+    def test_a_listagem_traz_operadora_dias_paginas_por_ocr_e_as_contagens_da_conta_pronta(self):
+        """Issue #1419: os dados do cartão. O arquivo e a conta de antes desta
+        fatia, sem as colunas novas, voltam nulos."""
+        banco = _fila_semeada()
+        atendimentos = {a["id"]: a for a in banco.tabelas["cm_atendimento"]}
+        atendimentos["at-na-fila"]["operadora_id"] = "op-1"
+        atendimentos["at-livre-nova"]["operadora_id"] = "op-1"
+        contas = {c["id"]: c for c in banco.tabelas["cm_conta"]}
+        contas["na-fila"].update(periodo_inicio="2026-10-01", periodo_fim="2026-10-05")
+        # A conta à espera da Conta ainda não tem período.
+        contas["falta-conta"].update(periodo_inicio=None, periodo_fim=None)
+        contas["livre-nova"]["faltantes"] = {"itens": [], "contagens": {"itens": 42, "eventos": 15}}
+        contas["livre-antiga"]["faltantes"] = {"itens": []}
+        # A conta que voltou para a fila guarda as contagens da análise de antes.
+        contas["na-fila"]["faltantes"] = {"itens": [], "contagens": {"itens": 40, "eventos": 9}}
+        banco.tabelas["cm_arquivo"] += [
+            {
+                "id": "pront-na-fila",
+                "envio_id": "env-F1",
+                "tipo": "PRONTUARIO",
+                "atendimento_id": "at-na-fila",
+                "paginas": 1946,
+                "paginas_ocr": 37,
+                "criado_em": "2026-10-11T10:00:00+00:00",
+            },
+        ]
+        for arquivo in banco.tabelas["cm_arquivo"]:
+            if arquivo["id"] == "arq-pront":
+                arquivo["paginas"] = 47
+        cliente = _cliente("faturista", banco)
+
+        envios = {c["id"]: c for c in cliente.get(ROTA_MEUS_ENVIOS).json()["meus_envios"]}
+        fila = {c["id"]: c for c in cliente.get(ROTA_FILA).json()["fila"]}
+
+        na_fila = envios["na-fila"]
+        assert (na_fila["operadora"], na_fila["dias_internacao"]) == ("ASSIM", 4)
+        assert (na_fila["prontuario_paginas"], na_fila["prontuario_paginas_ocr"]) == (1946, 37)
+        # Ainda não ficou pronta: sem as contagens.
+        assert (na_fila["itens_lidos"], na_fila["eventos_lidos"]) == (None, None)
+        # Sem operadora no atendimento, sem o período da Conta, sem a contagem de OCR.
+        sem_conta = envios["falta-conta"]
+        assert (sem_conta["operadora"], sem_conta["dias_internacao"]) == (None, None)
+        assert (sem_conta["prontuario_paginas"], sem_conta["prontuario_paginas_ocr"]) == (47, None)
+        assert (fila["livre-nova"]["itens_lidos"], fila["livre-nova"]["eventos_lidos"]) == (42, 15)
+        assert fila["livre-nova"]["operadora"] == "ASSIM"
+        assert (fila["livre-antiga"]["itens_lidos"], fila["livre-antiga"]["eventos_lidos"]) == (None, None)
+
     @pytest.mark.parametrize("quem", ["credenciamento", "sem_eixo"])
     def test_sem_a_permissao_de_enviar_e_corrigir_contas_recebe_403(self, quem):
         assert _cliente(quem, _fila_semeada()).get(ROTA_FILA).status_code == 403
@@ -1089,6 +1212,23 @@ class TestKitDeConhecimento:
             "Enviar o prontuário",
             "páginas",
             "um embaixo do outro",
+        ):
+            assert trecho in secao, trecho
+
+    def test_diz_o_que_o_cartao_mostra_da_conta_e_do_prontuario(self):
+        """Issue #1419: Operadora, dias de internação, páginas por OCR e, na
+        conta pronta, os itens e os eventos. O valor da conta fica de fora."""
+        secao = KIT.read_text(encoding="utf-8").split("## O envio e a fila", 1)[1].split("\n## ", 1)[0]
+
+        for trecho in (
+            "operadora",
+            "dias de internação",
+            "escaneadas",
+            "OCR",
+            "mais lenta",
+            "itens",
+            "eventos",
+            "O valor da conta não aparece no cartão",
         ):
             assert trecho in secao, trecho
 

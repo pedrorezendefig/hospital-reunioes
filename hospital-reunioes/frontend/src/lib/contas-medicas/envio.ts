@@ -99,6 +99,17 @@ export interface ItemDaFila {
   periodo_fim: string | null;
   /** As páginas do último Prontuário do atendimento (issue #1336); nulas sem prontuário. */
   prontuario_paginas?: number | null;
+  /**
+   * Os dados do cartão do envio (issue #1419): a sigla da Operadora, os dias do
+   * período da Conta, as páginas do Prontuário que vão por OCR (nulas no
+   * prontuário enviado antes dela) e, só na conta pronta, quantos itens da
+   * conta e quantos eventos do prontuário o Motor achou.
+   */
+  operadora?: string | null;
+  dias_internacao?: number | null;
+  prontuario_paginas_ocr?: number | null;
+  itens_lidos?: number | null;
+  eventos_lidos?: number | null;
   nota_entrada: number | null;
   /** A nota depois do reenvio da conta corrigida (issue #1136); nula sem reenvio. */
   nota_saida?: number | null;

@@ -13,7 +13,7 @@ as Concluídas pedem "Analisar contas" (a chave `enviar_corrigir_contas`, issue
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile, status
@@ -36,7 +36,7 @@ from app.services.contas_medicas.envio import (
     receber,
 )
 from app.services.contas_medicas.erro_da_conta import arquivo_da_etapa, detalhe_legivel
-from app.services.contas_medicas.fila import envios_da_pessoa, fila_da_pessoa
+from app.services.contas_medicas.fila import NAO_PRONTAS, envios_da_pessoa, fila_da_pessoa
 from app.services.contas_medicas.guia import MARCADAS, linha_pendente
 from app.services.contas_medicas.painel_do_processamento import (
     ContaNaoEncontradaError as ContaDoPainelNaoEncontradaError,
@@ -113,15 +113,16 @@ def _linhas_por_conta(supabase: Client, contas: list[dict]) -> dict[str, list[di
     return por_conta
 
 
-def _paginas_do_prontuario(supabase: Client, contas: list[dict]) -> dict[str, int | None]:
-    """As páginas do Prontuário de cada atendimento (issue #1336). Com o
-    prontuário reenviado, vale o último que chegou."""
+def _paginas_do_prontuario(supabase: Client, contas: list[dict]) -> dict[str, dict]:
+    """As páginas do Prontuário de cada atendimento (issue #1336) e, delas, as
+    que vão por OCR (issue #1419). Com o prontuário reenviado, vale o último
+    que chegou."""
     ids = list({c["atendimento_id"] for c in contas if c.get("atendimento_id")})
     if not ids:
         return {}
     prontuarios = (
         supabase.table("cm_arquivo")
-        .select("atendimento_id, paginas, criado_em")
+        .select("atendimento_id, paginas, paginas_ocr, criado_em")
         .in_("atendimento_id", ids)
         .eq("tipo", "PRONTUARIO")
         .order("criado_em")
@@ -129,7 +130,27 @@ def _paginas_do_prontuario(supabase: Client, contas: list[dict]) -> dict[str, in
         .data
     )
     # Em ordem de chegada: o último de cada atendimento sobrescreve os de antes.
-    return {p["atendimento_id"]: p.get("paginas") for p in prontuarios or []}
+    return {p["atendimento_id"]: p for p in prontuarios or []}
+
+
+def _dias_de_internacao(conta: dict) -> int | None:
+    """Os dias do período da Conta, contados como diárias: do início ao fim.
+    A internação que começa e termina no mesmo dia conta um."""
+    if not (conta.get("periodo_inicio") and conta.get("periodo_fim")):
+        return None
+    dias = (date.fromisoformat(conta["periodo_fim"]) - date.fromisoformat(conta["periodo_inicio"])).days
+    return max(dias, 1)
+
+
+def _contagens(conta: dict) -> dict:
+    """Quantos itens da conta e quantos eventos do prontuário o Motor gravou,
+    só na conta pronta (issue #1419). A conta pronta antes desta fatia e a que
+    voltou para a fila ficam sem as contagens."""
+    faltantes = conta.get("faltantes")
+    contagens = faltantes.get("contagens") if isinstance(faltantes, dict) else None
+    if conta.get("situacao") in NAO_PRONTAS or not isinstance(contagens, dict):
+        return {"itens_lidos": None, "eventos_lidos": None}
+    return {"itens_lidos": contagens.get("itens"), "eventos_lidos": contagens.get("eventos")}
 
 
 def _falta(conta: dict) -> str | None:
@@ -171,8 +192,12 @@ def _processamento(conta: dict) -> dict:
     }
 
 
-def _item(conta: dict, atendimento: dict, linhas: list[dict], paginas: int | None, guardado: bool) -> dict:
-    """A conta como a fila mostra: identificada pelo atendimento, com a conta como complemento."""
+def _item(
+    conta: dict, atendimento: dict, linhas: list[dict], prontuario: dict, operadora: dict, guardado: bool
+) -> dict:
+    """A conta como a fila mostra: identificada pelo atendimento, com a conta
+    como complemento. O valor da conta não entra no cartão do envio: a Fila
+    nunca anda por valor."""
     da_faturista = [linha for linha in linhas if linha.get("acao") != "VALIDAR"]
     return {
         "id": conta["id"],
@@ -182,8 +207,13 @@ def _item(conta: dict, atendimento: dict, linhas: list[dict], paginas: int | Non
         "falta": _falta(conta),
         "periodo_inicio": conta.get("periodo_inicio"),
         "periodo_fim": conta.get("periodo_fim"),
-        # O quadrado do Prontuário no cartão do envio (issue #1336).
-        "prontuario_paginas": paginas,
+        # O quadrado da Conta no cartão do envio (issue #1419).
+        "operadora": operadora.get("sigla"),
+        "dias_internacao": _dias_de_internacao(conta),
+        # O quadrado do Prontuário no cartão do envio (issues #1336 e #1419).
+        "prontuario_paginas": prontuario.get("paginas"),
+        "prontuario_paginas_ocr": prontuario.get("paginas_ocr"),
+        **_contagens(conta),
         "nota_entrada": conta.get("nota_entrada") if conta.get("nota_entrada") is not None else conta.get("nota_bruta"),
         # A nota depois do reenvio da conta corrigida (issue #1136); nula sem reenvio.
         "nota_saida": conta.get("nota_saida"),
@@ -206,6 +236,8 @@ def _item(conta: dict, atendimento: dict, linhas: list[dict], paginas: int | Non
 def _itens(supabase: Client, listas: dict, nomes: tuple[str, ...]) -> dict:
     todas = [conta for nome in nomes for conta in listas[nome]]
     atendimentos = _por_id(supabase, "cm_atendimento", "id", list({c["atendimento_id"] for c in todas}))
+    com_operadora = {a["operadora_id"] for a in atendimentos.values() if a.get("operadora_id")}
+    operadoras = _por_id(supabase, "cm_operadora", "id", list(com_operadora))
     linhas = _linhas_por_conta(supabase, todas)
     paginas = _paginas_do_prontuario(supabase, todas)
     em_erro = [c for c in todas if c.get("situacao") == "ERRO"]
@@ -217,7 +249,8 @@ def _itens(supabase: Client, listas: dict, nomes: tuple[str, ...]) -> dict:
                 c,
                 atendimentos.get(c["atendimento_id"], {}),
                 linhas.get(c["id"], []),
-                paginas.get(c["atendimento_id"]),
+                paginas.get(c["atendimento_id"], {}),
+                operadoras.get(atendimentos.get(c["atendimento_id"], {}).get("operadora_id"), {}),
                 c["id"] in guardadas,
             )
             for c in contas

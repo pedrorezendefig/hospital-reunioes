@@ -419,6 +419,101 @@ describe("o cartão do envio (issue #1336)", () => {
   });
 });
 
+describe("os dados da conta e do prontuário no cartão (issue #1419)", () => {
+  const ENVIOS: ItemDaFila[] = [
+    conta({
+      id: "na-fila",
+      numero_atendimento: "31302",
+      operadora: "ASSIM",
+      dias_internacao: 4,
+      prontuario_paginas: 1946,
+      prontuario_paginas_ocr: 37,
+    }),
+    conta({
+      id: "de-antes",
+      numero_atendimento: "31303",
+      operadora: "ASSIM",
+      dias_internacao: 1,
+      prontuario_paginas: 212,
+      prontuario_paginas_ocr: null,
+    }),
+    // A conta que voltou para a fila guarda a nota e o valor da análise de
+    // antes; as contagens o backend só manda na conta pronta, que não fica aqui.
+    conta({
+      id: "de-volta",
+      numero_atendimento: "31304",
+      operadora: "ASSIM",
+      dias_internacao: 4,
+      prontuario_paginas: 300,
+      prontuario_paginas_ocr: 1,
+      nota_entrada: 74,
+      valor_apontado: 584.6,
+      itens_total: 9,
+    }),
+    conta({ id: "sem-escaneada", numero_atendimento: "31305", prontuario_paginas: 80, prontuario_paginas_ocr: 0 }),
+  ];
+
+  async function cartoes(): Promise<HTMLElement[]> {
+    filaDoServidor = { ...FILA, meus_envios: ENVIOS };
+    render(<ContasMedicasPage />);
+    await linhas();
+    aba(/^Meus envios/);
+    return linhas();
+  }
+
+  function quadrado(cartao: HTMLElement, nome: "Conta" | "Prontuário"): HTMLElement {
+    return within(cartao).getByRole("region", { name: nome });
+  }
+
+  it("o quadrado da Conta mostra a operadora e os dias de internação", async () => {
+    const [naFila, deAntes] = await cartoes();
+
+    expect(quadrado(naFila, "Conta").textContent).toContain("ASSIM");
+    expect(quadrado(naFila, "Conta").textContent).toContain("4 dias de internação");
+    expect(quadrado(deAntes, "Conta").textContent).toContain("1 dia de internação");
+  });
+
+  it("o quadrado do Prontuário mostra as páginas escaneadas, e o de antes desta fatia não desenha a linha", async () => {
+    const [naFila, deAntes, deVolta] = await cartoes();
+
+    expect(quadrado(naFila, "Prontuário").textContent).toContain("37 escaneadas, lidas por OCR");
+    expect(quadrado(deVolta, "Prontuário").textContent).toContain("1 escaneada, lida por OCR");
+    expect(quadrado(deAntes, "Prontuário").textContent).toContain("212 páginas");
+    expect(quadrado(deAntes, "Prontuário").textContent).not.toMatch(/escanead|OCR/);
+  });
+
+  it("a conta pronta vai para a Fila com as contagens na linha, sem desenhar nada na que veio antes desta fatia", async () => {
+    filaDoServidor = {
+      ...FILA,
+      fila: [
+        conta({ id: "pronta", numero_atendimento: "31304", situacao: "A_FAZER", itens_lidos: 42, eventos_lidos: 15 }),
+        conta({ id: "de-antes", numero_atendimento: "31303", situacao: "A_FAZER" }),
+      ],
+    };
+    render(<ContasMedicasPage />);
+
+    const [pronta, deAntes] = await linhas();
+    expect(pronta.textContent).toContain("42 itens, 15 eventos");
+    expect(deAntes.textContent).not.toMatch(/itens|eventos/);
+  });
+
+  it("o prontuário sem folha escaneada diz que nenhuma vai por OCR", async () => {
+    const itens = await cartoes();
+
+    expect(quadrado(itens[3], "Prontuário").textContent).toContain("nenhuma escaneada");
+    expect(quadrado(itens[3], "Prontuário").textContent).not.toContain("0 escaneadas");
+  });
+
+  it("nenhum valor em reais aparece no cartão", async () => {
+    const itens = await cartoes();
+
+    for (const cartao of itens) {
+      expect(cartao.textContent).not.toContain("R$");
+      expect(cartao.textContent).not.toContain("584,60");
+    }
+  });
+});
+
 describe("o Código do erro no cartão (issue #1337)", () => {
   const DETALHE = "OverloadedError, HTTP 529, etapa passo_a (leitura do prontuário pela IA), ia.py:497";
   const ENVIOS: ItemDaFila[] = [
