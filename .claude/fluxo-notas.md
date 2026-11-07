@@ -8,6 +8,8 @@ Vocabulário do domínio: Reunião, Ata, Pendência, Facilitador, Colaborador, E
 
 **Migration:** a linha da subida é `migration: cole no Studio <arquivo>:1`. Repasse pelo evento `pronto-para-voce` assim que aparecer.
 
+**PRD entregue:** quando a subida desta onda fecha a última sub-issue aberta de um PRD (health ok e nenhuma filha aberta em `gh api repos/{owner}/{repo}/issues/<PRD>/sub_issues`), chame a Skill tool com `mensagem-prd` e o número do PRD antes do relatório do passo 6. Cole a mensagem no relatório e grave o evento `pronto-para-voce` com "PRD #<PRD> em produção, mensagem para o diretor pronta no comentário do PRD". Vale também quando o prompt pede auditoria do PRD: a mensagem sai depois dela.
+
 ## onda-implementador
 
 - **Anexos da Demanda:** se o corpo da issue diz "Anexos" (os prints da Demanda, que vivem só no app), rode no seu worktree `python3 .claude/skills/pegar-issue/scripts/anexos.py <N>` e leia com a Read tool cada caminho que ele imprimir; saída 1 não bloqueia: siga sem as imagens e ponha o motivo em `atritos`.
@@ -107,7 +109,7 @@ Pare no draft e me mostre os frames antes do render final. Depois da página pub
 ```
 
 5. No passo a passo (6), a divulgação entra como item próprio: em qual momento colar cada prompt e a quem mandar o link depois (diretor, usuários do módulo). O envio do link é "precisa de você".
-6. **Mensagem de WhatsApp** junto do vídeo: para o mesmo PRD, o plano traz também a linha `/mensagem-prd #<PRD>`, a colar no mesmo terminal de divulgação depois do deploy da última tela (a skill confere o que está em produção). O texto sai pronto para o Pedro copiar e mandar ao diretor e aos usuários do módulo, com o link da página quando ela já existir.
+6. **Mensagem de WhatsApp:** não entra no plano. A `/onda-enxuta` que fecha a última filha do PRD roda o `/mensagem-prd` sozinha depois da subida (nota da `onda-enxuta`). Se a página do `/divulgar` sair depois, o Pedro manda o link à parte.
 
 ## minhas-issues
 
