@@ -13,8 +13,10 @@ só aqui, no `CATALOGO`, em quatro famílias:
 - `CM-APP-*`: defeito do app ou análise que não terminou, para a TI.
 
 O detalhe técnico guarda o tipo do erro, o código HTTP, a etapa, o arquivo e a
-linha do código. Nunca a mensagem da exceção nem a da resposta da IA: as duas
-podem citar o prontuário.
+linha do código, e do erro da IA o `request_id` da Anthropic. Nunca a mensagem
+da exceção nem a da resposta da IA, que podem citar o prontuário; a exceção é o
+400 de validação do pedido (schema, parâmetro, modelo), que fala só do pedido
+que o app montou (#1410).
 
 O arquivo afetado é o da etapa em que a análise parou: a leitura da conta e as
 etapas que comparam a conta apontam a Conta; a leitura do prontuário, o
@@ -209,6 +211,13 @@ def classificar(erro: BaseException, etapa: str | None) -> ErroDaConta:
     if isinstance(erro, ErroDaIA):
         # O tipo é o do erro da última tentativa (o do SDK ou o da validação).
         detalhe |= {"tipo": erro.tipo, "http": erro.http}
+        # A mensagem só existe no 400 de validação do pedido, que não cita o
+        # prontuário (#1410); o `request_id` cruza com o console da Anthropic.
+        detalhe |= {
+            chave: valor
+            for chave, valor in (("mensagem_da_api", erro.mensagem_da_api), ("request_id", erro.request_id))
+            if valor
+        }
         return _erro(_CAUSA_DA_IA.get(erro.causa, erro.causa), etapa, detalhe)
     return _erro("defeito", etapa, detalhe)
 
@@ -226,8 +235,9 @@ def acao_do_codigo(codigo: str | None) -> Acao | None:
 
 def detalhe_legivel(detalhe: dict[str, Any] | None) -> str | None:
     """O detalhe técnico numa linha, como "Ver detalhes" mostra e "Copiar para
-    a TI" leva: o tipo, o código HTTP, a etapa, o lugar no código e, depois do
-    OCR, quantas folhas digitalizadas saíram em cada faixa (#1398)."""
+    a TI" leva: o tipo, o código HTTP, a etapa, o lugar no código, depois do
+    OCR quantas folhas digitalizadas saíram em cada faixa (#1398) e, do erro
+    da IA, a mensagem do 400 de validação e o `request_id` (#1410)."""
     if not detalhe:
         return None
     partes = [detalhe.get("tipo") or "Erro"]
@@ -240,6 +250,10 @@ def detalhe_legivel(detalhe: dict[str, Any] | None) -> str | None:
     if contagem := detalhe.get("digitalizadas"):
         faixas = ", ".join(f"{_FAIXA_NO_DETALHE.get(faixa, faixa)} {n}" for faixa, n in contagem.items())
         partes.append(f"digitalizadas: {faixas}")
+    if detalhe.get("mensagem_da_api"):
+        partes.append(f'mensagem da API "{detalhe["mensagem_da_api"]}"')
+    if detalhe.get("request_id"):
+        partes.append(f"request_id {detalhe['request_id']}")
     return ", ".join(partes)
 
 

@@ -2075,6 +2075,35 @@ class TestCodigoDoErroDaIA:
         )
         assert item["erro_em"] == detalhe["em"]
 
+    def test_o_400_de_schema_leva_a_mensagem_da_api_e_o_request_id_para_a_ti(self, ia_falsa):
+        """O 400 de validação do pedido não cita o prontuário: a mensagem da API
+        e o `request_id` vão para o detalhe e para o "Copiar para a TI" (#1410)."""
+        ia_falsa.resposta_fixa = httpx2.Response(
+            400,
+            json={"type": "error", "error": {"type": "invalid_request_error", "message": MENSAGEM_DE_SCHEMA}},
+            headers={"request-id": "req_011CVschema"},
+        )
+        banco = _cenario()
+        _enviar(banco, _conta(), _prontuario())
+
+        _rodar_o_job(banco)
+
+        (conta,) = banco.tabelas["cm_conta"]
+        detalhe = conta["erro_detalhe"]
+        assert (detalhe["mensagem_da_api"], detalhe["request_id"]) == (MENSAGEM_DE_SCHEMA, "req_011CVschema")
+        (item,) = _fila(banco, "meus_envios")
+        assert item["erro_detalhe"] == (
+            f"BadRequestError, HTTP 400, etapa passo_a (leitura do prontuário pela IA), ia.py:{detalhe['linha']}, "
+            f'mensagem da API "{MENSAGEM_DE_SCHEMA}", request_id req_011CVschema'
+        )
+
+
+# O 400 do PR #1408: o schema do Passo A passou do limite de uniões.
+MENSAGEM_DE_SCHEMA = (
+    "Schemas contains too many parameters with union types (20 parameters with type arrays or anyOf). "
+    "(limit: 16 parameters with unions)."
+)
+
 
 class _Reinicio(BaseException):  # noqa: N818, o processo morrendo no meio da análise
     """O app reiniciando: nada no processamento pega uma `BaseException`."""

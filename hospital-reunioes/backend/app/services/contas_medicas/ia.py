@@ -90,15 +90,28 @@ _esperar = time.sleep
 
 class ErroDaIA(Exception):  # noqa: N818, o nome do domínio
     """A IA não respondeu no formato. Carrega a causa (o tipo da falha, de que
-    nasce o Código do erro da conta), o tipo do erro da última tentativa e o
-    código HTTP dela. Nunca leva a mensagem da resposta, que pode citar o
-    prontuário (issue #1337); o pipeline transforma em Erro com a frase."""
+    nasce o Código do erro da conta), o tipo do erro da última tentativa, o
+    código HTTP e o `request_id` dela. A mensagem da API só vem no 4xx de
+    validação do pedido (`_mensagem_da_api`); toda outra resposta pode citar o
+    prontuário e fica sem ela (issues #1337 e #1410). O pipeline transforma em
+    Erro com a frase."""
 
-    def __init__(self, mensagem: str, *, causa: str, tipo: str, http: int | None = None):
+    def __init__(
+        self,
+        mensagem: str,
+        *,
+        causa: str,
+        tipo: str,
+        http: int | None = None,
+        mensagem_da_api: str | None = None,
+        request_id: str | None = None,
+    ):
         super().__init__(mensagem)
         self.causa = causa
         self.tipo = tipo
         self.http = http
+        self.mensagem_da_api = mensagem_da_api
+        self.request_id = request_id
 
 
 class IASemCredito(ErroDaIA):  # noqa: N818, o nome do domínio
@@ -149,6 +162,25 @@ def _causa(erro: anthropic.APIError | httpx2.HTTPError | ValidationError) -> tup
     if isinstance(erro, httpx2.HTTPError):  # a conexão ou o prazo que cai no meio do stream
         return "fora_do_ar", None
     return "recusa", None
+
+
+# O teto da mensagem da API que vai para o detalhe da conta e para o log.
+MENSAGEM_DA_API_MAX = 500
+
+
+def _mensagem_da_api(erro: anthropic.APIStatusError, causa: str) -> str | None:
+    """A mensagem do 4xx de validação do pedido (schema, parâmetro, modelo),
+    que fala do pedido que o app montou e não do prontuário (issue #1410). Sai
+    só o campo `error.message` da resposta, nunca o corpo do pedido, e com teto.
+    A que fala de `messages`, o campo que leva o prontuário, fica de fora, como
+    as de chave, modelo inexistente, tamanho e fora do ar (issue #1337)."""
+    if causa != "recusa" or erro.type != "invalid_request_error" or not 400 <= erro.status_code < 500:
+        return None
+    falha = erro.body.get("error") if isinstance(erro.body, dict) else None
+    mensagem = falha.get("message") if isinstance(falha, dict) else None
+    if not isinstance(mensagem, str) or "messages" in mensagem.lower():
+        return None
+    return mensagem[:MENSAGEM_DA_API_MAX]
 
 
 # ----------------------------------------------------------------------------------
@@ -527,7 +559,8 @@ def _chamar_a_ia[Saida: BaseModel](
         except (anthropic.APIError, httpx2.HTTPError, ValidationError) as erro:
             # O SDK só traduz o erro do envio; o que cai na leitura do stream (conexão
             # perdida, prazo de leitura esgotado) sobe cru do httpx2, o transporte dele.
-            # O tipo do erro, nunca a mensagem: a resposta inválida pode citar o prontuário.
+            # O tipo do erro e, só no 400 de validação do pedido, a mensagem da API:
+            # a resposta inválida pode citar o prontuário.
             tipo = type(erro).__name__
             if isinstance(erro, anthropic.APIStatusError) and _sem_credito(erro):
                 logger.error(
@@ -536,12 +569,25 @@ def _chamar_a_ia[Saida: BaseModel](
                 _gravar(onde, modelo, uso, round((perf_counter() - inicio) * 1000), tentativa, sucesso=False)
                 raise IASemCredito(tipo=tipo, http=erro.status_code) from None
             causa, http = _causa(erro)
-            logger.warning("[ContasMedicas] IA %s, tentativa %s: %s (HTTP %s)", modelo, tentativa, tipo, http)
+            status = isinstance(erro, anthropic.APIStatusError)
+            mensagem_da_api = _mensagem_da_api(erro, causa) if status else None
+            request_id = erro.request_id if status else None
+            logger.warning(
+                "[ContasMedicas] IA %s, tentativa %s: %s (HTTP %s, request_id %s)%s",
+                modelo,
+                tentativa,
+                tipo,
+                http,
+                request_id,
+                f": {mensagem_da_api}" if mensagem_da_api else "",
+            )
             falha = ErroDaIA(
                 f"A IA falhou na tentativa {tentativa} ({causa}, {tipo}, HTTP {http})",
                 causa=causa,
                 tipo=tipo,
                 http=http,
+                mensagem_da_api=mensagem_da_api,
+                request_id=request_id,
             )
             if causa in DEFINITIVAS:
                 break
