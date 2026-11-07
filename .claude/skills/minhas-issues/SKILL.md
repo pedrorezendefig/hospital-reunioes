@@ -1,6 +1,6 @@
 ---
 name: minhas-issues
-description: "Check de um minuto das minhas issues abertas: semáforo do Actions, onde parou, fila por PRD, plano com comandos e passo a passo das humanas. Gatilhos: minhas issues, onde parei, o que tem pra mim, check das minhas issues, status do Actions. Só leitura. Sintaxe `/minhas-issues [@login]`."
+description: "Check de um minuto das minhas issues abertas: semáforo do Actions, onde parou, fila por PRD, plano com comandos e passo a passo das humanas. Gatilhos: minhas issues, onde parei, o que tem pra mim, check das minhas issues, status do Actions. Só leitura. Sintaxe `/minhas-issues [@login] [--curto]`."
 ---
 
 # Minhas issues: check de um minuto
@@ -10,10 +10,10 @@ Mostra numa tela só o que está aberto com quem pede, onde cada coisa parou, se
 ## Sintaxe
 
 ```
-/minhas-issues [@login]
+/minhas-issues [@login] [--curto]
 ```
 
-Sem argumento, a pessoa é o login do `gh api user`. Com `@login`, mostra a fila de outra pessoa (cobrar alguém, cobrir férias).
+Sem argumento, a pessoa é o login do `gh api user`. Com `@login`, mostra a fila de outra pessoa (cobrar alguém, cobrir férias). A tela padrão é a visual (fluxogramas, selos e a seção da Tecnologia); `--curto` devolve só os blocos de texto.
 
 "Minha" é o que a pessoa tem que fazer: atribuída a ela; sem ninguém atribuído, quem criou. O painel filtrado pela pessoa mostra também o que ela criou e outro assumiu, então lá o total pode ser maior.
 
@@ -22,8 +22,10 @@ Sem argumento, a pessoa é o login do `gh api user`. Com `@login`, mostra a fila
 1. Rode o script e mostre a saída **como veio**, sem reescrever:
 
    ```bash
-   python3 .claude/skills/minhas-issues/scripts/minhas_issues.py [@login]
+   python3 .claude/skills/minhas-issues/scripts/minhas_issues.py [@login] [--curto]
    ```
+
+   Os blocos ` ```mermaid ` vão na resposta do jeito que vieram: o terminal desenha os fluxogramas.
 
 2. Acrescente no máximo **duas linhas** suas, e só se mudarem a decisão (por exemplo: o mesmo arquivo em dois PRs do plano, ou um PR verde cuja issue já fechou). Nada de recapitular a tabela.
 
@@ -74,6 +76,13 @@ Regras:
    6. fila de agente em ondas: devolve `/montar-ondas-enxutas` com `--exceto #PRD` para o PRD que já tem fatia andando. Esta skill não monta ondas.
 
    A estimativa é a mediana de PR aberto até o merge pelo tamanho da fatia (`fatia:P/M/G`), calculada na hora sobre os últimos 45 dias. O lead time abertura-fechamento não entra: mede espera na fila, não esforço. **Melhor** é o passo 1 (a ordem já põe primeiro o que destrava mais); **mais rápido** é o de menor estimativa; quando coincidem, sai numa linha.
+
+### O que a tela visual soma (padrão)
+
+- **Caminho das issues**, logo abaixo do total: um fluxograma com as caixas Triagem, Fila de agente, Humana, Em andamento, PR aberto e Entregue nos últimos 14 dias. Cada caixa traz a contagem e até 6 números.
+- **Árvore de cada PRD** que tem fatia sua aberta: o PRD, as fatias com a fase e uma seta pontilhada "trava" para cada bloqueio nativo do GitHub ("blocked by"). Uma fatia travada se liga à fatia que a trava, e não ao PRD.
+- **Selos** nos números: `[Humana]` para `ready-for-human` e `[Diretor]` para a issue que nasceu na aba Tecnologia.
+- **Chegou da Tecnologia**, antes do plano: as issues do diretor separadas em Bug (`type:fix` ou `type:bug`) e Melhoria. Entram as abertas e as fechadas nos últimos 14 dias, de qualquer responsável, com a fase e a pessoa responsável. A origem vem do marcador `<!-- demanda-vitta id="..." -->` que a aba grava no corpo da issue. Não existe label para isso.
 
 ## Limites
 
