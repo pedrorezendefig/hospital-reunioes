@@ -385,6 +385,15 @@ class _Banco:
     def table(self, nome: str):
         return _Consulta(self, nome)
 
+    def rpc(self, nome: str, params: dict):
+        """A troca da vigente da migration 125, sem a falha no meio (essa é de
+        `test_contas_medicas_memoria_vigente.py`)."""
+        assert nome == "cm_trocar_memoria_vigente", f"RPC sem dublê: {nome}"
+        for versao in self.tabelas.get("cm_memoria_versao", []):
+            if versao["operadora_id"] == params["p_operadora_id"]:
+                versao["vigente"] = versao["id"] == params["p_versao_id"]
+        return SimpleNamespace(execute=lambda: SimpleNamespace(data=[{"versao_vigente": params["p_versao_id"]}]))
+
     def conta(self, conta_id: str) -> dict:
         return next(c for c in self.tabelas["cm_conta"] if c["id"] == conta_id)
 
