@@ -33,6 +33,7 @@ __all__ = [
     "memoria_vigente",
     "reconhecer_plano",
     "texto_da_memoria_vigente",
+    "trocar_vigente",
 ]
 
 
@@ -42,6 +43,13 @@ class CadastroRecusadoError(ValueError):
     def __init__(self, mensagem: str, *, conflito: bool = False):
         super().__init__(mensagem)
         self.conflito = conflito
+
+
+def trocar_vigente(supabase, operadora_id: str, versao_id: str) -> None:
+    """Marca `versao_id` como a vigente da operadora e desmarca a anterior, numa
+    transação só (função da migration 125, issue #1471). Se falhar, a anterior
+    continua vigente e o erro sobe."""
+    supabase.rpc("cm_trocar_memoria_vigente", {"p_operadora_id": operadora_id, "p_versao_id": versao_id}).execute()
 
 
 def _operadora(supabase, memoria: MemoriaLida) -> dict:
@@ -97,10 +105,7 @@ def importar_memoria(supabase, memoria: MemoriaLida, texto_md: str, autor_id: st
             ]
         ).execute()
 
-    supabase.table("cm_memoria_versao").update({"vigente": False}).eq("operadora_id", operadora["id"]).eq(
-        "vigente", True
-    ).execute()
-    supabase.table("cm_memoria_versao").update({"vigente": True}).eq("id", versao["id"]).execute()
+    trocar_vigente(supabase, operadora["id"], versao["id"])
     supabase.table("cm_operadora").update({"nome": memoria.nome, "situacao": memoria.situacao}).eq(
         "id", operadora["id"]
     ).execute()
