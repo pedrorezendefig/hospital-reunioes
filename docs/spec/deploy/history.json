@@ -2,6 +2,52 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-11-07T20:43:15-03:00",
+      "sha": "482264ed170c305048eb49fa2d4f00c5c5956814",
+      "app_version": "0.227.1",
+      "subject": "Onda deps-1107: Bump pnpm/action-setup from 6.1.0 to 6.1.1 in the actions group across 1 directory; Bump the frontend group across 1 directory with 8 updates; Bump the backend group across 1 directory",
+      "raw_subject": "chore(deploy): registro da onda deps-1107 (#1431 #1478 #1479)",
+      "scope": [
+        "backend",
+        "frontend"
+      ],
+      "prds": [],
+      "result": "healthy",
+      "duration_seconds": 462,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        },
+        {
+          "service": "frontend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "onda-enxuta deps-1107: PR #1431 (sem issue), PR #1478 (sem issue), PR #1479 (sem issue), mergeados PR a PR. Merge pela API do GitHub, um build. Registro pela Action pos-merge depois do health.",
+      "etapas": {
+        "merge_s": 9,
+        "build_s": {
+          "backend": 126,
+          "frontend": 129
+        },
+        "health_s": 0
+      },
+      "responsavel": "pedrorezendefig"
+    },
+    {
       "at": "2026-11-07T20:05:09-03:00",
       "sha": "20aa9b42bf6a527ff0c015dac5b3eff6cb431b50",
       "app_version": "0.227.0",
