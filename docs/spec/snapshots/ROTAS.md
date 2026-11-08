@@ -1,6 +1,6 @@
 # ROTAS.md
 <!-- gerado automaticamente por /snapshot — não editar -->
-<!-- last_update: 2026-11-08T17:08+0000 -->
+<!-- last_update: 2026-11-08T17:21+0000 -->
 
 Endpoints HTTP expostos pelo backend FastAPI do Hospital Reuniões.
 
@@ -186,6 +186,8 @@ Endpoints HTTP expostos pelo backend FastAPI do Hospital Reuniões.
 | Método | Rota | O que faz | Auth |
 |--------|------|-----------|------|
 | GET | `/contas-medicas/validacao` | Os temas abertos, do maior R$ em jogo para o menor, e os três números do topo. | ✅ |
+| POST | `/contas-medicas/validacao/lote` | "Aprovar o lote" (#1491): cada tema aberto com recomendação recebe a | ✅ |
+| GET | `/contas-medicas/validacao/temas/{tema_id}/cadastro` | A lista do tema já enviado ao cadastro, de novo: o aprovado no lote. | ✅ |
 | POST | `/contas-medicas/validacao/temas/{tema_id}/cadastro` | "Enviar ao cadastro": fecha o tema do código bloqueado e devolve a lista | ✅ |
 | POST | `/contas-medicas/validacao/temas/{tema_id}/decisao` | Decide o tema: grava quem decidiu e quando, e o tema sai da fila. | ✅ |
 | POST | `/contas-medicas/validacao/temas/{tema_id}/leitura` | A leitura da IA sobre as observações do tema: a guardada ou, na falta, | ✅ |
@@ -516,4 +518,4 @@ Endpoints HTTP expostos pelo backend FastAPI do Hospital Reuniões.
 
 ---
 
-**Totais:** 285 endpoints em 45 routers · 94% exigem auth.
+**Totais:** 287 endpoints em 45 routers · 94% exigem auth.

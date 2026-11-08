@@ -50,6 +50,7 @@ __all__ = [
     "LoteDoContrato",
     "PropostaDeRegra",
     "PropostaDoAuditor",
+    "RecomendacaoDoTema",
     "chamada_curta",
     "comparar_conta",
     "corrigir_item",
@@ -58,6 +59,7 @@ __all__ = [
     "propor_lote",
     "propor_lote_do_contrato",
     "propor_regra",
+    "recomendar_tema",
 ]
 
 logger = logging.getLogger(__name__)
@@ -444,6 +446,26 @@ class LoteDoContrato(_Estrito):
     resposta: str
     propostas: list[PropostaDoContrato]
     o_contrato_diz: list[OContratoDiz]
+
+
+class RecomendacaoDoTema(_Estrito):
+    """A recomendação do Auditor a um Tema de validação (ADR 0081, decisão 13):
+    a decisão, o motivo para quem aprova e o texto que a decisão leva (a regra
+    editada ou a resposta ao time; vazio nas outras)."""
+
+    decisao: Literal[
+        "VALIDAR_REGRA",
+        "DEIXAR_PENDENTE",
+        "ENVIAR_AO_CADASTRO",
+        "DESCARTAR",
+        "MANTER_REGRA",
+        "EDITAR_REGRA",
+        "RESPONDER",
+        "CONFIRMAR",
+        "REJEITAR",
+    ]
+    motivo: str
+    texto: str
 
 
 # ----------------------------------------------------------------------------------
@@ -836,6 +858,22 @@ def propor_lote_do_contrato(contrato: str, memoria: str, *, supabase) -> LoteDoC
             (f"TEXTO DO CONTRATO\n{contrato}", False),
         ],
         saida=LoteDoContrato,
+        onde=_Onde(supabase, None, None, "CONVERSA"),
+    )
+
+
+def recomendar_tema(memoria: str, tema: str, *, supabase) -> RecomendacaoDoTema:
+    """O Auditor decide um Tema da fila de Validação (issue #1491): no modelo do
+    Passo B, com a memória da operadora em bloco de cache. Gravada como
+    CONVERSA, o passo do Auditor, sem conta: o Tema junta várias."""
+    return _chamar_a_ia(
+        modelo=settings.cm_ia_modelo_passo_b,
+        instrucao=load_prompt("contas_medicas_recomendacao"),
+        blocos=[
+            (f"MEMÓRIA DA OPERADORA\n{memoria}", True),
+            (f"O TEMA DE VALIDAÇÃO\n{tema}", False),
+        ],
+        saida=RecomendacaoDoTema,
         onde=_Onde(supabase, None, None, "CONVERSA"),
     )
 

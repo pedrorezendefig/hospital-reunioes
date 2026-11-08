@@ -46,6 +46,10 @@ Jobs:
  12. avisar_contratos_contas_medicas: 07:15 diário, avisa no sino o reajuste de cada
      contrato de operadora na data do aviso (vencimento menos a antecedência), issue
      #1144. Idempotente: `cm_aviso` guarda a data prevista e o envio.
+ 13. recomendar_validacao_contas_medicas: a cada 30 minutos, o Auditor decide os Temas
+     abertos da fila de Validação ainda sem recomendação, com a Prova da regra no Tema
+     de Regra pendente (issue #1491, ADR 0081, decisão 13). Idempotente: o tema
+     recomendado ganha carimbo e sai da varredura; a observação nova apaga o carimbo.
 """
 
 import logging
@@ -374,6 +378,20 @@ def avisar_contratos_contas_medicas() -> None:
         logger.info(f"[Cron] Contratos de Contas médicas: {avisados} aviso(s) de reajuste no sino.")
 
 
+def recomendar_validacao_contas_medicas() -> None:
+    """A fila de Validação chega decidida (issue #1491). A lógica e o limite
+    por rodada vivem no serviço; aqui, só o relógio e o log."""
+    from app.services.contas_medicas import validacao_decidida
+
+    try:
+        recomendados = validacao_decidida.recomendar_abertos(_supabase())
+    except Exception as e:
+        logger.error(f"[Cron] Erro em recomendar_validacao_contas_medicas: {type(e).__name__}")
+        return
+    if recomendados:
+        logger.info(f"[Cron] Validação de Contas médicas: {recomendados} tema(s) com recomendação do Auditor.")
+
+
 def _registrar_entrega(competencia: str, entrega, rotulo: str = "Relatório quinzenal") -> None:
     """Escreve no log o que aconteceu com uma tentativa de entrega.
 
@@ -561,6 +579,15 @@ def start_scheduler() -> None:
         hour=7,
         minute=15,
         id="contratos_contas_medicas",
+        replace_existing=True,
+    )
+    # A cada 30 minutos: o Auditor recomenda até cinco Temas por rodada, e a
+    # Regra pendente custa a prova inteira.
+    scheduler.add_job(
+        recomendar_validacao_contas_medicas,
+        "interval",
+        minutes=30,
+        id="validacao_decidida_contas_medicas",
         replace_existing=True,
     )
     # Todo dia às 07h, no fuso do scheduler (America/Sao_Paulo). A quinzena

@@ -49,6 +49,7 @@ __all__ = [
     "linhas_do_retorno",
     "respostas_da_conta",
     "temas_da_observacao",
+    "tema_enviado_ao_cadastro",
     "temas_das_linhas_validar",
 ]
 
@@ -182,8 +183,11 @@ def _tema_da_observacao(supabase, operadora_id: str | None, regra: str | None) -
     nele não leu a observação que está chegando: some, e a próxima é nova."""
     titulo = f"Observações sobre a regra {regra}" if regra else "Observações sem regra citada"
     tema = _tema_aberto(supabase, OBSERVACAO, titulo, operadora_id=operadora_id, regra_codigo=regra)
-    if tema.get("leitura_ia"):
-        supabase.table("cm_validacao_tema").update({"leitura_ia": None}).eq("id", tema["id"]).execute()
+    if tema.get("leitura_ia") or tema.get("recomendado_em"):
+        # A recomendação do Auditor (issue #1491) também não leu a observação nova.
+        supabase.table("cm_validacao_tema").update({"leitura_ia": None, **SEM_RECOMENDACAO}).eq(
+            "id", tema["id"]
+        ).execute()
     return tema
 
 
@@ -246,6 +250,65 @@ def _falas_do_time(ligadas: list[dict], linhas: dict[str, dict], observacoes: di
         elif (observacao := observacoes.get(ligacao.get("observacao_id"))) is not None:
             falas.append(observacao["texto"])
     return falas
+
+
+# A recomendação do Auditor (issue #1491, ADR 0081, decisão 13). O texto que a
+# decisão leva (a regra editada, a resposta ao time) vai junto do motivo, numa
+# linha própria: a migration 126 não tem coluna para ele.
+SEM_RECOMENDACAO = {
+    "recomendacao": None,
+    "recomendacao_motivo": None,
+    "recomendacao_prova_id": None,
+    "recomendado_em": None,
+}
+ROTULO_DO_TEXTO = "Texto da decisão: "
+
+
+def juntar_motivo(motivo: str, texto: str) -> str:
+    motivo, texto = motivo.strip(), texto.strip()
+    return f"{motivo}\n\n{ROTULO_DO_TEXTO}{texto}" if texto else motivo
+
+
+def separar_motivo(gravado: str | None) -> tuple[str, str]:
+    """O motivo e o texto da decisão, como `juntar_motivo` os gravou."""
+    motivo, _, texto = (gravado or "").partition(f"\n\n{ROTULO_DO_TEXTO}")
+    return motivo.strip(), texto.strip()
+
+
+def _resumo_da_prova(prova: dict) -> dict[str, Any]:
+    """O que o cartão mostra da Prova da regra: quantas contas, se mudaria e,
+    por conta, quantas Linhas entrariam, sairiam ou mudariam."""
+    por_conta = [c for c in prova.get("resultado_json") or [] if c.get("refeita")]
+    return {
+        "contas": prova.get("contas") or 0,
+        "mudaria": bool(prova.get("mudaria")),
+        "feitas_que_sumiriam": sum(1 for c in por_conta for linha in c.get("sairiam") or [] if linha.get("feito")),
+        "por_conta": [
+            {
+                "numero_conta": c.get("numero_conta"),
+                "entrariam": len(c.get("entrariam") or []),
+                "sairiam": len(c.get("sairiam") or []),
+                "mudariam": len(c.get("mudariam") or []),
+            }
+            for c in por_conta
+            if c.get("mudaria")
+        ],
+    }
+
+
+def _recomendacao(tema: dict, provas: dict[str, dict]) -> dict[str, Any] | None:
+    if not tema.get("recomendacao"):
+        return None
+    motivo, texto = separar_motivo(tema.get("recomendacao_motivo"))
+    prova = provas.get(tema.get("recomendacao_prova_id"))
+    return {
+        "decisao": tema["recomendacao"],
+        "motivo": motivo,
+        "texto": texto or None,
+        "prova": _resumo_da_prova(prova) if prova else None,
+        # O lote devolve este carimbo: só aplica a recomendação que a tela mostrou.
+        "recomendado_em": tema.get("recomendado_em"),
+    }
 
 
 def _temas_do_dicionario(supabase) -> None:
@@ -332,6 +395,10 @@ def fila_de_validacao(supabase) -> dict[str, Any]:
     }
     siglas = {o["id"]: o["sigla"] for o in _em_lotes(supabase, "cm_operadora", "id", operadora_ids, "operadoras")}
     regras = _regras_vigentes(supabase, operadora_ids)
+    provas = {
+        p["id"]: p
+        for p in _em_lotes(supabase, "cm_prova", "id", [t.get("recomendacao_prova_id") for t in temas], "provas")
+    }
 
     do_tema: dict[str, list[dict]] = {}
     for ligacao in ligacoes:
@@ -366,6 +433,7 @@ def fila_de_validacao(supabase) -> dict[str, Any]:
                 "desde": tema.get("criado_em"),
                 "valor": float(valor),
                 "leitura_ia": tema.get("leitura_ia"),
+                "recomendacao": _recomendacao(tema, provas),
                 "observacoes": _falas_do_time(ligadas, linhas, observacoes) if tema["tipo"] == OBSERVACAO else [],
                 "dicionario": (
                     {k: termo.get(k) for k in ("termo", "codigo_conta", "descricao_conta")}
@@ -561,6 +629,15 @@ def csv_do_cadastro(supabase, tema_id: str) -> str:
 def _celula(valor: str) -> str:
     """A descrição vem do PDF do MV: a célula que começa como fórmula vira texto."""
     return f"'{valor}" if valor[:1] in ("=", "+", "-", "@", "\t", "\r") else valor
+
+
+def tema_enviado_ao_cadastro(supabase, tema_id: str) -> dict:
+    """O tema que foi ao cadastro, para baixar a lista de novo: o aprovado no
+    lote da Validação decidida (issue #1491) não baixou nada na hora."""
+    tema = _tema(supabase, tema_id)
+    if tema.get("decisao") != ENVIAR_AO_CADASTRO:
+        raise DecisaoRecusadaError("Este tema não foi enviado ao cadastro.")
+    return tema
 
 
 def linhas_do_retorno(supabase, linhas: list[dict]) -> list[dict]:
