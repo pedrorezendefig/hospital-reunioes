@@ -18,7 +18,6 @@ from __future__ import annotations
 import json
 import logging
 import random
-from collections.abc import Callable
 from datetime import date
 from typing import Any
 
@@ -42,8 +41,6 @@ __all__ = ["CONTAS_POR_SEMANA", "revisar_semana"]
 logger = logging.getLogger(__name__)
 
 CONTAS_POR_SEMANA = 10
-
-Sorteio = Callable[[list[dict[str, Any]], int], list[dict[str, Any]]]
 
 
 def _ja_revisadas(supabase) -> set[str]:
@@ -89,11 +86,8 @@ def _a_conta_para_a_ia(supabase, conta: dict[str, Any]) -> dict[str, Any]:
         "paginas_sem_texto": eventos.get("paginas_sem_texto") or [],
         "documentos": eventos.get("documentos") or [],
         "eventos": {lista: da_ia.get(lista) or [] for lista in _LISTAS_DO_DIA},
-        "linhas_do_guia": [
-            {"data": linha.get("data"), "data_fim": linha.get("data_fim"), **{c: linha.get(c) for c in _CAMPOS_DA_LINHA}}
-            for linha in linhas
-        ],
-        "itens_da_conta": [{"data": item.get("data"), **{c: item.get(c) for c in _CAMPOS_DO_ITEM}} for item in itens],
+        "linhas_do_guia": [{c: linha.get(c) for c in ("data", "data_fim", *_CAMPOS_DA_LINHA)} for linha in linhas],
+        "itens_da_conta": [{c: item.get(c) for c in ("data", *_CAMPOS_DO_ITEM)} for item in itens],
     }
 
 
@@ -138,7 +132,7 @@ def _revisar(supabase, conta: dict[str, Any]) -> int:
     return len(achados)
 
 
-def revisar_semana(supabase, sortear: Sorteio = random.sample) -> int:
+def revisar_semana(supabase) -> int:
     """A rodada da semana: até `CONTAS_POR_SEMANA` Contas concluídas ainda não
     revisadas, sorteadas. Devolve quantos Faltou isto o agente gravou.
 
@@ -146,7 +140,7 @@ def revisar_semana(supabase, sortear: Sorteio = random.sample) -> int:
     log leva só o tipo do erro: a mensagem pode citar o prontuário."""
     candidatas = _a_revisar(supabase)
     achados = 0
-    for conta in sortear(candidatas, min(CONTAS_POR_SEMANA, len(candidatas))):
+    for conta in random.sample(candidatas, min(CONTAS_POR_SEMANA, len(candidatas))):
         try:
             achados += _revisar(supabase, conta)
         except ia.IASemCredito:

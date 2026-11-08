@@ -31,7 +31,7 @@ from app.services.contas_medicas import ia, revisor
 CONCLUIDAS = {f"c{n:02d}" for n in range(1, 13)} | {"c14"}
 
 
-def _achado(dia: str, item: str = "Equipo macrogotas", pagina: int | None = 3) -> dict[str, Any]:
+def _achado(dia: str, item: str = "Equipo macrogotas", pagina: int = 3) -> dict[str, Any]:
     return {
         "data": dia,
         "item": item,
@@ -72,7 +72,8 @@ def cenario(monkeypatch):
     _importar(cliente, "MEMORIA-BETA-v1.0.md")
     _semear(banco)
     # A da BETA foi analisada com a memória da BETA.
-    next(c for c in banco.linhas("cm_conta") if c["id"] == "c14")["memoria_versao_id"] = _versao(banco, "BETA", "1.0")["id"]
+    da_beta = next(c for c in banco.linhas("cm_conta") if c["id"] == "c14")
+    da_beta["memoria_versao_id"] = _versao(banco, "BETA", "1.0")["id"]
     return banco, provedor
 
 
@@ -195,5 +196,11 @@ class TestOKit:
     def test_o_kit_diz_que_o_segundo_agente_rele_dez_contas_por_semana(self):
         no_ar = KIT.read_text(encoding="utf-8").split("## O que já está no ar")[1].split("\n## ")[0]
 
-        for termo in ("segundo agente", "10 contas concluídas", "toda semana", "achado pelo agente"):
+        for termo in (
+            "segundo agente",
+            "toda semana",
+            "10 contas concluídas",
+            "ainda não revisou",
+            "achado pelo agente",
+        ):
             assert termo in no_ar, termo

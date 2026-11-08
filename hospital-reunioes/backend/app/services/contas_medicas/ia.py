@@ -791,9 +791,7 @@ def explicar_faltou_isto(
     )
 
 
-def revisar_conta(
-    memoria: str, conta: str, *, supabase, conta_id: str, atendimento_id: str | None
-) -> RevisaoDaConta:
+def revisar_conta(memoria: str, conta: str, *, supabase, conta_id: str, atendimento_id: str | None) -> RevisaoDaConta:
     """O segundo agente (issue #1493): relê a Conta concluída, com os eventos
     guardados, o Guia e os itens, atrás do que foi administrado e não cobrado.
     No modelo do Passo B, com a memória em bloco de cache; gravada com o passo
