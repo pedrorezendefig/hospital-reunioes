@@ -2,6 +2,56 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-11-07T22:38:52-03:00",
+      "sha": "d436b41eaba5ecfd974fac99679bea0e0c8df4af",
+      "app_version": "0.228.0",
+      "subject": "Onda onda-a-onda1: Regra da diretoria nasce Vigente, prévia da importação da Memória e schema do Auditor; Tabela de preço em XLS antigo entra como as outras",
+      "raw_subject": "chore(deploy): registro da onda onda-a-onda1 (#1505 #1503)",
+      "scope": [
+        "backend",
+        "frontend"
+      ],
+      "prds": [
+        1484
+      ],
+      "result": "healthy",
+      "duration_seconds": 429,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        },
+        {
+          "service": "frontend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [
+        "126_contas_medicas_auditor.sql"
+      ],
+      "rollback_target_sha": null,
+      "notes": "onda-enxuta onda-a-onda1: PR #1505 (issue #1486), PR #1503 (issue #1487), mergeados PR a PR. Merge pela API do GitHub, um build. Registro pela Action pos-merge depois do health.",
+      "etapas": {
+        "merge_s": 6,
+        "build_s": {
+          "backend": 90,
+          "frontend": 259
+        },
+        "health_s": 0
+      },
+      "responsavel": "pedrorezendefig"
+    },
+    {
       "at": "2026-11-07T20:43:15-03:00",
       "sha": "482264ed170c305048eb49fa2d4f00c5c5956814",
       "app_version": "0.227.1",
