@@ -99,6 +99,8 @@ def ia_falsa(monkeypatch) -> _IAFalsa:
         "explicacao": "O acesso periférico está no evento da página 2, mas o Guia não pediu o equipo.",
         "esperado": "Incluir 1 equipo macrogotas em 03/10, pelo acesso periférico da admissão.",
     }
+    # A falta de regra pede a proposta de Regra ao Auditor (issue #1496); aqui ele não propõe nenhuma.
+    duble.respostas["LoteDoAuditor"] = {"resposta": "Sem regra para propor.", "propostas": []}
     monkeypatch.setattr(ia, "_cliente", lambda: cliente_por_transporte(duble))
     monkeypatch.setattr(ia, "_esperar", lambda _segundos: None)
     return duble
