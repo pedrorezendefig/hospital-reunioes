@@ -23,7 +23,7 @@ from typing import Any
 
 import yaml
 
-__all__ = ["gerar_texto_memoria", "orientacoes_de_leitura"]
+__all__ = ["gerar_texto_memoria", "montar_texto_memoria", "orientacoes_de_leitura"]
 
 # As seções do MODELO-MEMORIA-OPERADORA.md, pelo prefixo do ID da regra.
 SECOES = {
@@ -141,15 +141,25 @@ def gerar_texto_memoria(supabase, operadora_id: str, versao_id: str | None = Non
         .data
         or []
     )
+    return montar_texto_memoria(
+        operadora["sigla"], operadora["nome"], versao["versao"], versao.get("parametros_json") or {}, regras
+    )
 
+
+def montar_texto_memoria(
+    sigla: str, nome: str, versao: str, parametros: dict[str, Any], regras: list[dict[str, Any]]
+) -> str:
+    """O texto no formato do arquivo a partir das partes, sem ler o banco: é
+    como a Prova da regra (#1488) monta a Memória candidata, que não está
+    gravada. As regras saem por seção, na ordem em que vierem dentro dela."""
     por_secao: dict[str, list[dict[str, Any]]] = {}
     for regra in regras:
         por_secao.setdefault(SECOES.get(regra.get("secao") or "", SECAO_SEM_PREFIXO), []).append(regra)
     ordem = [*SECOES.values(), SECAO_SEM_PREFIXO]
 
     partes = [
-        "---\n" + _cabecalho(versao.get("parametros_json") or {}, operadora["sigla"], versao["versao"]) + "---",
-        f"# MEMÓRIA DA OPERADORA: {operadora['nome']}",
+        "---\n" + _cabecalho(parametros, sigla, versao) + "---",
+        f"# MEMÓRIA DA OPERADORA: {nome}",
     ]
     for secao in sorted(por_secao, key=ordem.index):
         partes.append(f"## {secao}")

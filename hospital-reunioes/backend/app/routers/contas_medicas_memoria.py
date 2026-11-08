@@ -29,6 +29,7 @@ from app.services.contas_medicas.memoria_edicao import (
     ler_memoria_da_operadora,
     mudar_regra,
 )
+from app.services.contas_medicas.prova_da_regra import provar_regra
 from app.services.contas_medicas.regra_nova import contas_com_regra_nova, ensinar_regra, propor_regra_nova
 
 router = APIRouter(prefix="/contas-medicas", tags=["contas-medicas"])
@@ -134,6 +135,43 @@ async def proposta_de_regra(
     _permissoes_da_tela(me)
     try:
         return await chamar_ia_fora_do_loop(propor_regra_nova, supabase, sigla, corpo.texto)
+    except RegraNaoEncontradaError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from None
+    except MudancaRecusadaError as exc:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)) from None
+    except ErroDaIA:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="A IA não respondeu agora. Tente de novo em alguns minutos.",
+        ) from None
+
+
+@router.post("/operadoras/{sigla}/regras/prova")
+@limiter.limit("10/minute")
+async def prova_da_regra(
+    request: Request,
+    sigla: str,
+    corpo: RegraEnsinada,
+    me: dict = Depends(require_permissao_cm()),
+    supabase=Depends(get_supabase_client),
+) -> dict:
+    """A Prova da regra (#1488): a regra conferida refaz o Passo B nas 10
+    últimas Contas concluídas da operadora e volta o que o Guia teria dito de
+    diferente em cada uma. Nada muda nas Contas nem na memória; a prova fica
+    guardada. Abre para quem abre a tela, como a proposta."""
+    _permissoes_da_tela(me)
+    try:
+        return await chamar_ia_fora_do_loop(
+            provar_regra,
+            supabase,
+            sigla,
+            secao=corpo.secao,
+            texto=corpo.texto,
+            tipo=corpo.tipo,
+            origem=corpo.origem,
+            parametro=corpo.parametro.model_dump() if corpo.parametro else None,
+            autor_id=me.get("id"),
+        )
     except RegraNaoEncontradaError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from None
     except MudancaRecusadaError as exc:
