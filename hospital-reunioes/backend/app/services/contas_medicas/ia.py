@@ -1,7 +1,7 @@
 """O adaptador de IA de Contas médicas (issue #1130, PRD #1128).
 
 A única porta do módulo para a IA, pelo SDK oficial da Anthropic (issue #1302).
-Sete chamadas:
+Oito chamadas:
 
 - `extrair_eventos`: o passo A, que lê o prontuário e lista os eventos
   (Anexo A da spec);
@@ -14,7 +14,9 @@ Sete chamadas:
 - `explicar_faltou_isto`: o Auditor na conversa da Conta, que explica o
   Faltou isto do Guia e classifica a origem (issue #1489);
 - `propor_lote` e `corrigir_item`: o Auditor na conversa da Operadora, que
-  devolve o lote de propostas e refaz um item dele (issue #1490).
+  devolve o lote de propostas e refaz um item dele (issue #1490);
+- `revisar_conta`: o segundo agente, que relê uma Conta concluída atrás do
+  que foi administrado e não cobrado (issue #1493).
 
 Toda chamada sai igual: saída estruturada estrita (`output_config.format` com
 `json_schema`), a instrução e a memória em bloco de cache, e a resposta
@@ -49,6 +51,7 @@ __all__ = [
     "LoteDoAuditor",
     "PropostaDeRegra",
     "PropostaDoAuditor",
+    "RevisaoDaConta",
     "chamada_curta",
     "comparar_conta",
     "corrigir_item",
@@ -56,6 +59,7 @@ __all__ = [
     "extrair_eventos",
     "propor_lote",
     "propor_regra",
+    "revisar_conta",
 ]
 
 logger = logging.getLogger(__name__)
@@ -378,6 +382,26 @@ class DiagnosticoDoFaltouIsto(_Estrito):
     classificacao: Literal["REGRA", "LEITURA", "DEFEITO"]
     explicacao: str
     esperado: str
+
+
+class AchadoDoRevisor(_Estrito):
+    """Um item administrado e não cobrado que o segundo agente achou numa
+    Conta concluída (ADR 0081, decisão 14): o dia, o item, a página e o mesmo
+    diagnóstico do Faltou isto."""
+
+    data: str
+    item: str
+    pagina: int
+    classificacao: Literal["REGRA", "LEITURA", "DEFEITO"]
+    explicacao: str
+    esperado: str
+
+
+class RevisaoDaConta(_Estrito):
+    """A resposta do segundo agente: os achados da Conta, vazia quando não
+    faltou nada."""
+
+    achados: list[AchadoDoRevisor]
 
 
 class ConflitoDaProposta(_Estrito):
@@ -764,6 +788,25 @@ def explicar_faltou_isto(
         ],
         saida=DiagnosticoDoFaltouIsto,
         onde=_Onde(supabase, conta_id, atendimento_id, "CONVERSA"),
+    )
+
+
+def revisar_conta(
+    memoria: str, conta: str, *, supabase, conta_id: str, atendimento_id: str | None
+) -> RevisaoDaConta:
+    """O segundo agente (issue #1493): relê a Conta concluída, com os eventos
+    guardados, o Guia e os itens, atrás do que foi administrado e não cobrado.
+    No modelo do Passo B, com a memória em bloco de cache; gravada com o passo
+    REVISOR."""
+    return _chamar_a_ia(
+        modelo=settings.cm_ia_modelo_passo_b,
+        instrucao=load_prompt("contas_medicas_revisor"),
+        blocos=[
+            (f"MEMÓRIA DA OPERADORA\n{memoria}", True),
+            (f"A CONTA CONCLUÍDA\n{conta}", False),
+        ],
+        saida=RevisaoDaConta,
+        onde=_Onde(supabase, conta_id, atendimento_id, "REVISOR"),
     )
 
 
