@@ -701,3 +701,39 @@ describe("o Ditar (issue #1145)", () => {
     expect(botao.parentElement?.textContent).toContain("Não dite nome nem dado de paciente.");
   });
 });
+
+describe("o Faltou isto e a conversa com o Auditor (issue #1489)", () => {
+  it("cada dia do Guia tem o Faltou isto, e o clique leva o dia para a conversa com o Auditor", async () => {
+    await abrir();
+
+    const dia = screen.getByRole("region", { name: "04/10 · ENFERMARIA" });
+    fireEvent.click(within(dia).getByRole("button", { name: "Faltou isto" }));
+
+    const conversa = screen.getByRole("region", { name: "Falar com o auditor" });
+    await waitFor(() =>
+      expect((within(conversa).getByLabelText("Dia") as HTMLSelectElement).value).toBe("2026-10-04"),
+    );
+    expect(screen.getAllByRole("button", { name: "Faltou isto" })).toHaveLength(2);
+  });
+
+  it("a conversa oferece todos os dias do período, também os que não têm linha", async () => {
+    await abrir();
+
+    const conversa = screen.getByRole("region", { name: "Falar com o auditor" });
+    const dias = within(conversa)
+      .getAllByRole("option")
+      .map((opcao) => opcao.textContent);
+    expect(dias).toEqual(["03/10", "04/10", "05/10", "06/10", "07/10"]);
+  });
+
+  it("a conta concluída também aponta, e o Guia e as linhas mantêm os nomes", async () => {
+    respostaDoGuia = guia({ cabecalho: { ...guia().cabecalho, situacao: "CONCLUIDA" } });
+    await abrir();
+
+    expect(screen.getAllByRole("button", { name: "Faltou isto" })).toHaveLength(2);
+    expect(screen.getByRole("region", { name: "Falar com o auditor" })).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "03/10 · CTI" })).toBeTruthy();
+    expect(aLinha("Luva de procedimento")).toBeTruthy();
+    expect(screen.getByText("Conta concluída. As marcações não mudam mais.")).toBeTruthy();
+  });
+});

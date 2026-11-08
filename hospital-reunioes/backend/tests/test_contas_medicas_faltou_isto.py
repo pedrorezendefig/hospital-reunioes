@@ -393,6 +393,27 @@ class TestPedidoParaATecnologia:
         assert resposta.json()["apontamento"]["pode_abrir_pedido"] is True
         assert banco.tabelas["cm_faltou_isto"][0].get("issue_numero") is None
 
+    def test_o_guia_traz_a_conversa_e_o_botao_do_pedido_so_para_quem_apontou(self):
+        banco, conta_id = _conta_no_guia()
+        faltou_id = _apontado(banco, conta_id)
+
+        def da_conversa(quem: str) -> list[dict]:
+            guia = _cliente(banco, quem).get(f"/api/contas-medicas/contas/{conta_id}/guia")
+            assert guia.status_code == 200, guia.text
+            return guia.json()["faltou_isto"]
+
+        (da_faturista,) = da_conversa("faturista")
+        assert (da_faturista["id"], da_faturista["item"], da_faturista["classificacao"]) == (
+            faltou_id,
+            "Equipo macrogotas",
+            "DEFEITO",
+        )
+        assert da_faturista["explicacao"].startswith("O acesso periférico está no evento da página 2")
+        assert da_faturista["pode_abrir_pedido"] is True
+        (da_gestao,) = da_conversa("gestao")
+        assert da_gestao["pode_abrir_pedido"] is False
+        assert "issue_numero" not in da_gestao
+
     def test_falta_de_regra_nao_vira_pedido(self, ia_falsa, github):
         ia_falsa.respostas[DIAGNOSTICO] = {**ia_falsa.respostas[DIAGNOSTICO], "classificacao": "REGRA"}
         banco, conta_id = _conta_no_guia()

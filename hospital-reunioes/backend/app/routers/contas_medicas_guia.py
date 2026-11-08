@@ -159,6 +159,8 @@ async def abrir_guia(
         "pode_reanalisar": _pode_reanalisar(me, conta, regra_nova),
         # A conta analisada com uma memória que já mudou: o botão vira "Reanalisar com a regra nova".
         "regra_nova_desde_analise": regra_nova,
+        # A conversa da Conta com o Auditor (issue #1489): cada Faltou isto e a resposta.
+        "faltou_isto": [faltou_isto.para_a_tela(a, me.get("id")) for a in faltou_isto.da_conta(supabase, conta["id"])],
     }
 
 
@@ -491,24 +493,6 @@ async def apontar_faltou_isto(
     except ErroDaIA:
         raise HTTPException(status_code=503, detail=faltou_isto.MENSAGEM_AUDITOR_FORA) from None
     return {"apontamento": faltou_isto.para_a_tela(gravado, me.get("id"))}
-
-
-@router.get("/contas/{conta_id}/guia/faltou-isto")
-@limiter.limit("120/minute")
-async def faltou_isto_da_conta(
-    request: Request,
-    conta_id: UUID,
-    me: dict = Depends(_PODE_CORRIGIR),
-    supabase: Client = Depends(get_supabase_client),
-) -> dict:
-    """A conversa da Conta: cada Faltou isto com a resposta do Auditor."""
-    conta = _conta_do_guia(supabase, conta_id, me)
-    return {
-        "apontamentos": [
-            faltou_isto.para_a_tela(apontamento, me.get("id"))
-            for apontamento in faltou_isto.da_conta(supabase, conta["id"])
-        ]
-    }
 
 
 @router.post("/contas/{conta_id}/guia/faltou-isto/{faltou_id}/pedido")

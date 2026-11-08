@@ -6,6 +6,8 @@
  * e diz a quantidade e o período (spec do diretor, item 4.3).
  */
 
+import type { FaltouIsto } from "@/lib/contas-medicas/faltouIsto";
+
 export type AcaoGuia = "INCLUIR" | "AJUSTAR_QUANTIDADE" | "RETIRAR" | "CORRIGIR_PRECO" | "VALIDAR";
 
 export type EstadoLinha =
@@ -93,6 +95,8 @@ export interface Guia {
   regra_nova_desde_analise?: boolean;
   /** O "Responder ao time" da Validação sobre o que esta conta levantou (issue #1142). */
   respostas?: RespostaDaValidacao[];
+  /** A conversa da Conta com o Auditor: cada Faltou isto e a resposta (issue #1489). */
+  faltou_isto?: FaltouIsto[];
 }
 
 export interface RespostaDaValidacao {
