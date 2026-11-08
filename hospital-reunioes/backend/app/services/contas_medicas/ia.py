@@ -1,7 +1,7 @@
 """O adaptador de IA de Contas médicas (issue #1130, PRD #1128).
 
 A única porta do módulo para a IA, pelo SDK oficial da Anthropic (issue #1302).
-Cinco chamadas:
+Sete chamadas:
 
 - `extrair_eventos`: o passo A, que lê o prontuário e lista os eventos
   (Anexo A da spec);
@@ -12,7 +12,9 @@ Cinco chamadas:
 - `propor_regra`: a regra nova que a pessoa escreveu em linguagem comum, no
   formato da memória da operadora (issue #1141);
 - `explicar_faltou_isto`: o Auditor na conversa da Conta, que explica o
-  Faltou isto do Guia e classifica a origem (issue #1489).
+  Faltou isto do Guia e classifica a origem (issue #1489);
+- `propor_lote` e `corrigir_item`: o Auditor na conversa da Operadora, que
+  devolve o lote de propostas e refaz um item dele (issue #1490).
 
 Toda chamada sai igual: saída estruturada estrita (`output_config.format` com
 `json_schema`), a instrução e a memória em bloco de cache, e a resposta
@@ -42,12 +44,17 @@ __all__ = [
     "ErroDaIA",
     "IASemCredito",
     "EventosDoProntuario",
+    "ItemCorrigido",
     "LinhasDaComparacao",
+    "LoteDoAuditor",
     "PropostaDeRegra",
+    "PropostaDoAuditor",
     "chamada_curta",
     "comparar_conta",
+    "corrigir_item",
     "explicar_faltou_isto",
     "extrair_eventos",
+    "propor_lote",
     "propor_regra",
 ]
 
@@ -371,6 +378,46 @@ class DiagnosticoDoFaltouIsto(_Estrito):
     classificacao: Literal["REGRA", "LEITURA", "DEFEITO"]
     explicacao: str
     esperado: str
+
+
+class ConflitoDaProposta(_Estrito):
+    """A regra da memória com que a proposta conflita e o que o Auditor propõe
+    fazer com ela (ADR 0081, decisão 8)."""
+
+    codigo: str
+    resolucao: Literal["JUNTAR", "SUBSTITUIR"]
+
+
+class PropostaDoAuditor(_Estrito):
+    """Um item do lote do Auditor (issue #1490). Os campos que não cabem no tipo
+    vêm vazios: a regra nova não tem código, o parâmetro não tem texto de regra.
+    Texto vazio em vez de nulo, pelo teto de anuláveis da saída estrita."""
+
+    tipo: Literal["REGRA_NOVA", "REGRA_ALTERADA", "PARAMETRO"]
+    regra_codigo: str
+    secao: Literal["PRI", "PRC", "DIA", "PAC", "TAX", "CC", "HON", "INS", "MED"]
+    texto: str
+    tipo_regra: Literal["CONTRATUAL", "OPERACIONAL"]
+    origem: str
+    parametro: str
+    valor_json: str
+    motivo: str
+    conflitos: list[ConflitoDaProposta]
+
+
+class LoteDoAuditor(_Estrito):
+    """A resposta do Auditor na conversa da Operadora: a fala dele e as
+    propostas do lote, já decididas (ADR 0081, decisão 1)."""
+
+    resposta: str
+    propostas: list[PropostaDoAuditor]
+
+
+class ItemCorrigido(_Estrito):
+    """O "corrige o item N": a fala do Auditor e o item refeito."""
+
+    resposta: str
+    proposta: PropostaDoAuditor
 
 
 # ----------------------------------------------------------------------------------
@@ -717,6 +764,38 @@ def explicar_faltou_isto(
         ],
         saida=DiagnosticoDoFaltouIsto,
         onde=_Onde(supabase, conta_id, atendimento_id, "CONVERSA"),
+    )
+
+
+def propor_lote(texto: str, memoria: str, *, supabase) -> LoteDoAuditor:
+    """O Auditor na conversa da Operadora (issue #1490): a mensagem de quem
+    decide vira um lote de propostas. Só a mensagem desta vez vai junto da
+    memória: a conversa não é memória (ADR 0081, decisão 3)."""
+    return _chamar_a_ia(
+        modelo=settings.cm_ia_modelo_passo_b,
+        instrucao=load_prompt("contas_medicas_auditor"),
+        blocos=[
+            (f"MEMÓRIA DA OPERADORA\n{memoria}", True),
+            (f"MENSAGEM DE QUEM DECIDE\n{texto}", False),
+        ],
+        saida=LoteDoAuditor,
+        onde=_Onde(supabase, None, None, "CONVERSA"),
+    )
+
+
+def corrigir_item(memoria: str, item: str, pedido: str, *, supabase) -> ItemCorrigido:
+    """O "corrige o item N" (issue #1490): o item atual do lote, em JSON, e o
+    que quem decide pediu para mudar nele. Volta um item só."""
+    return _chamar_a_ia(
+        modelo=settings.cm_ia_modelo_passo_b,
+        instrucao=load_prompt("contas_medicas_auditor"),
+        blocos=[
+            (f"MEMÓRIA DA OPERADORA\n{memoria}", True),
+            (f"ITEM ATUAL DO LOTE\n{item}", False),
+            (f"CORREÇÃO PEDIDA\n{pedido}", False),
+        ],
+        saida=ItemCorrigido,
+        onde=_Onde(supabase, None, None, "CONVERSA"),
     )
 
 

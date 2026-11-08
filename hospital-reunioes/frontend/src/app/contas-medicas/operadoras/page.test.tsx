@@ -691,3 +691,37 @@ describe("a tabela em PDF ou planilha, lida por mapeamento (#1146)", () => {
     expect(chamadas.some((c) => c.url === "/api/contas-medicas/operadoras/ALFA/tabelas")).toBe(true);
   });
 });
+
+describe("o atalho da conversa com o auditor (issue #1490)", () => {
+  afterEach(() => {
+    window.history.replaceState({}, "", "/");
+  });
+
+  it("chegar com ?tabela= abre o envio de tabela já com a operadora, e o envio segue o mesmo caminho", async () => {
+    window.history.replaceState({}, "", "/contas-medicas/operadoras?tabela=ALFA");
+    render(<OperadorasPage />);
+    await screen.findByTestId("operadora-ALFA");
+
+    const secao = screen.getByRole("region", { name: "Enviar tabela de preço" });
+    await waitFor(() =>
+      expect(within(secao).getByRole("combobox", { name: "Operadora da tabela" }).textContent).toContain("ALFA"),
+    );
+    escolher("Categoria", "Materiais");
+    const arquivo = new File(["codigo_assim;codigo_tuss\n"], "ALFA-MATERIAIS.csv", { type: "text/csv" });
+    fireEvent.change(within(secao).getByLabelText("Início da vigência"), { target: { value: "2026-11-01" } });
+    fireEvent.change(within(secao).getByLabelText("Arquivo da tabela"), { target: { files: [arquivo] } });
+    fireEvent.click(within(secao).getByRole("button", { name: "Enviar tabela" }));
+
+    await within(secao).findByRole("status");
+    const envio = chamadas.find((c) => c.metodo === "POST" && c.url === "/api/contas-medicas/operadoras/ALFA/tabelas");
+    expect((envio!.corpo as FormData).get("categoria")).toBe("MATERIAL");
+  });
+
+  it("sem ?tabela=, o envio abre sem operadora escolhida", async () => {
+    render(<OperadorasPage />);
+    await screen.findByTestId("operadora-ALFA");
+
+    const secao = screen.getByRole("region", { name: "Enviar tabela de preço" });
+    expect(within(secao).getByRole("combobox", { name: "Operadora da tabela" }).textContent).not.toContain("ALFA");
+  });
+});

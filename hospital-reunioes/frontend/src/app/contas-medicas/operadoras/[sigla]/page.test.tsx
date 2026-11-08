@@ -209,6 +209,7 @@ let respostaDaProposta: { status: number; corpo: unknown };
 let respostaDoEnsino: { status: number; corpo: unknown };
 let respostaDaProva: { status: number; corpo: unknown };
 let contasComRegraNova: unknown[];
+let respostaDaConversa: unknown;
 
 function resposta(status: number, corpo: unknown, cabecalhos: Record<string, string> = {}): Response {
   return {
@@ -244,6 +245,12 @@ function backend() {
       if (url === `${ROTA}/regras` && metodo === "POST") {
         return resposta(respostaDoEnsino.status, respostaDoEnsino.corpo);
       }
+      if (url === `${ROTA}/conversa` && metodo === "GET") {
+        return resposta(200, { mensagens: [], lote: null });
+      }
+      if (url === `${ROTA}/conversa` && metodo === "POST") {
+        return resposta(200, respostaDaConversa);
+      }
       if (url.endsWith("/reanalisar") && metodo === "POST") {
         return resposta(200, { situacao: "NA_FILA" });
       }
@@ -271,6 +278,7 @@ beforeEach(() => {
   };
   respostaDaProva = { status: 200, corpo: PROVA };
   contasComRegraNova = [];
+  respostaDaConversa = { mensagens: [], lote: null, aplicado: null };
   backend();
 });
 
@@ -545,6 +553,12 @@ describe("tabelas, histórico e exportação", () => {
 });
 
 describe("ensinar uma regra nova (issue #1141)", () => {
+  // Desde a #1490, quem tem "regra contratual e tabelas" fala com o auditor:
+  // o Ensinar uma regra nova fica para quem só tem a permissão operacional.
+  beforeEach(() => {
+    permissoes = ["incluir_regra_operacional"];
+  });
+
   async function proporRegra() {
     await abrir();
     fireEvent.click(screen.getByRole("button", { name: "Ensinar uma regra nova" }));
@@ -714,10 +728,47 @@ describe("as contas com regra nova desde a análise (issue #1141)", () => {
 
 describe("o Ditar ao ensinar uma regra nova (issue #1145)", () => {
   it("o campo da regra em linguagem comum tem o Ditar com o aviso de paciente ao lado", async () => {
+    permissoes = ["incluir_regra_operacional"];
     await abrir();
     fireEvent.click(screen.getByRole("button", { name: "Ensinar uma regra nova" }));
 
     const botao = screen.getByRole("button", { name: "Ditar: A regra, em linguagem comum" });
     expect(botao.parentElement?.textContent).toContain("Não dite nome nem dado de paciente.");
+  });
+});
+
+describe("falar com o auditor (issue #1490)", () => {
+  it("com regra contratual e tabelas, Falar com o auditor toma o lugar de Ensinar uma regra nova", async () => {
+    await abrir();
+
+    expect(screen.getByRole("button", { name: "Falar com o auditor" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Ensinar uma regra nova" })).toBeNull();
+  });
+
+  it("só com incluir regra operacional, a página mostra Ensinar uma regra nova e não a conversa", async () => {
+    permissoes = ["incluir_regra_operacional"];
+    await abrir();
+
+    expect(screen.getByRole("button", { name: "Ensinar uma regra nova" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Falar com o auditor" })).toBeNull();
+  });
+
+  it("o ok do lote avisa a versão nova e as contas marcadas e relê a memória", async () => {
+    await abrir();
+    fireEvent.click(screen.getByRole("button", { name: "Falar com o auditor" }));
+    const conversa = await screen.findByRole("region", { name: "Falar com o auditor" });
+    respostaDaConversa = {
+      mensagens: [],
+      lote: null,
+      aplicado: { versao: "1.3", regras: ["ALFA-DIA-03", "ALFA-DIA-01"], contas_com_regra_nova: 2 },
+    };
+
+    fireEvent.change(within(conversa).getByLabelText("Mensagem para o auditor"), { target: { value: "ok" } });
+    fireEvent.click(within(conversa).getByRole("button", { name: "Enviar ao auditor" }));
+
+    const aviso = await screen.findByRole("status");
+    expect(aviso.textContent).toContain("Versão 1.3 da memória criada pelo lote do Auditor, com ALFA-DIA-03 e ALFA-DIA-01.");
+    expect(aviso.textContent).toContain("2 contas abertas");
+    await waitFor(() => expect(leiturasDaMemoria()).toBe(2));
   });
 });
