@@ -979,6 +979,25 @@ class TestPipeline:
         assert list(estrutura.parecer_parcial) == guia["cabecalho"]["faltantes"]
         assert guia["cabecalho"]["paciente_rotulo"] == "Antônia F."
 
+    def test_a_conta_pronta_guarda_as_diarias_pagas_e_as_cirurgias_do_teto(self):
+        # A Prova da regra (#1508) refaz o teto por diária de uma conta
+        # concluída: as diárias pagas e as cirurgias que a análise usou ficam
+        # gravadas. O par sintético paga 4 diárias de CTI e tem uma cirurgia.
+        banco = _cenario()
+        _enviar(banco, _conta(), _prontuario())
+        _rodar_o_job(banco)
+
+        (gravada,) = banco.tabelas["cm_conta"]
+        assert gravada["situacao"] == "A_FAZER", gravada.get("erro_motivo")
+        base = gravada["faltantes"]["base_dos_tetos"]
+        assert [(d["data"], d["acomodacao"], d["do_paciente"]) for d in base["diarias_pagas"]] == [
+            ("2026-10-02", "CTI", True),
+            ("2026-10-03", "CTI", True),
+            ("2026-10-04", "CTI", True),
+            ("2026-10-05", "CTI", True),
+        ]
+        assert base["cirurgias"] == ["2026-10-04"]
+
 
 # O nome termina um espaço antes da coluna da dose: lido por linha, a dose entra no nome.
 CLEXANE_ENCOSTADO = " 1 CLEXANE 40MG/0,4ML SER PREENCH SC 40 MG 1 SERINGA                 24HS/24HS          SC    . 22"

@@ -36,7 +36,16 @@ from app.services.contas_medicas.prontuario import Prontuario
 from app.services.contas_medicas.tabelas import NAO_CONFERIDO, PACOTE, Pacote, tabela_do_preco
 from app.services.contas_medicas_conta import Conta, ItemConta, coluna_do_plano
 
-__all__ = ["BuscaDePacote", "BuscaDePreco", "Conferencia", "Pacote", "ProntuarioLido", "conferir"]
+__all__ = [
+    "BuscaDePacote",
+    "BuscaDePreco",
+    "Conferencia",
+    "Pacote",
+    "ProntuarioLido",
+    "base_dos_tetos",
+    "conferir",
+    "tetos_da_base",
+]
 
 CENTAVO = Decimal("0.01")
 TOLERANCIA = Decimal("0.01")
@@ -1174,20 +1183,20 @@ def _teto_do_dia(teto: Mapping[str, Any], acomodacao: str) -> Decimal | None:
     return None
 
 
-def _devida_do_teto(teto: Mapping[str, Any], do_paciente: list[_Devida], cirurgias: int) -> Decimal | None:
-    """Diárias pagas × teto diário, mais o do centro cirúrgico por cirurgia.
-    `None` sem diária paga ou com diária em acomodação sem teto na memória:
-    não dá para dizer o máximo."""
-    por_dia = [_teto_do_dia(teto, d.acomodacao) for d in do_paciente]
-    if not do_paciente or any(valor is None for valor in por_dia):
+def _devida_do_teto(teto: Mapping[str, Any], acomodacoes: list[str], cirurgias: int) -> Decimal | None:
+    """Diárias pagas (a acomodação de cada uma) × teto diário, mais o do centro
+    cirúrgico por cirurgia. `None` sem diária paga ou com diária em acomodação
+    sem teto na memória: não dá para dizer o máximo."""
+    por_dia = [_teto_do_dia(teto, acomodacao) for acomodacao in acomodacoes]
+    if not acomodacoes or any(valor is None for valor in por_dia):
         return None
     return sum(por_dia, Decimal(0)) + Decimal(str(teto.get("centro_cirurgico_por_cirurgia") or 0)) * cirurgias
 
 
-def _tetos_da_memoria(ctx: _Contexto) -> list[tuple[str, Mapping[str, Any]]]:
+def _tetos_da_memoria(parametros: Mapping[str, Any]) -> list[tuple[str, Mapping[str, Any]]]:
     return [
         (nome, teto)
-        for nome, teto in (ctx.parametros.get("tetos_por_dia") or {}).items()
+        for nome, teto in (parametros.get("tetos_por_dia") or {}).items()
         if isinstance(teto, dict) and teto.get("codigo")
     ]
 
@@ -1201,9 +1210,9 @@ def _tetos(ctx: _Contexto, pagas: list[_Devida]) -> list[_Linha]:
         return []
     cirurgias = len(ctx.prontuario.conteudo.descricoes_cirurgicas)
     linhas = []
-    for nome, teto in _tetos_da_memoria(ctx):
+    for nome, teto in _tetos_da_memoria(ctx.parametros):
         lancados = [i for i in ctx.conta.itens if i.codigo == str(teto["codigo"])]
-        devida = _devida_do_teto(teto, do_paciente, cirurgias)
+        devida = _devida_do_teto(teto, [d.acomodacao for d in do_paciente], cirurgias)
         if not lancados or devida is None:
             continue
         lancada = sum((i.quantidade for i in lancados), Decimal(0))
@@ -1236,26 +1245,61 @@ def _tetos(ctx: _Contexto, pagas: list[_Devida]) -> list[_Linha]:
 
 def _tetos_calculados(ctx: _Contexto, pagas: list[_Devida]) -> tuple[dict[str, Any], ...]:
     """O teto de cada consumível da memória, lançado ou não: é com ele que o
-    código corrige a quantidade que a IA propõe para o item. A linha da IA cobre
-    um período: `por_dia` e `cirurgias` dão a devida só dos dias dela."""
-    do_paciente = [d for d in pagas if d.do_paciente]
-    descricoes = ctx.prontuario.conteudo.descricoes_cirurgicas
+    código corrige a quantidade que a IA propõe para o item."""
+    return _tetos_das_diarias(
+        ctx.parametros,
+        [(d.data, d.acomodacao) for d in pagas if d.do_paciente],
+        [d.inicio.date() if d.inicio else None for d in ctx.prontuario.conteudo.descricoes_cirurgicas],
+    )
+
+
+def _tetos_das_diarias(
+    parametros: Mapping[str, Any], diarias: list[tuple[date, str]], cirurgias: list[date | None]
+) -> tuple[dict[str, Any], ...]:
+    """Os tetos pelas diárias pagas do paciente (dia e acomodação) e pelas
+    cirurgias. A linha da IA cobre um período: `por_dia` e `cirurgias` dão a
+    devida só dos dias dela."""
     calculados = []
-    for nome, teto in _tetos_da_memoria(ctx):
-        devida = _devida_do_teto(teto, do_paciente, len(descricoes))
+    for nome, teto in _tetos_da_memoria(parametros):
+        devida = _devida_do_teto(teto, [acomodacao for _dia, acomodacao in diarias], len(cirurgias))
         if devida is not None:
             calculados.append(
                 {
                     "item": nome,
                     "codigo": str(teto["codigo"]),
                     "devida": devida,
-                    "por_dia": tuple((d.data, _teto_do_dia(teto, d.acomodacao)) for d in do_paciente),
+                    "por_dia": tuple((dia, _teto_do_dia(teto, acomodacao)) for dia, acomodacao in diarias),
                     "por_cirurgia": Decimal(str(teto.get("centro_cirurgico_por_cirurgia") or 0)),
                     # A cirurgia sem data não cai em período nenhum: só conta na conta inteira.
-                    "cirurgias": tuple(d.inicio.date() for d in descricoes if d.inicio),
+                    "cirurgias": tuple(dia for dia in cirurgias if dia),
                 }
             )
     return tuple(calculados)
+
+
+def base_dos_tetos(conferencia: Conferencia, prontuario: ProntuarioLido) -> dict[str, Any]:
+    """O que a análise usou para os tetos, para gravar com a conta: as diárias
+    pagas e a data de cada cirurgia (`None` na que veio sem). A Prova da regra
+    (#1508) refaz os tetos daqui, com a memória candidata."""
+    return {
+        "diarias_pagas": list(conferencia.diarias_pagas),
+        "cirurgias": [
+            d.inicio.date().isoformat() if d.inicio else None for d in prontuario.conteudo.descricoes_cirurgicas
+        ],
+    }
+
+
+def tetos_da_base(parametros: Mapping[str, Any], base: Mapping[str, Any]) -> tuple[dict[str, Any], ...]:
+    """Os tetos da conta pela base gravada na análise (`base_dos_tetos`)."""
+    return _tetos_das_diarias(
+        parametros,
+        [
+            (date.fromisoformat(d["data"]), d["acomodacao"])
+            for d in base.get("diarias_pagas") or []
+            if d.get("do_paciente")
+        ],
+        [date.fromisoformat(dia) if dia else None for dia in base.get("cirurgias") or []],
+    )
 
 
 # ----------------------------------------------------------------------------------

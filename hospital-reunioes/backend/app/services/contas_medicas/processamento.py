@@ -61,7 +61,7 @@ from app.services import storage
 from app.services import transcricao_extractor as orcamento
 from app.services.contas_medicas import dicionario_ia, passo_a, passo_b, passo_c
 from app.services.contas_medicas import prontuario as leitura_do_prontuario
-from app.services.contas_medicas.conferencia import Conferencia, ProntuarioLido, conferir
+from app.services.contas_medicas.conferencia import Conferencia, ProntuarioLido, base_dos_tetos, conferir
 from app.services.contas_medicas.conteudo import Conteudo, ler_conteudo
 from app.services.contas_medicas.desidentificacao import desidentificar
 from app.services.contas_medicas.dicionario import dicionario_do_banco
@@ -611,6 +611,8 @@ def _pipeline(supabase, conta: dict, cronometro: _Cronometro) -> None:
                 "digitalizadas": cronometro.digitalizadas,
                 # O que o cartão do envio mostra da conta pronta (#1419).
                 "contagens": {"itens": len(lida.itens), "eventos": passo_a.quantos_eventos(eventos)},
+                # As diárias pagas e as cirurgias dos tetos, para a Prova da regra (#1508).
+                "base_dos_tetos": base_dos_tetos(conferencia, prontuario),
                 # A marca do "Analisar assim mesmo" segue com o mesmo prontuário (#1401).
                 **({MARCA_ASSIM_MESMO: arquivo_do_prontuario["id"]} if assim_mesmo else {}),
             },

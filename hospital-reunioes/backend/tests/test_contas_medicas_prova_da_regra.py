@@ -318,10 +318,11 @@ class TestComoAAnalise:
         assert c12["entrariam"] == c12["sairiam"] == c12["mudariam"] == []
         assert corpo["aviso"] == "A regra não mudaria nada nas 10 últimas contas concluídas."
 
-    def test_a_devida_do_consumivel_com_teto_nao_vira_mudanca(self, cenario):
+    def test_conta_sem_as_diarias_gravadas_nao_compara_a_devida_do_item_com_teto(self, cenario):
         cliente, banco, provedor = cenario
         # O M011 tem teto na Memória: na análise o código trocou a devida 5 da
-        # IA pelo teto, 2. A prova não tem as diárias pagas para refazer o teto.
+        # IA pelo teto, 2. A conta foi analisada antes da #1508 e não guardou as
+        # diárias pagas: a prova não refaz o teto e não acusa Mudaria falso.
         _versao(banco, "ALFA", "1.0")["parametros_json"]["tetos_por_dia"] = {
             "luva": {"codigo": "M011", "CTI": 2},
         }
@@ -333,6 +334,57 @@ class TestComoAAnalise:
         c11 = _da_conta(corpo, "c11")
         assert c11["entrariam"] == c11["sairiam"] == c11["mudariam"] == []
         assert corpo["aviso"] == "A regra não mudaria nada nas 10 últimas contas concluídas."
+
+    @staticmethod
+    def _c11_com_teto_e_diaria_gravada(banco) -> None:
+        """O M011 com teto de 2 por diária de CTI; a c11 pagou uma diária de CTI
+        no dia 11 e a análise guardou essa base (#1508). No Guia, a devida que
+        o teto deu na análise: 2."""
+        _versao(banco, "ALFA", "1.0")["parametros_json"]["tetos_por_dia"] = {"luva": {"codigo": "M011", "cti": 2}}
+        c11 = next(c for c in banco.tabelas["cm_conta"] if c["id"] == "c11")
+        c11["faltantes"] = {
+            "itens": [],
+            "base_dos_tetos": {
+                "diarias_pagas": [
+                    {
+                        "data": _dia(11),
+                        "setor": "CTI ADULTO",
+                        "acomodacao": "CTI",
+                        "codigo": "60001038",
+                        "do_paciente": True,
+                    }
+                ],
+                "cirurgias": [],
+            },
+        }
+        banco.tabelas["cm_guia_linha"] = [_linha_do_guia("c11", "M011", _dia(11), 2.0)]
+
+    def test_com_as_diarias_gravadas_a_prova_aplica_o_teto_a_devida_da_ia(self, cenario):
+        cliente, banco, provedor = cenario
+        self._c11_com_teto_e_diaria_gravada(banco)
+        # A IA diz 5 de novo; o teto da diária gravada corta para 2, como na análise.
+        provedor.por_codigo = {"M011": [_linha_da_ia("M011", "11/10/2026", 5, regra="ALFA-DIA-01")]}
+
+        corpo = cliente.post(_rota(), json=REGRA).json()
+
+        c11 = _da_conta(corpo, "c11")
+        assert c11["entrariam"] == c11["sairiam"] == c11["mudariam"] == []
+        assert corpo["mudaria"] is False
+
+    def test_regra_que_muda_so_o_teto_do_item_aparece_como_mudaria(self, cenario):
+        cliente, banco, provedor = cenario
+        self._c11_com_teto_e_diaria_gravada(banco)
+        provedor.por_codigo = {"M011": [_linha_da_ia("M011", "11/10/2026", 5, regra="ALFA-DIA-01")]}
+        # A regra sobe o teto da luva no CTI de 2 para 3 por diária.
+        regra = {**REGRA, "parametro": {"chave": "tetos_por_dia.luva.cti", "valor": 3}}
+
+        corpo = cliente.post(_rota(), json=regra).json()
+
+        c11 = _da_conta(corpo, "c11")
+        assert [(m["antes"]["quantidade_devida"], m["depois"]["quantidade_devida"]) for m in c11["mudariam"]] == [
+            (2.0, 3.0)
+        ]
+        assert c11["mudaria"] is True and corpo["mudaria"] is True
 
     def test_duas_linhas_sem_codigo_no_mesmo_dia_e_setor_nao_somem(self, cenario):
         cliente, banco, provedor = cenario

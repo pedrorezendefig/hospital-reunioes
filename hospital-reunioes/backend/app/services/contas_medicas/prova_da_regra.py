@@ -9,10 +9,12 @@ Tudo sai do que ficou guardado, porque o PDF pode já ter sido apagado: os
 eventos que a IA leu no Passo A (`cm_eventos.eventos_json.ia`), os itens da
 conta (`cm_conta_item`) e o Guia (`cm_guia_linha`). As Linhas do código entram
 nos CÁLCULOS como entraram na análise, para a IA não repetir o que o código já
-apontou; o teto e as diárias pagas, que o código calcula sobre o prontuário,
-não estão guardados e ficam de fora. Por isso a devida do consumível com teto
-na Memória não entra no diff: na análise o código trocou a da IA pelo teto, e
-a prova não tem como refazê-lo. A Linha da IA passa pelas mesmas conferências
+apontou. Os tetos saem das diárias pagas e das cirurgias que a análise gravou
+na conta (`faltantes.base_dos_tetos`, #1508), com os parâmetros da Memória
+candidata: a regra que muda só o teto de um item aparece no diff. A Conta
+analisada antes disso não tem a base: a devida do consumível com teto fica
+fora do diff, porque na análise o código trocou a da IA pelo teto e a prova
+não tem como refazê-lo. A Linha da IA passa pelas mesmas conferências
 do Passo B (regra que a memória tem, período da conta, a mesma linha já
 apontada, regra pendente vira Validar, código pelo dicionário do hospital); o
 preço não entra no diff.
@@ -30,7 +32,7 @@ from decimal import Decimal
 from typing import Any
 
 from app.services.contas_medicas import ia, passo_b
-from app.services.contas_medicas.conferencia import Conferencia, _codigos_de_diaria
+from app.services.contas_medicas.conferencia import Conferencia, _codigos_de_diaria, tetos_da_base
 from app.services.contas_medicas.dicionario import dicionario_do_banco
 from app.services.contas_medicas.memoria_edicao import MudancaRecusadaError
 from app.services.contas_medicas.memoria_texto import montar_texto_memoria
@@ -75,7 +77,7 @@ def _ultimas_concluidas(supabase, operadora_id: str) -> list[dict[str, Any]]:
         inicio = pagina * _PAGINA
         lote = (
             supabase.table("cm_conta")
-            .select("id, atendimento_id, numero_conta, periodo_inicio, periodo_fim, concluida_em")
+            .select("id, atendimento_id, numero_conta, periodo_inicio, periodo_fim, concluida_em, faltantes")
             .in_("situacao", list(CONCLUIDAS))
             .order("concluida_em", desc=True)
             .range(inicio, inicio + _PAGINA - 1)
@@ -258,7 +260,15 @@ def _provar_conta(
     do_codigo = tuple(linha for linha in guia if linha.get("origem") != "IA")
     da_ia = [linha for linha in guia if linha.get("origem") == "IA"]
     lida = _conta_guardada(supabase, conta)
-    conferencia = Conferencia(linhas=do_codigo, descartadas=(), nota=None)
+    faltantes = conta.get("faltantes")
+    base = faltantes.get("base_dos_tetos") if isinstance(faltantes, dict) else None
+    conferencia = Conferencia(
+        linhas=do_codigo,
+        descartadas=(),
+        nota=None,
+        diarias_pagas=tuple(base["diarias_pagas"]) if base else (),
+        tetos=tetos_da_base(parametros, base) if base else (),
+    )
 
     resposta = ia.comparar_conta(
         memoria,
@@ -285,7 +295,8 @@ def _provar_conta(
         descartadas=[],
     )
     novas = [r for r in map(conferencias.registro, resposta.linhas) if r is not None]
-    diff = _diff(da_ia, novas, _codigos_com_teto(parametros))
+    # Sem a base, a devida do item com teto fica fora do diff.
+    diff = _diff(da_ia, novas, frozenset() if base else _codigos_com_teto(parametros))
     return {**resumo, "refeita": True, "mudaria": any(diff.values()), **diff}
 
 
