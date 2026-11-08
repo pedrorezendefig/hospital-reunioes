@@ -457,7 +457,9 @@ class TestKitDeConhecimento:
     """O que o texto do Produto diz da tabela em XLS; a sanidade geral mora em `test_kit_conhecimento.py`."""
 
     def test_o_kit_diz_que_o_xls_entra_e_que_outro_formato_e_recusado_com_a_lista(self):
-        kit = (Path(__file__).resolve().parents[1] / "app" / "conhecimento" / "contas-medicas.md").read_text("utf-8")
+        kit = (Path(__file__).resolve().parents[1] / "app" / "conhecimento" / "contas-medicas.md").read_text(
+            encoding="utf-8"
+        )
 
         assert "inclusive a do Excel antigo em .xls" in kit
         assert "arquivo de outro formato é recusado com a lista dos aceitos: PDF, XLSX, XLS ou CSV" in kit
