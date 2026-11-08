@@ -19,6 +19,7 @@ import zipfile
 from datetime import date
 from decimal import Decimal
 from html import escape
+from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
@@ -361,7 +362,111 @@ class TestPdf:
 
 
 # ═══════════════════════════════════════════════════════════════════════════
-# 5. A permissão
+# 5. O Excel antigo (.xls) entra como o XLSX (issue #1487)
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+def _xls(cabecalho: list[str], linhas: list[list[str | float]]) -> bytes:
+    """Uma planilha do Excel 97-2003, com o texto como texto e o preço como número."""
+    import xlwt
+
+    livro = xlwt.Workbook()
+    aba = livro.add_sheet("Tabela")
+    for numero, valores in enumerate([cabecalho, *linhas]):
+        for coluna, valor in enumerate(valores):
+            aba.write(numero, coluna, valor)
+    saida = io.BytesIO()
+    livro.save(saida)
+    return saida.getvalue()
+
+
+XLS = "application/vnd.ms-excel"
+
+
+class TestXls:
+    def test_xls_chega_ao_mapeamento_com_as_mesmas_linhas_que_o_xlsx_equivalente(self, ia):
+        cliente, banco = _cliente(GESTAO, _banco_com_bucket(_com_operadoras("ALFA")))
+        # O código TUSS digitado como número, como o Excel guarda.
+        linhas = [[valor, descricao, int(codigo), *resto] for valor, descricao, codigo, *resto in _linhas(25)]
+
+        do_xlsx = _propor(cliente, "tabela-alfa.xlsx", _xlsx(CABECALHO, linhas))
+        do_xls = _propor(cliente, "tabela-alfa.xls", _xls(CABECALHO, linhas), tipo=XLS)
+
+        assert do_xls.status_code == 200, do_xls.text
+        assert do_xls.json() == do_xlsx.json()
+        assert do_xls.json()["amostra"][3]["codigo"] == "70000003"
+        # A IA viu a mesma tabela nos dois envios.
+        assert ia.chamadas[1]["conteudo"] == ia.chamadas[0]["conteudo"]
+        assert banco.linhas("cm_tabela_preco") == []
+
+    def test_xls_confirmado_grava_os_itens_e_guarda_o_arquivo(self, ia):
+        cliente, banco = _cliente(GESTAO, _banco_com_bucket(_com_operadoras("ALFA")))
+        planilha = _xls(CABECALHO, _linhas(25))
+
+        resposta = _confirmar(cliente, "tabela-alfa.xls", planilha, PROPOSTA_DA_IA, tipo=XLS)
+
+        assert resposta.status_code == 201, resposta.text
+        assert resposta.json()["itens"] == 25
+        [tabela] = banco.linhas("cm_tabela_preco")
+        assert banco.bucket == {("contas-medicas", tabela["arquivo_original"]): planilha}
+        assert preco(banco, "op-ALFA", "MATERIAL", "70000003", DIA) == Decimal("4.5")
+
+    def test_xls_que_nao_abre_e_recusado_com_o_motivo(self, ia):
+        cliente, banco = _cliente(GESTAO, _banco_com_bucket(_com_operadoras("ALFA")))
+
+        resposta = _propor(cliente, "tabela-alfa.xls", b"isto nao e uma planilha", tipo=XLS)
+
+        assert resposta.status_code == 422
+        assert resposta.json()["detail"] == "Não consegui ler a planilha. Confira se ela abre no Excel e envie de novo."
+        assert ia.chamadas == []
+        assert banco.linhas("cm_tabela_preco") == []
+
+    def test_xls_pequeno_com_a_aba_esticada_ate_a_ultima_celula_e_recusado_sem_abrir_tudo(self, ia):
+        # Poucos KB com uma célula em (65535, 255): completar cada linha até a
+        # última coluna dá 16,7 milhões de células e derruba o backend.
+        import xlwt
+
+        livro = xlwt.Workbook()
+        livro.add_sheet("Tabela").write(65535, 255, "x")
+        saida = io.BytesIO()
+        livro.save(saida)
+        cliente, banco = _cliente(GESTAO, _banco_com_bucket(_com_operadoras("ALFA")))
+
+        resposta = _propor(cliente, "tabela-alfa.xls", saida.getvalue(), tipo=XLS)
+
+        assert resposta.status_code == 422
+        assert resposta.json()["detail"] == "A planilha é grande demais para uma tabela."
+        assert ia.chamadas == []
+        assert banco.linhas("cm_tabela_preco") == []
+
+
+class TestFormatoRecusado:
+    @pytest.mark.parametrize("nome", ["tabela-alfa.ods", "tabela-alfa.docx", "tabela-alfa"])
+    def test_arquivo_de_outro_formato_e_recusado_com_a_mensagem_que_cita_o_xls(self, ia, nome):
+        cliente, banco = _cliente(GESTAO, _banco_com_bucket(_com_operadoras("ALFA")))
+
+        resposta = _propor(cliente, nome, b"qualquer coisa", tipo="application/octet-stream")
+
+        assert resposta.status_code == 422
+        assert resposta.json()["detail"] == "Envie a tabela em PDF, planilha do Excel (XLSX ou XLS) ou CSV."
+        assert ia.chamadas == []
+        assert banco.linhas("cm_tabela_preco") == []
+
+
+class TestKitDeConhecimento:
+    """O que o texto do Produto diz da tabela em XLS; a sanidade geral mora em `test_kit_conhecimento.py`."""
+
+    def test_o_kit_diz_que_o_xls_entra_e_que_outro_formato_e_recusado_com_a_lista(self):
+        kit = (Path(__file__).resolve().parents[1] / "app" / "conhecimento" / "contas-medicas.md").read_text(
+            encoding="utf-8"
+        )
+
+        assert "inclusive a do Excel antigo em .xls" in kit
+        assert "arquivo de outro formato é recusado com a lista dos aceitos: PDF, XLSX, XLS ou CSV" in kit
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 6. A permissão
 # ═══════════════════════════════════════════════════════════════════════════
 
 

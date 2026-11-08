@@ -1,7 +1,7 @@
 """Tabela de preço em PDF ou planilha, lida por mapeamento (issue #1146, PRD #1129).
 
-A tabela que o convênio manda no formato dele (PDF, XLSX ou CSV com cabeçalho
-que não é de nenhum formato conhecido) entra em dois passos:
+A tabela que o convênio manda no formato dele (PDF, XLSX, XLS ou CSV com
+cabeçalho que não é de nenhum formato conhecido) entra em dois passos:
 
 1. a proposta: o arquivo vira cabeçalho e linhas, a IA diz qual coluna é
    código, código alternativo, descrição, unidade e preço (ou preços), e a tela
@@ -18,6 +18,9 @@ O PDF é lido pelo extrator do módulo (`pdftotext -layout`, que preserva as
 colunas): cada linha vira células pelas sequências de dois ou mais espaços. A
 linha de cabeçalho é a primeira com três células ou mais; valem as linhas com o
 mesmo número de células dela.
+
+O XLS do Excel antigo (issue #1487, ADR 0081) vira as mesmas linhas que o
+XLSX equivalente daria, e dali segue o mesmo caminho.
 """
 
 from __future__ import annotations
@@ -31,6 +34,7 @@ from dataclasses import dataclass
 from typing import Any
 from xml.etree import ElementTree
 
+import xlrd
 from pydantic import BaseModel, ConfigDict, ValidationError
 
 from app.services import storage
@@ -66,10 +70,16 @@ LINHAS_PARA_A_IA = 30
 # passa da leitura do índice.
 TETO_DESCOMPACTADO = 200 * 1024 * 1024
 
+# Teto de células do XLS (linhas x colunas da aba): o arquivo de poucos KB
+# com uma célula no canto da aba vira milhões de células na leitura. Cabem
+# as 65.536 linhas do formato com 30 colunas.
+TETO_DE_CELULAS_DO_XLS = 65536 * 30
+
 # As extensões aceitas, com o tipo do arquivo guardado no bucket.
 _TIPOS = {
     ".pdf": "application/pdf",
     ".xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    ".xls": "application/vnd.ms-excel",
     ".csv": "text/csv",
 }
 
@@ -114,7 +124,7 @@ class ArquivoDeTabela:
 def _extensao(nome: str) -> str:
     extensao = ("." + nome.rsplit(".", 1)[-1].lower()) if "." in nome else ""
     if extensao not in _TIPOS:
-        raise TabelaRecusadaError("Envie a tabela em PDF, planilha XLSX ou CSV.")
+        raise TabelaRecusadaError("Envie a tabela em PDF, planilha do Excel (XLSX ou XLS) ou CSV.")
     return extensao
 
 
@@ -189,6 +199,40 @@ def _do_xlsx(conteudo: bytes) -> list[list[str]]:
     return _sem_vazias(linhas)
 
 
+def _do_xls(conteudo: bytes) -> list[list[str]]:
+    """A primeira aba do Excel 97-2003, com cada célula escrita como o XLSX
+    guarda: o número inteiro sem casa decimal, o resto como está."""
+    try:
+        # ragged_rows: cada linha só até a última célula escrita, sem completar
+        # a aba inteira até a última coluna.
+        aba = xlrd.open_workbook(file_contents=conteudo, ragged_rows=True).sheet_by_index(0)
+    except Exception:  # o arquivo é de fora: qualquer quebra do leitor é "não abre"
+        raise TabelaRecusadaError(
+            "Não consegui ler a planilha. Confira se ela abre no Excel e envie de novo."
+        ) from None
+    if aba.nrows * aba.ncols > TETO_DE_CELULAS_DO_XLS:
+        raise TabelaRecusadaError("A planilha é grande demais para uma tabela.")
+    linhas = [aba.row(i) for i in range(aba.nrows)]
+
+    def texto(celula: xlrd.sheet.Cell) -> str:
+        if celula.ctype in (xlrd.XL_CELL_NUMBER, xlrd.XL_CELL_DATE, xlrd.XL_CELL_BOOLEAN):
+            valor = float(celula.value)
+            return str(int(valor)) if valor.is_integer() else str(valor)
+        if celula.ctype == xlrd.XL_CELL_ERROR:
+            return xlrd.error_text_from_code.get(celula.value, "")
+        return str(celula.value)
+
+    saida = []
+    for linha in linhas:
+        textos = [texto(c) for c in linha]
+        # O XLS completa a linha até a última coluna da aba; o XLSX para na
+        # última célula escrita. Sem isso, o cabeçalho ganharia "Coluna N".
+        while textos and not textos[-1].strip():
+            textos.pop()
+        saida.append(textos)
+    return _sem_vazias(saida)
+
+
 def _do_pdf(conteudo: bytes) -> list[list[str]]:
     paginas = extrair_paginas(conteudo)
     if isinstance(paginas, ErroLeitura):
@@ -223,6 +267,8 @@ def ler_arquivo(nome: str, conteudo: bytes) -> ArquivoDeTabela:
         conhecido = _formato_conhecido(linhas[0], separador) if linhas else None
     elif extensao == ".xlsx":
         linhas = _do_xlsx(conteudo)
+    elif extensao == ".xls":
+        linhas = _do_xls(conteudo)
     else:
         linhas = _do_pdf(conteudo)
     if len(linhas) < 2:
