@@ -450,6 +450,13 @@ def _corrigir(supabase, sigla: str, numero: int, pedido: str, texto: str, autor_
     refeito = _item_do_auditor(resposta.proposta, vigente, regras)
     if refeito is None:
         raise LoteRecusadoError(f"O Auditor não conseguiu refazer o item {numero}. Diga a correção de outro jeito.")
+    # O que veio do contrato fica com o item corrigido: o trecho da cláusula e
+    # o arquivo das datas (issue #1495).
+    antes = alvo.get("proposta_json") or {}
+    if refeito["tipo"] in TIPOS_DE_REGRA and antes.get("contrato_diz"):
+        refeito["proposta_json"]["contrato_diz"] = antes["contrato_diz"]
+    if refeito["tipo"] == "PARAMETRO" and antes.get("arquivo") and refeito["proposta_json"]["chave"] == antes.get("chave"):
+        refeito["proposta_json"]["arquivo"] = antes["arquivo"]
     _falar(supabase, conversa["id"], "PESSOA", texto, autor_id)
     gravado = (
         supabase.table("cm_lote_item")
@@ -476,7 +483,7 @@ def _aplicar(supabase, sigla: str, texto: str, autor_id: str | None) -> dict[str
     # Prova antes do ok (ADR 0081, decisão 7): item de regra sem prova não se aplica.
     provas = _provas(supabase, itens)
     for item in itens:
-        if item["tipo"] in TIPOS_DE_REGRA and item["id"] not in provas:
+        if _pede_prova(item) and item["id"] not in provas:
             raise LoteRecusadoError(
                 f"O item {item['numero']} está sem a prova da regra. "
                 "Peça a correção do item para provar de novo antes do ok."
@@ -491,18 +498,34 @@ def _aplicar(supabase, sigla: str, texto: str, autor_id: str | None) -> dict[str
     parametros: dict[str, Any] | None = None
     codigos: dict[str, str] = {}
     saem: dict[str, int] = {}
+    so_diz: list[str] = []
+    contrato: dict[str, Any] | None = None
     for item in itens:
         dados = item["proposta_json"]
         if item["tipo"] == "PARAMETRO":
             base = (vigente.get("parametros_json") or {}) if parametros is None else parametros
             parametros = _com_parametro(base, dados["chave"], dados["depois"])
+            if lote.get("fonte") == "CONTRATO" and dados["chave"] == "contrato" and isinstance(dados["depois"], dict):
+                contrato = dados
             continue
-        if _CPF.search(dados["texto"]):
+        if _CPF.search(f"{dados['texto']} {dados.get('contrato_diz') or ''}"):
             raise LoteRecusadoError(
                 f"O item {item['numero']} tem um número no formato de CPF. A memória não pode ter dado de paciente: "
                 "corrija o item."
             )
+        if _so_o_contrato_diz(item):
+            # Só o trecho do contrato: o texto, o tipo e a pendência da Regra ficam.
+            if item["regra_codigo"] not in por_codigo:
+                raise LoteRecusadoError(
+                    f"A regra {item['regra_codigo']} do item {item['numero']} não está mais na memória: corrija o item."
+                )
+            mudancas[item["regra_codigo"]] = {"contrato_diz": dados["contrato_diz"]}
+            codigos[item["id"]] = item["regra_codigo"]
+            so_diz.append(item["regra_codigo"])
+            continue
         campos = {"texto": dados["texto"], "tipo": dados["tipo"], "origem": dados.get("origem"), **validacao}
+        if dados.get("contrato_diz"):
+            campos["contrato_diz"] = dados["contrato_diz"]
         for conflito in _em_conflito(item):
             if conflito not in por_codigo:
                 raise LoteRecusadoError(
@@ -530,7 +553,8 @@ def _aplicar(supabase, sigla: str, texto: str, autor_id: str | None) -> dict[str
             )
     resumo = "Lote do Auditor: " + ", ".join(
         [f"{n['codigo']} incluída" for n in novas]
-        + [f"{codigo} alterada" for codigo in mudancas]
+        + [f"{codigo} alterada" for codigo in mudancas if codigo not in so_diz]
+        + [f"o contrato diz de {codigo}" for codigo in so_diz]
         + [f"{codigo} juntada ou substituída" for codigo in saem]
         + [f"parâmetro {i['proposta_json']['chave']}" for i in itens if i["tipo"] == "PARAMETRO"]
     )
@@ -546,6 +570,16 @@ def _aplicar(supabase, sigla: str, texto: str, autor_id: str | None) -> dict[str
         novas=novas,
         parametros=parametros,
     )
+    if contrato is not None:
+        # As datas do contrato valem como a confirmação da aba Contratos: o
+        # contrato fica com o arquivo e o aviso de reajuste sai pela data nova.
+        confirmar_contrato(
+            supabase,
+            operadora_id,
+            {**contrato_do_bloco(contrato["depois"]), "arquivo": contrato.get("arquivo")},
+            autor_id,
+            datetime.now(UTC),
+        )
 
     supabase.table("cm_lote").update(
         {"estado": "APLICADO", "memoria_versao_id": versao["id"], "aplicado_por": autor_id, "aplicado_em": agora}

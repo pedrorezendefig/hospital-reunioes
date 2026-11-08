@@ -25,6 +25,7 @@ from test_contas_medicas_contratos import _pdf, _Storage
 from test_contas_medicas_conversa_da_operadora import ROTA, _item, _proposta, _Provedor, _regras_vigentes, _vigente
 from test_contas_medicas_conversa_da_operadora import cenario as cenario  # noqa: F401
 from test_contas_medicas_memoria_tela import _versoes
+from test_contas_medicas_operadoras import GESTAO
 
 from app.services.contas_medicas.contratos import avisar_contratos
 
@@ -176,3 +177,80 @@ class TestOContratoViraLote:
         assert _versoes(banco, "ALFA") == {"1.0": True}
         # Uma prova, só da Regra nova.
         assert len(provedor.da_prova()) == 10
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 2. O ok aplica o lote do contrato numa versão da Memória
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+class TestOOkDoContrato:
+    def test_o_ok_aplica_o_lote_do_contrato_numa_versao_so_da_memoria(self, com_storage):
+        cliente, banco, _provedor = com_storage
+        assert _subir(cliente, _pdf(TEXTO_DO_CONTRATO)).status_code == 200
+
+        resposta = cliente.post(ROTA, json={"texto": "ok"})
+
+        assert resposta.status_code == 200, resposta.text
+        assert _versoes(banco, "ALFA") == {"1.0": False, "1.1": True}
+        regras = _regras_vigentes(banco)
+        # A Regra da cláusula nasce vigente, com o trecho do contrato.
+        assert (regras["ALFA-TAX-01"]["texto"], regras["ALFA-TAX-01"]["status"]) == (TAXA_DE_SALA, "VIGENTE")
+        assert regras["ALFA-TAX-01"]["contrato_diz"] == CLAUSULA_7
+        # A Regra que existia ganha o "o contrato diz" e fica como estava: o
+        # texto e a pendência são de quem decide a regra, não do contrato.
+        pri_03 = regras["ALFA-PRI-03"]
+        assert (pri_03["texto"], pri_03["status"], pri_03["contrato_diz"]) == (
+            "Edição do Brasíndice usada pela operadora.",
+            "PENDENTE",
+            CLAUSULA_9,
+        )
+        assert _vigente(banco)["parametros_json"]["contrato"]["ultimo_aditivo"]["numero"] == "13"
+        (lote,) = banco.linhas("cm_lote")
+        assert (lote["estado"], lote["memoria_versao_id"]) == ("APLICADO", _vigente(banco)["id"])
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 3. O contrato fica gravado e o aviso de reajuste continua saindo
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+class TestOContratoEOAviso:
+    def test_o_contrato_fica_gravado_e_o_aviso_de_reajuste_sai_depois_do_ok(self, com_storage):
+        cliente, banco, _provedor = com_storage
+        antes = dict(_contrato_da_alfa(banco))
+
+        arquivo = _item(_subir(cliente, _pdf(TEXTO_DO_CONTRATO)).json(), 3)["proposta"]["arquivo"]
+
+        # O arquivo fica guardado já no envio, como na aba Contratos; as datas
+        # só valem com o ok.
+        assert arquivo.startswith("contratos/") and arquivo in banco.storage.arquivos
+        assert _contrato_da_alfa(banco) == antes
+
+        assert cliente.post(ROTA, json={"texto": "ok"}).status_code == 200
+
+        contrato = _contrato_da_alfa(banco)
+        assert {k: contrato[k] for k in ("arquivo", "aditivo_numero", "aditivo_data", "vigencia_inicio")} == {
+            "arquivo": arquivo,
+            "aditivo_numero": "13",
+            "aditivo_data": "2027-04-20",
+            "vigencia_inicio": "2027-05-01",
+        }
+        # Vigência mais um ano, calculado, como a aba Contratos faz.
+        assert (contrato["vencimento"], contrato["vencimento_calculado"]) == ("2028-05-01", True)
+        assert (contrato["confirmado_por"], bool(contrato["confirmado_em"])) == (GESTAO["id"], True)
+        # A rotina diária avisa 60 dias antes do vencimento novo, uma vez só.
+        assert avisar_contratos(banco, date(2028, 3, 2)) == 1
+        assert avisar_contratos(banco, date(2028, 3, 3)) == 0
+
+    def test_a_imagem_fica_guardada_sem_lote_e_o_auditor_diz_por_que(self, com_storage):
+        cliente, banco, provedor = com_storage
+
+        resposta = _subir(cliente, b"\x89PNG\r\n\x1a\n", nome="contrato-2015.png", tipo="image/png")
+
+        assert resposta.status_code == 200, resposta.text
+        corpo = resposta.json()
+        assert corpo["lote"] is None
+        assert corpo["mensagens"][-1]["texto"].startswith("O arquivo não tem texto para ler")
+        assert [k for k in banco.storage.arquivos if k.endswith(".png")]
+        assert provedor.pedidos == []
