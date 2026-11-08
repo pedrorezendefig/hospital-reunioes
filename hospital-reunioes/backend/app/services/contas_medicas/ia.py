@@ -1,7 +1,7 @@
 """O adaptador de IA de Contas médicas (issue #1130, PRD #1128).
 
 A única porta do módulo para a IA, pelo SDK oficial da Anthropic (issue #1302).
-Quatro chamadas:
+Cinco chamadas:
 
 - `extrair_eventos`: o passo A, que lê o prontuário e lista os eventos
   (Anexo A da spec);
@@ -10,7 +10,9 @@ Quatro chamadas:
 - `chamada_curta`: a pergunta curta do dicionário e das observações, com o
   schema que quem chama escolhe;
 - `propor_regra`: a regra nova que a pessoa escreveu em linguagem comum, no
-  formato da memória da operadora (issue #1141).
+  formato da memória da operadora (issue #1141);
+- `explicar_faltou_isto`: o Auditor na conversa da Conta, que explica o
+  Faltou isto do Guia e classifica a origem (issue #1489).
 
 Toda chamada sai igual: saída estruturada estrita (`output_config.format` com
 `json_schema`), a instrução e a memória em bloco de cache, e a resposta
@@ -36,6 +38,7 @@ from app.config import settings
 from app.services.prompt_loader import load_prompt
 
 __all__ = [
+    "DiagnosticoDoFaltouIsto",
     "ErroDaIA",
     "IASemCredito",
     "EventosDoProntuario",
@@ -43,6 +46,7 @@ __all__ = [
     "PropostaDeRegra",
     "chamada_curta",
     "comparar_conta",
+    "explicar_faltou_isto",
     "extrair_eventos",
     "propor_regra",
 ]
@@ -358,6 +362,15 @@ class PropostaDeRegra(_Estrito):
     parametro: ParametroProposto | None
     conflitos: list[str]
     efeito_no_guia: str
+
+
+class DiagnosticoDoFaltouIsto(_Estrito):
+    """A resposta do Auditor a um Faltou isto (ADR 0081, decisão 4): a origem
+    da omissão, a explicação para quem apontou e o que o Guia deveria ter dito."""
+
+    classificacao: Literal["REGRA", "LEITURA", "DEFEITO"]
+    explicacao: str
+    esperado: str
 
 
 # ----------------------------------------------------------------------------------
@@ -680,6 +693,26 @@ def chamada_curta[Saida: BaseModel](
         blocos=[(conteudo, False)],
         saida=saida,
         onde=_Onde(supabase, conta_id, atendimento_id, passo),
+    )
+
+
+def explicar_faltou_isto(
+    memoria: str, dia: str, apontamento: str, *, supabase, conta_id: str, atendimento_id: str | None
+) -> DiagnosticoDoFaltouIsto:
+    """O Auditor na conversa da Conta (issue #1489): por que o Guia não achou o
+    item apontado naquele dia, e de onde a omissão veio. No modelo do Passo B,
+    com a memória da operadora em bloco de cache; o dia traz os eventos, as
+    páginas, as linhas do Guia e os itens da conta, já sem identificação."""
+    return _chamar_a_ia(
+        modelo=settings.cm_ia_modelo_passo_b,
+        instrucao=load_prompt("contas_medicas_faltou_isto"),
+        blocos=[
+            (f"MEMÓRIA DA OPERADORA\n{memoria}", True),
+            (f"O DIA NA CONTA\n{dia}", False),
+            (f"O QUE FALTOU\n{apontamento}", False),
+        ],
+        saida=DiagnosticoDoFaltouIsto,
+        onde=_Onde(supabase, conta_id, atendimento_id, "CONVERSA"),
     )
 
 

@@ -22,8 +22,10 @@ from supabase import Client
 
 from app.dependencies import get_supabase_client, require_permissao_cm
 from app.limiter import limiter
-from app.services.contas_medicas import fila, reenvio
+from app.services.ai_processor import chamar_ia_fora_do_loop
+from app.services.contas_medicas import faltou_isto, fila, reenvio
 from app.services.contas_medicas.envio import LIMITE_POR_ARQUIVO, MENSAGEM_ARQUIVO_GRANDE
+from app.services.contas_medicas.ia import ErroDaIA
 from app.services.contas_medicas.guia import (
     agrupar_por_dia_e_setor,
     linha_nao_conferida,
@@ -435,3 +437,53 @@ async def reanalisar_conta(
     if not devolvida:
         raise HTTPException(status_code=409, detail=_SO_REANALISAVEL)
     return {"situacao": "NA_FILA"}
+
+
+# ─── O Faltou isto (issue #1489, PRD #1484, ADR 0081, decisão 4) ─────────────
+
+
+class FaltouIsto(BaseModel):
+    """O item que o Guia não achou num dia da Conta, a página e a pergunta."""
+
+    data: date
+    item: str = Field(..., min_length=1, max_length=200)
+    pagina: int | None = Field(default=None, ge=1, le=100000)
+    texto: str | None = Field(default=None, max_length=2000)
+
+    @model_validator(mode="after")
+    def _sem_espaco_sobrando(self):
+        self.item = self.item.strip()
+        self.texto = (self.texto or "").strip() or None
+        if not self.item:
+            raise ValueError("Diga o item que faltou")
+        return self
+
+
+@router.post("/contas/{conta_id}/guia/faltou-isto")
+@limiter.limit("30/minute")
+async def apontar_faltou_isto(
+    request: Request,
+    conta_id: UUID,
+    corpo: FaltouIsto,
+    me: dict = Depends(_PODE_CORRIGIR),
+    supabase: Client = Depends(get_supabase_client),
+) -> dict:
+    """Faltou isto: quem vê o Guia aponta o item e a página que o módulo não
+    achou num dia da Conta, e o Auditor responde por que não achou."""
+    conta = _conta_do_guia(supabase, conta_id, me)
+    atendimento = _primeira(supabase, "cm_atendimento", "id", conta.get("atendimento_id")) or {}
+    try:
+        gravado = await chamar_ia_fora_do_loop(
+            faltou_isto.apontar,
+            supabase,
+            conta=conta,
+            atendimento=atendimento,
+            autor_id=me.get("id"),
+            dia=corpo.data,
+            item=corpo.item,
+            pagina=corpo.pagina,
+            texto=corpo.texto,
+        )
+    except ErroDaIA:
+        raise HTTPException(status_code=503, detail=faltou_isto.MENSAGEM_AUDITOR_FORA) from None
+    return {"apontamento": faltou_isto.para_a_tela(gravado, me.get("id"))}
