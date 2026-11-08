@@ -358,6 +358,42 @@ class TestEnvioDaMemoria:
 
 
 # ═══════════════════════════════════════════════════════════════════════════
+# 1b. A Regra que a diretoria importa nasce Vigente (issue #1486, ADR 0081)
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+class TestRegraImportadaNasceVigente:
+    """Só quem tem "regra contratual e tabelas" importa (a rota recusa os outros
+    com 403, acima). A linha sem STATUS deixou de ser Pendente por omissão: era
+    ela que enchia a fila de Validação, porque a Regra pendente vira Linha
+    Validar no Passo B, e cada Linha Validar abre um Tema."""
+
+    def test_linha_sem_status_importada_pela_gestao_nasce_vigente_e_nao_abre_tema_de_validacao(self):
+        cliente, banco = _cliente(GESTAO)
+
+        resposta = _enviar_memoria(cliente, _memoria("MEMORIA-DELTA-v1.0.md"))
+
+        assert resposta.status_code == 201, resposta.text
+        status = {r["codigo"]: r["status"] for r in banco.linhas("cm_regra")}
+        # PRI-01 tem a célula Status vazia; DIA-01 e DIA-02 vêm de uma tabela sem a coluna.
+        assert status["DELTA-PRI-01"] == "VIGENTE"
+        assert status["DELTA-DIA-01"] == "VIGENTE"
+        assert status["DELTA-DIA-02"] == "VIGENTE"
+        assert resposta.json()["regras"] == {"total": 5, "vigentes": 4, "pendentes": 1}
+        assert banco.linhas("cm_validacao_tema") == []
+
+    def test_regra_tecnica_hsm_copiada_para_operadora_nova_continua_nascendo_pendente(self):
+        """O modelo do diretor manda copiar a Regra técnica HSM com STATUS
+        PENDENTE: ela só vira Vigente quando validada para aquela Operadora."""
+        cliente, banco = _cliente(GESTAO)
+
+        _enviar_memoria(cliente, _memoria("MEMORIA-DELTA-v1.0.md"))
+
+        [tecnica] = [r for r in banco.linhas("cm_regra") if r["codigo"] == "DELTA-PRI-03"]
+        assert (tecnica["status"], tecnica["modelo_id"]) == ("PENDENTE", "HSM-MED-01")
+
+
+# ═══════════════════════════════════════════════════════════════════════════
 # 2. O cabeçalho inteiro em parametros_json, com padrão no que falta
 # ═══════════════════════════════════════════════════════════════════════════
 
