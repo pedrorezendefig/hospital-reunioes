@@ -3,6 +3,10 @@
 /**
  * Um cartão da fila de Validação (issue #1142, PRD #1129).
  *
+ * Desde a issue #1491 o cartão traz a recomendação do Auditor (a decisão, o
+ * motivo e, na regra pendente, a Prova da regra); os botões continuam sendo a
+ * correção de quem discorda.
+ *
  * O tema com a operadora, quantas contas, desde quando e o R$ em jogo, e os
  * botões do tipo dele. "Validar regra" e "Editar a regra" abrem o texto da
  * regra para conferir antes de gravar; "Responder ao time" abre o campo da
@@ -10,12 +14,18 @@
  */
 
 import { useState } from "react";
-import { Loader2, Sparkles } from "lucide-react";
+import { Bot, Loader2, Sparkles } from "lucide-react";
 
 import { Ditar, juntarDitado } from "@/components/contas-medicas/Ditar";
 import { reais } from "@/lib/contas-medicas/guia";
 import { dataBr, plural } from "@/lib/contas-medicas/operadoras";
-import { type Decisao, ROTULO_DO_TIPO, type Tema } from "@/lib/contas-medicas/validacao";
+import {
+  type Decisao,
+  type ProvaDoTema,
+  ROTULO_DA_DECISAO,
+  ROTULO_DO_TIPO,
+  type Tema,
+} from "@/lib/contas-medicas/validacao";
 
 const BOTAO =
   "inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-primary text-white text-sm font-medium disabled:opacity-50";
@@ -33,6 +43,67 @@ const COR_DO_TIPO: Record<Tema["tipo"], string> = {
 };
 
 type Aberto = "regra" | "resposta" | null;
+
+function Prova({ prova }: { prova: ProvaDoTema }) {
+  if (!prova.mudaria) {
+    return (
+      <p className="text-xs text-slate-500">
+        A regra não mudaria nada nas {plural(prova.contas, "conta concluída", "contas concluídas")} da prova.
+      </p>
+    );
+  }
+  return (
+    <div className="text-xs text-slate-600 space-y-0.5">
+      <p className="font-semibold text-slate-700">
+        Prova da regra em {plural(prova.contas, "conta concluída", "contas concluídas")}
+      </p>
+      <ul>
+        {prova.por_conta.map((conta, i) => (
+          <li key={i}>
+            Conta {conta.numero_conta ?? "sem número"}: {plural(conta.entrariam, "entraria", "entrariam")},{" "}
+            {plural(conta.sairiam, "sairia", "sairiam")}, {plural(conta.mudariam, "mudaria", "mudariam")}
+          </li>
+        ))}
+      </ul>
+      {prova.feitas_que_sumiriam > 0 && (
+        <p className="text-[#92400E]">
+          {plural(prova.feitas_que_sumiriam, "linha já feita sumiria", "linhas já feitas sumiriam")}
+        </p>
+      )}
+    </div>
+  );
+}
+
+/** A recomendação do Auditor (issue #1491): o que ele decidiria e por quê. */
+function Recomendacao({ tema }: { tema: Tema }) {
+  const recomendacao = tema.recomendacao;
+  if (!recomendacao) {
+    return (
+      <p className="flex items-center gap-2 text-sm text-slate-500">
+        <Bot className="w-4 h-4 shrink-0" aria-hidden="true" /> O Auditor ainda não recomendou. Decida pelos botões.
+      </p>
+    );
+  }
+  return (
+    <section
+      aria-label="Recomendação do Auditor"
+      className="rounded-xl border border-[#C7D2FE] bg-[#EEF2FF] px-3 py-2 space-y-1"
+    >
+      <p className="flex items-center gap-2 text-sm font-semibold text-primary">
+        <Bot className="w-4 h-4 shrink-0" aria-hidden="true" /> O Auditor recomenda:{" "}
+        {ROTULO_DA_DECISAO[recomendacao.decisao]}
+      </p>
+      <p className="text-sm text-slate-700 break-words">{recomendacao.motivo}</p>
+      {recomendacao.texto && (
+        <blockquote className="text-sm text-slate-700 border-l-2 border-[#C7D2FE] pl-3 whitespace-pre-line break-words">
+          {recomendacao.texto}
+        </blockquote>
+      )}
+      {recomendacao.prova && <Prova prova={recomendacao.prova} />}
+      <p className="text-xs text-slate-500">Discorda? Decida este cartão pelos botões antes de aprovar o lote.</p>
+    </section>
+  );
+}
 
 interface Props {
   tema: Tema;
@@ -97,6 +168,8 @@ export function CartaoDeTema({ tema, ocupado, falhaDaLeitura, onDecidir, onEnvia
           ))}
         </ul>
       )}
+
+      <Recomendacao tema={tema} />
 
       {tema.tipo === "OBSERVACAO" && (
         <p className="flex items-start gap-2 text-sm text-slate-600">

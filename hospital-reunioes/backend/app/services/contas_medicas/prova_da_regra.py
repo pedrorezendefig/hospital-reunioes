@@ -38,7 +38,7 @@ from app.services.contas_medicas.regra_nova import regra_candidata
 from app.services.contas_medicas_conta import Conta, ItemConta
 from app.utils.text_sanitizer import sanitizar_estrutura
 
-__all__ = ["CONTAS_DA_PROVA", "provar_regra", "resumo_da_prova"]
+__all__ = ["CONTAS_DA_PROVA", "provar_pendente", "provar_regra", "resumo_da_prova"]
 
 CONTAS_DA_PROVA = 10
 CONCLUIDAS = ("CONCLUIDA", "CONCLUIDA_COM_PENDENCIA")
@@ -342,27 +342,90 @@ def provar_regra(
         autor_id=autor_id,
     )
     vigente, nova = candidata["vigente"], candidata["regra"]
-    parametros = candidata["parametros"] or vigente.get("parametros_json") or {}
     regras = candidata["regras"]
     if codigo:
         if not any(r["codigo"] == codigo for r in regras):
             raise MudancaRecusadaError(f"A regra {codigo} não está na memória vigente de {candidata['sigla']}.")
         nova = {**nova, "codigo": codigo}
         regras = [r for r in regras if r["codigo"] != codigo]
-    regras = [*(r for r in regras if r["codigo"] not in sem), *([] if descartar else [nova])]
-    operadora = (
-        supabase.table("cm_operadora").select("nome").eq("id", candidata["operadora_id"]).execute().data or [{}]
-    )[0]
+    return _provar(
+        supabase,
+        operadora_id=candidata["operadora_id"],
+        sigla=candidata["sigla"],
+        vigente=vigente,
+        regras=[r for r in regras if r["codigo"] not in sem],
+        nova=nova,
+        parametros=candidata["parametros"] or vigente.get("parametros_json") or {},
+        autor_id=autor_id,
+        lote_item_id=lote_item_id,
+        descartar=descartar,
+    )
+
+
+def provar_pendente(supabase, operadora_id: str, regra_codigo: str) -> dict[str, Any]:
+    """A prova da regra pendente da memória vigente, como se ela fosse validada
+    com o texto de hoje (issue #1491): o Auditor lê a prova antes de recomendar
+    o Tema de Regra pendente. Sem autor: quem pede é o Auditor."""
+    operadora = supabase.table("cm_operadora").select("id, sigla").eq("id", operadora_id).execute().data or []
+    vigentes = (
+        supabase.table("cm_memoria_versao")
+        .select("*")
+        .eq("operadora_id", operadora_id)
+        .eq("vigente", True)
+        .execute()
+        .data
+        or []
+    )
+    if not operadora or not vigentes:
+        raise LookupError("A operadora não tem memória vigente.")
+    vigente = vigentes[0]
+    regras = (
+        supabase.table("cm_regra").select("*").eq("memoria_versao_id", vigente["id"]).eq("ativa", True).execute().data
+        or []
+    )
+    pendente = next((r for r in regras if r["codigo"] == regra_codigo), None)
+    if pendente is None:
+        raise LookupError(f"A regra {regra_codigo} não está na memória vigente.")
+    return _provar(
+        supabase,
+        operadora_id=operadora_id,
+        sigla=operadora[0]["sigla"],
+        vigente=vigente,
+        regras=[r for r in regras if r is not pendente],
+        nova={**pendente, "status": "VIGENTE"},
+        parametros=vigente.get("parametros_json") or {},
+        autor_id=None,
+    )
+
+
+def _provar(
+    supabase,
+    *,
+    operadora_id: str,
+    sigla: str,
+    vigente: dict[str, Any],
+    regras: list[dict[str, Any]],
+    nova: dict[str, Any],
+    parametros: dict[str, Any],
+    autor_id: str | None,
+    lote_item_id: str | None = None,
+    descartar: bool = False,
+) -> dict[str, Any]:
+    """A memória vigente com a regra `nova` refaz o Passo B nas últimas
+    concluídas da operadora; o resultado fica em `cm_prova`. Com `descartar`,
+    a `nova` não entra: a memória fica sem ela (#1494)."""
+    regras = [*regras, *([] if descartar else [nova])]
+    operadora = (supabase.table("cm_operadora").select("nome").eq("id", operadora_id).execute().data or [{}])[0]
     memoria = montar_texto_memoria(
-        candidata["sigla"],
-        operadora.get("nome") or candidata["sigla"],
+        sigla,
+        operadora.get("nome") or sigla,
         vigente["versao"],
         parametros,
         sorted(regras, key=lambda r: r["codigo"]),
     )
     por_codigo = {r["codigo"]: r for r in regras}
 
-    contas = _ultimas_concluidas(supabase, candidata["operadora_id"])
+    contas = _ultimas_concluidas(supabase, operadora_id)
     # O mesmo dicionário com que a análise dá código à Linha da IA que veio sem.
     dicionario = dicionario_do_banco(supabase)
     with ThreadPoolExecutor(max_workers=_EM_PARALELO) as executor:
@@ -377,7 +440,7 @@ def provar_regra(
         supabase.table("cm_prova")
         .insert(
             {
-                "operadora_id": candidata["operadora_id"],
+                "operadora_id": operadora_id,
                 "memoria_versao_id": vigente["id"],
                 "lote_item_id": lote_item_id,
                 "regra_codigo": nova["codigo"],
