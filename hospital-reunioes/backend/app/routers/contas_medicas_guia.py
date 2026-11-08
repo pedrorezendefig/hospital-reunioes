@@ -471,6 +471,8 @@ async def apontar_faltou_isto(
     """Faltou isto: quem vê o Guia aponta o item e a página que o módulo não
     achou num dia da Conta, e o Auditor responde por que não achou."""
     conta = _conta_do_guia(supabase, conta_id, me)
+    if motivo := faltou_isto.fora_do_periodo(conta, corpo.data):
+        raise HTTPException(status_code=422, detail=motivo)
     atendimento = _primeira(supabase, "cm_atendimento", "id", conta.get("atendimento_id")) or {}
     try:
         gravado = await chamar_ia_fora_do_loop(

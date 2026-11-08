@@ -106,6 +106,16 @@ def _dia_curto(dia: date) -> str:
     return dia.strftime("%d/%m")
 
 
+def fora_do_periodo(conta: dict[str, Any], dia: date) -> str | None:
+    """A frase da recusa quando o dia não é da Conta. Sem período gravado, todo
+    dia vale."""
+    inicio, fim = conta.get("periodo_inicio"), conta.get("periodo_fim")
+    if not inicio or not fim or inicio <= dia.isoformat() <= fim:
+        return None
+    de, ate = date.fromisoformat(inicio), date.fromisoformat(fim)
+    return f"Escolha um dia do período da conta, de {_dia_curto(de)} a {_dia_curto(ate)}."
+
+
 def _mensagem_de_quem_apontou(dia: date, item: str, pagina: int | None, texto: str | None) -> str:
     """O que fica na conversa como a fala da pessoa."""
     onde = f", página {pagina}" if pagina else ""
