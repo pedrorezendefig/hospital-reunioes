@@ -16,13 +16,14 @@ from __future__ import annotations
 
 import json
 import re
+from pathlib import Path
 from typing import Any
 
 import httpx2
 import pytest
 from anthropic_apoio import cliente_por_transporte, mensagem, nome_do_schema, nomear_schemas
 from test_contas_medicas_memoria_tela import DIA_01_ANTES, DIA_01_DEPOIS, _importar, _versoes
-from test_contas_medicas_operadoras import GESTAO
+from test_contas_medicas_operadoras import FATURISTA, GESTAO
 from test_contas_medicas_prova_da_regra import _linha_do_guia, _semear
 from test_contas_medicas_regra_nova import _cliente as _cliente_da_memoria
 
@@ -418,3 +419,65 @@ class TestAConversaEHistorico:
         for prompt in prompts.values():
             assert "Dona Fulana" not in prompt
             assert "anotei a troca do equipo" not in prompt
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 5. Só quem tem "Regra contratual e tabelas" abre a conversa da Operadora
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+class TestQuemConversa:
+    def test_quem_nao_tem_regra_contratual_e_tabelas_nao_abre_a_conversa(self, provedor):
+        # A faturista com "incluir regra operacional" ligada abre a Memória da
+        # operadora, mas não a conversa com o Auditor.
+        cliente, banco = _cliente(FATURISTA, ligar=("incluir_regra_operacional",))
+        # A memória entra pela gestão (a mesma sessão do teste, com o perfil trocado).
+        banco.tabelas["participantes"] = [GESTAO]
+        _importar(cliente)
+        banco.tabelas["participantes"] = [FATURISTA]
+        assert cliente.get("/api/contas-medicas/operadoras/ALFA").status_code == 200
+
+        leitura = cliente.get(ROTA)
+        envio = cliente.post(ROTA, json={"texto": PEDIDO})
+
+        assert (leitura.status_code, envio.status_code) == (403, 403)
+        assert provedor.pedidos == []
+        assert banco.linhas("cm_conversa") == banco.linhas("cm_conversa_mensagem") == banco.linhas("cm_lote") == []
+
+    def test_o_app_de_verdade_registra_as_rotas_da_conversa(self):
+        """A fonte é o schema OpenAPI, e não `app.routes` (issues #542 e #546)."""
+        from app.main import app
+
+        cache = app.openapi_schema
+        try:
+            caminhos = app.openapi()["paths"]
+        finally:
+            app.openapi_schema = cache
+
+        assert len(caminhos) > 50
+        assert {"get", "post"} <= set(caminhos["/api/contas-medicas/operadoras/{sigla}/conversa"])
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 7. O kit de conhecimento diz o comportamento novo
+# ═══════════════════════════════════════════════════════════════════════════
+
+KIT = Path(__file__).resolve().parents[1] / "app" / "conhecimento" / "contas-medicas.md"
+
+
+class TestOKit:
+    def test_o_kit_diz_que_a_operadora_se_ensina_conversando_com_o_auditor_em_lote(self):
+        no_ar = KIT.read_text(encoding="utf-8").split("## O que já está no ar")[1].split("\n## ")[0]
+
+        for termo in (
+            "Falar com o auditor",
+            "lote",
+            '"ok"',
+            '"corrige o item 2"',
+            "uma versão nova da memória só",
+            "nasce vigente",
+            "regra contratual e tabelas",
+            "Enviar tabela",
+            "não entra na análise",
+        ):
+            assert termo in no_ar, termo
