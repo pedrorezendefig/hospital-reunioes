@@ -501,9 +501,14 @@ def _aplicar(supabase, sigla: str, texto: str, autor_id: str | None) -> dict[str
         parametros=parametros,
     )
 
-    # A Regra pendente que o lote decidiu sai da fila de Validação (#1494).
+    # A Regra pendente que o lote decidiu sai da fila de Validação (#1494). A
+    # juntada continua valendo no texto do item: fecha como validada, com as
+    # ações das Linhas; descartada é só a que o item substitui ou descarta.
+    juntadas = {c["codigo"] for i in itens for c in i.get("conflitos_json") or [] if c.get("resolucao") == "JUNTAR"}
     decididas = {
-        codigo: codigo in saem for codigo in [*mudancas, *saem] if por_codigo[codigo].get("status") != "VIGENTE"
+        codigo: codigo in descartadas or (codigo in saem and codigo not in juntadas)
+        for codigo in [*mudancas, *saem]
+        if por_codigo[codigo].get("status") != "VIGENTE"
     }
     decidir_pela_memoria(supabase, operadora_id, decididas, autor_id)
 

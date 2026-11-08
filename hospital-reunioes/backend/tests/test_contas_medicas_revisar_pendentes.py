@@ -20,7 +20,7 @@ from typing import Any
 import httpx2
 import pytest
 from anthropic_apoio import cliente_por_transporte, mensagem, nome_do_schema, nomear_schemas
-from test_contas_medicas_conversa_da_operadora import ROTA, _cliente, _regras_vigentes, _vigente
+from test_contas_medicas_conversa_da_operadora import ROTA, _cliente, _proposta, _regras_vigentes, _vigente
 from test_contas_medicas_memoria_tela import _importar, _versoes
 from test_contas_medicas_operadoras import GESTAO
 from test_contas_medicas_prova_da_regra import _linha_do_guia, _semear
@@ -248,6 +248,43 @@ class TestOOkDasPendentes:
         linhas = {linha["id"]: linha for linha in banco.linhas("cm_guia_linha")}
         assert (linhas[dia_02["id"]]["estado"], linhas[dia_02["id"]]["acao"]) == ("DECIDIDA", "INCLUIR")
         assert (linhas[pri_03["id"]]["estado"], linhas[pri_03["id"]]["acao"]) == ("DECIDIDA", "VALIDAR")
+        contas = {c["id"]: c["situacao"] for c in banco.linhas("cm_conta")}
+        assert (contas["c05"], contas["c06"]) == ("RETORNO", "CONCLUIDA")
+
+    def test_a_pendente_juntada_num_lote_de_texto_fecha_validada_e_a_substituida_descartada(self, cenario):
+        """No lote de texto (#1490), a pendente JUNTADA continua valendo dentro
+        da regra nova: o Tema fecha como Validar regra e a Linha ganha a ação.
+        A SUBSTITUÍDA perde o lugar para o item: o Tema fecha descartado."""
+        cliente, banco, provedor = cenario
+        pri_03 = _validar("c05", "M005", "ALFA-PRI-03", 0.0, 1.0)
+        dia_02 = _validar("c06", "M006", "ALFA-DIA-02", 1.0, 2.0)
+        _tema(banco, "t-pri-03", "ALFA", "ALFA-PRI-03", [pri_03])
+        _tema(banco, "t-dia-02", "ALFA", "ALFA-DIA-02", [dia_02])
+        provedor.revisao = {
+            "resposta": "Entendi uma regra nova. Confira e responda ok.",
+            "propostas": [
+                _proposta(
+                    conflitos=[
+                        {"codigo": "ALFA-PRI-03", "resolucao": "JUNTAR"},
+                        {"codigo": "ALFA-DIA-02", "resolucao": "SUBSTITUIR"},
+                    ]
+                )
+            ],
+        }
+        assert (
+            cliente.post(ROTA, json={"texto": "A transferência antes do meio-dia não gera diária extra."}).status_code
+            == 200
+        )
+
+        resposta = cliente.post(ROTA, json={"texto": "ok"})
+
+        assert resposta.status_code == 200, resposta.text
+        temas = {t["id"]: (t["estado"], t["decisao"]) for t in banco.linhas("cm_validacao_tema")}
+        assert temas == {"t-pri-03": ("DECIDIDO", "VALIDAR_REGRA"), "t-dia-02": ("DECIDIDO", "DESCARTAR")}
+        linhas = {linha["id"]: linha for linha in banco.linhas("cm_guia_linha")}
+        assert (linhas[pri_03["id"]]["estado"], linhas[pri_03["id"]]["acao"]) == ("DECIDIDA", "INCLUIR")
+        assert linhas[pri_03["id"]]["motivo"] == "Regra ALFA-PRI-03 validada. Dado na evolução."
+        assert (linhas[dia_02["id"]]["estado"], linhas[dia_02["id"]]["acao"]) == ("DECIDIDA", "VALIDAR")
         contas = {c["id"]: c["situacao"] for c in banco.linhas("cm_conta")}
         assert (contas["c05"], contas["c06"]) == ("RETORNO", "CONCLUIDA")
 
