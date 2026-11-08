@@ -2,6 +2,54 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-11-08T13:28:13-03:00",
+      "sha": "a9f8a4cde15b3230d7e0f0104c190381fd68a418",
+      "app_version": "0.230.0",
+      "subject": "Onda onda-a-onda2b: Prova da regra nas 10 últimas contas concluídas antes de validar",
+      "raw_subject": "chore(deploy): registro da onda onda-a-onda2b (#1506)",
+      "scope": [
+        "backend",
+        "frontend"
+      ],
+      "prds": [
+        1484
+      ],
+      "result": "healthy",
+      "duration_seconds": 209,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        },
+        {
+          "service": "frontend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "onda-enxuta onda-a-onda2b: PR #1506 (issue #1488), mergeados PR a PR. Merge pela API do GitHub, um build. Registro pela Action pos-merge depois do health.",
+      "etapas": {
+        "merge_s": 2,
+        "build_s": {
+          "backend": 21,
+          "frontend": 184
+        },
+        "health_s": 0
+      },
+      "responsavel": "pedrorezendefig"
+    },
+    {
       "at": "2026-11-07T23:21:40-03:00",
       "sha": "cab79612b9aaffac066d207b03ee44ed70b56d4d",
       "app_version": "0.229.0",
