@@ -2,6 +2,54 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-11-08T14:55:48-03:00",
+      "sha": "c53099f709809eeef8fc614f36fffebf0d9ed4c8",
+      "app_version": "0.234.0",
+      "subject": "Onda onda-a-onda4b: Revisar as Regras pendentes de uma Operadora em lote na conversa",
+      "raw_subject": "chore(deploy): registro da onda onda-a-onda4b (#1512)",
+      "scope": [
+        "backend",
+        "frontend"
+      ],
+      "prds": [
+        1484
+      ],
+      "result": "healthy",
+      "duration_seconds": 192,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        },
+        {
+          "service": "frontend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "onda-enxuta onda-a-onda4b: PR #1512 (issue #1494), mergeados PR a PR. Merge pela API do GitHub, um build. Registro pela Action pos-merge depois do health.",
+      "etapas": {
+        "merge_s": 2,
+        "build_s": {
+          "backend": 15,
+          "frontend": 170
+        },
+        "health_s": 0
+      },
+      "responsavel": "pedrorezendefig"
+    },
+    {
       "at": "2026-11-08T14:40:50-03:00",
       "sha": "06fba847754e7bf3aabf2e93df9e2951fbf81e12",
       "app_version": "0.233.0",
