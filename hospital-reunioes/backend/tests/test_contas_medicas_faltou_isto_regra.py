@@ -145,7 +145,6 @@ class TestDeQuemDecide:
         assert (regra["status"], regra["validado_por"]) == ("VIGENTE", PESSOAS[quem]["id"])
         assert regra["codigo"] == "ALFA-INS-01"
 
-
     def test_a_proposta_entra_no_lote_que_ja_estava_aberto_sem_descarta_lo(self, falta_regra):
         banco, conta_id = _na_conta()
         assert _com_a_conversa(banco, "gestao").post(CONVERSA, json={"texto": "Ensina o equipo."}).status_code == 200
