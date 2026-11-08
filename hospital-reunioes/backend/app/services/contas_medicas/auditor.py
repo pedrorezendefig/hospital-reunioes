@@ -27,6 +27,7 @@ da regra e a gravação de versão da edição pela tela.
 
 from __future__ import annotations
 
+import copy
 import json
 import logging
 import re
@@ -34,6 +35,12 @@ from datetime import UTC, datetime
 from typing import Any
 
 from app.services.contas_medicas import ia
+from app.services.contas_medicas.contratos import (
+    TETO_DO_TEXTO,
+    confirmar_contrato,
+    contrato_do_bloco,
+    guardar_e_ler_contrato,
+)
 from app.services.contas_medicas.memoria import _CPF
 from app.services.contas_medicas.memoria_edicao import (
     MudancaRecusadaError,
@@ -53,7 +60,7 @@ from app.services.contas_medicas.regra_nova import (
 )
 from app.utils.text_sanitizer import sanitizar_estrutura
 
-__all__ = ["LoteRecusadoError", "conversa_da_operadora", "conversar"]
+__all__ = ["LoteRecusadoError", "conversa_da_operadora", "conversar", "conversar_com_contrato"]
 
 logger = logging.getLogger(__name__)
 
@@ -103,23 +110,25 @@ def _conversa_ou_nova(supabase, operadora_id: str, autor_id: str | None) -> str:
 
 
 def _falar(
-    supabase, conversa_id: str, autor: str, texto: str, autor_id: str | None = None, versao_id: str | None = None
+    supabase,
+    conversa_id: str,
+    autor: str,
+    texto: str,
+    autor_id: str | None = None,
+    versao_id: str | None = None,
+    anexo: str | None = None,
 ) -> dict:
     """Uma fala na conversa. Uma gravação por fala: a ordem é a do `criado_em`."""
-    return (
-        supabase.table("cm_conversa_mensagem")
-        .insert(
-            {
-                "conversa_id": conversa_id,
-                "autor": autor,
-                "autor_id": autor_id,
-                "texto": texto,
-                "memoria_versao_id": versao_id,
-            }
-        )
-        .execute()
-        .data[0]
-    )
+    fala = {
+        "conversa_id": conversa_id,
+        "autor": autor,
+        "autor_id": autor_id,
+        "texto": texto,
+        "memoria_versao_id": versao_id,
+    }
+    if anexo:
+        fala["anexo_nome"] = anexo
+    return supabase.table("cm_conversa_mensagem").insert(fala).execute().data[0]
 
 
 def _lote_aberto(supabase, conversa_id: str) -> dict | None:
@@ -200,10 +209,26 @@ def _em_conflito(item: dict) -> tuple[str, ...]:
     return tuple(c["codigo"] for c in item.get("conflitos_json") or [])
 
 
+def _so_o_contrato_diz(item: dict) -> bool:
+    """O item que só preenche o "o contrato diz" de uma Regra que existe: o
+    texto fica como está e a análise não muda (issue #1495)."""
+    dados = item.get("proposta_json") or {}
+    return (
+        item["tipo"] == "REGRA_ALTERADA"
+        and "contrato_diz" in dados
+        and dados.get("texto") == dados.get("texto_anterior")
+    )
+
+
+def _pede_prova(item: dict) -> bool:
+    """A Prova da regra vale para o item que muda a análise (ADR 0081, decisão 7)."""
+    return item["tipo"] in TIPOS_DE_REGRA and not _so_o_contrato_diz(item)
+
+
 def _provar(supabase, sigla: str, item: dict, autor_id: str | None) -> None:
     """A Prova da regra do item, ligada a ele. Falha da prova não desfaz o lote:
     o item fica sem prova, e corrigir o item prova de novo."""
-    if item["tipo"] not in TIPOS_DE_REGRA:
+    if not _pede_prova(item):
         return
     regra = item["proposta_json"]
     try:
@@ -234,9 +259,26 @@ def _novo_lote(supabase, sigla: str, texto: str, autor_id: str | None) -> None:
 
     regras = {r["codigo"]: r for r in _regras_da_versao(supabase, vigente["id"])}
     itens = [i for i in (_item_do_auditor(p, vigente, regras) for p in resposta.propostas) if i is not None]
+    do_auditor = sanitizar_estrutura(resposta.resposta).strip()
+    _gravar_lote(supabase, sigla, operadora_id, texto, itens, do_auditor, autor_id)
 
+
+def _gravar_lote(
+    supabase,
+    sigla: str,
+    operadora_id: str,
+    fala: str,
+    itens: list[dict[str, Any]],
+    do_auditor: str,
+    autor_id: str | None,
+    *,
+    fonte: str = "TEXTO",
+    anexo: str | None = None,
+) -> None:
+    """A fala de quem pediu, o lote no lugar do aberto (quando há item), a fala
+    do Auditor e a prova de cada item que muda a análise."""
     conversa_id = _conversa_ou_nova(supabase, operadora_id, autor_id)
-    pessoa = _falar(supabase, conversa_id, "PESSOA", texto, autor_id)
+    pessoa = _falar(supabase, conversa_id, "PESSOA", fala, autor_id, anexo=anexo)
     gravados: list[dict[str, Any]] = []
     if itens:
         # Um lote aberto por vez: o que estava aberto fica descartado.
@@ -251,7 +293,7 @@ def _novo_lote(supabase, sigla: str, texto: str, autor_id: str | None) -> None:
                     "operadora_id": operadora_id,
                     "conversa_id": conversa_id,
                     "mensagem_id": pessoa["id"],
-                    "fonte": "TEXTO",
+                    "fonte": fonte,
                     "estado": "PROPOSTO",
                     "criado_por": autor_id,
                 }
@@ -270,9 +312,120 @@ def _novo_lote(supabase, sigla: str, texto: str, autor_id: str | None) -> None:
             .execute()
             .data
         )
-    _falar(supabase, conversa_id, "AUDITOR", sanitizar_estrutura(resposta.resposta).strip())
+    _falar(supabase, conversa_id, "AUDITOR", do_auditor)
     for item in gravados:
         _provar(supabase, sigla, item, autor_id)
+
+
+# ─── O contrato ─────────────────────────────────────────────────────────────
+
+SEM_TEXTO = (
+    "O arquivo não tem texto para ler (é imagem ou escaneado). Ele ficou guardado; as datas do aviso de reajuste "
+    "se digitam na aba Contratos."
+)
+DATAS_NAO_LIDAS = "Não consegui ler as datas do contrato agora: digite as datas na aba Contratos."
+
+# O último aditivo no bloco `contrato` da memória e o campo lido na aba Contratos.
+_DATAS_DO_ADITIVO = (("numero", "aditivo_numero"), ("data", "aditivo_data"), ("inicio_vigencia", "vigencia_inicio"))
+
+
+def _item_das_datas(vigente: dict, campos: dict[str, Any], arquivo: str) -> dict | None:
+    """As datas lidas do contrato, pela mesma leitura da aba Contratos, no
+    bloco `contrato` do cabeçalho da memória. O ok confirma o contrato com
+    elas, para o aviso de reajuste. Sem data lida, sem item."""
+    if not any(valor for campo, valor in campos.items() if campo != "vencimento_calculado"):
+        return None
+    antes = (vigente.get("parametros_json") or {}).get("contrato")
+    bloco = copy.deepcopy(antes) if isinstance(antes, dict) else {}
+    if campos.get("data_assinatura"):
+        bloco["assinatura"] = campos["data_assinatura"]
+    if campos.get("vencimento_calculado"):
+        # Vigência mais um ano: o bloco sem vencimento é lido assim.
+        bloco.pop("vencimento", None)
+    elif campos.get("vencimento"):
+        bloco["vencimento"] = campos["vencimento"]
+    aditivo = dict(bloco["ultimo_aditivo"]) if isinstance(bloco.get("ultimo_aditivo"), dict) else {}
+    for chave, campo in _DATAS_DO_ADITIVO:
+        if campos.get(campo):
+            aditivo[chave] = campos[campo]
+    if aditivo:
+        bloco["ultimo_aditivo"] = aditivo
+    return {
+        "tipo": "PARAMETRO",
+        "regra_codigo": None,
+        "proposta_json": {"chave": "contrato", "antes": antes, "depois": bloco, "arquivo": arquivo},
+        "motivo": "As datas do contrato, para o aviso de reajuste.",
+        "conflitos_json": [],
+    }
+
+
+def _itens_do_contrato(resposta: ia.LoteDoContrato, vigente: dict, regras: dict[str, dict]) -> list[dict[str, Any]]:
+    """As Regras por cláusula, com o trecho no "o contrato diz", e o "o
+    contrato diz" das Regras que existem e que nenhum outro item toca."""
+    itens = []
+    for proposta in resposta.propostas:
+        item = _item_do_auditor(
+            ia.PropostaDoAuditor.model_validate(proposta.model_dump(exclude={"clausula"})), vigente, regras
+        )
+        # As datas do contrato vêm da leitura da aba Contratos, não daqui.
+        if item is None or item["tipo"] == "PARAMETRO":
+            continue
+        clausula = sanitizar_estrutura(proposta.clausula).strip()
+        if clausula:
+            item["proposta_json"]["contrato_diz"] = clausula
+        itens.append(item)
+    tocadas = {i["regra_codigo"] for i in itens if i["regra_codigo"]} | {c for i in itens for c in _em_conflito(i)}
+    for diz in resposta.o_contrato_diz:
+        codigo, clausula = diz.regra_codigo.strip(), sanitizar_estrutura(diz.clausula).strip()
+        if codigo not in regras or codigo in tocadas or not clausula:
+            continue
+        tocadas.add(codigo)
+        regra = regras[codigo]
+        itens.append(
+            {
+                "tipo": "REGRA_ALTERADA",
+                "regra_codigo": codigo,
+                "proposta_json": {
+                    "secao": regra.get("secao"),
+                    "texto": regra["texto"],
+                    "tipo": regra.get("tipo"),
+                    "origem": regra.get("origem"),
+                    "texto_anterior": regra["texto"],
+                    "contrato_diz": clausula,
+                },
+                "motivo": f"O contrato sustenta a regra {codigo}, para o recurso de glosa.",
+                "conflitos_json": [],
+            }
+        )
+    return itens
+
+
+def conversar_com_contrato(supabase, sigla: str, nome: str, conteudo: bytes, autor_id: str | None) -> dict[str, Any]:
+    """O contrato subido na conversa da Operadora (issue #1495, ADR 0081,
+    decisão 9). Fica guardado como na aba Contratos, com as datas lidas do
+    mesmo jeito, e o Auditor devolve o lote: as Regras por cláusula, o "o
+    contrato diz" das Regras que existem e as datas do aviso de reajuste."""
+    sigla, operadora_id, vigente = _operadora_e_vigente(supabase, sigla)
+    leitura, texto = guardar_e_ler_contrato(supabase, operadora_id, nome, conteudo)
+    fala = f"Contrato enviado: {nome}"
+    if not texto:
+        conversa_id = _conversa_ou_nova(supabase, operadora_id, autor_id)
+        _falar(supabase, conversa_id, "PESSOA", fala, autor_id, anexo=nome)
+        _falar(supabase, conversa_id, "AUDITOR", SEM_TEXTO)
+        return {**conversa_da_operadora(supabase, sigla), "aplicado": None}
+    memoria = gerar_texto_memoria(supabase, operadora_id, vigente["id"])
+    resposta = ia.propor_lote_do_contrato(texto[:TETO_DO_TEXTO], memoria, supabase=supabase)
+
+    regras = {r["codigo"]: r for r in _regras_da_versao(supabase, vigente["id"])}
+    itens = _itens_do_contrato(resposta, vigente, regras)
+    datas = _item_das_datas(vigente, leitura["campos"], leitura["arquivo"])
+    do_auditor = sanitizar_estrutura(resposta.resposta).strip()
+    if datas:
+        itens.append(datas)
+    else:
+        do_auditor = f"{do_auditor} {DATAS_NAO_LIDAS}".strip()
+    _gravar_lote(supabase, sigla, operadora_id, fala, itens, do_auditor, autor_id, fonte="CONTRATO", anexo=nome)
+    return {**conversa_da_operadora(supabase, sigla), "aplicado": None}
 
 
 def _corrigir(supabase, sigla: str, numero: int, pedido: str, texto: str, autor_id: str | None) -> None:
@@ -300,6 +453,14 @@ def _corrigir(supabase, sigla: str, numero: int, pedido: str, texto: str, autor_
     refeito = _item_do_auditor(resposta.proposta, vigente, regras)
     if refeito is None:
         raise LoteRecusadoError(f"O Auditor não conseguiu refazer o item {numero}. Diga a correção de outro jeito.")
+    # O que veio do contrato fica com o item corrigido: o trecho da cláusula e
+    # o arquivo das datas (issue #1495).
+    antes = alvo.get("proposta_json") or {}
+    if refeito["tipo"] in TIPOS_DE_REGRA and antes.get("contrato_diz"):
+        refeito["proposta_json"]["contrato_diz"] = antes["contrato_diz"]
+    mesma_chave = refeito["tipo"] == "PARAMETRO" and refeito["proposta_json"]["chave"] == antes.get("chave")
+    if mesma_chave and antes.get("arquivo"):
+        refeito["proposta_json"]["arquivo"] = antes["arquivo"]
     _falar(supabase, conversa["id"], "PESSOA", texto, autor_id)
     gravado = (
         supabase.table("cm_lote_item")
@@ -326,7 +487,7 @@ def _aplicar(supabase, sigla: str, texto: str, autor_id: str | None) -> dict[str
     # Prova antes do ok (ADR 0081, decisão 7): item de regra sem prova não se aplica.
     provas = _provas(supabase, itens)
     for item in itens:
-        if item["tipo"] in TIPOS_DE_REGRA and item["id"] not in provas:
+        if _pede_prova(item) and item["id"] not in provas:
             raise LoteRecusadoError(
                 f"O item {item['numero']} está sem a prova da regra. "
                 "Peça a correção do item para provar de novo antes do ok."
@@ -341,18 +502,34 @@ def _aplicar(supabase, sigla: str, texto: str, autor_id: str | None) -> dict[str
     parametros: dict[str, Any] | None = None
     codigos: dict[str, str] = {}
     saem: dict[str, int] = {}
+    so_diz: list[str] = []
+    contrato: dict[str, Any] | None = None
     for item in itens:
         dados = item["proposta_json"]
         if item["tipo"] == "PARAMETRO":
             base = (vigente.get("parametros_json") or {}) if parametros is None else parametros
             parametros = _com_parametro(base, dados["chave"], dados["depois"])
+            if lote.get("fonte") == "CONTRATO" and dados["chave"] == "contrato" and isinstance(dados["depois"], dict):
+                contrato = dados
             continue
-        if _CPF.search(dados["texto"]):
+        if _CPF.search(f"{dados['texto']} {dados.get('contrato_diz') or ''}"):
             raise LoteRecusadoError(
                 f"O item {item['numero']} tem um número no formato de CPF. A memória não pode ter dado de paciente: "
                 "corrija o item."
             )
+        if _so_o_contrato_diz(item):
+            # Só o trecho do contrato: o texto, o tipo e a pendência da Regra ficam.
+            if item["regra_codigo"] not in por_codigo:
+                raise LoteRecusadoError(
+                    f"A regra {item['regra_codigo']} do item {item['numero']} não está mais na memória: corrija o item."
+                )
+            mudancas[item["regra_codigo"]] = {"contrato_diz": dados["contrato_diz"]}
+            codigos[item["id"]] = item["regra_codigo"]
+            so_diz.append(item["regra_codigo"])
+            continue
         campos = {"texto": dados["texto"], "tipo": dados["tipo"], "origem": dados.get("origem"), **validacao}
+        if dados.get("contrato_diz"):
+            campos["contrato_diz"] = dados["contrato_diz"]
         for conflito in _em_conflito(item):
             if conflito not in por_codigo:
                 raise LoteRecusadoError(
@@ -380,7 +557,8 @@ def _aplicar(supabase, sigla: str, texto: str, autor_id: str | None) -> dict[str
             )
     resumo = "Lote do Auditor: " + ", ".join(
         [f"{n['codigo']} incluída" for n in novas]
-        + [f"{codigo} alterada" for codigo in mudancas]
+        + [f"{codigo} alterada" for codigo in mudancas if codigo not in so_diz]
+        + [f"o contrato diz de {codigo}" for codigo in so_diz]
         + [f"{codigo} juntada ou substituída" for codigo in saem]
         + [f"parâmetro {i['proposta_json']['chave']}" for i in itens if i["tipo"] == "PARAMETRO"]
     )
@@ -396,6 +574,16 @@ def _aplicar(supabase, sigla: str, texto: str, autor_id: str | None) -> dict[str
         novas=novas,
         parametros=parametros,
     )
+    if contrato is not None:
+        # As datas do contrato valem como a confirmação da aba Contratos: o
+        # contrato fica com o arquivo e o aviso de reajuste sai pela data nova.
+        confirmar_contrato(
+            supabase,
+            operadora_id,
+            {**contrato_do_bloco(contrato["depois"]), "arquivo": contrato.get("arquivo")},
+            autor_id,
+            datetime.now(UTC),
+        )
 
     supabase.table("cm_lote").update(
         {"estado": "APLICADO", "memoria_versao_id": versao["id"], "aplicado_por": autor_id, "aplicado_em": agora}
@@ -530,6 +718,7 @@ def conversa_da_operadora(supabase, sigla: str) -> dict[str, Any]:
                     "proposta": i.get("proposta_json") or {},
                     "motivo": i.get("motivo"),
                     "conflitos": i.get("conflitos_json") or [],
+                    "pede_prova": _pede_prova(i),
                     "prova": _prova_na_tela(provas.get(i["id"])),
                 }
                 for i in itens
