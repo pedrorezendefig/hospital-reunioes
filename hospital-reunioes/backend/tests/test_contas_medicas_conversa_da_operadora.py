@@ -261,13 +261,14 @@ class TestOOk:
         assert _versoes(banco, "ALFA") == {"1.0": False, "1.1": True}
         assert corpo["aplicado"]["versao"] == "1.1"
         regras = _regras_vigentes(banco)
+        tocadas = ("ALFA-DIA-02", "ALFA-DIA-03", "ALFA-DIA-04")
         # As duas regras novas da mesma seção ganham códigos seguidos.
-        assert {c: (regras[c]["texto"], regras[c]["status"]) for c in ("ALFA-DIA-02", "ALFA-DIA-03", "ALFA-DIA-04")} == {
+        assert {c: (regras[c]["texto"], regras[c]["status"]) for c in tocadas} == {
             "ALFA-DIA-02": (DIA_02_DECIDIDA, "VIGENTE"),
             "ALFA-DIA-03": (DIA_03, "VIGENTE"),
             "ALFA-DIA-04": (OBITO, "VIGENTE"),
         }
-        assert {regras[c]["validado_por"] for c in ("ALFA-DIA-02", "ALFA-DIA-03", "ALFA-DIA-04")} == {GESTAO["id"]}
+        assert {regras[c]["validado_por"] for c in tocadas} == {GESTAO["id"]}
         # A regra que o lote não toca fica como estava.
         assert (regras["ALFA-PRI-03"]["status"], regras["ALFA-DIA-01"]["texto"]) == ("PENDENTE", DIA_01_ANTES)
         assert _vigente(banco)["parametros_json"]["diaria"]["hora_vencimento"] == "12:00"
@@ -333,3 +334,87 @@ class TestCorrigeOItemN:
         assert resposta.status_code == 422
         assert resposta.json()["detail"] == "O lote não tem o item 7."
         assert len(provedor.pedidos) == pedidos
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 4. A conversa fica ligada à versão e nunca entra no prompt das análises
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+class TestAConversaEHistorico:
+    def test_a_mensagem_que_pediu_o_lote_e_o_ok_ficam_ligados_a_versao_gerada(self, cenario):
+        cliente, banco, _provedor = cenario
+        assert cliente.post(ROTA, json={"texto": PEDIDO}).status_code == 200
+
+        corpo = cliente.post(ROTA, json={"texto": "ok"}).json()
+
+        assert [(m["autor"], m["texto"], m["versao"]) for m in corpo["mensagens"][:3]] == [
+            ("PESSOA", PEDIDO, "1.1"),
+            ("AUDITOR", LOTE["resposta"], None),
+            ("PESSOA", "ok", "1.1"),
+        ]
+        assert (corpo["mensagens"][3]["autor"], corpo["mensagens"][3]["versao"]) == ("AUDITOR", "1.1")
+        assert corpo["mensagens"][0]["autor_nome"] == GESTAO["nome_completo"]
+        (lote,) = banco.linhas("cm_lote")
+        assert (lote["estado"], lote["memoria_versao_id"]) == ("APLICADO", _vigente(banco)["id"])
+        assert lote["aplicado_por"] == GESTAO["id"]
+        # A conversa continua guardada depois do ok, para quem abrir de novo.
+        assert cliente.get(ROTA).json()["mensagens"] == corpo["mensagens"]
+
+    def test_a_conversa_nao_aparece_no_prompt_do_passo_a_nem_do_passo_b(self, monkeypatch):
+        """O ok vale na análise seguinte pela Regra aprovada; a conversa que a
+        ensinou não vai junto (ADR 0081, decisão 3). A análise roda inteira,
+        do envio ao Guia, e o teste lê o prompt que saiu para a IA."""
+        from test_contas_medicas_processamento import (
+            PASSO_A,
+            PASSO_B,
+            _cenario,
+            _conta,
+            _enviar,
+            _Extrator,
+            _IAFalsa,
+            _prontuario,
+            _rodar_o_job,
+        )
+        from test_contas_medicas_processamento import _cliente as _cliente_do_processamento
+
+        from app.services.contas_medicas import envio as envio_service
+        from app.services.contas_medicas import processamento
+
+        extrator = _Extrator()
+        monkeypatch.setattr(envio_service, "extrair_paginas", extrator)
+        monkeypatch.setattr(processamento, "extrair_paginas", extrator)
+        ia_falsa = _IAFalsa()
+        ia_falsa.nomes = nomear_schemas(monkeypatch)
+        monkeypatch.setattr(ia, "_cliente", lambda: cliente_por_transporte(ia_falsa))
+        monkeypatch.setattr(ia, "_esperar", lambda _segundos: None)
+
+        aprovada = "Equipo de bomba de infusão é cobrado uma vez por dia de uso."
+        da_pessoa = "Conversa da diretoria: o equipo da Dona Fulana foi trocado três vezes."
+        do_auditor = "Resposta do Auditor: anotei a troca do equipo e vou lembrar disso."
+        ia_falsa.respostas["LoteDoAuditor"] = {
+            "resposta": do_auditor,
+            "propostas": [_proposta(secao="INS", texto=aprovada)],
+        }
+        banco = _cenario()
+        gestao = _cliente_do_processamento(banco, "gestao")
+        gestao.app.include_router(conversa_router.router, prefix="/api")
+        assert gestao.post(ROTA, json={"texto": da_pessoa}).status_code == 200
+        assert gestao.post(ROTA, json={"texto": "ok"}).status_code == 200
+
+        _enviar(banco, _conta(), _prontuario())
+        _rodar_o_job(banco)
+
+        (conta,) = banco.tabelas["cm_conta"]
+        assert conta["situacao"] == "A_FAZER", conta.get("erro_motivo")
+        prompts = {
+            formato: json.dumps(corpo, ensure_ascii=False)
+            for corpo in ia_falsa.corpos
+            if (formato := corpo["formato"]) in (PASSO_A, PASSO_B)
+        }
+        assert set(prompts) == {PASSO_A, PASSO_B}
+        # A Regra aprovada pesa; nada da conversa vai junto.
+        assert aprovada in prompts[PASSO_B]
+        for prompt in prompts.values():
+            assert "Dona Fulana" not in prompt
+            assert "anotei a troca do equipo" not in prompt
