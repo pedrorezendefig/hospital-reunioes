@@ -189,6 +189,19 @@ def _chamada(passo, conta, atendimento, custo, criado_em) -> dict:
     }
 
 
+def _custo(total, *, analise, conversa=0.0, provas=0.0, revisor=0.0, medio, contas) -> dict:
+    """O cartão do custo de IA: o total da semana e cada parte dele."""
+    return {
+        "total_usd": total,
+        "analise_usd": analise,
+        "conversa_usd": conversa,
+        "provas_usd": provas,
+        "revisor_usd": revisor,
+        "medio_por_conta_usd": medio,
+        "contas": contas,
+    }
+
+
 def _contas() -> list[dict]:
     return [
         # Semana escolhida (05/10 a 11/10)
@@ -434,7 +447,7 @@ class TestOsBlocos:
 
     def test_custo_de_ia_do_periodo_e_medio_por_conta(self):
         """0,40 + 0,20 + 0,60 dólares em 3 contas."""
-        assert _painel()["custo_ia"] == {"total_usd": 1.2, "provas_usd": 0.0, "medio_por_conta_usd": 0.4, "contas": 3}
+        assert _painel()["custo_ia"] == _custo(1.2, analise=1.2, medio=0.4, contas=3)
 
     def test_as_provas_da_regra_da_semana_entram_no_custo(self):
         """A Prova da regra (#1488) grava cada chamada com o passo PROVA e sem a
@@ -449,19 +462,114 @@ class TestOsBlocos:
             _chamada("B", "C1", "at-1", 0.40, "2026-10-06T13:00:00+00:00"),
         ]
 
-        assert _painel(banco=banco)["custo_ia"] == {
-            "total_usd": 1.55,
-            "provas_usd": 0.35,
-            "medio_por_conta_usd": 0.4,
-            "contas": 3,
-        }
+        assert _painel(banco=banco)["custo_ia"] == _custo(1.55, analise=1.2, provas=0.35, medio=0.4, contas=3)
         # Com a operadora escolhida, só as provas dela (at-1 é da ASSIM, at-3 da UNIMED).
-        assert _painel(banco=banco, operadora_id=ASSIM)["custo_ia"] == {
-            "total_usd": 1.3,
-            "provas_usd": 0.3,
-            "medio_por_conta_usd": 0.5,
-            "contas": 2,
-        }
+        assert _painel(banco=banco, operadora_id=ASSIM)["custo_ia"] == _custo(
+            1.3, analise=1.0, provas=0.3, medio=0.5, contas=2
+        )
+
+    def test_o_custo_da_semana_soma_e_separa_conversa_prova_e_revisor(self):
+        """O Auditor (CONVERSA), a Prova da regra (PROVA) e o segundo agente
+        (REVISOR) entram no custo pela semana em que a chamada foi feita, cada
+        um na própria parte. A conversa da Conta C1 grava a conta, e a soma da
+        C1 (0,40) já a inclui: a análise fica 0,40 - 0,15 = 0,25, para a
+        conversa não contar duas vezes. Análise 0,25 + 0,20 + 0,60 = 1,05;
+        conversa 0,15 + 0,10; prova 0,30; revisor 0,07 + 0,03. Total 1,70."""
+        banco = _cenario()
+        banco.tabelas["cm_chamada_ia"] = [
+            _chamada("A", "C1", "at-1", 0.10, "2026-10-06T12:00:00+00:00"),
+            _chamada("B", "C1", "at-1", 0.15, "2026-10-06T13:00:00+00:00"),
+            _chamada("CONVERSA", "C1", "at-1", 0.15, "2026-10-08T12:00:00+00:00"),
+            # A conversa sobre uma conta concluída antes da semana conta na semana dela.
+            _chamada("CONVERSA", "C4", "at-4", 0.10, "2026-10-09T12:00:00+00:00"),
+            _chamada("PROVA", None, "at-1", 0.30, "2026-10-07T12:00:00+00:00"),
+            _chamada("REVISOR", "C3", "at-2", 0.07, "2026-10-10T12:00:00+00:00"),
+            _chamada("REVISOR", None, "at-3", 0.03, "2026-10-10T13:00:00+00:00"),
+            # Da semana anterior: fora.
+            _chamada("CONVERSA", None, "at-1", 0.90, "2026-10-02T12:00:00+00:00"),
+            _chamada("REVISOR", None, "at-1", 0.80, "2026-10-03T12:00:00+00:00"),
+        ]
+        banco.tabelas["cm_conta"][2]["custo_usd"] = 0.67  # C3: 0,60 da análise + 0,07 do revisor
+
+        assert _painel(banco=banco)["custo_ia"] == _custo(
+            1.7, analise=1.05, conversa=0.25, provas=0.3, revisor=0.1, medio=0.35, contas=3
+        )
+        # Só a ASSIM (at-1, at-2): a conversa da C4 e o revisor do at-3 são da UNIMED.
+        assert _painel(banco=banco, operadora_id=ASSIM)["custo_ia"] == _custo(
+            1.37, analise=0.85, conversa=0.15, provas=0.3, revisor=0.07, medio=0.425, contas=2
+        )
+
+
+class TestOFaltouIstoPorSemana:
+    """O Faltou isto (#1489) conta na semana em que foi apontado, por
+    classificação do Auditor e por origem, nas oito semanas até a escolhida."""
+
+    def _banco(self) -> _Banco:
+        banco = _cenario()
+        banco.tabelas["cm_faltou_isto"] = [
+            _faltou("F01", "C1", "PESSOA", "REGRA", "2026-10-06T12:00:00+00:00"),
+            _faltou("F02", "C1", "PESSOA", "LEITURA", "2026-10-07T12:00:00+00:00"),
+            _faltou("F03", "C3", "AGENTE", "REGRA", "2026-10-08T12:00:00+00:00"),
+            # Domingo 11/10 às 20h no fuso do hospital: ainda é a semana.
+            _faltou("F04", "C2", "AGENTE", "DEFEITO", "2026-10-11T23:00:00+00:00"),
+            # O Auditor ainda não classificou.
+            _faltou("F05", "C2", "PESSOA", None, "2026-10-09T12:00:00+00:00"),
+            # Semana anterior.
+            _faltou("F06", "C5", "PESSOA", "LEITURA", "2026-09-30T12:00:00+00:00"),
+            # Segunda 12/10 à 0h30 no fuso do hospital: a semana seguinte, fora.
+            _faltou("F07", "C1", "PESSOA", "REGRA", "2026-10-12T03:30:00+00:00"),
+        ]
+        return banco
+
+    def test_a_contagem_semanal_por_classificacao_e_por_origem(self):
+        serie = _painel(banco=self._banco())["faltou_isto"]
+
+        assert [ponto["semana"] for ponto in serie] == [
+            "2026-08-17",
+            "2026-08-24",
+            "2026-08-31",
+            "2026-09-07",
+            "2026-09-14",
+            "2026-09-21",
+            "2026-09-28",
+            "2026-10-05",
+        ]
+        assert serie[0] == _semana_do_faltou("2026-08-17")
+        assert serie[-2] == _semana_do_faltou("2026-09-28", LEITURA=1, PESSOA=1)
+        assert serie[-1] == _semana_do_faltou(
+            "2026-10-05", REGRA=2, LEITURA=1, DEFEITO=1, SEM_CLASSIFICACAO=1, PESSOA=3, AGENTE=2
+        )
+
+    def test_com_a_operadora_escolhida_so_os_das_contas_dela(self):
+        """ASSIM: C1, C3 e C5. A C2 é da UNIMED."""
+        serie = _painel(banco=self._banco(), operadora_id=ASSIM)["faltou_isto"]
+
+        assert serie[-1] == _semana_do_faltou("2026-10-05", REGRA=2, LEITURA=1, PESSOA=2, AGENTE=1)
+        assert serie[-2] == _semana_do_faltou("2026-09-28", LEITURA=1, PESSOA=1)
+
+    def test_a_faturista_nao_recebe_o_faltou_isto(self):
+        assert "faltou_isto" not in _painel("ana", banco=self._banco())
+
+
+def _faltou(fid, conta, origem, classificacao, criado_em) -> dict:
+    return {
+        "id": fid,
+        "conta_id": conta,
+        "origem": origem,
+        "classificacao": classificacao,
+        "criado_em": criado_em,
+    }
+
+
+def _semana_do_faltou(semana: str, **contagem: int) -> dict:
+    classificacao = {c: contagem.get(c, 0) for c in ("REGRA", "LEITURA", "DEFEITO", "SEM_CLASSIFICACAO")}
+    origem = {o: contagem.get(o, 0) for o in ("PESSOA", "AGENTE")}
+    return {
+        "semana": semana,
+        "total": sum(classificacao.values()),
+        "classificacao": classificacao,
+        "origem": origem,
+    }
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -493,7 +601,7 @@ class TestOsFiltros:
             "PRESCRITO_SN": 0.0,
             "POR_REGRA": 50.0,
         }
-        assert painel["custo_ia"] == {"total_usd": 1.0, "provas_usd": 0.0, "medio_por_conta_usd": 0.5, "contas": 2}
+        assert painel["custo_ia"] == _custo(1.0, analise=1.0, medio=0.5, contas=2)
 
     def test_filtro_por_semana(self):
         """A semana anterior: C4 e C5."""
@@ -507,7 +615,7 @@ class TestOsFiltros:
             ("Ana Faturista", 1, 30.0),
             ("Bia Faturista", 1, 70.0),
         ]
-        assert painel["custo_ia"] == {"total_usd": 0.4, "provas_usd": 0.0, "medio_por_conta_usd": 0.2, "contas": 2}
+        assert painel["custo_ia"] == _custo(0.4, analise=0.4, medio=0.2, contas=2)
 
     def test_filtro_por_tipo_de_conta(self):
         """Parcial: o atendimento tem mais de uma conta (at-2 tem C3 e C5).
