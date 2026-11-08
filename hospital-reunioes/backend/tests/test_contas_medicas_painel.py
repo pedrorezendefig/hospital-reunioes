@@ -179,6 +179,16 @@ def _conta(cid, atendimento, faturista, situacao, nota, concluida_em, custo) -> 
     }
 
 
+def _chamada(passo, conta, atendimento, custo, criado_em) -> dict:
+    return {
+        "passo": passo,
+        "conta_id": conta,
+        "atendimento_id": atendimento,
+        "custo_usd": custo,
+        "criado_em": criado_em,
+    }
+
+
 def _contas() -> list[dict]:
     return [
         # Semana escolhida (05/10 a 11/10)
@@ -424,7 +434,34 @@ class TestOsBlocos:
 
     def test_custo_de_ia_do_periodo_e_medio_por_conta(self):
         """0,40 + 0,20 + 0,60 dólares em 3 contas."""
-        assert _painel()["custo_ia"] == {"total_usd": 1.2, "medio_por_conta_usd": 0.4, "contas": 3}
+        assert _painel()["custo_ia"] == {"total_usd": 1.2, "provas_usd": 0.0, "medio_por_conta_usd": 0.4, "contas": 3}
+
+    def test_as_provas_da_regra_da_semana_entram_no_custo(self):
+        """A Prova da regra (#1488) grava cada chamada com o passo PROVA e sem a
+        conta. As da semana somam 0,30 + 0,05 no total; a da semana anterior
+        fica de fora, e a chamada da análise já está no custo da Conta."""
+        banco = _cenario()
+        banco.tabelas["cm_chamada_ia"] = [
+            _chamada("PROVA", None, "at-1", 0.30, "2026-10-07T12:00:00+00:00"),
+            # Domingo 11/10 às 17h no fuso do hospital: ainda é a semana.
+            _chamada("PROVA", None, "at-3", 0.05, "2026-10-11T20:00:00+00:00"),
+            _chamada("PROVA", None, "at-1", 0.70, "2026-10-02T12:00:00+00:00"),
+            _chamada("B", "C1", "at-1", 0.40, "2026-10-06T13:00:00+00:00"),
+        ]
+
+        assert _painel(banco=banco)["custo_ia"] == {
+            "total_usd": 1.55,
+            "provas_usd": 0.35,
+            "medio_por_conta_usd": 0.4,
+            "contas": 3,
+        }
+        # Com a operadora escolhida, só as provas dela (at-1 é da ASSIM, at-3 da UNIMED).
+        assert _painel(banco=banco, operadora_id=ASSIM)["custo_ia"] == {
+            "total_usd": 1.3,
+            "provas_usd": 0.3,
+            "medio_por_conta_usd": 0.5,
+            "contas": 2,
+        }
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -456,7 +493,7 @@ class TestOsFiltros:
             "PRESCRITO_SN": 0.0,
             "POR_REGRA": 50.0,
         }
-        assert painel["custo_ia"] == {"total_usd": 1.0, "medio_por_conta_usd": 0.5, "contas": 2}
+        assert painel["custo_ia"] == {"total_usd": 1.0, "provas_usd": 0.0, "medio_por_conta_usd": 0.5, "contas": 2}
 
     def test_filtro_por_semana(self):
         """A semana anterior: C4 e C5."""
@@ -470,7 +507,7 @@ class TestOsFiltros:
             ("Ana Faturista", 1, 30.0),
             ("Bia Faturista", 1, 70.0),
         ]
-        assert painel["custo_ia"] == {"total_usd": 0.4, "medio_por_conta_usd": 0.2, "contas": 2}
+        assert painel["custo_ia"] == {"total_usd": 0.4, "provas_usd": 0.0, "medio_por_conta_usd": 0.2, "contas": 2}
 
     def test_filtro_por_tipo_de_conta(self):
         """Parcial: o atendimento tem mais de uma conta (at-2 tem C3 e C5).

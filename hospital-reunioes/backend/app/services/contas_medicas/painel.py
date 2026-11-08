@@ -227,12 +227,47 @@ def _incluido_por_nivel(linhas: list[dict]) -> dict[str, float]:
     return {nivel: _dinheiro(valor) for nivel, valor in soma.items()}
 
 
-def _custo_ia(contas: list[dict]) -> dict[str, Any]:
+def _custo_das_provas(supabase, segunda: date, operadora_id: str | None) -> Decimal:
+    """O custo das chamadas da Prova da regra (#1488) feitas na semana. Elas
+    não têm conta: são da Operadora, que se acha pelo atendimento da Conta
+    refeita. O filtro de tipo de conta não vale para elas."""
+    chamadas = ler_tudo(
+        lambda: (
+            supabase.table("cm_chamada_ia")
+            .select("id, atendimento_id, custo_usd")
+            .eq("passo", "PROVA")
+            .gte("criado_em", _meia_noite(segunda))
+            .lt("criado_em", _meia_noite(segunda + timedelta(weeks=1)))
+            .order("id")
+        ),
+        rotulo="provas do Painel",
+    )
+    if operadora_id:
+        atendimentos = _em_lotes(
+            supabase,
+            "cm_atendimento",
+            "id, operadora_id",
+            "id",
+            (c["atendimento_id"] for c in chamadas if c.get("atendimento_id")),
+            "atendimentos das provas",
+        )
+        da_operadora = {a["id"] for a in atendimentos if a.get("operadora_id") == operadora_id}
+        chamadas = [c for c in chamadas if c.get("atendimento_id") in da_operadora]
+    return sum((Decimal(str(c.get("custo_usd") or 0)) for c in chamadas), Decimal(0))
+
+
+def _custo_ia(contas: list[dict], provas: Decimal) -> dict[str, Any]:
     """A soma do custo de IA das Contas (o de todas as chamadas de cada uma,
-    inclusive as de uma nova análise) e a média por Conta."""
-    total = sum((Decimal(str(c.get("custo_usd") or 0)) for c in contas), Decimal(0))
-    medio = total / len(contas) if contas else Decimal(0)
-    return {"total_usd": float(round(total, 4)), "medio_por_conta_usd": float(round(medio, 4)), "contas": len(contas)}
+    inclusive as de uma nova análise) mais o das Provas da regra da semana, e
+    a média por Conta, que é só das Contas."""
+    das_contas = sum((Decimal(str(c.get("custo_usd") or 0)) for c in contas), Decimal(0))
+    medio = das_contas / len(contas) if contas else Decimal(0)
+    return {
+        "total_usd": float(round(das_contas + provas, 4)),
+        "provas_usd": float(round(provas, 4)),
+        "medio_por_conta_usd": float(round(medio, 4)),
+        "contas": len(contas),
+    }
 
 
 def _nota_media(contas: list[dict]) -> float | None:
@@ -305,5 +340,5 @@ def montar_painel(
         "nivel_evidencia": [
             {"semana": s.isoformat(), **_incluido_por_nivel(linhas_de(por_semana[s]))} for s in semanas
         ],
-        "custo_ia": _custo_ia(da_semana),
+        "custo_ia": _custo_ia(da_semana, _custo_das_provas(supabase, segunda, operadora_id)),
     }

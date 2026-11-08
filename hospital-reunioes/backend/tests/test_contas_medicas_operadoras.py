@@ -129,6 +129,7 @@ class _Consulta:
         self._operacao = "select"
         self._payload: Any = None
         self._colunas: list[str] | None = None
+        self._recorte: tuple[int, int] | None = None
 
     def select(self, colunas: str = "*", **_kw):
         if colunas.strip() != "*":
@@ -169,6 +170,10 @@ class _Consulta:
     def limit(self, _n):
         return self
 
+    def range(self, inicio, fim):
+        self._recorte = (inicio, fim)
+        return self
+
     def insert(self, payload):
         self._operacao = "insert"
         self._payload = payload
@@ -196,6 +201,8 @@ class _Consulta:
         if self._ordem:
             coluna, desc = self._ordem
             casam.sort(key=lambda linha: (linha.get(coluna) is None, linha.get(coluna)), reverse=desc)
+        if self._recorte is not None:
+            casam = casam[self._recorte[0] : self._recorte[1] + 1]
         if self._colunas:
             casam = [{c: linha.get(c) for c in self._colunas} for linha in casam]
         return SimpleNamespace(data=casam, count=len(casam))

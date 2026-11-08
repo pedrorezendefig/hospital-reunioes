@@ -150,9 +150,64 @@ type Chamada = { url: string; metodo: string; corpo: unknown };
 let chamadas: Chamada[];
 let permissoes: string[];
 let statusDaMemoria: number;
+function linhaDaProva(campos: Record<string, unknown>) {
+  return {
+    acao: "INCLUIR",
+    data: "2026-10-12",
+    data_fim: null,
+    setor: "UTI",
+    codigo: "M012",
+    descricao: "Seringa de limpeza pronta",
+    quantidade_lancada: 1,
+    quantidade_devida: 2,
+    regra_codigo: "ALFA-DIA-01",
+    motivo: "Dado na evolução.",
+    ...campos,
+  };
+}
+
+const PROVA = {
+  prova_id: "prova-1",
+  regra: "ALFA-DIA-03",
+  contas: 10,
+  mudaria: true,
+  feitas_que_sumiriam: 1,
+  aviso: null,
+  por_conta: [
+    {
+      conta_id: "c12",
+      numero_atendimento: "31012",
+      numero_conta: "N12",
+      concluida_em: "2026-10-12T18:00:00+00:00",
+      refeita: true,
+      mudaria: true,
+      entrariam: [linhaDaProva({ codigo: "M020", descricao: "Cateter periférico", regra_codigo: "ALFA-DIA-03" })],
+      sairiam: [{ ...linhaDaProva({}), estado: "FEITO", feito: true }],
+      mudariam: [
+        {
+          antes: { ...linhaDaProva({ codigo: "M030", descricao: "Equipo", quantidade_devida: 2 }), estado: "ABERTA" },
+          depois: linhaDaProva({ codigo: "M030", descricao: "Equipo", quantidade_devida: 3 }),
+        },
+      ],
+    },
+    {
+      conta_id: "c11",
+      numero_atendimento: "31011",
+      numero_conta: "N11",
+      concluida_em: "2026-10-11T18:00:00+00:00",
+      refeita: true,
+      mudaria: false,
+      entrariam: [],
+      sairiam: [],
+      mudariam: [],
+    },
+  ],
+};
+
 let respostaDaMudanca: { status: number; corpo: unknown };
 let respostaDaProposta: { status: number; corpo: unknown };
 let respostaDoEnsino: { status: number; corpo: unknown };
+let respostaDaProva: { status: number; corpo: unknown };
 let contasComRegraNova: unknown[];
 
 function resposta(status: number, corpo: unknown, cabecalhos: Record<string, string> = {}): Response {
@@ -183,6 +238,9 @@ function backend() {
       if (url === `${ROTA}/regras/proposta` && metodo === "POST") {
         return resposta(respostaDaProposta.status, respostaDaProposta.corpo);
       }
+      if (url === `${ROTA}/regras/prova` && metodo === "POST") {
+        return resposta(respostaDaProva.status, respostaDaProva.corpo);
+      }
       if (url === `${ROTA}/regras` && metodo === "POST") {
         return resposta(respostaDoEnsino.status, respostaDoEnsino.corpo);
       }
@@ -211,6 +269,7 @@ beforeEach(() => {
     status: 200,
     corpo: { operadora: "ALFA", versao: "1.3", regra: "ALFA-DIA-03", contas_com_regra_nova: 2 },
   };
+  respostaDaProva = { status: 200, corpo: PROVA };
   contasComRegraNova = [];
   backend();
 });
@@ -555,6 +614,55 @@ describe("ensinar uma regra nova (issue #1141)", () => {
     await screen.findByRole("status");
     const envio = chamadas.find((c) => c.url === `${ROTA}/regras` && c.metodo === "POST");
     expect((envio?.corpo as Record<string, unknown>).parametro).toBeNull();
+  });
+
+  it("a prova da regra aparece antes do Validar, com o que entraria, sairia e mudaria e a Linha feita em destaque", async () => {
+    const proposta = await proporRegra();
+    const botoes = within(proposta).getAllByRole("button").map((b) => b.textContent);
+    expect(botoes.indexOf("Provar nas últimas contas")).toBeLessThan(botoes.indexOf("Validar regra"));
+
+    fireEvent.click(within(proposta).getByRole("button", { name: "Provar nas últimas contas" }));
+
+    const prova = await within(proposta).findByRole("region", { name: "Prova da regra" });
+    expect(chamadas.find((c) => c.url === `${ROTA}/regras/prova`)?.corpo).toEqual({
+      secao: "DIA",
+      texto: "Transferência de setor antes das 12h não gera diária extra no setor de origem.",
+      tipo: "CONTRATUAL",
+      origem: "PRÁTICA",
+      parametro: { chave: "diaria.hora_vencimento", valor: "12:00" },
+    });
+    expect(prova.textContent).toContain("10 últimas contas concluídas");
+    const conta = within(prova).getByRole("listitem", { name: "Atendimento 31012, conta N12" });
+    expect(conta.textContent).toContain("Entraria: Cateter periférico");
+    expect(conta.textContent).toContain("Sairia: Seringa de limpeza pronta");
+    expect(conta.textContent).toContain("Mudaria: Equipo, quantidade 2 para 3");
+    expect(within(conta).getByText("Já feita").className).toContain("text-red-700");
+    expect(within(prova).getByRole("alert").textContent).toContain("1 linha já feita pela faturista sumiria.");
+    // A conta que não muda não aparece na lista.
+    expect(within(prova).queryByRole("listitem", { name: "Atendimento 31011, conta N11" })).toBeNull();
+    expect(chamadas.some((c) => c.url === `${ROTA}/regras` && c.metodo === "POST")).toBe(false);
+  });
+
+  it("a prova que não muda nada diz isso, e mexer na regra apaga a prova antiga", async () => {
+    respostaDaProva = {
+      status: 200,
+      corpo: {
+        ...PROVA,
+        mudaria: false,
+        feitas_que_sumiriam: 0,
+        aviso: "A regra não mudaria nada nas 10 últimas contas concluídas.",
+        por_conta: [],
+      },
+    };
+    const proposta = await proporRegra();
+    fireEvent.click(within(proposta).getByRole("button", { name: "Provar nas últimas contas" }));
+
+    const prova = await within(proposta).findByRole("region", { name: "Prova da regra" });
+    expect(prova.textContent).toContain("A regra não mudaria nada nas 10 últimas contas concluídas.");
+    expect(within(prova).queryByRole("alert")).toBeNull();
+
+    fireEvent.change(within(proposta).getByLabelText("Texto da regra"), { target: { value: "Outra regra." } });
+    expect(within(proposta).queryByRole("region", { name: "Prova da regra" })).toBeNull();
   });
 
   it("mostra a recusa da proposta como veio", async () => {
