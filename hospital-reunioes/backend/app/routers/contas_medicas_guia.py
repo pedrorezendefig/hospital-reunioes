@@ -22,7 +22,9 @@ from supabase import Client
 
 from app.dependencies import get_supabase_client, require_permissao_cm
 from app.limiter import limiter
-from app.services.contas_medicas import fila, reenvio
+from app.services import github_client
+from app.services.ai_processor import chamar_ia_fora_do_loop
+from app.services.contas_medicas import faltou_isto, fila, reenvio
 from app.services.contas_medicas.envio import LIMITE_POR_ARQUIVO, MENSAGEM_ARQUIVO_GRANDE
 from app.services.contas_medicas.guia import (
     agrupar_por_dia_e_setor,
@@ -31,6 +33,7 @@ from app.services.contas_medicas.guia import (
     nota_de_entrada,
     numeros_do_topo,
 )
+from app.services.contas_medicas.ia import ErroDaIA
 from app.services.contas_medicas.regra_nova import SITUACOES_REANALISAVEIS, regra_nova_desde_a_analise
 from app.services.contas_medicas.validacao import (
     acompanhar_marcacao,
@@ -39,6 +42,7 @@ from app.services.contas_medicas.validacao import (
     temas_da_observacao,
 )
 from app.services.contas_medicas_conta import ErroLeitura
+from app.services.tecnologia_vinculo import MOTIVO_INTEGRACAO_DESLIGADA
 
 router = APIRouter(prefix="/contas-medicas", tags=["contas-medicas"])
 
@@ -155,6 +159,8 @@ async def abrir_guia(
         "pode_reanalisar": _pode_reanalisar(me, conta, regra_nova),
         # A conta analisada com uma memória que já mudou: o botão vira "Reanalisar com a regra nova".
         "regra_nova_desde_analise": regra_nova,
+        # A conversa da Conta com o Auditor (issue #1489): cada Faltou isto e a resposta.
+        "faltou_isto": [faltou_isto.para_a_tela(a, me.get("id")) for a in faltou_isto.da_conta(supabase, conta["id"])],
     }
 
 
@@ -435,3 +441,92 @@ async def reanalisar_conta(
     if not devolvida:
         raise HTTPException(status_code=409, detail=_SO_REANALISAVEL)
     return {"situacao": "NA_FILA"}
+
+
+# ─── O Faltou isto (issue #1489, PRD #1484, ADR 0081, decisão 4) ─────────────
+
+
+class FaltouIsto(BaseModel):
+    """O item que o Guia não achou num dia da Conta, a página e a pergunta."""
+
+    data: date
+    item: str = Field(..., min_length=1, max_length=200)
+    pagina: int | None = Field(default=None, ge=1, le=100000)
+    texto: str | None = Field(default=None, max_length=2000)
+
+    @model_validator(mode="after")
+    def _sem_espaco_sobrando(self):
+        self.item = self.item.strip()
+        self.texto = (self.texto or "").strip() or None
+        if not self.item:
+            raise ValueError("Diga o item que faltou")
+        return self
+
+
+@router.post("/contas/{conta_id}/guia/faltou-isto")
+@limiter.limit("30/minute")
+async def apontar_faltou_isto(
+    request: Request,
+    conta_id: UUID,
+    corpo: FaltouIsto,
+    me: dict = Depends(_PODE_CORRIGIR),
+    supabase: Client = Depends(get_supabase_client),
+) -> dict:
+    """Faltou isto: quem vê o Guia aponta o item e a página que o módulo não
+    achou num dia da Conta, e o Auditor responde por que não achou."""
+    conta = _conta_do_guia(supabase, conta_id, me)
+    if motivo := faltou_isto.fora_do_periodo(conta, corpo.data):
+        raise HTTPException(status_code=422, detail=motivo)
+    atendimento = _primeira(supabase, "cm_atendimento", "id", conta.get("atendimento_id")) or {}
+    try:
+        gravado = await chamar_ia_fora_do_loop(
+            faltou_isto.apontar,
+            supabase,
+            conta=conta,
+            atendimento=atendimento,
+            autor_id=me.get("id"),
+            dia=corpo.data,
+            item=corpo.item,
+            pagina=corpo.pagina,
+            texto=corpo.texto,
+        )
+    except ErroDaIA:
+        raise HTTPException(status_code=503, detail=faltou_isto.MENSAGEM_AUDITOR_FORA) from None
+    return {"apontamento": faltou_isto.para_a_tela(gravado, me.get("id"))}
+
+
+@router.post("/contas/{conta_id}/guia/faltou-isto/{faltou_id}/pedido")
+@limiter.limit("20/minute")
+async def abrir_pedido_para_a_tecnologia(
+    request: Request,
+    conta_id: UUID,
+    faltou_id: UUID,
+    me: dict = Depends(_PODE_CORRIGIR),
+    supabase: Client = Depends(get_supabase_client),
+) -> dict:
+    """O ok de quem apontou: a página não lida ou o defeito vira issue
+    `ready-for-agent` para a Tecnologia, sem dado da paciente."""
+    conta = _conta_do_guia(supabase, conta_id, me)
+    apontamento = next((a for a in faltou_isto.da_conta(supabase, conta["id"]) if a["id"] == str(faltou_id)), None)
+    if apontamento is None:
+        raise HTTPException(status_code=404, detail="Faltou isto não encontrado nesta conta")
+    if apontamento.get("apontado_por") != me.get("id"):
+        raise HTTPException(status_code=403, detail=faltou_isto.MENSAGEM_SO_QUEM_APONTOU)
+    if apontamento.get("issue_numero"):
+        raise HTTPException(status_code=409, detail=faltou_isto.MENSAGEM_PEDIDO_JA_ABERTO)
+    if not faltou_isto.vira_pedido(apontamento):
+        raise HTTPException(status_code=409, detail=faltou_isto.MENSAGEM_SO_LEITURA_OU_DEFEITO)
+    if not github_client.integracao_configurada():
+        raise HTTPException(status_code=503, detail=MOTIVO_INTEGRACAO_DESLIGADA)
+    atendimento = _primeira(supabase, "cm_atendimento", "id", conta.get("atendimento_id")) or {}
+    try:
+        gravado = await run_in_threadpool(
+            faltou_isto.abrir_pedido, supabase, conta=conta, atendimento=atendimento, apontamento=apontamento
+        )
+    except faltou_isto.PedidoRecusadoError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from None
+    except github_client.GithubNaoConfiguradoError:
+        raise HTTPException(status_code=503, detail=MOTIVO_INTEGRACAO_DESLIGADA) from None
+    except github_client.GithubIndisponivelError:
+        raise HTTPException(status_code=502, detail=faltou_isto.MENSAGEM_GITHUB_FORA) from None
+    return {"apontamento": faltou_isto.para_a_tela(gravado, me.get("id"))}

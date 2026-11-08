@@ -19,9 +19,11 @@ import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { ArrowLeft, RefreshCw, Undo2, Upload } from "lucide-react";
 
+import { ConversaDaConta } from "@/components/contas-medicas/ConversaDaConta";
 import { Ditar, juntarDitado } from "@/components/contas-medicas/Ditar";
 import { LinhaDoGuia, type Marcacao } from "@/components/contas-medicas/LinhaDoGuia";
 import { useToast } from "@/components/ui/Toast";
+import { diasDoPeriodo } from "@/lib/contas-medicas/faltouIsto";
 import {
   CONCLUIDAS,
   PERGUNTA_DE_DEVOLVER,
@@ -67,6 +69,13 @@ function subtitulo(guia: Guia): string {
     .join(" · ");
 }
 
+/** Os dias em que o Faltou isto vale: o período da conta, ou os dias dos grupos quando ele falta. */
+function diasDoFaltouIsto(guia: Guia): string[] {
+  const doPeriodo = diasDoPeriodo(guia.cabecalho.periodo_inicio, guia.cabecalho.periodo_fim);
+  if (doPeriodo.length > 0) return doPeriodo;
+  return [...new Set(guia.grupos.map((grupo) => grupo.data).filter((dia): dia is string => Boolean(dia)))].sort();
+}
+
 function temAberta(grupo: GrupoGuia): boolean {
   return grupo.linhas.some((linha) => linha.estado === "ABERTA" && linha.acao !== "VALIDAR");
 }
@@ -93,6 +102,7 @@ export default function GuiaPage() {
   const [ocupado, setOcupado] = useState(false);
   const [observacao, setObservacao] = useState("");
   const [resultadoDoReenvio, setResultadoDoReenvio] = useState<string | null>(null);
+  const [escolhaDoFaltouIsto, setEscolhaDoFaltouIsto] = useState<{ dia: string; vez: number } | null>(null);
   const seletorDoPdf = useRef<HTMLInputElement>(null);
 
   const base = `/api/contas-medicas/contas/${contaId}/guia`;
@@ -396,16 +406,27 @@ export default function GuiaPage() {
           <section key={rotulo} aria-label={rotulo} className="space-y-2">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <h2 className={TITULO}>{rotulo}</h2>
-              {!concluida && temAberta(grupo) && (
-                <button
-                  type="button"
-                  onClick={() => marcarODia(grupo)}
-                  disabled={ocupado}
-                  className="text-xs font-semibold text-primary hover:underline disabled:opacity-50"
-                >
-                  Marcar o dia como feito
-                </button>
-              )}
+              <div className="flex flex-wrap items-center gap-3">
+                {grupo.data && (
+                  <button
+                    type="button"
+                    onClick={() => setEscolhaDoFaltouIsto({ dia: grupo.data as string, vez: Date.now() })}
+                    className="text-xs font-semibold text-primary hover:underline"
+                  >
+                    Faltou isto
+                  </button>
+                )}
+                {!concluida && temAberta(grupo) && (
+                  <button
+                    type="button"
+                    onClick={() => marcarODia(grupo)}
+                    disabled={ocupado}
+                    className="text-xs font-semibold text-primary hover:underline disabled:opacity-50"
+                  >
+                    Marcar o dia como feito
+                  </button>
+                )}
+              </div>
             </div>
             <div className="space-y-2">
               {grupo.linhas.map((linha) => (
@@ -423,6 +444,14 @@ export default function GuiaPage() {
           </section>
         );
       })}
+
+      <ConversaDaConta
+        contaId={contaId}
+        token={token}
+        dias={diasDoFaltouIsto(guia)}
+        iniciais={guia.faltou_isto ?? []}
+        escolha={escolhaDoFaltouIsto}
+      />
 
       {concluida ? (
         <footer className="bg-white rounded-2xl border border-border p-4 space-y-3">
