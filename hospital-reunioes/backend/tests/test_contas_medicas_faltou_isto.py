@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import json
 import re
+from pathlib import Path
 from typing import Any
 
 import pytest
@@ -546,6 +547,44 @@ class TestConversaForaDaAnalise:
             assert FALA_DA_PESSOA not in prompt, passo
             assert FALA_DO_AUDITOR not in prompt, passo
             assert "bomba de seringa" not in prompt, passo
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 5. O texto do Produto no Kit de conhecimento
+# ═══════════════════════════════════════════════════════════════════════════
+
+KIT = Path(__file__).resolve().parents[1] / "app" / "conhecimento" / "contas-medicas.md"
+
+
+class TestKitDeConhecimento:
+    """A sanidade geral do kit mora em `test_kit_conhecimento.py`; aqui, o que
+    o texto tem que dizer do Faltou isto."""
+
+    def test_diz_quem_aponta_o_que_o_auditor_responde_e_o_pedido_para_a_tecnologia(self):
+        secao = KIT.read_text(encoding="utf-8").split("## O Faltou isto e o Auditor", 1)[1].split("\n## ", 1)[0]
+
+        for trecho in (
+            '"Faltou isto"',
+            "coordenadora de faturamento",
+            "as duas diretorias",
+            "a página do prontuário",
+            "falta regra",
+            "página não lida",
+            "defeito do sistema",
+            '"Abrir o pedido para a Tecnologia"',
+            "Só essa pessoa dá o ok",
+            "300 caracteres",
+            "nunca leva nada que identifique a paciente",
+            "não entra na análise das contas",
+        ):
+            assert trecho in secao, trecho
+
+    def test_o_decidido_diz_que_a_conversa_nao_e_memoria(self):
+        decidido = KIT.read_text(encoding="utf-8").split("## O que já foi decidido", 1)[1].split("\n## ", 1)[0]
+
+        assert "- A conversa com o Auditor fica guardada como histórico e nunca entra na análise das contas." in (
+            decidido
+        )
 
 
 def _passos_da_chamada() -> set[str]:

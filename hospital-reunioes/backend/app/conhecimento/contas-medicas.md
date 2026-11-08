@@ -21,7 +21,8 @@ A primeira etapa inteira: a fundação do módulo, a carga das operadoras, o env
 - a tela Contratos, aberta a partir da tela de contas para quem tem a permissão de contratos e avisos (credenciamento, gestão de contas médicas e as duas diretorias), com o aviso de reajuste no sino, descrita em "Contratos e aviso de reajuste";
 - o Painel, aberto a partir da tela de contas, descrito em "O Painel";
 - a fila de Validação, aberta a partir da tela de contas para quem tem a permissão de decidir na validação (gestão de contas médicas e as duas diretorias), descrita em "A Validação";
-- a tela Coordenação, aberta a partir da tela de contas para quem tem a permissão de Conferência da coordenação (coordenadora de faturamento, gestão de contas médicas e as duas diretorias), com o número de lembretes abertos no botão, descrita em "A Conferência da coordenação".
+- a tela Coordenação, aberta a partir da tela de contas para quem tem a permissão de Conferência da coordenação (coordenadora de faturamento, gestão de contas médicas e as duas diretorias), com o número de lembretes abertos no botão, descrita em "A Conferência da coordenação";
+- o "Faltou isto" no Guia, com a conversa com o Auditor e o pedido para a Tecnologia, descrito em "O Faltou isto e o Auditor".
 
 Na tela Operadoras, a gestão envia o arquivo de memória de cada convênio, o mesmo que o diretor monta, e a memória passa a valer sem programador no meio. Antes de gravar, a tela compara o arquivo com a memória em vigor e mostra, regra a regra, o que entra, o que muda (com o texto de antes e o de depois, e o status quando ele muda) e o que sai. Nada é gravado antes do Confirmar e gravar; Cancelar descarta o envio. Depois de gravar, a tela mostra a versão, quantas regras vigentes e pendentes entraram e os parâmetros lidos do cabeçalho; os números têm de bater com o arquivo. Regra sem status no arquivo entra vigente, porque quem envia a memória tem a permissão de regra contratual e tabelas e é quem decide. Só entra pendente a regra que o arquivo marca assim, como a regra técnica do hospital copiada para uma operadora nova, que vira vigente quando validada para aquela operadora. Mandar uma versão nova aposenta a anterior. Parâmetro do cabeçalho que o sistema ainda não usa fica guardado, e a memória em vigor pode ser baixada de volta inteira. Arquivo com um número no formato de CPF é recusado, porque memória não pode ter dado de paciente. Na mesma tela a gestão cadastra os nomes de plano como o MV imprime, cada um com a operadora e a coluna de preço, e os setores do MV com a acomodação de cada um.
 
@@ -153,6 +154,16 @@ Abrir o Guia de uma conta da Fila é puxar a conta: ela muda de A fazer para Em 
 
 A faturista que pegou uma conta e não vai terminar clica em "Devolver à fila", no topo do Guia, e confirma. A conta volta para A fazer, livre, no mesmo lugar da Fila em que estava pela ordem de envio, e sai da aba Minhas. As marcações que ela já fez continuam na conta: quem pegar depois vê os itens Feito, Não procede e Bloqueado e segue de onde parou. A faturista devolve só a conta dela; quem tem o Painel completo devolve a de qualquer faturista, como a coordenação faz com a conta de quem faltou. Só a conta Em correção volta para a Fila: a conta em Retorno fica com quem analisou, e a concluída não volta.
 
+## O Faltou isto e o Auditor
+
+Quem vê o Guia de uma conta pode apontar o que o módulo deixou passar: a faturista, a coordenadora de faturamento, a gestão de contas médicas e as duas diretorias. Cada dia do Guia tem o botão "Faltou isto", e a conversa com o Auditor, no fim do Guia, aceita qualquer dia do período da conta, mesmo um dia sem linha. A pessoa diz o item que faltou, a página do prontuário onde ele aparece e, se quiser, uma pergunta, como "por que você não achou isto nesta página?". Vale também na conta concluída.
+
+O Auditor é o agente de inteligência artificial do módulo. Ele lê o que a análise guardou daquele dia, junto com a memória da operadora: os fatos do prontuário com a página e o trecho, os documentos do dia, as páginas que a leitura não conseguiu ler, as linhas do Guia e os itens lançados na conta. Responde em poucas frases por que o Guia não achou o item e o que deveria ter apontado, e diz de onde a falha veio. Pode ser falta regra (a página foi lida, mas nenhuma regra da memória manda cobrar o item), página não lida (a folha não foi lida ou foi lida mal) ou defeito do sistema (a página foi lida, a regra existe e o Guia não pediu o item). O apontamento fica guardado com o item, a página, a mensagem, quem apontou e a resposta do Auditor. Se o Auditor não responder, nada é gravado e a tela pede para tentar de novo.
+
+Quando a falha é página não lida ou defeito do sistema, quem apontou vê o botão "Abrir o pedido para a Tecnologia". Só essa pessoa dá o ok, e o pedido sai do app uma vez só, já escrito pelo Auditor para a equipe de desenvolvimento corrigir sem triagem: o código da conta no sistema, a página, o trecho da página com até 300 caracteres, o que o Guia deveria ter apontado, a explicação do Auditor e a mensagem de quem apontou. O pedido nunca leva nada que identifique a paciente. Nome, carteira, CPF, data de nascimento, número do atendimento, número da conta e plano saem trocados por marcadores, e do prontuário vai só o trecho da página, que a leitura já guarda sem identificação. A falta de regra fica registrada com a explicação, e virar proposta de regra fica para uma próxima entrega.
+
+A conversa com o Auditor é histórico e não entra na análise das contas: só o que vira regra da memória pesa no Guia.
+
 ## O reenvio da conta corrigida
 
 Depois de corrigir a conta no MV, a faturista pode reenviar só o PDF da conta para ver se a correção pegou. O reenvio é opcional: a conta concluída sem reenvio vale igual para a produção dela.
@@ -258,6 +269,8 @@ O módulo não guarda nome completo, CPF, carteira nem data de nascimento de pac
 - A Fila é comum a todas as faturistas, e a conta passa a ser de quem abre o Guia, nunca de quem enviou.
 - A Fila segue a ordem de envio e nunca é reordenada por valor.
 - O custo de cada chamada da inteligência artificial fica gravado, e o modelo de cada tarefa se troca numa configuração do servidor.
+- A conversa com o Auditor fica guardada como histórico e nunca entra na análise das contas.
+- O pedido para a Tecnologia que nasce de um Faltou isto só sai do app com o ok de quem apontou e sem dado da paciente.
 - Títulos, botões, abas, nomes de campo e cabeçalhos de coluna aparecem em caixa alta só na tela, os nomes de operadora, de paciente e de pessoa aparecem como foram escritos, e códigos e siglas ficam como estão.
 
 ## O que costuma virar Demanda
@@ -277,4 +290,5 @@ O módulo não guarda nome completo, CPF, carteira nem data de nascimento de pac
 - Um lembrete da coordenação para um insumo que já está na conta, um cenário que não gera lembrete quando o prontuário mostra o procedimento, ou a faturista que vê um cenário ou um lembrete (Defeito, ou Informação se a dúvida é sobre o período da conta ou sobre o cenário estar desativado).
 - Uma linha marcada "ainda na conta" que já foi corrigida no MV, ou uma nota de saída que não bate com as linhas (Defeito, ou Informação se a conta reenviada não era a corrigida).
 - Um cartão da Validação que não some depois da decisão, uma conta concluída que não volta em Retorno depois de validada a regra, ou a lista do cadastro que não baixa (Defeito, ou Informação se a dúvida é por que a conta voltou).
+- Um Faltou isto que o Auditor não responde, ou o botão "Abrir o pedido para a Tecnologia" que não aparece para quem apontou uma página não lida ou um defeito do sistema (Defeito, ou Informação se a falha veio como falta de regra, que não vira pedido).
 - Dúvida sobre quando chega o envio de contas ou alguma das próximas entregas (Informação).
