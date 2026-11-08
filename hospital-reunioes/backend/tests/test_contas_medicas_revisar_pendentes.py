@@ -250,3 +250,46 @@ class TestOOkDasPendentes:
         assert (linhas[pri_03["id"]]["estado"], linhas[pri_03["id"]]["acao"]) == ("DECIDIDA", "VALIDAR")
         contas = {c["id"]: c["situacao"] for c in banco.linhas("cm_conta")}
         assert (contas["c05"], contas["c06"]) == ("RETORNO", "CONCLUIDA")
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 3. "Corrige o item N" funciona como nas outras propostas em lote
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+class TestCorrigeOItemN:
+    def test_corrige_o_item_n_refaz_so_a_decisao_dele_e_o_ok_aplica_a_corrigida(self, cenario):
+        cliente, banco, provedor = cenario
+        assert cliente.post(ROTA, json={"texto": "revisar pendentes"}).status_code == 200
+        antes = cliente.get(ROTA).json()["lote"]
+        provas_antes = len(provedor.da_prova())
+        # O Auditor devolve outro código: o item 2 continua sendo a PRI-03.
+        provedor.correcao = {
+            "resposta": "Corrigi o item 2: a regra fica como está.",
+            "decisao": _decisao("ALFA-PRI-99", "VALIDAR", motivo="A edição vem do contrato."),
+        }
+
+        resposta = cliente.post(ROTA, json={"texto": "Corrige o item 2: não descarta, valida."})
+
+        assert resposta.status_code == 200, resposta.text
+        depois = resposta.json()["lote"]
+        assert depois["id"] == antes["id"]
+        refeito = _item(resposta.json(), 2)
+        assert (refeito["regra_codigo"], refeito["proposta"]["decisao"], refeito["proposta"]["texto"]) == (
+            "ALFA-PRI-03",
+            "VALIDAR",
+            PRI_03,
+        )
+        assert refeito["motivo"] == "A edição vem do contrato."
+        assert [i for i in depois["itens"] if i["numero"] != 2] == [i for i in antes["itens"] if i["numero"] != 2]
+        # O Auditor recebeu a decisão como estava e o que mudar nela.
+        _, pedido = [p for p in provedor.pedidos if p[0] == "PendenteCorrigida"][-1]
+        assert '"DESCARTAR"' in pedido and "não descarta, valida." in pedido
+        # Só o item corrigido prova de novo, agora com a regra na memória.
+        assert len(provedor.da_prova()) - provas_antes == 10
+        assert PRI_03 in provedor.da_prova()[-1]
+        assert refeito["prova"]["contas"] == 10
+
+        assert cliente.post(ROTA, json={"texto": "ok"}).status_code == 200
+        regras = _regras_vigentes(banco)
+        assert (regras["ALFA-PRI-03"]["ativa"], regras["ALFA-PRI-03"]["status"]) == (True, "VIGENTE")

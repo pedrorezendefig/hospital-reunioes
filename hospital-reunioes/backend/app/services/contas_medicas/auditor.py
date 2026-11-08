@@ -375,10 +375,22 @@ def _corrigir(supabase, sigla: str, numero: int, pedido: str, texto: str, autor_
         "motivo": alvo.get("motivo"),
         "conflitos": alvo.get("conflitos_json"),
     }
-    resposta = ia.corrigir_item(memoria, json.dumps(atual, ensure_ascii=False), pedido.strip(), supabase=supabase)
-
     regras = {r["codigo"]: r for r in _regras_da_versao(supabase, vigente["id"])}
-    refeito = _item_do_auditor(resposta.proposta, vigente, regras)
+    if lote.get("fonte") == PENDENTES:
+        # No lote das pendentes o item N é sempre a mesma Regra: muda a decisão.
+        pendente = regras.get(alvo.get("regra_codigo"))
+        if pendente is None:
+            raise LoteRecusadoError(
+                f"A regra {alvo.get('regra_codigo')} do item {numero} não está mais na memória: "
+                "peça a revisão das pendentes de novo."
+            )
+        resposta = ia.corrigir_pendente(
+            memoria, json.dumps(atual, ensure_ascii=False), pedido.strip(), supabase=supabase
+        )
+        refeito = _item_da_pendente(pendente, resposta.decisao)
+    else:
+        resposta = ia.corrigir_item(memoria, json.dumps(atual, ensure_ascii=False), pedido.strip(), supabase=supabase)
+        refeito = _item_do_auditor(resposta.proposta, vigente, regras)
     if refeito is None:
         raise LoteRecusadoError(f"O Auditor não conseguiu refazer o item {numero}. Diga a correção de outro jeito.")
     _falar(supabase, conversa["id"], "PESSOA", texto, autor_id)
