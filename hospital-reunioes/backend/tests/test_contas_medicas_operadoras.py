@@ -942,3 +942,18 @@ class TestTextoDoProduto:
             "CPF",
         ):
             assert termo in no_ar, termo
+
+    def test_diz_que_a_regra_sem_status_entra_vigente_e_que_a_previa_vem_antes_de_gravar(self):
+        """Issue #1486: o texto que o assistente lê conta o comportamento novo,
+        e não o antigo (a linha sem status entrava pendente)."""
+        no_ar = KIT.read_text(encoding="utf-8").split("## O que já está no ar")[1].split("\n## ")[0]
+
+        for termo in (
+            "Regra sem status no arquivo entra vigente",
+            "regra técnica do hospital",
+            "o que entra, o que muda",
+            "o texto de antes e o de depois",
+            "o que sai",
+            "Confirmar e gravar",
+        ):
+            assert termo in no_ar, termo
