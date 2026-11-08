@@ -34,6 +34,30 @@ export interface LinhaDeProducao {
 
 export type IncluidoNaSemana = { semana: string } & Record<NivelDeEvidencia, number>;
 
+/** A classificação do Faltou isto pelo Auditor, e o que ele ainda não classificou. */
+export type ClassificacaoDoFaltou = "REGRA" | "LEITURA" | "DEFEITO" | "SEM_CLASSIFICACAO";
+
+/** Quem achou o Faltou isto: a pessoa que vê o Guia ou o segundo agente. */
+export type OrigemDoFaltou = "PESSOA" | "AGENTE";
+
+export interface FaltouIstoNaSemana {
+  semana: string;
+  total: number;
+  classificacao: Record<ClassificacaoDoFaltou, number>;
+  origem: Record<OrigemDoFaltou, number>;
+}
+
+/** O custo de IA da semana: a análise das contas e as partes do Auditor. */
+export interface CustoDeIa {
+  total_usd: number;
+  analise_usd: number;
+  conversa_usd: number;
+  provas_usd: number;
+  revisor_usd: number;
+  medio_por_conta_usd: number;
+  contas: number;
+}
+
 export interface Painel {
   semana: { inicio: string; fim: string };
   filtros: { operadoras: { id: string; sigla: string; nome: string }[] };
@@ -46,7 +70,8 @@ export interface Painel {
   itens_que_faltam?: { codigo: string; descricao: string | null; contas: number; valor: number }[];
   producao: LinhaDeProducao[];
   nivel_evidencia?: IncluidoNaSemana[];
-  custo_ia?: { total_usd: number; medio_por_conta_usd: number; contas: number };
+  custo_ia?: CustoDeIa;
+  faltou_isto?: FaltouIstoNaSemana[];
   /** Só para quem tem a Conferência da coordenação (#1143). */
   coordenacao?: { valor_incluido: number; lembretes_incluidos: number };
 }
@@ -81,6 +106,22 @@ export const ROTULO_NIVEL: Record<NivelDeEvidencia, string> = {
   PRESCRITO: "Prescrito",
   PRESCRITO_SN: "Prescrito SN",
   POR_REGRA: "Por regra",
+};
+
+export const CLASSIFICACOES_DO_FALTOU: ClassificacaoDoFaltou[] = ["REGRA", "LEITURA", "DEFEITO", "SEM_CLASSIFICACAO"];
+
+export const ROTULO_CLASSIFICACAO_DO_FALTOU: Record<ClassificacaoDoFaltou, string> = {
+  REGRA: "Regra",
+  LEITURA: "Leitura",
+  DEFEITO: "Defeito",
+  SEM_CLASSIFICACAO: "Sem classificação",
+};
+
+export const ORIGENS_DO_FALTOU: OrigemDoFaltou[] = ["PESSOA", "AGENTE"];
+
+export const ROTULO_ORIGEM_DO_FALTOU: Record<OrigemDoFaltou, string> = {
+  PESSOA: "Pessoa",
+  AGENTE: "Agente",
 };
 
 export const ROTULO_TIPO: Record<TipoDeConta, string> = {

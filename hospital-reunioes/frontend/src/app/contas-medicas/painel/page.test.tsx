@@ -7,7 +7,7 @@
  *
  * A tela não soma nada: o servidor manda cada cartão e cada bloco pronto, e a
  * faturista recebe só a própria linha de produção. O que se trava aqui é o
- * que aparece (os 4 cartões e os 6 blocos, com os números do payload), o que
+ * que aparece (os 4 cartões e os 7 blocos, com os números do payload), o que
  * some para a faturista e o que cada filtro pede ao servidor.
  */
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
@@ -97,7 +97,29 @@ const PAINEL: Painel = {
     semana("2026-09-28", { REGISTRADO: 70, PRESCRITO: 30 }),
     semana("2026-10-05", { REGISTRADO: 100, PRESCRITO: 40, PRESCRITO_SN: 60, POR_REGRA: 50 }),
   ],
-  custo_ia: { total_usd: 1.2, medio_por_conta_usd: 0.4, contas: 3 },
+  custo_ia: {
+    total_usd: 1.7,
+    analise_usd: 1.05,
+    conversa_usd: 0.25,
+    provas_usd: 0.3,
+    revisor_usd: 0.1,
+    medio_por_conta_usd: 0.35,
+    contas: 3,
+  },
+  faltou_isto: [
+    {
+      semana: "2026-09-28",
+      total: 1,
+      classificacao: { REGRA: 0, LEITURA: 1, DEFEITO: 0, SEM_CLASSIFICACAO: 0 },
+      origem: { PESSOA: 1, AGENTE: 0 },
+    },
+    {
+      semana: "2026-10-05",
+      total: 5,
+      classificacao: { REGRA: 2, LEITURA: 1, DEFEITO: 1, SEM_CLASSIFICACAO: 1 },
+      origem: { PESSOA: 3, AGENTE: 2 },
+    },
+  ],
 };
 
 const DA_FATURISTA: Painel = {
@@ -135,10 +157,11 @@ const BLOCOS = [
   "Produção por faturista",
   "R$ incluído por nível de evidência",
   "Custo de IA",
+  "Faltou isto por semana",
 ];
 
 describe("o Painel", () => {
-  it("mostra os 4 cartões e os 6 blocos com os números do servidor", async () => {
+  it("mostra os 4 cartões e os 7 blocos com os números do servidor", async () => {
     servidorResponde(PAINEL);
 
     render(<PainelPage />);
@@ -175,8 +198,21 @@ describe("o Painel", () => {
     expect(producao[1].textContent).toContain("R$ 30,00");
 
     const custo = screen.getByRole("region", { name: "Custo de IA" });
-    expect(custo.textContent).toContain("US$ 1,20");
-    expect(custo.textContent).toContain("US$ 0,40 por conta");
+    expect(custo.textContent).toContain("US$ 1,70");
+    expect(custo.textContent).toContain("US$ 0,35 por conta");
+    const parte = (nome: string) => within(custo).getByText(nome).closest("li")?.textContent;
+    expect(parte("Análise das contas")).toContain("US$ 1,05");
+    expect(parte("Conversas com o Auditor")).toContain("US$ 0,25");
+    expect(parte("Provas de regra")).toContain("US$ 0,30");
+    expect(parte("Revisor")).toContain("US$ 0,10");
+
+    const faltou = within(screen.getByRole("region", { name: "Faltou isto por semana" })).getAllByRole("row");
+    const cabecalho = Array.from(faltou[0].querySelectorAll("th")).map((th) => th.textContent);
+    expect(cabecalho).toEqual(["Semana", "Total", "Regra", "Leitura", "Defeito", "Sem classificação", "Pessoa", "Agente"]);
+    // A semana escolhida no alto, a anterior embaixo.
+    const celulas = (linha: HTMLElement) => Array.from(linha.querySelectorAll("td")).map((td) => td.textContent);
+    expect(celulas(faltou[1])).toEqual(["05/10", "5", "2", "1", "1", "1", "3", "2"]);
+    expect(celulas(faltou[2])).toEqual(["28/09", "1", "0", "1", "0", "0", "1", "0"]);
 
     expect(screen.getByText(/05\/10 a 11\/10\/2026/)).toBeTruthy();
   });

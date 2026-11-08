@@ -2,6 +2,7 @@ import type { Painel } from "@/lib/contas-medicas/painel";
 
 import { BlocoCausaRaiz } from "./BlocoCausaRaiz";
 import { BlocoCustoIa } from "./BlocoCustoIa";
+import { BlocoFaltouIsto } from "./BlocoFaltouIsto";
 import { BlocoItensQueFaltam } from "./BlocoItensQueFaltam";
 import { BlocoNivelEvidencia } from "./BlocoNivelEvidencia";
 import { BlocoNotaPorSemana } from "./BlocoNotaPorSemana";
@@ -38,6 +39,7 @@ export function TelaDoPainel({ painel }: { painel: Painel }) {
         <BlocoProducao linhas={painel.producao} />
         {painel.nivel_evidencia && <BlocoNivelEvidencia semanas={painel.nivel_evidencia} />}
         {painel.custo_ia && <BlocoCustoIa custo={painel.custo_ia} />}
+        {painel.faltou_isto && <BlocoFaltouIsto semanas={painel.faltou_isto} />}
       </div>
     </div>
   );

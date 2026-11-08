@@ -36,6 +36,14 @@ CAUSAS = ("DISPENSACAO", "REGRA_AUTOMATICA", "CADASTRO_PRECO", "REGISTRO_ASSISTE
 # Os níveis de evidência, na ordem do adendo v1.1 (item 4).
 NIVEIS = ("REGISTRADO", "PRESCRITO", "PRESCRITO_SN", "POR_REGRA")
 
+# Os passos do Auditor (ADR 0081): a conversa, a Prova da regra e o segundo
+# agente. Contam na semana da chamada, separados da análise das Contas.
+PASSOS_DO_AUDITOR = ("CONVERSA", "PROVA", "REVISOR")
+
+# A classificação do Faltou isto pelo Auditor, e o que ele ainda não classificou.
+CLASSIFICACOES = ("REGRA", "LEITURA", "DEFEITO", "SEM_CLASSIFICACAO")
+ORIGENS = ("PESSOA", "AGENTE")
+
 # Quantos itens a fila de parametrização para a consultoria do MV mostra.
 ITENS_QUE_FALTAM = 10
 
@@ -58,8 +66,7 @@ def _meia_noite(dia: date) -> str:
 
 
 def _semana_da_conta(conta: dict) -> date:
-    instante = datetime.fromisoformat(conta["concluida_em"]).astimezone(FUSO_DO_HOSPITAL)
-    return segunda_da_semana(instante.date())
+    return _semana_do_instante(conta["concluida_em"])
 
 
 def _contas_concluidas(supabase, de: date, ate: date, faturista_id: str | None) -> list[dict]:
@@ -227,20 +234,28 @@ def _incluido_por_nivel(linhas: list[dict]) -> dict[str, float]:
     return {nivel: _dinheiro(valor) for nivel, valor in soma.items()}
 
 
-def _custo_das_provas(supabase, segunda: date, operadora_id: str | None) -> Decimal:
-    """O custo das chamadas da Prova da regra (#1488) feitas na semana. Elas
-    não têm conta: são da Operadora, que se acha pelo atendimento da Conta
-    refeita. O filtro de tipo de conta não vale para elas."""
+def _semana_do_instante(instante: str) -> date:
+    return segunda_da_semana(datetime.fromisoformat(instante).astimezone(FUSO_DO_HOSPITAL).date())
+
+
+def _do_auditor_na_semana(supabase, segunda: date, operadora_id: str | None) -> dict[str, Decimal]:
+    """O custo das chamadas do Auditor (CONVERSA), da Prova da regra (PROVA) e
+    do segundo agente (REVISOR) feitas na semana, por passo. Elas contam pela
+    semana da chamada, não pela da Conta: a Prova não tem conta, e a conversa
+    pode ser sobre uma Conta concluída semanas antes. A Operadora se acha pelo
+    atendimento da chamada; a chamada sem atendimento (a conversa da Operadora)
+    fica fora quando a operadora é escolhida. O filtro de tipo de conta não
+    vale para elas."""
     chamadas = ler_tudo(
         lambda: (
             supabase.table("cm_chamada_ia")
-            .select("id, atendimento_id, custo_usd")
-            .eq("passo", "PROVA")
+            .select("id, atendimento_id, passo, custo_usd")
+            .in_("passo", list(PASSOS_DO_AUDITOR))
             .gte("criado_em", _meia_noite(segunda))
             .lt("criado_em", _meia_noite(segunda + timedelta(weeks=1)))
             .order("id")
         ),
-        rotulo="provas do Painel",
+        rotulo="chamadas do Auditor no Painel",
     )
     if operadora_id:
         atendimentos = _em_lotes(
@@ -249,25 +264,81 @@ def _custo_das_provas(supabase, segunda: date, operadora_id: str | None) -> Deci
             "id, operadora_id",
             "id",
             (c["atendimento_id"] for c in chamadas if c.get("atendimento_id")),
-            "atendimentos das provas",
+            "atendimentos das chamadas do Auditor",
         )
         da_operadora = {a["id"] for a in atendimentos if a.get("operadora_id") == operadora_id}
         chamadas = [c for c in chamadas if c.get("atendimento_id") in da_operadora]
-    return sum((Decimal(str(c.get("custo_usd") or 0)) for c in chamadas), Decimal(0))
+    soma = dict.fromkeys(PASSOS_DO_AUDITOR, Decimal(0))
+    for chamada in chamadas:
+        soma[chamada["passo"]] += Decimal(str(chamada.get("custo_usd") or 0))
+    return soma
 
 
-def _custo_ia(contas: list[dict], provas: Decimal) -> dict[str, Any]:
-    """A soma do custo de IA das Contas (o de todas as chamadas de cada uma,
-    inclusive as de uma nova análise) mais o das Provas da regra da semana, e
-    a média por Conta, que é só das Contas."""
-    das_contas = sum((Decimal(str(c.get("custo_usd") or 0)) for c in contas), Decimal(0))
-    medio = das_contas / len(contas) if contas else Decimal(0)
+def _do_auditor_nas_contas(supabase, contas: list[dict]) -> Decimal:
+    """O que as chamadas do Auditor gravadas com a conta somam no custo das
+    Contas: a soma da Conta inclui todas as chamadas dela, e essas já contam
+    na parte do Auditor."""
+    chamadas = _em_lotes(
+        supabase,
+        "cm_chamada_ia",
+        "id, conta_id, passo, custo_usd",
+        "conta_id",
+        (c["id"] for c in contas),
+        "chamadas das contas do Painel",
+    )
+    return sum(
+        (Decimal(str(c.get("custo_usd") or 0)) for c in chamadas if c.get("passo") in PASSOS_DO_AUDITOR), Decimal(0)
+    )
+
+
+def _custo_ia(contas: list[dict], do_auditor_nas_contas: Decimal, do_auditor: dict[str, Decimal]) -> dict[str, Any]:
+    """O custo de IA da semana: a análise das Contas concluídas nela (os
+    passos A e B e as chamadas curtas, inclusive as de uma nova análise), mais
+    as conversas, as provas e o revisor feitos na semana, cada um na própria
+    parte. A média por Conta é só a da análise."""
+    analise = sum((Decimal(str(c.get("custo_usd") or 0)) for c in contas), Decimal(0)) - do_auditor_nas_contas
+    medio = analise / len(contas) if contas else Decimal(0)
     return {
-        "total_usd": float(round(das_contas + provas, 4)),
-        "provas_usd": float(round(provas, 4)),
+        "total_usd": float(round(analise + sum(do_auditor.values(), Decimal(0)), 4)),
+        "analise_usd": float(round(analise, 4)),
+        "conversa_usd": float(round(do_auditor["CONVERSA"], 4)),
+        "provas_usd": float(round(do_auditor["PROVA"], 4)),
+        "revisor_usd": float(round(do_auditor["REVISOR"], 4)),
         "medio_por_conta_usd": float(round(medio, 4)),
         "contas": len(contas),
     }
+
+
+def _faltou_isto(supabase, semanas: list[date], operadora_id: str | None, tipo: str | None) -> list[dict[str, Any]]:
+    """Os Faltou isto apontados em cada semana (a do dia do apontamento), por
+    classificação do Auditor e por origem. Os filtros de operadora e de tipo
+    valem pela Conta do apontamento, concluída ou não."""
+    fim = semanas[-1] + timedelta(weeks=1)
+    apontamentos = ler_tudo(
+        lambda: (
+            supabase.table("cm_faltou_isto")
+            .select("id, conta_id, origem, classificacao, criado_em")
+            .gte("criado_em", _meia_noite(semanas[0]))
+            .lt("criado_em", _meia_noite(fim))
+            .order("id")
+        ),
+        rotulo="Faltou isto do Painel",
+    )
+    if operadora_id or tipo:
+        contas = _em_lotes(
+            supabase, "cm_conta", "id, atendimento_id", "id", (a["conta_id"] for a in apontamentos), "contas do Faltou"
+        )
+        das_filtradas = {c["id"] for c in _filtrar(supabase, contas, operadora_id, tipo)}
+        apontamentos = [a for a in apontamentos if a["conta_id"] in das_filtradas]
+
+    serie = {
+        s: {"classificacao": dict.fromkeys(CLASSIFICACOES, 0), "origem": dict.fromkeys(ORIGENS, 0)} for s in semanas
+    }
+    for apontamento in apontamentos:
+        ponto = serie[_semana_do_instante(apontamento["criado_em"])]
+        ponto["classificacao"][apontamento.get("classificacao") or "SEM_CLASSIFICACAO"] += 1
+        ponto["origem"][apontamento["origem"]] += 1
+    return [{"semana": s.isoformat(), "total": sum(p["classificacao"].values()), **p} for s, p in serie.items()]
 
 
 def _nota_media(contas: list[dict]) -> float | None:
@@ -340,5 +411,10 @@ def montar_painel(
         "nivel_evidencia": [
             {"semana": s.isoformat(), **_incluido_por_nivel(linhas_de(por_semana[s]))} for s in semanas
         ],
-        "custo_ia": _custo_ia(da_semana, _custo_das_provas(supabase, segunda, operadora_id)),
+        "custo_ia": _custo_ia(
+            da_semana,
+            _do_auditor_nas_contas(supabase, da_semana),
+            _do_auditor_na_semana(supabase, segunda, operadora_id),
+        ),
+        "faltou_isto": _faltou_isto(supabase, semanas, operadora_id, tipo),
     }
