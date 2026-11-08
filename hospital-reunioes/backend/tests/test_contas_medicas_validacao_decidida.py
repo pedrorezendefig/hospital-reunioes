@@ -167,8 +167,26 @@ def _tres_temas(banco: _Banco) -> dict[str, dict]:
     return {t["tipo"]: t for t in _fila_de_validacao(banco)["temas"]}
 
 
+def _o_que_a_tela_mostra(banco: _Banco, temas: list[str]) -> list[dict]:
+    """O corpo do lote como a tela manda: a recomendação que cada cartão mostrava."""
+    fila = {t["id"]: t for t in _fila_de_validacao(banco)["temas"]}
+    return [
+        {
+            "id": tema_id,
+            "decisao": fila[tema_id]["recomendacao"]["decisao"],
+            "recomendado_em": fila[tema_id]["recomendacao"]["recomendado_em"],
+        }
+        for tema_id in temas
+        if fila.get(tema_id, {}).get("recomendacao")
+    ]
+
+
+def _postar_lote(banco: _Banco, corpo: list[dict], quem: str = "gestao"):
+    return _cliente(banco, quem).post("/api/contas-medicas/validacao/lote", json={"temas": corpo})
+
+
 def _aprovar(banco: _Banco, temas: list[str], quem: str = "gestao"):
-    return _cliente(banco, quem).post("/api/contas-medicas/validacao/lote", json={"temas": temas})
+    return _postar_lote(banco, _o_que_a_tela_mostra(banco, temas), quem)
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -338,10 +356,55 @@ class TestOLote:
         banco = _cenario()
         temas = _tres_temas(banco)
 
-        resposta = _aprovar(banco, [t["id"] for t in temas.values()])
+        resposta = _postar_lote(
+            banco,
+            [
+                {"id": t["id"], "decisao": "DESCARTAR", "recomendado_em": "2026-11-08T12:00:00+00:00"}
+                for t in temas.values()
+            ],
+        )
 
         assert resposta.status_code == 200, resposta.text
         assert {t["estado"] for t in banco.tabelas["cm_validacao_tema"]} == {"ABERTO"}
+
+    def test_recomendacao_trocada_depois_que_a_tela_abriu_nao_e_aplicada(self, provedor):
+        banco = _cenario()
+        temas = _tres_temas(banco)
+        recomendar_abertos(banco)
+        observacao = temas["OBSERVACAO"]["id"]
+        o_que_a_tela_mostrou = _o_que_a_tela_mostra(banco, [observacao])
+        # Com a tela aberta, o time escreve de novo e o relógio grava outra resposta.
+        concluida = _cliente(banco, "faturista").post(
+            f"/api/contas-medicas/contas/{C1}/guia/concluir",
+            json={"observacao": f"A {REGRA_VIGENTE} também não vale para o Clexane desta conta."},
+        )
+        assert concluida.status_code == 200, concluida.text
+        provedor.recomendacoes[f"Observações sobre a regra {REGRA_VIGENTE}"] = {
+            "decisao": "RESPONDER",
+            "motivo": "Resposta que ninguém leu.",
+            "texto": "Texto escrito depois que a tela abriu.",
+        }
+        assert recomendar_abertos(banco) == 1
+
+        resposta = _postar_lote(banco, o_que_a_tela_mostrou)
+
+        assert resposta.status_code == 200, resposta.text
+        assert [f["id"] for f in resposta.json()["falhas"]] == [observacao]
+        assert "mudou" in resposta.json()["falhas"][0]["motivo"]
+        assert resposta.json()["decididos"] == []
+        assert _tema_no_banco(banco, observacao)["estado"] == "ABERTO"
+        assert _guia(banco, C2)["respostas"] == []
+
+    def test_lote_que_traz_outra_decisao_nao_aplica_a_recomendacao(self, provedor):
+        banco = _cenario()
+        temas = _tres_temas(banco)
+        recomendar_abertos(banco)
+        [bloqueado] = _o_que_a_tela_mostra(banco, [temas["BLOQUEADO"]["id"]])
+
+        resposta = _postar_lote(banco, [{**bloqueado, "decisao": "ENVIAR_AO_CADASTRO"}])
+
+        assert [f["id"] for f in resposta.json()["falhas"]] == [bloqueado["id"]]
+        assert _tema_no_banco(banco, bloqueado["id"])["estado"] == "ABERTO"
 
     def test_enviar_ao_cadastro_aprovado_no_lote_deixa_a_lista_para_baixar(self, provedor):
         banco = _cenario()

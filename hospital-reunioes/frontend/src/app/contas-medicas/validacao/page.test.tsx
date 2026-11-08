@@ -325,6 +325,7 @@ const DECIDIDA: FilaDeValidacao = {
             feitas_que_sumiriam: 1,
             por_conta: [{ numero_conta: "48803", entrariam: 2, sairiam: 1, mudariam: 0 }],
           },
+          recomendado_em: "2026-11-08T10:00:00+00:00",
         },
       };
     }
@@ -336,6 +337,7 @@ const DECIDIDA: FilaDeValidacao = {
           motivo: "A regra já cobre o caso.",
           texto: "Na ALFA o Clexane vem no pacote: a regra segue como está.",
           prova: null,
+          recomendado_em: "2026-11-08T10:30:00+00:00",
         },
       };
     }
@@ -408,7 +410,7 @@ describe("a fila decidida pelo Auditor (issue #1491)", () => {
     expect(regra.textContent).toContain("A regra não mudaria nada nas 4 contas concluídas da prova.");
   });
 
-  it("Aprovar o lote manda os temas com recomendação e relê a fila", async () => {
+  it("Aprovar o lote manda a recomendação que cada cartão mostrava e relê a fila", async () => {
     const pedidos = servidorDoLote(LOTE_OK);
     abrir();
     await screen.findByRole("article", { name: "Regra ALFA-PRI-03" });
@@ -419,7 +421,12 @@ describe("a fila decidida pelo Auditor (issue #1491)", () => {
       expect(pedidos).toContainEqual({
         url: "/api/contas-medicas/validacao/lote",
         metodo: "POST",
-        corpo: { temas: ["regra", "observacao"] },
+        corpo: {
+          temas: [
+            { id: "regra", decisao: "VALIDAR_REGRA", recomendado_em: "2026-11-08T10:00:00+00:00" },
+            { id: "observacao", decisao: "RESPONDER", recomendado_em: "2026-11-08T10:30:00+00:00" },
+          ],
+        },
       }),
     );
     await waitFor(() => expect(pedidos.filter((p) => p.url === "/api/contas-medicas/validacao")).toHaveLength(2));

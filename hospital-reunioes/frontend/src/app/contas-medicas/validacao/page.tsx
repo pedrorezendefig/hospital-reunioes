@@ -26,6 +26,7 @@ import {
   type FilaDeValidacao,
   ROTA_DA_FILA,
   type Tema,
+  type TemaDoLote,
   aprovarLote,
   baixarCadastro,
   decidir,
@@ -52,9 +53,9 @@ function LoteDoAuditor({
   ocupado,
   onAprovar,
 }: {
-  temas: string[];
+  temas: TemaDoLote[];
   ocupado: boolean;
-  onAprovar: (temas: string[]) => void;
+  onAprovar: (temas: TemaDoLote[]) => void;
 }) {
   return (
     <section
@@ -155,7 +156,7 @@ export default function ValidacaoPage() {
     await carregar(token);
   }
 
-  async function aoAprovarOLote(temas: string[]) {
+  async function aoAprovarOLote(temas: TemaDoLote[]) {
     if (!token) return;
     setOcupado("lote");
     const { resposta, erro: falha } = await aprovarLote(token, temas);
@@ -221,7 +222,11 @@ export default function ValidacaoPage() {
 
           {fila.temas.some((t) => t.recomendacao) && (
             <LoteDoAuditor
-              temas={fila.temas.filter((t) => t.recomendacao).map((t) => t.id)}
+              temas={fila.temas.flatMap((t) =>
+                t.recomendacao
+                  ? [{ id: t.id, decisao: t.recomendacao.decisao, recomendado_em: t.recomendacao.recomendado_em }]
+                  : [],
+              )}
               ocupado={ocupado === "lote"}
               onAprovar={aoAprovarOLote}
             />

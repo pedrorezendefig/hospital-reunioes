@@ -204,11 +204,20 @@ _RECUSAS = (
 )
 
 
-def aprovar_lote(supabase, tema_ids: list[str], me: dict) -> dict[str, Any]:
+# A recomendação gravada não é mais a que a tela mostrou: uma observação nova
+# apagou a antiga e o relógio gravou outra. Ninguém viu esta, então o lote não
+# a aplica.
+_RECOMENDACAO_MUDOU = "A recomendação do Auditor mudou depois que a tela abriu. Confira o cartão de novo."
+
+
+def aprovar_lote(supabase, vistos: list[dict[str, str]], me: dict) -> dict[str, Any]:
     """Aplica a recomendação de cada Tema aberto do lote pelo caminho do
-    cartão. O Tema já decidido (corrigido pela pessoa) ou sem recomendação fica
-    como está; o que recusar volta em `falhas`, e o resto segue."""
-    ids = list(dict.fromkeys(tema_ids))
+    cartão, desde que seja a que a tela mostrou (`decisao` e `recomendado_em`
+    de cada item de `vistos`). O Tema já decidido (corrigido pela pessoa) ou sem
+    recomendação fica como está; o que recusar ou cuja recomendação mudou volta
+    em `falhas`, e o resto segue."""
+    por_id = {v["id"]: v for v in vistos}
+    ids = list(por_id)
     temas = {t["id"]: t for t in _em_lotes(supabase, "cm_validacao_tema", "id", ids, "temas do lote")}
     decididos: list[dict[str, str]] = []
     falhas: list[dict[str, str]] = []
@@ -218,6 +227,10 @@ def aprovar_lote(supabase, tema_ids: list[str], me: dict) -> dict[str, Any]:
         if tema is None or tema.get("estado") != ABERTO or not tema.get("recomendacao"):
             continue
         decisao = tema["recomendacao"]
+        visto = por_id[tema_id]
+        if (visto["decisao"], visto["recomendado_em"]) != (decisao, tema.get("recomendado_em")):
+            falhas.append({"id": tema_id, "titulo": tema["titulo"], "motivo": _RECOMENDACAO_MUDOU})
+            continue
         _motivo, texto = separar_motivo(tema.get("recomendacao_motivo"))
         try:
             decidir_tema(supabase, tema_id, {"decisao": decisao, "texto": texto or None}, me)

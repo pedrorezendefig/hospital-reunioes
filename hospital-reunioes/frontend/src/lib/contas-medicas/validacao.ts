@@ -41,6 +41,8 @@ export interface Recomendacao {
   motivo: string;
   texto: string | null;
   prova: ProvaDoTema | null;
+  /** O carimbo da recomendação: o lote o devolve para só aplicar a que a tela mostrou. */
+  recomendado_em: string;
 }
 
 export interface Tema {
@@ -143,10 +145,18 @@ export interface RespostaDoLote {
   cadastro: string[];
 }
 
-/** "Aprovar o lote": cada tema recebe a recomendação do Auditor no servidor. */
+/** Um cartão do lote e a recomendação que ele mostrava. */
+export interface TemaDoLote {
+  id: string;
+  decisao: Recomendacao["decisao"];
+  recomendado_em: string;
+}
+
+/** "Aprovar o lote": cada tema recebe a recomendação do Auditor no servidor,
+ * se ainda for a que o cartão mostrava. */
 export async function aprovarLote(
   token: string,
-  temas: string[],
+  temas: TemaDoLote[],
 ): Promise<{ resposta?: RespostaDoLote; erro?: string }> {
   const res = await fetch(`${ROTA_DA_FILA}/lote`, {
     method: "POST",

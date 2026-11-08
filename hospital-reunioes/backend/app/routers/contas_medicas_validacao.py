@@ -93,10 +93,18 @@ async def decidir(
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from None
 
 
+class TemaDoLote(BaseModel):
+    """Um cartão do lote e a recomendação que ele mostrava."""
+
+    id: UUID
+    decisao: str = Field(max_length=40)
+    recomendado_em: str = Field(max_length=64)
+
+
 class Lote(BaseModel):
     """Os temas que a tela mostrava com a recomendação do Auditor."""
 
-    temas: list[UUID] = Field(max_length=500)
+    temas: list[TemaDoLote] = Field(max_length=500)
 
 
 @router.post("/validacao/lote")
@@ -108,9 +116,11 @@ async def aprovar_o_lote(
     supabase=Depends(get_supabase_client),
 ) -> dict:
     """ "Aprovar o lote" (#1491): cada tema aberto com recomendação recebe a
-    decisão do Auditor pelo caminho do cartão. Devolve os decididos, os que
-    recusaram, com o motivo, e os enviados ao cadastro, para baixar a lista."""
-    return aprovar_lote(supabase, [str(t) for t in corpo.temas], me)
+    decisão do Auditor pelo caminho do cartão, se ainda for a que a tela
+    mostrou. Devolve os decididos, os que recusaram, com o motivo, e os
+    enviados ao cadastro, para baixar a lista."""
+    vistos = [{"id": str(t.id), "decisao": t.decisao, "recomendado_em": t.recomendado_em} for t in corpo.temas]
+    return aprovar_lote(supabase, vistos, me)
 
 
 @router.post("/validacao/temas/{tema_id}/leitura")

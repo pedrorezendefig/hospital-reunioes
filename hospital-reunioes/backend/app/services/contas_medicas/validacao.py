@@ -306,6 +306,8 @@ def _recomendacao(tema: dict, provas: dict[str, dict]) -> dict[str, Any] | None:
         "motivo": motivo,
         "texto": texto or None,
         "prova": _resumo_da_prova(prova) if prova else None,
+        # O lote devolve este carimbo: só aplica a recomendação que a tela mostrou.
+        "recomendado_em": tema.get("recomendado_em"),
     }
 
 
