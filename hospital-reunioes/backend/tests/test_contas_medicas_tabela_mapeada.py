@@ -385,13 +385,15 @@ XLS = "application/vnd.ms-excel"
 class TestXls:
     def test_xls_chega_ao_mapeamento_com_as_mesmas_linhas_que_o_xlsx_equivalente(self, ia):
         cliente, banco = _cliente(GESTAO, _banco_com_bucket(_com_operadoras("ALFA")))
-        linhas = _linhas(25)
+        # O código TUSS digitado como número, como o Excel guarda.
+        linhas = [[valor, descricao, int(codigo), *resto] for valor, descricao, codigo, *resto in _linhas(25)]
 
         do_xlsx = _propor(cliente, "tabela-alfa.xlsx", _xlsx(CABECALHO, linhas))
         do_xls = _propor(cliente, "tabela-alfa.xls", _xls(CABECALHO, linhas), tipo=XLS)
 
         assert do_xls.status_code == 200, do_xls.text
         assert do_xls.json() == do_xlsx.json()
+        assert do_xls.json()["amostra"][3]["codigo"] == "70000003"
         # A IA viu a mesma tabela nos dois envios.
         assert ia.chamadas[1]["conteudo"] == ia.chamadas[0]["conteudo"]
         assert banco.linhas("cm_tabela_preco") == []
