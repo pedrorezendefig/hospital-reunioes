@@ -88,7 +88,8 @@ Para cada fatia aprovada, publique uma issue com `gh issue create`, usando o tem
 
 ```bash
 REPO=$(gh repo view --json nameWithOwner -q .nameWithOwner)
-URL=$(gh issue create --title "<título pt-BR>" --body "<corpo>" --label ready-for-agent --label "fatia:<P|M|G>")
+DONO=$(gh issue view "$PRD" --json assignees -q '.assignees[0].login // empty')  # a fatia nasce com o dono do PRD
+URL=$(gh issue create --title "<título pt-BR>" --body "<corpo>" --label ready-for-agent --label "fatia:<P|M|G>" --assignee "${DONO:-@me}")
 CHILD=${URL##*/}                                           # número da fatia recém-criada
 CHILD_ID=$(gh api "repos/$REPO/issues/$CHILD" --jq '.id')  # database id (≠ número da issue)
 gh api --method POST "repos/$REPO/issues/$PRD/sub_issues" -F sub_issue_id="$CHILD_ID"

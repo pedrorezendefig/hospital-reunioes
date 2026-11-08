@@ -14,6 +14,7 @@ Uso:
 from __future__ import annotations
 
 import json
+import subprocess
 import os
 import re
 import sys
@@ -85,12 +86,12 @@ def imprimir(dado: dict) -> str:
     return "\n".join(saida)
 
 
-def apta(i: dict, designado_tira_da_fila: bool) -> bool:
+def apta(i: dict, designado_tira_da_fila: bool, login: str) -> bool:
     """A regra da montar-ondas-enxutas com o que o Coletor já leu: `ready-for-agent`, sem claim
-    (`in-progress`) e sem PR. Designar alguém só é claim no Projeto com `designado_tira_da_fila` (o
-    Hospital): ali a issue com assignee é de outra sessão; nos outros, a `em_andamento` só por assignee entra."""
+    (`in-progress`) e sem PR. No Projeto com `designado_tira_da_fila` (o Hospital), o assignee é o dono
+    do card e a Onda de quem roda pega só os cards dele; nos outros, o assignee não conta."""
     labels = i.get("labels") or []
-    if designado_tira_da_fila and i.get("designada"):
+    if designado_tira_da_fila and not (i.get("designada") and login in (i.get("responsaveis") or [])):
         return False
     return "ready-for-agent" in labels and "in-progress" not in labels and i.get("fase") not in FORA_DA_FILA
 
@@ -108,10 +109,10 @@ def sessao_de(projeto: dict) -> str:
     return re.sub(r"[^a-z0-9]+", "-", projeto["nome"].lower()).strip("-") or "projeto"
 
 
-def montar_onda(projeto: dict) -> dict | None:
+def montar_onda(projeto: dict, login: str) -> dict | None:
     """As Ondas de um Projeto: as aptas em ondas de até 3 (fatia:P antes), e as bloqueadas no fim, para a
     /onda-enxuta puxar quando a bloqueadora fechar. Projeto sem apta não ganha Onda."""
-    na_fila = [i for i in projeto["issues"] if apta(i, bool(projeto.get("designado_tira_da_fila")))]
+    na_fila = [i for i in projeto["issues"] if apta(i, bool(projeto.get("designado_tira_da_fila")), login)]
     aptas = sorted((i for i in na_fila if i.get("fase") != "bloqueada"), key=ordem)
     if not aptas:
         return None
@@ -135,6 +136,11 @@ def montar_onda(projeto: dict) -> dict | None:
     return {"fila": fila, "fora": fora, "paralelo": paralelo, "prompt": prompt}
 
 
+def quem_roda() -> str:
+    """O login do GitHub de quem roda: no Projeto em que o assignee é o dono, a Onda é dos cards dele."""
+    return subprocess.run(["gh", "api", "user", "-q", ".login"], capture_output=True, text=True, check=True).stdout.strip()
+
+
 def planejar(dado: dict) -> str:
     """O plano de Ondas de todos os Projetos. Grava o prompt de cada um e termina na pergunta: lançar é o
     `--lancar`, que só roda com o "pode". Apaga antes os prompts do plano anterior: o `--lancar` só acha
@@ -143,10 +149,11 @@ def planejar(dado: dict) -> str:
     for velho in PROMPTS.glob("*-onda1.md"):
         velho.unlink()
     saida, ids, nomes, sem_onda = [], [], [], []
+    login = quem_roda()
     for c in dado["categorias"]:
         bloco = []
         for p in c["projetos"]:
-            onda = None if p.get("erro") else montar_onda(p)
+            onda = None if p.get("erro") else montar_onda(p, login)
             if not onda:
                 sem_onda.append(p["nome"])
                 continue

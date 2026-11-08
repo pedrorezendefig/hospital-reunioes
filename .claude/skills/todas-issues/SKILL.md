@@ -39,7 +39,7 @@ Sem argumento, vale a leitura que o PedroOS guardou nos últimos 5 minutos. Com 
    python3 ~/.claude/skills/todas-issues/scripts/todas_issues.py --plano [--atualizar]
    ```
 
-   O script segue a regra da `montar-ondas-enxutas` com o que o PedroOS já leu: entra a issue `ready-for-agent` sem `in-progress` e sem PR (designar alguém só é claim no Projeto com `designado_tira_da_fila`, o Hospital: ali a issue com assignee fica fora), em ondas de até 3, `fatia:P` antes de `M` e `G`; a bloqueada entra no fim, para a `/onda-enxuta` puxar quando a bloqueadora fechar. Projeto sem issue apta não ganha Onda. O prompt de cada Projeto fica em `$TMPDIR/onda-enxuta/todas-issues/<repo>-onda1.md` (cada `--plano` apaga os do plano anterior, e o `--lancar` só acha o Projeto que tem Onda no último plano) e começa pelo comando `/onda-enxuta --sessao <projeto> --onda 1 --paralelo N`.
+   O script segue a regra da `montar-ondas-enxutas` com o que o PedroOS já leu: entra a issue `ready-for-agent` sem `in-progress` e sem PR (no Projeto com `designado_tira_da_fila`, o Hospital, o assignee é o dono do card e a Onda de quem roda pega só os cards designados a ele; card de outro dono ou sem dono fica fora), em ondas de até 3, `fatia:P` antes de `M` e `G`; a bloqueada entra no fim, para a `/onda-enxuta` puxar quando a bloqueadora fechar. Projeto sem issue apta não ganha Onda. O prompt de cada Projeto fica em `$TMPDIR/onda-enxuta/todas-issues/<repo>-onda1.md` (cada `--plano` apaga os do plano anterior, e o `--lancar` só acha o Projeto que tem Onda no último plano) e começa pelo comando `/onda-enxuta --sessao <projeto> --onda 1 --paralelo N`.
 
 2. A saída termina em "Posso lançar?". **Pare ali e espere a resposta.** Sem o "pode", nada é lançado.
 

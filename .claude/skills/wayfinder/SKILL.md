@@ -66,9 +66,9 @@ Sub-issue do mapa. O corpo é a pergunta, do tamanho de uma sessão:
 
 Cada ticket leva um label `wayfinder:<tipo>`. Bloqueio entre tickets usa a dependência nativa do GitHub ("blocked by"), que desenha o frontier na própria interface.
 
-**Claim:** assinar a issue para si **antes** de qualquer trabalho. O assignee é o lock. Ticket aberto e sem assignee está livre.
+**Claim:** pôr a label `in-progress` **antes** de qualquer trabalho. A label é o lock; o assignee é o dono do ticket (quem o criou, ou a quem foi passado) e não trava nada. Ticket aberto e sem `in-progress` está livre.
 
-**Frontier** = filhas abertas, desbloqueadas e sem assignee.
+**Frontier** = filhas abertas, desbloqueadas e sem `in-progress`.
 
 > **Invariante das duas filas:** ticket wayfinder **nunca** recebe `ready-for-agent` e nunca entra na máquina de estados do `/triage`. A fila de execução (`/pegar-issue`, `/onda-enxuta`) enxerga só issues de build. As filas não colidem.
 
