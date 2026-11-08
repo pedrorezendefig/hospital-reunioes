@@ -32,12 +32,13 @@ from typing import Any
 from app.services.contas_medicas import ia, passo_b
 from app.services.contas_medicas.conferencia import Conferencia, _codigos_de_diaria
 from app.services.contas_medicas.dicionario import dicionario_do_banco
+from app.services.contas_medicas.memoria_edicao import MudancaRecusadaError
 from app.services.contas_medicas.memoria_texto import montar_texto_memoria
 from app.services.contas_medicas.regra_nova import regra_candidata
 from app.services.contas_medicas_conta import Conta, ItemConta
 from app.utils.text_sanitizer import sanitizar_estrutura
 
-__all__ = ["CONTAS_DA_PROVA", "provar_regra"]
+__all__ = ["CONTAS_DA_PROVA", "provar_regra", "resumo_da_prova"]
 
 CONTAS_DA_PROVA = 10
 CONCLUIDAS = ("CONCLUIDA", "CONCLUIDA_COM_PENDENCIA")
@@ -288,6 +289,24 @@ def _provar_conta(
     return {**resumo, "refeita": True, "mudaria": any(diff.values()), **diff}
 
 
+def resumo_da_prova(por_conta: list[dict[str, Any]]) -> dict[str, Any]:
+    """As contas refeitas, se alguma mudaria, as Linhas Feito que sumiriam e o
+    aviso, a partir do resultado por Conta (o `resultado_json` de `cm_prova`)."""
+    refeitas = sum(1 for c in por_conta if c["refeita"])
+    mudaria = any(c["mudaria"] for c in por_conta)
+    aviso = None
+    if not refeitas:
+        aviso = "A operadora não tem conta concluída com os eventos guardados para provar a regra."
+    elif not mudaria:
+        aviso = f"A regra não mudaria nada nas {refeitas} últimas contas concluídas."
+    return {
+        "contas": refeitas,
+        "mudaria": mudaria,
+        "feitas_que_sumiriam": sum(1 for c in por_conta for linha in c["sairiam"] if linha["feito"]),
+        "aviso": aviso,
+    }
+
+
 def provar_regra(
     supabase,
     sigla: str,
@@ -298,8 +317,14 @@ def provar_regra(
     origem: str | None,
     parametro: dict[str, Any] | None,
     autor_id: str | None,
+    codigo: str | None = None,
+    lote_item_id: str | None = None,
 ) -> dict[str, Any]:
-    """A prova da regra conferida pela pessoa, guardada em `cm_prova`."""
+    """A prova da regra conferida pela pessoa, guardada em `cm_prova`.
+
+    Com `codigo`, a regra é a alterada do lote do Auditor (#1490): o texto novo
+    toma o lugar da regra que já existe na memória candidata, em vez de entrar
+    ao lado dela. `lote_item_id` liga a prova ao item do lote."""
     candidata = regra_candidata(
         supabase,
         sigla,
@@ -312,7 +337,13 @@ def provar_regra(
     )
     vigente, nova = candidata["vigente"], candidata["regra"]
     parametros = candidata["parametros"] or vigente.get("parametros_json") or {}
-    regras = [*candidata["regras"], nova]
+    regras = candidata["regras"]
+    if codigo:
+        if not any(r["codigo"] == codigo for r in regras):
+            raise MudancaRecusadaError(f"A regra {codigo} não está na memória vigente de {candidata['sigla']}.")
+        nova = {**nova, "codigo": codigo}
+        regras = [r for r in regras if r["codigo"] != codigo]
+    regras = [*regras, nova]
     operadora = (
         supabase.table("cm_operadora").select("nome").eq("id", candidata["operadora_id"]).execute().data or [{}]
     )[0]
@@ -335,23 +366,18 @@ def provar_regra(
     # O texto que a IA escreveu vai para a tela: sem travessão nem meia-risca.
     por_conta = sanitizar_estrutura(por_conta)
 
-    refeitas = sum(1 for c in por_conta if c["refeita"])
-    mudaria = any(c["mudaria"] for c in por_conta)
-    aviso = None
-    if not refeitas:
-        aviso = "A operadora não tem conta concluída com os eventos guardados para provar a regra."
-    elif not mudaria:
-        aviso = f"A regra não mudaria nada nas {refeitas} últimas contas concluídas."
+    resumo = resumo_da_prova(por_conta)
     prova = (
         supabase.table("cm_prova")
         .insert(
             {
                 "operadora_id": candidata["operadora_id"],
                 "memoria_versao_id": vigente["id"],
+                "lote_item_id": lote_item_id,
                 "regra_codigo": nova["codigo"],
                 "regra_texto": nova["texto"],
-                "contas": refeitas,
-                "mudaria": mudaria,
+                "contas": resumo["contas"],
+                "mudaria": resumo["mudaria"],
                 "resultado_json": por_conta,
                 "criado_por": autor_id,
             }
@@ -359,12 +385,4 @@ def provar_regra(
         .execute()
         .data
     )[0]
-    return {
-        "prova_id": prova["id"],
-        "regra": nova["codigo"],
-        "contas": refeitas,
-        "mudaria": mudaria,
-        "feitas_que_sumiriam": sum(1 for c in por_conta for linha in c["sairiam"] if linha["feito"]),
-        "aviso": aviso,
-        "por_conta": por_conta,
-    }
+    return {"prova_id": prova["id"], "regra": nova["codigo"], **resumo, "por_conta": por_conta}
