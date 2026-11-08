@@ -11,6 +11,9 @@
  * imprime e o dos setores com a acomodação. Só quem tem a permissão "regra
  * contratual e tabelas" usa; o backend recusa de novo, para quem chamar a API
  * direto.
+ *
+ * O "Enviar tabela" da conversa com o auditor (issue #1490) chega aqui com
+ * `?tabela=<sigla>` e abre o envio de tabela já com a operadora escolhida.
  */
 
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -162,6 +165,10 @@ export default function OperadorasPage() {
         ]);
         if (resPlanos.ok) setPlanos((await resPlanos.json()).planos);
         if (resSetores.ok) setSetores((await resSetores.json()).setores);
+        // O atalho "Enviar tabela" da conversa com o auditor (#1490) chega com a
+        // operadora em `?tabela=` e abre o envio já com ela.
+        const daConversa = new URLSearchParams(window.location.search).get("tabela");
+        if (daConversa) setEscolha({ operadora: daConversa.toUpperCase(), categoria: "", vez: 1 });
       } catch (e) {
         console.error("Erro ao carregar as operadoras de Contas médicas:", e);
         setErroGeral("Não foi possível carregar as operadoras.");

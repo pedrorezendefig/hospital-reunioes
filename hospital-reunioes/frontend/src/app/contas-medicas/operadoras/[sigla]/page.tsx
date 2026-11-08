@@ -13,6 +13,10 @@
  * linguagem comum, a IA propõe (regra, parâmetro, conflitos e efeito no Guia)
  * e nada vale antes do "Validar regra". As contas abertas analisadas com a
  * memória anterior aparecem com a marca e o "Reanalisar com a regra nova".
+ *
+ * "Falar com o auditor" (issue #1490) toma o lugar do "Ensinar uma regra
+ * nova" para quem tem "regra contratual e tabelas": o Auditor devolve um lote
+ * de propostas e o "ok" aplica o lote numa versão nova só.
  */
 
 import { useCallback, useEffect, useState } from "react";
@@ -20,7 +24,9 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { AlertCircle, ArrowLeft, Download, Loader2, RefreshCw, Sparkles } from "lucide-react";
 
+import { ConversaDaOperadora, type LoteAplicado } from "@/components/contas-medicas/ConversaDaOperadora";
 import { Ditar, juntarDitado } from "@/components/contas-medicas/Ditar";
+import { type ProvaDaRegra, ProvaDaRegraNaTela } from "@/components/contas-medicas/ProvaDaRegra";
 import { TabelasDePreco } from "@/components/contas-medicas/TabelasDePreco";
 import { Select } from "@/components/ui/Select";
 import {
@@ -85,33 +91,6 @@ interface Proposta {
   parametro: { chave: string; antes: ValorDoParametro; depois: ValorDoParametro } | null;
   conflitos: { codigo: string; texto: string }[];
   efeito_no_guia: string;
-}
-
-interface LinhaDaProva {
-  acao: string;
-  data: string | null;
-  codigo: string | null;
-  descricao: string;
-  quantidade_devida: number | null;
-  regra_codigo: string | null;
-}
-
-interface ContaDaProva {
-  conta_id: string;
-  numero_atendimento: string | null;
-  numero_conta: string | null;
-  mudaria: boolean;
-  entrariam: LinhaDaProva[];
-  sairiam: (LinhaDaProva & { feito: boolean })[];
-  mudariam: { antes: LinhaDaProva; depois: LinhaDaProva }[];
-}
-
-interface ProvaDaRegra {
-  contas: number;
-  mudaria: boolean;
-  feitas_que_sumiriam: number;
-  aviso: string | null;
-  por_conta: ContaDaProva[];
 }
 
 interface RegraEnsinada {
@@ -270,6 +249,20 @@ export default function MemoriaDaOperadoraPage() {
     if (token) await carregar(token);
   }
 
+  async function aoAplicarLote(aplicado: LoteAplicado) {
+    const contas = aplicado.contas_com_regra_nova;
+    const regras = aplicado.regras.length
+      ? `, com ${new Intl.ListFormat("pt-BR", { type: "conjunction" }).format(aplicado.regras)}`
+      : "";
+    setAviso(
+      `Versão ${aplicado.versao} da memória criada pelo lote do Auditor${regras}.` +
+        (contas
+          ? ` ${plural(contas, "conta aberta ganhou", "contas abertas ganharam")} a marca "regra nova desde a análise".`
+          : ""),
+    );
+    if (token) await carregar(token);
+  }
+
   async function reanalisar(conta: ContaComRegraNova) {
     if (!token) return;
     setErro(null);
@@ -341,7 +334,11 @@ export default function MemoriaDaOperadoraPage() {
             podeReanalisar={memoria.permissoes.includes("regra_contratual_tabelas")}
             aoReanalisar={reanalisar}
           />
-          <EnsinarRegra sigla={memoria.sigla} token={token} aoEnsinar={aoEnsinar} />
+          {memoria.permissoes.includes("regra_contratual_tabelas") ? (
+            <ConversaDaOperadora sigla={memoria.sigla} token={token} aoAplicar={aoAplicarLote} />
+          ) : (
+            <EnsinarRegra sigla={memoria.sigla} token={token} aoEnsinar={aoEnsinar} />
+          )}
           <Regras memoria={memoria} token={token} aoMudar={aoMudar} />
           <section aria-label="Tabelas de preço" className={CARTAO}>
             <h2 className="text-base font-semibold text-slate-900">Tabelas de preço</h2>
@@ -943,62 +940,6 @@ function PropostaDaRegra({
   );
 }
 
-
-function descricaoDaLinha(linha: LinhaDaProva): string {
-  return [linha.descricao, linha.data ? dataBr(linha.data) : null].filter(Boolean).join(", ");
-}
-
-/** O que o Guia teria dito de diferente em cada conta. A conta que não muda fica de fora. */
-function ProvaDaRegraNaTela({ prova }: { prova: ProvaDaRegra }) {
-  const mudaram = prova.por_conta.filter((c) => c.mudaria);
-  const feitas = prova.feitas_que_sumiriam;
-  return (
-    <section aria-label="Prova da regra" className="rounded-lg bg-white border border-slate-200 p-3 text-sm space-y-2">
-      <h3 className="text-xs font-semibold text-slate-500 uppercase">Prova da regra</h3>
-      <p className="text-slate-700">
-        Refeita nas {prova.contas} últimas contas concluídas da operadora. Nenhuma conta foi alterada.
-      </p>
-      {prova.aviso && <p className="text-amber-700 font-medium">{prova.aviso}</p>}
-      {feitas > 0 && (
-        <p role="alert" className="flex items-start gap-2 text-red-700 font-medium">
-          <AlertCircle className="w-4 h-4 mt-0.5 shrink-0" aria-hidden="true" />
-          {feitas === 1
-            ? "1 linha já feita pela faturista sumiria."
-            : `${feitas} linhas já feitas pela faturista sumiriam.`}
-        </p>
-      )}
-      {mudaram.length > 0 && (
-        <ul className="divide-y divide-slate-100">
-          {mudaram.map((c) => {
-            const rotulo = `Atendimento ${c.numero_atendimento ?? ""}, conta ${c.numero_conta ?? ""}`;
-            return (
-              <li key={c.conta_id} aria-label={rotulo} className="py-2 space-y-1">
-                <p className="font-semibold text-slate-900">{rotulo}</p>
-                {c.entrariam.map((l, i) => (
-                  <p key={`e-${i}`} className="text-emerald-700">
-                    Entraria: {descricaoDaLinha(l)}
-                  </p>
-                ))}
-                {c.sairiam.map((l, i) => (
-                  <p key={`s-${i}`} className="text-slate-700">
-                    Sairia: {descricaoDaLinha(l)}
-                    {l.feito && <span className="ml-2 text-xs font-semibold text-red-700">Já feita</span>}
-                  </p>
-                ))}
-                {c.mudariam.map((m, i) => (
-                  <p key={`m-${i}`} className="text-slate-700">
-                    Mudaria: {m.depois.descricao}, quantidade {m.antes.quantidade_devida ?? ""} para{" "}
-                    {m.depois.quantidade_devida ?? ""}
-                  </p>
-                ))}
-              </li>
-            );
-          })}
-        </ul>
-      )}
-    </section>
-  );
-}
 
 function Historico({ versoes }: { versoes: VersaoDaMemoria[] }) {
   return (
