@@ -442,9 +442,7 @@ def ler_contrato_enviado(supabase, operadora_id: str, nome: str, conteudo: bytes
     return guardar_e_ler_contrato(supabase, operadora_id, nome, conteudo)[0]
 
 
-def guardar_e_ler_contrato(
-    supabase, operadora_id: str, nome: str, conteudo: bytes
-) -> tuple[dict[str, Any], str]:
+def guardar_e_ler_contrato(supabase, operadora_id: str, nome: str, conteudo: bytes) -> tuple[dict[str, Any], str]:
     """O que `ler_contrato_enviado` devolve e o texto do contrato, que a
     conversa da Operadora manda ao Auditor (issue #1495)."""
     extensao = os.path.splitext(nome or "")[1].lower()

@@ -325,6 +325,9 @@ SEM_TEXTO = (
 )
 DATAS_NAO_LIDAS = "Não consegui ler as datas do contrato agora: digite as datas na aba Contratos."
 
+# O último aditivo no bloco `contrato` da memória e o campo lido na aba Contratos.
+_DATAS_DO_ADITIVO = (("numero", "aditivo_numero"), ("data", "aditivo_data"), ("inicio_vigencia", "vigencia_inicio"))
+
 
 def _item_das_datas(vigente: dict, campos: dict[str, Any], arquivo: str) -> dict | None:
     """As datas lidas do contrato, pela mesma leitura da aba Contratos, no
@@ -342,7 +345,7 @@ def _item_das_datas(vigente: dict, campos: dict[str, Any], arquivo: str) -> dict
     elif campos.get("vencimento"):
         bloco["vencimento"] = campos["vencimento"]
     aditivo = dict(bloco["ultimo_aditivo"]) if isinstance(bloco.get("ultimo_aditivo"), dict) else {}
-    for chave, campo in (("numero", "aditivo_numero"), ("data", "aditivo_data"), ("inicio_vigencia", "vigencia_inicio")):
+    for chave, campo in _DATAS_DO_ADITIVO:
         if campos.get(campo):
             aditivo[chave] = campos[campo]
     if aditivo:
@@ -455,7 +458,8 @@ def _corrigir(supabase, sigla: str, numero: int, pedido: str, texto: str, autor_
     antes = alvo.get("proposta_json") or {}
     if refeito["tipo"] in TIPOS_DE_REGRA and antes.get("contrato_diz"):
         refeito["proposta_json"]["contrato_diz"] = antes["contrato_diz"]
-    if refeito["tipo"] == "PARAMETRO" and antes.get("arquivo") and refeito["proposta_json"]["chave"] == antes.get("chave"):
+    mesma_chave = refeito["tipo"] == "PARAMETRO" and refeito["proposta_json"]["chave"] == antes.get("chave")
+    if mesma_chave and antes.get("arquivo"):
         refeito["proposta_json"]["arquivo"] = antes["arquivo"]
     _falar(supabase, conversa["id"], "PESSOA", texto, autor_id)
     gravado = (

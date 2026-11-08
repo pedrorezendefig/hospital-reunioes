@@ -37,6 +37,7 @@ TEXTO_DO_CONTRATO = (
     "TERMO ADITIVO No 13 AO CONTRATO DE CREDENCIAMENTO firmado em 01/10/2015. "
     f"Assinado em 20/04/2027. Vigencia a partir de 01/05/2027. {CLAUSULA_7} {CLAUSULA_9}"
 )
+BRASINDICE = "Edição do Brasíndice usada pela operadora."
 TAXA_DE_SALA = "Taxa de sala cirúrgica paga por porte anestésico, pela tabela própria da operadora."
 
 CAMPOS_DO_CONTRATO = {
@@ -151,7 +152,7 @@ class TestOContratoViraLote:
         # a análise não muda, e o item vai sem prova.
         diz = _item(corpo, 2)
         assert diz["proposta"]["contrato_diz"] == CLAUSULA_9
-        assert diz["proposta"]["texto"] == diz["proposta"]["texto_anterior"] == "Edição do Brasíndice usada pela operadora."
+        assert diz["proposta"]["texto"] == diz["proposta"]["texto_anterior"] == BRASINDICE
         assert (diz["pede_prova"], diz["prova"]) == (False, None)
 
         # As datas do aviso de reajuste entram no mesmo lote.
@@ -200,11 +201,7 @@ class TestOOkDoContrato:
         # A Regra que existia ganha o "o contrato diz" e fica como estava: o
         # texto e a pendência são de quem decide a regra, não do contrato.
         pri_03 = regras["ALFA-PRI-03"]
-        assert (pri_03["texto"], pri_03["status"], pri_03["contrato_diz"]) == (
-            "Edição do Brasíndice usada pela operadora.",
-            "PENDENTE",
-            CLAUSULA_9,
-        )
+        assert (pri_03["texto"], pri_03["status"], pri_03["contrato_diz"]) == (BRASINDICE, "PENDENTE", CLAUSULA_9)
         assert _vigente(banco)["parametros_json"]["contrato"]["ultimo_aditivo"]["numero"] == "13"
         (lote,) = banco.linhas("cm_lote")
         assert (lote["estado"], lote["memoria_versao_id"]) == ("APLICADO", _vigente(banco)["id"])
@@ -254,3 +251,26 @@ class TestOContratoEOAviso:
         assert corpo["mensagens"][-1]["texto"].startswith("O arquivo não tem texto para ler")
         assert [k for k in banco.storage.arquivos if k.endswith(".png")]
         assert provedor.pedidos == []
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 4. O kit de conhecimento diz o comportamento novo
+# ═══════════════════════════════════════════════════════════════════════════
+
+KIT = Path(__file__).resolve().parents[1] / "app" / "conhecimento" / "contas-medicas.md"
+
+
+class TestOKit:
+    def test_o_kit_diz_que_o_contrato_subido_na_conversa_vira_regras_por_clausula(self):
+        no_ar = KIT.read_text(encoding="utf-8").split("## O que já está no ar")[1].split("\n## ")[0]
+
+        for termo in (
+            "Enviar contrato",
+            "cláusula a cláusula",
+            '"o contrato diz"',
+            "recurso de glosa",
+            "sem prova",
+            "aviso de reajuste",
+            "aba Contratos",
+        ):
+            assert termo in no_ar, termo
