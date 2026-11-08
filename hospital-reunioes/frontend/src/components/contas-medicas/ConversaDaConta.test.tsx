@@ -101,6 +101,18 @@ describe("a conversa com o Auditor", () => {
     expect(chamadas).toEqual([]);
   });
 
+  it("marca o Faltou isto que o segundo agente achou, e só ele", async () => {
+    lista = [
+      apontamento(),
+      apontamento({ id: "f-2", origem: "AGENTE", texto: null, item: "Fralda geriátrica", pode_abrir_pedido: false }),
+    ];
+    abrir();
+
+    const doAgente = (await screen.findByText(/Fralda geriátrica\./)).closest("div") as HTMLElement;
+    expect(within(doAgente).getByText("Achado pelo agente")).toBeTruthy();
+    expect(screen.getAllByText("Achado pelo agente")).toHaveLength(1);
+  });
+
   it("aponta o Faltou isto do dia escolhido, com o item, a página e a pergunta", async () => {
     abrir();
     await screen.findByText(/Equipo macrogotas\./);

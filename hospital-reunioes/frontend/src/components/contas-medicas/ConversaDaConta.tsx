@@ -113,7 +113,14 @@ export function ConversaDaConta({ contaId, token, dias, iniciais, escolha }: Pro
 
       {apontamentos.map((apontamento) => (
         <div key={apontamento.id} className="space-y-2">
-          <p className="text-sm text-slate-700 break-words">{falaDeQuemApontou(apontamento)}</p>
+          <div className="flex flex-wrap items-center gap-2">
+            {apontamento.origem === "AGENTE" && (
+              <span className="etiqueta inline-flex px-2 py-0.5 rounded-full text-[11px] font-semibold bg-[#EEEEF6] text-primary">
+                Achado pelo agente
+              </span>
+            )}
+            <p className="text-sm text-slate-700 break-words">{falaDeQuemApontou(apontamento)}</p>
+          </div>
           {apontamento.explicacao && (
             <article
               aria-label="Resposta do Auditor"
