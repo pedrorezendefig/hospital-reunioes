@@ -166,12 +166,14 @@ def apontar(
     sem nada gravado."""
     operadora_id = atendimento.get("operadora_id")
     memoria = gerar_texto_memoria(supabase, operadora_id, conta.get("memoria_versao_id"))
+    # O que a pessoa escreveu vai ao Auditor sem identificação, como o texto do
+    # prontuário vai ao Passo A (ADR 0070, decisão 8).
     pergunta = "\n".join(
         [
             f"Dia: {dia.strftime('%d/%m/%Y')}",
-            f"Item: {item}",
+            f"Item: {_sem_identificacao(item, conta, atendimento)}",
             f"Página do prontuário: {pagina if pagina else 'não informada'}",
-            f"Mensagem de quem apontou: {texto or '(sem mensagem)'}",
+            f"Mensagem de quem apontou: {_sem_identificacao(texto, conta, atendimento) or '(sem mensagem)'}",
         ]
     )
     diagnostico = ia.explicar_faltou_isto(
@@ -232,9 +234,7 @@ def para_a_tela(apontamento: dict[str, Any], me_id: str | None) -> dict[str, Any
 
 def da_conta(supabase, conta_id: str) -> list[dict[str, Any]]:
     """Os Faltou isto da Conta, do mais antigo ao mais novo."""
-    return (
-        supabase.table("cm_faltou_isto").select("*").eq("conta_id", conta_id).order("criado_em").execute().data or []
-    )
+    return supabase.table("cm_faltou_isto").select("*").eq("conta_id", conta_id).order("criado_em").execute().data or []
 
 
 # ─── O pedido para a Tecnologia (ADR 0081, decisão 4) ─────────────────────────
@@ -315,7 +315,8 @@ def _criterios(origem: str, pagina: int | None, esperado: str) -> list[str]:
     na_pagina = f"a página {pagina}" if pagina else "a página do dia apontado"
     if origem == "LEITURA":
         especificos = [
-            f"A leitura do prontuário de uma conta como esta lê {na_pagina}, e o fato do trecho entra nos eventos do dia.",
+            f"A leitura do prontuário de uma conta como esta lê {na_pagina}, e o fato do trecho entra nos "
+            "eventos do dia.",
             f"Com a leitura corrigida, o Guia aponta: {esperado}",
         ]
     else:
@@ -408,11 +409,7 @@ def abrir_pedido(supabase, *, conta: dict[str, Any], atendimento: dict[str, Any]
         if not isinstance(numero, int):
             raise github_client.GithubIndisponivelError("A criação da issue voltou sem número")
         gravado = (
-            supabase.table("cm_faltou_isto")
-            .update({"issue_numero": numero})
-            .eq("id", apontamento["id"])
-            .execute()
-            .data
+            supabase.table("cm_faltou_isto").update({"issue_numero": numero}).eq("id", apontamento["id"]).execute().data
             or []
         )
         return gravado[0] if gravado else {**apontamento, "issue_numero": numero}

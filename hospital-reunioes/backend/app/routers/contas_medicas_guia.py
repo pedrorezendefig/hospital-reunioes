@@ -26,7 +26,6 @@ from app.services import github_client
 from app.services.ai_processor import chamar_ia_fora_do_loop
 from app.services.contas_medicas import faltou_isto, fila, reenvio
 from app.services.contas_medicas.envio import LIMITE_POR_ARQUIVO, MENSAGEM_ARQUIVO_GRANDE
-from app.services.contas_medicas.ia import ErroDaIA
 from app.services.contas_medicas.guia import (
     agrupar_por_dia_e_setor,
     linha_nao_conferida,
@@ -34,6 +33,7 @@ from app.services.contas_medicas.guia import (
     nota_de_entrada,
     numeros_do_topo,
 )
+from app.services.contas_medicas.ia import ErroDaIA
 from app.services.contas_medicas.regra_nova import SITUACOES_REANALISAVEIS, regra_nova_desde_a_analise
 from app.services.contas_medicas.validacao import (
     acompanhar_marcacao,

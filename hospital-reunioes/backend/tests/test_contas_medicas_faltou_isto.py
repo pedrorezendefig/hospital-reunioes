@@ -40,7 +40,9 @@ from test_contas_medicas_processamento import (
     _prontuario,
     _rodar_o_job,
 )
+from test_contas_medicas_prontuario import VALORES_PESSOAIS, aparece
 
+from app.config import settings
 from app.dependencies import get_current_user, get_supabase_client
 from app.limiter import limiter
 from app.routers import contas_medicas_envio as envio_router
@@ -266,9 +268,7 @@ class TestApontamento:
 
 
 class TestQuemAponta:
-    @pytest.mark.parametrize(
-        "quem", ["faturista", "coordenadora", "gestao", "diretoria_medica", "diretoria_executiva"]
-    )
+    @pytest.mark.parametrize("quem", ["faturista", "coordenadora", "gestao", "diretoria_medica", "diretoria_executiva"])
     def test_quem_ve_o_guia_aponta_faltou_isto(self, quem):
         banco, conta_id = _conta_no_guia()
 
@@ -443,6 +443,109 @@ class TestPedidoParaATecnologia:
 
         assert resposta.status_code == 503
         assert github.issues == []
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 3. A desidentificação do pedido: o repositório é público
+# ═══════════════════════════════════════════════════════════════════════════
+
+# O que a capa da Conta imprime e o app guarda (o cabeçalho da "Fatura
+# Individual" do par sintético e o rótulo que a leitura tira da capa do
+# prontuário), somado a cada valor da capa do prontuário que o teste de
+# desidentificação do módulo já procura.
+CAPA_DA_CONTA = {
+    "número do atendimento": "31245",
+    "número da conta": "48811",
+    "guia": "123456789",
+    "plano": "ALFA BASICO ENF",
+    "data da internação": "02/10/2026",
+    "rótulo da paciente": "Antônia F.",
+}
+VALORES_DA_CAPA = {**VALORES_PESSOAIS, **CAPA_DA_CONTA}
+
+# Quem apontou escreve a identificação inteira, e o Auditor a repete: os dois
+# textos chegam ao corpo da issue.
+MENSAGEM_COM_A_CAPA = (
+    "A paciente Antônia Melo Farias, filha de Josefa Ribeiro Costa, nascida em 14/03/1951, CPF 529.982.247-25, "
+    "RG 20.481.337-6, carteira 0817734, telefone 98765-4321, atendimento 31245, conta 48811, guia 123456789, "
+    "plano ALFA BASICO ENF, internada em 02/10/2026, rótulo Antônia F. O médico do CPF 111.444.777-35 prescreveu."
+)
+ITEM_COM_A_CAPA = "Equipo da ANTONIA MELO, carteira 0817734"
+
+
+class TestDesidentificacao:
+    def _pedido_com_a_capa(self, ia_falsa, github) -> tuple[_Banco, str]:
+        ia_falsa.respostas[DIAGNOSTICO] = {
+            "classificacao": "LEITURA",
+            "explicacao": f"Sobre a mensagem: {MENSAGEM_COM_A_CAPA}",
+            "esperado": "Incluir o equipo de ANTÔNIA MELO FARIAS, carteira 0817734, atendimento 31245.",
+        }
+        banco, conta_id = _conta_no_guia()
+        faltou_id = _apontado(banco, conta_id, item=ITEM_COM_A_CAPA, texto=MENSAGEM_COM_A_CAPA)
+        assert _pedido(banco, conta_id, faltou_id).status_code == 200
+        return banco, conta_id
+
+    def test_a_entrada_traz_cada_valor_da_capa(self, ia_falsa, github):
+        """Guarda do teste de baixo: sem isto ele passaria sobre um texto que nunca teve o dado."""
+        banco, _ = self._pedido_com_a_capa(ia_falsa, github)
+        (gravado,) = banco.tabelas["cm_faltou_isto"]
+        entrada = f"{gravado['item']}\n{gravado['texto']}\n{gravado['explicacao']}"
+
+        assert [nome for nome, valor in VALORES_DA_CAPA.items() if not aparece(valor, entrada)] == []
+
+    def test_nenhum_valor_lido_da_capa_aparece_no_corpo_nem_no_titulo_da_issue(self, ia_falsa, github):
+        self._pedido_com_a_capa(ia_falsa, github)
+        (issue,) = github.issues
+        publico = f"{issue['titulo']}\n{issue['corpo']}"
+
+        assert [nome for nome, valor in VALORES_DA_CAPA.items() if aparece(valor, publico)] == []
+        # O dado sai como marcador, e o resto da mensagem fica legível.
+        assert "carteira [NUMERO], telefone [TELEFONE], atendimento [NUMERO], conta [NUMERO]" in issue["corpo"]
+        assert "prescreveu" in issue["corpo"]
+
+    def test_o_que_vai_ao_auditor_tambem_sai_sem_a_capa(self, ia_falsa, github):
+        self._pedido_com_a_capa(ia_falsa, github)
+        (corpo,) = [c for c in ia_falsa.corpos if c["formato"] == DIAGNOSTICO]
+        pergunta = corpo["messages"][0]["content"][-1]["text"]
+
+        assert pergunta.startswith("O QUE FALTOU")
+        assert [nome for nome, valor in VALORES_PESSOAIS.items() if aparece(valor, pergunta)] == []
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 4. A conversa não é memória (ADR 0081, decisão 3)
+# ═══════════════════════════════════════════════════════════════════════════
+
+FALA_DA_PESSOA = "Pergunta só da conversa: e a bomba de seringa da madrugada?"
+FALA_DO_AUDITOR = "Resposta só da conversa: a bomba de seringa ficou fora porque falta regra."
+
+
+class TestConversaForaDaAnalise:
+    def test_a_conversa_da_conta_nao_entra_no_prompt_do_passo_a_nem_do_passo_b(self, monkeypatch, ia_falsa):
+        ia_falsa.respostas[DIAGNOSTICO] = {"classificacao": "REGRA", "explicacao": FALA_DO_AUDITOR, "esperado": ""}
+        banco, conta_id = _conta_no_guia()
+        assert _apontar(banco, conta_id, texto=FALA_DA_PESSOA).status_code == 200
+        conversa = json.dumps(banco.tabelas["cm_conversa_mensagem"], ensure_ascii=False)
+        assert FALA_DA_PESSOA in conversa and FALA_DO_AUDITOR in conversa
+
+        # A conta volta para a análise, e o modelo novo do Passo A faz a IA ler o prontuário de novo.
+        assert _cliente(banco, "gestao").post(f"/api/contas-medicas/contas/{conta_id}/reanalisar").status_code == 200
+        monkeypatch.setattr(settings, "cm_ia_modelo_passo_a", "claude-opus-5-5")
+        ia_falsa.corpos.clear()
+        _rodar_o_job(banco)
+
+        assert banco.conta(conta_id)["situacao"] == "A_FAZER"
+        prompts = {
+            passo: json.dumps([c["messages"] for c in ia_falsa.corpos if c["formato"] == passo], ensure_ascii=False)
+            for passo in (PASSO_A, PASSO_B)
+        }
+        # Os dois passos rodaram, cada um com o que é dele.
+        assert "Chegou com acesso venoso" in prompts[PASSO_A]
+        assert "AGULHA HIPODERMICA" in prompts[PASSO_B]
+        for passo, prompt in prompts.items():
+            assert FALA_DA_PESSOA not in prompt, passo
+            assert FALA_DO_AUDITOR not in prompt, passo
+            assert "bomba de seringa" not in prompt, passo
 
 
 def _passos_da_chamada() -> set[str]:
