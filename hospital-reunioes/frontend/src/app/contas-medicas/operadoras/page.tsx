@@ -17,6 +17,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { AlertCircle, ArrowLeft, Download, Loader2, Upload } from "lucide-react";
 import { MapeamentoDaTabela } from "@/components/contas-medicas/MapeamentoDaTabela";
+import { PreviaDaMemoria, type PreviaDaImportacao } from "@/components/contas-medicas/PreviaDaMemoria";
 import { PropostasDoDicionario } from "@/components/contas-medicas/PropostasDoDicionario";
 import { TabelasDePreco } from "@/components/contas-medicas/TabelasDePreco";
 import { createClient } from "@/lib/supabase/client";
@@ -374,40 +375,53 @@ function EnvioDeMemoria({ token, aoImportar }: { token: string | null; aoImporta
   const [arquivo, setArquivo] = useState<File | null>(null);
   const [enviando, setEnviando] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
+  const [previa, setPrevia] = useState<PreviaDaImportacao | null>(null);
   const [importada, setImportada] = useState<MemoriaImportada | null>(null);
 
-  async function enviar(e: React.FormEvent<HTMLFormElement>) {
-    e.preventDefault();
-    if (!token || !arquivo) return;
+  /** Manda o arquivo para `rota` e devolve o corpo da resposta, ou null com o erro na tela. */
+  async function postar<T>(rota: string, arquivoDaMemoria: File): Promise<T | null> {
     setEnviando(true);
     setErro(null);
-    setImportada(null);
     try {
       const corpo = new FormData();
-      corpo.append("arquivo", arquivo);
-      const res = await fetch("/api/contas-medicas/operadoras/memoria", {
-        method: "POST",
-        headers: { Authorization: `Bearer ${token}` },
-        body: corpo,
-      });
+      corpo.append("arquivo", arquivoDaMemoria);
+      const res = await fetch(rota, { method: "POST", headers: { Authorization: `Bearer ${token}` }, body: corpo });
       if (!res.ok) {
         setErro(await detalheDoErro(res, `Não foi possível enviar a memória (HTTP ${res.status}).`));
-        return;
+        return null;
       }
-      setImportada(await res.json());
-      await aoImportar();
+      return (await res.json()) as T;
     } catch {
       setErro("Não foi possível enviar a memória.");
+      return null;
     } finally {
       setEnviando(false);
     }
+  }
+
+  // Enviar mostra a prévia; só o "Confirmar e gravar" dela grava a versão nova.
+  async function enviar(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    if (!token || !arquivo) return;
+    setImportada(null);
+    setPrevia(await postar<PreviaDaImportacao>("/api/contas-medicas/operadoras/memoria/previa", arquivo));
+  }
+
+  async function confirmar() {
+    if (!token || !arquivo) return;
+    const gravada = await postar<MemoriaImportada>("/api/contas-medicas/operadoras/memoria", arquivo);
+    if (!gravada) return;
+    setPrevia(null);
+    setImportada(gravada);
+    await aoImportar();
   }
 
   return (
     <section aria-label="Enviar memória" className={CARTAO}>
       <h2 className="text-base font-semibold text-slate-900">Enviar memória</h2>
       <p className="text-sm text-slate-500 mt-0.5 mb-4">
-        O arquivo de memória do convênio, como o diretor monta. Uma versão nova aposenta a anterior.
+        O arquivo de memória do convênio, como o diretor monta. Antes de gravar, a tela mostra Regra a Regra o
+        que muda; a versão nova aposenta a anterior.
       </p>
       <form aria-label="Enviar memória" onSubmit={enviar} className="flex flex-wrap items-end gap-3">
         <label className="flex flex-col gap-1.5 text-xs font-medium text-slate-500 uppercase">
@@ -415,7 +429,10 @@ function EnvioDeMemoria({ token, aoImportar }: { token: string | null; aoImporta
           <input
             type="file"
             accept=".md,text/markdown,text/plain"
-            onChange={(e) => setArquivo(e.target.files?.[0] ?? null)}
+            onChange={(e) => {
+              setArquivo(e.target.files?.[0] ?? null);
+              setPrevia(null);
+            }}
             className="text-sm normal-case font-normal text-slate-700"
           />
         </label>
@@ -432,6 +449,14 @@ function EnvioDeMemoria({ token, aoImportar }: { token: string | null; aoImporta
         <p role="alert" className="flex items-start gap-2 text-sm text-red-700 mt-4">
           <AlertCircle className="w-4 h-4 mt-0.5 shrink-0" aria-hidden="true" /> {erro}
         </p>
+      )}
+      {previa && (
+        <PreviaDaMemoria
+          previa={previa}
+          ocupado={enviando}
+          aoConfirmar={confirmar}
+          aoCancelar={() => setPrevia(null)}
+        />
       )}
       {importada && (
         <div role="status" className="mt-4 rounded-xl bg-emerald-50 p-4 text-sm text-slate-700">

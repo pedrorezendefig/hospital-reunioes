@@ -106,6 +106,50 @@ const IMPORTADA = {
   parametros: { diaria: { hora_vencimento: "10:00" }, opme: { fornecida_por: "OPERADORA" } },
 };
 
+/** A prévia da v1.1 da ALFA contra a 1.0 vigente (issue #1486). */
+const PREVIA = {
+  operadora: "ALFA",
+  nome: "Alfa Saúde",
+  versao: "1.1",
+  versao_vigente: "1.0",
+  regras: { total: 5, vigentes: 4, pendentes: 1 },
+  incluidas: [
+    {
+      codigo: "ALFA-DIA-03",
+      texto: "Diária de acompanhante só com autorização prévia.",
+      tipo: "CONTRATUAL",
+      origem: "CONTRATO",
+      status: "VIGENTE",
+    },
+  ],
+  alteradas: [
+    {
+      codigo: "ALFA-PRI-02",
+      antes: { texto: "Escopo: itens e divergência de valor.", tipo: "OPERACIONAL", origem: "PRÁTICA", status: "VIGENTE" },
+      depois: {
+        texto: "Escopo: itens, divergência de valor e pacote.",
+        tipo: "OPERACIONAL",
+        origem: "PRÁTICA",
+        status: "VIGENTE",
+      },
+    },
+    {
+      codigo: "ALFA-DIA-02",
+      antes: { texto: "Transferência de setor antes das 10h.", tipo: "CONTRATUAL", origem: "PRÁTICA", status: "PENDENTE" },
+      depois: { texto: "Transferência de setor antes das 10h.", tipo: "CONTRATUAL", origem: "PRÁTICA", status: "VIGENTE" },
+    },
+  ],
+  removidas: [
+    {
+      codigo: "ALFA-PRI-03",
+      texto: "Edição do Brasíndice usada pela operadora.",
+      tipo: "CONTRATUAL",
+      origem: "CONTRATO",
+      status: "PENDENTE",
+    },
+  ],
+};
+
 /** A proposta de uma planilha do convênio: a IA apontou as colunas. */
 const PROPOSTA = {
   conhecido: false,
@@ -134,6 +178,7 @@ type Chamada = { url: string; metodo: string; corpo: unknown };
 let chamadas: Chamada[];
 let statusDaLista: number;
 let respostaDaMemoria: { status: number; corpo: unknown };
+let respostaDaPrevia: { status: number; corpo: unknown };
 let respostaDaTabela: { status: number; corpo: unknown };
 let respostaDaProposta: unknown;
 let planos: Array<Record<string, string | null>>;
@@ -152,6 +197,9 @@ function backend() {
       chamadas.push({ url, metodo, corpo });
       if (url === "/api/contas-medicas/operadoras" && metodo === "GET") {
         return resposta(statusDaLista, statusDaLista === 200 ? OPERADORAS : { detail: "Sem permissão" });
+      }
+      if (url === "/api/contas-medicas/operadoras/memoria/previa" && metodo === "POST") {
+        return resposta(respostaDaPrevia.status, respostaDaPrevia.corpo);
       }
       if (url === "/api/contas-medicas/operadoras/memoria" && metodo === "POST") {
         return resposta(respostaDaMemoria.status, respostaDaMemoria.corpo);
@@ -205,6 +253,7 @@ beforeEach(() => {
   chamadas = [];
   statusDaLista = 200;
   respostaDaMemoria = { status: 201, corpo: IMPORTADA };
+  respostaDaPrevia = { status: 200, corpo: PREVIA };
   respostaDaTabela = { status: 201, corpo: TABELA_IMPORTADA };
   respostaDaProposta = CONHECIDO;
   planos = [];
@@ -340,30 +389,8 @@ describe("os formulários", () => {
     }
   });
 
-  it("envia o arquivo de memória e mostra a versão, a contagem e os parâmetros lidos", async () => {
-    render(<OperadorasPage />);
-    await screen.findByTestId("operadora-ALFA");
-    const secao = screen.getByRole("region", { name: "Enviar memória" });
-    const arquivo = new File(["---\noperadora: ALFA\n---\n"], "MEMORIA-ALFA-v1.1.md", { type: "text/markdown" });
-
-    fireEvent.change(within(secao).getByLabelText("Arquivo de memória"), { target: { files: [arquivo] } });
-    fireEvent.click(within(secao).getByRole("button", { name: "Enviar memória" }));
-
-    const resultado = await within(secao).findByRole("status");
-    expect(resultado.textContent).toContain("ALFA, versão 1.1");
-    expect(resultado.textContent).toContain("4 regras vigentes e 1 pendente");
-    expect(resultado.textContent).toContain("opme");
-    const envio = chamadas.find((c) => c.metodo === "POST" && c.url === "/api/contas-medicas/operadoras/memoria");
-    expect(envio).toBeTruthy();
-    expect((envio!.corpo as FormData).get("arquivo")).toBe(arquivo);
-    // A lista é relida, para a versão nova aparecer sem recarregar a página.
-    await waitFor(() =>
-      expect(chamadas.filter((c) => c.url === "/api/contas-medicas/operadoras" && c.metodo === "GET").length).toBe(2),
-    );
-  });
-
   it("mostra a recusa do servidor como veio, para quem enviou saber o que corrigir", async () => {
-    respostaDaMemoria = {
+    respostaDaPrevia = {
       status: 422,
       corpo: { detail: "O arquivo tem um número no formato de CPF (linha 42)." },
     };
@@ -408,6 +435,93 @@ describe("os formulários", () => {
     expect(await within(secao).findByText("CTI1")).toBeTruthy();
     const envio = chamadas.find((c) => c.metodo === "POST" && c.url === "/api/contas-medicas/setores");
     expect(envio?.corpo).toEqual({ nome_mv: "CTI1", acomodacao: "CTI" });
+  });
+});
+
+describe("a prévia da memória, Regra a Regra, antes de gravar (#1486)", () => {
+  const ROTA_PREVIA = "/api/contas-medicas/operadoras/memoria/previa";
+  const ROTA_MEMORIA = "/api/contas-medicas/operadoras/memoria";
+
+  async function verPrevia() {
+    render(<OperadorasPage />);
+    await screen.findByTestId("operadora-ALFA");
+    const secao = screen.getByRole("region", { name: "Enviar memória" });
+    const arquivo = new File(["---\noperadora: ALFA\n---\n"], "MEMORIA-ALFA-v1.1.md", { type: "text/markdown" });
+    fireEvent.change(within(secao).getByLabelText("Arquivo de memória"), { target: { files: [arquivo] } });
+    fireEvent.click(within(secao).getByRole("button", { name: "Enviar memória" }));
+    const previa = await within(secao).findByRole("region", { name: "O que muda na memória" });
+    return { secao, previa, arquivo };
+  }
+
+  function item(lista: HTMLElement, codigo: string): HTMLElement {
+    return within(lista)
+      .getAllByRole("listitem")
+      .find((li) => li.textContent?.includes(codigo))!;
+  }
+
+  it("lista as incluídas, as alteradas com o texto antes e depois e as removidas, sem gravar nada", async () => {
+    const { previa, arquivo } = await verPrevia();
+
+    expect(previa.textContent).toContain("da versão 1.0 para a 1.1");
+    expect(item(within(previa).getByRole("list", { name: "Incluídas" }), "ALFA-DIA-03").textContent).toContain(
+      "Diária de acompanhante só com autorização prévia.",
+    );
+    const alteradas = within(previa).getByRole("list", { name: "Alteradas" });
+    const [antes, depois] = within(item(alteradas, "ALFA-PRI-02")).getAllByRole("definition");
+    expect(antes.textContent).toBe("Escopo: itens e divergência de valor.");
+    expect(depois.textContent).toBe("Escopo: itens, divergência de valor e pacote.");
+    expect(item(alteradas, "ALFA-DIA-02").textContent).toContain("Status: Pendente para Vigente");
+    expect(item(within(previa).getByRole("list", { name: "Removidas" }), "ALFA-PRI-03").textContent).toContain(
+      "Edição do Brasíndice usada pela operadora.",
+    );
+    const pedido = chamadas.find((c) => c.url === ROTA_PREVIA);
+    expect((pedido!.corpo as FormData).get("arquivo")).toBe(arquivo);
+    expect(chamadas.some((c) => c.url === ROTA_MEMORIA)).toBe(false);
+  });
+
+  it("confirmar grava a memória e mostra a versão, a contagem e os parâmetros lidos", async () => {
+    const { secao, previa, arquivo } = await verPrevia();
+
+    fireEvent.click(within(previa).getByRole("button", { name: "Confirmar e gravar" }));
+
+    const resultado = await within(secao).findByRole("status");
+    expect(resultado.textContent).toContain("ALFA, versão 1.1");
+    expect(resultado.textContent).toContain("4 regras vigentes e 1 pendente");
+    expect(resultado.textContent).toContain("opme");
+    const envio = chamadas.find((c) => c.metodo === "POST" && c.url === ROTA_MEMORIA);
+    expect((envio!.corpo as FormData).get("arquivo")).toBe(arquivo);
+    expect(within(secao).queryByRole("region", { name: "O que muda na memória" })).toBeNull();
+    // A lista é relida, para a versão nova aparecer sem recarregar a página.
+    await waitFor(() =>
+      expect(chamadas.filter((c) => c.url === "/api/contas-medicas/operadoras" && c.metodo === "GET").length).toBe(2),
+    );
+  });
+
+  it("cancelar fecha a prévia e não grava nada", async () => {
+    const { secao, previa } = await verPrevia();
+
+    fireEvent.click(within(previa).getByRole("button", { name: "Cancelar" }));
+
+    expect(within(secao).queryByRole("region", { name: "O que muda na memória" })).toBeNull();
+    expect(chamadas.some((c) => c.url === ROTA_MEMORIA)).toBe(false);
+  });
+
+  it("operadora sem memória diz que todas as Regras entram", async () => {
+    respostaDaPrevia = {
+      status: 200,
+      corpo: { ...PREVIA, operadora: "GAMA", versao: "1.0", versao_vigente: null, alteradas: [], removidas: [] },
+    };
+    const { previa } = await verPrevia();
+
+    expect(previa.textContent).toContain("A GAMA ainda não tem memória");
+    expect(within(previa).queryByRole("list", { name: "Alteradas" })).toBeNull();
+  });
+
+  it("arquivo igual à memória vigente diz que nenhuma Regra muda", async () => {
+    respostaDaPrevia = { status: 200, corpo: { ...PREVIA, incluidas: [], alteradas: [], removidas: [] } };
+    const { previa } = await verPrevia();
+
+    expect(previa.textContent).toContain("Nenhuma Regra muda");
   });
 });
 

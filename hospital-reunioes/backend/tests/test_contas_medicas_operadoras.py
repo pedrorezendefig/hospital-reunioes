@@ -19,6 +19,7 @@ tabelas de preço e o dicionário (issue #1120) usam o mesmo dublê, em
 
 from __future__ import annotations
 
+import copy
 import os
 import re
 import sys
@@ -355,6 +356,138 @@ class TestEnvioDaMemoria:
         assert resposta.status_code == 403
         assert banco.linhas("cm_operadora") == []
         assert banco.linhas("cm_regra") == []
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 1b. A Regra que a diretoria importa nasce Vigente (issue #1486, ADR 0081)
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+class TestRegraImportadaNasceVigente:
+    """Só quem tem "regra contratual e tabelas" importa (a rota recusa os outros
+    com 403, acima). A linha sem STATUS deixou de ser Pendente por omissão: era
+    ela que enchia a fila de Validação, porque a Regra pendente vira Linha
+    Validar no Passo B, e cada Linha Validar abre um Tema."""
+
+    def test_linha_sem_status_importada_pela_gestao_nasce_vigente_e_nao_abre_tema_de_validacao(self):
+        cliente, banco = _cliente(GESTAO)
+
+        resposta = _enviar_memoria(cliente, _memoria("MEMORIA-DELTA-v1.0.md"))
+
+        assert resposta.status_code == 201, resposta.text
+        status = {r["codigo"]: r["status"] for r in banco.linhas("cm_regra")}
+        # PRI-01 tem a célula Status vazia; DIA-01 e DIA-02 vêm de uma tabela sem a coluna.
+        assert status["DELTA-PRI-01"] == "VIGENTE"
+        assert status["DELTA-DIA-01"] == "VIGENTE"
+        assert status["DELTA-DIA-02"] == "VIGENTE"
+        assert resposta.json()["regras"] == {"total": 5, "vigentes": 4, "pendentes": 1}
+        assert banco.linhas("cm_validacao_tema") == []
+
+    def test_regra_tecnica_hsm_copiada_para_operadora_nova_continua_nascendo_pendente(self):
+        """O modelo do diretor manda copiar a Regra técnica HSM com STATUS
+        PENDENTE: ela só vira Vigente quando validada para aquela Operadora."""
+        cliente, banco = _cliente(GESTAO)
+
+        _enviar_memoria(cliente, _memoria("MEMORIA-DELTA-v1.0.md"))
+
+        [tecnica] = [r for r in banco.linhas("cm_regra") if r["codigo"] == "DELTA-PRI-03"]
+        assert (tecnica["status"], tecnica["modelo_id"]) == ("PENDENTE", "HSM-MED-01")
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 1c. A prévia da importação: o que muda, Regra a Regra, antes de gravar
+# ═══════════════════════════════════════════════════════════════════════════
+
+ROTA_PREVIA = "/api/contas-medicas/operadoras/memoria/previa"
+
+
+def _previa(cliente: TestClient, texto: str):
+    return cliente.post(ROTA_PREVIA, files={"arquivo": ("MEMORIA.md", texto.encode("utf-8"), "text/markdown")})
+
+
+class TestPreviaDaImportacao:
+    """A importação compara o arquivo com a versão vigente e mostra o que é
+    incluído, alterado e removido antes de gravar (ADR 0081, decisão 10): o
+    `.md` trabalhado fora do app não sobrescreve às cegas o que foi ensinado
+    pela tela. A v1.1 da DELTA inclui DIA-03, muda o texto de PRI-02, valida
+    PRI-03 e tira DIA-02; PRI-01 e DIA-01 ficam iguais."""
+
+    def _com_a_v10_vigente(self) -> tuple[TestClient, _Banco]:
+        cliente, banco = _cliente(GESTAO)
+        assert _enviar_memoria(cliente, _memoria("MEMORIA-DELTA-v1.0.md")).status_code == 201
+        return cliente, banco
+
+    def test_lista_as_regras_incluidas_alteradas_com_o_texto_antes_e_depois_e_removidas(self):
+        cliente, _ = self._com_a_v10_vigente()
+
+        resposta = _previa(cliente, _memoria("MEMORIA-DELTA-v1.1.md"))
+
+        assert resposta.status_code == 200, resposta.text
+        previa = resposta.json()
+        assert (previa["operadora"], previa["versao"], previa["versao_vigente"]) == ("DELTA", "1.1", "1.0")
+        assert [(r["codigo"], r["texto"]) for r in previa["incluidas"]] == [
+            ("DELTA-DIA-03", "Diária de acompanhante só com autorização prévia.")
+        ]
+        alteradas = {r["codigo"]: r for r in previa["alteradas"]}
+        assert sorted(alteradas) == ["DELTA-PRI-02", "DELTA-PRI-03"]
+        assert alteradas["DELTA-PRI-02"]["antes"]["texto"] == "Escopo: itens e divergência de valor."
+        assert alteradas["DELTA-PRI-02"]["depois"]["texto"] == "Escopo: itens, divergência de valor e pacote."
+        assert (alteradas["DELTA-PRI-03"]["antes"]["status"], alteradas["DELTA-PRI-03"]["depois"]["status"]) == (
+            "PENDENTE",
+            "VIGENTE",
+        )
+        assert [(r["codigo"], r["texto"]) for r in previa["removidas"]] == [
+            ("DELTA-DIA-02", "Diária de UTI inclui o monitor multiparamétrico.")
+        ]
+        assert previa["regras"] == {"total": 5, "vigentes": 5, "pendentes": 0}
+
+    def test_a_previa_nao_grava_nada(self):
+        """Mutante: a prévia chamar a importação. A versão 1.1 seria gravada
+        (e trocaria a vigente) sem o confirmar."""
+        cliente, banco = self._com_a_v10_vigente()
+        antes = copy.deepcopy(banco.tabelas)
+
+        assert _previa(cliente, _memoria("MEMORIA-DELTA-v1.1.md")).status_code == 200
+
+        assert banco.tabelas == antes
+
+    def test_confirmar_grava_a_versao_que_a_previa_mostrou(self):
+        cliente, banco = self._com_a_v10_vigente()
+        _previa(cliente, _memoria("MEMORIA-DELTA-v1.1.md"))
+
+        resposta = _enviar_memoria(cliente, _memoria("MEMORIA-DELTA-v1.1.md"))
+
+        assert resposta.status_code == 201, resposta.text
+        [operadora] = banco.linhas("cm_operadora")
+        vigente = memoria_vigente(banco, operadora["id"])
+        assert vigente["versao"] == "1.1"
+        textos = {r["codigo"]: r["texto"] for r in vigente["regras"]}
+        assert sorted(textos) == ["DELTA-DIA-01", "DELTA-DIA-03", "DELTA-PRI-01", "DELTA-PRI-02", "DELTA-PRI-03"]
+        assert textos["DELTA-PRI-02"] == "Escopo: itens, divergência de valor e pacote."
+
+    def test_operadora_nova_tem_todas_as_regras_incluidas_e_nao_e_cadastrada_pela_previa(self):
+        cliente, banco = _cliente(GESTAO)
+
+        previa = _previa(cliente, _memoria("MEMORIA-DELTA-v1.0.md")).json()
+
+        assert previa["versao_vigente"] is None
+        assert len(previa["incluidas"]) == 5
+        assert previa["alteradas"] == previa["removidas"] == []
+        assert banco.linhas("cm_operadora") == []
+
+    def test_arquivo_recusado_na_previa_e_422_com_o_motivo(self):
+        cliente, _ = _cliente(GESTAO)
+        texto = _memoria("MEMORIA-DELTA-v1.0.md").replace("pelo número do atendimento", "pelo 123.456.789-09")
+
+        resposta = _previa(cliente, texto)
+
+        assert resposta.status_code == 422
+        assert "CPF" in resposta.json()["detail"]
+
+    def test_quem_nao_tem_regra_contratual_e_tabelas_nao_ve_a_previa(self):
+        cliente, _ = _cliente(FATURISTA)
+
+        assert _previa(cliente, _memoria("MEMORIA-DELTA-v1.0.md")).status_code == 403
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -779,6 +912,7 @@ class TestAsRotasEstaoNoApp:
         assert len(caminhos) > 50
         assert "get" in caminhos[ROTA_OPERADORAS]
         assert "post" in caminhos[ROTA_MEMORIA]
+        assert "post" in caminhos[ROTA_PREVIA]
         assert "get" in caminhos["/api/contas-medicas/operadoras/{sigla}/memoria"]
         assert {"get", "post"} <= set(caminhos[ROTA_PLANOS])
         assert {"get", "post"} <= set(caminhos[ROTA_SETORES])
@@ -806,5 +940,20 @@ class TestTextoDoProduto:
             "nomes de plano",
             "setores",
             "CPF",
+        ):
+            assert termo in no_ar, termo
+
+    def test_diz_que_a_regra_sem_status_entra_vigente_e_que_a_previa_vem_antes_de_gravar(self):
+        """Issue #1486: o texto que o assistente lê conta o comportamento novo,
+        e não o antigo (a linha sem status entrava pendente)."""
+        no_ar = KIT.read_text(encoding="utf-8").split("## O que já está no ar")[1].split("\n## ")[0]
+
+        for termo in (
+            "Regra sem status no arquivo entra vigente",
+            "regra técnica do hospital",
+            "o que entra, o que muda",
+            "o texto de antes e o de depois",
+            "o que sai",
+            "Confirmar e gravar",
         ):
             assert termo in no_ar, termo

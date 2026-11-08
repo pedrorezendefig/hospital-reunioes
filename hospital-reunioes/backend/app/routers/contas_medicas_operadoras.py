@@ -27,7 +27,7 @@ from app.services.ai_processor import chamar_ia_fora_do_loop
 from app.services.contas_medicas.dicionario import DicionarioRecusadoError, importar_dicionario, ler_dicionario
 from app.services.contas_medicas.dicionario_ia import PropostaRecusadaError, decidir_proposta, listar_propostas
 from app.services.contas_medicas.ia import ErroDaIA
-from app.services.contas_medicas.memoria import MemoriaRecusadaError, ler_memoria
+from app.services.contas_medicas.memoria import MemoriaLida, MemoriaRecusadaError, ler_memoria
 from app.services.contas_medicas.operadoras import (
     CadastroRecusadoError,
     cadastrar_plano,
@@ -36,6 +36,7 @@ from app.services.contas_medicas.operadoras import (
     listar_operadoras,
     listar_planos,
     listar_setores,
+    previa_da_importacao,
     texto_da_memoria_vigente,
 )
 from app.services.contas_medicas.tabela_mapeada import (
@@ -120,15 +121,8 @@ async def operadoras(
     return {"operadoras": listar_operadoras(supabase)}
 
 
-@router.post("/operadoras/memoria", status_code=status.HTTP_201_CREATED)
-@limiter.limit("20/minute")
-async def enviar_memoria(
-    request: Request,
-    arquivo: UploadFile = File(...),
-    me: dict = Depends(require_permissao_cm(PERMISSAO)),
-    supabase=Depends(get_supabase_client),
-) -> dict:
-    """Importa o arquivo de memória: versão nova, vigente, com as regras dela."""
+async def _memoria_do_arquivo(arquivo: UploadFile) -> tuple[MemoriaLida, str]:
+    """A memória lida do arquivo enviado e o texto dele, ou 422 com o motivo."""
     conteudo = await arquivo.read(TETO_DO_ARQUIVO_DE_MEMORIA + 1)
     if len(conteudo) > TETO_DO_ARQUIVO_DE_MEMORIA:
         raise HTTPException(
@@ -143,9 +137,35 @@ async def enviar_memoria(
             detail="O arquivo não é texto. Envie o MEMORIA-<SIGLA>-v<versão>.md.",
         ) from None
     try:
-        memoria = ler_memoria(texto)
+        return ler_memoria(texto), texto
     except MemoriaRecusadaError as exc:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)) from None
+
+
+@router.post("/operadoras/memoria/previa")
+@limiter.limit("20/minute")
+async def previa_da_memoria(
+    request: Request,
+    arquivo: UploadFile = File(...),
+    _me: dict = Depends(require_permissao_cm(PERMISSAO)),
+    supabase=Depends(get_supabase_client),
+) -> dict:
+    """O que o arquivo de memória mudaria na versão vigente, Regra a Regra, sem gravar nada."""
+    memoria, _texto = await _memoria_do_arquivo(arquivo)
+    return previa_da_importacao(supabase, memoria)
+
+
+@router.post("/operadoras/memoria", status_code=status.HTTP_201_CREATED)
+@limiter.limit("20/minute")
+async def enviar_memoria(
+    request: Request,
+    arquivo: UploadFile = File(...),
+    me: dict = Depends(require_permissao_cm(PERMISSAO)),
+    supabase=Depends(get_supabase_client),
+) -> dict:
+    """Importa o arquivo de memória: versão nova, vigente, com as regras dela.
+    A tela chama depois do confirmar da prévia."""
+    memoria, texto = await _memoria_do_arquivo(arquivo)
     return importar_memoria(supabase, memoria, texto, me.get("id"))
 
 

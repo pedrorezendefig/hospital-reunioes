@@ -17,6 +17,10 @@ de onde a regra veio (`HSM-PRI-01`, issue #1205): é o `modelo_id` que liga as
 cópias da mesma diretriz entre as operadoras. Coluna além de ID, Regra, Tipo,
 Origem, Status, Data e Modelo entra no texto da regra como "Coluna: valor",
 uma por linha.
+
+A linha sem Status nasce Vigente (issue #1486, ADR 0081): só quem tem "regra
+contratual e tabelas" importa, e é essa pessoa que decide. Pendente fica para
+o que vem escrito assim, como a Regra técnica HSM que o modelo manda copiar.
 """
 
 from __future__ import annotations
@@ -178,13 +182,17 @@ def _regra(cabecalho: list[str], celulas: list[str]) -> RegraLida | None:
         return None
     tipo = proprias.get("TIPO", "").upper()
     modelo_id = proprias.get("MODELO", "").strip()
+    status = proprias.get("STATUS", "").strip().upper()
     return RegraLida(
         codigo=codigo,
         secao=_secao(codigo),
         texto=texto,
         tipo=tipo if tipo in _TIPOS else None,
         origem=proprias.get("ORIGEM") or None,
-        status="VIGENTE" if proprias.get("STATUS", "").upper() == "VIGENTE" else "PENDENTE",
+        # Sem STATUS (célula vazia, só um traço ou tabela sem a coluna), a Regra
+        # é de quem importou, e quem importa decide: nasce Vigente (ADR 0081,
+        # decisão 6). O STATUS escrito vale, e o que não é VIGENTE é Pendente.
+        status="PENDENTE" if re.search(r"[A-Z]", status) and status != "VIGENTE" else "VIGENTE",
         validado_em=_data(proprias.get("DATA", "")),
         # Célula vazia ou só um traço: a regra é da operadora, não do modelo.
         modelo_id=modelo_id if re.search(r"[A-Za-z0-9]", modelo_id) else None,

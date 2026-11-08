@@ -31,6 +31,7 @@ __all__ = [
     "listar_planos",
     "listar_setores",
     "memoria_vigente",
+    "previa_da_importacao",
     "reconhecer_plano",
     "texto_da_memoria_vigente",
     "trocar_vigente",
@@ -64,11 +65,45 @@ def _operadora(supabase, memoria: MemoriaLida) -> dict:
     )
 
 
+def _contagem(memoria: MemoriaLida) -> dict[str, int]:
+    vigentes = sum(1 for r in memoria.regras if r.status == "VIGENTE")
+    return {"total": len(memoria.regras), "vigentes": vigentes, "pendentes": len(memoria.regras) - vigentes}
+
+
+# O que a prévia compara e mostra de cada Regra.
+_CAMPOS_DA_PREVIA = ("texto", "tipo", "origem", "status")
+
+
+def previa_da_importacao(supabase, memoria: MemoriaLida) -> dict:
+    """O que gravar a memória lida mudaria na versão vigente da operadora,
+    Regra a Regra pelo código: as incluídas, as alteradas (antes e depois) e as
+    removidas. Só lê: nem a operadora nova é cadastrada (issue #1486)."""
+    operadoras = supabase.table("cm_operadora").select("id").eq("sigla", memoria.sigla).execute().data or []
+    vigente = memoria_vigente(supabase, operadoras[0]["id"]) if operadoras else None
+    antes = {r["codigo"]: {c: r.get(c) for c in _CAMPOS_DA_PREVIA} for r in (vigente or {}).get("regras", [])}
+    depois = {r.codigo: {c: getattr(r, c) for c in _CAMPOS_DA_PREVIA} for r in memoria.regras}
+
+    return {
+        "operadora": memoria.sigla,
+        "nome": memoria.nome,
+        "versao": memoria.versao,
+        "versao_vigente": vigente["versao"] if vigente else None,
+        "regras": _contagem(memoria),
+        "incluidas": [{"codigo": c, **depois[c]} for c in sorted(depois.keys() - antes.keys())],
+        "alteradas": [
+            {"codigo": c, "antes": antes[c], "depois": depois[c]}
+            for c in sorted(depois.keys() & antes.keys())
+            if antes[c] != depois[c]
+        ],
+        "removidas": [{"codigo": c, **antes[c]} for c in sorted(antes.keys() - depois.keys())],
+    }
+
+
 def importar_memoria(supabase, memoria: MemoriaLida, texto_md: str, autor_id: str | None) -> dict:
     """Grava a memória lida como a versão vigente da operadora e devolve o resumo."""
     operadora = _operadora(supabase, memoria)
-    vigentes = sum(1 for r in memoria.regras if r.status == "VIGENTE")
-    contagem = {"total": len(memoria.regras), "vigentes": vigentes, "pendentes": len(memoria.regras) - vigentes}
+    contagem = _contagem(memoria)
+    vigentes = contagem["vigentes"]
 
     versao = (
         supabase.table("cm_memoria_versao")
