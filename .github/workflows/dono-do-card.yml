@@ -1,0 +1,39 @@
+# Dono do card (grill de 07/11/2026): o assignee é o dono do card e todo card nasce com um.
+# Quando a issue abre sem ninguém designado, designa o autor. Assim o filtro "ninguém
+# assumiu" do Hospital OS só mostra o que de fato ficou sem dono, e a fila de cada pessoa
+# (`assignee:@me` no /pegar-issue e na /onda-enxuta) recebe os cards que ela criou.
+#
+# Relê os assignees atuais antes de designar: o botão "Levar para desenvolvimento" das
+# Demandas cria a issue e designa o responsável num PATCH logo depois (github_client.py),
+# e o payload do evento ainda vem sem ninguém. Autor de fora (OWNER, MEMBER ou
+# COLLABORATOR não) e bot ficam como estão: o GitHub não deixa designar quem não tem acesso.
+name: Dono do card
+
+on:
+  issues:
+    types: [opened]
+
+permissions:
+  issues: write
+
+jobs:
+  dono:
+    if: >-
+      github.event.issue.user.type != 'Bot' &&
+      contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.issue.author_association)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Designar o autor quando a issue nasce sem dono
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        with:
+          script: |
+            const { owner, repo } = context.repo;
+            const issue_number = context.payload.issue.number;
+            const autor = context.payload.issue.user.login;
+            const { data: atual } = await github.rest.issues.get({ owner, repo, issue_number });
+            if (atual.assignees.length > 0) {
+              core.info(`#${issue_number} já tem dono: ${atual.assignees.map((a) => a.login).join(', ')}`);
+              return;
+            }
+            await github.rest.issues.addAssignees({ owner, repo, issue_number, assignees: [autor] });
+            core.info(`#${issue_number} designada a ${autor}, o autor`);

@@ -39,7 +39,7 @@ Every triaged issue should carry exactly one category role and one state role. I
 
 These are canonical role names, the actual label strings used in the issue tracker may differ. The mapping lives in `docs/agents/triage-labels.md`, read it if it was not provided.
 
-State transitions: an unlabeled issue normally goes to `needs-triage` first; from there it moves to `needs-info`, `ready-for-agent`, `ready-for-human`, or `wontfix`. `needs-info` returns to `needs-triage` once the reporter replies. The maintainer can override at any time, flag transitions that look unusual and ask before proceeding.
+State transitions: an unlabeled issue normally goes to `needs-triage` first; from there it moves to `needs-info`, `ready-for-agent`, `ready-for-human`, or `wontfix`. `needs-info` returns to `needs-triage` once the reporter replies. Mudar o papel nunca mexe no assignee: ele é o dono do card (no Hospital, `designado_tira_da_fila`) e continua o mesmo ao ir para `ready-for-agent`. The maintainer can override at any time, flag transitions that look unusual and ask before proceeding.
 
 ## Invocation
 

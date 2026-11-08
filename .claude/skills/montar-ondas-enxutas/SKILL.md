@@ -21,7 +21,7 @@ A meta é sair com **toda issue aberta em um de dois lugares**: dentro de um pro
 
 | Argumento | Default | Efeito |
 |---|---|---|
-| `--exceto #PRD` | detectado | PRD cujas fatias outra sessão já está rodando. Sem o argumento, detecte: sub-issue com `in-progress` ou PR aberto da branch dela. Assignee sozinho não conta: designar alguém não é claim (com `designado_tira_da_fila`, conta: ali assignee é claim). |
+| `--exceto #PRD` | detectado | PRD cujas fatias outra sessão já está rodando. Sem o argumento, detecte: sub-issue com `in-progress` ou PR aberto da branch dela. Assignee sozinho não conta: designar alguém não é claim (com `designado_tira_da_fila`, o assignee é o dono do card e separa as filas de cada pessoa, veja o balde Outro dono). |
 | `--max-sessoes N` | 3 | Teto de filas (sessões) novas. Mais que 3 deployando concorre pela mesma plataforma de deploy. Cada fila vira uma cadeia de sessões de fundo, uma por onda. |
 
 ## Fluxo
@@ -58,8 +58,9 @@ Classifique **cada** issue aberta em exatamente um balde. Conte: `N abertas = ag
 
 | Balde | Regra | Destino |
 |---|---|---|
-| Outra sessão | sub-issue de PRD em `--exceto`, ou já com `in-progress` (ou assignee, com `designado_tira_da_fila`), ou PR aberto | fora, citar no relatório |
-| Pronta | `ready-for-agent` (sem designado quando `designado_tira_da_fila`; com ou sem nos outros Projetos), bloqueio só por issue fechada | entra |
+| Outra sessão | sub-issue de PRD em `--exceto`, ou já com `in-progress`, ou PR aberto | fora, citar no relatório |
+| Outro dono | com `designado_tira_da_fila`: designada a outra pessoa, ou sem dono | fora, citar no relatório com o dono (a fila é dele) |
+| Pronta | `ready-for-agent` (designada a quem roda quando `designado_tira_da_fila`; com ou sem nos outros Projetos), bloqueio só por issue fechada | entra |
 | Sem triagem | `needs-triage` com critérios de aceite escritos e sem decisão de domínio | triagem rápida (passo 2a) |
 | Decisão | `needs-triage` ou `ready-for-human` cujo corpo traz **duas saídas escritas** (A/B, 1/2) | pergunta ao humano (passo 2b), depois entra |
 | PRD | issue-mãe com sub-issues | não é trabalho; fecha sozinho quando a última filha fecha |

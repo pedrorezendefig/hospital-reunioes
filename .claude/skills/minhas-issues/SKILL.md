@@ -15,7 +15,7 @@ Mostra numa tela só o que está aberto com quem pede, onde cada coisa parou, se
 
 Sem argumento, a pessoa é o login do `gh api user`. Com `@login`, mostra a fila de outra pessoa (cobrar alguém, cobrir férias). A tela padrão é a compacta, só os blocos de texto. O caminho, a árvore dos PRDs, os selos e a Tecnologia saem só com `--visual`, quando a pessoa pedir com essas palavras (`--curto` segue aceito e é o mesmo que o padrão).
 
-"Minha" é o que a pessoa tem que fazer: atribuída a ela; sem ninguém atribuído, quem criou. O painel filtrado pela pessoa mostra também o que ela criou e outro assumiu, então lá o total pode ser maior.
+"Minha" é o que a pessoa tem que fazer: atribuída a ela (o assignee é o dono do card). Card sem ninguém atribuído não é de ninguém: aparece em "ninguém assumiu" no painel, não aqui.
 
 ## Fluxo
 

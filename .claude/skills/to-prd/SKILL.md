@@ -27,7 +27,7 @@ Issue tracker = **GitHub Issues** via `gh` (veja `docs/agents/issue-tracker.md`)
    URL=$(gh issue create --title "<título pt-BR>" --body "<corpo>" --label ready-for-agent --assignee @me)
    ```
 
-   O `--assignee @me` faz o PRD nascer com dono: quem rodou o `/to-prd` (decisão do fluxo). Não é claim; as fatias que o `/to-issues` cria continuam sem assignee até alguém pegar, e o `/pegar-issue` avisa quem pega fatia de PRD alheio.
+   O `--assignee @me` faz o PRD nascer com dono: quem rodou o `/to-prd` (decisão do fluxo). Não é claim: o assignee é o dono do card, e as fatias que o `/to-issues` cria nascem com o mesmo dono do PRD. O `/pegar-issue` avisa quem pega card de outro dono.
 
    **Todo PRD abre com o bloco "<bloco>"** (decisão do fluxo): um resumo em linguagem simples, no topo do corpo, antes da parte técnica. É a porta de entrada de quem lê as issues direto no GitHub sem abrir o código. Formato fixo, mínimo de palavras, zero jargão:
 

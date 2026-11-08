@@ -53,12 +53,18 @@ def rodar(tmp_path: Path, resposta: dict, *args: str) -> subprocess.CompletedPro
     )
 
 
-def issue(parent: dict | None) -> dict:
-    """A resposta do GraphQL para `/pegar-issue <N>`: quem pega e o pai da fatia."""
+def issue(parent: dict | None, *donos: str) -> dict:
+    """A resposta do GraphQL para `/pegar-issue <N>`: quem pega, o dono do card e o pai da fatia."""
     return {
         "data": {
             "viewer": {"login": QUEM_PEGA},
-            "repository": {"issue": {"number": 904, "parent": parent}},
+            "repository": {
+                "issue": {
+                    "number": 904,
+                    "assignees": {"nodes": [{"login": d} for d in donos]},
+                    "parent": parent,
+                }
+            },
         }
     }
 
@@ -75,6 +81,22 @@ def test_fatia_de_prd_alheio_avisa_com_o_login_do_dono_e_nao_bloqueia(tmp_path):
 
     assert feito.returncode == 0, feito.stderr
     assert feito.stdout.strip() == "fatia do PRD de @pedrorezendefig; combine antes"
+
+
+def test_card_de_outro_dono_avisa_com_o_login_do_dono_e_nao_bloqueia(tmp_path):
+    """O assignee e o dono do card: pegar o card de outro se combina antes, como a fatia de PRD alheio."""
+    feito = rodar(tmp_path, issue(prd(902, QUEM_PEGA), "pedroribbe"), "904")
+
+    assert feito.returncode == 0, feito.stderr
+    assert feito.stdout.strip() == "card de @pedroribbe; combine antes"
+
+
+def test_card_proprio_de_prd_alheio_nao_avisa(tmp_path):
+    """Com o card designado a quem pega, o dono do PRD ja combinou ao passar o card."""
+    feito = rodar(tmp_path, issue(prd(902, "pedrorezendefig"), QUEM_PEGA), "904")
+
+    assert feito.returncode == 0, feito.stderr
+    assert feito.stdout == ""
 
 
 @pytest.mark.parametrize(
@@ -124,13 +146,16 @@ def test_a_fila_mostra_o_dono_do_prd_ao_lado_de_cada_fatia(tmp_path):
     ]
 
 
-def test_a_fila_continua_so_com_pronta_sem_dono_e_desbloqueada(tmp_path):
-    """O `-is:blocked` só vale na busca avançada; na comum volta a fatia bloqueada."""
+def test_a_fila_e_so_dos_cards_de_quem_roda_prontos_e_desbloqueados(tmp_path):
+    """Com `designado_tira_da_fila`, a fila e `assignee:@me`: card de outro dono fica na fila dele.
+
+    O `-is:blocked` só vale na busca avançada; na comum volta a fatia bloqueada."""
     rodar(tmp_path, fila(), "--fila")
 
     chamada = (tmp_path / "gh.log").read_text(encoding="utf-8")
     assert "ISSUE_ADVANCED" in chamada
     assert (
         "q=repo:hsm/hospital-reunioes is:issue is:open label:ready-for-agent "
-        "no:assignee -is:blocked"
+        "assignee:@me -is:blocked"
     ) in chamada
+    assert "no:assignee" not in chamada

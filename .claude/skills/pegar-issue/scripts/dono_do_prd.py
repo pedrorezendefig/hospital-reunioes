@@ -5,11 +5,13 @@ PRD alheio não é proibido, mas se combina antes; este script dá o aviso, sem
 bloquear o claim, e mostra o dono ao lado de cada fatia da fila.
 
 Uso:
-  python3 dono_do_prd.py <N>     imprime o aviso, ou nada se a fatia é do próprio
-                                 PRD, se o PRD não tem dono ou se a issue é avulsa
+  python3 dono_do_prd.py <N>     imprime o aviso, ou nada se o card é de quem pega
+                                 ou, sem dono, se a fatia é do próprio PRD, se o PRD
+                                 não tem dono ou se a issue é avulsa
   python3 dono_do_prd.py --fila  imprime a fila ready-for-agent sem bloqueio, em
                                  tabela, com o PRD, o dono dele e quem está
-                                 designado (designar não tira da fila)
+                                 designado; com `designado_tira_da_fila`, só os
+                                 cards de quem roda (o assignee é o dono do card)
 """
 
 from __future__ import annotations
@@ -35,7 +37,9 @@ PAI = "parent { number assignees(first: 10) { nodes { login } } }"
 CONSULTA_DA_ISSUE = f"""
 query($owner: String!, $repo: String!, $n: Int!) {{
   viewer {{ login }}
-  repository(owner: $owner, name: $repo) {{ issue(number: $n) {{ number {PAI} }} }}
+  repository(owner: $owner, name: $repo) {{
+    issue(number: $n) {{ number assignees(first: 10) {{ nodes {{ login }} }} {PAI} }}
+  }}
 }}
 """
 
@@ -55,8 +59,8 @@ FILTRO_DA_FILA = "is:issue is:open label:ready-for-agent -is:blocked"
 
 
 def filtro_da_fila(designado_tira_da_fila: bool) -> str:
-    """No Projeto em que assignee e claim (`designado_tira_da_fila` no fluxo.json), a fila e so sem dono."""
-    return FILTRO_DA_FILA.replace(" -is:blocked", " no:assignee -is:blocked") if designado_tira_da_fila else FILTRO_DA_FILA
+    """No Projeto em que o assignee e o dono do card (`designado_tira_da_fila` no fluxo.json), a fila e so a de quem roda."""
+    return FILTRO_DA_FILA.replace(" -is:blocked", " assignee:@me -is:blocked") if designado_tira_da_fila else FILTRO_DA_FILA
 
 
 def gh(*args: str) -> str:
@@ -82,8 +86,15 @@ def donos(issue: dict | None) -> list[str]:
     return [a["login"] for a in (issue.get("assignees") or {}).get("nodes", [])]
 
 
-def aviso(donos_do_prd: list[str], login: str) -> str | None:
-    """O aviso de uma linha, ou None quando não há o que combinar."""
+def aviso(donos_do_card: list[str], donos_do_prd: list[str], login: str) -> str | None:
+    """O aviso de uma linha, ou None quando não há o que combinar.
+
+    O dono do card manda; sem dono no card, vale o dono do PRD.
+    """
+    if donos_do_card:
+        if login in donos_do_card:
+            return None
+        return f"card de {', '.join('@' + d for d in donos_do_card)}; combine antes"
     if not donos_do_prd or login in donos_do_prd:
         return None
     return f"fatia do PRD de {', '.join('@' + d for d in donos_do_prd)}; combine antes"
@@ -107,7 +118,7 @@ def linha(issue: dict, com_designado: bool = True) -> str:
 
 
 def tabela(issues: list[dict], com_designado: bool = True) -> str:
-    """Onde assignee e claim (`designado_tira_da_fila`), a fila so tem issue sem dono: sem a coluna."""
+    """Onde o assignee e o dono (`designado_tira_da_fila`), a fila so tem card de quem roda: sem a coluna."""
     if com_designado:
         cabecalho = [
             "| # | título | labels | PRD | dono do PRD | designada a |",
@@ -120,14 +131,14 @@ def tabela(issues: list[dict], com_designado: bool = True) -> str:
 
 def main(argv: list[str]) -> int:
     if argv == ["--fila"]:
-        so_sem_dono = _designado_tira_da_fila()
-        dados = graphql(CONSULTA_DA_FILA, q=f"repo:{repositorio()} {filtro_da_fila(so_sem_dono)}")
-        print(tabela(dados["search"]["nodes"], com_designado=not so_sem_dono))
+        so_os_meus = _designado_tira_da_fila()
+        dados = graphql(CONSULTA_DA_FILA, q=f"repo:{repositorio()} {filtro_da_fila(so_os_meus)}")
+        print(tabela(dados["search"]["nodes"], com_designado=not so_os_meus))
         return 0
     owner, repo = repositorio().split("/")
     dados = graphql(CONSULTA_DA_ISSUE, owner=owner, repo=repo, n=int(argv[0]))
-    parent = dados["repository"]["issue"]["parent"]
-    texto = aviso(donos(parent), dados["viewer"]["login"])
+    card = dados["repository"]["issue"]
+    texto = aviso(donos(card), donos(card["parent"]), dados["viewer"]["login"])
     if texto:
         print(texto)
     return 0

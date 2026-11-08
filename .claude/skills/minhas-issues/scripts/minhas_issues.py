@@ -75,10 +75,8 @@ VEREDITO = {
 
 
 def minhas(issues: list[dict], login: str) -> list[dict]:
-    return [
-        i for i in issues
-        if login in i["assignees"] or (not i["assignees"] and i["author"] == login)
-    ]
+    """Só o assignee: é o dono do card (o criador deixou de ser reserva)."""
+    return [i for i in issues if login in i["assignees"]]
 
 
 def grill_tecnico_pendente(i: dict) -> bool:
@@ -719,7 +717,7 @@ def coletar(login: str | None, visual: bool = True) -> dict:
     repo = gh("repo", "view", "--json", "nameWithOwner", "-q", ".nameWithOwner").strip()
     agora = datetime.now(timezone.utc)
     vistas, issues = set(), []
-    for filtro in (f"is:open assignee:{login}", f"is:open author:{login} no:assignee"):
+    for filtro in (f"is:open assignee:{login}",):
         for i in _issues(repo, filtro):
             if i["number"] not in vistas:
                 vistas.add(i["number"])

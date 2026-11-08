@@ -18,13 +18,13 @@ gh issue list --label revisor-comentou --state all \
 
 Se houver alguma, mostre num bloco separado ("🔔 Revisor comentou, curadoria pendente") e recomende tratá-las antes de pegar issue nova. A curadoria (ler o comentário, classificar, reabrir/editar critérios sob aprovação humana) segue o protocolo do `/triage`.
 
-Depois, mostre as issues disponíveis (prontas e desbloqueadas), cada uma com o dono do PRD e quem está designado ao lado. Ter alguém designado só tira a issue da fila quando o `designado_tira_da_fila` do `fluxo.py` é `true` (assignee é claim); nos outros Projetos, quem escolhe é quem roda a skill.
+Depois, mostre as issues disponíveis (prontas e desbloqueadas), cada uma com o dono do PRD e quem está designado ao lado. Quando o `designado_tira_da_fila` do `fluxo.py` é `true`, o assignee é o dono do card e a fila é só a de quem roda (`assignee:@me`): card de outro dono fica na fila dele; nos outros Projetos, quem escolhe é quem roda a skill.
 
 ```bash
 python3 .claude/skills/pegar-issue/scripts/dono_do_prd.py --fila
 ```
 
-O script busca `ready-for-agent` e `-is:blocked` (mais `no:assignee` quando `designado_tira_da_fila`) (a busca avançada exclui as bloqueadas server-side, dependências nativas, decisão do fluxo) e imprime a tabela com as colunas **PRD**, **dono do PRD** e **designada a**: `avulsa` quando a issue não tem PRD, `sem dono` quando o PRD não tem assignee. Mostre essa tabela, acrescentando o tipo AFK/HITL, se marcado. Pergunte qual número pegar; se o usuário disser "pega a próxima", pegue a primeira AFK e siga.
+O script busca `ready-for-agent` e `-is:blocked` (mais `assignee:@me` quando `designado_tira_da_fila`) (a busca avançada exclui as bloqueadas server-side, dependências nativas, decisão do fluxo) e imprime a tabela com as colunas **PRD**, **dono do PRD** e **designada a**: `avulsa` quando a issue não tem PRD, `sem dono` quando o PRD não tem assignee. Mostre essa tabela, acrescentando o tipo AFK/HITL, se marcado. Pergunte qual número pegar; se o usuário disser "pega a próxima", pegue a primeira AFK e siga.
 
 ## Com argumento `<N>`: pegar a issue
 
@@ -50,11 +50,11 @@ python3 .claude/skills/pegar-issue/scripts/arquivo_em_comum.py <N>
 ```
 Arquivo em comum não separa fatias (decisão do fluxo): o único separador é a dependência, que quem fatia escreve como `blocked_by` nativo (passo 2), e o conflito de texto se resolve na subida, PR a PR. O script cruza os caminhos que o corpo da issue cita entre crases com os das issues `in-progress` (corpo e arquivos do PR aberto que as fecha) e, se algum coincide, imprime uma linha de aviso com as issues e os arquivos. Repasse a linha ao usuário e **siga para o claim**; o script não grava dependência e sempre sai `0`.
 
-### 4. Avisar fatia de PRD alheio (não bloqueia)
+### 4. Avisar card de outro dono (não bloqueia)
 ```bash
 python3 .claude/skills/pegar-issue/scripts/dono_do_prd.py <N>
 ```
-Se a fatia é de um PRD cujo dono (assignee do PRD pai) é outro login, o script imprime uma linha, `fatia do PRD de @fulano; combine antes`: repasse o aviso ao usuário e **siga para o claim** (decisão do fluxo: pegar fatia de PRD alheio não é proibido, se combina). Fatia do próprio PRD, PRD sem dono ou issue avulsa: o script não imprime nada.
+Se o card tem outro dono (assignee da issue), o script imprime `card de @fulano; combine antes`; sem dono no card, vale o do PRD pai: `fatia do PRD de @fulano; combine antes`. Repasse o aviso ao usuário e **siga para o claim** (decisão do fluxo: pegar card alheio por número explícito não é proibido, se combina). Card de quem pega, fatia do próprio PRD, PRD sem dono ou issue avulsa: o script não imprime nada.
 
 ### 5. Claim atômico (o "lock")
 ```bash
@@ -62,7 +62,7 @@ gh issue edit <N> --remove-label ready-for-agent --add-label in-progress --add-a
 ```
 Se o `--remove-label` falhar porque `ready-for-agent` já não estava lá, **outra sessão pegou primeiro**: avise e pare. O lock é só a label. Assignee que já estava na issue (alguém designado antes) não impede o claim e não é removido.
 
-Com `designado_tira_da_fila: true` no `fluxo.py`, confira depois do claim: `gh issue view <N> --json assignees --jq '.assignees[].login'`. Mais de um dono, abra mão (`gh issue edit <N> --remove-assignee @me`) e pegue a próxima.
+Com `designado_tira_da_fila: true` no `fluxo.py`, o assignee é o dono do card e o card tem um dono só: quando a issue já tem dono, o claim é sem o `--add-assignee @me` (o dono não muda); sem dono, mantenha o comando acima.
 
 ### 6. Criar o worktree da issue a partir da `origin/main`
 Derive o tipo do label `type:*` (feature→`feat`, fix→`fix`, etc.) e um slug curto do título. Branch determinística por número (nunca colide), num worktree próprio, nascido da `origin/main` recém-buscada (decisão do fluxo: a árvore principal fica na `main` e não recebe branch de trabalho):
@@ -94,3 +94,4 @@ Abandonou? Devolva ao pool:
 ```bash
 gh issue edit <N> --remove-assignee @me --remove-label in-progress --add-label ready-for-agent
 ```
+Com `designado_tira_da_fila: true`, devolva sem o `--remove-assignee @me`: o dono continua o mesmo.
