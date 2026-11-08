@@ -1,6 +1,6 @@
 # ROTAS.md
 <!-- gerado automaticamente por /snapshot — não editar -->
-<!-- last_update: 2026-11-08T01:34+0000 -->
+<!-- last_update: 2026-11-08T02:18+0000 -->
 
 Endpoints HTTP expostos pelo backend FastAPI do Hospital Reuniões.
 
@@ -121,6 +121,8 @@ Endpoints HTTP expostos pelo backend FastAPI do Hospital Reuniões.
 | GET | `/contas-medicas/contas/{conta_id}/guia` | O Guia da Conta: cabeçalho, os três números e as linhas por dia e setor. | ✅ |
 | POST | `/contas-medicas/contas/{conta_id}/guia/concluir` | Concluir é sempre possível. Sem pendência, a Conta fica Concluída; com | ✅ |
 | POST | `/contas-medicas/contas/{conta_id}/guia/dia/feito` | Feito em todas as linhas abertas do grupo (dia e setor). As já marcadas | ✅ |
+| POST | `/contas-medicas/contas/{conta_id}/guia/faltou-isto` | Faltou isto: quem vê o Guia aponta o item e a página que o módulo não | ✅ |
+| POST | `/contas-medicas/contas/{conta_id}/guia/faltou-isto/{faltou_id}/pedido` | O ok de quem apontou: a página não lida ou o defeito vira issue | ✅ |
 | DELETE | `/contas-medicas/contas/{conta_id}/guia/linhas/{linha_id}/marcacao` | Desfazer: a linha volta a aberta, enquanto a Conta não foi concluída. | ✅ |
 | POST | `/contas-medicas/contas/{conta_id}/guia/linhas/{linha_id}/marcacao` | Feito, Não procede (com motivo) ou Bloqueado numa linha do Guia. O | ✅ |
 | POST | `/contas-medicas/contas/{conta_id}/reanalisar` | Reanalisar (issue #1130): a conta A fazer ou Em correção volta para a | ✅ |
@@ -506,4 +508,4 @@ Endpoints HTTP expostos pelo backend FastAPI do Hospital Reuniões.
 
 ---
 
-**Totais:** 280 endpoints em 44 routers · 94% exigem auth.
+**Totais:** 282 endpoints em 44 routers · 94% exigem auth.
