@@ -489,6 +489,7 @@ async def apontar_faltou_isto(
             item=corpo.item,
             pagina=corpo.pagina,
             texto=corpo.texto,
+            decide="regra_contratual_tabelas" in me["permissoes_cm"],
         )
     except ErroDaIA:
         raise HTTPException(status_code=503, detail=faltou_isto.MENSAGEM_AUDITOR_FORA) from None

@@ -20,6 +20,8 @@ export interface FaltouIsto {
   classificacao: OrigemDoFaltouIsto | null;
   explicacao: string | null;
   criado_em?: string | null;
+  /** Onde está a Regra que o apontamento gerou, quando a falha é falta de regra (issue #1496). */
+  proposta_de_regra?: string | null;
   pedido_aberto: boolean;
   pode_abrir_pedido: boolean;
 }

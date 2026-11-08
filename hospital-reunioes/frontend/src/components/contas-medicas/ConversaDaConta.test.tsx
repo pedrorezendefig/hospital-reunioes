@@ -150,6 +150,21 @@ describe("a conversa com o Auditor", () => {
   });
 });
 
+describe("a Regra que nasceu do Faltou isto", () => {
+  it("mostra onde está a proposta de Regra, como o servidor diz", async () => {
+    const onde = "A Regra ALFA-INS-01 entrou na memória como pendente e foi para a Validação.";
+    lista = [
+      apontamento({ classificacao: "REGRA", pode_abrir_pedido: false, proposta_de_regra: onde }),
+      apontamento({ id: "f-2", item: "Fralda geriátrica", texto: null, pode_abrir_pedido: false }),
+    ];
+    abrir();
+
+    const respostas = await screen.findAllByRole("article", { name: "Resposta do Auditor" });
+    expect(within(respostas[0]).getByText(onde)).toBeTruthy();
+    expect(screen.getAllByText(onde)).toHaveLength(1);
+  });
+});
+
 describe("o pedido para a Tecnologia", () => {
   it("quem apontou dá o ok e o pedido fica aberto, sem número na tela", async () => {
     abrir();

@@ -21,7 +21,7 @@ from datetime import UTC, date, datetime
 from typing import Any
 
 from app.services import github_client
-from app.services.contas_medicas import ia
+from app.services.contas_medicas import auditor, ia
 from app.services.contas_medicas.desidentificacao import Identificacao, desidentificar
 from app.services.contas_medicas.memoria_texto import gerar_texto_memoria
 from app.services.contas_medicas.passo_b import eventos_do_periodo
@@ -152,6 +152,18 @@ def _conversa_da_conta(supabase, conta: dict[str, Any], operadora_id: str | None
     return criada.data[0]["id"]
 
 
+def _pedido_de_regra(dia: date, item: str, explicacao: str, esperado: str) -> str:
+    """A mensagem que leva o Faltou isto por falta de regra ao lote do Auditor."""
+    return "\n".join(
+        [
+            f"Faltou isto no Guia de uma conta desta operadora, em {_dia_curto(dia)}: {item}.",
+            f"O Auditor viu que falta regra: {explicacao}",
+            f"{ROTULO_DO_ESPERADO}{esperado or 'o Auditor não disse.'}",
+            "Proponha a Regra nova que faz o Guia apontar isto nas próximas contas.",
+        ]
+    )
+
+
 def apontar(
     supabase,
     *,
@@ -162,10 +174,15 @@ def apontar(
     item: str,
     pagina: int | None,
     texto: str | None,
+    decide: bool = False,
 ) -> dict[str, Any]:
-    """O Faltou isto de uma pessoa: o Auditor explica e classifica, e só então
-    o apontamento, a conversa e as duas falas são gravados. `ia.ErroDaIA` sobe
-    sem nada gravado."""
+    """O Faltou isto de uma pessoa: o Auditor explica e classifica e, quando
+    falta regra, propõe a Regra (issue #1496); só então o apontamento, a
+    conversa e as falas são gravados. `ia.ErroDaIA` sobe sem nada gravado.
+
+    `decide` é quem tem "Regra contratual e tabelas": a proposta espera o "ok"
+    na conversa da Operadora. Sem a permissão, a Regra entra pendente e vai
+    para a Validação."""
     operadora_id = atendimento.get("operadora_id")
     memoria = gerar_texto_memoria(supabase, operadora_id, conta.get("memoria_versao_id"))
     # O que a pessoa escreveu vai ao Auditor sem identificação, como o texto do
@@ -187,6 +204,14 @@ def apontar(
         atendimento_id=conta.get("atendimento_id"),
     )
     explicacao = _juntar(diagnostico.explicacao, diagnostico.esperado)
+    item_sem_identificacao = _sem_identificacao(item, conta, atendimento)
+    proposta = None
+    if diagnostico.classificacao == "REGRA":
+        proposta = auditor.propor_regra_do_faltou_isto(
+            supabase,
+            operadora_id,
+            _pedido_de_regra(dia, item_sem_identificacao, *separar(explicacao)),
+        )
 
     conversa_id = _conversa_da_conta(supabase, conta, operadora_id, autor_id)
     supabase.table("cm_conversa_mensagem").insert(
@@ -218,8 +243,35 @@ def apontar(
             }
         )
         .execute()
+        .data[0]
     )
-    return gravado.data[0]
+    if proposta is None:
+        return gravado
+    fala = f"Faltou isto no Guia, em {_dia_curto(dia)}: {item_sem_identificacao}."
+    do_lote = auditor.gravar_regra_do_faltou_isto(
+        supabase,
+        proposta,
+        fala=fala,
+        autor_id=autor_id,
+        decide=decide,
+        conversa_da_conta=conversa_id,
+    )
+    ligado = supabase.table("cm_faltou_isto").update({"lote_item_id": do_lote["id"]}).eq("id", gravado["id"]).execute()
+    return {**(ligado.data or [{**gravado, "lote_item_id": do_lote["id"]}])[0], "lote_item": do_lote}
+
+
+def proposta_de_regra(item: dict[str, Any] | None) -> str | None:
+    """O que a tela diz da Regra que o apontamento gerou (issue #1496), pelo
+    item do lote ligado a ele."""
+    if not item:
+        return None
+    if item.get("estado") == "PROPOSTO":
+        return 'A proposta de Regra está na conversa da Operadora, esperando o "ok".'
+    if item.get("estado") == "DESCARTADO":
+        return "A proposta de Regra foi descartada na conversa da Operadora."
+    if (item.get("proposta_json") or {}).get("status") == "PENDENTE":
+        return f"A Regra {item.get('regra_codigo')} entrou na memória como pendente e foi para a Validação."
+    return f"A Regra {item.get('regra_codigo')} entrou na memória."
 
 
 def para_a_tela(apontamento: dict[str, Any], me_id: str | None) -> dict[str, Any]:
@@ -229,14 +281,25 @@ def para_a_tela(apontamento: dict[str, Any], me_id: str | None) -> dict[str, Any
     aberto = bool(apontamento.get("issue_numero"))
     return {
         **{chave: apontamento.get(chave) for chave in campos},
+        "proposta_de_regra": proposta_de_regra(apontamento.get("lote_item")),
         "pedido_aberto": aberto,
         "pode_abrir_pedido": vira_pedido(apontamento) and not aberto and apontamento.get("apontado_por") == me_id,
     }
 
 
 def da_conta(supabase, conta_id: str) -> list[dict[str, Any]]:
-    """Os Faltou isto da Conta, do mais antigo ao mais novo."""
-    return supabase.table("cm_faltou_isto").select("*").eq("conta_id", conta_id).order("criado_em").execute().data or []
+    """Os Faltou isto da Conta, do mais antigo ao mais novo, cada um com o item
+    do lote da Regra que gerou (`lote_item`), quando gerou."""
+    apontamentos = (
+        supabase.table("cm_faltou_isto").select("*").eq("conta_id", conta_id).order("criado_em").execute().data or []
+    )
+    ids = sorted({a["lote_item_id"] for a in apontamentos if a.get("lote_item_id")})
+    itens = (
+        {i["id"]: i for i in supabase.table("cm_lote_item").select("*").in_("id", ids).execute().data or []}
+        if ids
+        else {}
+    )
+    return [{**a, "lote_item": itens.get(a.get("lote_item_id"))} for a in apontamentos]
 
 
 # ─── O pedido para a Tecnologia (ADR 0081, decisão 4) ─────────────────────────

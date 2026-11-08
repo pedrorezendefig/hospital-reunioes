@@ -6,7 +6,8 @@
  * Quem vê o Guia aponta o Faltou isto de um dia: o item, a página do
  * prontuário e a pergunta. O Auditor responde por que o Guia não achou e de
  * onde a falha veio. Na página não lida e no defeito do sistema, quem apontou
- * dá o ok e o pedido vai para a Tecnologia. O servidor decide quem pode o quê;
+ * dá o ok e o pedido vai para a Tecnologia. Na falta de regra, a resposta diz
+ * onde está a Regra proposta (issue #1496). O servidor decide quem pode o quê;
  * a tela desenha pelo que ele manda.
  */
 
@@ -135,6 +136,9 @@ export function ConversaDaConta({ contaId, token, dias, iniciais, escolha }: Pro
                 )}
               </div>
               <p className="text-sm text-slate-700 whitespace-pre-line break-words">{apontamento.explicacao}</p>
+              {apontamento.proposta_de_regra && (
+                <p className="text-xs font-semibold text-slate-600">{apontamento.proposta_de_regra}</p>
+              )}
               {apontamento.pedido_aberto && (
                 <p className="text-xs font-semibold text-slate-600">Pedido aberto para a Tecnologia.</p>
               )}

@@ -37,7 +37,7 @@ import re
 from datetime import UTC, datetime
 from typing import Any
 
-from app.services.contas_medicas import ia
+from app.services.contas_medicas import ia, validacao
 from app.services.contas_medicas.contratos import (
     TETO_DO_TEXTO,
     confirmar_contrato,
@@ -47,6 +47,7 @@ from app.services.contas_medicas.contratos import (
 from app.services.contas_medicas.memoria import _CPF
 from app.services.contas_medicas.memoria_edicao import (
     MudancaRecusadaError,
+    RegraNaoEncontradaError,
     _gravar_versao,
     _regras_da_versao,
 )
@@ -64,7 +65,14 @@ from app.services.contas_medicas.regra_nova import (
 from app.services.contas_medicas.validacao import decidir_pela_memoria
 from app.utils.text_sanitizer import sanitizar_estrutura
 
-__all__ = ["LoteRecusadoError", "conversa_da_operadora", "conversar", "conversar_com_contrato"]
+__all__ = [
+    "LoteRecusadoError",
+    "conversa_da_operadora",
+    "conversar",
+    "conversar_com_contrato",
+    "gravar_regra_do_faltou_isto",
+    "propor_regra_do_faltou_isto",
+]
 
 logger = logging.getLogger(__name__)
 
@@ -307,6 +315,26 @@ def _novo_lote(supabase, sigla: str, texto: str, autor_id: str | None) -> None:
     _gravar_lote(supabase, sigla, operadora_id, texto, itens, do_auditor, autor_id)
 
 
+def _lote_novo(
+    supabase, operadora_id: str, conversa_id: str, mensagem_id: str | None, fonte: str, autor_id: str | None
+) -> dict:
+    return (
+        supabase.table("cm_lote")
+        .insert(
+            {
+                "operadora_id": operadora_id,
+                "conversa_id": conversa_id,
+                "mensagem_id": mensagem_id,
+                "fonte": fonte,
+                "estado": "PROPOSTO",
+                "criado_por": autor_id,
+            }
+        )
+        .execute()
+        .data[0]
+    )
+
+
 def _revisar_pendentes(supabase, sigla: str, texto: str, autor_id: str | None) -> None:
     """O lote com todas as Regras pendentes da Operadora, e só dela: os itens
     saem da memória vigente, e o Auditor só sugere a decisão de cada um."""
@@ -354,21 +382,7 @@ def _gravar_lote(
         if anterior:
             supabase.table("cm_lote").update({"estado": "DESCARTADO"}).eq("id", anterior["id"]).execute()
             supabase.table("cm_lote_item").update({"estado": "DESCARTADO"}).eq("lote_id", anterior["id"]).execute()
-        lote = (
-            supabase.table("cm_lote")
-            .insert(
-                {
-                    "operadora_id": operadora_id,
-                    "conversa_id": conversa_id,
-                    "mensagem_id": pessoa["id"],
-                    "fonte": fonte,
-                    "estado": "PROPOSTO",
-                    "criado_por": autor_id,
-                }
-            )
-            .execute()
-            .data[0]
-        )
+        lote = _lote_novo(supabase, operadora_id, conversa_id, pessoa["id"], fonte, autor_id)
         gravados = (
             supabase.table("cm_lote_item")
             .insert(
@@ -383,6 +397,136 @@ def _gravar_lote(
     _falar(supabase, conversa_id, "AUDITOR", do_auditor)
     for item in gravados:
         _provar(supabase, sigla, item, autor_id)
+
+
+# ─── O Faltou isto por falta de regra (issue #1496) ──────────────────────────
+
+
+def propor_regra_do_faltou_isto(supabase, operadora_id: str | None, pedido: str) -> dict[str, Any] | None:
+    """A Regra nova que o Auditor propõe para o Faltou isto classificado como
+    REGRA (ADR 0081, decisão 4), sem gravar nada: a pergunta vai antes de
+    qualquer gravação. Uma Regra só, a primeira nova do lote; sem ela (ou com
+    número no formato de CPF), não há proposta."""
+    operadoras = (
+        supabase.table("cm_operadora").select("sigla").eq("id", operadora_id).execute().data or []
+        if operadora_id
+        else []
+    )
+    if not operadoras:
+        return None
+    try:
+        sigla, operadora_id, vigente = _operadora_e_vigente(supabase, operadoras[0]["sigla"])
+    except RegraNaoEncontradaError:
+        return None
+    memoria = gerar_texto_memoria(supabase, operadora_id, vigente["id"])
+    resposta = ia.propor_lote(pedido, memoria, supabase=supabase)
+    regras = {r["codigo"]: r for r in _regras_da_versao(supabase, vigente["id"])}
+    item = next(
+        (
+            i
+            for i in (_item_do_auditor(p, vigente, regras) for p in resposta.propostas)
+            if i is not None and i["tipo"] == "REGRA_NOVA"
+        ),
+        None,
+    )
+    if item is None or _CPF.search(item["proposta_json"]["texto"]):
+        return None
+    return {
+        "sigla": sigla,
+        "operadora_id": operadora_id,
+        "item": item,
+        "do_auditor": sanitizar_estrutura(resposta.resposta).strip(),
+    }
+
+
+def gravar_regra_do_faltou_isto(
+    supabase,
+    proposta: dict[str, Any],
+    *,
+    fala: str,
+    autor_id: str | None,
+    decide: bool,
+    conversa_da_conta: str,
+) -> dict[str, Any]:
+    """A proposta de Regra do Faltou isto, gravada pelo caminho de quem apontou
+    (ADR 0081, decisões 5 e 6). Devolve o item do lote, que o apontamento guarda.
+
+    Quem decide (tem "Regra contratual e tabelas"): o item entra no lote aberto
+    da conversa da Operadora, sem descartar o que já estava lá, com a Prova da
+    regra; o "ok" ali grava a Regra vigente numa versão nova. Quem não decide
+    (faturista, coordenadora): a Regra entra pendente numa versão nova, num
+    lote já aplicado da conversa da Conta, e abre o Tema de validação; a prova
+    dela é a da recomendação do Auditor na Validação."""
+    if not decide:
+        return _regra_pendente(supabase, proposta, autor_id, conversa_da_conta)
+    operadora_id, autor = proposta["operadora_id"], autor_id
+    conversa_id = _conversa_ou_nova(supabase, operadora_id, autor)
+    pessoa = _falar(supabase, conversa_id, "PESSOA", fala, autor)
+    lote = _lote_aberto(supabase, conversa_id) or _lote_novo(
+        supabase, operadora_id, conversa_id, pessoa["id"], "FALTOU_ISTO", autor
+    )
+    numero = max((i["numero"] for i in _itens(supabase, lote["id"])), default=0) + 1
+    gravado = (
+        supabase.table("cm_lote_item")
+        .insert({**proposta["item"], "lote_id": lote["id"], "numero": numero, "estado": "PROPOSTO"})
+        .execute()
+        .data[0]
+    )
+    _falar(supabase, conversa_id, "AUDITOR", proposta["do_auditor"])
+    _provar(supabase, proposta["sigla"], gravado, autor)
+    return gravado
+
+
+def _regra_pendente(supabase, proposta: dict[str, Any], autor_id: str | None, conversa_da_conta: str) -> dict[str, Any]:
+    sigla, operadora_id, vigente = _operadora_e_vigente(supabase, proposta["sigla"])
+    regras = _regras_da_versao(supabase, vigente["id"])
+    dados = proposta["item"]["proposta_json"]
+    codigo = _proximo_codigo(sigla, dados["secao"], regras)
+    versao = _gravar_versao(
+        supabase,
+        operadora_id,
+        vigente,
+        regras,
+        {},
+        autor_id,
+        f"Faltou isto: {codigo} incluída pendente",
+        novas=[
+            {
+                "operadora_id": operadora_id,
+                "codigo": codigo,
+                "secao": dados["secao"],
+                "texto": dados["texto"],
+                "tipo": dados["tipo"],
+                "origem": dados.get("origem"),
+                "status": "PENDENTE",
+                "ativa": True,
+            }
+        ],
+    )
+    lote = _lote_novo(supabase, operadora_id, conversa_da_conta, None, "FALTOU_ISTO", autor_id)
+    supabase.table("cm_lote").update(
+        {"estado": "APLICADO", "memoria_versao_id": versao["id"], "aplicado_por": autor_id, "aplicado_em": _agora()}
+    ).eq("id", lote["id"]).execute()
+    gravado = (
+        supabase.table("cm_lote_item")
+        .insert(
+            {
+                **proposta["item"],
+                "proposta_json": {**dados, "status": "PENDENTE"},
+                "regra_codigo": codigo,
+                "lote_id": lote["id"],
+                "numero": 1,
+                "estado": "APLICADO",
+            }
+        )
+        .execute()
+        .data[0]
+    )
+    with validacao._trava_dos_temas:
+        validacao._tema_aberto(
+            supabase, validacao.REGRA_PENDENTE, f"Regra {codigo}", operadora_id=operadora_id, regra_codigo=codigo
+        )
+    return gravado
 
 
 # ─── O contrato ─────────────────────────────────────────────────────────────

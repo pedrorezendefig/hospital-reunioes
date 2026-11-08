@@ -346,6 +346,23 @@ def _temas_do_dicionario(supabase) -> None:
             supabase.table("cm_validacao_tema").insert(novas).execute()
 
 
+def _contas_do_faltou_isto(supabase, temas: list[dict]) -> dict[str, set[str]]:
+    """As Contas do Faltou isto que fez nascer cada Regra pendente (issue
+    #1496), pelo código: a Regra ainda não tem linha Validar, e a Conta do
+    apontamento é a que ela afeta. O código já traz a sigla da operadora."""
+    codigos = [t.get("regra_codigo") for t in temas if t["tipo"] == REGRA_PENDENTE]
+    itens = [
+        i
+        for i in _em_lotes(supabase, "cm_lote_item", "regra_codigo", codigos, "itens do lote")
+        if i.get("estado") == "APLICADO"
+    ]
+    codigo_do_item = {i["id"]: i["regra_codigo"] for i in itens}
+    contas: dict[str, set[str]] = {}
+    for apontamento in _em_lotes(supabase, "cm_faltou_isto", "lote_item_id", codigo_do_item, "Faltou isto"):
+        contas.setdefault(codigo_do_item[apontamento["lote_item_id"]], set()).add(apontamento["conta_id"])
+    return contas
+
+
 def fila_de_validacao(supabase) -> dict[str, Any]:
     """Os temas abertos como a tela mostra, do maior R$ em jogo para o menor,
     e os três números do topo: aguardando decisão, contas afetadas e R$ em jogo."""
@@ -372,13 +389,15 @@ def fila_de_validacao(supabase) -> dict[str, Any]:
             supabase, "cm_observacao", "id", [li.get("observacao_id") for li in ligacoes], "observações da Validação"
         )
     }
+    do_faltou_isto = _contas_do_faltou_isto(supabase, temas)
     contas = {
         c["id"]: c
         for c in _em_lotes(
             supabase,
             "cm_conta",
             "id",
-            [x["conta_id"] for x in [*linhas.values(), *observacoes.values()]],
+            [x["conta_id"] for x in [*linhas.values(), *observacoes.values()]]
+            + [c for ids in do_faltou_isto.values() for c in ids],
             "contas da Validação",
         )
     }
@@ -412,6 +431,8 @@ def fila_de_validacao(supabase) -> dict[str, Any]:
         das_linhas = [linhas[li["guia_linha_id"]] for li in ligadas if li.get("guia_linha_id") in linhas]
         das_observacoes = [observacoes[li["observacao_id"]] for li in ligadas if li.get("observacao_id") in observacoes]
         conta_ids = {x["conta_id"] for x in [*das_linhas, *das_observacoes]}
+        if tema["tipo"] == REGRA_PENDENTE:
+            conta_ids |= do_faltou_isto.get(tema.get("regra_codigo"), set())
         if not conta_ids and tema["tipo"] != DICIONARIO:
             continue
         todas_as_contas |= conta_ids
