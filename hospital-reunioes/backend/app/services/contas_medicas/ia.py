@@ -47,6 +47,7 @@ __all__ = [
     "ItemCorrigido",
     "LinhasDaComparacao",
     "LoteDoAuditor",
+    "LoteDoContrato",
     "PropostaDeRegra",
     "PropostaDoAuditor",
     "chamada_curta",
@@ -55,6 +56,7 @@ __all__ = [
     "explicar_faltou_isto",
     "extrair_eventos",
     "propor_lote",
+    "propor_lote_do_contrato",
     "propor_regra",
 ]
 
@@ -418,6 +420,30 @@ class ItemCorrigido(_Estrito):
 
     resposta: str
     proposta: PropostaDoAuditor
+
+
+class PropostaDoContrato(PropostaDoAuditor):
+    """Um item do lote do contrato (issue #1495): a proposta e o trecho da
+    cláusula de onde ela saiu, que vira o "o contrato diz" da Regra."""
+
+    clausula: str
+
+
+class OContratoDiz(_Estrito):
+    """O que o contrato diz sobre uma Regra que a memória já tem, sem mudar o texto dela."""
+
+    regra_codigo: str
+    clausula: str
+
+
+class LoteDoContrato(_Estrito):
+    """A resposta do Auditor ao contrato subido na conversa da Operadora
+    (ADR 0081, decisão 9): as Regras por cláusula e o "o contrato diz" das
+    Regras que já existem."""
+
+    resposta: str
+    propostas: list[PropostaDoContrato]
+    o_contrato_diz: list[OContratoDiz]
 
 
 # ----------------------------------------------------------------------------------
@@ -795,6 +821,21 @@ def corrigir_item(memoria: str, item: str, pedido: str, *, supabase) -> ItemCorr
             (f"CORREÇÃO PEDIDA\n{pedido}", False),
         ],
         saida=ItemCorrigido,
+        onde=_Onde(supabase, None, None, "CONVERSA"),
+    )
+
+
+def propor_lote_do_contrato(contrato: str, memoria: str, *, supabase) -> LoteDoContrato:
+    """O contrato subido na conversa da Operadora (issue #1495): o texto dele
+    vira as Regras por cláusula e o "o contrato diz" das Regras que existem."""
+    return _chamar_a_ia(
+        modelo=settings.cm_ia_modelo_passo_b,
+        instrucao=load_prompt("contas_medicas_auditor_contrato"),
+        blocos=[
+            (f"MEMÓRIA DA OPERADORA\n{memoria}", True),
+            (f"TEXTO DO CONTRATO\n{contrato}", False),
+        ],
+        saida=LoteDoContrato,
         onde=_Onde(supabase, None, None, "CONVERSA"),
     )
 
