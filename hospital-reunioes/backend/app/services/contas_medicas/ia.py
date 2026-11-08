@@ -1,7 +1,7 @@
 """O adaptador de IA de Contas médicas (issue #1130, PRD #1128).
 
 A única porta do módulo para a IA, pelo SDK oficial da Anthropic (issue #1302).
-Sete chamadas:
+Nove chamadas:
 
 - `extrair_eventos`: o passo A, que lê o prontuário e lista os eventos
   (Anexo A da spec);
@@ -14,7 +14,9 @@ Sete chamadas:
 - `explicar_faltou_isto`: o Auditor na conversa da Conta, que explica o
   Faltou isto do Guia e classifica a origem (issue #1489);
 - `propor_lote` e `corrigir_item`: o Auditor na conversa da Operadora, que
-  devolve o lote de propostas e refaz um item dele (issue #1490).
+  devolve o lote de propostas e refaz um item dele (issue #1490);
+- `revisar_pendentes` e `corrigir_pendente`: o "revisar pendentes" da mesma
+  conversa, que decide cada Regra pendente e refaz uma decisão (issue #1494).
 
 Toda chamada sai igual: saída estruturada estrita (`output_config.format` com
 `json_schema`), a instrução e a memória em bloco de cache, e a resposta
@@ -44,18 +46,22 @@ __all__ = [
     "ErroDaIA",
     "IASemCredito",
     "EventosDoProntuario",
+    "DecisaoDaPendente",
     "ItemCorrigido",
     "LinhasDaComparacao",
     "LoteDoAuditor",
+    "PendenteCorrigida",
     "PropostaDeRegra",
     "PropostaDoAuditor",
     "chamada_curta",
     "comparar_conta",
     "corrigir_item",
+    "corrigir_pendente",
     "explicar_faltou_isto",
     "extrair_eventos",
     "propor_lote",
     "propor_regra",
+    "revisar_pendentes",
 ]
 
 logger = logging.getLogger(__name__)
@@ -418,6 +424,30 @@ class ItemCorrigido(_Estrito):
 
     resposta: str
     proposta: PropostaDoAuditor
+
+
+class DecisaoDaPendente(_Estrito):
+    """O que o Auditor sugere para uma Regra pendente (issue #1494): validar como
+    está, alterar o texto ou descartar. O texto vem vazio fora do ALTERAR."""
+
+    regra_codigo: str
+    decisao: Literal["VALIDAR", "ALTERAR", "DESCARTAR"]
+    texto: str
+    motivo: str
+
+
+class RevisaoDasPendentes(_Estrito):
+    """O "revisar pendentes": a fala do Auditor e uma decisão por Regra pendente."""
+
+    resposta: str
+    decisoes: list[DecisaoDaPendente]
+
+
+class PendenteCorrigida(_Estrito):
+    """O "corrige o item N" no lote das pendentes: a fala e a decisão refeita."""
+
+    resposta: str
+    decisao: DecisaoDaPendente
 
 
 # ----------------------------------------------------------------------------------
@@ -795,6 +825,37 @@ def corrigir_item(memoria: str, item: str, pedido: str, *, supabase) -> ItemCorr
             (f"CORREÇÃO PEDIDA\n{pedido}", False),
         ],
         saida=ItemCorrigido,
+        onde=_Onde(supabase, None, None, "CONVERSA"),
+    )
+
+
+def revisar_pendentes(memoria: str, pendentes: str, *, supabase) -> RevisaoDasPendentes:
+    """O "revisar pendentes" (issue #1494): a decisão sugerida para cada Regra
+    pendente da Operadora, com a memória inteira para o contexto."""
+    return _chamar_a_ia(
+        modelo=settings.cm_ia_modelo_passo_b,
+        instrucao=load_prompt("contas_medicas_auditor_pendentes"),
+        blocos=[
+            (f"MEMÓRIA DA OPERADORA\n{memoria}", True),
+            (f"REGRAS PENDENTES\n{pendentes}", False),
+        ],
+        saida=RevisaoDasPendentes,
+        onde=_Onde(supabase, None, None, "CONVERSA"),
+    )
+
+
+def corrigir_pendente(memoria: str, item: str, pedido: str, *, supabase) -> PendenteCorrigida:
+    """O "corrige o item N" no lote das pendentes (issue #1494): a decisão atual
+    do item, em JSON, e o que quem decide pediu para mudar nela."""
+    return _chamar_a_ia(
+        modelo=settings.cm_ia_modelo_passo_b,
+        instrucao=load_prompt("contas_medicas_auditor_pendentes"),
+        blocos=[
+            (f"MEMÓRIA DA OPERADORA\n{memoria}", True),
+            (f"ITEM ATUAL DO LOTE\n{item}", False),
+            (f"CORREÇÃO PEDIDA\n{pedido}", False),
+        ],
+        saida=PendenteCorrigida,
         onde=_Onde(supabase, None, None, "CONVERSA"),
     )
 

@@ -320,6 +320,7 @@ def provar_regra(
     codigo: str | None = None,
     lote_item_id: str | None = None,
     sem: tuple[str, ...] = (),
+    descartar: bool = False,
 ) -> dict[str, Any]:
     """A prova da regra conferida pela pessoa, guardada em `cm_prova`.
 
@@ -327,7 +328,9 @@ def provar_regra(
     toma o lugar da regra que já existe na memória candidata, em vez de entrar
     ao lado dela. `sem` são as regras em conflito que o item junta ou substitui
     (ADR 0081, decisão 8): saem da memória candidata, como sairão no ok.
-    `lote_item_id` liga a prova ao item do lote."""
+    `lote_item_id` liga a prova ao item do lote. Com `descartar`, a regra do
+    `codigo` sai da memória candidata e nada entra no lugar: é a prova da Regra
+    pendente que o Auditor sugere descartar (#1494)."""
     candidata = regra_candidata(
         supabase,
         sigla,
@@ -346,7 +349,7 @@ def provar_regra(
             raise MudancaRecusadaError(f"A regra {codigo} não está na memória vigente de {candidata['sigla']}.")
         nova = {**nova, "codigo": codigo}
         regras = [r for r in regras if r["codigo"] != codigo]
-    regras = [*(r for r in regras if r["codigo"] not in sem), nova]
+    regras = [*(r for r in regras if r["codigo"] not in sem), *([] if descartar else [nova])]
     operadora = (
         supabase.table("cm_operadora").select("nome").eq("id", candidata["operadora_id"]).execute().data or [{}]
     )[0]

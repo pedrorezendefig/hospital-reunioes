@@ -6,6 +6,9 @@ operadora. Uma interface só, `conversar`: a mensagem de quem decide é
 - "ok": aplica o lote aberto numa versão nova da Memória, uma por lote, com
   as Regras vigentes no nome de quem deu o ok (decisões 1 e 5);
 - "corrige o item N ...": o Auditor refaz só o item N, e a prova dele;
+- "revisar pendentes": o lote com todas as Regras pendentes da Operadora,
+  cada uma com a decisão que o Auditor sugere (validar, alterar, descartar) e
+  a prova (issue #1494, decisão 6). O ok fecha os Temas de validação delas;
 - qualquer outro texto: o Auditor devolve um lote novo de propostas tipadas
   (Regra nova, Regra alterada, parâmetro), cada uma com o motivo, os conflitos
   com as Regras da memória (decisão 8) e a Prova da regra (decisão 7). O lote
@@ -61,6 +64,11 @@ TIPOS_DE_REGRA = ("REGRA_NOVA", "REGRA_ALTERADA")
 
 _OK = re.compile(r"ok[.!]*", re.IGNORECASE)
 _CORRIGE = re.compile(r"corri[gj][ae]\s+o\s+item\s+(\d+)\b[\s:,.]*(.*)", re.IGNORECASE | re.DOTALL)
+_REVISAR = re.compile(r"revis[ae]r?\s+(?:as\s+)?(?:regras\s+)?pendentes[.!]*", re.IGNORECASE)
+
+# O lote das pendentes: cada item é uma Regra pendente, com a decisão sugerida.
+PENDENTES = "PENDENTES"
+VALIDAR, ALTERAR, DESCARTAR = "VALIDAR", "ALTERAR", "DESCARTAR"
 
 
 class LoteRecusadoError(ValueError):
@@ -194,6 +202,40 @@ def _item_do_auditor(proposta: ia.PropostaDoAuditor, vigente: dict, regras: dict
     }
 
 
+def _item_da_pendente(regra: dict, decisao: ia.DecisaoDaPendente | None) -> dict:
+    """O item do lote das pendentes: a Regra pendente como Regra alterada, com a
+    decisão sugerida. O texto de agora vem da memória; o ALTERAR sem texto novo
+    (ou com o mesmo) é um VALIDAR. A pendente que o Auditor deixou sem decisão
+    entra assim mesmo, para validar como está: o lote traz todas."""
+    if decisao is not None:
+        decisao = ia.DecisaoDaPendente.model_validate(sanitizar_estrutura(decisao.model_dump()))
+    escolha = decisao.decisao if decisao else VALIDAR
+    texto = regra["texto"]
+    if escolha == ALTERAR:
+        texto = decisao.texto.strip() or texto
+        if texto == regra["texto"]:
+            escolha = VALIDAR
+    motivo = decisao.motivo.strip() if decisao else ""
+    return {
+        "tipo": "REGRA_ALTERADA",
+        "regra_codigo": regra["codigo"],
+        "proposta_json": {
+            "decisao": escolha,
+            "secao": regra.get("secao"),
+            "texto": texto,
+            "tipo": regra.get("tipo"),
+            "origem": regra.get("origem"),
+            "texto_anterior": regra["texto"],
+        },
+        "motivo": motivo or "O Auditor não comentou esta regra: ela fica como está escrita.",
+        "conflitos_json": [],
+    }
+
+
+def _linha_da_pendente(regra: dict) -> str:
+    return f"{regra['codigo']} | {regra.get('secao')} | {regra.get('tipo')} | {regra.get('origem')} | {regra['texto']}"
+
+
 def _em_conflito(item: dict) -> tuple[str, ...]:
     """As regras que o item junta ou substitui (ADR 0081, decisão 8): nos dois
     casos o texto do item fica e a regra em conflito sai, em vez de empilhar."""
@@ -219,6 +261,7 @@ def _provar(supabase, sigla: str, item: dict, autor_id: str | None) -> None:
             codigo=item["regra_codigo"],
             lote_item_id=item["id"],
             sem=_em_conflito(item),
+            descartar=regra.get("decisao") == DESCARTAR,
         )
     except (ia.ErroDaIA, MudancaRecusadaError) as erro:
         logger.warning("[ContasMedicas] Prova do item %s do lote sem resultado: %s", item["id"], type(erro).__name__)
@@ -234,7 +277,44 @@ def _novo_lote(supabase, sigla: str, texto: str, autor_id: str | None) -> None:
 
     regras = {r["codigo"]: r for r in _regras_da_versao(supabase, vigente["id"])}
     itens = [i for i in (_item_do_auditor(p, vigente, regras) for p in resposta.propostas) if i is not None]
+    _gravar_lote(supabase, sigla, operadora_id, texto, autor_id, itens, resposta.resposta, "TEXTO")
 
+
+def _revisar_pendentes(supabase, sigla: str, texto: str, autor_id: str | None) -> None:
+    """O lote com todas as Regras pendentes da Operadora, e só dela: os itens
+    saem da memória vigente, e o Auditor só sugere a decisão de cada um."""
+    sigla, operadora_id, vigente = _operadora_e_vigente(supabase, sigla)
+    pendentes = sorted(
+        (r for r in _regras_da_versao(supabase, vigente["id"]) if r.get("status") != "VIGENTE"),
+        key=lambda r: r["codigo"],
+    )
+    if not pendentes:
+        conversa_id = _conversa_ou_nova(supabase, operadora_id, autor_id)
+        _falar(supabase, conversa_id, "PESSOA", texto, autor_id)
+        _falar(supabase, conversa_id, "AUDITOR", f"A {sigla} não tem Regra pendente para revisar.")
+        return
+    memoria = gerar_texto_memoria(supabase, operadora_id, vigente["id"])
+    resposta = ia.revisar_pendentes(memoria, "\n".join(map(_linha_da_pendente, pendentes)), supabase=supabase)
+
+    decisoes: dict[str, ia.DecisaoDaPendente] = {}
+    for decisao in resposta.decisoes:
+        decisoes.setdefault(decisao.regra_codigo.strip(), decisao)
+    itens = [_item_da_pendente(regra, decisoes.get(regra["codigo"])) for regra in pendentes]
+    _gravar_lote(supabase, sigla, operadora_id, texto, autor_id, itens, resposta.resposta, PENDENTES)
+
+
+def _gravar_lote(
+    supabase,
+    sigla: str,
+    operadora_id: str,
+    texto: str,
+    autor_id: str | None,
+    itens: list[dict[str, Any]],
+    fala: str,
+    fonte: str,
+) -> None:
+    """A mensagem, o lote novo (o aberto antes dele fica descartado), a fala do
+    Auditor e a prova de cada item de regra."""
     conversa_id = _conversa_ou_nova(supabase, operadora_id, autor_id)
     pessoa = _falar(supabase, conversa_id, "PESSOA", texto, autor_id)
     gravados: list[dict[str, Any]] = []
@@ -251,7 +331,7 @@ def _novo_lote(supabase, sigla: str, texto: str, autor_id: str | None) -> None:
                     "operadora_id": operadora_id,
                     "conversa_id": conversa_id,
                     "mensagem_id": pessoa["id"],
-                    "fonte": "TEXTO",
+                    "fonte": fonte,
                     "estado": "PROPOSTO",
                     "criado_por": autor_id,
                 }
@@ -270,7 +350,7 @@ def _novo_lote(supabase, sigla: str, texto: str, autor_id: str | None) -> None:
             .execute()
             .data
         )
-    _falar(supabase, conversa_id, "AUDITOR", sanitizar_estrutura(resposta.resposta).strip())
+    _falar(supabase, conversa_id, "AUDITOR", sanitizar_estrutura(fala).strip())
     for item in gravados:
         _provar(supabase, sigla, item, autor_id)
 
@@ -438,6 +518,8 @@ def conversar(supabase, sigla: str, texto: str, autor_id: str | None) -> dict[st
         aplicado = _aplicar(supabase, sigla, texto, autor_id)
     elif correcao:
         _corrigir(supabase, sigla, int(correcao.group(1)), correcao.group(2), texto, autor_id)
+    elif _REVISAR.fullmatch(texto):
+        _revisar_pendentes(supabase, sigla, texto, autor_id)
     else:
         _novo_lote(supabase, sigla, texto, autor_id)
     return {**conversa_da_operadora(supabase, sigla), "aplicado": aplicado}
