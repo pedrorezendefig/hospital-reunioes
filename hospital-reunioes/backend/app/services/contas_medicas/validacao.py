@@ -43,6 +43,7 @@ __all__ = [
     "acao_decidida",
     "acompanhar_marcacao",
     "csv_do_cadastro",
+    "decidir_pela_memoria",
     "decidir_tema",
     "fila_de_validacao",
     "leitura_da_observacao",
@@ -486,10 +487,11 @@ def _mudar_a_regra(supabase, tema: dict, corpo: dict, me: dict, *, validar: bool
     )
 
 
-def _decidir_as_linhas(supabase, tema: dict, autor_id: str | None) -> None:
+def _decidir_as_linhas(supabase, tema: dict, autor_id: str | None, *, descartada: bool = False) -> None:
     """As linhas Validar do tema viram Decidida, com a ação resultante ou sem
     ação (descarte). A conta já concluída com linha a lançar volta para a
-    faturista em Retorno."""
+    faturista em Retorno. Regra `descartada` não manda nada: toda linha dela
+    fica sem ação."""
     agora = _agora()
     a_lancar: set[str] = set()
     pendente = f"Regra {tema.get('regra_codigo')} pendente. "
@@ -497,18 +499,56 @@ def _decidir_as_linhas(supabase, tema: dict, autor_id: str | None) -> None:
         if linha.get("acao") != "VALIDAR" or linha.get("estado") not in ("ABERTA", "EM_VALIDACAO"):
             continue
         campos: dict[str, Any] = {"estado": "DECIDIDA", "marcado_por": autor_id, "marcado_em": agora}
-        acao = acao_decidida(linha)
+        acao = None if descartada else acao_decidida(linha)
         if acao:
             campos["acao"] = acao
             a_lancar.add(linha["conta_id"])
         motivo = linha.get("motivo") or ""
         if motivo.startswith(pendente):
-            campos["motivo"] = f"Regra {tema['regra_codigo']} validada. " + motivo[len(pendente) :]
+            desfecho = "descartada" if descartada else "validada"
+            campos["motivo"] = f"Regra {tema['regra_codigo']} {desfecho}. " + motivo[len(pendente) :]
         supabase.table("cm_guia_linha").update(campos).eq("id", linha["id"]).eq("acao", "VALIDAR").execute()
     if a_lancar:
         supabase.table("cm_conta").update({"situacao": "RETORNO"}).in_("id", sorted(a_lancar)).in_(
             "situacao", list(CONCLUIDAS)
         ).execute()
+
+
+def decidir_pela_memoria(supabase, operadora_id: str, decididas: dict[str, bool], autor_id: str | None) -> None:
+    """Fecha os Temas de Regra pendente que uma versão nova da Memória já
+    decidiu fora da fila, pelo lote do Auditor (issue #1494). `decididas` diz,
+    por código, se a Regra saiu da memória (True) ou ficou vigente (False). As
+    Linhas seguem o mesmo caminho do "Validar regra"; as da descartada ficam
+    sem ação. O tema é tomado condicional, como no clique da fila."""
+    for codigo, descartada in decididas.items():
+        abertos = (
+            supabase.table("cm_validacao_tema")
+            .select("*")
+            .eq("tipo", REGRA_PENDENTE)
+            .eq("estado", ABERTO)
+            .eq("operadora_id", operadora_id)
+            .eq("regra_codigo", codigo)
+            .execute()
+            .data
+            or []
+        )
+        for tema in abertos:
+            fechamento = {
+                "estado": DECIDIDO,
+                "decisao": DESCARTAR if descartada else VALIDAR_REGRA,
+                "decidido_por": autor_id,
+                "decidido_em": _agora(),
+            }
+            tomado = (
+                supabase.table("cm_validacao_tema")
+                .update(fechamento)
+                .eq("id", tema["id"])
+                .eq("estado", ABERTO)
+                .execute()
+                .data
+            )
+            if tomado:
+                _decidir_as_linhas(supabase, tema, autor_id, descartada=descartada)
 
 
 COLUNAS_DO_CADASTRO = ("Código", "Descrição", "Operadora", "Coluna", "Preço de tabela", "Contas afetadas")

@@ -20,10 +20,10 @@ from typing import Any
 import httpx2
 import pytest
 from anthropic_apoio import cliente_por_transporte, mensagem, nome_do_schema, nomear_schemas
-from test_contas_medicas_conversa_da_operadora import ROTA, _cliente, _regras_vigentes
+from test_contas_medicas_conversa_da_operadora import ROTA, _cliente, _regras_vigentes, _vigente
 from test_contas_medicas_memoria_tela import _importar, _versoes
 from test_contas_medicas_operadoras import GESTAO
-from test_contas_medicas_prova_da_regra import _semear
+from test_contas_medicas_prova_da_regra import _linha_do_guia, _semear
 
 from app.limiter import limiter
 from app.services.contas_medicas import ia
@@ -169,3 +169,84 @@ class TestOLoteDasPendentes:
         assert resposta.json()["mensagens"][-1]["texto"] == "A ALFA não tem Regra pendente para revisar."
         assert len(provedor.pedidos) == pedidos
         assert len(banco.linhas("cm_lote")) == 1
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 2. O ok gera uma versão da Memória e fecha os Temas de validação
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+def _validar(conta: str, codigo: str, regra: str, lancada: float, devida: float) -> dict[str, Any]:
+    """A Linha Validar da Regra pendente, como o Passo B grava."""
+    return {
+        **_linha_do_guia(conta, codigo, "2026-10-05", devida),
+        "acao": "VALIDAR",
+        "estado": "EM_VALIDACAO",
+        "quantidade_lancada": lancada,
+        "regra_codigo": regra,
+        "motivo": f"Regra {regra} pendente. Dado na evolução.",
+    }
+
+
+def _tema(banco, tema_id: str, sigla: str, regra: str, linhas: list[dict]) -> None:
+    operadora = next(o["id"] for o in banco.linhas("cm_operadora") if o["sigla"] == sigla)
+    banco.tabelas.setdefault("cm_validacao_tema", []).append(
+        {
+            "id": tema_id,
+            "operadora_id": operadora,
+            "tipo": "REGRA_PENDENTE",
+            "regra_codigo": regra,
+            "codigo_item": None,
+            "item_dicionario_id": None,
+            "titulo": f"Regra {regra}",
+            "estado": "ABERTO",
+            "decisao": None,
+            "criado_em": "2026-10-20T10:00:00+00:00",
+        }
+    )
+    banco.tabelas.setdefault("cm_guia_linha", []).extend(linhas)
+    banco.tabelas.setdefault("cm_validacao_tema_linha", []).extend(
+        {"id": f"tl-{linha['id']}", "tema_id": tema_id, "guia_linha_id": linha["id"], "observacao_id": None}
+        for linha in linhas
+    )
+
+
+class TestOOkDasPendentes:
+    def test_o_ok_gera_uma_versao_e_fecha_os_temas_de_validacao_das_regras(self, cenario):
+        cliente, banco, _provedor = cenario
+        # A DIA-02 espera numa conta concluída (c05) com o item a incluir; a
+        # PRI-03 numa outra (c06). A pendente da BETA tem o tema dela.
+        dia_02 = _validar("c05", "M005", "ALFA-DIA-02", 0.0, 1.0)
+        pri_03 = _validar("c06", "M006", "ALFA-PRI-03", 1.0, 2.0)
+        _tema(banco, "t-dia-02", "ALFA", "ALFA-DIA-02", [dia_02])
+        _tema(banco, "t-pri-03", "ALFA", "ALFA-PRI-03", [pri_03])
+        _tema(banco, "t-beta", "BETA", "BETA-INS-02", [])
+        assert cliente.post(ROTA, json={"texto": "revisar pendentes"}).status_code == 200
+
+        resposta = cliente.post(ROTA, json={"texto": "ok"})
+
+        assert resposta.status_code == 200, resposta.text
+        assert _versoes(banco, "ALFA") == {"1.0": False, "1.1": True}
+        assert resposta.json()["aplicado"]["versao"] == "1.1"
+        regras = _regras_vigentes(banco)
+        assert (regras["ALFA-DIA-02"]["texto"], regras["ALFA-DIA-02"]["status"]) == (DIA_02_ALTERADA, "VIGENTE")
+        assert regras["ALFA-DIA-02"]["validado_por"] == GESTAO["id"]
+        # A descartada sai da memória.
+        assert regras["ALFA-PRI-03"]["ativa"] is False
+        assert PRI_03 not in _vigente(banco)["texto_md"]
+
+        temas = {t["id"]: t for t in banco.linhas("cm_validacao_tema")}
+        assert {t: (temas[t]["estado"], temas[t]["decisao"]) for t in temas} == {
+            "t-dia-02": ("DECIDIDO", "VALIDAR_REGRA"),
+            "t-pri-03": ("DECIDIDO", "DESCARTAR"),
+            "t-beta": ("ABERTO", None),
+        }
+        assert {temas[t]["decidido_por"] for t in ("t-dia-02", "t-pri-03")} == {GESTAO["id"]}
+
+        # As Linhas seguem o caminho de hoje: a da regra validada vira a ação e
+        # a conta concluída volta em Retorno; a da descartada fica sem ação.
+        linhas = {linha["id"]: linha for linha in banco.linhas("cm_guia_linha")}
+        assert (linhas[dia_02["id"]]["estado"], linhas[dia_02["id"]]["acao"]) == ("DECIDIDA", "INCLUIR")
+        assert (linhas[pri_03["id"]]["estado"], linhas[pri_03["id"]]["acao"]) == ("DECIDIDA", "VALIDAR")
+        contas = {c["id"]: c["situacao"] for c in banco.linhas("cm_conta")}
+        assert (contas["c05"], contas["c06"]) == ("RETORNO", "CONCLUIDA")

@@ -54,6 +54,7 @@ from app.services.contas_medicas.regra_nova import (
     _valor_json,
     contas_com_regra_nova,
 )
+from app.services.contas_medicas.validacao import decidir_pela_memoria
 from app.utils.text_sanitizer import sanitizar_estrutura
 
 __all__ = ["LoteRecusadoError", "conversa_da_operadora", "conversar"]
@@ -427,6 +428,15 @@ def _aplicar(supabase, sigla: str, texto: str, autor_id: str | None) -> dict[str
             base = (vigente.get("parametros_json") or {}) if parametros is None else parametros
             parametros = _com_parametro(base, dados["chave"], dados["depois"])
             continue
+        if dados.get("decisao") == DESCARTAR:
+            # A pendente descartada fica na versão nova, desligada, como a regra em conflito.
+            if item["regra_codigo"] not in por_codigo:
+                raise LoteRecusadoError(
+                    f"A regra {item['regra_codigo']} do item {item['numero']} não está mais na memória: corrija o item."
+                )
+            saem.setdefault(item["regra_codigo"], item["numero"])
+            codigos[item["id"]] = item["regra_codigo"]
+            continue
         if _CPF.search(dados["texto"]):
             raise LoteRecusadoError(
                 f"O item {item['numero']} tem um número no formato de CPF. A memória não pode ter dado de paciente: "
@@ -458,10 +468,12 @@ def _aplicar(supabase, sigla: str, texto: str, autor_id: str | None) -> dict[str
                 f"O item {numero} tira da memória a regra {conflito}, que outro item do lote altera: "
                 "corrija um dos dois."
             )
+    descartadas = {i["regra_codigo"] for i in itens if (i.get("proposta_json") or {}).get("decisao") == DESCARTAR}
+    validadas = {i["regra_codigo"] for i in itens if (i.get("proposta_json") or {}).get("decisao") == VALIDAR}
     resumo = "Lote do Auditor: " + ", ".join(
         [f"{n['codigo']} incluída" for n in novas]
-        + [f"{codigo} alterada" for codigo in mudancas]
-        + [f"{codigo} juntada ou substituída" for codigo in saem]
+        + [f"{codigo} {'validada' if codigo in validadas else 'alterada'}" for codigo in mudancas]
+        + [f"{codigo} {'descartada' if codigo in descartadas else 'juntada ou substituída'}" for codigo in saem]
         + [f"parâmetro {i['proposta_json']['chave']}" for i in itens if i["tipo"] == "PARAMETRO"]
     )
     versao = _gravar_versao(
@@ -476,6 +488,14 @@ def _aplicar(supabase, sigla: str, texto: str, autor_id: str | None) -> dict[str
         novas=novas,
         parametros=parametros,
     )
+
+    # A Regra pendente que o lote decidiu sai da fila de Validação (#1494).
+    decididas = {
+        codigo: codigo in saem
+        for codigo in [*mudancas, *saem]
+        if por_codigo[codigo].get("status") != "VIGENTE"
+    }
+    decidir_pela_memoria(supabase, operadora_id, decididas, autor_id)
 
     supabase.table("cm_lote").update(
         {"estado": "APLICADO", "memoria_versao_id": versao["id"], "aplicado_por": autor_id, "aplicado_em": agora}
