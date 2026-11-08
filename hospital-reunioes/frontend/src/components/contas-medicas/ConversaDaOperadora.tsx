@@ -13,12 +13,14 @@
  * A tabela de preço entra pelo atalho "Enviar tabela", o envio da tela
  * Operadoras já com a operadora escolhida. "Revisar pendentes" manda a
  * mensagem que monta o lote com as Regras pendentes da operadora, cada uma
- * com a decisão que o Auditor sugere (issue #1494).
+ * com a decisão que o Auditor sugere (issue #1494). O contrato entra por
+ * "Enviar contrato" (issue #1495): o Auditor devolve as Regras por cláusula,
+ * o "o contrato diz" das Regras que existem e as datas do aviso de reajuste.
  */
 
 import { useState } from "react";
 import Link from "next/link";
-import { AlertCircle, ListChecks, Loader2, MessageSquare, Upload } from "lucide-react";
+import { AlertCircle, FileText, ListChecks, Loader2, MessageSquare, Upload } from "lucide-react";
 
 import { Ditar, juntarDitado } from "@/components/contas-medicas/Ditar";
 import { type ProvaDaRegra, ProvaDaRegraNaTela } from "@/components/contas-medicas/ProvaDaRegra";
@@ -46,6 +48,8 @@ interface PropostaDeRegra {
   tipo: string;
   origem: string | null;
   texto_anterior?: string;
+  /** O trecho do contrato que sustenta a regra (issue #1495). */
+  contrato_diz?: string;
 }
 
 interface PropostaDeParametro {
@@ -61,6 +65,8 @@ interface ItemDoLote {
   proposta: PropostaDeRegra | PropostaDeParametro;
   motivo: string | null;
   conflitos: { codigo: string; texto: string; resolucao: "JUNTAR" | "SUBSTITUIR" }[];
+  /** O item muda a análise e precisa da Prova antes do ok. */
+  pede_prova: boolean;
   prova: ProvaDaRegra | null;
 }
 
@@ -138,14 +144,25 @@ export function ConversaDaOperadora({
   /** Manda uma mensagem ao Auditor; devolve se deu certo. */
   async function mandar(mensagem: string): Promise<boolean> {
     if (!token || !mensagem.trim()) return false;
+    return falar(rota, {
+      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ texto: mensagem.trim() }),
+    });
+  }
+
+  /** Sobe o contrato na conversa: o Auditor devolve o lote dele. */
+  async function enviarContrato(arquivo: File | undefined) {
+    if (!token || !arquivo) return;
+    const corpo = new FormData();
+    corpo.append("arquivo", arquivo);
+    await falar(`${rota}/contrato`, { headers: { Authorization: `Bearer ${token}` }, body: corpo });
+  }
+
+  async function falar(url: string, pedido: { headers: Record<string, string>; body: BodyInit }): Promise<boolean> {
     setOcupado(true);
     setErro(null);
     try {
-      const res = await fetch(rota, {
-        method: "POST",
-        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-        body: JSON.stringify({ texto: mensagem.trim() }),
-      });
+      const res = await fetch(url, { method: "POST", ...pedido });
       if (!res.ok) {
         setErro(await detalheDoErro(res, `Não foi possível falar com o auditor (HTTP ${res.status}).`));
         return false;
@@ -185,7 +202,7 @@ export function ConversaDaOperadora({
           <p className="text-sm text-slate-500 mt-0.5">
             Escreva a regra do seu jeito. O Auditor devolve as mudanças num lote, cada uma com a prova. Responda
             &quot;ok&quot; para aplicar tudo ou corrija só o item que discordar. A conversa fica guardada, mas só o que
-            você aplica muda a análise das contas.
+            você aplica muda a análise das contas. O contrato, em PDF ou imagem, vira as regras cláusula a cláusula.
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -197,6 +214,19 @@ export function ConversaDaOperadora({
           >
             <ListChecks className="w-4 h-4" aria-hidden="true" /> Revisar pendentes
           </button>
+          <label className={`${BOTAO_SECUNDARIO} cursor-pointer ${ocupado ? "pointer-events-none opacity-50" : ""}`}>
+            <FileText className="w-4 h-4" aria-hidden="true" /> Enviar contrato
+            <input
+              type="file"
+              accept=".pdf,.png,.jpg,.jpeg"
+              disabled={ocupado}
+              onChange={(e) => {
+                void enviarContrato(e.target.files?.[0]);
+                e.target.value = "";
+              }}
+              className="sr-only"
+            />
+          </label>
           <Link href={`/contas-medicas/operadoras?tabela=${encodeURIComponent(sigla)}`} className={BOTAO_SECUNDARIO}>
             <Upload className="w-4 h-4" aria-hidden="true" /> Enviar tabela
           </Link>
@@ -268,7 +298,7 @@ function LoteDoAuditor({
   aoMandar: (mensagem: string) => Promise<boolean>;
 }) {
   // Prova antes do ok (ADR 0081, decisão 7): o servidor recusa o ok com item de regra sem prova.
-  const semProva = lote.itens.filter((item) => item.tipo !== "PARAMETRO" && !item.prova).map((item) => item.numero);
+  const semProva = lote.itens.filter((item) => item.pede_prova && !item.prova).map((item) => item.numero);
   return (
     <section aria-label="Lote do Auditor" className="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-4 space-y-3">
       <h3 className="text-xs font-semibold text-slate-500 uppercase">
@@ -342,8 +372,11 @@ function ItemDoLoteNaTela({
         </p>
       ))}
       {item.prova && <ProvaDaRegraNaTela prova={item.prova} />}
-      {!item.prova && item.tipo !== "PARAMETRO" && (
+      {!item.prova && item.pede_prova && (
         <p className="text-amber-700">A prova não rodou agora. Corrija o item para provar de novo.</p>
+      )}
+      {!item.pede_prova && item.tipo !== "PARAMETRO" && (
+        <p className="text-slate-500">Não muda a análise, por isso vem sem prova.</p>
       )}
       {corrigindo ? (
         <form aria-label={`Corrigir o item ${item.numero}`} onSubmit={corrigir} className="space-y-2">
@@ -381,18 +414,55 @@ function ItemDoLoteNaTela({
 }
 
 function RegraDoItem({ proposta, alterada }: { proposta: PropostaDeRegra; alterada: boolean }) {
-  if (proposta.decisao === "DESCARTAR") return <p className="text-slate-600">Sai da memória: {proposta.texto_anterior}</p>;
-  if (proposta.decisao === "VALIDAR") return <p className="text-slate-800">Fica vigente como está: {proposta.texto}</p>;
-  if (!alterada) return <p className="text-slate-800">{proposta.texto}</p>;
+  let regra = <p className="text-slate-800">{proposta.texto}</p>;
+  if (proposta.decisao === "DESCARTAR") {
+    regra = <p className="text-slate-600">Sai da memória: {proposta.texto_anterior}</p>;
+  } else if (proposta.decisao === "VALIDAR") {
+    regra = <p className="text-slate-800">Fica vigente como está: {proposta.texto}</p>;
+  } else if (alterada && proposta.texto === proposta.texto_anterior) {
+    regra = <p className="text-slate-800">Regra mantida: {proposta.texto}</p>;
+  } else if (alterada) {
+    regra = (
+      <>
+        <p className="text-slate-600">Antes: {proposta.texto_anterior ?? ""}</p>
+        <p className="text-slate-800">Depois: {proposta.texto}</p>
+      </>
+    );
+  }
   return (
     <>
-      <p className="text-slate-600">Antes: {proposta.texto_anterior ?? ""}</p>
-      <p className="text-slate-800">Depois: {proposta.texto}</p>
+      {regra}
+      {proposta.contrato_diz && <p className="text-slate-600">O contrato diz: {proposta.contrato_diz}</p>}
     </>
   );
 }
 
+function dataBr(valor: unknown): string | null {
+  const iso = typeof valor === "string" ? valor.match(/^(\d{4})-(\d{2})-(\d{2})/) : null;
+  return iso ? `${iso[3]}/${iso[2]}/${iso[1]}` : null;
+}
+
+/** As datas do bloco `contrato` da memória, para quem decide ler sem JSON. */
+function datasDoContrato(bloco: Record<string, unknown>): string {
+  const aditivo = (bloco.ultimo_aditivo ?? {}) as Record<string, unknown>;
+  const partes: string[] = [];
+  const assinatura = dataBr(bloco.assinatura);
+  if (assinatura) partes.push(`assinatura ${assinatura}`);
+  if (aditivo.numero !== undefined && aditivo.numero !== null) {
+    const data = dataBr(aditivo.data);
+    partes.push(`aditivo ${String(aditivo.numero)}${data ? ` de ${data}` : ""}`);
+  }
+  const vigencia = dataBr(aditivo.inicio_vigencia);
+  if (vigencia) partes.push(`vigência a partir de ${vigencia}`);
+  const vencimento = dataBr(bloco.vencimento);
+  if (vencimento) partes.push(`vencimento ${vencimento}`);
+  return `Datas do contrato: ${partes.join(", ")}.`;
+}
+
 function ParametroDoItem({ proposta }: { proposta: PropostaDeParametro }) {
+  if (proposta.chave === "contrato" && proposta.depois && typeof proposta.depois === "object" && !Array.isArray(proposta.depois)) {
+    return <p className="text-slate-800">{datasDoContrato(proposta.depois)}</p>;
+  }
   return (
     <p className="text-slate-800">
       <span className="font-mono text-xs normal-case">{proposta.chave}</span>: de {valorLegivel(proposta.antes)} para{" "}

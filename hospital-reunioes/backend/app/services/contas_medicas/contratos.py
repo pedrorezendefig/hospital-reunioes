@@ -43,7 +43,9 @@ __all__ = [
     "avisar_contratos",
     "confirmar_contrato",
     "contrato_da_memoria",
+    "contrato_do_bloco",
     "gravar_contrato_da_memoria",
+    "guardar_e_ler_contrato",
     "hoje_em_sao_paulo",
     "ler_contrato_enviado",
     "listar_contratos",
@@ -142,6 +144,15 @@ def contrato_da_memoria(parametros: dict[str, Any], texto_md: str) -> dict[str, 
 
 def _iso(dia: date | None) -> str | None:
     return dia.isoformat() if dia else None
+
+
+def contrato_do_bloco(bloco: dict[str, Any]) -> dict[str, Any]:
+    """Os campos de `cm_contrato` do bloco `contrato` da memória, com a data do
+    último aditivo, que o bloco guarda quando o contrato veio pela conversa da
+    Operadora (issue #1495)."""
+    aditivo = bloco.get("ultimo_aditivo") if isinstance(bloco.get("ultimo_aditivo"), dict) else {}
+    campos = contrato_da_memoria({"contrato": bloco}, "") or {}
+    return {**campos, "aditivo_data": _iso(_data(aditivo.get("data")))}
 
 
 def _contrato_de(supabase, operadora_id: str) -> dict | None:
@@ -428,6 +439,12 @@ def ler_contrato_enviado(supabase, operadora_id: str, nome: str, conteudo: bytes
     Nada muda em `cm_contrato`: os campos só valem quando a pessoa confirma
     (`confirmar_contrato`). Arquivo sem texto (imagem, PDF escaneado) volta
     com os campos vazios, para digitar."""
+    return guardar_e_ler_contrato(supabase, operadora_id, nome, conteudo)[0]
+
+
+def guardar_e_ler_contrato(supabase, operadora_id: str, nome: str, conteudo: bytes) -> tuple[dict[str, Any], str]:
+    """O que `ler_contrato_enviado` devolve e o texto do contrato, que a
+    conversa da Operadora manda ao Auditor (issue #1495)."""
     extensao = os.path.splitext(nome or "")[1].lower()
     if extensao not in TIPOS_DO_ARQUIVO:
         raise ArquivoDoContratoRecusadoError("Envie o contrato ou o aditivo em PDF ou em imagem (PNG ou JPG).")
@@ -437,11 +454,11 @@ def ler_contrato_enviado(supabase, operadora_id: str, nome: str, conteudo: bytes
     texto = _texto_do_pdf(conteudo) if extensao == ".pdf" else ""
     resposta = {"arquivo": chave, "tem_texto": bool(texto), "campos": _campos_vazios(), "aviso": None}
     if not texto:
-        return {**resposta, "aviso": AVISO_SEM_TEXTO}
+        return {**resposta, "aviso": AVISO_SEM_TEXTO}, texto
     try:
-        return {**resposta, "campos": propor_campos_do_contrato(supabase, texto)}
+        return {**resposta, "campos": propor_campos_do_contrato(supabase, texto)}, texto
     except ia.ErroDaIA:
-        return {**resposta, "aviso": AVISO_IA_FALHOU}
+        return {**resposta, "aviso": AVISO_IA_FALHOU}, texto
 
 
 def confirmar_contrato(

@@ -1,7 +1,7 @@
 """O adaptador de IA de Contas médicas (issue #1130, PRD #1128).
 
 A única porta do módulo para a IA, pelo SDK oficial da Anthropic (issue #1302).
-Nove chamadas:
+Dez chamadas:
 
 - `extrair_eventos`: o passo A, que lê o prontuário e lista os eventos
   (Anexo A da spec);
@@ -15,8 +15,11 @@ Nove chamadas:
   Faltou isto do Guia e classifica a origem (issue #1489);
 - `propor_lote` e `corrigir_item`: o Auditor na conversa da Operadora, que
   devolve o lote de propostas e refaz um item dele (issue #1490);
-- `revisar_pendentes` e `corrigir_pendente`: o "revisar pendentes" da mesma
-  conversa, que decide cada Regra pendente e refaz uma decisão (issue #1494).
+- `revisar_conta`: o segundo agente, que relê uma Conta concluída atrás do
+  que foi administrado e não cobrado (issue #1493).
+- `revisar_pendentes` e `corrigir_pendente`: o "revisar pendentes" da
+  conversa da Operadora, que decide cada Regra pendente e refaz uma decisão
+  (issue #1494).
 
 Toda chamada sai igual: saída estruturada estrita (`output_config.format` com
 `json_schema`), a instrução e a memória em bloco de cache, e a resposta
@@ -51,9 +54,11 @@ __all__ = [
     "LinhasDaComparacao",
     "LoteDoAuditor",
     "PendenteCorrigida",
+    "LoteDoContrato",
     "PropostaDeRegra",
     "PropostaDoAuditor",
     "RecomendacaoDoTema",
+    "RevisaoDaConta",
     "chamada_curta",
     "comparar_conta",
     "corrigir_item",
@@ -61,9 +66,11 @@ __all__ = [
     "explicar_faltou_isto",
     "extrair_eventos",
     "propor_lote",
+    "propor_lote_do_contrato",
     "propor_regra",
     "recomendar_tema",
     "revisar_pendentes",
+    "revisar_conta",
 ]
 
 logger = logging.getLogger(__name__)
@@ -388,6 +395,26 @@ class DiagnosticoDoFaltouIsto(_Estrito):
     esperado: str
 
 
+class AchadoDoRevisor(_Estrito):
+    """Um item administrado e não cobrado que o segundo agente achou numa
+    Conta concluída (ADR 0081, decisão 14): o dia, o item, a página e o mesmo
+    diagnóstico do Faltou isto."""
+
+    data: str
+    item: str
+    pagina: int
+    classificacao: Literal["REGRA", "LEITURA", "DEFEITO"]
+    explicacao: str
+    esperado: str
+
+
+class RevisaoDaConta(_Estrito):
+    """A resposta do segundo agente: os achados da Conta, vazia quando não
+    faltou nada."""
+
+    achados: list[AchadoDoRevisor]
+
+
 class ConflitoDaProposta(_Estrito):
     """A regra da memória com que a proposta conflita e o que o Auditor propõe
     fazer com ela (ADR 0081, decisão 8)."""
@@ -450,6 +477,30 @@ class PendenteCorrigida(_Estrito):
 
     resposta: str
     decisao: DecisaoDaPendente
+
+
+class PropostaDoContrato(PropostaDoAuditor):
+    """Um item do lote do contrato (issue #1495): a proposta e o trecho da
+    cláusula de onde ela saiu, que vira o "o contrato diz" da Regra."""
+
+    clausula: str
+
+
+class OContratoDiz(_Estrito):
+    """O que o contrato diz sobre uma Regra que a memória já tem, sem mudar o texto dela."""
+
+    regra_codigo: str
+    clausula: str
+
+
+class LoteDoContrato(_Estrito):
+    """A resposta do Auditor ao contrato subido na conversa da Operadora
+    (ADR 0081, decisão 9): as Regras por cláusula e o "o contrato diz" das
+    Regras que já existem."""
+
+    resposta: str
+    propostas: list[PropostaDoContrato]
+    o_contrato_diz: list[OContratoDiz]
 
 
 class RecomendacaoDoTema(_Estrito):
@@ -819,6 +870,23 @@ def explicar_faltou_isto(
     )
 
 
+def revisar_conta(memoria: str, conta: str, *, supabase, conta_id: str, atendimento_id: str | None) -> RevisaoDaConta:
+    """O segundo agente (issue #1493): relê a Conta concluída, com os eventos
+    guardados, o Guia e os itens, atrás do que foi administrado e não cobrado.
+    No modelo do Passo B, com a memória em bloco de cache; gravada com o passo
+    REVISOR."""
+    return _chamar_a_ia(
+        modelo=settings.cm_ia_modelo_passo_b,
+        instrucao=load_prompt("contas_medicas_revisor"),
+        blocos=[
+            (f"MEMÓRIA DA OPERADORA\n{memoria}", True),
+            (f"A CONTA CONCLUÍDA\n{conta}", False),
+        ],
+        saida=RevisaoDaConta,
+        onde=_Onde(supabase, conta_id, atendimento_id, "REVISOR"),
+    )
+
+
 def propor_lote(texto: str, memoria: str, *, supabase) -> LoteDoAuditor:
     """O Auditor na conversa da Operadora (issue #1490): a mensagem de quem
     decide vira um lote de propostas. Só a mensagem desta vez vai junto da
@@ -878,6 +946,21 @@ def corrigir_pendente(memoria: str, item: str, pedido: str, *, supabase) -> Pend
             (f"CORREÇÃO PEDIDA\n{pedido}", False),
         ],
         saida=PendenteCorrigida,
+        onde=_Onde(supabase, None, None, "CONVERSA"),
+    )
+
+
+def propor_lote_do_contrato(contrato: str, memoria: str, *, supabase) -> LoteDoContrato:
+    """O contrato subido na conversa da Operadora (issue #1495): o texto dele
+    vira as Regras por cláusula e o "o contrato diz" das Regras que existem."""
+    return _chamar_a_ia(
+        modelo=settings.cm_ia_modelo_passo_b,
+        instrucao=load_prompt("contas_medicas_auditor_contrato"),
+        blocos=[
+            (f"MEMÓRIA DA OPERADORA\n{memoria}", True),
+            (f"TEXTO DO CONTRATO\n{contrato}", False),
+        ],
+        saida=LoteDoContrato,
         onde=_Onde(supabase, None, None, "CONVERSA"),
     )
 
