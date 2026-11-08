@@ -11,12 +11,14 @@
  * tudo; a tela desenha a conversa e o lote como ele manda.
  *
  * A tabela de preço entra pelo atalho "Enviar tabela", o envio da tela
- * Operadoras já com a operadora escolhida.
+ * Operadoras já com a operadora escolhida. "Revisar pendentes" manda a
+ * mensagem que monta o lote com as Regras pendentes da operadora, cada uma
+ * com a decisão que o Auditor sugere (issue #1494).
  */
 
 import { useState } from "react";
 import Link from "next/link";
-import { AlertCircle, Loader2, MessageSquare, Upload } from "lucide-react";
+import { AlertCircle, ListChecks, Loader2, MessageSquare, Upload } from "lucide-react";
 
 import { Ditar, juntarDitado } from "@/components/contas-medicas/Ditar";
 import { type ProvaDaRegra, ProvaDaRegraNaTela } from "@/components/contas-medicas/ProvaDaRegra";
@@ -34,7 +36,11 @@ interface Fala {
   versao: string | null;
 }
 
+type DecisaoDaPendente = "VALIDAR" | "ALTERAR" | "DESCARTAR";
+
 interface PropostaDeRegra {
+  /** Só no lote das Regras pendentes: a decisão que o Auditor sugere. */
+  decisao?: DecisaoDaPendente;
   secao: string;
   texto: string;
   tipo: string;
@@ -81,6 +87,12 @@ const ROTULO_DO_TIPO: Record<ItemDoLote["tipo"], string> = {
   REGRA_NOVA: "Regra nova",
   REGRA_ALTERADA: "Regra alterada",
   PARAMETRO: "Parâmetro",
+};
+
+const ROTULO_DA_DECISAO: Record<DecisaoDaPendente, string> = {
+  VALIDAR: "validar",
+  ALTERAR: "alterar",
+  DESCARTAR: "descartar",
 };
 
 const ROTULO_DA_RESOLUCAO = { JUNTAR: "propõe juntar as duas", SUBSTITUIR: "propõe substituir" };
@@ -176,9 +188,19 @@ export function ConversaDaOperadora({
             você aplica muda a análise das contas.
           </p>
         </div>
-        <Link href={`/contas-medicas/operadoras?tabela=${encodeURIComponent(sigla)}`} className={BOTAO_SECUNDARIO}>
-          <Upload className="w-4 h-4" aria-hidden="true" /> Enviar tabela
-        </Link>
+        <div className="flex flex-wrap gap-2">
+          <button
+            type="button"
+            disabled={ocupado}
+            onClick={() => mandar("revisar pendentes")}
+            className={BOTAO_SECUNDARIO}
+          >
+            <ListChecks className="w-4 h-4" aria-hidden="true" /> Revisar pendentes
+          </button>
+          <Link href={`/contas-medicas/operadoras?tabela=${encodeURIComponent(sigla)}`} className={BOTAO_SECUNDARIO}>
+            <Upload className="w-4 h-4" aria-hidden="true" /> Enviar tabela
+          </Link>
+        </div>
       </div>
 
       {conversa.mensagens.length > 0 && (
@@ -283,6 +305,7 @@ function ItemDoLoteNaTela({
   const [corrigindo, setCorrigindo] = useState(false);
   const [correcao, setCorrecao] = useState("");
   const rotulo = `Item ${item.numero}`;
+  const decisao = item.tipo === "PARAMETRO" ? undefined : (item.proposta as PropostaDeRegra).decisao;
 
   async function corrigir(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -295,13 +318,14 @@ function ItemDoLoteNaTela({
   return (
     <article aria-label={rotulo} className="rounded-lg bg-white border border-slate-200 p-3 text-sm space-y-2">
       <p className="font-semibold text-slate-900">
-        {rotulo}, {ROTULO_DO_TIPO[item.tipo]}
+        {rotulo}, {decisao ? "Regra pendente" : ROTULO_DO_TIPO[item.tipo]}
         {item.regra_codigo && (
           <>
             {" "}
             <span className="font-mono text-xs text-slate-500">{item.regra_codigo}</span>
           </>
         )}
+        {decisao && `, ${ROTULO_DA_DECISAO[decisao]}`}
       </p>
       {item.tipo === "PARAMETRO" ? (
         <ParametroDoItem proposta={item.proposta as PropostaDeParametro} />
@@ -357,6 +381,8 @@ function ItemDoLoteNaTela({
 }
 
 function RegraDoItem({ proposta, alterada }: { proposta: PropostaDeRegra; alterada: boolean }) {
+  if (proposta.decisao === "DESCARTAR") return <p className="text-slate-600">Sai da memória: {proposta.texto_anterior}</p>;
+  if (proposta.decisao === "VALIDAR") return <p className="text-slate-800">Fica vigente como está: {proposta.texto}</p>;
   if (!alterada) return <p className="text-slate-800">{proposta.texto}</p>;
   return (
     <>

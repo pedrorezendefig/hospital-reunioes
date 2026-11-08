@@ -503,9 +503,7 @@ def _aplicar(supabase, sigla: str, texto: str, autor_id: str | None) -> dict[str
 
     # A Regra pendente que o lote decidiu sai da fila de Validação (#1494).
     decididas = {
-        codigo: codigo in saem
-        for codigo in [*mudancas, *saem]
-        if por_codigo[codigo].get("status") != "VIGENTE"
+        codigo: codigo in saem for codigo in [*mudancas, *saem] if por_codigo[codigo].get("status") != "VIGENTE"
     }
     decidir_pela_memoria(supabase, operadora_id, decididas, autor_id)
 
