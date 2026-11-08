@@ -12,9 +12,7 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-MIGRATION_126 = (
-    Path(__file__).resolve().parents[2] / "supabase" / "migrations" / "126_contas_medicas_auditor.sql"
-)
+MIGRATION_126 = Path(__file__).resolve().parents[2] / "supabase" / "migrations" / "126_contas_medicas_auditor.sql"
 
 
 def _sql() -> str:
