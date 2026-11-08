@@ -13,7 +13,8 @@ operadora. Uma interface só, `conversar`: a mensagem de quem decide é
 
 A pergunta vai ao Auditor antes de qualquer gravação: se ele não responder,
 nada fica pela metade. A prova roda depois que o lote está gravado; se ela
-falhar, o item fica sem prova e o lote continua valendo.
+falhar, o item fica sem prova e o ok fica recusado até a correção provar de
+novo (decisão 7).
 
 A conversa é histórico, nunca memória (decisão 3): o Auditor recebe só a
 mensagem desta vez, e nada daqui entra no prompt do Passo A nem do Passo B. A
@@ -177,7 +178,8 @@ def _item_do_auditor(proposta: ia.PropostaDoAuditor, vigente: dict, regras: dict
             dados["texto_anterior"] = regras[codigo]["texto"]
     conflitos = {}
     for conflito in proposta.conflitos:
-        if conflito.codigo in regras and conflito.codigo not in conflitos:
+        # A regra alterada não conflita com ela mesma: o texto novo já a troca.
+        if conflito.codigo in regras and conflito.codigo != codigo and conflito.codigo not in conflitos:
             conflitos[conflito.codigo] = {
                 "codigo": conflito.codigo,
                 "texto": regras[conflito.codigo]["texto"],
@@ -190,6 +192,12 @@ def _item_do_auditor(proposta: ia.PropostaDoAuditor, vigente: dict, regras: dict
         "motivo": proposta.motivo.strip() or None,
         "conflitos_json": list(conflitos.values()),
     }
+
+
+def _em_conflito(item: dict) -> tuple[str, ...]:
+    """As regras que o item junta ou substitui (ADR 0081, decisão 8): nos dois
+    casos o texto do item fica e a regra em conflito sai, em vez de empilhar."""
+    return tuple(c["codigo"] for c in item.get("conflitos_json") or [])
 
 
 def _provar(supabase, sigla: str, item: dict, autor_id: str | None) -> None:
@@ -210,6 +218,7 @@ def _provar(supabase, sigla: str, item: dict, autor_id: str | None) -> None:
             autor_id=autor_id,
             codigo=item["regra_codigo"],
             lote_item_id=item["id"],
+            sem=_em_conflito(item),
         )
     except (ia.ErroDaIA, MudancaRecusadaError) as erro:
         logger.warning("[ContasMedicas] Prova do item %s do lote sem resultado: %s", item["id"], type(erro).__name__)
@@ -299,6 +308,9 @@ def _corrigir(supabase, sigla: str, numero: int, pedido: str, texto: str, autor_
         .execute()
         .data[0]
     )
+    # A prova do texto antigo se solta do item: se a nova falhar, ou se o item
+    # virar parâmetro, a tela mostra o item sem prova, e não a de outra regra.
+    supabase.table("cm_prova").update({"lote_item_id": None}).eq("lote_item_id", alvo["id"]).execute()
     _falar(supabase, conversa["id"], "AUDITOR", sanitizar_estrutura(resposta.resposta).strip())
     _provar(supabase, sigla, gravado, autor_id)
 
@@ -311,6 +323,14 @@ def _aplicar(supabase, sigla: str, texto: str, autor_id: str | None) -> dict[str
     if lote is None:
         raise LoteRecusadoError("Não há lote aberto para aplicar.")
     itens = _itens(supabase, lote["id"])
+    # Prova antes do ok (ADR 0081, decisão 7): item de regra sem prova não se aplica.
+    provas = _provas(supabase, itens)
+    for item in itens:
+        if item["tipo"] in TIPOS_DE_REGRA and item["id"] not in provas:
+            raise LoteRecusadoError(
+                f"O item {item['numero']} está sem a prova da regra. "
+                "Peça a correção do item para provar de novo antes do ok."
+            )
     regras = _regras_da_versao(supabase, vigente["id"])
     por_codigo = {r["codigo"]: r for r in regras}
     agora = _agora()
@@ -320,6 +340,7 @@ def _aplicar(supabase, sigla: str, texto: str, autor_id: str | None) -> dict[str
     mudancas: dict[str, dict[str, Any]] = {}
     parametros: dict[str, Any] | None = None
     codigos: dict[str, str] = {}
+    saem: dict[str, int] = {}
     for item in itens:
         dados = item["proposta_json"]
         if item["tipo"] == "PARAMETRO":
@@ -332,6 +353,13 @@ def _aplicar(supabase, sigla: str, texto: str, autor_id: str | None) -> dict[str
                 "corrija o item."
             )
         campos = {"texto": dados["texto"], "tipo": dados["tipo"], "origem": dados.get("origem"), **validacao}
+        for conflito in _em_conflito(item):
+            if conflito not in por_codigo:
+                raise LoteRecusadoError(
+                    f"A regra {conflito}, em conflito com o item {item['numero']}, não está mais na memória: "
+                    "corrija o item."
+                )
+            saem.setdefault(conflito, item["numero"])
         if item["tipo"] == "REGRA_ALTERADA":
             if item["regra_codigo"] not in por_codigo:
                 raise LoteRecusadoError(
@@ -344,9 +372,16 @@ def _aplicar(supabase, sigla: str, texto: str, autor_id: str | None) -> dict[str
         novas.append({"operadora_id": operadora_id, "codigo": codigo, "secao": dados["secao"], "ativa": True, **campos})
         codigos[item["id"]] = codigo
 
+    for conflito, numero in saem.items():
+        if conflito in mudancas:
+            raise LoteRecusadoError(
+                f"O item {numero} tira da memória a regra {conflito}, que outro item do lote altera: "
+                "corrija um dos dois."
+            )
     resumo = "Lote do Auditor: " + ", ".join(
         [f"{n['codigo']} incluída" for n in novas]
         + [f"{codigo} alterada" for codigo in mudancas]
+        + [f"{codigo} juntada ou substituída" for codigo in saem]
         + [f"parâmetro {i['proposta_json']['chave']}" for i in itens if i["tipo"] == "PARAMETRO"]
     )
     versao = _gravar_versao(
@@ -354,7 +389,8 @@ def _aplicar(supabase, sigla: str, texto: str, autor_id: str | None) -> dict[str
         operadora_id,
         vigente,
         regras,
-        mudancas,
+        # A regra em conflito fica na versão nova, desligada: sai do Guia e da memória.
+        {**mudancas, **{codigo: {"ativa": False} for codigo in saem}},
         autor_id,
         resumo,
         novas=novas,

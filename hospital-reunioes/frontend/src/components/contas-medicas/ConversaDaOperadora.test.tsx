@@ -211,6 +211,20 @@ describe("o lote do Auditor", () => {
     expect(within(conversa).queryByRole("region", { name: "Lote do Auditor" })).toBeNull();
   });
 
+  it("com um item de regra sem prova o ok fica travado até a correção provar de novo", async () => {
+    respostaDoEnvio = () => ({
+      status: 200,
+      corpo: { mensagens: FALAS, lote: { ...LOTE, itens: [{ ...LOTE.itens[0], prova: null }, LOTE.itens[1], LOTE.itens[2]] }, aplicado: null },
+    });
+    const conversa = await abrir();
+    const lote = await mandar(conversa, PEDIDO);
+
+    const ok = within(lote).getByRole("button", { name: "Ok, aplicar o lote" }) as HTMLButtonElement;
+
+    expect(ok.disabled).toBe(true);
+    expect(lote.textContent).toContain("O ok fica travado enquanto o item 1 estiver sem prova.");
+  });
+
   it("Corrigir o item 2 manda corrige o item 2 com o que mudar e mostra o item refeito", async () => {
     const conversa = await abrir();
     const lote = await mandar(conversa, PEDIDO);

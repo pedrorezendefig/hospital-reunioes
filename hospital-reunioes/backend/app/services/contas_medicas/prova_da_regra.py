@@ -319,12 +319,15 @@ def provar_regra(
     autor_id: str | None,
     codigo: str | None = None,
     lote_item_id: str | None = None,
+    sem: tuple[str, ...] = (),
 ) -> dict[str, Any]:
     """A prova da regra conferida pela pessoa, guardada em `cm_prova`.
 
     Com `codigo`, a regra é a alterada do lote do Auditor (#1490): o texto novo
     toma o lugar da regra que já existe na memória candidata, em vez de entrar
-    ao lado dela. `lote_item_id` liga a prova ao item do lote."""
+    ao lado dela. `sem` são as regras em conflito que o item junta ou substitui
+    (ADR 0081, decisão 8): saem da memória candidata, como sairão no ok.
+    `lote_item_id` liga a prova ao item do lote."""
     candidata = regra_candidata(
         supabase,
         sigla,
@@ -343,7 +346,7 @@ def provar_regra(
             raise MudancaRecusadaError(f"A regra {codigo} não está na memória vigente de {candidata['sigla']}.")
         nova = {**nova, "codigo": codigo}
         regras = [r for r in regras if r["codigo"] != codigo]
-    regras = [*regras, nova]
+    regras = [*(r for r in regras if r["codigo"] not in sem), nova]
     operadora = (
         supabase.table("cm_operadora").select("nome").eq("id", candidata["operadora_id"]).execute().data or [{}]
     )[0]

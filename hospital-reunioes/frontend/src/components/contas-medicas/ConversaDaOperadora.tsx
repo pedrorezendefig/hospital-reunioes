@@ -245,6 +245,8 @@ function LoteDoAuditor({
   ocupado: boolean;
   aoMandar: (mensagem: string) => Promise<boolean>;
 }) {
+  // Prova antes do ok (ADR 0081, decisão 7): o servidor recusa o ok com item de regra sem prova.
+  const semProva = lote.itens.filter((item) => item.tipo !== "PARAMETRO" && !item.prova).map((item) => item.numero);
   return (
     <section aria-label="Lote do Auditor" className="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-4 space-y-3">
       <h3 className="text-xs font-semibold text-slate-500 uppercase">
@@ -256,7 +258,13 @@ function LoteDoAuditor({
       <p className="text-xs text-slate-500">
         Nada vale antes do ok. O ok aplica o lote inteiro numa versão nova da memória, com o seu nome e a data.
       </p>
-      <button type="button" disabled={ocupado} onClick={() => aoMandar("ok")} className={BOTAO}>
+      {semProva.length > 0 && (
+        <p className="text-xs text-amber-700">
+          O ok fica travado enquanto {semProva.length === 1 ? "o item" : "os itens"} {semProva.join(", ")}{" "}
+          {semProva.length === 1 ? "estiver" : "estiverem"} sem prova.
+        </p>
+      )}
+      <button type="button" disabled={ocupado || semProva.length > 0} onClick={() => aoMandar("ok")} className={BOTAO}>
         Ok, aplicar o lote
       </button>
     </section>
