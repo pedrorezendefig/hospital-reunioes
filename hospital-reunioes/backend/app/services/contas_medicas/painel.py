@@ -232,12 +232,14 @@ def _custo_das_provas(supabase, segunda: date, operadora_id: str | None) -> Deci
     não têm conta: são da Operadora, que se acha pelo atendimento da Conta
     refeita. O filtro de tipo de conta não vale para elas."""
     chamadas = ler_tudo(
-        lambda: supabase.table("cm_chamada_ia")
-        .select("id, atendimento_id, custo_usd")
-        .eq("passo", "PROVA")
-        .gte("criado_em", _meia_noite(segunda))
-        .lt("criado_em", _meia_noite(segunda + timedelta(weeks=1)))
-        .order("id"),
+        lambda: (
+            supabase.table("cm_chamada_ia")
+            .select("id, atendimento_id, custo_usd")
+            .eq("passo", "PROVA")
+            .gte("criado_em", _meia_noite(segunda))
+            .lt("criado_em", _meia_noite(segunda + timedelta(weeks=1)))
+            .order("id")
+        ),
         rotulo="provas do Painel",
     )
     if operadora_id:

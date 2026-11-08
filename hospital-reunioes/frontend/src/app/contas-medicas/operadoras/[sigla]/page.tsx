@@ -87,6 +87,33 @@ interface Proposta {
   efeito_no_guia: string;
 }
 
+interface LinhaDaProva {
+  acao: string;
+  data: string | null;
+  codigo: string | null;
+  descricao: string;
+  quantidade_devida: number | null;
+  regra_codigo: string | null;
+}
+
+interface ContaDaProva {
+  conta_id: string;
+  numero_atendimento: string | null;
+  numero_conta: string | null;
+  mudaria: boolean;
+  entrariam: LinhaDaProva[];
+  sairiam: (LinhaDaProva & { feito: boolean })[];
+  mudariam: { antes: LinhaDaProva; depois: LinhaDaProva }[];
+}
+
+interface ProvaDaRegra {
+  contas: number;
+  mudaria: boolean;
+  feitas_que_sumiriam: number;
+  aviso: string | null;
+  por_conta: ContaDaProva[];
+}
+
 interface RegraEnsinada {
   versao: string;
   regra: string;
@@ -759,7 +786,40 @@ function PropostaDaRegra({
   const [comParametro, setComParametro] = useState(Boolean(proposta.parametro));
   const [salvando, setSalvando] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
+  const [prova, setProva] = useState<{ corpo: string; resultado: ProvaDaRegra } | null>(null);
+  const [provando, setProvando] = useState(false);
   const parametro = proposta.parametro;
+  // O corpo que a prova e o Validar mandam: a prova de uma regra que mudou depois não vale.
+  const corpo = JSON.stringify({
+    secao,
+    texto: texto.trim(),
+    tipo: tipo || null,
+    origem: origem.trim() || null,
+    parametro: parametro && comParametro ? { chave: parametro.chave, valor: parametro.depois } : null,
+  });
+  const provaAtual = prova && prova.corpo === corpo ? prova.resultado : null;
+
+  async function provar() {
+    if (!token || !texto.trim()) return;
+    setProvando(true);
+    setErro(null);
+    try {
+      const res = await fetch(`/api/contas-medicas/operadoras/${encodeURIComponent(sigla)}/regras/prova`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        body: corpo,
+      });
+      if (!res.ok) {
+        setErro(await detalheDoErro(res, `Não foi possível provar a regra (HTTP ${res.status}).`));
+        return;
+      }
+      setProva({ corpo, resultado: await res.json() });
+    } catch {
+      setErro("Não foi possível provar a regra.");
+    } finally {
+      setProvando(false);
+    }
+  }
 
   async function validar(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -770,13 +830,7 @@ function PropostaDaRegra({
       const res = await fetch(`/api/contas-medicas/operadoras/${encodeURIComponent(sigla)}/regras`, {
         method: "POST",
         headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-        body: JSON.stringify({
-          secao,
-          texto: texto.trim(),
-          tipo: tipo || null,
-          origem: origem.trim() || null,
-          parametro: parametro && comParametro ? { chave: parametro.chave, valor: parametro.depois } : null,
-        }),
+        body: corpo,
       });
       if (!res.ok) {
         setErro(await detalheDoErro(res, `Não foi possível validar a regra (HTTP ${res.status}).`));
@@ -862,8 +916,10 @@ function PropostaDaRegra({
           <span className="normal-case">{valorLegivel(parametro.depois)}</span>
         </label>
       )}
+      {provaAtual && <ProvaDaRegraNaTela prova={provaAtual} />}
       <p className="text-xs text-slate-500">
-        Nada vale antes de validar. Validar cria uma versão nova da memória, com o seu nome e a data.
+        Nada vale antes de validar. Validar cria uma versão nova da memória, com o seu nome e a data. A prova refaz a
+        análise nas últimas contas concluídas da operadora sem mexer nelas.
       </p>
       {erro && (
         <p role="alert" className="flex items-start gap-2 text-sm text-red-700">
@@ -871,6 +927,10 @@ function PropostaDaRegra({
         </p>
       )}
       <div className="flex flex-wrap gap-2">
+        <button type="button" onClick={provar} disabled={!texto.trim() || provando} className={BOTAO_SECUNDARIO}>
+          {provando && <Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" />}
+          Provar nas últimas contas
+        </button>
         <button type="submit" disabled={!texto.trim() || salvando} className={BOTAO}>
           {salvando && <Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" />}
           Validar regra
@@ -883,6 +943,62 @@ function PropostaDaRegra({
   );
 }
 
+
+function descricaoDaLinha(linha: LinhaDaProva): string {
+  return [linha.descricao, linha.data ? dataBr(linha.data) : null].filter(Boolean).join(", ");
+}
+
+/** O que o Guia teria dito de diferente em cada conta. A conta que não muda fica de fora. */
+function ProvaDaRegraNaTela({ prova }: { prova: ProvaDaRegra }) {
+  const mudaram = prova.por_conta.filter((c) => c.mudaria);
+  const feitas = prova.feitas_que_sumiriam;
+  return (
+    <section aria-label="Prova da regra" className="rounded-lg bg-white border border-slate-200 p-3 text-sm space-y-2">
+      <h3 className="text-xs font-semibold text-slate-500 uppercase">Prova da regra</h3>
+      <p className="text-slate-700">
+        Refeita nas {prova.contas} últimas contas concluídas da operadora. Nenhuma conta foi alterada.
+      </p>
+      {prova.aviso && <p className="text-amber-700 font-medium">{prova.aviso}</p>}
+      {feitas > 0 && (
+        <p role="alert" className="flex items-start gap-2 text-red-700 font-medium">
+          <AlertCircle className="w-4 h-4 mt-0.5 shrink-0" aria-hidden="true" />
+          {feitas === 1
+            ? "1 linha já feita pela faturista sumiria."
+            : `${feitas} linhas já feitas pela faturista sumiriam.`}
+        </p>
+      )}
+      {mudaram.length > 0 && (
+        <ul className="divide-y divide-slate-100">
+          {mudaram.map((c) => {
+            const rotulo = `Atendimento ${c.numero_atendimento ?? ""}, conta ${c.numero_conta ?? ""}`;
+            return (
+              <li key={c.conta_id} aria-label={rotulo} className="py-2 space-y-1">
+                <p className="font-semibold text-slate-900">{rotulo}</p>
+                {c.entrariam.map((l, i) => (
+                  <p key={`e-${i}`} className="text-emerald-700">
+                    Entraria: {descricaoDaLinha(l)}
+                  </p>
+                ))}
+                {c.sairiam.map((l, i) => (
+                  <p key={`s-${i}`} className="text-slate-700">
+                    Sairia: {descricaoDaLinha(l)}
+                    {l.feito && <span className="ml-2 text-xs font-semibold text-red-700">Já feita</span>}
+                  </p>
+                ))}
+                {c.mudariam.map((m, i) => (
+                  <p key={`m-${i}`} className="text-slate-700">
+                    Mudaria: {m.depois.descricao}, quantidade {m.antes.quantidade_devida ?? ""} para{" "}
+                    {m.depois.quantidade_devida ?? ""}
+                  </p>
+                ))}
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </section>
+  );
+}
 
 function Historico({ versoes }: { versoes: VersaoDaMemoria[] }) {
   return (

@@ -125,9 +125,7 @@ def _dia(valor: Any) -> date | None:
 
 def _conta_guardada(supabase, conta: dict[str, Any]) -> Conta:
     """A conta como o Passo B a lê, montada dos itens gravados na análise."""
-    itens = (
-        supabase.table("cm_conta_item").select("*").eq("conta_id", conta["id"]).order("ordem").execute().data or []
-    )
+    itens = supabase.table("cm_conta_item").select("*").eq("conta_id", conta["id"]).order("ordem").execute().data or []
     return Conta(
         atendimento=str(conta.get("numero_atendimento") or ""),
         conta=conta.get("numero_conta"),

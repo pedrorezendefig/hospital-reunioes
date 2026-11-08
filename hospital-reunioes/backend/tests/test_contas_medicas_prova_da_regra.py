@@ -22,11 +22,11 @@ import httpx2
 import pytest
 from anthropic_apoio import cliente_por_transporte, mensagem
 from test_contas_medicas_memoria_tela import _importar, _operadora_id, _versao
+from test_contas_medicas_operadoras import GESTAO
 from test_contas_medicas_regra_nova import _cliente
 
 from app.limiter import limiter
 from app.services.contas_medicas import ia
-from test_contas_medicas_operadoras import GESTAO
 
 MIGRATION_126 = Path(__file__).resolve().parents[2] / "supabase" / "migrations" / "126_contas_medicas_auditor.sql"
 KIT = Path(__file__).resolve().parents[1] / "app" / "conhecimento" / "contas-medicas.md"
@@ -232,7 +232,7 @@ class TestODiffPorConta:
         assert len(provedor.pedidos) == 10
 
         c12 = _da_conta(corpo, "c12")
-        assert [(l["codigo"], l["quantidade_devida"]) for l in c12["sairiam"]] == [("M012", 2.0)]
+        assert [(linha["codigo"], linha["quantidade_devida"]) for linha in c12["sairiam"]] == [("M012", 2.0)]
         assert c12["entrariam"] == [] and c12["mudariam"] == []
 
         c11 = _da_conta(corpo, "c11")
@@ -242,7 +242,7 @@ class TestODiffPorConta:
         assert c11["entrariam"] == [] and c11["sairiam"] == []
 
         c10 = _da_conta(corpo, "c10")
-        assert [(l["codigo"], l["regra_codigo"]) for l in c10["entrariam"]] == [("M010", CODIGO_NOVO)]
+        assert [(linha["codigo"], linha["regra_codigo"]) for linha in c10["entrariam"]] == [("M010", CODIGO_NOVO)]
 
         assert all(not c["mudaria"] for c in corpo["por_conta"] if c["conta_id"] not in ("c10", "c11", "c12"))
         assert corpo["mudaria"] is True
@@ -273,8 +273,8 @@ class TestFeitoENaoMudaria:
 
         corpo = cliente.post(_rota(), json=REGRA).json()
 
-        assert [(l["codigo"], l["feito"]) for l in _da_conta(corpo, "c12")["sairiam"]] == [("M012", True)]
-        assert [(l["codigo"], l["feito"]) for l in _da_conta(corpo, "c11")["sairiam"]] == [("M011", False)]
+        assert [(linha["codigo"], linha["feito"]) for linha in _da_conta(corpo, "c12")["sairiam"]] == [("M012", True)]
+        assert [(linha["codigo"], linha["feito"]) for linha in _da_conta(corpo, "c11")["sairiam"]] == [("M011", False)]
         assert corpo["feitas_que_sumiriam"] == 1
 
     def test_prova_sem_mudanca_devolve_o_aviso_de_que_nao_mudaria_nada(self, cenario):
