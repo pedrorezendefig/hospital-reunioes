@@ -26,6 +26,7 @@ from test_contas_medicas_conversa_da_operadora import ROTA, _item, _proposta, _P
 from test_contas_medicas_conversa_da_operadora import cenario as cenario  # noqa: F401
 from test_contas_medicas_memoria_tela import _versoes
 from test_contas_medicas_operadoras import GESTAO
+from test_contas_medicas_revisar_pendentes import _tema
 
 from app.services.contas_medicas.contratos import avisar_contratos
 
@@ -205,6 +206,19 @@ class TestOOkDoContrato:
         assert _vigente(banco)["parametros_json"]["contrato"]["ultimo_aditivo"]["numero"] == "13"
         (lote,) = banco.linhas("cm_lote")
         assert (lote["estado"], lote["memoria_versao_id"]) == ("APLICADO", _vigente(banco)["id"])
+
+    def test_o_contrato_diz_de_uma_pendente_deixa_o_tema_dela_aberto(self, com_storage):
+        """O "o contrato diz" não decide a Regra pendente (#1494 com #1495): ela
+        segue pendente, e o cartão dela continua na fila de Validação."""
+        cliente, banco, _provedor = com_storage
+        _tema(banco, "t-pri-03", "ALFA", "ALFA-PRI-03", [])
+        assert _subir(cliente, _pdf(TEXTO_DO_CONTRATO)).status_code == 200
+
+        resposta = cliente.post(ROTA, json={"texto": "ok"})
+
+        assert resposta.status_code == 200, resposta.text
+        (tema,) = banco.linhas("cm_validacao_tema")
+        assert (tema["estado"], tema["decisao"]) == ("ABERTO", None)
 
 
 # ═══════════════════════════════════════════════════════════════════════════

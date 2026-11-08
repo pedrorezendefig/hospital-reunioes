@@ -6,6 +6,9 @@ operadora. Uma interface só, `conversar`: a mensagem de quem decide é
 - "ok": aplica o lote aberto numa versão nova da Memória, uma por lote, com
   as Regras vigentes no nome de quem deu o ok (decisões 1 e 5);
 - "corrige o item N ...": o Auditor refaz só o item N, e a prova dele;
+- "revisar pendentes": o lote com todas as Regras pendentes da Operadora,
+  cada uma com a decisão que o Auditor sugere (validar, alterar, descartar) e
+  a prova (issue #1494, decisão 6). O ok fecha os Temas de validação delas;
 - qualquer outro texto: o Auditor devolve um lote novo de propostas tipadas
   (Regra nova, Regra alterada, parâmetro), cada uma com o motivo, os conflitos
   com as Regras da memória (decisão 8) e a Prova da regra (decisão 7). O lote
@@ -59,6 +62,7 @@ from app.services.contas_medicas.regra_nova import (
     _valor_json,
     contas_com_regra_nova,
 )
+from app.services.contas_medicas.validacao import decidir_pela_memoria
 from app.utils.text_sanitizer import sanitizar_estrutura
 
 __all__ = [
@@ -76,6 +80,11 @@ TIPOS_DE_REGRA = ("REGRA_NOVA", "REGRA_ALTERADA")
 
 _OK = re.compile(r"ok[.!]*", re.IGNORECASE)
 _CORRIGE = re.compile(r"corri[gj][ae]\s+o\s+item\s+(\d+)\b[\s:,.]*(.*)", re.IGNORECASE | re.DOTALL)
+_REVISAR = re.compile(r"revis[ae]r?\s+(?:as\s+)?(?:regras\s+)?pendentes[.!]*", re.IGNORECASE)
+
+# O lote das pendentes: cada item é uma Regra pendente, com a decisão sugerida.
+PENDENTES = "PENDENTES"
+VALIDAR, ALTERAR, DESCARTAR = "VALIDAR", "ALTERAR", "DESCARTAR"
 
 
 class LoteRecusadoError(ValueError):
@@ -211,6 +220,40 @@ def _item_do_auditor(proposta: ia.PropostaDoAuditor, vigente: dict, regras: dict
     }
 
 
+def _item_da_pendente(regra: dict, decisao: ia.DecisaoDaPendente | None) -> dict:
+    """O item do lote das pendentes: a Regra pendente como Regra alterada, com a
+    decisão sugerida. O texto de agora vem da memória; o ALTERAR sem texto novo
+    (ou com o mesmo) é um VALIDAR. A pendente que o Auditor deixou sem decisão
+    entra assim mesmo, para validar como está: o lote traz todas."""
+    if decisao is not None:
+        decisao = ia.DecisaoDaPendente.model_validate(sanitizar_estrutura(decisao.model_dump()))
+    escolha = decisao.decisao if decisao else VALIDAR
+    texto = regra["texto"]
+    if escolha == ALTERAR:
+        texto = decisao.texto.strip() or texto
+        if texto == regra["texto"]:
+            escolha = VALIDAR
+    motivo = decisao.motivo.strip() if decisao else ""
+    return {
+        "tipo": "REGRA_ALTERADA",
+        "regra_codigo": regra["codigo"],
+        "proposta_json": {
+            "decisao": escolha,
+            "secao": regra.get("secao"),
+            "texto": texto,
+            "tipo": regra.get("tipo"),
+            "origem": regra.get("origem"),
+            "texto_anterior": regra["texto"],
+        },
+        "motivo": motivo or "O Auditor não comentou esta regra: ela fica como está escrita.",
+        "conflitos_json": [],
+    }
+
+
+def _linha_da_pendente(regra: dict) -> str:
+    return f"{regra['codigo']} | {regra.get('secao')} | {regra.get('tipo')} | {regra.get('origem')} | {regra['texto']}"
+
+
 def _em_conflito(item: dict) -> tuple[str, ...]:
     """As regras que o item junta ou substitui (ADR 0081, decisão 8): nos dois
     casos o texto do item fica e a regra em conflito sai, em vez de empilhar."""
@@ -252,6 +295,7 @@ def _provar(supabase, sigla: str, item: dict, autor_id: str | None) -> None:
             codigo=item["regra_codigo"],
             lote_item_id=item["id"],
             sem=_em_conflito(item),
+            descartar=regra.get("decisao") == DESCARTAR,
         )
     except (ia.ErroDaIA, MudancaRecusadaError) as erro:
         logger.warning("[ContasMedicas] Prova do item %s do lote sem resultado: %s", item["id"], type(erro).__name__)
@@ -289,6 +333,30 @@ def _lote_novo(
         .execute()
         .data[0]
     )
+
+
+def _revisar_pendentes(supabase, sigla: str, texto: str, autor_id: str | None) -> None:
+    """O lote com todas as Regras pendentes da Operadora, e só dela: os itens
+    saem da memória vigente, e o Auditor só sugere a decisão de cada um."""
+    sigla, operadora_id, vigente = _operadora_e_vigente(supabase, sigla)
+    pendentes = sorted(
+        (r for r in _regras_da_versao(supabase, vigente["id"]) if r.get("status") != "VIGENTE"),
+        key=lambda r: r["codigo"],
+    )
+    if not pendentes:
+        conversa_id = _conversa_ou_nova(supabase, operadora_id, autor_id)
+        _falar(supabase, conversa_id, "PESSOA", texto, autor_id)
+        _falar(supabase, conversa_id, "AUDITOR", f"A {sigla} não tem Regra pendente para revisar.")
+        return
+    memoria = gerar_texto_memoria(supabase, operadora_id, vigente["id"])
+    resposta = ia.revisar_pendentes(memoria, "\n".join(map(_linha_da_pendente, pendentes)), supabase=supabase)
+
+    decisoes: dict[str, ia.DecisaoDaPendente] = {}
+    for decisao in resposta.decisoes:
+        decisoes.setdefault(decisao.regra_codigo.strip(), decisao)
+    itens = [_item_da_pendente(regra, decisoes.get(regra["codigo"])) for regra in pendentes]
+    do_auditor = sanitizar_estrutura(resposta.resposta).strip()
+    _gravar_lote(supabase, sigla, operadora_id, texto, itens, do_auditor, autor_id, fonte=PENDENTES)
 
 
 def _gravar_lote(
@@ -591,10 +659,22 @@ def _corrigir(supabase, sigla: str, numero: int, pedido: str, texto: str, autor_
         "motivo": alvo.get("motivo"),
         "conflitos": alvo.get("conflitos_json"),
     }
-    resposta = ia.corrigir_item(memoria, json.dumps(atual, ensure_ascii=False), pedido.strip(), supabase=supabase)
-
     regras = {r["codigo"]: r for r in _regras_da_versao(supabase, vigente["id"])}
-    refeito = _item_do_auditor(resposta.proposta, vigente, regras)
+    if lote.get("fonte") == PENDENTES:
+        # No lote das pendentes o item N é sempre a mesma Regra: muda a decisão.
+        pendente = regras.get(alvo.get("regra_codigo"))
+        if pendente is None:
+            raise LoteRecusadoError(
+                f"A regra {alvo.get('regra_codigo')} do item {numero} não está mais na memória: "
+                "peça a revisão das pendentes de novo."
+            )
+        resposta = ia.corrigir_pendente(
+            memoria, json.dumps(atual, ensure_ascii=False), pedido.strip(), supabase=supabase
+        )
+        refeito = _item_da_pendente(pendente, resposta.decisao)
+    else:
+        resposta = ia.corrigir_item(memoria, json.dumps(atual, ensure_ascii=False), pedido.strip(), supabase=supabase)
+        refeito = _item_do_auditor(resposta.proposta, vigente, regras)
     if refeito is None:
         raise LoteRecusadoError(f"O Auditor não conseguiu refazer o item {numero}. Diga a correção de outro jeito.")
     # O que veio do contrato fica com o item corrigido: o trecho da cláusula e
@@ -656,6 +736,15 @@ def _aplicar(supabase, sigla: str, texto: str, autor_id: str | None) -> dict[str
             if lote.get("fonte") == "CONTRATO" and dados["chave"] == "contrato" and isinstance(dados["depois"], dict):
                 contrato = dados
             continue
+        if dados.get("decisao") == DESCARTAR:
+            # A pendente descartada fica na versão nova, desligada, como a regra em conflito.
+            if item["regra_codigo"] not in por_codigo:
+                raise LoteRecusadoError(
+                    f"A regra {item['regra_codigo']} do item {item['numero']} não está mais na memória: corrija o item."
+                )
+            saem.setdefault(item["regra_codigo"], item["numero"])
+            codigos[item["id"]] = item["regra_codigo"]
+            continue
         if _CPF.search(f"{dados['texto']} {dados.get('contrato_diz') or ''}"):
             raise LoteRecusadoError(
                 f"O item {item['numero']} tem um número no formato de CPF. A memória não pode ter dado de paciente: "
@@ -699,11 +788,17 @@ def _aplicar(supabase, sigla: str, texto: str, autor_id: str | None) -> dict[str
                 f"O item {numero} tira da memória a regra {conflito}, que outro item do lote altera: "
                 "corrija um dos dois."
             )
+    descartadas = {i["regra_codigo"] for i in itens if (i.get("proposta_json") or {}).get("decisao") == DESCARTAR}
+    validadas = {i["regra_codigo"] for i in itens if (i.get("proposta_json") or {}).get("decisao") == VALIDAR}
     resumo = "Lote do Auditor: " + ", ".join(
         [f"{n['codigo']} incluída" for n in novas]
-        + [f"{codigo} alterada" for codigo in mudancas if codigo not in so_diz]
+        + [
+            f"{codigo} {'validada' if codigo in validadas else 'alterada'}"
+            for codigo in mudancas
+            if codigo not in so_diz
+        ]
         + [f"o contrato diz de {codigo}" for codigo in so_diz]
-        + [f"{codigo} juntada ou substituída" for codigo in saem]
+        + [f"{codigo} {'descartada' if codigo in descartadas else 'juntada ou substituída'}" for codigo in saem]
         + [f"parâmetro {i['proposta_json']['chave']}" for i in itens if i["tipo"] == "PARAMETRO"]
     )
     versao = _gravar_versao(
@@ -728,6 +823,18 @@ def _aplicar(supabase, sigla: str, texto: str, autor_id: str | None) -> dict[str
             autor_id,
             datetime.now(UTC),
         )
+
+    # A Regra pendente que o lote decidiu sai da fila de Validação (#1494). A
+    # juntada continua valendo no texto do item: fecha como validada, com as
+    # ações das Linhas; descartada é só a que o item substitui ou descarta. O
+    # "o contrato diz" (#1495) não decide: a Regra segue pendente.
+    juntadas = {c["codigo"] for i in itens for c in i.get("conflitos_json") or [] if c.get("resolucao") == "JUNTAR"}
+    decididas = {
+        codigo: codigo in descartadas or (codigo in saem and codigo not in juntadas)
+        for codigo in [*mudancas, *saem]
+        if por_codigo[codigo].get("status") != "VIGENTE" and codigo not in so_diz
+    }
+    decidir_pela_memoria(supabase, operadora_id, decididas, autor_id)
 
     supabase.table("cm_lote").update(
         {"estado": "APLICADO", "memoria_versao_id": versao["id"], "aplicado_por": autor_id, "aplicado_em": agora}
@@ -770,6 +877,8 @@ def conversar(supabase, sigla: str, texto: str, autor_id: str | None) -> dict[st
         aplicado = _aplicar(supabase, sigla, texto, autor_id)
     elif correcao:
         _corrigir(supabase, sigla, int(correcao.group(1)), correcao.group(2), texto, autor_id)
+    elif _REVISAR.fullmatch(texto):
+        _revisar_pendentes(supabase, sigla, texto, autor_id)
     else:
         _novo_lote(supabase, sigla, texto, autor_id)
     return {**conversa_da_operadora(supabase, sigla), "aplicado": aplicado}
