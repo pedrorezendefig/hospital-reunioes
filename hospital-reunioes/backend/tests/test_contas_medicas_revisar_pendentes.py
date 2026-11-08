@@ -293,3 +293,26 @@ class TestCorrigeOItemN:
         assert cliente.post(ROTA, json={"texto": "ok"}).status_code == 200
         regras = _regras_vigentes(banco)
         assert (regras["ALFA-PRI-03"]["ativa"], regras["ALFA-PRI-03"]["status"]) == (True, "VIGENTE")
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 4. O kit de conhecimento diz o comportamento novo
+# ═══════════════════════════════════════════════════════════════════════════
+
+KIT = Path(__file__).resolve().parents[1] / "app" / "conhecimento" / "contas-medicas.md"
+
+
+class TestOKit:
+    def test_o_kit_diz_que_as_pendentes_se_revisam_em_lote_na_conversa_da_operadora(self):
+        kit = KIT.read_text(encoding="utf-8")
+        no_ar = kit.split("## O que já está no ar")[1].split("\n## ")[0]
+        validacao = kit.split("## A Validação")[1].split("\n## ")[0]
+
+        for termo in (
+            '"revisar pendentes"',
+            "todas as regras pendentes daquela operadora",
+            "validar, alterar ou descartar",
+            "saem da fila de Validação",
+        ):
+            assert termo in no_ar, termo
+        assert '"revisar pendentes"' in validacao
