@@ -211,14 +211,15 @@ Quatro cartões no topo:
 - **R$ apontado**, com quanto disso já foi incluído no MV (as linhas Feito).
 - **Não procede**: quantas linhas a faturista marcou como Não procede, de quantas apontadas, sem as de validação. Mede o acerto da IA e da memória.
 
-E seis blocos:
+E sete blocos:
 
 - a nota média por semana, nas oito semanas até a escolhida;
 - o R$ apontado por causa-raiz (dispensação, regra automática, cadastro e preço, registro assistencial, lançamento manual), com o percentual de cada uma: diz quem corrige;
 - os dez itens que mais faltam: os códigos com mais contas com linha Incluir, com o número de contas e o R$. É a fila de parametrização para a consultoria do MV;
 - a produção de cada faturista, contada para quem puxou e analisou a conta, e não para quem a enviou: contas, contas com pendência, R$ incluído, taxa de Não procede e, em segundo plano, o R$ retirado;
 - o R$ incluído por nível de evidência (Registrado, Prescrito, Prescrito SN, Por regra), por semana, em barras: mostra quanto do valor incluído depende só de prescrição;
-- o custo de inteligência artificial da semana e o custo médio por conta, em dólar. O custo da semana inclui as provas de regra feitas nela; o médio por conta é só o das análises.
+- o custo de inteligência artificial da semana e o custo médio por conta, em dólar. O custo da semana soma a análise das contas concluídas nela e, em partes separadas, o que foi feito na semana: as conversas com o Auditor, as provas de regra e o agente que revisa as contas. O médio por conta é só o das análises;
+- os Faltou isto apontados por semana, nas oito semanas até a escolhida, contados pelo dia em que foram apontados: quantos o Auditor classificou como Regra, Leitura ou Defeito, quantos ainda esperam a classificação, e quem achou, a pessoa ou o agente. Com a operadora ou o tipo de conta escolhidos, entram só os das contas deles.
 
 Quem tem o Painel completo (coordenadora de faturamento, gestão de contas médicas e as duas diretorias) vê tudo. A faturista vê só a própria linha de produção, e mais nenhum bloco.
 

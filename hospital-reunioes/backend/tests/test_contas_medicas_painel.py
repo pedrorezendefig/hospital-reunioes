@@ -748,6 +748,21 @@ class TestOKitDescreveOPainel:
         ):
             assert trecho in painel, trecho
 
+    def test_a_secao_do_painel_diz_o_faltou_isto_e_o_custo_do_auditor(self):
+        """O comportamento da issue #1492: o Faltou isto por semana, por
+        classificação e por origem, e o custo do Auditor separado da análise."""
+        painel = _secao("O Painel")
+
+        for trecho in (
+            "Faltou isto apontados por semana",
+            "Regra, Leitura ou Defeito",
+            "pessoa ou o agente",
+            "conversas com o Auditor",
+            "provas de regra",
+            "agente que revisa as contas",
+        ):
+            assert trecho in painel, trecho
+
     def test_o_que_ja_esta_no_ar_inclui_o_painel(self):
         assert "o Painel" in _secao("O que já está no ar")
 
