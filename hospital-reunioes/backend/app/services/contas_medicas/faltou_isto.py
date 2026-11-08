@@ -254,6 +254,7 @@ def apontar(
         fala=fala,
         autor_id=autor_id,
         decide=decide,
+        conversa_da_conta=conversa_id,
     )
     ligado = supabase.table("cm_faltou_isto").update({"lote_item_id": do_lote["id"]}).eq("id", gravado["id"]).execute()
     return (ligado.data or [{**gravado, "lote_item_id": do_lote["id"]}])[0]
