@@ -145,6 +145,27 @@ class TestDeQuemDecide:
         assert regra["codigo"] == "ALFA-INS-01"
 
 
+    def test_a_proposta_entra_no_lote_que_ja_estava_aberto_sem_descarta_lo(self, falta_regra):
+        banco, conta_id = _na_conta()
+        assert _com_a_conversa(banco, "gestao").post(CONVERSA, json={"texto": "Ensina o equipo."}).status_code == 200
+
+        _apontar(banco, conta_id, "gestao")
+
+        lote = _com_a_conversa(banco, "gestao").get(CONVERSA).json()["lote"]
+        assert [i["numero"] for i in lote["itens"]] == [1, 2]
+        assert {item["estado"] for item in banco.tabelas["cm_lote_item"]} == {"PROPOSTO"}
+
+    def test_auditor_fora_na_proposta_responde_503_e_nada_fica_gravado(self, falta_regra):
+        banco, conta_id = _na_conta()
+        falta_regra.fora_do_formato_em = {LOTE}
+
+        resposta = _apontar(banco, conta_id, "gestao")
+
+        assert resposta.status_code == 503
+        for tabela in ("cm_faltou_isto", "cm_conversa", "cm_lote", "cm_lote_item"):
+            assert banco.tabelas.get(tabela, []) == [], tabela
+
+
 # ═══════════════════════════════════════════════════════════════════════════
 # 2. Da faturista ou da coordenadora: Regra pendente e Tema de validação
 # ═══════════════════════════════════════════════════════════════════════════
@@ -174,3 +195,67 @@ class TestDeQuemNaoDecide:
         assert (tema["tipo"], tema["estado"], tema["operadora_id"]) == ("REGRA_PENDENTE", "ABERTO", "op-alfa")
         (cartao,) = [c for c in fila_de_validacao(banco)["temas"] if c["id"] == tema["id"]]
         assert (cartao["contas"], cartao["regra"]["status"]) == (1, "PENDENTE")
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 3. O apontamento fica ligado à Regra gerada
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+def _no_guia(banco: _Banco, conta_id: str, quem: str) -> dict[str, Any]:
+    guia = _cliente(banco, quem).get(f"/api/contas-medicas/contas/{conta_id}/guia")
+    assert guia.status_code == 200, guia.text
+    (apontamento,) = guia.json()["faltou_isto"]
+    return apontamento
+
+
+def _regra_do_apontamento(banco: _Banco) -> str | None:
+    (apontamento,) = banco.tabelas["cm_faltou_isto"]
+    (item,) = [i for i in banco.tabelas["cm_lote_item"] if i["id"] == apontamento["lote_item_id"]]
+    return item.get("regra_codigo")
+
+
+class TestOApontamentoLigadoARegra:
+    def test_o_ok_liga_o_apontamento_de_quem_decide_a_regra_vigente(self, falta_regra):
+        banco, conta_id = _na_conta()
+        _apontar(banco, conta_id, "gestao")
+
+        # Antes do ok, o apontamento aponta para o item que espera na conversa da Operadora.
+        assert _regra_do_apontamento(banco) is None
+        assert _no_guia(banco, conta_id, "gestao")["proposta_de_regra"] == (
+            'A proposta de Regra está na conversa da Operadora, esperando o "ok".'
+        )
+
+        assert _com_a_conversa(banco, "gestao").post(CONVERSA, json={"texto": "ok"}).status_code == 200
+
+        assert _regra_do_apontamento(banco) == _regra_do_equipo(banco)["codigo"] == "ALFA-INS-01"
+        assert _no_guia(banco, conta_id, "gestao")["proposta_de_regra"] == "A Regra ALFA-INS-01 entrou na memória."
+
+    def test_a_mensagem_nova_na_conversa_da_operadora_descarta_a_proposta_e_o_guia_diz(self, falta_regra):
+        banco, conta_id = _na_conta()
+        _apontar(banco, conta_id, "gestao")
+
+        outra = _com_a_conversa(banco, "gestao").post(CONVERSA, json={"texto": "Na ALFA o equipo é por dia."})
+
+        assert outra.status_code == 200, outra.text
+        assert _no_guia(banco, conta_id, "gestao")["proposta_de_regra"] == (
+            "A proposta de Regra foi descartada na conversa da Operadora."
+        )
+
+    def test_o_apontamento_da_faturista_fica_ligado_a_regra_pendente(self, falta_regra):
+        banco, conta_id = _na_conta()
+
+        _apontar(banco, conta_id)
+
+        assert _regra_do_apontamento(banco) == _regra_do_equipo(banco)["codigo"] == "ALFA-INS-01"
+        assert _no_guia(banco, conta_id, "faturista")["proposta_de_regra"] == (
+            "A Regra ALFA-INS-01 entrou na memória como pendente e foi para a Validação."
+        )
+
+    def test_sem_falta_de_regra_nao_ha_proposta(self):
+        banco, conta_id = _na_conta()
+
+        _apontar(banco, conta_id)
+
+        assert banco.tabelas.get("cm_lote_item", []) == []
+        assert _no_guia(banco, conta_id, "faturista")["proposta_de_regra"] is None

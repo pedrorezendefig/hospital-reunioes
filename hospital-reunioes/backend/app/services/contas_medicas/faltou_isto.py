@@ -257,7 +257,21 @@ def apontar(
         conversa_da_conta=conversa_id,
     )
     ligado = supabase.table("cm_faltou_isto").update({"lote_item_id": do_lote["id"]}).eq("id", gravado["id"]).execute()
-    return (ligado.data or [{**gravado, "lote_item_id": do_lote["id"]}])[0]
+    return {**(ligado.data or [{**gravado, "lote_item_id": do_lote["id"]}])[0], "lote_item": do_lote}
+
+
+def proposta_de_regra(item: dict[str, Any] | None) -> str | None:
+    """O que a tela diz da Regra que o apontamento gerou (issue #1496), pelo
+    item do lote ligado a ele."""
+    if not item:
+        return None
+    if item.get("estado") == "PROPOSTO":
+        return 'A proposta de Regra está na conversa da Operadora, esperando o "ok".'
+    if item.get("estado") == "DESCARTADO":
+        return "A proposta de Regra foi descartada na conversa da Operadora."
+    if (item.get("proposta_json") or {}).get("status") == "PENDENTE":
+        return f"A Regra {item.get('regra_codigo')} entrou na memória como pendente e foi para a Validação."
+    return f"A Regra {item.get('regra_codigo')} entrou na memória."
 
 
 def para_a_tela(apontamento: dict[str, Any], me_id: str | None) -> dict[str, Any]:
@@ -267,14 +281,25 @@ def para_a_tela(apontamento: dict[str, Any], me_id: str | None) -> dict[str, Any
     aberto = bool(apontamento.get("issue_numero"))
     return {
         **{chave: apontamento.get(chave) for chave in campos},
+        "proposta_de_regra": proposta_de_regra(apontamento.get("lote_item")),
         "pedido_aberto": aberto,
         "pode_abrir_pedido": vira_pedido(apontamento) and not aberto and apontamento.get("apontado_por") == me_id,
     }
 
 
 def da_conta(supabase, conta_id: str) -> list[dict[str, Any]]:
-    """Os Faltou isto da Conta, do mais antigo ao mais novo."""
-    return supabase.table("cm_faltou_isto").select("*").eq("conta_id", conta_id).order("criado_em").execute().data or []
+    """Os Faltou isto da Conta, do mais antigo ao mais novo, cada um com o item
+    do lote da Regra que gerou (`lote_item`), quando gerou."""
+    apontamentos = (
+        supabase.table("cm_faltou_isto").select("*").eq("conta_id", conta_id).order("criado_em").execute().data or []
+    )
+    ids = sorted({a["lote_item_id"] for a in apontamentos if a.get("lote_item_id")})
+    itens = (
+        {i["id"]: i for i in supabase.table("cm_lote_item").select("*").in_("id", ids).execute().data or []}
+        if ids
+        else {}
+    )
+    return [{**a, "lote_item": itens.get(a.get("lote_item_id"))} for a in apontamentos]
 
 
 # ─── O pedido para a Tecnologia (ADR 0081, decisão 4) ─────────────────────────
