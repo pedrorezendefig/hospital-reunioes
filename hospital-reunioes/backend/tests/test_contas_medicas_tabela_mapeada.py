@@ -421,6 +421,24 @@ class TestXls:
         assert ia.chamadas == []
         assert banco.linhas("cm_tabela_preco") == []
 
+    def test_xls_pequeno_com_a_aba_esticada_ate_a_ultima_celula_e_recusado_sem_abrir_tudo(self, ia):
+        # Poucos KB com uma célula em (65535, 255): completar cada linha até a
+        # última coluna dá 16,7 milhões de células e derruba o backend.
+        import xlwt
+
+        livro = xlwt.Workbook()
+        livro.add_sheet("Tabela").write(65535, 255, "x")
+        saida = io.BytesIO()
+        livro.save(saida)
+        cliente, banco = _cliente(GESTAO, _banco_com_bucket(_com_operadoras("ALFA")))
+
+        resposta = _propor(cliente, "tabela-alfa.xls", saida.getvalue(), tipo=XLS)
+
+        assert resposta.status_code == 422
+        assert resposta.json()["detail"] == "A planilha é grande demais para uma tabela."
+        assert ia.chamadas == []
+        assert banco.linhas("cm_tabela_preco") == []
+
 
 class TestFormatoRecusado:
     @pytest.mark.parametrize("nome", ["tabela-alfa.ods", "tabela-alfa.docx", "tabela-alfa"])

@@ -70,6 +70,11 @@ LINHAS_PARA_A_IA = 30
 # passa da leitura do índice.
 TETO_DESCOMPACTADO = 200 * 1024 * 1024
 
+# Teto de células do XLS (linhas x colunas da aba): o arquivo de poucos KB
+# com uma célula no canto da aba vira milhões de células na leitura. Cabem
+# as 65.536 linhas do formato com 30 colunas.
+TETO_DE_CELULAS_DO_XLS = 65536 * 30
+
 # As extensões aceitas, com o tipo do arquivo guardado no bucket.
 _TIPOS = {
     ".pdf": "application/pdf",
@@ -198,12 +203,16 @@ def _do_xls(conteudo: bytes) -> list[list[str]]:
     """A primeira aba do Excel 97-2003, com cada célula escrita como o XLSX
     guarda: o número inteiro sem casa decimal, o resto como está."""
     try:
-        aba = xlrd.open_workbook(file_contents=conteudo).sheet_by_index(0)
-        linhas = [aba.row(i) for i in range(aba.nrows)]
+        # ragged_rows: cada linha só até a última célula escrita, sem completar
+        # a aba inteira até a última coluna.
+        aba = xlrd.open_workbook(file_contents=conteudo, ragged_rows=True).sheet_by_index(0)
     except Exception:  # o arquivo é de fora: qualquer quebra do leitor é "não abre"
         raise TabelaRecusadaError(
             "Não consegui ler a planilha. Confira se ela abre no Excel e envie de novo."
         ) from None
+    if aba.nrows * aba.ncols > TETO_DE_CELULAS_DO_XLS:
+        raise TabelaRecusadaError("A planilha é grande demais para uma tabela.")
+    linhas = [aba.row(i) for i in range(aba.nrows)]
 
     def texto(celula: xlrd.sheet.Cell) -> str:
         if celula.ctype in (xlrd.XL_CELL_NUMBER, xlrd.XL_CELL_DATE, xlrd.XL_CELL_BOOLEAN):
