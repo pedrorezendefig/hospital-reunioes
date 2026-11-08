@@ -2,6 +2,54 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-11-08T15:07:03-03:00",
+      "sha": "31e7e9981dfeff2c7d83c60cf22648472204313f",
+      "app_version": "0.235.0",
+      "subject": "Onda onda-a-onda5: Prova da regra compara a quantidade dos itens com teto; Faltou isto por falta de regra vira proposta de Regra com prova",
+      "raw_subject": "chore(deploy): registro da onda onda-a-onda5 (#1515 #1516)",
+      "scope": [
+        "backend",
+        "frontend"
+      ],
+      "prds": [
+        1484
+      ],
+      "result": "healthy",
+      "duration_seconds": 209,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        },
+        {
+          "service": "frontend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "onda-enxuta onda-a-onda5: PR #1515 (issue #1508), PR #1516 (issue #1496), mergeados PR a PR. Merge pela API do GitHub, um build. Registro pela Action pos-merge depois do health.",
+      "etapas": {
+        "merge_s": 5,
+        "build_s": {
+          "backend": 15,
+          "frontend": 164
+        },
+        "health_s": 0
+      },
+      "responsavel": "pedrorezendefig"
+    },
+    {
       "at": "2026-11-08T14:55:48-03:00",
       "sha": "c53099f709809eeef8fc614f36fffebf0d9ed4c8",
       "app_version": "0.234.0",
