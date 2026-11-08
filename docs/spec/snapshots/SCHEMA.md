@@ -1,6 +1,6 @@
 # SCHEMA.md
 <!-- gerado automaticamente por /snapshot — não editar -->
-<!-- last_update: 2026-11-07T21:16+0000 -->
+<!-- last_update: 2026-11-08T01:34+0000 -->
 
 Diagrama relacional do Hospital Reuniões. Renderiza nativo no GitHub.
 
@@ -20,27 +20,43 @@ erDiagram
     cm_cenario ||--o{ cm_lembrete : "cenario_id"
     cm_conta ||--o{ cm_chamada_ia : "conta_id"
     cm_conta ||--o{ cm_conta_item : "conta_id"
+    cm_conta ||--o{ cm_conversa : "conta_id"
+    cm_conta ||--o{ cm_faltou_isto : "conta_id"
     cm_conta ||--o{ cm_guia_linha : "conta_id"
     cm_conta ||--o{ cm_lembrete : "conta_id"
     cm_conta ||--o{ cm_observacao : "conta_id"
     cm_contrato ||--o{ cm_aviso : "contrato_id"
+    cm_conversa ||--o{ cm_conversa_mensagem : "conversa_id"
+    cm_conversa ||--o{ cm_faltou_isto : "conversa_id"
+    cm_conversa ||--o{ cm_lote : "conversa_id"
+    cm_conversa_mensagem ||--o{ cm_lote : "mensagem_id"
     cm_envio ||--o{ cm_arquivo : "envio_id"
     cm_guia_linha ||--o{ cm_validacao_tema_linha : "guia_linha_id"
     cm_item_dicionario ||--o{ cm_validacao_tema : "item_dicionario_id"
     cm_lembrete ||--o{ cm_lembrete_item : "lembrete_id"
+    cm_lote ||--o{ cm_lote_item : "lote_id"
+    cm_lote_item ||--o{ cm_faltou_isto : "lote_item_id"
+    cm_lote_item ||--o{ cm_prova : "lote_item_id"
     cm_memoria_versao ||--o{ cm_conta : "memoria_versao_id"
+    cm_memoria_versao ||--o{ cm_conversa_mensagem : "memoria_versao_id"
+    cm_memoria_versao ||--o{ cm_lote : "memoria_versao_id"
+    cm_memoria_versao ||--o{ cm_prova : "memoria_versao_id"
     cm_memoria_versao ||--o{ cm_regra : "memoria_versao_id"
     cm_memoria_versao ||--o{ cm_regra_historico : "memoria_versao_id"
     cm_observacao ||--o{ cm_validacao_tema_linha : "observacao_id"
     cm_operadora ||--o{ cm_atendimento : "operadora_id"
     cm_operadora ||--o{ cm_cenario : "operadora_id"
     cm_operadora ||--o{ cm_contrato : "operadora_id"
+    cm_operadora ||--o{ cm_conversa : "operadora_id"
+    cm_operadora ||--o{ cm_lote : "operadora_id"
     cm_operadora ||--o{ cm_memoria_versao : "operadora_id"
     cm_operadora ||--o{ cm_operadora_plano : "operadora_id"
     cm_operadora ||--o{ cm_operadora_tabela : "operadora_id"
+    cm_operadora ||--o{ cm_prova : "operadora_id"
     cm_operadora ||--o{ cm_regra : "operadora_id"
     cm_operadora ||--o{ cm_validacao_tema : "operadora_id"
     cm_prescricao ||--o{ cm_prescricao_item : "prescricao_id"
+    cm_prova ||--o{ cm_validacao_tema : "recomendacao_prova_id"
     cm_regra ||--o{ cm_regra_historico : "regra_id"
     cm_tabela_preco ||--o{ cm_guia_linha : "tabela_id"
     cm_tabela_preco ||--o{ cm_operadora_tabela : "tabela_id"
@@ -51,12 +67,18 @@ erDiagram
     participantes ||--o{ cm_cenario : "autor_id"
     participantes ||--o{ cm_conta : "faturista_id"
     participantes ||--o{ cm_contrato : "confirmado_por"
+    participantes ||--o{ cm_conversa : "criado_por"
+    participantes ||--o{ cm_conversa_mensagem : "autor_id"
     participantes ||--o{ cm_envio : "usuario_id"
+    participantes ||--o{ cm_faltou_isto : "apontado_por"
     participantes ||--o{ cm_guia_linha : "marcado_por"
     participantes ||--o{ cm_item_dicionario : "autor_id"
     participantes ||--o{ cm_lembrete : "marcado_por"
+    participantes ||--o{ cm_lote : "aplicado_por"
+    participantes ||--o{ cm_lote : "criado_por"
     participantes ||--o{ cm_memoria_versao : "autor_id"
     participantes ||--o{ cm_observacao : "autor_id"
+    participantes ||--o{ cm_prova : "criado_por"
     participantes ||--o{ cm_registro : "autor_id"
     participantes ||--o{ cm_regra : "validado_por"
     participantes ||--o{ cm_regra_historico : "autor_id"
@@ -774,7 +796,7 @@ erDiagram
         UUID item_dicionario_id FK
         TEXT titulo
         TEXT estado
-        _ mais_colunas "+6"
+        _ mais_colunas "+10"
     }
     cm_validacao_tema_linha {
         UUID id PK
@@ -860,6 +882,68 @@ erDiagram
         INTEGER tokens_cache
         NUMERIC custo_usd
         _ mais_colunas "+3"
+    }
+    cm_conversa {
+        UUID id PK
+        TEXT contexto
+        UUID operadora_id FK
+        UUID conta_id FK
+        VARCHAR criado_por FK
+        TIMESTAMPTZ criado_em
+    }
+    cm_conversa_mensagem {
+        UUID id PK
+        UUID conversa_id FK
+        TEXT autor
+        VARCHAR autor_id FK
+        TEXT texto
+        TEXT anexo_nome
+        UUID memoria_versao_id FK
+        TIMESTAMPTZ criado_em
+    }
+    cm_lote {
+        UUID id PK
+        UUID operadora_id FK
+        UUID conversa_id FK
+        UUID mensagem_id FK
+        TEXT fonte
+        TEXT estado
+        UUID memoria_versao_id FK
+        VARCHAR criado_por FK
+        _ mais_colunas "+3"
+    }
+    cm_lote_item {
+        UUID id PK
+        UUID lote_id FK
+        INTEGER numero
+        TEXT tipo
+        TEXT regra_codigo
+        JSONB proposta_json
+        TEXT motivo
+        JSONB conflitos_json
+        _ mais_colunas "+3"
+    }
+    cm_prova {
+        UUID id PK
+        UUID operadora_id FK
+        UUID memoria_versao_id FK
+        UUID lote_item_id FK
+        TEXT regra_codigo
+        TEXT regra_texto
+        INTEGER contas
+        BOOLEAN mudaria
+        _ mais_colunas "+3"
+    }
+    cm_faltou_isto {
+        UUID id PK
+        UUID conta_id FK
+        DATE data
+        TEXT item
+        INTEGER pagina
+        TEXT texto
+        TEXT origem
+        VARCHAR apontado_por FK
+        _ mais_colunas "+7"
     }
 ```
 
@@ -1000,6 +1084,17 @@ erDiagram
 | `cm_lembrete_item` | `idx_cm_lembrete_item_lembrete` | `lembrete_id` | `118_contas_medicas_gestao.sql` |
 | `tecnologia_chamadas_ia` | `idx_tecnologia_chamadas_ia_demanda` | `demanda_id` | `123_tecnologia_planejamento.sql` |
 | `tecnologia_chamadas_ia` | `idx_tecnologia_chamadas_ia_criado_em` | `criado_em` | `123_tecnologia_planejamento.sql` |
+| `cm_conversa` | `idx_cm_conversa_operadora` | `operadora_id, criado_em` | `126_contas_medicas_auditor.sql` |
+| `cm_conversa` | `idx_cm_conversa_conta` | `conta_id` | `126_contas_medicas_auditor.sql` |
+| `cm_conversa_mensagem` | `idx_cm_conversa_mensagem_conversa` | `conversa_id, criado_em` | `126_contas_medicas_auditor.sql` |
+| `cm_conversa_mensagem` | `idx_cm_conversa_mensagem_versao` | `memoria_versao_id` | `126_contas_medicas_auditor.sql` |
+| `cm_lote` | `idx_cm_lote_operadora` | `operadora_id, criado_em` | `126_contas_medicas_auditor.sql` |
+| `cm_lote` | `idx_cm_lote_conversa` | `conversa_id` | `126_contas_medicas_auditor.sql` |
+| `cm_prova` | `idx_cm_prova_operadora` | `operadora_id, criado_em` | `126_contas_medicas_auditor.sql` |
+| `cm_prova` | `idx_cm_prova_lote_item` | `lote_item_id` | `126_contas_medicas_auditor.sql` |
+| `cm_faltou_isto` | `idx_cm_faltou_isto_conta` | `conta_id, data` | `126_contas_medicas_auditor.sql` |
+| `cm_faltou_isto` | `idx_cm_faltou_isto_criado_em` | `criado_em` | `126_contas_medicas_auditor.sql` |
+| `cm_faltou_isto` | `idx_cm_faltou_isto_conversa` | `conversa_id` | `126_contas_medicas_auditor.sql` |
 
 ---
-**Resumo:** 80 tabelas · 104 relacionamentos FK detectados.
+**Resumo:** 86 tabelas · 126 relacionamentos FK detectados.

@@ -1,6 +1,6 @@
 # ROTAS.md
 <!-- gerado automaticamente por /snapshot — não editar -->
-<!-- last_update: 2026-11-07T21:49+0000 -->
+<!-- last_update: 2026-11-08T01:34+0000 -->
 
 Endpoints HTTP expostos pelo backend FastAPI do Hospital Reuniões.
 
@@ -155,6 +155,7 @@ Endpoints HTTP expostos pelo backend FastAPI do Hospital Reuniões.
 | POST | `/contas-medicas/dicionario/propostas/{proposta_id}/rejeitar` | O código proposto sai; o termo fica decidido, sem par, e a IA não é perguntada de novo. | ✅ |
 | GET | `/contas-medicas/operadoras` | As operadoras com a situação, a versão da memória, as regras e as tabelas carregadas. | ✅ |
 | POST | `/contas-medicas/operadoras/memoria` | Importa o arquivo de memória: versão nova, vigente, com as regras dela. | ✅ |
+| POST | `/contas-medicas/operadoras/memoria/previa` | O que o arquivo de memória mudaria na versão vigente, Regra a Regra, sem gravar nada. | ✅ |
 | GET | `/contas-medicas/operadoras/{sigla}/memoria` | A memória vigente no formato do arquivo, gerada do banco com o cabeçalho inteiro, para baixar. | ✅ |
 | POST | `/contas-medicas/operadoras/{sigla}/tabelas` | Carrega o CSV como uma versão nova da tabela da categoria, ao lado das anteriores. | ✅ |
 | POST | `/contas-medicas/operadoras/{sigla}/tabelas/mapeada` | Grava a tabela lida pelo mapeamento confirmado como uma versão nova da categoria. | ✅ |
@@ -505,4 +506,4 @@ Endpoints HTTP expostos pelo backend FastAPI do Hospital Reuniões.
 
 ---
 
-**Totais:** 279 endpoints em 44 routers · 94% exigem auth.
+**Totais:** 280 endpoints em 44 routers · 94% exigem auth.

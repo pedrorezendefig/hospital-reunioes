@@ -1,6 +1,6 @@
 # ENTIDADES.md
 <!-- gerado automaticamente por /snapshot — não editar -->
-<!-- last_update: 2026-11-07T21:16+0000 -->
+<!-- last_update: 2026-11-08T01:34+0000 -->
 
 Modelo de dados do Hospital Reuniões. Tabelas no Postgres (via Supabase).
 
@@ -1443,7 +1443,7 @@ Modelo de dados do Hospital Reuniões. Tabelas no Postgres (via Supabase).
 
 ## cm_validacao_tema
 
-> Origem: `118_contas_medicas_gestao.sql`
+> Origem: `118_contas_medicas_gestao.sql` (alterada em: 126_contas_medicas_auditor.sql)
 
 | Campo | Tipo | Constraints | Default | FK |
 |-------|------|-------------|---------|-----|
@@ -1461,6 +1461,10 @@ Modelo de dados do Hospital Reuniões. Tabelas no Postgres (via Supabase).
 | `decidido_por` | `VARCHAR(10)` | — | — | `participantes.id` |
 | `decidido_em` | `TIMESTAMPTZ` | — | — | — |
 | `criado_em` | `TIMESTAMPTZ` | NOT NULL | `now()` | — |
+| `recomendacao` | `TEXT` | — | — | — |
+| `recomendacao_motivo` | `TEXT` | — | — | — |
+| `recomendacao_prova_id` | `UUID` | — | — | `cm_prova.id` |
+| `recomendado_em` | `TIMESTAMPTZ` | — | — | — |
 
 **Indexes:**
 - `idx_cm_validacao_tema_estado` em `(estado, tipo)` (de `118_contas_medicas_gestao.sql`)
@@ -1623,6 +1627,131 @@ Modelo de dados do Hospital Reuniões. Tabelas no Postgres (via Supabase).
 - `idx_tecnologia_chamadas_ia_demanda` em `(demanda_id)` (de `123_tecnologia_planejamento.sql`)
 - `idx_tecnologia_chamadas_ia_criado_em` em `(criado_em)` (de `123_tecnologia_planejamento.sql`)
 
+## cm_conversa
+
+> Origem: `126_contas_medicas_auditor.sql`
+
+| Campo | Tipo | Constraints | Default | FK |
+|-------|------|-------------|---------|-----|
+| `id` | `UUID` | PK | `gen_random_uuid()` | — |
+| `contexto` | `TEXT` | NOT NULL | — | — |
+| `operadora_id` | `UUID` | — | — | `cm_operadora.id` |
+| `conta_id` | `UUID` | — | — | `cm_conta.id` |
+| `criado_por` | `VARCHAR(10)` | — | — | `participantes.id` |
+| `criado_em` | `TIMESTAMPTZ` | NOT NULL | `now()` | — |
+
+**Indexes:**
+- `idx_cm_conversa_operadora` em `(operadora_id, criado_em)` (de `126_contas_medicas_auditor.sql`)
+- `idx_cm_conversa_conta` em `(conta_id)` (de `126_contas_medicas_auditor.sql`)
+
+## cm_conversa_mensagem
+
+> Origem: `126_contas_medicas_auditor.sql`
+
+| Campo | Tipo | Constraints | Default | FK |
+|-------|------|-------------|---------|-----|
+| `id` | `UUID` | PK | `gen_random_uuid()` | — |
+| `conversa_id` | `UUID` | NOT NULL | — | `cm_conversa.id` |
+| `autor` | `TEXT` | NOT NULL | — | — |
+| `autor_id` | `VARCHAR(10)` | — | — | `participantes.id` |
+| `texto` | `TEXT` | NOT NULL | — | — |
+| `anexo_nome` | `TEXT` | — | — | — |
+| `memoria_versao_id` | `UUID` | — | — | `cm_memoria_versao.id` |
+| `criado_em` | `TIMESTAMPTZ` | NOT NULL | `now()` | — |
+
+**Indexes:**
+- `idx_cm_conversa_mensagem_conversa` em `(conversa_id, criado_em)` (de `126_contas_medicas_auditor.sql`)
+- `idx_cm_conversa_mensagem_versao` em `(memoria_versao_id)` (de `126_contas_medicas_auditor.sql`)
+
+## cm_lote
+
+> Origem: `126_contas_medicas_auditor.sql`
+
+| Campo | Tipo | Constraints | Default | FK |
+|-------|------|-------------|---------|-----|
+| `id` | `UUID` | PK | `gen_random_uuid()` | — |
+| `operadora_id` | `UUID` | — | — | `cm_operadora.id` |
+| `conversa_id` | `UUID` | — | — | `cm_conversa.id` |
+| `mensagem_id` | `UUID` | — | — | `cm_conversa_mensagem.id` |
+| `fonte` | `TEXT` | NOT NULL | — | — |
+| `estado` | `TEXT` | NOT NULL | `'PROPOSTO'` | — |
+| `memoria_versao_id` | `UUID` | — | — | `cm_memoria_versao.id` |
+| `criado_por` | `VARCHAR(10)` | — | — | `participantes.id` |
+| `criado_em` | `TIMESTAMPTZ` | NOT NULL | `now()` | — |
+| `aplicado_por` | `VARCHAR(10)` | — | — | `participantes.id` |
+| `aplicado_em` | `TIMESTAMPTZ` | — | — | — |
+
+**Indexes:**
+- `idx_cm_lote_operadora` em `(operadora_id, criado_em)` (de `126_contas_medicas_auditor.sql`)
+- `idx_cm_lote_conversa` em `(conversa_id)` (de `126_contas_medicas_auditor.sql`)
+
+## cm_lote_item
+
+> Origem: `126_contas_medicas_auditor.sql`
+
+| Campo | Tipo | Constraints | Default | FK |
+|-------|------|-------------|---------|-----|
+| `id` | `UUID` | PK | `gen_random_uuid()` | — |
+| `lote_id` | `UUID` | NOT NULL | — | `cm_lote.id` |
+| `numero` | `INTEGER` | NOT NULL | — | — |
+| `tipo` | `TEXT` | NOT NULL | — | — |
+| `regra_codigo` | `TEXT` | — | — | — |
+| `proposta_json` | `JSONB` | NOT NULL | `'{}'::jsonb` | — |
+| `motivo` | `TEXT` | — | — | — |
+| `conflitos_json` | `JSONB` | NOT NULL | `'[]'::jsonb` | — |
+| `estado` | `TEXT` | NOT NULL | `'PROPOSTO'` | — |
+| `criado_em` | `TIMESTAMPTZ` | NOT NULL | `now()` | — |
+| `atualizado_em` | `TIMESTAMPTZ` | NOT NULL | `now()` | — |
+
+## cm_prova
+
+> Origem: `126_contas_medicas_auditor.sql`
+
+| Campo | Tipo | Constraints | Default | FK |
+|-------|------|-------------|---------|-----|
+| `id` | `UUID` | PK | `gen_random_uuid()` | — |
+| `operadora_id` | `UUID` | NOT NULL | — | `cm_operadora.id` |
+| `memoria_versao_id` | `UUID` | — | — | `cm_memoria_versao.id` |
+| `lote_item_id` | `UUID` | — | — | `cm_lote_item.id` |
+| `regra_codigo` | `TEXT` | — | — | — |
+| `regra_texto` | `TEXT` | — | — | — |
+| `contas` | `INTEGER` | NOT NULL | `0` | — |
+| `mudaria` | `BOOLEAN` | NOT NULL | `false` | — |
+| `resultado_json` | `JSONB` | NOT NULL | `'[]'::jsonb` | — |
+| `criado_por` | `VARCHAR(10)` | — | — | `participantes.id` |
+| `criado_em` | `TIMESTAMPTZ` | NOT NULL | `now()` | — |
+
+**Indexes:**
+- `idx_cm_prova_operadora` em `(operadora_id, criado_em)` (de `126_contas_medicas_auditor.sql`)
+- `idx_cm_prova_lote_item` em `(lote_item_id)` (de `126_contas_medicas_auditor.sql`)
+
+## cm_faltou_isto
+
+> Origem: `126_contas_medicas_auditor.sql`
+
+| Campo | Tipo | Constraints | Default | FK |
+|-------|------|-------------|---------|-----|
+| `id` | `UUID` | PK | `gen_random_uuid()` | — |
+| `conta_id` | `UUID` | NOT NULL | — | `cm_conta.id` |
+| `data` | `DATE` | NOT NULL | — | — |
+| `item` | `TEXT` | NOT NULL | — | — |
+| `pagina` | `INTEGER` | — | — | — |
+| `texto` | `TEXT` | — | — | — |
+| `origem` | `TEXT` | NOT NULL | — | — |
+| `apontado_por` | `VARCHAR(10)` | — | — | `participantes.id` |
+| `conversa_id` | `UUID` | — | — | `cm_conversa.id` |
+| `classificacao` | `TEXT` | — | — | — |
+| `explicacao` | `TEXT` | — | — | — |
+| `classificado_em` | `TIMESTAMPTZ` | — | — | — |
+| `lote_item_id` | `UUID` | — | — | `cm_lote_item.id` |
+| `issue_numero` | `INTEGER` | — | — | — |
+| `criado_em` | `TIMESTAMPTZ` | NOT NULL | `now()` | — |
+
+**Indexes:**
+- `idx_cm_faltou_isto_conta` em `(conta_id, data)` (de `126_contas_medicas_auditor.sql`)
+- `idx_cm_faltou_isto_criado_em` em `(criado_em)` (de `126_contas_medicas_auditor.sql`)
+- `idx_cm_faltou_isto_conversa` em `(conversa_id)` (de `126_contas_medicas_auditor.sql`)
+
 ---
 
-**Resumo:** 80 tabelas vivas.
+**Resumo:** 86 tabelas vivas.
