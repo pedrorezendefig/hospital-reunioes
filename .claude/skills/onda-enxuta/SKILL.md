@@ -55,6 +55,7 @@ A Onda grava o que faz num arquivo que o PedroOS lê (formato em `docs/estado-da
 - **Cada issue:** `E issue --sessao <nome> --onda <N> --numero <I> [--pr <PR>] --status <fila|implementando|revisao|correcao|verde|baixa|mergeado>` quando o status muda.
 - **Eventos:** `E evento --sessao <nome> --onda <N> --tipo <tipo> --texto "<uma frase>" [--pr <PR>]`. Tipos: `checkpoint` (lote verde, passo 4), `pr-pronto` (PR verde), `erro` (subida 3, 4 ou 6; sessão que não consegue seguir), `pronto-para-voce` (baixa, migration para aplicar, saídas 7 e 8, Sinal final com issue `ready-for-human`).
 - **Fim:** `E fim --sessao <nome> --onda <N> --retro "<a linha retro:>"`.
+- **Resolvido:** `E resolvido --sessao <nome> --onda <N> --texto "<o que acabou>"` quando o que esperava o humano acabou (migration aplicada, saída 7 ou 8 que passou, pedido do passo 4 atendido). A onda sai do "espera você"; issue ainda em `baixa` mantém o selo. Sem nada pendente, não muda nada. A baixa que o humano resolve depois, em outra sessão, sai sozinha: a subida que mergeia o PR dela roda `estado_onda.py mergeadas`.
 
 **Aviso no celular.** Quando o `evento` imprime uma linha `push: <mensagem>`, carregue o `PushNotification` (ToolSearch `select:PushNotification`) e mande a mensagem **literal**: ela já traz o Projeto, a onda e o comando para entrar na sessão (`claude attach <sessao>-onda<N>`). Só `erro` e `pronto-para-voce` geram `push:`, e evento repetido não gera de novo. Nunca escreva outra mensagem de push à mão: se o script falhar, mande "<Projeto>, <sessao>-onda<N>: <a frase>. Entrar: claude attach <sessao>-onda<N>". O PedroOS fala no Mac; o celular é só por aqui.
 
@@ -113,7 +114,7 @@ Com todos os PRs verdes ou baixados, registre a hora dos PRs verdes, grave o eve
 - **6:** uma tentativa por fatia e evento `erro` "rollback disparado no PR #N, versão vX.Y.Z voltou".
 - **7 e 8:** evento `pronto-para-voce` com a linha do script; o mesmo comando de novo depois do humano. Sem tentativa.
 
-Cada PR que entrou: `E issue ... --status mergeado`. Depois: `python3 .claude/skills/onda-enxuta/scripts/medir_onda.py --onda <N> --issues <...> --prs <...> --inicio <passo 0>`.
+Cada PR que entrou: `E issue ... --status mergeado`. Saída 0 depois de um `pronto-para-voce` desta onda (a migration apareceu no health, 7 ou 8 resolvidas): `E resolvido ... --texto "migration <número> aplicada"` (ou a pendência que acabou). Depois: `python3 .claude/skills/onda-enxuta/scripts/medir_onda.py --onda <N> --issues <...> --prs <...> --inicio <passo 0>`.
 
 ### 6. Fim
 
@@ -124,7 +125,7 @@ Relatório de até 15 linhas (linha final da subida, issue · PR · versão, bai
 | Script | Faz |
 |---|---|
 | `scripts/fluxo.py [chave \| classe \| notas <skill>]` | A configuração do Projeto (`.claude/fluxo.json`), a classe de um PR e as notas de uma skill. |
-| `scripts/estado_onda.py iniciar\|issue\|evento\|fim\|ler` | O estado da Onda em `~/.pedroos/ondas/<slug>/<sessao>-onda<N>.json` e a linha `push:` do celular. |
+| `scripts/estado_onda.py iniciar\|issue\|evento\|fim\|resolvido\|mergeadas\|ler` | O estado da Onda em `~/.pedroos/ondas/<slug>/<sessao>-onda<N>.json` e a linha `push:` do celular. `resolvido` tira o "espera você"; `mergeadas` (chamado pela subida) tira a baixa da issue mergeada em qualquer onda do Projeto. |
 | `scripts/lancar_sessao.sh <nome> <prompt.md>` | Sessão de fundo limpa: zero MCP, plugins desligados, Opus, `high`. |
 | `scripts/sensivel.py <PR>` | Arquivo sensível no PR (lista do Projeto em `revisao-sensivel.txt`, mais a varredura de `varredura` no `fluxo.json`); exit 0 se houver. |
 | `scripts/fechar_onda.py --prs ... [--sessao ...] [--dry-run]` | A subida: merge PR a PR pela API, caixas da issue marcadas, um build, health, rollback, registro (sem deploy, para no merge). Códigos na docstring. |
