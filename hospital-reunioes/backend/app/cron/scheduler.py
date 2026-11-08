@@ -46,6 +46,10 @@ Jobs:
  12. avisar_contratos_contas_medicas: 07:15 diário, avisa no sino o reajuste de cada
      contrato de operadora na data do aviso (vencimento menos a antecedência), issue
      #1144. Idempotente: `cm_aviso` guarda a data prevista e o envio.
+ 13. revisar_contas_medicas: domingo 03:00, o segundo agente relê até 10 Contas
+     concluídas ainda não revisadas e grava o que achou como Faltou isto de
+     origem AGENTE (issue #1493). A chamada REVISOR com sucesso tira a Conta do
+     sorteio das semanas seguintes.
 """
 
 import logging
@@ -374,6 +378,23 @@ def avisar_contratos_contas_medicas() -> None:
         logger.info(f"[Cron] Contratos de Contas médicas: {avisados} aviso(s) de reajuste no sino.")
 
 
+def revisar_contas_medicas() -> None:
+    """O segundo agente de Contas médicas (issue #1493, ADR 0081, decisão 14).
+
+    Relê até 10 Contas concluídas ainda não revisadas e grava cada omissão
+    achada como Faltou isto de origem AGENTE. A lógica vive no serviço; aqui,
+    só o relógio e o log. Na falha, só o tipo do erro: a mensagem pode citar o
+    prontuário."""
+    from app.services.contas_medicas import revisor
+
+    try:
+        achados = revisor.revisar_semana(_supabase())
+    except Exception as e:
+        logger.error(f"[Cron] Erro em revisar_contas_medicas: {type(e).__name__}")
+        return
+    logger.info(f"[Cron] Segundo agente de Contas médicas: {achados} Faltou isto achado(s).")
+
+
 def _registrar_entrega(competencia: str, entrega, rotulo: str = "Relatório quinzenal") -> None:
     """Escreve no log o que aconteceu com uma tentativa de entrega.
 
@@ -563,6 +584,18 @@ def start_scheduler() -> None:
         id="contratos_contas_medicas",
         replace_existing=True,
     )
+    # Domingo às 03:00, uma vez por semana, fora do expediente e longe dos
+    # jobs da madrugada. Disparo perdido num deploy só adia a releitura para o
+    # domingo seguinte: a Conta não revisada continua no sorteio.
+    scheduler.add_job(
+        revisar_contas_medicas,
+        "cron",
+        day_of_week="sun",
+        hour=3,
+        minute=0,
+        id="revisor_contas_medicas",
+        replace_existing=True,
+    )
     # Todo dia às 07h, no fuso do scheduler (America/Sao_Paulo). A quinzena
     # fecha nos dias 1 e 16, e é neles que o email sai; os outros dias existem
     # para a edição não se perder quando o container estiver fora do ar na hora
@@ -591,6 +624,7 @@ def start_scheduler() -> None:
         "notificacoes_ouvidoria (a cada 10min), cobranca_prazos_ouvidoria (a cada 10min), "
         "escalonamento_ouvidoria (a cada 10min), retencao_ouvidoria (04:00), "
         "retencao_contas_medicas (04:30), fila_contas_medicas (a cada 10s), contratos_contas_medicas (07:15), "
+        "revisor_contas_medicas (domingo 03:00), "
         "relatorio_quinzenal_ouvidoria (07:00 diário, email nos dias 1 e 16), "
         "reconciliacao_tecnologia (de hora em hora)"
     )
