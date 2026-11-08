@@ -314,6 +314,47 @@ describe("o lote do Auditor", () => {
   });
 });
 
+describe("revisar as Regras pendentes (issue #1494)", () => {
+  const PRI_03 = "Edição do Brasíndice usada pela operadora.";
+  const DIA_02 = "Transferência de setor antes das 10h: gera ou não diária extra.";
+  const pendente = (numero: number, codigo: string, decisao: string, antes: string, depois: string) => ({
+    numero,
+    tipo: "REGRA_ALTERADA",
+    regra_codigo: codigo,
+    proposta: { decisao, secao: "PRI", texto: depois, tipo: "CONTRATUAL", origem: "CONTRATO", texto_anterior: antes },
+    motivo: `Motivo de ${codigo}.`,
+    conflitos: [],
+    prova: prova({ mudaria: false, feitas_que_sumiriam: 0, por_conta: [] }),
+  });
+  const LOTE_DAS_PENDENTES = {
+    id: "lote-2",
+    itens: [
+      pendente(1, "ALFA-DIA-02", "ALTERAR", DIA_02, "Transferência antes das 10h não gera diária extra."),
+      pendente(2, "ALFA-PRI-03", "DESCARTAR", PRI_03, PRI_03),
+      pendente(3, "ALFA-PRI-04", "VALIDAR", "Brasíndice da edição vigente.", "Brasíndice da edição vigente."),
+    ],
+  };
+
+  it("Revisar pendentes manda a mensagem e cada item mostra a decisão sugerida", async () => {
+    respostaDoEnvio = () => ({ status: 200, corpo: { mensagens: FALAS, lote: LOTE_DAS_PENDENTES, aplicado: null } });
+    const conversa = await abrir();
+
+    fireEvent.click(within(conversa).getByRole("button", { name: "Revisar pendentes" }));
+
+    const lote = await within(conversa).findByRole("region", { name: "Lote do Auditor" });
+    expect(enviados()).toEqual(["revisar pendentes"]);
+    const alterar = within(lote).getByRole("article", { name: "Item 1" });
+    expect(alterar.textContent).toContain("Regra pendente ALFA-DIA-02, alterar");
+    expect(alterar.textContent).toContain(`Antes: ${DIA_02}`);
+    const descartar = within(lote).getByRole("article", { name: "Item 2" });
+    expect(descartar.textContent).toContain("Regra pendente ALFA-PRI-03, descartar");
+    expect(descartar.textContent).toContain(`Sai da memória: ${PRI_03}`);
+    const validar = within(lote).getByRole("article", { name: "Item 3" });
+    expect(validar.textContent).toContain("Regra pendente ALFA-PRI-04, validar");
+    expect(validar.textContent).toContain("Fica vigente como está: Brasíndice da edição vigente.");
+  });
+});
+
 describe("o contrato na conversa", () => {
   it("Enviar contrato manda o arquivo e mostra as Regras por cláusula, o contrato diz e as datas", async () => {
     const conversa = await abrir();

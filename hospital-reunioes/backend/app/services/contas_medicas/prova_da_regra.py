@@ -320,6 +320,7 @@ def provar_regra(
     codigo: str | None = None,
     lote_item_id: str | None = None,
     sem: tuple[str, ...] = (),
+    descartar: bool = False,
 ) -> dict[str, Any]:
     """A prova da regra conferida pela pessoa, guardada em `cm_prova`.
 
@@ -327,7 +328,9 @@ def provar_regra(
     toma o lugar da regra que já existe na memória candidata, em vez de entrar
     ao lado dela. `sem` são as regras em conflito que o item junta ou substitui
     (ADR 0081, decisão 8): saem da memória candidata, como sairão no ok.
-    `lote_item_id` liga a prova ao item do lote."""
+    `lote_item_id` liga a prova ao item do lote. Com `descartar`, a regra do
+    `codigo` sai da memória candidata e nada entra no lugar: é a prova da Regra
+    pendente que o Auditor sugere descartar (#1494)."""
     candidata = regra_candidata(
         supabase,
         sigla,
@@ -355,6 +358,7 @@ def provar_regra(
         parametros=candidata["parametros"] or vigente.get("parametros_json") or {},
         autor_id=autor_id,
         lote_item_id=lote_item_id,
+        descartar=descartar,
     )
 
 
@@ -405,10 +409,12 @@ def _provar(
     parametros: dict[str, Any],
     autor_id: str | None,
     lote_item_id: str | None = None,
+    descartar: bool = False,
 ) -> dict[str, Any]:
     """A memória vigente com a regra `nova` refaz o Passo B nas últimas
-    concluídas da operadora; o resultado fica em `cm_prova`."""
-    regras = [*regras, nova]
+    concluídas da operadora; o resultado fica em `cm_prova`. Com `descartar`,
+    a `nova` não entra: a memória fica sem ela (#1494)."""
+    regras = [*regras, *([] if descartar else [nova])]
     operadora = (supabase.table("cm_operadora").select("nome").eq("id", operadora_id).execute().data or [{}])[0]
     memoria = montar_texto_memoria(
         sigla,
