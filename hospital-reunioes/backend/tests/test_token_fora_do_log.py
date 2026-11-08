@@ -103,6 +103,10 @@ PARAMS_SEM_SEGREDO = {
     # abre porta nenhuma, como o `manifestacao_id`.
     "email_id",
     "especialidade_id",
+    # UUID do Faltou isto do Guia de Contas médicas (issue #1489). Nao e
+    # credencial: a rota exige "enviar e corrigir contas", ver o Guia da Conta
+    # do caminho e ser quem apontou, entao o id sozinho nao abre porta nenhuma.
+    "faltou_id",
     "externo_id",
     "gravidade",
     "id_acao",

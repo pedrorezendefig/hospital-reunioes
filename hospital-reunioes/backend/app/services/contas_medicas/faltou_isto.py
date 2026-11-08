@@ -32,6 +32,20 @@ from app.utils.text_sanitizer import sanitizar_travessao
 # As listas datadas da leitura do prontuário pela IA (Anexo A). O número do
 # atendimento e a idade, que a mesma leitura devolve, não vão ao Auditor.
 _LISTAS_DO_DIA = ("movimentacoes", "terapias", "prescricoes", "procedimentos", "cirurgias")
+# O que o Auditor lê de cada linha do Guia e de cada item lançado no dia: sem
+# preço, que é do código (ADR 0070).
+_CAMPOS_DA_LINHA = (
+    "acao",
+    "codigo",
+    "descricao",
+    "quantidade_lancada",
+    "quantidade_devida",
+    "regra_codigo",
+    "motivo",
+    "estado",
+    "evidencia_pagina",
+)
+_CAMPOS_DO_ITEM = ("setor", "codigo", "descricao", "quantidade")
 
 
 # O que o Guia deveria ter apontado vai junto da explicação, numa linha própria:
@@ -91,20 +105,8 @@ def contexto_do_dia(supabase, conta: dict[str, Any], dia: date) -> dict[str, Any
         "paginas_sem_texto": eventos.get("paginas_sem_texto") or [],
         "documentos_do_dia": [d for d in eventos.get("documentos") or [] if d.get("data") == iso],
         "eventos_do_dia": {lista: da_ia.get(lista) or [] for lista in _LISTAS_DO_DIA},
-        "linhas_do_guia": [
-            {
-                chave: linha.get(chave)
-                for chave in ("acao", "codigo", "descricao", "quantidade_lancada", "quantidade_devida")
-                + ("regra_codigo", "motivo", "estado", "evidencia_pagina")
-            }
-            for linha in linhas
-            if _do_dia(linha, iso)
-        ],
-        "itens_da_conta": [
-            {chave: item.get(chave) for chave in ("setor", "codigo", "descricao", "quantidade")}
-            for item in itens
-            if item.get("data") == iso
-        ],
+        "linhas_do_guia": [{c: linha.get(c) for c in _CAMPOS_DA_LINHA} for linha in linhas if _do_dia(linha, iso)],
+        "itens_da_conta": [{c: item.get(c) for c in _CAMPOS_DO_ITEM} for item in itens if item.get("data") == iso],
     }
 
 
@@ -400,6 +402,10 @@ def abrir_pedido(supabase, *, conta: dict[str, Any], atendimento: dict[str, Any]
             raise PedidoRecusadoError(MENSAGEM_PEDIDO_EM_ANDAMENTO)
         _abrindo.add(apontamento["id"])
     try:
+        # O ok que terminou entre a leitura da rota e esta vez já gravou o número.
+        relido = supabase.table("cm_faltou_isto").select("issue_numero").eq("id", apontamento["id"]).execute().data
+        if relido and relido[0].get("issue_numero"):
+            raise PedidoRecusadoError(MENSAGEM_PEDIDO_JA_ABERTO)
         dados = github_client.criar_issue(
             titulo=titulo_do_pedido(apontamento, conta, atendimento),
             corpo=corpo_do_pedido(apontamento, conta, atendimento, trecho_da_pagina(supabase, conta, apontamento)),
