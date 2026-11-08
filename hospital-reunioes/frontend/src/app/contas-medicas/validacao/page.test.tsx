@@ -42,6 +42,7 @@ function tema(campos: Partial<Tema>): Tema {
     leitura_ia: null,
     observacoes: [],
     dicionario: null,
+    recomendacao: null,
     ...campos,
   };
 }
@@ -303,6 +304,163 @@ describe("a fila de Validação", () => {
     const termo = await screen.findByRole("heading", { level: 2, name: "Termo SERINGA PRONTA no dicionário" });
     expect(caixaDoDado(termo)).toBe("normal-case");
     expect(caixaDoDado(screen.getByRole("heading", { level: 2, name: "Regra ALFA-PRI-03" }))).toBe("normal-case");
+  });
+});
+
+// A fila decidida pelo Auditor (issue #1491): a regra com a prova, a
+// observação com a resposta pronta; o bloqueado e o termo, sem recomendação.
+const DECIDIDA: FilaDeValidacao = {
+  ...FILA,
+  temas: FILA.temas.map((t) => {
+    if (t.id === "regra") {
+      return {
+        ...t,
+        recomendacao: {
+          decisao: "VALIDAR_REGRA",
+          motivo: "A seringa pronta é cobrada à parte no contrato da ALFA.",
+          texto: null,
+          prova: {
+            contas: 10,
+            mudaria: true,
+            feitas_que_sumiriam: 1,
+            por_conta: [{ numero_conta: "48803", entrariam: 2, sairiam: 1, mudariam: 0 }],
+          },
+          recomendado_em: "2026-11-08T10:00:00+00:00",
+        },
+      };
+    }
+    if (t.id === "observacao") {
+      return {
+        ...t,
+        recomendacao: {
+          decisao: "RESPONDER",
+          motivo: "A regra já cobre o caso.",
+          texto: "Na ALFA o Clexane vem no pacote: a regra segue como está.",
+          prova: null,
+          recomendado_em: "2026-11-08T10:30:00+00:00",
+        },
+      };
+    }
+    return t;
+  }),
+};
+
+type RespostaDoLote = {
+  decididos: { id: string; decisao: string }[];
+  falhas: { id: string; titulo: string; motivo: string }[];
+  cadastro: string[];
+};
+
+function servidorDoLote(resposta: RespostaDoLote, fila: FilaDeValidacao = DECIDIDA) {
+  const pedidos = servidor(fila);
+  const base = globalThis.fetch as unknown as (url: string, init?: RequestInit) => Promise<unknown>;
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async (url: string, init?: RequestInit) => {
+      const resultado = await base(url, init);
+      if (url === "/api/contas-medicas/validacao/lote") {
+        return { ok: true, status: 200, json: async () => resposta };
+      }
+      return resultado;
+    }),
+  );
+  return pedidos;
+}
+
+const LOTE_OK: RespostaDoLote = {
+  decididos: [
+    { id: "regra", decisao: "VALIDAR_REGRA" },
+    { id: "observacao", decisao: "RESPONDER" },
+  ],
+  falhas: [],
+  cadastro: [],
+};
+
+describe("a fila decidida pelo Auditor (issue #1491)", () => {
+  it("cada cartão mostra a recomendação e o motivo, e a regra pendente mostra a prova", async () => {
+    servidor(DECIDIDA);
+    abrir();
+
+    const regra = await screen.findByRole("article", { name: "Regra ALFA-PRI-03" });
+    expect(regra.textContent).toContain("O Auditor recomenda: Validar regra");
+    expect(regra.textContent).toContain("A seringa pronta é cobrada à parte no contrato da ALFA.");
+    expect(regra.textContent).toContain("Prova da regra em 10 contas concluídas");
+    expect(regra.textContent).toContain("Conta 48803: 2 entrariam, 1 sairia, 0 mudariam");
+    expect(regra.textContent).toContain("1 linha já feita sumiria");
+
+    const observacao = cartao("Observações sobre a regra ALFA-PRI-07");
+    expect(observacao.textContent).toContain("O Auditor recomenda: Responder ao time");
+    expect(observacao.textContent).toContain("Na ALFA o Clexane vem no pacote: a regra segue como está.");
+
+    expect(cartao("Código 70000020 bloqueado").textContent).toContain("O Auditor ainda não recomendou");
+  });
+
+  it("a prova que não mudaria nada diz isso", async () => {
+    servidor({
+      ...DECIDIDA,
+      temas: DECIDIDA.temas.map((t) =>
+        t.id === "regra" && t.recomendacao
+          ? { ...t, recomendacao: { ...t.recomendacao, prova: { contas: 4, mudaria: false, feitas_que_sumiriam: 0, por_conta: [] } } }
+          : t,
+      ),
+    });
+    abrir();
+
+    const regra = await screen.findByRole("article", { name: "Regra ALFA-PRI-03" });
+    expect(regra.textContent).toContain("A regra não mudaria nada nas 4 contas concluídas da prova.");
+  });
+
+  it("Aprovar o lote manda a recomendação que cada cartão mostrava e relê a fila", async () => {
+    const pedidos = servidorDoLote(LOTE_OK);
+    abrir();
+    await screen.findByRole("article", { name: "Regra ALFA-PRI-03" });
+
+    fireEvent.click(screen.getByRole("button", { name: "Aprovar o lote (2)" }));
+
+    await waitFor(() =>
+      expect(pedidos).toContainEqual({
+        url: "/api/contas-medicas/validacao/lote",
+        metodo: "POST",
+        corpo: {
+          temas: [
+            { id: "regra", decisao: "VALIDAR_REGRA", recomendado_em: "2026-11-08T10:00:00+00:00" },
+            { id: "observacao", decisao: "RESPONDER", recomendado_em: "2026-11-08T10:30:00+00:00" },
+          ],
+        },
+      }),
+    );
+    await waitFor(() => expect(pedidos.filter((p) => p.url === "/api/contas-medicas/validacao")).toHaveLength(2));
+  });
+
+  it("o lote que mandou código ao cadastro baixa a lista, e o tema que recusou aparece com o motivo", async () => {
+    const pedidos = servidorDoLote({
+      decididos: [{ id: "bloqueado", decisao: "ENVIAR_AO_CADASTRO" }],
+      falhas: [{ id: "regra", titulo: "Regra ALFA-PRI-03", motivo: "Sem a permissão de regra contratual." }],
+      cadastro: ["bloqueado"],
+    });
+    abrir();
+    await screen.findByRole("article", { name: "Regra ALFA-PRI-03" });
+
+    fireEvent.click(screen.getByRole("button", { name: "Aprovar o lote (2)" }));
+
+    await waitFor(() =>
+      expect(pedidos).toContainEqual({
+        url: "/api/contas-medicas/validacao/temas/bloqueado/cadastro",
+        metodo: "GET",
+        corpo: null,
+      }),
+    );
+    expect(URL.createObjectURL).toHaveBeenCalled();
+    const aviso = await screen.findByRole("alert");
+    expect(aviso.textContent).toContain("Regra ALFA-PRI-03: Sem a permissão de regra contratual.");
+  });
+
+  it("sem recomendação na fila, não há lote para aprovar", async () => {
+    servidor();
+    abrir();
+    await screen.findByRole("article", { name: "Regra ALFA-PRI-03" });
+
+    expect(screen.queryByRole("button", { name: /Aprovar o lote/ })).toBeNull();
   });
 });
 
