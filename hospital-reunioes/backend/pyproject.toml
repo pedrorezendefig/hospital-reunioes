@@ -52,6 +52,9 @@ dependencies = [
     # Piso no 13.0.0: primeira versão sem os alertas críticos e altos do
     # Dependabot que pegavam a 12.3.0 (issue #1284).
     "pillow>=13.0.0",
+    # Tabela de preço em Excel antigo (.xls) em Contas médicas (issue #1487).
+    # Python puro, só lê o formato binário do Excel 97-2003.
+    "xlrd>=2.0.1",
 ]
 
 [project.optional-dependencies]
@@ -62,6 +65,8 @@ dev = [
     "pytest-xdist>=3.6.0",
     "ruff>=0.7.0",
     "mypy>=1.12.0",
+    # Monta o .xls sintético dos testes da tabela de preço (issue #1487).
+    "xlwt>=1.3.0",
 ]
 
 [tool.ruff]
