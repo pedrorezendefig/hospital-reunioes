@@ -817,6 +817,28 @@ def marcar_criterios(raiz: Path, info: dict) -> None:
             print(f"aviso: criterios da issue #{n} nao marcados ({str(e)[:200]})")
 
 
+def avisar_ondas_das_baixas(raiz: Path, lote: list[dict], chave: str) -> None:
+    """A issue que tinha ficado com o humano (baixa) e agora entrou na main sai do "espera
+    voce" da Onda dela, em qualquer sessao do Projeto (estado_onda.py mergeadas). Falha aqui
+    so avisa: o merge ja entrou."""
+    nums = sorted({ref["number"] for info in lote for ref in info.get("closingIssuesReferences") or []})
+    # Projeto sem `.claude/fluxo.json` nao tem Estado da Onda: nada a atualizar
+    if not nums or not (raiz / ".claude" / "fluxo.json").exists():
+        return
+    script = Path(__file__).resolve().parent / "estado_onda.py"
+    cmd = [sys.executable, str(script), "mergeadas", "--issues", *map(str, nums), "--texto", f"subida {chave}"]
+    try:
+        r = subprocess.run(cmd, cwd=raiz, capture_output=True, text=True, encoding="utf-8", timeout=30)
+    except (OSError, subprocess.TimeoutExpired) as e:
+        print(f"aviso: estado das Ondas nao atualizado ({str(e)[:200]})")
+        return
+    if r.returncode != 0:
+        print(f"aviso: estado das Ondas nao atualizado ({(r.stderr or r.stdout).strip()[:200]})")
+        return
+    for linha in r.stdout.split():
+        print(f"ondas: baixa resolvida em {Path(linha).stem}")
+
+
 def rotulo_issues(info: dict) -> str:
     nums = [ref["number"] for ref in info.get("closingIssuesReferences") or []]
     if not nums:
@@ -1713,6 +1735,7 @@ def main() -> int:
             print(f"nada entrou na main: {fora} de fora, semaforo solto. Rode de novo depois de corrigir.")
             return EXIT_MERGE
         lote = [i for i, _, _ in mergeados]
+        avisar_ondas_das_baixas(raiz, lote, args.sessao)
         entraram = " ".join(f"#{i['number']}" for i in lote)
         sha_main, t_merge = mergeados[-1][1], mergeados[-1][2]
         intermediarios = tuple(s for _, s, _ in mergeados[:-1])

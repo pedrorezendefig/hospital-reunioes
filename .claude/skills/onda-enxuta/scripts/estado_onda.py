@@ -12,6 +12,8 @@ Uso (sempre da raiz do repositório do Projeto, que tem o `.claude/fluxo.json`):
     estado_onda.py issue   --sessao onda-a --onda 1 --numero 40 [--pr 77] [--status verde]
     estado_onda.py evento  --sessao onda-a --onda 1 --tipo erro --texto "..." [--pr 77]
     estado_onda.py fim     --sessao onda-a --onda 1 [--proxima 2 | --ultima] [--retro "dispensável"]
+    estado_onda.py resolvido --sessao onda-a --onda 1 --texto "migration 124 aplicada"
+    estado_onda.py mergeadas --issues 40 41 [--texto "subida onda-a-onda2b"]
     estado_onda.py ler     --sessao onda-a --onda 1
 
 `evento` de tipo `erro` ou `pronto-para-voce`, novo e com `aviso_celular` ligado no
@@ -19,6 +21,12 @@ fluxo.json, imprime uma linha `push: <mensagem>`. A sessão manda essa linha, li
 pelo `PushNotification`. A mensagem termina com o comando para entrar na sessão
 (`claude attach <nome>`). Evento repetido (mesmo tipo, texto e PR) não entra de novo
 nem gera `push:`.
+
+`resolvido` tira o "espera você" (e o "quebrou") quando a pendência acabou: a onda volta
+para `terminada` (já teve `fim`) ou `rodando`, com o evento `resolvido`. Enquanto alguma
+issue da onda segue em `baixa`, o estado continua `pronto-para-voce`. Sem nada pendente,
+não muda nada. `mergeadas` é o que o `fechar_onda.py` chama depois do merge: em todas as
+ondas do Projeto, a issue do lote que estava em `baixa` vira `mergeado` e a onda é resolvida.
 
 Saída 0, ou 2 com o motivo no stderr.
 """
@@ -29,6 +37,7 @@ import hashlib
 import json
 import os
 import re
+import socket
 import subprocess
 import sys
 import tempfile
@@ -42,6 +51,7 @@ CONTRATO = 1
 ESTADOS = ("rodando", "pronto-para-voce", "erro", "terminada")
 TIPOS = ("checkpoint", "pr-pronto", "erro", "pronto-para-voce", "terminada")
 NO_CELULAR = ("erro", "pronto-para-voce")
+PENDENTES = ("pronto-para-voce", "erro")
 STATUS_DA_ISSUE = ("fila", "implementando", "revisao", "correcao", "verde", "baixa", "mergeado")
 NOME_VALIDO = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,80}$")
 
@@ -72,6 +82,26 @@ def repo_do_git(base: Path) -> str | None:
     return m.group(1) if m else None
 
 
+def saida_de(*cmd: str) -> str | None:
+    """A primeira linha do que o comando imprime, ou None se ele falhar ou não existir."""
+    try:
+        r = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", timeout=15, check=True)
+    except (subprocess.CalledProcessError, subprocess.TimeoutExpired, FileNotFoundError, OSError):
+        return None
+    linha = r.stdout.strip().splitlines()
+    return (linha[0].strip() or None) if linha else None
+
+
+def login_do_github() -> str | None:
+    """Quem rodou a Onda: o login do `gh` desta máquina. Sem `gh` ou sem rede, None."""
+    return saida_de("gh", "api", "user", "--jq", ".login")
+
+
+def nome_do_mac() -> str | None:
+    """O nome do computador (o do Compartilhamento do macOS); fora do Mac, o hostname."""
+    return saida_de("scutil", "--get", "ComputerName") or socket.gethostname().removesuffix(".local") or None
+
+
 def ler(arq: Path) -> dict:
     if not arq.exists():
         raise config_do_fluxo.Erro(f"onda sem estado ainda: {arq} (rode `iniciar` antes)")
@@ -98,6 +128,8 @@ def novo_estado(cfg: dict, base: Path, sessao: str, onda: int, prd: int | None, 
         "slug": cfg["slug"],
         "repo": repo_do_git(base),
         "pasta": str(base),
+        "login": login_do_github(),
+        "mac": nome_do_mac(),
         "sessao": sessao,
         "onda": onda,
         "id": nome,
@@ -137,6 +169,40 @@ def registrar_evento(estado: dict, tipo: str, texto: str, pr: int | None) -> boo
     return True
 
 
+def resolver(estado: dict, texto: str) -> bool:
+    """Dá baixa no que esperava o humano. False se nada esperava."""
+    if estado["estado"] not in PENDENTES:
+        return False
+    registrar_evento(estado, "resolvido", texto, None)
+    if any(i["status"] == "baixa" for i in estado["issues"]):
+        estado["estado"] = "pronto-para-voce"
+    else:
+        estado["estado"] = "terminada" if estado.get("fim") else "rodando"
+    return True
+
+
+def marcar_mergeadas(slug: str, numeros: list[int], origem: str | None) -> list[Path]:
+    """Em cada onda do Projeto, a issue em `baixa` que acabou de ser mergeada vira `mergeado`."""
+    pasta = pasta_base() / slug
+    mudados = []
+    for arq in sorted(pasta.glob("*.json")) if pasta.is_dir() else []:
+        try:
+            estado = ler(arq)
+        except (json.JSONDecodeError, OSError):
+            continue
+        saiu = [i for i in estado.get("issues", []) if i.get("numero") in numeros and i.get("status") == "baixa"]
+        if not saiu:
+            continue
+        for i in saiu:
+            i["status"] = "mergeado"
+        nomes = " e ".join(f"#{i['numero']}" for i in saiu)
+        texto = f"{nomes} {'mergeada' if len(saiu) == 1 else 'mergeadas'}" + (f" ({origem})" if origem else "")
+        resolver(estado, texto)
+        gravar(arq, estado)
+        mudados.append(arq)
+    return mudados
+
+
 def main(argv: list[str]) -> int:
     for f in (sys.stdout, sys.stderr):
         f.reconfigure(encoding="utf-8")
@@ -163,11 +229,20 @@ def main(argv: list[str]) -> int:
     seguinte.add_argument("--proxima", type=int, help="número da onda seguinte, já lançada")
     seguinte.add_argument("--ultima", action="store_true", help="fila vazia: não há onda seguinte")
     sub.add_parser("ler", parents=[comuns])
+    p = sub.add_parser("resolvido", parents=[comuns])
+    p.add_argument("--texto", required=True, help="o que resolveu, numa frase")
+    p = sub.add_parser("mergeadas")
+    p.add_argument("--issues", type=int, nargs="+", required=True)
+    p.add_argument("--texto", help="de onde veio o merge (a chave da subida)")
     args = ap.parse_args(argv)
 
     try:
         base = config_do_fluxo.raiz()
         cfg = config_do_fluxo.carregar(base)
+        if args.cmd == "mergeadas":
+            for arq in marcar_mergeadas(cfg["slug"], args.issues, args.texto):
+                print(arq)
+            return 0
         arq = caminho(cfg["slug"], args.sessao, args.onda)
         if args.cmd == "iniciar":
             if arq.exists():  # retomada: a mesma onda de novo não apaga o que já foi gravado
@@ -183,6 +258,10 @@ def main(argv: list[str]) -> int:
             print(arq)
             return 0
         estado = ler(arq)
+        if args.cmd == "resolvido":
+            if resolver(estado, args.texto):
+                gravar(arq, estado)
+            return 0
         if args.cmd == "ler":
             print(json.dumps(estado, ensure_ascii=False, indent=2))
             return 0
