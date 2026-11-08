@@ -356,3 +356,22 @@ class TestAsChamadasDaProva:
         assert sorted(c["atendimento_id"] for c in chamadas) == [f"at-{n:02d}" for n in range(3, 13)]
         # O custo da prova não entra na soma da Conta: a Conta não muda.
         assert all(c["conta_id"] is None for c in chamadas)
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 5. O kit de conhecimento diz o comportamento novo
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+class TestOKit:
+    def test_o_kit_diz_que_a_regra_se_prova_nas_ultimas_contas_antes_do_validar(self):
+        no_ar = KIT.read_text(encoding="utf-8").split("## O que já está no ar")[1].split("\n## ")[0]
+
+        for termo in (
+            "Provar nas últimas contas",
+            "10 últimas contas concluídas",
+            "não mexe em nenhuma conta",
+            "Já feita",
+            "não mudaria nada",
+        ):
+            assert termo in no_ar, termo
