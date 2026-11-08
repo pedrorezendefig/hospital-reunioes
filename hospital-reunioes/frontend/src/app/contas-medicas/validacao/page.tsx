@@ -8,11 +8,15 @@
  * termo do dicionário, na ordem do servidor (maior R$ em jogo primeiro). Cada
  * decisão grava no servidor e a fila é relida. A leitura da IA de cada
  * observação é pedida uma vez; o servidor guarda.
+ *
+ * Desde a issue #1491 a fila chega decidida pelo Auditor: "Aprovar o lote"
+ * manda os cartões com recomendação, e o servidor aplica cada uma pelo mesmo
+ * caminho do botão do cartão. Quem discorda decide o cartão antes.
  */
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { AlertCircle, ArrowLeft, Loader2 } from "lucide-react";
+import { AlertCircle, ArrowLeft, CheckCheck, Loader2 } from "lucide-react";
 
 import { CartaoDeTema } from "@/components/contas-medicas/CartaoDeTema";
 import { reais } from "@/lib/contas-medicas/guia";
@@ -22,6 +26,8 @@ import {
   type FilaDeValidacao,
   ROTA_DA_FILA,
   type Tema,
+  aprovarLote,
+  baixarCadastro,
   decidir,
   enviarAoCadastro,
   lerObservacao,
@@ -29,6 +35,8 @@ import {
 import { createClient } from "@/lib/supabase/client";
 
 const CARTAO = "bg-white rounded-2xl border border-border shadow-premium p-5";
+const BOTAO =
+  "inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-primary text-white text-sm font-medium disabled:opacity-50";
 
 function Numero({ rotulo, valor }: { rotulo: string; valor: string }) {
   return (
@@ -36,6 +44,36 @@ function Numero({ rotulo, valor }: { rotulo: string; valor: string }) {
       <p className="text-xs font-semibold uppercase tracking-[0.04em] text-slate-500">{rotulo}</p>
       <p className="text-2xl font-bold text-primary mt-1">{valor}</p>
     </div>
+  );
+}
+
+function LoteDoAuditor({
+  temas,
+  ocupado,
+  onAprovar,
+}: {
+  temas: string[];
+  ocupado: boolean;
+  onAprovar: (temas: string[]) => void;
+}) {
+  return (
+    <section
+      aria-label="Lote do Auditor"
+      className={`${CARTAO} flex flex-wrap items-center justify-between gap-3`}
+    >
+      <p className="text-sm text-slate-600 max-w-xl">
+        O Auditor recomendou uma decisão em cada cartão abaixo. Aprovar o lote aplica todas de uma vez; o cartão de
+        que você discordar, decida antes pelos botões dele.
+      </p>
+      <button type="button" disabled={ocupado} onClick={() => onAprovar(temas)} className={BOTAO}>
+        {ocupado ? (
+          <Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" />
+        ) : (
+          <CheckCheck className="w-4 h-4" aria-hidden="true" />
+        )}
+        Aprovar o lote ({temas.length})
+      </button>
+    </section>
   );
 }
 
@@ -117,6 +155,22 @@ export default function ValidacaoPage() {
     await carregar(token);
   }
 
+  async function aoAprovarOLote(temas: string[]) {
+    if (!token) return;
+    setOcupado("lote");
+    const { resposta, erro: falha } = await aprovarLote(token, temas);
+    const falhas = resposta ? resposta.falhas.map((f) => `${f.titulo}: ${f.motivo}`) : [];
+    for (const id of resposta?.cadastro ?? []) {
+      const semLista = await baixarCadastro(token, id);
+      if (semLista) falhas.push(semLista);
+    }
+    setOcupado(null);
+    // A fila relida limpa o aviso: o do lote vem depois dela.
+    await carregar(token);
+    if (!resposta) setErro(falha ?? "Não foi possível aprovar o lote.");
+    else if (falhas.length) setErro(`Ficaram na fila. ${falhas.join(" ")}`);
+  }
+
   async function aoEnviarAoCadastro(tema: Tema) {
     if (!token) return;
     setOcupado(tema.id);
@@ -164,6 +218,14 @@ export default function ValidacaoPage() {
             <Numero rotulo="Contas afetadas" valor={String(fila.numeros.contas_afetadas)} />
             <Numero rotulo="R$ em jogo" valor={`R$ ${reais(fila.numeros.valor_em_jogo)}`} />
           </section>
+
+          {fila.temas.some((t) => t.recomendacao) && (
+            <LoteDoAuditor
+              temas={fila.temas.filter((t) => t.recomendacao).map((t) => t.id)}
+              ocupado={ocupado === "lote"}
+              onAprovar={aoAprovarOLote}
+            />
+          )}
 
           {fila.temas.length === 0 ? (
             <p className="text-sm text-slate-500">Nada aguardando decisão.</p>

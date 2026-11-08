@@ -27,6 +27,22 @@ export interface RegraDoTema {
   status: "VIGENTE" | "PENDENTE";
 }
 
+/** O resumo da Prova da regra que sustenta a recomendação (issue #1491). */
+export interface ProvaDoTema {
+  contas: number;
+  mudaria: boolean;
+  feitas_que_sumiriam: number;
+  por_conta: { numero_conta: string | null; entrariam: number; sairiam: number; mudariam: number }[];
+}
+
+/** A recomendação do Auditor: a decisão, o motivo e o texto que ela leva. */
+export interface Recomendacao {
+  decisao: Decisao | "ENVIAR_AO_CADASTRO";
+  motivo: string;
+  texto: string | null;
+  prova: ProvaDoTema | null;
+}
+
 export interface Tema {
   id: string;
   tipo: TipoDeTema;
@@ -41,6 +57,7 @@ export interface Tema {
   leitura_ia: string | null;
   observacoes: string[];
   dicionario: { termo: string; codigo_conta: string | null; descricao_conta: string | null } | null;
+  recomendacao: Recomendacao | null;
 }
 
 export interface FilaDeValidacao {
@@ -53,6 +70,19 @@ export const ROTULO_DO_TIPO: Record<TipoDeTema, string> = {
   BLOQUEADO: "Código bloqueado",
   OBSERVACAO: "Observação do time",
   DICIONARIO: "Termo do dicionário",
+};
+
+/** O nome do botão de cada decisão, como a recomendação aparece no cartão. */
+export const ROTULO_DA_DECISAO: Record<Recomendacao["decisao"], string> = {
+  VALIDAR_REGRA: "Validar regra",
+  DEIXAR_PENDENTE: "Deixar pendente",
+  ENVIAR_AO_CADASTRO: "Enviar ao cadastro",
+  DESCARTAR: "Descartar",
+  MANTER_REGRA: "Manter a regra",
+  EDITAR_REGRA: "Editar a regra",
+  RESPONDER: "Responder ao time",
+  CONFIRMAR: "Confirmar",
+  REJEITAR: "Rejeitar",
 };
 
 export const ROTA_DA_FILA = "/api/contas-medicas/validacao";
@@ -83,6 +113,11 @@ export async function enviarAoCadastro(token: string, tema: Tema): Promise<strin
     headers: { Authorization: `Bearer ${token}` },
   });
   if (!res.ok) return detalheDoErro(res, "Não foi possível gerar a lista do cadastro.");
+  await baixar(res);
+  return null;
+}
+
+async function baixar(res: Response): Promise<void> {
   const nome = res.headers.get("content-disposition")?.match(/filename="([^"]+)"/)?.[1] ?? "cadastro.csv";
   const url = URL.createObjectURL(await res.blob());
   const link = document.createElement("a");
@@ -90,7 +125,36 @@ export async function enviarAoCadastro(token: string, tema: Tema): Promise<strin
   link.download = nome;
   link.click();
   URL.revokeObjectURL(url);
+}
+
+/** A lista do tema que o lote mandou ao cadastro, para baixar. */
+export async function baixarCadastro(token: string, temaId: string): Promise<string | null> {
+  const res = await fetch(`${ROTA_DA_FILA}/temas/${encodeURIComponent(temaId)}/cadastro`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!res.ok) return detalheDoErro(res, "Não foi possível baixar a lista do cadastro.");
+  await baixar(res);
   return null;
+}
+
+export interface RespostaDoLote {
+  decididos: { id: string; decisao: string }[];
+  falhas: { id: string; titulo: string; motivo: string }[];
+  cadastro: string[];
+}
+
+/** "Aprovar o lote": cada tema recebe a recomendação do Auditor no servidor. */
+export async function aprovarLote(
+  token: string,
+  temas: string[],
+): Promise<{ resposta?: RespostaDoLote; erro?: string }> {
+  const res = await fetch(`${ROTA_DA_FILA}/lote`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+    body: JSON.stringify({ temas }),
+  });
+  if (!res.ok) return { erro: await detalheDoErro(res, "Não foi possível aprovar o lote.") };
+  return { resposta: await res.json() };
 }
 
 /** A leitura da IA sobre as observações: a guardada ou uma nova. */
