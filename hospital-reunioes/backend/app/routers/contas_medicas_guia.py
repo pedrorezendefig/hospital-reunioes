@@ -22,6 +22,7 @@ from supabase import Client
 
 from app.dependencies import get_supabase_client, require_permissao_cm
 from app.limiter import limiter
+from app.services import github_client
 from app.services.ai_processor import chamar_ia_fora_do_loop
 from app.services.contas_medicas import faltou_isto, fila, reenvio
 from app.services.contas_medicas.envio import LIMITE_POR_ARQUIVO, MENSAGEM_ARQUIVO_GRANDE
@@ -41,6 +42,7 @@ from app.services.contas_medicas.validacao import (
     temas_da_observacao,
 )
 from app.services.contas_medicas_conta import ErroLeitura
+from app.services.tecnologia_vinculo import MOTIVO_INTEGRACAO_DESLIGADA
 
 router = APIRouter(prefix="/contas-medicas", tags=["contas-medicas"])
 
@@ -488,4 +490,59 @@ async def apontar_faltou_isto(
         )
     except ErroDaIA:
         raise HTTPException(status_code=503, detail=faltou_isto.MENSAGEM_AUDITOR_FORA) from None
+    return {"apontamento": faltou_isto.para_a_tela(gravado, me.get("id"))}
+
+
+@router.get("/contas/{conta_id}/guia/faltou-isto")
+@limiter.limit("120/minute")
+async def faltou_isto_da_conta(
+    request: Request,
+    conta_id: UUID,
+    me: dict = Depends(_PODE_CORRIGIR),
+    supabase: Client = Depends(get_supabase_client),
+) -> dict:
+    """A conversa da Conta: cada Faltou isto com a resposta do Auditor."""
+    conta = _conta_do_guia(supabase, conta_id, me)
+    return {
+        "apontamentos": [
+            faltou_isto.para_a_tela(apontamento, me.get("id"))
+            for apontamento in faltou_isto.da_conta(supabase, conta["id"])
+        ]
+    }
+
+
+@router.post("/contas/{conta_id}/guia/faltou-isto/{faltou_id}/pedido")
+@limiter.limit("20/minute")
+async def abrir_pedido_para_a_tecnologia(
+    request: Request,
+    conta_id: UUID,
+    faltou_id: UUID,
+    me: dict = Depends(_PODE_CORRIGIR),
+    supabase: Client = Depends(get_supabase_client),
+) -> dict:
+    """O ok de quem apontou: a página não lida ou o defeito vira issue
+    `ready-for-agent` para a Tecnologia, sem dado da paciente."""
+    conta = _conta_do_guia(supabase, conta_id, me)
+    apontamento = next((a for a in faltou_isto.da_conta(supabase, conta["id"]) if a["id"] == str(faltou_id)), None)
+    if apontamento is None:
+        raise HTTPException(status_code=404, detail="Faltou isto não encontrado nesta conta")
+    if apontamento.get("apontado_por") != me.get("id"):
+        raise HTTPException(status_code=403, detail=faltou_isto.MENSAGEM_SO_QUEM_APONTOU)
+    if apontamento.get("issue_numero"):
+        raise HTTPException(status_code=409, detail=faltou_isto.MENSAGEM_PEDIDO_JA_ABERTO)
+    if not faltou_isto.vira_pedido(apontamento):
+        raise HTTPException(status_code=409, detail=faltou_isto.MENSAGEM_SO_LEITURA_OU_DEFEITO)
+    if not github_client.integracao_configurada():
+        raise HTTPException(status_code=503, detail=MOTIVO_INTEGRACAO_DESLIGADA)
+    atendimento = _primeira(supabase, "cm_atendimento", "id", conta.get("atendimento_id")) or {}
+    try:
+        gravado = await run_in_threadpool(
+            faltou_isto.abrir_pedido, supabase, conta=conta, atendimento=atendimento, apontamento=apontamento
+        )
+    except faltou_isto.PedidoRecusadoError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from None
+    except github_client.GithubNaoConfiguradoError:
+        raise HTTPException(status_code=503, detail=MOTIVO_INTEGRACAO_DESLIGADA) from None
+    except github_client.GithubIndisponivelError:
+        raise HTTPException(status_code=502, detail=faltou_isto.MENSAGEM_GITHUB_FORA) from None
     return {"apontamento": faltou_isto.para_a_tela(gravado, me.get("id"))}

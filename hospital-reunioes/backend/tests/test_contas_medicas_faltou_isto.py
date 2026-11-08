@@ -45,6 +45,7 @@ from app.dependencies import get_current_user, get_supabase_client
 from app.limiter import limiter
 from app.routers import contas_medicas_envio as envio_router
 from app.routers import contas_medicas_guia as guia_router
+from app.services import github_client
 from app.services.contas_medicas import envio as envio_service
 from app.services.contas_medicas import ia, processamento
 
@@ -314,6 +315,134 @@ class TestQuemAponta:
         resposta = _apontar(banco, conta_id)
 
         assert resposta.status_code == 200, resposta.text
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 2. O pedido para a Tecnologia
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+class _GithubFalso:
+    """A porta `criar_issue` do cliente do GitHub: guarda cada issue pedida."""
+
+    def __init__(self):
+        self.issues: list[dict[str, Any]] = []
+        self.falha: Exception | None = None
+
+    def __call__(self, *, titulo: str, corpo: str, labels: list[str], assignees=None) -> dict[str, Any]:
+        if self.falha is not None:
+            raise self.falha
+        self.issues.append({"titulo": titulo, "corpo": corpo, "labels": labels, "assignees": assignees})
+        return {"number": 4321, "html_url": "https://github.com/exemplo/repo/issues/4321"}
+
+
+@pytest.fixture(autouse=True)
+def github(monkeypatch) -> _GithubFalso:
+    duble = _GithubFalso()
+    monkeypatch.setattr(github_client, "criar_issue", duble)
+    monkeypatch.setattr(github_client, "integracao_configurada", lambda: True)
+    return duble
+
+
+def _pedido(banco: _Banco, conta_id: str, faltou_id: str, quem: str = "faturista") -> Any:
+    return _cliente(banco, quem).post(f"{_rota(conta_id)}/{faltou_id}/pedido")
+
+
+def _apontado(banco: _Banco, conta_id: str, quem: str = "faturista", **campos) -> str:
+    resposta = _apontar(banco, conta_id, quem, **campos)
+    assert resposta.status_code == 200, resposta.text
+    return resposta.json()["apontamento"]["id"]
+
+
+class TestPedidoParaATecnologia:
+    @pytest.mark.parametrize("classificacao", ["LEITURA", "DEFEITO"])
+    def test_com_o_ok_de_quem_apontou_o_github_recebe_a_issue_pronta_para_o_agente(
+        self, ia_falsa, github, classificacao
+    ):
+        ia_falsa.respostas[DIAGNOSTICO] = {**ia_falsa.respostas[DIAGNOSTICO], "classificacao": classificacao}
+        banco, conta_id = _conta_no_guia()
+        faltou_id = _apontado(banco, conta_id)
+
+        resposta = _pedido(banco, conta_id, faltou_id)
+
+        assert resposta.status_code == 200, resposta.text
+        (issue,) = github.issues
+        assert "ready-for-agent" in issue["labels"]
+        assert not issue["assignees"]
+        corpo = issue["corpo"]
+        criterios = corpo.split("## Critérios de aceite", 1)[1].split("\n## ", 1)[0]
+        assert criterios.count("\n- [ ] ") >= 2
+        assert "Incluir 1 equipo macrogotas em 03/10, pelo acesso periférico da admissão." in criterios
+        assert f"- **Trecho da página (desidentificado):** {TRECHO_DA_ADMISSAO}" in corpo
+        assert f"- **Código da Conta:** `{conta_id}`" in corpo
+        assert "- **Página do prontuário:** 2" in corpo
+        assert "- **Explicação do Auditor:** O acesso periférico está no evento da página 2" in corpo
+        assert "- **Mensagem de quem apontou:** Por que você não achou o equipo nesta página?" in corpo
+        assert f'<!-- auditor-contas-medicas faltou-isto="{faltou_id}" -->' in corpo
+        (gravado,) = banco.tabelas["cm_faltou_isto"]
+        assert gravado["issue_numero"] == 4321
+        assert resposta.json()["apontamento"]["pedido_aberto"] is True
+
+    def test_antes_do_ok_nada_vai_ao_github(self, github):
+        banco, conta_id = _conta_no_guia()
+
+        resposta = _apontar(banco, conta_id)
+
+        assert github.issues == []
+        assert resposta.json()["apontamento"]["pode_abrir_pedido"] is True
+        assert banco.tabelas["cm_faltou_isto"][0].get("issue_numero") is None
+
+    def test_falta_de_regra_nao_vira_pedido(self, ia_falsa, github):
+        ia_falsa.respostas[DIAGNOSTICO] = {**ia_falsa.respostas[DIAGNOSTICO], "classificacao": "REGRA"}
+        banco, conta_id = _conta_no_guia()
+        faltou_id = _apontado(banco, conta_id)
+
+        resposta = _pedido(banco, conta_id, faltou_id)
+
+        assert resposta.status_code == 409
+        assert github.issues == []
+        assert banco.tabelas["cm_faltou_isto"][0]["classificacao"] == "REGRA"
+
+    def test_so_quem_apontou_da_o_ok(self, github):
+        banco, conta_id = _conta_no_guia()
+        faltou_id = _apontado(banco, conta_id)
+
+        resposta = _pedido(banco, conta_id, faltou_id, "gestao")
+
+        assert resposta.status_code == 403
+        assert github.issues == []
+
+    def test_o_segundo_ok_nao_abre_outro_pedido(self, github):
+        banco, conta_id = _conta_no_guia()
+        faltou_id = _apontado(banco, conta_id)
+        assert _pedido(banco, conta_id, faltou_id).status_code == 200
+
+        resposta = _pedido(banco, conta_id, faltou_id)
+
+        assert resposta.status_code == 409
+        assert len(github.issues) == 1
+
+    def test_github_fora_do_ar_responde_502_e_o_ok_vale_de_novo(self, github):
+        banco, conta_id = _conta_no_guia()
+        faltou_id = _apontado(banco, conta_id)
+        github.falha = github_client.GithubIndisponivelError("GitHub respondeu 500")
+
+        resposta = _pedido(banco, conta_id, faltou_id)
+
+        assert resposta.status_code == 502
+        assert banco.tabelas["cm_faltou_isto"][0].get("issue_numero") is None
+        github.falha = None
+        assert _pedido(banco, conta_id, faltou_id).status_code == 200
+
+    def test_sem_a_integracao_configurada_responde_503(self, monkeypatch, github):
+        banco, conta_id = _conta_no_guia()
+        faltou_id = _apontado(banco, conta_id)
+        monkeypatch.setattr(github_client, "integracao_configurada", lambda: False)
+
+        resposta = _pedido(banco, conta_id, faltou_id)
+
+        assert resposta.status_code == 503
+        assert github.issues == []
 
 
 def _passos_da_chamada() -> set[str]:
