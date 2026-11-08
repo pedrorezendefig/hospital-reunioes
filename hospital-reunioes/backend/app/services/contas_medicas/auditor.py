@@ -60,7 +60,7 @@ logger = logging.getLogger(__name__)
 TIPOS_DE_REGRA = ("REGRA_NOVA", "REGRA_ALTERADA")
 
 _OK = re.compile(r"ok[.!]*", re.IGNORECASE)
-_CORRIGE = re.compile(r"corrij?[ae]\s+o\s+item\s+(\d+)\b[\s:,.]*(.*)", re.IGNORECASE | re.DOTALL)
+_CORRIGE = re.compile(r"corri[gj][ae]\s+o\s+item\s+(\d+)\b[\s:,.]*(.*)", re.IGNORECASE | re.DOTALL)
 
 
 class LoteRecusadoError(ValueError):

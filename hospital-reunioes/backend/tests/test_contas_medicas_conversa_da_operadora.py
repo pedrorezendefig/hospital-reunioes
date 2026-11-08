@@ -219,3 +219,117 @@ class TestOTextoViraLote:
         assert f"| ALFA-DIA-01 | {DIA_01_ANTES} |" in pedido
         assert PEDIDO in pedido
         assert "Primeira mensagem" not in pedido
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 2. O ok aplica o lote inteiro numa versão nova só da Memória
+# ═══════════════════════════════════════════════════════════════════════════
+
+OBITO = "Óbito antes das 12h não gera diária extra no setor de origem."
+DIA_02_DECIDIDA = "Transferência de setor antes das 12h não gera diária extra no setor de origem, sem exceção."
+
+
+def _vigente(banco) -> dict:
+    oid = next(o["id"] for o in banco.linhas("cm_operadora") if o["sigla"] == "ALFA")
+    return next(v for v in banco.linhas("cm_memoria_versao") if v["operadora_id"] == oid and v["vigente"])
+
+
+def _regras_vigentes(banco) -> dict[str, dict]:
+    vigente = _vigente(banco)
+    return {r["codigo"]: r for r in banco.linhas("cm_regra") if r["memoria_versao_id"] == vigente["id"]}
+
+
+class TestOOk:
+    def test_o_ok_num_lote_com_varias_propostas_gera_uma_versao_so_com_as_regras_vigentes(self, cenario):
+        cliente, banco, provedor = cenario
+        provedor.lote = {
+            **LOTE,
+            "propostas": [
+                _proposta(),
+                _proposta(texto=OBITO),
+                # A pendente ALFA-DIA-02, decidida pelo lote.
+                _proposta(tipo="REGRA_ALTERADA", regra_codigo="ALFA-DIA-02", texto=DIA_02_DECIDIDA),
+                LOTE["propostas"][2],
+            ],
+        }
+        assert cliente.post(ROTA, json={"texto": PEDIDO}).status_code == 200
+
+        resposta = cliente.post(ROTA, json={"texto": "ok"})
+
+        assert resposta.status_code == 200, resposta.text
+        corpo = resposta.json()
+        assert _versoes(banco, "ALFA") == {"1.0": False, "1.1": True}
+        assert corpo["aplicado"]["versao"] == "1.1"
+        regras = _regras_vigentes(banco)
+        # As duas regras novas da mesma seção ganham códigos seguidos.
+        assert {c: (regras[c]["texto"], regras[c]["status"]) for c in ("ALFA-DIA-02", "ALFA-DIA-03", "ALFA-DIA-04")} == {
+            "ALFA-DIA-02": (DIA_02_DECIDIDA, "VIGENTE"),
+            "ALFA-DIA-03": (DIA_03, "VIGENTE"),
+            "ALFA-DIA-04": (OBITO, "VIGENTE"),
+        }
+        assert {regras[c]["validado_por"] for c in ("ALFA-DIA-02", "ALFA-DIA-03", "ALFA-DIA-04")} == {GESTAO["id"]}
+        # A regra que o lote não toca fica como estava.
+        assert (regras["ALFA-PRI-03"]["status"], regras["ALFA-DIA-01"]["texto"]) == ("PENDENTE", DIA_01_ANTES)
+        assert _vigente(banco)["parametros_json"]["diaria"]["hora_vencimento"] == "12:00"
+        # O lote saiu da mesa.
+        assert corpo["lote"] is None
+
+    def test_ok_sem_lote_aberto_e_recusado_e_nada_muda(self, cenario):
+        cliente, banco, _provedor = cenario
+
+        resposta = cliente.post(ROTA, json={"texto": "ok"})
+
+        assert resposta.status_code == 422
+        assert resposta.json()["detail"] == "Não há lote aberto para aplicar."
+        assert _versoes(banco, "ALFA") == {"1.0": True}
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 3. "Corrige o item N" refaz só aquele item
+# ═══════════════════════════════════════════════════════════════════════════
+
+DIA_03_UTI = "Na UTI, transferência de setor antes das 12h não gera diária extra no setor de origem."
+
+
+class TestCorrigeOItemN:
+    def test_corrige_o_item_n_muda_so_o_item_n_e_preserva_os_outros(self, cenario):
+        cliente, banco, provedor = cenario
+        assert cliente.post(ROTA, json={"texto": PEDIDO}).status_code == 200
+        antes = cliente.get(ROTA).json()["lote"]
+        provas_antes = len(provedor.da_prova())
+        provedor.correcao = {
+            "resposta": "Corrigi o item 1: vale só para a UTI.",
+            "proposta": _proposta(texto=DIA_03_UTI),
+        }
+
+        resposta = cliente.post(ROTA, json={"texto": "Corrige o item 1: só na UTI."})
+
+        assert resposta.status_code == 200, resposta.text
+        depois = resposta.json()["lote"]
+        assert depois["id"] == antes["id"]
+        assert _item(resposta.json(), 1)["proposta"]["texto"] == DIA_03_UTI
+        assert [i for i in depois["itens"] if i["numero"] != 1] == [i for i in antes["itens"] if i["numero"] != 1]
+        # O Auditor recebeu o item como estava e o que mudar nele.
+        _, pedido = [p for p in provedor.pedidos if p[0] == "ItemCorrigido"][-1]
+        assert DIA_03 in pedido and "só na UTI." in pedido
+        # Só o item corrigido prova de novo.
+        assert len(provedor.da_prova()) - provas_antes == 10
+        assert [(m["autor"], m["texto"]) for m in resposta.json()["mensagens"]][-2:] == [
+            ("PESSOA", "Corrige o item 1: só na UTI."),
+            ("AUDITOR", "Corrigi o item 1: vale só para a UTI."),
+        ]
+
+        # O ok aplica o item corrigido.
+        assert cliente.post(ROTA, json={"texto": "ok"}).status_code == 200
+        assert _regras_vigentes(banco)["ALFA-DIA-03"]["texto"] == DIA_03_UTI
+
+    def test_corrigir_item_que_o_lote_nao_tem_e_recusado_sem_chamar_o_auditor(self, cenario):
+        cliente, _banco, provedor = cenario
+        assert cliente.post(ROTA, json={"texto": PEDIDO}).status_code == 200
+        pedidos = len(provedor.pedidos)
+
+        resposta = cliente.post(ROTA, json={"texto": "corrige o item 7: tanto faz"})
+
+        assert resposta.status_code == 422
+        assert resposta.json()["detail"] == "O lote não tem o item 7."
+        assert len(provedor.pedidos) == pedidos
