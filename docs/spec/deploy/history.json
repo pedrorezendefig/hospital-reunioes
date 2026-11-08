@@ -2,6 +2,54 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-11-08T14:11:46-03:00",
+      "sha": "8dcf30c1f776df9e68f8574935f80cb0b36ba959",
+      "app_version": "0.231.0",
+      "subject": "Onda onda-a-onda3: Conversa da Operadora com o Auditor e propostas em lote; Painel mostra o Faltou isto por semana e separa o custo do Auditor",
+      "raw_subject": "chore(deploy): registro da onda onda-a-onda3 (#1511 #1509)",
+      "scope": [
+        "backend",
+        "frontend"
+      ],
+      "prds": [
+        1484
+      ],
+      "result": "healthy",
+      "duration_seconds": 237,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        },
+        {
+          "service": "frontend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "onda-enxuta onda-a-onda3: PR #1511 (issue #1490), PR #1509 (issue #1492), mergeados PR a PR. Merge pela API do GitHub, um build. Registro pela Action pos-merge depois do health.",
+      "etapas": {
+        "merge_s": 5,
+        "build_s": {
+          "backend": 172,
+          "frontend": 158
+        },
+        "health_s": 10
+      },
+      "responsavel": "pedrorezendefig"
+    },
+    {
       "at": "2026-11-08T13:28:13-03:00",
       "sha": "a9f8a4cde15b3230d7e0f0104c190381fd68a418",
       "app_version": "0.230.0",
