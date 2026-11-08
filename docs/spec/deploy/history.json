@@ -2,6 +2,54 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-11-08T14:40:50-03:00",
+      "sha": "06fba847754e7bf3aabf2e93df9e2951fbf81e12",
+      "app_version": "0.233.0",
+      "subject": "Onda onda-a-onda4: Segundo agente relê 10 contas concluídas por semana atrás de omissões; Contrato subido na conversa vira Regras por cláusula e o contrato diz",
+      "raw_subject": "chore(deploy): registro da onda onda-a-onda4 (#1513 #1514)",
+      "scope": [
+        "backend",
+        "frontend"
+      ],
+      "prds": [
+        1484
+      ],
+      "result": "healthy",
+      "duration_seconds": 199,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        },
+        {
+          "service": "frontend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "onda-enxuta onda-a-onda4: PR #1513 (issue #1493), PR #1514 (issue #1495), mergeados PR a PR. Merge pela API do GitHub, um build. Registro pela Action pos-merge depois do health.",
+      "etapas": {
+        "merge_s": 5,
+        "build_s": {
+          "backend": 17,
+          "frontend": 169
+        },
+        "health_s": 0
+      },
+      "responsavel": "pedrorezendefig"
+    },
+    {
       "at": "2026-11-08T14:23:36-03:00",
       "sha": "49f048ee461399e7d77310e735da297530b29245",
       "app_version": "0.232.0",
