@@ -256,3 +256,103 @@ class TestODiffPorConta:
         pedido = next(p for p in provedor.pedidos if "M012" in p.split("CONTA\n", 1)[1])
         assert f"| {CODIGO_NOVO} | {REGRA['texto']} |" in pedido
         assert "evento do dia 12" in pedido
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 2. A Linha Feito que sumiria e o "não mudaria nada"
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+class TestFeitoENaoMudaria:
+    def test_a_linha_feito_que_sumiria_vem_marcada(self, cenario):
+        cliente, banco, _provedor = cenario
+        banco.tabelas["cm_guia_linha"] = [
+            _linha_do_guia("c12", "M012", _dia(12), 2.0, estado="FEITO"),
+            _linha_do_guia("c11", "M011", _dia(11), 2.0, estado="ABERTA"),
+        ]
+
+        corpo = cliente.post(_rota(), json=REGRA).json()
+
+        assert [(l["codigo"], l["feito"]) for l in _da_conta(corpo, "c12")["sairiam"]] == [("M012", True)]
+        assert [(l["codigo"], l["feito"]) for l in _da_conta(corpo, "c11")["sairiam"]] == [("M011", False)]
+        assert corpo["feitas_que_sumiriam"] == 1
+
+    def test_prova_sem_mudanca_devolve_o_aviso_de_que_nao_mudaria_nada(self, cenario):
+        cliente, banco, provedor = cenario
+        # A IA devolve de novo a mesma Linha que o Guia já tinha.
+        banco.tabelas["cm_guia_linha"] = [_linha_do_guia("c12", "M012", _dia(12), 2.0, estado="FEITO")]
+        provedor.por_codigo = {"M012": [_linha_da_ia("M012", "12/10/2026", 2, regra="ALFA-DIA-01")]}
+
+        corpo = cliente.post(_rota(), json=REGRA).json()
+
+        assert corpo["mudaria"] is False
+        assert corpo["aviso"] == "A regra não mudaria nada nas 10 últimas contas concluídas."
+        assert corpo["feitas_que_sumiriam"] == 0
+        assert all(c["entrariam"] == c["sairiam"] == c["mudariam"] == [] for c in corpo["por_conta"])
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 3. Nada muda nas Contas, nas Linhas nem na Memória
+# ═══════════════════════════════════════════════════════════════════════════
+
+_INTOCADAS = ("cm_conta", "cm_guia_linha", "cm_conta_item", "cm_eventos", "cm_memoria_versao", "cm_regra")
+
+
+class TestNadaMuda:
+    def test_a_prova_nao_altera_conta_linha_nem_versao_da_memoria(self, cenario):
+        cliente, banco, provedor = cenario
+        banco.tabelas["cm_guia_linha"] = [
+            _linha_do_guia("c12", "M012", _dia(12), 2.0, estado="FEITO"),
+            _linha_do_guia("c11", "M011", _dia(11), 2.0),
+        ]
+        provedor.por_codigo = {
+            "M011": [_linha_da_ia("M011", "11/10/2026", 3)],
+            "M010": [_linha_da_ia("M010", "10/10/2026", 2)],
+        }
+        antes = {tabela: copy.deepcopy(banco.linhas(tabela)) for tabela in _INTOCADAS}
+        com_parametro = {**REGRA, "parametro": {"chave": "diaria.hora_vencimento", "valor": "12:00"}}
+
+        resposta = cliente.post(_rota(), json=com_parametro)
+
+        assert resposta.status_code == 200, resposta.text
+        assert resposta.json()["mudaria"] is True
+        assert {tabela: banco.linhas(tabela) for tabela in _INTOCADAS} == antes
+
+    def test_a_prova_fica_guardada_com_o_resultado(self, cenario):
+        cliente, banco, _provedor = cenario
+        banco.tabelas["cm_guia_linha"] = [_linha_do_guia("c12", "M012", _dia(12), 2.0, estado="FEITO")]
+
+        corpo = cliente.post(_rota(), json=REGRA).json()
+
+        [prova] = banco.linhas("cm_prova")
+        assert prova["id"] == corpo["prova_id"]
+        assert prova["operadora_id"] == _operadora_id(banco, "ALFA")
+        assert prova["memoria_versao_id"] == _versao(banco, "ALFA", "1.0")["id"]
+        assert (prova["regra_codigo"], prova["regra_texto"]) == (CODIGO_NOVO, REGRA["texto"])
+        assert (prova["contas"], prova["mudaria"]) == (10, True)
+        assert prova["resultado_json"] == corpo["por_conta"]
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 4. As chamadas da prova em cm_chamada_ia, com o passo PROVA
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+def _passos_do_check() -> set[str]:
+    sql = MIGRATION_126.read_text(encoding="utf-8")
+    bloco = re.search(r"cm_chamada_ia_passo_check\s+CHECK \(passo IN \(([^)]*)\)\)", sql)
+    return set(re.findall(r"'(\w+)'", bloco.group(1)))
+
+
+class TestAsChamadasDaProva:
+    def test_cada_conta_refeita_grava_uma_chamada_prova_sem_somar_na_conta(self, cenario):
+        cliente, banco, _provedor = cenario
+
+        assert cliente.post(_rota(), json=REGRA).status_code == 200
+
+        chamadas = banco.linhas("cm_chamada_ia")
+        assert [c["passo"] for c in chamadas] == ["PROVA"] * 10
+        assert "PROVA" in _passos_do_check()
+        assert sorted(c["atendimento_id"] for c in chamadas) == [f"at-{n:02d}" for n in range(3, 13)]
+        # O custo da prova não entra na soma da Conta: a Conta não muda.
+        assert all(c["conta_id"] is None for c in chamadas)
