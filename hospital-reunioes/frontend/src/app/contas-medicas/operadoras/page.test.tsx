@@ -494,6 +494,17 @@ describe("a tabela em PDF ou planilha, lida por mapeamento (#1146)", () => {
     return { secao, mapeamento, arquivo };
   }
 
+  it("o seletor do arquivo aceita o Excel antigo (.xls) ao lado do PDF, do XLSX e do CSV (#1487)", async () => {
+    render(<OperadorasPage />);
+    await screen.findByTestId("operadora-ALFA");
+    const secao = screen.getByRole("region", { name: "Enviar tabela de preço" });
+
+    const seletor = within(secao).getByLabelText("Arquivo da tabela") as HTMLInputElement;
+
+    const aceitos = seletor.accept.split(",");
+    expect(aceitos).toEqual(expect.arrayContaining([".csv", ".xlsx", ".xls", ".pdf", "application/vnd.ms-excel"]));
+  });
+
   it("mostra o mapeamento da IA, a amostra e o total, e nada é gravado antes de confirmar", async () => {
     const { mapeamento, arquivo } = await enviarPlanilha();
 

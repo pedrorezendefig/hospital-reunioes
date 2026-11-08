@@ -572,9 +572,9 @@ function EnvioDeTabela({
       <h2 className="text-base font-semibold text-slate-900">Enviar tabela de preço</h2>
       <p className="text-sm text-slate-500 mt-0.5 mb-4">
         A tabela do convênio, com a categoria e a vigência. O CSV de formato conhecido entra direto; o PDF, a planilha
-        e o CSV de outro cabeçalho mostram as colunas que a IA propõe e 20 linhas de amostra, e só valem depois de
-        confirmados. Uma versão nova fica ao lado da anterior: a conta de um atendimento antigo usa a tabela da data
-        dele.
+        do Excel (XLSX ou XLS) e o CSV de outro cabeçalho mostram as colunas que a IA propõe e 20 linhas de amostra, e
+        só valem depois de confirmados. Uma versão nova fica ao lado da anterior: a conta de um atendimento antigo usa
+        a tabela da data dele.
       </p>
       <form aria-label="Enviar tabela de preço" onSubmit={enviar} className="grid gap-3 sm:grid-cols-3 items-end">
         <Select
@@ -615,7 +615,7 @@ function EnvioDeTabela({
           Arquivo da tabela
           <input
             type="file"
-            accept=".csv,.xlsx,.pdf,text/csv,application/pdf,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            accept=".csv,.xlsx,.xls,.pdf,text/csv,application/pdf,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel"
             onChange={(e) => {
               setArquivo(e.target.files?.[0] ?? null);
               setProposta(null);
