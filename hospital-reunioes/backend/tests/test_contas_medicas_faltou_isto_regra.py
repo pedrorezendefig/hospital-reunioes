@@ -17,6 +17,7 @@ Guia pronto e o provedor da IA dublado no transporte HTTP.
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any
 
 import pytest
@@ -259,3 +260,28 @@ class TestOApontamentoLigadoARegra:
 
         assert banco.tabelas.get("cm_lote_item", []) == []
         assert _no_guia(banco, conta_id, "faturista")["proposta_de_regra"] is None
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 4. O texto do Produto no Kit de conhecimento
+# ═══════════════════════════════════════════════════════════════════════════
+
+KIT = Path(__file__).resolve().parents[1] / "app" / "conhecimento" / "contas-medicas.md"
+
+
+class TestOKit:
+    def test_o_kit_diz_que_a_falta_de_regra_vira_proposta_de_regra(self):
+        secao = KIT.read_text(encoding="utf-8").split("## O Faltou isto e o Auditor", 1)[1].split("\n## ", 1)[0]
+
+        for trecho in (
+            "propõe a regra",
+            "Prova da regra",
+            "conversa da Operadora",
+            '"ok"',
+            "nasce vigente",
+            "entra pendente",
+            "fila de Validação",
+            "fica ligado à regra",
+        ):
+            assert trecho in secao, trecho
+        assert "fica para uma próxima entrega" not in secao
