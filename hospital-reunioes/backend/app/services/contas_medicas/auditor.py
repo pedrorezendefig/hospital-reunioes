@@ -26,7 +26,6 @@ da regra e a gravação de versão da edição pela tela.
 
 from __future__ import annotations
 
-import copy
 import json
 import logging
 import re
@@ -359,7 +358,7 @@ def _aplicar(supabase, sigla: str, texto: str, autor_id: str | None) -> dict[str
         autor_id,
         resumo,
         novas=novas,
-        parametros=copy.deepcopy(parametros) if parametros is not None else None,
+        parametros=parametros,
     )
 
     supabase.table("cm_lote").update(
