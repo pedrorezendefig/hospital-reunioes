@@ -1,6 +1,6 @@
 # ROTAS.md
 <!-- gerado automaticamente por /snapshot — não editar -->
-<!-- last_update: 2026-11-08T02:18+0000 -->
+<!-- last_update: 2026-11-08T16:25+0000 -->
 
 Endpoints HTTP expostos pelo backend FastAPI do Hospital Reuniões.
 
@@ -144,6 +144,7 @@ Endpoints HTTP expostos pelo backend FastAPI do Hospital Reuniões.
 | GET | `/contas-medicas/operadoras/{sigla}` | A memória da operadora para a tela: cabeçalho, regras, tabelas, histórico | ✅ |
 | POST | `/contas-medicas/operadoras/{sigla}/regras` | Validar regra: a regra ensinada entra vigente numa versão nova da memória. | ✅ |
 | POST | `/contas-medicas/operadoras/{sigla}/regras/proposta` | A IA propõe a regra no formato da memória: a regra, o parâmetro que | ✅ |
+| POST | `/contas-medicas/operadoras/{sigla}/regras/prova` | A Prova da regra (#1488): a regra conferida refaz o Passo B nas 10 | ✅ |
 | PUT | `/contas-medicas/operadoras/{sigla}/regras/{codigo}` | Edita a regra vigente: versão nova da memória, com o texto anterior guardado. | ✅ |
 | POST | `/contas-medicas/operadoras/{sigla}/regras/{codigo}/decisao` | Decide a regra pendente: vira vigente, com quem validou e a data, numa versão nova. | ✅ |
 
@@ -508,4 +509,4 @@ Endpoints HTTP expostos pelo backend FastAPI do Hospital Reuniões.
 
 ---
 
-**Totais:** 282 endpoints em 44 routers · 94% exigem auth.
+**Totais:** 283 endpoints em 44 routers · 94% exigem auth.
