@@ -66,6 +66,7 @@ const LOTE = {
       conflitos: [
         { codigo: "ALFA-DIA-02", texto: "Transferência antes das 10h: gera ou não diária extra.", resolucao: "SUBSTITUIR" },
       ],
+      pede_prova: true,
       prova: prova(),
     },
     {
@@ -75,6 +76,7 @@ const LOTE = {
       proposta: { secao: "DIA", texto: DIA_01_DEPOIS, tipo: "CONTRATUAL", origem: "PRÁTICA", texto_anterior: DIA_01_ANTES },
       motivo: "A diária passa a vencer ao meio-dia.",
       conflitos: [],
+      pede_prova: true,
       prova: prova({ mudaria: false, feitas_que_sumiriam: 0, aviso: "A regra não mudaria nada nas 10 últimas contas concluídas.", por_conta: [] }),
     },
     {
@@ -84,6 +86,7 @@ const LOTE = {
       proposta: { chave: "diaria.hora_vencimento", antes: "10:00", depois: "12:00" },
       motivo: "O cabeçalho acompanha o vencimento novo.",
       conflitos: [],
+      pede_prova: false,
       prova: null,
     },
   ],
@@ -93,6 +96,54 @@ const PEDIDO = "Na ALFA a transferência antes do meio-dia não gera diária ext
 const FALAS = [
   { id: "m1", autor: "PESSOA", autor_nome: "Diretor Teste", texto: PEDIDO, criado_em: null, versao: null },
   { id: "m2", autor: "AUDITOR", autor_nome: null, texto: "Entendi três mudanças.", criado_em: null, versao: null },
+];
+
+const CLAUSULA_7 = "Cláusula 7: a taxa de sala cirúrgica é paga por porte anestésico.";
+const CLAUSULA_9 = "Cláusula 9: o Brasíndice usado é a edição vigente na data do atendimento.";
+const BRASINDICE = "Edição do Brasíndice usada pela operadora.";
+const LOTE_DO_CONTRATO = {
+  id: "lote-2",
+  itens: [
+    {
+      numero: 1,
+      tipo: "REGRA_NOVA",
+      regra_codigo: null,
+      proposta: { secao: "TAX", texto: "Taxa de sala paga por porte anestésico.", tipo: "CONTRATUAL", origem: "ADITIVO", contrato_diz: CLAUSULA_7 },
+      motivo: "A taxa de sala passa a ser conferida pelo porte.",
+      conflitos: [],
+      pede_prova: true,
+      prova: prova(),
+    },
+    {
+      numero: 2,
+      tipo: "REGRA_ALTERADA",
+      regra_codigo: "ALFA-PRI-03",
+      proposta: { secao: "PRI", texto: BRASINDICE, tipo: "CONTRATUAL", origem: "CONTRATO", texto_anterior: BRASINDICE, contrato_diz: CLAUSULA_9 },
+      motivo: "O contrato sustenta a regra ALFA-PRI-03, para o recurso de glosa.",
+      conflitos: [],
+      pede_prova: false,
+      prova: null,
+    },
+    {
+      numero: 3,
+      tipo: "PARAMETRO",
+      regra_codigo: null,
+      proposta: {
+        chave: "contrato",
+        antes: { assinatura: "2015-10-01", ultimo_aditivo: { numero: 12, inicio_vigencia: "2026-05-01" } },
+        depois: { assinatura: "2015-10-01", ultimo_aditivo: { numero: "13", data: "2027-04-20", inicio_vigencia: "2027-05-01" } },
+        arquivo: "contratos/op/arquivo.pdf",
+      },
+      motivo: "As datas do contrato, para o aviso de reajuste.",
+      conflitos: [],
+      pede_prova: false,
+      prova: null,
+    },
+  ],
+};
+const FALAS_DO_CONTRATO = [
+  { id: "m5", autor: "PESSOA", autor_nome: "Diretor Teste", texto: "Contrato enviado: aditivo-13.pdf", criado_em: null, versao: null },
+  { id: "m6", autor: "AUDITOR", autor_nome: null, texto: "Li o contrato: uma regra nova.", criado_em: null, versao: null },
 ];
 
 type Chamada = { url: string; metodo: string; corpo: unknown };
@@ -112,9 +163,12 @@ beforeEach(() => {
     "fetch",
     vi.fn(async (url: string, init?: RequestInit) => {
       const metodo = init?.method ?? "GET";
-      const corpo = typeof init?.body === "string" ? JSON.parse(init.body) : undefined;
+      const corpo = typeof init?.body === "string" ? JSON.parse(init.body) : init?.body;
       chamadas.push({ url, metodo, corpo });
       if (url === ROTA && metodo === "GET") return resposta(200, leitura);
+      if (url === `${ROTA}/contrato` && metodo === "POST") {
+        return resposta(200, { mensagens: FALAS_DO_CONTRATO, lote: LOTE_DO_CONTRATO, aplicado: null });
+      }
       if (url === ROTA && metodo === "POST") {
         const { status, corpo: devolvido } = respostaDoEnvio((corpo as { texto: string }).texto);
         return resposta(status, devolvido);
@@ -146,7 +200,7 @@ async function mandar(conversa: HTMLElement, texto: string) {
 }
 
 function enviados(): string[] {
-  return chamadas.filter((c) => c.metodo === "POST").map((c) => (c.corpo as { texto: string }).texto);
+  return chamadas.filter((c) => c.metodo === "POST" && c.url === ROTA).map((c) => (c.corpo as { texto: string }).texto);
 }
 
 describe("o lote do Auditor", () => {
@@ -257,6 +311,39 @@ describe("o lote do Auditor", () => {
     fireEvent.click(within(conversa).getByRole("button", { name: "Enviar ao auditor" }));
 
     expect((await within(conversa).findByRole("alert")).textContent).toContain("O Auditor não respondeu agora.");
+  });
+});
+
+describe("o contrato na conversa", () => {
+  it("Enviar contrato manda o arquivo e mostra as Regras por cláusula, o contrato diz e as datas", async () => {
+    const conversa = await abrir();
+    const arquivo = new File(["%PDF-1.4"], "aditivo-13.pdf", { type: "application/pdf" });
+
+    fireEvent.change(within(conversa).getByLabelText("Enviar contrato"), { target: { files: [arquivo] } });
+
+    const lote = await within(conversa).findByRole("region", { name: "Lote do Auditor" });
+    const envio = chamadas.find((c) => c.url === `${ROTA}/contrato`);
+    expect(envio?.metodo).toBe("POST");
+    expect((envio?.corpo as FormData).get("arquivo")).toBe(arquivo);
+    expect(conversa.textContent).toContain("Contrato enviado: aditivo-13.pdf");
+
+    const nova = within(lote).getByRole("article", { name: "Item 1" });
+    expect(nova.textContent).toContain(`O contrato diz: ${CLAUSULA_7}`);
+
+    // A Regra que existe ganha só o trecho: o texto fica, e o item vai sem prova.
+    const diz = within(lote).getByRole("article", { name: "Item 2" });
+    expect(diz.textContent).toContain(`Regra mantida: ${BRASINDICE}`);
+    expect(diz.textContent).toContain(`O contrato diz: ${CLAUSULA_9}`);
+    expect(diz.textContent).toContain("Não muda a análise, por isso vem sem prova.");
+    expect(diz.textContent).not.toContain("Antes:");
+    expect(diz.textContent).not.toContain("A prova não rodou agora.");
+
+    const datas = within(lote).getByRole("article", { name: "Item 3" });
+    expect(datas.textContent).toContain(
+      "Datas do contrato: assinatura 01/10/2015, aditivo 13 de 20/04/2027, vigência a partir de 01/05/2027",
+    );
+
+    expect((within(lote).getByRole("button", { name: "Ok, aplicar o lote" }) as HTMLButtonElement).disabled).toBe(false);
   });
 });
 
