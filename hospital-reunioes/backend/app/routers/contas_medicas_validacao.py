@@ -34,7 +34,9 @@ from app.services.contas_medicas.validacao import (
     decidir_tema,
     fila_de_validacao,
     leitura_da_observacao,
+    tema_enviado_ao_cadastro,
 )
+from app.services.contas_medicas.validacao_decidida import aprovar_lote
 
 router = APIRouter(prefix="/contas-medicas", tags=["contas-medicas"])
 
@@ -91,6 +93,26 @@ async def decidir(
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from None
 
 
+class Lote(BaseModel):
+    """Os temas que a tela mostrava com a recomendação do Auditor."""
+
+    temas: list[UUID] = Field(max_length=500)
+
+
+@router.post("/validacao/lote")
+@limiter.limit("30/minute")
+async def aprovar_o_lote(
+    request: Request,
+    corpo: Lote,
+    me: dict = Depends(_PODE_DECIDIR),
+    supabase=Depends(get_supabase_client),
+) -> dict:
+    """ "Aprovar o lote" (#1491): cada tema aberto com recomendação recebe a
+    decisão do Auditor pelo caminho do cartão. Devolve os decididos, os que
+    recusaram, com o motivo, e os enviados ao cadastro, para baixar a lista."""
+    return aprovar_lote(supabase, [str(t) for t in corpo.temas], me)
+
+
 @router.post("/validacao/temas/{tema_id}/leitura")
 @limiter.limit("30/minute")
 async def ler_observacao(
@@ -130,6 +152,28 @@ async def enviar_ao_cadastro(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from None
     except DecisaoRecusadaError as exc:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from None
+    return _lista_do_cadastro(supabase, tema)
+
+
+@router.get("/validacao/temas/{tema_id}/cadastro")
+@limiter.limit("30/minute")
+async def baixar_lista_do_cadastro(
+    request: Request,
+    tema_id: UUID,
+    me: dict = Depends(_PODE_DECIDIR),
+    supabase=Depends(get_supabase_client),
+) -> Response:
+    """A lista do tema já enviado ao cadastro, de novo: o aprovado no lote."""
+    try:
+        tema = tema_enviado_ao_cadastro(supabase, str(tema_id))
+    except TemaNaoEncontradoError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from None
+    except DecisaoRecusadaError as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from None
+    return _lista_do_cadastro(supabase, tema)
+
+
+def _lista_do_cadastro(supabase, tema: dict) -> Response:
     nome = f"cadastro-{re.sub(r'[^0-9A-Za-z.-]', '', tema.get('codigo_item') or '') or 'bloqueado'}.csv"
     return Response(
         content="﻿" + csv_do_cadastro(supabase, tema["id"]),
