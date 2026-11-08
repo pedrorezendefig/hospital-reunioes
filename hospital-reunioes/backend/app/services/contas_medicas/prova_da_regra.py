@@ -10,9 +10,12 @@ eventos que a IA leu no Passo A (`cm_eventos.eventos_json.ia`), os itens da
 conta (`cm_conta_item`) e o Guia (`cm_guia_linha`). As Linhas do código entram
 nos CÁLCULOS como entraram na análise, para a IA não repetir o que o código já
 apontou; o teto e as diárias pagas, que o código calcula sobre o prontuário,
-não estão guardados e ficam de fora. A Linha da IA passa pelas mesmas
-conferências do Passo B (regra que a memória tem, período da conta, a mesma
-linha já apontada, regra pendente vira Validar); o preço não entra no diff.
+não estão guardados e ficam de fora. Por isso a devida do consumível com teto
+na Memória não entra no diff: na análise o código trocou a da IA pelo teto, e
+a prova não tem como refazê-lo. A Linha da IA passa pelas mesmas conferências
+do Passo B (regra que a memória tem, período da conta, a mesma linha já
+apontada, regra pendente vira Validar, código pelo dicionário do hospital); o
+preço não entra no diff.
 
 Nada é gravado nas Contas, nas Linhas nem na Memória. Cada chamada fica em
 `cm_chamada_ia` com o passo PROVA, sem a conta: a soma da conta é o custo da
@@ -28,6 +31,7 @@ from typing import Any
 
 from app.services.contas_medicas import ia, passo_b
 from app.services.contas_medicas.conferencia import Conferencia, _codigos_de_diaria
+from app.services.contas_medicas.dicionario import dicionario_do_banco
 from app.services.contas_medicas.memoria_texto import montar_texto_memoria
 from app.services.contas_medicas.regra_nova import regra_candidata
 from app.services.contas_medicas_conta import Conta, ItemConta
@@ -174,26 +178,71 @@ def _chave(linha: dict[str, Any]) -> tuple:
     return (linha["acao"], linha["codigo"], linha["data"], linha["data_fim"], linha["setor"])
 
 
-def _diff(originais: list[dict[str, Any]], novas: list[dict[str, Any]]) -> dict[str, list[dict[str, Any]]]:
+def _parear(antes: list[dict[str, Any]], depois: list[dict[str, Any]]) -> dict[int, int]:
+    """Cada Linha de antes com no máximo uma da prova, de mesma chave, a de mesma
+    descrição primeiro: duas Linhas sem código no mesmo dia e setor não se
+    confundem, e nenhuma some do diff."""
+    pares: dict[int, int] = {}
+    livres = list(range(len(depois)))
+    for mesma_descricao in (True, False):
+        for i, a in enumerate(antes):
+            if i in pares:
+                continue
+            j = next(
+                (
+                    j
+                    for j in livres
+                    if _chave(a) == _chave(depois[j])
+                    and (not mesma_descricao or a["descricao"] == depois[j]["descricao"])
+                ),
+                None,
+            )
+            if j is not None:
+                pares[i] = j
+                livres.remove(j)
+    return pares
+
+
+def _diff(
+    originais: list[dict[str, Any]], novas: list[dict[str, Any]], com_teto: frozenset[str]
+) -> dict[str, list[dict[str, Any]]]:
     """As Linhas da IA de antes contra as da prova, pela mesma chave do reprocesso."""
-    antes = {_chave(_linha(o)): o for o in originais}
-    depois = {_chave(_linha(n)): _linha(n) for n in novas}
+    antes = [_linha(o) for o in originais]
+    depois = [_linha(n) for n in novas]
+    pares = _parear(antes, depois)
     sairiam = [
-        {**_linha(o), "estado": o.get("estado"), "feito": o.get("estado") == "FEITO"}
-        for chave, o in antes.items()
-        if chave not in depois
+        {**a, "estado": originais[i].get("estado"), "feito": originais[i].get("estado") == "FEITO"}
+        for i, a in enumerate(antes)
+        if i not in pares
     ]
-    entrariam = [n for chave, n in depois.items() if chave not in antes]
-    mudariam = [
-        {"antes": {**_linha(antes[chave]), "estado": antes[chave].get("estado")}, "depois": n}
-        for chave, n in depois.items()
-        if chave in antes and any(_linha(antes[chave])[c] != n[c] for c in _O_QUE_MUDA)
-    ]
+    pareadas = set(pares.values())
+    entrariam = [n for j, n in enumerate(depois) if j not in pareadas]
+    mudariam = []
+    for i, j in pares.items():
+        a, n = antes[i], depois[j]
+        if a["codigo"] in com_teto:
+            # Na análise a devida veio do teto, não da IA.
+            n = {**n, "quantidade_devida": a["quantidade_devida"]}
+        if any(a[c] != n[c] for c in _O_QUE_MUDA):
+            mudariam.append({"antes": {**a, "estado": originais[i].get("estado")}, "depois": n})
     return {"entrariam": entrariam, "sairiam": sairiam, "mudariam": mudariam}
 
 
+def _codigos_com_teto(parametros: dict[str, Any]) -> frozenset[str]:
+    return frozenset(
+        str(teto["codigo"])
+        for teto in (parametros.get("tetos_por_dia") or {}).values()
+        if isinstance(teto, dict) and teto.get("codigo")
+    )
+
+
 def _provar_conta(
-    supabase, conta: dict[str, Any], memoria: str, regras: dict[str, dict], parametros: dict
+    supabase,
+    conta: dict[str, Any],
+    memoria: str,
+    regras: dict[str, dict],
+    parametros: dict,
+    dicionario: dict[str, set[str]],
 ) -> dict[str, Any]:
     resumo = {
         "conta_id": conta["id"],
@@ -226,7 +275,7 @@ def _provar_conta(
         regras=regras,
         # O preço não entra no diff: a prova não consulta a tabela.
         preco=lambda *_: "sem preço",
-        dicionario={},
+        dicionario=dicionario,
         diarias=frozenset(_codigos_de_diaria(parametros)),
         bloqueados=passo_b._bloqueados(supabase, resposta),
         # O PDF pode ter saído do sistema: o trecho não é conferido na página.
@@ -235,7 +284,7 @@ def _provar_conta(
         descartadas=[],
     )
     novas = [r for r in map(conferencias.registro, resposta.linhas) if r is not None]
-    diff = _diff(da_ia, novas)
+    diff = _diff(da_ia, novas, _codigos_com_teto(parametros))
     return {**resumo, "refeita": True, "mudaria": any(diff.values()), **diff}
 
 
@@ -277,8 +326,12 @@ def provar_regra(
     por_codigo = {r["codigo"]: r for r in regras}
 
     contas = _ultimas_concluidas(supabase, candidata["operadora_id"])
+    # O mesmo dicionário com que a análise dá código à Linha da IA que veio sem.
+    dicionario = dicionario_do_banco(supabase)
     with ThreadPoolExecutor(max_workers=_EM_PARALELO) as executor:
-        por_conta = list(executor.map(lambda c: _provar_conta(supabase, c, memoria, por_codigo, parametros), contas))
+        por_conta = list(
+            executor.map(lambda c: _provar_conta(supabase, c, memoria, por_codigo, parametros, dicionario), contas)
+        )
     # O texto que a IA escreveu vai para a tela: sem travessão nem meia-risca.
     por_conta = sanitizar_estrutura(por_conta)
 

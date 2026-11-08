@@ -292,6 +292,78 @@ class TestFeitoENaoMudaria:
 
 
 # ═══════════════════════════════════════════════════════════════════════════
+# 2b. A prova refaz a Linha como a análise fez (revisão do PR #1506)
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+class TestComoAAnalise:
+    def test_a_linha_da_ia_sem_codigo_tira_o_codigo_do_dicionario_do_hospital(self, cenario):
+        cliente, banco, provedor = cenario
+        # Na análise, a IA deu a Linha sem código e o dicionário deu o M012.
+        banco.tabelas["cm_item_dicionario"] = [
+            {"termo": "Curativo especial", "codigo_conta": "M012", "situacao": "CONFIRMADO"}
+        ]
+        original = {**_linha_do_guia("c12", "M012", _dia(12), 2.0, estado="FEITO"), "descricao": "Curativo especial"}
+        banco.tabelas["cm_guia_linha"] = [original]
+        sem_codigo = {
+            **_linha_da_ia("", "12/10/2026", 2, regra="ALFA-DIA-01"),
+            "codigo": None,
+            "descricao": "Curativo especial",
+        }
+        provedor.por_codigo = {"M012": [sem_codigo]}
+
+        corpo = cliente.post(_rota(), json=REGRA).json()
+
+        c12 = _da_conta(corpo, "c12")
+        assert c12["entrariam"] == c12["sairiam"] == c12["mudariam"] == []
+        assert corpo["aviso"] == "A regra não mudaria nada nas 10 últimas contas concluídas."
+
+    def test_a_devida_do_consumivel_com_teto_nao_vira_mudanca(self, cenario):
+        cliente, banco, provedor = cenario
+        # O M011 tem teto na Memória: na análise o código trocou a devida 5 da
+        # IA pelo teto, 2. A prova não tem as diárias pagas para refazer o teto.
+        _versao(banco, "ALFA", "1.0")["parametros_json"]["tetos_por_dia"] = {
+            "luva": {"codigo": "M011", "CTI": 2},
+        }
+        banco.tabelas["cm_guia_linha"] = [_linha_do_guia("c11", "M011", _dia(11), 2.0)]
+        provedor.por_codigo = {"M011": [_linha_da_ia("M011", "11/10/2026", 5, regra="ALFA-DIA-01")]}
+
+        corpo = cliente.post(_rota(), json=REGRA).json()
+
+        c11 = _da_conta(corpo, "c11")
+        assert c11["entrariam"] == c11["sairiam"] == c11["mudariam"] == []
+        assert corpo["aviso"] == "A regra não mudaria nada nas 10 últimas contas concluídas."
+
+    def test_duas_linhas_sem_codigo_no_mesmo_dia_e_setor_nao_somem(self, cenario):
+        cliente, banco, provedor = cenario
+        # Duas Linhas sem código no mesmo dia e setor, uma delas já Feita. A IA
+        # devolve só a outra: a Feita sairia e vem marcada.
+        sem_codigo = {"codigo": None, "regra_codigo": "ALFA-DIA-01"}
+        banco.tabelas["cm_guia_linha"] = [
+            {
+                **_linha_do_guia("c12", "X", _dia(12), 1.0, estado="FEITO"),
+                **sem_codigo,
+                "id": "g-1",
+                "descricao": "Oxigenio",
+            },
+            {**_linha_do_guia("c12", "X", _dia(12), 1.0), **sem_codigo, "id": "g-2", "descricao": "Fralda"},
+        ]
+        fralda = {
+            **_linha_da_ia("", "12/10/2026", 1, regra="ALFA-DIA-01"),
+            "codigo": None,
+            "descricao": "Fralda",
+        }
+        provedor.por_codigo = {"M012": [fralda]}
+
+        corpo = cliente.post(_rota(), json=REGRA).json()
+
+        c12 = _da_conta(corpo, "c12")
+        assert [(linha["descricao"], linha["feito"]) for linha in c12["sairiam"]] == [("Oxigenio", True)]
+        assert c12["entrariam"] == c12["mudariam"] == []
+        assert corpo["feitas_que_sumiriam"] == 1
+
+
+# ═══════════════════════════════════════════════════════════════════════════
 # 3. Nada muda nas Contas, nas Linhas nem na Memória
 # ═══════════════════════════════════════════════════════════════════════════
 
