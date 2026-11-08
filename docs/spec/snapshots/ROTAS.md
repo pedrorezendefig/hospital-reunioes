@@ -1,6 +1,6 @@
 # ROTAS.md
 <!-- gerado automaticamente por /snapshot — não editar -->
-<!-- last_update: 2026-11-08T16:25+0000 -->
+<!-- last_update: 2026-11-08T17:08+0000 -->
 
 Endpoints HTTP expostos pelo backend FastAPI do Hospital Reuniões.
 
@@ -89,6 +89,13 @@ Endpoints HTTP expostos pelo backend FastAPI do Hospital Reuniões.
 | POST | `/contas-medicas/contratos/{sigla}` | Os campos confirmados passam a valer, com quem confirmou e quando. | ✅ |
 | GET | `/contas-medicas/contratos/{sigla}/arquivo` | O contrato ou o aditivo confirmado da operadora. | ✅ |
 | POST | `/contas-medicas/contratos/{sigla}/arquivo` | Guarda o contrato ou o aditivo e devolve os campos que a IA leu, para a | ✅ |
+
+## contas-medicas (`app/routers/contas_medicas_conversa.py`)
+
+| Método | Rota | O que faz | Auth |
+|--------|------|-----------|------|
+| GET | `/contas-medicas/operadoras/{sigla}/conversa` | As falas da conversa da Operadora e o lote aberto. | ✅ |
+| POST | `/contas-medicas/operadoras/{sigla}/conversa` | A mensagem ao Auditor. Devolve a conversa como fica e, no ok, a versão | ✅ |
 
 ## contas-medicas (`app/routers/contas_medicas_coordenacao.py`)
 
@@ -509,4 +516,4 @@ Endpoints HTTP expostos pelo backend FastAPI do Hospital Reuniões.
 
 ---
 
-**Totais:** 283 endpoints em 44 routers · 94% exigem auth.
+**Totais:** 285 endpoints em 45 routers · 94% exigem auth.
