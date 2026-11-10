@@ -359,7 +359,8 @@ export type TipoNotificacao =
   | "PRAZO_PROXIMO"
   | "RESPONSAVEL_ATRIBUIDO"
   | "ACEITE_INTERNO"
-  | "CONTAS_MEDICAS";
+  | "CONTAS_MEDICAS"
+  | "TECNOLOGIA";
 
 export interface Notificacao {
   id: string;

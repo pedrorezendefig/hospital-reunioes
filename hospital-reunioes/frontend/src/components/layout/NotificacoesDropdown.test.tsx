@@ -111,6 +111,24 @@ describe("aviso de Contas médicas no sino", () => {
   });
 });
 
+describe("aviso da Conversa da Demanda no sino (#1537)", () => {
+  it("abre a Demanda na aba Tecnologia", async () => {
+    notificacoes = [
+      aviso({
+        tipo: "TECNOLOGIA",
+        titulo: "Pedro Vitta escreveu na Demanda",
+        mensagem: "O relatório some",
+        referencia_id: "d-42",
+      }),
+    ];
+
+    await clicarNoAviso("Pedro Vitta escreveu na Demanda");
+
+    await waitFor(() => expect(navegacao.push).toHaveBeenCalledWith("/admin/tecnologia?demanda=d-42"));
+    expect(navegacao.push).toHaveBeenCalledTimes(1);
+  });
+});
+
 describe("painel do sino quando a lista falha (#1430)", () => {
   it("não diz 'Sem notificações' com o sino marcando avisos", async () => {
     vi.stubGlobal(

@@ -13,6 +13,7 @@ import {
   UserCheck,
   PenLine,
   Receipt,
+  Cpu,
   X,
 } from "lucide-react";
 import { Notificacao } from "@/types";
@@ -25,6 +26,7 @@ const TIPO_CONFIG: Record<string, { icon: typeof Bell; color: string; bg: string
   RESPONSAVEL_ATRIBUIDO: { icon: UserCheck, color: "text-emerald-600", bg: "bg-emerald-50" },
   ACEITE_INTERNO: { icon: PenLine, color: "text-amber-600", bg: "bg-amber-50" },
   CONTAS_MEDICAS: { icon: Receipt, color: "text-emerald-600", bg: "bg-emerald-50" },
+  TECNOLOGIA: { icon: Cpu, color: "text-primary", bg: "bg-primary/10" },
 };
 
 const POLL_INTERVAL_MS = 30000;
@@ -140,13 +142,16 @@ export function NotificacoesDropdown() {
     // destinatário e mantém o banco hash-only. O aviso de Contas médicas
     // guarda o envio e leva à fila de contas, onde estão os guias (#1124);
     // o aviso de reajuste guarda "contrato:<aviso>" e leva à tela Contratos
-    // (#1144), que o credenciamento abre e a fila não.
+    // (#1144), que o credenciamento abre e a fila não. O aviso da Conversa da
+    // Demanda guarda a Demanda e a abre na aba Tecnologia (#1537).
     if (notif.referencia_id) {
       setOpen(false);
       if (notif.tipo === "CONTAS_MEDICAS" && notif.referencia_id.startsWith("contrato:")) {
         router.push("/contas-medicas/contratos");
       } else if (notif.tipo === "CONTAS_MEDICAS") {
         router.push("/contas-medicas");
+      } else if (notif.tipo === "TECNOLOGIA") {
+        router.push(`/admin/tecnologia?demanda=${encodeURIComponent(notif.referencia_id)}`);
       } else if (notif.tipo === "ACEITE_INTERNO") {
         await irParaOAceite(notif.referencia_id);
       } else {
