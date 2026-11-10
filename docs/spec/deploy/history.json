@@ -2,6 +2,54 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-11-10T00:51:10-03:00",
+      "sha": "e76a5c270fc832ae9c912db92b7a7f18e2ec0ac5",
+      "app_version": "0.238.0",
+      "subject": "Onda anexo-onda2: Planilha .xlsx e .csv no chat da Tecnologia",
+      "raw_subject": "chore(deploy): registro da onda anexo-onda2 (#1526)",
+      "scope": [
+        "backend",
+        "frontend"
+      ],
+      "prds": [
+        1519
+      ],
+      "result": "healthy",
+      "duration_seconds": 205,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        },
+        {
+          "service": "frontend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "onda-enxuta anexo-onda2: PR #1526 (issue #1521), mergeados PR a PR. Merge pela API do GitHub, um build. Registro pela Action pos-merge depois do health.",
+      "etapas": {
+        "merge_s": 3,
+        "build_s": {
+          "backend": 29,
+          "frontend": 178
+        },
+        "health_s": 0
+      },
+      "responsavel": "pedrorezendefig"
+    },
+    {
       "at": "2026-11-10T00:35:12-03:00",
       "sha": "3773c05c2bffe0a31b36ddbb9fb295300b017a2f",
       "app_version": "0.237.0",
