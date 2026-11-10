@@ -1047,7 +1047,7 @@ class TestAsGuardasDoIsolamento:
         """
         capturado: dict[str, str] = {}
 
-        def _espiar_o_nome_da_thread(filename: str, file_bytes: bytes):
+        def _espiar_o_nome_da_thread(filename: str, file_bytes: bytes, extensoes=None):
             capturado["thread"] = threading.current_thread().name
             return "texto qualquer para a rota devolver", ".docx"
 
@@ -1083,10 +1083,11 @@ class TestAsGuardasDoIsolamento:
 
         Tudo em `SUPPORTED_EXTENSIONS` roda isolado por padrão; a exceção é lista
         fechada. Pôr um formato aqui exige provar que ele não tem parser nenhum
-        no caminho, porque é o que dispensa o processo separado.
+        no caminho, porque é o que dispensa o processo separado. O `.csv`
+        (issue #1521) entrou assim: é `bytes.decode`, sem leitor de CSV.
         """
-        assert extrator.FORMATOS_DE_TEXTO_PURO == {".txt", ".md"}
-        assert extrator.FORMATOS_DE_TEXTO_PURO < extrator.SUPPORTED_EXTENSIONS
+        assert extrator.FORMATOS_DE_TEXTO_PURO == {".txt", ".md", ".csv"}
+        assert extrator.FORMATOS_DE_TEXTO_PURO < extrator.SUPPORTED_EXTENSIONS | extrator.FORMATOS_DE_PLANILHA
 
     # Rodar sozinho (issue #971): este teste e o de baixo comparam as pastas
     # `extracao-*` do tempdir da MÁQUINA antes e depois de uma extração. Em

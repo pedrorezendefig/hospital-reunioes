@@ -142,3 +142,95 @@ class TestOAgenteLeAPlanilha:
         assert SO_NA_SEGUNDA in _conversas(sb)[0]["mensagens"][-2]["documentos"][0]["texto"]
         [anexo] = sb.tabelas["tecnologia_anexos"]
         assert anexo["content_type"] == tipo
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 2. O parser do .xlsx roda isolado
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+class TestOParserIsolado:
+    """O orcamento do filho so morde quem roda no filho: lido aqui dentro, o
+    `.xlsx` passaria pelos dois tetos encolhidos e voltaria 200."""
+
+    @pytest.mark.parametrize("estouro", ["memoria", "prazo"])
+    def test_xlsx_que_estoura_o_orcamento_vira_recusa_e_o_worker_segue_atendendo(self, monkeypatch, estouro):
+        client, _, _ = _cenario(monkeypatch)
+        # O vigia olha o filho a cada 10 ms: nenhum interpretador sobe o
+        # `openpyxl` nesse tempo, entao o teto encolhido morde sempre.
+        monkeypatch.setattr(transcricao_extractor, "INTERVALO_DE_VIGIA", 0.01)
+        if estouro == "memoria":
+            monkeypatch.setattr(transcricao_extractor, "TETO_DE_MEMORIA_DO_FILHO", 1)
+            monkeypatch.setattr(transcricao_extractor, "PRAZO_DA_EXTRACAO", 300.0)
+        else:
+            monkeypatch.setattr(transcricao_extractor, "PRAZO_DA_EXTRACAO", 0.0)
+
+        resposta = _ler(client, "glosas.xlsx", _xlsx(DUAS_ABAS))
+
+        assert resposta.status_code == 422
+        assert resposta.json()["detail"] == tecnologia_anexos.MOTIVO_DOCUMENTO_COMPLEXO
+        assert tecnologia_anexos._prints == {}
+        # O worker nao caiu: a proxima leitura, sem parser, entra.
+        assert _ler(client, "glosas.csv", b"Motivo\nGlosa\n").status_code == 200
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 3. Os tetos e as recusas
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+class TestRecusas:
+    @pytest.mark.parametrize(("nome", "teto_em_mb"), [("a.csv", 5), ("a.xlsx", 15)])
+    def test_planilha_acima_do_teto_do_tipo_e_recusada_com_413(self, monkeypatch, nome, teto_em_mb):
+        client, _, _ = _cenario(monkeypatch)
+
+        resposta = _ler(client, nome, b"x" * (teto_em_mb * 1024 * 1024 + 1))
+
+        assert resposta.status_code == 413
+        assert resposta.json()["detail"] == (
+            f"O arquivo {nome[1:]} passou do limite de {teto_em_mb} MB. "
+            "Divida o documento em partes menores e mande uma de cada vez."
+        )
+
+    def test_csv_no_teto_cravado_nao_e_recusado_pelo_tamanho(self, monkeypatch):
+        """5 MB cravados passam pelo tamanho e caem no teto de caracteres, que
+        e outra frase e outro status."""
+        client, _, _ = _cenario(monkeypatch)
+
+        resposta = _ler(client, "a.csv", b"x" * (5 * 1024 * 1024))
+
+        assert resposta.status_code == 422
+        assert resposta.json()["detail"] == tecnologia_anexos.MOTIVO_TEXTO_GRANDE
+
+    def test_xlsx_com_mais_de_cem_mil_caracteres_pede_para_dividir(self, monkeypatch):
+        client, _, _ = _cenario(monkeypatch)
+        grande = _xlsx({"Linhas": [[f"linha {i:06d}", "x" * 40] for i in range(2500)]})
+
+        resposta = _ler(client, "grande.xlsx", grande)
+
+        assert resposta.status_code == 422
+        assert resposta.json()["detail"] == tecnologia_anexos.MOTIVO_TEXTO_GRANDE
+
+    def test_xlsx_que_nao_abre_tem_a_frase_do_arquivo_ilegivel(self, monkeypatch):
+        client, _, _ = _cenario(monkeypatch)
+
+        resposta = _ler(client, "quebrada.xlsx", b"isto nao e um zip")
+
+        assert resposta.status_code == 422
+        assert resposta.json()["detail"] == tecnologia_anexos.MOTIVO_DOCUMENTO_ILEGIVEL
+
+    @pytest.mark.parametrize("nome", ["antiga.xls", "ANTIGA.XLS"])
+    def test_xls_antigo_e_recusado_com_a_frase_que_pede_para_salvar_como_xlsx(self, monkeypatch, nome):
+        client, _, _ = _cenario(monkeypatch)
+
+        resposta = client.post(URL_DO_DOCUMENTO, files={"documento": (nome, b"\xd0\xcf\x11\xe0", XLSX)})
+
+        assert resposta.status_code == 422
+        assert resposta.json()["detail"] == (
+            "Planilha no formato antigo (.xls) não entra. Abra no Excel, salve como .xlsx e anexe de novo."
+        )
+
+    def test_a_frase_do_tipo_fora_da_lista_diz_que_a_planilha_entra(self):
+        frase = assistente_tecnologia.MOTIVO_TIPO_FORA_DA_LISTA
+
+        assert "documento (.md, .txt, .pdf, .docx, .csv ou .xlsx)" in frase

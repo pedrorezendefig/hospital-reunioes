@@ -405,6 +405,11 @@ MOTIVO_DOCUMENTO_COMPLEXO = (
     "Esse documento é grande ou complexo demais para o sistema ler de uma vez. O arquivo não tem defeito: "
     "divida o documento em partes menores e mande uma de cada vez, ou cole o texto na conversa."
 )
+# O Excel 97-2003 e binario proprio, sem parser isolado aqui (issue #1521): a
+# frase diz a saida, que esta na mao de quem tem o arquivo.
+MOTIVO_PLANILHA_ANTIGA = (
+    "Planilha no formato antigo (.xls) não entra. Abra no Excel, salve como .xlsx e anexe de novo."
+)
 MOTIVO_DOCUMENTO_SUMIU = (
     "O documento não está mais guardado: passou o prazo ou o sistema reiniciou. Anexe o arquivo de novo."
 )
@@ -418,6 +423,8 @@ def extensao_do_documento(nome: str) -> str:
     recusa-lo pelo nome.
     """
     extensao = os.path.splitext(nome or "")[1].lower()
+    if extensao == ".xls":
+        raise AnexoRecusadoError(MOTIVO_PLANILHA_ANTIGA)
     tipo = TIPOS_DE_ANEXO.get(extensao)
     if tipo is None or tipo.classe != "documento":
         raise AnexoRecusadoError(MOTIVO_TIPO_FORA_DA_LISTA)

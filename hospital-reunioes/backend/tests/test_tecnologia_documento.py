@@ -244,7 +244,7 @@ class TestConversaRetomada:
 
 
 class TestRecusas:
-    @pytest.mark.parametrize("nome", ["planilha.xlsx", "antigo.doc", "tela.png", "sem-extensao"])
+    @pytest.mark.parametrize("nome", ["dados.ods", "antigo.doc", "tela.png", "sem-extensao"])
     def test_tipo_fora_da_lista_e_recusado_com_a_frase_que_diz_o_que_entra(self, monkeypatch, nome):
         client, _, _ = _cenario(monkeypatch)
 
@@ -325,7 +325,7 @@ class TestRecusas:
 
         client, _, _ = _cenario(monkeypatch)
 
-        async def _interrompido(nome, conteudo):
+        async def _interrompido(nome, conteudo, extensoes=None):
             raise ValueError(transcricao_extractor.MENSAGEM_GRANDE_DEMAIS)
 
         monkeypatch.setattr(transcricao_extractor, "extrair_texto_async", _interrompido)
@@ -658,16 +658,18 @@ class TestUmaTabelaSo:
             for extensao, tipo in assistente_tecnologia.TIPOS_DE_ANEXO.items()
         }
 
-    def test_a_tabela_tem_os_quatro_documentos_e_a_imagem_continua_em_3_75_mb(self):
-        """Ancora contra a tabela que encolhesse junto com o espelho."""
+    def test_a_tabela_tem_os_documentos_e_as_planilhas_e_a_imagem_continua_em_3_75_mb(self):
+        """Ancora contra a tabela que encolhesse junto com o espelho. A
+        planilha conta como documento desde a issue #1521."""
         tipos = assistente_tecnologia.TIPOS_DE_ANEXO
 
-        assert {e for e, t in tipos.items() if t.classe == "documento"} == {".md", ".txt", ".pdf", ".docx"}
         assert {e: t.teto_bytes for e, t in tipos.items() if t.classe == "documento"} == {
             ".md": 5 * 1024 * 1024,
             ".txt": 5 * 1024 * 1024,
             ".pdf": 15 * 1024 * 1024,
             ".docx": 15 * 1024 * 1024,
+            ".csv": 5 * 1024 * 1024,
+            ".xlsx": 15 * 1024 * 1024,
         }
         assert {t.teto_bytes for t in tipos.values() if t.classe == "imagem"} == {3932160}
         assert assistente_tecnologia.TIPOS_DE_IMAGEM == {
