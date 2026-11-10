@@ -15,8 +15,10 @@ from __future__ import annotations
 
 import json
 import re
+from contextlib import contextmanager
 from pathlib import Path
 
+import httpx
 import httpx2
 import pytest
 from anthropic_apoio import cliente_por_transporte, mensagem
@@ -143,6 +145,28 @@ def _conta_concluida_com_eventos(banco: _Banco) -> None:
         }
     ]
     banco.tabelas.setdefault("cm_prova", [])
+
+
+@contextmanager
+def _leitura_quebrada(banco, tabela: str):
+    """O PostgREST que estoura o prazo dentro do `execute` da `tabela`."""
+    original = banco.table
+
+    def table(nome: str):
+        consulta = original(nome)
+        if nome == tabela:
+
+            def execute():
+                raise httpx.ReadTimeout("o banco não respondeu")
+
+            consulta.execute = execute
+        return consulta
+
+    banco.table = table
+    try:
+        yield
+    finally:
+        del banco.table
 
 
 def _tres_temas(banco: _Banco) -> dict[str, dict]:
@@ -519,6 +543,16 @@ class TestOBotao:
 
         assert resposta.status_code == 409
         assert provedor.pedidos == []
+
+    def test_banco_que_cai_no_clique_nao_prende_o_botao(self, provedor):
+        banco = _cenario()
+        _tres_temas(banco)
+
+        with _leitura_quebrada(banco, "cm_validacao_tema"), pytest.raises(httpx.ReadTimeout):
+            _cliente(banco, "gestao").post(ROTA_DO_PEDIDO)
+
+        assert _cliente(banco, "gestao").get(ROTA_DO_PEDIDO).json()["em_andamento"] is False
+        assert _cliente(banco, "gestao").post(ROTA_DO_PEDIDO).status_code == 202
 
     def test_sem_tema_sem_recomendacao_o_clique_nao_chama_a_ia(self, provedor):
         banco = _cenario()

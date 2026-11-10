@@ -85,7 +85,12 @@ async def pedir_releitura(
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT, detail="O segundo agente já está relendo. Espere terminar."
         )
-    pedido = revisor.pedido_de_releitura(supabase)
+    try:
+        pedido = revisor.pedido_de_releitura(supabase)
+    except Exception:
+        # O banco que cai aqui não pode deixar o botão preso no "relendo".
+        revisor.liberar()
+        raise
     if not pedido["contas"]:
         revisor.liberar()
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Nenhuma conta concluída aguarda releitura.")

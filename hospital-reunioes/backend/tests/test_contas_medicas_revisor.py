@@ -20,6 +20,7 @@ import json
 import re
 from typing import Any
 
+import httpx
 import httpx2
 import pytest
 from anthropic_apoio import cliente_por_transporte, erro, mensagem
@@ -27,6 +28,7 @@ from test_contas_medicas_memoria_tela import _importar, _versao
 from test_contas_medicas_operadoras import FATURISTA, GESTAO
 from test_contas_medicas_prova_da_regra import KIT, _passos_do_check, _semear
 from test_contas_medicas_regra_nova import _cliente
+from test_contas_medicas_validacao_decidida import _leitura_quebrada
 
 from app.routers import contas_medicas_painel as painel_router
 from app.services.contas_medicas import ia, revisor
@@ -221,6 +223,16 @@ class TestOBotaoDoPainel:
 
         assert resposta.status_code == 409
         assert provedor.pedidos == []
+
+    def test_banco_que_cai_no_clique_nao_prende_o_botao(self, cenario):
+        banco, provedor = cenario
+
+        with _leitura_quebrada(banco, "cm_conta"), pytest.raises(httpx.ReadTimeout):
+            _no_painel(banco).post(ROTA_DO_SEGUNDO_AGENTE)
+
+        assert _no_painel(banco).get(ROTA_DO_SEGUNDO_AGENTE).json()["em_andamento"] is False
+        assert _no_painel(banco).post(ROTA_DO_SEGUNDO_AGENTE).status_code == 202
+        assert len(_revisadas(banco)) == 10
 
     def test_so_quem_tem_o_painel_completo_chama_o_segundo_agente(self, cenario):
         banco, provedor = cenario

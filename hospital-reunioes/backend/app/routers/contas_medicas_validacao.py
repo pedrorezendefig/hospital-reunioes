@@ -151,7 +151,12 @@ async def pedir_recomendacao(
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT, detail="O Auditor já está recomendando a fila. Espere terminar."
         )
-    pedido = validacao_decidida.pedido_de_recomendacao(supabase)
+    try:
+        pedido = validacao_decidida.pedido_de_recomendacao(supabase)
+    except Exception:
+        # O banco que cai aqui não pode deixar o botão preso no "recomendando".
+        validacao_decidida.liberar()
+        raise
     if not pedido["temas"]:
         validacao_decidida.liberar()
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Nenhum tema aguarda recomendação.")
