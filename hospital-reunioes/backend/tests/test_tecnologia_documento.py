@@ -18,8 +18,10 @@ from __future__ import annotations
 import io
 import json
 import os
+import re
 import sys
 import zipfile
+from pathlib import Path
 
 import pytest
 
@@ -562,3 +564,54 @@ class TestMelhoriaComDocumento:
         resposta = client.post(f"{CHAT}/{demanda_id}", json={"opcao": "A", "documentos": [lido["documento_id"]]})
 
         assert resposta.status_code == 422
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 7. A migration: o banco aceita o que o código grava
+# ═══════════════════════════════════════════════════════════════════════════
+
+MIGRATION = Path(__file__).resolve().parents[2] / "supabase" / "migrations" / "127_tecnologia_documento_no_chat.sql"
+
+
+class TestMigracao:
+    """O SQL e colado a mao no Studio: e lido aqui como texto, contra a tabela
+    de tipos do codigo, que e o que o `anexar` grava."""
+
+    @pytest.fixture
+    def sql(self) -> str:
+        return MIGRATION.read_text(encoding="utf-8")
+
+    def _check(self, sql: str, coluna: str) -> str:
+        nome = f"tecnologia_anexos_{coluna}_check"
+        assert f"ALTER TABLE tecnologia_anexos DROP CONSTRAINT IF EXISTS {nome};" in sql
+        achado = re.search(rf"ADD CONSTRAINT {nome}\s+CHECK \((.*?)\);", sql, re.DOTALL)
+        assert achado, f"a migration nao recria {nome}"
+        assert sql.find(f"DROP CONSTRAINT IF EXISTS {nome}") < achado.start()
+        return achado.group(1)
+
+    def test_o_check_do_content_type_aceita_todo_tipo_que_o_codigo_grava(self, sql):
+        aceitos = set(re.findall(r"'([^']+)'", self._check(sql, "content_type")))
+
+        assert {t.content_type for t in assistente_tecnologia.TIPOS_DE_ANEXO.values()} <= aceitos
+        # A planilha da fatia seguinte (#1521) ja entra, para ela nao pedir
+        # outra parada no Studio.
+        assert "text/csv" in aceitos
+        assert "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" in aceitos
+
+    def test_o_check_do_tamanho_vai_ate_15_mb(self, sql):
+        check = self._check(sql, "tamanho_bytes")
+
+        assert re.fullmatch(r"\s*tamanho_bytes > 0 AND tamanho_bytes <= 15728640\s*", check), check
+        assert max(t.teto_bytes for t in assistente_tecnologia.TIPOS_DE_ANEXO.values()) == 15728640
+
+    def test_nenhuma_tabela_nova_e_o_texto_da_fala_fica_documentado(self, sql):
+        assert "CREATE TABLE" not in sql
+        comentario = re.search(r"COMMENT ON COLUMN tecnologia_planejamentos\.mensagens IS\s*'(.*?)';", sql, re.DOTALL)
+        assert comentario, "a migration nao documenta o campo do texto extraido na fala"
+        assert "documentos" in comentario.group(1)
+        assert "texto" in comentario.group(1)
+
+    def test_termina_gravando_o_proprio_numero(self, sql):
+        assert sql.rstrip().endswith(
+            "INSERT INTO migracoes_aplicadas (numero) VALUES (127) ON CONFLICT (numero) DO NOTHING;"
+        )
