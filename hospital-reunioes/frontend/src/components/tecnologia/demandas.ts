@@ -79,6 +79,8 @@ export type Demanda = {
   autor?: string | null;
   issue_numero?: number | null;
   issue_url?: string | null;
+  /** Quem cuida do card (ADR 0083, decisão 5), para todos. Nulo enquanto o card não nasceu. */
+  responsavel?: string | null;
 };
 
 export type Classificacao = "bug" | "melhoria";
