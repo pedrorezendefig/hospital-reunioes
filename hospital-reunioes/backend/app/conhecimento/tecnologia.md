@@ -14,7 +14,7 @@ Para responder e para perguntar, a IA consulta o que já existe na plataforma: c
 
 No bug, a IA faz no máximo cinco perguntas, uma por vez: onde aconteceu, o que aconteceu, o que você esperava, como repetir e, se você tiver, o print da tela. Ela pula o que você já contou. O print vai pelo botão de anexo da conversa e fica guardado como anexo na hora em que você manda, sem nunca sair do aplicativo. O que você não respondeu aparece como "não informado".
 
-Pelo mesmo botão de anexo entra um documento: um texto, um PDF ou um arquivo do Word, em qualquer ponto da conversa, no bug ou na melhoria. Na conversa aparece só o nome e o tamanho do arquivo, e a IA lê o documento inteiro antes de responder, sem perguntar o que ele já diz. Um documento com várias melhorias continua sendo um pedido só, que a Vitta divide em partes depois. Se ele mistura sistemas que não têm nada a ver um com o outro, a IA avisa e sugere uma conversa para cada assunto. Nas respostas seguintes, mesmo numa conversa retomada pela lista, a IA continua lendo o documento.
+Pelo mesmo botão de anexo entra um documento: um texto, um PDF, um arquivo do Word ou uma planilha do Excel, em qualquer ponto da conversa, no bug ou na melhoria. Na conversa aparece só o nome e o tamanho do arquivo, e a IA lê o documento inteiro antes de responder, sem perguntar o que ele já diz. Um documento com várias melhorias continua sendo um pedido só, que a Vitta divide em partes depois. Se ele mistura sistemas que não têm nada a ver um com o outro, a IA avisa e sugere uma conversa para cada assunto. Nas respostas seguintes, mesmo numa conversa retomada pela lista, a IA continua lendo o documento.
 
 No fim, a IA mostra um resumo com o que você disse e com os critérios que dizem como se sabe que o bug foi resolvido. Se estiver certo, o botão **Criar o card** manda o bug para o desenvolvimento da Vitta, que começa a trabalhar nele sem ninguém precisar assumir antes. Se alguma coisa estiver errada, o botão **Não bateu** pede para você dizer o quê, a conversa continua e o resumo é refeito. Nada vai para a Vitta antes do clique em Criar o card.
 
@@ -43,9 +43,10 @@ Não chame de pendência, tarefa nem chamado. Pendência é outra coisa no aplic
 Os anexos são prints de tela e documentos guardados junto da Demanda, para quem vai resolver ver o que você viu e ler o que você escreveu. Entram:
 
 - print de tela em .png, .jpg, .jpeg ou .webp, de até 3,75 MB;
-- documento em .md ou .txt, de até 5 MB, e em .pdf ou .docx (Word), de até 15 MB. O texto do documento pode ter até 100 mil caracteres; acima disso a tela pede para dividir o arquivo em partes.
+- documento em .md ou .txt, de até 5 MB, e em .pdf ou .docx (Word), de até 15 MB. O texto do documento pode ter até 100 mil caracteres; acima disso a tela pede para dividir o arquivo em partes;
+- planilha em .csv, de até 5 MB, e em .xlsx (Excel), de até 15 MB. A planilha conta como documento: a IA lê todas as abas, cada uma com o nome dela, até o mesmo limite de 100 mil caracteres. Planilha maior que isso a tela pede para dividir.
 
-São até 10 anexos por Demanda, somando prints e documentos. O PDF que é foto de papel, sem texto para ler, não entra como documento: mande as páginas como print. O arquivo .doc antigo também não entra; salve como .docx ou PDF. A tela recusa o arquivo fora da lista ou grande demais antes de enviar, com a frase que diz o que fazer.
+São até 10 anexos por Demanda, somando prints e documentos. O PDF que é foto de papel, sem texto para ler, não entra como documento: mande as páginas como print. O arquivo .doc antigo também não entra; salve como .docx ou PDF. A planilha no formato antigo (.xls) não entra; salve como .xlsx no Excel e mande de novo. A tela recusa o arquivo fora da lista ou grande demais antes de enviar, com a frase que diz o que fazer.
 
 O anexo entra pelo botão de anexo da conversa com o Assistente e vira anexo da Demanda na hora em que você manda. Se algum não entrar, a tela avisa, e é só mandar de novo na conversa.
 

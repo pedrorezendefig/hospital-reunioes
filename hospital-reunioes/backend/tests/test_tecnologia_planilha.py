@@ -23,7 +23,9 @@ from openpyxl import Workbook
 sys.path.insert(0, os.path.dirname(__file__))
 
 from test_tecnologia_chat import (  # noqa: E402
+    CAMPOS_RESPONDIDOS,
     CHAT,
+    CRITERIOS,
     _cenario,
     _comecar,
     _conversas,
@@ -234,3 +236,53 @@ class TestRecusas:
         frase = assistente_tecnologia.MOTIVO_TIPO_FORA_DA_LISTA
 
         assert "documento (.md, .txt, .pdf, .docx, .csv ou .xlsx)" in frase
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 4. A frase da issue conta a planilha como documento
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+class TestAFraseDaIssue:
+    def test_o_card_do_bug_conta_as_planilhas_como_documento_e_nao_leva_trecho_delas(self, monkeypatch):
+        client, _, gh = _cenario(monkeypatch)
+        demanda_id = _comecar(client, monkeypatch)
+        planilhas = [
+            _ler(client, "glosas.xlsx", _xlsx(DUAS_ABAS)).json()["documento_id"],
+            _ler(client, "glosas.csv", f"Motivo\n{SO_NA_SEGUNDA}\n".encode()).json()["documento_id"],
+        ]
+        _ia(monkeypatch, _turno(mensagem="Como repetir?"))
+        assert client.post(f"{CHAT}/{demanda_id}", json={"documentos": planilhas}).status_code == 200
+        _ia(monkeypatch, _turno(pronto=True, campos=CAMPOS_RESPONDIDOS, criterios=CRITERIOS))
+        assert client.post(f"{CHAT}/{demanda_id}", json={"texto": "Abrindo o caso"}).status_code == 200
+
+        assert client.post(f"{CHAT}/{demanda_id}/criar-card").status_code == 200
+
+        corpo = gh.criadas[0]["corpo"]
+        assert "Anexos: 2 documentos na Demanda" in corpo
+        for vestigio in (SO_NA_SEGUNDA, "glosas.xlsx", "glosas.csv", "Glosas de outubro"):
+            assert vestigio not in corpo, vestigio
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 5. O Kit de conhecimento diz o comportamento novo
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+class TestKitDaTecnologia:
+    def test_o_kit_diz_que_a_planilha_entra_com_o_teto_e_o_que_fazer_com_o_xls(self):
+        texto = (CONHECIMENTO_DIR / "tecnologia.md").read_text(encoding="utf-8")
+
+        secao = texto.split("## Os anexos da Demanda", 1)[1].split("\n## ", 1)[0]
+        for trecho in (
+            "planilha em .csv, de até 5 MB, e em .xlsx (Excel), de até 15 MB",
+            "lê todas as abas",
+            "A planilha no formato antigo (.xls) não entra; salve como .xlsx",
+        ):
+            assert trecho in secao, trecho
+
+    def test_o_kit_diz_na_conversa_que_a_planilha_entra_pelo_mesmo_botao(self):
+        texto = (CONHECIMENTO_DIR / "tecnologia.md").read_text(encoding="utf-8")
+
+        secao = texto.split("## A conversa com o Assistente", 1)[1].split("\n## ", 1)[0]
+        assert "uma planilha do Excel" in secao
