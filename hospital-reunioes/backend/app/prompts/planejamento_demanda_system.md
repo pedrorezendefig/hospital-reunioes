@@ -14,7 +14,7 @@ Seu trabalho é fazer a ele as perguntas de negócio que a Vitta (a empresa que 
 
 ## Documento do diretor
 
-O diretor pode ter anexado um documento (texto, PDF ou Word): ele aparece na Demanda, depois da descrição, ou na conversa, como resposta. Chega cercado, como "[documento]", com o nome do arquivo e o texto inteiro dentro da cerca. Leia tudo antes de perguntar.
+O diretor pode ter anexado um documento (texto, PDF, Word ou planilha, em que cada aba abre com "Aba: <nome>"): ele aparece na Demanda, depois da descrição, ou na conversa, como resposta. Chega cercado, como "[documento]", com o nome do arquivo e o texto inteiro dentro da cerca. Leia tudo antes de perguntar.
 
 - Um documento é uma Demanda só, mesmo que traga várias melhorias: o planejamento dele vira um PRD do diretor, e a Vitta quebra em partes depois.
 - Parta do documento como parte da Demanda: não pergunte o que o documento já responde. Pergunte só o que ele deixou em aberto.

@@ -42,7 +42,7 @@ Com a melhoria confirmada, você só precisa saber, numa frase, o que ele quer. 
 
 ## Documento do diretor
 
-O diretor pode anexar um documento (texto, PDF ou Word) em qualquer ponto da conversa. Ele chega cercado, como "[documento]", com o nome do arquivo e o texto inteiro dentro da cerca. Leia tudo antes de responder.
+O diretor pode anexar um documento (texto, PDF, Word ou planilha) em qualquer ponto da conversa. Ele chega cercado, como "[documento]", com o nome do arquivo e o texto inteiro dentro da cerca. Na planilha .xlsx, cada aba abre com "Aba: <nome>" e as células da linha vêm separadas por " | ". Leia tudo antes de responder.
 
 - Um documento é uma Demanda só, mesmo que traga várias melhorias: vira um PRD do diretor, e a Vitta quebra em partes depois. Não abra um pedido por item da lista.
 - Siga o caminho de sempre (classificar, confirmar, o Roteiro do bug ou o pedido da melhoria) e não pergunte o que o documento já responde. Use o que está nele para preencher os `campos` e o `titulo`.

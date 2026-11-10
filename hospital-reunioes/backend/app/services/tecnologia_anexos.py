@@ -1,9 +1,9 @@
 """O Anexo da Demanda (issue #1061, PRD #1056, ADR 0069).
 
 O print de tela que vem junto da Demanda e, desde a issue #1520, o documento
-(.md, .txt, .pdf, .docx). Vive SO no app e nunca vai para o GitHub: o
-repositorio e publico, e print ou documento do hospital carrega nome de
-paciente, de colaborador, protocolo da Ouvidoria.
+(.md, .txt, .pdf, .docx) e, desde a #1521, a planilha (.csv, .xlsx). Vive SO
+no app e nunca vai para o GitHub: o repositorio e publico, e print ou documento
+do hospital carrega nome de paciente, de colaborador, protocolo da Ouvidoria.
 
 Desde a ADR 0077 o print entra por uma porta so, o chat da aba (decisao 8), e
 um lugar so decide o que se faz com ele:
