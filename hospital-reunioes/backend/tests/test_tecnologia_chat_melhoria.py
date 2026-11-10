@@ -386,7 +386,7 @@ class TestCriarOCardDaMelhoria:
         assert resposta.status_code == 200, resposta.text
         assert resposta.json()["estado"] == "enviado"
         [issue] = gh.criadas
-        assert sorted(issue["labels"]) == ["needs-triage", "type:feature"]
+        assert sorted(issue["labels"]) == ["needs-triage", "origem:diretor", "type:feature"]
         assert issue["titulo"] == "Agenda de retorno na recepção"
         cabecalhos = re.findall(r"^## (.+)$", issue["corpo"], re.MULTILINE)
         assert cabecalhos == [

@@ -802,6 +802,12 @@ LABEL_PRONTA_PARA_AGENTE = "ready-for-agent"
 # PR do app (`LABELS_DO_APP` do painel, `docs/agents/triage-labels.md`).
 LABELS_DO_BUG = [LABEL_PRONTA_PARA_AGENTE, LABEL_DO_TIPO["defeito"]]
 
+# A label do card que o diretor criou na aba Tecnologia, bug ou melhoria (ADR
+# 0083, decisao 9). E por ela que o Hospital OS reconhece o card. Fica fora do
+# `LABELS_DO_BUG` porque o Faltou isto das Contas medicas usa a mesma lista e
+# nao vem do diretor.
+LABEL_ORIGEM_DIRETOR = "origem:diretor"
+
 
 def corpo_da_issue_do_bug(
     *,
