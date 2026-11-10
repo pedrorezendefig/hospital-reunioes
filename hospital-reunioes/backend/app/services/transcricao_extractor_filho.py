@@ -1,4 +1,4 @@
-"""Processo filho que lê de fato o `.pdf` e o `.docx` (issue #758).
+"""Processo filho que lê de fato o `.pdf`, o `.docx` e o `.xlsx` (issue #758).
 
 Roda como script solto (`python transcricao_extractor_filho.py <ext> <arquivo>
 <limite>`), fora do processo do uvicorn. O motivo é que o uvicorn sobe com **um
@@ -21,7 +21,8 @@ As constantes do orçamento (quanto de endereçamento, quanto de RSS, quanto
 tempo) vivem no `transcricao_extractor`, que é quem decide; este módulo recebe o
 limite por argumento. O pai importa este módulo só para saber o caminho do
 script e os códigos de saída, por isso o topo aqui é **stdlib pura**: o
-`pdfplumber` e o `docx2txt` são importados dentro das funções, depois do limite.
+`pdfplumber`, o `docx2txt` e o `openpyxl` (issue #1521) são importados dentro
+das funções, depois do limite.
 """
 
 from __future__ import annotations
@@ -98,6 +99,41 @@ def extrair_docx(file_bytes: bytes) -> str:
     return texto.strip()
 
 
+def _celula(valor) -> str:
+    if valor is None:
+        return ""
+    if isinstance(valor, float) and valor.is_integer():
+        return str(int(valor))
+    return str(valor)
+
+
+def extrair_xlsx(file_bytes: bytes) -> str:
+    """Texto de uma planilha, um bloco por aba (issue #1521).
+
+    Cada bloco abre com o nome da aba e segue com as linhas, celulas separadas
+    por " | ". Linha toda vazia sai, e a celula vazia do fim da linha tambem.
+    `read_only` le a aba em fluxo, sem montar a planilha inteira na memoria, e
+    `data_only` traz o valor calculado da formula, e nao a formula.
+    """
+    from openpyxl import load_workbook
+
+    livro = load_workbook(BytesIO(file_bytes), read_only=True, data_only=True)
+    try:
+        blocos: list[str] = []
+        for aba in livro.worksheets:
+            linhas = [f"Aba: {aba.title}"]
+            for valores in aba.iter_rows(values_only=True):
+                celulas = [_celula(v) for v in valores]
+                while celulas and not celulas[-1].strip():
+                    celulas.pop()
+                if celulas:
+                    linhas.append(" | ".join(celulas))
+            blocos.append("\n".join(linhas))
+        return "\n\n".join(blocos).strip()
+    finally:
+        livro.close()
+
+
 def extrair(ext: str, file_bytes: bytes) -> str:
     """Despacha pela extensão. `ValueError` é recusa com frase pronta em pt-BR."""
     if ext == ".pdf":
@@ -107,6 +143,8 @@ def extrair(ext: str, file_bytes: bytes) -> str:
         return texto
     if ext == ".docx":
         return extrair_docx(file_bytes)
+    if ext == ".xlsx":
+        return extrair_xlsx(file_bytes)
     raise ValueError("Formato nao suportado.")
 
 

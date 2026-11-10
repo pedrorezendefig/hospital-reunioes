@@ -1,9 +1,9 @@
 """O Anexo da Demanda (issue #1061, PRD #1056, ADR 0069).
 
 O print de tela que vem junto da Demanda e, desde a issue #1520, o documento
-(.md, .txt, .pdf, .docx). Vive SO no app e nunca vai para o GitHub: o
-repositorio e publico, e print ou documento do hospital carrega nome de
-paciente, de colaborador, protocolo da Ouvidoria.
+(.md, .txt, .pdf, .docx) e, desde a #1521, a planilha (.csv, .xlsx). Vive SO
+no app e nunca vai para o GitHub: o repositorio e publico, e print ou documento
+do hospital carrega nome de paciente, de colaborador, protocolo da Ouvidoria.
 
 Desde a ADR 0077 o print entra por uma porta so, o chat da aba (decisao 8), e
 um lugar so decide o que se faz com ele:
@@ -405,6 +405,9 @@ MOTIVO_DOCUMENTO_COMPLEXO = (
     "Esse documento é grande ou complexo demais para o sistema ler de uma vez. O arquivo não tem defeito: "
     "divida o documento em partes menores e mande uma de cada vez, ou cole o texto na conversa."
 )
+# O Excel 97-2003 e binario proprio, sem parser isolado aqui (issue #1521): a
+# frase diz a saida, que esta na mao de quem tem o arquivo.
+MOTIVO_PLANILHA_ANTIGA = "Planilha no formato antigo (.xls) não entra. Abra no Excel, salve como .xlsx e anexe de novo."
 MOTIVO_DOCUMENTO_SUMIU = (
     "O documento não está mais guardado: passou o prazo ou o sistema reiniciou. Anexe o arquivo de novo."
 )
@@ -418,6 +421,8 @@ def extensao_do_documento(nome: str) -> str:
     recusa-lo pelo nome.
     """
     extensao = os.path.splitext(nome or "")[1].lower()
+    if extensao == ".xls":
+        raise AnexoRecusadoError(MOTIVO_PLANILHA_ANTIGA)
     tipo = TIPOS_DE_ANEXO.get(extensao)
     if tipo is None or tipo.classe != "documento":
         raise AnexoRecusadoError(MOTIVO_TIPO_FORA_DA_LISTA)
@@ -440,7 +445,7 @@ async def texto_do_documento(*, nome: str, conteudo: bytes) -> str:
     if not conteudo:
         raise AnexoRecusadoError(MOTIVO_ARQUIVO_VAZIO)
     try:
-        texto, _ = await transcricao_extractor.extrair_texto_async(nome, conteudo)
+        texto, _ = await transcricao_extractor.extrair_texto_async(nome, conteudo, extensoes=set(TIPOS_DE_DOCUMENTO))
     except ValueError as erro:
         if str(erro) == MENSAGEM_PDF_ESCANEADO:
             raise AnexoRecusadoError(MOTIVO_PDF_SEM_TEXTO) from erro

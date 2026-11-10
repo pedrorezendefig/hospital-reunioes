@@ -127,6 +127,9 @@ TIPOS_DE_ANEXO: dict[str, TipoDeAnexo] = {
     ".txt": TipoDeAnexo("documento", CONTENT_TYPE_BY_EXT[".txt"], MAX_BYTES_TEXT),
     ".pdf": TipoDeAnexo("documento", CONTENT_TYPE_BY_EXT[".pdf"], MAX_BYTES_BINARY),
     ".docx": TipoDeAnexo("documento", CONTENT_TYPE_BY_EXT[".docx"], MAX_BYTES_BINARY),
+    # A planilha conta como documento (issue #1521): o agente le o texto dela.
+    ".csv": TipoDeAnexo("documento", CONTENT_TYPE_BY_EXT[".csv"], MAX_BYTES_TEXT),
+    ".xlsx": TipoDeAnexo("documento", CONTENT_TYPE_BY_EXT[".xlsx"], MAX_BYTES_BINARY),
 }
 
 TIPOS_DE_IMAGEM: dict[str, str] = {ext: t.content_type for ext, t in TIPOS_DE_ANEXO.items() if t.classe == "imagem"}

@@ -55,6 +55,9 @@ dependencies = [
     # Tabela de preço em Excel antigo (.xls) em Contas médicas (issue #1487).
     # Python puro, só lê o formato binário do Excel 97-2003.
     "xlrd>=2.0.1",
+    # Planilha .xlsx no chat da Tecnologia (issue #1521). Python puro; roda só
+    # no processo filho do extrator, com teto de memória e prazo (issue #758).
+    "openpyxl>=3.1.5",
 ]
 
 [project.optional-dependencies]

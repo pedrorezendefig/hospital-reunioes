@@ -568,18 +568,18 @@ describe("O documento no chat (issue #1520)", () => {
   it("o botão de anexo aceita print e documento, pelos tipos da tabela do backend", () => {
     montar([]);
 
-    expect(seletorDeAnexo().accept).toBe(".png,.jpg,.jpeg,.webp,.md,.txt,.pdf,.docx");
+    expect(seletorDeAnexo().accept).toBe(".png,.jpg,.jpeg,.webp,.md,.txt,.pdf,.docx,.csv,.xlsx");
     expect(screen.getByRole("button", { name: "Anexar print ou documento" })).toBeTruthy();
   });
 
   it("tipo fora da lista é recusado na tela, antes do upload, com a frase que diz o que entra", async () => {
     const chamadas = montar([]);
 
-    escolher(arquivo("planilha.xlsx"));
+    escolher(arquivo("dados.ods"));
 
     const alerta = await screen.findByRole("alert");
     expect(alerta.textContent).toBe(
-      "Esse tipo de arquivo não entra na conversa. Entram print (.png, .jpg, .jpeg ou .webp) e documento (.md, .txt, .pdf ou .docx).",
+      "Esse tipo de arquivo não entra na conversa. Entram print (.png, .jpg, .jpeg ou .webp) e documento (.md, .txt, .pdf, .docx, .csv ou .xlsx).",
     );
     expect(chamadas).toEqual([]);
   });
@@ -589,6 +589,8 @@ describe("O documento no chat (issue #1520)", () => {
     ["plano.docx", 15 * MB + 1, "15 MB"],
     ["notas.md", 5 * MB + 1, "5 MB"],
     ["notas.txt", 5 * MB + 1, "5 MB"],
+    ["glosas.csv", 5 * MB + 1, "5 MB"],
+    ["glosas.xlsx", 15 * MB + 1, "15 MB"],
     ["tela.png", 3932161, "3,75 MB"],
   ])("%s acima do teto é recusado na tela antes do upload, com o número do backend", async (nome, tamanho, teto) => {
     const chamadas = montar([]);
@@ -641,6 +643,27 @@ describe("O documento no chat (issue #1520)", () => {
     const anexado = screen.getByRole("group", { name: "Documento anexado: melhorias.md" });
     expect(anexado.textContent).toContain("melhorias.md");
     expect(anexado.textContent).toContain("12 KB");
+  });
+
+  it("planilha .xls antiga é recusada na tela, antes do upload, com a frase que pede .xlsx (issue #1521)", async () => {
+    const chamadas = montar([]);
+
+    escolher(arquivo("glosas.XLS"));
+
+    expect((await screen.findByRole("alert")).textContent).toBe(
+      "Planilha no formato antigo (.xls) não entra. Abra no Excel, salve como .xlsx e anexe de novo.",
+    );
+    expect(chamadas).toEqual([]);
+  });
+
+  it.each(["glosas.xlsx", "glosas.csv"])("a planilha %s sobe pela rota do documento (issue #1521)", async (nome) => {
+    const chamadas = montar([{ status: 422, corpo: { detail: "recusa do servidor" } }]);
+
+    escolher(arquivo(nome, 2 * MB));
+
+    await screen.findByText("recusa do servidor");
+    expect(chamadas[0].url).toBe("/api/admin/tecnologia/assistente/ler-documento");
+    expect((chamadas[0].corpo as FormData).get("documento")).toBeInstanceOf(File);
   });
 
   it("a recusa do servidor ao documento aparece na tela, e a conversa não anda", async () => {

@@ -52,13 +52,21 @@ MIN_PDF_TEXT_BYTES = filho.MIN_PDF_TEXT_BYTES
 # `bytes.decode`, cujo custo e multiplo fixo do arquivo de entrada. Tirar um
 # formato daqui e barato; POR um formato aqui exige provar que ele nao tem
 # parser nenhum no caminho.
-FORMATOS_DE_TEXTO_PURO = {".txt", ".md"}
+FORMATOS_DE_TEXTO_PURO = {".txt", ".md", ".csv"}
+
+# A planilha (issue #1521) so entra pelo chat da Tecnologia, que pede por ela
+# em `extensoes`: a Ata, a transcricao e os POPs continuam na lista acima. O
+# `.csv` e texto puro; o `.xlsx` e zip com XML e tem parser, entao nasce
+# isolado, como o `.docx`.
+FORMATOS_DE_PLANILHA = {".csv", ".xlsx"}
 
 CONTENT_TYPE_BY_EXT = {
     ".txt": "text/plain",
     ".md": "text/markdown",
     ".pdf": "application/pdf",
     ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    ".csv": "text/csv",
+    ".xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
 }
 
 # ─── Orcamento do processo filho ────────────────────────────────────────────
@@ -411,9 +419,24 @@ def _extrair_isolado(ext: str, file_bytes: bytes) -> str:
     raise ValueError(f"Nao foi possivel ler o arquivo {ext}. Verifique se nao esta corrompido.")
 
 
-def extrair_texto(filename: str, file_bytes: bytes) -> tuple[str, str]:
+def _decodificar(ext: str, file_bytes: bytes) -> str:
+    """Texto puro em UTF-8. O `.csv` que nao e UTF-8 veio do Excel em
+    portugues, que salva em Windows-1252: decodificar como UTF-8 trocaria cada
+    acento por um losango (issue #1521)."""
+    if ext == ".csv":
+        try:
+            return file_bytes.decode("utf-8-sig").strip()
+        except UnicodeDecodeError:
+            return file_bytes.decode("cp1252", errors="replace").strip()
+    return file_bytes.decode("utf-8", errors="replace").strip()
+
+
+def extrair_texto(
+    filename: str, file_bytes: bytes, extensoes: frozenset[str] | set[str] = frozenset(SUPPORTED_EXTENSIONS)
+) -> tuple[str, str]:
     """
-    Extrai texto plano UTF-8 de uma transcricao em txt/md/pdf/docx.
+    Extrai texto plano UTF-8 de uma transcricao em txt/md/pdf/docx, ou do
+    que a chamada aceitar em `extensoes` (a planilha do chat da Tecnologia).
 
     Retorna (texto, extensao_normalizada). Levanta ValueError com mensagem
     em pt-BR pronta para virar HTTPException(422).
@@ -426,8 +449,8 @@ def extrair_texto(filename: str, file_bytes: bytes) -> tuple[str, str]:
     if ext == ".doc":
         raise ValueError("Formato .doc nao suportado. Salve como .docx ou PDF antes de enviar.")
 
-    if ext not in SUPPORTED_EXTENSIONS:
-        aceitos = ", ".join(sorted(SUPPORTED_EXTENSIONS))
+    if ext not in extensoes:
+        aceitos = ", ".join(sorted(extensoes))
         raise ValueError(f"Formato nao suportado. Aceitos: {aceitos}.")
 
     tamanho = len(file_bytes)
@@ -443,7 +466,7 @@ def extrair_texto(filename: str, file_bytes: bytes) -> tuple[str, str]:
 
     try:
         if ext in FORMATOS_DE_TEXTO_PURO:
-            texto = file_bytes.decode("utf-8", errors="replace").strip()
+            texto = _decodificar(ext, file_bytes)
         else:
             texto = _extrair_isolado(ext, file_bytes)
     except ValueError:
@@ -458,7 +481,9 @@ def extrair_texto(filename: str, file_bytes: bytes) -> tuple[str, str]:
     return texto, ext
 
 
-async def extrair_texto_async(filename: str, file_bytes: bytes) -> tuple[str, str]:
+async def extrair_texto_async(
+    filename: str, file_bytes: bytes, extensoes: frozenset[str] | set[str] = frozenset(SUPPORTED_EXTENSIONS)
+) -> tuple[str, str]:
     """Mesma extracao, sem prender o event loop nem o executor de todo mundo.
 
     As rotas que chamam isto sao `async def`, e ate a #758 a leitura acontecia
@@ -479,4 +504,4 @@ async def extrair_texto_async(filename: str, file_bytes: bytes) -> tuple[str, st
     definicao do executor.
     """
     laco = asyncio.get_running_loop()
-    return await laco.run_in_executor(_EXECUTOR_DE_EXTRACAO, extrair_texto, filename, file_bytes)
+    return await laco.run_in_executor(_EXECUTOR_DE_EXTRACAO, extrair_texto, filename, file_bytes, extensoes)

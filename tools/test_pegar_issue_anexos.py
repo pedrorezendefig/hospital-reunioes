@@ -33,6 +33,8 @@ PNG = b"\x89PNG\r\n\x1a\nprint-um"
 JPG = b"\xff\xd8\xffprint-dois"
 MD = b"# Melhorias\n\n- glosas por convenio\n"
 PDF = b"%PDF-1.4\nrelatorio\n%%EOF\n"
+XLSX = b"PK\x03\x04planilha-do-excel"
+CSV = b"Motivo;Valor\nglosa;350,50\n"
 
 CORPO_COM_DEMANDA = (
     "## O que construir\n\nO botão some na tela de Reuniões.\n\n"
@@ -74,6 +76,10 @@ def app_falso():
                 corpo = MD
             elif self.path.startswith("/storage/pdf"):
                 corpo = PDF
+            elif self.path.startswith("/storage/xlsx"):
+                corpo = XLSX
+            elif self.path.startswith("/storage/csv"):
+                corpo = CSV
             else:
                 self.send_response(404)
                 self.end_headers()
@@ -155,6 +161,30 @@ def test_grava_os_documentos_junto_das_imagens_na_ordem_da_demanda(repo, app_fal
     ]
     assert (pasta / "02-melhorias.md").read_bytes() == MD
     assert (pasta / "03-relatorio.pdf").read_bytes() == PDF
+
+
+def test_grava_as_planilhas_junto_dos_outros_anexos(repo, app_falso):
+    """Issue #1521: a planilha da Demanda chega pela mesma boca, com os bytes
+    intactos, na ordem em que a rota entrega."""
+    base, _, estado = app_falso
+    xlsx = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    estado["anexos"] = [
+        {"nome": "tela do erro.png", "tipo": "image/png", "url": f"{base[:-4]}/storage/um?token=x"},
+        {"nome": "glosas.xlsx", "tipo": xlsx, "url": f"{base[:-4]}/storage/xlsx?token=y"},
+        {"nome": "glosas.csv", "tipo": "text/csv", "url": f"{base[:-4]}/storage/csv?token=z"},
+    ]
+
+    feito = rodar(repo, base)
+
+    assert feito.returncode == 0, feito.stderr
+    pasta = repo / "local" / "anexos" / ISSUE
+    assert feito.stdout.splitlines() == [
+        str(pasta / "01-tela do erro.png"),
+        str(pasta / "02-glosas.xlsx"),
+        str(pasta / "03-glosas.csv"),
+    ]
+    assert (pasta / "02-glosas.xlsx").read_bytes() == XLSX
+    assert (pasta / "03-glosas.csv").read_bytes() == CSV
 
 
 def test_issue_sem_demanda_sai_zero_com_sem_anexos_e_nao_chama_o_app(repo, app_falso):
