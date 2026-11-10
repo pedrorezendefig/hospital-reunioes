@@ -508,8 +508,9 @@ class TestCriarOCard:
 class TestOCardNasceUmaVezSo:
     """Duas issues publicas e o dano que ninguem desfaz sozinho: a segunda
     nasce orfa, com o marcador apontando para uma Demanda que ja aponta para a
-    primeira. Os testes do servico `_criar_issue_e_vincular`, pela porta que
-    sobrou dele (issue #1386; antes, pelo "Levar para desenvolvimento")."""
+    primeira. Os testes da porta do envio (`tecnologia_envio`, issue #1535),
+    pela rota do Criar o card (issue #1386; antes, pelo "Levar para
+    desenvolvimento")."""
 
     def test_o_segundo_pedido_concorrente_nao_cria_a_segunda_issue(self, monkeypatch):
         """O segundo pedido roda enquanto o primeiro ainda esta dentro do
