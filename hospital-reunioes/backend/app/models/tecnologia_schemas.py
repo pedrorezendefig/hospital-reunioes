@@ -53,6 +53,21 @@ class DemandaResponse(BaseModel):
     # O selo ao lado da Etapa (issue #1438): o Tipo da Demanda traduzido de
     # volta para a pergunta do chat. Nulo no Tipo de antes do chat.
     classificacao: Literal["bug", "melhoria"] | None = None
+    # Se quem esta logado e o autor (ADR 0083): a Demanda de outro autor abre
+    # so para leitura.
+    minha: bool = True
+    # So para o Desenvolvedor (ADR 0083, decisao 3): quem pediu, e o numero e o
+    # endereco da issue. Para o diretor saem nulos (ADR 0054, decisao 9).
+    autor: str | None = None
+    issue_numero: int | None = None
+    issue_url: str | None = None
+
+
+class QuemSouNaAbaResponse(BaseModel):
+    """Se quem esta logado e Desenvolvedor (ADR 0083, decisao 2): e o que faz a
+    tela mostrar o filtro "Todas". A regra fica no backend."""
+
+    desenvolvedor: bool
 
 
 # O teto de uma fala do chat. E do pydantic, e nao do router, porque aqui nao
@@ -192,6 +207,15 @@ class ResumoDoBug(BaseModel):
     criterios: list[str]
 
 
+class AnexoDaDemanda(BaseModel):
+    """Um Anexo da Demanda como o Desenvolvedor o abre: o nome, o tipo e a URL
+    assinada de vida curta (ADR 0083, decisao 3)."""
+
+    nome: str
+    tipo: str
+    url: str | None = None
+
+
 class CustoDaConversa(BaseModel):
     """O modelo da chamada mais recente, no nome de exibicao ("Opus 5.5"), e a
     soma em dolar das chamadas de IA da Demanda. `custo_usd` nulo = nao medido:
@@ -225,3 +249,6 @@ class ChatResponse(BaseModel):
     planejamento: bool = False
     aviso_dos_anexos: str | None = None
     custo: CustoDaConversa | None = None
+    # Os Anexos, so para o Desenvolvedor (ADR 0083, decisao 3). O diretor le
+    # so a contagem em `anexos`.
+    anexos_da_demanda: list[AnexoDaDemanda] = []
