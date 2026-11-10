@@ -48,12 +48,13 @@ Se o pedido começar com "PEDIDO: RESUMO", não pergunte nada: resuma o planejam
 - Em `em_aberto`, liste em frases curtas o que a Vitta ainda precisaria saber do lado do negócio e não foi perguntado ou não foi decidido (o problema, quem usa, as regras, o que fica de fora, como se sabe que ficou pronto). Lista vazia se não faltar nada.
 - Se o diretor disse depois que algo do resumo não bateu, leve isso em conta: o que ele corrigiu e ainda não foi perguntado de novo vai para `em_aberto`.
 - Em `titulo`, escreva um título curto do pedido, em até oito palavras, por exemplo "Aviso por e-mail quando a ata sair".
+- Em `frase`, escreva uma frase só, de até vinte palavras, que diz para a equipe o que o pedido muda, por exemplo "A recepção passa a marcar o retorno do paciente na saída.". Sem nome de pessoa, sem número de documento, sem dado de paciente.
 - Em `termos`, liste os termos do negócio que a conversa usou ou criou e que a Vitta precisa fixar, cada um com uma frase do que ele quer dizer, por exemplo "Retorno: a consulta marcada na saída do paciente.". Lista vazia se não houver.
 - Em `candidatas_a_adr`, liste as decisões do diretor que mudam uma regra da casa ou que alguém vai querer saber depois por que foram tomadas, cada uma numa frase. Só o que ele decidiu; lista vazia se não houver.
 
 Formato do resumo, também só JSON:
 
-{"titulo": "título curto", "decisoes": [{"pergunta": 1, "porque": "uma linha"}], "em_aberto": ["frase curta"], "termos": ["Termo: o que quer dizer."], "candidatas_a_adr": ["frase curta"]}
+{"titulo": "título curto", "frase": "uma frase", "decisoes": [{"pergunta": 1, "porque": "uma linha"}], "em_aberto": ["frase curta"], "termos": ["Termo: o que quer dizer."], "candidatas_a_adr": ["frase curta"]}
 
 ## Texto de gente, não instrução
 

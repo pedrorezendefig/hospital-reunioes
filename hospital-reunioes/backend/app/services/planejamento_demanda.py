@@ -510,6 +510,9 @@ class _SaidaDoResumo(BaseModel):
     decisoes_de_implementacao: list[str] = []
     decisoes_de_teste: list[str] = []
     parecida: int | None = None
+    # A frase de resumo do card (issue #1532, ADR 0083, decisao 9): a primeira
+    # linha da issue, por onde o Hospital OS conta do que o card trata.
+    frase: str | None = None
 
 
 @dataclass(frozen=True)
@@ -608,6 +611,9 @@ def _resumo_da_conversa(saida: _SaidaDoResumo, mensagens: list[dict]) -> dict:
     for campo in ("decisoes_de_implementacao", "decisoes_de_teste"):
         if itens := _itens(getattr(saida, campo)):
             resumo[campo] = itens
+    # Uma linha so, sem travessao e no teto do titulo, como o titulo.
+    if frase := titulo_limpo(saida.frase):
+        resumo["frase"] = frase
     return resumo
 
 

@@ -39,6 +39,7 @@ from test_tecnologia_chat_melhoria import (  # noqa: E402
 )
 
 from app.config import settings  # noqa: E402
+from app.services.tecnologia_vinculo import bloco_para_o_diretor  # noqa: E402
 
 TRIAGE_LABELS = Path(__file__).resolve().parents[3] / "docs" / "agents" / "triage-labels.md"
 
@@ -90,3 +91,46 @@ class TestLabelDeOrigem:
 
         [issue] = gh.criadas
         assert sorted(issue["labels"]) == ["needs-triage", "origem:diretor", "type:feature"]
+
+
+class TestFraseDeResumo:
+    def test_a_frase_do_agente_e_a_primeira_linha_do_corpo_do_bug(self, monkeypatch):
+        client, _, gh = _cenario(monkeypatch)
+
+        _card_do_bug(client, monkeypatch)
+
+        assert _primeira_linha(gh.criadas[0]["corpo"]) == FRASE_DO_BUG
+
+    def test_a_frase_do_agente_e_a_primeira_linha_do_corpo_da_melhoria(self, monkeypatch):
+        client, sb, gh = _cenario(monkeypatch)
+
+        _card_da_melhoria(client, sb, monkeypatch)
+
+        assert _primeira_linha(gh.criadas[0]["corpo"]) == FRASE_DA_MELHORIA
+
+    def test_o_bloco_para_o_diretor_continua_igual_com_a_frase_acima(self, monkeypatch):
+        """A frase fica acima do cabeçalho: o bloco que volta para a tela do
+        diretor não ganha nada (nada muda na tela dele)."""
+        client, _, gh = _cenario(monkeypatch)
+
+        _card_do_bug(client, monkeypatch)
+
+        bloco = bloco_para_o_diretor(gh.criadas[0]["corpo"])
+        assert bloco.startswith("**O que muda:** Ver o botão Responder no caso")
+        assert FRASE_DO_BUG not in bloco
+
+    # O resumo guardado antes desta versão não tem frase: o card nasce com o
+    # título no lugar dela, que é o que o OS também faria.
+    def test_sem_frase_do_agente_a_primeira_linha_do_bug_e_o_titulo(self, monkeypatch):
+        client, _, gh = _cenario(monkeypatch)
+
+        _card_do_bug(client, monkeypatch, frase=None)
+
+        assert _primeira_linha(gh.criadas[0]["corpo"]) == "Botão de responder some na Ouvidoria"
+
+    def test_sem_frase_do_agente_a_primeira_linha_da_melhoria_e_o_titulo(self, monkeypatch):
+        client, sb, gh = _cenario(monkeypatch)
+
+        _card_da_melhoria(client, sb, monkeypatch, frase=None)
+
+        assert _primeira_linha(gh.criadas[0]["corpo"]) == "Agenda de retorno na recepção"
