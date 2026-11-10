@@ -140,11 +140,11 @@ Aguardando arquivo → Na fila → Processando → A fazer (Guia pronto) → Em 
 Onde o problema nasce e quem corrige: **Dispensação** (farmácia e enfermagem), **Regra automática** (TI e consultoria MV), **Cadastro e preço** (credenciamento e cadastro), **Registro assistencial** (enfermagem e corpo clínico), **Lançamento manual** (faturamento). A IA propõe; o código sobrepõe nos casos óbvios (toda Linha de diária, de preço e Bloqueado).
 
 **Faltou isto**:
-Apontamento de omissão no Guia: alguém que conferiu a Conta diz o item e a página que o módulo não achou. Abre a conversa da Conta, em que o Auditor explica por que não achou e classifica a origem: **regra** (vira proposta de Regra), **leitura** (a página não foi lida, OCR ou folha digitalizada) ou **defeito** (do código); leitura e defeito viram card na Tecnologia. Vem de uma pessoa ou do **segundo agente**, que toda semana relê uma amostra de Contas concluídas procurando o que foi dado e não está na conta. É contado no Painel por semana e por origem.
+Apontamento de omissão no Guia: alguém que conferiu a Conta diz o item e a página que o módulo não achou. Abre a conversa da Conta, em que o Auditor explica por que não achou e classifica a origem: **regra** (vira proposta de Regra), **leitura** (a página não foi lida, OCR ou folha digitalizada) ou **defeito** (do código); leitura e defeito viram card na Tecnologia. Vem de uma pessoa ou do **segundo agente**, que relê uma amostra de Contas concluídas procurando o que foi dado e não está na conta quando alguém pede, pelo botão do Painel (ADR 0082). É contado no Painel por semana e por origem.
 _Evitar_: tratar como Não procede, que é o contrário (a Linha existe e não devia).
 
 **Validação**:
-Fila da diretoria e da gestão de contas médicas: Regras pendentes agrupadas por Regra, Bloqueados agrupados por código, observações do time. Decidir uma Regra gera versão nova da Memória e devolve as Linhas afetadas; Conta já concluída volta à faturista em Retorno só com essas Linhas.
+Fila da diretoria e da gestão de contas médicas: Regras pendentes agrupadas por Regra, Bloqueados agrupados por código, observações do time. Decidir uma Regra gera versão nova da Memória e devolve as Linhas afetadas; Conta já concluída volta à faturista em Retorno só com essas Linhas. A recomendação do Auditor em cada tema, com a Prova da regra no de Regra pendente, só sai quando alguém clica em "Pedir recomendação ao Auditor" (ADR 0082); nenhuma rotina automática a pede.
 
 **Conferência da coordenação**:
 Segunda checagem que só a coordenadora de faturamento vê: cenários cadastrados pela gestão (procedimento que dispara → insumos a conferir) geram **lembretes** por Conta. A faturista não sabe que existem; o Guia, a nota e a produção dela não mudam.

@@ -11,17 +11,22 @@ pelo mesmo caminho do cartão (`validacao.decidir_tema`): versão nova da
 Memória e Retorno da Conta concluída só com as Linhas decididas. O Tema que a
 pessoa corrigir antes, pelo cartão, já saiu da fila e o lote não mexe nele.
 
-A recomendação sai do relógio do backend, não da tela: a prova refaz até dez
-Contas e não cabe no tempo de um pedido.
+A recomendação só sai quando alguém pede, pelo botão da tela (ADR 0082,
+issue #1523): o pedido mostra antes quantos Temas e quanto deve custar, e roda
+em segundo plano, porque a prova refaz até dez Contas e não cabe no tempo de
+uma requisição. Um pedido por vez. A Prova e o Auditor rodam no modelo da
+Validação (`CM_IA_MODELO_VALIDACAO`), não no do passo B.
 """
 
 from __future__ import annotations
 
 import json
 import logging
+import threading
 from datetime import UTC, datetime
 from typing import Any
 
+from app.config import settings
 from app.services.contas_medicas import ia
 from app.services.contas_medicas.memoria_edicao import (
     MudancaRecusadaError,
@@ -29,7 +34,7 @@ from app.services.contas_medicas.memoria_edicao import (
     SemPermissaoNaRegraError,
 )
 from app.services.contas_medicas.memoria_texto import gerar_texto_memoria
-from app.services.contas_medicas.prova_da_regra import provar_pendente
+from app.services.contas_medicas.prova_da_regra import _ultimas_concluidas, provar_pendente
 from app.services.contas_medicas.validacao import (
     ABERTO,
     DECISOES,
@@ -48,13 +53,27 @@ from app.services.contas_medicas.validacao import (
 from app.services.paginacao import ler_tudo
 from app.utils.text_sanitizer import sanitizar_travessao
 
-__all__ = ["aprovar_lote", "recomendar_abertos"]
+__all__ = [
+    "aprovar_lote",
+    "liberar",
+    "pedido_de_recomendacao",
+    "recomendar_abertos",
+    "recomendar_e_liberar",
+    "reservar",
+]
 
 logger = logging.getLogger(__name__)
 
-# Quantos Temas o Auditor decide por rodada do relógio: cada Regra pendente
-# custa até dez chamadas da prova.
-TEMAS_POR_RODADA = 5
+# O custo estimado que o botão mostra antes do clique, no Sonnet: a Prova por
+# Conta concluída que ela refaz e a recomendação por Tema. Medido em produção
+# em novembro de 2026 (Prova US$ 0,59 e Auditor US$ 0,08 por chamada no Opus,
+# que custa o dobro).
+CUSTO_POR_CONTA_DA_PROVA_USD = 0.30
+CUSTO_POR_RECOMENDACAO_USD = 0.04
+
+# Um pedido por vez: o segundo clique, enquanto o primeiro roda, não dispara
+# outra rodada sobre os mesmos Temas.
+_em_andamento = threading.Lock()
 
 _ROTULO_DO_TIPO = {
     "REGRA_PENDENTE": "Regra pendente",
@@ -71,19 +90,51 @@ def _agora() -> str:
     return datetime.now(UTC).isoformat()
 
 
-def _sem_recomendacao(supabase) -> set[str]:
+def _sem_recomendacao(supabase) -> list[dict[str, Any]]:
+    return ler_tudo(
+        lambda: (
+            supabase.table("cm_validacao_tema")
+            .select("id, tipo, operadora_id, regra_codigo")
+            .eq("estado", ABERTO)
+            .is_("recomendado_em", "null")
+            .order("id")
+        ),
+        rotulo="temas sem recomendação",
+    )
+
+
+def _tem_prova(tema: dict[str, Any]) -> bool:
+    return tema["tipo"] == REGRA_PENDENTE and bool(tema.get("operadora_id")) and bool(tema.get("regra_codigo"))
+
+
+def reservar() -> bool:
+    """Reserva o pedido; falso quando outro já está rodando."""
+    return _em_andamento.acquire(blocking=False)
+
+
+def liberar() -> None:
+    _em_andamento.release()
+
+
+def pedido_de_recomendacao(supabase) -> dict[str, Any]:
+    """O que o botão mostra antes do clique: os Temas abertos sem
+    recomendação, quantos levam a Prova da regra, o custo estimado e se já há
+    um pedido rodando. Não chama a IA."""
+    temas = _sem_recomendacao(supabase)
+    provas = [t for t in temas if _tem_prova(t)]
+    contas: dict[str, int] = {}
+    for tema in provas:
+        if tema["operadora_id"] not in contas:
+            contas[tema["operadora_id"]] = len(_ultimas_concluidas(supabase, tema["operadora_id"]))
+    custo = (
+        sum(contas[t["operadora_id"]] for t in provas) * CUSTO_POR_CONTA_DA_PROVA_USD
+        + len(temas) * CUSTO_POR_RECOMENDACAO_USD
+    )
     return {
-        t["id"]
-        for t in ler_tudo(
-            lambda: (
-                supabase.table("cm_validacao_tema")
-                .select("id")
-                .eq("estado", ABERTO)
-                .is_("recomendado_em", "null")
-                .order("id")
-            ),
-            rotulo="temas sem recomendação",
-        )
+        "temas": len(temas),
+        "provas": len(provas),
+        "custo_estimado_usd": round(custo, 2),
+        "em_andamento": _em_andamento.locked(),
     }
 
 
@@ -152,17 +203,17 @@ def _cabe(tema: dict[str, Any], resposta: ia.RecomendacaoDoTema) -> bool:
     return not (resposta.decisao == EDITAR_REGRA and not tema.get("regra_codigo"))
 
 
-def _recomendar(supabase, cartao: dict[str, Any], tema: dict[str, Any]) -> bool:
+def _recomendar(supabase, cartao: dict[str, Any], tema: dict[str, Any], modelo: str) -> bool:
     operadora_id = tema.get("operadora_id")
     prova = None
-    if tema["tipo"] == REGRA_PENDENTE and operadora_id and tema.get("regra_codigo"):
-        prova = provar_pendente(supabase, operadora_id, tema["regra_codigo"])
+    if _tem_prova(tema):
+        prova = provar_pendente(supabase, operadora_id, tema["regra_codigo"], modelo=modelo)
     memoria = gerar_texto_memoria(supabase, operadora_id) if operadora_id else "(o tema não é de uma operadora só)"
-    resposta = ia.recomendar_tema(memoria, _texto_do_tema(cartao, prova), supabase=supabase)
+    resposta = ia.recomendar_tema(memoria, _texto_do_tema(cartao, prova), supabase=supabase, modelo=modelo)
     cabe = _cabe(tema, resposta)
     if not cabe:
         # Fica sem recomendação, e marcado: a pessoa decide pelo cartão, e o
-        # relógio não pergunta de novo a cada rodada.
+        # próximo pedido não pergunta de novo.
         logger.warning("[ContasMedicas] Auditor recomendou %s, que não cabe no tema %s", resposta.decisao, tema["id"])
     texto = resposta.texto if resposta.decisao in _COM_TEXTO else ""
     supabase.table("cm_validacao_tema").update(
@@ -178,21 +229,34 @@ def _recomendar(supabase, cartao: dict[str, Any], tema: dict[str, Any]) -> bool:
     return cabe
 
 
-def recomendar_abertos(supabase, limite: int = TEMAS_POR_RODADA) -> int:
-    """O Auditor decide os Temas abertos ainda sem recomendação, até `limite`
-    por rodada. Devolve quantos ganharam recomendação. O Tema que falhar (IA
-    fora, prova sem memória) fica para a próxima rodada."""
+def recomendar_abertos(supabase) -> int:
+    """O Auditor decide todos os Temas abertos ainda sem recomendação, no
+    modelo da Validação. Devolve quantos ganharam recomendação. O Tema que
+    falhar (IA fora, prova sem memória) fica para o próximo pedido."""
+    modelo = settings.cm_ia_modelo_validacao
     cartoes = fila_de_validacao(supabase)["temas"]
-    sem = _sem_recomendacao(supabase)
-    a_fazer = [c for c in cartoes if c["id"] in sem][:limite]
+    sem = {t["id"] for t in _sem_recomendacao(supabase)}
+    a_fazer = [c for c in cartoes if c["id"] in sem]
     temas = {t["id"]: t for t in _em_lotes(supabase, "cm_validacao_tema", "id", [c["id"] for c in a_fazer], "temas")}
     recomendados = 0
     for cartao in a_fazer:
         try:
-            recomendados += _recomendar(supabase, cartao, temas[cartao["id"]])
+            recomendados += _recomendar(supabase, cartao, temas[cartao["id"]], modelo)
         except Exception as erro:
             logger.error("[ContasMedicas] Auditor não recomendou o tema %s: %s", cartao["id"], type(erro).__name__)
     return recomendados
+
+
+def recomendar_e_liberar(supabase) -> None:
+    """O pedido do botão, em segundo plano: recomenda e solta a reserva, dê
+    certo ou não. Na falha, só o tipo do erro no log."""
+    try:
+        recomendados = recomendar_abertos(supabase)
+        logger.info("[ContasMedicas] Auditor recomendou %s tema(s) a pedido", recomendados)
+    except Exception as erro:
+        logger.error("[ContasMedicas] Pedido de recomendação falhou: %s", type(erro).__name__)
+    finally:
+        liberar()
 
 
 _RECUSAS = (
@@ -205,7 +269,7 @@ _RECUSAS = (
 
 
 # A recomendação gravada não é mais a que a tela mostrou: uma observação nova
-# apagou a antiga e o relógio gravou outra. Ninguém viu esta, então o lote não
+# apagou a antiga e um pedido novo gravou outra. Ninguém viu esta, então o lote não
 # a aplica.
 _RECOMENDACAO_MUDOU = "A recomendação do Auditor mudou depois que a tela abriu. Confira o cartão de novo."
 

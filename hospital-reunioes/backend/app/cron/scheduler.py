@@ -46,14 +46,12 @@ Jobs:
  12. avisar_contratos_contas_medicas: 07:15 diário, avisa no sino o reajuste de cada
      contrato de operadora na data do aviso (vencimento menos a antecedência), issue
      #1144. Idempotente: `cm_aviso` guarda a data prevista e o envio.
- 13. recomendar_validacao_contas_medicas: a cada 30 minutos, o Auditor decide os Temas
-     abertos da fila de Validação ainda sem recomendação, com a Prova da regra no Tema
-     de Regra pendente (issue #1491, ADR 0081, decisão 13). Idempotente: o tema
-     recomendado ganha carimbo e sai da varredura; a observação nova apaga o carimbo.
- 14. revisar_contas_medicas: domingo 03:00, o segundo agente relê até 10 Contas
-     concluídas ainda não revisadas e grava o que achou como Faltou isto de
-     origem AGENTE (issue #1493). A chamada REVISOR com sucesso tira a Conta do
-     sorteio das semanas seguintes.
+
+Nenhum job dispara IA por conta própria (ADR 0082): a recomendação da Validação
+e o segundo agente de Contas médicas rodam só pelo botão da tela. A fila de
+contas (11) só analisa a conta que alguém enviou, e as sugestões de ação do
+relatório da Ouvidoria são a exceção registrada na ADR. Job novo que chame IA
+pede uma ADR que emende a 0082.
 """
 
 import logging
@@ -382,37 +380,6 @@ def avisar_contratos_contas_medicas() -> None:
         logger.info(f"[Cron] Contratos de Contas médicas: {avisados} aviso(s) de reajuste no sino.")
 
 
-def recomendar_validacao_contas_medicas() -> None:
-    """A fila de Validação chega decidida (issue #1491). A lógica e o limite
-    por rodada vivem no serviço; aqui, só o relógio e o log."""
-    from app.services.contas_medicas import validacao_decidida
-
-    try:
-        recomendados = validacao_decidida.recomendar_abertos(_supabase())
-    except Exception as e:
-        logger.error(f"[Cron] Erro em recomendar_validacao_contas_medicas: {type(e).__name__}")
-        return
-    if recomendados:
-        logger.info(f"[Cron] Validação de Contas médicas: {recomendados} tema(s) com recomendação do Auditor.")
-
-
-def revisar_contas_medicas() -> None:
-    """O segundo agente de Contas médicas (issue #1493, ADR 0081, decisão 14).
-
-    Relê até 10 Contas concluídas ainda não revisadas e grava cada omissão
-    achada como Faltou isto de origem AGENTE. A lógica vive no serviço; aqui,
-    só o relógio e o log. Na falha, só o tipo do erro: a mensagem pode citar o
-    prontuário."""
-    from app.services.contas_medicas import revisor
-
-    try:
-        achados = revisor.revisar_semana(_supabase())
-    except Exception as e:
-        logger.error(f"[Cron] Erro em revisar_contas_medicas: {type(e).__name__}")
-        return
-    logger.info(f"[Cron] Segundo agente de Contas médicas: {achados} Faltou isto achado(s).")
-
-
 def _registrar_entrega(competencia: str, entrega, rotulo: str = "Relatório quinzenal") -> None:
     """Escreve no log o que aconteceu com uma tentativa de entrega.
 
@@ -602,27 +569,6 @@ def start_scheduler() -> None:
         id="contratos_contas_medicas",
         replace_existing=True,
     )
-    # A cada 30 minutos: o Auditor recomenda até cinco Temas por rodada, e a
-    # Regra pendente custa a prova inteira.
-    scheduler.add_job(
-        recomendar_validacao_contas_medicas,
-        "interval",
-        minutes=30,
-        id="validacao_decidida_contas_medicas",
-        replace_existing=True,
-    )
-    # Domingo às 03:00, uma vez por semana, fora do expediente e longe dos
-    # jobs da madrugada. Disparo perdido num deploy só adia a releitura para o
-    # domingo seguinte: a Conta não revisada continua no sorteio.
-    scheduler.add_job(
-        revisar_contas_medicas,
-        "cron",
-        day_of_week="sun",
-        hour=3,
-        minute=0,
-        id="revisor_contas_medicas",
-        replace_existing=True,
-    )
     # Todo dia às 07h, no fuso do scheduler (America/Sao_Paulo). A quinzena
     # fecha nos dias 1 e 16, e é neles que o email sai; os outros dias existem
     # para a edição não se perder quando o container estiver fora do ar na hora
@@ -651,7 +597,6 @@ def start_scheduler() -> None:
         "notificacoes_ouvidoria (a cada 10min), cobranca_prazos_ouvidoria (a cada 10min), "
         "escalonamento_ouvidoria (a cada 10min), retencao_ouvidoria (04:00), "
         "retencao_contas_medicas (04:30), fila_contas_medicas (a cada 10s), contratos_contas_medicas (07:15), "
-        "revisor_contas_medicas (domingo 03:00), "
         "relatorio_quinzenal_ouvidoria (07:00 diário, email nos dias 1 e 16), "
         "reconciliacao_tecnologia (de hora em hora)"
     )

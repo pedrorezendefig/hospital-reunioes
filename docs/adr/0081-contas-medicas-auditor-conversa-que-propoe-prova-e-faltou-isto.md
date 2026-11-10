@@ -1,6 +1,7 @@
 ---
 status: accepted
 amends: 0070
+amended_by: 0082
 ---
 
 # Contas médicas: o Auditor é uma conversa que só propõe, toda regra passa por prova, e o "Faltou isto" entra no Guia

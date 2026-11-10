@@ -15,7 +15,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ToastProvider } from "@/components/ui/Toast";
 import { caixaDoDado } from "@/lib/testes/caixaDoDado";
-import type { FilaDeValidacao, Tema } from "@/lib/contas-medicas/validacao";
+import {
+  type FilaDeValidacao,
+  PERGUNTA_A_CADA_MS,
+  type PedidoAoAuditor,
+  type Tema,
+} from "@/lib/contas-medicas/validacao";
 
 import ValidacaoPage from "./page";
 
@@ -90,13 +95,24 @@ type Pedido = { url: string; metodo: string; corpo: unknown };
 
 type Leitura = "ok" | "ia-fora" | "sem-rede";
 
-function servidor(fila: FilaDeValidacao = FILA, status = 200, leitura: Leitura = "ok") {
+const SEM_PEDIDO: PedidoAoAuditor = { temas: 0, provas: 0, custo_estimado_usd: 0, em_andamento: false };
+
+function servidor(
+  fila: FilaDeValidacao = FILA,
+  status = 200,
+  leitura: Leitura = "ok",
+  pedido: PedidoAoAuditor = { ...SEM_PEDIDO },
+) {
   const pedidos: Pedido[] = [];
   const fetch = vi.fn(async (url: string, init?: RequestInit) => {
     const metodo = init?.method ?? "GET";
     pedidos.push({ url, metodo, corpo: typeof init?.body === "string" ? JSON.parse(init.body) : null });
     if (url === "/api/contas-medicas/validacao") {
       return { ok: status === 200, status, json: async () => (status === 200 ? fila : { detail: "Sem permissão" }) };
+    }
+    if (url === "/api/contas-medicas/validacao/recomendacao") {
+      if (metodo === "POST") pedido.em_andamento = true;
+      return { ok: true, status: metodo === "POST" ? 202 : 200, json: async () => ({ ...pedido }) };
     }
     if (url.endsWith("/leitura")) {
       if (leitura === "sem-rede") throw new TypeError("Failed to fetch");
@@ -486,6 +502,76 @@ class GravadorFalso {
     this.onstop?.();
   }
 }
+
+describe("o pedido de recomendação ao Auditor (ADR 0082, issue #1523)", () => {
+  const ROTA = "/api/contas-medicas/validacao/recomendacao";
+  const TRES = (): PedidoAoAuditor => ({ temas: 3, provas: 1, custo_estimado_usd: 0.42, em_andamento: false });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.useRealTimers();
+  });
+
+  it("mostra quantos cartões estão sem recomendação, as provas e o custo antes do clique", async () => {
+    const pedidos = servidor(FILA, 200, "ok", TRES());
+    abrir();
+
+    const pedido = await screen.findByRole("region", { name: "Pedido ao Auditor" });
+    expect(pedido.textContent).toContain("3 cartões estão sem recomendação do Auditor, 1 com Prova da regra");
+    expect(pedido.textContent).toContain("cerca de US$ 0,42");
+    expect(pedidos.filter((p) => p.url === ROTA && p.metodo === "POST")).toHaveLength(0);
+  });
+
+  it("o clique pergunta com o custo, manda o pedido e mostra que o Auditor está recomendando", async () => {
+    const pedidos = servidor(FILA, 200, "ok", TRES());
+    const confirmar = vi.spyOn(window, "confirm").mockReturnValue(true);
+    abrir();
+
+    fireEvent.click(await screen.findByRole("button", { name: "Pedir recomendação ao Auditor" }));
+
+    expect(confirmar).toHaveBeenCalledWith(
+      "Pedir ao Auditor a recomendação de 3 cartões? Custo estimado: cerca de US$ 0,42.",
+    );
+    await screen.findByText("O Auditor está recomendando a fila. A tela atualiza sozinha quando ele terminar.", {
+      exact: false,
+    });
+    expect(pedidos).toContainEqual({ url: ROTA, metodo: "POST", corpo: null });
+    expect(screen.queryByRole("button", { name: "Pedir recomendação ao Auditor" })).toBeNull();
+  });
+
+  it("sem confirmar, não pede nada ao servidor", async () => {
+    const pedidos = servidor(FILA, 200, "ok", TRES());
+    vi.spyOn(window, "confirm").mockReturnValue(false);
+    abrir();
+
+    fireEvent.click(await screen.findByRole("button", { name: "Pedir recomendação ao Auditor" }));
+
+    expect(pedidos.filter((p) => p.url === ROTA && p.metodo === "POST")).toHaveLength(0);
+    expect(screen.getByRole("button", { name: "Pedir recomendação ao Auditor" })).toBeTruthy();
+  });
+
+  it("sem cartão sem recomendação, o botão não aparece", async () => {
+    servidor(FILA, 200, "ok", { ...SEM_PEDIDO });
+    abrir();
+
+    await screen.findByRole("region", { name: "Números da Validação" });
+    await waitFor(() => expect(screen.queryByRole("region", { name: "Pedido ao Auditor" })).toBeNull());
+  });
+
+  it("quando o Auditor termina, a tela relê a fila e o aviso some", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const pedido = { ...TRES(), em_andamento: true };
+    const pedidos = servidor(FILA, 200, "ok", pedido);
+    abrir();
+    await screen.findByText("O Auditor está recomendando a fila.", { exact: false });
+
+    Object.assign(pedido, { temas: 0, provas: 0, em_andamento: false });
+    await vi.advanceTimersByTimeAsync(PERGUNTA_A_CADA_MS);
+
+    await waitFor(() => expect(pedidos.filter((p) => p.url === "/api/contas-medicas/validacao")).toHaveLength(2));
+    await waitFor(() => expect(screen.queryByRole("region", { name: "Pedido ao Auditor" })).toBeNull());
+  });
+});
 
 describe("o Ditar na resposta ao time (issue #1145)", () => {
   it("tem o aviso de paciente ao lado, e o texto ditado entra no campo sem enviar a resposta", async () => {

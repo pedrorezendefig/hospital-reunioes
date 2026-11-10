@@ -85,12 +85,14 @@ class _Provedor:
 
     def __init__(self):
         self.pedidos: list[str] = []
+        self.modelos: list[str] = []
         self.recomendacoes = dict(RECOMENDACOES)
 
     def __call__(self, request: httpx2.Request) -> httpx2.Response:
         corpo = json.loads(request.content)
         texto = "\n".join(bloco["text"] for m in corpo["messages"] for bloco in m["content"])
         self.pedidos.append(texto)
+        self.modelos.append(corpo["model"])
         if "O TEMA DE VALIDAÇÃO" in texto:
             titulo = re.search(r"Título: (.+)", texto).group(1).strip()
             return httpx2.Response(200, json=mensagem(json.dumps(self.recomendacoes[titulo])))
@@ -443,36 +445,100 @@ class TestOLote:
 
 
 # ═══════════════════════════════════════════════════════════════════════════
-# 3. O relógio e o kit de conhecimento
+# 3. A recomendação só sai do botão (ADR 0082) e o kit de conhecimento
 # ═══════════════════════════════════════════════════════════════════════════
 
+ROTA_DO_PEDIDO = "/api/contas-medicas/validacao/recomendacao"
 
-def test_o_auditor_recomenda_a_fila_pelo_relogio_do_backend():
+
+def test_nenhum_job_do_agendador_pede_a_recomendacao():
     from app.cron import scheduler as cron
 
     try:
         cron.start_scheduler()
-        job = cron.scheduler.get_job("validacao_decidida_contas_medicas")
-        assert job is not None
-        assert job.func is cron.recomendar_validacao_contas_medicas
+        assert cron.scheduler.get_job("validacao_decidida_contas_medicas") is None
     finally:
         cron.stop_scheduler()
+    assert not hasattr(cron, "recomendar_validacao_contas_medicas")
 
 
-def test_o_job_recomenda_os_temas_abertos(monkeypatch, provedor):
-    from app.cron import scheduler as cron
+class TestOBotao:
+    def test_o_botao_mostra_os_temas_as_provas_e_o_custo_antes_do_clique(self, provedor):
+        banco = _cenario()
+        _tres_temas(banco)
 
-    banco = _cenario()
-    _tres_temas(banco)
-    monkeypatch.setattr(cron, "_supabase", lambda: banco)
+        pedido = _cliente(banco, "gestao").get(ROTA_DO_PEDIDO)
 
-    cron.recomendar_validacao_contas_medicas()
+        assert pedido.status_code == 200, pedido.text
+        corpo = pedido.json()
+        assert (corpo["temas"], corpo["provas"], corpo["em_andamento"]) == (3, 1, False)
+        # Uma prova numa conta concluída e três recomendações, no Sonnet.
+        assert corpo["custo_estimado_usd"] == pytest.approx(1 * 0.30 + 3 * 0.04)
+        # Ver o pedido não chama a IA.
+        assert provedor.pedidos == []
 
-    assert {t["recomendacao"] for t in banco.tabelas["cm_validacao_tema"]} == {
-        "VALIDAR_REGRA",
-        "DESCARTAR",
-        "RESPONDER",
-    }
+    def test_o_clique_recomenda_todos_os_temas_abertos(self, provedor):
+        banco = _cenario()
+        _tres_temas(banco)
+
+        resposta = _cliente(banco, "gestao").post(ROTA_DO_PEDIDO)
+
+        assert resposta.status_code == 202, resposta.text
+        assert {t["recomendacao"] for t in banco.tabelas["cm_validacao_tema"]} == {
+            "VALIDAR_REGRA",
+            "DESCARTAR",
+            "RESPONDER",
+        }
+        assert _cliente(banco, "gestao").get(ROTA_DO_PEDIDO).json()["temas"] == 0
+
+    def test_a_prova_e_o_auditor_do_botao_rodam_no_modelo_da_validacao(self, provedor, monkeypatch):
+        from app.config import settings
+
+        monkeypatch.setattr(settings, "cm_ia_modelo_passo_b", "claude-opus-5-5")
+        assert settings.cm_ia_modelo_validacao == "claude-sonnet-5-5"
+        banco = _cenario()
+        _tres_temas(banco)
+
+        _cliente(banco, "gestao").post(ROTA_DO_PEDIDO)
+
+        assert len(provedor.modelos) == 4
+        assert set(provedor.modelos) == {"claude-sonnet-5-5"}
+        assert {c["modelo"] for c in banco.tabelas["cm_chamada_ia"]} == {"claude-sonnet-5-5"}
+
+    def test_segundo_clique_enquanto_o_primeiro_roda_nao_dispara_outra_rodada(self, provedor):
+        from app.services.contas_medicas import validacao_decidida
+
+        banco = _cenario()
+        _tres_temas(banco)
+        assert validacao_decidida.reservar()
+        try:
+            assert _cliente(banco, "gestao").get(ROTA_DO_PEDIDO).json()["em_andamento"] is True
+            resposta = _cliente(banco, "gestao").post(ROTA_DO_PEDIDO)
+        finally:
+            validacao_decidida.liberar()
+
+        assert resposta.status_code == 409
+        assert provedor.pedidos == []
+
+    def test_sem_tema_sem_recomendacao_o_clique_nao_chama_a_ia(self, provedor):
+        banco = _cenario()
+        _tres_temas(banco)
+        _cliente(banco, "gestao").post(ROTA_DO_PEDIDO)
+        chamadas = len(provedor.pedidos)
+
+        resposta = _cliente(banco, "gestao").post(ROTA_DO_PEDIDO)
+
+        assert resposta.status_code == 409
+        assert len(provedor.pedidos) == chamadas
+
+    @pytest.mark.parametrize("quem", ["faturista", "coordenadora"])
+    def test_so_quem_decide_validacao_pede_a_recomendacao(self, provedor, quem):
+        banco = _cenario()
+        _tres_temas(banco)
+
+        assert _cliente(banco, quem).post(ROTA_DO_PEDIDO).status_code == 403
+        assert _cliente(banco, quem).get(ROTA_DO_PEDIDO).status_code == 403
+        assert provedor.pedidos == []
 
 
 def test_a_migration_126_tem_as_colunas_da_recomendacao():

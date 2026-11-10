@@ -12,7 +12,7 @@
       "pdf": "WeasyPrint + Jinja2"
     },
     "integrations": [
-      { "name": "Anthropic", "configured_via": "ANTHROPIC_API_KEY", "note": "IA de texto do app inteiro desde a issue #1302 (Atas, POP, Ouvidoria, Assistente de Tecnologia, Contas médicas), pelo LLM_MODEL e pelos CM_IA_MODELO_PASSO_A/B, todos claude-sonnet-5-5, e o Planejamento da Demanda pelo LLM_MODEL_PLANEJAMENTO, claude-opus-5-5 (ADR 0075). Retenção padrão da API (até 30 dias, sem treino), sem ZDR (ADR 0074)" },
+      { "name": "Anthropic", "configured_via": "ANTHROPIC_API_KEY", "note": "IA de texto do app inteiro desde a issue #1302 (Atas, POP, Ouvidoria, Assistente de Tecnologia, Contas médicas), pelo LLM_MODEL e pelos CM_IA_MODELO_PASSO_A/B (default claude-sonnet-5-5 no código; em produção estão em claude-opus-5-5 no Coolify, conferido em 09/11/2026), a recomendação da Validação pelo CM_IA_MODELO_VALIDACAO (claude-sonnet-5-5, ADR 0082), e o Planejamento da Demanda pelo LLM_MODEL_PLANEJAMENTO, claude-opus-5-5 (ADR 0075). Retenção padrão da API (até 30 dias, sem treino), sem ZDR (ADR 0074)" },
       { "name": "OpenRouter", "configured_via": "OPENROUTER_API_KEY", "note": "Só a transcrição de voz, pelo TRANSCRICAO_MODEL (default: openai/gpt-4o-mini-transcribe)" },
       { "name": "ClickSign", "configured_via": "CLICKSIGN_API_KEY", "note": "Assinatura digital de atas (sandbox em dev, app em prod)" },
       { "name": "Resend", "configured_via": "RESEND_API_KEY", "note": "Emails transacionais e SMTP do Supabase Auth" },
@@ -97,6 +97,7 @@
         ],
         "runtime_optional": [
           { "name": "APP_VERSION", "purpose": "Versão semântica (semver) exibida no /api/health e no rodapé do frontend. Injetada pelo /ship Passo 8.5 (ou /deploy ship Passo 3.5 standalone) a partir de frontend/package.json. Opcional porque config.py tem default '0.1.0' — app não quebra se ausente." },
+          { "name": "CM_IA_MODELO_VALIDACAO", "purpose": "Modelo da Prova da regra e do Auditor quando alguém clica em Pedir recomendação ao Auditor na Validação de Contas médicas (ADR 0082, issue #1523). Ausente = claude-sonnet-5-5, o default do código. A Prova pedida na conversa da Operadora segue no CM_IA_MODELO_PASSO_B." },
           { "name": "LLM_MODEL_PLANEJAMENTO", "purpose": "Modelo do Planejamento da Demanda na aba Tecnologia (issue #1345, ADR 0075, decisão 7), pela mesma ANTHROPIC_API_KEY. Ausente = claude-opus-5-5, o default do código. Modelo fora da tabela de preço do código grava custo zero e avisa no log. Nome de modelo do OpenRouter aqui dá erro em todo turno." },
           { "name": "ANA_API_KEY", "purpose": "API key de serviço da API da Ana (header X-API-Key, ADR 0031). Vazia/ausente = API da Ana desabilitada (recusa tudo). A mesma chave vai no vault da plataforma da Ana." },
           { "name": "OUVIDORIA_RETENCAO_ATIVA", "purpose": "Freio do job de retenção da Ouvidoria (issue #343), que às 04:00 apaga em definitivo o Dossiê de manifestação encerrada há mais de cinco anos. Ausente = true (ligado). Defina 'false' e reinicie o backend para parar o job sem esperar deploy de código: é a única defesa se o prazo, o relógio do host ou os dados saírem do lugar." },

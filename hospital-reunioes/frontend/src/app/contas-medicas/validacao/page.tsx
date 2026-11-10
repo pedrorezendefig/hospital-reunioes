@@ -12,18 +12,26 @@
  * Desde a issue #1491 a fila chega decidida pelo Auditor: "Aprovar o lote"
  * manda os cartões com recomendação, e o servidor aplica cada uma pelo mesmo
  * caminho do botão do cartão. Quem discorda decide o cartão antes.
+ *
+ * A recomendação só sai do botão "Pedir recomendação ao Auditor" (ADR 0082,
+ * issue #1523): ele mostra antes quantos cartões e o custo estimado, pede
+ * confirmação e o servidor roda em segundo plano. Enquanto roda, a tela
+ * pergunta de tempos em tempos e relê a fila quando termina.
  */
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { AlertCircle, ArrowLeft, CheckCheck, Loader2 } from "lucide-react";
+import { AlertCircle, ArrowLeft, CheckCheck, Loader2, Sparkles } from "lucide-react";
 
 import { CartaoDeTema } from "@/components/contas-medicas/CartaoDeTema";
 import { reais } from "@/lib/contas-medicas/guia";
 import { detalheDoErro } from "@/lib/contas-medicas/operadoras";
+import { textoEmDolar } from "@/lib/contas-medicas/painel";
 import {
   type Decisao,
   type FilaDeValidacao,
+  PERGUNTA_A_CADA_MS,
+  type PedidoAoAuditor,
   ROTA_DA_FILA,
   type Tema,
   type TemaDoLote,
@@ -32,6 +40,8 @@ import {
   decidir,
   enviarAoCadastro,
   lerObservacao,
+  pedirRecomendacao,
+  verPedido,
 } from "@/lib/contas-medicas/validacao";
 import { createClient } from "@/lib/supabase/client";
 
@@ -45,6 +55,44 @@ function Numero({ rotulo, valor }: { rotulo: string; valor: string }) {
       <p className="text-xs font-semibold uppercase tracking-[0.04em] text-slate-500">{rotulo}</p>
       <p className="text-2xl font-bold text-primary mt-1">{valor}</p>
     </div>
+  );
+}
+
+function PedidoDoAuditor({
+  pedido,
+  ocupado,
+  onPedir,
+}: {
+  pedido: PedidoAoAuditor;
+  ocupado: boolean;
+  onPedir: () => void;
+}) {
+  if (pedido.em_andamento) {
+    return (
+      <section aria-label="Pedido ao Auditor" className={`${CARTAO} flex items-center gap-2 text-sm text-slate-600`}>
+        <Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" />
+        O Auditor está recomendando a fila. A tela atualiza sozinha quando ele terminar.
+      </section>
+    );
+  }
+  return (
+    <section
+      aria-label="Pedido ao Auditor"
+      className={`${CARTAO} flex flex-wrap items-center justify-between gap-3`}
+    >
+      <p className="text-sm text-slate-600 max-w-xl">
+        {pedido.temas} {pedido.temas === 1 ? "cartão está" : "cartões estão"} sem recomendação do Auditor,{" "}
+        {pedido.provas} com Prova da regra. Custo estimado: cerca de {textoEmDolar(pedido.custo_estimado_usd)}.
+      </p>
+      <button type="button" disabled={ocupado} onClick={onPedir} className={BOTAO}>
+        {ocupado ? (
+          <Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" />
+        ) : (
+          <Sparkles className="w-4 h-4" aria-hidden="true" />
+        )}
+        Pedir recomendação ao Auditor
+      </button>
+    </section>
   );
 }
 
@@ -85,6 +133,7 @@ export default function ValidacaoPage() {
   const [erro, setErro] = useState<string | null>(null);
   const [ocupado, setOcupado] = useState<string | null>(null);
   const [falhasDaLeitura, setFalhasDaLeitura] = useState<Record<string, string>>({});
+  const [pedido, setPedido] = useState<PedidoAoAuditor | null>(null);
   const lidas = useRef(new Set<string>());
 
   const carregar = useCallback(async (tk: string) => {
@@ -101,6 +150,7 @@ export default function ValidacaoPage() {
       }
       setErro(null);
       setFila(await res.json());
+      setPedido(await verPedido(tk).catch(() => null));
     } catch {
       setErro("Não foi possível carregar a fila de Validação.");
     } finally {
@@ -143,6 +193,35 @@ export default function ValidacaoPage() {
         });
     }
   }, [token, fila]);
+
+  // Enquanto o Auditor recomenda, a tela pergunta de tempos em tempos e relê a
+  // fila quando ele termina.
+  const emAndamento = pedido?.em_andamento ?? false;
+  useEffect(() => {
+    if (!token || !emAndamento) return;
+    const relogio = setInterval(async () => {
+      const atual = await verPedido(token).catch(() => null);
+      if (!atual || atual.em_andamento) return;
+      await carregar(token);
+    }, PERGUNTA_A_CADA_MS);
+    return () => clearInterval(relogio);
+  }, [token, emAndamento, carregar]);
+
+  async function aoPedirRecomendacao() {
+    if (!token || !pedido) return;
+    const pergunta =
+      `Pedir ao Auditor a recomendação de ${pedido.temas} ${pedido.temas === 1 ? "cartão" : "cartões"}? ` +
+      `Custo estimado: cerca de ${textoEmDolar(pedido.custo_estimado_usd)}.`;
+    if (!window.confirm(pergunta)) return;
+    setOcupado("pedido");
+    const { pedido: novo, erro: falha } = await pedirRecomendacao(token);
+    setOcupado(null);
+    if (!novo) {
+      setErro(falha ?? "Não foi possível pedir a recomendação.");
+      return;
+    }
+    setPedido(novo);
+  }
 
   async function aoDecidir(tema: Tema, decisao: Decisao, corpo?: { texto?: string }) {
     if (!token) return;
@@ -219,6 +298,10 @@ export default function ValidacaoPage() {
             <Numero rotulo="Contas afetadas" valor={String(fila.numeros.contas_afetadas)} />
             <Numero rotulo="R$ em jogo" valor={`R$ ${reais(fila.numeros.valor_em_jogo)}`} />
           </section>
+
+          {pedido && (pedido.em_andamento || pedido.temas > 0) && (
+            <PedidoDoAuditor pedido={pedido} ocupado={ocupado === "pedido"} onPedir={aoPedirRecomendacao} />
+          )}
 
           {fila.temas.some((t) => t.recomendacao) && (
             <LoteDoAuditor

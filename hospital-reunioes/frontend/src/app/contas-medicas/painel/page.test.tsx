@@ -14,7 +14,7 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-li
 import { cloneElement, type ReactElement } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import type { Painel } from "@/lib/contas-medicas/painel";
+import { type Painel, PERGUNTA_A_CADA_MS, type PedidoAoSegundoAgente } from "@/lib/contas-medicas/painel";
 
 import PainelPage from "./page";
 
@@ -128,14 +128,25 @@ const DA_FATURISTA: Painel = {
   producao: [PRODUCAO_DA_ANA],
 };
 
-function servidorResponde(painel: Painel) {
-  const fetch = vi.fn(async () => ({ ok: true, status: 200, json: async () => painel }));
+const SEGUNDO_AGENTE = "/api/contas-medicas/painel/segundo-agente";
+
+/** `segundoAgente` nulo é quem não tem o painel completo: a rota dele dá 403. */
+function servidorResponde(painel: Painel, segundoAgente: PedidoAoSegundoAgente | null = null) {
+  const fetch = vi.fn(async (url: string, init?: RequestInit) => {
+    if (url === SEGUNDO_AGENTE) {
+      if (!segundoAgente) return { ok: false, status: 403, json: async () => ({ detail: "Sem permissão" }) };
+      if (init?.method === "POST") segundoAgente.em_andamento = true;
+      return { ok: true, status: init?.method === "POST" ? 202 : 200, json: async () => ({ ...segundoAgente }) };
+    }
+    return { ok: true, status: 200, json: async () => painel };
+  });
   vi.stubGlobal("fetch", fetch);
   return fetch;
 }
 
+/** Os pedidos do Painel, sem os do botão do segundo agente. */
 function pedidos(fetch: ReturnType<typeof vi.fn>): string[] {
-  return fetch.mock.calls.map(([url]) => String(url));
+  return fetch.mock.calls.map(([url]) => String(url)).filter((url) => url !== SEGUNDO_AGENTE);
 }
 
 beforeEach(() => {
@@ -252,5 +263,74 @@ describe("o Painel", () => {
         `/api/contas-medicas/painel?semana=2026-09-28&operadora_id=${ASSIM}&tipo=parcial`,
       ),
     );
+  });
+});
+
+describe("o botão do segundo agente (ADR 0082, issue #1523)", () => {
+  const DEZ = (): PedidoAoSegundoAgente => ({ contas: 10, custo_estimado_usd: 6, em_andamento: false });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.useRealTimers();
+  });
+
+  it("mostra quantas contas e o custo antes do clique, sem chamar o agente", async () => {
+    const fetch = servidorResponde(PAINEL, DEZ());
+
+    render(<PainelPage />);
+
+    const agente = await screen.findByRole("region", { name: "Segundo agente" });
+    expect(agente.textContent).toContain("relê 10 contas concluídas que ele ainda não revisou");
+    expect(agente.textContent).toContain("cerca de US$ 6,00");
+    expect(fetch.mock.calls.filter(([, init]) => init?.method === "POST")).toHaveLength(0);
+  });
+
+  it("o clique pergunta com o custo, chama o agente e mostra que ele está relendo", async () => {
+    const fetch = servidorResponde(PAINEL, DEZ());
+    const confirmar = vi.spyOn(window, "confirm").mockReturnValue(true);
+    render(<PainelPage />);
+
+    fireEvent.click(await screen.findByRole("button", { name: "Reler contas concluídas" }));
+
+    expect(confirmar).toHaveBeenCalledWith(
+      "Pedir ao segundo agente a releitura de 10 contas? Custo estimado: cerca de US$ 6,00.",
+    );
+    await screen.findByText("O segundo agente está relendo as contas.", { exact: false });
+    expect(fetch.mock.calls.filter(([url, init]) => url === SEGUNDO_AGENTE && init?.method === "POST")).toHaveLength(1);
+  });
+
+  it("sem confirmar, não chama o agente", async () => {
+    const fetch = servidorResponde(PAINEL, DEZ());
+    vi.spyOn(window, "confirm").mockReturnValue(false);
+    render(<PainelPage />);
+
+    fireEvent.click(await screen.findByRole("button", { name: "Reler contas concluídas" }));
+
+    expect(fetch.mock.calls.filter(([, init]) => init?.method === "POST")).toHaveLength(0);
+  });
+
+  it("sem o painel completo, o botão não aparece", async () => {
+    servidorResponde(DA_FATURISTA, null);
+
+    render(<PainelPage />);
+
+    await screen.findByRole("region", { name: "Produção por faturista" });
+    expect(screen.queryByRole("region", { name: "Segundo agente" })).toBeNull();
+  });
+
+  it("quando o agente termina, o Painel é pedido de novo e o aviso some", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const agente = { ...DEZ(), em_andamento: true };
+    const fetch = servidorResponde(PAINEL, agente);
+    render(<PainelPage />);
+    await screen.findByText("O segundo agente está relendo as contas.", { exact: false });
+    await screen.findByRole("region", { name: "Nota média de entrada" });
+    const antes = pedidos(fetch).length;
+
+    Object.assign(agente, { contas: 0, em_andamento: false });
+    await vi.advanceTimersByTimeAsync(PERGUNTA_A_CADA_MS);
+
+    await waitFor(() => expect(pedidos(fetch).length).toBe(antes + 1));
+    await waitFor(() => expect(screen.queryByRole("region", { name: "Segundo agente" })).toBeNull());
   });
 });

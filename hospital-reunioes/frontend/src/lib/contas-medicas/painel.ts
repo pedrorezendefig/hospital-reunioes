@@ -177,3 +177,16 @@ export function textoDaTaxa(taxa: number | null): string {
 export function textoDoPercentual(percentual: number): string {
   return `${PORCENTO.format(percentual)}%`;
 }
+
+/** O botão "Reler contas concluídas" do segundo agente (ADR 0082, issue
+ * #1523): o que ele mostra antes do clique, e se um pedido já está rodando. */
+export interface PedidoAoSegundoAgente {
+  contas: number;
+  custo_estimado_usd: number;
+  em_andamento: boolean;
+}
+
+export const ROTA_DO_SEGUNDO_AGENTE = "/api/contas-medicas/painel/segundo-agente";
+
+/** De quanto em quanto tempo a tela pergunta se a releitura terminou. */
+export const PERGUNTA_A_CADA_MS = 15_000;
