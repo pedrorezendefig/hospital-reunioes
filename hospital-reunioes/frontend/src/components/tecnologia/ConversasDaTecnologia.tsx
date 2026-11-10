@@ -16,6 +16,10 @@
  * em cada linha. A Demanda de outro autor abre só para leitura, com a
  * entrevista inteira, os Anexos e o número e o link da issue. Quem é
  * Desenvolvedor é o servidor que diz.
+ *
+ * Cada linha com card mostra o Responsável, para todos, e a lista do
+ * Desenvolvedor abre em "Para mim", as Demandas de que ele cuida (issue
+ * #1533, ADR 0083, decisão 5).
  */
 
 import { useCallback, useEffect, useState } from "react";
@@ -43,8 +47,9 @@ const LISTA_VAZIA = "Nenhuma conversa ainda.";
 const LISTA_FALHOU = "Não foi possível carregar as suas conversas. Tente recarregar a página.";
 const URL_QUEM_SOU = `${BASE_TECNOLOGIA}/eu`;
 
-type Filtro = "minhas" | "todas";
+type Filtro = "para_mim" | "minhas" | "todas";
 const FILTROS: { valor: Filtro; rotulo: string }[] = [
+  { valor: "para_mim", rotulo: "Para mim" },
   { valor: "minhas", rotulo: "Minhas" },
   { valor: "todas", rotulo: "Todas" },
 ];
@@ -180,7 +185,8 @@ export function ConversasDaTecnologia({ token }: { token: string | null }) {
   const [chave, setChave] = useState(0);
   const [naTela, setNaTela] = useState<"lista" | "conversa">("lista");
   const [desenvolvedor, setDesenvolvedor] = useState(false);
-  const [filtro, setFiltro] = useState<Filtro>("minhas");
+  /** Nulo até o servidor dizer quem está logado: o Desenvolvedor abre em Para mim. */
+  const [filtro, setFiltro] = useState<Filtro | null>(null);
 
   // Sem resposta, a tela fica como a do diretor: o filtro só aparece com o
   // sim do servidor.
@@ -188,14 +194,19 @@ export function ConversasDaTecnologia({ token }: { token: string | null }) {
     if (!token) return;
     let viva = true;
     (async () => {
+      let sim = false;
       try {
         const resposta = await fetch(URL_QUEM_SOU, { headers: { Authorization: `Bearer ${token}` } });
-        if (!resposta.ok) return;
-        const corpo: unknown = await resposta.json();
-        if (viva) setDesenvolvedor((corpo as { desenvolvedor?: unknown })?.desenvolvedor === true);
+        if (resposta.ok) {
+          const corpo: unknown = await resposta.json();
+          sim = (corpo as { desenvolvedor?: unknown })?.desenvolvedor === true;
+        }
       } catch (e) {
         console.error("[admin/tecnologia] falha ao saber quem está logado", e);
       }
+      if (!viva) return;
+      setDesenvolvedor(sim);
+      setFiltro(sim ? "para_mim" : "minhas");
     })();
     return () => {
       viva = false;
@@ -203,8 +214,8 @@ export function ConversasDaTecnologia({ token }: { token: string | null }) {
   }, [token]);
 
   const carregar = useCallback(async () => {
-    if (!token) return;
-    const url = filtro === "todas" ? `${URL_DO_CHAT_DA_ABA}?filtro=todas` : URL_DO_CHAT_DA_ABA;
+    if (!token || filtro === null) return;
+    const url = filtro === "minhas" ? URL_DO_CHAT_DA_ABA : `${URL_DO_CHAT_DA_ABA}?filtro=${filtro}`;
     try {
       const resposta = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
       if (!resposta.ok) {
@@ -303,6 +314,11 @@ export function ConversasDaTecnologia({ token }: { token: string | null }) {
                     <span className="normal-case font-medium text-text-primary line-clamp-2">{demanda.titulo}</span>
                     {demanda.autor && (
                       <span className="normal-case text-xs text-text-secondary">{demanda.autor}</span>
+                    )}
+                    {demanda.responsavel && (
+                      <span className="normal-case text-xs text-text-secondary">
+                        Responsável: {demanda.responsavel}
+                      </span>
                     )}
                     <span className="flex flex-wrap items-center gap-1.5">
                       <EtapaNaLista demanda={demanda} />

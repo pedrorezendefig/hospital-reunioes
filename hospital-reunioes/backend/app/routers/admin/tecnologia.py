@@ -17,7 +17,11 @@ O chat da aba (issues #1381, #1383 e #1384):
                                                 de quem esta logado, da mais
                                                 recente para a mais antiga;
                                                 `?filtro=todas` traz as de
-                                                todos ao Desenvolvedor.
+                                                todos ao Desenvolvedor, e
+                                                `?filtro=para_mim` as de que
+                                                ele e o Responsavel.
+- GET   /admin/tecnologia/desenvolvedores       o "Quem cuida disto?" do
+                                                resumo (ADR 0083).
 - POST  /admin/tecnologia/chat                  o primeiro turno: a Demanda
                                                 nasce aqui.
 - GET   /admin/tecnologia/chat/{id}             a conversa guardada.
@@ -27,7 +31,8 @@ O chat da aba (issues #1381, #1383 e #1384):
 - POST  /admin/tecnologia/chat/{id}/resumo      o "Fechar e resumir" da
                                                 melhoria.
 - POST  /admin/tecnologia/chat/{id}/criar-card  cria a issue (o bug pronto para
-                                                a onda, ou o PRD do diretor) e
+                                                a onda, ou o PRD do diretor),
+                                                designada ao Responsavel, e
                                                 vincula.
 
 O print do chat (ADR 0056, decisao 4; ADR 0077, decisao 8):
@@ -67,7 +72,9 @@ from app.models.tecnologia_schemas import (
     ChatPrimeiroTurnoPayload,
     ChatResponse,
     ChatTurnoPayload,
+    CriarOCardPayload,
     DemandaResponse,
+    DesenvolvedorResponse,
     QuemSouNaAbaResponse,
 )
 from app.services import (
@@ -87,6 +94,7 @@ from app.services.tecnologia import (
     e_desenvolvedor,
     instante_do_banco,
     pode_ver,
+    responsavel_da_demanda,
     versao_da_entrega,
 )
 from app.services.tecnologia_sincronizacao import mudanca_da_foto
@@ -101,6 +109,7 @@ from app.services.tecnologia_vinculo import (
     labels_da_issue_nova,
     link_da_demanda,
     login_para_publicar,
+    normalizar_github_login,
     titulo_da_issue,
 )
 
@@ -133,10 +142,14 @@ def _para_a_lista(supabase: Client, demandas: list[dict], *, ator: dict) -> list
     E o funil por onde a Demanda sai desta API, e por isso o corte e aqui:
     numero e endereco da issue nao saem para o diretor (ADR 0054, decisao 9), e
     ele le a Etapa e O que muda sem nenhum dos dois. O Desenvolvedor le tambem
-    o autor, o numero e o link (ADR 0083, decisao 3).
+    o autor, o numero e o link (ADR 0083, decisao 3). O Responsavel sai para
+    os dois (ADR 0083, decisao 5).
     """
     desenvolvedor = e_desenvolvedor(ator)
-    nomes = _nomes_dos_autores(supabase, demandas) if desenvolvedor else {}
+    ids = {responsavel_da_demanda(d) for d in demandas}
+    if desenvolvedor:
+        ids |= {d.get("autor_id") for d in demandas}
+    nomes = _nomes(supabase, ids)
     return [
         {
             **d,
@@ -148,16 +161,17 @@ def _para_a_lista(supabase: Client, demandas: list[dict], *, ator: dict) -> list
             "autor": nomes.get(str(d.get("autor_id"))) if desenvolvedor else None,
             "issue_numero": d.get("github_issue_numero") if desenvolvedor else None,
             "issue_url": _url_da_issue(d) if desenvolvedor else None,
+            "responsavel": nomes.get(str(responsavel_da_demanda(d))),
         }
         for d in demandas
     ]
 
 
-def _nomes_dos_autores(supabase: Client, demandas: list[dict]) -> dict[str, str]:
-    ids = sorted({str(d["autor_id"]) for d in demandas if d.get("autor_id")})
-    if not ids:
+def _nomes(supabase: Client, ids: set) -> dict[str, str]:
+    ids_lidos = sorted({str(i) for i in ids if i})
+    if not ids_lidos:
         return {}
-    result = selecionar_participantes(supabase, "id, nome_completo", lambda q: q.in_("id", ids))
+    result = selecionar_participantes(supabase, "id, nome_completo", lambda q: q.in_("id", ids_lidos))
     return {str(p["id"]): p.get("nome_completo") or "" for p in (result.data or [])}
 
 
@@ -286,6 +300,7 @@ def _criar_issue_e_vincular(
     corpo,
     assignees: list[str],
     labels: list[str],
+    responsavel_id: str | None,
 ) -> dict:
     """O servico do "Criar o card" do chat (issues #1381 e #1383), o bug e a
     melhoria.
@@ -346,6 +361,7 @@ def _criar_issue_e_vincular(
         **mudanca_da_foto(foto),
         "github_issue_numero": numero,
         "vinculado_por": ator["id"],
+        "responsavel_id": responsavel_id,
     }
 
     result = supabase.table(TABELA_DEMANDAS).update(mudanca).eq("id", demanda_id).execute()
@@ -418,7 +434,8 @@ def _nascer_a_demanda(supabase: Client, *, ator: dict, titulo: str, tipo: str, p
                 "tipo": tipo,
                 "produto_id": produto["id"],
                 "estado": "nova",
-                "responsavel_id": produto.get("dono_id"),
+                # O Responsavel nasce no "Criar o card" (ADR 0083, decisao 5).
+                "responsavel_id": None,
                 "autor_id": ator["id"],
                 "prioridade": "normal",
             }
@@ -561,9 +578,65 @@ async def quem_sou_na_aba(ator: dict = Depends(require_super_admin)):
     return {"desenvolvedor": e_desenvolvedor(ator)}
 
 
+# A recusa do Responsavel que nao esta no "Quem cuida disto?": a tela so
+# oferece Desenvolvedor, e o id que chega de fora dela nao vira assignee.
+MOTIVO_RESPONSAVEL_FORA_DA_LISTA = "Escolha quem cuida disto entre as pessoas da lista."
+
+
+def _desenvolvedores(supabase: Client) -> list[dict]:
+    """Os Desenvolvedores do cadastro, pelo nome: o Super admin ativo com login
+    do GitHub (ADR 0083, decisao 2). E quem pode ser Responsavel."""
+    result = selecionar_participantes(
+        supabase, "id, nome_completo, access_profile, is_super_admin, github_login, ativo"
+    )
+    pessoas = [p for p in (result.data or []) if p.get("ativo") is not False and e_desenvolvedor(p)]
+    return sorted(pessoas, key=lambda p: (p.get("nome_completo") or "").casefold())
+
+
+def _id_do_dono(desenvolvedores: list[dict]) -> str | None:
+    """Quem tem, no cadastro, o login do dono que esta na configuracao: o
+    Responsavel do card sem escolha."""
+    dono = login_para_publicar(settings.github_login_dono)
+    pessoa = next((p for p in desenvolvedores if dono and normalizar_github_login(p.get("github_login")) == dono), None)
+    return str(pessoa["id"]) if pessoa else None
+
+
+def _responsavel_do_card(supabase: Client, escolhido: str | None) -> tuple[list[str], str | None]:
+    """O assignee da issue e o Responsavel da Demanda (ADR 0083, decisao 5).
+
+    Com escolha, o Desenvolvedor escolhido. Sem escolha, o login do dono que ja
+    esta na configuracao, em bug e em melhoria; o Responsavel e quem tem esse
+    login no cadastro, ou ninguem, e o card nasce designado do mesmo jeito.
+    """
+    desenvolvedores = _desenvolvedores(supabase)
+    if escolhido:
+        pessoa = next((p for p in desenvolvedores if str(p["id"]) == escolhido), None)
+        if pessoa is None:
+            _recusar(MOTIVO_RESPONSAVEL_FORA_DA_LISTA)
+        login = login_para_publicar(pessoa.get("github_login"))
+        return ([login] if login else []), str(pessoa["id"])
+    dono = login_para_publicar(settings.github_login_dono)
+    return ([dono] if dono else []), _id_do_dono(desenvolvedores)
+
+
+@router.get("/desenvolvedores", response_model=list[DesenvolvedorResponse])
+async def listar_os_desenvolvedores(
+    _ator: dict = Depends(require_super_admin),
+    supabase: Client = Depends(get_supabase_client),
+):
+    """O "Quem cuida disto?" do resumo (ADR 0083, decisao 5). `padrao` marca
+    para quem vai o card sem escolha, e a tela diz o nome."""
+    desenvolvedores = _desenvolvedores(supabase)
+    dono = _id_do_dono(desenvolvedores)
+    return [
+        {"id": str(p["id"]), "nome": p.get("nome_completo") or "", "padrao": str(p["id"]) == dono}
+        for p in desenvolvedores
+    ]
+
+
 @router.get("/chat", response_model=list[DemandaResponse])
 async def listar_as_conversas(
-    filtro: Literal["minhas", "todas"] = "minhas",
+    filtro: Literal["minhas", "todas", "para_mim"] = "minhas",
     ator: dict = Depends(require_super_admin),
     supabase: Client = Depends(get_supabase_client),
 ):
@@ -572,7 +645,8 @@ async def listar_as_conversas(
 
     `todas` e o filtro do Desenvolvedor (ADR 0083, decisao 3). Quem corta e o
     `pode_ver`, a mesma regra da leitura da conversa: para quem nao e
-    Desenvolvedor, `todas` volta so as dele.
+    Desenvolvedor, `todas` volta so as dele. `para_mim` e o padrao da lista do
+    Desenvolvedor: as Demandas de que ele e o Responsavel (ADR 0083, decisao 5).
 
     Sai pelo `_para_a_lista`, o funil da Demanda desta API: e la que numero e
     endereco da issue ficam de fora para o diretor.
@@ -580,8 +654,12 @@ async def listar_as_conversas(
     consulta = supabase.table(TABELA_DEMANDAS).select("*")
     if filtro == "minhas":
         consulta = consulta.eq("autor_id", ator["id"])
+    elif filtro == "para_mim":
+        consulta = consulta.eq("responsavel_id", ator["id"])
     result = consulta.order("criado_em", desc=True).execute()
     visiveis = [d for d in (result.data or []) if pode_ver(ator, d)]
+    if filtro == "para_mim":
+        visiveis = [d for d in visiveis if responsavel_da_demanda(d) == ator["id"]]
     return _para_a_lista(supabase, visiveis, ator=ator)
 
 
@@ -985,6 +1063,7 @@ async def fechar_e_resumir_a_melhoria(
 async def criar_o_card(
     request: Request,
     demanda_id: str,
+    payload: CriarOCardPayload | None = None,
     ator: dict = Depends(require_super_admin),
     supabase: Client = Depends(get_supabase_client),
 ):
@@ -992,9 +1071,10 @@ async def criar_o_card(
 
     Pelo servico `_criar_issue_e_vincular`: a vez de criar, a peneira no
     titulo, o Vinculo e a Etapa. O que e do bug entra por parametro: o corpo
-    com os rotulos do roteiro e os criterios de aceite, as labels que fazem a
-    onda pegar sozinha (`ready-for-agent`, sem `needs-triage`) e nenhum
-    assignee, porque assignee e claim. A melhoria leva o PRD do diretor.
+    com os rotulos do roteiro e os criterios de aceite e as labels que fazem a
+    onda pegar sozinha (`ready-for-agent`, sem `needs-triage`). A melhoria leva
+    o PRD do diretor. Nos dois, o assignee e o Responsavel escolhido no "Quem
+    cuida disto?", ou o dono da configuracao sem escolha (ADR 0083, decisao 5).
 
     Sem gate de `github_login`: quem cria o card e o diretor que relatou. A
     ordem das guardas e: o que eu pedi existe e faz sentido (404, 409) e so
@@ -1007,6 +1087,7 @@ async def criar_o_card(
     resumo = atual.get("resumo")
     if atual.get("estado") != planejamento_demanda.ESTADO_RESUMIDO or not resumo:
         _conflito(MOTIVO_CHAT_SEM_RESUMO)
+    assignees, responsavel_id = _responsavel_do_card(supabase, payload.responsavel_id if payload else None)
     _exigir_integracao()
     # So a contagem dos anexos vai a issue (ADR 0069), por tipo (issue #1520).
     imagens, documentos = tecnologia_anexos.quantos_guardados(supabase, demanda_id)
@@ -1014,7 +1095,7 @@ async def criar_o_card(
     if chat_tecnologia.em_planejamento(atual.get("mensagens") or []):
         # A melhoria (issue #1383): o PRD do diretor, que nasce na triagem
         # (`needs-triage` e `type:feature`) porque ainda passa pelo
-        # `/to-issues`, atribuido ao dono da empresa.
+        # `/to-issues`, atribuido ao Responsavel.
         def corpo_do_prd(titulo: str) -> str:
             return corpo_do_prd_do_diretor(
                 demanda_id=demanda_id,
@@ -1026,14 +1107,14 @@ async def criar_o_card(
                 documentos=documentos,
             )
 
-        dono = login_para_publicar(settings.github_login_dono)
         _criar_issue_e_vincular(
             supabase,
             demanda=demanda,
             ator=ator,
             corpo=corpo_do_prd,
-            assignees=[dono] if dono else [],
+            assignees=assignees,
             labels=[*labels_da_issue_nova(chat_tecnologia.TIPO_DA_CLASSIFICACAO["melhoria"]), LABEL_ORIGEM_DIRETOR],
+            responsavel_id=responsavel_id,
         )
         linha = planejamento_demanda.marcar_enviado(supabase, demanda_id, agora=_agora())
         return _chat_para_a_tela(
@@ -1054,7 +1135,13 @@ async def criar_o_card(
         )
 
     _criar_issue_e_vincular(
-        supabase, demanda=demanda, ator=ator, corpo=corpo, assignees=[], labels=[*LABELS_DO_BUG, LABEL_ORIGEM_DIRETOR]
+        supabase,
+        demanda=demanda,
+        ator=ator,
+        corpo=corpo,
+        assignees=assignees,
+        labels=[*LABELS_DO_BUG, LABEL_ORIGEM_DIRETOR],
+        responsavel_id=responsavel_id,
     )
     linha = planejamento_demanda.marcar_enviado(supabase, demanda_id, agora=_agora())
     return _chat_para_a_tela(supabase, demanda_id, linha or {**atual, "estado": planejamento_demanda.ESTADO_ENVIADO})

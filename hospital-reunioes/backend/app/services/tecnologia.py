@@ -119,3 +119,16 @@ def pode_ver(pessoa: dict[str, Any], demanda: dict[str, Any]) -> bool:
     A regra e uma so, e a lista e a leitura da conversa leem daqui.
     """
     return demanda.get("autor_id") == pessoa.get("id") or e_desenvolvedor(pessoa)
+
+
+def responsavel_da_demanda(demanda: dict[str, Any]) -> str | None:
+    """O id do Responsavel, que so existe depois do "Criar o card" (ADR 0083,
+    decisao 5).
+
+    A conversa sem card nao tem Responsavel, mesmo com a coluna preenchida: a
+    Demanda de antes desta versao nascia com o dono do Produto ali, e ninguem o
+    escolheu.
+    """
+    if not demanda.get("github_issue_numero"):
+        return None
+    return demanda.get("responsavel_id") or None

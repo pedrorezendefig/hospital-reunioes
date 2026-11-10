@@ -32,6 +32,8 @@ ROTAS_DO_CHAT = {
     # Se quem esta logado e Desenvolvedor (issue #1531, ADR 0083): o filtro
     # "Todas" da lista depende dela.
     "/api/admin/tecnologia/eu",
+    # O "Quem cuida disto?" do resumo (issue #1533, ADR 0083, decisão 5).
+    "/api/admin/tecnologia/desenvolvedores",
 }
 
 # O que fica de fora da aba e continua de pé (critério 2 da issue).

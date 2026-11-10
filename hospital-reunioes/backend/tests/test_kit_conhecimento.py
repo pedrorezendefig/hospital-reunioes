@@ -383,7 +383,8 @@ APOSENTADOS_DA_ABA = (
     "Cancelar",
     "Mover",
     "raia",
-    "esponsável",
+    # "Responsável" voltou com a ADR 0083 (issue #1533): o diretor escolhe
+    # quem cuida do card em "Quem cuida disto?".
     "rioridade",
     "menç",
     "mencion",

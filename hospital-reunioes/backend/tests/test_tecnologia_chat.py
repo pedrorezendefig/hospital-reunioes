@@ -463,8 +463,10 @@ class TestNaoBateu:
 class TestCriarOCard:
     def test_criar_o_card_cria_a_issue_do_bug_pronta_para_a_onda(self, monkeypatch):
         """O diretor (sem login no GitHub) clica em Criar o card: a issue nasce
-        com a label de bug e `ready-for-agent`, sem `needs-triage` e sem
-        ninguém designado, porque designar é tomar a issue."""
+        com a label de bug e `ready-for-agent`, sem `needs-triage`, designada
+        ao dono da configuração quando ninguém foi escolhido (ADR 0083,
+        decisão 5)."""
+        monkeypatch.setattr(settings, "github_login_dono", "pedrorezendefig")
         client, sb, gh = _cenario(monkeypatch)
         demanda_id = _ate_o_resumo(client, monkeypatch)
 
@@ -474,7 +476,7 @@ class TestCriarOCard:
         assert resposta.json()["estado"] == "enviado"
         [issue] = gh.criadas
         assert sorted(issue["labels"]) == ["origem:diretor", "ready-for-agent", "type:fix"]
-        assert issue["assignees"] == []
+        assert issue["assignees"] == ["pedrorezendefig"]
         assert issue["titulo"] == "Botão de responder some na Ouvidoria"
         assert _demandas(sb)[0]["github_issue_numero"] == 900
 

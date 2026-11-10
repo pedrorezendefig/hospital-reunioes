@@ -307,6 +307,7 @@ describe("No celular", () => {
 describe("O Desenvolvedor (issue #1531, ADR 0083)", () => {
   const EU = "/api/admin/tecnologia/eu";
   const TODAS = `${LISTA}?filtro=todas`;
+  const PARA_MIM = `${LISTA}?filtro=para_mim`;
   const DO_DIRETOR = demanda("d-7", "O relatório some", { minha: false, autor: "Diretor do Hospital" });
   const COM_CARD_DE_OUTRO = demanda("d-8", "O botão sumiu", {
     minha: false,
@@ -320,7 +321,7 @@ describe("O Desenvolvedor (issue #1531, ADR 0083)", () => {
   it("vê o filtro Todas, que traz as Demandas de todos com o autor em cada linha", async () => {
     const chamadas = montar((url) => {
       if (url === EU) return { status: 200, corpo: { desenvolvedor: true } };
-      if (url === LISTA) return { status: 200, corpo: [SEM_CARD] };
+      if (url === PARA_MIM) return { status: 200, corpo: [SEM_CARD] };
       if (url === TODAS) return { status: 200, corpo: [DO_DIRETOR, { ...SEM_CARD, autor: "Pedro Vitta" }] };
       return { status: 404, corpo: {} };
     });
@@ -350,7 +351,7 @@ describe("O Desenvolvedor (issue #1531, ADR 0083)", () => {
   it("abre a Demanda de outro autor só para ler: a entrevista inteira e os Anexos", async () => {
     montar((url) => {
       if (url === EU) return { status: 200, corpo: { desenvolvedor: true } };
-      if (url === LISTA) return { status: 200, corpo: [DO_DIRETOR] };
+      if (url === PARA_MIM) return { status: 200, corpo: [DO_DIRETOR] };
       if (url === `${LISTA}/d-7`) {
         return {
           status: 200,
@@ -375,7 +376,7 @@ describe("O Desenvolvedor (issue #1531, ADR 0083)", () => {
   it("vê o número e o link da issue na Demanda que já tem card", async () => {
     montar((url) => {
       if (url === EU) return { status: 200, corpo: { desenvolvedor: true } };
-      if (url === LISTA) return { status: 200, corpo: [COM_CARD_DE_OUTRO] };
+      if (url === PARA_MIM) return { status: 200, corpo: [COM_CARD_DE_OUTRO] };
       if (url === `${LISTA}/d-8`) return { status: 200, corpo: conversa("d-8", { estado: "enviado" }) };
       return { status: 404, corpo: {} };
     });
@@ -384,5 +385,77 @@ describe("O Desenvolvedor (issue #1531, ADR 0083)", () => {
 
     const link = await screen.findByRole("link", { name: "#912" });
     expect(link.getAttribute("href")).toBe("https://github.com/pedrorezendefig/hospital-reunioes/issues/912");
+  });
+
+  // ─── O Responsável e o Para mim (issue #1533, ADR 0083, decisão 5) ────────
+
+  it("a lista abre em Para mim e mostra só as Demandas de que ele é Responsável", async () => {
+    const minha = demanda("d-9", "Agenda de retorno", {
+      tem_vinculo: true,
+      etapa: "em_analise",
+      responsavel: "Pedro Vitta",
+    });
+    const chamadas = montar((url) => {
+      if (url === EU) return { status: 200, corpo: { desenvolvedor: true } };
+      if (url === PARA_MIM) return { status: 200, corpo: [minha] };
+      if (url === LISTA) return { status: 200, corpo: [SEM_CARD] };
+      return { status: 404, corpo: {} };
+    });
+
+    await within(lista()).findByText("Agenda de retorno");
+    expect(screen.getByRole("button", { name: "Para mim" }).getAttribute("aria-pressed")).toBe("true");
+    expect(within(lista()).getAllByRole("listitem")).toHaveLength(1);
+    const listas = chamadas.filter((c) => c.url.startsWith(LISTA));
+    expect(listas.map((c) => c.url)).toEqual([PARA_MIM]);
+  });
+
+  it("os filtros do Desenvolvedor são Para mim, Minhas e Todas", async () => {
+    montar((url) => {
+      if (url === EU) return { status: 200, corpo: { desenvolvedor: true } };
+      return { status: 200, corpo: [] };
+    });
+
+    const filtros = await screen.findByRole("group", { name: "Filtro das conversas" });
+    expect(within(filtros).getAllByRole("button").map((b) => b.textContent)).toEqual(["Para mim", "Minhas", "Todas"]);
+  });
+});
+
+describe("O Responsável na lista (issue #1533, ADR 0083)", () => {
+  it("o diretor vê quem cuida de cada pedido que já virou card", async () => {
+    const comResponsavel = demanda("d-10", "Agenda de retorno", {
+      tem_vinculo: true,
+      etapa: "em_analise",
+      responsavel: "Lucas Sampaio",
+    });
+    montar((url) => (url === LISTA ? { status: 200, corpo: [comResponsavel, SEM_CARD] } : { status: 404, corpo: {} }));
+
+    await within(lista()).findByText("Agenda de retorno");
+    const itens = within(lista()).getAllByRole("listitem");
+    expect(itens.map((item) => item.textContent)).toEqual([
+      "Agenda de retornoResponsável: Lucas SampaioEm análise",
+      "Botão de responder some na OuvidoriaRegistrada",
+    ]);
+  });
+
+  it("o Desenvolvedor vê o autor e o Responsável em cada linha", async () => {
+    const deOutro = demanda("d-11", "O botão sumiu", {
+      minha: false,
+      autor: "Diretor do Hospital",
+      tem_vinculo: true,
+      etapa: "em_analise",
+      responsavel: "Pedro Rib",
+    });
+    montar((url) => {
+      if (url === "/api/admin/tecnologia/eu") return { status: 200, corpo: { desenvolvedor: true } };
+      if (url === `${LISTA}?filtro=todas`) return { status: 200, corpo: [deOutro] };
+      return { status: 200, corpo: [] };
+    });
+
+    fireEvent.click(await screen.findByRole("button", { name: "Todas" }));
+
+    await within(lista()).findByText("O botão sumiu");
+    expect(within(lista()).getAllByRole("listitem").map((item) => item.textContent)).toEqual([
+      "O botão sumiuDiretor do HospitalResponsável: Pedro RibEm análise",
+    ]);
   });
 });

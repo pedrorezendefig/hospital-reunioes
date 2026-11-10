@@ -43,6 +43,8 @@ import {
 import {
   ConversaDoChat,
   conversaValida,
+  Desenvolvedor,
+  desenvolvedoresValidos,
   esperaAPergunta,
   FalaDoChat,
   frasesDosPrints,
@@ -52,6 +54,7 @@ import {
   ResumoDoBug,
   textoDoCusto,
   URL_DO_CHAT_DA_ABA,
+  URL_DOS_DESENVOLVEDORES,
   urlDaConversa,
   urlDoCriarOCard,
   urlDoNaoBateu,
@@ -66,6 +69,8 @@ export const CONTINUAR_RESPONDENDO = "Continuar respondendo";
 export const NAO_BATEU = "Não bateu";
 export const TITULO_DO_CHAT = "Assistente de Tecnologia";
 export const FECHAR_E_RESUMIR = "Fechar e resumir";
+export const QUEM_CUIDA_DISTO = "Quem cuida disto?";
+const SEM_ESCOLHA = "Sem escolha";
 const TITULO_DO_RESUMO = "Resumo do bug";
 const TITULO_DO_RESUMO_DA_MELHORIA = "Resumo da melhoria";
 const O_QUE_O_CARD_FAZ = "Criar o card manda o bug para o desenvolvimento da Vitta, que começa a trabalhar nele.";
@@ -224,12 +229,75 @@ function CorpoDoResumoDaMelhoria({ resumo, pensando, onContinuar }: PropsDoResum
   );
 }
 
+/**
+ * "Quem cuida disto?" (issue #1533, ADR 0083, decisão 5): os Desenvolvedores
+ * que o servidor lista. A escolha é opcional; sem a lista (a rede fora), a
+ * pergunta não aparece e o Criar o card segue valendo.
+ */
+function QuemCuidaDisto({
+  token,
+  escolhido,
+  onEscolher,
+}: {
+  token: string | null;
+  escolhido: string;
+  onEscolher: (id: string) => void;
+}) {
+  const [desenvolvedores, setDesenvolvedores] = useState<Desenvolvedor[]>([]);
+
+  useEffect(() => {
+    if (!token) return;
+    let viva = true;
+    (async () => {
+      try {
+        const resposta = await fetch(URL_DOS_DESENVOLVEDORES, { headers: { Authorization: `Bearer ${token}` } });
+        if (!resposta.ok) return;
+        const lidos = desenvolvedoresValidos(await resposta.json());
+        if (viva) setDesenvolvedores(lidos);
+      } catch (e) {
+        console.error("[admin/tecnologia] falha ao listar quem cuida", e);
+      }
+    })();
+    return () => {
+      viva = false;
+    };
+  }, [token]);
+
+  if (desenvolvedores.length === 0) return null;
+  const padrao = desenvolvedores.find((d) => d.padrao);
+  return (
+    <div className="space-y-1">
+      <label htmlFor="quem-cuida-disto" className="text-sm font-semibold text-text-primary">
+        {QUEM_CUIDA_DISTO}
+      </label>
+      <select
+        id="quem-cuida-disto"
+        value={escolhido}
+        onChange={(e) => onEscolher(e.target.value)}
+        className="w-full sm:w-72 px-3 py-2 text-sm border border-slate-200 rounded-xl outline-none focus:border-primary focus:ring-1 focus:ring-primary bg-white"
+      >
+        <option value="">{SEM_ESCOLHA}</option>
+        {desenvolvedores.map((d) => (
+          <option key={d.id} value={d.id}>
+            {d.nome}
+          </option>
+        ))}
+      </select>
+      <p className="text-xs text-text-secondary">
+        {padrao ? `Escolher é opcional. Sem escolha, o card vai para ${padrao.nome}.` : "Escolher é opcional."}
+      </p>
+    </div>
+  );
+}
+
 type PropsDoResumo = {
   titulo: string;
+  token: string | null;
   /** A frase debaixo dos botões, que diz o que o Criar o card faz. */
   oQueOCardFaz: string;
   pensando: boolean;
-  onCriar: () => void;
+  /** Cria o card com o Responsável escolhido, ou sem ninguém escolhido. */
+  onCriar: (responsavelId: string | null) => void;
   /** Manda o que não bateu; devolve se o servidor aceitou. */
   onNaoBateu: (texto: string) => Promise<boolean>;
   onRecusaNaTela: (motivo: string) => void;
@@ -237,8 +305,18 @@ type PropsDoResumo = {
 };
 
 /** A caixa do resumo, do bug ou da melhoria, com Criar o card e Não bateu. */
-function ResumoNaTela({ titulo, oQueOCardFaz, pensando, onCriar, onNaoBateu, onRecusaNaTela, children }: PropsDoResumo) {
+function ResumoNaTela({
+  titulo,
+  token,
+  oQueOCardFaz,
+  pensando,
+  onCriar,
+  onNaoBateu,
+  onRecusaNaTela,
+  children,
+}: PropsDoResumo) {
   const [dizendo, setDizendo] = useState(false);
+  const [responsavel, setResponsavel] = useState("");
   const [texto, setTexto] = useState("");
 
   async function enviar() {
@@ -264,11 +342,12 @@ function ResumoNaTela({ titulo, oQueOCardFaz, pensando, onCriar, onNaoBateu, onR
 
       {children}
 
-      <div className="space-y-2 border-t border-slate-100 pt-4">
+      <div className="space-y-3 border-t border-slate-100 pt-4">
+        <QuemCuidaDisto token={token} escolhido={responsavel} onEscolher={setResponsavel} />
         <div className="flex flex-wrap gap-2">
           <button
             type="button"
-            onClick={onCriar}
+            onClick={() => onCriar(responsavel || null)}
             disabled={pensando}
             className="px-4 py-2 rounded-xl bg-primary text-white text-sm font-semibold disabled:opacity-50"
           >
@@ -609,7 +688,10 @@ export function ChatDaTecnologia({ token, demandaId = null, onMudou }: PropsDoCh
           titulo={TITULO_DO_RESUMO}
           oQueOCardFaz={O_QUE_O_CARD_FAZ}
           pensando={pensando}
-          onCriar={() => enviar(urlDoCriarOCard(conversa.demanda_id), {})}
+          token={token}
+          onCriar={(responsavelId) =>
+            enviar(urlDoCriarOCard(conversa.demanda_id), responsavelId ? { responsavel_id: responsavelId } : {})
+          }
           onNaoBateu={naoBateu}
           onRecusaNaTela={setErro}
         >
@@ -694,7 +776,10 @@ export function ChatDaTecnologia({ token, demandaId = null, onMudou }: PropsDoCh
           titulo={TITULO_DO_RESUMO_DA_MELHORIA}
           oQueOCardFaz={O_QUE_O_CARD_DA_MELHORIA_FAZ}
           pensando={pensando}
-          onCriar={() => enviar(urlDoCriarOCard(conversa.demanda_id), {})}
+          token={token}
+          onCriar={(responsavelId) =>
+            enviar(urlDoCriarOCard(conversa.demanda_id), responsavelId ? { responsavel_id: responsavelId } : {})
+          }
           onNaoBateu={naoBateu}
           onRecusaNaTela={setErro}
         >
