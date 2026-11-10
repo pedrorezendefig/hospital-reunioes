@@ -47,6 +47,8 @@ from test_tecnologia_chat import (  # noqa: E402
 from test_tecnologia_vinculo import BASE, DIRETOR, _demanda  # noqa: E402
 
 from app.services import assistente_tecnologia, tecnologia_anexos  # noqa: E402
+from app.services.conhecimento import CONHECIMENTO_DIR  # noqa: E402
+from app.services.prompt_loader import load_prompt  # noqa: E402
 from app.services.tecnologia_vinculo import frase_dos_anexos  # noqa: E402
 
 URL_DO_DOCUMENTO = f"{BASE}/assistente/ler-documento"
@@ -567,7 +569,46 @@ class TestMelhoriaComDocumento:
 
 
 # ═══════════════════════════════════════════════════════════════════════════
-# 7. A migration: o banco aceita o que o código grava
+# 7. A instrução do agente e o Kit de conhecimento
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+class TestInstrucaoDoAgente:
+    @pytest.mark.parametrize("prompt", ["chat_tecnologia_system", "planejamento_demanda_system"])
+    def test_o_documento_e_uma_demanda_e_um_prd_e_o_agente_avisa_a_mistura(self, prompt):
+        """O chat classifica e o planejamento pergunta: os dois leem o mesmo
+        documento, e os dois precisam da mesma regra."""
+        texto = load_prompt(prompt)
+
+        secao = texto.split("## Documento do diretor", 1)[1].split("\n## ", 1)[0]
+        for trecho in (
+            "uma Demanda só",
+            "um PRD do diretor",
+            "não pergunte o que o documento já responde",
+            "módulos sem relação",
+            "um assunto por conversa",
+        ):
+            assert trecho in secao, trecho
+
+
+class TestKitDaTecnologia:
+    def test_o_kit_diz_os_arquivos_aceitos_e_o_que_acontece_com_eles(self):
+        texto = (CONHECIMENTO_DIR / "tecnologia.md").read_text(encoding="utf-8")
+
+        secao = texto.split("## Os anexos da Demanda", 1)[1].split("\n## ", 1)[0]
+        for trecho in (".md", ".txt", ".pdf", ".docx", "3,75 MB", "15 MB", "100 mil caracteres", "como print", "10"):
+            assert trecho in secao, trecho
+
+    def test_o_kit_diz_que_a_conversa_mostra_so_o_nome_e_o_tamanho_e_o_assistente_le_tudo(self):
+        texto = (CONHECIMENTO_DIR / "tecnologia.md").read_text(encoding="utf-8")
+
+        secao = texto.split("## A conversa com o Assistente", 1)[1].split("\n## ", 1)[0]
+        for trecho in ("documento", "o nome e o tamanho", "lê o documento inteiro"):
+            assert trecho in secao, trecho
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 8. A migration: o banco aceita o que o código grava
 # ═══════════════════════════════════════════════════════════════════════════
 
 MIGRATION = Path(__file__).resolve().parents[2] / "supabase" / "migrations" / "127_tecnologia_documento_no_chat.sql"

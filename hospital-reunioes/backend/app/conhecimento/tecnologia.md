@@ -12,7 +12,9 @@ Se for uma dúvida que o material da Vitta responde (como uma tela funciona, ond
 
 Para responder e para perguntar, a IA consulta o que já existe na plataforma: como as telas funcionam de verdade e o que a Vitta já decidiu. Se o seu pedido esbarra em algo já decidido, ela avisa e explica em palavras simples, sem termos de programador. Ela só lê: nada que ela consulta muda o aplicativo.
 
-No bug, a IA faz no máximo cinco perguntas, uma por vez: onde aconteceu, o que aconteceu, o que você esperava, como repetir e, se você tiver, o print da tela. Ela pula o que você já contou. O print vai pelo botão de imagem da conversa e fica guardado como anexo na hora em que você manda, sem nunca sair do aplicativo. O que você não respondeu aparece como "não informado".
+No bug, a IA faz no máximo cinco perguntas, uma por vez: onde aconteceu, o que aconteceu, o que você esperava, como repetir e, se você tiver, o print da tela. Ela pula o que você já contou. O print vai pelo botão de anexo da conversa e fica guardado como anexo na hora em que você manda, sem nunca sair do aplicativo. O que você não respondeu aparece como "não informado".
+
+Pelo mesmo botão de anexo entra um documento: um texto, um PDF ou um arquivo do Word, em qualquer ponto da conversa, no bug ou na melhoria. Na conversa aparece só o nome e o tamanho do arquivo, e a IA lê o documento inteiro antes de responder, sem perguntar o que ele já diz. Um documento com várias melhorias continua sendo um pedido só, que a Vitta divide em partes depois. Se ele mistura sistemas que não têm nada a ver um com o outro, a IA avisa e sugere uma conversa para cada assunto. Nas respostas seguintes, mesmo numa conversa retomada pela lista, a IA continua lendo o documento.
 
 No fim, a IA mostra um resumo com o que você disse e com os critérios que dizem como se sabe que o bug foi resolvido. Se estiver certo, o botão **Criar o card** manda o bug para o desenvolvimento da Vitta, que começa a trabalhar nele sem ninguém precisar assumir antes. Se alguma coisa estiver errada, o botão **Não bateu** pede para você dizer o quê, a conversa continua e o resumo é refeito. Nada vai para a Vitta antes do clique em Criar o card.
 
@@ -24,13 +26,13 @@ Antes do resumo, no bug e na melhoria, a IA confere os pedidos que já estão na
 
 Se a IA não conseguir responder, a tela avisa, a conversa continua como estava e o que você escreveu fica na caixa: é só mandar de novo.
 
-O modelo de IA que está respondendo e quanto a conversa já custou em dólar aparecem no alto da conversa aberta, por exemplo "Opus 5.5 · US$ 1,84 até agora". O valor soma o que a IA fez naquela conversa (as perguntas, o resumo e a leitura do código) e muda a cada resposta. Aparece "custo não medido" em dois casos em que o sistema não tem como fazer a conta inteira: quando o modelo usado está sem preço cadastrado e quando a conversa tem print, porque a leitura do print ainda não fica registrada. Nesses casos ele avisa em vez de mostrar um valor menor que o de verdade. Enquanto a IA não respondeu nada, não aparece custo. O custo não está na lista ao lado, só na conversa aberta.
+O modelo de IA que está respondendo e quanto a conversa já custou em dólar aparecem no alto da conversa aberta, por exemplo "Opus 5.5 · US$ 1,84 até agora". O valor soma o que a IA fez naquela conversa (as perguntas, o resumo e a leitura do código) e muda a cada resposta. Aparece "custo não medido" em dois casos em que o sistema não tem como fazer a conta inteira: quando o modelo usado está sem preço cadastrado e quando a conversa tem print, porque a leitura do print ainda não fica registrada. Nesses casos ele avisa em vez de mostrar um valor menor que o de verdade. Documento não deixa o custo sem medida: ele é lido sem IA, e as respostas que o levam à IA entram na conta como as outras. Enquanto a IA não respondeu nada, não aparece custo. O custo não está na lista ao lado, só na conversa aberta.
 
 A conversa fica guardada. Ao lado dela fica a lista de tudo o que você já pediu, do mais recente para o mais antigo, com o título e a Etapa de cada pedido. Ao lado da Etapa, o selo **Bug** ou **Melhoria** diz o que o pedido é. Uma conversa que ficou no meio aparece como Registrada: clique nela e você continua de onde parou. Num pedido que já foi para a Vitta, o clique mostra a conversa e O que muda, que é o que a entrega acrescenta para você; enquanto a Vitta não escreve esse texto, aparece "Descrição em preparação". O botão **Nova conversa**, no alto da lista, começa um pedido do zero. No celular a lista abre primeiro, e o botão Voltar às conversas leva de volta a ela.
 
 ## O que é uma Demanda
 
-Uma Demanda é um pedido sobre um dos sistemas: um bug ou uma melhoria. Ela nasce na primeira resposta da conversa com o Assistente e guarda o que você disse, os prints que você mandou e, depois do clique em Criar o card, a ligação com o trabalho de desenvolvimento.
+Uma Demanda é um pedido sobre um dos sistemas: um bug ou uma melhoria. Ela nasce na primeira resposta da conversa com o Assistente e guarda o que você disse, os prints e os documentos que você mandou e, depois do clique em Criar o card, a ligação com o trabalho de desenvolvimento.
 
 A aba vai num sentido só: você conta à Vitta. Quando é a Vitta que precisa de uma decisão, de um dado ou de um acesso do hospital, ela pede pelo WhatsApp.
 
@@ -38,13 +40,18 @@ Não chame de pendência, tarefa nem chamado. Pendência é outra coisa no aplic
 
 ## Os anexos da Demanda
 
-Os anexos são prints de tela guardados junto da Demanda, para quem vai resolver ver o que você viu. Aceita imagem PNG, JPG ou WEBP, de até 5 MB cada, e até 10 imagens por Demanda.
+Os anexos são prints de tela e documentos guardados junto da Demanda, para quem vai resolver ver o que você viu e ler o que você escreveu. Entram:
 
-O print entra pelo botão de imagem da conversa com o Assistente e vira anexo na hora em que você manda. Se algum não entrar, a tela avisa, e é só mandar de novo na conversa.
+- print de tela em .png, .jpg, .jpeg ou .webp, de até 3,75 MB;
+- documento em .md ou .txt, de até 5 MB, e em .pdf ou .docx (Word), de até 15 MB. O texto do documento pode ter até 100 mil caracteres; acima disso a tela pede para dividir o arquivo em partes.
 
-Os prints ficam só dentro do aplicativo. Eles nunca vão para o material público do desenvolvimento, porque um print do hospital pode ter nome de paciente ou de colaborador; quem desenvolve busca as imagens pelo aplicativo.
+São até 10 anexos por Demanda, somando prints e documentos. O PDF que é foto de papel, sem texto para ler, não entra como documento: mande as páginas como print. O arquivo .doc antigo também não entra; salve como .docx ou PDF. A tela recusa o arquivo fora da lista ou grande demais antes de enviar, com a frase que diz o que fazer.
 
-As imagens são apagadas 30 dias depois de a entrega ficar **Em produção**, o que dá tempo de conferir a correção com o print na mão. Se a entrega fica **Não será feita**, elas são apagadas logo, em até uma hora. Fica o registro de que existiram (o nome, quem mandou e quando), marcado como apagado.
+O anexo entra pelo botão de anexo da conversa com o Assistente e vira anexo da Demanda na hora em que você manda. Se algum não entrar, a tela avisa, e é só mandar de novo na conversa.
+
+Os anexos ficam só dentro do aplicativo. Eles nunca vão para o material público do desenvolvimento, porque um print ou um documento do hospital pode ter nome de paciente ou de colaborador: o pedido diz só quantos há, por exemplo "Anexos: 2 imagens e 1 documento na Demanda", e quem desenvolve busca os arquivos pelo aplicativo.
+
+Os arquivos são apagados 30 dias depois de a entrega ficar **Em produção**, o que dá tempo de conferir a correção com o print na mão. Se a entrega fica **Não será feita**, eles são apagados logo, em até uma hora. Fica o registro de que existiram (o nome, quem mandou e quando), marcado como apagado. O texto que a IA leu de um documento continua na conversa.
 
 ## Quem vê
 
@@ -93,7 +100,8 @@ A IA cuida das decisões de negócio: o problema, quem usa, as regras e o que fi
 - A lista ao lado da conversa mostra os pedidos de quem está olhando, e a Etapa de cada um vem do desenvolvimento, sem ninguém escrever à mão.
 - Uma Demanda se liga a um trabalho de desenvolvimento só, e a Etapa é lida de lá, nunca digitada.
 - O texto que sai da Demanda para o material público do desenvolvimento passa por uma peneira que esconde CPF, telefone, nome e outros dados pessoais.
-- Os prints ficam só dentro do aplicativo e são apagados 30 dias depois de Em produção, ou logo quando a entrega fica Não será feita.
+- Os prints e os documentos ficam só dentro do aplicativo e são apagados 30 dias depois de Em produção, ou logo quando a entrega fica Não será feita.
+- Um documento anexado é um pedido só, mesmo com várias melhorias dentro, e a IA lê o texto inteiro, sem resumir antes.
 - No planejamento, a IA cuida só das decisões de negócio, e as decisões técnicas continuam com a Vitta.
 - Títulos, botões e abas aparecem em caixa alta só na tela, e o título de cada Demanda aparece como foi escrito.
 - Dentro da aba, a conversa e o texto dos resumos ficam com maiúscula e minúscula, e só os subtítulos do resumo ficam em caixa alta.
