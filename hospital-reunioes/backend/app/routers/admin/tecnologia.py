@@ -53,6 +53,7 @@ from app.config import settings
 from app.dependencies import get_supabase_client, require_super_admin
 from app.limiter import limiter
 from app.models.tecnologia_schemas import (
+    AssistenteDocumentoResponse,
     AssistenteImagemResponse,
     ChatNaoBateuPayload,
     ChatPrimeiroTurnoPayload,
@@ -393,7 +394,7 @@ def _estado_do_planejamento(mensagem: dict) -> str:
 
 
 async def _comecar_a_melhoria(
-    supabase: Client, *, ator: dict, falas: list[dict], produtos: list[dict], prints: list[str]
+    supabase: Client, *, ator: dict, falas: list[dict], produtos: list[dict], prints: list[str], documentos: list[str]
 ) -> dict:
     """O botao "Melhoria" abre o planejamento na hora (issue #1383): a primeira
     fala da IA ja e a primeira pergunta, com as duas opcoes e a recomendada.
@@ -425,7 +426,7 @@ async def _comecar_a_melhoria(
     if descricao:
         supabase.table(TABELA_DEMANDAS).update({"descricao": descricao}).eq("id", demanda_id).execute()
 
-    aviso = _prints_do_turno(supabase, demanda=demanda, print_ids=prints, ator=ator)
+    aviso = _prints_do_turno(supabase, demanda=demanda, print_ids=prints, ator=ator, documento_ids=documentos)
     linha = planejamento_demanda.gravar(
         supabase,
         demanda_id,
@@ -440,13 +441,47 @@ async def _comecar_a_melhoria(
     return _chat_para_a_tela(supabase, demanda_id, linha, aviso_dos_anexos=aviso)
 
 
-def _prints_do_turno(supabase: Client, *, demanda: dict, print_ids: list[str], ator: dict) -> str | None:
-    """Os prints que a fala do diretor trouxe viram Anexo da Demanda na hora
-    (ADR 0077, decisao 8), e so quando a fala entrou na conversa: o turno que
-    falhou devolve o 502 antes de chegar aqui, e o print espera o reenvio."""
-    if not print_ids:
-        return None
-    return tecnologia_anexos.anexar_prints(supabase, demanda=demanda, print_ids=print_ids, quem_id=ator["id"])
+def _prints_do_turno(
+    supabase: Client, *, demanda: dict, print_ids: list[str], ator: dict, documento_ids: list[str] | None = None
+) -> str | None:
+    """Os prints e os documentos que a fala do diretor trouxe viram Anexo da
+    Demanda na hora (ADR 0077, decisao 8; issue #1520), e so quando a fala
+    entrou na conversa: o turno que falhou devolve o 502 antes de chegar aqui,
+    e o arquivo espera o reenvio."""
+    avisos = []
+    if print_ids:
+        avisos.append(
+            tecnologia_anexos.anexar_prints(supabase, demanda=demanda, print_ids=print_ids, quem_id=ator["id"])
+        )
+    if documento_ids:
+        avisos.append(
+            tecnologia_anexos.anexar_documentos(
+                supabase, demanda=demanda, documento_ids=documento_ids, quem_id=ator["id"]
+            )
+        )
+    return " ".join(a for a in avisos if a) or None
+
+
+def _documentos_da_fala(supabase: Client, *, demanda_id: str | None, ids: list[str], ator: dict) -> list[dict]:
+    """Os documentos que a fala traz (issue #1520), lidos da memoria SEM sair
+    dela: o turno ainda pode falhar, e o reenvio tem que acha-los. O texto de
+    cada um entra na fala; o original sai da memoria so quando vira Anexo.
+
+    Duas recusas, antes de qualquer IA: o documento que nao esta mais guardado
+    (a fala sem ele seria vazia) e o que nao caberia no teto de dez anexos da
+    Demanda, somando imagens e documentos.
+    """
+    documentos = []
+    for documento_id in dict.fromkeys(ids):
+        guardado = tecnologia_anexos.ver_documento(quem_id=ator["id"], documento_id=documento_id)
+        if guardado is None:
+            _conflito(tecnologia_anexos.MOTIVO_DOCUMENTO_SUMIU)
+        documentos.append(
+            {"nome": guardado["nome"], "tamanho_bytes": len(guardado["conteudo"]), "texto": guardado["texto"]}
+        )
+    if demanda_id and documentos and tecnologia_anexos.posicoes_livres(supabase, demanda_id) < len(documentos):
+        _recusar(tecnologia_anexos.MOTIVO_ANEXOS_DEMAIS)
+    return documentos
 
 
 def _passar_ao_planejamento(
@@ -512,18 +547,21 @@ async def comecar_o_chat(
     deixa Demanda vazia para tras, e o texto continua na caixa da tela.
     """
     texto = (payload.texto or "").strip()
-    if not payload.escolha and not texto:
+    if not payload.escolha and not texto and not payload.documentos:
         _recusar(chat_tecnologia.MOTIVO_SEM_TEXTO)
+    documentos = _documentos_da_fala(supabase, demanda_id=None, ids=payload.documentos, ator=ator)
 
     produtos = _produtos_ativos(supabase)
     falas = [chat_tecnologia.mensagem_de_abertura()]
     if payload.escolha:
         falas.append(chat_tecnologia.fala_do_diretor(chat_tecnologia.ESCOLHAS[payload.escolha]))
-    if texto:
-        falas.append(chat_tecnologia.fala_do_diretor(texto))
+    if texto or documentos:
+        falas.append(chat_tecnologia.fala_do_diretor(texto, documentos))
 
     if payload.escolha == "melhoria":
-        return await _comecar_a_melhoria(supabase, ator=ator, falas=falas, produtos=produtos, prints=payload.prints)
+        return await _comecar_a_melhoria(
+            supabase, ator=ator, falas=falas, produtos=produtos, prints=payload.prints, documentos=payload.documentos
+        )
 
     # Fora do loop (issue #773, o porque em `ai_processor._EXECUTOR_DA_IA`).
     resultado = await ai_processor.chamar_ia_fora_do_loop(
@@ -546,7 +584,9 @@ async def comecar_o_chat(
     if resultado.chamada is not None:
         planejamento_demanda.gravar_chamada(supabase, {**resultado.chamada, "demanda_id": demanda_id})
 
-    aviso = _prints_do_turno(supabase, demanda=demanda, print_ids=payload.prints, ator=ator)
+    aviso = _prints_do_turno(
+        supabase, demanda=demanda, print_ids=payload.prints, ator=ator, documento_ids=payload.documentos
+    )
     if resultado.caminho == chat_tecnologia.CAMINHO_DO_PLANEJAMENTO:
         linha = _passar_ao_planejamento(supabase, demanda_id, atual=None, mensagens=[*falas, resultado.mensagem])
         return _chat_para_a_tela(supabase, demanda_id, linha, aviso_dos_anexos=aviso)
@@ -600,7 +640,14 @@ def _acompanhar_o_turno(supabase: Client, demanda: dict, resultado: chat_tecnolo
 
 
 async def _turno_da_melhoria(
-    supabase: Client, *, demanda: dict, atual: dict, payload: ChatTurnoPayload, ator: dict, depois_do_fim: bool
+    supabase: Client,
+    *,
+    demanda: dict,
+    atual: dict,
+    payload: ChatTurnoPayload,
+    ator: dict,
+    depois_do_fim: bool,
+    documentos: list[dict],
 ) -> dict:
     """Um turno do planejamento da melhoria dentro do chat (issue #1383).
 
@@ -619,6 +666,12 @@ async def _turno_da_melhoria(
         resposta, motivo = planejamento_demanda.fala_de_continuar(atual.get("resumo"))
         if motivo:
             _conflito(motivo)
+    elif documentos:
+        # O documento vale como resposta em texto livre (issue #1520): com ou
+        # sem pergunta em aberto, e nunca junto da letra de uma opcao.
+        if payload.opcao:
+            _recusar(planejamento_demanda.MOTIVO_DUAS_RESPOSTAS)
+        resposta = {"tipo": "resposta", "opcao": None, "texto": (payload.texto or "").strip(), "documentos": documentos}
     else:
         resposta, motivo = planejamento_demanda.resposta_do_diretor(
             planejamento, opcao=payload.opcao, texto=payload.texto, depois_do_fim=depois_do_fim
@@ -660,7 +713,9 @@ async def _turno_da_melhoria(
     # #1438); o turno sem titulo deixa o que a Demanda tem.
     if resultado.titulo and resultado.titulo != demanda.get("titulo"):
         supabase.table(TABELA_DEMANDAS).update({"titulo": resultado.titulo}).eq("id", demanda_id).execute()
-    aviso = _prints_do_turno(supabase, demanda=demanda, print_ids=payload.prints, ator=ator)
+    aviso = _prints_do_turno(
+        supabase, demanda=demanda, print_ids=payload.prints, ator=ator, documento_ids=payload.documentos
+    )
     return _chat_para_a_tela(supabase, demanda_id, linha, aviso_dos_anexos=aviso)
 
 
@@ -705,14 +760,21 @@ async def responder_no_chat(
     # O "Continuar respondendo" vale so no resumo da melhoria (issue #1440).
     if payload.continuar and not (depois_do_fim and estado == planejamento_demanda.ESTADO_RESUMIDO):
         _conflito(planejamento_demanda.MOTIVO_NADA_EM_ABERTO)
+    documentos = _documentos_da_fala(supabase, demanda_id=demanda_id, ids=payload.documentos, ator=ator)
 
     if na_melhoria:
         return await _turno_da_melhoria(
-            supabase, demanda=demanda, atual=atual, payload=payload, ator=ator, depois_do_fim=depois_do_fim
+            supabase,
+            demanda=demanda,
+            atual=atual,
+            payload=payload,
+            ator=ator,
+            depois_do_fim=depois_do_fim,
+            documentos=documentos,
         )
     texto = (payload.texto or "").strip()
-    if texto:
-        mensagens.append(chat_tecnologia.fala_do_diretor(texto))
+    if texto or documentos:
+        mensagens.append(chat_tecnologia.fala_do_diretor(texto, documentos))
     elif mensagens[-1].get("tipo") == "ia":
         # Sem texto e sem fala do diretor esperando: nao ha o que a IA responder.
         _recusar(chat_tecnologia.MOTIVO_SEM_TEXTO)
@@ -735,7 +797,9 @@ async def responder_no_chat(
         if linha is None:
             _conflito(MOTIVO_CHAT_MUDOU)
         _acompanhar_o_turno(supabase, demanda, resultado)
-        aviso = _prints_do_turno(supabase, demanda=demanda, print_ids=payload.prints, ator=ator)
+        aviso = _prints_do_turno(
+            supabase, demanda=demanda, print_ids=payload.prints, ator=ator, documento_ids=payload.documentos
+        )
         return _chat_para_a_tela(supabase, demanda_id, linha, aviso_dos_anexos=aviso)
 
     linha = planejamento_demanda.gravar(
@@ -752,7 +816,9 @@ async def responder_no_chat(
     if linha is None:
         _conflito(MOTIVO_CHAT_MUDOU)
     _acompanhar_o_turno(supabase, demanda, resultado)
-    aviso = _prints_do_turno(supabase, demanda=demanda, print_ids=payload.prints, ator=ator)
+    aviso = _prints_do_turno(
+        supabase, demanda=demanda, print_ids=payload.prints, ator=ator, documento_ids=payload.documentos
+    )
     return _chat_para_a_tela(supabase, demanda_id, linha, aviso_dos_anexos=aviso)
 
 
@@ -991,3 +1057,34 @@ async def assistente_descrever_imagem(
     # Anexo quando a fala do chat o trouxer, e some sozinho se nao trouxer.
     print_id = tecnologia_anexos.guardar_print(quem_id=_ator["id"], nome=imagem.filename or "", conteudo=conteudo)
     return {"texto": texto, "print_id": print_id}
+
+
+@router.post("/assistente/ler-documento", response_model=AssistenteDocumentoResponse)
+@limiter.limit(LIMITE_DO_ASSISTENTE)
+async def assistente_ler_documento(
+    request: Request,
+    documento: UploadFile = File(...),
+    _ator: dict = Depends(require_super_admin),
+):
+    """O documento anexado no chat vira texto (issue #1520, ADR 0069).
+
+    Irma da rota do print, sem IA: o texto sai do extrator da Ata Guiada, com
+    o parser em processo isolado (issue #758). Os bytes e o texto ficam so na
+    memoria, com o identificador efemero que a tela leva na fala do chat; o
+    original vira Anexo quando a fala entra na conversa. O texto NAO sai daqui:
+    a tela mostra o nome e o tamanho, e o agente le o texto pela fala.
+
+    O tipo vem da EXTENSAO, e nunca do `content-type` do cliente (ADR 0034), e
+    a recusa do tipo vem antes de ler os bytes.
+    """
+    nome = documento.filename or ""
+    try:
+        extensao = tecnologia_anexos.extensao_do_documento(nome)
+        conteudo = await documento.read()
+        texto = await tecnologia_anexos.texto_do_documento(nome=nome, conteudo=conteudo)
+    except tecnologia_anexos.AnexoRecusadoError as recusa:
+        raise HTTPException(status_code=recusa.status_code, detail=str(recusa)) from recusa
+
+    logger.info(f"Documento lido no chat por {_ator['id']}: {extensao}, {len(texto)} chars")
+    documento_id = tecnologia_anexos.guardar_documento(quem_id=_ator["id"], nome=nome, conteudo=conteudo, texto=texto)
+    return {"documento_id": documento_id, "nome": nome, "tamanho_bytes": len(conteudo), "caracteres": len(texto)}

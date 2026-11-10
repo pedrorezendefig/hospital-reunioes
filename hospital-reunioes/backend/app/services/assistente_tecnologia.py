@@ -16,10 +16,13 @@ from __future__ import annotations
 import base64
 import logging
 import re
+from dataclasses import dataclass
+from typing import Literal
 
 from app.services import ai_processor
 from app.services.prompt_loader import load_prompt
 from app.services.tecnologia import recuar_continuacao
+from app.services.transcricao_extractor import CONTENT_TYPE_BY_EXT, MAX_BYTES_BINARY, MAX_BYTES_TEXT
 from app.utils.text_sanitizer import sanitizar_travessao
 
 logger = logging.getLogger(__name__)
@@ -84,12 +87,9 @@ PREFIXO_DE_ORIGEM = re.compile(
 # O tipo vem da EXTENSAO, nunca do `content-type` que o cliente declarou, pela
 # mesma razao do Anexo da Manifestacao (ADR 0034): o cabecalho e escrito do lado
 # de la e pode mentir.
-TIPOS_DE_IMAGEM: dict[str, str] = {
-    ".png": "image/png",
-    ".jpg": "image/jpeg",
-    ".jpeg": "image/jpeg",
-    ".webp": "image/webp",
-}
+#
+# Desde a issue #1520 a tabela e a de TUDO que entra pelo botao de anexo do
+# chat (`TIPOS_DE_ANEXO`, logo abaixo), e esta e a parte dela que e imagem.
 
 # 3,75 MB. A API da Anthropic recusa imagem acima de 5 MB, e quem ela mede e o
 # `data` em base64, que cresce 4/3: o arquivo maior que 3,75 MB chegaria la, a
@@ -98,6 +98,68 @@ TIPOS_DE_IMAGEM: dict[str, str] = {
 # grande nao passa de dois; o que passa disto e foto de celular de um monitor.
 LIMITE_DA_IMAGEM_EM_BASE64 = 5 * 1024 * 1024
 LIMITE_DA_IMAGEM = LIMITE_DA_IMAGEM_EM_BASE64 * 3 // 4
+
+
+# ─── O que entra pelo botao de anexo (issue #1520, ADR 0069) ─────────────────
+#
+# UMA tabela so decide o tipo, o `content-type` e o teto de cada extensao: a
+# rota do print, a rota do documento, o servico de anexos e a tela (pelo espelho
+# `frontend/src/components/tecnologia/tipos-de-anexo.json`, que o teste amarra
+# a esta tabela). Duas listas para a mesma regra divergiriam calado.
+#
+# Os tetos do documento sao os do extrator da Ata Guiada, que e quem le o
+# arquivo: 5 MB para o que e texto puro, 15 MB para o que pede parser.
+
+
+@dataclass(frozen=True)
+class TipoDeAnexo:
+    classe: Literal["imagem", "documento"]
+    content_type: str
+    teto_bytes: int
+
+
+TIPOS_DE_ANEXO: dict[str, TipoDeAnexo] = {
+    ".png": TipoDeAnexo("imagem", "image/png", LIMITE_DA_IMAGEM),
+    ".jpg": TipoDeAnexo("imagem", "image/jpeg", LIMITE_DA_IMAGEM),
+    ".jpeg": TipoDeAnexo("imagem", "image/jpeg", LIMITE_DA_IMAGEM),
+    ".webp": TipoDeAnexo("imagem", "image/webp", LIMITE_DA_IMAGEM),
+    ".md": TipoDeAnexo("documento", CONTENT_TYPE_BY_EXT[".md"], MAX_BYTES_TEXT),
+    ".txt": TipoDeAnexo("documento", CONTENT_TYPE_BY_EXT[".txt"], MAX_BYTES_TEXT),
+    ".pdf": TipoDeAnexo("documento", CONTENT_TYPE_BY_EXT[".pdf"], MAX_BYTES_BINARY),
+    ".docx": TipoDeAnexo("documento", CONTENT_TYPE_BY_EXT[".docx"], MAX_BYTES_BINARY),
+}
+
+TIPOS_DE_IMAGEM: dict[str, str] = {ext: t.content_type for ext, t in TIPOS_DE_ANEXO.items() if t.classe == "imagem"}
+TIPOS_DE_DOCUMENTO: dict[str, str] = {
+    ext: t.content_type for ext, t in TIPOS_DE_ANEXO.items() if t.classe == "documento"
+}
+
+
+def _ou(itens: list[str]) -> str:
+    return f"{', '.join(itens[:-1])} ou {itens[-1]}" if len(itens) > 1 else "".join(itens)
+
+
+def _em_mb(teto: int) -> str:
+    mb = teto / (1024 * 1024)
+    return f"{mb:.0f}" if mb == int(mb) else f"{mb:.2f}".replace(".", ",")
+
+
+# A recusa do tipo que nao entra: diz quais entram, da tabela, para a pessoa
+# saber o que fazer com o arquivo que tem na mao.
+MOTIVO_TIPO_FORA_DA_LISTA = (
+    "Esse tipo de arquivo não entra na conversa. "
+    f"Entram print ({_ou(list(TIPOS_DE_IMAGEM))}) e documento ({_ou(list(TIPOS_DE_DOCUMENTO))})."
+)
+
+
+def motivo_documento_grande(extensao: str) -> str:
+    """A recusa do documento acima do teto do tipo dele, com o numero."""
+    teto = TIPOS_DE_ANEXO[extensao].teto_bytes
+    return (
+        f"O arquivo {extensao} passou do limite de {_em_mb(teto)} MB. "
+        "Divida o documento em partes menores e mande uma de cada vez."
+    )
+
 
 # As duas recusas da imagem, junto da tabela e do teto que elas dizem. Moram
 # aqui, e nao na rota, porque sao duas as portas que recusam imagem: o print
@@ -176,6 +238,29 @@ def _linha_da_conversa(mensagem: dict) -> str:
             ),
         ]
     )
+
+
+def documentos_cercados(rotulo: str, documentos: list[dict]) -> list[str]:
+    """Os documentos de uma fala (issue #1520) como entram no prompt.
+
+    A regra e a do prefixo de origem: a linha de fora leva so o rotulo
+    `[documento]`, que e palavra do backend, e o nome do arquivo entra DENTRO
+    da cerca, com o texto inteiro. Fora das marcas nao sobra um caractere que
+    tenha vindo do arquivo.
+    """
+    linhas: list[str] = []
+    for documento in documentos:
+        nome = " ".join(str(documento.get("nome") or "").split())[:LIMITE_DO_NOME_DO_ARQUIVO]
+        linhas += [
+            f"{rotulo}: [documento]",
+            _cercar(
+                f"{ROTULO_DO_NOME} {nome}\n{documento.get('texto') or ''}",
+                titulo=TITULO_DO_QUE_VEIO_DE_FORA,
+                inicio=MARCA_INICIO_DE_FORA,
+                fim=MARCA_FIM_DE_FORA,
+            ),
+        ]
+    return linhas
 
 
 def descrever_imagem(*, imagem: bytes, extensao: str) -> str | None:
