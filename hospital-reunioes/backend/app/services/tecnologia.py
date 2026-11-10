@@ -19,6 +19,9 @@ from app.services.tecnologia_vinculo import ETAPA_EM_PRODUCAO
 # uma renomeacao que passa em dois deles.
 TABELA_DEMANDAS = "tecnologia_demandas"
 TABELA_PRODUTOS = "tecnologia_produtos"
+# A Conversa da Demanda (issue #1537, ADR 0083, decisao 8): mensagens de gente,
+# separadas da conversa com o agente, que mora em `tecnologia_planejamentos`.
+TABELA_CONVERSA_DA_DEMANDA = "tecnologia_conversa_da_demanda"
 
 # O estado da Demanda de antes da ADR 0077, congelado na coluna ate o drop. A
 # sincronizacao e o apagamento dos prints ainda o leem: a Demanda Concluida ou
