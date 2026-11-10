@@ -27,7 +27,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from test_extracao_isolada import _montar_pdf, _pdf_sem_texto  # noqa: E402
 from test_planejamento_demanda import _encerrou, _ia, _pergunta  # noqa: E402
-from test_tecnologia_anexos import PNG  # noqa: E402
+from test_tecnologia_anexos import PNG, _ha_dias, _rodada_do_cron  # noqa: E402
 from test_tecnologia_chat import (  # noqa: E402
     CAMPOS_RESPONDIDOS,
     CHAT,
@@ -414,6 +414,25 @@ class TestAnexoDaDemanda:
 
         assert str(recusa.value) == tecnologia_anexos.MOTIVO_ANEXOS_DEMAIS
         assert len(sb.tabelas["tecnologia_anexos"]) == 10
+
+    def test_o_cron_tira_o_binario_do_documento_pela_regra_do_print_e_o_texto_fica(self, monkeypatch):
+        """Trinta dias depois de Em produção o original sai do bucket, como o
+        print; o texto que o agente leu fica na fala, como a descrição do
+        print fica."""
+        client, sb, _ = _cenario(monkeypatch)
+        demanda_id = _comecar(client, monkeypatch)
+        lido = _lido(client, ".docx")
+        _ia(monkeypatch, _turno())
+        assert client.post(f"{CHAT}/{demanda_id}", json={"documentos": [lido["documento_id"]]}).status_code == 200
+        demanda = next(d for d in sb.tabelas["tecnologia_demandas"] if d["id"] == demanda_id)
+        demanda.update(etapa="em_producao", entregue_em=_ha_dias(31))
+
+        _rodada_do_cron(monkeypatch, sb)
+
+        assert sb.storage.arquivos == {}, "o documento ficou no bucket 31 dias depois de Em produção"
+        [anexo] = sb.tabelas["tecnologia_anexos"]
+        assert anexo["apagado_em"]
+        assert TRECHO in _conversas(sb)[0]["mensagens"][-2]["documentos"][0]["texto"]
 
     def test_imagem_continua_no_teto_de_3_75_mb_no_servico_de_anexos(self, monkeypatch):
         _, sb, _ = _cenario(monkeypatch)

@@ -127,6 +127,28 @@ class TestCustoAoAbrirAConversa:
 
         assert custo == {"modelo": "Opus 5.5", "custo_usd": None}
 
+    def test_conversa_com_documento_continua_somando_os_turnos(self, monkeypatch):
+        """O documento é lido sem IA (issue #1520): não há chamada fora da
+        tabela, e o custo dos turnos com documento é o que está gravado."""
+        client, sb, demanda_id = _conversa_com(
+            monkeypatch,
+            lambda d: _chamada(d, custo=1.20, criado_em="2026-11-06T10:00:00Z"),
+            lambda d: _chamada(d, custo=0.64, criado_em="2026-11-06T10:05:00Z"),
+        )
+        sb.tabelas.setdefault("tecnologia_anexos", []).append(
+            {
+                "demanda_id": demanda_id,
+                "ordem": 1,
+                "storage_path": "x/melhorias.md",
+                "content_type": "text/markdown",
+                "apagado_em": None,
+            }
+        )
+
+        custo = client.get(f"{CHAT}/{demanda_id}").json()["custo"]
+
+        assert custo == {"modelo": "Opus 5.5", "custo_usd": 1.84}
+
     def test_sem_chamada_nenhuma_nao_ha_custo(self, monkeypatch):
         client, _, demanda_id = _conversa_com(monkeypatch)
 
