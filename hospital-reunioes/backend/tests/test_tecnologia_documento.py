@@ -596,7 +596,16 @@ class TestKitDaTecnologia:
         texto = (CONHECIMENTO_DIR / "tecnologia.md").read_text(encoding="utf-8")
 
         secao = texto.split("## Os anexos da Demanda", 1)[1].split("\n## ", 1)[0]
-        for trecho in (".md", ".txt", ".pdf", ".docx", "3,75 MB", "15 MB", "100 mil caracteres", "como print", "10"):
+        # Cada tipo junto do teto dele: a extensao solta aparece em outras
+        # frases da secao e passaria mesmo com o tipo fora da lista.
+        for trecho in (
+            ".png, .jpg, .jpeg ou .webp, de até 3,75 MB",
+            "em .md ou .txt, de até 5 MB",
+            "em .pdf ou .docx (Word), de até 15 MB",
+            "até 100 mil caracteres",
+            "mande as páginas como print",
+            "até 10 anexos por Demanda, somando prints e documentos",
+        ):
             assert trecho in secao, trecho
 
     def test_o_kit_diz_que_a_conversa_mostra_so_o_nome_e_o_tamanho_e_o_assistente_le_tudo(self):
