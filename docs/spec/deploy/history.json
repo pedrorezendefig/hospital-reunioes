@@ -2,6 +2,54 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-11-10T20:00:14-03:00",
+      "sha": "e53997779c18db2be9b2ce724d8b4f7028704f09",
+      "app_version": "0.240.0",
+      "subject": "Onda onda-tec-onda2: O diretor escolhe o Responsável antes de Criar o card",
+      "raw_subject": "chore(deploy): registro da onda onda-tec-onda2 (#1541)",
+      "scope": [
+        "backend",
+        "frontend"
+      ],
+      "prds": [
+        1529
+      ],
+      "result": "healthy",
+      "duration_seconds": 214,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        },
+        {
+          "service": "frontend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "onda-enxuta onda-tec-onda2: PR #1541 (issue #1533), mergeados PR a PR. Merge pela API do GitHub, um build. Registro pela Action pos-merge depois do health.",
+      "etapas": {
+        "merge_s": 3,
+        "build_s": {
+          "backend": 20,
+          "frontend": 192
+        },
+        "health_s": 0
+      },
+      "responsavel": "pedrorezendefig"
+    },
+    {
       "at": "2026-11-10T19:33:10-03:00",
       "sha": "89b77f8ecfd70bcd25a47201ce796e704467dbc5",
       "app_version": "0.239.0",
