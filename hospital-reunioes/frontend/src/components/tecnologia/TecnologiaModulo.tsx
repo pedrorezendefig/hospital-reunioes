@@ -15,7 +15,7 @@ import { useAuth } from "@/hooks/useAuth";
 
 import { ConversasDaTecnologia } from "./ConversasDaTecnologia";
 
-export function TecnologiaModulo() {
+export function TecnologiaModulo({ demandaInicial = null }: { demandaInicial?: string | null }) {
   const { token } = useAuth();
 
   return (
@@ -32,7 +32,7 @@ export function TecnologiaModulo() {
         </div>
       </div>
 
-      <ConversasDaTecnologia token={token} />
+      <ConversasDaTecnologia token={token} demandaInicial={demandaInicial} />
     </div>
   );
 }

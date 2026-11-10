@@ -20,12 +20,18 @@
  * Cada linha com card mostra o Responsável, para todos, e a lista do
  * Desenvolvedor abre em "Para mim", as Demandas de que ele cuida (issue
  * #1533, ADR 0083, decisão 5).
+ *
+ * Toda Demanda aberta tem, embaixo, a Conversa da Demanda, numa área própria
+ * (issue #1537, ADR 0083, decisão 8). O aviso do sino chega com a Demanda em
+ * `demandaInicial` e a abre: o Desenvolvedor a procura em "Todas", porque a
+ * menção pode ser numa Demanda de que ele não é o Responsável.
  */
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { ArrowLeft, Loader2, Plus } from "lucide-react";
 
 import { ChatDaTecnologia, Fala } from "./ChatDaTecnologia";
+import { ConversaDaDemanda } from "./ConversaDaDemanda";
 import { OQueMudaDaDemanda } from "./OQueMudaDaDemanda";
 import { SeloDeEtapa } from "./SeloDeEtapa";
 import { AnexoDaDemanda, conversaValida, FalaDoChat, URL_DO_CHAT_DA_ABA, urlDaConversa } from "./chat";
@@ -174,7 +180,14 @@ function Acompanhamento({ demanda, token }: { demanda: Demanda; token: string | 
   );
 }
 
-export function ConversasDaTecnologia({ token }: { token: string | null }) {
+export function ConversasDaTecnologia({
+  token,
+  demandaInicial = null,
+}: {
+  token: string | null;
+  /** A Demanda que o aviso do sino pediu para abrir. */
+  demandaInicial?: string | null;
+}) {
   const [demandas, setDemandas] = useState<Demanda[] | null>(null);
   const [erroDaLista, setErroDaLista] = useState<string | null>(null);
   /** A Demanda clicada; `null` é a conversa nova. */
@@ -187,6 +200,8 @@ export function ConversasDaTecnologia({ token }: { token: string | null }) {
   const [desenvolvedor, setDesenvolvedor] = useState(false);
   /** Nulo até o servidor dizer quem está logado: o Desenvolvedor abre em Para mim. */
   const [filtro, setFiltro] = useState<Filtro | null>(null);
+  /** A Demanda do sino que já foi aberta: abre uma vez, e não a cada recarga da lista. */
+  const abertaPeloSino = useRef<string | null>(null);
 
   // Sem resposta, a tela fica como a do diretor: o filtro só aparece com o
   // sim do servidor.
@@ -206,12 +221,12 @@ export function ConversasDaTecnologia({ token }: { token: string | null }) {
       }
       if (!viva) return;
       setDesenvolvedor(sim);
-      setFiltro(sim ? "para_mim" : "minhas");
+      setFiltro(sim ? (demandaInicial ? "todas" : "para_mim") : "minhas");
     })();
     return () => {
       viva = false;
     };
-  }, [token]);
+  }, [token, demandaInicial]);
 
   const carregar = useCallback(async () => {
     if (!token || filtro === null) return;
@@ -247,12 +262,20 @@ export function ConversasDaTecnologia({ token }: { token: string | null }) {
     [carregar],
   );
 
-  function abrir(demanda: Demanda | null) {
+  const abrir = useCallback((demanda: Demanda | null) => {
     setAberta(demanda);
     setDestacada(demanda?.id ?? null);
     setChave((atual) => atual + 1);
     setNaTela("conversa");
-  }
+  }, []);
+
+  useEffect(() => {
+    if (!demandaInicial || abertaPeloSino.current === demandaInicial || !demandas) return;
+    const pedida = demandas.find((d) => d.id === demandaInicial);
+    if (!pedida) return;
+    abertaPeloSino.current = demandaInicial;
+    abrir(pedida);
+  }, [demandaInicial, demandas, abrir]);
 
   return (
     <div className="md:grid md:grid-cols-[16rem_minmax(0,1fr)] md:gap-4 md:items-start">
@@ -350,6 +373,7 @@ export function ConversasDaTecnologia({ token }: { token: string | null }) {
         ) : (
           <ChatDaTecnologia key={chave} token={token} demandaId={aberta?.id ?? null} onMudou={aoMudar} />
         )}
+        {aberta && <ConversaDaDemanda key={`conversa-${chave}`} demandaId={aberta.id} token={token} />}
       </div>
     </div>
   );
