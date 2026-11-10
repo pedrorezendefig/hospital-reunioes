@@ -473,7 +473,7 @@ class TestCriarOCard:
         assert resposta.status_code == 200, resposta.text
         assert resposta.json()["estado"] == "enviado"
         [issue] = gh.criadas
-        assert sorted(issue["labels"]) == ["ready-for-agent", "type:fix"]
+        assert sorted(issue["labels"]) == ["origem:diretor", "ready-for-agent", "type:fix"]
         assert issue["assignees"] == []
         assert issue["titulo"] == "Botão de responder some na Ouvidoria"
         assert _demandas(sb)[0]["github_issue_numero"] == 900

@@ -276,6 +276,9 @@ class _SaidaDoTurno(BaseModel):
     opcoes: list[str] = Field(default_factory=list)
     campos: _CamposDoBug = Field(default_factory=_CamposDoBug)
     criterios: list[str] = Field(default_factory=list)
+    # A frase de resumo do card (issue #1532, ADR 0083, decisao 9): a primeira
+    # linha da issue, por onde o Hospital OS conta do que o card trata.
+    frase: str | None = None
     pronto: bool = False
     # O numero do pedido aberto parecido (issue #1385), que o turno so aceita
     # se o modelo o viu na lista das issues abertas neste mesmo turno.
@@ -358,13 +361,17 @@ def _texto_limpo(valor: str | None, teto: int) -> str:
     return sanitizar_travessao(" ".join((valor or "").split()))[:teto].strip()
 
 
-def resumo_do_bug(campos: _CamposDoBug, criterios: list[str], *, titulo: str) -> dict:
+def resumo_do_bug(campos: _CamposDoBug, criterios: list[str], *, titulo: str, frase: str | None = None) -> dict:
     """O resumo que o diretor confere: os quatro rotulos e os criterios.
 
     Rotulo sem resposta sai "nao informado" (ADR 0077, Roteiro do bug): o card
     nao deixa de nascer por falta de informacao, e o que faltou fica dito.
+    A frase de resumo (issue #1532) so entra quando o modelo a escreveu; sem
+    ela a issue abre pelo titulo.
     """
     resumo: dict = {"titulo": titulo}
+    if frase_limpa := _texto_limpo(frase, LIMITE_DO_TITULO):
+        resumo["frase"] = frase_limpa
     for campo in CAMPOS_DO_BUG:
         resumo[campo] = _texto_limpo(getattr(campos, campo), LIMITE_DO_CAMPO) or NAO_INFORMADO
     limpos = [c for c in (_texto_limpo(c, LIMITE_DO_CAMPO) for c in criterios) if c][:LIMITE_DE_CRITERIOS]
@@ -448,7 +455,7 @@ def turno(
     caminho = None
     texto = saida.mensagem
     if no_roteiro and (saida.pronto or perguntas_do_roteiro(mensagens) >= TETO_DO_ROTEIRO):
-        resumo = resumo_do_bug(saida.campos, saida.criterios, titulo=titulo)
+        resumo = resumo_do_bug(saida.campos, saida.criterios, titulo=titulo, frase=saida.frase)
         if not saida.pronto:
             texto = TEXTO_DO_TETO
         parecida = consultas.issues_vistas.get(saida.parecida) if saida.parecida is not None else None

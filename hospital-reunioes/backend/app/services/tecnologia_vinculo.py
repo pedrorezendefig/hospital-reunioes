@@ -688,9 +688,15 @@ def corpo_do_prd_do_diretor(
     de marcador e de estrutura, sanitizador de travessao), como o corpo da
     issue do bug. A Origem nao leva login: quem clicou e o diretor, que nao tem
     um.
+
+    A primeira linha e a frase de resumo que o modelo escreveu no resumo
+    (issue #1532, ADR 0083, decisao 9), acima do bloco e fora dele, e cai no
+    titulo quando o resumo nao a tem. A conversa nao vai: o link a substitui
+    (decisao 4).
     """
     o_que_muda = _linha_do_prd(descricao) or _linha_do_prd(titulo)
     titulo_limpo = _linha_do_prd(titulo)
+    frase = _linha_do_prd(resumo.get("frase")) or titulo_limpo
     decisoes = [
         (_linha_do_prd(d.get("pergunta")), _linha_do_prd(d.get("escolha")), _linha_do_prd(d.get("porque")))
         for d in resumo.get("decisoes") or []
@@ -721,6 +727,8 @@ def corpo_do_prd_do_diretor(
 
     return "\n".join(
         [
+            frase,
+            "",
             CABECALHO_DO_BLOCO,
             "",
             f"**O que muda:** {o_que_muda}",
@@ -802,6 +810,12 @@ LABEL_PRONTA_PARA_AGENTE = "ready-for-agent"
 # PR do app (`LABELS_DO_APP` do painel, `docs/agents/triage-labels.md`).
 LABELS_DO_BUG = [LABEL_PRONTA_PARA_AGENTE, LABEL_DO_TIPO["defeito"]]
 
+# A label do card que o diretor criou na aba Tecnologia, bug ou melhoria (ADR
+# 0083, decisao 9). E por ela que o Hospital OS reconhece o card. Fica fora do
+# `LABELS_DO_BUG` porque o Faltou isto das Contas medicas usa a mesma lista e
+# nao vem do diretor.
+LABEL_ORIGEM_DIRETOR = "origem:diretor"
+
 
 def corpo_da_issue_do_bug(
     *,
@@ -819,13 +833,19 @@ def corpo_da_issue_do_bug(
     Todo texto passa pela peneira publica do `texto_do_diretor` (dado pessoal,
     marcador, estrutura e travessao). O print nunca: so a contagem, na Origem
     (ADR 0069, decisao 1).
+
+    A primeira linha e a frase de resumo do modelo (issue #1532, ADR 0083,
+    decisao 9), ou o titulo quando o resumo nao a tem.
     """
     rotulos = [(rotulo, _linha_do_prd(resumo.get(campo))) for campo, rotulo in ROTULOS_DO_BUG.items()]
     esperado = dict(rotulos)["O que esperava"]
     o_que_muda = esperado if esperado and esperado != NAO_INFORMADO else _linha_do_prd(resumo.get("titulo"))
     criterios = [item for item in (_linha_do_prd(c) for c in resumo.get("criterios") or []) if item]
+    frase = _linha_do_prd(resumo.get("frase")) or _linha_do_prd(resumo.get("titulo"))
     return "\n".join(
         [
+            frase,
+            "",
             CABECALHO_DO_BLOCO,
             "",
             f"**O que muda:** {o_que_muda}",

@@ -91,6 +91,7 @@ from app.services.tecnologia import (
 )
 from app.services.tecnologia_sincronizacao import mudanca_da_foto
 from app.services.tecnologia_vinculo import (
+    LABEL_ORIGEM_DIRETOR,
     LABELS_DO_BUG,
     MOTIVO_CRIACAO_EM_ANDAMENTO,
     MOTIVO_GITHUB_INDISPONIVEL,
@@ -1032,7 +1033,7 @@ async def criar_o_card(
             ator=ator,
             corpo=corpo_do_prd,
             assignees=[dono] if dono else [],
-            labels=labels_da_issue_nova(chat_tecnologia.TIPO_DA_CLASSIFICACAO["melhoria"]),
+            labels=[*labels_da_issue_nova(chat_tecnologia.TIPO_DA_CLASSIFICACAO["melhoria"]), LABEL_ORIGEM_DIRETOR],
         )
         linha = planejamento_demanda.marcar_enviado(supabase, demanda_id, agora=_agora())
         return _chat_para_a_tela(
@@ -1052,7 +1053,9 @@ async def criar_o_card(
             documentos=documentos,
         )
 
-    _criar_issue_e_vincular(supabase, demanda=demanda, ator=ator, corpo=corpo, assignees=[], labels=LABELS_DO_BUG)
+    _criar_issue_e_vincular(
+        supabase, demanda=demanda, ator=ator, corpo=corpo, assignees=[], labels=[*LABELS_DO_BUG, LABEL_ORIGEM_DIRETOR]
+    )
     linha = planejamento_demanda.marcar_enviado(supabase, demanda_id, agora=_agora())
     return _chat_para_a_tela(supabase, demanda_id, linha or {**atual, "estado": planejamento_demanda.ESTADO_ENVIADO})
 
