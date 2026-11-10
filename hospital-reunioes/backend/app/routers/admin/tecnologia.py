@@ -32,6 +32,10 @@ O print do chat (ADR 0056, decisao 4; ADR 0077, decisao 8):
                                                        descricao com o
                                                        identificador efemero
                                                        que o faz Anexo.
+- POST  /admin/tecnologia/assistente/ler-documento     extrai o texto do
+                                                       documento, sem IA, e
+                                                       devolve o identificador
+                                                       (issue #1520).
 
 Fora daqui, e de pe: o webhook do GitHub que deriva a Etapa
 (`routers/webhooks.py`), a rota de automacao dos anexos
