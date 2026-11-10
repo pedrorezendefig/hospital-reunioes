@@ -181,6 +181,23 @@ class TestOQueALista:
         ]
         assert all(a["url"].startswith("https://storage.local/") for a in resposta.json()["anexos"])
 
+    def test_as_planilhas_vem_junto_dos_outros_anexos(self, chave_configurada):
+        """Issue #1521: a planilha chega a quem desenvolve pela mesma boca,
+        com o tipo dela, para o `anexos.py` baixar junto."""
+        xlsx = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        cliente = _cliente(
+            [_anexo(2, "glosas.xlsx", tipo=xlsx), _anexo(1, "tela.png"), _anexo(3, "glosas.csv", tipo="text/csv")]
+        )
+
+        resposta = cliente.get(ROTA, headers={"X-API-Key": CHAVE})
+
+        assert resposta.status_code == 200, resposta.text
+        assert [(a["nome"], a["tipo"]) for a in resposta.json()["anexos"]] == [
+            ("tela.png", "image/png"),
+            ("glosas.xlsx", xlsx),
+            ("glosas.csv", "text/csv"),
+        ]
+
     def test_demanda_sem_anexo_devolve_lista_vazia(self, chave_configurada):
         resposta = _cliente([]).get(ROTA, headers={"X-API-Key": CHAVE})
 

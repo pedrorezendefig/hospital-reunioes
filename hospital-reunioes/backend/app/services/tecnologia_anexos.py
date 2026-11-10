@@ -407,9 +407,7 @@ MOTIVO_DOCUMENTO_COMPLEXO = (
 )
 # O Excel 97-2003 e binario proprio, sem parser isolado aqui (issue #1521): a
 # frase diz a saida, que esta na mao de quem tem o arquivo.
-MOTIVO_PLANILHA_ANTIGA = (
-    "Planilha no formato antigo (.xls) não entra. Abra no Excel, salve como .xlsx e anexe de novo."
-)
+MOTIVO_PLANILHA_ANTIGA = "Planilha no formato antigo (.xls) não entra. Abra no Excel, salve como .xlsx e anexe de novo."
 MOTIVO_DOCUMENTO_SUMIU = (
     "O documento não está mais guardado: passou o prazo ou o sistema reiniciou. Anexe o arquivo de novo."
 )
