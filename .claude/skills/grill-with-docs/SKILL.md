@@ -1,6 +1,8 @@
 ---
 name: grill-with-docs
 description: 'Entrevista em rodadas que testa um plano contra o CONTEXT.md e as ADRs do repositório e grava o glossário e as decisões enquanto elas fecham. Modo lote (`/grill-with-docs --lote`, "responde tudo" ou "modo lote"): todas as lacunas de uma vez, já decididas, com um "ok" ou "N: correção" no fim. Use quando a pessoa disser "grill with docs", "/grill-with-docs", "grill", "vamos debater o plano" dentro de um repositório, ou antes de um PRD. Para uma entrevista que não grava nada, use grill-me.'
+model: fable
+effort: medium
 ---
 
 Entreviste a pessoa sem dar trégua até chegar a um entendimento comum. Conduza em **pt-BR**. Durante a entrevista, mantenha o modelo de domínio do repositório: o glossário em `CONTEXT.md` e as decisões em `docs/adr/`. Se a pessoa não quiser nada gravado, troque para `grill-me`.
