@@ -115,6 +115,17 @@ class TestListaDoDesenvolvedor:
 
         assert [d["titulo"] for d in client.get(CHAT).json()] == ["Pedido da Vitta"]
 
+    def test_so_a_demanda_do_proprio_desenvolvedor_sai_como_minha_na_lista_de_todas(self, monkeypatch):
+        """`minha` é o que faz a tela abrir a Demanda de outro autor no
+        Acompanhamento, com os Anexos e sem a caixa de responder."""
+        client, _, _ = _cenario(
+            monkeypatch, logado=PEDRO, participantes=_participantes(), demandas=_demandas_de_dois_autores()
+        )
+
+        por_id = {d["id"]: d["minha"] for d in client.get(TODAS).json()}
+
+        assert por_id == {"d-pedro": True, "d-diretor": False, "d-outro": False}
+
     def test_super_admin_sem_login_do_github_lista_so_as_proprias_mesmo_pedindo_todas(self, monkeypatch):
         client, _, _ = _cenario(
             monkeypatch, logado=DIRETOR, participantes=_participantes(), demandas=_demandas_de_dois_autores()
