@@ -440,7 +440,7 @@ async def texto_do_documento(*, nome: str, conteudo: bytes) -> str:
     if not conteudo:
         raise AnexoRecusadoError(MOTIVO_ARQUIVO_VAZIO)
     try:
-        texto, _ = await transcricao_extractor.extrair_texto_async(nome, conteudo)
+        texto, _ = await transcricao_extractor.extrair_texto_async(nome, conteudo, extensoes=set(TIPOS_DE_DOCUMENTO))
     except ValueError as erro:
         if str(erro) == MENSAGEM_PDF_ESCANEADO:
             raise AnexoRecusadoError(MOTIVO_PDF_SEM_TEXTO) from erro

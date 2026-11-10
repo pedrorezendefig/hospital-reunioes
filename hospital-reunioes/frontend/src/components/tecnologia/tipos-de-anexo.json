@@ -7,6 +7,8 @@
     ".md": { "classe": "documento", "teto_bytes": 5242880 },
     ".txt": { "classe": "documento", "teto_bytes": 5242880 },
     ".pdf": { "classe": "documento", "teto_bytes": 15728640 },
-    ".docx": { "classe": "documento", "teto_bytes": 15728640 }
+    ".docx": { "classe": "documento", "teto_bytes": 15728640 },
+    ".csv": { "classe": "documento", "teto_bytes": 5242880 },
+    ".xlsx": { "classe": "documento", "teto_bytes": 15728640 }
   }
 }
