@@ -70,6 +70,15 @@ export type Demanda = {
    * backend. Nulo, ou ausente, é o pedido de antes do chat: fica sem selo.
    */
   classificacao?: Classificacao | null;
+  /** Se quem está logado é o autor (ADR 0083). Falso abre a Demanda só para leitura. */
+  minha?: boolean;
+  /**
+   * Só para o Desenvolvedor (ADR 0083, decisão 3): quem pediu, e o número e o
+   * endereço da issue. Para o diretor o servidor manda nulo.
+   */
+  autor?: string | null;
+  issue_numero?: number | null;
+  issue_url?: string | null;
 };
 
 export type Classificacao = "bug" | "melhoria";

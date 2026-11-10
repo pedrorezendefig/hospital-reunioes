@@ -11,6 +11,11 @@
  * No celular só um dos dois lados aparece por vez: a lista é a tela de
  * entrada, e a conversa aberta tem o caminho de volta. Na tela larga os dois
  * ficam lado a lado.
+ *
+ * O Desenvolvedor (issue #1531, ADR 0083) tem o filtro "Todas", com o autor
+ * em cada linha. A Demanda de outro autor abre só para leitura, com a
+ * entrevista inteira, os Anexos e o número e o link da issue. Quem é
+ * Desenvolvedor é o servidor que diz.
  */
 
 import { useCallback, useEffect, useState } from "react";
@@ -19,8 +24,9 @@ import { ArrowLeft, Loader2, Plus } from "lucide-react";
 import { ChatDaTecnologia, Fala } from "./ChatDaTecnologia";
 import { OQueMudaDaDemanda } from "./OQueMudaDaDemanda";
 import { SeloDeEtapa } from "./SeloDeEtapa";
-import { conversaValida, FalaDoChat, URL_DO_CHAT_DA_ABA, urlDaConversa } from "./chat";
+import { AnexoDaDemanda, conversaValida, FalaDoChat, URL_DO_CHAT_DA_ABA, urlDaConversa } from "./chat";
 import {
+  BASE_TECNOLOGIA,
   CLASSIFICACAO_CLASSE,
   CLASSIFICACAO_ROTULO,
   Demanda,
@@ -35,6 +41,13 @@ export const NOVA_CONVERSA = "Nova conversa";
 export const VOLTAR_PARA_A_LISTA = "Voltar às conversas";
 const LISTA_VAZIA = "Nenhuma conversa ainda.";
 const LISTA_FALHOU = "Não foi possível carregar as suas conversas. Tente recarregar a página.";
+const URL_QUEM_SOU = `${BASE_TECNOLOGIA}/eu`;
+
+type Filtro = "minhas" | "todas";
+const FILTROS: { valor: Filtro; rotulo: string }[] = [
+  { valor: "minhas", rotulo: "Minhas" },
+  { valor: "todas", rotulo: "Todas" },
+];
 
 /** O item serve para a lista? O resto da Demanda é opcional para ela. */
 function itemValido(item: unknown): item is Demanda {
@@ -68,9 +81,49 @@ function ClassificacaoNaLista({ demanda }: { demanda: Demanda }) {
   );
 }
 
-/** A conversa que já virou card: só leitura, com a Etapa e O que muda. */
+/** O link da issue, só para o Desenvolvedor e só se apontar para o GitHub. */
+function LinkDaIssue({ demanda }: { demanda: Demanda }) {
+  const url = demanda.issue_url;
+  if (!demanda.issue_numero || !url || !url.startsWith("https://github.com/")) return null;
+  return (
+    <a href={url} target="_blank" rel="noopener noreferrer" className="font-semibold text-primary underline">
+      #{demanda.issue_numero}
+    </a>
+  );
+}
+
+/** Os Anexos da Demanda, que só o Desenvolvedor recebe do servidor. */
+function AnexosDaDemanda({ anexos }: { anexos: AnexoDaDemanda[] }) {
+  const comLink = anexos.filter((anexo) => anexo.url);
+  if (comLink.length === 0) return null;
+  return (
+    <div className="border-t border-slate-100 pt-4 space-y-1">
+      <h3 className="text-xs font-semibold text-text-secondary">Anexos</h3>
+      <ul className="space-y-1 text-sm">
+        {comLink.map((anexo, i) => (
+          <li key={i}>
+            <a
+              href={anexo.url ?? undefined}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="normal-case text-primary underline"
+            >
+              {anexo.nome}
+            </a>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+/**
+ * A conversa só para leitura: a que já virou card, ou a de outro autor que o
+ * Desenvolvedor abriu (ADR 0083), com a Etapa e O que muda.
+ */
 function Acompanhamento({ demanda, token }: { demanda: Demanda; token: string | null }) {
   const [falas, setFalas] = useState<FalaDoChat[]>([]);
+  const [anexos, setAnexos] = useState<AnexoDaDemanda[]>([]);
 
   // A conversa é complemento: sem ela (a melhoria planejada, ou a rede fora),
   // O que muda continua à vista.
@@ -82,7 +135,10 @@ function Acompanhamento({ demanda, token }: { demanda: Demanda; token: string | 
         const resposta = await fetch(urlDaConversa(demanda.id), { headers: { Authorization: `Bearer ${token}` } });
         if (!resposta.ok) return;
         const corpo: unknown = await resposta.json();
-        if (viva && conversaValida(corpo)) setFalas(corpo.mensagens);
+        if (viva && conversaValida(corpo)) {
+          setFalas(corpo.mensagens);
+          setAnexos(Array.isArray(corpo.anexos_da_demanda) ? corpo.anexos_da_demanda : []);
+        }
       } catch (e) {
         console.error("[admin/tecnologia] falha ao abrir a conversa", e);
       }
@@ -97,6 +153,8 @@ function Acompanhamento({ demanda, token }: { demanda: Demanda; token: string | 
       <div className="flex flex-wrap items-center gap-2 text-xs">
         <h2 className="normal-case text-base font-bold text-slate-900">{demanda.titulo}</h2>
         <SeloDeEtapa demanda={demanda} />
+        <LinkDaIssue demanda={demanda} />
+        {demanda.autor && <span className="normal-case text-text-secondary">{demanda.autor}</span>}
       </div>
       <OQueMudaDaDemanda demanda={demanda} />
       {falas.length > 0 && (
@@ -106,6 +164,7 @@ function Acompanhamento({ demanda, token }: { demanda: Demanda; token: string | 
           ))}
         </div>
       )}
+      <AnexosDaDemanda anexos={anexos} />
     </section>
   );
 }
@@ -120,11 +179,34 @@ export function ConversasDaTecnologia({ token }: { token: string | null }) {
   /** Muda a cada clique, para o chat recomeçar do estado da conversa escolhida. */
   const [chave, setChave] = useState(0);
   const [naTela, setNaTela] = useState<"lista" | "conversa">("lista");
+  const [desenvolvedor, setDesenvolvedor] = useState(false);
+  const [filtro, setFiltro] = useState<Filtro>("minhas");
+
+  // Sem resposta, a tela fica como a do diretor: o filtro só aparece com o
+  // sim do servidor.
+  useEffect(() => {
+    if (!token) return;
+    let viva = true;
+    (async () => {
+      try {
+        const resposta = await fetch(URL_QUEM_SOU, { headers: { Authorization: `Bearer ${token}` } });
+        if (!resposta.ok) return;
+        const corpo: unknown = await resposta.json();
+        if (viva) setDesenvolvedor((corpo as { desenvolvedor?: unknown })?.desenvolvedor === true);
+      } catch (e) {
+        console.error("[admin/tecnologia] falha ao saber quem está logado", e);
+      }
+    })();
+    return () => {
+      viva = false;
+    };
+  }, [token]);
 
   const carregar = useCallback(async () => {
     if (!token) return;
+    const url = filtro === "todas" ? `${URL_DO_CHAT_DA_ABA}?filtro=todas` : URL_DO_CHAT_DA_ABA;
     try {
-      const resposta = await fetch(URL_DO_CHAT_DA_ABA, { headers: { Authorization: `Bearer ${token}` } });
+      const resposta = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
       if (!resposta.ok) {
         setErroDaLista(LISTA_FALHOU);
         return;
@@ -140,7 +222,7 @@ export function ConversasDaTecnologia({ token }: { token: string | null }) {
       console.error("[admin/tecnologia] falha ao carregar as conversas", e);
       setErroDaLista(FALHA_DE_CONEXAO);
     }
-  }, [token]);
+  }, [token, filtro]);
 
   useEffect(() => {
     carregar();
@@ -172,6 +254,23 @@ export function ConversasDaTecnologia({ token }: { token: string | null }) {
           <Plus className="w-4 h-4" />
           {NOVA_CONVERSA}
         </button>
+        {desenvolvedor && (
+          <div role="group" aria-label="Filtro das conversas" className="flex gap-1">
+            {FILTROS.map(({ valor, rotulo }) => (
+              <button
+                key={valor}
+                type="button"
+                aria-pressed={filtro === valor}
+                onClick={() => setFiltro(valor)}
+                className={`flex-1 px-3 py-1.5 rounded-xl border text-xs font-semibold ${
+                  filtro === valor ? "border-primary bg-primary/5 text-primary" : "border-border text-text-secondary"
+                }`}
+              >
+                {rotulo}
+              </button>
+            ))}
+          </div>
+        )}
         <nav aria-label="Suas conversas" className="md:max-h-[calc(100vh-20rem)] md:overflow-y-auto">
           {erroDaLista && (
             <p role="alert" className="px-3 py-2 rounded-xl bg-red-50 border border-red-200 text-red-700 text-sm">
@@ -202,6 +301,9 @@ export function ConversasDaTecnologia({ token }: { token: string | null }) {
                     }`}
                   >
                     <span className="normal-case font-medium text-text-primary line-clamp-2">{demanda.titulo}</span>
+                    {demanda.autor && (
+                      <span className="normal-case text-xs text-text-secondary">{demanda.autor}</span>
+                    )}
                     <span className="flex flex-wrap items-center gap-1.5">
                       <EtapaNaLista demanda={demanda} />
                       <ClassificacaoNaLista demanda={demanda} />
@@ -227,7 +329,7 @@ export function ConversasDaTecnologia({ token }: { token: string | null }) {
           <ArrowLeft className="w-4 h-4" />
           {VOLTAR_PARA_A_LISTA}
         </button>
-        {aberta?.tem_vinculo ? (
+        {aberta?.tem_vinculo || aberta?.minha === false ? (
           <Acompanhamento key={chave} demanda={aberta} token={token} />
         ) : (
           <ChatDaTecnologia key={chave} token={token} demandaId={aberta?.id ?? null} onMudou={aoMudar} />

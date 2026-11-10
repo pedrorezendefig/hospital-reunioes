@@ -46,6 +46,9 @@ export type FalaDoChat = {
 
 export type DocumentoDaFala = { nome: string; tamanho_bytes: number };
 
+/** Um Anexo da Demanda, como o Desenvolvedor o abre: a URL assinada vale por pouco tempo. */
+export type AnexoDaDemanda = { nome: string; tipo: string; url: string | null };
+
 export const LETRAS: LetraDaOpcao[] = ["A", "B"];
 
 /** O resumo do planejamento da melhoria: as decisões e o que ficou em aberto. */
@@ -98,6 +101,8 @@ export type ConversaDoChat = {
   planejamento: boolean;
   aviso_dos_anexos: string | null;
   custo?: CustoDaConversa | null;
+  /** Os Anexos, só para o Desenvolvedor (ADR 0083, decisão 3); vazio para o diretor. */
+  anexos_da_demanda?: AnexoDaDemanda[];
 };
 
 /**

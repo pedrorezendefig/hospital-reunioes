@@ -303,3 +303,86 @@ describe("No celular", () => {
     expect(painelDoChat().className).toMatch(/(^|\s)hidden(\s|$)/);
   });
 });
+
+describe("O Desenvolvedor (issue #1531, ADR 0083)", () => {
+  const EU = "/api/admin/tecnologia/eu";
+  const TODAS = `${LISTA}?filtro=todas`;
+  const DO_DIRETOR = demanda("d-7", "O relatório some", { minha: false, autor: "Diretor do Hospital" });
+  const COM_CARD_DE_OUTRO = demanda("d-8", "O botão sumiu", {
+    minha: false,
+    autor: "Outro Diretor",
+    etapa: "em_desenvolvimento",
+    tem_vinculo: true,
+    issue_numero: 912,
+    issue_url: "https://github.com/pedrorezendefig/hospital-reunioes/issues/912",
+  });
+
+  it("vê o filtro Todas, que traz as Demandas de todos com o autor em cada linha", async () => {
+    const chamadas = montar((url) => {
+      if (url === EU) return { status: 200, corpo: { desenvolvedor: true } };
+      if (url === LISTA) return { status: 200, corpo: [SEM_CARD] };
+      if (url === TODAS) return { status: 200, corpo: [DO_DIRETOR, { ...SEM_CARD, autor: "Pedro Vitta" }] };
+      return { status: 404, corpo: {} };
+    });
+
+    fireEvent.click(await screen.findByRole("button", { name: "Todas" }));
+
+    await within(lista()).findByText("O relatório some");
+    const itens = within(lista()).getAllByRole("listitem");
+    expect(itens.map((item) => item.textContent)).toEqual([
+      "O relatório someDiretor do HospitalRegistrada",
+      "Botão de responder some na OuvidoriaPedro VittaRegistrada",
+    ]);
+    expect(chamadas.some((c) => c.url === TODAS)).toBe(true);
+  });
+
+  it("quem não é Desenvolvedor não vê o filtro", async () => {
+    montar((url) => {
+      if (url === EU) return { status: 200, corpo: { desenvolvedor: false } };
+      if (url === LISTA) return { status: 200, corpo: [SEM_CARD] };
+      return { status: 404, corpo: {} };
+    });
+
+    await within(lista()).findByText("Botão de responder some na Ouvidoria");
+    expect(screen.queryByRole("button", { name: "Todas" })).toBeNull();
+  });
+
+  it("abre a Demanda de outro autor só para ler: a entrevista inteira e os Anexos", async () => {
+    montar((url) => {
+      if (url === EU) return { status: 200, corpo: { desenvolvedor: true } };
+      if (url === LISTA) return { status: 200, corpo: [DO_DIRETOR] };
+      if (url === `${LISTA}/d-7`) {
+        return {
+          status: 200,
+          corpo: conversa("d-7", {
+            anexos: 1,
+            anexos_da_demanda: [{ nome: "tela.png", tipo: "image/png", url: "https://storage.local/tela.png?t=1" }],
+          }),
+        };
+      }
+      return { status: 404, corpo: {} };
+    });
+
+    fireEvent.click(await within(lista()).findByRole("button", { name: /O relatório some/ }));
+
+    expect(await screen.findByText("Onde isso aconteceu?")).toBeTruthy();
+    expect(screen.getByText(ABERTURA)).toBeTruthy();
+    const anexo = await screen.findByRole("link", { name: /tela\.png/ });
+    expect(anexo.getAttribute("href")).toBe("https://storage.local/tela.png?t=1");
+    expect(screen.queryByLabelText("Sua mensagem")).toBeNull();
+  });
+
+  it("vê o número e o link da issue na Demanda que já tem card", async () => {
+    montar((url) => {
+      if (url === EU) return { status: 200, corpo: { desenvolvedor: true } };
+      if (url === LISTA) return { status: 200, corpo: [COM_CARD_DE_OUTRO] };
+      if (url === `${LISTA}/d-8`) return { status: 200, corpo: conversa("d-8", { estado: "enviado" }) };
+      return { status: 404, corpo: {} };
+    });
+
+    fireEvent.click(await within(lista()).findByRole("button", { name: /O botão sumiu/ }));
+
+    const link = await screen.findByRole("link", { name: "#912" });
+    expect(link.getAttribute("href")).toBe("https://github.com/pedrorezendefig/hospital-reunioes/issues/912");
+  });
+});
