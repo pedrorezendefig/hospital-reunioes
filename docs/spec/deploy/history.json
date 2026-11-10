@@ -2,6 +2,56 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-11-10T00:29:36-03:00",
+      "sha": "3c2c1596834f8d504cd9f32cd8514ccd7eed75db",
+      "app_version": "0.236.0",
+      "subject": "Onda anexo-onda1: Documento no chat da Tecnologia, o diretor anexa e o agente lê",
+      "raw_subject": "chore(deploy): registro da onda anexo-onda1 (#1525)",
+      "scope": [
+        "backend",
+        "frontend"
+      ],
+      "prds": [
+        1519
+      ],
+      "result": "healthy",
+      "duration_seconds": 338,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        },
+        {
+          "service": "frontend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [
+        "127_tecnologia_documento_no_chat.sql"
+      ],
+      "rollback_target_sha": null,
+      "notes": "onda-enxuta anexo-onda1: PR #1525 (issue #1520), mergeados PR a PR. Merge pela API do GitHub, um build. Registro pela Action pos-merge depois do health.",
+      "etapas": {
+        "merge_s": 3,
+        "build_s": {
+          "backend": 86,
+          "frontend": 253
+        },
+        "health_s": 0
+      },
+      "responsavel": "pedrorezendefig"
+    },
+    {
       "at": "2026-11-08T15:07:03-03:00",
       "sha": "31e7e9981dfeff2c7d83c60cf22648472204313f",
       "app_version": "0.235.0",
