@@ -37,6 +37,8 @@ O chat da aba (issues #1381, #1383 e #1384):
                                                 a onda, ou o PRD do diretor),
                                                 designada ao Responsavel, e
                                                 vincula.
+- POST  /admin/tecnologia/chat/{id}/reenviar    o "Reenviar" do Envio falhou,
+                                                pela mesma porta (issue #1535).
 
 O print do chat (ADR 0056, decisao 4; ADR 0077, decisao 8):
 
@@ -516,18 +518,24 @@ def _id_do_dono(desenvolvedores: list[dict]) -> str | None:
     return str(pessoa["id"]) if pessoa else None
 
 
-def _responsavel_do_card(supabase: Client, escolhido: str | None) -> tuple[list[str], str | None]:
+def _responsavel_do_card(
+    supabase: Client, escolhido: str | None, *, guardado: bool = False
+) -> tuple[list[str], str | None]:
     """O assignee da issue e o Responsavel da Demanda (ADR 0083, decisao 5).
 
     Com escolha, o Desenvolvedor escolhido. Sem escolha, o login do dono que ja
     esta na configuracao, em bug e em melhoria; o Responsavel e quem tem esse
     login no cadastro, ou ninguem, e o card nasce designado do mesmo jeito.
+
+    `guardado` e o Responsavel que ficou na Demanda no clique que falhou (o
+    "Reenviar", issue #1535): quem deixou de ser Desenvolvedor desde entao
+    conta como sem escolha, em vez de recusar o reenvio.
     """
     desenvolvedores = _desenvolvedores(supabase)
-    if escolhido:
-        pessoa = next((p for p in desenvolvedores if str(p["id"]) == escolhido), None)
-        if pessoa is None:
-            _recusar(MOTIVO_RESPONSAVEL_FORA_DA_LISTA)
+    pessoa = next((p for p in desenvolvedores if escolhido and str(p["id"]) == escolhido), None)
+    if escolhido and pessoa is None and not guardado:
+        _recusar(MOTIVO_RESPONSAVEL_FORA_DA_LISTA)
+    if pessoa is not None:
         login = login_para_publicar(pessoa.get("github_login"))
         return ([login] if login else []), str(pessoa["id"])
     dono = login_para_publicar(settings.github_login_dono)
@@ -1009,6 +1017,62 @@ async def criar_o_card(
     if atual.get("estado") != planejamento_demanda.ESTADO_RESUMIDO or not resumo:
         _conflito(MOTIVO_CHAT_SEM_RESUMO)
     assignees, responsavel_id = _responsavel_do_card(supabase, payload.responsavel_id if payload else None)
+    return _enviar_o_card(
+        supabase, demanda=demanda, atual=atual, ator=ator, assignees=assignees, responsavel_id=responsavel_id
+    )
+
+
+MOTIVO_SEM_ENVIO_FALHOU = "Este card não está com o envio falhado. Recarregue a página."
+
+
+@router.post("/chat/{demanda_id}/reenviar", response_model=ChatResponse)
+@limiter.shared_limit(LIMITE_DO_VINCULO, ESCOPO_DO_VINCULO)
+async def reenviar_o_card(
+    request: Request,
+    demanda_id: str,
+    ator: dict = Depends(require_super_admin),
+    supabase: Client = Depends(get_supabase_client),
+):
+    """O "Reenviar" da Demanda em "Envio falhou" (issue #1535, ADR 0083, decisao 7).
+
+    Pelo autor ou pelo Desenvolvedor: quem nao ve a Demanda leva 404, como na
+    leitura. Passa pela mesma porta do "Criar o card", com o Responsavel que
+    ficou guardado no primeiro clique. Antes, confere se a Demanda ja tem issue
+    vinculada, e nesse caso nao cria a segunda. Nada reenvia sozinho.
+    """
+    demanda, atual = _chat_guardado(supabase, demanda_id)
+    if not pode_ver(ator, demanda):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=MOTIVO_CHAT_NAO_ENCONTRADO)
+    if demanda.get("github_issue_numero"):
+        _conflito(MOTIVO_CHAT_TERMINOU)
+    if not tecnologia_envio.envio_falhou(demanda):
+        _conflito(MOTIVO_SEM_ENVIO_FALHOU)
+    if atual.get("estado") != planejamento_demanda.ESTADO_RESUMIDO or not atual.get("resumo"):
+        _conflito(MOTIVO_CHAT_SEM_RESUMO)
+    assignees, responsavel_id = _responsavel_do_card(supabase, demanda.get("responsavel_id"), guardado=True)
+    return _enviar_o_card(
+        supabase, demanda=demanda, atual=atual, ator=ator, assignees=assignees, responsavel_id=responsavel_id
+    )
+
+
+def _enviar_o_card(
+    supabase: Client,
+    *,
+    demanda: dict,
+    atual: dict,
+    ator: dict,
+    assignees: list[str],
+    responsavel_id: str | None,
+) -> dict:
+    """O envio do card, igual para "Criar o card" e "Reenviar" (issue #1535).
+
+    Recebe as guardas da rota ja passadas e o Responsavel ja resolvido. O que
+    e do bug entra por parametro na porta: o corpo com os rotulos do roteiro e
+    os criterios de aceite e as labels que fazem a onda pegar sozinha
+    (`ready-for-agent`, sem `needs-triage`). A melhoria leva o PRD do diretor.
+    """
+    demanda_id = str(demanda["id"])
+    resumo = atual.get("resumo")
     _exigir_integracao()
     # So a contagem dos anexos vai a issue (ADR 0069), por tipo (issue #1520).
     imagens, documentos = tecnologia_anexos.quantos_guardados(supabase, demanda_id)

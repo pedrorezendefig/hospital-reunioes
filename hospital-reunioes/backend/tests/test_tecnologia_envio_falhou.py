@@ -29,9 +29,10 @@ from test_tecnologia_chat import (  # noqa: E402
     _llm_em_mock,  # noqa: F401
     _reset_rate_limiter,  # noqa: F401
 )
-from test_tecnologia_vinculo import DIRETOR, PEDRO, _montar  # noqa: E402
+from test_tecnologia_vinculo import DIRETOR, PEDRO, _montar, _pessoa  # noqa: E402
+from test_tecnologia_webhook_github import _SupabaseMock as _SupabaseDoCron  # noqa: E402
 
-from app.services import github_client  # noqa: E402
+from app.services import github_client, tecnologia_sincronizacao  # noqa: E402
 from app.services.tecnologia_vinculo import MOTIVO_GITHUB_INDISPONIVEL  # noqa: E402
 
 CRIAR_O_CARD_DE_VERDADE = github_client.criar_issue
@@ -52,6 +53,8 @@ def _demanda_com_envio_falhou(monkeypatch):
 
 
 def _como(logado: dict, sb, gh, monkeypatch):
+    if all(p["id"] != logado["id"] for p in sb.tabelas["participantes"]):
+        sb.tabelas["participantes"].append(dict(logado))
     client, _, _ = _montar(logado=logado, supabase=sb, github=gh, monkeypatch=monkeypatch)
     return client
 
@@ -143,3 +146,100 @@ class TestALista:
         assert resposta.status_code == 200, resposta.text
         assert [d["id"] for d in resposta.json()] == [falhou_id]
         assert {falhou_id, criada_id, conversa_id} <= {d["id"] for d in pedro.get(f"{CHAT}?filtro=todas").json()}
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 3. Reenviar
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+def _reenviar(client, demanda_id: str):
+    return client.post(f"{CHAT}/{demanda_id}/reenviar")
+
+
+class TestReenviar:
+    @pytest.mark.parametrize("quem", ["diretor", "desenvolvedor"])
+    def test_reenviar_cria_a_issue_e_limpa_o_estado(self, monkeypatch, quem):
+        diretor, sb, gh, demanda_id = _demanda_com_envio_falhou(monkeypatch)
+        client = diretor if quem == "diretor" else _como(PEDRO, sb, gh, monkeypatch)
+
+        resposta = _reenviar(client, demanda_id)
+
+        assert resposta.status_code == 200, resposta.text
+        assert resposta.json()["estado"] == "enviado"
+        assert len(gh.criadas) == 1
+        demanda = _demandas(sb)[0]
+        assert demanda["github_issue_numero"] == 900
+        assert demanda["envio_estado"] is None
+        assert demanda["envio_motivo"] is None
+        assert _linha(diretor.get(CHAT).json(), demanda_id)["envio_falhou"] is False
+
+    def test_reenviar_mantem_o_responsavel_escolhido_no_criar_o_card(self, monkeypatch):
+        lucas = _pessoa("P5", "Lucas Sampaio", github_login="lucas")
+        client, sb, gh = _cenario(monkeypatch, participantes=[PEDRO, DIRETOR, lucas])
+        demanda_id = _ate_o_resumo(client, monkeypatch)
+        _falha_no_github(gh)
+        assert client.post(f"{CHAT}/{demanda_id}/criar-card", json={"responsavel_id": "P5"}).status_code == 502
+        gh.erro_ao_criar = None
+
+        assert _reenviar(client, demanda_id).status_code == 200
+
+        assert gh.criadas[0]["assignees"] == ["lucas"]
+        assert _demandas(sb)[0]["responsavel_id"] == "P5"
+
+    def test_reenviar_que_falha_de_novo_continua_em_envio_falhou(self, monkeypatch):
+        client, sb, gh, demanda_id = _demanda_com_envio_falhou(monkeypatch)
+        gh.erro_ao_criar = github_client.GithubIndisponivelError("GitHub respondeu 503")
+
+        assert _reenviar(client, demanda_id).status_code == 502
+
+        assert _demandas(sb)[0]["envio_estado"] == "falhou"
+        assert _demandas(sb)[0]["envio_motivo"] == "GitHub respondeu 503"
+
+    def test_reenviar_demanda_que_ja_tem_issue_vinculada_nao_cria_a_segunda(self, monkeypatch):
+        client, sb, gh, demanda_id = _demanda_com_envio_falhou(monkeypatch)
+        # A issue foi vinculada por outro caminho depois da falha.
+        _demandas(sb)[0]["github_issue_numero"] = 777
+
+        resposta = _reenviar(client, demanda_id)
+
+        assert resposta.status_code == 409
+        assert gh.criadas == []
+        assert _demandas(sb)[0]["github_issue_numero"] == 777
+
+    def test_reenviar_demanda_sem_envio_falhou_nao_cria_issue(self, monkeypatch):
+        """Reenviar e para o envio que falhou; o primeiro envio e o Criar o card."""
+        client, _, gh = _cenario(monkeypatch)
+        demanda_id = _ate_o_resumo(client, monkeypatch)
+
+        assert _reenviar(client, demanda_id).status_code == 409
+        assert gh.criadas == []
+
+    def test_quem_nao_ve_a_demanda_nao_reenvia(self, monkeypatch):
+        _, sb, gh, demanda_id = _demanda_com_envio_falhou(monkeypatch)
+        outro_diretor = _pessoa("P3", "Outro Diretor")
+
+        resposta = _reenviar(_como(outro_diretor, sb, gh, monkeypatch), demanda_id)
+
+        assert resposta.status_code == 404
+        assert gh.criadas == []
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 4. O cron não reenvia
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+class TestOCronNaoReenvia:
+    def test_a_reconciliacao_de_hora_em_hora_nao_reenvia_a_demanda_com_envio_falhou(self, monkeypatch):
+        """O cron le pelo dublê do webhook, que conhece o `.not_` da consulta
+        dele; o `criar_issue` segue dublado pelo cenário, e é ele que conta."""
+        _, sb, gh, _ = _demanda_com_envio_falhou(monkeypatch)
+        banco_do_cron = _SupabaseDoCron({"tecnologia_demandas": _demandas(sb)})
+
+        lidas = tecnologia_sincronizacao.reconciliar_vinculos(banco_do_cron)
+
+        assert lidas == {"lidas": 0, "mudadas": 0, "falhas": 0}
+        assert gh.criadas == []
+        assert _demandas(sb)[0]["envio_estado"] == "falhou"
+        assert _demandas(sb)[0].get("github_issue_numero") is None
