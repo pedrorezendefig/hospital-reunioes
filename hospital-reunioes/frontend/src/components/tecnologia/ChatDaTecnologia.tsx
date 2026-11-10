@@ -37,8 +37,8 @@ import {
   mensagemComOrigem,
   PREFIXO_DE_PRINT,
   PRINT_SEM_LEITURA,
+  recusaDoTipo,
   tamanhoLegivel,
-  TIPO_FORA_DA_LISTA,
 } from "./assistente";
 import {
   ConversaDoChat,
@@ -544,7 +544,7 @@ export function ChatDaTecnologia({ token, demandaId = null, onMudou }: PropsDoCh
     const classe = classeDoAnexo(arquivo.name);
     if (classe === "imagem") return anexarOPrint(arquivo);
     if (classe === "documento") return anexarODocumento(arquivo);
-    setErro(TIPO_FORA_DA_LISTA);
+    setErro(recusaDoTipo(arquivo.name));
   }
 
   async function naoBateu(oQue: string): Promise<boolean> {

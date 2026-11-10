@@ -212,6 +212,15 @@ export const TIPO_FORA_DA_LISTA =
   "Esse tipo de arquivo não entra na conversa. " +
   `Entram print (${ou(extensoesDa("imagem"))}) e documento (${ou(extensoesDa("documento"))}).`;
 
+/** A mesma frase do backend para o Excel 97-2003 (issue #1521): diz a saída, que está na mão de quem tem o arquivo. */
+export const PLANILHA_ANTIGA =
+  "Planilha no formato antigo (.xls) não entra. Abra no Excel, salve como .xlsx e anexe de novo.";
+
+/** A recusa do arquivo fora da tabela: a planilha antiga tem frase própria. */
+export function recusaDoTipo(nome: string): string {
+  return extensaoDe(nome) === ".xls" ? PLANILHA_ANTIGA : TIPO_FORA_DA_LISTA;
+}
+
 /** A classe do arquivo pela extensão, nunca pelo tipo que o navegador diz; `null` fora da tabela. */
 export function classeDoAnexo(nome: string): ClasseDoAnexo | null {
   return TIPOS_DE_ANEXO[extensaoDe(nome)]?.classe ?? null;
@@ -233,7 +242,7 @@ export function tamanhoLegivel(bytes: number): string {
 export function avisoDoDocumento(arquivo: ArquivoEscolhido): string | null {
   const extensao = extensaoDe(arquivo.name);
   const tipo = TIPOS_DE_ANEXO[extensao];
-  if (!tipo || tipo.classe !== "documento") return TIPO_FORA_DA_LISTA;
+  if (!tipo || tipo.classe !== "documento") return recusaDoTipo(arquivo.name);
   if (arquivo.size > tipo.teto_bytes) {
     return `O arquivo ${extensao} passou do limite de ${emMb(tipo.teto_bytes)} MB. Divida o documento em partes menores e mande uma de cada vez.`;
   }
