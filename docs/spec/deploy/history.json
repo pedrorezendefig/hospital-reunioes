@@ -2,6 +2,52 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-11-10T00:35:12-03:00",
+      "sha": "3773c05c2bffe0a31b36ddbb9fb295300b017a2f",
+      "app_version": "0.237.0",
+      "subject": "PR #1524, issue #1523: IA só roda com clique, recomendação da Validação e segundo agente viram botão",
+      "raw_subject": "chore(deploy): registro do PR avulso (#1524)",
+      "scope": [
+        "backend",
+        "frontend"
+      ],
+      "prds": [],
+      "result": "healthy",
+      "duration_seconds": 484,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        },
+        {
+          "service": "frontend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "PR avulso: PR #1524, issue #1523. Merge pela API do GitHub, um build. Registro pela Action pos-merge depois do health.",
+      "etapas": {
+        "merge_s": 3,
+        "build_s": {
+          "backend": 13,
+          "frontend": 164
+        },
+        "health_s": 0
+      },
+      "responsavel": "pedrorezendefig"
+    },
+    {
       "at": "2026-11-10T00:29:36-03:00",
       "sha": "3c2c1596834f8d504cd9f32cd8514ccd7eed75db",
       "app_version": "0.236.0",
