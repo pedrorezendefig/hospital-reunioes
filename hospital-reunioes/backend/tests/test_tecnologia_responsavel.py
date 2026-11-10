@@ -69,10 +69,19 @@ class TestSeletor:
 
         assert resposta.status_code == 200, resposta.text
         assert resposta.json() == [
-            {"id": "P5", "nome": "Lucas Sampaio"},
-            {"id": "P4", "nome": "Pedro Rib"},
-            {"id": "P1", "nome": "Pedro Vitta"},
+            {"id": "P5", "nome": "Lucas Sampaio", "padrao": False},
+            {"id": "P4", "nome": "Pedro Rib", "padrao": False},
+            {"id": "P1", "nome": "Pedro Vitta", "padrao": True},
         ]
+
+    def test_o_padrao_e_quem_tem_o_login_do_dono_da_configuracao(self, monkeypatch):
+        """A tela diz para quem vai o card sem escolha: o dono, pelo nome."""
+        monkeypatch.setattr(settings, "github_login_dono", "Lucas-Sampaio")
+        client, _, _ = _cenario(monkeypatch, participantes=_participantes())
+
+        padrao = [d["nome"] for d in client.get(DESENVOLVEDORES).json() if d["padrao"]]
+
+        assert padrao == ["Lucas Sampaio"]
 
 
 # ═══════════════════════════════════════════════════════════════════════════

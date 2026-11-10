@@ -68,10 +68,12 @@ class DemandaResponse(BaseModel):
 
 class DesenvolvedorResponse(BaseModel):
     """Uma opcao do "Quem cuida disto?" (ADR 0083, decisao 5): um
-    Desenvolvedor, pelo id e pelo nome. O login fica no servidor."""
+    Desenvolvedor, pelo id e pelo nome. O login fica no servidor. `padrao` e
+    quem recebe o card sem escolha."""
 
     id: str
     nome: str
+    padrao: bool = False
 
 
 class QuemSouNaAbaResponse(BaseModel):

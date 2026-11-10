@@ -593,6 +593,14 @@ def _desenvolvedores(supabase: Client) -> list[dict]:
     return sorted(pessoas, key=lambda p: (p.get("nome_completo") or "").casefold())
 
 
+def _id_do_dono(desenvolvedores: list[dict]) -> str | None:
+    """Quem tem, no cadastro, o login do dono que esta na configuracao: o
+    Responsavel do card sem escolha."""
+    dono = login_para_publicar(settings.github_login_dono)
+    pessoa = next((p for p in desenvolvedores if dono and normalizar_github_login(p.get("github_login")) == dono), None)
+    return str(pessoa["id"]) if pessoa else None
+
+
 def _responsavel_do_card(supabase: Client, escolhido: str | None) -> tuple[list[str], str | None]:
     """O assignee da issue e o Responsavel da Demanda (ADR 0083, decisao 5).
 
@@ -608,8 +616,7 @@ def _responsavel_do_card(supabase: Client, escolhido: str | None) -> tuple[list[
         login = login_para_publicar(pessoa.get("github_login"))
         return ([login] if login else []), str(pessoa["id"])
     dono = login_para_publicar(settings.github_login_dono)
-    pessoa = next((p for p in desenvolvedores if dono and normalizar_github_login(p.get("github_login")) == dono), None)
-    return ([dono] if dono else []), (str(pessoa["id"]) if pessoa else None)
+    return ([dono] if dono else []), _id_do_dono(desenvolvedores)
 
 
 @router.get("/desenvolvedores", response_model=list[DesenvolvedorResponse])
@@ -617,8 +624,14 @@ async def listar_os_desenvolvedores(
     _ator: dict = Depends(require_super_admin),
     supabase: Client = Depends(get_supabase_client),
 ):
-    """O "Quem cuida disto?" do resumo (ADR 0083, decisao 5)."""
-    return [{"id": str(p["id"]), "nome": p.get("nome_completo") or ""} for p in _desenvolvedores(supabase)]
+    """O "Quem cuida disto?" do resumo (ADR 0083, decisao 5). `padrao` marca
+    para quem vai o card sem escolha, e a tela diz o nome."""
+    desenvolvedores = _desenvolvedores(supabase)
+    dono = _id_do_dono(desenvolvedores)
+    return [
+        {"id": str(p["id"]), "nome": p.get("nome_completo") or "", "padrao": str(p["id"]) == dono}
+        for p in desenvolvedores
+    ]
 
 
 @router.get("/chat", response_model=list[DemandaResponse])
