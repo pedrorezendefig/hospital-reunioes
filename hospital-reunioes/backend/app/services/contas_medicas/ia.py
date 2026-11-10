@@ -809,14 +809,16 @@ def comparar_conta(
     conta_id: str | None,
     atendimento_id: str | None,
     passo: Literal["B", "PROVA"] = "B",
+    modelo: str | None = None,
 ) -> LinhasDaComparacao:
     """O passo B: as linhas do Guia que a IA propõe. A memória vai em bloco de
     cache: é o mesmo texto para todas as contas da operadora.
 
     `passo="PROVA"` é o Passo B refeito pela Prova da regra (#1488): a mesma
-    chamada, gravada com o passo próprio."""
+    chamada, gravada com o passo próprio. `modelo` troca o do passo B (a prova
+    pedida pela Validação roda no modelo dela, #1523)."""
     return _chamar_a_ia(
-        modelo=settings.cm_ia_modelo_passo_b,
+        modelo=modelo or settings.cm_ia_modelo_passo_b,
         instrucao=load_prompt("contas_medicas_passo_b"),
         blocos=[
             (f"MEMÓRIA DA OPERADORA\n{memoria}", True),
@@ -965,12 +967,12 @@ def propor_lote_do_contrato(contrato: str, memoria: str, *, supabase) -> LoteDoC
     )
 
 
-def recomendar_tema(memoria: str, tema: str, *, supabase) -> RecomendacaoDoTema:
-    """O Auditor decide um Tema da fila de Validação (issue #1491): no modelo do
-    Passo B, com a memória da operadora em bloco de cache. Gravada como
-    CONVERSA, o passo do Auditor, sem conta: o Tema junta várias."""
+def recomendar_tema(memoria: str, tema: str, *, supabase, modelo: str) -> RecomendacaoDoTema:
+    """O Auditor decide um Tema da fila de Validação (issue #1491): no modelo da
+    Validação (#1523), com a memória da operadora em bloco de cache. Gravada
+    como CONVERSA, o passo do Auditor, sem conta: o Tema junta várias."""
     return _chamar_a_ia(
-        modelo=settings.cm_ia_modelo_passo_b,
+        modelo=modelo,
         instrucao=load_prompt("contas_medicas_recomendacao"),
         blocos=[
             (f"MEMÓRIA DA OPERADORA\n{memoria}", True),

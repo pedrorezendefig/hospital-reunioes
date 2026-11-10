@@ -1,15 +1,17 @@
-"""O segundo agente: a releitura semanal das Contas concluídas (issue #1493,
-PRD #1484, ADR 0081, decisão 14).
+"""O segundo agente: a releitura das Contas concluídas (issue #1493, PRD
+#1484, ADR 0081, decisão 14; botão no Painel desde a ADR 0082, issue #1523).
 
-Toda semana o job sorteia até 10 Contas concluídas que ele ainda não revisou,
-relê os eventos guardados de cada uma procurando o que o prontuário registra
-como administrado e não está nos itens da Conta, e grava cada achado como
-Faltou isto de origem AGENTE, já com a classificação e a explicação.
+Quando alguém com o painel completo clica, ele sorteia até 10 Contas
+concluídas que ainda não revisou, relê os eventos guardados de cada uma
+procurando o que o prontuário registra como administrado e não está nos itens
+da Conta, e grava cada achado como Faltou isto de origem AGENTE, já com a
+classificação e a explicação. Nenhum job do agendador o chama.
 
-O job é chamado direto, com o dublê do banco da carga da operadora e as Contas
-concluídas da Prova da regra (12 da ALFA, uma da BETA, uma A fazer). O
-provedor da IA é dublado no transporte HTTP (o adaptador roda inteiro) e
-responde pela Conta do pedido, pelo código do item dela.
+O serviço é chamado direto ou pela rota do Painel, com o dublê do banco da
+carga da operadora e as Contas concluídas da Prova da regra (12 da ALFA, uma
+da BETA, uma A fazer). O provedor da IA é dublado no transporte HTTP (o
+adaptador roda inteiro) e responde pela Conta do pedido, pelo código do item
+dela.
 """
 
 from __future__ import annotations
@@ -18,14 +20,17 @@ import json
 import re
 from typing import Any
 
+import httpx
 import httpx2
 import pytest
 from anthropic_apoio import cliente_por_transporte, erro, mensagem
 from test_contas_medicas_memoria_tela import _importar, _versao
-from test_contas_medicas_operadoras import GESTAO
+from test_contas_medicas_operadoras import FATURISTA, GESTAO
 from test_contas_medicas_prova_da_regra import KIT, _passos_do_check, _semear
 from test_contas_medicas_regra_nova import _cliente
+from test_contas_medicas_validacao_decidida import _leitura_quebrada
 
+from app.routers import contas_medicas_painel as painel_router
 from app.services.contas_medicas import ia, revisor
 
 CONCLUIDAS = {f"c{n:02d}" for n in range(1, 13)} | {"c14"}
@@ -86,7 +91,7 @@ class TestOsAchados:
         banco, provedor = cenario
         provedor.por_codigo = {f"M{n:03d}": [_achado(f"2026-10-{n:02d}")] for n in range(1, 15)}
 
-        revisor.revisar_semana(banco)
+        revisor.revisar_concluidas(banco)
 
         gravados = banco.linhas("cm_faltou_isto")
         revisadas = _revisadas(banco)
@@ -114,7 +119,7 @@ class TestOsAchados:
             f"M{n:03d}": [_achado("2026-10-20"), _achado(f"2026-10-{n:02d}", item="  ")] for n in range(1, 15)
         }
 
-        revisor.revisar_semana(banco)
+        revisor.revisar_concluidas(banco)
 
         assert len(_revisadas(banco)) == 10
         assert banco.linhas("cm_faltou_isto") == []
@@ -124,11 +129,11 @@ class TestAAmostra:
     def test_sorteia_ate_dez_concluidas_sem_repetir_a_ja_revisada(self, cenario):
         banco, provedor = cenario
 
-        revisor.revisar_semana(banco)
+        revisor.revisar_concluidas(banco)
         primeira = _revisadas(banco)
-        revisor.revisar_semana(banco)
+        revisor.revisar_concluidas(banco)
         segunda = _revisadas(banco)[len(primeira) :]
-        revisor.revisar_semana(banco)
+        revisor.revisar_concluidas(banco)
 
         # 13 concluídas (12 da ALFA e a da BETA); a A fazer, c13, nunca entra.
         assert len(primeira) == 10 and len(set(primeira)) == 10
@@ -142,9 +147,9 @@ class TestAAmostra:
         banco, provedor = cenario
         provedor.falha = True
 
-        revisor.revisar_semana(banco)
+        revisor.revisar_concluidas(banco)
         provedor.falha = False
-        revisor.revisar_semana(banco)
+        revisor.revisar_concluidas(banco)
 
         # A primeira semana falhou nas 10: a segunda ainda acha 10 a revisar.
         assert len([c for c in banco.linhas("cm_chamada_ia") if c["sucesso"]]) == 10
@@ -154,7 +159,7 @@ class TestAsChamadas:
     def test_cada_conta_revisada_grava_uma_chamada_revisor_com_a_conta(self, cenario):
         banco, _provedor = cenario
 
-        revisor.revisar_semana(banco)
+        revisor.revisar_concluidas(banco)
 
         chamadas = banco.linhas("cm_chamada_ia")
         assert [c["passo"] for c in chamadas] == ["REVISOR"] * 10
@@ -163,42 +168,87 @@ class TestAsChamadas:
         assert all(c["atendimento_id"] == f"at-{c['conta_id'][1:]}" for c in chamadas)
 
 
-class TestNoAgendador:
-    def test_o_job_roda_uma_vez_por_semana_no_fuso_de_sao_paulo(self):
-        from apscheduler.triggers.cron import CronTrigger
+ROTA_DO_SEGUNDO_AGENTE = "/api/contas-medicas/painel/segundo-agente"
 
+
+def _no_painel(banco, pessoa=GESTAO):
+    """O app da carga com a rota do Painel, para a pessoa."""
+    cliente, _banco = _cliente(pessoa, banco)
+    cliente.app.include_router(painel_router.router, prefix="/api")
+    return cliente
+
+
+class TestOBotaoDoPainel:
+    def test_nenhum_job_do_agendador_chama_o_segundo_agente(self):
         from app.cron import scheduler as cron
 
         try:
             cron.start_scheduler()
-            job = cron.scheduler.get_job("revisor_contas_medicas")
-            assert job is not None
-            assert job.func is cron.revisar_contas_medicas
-            assert isinstance(job.trigger, CronTrigger)
-            campos = {f.name: str(f) for f in job.trigger.fields}
-            assert (campos["day"], campos["day_of_week"]) == ("*", "sun")
-            assert str(job.trigger.timezone) == "America/Sao_Paulo"
+            assert cron.scheduler.get_job("revisor_contas_medicas") is None
         finally:
             cron.stop_scheduler()
+        assert not hasattr(cron, "revisar_contas_medicas")
 
-    def test_o_job_revisa_com_o_banco_do_app(self, cenario, monkeypatch):
-        from app.cron import scheduler as cron
+    def test_o_botao_mostra_quantas_contas_e_o_custo_antes_do_clique(self, cenario):
+        banco, provedor = cenario
 
-        banco, _provedor = cenario
-        monkeypatch.setattr(cron, "_supabase", lambda: banco)
+        pedido = _no_painel(banco).get(ROTA_DO_SEGUNDO_AGENTE)
 
-        cron.revisar_contas_medicas()
+        assert pedido.status_code == 200, pedido.text
+        corpo = pedido.json()
+        assert (corpo["contas"], corpo["em_andamento"]) == (10, False)
+        assert corpo["custo_estimado_usd"] == pytest.approx(10 * revisor.CUSTO_POR_CONTA_USD)
+        assert provedor.pedidos == []
 
+    def test_o_clique_rele_as_contas_e_grava_o_faltou_isto(self, cenario):
+        banco, provedor = cenario
+        provedor.por_codigo = {f"M{n:03d}": [_achado(f"2026-10-{n:02d}")] for n in range(1, 15)}
+
+        resposta = _no_painel(banco).post(ROTA_DO_SEGUNDO_AGENTE)
+
+        assert resposta.status_code == 202, resposta.text
         assert len(_revisadas(banco)) == 10
+        assert {f["origem"] for f in banco.linhas("cm_faltou_isto")} == {"AGENTE"}
+        assert len(banco.linhas("cm_faltou_isto")) == 10
+        assert _no_painel(banco).get(ROTA_DO_SEGUNDO_AGENTE).json()["contas"] == 3
+
+    def test_segundo_clique_enquanto_o_primeiro_roda_nao_dispara_outra_rodada(self, cenario):
+        banco, provedor = cenario
+        assert revisor.reservar()
+        try:
+            assert _no_painel(banco).get(ROTA_DO_SEGUNDO_AGENTE).json()["em_andamento"] is True
+            resposta = _no_painel(banco).post(ROTA_DO_SEGUNDO_AGENTE)
+        finally:
+            revisor.liberar()
+
+        assert resposta.status_code == 409
+        assert provedor.pedidos == []
+
+    def test_banco_que_cai_no_clique_nao_prende_o_botao(self, cenario):
+        banco, provedor = cenario
+
+        with _leitura_quebrada(banco, "cm_conta"), pytest.raises(httpx.ReadTimeout):
+            _no_painel(banco).post(ROTA_DO_SEGUNDO_AGENTE)
+
+        assert _no_painel(banco).get(ROTA_DO_SEGUNDO_AGENTE).json()["em_andamento"] is False
+        assert _no_painel(banco).post(ROTA_DO_SEGUNDO_AGENTE).status_code == 202
+        assert len(_revisadas(banco)) == 10
+
+    def test_so_quem_tem_o_painel_completo_chama_o_segundo_agente(self, cenario):
+        banco, provedor = cenario
+
+        assert _no_painel(banco, FATURISTA).post(ROTA_DO_SEGUNDO_AGENTE).status_code == 403
+        assert _no_painel(banco, FATURISTA).get(ROTA_DO_SEGUNDO_AGENTE).status_code == 403
+        assert provedor.pedidos == []
 
 
 class TestOKit:
-    def test_o_kit_diz_que_o_segundo_agente_rele_dez_contas_por_semana(self):
+    def test_o_kit_diz_que_o_segundo_agente_rele_dez_contas_quando_alguem_pede(self):
         no_ar = KIT.read_text(encoding="utf-8").split("## O que já está no ar")[1].split("\n## ")[0]
 
         for termo in (
             "segundo agente",
-            "toda semana",
+            "Reler contas concluídas",
             "10 contas concluídas",
             "ainda não revisou",
             "achado pelo agente",

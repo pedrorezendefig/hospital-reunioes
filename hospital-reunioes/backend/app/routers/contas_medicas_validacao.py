@@ -15,12 +15,13 @@ import re
 from typing import Literal
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, Response, status
 from pydantic import BaseModel, Field
 
 from app.dependencies import get_supabase_client, require_permissao_cm
 from app.limiter import limiter
 from app.services.ai_processor import chamar_ia_fora_do_loop
+from app.services.contas_medicas import validacao_decidida
 from app.services.contas_medicas.ia import ErroDaIA
 from app.services.contas_medicas.memoria_edicao import (
     MudancaRecusadaError,
@@ -121,6 +122,46 @@ async def aprovar_o_lote(
     enviados ao cadastro, para baixar a lista."""
     vistos = [{"id": str(t.id), "decisao": t.decisao, "recomendado_em": t.recomendado_em} for t in corpo.temas]
     return aprovar_lote(supabase, vistos, me)
+
+
+@router.get("/validacao/recomendacao")
+@limiter.limit("60/minute")
+async def ver_pedido_de_recomendacao(
+    request: Request,
+    me: dict = Depends(_PODE_DECIDIR),
+    supabase=Depends(get_supabase_client),
+) -> dict:
+    """O que o botão "Pedir recomendação ao Auditor" mostra antes do clique
+    (ADR 0082): temas sem recomendação, provas, custo estimado e se já roda."""
+    return validacao_decidida.pedido_de_recomendacao(supabase)
+
+
+@router.post("/validacao/recomendacao", status_code=status.HTTP_202_ACCEPTED)
+@limiter.limit("10/minute")
+async def pedir_recomendacao(
+    request: Request,
+    tarefas: BackgroundTasks,
+    me: dict = Depends(_PODE_DECIDIR),
+    supabase=Depends(get_supabase_client),
+) -> dict:
+    """O clique no botão (ADR 0082, issue #1523): o Auditor recomenda, em
+    segundo plano, todos os temas abertos sem recomendação. Um pedido por vez;
+    sem tema a recomendar, nada roda."""
+    if not validacao_decidida.reservar():
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT, detail="O Auditor já está recomendando a fila. Espere terminar."
+        )
+    try:
+        pedido = validacao_decidida.pedido_de_recomendacao(supabase)
+    except Exception:
+        # O banco que cai aqui não pode deixar o botão preso no "recomendando".
+        validacao_decidida.liberar()
+        raise
+    if not pedido["temas"]:
+        validacao_decidida.liberar()
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Nenhum tema aguarda recomendação.")
+    tarefas.add_task(validacao_decidida.recomendar_e_liberar, supabase)
+    return {**pedido, "em_andamento": True}
 
 
 @router.post("/validacao/temas/{tema_id}/leitura")

@@ -177,3 +177,31 @@ export async function lerObservacao(token: string, tema: Tema): Promise<{ leitur
   const corpo = await res.json();
   return { leitura: corpo.leitura_ia };
 }
+
+/** O botão "Pedir recomendação ao Auditor" (ADR 0082, issue #1523): o que ele
+ * mostra antes do clique, e se um pedido já está rodando. */
+export interface PedidoAoAuditor {
+  temas: number;
+  provas: number;
+  custo_estimado_usd: number;
+  em_andamento: boolean;
+}
+
+export const ROTA_DO_PEDIDO = `${ROTA_DA_FILA}/recomendacao`;
+
+/** De quanto em quanto tempo a tela pergunta se o pedido terminou. */
+export const PERGUNTA_A_CADA_MS = 15_000;
+
+/** O pedido como está no servidor; nulo quando não deu para ler. */
+export async function verPedido(token: string): Promise<PedidoAoAuditor | null> {
+  const res = await fetch(ROTA_DO_PEDIDO, { headers: { Authorization: `Bearer ${token}` } });
+  if (!res.ok) return null;
+  return res.json();
+}
+
+/** O clique: o Auditor recomenda, em segundo plano, os temas sem recomendação. */
+export async function pedirRecomendacao(token: string): Promise<{ pedido?: PedidoAoAuditor; erro?: string }> {
+  const res = await fetch(ROTA_DO_PEDIDO, { method: "POST", headers: { Authorization: `Bearer ${token}` } });
+  if (!res.ok) return { erro: await detalheDoErro(res, "Não foi possível pedir a recomendação.") };
+  return { pedido: await res.json() };
+}

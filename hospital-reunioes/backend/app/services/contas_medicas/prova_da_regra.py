@@ -246,6 +246,7 @@ def _provar_conta(
     regras: dict[str, dict],
     parametros: dict,
     dicionario: dict[str, set[str]],
+    modelo: str | None = None,
 ) -> dict[str, Any]:
     resumo = {
         "conta_id": conta["id"],
@@ -279,6 +280,7 @@ def _provar_conta(
         conta_id=None,
         atendimento_id=conta["atendimento_id"],
         passo="PROVA",
+        modelo=modelo,
     )
     conferencias = passo_b._Conferencias(
         conta=lida,
@@ -373,10 +375,11 @@ def provar_regra(
     )
 
 
-def provar_pendente(supabase, operadora_id: str, regra_codigo: str) -> dict[str, Any]:
+def provar_pendente(supabase, operadora_id: str, regra_codigo: str, *, modelo: str) -> dict[str, Any]:
     """A prova da regra pendente da memória vigente, como se ela fosse validada
     com o texto de hoje (issue #1491): o Auditor lê a prova antes de recomendar
-    o Tema de Regra pendente. Sem autor: quem pede é o Auditor."""
+    o Tema de Regra pendente. Sem autor: quem pede é o Auditor. Roda no
+    `modelo` da Validação, não no do passo B (#1523)."""
     operadora = supabase.table("cm_operadora").select("id, sigla").eq("id", operadora_id).execute().data or []
     vigentes = (
         supabase.table("cm_memoria_versao")
@@ -406,6 +409,7 @@ def provar_pendente(supabase, operadora_id: str, regra_codigo: str) -> dict[str,
         nova={**pendente, "status": "VIGENTE"},
         parametros=vigente.get("parametros_json") or {},
         autor_id=None,
+        modelo=modelo,
     )
 
 
@@ -421,10 +425,12 @@ def _provar(
     autor_id: str | None,
     lote_item_id: str | None = None,
     descartar: bool = False,
+    modelo: str | None = None,
 ) -> dict[str, Any]:
     """A memória vigente com a regra `nova` refaz o Passo B nas últimas
     concluídas da operadora; o resultado fica em `cm_prova`. Com `descartar`,
-    a `nova` não entra: a memória fica sem ela (#1494)."""
+    a `nova` não entra: a memória fica sem ela (#1494). Sem `modelo`, o do
+    passo B."""
     regras = [*regras, *([] if descartar else [nova])]
     operadora = (supabase.table("cm_operadora").select("nome").eq("id", operadora_id).execute().data or [{}])[0]
     memoria = montar_texto_memoria(
@@ -441,7 +447,9 @@ def _provar(
     dicionario = dicionario_do_banco(supabase)
     with ThreadPoolExecutor(max_workers=_EM_PARALELO) as executor:
         por_conta = list(
-            executor.map(lambda c: _provar_conta(supabase, c, memoria, por_codigo, parametros, dicionario), contas)
+            executor.map(
+                lambda c: _provar_conta(supabase, c, memoria, por_codigo, parametros, dicionario, modelo), contas
+            )
         )
     # O texto que a IA escreveu vai para a tela: sem travessão nem meia-risca.
     por_conta = sanitizar_estrutura(por_conta)

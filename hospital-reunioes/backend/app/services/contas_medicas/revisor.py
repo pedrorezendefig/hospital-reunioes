@@ -1,15 +1,15 @@
 """O segundo agente (issue #1493, PRD #1484, ADR 0081, decisão 14).
 
-Uma vez por semana, sorteia até 10 Contas concluídas que ainda não revisou e
-relê cada uma a partir do que a análise guardou (os eventos que a leitura do
-prontuário achou, os documentos, as páginas sem texto, o Guia e os itens da
-conta), procurando o que o prontuário registra como administrado e não foi
+Quando alguém pede, pelo botão do Painel (ADR 0082, issue #1523), sorteia até
+10 Contas concluídas que ainda não revisou e relê cada uma a partir do que a
+análise guardou (os eventos que a leitura do prontuário achou, os documentos,
+as páginas sem texto, o Guia e os itens da conta), procurando o que o prontuário registra como administrado e não foi
 cobrado. Cada achado vira um Faltou isto de origem AGENTE, já classificado e
 explicado como o Auditor faz com o da pessoa.
 
 A Conta revisada é a que tem chamada REVISOR com sucesso em `cm_chamada_ia`:
-é ela que tira a Conta do sorteio das semanas seguintes, e a falha da IA
-deixa a Conta no sorteio da próxima semana. Nenhuma Conta, Linha do Guia ou
+é ela que tira a Conta do sorteio dos pedidos seguintes, e a falha da IA
+deixa a Conta no sorteio do próximo pedido. Nenhuma Conta, Linha do Guia ou
 Memória muda aqui.
 """
 
@@ -18,6 +18,7 @@ from __future__ import annotations
 import json
 import logging
 import random
+import threading
 from datetime import date
 from typing import Any
 
@@ -36,11 +37,28 @@ from app.services.contas_medicas.prova_da_regra import CONCLUIDAS
 from app.services.paginacao import ler_tudo
 from app.utils.text_sanitizer import sanitizar_travessao
 
-__all__ = ["CONTAS_POR_SEMANA", "revisar_semana"]
+__all__ = [
+    "CONTAS_POR_RODADA",
+    "CUSTO_POR_CONTA_USD",
+    "liberar",
+    "pedido_de_releitura",
+    "reler_e_liberar",
+    "reservar",
+    "revisar_concluidas",
+]
 
 logger = logging.getLogger(__name__)
 
-CONTAS_POR_SEMANA = 10
+CONTAS_POR_RODADA = 10
+
+# O custo estimado que o botão mostra antes do clique, por Conta relida, no
+# modelo do passo B em Opus: o Passo B custou em média US$ 0,59 por Conta em
+# produção em novembro de 2026.
+CUSTO_POR_CONTA_USD = 0.60
+
+# Um pedido por vez: o segundo clique, enquanto o primeiro roda, não sorteia
+# outra rodada.
+_em_andamento = threading.Lock()
 
 
 def _ja_revisadas(supabase) -> set[str]:
@@ -132,15 +150,47 @@ def _revisar(supabase, conta: dict[str, Any]) -> int:
     return len(achados)
 
 
-def revisar_semana(supabase) -> int:
-    """A rodada da semana: até `CONTAS_POR_SEMANA` Contas concluídas ainda não
+def reservar() -> bool:
+    """Reserva o pedido; falso quando outro já está rodando."""
+    return _em_andamento.acquire(blocking=False)
+
+
+def liberar() -> None:
+    _em_andamento.release()
+
+
+def pedido_de_releitura(supabase) -> dict[str, Any]:
+    """O que o botão do Painel mostra antes do clique: quantas Contas serão
+    relidas, o custo estimado e se já há um pedido rodando. Não chama a IA."""
+    contas = min(CONTAS_POR_RODADA, len(_a_revisar(supabase)))
+    return {
+        "contas": contas,
+        "custo_estimado_usd": round(contas * CUSTO_POR_CONTA_USD, 2),
+        "em_andamento": _em_andamento.locked(),
+    }
+
+
+def reler_e_liberar(supabase) -> None:
+    """O pedido do botão, em segundo plano: relê e solta a reserva, dê certo ou
+    não. Na falha, só o tipo do erro: a mensagem pode citar o prontuário."""
+    try:
+        achados = revisar_concluidas(supabase)
+        logger.info("[ContasMedicas] Segundo agente a pedido: %s Faltou isto achado(s)", achados)
+    except Exception as erro:
+        logger.error("[ContasMedicas] Segundo agente a pedido falhou: %s", type(erro).__name__)
+    finally:
+        liberar()
+
+
+def revisar_concluidas(supabase) -> int:
+    """Uma rodada: até `CONTAS_POR_RODADA` Contas concluídas ainda não
     revisadas, sorteadas. Devolve quantos Faltou isto o agente gravou.
 
     A falha numa Conta não para as outras; a IA sem crédito para a rodada. O
     log leva só o tipo do erro: a mensagem pode citar o prontuário."""
     candidatas = _a_revisar(supabase)
     achados = 0
-    for conta in random.sample(candidatas, min(CONTAS_POR_SEMANA, len(candidatas))):
+    for conta in random.sample(candidatas, min(CONTAS_POR_RODADA, len(candidatas))):
         try:
             achados += _revisar(supabase, conta)
         except ia.IASemCredito:

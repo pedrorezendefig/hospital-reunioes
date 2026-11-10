@@ -14,14 +14,17 @@ from datetime import date
 from typing import Literal
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Query, Request
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Request, status
 
 from app.dependencies import get_supabase_client, require_permissao_cm
 from app.limiter import limiter
+from app.services.contas_medicas import revisor
 from app.services.contas_medicas.coordenacao import incluido_pela_coordenacao
 from app.services.contas_medicas.painel import montar_painel
 
 router = APIRouter(prefix="/contas-medicas", tags=["contas-medicas"])
+
+_PAINEL_COMPLETO = require_permissao_cm("painel_completo")
 
 
 @router.get("/painel")
@@ -53,3 +56,43 @@ async def painel(
     if "conferencia_coordenacao" in me["permissoes_cm"]:
         painel["coordenacao"] = incluido_pela_coordenacao(supabase, semana=semana, operadora_id=operadora, tipo=tipo)
     return painel
+
+
+@router.get("/painel/segundo-agente")
+@limiter.limit("60/minute")
+async def ver_pedido_do_segundo_agente(
+    request: Request,
+    me: dict = Depends(_PAINEL_COMPLETO),
+    supabase=Depends(get_supabase_client),
+) -> dict:
+    """O que o botão "Reler contas concluídas" mostra antes do clique (ADR
+    0082): quantas Contas, o custo estimado e se já roda."""
+    return revisor.pedido_de_releitura(supabase)
+
+
+@router.post("/painel/segundo-agente", status_code=status.HTTP_202_ACCEPTED)
+@limiter.limit("10/minute")
+async def pedir_releitura(
+    request: Request,
+    tarefas: BackgroundTasks,
+    me: dict = Depends(_PAINEL_COMPLETO),
+    supabase=Depends(get_supabase_client),
+) -> dict:
+    """O clique no botão (ADR 0082, issue #1523): o segundo agente relê, em
+    segundo plano, até 10 Contas concluídas ainda não revisadas. Um pedido por
+    vez; sem Conta a reler, nada roda."""
+    if not revisor.reservar():
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT, detail="O segundo agente já está relendo. Espere terminar."
+        )
+    try:
+        pedido = revisor.pedido_de_releitura(supabase)
+    except Exception:
+        # O banco que cai aqui não pode deixar o botão preso no "relendo".
+        revisor.liberar()
+        raise
+    if not pedido["contas"]:
+        revisor.liberar()
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Nenhuma conta concluída aguarda releitura.")
+    tarefas.add_task(revisor.reler_e_liberar, supabase)
+    return {**pedido, "em_andamento": True}

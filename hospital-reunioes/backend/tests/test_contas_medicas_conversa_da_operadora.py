@@ -105,6 +105,8 @@ class _Provedor:
     def __init__(self, nomes: dict[str, str]):
         self.nomes = nomes
         self.pedidos: list[tuple[str, str]] = []
+        # O modelo de cada pedido, com o formato: a prova vai no do passo B.
+        self.modelos: list[tuple[str, str]] = []
         self.lote: dict = LOTE
         self.correcao: dict | None = None
         self.por_codigo: dict[str, list[dict]] = {}
@@ -116,6 +118,7 @@ class _Provedor:
         formato = nome_do_schema(self.nomes, corpo)
         texto = "\n".join(bloco["text"] for m in corpo["messages"] for bloco in m["content"])
         self.pedidos.append((formato, texto))
+        self.modelos.append((formato, corpo["model"]))
         if formato == "LinhasDaComparacao" and self.prova_falha:
             return httpx2.Response(400, json={"type": "error", "error": {"type": "invalid_request_error"}})
         if formato == "LinhasDaComparacao":
@@ -202,6 +205,21 @@ class TestOTextoViraLote:
         assert _versoes(banco, "ALFA") == {"1.0": True}
         # Uma chamada da conversa e dez da prova por regra.
         assert sorted(c["passo"] for c in banco.linhas("cm_chamada_ia")) == ["CONVERSA"] + ["PROVA"] * 20
+
+    def test_a_prova_da_conversa_roda_no_modelo_do_passo_b_e_nao_no_da_validacao(self, cenario, monkeypatch):
+        """Issue #1523: só a recomendação da Validação vai para o modelo da
+        Validação; a Prova pedida na conversa segue no do passo B."""
+        from app.config import settings
+
+        cliente, banco, provedor = cenario
+        monkeypatch.setattr(settings, "cm_ia_modelo_passo_b", "claude-opus-5-5")
+        monkeypatch.setattr(settings, "cm_ia_modelo_validacao", "claude-sonnet-5-5")
+
+        assert cliente.post(ROTA, json={"texto": PEDIDO}).status_code == 200
+
+        da_prova = [modelo for formato, modelo in provedor.modelos if formato == "LinhasDaComparacao"]
+        assert da_prova == ["claude-opus-5-5"] * 20
+        assert {c["modelo"] for c in banco.linhas("cm_chamada_ia") if c["passo"] == "PROVA"} == {"claude-opus-5-5"}
 
     def test_a_prova_da_regra_alterada_troca_o_texto_da_antiga_na_memoria_candidata(self, cenario):
         cliente, _banco, provedor = cenario
