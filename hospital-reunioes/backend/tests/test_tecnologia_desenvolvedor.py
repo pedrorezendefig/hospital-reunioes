@@ -220,5 +220,6 @@ class TestKit:
         escrita, ele diria que ninguém da Vitta lê a conversa."""
         texto = (CONHECIMENTO_DIR / "tecnologia.md").read_text(encoding="utf-8")
 
-        for trecho in ("Desenvolvedor", "login do GitHub", "Demandas de todos", "só as suas"):
-            assert trecho in texto, trecho
+        secao = texto.split("## Quem vê", 1)[1].split("\n## ", 1)[0]
+        for trecho in ("Desenvolvedor", "login do GitHub", "Demandas de todos", "só as suas", "Todas"):
+            assert trecho in secao, trecho
