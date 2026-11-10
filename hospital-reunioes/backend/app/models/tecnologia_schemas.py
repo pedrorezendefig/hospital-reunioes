@@ -64,6 +64,10 @@ class DemandaResponse(BaseModel):
     # Quem cuida do card (ADR 0083, decisao 5), para o diretor e para o
     # Desenvolvedor. Nulo enquanto o card nao nasceu.
     responsavel: str | None = None
+    # O selo "Envio falhou" (issue #1535, ADR 0083, decisao 7), para os dois.
+    # O motivo tecnico sai so para o Desenvolvedor; para o diretor, nulo.
+    envio_falhou: bool = False
+    envio_motivo: str | None = None
 
 
 class DesenvolvedorResponse(BaseModel):

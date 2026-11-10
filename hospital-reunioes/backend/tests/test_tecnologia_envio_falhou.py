@@ -94,3 +94,52 @@ class TestAFalhaFicaRegistrada:
         demanda = _demandas(sb)[0]
         assert demanda["envio_estado"] == "falhou"
         assert "o GitHub não respondeu em 10 s" in demanda["envio_motivo"]
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 2. A lista
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+def _linha(lista: list[dict], demanda_id: str) -> dict:
+    return next(d for d in lista if d["id"] == demanda_id)
+
+
+class TestALista:
+    def test_o_autor_ve_o_selo_envio_falhou_na_lista(self, monkeypatch):
+        client, _, _, demanda_id = _demanda_com_envio_falhou(monkeypatch)
+
+        assert _linha(client.get(CHAT).json(), demanda_id)["envio_falhou"] is True
+
+    def test_o_desenvolvedor_ve_o_selo_envio_falhou_na_lista_de_todas(self, monkeypatch):
+        _, sb, gh, demanda_id = _demanda_com_envio_falhou(monkeypatch)
+        pedro = _como(PEDRO, sb, gh, monkeypatch)
+
+        assert _linha(pedro.get(f"{CHAT}?filtro=todas").json(), demanda_id)["envio_falhou"] is True
+
+    def test_a_demanda_que_criou_o_card_nao_tem_o_selo(self, monkeypatch):
+        client, _, _ = _cenario(monkeypatch)
+        demanda_id = _ate_o_resumo(client, monkeypatch)
+        assert client.post(f"{CHAT}/{demanda_id}/criar-card").status_code == 200
+
+        assert _linha(client.get(CHAT).json(), demanda_id)["envio_falhou"] is False
+
+    def test_o_desenvolvedor_ve_o_motivo_e_o_diretor_nao(self, monkeypatch):
+        diretor, sb, gh, demanda_id = _demanda_com_envio_falhou(monkeypatch)
+        pedro = _como(PEDRO, sb, gh, monkeypatch)
+
+        assert _linha(pedro.get(f"{CHAT}?filtro=todas").json(), demanda_id)["envio_motivo"] == "GitHub respondeu 502"
+        assert _linha(diretor.get(CHAT).json(), demanda_id)["envio_motivo"] is None
+
+    def test_o_filtro_envio_falhou_lista_so_as_demandas_nesse_estado(self, monkeypatch):
+        diretor, sb, gh, falhou_id = _demanda_com_envio_falhou(monkeypatch)
+        criada_id = _ate_o_resumo(diretor, monkeypatch)
+        assert diretor.post(f"{CHAT}/{criada_id}/criar-card").status_code == 200
+        conversa_id = _ate_o_resumo(diretor, monkeypatch)
+        pedro = _como(PEDRO, sb, gh, monkeypatch)
+
+        resposta = pedro.get(f"{CHAT}?filtro=envio_falhou")
+
+        assert resposta.status_code == 200, resposta.text
+        assert [d["id"] for d in resposta.json()] == [falhou_id]
+        assert {falhou_id, criada_id, conversa_id} <= {d["id"] for d in pedro.get(f"{CHAT}?filtro=todas").json()}

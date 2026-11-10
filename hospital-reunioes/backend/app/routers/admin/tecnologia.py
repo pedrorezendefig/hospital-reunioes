@@ -19,7 +19,10 @@ O chat da aba (issues #1381, #1383 e #1384):
                                                 `?filtro=todas` traz as de
                                                 todos ao Desenvolvedor, e
                                                 `?filtro=para_mim` as de que
-                                                ele e o Responsavel.
+                                                ele e o Responsavel, e
+                                                `?filtro=envio_falhou` as de
+                                                card que nao chegou ao GitHub
+                                                (issue #1535).
 - GET   /admin/tecnologia/desenvolvedores       o "Quem cuida disto?" do
                                                 resumo (ADR 0083).
 - POST  /admin/tecnologia/chat                  o primeiro turno: a Demanda
@@ -142,7 +145,8 @@ def _para_a_lista(supabase: Client, demandas: list[dict], *, ator: dict) -> list
     numero e endereco da issue nao saem para o diretor (ADR 0054, decisao 9), e
     ele le a Etapa e O que muda sem nenhum dos dois. O Desenvolvedor le tambem
     o autor, o numero e o link (ADR 0083, decisao 3). O Responsavel sai para
-    os dois (ADR 0083, decisao 5).
+    os dois (ADR 0083, decisao 5), e o selo "Envio falhou" tambem; o motivo
+    tecnico da falha, so para o Desenvolvedor (issue #1535).
     """
     desenvolvedor = e_desenvolvedor(ator)
     ids = {responsavel_da_demanda(d) for d in demandas}
@@ -161,6 +165,8 @@ def _para_a_lista(supabase: Client, demandas: list[dict], *, ator: dict) -> list
             "issue_numero": d.get("github_issue_numero") if desenvolvedor else None,
             "issue_url": _url_da_issue(d) if desenvolvedor else None,
             "responsavel": _nome_do_responsavel(d, nomes),
+            "envio_falhou": tecnologia_envio.envio_falhou(d),
+            "envio_motivo": d.get("envio_motivo") if desenvolvedor and tecnologia_envio.envio_falhou(d) else None,
         }
         for d in demandas
     ]
@@ -545,7 +551,7 @@ async def listar_os_desenvolvedores(
 
 @router.get("/chat", response_model=list[DemandaResponse])
 async def listar_as_conversas(
-    filtro: Literal["minhas", "todas", "para_mim"] = "minhas",
+    filtro: Literal["minhas", "todas", "para_mim", "envio_falhou"] = "minhas",
     ator: dict = Depends(require_super_admin),
     supabase: Client = Depends(get_supabase_client),
 ):
@@ -556,6 +562,8 @@ async def listar_as_conversas(
     `pode_ver`, a mesma regra da leitura da conversa: para quem nao e
     Desenvolvedor, `todas` volta so as dele. `para_mim` e o padrao da lista do
     Desenvolvedor: as Demandas de que ele e o Responsavel (ADR 0083, decisao 5).
+    `envio_falhou` e o filtro "Envio falhou" do Desenvolvedor (issue #1535): as
+    Demandas cujo card nao chegou ao GitHub, de todos os autores.
 
     Sai pelo `_para_a_lista`, o funil da Demanda desta API: e la que numero e
     endereco da issue ficam de fora para o diretor.
@@ -569,6 +577,8 @@ async def listar_as_conversas(
     visiveis = [d for d in (result.data or []) if pode_ver(ator, d)]
     if filtro == "para_mim":
         visiveis = [d for d in visiveis if responsavel_da_demanda(d) == ator["id"]]
+    elif filtro == "envio_falhou":
+        visiveis = [d for d in visiveis if tecnologia_envio.envio_falhou(d)]
     return _para_a_lista(supabase, visiveis, ator=ator)
 
 
