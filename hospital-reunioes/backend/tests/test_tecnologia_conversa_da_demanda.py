@@ -187,7 +187,8 @@ class TestNadaVaiParaOGithub:
 # 4. A migration 129
 # ═══════════════════════════════════════════════════════════════════════════
 
-MIGRATION_129 = Path(__file__).resolve().parents[2] / "supabase" / "migrations" / "129_tecnologia_conversa_da_demanda.sql"
+MIGRATIONS = Path(__file__).resolve().parents[2] / "supabase" / "migrations"
+MIGRATION_129 = MIGRATIONS / "129_tecnologia_conversa_da_demanda.sql"
 
 
 def _sql() -> str:

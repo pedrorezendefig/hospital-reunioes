@@ -413,8 +413,13 @@ class TestOTextoDaAbaContaATelaDeHoje:
     def test_o_detector_morde_a_tela_de_antes(self):
         """O detector tambem e codigo: o texto de antes desta fatia, com o
         Quadro e o Painel, tem que reprovar nele."""
-        antes = "A aba tem o **Quadro**, o **Painel** e a Conversa do card aberto, com e-mail."
-        assert [termo for termo in APOSENTADOS_DA_ABA if termo in antes] == ["Quadro", "Painel", "e-mail", "card aberto"]
+        antes = "A aba tem o **Quadro**, o **Painel** e a Conversa do card aberto, por e-mail."
+        assert [termo for termo in APOSENTADOS_DA_ABA if termo in antes] == [
+            "Quadro",
+            "Painel",
+            "e-mail",
+            "card aberto",
+        ]
 
     def test_os_anexos_dizem_a_porta_o_limite_e_o_apagamento(self, texto):
         anexos = _secao(texto, "Os anexos da Demanda")
