@@ -20,20 +20,25 @@
  */
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Bot, CheckCircle2, ImagePlus, ListChecks, Loader2, Mic, Send, Square } from "lucide-react";
+import { Bot, CheckCircle2, FileText, ListChecks, Loader2, Mic, Paperclip, Send, Square } from "lucide-react";
 
 import { useGravacaoVoz } from "@/hooks/useGravacaoVoz";
 
 import {
+  ACEITOS_NO_ANEXO,
   AVISO_DE_IA,
   avisoDaImagem,
+  avisoDoDocumento,
+  classeDoAnexo,
   corpoValidado,
   descreverAImagem,
-  IMAGENS_ACEITAS,
   LIMITE_DA_MENSAGEM,
+  lerODocumento,
   mensagemComOrigem,
   PREFIXO_DE_PRINT,
   PRINT_SEM_LEITURA,
+  tamanhoLegivel,
+  TIPO_FORA_DA_LISTA,
 } from "./assistente";
 import {
   ConversaDoChat,
@@ -96,11 +101,29 @@ const ROTULOS_DO_RESUMO: [keyof ResumoDoBug, string][] = [
 
 export function Fala({ fala }: { fala: FalaDoChat }) {
   if (fala.autor === "diretor") {
+    const documentos = fala.documentos ?? [];
     return (
-      <p className="ml-auto max-w-[85%] px-3 py-2 rounded-2xl bg-primary text-white text-sm whitespace-pre-line">
-        {fala.nao_bateu && <span className="font-semibold">O que não bateu no resumo: </span>}
-        {fala.texto}
-      </p>
+      <div className="ml-auto max-w-[85%] flex flex-col items-end gap-1">
+        {(fala.texto || fala.nao_bateu) && (
+          <p className="px-3 py-2 rounded-2xl bg-primary text-white text-sm whitespace-pre-line">
+            {fala.nao_bateu && <span className="font-semibold">O que não bateu no resumo: </span>}
+            {fala.texto}
+          </p>
+        )}
+        {/* O documento aparece pelo nome e pelo tamanho; o texto dele é só do assistente (issue #1520). */}
+        {documentos.map((documento, i) => (
+          <div
+            key={i}
+            role="group"
+            aria-label={`Documento anexado: ${documento.nome}`}
+            className="flex items-center gap-2 px-3 py-2 rounded-2xl bg-primary text-white text-sm"
+          >
+            <FileText className="w-4 h-4 flex-shrink-0" />
+            <span className="normal-case break-all">{documento.nome}</span>
+            <span className="text-xs text-white/80 whitespace-nowrap">{tamanhoLegivel(documento.tamanho_bytes)}</span>
+          </div>
+        ))}
+      </div>
     );
   }
   return (
@@ -322,7 +345,7 @@ export function ChatDaTecnologia({ token, demandaId = null, onMudou }: PropsDoCh
   const [pensando, setPensando] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
   const [texto, setTexto] = useState("");
-  const entradaDeImagem = useRef<HTMLInputElement>(null);
+  const entradaDeAnexo = useRef<HTMLInputElement>(null);
   const fimDaLista = useRef<HTMLDivElement>(null);
 
   // O texto falado entra DEPOIS do que já estava escrito, nunca no lugar dele.
@@ -439,9 +462,9 @@ export function ChatDaTecnologia({ token, demandaId = null, onMudou }: PropsDoCh
 
   /** A fala do diretor: o primeiro turno faz a Demanda nascer, os outros seguem nela. */
   const falar = useCallback(
-    async (fala: string, prints: string[] = []): Promise<boolean> => {
+    async (fala: string, prints: string[] = [], documentos: string[] = []): Promise<boolean> => {
       const url = conversa ? urlDaConversa(conversa.demanda_id) : URL_DO_CHAT_DA_ABA;
-      return turno(url, { texto: fala, prints });
+      return turno(url, { texto: fala, prints, ...(documentos.length > 0 ? { documentos } : {}) });
     },
     [conversa, turno],
   );
@@ -493,6 +516,35 @@ export function ChatDaTecnologia({ token, demandaId = null, onMudou }: PropsDoCh
     }
     const printId = leitura.corpo.print_id;
     await falar(mensagemComOrigem(PREFIXO_DE_PRINT, descricao), printId ? [printId] : []);
+  }
+
+  /**
+   * O documento sobe à rota que extrai o texto, e a fala leva só o
+   * identificador (issue #1520): o texto vai do servidor ao assistente, e a
+   * conversa mostra o nome e o tamanho.
+   */
+  async function anexarODocumento(arquivo: File) {
+    const aviso = avisoDoDocumento(arquivo);
+    if (aviso) {
+      setErro(aviso);
+      return;
+    }
+    setPensando(true);
+    const leitura = await lerODocumento(arquivo, token);
+    setPensando(false);
+    if ("aviso" in leitura) {
+      setErro(leitura.aviso);
+      return;
+    }
+    await falar("", [], [leitura.corpo.documento_id]);
+  }
+
+  /** O botão de anexo é um só: a extensão diz se é print ou documento. */
+  function anexar(arquivo: File) {
+    const classe = classeDoAnexo(arquivo.name);
+    if (classe === "imagem") return anexarOPrint(arquivo);
+    if (classe === "documento") return anexarODocumento(arquivo);
+    setErro(TIPO_FORA_DA_LISTA);
   }
 
   async function naoBateu(oQue: string): Promise<boolean> {
@@ -575,7 +627,9 @@ export function ChatDaTecnologia({ token, demandaId = null, onMudou }: PropsDoCh
         aria-label="Sua mensagem"
         rows={1}
         maxLength={LIMITE_DA_MENSAGEM}
-        placeholder={transcrevendo ? "Transcrevendo a sua fala..." : "Escreva, fale no microfone ou mande um print"}
+        placeholder={
+          transcrevendo ? "Transcrevendo a sua fala..." : "Escreva, fale no microfone ou anexe um print ou documento"
+        }
         value={texto}
         onChange={(e) => setTexto(e.target.value)}
         onKeyDown={(e) => {
@@ -587,25 +641,25 @@ export function ChatDaTecnologia({ token, demandaId = null, onMudou }: PropsDoCh
         className="flex-1 px-3 py-2 text-sm border border-slate-200 rounded-xl outline-none focus:border-primary focus:ring-1 focus:ring-primary bg-white resize-none"
       />
       <input
-        ref={entradaDeImagem}
+        ref={entradaDeAnexo}
         type="file"
-        accept={IMAGENS_ACEITAS.join(",")}
+        accept={ACEITOS_NO_ANEXO}
         className="hidden"
         onChange={(e) => {
           const arquivo = e.target.files?.[0];
           e.target.value = "";
-          if (arquivo) void anexarOPrint(arquivo);
+          if (arquivo) void anexar(arquivo);
         }}
       />
       <button
         type="button"
-        onClick={() => entradaDeImagem.current?.click()}
+        onClick={() => entradaDeAnexo.current?.click()}
         disabled={ocupado}
-        aria-label="Mandar um print"
-        title="Mandar um print"
+        aria-label="Anexar print ou documento"
+        title="Anexar print ou documento"
         className="px-3 py-2 rounded-xl border border-border text-text-secondary hover:border-primary hover:text-primary disabled:opacity-50 transition-colors"
       >
-        <ImagePlus className="w-4 h-4" />
+        <Paperclip className="w-4 h-4" />
       </button>
       {/* O microfone fica vivo enquanto grava: é o caminho de volta. */}
       <button

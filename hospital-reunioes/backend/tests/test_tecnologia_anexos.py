@@ -33,8 +33,8 @@ from app.limiter import limiter  # noqa: E402
 from app.services import tecnologia_anexos, tecnologia_sincronizacao  # noqa: E402
 from app.services.assistente_tecnologia import (  # noqa: E402
     LIMITE_DA_IMAGEM,
-    MOTIVO_IMAGEM_FORA_DA_LISTA,
     MOTIVO_IMAGEM_GRANDE,
+    MOTIVO_TIPO_FORA_DA_LISTA,
 )
 from app.services.tecnologia_anexos import (  # noqa: E402
     MOTIVO_ANEXOS_DEMAIS,
@@ -159,14 +159,16 @@ class TestAnexar:
         assert sorted(linha["ordem"] for linha in _anexos(sb)) == list(range(1, 11))
         assert len(sb.storage.arquivos) == 10
 
-    @pytest.mark.parametrize("nome", ["relatorio.pdf", "foto.heic", "tela.gif", "sem-extensao"])
-    def test_formato_fora_da_lista_volta_com_a_frase_do_print(self, nome):
+    @pytest.mark.parametrize("nome", ["planilha.xlsx", "foto.heic", "tela.gif", "sem-extensao"])
+    def test_formato_fora_da_lista_volta_com_a_frase_dos_tipos_que_entram(self, nome):
+        """Desde a issue #1520 o Anexo e imagem ou documento: a frase diz os
+        dois, da mesma tabela que decide o tipo."""
         _, sb, _ = _cenario(demandas=[_demanda("d-1")])
 
         recusa = _recusa(sb, nome=nome)
 
         assert recusa.status_code == 422
-        assert str(recusa) == MOTIVO_IMAGEM_FORA_DA_LISTA
+        assert str(recusa) == MOTIVO_TIPO_FORA_DA_LISTA
         assert _anexos(sb) == []
         assert sb.storage.arquivos == {}
 

@@ -156,6 +156,31 @@ class TestOQueALista:
 
         assert [a["nome"] for a in resposta.json()["anexos"]] == ["desta.png"]
 
+    def test_os_documentos_vem_junto_das_imagens_na_ordem_da_demanda(self, chave_configurada):
+        """Issue #1520: o original do documento chega a quem desenvolve pela
+        mesma boca, com o tipo dele e na posicao em que entrou na Demanda,
+        mesmo gravado fora de ordem no banco."""
+        docx = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+        cliente = _cliente(
+            [
+                _anexo(3, "plano.docx", tipo=docx),
+                _anexo(1, "tela.png"),
+                _anexo(2, "melhorias.md", tipo="text/markdown"),
+                _anexo(4, "relatorio.pdf", tipo="application/pdf"),
+            ]
+        )
+
+        resposta = cliente.get(ROTA, headers={"X-API-Key": CHAVE})
+
+        assert resposta.status_code == 200, resposta.text
+        assert [(a["nome"], a["tipo"]) for a in resposta.json()["anexos"]] == [
+            ("tela.png", "image/png"),
+            ("melhorias.md", "text/markdown"),
+            ("plano.docx", docx),
+            ("relatorio.pdf", "application/pdf"),
+        ]
+        assert all(a["url"].startswith("https://storage.local/") for a in resposta.json()["anexos"])
+
     def test_demanda_sem_anexo_devolve_lista_vazia(self, chave_configurada):
         resposta = _cliente([]).get(ROTA, headers={"X-API-Key": CHAVE})
 

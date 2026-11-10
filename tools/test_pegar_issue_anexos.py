@@ -31,6 +31,8 @@ DEMANDA = "3f2a9c1e-7b44-4d0a-9a51-0c6f7e8d1a22"
 ISSUE = "1234"
 PNG = b"\x89PNG\r\n\x1a\nprint-um"
 JPG = b"\xff\xd8\xffprint-dois"
+MD = b"# Melhorias\n\n- glosas por convenio\n"
+PDF = b"%PDF-1.4\nrelatorio\n%%EOF\n"
 
 CORPO_COM_DEMANDA = (
     "## O que construir\n\nO botão some na tela de Reuniões.\n\n"
@@ -68,6 +70,10 @@ def app_falso():
                 corpo = PNG
             elif self.path.startswith("/storage/dois"):
                 corpo = JPG
+            elif self.path.startswith("/storage/documento"):
+                corpo = MD
+            elif self.path.startswith("/storage/pdf"):
+                corpo = PDF
             else:
                 self.send_response(404)
                 self.end_headers()
@@ -126,6 +132,29 @@ def test_grava_os_anexos_em_local_anexos_da_issue_e_imprime_os_caminhos(repo, ap
     # A chave veio do tokens/.env, no header, para a rota da Demanda do marcador.
     rota = [p for p in pedidos if "/automacao/" in p["caminho"]]
     assert rota == [{"caminho": f"/api/automacao/tecnologia/demandas/{DEMANDA}/anexos", "chave": CHAVE}]
+
+
+def test_grava_os_documentos_junto_das_imagens_na_ordem_da_demanda(repo, app_falso):
+    """Issue #1520: o documento da Demanda chega pela mesma boca e cai na mesma
+    pasta, numerado na ordem em que a rota entrega."""
+    base, _, estado = app_falso
+    estado["anexos"] = [
+        {"nome": "tela do erro.png", "tipo": "image/png", "url": f"{base[:-4]}/storage/um?token=x"},
+        {"nome": "melhorias.md", "tipo": "text/markdown", "url": f"{base[:-4]}/storage/documento?token=y"},
+        {"nome": "relatorio.pdf", "tipo": "application/pdf", "url": f"{base[:-4]}/storage/pdf?token=z"},
+    ]
+
+    feito = rodar(repo, base)
+
+    assert feito.returncode == 0, feito.stderr
+    pasta = repo / "local" / "anexos" / ISSUE
+    assert feito.stdout.splitlines() == [
+        str(pasta / "01-tela do erro.png"),
+        str(pasta / "02-melhorias.md"),
+        str(pasta / "03-relatorio.pdf"),
+    ]
+    assert (pasta / "02-melhorias.md").read_bytes() == MD
+    assert (pasta / "03-relatorio.pdf").read_bytes() == PDF
 
 
 def test_issue_sem_demanda_sai_zero_com_sem_anexos_e_nao_chama_o_app(repo, app_falso):

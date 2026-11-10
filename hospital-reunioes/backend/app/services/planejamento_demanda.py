@@ -32,7 +32,7 @@ from pydantic import BaseModel, ConfigDict, model_validator
 
 from app.config import settings
 from app.services import ai_processor, ferramentas_do_codigo
-from app.services.assistente_tecnologia import MARCA_FIM_KIT, MARCA_INICIO_KIT, TITULO_DO_KIT
+from app.services.assistente_tecnologia import MARCA_FIM_KIT, MARCA_INICIO_KIT, TITULO_DO_KIT, documentos_cercados
 from app.services.prompt_loader import load_prompt
 from app.services.tecnologia import TIPO_ROTULO, recuar_continuacao
 from app.utils.text_sanitizer import sanitizar_travessao
@@ -247,6 +247,11 @@ def _linha_da_conversa(mensagem: dict) -> str:
     if mensagem.get("tipo") == "resposta":
         if mensagem.get("opcao"):
             return f"Diretor: escolheu {mensagem['opcao']}) {mensagem.get('texto') or ''}"
+        if mensagem.get("documentos"):
+            # O documento como resposta (issue #1520): cercado, com o nome.
+            texto = mensagem.get("texto") or ""
+            digitado = [f"Diretor: {recuar_continuacao(texto)}"] if texto.strip() else []
+            return "\n".join([*digitado, *documentos_cercados("Diretor", mensagem["documentos"])])
         return f"Diretor: {recuar_continuacao(mensagem.get('texto') or '')}"
     if mensagem.get("tipo") == "encerrou":
         return f"IA (encerrou): {mensagem.get('contexto') or ''}"
@@ -258,6 +263,15 @@ def _linha_da_conversa(mensagem: dict) -> str:
     opcoes = [f"    {o.get('letra')}) {o.get('texto') or ''}" for o in mensagem.get("opcoes", [])]
     recomendada = f"    (recomendada: {mensagem.get('recomendada')})"
     return "\n".join([f"IA: {mensagem.get('contexto') or ''}", *opcoes, recomendada])
+
+
+def _documentos_da_demanda(demanda: dict) -> list[str]:
+    """Os documentos que o diretor trouxe antes do planejamento (issue #1520),
+    cercados, logo depois da descricao: e de onde o planejamento parte."""
+    documentos = demanda.get("documentos") or []
+    if not documentos:
+        return []
+    return ["Documentos que o diretor anexou:", *documentos_cercados("Diretor", documentos)]
 
 
 def pedido_do_turno(demanda: dict, mensagens: list[dict]) -> str:
@@ -275,6 +289,7 @@ def pedido_do_turno(demanda: dict, mensagens: list[dict]) -> str:
             f"Título: {demanda.get('titulo') or ''}",
             "Descrição:",
             recuar_continuacao(f"    {demanda.get('descricao') or '(sem descrição)'}"),
+            *_documentos_da_demanda(demanda),
             "",
             "A CONVERSA ATÉ AQUI",
             conversa,
@@ -554,6 +569,7 @@ def pedido_do_resumo(demanda: dict, mensagens: list[dict]) -> str:
             f"Título: {demanda.get('titulo') or ''}",
             "Descrição:",
             recuar_continuacao(f"    {demanda.get('descricao') or '(sem descrição)'}"),
+            *_documentos_da_demanda(demanda),
             "",
             "A CONVERSA ATÉ AQUI",
             "\n".join(linhas) or "(nenhuma pergunta foi feita)",

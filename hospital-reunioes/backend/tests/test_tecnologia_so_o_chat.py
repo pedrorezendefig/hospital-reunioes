@@ -27,6 +27,8 @@ ROTAS_DO_CHAT = {
     "/api/admin/tecnologia/chat/{demanda_id}/resumo",
     "/api/admin/tecnologia/chat/{demanda_id}/criar-card",
     "/api/admin/tecnologia/assistente/descrever-imagem",
+    # O documento do chat (issue #1520), irmã da leitura do print.
+    "/api/admin/tecnologia/assistente/ler-documento",
 }
 
 # O que fica de fora da aba e continua de pé (critério 2 da issue).

@@ -40,7 +40,11 @@ export type FalaDoChat = {
   opcoes: string[];
   recomendada?: LetraDaOpcao | null;
   nao_bateu: boolean;
+  /** Os documentos que a fala do diretor trouxe (issue #1520): o nome e o tamanho, nunca o texto. */
+  documentos?: DocumentoDaFala[];
 };
+
+export type DocumentoDaFala = { nome: string; tamanho_bytes: number };
 
 export const LETRAS: LetraDaOpcao[] = ["A", "B"];
 
@@ -123,8 +127,15 @@ function falaValida(item: unknown): boolean {
     typeof f.texto === "string" &&
     textoOuNulo(f.fonte) &&
     listaDeTextos(f.opcoes) &&
-    (f.recomendada === undefined || f.recomendada === null || f.recomendada === "A" || f.recomendada === "B")
+    (f.recomendada === undefined || f.recomendada === null || f.recomendada === "A" || f.recomendada === "B") &&
+    (f.documentos === undefined || (Array.isArray(f.documentos) && f.documentos.every(documentoValido)))
   );
+}
+
+function documentoValido(item: unknown): boolean {
+  if (typeof item !== "object" || item === null) return false;
+  const d = item as Record<string, unknown>;
+  return typeof d.nome === "string" && typeof d.tamanho_bytes === "number";
 }
 
 function resumoDaMelhoriaValido(valor: unknown): boolean {

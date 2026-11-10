@@ -13,6 +13,9 @@ gravado daria um valor menor que o de verdade, com cara de exato:
   chama a IA antes de a Demanda receber o print e nao grava a chamada em lugar
   nenhum, entao o custo dela nao esta na tabela (revisao do PR #1443). O print
   apagado pelo cron tambem conta: a leitura aconteceu do mesmo jeito.
+
+O documento nao entra nessa conta (issue #1520): ele e lido pelo extrator, sem
+IA, e os turnos que o levam ao agente sao chamadas gravadas como as outras.
 """
 
 from __future__ import annotations
@@ -51,7 +54,8 @@ def da_demanda(supabase, demanda_id: str) -> dict | None:
     chamadas = list(result.data or [])
     if not chamadas:
         return None
-    if any(_sem_preco(c) for c in chamadas) or tecnologia_anexos.ler(supabase, demanda_id):
+    tem_print = any(not tecnologia_anexos.e_documento(linha) for linha in tecnologia_anexos.ler(supabase, demanda_id))
+    if any(_sem_preco(c) for c in chamadas) or tem_print:
         custo = None
     else:
         custo = round(sum(float(c.get("custo_usd") or 0) for c in chamadas), 6)

@@ -423,11 +423,21 @@ def marcador_da_demanda(demanda_id: str) -> str:
 # So a CONTAGEM sai para o repositorio publico: nem URL (a assinada expira e,
 # enquanto vale, abre o print para qualquer um), nem nome de arquivo (o nome
 # pode ser "prontuario do Joao.png"). Quem desenvolve busca as imagens pelo app.
-def frase_dos_anexos(quantos: int) -> str | None:
-    """A frase "Anexos: N imagens na Demanda", ou `None` sem imagem guardada."""
-    if quantos <= 0:
+#
+# Desde a issue #1520 a frase conta os dois tipos de Anexo: "Anexos: 2 imagens e
+# 1 documento na Demanda". Do documento tambem so a contagem: nem nome, nem
+# trecho do texto.
+def frase_dos_anexos(imagens: int, documentos: int = 0) -> str | None:
+    """A frase "Anexos: N imagens e M documentos na Demanda", com so o tipo que
+    houver, ou `None` sem anexo guardado."""
+    partes = [
+        f"{quantos} {singular if quantos == 1 else plural}"
+        for quantos, singular, plural in ((imagens, "imagem", "imagens"), (documentos, "documento", "documentos"))
+        if quantos > 0
+    ]
+    if not partes:
         return None
-    return f"Anexos: {quantos} {'imagem' if quantos == 1 else 'imagens'} na Demanda"
+    return f"Anexos: {' e '.join(partes)} na Demanda"
 
 
 # ─── 2b. A issue que o app CRIA (issue #677) ─────────────────────────────────
@@ -658,6 +668,7 @@ def corpo_do_prd_do_diretor(
     resumo: dict[str, Any],
     link: str,
     anexos: int = 0,
+    documentos: int = 0,
 ) -> str:
     """O corpo da issue que o "sim" do resumo cria (ADR 0075, decisao 1).
 
@@ -761,7 +772,7 @@ def corpo_do_prd_do_diretor(
             "Planejado com a IA na aba Tecnologia do aplicativo do hospital e mandado para o desenvolvimento "
             "por quem planejou, depois de conferir o resumo.",
             f"Abrir a Demanda: {link}",
-            *(["", frase] if (frase := frase_dos_anexos(anexos)) else []),
+            *(["", frase] if (frase := frase_dos_anexos(anexos, documentos)) else []),
             "",
             marcador_da_demanda(demanda_id),
         ]
@@ -799,6 +810,7 @@ def corpo_da_issue_do_bug(
     produto_nome: str,
     link: str,
     anexos: int = 0,
+    documentos: int = 0,
 ) -> str:
     """O corpo da issue que o "Criar o card" do Roteiro do bug cria.
 
@@ -836,7 +848,7 @@ def corpo_da_issue_do_bug(
             "Relatado na conversa com o Assistente de Tecnologia, no aplicativo do hospital, e mandado para o "
             'desenvolvimento pelo clique em "Criar o card".',
             f"Abrir a Demanda: {link}",
-            *(["", frase] if (frase := frase_dos_anexos(anexos)) else []),
+            *(["", frase] if (frase := frase_dos_anexos(anexos, documentos)) else []),
             "",
             marcador_da_demanda(demanda_id),
         ]

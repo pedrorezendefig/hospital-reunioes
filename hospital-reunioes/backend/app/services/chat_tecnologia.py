@@ -99,8 +99,28 @@ def mensagem_de_abertura() -> dict:
     return {"tipo": "ia", "texto": ABERTURA, "fonte": None, "opcoes": list(OPCOES_DA_ABERTURA)}
 
 
-def fala_do_diretor(texto: str) -> dict:
-    return {"tipo": "diretor", "texto": texto}
+def fala_do_diretor(texto: str, documentos: list[dict] | None = None) -> dict:
+    """A fala do diretor. `documentos` sao os que ela trouxe (issue #1520),
+    cada um com o nome, o tamanho e o texto extraido, guardado AQUI, em campo
+    proprio: fora do teto da mensagem e fora da tela, e de pe depois que o
+    binario sai do bucket."""
+    fala = {"tipo": "diretor", "texto": texto}
+    if documentos:
+        fala["documentos"] = documentos
+    return fala
+
+
+def documentos_para_a_tela(mensagem: dict) -> list[dict]:
+    """O nome e o tamanho dos documentos da fala, sem o texto."""
+    return [
+        {"nome": d.get("nome") or "", "tamanho_bytes": int(d.get("tamanho_bytes") or 0)}
+        for d in mensagem.get("documentos") or []
+    ]
+
+
+def documentos_do_diretor(mensagens: list[dict]) -> list[dict]:
+    """Os documentos que o diretor trouxe nestas falas, na ordem."""
+    return [d for m in mensagens for d in m.get("documentos") or []]
 
 
 def aviso_da_parecida(titulo: str) -> str:
@@ -140,11 +160,16 @@ def perguntas_do_roteiro(mensagens: list[dict]) -> int:
 
 
 def textos_do_diretor(mensagens: list[dict]) -> list[str]:
-    """O que o diretor escreveu, sem as falas que sao so o botao da abertura."""
+    """O que o diretor escreveu, sem as falas que sao so o botao da abertura.
+
+    O texto dos documentos nao entra (issue #1520): isto vira a descricao da
+    Demanda, que vai ao corpo da issue no repositorio publico."""
     return [
         m.get("texto") or ""
         for m in mensagens
-        if m.get("tipo") in ("diretor", "nao_bateu") and (m.get("texto") or "") not in ESCOLHAS.values()
+        if m.get("tipo") in ("diretor", "nao_bateu")
+        and (m.get("texto") or "").strip()
+        and (m.get("texto") or "") not in ESCOLHAS.values()
     ]
 
 
@@ -193,7 +218,14 @@ def _fala_do_planejamento_para_a_tela(m: dict) -> dict:
         }
     if m.get("tipo") == "encerrou":
         return {"autor": "ia", "texto": m.get("contexto") or "", "fonte": None, "opcoes": [], "nao_bateu": False}
-    return {"autor": "diretor", "texto": m.get("texto") or "", "fonte": None, "opcoes": [], "nao_bateu": False}
+    return {
+        "autor": "diretor",
+        "texto": m.get("texto") or "",
+        "fonte": None,
+        "opcoes": [],
+        "nao_bateu": False,
+        "documentos": documentos_para_a_tela(m),
+    }
 
 
 def para_a_tela(mensagens: list[dict]) -> list[dict]:
@@ -212,6 +244,7 @@ def para_a_tela(mensagens: list[dict]) -> list[dict]:
             "fonte": m.get("fonte") if m.get("tipo") == "ia" else None,
             "opcoes": list(m.get("opcoes") or []) if m.get("tipo") == "ia" else [],
             "nao_bateu": m.get("tipo") == "nao_bateu",
+            "documentos": documentos_para_a_tela(m),
         }
         for m in mensagens
     ]
@@ -284,6 +317,12 @@ def _linha_da_conversa(mensagem: dict) -> str:
     if mensagem.get("tipo") == "ia":
         return recuar_continuacao(f"IA: {texto}")
     rotulo = "Diretor, sobre o resumo (o que não bateu)" if mensagem.get("tipo") == "nao_bateu" else "Diretor"
+    documentos = mensagem.get("documentos") or []
+    if documentos:
+        # O documento (issue #1520): o que o diretor digitou junto, se digitou,
+        # e cada documento cercado, com o nome dentro da cerca.
+        digitado = [recuar_continuacao(f"{rotulo}: {texto}")] if texto.strip() else []
+        return "\n".join([*digitado, *assistente_tecnologia.documentos_cercados(rotulo, documentos)])
     if assistente_tecnologia.PREFIXO_DE_ORIGEM.match(texto):
         cercada = assistente_tecnologia._linha_da_conversa({"role": "user", "content": texto})
         return cercada.replace("Pessoa: ", f"{rotulo}: ", 1)
@@ -444,12 +483,16 @@ def turno(
 
 def demanda_da_melhoria(mensagens: list[dict], *, demanda_id: str | None, titulo: str | None) -> dict:
     """A Demanda como o planejamento a le: o que o diretor contou e o titulo,
-    menos o titulo provisorio, que nao diz nada ao modelo."""
+    menos o titulo provisorio, que nao diz nada ao modelo. Os documentos que
+    ele trouxe antes do planejamento (issue #1520) vao junto, cercados no
+    pedido: o planejamento parte deles sem perguntar o que eles ja respondem."""
+    antes, _ = partes_da_melhoria(mensagens)
     return {
         "id": demanda_id,
         "tipo": TIPO_DA_CLASSIFICACAO["melhoria"],
         "titulo": "" if titulo in (None, TITULO_SEM_RESPOSTA) else titulo,
         "descricao": descricao_da_melhoria(mensagens),
+        "documentos": documentos_do_diretor(antes),
     }
 
 

@@ -83,6 +83,20 @@ class AssistenteImagemResponse(BaseModel):
     print_id: str | None = None
 
 
+class AssistenteDocumentoResponse(BaseModel):
+    """Resposta do POST /admin/tecnologia/assistente/ler-documento (issue #1520).
+
+    O texto extraido NAO sai daqui: a tela mostra so o nome e o tamanho, e o
+    texto fica no backend, na memoria e depois na fala. `caracteres` e quanto
+    o agente vai ler.
+    """
+
+    documento_id: str
+    nome: str
+    tamanho_bytes: int
+    caracteres: int
+
+
 # ─── O resumo da melhoria (issue #1383, ADR 0077) ───────────────────────────
 
 
@@ -118,6 +132,10 @@ class ChatPrimeiroTurnoPayload(BaseModel):
     escolha: Literal["bug", "melhoria"] | None = None
     texto: str | None = Field(default=None, max_length=LIMITE_DA_MENSAGEM)
     prints: list[str] = Field(default_factory=list, max_length=10)
+    # Os identificadores dos documentos que a rota `ler-documento` leu (issue
+    # #1520): o texto entra na fala, fora do teto da mensagem, e o original
+    # vira Anexo quando a fala entra na conversa.
+    documentos: list[str] = Field(default_factory=list, max_length=10)
 
 
 class ChatTurnoPayload(BaseModel):
@@ -131,6 +149,7 @@ class ChatTurnoPayload(BaseModel):
     opcao: Literal["A", "B"] | None = None
     texto: str | None = Field(default=None, max_length=LIMITE_DA_MENSAGEM)
     prints: list[str] = Field(default_factory=list, max_length=10)
+    documentos: list[str] = Field(default_factory=list, max_length=10)
     # O "Continuar respondendo" do resumo da melhoria com lacuna (issue #1440):
     # a fala sai do "Ficou em aberto" guardado, sem opcao nem texto.
     continuar: bool = False
@@ -142,6 +161,14 @@ class ChatNaoBateuPayload(BaseModel):
     texto: str | None = Field(default=None, max_length=LIMITE_DA_MENSAGEM)
 
 
+class DocumentoDaFala(BaseModel):
+    """O documento que uma fala do diretor trouxe, como a tela o mostra: o nome
+    e o tamanho, e nunca o texto (issue #1520)."""
+
+    nome: str
+    tamanho_bytes: int
+
+
 class FalaDoChat(BaseModel):
     autor: Literal["ia", "diretor"]
     texto: str
@@ -151,6 +178,7 @@ class FalaDoChat(BaseModel):
     # (issue #1383): as `opcoes` vem na ordem A e B.
     recomendada: Literal["A", "B"] | None = None
     nao_bateu: bool = False
+    documentos: list[DocumentoDaFala] = []
 
 
 class ResumoDoBug(BaseModel):

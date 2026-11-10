@@ -417,7 +417,8 @@ class TestOTextoDaAbaContaATelaDeHoje:
 
     def test_os_anexos_dizem_a_porta_o_limite_e_o_apagamento(self, texto):
         anexos = _secao(texto, "Os anexos da Demanda")
-        for termo in ("botão de imagem", "até 10", "apagad"):
+        # Desde a issue #1520 o botão anexa print e documento.
+        for termo in ("botão de anexo", "até 10", "apagad"):
             assert termo in anexos, termo
 
     def test_os_anexos_dizem_o_prazo_depois_de_em_producao(self, texto):

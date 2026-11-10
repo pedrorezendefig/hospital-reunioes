@@ -44,6 +44,13 @@ SAIDA_TEXTO_GRANDE_DEMAIS = 98
 
 MIN_PDF_TEXT_BYTES = 200
 
+# A recusa do PDF sem texto. Constante, e nao frase solta, porque o chat da
+# Tecnologia (issue #1520) reconhece este desfecho para trocar a saida: la o
+# escaneado vai como print.
+MENSAGEM_PDF_ESCANEADO = (
+    "PDF parece ser escaneado (sem texto extraivel). Faca OCR antes ou envie a transcricao em texto."
+)
+
 
 def instalar_limite_de_enderecamento(limite_em_bytes: int) -> bool:
     """Aplica `RLIMIT_AS` neste processo. Devolve se o limite pegou.
@@ -96,9 +103,7 @@ def extrair(ext: str, file_bytes: bytes) -> str:
     if ext == ".pdf":
         texto = extrair_pdf(file_bytes)
         if len(texto.encode("utf-8")) < MIN_PDF_TEXT_BYTES:
-            raise ValueError(
-                "PDF parece ser escaneado (sem texto extraivel). Faca OCR antes ou envie a transcricao em texto."
-            )
+            raise ValueError(MENSAGEM_PDF_ESCANEADO)
         return texto
     if ext == ".docx":
         return extrair_docx(file_bytes)
