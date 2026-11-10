@@ -36,9 +36,19 @@ A conversa fica guardada. Ao lado dela fica a lista de tudo o que você já pedi
 
 Uma Demanda é um pedido sobre um dos sistemas: um bug ou uma melhoria. Ela nasce na primeira resposta da conversa com o Assistente e guarda o que você disse, os prints e os documentos que você mandou e, depois do clique em Criar o card, a ligação com o trabalho de desenvolvimento.
 
-A aba vai num sentido só: você conta à Vitta. Quando é a Vitta que precisa de uma decisão, de um dado ou de um acesso do hospital, ela pede pelo WhatsApp.
+Quem abre um pedido é sempre você. Dentro dele, a Vitta responde e pergunta pela Conversa da Demanda. Quando a Vitta precisa de uma decisão, de um dado ou de um acesso do hospital que não nasce de um pedido seu, ela pede pelo WhatsApp.
 
 Não chame de pendência, tarefa nem chamado. Pendência é outra coisa no aplicativo: é o compromisso operacional que sai de uma reunião do hospital, e mora em outro lugar.
+
+## A Conversa da Demanda
+
+Cada pedido tem, além da conversa com a IA, a **Conversa da Demanda**: um espaço para você e as pessoas da Vitta que desenvolvem trocarem mensagens sobre aquele pedido. Serve para tirar uma dúvida e ser respondido ali mesmo. Ela fica separada da conversa com a IA, numa área própria embaixo dela, e a IA não lê nem responde ali.
+
+Escreve e lê na Conversa quem vê o pedido: você, que pediu, e o Desenvolvedor. Outra pessoa da diretoria não vê, nem abrindo pelo endereço.
+
+Para chamar alguém, escreva @ e escolha o nome na lista que aparece, como nos comentários de uma pendência. A lista traz só quem vê o pedido. Quem você marcou é avisado no sino. Sem marcar ninguém, a sua mensagem avisa o Responsável, a pessoa da Vitta que cuida do pedido; enquanto o pedido não virou card ainda não há Responsável, então marque alguém para ser lido. Quando é alguém da Vitta que escreve sem marcar ninguém, a mensagem avisa você. Ninguém é avisado da própria mensagem. O clique no aviso do sino abre o pedido na aba Tecnologia.
+
+O que se escreve na Conversa fica só dentro do aplicativo e nunca vai para o material público do desenvolvimento.
 
 ## Os anexos da Demanda
 
@@ -96,7 +106,9 @@ A IA cuida das decisões de negócio: o problema, quem usa, as regras e o que fi
 
 - A aba mora dentro do aplicativo e só quem é Super admin a vê.
 - A aba é uma tela só, a conversa com o Assistente, que pergunta se é bug ou melhoria e confirma antes de seguir.
-- A aba vai num sentido só, do diretor para a Vitta, e os pedidos da Vitta ao hospital voltaram para o WhatsApp.
+- Quem abre o pedido é sempre o diretor, e os pedidos da Vitta ao hospital que não nascem de um pedido dele continuam no WhatsApp.
+- Cada pedido tem a Conversa da Demanda, entre quem pediu e a Vitta, separada da conversa com a IA e guardada só dentro do aplicativo.
+- Na Conversa da Demanda, quem é marcado pelo nome é avisado no sino, e sem marcação a mensagem de quem pediu avisa o Responsável e a da Vitta avisa quem pediu.
 - No bug, a IA faz no máximo cinco perguntas, e o pedido só vai para a Vitta no clique em Criar o card.
 - O bug que sai do Criar o card vai direto para o desenvolvimento, sem ninguém da Vitta precisar assumir antes.
 - Antes do Criar o card, o diretor escolhe em Quem cuida disto? a pessoa da Vitta que vai cuidar do pedido; a escolha é opcional e, sem ela, o card vai para o Pedro Rezende.
