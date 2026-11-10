@@ -117,6 +117,11 @@ export type ConversaDoChat = {
   custo?: CustoDaConversa | null;
   /** Os Anexos, só para o Desenvolvedor (ADR 0083, decisão 3); vazio para o diretor. */
   anexos_da_demanda?: AnexoDaDemanda[];
+  /**
+   * Quem cuida do card, só leitura: derivado do dono da issue no GitHub
+   * (issue #1534, ADR 0083, decisão 6). Nulo enquanto o card não nasceu.
+   */
+  responsavel?: string | null;
 };
 
 /**

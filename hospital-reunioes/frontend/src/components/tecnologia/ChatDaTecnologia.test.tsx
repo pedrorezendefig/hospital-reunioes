@@ -781,3 +781,26 @@ describe("O documento no chat (issue #1520)", () => {
     expect(chamadas).toHaveLength(1);
   });
 });
+
+// ─── O Responsável derivado do GitHub (issue #1534, ADR 0083, decisão 6) ────
+
+describe("O Responsável da Demanda aberta", () => {
+  it("o card criado mostra quem cuida dele, sem como trocar", async () => {
+    montar([{ status: 201, corpo: conversa({ estado: "enviado", resumo: RESUMO, responsavel: "Lucas Sampaio" }) }]);
+
+    fireEvent.click(screen.getByRole("button", { name: "Bug" }));
+
+    expect(await screen.findByText("Responsável: Lucas Sampaio")).toBeTruthy();
+    expect(screen.queryByLabelText("Quem cuida disto?")).toBeNull();
+    expect(screen.queryByRole("combobox")).toBeNull();
+  });
+
+  it("sem card, a conversa não fala de Responsável", async () => {
+    montar([{ status: 201, corpo: conversa({ responsavel: null }) }]);
+
+    fireEvent.click(screen.getByRole("button", { name: "Bug" }));
+
+    expect(await screen.findByText("Onde isso aconteceu?")).toBeTruthy();
+    expect(screen.queryByText(/Responsável/)).toBeNull();
+  });
+});
