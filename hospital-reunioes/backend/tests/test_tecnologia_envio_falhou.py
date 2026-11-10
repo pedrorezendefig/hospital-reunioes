@@ -32,7 +32,9 @@ from test_tecnologia_chat import (  # noqa: E402
 from test_tecnologia_vinculo import DIRETOR, PEDRO, _montar, _pessoa  # noqa: E402
 from test_tecnologia_webhook_github import _SupabaseMock as _SupabaseDoCron  # noqa: E402
 
+from app.routers.admin.tecnologia import MOTIVO_CHAT_TERMINOU  # noqa: E402
 from app.services import github_client, tecnologia_sincronizacao  # noqa: E402
+from app.services.conhecimento import CONHECIMENTO_DIR  # noqa: E402
 from app.services.tecnologia_vinculo import MOTIVO_GITHUB_INDISPONIVEL  # noqa: E402
 
 CRIAR_O_CARD_DE_VERDADE = github_client.criar_issue
@@ -204,6 +206,7 @@ class TestReenviar:
         resposta = _reenviar(client, demanda_id)
 
         assert resposta.status_code == 409
+        assert resposta.json()["detail"] == MOTIVO_CHAT_TERMINOU
         assert gh.criadas == []
         assert _demandas(sb)[0]["github_issue_numero"] == 777
 
@@ -243,3 +246,27 @@ class TestOCronNaoReenvia:
         assert gh.criadas == []
         assert _demandas(sb)[0]["envio_estado"] == "falhou"
         assert _demandas(sb)[0].get("github_issue_numero") is None
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 5. O Kit
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+def _secao(titulo: str) -> str:
+    texto = (CONHECIMENTO_DIR / "tecnologia.md").read_text(encoding="utf-8")
+    return texto.split(f"## {titulo}", 1)[1].split("\n## ", 1)[0]
+
+
+class TestKit:
+    def test_o_kit_diz_ao_diretor_que_o_envio_falhado_fica_na_lista_com_reenviar(self):
+        """O Kit é a língua do Assistente: sem isto, ele diria ao diretor que o
+        card que falhou se perdeu e que é preciso refazer a conversa."""
+        secao = _secao("A conversa com o Assistente")
+        for trecho in ("Envio falhou", "Reenviar", "não precisa refazer", "não reenvia sozinho"):
+            assert trecho in secao, trecho
+
+    def test_o_kit_diz_que_o_desenvolvedor_ve_o_motivo_e_tem_o_filtro(self):
+        secao = _secao("Quem vê")
+        for trecho in ("**Envio falhou**", "o motivo da falha"):
+            assert trecho in secao, trecho
