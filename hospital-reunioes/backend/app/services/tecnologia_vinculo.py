@@ -805,7 +805,9 @@ NAO_INFORMADO = "não informado"
 LABEL_PRONTA_PARA_AGENTE = "ready-for-agent"
 
 # O bug nasce pronto para a onda pegar sem ninguem da Vitta assumir (ADR 0077,
-# decisao 7), e por isso sem `needs-triage` e sem assignee: assignee e claim. A
+# decisao 7), e por isso sem `needs-triage`. Na aba Tecnologia ele leva o
+# Responsavel como assignee, que diz de que fila ele e e nao trava a onda (ADR
+# 0083, decisao 5). A
 # label de tipo e a de sempre do Defeito, `type:fix`, a que o pipeline le como
 # PR do app (`LABELS_DO_APP` do painel, `docs/agents/triage-labels.md`).
 LABELS_DO_BUG = [LABEL_PRONTA_PARA_AGENTE, LABEL_DO_TIPO["defeito"]]

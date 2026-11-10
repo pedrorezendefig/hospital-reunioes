@@ -90,3 +90,124 @@ class TestAssignee:
         assert resposta.status_code == 200, resposta.text
         assert gh.criadas[0]["assignees"] == ["lucas-sampaio"]
         assert _demandas(sb)[0]["responsavel_id"] == "P5"
+
+    @pytest.mark.parametrize("tipo", ["bug", "melhoria"])
+    def test_sem_escolha_o_assignee_e_o_login_do_dono_e_o_card_nasce_sem_erro(self, monkeypatch, tipo):
+        monkeypatch.setattr(settings, "github_login_dono", "lucas-sampaio")
+        client, sb, gh = _cenario(monkeypatch, participantes=_participantes())
+        demanda_id = _resumo(client, sb, monkeypatch, tipo)
+
+        resposta = client.post(f"{CHAT}/{demanda_id}/criar-card")
+
+        assert resposta.status_code == 200, resposta.text
+        assert resposta.json()["estado"] == "enviado"
+        assert gh.criadas[0]["assignees"] == ["lucas-sampaio"]
+        assert _demandas(sb)[0]["github_issue_numero"] == 900
+        assert _demandas(sb)[0]["responsavel_id"] == "P5"
+
+    def test_escolha_vazia_conta_como_sem_escolha(self, monkeypatch):
+        client, sb, gh = _cenario(monkeypatch, participantes=_participantes())
+        demanda_id = _resumo(client, sb, monkeypatch, "bug")
+
+        resposta = client.post(f"{CHAT}/{demanda_id}/criar-card", json={"responsavel_id": None})
+
+        assert resposta.status_code == 200, resposta.text
+        assert gh.criadas[0]["assignees"] == ["pedrorezendefig"]
+
+    @pytest.mark.parametrize("fora_da_lista", ["P2", "P6", "nao-existe"])
+    def test_quem_nao_e_desenvolvedor_nao_vira_responsavel(self, monkeypatch, fora_da_lista):
+        client, sb, gh = _cenario(monkeypatch, participantes=_participantes())
+        demanda_id = _resumo(client, sb, monkeypatch, "bug")
+
+        resposta = client.post(f"{CHAT}/{demanda_id}/criar-card", json={"responsavel_id": fora_da_lista})
+
+        assert resposta.status_code == 422, resposta.text
+        assert gh.criadas == []
+        assert _demandas(sb)[0].get("github_issue_numero") is None
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 3. As labels de sempre
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+class TestLabels:
+    @pytest.mark.parametrize(
+        ("tipo", "labels"),
+        [
+            ("bug", ["origem:diretor", "ready-for-agent", "type:fix"]),
+            ("melhoria", ["needs-triage", "origem:diretor", "type:feature"]),
+        ],
+    )
+    def test_com_responsavel_o_bug_nasce_pronto_e_a_melhoria_na_triagem(self, monkeypatch, tipo, labels):
+        client, sb, gh = _cenario(monkeypatch, participantes=_participantes())
+        demanda_id = _resumo(client, sb, monkeypatch, tipo)
+
+        assert client.post(f"{CHAT}/{demanda_id}/criar-card", json={"responsavel_id": "P4"}).status_code == 200
+
+        assert sorted(gh.criadas[0]["labels"]) == labels
+        assert gh.criadas[0]["assignees"] == ["pedrorib"]
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 4. A lista
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+def _demandas_com_responsavel() -> list[dict]:
+    return [
+        _demanda(
+            "d-rib",
+            titulo="O relatório some",
+            autor_id=DIRETOR["id"],
+            responsavel_id=RIB["id"],
+            github_issue_numero=910,
+            etapa="em_analise",
+            criado_em="2026-11-03T10:00:00Z",
+        ),
+        _demanda(
+            "d-pedro",
+            titulo="Agenda de retorno",
+            autor_id=DIRETOR["id"],
+            responsavel_id=PEDRO["id"],
+            github_issue_numero=911,
+            etapa="em_analise",
+            criado_em="2026-11-02T10:00:00Z",
+        ),
+        # Conversa sem card, de antes desta versão: o Responsável que o
+        # Produto punha no nascimento não conta, porque ninguém escolheu.
+        _demanda(
+            "d-registrada",
+            titulo="Conversa no meio",
+            autor_id=DIRETOR["id"],
+            responsavel_id=PEDRO["id"],
+            criado_em="2026-11-01T10:00:00Z",
+        ),
+    ]
+
+
+class TestLista:
+    @pytest.mark.parametrize("logado", [DIRETOR, PEDRO], ids=["diretor", "desenvolvedor"])
+    def test_o_responsavel_aparece_em_cada_linha(self, monkeypatch, logado):
+        client, _, _ = _cenario(
+            monkeypatch, logado=logado, participantes=_participantes(), demandas=_demandas_com_responsavel()
+        )
+
+        resposta = client.get(f"{CHAT}?filtro=todas")
+
+        assert resposta.status_code == 200, resposta.text
+        assert [(d["id"], d["responsavel"]) for d in resposta.json()] == [
+            ("d-rib", "Pedro Rib"),
+            ("d-pedro", "Pedro Vitta"),
+            ("d-registrada", None),
+        ]
+
+    def test_para_mim_mostra_so_as_demandas_de_que_o_desenvolvedor_e_responsavel(self, monkeypatch):
+        client, _, _ = _cenario(
+            monkeypatch, logado=PEDRO, participantes=_participantes(), demandas=_demandas_com_responsavel()
+        )
+
+        resposta = client.get(f"{CHAT}?filtro=para_mim")
+
+        assert resposta.status_code == 200, resposta.text
+        assert [d["id"] for d in resposta.json()] == ["d-pedro"]
