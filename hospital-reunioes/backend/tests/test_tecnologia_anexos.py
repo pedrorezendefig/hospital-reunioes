@@ -159,7 +159,7 @@ class TestAnexar:
         assert sorted(linha["ordem"] for linha in _anexos(sb)) == list(range(1, 11))
         assert len(sb.storage.arquivos) == 10
 
-    @pytest.mark.parametrize("nome", ["planilha.xlsx", "foto.heic", "tela.gif", "sem-extensao"])
+    @pytest.mark.parametrize("nome", ["dados.ods", "foto.heic", "tela.gif", "sem-extensao"])
     def test_formato_fora_da_lista_volta_com_a_frase_dos_tipos_que_entram(self, nome):
         """Desde a issue #1520 o Anexo e imagem ou documento: a frase diz os
         dois, da mesma tabela que decide o tipo."""
