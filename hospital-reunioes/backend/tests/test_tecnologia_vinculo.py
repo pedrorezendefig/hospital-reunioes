@@ -1048,6 +1048,8 @@ class _GithubFalso:
         self.proximo_numero += 1
         dados = _issue(numero, corpo=corpo, labels=tuple(labels))
         dados["title"] = titulo
+        # O GitHub devolve os donos na propria resposta da criacao (issue #1534).
+        dados["assignees"] = [{"login": login} for login in (assignees or [])]
         if self.resposta_sem_numero:
             dados.pop("number")
             return dados

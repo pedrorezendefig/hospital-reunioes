@@ -93,6 +93,7 @@ from app.services.tecnologia import (
     TABELA_PRODUTOS,
     e_desenvolvedor,
     instante_do_banco,
+    login_do_responsavel,
     pode_ver,
     responsavel_da_demanda,
     versao_da_entrega,
@@ -161,10 +162,17 @@ def _para_a_lista(supabase: Client, demandas: list[dict], *, ator: dict) -> list
             "autor": nomes.get(str(d.get("autor_id"))) if desenvolvedor else None,
             "issue_numero": d.get("github_issue_numero") if desenvolvedor else None,
             "issue_url": _url_da_issue(d) if desenvolvedor else None,
-            "responsavel": nomes.get(str(responsavel_da_demanda(d))),
+            "responsavel": _nome_do_responsavel(d, nomes),
         }
         for d in demandas
     ]
+
+
+def _nome_do_responsavel(demanda: dict, nomes: dict[str, str]) -> str | None:
+    """O Responsavel como a tela o mostra: o nome do usuario, ou o login do
+    dono no GitHub quando ele nao e usuario do app (issue #1534, ADR 0083,
+    decisao 6)."""
+    return nomes.get(str(responsavel_da_demanda(demanda))) or login_do_responsavel(demanda)
 
 
 def _nomes(supabase: Client, ids: set) -> dict[str, str]:
@@ -401,6 +409,7 @@ def _chat_para_a_tela(
     *,
     aviso_dos_anexos: str | None = None,
     anexos_da_demanda: list[dict] | None = None,
+    responsavel: str | None = None,
 ) -> dict:
     """A conversa para a tela. `planejamento` diz que a conversa esta no
     planejamento da melhoria (issue #1383): o resumo dela tem outra forma, e
@@ -420,6 +429,7 @@ def _chat_para_a_tela(
         "aviso_dos_anexos": aviso_dos_anexos,
         "custo": custo_da_conversa.da_demanda(supabase, demanda_id),
         "anexos_da_demanda": anexos_da_demanda or [],
+        "responsavel": responsavel,
     }
 
 
@@ -868,7 +878,9 @@ async def ler_o_chat(
     if not pode_ver(ator, demanda):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=MOTIVO_CHAT_NAO_ENCONTRADO)
     anexos = tecnologia_anexos.para_quem_desenvolve(supabase, demanda_id) if e_desenvolvedor(ator) else None
-    return _chat_para_a_tela(supabase, demanda_id, linha, anexos_da_demanda=anexos)
+    # O Responsavel de agora, derivado do GitHub (issue #1534): so leitura.
+    responsavel = _nome_do_responsavel(demanda, _nomes(supabase, {responsavel_da_demanda(demanda)}))
+    return _chat_para_a_tela(supabase, demanda_id, linha, anexos_da_demanda=anexos, responsavel=responsavel)
 
 
 @router.post("/chat/{demanda_id}", response_model=ChatResponse)
