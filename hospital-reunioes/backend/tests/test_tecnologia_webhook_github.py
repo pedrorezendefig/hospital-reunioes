@@ -369,6 +369,10 @@ def _ja_sincronizada(gh: _GithubFalso, numero: int, did: str = "D1", **campos) -
     """
     cache = tecnologia_sincronizacao.mudanca_da_foto(_foto_guardada(gh, numero))
     cache["github_sincronizado_em"] = CARIMBO_ANTERIOR
+    # O Responsavel tambem e derivado (issue #1534): a issue sem dono no GitHub
+    # deixa a Demanda sem Responsavel. Quem monta issue com dono passa o
+    # Responsavel dele por `campos`.
+    cache["responsavel_id"] = None
     return _demanda(did, github_issue_numero=numero, **{**cache, **campos})
 
 
@@ -1051,7 +1055,7 @@ class TestSoOEventoIssues:
 
 
 class TestAcoesTratadas:
-    @pytest.mark.parametrize("acao", ("labeled", "unlabeled", "closed", "reopened", "edited"))
+    @pytest.mark.parametrize("acao", ("labeled", "unlabeled", "closed", "reopened", "edited", "assigned", "unassigned"))
     def test_a_acao_da_lista_sincroniza(self, acao, monkeypatch):
         gh = _GithubFalso({673: _issue(673, labels=("in-progress",))})
         cliente, sb, _ = _montar(demandas=[_demanda("D1", github_issue_numero=673)], github=gh, monkeypatch=monkeypatch)
@@ -1061,7 +1065,7 @@ class TestAcoesTratadas:
         assert resposta.status_code == 200
         assert _demandas(sb)[0]["etapa"] == ETAPA_EM_DESENVOLVIMENTO
 
-    @pytest.mark.parametrize("acao", ("assigned", "unassigned", "milestoned", "opened", "deleted"))
+    @pytest.mark.parametrize("acao", ("milestoned", "opened", "deleted"))
     def test_a_acao_de_fora_da_lista_nao_faz_nada(self, acao, monkeypatch):
         gh = _GithubFalso({673: _issue(673, labels=("in-progress",))})
         cliente, sb, _ = _montar(demandas=[_demanda("D1", github_issue_numero=673)], github=gh, monkeypatch=monkeypatch)
@@ -1561,7 +1565,7 @@ class TestOCorpoDaRespostaEOSmokeDoPassoHumano:
     def test_acao_ignorada_diz_que_foi_a_acao(self, monkeypatch):
         cliente, _, _ = _montar(monkeypatch=monkeypatch)
 
-        assert _entregar(cliente, _corpo(acao="assigned")).json() == {"ignorado": "acao"}
+        assert _entregar(cliente, _corpo(acao="milestoned")).json() == {"ignorado": "acao"}
 
     def test_issue_sem_vinculo_diz_que_nao_ha_vinculo(self, monkeypatch):
         gh = _GithubFalso({999: _issue(999)})
