@@ -68,7 +68,7 @@ sequenceDiagram
 ## 3. Rotas (API) (auto)
 
 <!-- AUTO:rotas:start -->
-**289 endpoints** em 22 áreas:
+**293 endpoints** em 22 áreas:
 
 | Área | Endpoints |
 |---|---|
@@ -80,7 +80,7 @@ sequenceDiagram
 | `comentarios` | 4 |
 | `conector-mcp` | 2 |
 | `configuracoes` | 2 |
-| `contas-medicas` | 63 |
+| `contas-medicas` | 67 |
 | `health` | 1 |
 | `notificacoes` | 4 |
 | `ouvidoria` | 47 |
@@ -113,7 +113,7 @@ _Colunas, FKs e diagrama ER: `docs/spec/snapshots/ENTIDADES.md` e `SCHEMA.md`._
 <!-- AUTO:integracoes:start -->
 | Serviço | Para quê |
 |---|---|
-| **Anthropic** | IA de texto do app inteiro desde a issue #1302 (Atas, POP, Ouvidoria, Assistente de Tecnologia, Contas médicas), pelo LLM_MODEL e pelos CM_IA_MODELO_PASSO_A/B, todos claude-sonnet-5-5, e o Planejamento da Demanda pelo LLM_MODEL_PLANEJAMENTO, claude-opus-5-5 (ADR 0075). Retenção padrão da API (até 30 dias, sem treino), sem ZDR (ADR 0074) |
+| **Anthropic** | IA de texto do app inteiro desde a issue #1302 (Atas, POP, Ouvidoria, Assistente de Tecnologia, Contas médicas), pelo LLM_MODEL e pelos CM_IA_MODELO_PASSO_A/B (default claude-sonnet-5-5 no código; em produção estão em claude-opus-5-5 no Coolify, conferido em 09/11/2026), a recomendação da Validação pelo CM_IA_MODELO_VALIDACAO (claude-sonnet-5-5, ADR 0082), e o Planejamento da Demanda pelo LLM_MODEL_PLANEJAMENTO, claude-opus-5-5 (ADR 0075). Retenção padrão da API (até 30 dias, sem treino), sem ZDR (ADR 0074) |
 | **OpenRouter** | Só a transcrição de voz, pelo TRANSCRICAO_MODEL (default: openai/gpt-4o-mini-transcribe) |
 | **ClickSign** | Assinatura digital de atas (sandbox em dev, app em prod) |
 | **Resend** | Emails transacionais e SMTP do Supabase Auth |
