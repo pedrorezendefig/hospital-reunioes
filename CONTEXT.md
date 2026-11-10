@@ -223,11 +223,11 @@ _Evitar_: paginação; cortar a lista para caber; supor que a mesma chamada devo
 
 ## Tecnologia (o chat do diretor com o agente)
 
-Desde 02/11/2026 (ADR 0077) a aba Tecnologia é uma tela só: o chat do [Assistente de Tecnologia], em que o diretor relata um bug ou pede uma melhoria e o card nasce no GitHub. Só o Super admin vê (ADR 0050). Os pedidos da Vitta ao hospital voltaram para o WhatsApp.
+Desde 02/11/2026 (ADR 0077) a aba Tecnologia é uma tela só: o chat do [Assistente de Tecnologia], em que o diretor relata um bug ou pede uma melhoria e o card nasce no GitHub. Só o Super admin vê (ADR 0050). Desde 10/11/2026 (ADR 0083) o [Desenvolvedor] vê as Demandas de todos, o diretor escolhe o [Responsável] e cada Demanda tem a [Conversa da Demanda]. Os pedidos da Vitta ao hospital que não nascem de uma Demanda continuam no WhatsApp.
 
 **Demanda**:
 Um bug ou uma melhoria que o diretor relatou ao [Assistente de Tecnologia]. É o registro de uma conversa: o que foi dito, os [Anexos da Demanda] e, depois do clique "Criar o card", o [Vínculo com o desenvolvimento]. Na tela aparece só como uma linha na lista lateral, com o título que o agente dá desde a primeira resposta, o selo Bug ou Melhoria e a [Etapa] (ADR 0079). Fica **totalmente apartada** das Pendências de Ata: Demanda é assunto de tecnologia entre o hospital e a Vitta, Pendência é compromisso operacional do hospital.
-_Evitar_: chamar de Pendência, tarefa ou ticket; tipo além de bug ou melhoria; Responsável, Prioridade, Prazo ou raia (aposentados em 02/11/2026); "Demandas TI" (TI é o analista de TI do hospital, um terceiro).
+_Evitar_: chamar de Pendência, tarefa ou ticket; tipo além de bug ou melhoria; Prioridade, Prazo ou raia (aposentados em 02/11/2026); "Demandas TI" (TI é o analista de TI do hospital, um terceiro).
 
 **Assistente de Tecnologia**:
 O agente de IA que é a aba Tecnologia inteira (ADRs 0056 e 0077). Abre perguntando "bug ou melhoria?", com dois botões e um campo livre; se o diretor só descreve, ele classifica e confirma. No bug segue o [Roteiro do bug]; na melhoria conduz o [Planejamento da Demanda]. Dúvida que o [Kit de conhecimento] responde, ele responde ali, dizendo de onde tirou, sem card. Conhece a casa pelo Kit e **lê o código**: ferramentas de leitura do repositório pela API do GitHub (arquivo, busca, `CONTEXT.md`, ADRs aceitas, issues abertas), para desafiar o pedido contra o que já está decidido, falando com o diretor na língua do Kit. Não roda teste nem grava no repositório. Recebe texto, voz, imagem e documento a qualquer momento. A conversa **persiste** e se retoma pela lista. Termina num resumo com "Criar o card" ou "Não bateu"; antes de criar, avisa se já existe issue aberta parecida. Roda no Opus 5.5, só aqui. Sem nome próprio: nome próprio compete com a Ana.
@@ -249,6 +249,22 @@ _Evitar_: o app gravando `CONTEXT.md` ou ADR; PRD novo criado pelo terminal (que
 A ligação de uma Demanda com **uma** issue-raiz do GitHub (o PRD do diretor ou a issue do bug), criada pelo clique "Criar o card". As fatias são sub-issues dessa raiz e nunca se vinculam uma a uma. O diretor vê a Etapa e O que muda, nunca número nem link.
 _Evitar_: vincular fatia em vez da raiz; Demanda com mais de uma issue; vínculo digitado por número (aposentado).
 
+**Desenvolvedor**:
+O Super admin que tem login do GitHub no cadastro (ADR 0083). Não é perfil nem permissão própria. Na aba Tecnologia vê as Demandas de todos, a entrevista inteira, o número e o link da issue e o [Envio falhou]; é quem pode ser [Responsável].
+_Evitar_: "perfil de tecnologia", "engenheiro de IA"; eixo de permissão próprio para a aba.
+
+**Responsável**:
+Quem o diretor escolhe, entre os [Desenvolvedores], antes de "Criar o card" (ADR 0083). É o dono do card no GitHub: o card cai na fila dele. A escolha é opcional; sem ela, o card cai no Pedro. Depois de criado, é derivado do GitHub, como a [Etapa], e nunca editado no app.
+_Evitar_: dois Responsáveis; card sem Responsável; trocar pelo app; confundir com o Responsável do setor da Ouvidoria.
+
+**Conversa da Demanda**:
+A troca de mensagens entre o diretor e os [Desenvolvedores] dentro de uma Demanda, separada da conversa com o agente, com menção (ADR 0083). Vive só no app e nunca vai para a issue. Menção e mensagem nova avisam por sino e e-mail; sem menção, a mensagem do diretor avisa o [Responsável] e a do Desenvolvedor avisa quem abriu a Demanda.
+_Evitar_: espelhar com os comentários da issue (a versão aposentada em 02/11/2026); misturar com a conversa do agente; pedido da Vitta que não nasce de uma Demanda.
+
+**Envio falhou**:
+O estado de uma Demanda cujo "Criar o card" não chegou ao GitHub (ADR 0083). Fica registrado com o motivo, aparece na lista e se resolve com "Reenviar", pelo diretor ou pelo Desenvolvedor. Nunca é reenviado sozinho.
+_Evitar_: reenvio automático; falha que só o log sabe.
+
 **Etapa**:
 Onde a Demanda está na entrega, em palavras do diretor, sempre derivada do GitHub e nunca editada à mão: **Registrada** (conversa sem card), **Em análise**, **Planejada**, **Em desenvolvimento**, **Entregue**, **Em produção** e **Não será feita**. Num PRD, vem com "X de Y partes entregues". **Entregue** é o fechamento da issue (o merge); **Em produção** é a [Subida] que levou aquele fechamento ao ar, com a versão ("Em produção desde v0.165.0"; ADR 0069). Um PR aberto já conta como Em desenvolvimento. É o que a lista lateral mostra em cada conversa.
 _Evitar_: Etapa digitada; Entregue como "deploy confirmado" (é o fechamento; o deploy é Em produção).
@@ -268,7 +284,7 @@ _Evitar_: imagem ou trecho do documento no corpo ou no comentário da issue; lin
 O conjunto de textos que o [Assistente de Tecnologia] recebe inteiro a cada conversa: um arquivo por módulo (Ana, Integração Ana x MV, Reuniões, Ouvidoria, POPs, Contas médicas, Central de Comando, Site, Infra) mais um sobre a própria aba Tecnologia, cada um com a seção **"O que já foi decidido"**. Escrito para o leitor diretor, em linguagem de uso, sem número de issue, label, nome de tabela ou vocabulário interno. Vive no código do backend e viaja no deploy; é **curado por gente**: mudou o comportamento de um módulo, o arquivo dele muda no mesmo PR. É a língua em que o agente fala; o código e as ADRs, que ele lê pelas ferramentas, são o que ele consulta por trás.
 _Evitar_: gerar o kit por script a partir do glossário; busca vetorial; kit desatualizado (vira agente mentindo).
 
-**Aposentados em 02/11/2026** (ADR 0077): Tipo da Demanda (os sete), Produto com dono, Estado da Demanda, Responsável, Prioridade, Prazo, Quadro, Painel, Conversa da Demanda (espelhada com a issue), o formulário à mão, o Roteiro por Tipo e o botão "Planejar com a IA". Quem ler esses nomes em ADR antiga (0050, 0054, 0056, 0069, 0075) está lendo histórico.
+**Aposentados em 02/11/2026** (ADR 0077): Tipo da Demanda (os sete), Produto com dono, Estado da Demanda, Prioridade, Prazo, Quadro, Painel, a Conversa espelhada com a issue, o formulário à mão, o Roteiro por Tipo e o botão "Planejar com a IA". Quem ler esses nomes em ADR antiga (0050, 0054, 0056, 0069, 0075) está lendo histórico.
 
 ## Central de Comando (números do ecossistema digital)
 
