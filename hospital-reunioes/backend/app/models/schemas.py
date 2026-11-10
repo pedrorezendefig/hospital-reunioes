@@ -271,6 +271,8 @@ class TipoNotificacao(StrEnum):
     # sino dava 500 e o painel abria vazio com o contador marcando (#1430).
     ACEITE_INTERNO = "ACEITE_INTERNO"
     CONTAS_MEDICAS = "CONTAS_MEDICAS"
+    # A Conversa da Demanda (129, issue #1537): a referencia e a Demanda.
+    TECNOLOGIA = "TECNOLOGIA"
 
 
 class NotificacaoResponse(BaseModel):

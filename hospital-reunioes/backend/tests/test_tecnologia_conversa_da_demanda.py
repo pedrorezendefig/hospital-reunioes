@@ -27,6 +27,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 from test_tecnologia_vinculo import BASE, DIRETOR, PEDRO, _demanda, _montar, _pessoa  # noqa: E402
 
 from app.limiter import limiter  # noqa: E402
+from app.services import github_client  # noqa: E402
 
 # Outro Desenvolvedor da Vitta e outra pessoa da diretoria (Super admin sem
 # login do GitHub, que não vê a Demanda do DIRETOR).
@@ -158,3 +159,67 @@ class TestAvisoNoSino:
         pedro.post(CONVERSA, json={"texto": "@Pedro Vitta lembrar de testar no celular."})
 
         assert _avisos(sb) == []
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 3. Nada vai para o GitHub
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+class TestNadaVaiParaOGithub:
+    def test_nenhuma_chamada_ao_github_acontece_ao_enviar_mensagem(self, monkeypatch):
+        """A Conversa vive só no app (ADR 0083, decisão 8): o repositório é
+        público e a fala do diretor não vai para lá. Toda porta do cliente do
+        GitHub fica gravando, inclusive a de baixo, por onde qualquer chamada
+        passa."""
+        diretor, sb = _cenario(monkeypatch, logado=DIRETOR)
+        chamadas: list[str] = []
+        for nome in ("_chamar", "ler_issue", "ler_sub_issues", "criar_issue"):
+            monkeypatch.setattr(github_client, nome, lambda *a, _n=nome, **kw: chamadas.append(_n))
+
+        resposta = diretor.post(CONVERSA, json={"texto": "@Lucas Sampaio, olha o print que mandei."})
+
+        assert resposta.status_code == 201, resposta.text
+        assert chamadas == []
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 4. A migration 129
+# ═══════════════════════════════════════════════════════════════════════════
+
+MIGRATION_129 = Path(__file__).resolve().parents[2] / "supabase" / "migrations" / "129_tecnologia_conversa_da_demanda.sql"
+
+
+def _sql() -> str:
+    return MIGRATION_129.read_text(encoding="utf-8")
+
+
+class TestMigration:
+    def test_a_tabela_nova_tem_rls_ligado_e_nenhuma_policy(self):
+        sql = _sql()
+
+        assert "CREATE TABLE IF NOT EXISTS tecnologia_conversa_da_demanda (" in sql
+        assert "ALTER TABLE tecnologia_conversa_da_demanda ENABLE ROW LEVEL SECURITY;" in sql
+        # Default-deny: quem lê e escreve é o backend com a service_role.
+        assert "CREATE POLICY" not in sql.upper()
+
+    def test_o_sino_aceita_o_tipo_da_tecnologia_sem_perder_os_que_ja_existem(self):
+        sql = _sql()
+        check = sql[sql.index("ADD CONSTRAINT notificacoes_tipo_check") :]
+
+        for tipo in (
+            "MENCAO",
+            "STATUS_ALTERADO",
+            "COMENTARIO",
+            "PRAZO_PROXIMO",
+            "RESPONSAVEL_ATRIBUIDO",
+            "ACEITE_INTERNO",
+            "CONTAS_MEDICAS",
+            "TECNOLOGIA",
+        ):
+            assert f"'{tipo}'" in check, tipo
+
+    def test_termina_com_o_recibo_do_proprio_numero(self):
+        corpo = "\n".join(linha for linha in _sql().splitlines() if not linha.startswith("--")).strip()
+
+        assert corpo.endswith("INSERT INTO migracoes_aplicadas (numero) VALUES (129) ON CONFLICT (numero) DO NOTHING;")
