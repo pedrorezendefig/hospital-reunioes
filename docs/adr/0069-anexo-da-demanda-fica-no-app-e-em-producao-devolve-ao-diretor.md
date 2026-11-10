@@ -49,3 +49,15 @@ Decisão do Pedro (07/out/2026, grilling). A aba Tecnologia (ADRs 0050, 0054, 00
 ## Emenda a este ADR (07/out/2026, auditoria do PRD #1056)
 
 **Decisão 2, o que a rota de automação responde quando recusa.** A rota de leitura dos anexos (`GET /api/automacao/tecnologia/demandas/{id}/anexos`) segue o molde da API da Ana em quase tudo: chave ausente, vazia ou errada responde **401**, igual. A diferença é deliberada e vem da fatia #1063: quando `TECNOLOGIA_AUTOMACAO_API_KEY` **não está configurada no servidor**, a rota responde **503** ("ponte desligada"), enquanto a Ana responde 401 (`require_tecnologia_automacao_api_key` em `backend/app/dependencies.py`). O motivo é quem chama: o `anexos.py` roda na máquina do sócio e precisa distinguir os dois casos, porque o conserto é outro. No 503 ele diz que falta criar a chave na tela do Coolify; no 401, que a chave do `tokens/.env` está errada. Não é desvio a corrigir: trocar o 503 por 401 faria o sócio trocar de chave à toa quando o que falta é o cadastro no servidor.
+
+## Emenda a este ADR (09/nov/2026, grilling em lote)
+
+**Decisão 1, o Anexo da Demanda passa a aceitar documento.** O diretor relatou que preparou um Markdown com melhorias de auditoria e o chat recusou: a decisão 1 só previa print. O Anexo passa a ser imagem ou documento, e o resto da decisão fica de pé (vive no app, nunca vai para o GitHub, bucket privado, mesma regra de apagar).
+
+- **Tipos.** Primeiro `.md`, `.txt`, `.pdf` e `.docx`, que o extrator de texto do app já lê em processo isolado (issue #758). Depois `.xlsx` e `.csv`, em fatia própria, porque o `.xlsx` pede parser novo, que também nasce isolado. `.xls` antigo fica de fora. PDF escaneado é recusado com a frase que manda enviar como print. Rejeitado: OCR.
+- **Leitura.** O texto inteiro do documento entra na conversa como material cercado, com teto de 100 mil caracteres; acima disso a recusa pede para dividir. Na tela a fala mostra só o nome e o tamanho do arquivo. Rejeitado: resumir antes de entregar ao agente (ele planejaria em cima de um resumo, e o que o resumo cortou não volta).
+- **Tetos.** Dez anexos por Demanda, somando imagens e documentos. 5 MB para `.md`, `.txt` e `.csv`; 15 MB para `.pdf`, `.docx` e `.xlsx`, os tetos do extrator. A imagem continua no teto do Assistente.
+- **GitHub.** A issue diz só a contagem ("Anexos: 2 imagens e 1 documento na Demanda"). O PRD que nasce da conversa segue passando pela peneira de dado pessoal (ADR 0060). O original chega a quem desenvolve pela mesma rota de automação e pelo mesmo `anexos.py` (decisão 2).
+- **Várias melhorias num documento.** Continua sendo uma Demanda e um PRD do diretor, com as fatias saindo no `/to-issues`. Se o documento mistura módulos sem relação, o agente avisa e propõe um assunto por conversa. Rejeitado: o agente abrir um card por melhoria (quebra o par Demanda e issue-raiz da ADR 0077).
+
+Consequência: migration que alarga o CHECK de `content_type` e de `tamanho_bytes` da tabela de anexos (migration 115), e o texto extraído guardado junto da fala, fora do limite de caracteres da mensagem. Kit de conhecimento da aba Tecnologia e a página do manual mudam na primeira fatia.
