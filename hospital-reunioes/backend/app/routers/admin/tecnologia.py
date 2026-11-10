@@ -67,7 +67,9 @@ from app.models.tecnologia_schemas import (
     ChatPrimeiroTurnoPayload,
     ChatResponse,
     ChatTurnoPayload,
+    CriarOCardPayload,
     DemandaResponse,
+    DesenvolvedorResponse,
     QuemSouNaAbaResponse,
 )
 from app.services import (
@@ -101,6 +103,7 @@ from app.services.tecnologia_vinculo import (
     labels_da_issue_nova,
     link_da_demanda,
     login_para_publicar,
+    normalizar_github_login,
     titulo_da_issue,
 )
 
@@ -286,6 +289,7 @@ def _criar_issue_e_vincular(
     corpo,
     assignees: list[str],
     labels: list[str],
+    responsavel_id: str | None,
 ) -> dict:
     """O servico do "Criar o card" do chat (issues #1381 e #1383), o bug e a
     melhoria.
@@ -346,6 +350,7 @@ def _criar_issue_e_vincular(
         **mudanca_da_foto(foto),
         "github_issue_numero": numero,
         "vinculado_por": ator["id"],
+        "responsavel_id": responsavel_id,
     }
 
     result = supabase.table(TABELA_DEMANDAS).update(mudanca).eq("id", demanda_id).execute()
@@ -418,7 +423,8 @@ def _nascer_a_demanda(supabase: Client, *, ator: dict, titulo: str, tipo: str, p
                 "tipo": tipo,
                 "produto_id": produto["id"],
                 "estado": "nova",
-                "responsavel_id": produto.get("dono_id"),
+                # O Responsavel nasce no "Criar o card" (ADR 0083, decisao 5).
+                "responsavel_id": None,
                 "autor_id": ator["id"],
                 "prioridade": "normal",
             }
@@ -559,6 +565,49 @@ def _estado_depois_do_turno(resultado: chat_tecnologia.ResultadoDoTurno) -> str:
 async def quem_sou_na_aba(ator: dict = Depends(require_super_admin)):
     """Se quem esta logado e Desenvolvedor (ADR 0083, decisao 2)."""
     return {"desenvolvedor": e_desenvolvedor(ator)}
+
+
+# A recusa do Responsavel que nao esta no "Quem cuida disto?": a tela so
+# oferece Desenvolvedor, e o id que chega de fora dela nao vira assignee.
+MOTIVO_RESPONSAVEL_FORA_DA_LISTA = "Escolha quem cuida disto entre as pessoas da lista."
+
+
+def _desenvolvedores(supabase: Client) -> list[dict]:
+    """Os Desenvolvedores do cadastro, pelo nome: o Super admin ativo com login
+    do GitHub (ADR 0083, decisao 2). E quem pode ser Responsavel."""
+    result = selecionar_participantes(
+        supabase, "id, nome_completo, access_profile, is_super_admin, github_login, ativo"
+    )
+    pessoas = [p for p in (result.data or []) if p.get("ativo") is not False and e_desenvolvedor(p)]
+    return sorted(pessoas, key=lambda p: (p.get("nome_completo") or "").casefold())
+
+
+def _responsavel_do_card(supabase: Client, escolhido: str | None) -> tuple[list[str], str | None]:
+    """O assignee da issue e o Responsavel da Demanda (ADR 0083, decisao 5).
+
+    Com escolha, o Desenvolvedor escolhido. Sem escolha, o login do dono que ja
+    esta na configuracao, em bug e em melhoria; o Responsavel e quem tem esse
+    login no cadastro, ou ninguem, e o card nasce designado do mesmo jeito.
+    """
+    desenvolvedores = _desenvolvedores(supabase)
+    if escolhido:
+        pessoa = next((p for p in desenvolvedores if str(p["id"]) == escolhido), None)
+        if pessoa is None:
+            _recusar(MOTIVO_RESPONSAVEL_FORA_DA_LISTA)
+        login = login_para_publicar(pessoa.get("github_login"))
+        return ([login] if login else []), str(pessoa["id"])
+    dono = login_para_publicar(settings.github_login_dono)
+    pessoa = next((p for p in desenvolvedores if dono and normalizar_github_login(p.get("github_login")) == dono), None)
+    return ([dono] if dono else []), (str(pessoa["id"]) if pessoa else None)
+
+
+@router.get("/desenvolvedores", response_model=list[DesenvolvedorResponse])
+async def listar_os_desenvolvedores(
+    _ator: dict = Depends(require_super_admin),
+    supabase: Client = Depends(get_supabase_client),
+):
+    """O "Quem cuida disto?" do resumo (ADR 0083, decisao 5)."""
+    return [{"id": str(p["id"]), "nome": p.get("nome_completo") or ""} for p in _desenvolvedores(supabase)]
 
 
 @router.get("/chat", response_model=list[DemandaResponse])
@@ -985,6 +1034,7 @@ async def fechar_e_resumir_a_melhoria(
 async def criar_o_card(
     request: Request,
     demanda_id: str,
+    payload: CriarOCardPayload | None = None,
     ator: dict = Depends(require_super_admin),
     supabase: Client = Depends(get_supabase_client),
 ):
@@ -1007,6 +1057,7 @@ async def criar_o_card(
     resumo = atual.get("resumo")
     if atual.get("estado") != planejamento_demanda.ESTADO_RESUMIDO or not resumo:
         _conflito(MOTIVO_CHAT_SEM_RESUMO)
+    assignees, responsavel_id = _responsavel_do_card(supabase, payload.responsavel_id if payload else None)
     _exigir_integracao()
     # So a contagem dos anexos vai a issue (ADR 0069), por tipo (issue #1520).
     imagens, documentos = tecnologia_anexos.quantos_guardados(supabase, demanda_id)
@@ -1026,14 +1077,14 @@ async def criar_o_card(
                 documentos=documentos,
             )
 
-        dono = login_para_publicar(settings.github_login_dono)
         _criar_issue_e_vincular(
             supabase,
             demanda=demanda,
             ator=ator,
             corpo=corpo_do_prd,
-            assignees=[dono] if dono else [],
+            assignees=assignees,
             labels=[*labels_da_issue_nova(chat_tecnologia.TIPO_DA_CLASSIFICACAO["melhoria"]), LABEL_ORIGEM_DIRETOR],
+            responsavel_id=responsavel_id,
         )
         linha = planejamento_demanda.marcar_enviado(supabase, demanda_id, agora=_agora())
         return _chat_para_a_tela(
@@ -1054,7 +1105,13 @@ async def criar_o_card(
         )
 
     _criar_issue_e_vincular(
-        supabase, demanda=demanda, ator=ator, corpo=corpo, assignees=[], labels=[*LABELS_DO_BUG, LABEL_ORIGEM_DIRETOR]
+        supabase,
+        demanda=demanda,
+        ator=ator,
+        corpo=corpo,
+        assignees=assignees,
+        labels=[*LABELS_DO_BUG, LABEL_ORIGEM_DIRETOR],
+        responsavel_id=responsavel_id,
     )
     linha = planejamento_demanda.marcar_enviado(supabase, demanda_id, agora=_agora())
     return _chat_para_a_tela(supabase, demanda_id, linha or {**atual, "estado": planejamento_demanda.ESTADO_ENVIADO})

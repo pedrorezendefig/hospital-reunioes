@@ -61,6 +61,17 @@ class DemandaResponse(BaseModel):
     autor: str | None = None
     issue_numero: int | None = None
     issue_url: str | None = None
+    # Quem cuida do card (ADR 0083, decisao 5), para o diretor e para o
+    # Desenvolvedor. Nulo enquanto o card nao nasceu.
+    responsavel: str | None = None
+
+
+class DesenvolvedorResponse(BaseModel):
+    """Uma opcao do "Quem cuida disto?" (ADR 0083, decisao 5): um
+    Desenvolvedor, pelo id e pelo nome. O login fica no servidor."""
+
+    id: str
+    nome: str
 
 
 class QuemSouNaAbaResponse(BaseModel):
@@ -174,6 +185,13 @@ class ChatNaoBateuPayload(BaseModel):
     """Corpo do POST .../chat/{id}/nao-bateu: o que nao bateu no resumo."""
 
     texto: str | None = Field(default=None, max_length=LIMITE_DA_MENSAGEM)
+
+
+class CriarOCardPayload(BaseModel):
+    """Corpo do POST .../chat/{id}/criar-card (ADR 0083, decisao 5): o
+    Responsavel escolhido, que e opcional. Sem ele o card vai para o dono."""
+
+    responsavel_id: str | None = None
 
 
 class DocumentoDaFala(BaseModel):
