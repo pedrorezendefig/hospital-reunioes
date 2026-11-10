@@ -22,6 +22,11 @@ export function urlDoCriarOCard(demandaId: string): string {
   return `${urlDaConversa(demandaId)}/criar-card`;
 }
 
+/** O "Reenviar" do Envio falhou (issue #1535), pela mesma porta do Criar o card. */
+export function urlDoReenviar(demandaId: string): string {
+  return `${urlDaConversa(demandaId)}/reenviar`;
+}
+
 /** O "Quem cuida disto?" do resumo (issue #1533, ADR 0083, decisão 5). */
 export const URL_DOS_DESENVOLVEDORES = `${BASE_TECNOLOGIA}/desenvolvedores`;
 
