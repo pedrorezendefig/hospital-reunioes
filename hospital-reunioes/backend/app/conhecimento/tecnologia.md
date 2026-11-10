@@ -22,6 +22,8 @@ Na melhoria, a conversa vira o Planejamento da Demanda ali mesmo, sem trocar de 
 
 O resumo da melhoria mostra as decisões que você tomou e o que ficou em aberto, que são os pontos que a IA não chegou a perguntar. O que você não decidiu nunca aparece como decisão. Os botões são os mesmos do bug: **Criar o card** manda o pedido completo para a Vitta, já com o que a IA viu no sistema sobre como fazer e como testar, e **Não bateu** volta à conversa para acertar o que estiver errado. A Vitta ainda planeja o resto da parte técnica antes de começar. Se você fechou antes da hora e sobrou algo em aberto, o resumo traz também o botão **Continuar respondendo**: a IA volta a perguntar, começando pelo primeiro ponto em aberto. Dá para clicar em Criar o card mesmo com algo em aberto.
 
+No resumo, no bug e na melhoria, antes do Criar o card, aparece a pergunta **Quem cuida disto?**, com as pessoas da Vitta que desenvolvem: Pedro Rezende, Pedro Rib e Lucas Sampaio. Quem você escolher passa a cuidar do pedido, e o card cai na fila dessa pessoa. Escolher é opcional: sem escolha, o card vai para o Pedro Rezende, que repassa a quem for cuidar. O nome de quem cuida aparece em cada pedido da sua lista.
+
 Antes do resumo, no bug e na melhoria, a IA confere os pedidos que já estão na fila da Vitta. Se houver um pedido aberto parecido, ela avisa com o título dele, para você ver se não é o mesmo antes de clicar em Criar o card.
 
 Se a IA não conseguir responder, a tela avisa, a conversa continua como estava e o que você escreveu fica na caixa: é só mandar de novo.
@@ -56,9 +58,9 @@ Os arquivos são apagados 30 dias depois de a entrega ficar **Em produção**, o
 
 ## Quem vê
 
-Na lista ao lado da conversa, cada diretor vê só as suas conversas. Outra pessoa da diretoria não vê os seus pedidos, nem abrindo pelo endereço.
+Na lista ao lado da conversa, cada diretor vê só as suas conversas. Outra pessoa da diretoria não vê os seus pedidos, nem abrindo pelo endereço. Em cada pedido que já virou card aparece o **Responsável**, a pessoa da Vitta que cuida dele.
 
-Quem desenvolve na Vitta é o **Desenvolvedor**: um administrador do aplicativo que tem o login do GitHub no cadastro. Ele vê as Demandas de todos. A lista dele abre nos pedidos dele e tem o filtro **Todas**, com o nome de quem pediu em cada linha. Ao abrir o pedido de outra pessoa, ele lê a conversa inteira com a IA (as perguntas e as respostas) e abre os prints e os documentos, sem poder responder no lugar de quem pediu. Ele vê também o número e o link do card no desenvolvimento, que para você não aparecem.
+Quem desenvolve na Vitta é o **Desenvolvedor**: um administrador do aplicativo que tem o login do GitHub no cadastro. Ele vê as Demandas de todos. A lista dele abre em **Para mim**, os pedidos de que ele é o Responsável, e tem também **Minhas**, os pedidos que ele mesmo fez, e **Todas**, com o nome de quem pediu em cada linha. Ao abrir o pedido de outra pessoa, ele lê a conversa inteira com a IA (as perguntas e as respostas) e abre os prints e os documentos, sem poder responder no lugar de quem pediu. Ele vê também o número e o link do card no desenvolvimento, que para você não aparecem.
 
 ## A Etapa
 
@@ -86,7 +88,7 @@ A conversa fica guardada na Demanda, e a lista ao lado do chat a traz de volta.
 
 No fim, a IA mostra um resumo com as decisões que você tomou e a lista do que ficou em aberto, que são os pontos que ela não chegou a perguntar. O que você não decidiu nunca aparece como decisão. Se alguma coisa não bater, o **Não bateu** pede para você dizer o quê, a conversa continua de onde parou e o resumo é refeito. Quando sobra algo em aberto, o botão **Continuar respondendo** aparece embaixo da lista e faz a IA voltar às perguntas por esses pontos, um de cada vez. Com nada em aberto, o botão não aparece.
 
-Se o resumo estiver certo, o **Criar o card** manda o plano para o desenvolvimento da Vitta com as suas decisões e com o que ficou em aberto, que a Vitta pergunta depois. A Demanda fica ligada ao desenvolvimento, passa para a Etapa **Em análise** e, na lista, mostra **O que muda** com o que você decidiu. Do lado da Vitta, o plano chega primeiro ao Pedro, que distribui o trabalho.
+Se o resumo estiver certo, o **Criar o card** manda o plano para o desenvolvimento da Vitta com as suas decisões e com o que ficou em aberto, que a Vitta pergunta depois. A Demanda fica ligada ao desenvolvimento, passa para a Etapa **Em análise** e, na lista, mostra **O que muda** com o que você decidiu. Do lado da Vitta, o plano chega a quem você escolheu em Quem cuida disto?, ou ao Pedro Rezende quando ninguém foi escolhido.
 
 A IA cuida das decisões de negócio: o problema, quem usa, as regras e o que fica de fora. As decisões técnicas ficam com a Vitta, depois do sim. Quando o pedido esbarra numa regra da casa, a IA avisa e diz de onde tirou, citando a parte "O que já foi decidido" do texto daquele sistema.
 
@@ -97,6 +99,7 @@ A IA cuida das decisões de negócio: o problema, quem usa, as regras e o que fi
 - A aba vai num sentido só, do diretor para a Vitta, e os pedidos da Vitta ao hospital voltaram para o WhatsApp.
 - No bug, a IA faz no máximo cinco perguntas, e o pedido só vai para a Vitta no clique em Criar o card.
 - O bug que sai do Criar o card vai direto para o desenvolvimento, sem ninguém da Vitta precisar assumir antes.
+- Antes do Criar o card, o diretor escolhe em Quem cuida disto? a pessoa da Vitta que vai cuidar do pedido; a escolha é opcional e, sem ela, o card vai para o Pedro Rezende.
 - Na melhoria, a IA não tem limite de perguntas e só encerra quando nada fica em aberto, e a melhoria que sai do Criar o card ainda passa pelo planejamento técnico da Vitta antes de começar.
 - A conversa com o Assistente fica guardada na Demanda e se retoma pela lista ao lado.
 - O modelo de IA e o custo da conversa em dólar aparecem só no alto da conversa aberta, nunca na lista, e quando o custo não dá para calcular a tela diz "custo não medido".

@@ -31,6 +31,7 @@ from test_tecnologia_chat_melhoria import _ate_o_resumo as _ate_o_resumo_da_melh
 from test_tecnologia_vinculo import BASE, DIRETOR, PEDRO, _demanda, _pessoa  # noqa: E402
 
 from app.config import settings  # noqa: E402
+from app.services.conhecimento import CONHECIMENTO_DIR  # noqa: E402
 
 RIB = _pessoa("P4", "Pedro Rib", github_login="pedrorib")
 LUCAS = _pessoa("P5", "Lucas Sampaio", github_login="lucas-sampaio")
@@ -211,3 +212,24 @@ class TestLista:
 
         assert resposta.status_code == 200, resposta.text
         assert [d["id"] for d in resposta.json()] == ["d-pedro"]
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 5. O Kit de conhecimento
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+class TestKit:
+    def test_o_kit_diz_o_comportamento_novo_do_responsavel(self):
+        """O Assistente fala com o diretor pela língua do Kit: sem a regra
+        escrita, ele diria que o card vai sempre para o Pedro."""
+        texto = (CONHECIMENTO_DIR / "tecnologia.md").read_text(encoding="utf-8")
+        decidido = texto.split("## O que já foi decidido", 1)[1]
+        quem_ve = texto.split("## Quem vê", 1)[1].split("\n## ", 1)[0]
+
+        for trecho in ("Quem cuida disto?", "Pedro Rezende", "Pedro Rib", "Lucas Sampaio", "opcional"):
+            assert trecho in texto, trecho
+        assert "Quem cuida disto?" in decidido
+        for trecho in ("Para mim", "Responsável"):
+            assert trecho in quem_ve, trecho
+        assert "chega primeiro ao Pedro" not in texto
