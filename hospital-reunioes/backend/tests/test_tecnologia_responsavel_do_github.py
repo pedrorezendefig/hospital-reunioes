@@ -43,6 +43,7 @@ from test_tecnologia_webhook_github import (  # noqa: E402
 from test_tecnologia_webhook_github import _demandas as _demandas_do_webhook  # noqa: E402
 
 from app.config import settings  # noqa: E402
+from app.services.conhecimento import CONHECIMENTO_DIR  # noqa: E402
 
 REPO = "pedrorezendefig/hospital-reunioes"
 
@@ -254,3 +255,14 @@ class TestOAppNaoTrocaOResponsavel:
 
         assert resposta.status_code == 409, resposta.text
         assert _demandas(sb)[0]["responsavel_id"] == RIB["id"]
+
+    def test_o_kit_diz_que_a_troca_e_da_vitta_e_a_tela_acompanha(self):
+        """O Assistente fala com o diretor pela língua do Kit: sem a regra
+        escrita, ele mandaria o diretor procurar um botão que não existe."""
+        texto = (CONHECIMENTO_DIR / "tecnologia.md").read_text(encoding="utf-8")
+        decidido = texto.split("## O que já foi decidido", 1)[1]
+        quem_ve = texto.split("## Quem vê", 1)[1].split("\n## ", 1)[0]
+
+        assert "o nome muda sozinho" in quem_ve
+        assert "no aplicativo não há como trocar quem cuida" in quem_ve
+        assert "o aplicativo não troca o Responsável" in decidido
