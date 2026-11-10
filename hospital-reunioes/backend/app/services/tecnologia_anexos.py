@@ -34,7 +34,7 @@ from app.services.assistente_tecnologia import (
     MOTIVO_IMAGEM_GRANDE,
     MOTIVO_TIPO_FORA_DA_LISTA,
     TIPOS_DE_ANEXO,
-    TIPOS_DE_IMAGEM,
+    TIPOS_DE_DOCUMENTO,
     motivo_documento_grande,
 )
 from app.services.tecnologia import ESTADOS_FECHADOS, instante_do_banco
@@ -225,11 +225,20 @@ def posicoes_livres(supabase, demanda_id: str) -> int:
     return LIMITE_DE_ANEXOS - max((int(linha.get("ordem") or 0) for linha in existentes), default=0)
 
 
-def quantos_guardados(supabase, demanda_id: str) -> int:
-    """Quantas imagens a Demanda ainda guarda: o N da frase "Anexos: N imagens
-    na Demanda" da issue (issue #1062). O apagado nao conta: o binario saiu, e
-    quem desenvolve nao teria o que buscar."""
-    return sum(1 for linha in ler(supabase, demanda_id) if not linha.get("apagado_em"))
+def e_documento(linha: dict) -> bool:
+    """Se o anexo e um documento, pelo tipo gravado. O que nao e documento
+    conta como imagem: era o unico tipo antes da issue #1520."""
+    return linha.get("content_type") in TIPOS_DE_DOCUMENTO.values()
+
+
+def quantos_guardados(supabase, demanda_id: str) -> tuple[int, int]:
+    """Quantas imagens e quantos documentos a Demanda ainda guarda: os numeros
+    da frase "Anexos: 2 imagens e 1 documento na Demanda" da issue (issues
+    #1062 e #1520). O apagado nao conta: o binario saiu, e quem desenvolve nao
+    teria o que buscar."""
+    guardados = [linha for linha in ler(supabase, demanda_id) if not linha.get("apagado_em")]
+    documentos = sum(1 for linha in guardados if e_documento(linha))
+    return len(guardados) - documentos, documentos
 
 
 def ler(supabase, demanda_id: str) -> list[dict]:

@@ -357,7 +357,8 @@ def _chat_para_a_tela(
         "mensagens": chat_tecnologia.para_a_tela(mensagens),
         "resumo": None if planejamento else linha.get("resumo"),
         "resumo_da_melhoria": linha.get("resumo") if planejamento else None,
-        "anexos": tecnologia_anexos.quantos_guardados(supabase, demanda_id),
+        # As imagens: e o que a linha "Prints" do resumo do bug conta.
+        "anexos": tecnologia_anexos.quantos_guardados(supabase, demanda_id)[0],
         "planejamento": planejamento,
         "aviso_dos_anexos": aviso_dos_anexos,
         "custo": custo_da_conversa.da_demanda(supabase, demanda_id),
@@ -945,6 +946,8 @@ async def criar_o_card(
     if atual.get("estado") != planejamento_demanda.ESTADO_RESUMIDO or not resumo:
         _conflito(MOTIVO_CHAT_SEM_RESUMO)
     _exigir_integracao()
+    # So a contagem dos anexos vai a issue (ADR 0069), por tipo (issue #1520).
+    imagens, documentos = tecnologia_anexos.quantos_guardados(supabase, demanda_id)
 
     if chat_tecnologia.em_planejamento(atual.get("mensagens") or []):
         # A melhoria (issue #1383): o PRD do diretor, que nasce na triagem
@@ -957,7 +960,8 @@ async def criar_o_card(
                 descricao=demanda.get("descricao"),
                 resumo=resumo,
                 link=link_da_demanda(demanda_id),
-                anexos=tecnologia_anexos.quantos_guardados(supabase, demanda_id),
+                anexos=imagens,
+                documentos=documentos,
             )
 
         dono = login_para_publicar(settings.github_login_dono)
@@ -983,7 +987,8 @@ async def criar_o_card(
             resumo=resumo,
             produto_nome=produto_nome,
             link=link_da_demanda(demanda_id),
-            anexos=tecnologia_anexos.quantos_guardados(supabase, demanda_id),
+            anexos=imagens,
+            documentos=documentos,
         )
 
     _criar_issue_e_vincular(supabase, demanda=demanda, ator=ator, corpo=corpo, assignees=[], labels=LABELS_DO_BUG)

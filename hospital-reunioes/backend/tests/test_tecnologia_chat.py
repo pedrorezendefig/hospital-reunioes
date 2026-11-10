@@ -425,6 +425,7 @@ class TestNaoBateu:
             "opcoes": [],
             "recomendada": None,
             "nao_bateu": True,
+            "documentos": [],
         }
 
         # A tela pede o turno seguinte sem texto: a IA retoma da fala do diretor.
