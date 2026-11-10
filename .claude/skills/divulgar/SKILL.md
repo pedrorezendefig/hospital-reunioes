@@ -30,7 +30,7 @@ Fecha uma entrega para o diretor e para o usuário funcional em **dois passos, u
 
 - `video/`: a **fonte do vídeo**, versionada:
   - `roteiro.md`: o briefing da skill `copy`, os três ganchos e o escolhido, a narração final e a tabela de cenas (fala, tela capturada, transição de entrada, paradas planejadas em segundos).
-  - `narracao.txt`: o texto que a voz A lê (um parágrafo por cena).
+  - `narracao.txt`: o texto que a voz B lê (um parágrafo por cena). A voz B aceita emoção por parágrafo: o parágrafo que começa com `[animada]` (ou outra marca da skill `narracao`) sai naquele tom.
   - `tempos.json`: o tempo de cada palavra no formato da skill `motion` (`references/tempos.md`), convertido do `narracao.json` do `narrar.py`.
   - `capturas/*.png`: as telas reais do app, capturadas pelo `playwright-cli`.
   - `cena/`: a composição Remotion (`src/videos/<Nome>/` do projeto de trabalho: `<Nome>.tsx` e o que mais a cena usar).
@@ -60,7 +60,7 @@ Regras da pasta mãe: uma subpasta por contexto de domínio (`reunioes/`, `pops/
 
 **Antes de tudo, leia as skills globais:** `motion` (o `SKILL.md` e, inteiros, `references/guia-motion.md`, `references/catalogo.md` e `references/tempos.md`), `narracao`, `copy` e `marca-hsm`. Os valores do guia (ritmo, easing, transições, checklist) são o padrão; esta receita só diz o que muda no Hospital.
 
-**Especificação:** 1920x1080, 30 fps constante, 45 a 90 s, narrado com a voz A e legível no mudo: a fala aparece na tela como texto cinético, palavra a palavra, quando é dita (`<Fala>` da skill motion).
+**Especificação:** 1920x1080, 30 fps constante, 45 a 90 s, narrado com a voz B e legível no mudo: a fala aparece na tela como texto cinético, palavra a palavra, quando é dita (`<Fala>` da skill motion).
 
 ### 1. Copy e roteiro
 
@@ -90,7 +90,7 @@ Uma captura por estado que a demonstração mostra (antes do clique, campo preen
 
 ### 3. Narração e tempos
 
-1. `python3 ~/.claude/voz/narrar.py --file video/narracao.txt --output "$W/public/narracao.wav"` (voz A, padrão aprovado, skill `narracao`). Se o VoiceStudio falhar, pare e avise: nunca outra voz.
+1. `python3 ~/.claude/voz/narrar.py --file video/narracao.txt --output "$W/public/narracao.wav"` (voz B, padrão aprovado, skill `narracao`). Se o VoiceStudio falhar, pare e avise: nunca outra voz.
 2. Converta o `narracao.json` (tempo de cada palavra) para o `tempos.json` da skill motion: uma cena por parágrafo, `inicio_s` na primeira palavra da cena. Corrija a grafia, não os tempos. Grave em `video/tempos.json`.
 
 ### 4. Composição em Remotion
@@ -181,7 +181,7 @@ O link compartilhável é o **alias de produção** (`https://<projeto>.vercel.a
 
 1. Todos os critérios de aceite têm passo na demonstração; as telas são capturas do app real.
 2. Roteiro pela `copy` e pelo `humanizer`; abre no gancho, sem tela de metadado; vocabulário do glossário, zero jargão, zero travessão, tudo em HP Simplified.
-3. Narração na voz A; a fala aparece na tela quando é dita; uma transição diferente em cada corte; nada parado mais de 0,5 s fora da assinatura.
+3. Narração na voz B; a fala aparece na tela quando é dita; uma transição diferente em cada corte; nada parado mais de 0,5 s fora da assinatura.
 4. `gate-video.sh` passou no MP4 final; OK humano no draft.
 5. MP4 final em `~/Videos/Hospital/AAAA-MM-DD-<PRD>-<slug>.mp4`, nenhum MP4 no repositório nem em `out/`; `video/` (roteiro, narração, tempos, capturas, cena, `meta.json`) e `index.html` commitados.
 6. Página publicada, link no PRD. Se existe página de módulo do contexto, ela foi republicada com o MP4 novo.
