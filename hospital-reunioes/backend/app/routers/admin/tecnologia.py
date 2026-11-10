@@ -11,9 +11,13 @@ sidebar apenas esconde o item, e esconder nao e proteger (ADR 0050, decisao 2).
 
 O chat da aba (issues #1381, #1383 e #1384):
 
+- GET   /admin/tecnologia/eu                    se quem esta logado e
+                                                Desenvolvedor (ADR 0083).
 - GET   /admin/tecnologia/chat                  a lista lateral: as Demandas
                                                 de quem esta logado, da mais
-                                                recente para a mais antiga.
+                                                recente para a mais antiga;
+                                                `?filtro=todas` traz as de
+                                                todos ao Desenvolvedor.
 - POST  /admin/tecnologia/chat                  o primeiro turno: a Demanda
                                                 nasce aqui.
 - GET   /admin/tecnologia/chat/{id}             a conversa guardada.
@@ -48,13 +52,13 @@ from __future__ import annotations
 import logging
 import os
 from datetime import UTC, datetime, timedelta
-from typing import NoReturn
+from typing import Literal, NoReturn
 
 from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile, status
 from supabase import Client
 
 from app.config import settings
-from app.dependencies import get_supabase_client, require_super_admin
+from app.dependencies import get_supabase_client, require_super_admin, selecionar_participantes
 from app.limiter import limiter
 from app.models.tecnologia_schemas import (
     AssistenteDocumentoResponse,
@@ -64,6 +68,7 @@ from app.models.tecnologia_schemas import (
     ChatResponse,
     ChatTurnoPayload,
     DemandaResponse,
+    QuemSouNaAbaResponse,
 )
 from app.services import (
     ai_processor,
@@ -79,7 +84,9 @@ from app.services.tecnologia import (
     SEM_PRODUTO,
     TABELA_DEMANDAS,
     TABELA_PRODUTOS,
+    e_desenvolvedor,
     instante_do_banco,
+    pode_ver,
     versao_da_entrega,
 )
 from app.services.tecnologia_sincronizacao import mudanca_da_foto
@@ -119,13 +126,16 @@ def _buscar_demanda(supabase: Client, demanda_id: str) -> dict:
     return result.data[0]
 
 
-def _para_a_lista(demandas: list[dict]) -> list[dict]:
+def _para_a_lista(supabase: Client, demandas: list[dict], *, ator: dict) -> list[dict]:
     """A Demanda como a lista lateral do chat a le (issue #1384).
 
     E o funil por onde a Demanda sai desta API, e por isso o corte e aqui:
-    numero e endereco da issue nao saem (ADR 0054, decisao 9), e o diretor le a
-    Etapa e O que muda sem nenhum dos dois.
+    numero e endereco da issue nao saem para o diretor (ADR 0054, decisao 9), e
+    ele le a Etapa e O que muda sem nenhum dos dois. O Desenvolvedor le tambem
+    o autor, o numero e o link (ADR 0083, decisao 3).
     """
+    desenvolvedor = e_desenvolvedor(ator)
+    nomes = _nomes_dos_autores(supabase, demandas) if desenvolvedor else {}
     return [
         {
             **d,
@@ -133,9 +143,34 @@ def _para_a_lista(demandas: list[dict]) -> list[dict]:
             "partes": _partes_visiveis(d),
             "versao": versao_da_entrega(d),
             "classificacao": chat_tecnologia.CLASSIFICACAO_DO_TIPO.get(str(d.get("tipo") or "")),
+            "minha": d.get("autor_id") == ator["id"],
+            "autor": nomes.get(str(d.get("autor_id"))) if desenvolvedor else None,
+            "issue_numero": d.get("github_issue_numero") if desenvolvedor else None,
+            "issue_url": _url_da_issue(d) if desenvolvedor else None,
         }
         for d in demandas
     ]
+
+
+def _nomes_dos_autores(supabase: Client, demandas: list[dict]) -> dict[str, str]:
+    ids = sorted({str(d["autor_id"]) for d in demandas if d.get("autor_id")})
+    if not ids:
+        return {}
+    result = selecionar_participantes(supabase, "id, nome_completo", lambda q: q.in_("id", ids))
+    return {str(p["id"]): p.get("nome_completo") or "" for p in (result.data or [])}
+
+
+def _url_da_issue(demanda: dict) -> str | None:
+    """O endereco da issue-raiz: o que a foto do GitHub guardou, ou o montado
+    pelo numero quando a foto ainda nao veio."""
+    numero = demanda.get("github_issue_numero")
+    if not numero:
+        return None
+    foto = demanda.get("github_foto")
+    if isinstance(foto, dict) and foto.get("url"):
+        return str(foto["url"])
+    repo = settings.github_integracao_repo
+    return f"https://github.com/{repo}/issues/{numero}" if repo else None
 
 
 def _partes_visiveis(demanda: dict) -> list[dict]:
@@ -348,6 +383,7 @@ def _chat_para_a_tela(
     linha: dict | None,
     *,
     aviso_dos_anexos: str | None = None,
+    anexos_da_demanda: list[dict] | None = None,
 ) -> dict:
     """A conversa para a tela. `planejamento` diz que a conversa esta no
     planejamento da melhoria (issue #1383): o resumo dela tem outra forma, e
@@ -366,6 +402,7 @@ def _chat_para_a_tela(
         "planejamento": planejamento,
         "aviso_dos_anexos": aviso_dos_anexos,
         "custo": custo_da_conversa.da_demanda(supabase, demanda_id),
+        "anexos_da_demanda": anexos_da_demanda or [],
     }
 
 
@@ -517,22 +554,34 @@ def _estado_depois_do_turno(resultado: chat_tecnologia.ResultadoDoTurno) -> str:
     return planejamento_demanda.ESTADO_RESUMIDO if resultado.resumo else planejamento_demanda.ESTADO_EM_ANDAMENTO
 
 
+@router.get("/eu", response_model=QuemSouNaAbaResponse)
+async def quem_sou_na_aba(ator: dict = Depends(require_super_admin)):
+    """Se quem esta logado e Desenvolvedor (ADR 0083, decisao 2)."""
+    return {"desenvolvedor": e_desenvolvedor(ator)}
+
+
 @router.get("/chat", response_model=list[DemandaResponse])
 async def listar_as_conversas(
+    filtro: Literal["minhas", "todas"] = "minhas",
     ator: dict = Depends(require_super_admin),
     supabase: Client = Depends(get_supabase_client),
 ):
     """A lista ao lado do chat (issue #1384): as Demandas que o Super admin
     logado pediu, com o titulo e a Etapa, a mais recente primeiro.
 
+    `todas` e o filtro do Desenvolvedor (ADR 0083, decisao 3). Quem corta e o
+    `pode_ver`, a mesma regra da leitura da conversa: para quem nao e
+    Desenvolvedor, `todas` volta so as dele.
+
     Sai pelo `_para_a_lista`, o funil da Demanda desta API: e la que numero e
-    endereco da issue ficam de fora, e o diretor le aqui a Etapa e O que muda
-    sem nenhum dos dois.
+    endereco da issue ficam de fora para o diretor.
     """
-    result = (
-        supabase.table(TABELA_DEMANDAS).select("*").eq("autor_id", ator["id"]).order("criado_em", desc=True).execute()
-    )
-    return _para_a_lista(list(result.data or []))
+    consulta = supabase.table(TABELA_DEMANDAS).select("*")
+    if filtro == "minhas":
+        consulta = consulta.eq("autor_id", ator["id"])
+    result = consulta.order("criado_em", desc=True).execute()
+    visiveis = [d for d in (result.data or []) if pode_ver(ator, d)]
+    return _para_a_lista(supabase, visiveis, ator=ator)
 
 
 @router.post("/chat", response_model=ChatResponse, status_code=status.HTTP_201_CREATED)
@@ -727,12 +776,20 @@ async def _turno_da_melhoria(
 @router.get("/chat/{demanda_id}", response_model=ChatResponse)
 async def ler_o_chat(
     demanda_id: str,
-    _ator: dict = Depends(require_super_admin),
+    ator: dict = Depends(require_super_admin),
     supabase: Client = Depends(get_supabase_client),
 ):
-    """A conversa guardada, para retomar de onde parou."""
-    _demanda, linha = _chat_guardado(supabase, demanda_id)
-    return _chat_para_a_tela(supabase, demanda_id, linha)
+    """A conversa guardada, para retomar de onde parou.
+
+    So o autor e o Desenvolvedor a abrem (ADR 0083): a Demanda de outro autor
+    responde como inexistente, sem dizer que existe. O Desenvolvedor le tambem
+    os Anexos.
+    """
+    demanda, linha = _chat_guardado(supabase, demanda_id)
+    if not pode_ver(ator, demanda):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=MOTIVO_CHAT_NAO_ENCONTRADO)
+    anexos = tecnologia_anexos.para_quem_desenvolve(supabase, demanda_id) if e_desenvolvedor(ator) else None
+    return _chat_para_a_tela(supabase, demanda_id, linha, anexos_da_demanda=anexos)
 
 
 @router.post("/chat/{demanda_id}", response_model=ChatResponse)

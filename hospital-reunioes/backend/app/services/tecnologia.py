@@ -10,6 +10,7 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from typing import Any
 
+from app.dependencies import is_super_admin
 from app.services.tecnologia_vinculo import ETAPA_EM_PRODUCAO
 
 # As tabelas da aba. Moram aqui, e nao no router, porque quem escreve nelas nao
@@ -101,3 +102,20 @@ def versao_da_entrega(demanda: dict[str, Any]) -> str | None:
     if demanda.get("etapa") != ETAPA_EM_PRODUCAO:
         return None
     return demanda.get("versao_em_producao") or None
+
+
+def e_desenvolvedor(pessoa: dict[str, Any] | None) -> bool:
+    """O Super admin com login do GitHub no cadastro (ADR 0083, decisao 2).
+
+    Nao e perfil nem permissao propria: e o cadastro que diz. Login so de
+    espacos conta como sem login.
+    """
+    return is_super_admin(pessoa) and bool(str((pessoa or {}).get("github_login") or "").strip())
+
+
+def pode_ver(pessoa: dict[str, Any], demanda: dict[str, Any]) -> bool:
+    """Quem ve uma Demanda: o autor, e o Desenvolvedor, que ve todas (ADR 0083).
+
+    A regra e uma so, e a lista e a leitura da conversa leem daqui.
+    """
+    return demanda.get("autor_id") == pessoa.get("id") or e_desenvolvedor(pessoa)

@@ -56,7 +56,9 @@ Os arquivos são apagados 30 dias depois de a entrega ficar **Em produção**, o
 
 ## Quem vê
 
-Cada pessoa vê, na lista ao lado da conversa, os pedidos que ela fez. Quem desenvolve vê o pedido pelo material de desenvolvimento, sem os prints, que ficam no aplicativo.
+Na lista ao lado da conversa, cada diretor vê só as suas conversas. Outra pessoa da diretoria não vê os seus pedidos, nem abrindo pelo endereço.
+
+Quem desenvolve na Vitta é o **Desenvolvedor**: um administrador do aplicativo que tem o login do GitHub no cadastro. Ele vê as Demandas de todos. A lista dele abre nos pedidos dele e tem o filtro **Todas**, com o nome de quem pediu em cada linha. Ao abrir o pedido de outra pessoa, ele lê a conversa inteira com a IA (as perguntas e as respostas) e abre os prints e os documentos, sem poder responder no lugar de quem pediu. Ele vê também o número e o link do card no desenvolvimento, que para você não aparecem.
 
 ## A Etapa
 
@@ -99,6 +101,7 @@ A IA cuida das decisões de negócio: o problema, quem usa, as regras e o que fi
 - A conversa com o Assistente fica guardada na Demanda e se retoma pela lista ao lado.
 - O modelo de IA e o custo da conversa em dólar aparecem só no alto da conversa aberta, nunca na lista, e quando o custo não dá para calcular a tela diz "custo não medido".
 - A lista ao lado da conversa mostra os pedidos de quem está olhando, e a Etapa de cada um vem do desenvolvimento, sem ninguém escrever à mão.
+- O Desenvolvedor, administrador com login do GitHub no cadastro, vê as Demandas de todos, com a conversa inteira e os anexos; o diretor vê só as suas, sem número nem link do card.
 - Uma Demanda se liga a um trabalho de desenvolvimento só, e a Etapa é lida de lá, nunca digitada.
 - O texto que sai da Demanda para o material público do desenvolvimento passa por uma peneira que esconde CPF, telefone, nome e outros dados pessoais.
 - Os prints e os documentos ficam só dentro do aplicativo e são apagados 30 dias depois de Em produção, ou logo quando a entrega fica Não será feita.

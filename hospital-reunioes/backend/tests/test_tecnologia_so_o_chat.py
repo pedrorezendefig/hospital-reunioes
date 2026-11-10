@@ -29,6 +29,9 @@ ROTAS_DO_CHAT = {
     "/api/admin/tecnologia/assistente/descrever-imagem",
     # O documento do chat (issue #1520), irmã da leitura do print.
     "/api/admin/tecnologia/assistente/ler-documento",
+    # Se quem esta logado e Desenvolvedor (issue #1531, ADR 0083): o filtro
+    # "Todas" da lista depende dela.
+    "/api/admin/tecnologia/eu",
 }
 
 # O que fica de fora da aba e continua de pé (critério 2 da issue).

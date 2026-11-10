@@ -76,11 +76,12 @@ describe("A aba é o chat do agente, e só (issue #1386, ADR 0077)", () => {
     expect(screen.queryByText("Painel")).toBeNull();
   });
 
-  it("só pede ao servidor a lista das conversas: nada de Produtos, pessoas ou Vínculo", async () => {
+  it("só pede ao servidor a lista das conversas e quem está logado: nada de Produtos, pessoas ou Vínculo", async () => {
     montar();
 
-    await waitFor(() => expect(pedidos.length).toBeGreaterThan(0));
-    expect(pedidos).toEqual(["/api/admin/tecnologia/chat"]);
+    // `eu` diz se quem está logado é Desenvolvedor (issue #1531, ADR 0083).
+    await waitFor(() => expect(pedidos.length).toBe(2));
+    expect([...pedidos].sort()).toEqual(["/api/admin/tecnologia/chat", "/api/admin/tecnologia/eu"]);
   });
 
   it("a área da Tecnologia só tem a página da aba", () => {
