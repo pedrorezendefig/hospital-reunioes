@@ -70,13 +70,31 @@ const RESUMO = {
 
 type Resposta = { status: number; corpo: unknown };
 
-/** Monta o chat com um servidor falso que responde, em ordem, o que lhe derem. */
-function montar(respostas: Resposta[]) {
+/** Os Desenvolvedores do "Quem cuida disto?" (issue #1533). */
+const DESENVOLVEDORES = [
+  { id: "P5", nome: "Lucas Sampaio", padrao: false },
+  { id: "P4", nome: "Pedro Rib", padrao: false },
+  { id: "P1", nome: "Pedro Rezende", padrao: true },
+];
+
+/**
+ * Monta o chat com um servidor falso que responde, em ordem, o que lhe derem.
+ * A lista do "Quem cuida disto?" responde à parte, sem entrar na fila nem nas
+ * chamadas: os testes de antes dela continuam contando os POSTs do mesmo jeito.
+ */
+function montar(respostas: Resposta[], desenvolvedores: Resposta = { status: 200, corpo: DESENVOLVEDORES }) {
   const chamadas: Chamada[] = [];
   const fila = [...respostas];
   vi.stubGlobal(
     "fetch",
     vi.fn(async (url: string, init?: RequestInit) => {
+      if (url === "/api/admin/tecnologia/desenvolvedores") {
+        return {
+          ok: desenvolvedores.status < 400,
+          status: desenvolvedores.status,
+          json: async () => desenvolvedores.corpo,
+        } as unknown as Response;
+      }
       // O upload do anexo vai em multipart: guarda o FormData como veio.
       const corpo =
         init?.body instanceof FormData ? init.body : init?.body ? JSON.parse(String(init.body)) : null;
@@ -250,6 +268,93 @@ describe("O resumo do bug", () => {
 
     expect(await screen.findByText(/A Vitta recebeu o seu relato/)).toBeTruthy();
     expect(chamadas[1]).toMatchObject({ url: "/api/admin/tecnologia/chat/d-1/criar-card", metodo: "POST" });
+  });
+});
+
+// ─── Quem cuida disto? (issue #1533, ADR 0083, decisão 5) ────────────────────
+
+describe("Quem cuida disto?", () => {
+  it("o resumo lista os Desenvolvedores e diz para quem vai sem escolha", async () => {
+    montar([{ status: 201, corpo: conversa({ estado: "resumido", resumo: RESUMO }) }]);
+    fireEvent.click(screen.getByRole("button", { name: "Bug" }));
+
+    const seletor = (await screen.findByLabelText("Quem cuida disto?")) as HTMLSelectElement;
+
+    await waitFor(() => expect(seletor.options.length).toBe(4));
+    expect(Array.from(seletor.options).map((o) => o.textContent)).toEqual([
+      "Sem escolha",
+      "Lucas Sampaio",
+      "Pedro Rib",
+      "Pedro Rezende",
+    ]);
+    expect(seletor.value).toBe("");
+    expect(screen.getByText("Escolher é opcional. Sem escolha, o card vai para Pedro Rezende.")).toBeTruthy();
+  });
+
+  it("Criar o card leva quem foi escolhido", async () => {
+    const chamadas = montar([
+      { status: 201, corpo: conversa({ estado: "resumido", resumo: RESUMO }) },
+      { status: 200, corpo: conversa({ estado: "enviado", resumo: RESUMO }) },
+    ]);
+    fireEvent.click(screen.getByRole("button", { name: "Bug" }));
+    const seletor = (await screen.findByLabelText("Quem cuida disto?")) as HTMLSelectElement;
+    await waitFor(() => expect(seletor.options.length).toBe(4));
+
+    fireEvent.change(seletor, { target: { value: "P4" } });
+    fireEvent.click(screen.getByRole("button", { name: CRIAR_O_CARD }));
+
+    expect(await screen.findByText(/A Vitta recebeu o seu relato/)).toBeTruthy();
+    expect(chamadas[1]).toMatchObject({
+      url: "/api/admin/tecnologia/chat/d-1/criar-card",
+      corpo: { responsavel_id: "P4" },
+    });
+  });
+
+  it("sem escolha, Criar o card vai sem Responsável e não trava", async () => {
+    const chamadas = montar([
+      { status: 201, corpo: conversa({ estado: "resumido", resumo: RESUMO }) },
+      { status: 200, corpo: conversa({ estado: "enviado", resumo: RESUMO }) },
+    ]);
+    fireEvent.click(screen.getByRole("button", { name: "Bug" }));
+    await screen.findByLabelText("Quem cuida disto?");
+
+    fireEvent.click(screen.getByRole("button", { name: CRIAR_O_CARD }));
+
+    expect(await screen.findByText(/A Vitta recebeu o seu relato/)).toBeTruthy();
+    expect(chamadas[1].corpo).toEqual({});
+  });
+
+  it("sem a lista, o resumo segue com Criar o card e sem a pergunta", async () => {
+    const chamadas = montar(
+      [
+        { status: 201, corpo: conversa({ estado: "resumido", resumo: RESUMO }) },
+        { status: 200, corpo: conversa({ estado: "enviado", resumo: RESUMO }) },
+      ],
+      { status: 500, corpo: { detail: "fora do ar" } },
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Bug" }));
+
+    fireEvent.click(await screen.findByRole("button", { name: CRIAR_O_CARD }));
+
+    expect(await screen.findByText(/A Vitta recebeu o seu relato/)).toBeTruthy();
+    expect(screen.queryByLabelText("Quem cuida disto?")).toBeNull();
+    expect(chamadas[1].corpo).toEqual({});
+  });
+
+  it("a melhoria também pergunta quem cuida e leva a escolha", async () => {
+    const chamadas = montar([
+      { status: 201, corpo: melhoria({ estado: "resumido", resumo_da_melhoria: RESUMO_DA_MELHORIA }) },
+      { status: 200, corpo: melhoria({ estado: "enviado", resumo_da_melhoria: RESUMO_DA_MELHORIA }) },
+    ]);
+    fireEvent.click(screen.getByRole("button", { name: "Melhoria" }));
+    const seletor = (await screen.findByLabelText("Quem cuida disto?")) as HTMLSelectElement;
+    await waitFor(() => expect(seletor.options.length).toBe(4));
+
+    fireEvent.change(seletor, { target: { value: "P5" } });
+    fireEvent.click(screen.getByRole("button", { name: CRIAR_O_CARD }));
+
+    expect(await screen.findByText(/A Vitta recebeu o seu pedido/)).toBeTruthy();
+    expect(chamadas[1].corpo).toEqual({ responsavel_id: "P5" });
   });
 });
 

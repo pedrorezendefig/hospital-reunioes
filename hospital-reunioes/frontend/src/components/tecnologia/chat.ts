@@ -22,6 +22,20 @@ export function urlDoCriarOCard(demandaId: string): string {
   return `${urlDaConversa(demandaId)}/criar-card`;
 }
 
+/** O "Quem cuida disto?" do resumo (issue #1533, ADR 0083, decisão 5). */
+export const URL_DOS_DESENVOLVEDORES = `${BASE_TECNOLOGIA}/desenvolvedores`;
+
+/** Um Desenvolvedor do "Quem cuida disto?"; `padrao` é quem recebe o card sem escolha. */
+export type Desenvolvedor = { id: string; nome: string; padrao: boolean };
+
+export function desenvolvedoresValidos(corpo: unknown): Desenvolvedor[] {
+  if (!Array.isArray(corpo)) return [];
+  return corpo.filter(
+    (d): d is Desenvolvedor =>
+      typeof d === "object" && d !== null && typeof d.id === "string" && typeof d.nome === "string",
+  );
+}
+
 /** O "Fechar e resumir" da melhoria (issue #1383). */
 export function urlDoResumoDaMelhoria(demandaId: string): string {
   return `${urlDaConversa(demandaId)}/resumo`;
