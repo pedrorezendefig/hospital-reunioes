@@ -7,6 +7,7 @@
  */
 
 import { BASE_TECNOLOGIA, FALHA_DE_CONEXAO } from "./demandas";
+import tiposDeAnexo from "./tipos-de-anexo.json";
 
 /**
  * O aviso fixo sob a caixa de mensagem: quem escreve tem que saber que o texto
@@ -96,10 +97,6 @@ export function extensaoDe(nome: string): string {
   return ponto < 0 ? "" : nome.slice(ponto).toLowerCase();
 }
 
-function avisoDeTamanho(teto: number, saida: string): string {
-  return `O arquivo passou do limite de ${Math.round(teto / (1024 * 1024))} MB. ${saida}`;
-}
-
 /** O desfecho de uma entrada de fora: virou texto, ou virou aviso na conversa. */
 export type LeituraDoAnexo<T> = { corpo: T } | { aviso: string };
 
@@ -181,13 +178,88 @@ export const URL_DA_IMAGEM = `${BASE_TECNOLOGIA}/assistente/descrever-imagem`;
  */
 export const PREFIXO_DE_PRINT = "[print] ";
 
-// Os aceitos e o teto, iguais aos do backend: a recusa acontece ANTES de subir a imagem por um cabo de hospital e voltar
-// 413. Quem decide continua sendo o backend, e a frase dele é a que aparece.
-export const IMAGENS_ACEITAS = [".png", ".jpg", ".jpeg", ".webp"];
-export const LIMITE_DA_IMAGEM = 5 * 1024 * 1024;
+// ─── O que entra pelo botão de anexo (issue #1520) ──────────────────────────
+//
+// UMA tabela decide o tipo e o teto de cada extensão: o espelho
+// `tipos-de-anexo.json`, que o teste do backend amarra à tabela de lá
+// (`assistente_tecnologia.TIPOS_DE_ANEXO`). A recusa acontece ANTES de subir o
+// arquivo por um cabo de hospital e voltar 413; quem decide continua sendo o
+// backend, e a frase dele é a que aparece quando ele recusa.
+
+export type ClasseDoAnexo = "imagem" | "documento";
+
+export const TIPOS_DE_ANEXO = tiposDeAnexo.tipos as Record<string, { classe: ClasseDoAnexo; teto_bytes: number }>;
+
+function extensoesDa(classe: ClasseDoAnexo): string[] {
+  return Object.keys(TIPOS_DE_ANEXO).filter((ext) => TIPOS_DE_ANEXO[ext].classe === classe);
+}
+
+function ou(itens: string[]): string {
+  return itens.length > 1 ? `${itens.slice(0, -1).join(", ")} ou ${itens[itens.length - 1]}` : itens.join("");
+}
+
+/** O `accept` do seletor: todo tipo da tabela, na ordem dela. */
+export const ACEITOS_NO_ANEXO = Object.keys(TIPOS_DE_ANEXO).join(",");
+
+export const IMAGENS_ACEITAS = extensoesDa("imagem");
+export const LIMITE_DA_IMAGEM = TIPOS_DE_ANEXO[".png"].teto_bytes;
 
 export const IMAGEM_FORA_DA_LISTA =
   "Só dá para ler print .png, .jpg, .jpeg ou .webp. Salve a imagem em um desses formatos e anexe de novo.";
+
+/** A mesma frase do backend para o tipo que não entra: diz quais entram. */
+export const TIPO_FORA_DA_LISTA =
+  "Esse tipo de arquivo não entra na conversa. " +
+  `Entram print (${ou(extensoesDa("imagem"))}) e documento (${ou(extensoesDa("documento"))}).`;
+
+/** A classe do arquivo pela extensão, nunca pelo tipo que o navegador diz; `null` fora da tabela. */
+export function classeDoAnexo(nome: string): ClasseDoAnexo | null {
+  return TIPOS_DE_ANEXO[extensaoDe(nome)]?.classe ?? null;
+}
+
+/** "3,75 MB", "15 MB": o teto como o backend o escreve. */
+function emMb(teto: number): string {
+  const mb = teto / (1024 * 1024);
+  return Number.isInteger(mb) ? String(mb) : mb.toFixed(2).replace(".", ",");
+}
+
+/** O tamanho como a fala mostra: "12 KB", "1,4 MB". */
+export function tamanhoLegivel(bytes: number): string {
+  if (bytes < 1024 * 1024) return `${Math.max(1, Math.round(bytes / 1024))} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1).replace(".", ",")} MB`;
+}
+
+/** O que impede este documento de subir, ou `null` se nada impede. */
+export function avisoDoDocumento(arquivo: ArquivoEscolhido): string | null {
+  const extensao = extensaoDe(arquivo.name);
+  const tipo = TIPOS_DE_ANEXO[extensao];
+  if (!tipo || tipo.classe !== "documento") return TIPO_FORA_DA_LISTA;
+  if (arquivo.size > tipo.teto_bytes) {
+    return `O arquivo ${extensao} passou do limite de ${emMb(tipo.teto_bytes)} MB. Divida o documento em partes menores e mande uma de cada vez.`;
+  }
+  return null;
+}
+
+export const URL_DO_DOCUMENTO = `${BASE_TECNOLOGIA}/assistente/ler-documento`;
+
+/** O que a rota do documento devolve: o identificador, o nome, o tamanho e quanto o agente vai ler. Nunca o texto. */
+export type DocumentoLido = { documento_id: string; nome: string; tamanho_bytes: number; caracteres: number };
+
+export function documentoLidoValido(corpo: unknown): corpo is DocumentoLido {
+  if (typeof corpo !== "object" || corpo === null) return false;
+  const c = corpo as Record<string, unknown>;
+  return (
+    typeof c.documento_id === "string" &&
+    typeof c.nome === "string" &&
+    typeof c.tamanho_bytes === "number" &&
+    typeof c.caracteres === "number"
+  );
+}
+
+/** O documento vai à rota que extrai o texto; o que volta é o identificador que a fala leva. */
+export function lerODocumento(arquivo: File, token: string | null): Promise<LeituraDoAnexo<DocumentoLido>> {
+  return mandarOArquivo(URL_DO_DOCUMENTO, "documento", arquivo, token, documentoLidoValido);
+}
 
 /**
  * A frase de quando a descrição voltou em branco.
@@ -202,7 +274,7 @@ export const PRINT_SEM_LEITURA = "Não consegui ler esse print. Mande outro, ou 
 export function avisoDaImagem(arquivo: ArquivoEscolhido): string | null {
   if (!IMAGENS_ACEITAS.includes(extensaoDe(arquivo.name))) return IMAGEM_FORA_DA_LISTA;
   if (arquivo.size > LIMITE_DA_IMAGEM) {
-    return avisoDeTamanho(LIMITE_DA_IMAGEM, "Anexe uma imagem menor, ou escreva o que aparece na tela.");
+    return `O print passou do limite de ${emMb(LIMITE_DA_IMAGEM)} MB. Anexe uma imagem menor, ou escreva o que aparece na tela.`;
   }
   return null;
 }

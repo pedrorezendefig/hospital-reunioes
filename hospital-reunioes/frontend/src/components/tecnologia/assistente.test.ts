@@ -28,10 +28,13 @@ describe("A peneira do print (issue #730)", () => {
     expect(avisoDaImagem({ name: "semponto", size: 1000 })).toBe(IMAGEM_FORA_DA_LISTA);
   });
 
-  it("recusa print acima de 5 MB, dizendo o limite", () => {
+  it("recusa print acima de 3,75 MB, o teto do backend, dizendo o limite", () => {
+    // Desde a issue #1520 o teto vem do espelho da tabela do backend: antes a
+    // tela deixava subir até 5 MB e o servidor recusava acima de 3,75 MB.
+    expect(LIMITE_DA_IMAGEM).toBe(3932160);
     const aviso = avisoDaImagem({ name: "tela.png", size: LIMITE_DA_IMAGEM + 1 });
-    expect(aviso).toContain("5 MB");
-    // E o de 5 MB cravados passa: o par que impede um `>=` disfarçado, e que
+    expect(aviso).toContain("limite de 3,75 MB");
+    // E o de 3,75 MB cravados passa: o par que impede um `>=` disfarçado, e que
     // mantém a tela concordando com o 413 do backend em vez de recusar antes.
     expect(avisoDaImagem({ name: "tela.png", size: LIMITE_DA_IMAGEM })).toBeNull();
   });

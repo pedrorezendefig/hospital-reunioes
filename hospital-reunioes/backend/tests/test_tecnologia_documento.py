@@ -608,7 +608,49 @@ class TestKitDaTecnologia:
 
 
 # ═══════════════════════════════════════════════════════════════════════════
-# 8. A migration: o banco aceita o que o código grava
+# 8. Uma tabela só: a tela espelha a do backend
+# ═══════════════════════════════════════════════════════════════════════════
+
+ESPELHO_DA_TELA = (
+    Path(__file__).resolve().parents[2] / "frontend" / "src" / "components" / "tecnologia" / "tipos-de-anexo.json"
+)
+
+
+class TestUmaTabelaSo:
+    """A tela recusa tipo e tamanho antes do upload pelo espelho
+    `tipos-de-anexo.json`. Este teste prova que ele diz o que a tabela do
+    backend diz; o teste da tela prova que o seletor e a recusa leem dele."""
+
+    def test_o_espelho_da_tela_tem_os_mesmos_tipos_classes_e_tetos_do_backend(self):
+        espelho = json.loads(ESPELHO_DA_TELA.read_text(encoding="utf-8"))
+
+        assert espelho["tipos"] == {
+            extensao: {"classe": tipo.classe, "teto_bytes": tipo.teto_bytes}
+            for extensao, tipo in assistente_tecnologia.TIPOS_DE_ANEXO.items()
+        }
+
+    def test_a_tabela_tem_os_quatro_documentos_e_a_imagem_continua_em_3_75_mb(self):
+        """Ancora contra a tabela que encolhesse junto com o espelho."""
+        tipos = assistente_tecnologia.TIPOS_DE_ANEXO
+
+        assert {e for e, t in tipos.items() if t.classe == "documento"} == {".md", ".txt", ".pdf", ".docx"}
+        assert {e: t.teto_bytes for e, t in tipos.items() if t.classe == "documento"} == {
+            ".md": 5 * 1024 * 1024,
+            ".txt": 5 * 1024 * 1024,
+            ".pdf": 15 * 1024 * 1024,
+            ".docx": 15 * 1024 * 1024,
+        }
+        assert {t.teto_bytes for t in tipos.values() if t.classe == "imagem"} == {3932160}
+        assert assistente_tecnologia.TIPOS_DE_IMAGEM == {
+            ".png": "image/png",
+            ".jpg": "image/jpeg",
+            ".jpeg": "image/jpeg",
+            ".webp": "image/webp",
+        }
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 9. A migration: o banco aceita o que o código grava
 # ═══════════════════════════════════════════════════════════════════════════
 
 MIGRATION = Path(__file__).resolve().parents[2] / "supabase" / "migrations" / "127_tecnologia_documento_no_chat.sql"

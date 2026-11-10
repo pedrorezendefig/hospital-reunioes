@@ -77,7 +77,10 @@ function montar(respostas: Resposta[]) {
   vi.stubGlobal(
     "fetch",
     vi.fn(async (url: string, init?: RequestInit) => {
-      chamadas.push({ url, metodo: init?.method ?? "GET", corpo: init?.body ? JSON.parse(String(init.body)) : null });
+      // O upload do anexo vai em multipart: guarda o FormData como veio.
+      const corpo =
+        init?.body instanceof FormData ? init.body : init?.body ? JSON.parse(String(init.body)) : null;
+      chamadas.push({ url, metodo: init?.method ?? "GET", corpo });
       const proxima = fila.shift() ?? { status: 500, corpo: { detail: "sem resposta no teste" } };
       return {
         ok: proxima.status < 400,
@@ -537,5 +540,116 @@ describe("Caixa alta na conversa e no resumo", () => {
     expect(within(resumo).getByRole("heading", { level: 3, name: "Ficou em aberto" })).toBeTruthy();
     expect(caixaDoDado(within(resumo).getByText("Só a recepção."))).toBeNull();
     expect(caixaDoDado(within(resumo).getByText("Quem confirma o retorno com o paciente."))).toBeNull();
+  });
+});
+
+// ─── O documento no chat (issue #1520) ──────────────────────────────────────
+
+function seletorDeAnexo(): HTMLInputElement {
+  const entrada = document.querySelector('input[type="file"]');
+  if (!(entrada instanceof HTMLInputElement)) throw new Error("o chat não tem o seletor de anexo");
+  return entrada;
+}
+
+/** Um arquivo do tamanho dado sem alocar os bytes: o `size` é o que a recusa lê. */
+function arquivo(nome: string, tamanho = 1000): File {
+  const falso = new File(["x"], nome);
+  Object.defineProperty(falso, "size", { value: tamanho });
+  return falso;
+}
+
+function escolher(anexo: File) {
+  fireEvent.change(seletorDeAnexo(), { target: { files: [anexo] } });
+}
+
+const MB = 1024 * 1024;
+
+describe("O documento no chat (issue #1520)", () => {
+  it("o botão de anexo aceita print e documento, pelos tipos da tabela do backend", () => {
+    montar([]);
+
+    expect(seletorDeAnexo().accept).toBe(".png,.jpg,.jpeg,.webp,.md,.txt,.pdf,.docx");
+    expect(screen.getByRole("button", { name: "Anexar print ou documento" })).toBeTruthy();
+  });
+
+  it("tipo fora da lista é recusado na tela, antes do upload, com a frase que diz o que entra", async () => {
+    const chamadas = montar([]);
+
+    escolher(arquivo("planilha.xlsx"));
+
+    const alerta = await screen.findByRole("alert");
+    expect(alerta.textContent).toBe(
+      "Esse tipo de arquivo não entra na conversa. Entram print (.png, .jpg, .jpeg ou .webp) e documento (.md, .txt, .pdf ou .docx).",
+    );
+    expect(chamadas).toEqual([]);
+  });
+
+  it.each([
+    ["relatorio.pdf", 15 * MB + 1, "15 MB"],
+    ["plano.docx", 15 * MB + 1, "15 MB"],
+    ["notas.md", 5 * MB + 1, "5 MB"],
+    ["notas.txt", 5 * MB + 1, "5 MB"],
+    ["tela.png", 3932161, "3,75 MB"],
+  ])("%s acima do teto é recusado na tela antes do upload, com o número do backend", async (nome, tamanho, teto) => {
+    const chamadas = montar([]);
+
+    escolher(arquivo(nome, tamanho));
+
+    expect((await screen.findByRole("alert")).textContent).toContain(`limite de ${teto}`);
+    expect(chamadas).toEqual([]);
+  });
+
+  it("no teto cravado o documento sobe", async () => {
+    const chamadas = montar([{ status: 422, corpo: { detail: "recusa do servidor" } }]);
+
+    escolher(arquivo("relatorio.pdf", 15 * MB));
+
+    await screen.findByText("recusa do servidor");
+    expect(chamadas[0].url).toBe("/api/admin/tecnologia/assistente/ler-documento");
+  });
+
+  it("o documento sobe, a fala leva o identificador e mostra o nome e o tamanho, sem o texto", async () => {
+    const lido = { documento_id: "doc-1", nome: "melhorias.md", tamanho_bytes: 12 * 1024, caracteres: 900 };
+    const comODocumento = conversa({
+      mensagens: [
+        ABERTURA_GUARDADA,
+        {
+          autor: "diretor",
+          texto: "",
+          fonte: null,
+          opcoes: [],
+          nao_bateu: false,
+          documentos: [{ nome: "melhorias.md", tamanho_bytes: 12 * 1024 }],
+        },
+        { autor: "ia", texto: "Li o documento. É uma melhoria?", fonte: null, opcoes: [], nao_bateu: false },
+      ],
+    });
+    const chamadas = montar([
+      { status: 200, corpo: lido },
+      { status: 201, corpo: comODocumento },
+    ]);
+
+    escolher(arquivo("melhorias.md", 12 * 1024));
+
+    expect(await screen.findByText("Li o documento. É uma melhoria?")).toBeTruthy();
+    expect((chamadas[0].corpo as FormData).get("documento")).toBeInstanceOf(File);
+    expect(chamadas[1]).toMatchObject({
+      url: "/api/admin/tecnologia/chat",
+      metodo: "POST",
+      corpo: { texto: "", prints: [], documentos: ["doc-1"] },
+    });
+    const anexado = screen.getByRole("group", { name: "Documento anexado: melhorias.md" });
+    expect(anexado.textContent).toContain("melhorias.md");
+    expect(anexado.textContent).toContain("12 KB");
+  });
+
+  it("a recusa do servidor ao documento aparece na tela, e a conversa não anda", async () => {
+    const frase = "Esse PDF é uma imagem de papel, sem texto para ler. Mande as páginas como print, pelo mesmo botão.";
+    const chamadas = montar([{ status: 422, corpo: { detail: frase } }]);
+
+    escolher(arquivo("escaneado.pdf", 2 * MB));
+
+    expect((await screen.findByRole("alert")).textContent).toBe(frase);
+    expect(chamadas).toHaveLength(1);
   });
 });

@@ -1,0 +1,12 @@
+{
+  "tipos": {
+    ".png": { "classe": "imagem", "teto_bytes": 3932160 },
+    ".jpg": { "classe": "imagem", "teto_bytes": 3932160 },
+    ".jpeg": { "classe": "imagem", "teto_bytes": 3932160 },
+    ".webp": { "classe": "imagem", "teto_bytes": 3932160 },
+    ".md": { "classe": "documento", "teto_bytes": 5242880 },
+    ".txt": { "classe": "documento", "teto_bytes": 5242880 },
+    ".pdf": { "classe": "documento", "teto_bytes": 15728640 },
+    ".docx": { "classe": "documento", "teto_bytes": 15728640 }
+  }
+}
