@@ -87,3 +87,74 @@ class TestQuemEscreveELe:
                 ("Diretor do Hospital", "O relatório sumiu de novo hoje."),
                 ("Pedro Vitta", "Vi aqui, olho amanhã cedo."),
             ]
+
+    def test_quem_nao_ve_a_demanda_nao_le_nem_escreve_na_conversa(self, monkeypatch):
+        diretor, sb = _cenario(monkeypatch, logado=DIRETOR)
+        diretor.post(CONVERSA, json={"texto": "Só entre nós."})
+        outro, _ = _cenario(monkeypatch, logado=OUTRO_DIRETOR, sb=sb)
+
+        leitura = outro.get(CONVERSA)
+        escrita = outro.post(CONVERSA, json={"texto": "Entrei pelo endereço."})
+
+        assert leitura.status_code == 404
+        assert "Só entre nós." not in leitura.text
+        assert escrita.status_code == 404
+        assert [m["texto"] for m in sb.tabelas["tecnologia_conversa_da_demanda"]] == ["Só entre nós."]
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 2. O aviso no sino
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+class TestAvisoNoSino:
+    def test_mencao_avisa_o_mencionado_no_sino(self, monkeypatch):
+        diretor, sb = _cenario(monkeypatch, logado=DIRETOR)
+
+        diretor.post(CONVERSA, json={"texto": "@Lucas Sampaio, consegue ver isto hoje?"})
+
+        # Só o mencionado: com menção, o Responsável (PEDRO) não é avisado.
+        assert _avisos(sb) == [(LUCAS["id"], DEMANDA)]
+        [aviso] = sb.tabelas["notificacoes"]
+        assert aviso["tipo"] == "TECNOLOGIA"
+        assert aviso["titulo"] == "Diretor do Hospital mencionou você"
+        assert "O relatório some" in aviso["mensagem"]
+
+    def test_mencao_de_quem_nao_ve_a_demanda_nao_avisa_ninguem_alem_do_padrao(self, monkeypatch):
+        """O Outro Diretor não abre a Demanda: o "@" dele não vira menção, e a
+        mensagem segue a regra de sem menção (avisa o Responsável)."""
+        diretor, sb = _cenario(monkeypatch, logado=DIRETOR)
+
+        diretor.post(CONVERSA, json={"texto": "@Outro Diretor, olha isso."})
+
+        assert _avisos(sb) == [(PEDRO["id"], DEMANDA)]
+
+    def test_mensagem_do_autor_sem_mencao_avisa_o_responsavel(self, monkeypatch):
+        diretor, sb = _cenario(monkeypatch, logado=DIRETOR, demanda=_demanda_do_diretor(responsavel_id=LUCAS["id"]))
+
+        diretor.post(CONVERSA, json={"texto": "Aconteceu de novo."})
+
+        assert _avisos(sb) == [(LUCAS["id"], DEMANDA)]
+        [aviso] = sb.tabelas["notificacoes"]
+        assert aviso["titulo"] == "Diretor do Hospital escreveu na Demanda"
+
+    def test_mensagem_de_desenvolvedor_sem_mencao_avisa_o_autor_da_demanda(self, monkeypatch):
+        lucas, sb = _cenario(monkeypatch, logado=LUCAS)
+
+        lucas.post(CONVERSA, json={"texto": "Qual navegador o senhor usa?"})
+
+        assert _avisos(sb) == [(DIRETOR["id"], DEMANDA)]
+
+    def test_ninguem_recebe_aviso_da_propria_mensagem(self, monkeypatch):
+        """O Responsável que é o próprio autor não se avisa, e quem se menciona
+        também não."""
+        pedro, sb = _cenario(
+            monkeypatch,
+            logado=PEDRO,
+            demanda=_demanda_do_diretor(autor_id=PEDRO["id"], responsavel_id=PEDRO["id"]),
+        )
+
+        pedro.post(CONVERSA, json={"texto": "Anotando para mim."})
+        pedro.post(CONVERSA, json={"texto": "@Pedro Vitta lembrar de testar no celular."})
+
+        assert _avisos(sb) == []

@@ -90,6 +90,8 @@ from app.services import (
     tecnologia_anexos,
 )
 from app.services.conhecimento import carregar_kit
+from app.services.mencoes import extrair_mencoes
+from app.services.notificacao_service import criar_notificacao_tecnologia
 from app.services.tecnologia import (
     SEM_PRODUTO,
     TABELA_CONVERSA_DA_DEMANDA,
@@ -98,6 +100,7 @@ from app.services.tecnologia import (
     e_desenvolvedor,
     instante_do_banco,
     pode_ver,
+    quem_avisar,
     responsavel_da_demanda,
     versao_da_entrega,
 )
@@ -948,17 +951,27 @@ async def escrever_na_conversa_da_demanda(
 ):
     """Uma mensagem na Conversa da Demanda. Escreve quem ve a Demanda. Nada
     daqui vai para o GitHub (ADR 0083, decisao 8)."""
-    _demanda_visivel(supabase, demanda_id, ator)
+    demanda = _demanda_visivel(supabase, demanda_id, ator)
     texto = payload.texto.strip()
     if not texto:
         _recusar("Escreva a mensagem antes de enviar.")
+    mencoes = extrair_mencoes(texto, _mencionaveis(supabase, demanda))
     [linha] = (
         supabase.table(TABELA_CONVERSA_DA_DEMANDA)
-        .insert({"demanda_id": demanda_id, "autor_id": ator["id"], "texto": texto})
+        .insert({"demanda_id": demanda_id, "autor_id": ator["id"], "texto": texto, "mencoes": mencoes})
         .execute()
         .data
     )
-    return _mensagem_para_a_tela(linha, nomes={str(ator["id"]): ator.get("nome_completo") or ""}, ator=ator)
+    nome = ator.get("nome_completo") or ""
+    for destinatario in quem_avisar(demanda, autor_id=ator["id"], mencoes=mencoes):
+        criar_notificacao_tecnologia(
+            supabase,
+            destinatario_id=destinatario,
+            titulo=f"{nome} mencionou você" if destinatario in mencoes else f"{nome} escreveu na Demanda",
+            mensagem=str(demanda.get("titulo") or "")[:80],
+            demanda_id=demanda_id,
+        )
+    return _mensagem_para_a_tela(linha, nomes={str(ator["id"]): nome}, ator=ator)
 
 
 @router.post("/chat/{demanda_id}", response_model=ChatResponse)
