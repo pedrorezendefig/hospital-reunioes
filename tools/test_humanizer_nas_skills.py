@@ -26,6 +26,7 @@ TEXTO_PARA_FORA = {
     "to-issues",
     "ship",
     "ask-pedro",
+    "pendencias",
 }
 
 

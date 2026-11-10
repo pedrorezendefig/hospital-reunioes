@@ -14,9 +14,9 @@ Uso:
 from __future__ import annotations
 
 import json
-import subprocess
 import os
 import re
+import subprocess
 import sys
 import tempfile
 import urllib.error
@@ -112,7 +112,11 @@ def sessao_de(projeto: dict) -> str:
 def montar_onda(projeto: dict, login: str) -> dict | None:
     """As Ondas de um Projeto: as aptas em ondas de até 3 (fatia:P antes), e as bloqueadas no fim, para a
     /onda-enxuta puxar quando a bloqueadora fechar. Projeto sem apta não ganha Onda."""
-    na_fila = [i for i in projeto["issues"] if apta(i, bool(projeto.get("designado_tira_da_fila")), login)]
+    # PRD não é trabalho: fecha sozinho quando a última filha fecha (montar-ondas-enxutas). É PRD o pai de
+    # outra issue aberta, ou o título "PRD:" (o que ainda não tem fatia)
+    prds = {i["prd"] for i in projeto["issues"] if i.get("prd")}
+    na_fila = [i for i in projeto["issues"] if apta(i, bool(projeto.get("designado_tira_da_fila")), login)
+               and i["numero"] not in prds and not re.match(r"PRD\b", i.get("titulo") or "")]
     aptas = sorted((i for i in na_fila if i.get("fase") != "bloqueada"), key=ordem)
     if not aptas:
         return None
@@ -149,7 +153,9 @@ def planejar(dado: dict) -> str:
     for velho in PROMPTS.glob("*-onda1.md"):
         velho.unlink()
     saida, ids, nomes, sem_onda = [], [], [], []
-    login = quem_roda()
+    # só pergunta ao gh quem roda quando algum Projeto separa a fila pelo dono do card
+    regra = any(p.get("designado_tira_da_fila") for c in dado["categorias"] for p in c["projetos"])
+    login = quem_roda() if regra else ""
     for c in dado["categorias"]:
         bloco = []
         for p in c["projetos"]:
