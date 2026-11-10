@@ -56,7 +56,7 @@ from __future__ import annotations
 
 import logging
 import os
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 from typing import Literal, NoReturn
 
 from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile, status
@@ -85,6 +85,7 @@ from app.services import (
     github_client,
     planejamento_demanda,
     tecnologia_anexos,
+    tecnologia_envio,
 )
 from app.services.conhecimento import carregar_kit
 from app.services.tecnologia import (
@@ -92,13 +93,11 @@ from app.services.tecnologia import (
     TABELA_DEMANDAS,
     TABELA_PRODUTOS,
     e_desenvolvedor,
-    instante_do_banco,
     login_do_responsavel,
     pode_ver,
     responsavel_da_demanda,
     versao_da_entrega,
 )
-from app.services.tecnologia_sincronizacao import mudanca_da_foto
 from app.services.tecnologia_vinculo import (
     LABEL_ORIGEM_DIRETOR,
     LABELS_DO_BUG,
@@ -111,7 +110,6 @@ from app.services.tecnologia_vinculo import (
     link_da_demanda,
     login_para_publicar,
     normalizar_github_login,
-    titulo_da_issue,
 )
 
 logger = logging.getLogger(__name__)
@@ -242,65 +240,7 @@ def _issue_indisponivel() -> NoReturn:
     raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=MOTIVO_GITHUB_INDISPONIVEL)
 
 
-# Por quanto tempo o carimbo de "estou criando a issue agora" segura a porta.
-#
-# Maior que o timeout do cliente do GitHub (10 s) com folga para a escrita que
-# vem depois, e curto o bastante para um processo morto no meio da criacao nao
-# trancar a Demanda para sempre. O caminho normal nem chega perto disso: a
-# falha DEVOLVE a vez na hora (`_devolver_a_vez`), e este teto e so a rede de
-# baixo, para o que o codigo nao consegue desfazer.
-JANELA_DA_CRIACAO = timedelta(seconds=60)
-
-
-def _criacao_em_andamento(demanda: dict) -> bool:
-    """Se outro pedido esta criando a issue desta Demanda AGORA (issue #677).
-
-    O carimbo lido e o `github_sincronizado_em`, que numa Demanda sem Vinculo e
-    sempre NULO: a unica coisa que o preenche antes de existir issue e o claim
-    logo abaixo. Carimbo velho e claim que morreu com o processo, e a porta
-    reabre.
-    """
-    carimbo = instante_do_banco(demanda.get("github_sincronizado_em"))
-    if carimbo is None:
-        return False
-    return datetime.now(UTC) - carimbo < JANELA_DA_CRIACAO
-
-
-def _tomar_a_vez_de_criar(supabase: Client, *, demanda_id: str, carimbo_lido: str | None) -> bool:
-    """Carimba a Demanda como "indo para o desenvolvimento", ou devolve False.
-
-    E o que fecha a janela do duplo clique DO LADO DO SERVIDOR, e nao so no
-    botao: o `github_issue_numero` da Demanda so existe DEPOIS de a issue
-    nascer, entao dois pedidos concorrentes leem os dois "sem Vinculo" e
-    criariam duas issues publicas, a segunda orfa (o marcador dela aponta para
-    a mesma Demanda, que ja aponta para a primeira).
-
-    O UPDATE e condicionado ao valor que ESTE pedido leu (compare-and-swap): o
-    Postgres serializa os dois, o segundo reavalia a condicao com a linha ja
-    escrita e volta sem nenhuma. Nao ha transacao no PostgREST, e nao e preciso:
-    um UPDATE condicionado e atomico por si.
-    """
-    consulta = supabase.table(TABELA_DEMANDAS).update({"github_sincronizado_em": _agora()}).eq("id", demanda_id)
-    # Coluna nulavel: `.eq(coluna, None)` nao casa NULL no PostgREST, `.is_` casa.
-    consulta = (
-        consulta.eq("github_sincronizado_em", carimbo_lido)
-        if carimbo_lido
-        else consulta.is_("github_sincronizado_em", "null")
-    )
-    return bool(consulta.execute().data)
-
-
-def _devolver_a_vez(supabase: Client, *, demanda_id: str, carimbo_lido: str | None) -> None:
-    """Desfaz o claim quando a criacao nao aconteceu.
-
-    Sem isto, a frase do 502 ("tente de novo em alguns instantes") seria
-    mentira: a Demanda ficaria trancada pela `JANELA_DA_CRIACAO` inteira depois
-    de uma falha que durou um segundo.
-    """
-    supabase.table(TABELA_DEMANDAS).update({"github_sincronizado_em": carimbo_lido}).eq("id", demanda_id).execute()
-
-
-def _criar_issue_e_vincular(
+def _enviar(
     supabase: Client,
     *,
     demanda: dict,
@@ -310,73 +250,32 @@ def _criar_issue_e_vincular(
     labels: list[str],
     responsavel_id: str | None,
 ) -> dict:
-    """O servico do "Criar o card" do chat (issues #1381 e #1383), o bug e a
-    melhoria.
+    """A porta unica do envio (`tecnologia_envio.enviar`, issue #1535) em HTTP.
 
-    Recebe a Demanda ja lida e as guardas da porta ja passadas, e faz o que e
-    igual nos dois: a vez de criar, o titulo pela peneira, a issue no GitHub, o
-    Vinculo e a Etapa derivada da issue nova. O que muda de um para o outro
-    entra por parametro: o `corpo(titulo)`, os `assignees` e as `labels`.
-    Devolve a linha da Demanda ja vinculada.
+    Duplo clique e 422; Demanda que sumiu e 404. A falha ja ficou gravada na
+    Demanda como "Envio falhou" quando chega aqui, e sai como 503 (falta
+    configuracao) ou 502 (o GitHub nao criou), com o resumo intacto. Devolve a
+    linha da Demanda ja vinculada.
     """
-    demanda_id = str(demanda["id"])
-    if _criacao_em_andamento(demanda):
-        _recusar(MOTIVO_CRIACAO_EM_ANDAMENTO)
-
-    carimbo_lido = demanda.get("github_sincronizado_em")
-    if not _tomar_a_vez_de_criar(supabase, demanda_id=demanda_id, carimbo_lido=carimbo_lido):
-        # Outro pedido carimbou entre a leitura e agora. Ele esta criando a
-        # issue; este para aqui em vez de criar a segunda.
-        _recusar(MOTIVO_CRIACAO_EM_ANDAMENTO)
-
-    # O titulo tambem vai para o repositorio publico, e nao so o corpo: passa
-    # pela mesma peneira (o corpo ja passava, porque o titulo e o "O que muda"
-    # da Demanda sem descricao). Inclusive a de dado pessoal (issue #772).
-    titulo = titulo_da_issue(demanda.get("titulo"))
-
     try:
-        dados = github_client.criar_issue(
-            titulo=titulo,
-            corpo=corpo(titulo),
-            labels=labels,
+        envio = tecnologia_envio.enviar(
+            supabase,
+            demanda=demanda,
+            ator=ator,
+            corpo=corpo,
             assignees=assignees,
+            labels=labels,
+            responsavel_id=responsavel_id,
         )
-        numero = dados.get("number")
-        if not isinstance(numero, int):
-            # A issue pode ter nascido; o Vinculo, nao. Sem o numero nao ha par,
-            # e gravar `None` no lugar dele e o meio Vinculo proibido.
-            logger.error("[tecnologia] a criacao da issue da Demanda %s voltou sem numero", demanda_id)
-            raise github_client.GithubIndisponivelError("A criacao da issue voltou sem numero")
-    except github_client.GithubNaoConfiguradoError:
-        # A configuracao pode ter sumido entre a guarda la em cima e a chamada.
-        _devolver_a_vez(supabase, demanda_id=demanda_id, carimbo_lido=carimbo_lido)
-        _exigir_integracao()
-        raise
-    except github_client.GithubIndisponivelError:
-        _devolver_a_vez(supabase, demanda_id=demanda_id, carimbo_lido=carimbo_lido)
-        logger.warning("[tecnologia] GitHub indisponivel ao criar o card da Demanda %s", demanda_id)
+    except tecnologia_envio.EnvioEmAndamentoError:
+        _recusar(MOTIVO_CRIACAO_EM_ANDAMENTO)
+    except tecnologia_envio.DemandaSumiuError:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Demanda nao encontrada") from None
+    if envio.integracao_desligada:
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=MOTIVO_INTEGRACAO_DESLIGADA)
+    if not envio.criado:
         _issue_indisponivel()
-
-    # A issue acabou de nascer: ela nao tem sub-issue nenhuma, e a foto sai do
-    # proprio JSON da criacao, sem uma segunda leitura.
-    foto = github_client.montar_foto(dados, [])
-    # O SHAPE do cache vem de um lugar so (`mudanca_da_foto`), o mesmo do
-    # webhook e da reconciliacao (issue #678): so o par do Vinculo, que e desta
-    # porta, entra por fora. A Etapa sai derivada dali, e
-    # nao cravada aqui: a issue nova vem com a label da triagem, e a tabela de
-    # Etapas le "Em análise" dela.
-    mudanca = {
-        **mudanca_da_foto(foto),
-        "github_issue_numero": numero,
-        "vinculado_por": ator["id"],
-        "responsavel_id": responsavel_id,
-    }
-
-    result = supabase.table(TABELA_DEMANDAS).update(mudanca).eq("id", demanda_id).execute()
-    if not result.data:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Demanda nao encontrada")
-
-    return result.data[0]
+    return envio.demanda
 
 
 # O mesmo teto dos outros chats do app. Ele e por ENDERECO, e nao por pessoa,
@@ -1081,7 +980,7 @@ async def criar_o_card(
 ):
     """O "Criar o card" do resumo (ADR 0077, decisoes 6 e 7).
 
-    Pelo servico `_criar_issue_e_vincular`: a vez de criar, a peneira no
+    Pela porta unica do envio (`_enviar`, issue #1535): a vez de criar, a peneira no
     titulo, o Vinculo e a Etapa. O que e do bug entra por parametro: o corpo
     com os rotulos do roteiro e os criterios de aceite e as labels que fazem a
     onda pegar sozinha (`ready-for-agent`, sem `needs-triage`). A melhoria leva
@@ -1119,7 +1018,7 @@ async def criar_o_card(
                 documentos=documentos,
             )
 
-        _criar_issue_e_vincular(
+        _enviar(
             supabase,
             demanda=demanda,
             ator=ator,
@@ -1146,7 +1045,7 @@ async def criar_o_card(
             documentos=documentos,
         )
 
-    _criar_issue_e_vincular(
+    _enviar(
         supabase,
         demanda=demanda,
         ator=ator,

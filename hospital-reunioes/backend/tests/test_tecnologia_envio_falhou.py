@@ -1,0 +1,96 @@
+"""Envio falhou fica registrado na Demanda, com "Reenviar" (issue #1535, PRD #1529, ADR 0083, decisão 7).
+
+O "Criar o card" que não chega ao GitHub grava na Demanda o estado "Envio
+falhou" e o motivo. A lista mostra o selo para o autor e para o Desenvolvedor;
+os dois têm "Reenviar", que passa pela mesma porta do "Criar o card". O motivo
+técnico só sai para o Desenvolvedor, que ganha o filtro "Envio falhou". O cron
+de reconciliação nunca reenvia.
+
+Tudo pela ROTA, com o modelo e o GitHub dublados no molde de `test_tecnologia_chat`.
+"""
+
+from __future__ import annotations
+
+import os
+import sys
+
+import httpx
+import pytest
+
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+
+from test_tecnologia_chat import (  # noqa: E402
+    CHAT,
+    _ate_o_resumo,
+    _cenario,
+    _conversas,
+    _demandas,
+    _integracao_configurada,  # noqa: F401
+    _llm_em_mock,  # noqa: F401
+    _reset_rate_limiter,  # noqa: F401
+)
+from test_tecnologia_vinculo import DIRETOR, PEDRO, _montar  # noqa: E402
+
+from app.services import github_client  # noqa: E402
+from app.services.tecnologia_vinculo import MOTIVO_GITHUB_INDISPONIVEL  # noqa: E402
+
+CRIAR_O_CARD_DE_VERDADE = github_client.criar_issue
+
+
+def _falha_no_github(gh) -> None:
+    gh.erro_ao_criar = github_client.GithubIndisponivelError("GitHub respondeu 502")
+
+
+def _demanda_com_envio_falhou(monkeypatch):
+    """O diretor chega ao resumo, clica em Criar o card e o GitHub falha."""
+    client, sb, gh = _cenario(monkeypatch, participantes=[PEDRO, DIRETOR])
+    demanda_id = _ate_o_resumo(client, monkeypatch)
+    _falha_no_github(gh)
+    assert client.post(f"{CHAT}/{demanda_id}/criar-card").status_code == 502
+    gh.erro_ao_criar = None
+    return client, sb, gh, demanda_id
+
+
+def _como(logado: dict, sb, gh, monkeypatch):
+    client, _, _ = _montar(logado=logado, supabase=sb, github=gh, monkeypatch=monkeypatch)
+    return client
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 1. A falha fica registrada
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+class TestAFalhaFicaRegistrada:
+    def test_falha_do_github_grava_envio_falhou_e_o_motivo_na_demanda(self, monkeypatch):
+        client, sb, gh = _cenario(monkeypatch)
+        demanda_id = _ate_o_resumo(client, monkeypatch)
+        _falha_no_github(gh)
+
+        resposta = client.post(f"{CHAT}/{demanda_id}/criar-card")
+
+        assert resposta.status_code == 502
+        assert resposta.json()["detail"] == MOTIVO_GITHUB_INDISPONIVEL
+        demanda = _demandas(sb)[0]
+        assert demanda["envio_estado"] == "falhou"
+        assert demanda["envio_motivo"] == "GitHub respondeu 502"
+        assert demanda.get("github_issue_numero") is None
+        assert _conversas(sb)[0]["estado"] == "resumido"
+
+    def test_timeout_de_rede_dentro_da_chamada_tambem_grava_envio_falhou(self, monkeypatch):
+        """A falha nasce DENTRO do cliente do GitHub, no `httpx`, e não num
+        dublê do cliente: é o caminho do timeout de verdade."""
+        client, sb, _ = _cenario(monkeypatch)
+        demanda_id = _ate_o_resumo(client, monkeypatch)
+        monkeypatch.setattr(github_client, "criar_issue", CRIAR_O_CARD_DE_VERDADE)
+
+        def _timeout(*_a, **_kw):
+            raise httpx.ReadTimeout("o GitHub não respondeu em 10 s")
+
+        monkeypatch.setattr(github_client.httpx, "request", _timeout)
+
+        assert client.post(f"{CHAT}/{demanda_id}/criar-card").status_code == 502
+
+        demanda = _demandas(sb)[0]
+        assert demanda["envio_estado"] == "falhou"
+        assert "o GitHub não respondeu em 10 s" in demanda["envio_motivo"]

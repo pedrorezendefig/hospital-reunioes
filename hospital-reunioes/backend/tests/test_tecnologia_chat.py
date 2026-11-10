@@ -556,14 +556,15 @@ class TestOCardNasceUmaVezSo:
         assert len(gh.criadas) == 1, "duas issues publicas nasceram do mesmo pedido"
 
     def test_a_falha_do_github_devolve_a_vez_e_o_resumo_fica(self, monkeypatch):
-        """A frase do 502 manda tentar de novo: sem devolver o carimbo, tentar
-        de novo levaria a recusa de "ja esta sendo criado" pela janela inteira."""
+        """A frase do 502 manda tentar de novo: a falha solta a trava (o estado
+        vira "Envio falhou"), e o clique seguinte nao leva a recusa de "ja esta
+        sendo criado" pela janela inteira."""
         client, sb, gh = _cenario(monkeypatch)
         demanda_id = _ate_o_resumo(client, monkeypatch)
         gh.erro_ao_criar = github_client.GithubIndisponivelError("timeout")
 
         assert client.post(f"{CHAT}/{demanda_id}/criar-card").status_code == 502
-        assert _demandas(sb)[0].get("github_sincronizado_em") is None
+        assert _demandas(sb)[0]["envio_estado"] == "falhou"
         assert _demandas(sb)[0].get("github_issue_numero") is None
         assert _conversas(sb)[0]["estado"] == "resumido"
 
@@ -574,7 +575,10 @@ class TestOCardNasceUmaVezSo:
     def test_carimbo_de_agora_segura_a_porta_e_o_velho_nao(self, monkeypatch):
         client, sb, gh = _cenario(monkeypatch)
         demanda_id = _ate_o_resumo(client, monkeypatch)
-        _demandas(sb)[0]["github_sincronizado_em"] = datetime.now(UTC).isoformat()
+        # A trava e o estado do envio (migration 128, issue #1535), e nao mais o
+        # carimbo da sincronizacao.
+        _demandas(sb)[0]["envio_estado"] = "enviando"
+        _demandas(sb)[0]["envio_em"] = datetime.now(UTC).isoformat()
 
         resposta = client.post(f"{CHAT}/{demanda_id}/criar-card")
 
@@ -582,7 +586,7 @@ class TestOCardNasceUmaVezSo:
         assert resposta.json()["detail"] == MOTIVO_CRIACAO_EM_ANDAMENTO
         assert gh.criadas == []
 
-        _demandas(sb)[0]["github_sincronizado_em"] = "2026-09-10T00:00:00Z"
+        _demandas(sb)[0]["envio_em"] = "2026-09-10T00:00:00Z"
         assert client.post(f"{CHAT}/{demanda_id}/criar-card").status_code == 200
 
 
