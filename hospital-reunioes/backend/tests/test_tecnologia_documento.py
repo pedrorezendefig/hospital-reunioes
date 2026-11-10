@@ -317,6 +317,26 @@ class TestRecusas:
         assert resposta.status_code == 422
         assert resposta.json()["detail"] == tecnologia_anexos.MOTIVO_DOCUMENTO_ILEGIVEL
 
+    def test_documento_que_o_extrator_interrompeu_pede_para_dividir(self, monkeypatch):
+        # O extrator interrompe o filho por memoria, prazo, teto da saida ou
+        # sinal: o arquivo abre normalmente, e mandar conferi-lo faz o diretor
+        # reenviar o mesmo PDF. A saida e dividir.
+        from app.services import transcricao_extractor
+
+        client, _, _ = _cenario(monkeypatch)
+
+        async def _interrompido(nome, conteudo):
+            raise ValueError(transcricao_extractor.MENSAGEM_GRANDE_DEMAIS)
+
+        monkeypatch.setattr(transcricao_extractor, "extrair_texto_async", _interrompido)
+
+        resposta = _ler(client, "relatorio.pdf", b"%PDF-1.4 qualquer coisa")
+
+        assert resposta.status_code == 422
+        assert resposta.json()["detail"] == tecnologia_anexos.MOTIVO_DOCUMENTO_COMPLEXO
+        assert "divida" in resposta.json()["detail"].lower()
+        assert dict(tecnologia_anexos._prints) == {}
+
     def test_a_recusa_nao_guarda_nada_na_memoria(self, monkeypatch):
         client, _, _ = _cenario(monkeypatch)
 

@@ -398,6 +398,13 @@ MOTIVO_DOCUMENTO_ILEGIVEL = (
     "Não deu para ler o texto desse arquivo. Confira se ele abre no computador e mande de novo, "
     "ou cole o texto na conversa."
 )
+# O extrator interrompe a leitura por memoria, prazo, teto da saida ou sinal
+# (`transcricao_extractor.MENSAGEM_GRANDE_DEMAIS`): o arquivo abre normalmente,
+# e a saida e dividir, nao conferir o arquivo.
+MOTIVO_DOCUMENTO_COMPLEXO = (
+    "Esse documento é grande ou complexo demais para o sistema ler de uma vez. O arquivo não tem defeito: "
+    "divida o documento em partes menores e mande uma de cada vez, ou cole o texto na conversa."
+)
 MOTIVO_DOCUMENTO_SUMIU = (
     "O documento não está mais guardado: passou o prazo ou o sistema reiniciou. Anexe o arquivo de novo."
 )
@@ -422,7 +429,8 @@ async def texto_do_documento(*, nome: str, conteudo: bytes) -> str:
 
     Toda recusa sai daqui como `AnexoRecusadoError`, que a rota so traduz: o
     tamanho pelo teto do tipo (413), o arquivo vazio, o PDF escaneado (que vai
-    como print), o texto acima do teto de caracteres e a leitura que falhou.
+    como print), o texto acima do teto de caracteres, a leitura que o extrator
+    interrompeu (o arquivo abre, a saida e dividir) e a leitura que falhou.
     A fila cheia do extrator e 503: o arquivo esta bom, e quem tenta de novo
     daqui a pouco consegue.
     """
@@ -438,6 +446,8 @@ async def texto_do_documento(*, nome: str, conteudo: bytes) -> str:
             raise AnexoRecusadoError(MOTIVO_PDF_SEM_TEXTO) from erro
         if str(erro) == transcricao_extractor.MENSAGEM_FILA_CHEIA:
             raise AnexoRecusadoError(transcricao_extractor.MENSAGEM_FILA_CHEIA, status_code=503) from erro
+        if str(erro) == transcricao_extractor.MENSAGEM_GRANDE_DEMAIS:
+            raise AnexoRecusadoError(MOTIVO_DOCUMENTO_COMPLEXO) from erro
         raise AnexoRecusadoError(MOTIVO_DOCUMENTO_ILEGIVEL) from erro
     if len(texto) > LIMITE_DE_CARACTERES_DO_DOCUMENTO:
         raise AnexoRecusadoError(MOTIVO_TEXTO_GRANDE)
