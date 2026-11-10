@@ -28,6 +28,14 @@ Quando uma skill mencionar um papel (ex.: "aplique a label de AFK-ready"), use a
 
 Aplicada automaticamente pela Action de higiene (`.github/workflows/higiene-issues.yml`) em `issue_comment.created`, por **dois gatilhos**: o login do autor estar em `REVIEWER_LOGINS`, ou o corpo do comentário **começar** pelo marcador `<!-- revisor-app autor="Pessoa do hospital" demanda="id" -->` em linha própria (ADR 0054, decisão 4 e emenda de 11/09: nome civil nenhum sai para o GitHub), que vale independente do login. Citar o marcador no meio de um texto não acende a label (issue #680): só o app o escreve como primeira linha, e o texto do autor chega com `<!--` neutralizado. O caminho do marcador não fica sem filtro: o `if:` do job só deixa passar comentário com `author_association` OWNER, MEMBER ou COLLABORATOR, e o comentário espelhado pelo app sai pelo token de um colaborador. A Action **só sinaliza**, nunca reabre nem edita. Comentários de automação não disparam o loop: a Action ignora comentários em PRs e, nos comentários **sem** o marcador de revisor, os que trazem o disclaimer do `/triage` ou o marcador `<!-- automacao -->`. O protocolo de curadoria vive na skill `/triage`; o acesso do revisor e a config `REVIEWER_LOGINS` estão em `docs/agents/issue-tracker.md`.
 
+## Label de origem (ADR 0083)
+
+| Label | Significado |
+| --- | --- |
+| `origem:diretor` | O diretor criou o card pelo "Criar o card" da aba Tecnologia, bug ou melhoria. O app aplica sozinho, junto com uma frase de resumo na primeira linha do corpo e o link para a Demanda; o Hospital OS lê os três para o selo, o Aviso e o Resumo da manhã |
+
+Descreve de onde a issue veio, não o estado dela: convive com as labels de triagem e de tipo, e ninguém a tira na curadoria.
+
 ## Labels de tamanho de fatia (Plano vivo)
 
 Família **descritiva de tamanho** (não de estado), aplicada pelo `/to-issues` no momento da quebra do PRD — uma por fatia, nunca no PRD pai:
