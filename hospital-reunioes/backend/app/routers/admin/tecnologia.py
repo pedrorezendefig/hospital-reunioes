@@ -11,9 +11,13 @@ sidebar apenas esconde o item, e esconder nao e proteger (ADR 0050, decisao 2).
 
 O chat da aba (issues #1381, #1383 e #1384):
 
+- GET   /admin/tecnologia/eu                    se quem esta logado e
+                                                Desenvolvedor (ADR 0083).
 - GET   /admin/tecnologia/chat                  a lista lateral: as Demandas
                                                 de quem esta logado, da mais
-                                                recente para a mais antiga.
+                                                recente para a mais antiga;
+                                                `?filtro=todas` traz as de
+                                                todos ao Desenvolvedor.
 - POST  /admin/tecnologia/chat                  o primeiro turno: a Demanda
                                                 nasce aqui.
 - GET   /admin/tecnologia/chat/{id}             a conversa guardada.
