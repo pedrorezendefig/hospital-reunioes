@@ -2,6 +2,54 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-11-10T19:33:10-03:00",
+      "sha": "89b77f8ecfd70bcd25a47201ce796e704467dbc5",
+      "app_version": "0.239.0",
+      "subject": "Onda onda-tec-onda1: O Desenvolvedor vê as Demandas de todos, com a entrevista inteira; Issue do diretor nasce com label origem:diretor, frase de resumo e link",
+      "raw_subject": "chore(deploy): registro da onda onda-tec-onda1 (#1540 #1539)",
+      "scope": [
+        "backend",
+        "frontend"
+      ],
+      "prds": [
+        1529
+      ],
+      "result": "healthy",
+      "duration_seconds": 414,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        },
+        {
+          "service": "frontend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "onda-enxuta onda-tec-onda1: PR #1540 (issue #1531), PR #1539 (issue #1532), mergeados PR a PR. Merge pela API do GitHub, um build. Registro pela Action pos-merge depois do health.",
+      "etapas": {
+        "merge_s": 6,
+        "build_s": {
+          "backend": 26,
+          "frontend": 205
+        },
+        "health_s": 0
+      },
+      "responsavel": "pedrorezendefig"
+    },
+    {
       "at": "2026-11-10T00:51:10-03:00",
       "sha": "e76a5c270fc832ae9c912db92b7a7f18e2ec0ac5",
       "app_version": "0.238.0",
