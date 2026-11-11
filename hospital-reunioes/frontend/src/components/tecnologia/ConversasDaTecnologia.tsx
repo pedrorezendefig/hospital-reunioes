@@ -1129,9 +1129,15 @@ export function ConversasDaTecnologia({
               onDesignado={aoDesignar}
             />
           )}
+          {/* Ao lado da lista, a Conversa da Demanda desce para baixo do documento;
+              ampliado, ela ganha a coluna à direita (issue #1593). */}
           <div
             className={
-              aberta ? "space-y-3 xl:space-y-0 xl:grid xl:grid-cols-[minmax(0,1fr)_24rem] xl:gap-6 xl:items-start" : ""
+              !aberta
+                ? ""
+                : recolhida
+                  ? "space-y-3 xl:space-y-0 xl:grid xl:grid-cols-[minmax(0,1fr)_24rem] xl:gap-6 xl:items-start"
+                  : "space-y-3"
             }
           >
             <div className="min-w-0">
@@ -1142,7 +1148,7 @@ export function ConversasDaTecnologia({
               )}
             </div>
             {aberta && (
-              <div className="xl:sticky xl:top-4 xl:max-h-[calc(100vh-2rem)] xl:overflow-y-auto">
+              <div className={recolhida ? "xl:sticky xl:top-4 xl:max-h-[calc(100vh-2rem)] xl:overflow-y-auto" : ""}>
                 <ConversaDaDemanda
                   key={`conversa-${chave}`}
                   demandaId={aberta.id}

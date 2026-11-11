@@ -1135,11 +1135,25 @@ describe("O card da conversa (issue #1578)", () => {
     expect(document.activeElement).not.toBe(caixa);
   });
 
-  it("em tela larga a Conversa da Demanda fica numa coluna à direita, fixa na rolagem", async () => {
+  it("na vista ao lado a Conversa da Demanda fica embaixo do documento, sem terceira coluna (issue #1593)", async () => {
     comCard();
     const item = await card();
 
     fireEvent.click(within(item).getByRole("button", { name: /Ata de reunião longa/ }));
+
+    const conversaDaDemanda = await screen.findByRole("region", { name: "Conversa da Demanda" });
+    const coluna = conversaDaDemanda.parentElement as HTMLElement;
+    expect(coluna.className).not.toMatch(/xl:sticky/);
+    expect((coluna.parentElement as HTMLElement).className).not.toMatch(/xl:grid-cols-/);
+    const documento = screen.getByRole("heading", { name: "Ata de reunião longa para com erro" });
+    expect(documento.compareDocumentPosition(conversaDaDemanda) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it("ampliado, a Conversa da Demanda fica numa coluna à direita, fixa na rolagem", async () => {
+    comCard();
+    const item = await card();
+
+    fireEvent.click(within(item).getByRole("button", { name: AMPLIAR }));
 
     const conversaDaDemanda = await screen.findByRole("region", { name: "Conversa da Demanda" });
     const coluna = conversaDaDemanda.parentElement as HTMLElement;
