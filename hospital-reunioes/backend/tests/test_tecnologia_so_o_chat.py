@@ -26,6 +26,8 @@ ROTAS_DO_CHAT = {
     "/api/admin/tecnologia/chat/{demanda_id}/nao-bateu",
     "/api/admin/tecnologia/chat/{demanda_id}/resumo",
     "/api/admin/tecnologia/chat/{demanda_id}/criar-card",
+    # O "Reenviar" do Envio falhou (issue #1535), pela mesma porta do card.
+    "/api/admin/tecnologia/chat/{demanda_id}/reenviar",
     "/api/admin/tecnologia/assistente/descrever-imagem",
     # O documento do chat (issue #1520), irmã da leitura do print.
     "/api/admin/tecnologia/assistente/ler-documento",
