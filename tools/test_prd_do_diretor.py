@@ -214,3 +214,14 @@ def test_ask_pedro_descreve_o_caminho_do_prd_do_diretor_ate_o_to_issues():
     posicoes = [trecho.find(passo) for passo in ordem]
     assert -1 not in posicoes, dict(zip(ordem, posicoes))
     assert posicoes == sorted(posicoes)
+
+
+def test_to_prd_limita_o_bloco_a_uma_frase_e_ate_cinco_topicos():
+    """Formato fixo do bloco (ADR 0084, decisão 7, issue #1553): o mesmo do
+    PRD do diretor, que o Documento do card lê em Em uma frase e O que muda."""
+    texto = (RAIZ / ".claude" / "skills" / "to-prd" / "SKILL.md").read_text(encoding="utf-8")
+    regra = texto.split("**Todo PRD abre com o bloco", 1)[1].split("**Humanizer", 1)[0]
+    assert "uma frase só" in regra
+    assert "no máximo cinco tópicos curtos" in regra
+    modelo = texto.split("<prd-template>", 1)[1].split("---", 1)[0]
+    assert "No máximo cinco tópicos curtos" in modelo
