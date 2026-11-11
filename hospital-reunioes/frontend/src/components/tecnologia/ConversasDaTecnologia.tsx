@@ -79,10 +79,12 @@ import {
   EtapaDemanda,
   ETAPA_ROTULO,
   FALHA_DE_CONEXAO,
+  linkDaDemonstracao,
   motivoDaRecusa,
   Origem,
   ORIGEM_CLASSE,
   ORIGEM_ROTULO,
+  TEM_DEMONSTRACAO,
   temSelo,
   textoDoSelo,
 } from "./demandas";
@@ -208,6 +210,12 @@ function OrigemNaLista({ demanda }: { demanda: Demanda }) {
       {ORIGEM_ROTULO[demanda.origem]}
     </span>
   );
+}
+
+/** O pedido que tem vídeo de demonstração (issue #1559). Sem link, sem selo. */
+function SeloDaDemonstracao({ demanda }: { demanda: Demanda }) {
+  if (!linkDaDemonstracao(demanda)) return null;
+  return <span className="px-2 py-0.5 rounded text-xs font-medium bg-violet-50 text-violet-700">{TEM_DEMONSTRACAO}</span>;
 }
 
 /** O selo do card que não chegou ao GitHub (issue #1535). */
@@ -760,6 +768,7 @@ export function ConversasDaTecnologia({
                       <EtapaNaLista demanda={demanda} />
                       <ClassificacaoNaLista demanda={demanda} />
                       <OrigemNaLista demanda={demanda} />
+                      <SeloDaDemonstracao demanda={demanda} />
                       <SeloDoEnvioFalhou demanda={demanda} />
                     </span>
                   </button>

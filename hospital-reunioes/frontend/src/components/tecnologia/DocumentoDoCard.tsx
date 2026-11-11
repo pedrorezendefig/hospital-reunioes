@@ -4,7 +4,8 @@
  *
  * Seções fixas: Em uma frase, O que muda (até cinco tópicos, o resto atrás do
  * "Ver tudo"), Partes (com a Etapa e a data de fechamento) e Datas (criado,
- * entregue, em produção). O texto vem do bloco "Para o diretor" da issue e do
+ * entregue, em produção). A Demonstração, num cartão próprio, só quando a
+ * issue traz o link do vídeo (issue #1559). O texto vem do bloco "Para o diretor" da issue e do
  * de cada parte, lido do GitHub e guardado no cache da Demanda. Ninguém o
  * digita no app, e o app só o separa em seções, sem reescrever.
  *
@@ -31,6 +32,7 @@ import {
   ETAPA_CLASSE,
   ETAPA_ROTULO,
   EtapaDemanda,
+  linkDaDemonstracao,
   ParteDaEntrega,
   PedacoForte,
   temSelo,
@@ -41,6 +43,8 @@ export const TITULO_EM_UMA_FRASE = "Em uma frase";
 export const TITULO_O_QUE_MUDA = "O que muda";
 export const TITULO_PARTES = "Partes";
 export const TITULO_DATAS = "Datas";
+export const TITULO_DEMONSTRACAO = "Demonstração";
+export const ASSISTIR_A_DEMONSTRACAO = "Assistir à demonstração";
 export const VER_TUDO = "Ver tudo";
 
 /** Quantos tópicos de O que muda aparecem antes do "Ver tudo" (ADR 0084). */
@@ -172,6 +176,28 @@ function Topicos({ topicos }: { topicos: PedacoForte[][] }) {
 }
 
 /**
+ * O vídeo de demonstração da entrega, num cartão próprio (issue #1559). Só com
+ * link `https`: o link vem do corpo da issue, de fora do app.
+ */
+function Demonstracao({ demanda }: { demanda: Demanda }) {
+  const url = linkDaDemonstracao(demanda);
+  if (!url) return null;
+  const dia = diaDoHospital(demanda.demonstracao_em);
+  return (
+    <section
+      aria-label={TITULO_DEMONSTRACAO}
+      className="px-3 py-2 rounded-lg bg-white border border-violet-200 space-y-1"
+    >
+      <Titulo>{TITULO_DEMONSTRACAO}</Titulo>
+      <a href={url} target="_blank" rel="noopener noreferrer" className="text-sm font-semibold text-primary underline">
+        {ASSISTIR_A_DEMONSTRACAO}
+      </a>
+      {dia && <p className="text-xs text-text-secondary">Adicionada em {dia}</p>}
+    </section>
+  );
+}
+
+/**
  * Em uma frase e O que muda, lidos do bloco "Para o diretor". É a parte do
  * documento que o planejamento monta ao vivo ao lado do chat (issue #1553):
  * o mesmo componente nos dois lugares, para o rascunho e o card não divergirem.
@@ -223,6 +249,8 @@ export function DocumentoDoCard({ demanda }: { demanda: Demanda }) {
       <LinkDaIssue demanda={demanda} />
 
       <FraseEOQueMuda texto={demanda.o_que_muda} chave={demanda.id} />
+
+      <Demonstracao demanda={demanda} />
 
       {partes.length > 0 && (
         <>

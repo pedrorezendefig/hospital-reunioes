@@ -136,6 +136,19 @@ describe("A lista", () => {
     ]);
   });
 
+  it("mostra o selo Tem demonstração só no pedido com o link do vídeo (issue #1559)", async () => {
+    const comVideo = demanda("d-6", "Selo na lista", { demonstracao_url: "https://youtu.be/demo" });
+    const semVideo = demanda("d-7", "Sem vídeo", { demonstracao_url: null });
+    montar((url) => (url === LISTA ? { status: 200, corpo: [comVideo, semVideo] } : { status: 404, corpo: {} }));
+
+    await within(lista()).findByText("Selo na lista");
+    const itens = within(lista()).getAllByRole("listitem");
+    expect(itens.map((item) => item.textContent)).toEqual([
+      "Selo na listaRegistradaTem demonstração",
+      "Sem vídeoRegistrada",
+    ]);
+  });
+
   it("sem conversa nenhuma, diz que ainda não há", async () => {
     montar(() => ({ status: 200, corpo: [] }));
 
