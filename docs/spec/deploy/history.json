@@ -2,6 +2,49 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-11-11T16:21:19-03:00",
+      "sha": "a78e75788471e29032424c48e396a1df32730712",
+      "app_version": "0.256.0",
+      "subject": "PR #1581, issue #1580: Hora de abertura, entrega e produção no card e no Documento do card",
+      "raw_subject": "chore(deploy): registro do PR avulso (#1581)",
+      "scope": [
+        "frontend"
+      ],
+      "prds": [],
+      "result": "healthy",
+      "duration_seconds": 257,
+      "services_touched": [
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        },
+        {
+          "service": "frontend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "PR avulso: PR #1581, issue #1580. Merge pela API do GitHub, um build. Registro pela Action pos-merge depois do health.",
+      "etapas": {
+        "merge_s": 3,
+        "build_s": {
+          "frontend": 229
+        },
+        "health_s": 0
+      },
+      "responsavel": "pedrorezendefig"
+    },
+    {
       "at": "2026-11-11T15:46:57-03:00",
       "sha": "f58b4d3756bb5cc9c5667f8fb7621d14a8c2be52",
       "app_version": "0.255.0",
