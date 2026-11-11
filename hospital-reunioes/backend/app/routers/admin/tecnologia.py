@@ -93,6 +93,7 @@ from app.models.tecnologia_schemas import (
     CriarOCardPayload,
     DemandaResponse,
     DesenvolvedorResponse,
+    EntregasResponse,
     MensagemDaConversaPayload,
     MensagemDaConversaResponse,
     QuemSouNaAbaResponse,
@@ -107,6 +108,7 @@ from app.services import (
     tecnologia_anexos,
     tecnologia_apagar,
     tecnologia_email,
+    tecnologia_entregas,
     tecnologia_envio,
 )
 from app.services.conhecimento import carregar_kit
@@ -700,6 +702,29 @@ async def listar_as_conversas(
     if origem:
         visiveis = [d for d in visiveis if origem_da_demanda(d) == origem]
     return _para_a_lista(supabase, visiveis, ator=ator)
+
+
+@router.get("/entregas", response_model=EntregasResponse)
+async def listar_as_entregas(
+    agrupar: Literal["semana", "mes"] = "semana",
+    ator: dict = Depends(require_super_admin),
+    supabase: Client = Depends(get_supabase_client),
+):
+    """A aba Entregas (issue #1556, ADR 0084, decisao 8): os cards entregues,
+    contados por semana ou por mes. So leitura: ninguem move nada por aqui."""
+    result = supabase.table(TABELA_DEMANDAS).select("*").is_("apagada_em", "null").execute()
+    entregues = [
+        (dia, d)
+        for d in (result.data or [])
+        if pode_ver(ator, d) and (dia := tecnologia_entregas.dia_da_entrega(d)) is not None
+    ]
+    entregues.sort(key=lambda par: par[0], reverse=True)
+    return {
+        "agrupar": agrupar,
+        "periodos": tecnologia_entregas.contagem([dia for dia, _ in entregues], agrupar),
+        "entregas": _para_a_lista(supabase, [d for _, d in entregues], ator=ator),
+        "responsaveis": [],
+    }
 
 
 @router.post("/chat", response_model=ChatResponse, status_code=status.HTTP_201_CREATED)
