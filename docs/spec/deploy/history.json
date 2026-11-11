@@ -2,6 +2,56 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-11-10T22:15:55-03:00",
+      "sha": "563e192f9035adb8627115812ef8bc3ff7782617",
+      "app_version": "0.242.0",
+      "subject": "Onda onda-tec-onda3: Envio falhou fica registrado na Demanda, com Reenviar",
+      "raw_subject": "chore(deploy): registro da onda onda-tec-onda3 (#1543)",
+      "scope": [
+        "backend",
+        "frontend"
+      ],
+      "prds": [
+        1529
+      ],
+      "result": "healthy",
+      "duration_seconds": 199,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        },
+        {
+          "service": "frontend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [
+        "128_tecnologia_envio_falhou.sql"
+      ],
+      "rollback_target_sha": null,
+      "notes": "onda-enxuta onda-tec-onda3: PR #1543 (issue #1535), mergeados PR a PR. Merge pela API do GitHub, um build. Registro pela Action pos-merge depois do health.",
+      "etapas": {
+        "merge_s": 4,
+        "build_s": {
+          "backend": 18,
+          "frontend": 176
+        },
+        "health_s": 0
+      },
+      "responsavel": "pedrorezendefig"
+    },
+    {
       "at": "2026-11-10T22:03:18-03:00",
       "sha": "07654669ab81cec716469e1565593268f546d105",
       "app_version": "0.241.0",
