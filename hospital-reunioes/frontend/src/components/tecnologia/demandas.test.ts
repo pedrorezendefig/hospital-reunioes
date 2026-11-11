@@ -7,7 +7,58 @@
 
 import { describe, expect, it } from "vitest";
 
-import { blocosDoTextoSimples } from "./demandas";
+import { blocosDoTextoSimples, iniciais, rotuloDaEtapa, textoDaAbertura } from "./demandas";
+
+describe("A data de abertura do card (issue #1578)", () => {
+  const AGORA = new Date("2026-11-11T15:00:00Z");
+
+  it("conta os dias pelo calendário do hospital", () => {
+    expect(textoDaAbertura("2026-11-01T13:00:00Z", AGORA)).toBe("Aberto em 01/11, há 10 dias");
+  });
+
+  it("hoje e ontem têm nome", () => {
+    expect(textoDaAbertura("2026-11-11T12:00:00Z", AGORA)).toBe("Aberto hoje");
+    expect(textoDaAbertura("2026-11-10T12:00:00Z", AGORA)).toBe("Aberto ontem");
+  });
+
+  it("a virada do dia é a de Brasília, e não a de Greenwich", () => {
+    // 01h30 em Greenwich no dia 11 ainda é 22h30 do dia 10 em Brasília.
+    expect(textoDaAbertura("2026-11-11T01:30:00Z", AGORA)).toBe("Aberto ontem");
+  });
+
+  it("sem data, ou com data inválida, não escreve nada", () => {
+    expect(textoDaAbertura(null, AGORA)).toBe("");
+    expect(textoDaAbertura("ontem", AGORA)).toBe("");
+  });
+});
+
+describe("As iniciais de quem pediu e de quem cuida (issue #1578)", () => {
+  it("são a primeira letra do primeiro e do último nome", () => {
+    expect(iniciais("Felipe Malafaia")).toBe("FM");
+    expect(iniciais("Ana de Souza Lima")).toBe("AL");
+  });
+
+  it("nome único vira uma letra, e espaço sobrando não conta", () => {
+    expect(iniciais("  pedro  ")).toBe("P");
+    expect(iniciais("")).toBe("");
+  });
+});
+
+describe("O rótulo da Etapa no card (issue #1578)", () => {
+  it("é o selo sem a contagem de partes, que o card mostra na barra", () => {
+    expect(
+      rotuloDaEtapa({ id: "d", titulo: "t", etapa: "em_desenvolvimento", partes_entregues: 2, partes_total: 5 }),
+    ).toBe("Em desenvolvimento");
+    expect(rotuloDaEtapa({ id: "d", titulo: "t", etapa: "em_producao", versao: "v0.223.0" })).toBe(
+      "Em produção desde v0.223.0",
+    );
+  });
+
+  it("a conversa sem card é Registrada", () => {
+    expect(rotuloDaEtapa({ id: "d", titulo: "t", etapa: "registrada" })).toBe("Registrada");
+    expect(rotuloDaEtapa({ id: "d", titulo: "t" })).toBe("Registrada");
+  });
+});
 
 describe("O Markdown simples do O que muda", () => {
   it("separa parágrafo de lista", () => {

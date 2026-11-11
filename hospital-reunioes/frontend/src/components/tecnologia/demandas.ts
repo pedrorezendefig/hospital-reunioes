@@ -243,6 +243,63 @@ export function textoDoSelo(demanda: Demanda): string {
   return rotulo;
 }
 
+/**
+ * A Etapa no card da lista (issue #1578): o selo sem as partes, que o card
+ * mostra à parte, com a barra. A conversa sem card aparece como Registrada.
+ */
+export function rotuloDaEtapa(demanda: Demanda): string {
+  if (!temSelo(demanda)) return ETAPA_ROTULO.registrada;
+  return demanda.etapa === "em_producao" && demanda.versao
+    ? `${ETAPA_ROTULO.em_producao} desde ${demanda.versao}`
+    : ETAPA_ROTULO[demanda.etapa as EtapaDemanda];
+}
+
+/** As partes de um PRD, para a barra do card; nulo na issue simples. */
+export function partesDoCard(demanda: Demanda): { entregues: number; total: number } | null {
+  const total = demanda.partes_total;
+  const entregues = demanda.partes_entregues;
+  if (typeof total !== "number" || total <= 0 || typeof entregues !== "number") return null;
+  return { entregues: Math.min(Math.max(entregues, 0), total), total };
+}
+
+const FUSO_DO_HOSPITAL = "America/Sao_Paulo";
+/** O dia do hospital em AAAA-MM-DD, que o `Date.parse` lê como meia-noite UTC: a conta de dias fica exata. */
+const DATA_ISO_NO_HOSPITAL = new Intl.DateTimeFormat("en-CA", {
+  timeZone: FUSO_DO_HOSPITAL,
+  year: "numeric",
+  month: "2-digit",
+  day: "2-digit",
+});
+const DIA_E_MES = new Intl.DateTimeFormat("pt-BR", { timeZone: FUSO_DO_HOSPITAL, day: "2-digit", month: "2-digit" });
+const UM_DIA_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * Quando o pedido foi aberto, no card da lista (issue #1578): "Aberto hoje",
+ * "Aberto ontem" ou "Aberto em 01/11, há 10 dias". Os dias se contam pelo
+ * calendário do hospital, e não pelas horas: o pedido das 23h de ontem é de
+ * ontem, mesmo com menos de 24 horas.
+ */
+export function textoDaAbertura(criadoEm: string | null | undefined, agora: Date = new Date()): string {
+  if (!criadoEm) return "";
+  const data = new Date(criadoEm);
+  if (Number.isNaN(data.getTime())) return "";
+  const dias = Math.round(
+    (Date.parse(DATA_ISO_NO_HOSPITAL.format(agora)) - Date.parse(DATA_ISO_NO_HOSPITAL.format(data))) / UM_DIA_MS,
+  );
+  if (dias <= 0) return "Aberto hoje";
+  if (dias === 1) return "Aberto ontem";
+  return `Aberto em ${DIA_E_MES.format(data)}, há ${dias} dias`;
+}
+
+/** As iniciais do círculo do card: a primeira letra do primeiro e do último nome. */
+export function iniciais(nome: string): string {
+  const partes = nome.trim().split(/\s+/).filter(Boolean);
+  if (partes.length === 0) return "";
+  const primeira = partes[0][0];
+  const ultima = partes.length > 1 ? partes[partes.length - 1][0] : "";
+  return `${primeira}${ultima}`.toUpperCase();
+}
+
 /** Um pedaço de uma linha do "O que muda": negrito ou texto comum. */
 export type PedacoForte = { texto: string; forte: boolean };
 

@@ -36,11 +36,19 @@
  * na conversa Registrada, o Desenvolvedor no card até Planejada (issue
  * #1549, ADR 0084, decisão 2). Quem pode é o servidor que diz.
  *
- * A lista é larga, com a busca pelo título e os filtros em chips que quebram
- * linha (issue #1551): Tipo e Etapa para todos; o recorte (Para mim, Minhas,
- * Todas), o Responsável e o Envio falhou só para o Desenvolvedor. Tudo combina,
- * e quem filtra é o servidor. Com uma Demanda aberta a lista recolhe, e o
- * Voltar às conversas a traz de volta, na tela larga como no celular.
+ * Os filtros ficam numa barra em cima, na largura toda, um campo com rótulo
+ * por categoria (issue #1578, emenda da ADR 0084, que trocou os chips da
+ * #1551): Tipo, Etapa e Origem para todos; o recorte (Para mim, Minhas,
+ * Todas, controle segmentado), o Responsável e o "Só envio falhou" só para o
+ * Desenvolvedor. Tudo combina, e quem filtra é o servidor. Com uma Demanda
+ * aberta a barra e a lista recolhem, e o Voltar às conversas as traz de volta,
+ * na tela larga como no celular.
+ *
+ * Cada conversa é um card com contorno: título, data de abertura, quem pediu
+ * e quem cuida com as iniciais, as partes do PRD numa barra e os selos. O
+ * "Conversar" do card abre a Demanda com a caixa da Conversa da Demanda em
+ * foco. Na tela larga a Demanda aberta tem a Conversa da Demanda numa coluna
+ * à direita, fixa na rolagem (issue #1578).
  *
  * Os cards que a Vitta abre pelo terminal aparecem na lista com o selo
  * "Vitta", e os do chat com "Pedido do diretor"; o chip Origem filtra (issue
@@ -55,9 +63,10 @@
  */
 
 import { ReactNode, useCallback, useEffect, useRef, useState } from "react";
-import { ArrowLeft, Loader2, Plus, RefreshCw, Trash2 } from "lucide-react";
+import { ArrowLeft, Loader2, MessageSquare, Plus, RefreshCw, Search, Trash2, X } from "lucide-react";
 
 import { ConfirmDialog } from "@/components/ConfirmDialog";
+import { Select } from "@/components/ui/Select";
 
 import { ChatDaTecnologia, Fala } from "./ChatDaTecnologia";
 import { ConversaDaDemanda } from "./ConversaDaDemanda";
@@ -88,14 +97,17 @@ import {
   EtapaDemanda,
   ETAPA_ROTULO,
   FALHA_DE_CONEXAO,
+  iniciais,
   linkDaDemonstracao,
   motivoDaRecusa,
   Origem,
   ORIGEM_CLASSE,
   ORIGEM_ROTULO,
+  partesDoCard,
+  rotuloDaEtapa,
   TEM_DEMONSTRACAO,
   temSelo,
-  textoDoSelo,
+  textoDaAbertura,
 } from "./demandas";
 
 export const NOVA_CONVERSA = "Nova conversa";
@@ -130,6 +142,22 @@ const FILTROS: { valor: Filtro; rotulo: string }[] = [
 const CLASSIFICACOES = Object.keys(CLASSIFICACAO_ROTULO) as Classificacao[];
 const ETAPAS = Object.keys(ETAPA_ROTULO) as EtapaDemanda[];
 const ORIGENS = Object.keys(ORIGEM_ROTULO) as Origem[];
+/** As opções de cada campo da barra; o valor vazio é "sem filtro" (issue #1578). */
+const OPCOES_DE_TIPO = [
+  { value: "", label: "Todos" },
+  ...CLASSIFICACOES.map((valor) => ({ value: valor, label: CLASSIFICACAO_ROTULO[valor] })),
+];
+const OPCOES_DE_ETAPA = [
+  { value: "", label: "Todas" },
+  ...ETAPAS.map((valor) => ({ value: valor, label: ETAPA_ROTULO[valor] })),
+];
+const OPCOES_DE_ORIGEM = [
+  { value: "", label: "Todas" },
+  ...ORIGENS.map((valor) => ({ value: valor, label: ORIGEM_ROTULO[valor] })),
+];
+const LIMPAR_FILTROS = "Limpar filtros";
+const SO_ENVIO_FALHOU = "Só envio falhou";
+const CONVERSAR = "Conversar";
 /** A espera depois da última tecla, para a busca não pedir a lista a cada letra. */
 const ESPERA_DA_BUSCA_MS = 300;
 
@@ -195,13 +223,8 @@ function itemValido(item: unknown): item is Demanda {
  * ausência de selo).
  */
 function EtapaNaLista({ demanda }: { demanda: Demanda }) {
-  const comSelo = temSelo(demanda);
-  const classe = comSelo && demanda.etapa ? ETAPA_CLASSE[demanda.etapa] : ETAPA_CLASSE.registrada;
-  return (
-    <span className={`px-2 py-0.5 rounded text-xs font-medium ${classe}`}>
-      {comSelo ? textoDoSelo(demanda) : ETAPA_ROTULO.registrada}
-    </span>
-  );
+  const classe = temSelo(demanda) && demanda.etapa ? ETAPA_CLASSE[demanda.etapa] : ETAPA_CLASSE.registrada;
+  return <span className={`px-2 py-0.5 rounded-md text-xs font-semibold ${classe}`}>{rotuloDaEtapa(demanda)}</span>;
 }
 
 /** Bug ou Melhoria, ao lado da Etapa (issue #1438). O pedido de antes do chat fica sem. */
@@ -234,6 +257,162 @@ function SeloDaDemonstracao({ demanda }: { demanda: Demanda }) {
 function SeloDoEnvioFalhou({ demanda }: { demanda: Demanda }) {
   if (!demanda.envio_falhou) return null;
   return <span className="px-2 py-0.5 rounded text-xs font-medium bg-red-50 text-red-700">{ENVIO_FALHOU}</span>;
+}
+
+/** Quem pediu ou quem cuida, com as iniciais num círculo (issue #1578). */
+function PessoaNoCard({ papel, nome }: { papel: string; nome: string }) {
+  return (
+    <span className="flex items-center gap-2 min-w-0">
+      <span
+        aria-hidden="true"
+        className="w-7 h-7 shrink-0 rounded-full bg-primary/10 text-primary text-[11px] font-bold flex items-center justify-center"
+      >
+        {iniciais(nome)}
+      </span>
+      <span className="flex flex-col min-w-0 leading-tight">
+        <span className="text-[10px] font-semibold tracking-wide text-slate-400">{papel}</span>
+        <span className="normal-case text-xs font-medium text-text-primary truncate">{nome}</span>
+      </span>
+    </span>
+  );
+}
+
+/** As partes do PRD numa barra (issue #1578). A issue simples não tem barra. */
+function PartesNoCard({ demanda }: { demanda: Demanda }) {
+  const partes = partesDoCard(demanda);
+  if (!partes) return null;
+  const largura = `${Math.round((partes.entregues / partes.total) * 100)}%`;
+  return (
+    <span className="flex items-center gap-3">
+      <span
+        role="progressbar"
+        aria-label="Partes entregues"
+        aria-valuemin={0}
+        aria-valuemax={partes.total}
+        aria-valuenow={partes.entregues}
+        className="h-1.5 flex-1 rounded-full bg-slate-100 overflow-hidden"
+      >
+        <span className="block h-full rounded-full bg-emerald-500" style={{ width: largura }} />
+      </span>
+      <span className="normal-case text-xs font-medium text-text-secondary whitespace-nowrap">
+        {partes.entregues} de {partes.total} partes
+      </span>
+    </span>
+  );
+}
+
+/**
+ * O card de uma conversa na lista (issue #1578). Contorno sempre visível; no
+ * hover e no foco ele se destaca e sobe um pouco, sem movimento para quem
+ * pediu menos animação ao sistema. O "Conversar" fica num botão próprio, ao
+ * lado do card, porque botão dentro de botão não existe no HTML.
+ */
+function CardDaConversa({
+  demanda,
+  destacada,
+  onAbrir,
+  onConversar,
+}: {
+  demanda: Demanda;
+  destacada: boolean;
+  onAbrir: () => void;
+  onConversar: () => void;
+}) {
+  const abertura = textoDaAbertura(demanda.criado_em);
+  return (
+    <div
+      className={`group relative rounded-2xl border bg-white transition duration-150 ease-out motion-reduce:transition-none motion-reduce:transform-none ${
+        destacada
+          ? "border-primary ring-2 ring-primary/15 shadow-md"
+          : "border-border shadow-sm hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-md focus-within:border-primary/40 focus-within:shadow-md"
+      }`}
+    >
+      <button
+        type="button"
+        onClick={onAbrir}
+        aria-current={destacada ? "true" : undefined}
+        className="w-full flex flex-col gap-3 p-4 pr-14 text-left rounded-2xl focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+      >
+        <span className="flex flex-col gap-1">
+          <span className="normal-case text-[15px] font-semibold leading-snug text-text-primary line-clamp-2">
+            {demanda.titulo}
+          </span>
+          {abertura && <span className="normal-case text-xs text-text-secondary">{abertura}</span>}
+        </span>
+        {(demanda.autor || demanda.responsavel) && (
+          <span className="flex flex-wrap items-center gap-x-5 gap-y-2">
+            {demanda.autor && <PessoaNoCard papel="Pediu" nome={demanda.autor} />}
+            {demanda.responsavel && <PessoaNoCard papel="Responsável" nome={demanda.responsavel} />}
+          </span>
+        )}
+        <PartesNoCard demanda={demanda} />
+        <span className="flex flex-wrap items-center gap-1.5">
+          <EtapaNaLista demanda={demanda} />
+          <ClassificacaoNaLista demanda={demanda} />
+          <OrigemNaLista demanda={demanda} />
+          <SeloDaDemonstracao demanda={demanda} />
+          <SeloDoEnvioFalhou demanda={demanda} />
+        </span>
+      </button>
+      <button
+        type="button"
+        onClick={onConversar}
+        aria-label={CONVERSAR}
+        title="Conversar com quem cuida deste pedido"
+        className="absolute top-3 right-3 w-9 h-9 inline-flex items-center justify-center rounded-xl border border-border bg-white text-primary shadow-sm transition-opacity duration-150 motion-reduce:transition-none hover:bg-primary/5 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary md:opacity-0 md:group-hover:opacity-100 md:group-focus-within:opacity-100"
+      >
+        <MessageSquare className="w-4 h-4" />
+      </button>
+    </div>
+  );
+}
+
+/** Para mim, Minhas e Todas, numa peça só: um dos três está sempre escolhido. */
+function RecorteDaLista({ valor, onMudar }: { valor: Filtro | null; onMudar: (filtro: Filtro) => void }) {
+  return (
+    <div role="group" aria-label="Recorte" className="inline-flex shrink-0 p-1 rounded-xl bg-slate-100">
+      {FILTROS.map(({ valor: opcao, rotulo }) => (
+        <button
+          key={opcao}
+          type="button"
+          aria-pressed={valor === opcao}
+          onClick={() => onMudar(opcao)}
+          className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors motion-reduce:transition-none ${
+            valor === opcao ? "bg-white text-primary shadow-sm" : "text-text-secondary hover:text-text-primary"
+          }`}
+        >
+          {rotulo}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+/** O "Só envio falhou" do Desenvolvedor, um interruptor: não é Etapa (issue #1578). */
+function InterruptorDoEnvioFalhou({ ligado, onMudar }: { ligado: boolean; onMudar: (ligado: boolean) => void }) {
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={ligado}
+      onClick={() => onMudar(!ligado)}
+      className="inline-flex items-center gap-2 text-xs font-semibold text-text-secondary"
+    >
+      <span
+        aria-hidden="true"
+        className={`relative w-9 h-5 rounded-full transition-colors motion-reduce:transition-none ${
+          ligado ? "bg-primary" : "bg-slate-300"
+        }`}
+      >
+        <span
+          className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform motion-reduce:transition-none ${
+            ligado ? "translate-x-4" : ""
+          }`}
+        />
+      </span>
+      {SO_ENVIO_FALHOU}
+    </button>
+  );
 }
 
 /**
@@ -608,6 +787,8 @@ export function ConversasDaTecnologia({
   /** Muda a cada clique, para o chat recomeçar do estado da conversa escolhida. */
   const [chave, setChave] = useState(0);
   const [naTela, setNaTela] = useState<"lista" | "conversa">("lista");
+  /** A Demanda abriu pelo "Conversar" do card: a caixa da Conversa da Demanda vem em foco. */
+  const [focarConversa, setFocarConversa] = useState(false);
   const [desenvolvedor, setDesenvolvedor] = useState(false);
   /** Nulo até o servidor dizer quem está logado: o Desenvolvedor abre em Para mim. */
   const [filtro, setFiltro] = useState<Filtro | null>(null);
@@ -714,12 +895,26 @@ export function ConversasDaTecnologia({
     [carregar],
   );
 
-  const abrir = useCallback((demanda: Demanda | null) => {
+  const abrir = useCallback((demanda: Demanda | null, conversar = false) => {
     setAberta(demanda);
     setDestacada(demanda?.id ?? null);
+    setFocarConversa(conversar);
     setChave((atual) => atual + 1);
     setNaTela("conversa");
   }, []);
+
+  const filtroAtivo = Boolean(textoDaBusca.trim() || tipo || etapa || origem || responsavel || envioFalhou);
+
+  /** Volta a barra ao padrão. O recorte fica: ele é a vista do Desenvolvedor, não um filtro. */
+  function limparFiltros() {
+    setTextoDaBusca("");
+    setBusca("");
+    setTipo(null);
+    setEtapa(null);
+    setOrigem(null);
+    setResponsavel(null);
+    setEnvioFalhou(false);
+  }
 
   /** O card nasceu pelo Reenviar: a lista relê e a Demanda abre como está agora. */
   async function aoReenviar(demandaId: string) {
@@ -763,167 +958,169 @@ export function ConversasDaTecnologia({
   const recolhida = naTela === "conversa" && aberta !== null;
 
   return (
-    <div
-      className={`md:grid ${recolhida ? "md:grid-cols-1" : "md:grid-cols-[22rem_minmax(0,1fr)]"} md:gap-4 md:items-start`}
-    >
-      <div className={`${naTela === "lista" ? "" : "hidden"} ${recolhida ? "md:hidden" : "md:block"} space-y-3`}>
-        <button
-          type="button"
-          onClick={() => abrir(null)}
-          className="w-full inline-flex items-center justify-center gap-2 px-4 py-2 rounded-xl bg-primary text-white text-sm font-semibold"
-        >
-          <Plus className="w-4 h-4" />
-          {NOVA_CONVERSA}
-        </button>
-        <section role="region" aria-label="Filtros da lista" className="space-y-2">
-          <input
-            type="search"
-            aria-label="Buscar pelo título"
-            placeholder="Buscar pelo título"
-            value={textoDaBusca}
-            onChange={(e) => setTextoDaBusca(e.target.value)}
-            className="w-full px-3 py-2 rounded-xl border border-border text-sm normal-case"
+    <div className="space-y-4">
+      <section
+        role="region"
+        aria-label="Filtros da lista"
+        className={`${naTela === "lista" ? "" : "hidden"} ${recolhida ? "md:hidden" : "md:block"} rounded-2xl border border-border bg-white shadow-sm p-4 space-y-4`}
+      >
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+          <div className="relative flex-1 min-w-0">
+            <Search aria-hidden="true" className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+            <input
+              type="search"
+              aria-label="Buscar pelo título"
+              placeholder="Buscar pelo título"
+              value={textoDaBusca}
+              onChange={(e) => setTextoDaBusca(e.target.value)}
+              className="w-full min-h-[38px] pl-9 pr-3 py-2 rounded-lg border border-slate-200 text-sm normal-case bg-white focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary"
+            />
+          </div>
+          {desenvolvedor && <RecorteDaLista valor={filtro} onMudar={setFiltro} />}
+          <button
+            type="button"
+            onClick={() => abrir(null)}
+            className="shrink-0 inline-flex items-center justify-center gap-2 px-4 py-2 min-h-[38px] rounded-xl bg-primary text-white text-sm font-semibold transition-opacity hover:opacity-90"
+          >
+            <Plus className="w-4 h-4" />
+            {NOVA_CONVERSA}
+          </button>
+        </div>
+        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+          <Select
+            label="Tipo"
+            value={tipo ?? ""}
+            options={OPCOES_DE_TIPO}
+            onChange={(valor) => setTipo((valor || null) as Classificacao | null)}
           />
-          {desenvolvedor && (
-            <GrupoDeChips rotulo="Filtro das conversas">
-              {FILTROS.map(({ valor, rotulo }) => (
-                <Chip key={valor} ativo={filtro === valor} onClick={() => setFiltro(valor)}>
-                  {rotulo}
-                </Chip>
-              ))}
-            </GrupoDeChips>
-          )}
-          <GrupoDeChips rotulo="Tipo">
-            {CLASSIFICACOES.map((valor) => (
-              <Chip key={valor} ativo={tipo === valor} onClick={() => setTipo(tipo === valor ? null : valor)}>
-                {CLASSIFICACAO_ROTULO[valor]}
-              </Chip>
-            ))}
-          </GrupoDeChips>
-          <GrupoDeChips rotulo="Etapa">
-            {ETAPAS.map((valor) => (
-              <Chip key={valor} ativo={etapa === valor} onClick={() => setEtapa(etapa === valor ? null : valor)}>
-                {ETAPA_ROTULO[valor]}
-              </Chip>
-            ))}
-          </GrupoDeChips>
-          <GrupoDeChips rotulo="Origem">
-            {ORIGENS.map((valor) => (
-              <Chip key={valor} ativo={origem === valor} onClick={() => setOrigem(origem === valor ? null : valor)}>
-                {ORIGEM_ROTULO[valor]}
-              </Chip>
-            ))}
-          </GrupoDeChips>
+          <Select
+            label="Etapa"
+            value={etapa ?? ""}
+            options={OPCOES_DE_ETAPA}
+            onChange={(valor) => setEtapa((valor || null) as EtapaDemanda | null)}
+          />
+          <Select
+            label="Origem"
+            value={origem ?? ""}
+            options={OPCOES_DE_ORIGEM}
+            onChange={(valor) => setOrigem((valor || null) as Origem | null)}
+          />
           {desenvolvedor && desenvolvedores.length > 0 && (
-            <GrupoDeChips rotulo="Responsável">
-              {desenvolvedores.map((d) => (
-                <Chip
-                  key={d.id}
-                  ativo={responsavel === d.id}
-                  onClick={() => setResponsavel(responsavel === d.id ? null : d.id)}
-                >
-                  {d.nome}
-                </Chip>
-              ))}
-            </GrupoDeChips>
+            <Select
+              label="Responsável"
+              value={responsavel ?? ""}
+              options={[{ value: "", label: "Todos" }, ...desenvolvedores.map((d) => ({ value: d.id, label: d.nome }))]}
+              onChange={(valor) => setResponsavel(valor || null)}
+            />
           )}
-          {desenvolvedor && (
-            <GrupoDeChips rotulo="Situação">
-              <Chip ativo={envioFalhou} onClick={() => setEnvioFalhou(!envioFalhou)}>
-                {ENVIO_FALHOU}
-              </Chip>
-            </GrupoDeChips>
-          )}
-        </section>
-        <nav aria-label="Suas conversas" className="md:max-h-[calc(100vh-20rem)] md:overflow-y-auto">
-          {erroDaLista && (
-            <p role="alert" className="px-3 py-2 rounded-xl bg-red-50 border border-red-200 text-red-700 text-sm">
-              {erroDaLista}
-            </p>
-          )}
-          {demandas === null && !erroDaLista && (
-            <p role="status" className="flex items-center gap-2 px-1 text-xs text-text-secondary">
-              <Loader2 className="w-3.5 h-3.5 animate-spin" />
-              Carregando as conversas...
-            </p>
-          )}
-          {demandas !== null && demandas.length === 0 && (
-            <p className="px-1 text-sm text-text-secondary">{LISTA_VAZIA}</p>
-          )}
-          {demandas !== null && demandas.length > 0 && (
-            <ul className="space-y-1">
-              {demandas.map((demanda) => (
-                <li key={demanda.id}>
-                  <button
-                    type="button"
-                    onClick={() => abrir(demanda)}
-                    aria-current={destacada === demanda.id ? "true" : undefined}
-                    className={`w-full flex flex-col gap-1 px-3 py-2 rounded-xl border text-left text-sm transition-colors ${
-                      destacada === demanda.id
-                        ? "border-primary bg-primary/5"
-                        : "border-transparent hover:border-border hover:bg-slate-50"
-                    }`}
-                  >
-                    <span className="normal-case font-medium text-text-primary line-clamp-2">{demanda.titulo}</span>
-                    {demanda.autor && (
-                      <span className="normal-case text-xs text-text-secondary">{demanda.autor}</span>
-                    )}
-                    {demanda.responsavel && (
-                      <span className="normal-case text-xs text-text-secondary">
-                        Responsável: {demanda.responsavel}
-                      </span>
-                    )}
-                    <span className="flex flex-wrap items-center gap-1.5">
-                      <EtapaNaLista demanda={demanda} />
-                      <ClassificacaoNaLista demanda={demanda} />
-                      <OrigemNaLista demanda={demanda} />
-                      <SeloDaDemonstracao demanda={demanda} />
-                      <SeloDoEnvioFalhou demanda={demanda} />
-                    </span>
-                  </button>
-                </li>
-              ))}
-            </ul>
-          )}
-        </nav>
-      </div>
+        </div>
+        {(desenvolvedor || filtroAtivo) && (
+          <div className="flex flex-wrap items-center gap-3 border-t border-slate-100 pt-3">
+            {desenvolvedor && <InterruptorDoEnvioFalhou ligado={envioFalhou} onMudar={setEnvioFalhou} />}
+            {filtroAtivo && (
+              <button
+                type="button"
+                onClick={limparFiltros}
+                className="ml-auto inline-flex items-center gap-1 text-xs font-semibold text-primary hover:underline"
+              >
+                <X aria-hidden="true" className="w-3.5 h-3.5" />
+                {LIMPAR_FILTROS}
+              </button>
+            )}
+          </div>
+        )}
+      </section>
 
       <div
-        role="region"
-        aria-label="Conversa aberta"
-        className={`${naTela === "conversa" ? "" : "hidden"} md:block min-w-0 space-y-3`}
+        className={`md:grid ${recolhida ? "md:grid-cols-1" : "md:grid-cols-[24rem_minmax(0,1fr)]"} md:gap-6 md:items-start`}
       >
-        <button
-          type="button"
-          onClick={() => setNaTela("lista")}
-          className={`${recolhida ? "" : "md:hidden"} inline-flex items-center gap-1.5 text-sm font-semibold text-primary`}
+        <div className={`${naTela === "lista" ? "" : "hidden"} ${recolhida ? "md:hidden" : "md:block"}`}>
+          <nav aria-label="Suas conversas" className="md:max-h-[calc(100vh-18rem)] md:overflow-y-auto p-1 -m-1">
+            {erroDaLista && (
+              <p role="alert" className="px-3 py-2 rounded-xl bg-red-50 border border-red-200 text-red-700 text-sm">
+                {erroDaLista}
+              </p>
+            )}
+            {demandas === null && !erroDaLista && (
+              <p role="status" className="flex items-center gap-2 px-1 text-xs text-text-secondary">
+                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                Carregando as conversas...
+              </p>
+            )}
+            {demandas !== null && demandas.length === 0 && (
+              <p className="px-1 text-sm text-text-secondary">{LISTA_VAZIA}</p>
+            )}
+            {demandas !== null && demandas.length > 0 && (
+              <ul className="space-y-3">
+                {demandas.map((demanda) => (
+                  <li key={demanda.id}>
+                    <CardDaConversa
+                      demanda={demanda}
+                      destacada={destacada === demanda.id}
+                      onAbrir={() => abrir(demanda)}
+                      onConversar={() => abrir(demanda, true)}
+                    />
+                  </li>
+                ))}
+              </ul>
+            )}
+          </nav>
+        </div>
+
+        <div
+          role="region"
+          aria-label="Conversa aberta"
+          className={`${naTela === "conversa" ? "" : "hidden"} md:block min-w-0 space-y-3`}
         >
-          <ArrowLeft className="w-4 h-4" />
-          {VOLTAR_PARA_A_LISTA}
-        </button>
-        {aberta?.pode_apagar && (
-          <ApagarADemanda key={`apagar-${chave}`} demanda={aberta} token={token} onApagada={aoApagar} />
-        )}
-        {aberta?.pode_revisar && (
-          <RevisarComOCodigoDeHoje key={`revisar-${chave}`} demanda={aberta} token={token} onRevisada={aoRevisar} />
-        )}
-        {aberta?.envio_falhou && (
-          <AvisoDoEnvioFalhou key={`envio-${chave}`} demanda={aberta} token={token} onReenviado={aoReenviar} />
-        )}
-        {desenvolvedor && aberta?.designacao_falhou && (
-          <AvisoDaDesignacaoFalhou
-            key={`designacao-${chave}`}
-            demanda={aberta}
-            token={token}
-            onDesignado={aoDesignar}
-          />
-        )}
-        {(aberta?.tem_vinculo || aberta?.minha === false) && !aberta?.em_revisao ? (
-          <Acompanhamento key={chave} demanda={aberta} token={token} />
-        ) : (
-          <ChatDaTecnologia key={chave} token={token} demandaId={aberta?.id ?? null} onMudou={aoMudar} />
-        )}
-        {aberta && <ConversaDaDemanda key={`conversa-${chave}`} demandaId={aberta.id} token={token} />}
+          <button
+            type="button"
+            onClick={() => setNaTela("lista")}
+            className={`${recolhida ? "" : "md:hidden"} inline-flex items-center gap-1.5 text-sm font-semibold text-primary`}
+          >
+            <ArrowLeft className="w-4 h-4" />
+            {VOLTAR_PARA_A_LISTA}
+          </button>
+          {aberta?.pode_apagar && (
+            <ApagarADemanda key={`apagar-${chave}`} demanda={aberta} token={token} onApagada={aoApagar} />
+          )}
+          {aberta?.pode_revisar && (
+            <RevisarComOCodigoDeHoje key={`revisar-${chave}`} demanda={aberta} token={token} onRevisada={aoRevisar} />
+          )}
+          {aberta?.envio_falhou && (
+            <AvisoDoEnvioFalhou key={`envio-${chave}`} demanda={aberta} token={token} onReenviado={aoReenviar} />
+          )}
+          {desenvolvedor && aberta?.designacao_falhou && (
+            <AvisoDaDesignacaoFalhou
+              key={`designacao-${chave}`}
+              demanda={aberta}
+              token={token}
+              onDesignado={aoDesignar}
+            />
+          )}
+          <div
+            className={
+              aberta ? "space-y-3 xl:space-y-0 xl:grid xl:grid-cols-[minmax(0,1fr)_24rem] xl:gap-6 xl:items-start" : ""
+            }
+          >
+            <div className="min-w-0">
+              {(aberta?.tem_vinculo || aberta?.minha === false) && !aberta?.em_revisao ? (
+                <Acompanhamento key={chave} demanda={aberta} token={token} />
+              ) : (
+                <ChatDaTecnologia key={chave} token={token} demandaId={aberta?.id ?? null} onMudou={aoMudar} />
+              )}
+            </div>
+            {aberta && (
+              <div className="xl:sticky xl:top-4 xl:max-h-[calc(100vh-2rem)] xl:overflow-y-auto">
+                <ConversaDaDemanda
+                  key={`conversa-${chave}`}
+                  demandaId={aberta.id}
+                  token={token}
+                  focar={focarConversa}
+                />
+              </div>
+            )}
+          </div>
+        </div>
       </div>
     </div>
   );

@@ -12,7 +12,7 @@
  */
 
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ToastProvider } from "@/components/ui/Toast";
 import { caixaDoDado } from "@/lib/testes/caixaDoDado";
@@ -21,6 +21,12 @@ import { ABERTURA, SEM_CONVERSA_GUARDADA } from "./ChatDaTecnologia";
 import { ConversasDaTecnologia, NOVA_CONVERSA, VOLTAR_PARA_A_LISTA } from "./ConversasDaTecnologia";
 import { ConversaDoChat, FalaDoChat } from "./chat";
 import { Demanda } from "./demandas";
+
+beforeEach(() => {
+  // O jsdom não implementa `scrollIntoView`, que o `Select` da casa chama ao
+  // abrir a lista de opções dos filtros (issue #1578).
+  Element.prototype.scrollIntoView = vi.fn();
+});
 
 afterEach(() => {
   cleanup();
@@ -115,10 +121,11 @@ describe("A lista", () => {
 
     await within(lista()).findByText("Aviso quando a ata sair");
     const itens = within(lista()).getAllByRole("listitem");
-    expect(itens.map((item) => item.textContent)).toEqual([
-      "Aviso quando a ata sairEm produção desde v0.207.0",
-      "Botão de responder some na OuvidoriaRegistrada",
-    ]);
+    expect(itens).toHaveLength(2);
+    expect(within(itens[0]).getByText("Aviso quando a ata sair")).toBeTruthy();
+    expect(within(itens[0]).getByText("Em produção desde v0.207.0")).toBeTruthy();
+    expect(within(itens[1]).getByText("Botão de responder some na Ouvidoria")).toBeTruthy();
+    expect(within(itens[1]).getByText("Registrada")).toBeTruthy();
   });
 
   it("mostra o selo Bug ou Melhoria ao lado da Etapa (issue #1438)", async () => {
@@ -129,11 +136,10 @@ describe("A lista", () => {
 
     await within(lista()).findByText("O relatório some");
     const itens = within(lista()).getAllByRole("listitem");
-    expect(itens.map((item) => item.textContent)).toEqual([
-      "O relatório someRegistradaBug",
-      "Aviso quando a ata sairRegistradaMelhoria",
-      "Pedido de antes do chatRegistrada",
-    ]);
+    expect(within(itens[0]).getByText("Bug")).toBeTruthy();
+    expect(within(itens[1]).getByText("Melhoria")).toBeTruthy();
+    expect(within(itens[2]).queryByText(/^(Bug|Melhoria)$/)).toBeNull();
+    expect(within(itens[2]).getByText("Registrada")).toBeTruthy();
   });
 
   it("mostra o selo Tem demonstração só no pedido com o link do vídeo (issue #1559)", async () => {
@@ -143,10 +149,8 @@ describe("A lista", () => {
 
     await within(lista()).findByText("Selo na lista");
     const itens = within(lista()).getAllByRole("listitem");
-    expect(itens.map((item) => item.textContent)).toEqual([
-      "Selo na listaRegistradaTem demonstração",
-      "Sem vídeoRegistrada",
-    ]);
+    expect(within(itens[0]).getByText("Tem demonstração")).toBeTruthy();
+    expect(within(itens[1]).queryByText("Tem demonstração")).toBeNull();
   });
 
   it("sem conversa nenhuma, diz que ainda não há", async () => {
@@ -344,10 +348,10 @@ describe("O Desenvolvedor (issue #1531, ADR 0083)", () => {
 
     await within(lista()).findByText("O relatório some");
     const itens = within(lista()).getAllByRole("listitem");
-    expect(itens.map((item) => item.textContent)).toEqual([
-      "O relatório someDiretor do HospitalRegistrada",
-      "Botão de responder some na OuvidoriaPedro VittaRegistrada",
-    ]);
+    expect(within(itens[0]).getByText("O relatório some")).toBeTruthy();
+    expect(within(itens[0]).getByText("Diretor do Hospital")).toBeTruthy();
+    expect(within(itens[1]).getByText("Botão de responder some na Ouvidoria")).toBeTruthy();
+    expect(within(itens[1]).getByText("Pedro Vitta")).toBeTruthy();
     expect(chamadas.some((c) => c.url === TODAS)).toBe(true);
   });
 
@@ -429,7 +433,7 @@ describe("O Desenvolvedor (issue #1531, ADR 0083)", () => {
       return { status: 200, corpo: [] };
     });
 
-    const filtros = await screen.findByRole("group", { name: "Filtro das conversas" });
+    const filtros = await screen.findByRole("group", { name: "Recorte" });
     expect(within(filtros).getAllByRole("button").map((b) => b.textContent)).toEqual([
       "Para mim",
       "Minhas",
@@ -449,10 +453,10 @@ describe("O Responsável na lista (issue #1533, ADR 0083)", () => {
 
     await within(lista()).findByText("Agenda de retorno");
     const itens = within(lista()).getAllByRole("listitem");
-    expect(itens.map((item) => item.textContent)).toEqual([
-      "Agenda de retornoResponsável: Lucas SampaioEm análise",
-      "Botão de responder some na OuvidoriaRegistrada",
-    ]);
+    expect(within(itens[0]).getByText("Responsável")).toBeTruthy();
+    expect(within(itens[0]).getByText("Lucas Sampaio")).toBeTruthy();
+    expect(within(itens[0]).getByText("Em análise")).toBeTruthy();
+    expect(within(itens[1]).queryByText("Responsável")).toBeNull();
   });
 
   it("o Desenvolvedor vê o autor e o Responsável em cada linha", async () => {
@@ -472,9 +476,11 @@ describe("O Responsável na lista (issue #1533, ADR 0083)", () => {
     fireEvent.click(await screen.findByRole("button", { name: "Todas" }));
 
     await within(lista()).findByText("O botão sumiu");
-    expect(within(lista()).getAllByRole("listitem").map((item) => item.textContent)).toEqual([
-      "O botão sumiuDiretor do HospitalResponsável: Pedro RibEm análise",
-    ]);
+    const [item] = within(lista()).getAllByRole("listitem");
+    expect(within(item).getByText("Pediu")).toBeTruthy();
+    expect(within(item).getByText("Diretor do Hospital")).toBeTruthy();
+    expect(within(item).getByText("Responsável")).toBeTruthy();
+    expect(within(item).getByText("Pedro Rib")).toBeTruthy();
   });
 });
 
@@ -611,7 +617,7 @@ describe("Envio falhou (issue #1535, ADR 0083, decisão 7)", () => {
       return { status: 200, corpo: [] };
     });
 
-    fireEvent.click(await screen.findByRole("button", { name: "Envio falhou" }));
+    fireEvent.click(await screen.findByRole("switch", { name: "Só envio falhou" }));
     fireEvent.click(await within(lista()).findByRole("button", { name: /Botão de responder/ }));
 
     const aviso = await screen.findByRole("region", { name: "Envio falhou" });
@@ -792,7 +798,14 @@ describe("Apagar a Demanda (issue #1549, ADR 0084, decisão 2)", () => {
   });
 });
 
-describe("A lista larga com busca e filtros em chips (issue #1551, PRD #1548)", () => {
+/** Escolhe uma opção num campo de filtro: abre o campo pelo rótulo e clica na opção. */
+function escolher(campo: string, opcao: string) {
+  const filtros = screen.getByRole("region", { name: "Filtros da lista" });
+  fireEvent.click(within(filtros).getByRole("combobox", { name: campo }));
+  fireEvent.click(screen.getByRole("option", { name: opcao }));
+}
+
+describe("A barra de filtros por categoria (issue #1578, emenda da ADR 0084)", () => {
   const EU = "/api/admin/tecnologia/eu";
   const DESENVOLVEDORES = "/api/admin/tecnologia/desenvolvedores";
   const QUEM_CUIDA = [
@@ -804,28 +817,16 @@ describe("A lista larga com busca e filtros em chips (issue #1551, PRD #1548)", 
     return screen.getByRole("region", { name: "Filtros da lista" });
   }
 
-  function chips() {
+  /** O rótulo visível de cada campo, na ordem da barra. */
+  function campos() {
     return within(filtros())
-      .getAllByRole("button")
-      .map((b) => b.textContent);
-  }
-
-  function chip(grupo: string, rotulo: string) {
-    return within(within(filtros()).getByRole("group", { name: grupo })).getByRole("button", { name: rotulo });
+      .getAllByRole("combobox")
+      .map((c) => document.querySelector(`label[for="${c.id}"]`)?.textContent);
   }
 
   function comoDiretor() {
     return montar((url) => {
       if (url === EU) return { status: 200, corpo: { desenvolvedor: false } };
-      if (url.startsWith(LISTA)) return { status: 200, corpo: [SEM_CARD] };
-      return { status: 404, corpo: {} };
-    });
-  }
-
-  function comoDesenvolvedor() {
-    return montar((url) => {
-      if (url === EU) return { status: 200, corpo: { desenvolvedor: true } };
-      if (url === DESENVOLVEDORES) return { status: 200, corpo: QUEM_CUIDA };
       if (url.startsWith(LISTA)) return { status: 200, corpo: [SEM_CARD] };
       return { status: 404, corpo: {} };
     });
@@ -842,37 +843,26 @@ describe("A lista larga com busca e filtros em chips (issue #1551, PRD #1548)", 
     await waitFor(() => expect(chamadas.map((c) => c.url)).toContain(`${LISTA}?busca=relatorio`));
   });
 
-  it("o diretor combina Bug e Etapa, e clicar de novo desliga o chip", async () => {
+  it("o diretor combina Tipo e Etapa, e Todos desfaz o Tipo", async () => {
     const chamadas = comoDiretor();
     await within(lista()).findByText("Botão de responder some na Ouvidoria");
 
-    fireEvent.click(chip("Tipo", "Bug"));
-    fireEvent.click(chip("Etapa", "Em produção"));
+    escolher("Tipo", "Bug");
+    escolher("Etapa", "Em produção");
     await waitFor(() => expect(chamadas.map((c) => c.url)).toContain(`${LISTA}?tipo=bug&etapa=em_producao`));
-    expect(chip("Tipo", "Bug").getAttribute("aria-pressed")).toBe("true");
+    expect(within(filtros()).getByRole("combobox", { name: "Tipo" }).textContent).toBe("Bug");
 
-    fireEvent.click(chip("Tipo", "Bug"));
+    escolher("Tipo", "Todos");
     await waitFor(() => expect(chamadas.at(-1)?.url).toBe(`${LISTA}?etapa=em_producao`));
-    expect(chip("Tipo", "Bug").getAttribute("aria-pressed")).toBe("false");
   });
 
-  it("o diretor não vê os chips do Desenvolvedor", async () => {
+  it("o diretor vê Tipo, Etapa e Origem, sem o recorte, o Responsável e o Envio falhou", async () => {
     comoDiretor();
     await within(lista()).findByText("Botão de responder some na Ouvidoria");
 
-    expect(chips()).toEqual([
-      "Bug",
-      "Melhoria",
-      "Registrada",
-      "Em análise",
-      "Planejada",
-      "Em desenvolvimento",
-      "Entregue",
-      "Em produção",
-      "Não será feita",
-      "Pedido do diretor",
-      "Vitta",
-    ]);
+    expect(campos()).toEqual(["Tipo", "Etapa", "Origem"]);
+    expect(within(filtros()).queryByRole("group", { name: "Recorte" })).toBeNull();
+    expect(within(filtros()).queryByRole("switch")).toBeNull();
   });
 
   it("o Desenvolvedor combina Responsável e Envio falhou com o Para mim", async () => {
@@ -894,52 +884,54 @@ describe("A lista larga com busca e filtros em chips (issue #1551, PRD #1548)", 
       return { status: 404, corpo: {} };
     });
     await within(lista()).findByText("Botão de responder some na Ouvidoria");
+    await waitFor(() => expect(campos()).toEqual(["Tipo", "Etapa", "Origem", "Responsável"]));
 
-    fireEvent.click(await within(filtros()).findByRole("button", { name: "Pedro Rib" }));
-    fireEvent.click(chip("Situação", "Envio falhou"));
-    fireEvent.click(chip("Tipo", "Melhoria"));
+    const recorte = within(filtros()).getByRole("group", { name: "Recorte" });
+    expect(within(recorte).getAllByRole("button").map((b) => b.textContent)).toEqual(["Para mim", "Minhas", "Todas"]);
+    expect(within(recorte).getByRole("button", { name: "Para mim" }).getAttribute("aria-pressed")).toBe("true");
+
+    escolher("Responsável", "Pedro Rib");
+    const soFalhas = within(filtros()).getByRole("switch", { name: "Só envio falhou" });
+    expect(soFalhas.getAttribute("aria-checked")).toBe("false");
+    fireEvent.click(soFalhas);
+    expect(soFalhas.getAttribute("aria-checked")).toBe("true");
+    escolher("Tipo", "Melhoria");
 
     await waitFor(() => expect(chamadas.at(-1)?.url).toBe(COMBINADA));
     expect(await within(lista()).findByText("Relatorio de custo por setor")).toBeTruthy();
     expect(within(lista()).queryByText("Botão de responder some na Ouvidoria")).toBeNull();
-    expect(chips()).toEqual([
-      "Para mim",
-      "Minhas",
-      "Todas",
-      "Bug",
-      "Melhoria",
-      "Registrada",
-      "Em análise",
-      "Planejada",
-      "Em desenvolvimento",
-      "Entregue",
-      "Em produção",
-      "Não será feita",
-      "Pedido do diretor",
-      "Vitta",
-      "Pedro Vitta",
-      "Pedro Rib",
-      "Envio falhou",
-    ]);
   });
 
-  it("os chips quebram linha dentro da coluna, sem rolagem horizontal", async () => {
-    comoDesenvolvedor();
+  it("Limpar filtros aparece só com filtro ativo e volta tudo ao padrão, menos o recorte", async () => {
+    const chamadas = montar((url) => {
+      if (url === EU) return { status: 200, corpo: { desenvolvedor: true } };
+      if (url === DESENVOLVEDORES) return { status: 200, corpo: QUEM_CUIDA };
+      if (url.startsWith(LISTA)) return { status: 200, corpo: [SEM_CARD] };
+      return { status: 404, corpo: {} };
+    });
     await within(lista()).findByText("Botão de responder some na Ouvidoria");
-    await within(filtros()).findByRole("button", { name: "Pedro Rib" });
+    await within(filtros()).findByRole("switch", { name: "Só envio falhou" });
+    expect(within(filtros()).queryByRole("button", { name: "Limpar filtros" })).toBeNull();
 
-    const grupos = within(filtros()).getAllByRole("group");
-    expect(grupos).toHaveLength(6);
-    for (const grupo of grupos) {
-      expect(grupo.className).toMatch(/(^|\s)flex-wrap(\s|$)/);
-      expect(grupo.className).not.toMatch(/overflow-x|flex-nowrap|whitespace-nowrap/);
-    }
-    for (const botao of within(filtros()).getAllByRole("button")) {
-      expect(botao.className).not.toMatch(/(^|\s)flex-1(\s|$)/);
-    }
+    escolher("Etapa", "Planejada");
+    fireEvent.click(within(filtros()).getByRole("switch", { name: "Só envio falhou" }));
+    fireEvent.change(screen.getByRole("searchbox", { name: "Buscar pelo título" }), { target: { value: "ata" } });
+    await waitFor(() =>
+      expect(chamadas.at(-1)?.url).toBe(`${LISTA}?filtro=para_mim&busca=ata&etapa=planejada&envio_falhou=true`),
+    );
+
+    fireEvent.click(within(filtros()).getByRole("button", { name: "Limpar filtros" }));
+
+    await waitFor(() => expect(chamadas.at(-1)?.url).toBe(`${LISTA}?filtro=para_mim`));
+    expect((screen.getByRole("searchbox", { name: "Buscar pelo título" }) as HTMLInputElement).value).toBe("");
+    expect(within(filtros()).getByRole("combobox", { name: "Etapa" }).textContent).toBe("Todas");
+    expect(within(filtros()).getByRole("switch", { name: "Só envio falhou" }).getAttribute("aria-checked")).toBe(
+      "false",
+    );
+    expect(within(filtros()).queryByRole("button", { name: "Limpar filtros" })).toBeNull();
   });
 
-  it("a lista recolhe com uma Demanda aberta e volta pelo botão", async () => {
+  it("a barra fica em cima, fora da coluna da lista, e recolhe junto com ela", async () => {
     montar((url) => {
       if (url === LISTA) return { status: 200, corpo: [SEM_CARD] };
       if (url === `${LISTA}/d-1`) return { status: 200, corpo: conversa("d-1") };
@@ -950,16 +942,117 @@ describe("A lista larga com busca e filtros em chips (issue #1551, PRD #1548)", 
     const voltar = () => screen.getByRole("button", { name: VOLTAR_PARA_A_LISTA });
 
     await within(lista()).findByText("Botão de responder some na Ouvidoria");
+    expect(painelDaLista().contains(filtros())).toBe(false);
+    expect(filtros().compareDocumentPosition(lista()) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(painelDaLista().className).not.toMatch(recolhida);
+    expect(filtros().className).not.toMatch(recolhida);
     expect(voltar().className).toMatch(recolhida);
 
     fireEvent.click(within(lista()).getByRole("button", { name: /Botão de responder some/ }));
     await screen.findByText("Onde isso aconteceu?");
     expect(painelDaLista().className).toMatch(recolhida);
+    expect(filtros().className).toMatch(recolhida);
     expect(voltar().className).not.toMatch(recolhida);
 
     fireEvent.click(voltar());
     await waitFor(() => expect(painelDaLista().className).not.toMatch(recolhida));
+    expect(filtros().className).not.toMatch(recolhida);
+  });
+});
+
+describe("O card da conversa (issue #1578)", () => {
+  const COMPLETO = demanda("d-c", "Ata de reunião longa para com erro", {
+    criado_em: "2026-11-01T13:00:00Z",
+    etapa: "em_desenvolvimento",
+    tem_vinculo: true,
+    classificacao: "bug",
+    origem: "diretor",
+    autor: "Felipe Malafaia",
+    responsavel: "Pedro Rezende",
+    partes_entregues: 2,
+    partes_total: 5,
+  });
+
+  function comCard() {
+    return montar((url) => {
+      if (url === LISTA) return { status: 200, corpo: [COMPLETO] };
+      if (url === `${LISTA}/d-c/conversa`) return { status: 200, corpo: { mensagens: [], mencionaveis: [] } };
+      return { status: 404, corpo: {} };
+    });
+  }
+
+  async function card() {
+    await within(lista()).findByText("Ata de reunião longa para com erro");
+    return within(lista()).getAllByRole("listitem")[0];
+  }
+
+  it("mostra a data de abertura, quem pediu e quem cuida com as iniciais, e a Etapa", async () => {
+    comCard();
+    const item = await card();
+
+    expect(within(item).getByText(/^Aberto em 01\/11/)).toBeTruthy();
+    expect(within(item).getByText("Felipe Malafaia")).toBeTruthy();
+    expect(within(item).getByText("FM")).toBeTruthy();
+    expect(within(item).getByText("Pedro Rezende")).toBeTruthy();
+    expect(within(item).getByText("PR")).toBeTruthy();
+    expect(within(item).getByText("Em desenvolvimento")).toBeTruthy();
+    expect(within(item).getByText("Bug")).toBeTruthy();
+    expect(within(item).getByText("Pedido do diretor")).toBeTruthy();
+  });
+
+  it("o PRD com partes mostra X de Y partes e a barra de progresso", async () => {
+    comCard();
+    const item = await card();
+
+    expect(within(item).getByText("2 de 5 partes")).toBeTruthy();
+    const barra = within(item).getByRole("progressbar", { name: "Partes entregues" });
+    expect(barra.getAttribute("aria-valuenow")).toBe("2");
+    expect(barra.getAttribute("aria-valuemax")).toBe("5");
+  });
+
+  it("tem borda fora do hover, transição no hover e no foco, e não se move com motion-reduce", async () => {
+    comCard();
+    const item = await card();
+    const contorno = item.firstElementChild as HTMLElement;
+
+    expect(contorno.className).toMatch(/(^|\s)border(\s|$)/);
+    expect(contorno.className).not.toMatch(/border-transparent/);
+    expect(contorno.className).toMatch(/hover:shadow/);
+    expect(contorno.className).toMatch(/focus-within:/);
+    expect(contorno.className).toMatch(/(^|\s)transition/);
+    expect(contorno.className).toMatch(/motion-reduce:transform-none/);
+  });
+
+  it("Conversar abre a Demanda com a caixa da Conversa da Demanda em foco", async () => {
+    comCard();
+    const item = await card();
+
+    fireEvent.click(within(item).getByRole("button", { name: "Conversar" }));
+
+    const caixa = await screen.findByRole("textbox", { name: "Mensagem para a Conversa" });
+    await waitFor(() => expect(document.activeElement).toBe(caixa));
+  });
+
+  it("clicar no card abre a Demanda sem roubar o foco para a Conversa", async () => {
+    comCard();
+    const item = await card();
+
+    fireEvent.click(within(item).getByRole("button", { name: /Ata de reunião longa/ }));
+
+    const caixa = await screen.findByRole("textbox", { name: "Mensagem para a Conversa" });
+    expect(document.activeElement).not.toBe(caixa);
+  });
+
+  it("em tela larga a Conversa da Demanda fica numa coluna à direita, fixa na rolagem", async () => {
+    comCard();
+    const item = await card();
+
+    fireEvent.click(within(item).getByRole("button", { name: /Ata de reunião longa/ }));
+
+    const conversaDaDemanda = await screen.findByRole("region", { name: "Conversa da Demanda" });
+    const coluna = conversaDaDemanda.parentElement as HTMLElement;
+    expect(coluna.className).toMatch(/xl:sticky/);
+    expect((coluna.parentElement as HTMLElement).className).toMatch(/xl:grid-cols-/);
   });
 });
 
@@ -994,25 +1087,21 @@ describe("Os cards que a Vitta abre pelo terminal (issue #1554, ADR 0084, decis�
 
     await within(lista()).findByText("Ouvidoria: prazo por setor");
     const itens = within(lista()).getAllByRole("listitem");
-    expect(itens.map((item) => item.textContent)).toEqual([
-      "Ouvidoria: prazo por setorEm análiseVitta",
-      "Botão de imprimirEm análisePedido do diretor",
-    ]);
+    expect(within(itens[0]).getByText("Ouvidoria: prazo por setor")).toBeTruthy();
+    expect(within(itens[0]).getByText("Vitta")).toBeTruthy();
+    expect(within(itens[1]).getByText("Botão de imprimir")).toBeTruthy();
+    expect(within(itens[1]).getByText("Pedido do diretor")).toBeTruthy();
   });
 
-  it("o chip Origem pede ao servidor só os cards daquela origem", async () => {
+  it("o filtro Origem pede ao servidor só os cards daquela origem", async () => {
     const chamadas = comoDiretor();
     await within(lista()).findByText("Ouvidoria: prazo por setor");
-    const origem = within(screen.getByRole("region", { name: "Filtros da lista" })).getByRole("group", {
-      name: "Origem",
-    });
 
-    fireEvent.click(within(origem).getByRole("button", { name: "Vitta" }));
+    escolher("Origem", "Vitta");
     await waitFor(() => expect(chamadas.at(-1)?.url).toBe(`${LISTA}?origem=vitta`));
 
-    fireEvent.click(within(origem).getByRole("button", { name: "Pedido do diretor" }));
+    escolher("Origem", "Pedido do diretor");
     await waitFor(() => expect(chamadas.at(-1)?.url).toBe(`${LISTA}?origem=diretor`));
-    expect(within(origem).getByRole("button", { name: "Vitta" }).getAttribute("aria-pressed")).toBe("false");
   });
 
   it("o card Vitta abre o documento e a Conversa da Demanda, sem o chat do agente", async () => {
