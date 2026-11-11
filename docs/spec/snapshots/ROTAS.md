@@ -1,6 +1,6 @@
 # ROTAS.md
 <!-- gerado automaticamente por /snapshot — não editar -->
-<!-- last_update: 2026-11-11T13:59+0000 -->
+<!-- last_update: 2026-11-11T17:19+0000 -->
 
 Endpoints HTTP expostos pelo backend FastAPI do Hospital Reuniões.
 
@@ -485,6 +485,8 @@ Endpoints HTTP expostos pelo backend FastAPI do Hospital Reuniões.
 | POST | `/admin/tecnologia/chat/{demanda_id}/nao-bateu` | O "Nao bateu" do resumo: o que nao bateu entra na conversa como fala do | ✅ |
 | POST | `/admin/tecnologia/chat/{demanda_id}/reenviar` | O "Reenviar" da Demanda em "Envio falhou" (issue #1535, ADR 0083, decisao 7). | ✅ |
 | POST | `/admin/tecnologia/chat/{demanda_id}/resumo` | O "Fechar e resumir" da melhoria (issue #1383): vale a qualquer altura do | ✅ |
+| GET | `/admin/tecnologia/chat/{demanda_id}/revisao` | A estimativa do diálogo de confirmação (ADR 0082): a faixa em dólar do | ✅ |
+| POST | `/admin/tecnologia/chat/{demanda_id}/revisao` | O "Revisar com o código de hoje" confirmado (ADR 0084, decisão 3). | ✅ |
 | GET | `/admin/tecnologia/desenvolvedores` | O "Quem cuida disto?" do resumo (ADR 0083, decisao 5). `padrao` marca | ✅ |
 | GET | `/admin/tecnologia/entregas` | A aba Entregas (issue #1556, ADR 0084, decisao 8): os cards entregues, | ✅ |
 | GET | `/admin/tecnologia/eu` | Se quem esta logado e Desenvolvedor (ADR 0083, decisao 2). | ✅ |
@@ -532,4 +534,4 @@ Endpoints HTTP expostos pelo backend FastAPI do Hospital Reuniões.
 
 ---
 
-**Totais:** 301 endpoints em 45 routers · 94% exigem auth.
+**Totais:** 303 endpoints em 45 routers · 94% exigem auth.
