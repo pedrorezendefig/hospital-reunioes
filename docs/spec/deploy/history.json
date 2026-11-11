@@ -2,6 +2,54 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-11-11T03:46:13-03:00",
+      "sha": "30b1b24e61ced60eff3bffeefad4bb0bcee2b4b1",
+      "app_version": "0.248.0",
+      "subject": "Onda onda-entregas-onda3: Cards que a Vitta abre pelo terminal aparecem na aba",
+      "raw_subject": "chore(deploy): registro da onda onda-entregas-onda3 (#1566)",
+      "scope": [
+        "backend",
+        "frontend"
+      ],
+      "prds": [
+        1548
+      ],
+      "result": "healthy",
+      "duration_seconds": 209,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        },
+        {
+          "service": "frontend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "onda-enxuta onda-entregas-onda3: PR #1566 (issue #1554), mergeados PR a PR. Merge pela API do GitHub, um build. Registro pela Action pos-merge depois do health.",
+      "etapas": {
+        "merge_s": 3,
+        "build_s": {
+          "backend": 169,
+          "frontend": 151
+        },
+        "health_s": 10
+      },
+      "responsavel": "pedrorezendefig"
+    },
+    {
       "at": "2026-11-11T03:17:35-03:00",
       "sha": "9b7bcba0ea9bc6a98e7bb24843d9d93a74c0568a",
       "app_version": "0.247.0",
