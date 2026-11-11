@@ -1,0 +1,43 @@
+{% extends "email_base.html" %}
+
+{% block title %}{{ aviso }}: {{ titulo }} - Hospital São Matheus{% endblock %}
+
+{% block header_subtitle %}Tecnologia{% endblock %}
+
+{% block body %}
+  <p style="color:#475569;font-size:15px;margin:0 0 16px;">
+    Olá, <strong style="color:#1e293b;">{{ destinatario_nome }}</strong>!
+  </p>
+
+  <p style="color:#475569;font-size:14px;line-height:1.6;margin:0 0 20px;">
+    <strong style="color:#1e293b;">{{ autor_nome }}</strong> escreveu na Conversa da Demanda abaixo.
+  </p>
+
+  <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:24px;">
+    <tr>
+      <td style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:20px 24px;">
+        <p style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:#94a3b8;margin:0 0 6px;">
+          Demanda
+        </p>
+        <p style="font-size:15px;font-weight:600;color:#1e293b;line-height:1.5;margin:0;">
+          {{ titulo }}
+        </p>
+      </td>
+    </tr>
+  </table>
+
+  <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:16px;">
+    <tr>
+      <td align="center">
+        <a href="{{ link }}"
+           style="display:inline-block;background:linear-gradient(135deg,#2B2E7E,#2558A0);color:#ffffff;font-size:14px;font-weight:700;text-decoration:none;padding:13px 36px;border-radius:10px;">
+          Ler e responder
+        </a>
+      </td>
+    </tr>
+  </table>
+
+  <p style="color:#94a3b8;font-size:12px;line-height:1.6;margin:0;text-align:center;">
+    O link abre a Demanda na aba Tecnologia, com a conversa embaixo.
+  </p>
+{% endblock %}

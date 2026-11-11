@@ -26,8 +26,9 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from test_tecnologia_vinculo import BASE, DIRETOR, PEDRO, _demanda, _montar, _pessoa  # noqa: E402
 
+from app.config import settings  # noqa: E402
 from app.limiter import limiter  # noqa: E402
-from app.services import github_client  # noqa: E402
+from app.services import github_client, tecnologia_email  # noqa: E402
 
 # Outro Desenvolvedor da Vitta e outra pessoa da diretoria (Super admin sem
 # login do GitHub, que não vê a Demanda do DIRETOR).
@@ -162,7 +163,41 @@ class TestAvisoNoSino:
 
 
 # ═══════════════════════════════════════════════════════════════════════════
-# 3. Nada vai para o GitHub
+# 3. O aviso por e-mail (issue #1538, ADR 0083, decisão 8)
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+@pytest.fixture(autouse=True)
+def emails(monkeypatch) -> list[dict]:
+    """Cada e-mail que sairia, gravado na porta do transporte (Resend, SMTP ou
+    mock): daqui para dentro é o serviço de e-mail que já existe. Autouse
+    porque toda mensagem da Conversa avisa por e-mail."""
+    enviados: list[dict] = []
+
+    def _gravar(destinatario, assunto, html_content, texto_fallback, *a, **kw):
+        enviados.append({"para": destinatario, "assunto": assunto, "html": html_content, "texto": texto_fallback})
+        return True
+
+    monkeypatch.setattr(tecnologia_email, "_enviar_email", _gravar)
+    monkeypatch.setattr(settings, "frontend_url", "https://app.hsm.test")
+    return enviados
+
+
+class TestAvisoPorEmail:
+    def test_cada_aviso_do_sino_sai_tambem_por_email_para_o_mesmo_destinatario(self, monkeypatch, emails):
+        diretor, sb = _cenario(monkeypatch, logado=DIRETOR)
+        lucas, _ = _cenario(monkeypatch, logado=LUCAS, sb=sb)
+
+        diretor.post(CONVERSA, json={"texto": "@Lucas Sampaio, consegue ver isto hoje?"})
+        diretor.post(CONVERSA, json={"texto": "Aconteceu de novo."})
+        lucas.post(CONVERSA, json={"texto": "Qual navegador o senhor usa?"})
+
+        assert _avisos(sb) == [(LUCAS["id"], DEMANDA), (PEDRO["id"], DEMANDA), (DIRETOR["id"], DEMANDA)]
+        assert [e["para"] for e in emails] == [LUCAS["email"], PEDRO["email"], DIRETOR["email"]]
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 4. Nada vai para o GitHub
 # ═══════════════════════════════════════════════════════════════════════════
 
 
@@ -184,7 +219,7 @@ class TestNadaVaiParaOGithub:
 
 
 # ═══════════════════════════════════════════════════════════════════════════
-# 4. A migration 129
+# 5. A migration 129
 # ═══════════════════════════════════════════════════════════════════════════
 
 MIGRATIONS = Path(__file__).resolve().parents[2] / "supabase" / "migrations"

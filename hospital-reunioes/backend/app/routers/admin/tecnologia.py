@@ -93,6 +93,7 @@ from app.services import (
     github_client,
     planejamento_demanda,
     tecnologia_anexos,
+    tecnologia_email,
     tecnologia_envio,
 )
 from app.services.conhecimento import carregar_kit
@@ -893,12 +894,17 @@ async def escrever_na_conversa_da_demanda(
     )
     nome = ator.get("nome_completo") or ""
     for destinatario in quem_avisar(demanda, autor_id=ator["id"], mencoes=mencoes):
+        aviso = f"{nome} mencionou você" if destinatario in mencoes else f"{nome} escreveu na Demanda"
         criar_notificacao_tecnologia(
             supabase,
             destinatario_id=destinatario,
-            titulo=f"{nome} mencionou você" if destinatario in mencoes else f"{nome} escreveu na Demanda",
+            titulo=aviso,
             mensagem=str(demanda.get("titulo") or "")[:80],
             demanda_id=demanda_id,
+        )
+        # O mesmo aviso, por e-mail (issue #1538): o diretor não fica com o app aberto.
+        tecnologia_email.enviar_aviso_da_conversa(
+            supabase, destinatario_id=destinatario, aviso=aviso, autor_nome=nome, demanda=demanda
         )
     return _mensagem_para_a_tela(linha, nomes={str(ator["id"]): nome}, ator=ator)
 
