@@ -195,6 +195,59 @@ class TestAvisoPorEmail:
         assert _avisos(sb) == [(LUCAS["id"], DEMANDA), (PEDRO["id"], DEMANDA), (DIRETOR["id"], DEMANDA)]
         assert [e["para"] for e in emails] == [LUCAS["email"], PEDRO["email"], DIRETOR["email"]]
 
+    def test_o_email_traz_o_titulo_quem_escreveu_e_o_link_da_demanda(self, monkeypatch, emails):
+        lucas, _ = _cenario(monkeypatch, logado=LUCAS)
+
+        lucas.post(CONVERSA, json={"texto": "Qual navegador o senhor usa?"})
+
+        [email] = emails
+        link = f"https://app.hsm.test/admin/tecnologia?demanda={DEMANDA}"
+        assert email["assunto"] == "Lucas Sampaio escreveu na Demanda: O relatório some"
+        for corpo in (email["html"], email["texto"]):
+            assert "O relatório some" in corpo
+            assert "Lucas Sampaio" in corpo
+            assert link in corpo
+        assert f'href="{link}"' in email["html"]
+
+    def test_o_email_nao_traz_numero_de_issue_nem_link_do_github(self, monkeypatch, emails):
+        diretor, _ = _cenario(monkeypatch, logado=DIRETOR, demanda=_demanda_do_diretor(github_issue_numero=48213))
+
+        diretor.post(CONVERSA, json={"texto": "@Lucas Sampaio, consegue ver isto hoje?"})
+
+        [email] = emails
+        for parte in ("assunto", "html", "texto"):
+            assert "48213" not in email[parte], parte
+            assert "github" not in email[parte].lower(), parte
+            assert "issue" not in email[parte].lower(), parte
+
+    def test_ninguem_recebe_email_da_propria_mensagem(self, monkeypatch, emails):
+        pedro, _ = _cenario(
+            monkeypatch,
+            logado=PEDRO,
+            demanda=_demanda_do_diretor(autor_id=PEDRO["id"], responsavel_id=PEDRO["id"]),
+        )
+
+        pedro.post(CONVERSA, json={"texto": "Anotando para mim."})
+        pedro.post(CONVERSA, json={"texto": "@Pedro Vitta lembrar de testar no celular."})
+        pedro.post(CONVERSA, json={"texto": "@Pedro Vitta e @Lucas Sampaio, combinado."})
+
+        assert [e["para"] for e in emails] == [LUCAS["email"]]
+
+    def test_falha_no_email_nao_impede_a_mensagem_nem_o_aviso_do_sino(self, monkeypatch, emails):
+        def _cair(*a, **kw):
+            raise RuntimeError("Resend fora do ar")
+
+        monkeypatch.setattr(tecnologia_email, "_enviar_email", _cair)
+        diretor, sb = _cenario(monkeypatch, logado=DIRETOR)
+
+        resposta = diretor.post(CONVERSA, json={"texto": "@Lucas Sampaio, consegue ver isto hoje?"})
+
+        assert resposta.status_code == 201, resposta.text
+        assert [m["texto"] for m in sb.tabelas["tecnologia_conversa_da_demanda"]] == [
+            "@Lucas Sampaio, consegue ver isto hoje?"
+        ]
+        assert _avisos(sb) == [(LUCAS["id"], DEMANDA)]
+
 
 # ═══════════════════════════════════════════════════════════════════════════
 # 4. Nada vai para o GitHub
