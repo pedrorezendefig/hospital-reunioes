@@ -2,6 +2,54 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-11-11T19:12:22-03:00",
+      "sha": "d646fbf4fe536a61a0b3b133b30c6ad5fe86b1fe",
+      "app_version": "0.257.0",
+      "subject": "Onda onda-pergunta-onda1: Pergunta do planejamento em cartão com título, na prática e o porquê da recomendada; Pedido abre ao lado da lista, com botão de ampliar",
+      "raw_subject": "chore(deploy): registro da onda onda-pergunta-onda1 (#1598 #1597)",
+      "scope": [
+        "backend",
+        "frontend"
+      ],
+      "prds": [
+        1591
+      ],
+      "result": "healthy",
+      "duration_seconds": 288,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        },
+        {
+          "service": "frontend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "onda-enxuta onda-pergunta-onda1: PR #1598 (issue #1592), PR #1597 (issue #1593), mergeados PR a PR. Merge pela API do GitHub, um build. Registro pela Action pos-merge depois do health.",
+      "etapas": {
+        "merge_s": 7,
+        "build_s": {
+          "backend": 21,
+          "frontend": 232
+        },
+        "health_s": 0
+      },
+      "responsavel": "pedrorezendefig"
+    },
+    {
       "at": "2026-11-11T16:21:19-03:00",
       "sha": "a78e75788471e29032424c48e396a1df32730712",
       "app_version": "0.256.0",
