@@ -53,6 +53,7 @@ from app.services.tecnologia_vinculo import (
     ETAPA_ENTREGUE,
     ETAPA_REGISTRADA,
     etapa_da_foto,
+    normalizar_github_login,
     o_que_muda_da_foto,
     partes_da_foto,
     partes_para_o_diretor,
@@ -63,10 +64,11 @@ logger = logging.getLogger(__name__)
 # As acoes do evento `issues` que podem mexer na foto (issue #678).
 #
 # `opened` fica de fora porque uma issue recem-aberta nao tem Demanda vinculada
-# ainda: o Vinculo nasce depois, e ja sincroniza na hora em que e criado. As
-# demais acoes (`assigned`, `milestoned`, `pinned`) nao tocam em label, estado
-# nem corpo, que sao os tres campos de que a Etapa e o "O que muda" vivem.
-ACOES_DE_ISSUE = ("labeled", "unlabeled", "closed", "reopened", "edited")
+# ainda: o Vinculo nasce depois, e ja sincroniza na hora em que e criado. A
+# troca de dono (`assigned`, `unassigned`) entra desde a issue #1534: o
+# Responsavel e derivado do assignee (ADR 0083, decisao 6). As demais acoes
+# (`milestoned`, `pinned`) nao tocam em label, estado, corpo nem dono.
+ACOES_DE_ISSUE = ("labeled", "unlabeled", "closed", "reopened", "edited", "assigned", "unassigned")
 
 # As acoes do evento `pull_request` que mexem no fato do PR (issue #1064, ADR
 # 0069, decisao 6). Abrir e reabrir poem o PR na foto; fechar o tira, e o merge
@@ -154,6 +156,22 @@ def cache_desatualizado(demanda: dict[str, Any], mudanca: dict[str, Any]) -> boo
     criterio so. Uma coluna nova no cache passa a ser comparada sozinha.
     """
     return any(valor != demanda.get(campo) for campo, valor in mudanca.items() if campo != CARIMBO_DA_SINCRONIZACAO)
+
+
+def responsavel_da_foto(supabase, foto: dict[str, Any]) -> str | None:
+    """O Responsavel que a foto diz: quem tem no cadastro o login do dono da
+    issue (issue #1534, ADR 0083, decisao 6). `None` sem dono, ou com um dono
+    que nao e usuario do app, e a lista o mostra pelo login.
+
+    O login e unico no cadastro e gravado em minusculas
+    (`normalizar_github_login`), o que o GitHub manda pode vir com maiusculas.
+    """
+    login = normalizar_github_login(foto.get(github_client.FATO_ASSIGNEE))
+    if not login:
+        return None
+    result = supabase.table("participantes").select("id").eq("github_login", login).execute()
+    linhas = result.data or []
+    return str(linhas[0]["id"]) if linhas else None
 
 
 def demanda_vinculada(supabase, numero: int) -> dict[str, Any] | None:
@@ -311,12 +329,16 @@ def sincronizar_demanda(
 
     dados = github_client.ler_issue(numero)
     foto_do_github = github_client.montar_foto(dados, github_client.ler_sub_issues(numero))
+    # O Responsavel e derivado do dono da issue, como a Etapa das labels
+    # (issue #1534): entra no cache e na comparacao do cache igual.
+    responsavel_id = responsavel_da_foto(supabase, foto_do_github)
     demanda_id = str(demanda["id"])
 
     for _ in range(TENTATIVAS_DA_ESCRITA):
         mudanca = mudanca_da_foto(
             _com_os_fatos(foto_do_github, demanda, ajustar_fatos), versao_em_producao=_versao_que_segura(demanda)
         )
+        mudanca["responsavel_id"] = responsavel_id
         if not cache_desatualizado(demanda, mudanca):
             return False
         etapa_antes = demanda.get("etapa") or ETAPA_REGISTRADA

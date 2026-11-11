@@ -461,8 +461,9 @@ async def webhook_github(
     3. **Assinatura.** Antes de olhar QUALQUER outra coisa do pedido, o header do
        evento incluído: conferir o evento primeiro deixaria qualquer um
        descobrir, sem segredo nenhum, quais eventos o app trata.
-    4. **Evento e ação.** `issues`, só nas ações que mexem em label, estado ou
-       corpo, e `pull_request`, só ao abrir, reabrir e fechar. O resto sai em
+    4. **Evento e ação.** `issues`, só nas ações que mexem em label, estado,
+       corpo ou dono (o dono é o Responsável, issue #1534), e `pull_request`,
+       só ao abrir, reabrir e fechar. O resto sai em
        2xx sem gastar cota do GitHub.
     5. **Repositório**, como defesa em profundidade.
     6. **Demanda vinculada.** A esmagadora maioria das issues do repositório não

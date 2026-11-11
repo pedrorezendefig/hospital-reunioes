@@ -374,6 +374,22 @@ def criar_issue(*, titulo: str, corpo: str, labels: list[str], assignees: list[s
     return dados
 
 
+# A chave do dono da raiz na foto (issue #1534).
+FATO_ASSIGNEE = "assignee"
+
+
+def _primeiro_assignee(dados: dict[str, Any]) -> str | None:
+    """O login do primeiro dono da issue, na ordem do GitHub, ou `None`.
+
+    Um Responsavel so (ADR 0083): com dois donos no GitHub, vale o primeiro.
+    """
+    candidatos = [*(dados.get("assignees") or []), dados.get("assignee")]
+    for pessoa in candidatos:
+        if isinstance(pessoa, dict) and isinstance(pessoa.get("login"), str) and pessoa["login"].strip():
+            return pessoa["login"].strip()
+    return None
+
+
 def montar_foto(dados: dict[str, Any], partes: list[dict[str, Any]]) -> dict[str, Any]:
     """A foto que o servico puro le: a raiz, as partes e o resumo das partes.
 
@@ -388,6 +404,13 @@ def montar_foto(dados: dict[str, Any], partes: list[dict[str, Any]]) -> dict[str
     """
     foto = _no(dados)
     foto["partes"] = [_no(parte) for parte in partes if isinstance(parte, dict)]
+
+    # O dono da raiz no GitHub, de que o Responsavel da Demanda e derivado
+    # (issue #1534, ADR 0083, decisao 6). So entra quando ha dono: a foto da
+    # issue sem assignee continua identica a de antes desta fatia.
+    assignee = _primeiro_assignee(dados)
+    if assignee is not None:
+        foto[FATO_ASSIGNEE] = assignee
 
     resumo = dados.get("sub_issues_summary")
     if isinstance(resumo, dict) and isinstance(resumo.get("total"), int):
