@@ -237,3 +237,109 @@ class TestFiltros:
 
     def test_periodo_invertido_e_recusado(self, entregas):
         assert entregas(PEDRO, "de=2026-11-05&ate=2026-11-01").status_code == 422
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 3. O que fica fora
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+class TestFicamFora:
+    @pytest.mark.parametrize("did", ["x-apagado", "x-em-desenvolvimento", "x-nao-sera-feita"])
+    def test_card_apagado_e_card_nao_entregue_ficam_fora_da_lista(self, entregas, did):
+        assert did not in _ids(entregas(PEDRO, "de=2026-11-03&ate=2026-11-03"))
+
+    def test_card_apagado_nao_conta_na_semana(self, entregas):
+        """Os tres de fora tem a data de 03/11, a mesma do bug entregue: a
+        semana de 02/11 conta so os dois entregues."""
+        assert _periodos(entregas(PEDRO, "de=2026-11-02&ate=2026-11-08")) == [("2026-11-02", 2)]
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 4. A lista: datas e Responsavel
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+class TestLista:
+    def test_a_entrega_traz_data_de_entrega_data_em_producao_e_responsavel(self, entregas):
+        [entrega] = _corpo(entregas(DIRETOR, "tipo=bug&origem=diretor"))["entregas"]
+
+        assert entrega["id"] == "e-bug-diretor"
+        assert entrega["fechada_em"] == "2026-11-03T12:00:00Z"
+        assert entrega["em_producao_em"] == "2026-11-04T15:00:00Z"
+        assert entrega["responsavel"] == "Pedro Vitta"
+        assert entrega["etapa"] == "em_producao"
+
+    def test_a_entrega_que_nao_subiu_vem_sem_data_em_producao(self, entregas):
+        [entrega] = _corpo(entregas(DIRETOR, "responsavel=P4"))["entregas"]
+
+        assert entrega["fechada_em"] == "2026-11-05T20:00:00Z"
+        assert entrega["em_producao_em"] is None
+
+    def test_o_responsavel_de_fora_do_app_aparece_pelo_login(self, entregas):
+        [entrega] = _corpo(entregas(DIRETOR, "responsavel=terceiro-gh"))["entregas"]
+
+        assert entrega["responsavel"] == "terceiro-gh"
+
+    def test_numero_e_link_da_issue_nao_saem_para_o_diretor(self, entregas):
+        """O mesmo funil da lista do chat (ADR 0054, decisao 9)."""
+        [entrega] = _corpo(entregas(DIRETOR, "tipo=bug&origem=diretor"))["entregas"]
+
+        assert entrega["issue_numero"] is None
+        assert entrega["issue_url"] is None
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 5. Quem ve
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+class TestQuemVe:
+    @pytest.mark.parametrize("logado", [PEDRO, DIRETOR])
+    def test_o_diretor_e_o_desenvolvedor_abrem_as_entregas(self, entregas, logado):
+        assert entregas(logado).status_code == 200
+
+    def test_quem_nao_e_super_admin_e_recusado(self, entregas):
+        assert entregas(FACILITADOR).status_code == 403
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 6. O Kit de conhecimento
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+def _kit() -> str:
+    return (CONHECIMENTO_DIR / "tecnologia.md").read_text(encoding="utf-8")
+
+
+def _secao(titulo: str) -> str:
+    return _kit().split(f"## {titulo}", 1)[1].split("\n## ", 1)[0]
+
+
+class TestKit:
+    def test_o_kit_diz_que_a_aba_tem_conversas_e_entregas(self):
+        """O Assistente fala pela lingua do Kit: sem isto, ele diria que a aba
+        e uma tela so."""
+        abertura = _kit().split("\n## ", 1)[0]
+
+        assert "**Conversas**" in abertura
+        assert "**Entregas**" in abertura
+        assert "tela só" not in _kit()
+
+    def test_o_kit_explica_as_entregas(self):
+        secao = _secao("As Entregas")
+        for trecho in (
+            "por semana",
+            "por mês",
+            "segunda-feira",
+            "data de entrega",
+            "em produção",
+            "Responsável",
+            "período",
+            "Origem",
+            "combinam",
+            "apagado",
+            "Documento do card",
+            "nada se move",
+        ):
+            assert trecho in secao, trecho

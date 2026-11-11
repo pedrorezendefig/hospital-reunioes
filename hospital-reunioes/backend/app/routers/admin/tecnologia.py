@@ -759,8 +759,7 @@ async def listar_as_entregas(
         "periodos": tecnologia_entregas.contagem([dia for dia, _ in filtradas], agrupar),
         "entregas": _para_a_lista(supabase, [d for _, d in filtradas], ator=ator),
         "responsaveis": [
-            {"valor": valor, "nome": nome}
-            for valor, nome in sorted(opcoes.items(), key=lambda par: par[1].casefold())
+            {"valor": valor, "nome": nome} for valor, nome in sorted(opcoes.items(), key=lambda par: par[1].casefold())
         ],
     }
 
