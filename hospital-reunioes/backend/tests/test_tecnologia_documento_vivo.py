@@ -13,7 +13,6 @@ Tudo pela ROTA, com o modelo e o GitHub dublados no molde de
 from __future__ import annotations
 
 import os
-import re
 import sys
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
