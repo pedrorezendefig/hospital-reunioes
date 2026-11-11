@@ -32,6 +32,7 @@ from test_tecnologia_webhook_github import (  # noqa: E402
     _sem_pr_aberto,  # noqa: F401  (autouse)
 )
 
+from app.services.conhecimento import CONHECIMENTO_DIR  # noqa: E402
 from app.services.tecnologia_vinculo import (  # noqa: E402
     ETAPA_EM_DESENVOLVIMENTO,
     ETAPA_EM_PRODUCAO,
@@ -117,3 +118,21 @@ class TestAsDatasDoDocumento:
         [item] = client.get(CHAT).json()
 
         assert (item["fechada_em"], item["em_producao_em"]) == (None, None)
+
+
+class TestOKitDizODocumento:
+    def test_o_kit_da_tecnologia_descreve_o_documento_do_card(self):
+        """O kit é a língua em que o Assistente fala com o diretor: sem o
+        comportamento novo escrito, ele descreveria o texto corrido de antes."""
+        texto = (CONHECIMENTO_DIR / "tecnologia.md").read_text(encoding="utf-8")
+
+        secao = texto.split("## A Etapa", 1)[1].split("\n## ", 1)[0]
+        for trecho in (
+            "**Em uma frase**",
+            "até cinco tópicos",
+            "**Ver tudo**",
+            "quando ficou pronta",
+            "**Datas**",
+            "Descrição em preparação",
+        ):
+            assert trecho in secao, trecho

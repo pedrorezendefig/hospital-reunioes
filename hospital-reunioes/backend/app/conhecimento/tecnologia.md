@@ -32,7 +32,7 @@ Se o card não chegar à Vitta depois do clique em Criar o card, o pedido fica m
 
 O modelo de IA que está respondendo e quanto a conversa já custou em dólar aparecem no alto da conversa aberta, por exemplo "Opus 5.5 · US$ 1,84 até agora". O valor soma o que a IA fez naquela conversa (as perguntas, o resumo e a leitura do código) e muda a cada resposta. Aparece "custo não medido" em dois casos em que o sistema não tem como fazer a conta inteira: quando o modelo usado está sem preço cadastrado e quando a conversa tem print, porque a leitura do print ainda não fica registrada. Nesses casos ele avisa em vez de mostrar um valor menor que o de verdade. Documento não deixa o custo sem medida: ele é lido sem IA, e as respostas que o levam à IA entram na conta como as outras. Enquanto a IA não respondeu nada, não aparece custo. O custo não está na lista ao lado, só na conversa aberta.
 
-A conversa fica guardada. Ao lado dela fica a lista de tudo o que você já pediu, do mais recente para o mais antigo, com o título e a Etapa de cada pedido. Ao lado da Etapa, o selo **Bug** ou **Melhoria** diz o que o pedido é. Uma conversa que ficou no meio aparece como Registrada: clique nela e você continua de onde parou. Num pedido que já foi para a Vitta, o clique mostra a conversa e O que muda, que é o que a entrega acrescenta para você; enquanto a Vitta não escreve esse texto, aparece "Descrição em preparação". O botão **Nova conversa**, no alto da lista, começa um pedido do zero. No celular a lista abre primeiro, e o botão Voltar às conversas leva de volta a ela.
+A conversa fica guardada. Ao lado dela fica a lista de tudo o que você já pediu, do mais recente para o mais antigo, com o título e a Etapa de cada pedido. Ao lado da Etapa, o selo **Bug** ou **Melhoria** diz o que o pedido é. Uma conversa que ficou no meio aparece como Registrada: clique nela e você continua de onde parou. Num pedido que já foi para a Vitta, o clique abre o documento do pedido, com O que muda, que é o que a entrega acrescenta para você, e a conversa embaixo; enquanto a Vitta não escreve esse texto, aparece "Descrição em preparação". O botão **Nova conversa**, no alto da lista, começa um pedido do zero. No celular a lista abre primeiro, e o botão Voltar às conversas leva de volta a ela.
 
 ## O que é uma Demanda
 
@@ -88,7 +88,14 @@ Quando o pedido vira trabalho de desenvolvimento, ele ganha uma **Etapa**, que c
 
 A Etapa nunca é digitada à mão: ela é lida do planejamento da Vitta e aparece sozinha na lista. Quando a entrega tem partes, a lista mostra quantas já foram entregues. Assim que a Vitta começa a construir, a Etapa passa sozinha para Em desenvolvimento, e quando a versão nova do aplicativo sobe, passa para Em produção.
 
-Ao abrir um pedido que já foi para a Vitta, aparece também **O que muda**: o que aquela entrega acrescenta, em linguagem de quem usa. Esse texto vem do planejamento da Vitta, ou das suas decisões quando a melhoria foi planejada com a IA, e não se edita no aplicativo.
+Ao abrir um pedido que já foi para a Vitta, ele aparece como um documento curto, em quatro partes:
+
+- **Em uma frase**: o que muda, numa frase só.
+- **O que muda**: o que aquela entrega acrescenta, em linguagem de quem usa, em até cinco tópicos. Se houver mais, o botão **Ver tudo** mostra os outros.
+- **Partes**: quando a entrega é feita em partes, cada uma mostra em que pé está e quando ficou pronta.
+- **Datas**: quando o pedido foi criado, quando foi entregue e quando entrou em produção.
+
+Esse texto vem do planejamento da Vitta, ou das suas decisões quando a melhoria foi planejada com a IA, e não se edita no aplicativo. Enquanto a Vitta não escreve o resumo, o documento mostra "Descrição em preparação".
 
 ## Apagar um pedido
 
