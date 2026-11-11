@@ -918,6 +918,17 @@ function melhoriaEmCartao(): ConversaDoChat {
   });
 }
 
+/** A primeira pergunta é de antes do cartão, sem título, e já foi respondida; a da vez está em cartão. */
+function melhoriaComAntigaRespondida(): ConversaDoChat {
+  return melhoria({
+    mensagens: [
+      ...melhoria().mensagens,
+      { autor: "diretor", texto: "Não, na enfermagem.", fonte: null, opcoes: [], nao_bateu: false },
+      PERGUNTA_EM_CARTAO,
+    ],
+  });
+}
+
 describe("A pergunta em cartão", () => {
   it("a pergunta da vez aparece em cartão com número, título, contexto, Na prática das duas opções e o porquê embaixo das opções", async () => {
     montar([{ status: 201, corpo: melhoriaEmCartao() }]);
@@ -978,7 +989,8 @@ describe("A pergunta em cartão", () => {
   });
 
   it("o texto da conversa com o assistente está em 16px, com entrelinha folgada", async () => {
-    montar([{ status: 201, corpo: melhoriaEmCartao() }]);
+    // A pergunta respondida com título encolhe numa linha (issue #1594): as bolhas vêm da pergunta antiga.
+    montar([{ status: 201, corpo: melhoriaComAntigaRespondida() }]);
     fireEvent.click(screen.getByRole("button", { name: "Melhoria" }));
     const cartao = await screen.findByRole("region", { name: "Pergunta 2" });
 
@@ -992,5 +1004,143 @@ describe("A pergunta em cartão", () => {
       expect(texto.className).toMatch(/(^|\s)text-\[16px\](\s|$)/);
       expect(texto.className).toMatch(/(^|\s)leading-relaxed(\s|$)/);
     }
+  });
+});
+
+// ─── A pergunta respondida encolhe numa linha (issue #1594, PRD #1591) ───────
+
+/** A linha da pergunta respondida: o botão que abre e fecha o cartão dela. */
+function linhaDaPergunta(numero: number) {
+  return screen.getByRole("button", { name: new RegExp(`^Pergunta ${numero},`) });
+}
+
+describe("A pergunta respondida em linha", () => {
+  it("a pergunta respondida com título vira uma linha com o número, o título e a letra escolhida, sem bolhas", async () => {
+    montar([{ status: 201, corpo: melhoriaEmCartao() }]);
+
+    fireEvent.click(screen.getByRole("button", { name: "Melhoria" }));
+    await screen.findByRole("region", { name: "Pergunta 2" });
+
+    const linha = linhaDaPergunta(1);
+    expect(within(linha).getByText("Pergunta 1")).toBeTruthy();
+    expect(within(linha).getByText("Onde acontece o problema?")).toBeTruthy();
+    expect(within(linha).getByText("escolheu B")).toBeTruthy();
+    expect(linha.getAttribute("aria-expanded")).toBe("false");
+    // Nem o contexto da pergunta nem a resposta do diretor ficam em bolha.
+    expect(screen.queryByText(PERGUNTA.texto)).toBeNull();
+    expect(screen.queryByText("Não, na enfermagem.")).toBeNull();
+  });
+
+  it("a resposta livre aparece na linha pelo começo do texto", async () => {
+    const livre =
+      "Acontece nos dois lugares, mas a recepção sofre mais porque é ela que atende o paciente no fim do dia.";
+    const conversa = melhoriaEmCartao();
+    conversa.mensagens[3] = { autor: "diretor", texto: livre, fonte: null, opcoes: [], nao_bateu: false };
+    montar([{ status: 201, corpo: conversa }]);
+
+    fireEvent.click(screen.getByRole("button", { name: "Melhoria" }));
+    await screen.findByRole("region", { name: "Pergunta 2" });
+
+    const linha = linhaDaPergunta(1);
+    expect(within(linha).getByText("Acontece nos dois lugares, mas a recepção sofre mais porque…")).toBeTruthy();
+    expect(within(linha).queryByText(/escolheu/)).toBeNull();
+    expect(screen.queryByText(livre)).toBeNull();
+  });
+
+  it("o clique na linha abre o cartão da pergunta só para ler, sem botões de resposta, e outro clique fecha", async () => {
+    montar([{ status: 201, corpo: melhoriaEmCartao() }]);
+    fireEvent.click(screen.getByRole("button", { name: "Melhoria" }));
+    await screen.findByRole("region", { name: "Pergunta 2" });
+    expect(screen.queryByRole("region", { name: "Pergunta 1" })).toBeNull();
+
+    fireEvent.click(linhaDaPergunta(1));
+
+    expect(linhaDaPergunta(1).getAttribute("aria-expanded")).toBe("true");
+    const cartao = screen.getByRole("region", { name: "Pergunta 1" });
+    expect(within(cartao).getByRole("heading", { name: "Onde acontece o problema?" })).toBeTruthy();
+    expect(within(cartao).getByText(PERGUNTA.texto)).toBeTruthy();
+    const grupo = within(cartao).getByRole("group", { name: "Opções" });
+    expect(within(grupo).getByText("Sim, na recepção.")).toBeTruthy();
+    expect(within(grupo).getByText("Não, na enfermagem.")).toBeTruthy();
+    expect(within(cartao).getByText("Por que recomendo a B: É onde o retorno se marca.")).toBeTruthy();
+    expect(within(cartao).queryAllByRole("button")).toHaveLength(0);
+
+    fireEvent.click(linhaDaPergunta(1));
+
+    expect(linhaDaPergunta(1).getAttribute("aria-expanded")).toBe("false");
+    expect(screen.queryByRole("region", { name: "Pergunta 1" })).toBeNull();
+  });
+
+  it("a pergunta antiga, sem título, já respondida, continua em bolha com a resposta em bolha", async () => {
+    montar([{ status: 201, corpo: melhoriaComAntigaRespondida() }]);
+    fireEvent.click(screen.getByRole("button", { name: "Melhoria" }));
+    await screen.findByRole("region", { name: "Pergunta 2" });
+
+    expect(screen.queryByRole("button", { name: /^Pergunta 1,/ })).toBeNull();
+    expect(screen.getByText(PERGUNTA.texto)).toBeTruthy();
+    expect(screen.getByText("Não, na enfermagem.")).toBeTruthy();
+  });
+
+  it("a pergunta da vez, com uma respondida antes dela, continua em cartão inteiro com as opções para clicar", async () => {
+    montar([{ status: 201, corpo: melhoriaEmCartao() }]);
+    fireEvent.click(screen.getByRole("button", { name: "Melhoria" }));
+
+    const cartao = await screen.findByRole("region", { name: "Pergunta 2" });
+    expect(screen.queryByRole("button", { name: /^Pergunta 2,/ })).toBeNull();
+    expect(within(cartao).getByRole("heading", { name: "Quem marca o retorno do paciente?" })).toBeTruthy();
+    expect(within(cartao).getByText(CONTEXTO_DO_CARTAO)).toBeTruthy();
+    const opcoes = within(within(cartao).getByRole("group", { name: "Opções" })).getAllByRole("button");
+    expect(opcoes).toHaveLength(2);
+  });
+});
+
+describe("A resposta com documento ou com quem respondeu, na linha da pergunta", () => {
+  /** A pergunta 1 em cartão respondida pela fala dada; a pergunta da vez é a 2. */
+  function respondidaCom(resposta: Partial<FalaDoChat>): ConversaDoChat {
+    const conversa = melhoriaEmCartao();
+    conversa.mensagens[3] = { autor: "diretor", texto: "", fonte: null, opcoes: [], nao_bateu: false, ...resposta };
+    return conversa;
+  }
+
+  it("a resposta só com documento mostra na linha que anexou e o documento continua na conversa", async () => {
+    montar([
+      {
+        status: 201,
+        corpo: respondidaCom({ documentos: [{ nome: "fluxo-do-retorno.pdf", tamanho_bytes: 3 * 1024 }] }),
+      },
+    ]);
+    fireEvent.click(screen.getByRole("button", { name: "Melhoria" }));
+    await screen.findByRole("region", { name: "Pergunta 2" });
+
+    expect(within(linhaDaPergunta(1)).getByText("anexou um documento")).toBeTruthy();
+    const anexado = screen.getByRole("group", { name: "Documento anexado: fluxo-do-retorno.pdf" });
+    expect(anexado.textContent).toContain("3 KB");
+  });
+
+  it("a resposta com texto e documento mostra a escolha na linha e o documento continua na conversa", async () => {
+    montar([
+      {
+        status: 201,
+        corpo: respondidaCom({
+          texto: "Não, na enfermagem.",
+          documentos: [{ nome: "escala.xlsx", tamanho_bytes: 2 * 1024 }],
+        }),
+      },
+    ]);
+    fireEvent.click(screen.getByRole("button", { name: "Melhoria" }));
+    await screen.findByRole("region", { name: "Pergunta 2" });
+
+    expect(within(linhaDaPergunta(1)).getByText("escolheu B")).toBeTruthy();
+    expect(screen.getByRole("group", { name: "Documento anexado: escala.xlsx" })).toBeTruthy();
+  });
+
+  it("a linha diz quem respondeu a pergunta (issue #1557)", async () => {
+    montar([{ status: 201, corpo: respondidaCom({ texto: "Não, na enfermagem.", respondido_por: "Paula Dev" }) }]);
+    fireEvent.click(screen.getByRole("button", { name: "Melhoria" }));
+    await screen.findByRole("region", { name: "Pergunta 2" });
+
+    const linha = linhaDaPergunta(1);
+    expect(within(linha).getByText("Paula Dev")).toBeTruthy();
+    expect(linha.getAttribute("aria-label")).toBe("Pergunta 1, Onde acontece o problema?: Paula Dev escolheu B");
   });
 });

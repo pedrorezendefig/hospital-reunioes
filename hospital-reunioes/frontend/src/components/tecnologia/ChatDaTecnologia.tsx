@@ -47,6 +47,7 @@ import {
   conversaValida,
   Desenvolvedor,
   desenvolvedoresValidos,
+  DocumentoDaFala,
   DocumentoDoPlanejamento,
   esperaAPergunta,
   FalaDoChat,
@@ -120,9 +121,28 @@ const ROTULOS_DO_RESUMO: [keyof ResumoDoBug, string][] = [
   ["como_repetir", "Como repetir"],
 ];
 
+/** O documento aparece pelo nome e pelo tamanho; o texto dele é só do assistente (issue #1520). */
+function DocumentosAnexados({ documentos }: { documentos: DocumentoDaFala[] }) {
+  return (
+    <>
+      {documentos.map((documento, i) => (
+        <div
+          key={i}
+          role="group"
+          aria-label={`Documento anexado: ${documento.nome}`}
+          className="flex items-center gap-2 px-3 py-2 rounded-2xl bg-primary text-white text-sm"
+        >
+          <FileText className="w-4 h-4 flex-shrink-0" />
+          <span className="normal-case break-all">{documento.nome}</span>
+          <span className="text-xs text-white/80 whitespace-nowrap">{tamanhoLegivel(documento.tamanho_bytes)}</span>
+        </div>
+      ))}
+    </>
+  );
+}
+
 export function Fala({ fala }: { fala: FalaDoChat }) {
   if (fala.autor === "diretor") {
-    const documentos = fala.documentos ?? [];
     return (
       <div className="ml-auto max-w-[85%] flex flex-col items-end gap-1">
         {/* Quem respondeu o turno (issue #1557): na revisão, o Desenvolvedor também responde. */}
@@ -133,19 +153,7 @@ export function Fala({ fala }: { fala: FalaDoChat }) {
             {fala.texto}
           </p>
         )}
-        {/* O documento aparece pelo nome e pelo tamanho; o texto dele é só do assistente (issue #1520). */}
-        {documentos.map((documento, i) => (
-          <div
-            key={i}
-            role="group"
-            aria-label={`Documento anexado: ${documento.nome}`}
-            className="flex items-center gap-2 px-3 py-2 rounded-2xl bg-primary text-white text-sm"
-          >
-            <FileText className="w-4 h-4 flex-shrink-0" />
-            <span className="normal-case break-all">{documento.nome}</span>
-            <span className="text-xs text-white/80 whitespace-nowrap">{tamanhoLegivel(documento.tamanho_bytes)}</span>
-          </div>
-        ))}
+        <DocumentosAnexados documentos={fala.documentos ?? []} />
       </div>
     );
   }
@@ -165,8 +173,9 @@ type PropsDaPerguntaEmCartao = {
   cartao: CartaoDaPergunta;
   /** Contado pelas perguntas da IA na conversa, a partir de 1. */
   numero: number;
-  desabilitado: boolean;
-  onEscolher: (letra: LetraDaOpcao) => void;
+  desabilitado?: boolean;
+  /** Sem ele, o cartão é só de leitura: a pergunta já respondida (issue #1594), sem botões. */
+  onEscolher?: (letra: LetraDaOpcao) => void;
 };
 
 /**
@@ -189,16 +198,8 @@ function PerguntaEmCartao({ fala, cartao, numero, desabilitado, onEscolher }: Pr
         {fala.opcoes.map((opcao, i) => {
           const letra = LETRAS[i];
           const destaque = letra === fala.recomendada;
-          return (
-            <button
-              key={letra}
-              type="button"
-              onClick={() => onEscolher(letra)}
-              disabled={desabilitado}
-              className={`flex items-start gap-3 w-full text-left px-4 py-3 rounded-xl border transition-colors disabled:opacity-60 ${
-                destaque ? "border-primary bg-primary/5 ring-1 ring-primary" : "border-border hover:border-primary"
-              }`}
-            >
+          const conteudo = (
+            <>
               <span
                 className={`flex-shrink-0 w-7 h-7 rounded-full flex items-center justify-center text-sm font-bold ${
                   destaque ? "bg-primary text-white" : "bg-slate-100 text-slate-700"
@@ -219,6 +220,27 @@ function PerguntaEmCartao({ fala, cartao, numero, desabilitado, onEscolher }: Pr
                   Recomendada
                 </span>
               )}
+            </>
+          );
+          const classe = `flex items-start gap-3 w-full text-left px-4 py-3 rounded-xl border transition-colors ${
+            destaque ? "border-primary bg-primary/5 ring-1 ring-primary" : "border-border"
+          }`;
+          if (!onEscolher) {
+            return (
+              <div key={letra} className={classe}>
+                {conteudo}
+              </div>
+            );
+          }
+          return (
+            <button
+              key={letra}
+              type="button"
+              onClick={() => onEscolher(letra)}
+              disabled={desabilitado}
+              className={`${classe} disabled:opacity-60 ${destaque ? "" : "hover:border-primary"}`}
+            >
+              {conteudo}
             </button>
           );
         })}
@@ -227,6 +249,69 @@ function PerguntaEmCartao({ fala, cartao, numero, desabilitado, onEscolher }: Pr
         <p className="text-sm leading-relaxed text-slate-700">{`Por que recomendo a ${fala.recomendada}: ${cartao.porque}`}</p>
       )}
     </section>
+  );
+}
+
+/** Quantos caracteres da resposta livre cabem na linha da pergunta respondida. */
+const COMECO_DA_RESPOSTA = 60;
+
+function comecoDoTexto(texto: string): string {
+  return texto.length > COMECO_DA_RESPOSTA ? `${texto.slice(0, COMECO_DA_RESPOSTA).trimEnd()}…` : texto;
+}
+
+type PropsDaPerguntaRespondida = {
+  pergunta: FalaDoChat;
+  cartao: CartaoDaPergunta & { titulo: string };
+  resposta: FalaDoChat;
+  numero: number;
+};
+
+/**
+ * A pergunta já respondida do planejamento, encolhida numa linha (issue #1594,
+ * PRD #1591): o número, o título e a letra escolhida, ou o começo da resposta
+ * livre. A resposta do diretor entra na linha, sem bolha própria, com quem
+ * respondeu (issue #1557); os documentos dela ficam embaixo da linha (issue
+ * #1520). O clique na linha abre o cartão inteiro, só para ler, e outro clique fecha.
+ */
+function PerguntaRespondida({ pergunta, cartao, resposta, numero }: PropsDaPerguntaRespondida) {
+  const [aberta, setAberta] = useState(false);
+  const nome = `Pergunta ${numero}`;
+  const documentos = resposta.documentos ?? [];
+  const quem = resposta.respondido_por ?? null;
+  // O clique na opção grava o texto dela como a resposta (planejamento_demanda.py).
+  const escolhida = pergunta.opcoes.indexOf(resposta.texto);
+  // A resposta pode ser só um documento, sem texto (issue #1520).
+  const soDocumento = !resposta.texto && documentos.length > 0;
+  const escolha =
+    escolhida >= 0
+      ? `escolheu ${LETRAS[escolhida]}`
+      : soDocumento
+        ? documentos.length === 1
+          ? "anexou um documento"
+          : `anexou ${documentos.length} documentos`
+        : comecoDoTexto(resposta.texto);
+  const separador = escolhida >= 0 || soDocumento ? " " : ": ";
+  return (
+    <div className="space-y-2">
+      <button
+        type="button"
+        aria-label={`${nome}, ${cartao.titulo}: ${quem ? `${quem}${separador}` : ""}${escolha}`}
+        aria-expanded={aberta}
+        onClick={() => setAberta((v) => !v)}
+        className="flex w-full items-baseline gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-left text-sm hover:border-primary"
+      >
+        <span className="flex-shrink-0 text-xs font-semibold text-text-secondary">{nome}</span>
+        <span className="min-w-0 flex-1 truncate normal-case font-semibold text-slate-900">{cartao.titulo}</span>
+        {quem && <span className="flex-shrink-0 normal-case text-xs text-text-secondary">{quem}</span>}
+        <span className="max-w-[50%] truncate normal-case text-slate-700">{escolha}</span>
+      </button>
+      {documentos.length > 0 && (
+        <div className="ml-auto max-w-[85%] flex flex-col items-end gap-1">
+          <DocumentosAnexados documentos={documentos} />
+        </div>
+      )}
+      {aberta && <PerguntaEmCartao fala={pergunta} cartao={cartao} numero={numero} />}
+    </div>
   );
 }
 
@@ -984,6 +1069,15 @@ export function ChatDaTecnologia({ token, demandaId = null, onMudou }: PropsDoCh
   // #1592): a pergunta de antes continua como bolha, com as opções embaixo.
   const cartaoDaVez = ultima?.autor === "ia" && recomendada ? (ultima.cartao ?? null) : null;
   const numeroDaPergunta = falas.filter((f) => f.autor === "ia" && f.recomendada).length;
+  // O número de cada pergunta do planejamento na conversa, a partir de 1.
+  let contadas = 0;
+  const numerosDasPerguntas = falas.map((f) => (f.autor === "ia" && f.recomendada ? ++contadas : 0));
+  // A pergunta com título que o diretor já respondeu encolhe numa linha (issue
+  // #1594); a de antes, sem título, segue como bolha.
+  const emLinha = (i: number) => {
+    const fala = falas[i];
+    return Boolean(fala?.autor === "ia" && fala.recomendada && fala.cartao?.titulo && falas[i + 1]?.autor === "diretor");
+  };
   const naMelhoria = conversa?.planejamento ?? false;
   const encerrado = naMelhoria && conversa?.estado === "encerrado";
   const podeResumir = naMelhoria && (conversa?.estado === "em_andamento" || encerrado);
@@ -1014,20 +1108,35 @@ export function ChatDaTecnologia({ token, demandaId = null, onMudou }: PropsDoCh
       </div>
 
       <div role="log" className="flex-1 overflow-y-auto px-5 py-4 space-y-3 overscroll-contain">
-        {falas.map((fala, i) =>
-          cartaoDaVez && i === falas.length - 1 ? (
-            <PerguntaEmCartao
-              key={i}
-              fala={fala}
-              cartao={cartaoDaVez}
-              numero={numeroDaPergunta}
-              desabilitado={ocupado}
-              onEscolher={escolherALetra}
-            />
-          ) : (
-            <Fala key={i} fala={fala} />
-          ),
-        )}
+        {falas.map((fala, i) => {
+          if (cartaoDaVez && i === falas.length - 1) {
+            return (
+              <PerguntaEmCartao
+                key={i}
+                fala={fala}
+                cartao={cartaoDaVez}
+                numero={numeroDaPergunta}
+                desabilitado={ocupado}
+                onEscolher={escolherALetra}
+              />
+            );
+          }
+          // A resposta da pergunta encolhida já está na linha dela.
+          if (emLinha(i - 1)) return null;
+          const titulo = emLinha(i) ? fala.cartao?.titulo : null;
+          if (titulo && fala.cartao) {
+            return (
+              <PerguntaRespondida
+                key={i}
+                pergunta={fala}
+                cartao={{ ...fala.cartao, titulo }}
+                resposta={falas[i + 1]}
+                numero={numerosDasPerguntas[i]}
+              />
+            );
+          }
+          return <Fala key={i} fala={fala} />;
+        })}
 
         {opcoes.length > 0 && !pensando && recomendada && !cartaoDaVez && (
           <div role="group" aria-label="Opções" className="flex flex-col gap-2 max-w-[85%]">
