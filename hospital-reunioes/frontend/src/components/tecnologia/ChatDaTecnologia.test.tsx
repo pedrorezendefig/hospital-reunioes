@@ -1093,3 +1093,54 @@ describe("A pergunta respondida em linha", () => {
     expect(opcoes).toHaveLength(2);
   });
 });
+
+describe("A resposta com documento ou com quem respondeu, na linha da pergunta", () => {
+  /** A pergunta 1 em cartão respondida pela fala dada; a pergunta da vez é a 2. */
+  function respondidaCom(resposta: Partial<FalaDoChat>): ConversaDoChat {
+    const conversa = melhoriaEmCartao();
+    conversa.mensagens[3] = { autor: "diretor", texto: "", fonte: null, opcoes: [], nao_bateu: false, ...resposta };
+    return conversa;
+  }
+
+  it("a resposta só com documento mostra na linha que anexou e o documento continua na conversa", async () => {
+    montar([
+      {
+        status: 201,
+        corpo: respondidaCom({ documentos: [{ nome: "fluxo-do-retorno.pdf", tamanho_bytes: 3 * 1024 }] }),
+      },
+    ]);
+    fireEvent.click(screen.getByRole("button", { name: "Melhoria" }));
+    await screen.findByRole("region", { name: "Pergunta 2" });
+
+    expect(within(linhaDaPergunta(1)).getByText("anexou um documento")).toBeTruthy();
+    const anexado = screen.getByRole("group", { name: "Documento anexado: fluxo-do-retorno.pdf" });
+    expect(anexado.textContent).toContain("3 KB");
+  });
+
+  it("a resposta com texto e documento mostra a escolha na linha e o documento continua na conversa", async () => {
+    montar([
+      {
+        status: 201,
+        corpo: respondidaCom({
+          texto: "Não, na enfermagem.",
+          documentos: [{ nome: "escala.xlsx", tamanho_bytes: 2 * 1024 }],
+        }),
+      },
+    ]);
+    fireEvent.click(screen.getByRole("button", { name: "Melhoria" }));
+    await screen.findByRole("region", { name: "Pergunta 2" });
+
+    expect(within(linhaDaPergunta(1)).getByText("escolheu B")).toBeTruthy();
+    expect(screen.getByRole("group", { name: "Documento anexado: escala.xlsx" })).toBeTruthy();
+  });
+
+  it("a linha diz quem respondeu a pergunta (issue #1557)", async () => {
+    montar([{ status: 201, corpo: respondidaCom({ texto: "Não, na enfermagem.", respondido_por: "Paula Dev" }) }]);
+    fireEvent.click(screen.getByRole("button", { name: "Melhoria" }));
+    await screen.findByRole("region", { name: "Pergunta 2" });
+
+    const linha = linhaDaPergunta(1);
+    expect(within(linha).getByText("Paula Dev")).toBeTruthy();
+    expect(linha.getAttribute("aria-label")).toBe("Pergunta 1, Onde acontece o problema?: Paula Dev escolheu B");
+  });
+});

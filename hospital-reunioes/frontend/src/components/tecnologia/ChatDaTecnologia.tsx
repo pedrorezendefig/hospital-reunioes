@@ -47,6 +47,7 @@ import {
   conversaValida,
   Desenvolvedor,
   desenvolvedoresValidos,
+  DocumentoDaFala,
   DocumentoDoPlanejamento,
   esperaAPergunta,
   FalaDoChat,
@@ -120,9 +121,28 @@ const ROTULOS_DO_RESUMO: [keyof ResumoDoBug, string][] = [
   ["como_repetir", "Como repetir"],
 ];
 
+/** O documento aparece pelo nome e pelo tamanho; o texto dele é só do assistente (issue #1520). */
+function DocumentosAnexados({ documentos }: { documentos: DocumentoDaFala[] }) {
+  return (
+    <>
+      {documentos.map((documento, i) => (
+        <div
+          key={i}
+          role="group"
+          aria-label={`Documento anexado: ${documento.nome}`}
+          className="flex items-center gap-2 px-3 py-2 rounded-2xl bg-primary text-white text-sm"
+        >
+          <FileText className="w-4 h-4 flex-shrink-0" />
+          <span className="normal-case break-all">{documento.nome}</span>
+          <span className="text-xs text-white/80 whitespace-nowrap">{tamanhoLegivel(documento.tamanho_bytes)}</span>
+        </div>
+      ))}
+    </>
+  );
+}
+
 export function Fala({ fala }: { fala: FalaDoChat }) {
   if (fala.autor === "diretor") {
-    const documentos = fala.documentos ?? [];
     return (
       <div className="ml-auto max-w-[85%] flex flex-col items-end gap-1">
         {/* Quem respondeu o turno (issue #1557): na revisão, o Desenvolvedor também responde. */}
@@ -133,19 +153,7 @@ export function Fala({ fala }: { fala: FalaDoChat }) {
             {fala.texto}
           </p>
         )}
-        {/* O documento aparece pelo nome e pelo tamanho; o texto dele é só do assistente (issue #1520). */}
-        {documentos.map((documento, i) => (
-          <div
-            key={i}
-            role="group"
-            aria-label={`Documento anexado: ${documento.nome}`}
-            className="flex items-center gap-2 px-3 py-2 rounded-2xl bg-primary text-white text-sm"
-          >
-            <FileText className="w-4 h-4 flex-shrink-0" />
-            <span className="normal-case break-all">{documento.nome}</span>
-            <span className="text-xs text-white/80 whitespace-nowrap">{tamanhoLegivel(documento.tamanho_bytes)}</span>
-          </div>
-        ))}
+        <DocumentosAnexados documentos={fala.documentos ?? []} />
       </div>
     );
   }
@@ -261,28 +269,47 @@ type PropsDaPerguntaRespondida = {
 /**
  * A pergunta já respondida do planejamento, encolhida numa linha (issue #1594,
  * PRD #1591): o número, o título e a letra escolhida, ou o começo da resposta
- * livre. A resposta do diretor entra na linha, sem bolha própria. O clique na
- * linha abre o cartão inteiro, só para ler, e outro clique fecha.
+ * livre. A resposta do diretor entra na linha, sem bolha própria, com quem
+ * respondeu (issue #1557); os documentos dela ficam embaixo da linha (issue
+ * #1520). O clique na linha abre o cartão inteiro, só para ler, e outro clique fecha.
  */
 function PerguntaRespondida({ pergunta, cartao, resposta, numero }: PropsDaPerguntaRespondida) {
   const [aberta, setAberta] = useState(false);
   const nome = `Pergunta ${numero}`;
+  const documentos = resposta.documentos ?? [];
+  const quem = resposta.respondido_por ?? null;
   // O clique na opção grava o texto dela como a resposta (planejamento_demanda.py).
   const escolhida = pergunta.opcoes.indexOf(resposta.texto);
-  const escolha = escolhida >= 0 ? `escolheu ${LETRAS[escolhida]}` : comecoDoTexto(resposta.texto);
+  // A resposta pode ser só um documento, sem texto (issue #1520).
+  const soDocumento = !resposta.texto && documentos.length > 0;
+  const escolha =
+    escolhida >= 0
+      ? `escolheu ${LETRAS[escolhida]}`
+      : soDocumento
+        ? documentos.length === 1
+          ? "anexou um documento"
+          : `anexou ${documentos.length} documentos`
+        : comecoDoTexto(resposta.texto);
+  const separador = escolhida >= 0 || soDocumento ? " " : ": ";
   return (
     <div className="space-y-2">
       <button
         type="button"
-        aria-label={`${nome}, ${cartao.titulo}: ${escolha}`}
+        aria-label={`${nome}, ${cartao.titulo}: ${quem ? `${quem}${separador}` : ""}${escolha}`}
         aria-expanded={aberta}
         onClick={() => setAberta((v) => !v)}
         className="flex w-full items-baseline gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-left text-sm hover:border-primary"
       >
         <span className="flex-shrink-0 text-xs font-semibold text-text-secondary">{nome}</span>
         <span className="min-w-0 flex-1 truncate normal-case font-semibold text-slate-900">{cartao.titulo}</span>
+        {quem && <span className="flex-shrink-0 normal-case text-xs text-text-secondary">{quem}</span>}
         <span className="max-w-[50%] truncate normal-case text-slate-700">{escolha}</span>
       </button>
+      {documentos.length > 0 && (
+        <div className="ml-auto max-w-[85%] flex flex-col items-end gap-1">
+          <DocumentosAnexados documentos={documentos} />
+        </div>
+      )}
       {aberta && <PerguntaEmCartao fala={pergunta} cartao={cartao} numero={numero} />}
     </div>
   );
