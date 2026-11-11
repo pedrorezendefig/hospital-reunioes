@@ -80,7 +80,7 @@ from fastapi import APIRouter, Depends, File, HTTPException, Request, Response, 
 from supabase import Client
 
 from app.config import settings
-from app.dependencies import get_supabase_client, require_super_admin, selecionar_participantes
+from app.dependencies import get_supabase_client, is_super_admin, require_super_admin, selecionar_participantes
 from app.limiter import limiter
 from app.models.tecnologia_schemas import (
     AssistenteDocumentoResponse,
@@ -113,6 +113,7 @@ from app.services.conhecimento import carregar_kit
 from app.services.mencoes import extrair_mencoes
 from app.services.notificacao_service import criar_notificacao_tecnologia
 from app.services.tecnologia import (
+    ORIGEM_VITTA,
     SEM_PRODUTO,
     TABELA_CONVERSA_DA_DEMANDA,
     TABELA_DEMANDAS,
@@ -121,6 +122,7 @@ from app.services.tecnologia import (
     em_producao_desde,
     entregue_na_data,
     login_do_responsavel,
+    origem_da_demanda,
     pode_ver,
     quem_avisar,
     recusa_de_apagar,
@@ -178,7 +180,8 @@ def _para_a_lista(supabase: Client, demandas: list[dict], *, ator: dict) -> list
     os dois (ADR 0083, decisao 5), e o selo "Envio falhou" tambem; o motivo
     tecnico da falha, so para o Desenvolvedor (issue #1535). A designacao
     falhada sai so para o Desenvolvedor (issue #1536). O `pode_apagar` diz a
-    tela se mostra o "Apagar" (issue #1549), pela regra da rota.
+    tela se mostra o "Apagar" (issue #1549), pela regra da rota. A `origem`
+    da o selo "Pedido do diretor" ou "Vitta" (issue #1554).
     """
     desenvolvedor = e_desenvolvedor(ator)
     ids = {responsavel_da_demanda(d) for d in demandas}
@@ -203,6 +206,7 @@ def _para_a_lista(supabase: Client, demandas: list[dict], *, ator: dict) -> list
             "designacao_falhou": desenvolvedor and tecnologia_envio.designacao_falhou(d),
             "envio_motivo": d.get("envio_motivo") if desenvolvedor and _falha_pendente(d) else None,
             "pode_apagar": recusa_de_apagar(ator, d) is None,
+            "origem": origem_da_demanda(d),
         }
         for d in demandas
     ]
@@ -636,6 +640,7 @@ async def listar_as_conversas(
     etapa: str | None = None,
     responsavel: str | None = None,
     envio_falhou: bool = False,
+    origem: Literal["diretor", "vitta"] | None = None,
     ator: dict = Depends(require_super_admin),
     supabase: Client = Depends(get_supabase_client),
 ):
@@ -653,7 +658,12 @@ async def listar_as_conversas(
     Demandas cujo card nao chegou ao GitHub (issue #1535), de todos os autores
     mesmo partindo de `para_mim`, porque elas nao tem Responsavel. `para_mim`,
     `responsavel` e `envio_falhou` sao do Desenvolvedor, como os chips da
-    tela, e a rota os recusa a quem nao e.
+    tela, e a rota os recusa a quem nao e. A `origem` (issue #1554) e para
+    todos.
+
+    O diretor ve, alem das dele, os cards de Origem Vitta, abertos pelo
+    terminal (ADR 0084, decisao 4): o "Minhas" dele e o `pode_ver`, e o do
+    Desenvolvedor continua sendo o que ele mesmo pediu.
 
     Sai pelo `_para_a_lista`, o funil da Demanda desta API: e la que numero e
     endereco da issue ficam de fora para o diretor.
@@ -664,7 +674,7 @@ async def listar_as_conversas(
         _recusar("Etapa desconhecida")
     # A lapide do Apagar fica fora de todo filtro (ADR 0084, decisao 2).
     consulta = supabase.table(TABELA_DEMANDAS).select("*").is_("apagada_em", "null")
-    if filtro == "minhas":
+    if filtro == "minhas" and e_desenvolvedor(ator):
         consulta = consulta.eq("autor_id", ator["id"])
     elif filtro == "para_mim":
         consulta = consulta.eq("responsavel_id", ator["id"])
@@ -687,6 +697,8 @@ async def listar_as_conversas(
         visiveis = [d for d in visiveis if responsavel_da_demanda(d) == responsavel]
     if envio_falhou:
         visiveis = [d for d in visiveis if tecnologia_envio.envio_falhou(d)]
+    if origem:
+        visiveis = [d for d in visiveis if origem_da_demanda(d) == origem]
     return _para_a_lista(supabase, visiveis, ator=ator)
 
 
@@ -913,8 +925,13 @@ def _demanda_visivel(supabase: Client, demanda_id: str, ator: dict) -> dict:
 
 
 def _mencionaveis(supabase: Client, demanda: dict) -> list[dict]:
-    """Quem ve a Demanda: o autor e os Desenvolvedores. E so quem a menção
-    alcanca, para o aviso nunca levar alguem a uma Demanda que ele nao abre."""
+    """Quem ve a Demanda: o autor e os Desenvolvedores, e no card de Origem
+    Vitta toda a diretoria (ADR 0084, decisao 4). E so quem a menção alcanca,
+    para o aviso nunca levar alguem a uma Demanda que ele nao abre."""
+    if origem_da_demanda(demanda) == ORIGEM_VITTA:
+        result = selecionar_participantes(supabase, "id, nome_completo, access_profile, is_super_admin, ativo")
+        diretoria = [p for p in (result.data or []) if p.get("ativo") is not False and is_super_admin(p)]
+        return sorted(diretoria, key=lambda p: (p.get("nome_completo") or "").casefold())
     pessoas = {str(p["id"]): p for p in _desenvolvedores(supabase)}
     autor_id = demanda.get("autor_id")
     if autor_id and str(autor_id) not in pessoas:
@@ -978,6 +995,14 @@ async def escrever_na_conversa_da_demanda(
     if not texto:
         _recusar("Escreva a mensagem antes de enviar.")
     mencoes = extrair_mencoes(texto, _mencionaveis(supabase, demanda))
+    ja_escreveram = [
+        str(m["autor_id"])
+        for m in (
+            supabase.table(TABELA_CONVERSA_DA_DEMANDA).select("autor_id").eq("demanda_id", demanda_id).execute().data
+            or []
+        )
+        if m.get("autor_id")
+    ]
     [linha] = (
         supabase.table(TABELA_CONVERSA_DA_DEMANDA)
         .insert({"demanda_id": demanda_id, "autor_id": ator["id"], "texto": texto, "mencoes": mencoes})
@@ -985,7 +1010,7 @@ async def escrever_na_conversa_da_demanda(
         .data
     )
     nome = ator.get("nome_completo") or ""
-    for destinatario in quem_avisar(demanda, autor_id=ator["id"], mencoes=mencoes):
+    for destinatario in quem_avisar(demanda, autor_id=ator["id"], mencoes=mencoes, ja_escreveram=ja_escreveram):
         aviso = f"{nome} mencionou você" if destinatario in mencoes else f"{nome} escreveu na Demanda"
         criar_notificacao_tecnologia(
             supabase,

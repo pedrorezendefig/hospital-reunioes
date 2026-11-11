@@ -857,6 +857,8 @@ describe("A lista larga com busca e filtros em chips (issue #1551, PRD #1548)", 
       "Entregue",
       "Em produção",
       "Não será feita",
+      "Pedido do diretor",
+      "Vitta",
     ]);
   });
 
@@ -900,6 +902,8 @@ describe("A lista larga com busca e filtros em chips (issue #1551, PRD #1548)", 
       "Entregue",
       "Em produção",
       "Não será feita",
+      "Pedido do diretor",
+      "Vitta",
       "Pedro Vitta",
       "Pedro Rib",
       "Envio falhou",
@@ -912,7 +916,7 @@ describe("A lista larga com busca e filtros em chips (issue #1551, PRD #1548)", 
     await within(filtros()).findByRole("button", { name: "Pedro Rib" });
 
     const grupos = within(filtros()).getAllByRole("group");
-    expect(grupos).toHaveLength(5);
+    expect(grupos).toHaveLength(6);
     for (const grupo of grupos) {
       expect(grupo.className).toMatch(/(^|\s)flex-wrap(\s|$)/);
       expect(grupo.className).not.toMatch(/overflow-x|flex-nowrap|whitespace-nowrap/);
@@ -943,5 +947,71 @@ describe("A lista larga com busca e filtros em chips (issue #1551, PRD #1548)", 
 
     fireEvent.click(voltar());
     await waitFor(() => expect(painelDaLista().className).not.toMatch(recolhida));
+  });
+});
+
+describe("Os cards que a Vitta abre pelo terminal (issue #1554, ADR 0084, decisão 4)", () => {
+  const EU = "/api/admin/tecnologia/eu";
+  const DO_TERMINAL = demanda("d-v", "Ouvidoria: prazo por setor", {
+    etapa: "em_analise",
+    tem_vinculo: true,
+    minha: false,
+    origem: "vitta",
+    o_que_muda: "**O que muda:** o prazo aparece por setor.",
+  });
+  const DO_DIRETOR = demanda("d-d", "Botão de imprimir", {
+    etapa: "em_analise",
+    tem_vinculo: true,
+    origem: "diretor",
+  });
+
+  function comoDiretor(extra: (url: string) => Resposta | null = () => null) {
+    return montar((url) => {
+      const especial = extra(url);
+      if (especial) return especial;
+      if (url === EU) return { status: 200, corpo: { desenvolvedor: false } };
+      if (url.startsWith(LISTA + "?") || url === LISTA) return { status: 200, corpo: [DO_TERMINAL, DO_DIRETOR] };
+      if (url === `${LISTA}/d-v/conversa`) return { status: 200, corpo: { mensagens: [], mencionaveis: [] } };
+      return { status: 404, corpo: {} };
+    });
+  }
+
+  it("cada linha leva o selo Vitta ou Pedido do diretor", async () => {
+    comoDiretor();
+
+    await within(lista()).findByText("Ouvidoria: prazo por setor");
+    const itens = within(lista()).getAllByRole("listitem");
+    expect(itens.map((item) => item.textContent)).toEqual([
+      "Ouvidoria: prazo por setorEm análiseVitta",
+      "Botão de imprimirEm análisePedido do diretor",
+    ]);
+  });
+
+  it("o chip Origem pede ao servidor só os cards daquela origem", async () => {
+    const chamadas = comoDiretor();
+    await within(lista()).findByText("Ouvidoria: prazo por setor");
+    const origem = within(screen.getByRole("region", { name: "Filtros da lista" })).getByRole("group", {
+      name: "Origem",
+    });
+
+    fireEvent.click(within(origem).getByRole("button", { name: "Vitta" }));
+    await waitFor(() => expect(chamadas.at(-1)?.url).toBe(`${LISTA}?origem=vitta`));
+
+    fireEvent.click(within(origem).getByRole("button", { name: "Pedido do diretor" }));
+    await waitFor(() => expect(chamadas.at(-1)?.url).toBe(`${LISTA}?origem=diretor`));
+    expect(within(origem).getByRole("button", { name: "Vitta" }).getAttribute("aria-pressed")).toBe("false");
+  });
+
+  it("o card Vitta abre o documento e a Conversa da Demanda, sem o chat do agente", async () => {
+    const chamadas = comoDiretor();
+    await within(lista()).findByText("Ouvidoria: prazo por setor");
+
+    fireEvent.click(within(lista()).getByRole("button", { name: /Ouvidoria: prazo por setor/ }));
+
+    expect(await screen.findByRole("region", { name: "Conversa da Demanda" })).toBeTruthy();
+    const aberta = screen.getByRole("region", { name: "Conversa aberta" });
+    expect(within(aberta).getByText("o prazo aparece por setor.")).toBeTruthy();
+    expect(within(aberta).queryByText(ABERTURA)).toBeNull();
+    expect(chamadas.map((c) => c.url)).not.toContain(`${LISTA}/d-v`);
   });
 });

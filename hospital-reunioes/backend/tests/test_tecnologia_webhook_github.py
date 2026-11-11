@@ -1055,7 +1055,9 @@ class TestSoOEventoIssues:
 
 
 class TestAcoesTratadas:
-    @pytest.mark.parametrize("acao", ("labeled", "unlabeled", "closed", "reopened", "edited", "assigned", "unassigned"))
+    @pytest.mark.parametrize(
+        "acao", ("opened", "labeled", "unlabeled", "closed", "reopened", "edited", "assigned", "unassigned")
+    )
     def test_a_acao_da_lista_sincroniza(self, acao, monkeypatch):
         gh = _GithubFalso({673: _issue(673, labels=("in-progress",))})
         cliente, sb, _ = _montar(demandas=[_demanda("D1", github_issue_numero=673)], github=gh, monkeypatch=monkeypatch)
@@ -1065,7 +1067,7 @@ class TestAcoesTratadas:
         assert resposta.status_code == 200
         assert _demandas(sb)[0]["etapa"] == ETAPA_EM_DESENVOLVIMENTO
 
-    @pytest.mark.parametrize("acao", ("milestoned", "opened", "deleted"))
+    @pytest.mark.parametrize("acao", ("milestoned", "deleted"))
     def test_a_acao_de_fora_da_lista_nao_faz_nada(self, acao, monkeypatch):
         gh = _GithubFalso({673: _issue(673, labels=("in-progress",))})
         cliente, sb, _ = _montar(demandas=[_demanda("D1", github_issue_numero=673)], github=gh, monkeypatch=monkeypatch)

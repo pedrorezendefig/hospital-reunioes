@@ -467,7 +467,9 @@ async def webhook_github(
        2xx sem gastar cota do GitHub.
     5. **Repositório**, como defesa em profundidade.
     6. **Demanda vinculada.** A esmagadora maioria das issues do repositório não
-       tem Demanda nenhuma atrás, e isso não é erro.
+       tem Demanda nenhuma atrás, e isso não é erro. A exceção é a issue-raiz do
+       app aberta pelo terminal, que o espelho transforma em Demanda de Origem
+       Vitta no `opened` e no `edited` (issue #1554, ADR 0084, decisão 4).
 
     O corpo da resposta é o SMOKE do passo humano: o operador confere a
     instalação pelo corpo da delivery em `Recent Deliveries`, e não pelo 200.
@@ -553,6 +555,8 @@ async def webhook_github(
 
     demanda = tecnologia_sincronizacao.demanda_vinculada(supabase, numero)
     if demanda is None:
+        if _espelho_aceita(payload):
+            return await _espelhar(supabase, numero)
         return {"ignorado": "sem_vinculo"}
 
     return await _sincronizar(
@@ -560,6 +564,46 @@ async def webhook_github(
         demanda,
         numero,
     )
+
+
+def _espelho_aceita(payload: dict) -> bool:
+    """O filtro barato do espelho (issue #1554), pelo corpo do evento e sem
+    gastar cota: a esmagadora maioria das issues sem Demanda (a parte, a
+    ferramenta, o card do chat que ainda nao gravou o numero) para aqui."""
+    from app.services import tecnologia_espelho
+
+    issue = payload.get("issue")
+    return (
+        payload.get("action") in tecnologia_espelho.ACOES_DO_ESPELHO
+        and isinstance(issue, dict)
+        and tecnologia_espelho.decidir(issue, None) == tecnologia_espelho.CRIA
+    )
+
+
+async def _espelhar(supabase, numero: int) -> dict:
+    """A issue-raiz do app aberta pelo terminal vira Demanda de Origem Vitta
+    (issue #1554, ADR 0084, decisao 4), e a sincronizacao lhe da a Etapa, as
+    partes e o Responsavel na mesma entrega.
+
+    O espelho rele a issue e decide de novo pelo que releu: quem cria e o
+    GitHub de agora, e nao o corpo do evento. Falha responde 2xx, como a
+    sincronizacao: o GitHub nao reentrega, e o proximo `edited` tenta de novo.
+    """
+    from app.services import tecnologia_espelho, tecnologia_sincronizacao
+
+    try:
+        criada = await run_in_threadpool(tecnologia_espelho.espelhar, supabase, numero)
+    except Exception:
+        logger.warning("[GitHub webhook] Falha ao espelhar a issue #%s como Demanda.", numero, exc_info=True)
+        return {"recebido": True, "espelhada": False, "falhou": True}
+    if criada is None:
+        return {"ignorado": "espelho"}
+    desfecho = await _sincronizar(
+        lambda: tecnologia_sincronizacao.sincronizar_demanda(supabase, criada),
+        criada,
+        numero,
+    )
+    return {**desfecho, "espelhada": True}
 
 
 def _numero_utilizavel(numero) -> bool:

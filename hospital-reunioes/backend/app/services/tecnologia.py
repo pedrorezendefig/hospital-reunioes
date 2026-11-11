@@ -7,6 +7,7 @@ sincronizacao da Etapa e o Anexo ainda leem (issue #1386).
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from datetime import UTC, datetime
 from typing import Any
 
@@ -37,6 +38,12 @@ TABELA_CONVERSA_DA_DEMANDA = "tecnologia_conversa_da_demanda"
 # isso (`test_admin_tecnologia.py`).
 ESTADOS_ABERTOS: tuple[str, ...] = ("nova", "em_andamento", "aguardando")
 ESTADOS_FECHADOS: tuple[str, ...] = ("concluida", "cancelada")
+
+# Quem abriu o card (ADR 0084, decisao 4; CHECK da migration 130): o diretor,
+# pelo chat da aba, ou a Vitta, pela issue-raiz do app aberta no terminal.
+ORIGEM_DIRETOR = "diretor"
+ORIGEM_VITTA = "vitta"
+ORIGENS: tuple[str, ...] = (ORIGEM_DIRETOR, ORIGEM_VITTA)
 
 # O nome que a issue do bug leva quando a Demanda nao tem Produto.
 SEM_PRODUTO = "(sem Produto)"
@@ -142,12 +149,23 @@ def e_desenvolvedor(pessoa: dict[str, Any] | None) -> bool:
     return is_super_admin(pessoa) and bool(str((pessoa or {}).get("github_login") or "").strip())
 
 
+def origem_da_demanda(demanda: dict[str, Any]) -> str:
+    """A Origem da Demanda; a linha de antes da coluna (migration 130) e do diretor."""
+    return ORIGEM_VITTA if demanda.get("origem") == ORIGEM_VITTA else ORIGEM_DIRETOR
+
+
 def pode_ver(pessoa: dict[str, Any], demanda: dict[str, Any]) -> bool:
-    """Quem ve uma Demanda: o autor, e o Desenvolvedor, que ve todas (ADR 0083).
+    """Quem ve uma Demanda: o autor, o Desenvolvedor, que ve todas (ADR 0083),
+    e todo Super admin no card de Origem Vitta, aberto pelo terminal (ADR 0084,
+    decisao 4). A conversa de outro diretor continua fechada.
 
     A regra e uma so, e a lista e a leitura da conversa leem daqui.
     """
-    return demanda.get("autor_id") == pessoa.get("id") or e_desenvolvedor(pessoa)
+    return (
+        demanda.get("autor_id") == pessoa.get("id")
+        or e_desenvolvedor(pessoa)
+        or origem_da_demanda(demanda) == ORIGEM_VITTA
+    )
 
 
 # Ate onde a Demanda se apaga (ADR 0084, decisao 2): ate Planejada. Em
@@ -191,13 +209,18 @@ def responsavel_da_demanda(demanda: dict[str, Any]) -> str | None:
     return demanda.get("responsavel_id") or None
 
 
-def quem_avisar(demanda: dict[str, Any], *, autor_id: str, mencoes: list[str]) -> list[str]:
+def quem_avisar(
+    demanda: dict[str, Any], *, autor_id: str, mencoes: list[str], ja_escreveram: Sequence[str] = ()
+) -> list[str]:
     """Quem a mensagem da Conversa da Demanda avisa no sino (ADR 0083, decisao 8).
 
     Mencao avisa o mencionado, e so ele. Sem mencao, a mensagem do autor da
     Demanda avisa o Responsavel, e a de qualquer outro (o Desenvolvedor, unico
-    que alem do autor escreve ali) avisa o autor. Ninguem e avisado da propria
-    mensagem.
+    que alem do autor escreve ali) avisa o autor. No card de Origem Vitta, que
+    toda a diretoria le e escreve (ADR 0084, decisao 4), avisa tambem quem ja
+    escreveu na conversa: o autor ali e o proprio Desenvolvedor, e sem isso a
+    resposta nunca chega ao diretor que perguntou. Ninguem e avisado da
+    propria mensagem.
     """
     if mencoes:
         destino = list(mencoes)
@@ -205,6 +228,8 @@ def quem_avisar(demanda: dict[str, Any], *, autor_id: str, mencoes: list[str]) -
         destino = [responsavel_da_demanda(demanda)]
     else:
         destino = [demanda.get("autor_id")]
+    if not mencoes and origem_da_demanda(demanda) == ORIGEM_VITTA:
+        destino += list(ja_escreveram)
     return sorted({str(d) for d in destino if d and d != autor_id})
 
 

@@ -100,6 +100,25 @@ export type Demanda = {
    * é o servidor; sem o campo, o botão não aparece.
    */
   pode_apagar?: boolean;
+  /**
+   * Quem abriu o card (issue #1554, ADR 0084, decisão 4): o diretor, pelo
+   * chat, ou a Vitta, pela issue aberta no terminal. O card da Vitta não tem
+   * conversa com o agente. Sem o campo, a linha fica sem selo.
+   */
+  origem?: Origem | null;
+};
+
+export type Origem = "diretor" | "vitta";
+
+/** O selo da Origem na lista (issue #1554). */
+export const ORIGEM_ROTULO: Record<Origem, string> = {
+  diretor: "Pedido do diretor",
+  vitta: "Vitta",
+};
+
+export const ORIGEM_CLASSE: Record<Origem, string> = {
+  diretor: "bg-slate-100 text-slate-700",
+  vitta: "bg-sky-50 text-sky-700",
 };
 
 export type Classificacao = "bug" | "melhoria";
