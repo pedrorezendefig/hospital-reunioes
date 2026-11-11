@@ -881,3 +881,116 @@ describe("O documento vivo", () => {
     expect(screen.queryByRole("region", { name: TITULO_DO_DOCUMENTO_VIVO })).toBeNull();
   });
 });
+
+// ─── A pergunta em cartão (issue #1592, PRD #1591) ───────────────────────────
+
+const CONTEXTO_DO_CARTAO = "O retorno pode ser marcado na saída do paciente ou ainda no consultório.";
+
+const PERGUNTA_EM_CARTAO: FalaDoChat = {
+  autor: "ia",
+  texto: CONTEXTO_DO_CARTAO,
+  fonte: null,
+  opcoes: ["A recepção marca na saída.", "O médico marca no consultório."],
+  recomendada: "A",
+  nao_bateu: false,
+  cartao: {
+    titulo: "Quem marca o retorno do paciente?",
+    na_pratica_a: "O paciente sai do hospital com o retorno marcado.",
+    na_pratica_b: "O médico gasta tempo da consulta com a agenda.",
+    porque: "A recepção já agenda as consultas hoje.",
+  },
+};
+
+/** A primeira pergunta, já respondida e também com cartão; a pergunta da vez é a segunda. */
+const RESPONDIDA_EM_CARTAO: FalaDoChat = {
+  ...PERGUNTA,
+  cartao: { titulo: "Onde acontece o problema?", na_pratica_a: null, na_pratica_b: null, porque: "É onde o retorno se marca." },
+};
+
+function melhoriaEmCartao(): ConversaDoChat {
+  return melhoria({
+    mensagens: [
+      ...melhoria().mensagens.slice(0, 2),
+      RESPONDIDA_EM_CARTAO,
+      { autor: "diretor", texto: "Não, na enfermagem.", fonte: null, opcoes: [], nao_bateu: false },
+      PERGUNTA_EM_CARTAO,
+    ],
+  });
+}
+
+describe("A pergunta em cartão", () => {
+  it("a pergunta da vez aparece em cartão com número, título, contexto, Na prática das duas opções e o porquê embaixo das opções", async () => {
+    montar([{ status: 201, corpo: melhoriaEmCartao() }]);
+
+    fireEvent.click(screen.getByRole("button", { name: "Melhoria" }));
+
+    const cartao = await screen.findByRole("region", { name: "Pergunta 2" });
+    expect(within(cartao).getByText("Pergunta 2")).toBeTruthy();
+    const titulo = within(cartao).getByRole("heading", { name: "Quem marca o retorno do paciente?" });
+    expect(caixaDoDado(titulo)).toBe("normal-case");
+    expect(within(cartao).getByText(CONTEXTO_DO_CARTAO)).toBeTruthy();
+
+    const grupo = within(cartao).getByRole("group", { name: "Opções" });
+    const [a, b] = within(grupo).getAllByRole("button");
+    expect(within(a).getByText("A")).toBeTruthy();
+    expect(within(a).getByText("A recepção marca na saída.")).toBeTruthy();
+    expect(within(a).getByText("Na prática: O paciente sai do hospital com o retorno marcado.")).toBeTruthy();
+    expect(a.textContent).toContain("Recomendada");
+    expect(within(b).getByText("B")).toBeTruthy();
+    expect(within(b).getByText("O médico marca no consultório.")).toBeTruthy();
+    expect(within(b).getByText("Na prática: O médico gasta tempo da consulta com a agenda.")).toBeTruthy();
+    expect(b.textContent).not.toContain("Recomendada");
+
+    const porque = within(cartao).getByText("Por que recomendo a A: A recepção já agenda as consultas hoje.");
+    expect(grupo.contains(porque)).toBe(false);
+    expect(grupo.compareDocumentPosition(porque) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+
+    // Só a pergunta da vez vira cartão, e o contexto dela não se repete numa bolha.
+    expect(screen.getAllByRole("region", { name: /^Pergunta \d+$/ })).toHaveLength(1);
+    expect(screen.getAllByText(CONTEXTO_DO_CARTAO)).toHaveLength(1);
+    expect(screen.getAllByRole("group", { name: "Opções" })).toHaveLength(1);
+  });
+
+  it("o clique numa opção do cartão manda a letra, como o clique de hoje", async () => {
+    const chamadas = montar([{ status: 201, corpo: melhoriaEmCartao() }, { status: 200, corpo: melhoriaEmCartao() }]);
+    fireEvent.click(screen.getByRole("button", { name: "Melhoria" }));
+    const cartao = await screen.findByRole("region", { name: "Pergunta 2" });
+
+    fireEvent.click(within(cartao).getByRole("button", { name: /O médico marca no consultório/ }));
+
+    await waitFor(() => expect(chamadas).toHaveLength(2));
+    expect(chamadas[1]).toMatchObject({ url: "/api/admin/tecnologia/chat/d-1", metodo: "POST", corpo: { opcao: "B" } });
+  });
+
+  it("a pergunta antiga, sem os campos novos, aparece como bolha com as opções", async () => {
+    montar([{ status: 201, corpo: melhoria() }]);
+
+    fireEvent.click(screen.getByRole("button", { name: "Melhoria" }));
+
+    await screen.findByText(PERGUNTA.texto);
+    expect(screen.queryByRole("region", { name: /^Pergunta \d+$/ })).toBeNull();
+    expect(screen.queryByText(/^Na prática/)).toBeNull();
+    expect(screen.queryByText(/^Por que recomendo/)).toBeNull();
+    const opcoes = within(screen.getByRole("group", { name: "Opções" })).getAllByRole("button");
+    expect(opcoes).toHaveLength(2);
+    expect(opcoes[0].textContent).toContain("Sim, na recepção.");
+    expect(opcoes[1].textContent).toContain("Não, na enfermagem.");
+  });
+
+  it("o texto da conversa com o assistente está em 16px, com entrelinha folgada", async () => {
+    montar([{ status: 201, corpo: melhoriaEmCartao() }]);
+    fireEvent.click(screen.getByRole("button", { name: "Melhoria" }));
+    const cartao = await screen.findByRole("region", { name: "Pergunta 2" });
+
+    const textos = [
+      screen.getByText(ABERTURA),
+      screen.getByText(PERGUNTA.texto),
+      screen.getByText("Não, na enfermagem."),
+      within(cartao).getByText(CONTEXTO_DO_CARTAO),
+    ];
+    for (const texto of textos) {
+      expect(texto.className).toMatch(/(^|\s)text-\[16px\](\s|$)/);
+      expect(texto.className).toMatch(/(^|\s)leading-relaxed(\s|$)/);
+    }
+  });
+});

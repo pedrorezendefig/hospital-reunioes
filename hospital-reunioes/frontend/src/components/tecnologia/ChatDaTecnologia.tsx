@@ -42,6 +42,7 @@ import {
 } from "./assistente";
 import {
   blocoDoRascunho,
+  CartaoDaPergunta,
   ConversaDoChat,
   conversaValida,
   Desenvolvedor,
@@ -127,7 +128,7 @@ export function Fala({ fala }: { fala: FalaDoChat }) {
         {/* Quem respondeu o turno (issue #1557): na revisão, o Desenvolvedor também responde. */}
         {fala.respondido_por && <span className="normal-case text-xs text-text-secondary">{fala.respondido_por}</span>}
         {(fala.texto || fala.nao_bateu) && (
-          <p className="px-3 py-2 rounded-2xl bg-primary text-white text-sm whitespace-pre-line">
+          <p className="px-3 py-2 rounded-2xl bg-primary text-white text-[16px] leading-relaxed whitespace-pre-line">
             {fala.nao_bateu && <span className="font-semibold">O que não bateu no resumo: </span>}
             {fala.texto}
           </p>
@@ -151,9 +152,81 @@ export function Fala({ fala }: { fala: FalaDoChat }) {
   if (fala.retrato) return <RetratoNaConversa retrato={fala.retrato} />;
   return (
     <div className="mr-auto max-w-[85%] space-y-1">
-      <p className="px-3 py-2 rounded-2xl bg-slate-100 text-slate-800 text-sm whitespace-pre-line">{fala.texto}</p>
+      <p className="px-3 py-2 rounded-2xl bg-slate-100 text-slate-800 text-[16px] leading-relaxed whitespace-pre-line">
+        {fala.texto}
+      </p>
       {fala.fonte && <p className="px-3 text-xs text-text-secondary">De onde veio: material da Vitta sobre {fala.fonte}</p>}
     </div>
+  );
+}
+
+type PropsDaPerguntaEmCartao = {
+  fala: FalaDoChat;
+  cartao: CartaoDaPergunta;
+  /** Contado pelas perguntas da IA na conversa, a partir de 1. */
+  numero: number;
+  desabilitado: boolean;
+  onEscolher: (letra: LetraDaOpcao) => void;
+};
+
+/**
+ * A pergunta da vez do planejamento em cartão (issue #1592, PRD #1591): o
+ * número, o título, o contexto, as duas opções com a letra num círculo e o
+ * "Na prática" de cada uma, a recomendada em destaque e, embaixo das opções,
+ * o porquê dela. O título é texto da conversa: fica em letra normal (ADR 0080).
+ */
+function PerguntaEmCartao({ fala, cartao, numero, desabilitado, onEscolher }: PropsDaPerguntaEmCartao) {
+  const naPratica = [cartao.na_pratica_a, cartao.na_pratica_b];
+  const nome = `Pergunta ${numero}`;
+  return (
+    <section aria-label={nome} className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-4 space-y-3">
+      <p className="text-xs font-semibold text-text-secondary">{nome}</p>
+      {cartao.titulo && (
+        <h3 className="normal-case text-[16px] font-bold leading-snug text-slate-900">{cartao.titulo}</h3>
+      )}
+      <p className="text-[16px] leading-relaxed text-slate-800 whitespace-pre-line">{fala.texto}</p>
+      <div role="group" aria-label="Opções" className="flex flex-col gap-2">
+        {fala.opcoes.map((opcao, i) => {
+          const letra = LETRAS[i];
+          const destaque = letra === fala.recomendada;
+          return (
+            <button
+              key={letra}
+              type="button"
+              onClick={() => onEscolher(letra)}
+              disabled={desabilitado}
+              className={`flex items-start gap-3 w-full text-left px-4 py-3 rounded-xl border transition-colors disabled:opacity-60 ${
+                destaque ? "border-primary bg-primary/5 ring-1 ring-primary" : "border-border hover:border-primary"
+              }`}
+            >
+              <span
+                className={`flex-shrink-0 w-7 h-7 rounded-full flex items-center justify-center text-sm font-bold ${
+                  destaque ? "bg-primary text-white" : "bg-slate-100 text-slate-700"
+                }`}
+              >
+                {letra}
+              </span>
+              <span className="flex-1 space-y-1">
+                <span className="block normal-case text-[16px] font-semibold leading-snug text-slate-900">{opcao}</span>
+                {naPratica[i] && (
+                  <span className="block normal-case text-sm leading-relaxed text-text-secondary">
+                    {`Na prática: ${naPratica[i]}`}
+                  </span>
+                )}
+              </span>
+              {destaque && (
+                <span className="flex-shrink-0 px-2 py-0.5 rounded-full bg-primary text-white text-xs font-semibold">
+                  Recomendada
+                </span>
+              )}
+            </button>
+          );
+        })}
+      </div>
+      {cartao.porque && fala.recomendada && (
+        <p className="text-sm leading-relaxed text-slate-700">{`Por que recomendo a ${fala.recomendada}: ${cartao.porque}`}</p>
+      )}
+    </section>
   );
 }
 
@@ -907,6 +980,10 @@ export function ChatDaTecnologia({ token, demandaId = null, onMudou }: PropsDoCh
   const ultima = falas[falas.length - 1];
   const opcoes = ultima?.autor === "ia" ? ultima.opcoes : [];
   const recomendada = ultima?.autor === "ia" ? ultima.recomendada : null;
+  // Só a pergunta da vez vira cartão, e só a que trouxe os textos dele (issue
+  // #1592): a pergunta de antes continua como bolha, com as opções embaixo.
+  const cartaoDaVez = ultima?.autor === "ia" && recomendada ? (ultima.cartao ?? null) : null;
+  const numeroDaPergunta = falas.filter((f) => f.autor === "ia" && f.recomendada).length;
   const naMelhoria = conversa?.planejamento ?? false;
   const encerrado = naMelhoria && conversa?.estado === "encerrado";
   const podeResumir = naMelhoria && (conversa?.estado === "em_andamento" || encerrado);
@@ -937,11 +1014,22 @@ export function ChatDaTecnologia({ token, demandaId = null, onMudou }: PropsDoCh
       </div>
 
       <div role="log" className="flex-1 overflow-y-auto px-5 py-4 space-y-3 overscroll-contain">
-        {falas.map((fala, i) => (
-          <Fala key={i} fala={fala} />
-        ))}
+        {falas.map((fala, i) =>
+          cartaoDaVez && i === falas.length - 1 ? (
+            <PerguntaEmCartao
+              key={i}
+              fala={fala}
+              cartao={cartaoDaVez}
+              numero={numeroDaPergunta}
+              desabilitado={ocupado}
+              onEscolher={escolherALetra}
+            />
+          ) : (
+            <Fala key={i} fala={fala} />
+          ),
+        )}
 
-        {opcoes.length > 0 && !pensando && recomendada && (
+        {opcoes.length > 0 && !pensando && recomendada && !cartaoDaVez && (
           <div role="group" aria-label="Opções" className="flex flex-col gap-2 max-w-[85%]">
             {opcoes.map((opcao, i) => {
               const letra = LETRAS[i];
