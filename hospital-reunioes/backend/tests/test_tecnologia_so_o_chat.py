@@ -28,6 +28,8 @@ ROTAS_DO_CHAT = {
     "/api/admin/tecnologia/chat/{demanda_id}/criar-card",
     # O "Reenviar" do Envio falhou (issue #1535), pela mesma porta do card.
     "/api/admin/tecnologia/chat/{demanda_id}/reenviar",
+    # O "Designar de novo" da issue que nasceu sem o Responsável (issue #1536).
+    "/api/admin/tecnologia/chat/{demanda_id}/designar-de-novo",
     "/api/admin/tecnologia/assistente/descrever-imagem",
     # O documento do chat (issue #1520), irmã da leitura do print.
     "/api/admin/tecnologia/assistente/ler-documento",

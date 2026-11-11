@@ -32,6 +32,7 @@ logger = logging.getLogger(__name__)
 
 ESTADO_ENVIANDO = "enviando"
 ESTADO_FALHOU = "falhou"
+ESTADO_DESIGNACAO_FALHOU = "designacao_falhou"
 
 # Por quanto tempo a vez de criar segura a porta.
 #
@@ -55,12 +56,14 @@ class Envio:
     """O resultado da porta: a Demanda vinculada, ou o motivo da falha.
 
     `integracao_desligada` separa a falta de configuracao (nao ha o que tentar
-    sem mexer no ambiente) da indisponibilidade do GitHub.
+    sem mexer no ambiente) da indisponibilidade do GitHub. `designacao_falhou`
+    e a Demanda vinculada a uma issue que nasceu sem o Responsavel (issue #1536).
     """
 
     demanda: dict[str, Any] | None = None
     motivo: str | None = None
     integracao_desligada: bool = False
+    designacao_falhou: bool = False
 
     @property
     def criado(self) -> bool:
@@ -78,6 +81,16 @@ def envio_falhou(demanda: dict[str, Any]) -> bool:
     com o selo, mesmo que a coluna ainda diga falhou.
     """
     return demanda.get("envio_estado") == ESTADO_FALHOU and not demanda.get("github_issue_numero")
+
+
+def designacao_falhou(demanda: dict[str, Any]) -> bool:
+    """Se a issue da Demanda nasceu e a designacao ao Responsavel nao (issue #1536)."""
+    return demanda.get("envio_estado") == ESTADO_DESIGNACAO_FALHOU and bool(demanda.get("github_issue_numero"))
+
+
+def motivo_da_designacao(numero: int, logins: list[str]) -> str:
+    """O motivo tecnico da designacao falhada, que so o Desenvolvedor le."""
+    return f"A issue #{numero} nasceu sem o Responsável ({', '.join(logins)})"
 
 
 def _em_andamento(demanda: dict[str, Any]) -> bool:
@@ -173,16 +186,23 @@ def enviar(
     # proprio JSON da criacao, sem uma segunda leitura. O SHAPE do cache vem de
     # `mudanca_da_foto`, o mesmo do webhook e da reconciliacao (issue #678); a
     # Etapa sai derivada dali, da label da triagem da issue nova.
+    #
+    # A issue nascida sem o Responsavel e o terceiro resultado (issue #1536): a
+    # Demanda fica vinculada E guarda a designacao falhada, que o "Designar de
+    # novo" resolve sem criar outra issue.
+    designada = not assignees or github_client.designado(dados, assignees)
+    if not designada:
+        logger.warning("[tecnologia] a issue #%s da Demanda %s nasceu sem o Responsavel", numero, demanda_id)
     mudanca = {
         **mudanca_da_foto(github_client.montar_foto(dados, [])),
         "github_issue_numero": numero,
         "vinculado_por": ator["id"],
         "responsavel_id": responsavel_id,
-        "envio_estado": None,
-        "envio_motivo": None,
+        "envio_estado": None if designada else ESTADO_DESIGNACAO_FALHOU,
+        "envio_motivo": None if designada else motivo_da_designacao(numero, assignees),
         "envio_em": _agora(),
     }
     result = supabase.table(TABELA_DEMANDAS).update(mudanca).eq("id", demanda_id).execute()
     if not result.data:
         raise DemandaSumiuError(demanda_id)
-    return Envio(demanda=result.data[0])
+    return Envio(demanda=result.data[0], designacao_falhou=not designada)

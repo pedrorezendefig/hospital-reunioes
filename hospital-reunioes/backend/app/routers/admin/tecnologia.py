@@ -39,6 +39,10 @@ O chat da aba (issues #1381, #1383 e #1384):
                                                 vincula.
 - POST  /admin/tecnologia/chat/{id}/reenviar    o "Reenviar" do Envio falhou,
                                                 pela mesma porta (issue #1535).
+- POST  /admin/tecnologia/chat/{id}/designar-de-novo  so a designacao da
+                                                issue que nasceu sem o
+                                                Responsavel, pelo
+                                                Desenvolvedor (issue #1536).
 
 O print do chat (ADR 0056, decisao 4; ADR 0077, decisao 8):
 
@@ -155,7 +159,8 @@ def _para_a_lista(supabase: Client, demandas: list[dict], *, ator: dict) -> list
     ele le a Etapa e O que muda sem nenhum dos dois. O Desenvolvedor le tambem
     o autor, o numero e o link (ADR 0083, decisao 3). O Responsavel sai para
     os dois (ADR 0083, decisao 5), e o selo "Envio falhou" tambem; o motivo
-    tecnico da falha, so para o Desenvolvedor (issue #1535).
+    tecnico da falha, so para o Desenvolvedor (issue #1535). A designacao
+    falhada sai so para o Desenvolvedor (issue #1536).
     """
     desenvolvedor = e_desenvolvedor(ator)
     ids = {responsavel_da_demanda(d) for d in demandas}
@@ -175,10 +180,16 @@ def _para_a_lista(supabase: Client, demandas: list[dict], *, ator: dict) -> list
             "issue_url": _url_da_issue(d) if desenvolvedor else None,
             "responsavel": _nome_do_responsavel(d, nomes),
             "envio_falhou": tecnologia_envio.envio_falhou(d),
-            "envio_motivo": d.get("envio_motivo") if desenvolvedor and tecnologia_envio.envio_falhou(d) else None,
+            "designacao_falhou": desenvolvedor and tecnologia_envio.designacao_falhou(d),
+            "envio_motivo": d.get("envio_motivo") if desenvolvedor and _falha_pendente(d) else None,
         }
         for d in demandas
     ]
+
+
+def _falha_pendente(demanda: dict) -> bool:
+    """O envio ou a designacao que falhou e ainda espera alguem (issues #1535 e #1536)."""
+    return tecnologia_envio.envio_falhou(demanda) or tecnologia_envio.designacao_falhou(demanda)
 
 
 def _nome_do_responsavel(demanda: dict, nomes: dict[str, str]) -> str | None:
@@ -255,6 +266,23 @@ def _issue_indisponivel() -> NoReturn:
     raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=MOTIVO_GITHUB_INDISPONIVEL)
 
 
+AVISO_DO_ENVIO_FALHOU = "O envio de um card falhou"
+AVISO_DA_DESIGNACAO_FALHOU = "Um card nasceu sem o Responsável"
+
+
+def _avisar_os_desenvolvedores(supabase: Client, demanda: dict, *, titulo: str) -> None:
+    """A falha do envio no sino de cada Desenvolvedor (issue #1536, ADR 0083,
+    decisao 7). O aviso abre a Demanda, onde estao o motivo e o botao."""
+    for pessoa in _desenvolvedores(supabase):
+        criar_notificacao_tecnologia(
+            supabase,
+            destinatario_id=str(pessoa["id"]),
+            titulo=titulo,
+            mensagem=str(demanda.get("titulo") or "")[:80],
+            demanda_id=str(demanda["id"]),
+        )
+
+
 def _enviar(
     supabase: Client,
     *,
@@ -286,6 +314,10 @@ def _enviar(
         _recusar(MOTIVO_CRIACAO_EM_ANDAMENTO)
     except tecnologia_envio.DemandaSumiuError:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Demanda nao encontrada") from None
+    if not envio.criado:
+        _avisar_os_desenvolvedores(supabase, demanda, titulo=AVISO_DO_ENVIO_FALHOU)
+    elif envio.designacao_falhou:
+        _avisar_os_desenvolvedores(supabase, demanda, titulo=AVISO_DA_DESIGNACAO_FALHOU)
     if envio.integracao_desligada:
         raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=MOTIVO_INTEGRACAO_DESLIGADA)
     if not envio.criado:
@@ -1156,6 +1188,54 @@ async def reenviar_o_card(
     return _enviar_o_card(
         supabase, demanda=demanda, atual=atual, ator=ator, assignees=assignees, responsavel_id=responsavel_id
     )
+
+
+MOTIVO_SEM_DESIGNACAO_FALHOU = "Este card não está com a designação falhada. Recarregue a página."
+MOTIVO_SEM_LOGIN_PARA_DESIGNAR = "O Responsável deste card não tem login do GitHub no cadastro."
+
+
+@router.post("/chat/{demanda_id}/designar-de-novo", response_model=DemandaResponse)
+@limiter.shared_limit(LIMITE_DO_VINCULO, ESCOPO_DO_VINCULO)
+async def designar_de_novo(
+    request: Request,
+    demanda_id: str,
+    ator: dict = Depends(require_super_admin),
+    supabase: Client = Depends(get_supabase_client),
+):
+    """O "Designar de novo" da issue que nasceu sem o Responsavel (issue #1536,
+    ADR 0083, decisao 7).
+
+    So o Desenvolvedor: para o diretor a rota responde como inexistente, porque
+    a designacao falhada nem aparece para ele. Pede ao GitHub so a designacao,
+    com o login do Responsavel que ficou na Demanda, sem criar issue nenhuma. A
+    designacao que pega limpa o estado; a que falha de novo sai como 502 e
+    guarda o motivo novo.
+    """
+    if not e_desenvolvedor(ator):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=MOTIVO_CHAT_NAO_ENCONTRADO)
+    demanda = _buscar_demanda(supabase, demanda_id)
+    if not tecnologia_envio.designacao_falhou(demanda):
+        _conflito(MOTIVO_SEM_DESIGNACAO_FALHOU)
+    logins, responsavel_id = _responsavel_do_card(supabase, demanda.get("responsavel_id"), guardado=True)
+    if not logins:
+        _conflito(MOTIVO_SEM_LOGIN_PARA_DESIGNAR)
+    _exigir_integracao()
+    try:
+        github_client.designar(int(demanda["github_issue_numero"]), logins)
+    except (github_client.GithubIndisponivelError, github_client.GithubNaoConfiguradoError) as exc:
+        supabase.table(TABELA_DEMANDAS).update({"envio_motivo": str(exc), "envio_em": _agora()}).eq(
+            "id", demanda_id
+        ).execute()
+        _issue_indisponivel()
+    result = (
+        supabase.table(TABELA_DEMANDAS)
+        .update({"envio_estado": None, "envio_motivo": None, "envio_em": _agora(), "responsavel_id": responsavel_id})
+        .eq("id", demanda_id)
+        .execute()
+    )
+    if not result.data:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Demanda nao encontrada")
+    return _para_a_lista(supabase, result.data, ator=ator)[0]
 
 
 def _enviar_o_card(

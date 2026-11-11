@@ -83,6 +83,8 @@ export type Demanda = {
   responsavel?: string | null;
   /** O card não chegou ao GitHub (issue #1535, ADR 0083, decisão 7): o selo e o Reenviar, para todos. */
   envio_falhou?: boolean;
+  /** A issue nasceu sem o Responsável (issue #1536): o aviso e o Designar de novo, só para o Desenvolvedor. */
+  designacao_falhou?: boolean;
   /** O motivo técnico da falha, só para o Desenvolvedor. Para o diretor o servidor manda nulo. */
   envio_motivo?: string | null;
 };
