@@ -1246,6 +1246,11 @@ async def designar_de_novo(
     return _para_a_lista(supabase, result.data, ator=ator)[0]
 
 
+MOTIVO_APAGAR_GITHUB_FALHOU = (
+    "O GitHub não respondeu, e o card não foi fechado lá. Nada foi apagado: tente de novo em instantes."
+)
+
+
 @router.delete("/chat/{demanda_id}", status_code=status.HTTP_204_NO_CONTENT)
 @limiter.shared_limit(LIMITE_DO_VINCULO, ESCOPO_DO_VINCULO)
 async def apagar_a_demanda(
@@ -1258,13 +1263,25 @@ async def apagar_a_demanda(
 
     Quem pode e ate onde e a `recusa_de_apagar`: o autor apaga a conversa
     Registrada; o card criado, so o Desenvolvedor, ate Planejada. A recusa
-    sai com o status dela (403 ou 409).
+    sai com o status dela (403 ou 409). O card fecha antes no GitHub, e a
+    falha de la sai como 503 (falta configuracao) ou 502, sem nada apagado no
+    app.
     """
     demanda = _buscar_demanda(supabase, demanda_id)
     recusa = recusa_de_apagar(ator, demanda)
     if recusa is not None:
         raise HTTPException(status_code=recusa[0], detail=recusa[1])
-    tecnologia_apagar.apagar(supabase, demanda, ator=ator)
+    if demanda.get("github_issue_numero"):
+        _exigir_integracao()
+    try:
+        tecnologia_apagar.apagar(supabase, demanda, ator=ator)
+    except github_client.GithubNaoConfiguradoError:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=MOTIVO_INTEGRACAO_DESLIGADA
+        ) from None
+    except (github_client.GithubIndisponivelError, github_client.IssueNaoEncontradaError) as exc:
+        logger.warning("[tecnologia] o card da Demanda %s não fechou no GitHub: %s", demanda_id, exc)
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=MOTIVO_APAGAR_GITHUB_FALHOU) from None
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 

@@ -40,7 +40,9 @@ from test_tecnologia_vinculo import (  # noqa: E402
     _sem_github_de_verdade,  # noqa: F401
 )
 
+from app.config import settings  # noqa: E402
 from app.limiter import limiter  # noqa: E402
+from app.routers.admin.tecnologia import MOTIVO_APAGAR_GITHUB_FALHOU  # noqa: E402
 from app.services import github_client  # noqa: E402
 from app.services.tecnologia_vinculo import (  # noqa: E402
     ETAPA_EM_ANALISE,
@@ -321,3 +323,38 @@ class TestNoGithub:
             ("POST", f"{issue}/comments", {"body": "motivo"}),
             ("PATCH", issue, {"state": "closed", "state_reason": "not_planned"}),
         ]
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 5. O GitHub que falha não deixa nada apagado
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+class TestFalhaDoGithub:
+    @pytest.mark.parametrize(
+        "erro",
+        [
+            github_client.GithubIndisponivelError("GitHub respondeu 502"),
+            github_client.GithubIndisponivelError("A issue #900 nao foi encontrada para fechar"),
+        ],
+    )
+    def test_falha_ao_fechar_devolve_erro_claro_e_nao_apaga_nada(self, monkeypatch, erro):
+        gh = _github_do_card()
+        gh.erro_ao_fechar = erro
+        client, sb, _ = _cenario(monkeypatch, logado=PEDRO, demanda=_card(), github=gh)
+
+        resposta = client.delete(APAGAR)
+
+        assert resposta.status_code == 502
+        assert resposta.json()["detail"] == MOTIVO_APAGAR_GITHUB_FALHOU
+        _nada_foi_apagado(sb)
+
+    def test_sem_a_integracao_configurada_responde_503_e_nao_apaga_nada(self, monkeypatch):
+        client, sb, gh = _cenario(monkeypatch, logado=PEDRO, demanda=_card())
+        monkeypatch.setattr(settings, "github_integracao_token", "")
+
+        resposta = client.delete(APAGAR)
+
+        assert resposta.status_code == 503
+        assert gh.fechadas == []
+        _nada_foi_apagado(sb)
