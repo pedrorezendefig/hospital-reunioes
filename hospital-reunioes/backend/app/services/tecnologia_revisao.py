@@ -17,15 +17,17 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 from dataclasses import dataclass
 from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict, field_validator
 
 from app.config import settings
-from app.services import ai_processor, ferramentas_do_codigo, planejamento_demanda
+from app.services import ai_processor, ferramentas_do_codigo, github_client, planejamento_demanda
 from app.services.custo_da_conversa import nome_de_exibicao
 from app.services.tecnologia import instante_do_banco, recuar_continuacao
+from app.services.tecnologia_vinculo import marcador_da_demanda
 from app.utils.text_sanitizer import sanitizar_travessao
 
 logger = logging.getLogger(__name__)
@@ -272,3 +274,47 @@ def escopo(mensagens: list[dict]) -> dict | None:
         texto = itens[mensagem["atende"]]["item"]
         (saiu if resposta.get("opcao") == "A" else continua).append(texto)
     return {"saiu": saiu, "continua": continua}
+
+
+# ─── "Atualizar o card" (issue #1558) ────────────────────────────────────────
+
+# O marcador da Demanda como ele estiver na issue (o mesmo padrao do
+# `prd_do_leitor` do fluxo): espaco a mais nao o torna outro marcador.
+_MARCADOR_DA_DEMANDA = re.compile(r'<!--\s*demanda-vitta id="[^"]*"\s*-->')
+
+
+def corpo_revisado(*, corpo_atual: str | None, corpo_novo: str, demanda_id: str) -> str:
+    """O PRD revisado com o marcador da Demanda da issue, byte a byte.
+
+    O corpo novo sai do `corpo_do_prd_do_diretor`, que escreve o marcador do
+    jeito de hoje. Quem acha a Demanda pela issue (a reconciliacao, o
+    `anexos.py`) le o PRIMEIRO marcador do corpo, e o que ja esta la e o que
+    vale: ele substitui o escrito. Sem marcador na issue, fica o novo.
+    """
+    achado = _MARCADOR_DA_DEMANDA.search(corpo_atual or "")
+    if achado is None:
+        return corpo_novo
+    return corpo_novo.replace(marcador_da_demanda(demanda_id), achado.group(0))
+
+
+class ParteJaComecouError(RuntimeError):
+    """Uma parte do card esta em desenvolvimento: o card nao se atualiza."""
+
+
+def _labels_da_issue(dados: dict) -> list[str]:
+    return [str(label["name"]) for label in dados.get("labels") or [] if isinstance(label, dict) and label.get("name")]
+
+
+def atualizar_no_github(
+    numero: int,
+    *,
+    demanda_id: str,
+    corpo_novo: str,
+    saiu_por_atender: list[str],
+    versao_base: str | None,
+) -> list[int]:
+    """Leva o PRD revisado a issue-raiz. Devolve as partes que fechou."""
+    dados = github_client.ler_issue(numero)
+    corpo = corpo_revisado(corpo_atual=dados.get("body"), corpo_novo=corpo_novo, demanda_id=demanda_id)
+    github_client.regravar(numero, corpo=corpo, labels=_labels_da_issue(dados))
+    return []

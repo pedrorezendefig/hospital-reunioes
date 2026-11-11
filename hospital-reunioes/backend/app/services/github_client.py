@@ -16,7 +16,9 @@ Tres invariantes que o resto do app herda:
 - **Escrita minima.** So o "Criar o card" do chat escreve (ADR 0077, decisao
   6): o POST que abre a issue e o PATCH que a designa. Desde a ADR 0084
   (decisao 2) o "Apagar" tambem: o comentario de motivo e o PATCH que fecha a
-  issue como nao planejada. Issue nunca se apaga. Nenhum verbo de LEITURA de
+  issue como nao planejada. E o "Atualizar o card" da revisao (decisao 3,
+  issue #1558): o comentario do que mudou e o PATCH que regrava o corpo e as
+  labels. Issue nunca se apaga. Nenhum verbo de LEITURA de
   comentario: nada do GitHub volta para o app alem da foto da issue (ADR 0054,
   decisao 5). O token fine-grained do Pedro tem Issues: write neste
   repositorio e mais nada (ADR 0054, decisao 8).
@@ -462,6 +464,29 @@ def fechar_como_nao_planejada(numero: int, *, comentario: str) -> None:
         _chamar("PATCH", f"/issues/{numero}", json={"state": "closed", "state_reason": FECHAMENTO_NAO_PLANEJADA})
     except IssueNaoEncontradaError as exc:
         raise GithubIndisponivelError(f"A issue #{numero} nao foi encontrada para fechar") from exc
+
+
+def comentar(numero: int, corpo: str) -> None:
+    """Deixa um comentario na issue (issue #1558, ADR 0084, decisao 3): o que
+    o "Atualizar o card" mudou. Um 404 aqui nao e resposta (a issue estava
+    vinculada): vira indisponibilidade."""
+    try:
+        _chamar("POST", f"/issues/{numero}/comments", json={"body": corpo})
+    except IssueNaoEncontradaError as exc:
+        raise GithubIndisponivelError(f"A issue #{numero} nao foi encontrada para comentar") from exc
+
+
+def regravar(numero: int, *, corpo: str, labels: list[str]) -> dict[str, Any]:
+    """Regrava o corpo e as labels da issue num PATCH so (issue #1558, ADR
+    0084, decisao 3): o PRD revisado e a volta para a triagem saem juntos, ou
+    nenhum dos dois. Devolve a issue como o GitHub a devolve."""
+    try:
+        dados = _chamar("PATCH", f"/issues/{numero}", json={"body": corpo, "labels": labels})
+    except IssueNaoEncontradaError as exc:
+        raise GithubIndisponivelError(f"A issue #{numero} nao foi encontrada para regravar") from exc
+    if not isinstance(dados, dict):
+        raise GithubIndisponivelError(f"GitHub respondeu a issue #{numero} fora do formato")
+    return dados
 
 
 # A chave do dono da raiz na foto (issue #1534).

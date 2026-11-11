@@ -119,11 +119,13 @@ from app.services import (
     tecnologia_entregas,
     tecnologia_envio,
     tecnologia_revisao,
+    tecnologia_sincronizacao,
 )
 from app.services.conhecimento import carregar_kit
 from app.services.mencoes import extrair_mencoes
 from app.services.notificacao_service import criar_notificacao_tecnologia
 from app.services.tecnologia import (
+    MOTIVO_REVISAR_JA_COMECOU,
     ORIGEM_VITTA,
     SEM_PRODUTO,
     TABELA_CONVERSA_DA_DEMANDA,
@@ -156,6 +158,7 @@ from app.services.tecnologia_vinculo import (
     link_da_demanda,
     login_para_publicar,
     normalizar_github_login,
+    titulo_da_issue,
 )
 
 logger = logging.getLogger(__name__)
@@ -1677,6 +1680,88 @@ async def revisar_com_o_codigo_de_hoje(
     return _chat_para_a_tela(supabase, demanda_id, linha)
 
 
+# ─── O "Atualizar o card" da revisao (issue #1558, ADR 0084, decisao 3) ─────
+
+MOTIVO_ATUALIZAR_SEM_REVISAO = "Este pedido não está em revisão. Recarregue a página."
+MOTIVO_ATUALIZAR_GITHUB_FALHOU = (
+    "O desenvolvimento não respondeu, e o card não foi atualizado. Nada mudou aqui: tente de novo em instantes."
+)
+
+
+@router.post("/chat/{demanda_id}/atualizar-card", response_model=ChatResponse)
+@limiter.shared_limit(LIMITE_DO_VINCULO, ESCOPO_DO_VINCULO)
+async def atualizar_o_card(
+    request: Request,
+    demanda_id: str,
+    ator: dict = Depends(require_super_admin),
+    supabase: Client = Depends(get_supabase_client),
+):
+    """O "Atualizar o card" no fim da revisão (ADR 0084, decisão 3).
+
+    Quem pode é a `recusa_de_revisar`, e a conversa tem de estar em revisão,
+    com o resumo refeito. No GitHub, pela ordem: o comentário do que entrou e
+    do que saiu, as partes não começadas fechadas como não planejadas, e o
+    corpo regravado com o marcador da Demanda intacto e a raiz de volta em
+    `needs-triage`. Parte em desenvolvimento recusa com 409 antes de qualquer
+    escrita. Só depois do GitHub o app grava: a conversa volta a enviada e a
+    Etapa é relida. Falha do GitHub sai como 502, com nada gravado no app.
+    """
+    demanda = _demanda_visivel(supabase, demanda_id, ator)
+    recusa = recusa_de_revisar(ator, demanda)
+    if recusa is not None:
+        raise HTTPException(status_code=recusa[0], detail=recusa[1])
+    atual = planejamento_demanda.ler(supabase, demanda_id) or {}
+    if not atual.get("revisao_iniciada_em") or atual.get("estado") == planejamento_demanda.ESTADO_ENVIADO:
+        _conflito(MOTIVO_ATUALIZAR_SEM_REVISAO)
+    if atual.get("estado") != planejamento_demanda.ESTADO_RESUMIDO or not atual.get("resumo"):
+        _conflito(MOTIVO_CHAT_SEM_RESUMO)
+    _exigir_integracao()
+
+    _, planejamento = chat_tecnologia.partes_da_melhoria(atual.get("mensagens") or [])
+    corpo_novo = _corpo_do_prd(supabase, demanda=demanda, atual=atual, titulo=titulo_da_issue(demanda.get("titulo")))
+    try:
+        tecnologia_revisao.atualizar_no_github(
+            int(demanda["github_issue_numero"]),
+            demanda_id=demanda_id,
+            corpo_novo=corpo_novo,
+            saiu_por_atender=(tecnologia_revisao.escopo(planejamento) or {}).get("saiu") or [],
+            versao_base=atual.get("revisao_versao_base"),
+        )
+    except tecnologia_revisao.ParteJaComecouError:
+        _conflito(MOTIVO_REVISAR_JA_COMECOU)
+    except (github_client.GithubIndisponivelError, github_client.IssueNaoEncontradaError) as exc:
+        logger.warning("[tecnologia] o card da Demanda %s não foi atualizado no GitHub: %s", demanda_id, exc)
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=MOTIVO_ATUALIZAR_GITHUB_FALHOU) from None
+
+    linha = planejamento_demanda.marcar_enviado(supabase, demanda_id, agora=_agora())
+    try:
+        # A Etapa e lida de novo do GitHub, como no webhook: o card volta a Em
+        # analise. Falha aqui nao desfaz o que o GitHub ja gravou; o webhook
+        # da raiz regravada e a reconciliacao acertam a Etapa depois.
+        tecnologia_sincronizacao.sincronizar_demanda(supabase, _buscar_demanda(supabase, demanda_id))
+    except (github_client.GithubIndisponivelError, github_client.IssueNaoEncontradaError) as exc:
+        logger.warning("[tecnologia] a Etapa da Demanda %s não foi relida depois do Atualizar: %s", demanda_id, exc)
+    return _chat_para_a_tela(supabase, demanda_id, linha or {**atual, "estado": planejamento_demanda.ESTADO_ENVIADO})
+
+
+def _corpo_do_prd(supabase: Client, *, demanda: dict, atual: dict, titulo: str) -> str:
+    """O PRD do diretor que vai a issue, no "Criar o card" e no "Atualizar o
+    card" da revisao: o resumo, o documento vivo e so a contagem dos anexos
+    (ADR 0069), por tipo (issue #1520)."""
+    demanda_id = str(demanda["id"])
+    imagens, documentos = tecnologia_anexos.quantos_guardados(supabase, demanda_id)
+    return corpo_do_prd_do_diretor(
+        demanda_id=demanda_id,
+        titulo=titulo,
+        descricao=demanda.get("descricao"),
+        resumo=atual.get("resumo"),
+        link=link_da_demanda(demanda_id),
+        anexos=imagens,
+        documentos=documentos,
+        documento=atual.get("documento"),
+    )
+
+
 def _enviar_o_card(
     supabase: Client,
     *,
@@ -1696,30 +1781,16 @@ def _enviar_o_card(
     demanda_id = str(demanda["id"])
     resumo = atual.get("resumo")
     _exigir_integracao()
-    # So a contagem dos anexos vai a issue (ADR 0069), por tipo (issue #1520).
-    imagens, documentos = tecnologia_anexos.quantos_guardados(supabase, demanda_id)
 
     if chat_tecnologia.em_planejamento(atual.get("mensagens") or []):
         # A melhoria (issue #1383): o PRD do diretor, que nasce na triagem
         # (`needs-triage` e `type:feature`) porque ainda passa pelo
         # `/to-issues`, atribuido ao Responsavel.
-        def corpo_do_prd(titulo: str) -> str:
-            return corpo_do_prd_do_diretor(
-                demanda_id=demanda_id,
-                titulo=titulo,
-                descricao=demanda.get("descricao"),
-                resumo=resumo,
-                link=link_da_demanda(demanda_id),
-                anexos=imagens,
-                documentos=documentos,
-                documento=atual.get("documento"),
-            )
-
         _enviar(
             supabase,
             demanda=demanda,
             ator=ator,
-            corpo=corpo_do_prd,
+            corpo=lambda titulo: _corpo_do_prd(supabase, demanda=demanda, atual=atual, titulo=titulo),
             assignees=assignees,
             labels=[*labels_da_issue_nova(chat_tecnologia.TIPO_DA_CLASSIFICACAO["melhoria"]), LABEL_ORIGEM_DIRETOR],
             responsavel_id=responsavel_id,
@@ -1731,6 +1802,8 @@ def _enviar_o_card(
 
     produtos = supabase.table(TABELA_PRODUTOS).select("id, nome").eq("id", demanda.get("produto_id")).execute()
     produto_nome = (produtos.data or [{}])[0].get("nome") or SEM_PRODUTO
+    # So a contagem dos anexos vai a issue (ADR 0069), por tipo (issue #1520).
+    imagens, documentos = tecnologia_anexos.quantos_guardados(supabase, demanda_id)
 
     def corpo(_titulo: str) -> str:
         return corpo_da_issue_do_bug(
