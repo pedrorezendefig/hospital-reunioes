@@ -2,6 +2,54 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-11-10T22:03:18-03:00",
+      "sha": "07654669ab81cec716469e1565593268f546d105",
+      "app_version": "0.241.0",
+      "subject": "Onda onda-tec-onda3: O Responsável acompanha a troca de dono no GitHub",
+      "raw_subject": "chore(deploy): registro da onda onda-tec-onda3 (#1542)",
+      "scope": [
+        "backend",
+        "frontend"
+      ],
+      "prds": [
+        1529
+      ],
+      "result": "healthy",
+      "duration_seconds": 306,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        },
+        {
+          "service": "frontend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "onda-enxuta onda-tec-onda3: PR #1542 (issue #1534), mergeados PR a PR. Merge pela API do GitHub, um build. Registro pela Action pos-merge depois do health.",
+      "etapas": {
+        "merge_s": 3,
+        "build_s": {
+          "backend": 114,
+          "frontend": 277
+        },
+        "health_s": 0
+      },
+      "responsavel": "pedrorezendefig"
+    },
+    {
       "at": "2026-11-10T20:00:14-03:00",
       "sha": "e53997779c18db2be9b2ce724d8b4f7028704f09",
       "app_version": "0.240.0",
