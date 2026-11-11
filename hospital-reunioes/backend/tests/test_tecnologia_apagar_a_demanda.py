@@ -411,9 +411,45 @@ class TestALapide:
         assert sb.tabelas["tecnologia_anexos"][0]["apagado_em"]
 
     def test_a_demanda_apagada_nao_abre_nem_se_apaga_de_novo(self, monkeypatch):
-        client, _, gh = _cenario(monkeypatch, logado=DIRETOR, demanda=_conversa_registrada())
+        client, _, _ = _cenario(monkeypatch, logado=DIRETOR, demanda=_conversa_registrada())
         assert client.delete(APAGAR).status_code == 204
 
         assert client.get(APAGAR).status_code == 404
         assert client.get(f"{APAGAR}/conversa").status_code == 404
         assert client.delete(APAGAR).status_code == 404
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 7. A lista diz a quem o botão aparece
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+class TestQuemVeOBotao:
+    """A tela esconde o "Apagar" de quem não pode: quem diz é o servidor, pela
+    mesma regra da rota, no campo `pode_apagar` de cada linha da lista."""
+
+    @pytest.mark.parametrize(
+        ("logado", "demanda", "filtro", "pode"),
+        [
+            (DIRETOR, _conversa_registrada(), "", True),
+            (PEDRO, _conversa_registrada(), "?filtro=todas", False),
+            (DIRETOR, _card(ETAPA_EM_ANALISE), "", False),
+            (PEDRO, _card(ETAPA_EM_ANALISE), "?filtro=todas", True),
+            (PEDRO, _card(ETAPA_PLANEJADA), "?filtro=todas", True),
+            (PEDRO, _card(ETAPA_EM_DESENVOLVIMENTO), "?filtro=todas", False),
+        ],
+        ids=[
+            "autor-registrada",
+            "desenvolvedor-registrada-de-outro",
+            "autor-sem-login-no-card",
+            "desenvolvedor-em-analise",
+            "desenvolvedor-planejada",
+            "desenvolvedor-em-desenvolvimento",
+        ],
+    )
+    def test_a_lista_diz_se_quem_esta_logado_pode_apagar(self, monkeypatch, logado, demanda, filtro, pode):
+        client, _, _ = _cenario(monkeypatch, logado=logado, demanda=demanda)
+
+        [linha] = client.get(f"{BASE}/chat{filtro}").json()
+
+        assert linha["pode_apagar"] is pode

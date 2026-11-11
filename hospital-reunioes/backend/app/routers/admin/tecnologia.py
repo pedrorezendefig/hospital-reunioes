@@ -43,6 +43,12 @@ O chat da aba (issues #1381, #1383 e #1384):
                                                 issue que nasceu sem o
                                                 Responsavel, pelo
                                                 Desenvolvedor (issue #1536).
+- DELETE /admin/tecnologia/chat/{id}            o "Apagar": a conversa
+                                                Registrada pelo autor, o card
+                                                ate Planejada pelo
+                                                Desenvolvedor, que fecha no
+                                                GitHub como nao planejado
+                                                (issue #1549, ADR 0084).
 
 O print do chat (ADR 0056, decisao 4; ADR 0077, decisao 8):
 
@@ -165,7 +171,8 @@ def _para_a_lista(supabase: Client, demandas: list[dict], *, ator: dict) -> list
     o autor, o numero e o link (ADR 0083, decisao 3). O Responsavel sai para
     os dois (ADR 0083, decisao 5), e o selo "Envio falhou" tambem; o motivo
     tecnico da falha, so para o Desenvolvedor (issue #1535). A designacao
-    falhada sai so para o Desenvolvedor (issue #1536).
+    falhada sai so para o Desenvolvedor (issue #1536). O `pode_apagar` diz a
+    tela se mostra o "Apagar" (issue #1549), pela regra da rota.
     """
     desenvolvedor = e_desenvolvedor(ator)
     ids = {responsavel_da_demanda(d) for d in demandas}
@@ -187,6 +194,7 @@ def _para_a_lista(supabase: Client, demandas: list[dict], *, ator: dict) -> list
             "envio_falhou": tecnologia_envio.envio_falhou(d),
             "designacao_falhou": desenvolvedor and tecnologia_envio.designacao_falhou(d),
             "envio_motivo": d.get("envio_motivo") if desenvolvedor and _falha_pendente(d) else None,
+            "pode_apagar": recusa_de_apagar(ator, d) is None,
         }
         for d in demandas
     ]
