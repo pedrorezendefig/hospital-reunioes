@@ -1,6 +1,6 @@
 # ENTIDADES.md
 <!-- gerado automaticamente por /snapshot — não editar -->
-<!-- last_update: 2026-11-11T01:26+0000 -->
+<!-- last_update: 2026-11-11T05:47+0000 -->
 
 Modelo de dados do Hospital Reuniões. Tabelas no Postgres (via Supabase).
 
@@ -824,7 +824,7 @@ Modelo de dados do Hospital Reuniões. Tabelas no Postgres (via Supabase).
 
 ## tecnologia_demandas
 
-> Origem: `102_tecnologia_fundacao.sql` (alterada em: 103_tecnologia_vinculo.sql, 115_tecnologia_anexos_e_em_producao.sql, 128_tecnologia_envio_falhou.sql)
+> Origem: `102_tecnologia_fundacao.sql` (alterada em: 103_tecnologia_vinculo.sql, 115_tecnologia_anexos_e_em_producao.sql, 128_tecnologia_envio_falhou.sql, 130_tecnologia_adr_0084.sql)
 
 | Campo | Tipo | Constraints | Default | FK |
 |-------|------|-------------|---------|-----|
@@ -858,6 +858,12 @@ Modelo de dados do Hospital Reuniões. Tabelas no Postgres (via Supabase).
 | `envio_estado` | `TEXT` | — | — | — |
 | `envio_motivo` | `TEXT` | — | — | — |
 | `envio_em` | `TIMESTAMPTZ` | — | — | — |
+| `origem` | `TEXT` | NOT NULL | `'diretor'` | — |
+| `apagada_em` | `TIMESTAMPTZ` | — | — | — |
+| `apagada_por` | `VARCHAR(10)` | — | — | `participantes.id` |
+| `em_producao_em` | `TIMESTAMPTZ` | — | — | — |
+| `demonstracao_url` | `TEXT` | — | — | — |
+| `demonstracao_em` | `TIMESTAMPTZ` | — | — | — |
 
 **Indexes:**
 - `idx_tecnologia_demandas_estado` em `(estado)` (de `102_tecnologia_fundacao.sql`)
@@ -1594,7 +1600,7 @@ Modelo de dados do Hospital Reuniões. Tabelas no Postgres (via Supabase).
 
 ## tecnologia_planejamentos
 
-> Origem: `123_tecnologia_planejamento.sql`
+> Origem: `123_tecnologia_planejamento.sql` (alterada em: 130_tecnologia_adr_0084.sql)
 
 | Campo | Tipo | Constraints | Default | FK |
 |-------|------|-------------|---------|-----|
@@ -1607,6 +1613,10 @@ Modelo de dados do Hospital Reuniões. Tabelas no Postgres (via Supabase).
 | `modelo` | `TEXT` | NOT NULL | — | — |
 | `criado_em` | `TIMESTAMPTZ` | NOT NULL | `now()` | — |
 | `atualizado_em` | `TIMESTAMPTZ` | NOT NULL | `now()` | — |
+| `documento` | `JSONB` | — | — | — |
+| `revisao_iniciada_em` | `TIMESTAMPTZ` | — | — | — |
+| `revisao_por` | `VARCHAR(10)` | — | — | `participantes.id` |
+| `revisao_versao_base` | `TEXT` | — | — | — |
 
 ## tecnologia_chamadas_ia
 

@@ -1,6 +1,6 @@
 # SCHEMA.md
 <!-- gerado automaticamente por /snapshot — não editar -->
-<!-- last_update: 2026-11-11T01:26+0000 -->
+<!-- last_update: 2026-11-11T05:47+0000 -->
 
 Diagrama relacional do Hospital Reuniões. Renderiza nativo no GitHub.
 
@@ -111,11 +111,13 @@ erDiagram
     participantes ||--o{ tecnologia_anexos : "anexado_por"
     participantes ||--o{ tecnologia_conversa_da_demanda : "autor_id"
     participantes ||--o{ tecnologia_conversas : "autor_id"
+    participantes ||--o{ tecnologia_demandas : "apagada_por"
     participantes ||--o{ tecnologia_demandas : "autor_id"
     participantes ||--o{ tecnologia_demandas : "cancelada_por"
     participantes ||--o{ tecnologia_demandas : "concluida_por"
     participantes ||--o{ tecnologia_demandas : "responsavel_id"
     participantes ||--o{ tecnologia_demandas : "vinculado_por"
+    participantes ||--o{ tecnologia_planejamentos : "revisao_por"
     participantes ||--o{ tecnologia_produtos : "dono_id"
     participantes ||--o{ user_preferences : "participante_id"
     pendencias ||--o{ agendamentos_email : "id_acao"
@@ -514,7 +516,7 @@ erDiagram
         TEXT estado
         VARCHAR responsavel_id FK
         VARCHAR autor_id FK
-        _ mais_colunas "+22"
+        _ mais_colunas "+28"
     }
     tecnologia_conversas {
         UUID id PK
@@ -872,7 +874,7 @@ erDiagram
         JSONB resumo
         TEXT modelo
         TIMESTAMPTZ criado_em
-        _ mais_colunas "+1"
+        _ mais_colunas "+5"
     }
     tecnologia_chamadas_ia {
         UUID id PK
@@ -1108,4 +1110,4 @@ erDiagram
 | `tecnologia_conversa_da_demanda` | `idx_tecnologia_conversa_da_demanda_demanda` | `demanda_id, criado_em` | `129_tecnologia_conversa_da_demanda.sql` |
 
 ---
-**Resumo:** 87 tabelas · 128 relacionamentos FK detectados.
+**Resumo:** 87 tabelas · 130 relacionamentos FK detectados.

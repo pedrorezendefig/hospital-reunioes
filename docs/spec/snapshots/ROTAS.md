@@ -1,6 +1,6 @@
 # ROTAS.md
 <!-- gerado automaticamente por /snapshot — não editar -->
-<!-- last_update: 2026-11-11T01:46+0000 -->
+<!-- last_update: 2026-11-11T05:47+0000 -->
 
 Endpoints HTTP expostos pelo backend FastAPI do Hospital Reuniões.
 
@@ -475,6 +475,7 @@ Endpoints HTTP expostos pelo backend FastAPI do Hospital Reuniões.
 | POST | `/admin/tecnologia/assistente/ler-documento` | O documento anexado no chat vira texto (issue #1520, ADR 0069). | ✅ |
 | GET | `/admin/tecnologia/chat` | A lista ao lado do chat (issue #1384): as Demandas que o Super admin | ✅ |
 | POST | `/admin/tecnologia/chat` | O primeiro turno: a Demanda nasce aqui (ADR 0077, decisao 2). | ✅ |
+| DELETE | `/admin/tecnologia/chat/{demanda_id}` | O "Apagar" da Demanda (issue #1549, ADR 0084, decisao 2). | ✅ |
 | GET | `/admin/tecnologia/chat/{demanda_id}` | A conversa guardada, para retomar de onde parou. | ✅ |
 | POST | `/admin/tecnologia/chat/{demanda_id}` | Um turno: a fala do diretor entra, a da IA volta. | ✅ |
 | GET | `/admin/tecnologia/chat/{demanda_id}/conversa` | A Conversa da Demanda, da mais antiga para a mais nova, e quem pode ser | ✅ |
@@ -530,4 +531,4 @@ Endpoints HTTP expostos pelo backend FastAPI do Hospital Reuniões.
 
 ---
 
-**Totais:** 299 endpoints em 45 routers · 94% exigem auth.
+**Totais:** 300 endpoints em 45 routers · 94% exigem auth.
