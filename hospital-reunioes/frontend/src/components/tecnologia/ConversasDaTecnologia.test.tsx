@@ -18,7 +18,7 @@ import { ToastProvider } from "@/components/ui/Toast";
 import { caixaDoDado } from "@/lib/testes/caixaDoDado";
 
 import { ABERTURA, SEM_CONVERSA_GUARDADA } from "./ChatDaTecnologia";
-import { ConversasDaTecnologia, NOVA_CONVERSA, VOLTAR_PARA_A_LISTA } from "./ConversasDaTecnologia";
+import { AMPLIAR, ConversasDaTecnologia, NOVA_CONVERSA, VOLTAR_PARA_A_LISTA } from "./ConversasDaTecnologia";
 import { ConversaDoChat, FalaDoChat } from "./chat";
 import { Demanda } from "./demandas";
 
@@ -988,6 +988,62 @@ describe("O pedido ao lado da lista e o Ampliar (issue #1593)", () => {
     await screen.findByText("Onde isso aconteceu?");
 
     listaAoLado();
+  });
+
+  it("o Ampliar do cartão abre o pedido com a lista recolhida, e o Voltar devolve a lista", async () => {
+    comDuas();
+    await within(lista()).findByText("Botão de responder some na Ouvidoria");
+
+    fireEvent.click(within(cardDe(/Botão de responder some/)).getByRole("button", { name: AMPLIAR }));
+    await screen.findByText("Onde isso aconteceu?");
+    listaRecolhida();
+
+    fireEvent.click(voltar());
+    await waitFor(() => expect(painelDaLista().className).not.toMatch(recolhida));
+    expect(filtros().className).not.toMatch(recolhida);
+  });
+
+  it("o Ampliar também fica no topo do pedido aberto ao lado, e faz o mesmo", async () => {
+    comDuas();
+    await within(lista()).findByText("Botão de responder some na Ouvidoria");
+
+    fireEvent.click(within(lista()).getByRole("button", { name: /Botão de responder some/ }));
+    await screen.findByText("Onde isso aconteceu?");
+    listaAoLado();
+
+    fireEvent.click(within(aberto()).getByRole("button", { name: AMPLIAR }));
+    listaRecolhida();
+    // Ampliado, o pedido não oferece Ampliar de novo: o caminho é o Voltar.
+    expect(within(aberto()).queryByRole("button", { name: AMPLIAR })).toBeNull();
+
+    fireEvent.click(voltar());
+    await waitFor(() => expect(painelDaLista().className).not.toMatch(recolhida));
+  });
+
+  it("depois de ampliar um pedido, o clique em outro cartão abre ao lado", async () => {
+    comDuas();
+    await within(lista()).findByText("Botão de responder some na Ouvidoria");
+
+    fireEvent.click(within(cardDe(/Botão de responder some/)).getByRole("button", { name: AMPLIAR }));
+    await screen.findByText("Onde isso aconteceu?");
+    listaRecolhida();
+    fireEvent.click(voltar());
+
+    fireEvent.click(within(lista()).getByRole("button", { name: /Relatório de leitos atrasa/ }));
+    await waitFor(() => expect(cardDe(/Relatório de leitos/).querySelector("[aria-current]")).toBeTruthy());
+    listaAoLado();
+  });
+
+  it("o Ampliar do cartão fica visível sem passar o mouse, e o Conversar segue no hover", async () => {
+    comDuas();
+    await within(lista()).findByText("Botão de responder some na Ouvidoria");
+    const card = cardDe(/Botão de responder some/);
+
+    const ampliar = within(card).getByRole("button", { name: AMPLIAR }).className.split(/\s+/);
+    expect(ampliar.filter((c) => /opacity-0/.test(c))).toEqual([]);
+    expect(ampliar).toContain("md:inline-flex");
+    const conversar = within(card).getByRole("button", { name: "Conversar" }).className.split(/\s+/);
+    expect(conversar).toContain("md:opacity-0");
   });
 });
 

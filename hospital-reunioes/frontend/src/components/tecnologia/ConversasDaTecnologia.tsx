@@ -63,7 +63,7 @@
  */
 
 import { ReactNode, useCallback, useEffect, useRef, useState } from "react";
-import { ArrowLeft, Loader2, MessageSquare, Plus, RefreshCw, Search, Trash2, X } from "lucide-react";
+import { ArrowLeft, Loader2, Maximize2, MessageSquare, Plus, RefreshCw, Search, Trash2, X } from "lucide-react";
 
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { Select } from "@/components/ui/Select";
@@ -112,6 +112,8 @@ import {
 
 export const NOVA_CONVERSA = "Nova conversa";
 export const VOLTAR_PARA_A_LISTA = "Voltar às conversas";
+export const AMPLIAR = "Ampliar";
+const AMPLIAR_EXPLICADO = "Abrir este pedido em tela cheia";
 export const ENVIO_FALHOU = "Envio falhou";
 export const REENVIAR = "Reenviar";
 export const DESIGNACAO_FALHOU = "Designação falhou";
@@ -305,18 +307,22 @@ function PartesNoCard({ demanda }: { demanda: Demanda }) {
  * O card de uma conversa na lista (issue #1578). Contorno sempre visível; no
  * hover e no foco ele se destaca e sobe um pouco, sem movimento para quem
  * pediu menos animação ao sistema. O "Conversar" fica num botão próprio, ao
- * lado do card, porque botão dentro de botão não existe no HTML.
+ * lado do card, porque botão dentro de botão não existe no HTML. Ao lado dele,
+ * o Ampliar abre o pedido em tela cheia, e fica sempre à vista na tela larga
+ * (issue #1593).
  */
 function CardDaConversa({
   demanda,
   destacada,
   onAbrir,
   onConversar,
+  onAmpliar,
 }: {
   demanda: Demanda;
   destacada: boolean;
   onAbrir: () => void;
   onConversar: () => void;
+  onAmpliar: () => void;
 }) {
   const abertura = textoDaAbertura(demanda.criado_em);
   return (
@@ -331,7 +337,7 @@ function CardDaConversa({
         type="button"
         onClick={onAbrir}
         aria-current={destacada ? "true" : undefined}
-        className="w-full flex flex-col gap-3 p-4 pr-14 text-left rounded-2xl focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+        className="w-full flex flex-col gap-3 p-4 pr-14 md:pr-24 text-left rounded-2xl focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
       >
         <span className="flex flex-col gap-1">
           <span className="normal-case text-[15px] font-semibold leading-snug text-text-primary line-clamp-2">
@@ -354,15 +360,26 @@ function CardDaConversa({
           <SeloDoEnvioFalhou demanda={demanda} />
         </span>
       </button>
-      <button
-        type="button"
-        onClick={onConversar}
-        aria-label={CONVERSAR}
-        title="Conversar com quem cuida deste pedido"
-        className="absolute top-3 right-3 w-9 h-9 inline-flex items-center justify-center rounded-xl border border-border bg-white text-primary shadow-sm transition-opacity duration-150 motion-reduce:transition-none hover:bg-primary/5 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary md:opacity-0 md:group-hover:opacity-100 md:group-focus-within:opacity-100"
-      >
-        <MessageSquare className="w-4 h-4" />
-      </button>
+      <div className="absolute top-3 right-3 flex items-center gap-1.5">
+        <button
+          type="button"
+          onClick={onConversar}
+          aria-label={CONVERSAR}
+          title="Conversar com quem cuida deste pedido"
+          className="w-9 h-9 inline-flex items-center justify-center rounded-xl border border-border bg-white text-primary shadow-sm transition-opacity duration-150 motion-reduce:transition-none hover:bg-primary/5 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary md:opacity-0 md:group-hover:opacity-100 md:group-focus-within:opacity-100"
+        >
+          <MessageSquare className="w-4 h-4" />
+        </button>
+        <button
+          type="button"
+          onClick={onAmpliar}
+          aria-label={AMPLIAR}
+          title={AMPLIAR_EXPLICADO}
+          className="hidden md:inline-flex w-9 h-9 items-center justify-center rounded-xl border border-border bg-white text-primary shadow-sm hover:bg-primary/5 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+        >
+          <Maximize2 className="w-4 h-4" />
+        </button>
+      </div>
     </div>
   );
 }
@@ -1062,6 +1079,7 @@ export function ConversasDaTecnologia({
                       destacada={destacada === demanda.id}
                       onAbrir={() => abrir(demanda)}
                       onConversar={() => abrir(demanda, true)}
+                      onAmpliar={() => abrir(demanda, false, true)}
                     />
                   </li>
                 ))}
@@ -1083,6 +1101,17 @@ export function ConversasDaTecnologia({
             <ArrowLeft className="w-4 h-4" />
             {VOLTAR_PARA_A_LISTA}
           </button>
+          {aberta && !recolhida && (
+            <button
+              type="button"
+              onClick={() => setAmpliada(true)}
+              title={AMPLIAR_EXPLICADO}
+              className="hidden md:inline-flex items-center gap-1.5 text-sm font-semibold text-primary"
+            >
+              <Maximize2 className="w-4 h-4" />
+              {AMPLIAR}
+            </button>
+          )}
           {aberta?.pode_apagar && (
             <ApagarADemanda key={`apagar-${chave}`} demanda={aberta} token={token} onApagada={aoApagar} />
           )}
