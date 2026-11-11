@@ -12,7 +12,7 @@ from typing import Any
 
 from app.dependencies import is_super_admin
 from app.services.github_client import FATO_ASSIGNEE
-from app.services.tecnologia_vinculo import ETAPA_EM_PRODUCAO
+from app.services.tecnologia_vinculo import ETAPA_EM_ANALISE, ETAPA_EM_PRODUCAO, ETAPA_PLANEJADA, ETAPA_REGISTRADA
 
 # As tabelas da aba. Moram aqui, e nao no router, porque quem escreve nelas nao
 # e so o router: o webhook do GitHub e o job de reconciliacao escrevem pelo
@@ -123,6 +123,34 @@ def pode_ver(pessoa: dict[str, Any], demanda: dict[str, Any]) -> bool:
     A regra e uma so, e a lista e a leitura da conversa leem daqui.
     """
     return demanda.get("autor_id") == pessoa.get("id") or e_desenvolvedor(pessoa)
+
+
+# Ate onde a Demanda se apaga (ADR 0084, decisao 2): ate Planejada. Em
+# desenvolvimento ja existe PR aberto, e dali em diante o app recusa.
+ETAPAS_QUE_SE_APAGAM: tuple[str, ...] = (ETAPA_REGISTRADA, ETAPA_EM_ANALISE, ETAPA_PLANEJADA)
+
+MOTIVO_APAGAR_SO_O_AUTOR = "Só quem começou esta conversa pode apagá-la."
+MOTIVO_APAGAR_SO_O_DESENVOLVEDOR = "Pedido que já virou card, só a Vitta apaga. Peça na Conversa da Demanda."
+MOTIVO_APAGAR_JA_COMECOU = "Este pedido já começou a ser feito e não pode mais ser apagado."
+
+
+def recusa_de_apagar(pessoa: dict[str, Any], demanda: dict[str, Any]) -> tuple[int, str] | None:
+    """Por que esta pessoa nao apaga esta Demanda, ou `None` se apaga (ADR 0084,
+    decisao 2). A recusa vem com o status HTTP e a frase da tela.
+
+    A conversa que nao virou card, quem apaga e o autor. O card criado, so o
+    Desenvolvedor, e so ate Planejada. Quem nao pode apagar e 403 antes de a
+    Etapa ser olhada. A lista le daqui para mostrar o botao so a quem pode.
+    """
+    if not demanda.get("github_issue_numero"):
+        if demanda.get("autor_id") != pessoa.get("id"):
+            return 403, MOTIVO_APAGAR_SO_O_AUTOR
+        return None
+    if not e_desenvolvedor(pessoa):
+        return 403, MOTIVO_APAGAR_SO_O_DESENVOLVEDOR
+    if demanda.get("etapa") not in ETAPAS_QUE_SE_APAGAM:
+        return 409, MOTIVO_APAGAR_JA_COMECOU
+    return None
 
 
 def responsavel_da_demanda(demanda: dict[str, Any]) -> str | None:

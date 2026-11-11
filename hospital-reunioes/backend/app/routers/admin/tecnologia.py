@@ -68,7 +68,7 @@ import os
 from datetime import UTC, datetime
 from typing import Literal, NoReturn
 
-from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile, status
+from fastapi import APIRouter, Depends, File, HTTPException, Request, Response, UploadFile, status
 from supabase import Client
 
 from app.config import settings
@@ -97,6 +97,7 @@ from app.services import (
     github_client,
     planejamento_demanda,
     tecnologia_anexos,
+    tecnologia_apagar,
     tecnologia_email,
     tecnologia_envio,
 )
@@ -112,6 +113,7 @@ from app.services.tecnologia import (
     login_do_responsavel,
     pode_ver,
     quem_avisar,
+    recusa_de_apagar,
     responsavel_da_demanda,
     versao_da_entrega,
 )
@@ -1242,6 +1244,28 @@ async def designar_de_novo(
     if not result.data:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Demanda nao encontrada")
     return _para_a_lista(supabase, result.data, ator=ator)[0]
+
+
+@router.delete("/chat/{demanda_id}", status_code=status.HTTP_204_NO_CONTENT)
+@limiter.shared_limit(LIMITE_DO_VINCULO, ESCOPO_DO_VINCULO)
+async def apagar_a_demanda(
+    request: Request,
+    demanda_id: str,
+    ator: dict = Depends(require_super_admin),
+    supabase: Client = Depends(get_supabase_client),
+):
+    """O "Apagar" da Demanda (issue #1549, ADR 0084, decisao 2).
+
+    Quem pode e ate onde e a `recusa_de_apagar`: o autor apaga a conversa
+    Registrada; o card criado, so o Desenvolvedor, ate Planejada. A recusa
+    sai com o status dela (403 ou 409).
+    """
+    demanda = _buscar_demanda(supabase, demanda_id)
+    recusa = recusa_de_apagar(ator, demanda)
+    if recusa is not None:
+        raise HTTPException(status_code=recusa[0], detail=recusa[1])
+    tecnologia_apagar.apagar(supabase, demanda, ator=ator)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 def _enviar_o_card(
