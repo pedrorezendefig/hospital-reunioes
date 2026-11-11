@@ -1123,6 +1123,77 @@ class TestIssueSemDemandaVinculada:
         assert _fio(sb) == []
 
 
+class TestALapideDoApagar:
+    """A Demanda apagada (issue #1549, ADR 0084, decisao 2): a issue fecha como
+    nao planejada no GitHub, e o evento que volta de la nao pode mexer na
+    lapide nem fazer nascer outra Demanda para a mesma issue."""
+
+    @pytest.mark.parametrize("acao", ["edited", "closed"])
+    def test_issue_de_demanda_apagada_nao_altera_a_lapide_nem_cria_demanda(self, monkeypatch, acao):
+        gh = _GithubFalso({673: _issue(673, estado="closed", motivo="not_planned")})
+        lapide = _demanda(
+            "D1",
+            github_issue_numero=673,
+            etapa=ETAPA_PLANEJADA,
+            apagada_em="2026-11-11T10:00:00+00:00",
+            apagada_por="P1",
+        )
+        updates: list[tuple[str, dict]] = []
+        cliente, sb, _ = _montar(
+            demandas=[lapide],
+            github=gh,
+            antes_do_update=lambda nome, update, _linhas: updates.append((nome, update)),
+            monkeypatch=monkeypatch,
+        )
+
+        resposta = _entregar(cliente, _corpo(acao=acao))
+
+        assert resposta.status_code == 200
+        assert updates == []
+        assert _demandas(sb) == [lapide]
+        assert gh.leituras == []
+
+    def test_o_fechamento_que_chega_enquanto_a_lapide_e_gravada_nao_a_sobrescreve(self, monkeypatch):
+        """A corrida do proprio Apagar: o `issues.closed` da raiz le a Demanda
+        ainda viva, e a lapide entra entre a leitura e o UPDATE dele."""
+        gh = _GithubFalso({673: _issue(673, estado="closed", motivo="not_planned")})
+        apagou: list[bool] = []
+
+        def _apagar_no_meio(nome, _update, linhas):
+            if nome == "tecnologia_demandas" and not apagou:
+                apagou.append(True)
+                linhas[0].update(
+                    apagada_em="2026-11-11T10:00:00+00:00",
+                    apagada_por="P1",
+                    atualizado_em="2026-11-11T10:00:00+00:00",
+                )
+
+        cliente, sb, _ = _montar(
+            demandas=[_demanda("D1", github_issue_numero=673, etapa=ETAPA_PLANEJADA)],
+            github=gh,
+            antes_do_update=_apagar_no_meio,
+            monkeypatch=monkeypatch,
+        )
+
+        assert _entregar(cliente, _corpo(acao="closed")).status_code == 200
+
+        demanda = _demandas(sb)[0]
+        assert demanda["apagada_em"] == "2026-11-11T10:00:00+00:00"
+        assert demanda["etapa"] == ETAPA_PLANEJADA
+        assert demanda["atualizado_em"] == "2026-11-11T10:00:00+00:00"
+
+    def test_a_reconciliacao_de_hora_em_hora_tambem_deixa_a_lapide_como_esta(self, monkeypatch):
+        gh = _GithubFalso({673: _issue(673, estado="closed", motivo="not_planned")})
+        lapide = _demanda("D1", github_issue_numero=673, etapa=ETAPA_PLANEJADA, apagada_em="2026-11-11T10:00:00+00:00")
+        _, sb, _ = _montar(demandas=[lapide], github=gh, monkeypatch=monkeypatch)
+        monkeypatch.setattr(github_client, "ler_prs_abertos", lambda: [])
+
+        tecnologia_sincronizacao.reconciliar_vinculos(sb)
+
+        assert _demandas(sb) == [lapide]
+        assert gh.leituras == []
+
+
 class TestRepositorioDaEntrega:
     """Defesa em profundidade: o mesmo segredo reaproveitado noutro repositorio
     ou num fork mandaria o app reler issues pelo numero errado."""
