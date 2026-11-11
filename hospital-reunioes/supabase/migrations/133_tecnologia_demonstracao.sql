@@ -29,3 +29,5 @@ ALTER TABLE tecnologia_demandas DROP CONSTRAINT IF EXISTS tecnologia_demandas_de
 ALTER TABLE tecnologia_demandas
   ADD CONSTRAINT tecnologia_demandas_demonstracao_url_check
   CHECK (demonstracao_url IS NULL OR demonstracao_url LIKE 'https://%');
+
+INSERT INTO migracoes_aplicadas (numero) VALUES (133) ON CONFLICT (numero) DO NOTHING;

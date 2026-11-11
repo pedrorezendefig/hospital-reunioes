@@ -70,12 +70,30 @@ class TestOMarcador:
             "<!-- demonstracao: https:// -->",
             "<!-- demonstracao: javascript:alert(1) -->",
             '<!-- demonstracao: https://youtu.be/x"onclick="y -->',
+            # A spec do PRD #1548 cita o marcador com reticencias: host so de pontos.
+            "`<!-- demonstracao: https://... -->`",
+            "<!-- demonstracao: https://localhost/video -->",
         ],
     )
     def test_o_marcador_sem_https_ou_malformado_e_ignorado(self, monkeypatch, marcador):
         demanda = _sincronizar(_com_corpo(marcador), monkeypatch)
 
         assert (demanda.get("demonstracao_url"), demanda.get("demonstracao_em")) == (None, None)
+
+    @pytest.mark.parametrize(
+        "citacao",
+        [
+            "`<!-- demonstracao: <url> -->`",
+            "`<!-- demonstracao: https://... -->`",
+            f"<!-- demonstracao: {OUTRO_VIDEO} -->",
+        ],
+    )
+    def test_vale_o_ultimo_marcador_o_que_o_divulgar_grava_no_fim(self, monkeypatch, citacao):
+        corpo = f"O marcador e {citacao}.\n\n<!-- demonstracao: {VIDEO} -->\n"
+
+        demanda = _sincronizar(_com_corpo(corpo), monkeypatch)
+
+        assert demanda["demonstracao_url"] == VIDEO
 
     def test_o_mesmo_link_de_novo_nao_muda_a_data(self, monkeypatch):
         demanda = _sincronizar(

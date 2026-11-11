@@ -479,15 +479,20 @@ def demonstracao_do_corpo(corpo: str | None) -> str | None:
     So `https` com endereco entra (issue #1559): o link vai para a tela do
     diretor, e `http`, `javascript:` ou um `https://` sem host nao sao link de
     video. Marcador malformado vale o mesmo que marcador nenhum.
+
+    Vale o ultimo marcador do corpo, o que o `/divulgar` grava no fim: o texto
+    da issue pode citar o marcador antes (a spec do PRD #1548 cita). O host
+    precisa de um ponto e nenhum pedaco vazio, para `https://...` nao passar.
     """
-    achado = _MARCADOR_DA_DEMONSTRACAO.search(corpo or "")
-    if not achado:
+    achados = _MARCADOR_DA_DEMONSTRACAO.findall(corpo or "")
+    if not achados:
         return None
-    url = achado.group(1)
+    url = achados[-1]
     if _FORA_DO_LINK.search(url):
         return None
     partes = urlsplit(url)
-    if partes.scheme != "https" or not partes.hostname:
+    host = partes.hostname or ""
+    if partes.scheme != "https" or "." not in host or not all(host.split(".")):
         return None
     return url
 
