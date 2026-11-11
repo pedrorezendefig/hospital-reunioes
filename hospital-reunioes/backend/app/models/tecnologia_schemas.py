@@ -293,6 +293,15 @@ class CustoDaConversa(BaseModel):
     custo_usd: float | None = None
 
 
+class DocumentoDoPlanejamento(BaseModel):
+    """O rascunho do documento do card, montado a cada turno do planejamento
+    (issue #1553, ADR 0084, decisao 7): a frase de "O que muda" e ate cinco
+    topicos. E o que o bloco "Para o diretor" do card criado leva."""
+
+    frase: str | None = None
+    topicos: list[str] = []
+
+
 class ChatResponse(BaseModel):
     """A conversa do chat como a tela a mostra.
 
@@ -313,6 +322,9 @@ class ChatResponse(BaseModel):
     # O resumo do planejamento da melhoria (issue #1383), com `planejamento`
     # verdadeiro: as decisoes e o que ficou em aberto.
     resumo_da_melhoria: ResumoDoPlanejamento | None = None
+    # O documento vivo ao lado do chat, so na melhoria (issue #1553). Nulo
+    # enquanto o agente nao devolveu rascunho, e sempre no bug.
+    documento: DocumentoDoPlanejamento | None = None
     anexos: int = 0
     planejamento: bool = False
     aviso_dos_anexos: str | None = None

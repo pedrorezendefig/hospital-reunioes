@@ -130,6 +130,15 @@ def fala_de_continuar(resumo: dict | None) -> tuple[dict | None, str | None]:
 # ─── O turno ─────────────────────────────────────────────────────────────────
 
 
+class _DocumentoDoTurno(BaseModel):
+    """O rascunho do documento do card que o turno devolve (issue #1553)."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    frase: str | None = None
+    topicos: list[str] = []
+
+
 class _SaidaDoTurno(BaseModel):
     """O esquema da resposta do modelo. O que nao valida aqui e falha do turno."""
 
@@ -144,6 +153,9 @@ class _SaidaDoTurno(BaseModel):
     # O titulo curto da melhoria desde a primeira resposta (issue #1438, ADR
     # 0079, decisao 5). Opcional: o turno sem titulo mantem o que a Demanda tem.
     titulo: str | None = None
+    # O rascunho do documento do card, a cada turno (issue #1553, ADR 0084,
+    # decisao 7). Opcional: o turno sem ele deixa o rascunho de antes.
+    documento: _DocumentoDoTurno | None = None
 
     @model_validator(mode="after")
     def _pergunta_inteira(self):
@@ -192,6 +204,9 @@ class ResultadoDoTurno:
     erro: str | None
     chamada: dict | None
     titulo: str | None = None
+    # O rascunho do documento do card, ja no formato fixo (issue #1553), ou
+    # nulo quando o turno nao trouxe nenhum.
+    documento: dict | None = None
 
 
 # O teto do titulo, o mesmo do titulo do bug (`chat_tecnologia.LIMITE_DO_TITULO`).
@@ -202,6 +217,22 @@ def titulo_limpo(valor: str | None) -> str | None:
     """O titulo que o modelo deu, com a limpeza do titulo do bug: uma linha
     so, sem travessao e no teto. Vazio vira nulo, que e "nao deu titulo"."""
     return sanitizar_travessao(" ".join((valor or "").split()))[:LIMITE_DO_TITULO].strip() or None
+
+
+# O formato fixo do bloco "Para o diretor" (ADR 0084, decisao 7): uma frase
+# de "O que muda" e no maximo cinco topicos curtos.
+LIMITE_DE_TOPICOS = 5
+
+
+def documento_limpo(frase: str | None, topicos: list[str] | None) -> dict | None:
+    """O documento do card no formato fixo: a frase numa linha so e ate cinco
+    topicos, cada um numa linha, sem travessao e no teto do titulo. Nulo
+    quando nao sobra nada, que e "ainda sem rascunho"."""
+    limpos = [t for t in (titulo_limpo(t) for t in topicos or []) if t][:LIMITE_DE_TOPICOS]
+    frase_limpa = titulo_limpo(frase)
+    if not frase_limpa and not limpos:
+        return None
+    return {"frase": frase_limpa, "topicos": limpos}
 
 
 def _cercar_o_kit(kit: str) -> str:
@@ -478,6 +509,7 @@ def turno(
         erro=None,
         chamada=chamada,
         titulo=titulo_limpo(saida.titulo),
+        documento=documento_limpo(saida.documento.frase, saida.documento.topicos) if saida.documento else None,
     )
 
 
