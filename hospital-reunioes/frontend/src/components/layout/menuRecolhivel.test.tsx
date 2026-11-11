@@ -138,4 +138,61 @@ describe.each(barras)("$nome recolhível", ({ rota: rotaDaBarra, ativo, outro, d
     expect(outroLink.getAttribute("aria-current")).toBeNull();
     expect(outroLink.className.split(/\s+/)).not.toContain("bg-primary/10");
   });
+
+  it("recarregar a página mantém o estado escolhido", () => {
+    const primeira = render(desenhar("desktop"));
+    fireEvent.click(screen.getByRole("button", { name: "Recolher menu" }));
+    primeira.unmount();
+
+    // A página nova monta a barra do zero: só o navegador lembra.
+    const recolhida = render(desenhar("desktop"));
+    expect(classesDaBarra(recolhida.container)).toContain("w-16");
+    fireEvent.click(screen.getByRole("button", { name: "Expandir menu" }));
+    recolhida.unmount();
+
+    const expandida = render(desenhar("desktop"));
+    expect(classesDaBarra(expandida.container)).toContain("w-64");
+  });
+
+  it("sem armazenamento disponível, a barra abre expandida e não dá erro", () => {
+    localStorage.setItem("menu-recolhido", "1");
+    vi.spyOn(Storage.prototype, "getItem").mockImplementation(() => {
+      throw new DOMException("bloqueado", "SecurityError");
+    });
+    vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => {
+      throw new DOMException("cheio", "QuotaExceededError");
+    });
+
+    const { container } = render(desenhar("desktop"));
+    expect(classesDaBarra(container)).toContain("w-64");
+
+    // O botão segue funcionando na página aberta, só não é lembrado.
+    fireEvent.click(screen.getByRole("button", { name: "Recolher menu" }));
+    expect(classesDaBarra(container)).toContain("w-16");
+  });
+
+  it("a gaveta do celular ignora a preferência e segue aberta", () => {
+    localStorage.setItem("menu-recolhido", "1");
+
+    render(desenhar("drawer"));
+
+    expect(
+      screen.queryByRole("button", { name: /menu$/ }),
+    ).toBeNull();
+    const ativoLink = screen.getByRole("link", { name: ativo });
+    expect(ativoLink.getAttribute("title")).toBeNull();
+  });
+});
+
+describe("a preferência é uma só para as duas barras", () => {
+  it("recolher na barra do app recolhe também a da administração", () => {
+    rota.atual = "/ouvidoria";
+    const app = render(<Sidebar variant="desktop" />);
+    fireEvent.click(screen.getByRole("button", { name: "Recolher menu" }));
+    app.unmount();
+
+    rota.atual = "/admin/usuarios";
+    const admin = render(<AdminSidebar variant="desktop" />);
+    expect(classesDaBarra(admin.container)).toContain("w-16");
+  });
 });
