@@ -1,6 +1,6 @@
 # MIGRATIONS.md
 <!-- gerado automaticamente por /snapshot — não editar -->
-<!-- last_update: 2026-11-10T03:25+0000 -->
+<!-- last_update: 2026-11-11T01:13+0000 -->
 
 Ordem cronológica das migrations do Postgres do Hospital Reuniões.
 
@@ -129,6 +129,7 @@ Ordem cronológica das migrations do Postgres do Hospital Reuniões.
 | 125 | `125_contas_medicas_troca_da_memoria_vigente.sql` | a troca da memoria vigente numa transacao so | 0 | 0 | 0 | 0 |
 | 126 | `126_contas_medicas_auditor.sql` | Contas medicas, o schema do Auditor | 6 | 4 | 11 | 0 |
 | 127 | `127_tecnologia_documento_no_chat.sql` | o documento no chat da Tecnologia | 0 | 0 | 0 | 0 |
+| 128 | `128_tecnologia_envio_falhou.sql` | o Envio falhou da Demanda | 0 | 3 | 0 | 0 |
 
 **Legenda:** C = CREATE TABLE · A = ALTER TABLE · I = CREATE INDEX · D = DROP.
-**Total:** 123 migrations.
+**Total:** 124 migrations.
