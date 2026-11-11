@@ -87,6 +87,12 @@ export type Demanda = {
   designacao_falhou?: boolean;
   /** O motivo técnico da falha, só para o Desenvolvedor. Para o diretor o servidor manda nulo. */
   envio_motivo?: string | null;
+  /**
+   * Se quem está logado pode apagar a Demanda (issue #1549, ADR 0084): o autor
+   * na conversa Registrada, o Desenvolvedor no card até Planejada. Quem decide
+   * é o servidor; sem o campo, o botão não aparece.
+   */
+  pode_apagar?: boolean;
 };
 
 export type Classificacao = "bug" | "melhoria";

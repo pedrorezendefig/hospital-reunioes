@@ -31,10 +31,16 @@
  * Desenvolvedor lê o motivo técnico e tem o filtro "Envio falhou" (issue
  * #1535, ADR 0083, decisão 7). O card que nasceu sem o Responsável aparece
  * só para o Desenvolvedor, com o "Designar de novo" (issue #1536).
+ *
+ * A conversa aberta tem o "Apagar" para quem pode, com confirmação: o autor
+ * na conversa Registrada, o Desenvolvedor no card até Planejada (issue
+ * #1549, ADR 0084, decisão 2). Quem pode é o servidor que diz.
  */
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ArrowLeft, Loader2, Plus } from "lucide-react";
+import { ArrowLeft, Loader2, Plus, Trash2 } from "lucide-react";
+
+import { ConfirmDialog } from "@/components/ConfirmDialog";
 
 import { ChatDaTecnologia, Fala } from "./ChatDaTecnologia";
 import { ConversaDaDemanda } from "./ConversaDaDemanda";
@@ -68,6 +74,12 @@ export const ENVIO_FALHOU = "Envio falhou";
 export const REENVIAR = "Reenviar";
 export const DESIGNACAO_FALHOU = "Designação falhou";
 export const DESIGNAR_DE_NOVO = "Designar de novo";
+export const APAGAR = "Apagar";
+const APAGAR_TITULO = "Apagar este pedido?";
+const APAGAR_A_CONVERSA_EXPLICADO =
+  "A conversa sai da lista com os anexos. Não dá para desfazer.";
+const APAGAR_O_CARD_EXPLICADO =
+  "O pedido sai da lista com a conversa e os anexos, e o card fecha como não planejado no desenvolvimento. Não dá para desfazer.";
 const DESIGNACAO_FALHOU_EXPLICADO =
   "O card nasceu no GitHub sem o Responsável. Designar de novo pede só a designação, sem criar outro card.";
 const ENVIO_FALHOU_EXPLICADO =
@@ -241,6 +253,70 @@ function AvisoDaDesignacaoFalhou({
         {DESIGNAR_DE_NOVO}
       </button>
     </section>
+  );
+}
+
+/**
+ * O "Apagar" da Demanda (issue #1549, ADR 0084, decisão 2). Só aparece com o
+ * `pode_apagar` do servidor, e pede confirmação antes. A recusa do servidor
+ * (o GitHub que não fechou o card, a Etapa que andou) aparece embaixo do botão.
+ */
+function ApagarADemanda({
+  demanda,
+  token,
+  onApagada,
+}: {
+  demanda: Demanda;
+  token: string | null;
+  onApagada: () => void;
+}) {
+  const [confirmando, setConfirmando] = useState(false);
+  const [erro, setErro] = useState<string | null>(null);
+
+  async function apagar() {
+    if (!token) return;
+    setErro(null);
+    try {
+      const resposta = await fetch(urlDaConversa(demanda.id), {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!resposta.ok) {
+        setErro(await motivoDaRecusa(resposta));
+        return;
+      }
+      onApagada();
+    } catch (e) {
+      console.error("[admin/tecnologia] falha ao apagar a Demanda", e);
+      setErro(FALHA_DE_CONEXAO);
+    }
+  }
+
+  return (
+    <div className="flex flex-col items-end gap-1">
+      <button
+        type="button"
+        onClick={() => setConfirmando(true)}
+        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-red-200 text-red-700 text-xs font-semibold hover:bg-red-50"
+      >
+        <Trash2 className="w-3.5 h-3.5" />
+        {APAGAR}
+      </button>
+      {erro && (
+        <p role="alert" className="text-sm text-red-700">
+          {erro}
+        </p>
+      )}
+      <ConfirmDialog
+        open={confirmando}
+        onClose={() => setConfirmando(false)}
+        onConfirm={apagar}
+        title={APAGAR_TITULO}
+        description={demanda.tem_vinculo ? APAGAR_O_CARD_EXPLICADO : APAGAR_A_CONVERSA_EXPLICADO}
+        confirmLabel={APAGAR}
+        confirmVariant="danger"
+      />
+    </div>
   );
 }
 
@@ -432,6 +508,15 @@ export function ConversasDaTecnologia({
     abrir(atual ?? (aberta ? { ...aberta, envio_falhou: false, envio_motivo: null, tem_vinculo: true } : null));
   }
 
+  /** A Demanda foi apagada: some da lista, e a tela volta à lista com a conversa nova pronta. */
+  function aoApagar() {
+    setAberta(null);
+    setDestacada(null);
+    setChave((atual) => atual + 1);
+    setNaTela("lista");
+    carregar();
+  }
+
   /** A designação pegou: a lista relê e a Demanda abre como está agora. */
   async function aoDesignar(demandaId: string) {
     const lidas = await carregar();
@@ -539,6 +624,9 @@ export function ConversasDaTecnologia({
           <ArrowLeft className="w-4 h-4" />
           {VOLTAR_PARA_A_LISTA}
         </button>
+        {aberta?.pode_apagar && (
+          <ApagarADemanda key={`apagar-${chave}`} demanda={aberta} token={token} onApagada={aoApagar} />
+        )}
         {aberta?.envio_falhou && (
           <AvisoDoEnvioFalhou key={`envio-${chave}`} demanda={aberta} token={token} onReenviado={aoReenviar} />
         )}
