@@ -63,12 +63,12 @@ logger = logging.getLogger(__name__)
 
 # As acoes do evento `issues` que podem mexer na foto (issue #678).
 #
-# `opened` fica de fora porque uma issue recem-aberta nao tem Demanda vinculada
-# ainda: o Vinculo nasce depois, e ja sincroniza na hora em que e criado. A
-# troca de dono (`assigned`, `unassigned`) entra desde a issue #1534: o
+# `opened` entra desde a issue #1554: a issue-raiz do app aberta pelo terminal
+# nasce Demanda de Origem Vitta pelo espelho (`tecnologia_espelho`), que o
+# webhook chama quando a issue ainda nao tem Demanda. A troca de dono (`assigned`, `unassigned`) entra desde a issue #1534: o
 # Responsavel e derivado do assignee (ADR 0083, decisao 6). As demais acoes
 # (`milestoned`, `pinned`) nao tocam em label, estado, corpo nem dono.
-ACOES_DE_ISSUE = ("labeled", "unlabeled", "closed", "reopened", "edited", "assigned", "unassigned")
+ACOES_DE_ISSUE = ("opened", "labeled", "unlabeled", "closed", "reopened", "edited", "assigned", "unassigned")
 
 # As acoes do evento `pull_request` que mexem no fato do PR (issue #1064, ADR
 # 0069, decisao 6). Abrir e reabrir poem o PR na foto; fechar o tira, e o merge
