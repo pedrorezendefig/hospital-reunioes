@@ -230,6 +230,37 @@ function PerguntaEmCartao({ fala, cartao, numero, desabilitado, onEscolher }: Pr
   );
 }
 
+type PropsDaPerguntaRespondida = {
+  pergunta: FalaDoChat;
+  titulo: string;
+  resposta: FalaDoChat;
+  numero: number;
+};
+
+/**
+ * A pergunta já respondida do planejamento, encolhida numa linha (issue #1594,
+ * PRD #1591): o número, o título e a letra escolhida. A resposta do diretor
+ * entra na linha, sem bolha própria.
+ */
+function PerguntaRespondida({ pergunta, titulo, resposta, numero }: PropsDaPerguntaRespondida) {
+  const nome = `Pergunta ${numero}`;
+  // O clique na opção grava o texto dela como a resposta (planejamento_demanda.py).
+  const escolhida = pergunta.opcoes.indexOf(resposta.texto);
+  const escolha = `escolheu ${LETRAS[escolhida]}`;
+  return (
+    <button
+      type="button"
+      aria-label={`${nome}, ${titulo}: ${escolha}`}
+      aria-expanded={false}
+      className="flex w-full items-baseline gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-left text-sm hover:border-primary"
+    >
+      <span className="flex-shrink-0 text-xs font-semibold text-text-secondary">{nome}</span>
+      <span className="min-w-0 flex-1 truncate normal-case font-semibold text-slate-900">{titulo}</span>
+      <span className="flex-shrink-0 normal-case text-slate-700">{escolha}</span>
+    </button>
+  );
+}
+
 /** O Retrato de hoje da revisão (issue #1557): os três blocos, e a versão em cada item de Já existe. */
 function RetratoNaConversa({ retrato }: { retrato: RetratoDeHoje }) {
   const blocos: [string, ReactNode[]][] = [
@@ -984,6 +1015,15 @@ export function ChatDaTecnologia({ token, demandaId = null, onMudou }: PropsDoCh
   // #1592): a pergunta de antes continua como bolha, com as opções embaixo.
   const cartaoDaVez = ultima?.autor === "ia" && recomendada ? (ultima.cartao ?? null) : null;
   const numeroDaPergunta = falas.filter((f) => f.autor === "ia" && f.recomendada).length;
+  // O número de cada pergunta do planejamento na conversa, a partir de 1.
+  let contadas = 0;
+  const numerosDasPerguntas = falas.map((f) => (f.autor === "ia" && f.recomendada ? ++contadas : 0));
+  // A pergunta com título que o diretor já respondeu encolhe numa linha (issue
+  // #1594); a de antes, sem título, segue como bolha.
+  const emLinha = (i: number) => {
+    const fala = falas[i];
+    return Boolean(fala?.autor === "ia" && fala.recomendada && fala.cartao?.titulo && falas[i + 1]?.autor === "diretor");
+  };
   const naMelhoria = conversa?.planejamento ?? false;
   const encerrado = naMelhoria && conversa?.estado === "encerrado";
   const podeResumir = naMelhoria && (conversa?.estado === "em_andamento" || encerrado);
@@ -1014,20 +1054,35 @@ export function ChatDaTecnologia({ token, demandaId = null, onMudou }: PropsDoCh
       </div>
 
       <div role="log" className="flex-1 overflow-y-auto px-5 py-4 space-y-3 overscroll-contain">
-        {falas.map((fala, i) =>
-          cartaoDaVez && i === falas.length - 1 ? (
-            <PerguntaEmCartao
-              key={i}
-              fala={fala}
-              cartao={cartaoDaVez}
-              numero={numeroDaPergunta}
-              desabilitado={ocupado}
-              onEscolher={escolherALetra}
-            />
-          ) : (
-            <Fala key={i} fala={fala} />
-          ),
-        )}
+        {falas.map((fala, i) => {
+          if (cartaoDaVez && i === falas.length - 1) {
+            return (
+              <PerguntaEmCartao
+                key={i}
+                fala={fala}
+                cartao={cartaoDaVez}
+                numero={numeroDaPergunta}
+                desabilitado={ocupado}
+                onEscolher={escolherALetra}
+              />
+            );
+          }
+          // A resposta da pergunta encolhida já está na linha dela.
+          if (emLinha(i - 1)) return null;
+          const titulo = emLinha(i) ? fala.cartao?.titulo : null;
+          if (titulo) {
+            return (
+              <PerguntaRespondida
+                key={i}
+                pergunta={fala}
+                titulo={titulo}
+                resposta={falas[i + 1]}
+                numero={numerosDasPerguntas[i]}
+              />
+            );
+          }
+          return <Fala key={i} fala={fala} />;
+        })}
 
         {opcoes.length > 0 && !pensando && recomendada && !cartaoDaVez && (
           <div role="group" aria-label="Opções" className="flex flex-col gap-2 max-w-[85%]">
