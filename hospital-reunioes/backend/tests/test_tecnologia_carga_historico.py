@@ -377,6 +377,33 @@ class TestSemAviso:
         assert cenario.sb.tabelas["notificacoes"] == []
         assert enviados == []
 
+    def test_carga_com_demonstracao_e_diretoria_cadastrada_nao_avisa(self, monkeypatch):
+        """Issue #1560: a entrega antiga que a carga cria e promove a Em
+        produção traz o link de Demonstração, e há diretoria para avisar no
+        card da Vitta. Nem o sino nem o e-mail saem."""
+        enviados: list[tuple] = []
+        monkeypatch.setattr(tecnologia_email, "_enviar_email", lambda *a, **kw: enviados.append(a) or True)
+        corpo = f"{CORPO_DE_RAIZ}\n\n<!-- demonstracao: https://youtu.be/demo-antiga -->"
+        cenario = _Cenario(monkeypatch, fechadas=[_fechada(1600, fechada_em="2026-10-08T15:00:00Z", corpo=corpo)])
+        cenario.sb.tabelas["participantes"].append(
+            {
+                "id": "P9",
+                "nome_completo": "Diretor Geral",
+                "email": "diretor@hsm.test",
+                "ativo": True,
+                "is_super_admin": True,
+                "access_profile": "super_admin",
+            }
+        )
+
+        carregar(cenario.sb, dry_run=False)
+
+        demanda = cenario.demanda(1600)
+        assert demanda["demonstracao_url"] == "https://youtu.be/demo-antiga"
+        assert demanda["etapa"] == ETAPA_EM_PRODUCAO
+        assert cenario.sb.tabelas["notificacoes"] == []
+        assert enviados == []
+
 
 # ═══════════════════════════════════════════════════════════════════════════
 # --dry-run lista o que faria sem gravar

@@ -206,7 +206,8 @@ def _nova_demanda(supabase, issue: dict[str, Any], *, dry_run: bool) -> dict[str
     criada = criar(supabase, relida)
     if criada is None:
         return None
-    sincronizar_demanda(supabase, criada)
+    # Sem aviso (issue #1560): o link de Demonstracao da entrega antiga nao e novidade.
+    sincronizar_demanda(supabase, criada, avisar=False)
     return demanda_vinculada(supabase, numero)
 
 

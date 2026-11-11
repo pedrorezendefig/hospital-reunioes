@@ -77,7 +77,7 @@ def _subir(monkeypatch, demanda_campos: dict | None = None):
     """O card Entregue da issue #673 e o webhook da subida que a leva a Em produção."""
     gh = _GithubFalso({673: _fechada_em(673, "2026-10-08T12:30:00Z")})
     cliente, sb, _ = _montar(
-        demandas=[_entregue_por_pr(gh, 673, "D1", autor_id=DIRETOR["id"], **(demanda_campos or {}))],
+        demandas=[_entregue_por_pr(gh, 673, "D1", **{"autor_id": DIRETOR["id"], **(demanda_campos or {})})],
         participantes=CADASTRO,
         github=gh,
         monkeypatch=monkeypatch,
@@ -94,3 +94,74 @@ class TestEmProducaoAvisa:
         avisos = _avisos(sb)
         assert [(a["destinatario_id"], a["referencia_id"]) for a in avisos] == [(DIRETOR["id"], "D1")]
         assert [e["para"] for e in emails] == [DIRETOR["email"]]
+
+    def test_webhook_repetido_e_reconciliacao_depois_nao_avisam_de_novo(self, monkeypatch, emails):
+        cliente, sb = _subir(monkeypatch)
+
+        _avisar(cliente, _corpo_do_deploy())
+        _avisar(cliente, _corpo_do_deploy())
+        monkeypatch.setattr(github_client, "ler_historico_de_deploys", lambda: HISTORICO)
+        tecnologia_sincronizacao.reconciliar_em_producao(sb)
+
+        assert len(_avisos(sb)) == 1
+        assert len(emails) == 1
+
+    def test_a_reconciliacao_avisa_quando_o_webhook_nao_chegou(self, monkeypatch, emails):
+        _, sb = _subir(monkeypatch)
+        monkeypatch.setattr(github_client, "ler_historico_de_deploys", lambda: HISTORICO)
+
+        tecnologia_sincronizacao.reconciliar_em_producao(sb)
+        tecnologia_sincronizacao.reconciliar_em_producao(sb)
+
+        assert [a["destinatario_id"] for a in _avisos(sb)] == [DIRETOR["id"]]
+        assert [e["para"] for e in emails] == [DIRETOR["email"]]
+
+
+class TestQuemEAvisado:
+    def test_card_vitta_avisa_os_super_admins_sem_login_do_github(self, monkeypatch, emails):
+        cliente, sb = _subir(monkeypatch, {"origem": "vitta", "autor_id": DESENVOLVEDOR["id"]})
+
+        _avisar(cliente, _corpo_do_deploy())
+
+        assert sorted(a["destinatario_id"] for a in _avisos(sb)) == [DIRETOR["id"], DIRETORA["id"]]
+        assert sorted(e["para"] for e in emails) == sorted([DIRETOR["email"], DIRETORA["email"]])
+
+    def test_card_do_diretor_avisa_so_o_autor(self, monkeypatch, emails):
+        cliente, sb = _subir(monkeypatch, {"autor_id": DIRETORA["id"]})
+
+        _avisar(cliente, _corpo_do_deploy())
+
+        assert [a["destinatario_id"] for a in _avisos(sb)] == [DIRETORA["id"]]
+
+
+def _com_demonstracao(url: str) -> dict:
+    return {**_issue(673), "body": f"## Para o diretor\n\nO selo se atualiza sozinho.\n\n<!-- demonstracao: {url} -->"}
+
+
+class TestDemonstracaoAvisa:
+    def _editar(self, monkeypatch, issue: dict, **campos):
+        """Entrega o `issues.edited` da raiz e devolve o banco."""
+        gh = _GithubFalso({673: issue})
+        guardada = _ja_sincronizada(_GithubFalso({673: _issue(673)}), 673, autor_id=DIRETOR["id"], **campos)
+        cliente, sb, _ = _montar(demandas=[guardada], participantes=CADASTRO, github=gh, monkeypatch=monkeypatch)
+        _entregar(cliente, _corpo(acao="edited"))
+        return sb
+
+    def test_demonstracao_nova_gera_um_aviso(self, monkeypatch, emails):
+        sb = self._editar(monkeypatch, _com_demonstracao(VIDEO))
+
+        avisos = _avisos(sb)
+        assert [(a["destinatario_id"], a["titulo"]) for a in avisos] == [(DIRETOR["id"], "Demonstração pronta")]
+        assert [e["para"] for e in emails] == [DIRETOR["email"]]
+
+    def test_o_mesmo_link_de_novo_nao_avisa(self, monkeypatch, emails):
+        sb = self._editar(
+            monkeypatch,
+            _com_demonstracao(VIDEO),
+            demonstracao_url=VIDEO,
+            demonstracao_em="2026-11-08T10:00:00+00:00",
+            o_que_muda="Antes.",
+        )
+
+        assert _avisos(sb) == []
+        assert emails == []
