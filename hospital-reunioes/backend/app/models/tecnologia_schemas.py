@@ -67,6 +67,9 @@ class DemandaResponse(BaseModel):
     # O selo "Envio falhou" (issue #1535, ADR 0083, decisao 7), para os dois.
     # O motivo tecnico sai so para o Desenvolvedor; para o diretor, nulo.
     envio_falhou: bool = False
+    # A issue nasceu sem o Responsavel (issue #1536): so para o Desenvolvedor,
+    # que tem o "Designar de novo". O motivo sai no mesmo `envio_motivo`.
+    designacao_falhou: bool = False
     envio_motivo: str | None = None
 
 

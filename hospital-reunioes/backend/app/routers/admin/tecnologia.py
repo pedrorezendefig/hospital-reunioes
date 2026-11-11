@@ -155,7 +155,8 @@ def _para_a_lista(supabase: Client, demandas: list[dict], *, ator: dict) -> list
     ele le a Etapa e O que muda sem nenhum dos dois. O Desenvolvedor le tambem
     o autor, o numero e o link (ADR 0083, decisao 3). O Responsavel sai para
     os dois (ADR 0083, decisao 5), e o selo "Envio falhou" tambem; o motivo
-    tecnico da falha, so para o Desenvolvedor (issue #1535).
+    tecnico da falha, so para o Desenvolvedor (issue #1535). A designacao
+    falhada sai so para o Desenvolvedor (issue #1536).
     """
     desenvolvedor = e_desenvolvedor(ator)
     ids = {responsavel_da_demanda(d) for d in demandas}
@@ -175,10 +176,16 @@ def _para_a_lista(supabase: Client, demandas: list[dict], *, ator: dict) -> list
             "issue_url": _url_da_issue(d) if desenvolvedor else None,
             "responsavel": _nome_do_responsavel(d, nomes),
             "envio_falhou": tecnologia_envio.envio_falhou(d),
-            "envio_motivo": d.get("envio_motivo") if desenvolvedor and tecnologia_envio.envio_falhou(d) else None,
+            "designacao_falhou": desenvolvedor and tecnologia_envio.designacao_falhou(d),
+            "envio_motivo": d.get("envio_motivo") if desenvolvedor and _falha_pendente(d) else None,
         }
         for d in demandas
     ]
+
+
+def _falha_pendente(demanda: dict) -> bool:
+    """O envio ou a designacao que falhou e ainda espera alguem (issues #1535 e #1536)."""
+    return tecnologia_envio.envio_falhou(demanda) or tecnologia_envio.designacao_falhou(demanda)
 
 
 def _nome_do_responsavel(demanda: dict, nomes: dict[str, str]) -> str | None:

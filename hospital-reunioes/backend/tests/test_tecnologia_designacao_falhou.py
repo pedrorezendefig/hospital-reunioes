@@ -104,3 +104,56 @@ class TestADesignacaoQueFalhaFicaRegistrada:
         assert demanda["github_issue_numero"] == 900
         assert demanda["envio_estado"] == "designacao_falhou"
         assert "pedrorezendefig" in demanda["envio_motivo"]
+
+    def test_o_github_que_responde_200_sem_o_login_tambem_e_designacao_falhada(self, monkeypatch):
+        client, sb, _ = _cenario(monkeypatch)
+        demanda_id = _ate_o_resumo(client, monkeypatch)
+        _na_rede(monkeypatch, _GithubDeVerdadeNaRede(ignora_o_login=True))
+
+        assert client.post(f"{CHAT}/{demanda_id}/criar-card").status_code == 200
+
+        assert _demandas(sb)[0]["envio_estado"] == "designacao_falhou"
+
+    def test_a_designacao_que_pega_nao_deixa_estado(self, monkeypatch):
+        client, sb, _ = _cenario(monkeypatch)
+        demanda_id = _ate_o_resumo(client, monkeypatch)
+        _na_rede(monkeypatch, _GithubDeVerdadeNaRede())
+
+        assert client.post(f"{CHAT}/{demanda_id}/criar-card").status_code == 200
+
+        assert _demandas(sb)[0]["github_issue_numero"] == 900
+        assert _demandas(sb)[0]["envio_estado"] is None
+
+
+def _demanda_com_designacao_falhada(monkeypatch):
+    """O diretor cria o card; a issue 900 nasce e o GitHub recusa o Responsável."""
+    client, sb, gh = _cenario(monkeypatch, participantes=[PEDRO, DIRETOR, LUCAS])
+    demanda_id = _ate_o_resumo(client, monkeypatch)
+    rede = _na_rede(monkeypatch, _GithubDeVerdadeNaRede(status_da_designacao=422))
+    assert client.post(f"{CHAT}/{demanda_id}/criar-card").status_code == 200
+    return client, sb, gh, demanda_id, rede
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 2. Quem vê
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+class TestQuemVe:
+    def test_o_desenvolvedor_ve_a_designacao_falhada_e_o_motivo(self, monkeypatch):
+        _, sb, gh, demanda_id, _ = _demanda_com_designacao_falhada(monkeypatch)
+        pedro = _como(PEDRO, sb, gh, monkeypatch)
+
+        linha = _linha(pedro.get(f"{CHAT}?filtro=todas").json(), demanda_id)
+
+        assert linha["designacao_falhou"] is True
+        assert "pedrorezendefig" in linha["envio_motivo"]
+
+    def test_o_diretor_nao_ve_a_designacao_falhada(self, monkeypatch):
+        diretor, _, _, demanda_id, _ = _demanda_com_designacao_falhada(monkeypatch)
+
+        linha = _linha(diretor.get(CHAT).json(), demanda_id)
+
+        assert linha["designacao_falhou"] is False
+        assert linha["envio_motivo"] is None
+        assert linha["envio_falhou"] is False
