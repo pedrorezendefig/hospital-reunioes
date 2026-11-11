@@ -27,6 +27,11 @@ export function urlDoReenviar(demandaId: string): string {
   return `${urlDaConversa(demandaId)}/reenviar`;
 }
 
+/** O "Designar de novo" da issue que nasceu sem o Responsável (issue #1536), só do Desenvolvedor. */
+export function urlDoDesignarDeNovo(demandaId: string): string {
+  return `${urlDaConversa(demandaId)}/designar-de-novo`;
+}
+
 /** O "Quem cuida disto?" do resumo (issue #1533, ADR 0083, decisão 5). */
 export const URL_DOS_DESENVOLVEDORES = `${BASE_TECNOLOGIA}/desenvolvedores`;
 

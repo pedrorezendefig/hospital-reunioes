@@ -29,7 +29,8 @@
  * O card que não chegou ao GitHub fica com o selo "Envio falhou" na lista, e a
  * conversa aberta traz o "Reenviar", para o autor e para o Desenvolvedor. Só o
  * Desenvolvedor lê o motivo técnico e tem o filtro "Envio falhou" (issue
- * #1535, ADR 0083, decisão 7).
+ * #1535, ADR 0083, decisão 7). O card que nasceu sem o Responsável aparece
+ * só para o Desenvolvedor, com o "Designar de novo" (issue #1536).
  */
 
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -45,6 +46,7 @@ import {
   FalaDoChat,
   URL_DO_CHAT_DA_ABA,
   urlDaConversa,
+  urlDoDesignarDeNovo,
   urlDoReenviar,
 } from "./chat";
 import {
@@ -64,6 +66,10 @@ export const NOVA_CONVERSA = "Nova conversa";
 export const VOLTAR_PARA_A_LISTA = "Voltar às conversas";
 export const ENVIO_FALHOU = "Envio falhou";
 export const REENVIAR = "Reenviar";
+export const DESIGNACAO_FALHOU = "Designação falhou";
+export const DESIGNAR_DE_NOVO = "Designar de novo";
+const DESIGNACAO_FALHOU_EXPLICADO =
+  "O card nasceu no GitHub sem o Responsável. Designar de novo pede só a designação, sem criar outro card.";
 const ENVIO_FALHOU_EXPLICADO =
   "Este card não chegou à Vitta. O que você disse continua guardado: clique em Reenviar para tentar de novo.";
 const LISTA_VAZIA = "Nenhuma conversa ainda.";
@@ -172,6 +178,67 @@ function AvisoDoEnvioFalhou({
       >
         {reenviando && <Loader2 className="w-4 h-4 animate-spin" />}
         {REENVIAR}
+      </button>
+    </section>
+  );
+}
+
+/**
+ * O aviso da designação falhada no alto da conversa aberta, com o Designar de
+ * novo (issue #1536). Só o Desenvolvedor o recebe do servidor.
+ */
+function AvisoDaDesignacaoFalhou({
+  demanda,
+  token,
+  onDesignado,
+}: {
+  demanda: Demanda;
+  token: string | null;
+  onDesignado: (demandaId: string) => void;
+}) {
+  const [designando, setDesignando] = useState(false);
+  const [erro, setErro] = useState<string | null>(null);
+
+  async function designarDeNovo() {
+    if (!token) return;
+    setDesignando(true);
+    setErro(null);
+    try {
+      const resposta = await fetch(urlDoDesignarDeNovo(demanda.id), {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!resposta.ok) {
+        setErro(await motivoDaRecusa(resposta));
+        return;
+      }
+      onDesignado(demanda.id);
+    } catch (e) {
+      console.error("[admin/tecnologia] falha ao designar de novo", e);
+      setErro(FALHA_DE_CONEXAO);
+    } finally {
+      setDesignando(false);
+    }
+  }
+
+  return (
+    <section
+      role="region"
+      aria-label={DESIGNACAO_FALHOU}
+      className="w-full rounded-2xl border border-amber-200 bg-amber-50 p-4 space-y-2 text-sm text-amber-900"
+    >
+      <p className="font-semibold">{DESIGNACAO_FALHOU}</p>
+      <p>{DESIGNACAO_FALHOU_EXPLICADO}</p>
+      {demanda.envio_motivo && <p className="normal-case font-mono text-xs">{demanda.envio_motivo}</p>}
+      {erro && <p role="alert">{erro}</p>}
+      <button
+        type="button"
+        onClick={designarDeNovo}
+        disabled={designando}
+        className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-primary text-white text-sm font-semibold disabled:opacity-60"
+      >
+        {designando && <Loader2 className="w-4 h-4 animate-spin" />}
+        {DESIGNAR_DE_NOVO}
       </button>
     </section>
   );
@@ -365,6 +432,13 @@ export function ConversasDaTecnologia({
     abrir(atual ?? (aberta ? { ...aberta, envio_falhou: false, envio_motivo: null, tem_vinculo: true } : null));
   }
 
+  /** A designação pegou: a lista relê e a Demanda abre como está agora. */
+  async function aoDesignar(demandaId: string) {
+    const lidas = await carregar();
+    const atual = lidas?.find((d) => d.id === demandaId);
+    abrir(atual ?? (aberta ? { ...aberta, designacao_falhou: false, envio_motivo: null } : null));
+  }
+
   useEffect(() => {
     if (!demandaInicial || abertaPeloSino.current === demandaInicial || !demandas) return;
     const pedida = demandas.find((d) => d.id === demandaInicial);
@@ -467,6 +541,14 @@ export function ConversasDaTecnologia({
         </button>
         {aberta?.envio_falhou && (
           <AvisoDoEnvioFalhou key={`envio-${chave}`} demanda={aberta} token={token} onReenviado={aoReenviar} />
+        )}
+        {desenvolvedor && aberta?.designacao_falhou && (
+          <AvisoDaDesignacaoFalhou
+            key={`designacao-${chave}`}
+            demanda={aberta}
+            token={token}
+            onDesignado={aoDesignar}
+          />
         )}
         {aberta?.tem_vinculo || aberta?.minha === false ? (
           <Acompanhamento key={chave} demanda={aberta} token={token} />

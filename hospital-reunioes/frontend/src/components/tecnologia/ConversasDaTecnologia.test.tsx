@@ -638,3 +638,64 @@ describe("Envio falhou (issue #1535, ADR 0083, decisão 7)", () => {
     await waitFor(() => expect(within(linha(/Botão de responder/)).getByText("Envio falhou")).toBeTruthy());
   });
 });
+
+describe("Designação falhou (issue #1536, ADR 0083, decisão 7)", () => {
+  const EU = "/api/admin/tecnologia/eu";
+  const PARA_MIM = `${LISTA}?filtro=para_mim`;
+  const DESIGNAR = `${LISTA}/d-1/designar-de-novo`;
+  const SEM_DONO = demanda("d-1", "Botão de responder some na Ouvidoria", {
+    classificacao: "bug",
+    tem_vinculo: true,
+    etapa: "em_analise",
+    issue_numero: 900,
+    designacao_falhou: true,
+    envio_motivo: "A issue #900 nasceu sem o Responsável (lucas-vitta)",
+  });
+  const DESIGNADA = { ...SEM_DONO, designacao_falhou: false, envio_motivo: null };
+
+  it("o Desenvolvedor vê o estado com o motivo e Designar de novo o resolve", async () => {
+    let designada = false;
+    const chamadas = montar((url, metodo) => {
+      if (url === EU) return { status: 200, corpo: { desenvolvedor: true } };
+      if (url === PARA_MIM) return { status: 200, corpo: [designada ? DESIGNADA : SEM_DONO] };
+      if (url === DESIGNAR && metodo === "POST") {
+        designada = true;
+        return { status: 200, corpo: DESIGNADA };
+      }
+      return { status: 404, corpo: {} };
+    });
+
+    fireEvent.click(await within(lista()).findByRole("button", { name: /Botão de responder/ }));
+    const aviso = await screen.findByRole("region", { name: "Designação falhou" });
+    expect(within(aviso).getByText("A issue #900 nasceu sem o Responsável (lucas-vitta)")).toBeTruthy();
+    fireEvent.click(within(aviso).getByRole("button", { name: "Designar de novo" }));
+
+    await waitFor(() => expect(screen.queryByRole("region", { name: "Designação falhou" })).toBeNull());
+    expect(chamadas.filter((c) => c.url === DESIGNAR && c.metodo === "POST")).toHaveLength(1);
+  });
+
+  it("o Designar de novo que falha mostra a frase do servidor e o aviso fica", async () => {
+    montar((url) => {
+      if (url === EU) return { status: 200, corpo: { desenvolvedor: true } };
+      if (url === PARA_MIM) return { status: 200, corpo: [SEM_DONO] };
+      if (url === DESIGNAR) return { status: 502, corpo: { detail: "O GitHub não respondeu. Tente de novo." } };
+      return { status: 404, corpo: {} };
+    });
+
+    fireEvent.click(await within(lista()).findByRole("button", { name: /Botão de responder/ }));
+    const aviso = await screen.findByRole("region", { name: "Designação falhou" });
+    fireEvent.click(within(aviso).getByRole("button", { name: "Designar de novo" }));
+
+    expect(await within(aviso).findByText("O GitHub não respondeu. Tente de novo.")).toBeTruthy();
+  });
+
+  it("o diretor não vê o estado nem o botão", async () => {
+    montar((url) => (url === LISTA ? { status: 200, corpo: [SEM_DONO] } : { status: 404, corpo: {} }));
+
+    fireEvent.click(await within(lista()).findByRole("button", { name: /Botão de responder/ }));
+
+    await screen.findByRole("heading", { name: "Botão de responder some na Ouvidoria" });
+    expect(screen.queryByRole("region", { name: "Designação falhou" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Designar de novo" })).toBeNull();
+  });
+});
