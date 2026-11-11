@@ -2,6 +2,56 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-11-10T22:28:53-03:00",
+      "sha": "3eb33dae17014bbb82b21b2ff14b69db2c5c96c2",
+      "app_version": "0.243.0",
+      "subject": "Onda onda-tec-onda3: Conversa da Demanda, com menção e aviso no sino",
+      "raw_subject": "chore(deploy): registro da onda onda-tec-onda3 (#1544)",
+      "scope": [
+        "backend",
+        "frontend"
+      ],
+      "prds": [
+        1529
+      ],
+      "result": "healthy",
+      "duration_seconds": 185,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        },
+        {
+          "service": "frontend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [
+        "129_tecnologia_conversa_da_demanda.sql"
+      ],
+      "rollback_target_sha": null,
+      "notes": "onda-enxuta onda-tec-onda3: PR #1544 (issue #1537), mergeados PR a PR. Merge pela API do GitHub, um build. Registro pela Action pos-merge depois do health.",
+      "etapas": {
+        "merge_s": 2,
+        "build_s": {
+          "backend": 17,
+          "frontend": 166
+        },
+        "health_s": 0
+      },
+      "responsavel": "pedrorezendefig"
+    },
+    {
       "at": "2026-11-10T22:15:55-03:00",
       "sha": "563e192f9035adb8627115812ef8bc3ff7782617",
       "app_version": "0.242.0",
