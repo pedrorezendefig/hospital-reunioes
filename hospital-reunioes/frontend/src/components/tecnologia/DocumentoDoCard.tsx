@@ -28,6 +28,7 @@ import {
   blocosDoTextoSimples,
   Demanda,
   diaDoHospital,
+  diaEHoraDoHospital,
   documentoDoBloco,
   ETAPA_CLASSE,
   ETAPA_ROTULO,
@@ -236,9 +237,9 @@ export function DocumentoDoCard({ demanda }: { demanda: Demanda }) {
 
   const partes = demanda.partes ?? [];
   const datas = [
-    ["Criado em", diaDoHospital(demanda.criado_em)],
-    ["Entregue em", diaDoHospital(demanda.fechada_em)],
-    ["Em produção em", diaDoHospital(demanda.em_producao_em)],
+    ["Criado em", diaEHoraDoHospital(demanda.criado_em)],
+    ["Entregue em", diaEHoraDoHospital(demanda.fechada_em)],
+    ["Em produção em", diaEHoraDoHospital(demanda.em_producao_em)],
   ].filter((par): par is [string, string] => par[1] !== null);
 
   return (

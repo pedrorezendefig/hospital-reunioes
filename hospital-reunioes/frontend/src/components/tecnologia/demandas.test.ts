@@ -9,21 +9,21 @@ import { describe, expect, it } from "vitest";
 
 import { blocosDoTextoSimples, iniciais, rotuloDaEtapa, textoDaAbertura } from "./demandas";
 
-describe("A data de abertura do card (issue #1578)", () => {
+describe("A data de abertura do card (issues #1578 e #1580)", () => {
   const AGORA = new Date("2026-11-11T15:00:00Z");
 
-  it("conta os dias pelo calendário do hospital", () => {
-    expect(textoDaAbertura("2026-11-01T13:00:00Z", AGORA)).toBe("Aberto em 01/11, há 10 dias");
+  it("conta os dias pelo calendário do hospital, com a hora de Brasília", () => {
+    expect(textoDaAbertura("2026-11-01T13:00:00Z", AGORA)).toBe("Aberto em 01/11 às 10:00, há 10 dias");
   });
 
-  it("hoje e ontem têm nome", () => {
-    expect(textoDaAbertura("2026-11-11T12:00:00Z", AGORA)).toBe("Aberto hoje");
-    expect(textoDaAbertura("2026-11-10T12:00:00Z", AGORA)).toBe("Aberto ontem");
+  it("hoje e ontem têm nome, e também a hora", () => {
+    expect(textoDaAbertura("2026-11-11T12:05:00Z", AGORA)).toBe("Aberto hoje às 09:05");
+    expect(textoDaAbertura("2026-11-10T17:32:00Z", AGORA)).toBe("Aberto ontem às 14:32");
   });
 
-  it("a virada do dia é a de Brasília, e não a de Greenwich", () => {
+  it("a virada do dia e a hora são as de Brasília, e não as de Greenwich", () => {
     // 01h30 em Greenwich no dia 11 ainda é 22h30 do dia 10 em Brasília.
-    expect(textoDaAbertura("2026-11-11T01:30:00Z", AGORA)).toBe("Aberto ontem");
+    expect(textoDaAbertura("2026-11-11T01:30:00Z", AGORA)).toBe("Aberto ontem às 22:30");
   });
 
   it("sem data, ou com data inválida, não escreve nada", () => {
