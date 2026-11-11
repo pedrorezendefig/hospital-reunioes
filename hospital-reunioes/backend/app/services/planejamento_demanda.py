@@ -157,6 +157,13 @@ class _SaidaDoTurno(BaseModel):
     # O rascunho do documento do card, a cada turno (issue #1553, ADR 0084,
     # decisao 7). Opcional: o turno sem ele deixa o rascunho de antes.
     documento: _DocumentoDoTurno | None = None
+    # O cartao da pergunta (issue #1592): o titulo da pergunta, o "na pratica"
+    # de cada opcao e o porque da recomendada. Opcionais: sem eles a pergunta
+    # e gravada como antes, e nenhum turno cai por tamanho.
+    titulo_pergunta: str | None = None
+    na_pratica_a: str | None = None
+    na_pratica_b: str | None = None
+    porque: str | None = None
 
     @field_validator("documento", mode="wrap")
     @classmethod
@@ -392,11 +399,26 @@ def _json_da_resposta(resposta):
     return json.loads(texto[inicio : fim + 1] if 0 <= inicio < fim else texto)
 
 
+# Os textos do cartao da pergunta (issue #1592), com o nome que tem na resposta
+# do modelo e na mensagem gravada.
+CAMPOS_DO_CARTAO = ("titulo_pergunta", "na_pratica_a", "na_pratica_b", "porque")
+
+
+def _texto_do_cartao(valor: str | None) -> str | None:
+    """Uma linha so e sem travessao, sem teto: o tamanho e pedido no prompt,
+    nunca cobrado. Vazio vira nulo, que e "o modelo nao mandou"."""
+    return sanitizar_travessao(" ".join((valor or "").split())) or None
+
+
 def _mensagem_do_modelo(saida: _SaidaDoTurno) -> dict:
     """A fala da IA que entra na conversa: a pergunta, ou o "encerrou" quando
-    o modelo diz que nada ficou em aberto (ADR 0079, decisao 2)."""
+    o modelo diz que nada ficou em aberto (ADR 0079, decisao 2).
+
+    Os textos do cartao so entram quando o modelo os mandou: a pergunta sem
+    eles fica igual a de antes, e a tela a mostra como bolha."""
     if saida.encerrou:
         return {"tipo": "encerrou", "contexto": sanitizar_travessao(saida.contexto.strip())}
+    cartao = {campo: texto for campo in CAMPOS_DO_CARTAO if (texto := _texto_do_cartao(getattr(saida, campo)))}
     return {
         "tipo": "pergunta",
         "contexto": sanitizar_travessao(saida.contexto.strip()),
@@ -405,6 +427,7 @@ def _mensagem_do_modelo(saida: _SaidaDoTurno) -> dict:
             {"letra": "B", "texto": sanitizar_travessao((saida.opcao_b or "").strip())},
         ],
         "recomendada": saida.recomendada,
+        **cartao,
     }
 
 

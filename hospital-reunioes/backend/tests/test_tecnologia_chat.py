@@ -427,6 +427,7 @@ class TestNaoBateu:
             "nao_bateu": True,
             "documentos": [],
             "retrato": None,
+            "cartao": None,
             # Quem respondeu o turno (issue #1557), pelo nome.
             "respondido_por": "Diretor do Hospital",
         }
