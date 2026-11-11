@@ -19,7 +19,7 @@
  * a cada turno que valeu, para a Demanda que acabou de nascer aparecer nela.
  */
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { ReactNode, useCallback, useEffect, useRef, useState } from "react";
 import { Bot, CheckCircle2, FileText, ListChecks, Loader2, Mic, Paperclip, Send, Square } from "lucide-react";
 
 import { useGravacaoVoz } from "@/hooks/useGravacaoVoz";
@@ -54,6 +54,7 @@ import {
   LetraDaOpcao,
   ResumoDaMelhoria,
   ResumoDoBug,
+  RetratoDeHoje,
   textoDoCusto,
   URL_DO_CHAT_DA_ABA,
   URL_DOS_DESENVOLVEDORES,
@@ -116,6 +117,8 @@ export function Fala({ fala }: { fala: FalaDoChat }) {
     const documentos = fala.documentos ?? [];
     return (
       <div className="ml-auto max-w-[85%] flex flex-col items-end gap-1">
+        {/* Quem respondeu o turno (issue #1557): na revisão, o Desenvolvedor também responde. */}
+        {fala.respondido_por && <span className="normal-case text-xs text-text-secondary">{fala.respondido_por}</span>}
         {(fala.texto || fala.nao_bateu) && (
           <p className="px-3 py-2 rounded-2xl bg-primary text-white text-sm whitespace-pre-line">
             {fala.nao_bateu && <span className="font-semibold">O que não bateu no resumo: </span>}
@@ -138,11 +141,47 @@ export function Fala({ fala }: { fala: FalaDoChat }) {
       </div>
     );
   }
+  if (fala.retrato) return <RetratoNaConversa retrato={fala.retrato} />;
   return (
     <div className="mr-auto max-w-[85%] space-y-1">
       <p className="px-3 py-2 rounded-2xl bg-slate-100 text-slate-800 text-sm whitespace-pre-line">{fala.texto}</p>
       {fala.fonte && <p className="px-3 text-xs text-text-secondary">De onde veio: material da Vitta sobre {fala.fonte}</p>}
     </div>
+  );
+}
+
+/** O Retrato de hoje da revisão (issue #1557): os três blocos, e a versão em cada item de Já existe. */
+function RetratoNaConversa({ retrato }: { retrato: RetratoDeHoje }) {
+  const blocos: [string, ReactNode[]][] = [
+    [
+      "Já existe",
+      retrato.ja_existe.map((i, n) => (
+        <li key={n}>
+          <span>{i.item}</span> <span className="text-xs text-text-secondary">{`desde a ${i.versao}`}</span>
+        </li>
+      )),
+    ],
+    ["Mudou desde o card", retrato.mudou.map((t, n) => <li key={n}>{t}</li>)],
+    ["Continua em aberto", retrato.em_aberto.map((t, n) => <li key={n}>{t}</li>)],
+  ];
+  return (
+    <section
+      role="region"
+      aria-label="Retrato de hoje"
+      className="mr-auto max-w-[85%] space-y-2 px-3 py-2 rounded-2xl bg-slate-100 text-slate-800 text-sm"
+    >
+      <h3 className="font-semibold">Retrato de hoje</h3>
+      {blocos.map(([titulo, itens]) => (
+        <div key={titulo}>
+          <p className="text-xs font-semibold uppercase text-text-secondary">{titulo}</p>
+          {itens.length > 0 ? (
+            <ul className="list-disc pl-5 space-y-1">{itens}</ul>
+          ) : (
+            <p className="text-text-secondary">Nada.</p>
+          )}
+        </div>
+      ))}
+    </section>
   );
 }
 

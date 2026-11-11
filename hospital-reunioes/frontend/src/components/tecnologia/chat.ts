@@ -32,6 +32,24 @@ export function urlDoDesignarDeNovo(demandaId: string): string {
   return `${urlDaConversa(demandaId)}/designar-de-novo`;
 }
 
+/**
+ * A Revisão com o código de hoje (issue #1557, ADR 0084, decisão 3): o GET
+ * traz a estimativa do diálogo, e o POST com `confirmado` começa a revisão.
+ */
+export function urlDaRevisao(demandaId: string): string {
+  return `${urlDaConversa(demandaId)}/revisao`;
+}
+
+/** A faixa em dólar do Retrato de hoje; nula quando o modelo está sem preço. */
+export type EstimativaDaRevisao = { modelo: string; minimo_usd: number | null; maximo_usd: number | null };
+
+/** O Retrato de hoje: o que já existe (com a versão), o que mudou desde o card e o que continua em aberto. */
+export type RetratoDeHoje = {
+  ja_existe: { item: string; versao: string }[];
+  mudou: string[];
+  em_aberto: string[];
+};
+
 /** O "Quem cuida disto?" do resumo (issue #1533, ADR 0083, decisão 5). */
 export const URL_DOS_DESENVOLVEDORES = `${BASE_TECNOLOGIA}/desenvolvedores`;
 
@@ -66,6 +84,10 @@ export type FalaDoChat = {
   nao_bateu: boolean;
   /** Os documentos que a fala do diretor trouxe (issue #1520): o nome e o tamanho, nunca o texto. */
   documentos?: DocumentoDaFala[];
+  /** Só na fala do Retrato de hoje da revisão (issue #1557). */
+  retrato?: RetratoDeHoje | null;
+  /** O nome de quem respondeu o turno (issue #1557); nulo na fala de antes. */
+  respondido_por?: string | null;
 };
 
 export type DocumentoDaFala = { nome: string; tamanho_bytes: number };
@@ -101,6 +123,14 @@ export type CustoDaConversa = {
 };
 
 const DOLAR = new Intl.NumberFormat("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+/** A frase do diálogo da revisão: a faixa em dólar e o modelo, ou que não deu para estimar. */
+export function textoDaEstimativa(estimativa: EstimativaDaRevisao): string {
+  if (estimativa.minimo_usd === null || estimativa.maximo_usd === null) {
+    return `O custo do Retrato de hoje não foi estimado: o ${estimativa.modelo} está sem preço cadastrado.`;
+  }
+  return `O Retrato de hoje deve custar entre US$ ${DOLAR.format(estimativa.minimo_usd)} e US$ ${DOLAR.format(estimativa.maximo_usd)} no ${estimativa.modelo}.`;
+}
 
 /** "Opus 5.5 · US$ 1,84 até agora", ou "Opus 5.5 · custo não medido". */
 export function textoDoCusto(custo: CustoDaConversa): string {

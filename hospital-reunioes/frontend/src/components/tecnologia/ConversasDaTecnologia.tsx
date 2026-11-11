@@ -46,10 +46,16 @@
  * "Vitta", e os do chat com "Pedido do diretor"; o chip Origem filtra (issue
  * #1554, ADR 0084, decisão 4). O card da Vitta abre o documento e a Conversa
  * da Demanda, sem conversa com o agente.
+ *
+ * O card de melhoria Em análise ou Planejada tem o "Revisar com o código de
+ * hoje" para o autor e o Desenvolvedor (issue #1557, ADR 0084, decisão 3). O
+ * clique mostra antes quanto o Retrato de hoje deve custar, e a revisão só
+ * começa com a confirmação (ADR 0082). Em revisão, o card abre a conversa para
+ * responder. Quem pode é o servidor que diz.
  */
 
 import { ReactNode, useCallback, useEffect, useRef, useState } from "react";
-import { ArrowLeft, Loader2, Plus, Trash2 } from "lucide-react";
+import { ArrowLeft, Loader2, Plus, RefreshCw, Trash2 } from "lucide-react";
 
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 
@@ -62,10 +68,13 @@ import {
   conversaValida,
   Desenvolvedor,
   desenvolvedoresValidos,
+  EstimativaDaRevisao,
   FalaDoChat,
+  textoDaEstimativa,
   URL_DO_CHAT_DA_ABA,
   URL_DOS_DESENVOLVEDORES,
   urlDaConversa,
+  urlDaRevisao,
   urlDoDesignarDeNovo,
   urlDoReenviar,
 } from "./chat";
@@ -94,6 +103,9 @@ export const REENVIAR = "Reenviar";
 export const DESIGNACAO_FALHOU = "Designação falhou";
 export const DESIGNAR_DE_NOVO = "Designar de novo";
 export const APAGAR = "Apagar";
+export const REVISAR_COM_O_CODIGO_DE_HOJE = "Revisar com o código de hoje";
+const REVISAR_TITULO = "Revisar este pedido com o código de hoje?";
+const REVISAR = "Revisar";
 const APAGAR_TITULO = "Apagar este pedido?";
 const APAGAR_A_CONVERSA_EXPLICADO =
   "A conversa sai da lista com os anexos. Não dá para desfazer.";
@@ -402,6 +414,96 @@ function ApagarADemanda({
   );
 }
 
+/**
+ * O "Revisar com o código de hoje" (issue #1557, ADR 0084, decisão 3). O
+ * clique pede ao servidor a estimativa, que não chama a IA, e abre a
+ * confirmação com a faixa em dólar. Só o Revisar do diálogo começa a revisão
+ * (ADR 0082). A recusa do servidor aparece embaixo do botão.
+ */
+function RevisarComOCodigoDeHoje({
+  demanda,
+  token,
+  onRevisada,
+}: {
+  demanda: Demanda;
+  token: string | null;
+  onRevisada: (demandaId: string) => void;
+}) {
+  const [estimativa, setEstimativa] = useState<EstimativaDaRevisao | null>(null);
+  const [calculando, setCalculando] = useState(false);
+  const [erro, setErro] = useState<string | null>(null);
+
+  async function estimar() {
+    if (!token) return;
+    setCalculando(true);
+    setErro(null);
+    try {
+      const resposta = await fetch(urlDaRevisao(demanda.id), { headers: { Authorization: `Bearer ${token}` } });
+      if (!resposta.ok) {
+        setErro(await motivoDaRecusa(resposta));
+        return;
+      }
+      setEstimativa((await resposta.json()) as EstimativaDaRevisao);
+    } catch (e) {
+      console.error("[admin/tecnologia] falha ao estimar a revisão", e);
+      setErro(FALHA_DE_CONEXAO);
+    } finally {
+      setCalculando(false);
+    }
+  }
+
+  async function revisar() {
+    if (!token) return;
+    setErro(null);
+    try {
+      const resposta = await fetch(urlDaRevisao(demanda.id), {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ confirmado: true }),
+      });
+      if (!resposta.ok) {
+        setErro(await motivoDaRecusa(resposta));
+        return;
+      }
+      onRevisada(demanda.id);
+    } catch (e) {
+      console.error("[admin/tecnologia] falha ao começar a revisão", e);
+      setErro(FALHA_DE_CONEXAO);
+    }
+  }
+
+  return (
+    <div className="flex flex-col items-end gap-1">
+      <button
+        type="button"
+        onClick={estimar}
+        disabled={calculando}
+        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-primary/30 text-primary text-xs font-semibold hover:bg-primary/5 disabled:opacity-60"
+      >
+        {calculando ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
+        {REVISAR_COM_O_CODIGO_DE_HOJE}
+      </button>
+      {erro && (
+        <p role="alert" className="text-sm text-red-700">
+          {erro}
+        </p>
+      )}
+      <ConfirmDialog
+        open={estimativa !== null}
+        onClose={() => setEstimativa(null)}
+        onConfirm={revisar}
+        title={REVISAR_TITULO}
+        description={
+          estimativa
+            ? `${textoDaEstimativa(estimativa)} A IA lê o que o sistema já faz hoje e pergunta só o que falta. Cada resposta depois do retrato custa como as do planejamento.`
+            : undefined
+        }
+        confirmLabel={REVISAR}
+      />
+    </div>
+  );
+}
+
 /** Os Anexos da Demanda, que só o Desenvolvedor recebe do servidor. */
 function AnexosDaDemanda({ anexos }: { anexos: AnexoDaDemanda[] }) {
   const comLink = anexos.filter((anexo) => anexo.url);
@@ -627,6 +729,13 @@ export function ConversasDaTecnologia({
     carregar();
   }
 
+  /** A revisão começou: a lista relê e o card abre na conversa, para responder. */
+  async function aoRevisar(demandaId: string) {
+    const lidas = await carregar();
+    const atual = lidas?.find((d) => d.id === demandaId);
+    abrir(atual ?? (aberta ? { ...aberta, pode_revisar: false, em_revisao: true } : null));
+  }
+
   /** A designação pegou: a lista relê e a Demanda abre como está agora. */
   async function aoDesignar(demandaId: string) {
     const lidas = await carregar();
@@ -786,6 +895,9 @@ export function ConversasDaTecnologia({
         {aberta?.pode_apagar && (
           <ApagarADemanda key={`apagar-${chave}`} demanda={aberta} token={token} onApagada={aoApagar} />
         )}
+        {aberta?.pode_revisar && (
+          <RevisarComOCodigoDeHoje key={`revisar-${chave}`} demanda={aberta} token={token} onRevisada={aoRevisar} />
+        )}
         {aberta?.envio_falhou && (
           <AvisoDoEnvioFalhou key={`envio-${chave}`} demanda={aberta} token={token} onReenviado={aoReenviar} />
         )}
@@ -797,7 +909,7 @@ export function ConversasDaTecnologia({
             onDesignado={aoDesignar}
           />
         )}
-        {aberta?.tem_vinculo || aberta?.minha === false ? (
+        {(aberta?.tem_vinculo || aberta?.minha === false) && !aberta?.em_revisao ? (
           <Acompanhamento key={chave} demanda={aberta} token={token} />
         ) : (
           <ChatDaTecnologia key={chave} token={token} demandaId={aberta?.id ?? null} onMudou={aoMudar} />

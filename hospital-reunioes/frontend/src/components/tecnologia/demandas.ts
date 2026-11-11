@@ -106,6 +106,13 @@ export type Demanda = {
    * conversa com o agente. Sem o campo, a linha fica sem selo.
    */
   origem?: Origem | null;
+  /**
+   * A Revisão com o código de hoje (issue #1557, ADR 0084, decisão 3):
+   * `pode_revisar` mostra o botão, pela regra do servidor; `em_revisao` abre a
+   * conversa para responder, e não só para ler.
+   */
+  pode_revisar?: boolean;
+  em_revisao?: boolean;
 };
 
 export type Origem = "diretor" | "vitta";
