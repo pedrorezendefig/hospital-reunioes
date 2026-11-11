@@ -409,14 +409,19 @@ describe("O Desenvolvedor (issue #1531, ADR 0083)", () => {
     expect(listas.map((c) => c.url)).toEqual([PARA_MIM]);
   });
 
-  it("os filtros do Desenvolvedor são Para mim, Minhas e Todas", async () => {
+  it("os filtros do Desenvolvedor são Para mim, Minhas, Todas e Envio falhou", async () => {
     montar((url) => {
       if (url === EU) return { status: 200, corpo: { desenvolvedor: true } };
       return { status: 200, corpo: [] };
     });
 
     const filtros = await screen.findByRole("group", { name: "Filtro das conversas" });
-    expect(within(filtros).getAllByRole("button").map((b) => b.textContent)).toEqual(["Para mim", "Minhas", "Todas"]);
+    expect(within(filtros).getAllByRole("button").map((b) => b.textContent)).toEqual([
+      "Para mim",
+      "Minhas",
+      "Todas",
+      "Envio falhou",
+    ]);
   });
 });
 
@@ -457,5 +462,117 @@ describe("O Responsável na lista (issue #1533, ADR 0083)", () => {
     expect(within(lista()).getAllByRole("listitem").map((item) => item.textContent)).toEqual([
       "O botão sumiuDiretor do HospitalResponsável: Pedro RibEm análise",
     ]);
+  });
+});
+
+describe("Envio falhou (issue #1535, ADR 0083, decisão 7)", () => {
+  const EU = "/api/admin/tecnologia/eu";
+  const REENVIAR = `${LISTA}/d-1/reenviar`;
+  const FALHOU = demanda("d-1", "Botão de responder some na Ouvidoria", {
+    classificacao: "bug",
+    envio_falhou: true,
+    envio_motivo: null,
+  });
+  const CRIADA = demanda("d-1", "Botão de responder some na Ouvidoria", {
+    classificacao: "bug",
+    tem_vinculo: true,
+    etapa: "em_analise",
+    envio_falhou: false,
+  });
+  const RESUMO = {
+    titulo: "Botão de responder some na Ouvidoria",
+    onde: "Ouvidoria",
+    o_que_aconteceu: "O botão sumiu",
+    o_que_esperava: "Ver o botão",
+    como_repetir: "não informado",
+    criterios: ["O botão aparece"],
+  };
+  const RESUMIDA = conversa("d-1", { estado: "resumido", resumo: RESUMO });
+
+  function linha(titulo: RegExp) {
+    return within(lista()).getByRole("button", { name: titulo });
+  }
+
+  it("o diretor vê o selo Envio falhou na linha do pedido", async () => {
+    montar((url) => (url === LISTA ? { status: 200, corpo: [FALHOU, COM_VINCULO] } : { status: 404, corpo: {} }));
+
+    await within(lista()).findByText("Botão de responder some na Ouvidoria");
+    expect(within(linha(/Botão de responder/)).getByText("Envio falhou")).toBeTruthy();
+    expect(within(linha(/Aviso quando a ata/)).queryByText("Envio falhou")).toBeNull();
+  });
+
+  it("o diretor clica em Reenviar, o card nasce e o selo sai, sem ver motivo técnico", async () => {
+    let enviado = false;
+    const chamadas = montar((url, metodo) => {
+      if (url === LISTA) return { status: 200, corpo: [enviado ? CRIADA : FALHOU] };
+      if (url === `${LISTA}/d-1` && metodo === "GET") return { status: 200, corpo: RESUMIDA };
+      if (url === REENVIAR && metodo === "POST") {
+        enviado = true;
+        return { status: 200, corpo: { ...RESUMIDA, estado: "enviado" } };
+      }
+      return { status: 404, corpo: {} };
+    });
+
+    fireEvent.click(await within(lista()).findByRole("button", { name: /Botão de responder/ }));
+    const aviso = await screen.findByRole("region", { name: "Envio falhou" });
+    expect(aviso.textContent).not.toContain("GitHub");
+    fireEvent.click(within(aviso).getByRole("button", { name: "Reenviar" }));
+
+    await waitFor(() => expect(screen.queryByRole("region", { name: "Envio falhou" })).toBeNull());
+    expect(chamadas.filter((c) => c.url === REENVIAR && c.metodo === "POST")).toHaveLength(1);
+    await waitFor(() => expect(within(linha(/Botão de responder/)).queryByText("Envio falhou")).toBeNull());
+  });
+
+  it("o Desenvolvedor filtra Envio falhou, vê o motivo e reenvia o pedido de outro autor", async () => {
+    const deOutro = { ...FALHOU, minha: false, autor: "Diretor do Hospital", envio_motivo: "GitHub respondeu 502" };
+    const chamadas = montar((url, metodo) => {
+      if (url === EU) return { status: 200, corpo: { desenvolvedor: true } };
+      if (url === `${LISTA}?filtro=envio_falhou`) return { status: 200, corpo: [deOutro] };
+      if (url === `${LISTA}/d-1` && metodo === "GET") return { status: 200, corpo: RESUMIDA };
+      if (url === REENVIAR) return { status: 200, corpo: { ...RESUMIDA, estado: "enviado" } };
+      return { status: 200, corpo: [] };
+    });
+
+    fireEvent.click(await screen.findByRole("button", { name: "Envio falhou" }));
+    fireEvent.click(await within(lista()).findByRole("button", { name: /Botão de responder/ }));
+
+    const aviso = await screen.findByRole("region", { name: "Envio falhou" });
+    expect(within(aviso).getByText("GitHub respondeu 502")).toBeTruthy();
+    fireEvent.click(within(aviso).getByRole("button", { name: "Reenviar" }));
+    await waitFor(() => expect(chamadas.some((c) => c.url === REENVIAR && c.metodo === "POST")).toBe(true));
+  });
+
+  it("o Reenviar que falha de novo mostra a frase do servidor e o aviso fica", async () => {
+    montar((url, metodo) => {
+      if (url === LISTA) return { status: 200, corpo: [FALHOU] };
+      if (url === `${LISTA}/d-1` && metodo === "GET") return { status: 200, corpo: RESUMIDA };
+      if (url === REENVIAR) return { status: 502, corpo: { detail: "O GitHub não respondeu. Tente de novo." } };
+      return { status: 404, corpo: {} };
+    });
+
+    fireEvent.click(await within(lista()).findByRole("button", { name: /Botão de responder/ }));
+    const aviso = await screen.findByRole("region", { name: "Envio falhou" });
+    fireEvent.click(within(aviso).getByRole("button", { name: "Reenviar" }));
+
+    expect(await within(aviso).findByText("O GitHub não respondeu. Tente de novo.")).toBeTruthy();
+    expect(screen.getByRole("region", { name: "Envio falhou" })).toBeTruthy();
+  });
+
+  it("o Criar o card que falha faz a lista reler e mostrar o selo", async () => {
+    let falhou = false;
+    montar((url, metodo) => {
+      if (url === LISTA) return { status: 200, corpo: [falhou ? FALHOU : { ...FALHOU, envio_falhou: false }] };
+      if (url === `${LISTA}/d-1` && metodo === "GET") return { status: 200, corpo: RESUMIDA };
+      if (url === `${LISTA}/d-1/criar-card` && metodo === "POST") {
+        falhou = true;
+        return { status: 502, corpo: { detail: "O GitHub não respondeu. Tente de novo." } };
+      }
+      return { status: 404, corpo: {} };
+    });
+
+    fireEvent.click(await within(lista()).findByRole("button", { name: /Botão de responder/ }));
+    fireEvent.click(await screen.findByRole("button", { name: "Criar o card" }));
+
+    await waitFor(() => expect(within(linha(/Botão de responder/)).getByText("Envio falhou")).toBeTruthy());
   });
 });

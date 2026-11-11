@@ -81,6 +81,10 @@ export type Demanda = {
   issue_url?: string | null;
   /** Quem cuida do card (ADR 0083, decisão 5), para todos. Nulo enquanto o card não nasceu. */
   responsavel?: string | null;
+  /** O card não chegou ao GitHub (issue #1535, ADR 0083, decisão 7): o selo e o Reenviar, para todos. */
+  envio_falhou?: boolean;
+  /** O motivo técnico da falha, só para o Desenvolvedor. Para o diretor o servidor manda nulo. */
+  envio_motivo?: string | null;
 };
 
 export type Classificacao = "bug" | "melhoria";

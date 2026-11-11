@@ -28,6 +28,8 @@ Antes do resumo, no bug e na melhoria, a IA confere os pedidos que já estão na
 
 Se a IA não conseguir responder, a tela avisa, a conversa continua como estava e o que você escreveu fica na caixa: é só mandar de novo.
 
+Se o card não chegar à Vitta depois do clique em Criar o card, o pedido fica marcado com **Envio falhou** na lista ao lado. Você não precisa refazer nada do que disse: a conversa e o resumo continuam guardados, e o botão **Reenviar**, na conversa aberta, tenta de novo. O sistema não reenvia sozinho, para não criar o mesmo card duas vezes. A Vitta também vê o pedido marcado e pode reenviar por você.
+
 O modelo de IA que está respondendo e quanto a conversa já custou em dólar aparecem no alto da conversa aberta, por exemplo "Opus 5.5 · US$ 1,84 até agora". O valor soma o que a IA fez naquela conversa (as perguntas, o resumo e a leitura do código) e muda a cada resposta. Aparece "custo não medido" em dois casos em que o sistema não tem como fazer a conta inteira: quando o modelo usado está sem preço cadastrado e quando a conversa tem print, porque a leitura do print ainda não fica registrada. Nesses casos ele avisa em vez de mostrar um valor menor que o de verdade. Documento não deixa o custo sem medida: ele é lido sem IA, e as respostas que o levam à IA entram na conta como as outras. Enquanto a IA não respondeu nada, não aparece custo. O custo não está na lista ao lado, só na conversa aberta.
 
 A conversa fica guardada. Ao lado dela fica a lista de tudo o que você já pediu, do mais recente para o mais antigo, com o título e a Etapa de cada pedido. Ao lado da Etapa, o selo **Bug** ou **Melhoria** diz o que o pedido é. Uma conversa que ficou no meio aparece como Registrada: clique nela e você continua de onde parou. Num pedido que já foi para a Vitta, o clique mostra a conversa e O que muda, que é o que a entrega acrescenta para você; enquanto a Vitta não escreve esse texto, aparece "Descrição em preparação". O botão **Nova conversa**, no alto da lista, começa um pedido do zero. No celular a lista abre primeiro, e o botão Voltar às conversas leva de volta a ela.
@@ -60,7 +62,7 @@ Os arquivos são apagados 30 dias depois de a entrega ficar **Em produção**, o
 
 Na lista ao lado da conversa, cada diretor vê só as suas conversas. Outra pessoa da diretoria não vê os seus pedidos, nem abrindo pelo endereço. Em cada pedido que já virou card aparece o **Responsável**, a pessoa da Vitta que cuida dele, na lista e no pedido aberto. Quando a Vitta passa o pedido para outra pessoa, o nome muda sozinho na sua tela; você não precisa fazer nada, e no aplicativo não há como trocar quem cuida.
 
-Quem desenvolve na Vitta é o **Desenvolvedor**: um administrador do aplicativo que tem o login do GitHub no cadastro. Ele vê as Demandas de todos. A lista dele abre em **Para mim**, os pedidos de que ele é o Responsável, e tem também **Minhas**, os pedidos que ele mesmo fez, e **Todas**, com o nome de quem pediu em cada linha. Ao abrir o pedido de outra pessoa, ele lê a conversa inteira com a IA (as perguntas e as respostas) e abre os prints e os documentos, sem poder responder no lugar de quem pediu. Ele vê também o número e o link do card no desenvolvimento, que para você não aparecem.
+Quem desenvolve na Vitta é o **Desenvolvedor**: um administrador do aplicativo que tem o login do GitHub no cadastro. Ele vê as Demandas de todos. A lista dele abre em **Para mim**, os pedidos de que ele é o Responsável, e tem também **Minhas**, os pedidos que ele mesmo fez, e **Todas**, com o nome de quem pediu em cada linha. Ao abrir o pedido de outra pessoa, ele lê a conversa inteira com a IA (as perguntas e as respostas) e abre os prints e os documentos, sem poder responder no lugar de quem pediu. Ele vê também o número e o link do card no desenvolvimento, que para você não aparecem. Num pedido em **Envio falhou**, ele vê o motivo da falha, que para você não aparece, e tem o filtro **Envio falhou**, com só os pedidos nesse estado, de todos.
 
 ## A Etapa
 
@@ -99,6 +101,7 @@ A IA cuida das decisões de negócio: o problema, quem usa, as regras e o que fi
 - A aba vai num sentido só, do diretor para a Vitta, e os pedidos da Vitta ao hospital voltaram para o WhatsApp.
 - No bug, a IA faz no máximo cinco perguntas, e o pedido só vai para a Vitta no clique em Criar o card.
 - O bug que sai do Criar o card vai direto para o desenvolvimento, sem ninguém da Vitta precisar assumir antes.
+- O card que não chega à Vitta fica marcado como Envio falhou e se resolve com Reenviar, pelo diretor ou pela Vitta; o sistema nunca reenvia sozinho.
 - Antes do Criar o card, o diretor escolhe em Quem cuida disto? a pessoa da Vitta que vai cuidar do pedido; a escolha é opcional e, sem ela, o card vai para o Pedro Rezende.
 - Depois do Criar o card, quem troca o Responsável é a Vitta, no desenvolvimento, e a tela acompanha; o aplicativo não troca o Responsável.
 - Na melhoria, a IA não tem limite de perguntas e só encerra quando nada fica em aberto, e a melhoria que sai do Criar o card ainda passa pelo planejamento técnico da Vitta antes de começar.

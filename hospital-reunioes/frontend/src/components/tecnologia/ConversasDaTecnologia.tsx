@@ -20,6 +20,11 @@
  * Cada linha com card mostra o Responsável, para todos, e a lista do
  * Desenvolvedor abre em "Para mim", as Demandas de que ele cuida (issue
  * #1533, ADR 0083, decisão 5).
+ *
+ * O card que não chegou ao GitHub fica com o selo "Envio falhou" na lista, e a
+ * conversa aberta traz o "Reenviar", para o autor e para o Desenvolvedor. Só o
+ * Desenvolvedor lê o motivo técnico e tem o filtro "Envio falhou" (issue
+ * #1535, ADR 0083, decisão 7).
  */
 
 import { useCallback, useEffect, useState } from "react";
@@ -28,7 +33,14 @@ import { ArrowLeft, Loader2, Plus } from "lucide-react";
 import { ChatDaTecnologia, Fala } from "./ChatDaTecnologia";
 import { OQueMudaDaDemanda } from "./OQueMudaDaDemanda";
 import { SeloDeEtapa } from "./SeloDeEtapa";
-import { AnexoDaDemanda, conversaValida, FalaDoChat, URL_DO_CHAT_DA_ABA, urlDaConversa } from "./chat";
+import {
+  AnexoDaDemanda,
+  conversaValida,
+  FalaDoChat,
+  URL_DO_CHAT_DA_ABA,
+  urlDaConversa,
+  urlDoReenviar,
+} from "./chat";
 import {
   BASE_TECNOLOGIA,
   CLASSIFICACAO_CLASSE,
@@ -37,21 +49,27 @@ import {
   ETAPA_CLASSE,
   ETAPA_ROTULO,
   FALHA_DE_CONEXAO,
+  motivoDaRecusa,
   temSelo,
   textoDoSelo,
 } from "./demandas";
 
 export const NOVA_CONVERSA = "Nova conversa";
 export const VOLTAR_PARA_A_LISTA = "Voltar às conversas";
+export const ENVIO_FALHOU = "Envio falhou";
+export const REENVIAR = "Reenviar";
+const ENVIO_FALHOU_EXPLICADO =
+  "Este card não chegou à Vitta. O que você disse continua guardado: clique em Reenviar para tentar de novo.";
 const LISTA_VAZIA = "Nenhuma conversa ainda.";
 const LISTA_FALHOU = "Não foi possível carregar as suas conversas. Tente recarregar a página.";
 const URL_QUEM_SOU = `${BASE_TECNOLOGIA}/eu`;
 
-type Filtro = "para_mim" | "minhas" | "todas";
+type Filtro = "para_mim" | "minhas" | "todas" | "envio_falhou";
 const FILTROS: { valor: Filtro; rotulo: string }[] = [
   { valor: "para_mim", rotulo: "Para mim" },
   { valor: "minhas", rotulo: "Minhas" },
   { valor: "todas", rotulo: "Todas" },
+  { valor: "envio_falhou", rotulo: ENVIO_FALHOU },
 ];
 
 /** O item serve para a lista? O resto da Demanda é opcional para ela. */
@@ -83,6 +101,73 @@ function ClassificacaoNaLista({ demanda }: { demanda: Demanda }) {
     <span className={`px-2 py-0.5 rounded text-xs font-medium ${CLASSIFICACAO_CLASSE[demanda.classificacao]}`}>
       {CLASSIFICACAO_ROTULO[demanda.classificacao]}
     </span>
+  );
+}
+
+/** O selo do card que não chegou ao GitHub (issue #1535). */
+function SeloDoEnvioFalhou({ demanda }: { demanda: Demanda }) {
+  if (!demanda.envio_falhou) return null;
+  return <span className="px-2 py-0.5 rounded text-xs font-medium bg-red-50 text-red-700">{ENVIO_FALHOU}</span>;
+}
+
+/**
+ * O aviso do Envio falhou no alto da conversa aberta, com o Reenviar (issue
+ * #1535). O motivo técnico só vem do servidor para o Desenvolvedor.
+ */
+function AvisoDoEnvioFalhou({
+  demanda,
+  token,
+  onReenviado,
+}: {
+  demanda: Demanda;
+  token: string | null;
+  onReenviado: (demandaId: string) => void;
+}) {
+  const [reenviando, setReenviando] = useState(false);
+  const [erro, setErro] = useState<string | null>(null);
+
+  async function reenviar() {
+    if (!token) return;
+    setReenviando(true);
+    setErro(null);
+    try {
+      const resposta = await fetch(urlDoReenviar(demanda.id), {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!resposta.ok) {
+        setErro(await motivoDaRecusa(resposta));
+        return;
+      }
+      onReenviado(demanda.id);
+    } catch (e) {
+      console.error("[admin/tecnologia] falha ao reenviar o card", e);
+      setErro(FALHA_DE_CONEXAO);
+    } finally {
+      setReenviando(false);
+    }
+  }
+
+  return (
+    <section
+      role="region"
+      aria-label={ENVIO_FALHOU}
+      className="w-full rounded-2xl border border-red-200 bg-red-50 p-4 space-y-2 text-sm text-red-800"
+    >
+      <p className="font-semibold">{ENVIO_FALHOU}</p>
+      <p>{ENVIO_FALHOU_EXPLICADO}</p>
+      {demanda.envio_motivo && <p className="normal-case font-mono text-xs">{demanda.envio_motivo}</p>}
+      {erro && <p role="alert">{erro}</p>}
+      <button
+        type="button"
+        onClick={reenviar}
+        disabled={reenviando}
+        className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-primary text-white text-sm font-semibold disabled:opacity-60"
+      >
+        {reenviando && <Loader2 className="w-4 h-4 animate-spin" />}
+        {REENVIAR}
+      </button>
+    </section>
   );
 }
 
@@ -213,25 +298,29 @@ export function ConversasDaTecnologia({ token }: { token: string | null }) {
     };
   }, [token]);
 
-  const carregar = useCallback(async () => {
-    if (!token || filtro === null) return;
+  /** Relê a lista e devolve o que veio; nulo quando não deu. */
+  const carregar = useCallback(async (): Promise<Demanda[] | null> => {
+    if (!token || filtro === null) return null;
     const url = filtro === "minhas" ? URL_DO_CHAT_DA_ABA : `${URL_DO_CHAT_DA_ABA}?filtro=${filtro}`;
     try {
       const resposta = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
       if (!resposta.ok) {
         setErroDaLista(LISTA_FALHOU);
-        return;
+        return null;
       }
       const corpo: unknown = await resposta.json();
       if (!Array.isArray(corpo)) {
         setErroDaLista(LISTA_FALHOU);
-        return;
+        return null;
       }
-      setDemandas(corpo.filter(itemValido));
+      const lidas = corpo.filter(itemValido);
+      setDemandas(lidas);
       setErroDaLista(null);
+      return lidas;
     } catch (e) {
       console.error("[admin/tecnologia] falha ao carregar as conversas", e);
       setErroDaLista(FALHA_DE_CONEXAO);
+      return null;
     }
   }, [token, filtro]);
 
@@ -246,6 +335,13 @@ export function ConversasDaTecnologia({ token }: { token: string | null }) {
     },
     [carregar],
   );
+
+  /** O card nasceu pelo Reenviar: a lista relê e a Demanda abre como está agora. */
+  async function aoReenviar(demandaId: string) {
+    const lidas = await carregar();
+    const atual = lidas?.find((d) => d.id === demandaId);
+    abrir(atual ?? (aberta ? { ...aberta, envio_falhou: false, envio_motivo: null, tem_vinculo: true } : null));
+  }
 
   function abrir(demanda: Demanda | null) {
     setAberta(demanda);
@@ -323,6 +419,7 @@ export function ConversasDaTecnologia({ token }: { token: string | null }) {
                     <span className="flex flex-wrap items-center gap-1.5">
                       <EtapaNaLista demanda={demanda} />
                       <ClassificacaoNaLista demanda={demanda} />
+                      <SeloDoEnvioFalhou demanda={demanda} />
                     </span>
                   </button>
                 </li>
@@ -345,6 +442,9 @@ export function ConversasDaTecnologia({ token }: { token: string | null }) {
           <ArrowLeft className="w-4 h-4" />
           {VOLTAR_PARA_A_LISTA}
         </button>
+        {aberta?.envio_falhou && (
+          <AvisoDoEnvioFalhou key={`envio-${chave}`} demanda={aberta} token={token} onReenviado={aoReenviar} />
+        )}
         {aberta?.tem_vinculo || aberta?.minha === false ? (
           <Acompanhamento key={chave} demanda={aberta} token={token} />
         ) : (

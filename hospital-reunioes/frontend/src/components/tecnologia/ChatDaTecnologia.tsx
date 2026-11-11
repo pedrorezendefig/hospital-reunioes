@@ -471,6 +471,19 @@ export function ChatDaTecnologia({ token, demandaId = null, onMudou }: PropsDoCh
   );
 
   /**
+   * O "Criar o card". A falha fica gravada na Demanda como Envio falhou
+   * (issue #1535), e a lista relê para mostrar o selo.
+   */
+  const criarOCard = useCallback(
+    async (demandaId: string, responsavelId: string | null): Promise<ConversaDoChat | null> => {
+      const nova = await enviar(urlDoCriarOCard(demandaId), responsavelId ? { responsavel_id: responsavelId } : {});
+      if (nova === null) onMudou?.(demandaId);
+      return nova;
+    },
+    [enviar, onMudou],
+  );
+
+  /**
    * O que a melhoria pede sozinha depois de um turno (issue #1383): a pergunta
    * seguinte quando ainda não há pergunta esperando (a passagem ao
    * planejamento, o "Não bateu"), e o resumo quando as perguntas acabaram.
@@ -691,9 +704,7 @@ export function ChatDaTecnologia({ token, demandaId = null, onMudou }: PropsDoCh
           oQueOCardFaz={O_QUE_O_CARD_FAZ}
           pensando={pensando}
           token={token}
-          onCriar={(responsavelId) =>
-            enviar(urlDoCriarOCard(conversa.demanda_id), responsavelId ? { responsavel_id: responsavelId } : {})
-          }
+          onCriar={(responsavelId) => criarOCard(conversa.demanda_id, responsavelId)}
           onNaoBateu={naoBateu}
           onRecusaNaTela={setErro}
         >
@@ -779,9 +790,7 @@ export function ChatDaTecnologia({ token, demandaId = null, onMudou }: PropsDoCh
           oQueOCardFaz={O_QUE_O_CARD_DA_MELHORIA_FAZ}
           pensando={pensando}
           token={token}
-          onCriar={(responsavelId) =>
-            enviar(urlDoCriarOCard(conversa.demanda_id), responsavelId ? { responsavel_id: responsavelId } : {})
-          }
+          onCriar={(responsavelId) => criarOCard(conversa.demanda_id, responsavelId)}
           onNaoBateu={naoBateu}
           onRecusaNaTela={setErro}
         >
