@@ -27,6 +27,9 @@ TEXTO_PARA_FORA = {
     "ship",
     "ask-pedro",
     "pendencias",
+    # O bloco do leitor leigo da issue da porta B, que o card mostra a quem pediu.
+    "grill-with-docs",
+    "triage",
 }
 
 
@@ -57,6 +60,8 @@ def passos_do_humanizer(trecho: str) -> list[str]:
         ("divulgar", "Passo 2: a página"),
         ("mensagem-prd", "Fluxo"),
         ("to-prd", "Process"),
+        ("grill-with-docs", "Fim"),
+        ("triage", "Triage a specific issue"),
         ("to-issues", "5. Publish the issues"),
     ],
 )
