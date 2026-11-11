@@ -387,9 +387,8 @@ APOSENTADOS_DA_ABA = (
     # quem cuida do card em "Quem cuida disto?".
     "rioridade",
     # A menção voltou com a ADR 0083 (issue #1537), dentro da Conversa da
-    # Demanda, que fica só no app.
+    # Demanda, que fica só no app, e o e-mail voltou com ela (issue #1538).
     "arroba",
-    "e-mail",
     "Tipos",
     "Aguardando",
     "dono",
@@ -413,11 +412,11 @@ class TestOTextoDaAbaContaATelaDeHoje:
     def test_o_detector_morde_a_tela_de_antes(self):
         """O detector tambem e codigo: o texto de antes desta fatia, com o
         Quadro e o Painel, tem que reprovar nele."""
-        antes = "A aba tem o **Quadro**, o **Painel** e a Conversa do card aberto, por e-mail."
+        antes = "A aba tem o **Quadro**, o **Painel** e a Conversa do card aberto, por arroba."
         assert [termo for termo in APOSENTADOS_DA_ABA if termo in antes] == [
             "Quadro",
             "Painel",
-            "e-mail",
+            "arroba",
             "card aberto",
         ]
 
@@ -468,6 +467,14 @@ class TestOTextoDaAbaContaATelaDeHoje:
             assert termo in conversa, termo
         decidido = _secao(texto, "O que já foi decidido")
         assert "Conversa da Demanda" in decidido
+
+    def test_a_conversa_da_demanda_diz_que_o_aviso_chega_tambem_por_email(self, texto):
+        """Issue #1538 (ADR 0083, decisão 8): o aviso do sino sai também por
+        e-mail, com o link que abre o pedido."""
+        conversa = _secao(texto, "A Conversa da Demanda")
+        for termo in ("também por e-mail", "o link do e-mail abre o pedido"):
+            assert termo in conversa, termo
+        assert "no sino e por e-mail" in _secao(texto, "O que já foi decidido")
 
     def test_os_pedidos_ao_hospital_voltaram_para_o_whatsapp(self, texto):
         """ADR 0077, decisao 3: a aba e so de um sentido, o diretor relata."""

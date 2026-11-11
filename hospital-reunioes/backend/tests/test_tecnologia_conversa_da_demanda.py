@@ -4,7 +4,8 @@ A troca de mensagens entre o diretor e os Desenvolvedores dentro de uma
 Demanda: tabela própria, separada da conversa com o agente, e que nunca vai
 para o GitHub. Escreve e lê quem vê a Demanda (o `pode_ver`, a mesma regra da
 lista). Menção é por nome, no formato dos comentários de Pendência
-("@Nome Completo"). O aviso sai pelo sino:
+("@Nome Completo"). O aviso sai pelo sino e, desde a issue #1538, também
+por e-mail, para o mesmo destinatário:
 
 - menção avisa o mencionado;
 - sem menção, a mensagem do autor da Demanda avisa o Responsável, e a do
@@ -26,8 +27,9 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from test_tecnologia_vinculo import BASE, DIRETOR, PEDRO, _demanda, _montar, _pessoa  # noqa: E402
 
+from app.config import settings  # noqa: E402
 from app.limiter import limiter  # noqa: E402
-from app.services import github_client  # noqa: E402
+from app.services import github_client, tecnologia_email  # noqa: E402
 
 # Outro Desenvolvedor da Vitta e outra pessoa da diretoria (Super admin sem
 # login do GitHub, que não vê a Demanda do DIRETOR).
@@ -43,6 +45,22 @@ def _reset_rate_limiter():
     limiter._storage.reset()
     yield
     limiter._storage.reset()
+
+
+@pytest.fixture(autouse=True)
+def emails(monkeypatch) -> list[dict]:
+    """Cada e-mail que sairia, gravado na porta do transporte (Resend, SMTP ou
+    mock): daqui para dentro é o serviço de e-mail que já existe. Autouse
+    porque toda mensagem da Conversa avisa por e-mail."""
+    enviados: list[dict] = []
+
+    def _gravar(destinatario, assunto, html_content, texto_fallback, *a, **kw):
+        enviados.append({"para": destinatario, "assunto": assunto, "html": html_content, "texto": texto_fallback})
+        return True
+
+    monkeypatch.setattr(tecnologia_email, "_enviar_email", _gravar)
+    monkeypatch.setattr(settings, "frontend_url", "https://app.hsm.test")
+    return enviados
 
 
 def _demanda_do_diretor(**campos) -> dict:
@@ -162,7 +180,78 @@ class TestAvisoNoSino:
 
 
 # ═══════════════════════════════════════════════════════════════════════════
-# 3. Nada vai para o GitHub
+# 3. O aviso por e-mail (issue #1538, ADR 0083, decisão 8)
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+class TestAvisoPorEmail:
+    def test_cada_aviso_do_sino_sai_tambem_por_email_para_o_mesmo_destinatario(self, monkeypatch, emails):
+        diretor, sb = _cenario(monkeypatch, logado=DIRETOR)
+        lucas, _ = _cenario(monkeypatch, logado=LUCAS, sb=sb)
+
+        diretor.post(CONVERSA, json={"texto": "@Lucas Sampaio, consegue ver isto hoje?"})
+        diretor.post(CONVERSA, json={"texto": "Aconteceu de novo."})
+        lucas.post(CONVERSA, json={"texto": "Qual navegador o senhor usa?"})
+
+        assert _avisos(sb) == [(LUCAS["id"], DEMANDA), (PEDRO["id"], DEMANDA), (DIRETOR["id"], DEMANDA)]
+        assert [e["para"] for e in emails] == [LUCAS["email"], PEDRO["email"], DIRETOR["email"]]
+
+    def test_o_email_traz_o_titulo_quem_escreveu_e_o_link_da_demanda(self, monkeypatch, emails):
+        lucas, _ = _cenario(monkeypatch, logado=LUCAS)
+
+        lucas.post(CONVERSA, json={"texto": "Qual navegador o senhor usa?"})
+
+        [email] = emails
+        link = f"https://app.hsm.test/admin/tecnologia?demanda={DEMANDA}"
+        assert email["assunto"] == "Lucas Sampaio escreveu na Demanda: O relatório some"
+        for corpo in (email["html"], email["texto"]):
+            assert "O relatório some" in corpo
+            assert "Lucas Sampaio" in corpo
+            assert link in corpo
+        assert f'href="{link}"' in email["html"]
+
+    def test_o_email_nao_traz_numero_de_issue_nem_link_do_github(self, monkeypatch, emails):
+        diretor, _ = _cenario(monkeypatch, logado=DIRETOR, demanda=_demanda_do_diretor(github_issue_numero=48213))
+
+        diretor.post(CONVERSA, json={"texto": "@Lucas Sampaio, consegue ver isto hoje?"})
+
+        [email] = emails
+        for parte in ("assunto", "html", "texto"):
+            assert "48213" not in email[parte], parte
+            assert "github" not in email[parte].lower(), parte
+            assert "issue" not in email[parte].lower(), parte
+
+    def test_ninguem_recebe_email_da_propria_mensagem(self, monkeypatch, emails):
+        pedro, _ = _cenario(
+            monkeypatch,
+            logado=PEDRO,
+            demanda=_demanda_do_diretor(autor_id=PEDRO["id"], responsavel_id=PEDRO["id"]),
+        )
+
+        pedro.post(CONVERSA, json={"texto": "Anotando para mim."})
+        pedro.post(CONVERSA, json={"texto": "@Pedro Vitta lembrar de testar no celular."})
+        pedro.post(CONVERSA, json={"texto": "@Pedro Vitta e @Lucas Sampaio, combinado."})
+
+        assert [e["para"] for e in emails] == [LUCAS["email"]]
+
+    def test_falha_no_email_nao_impede_a_mensagem_nem_o_aviso_do_sino(self, monkeypatch, emails):
+        def _cair(*a, **kw):
+            raise RuntimeError("Resend fora do ar")
+
+        monkeypatch.setattr(tecnologia_email, "_enviar_email", _cair)
+        diretor, sb = _cenario(monkeypatch, logado=DIRETOR)
+
+        resposta = diretor.post(CONVERSA, json={"texto": "@Lucas Sampaio, consegue ver isto hoje?"})
+
+        assert resposta.status_code == 201, resposta.text
+        assert [m["texto"] for m in sb.tabelas["tecnologia_conversa_da_demanda"]] == [
+            "@Lucas Sampaio, consegue ver isto hoje?"
+        ]
+        assert _avisos(sb) == [(LUCAS["id"], DEMANDA)]
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 4. Nada vai para o GitHub
 # ═══════════════════════════════════════════════════════════════════════════
 
 
@@ -184,7 +273,7 @@ class TestNadaVaiParaOGithub:
 
 
 # ═══════════════════════════════════════════════════════════════════════════
-# 4. A migration 129
+# 5. A migration 129
 # ═══════════════════════════════════════════════════════════════════════════
 
 MIGRATIONS = Path(__file__).resolve().parents[2] / "supabase" / "migrations"
