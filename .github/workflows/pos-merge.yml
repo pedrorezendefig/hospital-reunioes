@@ -47,6 +47,10 @@ on:
 permissions:
   contents: read
 
+# Os três jobs rodam no runner próprio do Mac do Pedro (issue #1599): nenhum
+# monta imagem, e os minutos grátis do GitHub acabaram. O registro e o snapshot
+# só saem com o Mac ligado.
+
 # Um por vez, sem cancelar o que já começou: dois runs empurrando snapshot ao
 # mesmo tempo brigariam pelos mesmos arquivos.
 concurrency:
@@ -56,7 +60,7 @@ concurrency:
 jobs:
   gerar:
     name: Snapshot e registro
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, pedro-mac]
     env:
       # As mesmas do job backend do ci.yml: o Settings exige as duas primeiras
       # e recusa subir sem ENVIRONMENT. Sem elas o import do app falha e o
@@ -64,6 +68,8 @@ jobs:
       SUPABASE_URL: http://localhost:54321
       SUPABASE_SERVICE_ROLE_KEY: dummy-key-for-ci
       ENVIRONMENT: ci
+      # O WeasyPrint acha as bibliotecas do Homebrew por aqui no Mac.
+      DYLD_FALLBACK_LIBRARY_PATH: /opt/homebrew/lib
     outputs:
       # Se o registro foi aplicado: é o que libera o aviso ao app (job
       # `em-producao`). No run do push o passo nem roda, e fica `skipped`.
@@ -78,10 +84,6 @@ jobs:
           # no .git/config para um pacote comprometido ler.
           persist-credentials: false
 
-      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
-        with:
-          python-version: "3.12"
-
       - name: Aplicar o registro do deploy
         id: registro
         # Só no run que a subida dispara (ADR 0064, decisão 6b): a entrada nova
@@ -91,20 +93,20 @@ jobs:
         if: ${{ github.event_name == 'workflow_dispatch' }}
         env:
           REGISTRO: ${{ inputs.registro }}
-        run: python3 tools/aplicar_registro.py
+        run: uv run --no-project --python 3.12 python tools/aplicar_registro.py
 
       - name: Ambiente do backend (pelo uv.lock, como no CI)
         # O snapshot lê as rotas do app montado pelo .venv de
-        # hospital-reunioes/backend (introspect_routes.py).
+        # hospital-reunioes/backend (introspect_routes.py). O uv do Mac traz o
+        # Python 3.12 (o setup-python do Mac só instala em /Users/runner).
         working-directory: hospital-reunioes/backend
-        run: |
-          pip install uv
-          uv sync --frozen --extra dev --python "$(command -v python)"
+        run: uv sync --frozen --extra dev --python 3.12
 
       - name: Snapshot (docs/spec/snapshots e blocos AUTO do ARQUITETURA.md)
         # --no-commit: sem ele o snapshot.py commita sozinho, com outra
         # mensagem e sem [skip ci]. Quem commita é o job de baixo.
-        run: python3 .claude/skills/snapshot/scripts/snapshot.py --root . --no-commit
+        # Pelo Python 3.12 do uv: o python3 do macOS é o 3.9 do sistema.
+        run: uv run --no-project --python 3.12 python .claude/skills/snapshot/scripts/snapshot.py --root . --no-commit
 
       - name: Empacotar o patch dos três caminhos e do registro
         # Roda mesmo com o snapshot vermelho: o registro não se perde (o run fica vermelho do mesmo jeito). Patch, e não os
@@ -128,7 +130,7 @@ jobs:
     name: Commitar na main pela deploy key
     needs: gerar
     if: ${{ !cancelled() }}
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, pedro-mac]
     # O secret da deploy key só existe neste Environment, que só aceita job
     # da branch main: YAML de outra branch (ou de um workflow_dispatch nela)
     # não chega à chave.
@@ -239,7 +241,7 @@ jobs:
     # Depois do registro aplicado, e só no run que a subida dispara. O snapshot
     # vermelho não segura o aviso: a versão subiu do mesmo jeito.
     if: ${{ !cancelled() && needs.gerar.outputs.registro == 'success' }}
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, pedro-mac]
     # O app fora do ar ou o segredo ainda não cadastrado não derrubam o run: a
     # reconciliação de hora em hora do app marca Em produção pelo history.json.
     continue-on-error: true
@@ -256,4 +258,4 @@ jobs:
         env:
           REGISTRO: ${{ inputs.registro }}
           TECNOLOGIA_DEPLOY_WEBHOOK_SECRET: ${{ secrets.TECNOLOGIA_DEPLOY_WEBHOOK_SECRET }}
-        run: python3 tools/avisar_deploy_ao_app.py
+        run: uv run --no-project --python 3.12 python tools/avisar_deploy_ao_app.py

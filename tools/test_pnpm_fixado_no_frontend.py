@@ -5,7 +5,8 @@ sem o campo `packageManager`, o Dependabot regenerou o lockfile com o pnpm 11,
 que não lê mais o bloco `pnpm` do `package.json` e jogou fora a seção
 `overrides`. O CI e o Dockerfile instalam com o pnpm 9 e travam na instalação.
 Estes testes amarram o mesmo major nos quatro lugares e o lockfile em dia com
-os overrides.
+os overrides. Desde a issue #1599 o CI roda no Mac e pega o pnpm pelo corepack,
+que lê o próprio `packageManager`.
 """
 
 from __future__ import annotations
@@ -35,9 +36,13 @@ def test_package_manager_fixa_o_mesmo_pnpm_do_ci_e_do_dockerfile():
     major = major_do_package_manager()
 
     ci = yaml.safe_load((RAIZ / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8"))
-    setup = [p for p in ci["jobs"]["frontend-lint"]["steps"] if "pnpm/action-setup" in p.get("uses", "")]
-    assert len(setup) == 1
-    assert str(setup[0]["with"]["version"]) == major
+    passos = ci["jobs"]["frontend-lint"]["steps"]
+    # O corepack instala a versão exata do `packageManager`; nenhuma ação fixa outra.
+    assert not [p for p in passos if "pnpm/action-setup" in p.get("uses", "")]
+    corepack = [p for p in passos if "corepack enable pnpm" in p.get("run", "")]
+    assert len(corepack) == 1
+    instalar = [p for p in passos if p.get("run", "").startswith("pnpm install")]
+    assert passos.index(corepack[0]) < passos.index(instalar[0])
 
     dockerfile = (FRONTEND / "Dockerfile").read_text(encoding="utf-8")
     preparos = re.findall(r"corepack prepare pnpm@(\d+)", dockerfile)

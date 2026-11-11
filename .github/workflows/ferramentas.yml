@@ -6,6 +6,12 @@ name: Ferramentas
 permissions:
   contents: read
 
+# Commit novo na mesma branch cancela a rodada anterior do PR (issue #1599). O
+# push na main tem um grupo por commit e nunca cancela.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: true
+
 on:
   push:
     branches: [main]
@@ -82,19 +88,16 @@ on:
 jobs:
   ferramentas:
     name: Testes das ferramentas
-    runs-on: ubuntu-latest
+    # No Mac do Pedro (issue #1599); PR de fork não roda nele.
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: [self-hosted, pedro-mac]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-
-      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
-        with:
-          python-version: "3.12"
 
       - name: Testes de tools/
         # `tools/` inteiro em vez da lista de arquivos: quem cria um conferidor
         # novo ganha o teste dele no CI sem lembrar de editar este arquivo.
         # O `pyyaml` é do `tools/lint_skills.py` (issue #807), que também mora
-        # em tools/ e tem o teste pego por este curinga.
-        run: |
-          pip install pytest pyyaml
-          python -m pytest tools/ -q
+        # em tools/ e tem o teste pego por este curinga. O uv do Mac traz o
+        # Python 3.12 (o setup-python do Mac só instala em /Users/runner).
+        run: uv run --no-project --python 3.12 --with pytest --with pyyaml python -m pytest tools/ -q
