@@ -215,6 +215,20 @@ def descricao_da_melhoria(mensagens: list[dict]) -> str | None:
     return "\n\n".join(textos_do_diretor(antes)).strip() or None
 
 
+def _cartao_da_pergunta(m: dict) -> dict | None:
+    """Os textos do cartao da pergunta (issue #1592), ou nulo na pergunta que
+    nao tem nenhum deles: a de antes desta mudanca, que a tela mostra como
+    bolha."""
+    if not any(m.get(campo) for campo in planejamento_demanda.CAMPOS_DO_CARTAO):
+        return None
+    return {
+        "titulo": m.get("titulo_pergunta"),
+        "na_pratica_a": m.get("na_pratica_a"),
+        "na_pratica_b": m.get("na_pratica_b"),
+        "porque": m.get("porque"),
+    }
+
+
 def _fala_do_planejamento_para_a_tela(m: dict) -> dict:
     if m.get("tipo") == tecnologia_revisao.TIPO_DO_RETRATO:
         return {
@@ -233,6 +247,7 @@ def _fala_do_planejamento_para_a_tela(m: dict) -> dict:
             "opcoes": [o.get("texto") or "" for o in m.get("opcoes") or []],
             "recomendada": m.get("recomendada"),
             "nao_bateu": False,
+            "cartao": _cartao_da_pergunta(m),
         }
     if m.get("tipo") == "encerrou":
         return {"autor": "ia", "texto": m.get("contexto") or "", "fonte": None, "opcoes": [], "nao_bateu": False}

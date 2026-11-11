@@ -331,6 +331,17 @@ class RevisaoDaConversa(BaseModel):
     continua: list[str] = []
 
 
+class CartaoDaPergunta(BaseModel):
+    """Os textos do cartao da pergunta do planejamento (issue #1592): o titulo
+    da pergunta, o que muda na pratica com cada opcao e o porque da
+    recomendada. Cada um pode faltar: o modelo nao e obrigado a manda-los."""
+
+    titulo: str | None = None
+    na_pratica_a: str | None = None
+    na_pratica_b: str | None = None
+    porque: str | None = None
+
+
 class FalaDoChat(BaseModel):
     autor: Literal["ia", "diretor"]
     texto: str
@@ -343,6 +354,9 @@ class FalaDoChat(BaseModel):
     documentos: list[DocumentoDaFala] = []
     # O Retrato de hoje da revisao (issue #1557), so na fala dele.
     retrato: RetratoDeHoje | None = None
+    # O cartao da pergunta (issue #1592), so na pergunta que trouxe algum dos
+    # textos novos. Nulo, a tela mostra a pergunta como bolha.
+    cartao: CartaoDaPergunta | None = None
     # O nome de quem respondeu o turno (issue #1557), so na fala de gente.
     respondido_por: str | None = None
 

@@ -93,6 +93,19 @@ export type FalaDoChat = {
   retrato?: RetratoDeHoje | null;
   /** O nome de quem respondeu o turno (issue #1557); nulo na fala de antes. */
   respondido_por?: string | null;
+  /**
+   * Os textos do cartão da pergunta do planejamento (issue #1592). Nulo na
+   * pergunta de antes, que segue como bolha.
+   */
+  cartao?: CartaoDaPergunta | null;
+};
+
+/** O título da pergunta, o que muda na prática com cada opção e o porquê da recomendada; cada um pode faltar. */
+export type CartaoDaPergunta = {
+  titulo: string | null;
+  na_pratica_a: string | null;
+  na_pratica_b: string | null;
+  porque: string | null;
 };
 
 export type DocumentoDaFala = { nome: string; tamanho_bytes: number };
@@ -231,8 +244,16 @@ function falaValida(item: unknown): boolean {
     textoOuNulo(f.fonte) &&
     listaDeTextos(f.opcoes) &&
     (f.recomendada === undefined || f.recomendada === null || f.recomendada === "A" || f.recomendada === "B") &&
-    (f.documentos === undefined || (Array.isArray(f.documentos) && f.documentos.every(documentoValido)))
+    (f.documentos === undefined || (Array.isArray(f.documentos) && f.documentos.every(documentoValido))) &&
+    cartaoValido(f.cartao)
   );
+}
+
+function cartaoValido(valor: unknown): boolean {
+  if (valor === undefined || valor === null) return true;
+  if (typeof valor !== "object") return false;
+  const c = valor as Record<string, unknown>;
+  return [c.titulo, c.na_pratica_a, c.na_pratica_b, c.porque].every(textoOuNulo);
 }
 
 function documentoValido(item: unknown): boolean {
