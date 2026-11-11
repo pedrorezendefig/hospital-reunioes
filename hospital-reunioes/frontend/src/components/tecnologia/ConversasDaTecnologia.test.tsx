@@ -254,7 +254,8 @@ describe("Nova conversa", () => {
 
     expect(screen.getByText(ABERTURA)).toBeTruthy();
     expect(screen.queryByText("Onde isso aconteceu?")).toBeNull();
-    fireEvent.click(screen.getByRole("button", { name: "Bug" }));
+    const chat = screen.getByRole("region", { name: "Conversa aberta" });
+    fireEvent.click(within(chat).getByRole("button", { name: "Bug" }));
     expect(await within(lista()).findByText("O relatório some")).toBeTruthy();
     expect(chamadas.find((c) => c.metodo === "POST")).toMatchObject({ url: LISTA, corpo: { escolha: "bug" } });
   });
@@ -409,7 +410,7 @@ describe("O Desenvolvedor (issue #1531, ADR 0083)", () => {
     expect(listas.map((c) => c.url)).toEqual([PARA_MIM]);
   });
 
-  it("os filtros do Desenvolvedor são Para mim, Minhas, Todas e Envio falhou", async () => {
+  it("o recorte do Desenvolvedor é Para mim, Minhas e Todas", async () => {
     montar((url) => {
       if (url === EU) return { status: 200, corpo: { desenvolvedor: true } };
       return { status: 200, corpo: [] };
@@ -420,7 +421,6 @@ describe("O Desenvolvedor (issue #1531, ADR 0083)", () => {
       "Para mim",
       "Minhas",
       "Todas",
-      "Envio falhou",
     ]);
   });
 });
@@ -589,7 +589,7 @@ describe("Envio falhou (issue #1535, ADR 0083, decisão 7)", () => {
     const deOutro = { ...FALHOU, minha: false, autor: "Diretor do Hospital", envio_motivo: "GitHub respondeu 502" };
     const chamadas = montar((url, metodo) => {
       if (url === EU) return { status: 200, corpo: { desenvolvedor: true } };
-      if (url === `${LISTA}?filtro=envio_falhou`) return { status: 200, corpo: [deOutro] };
+      if (url === `${LISTA}?filtro=para_mim&envio_falhou=true`) return { status: 200, corpo: [deOutro] };
       if (url === `${LISTA}/d-1` && metodo === "GET") return { status: 200, corpo: RESUMIDA };
       if (url === REENVIAR) return { status: 200, corpo: { ...RESUMIDA, estado: "enviado" } };
       return { status: 200, corpo: [] };
@@ -773,5 +773,156 @@ describe("Apagar a Demanda (issue #1549, ADR 0084, decisão 2)", () => {
 
     expect(await screen.findByText("O GitHub não respondeu, e o card não foi fechado lá.")).toBeTruthy();
     expect(within(lista()).getByText("Botão de responder some na Ouvidoria")).toBeTruthy();
+  });
+});
+
+describe("A lista larga com busca e filtros em chips (issue #1551, PRD #1548)", () => {
+  const EU = "/api/admin/tecnologia/eu";
+  const DESENVOLVEDORES = "/api/admin/tecnologia/desenvolvedores";
+  const QUEM_CUIDA = [
+    { id: "P1", nome: "Pedro Vitta", padrao: true },
+    { id: "P4", nome: "Pedro Rib", padrao: false },
+  ];
+
+  function filtros() {
+    return screen.getByRole("region", { name: "Filtros da lista" });
+  }
+
+  function chips() {
+    return within(filtros())
+      .getAllByRole("button")
+      .map((b) => b.textContent);
+  }
+
+  function chip(grupo: string, rotulo: string) {
+    return within(within(filtros()).getByRole("group", { name: grupo })).getByRole("button", { name: rotulo });
+  }
+
+  function comoDiretor() {
+    return montar((url) => {
+      if (url === EU) return { status: 200, corpo: { desenvolvedor: false } };
+      if (url.startsWith(LISTA)) return { status: 200, corpo: [SEM_CARD] };
+      return { status: 404, corpo: {} };
+    });
+  }
+
+  function comoDesenvolvedor() {
+    return montar((url) => {
+      if (url === EU) return { status: 200, corpo: { desenvolvedor: true } };
+      if (url === DESENVOLVEDORES) return { status: 200, corpo: QUEM_CUIDA };
+      if (url.startsWith(LISTA)) return { status: 200, corpo: [SEM_CARD] };
+      return { status: 404, corpo: {} };
+    });
+  }
+
+  it("a busca pelo título vai ao servidor", async () => {
+    const chamadas = comoDiretor();
+    await within(lista()).findByText("Botão de responder some na Ouvidoria");
+
+    fireEvent.change(screen.getByRole("searchbox", { name: "Buscar pelo título" }), {
+      target: { value: "relatorio" },
+    });
+
+    await waitFor(() => expect(chamadas.map((c) => c.url)).toContain(`${LISTA}?busca=relatorio`));
+  });
+
+  it("o diretor combina Bug e Etapa, e clicar de novo desliga o chip", async () => {
+    const chamadas = comoDiretor();
+    await within(lista()).findByText("Botão de responder some na Ouvidoria");
+
+    fireEvent.click(chip("Tipo", "Bug"));
+    fireEvent.click(chip("Etapa", "Em produção"));
+    await waitFor(() => expect(chamadas.map((c) => c.url)).toContain(`${LISTA}?tipo=bug&etapa=em_producao`));
+    expect(chip("Tipo", "Bug").getAttribute("aria-pressed")).toBe("true");
+
+    fireEvent.click(chip("Tipo", "Bug"));
+    await waitFor(() => expect(chamadas.at(-1)?.url).toBe(`${LISTA}?etapa=em_producao`));
+    expect(chip("Tipo", "Bug").getAttribute("aria-pressed")).toBe("false");
+  });
+
+  it("o diretor não vê os chips do Desenvolvedor", async () => {
+    comoDiretor();
+    await within(lista()).findByText("Botão de responder some na Ouvidoria");
+
+    expect(chips()).toEqual([
+      "Bug",
+      "Melhoria",
+      "Registrada",
+      "Em análise",
+      "Planejada",
+      "Em desenvolvimento",
+      "Entregue",
+      "Em produção",
+      "Não será feita",
+    ]);
+  });
+
+  it("o Desenvolvedor combina Responsável e Envio falhou com o Para mim", async () => {
+    const chamadas = comoDesenvolvedor();
+    await within(lista()).findByText("Botão de responder some na Ouvidoria");
+
+    fireEvent.click(await within(filtros()).findByRole("button", { name: "Pedro Rib" }));
+    fireEvent.click(chip("Situação", "Envio falhou"));
+    fireEvent.click(chip("Tipo", "Melhoria"));
+
+    await waitFor(() =>
+      expect(chamadas.at(-1)?.url).toBe(`${LISTA}?filtro=para_mim&tipo=melhoria&responsavel=P4&envio_falhou=true`),
+    );
+    expect(chips()).toEqual([
+      "Para mim",
+      "Minhas",
+      "Todas",
+      "Bug",
+      "Melhoria",
+      "Registrada",
+      "Em análise",
+      "Planejada",
+      "Em desenvolvimento",
+      "Entregue",
+      "Em produção",
+      "Não será feita",
+      "Pedro Vitta",
+      "Pedro Rib",
+      "Envio falhou",
+    ]);
+  });
+
+  it("os chips quebram linha dentro da coluna, sem rolagem horizontal", async () => {
+    comoDesenvolvedor();
+    await within(lista()).findByText("Botão de responder some na Ouvidoria");
+    await within(filtros()).findByRole("button", { name: "Pedro Rib" });
+
+    const grupos = within(filtros()).getAllByRole("group");
+    expect(grupos).toHaveLength(5);
+    for (const grupo of grupos) {
+      expect(grupo.className).toMatch(/(^|\s)flex-wrap(\s|$)/);
+      expect(grupo.className).not.toMatch(/overflow-x|flex-nowrap|whitespace-nowrap/);
+    }
+    for (const botao of within(filtros()).getAllByRole("button")) {
+      expect(botao.className).not.toMatch(/(^|\s)flex-1(\s|$)/);
+    }
+  });
+
+  it("a lista recolhe com uma Demanda aberta e volta pelo botão", async () => {
+    montar((url) => {
+      if (url === LISTA) return { status: 200, corpo: [SEM_CARD] };
+      if (url === `${LISTA}/d-1`) return { status: 200, corpo: conversa("d-1") };
+      return { status: 404, corpo: {} };
+    });
+    const painelDaLista = () => lista().parentElement as HTMLElement;
+    const recolhida = /(^|\s)md:hidden(\s|$)/;
+    const voltar = () => screen.getByRole("button", { name: VOLTAR_PARA_A_LISTA });
+
+    await within(lista()).findByText("Botão de responder some na Ouvidoria");
+    expect(painelDaLista().className).not.toMatch(recolhida);
+    expect(voltar().className).toMatch(recolhida);
+
+    fireEvent.click(within(lista()).getByRole("button", { name: /Botão de responder some/ }));
+    await screen.findByText("Onde isso aconteceu?");
+    expect(painelDaLista().className).toMatch(recolhida);
+    expect(voltar().className).not.toMatch(recolhida);
+
+    fireEvent.click(voltar());
+    await waitFor(() => expect(painelDaLista().className).not.toMatch(recolhida));
   });
 });
