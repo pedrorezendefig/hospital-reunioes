@@ -2,6 +2,54 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-11-11T03:17:35-03:00",
+      "sha": "9b7bcba0ea9bc6a98e7bb24843d9d93a74c0568a",
+      "app_version": "0.247.0",
+      "subject": "Onda onda-entregas-onda2: O card abre como Documento do card",
+      "raw_subject": "chore(deploy): registro da onda onda-entregas-onda2 (#1565)",
+      "scope": [
+        "backend",
+        "frontend"
+      ],
+      "prds": [
+        1548
+      ],
+      "result": "healthy",
+      "duration_seconds": 194,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        },
+        {
+          "service": "frontend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "onda-enxuta onda-entregas-onda2: PR #1565 (issue #1552), mergeados PR a PR. Merge pela API do GitHub, um build. Registro pela Action pos-merge depois do health.",
+      "etapas": {
+        "merge_s": 3,
+        "build_s": {
+          "backend": 15,
+          "frontend": 170
+        },
+        "health_s": 0
+      },
+      "responsavel": "pedrorezendefig"
+    },
+    {
       "at": "2026-11-11T03:03:30-03:00",
       "sha": "43a2eb4c818237bca6c257950f8c7af366c1e6a8",
       "app_version": "0.246.0",
