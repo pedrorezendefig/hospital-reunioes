@@ -27,7 +27,7 @@ from app.config import settings
 from app.services import ai_processor, ferramentas_do_codigo, github_client, planejamento_demanda
 from app.services.custo_da_conversa import nome_de_exibicao
 from app.services.tecnologia import instante_do_banco, recuar_continuacao
-from app.services.tecnologia_vinculo import marcador_da_demanda
+from app.services.tecnologia_vinculo import marcador_da_demanda, texto_do_diretor
 from app.utils.text_sanitizer import sanitizar_travessao
 
 logger = logging.getLogger(__name__)
@@ -297,6 +297,73 @@ def corpo_revisado(*, corpo_atual: str | None, corpo_novo: str, demanda_id: str)
     return corpo_novo.replace(marcador_da_demanda(demanda_id), achado.group(0))
 
 
+# As secoes do PRD do diretor que sao o escopo: as decisoes e o que ficou em
+# aberto. O bloco "Para o diretor" e as historias repetem as decisoes, e a
+# Origem nao e escopo.
+_SECOES_DO_ESCOPO = ("Decisões de negócio", "Decisões de implementação", "Decisões de teste", "Ficou em aberto")
+_PERGUNTA_DA_DECISAO = re.compile(r"^\d+\.\s+\*\*(.*)\*\*$")
+
+
+def escopo_do_corpo(corpo: str | None) -> list[str]:
+    """Os itens do escopo de um PRD do diretor, na ordem: cada decisao de
+    negocio como "pergunta escolha", e cada item de lista das outras secoes."""
+    itens: list[str] = []
+    secao, pergunta = None, ""
+    for bruta in (corpo or "").splitlines():
+        linha = bruta.strip()
+        if linha.startswith("## "):
+            secao, pergunta = linha[3:].strip(), ""
+            continue
+        if secao not in _SECOES_DO_ESCOPO:
+            continue
+        if achada := _PERGUNTA_DA_DECISAO.match(linha):
+            pergunta = achada.group(1).strip()
+        elif linha.startswith("Escolha:"):
+            itens.append(f"{pergunta} {linha.removeprefix('Escolha:').strip()}".strip())
+        elif linha.startswith("- "):
+            itens.append(linha[2:].strip())
+    return list(dict.fromkeys(item for item in itens if item))
+
+
+NADA_NO_COMENTARIO = "- Nada."
+
+
+def comentario_da_atualizacao(
+    *,
+    corpo_antes: str | None,
+    corpo_depois: str,
+    saiu_por_atender: list[str],
+    partes_fechadas: list[int],
+    versao_base: str | None,
+) -> str:
+    """O comentario que o "Atualizar o card" deixa na issue-raiz: o que entrou
+    e o que saiu do escopo, pela diferenca entre os dois corpos, mais o que ja
+    existe e quem pediu disse que atende. A primeira linha o marca como do
+    agente. O repositorio e publico: o item que veio do retrato passa pela
+    mesma peneira do PRD."""
+    antes, depois = escopo_do_corpo(corpo_antes), escopo_do_corpo(corpo_depois)
+    entrou = [item for item in depois if item not in antes]
+    saiu = [item for item in antes if item not in depois]
+    saiu += [f"{' '.join(texto_do_diretor(item).split())} (já existe no app, e quem pediu disse que atende)"
+             for item in saiu_por_atender]
+    base = f", com o app na {versao_base}" if versao_base else ""
+    linhas = [
+        "<!-- automacao -->",
+        f"O card foi atualizado pela Revisão com o código de hoje, na aba Tecnologia do app{base}.",
+        "",
+        "Entrou no escopo:",
+        *([f"- {item}" for item in entrou] or [NADA_NO_COMENTARIO]),
+        "",
+        "Saiu do escopo:",
+        *([f"- {item}" for item in saiu] or [NADA_NO_COMENTARIO]),
+    ]
+    if partes_fechadas:
+        partes = ", ".join(f"#{n}" for n in partes_fechadas)
+        linhas += ["", f"Partes que não tinham começado, fechadas como não planejadas: {partes}."]
+    linhas += ["", "O card volta para a triagem, para um novo `/to-issues`."]
+    return "\n".join(linhas)
+
+
 class ParteJaComecouError(RuntimeError):
     """Uma parte do card esta em desenvolvimento: o card nao se atualiza."""
 
@@ -316,5 +383,15 @@ def atualizar_no_github(
     """Leva o PRD revisado a issue-raiz. Devolve as partes que fechou."""
     dados = github_client.ler_issue(numero)
     corpo = corpo_revisado(corpo_atual=dados.get("body"), corpo_novo=corpo_novo, demanda_id=demanda_id)
+    github_client.comentar(
+        numero,
+        comentario_da_atualizacao(
+            corpo_antes=dados.get("body"),
+            corpo_depois=corpo,
+            saiu_por_atender=saiu_por_atender,
+            partes_fechadas=[],
+            versao_base=versao_base,
+        ),
+    )
     github_client.regravar(numero, corpo=corpo, labels=_labels_da_issue(dados))
     return []

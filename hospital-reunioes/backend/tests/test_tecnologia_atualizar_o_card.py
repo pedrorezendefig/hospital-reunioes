@@ -199,3 +199,36 @@ class TestOCorpoRegravado:
         assert corpo.count("demanda-vitta") == 1
         assert "Só a recepção." in corpo
         assert "A enfermagem também vê." in corpo
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 2. O comentário do que mudou
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+class TestOComentario:
+    def test_o_comentario_lista_o_que_entrou_e_o_que_saiu_do_escopo(self, monkeypatch):
+        client, _, gh = _montar_o_card(monkeypatch)
+
+        assert client.post(ATUALIZAR).status_code == 200
+
+        comentario = _comentario(gh)
+        assert comentario.startswith("<!-- automacao -->\n")
+        entrou, saiu = comentario.split("Entrou no escopo:", 1)[1].split("Saiu do escopo:", 1)
+        # A decisão nova entra; a de antes, que continua, não aparece.
+        assert "- Quem vê o retorno? A enfermagem também vê." in entrou
+        assert "Só a recepção." not in comentario
+        # Sai o ponto em aberto que a revisão respondeu, e o que já existe com o "atende".
+        assert "- Quem confirma o retorno com o paciente." in saiu
+        assert f"- {ITEM_QUE_JA_EXISTE} (já existe" in saiu
+        assert "v0.251.0" in comentario
+
+    def test_o_comentario_vem_antes_do_corpo_regravado(self, monkeypatch):
+        """Com o corpo já regravado, um segundo clique depois de uma falha não
+        teria mais o corpo de antes para dizer o que mudou."""
+        client, _, gh = _montar_o_card(monkeypatch)
+
+        client.post(ATUALIZAR)
+
+        assert [e[0] for e in gh.escritas][0] == "comentou"
+        assert [e[0] for e in gh.escritas][-1] == "regravou"
