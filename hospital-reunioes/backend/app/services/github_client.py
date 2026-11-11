@@ -336,7 +336,9 @@ def listar_issues_fechadas() -> list[dict[str, Any]]:
         dados = _chamar("GET", f"/issues?state=closed&per_page={_POR_PAGINA}&page={pagina}")
         if not isinstance(dados, list):
             raise GithubIndisponivelError("GitHub respondeu a lista de issues fora do formato")
-        issues.extend(i for i in dados if isinstance(i, dict) and isinstance(i.get("number"), int) and not e_pull_request(i))
+        issues.extend(
+            i for i in dados if isinstance(i, dict) and isinstance(i.get("number"), int) and not e_pull_request(i)
+        )
         if len(dados) < _POR_PAGINA:
             return issues
         pagina += 1

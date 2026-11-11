@@ -10,16 +10,14 @@ from __future__ import annotations
 import os
 import sys
 
-import pytest
-
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from test_tecnologia_webhook_github import (  # noqa: E402
     REPO,
     _demanda,
     _GithubFalso,
-    _SupabaseMock,
     _sem_github_de_verdade,  # noqa: F401 (fixture autouse: nenhuma chamada sai para a rede)
+    _SupabaseMock,
 )
 
 from app.services import email_service, github_client, tecnologia_carga_historico, tecnologia_email  # noqa: E402
