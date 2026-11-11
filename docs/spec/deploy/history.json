@@ -2,6 +2,54 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-11-11T14:53:47-03:00",
+      "sha": "ec8caa6ee704685cd0006a9b4f49cd1396278e72",
+      "app_version": "0.254.0",
+      "subject": "Onda onda-entregas-onda8: Revisão com o código de hoje, Atualizar o card",
+      "raw_subject": "chore(deploy): registro da onda onda-entregas-onda8 (#1577)",
+      "scope": [
+        "backend",
+        "frontend"
+      ],
+      "prds": [
+        1548
+      ],
+      "result": "healthy",
+      "duration_seconds": 247,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        },
+        {
+          "service": "frontend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "onda-enxuta onda-entregas-onda8: PR #1577 (issue #1558), mergeados PR a PR. Merge pela API do GitHub, um build. Registro pela Action pos-merge depois do health.",
+      "etapas": {
+        "merge_s": 3,
+        "build_s": {
+          "backend": 210,
+          "frontend": 192
+        },
+        "health_s": 10
+      },
+      "responsavel": "pedrorezendefig"
+    },
+    {
       "at": "2026-11-11T14:26:42-03:00",
       "sha": "16033cd9c725a251c6dfc28932549c97e7e4814a",
       "app_version": "0.253.0",
