@@ -1018,6 +1018,10 @@ describe("O pedido ao lado da lista e o Ampliar (issue #1593)", () => {
 
     fireEvent.click(voltar());
     await waitFor(() => expect(painelDaLista().className).not.toMatch(recolhida));
+
+    // De volta ao lado da lista, o Ampliar do topo amplia de novo.
+    fireEvent.click(within(aberto()).getByRole("button", { name: AMPLIAR }));
+    listaRecolhida();
   });
 
   it("depois de ampliar um pedido, o clique em outro cartão abre ao lado", async () => {

@@ -1108,7 +1108,10 @@ export function ConversasDaTecnologia({
           {aberta && !recolhida && (
             <button
               type="button"
-              onClick={() => setAmpliada(true)}
+              onClick={() => {
+                setAmpliada(true);
+                setNaTela("conversa");
+              }}
               title={AMPLIAR_EXPLICADO}
               className="hidden md:inline-flex items-center gap-1.5 text-sm font-semibold text-primary"
             >
