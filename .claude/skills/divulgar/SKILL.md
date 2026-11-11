@@ -16,7 +16,7 @@ Fecha uma entrega para o diretor e para o usuário funcional em **dois passos, u
 
 ## Entrada
 
-`/divulgar <N> [--so-video | --so-pagina]`. N é uma issue entregue ou um PRD (issue mãe). PRD agrega as fatias filhas numa demonstração só: o caso de uso completo, não uma demonstração por fatia.
+`/divulgar <N> [--so-video | --so-pagina]`. N é uma issue entregue sem PRD (um bug, por exemplo) ou um PRD (issue mãe). PRD agrega as fatias filhas numa demonstração só: o caso de uso completo, não uma demonstração por fatia.
 
 - Sem flag: os dois passos, com o gate humano do vídeo entre eles.
 - `--so-video`: só o passo 1 (para WhatsApp, e-mail, TV).
@@ -175,7 +175,13 @@ cp docs/comunicacao/_assets/logo-hsm.png docs/comunicacao/_assets/fonts/HPSimpli
 cd "$D" && npx vercel@latest deploy --prod --yes
 ```
 
-O link compartilhável é o **alias de produção** (`https://<projeto>.vercel.app`, sem hash): URLs de deployment com hash caem no SSO da Vercel. Entregar o link e registrá-lo em comentário no PRD. Ajuste depois = editar no repo, recopiar, redeployar. A pasta temporária é apagada depois do deploy.
+O link compartilhável é o **alias de produção** (`https://<projeto>.vercel.app`, sem hash): URLs de deployment com hash caem no SSO da Vercel. Grave o link no corpo da issue N, que é o que leva a Demonstração ao card da aba Tecnologia (ADR 0084, decisão 9):
+
+```bash
+python3 .claude/skills/divulgar/scripts/marcar_demonstracao.py <N> https://<projeto>.vercel.app
+```
+
+O script põe `<!-- demonstracao: <url> -->` no fim do corpo, troca o marcador se ele já existe e só aceita `https`. Refazer o vídeo e republicar é rodar de novo com o mesmo link: o card não avisa o diretor duas vezes. Ajuste depois = editar no repo, recopiar, redeployar. A pasta temporária é apagada depois do deploy.
 
 ## Checklist de saída
 
@@ -184,4 +190,4 @@ O link compartilhável é o **alias de produção** (`https://<projeto>.vercel.a
 3. Narração na voz B; a fala aparece na tela quando é dita; uma transição diferente em cada corte; nada parado mais de 0,5 s fora da assinatura.
 4. `gate-video.sh` passou no MP4 final; OK humano no draft.
 5. MP4 final em `~/Videos/Hospital/AAAA-MM-DD-<PRD>-<slug>.mp4`, nenhum MP4 no repositório nem em `out/`; `video/` (roteiro, narração, tempos, capturas, cena, `meta.json`) e `index.html` commitados.
-6. Página publicada, link no PRD. Se existe página de módulo do contexto, ela foi republicada com o MP4 novo.
+6. Página publicada e marcador da demonstração gravado na issue N. Se existe página de módulo do contexto, ela foi republicada com o MP4 novo.
