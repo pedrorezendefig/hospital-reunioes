@@ -19,7 +19,7 @@ Decisão do Pedro (11/11/2026, grill no terminal em duas rodadas, todas as recom
 
 5. **Mesma tela para o diretor e para o Desenvolvedor.** Com `github_login`, ganha a mais o número, o link e o botão de apagar card criado, como já é a regra (ADR 0054, decisão 9; ADR 0083). Rejeitado: telas separadas.
 
-6. **Tela.** O menu principal recolhe para só ícones, em todo o app, e lembra a escolha no navegador. A lista de conversas fica mais larga, com busca e filtros em chips (Tipo, Etapa, Origem, Responsável, Envio falhou), e recolhe quando o documento abre.
+6. **Tela.** O menu principal recolhe para só ícones, em todo o app, e lembra a escolha no navegador. A lista de conversas fica mais larga, com busca e filtros em chips (Tipo, Etapa, Origem, Responsável, Envio falhou), e recolhe quando o documento abre. **Ver a emenda de 11/11/2026 abaixo: os chips viraram uma barra de campos com rótulo.**
 
 7. **Documento do card.** O detalhe deixa de ser texto corrido e vira um documento com seções fixas: Em uma frase, O que muda (até cinco tópicos), Partes (com Etapa e datas), Demonstração e Datas (criado, entregue, em produção). Durante o planejamento ele se monta ao vivo ao lado do chat, no molde da ata viva da Ata Guiada. Depois do card, é lido do GitHub. O bloco "Para o diretor" da issue ganha esse formato fixo e limite de tamanho, tanto no PRD do diretor quanto no `/to-prd` do terminal. Continua nunca digitado no app (ADR 0054, decisão 7). Rejeitado: só resumir o texto de hoje; documento editável à mão.
 
@@ -35,3 +35,13 @@ Decisão do Pedro (11/11/2026, grill no terminal em duas rodadas, todas as recom
 - A Demanda deixa de nascer só do chat, e a tabela ganha a origem. Precisa de migration.
 - O formato fixo do bloco "Para o diretor" muda o `/to-prd` e o prompt do Planejamento da Demanda no mesmo PRD.
 - O PRD lista os dois cards velhos, #1426 e #1427, como primeiro uso da revisão.
+
+## Emenda de 11/11/2026: filtros por categoria e card completo (issue #1578)
+
+Com os chips no ar, a lista continuou apertada. Eram dezesseis chips sem rótulo, sete só de Etapa, numa coluna de 22rem, e o card mostrava pouco e só ganhava contorno no hover. O Pedro pediu filtros separados por categoria, em cima, e cards com mais informação e mais ajuda para conversar. Grill no terminal, todas as recomendações aceitas.
+
+1. **Barra de filtros em cima, na largura toda.** Fica acima da lista e do chat e recolhe junto com a lista quando a Demanda abre. Tipo, Etapa, Origem e Responsável são campos com rótulo, no padrão do Painel de Contas médicas. O recorte do Desenvolvedor (Para mim, Minhas, Todas) é um controle segmentado, porque um dos três está sempre escolhido. "Só envio falhou" é um interruptor, porque Envio falhou não é Etapa. "Limpar filtros" aparece só com filtro ativo e não mexe no recorte. Rejeitado: os chips agrupados com título (continuavam ocupando várias linhas); um botão "Filtros" que abre painel (esconde o que está filtrado).
+2. **Card com contorno e com o que importa.** Borda sempre visível, data de abertura ("Aberto em 01/11, há 10 dias", pelo calendário do hospital), quem pediu e o Responsável com as iniciais, a Etapa em destaque e, no PRD, as partes numa barra. No hover e no foco o card se destaca e sobe um pouco; quem pede menos animação ao sistema não vê movimento.
+3. **Conversar sem procurar.** O card tem o botão "Conversar", que abre a Demanda com a caixa da Conversa da Demanda em foco. Na tela larga, a Demanda aberta mostra a Conversa da Demanda numa coluna à direita, fixa na rolagem. Rejeitado: abrir a Demanda num modal, que esconde a lista e quebra o link direto do aviso do sino.
+
+A aba Entregas segue com os chips. A contagem de mensagens não lidas no card fica de fora, porque pede backend.

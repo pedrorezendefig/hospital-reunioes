@@ -47,7 +47,16 @@ function buscaDaMencao(texto: string, cursor: number): string | null {
   return depois.split(" ").length <= 3 ? depois.toLowerCase() : null;
 }
 
-export function ConversaDaDemanda({ demandaId, token }: { demandaId: string; token: string | null }) {
+export function ConversaDaDemanda({
+  demandaId,
+  token,
+  focar = false,
+}: {
+  demandaId: string;
+  token: string | null;
+  /** O "Conversar" do card da lista (issue #1578): a caixa abre em foco, já à vista. */
+  focar?: boolean;
+}) {
   const [mensagens, setMensagens] = useState<Mensagem[] | null>(null);
   const [mencionaveis, setMencionaveis] = useState<Mencionavel[]>([]);
   const [erro, setErro] = useState<string | null>(null);
@@ -82,6 +91,13 @@ export function ConversaDaDemanda({ demandaId, token }: { demandaId: string; tok
       viva = false;
     };
   }, [demandaId, token]);
+
+  const carregou = mensagens !== null;
+  useEffect(() => {
+    if (!focar || !carregou) return;
+    caixa.current?.scrollIntoView?.({ block: "center" });
+    caixa.current?.focus();
+  }, [focar, carregou]);
 
   function aoDigitar(valor: string, cursor: number) {
     setTexto(valor);
