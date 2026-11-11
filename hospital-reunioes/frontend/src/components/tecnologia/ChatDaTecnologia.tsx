@@ -41,10 +41,12 @@ import {
   tamanhoLegivel,
 } from "./assistente";
 import {
+  blocoDoRascunho,
   ConversaDoChat,
   conversaValida,
   Desenvolvedor,
   desenvolvedoresValidos,
+  DocumentoDoPlanejamento,
   esperaAPergunta,
   FalaDoChat,
   frasesDosPrints,
@@ -61,6 +63,7 @@ import {
   urlDoResumoDaMelhoria,
 } from "./chat";
 import { FALHA_DE_CONEXAO, motivoDaRecusa } from "./demandas";
+import { FraseEOQueMuda } from "./DocumentoDoCard";
 
 // A mesma pergunta que o backend guarda como primeira fala da conversa.
 export const ABERTURA = "Isso é um bug, algo que não funciona como deveria, ou uma melhoria?";
@@ -86,6 +89,10 @@ const CONTINUAR_ESCREVENDO = "Quer acrescentar alguma coisa? Escreva aqui, e a I
 const NENHUMA_DECISAO = "Nenhuma pergunta respondida fechou uma decisão.";
 const NADA_EM_ABERTO = "Nada ficou em aberto.";
 const NAO_SEM_TEXTO = "Diga o que não bateu no resumo.";
+// O documento vivo do planejamento (issue #1553, ADR 0084, decisão 7).
+export const TITULO_DO_DOCUMENTO_VIVO = "Documento do pedido";
+export const DOCUMENTO_AINDA_VAZIO = "O documento se monta aqui conforme você responde.";
+const SOBRE_O_DOCUMENTO_VIVO = "É o que o pedido vai mostrar depois de criado.";
 export const SEM_CONVERSA_GUARDADA = "Este pedido é de antes do chat, e a conversa dele não ficou guardada aqui.";
 const CORPO_ILEGIVEL = "O servidor respondeu algo que a tela não conseguiu ler. Recarregue a página.";
 
@@ -388,6 +395,33 @@ function ResumoNaTela({
             Enviar o que não bateu
           </button>
         </div>
+      )}
+    </section>
+  );
+}
+
+/**
+ * O documento do pedido ao lado do chat da melhoria (issue #1553), no molde da
+ * ata viva da Ata Guiada: o agente o reescreve a cada turno, e ele é lido pelo
+ * mesmo componente do Documento do card, para o diretor ver aqui o que o card
+ * vai mostrar.
+ */
+function DocumentoVivo({ documento, chave }: { documento: DocumentoDoPlanejamento | null; chave: string }) {
+  const texto = documento ? blocoDoRascunho(documento) : "";
+  return (
+    <section
+      aria-label={TITULO_DO_DOCUMENTO_VIVO}
+      className="w-full bg-white rounded-2xl border border-slate-200 shadow-premium px-5 py-4 space-y-2"
+    >
+      <div className="flex items-center gap-2">
+        <FileText className="w-4 h-4 text-primary" />
+        <h2 className="text-sm font-bold text-slate-900">{TITULO_DO_DOCUMENTO_VIVO}</h2>
+      </div>
+      <p className="text-xs text-text-secondary">{SOBRE_O_DOCUMENTO_VIVO}</p>
+      {texto ? (
+        <FraseEOQueMuda texto={texto} chave={chave} />
+      ) : (
+        <p className="text-sm text-text-secondary italic">{DOCUMENTO_AINDA_VAZIO}</p>
       )}
     </section>
   );
@@ -823,108 +857,122 @@ export function ChatDaTecnologia({ token, demandaId = null, onMudou }: PropsDoCh
   const esperaAIA =
     conversa !== null && !pensando && (naMelhoria ? esperaAPergunta(conversa) : ultima?.autor === "diretor");
 
+  const chat = (
+    <section className="w-full bg-white rounded-2xl border border-primary/30 shadow-premium flex flex-col h-[calc(100vh-18rem)] min-h-[420px] overflow-hidden">
+      <div className="flex items-center gap-2 px-5 py-3 border-b border-slate-100">
+        <span className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center">
+          <Bot className="w-4 h-4 text-primary" />
+        </span>
+        <h2 className="text-sm font-bold text-slate-900">{TITULO_DO_CHAT}</h2>
+        {conversa?.custo && <span className="text-xs text-text-secondary">{textoDoCusto(conversa.custo)}</span>}
+        {podeResumir && conversa && (
+          <button
+            type="button"
+            onClick={() => enviar(urlDoResumoDaMelhoria(conversa.demanda_id), {})}
+            disabled={ocupado}
+            className="ml-auto inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-primary/40 text-xs font-semibold text-primary hover:bg-primary/5 disabled:opacity-50"
+          >
+            <ListChecks className="w-3.5 h-3.5" />
+            {FECHAR_E_RESUMIR}
+          </button>
+        )}
+      </div>
+
+      <div role="log" className="flex-1 overflow-y-auto px-5 py-4 space-y-3 overscroll-contain">
+        {falas.map((fala, i) => (
+          <Fala key={i} fala={fala} />
+        ))}
+
+        {opcoes.length > 0 && !pensando && recomendada && (
+          <div role="group" aria-label="Opções" className="flex flex-col gap-2 max-w-[85%]">
+            {opcoes.map((opcao, i) => {
+              const letra = LETRAS[i];
+              const destaque = letra === recomendada;
+              return (
+                <button
+                  key={letra}
+                  type="button"
+                  onClick={() => escolherALetra(letra)}
+                  className={`text-left px-3 py-2 rounded-xl border text-sm transition-colors ${
+                    destaque
+                      ? "border-primary bg-primary/5 text-slate-900 ring-1 ring-primary"
+                      : "border-border text-slate-800 hover:border-primary"
+                  }`}
+                >
+                  <span className="font-semibold">{letra}) </span>
+                  <span className="normal-case">{opcao}</span>
+                  {destaque && (
+                    <span className="ml-2 inline-block px-2 py-0.5 rounded-full bg-primary text-white text-xs font-semibold">
+                      Recomendada
+                    </span>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+        )}
+
+        {opcoes.length > 0 && !pensando && !recomendada && (
+          <div role="group" aria-label="Opções" className="flex flex-wrap gap-2 max-w-[85%]">
+            {opcoes.map((opcao) => (
+              <button
+                key={opcao}
+                type="button"
+                onClick={() => escolher(opcao)}
+                className="normal-case px-4 py-2 rounded-xl border border-primary/40 text-sm font-semibold text-primary hover:bg-primary/5"
+              >
+                {opcao}
+              </button>
+            ))}
+          </div>
+        )}
+
+        {encerrado && !pensando && (
+          <p role="status" className="text-xs text-text-secondary">
+            {ENCERRADO}
+          </p>
+        )}
+
+        {pensando && (
+          <p role="status" className="flex items-center gap-2 text-xs text-slate-400">
+            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+            Pensando...
+          </p>
+        )}
+
+        {esperaAIA && (
+          <button
+            type="button"
+            onClick={() => conversa && turno(urlDaConversa(conversa.demanda_id), {})}
+            className="px-3 py-2 rounded-xl border border-primary/40 text-sm font-semibold text-primary hover:bg-primary/5"
+          >
+            Tentar de novo
+          </button>
+        )}
+        <div ref={fimDaLista} />
+      </div>
+
+      <div className="px-5 py-3 border-t border-slate-100 flex-shrink-0">
+        {campoLivre}
+        <p className="mt-1.5 text-xs text-slate-400">{AVISO_DE_IA}</p>
+      </div>
+    </section>
+  );
+
   return (
     <div className="space-y-4">
       {aviso}
-      <section className="w-full bg-white rounded-2xl border border-primary/30 shadow-premium flex flex-col h-[calc(100vh-18rem)] min-h-[420px] overflow-hidden">
-        <div className="flex items-center gap-2 px-5 py-3 border-b border-slate-100">
-          <span className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center">
-            <Bot className="w-4 h-4 text-primary" />
-          </span>
-          <h2 className="text-sm font-bold text-slate-900">{TITULO_DO_CHAT}</h2>
-          {conversa?.custo && <span className="text-xs text-text-secondary">{textoDoCusto(conversa.custo)}</span>}
-          {podeResumir && conversa && (
-            <button
-              type="button"
-              onClick={() => enviar(urlDoResumoDaMelhoria(conversa.demanda_id), {})}
-              disabled={ocupado}
-              className="ml-auto inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-primary/40 text-xs font-semibold text-primary hover:bg-primary/5 disabled:opacity-50"
-            >
-              <ListChecks className="w-3.5 h-3.5" />
-              {FECHAR_E_RESUMIR}
-            </button>
-          )}
+      {naMelhoria && conversa ? (
+        // O documento ao lado do chat, como a ata viva da Ata Guiada (issue #1553).
+        <div className="grid lg:grid-cols-[1fr_minmax(260px,340px)] gap-4 items-start">
+          {chat}
+          <div className="lg:sticky lg:top-4">
+            <DocumentoVivo documento={conversa.documento ?? null} chave={conversa.demanda_id} />
+          </div>
         </div>
-
-        <div role="log" className="flex-1 overflow-y-auto px-5 py-4 space-y-3 overscroll-contain">
-          {falas.map((fala, i) => (
-            <Fala key={i} fala={fala} />
-          ))}
-
-          {opcoes.length > 0 && !pensando && recomendada && (
-            <div role="group" aria-label="Opções" className="flex flex-col gap-2 max-w-[85%]">
-              {opcoes.map((opcao, i) => {
-                const letra = LETRAS[i];
-                const destaque = letra === recomendada;
-                return (
-                  <button
-                    key={letra}
-                    type="button"
-                    onClick={() => escolherALetra(letra)}
-                    className={`text-left px-3 py-2 rounded-xl border text-sm transition-colors ${
-                      destaque
-                        ? "border-primary bg-primary/5 text-slate-900 ring-1 ring-primary"
-                        : "border-border text-slate-800 hover:border-primary"
-                    }`}
-                  >
-                    <span className="font-semibold">{letra}) </span>
-                    <span className="normal-case">{opcao}</span>
-                    {destaque && (
-                      <span className="ml-2 inline-block px-2 py-0.5 rounded-full bg-primary text-white text-xs font-semibold">
-                        Recomendada
-                      </span>
-                    )}
-                  </button>
-                );
-              })}
-            </div>
-          )}
-
-          {opcoes.length > 0 && !pensando && !recomendada && (
-            <div role="group" aria-label="Opções" className="flex flex-wrap gap-2 max-w-[85%]">
-              {opcoes.map((opcao) => (
-                <button
-                  key={opcao}
-                  type="button"
-                  onClick={() => escolher(opcao)}
-                  className="normal-case px-4 py-2 rounded-xl border border-primary/40 text-sm font-semibold text-primary hover:bg-primary/5"
-                >
-                  {opcao}
-                </button>
-              ))}
-            </div>
-          )}
-
-          {encerrado && !pensando && (
-            <p role="status" className="text-xs text-text-secondary">
-              {ENCERRADO}
-            </p>
-          )}
-
-          {pensando && (
-            <p role="status" className="flex items-center gap-2 text-xs text-slate-400">
-              <Loader2 className="w-3.5 h-3.5 animate-spin" />
-              Pensando...
-            </p>
-          )}
-
-          {esperaAIA && (
-            <button
-              type="button"
-              onClick={() => conversa && turno(urlDaConversa(conversa.demanda_id), {})}
-              className="px-3 py-2 rounded-xl border border-primary/40 text-sm font-semibold text-primary hover:bg-primary/5"
-            >
-              Tentar de novo
-            </button>
-          )}
-          <div ref={fimDaLista} />
-        </div>
-
-        <div className="px-5 py-3 border-t border-slate-100 flex-shrink-0">
-          {campoLivre}
-          <p className="mt-1.5 text-xs text-slate-400">{AVISO_DE_IA}</p>
-        </div>
-      </section>
+      ) : (
+        chat
+      )}
     </div>
   );
 }

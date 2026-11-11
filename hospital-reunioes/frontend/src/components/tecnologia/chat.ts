@@ -109,6 +109,26 @@ export function textoDoCusto(custo: CustoDaConversa): string {
 }
 
 /**
+ * O rascunho do documento do card, que o planejamento da melhoria monta a cada
+ * turno (issue #1553, ADR 0084, decisão 7): a frase de "O que muda" e até
+ * cinco tópicos. É o que o bloco "Para o diretor" do card leva.
+ */
+export type DocumentoDoPlanejamento = { frase: string | null; topicos: string[] };
+
+/**
+ * O rascunho escrito como o bloco "Para o diretor" que o card vai levar, para
+ * a tela o ler pelo mesmo caminho do Documento do card: o que o diretor vê ao
+ * lado do chat é o que o pedido mostra depois de criado.
+ */
+export function blocoDoRascunho(documento: DocumentoDoPlanejamento): string {
+  const linhas = documento.frase ? [`**O que muda:** ${documento.frase}`, ""] : [];
+  if (documento.topicos.length > 0) {
+    linhas.push("**O que você precisa saber:**", ...documento.topicos.map((t) => `- ${t}`));
+  }
+  return linhas.join("\n");
+}
+
+/**
  * `estado`: `em_andamento`, `encerrado` (as perguntas da melhoria acabaram e o
  * resumo vem a seguir), `resumido` (o resumo esperando o clique) e `enviado`
  * (o card nasceu). `planejamento` é a melhoria confirmada, que segue no próprio
@@ -132,6 +152,8 @@ export type ConversaDoChat = {
    * (issue #1534, ADR 0083, decisão 6). Nulo enquanto o card não nasceu.
    */
   responsavel?: string | null;
+  /** O documento vivo, só na melhoria (issue #1553); nulo no bug e antes do primeiro rascunho. */
+  documento?: DocumentoDoPlanejamento | null;
 };
 
 /**
@@ -197,6 +219,13 @@ function resumoValido(valor: unknown): boolean {
   );
 }
 
+function documentoDoPlanejamentoValido(valor: unknown): boolean {
+  if (valor === undefined || valor === null) return true;
+  if (typeof valor !== "object") return false;
+  const d = valor as Record<string, unknown>;
+  return textoOuNulo(d.frase) && listaDeTextos(d.topicos);
+}
+
 function custoValido(valor: unknown): boolean {
   if (valor === undefined || valor === null) return true;
   if (typeof valor !== "object") return false;
@@ -215,6 +244,7 @@ export function conversaValida(corpo: unknown): corpo is ConversaDoChat {
     c.mensagens.every(falaValida) &&
     resumoValido(c.resumo) &&
     resumoDaMelhoriaValido(c.resumo_da_melhoria) &&
+    documentoDoPlanejamentoValido(c.documento) &&
     custoValido(c.custo)
   );
 }
