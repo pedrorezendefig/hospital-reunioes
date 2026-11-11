@@ -125,7 +125,7 @@ jobs:
         # verdade nos testes (issue #1116, ADR 0070); a imagem leva o mesmo pacote.
         # O `tesseract` com o português lê as folhas desenhadas no teste da
         # confiança do OCR (issue #1398), como a imagem lê as digitalizadas.
-        run: sudo apt-get update -qq && sudo apt-get install -y -qq poppler-utils tesseract-ocr tesseract-ocr-por
+        run: bash ../../tools/apt_no_ci.sh poppler-utils tesseract-ocr tesseract-ocr-por
       - name: Install uv
         run: pip install uv
       - name: Lock em sincronia (uv.lock x pyproject.toml)
@@ -176,7 +176,7 @@ jobs:
         with:
           python-version: "3.12"
       - name: poppler-utils (pdftotext das Contas médicas)
-        run: sudo apt-get update -qq && sudo apt-get install -y -qq poppler-utils
+        run: bash ../../tools/apt_no_ci.sh poppler-utils
       - name: Install uv
         run: pip install uv
       - name: Install dependencies (pelo uv.lock)
