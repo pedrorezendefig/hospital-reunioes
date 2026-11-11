@@ -1,6 +1,6 @@
 # ENTIDADES.md
 <!-- gerado automaticamente por /snapshot — não editar -->
-<!-- last_update: 2026-11-11T01:13+0000 -->
+<!-- last_update: 2026-11-11T01:26+0000 -->
 
 Modelo de dados do Hospital Reuniões. Tabelas no Postgres (via Supabase).
 
@@ -1755,6 +1755,22 @@ Modelo de dados do Hospital Reuniões. Tabelas no Postgres (via Supabase).
 - `idx_cm_faltou_isto_criado_em` em `(criado_em)` (de `126_contas_medicas_auditor.sql`)
 - `idx_cm_faltou_isto_conversa` em `(conversa_id)` (de `126_contas_medicas_auditor.sql`)
 
+## tecnologia_conversa_da_demanda
+
+> Origem: `129_tecnologia_conversa_da_demanda.sql`
+
+| Campo | Tipo | Constraints | Default | FK |
+|-------|------|-------------|---------|-----|
+| `id` | `UUID` | PK | `gen_random_uuid()` | — |
+| `demanda_id` | `UUID` | NOT NULL | — | `tecnologia_demandas.id` |
+| `autor_id` | `VARCHAR(10)` | — | — | `participantes.id` |
+| `texto` | `TEXT` | NOT NULL | — | — |
+| `mencoes` | `VARCHAR(10)[]` | NOT NULL | `'{}'` | — |
+| `criado_em` | `TIMESTAMPTZ` | NOT NULL | `now()` | — |
+
+**Indexes:**
+- `idx_tecnologia_conversa_da_demanda_demanda` em `(demanda_id, criado_em)` (de `129_tecnologia_conversa_da_demanda.sql`)
+
 ---
 
-**Resumo:** 86 tabelas vivas.
+**Resumo:** 87 tabelas vivas.

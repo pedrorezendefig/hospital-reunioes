@@ -1,6 +1,6 @@
 # SCHEMA.md
 <!-- gerado automaticamente por /snapshot — não editar -->
-<!-- last_update: 2026-11-11T01:13+0000 -->
+<!-- last_update: 2026-11-11T01:26+0000 -->
 
 Diagrama relacional do Hospital Reuniões. Renderiza nativo no GitHub.
 
@@ -109,6 +109,7 @@ erDiagram
     participantes ||--o{ reunioes : "facilitador_id"
     participantes ||--o{ reunioes : "nome_arquivo_original"
     participantes ||--o{ tecnologia_anexos : "anexado_por"
+    participantes ||--o{ tecnologia_conversa_da_demanda : "autor_id"
     participantes ||--o{ tecnologia_conversas : "autor_id"
     participantes ||--o{ tecnologia_demandas : "autor_id"
     participantes ||--o{ tecnologia_demandas : "cancelada_por"
@@ -130,6 +131,7 @@ erDiagram
     tecnologia_conversas ||--o{ tecnologia_anexos : "conversa_id"
     tecnologia_demandas ||--o{ tecnologia_anexos : "demanda_id"
     tecnologia_demandas ||--o{ tecnologia_chamadas_ia : "demanda_id"
+    tecnologia_demandas ||--o{ tecnologia_conversa_da_demanda : "demanda_id"
     tecnologia_demandas ||--o{ tecnologia_conversas : "demanda_id"
     tecnologia_demandas ||--o{ tecnologia_planejamentos : "demanda_id"
     tecnologia_produtos ||--o{ tecnologia_demandas : "produto_id"
@@ -945,6 +947,14 @@ erDiagram
         VARCHAR apontado_por FK
         _ mais_colunas "+7"
     }
+    tecnologia_conversa_da_demanda {
+        UUID id PK
+        UUID demanda_id FK
+        VARCHAR autor_id FK
+        TEXT texto
+        VARCHAR mencoes
+        TIMESTAMPTZ criado_em
+    }
 ```
 
 ## Indexes principais
@@ -1095,6 +1105,7 @@ erDiagram
 | `cm_faltou_isto` | `idx_cm_faltou_isto_conta` | `conta_id, data` | `126_contas_medicas_auditor.sql` |
 | `cm_faltou_isto` | `idx_cm_faltou_isto_criado_em` | `criado_em` | `126_contas_medicas_auditor.sql` |
 | `cm_faltou_isto` | `idx_cm_faltou_isto_conversa` | `conversa_id` | `126_contas_medicas_auditor.sql` |
+| `tecnologia_conversa_da_demanda` | `idx_tecnologia_conversa_da_demanda_demanda` | `demanda_id, criado_em` | `129_tecnologia_conversa_da_demanda.sql` |
 
 ---
-**Resumo:** 86 tabelas · 126 relacionamentos FK detectados.
+**Resumo:** 87 tabelas · 128 relacionamentos FK detectados.
