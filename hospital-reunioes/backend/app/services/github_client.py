@@ -368,9 +368,37 @@ def criar_issue(*, titulo: str, corpo: str, labels: list[str], assignees: list[s
     numero = dados.get("number") if isinstance(dados, dict) else None
     if assignees and isinstance(numero, int):
         try:
-            _chamar("PATCH", f"/issues/{numero}", json={"assignees": assignees})
-        except (GithubIndisponivelError, IssueNaoEncontradaError) as exc:
+            designada = designar(numero, assignees)
+            # Os donos saem da resposta do PATCH: e por eles que quem chama
+            # sabe se a designacao pegou (`designado`, issue #1536).
+            dados = {**dados, "assignees": designada.get("assignees") or []}
+        except GithubIndisponivelError as exc:
             logger.warning("[github] a issue #%s nasceu sem assignee (%s): %s", numero, assignees, exc)
+    return dados
+
+
+def designado(dados: dict[str, Any], logins: list[str]) -> bool:
+    """Se a issue tem todos os `logins` entre os donos. O login do GitHub nao
+    diferencia maiuscula, e a resposta volta com a grafia da conta."""
+    donos = {
+        str(dono.get("login") or "").casefold() for dono in (dados.get("assignees") or []) if isinstance(dono, dict)
+    }
+    return {login.casefold() for login in logins} <= donos
+
+
+def designar(numero: int, logins: list[str]) -> dict[str, Any]:
+    """Pede ao GitHub so a designacao da issue (issue #1536, ADR 0083, decisao 7).
+
+    Devolve a issue como o GitHub a devolve. Levanta `GithubIndisponivelError`
+    quando ele nao designou: o 422 de login que nao e assignable, a falta de
+    resposta, e o 200 que volta sem o login pedido entre os donos.
+    """
+    try:
+        dados = _chamar("PATCH", f"/issues/{numero}", json={"assignees": logins})
+    except IssueNaoEncontradaError as exc:
+        raise GithubIndisponivelError(f"A issue #{numero} nao foi encontrada para designar") from exc
+    if not isinstance(dados, dict) or not designado(dados, logins):
+        raise GithubIndisponivelError(f"O GitHub nao designou {', '.join(logins)} na issue #{numero}")
     return dados
 
 
