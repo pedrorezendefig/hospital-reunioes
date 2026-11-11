@@ -19,10 +19,11 @@ O chat da aba (issues #1381, #1383 e #1384):
                                                 `?filtro=todas` traz as de
                                                 todos ao Desenvolvedor, e
                                                 `?filtro=para_mim` as de que
-                                                ele e o Responsavel, e
-                                                `?filtro=envio_falhou` as de
-                                                card que nao chegou ao GitHub
-                                                (issue #1535).
+                                                ele e o Responsavel. Combinam
+                                                com isso a busca pelo titulo e
+                                                os filtros Tipo, Etapa,
+                                                Responsavel e Envio falhou
+                                                (issue #1551).
 - GET   /admin/tecnologia/desenvolvedores       o "Quem cuida disto?" do
                                                 resumo (ADR 0083).
 - POST  /admin/tecnologia/chat                  o primeiro turno: a Demanda
@@ -71,6 +72,7 @@ from __future__ import annotations
 
 import logging
 import os
+import unicodedata
 from datetime import UTC, datetime
 from typing import Literal, NoReturn
 
@@ -124,6 +126,8 @@ from app.services.tecnologia import (
     versao_da_entrega,
 )
 from app.services.tecnologia_vinculo import (
+    ETAPA_REGISTRADA,
+    ETAPAS,
     LABEL_ORIGEM_DIRETOR,
     LABELS_DO_BUG,
     MOTIVO_CRIACAO_EM_ANDAMENTO,
@@ -609,9 +613,20 @@ async def listar_os_desenvolvedores(
     ]
 
 
+def _sem_acento(texto: str) -> str:
+    """O texto como a busca da lista o compara: sem acento e sem caixa (issue #1551)."""
+    decomposto = unicodedata.normalize("NFD", texto)
+    return "".join(c for c in decomposto if unicodedata.category(c) != "Mn").casefold()
+
+
 @router.get("/chat", response_model=list[DemandaResponse])
 async def listar_as_conversas(
-    filtro: Literal["minhas", "todas", "para_mim", "envio_falhou"] = "minhas",
+    filtro: Literal["minhas", "todas", "para_mim"] = "minhas",
+    busca: str | None = None,
+    tipo: Literal["bug", "melhoria"] | None = None,
+    etapa: str | None = None,
+    responsavel: str | None = None,
+    envio_falhou: bool = False,
     ator: dict = Depends(require_super_admin),
     supabase: Client = Depends(get_supabase_client),
 ):
@@ -622,12 +637,22 @@ async def listar_as_conversas(
     `pode_ver`, a mesma regra da leitura da conversa: para quem nao e
     Desenvolvedor, `todas` volta so as dele. `para_mim` e o padrao da lista do
     Desenvolvedor: as Demandas de que ele e o Responsavel (ADR 0083, decisao 5).
-    `envio_falhou` e o filtro "Envio falhou" do Desenvolvedor (issue #1535): as
-    Demandas cujo card nao chegou ao GitHub, de todos os autores.
+
+    Por cima do recorte, e combinando entre si (issue #1551): a `busca` pelo
+    titulo, sem diferenciar maiuscula e acento; o `tipo` (bug ou melhoria); a
+    `etapa`; o `responsavel` (o id de quem cuida); e o `envio_falhou`, as
+    Demandas cujo card nao chegou ao GitHub (issue #1535), de todos os autores
+    mesmo partindo de `para_mim`, porque elas nao tem Responsavel. `para_mim`,
+    `responsavel` e `envio_falhou` sao do Desenvolvedor, como os chips da
+    tela, e a rota os recusa a quem nao e.
 
     Sai pelo `_para_a_lista`, o funil da Demanda desta API: e la que numero e
     endereco da issue ficam de fora para o diretor.
     """
+    if not e_desenvolvedor(ator) and (filtro == "para_mim" or responsavel or envio_falhou):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Filtro so do Desenvolvedor")
+    if etapa is not None and etapa not in ETAPAS:
+        _recusar("Etapa desconhecida")
     # A lapide do Apagar fica fora de todo filtro (ADR 0084, decisao 2).
     consulta = supabase.table(TABELA_DEMANDAS).select("*").is_("apagada_em", "null")
     if filtro == "minhas":
@@ -636,9 +661,22 @@ async def listar_as_conversas(
         consulta = consulta.eq("responsavel_id", ator["id"])
     result = consulta.order("criado_em", desc=True).execute()
     visiveis = [d for d in (result.data or []) if pode_ver(ator, d)]
-    if filtro == "para_mim":
+    # A Demanda em Envio falhou nao tem card, logo nao tem Responsavel: com
+    # `envio_falhou`, o recorte por Responsavel (Para mim e o `responsavel`)
+    # nao corta, senao a lista do Desenvolvedor, que abre em Para mim, sairia
+    # sempre vazia (issue #1535).
+    if filtro == "para_mim" and not envio_falhou:
         visiveis = [d for d in visiveis if responsavel_da_demanda(d) == ator["id"]]
-    elif filtro == "envio_falhou":
+    if busca and busca.strip():
+        procurado = _sem_acento(busca.strip())
+        visiveis = [d for d in visiveis if procurado in _sem_acento(str(d.get("titulo") or ""))]
+    if tipo:
+        visiveis = [d for d in visiveis if d.get("tipo") == chat_tecnologia.TIPO_DA_CLASSIFICACAO[tipo]]
+    if etapa:
+        visiveis = [d for d in visiveis if (d.get("etapa") or ETAPA_REGISTRADA) == etapa]
+    if responsavel and not envio_falhou:
+        visiveis = [d for d in visiveis if responsavel_da_demanda(d) == responsavel]
+    if envio_falhou:
         visiveis = [d for d in visiveis if tecnologia_envio.envio_falhou(d)]
     return _para_a_lista(supabase, visiveis, ator=ator)
 

@@ -388,7 +388,7 @@ class TestALapide:
             ("", _conversa_registrada(autor_id=PEDRO["id"])),
             ("?filtro=todas", _card()),
             ("?filtro=para_mim", _card()),
-            ("?filtro=envio_falhou", _conversa_registrada(autor_id=PEDRO["id"], envio_estado="falhou")),
+            ("?filtro=todas&envio_falhou=true", _conversa_registrada(autor_id=PEDRO["id"], envio_estado="falhou")),
         ],
     )
     def test_a_demanda_apagada_some_da_lista(self, monkeypatch, filtro, demanda):
