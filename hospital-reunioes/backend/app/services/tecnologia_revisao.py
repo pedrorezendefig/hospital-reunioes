@@ -34,8 +34,6 @@ from app.services.tecnologia_vinculo import (
     marcador_da_demanda,
     texto_do_diretor,
 )
-
-LABEL_PEDE_INFORMACAO = "needs-info"
 from app.utils.text_sanitizer import sanitizar_travessao
 
 logger = logging.getLogger(__name__)
@@ -352,8 +350,10 @@ def comentario_da_atualizacao(
     antes, depois = escopo_do_corpo(corpo_antes), escopo_do_corpo(corpo_depois)
     entrou = [item for item in depois if item not in antes]
     saiu = [item for item in antes if item not in depois]
-    saiu += [f"{' '.join(texto_do_diretor(item).split())} (já existe no app, e quem pediu disse que atende)"
-             for item in saiu_por_atender]
+    saiu += [
+        f"{' '.join(texto_do_diretor(item).split())} (já existe no app, e quem pediu disse que atende)"
+        for item in saiu_por_atender
+    ]
     base = f", com o app na {versao_base}" if versao_base else ""
     linhas = [
         "<!-- automacao -->",
@@ -387,6 +387,8 @@ class ParteJaComecouError(RuntimeError):
 def _labels_da_issue(dados: dict) -> list[str]:
     return [str(label["name"]) for label in dados.get("labels") or [] if isinstance(label, dict) and label.get("name")]
 
+
+LABEL_PEDE_INFORMACAO = "needs-info"
 
 # As labels de triagem que a raiz perde ao voltar para `needs-triage`: as da
 # fila (Planejada) e o pedido de informacao.

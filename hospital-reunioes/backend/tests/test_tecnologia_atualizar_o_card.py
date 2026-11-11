@@ -16,8 +16,6 @@ from __future__ import annotations
 import os
 import sys
 
-import pytest
-
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from test_tecnologia_chat import (  # noqa: E402
@@ -46,6 +44,7 @@ from test_tecnologia_vinculo import (  # noqa: E402
 )
 
 from app.services import github_client, tecnologia_revisao  # noqa: E402
+from app.services.conhecimento import CONHECIMENTO_DIR  # noqa: E402
 from app.services.tecnologia_vinculo import (  # noqa: E402
     ETAPA_EM_ANALISE,
     ETAPA_PLANEJADA,
@@ -294,3 +293,87 @@ class TestAVoltaParaATriagem:
 
         _, _, _, labels = _regravado(gh)
         assert sorted(labels) == ["needs-triage", "type:feature"]
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 5. Falha do GitHub
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+class TestFalhaDoGithub:
+    def test_falha_do_github_devolve_erro_claro_sem_gravar_nada_no_app(self, monkeypatch):
+        client, sb, _ = _montar_o_card(
+            monkeypatch, erro_ao_escrever=github_client.GithubIndisponivelError("GitHub respondeu 502")
+        )
+        demanda_antes = dict(_demandas(sb)[0])
+        conversa_antes = dict(_conversas(sb)[0])
+
+        resposta = client.post(ATUALIZAR)
+
+        assert resposta.status_code == 502
+        assert "não foi atualizado" in resposta.json()["detail"]
+        assert _demandas(sb)[0] == demanda_antes
+        assert _conversas(sb)[0] == conversa_antes
+
+    def test_depois_da_falha_o_botao_vale_de_novo(self, monkeypatch):
+        client, _, gh = _montar_o_card(
+            monkeypatch, erro_ao_escrever=github_client.GithubIndisponivelError("GitHub respondeu 502")
+        )
+        assert client.post(ATUALIZAR).status_code == 502
+
+        gh.erro_ao_escrever = None
+        resposta = client.post(ATUALIZAR)
+
+        assert resposta.status_code == 200, resposta.text
+        assert resposta.json()["estado"] == "enviado"
+
+    def test_sem_a_revisao_a_rota_recusa(self, monkeypatch):
+        client, sb, gh = _montar_o_card(monkeypatch)
+        _conversas(sb)[0]["revisao_iniciada_em"] = None
+
+        resposta = client.post(ATUALIZAR)
+
+        assert resposta.status_code == 409
+        assert gh.escritas == []
+
+    def test_o_cliente_do_github_regrava_corpo_e_labels_num_patch_e_comenta(self, monkeypatch):
+        chamadas = []
+
+        def _rede(metodo, url, *, headers, json, timeout):
+            import httpx
+
+            chamadas.append((metodo, url, json))
+            return httpx.Response(200, json={"number": 900}, request=httpx.Request(metodo, url))
+
+        monkeypatch.setattr(github_client.httpx, "request", _rede)
+
+        github_client.comentar(900, "o que mudou")
+        github_client.regravar(900, corpo="PRD", labels=["needs-triage"])
+
+        issue = "https://api.github.com/repos/pedrorezendefig/hospital-reunioes/issues/900"
+        assert chamadas == [
+            ("POST", f"{issue}/comments", {"body": "o que mudou"}),
+            ("PATCH", issue, {"body": "PRD", "labels": ["needs-triage"]}),
+        ]
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 6. O kit de conhecimento
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+class TestOKitDizOAtualizar:
+    def test_o_texto_da_tecnologia_no_kit_diz_o_atualizar_o_card(self):
+        texto = (CONHECIMENTO_DIR / "tecnologia.md").read_text(encoding="utf-8")
+
+        secao = texto.split("## Revisar com o código de hoje", 1)[1].split("\n## ", 1)[0]
+        for trecho in (
+            "Atualizar o card",
+            "no mesmo card",
+            "o que entrou e o que saiu",
+            "não tinham começado",
+            "Em análise",
+            "já começou",
+            "nada muda no aplicativo",
+        ):
+            assert trecho in secao, trecho
