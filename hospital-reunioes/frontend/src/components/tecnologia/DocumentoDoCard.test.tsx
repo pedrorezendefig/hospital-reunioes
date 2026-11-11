@@ -176,6 +176,14 @@ describe("O Documento do card", () => {
     ]);
   });
 
+  it("data ilegível de entrega ou de produção some das Datas, sem quebrar o Documento (issue #1580)", () => {
+    montar(demanda({ etapa: "em_producao", o_que_muda: "A frase.", fechada_em: "ontem", em_producao_em: "ontem" }));
+
+    expect(within(secao(TITULO_DATAS)).getAllByRole("listitem").map((item) => item.textContent)).toEqual([
+      "Criado em 01/11/2026 às 09:00",
+    ]);
+  });
+
   it("o diretor não vê título de parte, número de issue nem link", () => {
     montar(VINCULADA);
 
