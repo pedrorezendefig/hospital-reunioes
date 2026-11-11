@@ -73,7 +73,7 @@ type Resposta = { status: number; corpo: unknown };
 type Servidor = (url: string, metodo: string, corpo: unknown) => Resposta;
 
 /** Monta a aba com um servidor falso que responde pela URL e pelo método. */
-function montar(servidor: Servidor) {
+function montar(servidor: Servidor, demandaInicial: string | null = null) {
   const chamadas: Chamada[] = [];
   vi.stubGlobal(
     "fetch",
@@ -91,7 +91,7 @@ function montar(servidor: Servidor) {
   );
   render(
     <ToastProvider>
-      <ConversasDaTecnologia token="token-de-teste" />
+      <ConversasDaTecnologia token="token-de-teste" demandaInicial={demandaInicial} />
     </ToastProvider>,
   );
   return chamadas;
@@ -462,6 +462,68 @@ describe("O Responsável na lista (issue #1533, ADR 0083)", () => {
     expect(within(lista()).getAllByRole("listitem").map((item) => item.textContent)).toEqual([
       "O botão sumiuDiretor do HospitalResponsável: Pedro RibEm análise",
     ]);
+  });
+});
+
+describe("A Conversa da Demanda e o aviso do sino (issue #1537, ADR 0083)", () => {
+  const EU = "/api/admin/tecnologia/eu";
+  const TODAS = `${LISTA}?filtro=todas`;
+  const PARA_MIM = `${LISTA}?filtro=para_mim`;
+  const DO_DIRETOR = demanda("d-7", "O relatório some", { minha: false, autor: "Diretor do Hospital" });
+  const CONVERSA_DA_DEMANDA = { mensagens: [], mencionaveis: [] };
+
+  it("a Demanda aberta mostra a Conversa da Demanda numa área própria, e a conversa nova não", async () => {
+    montar((url) => {
+      if (url === LISTA) return { status: 200, corpo: [COM_VINCULO] };
+      if (url === `${LISTA}/d-2`) return { status: 200, corpo: conversa("d-2", { estado: "enviado" }) };
+      if (url === `${LISTA}/d-2/conversa`) return { status: 200, corpo: CONVERSA_DA_DEMANDA };
+      return { status: 404, corpo: {} };
+    });
+
+    await within(lista()).findByText("Aviso quando a ata sair");
+    expect(screen.queryByRole("region", { name: "Conversa da Demanda" })).toBeNull();
+
+    fireEvent.click(within(lista()).getByRole("button", { name: /Aviso quando a ata sair/ }));
+
+    expect(await screen.findByRole("region", { name: "Conversa da Demanda" })).toBeTruthy();
+  });
+
+  it("o aviso do sino abre a Demanda do diretor", async () => {
+    const chamadas = montar(
+      (url) => {
+        if (url === EU) return { status: 200, corpo: { desenvolvedor: false } };
+        if (url === LISTA) return { status: 200, corpo: [SEM_CARD, COM_VINCULO] };
+        if (url === `${LISTA}/d-2`) return { status: 200, corpo: conversa("d-2", { estado: "enviado" }) };
+        if (url === `${LISTA}/d-2/conversa`) return { status: 200, corpo: CONVERSA_DA_DEMANDA };
+        return { status: 404, corpo: {} };
+      },
+      "d-2",
+    );
+
+    expect(await screen.findByText("Agora o aviso da ata chega por e-mail.")).toBeTruthy();
+    await waitFor(() => expect(chamadas.some((c) => c.url === `${LISTA}/d-2/conversa`)).toBe(true));
+    expect(within(lista()).getByRole("button", { name: /Aviso quando a ata sair/ }).getAttribute("aria-current")).toBe(
+      "true",
+    );
+  });
+
+  it("o aviso do sino abre a Demanda de outro autor para o Desenvolvedor, pela lista de Todas", async () => {
+    const chamadas = montar(
+      (url) => {
+        if (url === EU) return { status: 200, corpo: { desenvolvedor: true } };
+        if (url === PARA_MIM) return { status: 200, corpo: [] };
+        if (url === TODAS) return { status: 200, corpo: [SEM_CARD, DO_DIRETOR] };
+        if (url === `${LISTA}/d-7`) return { status: 200, corpo: conversa("d-7") };
+        if (url === `${LISTA}/d-7/conversa`) return { status: 200, corpo: CONVERSA_DA_DEMANDA };
+        return { status: 404, corpo: {} };
+      },
+      "d-7",
+    );
+
+    expect(await screen.findByText("Onde isso aconteceu?")).toBeTruthy();
+    expect(await screen.findByRole("region", { name: "Conversa da Demanda" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Todas" }).getAttribute("aria-pressed")).toBe("true");
+    expect(chamadas.filter((c) => c.url.startsWith(`${LISTA}?`)).map((c) => c.url)).toEqual([TODAS]);
   });
 });
 

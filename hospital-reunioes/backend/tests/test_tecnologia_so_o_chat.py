@@ -36,6 +36,8 @@ ROTAS_DO_CHAT = {
     "/api/admin/tecnologia/eu",
     # O "Quem cuida disto?" do resumo (issue #1533, ADR 0083, decisão 5).
     "/api/admin/tecnologia/desenvolvedores",
+    # A Conversa da Demanda volta, só no app (issue #1537, ADR 0083, decisão 8).
+    "/api/admin/tecnologia/chat/{demanda_id}/conversa",
 }
 
 # O que fica de fora da aba e continua de pé (critério 2 da issue).

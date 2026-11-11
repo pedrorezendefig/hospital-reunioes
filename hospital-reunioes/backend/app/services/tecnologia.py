@@ -20,6 +20,9 @@ from app.services.tecnologia_vinculo import ETAPA_EM_PRODUCAO
 # uma renomeacao que passa em dois deles.
 TABELA_DEMANDAS = "tecnologia_demandas"
 TABELA_PRODUTOS = "tecnologia_produtos"
+# A Conversa da Demanda (issue #1537, ADR 0083, decisao 8): mensagens de gente,
+# separadas da conversa com o agente, que mora em `tecnologia_planejamentos`.
+TABELA_CONVERSA_DA_DEMANDA = "tecnologia_conversa_da_demanda"
 
 # O estado da Demanda de antes da ADR 0077, congelado na coluna ate o drop. A
 # sincronizacao e o apagamento dos prints ainda o leem: a Demanda Concluida ou
@@ -133,6 +136,23 @@ def responsavel_da_demanda(demanda: dict[str, Any]) -> str | None:
     if not demanda.get("github_issue_numero"):
         return None
     return demanda.get("responsavel_id") or None
+
+
+def quem_avisar(demanda: dict[str, Any], *, autor_id: str, mencoes: list[str]) -> list[str]:
+    """Quem a mensagem da Conversa da Demanda avisa no sino (ADR 0083, decisao 8).
+
+    Mencao avisa o mencionado, e so ele. Sem mencao, a mensagem do autor da
+    Demanda avisa o Responsavel, e a de qualquer outro (o Desenvolvedor, unico
+    que alem do autor escreve ali) avisa o autor. Ninguem e avisado da propria
+    mensagem.
+    """
+    if mencoes:
+        destino = list(mencoes)
+    elif autor_id == demanda.get("autor_id"):
+        destino = [responsavel_da_demanda(demanda)]
+    else:
+        destino = [demanda.get("autor_id")]
+    return sorted({str(d) for d in destino if d and d != autor_id})
 
 
 def login_do_responsavel(demanda: dict[str, Any]) -> str | None:

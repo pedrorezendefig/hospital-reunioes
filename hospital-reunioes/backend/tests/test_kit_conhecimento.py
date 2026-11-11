@@ -386,8 +386,8 @@ APOSENTADOS_DA_ABA = (
     # "Responsável" voltou com a ADR 0083 (issue #1533): o diretor escolhe
     # quem cuida do card em "Quem cuida disto?".
     "rioridade",
-    "menç",
-    "mencion",
+    # A menção voltou com a ADR 0083 (issue #1537), dentro da Conversa da
+    # Demanda, que fica só no app.
     "arroba",
     "e-mail",
     "Tipos",
@@ -413,8 +413,13 @@ class TestOTextoDaAbaContaATelaDeHoje:
     def test_o_detector_morde_a_tela_de_antes(self):
         """O detector tambem e codigo: o texto de antes desta fatia, com o
         Quadro e o Painel, tem que reprovar nele."""
-        antes = "A aba tem o **Quadro**, o **Painel** e a Conversa do card aberto, com menção."
-        assert [termo for termo in APOSENTADOS_DA_ABA if termo in antes] == ["Quadro", "Painel", "menç", "card aberto"]
+        antes = "A aba tem o **Quadro**, o **Painel** e a Conversa do card aberto, por e-mail."
+        assert [termo for termo in APOSENTADOS_DA_ABA if termo in antes] == [
+            "Quadro",
+            "Painel",
+            "e-mail",
+            "card aberto",
+        ]
 
     def test_os_anexos_dizem_a_porta_o_limite_e_o_apagamento(self, texto):
         anexos = _secao(texto, "Os anexos da Demanda")
@@ -444,6 +449,25 @@ class TestOTextoDaAbaContaATelaDeHoje:
             "nunca é digitada",
         ):
             assert termo in etapa, termo
+
+    def test_a_conversa_da_demanda_diz_quem_escreve_a_mencao_o_aviso_e_que_fica_no_app(self, texto):
+        """Issue #1537 (ADR 0083, decisão 8): o diretor pergunta ao Assistente
+        quem é avisado da mensagem dele, e a resposta tem que estar no kit."""
+        conversa = _secao(texto, "A Conversa da Demanda")
+        for termo in (
+            "separada da conversa com a IA",
+            "quem vê o pedido",
+            "escreva @ e escolha o nome",
+            "avisado no sino",
+            "avisa o Responsável",
+            "avisa você",
+            "Ninguém é avisado da própria mensagem",
+            "abre o pedido",
+            "nunca vai para o material público",
+        ):
+            assert termo in conversa, termo
+        decidido = _secao(texto, "O que já foi decidido")
+        assert "Conversa da Demanda" in decidido
 
     def test_os_pedidos_ao_hospital_voltaram_para_o_whatsapp(self, texto):
         """ADR 0077, decisao 3: a aba e so de um sentido, o diretor relata."""

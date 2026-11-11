@@ -17,6 +17,7 @@ from app.dependencies import (
     require_acesso_reunioes,
 )
 from app.models.schemas import ComentarioCreate, ComentarioResponse
+from app.services.mencoes import extrair_mencoes
 from app.services.notificacao_service import (
     criar_notificacao_comentario,
     criar_notificacao_mencao,
@@ -57,32 +58,6 @@ def _participantes_mencionaveis(supabase, pendencia: dict) -> list[dict]:
         for p in participantes
         if (p.get("is_super_admin") or p["id"] in visiveis) and p.get("access_profile") != "secretaria"
     ]
-
-
-def _extrair_mencoes(conteudo: str, candidatos: list[dict]) -> list[str]:
-    """Extrai IDs de participantes mencionados com @nome no conteúdo, sem usar regex falível."""
-    if not candidatos:
-        return []
-
-    # O filtro previne matches duplicados (ex. João não deve triggar João Pedro).
-    # Como não temos regex garantido por pontuação, organizamos pelo tamanho, testando os maiores primeiro.
-    participantes_ordenados = sorted(candidatos, key=lambda p: len(p.get("nome_completo", "")), reverse=True)
-    mencionados_ids = []
-
-    texto_restante = conteudo
-
-    for p in participantes_ordenados:
-        nome_completo = p.get("nome_completo", "").strip()
-        if not nome_completo:
-            continue
-
-        assinatura = f"@{nome_completo}"
-        if assinatura in texto_restante:
-            mencionados_ids.append(p["id"])
-            # Removemos do buffer de busca para não parear com nomes menores de base.
-            texto_restante = texto_restante.replace(assinatura, "")
-
-    return list(set(mencionados_ids))
 
 
 async def _carregar_pendencia_visivel(
@@ -181,7 +156,7 @@ async def create_comentario(
         raise HTTPException(status_code=403, detail="Participante não encontrado para o usuário autenticado")
 
     # Extrai menções (restritas a quem enxerga a Pendência)
-    mencoes = _extrair_mencoes(req.conteudo, _participantes_mencionaveis(supabase, pendencia))
+    mencoes = extrair_mencoes(req.conteudo, _participantes_mencionaveis(supabase, pendencia))
 
     # Insere comentário
     comentario_data = {

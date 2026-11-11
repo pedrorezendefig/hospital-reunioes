@@ -87,6 +87,33 @@ class QuemSouNaAbaResponse(BaseModel):
     desenvolvedor: bool
 
 
+# ─── A Conversa da Demanda (issue #1537, ADR 0083, decisao 8) ──────────────
+
+
+class MensagemDaConversaResponse(BaseModel):
+    """Uma mensagem de gente na Conversa da Demanda. `autor` e o nome de quem
+    escreveu; `minha` diz se foi quem esta logado."""
+
+    id: str
+    autor: str | None = None
+    texto: str
+    criado_em: str | None = None
+    minha: bool = False
+
+
+class MencionavelResponse(BaseModel):
+    """Quem pode ser mencionado: quem ve a Demanda (o autor e os
+    Desenvolvedores)."""
+
+    id: str
+    nome: str
+
+
+class ConversaDaDemandaResponse(BaseModel):
+    mensagens: list[MensagemDaConversaResponse]
+    mencionaveis: list[MencionavelResponse]
+
+
 # O teto de uma fala do chat. E do pydantic, e nao do router, porque aqui nao
 # ha frase de gente a preservar: um texto de 50 mil caracteres nao veio da tela,
 # veio de um cliente que resolveu mandar o que quisesse para uma rota que gasta
@@ -280,3 +307,10 @@ class ChatResponse(BaseModel):
     # (issue #1534, ADR 0083, decisao 6). O nome, ou o login de quem nao e
     # usuario do app. Nulo enquanto o card nao nasceu.
     responsavel: str | None = None
+
+
+class MensagemDaConversaPayload(BaseModel):
+    """Corpo do POST /admin/tecnologia/chat/{id}/conversa (issue #1537). A
+    mencao vai no proprio texto, como "@Nome Completo"."""
+
+    texto: str = Field(min_length=1, max_length=LIMITE_DA_MENSAGEM)

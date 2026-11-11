@@ -77,9 +77,12 @@ from app.models.tecnologia_schemas import (
     ChatPrimeiroTurnoPayload,
     ChatResponse,
     ChatTurnoPayload,
+    ConversaDaDemandaResponse,
     CriarOCardPayload,
     DemandaResponse,
     DesenvolvedorResponse,
+    MensagemDaConversaPayload,
+    MensagemDaConversaResponse,
     QuemSouNaAbaResponse,
 )
 from app.services import (
@@ -93,13 +96,17 @@ from app.services import (
     tecnologia_envio,
 )
 from app.services.conhecimento import carregar_kit
+from app.services.mencoes import extrair_mencoes
+from app.services.notificacao_service import criar_notificacao_tecnologia
 from app.services.tecnologia import (
     SEM_PRODUTO,
+    TABELA_CONVERSA_DA_DEMANDA,
     TABELA_DEMANDAS,
     TABELA_PRODUTOS,
     e_desenvolvedor,
     login_do_responsavel,
     pode_ver,
+    quem_avisar,
     responsavel_da_demanda,
     versao_da_entrega,
 )
@@ -798,6 +805,102 @@ async def ler_o_chat(
     # O Responsavel de agora, derivado do GitHub (issue #1534): so leitura.
     responsavel = _nome_do_responsavel(demanda, _nomes(supabase, {responsavel_da_demanda(demanda)}))
     return _chat_para_a_tela(supabase, demanda_id, linha, anexos_da_demanda=anexos, responsavel=responsavel)
+
+
+# ─── A Conversa da Demanda (issue #1537, ADR 0083, decisao 8) ──────────────
+
+
+def _demanda_visivel(supabase: Client, demanda_id: str, ator: dict) -> dict:
+    """A Demanda, se quem pede a ve; senao 404, como a leitura do chat: a de
+    outro autor responde como inexistente, sem dizer que existe."""
+    demanda = _buscar_demanda(supabase, demanda_id)
+    if not pode_ver(ator, demanda):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=MOTIVO_CHAT_NAO_ENCONTRADO)
+    return demanda
+
+
+def _mencionaveis(supabase: Client, demanda: dict) -> list[dict]:
+    """Quem ve a Demanda: o autor e os Desenvolvedores. E so quem a menção
+    alcanca, para o aviso nunca levar alguem a uma Demanda que ele nao abre."""
+    pessoas = {str(p["id"]): p for p in _desenvolvedores(supabase)}
+    autor_id = demanda.get("autor_id")
+    if autor_id and str(autor_id) not in pessoas:
+        result = selecionar_participantes(supabase, "id, nome_completo", lambda q: q.eq("id", autor_id))
+        pessoas.update({str(p["id"]): p for p in (result.data or [])})
+    return sorted(pessoas.values(), key=lambda p: (p.get("nome_completo") or "").casefold())
+
+
+def _mensagem_para_a_tela(linha: dict, *, nomes: dict[str, str], ator: dict) -> dict:
+    return {
+        "id": str(linha["id"]),
+        "autor": nomes.get(str(linha.get("autor_id"))),
+        "texto": linha.get("texto") or "",
+        "criado_em": linha.get("criado_em"),
+        "minha": linha.get("autor_id") == ator["id"],
+    }
+
+
+@router.get("/chat/{demanda_id}/conversa", response_model=ConversaDaDemandaResponse)
+async def ler_a_conversa_da_demanda(
+    demanda_id: str,
+    ator: dict = Depends(require_super_admin),
+    supabase: Client = Depends(get_supabase_client),
+):
+    """A Conversa da Demanda, da mais antiga para a mais nova, e quem pode ser
+    mencionado nela. So quem ve a Demanda a le."""
+    demanda = _demanda_visivel(supabase, demanda_id, ator)
+    linhas = (
+        supabase.table(TABELA_CONVERSA_DA_DEMANDA)
+        .select("*")
+        .eq("demanda_id", demanda_id)
+        .order("criado_em")
+        .execute()
+        .data
+        or []
+    )
+    nomes = _nomes(supabase, {linha.get("autor_id") for linha in linhas})
+    return {
+        "mensagens": [_mensagem_para_a_tela(linha, nomes=nomes, ator=ator) for linha in linhas],
+        "mencionaveis": [
+            {"id": str(p["id"]), "nome": p.get("nome_completo") or ""} for p in _mencionaveis(supabase, demanda)
+        ],
+    }
+
+
+@router.post(
+    "/chat/{demanda_id}/conversa",
+    response_model=MensagemDaConversaResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def escrever_na_conversa_da_demanda(
+    demanda_id: str,
+    payload: MensagemDaConversaPayload,
+    ator: dict = Depends(require_super_admin),
+    supabase: Client = Depends(get_supabase_client),
+):
+    """Uma mensagem na Conversa da Demanda. Escreve quem ve a Demanda. Nada
+    daqui vai para o GitHub (ADR 0083, decisao 8)."""
+    demanda = _demanda_visivel(supabase, demanda_id, ator)
+    texto = payload.texto.strip()
+    if not texto:
+        _recusar("Escreva a mensagem antes de enviar.")
+    mencoes = extrair_mencoes(texto, _mencionaveis(supabase, demanda))
+    [linha] = (
+        supabase.table(TABELA_CONVERSA_DA_DEMANDA)
+        .insert({"demanda_id": demanda_id, "autor_id": ator["id"], "texto": texto, "mencoes": mencoes})
+        .execute()
+        .data
+    )
+    nome = ator.get("nome_completo") or ""
+    for destinatario in quem_avisar(demanda, autor_id=ator["id"], mencoes=mencoes):
+        criar_notificacao_tecnologia(
+            supabase,
+            destinatario_id=destinatario,
+            titulo=f"{nome} mencionou você" if destinatario in mencoes else f"{nome} escreveu na Demanda",
+            mensagem=str(demanda.get("titulo") or "")[:80],
+            demanda_id=demanda_id,
+        )
+    return _mensagem_para_a_tela(linha, nomes={str(ator["id"]): nome}, ator=ator)
 
 
 @router.post("/chat/{demanda_id}", response_model=ChatResponse)
