@@ -41,7 +41,15 @@ jobs:
             const issue = context.payload.issue;
             await limparLabels(issue.number, issue.labels.map((l) => l.name));
 
-            // 2. Se era a última sub-issue aberta de um PRD, fecha o PRD
+            // 2. Se era a última sub-issue aberta de um PRD, fecha o PRD. Só o
+            //    fechamento como concluída conta: a parte fechada como não
+            //    planejada não conclui o PRD. O "Atualizar o card" da aba
+            //    Tecnologia (PR #1577) fecha as partes não começadas assim, com
+            //    o token de uma pessoa, e devolve a raiz para a triagem.
+            if (issue.state_reason === 'not_planned') {
+              core.info(`#${issue.number} fechou como não planejada: o PRD pai não fecha por ela.`);
+              return;
+            }
             const { repository } = await github.graphql(
               `query($owner: String!, $repo: String!, $number: Int!) {
                 repository(owner: $owner, name: $repo) {
