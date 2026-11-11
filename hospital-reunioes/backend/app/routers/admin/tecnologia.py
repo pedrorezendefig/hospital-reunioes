@@ -43,6 +43,12 @@ O chat da aba (issues #1381, #1383 e #1384):
                                                 issue que nasceu sem o
                                                 Responsavel, pelo
                                                 Desenvolvedor (issue #1536).
+- DELETE /admin/tecnologia/chat/{id}            o "Apagar": a conversa
+                                                Registrada pelo autor, o card
+                                                ate Planejada pelo
+                                                Desenvolvedor, que fecha no
+                                                GitHub como nao planejado
+                                                (issue #1549, ADR 0084).
 
 O print do chat (ADR 0056, decisao 4; ADR 0077, decisao 8):
 
@@ -68,7 +74,7 @@ import os
 from datetime import UTC, datetime
 from typing import Literal, NoReturn
 
-from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile, status
+from fastapi import APIRouter, Depends, File, HTTPException, Request, Response, UploadFile, status
 from supabase import Client
 
 from app.config import settings
@@ -97,6 +103,7 @@ from app.services import (
     github_client,
     planejamento_demanda,
     tecnologia_anexos,
+    tecnologia_apagar,
     tecnologia_email,
     tecnologia_envio,
 )
@@ -112,6 +119,7 @@ from app.services.tecnologia import (
     login_do_responsavel,
     pode_ver,
     quem_avisar,
+    recusa_de_apagar,
     responsavel_da_demanda,
     versao_da_entrega,
 )
@@ -146,7 +154,9 @@ def _agora() -> str:
 
 
 def _buscar_demanda(supabase: Client, demanda_id: str) -> dict:
-    result = supabase.table(TABELA_DEMANDAS).select("*").eq("id", demanda_id).execute()
+    """A Demanda, ou 404. A lapide do Apagar (ADR 0084, decisao 2) responde como
+    inexistente: toda leitura e toda escrita da aba passam por aqui."""
+    result = supabase.table(TABELA_DEMANDAS).select("*").eq("id", demanda_id).is_("apagada_em", "null").execute()
     if not result.data:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Demanda nao encontrada")
     return result.data[0]
@@ -161,7 +171,8 @@ def _para_a_lista(supabase: Client, demandas: list[dict], *, ator: dict) -> list
     o autor, o numero e o link (ADR 0083, decisao 3). O Responsavel sai para
     os dois (ADR 0083, decisao 5), e o selo "Envio falhou" tambem; o motivo
     tecnico da falha, so para o Desenvolvedor (issue #1535). A designacao
-    falhada sai so para o Desenvolvedor (issue #1536).
+    falhada sai so para o Desenvolvedor (issue #1536). O `pode_apagar` diz a
+    tela se mostra o "Apagar" (issue #1549), pela regra da rota.
     """
     desenvolvedor = e_desenvolvedor(ator)
     ids = {responsavel_da_demanda(d) for d in demandas}
@@ -183,6 +194,7 @@ def _para_a_lista(supabase: Client, demandas: list[dict], *, ator: dict) -> list
             "envio_falhou": tecnologia_envio.envio_falhou(d),
             "designacao_falhou": desenvolvedor and tecnologia_envio.designacao_falhou(d),
             "envio_motivo": d.get("envio_motivo") if desenvolvedor and _falha_pendente(d) else None,
+            "pode_apagar": recusa_de_apagar(ator, d) is None,
         }
         for d in demandas
     ]
@@ -616,7 +628,8 @@ async def listar_as_conversas(
     Sai pelo `_para_a_lista`, o funil da Demanda desta API: e la que numero e
     endereco da issue ficam de fora para o diretor.
     """
-    consulta = supabase.table(TABELA_DEMANDAS).select("*")
+    # A lapide do Apagar fica fora de todo filtro (ADR 0084, decisao 2).
+    consulta = supabase.table(TABELA_DEMANDAS).select("*").is_("apagada_em", "null")
     if filtro == "minhas":
         consulta = consulta.eq("autor_id", ator["id"])
     elif filtro == "para_mim":
@@ -1242,6 +1255,45 @@ async def designar_de_novo(
     if not result.data:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Demanda nao encontrada")
     return _para_a_lista(supabase, result.data, ator=ator)[0]
+
+
+MOTIVO_APAGAR_GITHUB_FALHOU = (
+    "O GitHub não respondeu, e o card não foi fechado lá. Nada foi apagado: tente de novo em instantes."
+)
+
+
+@router.delete("/chat/{demanda_id}", status_code=status.HTTP_204_NO_CONTENT)
+@limiter.shared_limit(LIMITE_DO_VINCULO, ESCOPO_DO_VINCULO)
+async def apagar_a_demanda(
+    request: Request,
+    demanda_id: str,
+    ator: dict = Depends(require_super_admin),
+    supabase: Client = Depends(get_supabase_client),
+):
+    """O "Apagar" da Demanda (issue #1549, ADR 0084, decisao 2).
+
+    Quem pode e ate onde e a `recusa_de_apagar`: o autor apaga a conversa
+    Registrada; o card criado, so o Desenvolvedor, ate Planejada. A recusa
+    sai com o status dela (403 ou 409). O card fecha antes no GitHub, e a
+    falha de la sai como 503 (falta configuracao) ou 502, sem nada apagado no
+    app.
+    """
+    demanda = _buscar_demanda(supabase, demanda_id)
+    recusa = recusa_de_apagar(ator, demanda)
+    if recusa is not None:
+        raise HTTPException(status_code=recusa[0], detail=recusa[1])
+    if demanda.get("github_issue_numero"):
+        _exigir_integracao()
+    try:
+        tecnologia_apagar.apagar(supabase, demanda, ator=ator)
+    except github_client.GithubNaoConfiguradoError:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=MOTIVO_INTEGRACAO_DESLIGADA
+        ) from None
+    except (github_client.GithubIndisponivelError, github_client.IssueNaoEncontradaError) as exc:
+        logger.warning("[tecnologia] o card da Demanda %s não fechou no GitHub: %s", demanda_id, exc)
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=MOTIVO_APAGAR_GITHUB_FALHOU) from None
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 def _enviar_o_card(

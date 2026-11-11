@@ -71,6 +71,9 @@ class DemandaResponse(BaseModel):
     # que tem o "Designar de novo". O motivo sai no mesmo `envio_motivo`.
     designacao_falhou: bool = False
     envio_motivo: str | None = None
+    # Se quem esta logado pode apagar esta Demanda (issue #1549, ADR 0084,
+    # decisao 2): a tela mostra o botao so com o sim. A regra e a da rota.
+    pode_apagar: bool = False
 
 
 class DesenvolvedorResponse(BaseModel):

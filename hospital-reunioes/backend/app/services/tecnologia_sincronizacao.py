@@ -319,11 +319,15 @@ def sincronizar_demanda(
     estado poupa a cota do GitHub), mas a guarda mora aqui e nao la, porque o
     webhook chega pelo numero da issue e nao tem esse filtro: sem ela, os dois
     caminhos que a issue chama de "a mesma rotina" se comportariam diferente.
+
+    A lapide do Apagar (ADR 0084, decisao 2) tambem nao e tocada, pelo mesmo
+    motivo e antes de qualquer leitura do GitHub: a issue que o Apagar fechou
+    como nao planejada devolve o `issues.closed`, e ele nao muda nada.
     """
     numero = demanda.get("github_issue_numero")
     if not numero:
         return False
-    if str(demanda.get("estado") or "") in ESTADOS_FECHADOS:
+    if str(demanda.get("estado") or "") in ESTADOS_FECHADOS or demanda.get("apagada_em"):
         return False
     numero = int(numero)
 
@@ -348,7 +352,9 @@ def sincronizar_demanda(
         # Outra escrita passou na frente. A linha relida traz os fatos do PR que
         # ela gravou e a Etapa que ela moveu: a proxima volta parte dali.
         relida = _reler(supabase, demanda_id)
-        if relida is None or str(relida.get("estado") or "") in ESTADOS_FECHADOS:
+        # O Apagar pode ter gravado a lapide entre a leitura e a escrita: o
+        # `issues.closed` do proprio Apagar chega nessa janela.
+        if relida is None or str(relida.get("estado") or "") in ESTADOS_FECHADOS or relida.get("apagada_em"):
             return False
         demanda = relida
     else:

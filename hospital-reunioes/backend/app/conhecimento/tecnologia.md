@@ -90,6 +90,14 @@ A Etapa nunca é digitada à mão: ela é lida do planejamento da Vitta e aparec
 
 Ao abrir um pedido que já foi para a Vitta, aparece também **O que muda**: o que aquela entrega acrescenta, em linguagem de quem usa. Esse texto vem do planejamento da Vitta, ou das suas decisões quando a melhoria foi planejada com a IA, e não se edita no aplicativo.
 
+## Apagar um pedido
+
+Um pedido que não vale mais pode sair da lista pelo botão **Apagar**, no alto do pedido aberto. O aplicativo pede confirmação antes de apagar, e depois não dá para desfazer.
+
+Só dá para apagar enquanto ninguém começou a fazer o pedido. A conversa que ainda não virou card, a Registrada, quem apaga é quem escreveu. Depois do Criar o card, com o pedido Em análise ou Planejada, só o Desenvolvedor apaga: se quiser tirar um pedido seu nessa fase, peça na Conversa da Demanda. De Em desenvolvimento em diante, o aplicativo não deixa apagar. O botão só aparece para quem pode usar.
+
+O pedido apagado some da lista junto com a conversa com a IA, a Conversa da Demanda e os anexos. No desenvolvimento da Vitta o card não some: ele fecha como não planejado, com um comentário dizendo que foi apagado no aplicativo, e o histórico das decisões fica guardado lá. Se o desenvolvimento não responder na hora, nada é apagado e a tela pede para tentar de novo.
+
 ## O Planejamento da Demanda
 
 O Planejamento da Demanda é o caminho da melhoria na conversa com o Assistente: transforma o pedido de uma coisa nova, ou de uma mudança, num plano que a Vitta consegue construir. A IA faz as perguntas que a Vitta faria, uma por vez, e quem decide é você. Ele começa quando você escolhe melhoria na conversa.
@@ -122,6 +130,7 @@ A IA cuida das decisões de negócio: o problema, quem usa, as regras e o que fi
 - A lista ao lado da conversa mostra os pedidos de quem está olhando, e a Etapa de cada um vem do desenvolvimento, sem ninguém escrever à mão.
 - O Desenvolvedor, administrador com login do GitHub no cadastro, vê as Demandas de todos, com a conversa inteira e os anexos; o diretor vê só as suas, sem número nem link do card.
 - Uma Demanda se liga a um trabalho de desenvolvimento só, e a Etapa é lida de lá, nunca digitada.
+- Um pedido se apaga só até Planejada, com confirmação, pela mão de quem escreveu a conversa que não virou card ou do Desenvolvedor no card criado, e no desenvolvimento o card fecha como não planejado e nunca é apagado.
 - O texto que sai da Demanda para o material público do desenvolvimento passa por uma peneira que esconde CPF, telefone, nome e outros dados pessoais.
 - Os prints e os documentos ficam só dentro do aplicativo e são apagados 30 dias depois de Em produção, ou logo quando a entrega fica Não será feita.
 - Um documento anexado é um pedido só, mesmo com várias melhorias dentro, e a IA lê o texto inteiro, sem resumir antes.

@@ -14,7 +14,9 @@ Tres invariantes que o resto do app herda:
   `ler_do_repositorio`, `buscar_no_codigo` e `listar_issues_abertas`, e
   nenhuma delas escreve.
 - **Escrita minima.** So o "Criar o card" do chat escreve (ADR 0077, decisao
-  6): o POST que abre a issue e o PATCH que a designa. Nenhum verbo de LEITURA de
+  6): o POST que abre a issue e o PATCH que a designa. Desde a ADR 0084
+  (decisao 2) o "Apagar" tambem: o comentario de motivo e o PATCH que fecha a
+  issue como nao planejada. Issue nunca se apaga. Nenhum verbo de LEITURA de
   comentario: nada do GitHub volta para o app alem da foto da issue (ADR 0054,
   decisao 5). O token fine-grained do Pedro tem Issues: write neste
   repositorio e mais nada (ADR 0054, decisao 8).
@@ -40,7 +42,7 @@ from urllib.parse import quote, urlencode
 import httpx
 
 from app.config import settings
-from app.services.tecnologia_vinculo import bloco_para_o_diretor
+from app.services.tecnologia_vinculo import FECHAMENTO_NAO_PLANEJADA, bloco_para_o_diretor
 
 logger = logging.getLogger(__name__)
 
@@ -400,6 +402,21 @@ def designar(numero: int, logins: list[str]) -> dict[str, Any]:
     if not isinstance(dados, dict) or not designado(dados, logins):
         raise GithubIndisponivelError(f"O GitHub nao designou {', '.join(logins)} na issue #{numero}")
     return dados
+
+
+def fechar_como_nao_planejada(numero: int, *, comentario: str) -> None:
+    """Comenta o motivo e fecha a issue como nao planejada (issue #1549, ADR 0084,
+    decisao 2).
+
+    O comentario vai antes, para o motivo aparecer na issue antes do fechamento.
+    Um 404 aqui nao e resposta (a issue estava vinculada): vira
+    indisponibilidade, e quem chama nao apaga nada no app.
+    """
+    try:
+        _chamar("POST", f"/issues/{numero}/comments", json={"body": comentario})
+        _chamar("PATCH", f"/issues/{numero}", json={"state": "closed", "state_reason": FECHAMENTO_NAO_PLANEJADA})
+    except IssueNaoEncontradaError as exc:
+        raise GithubIndisponivelError(f"A issue #{numero} nao foi encontrada para fechar") from exc
 
 
 # A chave do dono da raiz na foto (issue #1534).

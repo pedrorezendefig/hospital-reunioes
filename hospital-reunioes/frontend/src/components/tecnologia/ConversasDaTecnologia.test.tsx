@@ -699,3 +699,79 @@ describe("Designação falhou (issue #1536, ADR 0083, decisão 7)", () => {
     expect(screen.queryByRole("button", { name: "Designar de novo" })).toBeNull();
   });
 });
+
+describe("Apagar a Demanda (issue #1549, ADR 0084, decisão 2)", () => {
+  const APAGAR_URL = `${LISTA}/d-1`;
+  const PODE = demanda("d-1", "Botão de responder some na Ouvidoria", { pode_apagar: true });
+  const NAO_PODE = demanda("d-1", "Botão de responder some na Ouvidoria", { pode_apagar: false });
+
+  function dialogo() {
+    return screen.queryByRole("dialog");
+  }
+
+  it("quem pode apagar vê o botão Apagar na conversa aberta, e quem não pode não vê", async () => {
+    montar((url) => (url === LISTA ? { status: 200, corpo: [PODE] } : { status: 200, corpo: conversa("d-1") }));
+    fireEvent.click(await within(lista()).findByRole("button", { name: /Botão de responder/ }));
+    expect(await screen.findByRole("button", { name: "Apagar" })).toBeTruthy();
+    cleanup();
+
+    montar((url) => (url === LISTA ? { status: 200, corpo: [NAO_PODE] } : { status: 200, corpo: conversa("d-1") }));
+    fireEvent.click(await within(lista()).findByRole("button", { name: /Botão de responder/ }));
+    await screen.findByText("Onde isso aconteceu?");
+    expect(screen.queryByRole("button", { name: "Apagar" })).toBeNull();
+  });
+
+  it("o clique pede confirmação antes de apagar, e Cancelar não apaga nada", async () => {
+    const chamadas = montar((url) =>
+      url === LISTA ? { status: 200, corpo: [PODE] } : { status: 200, corpo: conversa("d-1") },
+    );
+    fireEvent.click(await within(lista()).findByRole("button", { name: /Botão de responder/ }));
+
+    fireEvent.click(await screen.findByRole("button", { name: "Apagar" }));
+
+    const confirmacao = await screen.findByRole("dialog");
+    expect(within(confirmacao).getByRole("heading", { name: "Apagar este pedido?" })).toBeTruthy();
+    expect(chamadas.some((c) => c.metodo === "DELETE")).toBe(false);
+    fireEvent.click(within(confirmacao).getByRole("button", { name: "Cancelar" }));
+
+    await waitFor(() => expect(dialogo()).toBeNull());
+    expect(chamadas.some((c) => c.metodo === "DELETE")).toBe(false);
+  });
+
+  it("confirmar apaga, e o pedido some da lista", async () => {
+    let apagada = false;
+    const chamadas = montar((url, metodo) => {
+      if (url === LISTA) return { status: 200, corpo: apagada ? [COM_VINCULO] : [PODE, COM_VINCULO] };
+      if (url === APAGAR_URL && metodo === "DELETE") {
+        apagada = true;
+        return { status: 204, corpo: null };
+      }
+      return { status: 200, corpo: conversa("d-1") };
+    });
+    fireEvent.click(await within(lista()).findByRole("button", { name: /Botão de responder/ }));
+    fireEvent.click(await screen.findByRole("button", { name: "Apagar" }));
+
+    const confirmacao = await screen.findByRole("dialog");
+    fireEvent.click(within(confirmacao).getByRole("button", { name: "Apagar" }));
+
+    await waitFor(() => expect(within(lista()).queryByText("Botão de responder some na Ouvidoria")).toBeNull());
+    expect(chamadas.filter((c) => c.url === APAGAR_URL && c.metodo === "DELETE")).toHaveLength(1);
+    expect(within(lista()).getByText("Aviso quando a ata sair")).toBeTruthy();
+  });
+
+  it("a recusa do servidor aparece na tela e o pedido fica", async () => {
+    montar((url, metodo) => {
+      if (url === LISTA) return { status: 200, corpo: [PODE] };
+      if (url === APAGAR_URL && metodo === "DELETE") {
+        return { status: 502, corpo: { detail: "O GitHub não respondeu, e o card não foi fechado lá." } };
+      }
+      return { status: 200, corpo: conversa("d-1") };
+    });
+    fireEvent.click(await within(lista()).findByRole("button", { name: /Botão de responder/ }));
+    fireEvent.click(await screen.findByRole("button", { name: "Apagar" }));
+    fireEvent.click(within(await screen.findByRole("dialog")).getByRole("button", { name: "Apagar" }));
+
+    expect(await screen.findByText("O GitHub não respondeu, e o card não foi fechado lá.")).toBeTruthy();
+    expect(within(lista()).getByText("Botão de responder some na Ouvidoria")).toBeTruthy();
+  });
+});
