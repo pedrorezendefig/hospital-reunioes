@@ -39,6 +39,10 @@ O chat da aba (issues #1381, #1383 e #1384):
                                                 vincula.
 - POST  /admin/tecnologia/chat/{id}/reenviar    o "Reenviar" do Envio falhou,
                                                 pela mesma porta (issue #1535).
+- POST  /admin/tecnologia/chat/{id}/designar-de-novo  so a designacao da
+                                                issue que nasceu sem o
+                                                Responsavel, pelo
+                                                Desenvolvedor (issue #1536).
 
 O print do chat (ADR 0056, decisao 4; ADR 0077, decisao 8):
 
@@ -1163,6 +1167,54 @@ async def reenviar_o_card(
     return _enviar_o_card(
         supabase, demanda=demanda, atual=atual, ator=ator, assignees=assignees, responsavel_id=responsavel_id
     )
+
+
+MOTIVO_SEM_DESIGNACAO_FALHOU = "Este card não está com a designação falhada. Recarregue a página."
+MOTIVO_SEM_LOGIN_PARA_DESIGNAR = "O Responsável deste card não tem login do GitHub no cadastro."
+
+
+@router.post("/chat/{demanda_id}/designar-de-novo", response_model=DemandaResponse)
+@limiter.shared_limit(LIMITE_DO_VINCULO, ESCOPO_DO_VINCULO)
+async def designar_de_novo(
+    request: Request,
+    demanda_id: str,
+    ator: dict = Depends(require_super_admin),
+    supabase: Client = Depends(get_supabase_client),
+):
+    """O "Designar de novo" da issue que nasceu sem o Responsavel (issue #1536,
+    ADR 0083, decisao 7).
+
+    So o Desenvolvedor: para o diretor a rota responde como inexistente, porque
+    a designacao falhada nem aparece para ele. Pede ao GitHub so a designacao,
+    com o login do Responsavel que ficou na Demanda, sem criar issue nenhuma. A
+    designacao que pega limpa o estado; a que falha de novo sai como 502 e
+    guarda o motivo novo.
+    """
+    if not e_desenvolvedor(ator):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=MOTIVO_CHAT_NAO_ENCONTRADO)
+    demanda = _buscar_demanda(supabase, demanda_id)
+    if not tecnologia_envio.designacao_falhou(demanda):
+        _conflito(MOTIVO_SEM_DESIGNACAO_FALHOU)
+    logins, responsavel_id = _responsavel_do_card(supabase, demanda.get("responsavel_id"), guardado=True)
+    if not logins:
+        _conflito(MOTIVO_SEM_LOGIN_PARA_DESIGNAR)
+    _exigir_integracao()
+    try:
+        github_client.designar(int(demanda["github_issue_numero"]), logins)
+    except (github_client.GithubIndisponivelError, github_client.GithubNaoConfiguradoError) as exc:
+        supabase.table(TABELA_DEMANDAS).update({"envio_motivo": str(exc), "envio_em": _agora()}).eq(
+            "id", demanda_id
+        ).execute()
+        _issue_indisponivel()
+    result = (
+        supabase.table(TABELA_DEMANDAS)
+        .update({"envio_estado": None, "envio_motivo": None, "envio_em": _agora(), "responsavel_id": responsavel_id})
+        .eq("id", demanda_id)
+        .execute()
+    )
+    if not result.data:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Demanda nao encontrada")
+    return _para_a_lista(supabase, result.data, ator=ator)[0]
 
 
 def _enviar_o_card(

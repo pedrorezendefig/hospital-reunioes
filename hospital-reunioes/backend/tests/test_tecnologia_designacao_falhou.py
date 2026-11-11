@@ -157,3 +157,62 @@ class TestQuemVe:
         assert linha["designacao_falhou"] is False
         assert linha["envio_motivo"] is None
         assert linha["envio_falhou"] is False
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 3. Designar de novo
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+def _designar_de_novo(client, demanda_id: str):
+    return client.post(f"{CHAT}/{demanda_id}/designar-de-novo")
+
+
+class TestDesignarDeNovo:
+    def test_pede_so_a_designacao_com_o_login_do_responsavel_e_limpa_o_estado(self, monkeypatch):
+        client, sb, gh = _cenario(monkeypatch, participantes=[PEDRO, DIRETOR, LUCAS])
+        demanda_id = _ate_o_resumo(client, monkeypatch)
+        rede = _na_rede(monkeypatch, _GithubDeVerdadeNaRede(status_da_designacao=422))
+        assert client.post(f"{CHAT}/{demanda_id}/criar-card", json={"responsavel_id": "P4"}).status_code == 200
+        rede.status_da_designacao = 200
+        rede.chamadas.clear()
+        pedro = _como(PEDRO, sb, gh, monkeypatch)
+
+        resposta = _designar_de_novo(pedro, demanda_id)
+
+        assert resposta.status_code == 200, resposta.text
+        assert rede.chamadas == [("PATCH", f"{URL_DO_REPO}/issues/900", {"assignees": ["lucas-vitta"]})]
+        demanda = _demandas(sb)[0]
+        assert demanda["envio_estado"] is None
+        assert demanda["envio_motivo"] is None
+        assert demanda["github_issue_numero"] == 900
+        assert resposta.json()["designacao_falhou"] is False
+
+    def test_o_diretor_nao_designa_de_novo(self, monkeypatch):
+        diretor, sb, _, demanda_id, rede = _demanda_com_designacao_falhada(monkeypatch)
+        rede.chamadas.clear()
+
+        assert _designar_de_novo(diretor, demanda_id).status_code == 404
+
+        assert rede.chamadas == []
+        assert _demandas(sb)[0]["envio_estado"] == "designacao_falhou"
+
+    def test_a_designacao_que_falha_de_novo_continua_no_estado(self, monkeypatch):
+        _, sb, gh, demanda_id, rede = _demanda_com_designacao_falhada(monkeypatch)
+        rede.status_da_designacao = 503
+        pedro = _como(PEDRO, sb, gh, monkeypatch)
+
+        assert _designar_de_novo(pedro, demanda_id).status_code == 502
+
+        assert _demandas(sb)[0]["envio_estado"] == "designacao_falhou"
+        assert _demandas(sb)[0]["envio_motivo"] == "GitHub respondeu 503"
+
+    def test_demanda_sem_designacao_falhada_nao_chama_o_github(self, monkeypatch):
+        client, sb, gh = _cenario(monkeypatch)
+        demanda_id = _ate_o_resumo(client, monkeypatch)
+        rede = _na_rede(monkeypatch, _GithubDeVerdadeNaRede())
+        assert client.post(f"{CHAT}/{demanda_id}/criar-card").status_code == 200
+        rede.chamadas.clear()
+
+        assert _designar_de_novo(_como(PEDRO, sb, gh, monkeypatch), demanda_id).status_code == 409
+        assert rede.chamadas == []
