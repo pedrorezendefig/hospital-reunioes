@@ -48,7 +48,7 @@ Cada pedido tem, além da conversa com a IA, a **Conversa da Demanda**: um espa�
 
 Escreve e lê na Conversa quem vê o pedido: você, que pediu, e o Desenvolvedor. Outra pessoa da diretoria não vê, nem abrindo pelo endereço.
 
-Para chamar alguém, escreva @ e escolha o nome na lista que aparece, como nos comentários de uma pendência. A lista traz só quem vê o pedido. Quem você marcou é avisado no sino. Sem marcar ninguém, a sua mensagem avisa o Responsável, a pessoa da Vitta que cuida do pedido; enquanto o pedido não virou card ainda não há Responsável, então marque alguém para ser lido. Quando é alguém da Vitta que escreve sem marcar ninguém, a mensagem avisa você. Ninguém é avisado da própria mensagem. O clique no aviso do sino abre o pedido na aba Tecnologia.
+Para chamar alguém, escreva @ e escolha o nome na lista que aparece, como nos comentários de uma pendência. A lista traz só quem vê o pedido. Quem você marcou é avisado no sino. Sem marcar ninguém, a sua mensagem avisa o Responsável, a pessoa da Vitta que cuida do pedido; enquanto o pedido não virou card ainda não há Responsável, então marque alguém para ser lido. Quando é alguém da Vitta que escreve sem marcar ninguém, a mensagem avisa você. Ninguém é avisado da própria mensagem. Todo aviso chega também por e-mail, com o nome do pedido e de quem escreveu, para você não precisar estar com o aplicativo aberto. O clique no aviso do sino abre o pedido na aba Tecnologia, e o link do e-mail abre o pedido no mesmo lugar.
 
 O que se escreve na Conversa fica só dentro do aplicativo e nunca vai para o material público do desenvolvimento.
 
@@ -110,7 +110,7 @@ A IA cuida das decisões de negócio: o problema, quem usa, as regras e o que fi
 - A aba é uma tela só, a conversa com o Assistente, que pergunta se é bug ou melhoria e confirma antes de seguir.
 - Quem abre o pedido é sempre o diretor, e os pedidos da Vitta ao hospital que não nascem de um pedido dele continuam no WhatsApp.
 - Cada pedido tem a Conversa da Demanda, entre quem pediu e a Vitta, separada da conversa com a IA e guardada só dentro do aplicativo.
-- Na Conversa da Demanda, quem é marcado pelo nome é avisado no sino, e sem marcação a mensagem de quem pediu avisa o Responsável e a da Vitta avisa quem pediu.
+- Na Conversa da Demanda, quem é marcado pelo nome é avisado no sino e por e-mail, e sem marcação a mensagem de quem pediu avisa o Responsável e a da Vitta avisa quem pediu.
 - No bug, a IA faz no máximo cinco perguntas, e o pedido só vai para a Vitta no clique em Criar o card.
 - O bug que sai do Criar o card vai direto para o desenvolvimento, sem ninguém da Vitta precisar assumir antes.
 - O card que não chega à Vitta fica marcado como Envio falhou e se resolve com Reenviar, pelo diretor ou pela Vitta; o sistema nunca reenvia sozinho.

@@ -32,11 +32,7 @@ def enviar_aviso_da_conversa(supabase, *, destinatario_id: str, aviso: str, auto
         from app.services.email_constants import get_logo_data_uri
 
         linhas = (
-            supabase.table("participantes")
-            .select("id, nome_completo, email")
-            .eq("id", destinatario_id)
-            .execute()
-            .data
+            supabase.table("participantes").select("id, nome_completo, email").eq("id", destinatario_id).execute().data
         )
         destinatario = linhas[0] if linhas else None
         if not destinatario or not destinatario.get("email"):

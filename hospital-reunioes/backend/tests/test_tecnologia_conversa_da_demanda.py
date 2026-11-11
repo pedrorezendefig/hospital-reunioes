@@ -4,7 +4,8 @@ A troca de mensagens entre o diretor e os Desenvolvedores dentro de uma
 Demanda: tabela própria, separada da conversa com o agente, e que nunca vai
 para o GitHub. Escreve e lê quem vê a Demanda (o `pode_ver`, a mesma regra da
 lista). Menção é por nome, no formato dos comentários de Pendência
-("@Nome Completo"). O aviso sai pelo sino:
+("@Nome Completo"). O aviso sai pelo sino e, desde a issue #1538, também
+por e-mail, para o mesmo destinatário:
 
 - menção avisa o mencionado;
 - sem menção, a mensagem do autor da Demanda avisa o Responsável, e a do
@@ -44,6 +45,22 @@ def _reset_rate_limiter():
     limiter._storage.reset()
     yield
     limiter._storage.reset()
+
+
+@pytest.fixture(autouse=True)
+def emails(monkeypatch) -> list[dict]:
+    """Cada e-mail que sairia, gravado na porta do transporte (Resend, SMTP ou
+    mock): daqui para dentro é o serviço de e-mail que já existe. Autouse
+    porque toda mensagem da Conversa avisa por e-mail."""
+    enviados: list[dict] = []
+
+    def _gravar(destinatario, assunto, html_content, texto_fallback, *a, **kw):
+        enviados.append({"para": destinatario, "assunto": assunto, "html": html_content, "texto": texto_fallback})
+        return True
+
+    monkeypatch.setattr(tecnologia_email, "_enviar_email", _gravar)
+    monkeypatch.setattr(settings, "frontend_url", "https://app.hsm.test")
+    return enviados
 
 
 def _demanda_do_diretor(**campos) -> dict:
@@ -165,22 +182,6 @@ class TestAvisoNoSino:
 # ═══════════════════════════════════════════════════════════════════════════
 # 3. O aviso por e-mail (issue #1538, ADR 0083, decisão 8)
 # ═══════════════════════════════════════════════════════════════════════════
-
-
-@pytest.fixture(autouse=True)
-def emails(monkeypatch) -> list[dict]:
-    """Cada e-mail que sairia, gravado na porta do transporte (Resend, SMTP ou
-    mock): daqui para dentro é o serviço de e-mail que já existe. Autouse
-    porque toda mensagem da Conversa avisa por e-mail."""
-    enviados: list[dict] = []
-
-    def _gravar(destinatario, assunto, html_content, texto_fallback, *a, **kw):
-        enviados.append({"para": destinatario, "assunto": assunto, "html": html_content, "texto": texto_fallback})
-        return True
-
-    monkeypatch.setattr(tecnologia_email, "_enviar_email", _gravar)
-    monkeypatch.setattr(settings, "frontend_url", "https://app.hsm.test")
-    return enviados
 
 
 class TestAvisoPorEmail:
