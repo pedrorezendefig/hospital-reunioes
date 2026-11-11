@@ -789,6 +789,8 @@ export function ConversasDaTecnologia({
   const [naTela, setNaTela] = useState<"lista" | "conversa">("lista");
   /** A Demanda abriu pelo "Conversar" do card: a caixa da Conversa da Demanda vem em foco. */
   const [focarConversa, setFocarConversa] = useState(false);
+  /** O pedido aberto na largura toda, com a lista recolhida: só o Ampliar liga (issue #1593). */
+  const [ampliada, setAmpliada] = useState(false);
   const [desenvolvedor, setDesenvolvedor] = useState(false);
   /** Nulo até o servidor dizer quem está logado: o Desenvolvedor abre em Para mim. */
   const [filtro, setFiltro] = useState<Filtro | null>(null);
@@ -895,10 +897,11 @@ export function ConversasDaTecnologia({
     [carregar],
   );
 
-  const abrir = useCallback((demanda: Demanda | null, conversar = false) => {
+  const abrir = useCallback((demanda: Demanda | null, conversar = false, ampliar = false) => {
     setAberta(demanda);
     setDestacada(demanda?.id ?? null);
     setFocarConversa(conversar);
+    setAmpliada(ampliar);
     setChave((atual) => atual + 1);
     setNaTela("conversa");
   }, []);
@@ -954,8 +957,8 @@ export function ConversasDaTecnologia({
     abrir(pedida);
   }, [demandaInicial, demandas, abrir]);
 
-  /** Com uma Demanda aberta, a lista recolhe também na tela larga (issue #1551). */
-  const recolhida = naTela === "conversa" && aberta !== null;
+  /** A lista recolhe na tela larga só com o pedido ampliado (issue #1593, que reverteu a #1551). */
+  const recolhida = naTela === "conversa" && aberta !== null && ampliada;
 
   return (
     <div className="space-y-4">

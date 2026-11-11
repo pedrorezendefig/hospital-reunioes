@@ -931,32 +931,63 @@ describe("A barra de filtros por categoria (issue #1578, emenda da ADR 0084)", (
     expect(within(filtros()).queryByRole("button", { name: "Limpar filtros" })).toBeNull();
   });
 
-  it("a barra fica em cima, fora da coluna da lista, e recolhe junto com ela", async () => {
+  it("a barra fica em cima, fora da coluna da lista", async () => {
     montar((url) => {
       if (url === LISTA) return { status: 200, corpo: [SEM_CARD] };
-      if (url === `${LISTA}/d-1`) return { status: 200, corpo: conversa("d-1") };
       return { status: 404, corpo: {} };
     });
     const painelDaLista = () => lista().parentElement as HTMLElement;
-    const recolhida = /(^|\s)md:hidden(\s|$)/;
-    const voltar = () => screen.getByRole("button", { name: VOLTAR_PARA_A_LISTA });
 
     await within(lista()).findByText("Botão de responder some na Ouvidoria");
     expect(painelDaLista().contains(filtros())).toBe(false);
     expect(filtros().compareDocumentPosition(lista()) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+});
+
+describe("O pedido ao lado da lista e o Ampliar (issue #1593)", () => {
+  const OUTRO = demanda("d-3", "Relatório de leitos atrasa");
+  const recolhida = /(^|\s)md:hidden(\s|$)/;
+
+  function comDuas() {
+    return montar((url) => {
+      if (url === LISTA) return { status: 200, corpo: [SEM_CARD, OUTRO] };
+      if (url === `${LISTA}/d-1`) return { status: 200, corpo: conversa("d-1") };
+      if (url === `${LISTA}/d-3`) return { status: 200, corpo: conversa("d-3") };
+      return { status: 404, corpo: {} };
+    });
+  }
+
+  const painelDaLista = () => lista().parentElement as HTMLElement;
+  const filtros = () => screen.getByRole("region", { name: "Filtros da lista" });
+  const aberto = () => screen.getByRole("region", { name: "Conversa aberta" });
+  const voltar = () => screen.getByRole("button", { name: VOLTAR_PARA_A_LISTA });
+  const cardDe = (titulo: RegExp) =>
+    within(lista())
+      .getAllByRole("listitem")
+      .find((item) => within(item).queryByRole("button", { name: titulo })) as HTMLElement;
+
+  /** A lista e a barra à vista na tela larga, e o Voltar só no celular. */
+  function listaAoLado() {
     expect(painelDaLista().className).not.toMatch(recolhida);
     expect(filtros().className).not.toMatch(recolhida);
     expect(voltar().className).toMatch(recolhida);
+  }
 
-    fireEvent.click(within(lista()).getByRole("button", { name: /Botão de responder some/ }));
-    await screen.findByText("Onde isso aconteceu?");
+  /** A lista e a barra recolhidas na tela larga, e o Voltar à vista. */
+  function listaRecolhida() {
     expect(painelDaLista().className).toMatch(recolhida);
     expect(filtros().className).toMatch(recolhida);
     expect(voltar().className).not.toMatch(recolhida);
+  }
 
-    fireEvent.click(voltar());
-    await waitFor(() => expect(painelDaLista().className).not.toMatch(recolhida));
-    expect(filtros().className).not.toMatch(recolhida);
+  it("em tela larga, o clique no cartão abre o pedido com a lista visível", async () => {
+    comDuas();
+    await within(lista()).findByText("Botão de responder some na Ouvidoria");
+
+    fireEvent.click(within(lista()).getByRole("button", { name: /Botão de responder some/ }));
+    await screen.findByText("Onde isso aconteceu?");
+
+    listaAoLado();
   });
 });
 
