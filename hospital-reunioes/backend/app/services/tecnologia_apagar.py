@@ -61,9 +61,8 @@ def apagar(supabase, demanda: dict[str, Any], *, ator: dict[str, Any]) -> None:
     if numero:
         _fechar_no_github(int(numero))
     demanda_id = str(demanda["id"])
-    supabase.table(TABELA_DEMANDAS).update({"apagada_em": datetime.now(UTC).isoformat(), "apagada_por": ator["id"]}).eq(
-        "id", demanda_id
-    ).execute()
+    lapide = {"apagada_em": datetime.now(UTC).isoformat(), "apagada_por": ator["id"]}
+    supabase.table(TABELA_DEMANDAS).update(lapide).eq("id", demanda_id).execute()
     _levar_junto(supabase, demanda_id)
 
 
