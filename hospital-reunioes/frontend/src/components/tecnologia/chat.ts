@@ -22,6 +22,11 @@ export function urlDoCriarOCard(demandaId: string): string {
   return `${urlDaConversa(demandaId)}/criar-card`;
 }
 
+/** O "Atualizar o card" no fim da revisão (issue #1558): regrava o mesmo card com o pedido revisado. */
+export function urlDoAtualizarOCard(demandaId: string): string {
+  return `${urlDaConversa(demandaId)}/atualizar-card`;
+}
+
 /** O "Reenviar" do Envio falhou (issue #1535), pela mesma porta do Criar o card. */
 export function urlDoReenviar(demandaId: string): string {
   return `${urlDaConversa(demandaId)}/reenviar`;
@@ -184,6 +189,18 @@ export type ConversaDoChat = {
   responsavel?: string | null;
   /** O documento vivo, só na melhoria (issue #1553); nulo no bug e antes do primeiro rascunho. */
   documento?: DocumentoDoPlanejamento | null;
+  /**
+   * A marca da Revisão com o código de hoje (issue #1557); nula fora dela. Com
+   * ela, o resumo leva o Atualizar o card no lugar do Criar o card (issue #1558).
+   */
+  revisao?: RevisaoDaConversa | null;
+};
+
+export type RevisaoDaConversa = {
+  iniciada_em: string | null;
+  versao_base: string | null;
+  saiu: string[];
+  continua: string[];
 };
 
 /**

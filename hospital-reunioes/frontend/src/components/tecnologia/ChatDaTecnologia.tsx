@@ -59,6 +59,7 @@ import {
   URL_DO_CHAT_DA_ABA,
   URL_DOS_DESENVOLVEDORES,
   urlDaConversa,
+  urlDoAtualizarOCard,
   urlDoCriarOCard,
   urlDoNaoBateu,
   urlDoResumoDaMelhoria,
@@ -69,6 +70,7 @@ import { FraseEOQueMuda } from "./DocumentoDoCard";
 // A mesma pergunta que o backend guarda como primeira fala da conversa.
 export const ABERTURA = "Isso é um bug, algo que não funciona como deveria, ou uma melhoria?";
 export const CRIAR_O_CARD = "Criar o card";
+export const ATUALIZAR_O_CARD = "Atualizar o card";
 export const CONTINUAR_RESPONDENDO = "Continuar respondendo";
 export const NAO_BATEU = "Não bateu";
 export const TITULO_DO_CHAT = "Assistente de Tecnologia";
@@ -80,6 +82,11 @@ const TITULO_DO_RESUMO_DA_MELHORIA = "Resumo da melhoria";
 const O_QUE_O_CARD_FAZ = "Criar o card manda o bug para o desenvolvimento da Vitta, que começa a trabalhar nele.";
 const O_QUE_O_CARD_DA_MELHORIA_FAZ =
   "Criar o card manda o pedido para a Vitta, com as suas decisões e o que ficou em aberto. A parte técnica a Vitta planeja antes de começar.";
+// O fim da Revisão com o código de hoje (issue #1558, ADR 0084, decisão 3).
+const O_QUE_O_ATUALIZAR_FAZ =
+  "Atualizar o card troca o pedido que está com a Vitta pelo revisado, no mesmo card. As partes que ainda não começaram são fechadas, e a Vitta planeja de novo.";
+const ATUALIZADO =
+  "O card foi atualizado com o pedido revisado. As partes que ainda não tinham começado foram fechadas, e a Vitta planeja de novo a partir dele.";
 const ENVIADO =
   "A Vitta recebeu o seu relato e o bug já está na fila do desenvolvimento. Os prints ficaram guardados no aplicativo.";
 const ENVIADO_DA_MELHORIA =
@@ -344,6 +351,8 @@ type PropsDoResumo = {
   pensando: boolean;
   /** Cria o card com o Responsável escolhido, ou sem ninguém escolhido. */
   onCriar: (responsavelId: string | null) => void;
+  /** No fim da revisão (issue #1558): o botão é o Atualizar o card, e o Responsável já é o do card. */
+  naRevisao?: boolean;
   /** Manda o que não bateu; devolve se o servidor aceitou. */
   onNaoBateu: (texto: string) => Promise<boolean>;
   onRecusaNaTela: (motivo: string) => void;
@@ -357,6 +366,7 @@ function ResumoNaTela({
   oQueOCardFaz,
   pensando,
   onCriar,
+  naRevisao = false,
   onNaoBateu,
   onRecusaNaTela,
   children,
@@ -389,7 +399,7 @@ function ResumoNaTela({
       {children}
 
       <div className="space-y-3 border-t border-slate-100 pt-4">
-        <QuemCuidaDisto token={token} escolhido={responsavel} onEscolher={setResponsavel} />
+        {!naRevisao && <QuemCuidaDisto token={token} escolhido={responsavel} onEscolher={setResponsavel} />}
         <div className="flex flex-wrap gap-2">
           <button
             type="button"
@@ -397,7 +407,7 @@ function ResumoNaTela({
             disabled={pensando}
             className="px-4 py-2 rounded-xl bg-primary text-white text-sm font-semibold disabled:opacity-50"
           >
-            {CRIAR_O_CARD}
+            {naRevisao ? ATUALIZAR_O_CARD : CRIAR_O_CARD}
           </button>
           <button
             type="button"
@@ -554,6 +564,12 @@ export function ChatDaTecnologia({ token, demandaId = null, onMudou }: PropsDoCh
       return nova;
     },
     [enviar, onMudou],
+  );
+
+  /** O "Atualizar o card" no fim da revisão (issue #1558): falhou, nada mudou e o botão continua. */
+  const atualizarOCard = useCallback(
+    (demandaId: string): Promise<ConversaDoChat | null> => enviar(urlDoAtualizarOCard(demandaId), {}),
+    [enviar],
   );
 
   /**
@@ -754,7 +770,7 @@ export function ChatDaTecnologia({ token, demandaId = null, onMudou }: PropsDoCh
 
   if (conversa?.estado === "enviado") {
     return (
-      <Fechamento texto={conversa.planejamento ? ENVIADO_DA_MELHORIA : ENVIADO}>
+      <Fechamento texto={conversa.revisao ? ATUALIZADO : conversa.planejamento ? ENVIADO_DA_MELHORIA : ENVIADO}>
         {/* Só leitura: o Responsável muda no GitHub e a tela acompanha (issue #1534, ADR 0083, decisão 6). */}
         {conversa.responsavel && <p className="text-sm text-text-secondary">Responsável: {conversa.responsavel}</p>}
         <button
@@ -860,10 +876,13 @@ export function ChatDaTecnologia({ token, demandaId = null, onMudou }: PropsDoCh
         {aviso}
         <ResumoNaTela
           titulo={TITULO_DO_RESUMO_DA_MELHORIA}
-          oQueOCardFaz={O_QUE_O_CARD_DA_MELHORIA_FAZ}
+          oQueOCardFaz={conversa.revisao ? O_QUE_O_ATUALIZAR_FAZ : O_QUE_O_CARD_DA_MELHORIA_FAZ}
           pensando={pensando}
           token={token}
-          onCriar={(responsavelId) => criarOCard(conversa.demanda_id, responsavelId)}
+          naRevisao={Boolean(conversa.revisao)}
+          onCriar={(responsavelId) =>
+            conversa.revisao ? atualizarOCard(conversa.demanda_id) : criarOCard(conversa.demanda_id, responsavelId)
+          }
           onNaoBateu={naoBateu}
           onRecusaNaTela={setErro}
         >
