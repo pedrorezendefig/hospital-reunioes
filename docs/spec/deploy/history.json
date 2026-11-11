@@ -2,6 +2,51 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-11-11T04:30:15-03:00",
+      "sha": "59f0416a6b38890fa0dd37d756e5a679b56b6cef",
+      "app_version": "0.249.0",
+      "subject": "Onda onda-entregas-onda5: Carga do histórico de entregas desde o primeiro deploy",
+      "raw_subject": "chore(deploy): registro da onda onda-entregas-onda5 (#1570)",
+      "scope": [
+        "backend"
+      ],
+      "prds": [
+        1548
+      ],
+      "result": "healthy",
+      "duration_seconds": 49,
+      "services_touched": [
+        "backend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        },
+        {
+          "service": "frontend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "onda-enxuta onda-entregas-onda5: PR #1570 (issue #1555), mergeados PR a PR. Merge pela API do GitHub, um build. Registro pela Action pos-merge depois do health.",
+      "etapas": {
+        "merge_s": 2,
+        "build_s": {
+          "backend": 15
+        },
+        "health_s": 10
+      },
+      "responsavel": "pedrorezendefig"
+    },
+    {
       "at": "2026-11-11T03:46:13-03:00",
       "sha": "30b1b24e61ced60eff3bffeefad4bb0bcee2b4b1",
       "app_version": "0.248.0",
