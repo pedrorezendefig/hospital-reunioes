@@ -85,6 +85,10 @@ class DemandaResponse(BaseModel):
     # Quem abriu o card (issue #1554, ADR 0084, decisao 4): o diretor, pelo
     # chat, ou a Vitta, pela issue aberta no terminal. O selo da lista.
     origem: Literal["diretor", "vitta"] = "diretor"
+    # O video de demonstracao da entrega (issue #1559): o link `https` lido do
+    # marcador da issue-raiz e quando ele chegou. Nulo, sem selo nem secao.
+    demonstracao_url: str | None = None
+    demonstracao_em: str | None = None
 
 
 class DesenvolvedorResponse(BaseModel):

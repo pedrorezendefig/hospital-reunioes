@@ -159,6 +159,19 @@ def cache_desatualizado(demanda: dict[str, Any], mudanca: dict[str, Any]) -> boo
     return any(valor != demanda.get(campo) for campo, valor in mudanca.items() if campo != CARIMBO_DA_SINCRONIZACAO)
 
 
+def demonstracao_nova(foto: dict[str, Any], demanda: dict[str, Any]) -> dict[str, Any]:
+    """O link da Demonstracao a gravar, com a data, ou nada (issue #1559).
+
+    So o link novo, ou trocado, escreve: o mesmo link de novo nao mexe na data
+    em que ele chegou. A foto sem o marcador tambem nao escreve, e o link ja
+    gravado fica: tirar o marcador da issue nao apaga a Demonstracao do card.
+    """
+    url = foto.get(github_client.FATO_DEMONSTRACAO)
+    if not url or url == demanda.get("demonstracao_url"):
+        return {}
+    return {"demonstracao_url": url, "demonstracao_em": datetime.now(UTC).isoformat()}
+
+
 def responsavel_da_foto(supabase, foto: dict[str, Any]) -> str | None:
     """O Responsavel que a foto diz: quem tem no cadastro o login do dono da
     issue (issue #1534, ADR 0083, decisao 6). `None` sem dono, ou com um dono
@@ -344,6 +357,7 @@ def sincronizar_demanda(
             _com_os_fatos(foto_do_github, demanda, ajustar_fatos), versao_em_producao=_versao_que_segura(demanda)
         )
         mudanca["responsavel_id"] = responsavel_id
+        mudanca.update(demonstracao_nova(foto_do_github, demanda))
         if not cache_desatualizado(demanda, mudanca):
             return False
         etapa_antes = demanda.get("etapa") or ETAPA_REGISTRADA
