@@ -2,6 +2,54 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-11-11T11:03:01-03:00",
+      "sha": "04d22b258a2243660b00e47aeb07c63278756631",
+      "app_version": "0.250.0",
+      "subject": "Onda onda-entregas-onda4: Documento vivo no planejamento e formato fixo do bloco Para o diretor; Aba Entregas",
+      "raw_subject": "chore(deploy): registro da onda onda-entregas-onda4 (#1568 #1569)",
+      "scope": [
+        "backend",
+        "frontend"
+      ],
+      "prds": [
+        1548
+      ],
+      "result": "healthy",
+      "duration_seconds": 25001,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        },
+        {
+          "service": "frontend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "onda-enxuta onda-entregas-onda4: PR #1568 (issue #1553), PR #1569 (issue #1556), mergeados PR a PR. Merge pela API do GitHub, um build. Registro pela Action pos-merge depois do health.",
+      "etapas": {
+        "merge_s": 6,
+        "build_s": {
+          "backend": 27,
+          "frontend": 247
+        },
+        "health_s": 0
+      },
+      "responsavel": "pedrorezendefig"
+    },
+    {
       "at": "2026-11-11T04:30:15-03:00",
       "sha": "59f0416a6b38890fa0dd37d756e5a679b56b6cef",
       "app_version": "0.249.0",
