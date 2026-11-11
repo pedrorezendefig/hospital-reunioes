@@ -145,7 +145,7 @@ describe("O Documento do card", () => {
     expect(item.textContent).toContain(SEM_O_QUE_MUDA);
   });
 
-  it("as Datas dizem quando foi criado, entregue e posto em produção", () => {
+  it("as Datas dizem dia e hora, em Brasília, de quando foi criado, entregue e posto em produção (issue #1580)", () => {
     montar(
       demanda({
         etapa: "em_producao",
@@ -156,17 +156,31 @@ describe("O Documento do card", () => {
     );
 
     expect(within(secao(TITULO_DATAS)).getAllByRole("listitem").map((item) => item.textContent)).toEqual([
-      "Criado em 01/11/2026",
-      "Entregue em 06/11/2026",
-      "Em produção em 07/11/2026",
+      "Criado em 01/11/2026 às 09:00",
+      "Entregue em 06/11/2026 às 15:00",
+      "Em produção em 07/11/2026 às 10:00",
     ]);
+  });
+
+  it("perto da meia-noite de Greenwich, o dia e a hora são os de Brasília (issue #1580)", () => {
+    montar(demanda({ etapa: "entregue", o_que_muda: "A frase.", fechada_em: "2026-11-07T01:30:00Z" }));
+
+    expect(within(secao(TITULO_DATAS)).getByText("Entregue em 06/11/2026 às 22:30")).toBeTruthy();
   });
 
   it("antes da entrega as Datas só têm a criação", () => {
     montar(VINCULADA);
 
     expect(within(secao(TITULO_DATAS)).getAllByRole("listitem").map((item) => item.textContent)).toEqual([
-      "Criado em 01/11/2026",
+      "Criado em 01/11/2026 às 09:00",
+    ]);
+  });
+
+  it("data ilegível de entrega ou de produção some das Datas, sem quebrar o Documento (issue #1580)", () => {
+    montar(demanda({ etapa: "em_producao", o_que_muda: "A frase.", fechada_em: "ontem", em_producao_em: "ontem" }));
+
+    expect(within(secao(TITULO_DATAS)).getAllByRole("listitem").map((item) => item.textContent)).toEqual([
+      "Criado em 01/11/2026 às 09:00",
     ]);
   });
 

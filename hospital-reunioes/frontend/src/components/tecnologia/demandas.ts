@@ -271,13 +271,19 @@ const DATA_ISO_NO_HOSPITAL = new Intl.DateTimeFormat("en-CA", {
   day: "2-digit",
 });
 const DIA_E_MES = new Intl.DateTimeFormat("pt-BR", { timeZone: FUSO_DO_HOSPITAL, day: "2-digit", month: "2-digit" });
+const HORA_NO_HOSPITAL = new Intl.DateTimeFormat("pt-BR", {
+  timeZone: FUSO_DO_HOSPITAL,
+  hour: "2-digit",
+  minute: "2-digit",
+  hourCycle: "h23",
+});
 const UM_DIA_MS = 24 * 60 * 60 * 1000;
 
 /**
- * Quando o pedido foi aberto, no card da lista (issue #1578): "Aberto hoje",
- * "Aberto ontem" ou "Aberto em 01/11, há 10 dias". Os dias se contam pelo
- * calendário do hospital, e não pelas horas: o pedido das 23h de ontem é de
- * ontem, mesmo com menos de 24 horas.
+ * Quando o pedido foi aberto, no card da lista (issues #1578 e #1580): "Aberto
+ * hoje às 09:05", "Aberto ontem às 14:32" ou "Aberto em 01/11 às 10:00, há 10
+ * dias". Os dias se contam pelo calendário do hospital, e não pelas horas: o
+ * pedido das 23h de ontem é de ontem, mesmo com menos de 24 horas.
  */
 export function textoDaAbertura(criadoEm: string | null | undefined, agora: Date = new Date()): string {
   if (!criadoEm) return "";
@@ -286,9 +292,10 @@ export function textoDaAbertura(criadoEm: string | null | undefined, agora: Date
   const dias = Math.round(
     (Date.parse(DATA_ISO_NO_HOSPITAL.format(agora)) - Date.parse(DATA_ISO_NO_HOSPITAL.format(data))) / UM_DIA_MS,
   );
-  if (dias <= 0) return "Aberto hoje";
-  if (dias === 1) return "Aberto ontem";
-  return `Aberto em ${DIA_E_MES.format(data)}, há ${dias} dias`;
+  const hora = HORA_NO_HOSPITAL.format(data);
+  if (dias <= 0) return `Aberto hoje às ${hora}`;
+  if (dias === 1) return `Aberto ontem às ${hora}`;
+  return `Aberto em ${DIA_E_MES.format(data)} às ${hora}, há ${dias} dias`;
 }
 
 /** As iniciais do círculo do card: a primeira letra do primeiro e do último nome. */
@@ -408,6 +415,12 @@ export function diaDoHospital(iso: string | null | undefined): string | null {
   if (!iso) return null;
   const instante = new Date(iso);
   return Number.isNaN(instante.getTime()) ? null : DIA_NO_HOSPITAL.format(instante);
+}
+
+/** O mesmo instante com a hora do hospital, "06/11/2026 às 15:00" (issue #1580). Nulo como o `diaDoHospital`. */
+export function diaEHoraDoHospital(iso: string | null | undefined): string | null {
+  const dia = diaDoHospital(iso);
+  return dia === null ? null : `${dia} às ${HORA_NO_HOSPITAL.format(new Date(iso as string))}`;
 }
 
 /** Os cinco estados da Demanda, na ordem do fluxo. */
