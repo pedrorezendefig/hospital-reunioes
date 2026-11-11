@@ -66,6 +66,13 @@ export type Demanda = {
    */
   versao?: string | null;
   /**
+   * As Datas do Documento do card (issue #1552, ADR 0084): a entrega (o
+   * fechamento da issue-raiz) e a entrada Em produção. O backend as manda só
+   * na Etapa que as segura; nulas, a linha não aparece.
+   */
+  fechada_em?: string | null;
+  em_producao_em?: string | null;
+  /**
    * Se o pedido é bug ou melhoria (issue #1438), já traduzido do Tipo pelo
    * backend. Nulo, ou ausente, é o pedido de antes do chat: fica sem selo.
    */
@@ -108,10 +115,12 @@ export const CLASSIFICACAO_CLASSE: Record<Classificacao, string> = {
   melhoria: "bg-violet-50 text-violet-700",
 };
 
-/** Uma parte da entrega: o que ela muda e em que pé está. */
+/** Uma parte da entrega: o que ela muda, em que pé está e quando fechou. */
 export type ParteDaEntrega = {
   o_que_muda: string | null;
   situacao: EtapaDemanda | null;
+  /** Quando a parte fechou (issue #1552). Nula na parte aberta. */
+  fechada_em?: string | null;
 };
 
 /**
@@ -244,6 +253,63 @@ export function blocosDoTextoSimples(texto: string | null | undefined): BlocoDoT
     atual.linhas.push(pedacosFortes(lista ? linha.replace(MARCADOR_DE_ITEM, "") : linha));
   }
   return blocos;
+}
+
+/** O bloco "Para o diretor" em seções: a frase e os tópicos (issue #1552). */
+export type DocumentoDoBloco = { frase: PedacoForte[][]; topicos: PedacoForte[][] };
+
+// O rótulo em negrito que abre uma linha do bloco no formato fixo da ADR 0084:
+// "**O que muda:**" antes da frase, "**O que você precisa saber:**" antes dos
+// tópicos. É moldura, e não conteúdo: o documento já tem o título da seção.
+const ROTULO_DO_BLOCO = /:\s*$/;
+
+/**
+ * O bloco "Para o diretor" lido como Documento do card (issue #1552, ADR 0084,
+ * decisão 7): as linhas de texto viram Em uma frase, os itens de lista viram
+ * O que muda. O texto não é reescrito, só separado: o bloco fora do formato
+ * fixo (o de antes da ADR) vira a frase inteira, sem perder nada.
+ *
+ * Nulo quando não há texto: a tela diz "Descrição em preparação".
+ */
+export function documentoDoBloco(texto: string | null | undefined): DocumentoDoBloco | null {
+  const frase: PedacoForte[][] = [];
+  const topicos: PedacoForte[][] = [];
+  for (const bloco of blocosDoTextoSimples(texto)) {
+    if (bloco.lista) {
+      topicos.push(...bloco.linhas);
+      continue;
+    }
+    for (const linha of bloco.linhas) {
+      const [primeiro, ...resto] = linha;
+      if (!primeiro?.forte || !ROTULO_DO_BLOCO.test(primeiro.texto)) {
+        frase.push(linha);
+        continue;
+      }
+      const sobra = resto
+        .map((pedaco, i) => (i === 0 ? { ...pedaco, texto: pedaco.texto.trimStart() } : pedaco))
+        .filter((pedaco) => pedaco.texto !== "");
+      if (sobra.length > 0) frase.push(sobra);
+    }
+  }
+  return frase.length > 0 || topicos.length > 0 ? { frase, topicos } : null;
+}
+
+const DIA_NO_HOSPITAL = new Intl.DateTimeFormat("pt-BR", {
+  timeZone: "America/Sao_Paulo",
+  day: "2-digit",
+  month: "2-digit",
+  year: "numeric",
+});
+
+/**
+ * Um instante do backend (`2026-11-06T18:00:00Z`) como o dia do hospital,
+ * "06/11/2026". Nulo quando não há data legível: a linha some, em vez de
+ * mostrar "Invalid Date".
+ */
+export function diaDoHospital(iso: string | null | undefined): string | null {
+  if (!iso) return null;
+  const instante = new Date(iso);
+  return Number.isNaN(instante.getTime()) ? null : DIA_NO_HOSPITAL.format(instante);
 }
 
 /** Os cinco estados da Demanda, na ordem do fluxo. */
