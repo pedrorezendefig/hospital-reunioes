@@ -36,6 +36,7 @@ from test_tecnologia_chat_melhoria import (  # noqa: E402
     _resumo_do_modelo,
 )
 
+from app.services.conhecimento import CONHECIMENTO_DIR  # noqa: E402
 from app.services.prompt_loader import load_prompt  # noqa: E402
 from app.services.tecnologia_vinculo import bloco_para_o_diretor  # noqa: E402
 
@@ -106,6 +107,22 @@ class TestOPromptDizOLimite:
         # Nos dois formatos de turno (pergunta e encerrar), não no resumo.
         formato = prompt.split("## Formato de resposta", 1)[1]
         assert formato.count('"documento": {"frase":') == 2
+
+
+class TestOKitDizODocumentoVivo:
+    def test_o_texto_da_tecnologia_no_kit_diz_que_o_documento_se_monta_ao_lado_da_conversa(self):
+        """O kit é a língua em que o Assistente fala com o diretor: sem o
+        comportamento novo escrito, ele não saberia explicar o documento ao lado."""
+        texto = (CONHECIMENTO_DIR / "tecnologia.md").read_text(encoding="utf-8")
+
+        secao = texto.split("## O Planejamento da Demanda", 1)[1].split("\n## ", 1)[0]
+        for trecho in (
+            "o documento do pedido se monta ao lado da conversa",
+            "o mesmo documento que o pedido mostra depois de criado",
+            "uma frase e no máximo cinco tópicos",
+            "No bug não há documento ao lado",
+        ):
+            assert trecho in secao, trecho
 
 
 class TestOBugSemDocumentoVivo:
