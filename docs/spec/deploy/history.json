@@ -2,6 +2,56 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-11-11T02:50:40-03:00",
+      "sha": "17260b988648046c9ac5c0c3a1a5d048b22cacbe",
+      "app_version": "0.245.0",
+      "subject": "Onda onda-entregas-onda1: Apagar a Demanda, e a migration 130 da ADR 0084; Menu principal recolhível para só os ícones",
+      "raw_subject": "chore(deploy): registro da onda onda-entregas-onda1 (#1564 #1562)",
+      "scope": [
+        "backend",
+        "frontend"
+      ],
+      "prds": [
+        1548
+      ],
+      "result": "healthy",
+      "duration_seconds": 315,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        },
+        {
+          "service": "frontend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [
+        "130_tecnologia_adr_0084.sql"
+      ],
+      "rollback_target_sha": null,
+      "notes": "onda-enxuta onda-entregas-onda1: PR #1564 (issue #1549), PR #1562 (issue #1550), mergeados PR a PR. Merge pela API do GitHub, um build. Registro pela Action pos-merge depois do health.",
+      "etapas": {
+        "merge_s": 5,
+        "build_s": {
+          "backend": 66,
+          "frontend": 179
+        },
+        "health_s": 10
+      },
+      "responsavel": "pedrorezendefig"
+    },
+    {
       "at": "2026-11-10T22:51:39-03:00",
       "sha": "5e3653dfcedb8b20bb0de2c394547e05e5801098",
       "app_version": "0.244.0",
