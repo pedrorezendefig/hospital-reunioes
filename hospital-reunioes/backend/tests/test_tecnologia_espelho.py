@@ -404,6 +404,30 @@ class TestDemandaVittaAberta:
         [linha] = sb.tabelas["tecnologia_conversa_da_demanda"]
         assert (linha["demanda_id"], linha["autor_id"]) == ("d-vitta", DIRETOR["id"])
 
+    def test_a_resposta_da_vitta_sem_mencao_avisa_o_diretor_que_escreveu(self, monkeypatch):
+        """No card Vitta o autor e o Responsavel sao o proprio Desenvolvedor: a
+        resposta dele, sem mencao, avisa quem ja escreveu na conversa, e so."""
+        monkeypatch.setattr(tecnologia_email, "_enviar_email", lambda *a, **kw: True)
+        diretor, sb = _aba(monkeypatch, DIRETOR)
+        pedro, _, _ = _cenario(monkeypatch, logado=PEDRO, supabase=sb)
+        diretor.post(f"{CHAT}/d-vitta/conversa", json={"texto": "Quando fica pronto?"})
+        sb.tabelas["notificacoes"] = []
+
+        assert pedro.post(f"{CHAT}/d-vitta/conversa", json={"texto": "Na semana que vem."}).status_code == 201
+
+        assert [n["destinatario_id"] for n in sb.tabelas["notificacoes"]] == [DIRETOR["id"]]
+
+    def test_a_vitta_menciona_qualquer_diretor_no_card_vitta(self, monkeypatch):
+        """Quem ve o card Vitta e toda a diretoria: e quem a mencao alcanca."""
+        monkeypatch.setattr(tecnologia_email, "_enviar_email", lambda *a, **kw: True)
+        pedro, sb = _aba(monkeypatch, PEDRO)
+
+        nomes = [p["nome"] for p in pedro.get(f"{CHAT}/d-vitta/conversa").json()["mencionaveis"]]
+        pedro.post(f"{CHAT}/d-vitta/conversa", json={"texto": "@Outra Diretora, pode testar?"})
+
+        assert {"Diretor do Hospital", "Outra Diretora"} <= set(nomes)
+        assert [n["destinatario_id"] for n in sb.tabelas["notificacoes"]] == [OUTRO_DIRETOR["id"]]
+
     def test_a_demanda_vitta_nao_tem_chat_do_agente(self, monkeypatch):
         client, _ = _aba(monkeypatch, DIRETOR)
 
