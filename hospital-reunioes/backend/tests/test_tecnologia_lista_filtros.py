@@ -205,6 +205,14 @@ class TestKit:
         ):
             assert trecho in secao, trecho
 
+    def test_o_kit_diz_que_o_pedido_abre_ao_lado_e_o_ampliar_recolhe_a_lista(self):
+        """Issue #1593: o clique abre o pedido ao lado da lista, e só o Ampliar
+        a recolhe. Sem isto, o Assistente diria que a lista some ao abrir."""
+        secao = _secao("A conversa com o Assistente")
+        assert "a lista recolhe para a conversa ocupar a tela" not in secao
+        for trecho in ("abre ao lado da lista", "**Ampliar**", "tela cheia", "volta a abrir ao lado"):
+            assert trecho in secao, trecho
+
     def test_o_kit_diz_os_filtros_que_sao_so_do_desenvolvedor(self):
         secao = _secao("Quem vê")
         for trecho in ("**Responsável**", "**Envio falhou**", "**Para mim**", "combinam"):

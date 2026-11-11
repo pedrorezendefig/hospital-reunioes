@@ -18,7 +18,7 @@ import { ToastProvider } from "@/components/ui/Toast";
 import { caixaDoDado } from "@/lib/testes/caixaDoDado";
 
 import { ABERTURA, SEM_CONVERSA_GUARDADA } from "./ChatDaTecnologia";
-import { ConversasDaTecnologia, NOVA_CONVERSA, VOLTAR_PARA_A_LISTA } from "./ConversasDaTecnologia";
+import { AMPLIAR, ConversasDaTecnologia, NOVA_CONVERSA, VOLTAR_PARA_A_LISTA } from "./ConversasDaTecnologia";
 import { ConversaDoChat, FalaDoChat } from "./chat";
 import { Demanda } from "./demandas";
 
@@ -931,32 +931,123 @@ describe("A barra de filtros por categoria (issue #1578, emenda da ADR 0084)", (
     expect(within(filtros()).queryByRole("button", { name: "Limpar filtros" })).toBeNull();
   });
 
-  it("a barra fica em cima, fora da coluna da lista, e recolhe junto com ela", async () => {
+  it("a barra fica em cima, fora da coluna da lista", async () => {
     montar((url) => {
       if (url === LISTA) return { status: 200, corpo: [SEM_CARD] };
-      if (url === `${LISTA}/d-1`) return { status: 200, corpo: conversa("d-1") };
       return { status: 404, corpo: {} };
     });
     const painelDaLista = () => lista().parentElement as HTMLElement;
-    const recolhida = /(^|\s)md:hidden(\s|$)/;
-    const voltar = () => screen.getByRole("button", { name: VOLTAR_PARA_A_LISTA });
 
     await within(lista()).findByText("Botão de responder some na Ouvidoria");
     expect(painelDaLista().contains(filtros())).toBe(false);
     expect(filtros().compareDocumentPosition(lista()) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+});
+
+describe("O pedido ao lado da lista e o Ampliar (issue #1593)", () => {
+  const OUTRO = demanda("d-3", "Relatório de leitos atrasa");
+  const recolhida = /(^|\s)md:hidden(\s|$)/;
+
+  function comDuas() {
+    return montar((url) => {
+      if (url === LISTA) return { status: 200, corpo: [SEM_CARD, OUTRO] };
+      if (url === `${LISTA}/d-1`) return { status: 200, corpo: conversa("d-1") };
+      if (url === `${LISTA}/d-3`) return { status: 200, corpo: conversa("d-3") };
+      return { status: 404, corpo: {} };
+    });
+  }
+
+  const painelDaLista = () => lista().parentElement as HTMLElement;
+  const filtros = () => screen.getByRole("region", { name: "Filtros da lista" });
+  const aberto = () => screen.getByRole("region", { name: "Conversa aberta" });
+  const voltar = () => screen.getByRole("button", { name: VOLTAR_PARA_A_LISTA });
+  const cardDe = (titulo: RegExp) =>
+    within(lista())
+      .getAllByRole("listitem")
+      .find((item) => within(item).queryByRole("button", { name: titulo })) as HTMLElement;
+
+  /** A lista e a barra à vista na tela larga, e o Voltar só no celular. */
+  function listaAoLado() {
     expect(painelDaLista().className).not.toMatch(recolhida);
     expect(filtros().className).not.toMatch(recolhida);
     expect(voltar().className).toMatch(recolhida);
+  }
 
-    fireEvent.click(within(lista()).getByRole("button", { name: /Botão de responder some/ }));
-    await screen.findByText("Onde isso aconteceu?");
+  /** A lista e a barra recolhidas na tela larga, e o Voltar à vista. */
+  function listaRecolhida() {
     expect(painelDaLista().className).toMatch(recolhida);
     expect(filtros().className).toMatch(recolhida);
     expect(voltar().className).not.toMatch(recolhida);
+  }
+
+  it("em tela larga, o clique no cartão abre o pedido com a lista visível", async () => {
+    comDuas();
+    await within(lista()).findByText("Botão de responder some na Ouvidoria");
+
+    fireEvent.click(within(lista()).getByRole("button", { name: /Botão de responder some/ }));
+    await screen.findByText("Onde isso aconteceu?");
+
+    listaAoLado();
+  });
+
+  it("o Ampliar do cartão abre o pedido com a lista recolhida, e o Voltar devolve a lista", async () => {
+    comDuas();
+    await within(lista()).findByText("Botão de responder some na Ouvidoria");
+
+    fireEvent.click(within(cardDe(/Botão de responder some/)).getByRole("button", { name: AMPLIAR }));
+    await screen.findByText("Onde isso aconteceu?");
+    listaRecolhida();
 
     fireEvent.click(voltar());
     await waitFor(() => expect(painelDaLista().className).not.toMatch(recolhida));
     expect(filtros().className).not.toMatch(recolhida);
+  });
+
+  it("o Ampliar também fica no topo do pedido aberto ao lado, e faz o mesmo", async () => {
+    comDuas();
+    await within(lista()).findByText("Botão de responder some na Ouvidoria");
+
+    fireEvent.click(within(lista()).getByRole("button", { name: /Botão de responder some/ }));
+    await screen.findByText("Onde isso aconteceu?");
+    listaAoLado();
+
+    fireEvent.click(within(aberto()).getByRole("button", { name: AMPLIAR }));
+    listaRecolhida();
+    // Ampliado, o pedido não oferece Ampliar de novo: o caminho é o Voltar.
+    expect(within(aberto()).queryByRole("button", { name: AMPLIAR })).toBeNull();
+
+    fireEvent.click(voltar());
+    await waitFor(() => expect(painelDaLista().className).not.toMatch(recolhida));
+
+    // De volta ao lado da lista, o Ampliar do topo amplia de novo.
+    fireEvent.click(within(aberto()).getByRole("button", { name: AMPLIAR }));
+    listaRecolhida();
+  });
+
+  it("depois de ampliar um pedido, o clique em outro cartão abre ao lado", async () => {
+    comDuas();
+    await within(lista()).findByText("Botão de responder some na Ouvidoria");
+
+    fireEvent.click(within(cardDe(/Botão de responder some/)).getByRole("button", { name: AMPLIAR }));
+    await screen.findByText("Onde isso aconteceu?");
+    listaRecolhida();
+    fireEvent.click(voltar());
+
+    fireEvent.click(within(lista()).getByRole("button", { name: /Relatório de leitos atrasa/ }));
+    await waitFor(() => expect(cardDe(/Relatório de leitos/).querySelector("[aria-current]")).toBeTruthy());
+    listaAoLado();
+  });
+
+  it("o Ampliar do cartão fica visível sem passar o mouse, e o Conversar segue no hover", async () => {
+    comDuas();
+    await within(lista()).findByText("Botão de responder some na Ouvidoria");
+    const card = cardDe(/Botão de responder some/);
+
+    const ampliar = within(card).getByRole("button", { name: AMPLIAR }).className.split(/\s+/);
+    expect(ampliar.filter((c) => /opacity-0/.test(c))).toEqual([]);
+    expect(ampliar).toContain("md:inline-flex");
+    const conversar = within(card).getByRole("button", { name: "Conversar" }).className.split(/\s+/);
+    expect(conversar).toContain("md:opacity-0");
   });
 });
 
@@ -1048,11 +1139,25 @@ describe("O card da conversa (issue #1578)", () => {
     expect(document.activeElement).not.toBe(caixa);
   });
 
-  it("em tela larga a Conversa da Demanda fica numa coluna à direita, fixa na rolagem", async () => {
+  it("na vista ao lado a Conversa da Demanda fica embaixo do documento, sem terceira coluna (issue #1593)", async () => {
     comCard();
     const item = await card();
 
     fireEvent.click(within(item).getByRole("button", { name: /Ata de reunião longa/ }));
+
+    const conversaDaDemanda = await screen.findByRole("region", { name: "Conversa da Demanda" });
+    const coluna = conversaDaDemanda.parentElement as HTMLElement;
+    expect(coluna.className).not.toMatch(/xl:sticky/);
+    expect((coluna.parentElement as HTMLElement).className).not.toMatch(/xl:grid-cols-/);
+    const documento = screen.getByRole("heading", { name: "Ata de reunião longa para com erro" });
+    expect(documento.compareDocumentPosition(conversaDaDemanda) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it("ampliado, a Conversa da Demanda fica numa coluna à direita, fixa na rolagem", async () => {
+    comCard();
+    const item = await card();
+
+    fireEvent.click(within(item).getByRole("button", { name: AMPLIAR }));
 
     const conversaDaDemanda = await screen.findByRole("region", { name: "Conversa da Demanda" });
     const coluna = conversaDaDemanda.parentElement as HTMLElement;

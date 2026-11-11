@@ -40,15 +40,19 @@
  * por categoria (issue #1578, emenda da ADR 0084, que trocou os chips da
  * #1551): Tipo, Etapa e Origem para todos; o recorte (Para mim, Minhas,
  * Todas, controle segmentado), o Responsável e o "Só envio falhou" só para o
- * Desenvolvedor. Tudo combina, e quem filtra é o servidor. Com uma Demanda
- * aberta a barra e a lista recolhem, e o Voltar às conversas as traz de volta,
- * na tela larga como no celular.
+ * Desenvolvedor. Tudo combina, e quem filtra é o servidor.
+ *
+ * Na tela larga o clique no card abre a Demanda ao lado da lista (issue #1593,
+ * que reverteu o recolher da #1551). O Ampliar, no canto do card e no topo da
+ * Demanda aberta, recolhe a barra e a lista, e o Voltar às conversas as traz de
+ * volta; o próximo clique num card volta a abrir ao lado. No celular, a lista e
+ * a Demanda seguem uma de cada vez, com o Voltar.
  *
  * Cada conversa é um card com contorno: título, data de abertura, quem pediu
  * e quem cuida com as iniciais, as partes do PRD numa barra e os selos. O
  * "Conversar" do card abre a Demanda com a caixa da Conversa da Demanda em
- * foco. Na tela larga a Demanda aberta tem a Conversa da Demanda numa coluna
- * à direita, fixa na rolagem (issue #1578).
+ * foco. Ao lado da lista, a Conversa da Demanda fica embaixo do documento;
+ * ampliada, numa coluna à direita, fixa na rolagem (issues #1578 e #1593).
  *
  * Os cards que a Vitta abre pelo terminal aparecem na lista com o selo
  * "Vitta", e os do chat com "Pedido do diretor"; o chip Origem filtra (issue
@@ -63,7 +67,7 @@
  */
 
 import { ReactNode, useCallback, useEffect, useRef, useState } from "react";
-import { ArrowLeft, Loader2, MessageSquare, Plus, RefreshCw, Search, Trash2, X } from "lucide-react";
+import { ArrowLeft, Loader2, Maximize2, MessageSquare, Plus, RefreshCw, Search, Trash2, X } from "lucide-react";
 
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { Select } from "@/components/ui/Select";
@@ -112,6 +116,8 @@ import {
 
 export const NOVA_CONVERSA = "Nova conversa";
 export const VOLTAR_PARA_A_LISTA = "Voltar às conversas";
+export const AMPLIAR = "Ampliar";
+const AMPLIAR_EXPLICADO = "Abrir este pedido em tela cheia";
 export const ENVIO_FALHOU = "Envio falhou";
 export const REENVIAR = "Reenviar";
 export const DESIGNACAO_FALHOU = "Designação falhou";
@@ -305,18 +311,22 @@ function PartesNoCard({ demanda }: { demanda: Demanda }) {
  * O card de uma conversa na lista (issue #1578). Contorno sempre visível; no
  * hover e no foco ele se destaca e sobe um pouco, sem movimento para quem
  * pediu menos animação ao sistema. O "Conversar" fica num botão próprio, ao
- * lado do card, porque botão dentro de botão não existe no HTML.
+ * lado do card, porque botão dentro de botão não existe no HTML. Ao lado dele,
+ * o Ampliar abre o pedido em tela cheia, e fica sempre à vista na tela larga
+ * (issue #1593).
  */
 function CardDaConversa({
   demanda,
   destacada,
   onAbrir,
   onConversar,
+  onAmpliar,
 }: {
   demanda: Demanda;
   destacada: boolean;
   onAbrir: () => void;
   onConversar: () => void;
+  onAmpliar: () => void;
 }) {
   const abertura = textoDaAbertura(demanda.criado_em);
   return (
@@ -331,7 +341,7 @@ function CardDaConversa({
         type="button"
         onClick={onAbrir}
         aria-current={destacada ? "true" : undefined}
-        className="w-full flex flex-col gap-3 p-4 pr-14 text-left rounded-2xl focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+        className="w-full flex flex-col gap-3 p-4 pr-14 md:pr-24 text-left rounded-2xl focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
       >
         <span className="flex flex-col gap-1">
           <span className="normal-case text-[15px] font-semibold leading-snug text-text-primary line-clamp-2">
@@ -354,15 +364,26 @@ function CardDaConversa({
           <SeloDoEnvioFalhou demanda={demanda} />
         </span>
       </button>
-      <button
-        type="button"
-        onClick={onConversar}
-        aria-label={CONVERSAR}
-        title="Conversar com quem cuida deste pedido"
-        className="absolute top-3 right-3 w-9 h-9 inline-flex items-center justify-center rounded-xl border border-border bg-white text-primary shadow-sm transition-opacity duration-150 motion-reduce:transition-none hover:bg-primary/5 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary md:opacity-0 md:group-hover:opacity-100 md:group-focus-within:opacity-100"
-      >
-        <MessageSquare className="w-4 h-4" />
-      </button>
+      <div className="absolute top-3 right-3 flex items-center gap-1.5">
+        <button
+          type="button"
+          onClick={onConversar}
+          aria-label={CONVERSAR}
+          title="Conversar com quem cuida deste pedido"
+          className="w-9 h-9 inline-flex items-center justify-center rounded-xl border border-border bg-white text-primary shadow-sm transition-opacity duration-150 motion-reduce:transition-none hover:bg-primary/5 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary md:opacity-0 md:group-hover:opacity-100 md:group-focus-within:opacity-100"
+        >
+          <MessageSquare className="w-4 h-4" />
+        </button>
+        <button
+          type="button"
+          onClick={onAmpliar}
+          aria-label={AMPLIAR}
+          title={AMPLIAR_EXPLICADO}
+          className="hidden md:inline-flex w-9 h-9 items-center justify-center rounded-xl border border-border bg-white text-primary shadow-sm hover:bg-primary/5 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+        >
+          <Maximize2 className="w-4 h-4" />
+        </button>
+      </div>
     </div>
   );
 }
@@ -789,6 +810,8 @@ export function ConversasDaTecnologia({
   const [naTela, setNaTela] = useState<"lista" | "conversa">("lista");
   /** A Demanda abriu pelo "Conversar" do card: a caixa da Conversa da Demanda vem em foco. */
   const [focarConversa, setFocarConversa] = useState(false);
+  /** O pedido aberto na largura toda, com a lista recolhida: só o Ampliar liga (issue #1593). */
+  const [ampliada, setAmpliada] = useState(false);
   const [desenvolvedor, setDesenvolvedor] = useState(false);
   /** Nulo até o servidor dizer quem está logado: o Desenvolvedor abre em Para mim. */
   const [filtro, setFiltro] = useState<Filtro | null>(null);
@@ -895,10 +918,11 @@ export function ConversasDaTecnologia({
     [carregar],
   );
 
-  const abrir = useCallback((demanda: Demanda | null, conversar = false) => {
+  const abrir = useCallback((demanda: Demanda | null, conversar = false, ampliar = false) => {
     setAberta(demanda);
     setDestacada(demanda?.id ?? null);
     setFocarConversa(conversar);
+    setAmpliada(ampliar);
     setChave((atual) => atual + 1);
     setNaTela("conversa");
   }, []);
@@ -954,8 +978,8 @@ export function ConversasDaTecnologia({
     abrir(pedida);
   }, [demandaInicial, demandas, abrir]);
 
-  /** Com uma Demanda aberta, a lista recolhe também na tela larga (issue #1551). */
-  const recolhida = naTela === "conversa" && aberta !== null;
+  /** A lista recolhe na tela larga só com o pedido ampliado (issue #1593, que reverteu a #1551). */
+  const recolhida = naTela === "conversa" && aberta !== null && ampliada;
 
   return (
     <div className="space-y-4">
@@ -1059,6 +1083,7 @@ export function ConversasDaTecnologia({
                       destacada={destacada === demanda.id}
                       onAbrir={() => abrir(demanda)}
                       onConversar={() => abrir(demanda, true)}
+                      onAmpliar={() => abrir(demanda, false, true)}
                     />
                   </li>
                 ))}
@@ -1080,6 +1105,20 @@ export function ConversasDaTecnologia({
             <ArrowLeft className="w-4 h-4" />
             {VOLTAR_PARA_A_LISTA}
           </button>
+          {aberta && !recolhida && (
+            <button
+              type="button"
+              onClick={() => {
+                setAmpliada(true);
+                setNaTela("conversa");
+              }}
+              title={AMPLIAR_EXPLICADO}
+              className="hidden md:inline-flex items-center gap-1.5 text-sm font-semibold text-primary"
+            >
+              <Maximize2 className="w-4 h-4" />
+              {AMPLIAR}
+            </button>
+          )}
           {aberta?.pode_apagar && (
             <ApagarADemanda key={`apagar-${chave}`} demanda={aberta} token={token} onApagada={aoApagar} />
           )}
@@ -1097,9 +1136,15 @@ export function ConversasDaTecnologia({
               onDesignado={aoDesignar}
             />
           )}
+          {/* Ao lado da lista, a Conversa da Demanda desce para baixo do documento;
+              ampliado, ela ganha a coluna à direita (issue #1593). */}
           <div
             className={
-              aberta ? "space-y-3 xl:space-y-0 xl:grid xl:grid-cols-[minmax(0,1fr)_24rem] xl:gap-6 xl:items-start" : ""
+              !aberta
+                ? ""
+                : recolhida
+                  ? "space-y-3 xl:space-y-0 xl:grid xl:grid-cols-[minmax(0,1fr)_24rem] xl:gap-6 xl:items-start"
+                  : "space-y-3"
             }
           >
             <div className="min-w-0">
@@ -1110,7 +1155,7 @@ export function ConversasDaTecnologia({
               )}
             </div>
             {aberta && (
-              <div className="xl:sticky xl:top-4 xl:max-h-[calc(100vh-2rem)] xl:overflow-y-auto">
+              <div className={recolhida ? "xl:sticky xl:top-4 xl:max-h-[calc(100vh-2rem)] xl:overflow-y-auto" : ""}>
                 <ConversaDaDemanda
                   key={`conversa-${chave}`}
                   demandaId={aberta.id}
