@@ -1020,7 +1020,12 @@ describe("O card da conversa (issue #1578)", () => {
     expect(contorno.className).toMatch(/hover:shadow/);
     expect(contorno.className).toMatch(/focus-within:/);
     expect(contorno.className).toMatch(/(^|\s)transition/);
-    expect(contorno.className).toMatch(/motion-reduce:transform-none/);
+    // O translate do hover só existe sob motion-safe: com prefers-reduced-motion o card não pula.
+    const classes = contorno.className.split(/\s+/);
+    expect(classes).toContain("motion-safe:hover:-translate-y-0.5");
+    const comTranslate = classes.filter((c) => /translate/.test(c));
+    expect(comTranslate.length).toBeGreaterThan(0);
+    for (const c of comTranslate) expect(c.startsWith("motion-safe:")).toBe(true);
   });
 
   it("Conversar abre a Demanda com a caixa da Conversa da Demanda em foco", async () => {

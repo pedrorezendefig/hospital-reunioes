@@ -321,10 +321,10 @@ function CardDaConversa({
   const abertura = textoDaAbertura(demanda.criado_em);
   return (
     <div
-      className={`group relative rounded-2xl border bg-white transition duration-150 ease-out motion-reduce:transition-none motion-reduce:transform-none ${
+      className={`group relative rounded-2xl border bg-white transition duration-150 ease-out motion-reduce:transition-none ${
         destacada
           ? "border-primary ring-2 ring-primary/15 shadow-md"
-          : "border-border shadow-sm hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-md focus-within:border-primary/40 focus-within:shadow-md"
+          : "border-border shadow-sm motion-safe:hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-md focus-within:border-primary/40 focus-within:shadow-md"
       }`}
     >
       <button
