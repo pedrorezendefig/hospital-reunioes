@@ -97,6 +97,36 @@ class DesenvolvedorResponse(BaseModel):
     padrao: bool = False
 
 
+# ─── As Entregas (issue #1556, ADR 0084, decisao 8) ────────────────────────
+
+
+class PeriodoDasEntregasResponse(BaseModel):
+    """Quantos cards foram entregues num periodo: a semana pela segunda-feira,
+    ou o mes pelo dia 1, no formato AAAA-MM-DD."""
+
+    inicio: str
+    total: int
+
+
+class ResponsavelDasEntregasResponse(BaseModel):
+    """Uma opcao do filtro Responsavel: o id do usuario, ou o login do dono no
+    GitHub quando ele nao e usuario do app (issue #1534), e o nome da tela."""
+
+    valor: str
+    nome: str
+
+
+class EntregasResponse(BaseModel):
+    """A aba Entregas: a contagem por periodo e os cards entregues, do mais
+    recente para o mais antigo, no mesmo formato da lista do chat, para o clique
+    abrir o Documento do card."""
+
+    agrupar: Literal["semana", "mes"]
+    periodos: list[PeriodoDasEntregasResponse]
+    entregas: list[DemandaResponse]
+    responsaveis: list[ResponsavelDasEntregasResponse]
+
+
 class QuemSouNaAbaResponse(BaseModel):
     """Se quem esta logado e Desenvolvedor (ADR 0083, decisao 2): e o que faz a
     tela mostrar o filtro "Todas". A regra fica no backend."""

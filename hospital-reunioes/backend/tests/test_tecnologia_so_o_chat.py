@@ -40,6 +40,8 @@ ROTAS_DO_CHAT = {
     "/api/admin/tecnologia/desenvolvedores",
     # A Conversa da Demanda volta, só no app (issue #1537, ADR 0083, decisão 8).
     "/api/admin/tecnologia/chat/{demanda_id}/conversa",
+    # A aba Entregas, só leitura (issue #1556, ADR 0084, decisão 8).
+    "/api/admin/tecnologia/entregas",
 }
 
 # O que fica de fora da aba e continua de pé (critério 2 da issue).

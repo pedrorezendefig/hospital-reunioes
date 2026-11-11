@@ -145,7 +145,7 @@ function urlDaLista(filtros: FiltrosDaLista): string {
 }
 
 /** Um chip de filtro. Nada de `flex-1` nem `nowrap`: a linha quebra dentro da coluna. */
-function Chip({ ativo, onClick, children }: { ativo: boolean; onClick: () => void; children: string }) {
+export function Chip({ ativo, onClick, children }: { ativo: boolean; onClick: () => void; children: string }) {
   return (
     <button
       type="button"
@@ -160,7 +160,7 @@ function Chip({ ativo, onClick, children }: { ativo: boolean; onClick: () => voi
   );
 }
 
-function GrupoDeChips({ rotulo, children }: { rotulo: string; children: ReactNode }) {
+export function GrupoDeChips({ rotulo, children }: { rotulo: string; children: ReactNode }) {
   return (
     <div role="group" aria-label={rotulo} className="flex flex-wrap gap-1">
       {children}

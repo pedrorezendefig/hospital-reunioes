@@ -24,6 +24,11 @@ O chat da aba (issues #1381, #1383 e #1384):
                                                 os filtros Tipo, Etapa,
                                                 Responsavel e Envio falhou
                                                 (issue #1551).
+- GET   /admin/tecnologia/entregas              a aba Entregas: os cards
+                                                entregues por semana ou por
+                                                mes, com filtros de periodo,
+                                                tipo, Origem e Responsavel.
+                                                So leitura (issue #1556).
 - GET   /admin/tecnologia/desenvolvedores       o "Quem cuida disto?" do
                                                 resumo (ADR 0083).
 - POST  /admin/tecnologia/chat                  o primeiro turno: a Demanda
@@ -73,7 +78,7 @@ from __future__ import annotations
 import logging
 import os
 import unicodedata
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from typing import Literal, NoReturn
 
 from fastapi import APIRouter, Depends, File, HTTPException, Request, Response, UploadFile, status
@@ -93,6 +98,7 @@ from app.models.tecnologia_schemas import (
     CriarOCardPayload,
     DemandaResponse,
     DesenvolvedorResponse,
+    EntregasResponse,
     MensagemDaConversaPayload,
     MensagemDaConversaResponse,
     QuemSouNaAbaResponse,
@@ -107,6 +113,7 @@ from app.services import (
     tecnologia_anexos,
     tecnologia_apagar,
     tecnologia_email,
+    tecnologia_entregas,
     tecnologia_envio,
 )
 from app.services.conhecimento import carregar_kit
@@ -710,6 +717,66 @@ async def listar_as_conversas(
     if origem:
         visiveis = [d for d in visiveis if origem_da_demanda(d) == origem]
     return _para_a_lista(supabase, visiveis, ator=ator)
+
+
+@router.get("/entregas", response_model=EntregasResponse)
+async def listar_as_entregas(
+    agrupar: Literal["semana", "mes"] = "semana",
+    de: date | None = None,
+    ate: date | None = None,
+    tipo: Literal["bug", "melhoria"] | None = None,
+    origem: Literal["diretor", "vitta"] | None = None,
+    responsavel: str | None = None,
+    ator: dict = Depends(require_super_admin),
+    supabase: Client = Depends(get_supabase_client),
+):
+    """A aba Entregas (issue #1556, ADR 0084, decisao 8): os cards entregues,
+    contados por semana ou por mes. So leitura: ninguem move nada por aqui.
+
+    Entra o que quem pede ve (`pode_ver`, a regra da lista do chat), fora a
+    lapide do Apagar e o card que nao foi entregue. Os filtros combinam: o
+    periodo (`de` e `ate`, dias do hospital, inclusive) sobre a data de
+    entrega, o `tipo`, a `origem` e o `responsavel`, que aqui e de todos: o id
+    do usuario, ou o login do dono no GitHub quando ele nao e usuario do app.
+    A contagem segue os filtros; as opcoes do Responsavel, nao, para o filtro
+    ligado poder trocar.
+
+    Sai pelo `_para_a_lista`, o mesmo funil da lista do chat: o clique abre o
+    Documento do card sem outro pedido, e numero e link seguem so para o
+    Desenvolvedor.
+    """
+    if de and ate and de > ate:
+        _recusar("O inicio do periodo vem depois do fim")
+    result = supabase.table(TABELA_DEMANDAS).select("*").is_("apagada_em", "null").execute()
+    entregues = [
+        (dia, d)
+        for d in (result.data or [])
+        if pode_ver(ator, d) and (dia := tecnologia_entregas.dia_da_entrega(d)) is not None
+    ]
+    entregues.sort(key=lambda par: par[0], reverse=True)
+    nomes = _nomes(supabase, {responsavel_da_demanda(d) for _, d in entregues})
+    opcoes = {
+        chave: _nome_do_responsavel(d, nomes) or chave
+        for _, d in entregues
+        if (chave := tecnologia_entregas.chave_do_responsavel(d))
+    }
+    filtradas = [
+        (dia, d)
+        for dia, d in entregues
+        if (de is None or dia >= de)
+        and (ate is None or dia <= ate)
+        and (tipo is None or chat_tecnologia.CLASSIFICACAO_DO_TIPO.get(str(d.get("tipo") or "")) == tipo)
+        and (origem is None or origem_da_demanda(d) == origem)
+        and (responsavel is None or tecnologia_entregas.chave_do_responsavel(d) == responsavel)
+    ]
+    return {
+        "agrupar": agrupar,
+        "periodos": tecnologia_entregas.contagem([dia for dia, _ in filtradas], agrupar),
+        "entregas": _para_a_lista(supabase, [d for _, d in filtradas], ator=ator),
+        "responsaveis": [
+            {"valor": valor, "nome": nome} for valor, nome in sorted(opcoes.items(), key=lambda par: par[1].casefold())
+        ],
+    }
 
 
 @router.post("/chat", response_model=ChatResponse, status_code=status.HTTP_201_CREATED)

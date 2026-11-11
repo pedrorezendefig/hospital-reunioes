@@ -2,7 +2,7 @@
 
 A aba Tecnologia é onde o diretor conta à Vitta (a empresa que cuida dos sistemas do hospital) um bug ou uma melhoria que quer nos sistemas. Antes isso era o WhatsApp, e o que se combinava lá se perdia. Aqui cada pedido vira uma Demanda, guardada com a conversa que a originou.
 
-Só quem tem acesso de administrador do aplicativo enxerga a aba. Ela é uma tela só: a conversa com o **Assistente**, a IA que entende o pedido, com a lista dos seus pedidos ao lado.
+Só quem tem acesso de administrador do aplicativo enxerga a aba. Ela tem duas abas no alto: **Conversas**, a conversa com o **Assistente**, a IA que entende o pedido, com a lista dos seus pedidos ao lado, e **Entregas**, o que já foi entregue.
 
 ## A conversa com o Assistente
 
@@ -97,6 +97,16 @@ Ao abrir um pedido que já foi para a Vitta, ele aparece como um documento curto
 
 Esse texto vem do planejamento da Vitta, ou das suas decisões quando a melhoria foi planejada com a IA, e não se edita no aplicativo. Enquanto a Vitta não escreve o resumo, o documento mostra "Descrição em preparação".
 
+## As Entregas
+
+A aba **Entregas**, ao lado de Conversas, mostra o que já foi entregue: quantos pedidos ficaram prontos por semana ou por mês, e a lista deles, do mais recente para o mais antigo. A semana começa na segunda-feira, e o dia conta pelo horário do hospital. Cada pedido conta uma vez, mesmo quando foi feito em partes.
+
+Em cada linha aparecem o título, a data de entrega (o dia em que o pedido ficou pronto), a data em que entrou em produção, quando já entrou, e o Responsável, a pessoa da Vitta que cuidou dele. Clicar num pedido abre o mesmo Documento do card da conversa, com as partes e as datas de cada uma.
+
+No alto há os filtros: o período (de um dia até outro), **Bug** ou **Melhoria**, a Origem (**Pedido do diretor** ou **Vitta**) e o Responsável. Eles combinam entre si, por exemplo as melhorias da Vitta que ficaram prontas em outubro, e a contagem por semana ou por mês acompanha os filtros. Ali entram os mesmos pedidos que você vê na lista das conversas: os seus e os que a Vitta abriu. Pedido apagado e pedido que ainda não foi entregue não aparecem.
+
+A aba é só para acompanhar: nada se move por ali. Ninguém muda a Etapa nem o Responsável pelas Entregas.
+
 ## Apagar um pedido
 
 Um pedido que não vale mais pode sair da lista pelo botão **Apagar**, no alto do pedido aberto. O aplicativo pede confirmação antes de apagar, e depois não dá para desfazer.
@@ -124,7 +134,7 @@ A IA cuida das decisões de negócio: o problema, quem usa, as regras e o que fi
 ## O que já foi decidido
 
 - A aba mora dentro do aplicativo e só quem é Super admin a vê.
-- A aba é uma tela só, a conversa com o Assistente, que pergunta se é bug ou melhoria e confirma antes de seguir.
+- A aba tem Conversas, a conversa com o Assistente, que pergunta se é bug ou melhoria e confirma antes de seguir, e Entregas, que conta o que foi entregue por semana e por mês e não move nada.
 - O pedido nasce da conversa do diretor ou de um card do aplicativo que a Vitta abre pelo desenvolvimento, que aparece na lista com o selo Vitta, sem conversa com a IA; os ajustes internos da Vitta não aparecem, e os pedidos da Vitta ao hospital continuam no WhatsApp.
 - Cada pedido tem a Conversa da Demanda, entre quem pediu e a Vitta, separada da conversa com a IA e guardada só dentro do aplicativo.
 - Na Conversa da Demanda, quem é marcado pelo nome é avisado no sino e por e-mail, e sem marcação a mensagem de quem pediu avisa o Responsável e a da Vitta avisa quem pediu.
