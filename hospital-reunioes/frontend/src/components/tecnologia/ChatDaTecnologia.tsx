@@ -230,6 +230,13 @@ function PerguntaEmCartao({ fala, cartao, numero, desabilitado, onEscolher }: Pr
   );
 }
 
+/** Quantos caracteres da resposta livre cabem na linha da pergunta respondida. */
+const COMECO_DA_RESPOSTA = 60;
+
+function comecoDoTexto(texto: string): string {
+  return texto.length > COMECO_DA_RESPOSTA ? `${texto.slice(0, COMECO_DA_RESPOSTA).trimEnd()}…` : texto;
+}
+
 type PropsDaPerguntaRespondida = {
   pergunta: FalaDoChat;
   titulo: string;
@@ -246,7 +253,7 @@ function PerguntaRespondida({ pergunta, titulo, resposta, numero }: PropsDaPergu
   const nome = `Pergunta ${numero}`;
   // O clique na opção grava o texto dela como a resposta (planejamento_demanda.py).
   const escolhida = pergunta.opcoes.indexOf(resposta.texto);
-  const escolha = `escolheu ${LETRAS[escolhida]}`;
+  const escolha = escolhida >= 0 ? `escolheu ${LETRAS[escolhida]}` : comecoDoTexto(resposta.texto);
   return (
     <button
       type="button"

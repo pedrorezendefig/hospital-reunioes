@@ -1030,4 +1030,20 @@ describe("A pergunta respondida em linha", () => {
     expect(screen.queryByText(PERGUNTA.texto)).toBeNull();
     expect(screen.queryByText("Não, na enfermagem.")).toBeNull();
   });
+
+  it("a resposta livre aparece na linha pelo começo do texto", async () => {
+    const livre =
+      "Acontece nos dois lugares, mas a recepção sofre mais porque é ela que atende o paciente no fim do dia.";
+    const conversa = melhoriaEmCartao();
+    conversa.mensagens[3] = { autor: "diretor", texto: livre, fonte: null, opcoes: [], nao_bateu: false };
+    montar([{ status: 201, corpo: conversa }]);
+
+    fireEvent.click(screen.getByRole("button", { name: "Melhoria" }));
+    await screen.findByRole("region", { name: "Pergunta 2" });
+
+    const linha = linhaDaPergunta(1);
+    expect(within(linha).getByText("Acontece nos dois lugares, mas a recepção sofre mais porque…")).toBeTruthy();
+    expect(within(linha).queryByText(/escolheu/)).toBeNull();
+    expect(screen.queryByText(livre)).toBeNull();
+  });
 });
