@@ -36,6 +36,7 @@ from test_tecnologia_chat_melhoria import (  # noqa: E402
     _resumo_do_modelo,
 )
 
+from app.services.prompt_loader import load_prompt  # noqa: E402
 from app.services.tecnologia_vinculo import bloco_para_o_diretor  # noqa: E402
 
 SETE_TOPICOS = [f"Tópico {n} do pedido." for n in range(1, 8)]
@@ -92,6 +93,36 @@ class TestCadaTurnoGravaORascunho:
             "frase": "A recepção marca o retorno.",
             "topicos": ["Linha um.", *SETE_TOPICOS[:4]],
         }
+
+
+class TestOPromptDizOLimite:
+    def test_o_prompt_do_planejamento_pede_o_documento_com_uma_frase_e_ate_cinco_topicos(self):
+        prompt = load_prompt("planejamento_demanda_system")
+
+        secao = prompt.split("## O documento do pedido", 1)[1].split("\n## ", 1)[0]
+        assert "uma frase só" in secao
+        assert "no máximo cinco tópicos" in secao
+        assert "Para o diretor" in secao
+        # Nos dois formatos de turno (pergunta e encerrar), não no resumo.
+        formato = prompt.split("## Formato de resposta", 1)[1]
+        assert formato.count('"documento": {"frase":') == 2
+
+
+class TestOBugSemDocumentoVivo:
+    def test_o_bug_segue_o_roteiro_sem_documento_mesmo_se_o_modelo_mandar_um(self, monkeypatch):
+        client, sb, _ = _cenario(monkeypatch)
+        _ia(monkeypatch, _turno(documento={"frase": "O botão volta.", "topicos": ["Na Ouvidoria."]}))
+        demanda_id = client.post(CHAT, json={"escolha": "bug"}).json()["demanda_id"]
+        _ia(monkeypatch, _turno(mensagem="O que aconteceu?", documento={"frase": "O botão volta.", "topicos": []}))
+
+        resposta = client.post(f"{CHAT}/{demanda_id}", json={"texto": "Na Ouvidoria"})
+
+        assert resposta.status_code == 200, resposta.text
+        corpo = resposta.json()
+        assert corpo["planejamento"] is False
+        assert corpo["mensagens"][-1]["texto"] == "O que aconteceu?"
+        assert corpo["documento"] is None
+        assert "documento" not in _conversas(sb)[0]
 
 
 def _linhas_do_bloco(corpo: str) -> list[str]:
