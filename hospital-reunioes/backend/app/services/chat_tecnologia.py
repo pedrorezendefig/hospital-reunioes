@@ -30,7 +30,13 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from app.services import ai_processor, assistente_tecnologia, ferramentas_do_codigo, planejamento_demanda
+from app.services import (
+    ai_processor,
+    assistente_tecnologia,
+    ferramentas_do_codigo,
+    planejamento_demanda,
+    tecnologia_revisao,
+)
 from app.services.tecnologia import recuar_continuacao
 from app.services.tecnologia_vinculo import NAO_INFORMADO, ROTULOS_DO_BUG
 from app.utils.text_sanitizer import sanitizar_travessao
@@ -87,6 +93,9 @@ CRITERIO_SEM_O_ESPERADO = "O problema descrito em O que aconteceu deixa de acont
 
 MOTIVO_SEM_TEXTO = "Escreva a sua mensagem ou escolha uma das opções."
 MOTIVO_TURNO_FALHOU = planejamento_demanda.MOTIVO_TURNO_FALHOU
+
+# A fala do Retrato de hoje na tela (issue #1557); os tres blocos vao em `retrato`.
+TEXTO_DO_RETRATO = "Retrato de hoje: o que o sistema já faz, o que mudou desde o card e o que continua em aberto."
 
 FALA_MOCK = "[MOCK] Conversar com o Assistente de Tecnologia exige a IA configurada."
 
@@ -207,6 +216,15 @@ def descricao_da_melhoria(mensagens: list[dict]) -> str | None:
 
 
 def _fala_do_planejamento_para_a_tela(m: dict) -> dict:
+    if m.get("tipo") == tecnologia_revisao.TIPO_DO_RETRATO:
+        return {
+            "autor": "ia",
+            "texto": TEXTO_DO_RETRATO,
+            "fonte": None,
+            "opcoes": [],
+            "nao_bateu": False,
+            "retrato": {campo: m.get(campo) or [] for campo in ("ja_existe", "mudou", "em_aberto")},
+        }
     if m.get("tipo") == "pergunta":
         return {
             "autor": "ia",
@@ -228,16 +246,32 @@ def _fala_do_planejamento_para_a_tela(m: dict) -> dict:
     }
 
 
-def para_a_tela(mensagens: list[dict]) -> list[dict]:
+def para_a_tela(mensagens: list[dict], nomes: dict[str, str] | None = None) -> list[dict]:
     """A conversa como a tela a mostra: quem falou, o texto, a fonte e as opcoes.
 
     A classificacao e a marca do roteiro sao do backend, e nao saem daqui. A
     pergunta do planejamento sai com as duas opcoes na ordem A e B e a letra da
     recomendada, que e o que a tela destaca e o que o clique devolve.
+
+    A fala de gente sai com o nome de quem respondeu (issue #1557), lido de
+    `nomes` pelo `respondido_por` guardado; a fala de antes do campo, sem nome.
     """
+    nomes = nomes or {}
+    return [
+        {**fala, "respondido_por": nomes.get(str(m.get("respondido_por")))} if fala["autor"] == "diretor" else fala
+        for m, fala in zip(mensagens, _para_a_tela(mensagens), strict=True)
+    ]
+
+
+def quem_respondeu(mensagens: list[dict]) -> set[str]:
+    """Os ids de quem respondeu algum turno, para a tela ler os nomes."""
+    return {str(m["respondido_por"]) for m in mensagens if m.get("respondido_por")}
+
+
+def _para_a_tela(mensagens: list[dict]) -> list[dict]:
     return [
         _fala_do_planejamento_para_a_tela(m)
-        if m.get("tipo") in TIPOS_DO_PLANEJAMENTO
+        if m.get("tipo") in (*TIPOS_DO_PLANEJAMENTO, tecnologia_revisao.TIPO_DO_RETRATO)
         else {
             "autor": "ia" if m.get("tipo") == "ia" else "diretor",
             "texto": m.get("texto") or "",
@@ -493,13 +527,15 @@ def demanda_da_melhoria(mensagens: list[dict], *, demanda_id: str | None, titulo
     menos o titulo provisorio, que nao diz nada ao modelo. Os documentos que
     ele trouxe antes do planejamento (issue #1520) vao junto, cercados no
     pedido: o planejamento parte deles sem perguntar o que eles ja respondem."""
-    antes, _ = partes_da_melhoria(mensagens)
+    antes, planejamento = partes_da_melhoria(mensagens)
     return {
         "id": demanda_id,
         "tipo": TIPO_DA_CLASSIFICACAO["melhoria"],
         "titulo": "" if titulo in (None, TITULO_SEM_RESPOSTA) else titulo,
         "descricao": descricao_da_melhoria(mensagens),
         "documentos": documentos_do_diretor(antes),
+        # O que o "isso atende?" da revisao decidiu (issue #1557), quando ha revisao.
+        "revisao": tecnologia_revisao.escopo(planejamento),
     }
 
 

@@ -75,6 +75,7 @@ Fora daqui, e de pe: o webhook do GitHub que deriva a Etapa
 
 from __future__ import annotations
 
+import json
 import logging
 import os
 import unicodedata
@@ -99,9 +100,11 @@ from app.models.tecnologia_schemas import (
     DemandaResponse,
     DesenvolvedorResponse,
     EntregasResponse,
+    EstimativaDaRevisao,
     MensagemDaConversaPayload,
     MensagemDaConversaResponse,
     QuemSouNaAbaResponse,
+    RevisarPayload,
 )
 from app.services import (
     ai_processor,
@@ -115,6 +118,7 @@ from app.services import (
     tecnologia_email,
     tecnologia_entregas,
     tecnologia_envio,
+    tecnologia_revisao,
 )
 from app.services.conhecimento import carregar_kit
 from app.services.mencoes import extrair_mencoes
@@ -128,11 +132,13 @@ from app.services.tecnologia import (
     e_desenvolvedor,
     em_producao_desde,
     entregue_na_data,
+    instante_do_banco,
     login_do_responsavel,
     origem_da_demanda,
     pode_ver,
     quem_avisar,
     recusa_de_apagar,
+    recusa_de_revisar,
     responsavel_da_demanda,
     versao_da_entrega,
 )
@@ -195,6 +201,7 @@ def _para_a_lista(supabase: Client, demandas: list[dict], *, ator: dict) -> list
     if desenvolvedor:
         ids |= {d.get("autor_id") for d in demandas}
     nomes = _nomes(supabase, ids)
+    conversas = _conversas_dos_cards(supabase, demandas)
     return [
         {
             **d,
@@ -214,9 +221,41 @@ def _para_a_lista(supabase: Client, demandas: list[dict], *, ator: dict) -> list
             "envio_motivo": d.get("envio_motivo") if desenvolvedor and _falha_pendente(d) else None,
             "pode_apagar": recusa_de_apagar(ator, d) is None,
             "origem": origem_da_demanda(d),
+            **_revisao_na_lista(ator, d, conversas.get(str(d["id"]))),
         }
         for d in demandas
     ]
+
+
+def _conversas_dos_cards(supabase: Client, demandas: list[dict]) -> dict[str, dict]:
+    """O estado da conversa de cada Demanda que pode ser revisada (issue #1557):
+    uma leitura so, e so dos cards da melhoria."""
+    ids = [
+        str(d["id"])
+        for d in demandas
+        if d.get("github_issue_numero") and d.get("tipo") == "novo" and origem_da_demanda(d) != ORIGEM_VITTA
+    ]
+    if not ids:
+        return {}
+    result = (
+        supabase.table(planejamento_demanda.TABELA_PLANEJAMENTOS)
+        .select("demanda_id, estado, revisao_iniciada_em")
+        .in_("demanda_id", ids)
+        .execute()
+    )
+    return {str(linha["demanda_id"]): linha for linha in (result.data or [])}
+
+
+def _revisao_na_lista(ator: dict, demanda: dict, conversa: dict | None) -> dict:
+    """O botao "Revisar com o codigo de hoje" e a conversa reaberta pela
+    revisao (issue #1557). O botao so com a conversa ja enviada: a que esta em
+    revisao ainda nao virou card de novo."""
+    estado = (conversa or {}).get("estado")
+    return {
+        "pode_revisar": recusa_de_revisar(ator, demanda) is None and estado == planejamento_demanda.ESTADO_ENVIADO,
+        "em_revisao": bool((conversa or {}).get("revisao_iniciada_em"))
+        and estado not in (None, planejamento_demanda.ESTADO_ENVIADO),
+    }
 
 
 def _falha_pendente(demanda: dict) -> bool:
@@ -403,7 +442,9 @@ def _chat_para_a_tela(
     return {
         "demanda_id": str(demanda_id),
         "estado": linha.get("estado"),
-        "mensagens": chat_tecnologia.para_a_tela(mensagens),
+        "mensagens": chat_tecnologia.para_a_tela(
+            mensagens, _nomes(supabase, chat_tecnologia.quem_respondeu(mensagens))
+        ),
         "resumo": None if planejamento else linha.get("resumo"),
         "resumo_da_melhoria": linha.get("resumo") if planejamento else None,
         # O documento vivo, so da melhoria (issue #1553): o bug segue o
@@ -416,7 +457,26 @@ def _chat_para_a_tela(
         "custo": custo_da_conversa.da_demanda(supabase, demanda_id),
         "anexos_da_demanda": anexos_da_demanda or [],
         "responsavel": responsavel,
+        "revisao": _revisao_da_conversa(linha),
     }
+
+
+def _revisao_da_conversa(linha: dict) -> dict | None:
+    """A marca da revisao e o que o "isso atende?" ja decidiu (issue #1557)."""
+    if not linha.get("revisao_iniciada_em"):
+        return None
+    _, planejamento = chat_tecnologia.partes_da_melhoria(linha.get("mensagens") or [])
+    return {
+        "iniciada_em": linha.get("revisao_iniciada_em"),
+        "versao_base": linha.get("revisao_versao_base"),
+        **(tecnologia_revisao.escopo(planejamento) or {"saiu": [], "continua": []}),
+    }
+
+
+def _respondido_por(fala: dict, ator: dict) -> dict:
+    """A fala de gente com quem a escreveu (ADR 0084, decisao 3): o autor ou o
+    Desenvolvedor, que na revisao tambem responde."""
+    return {**fala, "respondido_por": ator["id"]}
 
 
 def _nascer_a_demanda(supabase: Client, *, ator: dict, titulo: str, tipo: str, produto: dict) -> dict:
@@ -803,9 +863,9 @@ async def comecar_o_chat(
     produtos = _produtos_ativos(supabase)
     falas = [chat_tecnologia.mensagem_de_abertura()]
     if payload.escolha:
-        falas.append(chat_tecnologia.fala_do_diretor(chat_tecnologia.ESCOLHAS[payload.escolha]))
+        falas.append(_respondido_por(chat_tecnologia.fala_do_diretor(chat_tecnologia.ESCOLHAS[payload.escolha]), ator))
     if texto or documentos:
-        falas.append(chat_tecnologia.fala_do_diretor(texto, documentos))
+        falas.append(_respondido_por(chat_tecnologia.fala_do_diretor(texto, documentos), ator))
 
     if payload.escolha == "melhoria":
         return await _comecar_a_melhoria(
@@ -928,7 +988,27 @@ async def _turno_da_melhoria(
         if motivo:
             _recusar(motivo)
     if resposta is not None:
-        mensagens.append(resposta)
+        mensagens.append(_respondido_por(resposta, ator))
+
+    # Na revisao, o proximo "isso atende?" e do codigo, sem IA (issue #1557).
+    atende = tecnologia_revisao.proxima_pergunta_de_atende(mensagens)
+    if atende is not None:
+        linha = planejamento_demanda.gravar(
+            supabase,
+            demanda_id,
+            atual=atual,
+            novo={
+                "estado": planejamento_demanda.ESTADO_EM_ANDAMENTO,
+                "mensagens": [*mensagens, atende],
+                "atualizado_em": _agora(),
+            },
+        )
+        if linha is None:
+            _conflito(MOTIVO_CHAT_MUDOU)
+        aviso = _prints_do_turno(
+            supabase, demanda=demanda, print_ids=payload.prints, ator=ator, documento_ids=payload.documentos
+        )
+        return _chat_para_a_tela(supabase, demanda_id, linha, aviso_dos_anexos=aviso)
 
     resultado = await ai_processor.chamar_ia_fora_do_loop(
         chat_tecnologia.turno_da_melhoria,
@@ -1148,7 +1228,7 @@ async def responder_no_chat(
         )
     texto = (payload.texto or "").strip()
     if texto or documentos:
-        mensagens.append(chat_tecnologia.fala_do_diretor(texto, documentos))
+        mensagens.append(_respondido_por(chat_tecnologia.fala_do_diretor(texto, documentos), ator))
     elif mensagens[-1].get("tipo") == "ia":
         # Sem texto e sem fala do diretor esperando: nao ha o que a IA responder.
         _recusar(chat_tecnologia.MOTIVO_SEM_TEXTO)
@@ -1205,7 +1285,7 @@ async def resumo_do_chat_nao_bateu(
     request: Request,
     demanda_id: str,
     payload: ChatNaoBateuPayload,
-    _ator: dict = Depends(require_super_admin),
+    ator: dict = Depends(require_super_admin),
     supabase: Client = Depends(get_supabase_client),
 ):
     """O "Nao bateu" do resumo: o que nao bateu entra na conversa como fala do
@@ -1225,7 +1305,10 @@ async def resumo_do_chat_nao_bateu(
         atual=atual,
         novo={
             "estado": planejamento_demanda.ESTADO_EM_ANDAMENTO,
-            "mensagens": [*(atual.get("mensagens") or []), {"tipo": "nao_bateu", "texto": texto}],
+            "mensagens": [
+                *(atual.get("mensagens") or []),
+                _respondido_por({"tipo": "nao_bateu", "texto": texto}, ator),
+            ],
             "atualizado_em": _agora(),
         },
     )
@@ -1444,6 +1527,130 @@ async def apagar_a_demanda(
         logger.warning("[tecnologia] o card da Demanda %s não fechou no GitHub: %s", demanda_id, exc)
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=MOTIVO_APAGAR_GITHUB_FALHOU) from None
     return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+# ─── A Revisao com o codigo de hoje (issue #1557, ADR 0084, decisao 3) ──────
+
+MOTIVO_REVISAO_SEM_CONVERSA = "Este pedido já está em revisão, ou não tem conversa para retomar. Recarregue a página."
+MOTIVO_REVISAO_SEM_CONFIRMACAO = "Confirme a revisão para a IA começar."
+MOTIVO_REVISAO_GITHUB_FALHOU = (
+    "O desenvolvimento não respondeu, e a revisão não começou. Nada foi cobrado: tente de novo em instantes."
+)
+
+
+def _revisao_permitida(supabase: Client, demanda_id: str, ator: dict) -> tuple[dict, dict]:
+    """A Demanda e a conversa que se revisam, ou a recusa: 404 para quem nao a
+    ve, a `recusa_de_revisar` (403 ou 409), e 409 sem a conversa da melhoria
+    ja enviada para retomar."""
+    demanda = _demanda_visivel(supabase, demanda_id, ator)
+    recusa = recusa_de_revisar(ator, demanda)
+    if recusa is not None:
+        raise HTTPException(status_code=recusa[0], detail=recusa[1])
+    linha = planejamento_demanda.ler(supabase, demanda_id)
+    mensagens = (linha or {}).get("mensagens") or []
+    if (
+        not chat_tecnologia.e_do_chat(linha)
+        or not chat_tecnologia.em_planejamento(mensagens)
+        or linha.get("estado") != planejamento_demanda.ESTADO_ENVIADO
+    ):
+        _conflito(MOTIVO_REVISAO_SEM_CONVERSA)
+    return demanda, linha
+
+
+def _tamanho_do_pedido(demanda: dict, linha: dict) -> int:
+    """O tamanho da conversa e do PRD, em caracteres, para a estimativa. O PRD
+    do diretor sai do resumo e da descricao, que e de onde o card nasceu."""
+    mensagens = linha.get("mensagens") or []
+    _, planejamento = chat_tecnologia.partes_da_melhoria(mensagens)
+    conversa = planejamento_demanda.pedido_do_turno(
+        chat_tecnologia.demanda_da_melhoria(mensagens, demanda_id=str(demanda["id"]), titulo=demanda.get("titulo")),
+        planejamento,
+    )
+    return len(conversa) + len(json.dumps(linha.get("resumo") or {}, ensure_ascii=False))
+
+
+@router.get("/chat/{demanda_id}/revisao", response_model=EstimativaDaRevisao)
+async def estimar_a_revisao(
+    demanda_id: str,
+    ator: dict = Depends(require_super_admin),
+    supabase: Client = Depends(get_supabase_client),
+):
+    """A estimativa do diálogo de confirmação (ADR 0082): a faixa em dólar do
+    Retrato de hoje, pelo tamanho da conversa e do PRD e pelo preço do modelo
+    do planejamento. Só conta: nenhuma IA e nenhum GitHub."""
+    demanda, linha = _revisao_permitida(supabase, demanda_id, ator)
+    return tecnologia_revisao.estimativa(caracteres=_tamanho_do_pedido(demanda, linha), kit=carregar_kit())
+
+
+@router.post("/chat/{demanda_id}/revisao", response_model=ChatResponse)
+@limiter.limit(LIMITE_DO_ASSISTENTE)
+async def revisar_com_o_codigo_de_hoje(
+    request: Request,
+    demanda_id: str,
+    payload: RevisarPayload,
+    ator: dict = Depends(require_super_admin),
+    supabase: Client = Depends(get_supabase_client),
+):
+    """O "Revisar com o código de hoje" confirmado (ADR 0084, decisão 3).
+
+    Sem `confirmado`, 422 antes de qualquer leitura: a IA só roda depois do
+    clique em Confirmar (ADR 0082). Confirmado, lê do GitHub o card, os
+    comentários e o `history.json`, e o primeiro turno é o Retrato de hoje. A
+    mesma conversa volta a em andamento com a marca da revisão (quando, por
+    quem, a versão de base) e, se há item em Já existe, com o primeiro "isso
+    atende?". Falha do GitHub ou da IA devolve 502 com a conversa como estava.
+    """
+    demanda, atual = _revisao_permitida(supabase, demanda_id, ator)
+    if not payload.confirmado:
+        _recusar(MOTIVO_REVISAO_SEM_CONFIRMACAO)
+    _exigir_integracao()
+    numero = int(demanda["github_issue_numero"])
+    try:
+        issue = github_client.ler_issue(numero)
+        comentarios = github_client.ler_comentarios(numero)
+        historico = github_client.ler_historico_de_deploys()
+    except (github_client.GithubIndisponivelError, github_client.IssueNaoEncontradaError) as exc:
+        logger.warning("[tecnologia] a revisão da Demanda %s não leu o GitHub: %s", demanda_id, exc)
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=MOTIVO_REVISAO_GITHUB_FALHOU) from None
+    data_do_card = instante_do_banco(issue.get("created_at")) or instante_do_banco(demanda.get("criado_em"))
+
+    mensagens = list(atual.get("mensagens") or [])
+    _, planejamento = chat_tecnologia.partes_da_melhoria(mensagens)
+    resultado = await ai_processor.chamar_ia_fora_do_loop(
+        tecnologia_revisao.retrato_de_hoje,
+        demanda=chat_tecnologia.demanda_da_melhoria(mensagens, demanda_id=demanda_id, titulo=demanda.get("titulo")),
+        mensagens=planejamento,
+        kit=carregar_kit(),
+        corpo_da_issue=str(issue.get("body") or ""),
+        comentarios=comentarios,
+        subidas=tecnologia_revisao.subidas_desde(historico, data_do_card),
+        data_do_card=data_do_card,
+    )
+    if resultado.chamada is not None:
+        planejamento_demanda.gravar_chamada(supabase, resultado.chamada)
+    if resultado.erro:
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=resultado.erro)
+
+    mensagens.append(resultado.mensagem)
+    atende = tecnologia_revisao.proxima_pergunta_de_atende(mensagens)
+    if atende is not None:
+        mensagens.append(atende)
+    linha = planejamento_demanda.gravar(
+        supabase,
+        demanda_id,
+        atual=atual,
+        novo={
+            "estado": planejamento_demanda.ESTADO_EM_ANDAMENTO,
+            "mensagens": mensagens,
+            "revisao_iniciada_em": _agora(),
+            "revisao_por": ator["id"],
+            "revisao_versao_base": tecnologia_revisao.versao(settings.app_version),
+            "atualizado_em": _agora(),
+        },
+    )
+    if linha is None:
+        _conflito(MOTIVO_CHAT_MUDOU)
+    return _chat_para_a_tela(supabase, demanda_id, linha)
 
 
 def _enviar_o_card(

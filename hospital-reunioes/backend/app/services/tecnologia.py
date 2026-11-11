@@ -15,6 +15,7 @@ from app.dependencies import is_super_admin
 from app.services.github_client import FATO_ASSIGNEE
 from app.services.tecnologia_vinculo import (
     ETAPA_EM_ANALISE,
+    ETAPA_EM_DESENVOLVIMENTO,
     ETAPA_EM_PRODUCAO,
     ETAPA_ENTREGUE,
     ETAPA_PLANEJADA,
@@ -193,6 +194,41 @@ def recusa_de_apagar(pessoa: dict[str, Any], demanda: dict[str, Any]) -> tuple[i
         return 403, MOTIVO_APAGAR_SO_O_DESENVOLVEDOR
     if demanda.get("etapa") not in ETAPAS_QUE_SE_APAGAM:
         return 409, MOTIVO_APAGAR_JA_COMECOU
+    return None
+
+
+# A Revisao com o codigo de hoje (ADR 0084, decisao 3): so no card Em analise
+# ou Planejada, e enquanto nenhuma parte esta em desenvolvimento.
+ETAPAS_QUE_SE_REVISAM: tuple[str, ...] = (ETAPA_EM_ANALISE, ETAPA_PLANEJADA)
+
+MOTIVO_REVISAR_SO_O_CARD_DA_MELHORIA = "Só a melhoria que já virou card se revisa com o código de hoje."
+MOTIVO_REVISAR_SO_O_AUTOR = "Só quem pediu e a Vitta revisam este pedido."
+MOTIVO_REVISAR_JA_COMECOU = "Este pedido já começou a ser feito e não pode mais ser revisado."
+
+
+def recusa_de_revisar(pessoa: dict[str, Any], demanda: dict[str, Any]) -> tuple[int, str] | None:
+    """Por que esta pessoa nao revisa esta Demanda, ou `None` se revisa (ADR
+    0084, decisao 3). A recusa vem com o status HTTP e a frase da tela.
+
+    Revisa-se a melhoria do chat que virou card: o bug e o card da Vitta nao
+    tem planejamento para retomar. Clicam o autor e o Desenvolvedor. A Etapa
+    tem de ser Em analise ou Planejada, sem parte Em desenvolvimento. A lista
+    le daqui para mostrar o botao so a quem pode.
+    """
+    if (
+        not demanda.get("github_issue_numero")
+        or demanda.get("tipo") != "novo"
+        or origem_da_demanda(demanda) == ORIGEM_VITTA
+    ):
+        return 409, MOTIVO_REVISAR_SO_O_CARD_DA_MELHORIA
+    if demanda.get("autor_id") != pessoa.get("id") and not e_desenvolvedor(pessoa):
+        return 403, MOTIVO_REVISAR_SO_O_AUTOR
+    partes = demanda.get("partes") if isinstance(demanda.get("partes"), list) else []
+    em_desenvolvimento = any(
+        isinstance(parte, dict) and parte.get("situacao") == ETAPA_EM_DESENVOLVIMENTO for parte in partes
+    )
+    if demanda.get("etapa") not in ETAPAS_QUE_SE_REVISAM or em_desenvolvimento:
+        return 409, MOTIVO_REVISAR_JA_COMECOU
     return None
 
 

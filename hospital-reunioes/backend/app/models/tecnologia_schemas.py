@@ -85,6 +85,11 @@ class DemandaResponse(BaseModel):
     # Quem abriu o card (issue #1554, ADR 0084, decisao 4): o diretor, pelo
     # chat, ou a Vitta, pela issue aberta no terminal. O selo da lista.
     origem: Literal["diretor", "vitta"] = "diretor"
+    # A Revisao com o codigo de hoje (issue #1557, ADR 0084, decisao 3):
+    # `pode_revisar` mostra o botao, pela regra da rota; `em_revisao` abre a
+    # conversa para responder em vez de so ler.
+    pode_revisar: bool = False
+    em_revisao: bool = False
 
 
 class DesenvolvedorResponse(BaseModel):
@@ -282,6 +287,46 @@ class DocumentoDaFala(BaseModel):
     tamanho_bytes: int
 
 
+class ItemQueJaExiste(BaseModel):
+    item: str
+    versao: str
+
+
+class RetratoDeHoje(BaseModel):
+    """O primeiro turno da Revisao com o codigo de hoje (issue #1557): o que ja
+    existe, com a versao em que entrou; o que mudou desde o card; e o que
+    continua em aberto."""
+
+    ja_existe: list[ItemQueJaExiste] = []
+    mudou: list[str] = []
+    em_aberto: list[str] = []
+
+
+class EstimativaDaRevisao(BaseModel):
+    """A faixa em dolar do Retrato de hoje, mostrada antes da confirmacao (ADR
+    0082). Nula quando o modelo nao tem preco na tabela."""
+
+    modelo: str
+    minimo_usd: float | None = None
+    maximo_usd: float | None = None
+
+
+class RevisarPayload(BaseModel):
+    """O clique em Confirmar do dialogo: sem ele, a IA nao roda (ADR 0082)."""
+
+    confirmado: bool = False
+
+
+class RevisaoDaConversa(BaseModel):
+    """A marca da revisao e o que o "isso atende?" ja decidiu: `saiu` do
+    pedido com o sim, `continua` com o nao."""
+
+    iniciada_em: str | None = None
+    versao_base: str | None = None
+    saiu: list[str] = []
+    continua: list[str] = []
+
+
 class FalaDoChat(BaseModel):
     autor: Literal["ia", "diretor"]
     texto: str
@@ -292,6 +337,10 @@ class FalaDoChat(BaseModel):
     recomendada: Literal["A", "B"] | None = None
     nao_bateu: bool = False
     documentos: list[DocumentoDaFala] = []
+    # O Retrato de hoje da revisao (issue #1557), so na fala dele.
+    retrato: RetratoDeHoje | None = None
+    # O nome de quem respondeu o turno (issue #1557), so na fala de gente.
+    respondido_por: str | None = None
 
 
 class ResumoDoBug(BaseModel):
@@ -366,6 +415,8 @@ class ChatResponse(BaseModel):
     # (issue #1534, ADR 0083, decisao 6). O nome, ou o login de quem nao e
     # usuario do app. Nulo enquanto o card nao nasceu.
     responsavel: str | None = None
+    # A Revisao com o codigo de hoje (issue #1557): nula fora dela.
+    revisao: RevisaoDaConversa | None = None
 
 
 class MensagemDaConversaPayload(BaseModel):
