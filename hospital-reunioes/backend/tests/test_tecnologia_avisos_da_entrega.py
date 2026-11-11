@@ -30,7 +30,6 @@ from test_tecnologia_webhook_deploy import (  # noqa: E402
 from test_tecnologia_webhook_github import (  # noqa: E402
     _corpo,
     _entregar,
-    _entregue,
     _GithubFalso,
     _issue,
     _ja_sincronizada,
@@ -45,6 +44,8 @@ from test_tecnologia_webhook_github import (  # noqa: E402
 
 from app.config import settings  # noqa: E402
 from app.services import github_client, tecnologia_email, tecnologia_sincronizacao  # noqa: E402
+from app.services.conhecimento import CONHECIMENTO_DIR  # noqa: E402
+from app.services.email_service import TEMPLATES_DIR  # noqa: E402
 
 DIRETOR = _pessoa("P1", "Diretor Geral", email="diretor@hsm.test")
 DIRETORA = _pessoa("P3", "Diretora Clínica", email="clinica@hsm.test")
@@ -165,3 +166,44 @@ class TestDemonstracaoAvisa:
 
         assert _avisos(sb) == []
         assert emails == []
+
+
+BLOCO = (
+    "**O que muda:** o prazo aparece por setor.\n\n"
+    "**O que você precisa saber:**\n"
+    "- O filtro fica no alto da lista.\n"
+    "- Vale para **todos** os setores."
+)
+
+
+class TestOEmail:
+    def test_o_email_traz_a_frase_os_topicos_e_o_link_do_card(self, monkeypatch, emails):
+        cliente, _ = _subir(monkeypatch, {"titulo": "Prazo por setor", "o_que_muda": BLOCO})
+
+        _avisar(cliente, _corpo_do_deploy())
+
+        [email] = emails
+        assert email["assunto"] == "Entrou no ar: Prazo por setor"
+        link = "https://app.hsm.test/admin/tecnologia?demanda=D1"
+        for corpo in (email["html"], email["texto"]):
+            assert "o prazo aparece por setor." in corpo
+            assert "O filtro fica no alto da lista." in corpo
+            assert "Vale para todos os setores." in corpo
+            assert "O que muda:" not in corpo
+            assert link in corpo
+        assert f'href="{link}"' in email["html"]
+        assert "<li>O filtro fica no alto da lista.</li>" in email["html"]
+
+    def test_o_template_do_email_nao_tem_travessao(self):
+        texto = (TEMPLATES_DIR / "email_tecnologia_entrega.html").read_text(encoding="utf-8")
+
+        assert "—" not in texto
+        assert "–" not in texto
+
+
+class TestOKit:
+    def test_o_kit_da_tecnologia_diz_os_avisos_da_entrega(self):
+        texto = (CONHECIMENTO_DIR / "tecnologia.md").read_text(encoding="utf-8")
+
+        for trecho in ("entra em produção", "vídeo de demonstração fica pronto", "sino e por e-mail"):
+            assert trecho in texto, trecho
