@@ -1414,6 +1414,7 @@ def _enviar_o_card(
                 link=link_da_demanda(demanda_id),
                 anexos=imagens,
                 documentos=documentos,
+                documento=atual.get("documento"),
             )
 
         _enviar(

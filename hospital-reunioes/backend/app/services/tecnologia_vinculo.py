@@ -656,6 +656,11 @@ SEM_CANDIDATA_NO_PRD = "Nenhuma decisão candidata a ADR."
 SEM_LEITURA_DO_CODIGO_NO_PRD = "Nenhuma lida do código nesta conversa: o planejamento técnico completa."
 
 
+# O formato fixo do bloco "Para o diretor" (ADR 0084, decisao 7): no maximo
+# cinco topicos depois da frase de "O que muda".
+LIMITE_DE_TOPICOS_DO_BLOCO = 5
+
+
 def _linha_do_prd(bruto: str | None) -> str:
     """Um texto do planejamento pronto para UMA linha do PRD: a peneira e o
     escape do `texto_do_diretor`, o numero de issue sem cerquilha e tudo numa
@@ -673,6 +678,7 @@ def corpo_do_prd_do_diretor(
     link: str,
     anexos: int = 0,
     documentos: int = 0,
+    documento: dict[str, Any] | None = None,
 ) -> str:
     """O corpo da issue que o "sim" do resumo cria (ADR 0075, decisao 1).
 
@@ -697,10 +703,18 @@ def corpo_do_prd_do_diretor(
     (issue #1532, ADR 0083, decisao 9), acima do bloco e fora dele, e cai no
     titulo quando o resumo nao a tem. A conversa nao vai: o link a substitui
     (decisao 4).
+
+    O bloco "Para o diretor" sai no formato fixo da ADR 0084 (decisao 7, issue
+    #1553): uma frase de "O que muda" e no maximo cinco topicos. Os dois vem do
+    `documento`, o rascunho que o planejamento montou ao lado do chat; sem ele
+    (conversa de antes do documento vivo), a frase e a do resumo e os topicos
+    sao as escolhas do diretor, cortados em cinco.
     """
-    o_que_muda = _linha_do_prd(descricao) or _linha_do_prd(titulo)
+    documento = documento or {}
+    problema = _linha_do_prd(descricao) or _linha_do_prd(titulo)
     titulo_limpo = _linha_do_prd(titulo)
     frase = _linha_do_prd(resumo.get("frase")) or titulo_limpo
+    o_que_muda = _linha_do_prd(documento.get("frase")) or frase
     decisoes = [
         (_linha_do_prd(d.get("pergunta")), _linha_do_prd(d.get("escolha")), _linha_do_prd(d.get("porque")))
         for d in resumo.get("decisoes") or []
@@ -716,8 +730,12 @@ def corpo_do_prd_do_diretor(
     if em_aberto:
         pontos = "1 ponto" if len(em_aberto) == 1 else f"{len(em_aberto)} pontos"
         precisa_saber.append(f"- Ficou em aberto: {pontos}, que a Vitta pergunta depois.")
+    topicos = [item for item in (_linha_do_prd(t) for t in documento.get("topicos") or []) if item]
+    if topicos:
+        precisa_saber = [f"- {item}" for item in topicos]
     if not precisa_saber:
         precisa_saber.append(f"- {SEM_DECISAO_NO_PRD}")
+    precisa_saber = precisa_saber[:LIMITE_DE_TOPICOS_DO_BLOCO]
 
     historias = [f"1. Como quem pediu a Demanda, quero {titulo_limpo}, para resolver o problema acima."]
     historias += [
@@ -744,7 +762,7 @@ def corpo_do_prd_do_diretor(
             "",
             "## Problema",
             "",
-            o_que_muda,
+            problema,
             "",
             "## Solução",
             "",
