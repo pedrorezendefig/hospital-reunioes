@@ -5,16 +5,17 @@
 /**
  * A tela da aba Tecnologia (issue #636, PRD #634; ADR 0077).
  *
- * Desde a issue #1386 a aba é uma tela só: o chat do Assistente, com a lista
- * das conversas ao lado. O Quadro, o Painel, a tela de Produtos, o formulário à
- * mão e a tela antiga do Planejamento saíram do código, e com eles as abas e o
- * que a aba carregava para elas (Produtos, pessoas, o "eu" do Vínculo).
+ * Desde a issue #1386 a aba é o chat do Assistente, com a lista das conversas
+ * ao lado. O Quadro, o Painel, a tela de Produtos, o formulário à mão e a tela
+ * antiga do Planejamento saíram do código, e com eles o que a aba carregava
+ * para elas (Produtos, pessoas, o "eu" do Vínculo). Desde a issue #1556 (ADR
+ * 0084, decisão 8) ela tem duas abas: Conversas, o chat, e Entregas.
  */
 
 import { readdirSync } from "node:fs";
 import { join, relative, resolve } from "node:path";
 
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { ToastProvider } from "@/components/ui/Toast";
@@ -28,13 +29,18 @@ vi.mock("@/hooks/useAuth", () => ({
 
 let pedidos: string[] = [];
 
-function montar() {
+function montar({ desenvolvedor = false }: { desenvolvedor?: boolean } = {}) {
   pedidos = [];
   vi.stubGlobal(
     "fetch",
     vi.fn(async (url: string) => {
       pedidos.push(url);
-      return { ok: true, status: 200, json: async () => [] } as unknown as Response;
+      const corpo = url.endsWith("/eu")
+        ? { desenvolvedor }
+        : url.includes("/entregas")
+          ? { agrupar: "semana", periodos: [], entregas: [], responsaveis: [] }
+          : [];
+      return { ok: true, status: 200, json: async () => corpo } as unknown as Response;
     }),
   );
   render(
@@ -65,15 +71,32 @@ function paginasDaAba(): string[] {
   return achadas.sort();
 }
 
-describe("A aba é o chat do agente, e só (issue #1386, ADR 0077)", () => {
-  it("abre no chat, sem abas de Quadro nem de Painel", async () => {
+describe("A aba abre no chat, com Conversas e Entregas (issues #1386 e #1556)", () => {
+  it("abre no chat, com as abas Conversas e Entregas e sem Quadro nem Painel", async () => {
     montar();
 
     expect(await screen.findByText(ABERTURA)).toBeTruthy();
-    expect(screen.queryByRole("tablist")).toBeNull();
-    expect(screen.queryByRole("tab")).toBeNull();
+    const abas = screen.getAllByRole("tab").map((aba) => aba.textContent);
+    expect(abas).toEqual(["Conversas", "Entregas"]);
+    expect(screen.getByRole("tab", { name: "Conversas" }).getAttribute("aria-selected")).toBe("true");
     expect(screen.queryByText("Quadro")).toBeNull();
     expect(screen.queryByText("Painel")).toBeNull();
+  });
+
+  it.each([
+    ["o diretor", false],
+    ["o Desenvolvedor", true],
+  ])("%s abre as Entregas", async (_quem, desenvolvedor) => {
+    montar({ desenvolvedor });
+    await screen.findByText(ABERTURA);
+
+    fireEvent.click(screen.getByRole("tab", { name: "Entregas" }));
+
+    expect(screen.getByRole("tab", { name: "Entregas" }).getAttribute("aria-selected")).toBe("true");
+    await waitFor(() => expect(pedidos.some((url) => url.startsWith("/api/admin/tecnologia/entregas"))).toBe(true));
+    expect(await screen.findByText("Nenhuma entrega com esses filtros.")).toBeTruthy();
+    // O chat fica guardado atrás da aba: voltar a Conversas não recomeça a conversa.
+    expect(screen.getByText(ABERTURA).closest("[hidden]")).not.toBeNull();
   });
 
   it("só pede ao servidor a lista das conversas e quem está logado: nada de Produtos, pessoas ou Vínculo", async () => {

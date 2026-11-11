@@ -3,20 +3,38 @@
 /**
  * O módulo da aba Tecnologia (issue #636, PRD #634, ADR 0050).
  *
- * Desde a ADR 0077 a aba é uma tela só: o chat do Assistente (issue #1381),
- * com a lista lateral das conversas (issue #1384). O Quadro, o Painel, a tela
- * de Produtos e o formulário à mão saíram do código na issue #1386. O gate de
- * verdade é o `require_super_admin` do backend; a sidebar apenas esconde o item.
+ * Desde a ADR 0077 a aba é o chat do Assistente (issue #1381), com a lista
+ * lateral das conversas (issue #1384). O Quadro, o Painel, a tela de Produtos
+ * e o formulário à mão saíram do código na issue #1386. Desde a issue #1556
+ * (ADR 0084, decisão 8) há duas abas: Conversas, o chat, e Entregas, o retrato
+ * do que foi entregue. O gate de verdade é o `require_super_admin` do backend;
+ * a sidebar apenas esconde o item.
  */
 
+import { useState } from "react";
 import { Cpu } from "lucide-react";
 
 import { useAuth } from "@/hooks/useAuth";
 
 import { ConversasDaTecnologia } from "./ConversasDaTecnologia";
+import { EntregasDaTecnologia } from "./EntregasDaTecnologia";
+
+type Aba = "conversas" | "entregas";
+const ABAS: { id: Aba; rotulo: string }[] = [
+  { id: "conversas", rotulo: "Conversas" },
+  { id: "entregas", rotulo: "Entregas" },
+];
 
 export function TecnologiaModulo({ demandaInicial = null }: { demandaInicial?: string | null }) {
   const { token } = useAuth();
+  const [aba, setAba] = useState<Aba>("conversas");
+  /** As Entregas só pedem ao servidor quando abertas pela primeira vez. */
+  const [entregasAbertas, setEntregasAbertas] = useState(false);
+
+  function escolher(id: Aba) {
+    setAba(id);
+    if (id === "entregas") setEntregasAbertas(true);
+  }
 
   return (
     <div className="animate-fade-in-up space-y-6">
@@ -32,7 +50,32 @@ export function TecnologiaModulo({ demandaInicial = null }: { demandaInicial?: s
         </div>
       </div>
 
-      <ConversasDaTecnologia token={token} demandaInicial={demandaInicial} />
+      <div className="flex flex-wrap gap-1 border-b border-border" role="tablist" aria-label="Tecnologia">
+        {ABAS.map((a) => (
+          <button
+            key={a.id}
+            type="button"
+            role="tab"
+            aria-selected={aba === a.id}
+            onClick={() => escolher(a.id)}
+            className={`px-3 py-2 text-sm font-medium border-b-2 transition-colors ${
+              aba === a.id ? "border-primary text-primary" : "border-transparent text-text-secondary hover:text-text"
+            }`}
+          >
+            {a.rotulo}
+          </button>
+        ))}
+      </div>
+
+      {/* A conversa fica montada atrás da aba: trocar de aba não perde o que foi escrito. */}
+      <div role="tabpanel" aria-label="Conversas" hidden={aba !== "conversas"}>
+        <ConversasDaTecnologia token={token} demandaInicial={demandaInicial} />
+      </div>
+      {entregasAbertas && (
+        <div role="tabpanel" aria-label="Entregas" hidden={aba !== "entregas"}>
+          <EntregasDaTecnologia token={token} />
+        </div>
+      )}
     </div>
   );
 }
