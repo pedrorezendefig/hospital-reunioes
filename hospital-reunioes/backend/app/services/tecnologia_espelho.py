@@ -121,6 +121,14 @@ def espelhar(supabase, numero: int) -> dict[str, Any] | None:
     issue = github_client.ler_issue(numero)
     if decidir(issue, demanda_vinculada(supabase, numero)) != CRIA:
         return None
+    return criar(supabase, issue)
+
+
+def criar(supabase, issue: dict[str, Any]) -> dict[str, Any] | None:
+    """A Demanda Vitta desta issue, que quem chama ja releu e passou por
+    `decidir`. A carga do historico (issue #1555) entra por aqui com a issue
+    que ja releu, sem gastar uma segunda leitura."""
+    numero = int(issue["number"])
     produto = _produto_padrao(supabase)
     if produto is None:
         logger.warning("[tecnologia] Sem Produto ativo; a issue #%s não virou Demanda.", numero)

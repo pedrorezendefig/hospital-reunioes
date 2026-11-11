@@ -323,6 +323,27 @@ def listar_issues_abertas() -> list[dict[str, Any]]:
     ]
 
 
+_POR_PAGINA = 100
+
+
+def listar_issues_fechadas() -> list[dict[str, Any]]:
+    """Todas as issues fechadas (sem os PRs), cruas, pagina a pagina ate vir uma
+    pagina curta. So a carga do historico de entregas le isto (issue #1555): e
+    leitura de uma vez, e a cota de uma hora cobre as poucas dezenas de paginas."""
+    issues: list[dict[str, Any]] = []
+    pagina = 1
+    while True:
+        dados = _chamar("GET", f"/issues?state=closed&per_page={_POR_PAGINA}&page={pagina}")
+        if not isinstance(dados, list):
+            raise GithubIndisponivelError("GitHub respondeu a lista de issues fora do formato")
+        issues.extend(
+            i for i in dados if isinstance(i, dict) and isinstance(i.get("number"), int) and not e_pull_request(i)
+        )
+        if len(dados) < _POR_PAGINA:
+            return issues
+        pagina += 1
+
+
 def e_pull_request(dados: dict[str, Any]) -> bool:
     """A API de issues tambem responde por PR, e o `pull_request` e o que os
     separa (o Vinculo e com a issue-raiz, ADR 0054, decisao 1)."""
