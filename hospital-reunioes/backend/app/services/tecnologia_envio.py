@@ -56,12 +56,14 @@ class Envio:
     """O resultado da porta: a Demanda vinculada, ou o motivo da falha.
 
     `integracao_desligada` separa a falta de configuracao (nao ha o que tentar
-    sem mexer no ambiente) da indisponibilidade do GitHub.
+    sem mexer no ambiente) da indisponibilidade do GitHub. `designacao_falhou`
+    e a Demanda vinculada a uma issue que nasceu sem o Responsavel (issue #1536).
     """
 
     demanda: dict[str, Any] | None = None
     motivo: str | None = None
     integracao_desligada: bool = False
+    designacao_falhou: bool = False
 
     @property
     def criado(self) -> bool:
@@ -203,4 +205,4 @@ def enviar(
     result = supabase.table(TABELA_DEMANDAS).update(mudanca).eq("id", demanda_id).execute()
     if not result.data:
         raise DemandaSumiuError(demanda_id)
-    return Envio(demanda=result.data[0])
+    return Envio(demanda=result.data[0], designacao_falhou=not designada)

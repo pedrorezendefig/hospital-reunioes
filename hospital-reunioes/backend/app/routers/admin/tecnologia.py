@@ -266,6 +266,23 @@ def _issue_indisponivel() -> NoReturn:
     raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=MOTIVO_GITHUB_INDISPONIVEL)
 
 
+AVISO_DO_ENVIO_FALHOU = "O envio de um card falhou"
+AVISO_DA_DESIGNACAO_FALHOU = "Um card nasceu sem o Responsável"
+
+
+def _avisar_os_desenvolvedores(supabase: Client, demanda: dict, *, titulo: str) -> None:
+    """A falha do envio no sino de cada Desenvolvedor (issue #1536, ADR 0083,
+    decisao 7). O aviso abre a Demanda, onde estao o motivo e o botao."""
+    for pessoa in _desenvolvedores(supabase):
+        criar_notificacao_tecnologia(
+            supabase,
+            destinatario_id=str(pessoa["id"]),
+            titulo=titulo,
+            mensagem=str(demanda.get("titulo") or "")[:80],
+            demanda_id=str(demanda["id"]),
+        )
+
+
 def _enviar(
     supabase: Client,
     *,
@@ -297,6 +314,10 @@ def _enviar(
         _recusar(MOTIVO_CRIACAO_EM_ANDAMENTO)
     except tecnologia_envio.DemandaSumiuError:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Demanda nao encontrada") from None
+    if not envio.criado:
+        _avisar_os_desenvolvedores(supabase, demanda, titulo=AVISO_DO_ENVIO_FALHOU)
+    elif envio.designacao_falhou:
+        _avisar_os_desenvolvedores(supabase, demanda, titulo=AVISO_DA_DESIGNACAO_FALHOU)
     if envio.integracao_desligada:
         raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=MOTIVO_INTEGRACAO_DESLIGADA)
     if not envio.criado:

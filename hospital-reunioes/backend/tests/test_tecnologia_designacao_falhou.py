@@ -216,3 +216,44 @@ class TestDesignarDeNovo:
 
         assert _designar_de_novo(_como(PEDRO, sb, gh, monkeypatch), demanda_id).status_code == 409
         assert rede.chamadas == []
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 4. O aviso no sino
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+def _avisos(sb) -> list[dict]:
+    return sb.tabelas.get("notificacoes", [])
+
+
+class TestOAvisoNoSino:
+    def test_envio_falhado_avisa_cada_desenvolvedor(self, monkeypatch):
+        client, sb, gh = _cenario(monkeypatch, participantes=[PEDRO, DIRETOR, LUCAS])
+        demanda_id = _ate_o_resumo(client, monkeypatch)
+        gh.erro_ao_criar = github_client.GithubIndisponivelError("GitHub respondeu 502")
+
+        assert client.post(f"{CHAT}/{demanda_id}/criar-card").status_code == 502
+
+        assert sorted(a["destinatario_id"] for a in _avisos(sb)) == ["P1", "P4"]
+        for aviso in _avisos(sb):
+            assert aviso["tipo"] == "TECNOLOGIA"
+            assert aviso["referencia_id"] == demanda_id
+            assert aviso["titulo"] == "O envio de um card falhou"
+
+    def test_designacao_falhada_avisa_cada_desenvolvedor(self, monkeypatch):
+        _, sb, _, demanda_id, _ = _demanda_com_designacao_falhada(monkeypatch)
+
+        assert sorted(a["destinatario_id"] for a in _avisos(sb)) == ["P1", "P4"]
+        for aviso in _avisos(sb):
+            assert aviso["tipo"] == "TECNOLOGIA"
+            assert aviso["referencia_id"] == demanda_id
+            assert aviso["titulo"] == "Um card nasceu sem o Responsável"
+
+    def test_o_envio_que_da_certo_nao_avisa(self, monkeypatch):
+        client, sb, _ = _cenario(monkeypatch, participantes=[PEDRO, DIRETOR, LUCAS])
+        demanda_id = _ate_o_resumo(client, monkeypatch)
+
+        assert client.post(f"{CHAT}/{demanda_id}/criar-card").status_code == 200
+
+        assert _avisos(sb) == []
