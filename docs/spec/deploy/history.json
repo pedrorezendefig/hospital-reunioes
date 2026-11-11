@@ -2,6 +2,51 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-11-11T14:26:42-03:00",
+      "sha": "16033cd9c725a251c6dfc28932549c97e7e4814a",
+      "app_version": "0.253.0",
+      "subject": "Onda onda-entregas-onda7: Avisos de Em produção e de demonstração pronta",
+      "raw_subject": "chore(deploy): registro da onda onda-entregas-onda7 (#1576)",
+      "scope": [
+        "backend"
+      ],
+      "prds": [
+        1548
+      ],
+      "result": "healthy",
+      "duration_seconds": 73,
+      "services_touched": [
+        "backend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        },
+        {
+          "service": "frontend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "onda-enxuta onda-entregas-onda7: PR #1576 (issue #1560), mergeados PR a PR. Merge pela API do GitHub, um build. Registro pela Action pos-merge depois do health.",
+      "etapas": {
+        "merge_s": 3,
+        "build_s": {
+          "backend": 18
+        },
+        "health_s": 11
+      },
+      "responsavel": "pedrorezendefig"
+    },
+    {
       "at": "2026-11-11T14:23:02-03:00",
       "sha": "c65d0aa1fcc872a03d1b58ef6973f899c5f66bd9",
       "app_version": "0.252.0",
