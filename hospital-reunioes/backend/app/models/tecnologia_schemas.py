@@ -14,8 +14,8 @@ from pydantic import BaseModel, Field
 class ParteDaEntrega(BaseModel):
     """Uma parte da entrega como o diretor a le (issue #676, ADR 0054, decisao 7).
 
-    Duas coisas, e nada mais: o que aquela parte muda para ele e em que pe ela
-    esta. O titulo e o numero da fatia NAO entram, porque sao tecnicos.
+    O que aquela parte muda para ele, em que pe ela esta e quando fechou. O
+    titulo e o numero da fatia NAO entram, porque sao tecnicos.
 
     `situacao` e opcional porque uma linha gravada antes desta fatia nao a tem: a
     tela desenha o texto sem selo em vez de derrubar a conversa inteira.
@@ -23,6 +23,9 @@ class ParteDaEntrega(BaseModel):
 
     o_que_muda: str | None = None
     situacao: str | None = None
+    # Quando a parte fechou, lida na sincronizacao (issue #1552). Nula na
+    # parte aberta e na linha gravada antes desta fatia.
+    fechada_em: str | None = None
 
 
 class DemandaResponse(BaseModel):
@@ -50,6 +53,11 @@ class DemandaResponse(BaseModel):
     # quando a Etapa e Em producao (`versao_da_entrega`), e o selo a mostra
     # ("Em producao desde v0.165.0", issue #1065). A tela nao repete a regra.
     versao: str | None = None
+    # As Datas do Documento do card (issue #1552, ADR 0084, decisao 7), alem
+    # do `criado_em`: a entrega (o fechamento da issue-raiz) e a entrada Em
+    # producao. Resolvidas pelo backend, nulas fora da Etapa que as segura.
+    fechada_em: str | None = None
+    em_producao_em: str | None = None
     # O selo ao lado da Etapa (issue #1438): o Tipo da Demanda traduzido de
     # volta para a pergunta do chat. Nulo no Tipo de antes do chat.
     classificacao: Literal["bug", "melhoria"] | None = None

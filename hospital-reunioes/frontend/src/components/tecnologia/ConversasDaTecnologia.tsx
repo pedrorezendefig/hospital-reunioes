@@ -50,7 +50,7 @@ import { ConfirmDialog } from "@/components/ConfirmDialog";
 
 import { ChatDaTecnologia, Fala } from "./ChatDaTecnologia";
 import { ConversaDaDemanda } from "./ConversaDaDemanda";
-import { OQueMudaDaDemanda } from "./OQueMudaDaDemanda";
+import { DocumentoDoCard } from "./DocumentoDoCard";
 import { SeloDeEtapa } from "./SeloDeEtapa";
 import {
   AnexoDaDemanda,
@@ -381,17 +381,6 @@ function ApagarADemanda({
   );
 }
 
-/** O link da issue, só para o Desenvolvedor e só se apontar para o GitHub. */
-function LinkDaIssue({ demanda }: { demanda: Demanda }) {
-  const url = demanda.issue_url;
-  if (!demanda.issue_numero || !url || !url.startsWith("https://github.com/")) return null;
-  return (
-    <a href={url} target="_blank" rel="noopener noreferrer" className="font-semibold text-primary underline">
-      #{demanda.issue_numero}
-    </a>
-  );
-}
-
 /** Os Anexos da Demanda, que só o Desenvolvedor recebe do servidor. */
 function AnexosDaDemanda({ anexos }: { anexos: AnexoDaDemanda[] }) {
   const comLink = anexos.filter((anexo) => anexo.url);
@@ -419,14 +408,14 @@ function AnexosDaDemanda({ anexos }: { anexos: AnexoDaDemanda[] }) {
 
 /**
  * A conversa só para leitura: a que já virou card, ou a de outro autor que o
- * Desenvolvedor abriu (ADR 0083), com a Etapa e O que muda.
+ * Desenvolvedor abriu (ADR 0083), com a Etapa e o Documento do card.
  */
 function Acompanhamento({ demanda, token }: { demanda: Demanda; token: string | null }) {
   const [falas, setFalas] = useState<FalaDoChat[]>([]);
   const [anexos, setAnexos] = useState<AnexoDaDemanda[]>([]);
 
   // A conversa é complemento: sem ela (a melhoria planejada, ou a rede fora),
-  // O que muda continua à vista.
+  // o Documento do card continua à vista.
   useEffect(() => {
     if (!token) return;
     let viva = true;
@@ -453,10 +442,9 @@ function Acompanhamento({ demanda, token }: { demanda: Demanda; token: string | 
       <div className="flex flex-wrap items-center gap-2 text-xs">
         <h2 className="normal-case text-base font-bold text-slate-900">{demanda.titulo}</h2>
         <SeloDeEtapa demanda={demanda} />
-        <LinkDaIssue demanda={demanda} />
         {demanda.autor && <span className="normal-case text-text-secondary">{demanda.autor}</span>}
       </div>
-      <OQueMudaDaDemanda demanda={demanda} />
+      <DocumentoDoCard demanda={demanda} />
       {falas.length > 0 && (
         <div role="log" className="space-y-3 border-t border-slate-100 pt-4">
           {falas.map((fala, i) => (

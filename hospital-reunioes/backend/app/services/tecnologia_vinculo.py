@@ -330,7 +330,8 @@ def situacao_da_parte(parte: dict[str, Any] | None) -> str:
 
 
 def partes_para_o_diretor(foto: dict[str, Any] | None) -> list[dict[str, Any]]:
-    """A lista de partes como a Demanda a guarda: numero, texto e situacao.
+    """A lista de partes como a Demanda a guarda: numero, texto, situacao e a
+    data do fechamento.
 
     O numero e INTERNO: ele fica no cache para quem e da Vitta rastrear, e o
     funil da resposta (`_com_nomes`, no router) o omite para quem nao tem
@@ -346,6 +347,9 @@ def partes_para_o_diretor(foto: dict[str, Any] | None) -> list[dict[str, Any]]:
             "numero": parte.get("numero"),
             "o_que_muda": parte.get("o_que_muda") or None,
             "situacao": situacao_da_parte(parte),
+            # Quando a parte fechou (issue #1552): o GitHub so a da com a issue
+            # fechada, e a reaberta volta a nulo.
+            "fechada_em": parte.get("fechada_em") or None,
         }
         for parte in _partes(foto)
     ]

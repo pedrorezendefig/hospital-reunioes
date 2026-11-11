@@ -205,7 +205,7 @@ describe("O pedido de antes do chat (issue #1386)", () => {
 });
 
 describe("Acompanhar", () => {
-  it("clicar numa conversa com Vínculo mostra a conversa e O que muda", async () => {
+  it("clicar numa conversa com Vínculo mostra a conversa e o Documento do card", async () => {
     montar((url) => {
       if (url === LISTA) return { status: 200, corpo: [COM_VINCULO] };
       if (url === `${LISTA}/d-2`) {
@@ -216,7 +216,7 @@ describe("Acompanhar", () => {
 
     fireEvent.click(await within(lista()).findByRole("button", { name: /Aviso quando a ata sair/ }));
 
-    const oQueMuda = await screen.findByRole("region", { name: "O que muda" });
+    const oQueMuda = await screen.findByRole("region", { name: "Documento do card" });
     expect(within(oQueMuda).getByText("Agora o aviso da ata chega por e-mail.")).toBeTruthy();
     expect(await screen.findByText("Onde isso aconteceu?")).toBeTruthy();
     expect(screen.queryByLabelText("Sua mensagem")).toBeNull();
@@ -230,7 +230,7 @@ describe("Acompanhar", () => {
 
     fireEvent.click(await within(lista()).findByRole("button", { name: /Aviso quando a ata sair/ }));
 
-    const oQueMuda = await screen.findByRole("region", { name: "O que muda" });
+    const oQueMuda = await screen.findByRole("region", { name: "Documento do card" });
     expect(within(oQueMuda).getByText("Descrição em preparação")).toBeTruthy();
   });
 });

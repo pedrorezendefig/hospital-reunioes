@@ -138,7 +138,7 @@ def _no(dados: dict[str, Any]) -> dict[str, Any]:
     tela do diretor. O corte e feito AQUI, na entrada, e nao na saida, porque a
     saida tem varias portas e a entrada tem uma so.
     """
-    return {
+    no = {
         "numero": dados.get("number"),
         "titulo": dados.get("title"),
         "url": dados.get("html_url"),
@@ -149,6 +149,12 @@ def _no(dados: dict[str, Any]) -> dict[str, Any]:
             str(label["name"]) for label in (dados.get("labels") or []) if isinstance(label, dict) and label.get("name")
         ),
     }
+    # A data do fechamento, que o Documento do card mostra na parte e em Datas
+    # (issue #1552, ADR 0084). So entra com a issue fechada: a foto da issue
+    # aberta continua identica a de antes, e a reconciliacao nao a regrava.
+    if dados.get("closed_at"):
+        no["fechada_em"] = dados["closed_at"]
+    return no
 
 
 # As palavras com que um PR diz que fecha uma issue, as mesmas que o GitHub
