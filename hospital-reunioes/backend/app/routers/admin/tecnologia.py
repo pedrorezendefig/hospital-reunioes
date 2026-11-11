@@ -641,7 +641,8 @@ async def listar_as_conversas(
     Por cima do recorte, e combinando entre si (issue #1551): a `busca` pelo
     titulo, sem diferenciar maiuscula e acento; o `tipo` (bug ou melhoria); a
     `etapa`; o `responsavel` (o id de quem cuida); e o `envio_falhou`, as
-    Demandas cujo card nao chegou ao GitHub (issue #1535). `para_mim`,
+    Demandas cujo card nao chegou ao GitHub (issue #1535), de todos os autores
+    mesmo partindo de `para_mim`, porque elas nao tem Responsavel. `para_mim`,
     `responsavel` e `envio_falhou` sao do Desenvolvedor, como os chips da
     tela, e a rota os recusa a quem nao e.
 
@@ -660,7 +661,11 @@ async def listar_as_conversas(
         consulta = consulta.eq("responsavel_id", ator["id"])
     result = consulta.order("criado_em", desc=True).execute()
     visiveis = [d for d in (result.data or []) if pode_ver(ator, d)]
-    if filtro == "para_mim":
+    # A Demanda em Envio falhou nao tem card, logo nao tem Responsavel: com
+    # `envio_falhou`, o recorte por Responsavel (Para mim e o `responsavel`)
+    # nao corta, senao a lista do Desenvolvedor, que abre em Para mim, sairia
+    # sempre vazia (issue #1535).
+    if filtro == "para_mim" and not envio_falhou:
         visiveis = [d for d in visiveis if responsavel_da_demanda(d) == ator["id"]]
     if busca and busca.strip():
         procurado = _sem_acento(busca.strip())
@@ -669,7 +674,7 @@ async def listar_as_conversas(
         visiveis = [d for d in visiveis if d.get("tipo") == chat_tecnologia.TIPO_DA_CLASSIFICACAO[tipo]]
     if etapa:
         visiveis = [d for d in visiveis if (d.get("etapa") or ETAPA_REGISTRADA) == etapa]
-    if responsavel:
+    if responsavel and not envio_falhou:
         visiveis = [d for d in visiveis if responsavel_da_demanda(d) == responsavel]
     if envio_falhou:
         visiveis = [d for d in visiveis if tecnologia_envio.envio_falhou(d)]

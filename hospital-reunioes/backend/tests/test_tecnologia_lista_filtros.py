@@ -147,6 +147,17 @@ class TestFiltrosCombinam:
     def test_o_desenvolvedor_combina_os_filtros_com_o_recorte(self, lista, consulta, esperado):
         assert _ids(lista(PEDRO, consulta)) == esperado
 
+    @pytest.mark.parametrize(
+        "consulta",
+        ["filtro=para_mim&envio_falhou=true", "filtro=para_mim&responsavel=P4&envio_falhou=true"],
+    )
+    def test_envio_falhou_partindo_de_para_mim_mostra_as_falhas_de_todos(self, lista, consulta):
+        """A Demanda em Envio falhou nao tem card, logo nao tem Responsavel: o
+        recorte por Responsavel (Para mim e o chip Responsavel) nao a corta. A
+        lista do Desenvolvedor abre em Para mim, e o chip Envio falhou tem de
+        mostrar as falhas de todos os autores, como antes (issue #1535)."""
+        assert _ids(lista(PEDRO, consulta)) == ["d-falhou-pedro", "d-falhou-diretor"]
+
     def test_o_diretor_combina_tipo_e_etapa(self, lista):
         assert _ids(lista(DIRETOR, "tipo=bug&etapa=em_analise")) == ["d-bug-rib", "d-bug-pedro"]
 

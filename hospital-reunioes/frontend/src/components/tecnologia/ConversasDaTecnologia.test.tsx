@@ -589,6 +589,9 @@ describe("Envio falhou (issue #1535, ADR 0083, decisão 7)", () => {
     const deOutro = { ...FALHOU, minha: false, autor: "Diretor do Hospital", envio_motivo: "GitHub respondeu 502" };
     const chamadas = montar((url, metodo) => {
       if (url === EU) return { status: 200, corpo: { desenvolvedor: true } };
+      // A lista abre em Para mim, e a rota de verdade devolve aqui as falhas de
+      // todos os autores, sem card e sem Responsavel: e o que prova
+      // `test_envio_falhou_partindo_de_para_mim_mostra_as_falhas_de_todos`.
       if (url === `${LISTA}?filtro=para_mim&envio_falhou=true`) return { status: 200, corpo: [deOutro] };
       if (url === `${LISTA}/d-1` && metodo === "GET") return { status: 200, corpo: RESUMIDA };
       if (url === REENVIAR) return { status: 200, corpo: { ...RESUMIDA, estado: "enviado" } };
@@ -858,16 +861,32 @@ describe("A lista larga com busca e filtros em chips (issue #1551, PRD #1548)", 
   });
 
   it("o Desenvolvedor combina Responsável e Envio falhou com o Para mim", async () => {
-    const chamadas = comoDesenvolvedor();
+    // O que a rota de verdade responde a essa combinacao: a falha de outro autor,
+    // porque Envio falhou nao e cortado por Responsavel (a Demanda sem card nao
+    // tem um), como prova o teste de rota de mesmo nome no backend.
+    const COMBINADA = `${LISTA}?filtro=para_mim&tipo=melhoria&responsavel=P4&envio_falhou=true`;
+    const falhaDeOutro = demanda("d-9", "Relatorio de custo por setor", {
+      classificacao: "melhoria",
+      envio_falhou: true,
+      minha: false,
+      autor: "Diretor do Hospital",
+    });
+    const chamadas = montar((url) => {
+      if (url === EU) return { status: 200, corpo: { desenvolvedor: true } };
+      if (url === DESENVOLVEDORES) return { status: 200, corpo: QUEM_CUIDA };
+      if (url === COMBINADA) return { status: 200, corpo: [falhaDeOutro] };
+      if (url.startsWith(LISTA)) return { status: 200, corpo: [SEM_CARD] };
+      return { status: 404, corpo: {} };
+    });
     await within(lista()).findByText("Botão de responder some na Ouvidoria");
 
     fireEvent.click(await within(filtros()).findByRole("button", { name: "Pedro Rib" }));
     fireEvent.click(chip("Situação", "Envio falhou"));
     fireEvent.click(chip("Tipo", "Melhoria"));
 
-    await waitFor(() =>
-      expect(chamadas.at(-1)?.url).toBe(`${LISTA}?filtro=para_mim&tipo=melhoria&responsavel=P4&envio_falhou=true`),
-    );
+    await waitFor(() => expect(chamadas.at(-1)?.url).toBe(COMBINADA));
+    expect(await within(lista()).findByText("Relatorio de custo por setor")).toBeTruthy();
+    expect(within(lista()).queryByText("Botão de responder some na Ouvidoria")).toBeNull();
     expect(chips()).toEqual([
       "Para mim",
       "Minhas",
