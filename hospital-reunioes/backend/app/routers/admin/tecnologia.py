@@ -148,7 +148,9 @@ def _agora() -> str:
 
 
 def _buscar_demanda(supabase: Client, demanda_id: str) -> dict:
-    result = supabase.table(TABELA_DEMANDAS).select("*").eq("id", demanda_id).execute()
+    """A Demanda, ou 404. A lapide do Apagar (ADR 0084, decisao 2) responde como
+    inexistente: toda leitura e toda escrita da aba passam por aqui."""
+    result = supabase.table(TABELA_DEMANDAS).select("*").eq("id", demanda_id).is_("apagada_em", "null").execute()
     if not result.data:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Demanda nao encontrada")
     return result.data[0]
@@ -618,7 +620,8 @@ async def listar_as_conversas(
     Sai pelo `_para_a_lista`, o funil da Demanda desta API: e la que numero e
     endereco da issue ficam de fora para o diretor.
     """
-    consulta = supabase.table(TABELA_DEMANDAS).select("*")
+    # A lapide do Apagar fica fora de todo filtro (ADR 0084, decisao 2).
+    consulta = supabase.table(TABELA_DEMANDAS).select("*").is_("apagada_em", "null")
     if filtro == "minhas":
         consulta = consulta.eq("autor_id", ator["id"])
     elif filtro == "para_mim":

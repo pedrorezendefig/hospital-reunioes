@@ -187,6 +187,10 @@ def apagar_todos(supabase, demanda_id: str) -> int:
 
 
 def _print_venceu(demanda: dict, agora: datetime) -> bool:
+    # A Demanda apagada (ADR 0084, decisao 2): o que o bucket nao soltou no
+    # Apagar sai agora.
+    if demanda.get("apagada_em"):
+        return True
     etapa = demanda.get("etapa")
     if etapa == ETAPA_NAO_SERA_FEITA:
         return True
@@ -199,7 +203,8 @@ def _print_venceu(demanda: dict, agora: datetime) -> bool:
 
 def apagar_vencidos(supabase, agora: datetime | None = None) -> int:
     """A passada do cron: apaga os prints das Demandas em Em producao ha 30
-    dias ou mais e das em Nao sera feita (ADR 0077, issue #1382).
+    dias ou mais, das em Nao sera feita (ADR 0077, issue #1382) e das apagadas
+    (ADR 0084, issue #1549).
 
     Parte dos anexos ainda guardados, e nao das Demandas: quase toda Demanda
     entregue ja nao tem o que apagar, e a passada de hora em hora fica do
@@ -214,7 +219,8 @@ def apagar_vencidos(supabase, agora: datetime | None = None) -> int:
     if not ids:
         return 0
     demandas = (
-        supabase.table("tecnologia_demandas").select("id, etapa, entregue_em").in_("id", ids).execute().data or []
+        supabase.table("tecnologia_demandas").select("id, etapa, entregue_em, apagada_em").in_("id", ids).execute().data
+        or []
     )
     return sum(apagar_todos(supabase, str(d["id"])) for d in demandas if _print_venceu(d, agora))
 

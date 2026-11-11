@@ -43,7 +43,7 @@ from test_tecnologia_vinculo import (  # noqa: E402
 from app.config import settings  # noqa: E402
 from app.limiter import limiter  # noqa: E402
 from app.routers.admin.tecnologia import MOTIVO_APAGAR_GITHUB_FALHOU  # noqa: E402
-from app.services import github_client  # noqa: E402
+from app.services import github_client, tecnologia_anexos  # noqa: E402
 from app.services.tecnologia_vinculo import (  # noqa: E402
     ETAPA_EM_ANALISE,
     ETAPA_EM_DESENVOLVIMENTO,
@@ -73,7 +73,8 @@ def _reset_rate_limiter():
 
 def _conversa_registrada(**campos) -> dict:
     """A conversa do DIRETOR que ainda não virou card."""
-    return _demanda(DEMANDA, autor_id=DIRETOR["id"], responsavel_id=None, etapa=ETAPA_REGISTRADA, **campos)
+    base = {"autor_id": DIRETOR["id"], "responsavel_id": None, "etapa": ETAPA_REGISTRADA}
+    return _demanda(DEMANDA, **{**base, **campos})
 
 
 def _card(etapa: str = ETAPA_EM_ANALISE, **campos) -> dict:
@@ -184,9 +185,7 @@ class TestMigration:
             ("tecnologia_planejamentos", ("documento", "revisao_iniciada_em", "revisao_por", "revisao_versao_base")),
         ):
             for coluna in colunas:
-                assert re.search(
-                    rf"ALTER TABLE {tabela} ADD COLUMN IF NOT EXISTS {coluna} ", sql
-                ), f"{tabela}.{coluna}"
+                assert re.search(rf"ALTER TABLE {tabela} ADD COLUMN IF NOT EXISTS {coluna} ", sql), f"{tabela}.{coluna}"
 
     def test_a_origem_nasce_diretor_e_so_aceita_diretor_ou_vitta(self):
         sql = _sem_comentarios()
@@ -210,8 +209,10 @@ class TestMigration:
         assert "CREATE POLICY" not in sql
 
     def test_termina_com_o_recibo_do_proprio_numero(self):
-        assert _sem_comentarios().strip().endswith(
-            "INSERT INTO migracoes_aplicadas (numero) VALUES (130) ON CONFLICT (numero) DO NOTHING;"
+        assert (
+            _sem_comentarios()
+            .strip()
+            .endswith("INSERT INTO migracoes_aplicadas (numero) VALUES (130) ON CONFLICT (numero) DO NOTHING;")
         )
 
 
@@ -358,3 +359,61 @@ class TestFalhaDoGithub:
         assert resposta.status_code == 503
         assert gh.fechadas == []
         _nada_foi_apagado(sb)
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 6. A lápide
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+class TestALapide:
+    def test_a_linha_fica_com_quem_apagou_e_a_conversa_o_planejamento_e_os_anexos_saem(self, monkeypatch):
+        client, sb, _ = _cenario(monkeypatch, logado=PEDRO, demanda=_card(ETAPA_PLANEJADA))
+
+        assert client.delete(APAGAR).status_code == 204
+
+        assert [d["id"] for d in sb.tabelas["tecnologia_demandas"]] == [DEMANDA]
+        demanda = _a_demanda(sb)
+        assert demanda["apagada_em"]
+        assert demanda["apagada_por"] == PEDRO["id"]
+        assert sb.tabelas["tecnologia_planejamentos"] == []
+        assert sb.tabelas["tecnologia_conversa_da_demanda"] == []
+        assert sb.storage.arquivos == {}
+        assert sb.tabelas["tecnologia_anexos"][0]["apagado_em"]
+
+    @pytest.mark.parametrize(
+        ("filtro", "demanda"),
+        [
+            ("", _conversa_registrada(autor_id=PEDRO["id"])),
+            ("?filtro=todas", _card()),
+            ("?filtro=para_mim", _card()),
+            ("?filtro=envio_falhou", _conversa_registrada(autor_id=PEDRO["id"], envio_estado="falhou")),
+        ],
+    )
+    def test_a_demanda_apagada_some_da_lista(self, monkeypatch, filtro, demanda):
+        client, _, _ = _cenario(monkeypatch, logado=PEDRO, demanda=demanda)
+        assert [d["id"] for d in client.get(f"{BASE}/chat{filtro}").json()] == [DEMANDA]
+
+        assert client.delete(APAGAR).status_code == 204
+
+        assert client.get(f"{BASE}/chat{filtro}").json() == []
+
+    def test_o_anexo_que_o_bucket_nao_soltou_no_apagar_sai_na_passada_do_cron(self, monkeypatch):
+        """O Apagar não espera o bucket: o anexo que ficou sem a marca de
+        apagado (o Storage não confirmou) sai na passada seguinte do cron, como
+        o da Demanda que ficou Não será feita."""
+        lapide = _conversa_registrada(apagada_em="2026-11-11T10:00:00+00:00", apagada_por=DIRETOR["id"])
+        _, sb, _ = _cenario(monkeypatch, logado=DIRETOR, demanda=lapide)
+
+        assert tecnologia_anexos.apagar_vencidos(sb) == 1
+
+        assert sb.storage.arquivos == {}
+        assert sb.tabelas["tecnologia_anexos"][0]["apagado_em"]
+
+    def test_a_demanda_apagada_nao_abre_nem_se_apaga_de_novo(self, monkeypatch):
+        client, _, gh = _cenario(monkeypatch, logado=DIRETOR, demanda=_conversa_registrada())
+        assert client.delete(APAGAR).status_code == 204
+
+        assert client.get(APAGAR).status_code == 404
+        assert client.get(f"{APAGAR}/conversa").status_code == 404
+        assert client.delete(APAGAR).status_code == 404

@@ -60,7 +60,7 @@ class _Result:
 
 
 class _TableQuery:
-    """PostgREST minimo: select/eq/in_/order/range/insert/update, e nada mais.
+    """PostgREST minimo: select/eq/in_/is_/order/range/insert/update, e nada mais.
 
     `range` entrou com a issue #641: as duas rotas de recorte da lista leem
     paginado (`ler_tudo`), e sem ele a matriz de gate morreria de
@@ -72,6 +72,7 @@ class _TableQuery:
         self._rows = rows
         self._eq: dict[str, Any] = {}
         self._in: dict[str, list] = {}
+        self._is_null: set[str] = set()
         self._insert: list[dict] | None = None
         self._update: dict | None = None
         self._order: list[str] = []
@@ -96,6 +97,13 @@ class _TableQuery:
         self._in[coluna] = list(valores)
         return self
 
+    def is_(self, coluna, valor):
+        """`.is_(coluna, "null")`: a leitura da aba deixa a lapide do Apagar de
+        fora (issue #1549)."""
+        assert str(valor).lower() == "null", "o dublê só conhece is_(coluna, 'null')"
+        self._is_null.add(coluna)
+        return self
+
     def insert(self, payload):
         linhas = payload if isinstance(payload, list) else [payload]
         self._insert = [dict(linha) for linha in linhas]
@@ -107,6 +115,8 @@ class _TableQuery:
 
     def _casa(self, linha: dict) -> bool:
         if not all(linha.get(c) == v for c, v in self._eq.items()):
+            return False
+        if not all(linha.get(c) is None for c in self._is_null):
             return False
         return all(linha.get(c) in v for c, v in self._in.items())
 

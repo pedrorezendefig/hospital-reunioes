@@ -13,11 +13,20 @@ GitHub falha, a excecao sobe antes de qualquer escrita no app.
 
 from __future__ import annotations
 
+import logging
 from datetime import UTC, datetime
 from typing import Any
 
-from app.services import github_client
-from app.services.tecnologia import TABELA_DEMANDAS
+from app.services import github_client, tecnologia_anexos
+from app.services.planejamento_demanda import TABELA_PLANEJAMENTOS
+from app.services.tecnologia import TABELA_CONVERSA_DA_DEMANDA, TABELA_DEMANDAS
+
+logger = logging.getLogger(__name__)
+
+# O que sai junto com a Demanda: a conversa com o agente e o planejamento (a
+# mesma linha, ADR 0077, decisao 2), a Conversa da Demanda e o fio de antes da
+# ADR 0077 (migration 102), que ninguem mais le mas ainda guarda o que se disse.
+TABELAS_DA_CONVERSA = (TABELA_PLANEJAMENTOS, TABELA_CONVERSA_DA_DEMANDA, "tecnologia_conversas")
 
 # A primeira linha marca o comentario como do agente (o /onda-enxuta nao o le
 # como comentario de revisor). O repositorio e publico: sem nome de ninguem.
@@ -51,6 +60,24 @@ def apagar(supabase, demanda: dict[str, Any], *, ator: dict[str, Any]) -> None:
     numero = demanda.get("github_issue_numero")
     if numero:
         _fechar_no_github(int(numero))
-    supabase.table(TABELA_DEMANDAS).update(
-        {"apagada_em": datetime.now(UTC).isoformat(), "apagada_por": ator["id"]}
-    ).eq("id", str(demanda["id"])).execute()
+    demanda_id = str(demanda["id"])
+    supabase.table(TABELA_DEMANDAS).update({"apagada_em": datetime.now(UTC).isoformat(), "apagada_por": ator["id"]}).eq(
+        "id", demanda_id
+    ).execute()
+    _levar_junto(supabase, demanda_id)
+
+
+def _levar_junto(supabase, demanda_id: str) -> None:
+    """A conversa e os anexos, depois da lapide gravada.
+
+    A lapide ja tira a Demanda de toda leitura, entao uma falha aqui nao a
+    devolve a tela: fica no log com a tabela. O anexo que o bucket nao
+    confirmou fica sem a marca de apagado, e o cron o tira na passada
+    seguinte (`tecnologia_anexos.apagar_vencidos`).
+    """
+    for tabela in TABELAS_DA_CONVERSA:
+        try:
+            supabase.table(tabela).delete().eq("demanda_id", demanda_id).execute()
+        except Exception:
+            logger.exception("A Demanda %s foi apagada, mas %s não saiu", demanda_id, tabela)
+    tecnologia_anexos.apagar_todos(supabase, demanda_id)
