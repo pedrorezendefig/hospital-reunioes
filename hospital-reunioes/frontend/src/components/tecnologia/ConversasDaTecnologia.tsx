@@ -40,15 +40,19 @@
  * por categoria (issue #1578, emenda da ADR 0084, que trocou os chips da
  * #1551): Tipo, Etapa e Origem para todos; o recorte (Para mim, Minhas,
  * Todas, controle segmentado), o Responsável e o "Só envio falhou" só para o
- * Desenvolvedor. Tudo combina, e quem filtra é o servidor. Com uma Demanda
- * aberta a barra e a lista recolhem, e o Voltar às conversas as traz de volta,
- * na tela larga como no celular.
+ * Desenvolvedor. Tudo combina, e quem filtra é o servidor.
+ *
+ * Na tela larga o clique no card abre a Demanda ao lado da lista (issue #1593,
+ * que reverteu o recolher da #1551). O Ampliar, no canto do card e no topo da
+ * Demanda aberta, recolhe a barra e a lista, e o Voltar às conversas as traz de
+ * volta; o próximo clique num card volta a abrir ao lado. No celular, a lista e
+ * a Demanda seguem uma de cada vez, com o Voltar.
  *
  * Cada conversa é um card com contorno: título, data de abertura, quem pediu
  * e quem cuida com as iniciais, as partes do PRD numa barra e os selos. O
  * "Conversar" do card abre a Demanda com a caixa da Conversa da Demanda em
- * foco. Na tela larga a Demanda aberta tem a Conversa da Demanda numa coluna
- * à direita, fixa na rolagem (issue #1578).
+ * foco. Ao lado da lista, a Conversa da Demanda fica embaixo do documento;
+ * ampliada, numa coluna à direita, fixa na rolagem (issues #1578 e #1593).
  *
  * Os cards que a Vitta abre pelo terminal aparecem na lista com o selo
  * "Vitta", e os do chat com "Pedido do diretor"; o chip Origem filtra (issue
