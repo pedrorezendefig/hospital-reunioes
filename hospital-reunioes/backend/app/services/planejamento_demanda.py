@@ -28,7 +28,7 @@ from types import SimpleNamespace
 from typing import Literal
 
 from postgrest.exceptions import APIError
-from pydantic import BaseModel, ConfigDict, model_validator
+from pydantic import BaseModel, ConfigDict, ValidationError, field_validator, model_validator
 
 from app.config import settings
 from app.services import ai_processor, ferramentas_do_codigo
@@ -136,7 +136,8 @@ class _DocumentoDoTurno(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
     frase: str | None = None
-    topicos: list[str] = []
+    # Nulo vale lista vazia (o `documento_limpo` ja trata assim).
+    topicos: list[str] | None = None
 
 
 class _SaidaDoTurno(BaseModel):
@@ -156,6 +157,15 @@ class _SaidaDoTurno(BaseModel):
     # O rascunho do documento do card, a cada turno (issue #1553, ADR 0084,
     # decisao 7). Opcional: o turno sem ele deixa o rascunho de antes.
     documento: _DocumentoDoTurno | None = None
+
+    @field_validator("documento", mode="wrap")
+    @classmethod
+    def _rascunho_invalido_cai_sozinho(cls, valor, handler):
+        """Rascunho malformado nao derruba a pergunta: cai so ele, e fica o de antes."""
+        try:
+            return handler(valor)
+        except ValidationError:
+            return None
 
     @model_validator(mode="after")
     def _pergunta_inteira(self):

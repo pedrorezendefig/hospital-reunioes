@@ -94,6 +94,31 @@ class TestCadaTurnoGravaORascunho:
             "topicos": ["Linha um.", *SETE_TOPICOS[:4]],
         }
 
+    def test_topicos_nulos_nao_derrubam_o_turno_e_a_pergunta_fica_gravada(self, monkeypatch):
+        client, sb, _ = _cenario(monkeypatch)
+        demanda_id = _abrir_pelo_botao(client, monkeypatch)["demanda_id"]
+        documento = {"frase": "A recepção marca.", "topicos": None}
+        _ia(monkeypatch, _pergunta(contexto="E quem confirma?", documento=documento))
+
+        resposta = client.post(f"{CHAT}/{demanda_id}", json={"opcao": "A"})
+
+        assert resposta.status_code == 200, resposta.text
+        assert _conversas(sb)[0]["mensagens"][-1]["contexto"] == "E quem confirma?"
+        assert _conversas(sb)[0]["documento"] == {"frase": "A recepção marca.", "topicos": []}
+
+    def test_rascunho_malformado_cai_sozinho_e_a_pergunta_fica_gravada(self, monkeypatch):
+        client, sb, _ = _cenario(monkeypatch)
+        demanda_id = _abrir_pelo_botao(client, monkeypatch)["demanda_id"]
+        _ia(monkeypatch, _pergunta(documento={"frase": "A recepção marca.", "topicos": []}))
+        client.post(f"{CHAT}/{demanda_id}", json={"opcao": "A"})
+        _ia(monkeypatch, _pergunta(contexto="E quem confirma?", documento={"frase": None, "topicos": "um texto"}))
+
+        resposta = client.post(f"{CHAT}/{demanda_id}", json={"opcao": "B"})
+
+        assert resposta.status_code == 200, resposta.text
+        assert _conversas(sb)[0]["mensagens"][-1]["contexto"] == "E quem confirma?"
+        assert resposta.json()["documento"] == {"frase": "A recepção marca.", "topicos": []}
+
 
 class TestOPromptDizOLimite:
     def test_o_prompt_do_planejamento_pede_o_documento_com_uma_frase_e_ate_cinco_topicos(self):
