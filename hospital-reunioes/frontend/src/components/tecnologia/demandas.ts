@@ -113,7 +113,22 @@ export type Demanda = {
    */
   pode_revisar?: boolean;
   em_revisao?: boolean;
+  /**
+   * O vídeo de demonstração da entrega (issue #1559): o link `https` lido do
+   * marcador da issue-raiz e quando ele chegou. Sem link, sem selo nem seção.
+   */
+  demonstracao_url?: string | null;
+  demonstracao_em?: string | null;
 };
+
+/** O selo da lista e a guarda da seção do Documento do card (issue #1559). */
+export const TEM_DEMONSTRACAO = "Tem demonstração";
+
+/** O link da Demonstração que a tela aceita desenhar: só `https`. */
+export function linkDaDemonstracao(demanda: Demanda): string | null {
+  const url = demanda.demonstracao_url;
+  return url && url.startsWith("https://") ? url : null;
+}
 
 export type Origem = "diretor" | "vitta";
 

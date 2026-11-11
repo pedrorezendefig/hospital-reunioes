@@ -95,6 +95,8 @@ Ao abrir um pedido que já foi para a Vitta, ele aparece como um documento curto
 - **Partes**: quando a entrega é feita em partes, cada uma mostra em que pé está e quando ficou pronta.
 - **Datas**: quando o pedido foi criado, quando foi entregue e quando entrou em produção.
 
+Quando a Vitta grava um vídeo mostrando a entrega funcionando, o documento ganha também a seção **Demonstração**, num cartão próprio, com o link para assistir, e o pedido aparece na lista com o selo **Tem demonstração**. Sem vídeo, nem o selo nem a seção aparecem. Se a Vitta troca o vídeo, o link novo substitui o antigo; depois de chegar ao pedido, o vídeo não some sozinho.
+
 Esse texto vem do planejamento da Vitta, ou das suas decisões quando a melhoria foi planejada com a IA, e não se edita no aplicativo. Enquanto a Vitta não escreve o resumo, o documento mostra "Descrição em preparação".
 
 ## As Entregas
@@ -166,6 +168,7 @@ Para cada item de Já existe a IA pergunta "isso atende?". Ele só sai do pedido
 - O Desenvolvedor, administrador com login do GitHub no cadastro, vê as Demandas de todos, com a conversa inteira e os anexos; o diretor vê as suas e os cards da Vitta, sem número nem link do card.
 - Uma Demanda se liga a um trabalho de desenvolvimento só, e a Etapa é lida de lá, nunca digitada.
 - Um pedido de melhoria Em análise ou Planejada se revisa com o código de hoje, pelo autor ou pelo Desenvolvedor, com o custo mostrado antes e a confirmação, e o que já existe só sai do pedido com o sim de quem pediu.
+- O vídeo de demonstração de uma entrega vem do desenvolvimento da Vitta, só por link seguro (https), e aparece no pedido com o selo Tem demonstração e a seção Demonstração.
 - Um pedido se apaga só até Planejada, com confirmação, pela mão de quem escreveu a conversa que não virou card ou do Desenvolvedor no card criado, e no desenvolvimento o card fecha como não planejado e nunca é apagado.
 - O texto que sai da Demanda para o material público do desenvolvimento passa por uma peneira que esconde CPF, telefone, nome e outros dados pessoais.
 - Os prints e os documentos ficam só dentro do aplicativo e são apagados 30 dias depois de Em produção, ou logo quando a entrega fica Não será feita.

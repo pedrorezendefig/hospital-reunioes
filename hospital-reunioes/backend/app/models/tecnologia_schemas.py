@@ -90,6 +90,10 @@ class DemandaResponse(BaseModel):
     # conversa para responder em vez de so ler.
     pode_revisar: bool = False
     em_revisao: bool = False
+    # O video de demonstracao da entrega (issue #1559): o link `https` lido do
+    # marcador da issue-raiz e quando ele chegou. Nulo, sem selo nem secao.
+    demonstracao_url: str | None = None
+    demonstracao_em: str | None = None
 
 
 class DesenvolvedorResponse(BaseModel):

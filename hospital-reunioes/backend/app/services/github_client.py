@@ -37,7 +37,7 @@ import json
 import logging
 import re
 from typing import Any
-from urllib.parse import quote, urlencode
+from urllib.parse import quote, urlencode, urlsplit
 
 import httpx
 
@@ -480,6 +480,41 @@ def _primeiro_assignee(dados: dict[str, Any]) -> str | None:
     return None
 
 
+# A chave do link da Demonstracao na foto (issue #1559).
+FATO_DEMONSTRACAO = "demonstracao"
+
+# O marcador da Demonstracao no corpo da issue-raiz (issue #1559):
+# `<!-- demonstracao: https://... -->`. O link e um token so, sem espaco.
+_MARCADOR_DA_DEMONSTRACAO = re.compile(r"<!--\s*demonstracao:\s*(\S+)\s*-->", re.IGNORECASE)
+
+# O que nunca entra num link que a tela poe num `href`: aspas e sinais de tag.
+_FORA_DO_LINK = re.compile(r"[\"'<>\\]")
+
+
+def demonstracao_do_corpo(corpo: str | None) -> str | None:
+    """O link da Demonstracao que o corpo da issue carrega, ou `None`.
+
+    So `https` com endereco entra (issue #1559): o link vai para a tela do
+    diretor, e `http`, `javascript:` ou um `https://` sem host nao sao link de
+    video. Marcador malformado vale o mesmo que marcador nenhum.
+
+    Vale o ultimo marcador do corpo, o que o `/divulgar` grava no fim: o texto
+    da issue pode citar o marcador antes (a spec do PRD #1548 cita). O host
+    precisa de um ponto e nenhum pedaco vazio, para `https://...` nao passar.
+    """
+    achados = _MARCADOR_DA_DEMONSTRACAO.findall(corpo or "")
+    if not achados:
+        return None
+    url = achados[-1]
+    if _FORA_DO_LINK.search(url):
+        return None
+    partes = urlsplit(url)
+    host = partes.hostname or ""
+    if partes.scheme != "https" or "." not in host or not all(host.split(".")):
+        return None
+    return url
+
+
 def montar_foto(dados: dict[str, Any], partes: list[dict[str, Any]]) -> dict[str, Any]:
     """A foto que o servico puro le: a raiz, as partes e o resumo das partes.
 
@@ -501,6 +536,12 @@ def montar_foto(dados: dict[str, Any], partes: list[dict[str, Any]]) -> dict[str
     assignee = _primeiro_assignee(dados)
     if assignee is not None:
         foto[FATO_ASSIGNEE] = assignee
+
+    # O link da Demonstracao, so da raiz (issue #1559). So entra quando o
+    # marcador e valido: a foto da issue sem ele continua identica.
+    demonstracao = demonstracao_do_corpo(dados.get("body"))
+    if demonstracao is not None:
+        foto[FATO_DEMONSTRACAO] = demonstracao
 
     resumo = dados.get("sub_issues_summary")
     if isinstance(resumo, dict) and isinstance(resumo.get("total"), int):

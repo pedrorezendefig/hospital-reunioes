@@ -20,9 +20,11 @@ import { cleanup, fireEvent, render, screen, within } from "@testing-library/rea
 import { afterEach, describe, expect, it } from "vitest";
 
 import {
+  ASSISTIR_A_DEMONSTRACAO,
   DocumentoDoCard,
   SEM_O_QUE_MUDA,
   TITULO_DATAS,
+  TITULO_DEMONSTRACAO,
   TITULO_DOCUMENTO,
   TITULO_EM_UMA_FRASE,
   TITULO_O_QUE_MUDA,
@@ -182,6 +184,26 @@ describe("O Documento do card", () => {
 
     const link = within(documento()).getByRole("link", { name: "#912" });
     expect(link.getAttribute("href")).toBe("https://github.com/pedrorezendefig/hospital-reunioes/issues/912");
+  });
+
+  it("com o link, a Demonstração vem num cartão próprio com o link para assistir (issue #1559)", () => {
+    montar({ ...VINCULADA, demonstracao_url: "https://youtu.be/demo", demonstracao_em: "2026-11-08T13:00:00Z" });
+
+    const cartao = within(documento()).getByRole("region", { name: TITULO_DEMONSTRACAO });
+    const link = within(cartao).getByRole("link", { name: ASSISTIR_A_DEMONSTRACAO });
+    expect(link.getAttribute("href")).toBe("https://youtu.be/demo");
+    expect(link.getAttribute("target")).toBe("_blank");
+    expect(link.getAttribute("rel")).toBe("noopener noreferrer");
+    expect(cartao.textContent).toContain("Adicionada em 08/11/2026");
+  });
+
+  it("sem o link, ou com um link que não é https, não há Demonstração", () => {
+    montar(VINCULADA);
+    expect(within(documento()).queryByRole("region", { name: TITULO_DEMONSTRACAO })).toBeNull();
+    cleanup();
+
+    montar({ ...VINCULADA, demonstracao_url: "javascript:alert(1)" });
+    expect(within(documento()).queryByRole("region", { name: TITULO_DEMONSTRACAO })).toBeNull();
   });
 
   it("some inteiro quando a Demanda não tem Vínculo", () => {
