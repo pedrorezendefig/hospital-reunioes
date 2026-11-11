@@ -116,7 +116,9 @@ class TestTabelaDoEspelho:
     def test_ferramenta_ou_sem_area_de_app_ignora(self, labels):
         assert decidir(_issue_raiz(labels=labels), None) == IGNORA
 
-    @pytest.mark.parametrize("labels", [("area:backend",), ("type:chore", "area:backend"), ("type:docs", "area:frontend")])
+    @pytest.mark.parametrize(
+        "labels", [("area:backend",), ("type:chore", "area:backend"), ("type:docs", "area:frontend")]
+    )
     def test_sem_tipo_de_entrega_ignora(self, labels):
         assert decidir(_issue_raiz(labels=labels), None) == IGNORA
 
@@ -433,4 +435,3 @@ class TestKit:
     def test_o_kit_diz_que_ajuste_interno_nao_aparece(self):
         secao = _secao("O que é uma Demanda")
         assert "ajustes internos" in secao
-

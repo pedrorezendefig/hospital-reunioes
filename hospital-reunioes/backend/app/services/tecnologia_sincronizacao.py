@@ -65,9 +65,10 @@ logger = logging.getLogger(__name__)
 #
 # `opened` entra desde a issue #1554: a issue-raiz do app aberta pelo terminal
 # nasce Demanda de Origem Vitta pelo espelho (`tecnologia_espelho`), que o
-# webhook chama quando a issue ainda nao tem Demanda. A troca de dono (`assigned`, `unassigned`) entra desde a issue #1534: o
-# Responsavel e derivado do assignee (ADR 0083, decisao 6). As demais acoes
-# (`milestoned`, `pinned`) nao tocam em label, estado, corpo nem dono.
+# webhook chama quando a issue ainda nao tem Demanda. A troca de dono
+# (`assigned`, `unassigned`) entra desde a issue #1534: o Responsavel e
+# derivado do assignee (ADR 0083, decisao 6). As demais acoes (`milestoned`,
+# `pinned`) nao tocam em label, estado, corpo nem dono.
 ACOES_DE_ISSUE = ("opened", "labeled", "unlabeled", "closed", "reopened", "edited", "assigned", "unassigned")
 
 # As acoes do evento `pull_request` que mexem no fato do PR (issue #1064, ADR
