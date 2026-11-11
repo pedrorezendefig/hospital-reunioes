@@ -17,15 +17,23 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 from dataclasses import dataclass
 from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict, field_validator
 
 from app.config import settings
-from app.services import ai_processor, ferramentas_do_codigo, planejamento_demanda
+from app.services import ai_processor, ferramentas_do_codigo, github_client, planejamento_demanda
 from app.services.custo_da_conversa import nome_de_exibicao
 from app.services.tecnologia import instante_do_banco, recuar_continuacao
+from app.services.tecnologia_vinculo import (
+    LABEL_EM_ANDAMENTO,
+    LABEL_TRIAGEM,
+    LABELS_PLANEJADA,
+    marcador_da_demanda,
+    texto_do_diretor,
+)
 from app.utils.text_sanitizer import sanitizar_travessao
 
 logger = logging.getLogger(__name__)
@@ -272,3 +280,165 @@ def escopo(mensagens: list[dict]) -> dict | None:
         texto = itens[mensagem["atende"]]["item"]
         (saiu if resposta.get("opcao") == "A" else continua).append(texto)
     return {"saiu": saiu, "continua": continua}
+
+
+# ─── "Atualizar o card" (issue #1558) ────────────────────────────────────────
+
+# O marcador da Demanda como ele estiver na issue (o mesmo padrao do
+# `prd_do_leitor` do fluxo): espaco a mais nao o torna outro marcador.
+_MARCADOR_DA_DEMANDA = re.compile(r'<!--\s*demanda-vitta id="[^"]*"\s*-->')
+
+
+def corpo_revisado(*, corpo_atual: str | None, corpo_novo: str, demanda_id: str) -> str:
+    """O PRD revisado com o marcador da Demanda da issue, byte a byte.
+
+    O corpo novo sai do `corpo_do_prd_do_diretor`, que escreve o marcador do
+    jeito de hoje. Quem acha a Demanda pela issue (a reconciliacao, o
+    `anexos.py`) le o PRIMEIRO marcador do corpo, e o que ja esta la e o que
+    vale: ele substitui o escrito. Sem marcador na issue, fica o novo.
+    """
+    achado = _MARCADOR_DA_DEMANDA.search(corpo_atual or "")
+    if achado is None:
+        return corpo_novo
+    return corpo_novo.replace(marcador_da_demanda(demanda_id), achado.group(0))
+
+
+# As secoes do PRD do diretor que sao o escopo: as decisoes e o que ficou em
+# aberto. O bloco "Para o diretor" e as historias repetem as decisoes, e a
+# Origem nao e escopo.
+_SECOES_DO_ESCOPO = ("Decisões de negócio", "Decisões de implementação", "Decisões de teste", "Ficou em aberto")
+_PERGUNTA_DA_DECISAO = re.compile(r"^\d+\.\s+\*\*(.*)\*\*$")
+
+
+def escopo_do_corpo(corpo: str | None) -> list[str]:
+    """Os itens do escopo de um PRD do diretor, na ordem: cada decisao de
+    negocio como "pergunta escolha", e cada item de lista das outras secoes."""
+    itens: list[str] = []
+    secao, pergunta = None, ""
+    for bruta in (corpo or "").splitlines():
+        linha = bruta.strip()
+        if linha.startswith("## "):
+            secao, pergunta = linha[3:].strip(), ""
+            continue
+        if secao not in _SECOES_DO_ESCOPO:
+            continue
+        if achada := _PERGUNTA_DA_DECISAO.match(linha):
+            pergunta = achada.group(1).strip()
+        elif linha.startswith("Escolha:"):
+            itens.append(f"{pergunta} {linha.removeprefix('Escolha:').strip()}".strip())
+        elif linha.startswith("- "):
+            itens.append(linha[2:].strip())
+    return list(dict.fromkeys(item for item in itens if item))
+
+
+NADA_NO_COMENTARIO = "- Nada."
+
+
+def comentario_da_atualizacao(
+    *,
+    corpo_antes: str | None,
+    corpo_depois: str,
+    saiu_por_atender: list[str],
+    partes_fechadas: list[int],
+    versao_base: str | None,
+) -> str:
+    """O comentario que o "Atualizar o card" deixa na issue-raiz: o que entrou
+    e o que saiu do escopo, pela diferenca entre os dois corpos, mais o que ja
+    existe e quem pediu disse que atende. A primeira linha o marca como do
+    agente. O repositorio e publico: o item que veio do retrato passa pela
+    mesma peneira do PRD."""
+    antes, depois = escopo_do_corpo(corpo_antes), escopo_do_corpo(corpo_depois)
+    entrou = [item for item in depois if item not in antes]
+    saiu = [item for item in antes if item not in depois]
+    saiu += [
+        f"{' '.join(texto_do_diretor(item).split())} (já existe no app, e quem pediu disse que atende)"
+        for item in saiu_por_atender
+    ]
+    base = f", com o app na {versao_base}" if versao_base else ""
+    linhas = [
+        "<!-- automacao -->",
+        f"O card foi atualizado pela Revisão com o código de hoje, na aba Tecnologia do app{base}.",
+        "",
+        "Entrou no escopo:",
+        *([f"- {item}" for item in entrou] or [NADA_NO_COMENTARIO]),
+        "",
+        "Saiu do escopo:",
+        *([f"- {item}" for item in saiu] or [NADA_NO_COMENTARIO]),
+    ]
+    if partes_fechadas:
+        partes = ", ".join(f"#{n}" for n in partes_fechadas)
+        linhas += ["", f"Partes que não tinham começado, fechadas como não planejadas: {partes}."]
+    linhas += ["", "O card volta para a triagem, para um novo `/to-issues`."]
+    return "\n".join(linhas)
+
+
+# O motivo na parte que fecha. A primeira linha o marca como do agente.
+COMENTARIO_DA_PARTE_FECHADA = (
+    "<!-- automacao -->\n"
+    "O card #{raiz} foi revisado com o código de hoje na aba Tecnologia do app, e esta parte ainda não "
+    "tinha começado. Ela fecha como não planejada; as partes novas saem de um novo `/to-issues`."
+)
+
+
+class ParteJaComecouError(RuntimeError):
+    """Uma parte do card esta em desenvolvimento: o card nao se atualiza."""
+
+
+def _labels_da_issue(dados: dict) -> list[str]:
+    return [str(label["name"]) for label in dados.get("labels") or [] if isinstance(label, dict) and label.get("name")]
+
+
+LABEL_PEDE_INFORMACAO = "needs-info"
+
+# As labels de triagem que a raiz perde ao voltar para `needs-triage`: as da
+# fila (Planejada) e o pedido de informacao.
+_LABELS_QUE_SAEM = {*LABELS_PLANEJADA, LABEL_PEDE_INFORMACAO}
+
+
+def labels_da_raiz_revisada(labels: list[str]) -> list[str]:
+    """As labels da raiz depois da revisao: as de fila saem, `needs-triage`
+    entra, e o resto (tipo, area, origem) fica, para o novo `/to-issues`."""
+    ficam = [label for label in labels if label.lower() not in _LABELS_QUE_SAEM and label.lower() != LABEL_TRIAGEM]
+    return [*ficam, LABEL_TRIAGEM]
+
+
+def atualizar_no_github(
+    numero: int,
+    *,
+    demanda_id: str,
+    corpo_novo: str,
+    saiu_por_atender: list[str],
+    versao_base: str | None,
+) -> list[int]:
+    """Leva o PRD revisado a issue-raiz. Devolve as partes que fechou.
+
+    Le a raiz e as partes NA HORA, e nao do cache da Demanda: a parte que pegou
+    `in-progress` depois da ultima sincronizacao levanta `ParteJaComecouError`
+    antes de qualquer escrita. Depois, pela ordem: o comentario (antes do
+    corpo, que e de onde sai o "o que mudou"), as partes abertas fechadas como
+    nao planejadas e, por ultimo, a raiz regravada. Falha do GitHub sobe como
+    `GithubIndisponivelError`; o clique seguinte refaz o que faltou, e a parte
+    ja fechada nao fecha de novo.
+    """
+    dados = github_client.ler_issue(numero)
+    partes = [p for p in github_client.ler_sub_issues(numero) if isinstance(p, dict)]
+    abertas = [p for p in partes if p.get("state") == "open" and isinstance(p.get("number"), int)]
+    if any(LABEL_EM_ANDAMENTO in {n.lower() for n in _labels_da_issue(p)} for p in [dados, *abertas]):
+        raise ParteJaComecouError(numero)
+    fechadas = [p["number"] for p in abertas]
+
+    corpo = corpo_revisado(corpo_atual=dados.get("body"), corpo_novo=corpo_novo, demanda_id=demanda_id)
+    github_client.comentar(
+        numero,
+        comentario_da_atualizacao(
+            corpo_antes=dados.get("body"),
+            corpo_depois=corpo,
+            saiu_por_atender=saiu_por_atender,
+            partes_fechadas=fechadas,
+            versao_base=versao_base,
+        ),
+    )
+    for parte in fechadas:
+        github_client.fechar_como_nao_planejada(parte, comentario=COMENTARIO_DA_PARTE_FECHADA.format(raiz=numero))
+    github_client.regravar(numero, corpo=corpo, labels=labels_da_raiz_revisada(_labels_da_issue(dados)))
+    return fechadas

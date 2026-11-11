@@ -44,6 +44,8 @@ ROTAS_DO_CHAT = {
     "/api/admin/tecnologia/entregas",
     # A Revisão com o código de hoje (issue #1557): a estimativa e o confirmar.
     "/api/admin/tecnologia/chat/{demanda_id}/revisao",
+    # O Atualizar o card no fim da revisão (issue #1558).
+    "/api/admin/tecnologia/chat/{demanda_id}/atualizar-card",
 }
 
 # O que fica de fora da aba e continua de pé (critério 2 da issue).

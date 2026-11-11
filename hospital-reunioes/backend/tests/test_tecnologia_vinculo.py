@@ -452,6 +452,23 @@ class TestPrecedenciaEntreAsRegras:
         foto = _foto(partes=(_parte(674, estado="closed", motivo="completed"),))
         assert etapa_da_foto(foto) == ETAPA_PLANEJADA
 
+    def test_partes_recusadas_sem_nenhuma_aberta_voltam_a_em_analise(self):
+        """O "Atualizar o card" da revisão (issue #1558): as partes não
+        começadas fecham como não planejadas, e o card volta à triagem até o
+        novo `/to-issues`, mesmo com uma parte já entregue."""
+        foto = _foto(
+            labels=("needs-triage",),
+            partes=(
+                _parte(674, estado="closed", motivo="completed"),
+                _parte(675, estado="closed", motivo="not_planned"),
+            ),
+        )
+        assert etapa_da_foto(foto) == ETAPA_EM_ANALISE
+
+    def test_parte_recusada_com_outra_aberta_segue_planejada(self):
+        foto = _foto(partes=(_parte(674, estado="closed", motivo="not_planned"), _parte(675)))
+        assert etapa_da_foto(foto) == ETAPA_PLANEJADA
+
     def test_label_desconhecida_nao_muda_nada(self):
         assert etapa_da_foto(_foto(labels=("area:backend", "fatia:G"))) == ETAPA_EM_ANALISE
 

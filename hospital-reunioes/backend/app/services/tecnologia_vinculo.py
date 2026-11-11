@@ -188,9 +188,19 @@ def etapa_da_foto(
 
     # 4. Planejada: a fila de agente ou de humano, ou um PRD que ja tem partes e
     #    nenhuma delas comecou (as partes existirem E o plano).
+    #
+    #    Parte recusada (fechada e nao entregue) sem nenhuma parte aberta e o
+    #    plano desfeito: e o que o "Atualizar o card" da revisao deixa (issue
+    #    #1558, ADR 0084, decisao 3), com as partes nao comecadas fechadas como
+    #    nao planejadas e a raiz de volta na triagem. O card volta a Em analise
+    #    ate o novo `/to-issues`. Com todas as partes entregues e a raiz aberta,
+    #    segue Planejada: a raiz ainda nao fechou.
     if labels_raiz & set(LABELS_PLANEJADA):
         return ETAPA_PLANEJADA
-    if partes:
+    plano_desfeito = not any(not _fechada(parte) for parte in partes) and any(
+        _fechada(parte) and not _entregue(parte) for parte in partes
+    )
+    if partes and not plano_desfeito:
         return ETAPA_PLANEJADA
 
     # 5. O resto que esta aberto: alguem ainda vai olhar. `needs-triage` e

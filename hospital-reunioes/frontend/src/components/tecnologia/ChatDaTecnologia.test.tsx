@@ -18,6 +18,7 @@ import { caixaDoDado } from "@/lib/testes/caixaDoDado";
 
 import {
   ABERTURA,
+  ATUALIZAR_O_CARD,
   ChatDaTecnologia,
   CONTINUAR_RESPONDENDO,
   CRIAR_O_CARD,
@@ -504,6 +505,41 @@ describe("A melhoria", () => {
 
     expect(await screen.findByText(/A Vitta recebeu o seu pedido/)).toBeTruthy();
     expect(chamadas[1]).toMatchObject({ url: "/api/admin/tecnologia/chat/d-1/criar-card", metodo: "POST" });
+  });
+});
+
+// ─── O Atualizar o card da revisão (issue #1558, ADR 0084, decisão 3) ───────
+
+describe("O fim da Revisão com o código de hoje", () => {
+  const REVISAO = { iniciada_em: "2026-11-10T12:00:00Z", versao_base: "v0.251.0", saiu: [], continua: [] };
+
+  it("o resumo da revisão troca o Criar o card pelo Atualizar o card, que regrava o mesmo card", async () => {
+    const chamadas = montar([
+      { status: 201, corpo: melhoria({ estado: "resumido", resumo_da_melhoria: RESUMO_DA_MELHORIA, revisao: REVISAO }) },
+      { status: 200, corpo: melhoria({ estado: "enviado", resumo_da_melhoria: RESUMO_DA_MELHORIA, revisao: REVISAO }) },
+    ]);
+    fireEvent.click(screen.getByRole("button", { name: "Melhoria" }));
+
+    const resumo = await screen.findByRole("region", { name: "Resumo da melhoria" });
+    expect(within(resumo).queryByRole("button", { name: CRIAR_O_CARD })).toBeNull();
+    expect(within(resumo).queryByLabelText("Quem cuida disto?")).toBeNull();
+    fireEvent.click(within(resumo).getByRole("button", { name: ATUALIZAR_O_CARD }));
+
+    expect(await screen.findByText(/O card foi atualizado com o pedido revisado/)).toBeTruthy();
+    expect(chamadas[1]).toMatchObject({ url: "/api/admin/tecnologia/chat/d-1/atualizar-card", metodo: "POST" });
+  });
+
+  it("se o desenvolvimento não responde, a tela diz e o Atualizar o card continua lá", async () => {
+    montar([
+      { status: 201, corpo: melhoria({ estado: "resumido", resumo_da_melhoria: RESUMO_DA_MELHORIA, revisao: REVISAO }) },
+      { status: 502, corpo: { detail: "O desenvolvimento não respondeu, e o card não foi atualizado." } },
+    ]);
+    fireEvent.click(screen.getByRole("button", { name: "Melhoria" }));
+
+    fireEvent.click(await screen.findByRole("button", { name: ATUALIZAR_O_CARD }));
+
+    expect(await screen.findByText(/o card não foi atualizado/)).toBeTruthy();
+    expect(screen.getByRole("button", { name: ATUALIZAR_O_CARD })).toBeTruthy();
   });
 });
 

@@ -149,6 +149,8 @@ A revisão continua a mesma conversa de antes. A IA lê o pedido como está hoje
 
 Para cada item de Já existe a IA pergunta "isso atende?". Ele só sai do pedido se você disser que atende; se não atende, continua no pedido. Depois ela pergunta só o que falta, sem limite de perguntas. O Desenvolvedor também pode responder, e cada resposta mostra o nome de quem respondeu.
 
+No fim, o resumo traz o botão **Atualizar o card** no lugar do Criar o card. Ele troca o pedido que está no desenvolvimento pelo revisado, no mesmo card, e deixa nele uma nota com o que entrou e o que saiu. As partes que ainda não tinham começado são fechadas, e o pedido volta para Em análise, para a Vitta planejar de novo a partir do pedido revisado. Se alguma parte já começou a ser feita, o card não é atualizado. Se o desenvolvimento não responder, nada muda no aplicativo e o botão continua lá para tentar de novo.
+
 ## O que já foi decidido
 
 - A aba mora dentro do aplicativo e só quem é Super admin a vê.
@@ -169,7 +171,7 @@ Para cada item de Já existe a IA pergunta "isso atende?". Ele só sai do pedido
 - A lista tem busca pelo título e filtros que combinam (Bug ou Melhoria, Etapa, Origem, e para o Desenvolvedor também Responsável, Envio falhou e Para mim), e recolhe quando um pedido está aberto.
 - O Desenvolvedor, administrador com login do GitHub no cadastro, vê as Demandas de todos, com a conversa inteira e os anexos; o diretor vê as suas e os cards da Vitta, sem número nem link do card.
 - Uma Demanda se liga a um trabalho de desenvolvimento só, e a Etapa é lida de lá, nunca digitada.
-- Um pedido de melhoria Em análise ou Planejada se revisa com o código de hoje, pelo autor ou pelo Desenvolvedor, com o custo mostrado antes e a confirmação, e o que já existe só sai do pedido com o sim de quem pediu.
+- Um pedido de melhoria Em análise ou Planejada se revisa com o código de hoje, pelo autor ou pelo Desenvolvedor, com o custo mostrado antes e a confirmação, e o que já existe só sai do pedido com o sim de quem pediu; no fim, o Atualizar o card troca o pedido no mesmo card e o devolve a Em análise.
 - O vídeo de demonstração de uma entrega vem do desenvolvimento da Vitta, só por link seguro (https), e aparece no pedido com o selo Tem demonstração e a seção Demonstração.
 - Quando o pedido entra em produção ou o vídeo de demonstração fica pronto, chega um aviso no sino e por e-mail, uma vez só: para quem pediu, no pedido do diretor, e para a diretoria, no pedido da Vitta.
 - Um pedido se apaga só até Planejada, com confirmação, pela mão de quem escreveu a conversa que não virou card ou do Desenvolvedor no card criado, e no desenvolvimento o card fecha como não planejado e nunca é apagado.
