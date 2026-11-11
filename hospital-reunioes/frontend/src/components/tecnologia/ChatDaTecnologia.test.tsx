@@ -1070,4 +1070,26 @@ describe("A pergunta respondida em linha", () => {
     expect(linhaDaPergunta(1).getAttribute("aria-expanded")).toBe("false");
     expect(screen.queryByRole("region", { name: "Pergunta 1" })).toBeNull();
   });
+
+  it("a pergunta antiga, sem título, já respondida, continua em bolha com a resposta em bolha", async () => {
+    montar([{ status: 201, corpo: melhoriaComAntigaRespondida() }]);
+    fireEvent.click(screen.getByRole("button", { name: "Melhoria" }));
+    await screen.findByRole("region", { name: "Pergunta 2" });
+
+    expect(screen.queryByRole("button", { name: /^Pergunta 1,/ })).toBeNull();
+    expect(screen.getByText(PERGUNTA.texto)).toBeTruthy();
+    expect(screen.getByText("Não, na enfermagem.")).toBeTruthy();
+  });
+
+  it("a pergunta da vez, com uma respondida antes dela, continua em cartão inteiro com as opções para clicar", async () => {
+    montar([{ status: 201, corpo: melhoriaEmCartao() }]);
+    fireEvent.click(screen.getByRole("button", { name: "Melhoria" }));
+
+    const cartao = await screen.findByRole("region", { name: "Pergunta 2" });
+    expect(screen.queryByRole("button", { name: /^Pergunta 2,/ })).toBeNull();
+    expect(within(cartao).getByRole("heading", { name: "Quem marca o retorno do paciente?" })).toBeTruthy();
+    expect(within(cartao).getByText(CONTEXTO_DO_CARTAO)).toBeTruthy();
+    const opcoes = within(within(cartao).getByRole("group", { name: "Opções" })).getAllByRole("button");
+    expect(opcoes).toHaveLength(2);
+  });
 });
