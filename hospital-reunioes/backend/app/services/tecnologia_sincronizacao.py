@@ -473,7 +473,10 @@ def _carimbar_em_producao(supabase, demanda: dict[str, Any], *, versao: str, dat
     demanda_id = str(demanda["id"])
     marcada = (
         supabase.table(TABELA_DEMANDAS)
-        .update({"etapa": ETAPA_EM_PRODUCAO, "versao_em_producao": versao, "entregue_em": data})
+        # `em_producao_em` e a data que o Documento do card mostra em Datas
+        # (issue #1552, ADR 0084, decisao 8); `entregue_em` segue sendo o
+        # relogio dos 30 dias dos prints.
+        .update({"etapa": ETAPA_EM_PRODUCAO, "versao_em_producao": versao, "entregue_em": data, "em_producao_em": data})
         .eq("id", demanda_id)
         .eq("etapa", ETAPA_ENTREGUE)
         .in_("estado", list(ESTADOS_ABERTOS))

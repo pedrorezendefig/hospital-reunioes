@@ -120,6 +120,22 @@ class TestOWebhookMarcaEmProducao:
         assert d2.get("versao_em_producao") is None
         assert gh.leituras == [], "o webhook de deploy não relê o GitHub"
 
+    def test_a_subida_grava_a_data_em_producao_do_documento_do_card(self, monkeypatch):
+        """Issue #1552: o webhook de deploy grava `em_producao_em`, a data que o
+        Documento do card mostra em Datas (ADR 0084, decisão 8)."""
+        gh = _GithubFalso({673: _entregue(673)})
+        cliente, sb, _ = _montar(
+            demandas=[_entregue_por_pr(gh, 673, "D1")],
+            participantes=[_pessoa()],
+            github=gh,
+            monkeypatch=monkeypatch,
+        )
+
+        _avisar(cliente, _corpo_do_deploy())
+
+        [d1] = _demandas(sb)
+        assert d1["em_producao_em"] == DATA_DA_SUBIDA
+
     def test_em_producao_nao_escreve_na_conversa_aposentada(self, monkeypatch):
         """A Conversa da Demanda saiu com a ADR 0077: a subida move a Etapa e a
         resposta conta a marcada, e nenhuma linha vai para o fio."""
@@ -409,6 +425,22 @@ class TestAReconciliacaoCarimbaEmProducao:
             "2026-10-08T10:00:00-03:00",
         )
         assert d2["etapa"] == ETAPA_ENTREGUE, "a issue que nenhuma subida lista continua Entregue"
+
+    def test_a_reconciliacao_grava_a_data_em_producao_do_documento_do_card(self, monkeypatch):
+        """Issue #1552: o par do webhook grava a mesma `em_producao_em`, com a
+        data da subida que o `history.json` registra."""
+        gh = _GithubFalso({673: _fechada_em(673, "2026-10-08T12:30:00Z")})
+        _, sb, _ = _montar(
+            demandas=[_entregue_por_pr(gh, 673, "D1")],
+            participantes=[_pessoa("P1")],
+            github=gh,
+            monkeypatch=monkeypatch,
+        )
+
+        self._job(monkeypatch, sb)
+
+        [d1] = _demandas(sb)
+        assert d1["em_producao_em"] == "2026-10-08T10:00:00-03:00"
 
     def test_a_issue_reaberta_nao_herda_a_subida_do_fechamento_anterior(self, monkeypatch):
         """O caso da revisão do PR #1100: a 673 subiu na v0.169.0, reabriu para
