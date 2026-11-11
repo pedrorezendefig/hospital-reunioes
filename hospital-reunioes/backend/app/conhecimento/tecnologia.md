@@ -97,6 +97,8 @@ Ao abrir um pedido que já foi para a Vitta, ele aparece como um documento curto
 
 Quando a Vitta grava um vídeo mostrando a entrega funcionando, o documento ganha também a seção **Demonstração**, num cartão próprio, com o link para assistir, e o pedido aparece na lista com o selo **Tem demonstração**. Sem vídeo, nem o selo nem a seção aparecem. Se a Vitta troca o vídeo, o link novo substitui o antigo; depois de chegar ao pedido, o vídeo não some sozinho.
 
+Quando o pedido entra em produção, e quando o vídeo de demonstração fica pronto, chega um aviso no sino e por e-mail. No seu pedido, o aviso vai para você; nos pedidos que a Vitta abriu, vai para a diretoria. O e-mail traz a frase e os tópicos do documento, e o link dele, como o clique no sino, abre o pedido. Cada coisa avisa uma vez só: o mesmo vídeo de novo não gera outro aviso.
+
 Esse texto vem do planejamento da Vitta, ou das suas decisões quando a melhoria foi planejada com a IA, e não se edita no aplicativo. Enquanto a Vitta não escreve o resumo, o documento mostra "Descrição em preparação".
 
 ## As Entregas
@@ -169,6 +171,7 @@ Para cada item de Já existe a IA pergunta "isso atende?". Ele só sai do pedido
 - Uma Demanda se liga a um trabalho de desenvolvimento só, e a Etapa é lida de lá, nunca digitada.
 - Um pedido de melhoria Em análise ou Planejada se revisa com o código de hoje, pelo autor ou pelo Desenvolvedor, com o custo mostrado antes e a confirmação, e o que já existe só sai do pedido com o sim de quem pediu.
 - O vídeo de demonstração de uma entrega vem do desenvolvimento da Vitta, só por link seguro (https), e aparece no pedido com o selo Tem demonstração e a seção Demonstração.
+- Quando o pedido entra em produção ou o vídeo de demonstração fica pronto, chega um aviso no sino e por e-mail, uma vez só: para quem pediu, no pedido do diretor, e para a diretoria, no pedido da Vitta.
 - Um pedido se apaga só até Planejada, com confirmação, pela mão de quem escreveu a conversa que não virou card ou do Desenvolvedor no card criado, e no desenvolvimento o card fecha como não planejado e nunca é apagado.
 - O texto que sai da Demanda para o material público do desenvolvimento passa por uma peneira que esconde CPF, telefone, nome e outros dados pessoais.
 - Os prints e os documentos ficam só dentro do aplicativo e são apagados 30 dias depois de Em produção, ou logo quando a entrega fica Não será feita.

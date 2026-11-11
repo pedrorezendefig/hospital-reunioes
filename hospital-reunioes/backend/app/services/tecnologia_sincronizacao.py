@@ -41,7 +41,7 @@ from collections.abc import Callable
 from datetime import UTC, datetime
 from typing import Any
 
-from app.services import github_client
+from app.services import github_client, tecnologia_avisos
 from app.services.registro_do_deploy import subida_de_cada_issue
 from app.services.tecnologia import (
     ESTADOS_ABERTOS,
@@ -307,8 +307,12 @@ def sincronizar_demanda(
     demanda: dict[str, Any],
     *,
     ajustar_fatos: AjusteDosFatos | None = None,
+    avisar: bool = True,
 ) -> bool:
     """Rele a issue vinculada e atualiza o cache da Demanda. `True` se mudou.
+
+    `avisar=False` e da carga do historico (issue #1560): o link de
+    Demonstracao que ela encontra numa entrega antiga nao vira aviso.
 
     `ajustar_fatos` e o que quem chama sabe dos fatos do PR (issue #1064).
     `None` quer dizer "nao sei", e o que vale e o que a foto guardada ja dizia:
@@ -381,6 +385,11 @@ def sincronizar_demanda(
         )
         return False
 
+    if avisar and "demonstracao_url" in mudanca:
+        # O link novo foi gravado por ESTA escrita (issue #1560): quem perdeu a
+        # trava releu a linha com o link ja la, e `demonstracao_nova` nao o
+        # devolveu de novo.
+        tecnologia_avisos.avisar(supabase, {**demanda, **mudanca}, aviso=tecnologia_avisos.AVISO_DEMONSTRACAO)
     return True
 
 
@@ -497,7 +506,13 @@ def _carimbar_em_producao(supabase, demanda: dict[str, Any], *, versao: str, dat
         .in_("estado", list(ESTADOS_ABERTOS))
         .execute()
     )
-    return bool(marcada.data)
+    if not marcada.data:
+        return False
+    # O aviso mora atras do compare-and-swap (issue #1560): so quem moveu a
+    # Etapa avisa, e o webhook repetido ou a reconciliacao que chega depois
+    # nao avisam de novo.
+    tecnologia_avisos.avisar(supabase, demanda, aviso=tecnologia_avisos.AVISO_EM_PRODUCAO)
+    return True
 
 
 def _subiu_depois_do_fechamento(data_da_subida: str, fechada_em: object) -> bool:
