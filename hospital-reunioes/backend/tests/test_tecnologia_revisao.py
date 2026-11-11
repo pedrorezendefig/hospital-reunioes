@@ -19,12 +19,13 @@ from __future__ import annotations
 import json
 import os
 import sys
+from pathlib import Path
 
 import pytest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from test_planejamento_demanda import _ia, _pergunta  # noqa: E402
+from test_planejamento_demanda import _ClienteFalso, _ia, _pergunta  # noqa: E402
 from test_tecnologia_chat import (  # noqa: E402
     _cenario,
     _conversas,
@@ -36,6 +37,8 @@ from test_tecnologia_vinculo import BASE, DIRETOR, PEDRO, _demanda, _GithubFalso
 
 from app.services import github_client  # noqa: E402
 from app.services.conhecimento import CONHECIMENTO_DIR  # noqa: E402
+
+PROMPTS_DIR = Path(__file__).resolve().parent.parent / "app" / "prompts"
 from app.services.tecnologia_vinculo import (  # noqa: E402
     ETAPA_EM_ANALISE,
     ETAPA_EM_DESENVOLVIMENTO,
@@ -149,6 +152,27 @@ def _montar_revisao(monkeypatch, *, logado=DIRETOR, demanda: dict | None = None,
     monkeypatch.setattr(github_client, "ler_historico_de_deploys", lambda: [dict(h) for h in HISTORICO])
     monkeypatch.setattr(github_client, "ler_comentarios", lambda numero: [dict(c) for c in COMENTARIOS], raising=False)
     return client, sb, gh
+
+
+class _ClienteEmSequencia(_ClienteFalso):
+    """O modelo dublado que responde um texto por chamada, na ordem."""
+
+    def __init__(self, *textos: str):
+        super().__init__(textos[0])
+        self.textos = list(textos)
+
+    def _create(self, **kwargs):
+        self.texto = self.textos[min(len(self.chamadas), len(self.textos) - 1)]
+        return super()._create(**kwargs)
+
+
+def _ia_em_sequencia(monkeypatch, *textos: str) -> _ClienteEmSequencia:
+    from app.services import ai_processor
+
+    cliente = _ClienteEmSequencia(*textos)
+    monkeypatch.setattr(ai_processor, "_llm_provider", lambda: "anthropic")
+    monkeypatch.setattr(ai_processor, "_get_llm", lambda: (cliente, "modelo-do-resto-do-app"))
+    return cliente
 
 
 def _na_lista(client) -> dict:
@@ -364,6 +388,47 @@ class TestIssoAtende:
         assert resposta.json()["mensagens"][-1]["texto"] == f"Isso atende? Já existe desde a v0.246.0: {outro}"
 
 
+class TestSemItemEmJaExiste:
+    """O pedido que ainda não existe no sistema: o Retrato sem nada em Já
+    existe não tem "isso atende?", e a conversa não pode parar nele."""
+
+    def test_a_primeira_pergunta_pelas_lacunas_vem_no_mesmo_clique(self, monkeypatch):
+        client, sb, _ = _montar_revisao(monkeypatch)
+        cliente = _ia_em_sequencia(monkeypatch, _retrato(ja_existe=[]), _pergunta(contexto="Quem confirma o retorno?"))
+
+        resposta = client.post(REVISAO, json={"confirmado": True})
+
+        assert resposta.status_code == 200, resposta.text
+        ultima = resposta.json()["mensagens"][-1]
+        assert ultima["autor"] == "ia"
+        assert ultima["texto"] == "Quem confirma o retorno?"
+        assert ultima["recomendada"] == "A"
+        assert len(cliente.chamadas) == 2
+        assert _conversas(sb)[0]["estado"] == "em_andamento"
+
+    def test_o_diretor_responde_por_escrito_depois_do_retrato_vazio(self, monkeypatch):
+        client, _, _ = _montar_revisao(monkeypatch)
+        _ia_em_sequencia(monkeypatch, _retrato(ja_existe=[]), _pergunta(contexto="Quem confirma o retorno?"))
+        client.post(REVISAO, json={"confirmado": True})
+        _ia(monkeypatch, _pergunta(contexto="E quando ele confirma?"))
+
+        resposta = client.post(f"{CHAT}/{DEMANDA}", json={"texto": "A própria recepção, por telefone."})
+
+        assert resposta.status_code == 200, resposta.text
+        assert resposta.json()["mensagens"][-1]["texto"] == "E quando ele confirma?"
+
+    def test_se_a_pergunta_falha_o_retrato_ja_cobrado_fica_na_conversa(self, monkeypatch):
+        client, sb, _ = _montar_revisao(monkeypatch)
+        _ia_em_sequencia(monkeypatch, _retrato(ja_existe=[]), "isso não é JSON")
+
+        resposta = client.post(REVISAO, json={"confirmado": True})
+
+        assert resposta.status_code == 200, resposta.text
+        conversa = _conversas(sb)[0]
+        assert conversa["estado"] == "em_andamento"
+        assert conversa["mensagens"][-1]["tipo"] == "retrato"
+
+
 # ═══════════════════════════════════════════════════════════════════════════
 # 5. Quem respondeu cada turno
 # ═══════════════════════════════════════════════════════════════════════════
@@ -384,7 +449,7 @@ class TestQuemRespondeu:
 
 
 # ═══════════════════════════════════════════════════════════════════════════
-# 6. O kit de conhecimento
+# 6. O kit de conhecimento e o prompt
 # ═══════════════════════════════════════════════════════════════════════════
 
 
@@ -405,3 +470,14 @@ class TestOKitDizARevisao:
             "o nome de quem respondeu",
         ):
             assert trecho in secao, trecho
+
+
+class TestOPromptDoRetrato:
+    def test_a_regra_de_formato_abre_excecao_para_o_retrato_de_hoje(self):
+        """Duas ordens contrárias no system deixam o modelo responder o Retrato
+        no formato de pergunta, que o `_SaidaDoRetrato` recusa depois da chamada
+        cobrada."""
+        texto = (PROMPTS_DIR / "planejamento_demanda_system.md").read_text(encoding="utf-8")
+
+        regra = texto.split("## Formato de resposta", 1)[1].split("Para fazer uma pergunta", 1)[0]
+        assert "Fora do pedido de resumo e do Retrato de hoje" in regra

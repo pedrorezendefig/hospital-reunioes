@@ -1598,7 +1598,8 @@ async def revisar_com_o_codigo_de_hoje(
     comentários e o `history.json`, e o primeiro turno é o Retrato de hoje. A
     mesma conversa volta a em andamento com a marca da revisão (quando, por
     quem, a versão de base) e, se há item em Já existe, com o primeiro "isso
-    atende?". Falha do GitHub ou da IA devolve 502 com a conversa como estava.
+    atende?"; sem item, com a primeira pergunta pelas lacunas. Falha do
+    GitHub ou do Retrato devolve 502 com a conversa como estava.
     """
     demanda, atual = _revisao_permitida(supabase, demanda_id, ator)
     if not payload.confirmado:
@@ -1633,14 +1634,37 @@ async def revisar_com_o_codigo_de_hoje(
 
     mensagens.append(resultado.mensagem)
     atende = tecnologia_revisao.proxima_pergunta_de_atende(mensagens)
+    estado = planejamento_demanda.ESTADO_EM_ANDAMENTO
+    do_turno: dict = {}
     if atende is not None:
         mensagens.append(atende)
+    else:
+        # Sem item em Ja existe nao ha "isso atende?": a primeira pergunta
+        # pelas lacunas vem no mesmo clique, senao a conversa para no retrato.
+        # Se ela falhar, o retrato ja cobrado fica e a tela pede de novo.
+        turno = await ai_processor.chamar_ia_fora_do_loop(
+            chat_tecnologia.turno_da_melhoria,
+            mensagens=mensagens,
+            kit=carregar_kit(),
+            demanda_id=demanda_id,
+            titulo=demanda.get("titulo"),
+        )
+        if turno.chamada is not None:
+            planejamento_demanda.gravar_chamada(supabase, turno.chamada)
+        if not turno.erro:
+            mensagens.append(turno.mensagem)
+            estado = _estado_do_planejamento(turno.mensagem)
+            do_turno = {
+                **_rascunho_do_documento(turno),
+                **({"decisoes": [*(atual.get("decisoes") or []), turno.decisao]} if turno.decisao else {}),
+            }
     linha = planejamento_demanda.gravar(
         supabase,
         demanda_id,
         atual=atual,
         novo={
-            "estado": planejamento_demanda.ESTADO_EM_ANDAMENTO,
+            "estado": estado,
+            **do_turno,
             "mensagens": mensagens,
             "revisao_iniciada_em": _agora(),
             "revisao_por": ator["id"],

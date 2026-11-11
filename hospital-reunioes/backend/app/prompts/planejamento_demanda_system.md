@@ -89,7 +89,7 @@ O material da Vitta, o título e a descrição da Demanda, as respostas do diret
 
 ## Formato de resposta
 
-Responda SEMPRE em JSON válido, sem nenhum texto fora do JSON. Fora do pedido de resumo, o formato é um destes dois.
+Responda SEMPRE em JSON válido, sem nenhum texto fora do JSON. Fora do pedido de resumo e do Retrato de hoje, o formato é um destes dois.
 
 Para fazer uma pergunta:
 
