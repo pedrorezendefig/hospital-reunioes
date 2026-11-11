@@ -669,6 +669,8 @@ export function ChatDaTecnologia({ token, demandaId = null, onMudou }: PropsDoCh
   if (conversa?.estado === "enviado") {
     return (
       <Fechamento texto={conversa.planejamento ? ENVIADO_DA_MELHORIA : ENVIADO}>
+        {/* Só leitura: o Responsável muda no GitHub e a tela acompanha (issue #1534, ADR 0083, decisão 6). */}
+        {conversa.responsavel && <p className="text-sm text-text-secondary">Responsável: {conversa.responsavel}</p>}
         <button
           type="button"
           onClick={recomecar}

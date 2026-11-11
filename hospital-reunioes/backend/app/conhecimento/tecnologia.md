@@ -68,7 +68,7 @@ Os arquivos são apagados 30 dias depois de a entrega ficar **Em produção**, o
 
 ## Quem vê
 
-Na lista ao lado da conversa, cada diretor vê só as suas conversas. Outra pessoa da diretoria não vê os seus pedidos, nem abrindo pelo endereço. Em cada pedido que já virou card aparece o **Responsável**, a pessoa da Vitta que cuida dele.
+Na lista ao lado da conversa, cada diretor vê só as suas conversas. Outra pessoa da diretoria não vê os seus pedidos, nem abrindo pelo endereço. Em cada pedido que já virou card aparece o **Responsável**, a pessoa da Vitta que cuida dele, na lista e no pedido aberto. Quando a Vitta passa o pedido para outra pessoa, o nome muda sozinho na sua tela; você não precisa fazer nada, e no aplicativo não há como trocar quem cuida.
 
 Quem desenvolve na Vitta é o **Desenvolvedor**: um administrador do aplicativo que tem o login do GitHub no cadastro. Ele vê as Demandas de todos. A lista dele abre em **Para mim**, os pedidos de que ele é o Responsável, e tem também **Minhas**, os pedidos que ele mesmo fez, e **Todas**, com o nome de quem pediu em cada linha. Ao abrir o pedido de outra pessoa, ele lê a conversa inteira com a IA (as perguntas e as respostas) e abre os prints e os documentos, sem poder responder no lugar de quem pediu. Ele vê também o número e o link do card no desenvolvimento, que para você não aparecem.
 
@@ -112,6 +112,7 @@ A IA cuida das decisões de negócio: o problema, quem usa, as regras e o que fi
 - No bug, a IA faz no máximo cinco perguntas, e o pedido só vai para a Vitta no clique em Criar o card.
 - O bug que sai do Criar o card vai direto para o desenvolvimento, sem ninguém da Vitta precisar assumir antes.
 - Antes do Criar o card, o diretor escolhe em Quem cuida disto? a pessoa da Vitta que vai cuidar do pedido; a escolha é opcional e, sem ela, o card vai para o Pedro Rezende.
+- Depois do Criar o card, quem troca o Responsável é a Vitta, no desenvolvimento, e a tela acompanha; o aplicativo não troca o Responsável.
 - Na melhoria, a IA não tem limite de perguntas e só encerra quando nada fica em aberto, e a melhoria que sai do Criar o card ainda passa pelo planejamento técnico da Vitta antes de começar.
 - A conversa com o Assistente fica guardada na Demanda e se retoma pela lista ao lado.
 - O modelo de IA e o custo da conversa em dólar aparecem só no alto da conversa aberta, nunca na lista, e quando o custo não dá para calcular a tela diz "custo não medido".

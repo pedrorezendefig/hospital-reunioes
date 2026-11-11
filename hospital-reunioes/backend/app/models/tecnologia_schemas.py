@@ -299,6 +299,10 @@ class ChatResponse(BaseModel):
     # Os Anexos, so para o Desenvolvedor (ADR 0083, decisao 3). O diretor le
     # so a contagem em `anexos`.
     anexos_da_demanda: list[AnexoDaDemanda] = []
+    # Quem cuida do card, so leitura: derivado do dono da issue no GitHub
+    # (issue #1534, ADR 0083, decisao 6). O nome, ou o login de quem nao e
+    # usuario do app. Nulo enquanto o card nao nasceu.
+    responsavel: str | None = None
 
 
 class MensagemDaConversaPayload(BaseModel):

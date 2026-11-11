@@ -11,6 +11,7 @@ from datetime import UTC, datetime
 from typing import Any
 
 from app.dependencies import is_super_admin
+from app.services.github_client import FATO_ASSIGNEE
 from app.services.tecnologia_vinculo import ETAPA_EM_PRODUCAO
 
 # As tabelas da aba. Moram aqui, e nao no router, porque quem escreve nelas nao
@@ -152,3 +153,18 @@ def quem_avisar(demanda: dict[str, Any], *, autor_id: str, mencoes: list[str]) -
     else:
         destino = [demanda.get("autor_id")]
     return sorted({str(d) for d in destino if d and d != autor_id})
+
+
+def login_do_responsavel(demanda: dict[str, Any]) -> str | None:
+    """O login do dono da issue, como a foto o guardou, ou `None`.
+
+    E o que a tela mostra quando o dono do GitHub nao e usuario do app (issue
+    #1534, ADR 0083, decisao 6): sem `responsavel_id`, o Responsavel aparece
+    pelo login. A conversa sem card nao tem dono, como em
+    `responsavel_da_demanda`.
+    """
+    if not demanda.get("github_issue_numero"):
+        return None
+    foto = demanda.get("github_foto")
+    login = foto.get(FATO_ASSIGNEE) if isinstance(foto, dict) else None
+    return login if isinstance(login, str) and login else None
