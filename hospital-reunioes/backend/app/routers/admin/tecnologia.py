@@ -116,6 +116,8 @@ from app.services.tecnologia import (
     TABELA_DEMANDAS,
     TABELA_PRODUTOS,
     e_desenvolvedor,
+    em_producao_desde,
+    entregue_na_data,
     login_do_responsavel,
     pode_ver,
     quem_avisar,
@@ -185,6 +187,8 @@ def _para_a_lista(supabase: Client, demandas: list[dict], *, ator: dict) -> list
             "tem_vinculo": bool(d.get("github_issue_numero")),
             "partes": _partes_visiveis(d),
             "versao": versao_da_entrega(d),
+            "fechada_em": entregue_na_data(d),
+            "em_producao_em": em_producao_desde(d),
             "classificacao": chat_tecnologia.CLASSIFICACAO_DO_TIPO.get(str(d.get("tipo") or "")),
             "minha": d.get("autor_id") == ator["id"],
             "autor": nomes.get(str(d.get("autor_id"))) if desenvolvedor else None,
@@ -234,13 +238,18 @@ def _url_da_issue(demanda: dict) -> str | None:
 
 
 def _partes_visiveis(demanda: dict) -> list[dict]:
-    """As partes da entrega como o diretor as le (issue #676): o texto e a
-    situacao, sem o numero da fatia, que e interno."""
+    """As partes da entrega como o diretor as le (issue #676): o texto, a
+    situacao e a data do fechamento (issue #1552), sem o numero da fatia, que
+    e interno."""
     partes = demanda.get("partes")
     if not isinstance(partes, list):
         return []
     return [
-        {"o_que_muda": parte.get("o_que_muda"), "situacao": parte.get("situacao")}
+        {
+            "o_que_muda": parte.get("o_que_muda"),
+            "situacao": parte.get("situacao"),
+            "fechada_em": parte.get("fechada_em"),
+        }
         for parte in partes
         if isinstance(parte, dict)
     ]

@@ -741,8 +741,13 @@ class TestPartesParaODiretor:
         )
 
         assert partes_para_o_diretor(foto) == [
-            {"numero": 674, "o_que_muda": "O selo aparece no card.", "situacao": ETAPA_ENTREGUE},
-            {"numero": 675, "o_que_muda": "A seção mostra o que muda.", "situacao": ETAPA_EM_DESENVOLVIMENTO},
+            {"numero": 674, "o_que_muda": "O selo aparece no card.", "situacao": ETAPA_ENTREGUE, "fechada_em": None},
+            {
+                "numero": 675,
+                "o_que_muda": "A seção mostra o que muda.",
+                "situacao": ETAPA_EM_DESENVOLVIMENTO,
+                "fechada_em": None,
+            },
         ]
 
     def test_parte_sem_bloco_entra_com_texto_nulo(self):
@@ -750,7 +755,9 @@ class TestPartesParaODiretor:
         que pe ela esta, mesmo sem o texto escrito ainda."""
         foto = _foto(partes=(_parte(675),))
 
-        assert partes_para_o_diretor(foto) == [{"numero": 675, "o_que_muda": None, "situacao": ETAPA_PLANEJADA}]
+        assert partes_para_o_diretor(foto) == [
+            {"numero": 675, "o_que_muda": None, "situacao": ETAPA_PLANEJADA, "fechada_em": None}
+        ]
 
     @pytest.mark.parametrize("foto", (None, _foto()))
     def test_sem_partes_a_lista_e_vazia(self, foto):

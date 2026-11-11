@@ -12,7 +12,13 @@ from typing import Any
 
 from app.dependencies import is_super_admin
 from app.services.github_client import FATO_ASSIGNEE
-from app.services.tecnologia_vinculo import ETAPA_EM_ANALISE, ETAPA_EM_PRODUCAO, ETAPA_PLANEJADA, ETAPA_REGISTRADA
+from app.services.tecnologia_vinculo import (
+    ETAPA_EM_ANALISE,
+    ETAPA_EM_PRODUCAO,
+    ETAPA_ENTREGUE,
+    ETAPA_PLANEJADA,
+    ETAPA_REGISTRADA,
+)
 
 # As tabelas da aba. Moram aqui, e nao no router, porque quem escreve nelas nao
 # e so o router: o webhook do GitHub e o job de reconciliacao escrevem pelo
@@ -106,6 +112,25 @@ def versao_da_entrega(demanda: dict[str, Any]) -> str | None:
     if demanda.get("etapa") != ETAPA_EM_PRODUCAO:
         return None
     return demanda.get("versao_em_producao") or None
+
+
+def em_producao_desde(demanda: dict[str, Any]) -> str | None:
+    """A data em que a Demanda entrou Em producao, so com a Etapa la (issue
+    #1552, ADR 0084, decisao 8). A mesma guarda da versao: a coluna guarda a
+    data de uma subida anterior quando a issue reabre."""
+    if demanda.get("etapa") != ETAPA_EM_PRODUCAO:
+        return None
+    return demanda.get("em_producao_em") or None
+
+
+def entregue_na_data(demanda: dict[str, Any]) -> str | None:
+    """A data de entrega do Documento do card: o fechamento da issue-raiz, lido
+    na sincronizacao (issue #1552). So com a Etapa Entregue ou Em producao: a
+    issue fechada como nao planejada tambem tem data, e nao e entrega."""
+    if demanda.get("etapa") not in (ETAPA_ENTREGUE, ETAPA_EM_PRODUCAO):
+        return None
+    foto = demanda.get("github_foto")
+    return (foto.get("fechada_em") or None) if isinstance(foto, dict) else None
 
 
 def e_desenvolvedor(pessoa: dict[str, Any] | None) -> bool:
