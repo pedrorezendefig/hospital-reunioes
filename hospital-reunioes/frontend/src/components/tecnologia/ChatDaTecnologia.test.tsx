@@ -1144,3 +1144,52 @@ describe("A resposta com documento ou com quem respondeu, na linha da pergunta",
     expect(linha.getAttribute("aria-label")).toBe("Pergunta 1, Onde acontece o problema?: Paula Dev escolheu B");
   });
 });
+
+// ─── Os atalhos da pergunta (issue #1595, PRD #1591) ─────────────────────────
+
+describe("Os atalhos da pergunta", () => {
+  it("o cartão da pergunta da vez mostra os dois atalhos embaixo das opções", async () => {
+    montar([{ status: 201, corpo: melhoriaEmCartao() }]);
+
+    fireEvent.click(screen.getByRole("button", { name: "Melhoria" }));
+
+    const cartao = await screen.findByRole("region", { name: "Pergunta 2" });
+    const opcoes = within(cartao).getByRole("group", { name: "Opções" });
+    const atalhos = within(cartao).getByRole("group", { name: "Atalhos" });
+    expect(within(atalhos).getAllByRole("button").map((b) => b.textContent)).toEqual([
+      "Não sei agora, siga",
+      "Explica melhor",
+    ]);
+    expect(opcoes.contains(atalhos)).toBe(false);
+    expect(opcoes.compareDocumentPosition(atalhos) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it.each(["Não sei agora, siga", "Explica melhor"])(
+    "o atalho %s envia a fala fixa como resposta do diretor",
+    async (atalho) => {
+      const chamadas = montar([{ status: 201, corpo: melhoriaEmCartao() }, { status: 200, corpo: melhoriaEmCartao() }]);
+      fireEvent.click(screen.getByRole("button", { name: "Melhoria" }));
+      const cartao = await screen.findByRole("region", { name: "Pergunta 2" });
+
+      fireEvent.click(within(cartao).getByRole("button", { name: atalho }));
+
+      await waitFor(() => expect(chamadas).toHaveLength(2));
+      expect(chamadas[1]).toMatchObject({ url: "/api/admin/tecnologia/chat/d-1", metodo: "POST", corpo: { texto: atalho } });
+      expect(chamadas[1].corpo).not.toHaveProperty("opcao");
+    },
+  );
+
+  it("os atalhos somem enquanto a IA pensa", async () => {
+    montar([{ status: 201, corpo: melhoriaEmCartao() }]);
+    fireEvent.click(screen.getByRole("button", { name: "Melhoria" }));
+    const cartao = await screen.findByRole("region", { name: "Pergunta 2" });
+    // A resposta do servidor não chega: a IA fica pensando.
+    vi.stubGlobal("fetch", vi.fn(() => new Promise<Response>(() => {})));
+
+    fireEvent.click(within(cartao).getByRole("button", { name: "Explica melhor" }));
+
+    await screen.findByText("Pensando...");
+    expect(screen.queryByRole("group", { name: "Atalhos" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Não sei agora, siga" })).toBeNull();
+  });
+});

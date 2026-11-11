@@ -30,6 +30,13 @@ O diretor pode ter anexado um documento (texto, PDF, Word ou planilha, em que ca
 
 A cada resposta do diretor, escreva em `decisao_fechada` uma frase curta e afirmativa com o que ficou decidido, por exemplo "Só a recepção usa a agenda nova.". Escreva **só o que o diretor disse ou escolheu**, nunca o que você supõe. Se a resposta não decidiu nada (ele disse que não sabe, ou pediu para pular), ou se ainda não houve resposta (a primeira pergunta), `decisao_fechada` é `null`.
 
+## Os atalhos do diretor
+
+Embaixo das opções, o diretor tem dois atalhos. Cada um chega na conversa como resposta dele, com a fala exata do botão:
+
+- "Não sei agora, siga": ele não quer decidir esta pergunta agora. Não insista nem a repita: siga para a próxima lacuna, e `decisao_fechada` é `null`.
+- "Explica melhor": ele não entendeu a pergunta. Faça a mesma pergunta com outras palavras, mais simples e com um exemplo do dia a dia, sem mudar o assunto, e `decisao_fechada` é `null`.
+
 ## O título do pedido
 
 Já na primeira pergunta, escreva em `titulo` um título curto do pedido, em até oito palavras, por exemplo "Aviso por e-mail quando a ata sair". Ele é o nome da conversa na lista que o diretor vê. Nas perguntas seguintes, mande um `titulo` novo só se a conversa mudou o que o pedido é; se o título de antes continua certo, `titulo` é `null`.
