@@ -62,6 +62,19 @@ MOTIVO_NADA_EM_ABERTO = "Nada ficou em aberto no resumo. Clique em Criar o card,
 # porque quem le pode fazer a mesma coisa nas tres: mandar de novo.
 MOTIVO_TURNO_FALHOU = "A IA não conseguiu responder agora, e a conversa ficou como estava. Tente de novo em instantes."
 
+# Os atalhos embaixo das opcoes da pergunta (issue #1595, PRD #1591): falas
+# fixas do diretor, que vao pelo caminho do texto livre. Nenhuma delas decide
+# nada: o turno depois delas nao fecha decisao, e o resumo nao conta a
+# pergunta respondida por uma delas.
+ATALHO_NAO_SEI = "Não sei agora, siga"
+ATALHO_EXPLICA = "Explica melhor"
+FALAS_SEM_DECISAO = frozenset({ATALHO_NAO_SEI, ATALHO_EXPLICA})
+
+
+def _e_atalho(mensagem: dict | None) -> bool:
+    return bool(mensagem) and mensagem.get("tipo") == "resposta" and mensagem.get("texto") in FALAS_SEM_DECISAO
+
+
 PERGUNTA_MOCK = {
     "tipo": "pergunta",
     "contexto": "[MOCK] Planejar com a IA exige a IA configurada.",
@@ -582,6 +595,8 @@ def turno(
         return ResultadoDoTurno(mensagem=None, decisao=None, erro=MOTIVO_TURNO_FALHOU, chamada=chamada)
 
     decisao = sanitizar_travessao(saida.decisao_fechada.strip()) if (saida.decisao_fechada or "").strip() else None
+    if mensagens and _e_atalho(mensagens[-1]):
+        decisao = None
     return ResultadoDoTurno(
         mensagem=_mensagem_do_modelo(saida),
         decisao=decisao,
@@ -648,8 +663,9 @@ RESUMO_MOCK = {"decisoes": [], "em_aberto": ["[MOCK] Resumir exige a IA configur
 
 def perguntas_respondidas(mensagens: list[dict]) -> dict[int, tuple[dict, dict]]:
     """Numero da pergunta (a partir de 1) -> a pergunta e a resposta do diretor
-    que veio logo depois dela. Pergunta sem resposta nao entra: e por esta
-    lista que o resumo descarta a decisao que o modelo inventar."""
+    que veio logo depois dela. Pergunta sem resposta nao entra, nem a
+    respondida por um atalho (issue #1595): e por esta lista que o resumo
+    descarta a decisao que o modelo inventar."""
     respondidas: dict[int, tuple[dict, dict]] = {}
     numero = 0
     for i, mensagem in enumerate(mensagens):
@@ -657,7 +673,7 @@ def perguntas_respondidas(mensagens: list[dict]) -> dict[int, tuple[dict, dict]]
             continue
         numero += 1
         seguinte = mensagens[i + 1] if i + 1 < len(mensagens) else None
-        if seguinte is not None and seguinte.get("tipo") == "resposta":
+        if seguinte is not None and seguinte.get("tipo") == "resposta" and not _e_atalho(seguinte):
             respondidas[numero] = (mensagem, seguinte)
     return respondidas
 
