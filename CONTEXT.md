@@ -223,10 +223,10 @@ _Evitar_: paginação; cortar a lista para caber; supor que a mesma chamada devo
 
 ## Tecnologia (o chat do diretor com o agente)
 
-Desde 02/11/2026 (ADR 0077) a aba Tecnologia é uma tela só: o chat do [Assistente de Tecnologia], em que o diretor relata um bug ou pede uma melhoria e o card nasce no GitHub. Só o Super admin vê (ADR 0050). Desde 10/11/2026 (ADR 0083) o [Desenvolvedor] vê as Demandas de todos, o diretor escolhe o [Responsável] e cada Demanda tem a [Conversa da Demanda]. Os pedidos da Vitta ao hospital que não nascem de uma Demanda continuam no WhatsApp.
+Desde 02/11/2026 (ADR 0077) a aba Tecnologia é uma tela só: o chat do [Assistente de Tecnologia], em que o diretor relata um bug ou pede uma melhoria e o card nasce no GitHub. Só o Super admin vê (ADR 0050). Desde 10/11/2026 (ADR 0083) o [Desenvolvedor] vê as Demandas de todos, o diretor escolhe o [Responsável] e cada Demanda tem a [Conversa da Demanda]. Desde 11/11/2026 (ADR 0084) a aba tem duas abas, Conversas e [Entregas], mostra também o que a Vitta abre pelo terminal ([Origem]) e cada card abre como [Documento do card]. Os pedidos da Vitta ao hospital que não nascem de uma Demanda continuam no WhatsApp.
 
 **Demanda**:
-Um bug ou uma melhoria que o diretor relatou ao [Assistente de Tecnologia]. É o registro de uma conversa: o que foi dito, os [Anexos da Demanda] e, depois do clique "Criar o card", o [Vínculo com o desenvolvimento]. Na tela aparece só como uma linha na lista lateral, com o título que o agente dá desde a primeira resposta, o selo Bug ou Melhoria e a [Etapa] (ADR 0079). Fica **totalmente apartada** das Pendências de Ata: Demanda é assunto de tecnologia entre o hospital e a Vitta, Pendência é compromisso operacional do hospital.
+Um bug ou uma melhoria que o diretor relatou ao [Assistente de Tecnologia] ou que a Vitta abriu pelo terminal (ver [Origem]). Na origem do diretor, é o registro de uma conversa: o que foi dito, os [Anexos da Demanda] e, depois do clique "Criar o card", o [Vínculo com o desenvolvimento]. Na tela aparece só como uma linha na lista lateral, com o título que o agente dá desde a primeira resposta, o selo Bug ou Melhoria e a [Etapa] (ADR 0079). Fica **totalmente apartada** das Pendências de Ata: Demanda é assunto de tecnologia entre o hospital e a Vitta, Pendência é compromisso operacional do hospital.
 _Evitar_: chamar de Pendência, tarefa ou ticket; tipo além de bug ou melhoria; Prioridade, Prazo ou raia (aposentados em 02/11/2026); "Demandas TI" (TI é o analista de TI do hospital, um terceiro).
 
 **Assistente de Tecnologia**:
@@ -243,10 +243,10 @@ _Evitar_: perguntar o que o diretor já disse; decisão inventada no lugar do "f
 
 **PRD do diretor**:
 O card de uma melhoria: o PRD inteiro escrito pelo [Planejamento da Demanda] na issue-raiz. Bloco "Para o diretor", Problema, Solução, Histórias de usuário, Decisões de negócio, Decisões de implementação e de teste lidas do código, "Ficou em aberto" e uma seção "Para o glossário" com os termos e as decisões candidatas a ADR. Nasce `needs-triage`, porque ainda passa pelo `/to-issues`; quem grava `CONTEXT.md` e ADR é o terminal, a partir da seção "Para o glossário".
-_Evitar_: o app gravando `CONTEXT.md` ou ADR; PRD novo criado pelo terminal (quebra o par Demanda x issue); número de issue dentro do bloco "Para o diretor".
+_Evitar_: o app gravando `CONTEXT.md` ou ADR; PRD novo criado pelo terminal para um pedido que já tem Demanda (quebra o par Demanda x issue; o caminho é a [Revisão com o código de hoje]); número de issue dentro do bloco "Para o diretor".
 
 **Vínculo com o desenvolvimento**:
-A ligação de uma Demanda com **uma** issue-raiz do GitHub (o PRD do diretor ou a issue do bug), criada pelo clique "Criar o card". As fatias são sub-issues dessa raiz e nunca se vinculam uma a uma. O diretor vê a Etapa e O que muda, nunca número nem link.
+A ligação de uma Demanda com **uma** issue-raiz do GitHub (o PRD do diretor ou a issue do bug), criada pelo clique "Criar o card" ou, na [Origem] Vitta, quando a issue-raiz nasce no terminal (ADR 0084). As fatias são sub-issues dessa raiz e nunca se vinculam uma a uma. O diretor vê a Etapa e O que muda, nunca número nem link.
 _Evitar_: vincular fatia em vez da raiz; Demanda com mais de uma issue; vínculo digitado por número (aposentado).
 
 **Desenvolvedor**:
@@ -273,8 +273,32 @@ _Evitar_: Etapa digitada; Entregue como "deploy confirmado" (é o fechamento; o 
 O passo que leva PRs verdes até produção (`fechar_onda.py`): merge pela API, versão, build, health, registro. Antes chamado de rabo.
 
 **O que muda**:
-O que a entrega acrescenta para quem pediu, em linguagem de leigo, vindo do bloco "Para o diretor" da issue e **nunca digitado no app** (ADR 0054, decisão 7). Aparece ao abrir uma conversa da lista; sem o bloco, "Descrição em preparação".
-_Evitar_: título de parte, número de issue, link ou label na tela do diretor.
+O que a entrega acrescenta para quem pediu, em linguagem de leigo, vindo do bloco "Para o diretor" da issue e **nunca digitado no app** (ADR 0054, decisão 7). Aparece como uma seção do [Documento do card]; sem o bloco, "Descrição em preparação". Até cinco tópicos (ADR 0084).
+_Evitar_: título de parte, número de issue, link ou label na tela do diretor; texto corrido com a fala do diretor transcrita.
+
+**Origem**:
+De onde a Demanda veio (ADR 0084): **Pedido do diretor**, quando nasceu do [Assistente de Tecnologia], ou **Vitta**, quando a issue-raiz do app (PRD ou bug) foi aberta pelo terminal. Aparece como selo na lista e é um dos filtros. A Demanda da Vitta não tem conversa com o agente, mas tem Etapa, [Documento do card] e [Conversa da Demanda]. Ferramenta e skills (`.claude/`, `tools/`, `docs/`) não viram Demanda.
+_Evitar_: label manual para mostrar ao diretor; Demanda para issue de ferramenta; parte (fatia) virando Demanda.
+
+**Documento do card**:
+O que abre quando se clica numa Demanda (ADR 0084): seções fixas, Em uma frase, [O que muda] (até cinco tópicos), Partes (com Etapa e datas), [Demonstração] e Datas (criado, entregue, em produção). Durante o [Planejamento da Demanda] se monta ao vivo ao lado do chat, no molde da ata viva da Ata Guiada; depois do card é lido do bloco "Para o diretor" da issue, que tem formato fixo e limite de tamanho tanto no [PRD do diretor] quanto no `/to-prd` do terminal. Nunca digitado no app.
+_Evitar_: texto corrido; documento editável à mão; seção sem limite.
+
+**Revisão com o código de hoje**:
+O botão "Revisar com o código de hoje" num card Em análise ou Planejada, enquanto nenhuma parte está em desenvolvimento (ADR 0084). Retoma a mesma conversa e a mesma issue: o agente relê a issue (com o que mudou por fora), o código, as ADRs e o que subiu desde a data do card, e abre o **Retrato de hoje** em três blocos, Já existe, Mudou desde o card e Continua em aberto. Cada item de Já existe diz a versão em que entrou e passa pelo "isso atende?" do diretor antes de sair do card. Pergunta só pelas lacunas, sem teto. "Atualizar o card" regrava o PRD na mesma issue com um comentário do que mudou; partes não começadas fecham como "não planejada" e o card volta para Em análise. Clicam o autor e o [Desenvolvedor], com estimativa de custo e confirmação (ADR 0082).
+_Evitar_: conversa nova com issue nova; escopo cortado em silêncio porque "já existe"; revisar card com parte em desenvolvimento.
+
+**Apagar a Demanda**:
+Tirar uma Demanda do app, com conversa e anexos (ADR 0084). Vale até Planejada. A conversa Registrada o autor apaga; card criado, só o [Desenvolvedor]. No GitHub a issue-raiz e as partes **fecham** como "não planejada", com comentário de motivo; a issue nunca é apagada de verdade.
+_Evitar_: apagar a issue no GitHub; apagar card com PR aberto; confundir com Não será feita, que fica na lista.
+
+**Entregas**:
+A segunda aba da Tecnologia (ADR 0084): o retrato do que foi entregue, contado por card, com as partes no detalhe. Entregues por semana e por mês, data de entrega (fechamento), data em produção ([Subida]) e [Responsável], com histórico desde o primeiro registro do `history.json`. Ninguém move nada ali.
+_Evitar_: chamar de Painel ou Quadro (aposentados em 02/11/2026); contar por parte; mover card pela aba.
+
+**Demonstração**:
+O vídeo do que um card entregue mudou, com a página na Vercel, feito pelo `/divulgar` (ADR 0045) numa sessão aberta pelo botão "Gerar demonstração" do PedroOS, sempre por clique do Pedro (ADR 0084). A sessão grava na issue-raiz o marcador `<!-- demonstracao: <url> -->`, o webhook leva o link ao card e o card ganha o selo "Tem demonstração". Nem todo card tem. Quando fica pronta, o diretor recebe aviso por sino e e-mail, como recebe quando o card entra Em produção, com o resumo montado do [Documento do card], sem IA.
+_Evitar_: vídeo gerado pela Subida; link digitado no app; resumo do aviso escrito por IA.
 
 **Anexo da Demanda**:
 Um arquivo mandado no chat e guardado junto da Demanda, até dez por Demanda somando os dois tipos (ADR 0069 e a emenda de 09/11/2026). É **imagem** (o print de tela) ou **documento** (texto, PDF, Word ou planilha) que o diretor já tem escrito. O [Assistente de Tecnologia] lê o documento inteiro como material da conversa; na tela aparece só o nome e o tamanho do arquivo. PDF escaneado, sem texto, não entra como documento: vai como print. Vive só no app, em guarda privada, e **nunca vai para o GitHub**: o repositório é público e arquivo do hospital é dado pessoal. A issue ganha só a frase de contagem ("Anexos: 2 imagens e 1 documento na Demanda"); quem desenvolve busca os arquivos pelo app (a rota de automação entrega ao agente que pega a issue). O binário é apagado 30 dias depois de Em produção ou quando a issue fecha como Não será feita (ADR 0077); fica o registro de que existiu, marcado apagado. Um documento com várias melhorias continua sendo uma Demanda e um [PRD do diretor]; as partes saem depois, como fatias.
