@@ -2,6 +2,54 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-11-11T20:16:33-03:00",
+      "sha": "7bec02391c1246985dee8cc57b6593b293880733",
+      "app_version": "0.259.0",
+      "subject": "Onda onda-pergunta-onda2: Atalhos Não sei agora, siga e Explica melhor na pergunta do planejamento",
+      "raw_subject": "chore(deploy): registro da onda onda-pergunta-onda2 (#1602)",
+      "scope": [
+        "backend",
+        "frontend"
+      ],
+      "prds": [
+        1591
+      ],
+      "result": "healthy",
+      "duration_seconds": 206,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        },
+        {
+          "service": "frontend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "onda-enxuta onda-pergunta-onda2: PR #1602 (issue #1595), mergeados PR a PR. Merge pela API do GitHub, um build. Registro pela Action pos-merge depois do health.",
+      "etapas": {
+        "merge_s": 3,
+        "build_s": {
+          "backend": 16,
+          "frontend": 180
+        },
+        "health_s": 0
+      },
+      "responsavel": "pedrorezendefig"
+    },
+    {
       "at": "2026-11-11T19:12:22-03:00",
       "sha": "d646fbf4fe536a61a0b3b133b30c6ad5fe86b1fe",
       "app_version": "0.257.0",
