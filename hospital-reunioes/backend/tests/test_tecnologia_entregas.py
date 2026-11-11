@@ -46,8 +46,8 @@ def _entregue(did: str, numero: int, fechada_em: str, **campos) -> dict:
 
 def _demandas() -> list[dict]:
     """As datas sao fixas. O hospital fica em Sao Paulo (UTC-3): o fechamento
-    as 01h de 02/11 em UTC e o domingo 01/11 no hospital, semana de 26/10 e mes
-    de outubro."""
+    as 01h de 02/11 em UTC e o domingo 01/11 no hospital, semana de 26/10; o das
+    02h de 01/11 em UTC e o sabado 31/10, mes de outubro."""
     return [
         _entregue(
             "e-bug-diretor",
@@ -83,7 +83,7 @@ def _demandas() -> list[dict]:
         _entregue(
             "e-vitta-terceiro",
             904,
-            "2026-10-14T12:00:00Z",
+            "2026-11-01T02:00:00Z",
             titulo="Impressao da escala",
             tipo="defeito",
             origem="vitta",
@@ -163,6 +163,77 @@ class TestContagem:
     def test_a_semana_comeca_na_segunda_e_conta_pelo_dia_do_hospital(self, entregas):
         assert _periodos(entregas(PEDRO, "agrupar=semana")) == [
             ("2026-11-02", 2),
-            ("2026-10-26", 1),
-            ("2026-10-12", 2),
+            ("2026-10-26", 2),
+            ("2026-10-12", 1),
         ]
+
+    def test_o_mes_conta_pelo_dia_do_hospital(self, entregas):
+        assert _periodos(entregas(PEDRO, "agrupar=mes")) == [("2026-11-01", 3), ("2026-10-01", 2)]
+
+    def test_sem_agrupar_a_contagem_e_por_semana(self, entregas):
+        corpo = _corpo(entregas(PEDRO))
+
+        assert corpo["agrupar"] == "semana"
+        assert corpo["periodos"][0] == {"inicio": "2026-11-02", "total": 2}
+
+    def test_a_lista_vem_da_entrega_mais_recente_para_a_mais_antiga(self, entregas):
+        assert _ids(entregas(PEDRO)) == [
+            "e-vitta-rib",
+            "e-bug-diretor",
+            "e-domingo",
+            "e-vitta-terceiro",
+            "e-outra-diretora",
+        ]
+
+    def test_o_diretor_conta_as_dele_e_as_da_vitta(self, entregas):
+        """A mesma regra da lista do chat (`pode_ver`): o pedido de outra
+        diretora nao entra, nem na contagem."""
+        resposta = entregas(DIRETOR, "agrupar=mes")
+
+        assert _periodos(resposta) == [("2026-11-01", 3), ("2026-10-01", 1)]
+        assert "e-outra-diretora" not in _ids(resposta)
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 2. Os filtros combinam
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+class TestFiltros:
+    @pytest.mark.parametrize(
+        ("consulta", "esperado"),
+        [
+            ("de=2026-10-31&ate=2026-11-03", ["e-bug-diretor", "e-domingo", "e-vitta-terceiro"]),
+            ("de=2026-11-01", ["e-vitta-rib", "e-bug-diretor", "e-domingo"]),
+            ("ate=2026-10-31", ["e-vitta-terceiro", "e-outra-diretora"]),
+            ("tipo=bug", ["e-bug-diretor", "e-vitta-terceiro"]),
+            ("tipo=melhoria&origem=vitta", ["e-vitta-rib"]),
+            ("origem=diretor&de=2026-11-01", ["e-bug-diretor", "e-domingo"]),
+            ("responsavel=P1&tipo=melhoria", ["e-domingo", "e-outra-diretora"]),
+            ("responsavel=terceiro-gh", ["e-vitta-terceiro"]),
+            ("responsavel=P4&origem=vitta&de=2026-11-01&tipo=melhoria", ["e-vitta-rib"]),
+        ],
+    )
+    def test_periodo_tipo_origem_e_responsavel_combinam(self, entregas, consulta, esperado):
+        assert _ids(entregas(PEDRO, consulta)) == esperado
+
+    def test_a_contagem_segue_os_filtros(self, entregas):
+        assert _periodos(entregas(PEDRO, "agrupar=mes&origem=vitta")) == [("2026-11-01", 1), ("2026-10-01", 1)]
+
+    def test_o_diretor_filtra_por_responsavel(self, entregas):
+        """Nas Entregas o Responsavel e filtro de todos: e a pergunta do diretor
+        "o que o Rib entregou"."""
+        assert _ids(entregas(DIRETOR, "responsavel=P4")) == ["e-vitta-rib"]
+
+    def test_as_opcoes_do_responsavel_vem_de_tudo_o_que_ele_ve_entregue(self, entregas):
+        """As opcoes nao somem com o filtro ligado, senao nao da para trocar."""
+        corpo = _corpo(entregas(DIRETOR, "responsavel=P4"))
+
+        assert corpo["responsaveis"] == [
+            {"valor": "P4", "nome": "Pedro Rib"},
+            {"valor": "P1", "nome": "Pedro Vitta"},
+            {"valor": "terceiro-gh", "nome": "terceiro-gh"},
+        ]
+
+    def test_periodo_invertido_e_recusado(self, entregas):
+        assert entregas(PEDRO, "de=2026-11-05&ate=2026-11-01").status_code == 422

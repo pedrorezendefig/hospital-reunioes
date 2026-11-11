@@ -14,7 +14,12 @@ from datetime import date, timedelta
 from typing import Any, Literal
 from zoneinfo import ZoneInfo
 
-from app.services.tecnologia import entregue_na_data, instante_do_banco
+from app.services.tecnologia import (
+    entregue_na_data,
+    instante_do_banco,
+    login_do_responsavel,
+    responsavel_da_demanda,
+)
 
 FUSO_DO_HOSPITAL = ZoneInfo("America/Sao_Paulo")
 
@@ -25,6 +30,12 @@ def dia_da_entrega(demanda: dict[str, Any]) -> date | None:
     """O dia do hospital em que o card foi entregue, ou `None` se nao foi."""
     instante = instante_do_banco(entregue_na_data(demanda))
     return instante.astimezone(FUSO_DO_HOSPITAL).date() if instante else None
+
+
+def chave_do_responsavel(demanda: dict[str, Any]) -> str | None:
+    """O valor do filtro Responsavel: o id do usuario, ou o login do dono no
+    GitHub quando ele nao e usuario do app (issue #1534)."""
+    return responsavel_da_demanda(demanda) or login_do_responsavel(demanda)
 
 
 def inicio_do_periodo(dia: date, agrupar: Agrupamento) -> date:
