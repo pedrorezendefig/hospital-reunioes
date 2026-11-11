@@ -44,6 +44,7 @@ from app.config import settings  # noqa: E402
 from app.limiter import limiter  # noqa: E402
 from app.routers.admin.tecnologia import MOTIVO_APAGAR_GITHUB_FALHOU  # noqa: E402
 from app.services import github_client, tecnologia_anexos  # noqa: E402
+from app.services.conhecimento import CONHECIMENTO_DIR  # noqa: E402
 from app.services.tecnologia_vinculo import (  # noqa: E402
     ETAPA_EM_ANALISE,
     ETAPA_EM_DESENVOLVIMENTO,
@@ -453,3 +454,42 @@ class TestQuemVeOBotao:
         [linha] = client.get(f"{BASE}/chat{filtro}").json()
 
         assert linha["pode_apagar"] is pode
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 8. O kit de conhecimento
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+def _kit() -> str:
+    return (CONHECIMENTO_DIR / "tecnologia.md").read_text(encoding="utf-8")
+
+
+def _secao(titulo: str) -> str:
+    return _kit().split(f"## {titulo}", 1)[1].split("\n## ", 1)[0]
+
+
+class TestKit:
+    """O kit é a língua do Assistente: sem isto, ele diria ao diretor que nada
+    se apaga (ADR 0050, decisão 11, emendada pela ADR 0084)."""
+
+    def test_o_kit_diz_quem_apaga_ate_onde_e_o_que_acontece(self):
+        secao = _secao("Apagar um pedido")
+
+        for trecho in (
+            "**Apagar**",
+            "confirmação",
+            "Registrada",
+            "quem escreveu",
+            "Em análise ou Planejada",
+            "só o Desenvolvedor",
+            "De Em desenvolvimento em diante",
+            "fecha como não planejado",
+            "nada é apagado",
+        ):
+            assert trecho in secao, trecho
+
+    def test_a_decisao_entra_no_que_ja_foi_decidido(self):
+        decidido = _secao("O que já foi decidido")
+
+        assert "se apaga só até Planejada" in decidido
