@@ -86,20 +86,21 @@ def subida_de_cada_issue(deploys: object) -> dict[int, tuple[str, str]]:
     return subidas
 
 
-def primeira_subida_de_cada_issue(deploys: object) -> dict[int, tuple[str, str]]:
-    """Para cada issue, a versão (rotulada) e a data da subida MAIS ANTIGA que a
-    cita: um PR do lote a fecha, ou o campo `prds` a lista (issue #1555, a carga
-    do histórico de entregas).
+def subidas_de_cada_issue(deploys: object) -> dict[int, list[tuple[str, str]]]:
+    """Para cada issue, a versão (rotulada) e a data de TODA subida que a cita,
+    da mais antiga para a mais nova: um PR do lote a fecha, ou o campo `prds` a
+    lista (issue #1555, a carga do histórico de entregas).
 
-    A primeira, e não a mais nova como em `subida_de_cada_issue`: a carga
+    Todas, e não só a mais nova como em `subida_de_cada_issue`: a carga
     registra desde quando a entrega está no ar, e "Em produção desde" é a
-    primeira subida. O `prds` entra porque os registros antigos não listam PR
-    nenhum nas `notes`, e o PRD é a issue-raiz que a Demanda carrega.
+    primeira subida de depois do fechamento atual da issue, que quem chama
+    escolhe pelo `closed_at`. O `prds` entra porque os registros antigos não
+    listam PR nenhum nas `notes`, e o PRD é a issue-raiz que a Demanda carrega.
 
     A ordem vem da data, e não da posição no arquivo. Entrada sem data legível
     não entra.
     """
-    primeiras: dict[int, tuple[str, str, datetime]] = {}
+    subidas: dict[int, list[tuple[datetime, str, str]]] = {}
     for entrada in deploys if isinstance(deploys, list) else []:
         aviso = aviso_da_entrada(entrada)
         if aviso is None or not isinstance(aviso["data"], str):
@@ -111,6 +112,8 @@ def primeira_subida_de_cada_issue(deploys: object) -> dict[int, tuple[str, str]]
         numeros = {numero for pr in aviso["prs"] for numero in pr["fecha"]}
         numeros.update(n for n in entrada.get("prds") or [] if isinstance(n, int) and not isinstance(n, bool))
         for numero in numeros:
-            if numero not in primeiras or quando < primeiras[numero][2]:
-                primeiras[numero] = (versao_rotulada(aviso["versao"]), aviso["data"], quando)
-    return {numero: (versao, data) for numero, (versao, data, _) in primeiras.items()}
+            subidas.setdefault(numero, []).append((quando, versao_rotulada(aviso["versao"]), aviso["data"]))
+    return {
+        numero: [(versao, data) for _, versao, data in sorted(lista, key=lambda s: s[0])]
+        for numero, lista in subidas.items()
+    }
