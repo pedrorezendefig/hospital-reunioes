@@ -42,6 +42,8 @@ ROTAS_DO_CHAT = {
     "/api/admin/tecnologia/chat/{demanda_id}/conversa",
     # A aba Entregas, só leitura (issue #1556, ADR 0084, decisão 8).
     "/api/admin/tecnologia/entregas",
+    # A Revisão com o código de hoje (issue #1557): a estimativa e o confirmar.
+    "/api/admin/tecnologia/chat/{demanda_id}/revisao",
 }
 
 # O que fica de fora da aba e continua de pé (critério 2 da issue).

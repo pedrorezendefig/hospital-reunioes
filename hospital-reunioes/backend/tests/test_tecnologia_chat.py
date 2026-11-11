@@ -426,6 +426,9 @@ class TestNaoBateu:
             "recomendada": None,
             "nao_bateu": True,
             "documentos": [],
+            "retrato": None,
+            # Quem respondeu o turno (issue #1557), pelo nome.
+            "respondido_por": "Diretor do Hospital",
         }
 
         # A tela pede o turno seguinte sem texto: a IA retoma da fala do diretor.
