@@ -143,7 +143,7 @@ class TestALista:
         conversa_id = _ate_o_resumo(diretor, monkeypatch)
         pedro = _como(PEDRO, sb, gh, monkeypatch)
 
-        resposta = pedro.get(f"{CHAT}?filtro=envio_falhou")
+        resposta = pedro.get(f"{CHAT}?filtro=todas&envio_falhou=true")
 
         assert resposta.status_code == 200, resposta.text
         assert [d["id"] for d in resposta.json()] == [falhou_id]

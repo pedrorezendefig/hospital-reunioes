@@ -35,9 +35,15 @@
  * A conversa aberta tem o "Apagar" para quem pode, com confirmação: o autor
  * na conversa Registrada, o Desenvolvedor no card até Planejada (issue
  * #1549, ADR 0084, decisão 2). Quem pode é o servidor que diz.
+ *
+ * A lista é larga, com a busca pelo título e os filtros em chips que quebram
+ * linha (issue #1551): Tipo e Etapa para todos; o recorte (Para mim, Minhas,
+ * Todas), o Responsável e o Envio falhou só para o Desenvolvedor. Tudo combina,
+ * e quem filtra é o servidor. Com uma Demanda aberta a lista recolhe, e o
+ * Voltar às conversas a traz de volta, na tela larga como no celular.
  */
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { ReactNode, useCallback, useEffect, useRef, useState } from "react";
 import { ArrowLeft, Loader2, Plus, Trash2 } from "lucide-react";
 
 import { ConfirmDialog } from "@/components/ConfirmDialog";
@@ -49,8 +55,11 @@ import { SeloDeEtapa } from "./SeloDeEtapa";
 import {
   AnexoDaDemanda,
   conversaValida,
+  Desenvolvedor,
+  desenvolvedoresValidos,
   FalaDoChat,
   URL_DO_CHAT_DA_ABA,
+  URL_DOS_DESENVOLVEDORES,
   urlDaConversa,
   urlDoDesignarDeNovo,
   urlDoReenviar,
@@ -59,8 +68,10 @@ import {
   BASE_TECNOLOGIA,
   CLASSIFICACAO_CLASSE,
   CLASSIFICACAO_ROTULO,
+  Classificacao,
   Demanda,
   ETAPA_CLASSE,
+  EtapaDemanda,
   ETAPA_ROTULO,
   FALHA_DE_CONEXAO,
   motivoDaRecusa,
@@ -88,13 +99,63 @@ const LISTA_VAZIA = "Nenhuma conversa ainda.";
 const LISTA_FALHOU = "Não foi possível carregar as suas conversas. Tente recarregar a página.";
 const URL_QUEM_SOU = `${BASE_TECNOLOGIA}/eu`;
 
-type Filtro = "para_mim" | "minhas" | "todas" | "envio_falhou";
+type Filtro = "para_mim" | "minhas" | "todas";
 const FILTROS: { valor: Filtro; rotulo: string }[] = [
   { valor: "para_mim", rotulo: "Para mim" },
   { valor: "minhas", rotulo: "Minhas" },
   { valor: "todas", rotulo: "Todas" },
-  { valor: "envio_falhou", rotulo: ENVIO_FALHOU },
 ];
+const CLASSIFICACOES = Object.keys(CLASSIFICACAO_ROTULO) as Classificacao[];
+const ETAPAS = Object.keys(ETAPA_ROTULO) as EtapaDemanda[];
+/** A espera depois da última tecla, para a busca não pedir a lista a cada letra. */
+const ESPERA_DA_BUSCA_MS = 300;
+
+/** O que a lista pede ao servidor (issue #1551). */
+type FiltrosDaLista = {
+  recorte: Filtro;
+  busca: string;
+  tipo: Classificacao | null;
+  etapa: EtapaDemanda | null;
+  responsavel: string | null;
+  envioFalhou: boolean;
+};
+
+/** A URL da lista: sem nenhum filtro, a de antes (as Demandas de quem está logado). */
+function urlDaLista(filtros: FiltrosDaLista): string {
+  const consulta = new URLSearchParams();
+  if (filtros.recorte !== "minhas") consulta.set("filtro", filtros.recorte);
+  if (filtros.busca) consulta.set("busca", filtros.busca);
+  if (filtros.tipo) consulta.set("tipo", filtros.tipo);
+  if (filtros.etapa) consulta.set("etapa", filtros.etapa);
+  if (filtros.responsavel) consulta.set("responsavel", filtros.responsavel);
+  if (filtros.envioFalhou) consulta.set("envio_falhou", "true");
+  const texto = consulta.toString();
+  return texto ? `${URL_DO_CHAT_DA_ABA}?${texto}` : URL_DO_CHAT_DA_ABA;
+}
+
+/** Um chip de filtro. Nada de `flex-1` nem `nowrap`: a linha quebra dentro da coluna. */
+function Chip({ ativo, onClick, children }: { ativo: boolean; onClick: () => void; children: string }) {
+  return (
+    <button
+      type="button"
+      aria-pressed={ativo}
+      onClick={onClick}
+      className={`px-3 py-1 rounded-full border text-xs font-semibold ${
+        ativo ? "border-primary bg-primary/5 text-primary" : "border-border text-text-secondary"
+      }`}
+    >
+      {children}
+    </button>
+  );
+}
+
+function GrupoDeChips({ rotulo, children }: { rotulo: string; children: ReactNode }) {
+  return (
+    <div role="group" aria-label={rotulo} className="flex flex-wrap gap-1">
+      {children}
+    </div>
+  );
+}
 
 /** O item serve para a lista? O resto da Demanda é opcional para ela. */
 function itemValido(item: unknown): item is Demanda {
@@ -416,6 +477,15 @@ export function ConversasDaTecnologia({
   const [desenvolvedor, setDesenvolvedor] = useState(false);
   /** Nulo até o servidor dizer quem está logado: o Desenvolvedor abre em Para mim. */
   const [filtro, setFiltro] = useState<Filtro | null>(null);
+  const [textoDaBusca, setTextoDaBusca] = useState("");
+  const [busca, setBusca] = useState("");
+  const [tipo, setTipo] = useState<Classificacao | null>(null);
+  const [etapa, setEtapa] = useState<EtapaDemanda | null>(null);
+  const [responsavel, setResponsavel] = useState<string | null>(null);
+  const [envioFalhou, setEnvioFalhou] = useState(false);
+  const [desenvolvedores, setDesenvolvedores] = useState<Desenvolvedor[]>([]);
+  /** O último pedido da lista: a resposta de um pedido mais velho não sobrescreve a do novo. */
+  const ultimoPedido = useRef(0);
   /** A Demanda do sino que já foi aberta: abre uma vez, e não a cada recarga da lista. */
   const abertaPeloSino = useRef<string | null>(null);
 
@@ -444,17 +514,44 @@ export function ConversasDaTecnologia({
     };
   }, [token, demandaInicial]);
 
+  // Os nomes do chip Responsável, só para o Desenvolvedor.
+  useEffect(() => {
+    if (!token || !desenvolvedor) return;
+    let viva = true;
+    (async () => {
+      try {
+        const resposta = await fetch(URL_DOS_DESENVOLVEDORES, { headers: { Authorization: `Bearer ${token}` } });
+        if (!resposta.ok) return;
+        const lidos = desenvolvedoresValidos(await resposta.json());
+        if (viva) setDesenvolvedores(lidos);
+      } catch (e) {
+        console.error("[admin/tecnologia] falha ao listar quem cuida", e);
+      }
+    })();
+    return () => {
+      viva = false;
+    };
+  }, [token, desenvolvedor]);
+
+  useEffect(() => {
+    const espera = setTimeout(() => setBusca(textoDaBusca.trim()), ESPERA_DA_BUSCA_MS);
+    return () => clearTimeout(espera);
+  }, [textoDaBusca]);
+
   /** Relê a lista e devolve o que veio; nulo quando não deu. */
   const carregar = useCallback(async (): Promise<Demanda[] | null> => {
     if (!token || filtro === null) return null;
-    const url = filtro === "minhas" ? URL_DO_CHAT_DA_ABA : `${URL_DO_CHAT_DA_ABA}?filtro=${filtro}`;
+    const url = urlDaLista({ recorte: filtro, busca, tipo, etapa, responsavel, envioFalhou });
+    const pedido = ++ultimoPedido.current;
     try {
       const resposta = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+      if (pedido !== ultimoPedido.current) return null;
       if (!resposta.ok) {
         setErroDaLista(LISTA_FALHOU);
         return null;
       }
       const corpo: unknown = await resposta.json();
+      if (pedido !== ultimoPedido.current) return null;
       if (!Array.isArray(corpo)) {
         setErroDaLista(LISTA_FALHOU);
         return null;
@@ -468,7 +565,7 @@ export function ConversasDaTecnologia({
       setErroDaLista(FALHA_DE_CONEXAO);
       return null;
     }
-  }, [token, filtro]);
+  }, [token, filtro, busca, tipo, etapa, responsavel, envioFalhou]);
 
   useEffect(() => {
     carregar();
@@ -520,9 +617,14 @@ export function ConversasDaTecnologia({
     abrir(pedida);
   }, [demandaInicial, demandas, abrir]);
 
+  /** Com uma Demanda aberta, a lista recolhe também na tela larga (issue #1551). */
+  const recolhida = naTela === "conversa" && aberta !== null;
+
   return (
-    <div className="md:grid md:grid-cols-[16rem_minmax(0,1fr)] md:gap-4 md:items-start">
-      <div className={`${naTela === "lista" ? "" : "hidden"} md:block space-y-3`}>
+    <div
+      className={`md:grid ${recolhida ? "md:grid-cols-1" : "md:grid-cols-[22rem_minmax(0,1fr)]"} md:gap-4 md:items-start`}
+    >
+      <div className={`${naTela === "lista" ? "" : "hidden"} ${recolhida ? "md:hidden" : "md:block"} space-y-3`}>
         <button
           type="button"
           onClick={() => abrir(null)}
@@ -531,23 +633,59 @@ export function ConversasDaTecnologia({
           <Plus className="w-4 h-4" />
           {NOVA_CONVERSA}
         </button>
-        {desenvolvedor && (
-          <div role="group" aria-label="Filtro das conversas" className="flex gap-1">
-            {FILTROS.map(({ valor, rotulo }) => (
-              <button
-                key={valor}
-                type="button"
-                aria-pressed={filtro === valor}
-                onClick={() => setFiltro(valor)}
-                className={`flex-1 px-3 py-1.5 rounded-xl border text-xs font-semibold ${
-                  filtro === valor ? "border-primary bg-primary/5 text-primary" : "border-border text-text-secondary"
-                }`}
-              >
-                {rotulo}
-              </button>
+        <section role="region" aria-label="Filtros da lista" className="space-y-2">
+          <input
+            type="search"
+            aria-label="Buscar pelo título"
+            placeholder="Buscar pelo título"
+            value={textoDaBusca}
+            onChange={(e) => setTextoDaBusca(e.target.value)}
+            className="w-full px-3 py-2 rounded-xl border border-border text-sm normal-case"
+          />
+          {desenvolvedor && (
+            <GrupoDeChips rotulo="Filtro das conversas">
+              {FILTROS.map(({ valor, rotulo }) => (
+                <Chip key={valor} ativo={filtro === valor} onClick={() => setFiltro(valor)}>
+                  {rotulo}
+                </Chip>
+              ))}
+            </GrupoDeChips>
+          )}
+          <GrupoDeChips rotulo="Tipo">
+            {CLASSIFICACOES.map((valor) => (
+              <Chip key={valor} ativo={tipo === valor} onClick={() => setTipo(tipo === valor ? null : valor)}>
+                {CLASSIFICACAO_ROTULO[valor]}
+              </Chip>
             ))}
-          </div>
-        )}
+          </GrupoDeChips>
+          <GrupoDeChips rotulo="Etapa">
+            {ETAPAS.map((valor) => (
+              <Chip key={valor} ativo={etapa === valor} onClick={() => setEtapa(etapa === valor ? null : valor)}>
+                {ETAPA_ROTULO[valor]}
+              </Chip>
+            ))}
+          </GrupoDeChips>
+          {desenvolvedor && desenvolvedores.length > 0 && (
+            <GrupoDeChips rotulo="Responsável">
+              {desenvolvedores.map((d) => (
+                <Chip
+                  key={d.id}
+                  ativo={responsavel === d.id}
+                  onClick={() => setResponsavel(responsavel === d.id ? null : d.id)}
+                >
+                  {d.nome}
+                </Chip>
+              ))}
+            </GrupoDeChips>
+          )}
+          {desenvolvedor && (
+            <GrupoDeChips rotulo="Situação">
+              <Chip ativo={envioFalhou} onClick={() => setEnvioFalhou(!envioFalhou)}>
+                {ENVIO_FALHOU}
+              </Chip>
+            </GrupoDeChips>
+          )}
+        </section>
         <nav aria-label="Suas conversas" className="md:max-h-[calc(100vh-20rem)] md:overflow-y-auto">
           {erroDaLista && (
             <p role="alert" className="px-3 py-2 rounded-xl bg-red-50 border border-red-200 text-red-700 text-sm">
@@ -607,7 +745,7 @@ export function ConversasDaTecnologia({
         <button
           type="button"
           onClick={() => setNaTela("lista")}
-          className="md:hidden inline-flex items-center gap-1.5 text-sm font-semibold text-primary"
+          className={`${recolhida ? "" : "md:hidden"} inline-flex items-center gap-1.5 text-sm font-semibold text-primary`}
         >
           <ArrowLeft className="w-4 h-4" />
           {VOLTAR_PARA_A_LISTA}

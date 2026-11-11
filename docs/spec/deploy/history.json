@@ -2,6 +2,54 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-11-11T03:03:30-03:00",
+      "sha": "43a2eb4c818237bca6c257950f8c7af366c1e6a8",
+      "app_version": "0.246.0",
+      "subject": "Onda onda-entregas-onda1: Lista larga com busca e filtros em chips",
+      "raw_subject": "chore(deploy): registro da onda onda-entregas-onda1 (#1563)",
+      "scope": [
+        "backend",
+        "frontend"
+      ],
+      "prds": [
+        1548
+      ],
+      "result": "healthy",
+      "duration_seconds": 207,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        },
+        {
+          "service": "frontend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "onda-enxuta onda-entregas-onda1: PR #1563 (issue #1551), mergeados PR a PR. Merge pela API do GitHub, um build. Registro pela Action pos-merge depois do health.",
+      "etapas": {
+        "merge_s": 3,
+        "build_s": {
+          "backend": 19,
+          "frontend": 181
+        },
+        "health_s": 0
+      },
+      "responsavel": "pedrorezendefig"
+    },
+    {
       "at": "2026-11-11T02:50:40-03:00",
       "sha": "17260b988648046c9ac5c0c3a1a5d048b22cacbe",
       "app_version": "0.245.0",
