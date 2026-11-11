@@ -5,6 +5,8 @@ import { usePathname } from "next/navigation";
 import { Logo } from "@/components/ui/Logo";
 import { useCurrentParticipante } from "@/hooks/useCurrentParticipante";
 import { isSuperAdmin } from "@/lib/auth";
+import { BotaoRecolherMenu } from "@/components/layout/BotaoRecolherMenu";
+import { useMenuRecolhido } from "@/hooks/useMenuRecolhido";
 import {
   Users,
   ArrowLeft,
@@ -107,31 +109,45 @@ export function AdminSidebar({
   const { participante } = useCurrentParticipante();
   const superAdmin = isSuperAdmin(participante);
   const sections = SECTIONS.filter((s) => superAdmin || !s.somenteSuperAdmin);
+  // A mesma preferência da barra do app (issue #1550); a gaveta do celular
+  // ignora e segue sempre aberta.
+  const [preferenciaRecolhido, alternarRecolhido] = useMenuRecolhido();
+  const recolhido = variant === "desktop" && preferenciaRecolhido;
 
   const content = (
     <>
-      <div className="px-4 py-3 border-b border-border flex justify-center">
-        <Link
-          href="/dashboard"
-          onClick={onNavigate}
-          className="block hover:opacity-80 transition-opacity"
-        >
-          <Logo layout="vertical" size="md" />
-        </Link>
-      </div>
+      {!recolhido && (
+        <>
+          <div className="px-4 py-3 border-b border-border flex justify-center">
+            <Link
+              href="/dashboard"
+              onClick={onNavigate}
+              className="block hover:opacity-80 transition-opacity"
+            >
+              <Logo layout="vertical" size="md" />
+            </Link>
+          </div>
 
-      <div className="px-4 pt-4 pb-2">
-        <span className="text-[11px] font-semibold text-text-secondary uppercase tracking-wider">
-          Administração
-        </span>
-      </div>
+          <div className="px-4 pt-4 pb-2">
+            <span className="text-[11px] font-semibold text-text-secondary uppercase tracking-wider">
+              Administração
+            </span>
+          </div>
+        </>
+      )}
 
-      <nav className="flex-1 px-4 pb-4 space-y-3 overflow-y-auto">
+      <nav
+        className={`flex-1 space-y-3 overflow-y-auto ${recolhido ? "p-2" : "px-4 pb-4"}`}
+      >
         {sections.map((section) => (
           <div key={section.label} className="space-y-1">
-            <div className="px-3 pt-2 pb-1 text-[10px] font-semibold text-text-secondary/70 uppercase tracking-wider">
-              {section.label}
-            </div>
+            {recolhido ? (
+              <div className="mx-2 border-t border-border/50" />
+            ) : (
+              <div className="px-3 pt-2 pb-1 text-[10px] font-semibold text-text-secondary/70 uppercase tracking-wider">
+                {section.label}
+              </div>
+            )}
             {section.items.map((item) => {
               const Icon = item.icon;
               const isActive = pathname.startsWith(item.href);
@@ -140,18 +156,25 @@ export function AdminSidebar({
                   key={item.href}
                   href={item.href}
                   onClick={onNavigate}
+                  title={recolhido ? item.label : undefined}
                   aria-current={isActive ? "page" : undefined}
                   className={`flex items-center gap-3 px-3 py-2 rounded-xl text-sm font-medium transition-all duration-200 cursor-pointer ${
+                    recolhido ? "justify-center" : ""
+                  } ${
                     isActive
-                      ? "bg-primary/10 text-primary border-l-[3px] border-primary pl-2.5"
+                      ? recolhido
+                        ? "bg-primary/10 text-primary"
+                        : "bg-primary/10 text-primary border-l-[3px] border-primary pl-2.5"
                       : "text-text-secondary hover:bg-primary/5 hover:text-text"
                   }`}
                 >
                   <Icon
-                    className="w-[18px] h-[18px]"
+                    className="w-[18px] h-[18px] shrink-0"
                     strokeWidth={isActive ? 2 : 1.5}
                   />
-                  {item.label}
+                  <span className={recolhido ? "sr-only" : undefined}>
+                    {item.label}
+                  </span>
                 </Link>
               );
             })}
@@ -160,22 +183,37 @@ export function AdminSidebar({
 
       </nav>
 
-      <div className="p-4 border-t border-border">
+      <div
+        className={`border-t border-border space-y-1 ${recolhido ? "p-2" : "p-4"}`}
+      >
         <Link
           href="/dashboard"
           onClick={onNavigate}
-          className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm text-text-secondary hover:bg-primary/5 hover:text-text transition-colors"
+          title={recolhido ? "Voltar ao app" : undefined}
+          className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm text-text-secondary hover:bg-primary/5 hover:text-text transition-colors ${
+            recolhido ? "justify-center" : ""
+          }`}
         >
-          <ArrowLeft className="w-4 h-4" strokeWidth={1.5} />
-          Voltar ao app
+          <ArrowLeft className="w-4 h-4 shrink-0" strokeWidth={1.5} />
+          <span className={recolhido ? "sr-only" : undefined}>
+            Voltar ao app
+          </span>
         </Link>
+        {variant === "desktop" && (
+          <BotaoRecolherMenu
+            recolhido={recolhido}
+            onAlternar={alternarRecolhido}
+          />
+        )}
       </div>
     </>
   );
 
   if (variant === "desktop") {
     return (
-      <aside className="hidden md:flex w-64 min-h-screen bg-gradient-to-b from-surface to-bg border-r border-border flex-col">
+      <aside
+        className={`hidden md:flex ${recolhido ? "w-16" : "w-64"} min-h-screen bg-gradient-to-b from-surface to-bg border-r border-border flex-col`}
+      >
         {content}
       </aside>
     );
