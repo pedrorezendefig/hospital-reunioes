@@ -28,6 +28,8 @@ import {
 } from "@/lib/auth";
 import { Home, CalendarPlus } from "lucide-react";
 import { DistintivoDeNovidades } from "@/components/layout/DistintivoDeNovidades";
+import { BotaoRecolherMenu } from "@/components/layout/BotaoRecolherMenu";
+import { useMenuRecolhido } from "@/hooks/useMenuRecolhido";
 import type { ContagemDeNovidades } from "@/lib/ouvidoria/novidades";
 
 interface SidebarProps {
@@ -56,6 +58,10 @@ export function Sidebar({
 }: SidebarProps) {
   const pathname = usePathname();
   const { participante } = useCurrentParticipante();
+  // Só a barra do computador recolhe (issue #1550); a gaveta do celular
+  // ignora a preferência e segue sempre aberta.
+  const [preferenciaRecolhido, alternarRecolhido] = useMenuRecolhido();
+  const recolhido = variant === "desktop" && preferenciaRecolhido;
   // Todo papel de Reuniões entra no /admin: super admin vê tudo, secretária
   // edita e facilitador lê o Dados do Atendimento (ADR 0031). A raiz /admin
   // redireciona por papel; a sidebar de lá esconde o que não é do papel.
@@ -186,12 +192,7 @@ export function Sidebar({
 
     // Item folha (link navegável). No topo (depth 0) usa o estilo cheio; em
     // submenu usa o estilo compacto do antigo Lista/Kanban.
-    const isLeafActive =
-      item.href === "/dashboard"
-        ? pathname === "/dashboard"
-        : depth === 0
-        ? pathname.startsWith(item.href)
-        : pathname === item.href;
+    const isLeafActive = folhaAtiva(item, depth, pathname);
 
     if (depth === 0) {
       return (
@@ -199,6 +200,7 @@ export function Sidebar({
           <Link
             href={item.href}
             onClick={onNavigate}
+            aria-current={isLeafActive ? "page" : undefined}
             className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-200 cursor-pointer ${
               isLeafActive
                 ? "bg-primary/10 text-primary border-l-[3px] border-primary pl-2.5"
@@ -226,6 +228,7 @@ export function Sidebar({
         key={item.href}
         href={item.href}
         onClick={onNavigate}
+        aria-current={isLeafActive ? "page" : undefined}
         className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-all duration-200 cursor-pointer ${
           isLeafActive
             ? "bg-primary/10 text-primary"
@@ -238,28 +241,72 @@ export function Sidebar({
     );
   };
 
+  // Recolhida, a barra mostra só o ícone de cada link folha, sem os grupos:
+  // um grupo não navega e o submenu indentado não cabe na largura dos ícones.
+  // O nome vai no `title` (o hover) e no texto só para leitor de tela.
+  const renderIcone = ({ item, depth }: { item: NavItem; depth: number }) => {
+    const ativo = folhaAtiva(item, depth, pathname);
+    const Icon = item.icon;
+    return (
+      <Link
+        key={item.href}
+        href={item.href}
+        title={item.label}
+        aria-current={ativo ? "page" : undefined}
+        className={`relative flex items-center justify-center px-3 py-2.5 rounded-xl transition-all duration-200 cursor-pointer ${
+          ativo
+            ? "bg-primary/10 text-primary"
+            : "text-text-secondary hover:bg-primary/5 hover:text-text"
+        }`}
+      >
+        <Icon className="w-[18px] h-[18px]" strokeWidth={ativo ? 2 : 1.5} />
+        <span className="sr-only">{item.label}</span>
+        {item.href === ouvidoriaItem.href && (
+          <DistintivoDeNovidades
+            contagem={novidadesOuvidoria}
+            className="absolute -top-1 -right-1"
+          />
+        )}
+      </Link>
+    );
+  };
+
   const content = (
     <>
-      <div className="px-4 py-3 border-b border-border flex justify-center">
-        <Link
-          href={popsOnly ? "/pops" : isSec ? "/secretaria" : "/dashboard"}
-          onClick={onNavigate}
-          className="block hover:opacity-80 transition-opacity"
-        >
-          <Logo layout="vertical" size="md" />
-        </Link>
-      </div>
+      {!recolhido && (
+        <div className="px-4 py-3 border-b border-border flex justify-center">
+          <Link
+            href={popsOnly ? "/pops" : isSec ? "/secretaria" : "/dashboard"}
+            onClick={onNavigate}
+            className="block hover:opacity-80 transition-opacity"
+          >
+            <Logo layout="vertical" size="md" />
+          </Link>
+        </div>
+      )}
 
-      <nav className="flex-1 p-4 space-y-1 overflow-y-auto">
-        {navItems.map((item) => renderItem(item, 0))}
+      <nav
+        className={`flex-1 space-y-1 overflow-y-auto ${recolhido ? "p-2" : "p-4"}`}
+      >
+        {recolhido
+          ? navItems.flatMap((item) => folhas(item, 0)).map(renderIcone)
+          : navItems.map((item) => renderItem(item, 0))}
       </nav>
     </>
   );
 
   if (variant === "desktop") {
     return (
-      <aside className="hidden md:flex w-64 min-h-screen bg-gradient-to-b from-surface to-bg border-r border-border flex-col">
+      <aside
+        className={`hidden md:flex ${recolhido ? "w-16" : "w-64"} min-h-screen bg-gradient-to-b from-surface to-bg border-r border-border flex-col`}
+      >
         {content}
+        <div className={`border-t border-border ${recolhido ? "p-2" : "p-4"}`}>
+          <BotaoRecolherMenu
+            recolhido={recolhido}
+            onAlternar={alternarRecolhido}
+          />
+        </div>
       </aside>
     );
   }
@@ -269,6 +316,20 @@ export function Sidebar({
       {content}
     </div>
   );
+}
+
+// O critério de "ativo" de um link folha: match exato para Dashboard e para
+// os itens de submenu, prefixo para os demais do topo.
+function folhaAtiva(item: NavItem, depth: number, pathname: string): boolean {
+  if (item.href === "/dashboard") return pathname === "/dashboard";
+  return depth === 0 ? pathname.startsWith(item.href) : pathname === item.href;
+}
+
+// Os links folha da subárvore, cada um com a profundidade em que mora (é ela
+// que decide o critério de "ativo").
+function folhas(item: NavItem, depth: number): { item: NavItem; depth: number }[] {
+  if (!item.subItems || item.subItems.length === 0) return [{ item, depth }];
+  return item.subItems.flatMap((sub) => folhas(sub, depth + 1));
 }
 
 // True se a rota atual cai sob algum link folha (recursivamente) da subárvore
