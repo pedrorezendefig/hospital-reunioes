@@ -77,7 +77,7 @@ class TestOTurnoGravaOsQuatroTextos:
             client,
             monkeypatch,
             titulo_pergunta="Quem marca\no retorno?",
-            porque="A recepção — que já agenda — marca.",
+            porque="A recepção \u2014 que já agenda \u2014 marca.",
         )
 
         pergunta = _conversas(sb)[0]["mensagens"][-1]
