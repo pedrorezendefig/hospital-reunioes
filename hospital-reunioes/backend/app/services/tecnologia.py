@@ -38,6 +38,12 @@ TABELA_CONVERSA_DA_DEMANDA = "tecnologia_conversa_da_demanda"
 ESTADOS_ABERTOS: tuple[str, ...] = ("nova", "em_andamento", "aguardando")
 ESTADOS_FECHADOS: tuple[str, ...] = ("concluida", "cancelada")
 
+# Quem abriu o card (ADR 0084, decisao 4; CHECK da migration 130): o diretor,
+# pelo chat da aba, ou a Vitta, pela issue-raiz do app aberta no terminal.
+ORIGEM_DIRETOR = "diretor"
+ORIGEM_VITTA = "vitta"
+ORIGENS: tuple[str, ...] = (ORIGEM_DIRETOR, ORIGEM_VITTA)
+
 # O nome que a issue do bug leva quando a Demanda nao tem Produto.
 SEM_PRODUTO = "(sem Produto)"
 
@@ -142,12 +148,23 @@ def e_desenvolvedor(pessoa: dict[str, Any] | None) -> bool:
     return is_super_admin(pessoa) and bool(str((pessoa or {}).get("github_login") or "").strip())
 
 
+def origem_da_demanda(demanda: dict[str, Any]) -> str:
+    """A Origem da Demanda; a linha de antes da coluna (migration 130) e do diretor."""
+    return ORIGEM_VITTA if demanda.get("origem") == ORIGEM_VITTA else ORIGEM_DIRETOR
+
+
 def pode_ver(pessoa: dict[str, Any], demanda: dict[str, Any]) -> bool:
-    """Quem ve uma Demanda: o autor, e o Desenvolvedor, que ve todas (ADR 0083).
+    """Quem ve uma Demanda: o autor, o Desenvolvedor, que ve todas (ADR 0083),
+    e todo Super admin no card de Origem Vitta, aberto pelo terminal (ADR 0084,
+    decisao 4). A conversa de outro diretor continua fechada.
 
     A regra e uma so, e a lista e a leitura da conversa leem daqui.
     """
-    return demanda.get("autor_id") == pessoa.get("id") or e_desenvolvedor(pessoa)
+    return (
+        demanda.get("autor_id") == pessoa.get("id")
+        or e_desenvolvedor(pessoa)
+        or origem_da_demanda(demanda) == ORIGEM_VITTA
+    )
 
 
 # Ate onde a Demanda se apaga (ADR 0084, decisao 2): ate Planejada. Em
