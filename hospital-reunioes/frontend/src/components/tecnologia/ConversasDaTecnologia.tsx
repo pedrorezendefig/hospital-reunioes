@@ -41,6 +41,11 @@
  * Todas), o Responsável e o Envio falhou só para o Desenvolvedor. Tudo combina,
  * e quem filtra é o servidor. Com uma Demanda aberta a lista recolhe, e o
  * Voltar às conversas a traz de volta, na tela larga como no celular.
+ *
+ * Os cards que a Vitta abre pelo terminal aparecem na lista com o selo
+ * "Vitta", e os do chat com "Pedido do diretor"; o chip Origem filtra (issue
+ * #1554, ADR 0084, decisão 4). O card da Vitta abre o documento e a Conversa
+ * da Demanda, sem conversa com o agente.
  */
 
 import { ReactNode, useCallback, useEffect, useRef, useState } from "react";
@@ -75,6 +80,9 @@ import {
   ETAPA_ROTULO,
   FALHA_DE_CONEXAO,
   motivoDaRecusa,
+  Origem,
+  ORIGEM_CLASSE,
+  ORIGEM_ROTULO,
   temSelo,
   textoDoSelo,
 } from "./demandas";
@@ -107,6 +115,7 @@ const FILTROS: { valor: Filtro; rotulo: string }[] = [
 ];
 const CLASSIFICACOES = Object.keys(CLASSIFICACAO_ROTULO) as Classificacao[];
 const ETAPAS = Object.keys(ETAPA_ROTULO) as EtapaDemanda[];
+const ORIGENS = Object.keys(ORIGEM_ROTULO) as Origem[];
 /** A espera depois da última tecla, para a busca não pedir a lista a cada letra. */
 const ESPERA_DA_BUSCA_MS = 300;
 
@@ -116,6 +125,7 @@ type FiltrosDaLista = {
   busca: string;
   tipo: Classificacao | null;
   etapa: EtapaDemanda | null;
+  origem: Origem | null;
   responsavel: string | null;
   envioFalhou: boolean;
 };
@@ -127,6 +137,7 @@ function urlDaLista(filtros: FiltrosDaLista): string {
   if (filtros.busca) consulta.set("busca", filtros.busca);
   if (filtros.tipo) consulta.set("tipo", filtros.tipo);
   if (filtros.etapa) consulta.set("etapa", filtros.etapa);
+  if (filtros.origem) consulta.set("origem", filtros.origem);
   if (filtros.responsavel) consulta.set("responsavel", filtros.responsavel);
   if (filtros.envioFalhou) consulta.set("envio_falhou", "true");
   const texto = consulta.toString();
@@ -185,6 +196,16 @@ function ClassificacaoNaLista({ demanda }: { demanda: Demanda }) {
   return (
     <span className={`px-2 py-0.5 rounded text-xs font-medium ${CLASSIFICACAO_CLASSE[demanda.classificacao]}`}>
       {CLASSIFICACAO_ROTULO[demanda.classificacao]}
+    </span>
+  );
+}
+
+/** Pedido do diretor ou Vitta (issue #1554). Sem o campo, sem selo. */
+function OrigemNaLista({ demanda }: { demanda: Demanda }) {
+  if (!demanda.origem) return null;
+  return (
+    <span className={`px-2 py-0.5 rounded text-xs font-medium ${ORIGEM_CLASSE[demanda.origem]}`}>
+      {ORIGEM_ROTULO[demanda.origem]}
     </span>
   );
 }
@@ -408,7 +429,8 @@ function AnexosDaDemanda({ anexos }: { anexos: AnexoDaDemanda[] }) {
 
 /**
  * A conversa só para leitura: a que já virou card, ou a de outro autor que o
- * Desenvolvedor abriu (ADR 0083), com a Etapa e o Documento do card.
+ * Desenvolvedor abriu (ADR 0083), com a Etapa e o Documento do card. O card
+ * da Vitta não tem conversa com o agente (issue #1554): nem a pede.
  */
 function Acompanhamento({ demanda, token }: { demanda: Demanda; token: string | null }) {
   const [falas, setFalas] = useState<FalaDoChat[]>([]);
@@ -416,8 +438,9 @@ function Acompanhamento({ demanda, token }: { demanda: Demanda; token: string | 
 
   // A conversa é complemento: sem ela (a melhoria planejada, ou a rede fora),
   // o Documento do card continua à vista.
+  const semChat = demanda.origem === "vitta";
   useEffect(() => {
-    if (!token) return;
+    if (!token || semChat) return;
     let viva = true;
     (async () => {
       try {
@@ -435,13 +458,14 @@ function Acompanhamento({ demanda, token }: { demanda: Demanda; token: string | 
     return () => {
       viva = false;
     };
-  }, [demanda.id, token]);
+  }, [demanda.id, token, semChat]);
 
   return (
     <section className="w-full bg-white rounded-2xl border border-primary/30 shadow-premium p-5 space-y-4">
       <div className="flex flex-wrap items-center gap-2 text-xs">
         <h2 className="normal-case text-base font-bold text-slate-900">{demanda.titulo}</h2>
         <SeloDeEtapa demanda={demanda} />
+        <OrigemNaLista demanda={demanda} />
         {demanda.autor && <span className="normal-case text-text-secondary">{demanda.autor}</span>}
       </div>
       <DocumentoDoCard demanda={demanda} />
@@ -481,6 +505,7 @@ export function ConversasDaTecnologia({
   const [busca, setBusca] = useState("");
   const [tipo, setTipo] = useState<Classificacao | null>(null);
   const [etapa, setEtapa] = useState<EtapaDemanda | null>(null);
+  const [origem, setOrigem] = useState<Origem | null>(null);
   const [responsavel, setResponsavel] = useState<string | null>(null);
   const [envioFalhou, setEnvioFalhou] = useState(false);
   const [desenvolvedores, setDesenvolvedores] = useState<Desenvolvedor[]>([]);
@@ -541,7 +566,7 @@ export function ConversasDaTecnologia({
   /** Relê a lista e devolve o que veio; nulo quando não deu. */
   const carregar = useCallback(async (): Promise<Demanda[] | null> => {
     if (!token || filtro === null) return null;
-    const url = urlDaLista({ recorte: filtro, busca, tipo, etapa, responsavel, envioFalhou });
+    const url = urlDaLista({ recorte: filtro, busca, tipo, etapa, origem, responsavel, envioFalhou });
     const pedido = ++ultimoPedido.current;
     try {
       const resposta = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
@@ -565,7 +590,7 @@ export function ConversasDaTecnologia({
       setErroDaLista(FALHA_DE_CONEXAO);
       return null;
     }
-  }, [token, filtro, busca, tipo, etapa, responsavel, envioFalhou]);
+  }, [token, filtro, busca, tipo, etapa, origem, responsavel, envioFalhou]);
 
   useEffect(() => {
     carregar();
@@ -665,6 +690,13 @@ export function ConversasDaTecnologia({
               </Chip>
             ))}
           </GrupoDeChips>
+          <GrupoDeChips rotulo="Origem">
+            {ORIGENS.map((valor) => (
+              <Chip key={valor} ativo={origem === valor} onClick={() => setOrigem(origem === valor ? null : valor)}>
+                {ORIGEM_ROTULO[valor]}
+              </Chip>
+            ))}
+          </GrupoDeChips>
           {desenvolvedor && desenvolvedores.length > 0 && (
             <GrupoDeChips rotulo="Responsável">
               {desenvolvedores.map((d) => (
@@ -727,6 +759,7 @@ export function ConversasDaTecnologia({
                     <span className="flex flex-wrap items-center gap-1.5">
                       <EtapaNaLista demanda={demanda} />
                       <ClassificacaoNaLista demanda={demanda} />
+                      <OrigemNaLista demanda={demanda} />
                       <SeloDoEnvioFalhou demanda={demanda} />
                     </span>
                   </button>
