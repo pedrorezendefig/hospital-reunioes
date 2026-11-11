@@ -2,6 +2,54 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-11-11T14:23:02-03:00",
+      "sha": "c65d0aa1fcc872a03d1b58ef6973f899c5f66bd9",
+      "app_version": "0.252.0",
+      "subject": "Onda onda-entregas-onda6: Revisão com o código de hoje, a conversa",
+      "raw_subject": "chore(deploy): registro da onda onda-entregas-onda6 (#1573)",
+      "scope": [
+        "backend",
+        "frontend"
+      ],
+      "prds": [
+        1548
+      ],
+      "result": "healthy",
+      "duration_seconds": 217,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        },
+        {
+          "service": "frontend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "onda-enxuta onda-entregas-onda6: PR #1573 (issue #1557), mergeados PR a PR. Merge pela API do GitHub, um build. Registro pela Action pos-merge depois do health.",
+      "etapas": {
+        "merge_s": 3,
+        "build_s": {
+          "backend": 16,
+          "frontend": 198
+        },
+        "health_s": 0
+      },
+      "responsavel": "pedrorezendefig"
+    },
+    {
       "at": "2026-11-11T14:03:38-03:00",
       "sha": "9d1dbab8dc06806bf682e0fcf321a44110e829c0",
       "app_version": "0.251.0",
