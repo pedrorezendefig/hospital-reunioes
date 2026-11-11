@@ -24,6 +24,11 @@ O chat da aba (issues #1381, #1383 e #1384):
                                                 os filtros Tipo, Etapa,
                                                 Responsavel e Envio falhou
                                                 (issue #1551).
+- GET   /admin/tecnologia/entregas              a aba Entregas: os cards
+                                                entregues por semana ou por
+                                                mes, com filtros de periodo,
+                                                tipo, Origem e Responsavel.
+                                                So leitura (issue #1556).
 - GET   /admin/tecnologia/desenvolvedores       o "Quem cuida disto?" do
                                                 resumo (ADR 0083).
 - POST  /admin/tecnologia/chat                  o primeiro turno: a Demanda
