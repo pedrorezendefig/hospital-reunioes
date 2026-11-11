@@ -44,6 +44,7 @@ Só `status: accepted` vale como decisão; `superseded` é histórico (CLAUDE.md
 | [0077](0077-tecnologia-vira-o-chat-do-agente-bug-ou-melhoria.md) | accepted | Tecnologia vira o chat do agente: bug ou melhoria, com Opus lendo o código, e o card nasce no GitHub (substitui 0075; emenda 0050, 0054, 0056, 0069 e 0076) |
 | [0079](0079-planejamento-sem-teto-e-custo-na-tela.md) | accepted | Planejamento da Demanda sem teto de perguntas, parada por "nada em aberto" e o custo da conversa na tela (emenda 0077) |
 | [0083](0083-tecnologia-responsavel-escolhido-pelo-diretor-e-conversa-da-demanda-no-app.md) | accepted | Tecnologia: o diretor escolhe o Responsável, o Desenvolvedor vê as Demandas de todos e a Conversa da Demanda volta, só no app (emenda 0077) |
+| [0084](0084-tecnologia-entregas-documento-do-card-revisao-apagar-e-demonstracao.md) | accepted | Tecnologia: Entregas, documento do card, revisão com o código de hoje, apagar e demonstração (emenda 0050, 0054, 0077 e 0083) |
 | [0060](0060-texto-que-sai-para-a-issue-publica-passa-pela-peneira-de-dado-pessoal.md) | accepted | Texto que sai para a issue pública passa pela peneira de dado pessoal (emenda 0054) |
 | [0069](0069-anexo-da-demanda-fica-no-app-e-em-producao-devolve-ao-diretor.md) | accepted | Anexo da Demanda fica no app e quem desenvolve busca; Em produção é a Etapa que devolve ao diretor (emenda 0054) |
 

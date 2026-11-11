@@ -1,6 +1,6 @@
 ---
 status: accepted
-amended_by: 0077
+amended_by: 0077, 0084
 ---
 
 > Nasceu como 0049 no grilling de 08/09/2026, na árvore local. O número 0049 já tinha sido tomado no `origin/main` pela ADR da wayfinder, então esta cedeu o número e virou 0050 em 09/09/2026. O PRD #634 e a issue #636 citam 0050.

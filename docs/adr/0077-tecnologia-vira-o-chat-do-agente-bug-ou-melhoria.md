@@ -2,7 +2,7 @@
 status: accepted
 supersedes: 0075
 amends: 0050, 0054, 0056, 0069, 0076
-amended_by: 0078, 0079, 0083
+amended_by: 0078, 0079, 0083, 0084
 ---
 
 # Tecnologia vira o chat do agente: bug ou melhoria, com Opus lendo o código, e o card nasce no GitHub
