@@ -2,6 +2,56 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-11-11T14:03:38-03:00",
+      "sha": "9d1dbab8dc06806bf682e0fcf321a44110e829c0",
+      "app_version": "0.251.0",
+      "subject": "Onda onda-entregas-onda4: Demonstração no card",
+      "raw_subject": "chore(deploy): registro da onda onda-entregas-onda4 (#1567)",
+      "scope": [
+        "backend",
+        "frontend"
+      ],
+      "prds": [
+        1548
+      ],
+      "result": "healthy",
+      "duration_seconds": 287,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        },
+        {
+          "service": "frontend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [
+        "133_tecnologia_demonstracao.sql"
+      ],
+      "rollback_target_sha": null,
+      "notes": "onda-enxuta onda-entregas-onda4: PR #1567 (issue #1559), mergeados PR a PR. Merge pela API do GitHub, um build. Registro pela Action pos-merge depois do health.",
+      "etapas": {
+        "merge_s": 3,
+        "build_s": {
+          "backend": 22,
+          "frontend": 262
+        },
+        "health_s": 0
+      },
+      "responsavel": "pedrorezendefig"
+    },
+    {
       "at": "2026-11-11T11:03:01-03:00",
       "sha": "04d22b258a2243660b00e47aeb07c63278756631",
       "app_version": "0.250.0",
