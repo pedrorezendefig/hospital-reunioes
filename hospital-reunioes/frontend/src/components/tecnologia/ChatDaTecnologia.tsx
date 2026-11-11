@@ -79,6 +79,11 @@ export const TITULO_DO_CHAT = "Assistente de Tecnologia";
 export const FECHAR_E_RESUMIR = "Fechar e resumir";
 export const QUEM_CUIDA_DISTO = "Quem cuida disto?";
 const SEM_ESCOLHA = "Sem escolha";
+/**
+ * Os atalhos embaixo das opções da pergunta (issue #1595): cada um é a fala
+ * fixa do diretor, a mesma que o backend reconhece para não fechar decisão.
+ */
+export const ATALHOS_DA_PERGUNTA = ["Não sei agora, siga", "Explica melhor"] as const;
 const TITULO_DO_RESUMO = "Resumo do bug";
 const TITULO_DO_RESUMO_DA_MELHORIA = "Resumo da melhoria";
 const O_QUE_O_CARD_FAZ = "Criar o card manda o bug para o desenvolvimento da Vitta, que começa a trabalhar nele.";
@@ -174,8 +179,12 @@ type PropsDaPerguntaEmCartao = {
   /** Contado pelas perguntas da IA na conversa, a partir de 1. */
   numero: number;
   desabilitado?: boolean;
+  /** Enquanto a IA pensa, os atalhos somem. */
+  pensando?: boolean;
   /** Sem ele, o cartão é só de leitura: a pergunta já respondida (issue #1594), sem botões. */
   onEscolher?: (letra: LetraDaOpcao) => void;
+  /** Sem ele, o cartão não mostra os atalhos (a pergunta já respondida). */
+  onAtalho?: (fala: string) => void;
 };
 
 /**
@@ -183,8 +192,17 @@ type PropsDaPerguntaEmCartao = {
  * número, o título, o contexto, as duas opções com a letra num círculo e o
  * "Na prática" de cada uma, a recomendada em destaque e, embaixo das opções,
  * o porquê dela. O título é texto da conversa: fica em letra normal (ADR 0080).
+ * Por último, os atalhos "Não sei agora, siga" e "Explica melhor" (issue #1595).
  */
-function PerguntaEmCartao({ fala, cartao, numero, desabilitado, onEscolher }: PropsDaPerguntaEmCartao) {
+function PerguntaEmCartao({
+  fala,
+  cartao,
+  numero,
+  desabilitado,
+  pensando,
+  onEscolher,
+  onAtalho,
+}: PropsDaPerguntaEmCartao) {
   const naPratica = [cartao.na_pratica_a, cartao.na_pratica_b];
   const nome = `Pergunta ${numero}`;
   return (
@@ -247,6 +265,21 @@ function PerguntaEmCartao({ fala, cartao, numero, desabilitado, onEscolher }: Pr
       </div>
       {cartao.porque && fala.recomendada && (
         <p className="text-sm leading-relaxed text-slate-700">{`Por que recomendo a ${fala.recomendada}: ${cartao.porque}`}</p>
+      )}
+      {onAtalho && !pensando && (
+        <div role="group" aria-label="Atalhos" className="flex flex-wrap gap-2">
+          {ATALHOS_DA_PERGUNTA.map((atalho) => (
+            <button
+              key={atalho}
+              type="button"
+              onClick={() => onAtalho(atalho)}
+              disabled={desabilitado}
+              className="px-3 py-1.5 rounded-full border border-border text-xs text-text-secondary hover:border-primary hover:text-primary disabled:opacity-60"
+            >
+              {atalho}
+            </button>
+          ))}
+        </div>
       )}
     </section>
   );
@@ -834,6 +867,12 @@ export function ChatDaTecnologia({ token, demandaId = null, onMudou }: PropsDoCh
     await turno(urlDaConversa(conversa.demanda_id), { opcao: letra });
   }
 
+  /** O atalho da pergunta vai como a fala fixa, pelo caminho do texto livre (issue #1595). */
+  async function usarOAtalho(atalho: string) {
+    if (ocupado) return;
+    await falar(atalho);
+  }
+
   /** O print vira a descrição lida pelo servidor, e a fala leva o identificador que o faz Anexo. */
   async function anexarOPrint(arquivo: File) {
     const aviso = avisoDaImagem(arquivo);
@@ -1117,7 +1156,9 @@ export function ChatDaTecnologia({ token, demandaId = null, onMudou }: PropsDoCh
                 cartao={cartaoDaVez}
                 numero={numeroDaPergunta}
                 desabilitado={ocupado}
+                pensando={pensando}
                 onEscolher={escolherALetra}
+                onAtalho={usarOAtalho}
               />
             );
           }
