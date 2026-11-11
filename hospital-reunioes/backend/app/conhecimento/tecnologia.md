@@ -46,7 +46,7 @@ Não chame de pendência, tarefa nem chamado. Pendência é outra coisa no aplic
 
 Cada pedido tem, além da conversa com a IA, a **Conversa da Demanda**: um espaço para você e as pessoas da Vitta que desenvolvem trocarem mensagens sobre aquele pedido. Serve para tirar uma dúvida e ser respondido ali mesmo. Ela fica separada da conversa com a IA, numa área própria embaixo dela, e a IA não lê nem responde ali.
 
-Escreve e lê na Conversa quem vê o pedido: você, que pediu, e o Desenvolvedor. Outra pessoa da diretoria não vê, nem abrindo pelo endereço.
+Escreve e lê na Conversa quem vê o pedido: você, que pediu, e o Desenvolvedor. Outra pessoa da diretoria não vê, nem abrindo pelo endereço. No card que a Vitta abriu, a Conversa fica aberta a toda a diretoria, como o próprio card.
 
 Para chamar alguém, escreva @ e escolha o nome na lista que aparece, como nos comentários de uma pendência. A lista traz só quem vê o pedido. Quem você marcou é avisado no sino. Sem marcar ninguém, a sua mensagem avisa o Responsável, a pessoa da Vitta que cuida do pedido; enquanto o pedido não virou card ainda não há Responsável, então marque alguém para ser lido. Quando é alguém da Vitta que escreve sem marcar ninguém, a mensagem avisa você. Ninguém é avisado da própria mensagem. Todo aviso chega também por e-mail, com o nome do pedido e de quem escreveu, para você não precisar estar com o aplicativo aberto. O clique no aviso do sino abre o pedido na aba Tecnologia, e o link do e-mail abre o pedido no mesmo lugar.
 
