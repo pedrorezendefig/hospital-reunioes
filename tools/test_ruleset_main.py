@@ -208,7 +208,7 @@ REPO = "dono/repo"
 
 
 def avaliar_if(expr: str, resultado: str, saidas_job: dict[str, str], cancelado: bool = False,
-               evento: str = "pull_request", fork: bool = False) -> bool:
+               evento: str = "pull_request", fork: bool = False, autor: str = "pedro") -> bool:
     """Avalia o `if:` de um job como o GitHub Actions avalia, no vocabulário
     que este CI usa: `!`, `&&`, `||`, `==`, `!=`, `cancelled()`, o evento, o
     repositório de onde vem o PR e o resultado e as saídas do job `mudancas`.
@@ -223,24 +223,26 @@ def avaliar_if(expr: str, resultado: str, saidas_job: dict[str, str], cancelado:
     corpo = corpo.replace("needs.mudancas.result", repr(resultado))
     corpo = re.sub(r"needs\.mudancas\.outputs\.(\w+)", lambda m: repr(saidas_job.get(m.group(1), "")), corpo)
     corpo = corpo.replace("github.event.pull_request.head.repo.full_name", repr("fora/repo" if fork else REPO))
+    corpo = corpo.replace("github.event.pull_request.user.login", repr(autor))
     corpo = corpo.replace("github.event_name", repr(evento))
     corpo = corpo.replace("github.repository", repr(REPO))
     corpo = corpo.replace("&&", " and ").replace("||", " or ")
     corpo = re.sub(r"!(?!=)", " not ", corpo)
+    corpo = corpo.replace("(", " ( ").replace(")", " ) ")
     sobra = set(re.findall(r"[A-Za-z_.]+", re.sub(r"'[^']*'", "", corpo)))
     assert sobra <= {"True", "False", "and", "or", "not"}, f"if fora do vocabulário: {expr}"
     return eval(corpo, {"__builtins__": {}})
 
 
 def jobs_que_rodam(resultado: str, saidas_passo: dict[str, str], cancelado: bool = False,
-                   evento: str = "pull_request", fork: bool = False) -> set[str]:
+                   evento: str = "pull_request", fork: bool = False, autor: str = "pedro") -> set[str]:
     repasse = repasse_do_job_mudancas()
     saidas_job = {saida: saidas_passo.get(passo, "") for saida, passo in repasse.items()}
     rodam = set()
     for job, bloco in jobs_obrigatorios().items():
         se = re.search(r"^    if: (.+)$", bloco, re.M)
         assert se, f"{job} sem if: sem ele o job roda sempre e o detector não serve"
-        if avaliar_if(se.group(1), resultado, saidas_job, cancelado, evento, fork):
+        if avaliar_if(se.group(1), resultado, saidas_job, cancelado, evento, fork, autor):
             rodam.add(job)
     return rodam
 
@@ -329,21 +331,27 @@ def test_detector_no_push_sem_o_commit_anterior_roda_tudo(tmp_path):
     assert jobs_que_rodam("success", saidas_do_passo(proc), evento="push") == TUDO
 
 
-def test_pr_de_fork_nao_roda_no_mac_e_fica_vermelho():
-    """PR de fork não entra no runner do Mac (issue #1599). Os jobs exigidos,
-    pulados por `if`, contariam como verdes: o `fork-sem-mac` reprova o PR."""
+DEPENDABOT = "dependabot[bot]"
+
+
+@pytest.mark.parametrize("fork, autor", [(True, "alguem"), (False, DEPENDABOT)], ids=["fork", "dependabot"])
+def test_pr_de_fora_nao_roda_no_mac_e_fica_vermelho(fork, autor):
+    """PR de fork e PR do Dependabot não entram no runner do Mac (issue #1599):
+    o código de um e os pacotes novos do outro rodariam com a conta do Pedro.
+    Os jobs exigidos, pulados por `if`, contariam como verdes: o `fora-do-mac`
+    reprova o PR, e a subida só mergeia com todo check verde."""
     jobs = jobs_do_ci()
     for job in ("mudancas", "gitleaks", "arquivo-sensivel"):
-        se = re.search(r"^    if: (.+)$", jobs[job], re.M).group(1)
-        assert not avaliar_if("${{ " + se + " }}", "success", {}, fork=True), job
-        assert avaliar_if("${{ " + se + " }}", "success", {}, fork=False), job
-    assert jobs_que_rodam("skipped", {}, fork=True) - {"build"} == set()
-    assert jobs_que_rodam("failure", {}, fork=False) == TUDO
-    recusa = re.search(r"^    if: (.+)$", jobs["fork-sem-mac"], re.M).group(1)
-    assert avaliar_if("${{ " + recusa + " }}", "success", {}, fork=True)
-    assert not avaliar_if("${{ " + recusa + " }}", "success", {}, fork=False)
-    assert not avaliar_if("${{ " + recusa + " }}", "success", {}, evento="push")
-    assert "exit 1" in jobs["fork-sem-mac"]
+        se = "${{ " + re.search(r"^    if: (.+)$", jobs[job], re.M).group(1) + " }}"
+        assert not avaliar_if(se, "success", {}, fork=fork, autor=autor), job
+        assert avaliar_if(se, "success", {}), job
+    assert jobs_que_rodam("skipped", {}, fork=fork, autor=autor) - {"build"} == set()
+    assert jobs_que_rodam("failure", {}) == TUDO
+    recusa = "${{ " + re.search(r"^    if: (.+)$", jobs["fora-do-mac"], re.M).group(1) + " }}"
+    assert avaliar_if(recusa, "success", {}, fork=fork, autor=autor)
+    assert not avaliar_if(recusa, "success", {})
+    assert not avaliar_if(recusa, "success", {}, evento="push")
+    assert "exit 1" in jobs["fora-do-mac"]
 
 
 def test_detector_que_nao_acha_a_base_falha_e_roda_tudo(tmp_path):

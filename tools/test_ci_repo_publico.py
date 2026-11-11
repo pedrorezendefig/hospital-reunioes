@@ -57,8 +57,9 @@ def test_toda_action_dos_workflows_esta_presa_ao_sha_com_a_tag_em_comentario():
 
 def test_gitleaks_roda_no_pr_so_nos_commits_dele_e_falha_em_achado():
     job = ci()["jobs"]["gitleaks"]
-    # só PR deste repositório: o de fork não roda no Mac (issue #1599)
-    assert job["if"] == "github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository"
+    # só PR deste repositório e de gente: fork e Dependabot não rodam no Mac (issue #1599)
+    assert job["if"] == ("github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name"
+                         " == github.repository && github.event.pull_request.user.login != 'dependabot[bot]'")
     checkout = passos("gitleaks")[0]
     assert checkout["uses"].startswith("actions/checkout@")
     assert checkout["with"]["fetch-depth"] == 0
@@ -89,8 +90,9 @@ def test_allowlist_do_gitleaks_cobre_os_fixtures_conhecidos_e_so_eles():
 
 def test_trava_de_arquivo_sensivel_roda_no_pr_contra_a_base():
     job = ci()["jobs"]["arquivo-sensivel"]
-    # só PR deste repositório: o de fork não roda no Mac (issue #1599)
-    assert job["if"] == "github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository"
+    # só PR deste repositório e de gente: fork e Dependabot não rodam no Mac (issue #1599)
+    assert job["if"] == ("github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name"
+                         " == github.repository && github.event.pull_request.user.login != 'dependabot[bot]'")
     assert passos("arquivo-sensivel")[0]["with"]["fetch-depth"] == 0
     assert 'python tools/checar_arquivo_sensivel.py --base "$BASE_SHA" --head "$HEAD_SHA"' in runs(
         "arquivo-sensivel"

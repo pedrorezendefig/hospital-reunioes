@@ -29,7 +29,7 @@ jobs:
   lint-adr:
     name: Frontmatter e supersessão das ADRs
     # No Mac do Pedro (issue #1599); PR de fork não roda nele.
-    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.user.login != 'dependabot[bot]'
     runs-on: [self-hosted, pedro-mac]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1

@@ -3,8 +3,9 @@ name: CI
 # Os jobs sem Docker rodam no runner próprio do Mac do Pedro (rótulo
 # `pedro-mac`, issue #1599): os minutos grátis do GitHub de novembro de 2026
 # acabaram e a conta não tem cartão. Só o `build` fica no `ubuntu-latest`. O CI
-# só anda com o Mac ligado. PR vindo de fork não roda no Mac: o job
-# `fork-sem-mac` o deixa vermelho em vez de os jobs pulados contarem verde.
+# só anda com o Mac ligado. PR de fork e PR do Dependabot (pacote novo que
+# ninguém leu) não rodam no Mac: o job `fora-do-mac` os deixa vermelhos em vez
+# de os jobs pulados contarem verde.
 
 permissions:
   contents: read
@@ -33,7 +34,7 @@ on:
 jobs:
   mudancas:
     name: Partes que o PR muda
-    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.user.login != 'dependabot[bot]'
     runs-on: [self-hosted, pedro-mac]
     outputs:
       backend: ${{ steps.diff.outputs.backend }}
@@ -102,7 +103,7 @@ jobs:
     needs: mudancas
     # Pulado por if = verde no ruleset. Detector quebrado roda o job: pular o
     # CI de um PR de código por erro do detector passaria pelo ruleset sem teste.
-    if: ${{ !cancelled() && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && (needs.mudancas.result != 'success' || needs.mudancas.outputs.backend == 'true') }}
+    if: ${{ !cancelled() && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.user.login != 'dependabot[bot]') && (needs.mudancas.result != 'success' || needs.mudancas.outputs.backend == 'true') }}
     runs-on: [self-hosted, pedro-mac]
     defaults:
       run:
@@ -194,7 +195,7 @@ jobs:
     # A lista do marcador `rodar_sozinho` num job próprio, em paralelo com o
     # job de backend: em série, no mesmo job, ela somava 2,5 min a todo PR do
     # app. Mesma condição do job de backend.
-    if: ${{ !cancelled() && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && (needs.mudancas.result != 'success' || needs.mudancas.outputs.backend == 'true') }}
+    if: ${{ !cancelled() && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.user.login != 'dependabot[bot]') && (needs.mudancas.result != 'success' || needs.mudancas.outputs.backend == 'true') }}
     runs-on: [self-hosted, pedro-mac]
     defaults:
       run:
@@ -231,7 +232,7 @@ jobs:
   frontend-lint:
     name: Frontend Lint & Type Check
     needs: mudancas
-    if: ${{ !cancelled() && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && (needs.mudancas.result != 'success' || needs.mudancas.outputs.frontend == 'true') }}
+    if: ${{ !cancelled() && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.user.login != 'dependabot[bot]') && (needs.mudancas.result != 'success' || needs.mudancas.outputs.frontend == 'true') }}
     runs-on: [self-hosted, pedro-mac]
     defaults:
       run:
@@ -246,6 +247,7 @@ jobs:
           COREPACK_ENABLE_DOWNLOAD_PROMPT: "0"
         run: |
           node --version | grep -q '^v24\.' || { echo "::error::O runner precisa do Node 24, achou $(node --version)"; exit 1; }
+          mkdir -p "$RUNNER_TEMP/corepack"
           corepack enable pnpm --install-directory "$RUNNER_TEMP/corepack"
           echo "$RUNNER_TEMP/corepack" >> "$GITHUB_PATH"
       - name: Install dependencies
@@ -343,7 +345,7 @@ jobs:
   # docs também pode trazer segredo ou planilha.
   gitleaks:
     name: Segredo nos commits do PR (gitleaks)
-    if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+    if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.user.login != 'dependabot[bot]'
     runs-on: [self-hosted, pedro-mac]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -369,7 +371,7 @@ jobs:
 
   arquivo-sensivel:
     name: Arquivo sensível no PR
-    if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+    if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.user.login != 'dependabot[bot]'
     runs-on: [self-hosted, pedro-mac]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -383,14 +385,16 @@ jobs:
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: uv run --no-project --python 3.12 python tools/checar_arquivo_sensivel.py --base "$BASE_SHA" --head "$HEAD_SHA"
 
-  # PR de fork não roda no Mac, e os jobs exigidos pelo ruleset, pulados por
-  # `if`, contariam como verdes sem teste nenhum. Este job deixa o PR vermelho.
-  fork-sem-mac:
-    name: PR de fork não roda no CI
-    if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository
+  # PR de fork e PR do Dependabot não rodam no Mac: o código de um e os
+  # pacotes novos do outro rodariam com o acesso da conta do Pedro. Os jobs
+  # exigidos pelo ruleset, pulados por `if`, contariam como verdes sem teste
+  # nenhum; este job deixa o PR vermelho, e a subida só mergeia tudo verde.
+  fora-do-mac:
+    name: PR de fork ou do Dependabot não roda no CI
+    if: github.event_name == 'pull_request' && (github.event.pull_request.head.repo.full_name != github.repository || github.event.pull_request.user.login == 'dependabot[bot]')
     runs-on: ubuntu-latest
     steps:
-      - name: Recusar o PR de fork
+      - name: Recusar o PR de fora
         run: |
-          echo "::error::O CI roda no Mac do Pedro e não aceita código de fork. Traga a mudança para uma branch deste repositório."
+          echo "::error::O CI roda no Mac do Pedro e não roda código de fork nem pacote novo do Dependabot sem alguém ler antes. Confira a mudança e traga-a num PR de uma branch deste repositório."
           exit 1

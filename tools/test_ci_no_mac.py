@@ -19,11 +19,12 @@ import yaml
 RAIZ = Path(__file__).resolve().parent.parent
 WORKFLOWS = sorted((RAIZ / ".github" / "workflows").glob("*.yml"))
 MAC = ["self-hosted", "pedro-mac"]
-TRAVA_DE_FORK = "github.event.pull_request.head.repo.full_name == github.repository"
+TRAVA_DE_FORK = ("github.event.pull_request.head.repo.full_name == github.repository"
+                 " && github.event.pull_request.user.login != 'dependabot[bot]'")
 # Os jobs que montam imagem Docker: ficam no GitHub, gastando os minutos grátis.
 DOCKER = {("ci.yml", "build"), ("imagem-backend.yml", "publicar")}
-# O único job do Mac que roda em fork é nenhum; este reprova o PR de fork no GitHub.
-RECUSA_DE_FORK = ("ci.yml", "fork-sem-mac")
+# Nenhum job do Mac roda em PR de fork ou do Dependabot; este reprova esse PR no GitHub.
+RECUSA_DE_FORK = ("ci.yml", "fora-do-mac")
 
 
 def carregar(arquivo: Path) -> dict:
