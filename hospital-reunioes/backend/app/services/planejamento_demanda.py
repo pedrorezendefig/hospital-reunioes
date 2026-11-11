@@ -324,9 +324,24 @@ def _linha_da_conversa(mensagem: dict) -> str:
                 *[f"    - {t}" for t in mensagem.get("em_aberto") or []],
             ]
         )
-    opcoes = [f"    {o.get('letra')}) {o.get('texto') or ''}" for o in mensagem.get("opcoes", [])]
-    recomendada = f"    (recomendada: {mensagem.get('recomendada')})"
-    return "\n".join([f"IA: {mensagem.get('contexto') or ''}", *opcoes, recomendada])
+    return _linhas_da_pergunta(mensagem)
+
+
+def _linhas_da_pergunta(mensagem: dict) -> str:
+    """A pergunta como o modelo a rele. Os textos do cartao (issue #1592) so
+    entram quando a pergunta os tem: a de antes volta como sempre voltou."""
+    linhas = [f"IA: {mensagem.get('contexto') or ''}"]
+    if mensagem.get("titulo_pergunta"):
+        linhas.append(f"    Título da pergunta: {mensagem['titulo_pergunta']}")
+    for opcao in mensagem.get("opcoes", []):
+        letra = opcao.get("letra")
+        linhas.append(f"    {letra}) {opcao.get('texto') or ''}")
+        if na_pratica := mensagem.get(f"na_pratica_{str(letra).lower()}"):
+            linhas.append(f"        Na prática: {na_pratica}")
+    linhas.append(f"    (recomendada: {mensagem.get('recomendada')})")
+    if mensagem.get("porque"):
+        linhas.append(f"    Por que recomendo a {mensagem.get('recomendada')}: {mensagem['porque']}")
+    return "\n".join(linhas)
 
 
 def _documentos_da_demanda(demanda: dict) -> list[str]:
