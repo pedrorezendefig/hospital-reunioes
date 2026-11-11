@@ -165,8 +165,9 @@ type PropsDaPerguntaEmCartao = {
   cartao: CartaoDaPergunta;
   /** Contado pelas perguntas da IA na conversa, a partir de 1. */
   numero: number;
-  desabilitado: boolean;
-  onEscolher: (letra: LetraDaOpcao) => void;
+  desabilitado?: boolean;
+  /** Sem ele, o cartão é só de leitura: a pergunta já respondida (issue #1594), sem botões. */
+  onEscolher?: (letra: LetraDaOpcao) => void;
 };
 
 /**
@@ -189,16 +190,8 @@ function PerguntaEmCartao({ fala, cartao, numero, desabilitado, onEscolher }: Pr
         {fala.opcoes.map((opcao, i) => {
           const letra = LETRAS[i];
           const destaque = letra === fala.recomendada;
-          return (
-            <button
-              key={letra}
-              type="button"
-              onClick={() => onEscolher(letra)}
-              disabled={desabilitado}
-              className={`flex items-start gap-3 w-full text-left px-4 py-3 rounded-xl border transition-colors disabled:opacity-60 ${
-                destaque ? "border-primary bg-primary/5 ring-1 ring-primary" : "border-border hover:border-primary"
-              }`}
-            >
+          const conteudo = (
+            <>
               <span
                 className={`flex-shrink-0 w-7 h-7 rounded-full flex items-center justify-center text-sm font-bold ${
                   destaque ? "bg-primary text-white" : "bg-slate-100 text-slate-700"
@@ -219,6 +212,27 @@ function PerguntaEmCartao({ fala, cartao, numero, desabilitado, onEscolher }: Pr
                   Recomendada
                 </span>
               )}
+            </>
+          );
+          const classe = `flex items-start gap-3 w-full text-left px-4 py-3 rounded-xl border transition-colors ${
+            destaque ? "border-primary bg-primary/5 ring-1 ring-primary" : "border-border"
+          }`;
+          if (!onEscolher) {
+            return (
+              <div key={letra} className={classe}>
+                {conteudo}
+              </div>
+            );
+          }
+          return (
+            <button
+              key={letra}
+              type="button"
+              onClick={() => onEscolher(letra)}
+              disabled={desabilitado}
+              className={`${classe} disabled:opacity-60 ${destaque ? "" : "hover:border-primary"}`}
+            >
+              {conteudo}
             </button>
           );
         })}
@@ -239,32 +253,38 @@ function comecoDoTexto(texto: string): string {
 
 type PropsDaPerguntaRespondida = {
   pergunta: FalaDoChat;
-  titulo: string;
+  cartao: CartaoDaPergunta & { titulo: string };
   resposta: FalaDoChat;
   numero: number;
 };
 
 /**
  * A pergunta já respondida do planejamento, encolhida numa linha (issue #1594,
- * PRD #1591): o número, o título e a letra escolhida. A resposta do diretor
- * entra na linha, sem bolha própria.
+ * PRD #1591): o número, o título e a letra escolhida, ou o começo da resposta
+ * livre. A resposta do diretor entra na linha, sem bolha própria. O clique na
+ * linha abre o cartão inteiro, só para ler, e outro clique fecha.
  */
-function PerguntaRespondida({ pergunta, titulo, resposta, numero }: PropsDaPerguntaRespondida) {
+function PerguntaRespondida({ pergunta, cartao, resposta, numero }: PropsDaPerguntaRespondida) {
+  const [aberta, setAberta] = useState(false);
   const nome = `Pergunta ${numero}`;
   // O clique na opção grava o texto dela como a resposta (planejamento_demanda.py).
   const escolhida = pergunta.opcoes.indexOf(resposta.texto);
   const escolha = escolhida >= 0 ? `escolheu ${LETRAS[escolhida]}` : comecoDoTexto(resposta.texto);
   return (
-    <button
-      type="button"
-      aria-label={`${nome}, ${titulo}: ${escolha}`}
-      aria-expanded={false}
-      className="flex w-full items-baseline gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-left text-sm hover:border-primary"
-    >
-      <span className="flex-shrink-0 text-xs font-semibold text-text-secondary">{nome}</span>
-      <span className="min-w-0 flex-1 truncate normal-case font-semibold text-slate-900">{titulo}</span>
-      <span className="flex-shrink-0 normal-case text-slate-700">{escolha}</span>
-    </button>
+    <div className="space-y-2">
+      <button
+        type="button"
+        aria-label={`${nome}, ${cartao.titulo}: ${escolha}`}
+        aria-expanded={aberta}
+        onClick={() => setAberta((v) => !v)}
+        className="flex w-full items-baseline gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-left text-sm hover:border-primary"
+      >
+        <span className="flex-shrink-0 text-xs font-semibold text-text-secondary">{nome}</span>
+        <span className="min-w-0 flex-1 truncate normal-case font-semibold text-slate-900">{cartao.titulo}</span>
+        <span className="max-w-[50%] truncate normal-case text-slate-700">{escolha}</span>
+      </button>
+      {aberta && <PerguntaEmCartao fala={pergunta} cartao={cartao} numero={numero} />}
+    </div>
   );
 }
 
@@ -1077,12 +1097,12 @@ export function ChatDaTecnologia({ token, demandaId = null, onMudou }: PropsDoCh
           // A resposta da pergunta encolhida já está na linha dela.
           if (emLinha(i - 1)) return null;
           const titulo = emLinha(i) ? fala.cartao?.titulo : null;
-          if (titulo) {
+          if (titulo && fala.cartao) {
             return (
               <PerguntaRespondida
                 key={i}
                 pergunta={fala}
-                titulo={titulo}
+                cartao={{ ...fala.cartao, titulo }}
                 resposta={falas[i + 1]}
                 numero={numerosDasPerguntas[i]}
               />

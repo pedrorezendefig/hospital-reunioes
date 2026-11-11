@@ -1046,4 +1046,28 @@ describe("A pergunta respondida em linha", () => {
     expect(within(linha).queryByText(/escolheu/)).toBeNull();
     expect(screen.queryByText(livre)).toBeNull();
   });
+
+  it("o clique na linha abre o cartão da pergunta só para ler, sem botões de resposta, e outro clique fecha", async () => {
+    montar([{ status: 201, corpo: melhoriaEmCartao() }]);
+    fireEvent.click(screen.getByRole("button", { name: "Melhoria" }));
+    await screen.findByRole("region", { name: "Pergunta 2" });
+    expect(screen.queryByRole("region", { name: "Pergunta 1" })).toBeNull();
+
+    fireEvent.click(linhaDaPergunta(1));
+
+    expect(linhaDaPergunta(1).getAttribute("aria-expanded")).toBe("true");
+    const cartao = screen.getByRole("region", { name: "Pergunta 1" });
+    expect(within(cartao).getByRole("heading", { name: "Onde acontece o problema?" })).toBeTruthy();
+    expect(within(cartao).getByText(PERGUNTA.texto)).toBeTruthy();
+    const grupo = within(cartao).getByRole("group", { name: "Opções" });
+    expect(within(grupo).getByText("Sim, na recepção.")).toBeTruthy();
+    expect(within(grupo).getByText("Não, na enfermagem.")).toBeTruthy();
+    expect(within(cartao).getByText("Por que recomendo a B: É onde o retorno se marca.")).toBeTruthy();
+    expect(within(cartao).queryAllByRole("button")).toHaveLength(0);
+
+    fireEvent.click(linhaDaPergunta(1));
+
+    expect(linhaDaPergunta(1).getAttribute("aria-expanded")).toBe("false");
+    expect(screen.queryByRole("region", { name: "Pergunta 1" })).toBeNull();
+  });
 });
