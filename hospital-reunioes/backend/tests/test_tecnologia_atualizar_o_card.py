@@ -264,3 +264,33 @@ class TestAsPartes:
         assert "já começou" in resposta.json()["detail"]
         assert gh.escritas == []
         assert _conversas(sb)[0]["estado"] == "resumido"
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 4. A volta para a triagem
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+class TestAVoltaParaATriagem:
+    def test_a_raiz_troca_para_needs_triage_e_a_etapa_vira_em_analise(self, monkeypatch):
+        client, sb, gh = _montar_o_card(monkeypatch, etapa=ETAPA_PLANEJADA)
+
+        resposta = client.post(ATUALIZAR)
+
+        assert resposta.status_code == 200, resposta.text
+        _, _, _, labels = _regravado(gh)
+        assert "needs-triage" in labels
+        assert "ready-for-agent" not in labels
+        assert "type:feature" in labels
+        assert _demandas(sb)[0]["etapa"] == ETAPA_EM_ANALISE
+        # A conversa volta a enviada, e o card pode ser revisado de novo.
+        assert resposta.json()["estado"] == "enviado"
+
+    def test_a_raiz_sem_needs_triage_ganha_a_label(self, monkeypatch):
+        client, _, gh = _montar_o_card(monkeypatch)
+        gh.issues[900]["labels"] = [{"name": "type:feature"}, {"name": "ready-for-human"}]
+
+        client.post(ATUALIZAR)
+
+        _, _, _, labels = _regravado(gh)
+        assert sorted(labels) == ["needs-triage", "type:feature"]

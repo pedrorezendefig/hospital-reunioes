@@ -27,7 +27,15 @@ from app.config import settings
 from app.services import ai_processor, ferramentas_do_codigo, github_client, planejamento_demanda
 from app.services.custo_da_conversa import nome_de_exibicao
 from app.services.tecnologia import instante_do_banco, recuar_continuacao
-from app.services.tecnologia_vinculo import LABEL_EM_ANDAMENTO, marcador_da_demanda, texto_do_diretor
+from app.services.tecnologia_vinculo import (
+    LABEL_EM_ANDAMENTO,
+    LABEL_TRIAGEM,
+    LABELS_PLANEJADA,
+    marcador_da_demanda,
+    texto_do_diretor,
+)
+
+LABEL_PEDE_INFORMACAO = "needs-info"
 from app.utils.text_sanitizer import sanitizar_travessao
 
 logger = logging.getLogger(__name__)
@@ -380,6 +388,18 @@ def _labels_da_issue(dados: dict) -> list[str]:
     return [str(label["name"]) for label in dados.get("labels") or [] if isinstance(label, dict) and label.get("name")]
 
 
+# As labels de triagem que a raiz perde ao voltar para `needs-triage`: as da
+# fila (Planejada) e o pedido de informacao.
+_LABELS_QUE_SAEM = {*LABELS_PLANEJADA, LABEL_PEDE_INFORMACAO}
+
+
+def labels_da_raiz_revisada(labels: list[str]) -> list[str]:
+    """As labels da raiz depois da revisao: as de fila saem, `needs-triage`
+    entra, e o resto (tipo, area, origem) fica, para o novo `/to-issues`."""
+    ficam = [label for label in labels if label.lower() not in _LABELS_QUE_SAEM and label.lower() != LABEL_TRIAGEM]
+    return [*ficam, LABEL_TRIAGEM]
+
+
 def atualizar_no_github(
     numero: int,
     *,
@@ -418,5 +438,5 @@ def atualizar_no_github(
     )
     for parte in fechadas:
         github_client.fechar_como_nao_planejada(parte, comentario=COMENTARIO_DA_PARTE_FECHADA.format(raiz=numero))
-    github_client.regravar(numero, corpo=corpo, labels=_labels_da_issue(dados))
+    github_client.regravar(numero, corpo=corpo, labels=labels_da_raiz_revisada(_labels_da_issue(dados)))
     return fechadas
