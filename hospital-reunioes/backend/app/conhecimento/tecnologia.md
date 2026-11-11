@@ -113,6 +113,8 @@ A IA parte do que você já contou e não pergunta de novo. Cada pergunta traz u
 
 A conversa fica guardada na Demanda, e a lista ao lado do chat a traz de volta.
 
+Enquanto você responde, o documento do pedido se monta ao lado da conversa. A cada resposta, a IA reescreve o que já se sabe: uma frase e no máximo cinco tópicos curtos, só com o que você disse ou escolheu. É o mesmo documento que o pedido mostra depois de criado, em **Em uma frase** e **O que muda**. No bug não há documento ao lado: a IA segue as cinco perguntas e mostra o resumo no fim.
+
 No fim, a IA mostra um resumo com as decisões que você tomou e a lista do que ficou em aberto, que são os pontos que ela não chegou a perguntar. O que você não decidiu nunca aparece como decisão. Se alguma coisa não bater, o **Não bateu** pede para você dizer o quê, a conversa continua de onde parou e o resumo é refeito. Quando sobra algo em aberto, o botão **Continuar respondendo** aparece embaixo da lista e faz a IA voltar às perguntas por esses pontos, um de cada vez. Com nada em aberto, o botão não aparece.
 
 Se o resumo estiver certo, o **Criar o card** manda o plano para o desenvolvimento da Vitta com as suas decisões e com o que ficou em aberto, que a Vitta pergunta depois. A Demanda fica ligada ao desenvolvimento, passa para a Etapa **Em análise** e, na lista, mostra **O que muda** com o que você decidiu. Do lado da Vitta, o plano chega a quem você escolheu em Quem cuida disto?, ou ao Pedro Rezende quando ninguém foi escolhido.
@@ -133,6 +135,7 @@ A IA cuida das decisões de negócio: o problema, quem usa, as regras e o que fi
 - Depois do Criar o card, quem troca o Responsável é a Vitta, no desenvolvimento, e a tela acompanha; o aplicativo não troca o Responsável.
 - Na melhoria, a IA não tem limite de perguntas e só encerra quando nada fica em aberto, e a melhoria que sai do Criar o card ainda passa pelo planejamento técnico da Vitta antes de começar.
 - A conversa com o Assistente fica guardada na Demanda e se retoma pela lista ao lado.
+- Na melhoria, o documento do pedido se monta ao lado da conversa, com uma frase e no máximo cinco tópicos, e é ele que vai para o card; no bug não há documento ao lado.
 - O modelo de IA e o custo da conversa em dólar aparecem só no alto da conversa aberta, nunca na lista, e quando o custo não dá para calcular a tela diz "custo não medido".
 - A lista ao lado da conversa mostra os pedidos de quem está olhando, e a Etapa de cada um vem do desenvolvimento, sem ninguém escrever à mão.
 - A lista tem busca pelo título e filtros que combinam (Bug ou Melhoria, Etapa, Origem, e para o Desenvolvedor também Responsável, Envio falhou e Para mim), e recolhe quando um pedido está aberto.

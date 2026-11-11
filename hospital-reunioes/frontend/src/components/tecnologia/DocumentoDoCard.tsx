@@ -171,24 +171,16 @@ function Topicos({ topicos }: { topicos: PedacoForte[][] }) {
   );
 }
 
-export function DocumentoDoCard({ demanda }: { demanda: Demanda }) {
-  if (!temSelo(demanda)) return null;
-
-  const partes = demanda.partes ?? [];
-  const bloco = documentoDoBloco(demanda.o_que_muda);
-  const datas = [
-    ["Criado em", diaDoHospital(demanda.criado_em)],
-    ["Entregue em", diaDoHospital(demanda.fechada_em)],
-    ["Em produção em", diaDoHospital(demanda.em_producao_em)],
-  ].filter((par): par is [string, string] => par[1] !== null);
-
+/**
+ * Em uma frase e O que muda, lidos do bloco "Para o diretor". É a parte do
+ * documento que o planejamento monta ao vivo ao lado do chat (issue #1553):
+ * o mesmo componente nos dois lugares, para o rascunho e o card não divergirem.
+ * `chave` recolhe o "Ver tudo" ao trocar de card.
+ */
+export function FraseEOQueMuda({ texto, chave }: { texto: string | null | undefined; chave: string }) {
+  const bloco = documentoDoBloco(texto);
   return (
-    <section
-      aria-label={TITULO_DOCUMENTO}
-      className="md:col-span-2 px-4 py-3 rounded-xl bg-slate-50 border border-slate-200 space-y-2"
-    >
-      <LinkDaIssue demanda={demanda} />
-
+    <>
       {/* Sem bloco, a frase de preparação no lugar da frase; o bloco só de
           tópicos não tem frase a mostrar, e a seção some. */}
       {(!bloco || bloco.frase.length > 0) && (
@@ -208,8 +200,29 @@ export function DocumentoDoCard({ demanda }: { demanda: Demanda }) {
         </>
       )}
 
-      {/* A chave recolhe o "Ver tudo" ao trocar de card. */}
-      {bloco && bloco.topicos.length > 0 && <Topicos key={demanda.id} topicos={bloco.topicos} />}
+      {bloco && bloco.topicos.length > 0 && <Topicos key={chave} topicos={bloco.topicos} />}
+    </>
+  );
+}
+
+export function DocumentoDoCard({ demanda }: { demanda: Demanda }) {
+  if (!temSelo(demanda)) return null;
+
+  const partes = demanda.partes ?? [];
+  const datas = [
+    ["Criado em", diaDoHospital(demanda.criado_em)],
+    ["Entregue em", diaDoHospital(demanda.fechada_em)],
+    ["Em produção em", diaDoHospital(demanda.em_producao_em)],
+  ].filter((par): par is [string, string] => par[1] !== null);
+
+  return (
+    <section
+      aria-label={TITULO_DOCUMENTO}
+      className="md:col-span-2 px-4 py-3 rounded-xl bg-slate-50 border border-slate-200 space-y-2"
+    >
+      <LinkDaIssue demanda={demanda} />
+
+      <FraseEOQueMuda texto={demanda.o_que_muda} chave={demanda.id} />
 
       {partes.length > 0 && (
         <>

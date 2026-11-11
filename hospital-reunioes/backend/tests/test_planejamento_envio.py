@@ -89,7 +89,9 @@ class TestOCorpoDoPrdDoDiretor:
     def test_o_bloco_do_diretor_diz_o_que_muda_e_as_decisoes(self):
         bloco = bloco_para_o_diretor(_corpo())
 
-        assert "**O que muda:** Hoje o retorno é marcado no papel e se perde." in bloco
+        # O formato fixo da ADR 0084 (issue #1553): a frase de "O que muda" e
+        # a do resumo, ou o titulo; a descricao inteira fica no Problema.
+        assert "**O que muda:** Agenda de retorno na recepção" in bloco
         assert "- Só a recepção." in bloco
         assert "- Avisa por WhatsApp na véspera." in bloco
         assert "Ficou em aberto: 1 ponto, que a Vitta pergunta depois." in bloco
@@ -142,6 +144,7 @@ class TestOCorpoDoPrdDoDiretor:
         corpo = _corpo(
             descricao="Igual ao pedido #42, mas para a recepção.",
             resumo={
+                "frase": "Igual ao pedido #42, mas para a recepção.",
                 "decisoes": [{"pergunta": "Como no #7?", "escolha": "Sim, como no GH-7.", "porque": "Ver #8."}],
                 "em_aberto": ["O que o #9 fez."],
             },

@@ -399,6 +399,9 @@ def _chat_para_a_tela(
         "mensagens": chat_tecnologia.para_a_tela(mensagens),
         "resumo": None if planejamento else linha.get("resumo"),
         "resumo_da_melhoria": linha.get("resumo") if planejamento else None,
+        # O documento vivo, so da melhoria (issue #1553): o bug segue o
+        # Roteiro do bug, sem documento ao lado.
+        "documento": linha.get("documento") if planejamento else None,
         # As imagens: e o que a linha "Prints" do resumo do bug conta.
         "anexos": tecnologia_anexos.quantos_guardados(supabase, demanda_id)[0],
         "planejamento": planejamento,
@@ -431,6 +434,12 @@ def _nascer_a_demanda(supabase: Client, *, ator: dict, titulo: str, tipo: str, p
     if not criada.data:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Falha ao criar a Demanda")
     return criada.data[0]
+
+
+def _rascunho_do_documento(resultado) -> dict:
+    """O rascunho do documento do card que o turno da melhoria trouxe (issue
+    #1553, ADR 0084, decisao 7). O turno sem rascunho deixa o de antes."""
+    return {"documento": resultado.documento} if resultado.documento else {}
 
 
 def _estado_do_planejamento(mensagem: dict) -> str:
@@ -482,6 +491,7 @@ async def _comecar_a_melhoria(
             "mensagens": [*falas, resultado.mensagem],
             "decisoes": [resultado.decisao] if resultado.decisao else [],
             "atualizado_em": _agora(),
+            **_rascunho_do_documento(resultado),
         },
     )
     return _chat_para_a_tela(supabase, demanda_id, linha, aviso_dos_anexos=aviso)
@@ -877,6 +887,7 @@ async def _turno_da_melhoria(
             "mensagens": [*mensagens, resultado.mensagem],
             "decisoes": decisoes,
             "atualizado_em": _agora(),
+            **_rascunho_do_documento(resultado),
         },
     )
     if linha is None:
@@ -1403,6 +1414,7 @@ def _enviar_o_card(
                 link=link_da_demanda(demanda_id),
                 anexos=imagens,
                 documentos=documentos,
+                documento=atual.get("documento"),
             )
 
         _enviar(

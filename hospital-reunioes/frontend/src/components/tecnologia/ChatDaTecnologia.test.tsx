@@ -21,10 +21,13 @@ import {
   ChatDaTecnologia,
   CONTINUAR_RESPONDENDO,
   CRIAR_O_CARD,
+  DOCUMENTO_AINDA_VAZIO,
   FECHAR_E_RESUMIR,
   NAO_BATEU,
+  TITULO_DO_DOCUMENTO_VIVO,
 } from "./ChatDaTecnologia";
 import { ConversaDoChat, FalaDoChat } from "./chat";
+import { TITULO_EM_UMA_FRASE, TITULO_O_QUE_MUDA } from "./DocumentoDoCard";
 
 afterEach(() => {
   cleanup();
@@ -802,5 +805,43 @@ describe("O Responsável da Demanda aberta", () => {
 
     expect(await screen.findByText("Onde isso aconteceu?")).toBeTruthy();
     expect(screen.queryByText(/Responsável/)).toBeNull();
+  });
+});
+
+// ─── O documento vivo do planejamento (issue #1553) ──────────────────────────
+
+describe("O documento vivo", () => {
+  it("na melhoria, o documento do pedido aparece ao lado do chat com a frase e os tópicos", async () => {
+    const documento = {
+      frase: "A recepção marca o retorno do paciente na saída.",
+      topicos: ["Só a recepção usa a agenda.", "O médico vê o retorno marcado."],
+    };
+    montar([{ status: 201, corpo: melhoria({ documento }) }]);
+
+    fireEvent.click(screen.getByRole("button", { name: "Melhoria" }));
+
+    const painel = await screen.findByRole("region", { name: TITULO_DO_DOCUMENTO_VIVO });
+    expect(within(painel).getByText(TITULO_EM_UMA_FRASE)).toBeTruthy();
+    expect(within(painel).getByText(documento.frase)).toBeTruthy();
+    expect(within(painel).getByText(TITULO_O_QUE_MUDA)).toBeTruthy();
+    expect(within(painel).getAllByRole("listitem").map((li) => li.textContent)).toEqual(documento.topicos);
+  });
+
+  it("antes do primeiro rascunho, o painel diz que o documento se monta com as respostas", async () => {
+    montar([{ status: 201, corpo: melhoria({ documento: null }) }]);
+
+    fireEvent.click(screen.getByRole("button", { name: "Melhoria" }));
+
+    const painel = await screen.findByRole("region", { name: TITULO_DO_DOCUMENTO_VIVO });
+    expect(within(painel).getByText(DOCUMENTO_AINDA_VAZIO)).toBeTruthy();
+  });
+
+  it("o bug segue o Roteiro do bug sem documento ao lado", async () => {
+    montar([{ status: 201, corpo: conversa() }]);
+
+    fireEvent.click(screen.getByRole("button", { name: "Bug" }));
+
+    await screen.findByText("Onde isso aconteceu?");
+    expect(screen.queryByRole("region", { name: TITULO_DO_DOCUMENTO_VIVO })).toBeNull();
   });
 });
