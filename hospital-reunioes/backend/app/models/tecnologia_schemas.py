@@ -82,6 +82,9 @@ class DemandaResponse(BaseModel):
     # Se quem esta logado pode apagar esta Demanda (issue #1549, ADR 0084,
     # decisao 2): a tela mostra o botao so com o sim. A regra e a da rota.
     pode_apagar: bool = False
+    # Quem abriu o card (issue #1554, ADR 0084, decisao 4): o diretor, pelo
+    # chat, ou a Vitta, pela issue aberta no terminal. O selo da lista.
+    origem: Literal["diretor", "vitta"] = "diretor"
 
 
 class DesenvolvedorResponse(BaseModel):

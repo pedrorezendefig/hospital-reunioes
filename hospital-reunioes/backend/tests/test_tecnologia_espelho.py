@@ -36,6 +36,7 @@ from test_tecnologia_webhook_github import (  # noqa: E402
 )
 
 from app.limiter import limiter  # noqa: E402
+from app.services import tecnologia_email  # noqa: E402
 from app.services.conhecimento import CONHECIMENTO_DIR  # noqa: E402
 from app.services.tecnologia_espelho import CRIA, IGNORA, JA_EXISTE, decidir  # noqa: E402
 from app.services.tecnologia_vinculo import ETAPA_EM_ANALISE, ETAPA_EM_DESENVOLVIMENTO  # noqa: E402
@@ -390,6 +391,8 @@ class TestOrigemNaLista:
 
 class TestDemandaVittaAberta:
     def test_o_diretor_le_e_escreve_na_conversa_da_demanda_vitta(self, monkeypatch):
+        enviados: list[dict] = []
+        monkeypatch.setattr(tecnologia_email, "_enviar_email", lambda *a, **kw: enviados.append(a) or True)
         client, sb = _aba(monkeypatch, DIRETOR)
 
         assert client.get(f"{CHAT}/d-vitta/conversa").status_code == 200
