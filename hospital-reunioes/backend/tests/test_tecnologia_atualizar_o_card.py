@@ -232,3 +232,35 @@ class TestOComentario:
 
         assert [e[0] for e in gh.escritas][0] == "comentou"
         assert [e[0] for e in gh.escritas][-1] == "regravou"
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 3. As partes
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+class TestAsPartes:
+    def test_as_partes_nao_comecadas_fecham_como_nao_planejadas(self, monkeypatch):
+        partes = [_parte(901), _parte(902, labels=("ready-for-agent",)), _parte(903, estado="closed")]
+        client, _, gh = _montar_o_card(monkeypatch, partes=partes)
+
+        assert client.post(ATUALIZAR).status_code == 200
+
+        assert [e[1] for e in gh.escritas if e[0] == "fechou"] == [901, 902]
+        assert gh.sub_issues[900][1]["state_reason"] == "not_planned"
+        # A parte já fechada fica como estava.
+        assert gh.sub_issues[900][2]["state_reason"] is None
+        assert "#901, #902" in _comentario(gh)
+
+    def test_parte_em_desenvolvimento_impede_a_atualizacao_sem_escrever_nada(self, monkeypatch):
+        """A lista do app pode estar atrasada: a parte que pegou `in-progress`
+        depois da última sincronização também recusa, lida na hora."""
+        partes = [_parte(901), _parte(902, labels=("in-progress",))]
+        client, sb, gh = _montar_o_card(monkeypatch, partes=partes)
+
+        resposta = client.post(ATUALIZAR)
+
+        assert resposta.status_code == 409
+        assert "já começou" in resposta.json()["detail"]
+        assert gh.escritas == []
+        assert _conversas(sb)[0]["estado"] == "resumido"

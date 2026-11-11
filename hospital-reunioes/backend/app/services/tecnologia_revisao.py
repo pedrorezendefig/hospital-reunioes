@@ -27,7 +27,7 @@ from app.config import settings
 from app.services import ai_processor, ferramentas_do_codigo, github_client, planejamento_demanda
 from app.services.custo_da_conversa import nome_de_exibicao
 from app.services.tecnologia import instante_do_banco, recuar_continuacao
-from app.services.tecnologia_vinculo import marcador_da_demanda, texto_do_diretor
+from app.services.tecnologia_vinculo import LABEL_EM_ANDAMENTO, marcador_da_demanda, texto_do_diretor
 from app.utils.text_sanitizer import sanitizar_travessao
 
 logger = logging.getLogger(__name__)
@@ -364,6 +364,14 @@ def comentario_da_atualizacao(
     return "\n".join(linhas)
 
 
+# O motivo na parte que fecha. A primeira linha o marca como do agente.
+COMENTARIO_DA_PARTE_FECHADA = (
+    "<!-- automacao -->\n"
+    "O card #{raiz} foi revisado com o código de hoje na aba Tecnologia do app, e esta parte ainda não "
+    "tinha começado. Ela fecha como não planejada; as partes novas saem de um novo `/to-issues`."
+)
+
+
 class ParteJaComecouError(RuntimeError):
     """Uma parte do card esta em desenvolvimento: o card nao se atualiza."""
 
@@ -380,8 +388,23 @@ def atualizar_no_github(
     saiu_por_atender: list[str],
     versao_base: str | None,
 ) -> list[int]:
-    """Leva o PRD revisado a issue-raiz. Devolve as partes que fechou."""
+    """Leva o PRD revisado a issue-raiz. Devolve as partes que fechou.
+
+    Le a raiz e as partes NA HORA, e nao do cache da Demanda: a parte que pegou
+    `in-progress` depois da ultima sincronizacao levanta `ParteJaComecouError`
+    antes de qualquer escrita. Depois, pela ordem: o comentario (antes do
+    corpo, que e de onde sai o "o que mudou"), as partes abertas fechadas como
+    nao planejadas e, por ultimo, a raiz regravada. Falha do GitHub sobe como
+    `GithubIndisponivelError`; o clique seguinte refaz o que faltou, e a parte
+    ja fechada nao fecha de novo.
+    """
     dados = github_client.ler_issue(numero)
+    partes = [p for p in github_client.ler_sub_issues(numero) if isinstance(p, dict)]
+    abertas = [p for p in partes if p.get("state") == "open" and isinstance(p.get("number"), int)]
+    if any(LABEL_EM_ANDAMENTO in {n.lower() for n in _labels_da_issue(p)} for p in [dados, *abertas]):
+        raise ParteJaComecouError(numero)
+    fechadas = [p["number"] for p in abertas]
+
     corpo = corpo_revisado(corpo_atual=dados.get("body"), corpo_novo=corpo_novo, demanda_id=demanda_id)
     github_client.comentar(
         numero,
@@ -389,9 +412,11 @@ def atualizar_no_github(
             corpo_antes=dados.get("body"),
             corpo_depois=corpo,
             saiu_por_atender=saiu_por_atender,
-            partes_fechadas=[],
+            partes_fechadas=fechadas,
             versao_base=versao_base,
         ),
     )
+    for parte in fechadas:
+        github_client.fechar_como_nao_planejada(parte, comentario=COMENTARIO_DA_PARTE_FECHADA.format(raiz=numero))
     github_client.regravar(numero, corpo=corpo, labels=_labels_da_issue(dados))
-    return []
+    return fechadas
