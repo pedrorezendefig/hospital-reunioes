@@ -90,7 +90,7 @@ Reply to the reviewer summarizing what was done with their comment. The reply ca
 4. **Grill (if needed).** If the issue needs fleshing out, run a `/grill-with-docs` session.
 
 5. **Apply the outcome:**
-   - `ready-for-agent`: post an agent brief comment ([AGENT-BRIEF.md](AGENT-BRIEF.md)).
+   - `ready-for-agent`: post an agent brief comment ([AGENT-BRIEF.md](AGENT-BRIEF.md)). Before the move, check that the body opens with the lay-reader block (the `bloco` in `python3 .claude/skills/onda-enxuta/scripts/fluxo.py`), in the `/to-prd` format: **O que muda** in one sentence and **O que você precisa saber** in up to five topics, no jargon. Missing: write it at the top of the body, pass it through the `humanizer` skill in modo embutido (ADR 0071 da origem do fluxo), with the block of an already published PRD as the voice amostra, and save it with `gh issue edit <N> --body-file`. An issue without it reaches production with no description for the lay reader (decisão do fluxo).
    - `ready-for-human`: same structure as an agent brief, but note why it can't be delegated (judgment calls, external access, design decisions, manual testing).
    - `needs-info`: post triage notes (template below).
    - `wontfix`: close, with the comment depending on *why*:

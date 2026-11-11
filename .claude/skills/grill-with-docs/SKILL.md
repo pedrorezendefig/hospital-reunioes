@@ -96,7 +96,7 @@ A sessão termina quando a fronteira fica vazia: todo galho da árvore visitado,
 **Num Projeto com o pacote do fluxo** (existe `.claude/fluxo.json`), nem todo grill termina em PRD. Quando o entendimento fechar, classifique o trabalho numa das três portas e diga, em uma linha, o motivo e o comando que vem a seguir, com a recomendada destacada. O que `python3 .claude/skills/onda-enxuta/scripts/fluxo.py notas grill-with-docs` imprimir entra nos critérios:
 
 - **A, PRD + fatias** (`/to-prd` e depois `/to-issues`): muda comportamento visível em mais de uma fatia, ou tem migration, ou quem decide precisa saber, ou não cabe numa sessão.
-- **B, issue única** (`/triage` ou `gh issue create` com critérios de aceite, depois `/pegar-issue`): uma fatia vertical no app, cabe numa sessão. O `onda-revisor` e o `/tdd` precisam dos critérios escritos.
+- **B, issue única** (`/triage` ou `gh issue create` com critérios de aceite, depois `/pegar-issue`): uma fatia vertical no app, cabe numa sessão. O `onda-revisor` e o `/tdd` precisam dos critérios escritos. O corpo abre com o bloco do leitor leigo (o `bloco` do `fluxo.py`), no formato do `/to-prd`: **O que muda** numa frase e **O que você precisa saber** em até cinco tópicos, sem jargão, passado pela skill `humanizer` em modo embutido (ADR 0071 da origem do fluxo), com a amostra de voz do bloco de um PRD já publicado. É o único texto do card que quem pediu lê; a issue que nasce sem ele chega à produção sem descrição.
 - **C, PR direto** (`/ship "<descrição>" --from-diff`): ferramenta (`.claude/`, `tools/`, `.github/`, `docs/`) ou chore do app que não muda comportamento. A decisão vai no corpo do PR. Pode ser feita nesta mesma sessão, agora.
 
 Não invoque `/to-prd` sem a porta A confirmada.
