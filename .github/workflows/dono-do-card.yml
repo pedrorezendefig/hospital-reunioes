@@ -21,7 +21,7 @@ jobs:
     if: >-
       github.event.issue.user.type != 'Bot' &&
       contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.issue.author_association)
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, pedro-mac]
     steps:
       - name: Designar o autor quando a issue nasce sem dono
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0

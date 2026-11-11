@@ -168,7 +168,7 @@ def test_o_job_chama_o_app_depois_do_registro_e_nao_falha_o_run():
     assert job["continue-on-error"] is True
     assert "permissions" not in job and "environment" not in job
     chamar = next(p for p in job["steps"] if "run" in p)
-    assert chamar["run"].strip() == "python3 tools/avisar_deploy_ao_app.py"
+    assert chamar["run"].strip() == "uv run --no-project --python 3.12 python tools/avisar_deploy_ao_app.py"
     assert chamar["env"] == {
         "REGISTRO": "${{ inputs.registro }}",
         "TECNOLOGIA_DEPLOY_WEBHOOK_SECRET": "${{ secrets.TECNOLOGIA_DEPLOY_WEBHOOK_SECRET }}",

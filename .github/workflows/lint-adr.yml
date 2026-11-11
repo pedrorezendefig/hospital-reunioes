@@ -5,6 +5,12 @@ name: Lint ADR
 permissions:
   contents: read
 
+# Commit novo na mesma branch cancela a rodada anterior do PR (issue #1599). O
+# push na main tem um grupo por commit e nunca cancela.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: true
+
 on:
   push:
     branches: [main]
@@ -22,8 +28,10 @@ on:
 jobs:
   lint-adr:
     name: Frontmatter e supersessão das ADRs
-    runs-on: ubuntu-latest
+    # No Mac do Pedro (issue #1599); PR de fork não roda nele.
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.user.login != 'dependabot[bot]'
+    runs-on: [self-hosted, pedro-mac]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Lint ADR
-        run: python3 tools/lint_adr.py
+        run: uv run --no-project --python 3.12 python tools/lint_adr.py

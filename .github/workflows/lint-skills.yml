@@ -8,6 +8,12 @@ name: Lint skills
 permissions:
   contents: read
 
+# Commit novo na mesma branch cancela a rodada anterior do PR (issue #1599). O
+# push na main tem um grupo por commit e nunca cancela.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: true
+
 on:
   push:
     branches: [main]
@@ -27,15 +33,14 @@ on:
 jobs:
   lint-skills:
     name: Cabeçalho YAML das skills
-    runs-on: ubuntu-latest
+    # No Mac do Pedro (issue #1599); PR de fork não roda nele. O uv do Mac
+    # traz o Python 3.12 e as dependências: o setup-python do Mac só instala
+    # em /Users/runner.
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.user.login != 'dependabot[bot]'
+    runs-on: [self-hosted, pedro-mac]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
-        with:
-          python-version: "3.12"
-      - name: Dependências do lint
-        run: pip install pyyaml pytest
       - name: Testes do lint
-        run: python -m pytest tools/test_lint_skills.py -q
+        run: uv run --no-project --python 3.12 --with pyyaml --with pytest python -m pytest tools/test_lint_skills.py -q
       - name: Lint skills
-        run: python3 tools/lint_skills.py --dir .claude/skills
+        run: uv run --no-project --python 3.12 --with pyyaml python tools/lint_skills.py --dir .claude/skills

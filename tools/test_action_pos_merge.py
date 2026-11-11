@@ -326,7 +326,7 @@ def test_registro_so_no_run_da_subida_lido_por_env():
     aplicar = passo("registro do deploy")
     assert aplicar["if"] == "${{ github.event_name == 'workflow_dispatch' }}"
     assert aplicar["env"] == {"REGISTRO": "${{ inputs.registro }}"}
-    assert aplicar["run"].strip() == "python3 tools/aplicar_registro.py"
+    assert aplicar["run"].strip() == "uv run --no-project --python 3.12 python tools/aplicar_registro.py"
     texto = WORKFLOW.read_text(encoding="utf-8")
     for job in workflow()["jobs"].values():
         for p in job["steps"]:

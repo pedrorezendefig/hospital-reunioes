@@ -1,7 +1,20 @@
 name: CI
 
+# Os jobs sem Docker rodam no runner próprio do Mac do Pedro (rótulo
+# `pedro-mac`, issue #1599): os minutos grátis do GitHub de novembro de 2026
+# acabaram e a conta não tem cartão. Só o `build` fica no `ubuntu-latest`. O CI
+# só anda com o Mac ligado. PR de fork e PR do Dependabot (pacote novo que
+# ninguém leu) não rodam no Mac: o job `fora-do-mac` os deixa vermelhos em vez
+# de os jobs pulados contarem verde.
+
 permissions:
   contents: read
+
+# Commit novo na mesma branch cancela a rodada anterior do PR. O push na main
+# tem um grupo por commit e nunca cancela.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: true
 
 on:
   push:
@@ -21,11 +34,13 @@ on:
 jobs:
   mudancas:
     name: Partes que o PR muda
-    runs-on: ubuntu-latest
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.user.login != 'dependabot[bot]'
+    runs-on: [self-hosted, pedro-mac]
     outputs:
       backend: ${{ steps.diff.outputs.backend }}
       frontend: ${{ steps.diff.outputs.frontend }}
       ferramenta: ${{ steps.diff.outputs.ferramenta }}
+      imagem: ${{ steps.diff.outputs.imagem }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -38,14 +53,27 @@ jobs:
         # nenhum job daqui a consome, porque os testes de tools/ rodam no
         # ferramentas.yml. Se o git diff falhar, o passo falha e os jobs rodam (ver
         # o if deles).
+        # Imagem é o que entra nos dois Dockerfiles (o contexto deles), e só ela
+        # acorda o `build`, o único job que gasta minuto do GitHub (issue #1599).
+        # Mudar o próprio CI não acorda o `build`: o que ele constrói não mudou.
         id: diff
         env:
           EVENTO: ${{ github.event_name }}
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          ANTES: ${{ github.event.before }}
         run: |
+          imagem_muda() { printf '%s\n' "$1" | grep -qE '^hospital-reunioes/(backend|frontend)/|^"'; }
           if [ "$EVENTO" != "pull_request" ]; then
-            printf 'backend=true\nfrontend=true\nferramenta=true\n' >> "$GITHUB_OUTPUT"
+            # Push na main: os testes rodam inteiros (no Mac, sem custo) e a
+            # imagem só quando o push muda o contexto dela. Diff que falha ou
+            # vem vazio constrói.
+            imagem=true
+            if arquivos="$(git -c core.quotePath=false diff --no-renames --name-only "$ANTES" "$GITHUB_SHA")" \
+                && [ -n "$arquivos" ] && ! imagem_muda "$arquivos"; then
+              imagem=false
+            fi
+            printf 'backend=true\nfrontend=true\nferramenta=true\nimagem=%s\n' "$imagem" >> "$GITHUB_OUTPUT"
             exit 0
           fi
           # --no-renames: num rename o diff lista só o caminho novo, e tirar
@@ -66,15 +94,17 @@ jobs:
           if [ -z "$arquivos" ] || muda '^\.github/workflows/' || muda '^"'; then
             backend=true; frontend=true
           fi
-          printf 'backend=%s\nfrontend=%s\nferramenta=%s\n' "$backend" "$frontend" "$ferramenta" >> "$GITHUB_OUTPUT"
+          imagem=false
+          if [ -z "$arquivos" ] || imagem_muda "$arquivos"; then imagem=true; fi
+          printf 'backend=%s\nfrontend=%s\nferramenta=%s\nimagem=%s\n' "$backend" "$frontend" "$ferramenta" "$imagem" >> "$GITHUB_OUTPUT"
 
   backend:
     name: Backend Lint, Format & Tests
     needs: mudancas
     # Pulado por if = verde no ruleset. Detector quebrado roda o job: pular o
     # CI de um PR de código por erro do detector passaria pelo ruleset sem teste.
-    if: ${{ !cancelled() && (needs.mudancas.result != 'success' || needs.mudancas.outputs.backend == 'true') }}
-    runs-on: ubuntu-latest
+    if: ${{ !cancelled() && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.user.login != 'dependabot[bot]') && (needs.mudancas.result != 'success' || needs.mudancas.outputs.backend == 'true') }}
+    runs-on: [self-hosted, pedro-mac]
     defaults:
       run:
         working-directory: hospital-reunioes/backend
@@ -88,6 +118,8 @@ jobs:
       # aqui, o import do app levantaria antes do primeiro teste. Mesmo valor
       # que o job de build já passa como build arg.
       ENVIRONMENT: ci
+      # O WeasyPrint acha as bibliotecas do Homebrew por aqui no Mac.
+      DYLD_FALLBACK_LIBRARY_PATH: /opt/homebrew/lib
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -98,36 +130,37 @@ jobs:
         # Trava travessão (U+2014) e meia-risca (U+2013) nos templates que viram
         # PDF/email (ADR 0013). Só superfície que o usuário lê: NÃO inclui
         # prompts (instruem a IA e citam o caractere), comentários, testes nem docs.
-        # Os caracteres entram via \x{...} para não existir nenhum literal no lint.
+        # Os caracteres entram pelos bytes do UTF-8 para não existir nenhum
+        # literal no lint (o grep do Mac não tem -P).
         run: |
-          if grep -rPln '[\x{2014}\x{2013}]' app/templates/; then
+          if LC_ALL=C grep -rlE "$(printf '\342\200\224|\342\200\223')" app/templates/; then
             echo "::error::Travessão (U+2014) ou meia-risca (U+2013) encontrado nos templates acima. Use vírgula, ou hífen entre números (ADR 0013)."
             exit 1
           fi
-      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
-        with:
-          python-version: "3.12"
       - name: Migration com número repetido
         # Duas sessões em paralelo podem escolher o mesmo próximo número
         # (issue #903). Recusa migration que o PR adiciona com número que a
         # main já usa; o fechar_onda.py repete a conferência contra a main da
         # hora do merge, porque ela pode ter andado desde este CI.
         if: github.event_name == 'pull_request'
-        run: python ../../tools/checar_migration_repetida.py --base origin/main
+        run: uv run --no-project --python 3.12 python ../../tools/checar_migration_repetida.py --base origin/main
       - name: Migration com recibo
         # Toda migration nova termina gravando o próprio número em
         # migracoes_aplicadas (issue #969): a subida só mergeia depois que o
         # /api/health devolve esse número, e sem o insert esperaria 24 h.
         if: github.event_name == 'pull_request'
-        run: python ../../tools/checar_recibo_da_migration.py --base origin/main
-      - name: poppler-utils e tesseract (pdftotext e OCR das Contas médicas)
+        run: uv run --no-project --python 3.12 python ../../tools/checar_recibo_da_migration.py --base origin/main
+      - name: poppler e tesseract (pdftotext e OCR das Contas médicas)
         # A leitura de PDF das Contas médicas roda o `pdftotext -layout` de
         # verdade nos testes (issue #1116, ADR 0070); a imagem leva o mesmo pacote.
         # O `tesseract` com o português lê as folhas desenhadas no teste da
-        # confiança do OCR (issue #1398), como a imagem lê as digitalizadas.
-        run: bash ../../tools/apt_no_ci.sh poppler-utils tesseract-ocr tesseract-ocr-por
-      - name: Install uv
-        run: pip install uv
+        # confiança do OCR (issue #1398), como a imagem lê as digitalizadas. No
+        # Mac eles vêm do Homebrew; sem o `por`, o teste pularia em silêncio.
+        run: |
+          for binario in pdftotext pdftoppm tesseract; do
+            command -v "$binario" > /dev/null || { echo "::error::Falta o $binario no Mac do runner: brew install poppler tesseract tesseract-lang"; exit 1; }
+          done
+          tesseract --list-langs 2>/dev/null | grep -qx por || { echo "::error::O tesseract do Mac do runner está sem o português: brew install tesseract-lang"; exit 1; }
       - name: Lock em sincronia (uv.lock x pyproject.toml)
         # Issue #852: o `uv sync --frozen` abaixo e a imagem instalam o que está
         # no lock, sem re-resolver. Um pyproject.toml alterado sem `uv lock`
@@ -139,10 +172,11 @@ jobs:
           fi
       - name: Install dependencies (pelo uv.lock)
         # Versões exatas do lock, com o extra de dev (ruff, pytest), num venv
-        # no Python 3.12 do setup-python. O venv entra no PATH dos passos
+        # no Python 3.12 que o uv do Mac baixa (o setup-python do Mac só
+        # instala em /Users/runner). O venv entra no PATH dos passos
         # seguintes, então ruff e pytest rodam com o que o lock travou.
         run: |
-          uv sync --frozen --extra dev --python "$(command -v python)"
+          uv sync --frozen --extra dev --python 3.12
           echo "$PWD/.venv/bin" >> "$GITHUB_PATH"
       - name: Lint (ruff)
         run: ruff check .
@@ -161,8 +195,8 @@ jobs:
     # A lista do marcador `rodar_sozinho` num job próprio, em paralelo com o
     # job de backend: em série, no mesmo job, ela somava 2,5 min a todo PR do
     # app. Mesma condição do job de backend.
-    if: ${{ !cancelled() && (needs.mudancas.result != 'success' || needs.mudancas.outputs.backend == 'true') }}
-    runs-on: ubuntu-latest
+    if: ${{ !cancelled() && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.user.login != 'dependabot[bot]') && (needs.mudancas.result != 'success' || needs.mudancas.outputs.backend == 'true') }}
+    runs-on: [self-hosted, pedro-mac]
     defaults:
       run:
         working-directory: hospital-reunioes/backend
@@ -170,18 +204,18 @@ jobs:
       SUPABASE_URL: http://localhost:54321
       SUPABASE_SERVICE_ROLE_KEY: dummy-key-for-ci
       ENVIRONMENT: ci
+      # O WeasyPrint acha as bibliotecas do Homebrew por aqui no Mac.
+      DYLD_FALLBACK_LIBRARY_PATH: /opt/homebrew/lib
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
-        with:
-          python-version: "3.12"
-      - name: poppler-utils (pdftotext das Contas médicas)
-        run: bash ../../tools/apt_no_ci.sh poppler-utils
-      - name: Install uv
-        run: pip install uv
-      - name: Install dependencies (pelo uv.lock)
+      - name: pdftotext das Contas médicas (Homebrew do Mac)
         run: |
-          uv sync --frozen --extra dev --python "$(command -v python)"
+          command -v pdftotext > /dev/null || { echo "::error::Falta o pdftotext no Mac do runner: brew install poppler"; exit 1; }
+      - name: Install dependencies (pelo uv.lock)
+        # O uv do Mac (~/.local/bin, no PATH do runner) baixa o Python 3.12
+        # sozinho: o setup-python do Mac só instala em /Users/runner.
+        run: |
+          uv sync --frozen --extra dev --python 3.12
           echo "$PWD/.venv/bin" >> "$GITHUB_PATH"
       - name: Tests (pytest, rodar sozinho)
         # A lista do marcador `rodar_sozinho`, em série. Sem teste marcado o
@@ -198,26 +232,27 @@ jobs:
   frontend-lint:
     name: Frontend Lint & Type Check
     needs: mudancas
-    if: ${{ !cancelled() && (needs.mudancas.result != 'success' || needs.mudancas.outputs.frontend == 'true') }}
-    runs-on: ubuntu-latest
+    if: ${{ !cancelled() && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.user.login != 'dependabot[bot]') && (needs.mudancas.result != 'success' || needs.mudancas.outputs.frontend == 'true') }}
+    runs-on: [self-hosted, pedro-mac]
     defaults:
       run:
         working-directory: hospital-reunioes/frontend
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
-        with:
-          # Pin pnpm@9 para bater com o Dockerfile do frontend
-          # (corepack prepare pnpm@9 --activate). pnpm@11 trata ERR_PNPM_IGNORED_BUILDS
-          # como fatal mesmo com onlyBuiltDependencies declarado no package.json.
-          version: 9
-      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
-        with:
-          node-version: "22"
-          cache: "pnpm"
-          cache-dependency-path: hospital-reunioes/frontend/pnpm-lock.yaml
+      - name: Node 24 e pnpm do Mac
+        # O Node 24 do Mac (/usr/local/bin, no PATH do runner), sem setup-node.
+        # O pnpm vem do corepack do próprio Node, na versão do `packageManager`
+        # do package.json (o mesmo major do Dockerfile), num atalho só deste job.
+        env:
+          COREPACK_ENABLE_DOWNLOAD_PROMPT: "0"
+        run: |
+          node --version | grep -q '^v24\.' || { echo "::error::O runner precisa do Node 24, achou $(node --version)"; exit 1; }
+          mkdir -p "$RUNNER_TEMP/corepack"
+          corepack enable pnpm --install-directory "$RUNNER_TEMP/corepack"
+          echo "$RUNNER_TEMP/corepack" >> "$GITHUB_PATH"
       - name: Install dependencies
-        run: pnpm install
+        # O store do pnpm fica no Mac de uma rodada para a outra.
+        run: pnpm install --prefer-offline
       - name: Lint
         run: pnpm lint
       - name: Type check
@@ -228,7 +263,9 @@ jobs:
   build:
     name: Docker Build (sanity)
     needs: mudancas
-    if: ${{ !cancelled() && (needs.mudancas.result != 'success' || needs.mudancas.outputs.backend == 'true' || needs.mudancas.outputs.frontend == 'true') }}
+    # Docker fica no GitHub (issue #1599), e só quando o PR muda o que entra
+    # na imagem: é o único job que gasta minuto.
+    if: ${{ !cancelled() && (needs.mudancas.result != 'success' || needs.mudancas.outputs.imagem == 'true') }}
     runs-on: ubuntu-latest
     # Os 2 Dockerfiles ainda buildam. A imagem do backend vai para o GHCR com a
     # tag do sha do head do PR (issue #1001, ADR 0064 decisão 6c): depois do
@@ -308,8 +345,8 @@ jobs:
   # docs também pode trazer segredo ou planilha.
   gitleaks:
     name: Segredo nos commits do PR (gitleaks)
-    if: github.event_name == 'pull_request'
-    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.user.login != 'dependabot[bot]'
+    runs-on: [self-hosted, pedro-mac]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -323,18 +360,19 @@ jobs:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
           VERSAO: 8.30.1
-          SHA256: 551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb
+          # O pacote do Mac (darwin_arm64), conferido no checksums.txt do release.
+          SHA256: b40ab0ae55c505963e365f271a8d3846efbc170aa17f2607f13df610a9aeb6a5
         run: |
-          pacote="gitleaks_${VERSAO}_linux_x64.tar.gz"
+          pacote="gitleaks_${VERSAO}_darwin_arm64.tar.gz"
           curl -sSfL -o "$RUNNER_TEMP/$pacote" "https://github.com/gitleaks/gitleaks/releases/download/v${VERSAO}/${pacote}"
-          echo "$SHA256  $RUNNER_TEMP/$pacote" | sha256sum -c -
+          echo "$SHA256  $RUNNER_TEMP/$pacote" | shasum -a 256 -c -
           tar -xzf "$RUNNER_TEMP/$pacote" -C "$RUNNER_TEMP" gitleaks
           "$RUNNER_TEMP/gitleaks" git --no-banner --redact --verbose --config .gitleaks.toml --exit-code 1 --log-opts="$BASE_SHA..$HEAD_SHA" .
 
   arquivo-sensivel:
     name: Arquivo sensível no PR
-    if: github.event_name == 'pull_request'
-    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.user.login != 'dependabot[bot]'
+    runs-on: [self-hosted, pedro-mac]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -345,4 +383,18 @@ jobs:
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-        run: python3 tools/checar_arquivo_sensivel.py --base "$BASE_SHA" --head "$HEAD_SHA"
+        run: uv run --no-project --python 3.12 python tools/checar_arquivo_sensivel.py --base "$BASE_SHA" --head "$HEAD_SHA"
+
+  # PR de fork e PR do Dependabot não rodam no Mac: o código de um e os
+  # pacotes novos do outro rodariam com o acesso da conta do Pedro. Os jobs
+  # exigidos pelo ruleset, pulados por `if`, contariam como verdes sem teste
+  # nenhum; este job deixa o PR vermelho, e a subida só mergeia tudo verde.
+  fora-do-mac:
+    name: PR de fork ou do Dependabot não roda no CI
+    if: github.event_name == 'pull_request' && (github.event.pull_request.head.repo.full_name != github.repository || github.event.pull_request.user.login == 'dependabot[bot]')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Recusar o PR de fora
+        run: |
+          echo "::error::O CI roda no Mac do Pedro e não roda código de fork nem pacote novo do Dependabot sem alguém ler antes. Confira a mudança e traga-a num PR de uma branch deste repositório."
+          exit 1
