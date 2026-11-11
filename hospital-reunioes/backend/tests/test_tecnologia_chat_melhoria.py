@@ -108,6 +108,8 @@ class TestEscolherMelhoriaAbreOGrill:
             "tipo": "resposta",
             "opcao": None,
             "texto": "A recepção e o médico",
+            # Quem respondeu o turno (issue #1557).
+            "respondido_por": "P2",
         }
 
     def test_a_melhoria_contada_em_texto_ganha_a_primeira_pergunta_no_turno_seguinte(self, monkeypatch):

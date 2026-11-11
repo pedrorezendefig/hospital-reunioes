@@ -355,6 +355,24 @@ def ler_issue(numero: int) -> dict[str, Any]:
     return _chamar("GET", f"/issues/{numero}")
 
 
+def ler_comentarios(numero: int) -> list[dict[str, Any]]:
+    """Os comentarios da issue, do mais antigo ao mais novo, a primeira pagina
+    (issue #1557): quem escreveu, o texto e quando. E o que a Revisao com o
+    codigo de hoje le do que se combinou por fora do app."""
+    dados = _chamar("GET", f"/issues/{numero}/comments?per_page={_POR_PAGINA}")
+    if not isinstance(dados, list):
+        raise GithubIndisponivelError("GitHub respondeu os comentarios fora do formato")
+    return [
+        {
+            "autor": str((c.get("user") or {}).get("login") or ""),
+            "corpo": str(c.get("body") or ""),
+            "criado_em": c.get("created_at"),
+        }
+        for c in dados
+        if isinstance(c, dict)
+    ]
+
+
 def ler_sub_issues(numero: int) -> list[dict[str, Any]]:
     """As partes da issue-raiz.
 

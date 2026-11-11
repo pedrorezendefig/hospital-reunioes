@@ -301,6 +301,22 @@ def _linha_da_conversa(mensagem: dict) -> str:
     if mensagem.get("tipo") == "ia":
         # O aviso do pedido parecido, que o chat poe depois do resumo (issue #1385).
         return recuar_continuacao(f"IA: {mensagem.get('texto') or ''}")
+    if mensagem.get("tipo") == "retrato":
+        # O Retrato de hoje da revisao (issue #1557): os tres blocos, um item por linha.
+        return "\n".join(
+            [
+                "IA (Retrato de hoje):",
+                "    Já existe:",
+                *[
+                    f"    - {i.get('item') or ''} (desde a {i.get('versao') or ''})"
+                    for i in mensagem.get("ja_existe") or []
+                ],
+                "    Mudou desde o card:",
+                *[f"    - {t}" for t in mensagem.get("mudou") or []],
+                "    Continua em aberto:",
+                *[f"    - {t}" for t in mensagem.get("em_aberto") or []],
+            ]
+        )
     opcoes = [f"    {o.get('letra')}) {o.get('texto') or ''}" for o in mensagem.get("opcoes", [])]
     recomendada = f"    (recomendada: {mensagem.get('recomendada')})"
     return "\n".join([f"IA: {mensagem.get('contexto') or ''}", *opcoes, recomendada])
@@ -331,11 +347,26 @@ def pedido_do_turno(demanda: dict, mensagens: list[dict]) -> str:
             "Descrição:",
             recuar_continuacao(f"    {demanda.get('descricao') or '(sem descrição)'}"),
             *_documentos_da_demanda(demanda),
+            *_escopo_da_revisao(demanda),
             "",
             "A CONVERSA ATÉ AQUI",
             conversa,
         ]
     )
+
+
+def _escopo_da_revisao(demanda: dict) -> list[str]:
+    """O que o "isso atende?" da revisao decidiu (issue #1557): o que saiu do
+    pedido nao volta a ser perguntado, e o que continua e lacuna."""
+    revisao = demanda.get("revisao")
+    if not revisao:
+        return []
+    linhas = ["", "A REVISÃO COM O CÓDIGO DE HOJE"]
+    if revisao.get("saiu"):
+        linhas += ["Saiu do pedido (o diretor disse que já atende):", *[f"- {t}" for t in revisao["saiu"]]]
+    if revisao.get("continua"):
+        linhas += ["Continua no pedido (o diretor disse que não atende):", *[f"- {t}" for t in revisao["continua"]]]
+    return [recuar_continuacao(linha) for linha in linhas]
 
 
 def _custo(uso, preco: Preco | None) -> tuple[dict, float]:

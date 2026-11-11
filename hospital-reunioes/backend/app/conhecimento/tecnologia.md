@@ -133,6 +133,20 @@ Se o resumo estiver certo, o **Criar o card** manda o plano para o desenvolvimen
 
 A IA cuida das decisões de negócio: o problema, quem usa, as regras e o que fica de fora. As decisões técnicas ficam com a Vitta, depois do sim. Quando o pedido esbarra numa regra da casa, a IA avisa e diz de onde tirou, citando a parte "O que já foi decidido" do texto daquele sistema.
 
+## Revisar com o código de hoje
+
+Um pedido feito há tempo pode ser revisto pelo botão **Revisar com o código de hoje**, no alto do pedido aberto. Ele aparece num pedido de melhoria que já virou card, com a Etapa Em análise ou Planejada, enquanto nenhuma parte está em desenvolvimento. Só quem pediu e o Desenvolvedor veem o botão.
+
+Antes de começar, o aplicativo mostra quanto a revisão deve custar, numa faixa em dólar, e a IA só começa depois que você confirma. Sem a confirmação nada é cobrado.
+
+A revisão continua a mesma conversa de antes. A IA lê o pedido como está hoje no desenvolvimento, os comentários da Vitta nele, o que subiu no aplicativo desde a data do card e o próprio sistema, e abre o **Retrato de hoje** em três partes:
+
+- **Já existe**: o que o sistema já faz do seu pedido, com a versão do aplicativo em que entrou.
+- **Mudou desde o card**: o que se combinou depois e o que subiu e mexe no pedido.
+- **Continua em aberto**: o que ainda falta.
+
+Para cada item de Já existe a IA pergunta "isso atende?". Ele só sai do pedido se você disser que atende; se não atende, continua no pedido. Depois ela pergunta só o que falta, sem limite de perguntas. O Desenvolvedor também pode responder, e cada resposta mostra o nome de quem respondeu.
+
 ## O que já foi decidido
 
 - A aba mora dentro do aplicativo e só quem é Super admin a vê.
@@ -153,6 +167,7 @@ A IA cuida das decisões de negócio: o problema, quem usa, as regras e o que fi
 - A lista tem busca pelo título e filtros que combinam (Bug ou Melhoria, Etapa, Origem, e para o Desenvolvedor também Responsável, Envio falhou e Para mim), e recolhe quando um pedido está aberto.
 - O Desenvolvedor, administrador com login do GitHub no cadastro, vê as Demandas de todos, com a conversa inteira e os anexos; o diretor vê as suas e os cards da Vitta, sem número nem link do card.
 - Uma Demanda se liga a um trabalho de desenvolvimento só, e a Etapa é lida de lá, nunca digitada.
+- Um pedido de melhoria Em análise ou Planejada se revisa com o código de hoje, pelo autor ou pelo Desenvolvedor, com o custo mostrado antes e a confirmação, e o que já existe só sai do pedido com o sim de quem pediu.
 - O vídeo de demonstração de uma entrega vem do desenvolvimento da Vitta, só por link seguro (https), e aparece no pedido com o selo Tem demonstração e a seção Demonstração.
 - Um pedido se apaga só até Planejada, com confirmação, pela mão de quem escreveu a conversa que não virou card ou do Desenvolvedor no card criado, e no desenvolvimento o card fecha como não planejado e nunca é apagado.
 - O texto que sai da Demanda para o material público do desenvolvimento passa por uma peneira que esconde CPF, telefone, nome e outros dados pessoais.

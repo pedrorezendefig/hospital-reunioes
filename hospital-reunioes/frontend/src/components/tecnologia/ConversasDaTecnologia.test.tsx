@@ -1028,3 +1028,118 @@ describe("Os cards que a Vitta abre pelo terminal (issue #1554, ADR 0084, decis�
     expect(chamadas.map((c) => c.url)).not.toContain(`${LISTA}/d-v`);
   });
 });
+
+describe("Revisar com o código de hoje (issue #1557, ADR 0084, decisão 3)", () => {
+  const REVISAO = `${LISTA}/d-2/revisao`;
+  const CARD = demanda("d-2", "Retorno marcado na saída", {
+    etapa: "em_analise",
+    tem_vinculo: true,
+    classificacao: "melhoria",
+    pode_revisar: true,
+  });
+  const EM_REVISAO = { ...CARD, pode_revisar: false, em_revisao: true };
+  const ESTIMATIVA = { modelo: "Opus 5.5", minimo_usd: 0.42, maximo_usd: 3.1 };
+  const ITEM = "A recepção já marca o retorno na saída do paciente.";
+  const NA_REVISAO = conversa("d-2", {
+    planejamento: true,
+    mensagens: [
+      {
+        autor: "diretor",
+        texto: "Só a recepção.",
+        fonte: null,
+        opcoes: [],
+        nao_bateu: false,
+        respondido_por: "Diretor do Hospital",
+      },
+      {
+        autor: "ia",
+        texto: "Retrato de hoje: o que o sistema já faz, o que mudou desde o card e o que continua em aberto.",
+        fonte: null,
+        opcoes: [],
+        nao_bateu: false,
+        retrato: {
+          ja_existe: [{ item: ITEM, versao: "v0.245.0" }],
+          mudou: ["A enfermagem também vê o retorno."],
+          em_aberto: ["Quem confirma o retorno com o paciente."],
+        },
+      },
+      {
+        autor: "ia",
+        texto: `Isso atende? Já existe desde a v0.245.0: ${ITEM}`,
+        fonte: null,
+        opcoes: ["Atende, pode sair do pedido.", "Não atende, continua no pedido."],
+        recomendada: "B",
+        nao_bateu: false,
+      },
+    ],
+  });
+
+  function abrirOCard() {
+    return within(lista()).findByRole("button", { name: /Retorno marcado na saída/ });
+  }
+
+  it("o botão aparece só no card que o servidor diz que se revisa", async () => {
+    montar((url) => (url === LISTA ? { status: 200, corpo: [CARD] } : { status: 200, corpo: conversa("d-2") }));
+    fireEvent.click(await abrirOCard());
+    expect(await screen.findByRole("button", { name: "Revisar com o código de hoje" })).toBeTruthy();
+    cleanup();
+
+    montar((url) =>
+      url === LISTA
+        ? { status: 200, corpo: [{ ...CARD, pode_revisar: false }] }
+        : { status: 200, corpo: conversa("d-2") },
+    );
+    fireEvent.click(await abrirOCard());
+    await screen.findByRole("heading", { name: "Retorno marcado na saída" });
+    expect(screen.queryByRole("button", { name: "Revisar com o código de hoje" })).toBeNull();
+  });
+
+  it("o clique mostra a estimativa em dólar, e Cancelar não começa a revisão", async () => {
+    const chamadas = montar((url) => {
+      if (url === LISTA) return { status: 200, corpo: [CARD] };
+      if (url === REVISAO) return { status: 200, corpo: ESTIMATIVA };
+      return { status: 200, corpo: conversa("d-2") };
+    });
+    fireEvent.click(await abrirOCard());
+
+    fireEvent.click(await screen.findByRole("button", { name: "Revisar com o código de hoje" }));
+
+    const confirmacao = await screen.findByRole("dialog");
+    expect(
+      await within(confirmacao).findByText(/O Retrato de hoje deve custar entre US\$ 0,42 e US\$ 3,10 no Opus 5\.5\./),
+    ).toBeTruthy();
+    fireEvent.click(within(confirmacao).getByRole("button", { name: "Cancelar" }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    expect(chamadas.some((c) => c.url === REVISAO && c.metodo === "POST")).toBe(false);
+  });
+
+  it("confirmar começa a revisão e abre a conversa com o Retrato de hoje e o nome de quem respondeu", async () => {
+    let revisando = false;
+    const chamadas = montar((url, metodo) => {
+      if (url === LISTA) return { status: 200, corpo: [revisando ? EM_REVISAO : CARD] };
+      if (url === REVISAO && metodo === "GET") return { status: 200, corpo: ESTIMATIVA };
+      if (url === REVISAO && metodo === "POST") {
+        revisando = true;
+        return { status: 200, corpo: NA_REVISAO };
+      }
+      return { status: 200, corpo: revisando ? NA_REVISAO : conversa("d-2") };
+    });
+    fireEvent.click(await abrirOCard());
+    fireEvent.click(await screen.findByRole("button", { name: "Revisar com o código de hoje" }));
+    const confirmacao = await screen.findByRole("dialog");
+    await within(confirmacao).findByText(/US\$ 0,42/);
+
+    fireEvent.click(within(confirmacao).getByRole("button", { name: "Revisar" }));
+
+    const retrato = await screen.findByRole("region", { name: "Retrato de hoje" });
+    expect(within(retrato).getByText(ITEM)).toBeTruthy();
+    expect(within(retrato).getByText("desde a v0.245.0")).toBeTruthy();
+    expect(within(retrato).getByText("A enfermagem também vê o retorno.")).toBeTruthy();
+    expect(within(retrato).getByText("Quem confirma o retorno com o paciente.")).toBeTruthy();
+    expect(screen.getByText("Diretor do Hospital")).toBeTruthy();
+    expect(screen.getByRole("button", { name: /Não atende, continua no pedido\./ })).toBeTruthy();
+    expect(chamadas.filter((c) => c.url === REVISAO && c.metodo === "POST").map((c) => c.corpo)).toEqual([
+      { confirmado: true },
+    ]);
+  });
+});

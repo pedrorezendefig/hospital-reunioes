@@ -107,6 +107,13 @@ export type Demanda = {
    */
   origem?: Origem | null;
   /**
+   * A Revisão com o código de hoje (issue #1557, ADR 0084, decisão 3):
+   * `pode_revisar` mostra o botão, pela regra do servidor; `em_revisao` abre a
+   * conversa para responder, e não só para ler.
+   */
+  pode_revisar?: boolean;
+  em_revisao?: boolean;
+  /**
    * O vídeo de demonstração da entrega (issue #1559): o link `https` lido do
    * marcador da issue-raiz e quando ele chegou. Sem link, sem selo nem seção.
    */
