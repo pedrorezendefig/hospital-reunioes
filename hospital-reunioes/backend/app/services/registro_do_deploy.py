@@ -13,6 +13,7 @@ issue que o webhook chama de "subiu" seria outra na passagem de hora em hora.
 from __future__ import annotations
 
 import re
+from datetime import datetime
 
 # A versão como a subida a grava ("0.169.0") ou como a tela a mostra
 # ("v0.169.0"). Nada antes nem depois: um texto qualquer não vira versão.
@@ -83,3 +84,33 @@ def subida_de_cada_issue(deploys: object) -> dict[int, tuple[str, str]]:
             for numero in pr["fecha"]:
                 subidas.setdefault(numero, (versao, aviso["data"]))
     return subidas
+
+
+def primeira_subida_de_cada_issue(deploys: object) -> dict[int, tuple[str, str]]:
+    """Para cada issue, a versão (rotulada) e a data da subida MAIS ANTIGA que a
+    cita: um PR do lote a fecha, ou o campo `prds` a lista (issue #1555, a carga
+    do histórico de entregas).
+
+    A primeira, e não a mais nova como em `subida_de_cada_issue`: a carga
+    registra desde quando a entrega está no ar, e "Em produção desde" é a
+    primeira subida. O `prds` entra porque os registros antigos não listam PR
+    nenhum nas `notes`, e o PRD é a issue-raiz que a Demanda carrega.
+
+    A ordem vem da data, e não da posição no arquivo. Entrada sem data legível
+    não entra.
+    """
+    primeiras: dict[int, tuple[str, str, datetime]] = {}
+    for entrada in deploys if isinstance(deploys, list) else []:
+        aviso = aviso_da_entrada(entrada)
+        if aviso is None or not isinstance(aviso["data"], str):
+            continue
+        try:
+            quando = datetime.fromisoformat(aviso["data"])
+        except ValueError:
+            continue
+        numeros = {numero for pr in aviso["prs"] for numero in pr["fecha"]}
+        numeros.update(n for n in entrada.get("prds") or [] if isinstance(n, int) and not isinstance(n, bool))
+        for numero in numeros:
+            if numero not in primeiras or quando < primeiras[numero][2]:
+                primeiras[numero] = (versao_rotulada(aviso["versao"]), aviso["data"], quando)
+    return {numero: (versao, data) for numero, (versao, data, _) in primeiras.items()}
