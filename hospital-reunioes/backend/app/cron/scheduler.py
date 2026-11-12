@@ -279,6 +279,25 @@ def escalonar_prazos_ouvidoria() -> None:
         logger.info(f"[Cron] {subidos} degrau(s) de escalonamento da Ouvidoria.")
 
 
+def reenviar_elogios_ouvidoria() -> None:
+    """Reenvia, uma vez só, o elogio que o setor não confirmou em 5 dias úteis
+    (issue #1618, ADR 0088). Idempotente: o carimbo `reenviado_em` impede o
+    segundo reenvio."""
+    from app.routers.ouvidoria import carregar_feriados
+    from app.services import ouvidoria_acionamentos
+
+    supabase = _supabase()
+    try:
+        reenviados = ouvidoria_acionamentos.reenviar_os_esquecidos(
+            supabase, datetime.now(tz=ZoneInfo("UTC")), carregar_feriados(supabase)
+        )
+    except Exception as e:
+        logger.error(f"[Cron] Erro em reenviar_elogios_ouvidoria: {e}", exc_info=True)
+        return
+    if reenviados:
+        logger.info(f"[Cron] {reenviados} elogio(s) da Ouvidoria reenviado(s) ao setor.")
+
+
 def anonimizar_manifestacoes_antigas() -> None:
     """Aplica a política de retenção da Ouvidoria, pelas duas portas.
 
@@ -524,6 +543,15 @@ def start_scheduler() -> None:
         id="escalonamento_ouvidoria",
         replace_existing=True,
     )
+    # De hora em hora: o elogio só espera dias úteis, e o email do reenvio
+    # respeita a janela comercial pela fila de notificações.
+    scheduler.add_job(
+        reenviar_elogios_ouvidoria,
+        "interval",
+        hours=1,
+        id="reenvio_elogios_ouvidoria",
+        replace_existing=True,
+    )
     # 04:00: fora da janela dos demais jobs e longe do expediente. A retenção
     # apaga dado em definitivo e não precisa disputar relógio com ninguém.
     scheduler.add_job(
@@ -595,7 +623,8 @@ def start_scheduler() -> None:
         "[Scheduler] APScheduler iniciado. Jobs: marcar_atrasadas (06:00), "
         "lembrete_24h_reunioes (a cada 15min), reconciliar_clicksign (05:30), "
         "notificacoes_ouvidoria (a cada 10min), cobranca_prazos_ouvidoria (a cada 10min), "
-        "escalonamento_ouvidoria (a cada 10min), retencao_ouvidoria (04:00), "
+        "escalonamento_ouvidoria (a cada 10min), reenvio_elogios_ouvidoria (de hora em hora), "
+        "retencao_ouvidoria (04:00), "
         "retencao_contas_medicas (04:30), fila_contas_medicas (a cada 10s), contratos_contas_medicas (07:15), "
         "relatorio_quinzenal_ouvidoria (07:00 diário, email nos dias 1 e 16), "
         "reconciliacao_tecnologia (de hora em hora)"

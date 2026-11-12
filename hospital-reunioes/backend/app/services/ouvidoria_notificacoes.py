@@ -119,6 +119,13 @@ GATILHO_DEVOLVIDO_A_OUVIDORIA = "devolvido_a_ouvidoria"
 # área nova quando o email é montado, e é justamente o nome que este aviso não
 # pode dizer.
 GATILHO_REDIRECIONAMENTO_AREA = "redirecionamento_area"
+# O elogio como acionamento de ciência (issue #1618, ADR 0088, decisão 2): o
+# responsável do setor recebe o elogio com a nota do ouvidor e o botão "Elogio
+# recebido". Fora de `GATILHOS_COM_PORTAL`, porque o link dele não abre o portal
+# de resposta: só confirma que o setor recebeu. Fora de
+# `GATILHOS_QUE_COBRAM_A_AREA`, porque não cobra nada; quem decide se ainda
+# vale mandar é a ciência pendente do caso, lida na hora do envio.
+GATILHO_CIENCIA_ELOGIO = "ciencia_elogio"
 GATILHOS = (
     GATILHO_NOVA_DEMANDA,
     GATILHO_ALERTA_SEM_TITULAR,
@@ -136,6 +143,7 @@ GATILHOS = (
     GATILHO_ENCERRAMENTO_MANIFESTANTE,
     GATILHO_DEVOLVIDO_A_OUVIDORIA,
     GATILHO_REDIRECIONAMENTO_AREA,
+    GATILHO_CIENCIA_ELOGIO,
 )
 
 # O que vai na coluna `destinatario_nome` (NOT NULL) quando quem manifestou não
@@ -235,10 +243,14 @@ CAMPOS_NOTIFICACAO = ", ".join(CAMPOS_NOTIFICACAO_TUPLA)
 # `paciente_nome` e `paciente_referencia` entraram pelo ADR 0052 (issue #664):
 # a área acha o atendimento sem devolver o caso. Quem decide se viajam é
 # `ouvidoria_blocos.paciente_do_caso`, que segura os dois no sigilo reforçado.
+#
+# `tipo_manifestacao` entrou pelo aviso de elogio entregue (issue #1618): é ele
+# que decide se o encerramento diz "no que deu" ou "seu elogio foi entregue". É
+# a classificação do caso, e não dado de quem manifestou.
 _CAMPOS_DO_EMAIL = (
     "id, protocolo, setor, categoria, resumo, relato_integral, extrato_para_o_setor, "
     "gravidade, prazo_area_em, sigilo_reforcado, anonimo, manifestante_nome, status, "
-    "paciente_nome, paciente_referencia"
+    "paciente_nome, paciente_referencia, tipo_manifestacao"
 )
 
 # O que o setor lê quando, por algum caminho, o caso chegou ao email sem
@@ -251,6 +263,13 @@ _SEM_EXTRATO = SEM_EXTRATO
 # prosa da recusa vizinha ("A área respondeu antes do envio"): diz o que
 # aconteceu e o que deixou de sair, para a Ouvidoria ler no caso e decidir.
 LINK_FORA_DA_AREA = "O destinatário não responde mais pelo setor do caso; link não enviado"
+
+# O motivo no registro quando o email do elogio não sai porque nenhuma ciência
+# do caso espera o clique (issue #1618): o setor já confirmou, o caso foi
+# mandado de novo, ou a ciência não bate mais com o setor, o tipo ou o estado.
+ELOGIO_JA_CONFIRMADO = (
+    "O elogio já foi confirmado pelo setor, mandado de novo ou o caso mudou de setor ou de tipo; email não enviado"
+)
 
 # Paleta da estratificação visual (RN-34). Os hex são os da spec da Diretoria,
 # como default trocável: a paleta da casa ainda aguarda confirmação do DP, e
@@ -988,6 +1007,35 @@ def montar_redirecionamento_area(destinatario_nome: str, detalhe: str | None) ->
     return (f"Ouvidoria {protocolo}: a demanda foi encaminhada a outra area", html, texto)
 
 
+def montar_ciencia_elogio(manifestacao: dict, destinatario_nome: str, link: str) -> tuple[str, str, str]:
+    """Assunto, HTML e texto do elogio enviado ao setor (issue #1618, ADR 0088).
+
+    O texto do elogio que viaja é a nota curta do ouvidor, e só ela: o relato
+    de quem elogiou pode trazer dado clínico, e a nota é o texto que o ouvidor
+    escreveu para sair. Nem prazo, nem gravidade: o elogio não cobra nada."""
+    from app.services.email_constants import get_logo_data_uri
+
+    protocolo = manifestacao.get("protocolo") or ""
+    setor = manifestacao.get("setor") or ""
+    nota = (manifestacao.get("extrato_para_o_setor") or "").strip() or _SEM_EXTRATO
+    html = jinja_env.get_template("email_ouvidoria_ciencia_elogio.html").render(
+        destinatario_nome=destinatario_nome,
+        protocolo=protocolo,
+        setor=setor,
+        nota=nota,
+        link=link,
+        logo_base64=get_logo_data_uri(),
+    )
+    texto = (
+        f"Ola {destinatario_nome},\n\n"
+        f"A Ouvidoria recebeu um elogio para a equipe do setor {setor} (manifestacao {protocolo}).\n\n"
+        f"{nota}\n\n"
+        "Nao e preciso responder. Confirme que o elogio chegou a equipe: "
+        f"{link}\n"
+    )
+    return (f"Ouvidoria {protocolo}: um elogio para o setor {setor}", html, texto)
+
+
 def montar_acuse_recebimento(protocolo: str) -> tuple[str, str, str]:
     """Assunto, HTML e texto do acuse ao manifestante (issue #493, ADR 0042).
 
@@ -1081,6 +1129,34 @@ def montar_encerramento_manifestante(protocolo: str, desfecho: str) -> tuple[str
         f"procure a Ouvidoria por {voltar} informando o numero do protocolo acima.\n"
     )
     return (f"Ouvidoria {protocolo}: sua manifestacao foi concluida", html, texto)
+
+
+ELOGIO_ENTREGUE = "Seu elogio foi entregue à equipe."
+
+
+def montar_elogio_entregue(protocolo: str) -> tuple[str, str, str]:
+    """O aviso de encerramento quando o caso é um elogio (issue #1618, ADR
+    0088, decisão 2).
+
+    O elogio não foi apurado: ele foi entregue. Por isso a frase é fixa e o
+    desfecho que o ouvidor escreveu não entra. A assinatura é a do aviso de
+    encerramento, sem o desfecho, pela mesma razão de lá: só o protocolo, e
+    nenhum texto vindo de quem manifestou."""
+    from app.services.email_constants import get_logo_data_uri
+
+    protocolo = protocolo or ""
+    html = jinja_env.get_template("email_ouvidoria_elogio_entregue.html").render(
+        protocolo=protocolo,
+        mensagem=ELOGIO_ENTREGUE,
+        logo_base64=get_logo_data_uri(),
+    )
+    texto = (
+        "Ola!\n\n"
+        "Seu elogio foi entregue a equipe.\n\n"
+        f"Protocolo: {protocolo}\n\n"
+        "Obrigado por reconhecer o trabalho de quem cuida de voce no Hospital Sao Matheus.\n"
+    )
+    return (f"Ouvidoria {protocolo}: seu elogio foi entregue", html, texto)
 
 
 def registrar(
@@ -1395,6 +1471,11 @@ def _montar(
         # o reenvio manual de um aviso antigo passaria a mandar o desfecho da
         # tramitação seguinte, ou um email mudo. A linha guarda o que foi dito
         # naquele ato, como a trilha imutável guarda (RN-64).
+        #
+        # O elogio fecha com a frase dele, e não com o que foi apurado (issue
+        # #1618): quem elogiou quer saber que a equipe recebeu.
+        if manifestacao.get("tipo_manifestacao") == "elogio":
+            return montar_elogio_entregue(manifestacao.get("protocolo") or "")
         return montar_encerramento_manifestante(manifestacao.get("protocolo") or "", notificacao.get("detalhe") or "")
     if notificacao["gatilho"] == GATILHO_REDIRECIONAMENTO_AREA:
         # Nem a manifestação, nem `agora`, nem os feriados: o aviso à área
@@ -1405,6 +1486,8 @@ def _montar(
         # Sem prazo e sem calendário: o vencimento da área foi zerado pela
         # própria devolução, e o que este aviso pede é despacho, não resposta.
         return montar_devolvido_a_ouvidoria(manifestacao, notificacao["destinatario_nome"], notificacao.get("detalhe"))
+    if notificacao["gatilho"] == GATILHO_CIENCIA_ELOGIO:
+        return montar_ciencia_elogio(manifestacao, notificacao["destinatario_nome"], link or "")
     if notificacao["gatilho"] == GATILHO_PRAZO_ROMPIDO:
         return montar_prazo_rompido(manifestacao, notificacao["destinatario_nome"], agora, feriados, link=link)
     if notificacao["gatilho"] == GATILHO_NOVA_DEMANDA:
@@ -1660,6 +1743,27 @@ def despachar(supabase, notificacao: dict, agora: dt.datetime, feriados: frozens
             _marcar(supabase, notificacao["id"], {"status": FALHA, "ultimo_erro": LINK_FORA_DA_AREA})
             return False
         link = _link_tokenizado(supabase, notificacao) if notificacao["gatilho"] in GATILHOS_COM_PORTAL else None
+        if notificacao["gatilho"] == GATILHO_CIENCIA_ELOGIO:
+            # O link do elogio nasce aqui, como o do portal, e só enquanto a
+            # ciência espera o clique: o elogio já confirmado (ou mandado de
+            # novo a outro setor) não gera email nenhum, nem no reenvio.
+            from app.services import ouvidoria_acionamentos
+
+            #
+            # A ciência tem de bater com o caso de agora: setor, tipo e estado.
+            # Uma ciência que sobrou de um envio anterior não pode levar ao
+            # setor antigo o extrato escrito para outro, nem chamar de elogio o
+            # caso que virou reclamação.
+            ciencia = ouvidoria_acionamentos.ciencia_pendente(supabase, notificacao["manifestacao_id"])
+            if (
+                ciencia is None
+                or ciencia.get("setor") != manifestacao.get("setor")
+                or manifestacao.get("tipo_manifestacao") != ouvidoria_acionamentos.MOTIVO_ELOGIO
+                or manifestacao.get("status") != "aguardando_area"
+            ):
+                _marcar(supabase, notificacao["id"], {"status": FALHA, "ultimo_erro": ELOGIO_JA_CONFIRMADO})
+                return False
+            link = ouvidoria_acionamentos.emitir_link(supabase, ciencia)
         assunto, html, texto = _montar(supabase, notificacao, manifestacao, agora, feriados, link=link)
         # Endereço de gente de fora não entra no log da aplicação: ele sairia ao
         # lado do assunto, que carrega o protocolo, e o par diria a quem lê o log

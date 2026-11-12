@@ -25,6 +25,7 @@ import {
   diaNoHospital,
   EM_ANDAMENTO,
   hojeNoHospital,
+  naoVence,
   type StatusManifestacao,
 } from "./prazo";
 
@@ -56,6 +57,8 @@ export interface CasoDoPainel {
   prazo_estourado: boolean;
   /** A marca de sigilo do caso (RN-40). Denúncia é sigilosa por natureza. */
   sigilo_reforcado: boolean;
+  /** O tipo do caso: o elogio não vence e fica fora dos vencidos (issue #1618). */
+  tipo_manifestacao?: string | null;
 }
 
 /**
@@ -140,6 +143,9 @@ export function classificarJanela(caso: CasoDoPainel, hoje: string): JanelaDeVen
   // o barato.
   const conhecido = ORDEM_DA_FILA.includes(caso.status);
   if (conhecido && !EM_ANDAMENTO.has(caso.status)) return "parado";
+  // O elogio não tem prazo de resposta (issue #1618, ADR 0088): sem esta linha
+  // o prazo de referência da fundação o punha em "Já venceu".
+  if (naoVence(caso)) return "sem_prazo";
   if (caso.prazo_area_em && caso.prazo_estourado) return "vencido";
   const dia = diaDaCobranca(caso);
   if (!dia) return "sem_prazo";

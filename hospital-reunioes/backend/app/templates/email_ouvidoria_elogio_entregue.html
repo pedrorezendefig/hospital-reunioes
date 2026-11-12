@@ -1,0 +1,36 @@
+{% extends "email_base.html" %}
+
+{# O aviso de encerramento do elogio, para quem elogiou (issue #1618, ADR 0088,
+   decisao 2). Mesmo desenho do aviso de encerramento: so o protocolo e uma
+   frase fixa, sem nome de quem manifestou e sem texto vindo de fora. #}
+
+{% block header_subtitle %}Ouvidoria{% endblock %}
+
+{% block title %}Ouvidoria {{ protocolo }}: seu elogio foi entregue - Hospital São Matheus{% endblock %}
+
+{% block body %}
+  <p style="color:#475569;font-size:15px;margin:0 0 16px;">
+    Olá!
+  </p>
+
+  <p style="color:#1e293b;font-size:16px;font-weight:600;line-height:1.6;margin:0 0 20px;">
+    {{ mensagem }}
+  </p>
+
+  <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:20px;">
+    <tr>
+      <td style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:16px 24px;">
+        <p style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:#94a3b8;margin:0 0 4px;">
+          Protocolo
+        </p>
+        <p style="font-size:20px;font-weight:700;color:#1e293b;line-height:1.3;margin:0;">
+          {{ protocolo }}
+        </p>
+      </td>
+    </tr>
+  </table>
+
+  <p style="color:#475569;font-size:14px;line-height:1.6;margin:0;">
+    Obrigado por reconhecer o trabalho de quem cuida de você no Hospital São Matheus.
+  </p>
+{% endblock %}

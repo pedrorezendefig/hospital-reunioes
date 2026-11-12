@@ -198,6 +198,21 @@ describe("classificarPrazoDaManifestacao (motor de prazos, issue #322)", () => {
 
     expect(classificarPrazoDaManifestacao(encerrada, hoje)).toBe("respondido");
   });
+
+  // O elogio vai ao setor só para ele confirmar que recebeu (issue #1618, ADR
+  // 0088): sem prazo da área, e o prazo de referência da fundação não pode
+  // acender o vermelho dele na fila.
+  it("o elogio com o prazo de referência já passado não fica estourado na fila", () => {
+    const elogio = { ...base, tipo_manifestacao: "elogio", prazo_resposta: "2026-08-20" };
+
+    expect(classificarPrazoDaManifestacao(elogio, hoje)).toBe("normal");
+  });
+
+  it("a reclamação na mesma situação continua estourada", () => {
+    const reclamacao = { ...base, tipo_manifestacao: "reclamacao", prazo_resposta: "2026-08-20" };
+
+    expect(classificarPrazoDaManifestacao(reclamacao, hoje)).toBe("estourado");
+  });
 });
 
 describe("o dia civil no fuso do hospital (issue #488)", () => {

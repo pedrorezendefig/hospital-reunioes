@@ -31,12 +31,14 @@ O prazo sai da gravidade e corre em horário útil: de segunda a sexta, das 8h �
 
 Se o caso não é da área, ela devolve para a ouvidoria com o motivo escrito. A área não escolhe para onde vai: quem encaminha é o ouvidor, e a área certa recebe prazo cheio. O ouvidor também pode redirecionar por conta própria, sem esperar a devolução.
 
+O elogio segue outro caminho. Ao validar um elogio, o ouvidor confere o setor e escreve uma nota curta, e o setor recebe o elogio só para confirmar que ele chegou: não há prazo de resposta, a área não é cobrada e o caso não entra nos vencidos da fila nem do Painel. O e-mail traz a nota do ouvidor e o botão Elogio recebido, que abre sem senha e vale uma vez. Se ninguém clicar em 5 dias úteis, o e-mail sai de novo, uma única vez. Quando o responsável clica, o caso volta ao ouvidor como respondido, com a marca Pronto para encerrar.
+
 ## O que o manifestante ouve do hospital
 
 São dois avisos, os dois por e-mail, e os dois só saem quando dá para reconhecer um e-mail no contato que a pessoa deixou:
 
 - **Na abertura**, o acuse de recebimento: diz que a manifestação chegou e repete o protocolo. Sai na hora, a qualquer dia e a qualquer hora, sem esperar o expediente.
-- **No encerramento**, o desfecho em linguagem simples, com o protocolo e o caminho para procurar a Ouvidoria de novo se o problema continuar.
+- **No encerramento**, o desfecho em linguagem simples, com o protocolo e o caminho para procurar a Ouvidoria de novo se o problema continuar. No elogio, o aviso diz só "Seu elogio foi entregue à equipe.", com o protocolo.
 
 Caso anônimo, ou caso cujo contato não traz um e-mail utilizável, é encerrado **sem aviso nenhum**, e fica marcado como tal: não é o hospital que deixou de avisar, é que não havia para onde avisar. Como o canal aberto produz muito caso anônimo, boa parte dos manifestantes não recebe retorno por e-mail em momento nenhum.
 
