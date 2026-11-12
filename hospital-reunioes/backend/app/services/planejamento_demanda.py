@@ -98,10 +98,13 @@ def resposta_do_diretor(
 ) -> tuple[dict | None, str | None]:
     """A fala do diretor que entra na conversa, ou a frase da recusa.
 
-    Sem pergunta em aberto (a conversa nao comecou), o pedido e "comece", e nao
-    leva resposta. Com pergunta em aberto, leva exatamente uma: a letra da
-    opcao (o texto vem da propria pergunta, que e o que o modelo leu) ou o
-    texto livre.
+    Sem pergunta em aberto (a conversa nao comecou, ou a pergunta nao veio
+    porque a IA falhou), o pedido vazio e "comece", e o texto livre entra como
+    fala do diretor e pede a pergunta do mesmo jeito (issue #1582): quem
+    reenvia depois do aviso de erro segue a conversa, em vez de ficar preso
+    numa recusa. A letra de opcao, sem pergunta, nao tem o que escolher. Com
+    pergunta em aberto, leva exatamente uma: a letra da opcao (o texto vem da
+    propria pergunta, que e o que o modelo leu) ou o texto livre.
 
     `depois_do_fim` e a conversa encerrada ou resumida (ADR 0079, decisao 3):
     nao ha opcao para clicar, e so o texto livre reabre as perguntas.
@@ -113,7 +116,9 @@ def resposta_do_diretor(
         return {"tipo": "resposta", "opcao": None, "texto": texto}, None
     pergunta = pergunta_em_aberto(mensagens)
     if pergunta is None:
-        return (None, MOTIVO_RESPOSTA_SEM_PERGUNTA) if (opcao or texto) else (None, None)
+        if opcao:
+            return None, MOTIVO_RESPOSTA_SEM_PERGUNTA
+        return ({"tipo": "resposta", "opcao": None, "texto": texto}, None) if texto else (None, None)
     if opcao and texto:
         return None, MOTIVO_DUAS_RESPOSTAS
     if opcao:
