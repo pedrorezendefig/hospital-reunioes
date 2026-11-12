@@ -37,6 +37,10 @@ class DemandaResponse(BaseModel):
     """
 
     id: str
+    # O Numero da Demanda (issue #1585): o "Demanda 42" da tela, gerado pelo
+    # banco no insert, para todo mundo que ve a Demanda. Nao e o numero da
+    # issue, que continua so do Desenvolvedor (`issue_numero`).
+    numero: int | None = None
     titulo: str
     criado_em: str | None = None
     # `registrada` (o default do banco) e a conversa sem card.
@@ -413,6 +417,8 @@ class ChatResponse(BaseModel):
     """
 
     demanda_id: str
+    # O Numero da Demanda (issue #1585), na leitura da conversa guardada.
+    numero: int | None = None
     estado: str | None = None
     mensagens: list[FalaDoChat] = []
     resumo: ResumoDoBug | None = None
