@@ -2,6 +2,57 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-11-12T20:28:57-03:00",
+      "sha": "2d9936402d40adbc142b7b993be6e2c03f088a6f",
+      "app_version": "0.261.0",
+      "subject": "Onda hsm-tec-onda2: Número da Demanda no topo do card e na lista; A URL acompanha o card aberto e o link sem acesso avisa; PRD do diretor nasce com o bloco Para o desenvolvedor",
+      "raw_subject": "chore(deploy): registro da onda hsm-tec-onda2 (#1647 #1649 #1646)",
+      "scope": [
+        "backend",
+        "frontend"
+      ],
+      "prds": [
+        1584,
+        1632
+      ],
+      "result": "healthy",
+      "duration_seconds": 648,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        },
+        {
+          "service": "frontend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [
+        "134_tecnologia_numero_da_demanda.sql"
+      ],
+      "rollback_target_sha": null,
+      "notes": "onda-enxuta hsm-tec-onda2: PR #1647 (issue #1585), PR #1649 (issue #1586), PR #1646 (issue #1633), mergeados PR a PR. Merge pela API do GitHub, um build. Registro pela Action pos-merge depois do health.",
+      "etapas": {
+        "merge_s": 9,
+        "build_s": {
+          "backend": 27,
+          "frontend": 149
+        },
+        "health_s": 0
+      },
+      "responsavel": "pedrorezendefig"
+    },
+    {
       "at": "2026-11-12T16:18:10-03:00",
       "sha": "9e48331301a481f291996ccae735387df075d5cd",
       "app_version": "0.260.0",
