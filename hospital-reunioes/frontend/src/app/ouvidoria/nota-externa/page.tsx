@@ -3,9 +3,10 @@
 /**
  * Nota externa do hospital: Google e Reclame Aqui (issue #347, PRD #319).
  *
- * A tela onde o ouvidor digita o que leu nas duas páginas de fora. O sistema
- * não calcula esses números, e a integração automática é fase seguinte da spec:
- * até lá, esta é a única porta por onde eles entram no relatório da Diretoria.
+ * A nota do Google é lida sozinha toda semana pela Places API (issue #1619,
+ * ADR 0089) e aparece aqui só para leitura, com o total de avaliações. O
+ * Reclame Aqui o ouvidor lê na página e digita aqui: é a única porta por onde
+ * ele entra no relatório da Diretoria.
  *
  * Cada gravação é um registro NOVO, e não uma edição: a tabela é um diário, e
  * o relatório de cada quinzena congela a nota que valia naquele dia. Por isso a
@@ -24,6 +25,7 @@ import { useCurrentParticipante } from "@/hooks/useCurrentParticipante";
 import {
   ESCALA,
   FONTES,
+  FONTES_DIGITADAS,
   type FonteExterna,
   ROTULO_FONTE,
   formatarNota,
@@ -37,6 +39,8 @@ interface NotaRegistrada {
   escala: number;
   registrada_em: string | null;
   registrada_por_nome: string;
+  origem?: "manual" | "automatica" | null;
+  total_avaliacoes?: number | null;
 }
 
 function formatarDia(iso: string | null): string {
@@ -191,9 +195,10 @@ export default function NotaExternaPage() {
 
       <h1 className="text-2xl font-bold text-slate-900">Nota externa do hospital</h1>
       <p className="text-slate-500 text-sm mt-0.5 mb-6">
-        A nota que o hospital tem no Google e no Reclame Aqui, lida nas duas páginas e digitada
-        aqui. O relatório da Diretoria mostra a última nota registrada de cada fonte. As escalas
-        são diferentes: o Google vai de 0 a 5 e o Reclame Aqui de 0 a 10.
+        A nota que o hospital tem no Google e no Reclame Aqui. A do Google é lida sozinha toda
+        semana; a do Reclame Aqui é lida na página e digitada aqui. O relatório da Diretoria
+        mostra a última nota registrada de cada fonte. As escalas são diferentes: o Google vai de
+        0 a 5 e o Reclame Aqui de 0 a 10.
       </p>
 
       {erro && (
@@ -219,42 +224,55 @@ export default function NotaExternaPage() {
               <div className="text-2xl font-bold text-slate-900 mt-2">
                 {formatarNota(atual?.nota, ESCALA[fonte])}
               </div>
+              {atual?.total_avaliacoes != null && (
+                <div className="text-sm text-slate-500 mt-0.5">
+                  {atual.total_avaliacoes.toLocaleString("pt-BR")} avaliações
+                </div>
+              )}
               <div className="text-xs text-slate-400 mt-0.5 min-h-[1rem]">
-                {atual?.registrada_em
-                  ? `Registrada em ${formatarDia(atual.registrada_em)}${
-                      atual.registrada_por_nome ? ` por ${atual.registrada_por_nome}` : ""
-                    }`
-                  : "Nenhum registro até agora."}
+                {!atual?.registrada_em
+                  ? "Nenhum registro até agora."
+                  : atual.origem === "automatica"
+                    ? `Lida sozinha no Google em ${formatarDia(atual.registrada_em)}.`
+                    : `Registrada em ${formatarDia(atual.registrada_em)}${
+                        atual.registrada_por_nome ? ` por ${atual.registrada_por_nome}` : ""
+                      }`}
               </div>
 
-              <div className="flex items-center gap-2 mt-4">
-                <input
-                  type="text"
-                  inputMode="decimal"
-                  aria-label={`Nova nota do ${ROTULO_FONTE[fonte]}`}
-                  placeholder={`0 a ${ESCALA[fonte]}`}
-                  value={digitado[fonte] ?? ""}
-                  onChange={(e) =>
-                    setDigitado((atualDigitado) => ({
-                      ...atualDigitado,
-                      [fonte]: e.target.value,
-                    }))
-                  }
-                  className="w-28 px-3 py-2 rounded-lg border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
-                />
-                <button
-                  onClick={() => registrar(fonte)}
-                  disabled={salvando === fonte}
-                  className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-semibold uppercase tracking-wide bg-primary text-white hover:bg-primary/90 disabled:opacity-50 transition-colors"
-                >
-                  {salvando === fonte ? (
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                  ) : salvo === fonte ? (
-                    <Check className="w-4 h-4" />
-                  ) : null}
-                  Registrar
-                </button>
-              </div>
+              {!FONTES_DIGITADAS.includes(fonte) ? (
+                <p className="text-xs text-slate-500 mt-4">
+                  A nota do Google é buscada sozinha uma vez por semana e não se digita.
+                </p>
+              ) : (
+                <div className="flex items-center gap-2 mt-4">
+                  <input
+                    type="text"
+                    inputMode="decimal"
+                    aria-label={`Nova nota do ${ROTULO_FONTE[fonte]}`}
+                    placeholder={`0 a ${ESCALA[fonte]}`}
+                    value={digitado[fonte] ?? ""}
+                    onChange={(e) =>
+                      setDigitado((atualDigitado) => ({
+                        ...atualDigitado,
+                        [fonte]: e.target.value,
+                      }))
+                    }
+                    className="w-28 px-3 py-2 rounded-lg border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
+                  />
+                  <button
+                    onClick={() => registrar(fonte)}
+                    disabled={salvando === fonte}
+                    className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-semibold uppercase tracking-wide bg-primary text-white hover:bg-primary/90 disabled:opacity-50 transition-colors"
+                  >
+                    {salvando === fonte ? (
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                    ) : salvo === fonte ? (
+                      <Check className="w-4 h-4" />
+                    ) : null}
+                    Registrar
+                  </button>
+                </div>
+              )}
             </div>
           );
         })}

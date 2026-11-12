@@ -1,4 +1,5 @@
 import { LenteDoObjetivo } from "@/components/central-de-comando/LenteDoObjetivo";
+import { NotaNoGoogle, OBJETIVO_NOTA_NO_GOOGLE } from "@/components/central-de-comando/NotaNoGoogle";
 import { lerPeriodo } from "@/lib/central-de-comando/periodo";
 
 /**
@@ -7,6 +8,9 @@ import { lerPeriodo } from "@/lib/central-de-comando/periodo";
  * (issue #847): aqui só o que não é período nenhum vira o padrão de 28. O
  * período que a lente não tem (90 dias no Instagram) cai no padrão dentro da
  * `LenteDoObjetivo`, também sem tela de erro.
+ *
+ * A nota no Google tem lente própria (issue #1619): os números vêm do diário
+ * da Ouvidoria, uma vez por semana, sem período nem cache.
  */
 export default async function LenteDoObjetivoPage({
   params,
@@ -16,6 +20,7 @@ export default async function LenteDoObjetivoPage({
   searchParams: Promise<{ periodo?: string | string[] }>;
 }) {
   const { identificador } = await params;
+  if (identificador === OBJETIVO_NOTA_NO_GOOGLE) return <NotaNoGoogle />;
   const { periodo } = await searchParams;
   return <LenteDoObjetivo identificador={identificador} periodo={lerPeriodo(periodo)} />;
 }

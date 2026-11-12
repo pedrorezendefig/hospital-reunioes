@@ -1,8 +1,8 @@
 /**
- * Nota externa manual: Google e Reclame Aqui (issue #347, PRD #319).
+ * Nota externa: Google e Reclame Aqui (issues #347 e #1619).
  *
- * O retrato que o hospital tem fora dele. Ninguém aqui calcula a estrela do
- * Google: quem sabe é o ouvidor, que abre as duas páginas e digita o que leu.
+ * O retrato que o hospital tem fora dele. A nota do Google é lida sozinha toda
+ * semana (ADR 0089); a do Reclame Aqui o ouvidor lê na página e digita.
  *
  * As duas escalas NÃO são a mesma, e é isso que este módulo existe para
  * proteger. O Google vai de 0 a 5, o Reclame Aqui de 0 a 10. Uma tela que
@@ -28,6 +28,12 @@ export const ROTULO_FONTE: Record<FonteExterna, string> = {
 };
 
 export const FONTES: FonteExterna[] = ["google", "reclame_aqui"];
+
+/**
+ * As fontes que o ouvidor ainda digita. O Google é lido sozinho toda semana
+ * pela Places API (issue #1619, ADR 0089), e o backend recusa a digitação dele.
+ */
+export const FONTES_DIGITADAS: readonly FonteExterna[] = ["reclame_aqui"];
 
 const PERFIS_DA_OUVIDORIA = ["ouvidor", "diretoria_executiva"];
 
