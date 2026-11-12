@@ -350,26 +350,88 @@ def _filhos_lendo_documento() -> list[str]:
     return [linha for linha in saida.stdout.decode().split() if linha]
 
 
+def _tempdir_so_deste_teste(monkeypatch, tmp_path) -> str:
+    """Aponta o `tempfile` deste processo para uma pasta que só este teste vê.
+
+    O tempdir da máquina é dividido: o worker vizinho do `-n auto` e os outros
+    jobs do Mac do runner (todos com o mesmo usuário) criam e apagam as pastas
+    `extracao-*` deles ali, e comparar o tempdir antes e depois acusava a pasta
+    dos outros. O mtime vai para zero para provar, depois, que o extrator
+    passou por aqui: criar e apagar a pasta dele é o que move o mtime.
+    """
+    import tempfile
+
+    pasta = tmp_path / "tempdir"
+    pasta.mkdir()
+    monkeypatch.setattr(tempfile, "tempdir", str(pasta))
+    os.utime(pasta, (0, 0))
+    return str(pasta)
+
+
+def _confere_que_passou_e_nao_ficou(tempdir: str) -> None:
+    assert os.stat(tempdir).st_mtime > 0, "o extrator nao passou pelo tempdir: o teste olha o lugar errado"
+    assert os.listdir(tempdir) == [], f"sobrou no disco: {os.listdir(tempdir)}"
+
+
+def _memoria_do_worker(pid: int) -> int | None:
+    """Memória do processo `pid`, em bytes, que só sobe quando ele aloca.
+
+    No Linux é o RSS de `/proc`. No macOS o RSS do `ps` não serve: o Mac do
+    runner divide a máquina com outros jobs (o `-n auto` do backend roda junto),
+    e sob pressão o compressor tira páginas ociosas do worker do RSS. A medida
+    inicial sai baixa, a rota toca as páginas de volta e o RSS "cresce" 13 a 33
+    MB que sempre foram do worker. Medido na mesma rodada: RSS +4,6 MB, footprint
+    +1,2 MB, com o RSS inicial abaixo do footprint. O `phys_footprint` conta a
+    página comprimida, então não se mexe com a compressão, e cresce igual ao RSS
+    quando o worker aloca de verdade.
+    """
+    if sys.platform != "darwin":
+        return extrator._rss_em_bytes(pid)
+    import ctypes
+
+    class _RusageInfoV0(ctypes.Structure):
+        _fields_ = [("ri_uuid", ctypes.c_uint8 * 16)] + [
+            (nome, ctypes.c_uint64)
+            for nome in (
+                "ri_user_time",
+                "ri_system_time",
+                "ri_pkg_idle_wkups",
+                "ri_interrupt_wkups",
+                "ri_pageins",
+                "ri_wired_size",
+                "ri_resident_size",
+                "ri_phys_footprint",
+                "ri_proc_start_abstime",
+                "ri_proc_exit_abstime",
+            )
+        ]
+
+    info = _RusageInfoV0()
+    if ctypes.CDLL("/usr/lib/libproc.dylib").proc_pid_rusage(pid, 0, ctypes.byref(info)) != 0:
+        return None
+    return info.ri_phys_footprint
+
+
 def _pico_do_worker_durante(chamada):
-    """Roda `chamada` amostrando o RSS deste processo, e devolve (resultado, pico).
+    """Roda `chamada` amostrando a memória deste processo (`_memoria_do_worker`), e devolve (resultado, pico).
 
     O pico é medido, não inferido de `ru_maxrss`. A `ru_maxrss` é **marca
     d'água**: ela nunca desce, então `depois - antes` tende a zero conforme a
     sessão avança, e a asserção fica mais frouxa quanto mais teste rodou antes
     dela. Ordem de teste virando rigor de teste é vácuo: o mutante que deixa 30
     MB atravessarem sobrevive só porque um teste anterior já tinha subido a
-    marca. Aqui a amostragem é do RSS de agora, e o número é o mesmo em qualquer
+    marca. Aqui a amostragem é da memória de agora, e o número é o mesmo em qualquer
     ordem.
     """
     de_onde = os.getpid()
-    inicial = extrator._rss_em_bytes(de_onde) or 0
+    inicial = _memoria_do_worker(de_onde) or 0
     pico = inicial
     parar = threading.Event()
 
     def vigiar() -> None:
         nonlocal pico
         while not parar.is_set():
-            atual = extrator._rss_em_bytes(de_onde)
+            atual = _memoria_do_worker(de_onde)
             if atual is not None and atual > pico:
                 pico = atual
             parar.wait(0.05)
@@ -1089,12 +1151,7 @@ class TestAsGuardasDoIsolamento:
         assert extrator.FORMATOS_DE_TEXTO_PURO == {".txt", ".md", ".csv"}
         assert extrator.FORMATOS_DE_TEXTO_PURO < extrator.SUPPORTED_EXTENSIONS | extrator.FORMATOS_DE_PLANILHA
 
-    # Rodar sozinho (issue #971): este teste e o de baixo comparam as pastas
-    # `extracao-*` do tempdir da MÁQUINA antes e depois de uma extração. Em
-    # paralelo, outro worker extraindo ao mesmo tempo cria a pasta dele ali, e a
-    # comparação acusa uma sobra que não é deste teste.
-    @pytest.mark.rodar_sozinho
-    def test_o_temporario_do_filho_nao_fica_para_tras(self, client, docx_honesto):
+    def test_o_temporario_do_filho_nao_fica_para_tras(self, client, monkeypatch, tmp_path, docx_honesto):
         """O conteúdo do upload passa pelo disco para chegar no filho. Passa, não fica.
 
         O glob olha `extracao-*`, que é a PASTA de hoje. A versão anterior deste
@@ -1106,35 +1163,24 @@ class TestAsGuardasDoIsolamento:
         A pergunta que faltou fazer, e que vale para todo teste desta fatia: o
         CAMINHO que ele observa ainda é o caminho que o código usa.
         """
-        import glob
-        import tempfile
+        tempdir = _tempdir_so_deste_teste(monkeypatch, tmp_path)
 
-        def _pastas_de_extracao() -> set[str]:
-            return set(glob.glob(os.path.join(tempfile.gettempdir(), "extracao-*")))
-
-        antes = _pastas_de_extracao()
         r = _enviar(client, "ata-longa.docx", docx_honesto)
-        depois = _pastas_de_extracao()
 
         assert r.status_code == 200
-        assert depois == antes, f"sobrou no disco: {depois - antes}"
+        _confere_que_passou_e_nao_ficou(tempdir)
 
-    @pytest.mark.rodar_sozinho
-    def test_o_temporario_some_tambem_quando_o_filho_e_morto(self, client, monkeypatch, pdf_honesto):
+    def test_o_temporario_some_tambem_quando_o_filho_e_morto(self, client, monkeypatch, tmp_path, pdf_honesto):
         """O caminho de limpeza que importa é o que roda quando algo dá errado.
 
         Passar e limpar é o caso fácil. Morto no meio de uma escrita, com o
         arquivo aberto, é onde a pasta ficaria para trás.
         """
-        import glob
-        import tempfile
-
         monkeypatch.setattr(extrator, "PRAZO_DA_EXTRACAO", 1.0)
-        padrao = os.path.join(tempfile.gettempdir(), "extracao-*")
-        antes = set(glob.glob(padrao))
+        tempdir = _tempdir_so_deste_teste(monkeypatch, tmp_path)
 
         r = _enviar(client, "ata-longa.pdf", pdf_honesto)
 
         assert r.status_code == 422
         assert r.json()["detail"] == extrator.MENSAGEM_GRANDE_DEMAIS
-        assert set(glob.glob(padrao)) == antes, "a pasta ficou depois da morte por prazo"
+        _confere_que_passou_e_nao_ficou(tempdir)
