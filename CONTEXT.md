@@ -128,7 +128,7 @@ O número que identifica a [Manifestação] e é informado a quem manifestou, fo
 _Evitar_: compor ou estimar número fora da sequence; reiniciar a numeração; prefixo `OUV-` como dado (pode ser exibição).
 
 **Canal aberto**:
-A entrada da [Manifestação] sem login: o **formulário público** (`/manifestacao`) e o **QR setorial**. O manifestante escreve o relato, se identifica ou não, e recebe o [Protocolo de ouvidoria] na tela; o caso entra em classificação, **sem área definida**, porque quem classifica é o ouvidor. A URL impressa no cartaz é `https://<app>/ouvidoria/qr?p=<codigo>` (rewrite do Next para a rota do backend), onde o código resolve um [Ponto de escuta] cadastrado; o formato antigo `?setor=X&ponto=Y` foi aposentado pelo ADR 0036. É o **servidor** que decide o destino (hoje o formulário; amanhã a conversa da Ana no WhatsApp oficial), para o cartaz nunca precisar ser reimpresso. O setor do cartaz é **origem, não área responsável**: fica em `canal_setor`, junto do `canal_ponto`, e os dois só são gravados quando o código resolve um Ponto de escuta ativo; a área continua sendo decisão do ouvidor. Canal sem credencial tem rate limit por manifestante (primeiro salto do `X-Forwarded-For`, porque o Next proxia a chamada), honeypot e nenhum campo que decida classificação, estado ou sigilo. O seletor das quatro naturezas do formulário (elogio primeiro, opcional, RN-88/ADR 0040) é **sugestão** gravada à parte em `natureza_informada`: não classifica, não decide nada. O ouvidor a lê no Dossiê, num bloco que nomeia a origem ("O manifestante informou: Elogio") e diz que a classificação segue sendo dele; caso sem escolha não desenha bloco nenhum. Desde 09/09/2026 o formulário pergunta, logo depois do relato e com resposta obrigatória de um toque, **"Este relato é sobre quem?"**: "Sobre mim" grava o vínculo `paciente`, "Sobre outra pessoa" grava `acompanhante` e abre os dois campos do [Paciente do caso]; esses campos continuam visíveis com "anônimo" marcado. Colaborador e terceiro ficam para os canais em que alguém conversa com a pessoa.
+A entrada da [Manifestação] sem login: o **formulário público** (`/manifestacao`) e o **QR setorial**. O manifestante escreve o relato, se identifica ou não, e recebe o [Protocolo de ouvidoria] na tela; o caso entra em classificação, **sem área definida**, porque quem classifica é o ouvidor. A URL impressa no cartaz é `https://<app>/ouvidoria/qr?p=<codigo>` (rewrite do Next para a rota do backend), onde o código resolve um [Ponto de escuta] cadastrado; o formato antigo `?setor=X&ponto=Y` foi aposentado pelo ADR 0036. É o **servidor** que decide o destino (hoje o formulário; amanhã a conversa da Ana no WhatsApp oficial), para o cartaz nunca precisar ser reimpresso. O setor do cartaz é **origem, não área responsável**: fica em `canal_setor`, junto do `canal_ponto`, e os dois só são gravados quando o código resolve um Ponto de escuta ativo; a área continua sendo decisão do ouvidor. Canal sem credencial tem rate limit por manifestante (primeiro salto do `X-Forwarded-For`, porque o Next proxia a chamada), honeypot e nenhum campo que decida classificação, estado ou sigilo. O seletor das quatro naturezas do formulário (elogio primeiro, opcional, RN-88/ADR 0040) é **sugestão** gravada à parte em `natureza_informada`: não classifica, não decide nada. O ouvidor a lê no Dossiê, num bloco que nomeia a origem ("O manifestante informou: Elogio") e diz que a classificação segue sendo dele; caso sem escolha não desenha bloco nenhum. Desde 09/09/2026 o formulário pergunta, logo depois do relato e com resposta obrigatória de um toque, **"Este relato é sobre quem?"**: "Sobre mim" grava o vínculo `paciente`, "Sobre outra pessoa" grava `acompanhante` e abre os dois campos do [Paciente do caso]; esses campos continuam visíveis com "anônimo" marcado. Colaborador e terceiro ficam para os canais em que alguém conversa com a pessoa. Desde a ADR 0086 (11/11/2026) o cartaz imprime `/a/{código}` e abre o [Funil do QR], o formulário vira a [Manifestação guiada], e as URLs antigas redirecionam.
 _Evitar_: deixar o manifestante escolher área, tipo, gravidade ou sigilo; gravar o setor do cartaz na coluna `setor` (faz o caso parecer já classificado); imprimir no cartaz a URL final em vez da `/ouvidoria/qr`; imprimir setor e ponto por extenso na URL; pendurar a página pública sob `/ouvidoria` (aquele espaço é da área logada do ouvidor).
 
 **Ponto de escuta**:
@@ -203,11 +203,71 @@ _Evitar_: mandar email sem registrar; reescrever o registro do primeiro envio; d
 
 **Nota externa**:
 A nota que o hospital tem FORA dele: as estrelas do Google (escala de 0 a 5) e o índice do Reclame Aqui (escala de 0 a 10). Nenhuma das duas é medida pelo sistema. Quem as sabe é o [Perfil da Ouvidoria], que abre as duas páginas e digita o que leu; a integração automática é fase seguinte da spec. Cada registro é uma **linha nova**, nunca uma edição, e o que vale é a última de cada fonte: o diário é o que guarda a evolução e o que deixa o relatório de julho, reenviado em setembro, mostrar a nota de julho. O relatório congela a nota junto dos números e a imprime no bloco **Retrato externo**.
+Desde a ADR 0089 (11/11/2026) a nota do Google deixa de ser digitada: ela é buscada toda semana pela API do Google, com o total de avaliações, e mostrada na Central de Comando; a tela da Ouvidoria a repete só para leitura. O Reclame Aqui continua digitado.
 _Evitar_: mostrar a nota sem a escala ao lado (4,3 de 5 é 86% e 7,8 de 10 é 78%: lado a lado sem denominador, o leitor conclui o contrário); transformar ausência de registro em 0 (leria como a pior nota possível); sobrescrever a linha anterior; validar as duas fontes contra um teto único (aceitaria "Google 8").
 
 **Perfil da Ouvidoria**:
 O eixo de permissão próprio do contexto Ouvidoria, ortogonal ao perfil de acesso das Reuniões e ao perfil de POPs: `ouvidor` e `diretoria_executiva`. Só esses dois abrem a [Manifestação] completa, inclusive a sigilosa; o **Super admin fica de fora** (RN-40), porque administrar o sistema não é ler o relato de quem manifestou. Demais papéis de Reuniões veem só o índice. O Super admin concede o perfil pela tela de Usuários, e a concessão fica no audit log. Todo acesso à Manifestação gera registro de log.
 _Evitar_: tratar Super admin como quem vê tudo; usar o perfil de Reuniões para decidir acesso ao dossiê.
+
+**Avaliação**:
+A nota de 1 a 5 deixada pelo QR, com os motivos (lista fechada de oito) e o comentário opcional de até 500 caracteres (ADR 0086). **Não gera protocolo**: é dado de gestão, sem fila e sem prazo, e não guarda nada de quem avaliou (sem IP, sem aparelho, sem contato). Só o [Perfil da Ouvidoria] vê a aba Avaliações. O comentário é apagado cinco anos depois de criado; a nota e os motivos ficam para os números.
+_Evitar_: chamar de manifestação ou de pesquisa de satisfação (a pesquisa por WhatsApp é outro pedido); guardar IP para conter abuso.
+
+**Funil do QR**:
+O caminho em que o cartaz abre primeiro a [Avaliação], e só quem pede retorno, escolhe registrar ou deixa um elogio entra na [Manifestação guiada]. Notas 1 a 3 perguntam se a pessoa quer retorno; notas 4 e 5 oferecem o elogio e, no [Teste do convite ao Google], o convite. Quem segue sem anonimato fica com o caso ligado à avaliação e ao cartaz; o anônimo guarda só o local que confirmou.
+_Evitar_: mandar quem chega pelo site à tela de nota (a nota é sempre de um cartaz).
+
+**Manifestação guiada**:
+O formulário público em cinco passos: identificação (com identificação ou anônimo, escolhido primeiro), sobre o quê, quando e onde, o que aconteceu e contato. Substitui o formulário de tela única do [Canal aberto]. Quem se identifica deixa telefone ou e-mail, ao menos um, com o aviso de que as respostas saem por e-mail.
+_Evitar_: tornar obrigatório o que serve só para localizar o atendimento (paciente, profissionais, quarto).
+
+**Nome público do ponto**:
+O nome do local que o paciente vê na tela de nota e no cartaz ("Emergência adulta"), no lugar do nome interno do setor. Mora no [Ponto de escuta], ao lado da descrição do local, que é o que aparece no painel.
+_Evitar_: mostrar ao paciente o nome do setor da taxonomia ("Você leu o QR de Auditoria").
+
+**Código de acompanhamento**:
+O código mostrado uma vez ao manifestante anônimo, junto com o protocolo, para acompanhar o caso na [Página de acompanhamento]. Só o hash é guardado.
+_Evitar_: guardar o código em claro; mostrá-lo de novo depois da confirmação.
+
+**Página de acompanhamento**:
+A página pública onde o manifestante informa o protocolo e o [Código de acompanhamento] (anônimo) ou o protocolo e o contato cadastrado (identificado) e vê só o estado em linguagem simples, a data da última movimentação e a resposta institucional. Nunca mostra setor interno, responsável nem anotação.
+_Evitar_: mostrar o nome da área ou do responsável; usar a página para mandar e-mail novo ao manifestante.
+
+**Acionamento de resposta**:
+O envio do caso a um setor que precisa responder dentro do prazo: é a [Validação e acionamento] de sempre. Na fase 2 um caso pode ter até três.
+
+**Acionamento de ciência**:
+O envio a um setor que só confirma o recebimento, por um botão no e-mail, sem login (ADR 0088). Usado no elogio ("Elogio recebido") e no [Núcleo de Segurança do Paciente] ("Recebido pelo NSP"). O tipo do acionamento é decidido pelo sistema, nunca pelo ouvidor. O do elogio não tem prazo de área nem entra nos vencidos, e reenvia o e-mail uma vez depois de 5 dias úteis; o do Núcleo tem prazo e cobrança em degraus.
+_Evitar_: confundir com o [Acionamento de resposta]; deixar o ouvidor escolher o tipo.
+
+**Núcleo de Segurança do Paciente**:
+O setor que recebe, em ciência e em paralelo à área, todo caso que descreve um incidente relacionado à assistência (RDC 36/2013): queda, erro de medicação, identificação errada, lesão por pressão, infecção, problema em procedimento, exame trocado ou atrasado com impacto clínico, falha de equipamento, piora ou óbito inesperado. É um setor da taxonomia, com a presidência do NSP como titular no cadastro de [Responsável do setor]. É a única exceção ao sigilo reforçado: recebe o relato integral e o paciente atendido mesmo no caso sigiloso, mas o nome de quem manifestou só quando o caso não é sigiloso. O e-mail só traz o link; o conteúdo fica na tela.
+_Evitar_: "NSP" sozinho em texto para o paciente; estender a exceção de sigilo a outro setor; deixar a investigação do Núcleo bloquear o encerramento do caso.
+
+**Em análise pelo NSP**:
+O selo do caso que o ouvidor confirmou para o [Núcleo de Segurança do Paciente]. Na resposta de um caso com o selo, o agente aponta frases que admitem ou negam falha antes do envio.
+
+**Assunto (do caso)**:
+A linha que o [Agente de triagem] escreve para cada caso, sem nome de pessoa nem dado clínico identificável ("Demora no resultado de tomografia"). É o que listas, painel e e-mails de cobrança mostram no lugar do começo do relato. Caso sem assunto mostra que ele não foi gerado.
+_Evitar_: confundir com a categoria, que é rótulo do ouvidor; mostrar nome de paciente em lista.
+
+**Agente de triagem**:
+O agente de IA que lê toda manifestação e toda avaliação com comentário na chegada (ADR 0087) e só sugere: o [Assunto (do caso)], o apontamento ao [Núcleo de Segurança do Paciente] com uma justificativa simples e uma técnica, e a marca [Para revisar]. Nunca classifica tipo, gravidade, sigilo nem área. Se falhar ou passar do teto diário, o caso entra na fila sem assunto e sem alerta, e o ouvidor decide sozinho.
+_Evitar_: tratar a sugestão como decisão; mandar ao paciente ou a um setor texto dele sem confirmação humana.
+
+**Para revisar**:
+A marca que o [Agente de triagem] põe na [Avaliação] cujo comentário sugere gravidade (incidente, agressão, assédio, risco à vida, menção a processo ou imprensa), qualquer que seja a nota. Não é alerta em tempo real: vira um contador no Painel que leva à aba Avaliações filtrada. O ouvidor tira a marca convertendo a avaliação ou arquivando a revisão com um motivo curto.
+
+**Converter em manifestação**:
+A ação do ouvidor que transforma uma [Avaliação] em caso de ouvidoria: canal `qr`, setor e ponto do cartaz, o comentário como relato, tipo vazio (sigiloso até a classificação) e T0 igual à hora da avaliação. A avaliação convertida guarda o cartaz e a ligação, porque a pessoa não pediu anonimato.
+
+**Pronto para encerrar**:
+A marca do elogio cujo setor já clicou em "Elogio recebido". O caso volta ao ouvidor, que encerra; o manifestante identificado recebe o aviso de que o elogio foi entregue à equipe.
+
+**Teste do convite ao Google**:
+O convite para avaliar no Google mostrado só às notas 4 e 5 do QR, quando a chave geral e a chave do ponto estão ligadas (ADR 0089). Quem liga é a diretoria executiva, com auditoria de cada mudança. Dura 60 dias, mas não se desliga sozinho: no fim, a Central de Comando só lembra de reavaliar. A diretoria aceitou o risco de punição pela política do Google.
+_Evitar_: oferecer incentivo, pedir conteúdo ou menção a profissional, dar meta de avaliações à equipe.
 
 **API da Ana**:
 Os endpoints de serviço `/api/ana/*`: leitura das tabelas do Dados do Atendimento, registro e consulta de protocolo de ouvidoria. Autenticação por **API key de serviço** dedicada (header), fora do fluxo JWT do Supabase Auth; a chave vive no vault da plataforma da Ana e o escopo é restrito a esses endpoints. Nos endpoints de escrita, campo crítico é NOT NULL e validado (o cliente tem falha silenciosa conhecida que enviaria vazio com HTTP 200; o banco recusa). O registro de protocolo aceita, opcionalmente, os campos do Dossiê da [Manifestação] (relato integral, nome, contato, vínculo e a gravidade sugerida com grau de confiança, guardada à parte em `classificacao_ia`); o POST sem eles continua valendo. A Ana registra manifestação, não classifica caso: status, desfecho, [Tipo da manifestação] e sigilo são decisão do ouvidor e o endpoint recusa quem tentar mandá-los. Por isso o caso dela entra **sem tipo**, logo sigiloso, até o ouvidor classificar. A consulta de protocolo devolve o índice do caso comum e, do sigiloso, só o andamento: protocolo, estado e data.

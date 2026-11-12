@@ -1,6 +1,7 @@
 ---
 status: accepted
 amends: 0034
+amended_by: 0086
 ---
 
 # O QR da Ouvidoria vira Ponto de escuta cadastrado, com código curto no cartaz
