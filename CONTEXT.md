@@ -71,7 +71,7 @@ _Evitar_: processamento, job de IA.
 
 **Pendência**:
 Uma ação atribuída a um responsável, com prazo e máquina de estados própria (`PENDENTE → EM_PROGRESSO → CONCLUIDO`; ramos `ATRASADO`, `CANCELADO` e `REPACTUADA`). Nasce quando o compromisso do responsável se firma, e desde o primeiro segundo é plena (painel, prazo, cobrança). No caminho com assinatura o nascimento é **incremental** (ADR 0030): a assinatura do responsável no ClickSign cria as dele; a assinatura do Facilitador cria as de quem está fora do Envelope; o Aceite interno cria as do aceitante; a finalização do documento cria todo o resto. No caminho sem assinatura, todas nascem na aprovação (**APROVADA**, ADR 0003).
-_Evitar_: tarefa, to-do, ação (use "ação" só para a linha da Ata que origina a Pendência).
+_Evitar_: tarefa, to-do, meta (o diretor chama de meta a Pendência com prazo; no app não existe cadastro de metas), ação (use "ação" só para a linha da Ata que origina a Pendência).
 
 **Repactuação**:
 O ato de o Facilitador remarcar o prazo de uma Pendência. **Não cria Pendência nova**: a mesma Pendência passa ao estado `REPACTUADA` e tem o prazo apagado, ficando "A repactuar" na tela até alguém marcar a data nova. É o caso mais comum a partir de `ATRASADO`.
@@ -206,7 +206,7 @@ A nota que o hospital tem FORA dele: as estrelas do Google (escala de 0 a 5) e o
 _Evitar_: mostrar a nota sem a escala ao lado (4,3 de 5 é 86% e 7,8 de 10 é 78%: lado a lado sem denominador, o leitor conclui o contrário); transformar ausência de registro em 0 (leria como a pior nota possível); sobrescrever a linha anterior; validar as duas fontes contra um teto único (aceitaria "Google 8").
 
 **Perfil da Ouvidoria**:
-O eixo de permissão próprio do contexto Ouvidoria, ortogonal ao perfil de acesso das Reuniões e ao perfil de POPs: `ouvidor` e `diretoria_executiva`. Só esses dois abrem a [Manifestação] completa, inclusive a sigilosa; o **Super admin fica de fora** (RN-40), porque administrar o sistema não é ler o relato de quem manifestou. Demais papéis de Reuniões veem só o índice. O Super admin concede o perfil pela tela de Usuários, e a concessão fica no audit log. Todo acesso à Manifestação gera registro de log.
+O eixo de permissão próprio do contexto Ouvidoria, ortogonal ao perfil de acesso das Reuniões e ao perfil de POPs: `ouvidor` e `diretoria_executiva`. Só esses dois abrem a [Manifestação] completa, inclusive a sigilosa; o **Super admin fica de fora** (RN-40), porque administrar o sistema não é ler o relato de quem manifestou. Demais papéis de Reuniões veem só o índice. O Super admin concede o perfil pela tela de Usuários, e a concessão fica no audit log. Todo acesso à Manifestação gera registro de log, inclusive a consulta pelo [Conector] (ADR 0085). A `diretoria_executiva` lê pelo [Conector] o mesmo Dossiê que abre na tela.
 _Evitar_: tratar Super admin como quem vê tudo; usar o perfil de Reuniões para decidir acesso ao dossiê.
 
 **API da Ana**:
@@ -319,6 +319,10 @@ _Evitar_: gerar o kit por script a partir do glossário; busca vetorial; kit des
 **Central de Comando**:
 O lugar da diretoria para acompanhar, e no futuro operar, o ecossistema digital do hospital, em português claro e na identidade do app. Hoje são os **números**: o site (Google Analytics) e o Instagram, sempre somente leitura. O que ainda não existe (Blog, Editor do Site, Mapa de Calor, Google Ads) aparece como [O que vem por aí], nunca como item de menu vazio. Vive na área de Administração, numa seção própria do menu, e **só o Super admin vê**, sem eixo de permissão próprio: quem precisa ver precisa ser Super admin (mesma troca da aba Tecnologia, ADR 0050). Princípio que atravessa tudo: **honestidade do dado**, o que não é medido aparece como não medido, nunca como zero nem como número inventado.
 _Evitar_: "dashboard de marketing", "BI"; definir a Central como somente leitura (os números são, o Blog não será); `perfil_central` ou qualquer papel novo só para ela; número estimado no lugar de dado que a fonte não entrega.
+
+**Conector**:
+A ligação que a pessoa adiciona no próprio Claude, no celular ou no computador, para perguntar sobre os dados do app. Só lê. Um só, com gate por ferramenta: as da [Central de Comando] são do Super admin; as de Reuniões e da Ouvidoria são só de quem tem `diretoria_executiva` no [Perfil da Ouvidoria] (ADR 0085). Entrega o que a tela de quem conectou entrega, com a mesma regra de atraso e de prazo da tela.
+_Evitar_: "MCP" para o diretor (é o nome técnico); "integração"; um Conector por módulo.
 
 **O que vem por aí**:
 O bloco no pé da Visão Geral da [Central de Comando] que conta à diretoria o que ainda vai nascer ali, em linguagem de leigo. É o único lugar onde funcionalidade futura aparece: o menu só lista o que funciona.
