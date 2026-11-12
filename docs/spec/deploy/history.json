@@ -2,6 +2,58 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-11-12T20:46:03-03:00",
+      "sha": "0147c46141838b9417b160514adb5d7faffc2c43",
+      "app_version": "0.263.0",
+      "subject": "Onda hsm-ouv-onda2: Ponto de escuta ganha nome público, cartaz A4 e endereço curto; Registro de acionamento e elogio como acionamento de ciência; Nota do Google buscada toda semana e mostrada na Centr",
+      "raw_subject": "chore(deploy): registro da onda hsm-ouv-onda2 (#1655 #1654 #1652)",
+      "scope": [
+        "backend",
+        "frontend"
+      ],
+      "prds": [
+        1527
+      ],
+      "result": "healthy",
+      "duration_seconds": 519,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        },
+        {
+          "service": "frontend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [
+        "135_ouvidoria_ponto_nome_publico_cartaz_a4.sql",
+        "136_ouvidoria_acionamento_de_ciencia.sql",
+        "137_ouvidoria_nota_do_google_automatica.sql"
+      ],
+      "rollback_target_sha": null,
+      "notes": "onda-enxuta hsm-ouv-onda2: PR #1655 (issue #1617), PR #1654 (issue #1618), PR #1652 (issue #1619), mergeados PR a PR. Merge pela API do GitHub, um build. Registro pela Action pos-merge depois do health.",
+      "etapas": {
+        "merge_s": 10,
+        "build_s": {
+          "backend": 19,
+          "frontend": 161
+        },
+        "health_s": 0
+      },
+      "responsavel": "pedrorezendefig"
+    },
+    {
       "at": "2026-11-12T20:39:19-03:00",
       "sha": "5fd6b7c5d312024436932bcf37992e996aa76a19",
       "app_version": "0.262.0",
