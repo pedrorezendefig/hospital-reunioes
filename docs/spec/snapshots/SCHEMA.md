@@ -486,7 +486,7 @@ erDiagram
         relogio no
         e e
         o e FK
-        _ mais_colunas "+2"
+        _ mais_colunas "+3"
     }
     ouvidoria_pontos {
         UUID id PK
@@ -969,6 +969,12 @@ erDiagram
         TEXT status
         _ mais_colunas "+8"
     }
+    ouvidoria_config {
+        BOOLEAN id PK
+        TEXT google_place_id
+        TEXT google_review_url
+        TIMESTAMPTZ atualizada_em
+    }
 ```
 
 ## Indexes principais
@@ -1125,4 +1131,4 @@ erDiagram
 | `ouvidoria_acionamentos` | `idx_ouvidoria_acionamentos_pendentes` | `enviado_em` | `136_ouvidoria_acionamento_de_ciencia.sql` |
 
 ---
-**Resumo:** 88 tabelas · 130 relacionamentos FK detectados.
+**Resumo:** 89 tabelas · 130 relacionamentos FK detectados.

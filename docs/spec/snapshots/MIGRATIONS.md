@@ -136,6 +136,7 @@ Ordem cronológica das migrations do Postgres do Hospital Reuniões.
 | 134 | `134_tecnologia_numero_da_demanda.sql` | o Numero da Demanda | 0 | 1 | 0 | 0 |
 | 135 | `135_ouvidoria_ponto_nome_publico_cartaz_a4.sql` | o Ponto de escuta ganha os campos do cartaz A4 | 0 | 5 | 0 | 0 |
 | 136 | `136_ouvidoria_acionamento_de_ciencia.sql` | o registro de acionamento e o elogio como ciencia | 1 | 0 | 3 | 0 |
+| 137 | `137_ouvidoria_nota_do_google_automatica.sql` | nota do Google buscada toda semana (issue #1619, PRD #1527, ADR 0089) | 1 | 1 | 0 | 0 |
 
 **Legenda:** C = CREATE TABLE · A = ALTER TABLE · I = CREATE INDEX · D = DROP.
-**Total:** 130 migrations.
+**Total:** 131 migrations.

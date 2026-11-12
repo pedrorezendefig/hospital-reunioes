@@ -768,7 +768,7 @@ Modelo de dados do Hospital Reuniões. Tabelas no Postgres (via Supabase).
 
 ## ouvidoria_nota_externa
 
-> Origem: `082_ouvidoria_nota_externa.sql`
+> Origem: `082_ouvidoria_nota_externa.sql` (alterada em: 137_ouvidoria_nota_do_google_automatica.sql)
 
 | Campo | Tipo | Constraints | Default | FK |
 |-------|------|-------------|---------|-----|
@@ -782,6 +782,7 @@ Modelo de dados do Hospital Reuniões. Tabelas no Postgres (via Supabase).
 | `e` | `o` | — | — | `participantes.id` |
 | `registrada_por_nome` | `TEXT` | NOT NULL | `''` | — |
 | `criada_em` | `TIMESTAMPTZ` | NOT NULL | `now()` | — |
+| `total_avaliacoes` | `INTEGER` | NOT NULL | `'manual'` | — |
 
 **Indexes:**
 - `idx_ouvidoria_nota_externa_fonte` em `(fonte, registrada_em DESC)` (de `082_ouvidoria_nota_externa.sql`)
@@ -1815,6 +1816,17 @@ Modelo de dados do Hospital Reuniões. Tabelas no Postgres (via Supabase).
 - `idx_ouvidoria_acionamentos_caso` em `(manifestacao_id, criado_em)` (de `136_ouvidoria_acionamento_de_ciencia.sql`)
 - `idx_ouvidoria_acionamentos_pendentes` em `(enviado_em)` (de `136_ouvidoria_acionamento_de_ciencia.sql`)
 
+## ouvidoria_config
+
+> Origem: `137_ouvidoria_nota_do_google_automatica.sql`
+
+| Campo | Tipo | Constraints | Default | FK |
+|-------|------|-------------|---------|-----|
+| `id` | `BOOLEAN` | PK | `TRUE` | — |
+| `google_place_id` | `TEXT` | NOT NULL | `''` | — |
+| `google_review_url` | `TEXT` | NOT NULL | `''` | — |
+| `atualizada_em` | `TIMESTAMPTZ` | NOT NULL | `now()` | — |
+
 ---
 
-**Resumo:** 88 tabelas vivas.
+**Resumo:** 89 tabelas vivas.

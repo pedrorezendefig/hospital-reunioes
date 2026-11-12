@@ -49,6 +49,7 @@ Endpoints HTTP expostos pelo backend FastAPI do Hospital Reuniões.
 | GET | `/admin/central-de-comando/dados-do-google` | Dados do Google no período: os Visitantes por dia e as Visitas por | ✅ |
 | GET | `/admin/central-de-comando/instagram` | A tela do Instagram no período: Seguidores e crescimento, Alcance, | ✅ |
 | GET | `/admin/central-de-comando/objetivos` | A galeria dos Objetivos: os seis do catálogo, com o número de hoje (28 | ✅ |
+| GET | `/admin/central-de-comando/objetivos/google-reputacao` | A lente de "Melhorar a nota no Google" (issue #1619, ADR 0089): a nota, | ✅ |
 | GET | `/admin/central-de-comando/objetivos/{identificador}` | A lente de um Objetivo: os números dele no período, as sugestões (cada uma | ✅ |
 | GET | `/admin/central-de-comando/visao-geral` | A Visão Geral no período, por bloco (issue #821): o número-manchete e o | ✅ |
 
@@ -297,7 +298,7 @@ Endpoints HTTP expostos pelo backend FastAPI do Hospital Reuniões.
 | POST | `/ouvidoria/manifestacoes/{manifestacao_id}/validar` | Valida a manifestação e aciona a área na mesma ação. | ✅ |
 | GET | `/ouvidoria/metricas` | Os números da Ouvidoria no período (PRD #319, fatia I1). | ✅ |
 | GET | `/ouvidoria/nota-externa` | A última nota de cada fonte, com a escala junto do número. | ✅ |
-| POST | `/ouvidoria/nota-externa` | Registra a nota atual do Google ou do Reclame Aqui (PRD #319, história 10). | ✅ |
+| POST | `/ouvidoria/nota-externa` | Registra a nota atual do Reclame Aqui (PRD #319, história 10). O Google é 422 (issue #1619). | ✅ |
 | GET | `/ouvidoria/novidades` | O total de casos com novidade, para o distintivo do menu (issue #487, | ✅ |
 | GET | `/ouvidoria/pontos` | Os cartazes, com o QR já embutido. | ✅ |
 | POST | `/ouvidoria/pontos` | Cria o cartaz e devolve o código sorteado. | ✅ |
@@ -536,4 +537,4 @@ Endpoints HTTP expostos pelo backend FastAPI do Hospital Reuniões.
 
 ---
 
-**Totais:** 305 endpoints em 45 routers · 94% exigem auth.
+**Totais:** 306 endpoints em 45 routers · 94% exigem auth.
