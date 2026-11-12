@@ -1,9 +1,10 @@
 """A nota que o hospital tem FORA dele: Google e Reclame Aqui (issue #347).
 
-Este número não é medido pelo sistema, e não dá para calculá-lo aqui: quem o
-sabe é o ouvidor, que abre as duas páginas e digita o que leu. A integração
-automática com o Google Business Profile e com o Reclame Aqui é fase seguinte
-(PRD #319, fora de escopo), e por isso a porta desta fatia é a mão do ouvidor.
+Desde a issue #1619 (ADR 0089), a nota do Google é lida sozinha toda semana
+pela Places API (`ouvidoria_nota_google.py`) e grava aqui com `origem =
+automatica` e o total de avaliações. O Reclame Aqui continua digitado pelo
+ouvidor, que abre a página e digita o que leu. O histórico digitado do Google
+fica no diário.
 
 **Cada registro é uma linha nova, nunca um UPDATE.** A tabela é um diário, e a
 leitura devolve a última linha de cada fonte. Sobrescrever seria mais curto e
@@ -36,7 +37,11 @@ ESCALA: dict[str, int] = {"google": 5, "reclame_aqui": 10}
 
 ROTULO_FONTE: dict[str, str] = {"google": "Google", "reclame_aqui": "Reclame Aqui"}
 
-CAMPOS = "fonte, nota, registrada_em, registrada_por_nome"
+# As fontes que o ouvidor ainda digita. O Google é lido sozinho toda semana pelo
+# job da Places API (`ouvidoria_nota_google.py`, issue #1619, ADR 0089).
+FONTES_DIGITADAS: frozenset[str] = frozenset({"reclame_aqui"})
+
+CAMPOS = "fonte, nota, total_avaliacoes, origem, registrada_em, registrada_por_nome"
 
 
 def registrar(supabase, fonte: str, nota: float, quem: dict, agora: dt.datetime) -> dict:
@@ -47,6 +52,7 @@ def registrar(supabase, fonte: str, nota: float, quem: dict, agora: dt.datetime)
         "registrada_em": agora.isoformat(),
         "registrada_por": quem.get("id"),
         "registrada_por_nome": quem.get("nome_completo") or "",
+        "origem": "manual",
     }
     resultado = supabase.table(TABELA).insert(linha).execute()
     gravada = (resultado.data or [linha])[0]
@@ -62,6 +68,8 @@ def _publico(linha: dict) -> dict:
         "escala": ESCALA.get(fonte),
         "registrada_em": linha.get("registrada_em"),
         "registrada_por_nome": linha.get("registrada_por_nome") or "",
+        "origem": linha.get("origem") or "manual",
+        "total_avaliacoes": linha.get("total_avaliacoes"),
     }
 
 
@@ -81,7 +89,15 @@ def _ultima_da_fonte(supabase, fonte: str) -> dict:
     )
     linhas = resultado.data or []
     if not linhas:
-        return {"fonte": fonte, "nota": None, "escala": ESCALA[fonte], "registrada_em": None, "registrada_por_nome": ""}
+        return {
+            "fonte": fonte,
+            "nota": None,
+            "escala": ESCALA[fonte],
+            "registrada_em": None,
+            "registrada_por_nome": "",
+            "origem": None,
+            "total_avaliacoes": None,
+        }
     return _publico(linhas[0])
 
 

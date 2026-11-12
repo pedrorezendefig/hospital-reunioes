@@ -4,9 +4,10 @@ Porte de `src/lib/objetivos/catalogo.ts`, adaptado ao domínio: adicionar um
 Objetivo é adicionar um item aqui. O ícone é escolha de tela e mora no front; o
 backend cuida do que a tela não compõe (nome, descrição, estado e números).
 
-Dois Objetivos ainda não têm dado e nascem **em construção** (sem destino
-navegável): a Área do site (o nome novo da ADR 0058, decisão 7) e a nota no
-Google.
+Um Objetivo ainda não tem dado e está **em construção** (sem destino
+navegável): a Área do site (o nome novo da ADR 0058, decisão 7). A nota no
+Google saiu de construção na issue #1619 (ADR 0089): a lente dela lê o diário
+de Nota externa da Ouvidoria (`nota_no_google.py`), e não um montador.
 """
 
 from __future__ import annotations
@@ -27,7 +28,7 @@ class Objetivo:
     em_construcao: bool = False
 
 
-# O catálogo, na ordem do design. Os dois `em_construcao` são os sem montador.
+# O catálogo, na ordem do design. O `em_construcao` não tem montador nem lente.
 OBJETIVOS: tuple[Objetivo, ...] = (
     Objetivo(
         id="site-visitantes",
@@ -59,7 +60,6 @@ OBJETIVOS: tuple[Objetivo, ...] = (
         id="google-reputacao",
         nome="Melhorar a nota no Google",
         descricao="Melhorar a reputação e as avaliações no Google Meu Negócio.",
-        em_construcao=True,
     ),
 )
 

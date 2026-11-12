@@ -46,6 +46,10 @@ Jobs:
  12. avisar_contratos_contas_medicas: 07:15 diário, avisa no sino o reajuste de cada
      contrato de operadora na data do aviso (vencimento menos a antecedência), issue
      #1144. Idempotente: `cm_aviso` guarda a data prevista e o envio.
+ 13. buscar_nota_do_google: 06:45 diário, lê a nota e o total de avaliações do Google
+     pela Places API e grava no diário de Nota externa (issue #1619, ADR 0089). Busca
+     uma vez por semana: o dia em que já há leitura automática da semana não chama
+     nada. Sem GOOGLE_PLACES_API_KEY, não chama nada e registra a falta no log. Sem IA.
 
 Nenhum job dispara IA por conta própria (ADR 0082): a recomendação da Validação
 e o segundo agente de Contas médicas rodam só pelo botão da tela. A fila de
@@ -399,6 +403,23 @@ def avisar_contratos_contas_medicas() -> None:
         logger.info(f"[Cron] Contratos de Contas médicas: {avisados} aviso(s) de reajuste no sino.")
 
 
+def buscar_nota_do_google() -> None:
+    """A nota do Google da semana (issue #1619, ADR 0089). A guarda da semana,
+    a falta da chave e a falha do Google vivem no serviço; aqui, só o relógio."""
+    from app.config import settings
+    from app.services import ouvidoria_nota_google
+
+    try:
+        linha = ouvidoria_nota_google.buscar_e_gravar(
+            _supabase(), datetime.now(tz=ZoneInfo("UTC")), chave=settings.google_places_api_key
+        )
+    except Exception as e:
+        logger.error(f"[Cron] Erro em buscar_nota_do_google: {type(e).__name__}")
+        return
+    if linha:
+        logger.info(f"[Cron] Nota do Google lida: {linha['nota']} com {linha['total_avaliacoes']} avaliações.")
+
+
 def _registrar_entrega(competencia: str, entrega, rotulo: str = "Relatório quinzenal") -> None:
     """Escreve no log o que aconteceu com uma tentativa de entrega.
 
@@ -597,6 +618,17 @@ def start_scheduler() -> None:
         id="contratos_contas_medicas",
         replace_existing=True,
     )
+    # 06:45 todo dia, buscando uma vez por semana (a guarda é a última leitura
+    # automática): o jobstore é em memória, e um disparo semanal perdido num
+    # deploy esperaria outra semana inteira.
+    scheduler.add_job(
+        buscar_nota_do_google,
+        "cron",
+        hour=6,
+        minute=45,
+        id="nota_do_google",
+        replace_existing=True,
+    )
     # Todo dia às 07h, no fuso do scheduler (America/Sao_Paulo). A quinzena
     # fecha nos dias 1 e 16, e é neles que o email sai; os outros dias existem
     # para a edição não se perder quando o container estiver fora do ar na hora
@@ -627,7 +659,7 @@ def start_scheduler() -> None:
         "retencao_ouvidoria (04:00), "
         "retencao_contas_medicas (04:30), fila_contas_medicas (a cada 10s), contratos_contas_medicas (07:15), "
         "relatorio_quinzenal_ouvidoria (07:00 diário, email nos dias 1 e 16), "
-        "reconciliacao_tecnologia (de hora em hora)"
+        "reconciliacao_tecnologia (de hora em hora), nota_do_google (06:45, uma leitura por semana)"
     )
 
 

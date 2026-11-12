@@ -165,12 +165,19 @@ class TestGaleria:
 
         assert por_id["contatos"]["numero"]["valor"] == 0
 
-    def test_dois_em_construcao_sem_numero_nem_destino_navegavel(self, central_falsa):
+    def test_a_area_do_site_em_construcao_sem_numero_nem_destino_navegavel(self, central_falsa):
         por_id = {o["id"]: o for o in _galeria().json()["objetivos"]}
 
-        for em_construcao in ("site-area", "google-reputacao"):
-            assert por_id[em_construcao]["em_construcao"] is True
-            assert por_id[em_construcao]["numero"] is None
+        assert por_id["site-area"]["em_construcao"] is True
+        assert por_id["site-area"]["numero"] is None
+
+    def test_a_nota_no_google_e_navegavel_e_sem_numero_no_card(self, central_falsa):
+        """A lente dela lê o diário da Ouvidoria (issue #1619); a galeria, que
+        lê as fontes da Central, não traz a nota, e o card leva à lente."""
+        por_id = {o["id"]: o for o in _galeria().json()["objetivos"]}
+
+        assert por_id["google-reputacao"]["em_construcao"] is False
+        assert por_id["google-reputacao"]["numero"] is None
 
     def test_a_galeria_traz_o_frescor(self, central_falsa, relogio_da_central):
         assert _galeria().json()["frescor"] == {
@@ -339,7 +346,7 @@ class TestLenteContatos:
 
 
 class TestLenteNaoEncontradaEPeriodo:
-    @pytest.mark.parametrize("identificador", ["nao-existe", "site-area", "google-reputacao"])
+    @pytest.mark.parametrize("identificador", ["nao-existe", "site-area"])
     def test_identificador_sem_lente_e_404(self, identificador):
         """Inexistente ou em construção (sem destino navegável): 404, com frase."""
         resposta = _lente(identificador, "28d")

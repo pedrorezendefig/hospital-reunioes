@@ -5864,7 +5864,7 @@ def reenviar_relatorio(
 
 
 # ═══════════════════════════════════════════════════════════════════════════
-# Nota externa manual: Google e Reclame Aqui (issue #347, PRD #319)
+# Nota externa: Google lido sozinho, Reclame Aqui digitado (issues #347 e #1619)
 # ═══════════════════════════════════════════════════════════════════════════
 
 
@@ -5880,6 +5880,10 @@ class PedidoNotaExterna(BaseModel):
 
     @model_validator(mode="after")
     def _dentro_da_escala(self):
+        # O Google é lido sozinho toda semana (issue #1619, ADR 0089, decisão 2):
+        # a digitação dele saiu, e o histórico digitado fica no diário.
+        if self.fonte not in ouvidoria_nota_externa.FONTES_DIGITADAS:
+            raise ValueError("A nota do Google é buscada sozinha toda semana e não se digita mais.")
         teto = ouvidoria_nota_externa.ESCALA[self.fonte]
         if not (0 <= self.nota <= teto):
             raise ValueError(f"A nota do {ouvidoria_nota_externa.ROTULO_FONTE[self.fonte]} vai de 0 a {teto}.")
@@ -5894,7 +5898,7 @@ async def registrar_nota_externa(
     me: dict = Depends(require_perfil_ouvidoria),
     supabase=Depends(get_supabase_client),
 ):
-    """Registra a nota atual do Google ou do Reclame Aqui (PRD #319, história 10)."""
+    """Registra a nota atual do Reclame Aqui (PRD #319, história 10). O Google é 422 (issue #1619)."""
     return ouvidoria_nota_externa.registrar(supabase, pedido.fonte, pedido.nota, me, agora_utc())
 
 

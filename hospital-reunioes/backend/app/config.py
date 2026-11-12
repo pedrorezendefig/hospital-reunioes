@@ -147,6 +147,11 @@ class Settings(BaseSettings):
     # expira e é renovado à mão, como na Central antiga.
     instagram_access_token: str = ""
     instagram_business_account_id: str = ""
+    # Ouvidoria (issue #1619, ADR 0089): a chave da Places API (New) com que o
+    # job semanal lê a nota e o total de avaliações do Google. Segredo, criado
+    # na tela do Coolify. Vazio = o job não chama nada e a Central diz que a
+    # nota do Google não está sendo medida.
+    google_places_api_key: str = ""
     # Conector MCP (ADR 0058, decisões 3 e 4): o emissor do WorkOS AuthKit, o
     # JWKS dele (vazio = `<emissor>/oauth2/jwks`) e o endereço do recurso, que é
     # a audiência do token. Quem conecta é quem é Super admin: a lista de
