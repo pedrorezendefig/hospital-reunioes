@@ -82,9 +82,14 @@ export type Coleta = {
   osEm?: number | null
   /** Hora da última busca no GitHub, OS e health (cache compartilhado entre as sessões). */
   remotoEm?: number | null
+  /** Ondas que quebraram ou esperam o humano, pelo Estado da Onda (~/.pedroos/ondas/hospital). */
+  ondasEstado?: EstadoOnda[]
 }
 
-export type EsperaCi = { pr: number | null; url: string }
+/** Uma Onda em `erro` ou `pronto-para-voce`, com o texto do último evento daquele estado. */
+export type EstadoOnda = { id: string; estado: 'erro' | 'pronto-para-voce'; prd: number | null; texto: string | null }
+
+export type EsperaCi = { pr: number | null }
 
 declare module 'claude-code' {
   interface PluginState {
@@ -93,6 +98,8 @@ declare module 'claude-code' {
       erro: string | null
       todos: boolean
       esperaCi: EsperaCi | null
+      /** `/ondas detalhe`: mostra modelo, contexto e fala dos agentes. */
+      verDetalhe: boolean
     }
   }
 }
