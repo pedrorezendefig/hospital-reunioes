@@ -72,6 +72,8 @@ ROTAS_TOKENIZADAS = [
     ("GET", f"/api/ouvidoria-setor/{TOKEN}", "/api/ouvidoria-setor/{token}"),
     ("POST", f"/api/ouvidoria-setor/{TOKEN}/responder", "/api/ouvidoria-setor/{token}/responder"),
     ("POST", f"/api/ouvidoria-setor/{TOKEN}/prorrogacao", "/api/ouvidoria-setor/{token}/prorrogacao"),
+    # O botão Elogio recebido (issue #1618): o token do elogio também é o path.
+    ("POST", f"/api/ouvidoria-setor/elogio/{TOKEN}/recebido", "/api/ouvidoria-setor/elogio/{token}/recebido"),
     ("GET", f"/api/aceite/{TOKEN}", "/api/aceite/{token}"),
     ("POST", f"/api/aceite/{TOKEN}/aceitar", "/api/aceite/{token}/aceitar"),
 ]
@@ -166,6 +168,7 @@ ROTAS_COM_SEGREDO_NO_PATH = {
     "/api/ouvidoria-setor/{token}/devolver",
     "/api/ouvidoria-setor/{token}/prorrogacao",
     "/api/ouvidoria-setor/{token}/responder",
+    "/api/ouvidoria-setor/elogio/{token}/recebido",
 }
 
 
