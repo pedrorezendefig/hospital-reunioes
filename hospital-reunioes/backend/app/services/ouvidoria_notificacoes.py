@@ -265,9 +265,11 @@ _SEM_EXTRATO = SEM_EXTRATO
 LINK_FORA_DA_AREA = "O destinatário não responde mais pelo setor do caso; link não enviado"
 
 # O motivo no registro quando o email do elogio não sai porque nenhuma ciência
-# do caso espera o clique (issue #1618): o setor já confirmou, ou o caso foi
-# mandado de novo.
-ELOGIO_JA_CONFIRMADO = "O elogio já foi confirmado pelo setor ou mandado de novo; email não enviado"
+# do caso espera o clique (issue #1618): o setor já confirmou, o caso foi
+# mandado de novo, ou a ciência não bate mais com o setor, o tipo ou o estado.
+ELOGIO_JA_CONFIRMADO = (
+    "O elogio já foi confirmado pelo setor, mandado de novo ou o caso mudou de setor ou de tipo; email não enviado"
+)
 
 # Paleta da estratificação visual (RN-34). Os hex são os da spec da Diretoria,
 # como default trocável: a paleta da casa ainda aguarda confirmação do DP, e
@@ -1747,8 +1749,18 @@ def despachar(supabase, notificacao: dict, agora: dt.datetime, feriados: frozens
             # novo a outro setor) não gera email nenhum, nem no reenvio.
             from app.services import ouvidoria_acionamentos
 
+            #
+            # A ciência tem de bater com o caso de agora: setor, tipo e estado.
+            # Uma ciência que sobrou de um envio anterior não pode levar ao
+            # setor antigo o extrato escrito para outro, nem chamar de elogio o
+            # caso que virou reclamação.
             ciencia = ouvidoria_acionamentos.ciencia_pendente(supabase, notificacao["manifestacao_id"])
-            if ciencia is None:
+            if (
+                ciencia is None
+                or ciencia.get("setor") != manifestacao.get("setor")
+                or manifestacao.get("tipo_manifestacao") != ouvidoria_acionamentos.MOTIVO_ELOGIO
+                or manifestacao.get("status") != "aguardando_area"
+            ):
                 _marcar(supabase, notificacao["id"], {"status": FALHA, "ultimo_erro": ELOGIO_JA_CONFIRMADO})
                 return False
             link = ouvidoria_acionamentos.emitir_link(supabase, ciencia)

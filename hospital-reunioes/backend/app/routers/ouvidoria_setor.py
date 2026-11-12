@@ -859,6 +859,35 @@ ELOGIO_JA_CONFIRMADO = "Este elogio já foi confirmado. Obrigado por compartilha
 ELOGIO_MOVIMENTADO = "A Ouvidoria já movimentou este caso e este link não vale mais."
 
 
+def _o_elogio_continua_com_o_setor(supabase, ciencia: dict) -> bool:
+    """Se o caso continua em `aguardando_area` no setor da ciência depois de uma
+    transição sem resposta. Só a linha lida prova que a transição não entrou;
+    leitura que falha não prova nada e devolve False."""
+    try:
+        result = (
+            supabase.table("ouvidoria_protocolos")
+            .select("id")
+            .eq("id", ciencia["manifestacao_id"])
+            .eq("status", "aguardando_area")
+            .eq("setor", ciencia.get("setor"))
+            .limit(1)
+            .execute()
+        )
+    except FALHAS_DO_POSTGREST:
+        logger.warning("Falha ao reler a manifestação %s depois do clique no elogio", ciencia["manifestacao_id"])
+        return False
+    return bool(result.data)
+
+
+def _desfazer_o_clique(supabase, ciencia: dict, carimbo: str) -> None:
+    """Devolve a ciência a `pendente` sem deixar a falha da própria devolução
+    trocar o 503 (que diz para tentar de novo) por um 500 cru."""
+    try:
+        ouvidoria_acionamentos.desfazer_confirmacao(supabase, ciencia, carimbo)
+    except FALHAS_DO_POSTGREST:
+        logger.error("Falha ao desfazer a confirmação do elogio da manifestação %s", ciencia["manifestacao_id"])
+
+
 @router.post("/elogio/{token}/recebido")
 @limiter.limit("10/minute")
 async def confirmar_elogio(
@@ -939,9 +968,18 @@ async def confirmar_elogio(
         logger.error("Erro na RPC ouvidoria_transicionar pelo link do elogio (código %s)", exc.code)
         raise _indisponivel() from exc
     except HTTPError as exc:
-        # Sem resposta, o caso pode ter andado: a confirmação fica, e a frase
-        # não promete que o link continua valendo.
+        # Sem resposta, o caso pode ter andado ou não. Quem decide é onde ele
+        # ficou, como o `_limpar_t2` do portal: ainda em `aguardando_area` no
+        # mesmo setor, a transição não entrou, e a confirmação é desfeita para o
+        # clique voltar a valer. Sem isso o elogio ficava preso para sempre: sem
+        # prazo, fora do reenvio (que só vê `pendente`) e com o link dizendo que
+        # já foi confirmado.
         logger.error("Falha de rede na transição do elogio da manifestação %s", ciencia["manifestacao_id"])
+        if _o_elogio_continua_com_o_setor(supabase, ciencia):
+            _desfazer_o_clique(supabase, ciencia, agora.isoformat())
+            raise _indisponivel() from exc
+        # O caso andou, ou a leitura também falhou: a confirmação fica, e a
+        # frase não promete que o link continua valendo.
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="O sistema está instável agora. A confirmação pode já ter sido registrada.",

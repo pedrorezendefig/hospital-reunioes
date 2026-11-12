@@ -90,14 +90,7 @@ def criar_ciencia_do_elogio(
     `enviado_em` é o instante do acionamento, e é dele que os 5 dias úteis do
     reenvio contam. O email retido pela janela comercial sai na abertura
     seguinte, e a contagem em dias úteis também só começa ali."""
-    (
-        supabase.table(TABELA)
-        .update({"status": DEVOLVIDO})
-        .eq("manifestacao_id", manifestacao_id)
-        .eq("tipo", CIENCIA)
-        .eq("status", PENDENTE)
-        .execute()
-    )
+    devolver_as_pendentes(supabase, manifestacao_id)
     result = (
         supabase.table(TABELA)
         .insert(
@@ -116,6 +109,23 @@ def criar_ciencia_do_elogio(
         .execute()
     )
     return result.data[0] if result.data else None
+
+
+def devolver_as_pendentes(supabase, manifestacao_id: str) -> None:
+    """A ciência do caso que ainda esperava o clique perde a vez (`devolvido`).
+
+    Chamada em todo acionamento novo do caso, de ciência ou de resposta: o
+    elogio redirecionado como reclamação não pode deixar a ciência do setor
+    antigo viva, senão o reenvio leva a ele o extrato escrito para o setor
+    novo, e o link antigo confirma um caso que não é mais elogio."""
+    (
+        supabase.table(TABELA)
+        .update({"status": DEVOLVIDO})
+        .eq("manifestacao_id", manifestacao_id)
+        .eq("tipo", CIENCIA)
+        .eq("status", PENDENTE)
+        .execute()
+    )
 
 
 def ciencia_pendente(supabase, manifestacao_id: str) -> dict | None:

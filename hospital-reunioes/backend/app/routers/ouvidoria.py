@@ -4120,8 +4120,13 @@ def acionar_a_area(
     # genérico que o FastAPI devolveria não carrega a frase abaixo, que é a
     # única coisa que este bloco entrega ao ouvidor, e a segunda tentativa dele
     # bate na recusa "Este caso já está com a área", porque o caso transicionou.
+    #
+    # A ciência de elogio que ainda esperava o clique cai junto (issue #1618):
+    # o elogio redirecionado como reclamação deixaria o link e o reenvio da
+    # área antiga vivos, e o reenvio levaria a ela o extrato da área nova.
     try:
         ouvidoria_setor_tokens.revogar_os_vivos(supabase, manifestacao_id, agora)
+        ouvidoria_acionamentos.devolver_as_pendentes(supabase, manifestacao_id)
     except (APIError, HTTPError) as exc:
         # `code` só existe no `APIError`: lido direto, o log da falha de rede
         # quebraria dentro do próprio tratamento de erro.

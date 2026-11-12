@@ -20,6 +20,7 @@ import re
 import sys
 from pathlib import Path
 
+import httpx
 import pytest
 from fastapi import BackgroundTasks, FastAPI
 from fastapi.testclient import TestClient
@@ -287,6 +288,154 @@ class TestDepoisDoClique:
         assert "não vale mais" in recusa.json()["detail"]
         assert caso["status"] == "aguardando_area"
         assert [a["status"] for a in supabase.tabelas["ouvidoria_acionamentos"]] == ["devolvido", "pendente"]
+
+
+class TestFalhaDeRedeNoClique:
+    """A transição do clique sem resposta do servidor (achado da revisão do PR
+    #1654). Quem decide se o clique volta a valer é onde o caso ficou, e não a
+    falha: o `ReadTimeout` não prova que a RPC deixou de executar."""
+
+    @staticmethod
+    def _rpc_que_cai(monkeypatch, supabase, *, depois_de_executar: bool):
+        rpc_de_verdade = supabase.rpc
+        quedas = {"falta": 1}
+
+        def _rpc(nome, params):
+            if params["p_estado_novo"] != "respondido" or not quedas["falta"]:
+                return rpc_de_verdade(nome, params)
+            quedas["falta"] -= 1
+
+            class _SemResposta:
+                def execute(self):
+                    if depois_de_executar:
+                        rpc_de_verdade(nome, params).execute()
+                    raise httpx.ReadTimeout("o banco não respondeu no tempo")
+
+            return _SemResposta()
+
+        monkeypatch.setattr(supabase, "rpc", _rpc)
+
+    def test_a_transicao_que_nao_entrou_deixa_clicar_de_novo(self, monkeypatch, emails):
+        client, supabase = _validar_o_elogio(monkeypatch)
+        token = _token_do_email(emails[0])
+        self._rpc_que_cai(monkeypatch, supabase, depois_de_executar=False)
+
+        primeiro = _clicar(client, token)
+
+        assert primeiro.status_code == 503
+        assert supabase.tabelas["ouvidoria_protocolos"][0]["status"] == "aguardando_area"
+        assert supabase.tabelas["ouvidoria_acionamentos"][0]["status"] == "pendente"
+
+        segundo = _clicar(client, token)
+
+        assert segundo.status_code == 200, segundo.text
+        assert supabase.tabelas["ouvidoria_protocolos"][0]["status"] == "respondido"
+
+    def test_a_transicao_que_entrou_mantem_a_confirmacao(self, monkeypatch, emails):
+        client, supabase = _validar_o_elogio(monkeypatch)
+        self._rpc_que_cai(monkeypatch, supabase, depois_de_executar=True)
+
+        r = _clicar(client, _token_do_email(emails[0]))
+
+        assert r.status_code == 503
+        assert "pode já ter sido registrada" in r.json()["detail"]
+        assert supabase.tabelas["ouvidoria_protocolos"][0]["status"] == "respondido"
+        assert supabase.tabelas["ouvidoria_acionamentos"][0]["status"] == "ciente"
+
+
+# =====================================================================
+# O elogio redirecionado com outro tipo (achado da revisão do PR #1654)
+# =====================================================================
+
+MOTIVO_DO_REDIRECIONAMENTO = "O relato descreve uma falha no atendimento do CTI, nao um elogio a Recepcao."
+RECLAMACAO_NO_CTI = {
+    **ELOGIO,
+    "tipo_manifestacao": "reclamacao",
+    "gravidade": "medio",
+    "setor": "CTI",
+    "extrato_para_o_setor": "Paciente do leito 4 relata demora no atendimento da equipe do CTI.",
+    "motivo": MOTIVO_DO_REDIRECIONAMENTO,
+}
+
+
+def _com_o_cti(supabase: _SupabaseFake) -> None:
+    supabase.tabelas["ouvidoria_setor_responsaveis"].append(
+        {
+            "id": "resp-cti",
+            "setor": "CTI",
+            "papel": "titular",
+            "nome": "Bia do CTI",
+            "email": "bia@hsm.br",
+            "vigencia_inicio": "2026-01-01",
+            "vigencia_fim": None,
+        }
+    )
+    supabase.tabelas["setores"].append({"id": "s2", "nome": "CTI", "ativo": True})
+
+
+def _redirecionar(client, corpo: dict):
+    r = client.post("/api/ouvidoria/manifestacoes/uuid-7/redirecionamentos", json=corpo)
+    assert r.status_code == 201, r.text
+    return r
+
+
+class TestElogioRedirecionadoComoReclamacao:
+    def test_a_ciencia_do_setor_antigo_perde_a_vez(self, monkeypatch, emails):
+        client, supabase = _validar_o_elogio(monkeypatch)
+        _com_o_cti(supabase)
+
+        _redirecionar(client, RECLAMACAO_NO_CTI)
+
+        assert [a["status"] for a in supabase.tabelas["ouvidoria_acionamentos"]] == ["devolvido"]
+        assert _reenviar(supabase, DEPOIS_DOS_CINCO_DIAS) == 0
+        assert [e["destinatario"] for e in _emails_do_elogio(emails)] == ["carlos@hsm.br"]
+
+    def test_a_ciencia_que_sobrou_nao_leva_a_reclamacao_ao_setor_antigo(self, monkeypatch, emails):
+        """A guarda do envio não confia só em a ciência estar pendente: uma
+        ciência que sobrou de outro setor e outro tipo não manda nada."""
+        client, supabase = _validar_o_elogio(monkeypatch)
+        _com_o_cti(supabase)
+        _redirecionar(client, RECLAMACAO_NO_CTI)
+        supabase.tabelas["ouvidoria_acionamentos"][0]["status"] = "pendente"
+        emails.clear()
+
+        _reenviar(supabase, DEPOIS_DOS_CINCO_DIAS)
+
+        assert [e for e in emails if e["destinatario"] == "carlos@hsm.br"] == []
+        reenvio = supabase.tabelas["ouvidoria_notificacoes"][-1]
+        assert reenvio["gatilho"] == ouvidoria_notificacoes.GATILHO_CIENCIA_ELOGIO
+        assert reenvio["status"] == "falha"
+
+    @pytest.mark.parametrize(
+        "o_caso_mudou",
+        [{"setor": "CTI"}, {"tipo_manifestacao": "reclamacao"}, {"status": "em_classificacao"}],
+        ids=["de setor", "de tipo", "de estado"],
+    )
+    def test_a_ciencia_que_nao_bate_com_o_caso_nao_e_enviada(self, monkeypatch, emails, o_caso_mudou):
+        """Cada conferência da guarda sozinha: a ciência continua pendente e
+        só uma coisa do caso diverge dela."""
+        _client_, supabase = _validar_o_elogio(monkeypatch)
+        supabase.tabelas["ouvidoria_protocolos"][0].update(o_caso_mudou)
+        emails.clear()
+
+        _reenviar(supabase, DEPOIS_DOS_CINCO_DIAS)
+
+        assert emails == []
+        assert supabase.tabelas["ouvidoria_notificacoes"][-1]["status"] == "falha"
+
+    def test_o_link_antigo_nao_confirma_a_reclamacao_que_voltou_ao_setor(self, monkeypatch, emails):
+        client, supabase = _validar_o_elogio(monkeypatch)
+        token_antigo = _token_do_email(emails[0])
+        _com_o_cti(supabase)
+        _redirecionar(client, RECLAMACAO_NO_CTI)
+        _redirecionar(client, {**RECLAMACAO_NO_CTI, "setor": "Recepcao"})
+
+        recusa = _clicar(client, token_antigo)
+
+        assert recusa.status_code == 410
+        caso = supabase.tabelas["ouvidoria_protocolos"][0]
+        assert caso["status"] == "aguardando_area"
+        assert caso["setor"] == "Recepcao"
 
 
 # =====================================================================
