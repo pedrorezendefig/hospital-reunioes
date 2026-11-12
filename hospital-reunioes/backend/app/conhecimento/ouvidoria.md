@@ -75,6 +75,13 @@ Arquivar é outra coisa: só tira da lista o caso que já foi encerrado, para or
 - Caso apagado não tem volta e não reabre, e arquivar só organiza a lista e vale apenas para caso encerrado.
 - Linha da trilha nunca é apagada, e erro se conserta com um registro novo.
 - Os títulos do PDF do relatório e do cartaz da Ouvidoria saem em caixa alta, inclusive o título das sugestões escritas pela inteligência artificial, e o resto do texto continua com maiúscula e minúscula.
+- O QR dos cartazes vai abrir primeiro uma nota de 1 a 5, que não vira protocolo, e só quem pede retorno ou quer registrar segue para a manifestação, em cinco passos.
+- A nota do QR não guarda nada de quem avaliou, tem limite de envios em pouco tempo, e só o ouvidor e a diretoria executiva veem as avaliações e os comentários.
+- Quem se manifesta de forma anônima vai receber um código para acompanhar o caso numa página pública, que mostra só o estado e a resposta.
+- Um agente de inteligência artificial vai ler toda manifestação e toda nota com comentário assim que chegam, inclusive as sigilosas, só para sugerir o assunto, o envio ao Núcleo de Segurança do Paciente e a revisão de comentários graves, e se ele falhar o caso entra normal na fila.
+- O Núcleo de Segurança do Paciente vai receber o relato integral e o paciente atendido mesmo no caso sigiloso, só depois de o ouvidor confirmar, e o nome de quem manifestou só vai quando o caso não é sigiloso, como única exceção à regra do sigilo.
+- O elogio vai ao setor só para ele confirmar que recebeu, sem prazo de resposta, com uma nota curta do ouvidor.
+- A nota do Google vai ser buscada sozinha toda semana e deixa de ser digitada, e o convite para avaliar no Google aparece só para as notas 4 e 5, com o risco aceito pela diretoria.
 
 ## O que costuma virar Demanda
 

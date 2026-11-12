@@ -21,6 +21,10 @@ Só `status: accepted` vale como decisão; `superseded` é histórico (CLAUDE.md
 | [0051](0051-email-recebido-passa-por-triagem-antes-de-virar-manifestacao.md) | accepted | E-mail recebido em ouvidoria@ passa por triagem antes de virar manifestação |
 | [0052](0052-paciente-do-caso-viaja-para-a-area-no-caso-anonimo.md) | accepted | O Paciente do caso viaja para a área, inclusive no caso anônimo |
 | [0055](0055-redirecionamento-pelo-ouvidor-e-cadastro-de-responsaveis-pelo-ouvidor.md) | accepted | O ouvidor redireciona o caso para outra área num ato só, e passa a manter o cadastro de responsáveis |
+| [0086](0086-qr-da-ouvidoria-vira-avaliacao-com-funil.md) | accepted | O QR da Ouvidoria vira Avaliação com funil para a manifestação guiada (emenda 0036) |
+| [0087](0087-agente-de-triagem-da-ouvidoria.md) | accepted | O agente de triagem da Ouvidoria lê toda manifestação e toda avaliação na chegada (emenda 0082 e 0039) |
+| [0088](0088-acionamento-de-ciencia-elogio-e-nucleo-de-seguranca-do-paciente.md) | accepted | Acionamento de ciência: o elogio e o Núcleo de Segurança do Paciente, com exceção de sigilo para o Núcleo (emenda 0041 e 0052) |
+| [0089](0089-nota-do-google-automatica-e-convite-so-para-notas-4-e-5.md) | accepted | Nota do Google buscada toda semana e convite ao Google só para as notas 4 e 5 |
 
 ## Contas médicas
 

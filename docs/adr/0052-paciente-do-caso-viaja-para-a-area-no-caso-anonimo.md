@@ -1,6 +1,7 @@
 ---
 status: accepted
 amends: 0041
+amended_by: 0088
 ---
 
 > Emenda a exceção do ADR 0041 (decisão 3 e emenda de 01/09/2026): o **caso anônimo** continua sem identificação de quem manifestou e sem relato integral, mas passa a levar para a área o nome e a referência do Paciente do caso. O sigilo reforçado não muda: ali nada do paciente viaja fora do extrato do ouvidor.
