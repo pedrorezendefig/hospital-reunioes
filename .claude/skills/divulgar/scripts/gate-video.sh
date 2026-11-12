@@ -2,7 +2,8 @@
 # Gate anti-travamento do vídeo da /divulgar (regra 10 do CLAUDE.md global).
 #
 # Três provas, e o vídeo só é entregue se as três passam:
-#   1. fps constante 30 (r_frame_rate e avg_frame_rate iguais a 30/1);
+#   1. fps constante 60, o do render final do Motion studio (r_frame_rate e
+#      avg_frame_rate iguais a 60/1);
 #   2. nenhum congelamento de 0,5 s ou mais fora das paradas planejadas
 #      (ffmpeg freezedetect=n=-60dB:d=0.5);
 #   3. o MP4 toca no Chrome real (Playwright com channel="chrome", servido por
@@ -28,14 +29,14 @@ while [ $# -gt 0 ]; do
 done
 FALHOU=""
 
-echo "== 1. fps constante 30"
+echo "== 1. fps constante 60"
 FPS=$(ffprobe -v error -select_streams v:0 \
   -show_entries stream=r_frame_rate,avg_frame_rate -of csv=p=0 "$VIDEO" | cut -d, -f1-2)
-# cut: o MP4 do Remotion traz um side_data vazio e o csv sai "30/1,30/1," (vírgula sobrando)
-if [ "$FPS" = "30/1,30/1" ]; then
+# cut: o ffprobe pode trazer um side_data vazio e o csv sai "60/1,60/1," (vírgula sobrando)
+if [ "$FPS" = "60/1,60/1" ]; then
   echo "ok ($FPS)"
 else
-  echo "REPROVADO: r_frame_rate,avg_frame_rate = $FPS (esperado 30/1,30/1)"
+  echo "REPROVADO: r_frame_rate,avg_frame_rate = $FPS (esperado 60/1,60/1)"
   FALHOU=1
 fi
 

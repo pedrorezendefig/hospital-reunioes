@@ -8,10 +8,14 @@ falsos no PATH, para provar o fps que ele aceita sem precisar de um MP4 de verda
 from __future__ import annotations
 
 import re
+import subprocess
 from pathlib import Path
+
+import pytest
 
 RAIZ = Path(__file__).resolve().parent.parent
 SKILL = RAIZ / ".claude" / "skills" / "divulgar" / "SKILL.md"
+GATE = RAIZ / ".claude" / "skills" / "divulgar" / "scripts" / "gate-video.sh"
 
 
 def _texto() -> str:
@@ -47,3 +51,28 @@ def test_passo_1_para_na_lista_de_tomadas_antes_do_codigo_e_na_folha_antes_do_re
     assert "lista" in passo[parada_1 : parada_1 + 80]
     assert "folha de quadros" in passo[parada_2 : parada_2 + 80]
     assert parada_1 < codigo < parada_2 < render_final
+
+
+def _portao(tmp_path: Path, fps: str) -> str:
+    """Roda o gate-video.sh com um ffprobe que responde `fps` e devolve a prova 1 da saída."""
+    bin_ = tmp_path / "bin"
+    bin_.mkdir()
+    (bin_ / "ffprobe").write_text(f'#!/bin/sh\necho "{fps},{fps},"\n', encoding="utf-8")
+    (bin_ / "ffmpeg").write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+    for b in bin_.iterdir():
+        b.chmod(0o755)
+    video = tmp_path / "filme.mp4"
+    video.write_bytes(b"")
+    saida = subprocess.run(
+        ["bash", str(GATE), str(video)],
+        capture_output=True,
+        text=True,
+        env={"PATH": f"{bin_}:/usr/bin:/bin", "PYTHON": "/bin/false"},
+    ).stdout
+    return saida[saida.index("== 1.") : saida.index("== 2.")]
+
+
+@pytest.mark.parametrize("fps, aprovado", [("60/1", True), ("30/1", False)])
+def test_portao_aceita_o_render_final_do_estudio_a_60_fps(tmp_path, fps, aprovado):
+    prova = _portao(tmp_path, fps)
+    assert ("REPROVADO" not in prova) is aprovado
