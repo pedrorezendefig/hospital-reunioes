@@ -1,6 +1,6 @@
 # MIGRATIONS.md
 <!-- gerado automaticamente por /snapshot — não editar -->
-<!-- last_update: 2026-11-12T23:42+0000 -->
+<!-- last_update: 2026-11-12T23:43+0000 -->
 
 Ordem cronológica das migrations do Postgres do Hospital Reuniões.
 
@@ -135,6 +135,7 @@ Ordem cronológica das migrations do Postgres do Hospital Reuniões.
 | 133 | `133_tecnologia_demonstracao.sql` | a Demonstracao no card | 0 | 2 | 0 | 0 |
 | 134 | `134_tecnologia_numero_da_demanda.sql` | o Numero da Demanda | 0 | 1 | 0 | 0 |
 | 135 | `135_ouvidoria_ponto_nome_publico_cartaz_a4.sql` | o Ponto de escuta ganha os campos do cartaz A4 | 0 | 5 | 0 | 0 |
+| 136 | `136_ouvidoria_acionamento_de_ciencia.sql` | o registro de acionamento e o elogio como ciencia | 1 | 0 | 3 | 0 |
 
 **Legenda:** C = CREATE TABLE · A = ALTER TABLE · I = CREATE INDEX · D = DROP.
-**Total:** 129 migrations.
+**Total:** 130 migrations.

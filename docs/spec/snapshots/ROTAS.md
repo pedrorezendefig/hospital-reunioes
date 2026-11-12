@@ -1,6 +1,6 @@
 # ROTAS.md
 <!-- gerado automaticamente por /snapshot — não editar -->
-<!-- last_update: 2026-11-12T23:42+0000 -->
+<!-- last_update: 2026-11-12T23:43+0000 -->
 
 Endpoints HTTP expostos pelo backend FastAPI do Hospital Reuniões.
 
@@ -327,6 +327,7 @@ Endpoints HTTP expostos pelo backend FastAPI do Hospital Reuniões.
 
 | Método | Rota | O que faz | Auth |
 |--------|------|-----------|------|
+| POST | `/ouvidoria-setor/elogio/{token}/recebido` | O responsável do setor confirma que o elogio chegou à equipe, sem senha. | ❌ |
 | GET | `/ouvidoria-setor/{token}` | O que o titular vê ao abrir o link do email: extrato, prazo e se o caso | ❌ |
 | POST | `/ouvidoria-setor/{token}/devolver` | A Devolução à Ouvidoria: este caso não é do meu setor (issue #600). | ❌ |
 | POST | `/ouvidoria-setor/{token}/prorrogacao` | O pedido de mais prazo, feito pelo próprio link do email (issue #333). | ❌ |
@@ -535,4 +536,4 @@ Endpoints HTTP expostos pelo backend FastAPI do Hospital Reuniões.
 
 ---
 
-**Totais:** 304 endpoints em 45 routers · 94% exigem auth.
+**Totais:** 305 endpoints em 45 routers · 94% exigem auth.

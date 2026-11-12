@@ -1,6 +1,6 @@
 # ENTIDADES.md
 <!-- gerado automaticamente por /snapshot — não editar -->
-<!-- last_update: 2026-11-12T23:42+0000 -->
+<!-- last_update: 2026-11-12T23:43+0000 -->
 
 Modelo de dados do Hospital Reuniões. Tabelas no Postgres (via Supabase).
 
@@ -1787,6 +1787,34 @@ Modelo de dados do Hospital Reuniões. Tabelas no Postgres (via Supabase).
 **Indexes:**
 - `idx_tecnologia_conversa_da_demanda_demanda` em `(demanda_id, criado_em)` (de `129_tecnologia_conversa_da_demanda.sql`)
 
+## ouvidoria_acionamentos
+
+> Origem: `136_ouvidoria_acionamento_de_ciencia.sql`
+
+| Campo | Tipo | Constraints | Default | FK |
+|-------|------|-------------|---------|-----|
+| `id` | `UUID` | PK | `gen_random_uuid()` | — |
+| `manifestacao_id` | `UUID` | NOT NULL | — | `ouvidoria_protocolos.id` |
+| `setor` | `TEXT` | NOT NULL | — | — |
+| `responsavel_nome` | `TEXT` | NOT NULL | — | — |
+| `responsavel_email` | `TEXT` | NOT NULL | — | — |
+| `tipo` | `TEXT` | NOT NULL | — | — |
+| `motivo_ciencia` | `TEXT` | — | — | — |
+| `status` | `TEXT` | NOT NULL | `'pendente'` | — |
+| `prazo` | `TIMESTAMPTZ` | — | — | — |
+| `enviado_em` | `TIMESTAMPTZ` | — | — | — |
+| `respondido_em` | `TIMESTAMPTZ` | — | — | — |
+| `resposta_texto` | `TEXT` | — | — | — |
+| `token_hash` | `TEXT` | — | — | — |
+| `reenviado_em` | `TIMESTAMPTZ` | — | — | — |
+| `criado_em` | `TIMESTAMPTZ` | NOT NULL | `now()` | — |
+| `e` | `toda` | NOT NULL | — | — |
+
+**Indexes:**
+- `idx_ouvidoria_acionamentos_token` em `(token_hash)` (de `136_ouvidoria_acionamento_de_ciencia.sql`)
+- `idx_ouvidoria_acionamentos_caso` em `(manifestacao_id, criado_em)` (de `136_ouvidoria_acionamento_de_ciencia.sql`)
+- `idx_ouvidoria_acionamentos_pendentes` em `(enviado_em)` (de `136_ouvidoria_acionamento_de_ciencia.sql`)
+
 ---
 
-**Resumo:** 87 tabelas vivas.
+**Resumo:** 88 tabelas vivas.

@@ -1,6 +1,6 @@
 # SCHEMA.md
 <!-- gerado automaticamente por /snapshot — não editar -->
-<!-- last_update: 2026-11-12T23:42+0000 -->
+<!-- last_update: 2026-11-12T23:43+0000 -->
 
 Diagrama relacional do Hospital Reuniões. Renderiza nativo no GitHub.
 
@@ -958,6 +958,17 @@ erDiagram
         VARCHAR mencoes
         TIMESTAMPTZ criado_em
     }
+    ouvidoria_acionamentos {
+        UUID id PK
+        UUID manifestacao_id FK
+        TEXT setor
+        TEXT responsavel_nome
+        TEXT responsavel_email
+        TEXT tipo
+        TEXT motivo_ciencia
+        TEXT status
+        _ mais_colunas "+8"
+    }
 ```
 
 ## Indexes principais
@@ -1109,6 +1120,9 @@ erDiagram
 | `cm_faltou_isto` | `idx_cm_faltou_isto_criado_em` | `criado_em` | `126_contas_medicas_auditor.sql` |
 | `cm_faltou_isto` | `idx_cm_faltou_isto_conversa` | `conversa_id` | `126_contas_medicas_auditor.sql` |
 | `tecnologia_conversa_da_demanda` | `idx_tecnologia_conversa_da_demanda_demanda` | `demanda_id, criado_em` | `129_tecnologia_conversa_da_demanda.sql` |
+| `ouvidoria_acionamentos` | `idx_ouvidoria_acionamentos_token` | `token_hash` | `136_ouvidoria_acionamento_de_ciencia.sql` |
+| `ouvidoria_acionamentos` | `idx_ouvidoria_acionamentos_caso` | `manifestacao_id, criado_em` | `136_ouvidoria_acionamento_de_ciencia.sql` |
+| `ouvidoria_acionamentos` | `idx_ouvidoria_acionamentos_pendentes` | `enviado_em` | `136_ouvidoria_acionamento_de_ciencia.sql` |
 
 ---
-**Resumo:** 87 tabelas · 130 relacionamentos FK detectados.
+**Resumo:** 88 tabelas · 130 relacionamentos FK detectados.
