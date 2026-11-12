@@ -2,6 +2,49 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-11-11T23:15:09-03:00",
+      "sha": "261e0926ea741ab1ae80e24a13e9ddbd3dd7e08b",
+      "app_version": "0.259.1",
+      "subject": "Onda onda-a-onda1: Assistente responde ao reenvio depois do aviso de erro no planejamento da melhoria",
+      "raw_subject": "chore(deploy): registro da onda onda-a-onda1 (#1607)",
+      "scope": [
+        "backend"
+      ],
+      "prds": [],
+      "result": "healthy",
+      "duration_seconds": 198,
+      "services_touched": [
+        "backend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        },
+        {
+          "service": "frontend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "onda-enxuta onda-a-onda1: PR #1607 (issue #1582), mergeados PR a PR. Merge pela API do GitHub, um build. Registro pela Action pos-merge depois do health.",
+      "etapas": {
+        "merge_s": 3,
+        "build_s": {
+          "backend": 164
+        },
+        "health_s": 10
+      },
+      "responsavel": "pedrorezendefig"
+    },
+    {
       "at": "2026-11-11T20:16:33-03:00",
       "sha": "7bec02391c1246985dee8cc57b6593b293880733",
       "app_version": "0.259.0",
