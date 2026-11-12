@@ -43,7 +43,11 @@ import {
   tomDaCobranca,
   type ResultadoDaCobranca,
 } from "@/lib/ouvidoria/cobranca";
-import type { ManifestacaoIndice } from "@/lib/ouvidoria/fila";
+import {
+  MARCA_PRONTO_PARA_ENCERRAR,
+  prontoParaEncerrar,
+  type ManifestacaoIndice,
+} from "@/lib/ouvidoria/fila";
 import { classificarPrazoDaManifestacao, type ClassePrazo } from "@/lib/ouvidoria/prazo";
 import {
   classeDaGravidade,
@@ -434,6 +438,13 @@ function LinhaDaFila({
                 className={`shrink-0 px-2 py-0.5 rounded-full border text-[11px] font-semibold uppercase tracking-wide ${classeDaGravidade(m.gravidade)}`}
               >
                 {gravidade}
+              </span>
+            )}
+            {/* O elogio que o setor confirmou pelo botão Elogio recebido
+                (issue #1618, ADR 0088): só falta o ouvidor encerrar. */}
+            {prontoParaEncerrar(m) && (
+              <span className="shrink-0 px-2 py-0.5 rounded-full border text-[11px] font-semibold bg-emerald-50 text-emerald-700 border-emerald-200">
+                {MARCA_PRONTO_PARA_ENCERRAR}
               </span>
             )}
           </div>

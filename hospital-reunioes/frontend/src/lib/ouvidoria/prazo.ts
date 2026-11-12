@@ -93,6 +93,19 @@ export interface PrazoDaManifestacao {
   rotulo_prazo: string;
   /** Folga em minutos de expediente. Zero quando estourado, nulo sem prazo. */
   minutos_uteis_restantes: number | null;
+  /** O tipo do caso: o elogio não vence (issue #1618). */
+  tipo_manifestacao?: string | null;
+}
+
+/**
+ * O caso que nunca vence (issue #1618, ADR 0088): o elogio vai ao setor só
+ * para ele confirmar que recebeu, sem prazo de resposta. Sem prazo da área, a
+ * tela cairia no prazo de referência da fundação e pintaria o elogio de
+ * vencido na fila e no Painel. A regra mora aqui, num lugar só, para as duas
+ * telas.
+ */
+export function naoVence(m: { tipo_manifestacao?: string | null }): boolean {
+  return m.tipo_manifestacao === "elogio";
 }
 
 /** Expediente de 08h às 17h: a mesma régua que o motor usa no servidor. */
@@ -120,6 +133,7 @@ export function classificarPrazoDaManifestacao(
   hoje: string
 ): ClassePrazo {
   if (!EM_ANDAMENTO.has(m.status)) return "respondido";
+  if (naoVence(m)) return "normal";
   if (!m.prazo_area_em) return classificarPrazo(m.prazo_resposta, m.status, hoje);
   const dia = diaNoHospital(m.prazo_area_em);
   // O dia já passado conta como estouro mesmo sem o carimbo do motor: o painel

@@ -660,3 +660,20 @@ describe("o dia civil seguinte", () => {
     expect(classificarJanela(virada, "2026-08-31")).toBe("amanha");
   });
 });
+
+describe("o elogio fica fora dos vencidos (issue #1618, ADR 0088)", () => {
+  // O elogio com a área não tem prazo da área, e o prazo de referência da
+  // fundação já passou: sem a regra, ele cairia em "Já venceu".
+  const elogio = caso({ tipo_manifestacao: "elogio", prazo_area_em: null, prazo_resposta: "2026-08-20" });
+
+  it("o elogio não aparece em Já venceu", () => {
+    expect(classificarJanela(elogio, HOJE)).toBe("sem_prazo");
+    expect(vencendoEm([elogio], "vencido", HOJE)).toEqual([]);
+  });
+
+  it("a reclamação na mesma situação continua em Já venceu", () => {
+    const reclamacao = { ...elogio, tipo_manifestacao: "reclamacao" };
+
+    expect(vencendoEm([reclamacao], "vencido", HOJE)).toEqual([reclamacao]);
+  });
+});

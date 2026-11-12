@@ -237,4 +237,20 @@ describe("bloco aguardando seu encerramento (issue #486)", () => {
     );
     expect(screen.queryByRole("region", { name: BLOCO })).toBeNull();
   });
+
+  // O elogio que o setor confirmou volta ao ouvidor como respondido, com a
+  // marca Pronto para encerrar (issue #1618, ADR 0088).
+  it("o elogio confirmado pelo setor chega com a marca Pronto para encerrar", async () => {
+    montar([
+      { ...linha(7, "respondido", true), tipo_manifestacao: "elogio" },
+      linha(8, "respondido", true),
+    ]);
+
+    const bloco = within(await screen.findByRole("region", { name: BLOCO }));
+    const elogio = bloco.getByText("2026-0007").closest("li") as HTMLElement;
+    const reclamacao = bloco.getByText("2026-0008").closest("li") as HTMLElement;
+
+    expect(within(elogio).getByText("Pronto para encerrar")).toBeTruthy();
+    expect(within(reclamacao).queryByText("Pronto para encerrar")).toBeNull();
+  });
 });

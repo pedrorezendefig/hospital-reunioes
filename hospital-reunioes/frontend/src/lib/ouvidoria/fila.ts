@@ -149,6 +149,21 @@ export function classeDoStatus(status: StatusManifestacao): string {
   return CLASSE_POR_STATUS[status] ?? "bg-slate-100 text-slate-600";
 }
 
+/** A marca do elogio que o setor confirmou (issue #1618, ADR 0088). */
+export const MARCA_PRONTO_PARA_ENCERRAR = "Pronto para encerrar";
+
+/**
+ * O elogio que o setor confirmou pelo botão Elogio recebido: o caso volta ao
+ * ouvidor como respondido e só falta encerrar. É o elogio respondido, e mais
+ * nada, porque o elogio não tem resposta da área para o ouvidor ler.
+ */
+export function prontoParaEncerrar(m: {
+  status: StatusManifestacao;
+  tipo_manifestacao: TipoManifestacao | null;
+}): boolean {
+  return m.status === "respondido" && m.tipo_manifestacao === "elogio";
+}
+
 /** O título do bloco de destaque, um só lugar para a tela e para o contador. */
 export const TITULO_AGUARDANDO_ENCERRAMENTO = "Aguardando seu encerramento";
 
