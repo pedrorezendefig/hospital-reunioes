@@ -2,6 +2,49 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-11-11T23:26:56-03:00",
+      "sha": "0193535ecc71bbf7bdd5229c2949cd5cda4b4438",
+      "app_version": "0.259.2",
+      "subject": "Onda onda-1583-onda1: Botão dos e-mails da Ouvidoria aparece no Gmail e no Outlook",
+      "raw_subject": "chore(deploy): registro da onda onda-1583-onda1 (#1606)",
+      "scope": [
+        "backend"
+      ],
+      "prds": [],
+      "result": "healthy",
+      "duration_seconds": 50,
+      "services_touched": [
+        "backend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        },
+        {
+          "service": "frontend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "onda-enxuta onda-1583-onda1: PR #1606 (issue #1583), mergeados PR a PR. Merge pela API do GitHub, um build. Registro pela Action pos-merge depois do health.",
+      "etapas": {
+        "merge_s": 2,
+        "build_s": {
+          "backend": 15
+        },
+        "health_s": 10
+      },
+      "responsavel": "pedrorezendefig"
+    },
+    {
       "at": "2026-11-11T23:15:09-03:00",
       "sha": "261e0926ea741ab1ae80e24a13e9ddbd3dd7e08b",
       "app_version": "0.259.1",
