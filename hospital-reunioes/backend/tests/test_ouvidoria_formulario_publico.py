@@ -16,7 +16,6 @@ from __future__ import annotations
 
 import os
 import sys
-from urllib.parse import parse_qs, urlsplit
 
 import pytest
 from fastapi import FastAPI
@@ -377,22 +376,19 @@ class TestEnvioVazio:
 
 
 class TestQrSetorial:
-    """O cartaz impresso aponta para `/ouvidoria/qr`, e é o servidor que decide
-    o destino (ADR 0034 decisão 9, emendado pelo ADR 0036): o cartaz nunca
-    precisa ser reimpresso. Desde a issue #378, o que vai no papel é o código
-    do Ponto de escuta."""
+    """O cartaz de antes aponta para `/ouvidoria/qr`, e é o servidor que decide
+    o destino (ADR 0034 decisão 9, emendado pelos ADRs 0036 e 0086): desde a
+    issue #1617 ele redireciona ao endereço curto `/a/{código}`."""
 
-    def test_qr_do_cartaz_cadastrado_abre_o_formulario_com_o_codigo(self, monkeypatch):
+    def test_qr_do_cartaz_cadastrado_vai_ao_endereco_curto(self, monkeypatch):
         monkeypatch.setattr(settings, "frontend_url", "https://app.hospital.exemplo")
         client, _banco = _make_app(_BancoFake(pontos=[dict(CARTAZ)]))
 
         r = client.get("/api/ouvidoria/qr", params={"p": "AB2CD3"})
 
         assert r.status_code == 302
-        destino = urlsplit(r.headers["location"])
-        assert f"{destino.scheme}://{destino.netloc}{destino.path}" == "https://app.hospital.exemplo/manifestacao"
         # Só o código viaja: setor e ponto saem do cadastro, do lado do servidor.
-        assert parse_qs(destino.query) == {"p": ["AB2CD3"]}
+        assert r.headers["location"] == "https://app.hospital.exemplo/a/AB2CD3"
 
     def test_qr_sem_parametros_abre_o_formulario_limpo(self, monkeypatch):
         monkeypatch.setattr(settings, "frontend_url", "https://app.hospital.exemplo")
@@ -422,7 +418,7 @@ class TestQrSetorial:
 
         r = client.get("/api/ouvidoria/qr", params={"p": "  ab2cd3 "})
 
-        assert parse_qs(urlsplit(r.headers["location"]).query)["p"] == ["AB2CD3"]
+        assert r.headers["location"] == "https://app.hospital.exemplo/a/AB2CD3"
 
     def test_o_formato_antigo_da_url_foi_aposentado(self, monkeypatch):
         """ADR 0036, decisão 4: `?setor=X&ponto=Y` não pré-preenche mais nada.
@@ -438,16 +434,16 @@ class TestQrSetorial:
         assert r.headers["location"] == "https://app.hospital.exemplo/manifestacao"
 
     def test_qr_nunca_manda_o_manifestante_para_fora_do_app(self, monkeypatch):
-        """Open redirect: o destino sai da configuração do servidor, o
-        parâmetro só escolhe o pré-preenchimento."""
+        """Open redirect: o destino sai da configuração do servidor, e o
+        parâmetro só entra no caminho depois de passar pela régua do código."""
         monkeypatch.setattr(settings, "frontend_url", "https://app.hospital.exemplo")
         client, _banco = _make_app()
 
         # Código que não existe: o destino continua saindo da configuração do
-        # servidor, e o parâmetro só escolheria o pré-preenchimento.
+        # servidor, e quem decide que ele entra sem origem é o endereço curto.
         r = client.get("/api/ouvidoria/qr", params={"p": "ZZ9YY8"})
 
-        assert r.headers["location"].startswith("https://app.hospital.exemplo/manifestacao")
+        assert r.headers["location"] == "https://app.hospital.exemplo/a/ZZ9YY8"
 
         # URL inteira no lugar do código também cai no formulário, e não numa
         # página de erro (ADR 0036, decisão 6): quem filtra é o alfabeto do

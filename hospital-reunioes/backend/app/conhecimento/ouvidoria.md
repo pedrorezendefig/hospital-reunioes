@@ -68,6 +68,11 @@ Arquivar é outra coisa: só tira da lista o caso que já foi encerrado, para or
 - A área que recebe um caso que não é dela devolve com o motivo e não escolhe o destino, que é decisão do ouvidor, com prazo cheio para a área certa.
 - O ouvidor pode redirecionar o caso para outra área num ato só, e a área antiga é avisada.
 - O cartaz de QR leva o código curto de um ponto de escuta, e o setor do cartaz é a origem do relato, nunca a área responsável.
+- Na tela Pontos de escuta, o ouvidor cadastra e edita em cada ponto o nome público, a descrição do local onde o cartaz fica (obrigatória), um dos dois títulos do cartaz ("Como foi seu atendimento hoje?" ou "Um minuto para nos contar"), um código de controle opcional e a marca de ala de internação.
+- O paciente nunca vê o nome interno do setor, e sem nome público aparece o rótulo do ponto.
+- O cartaz sai em PDF no tamanho A4, no modelo aprovado pela diretoria, com o QR de 9 centímetros, um endereço curto impresso para quem prefere digitar e, fora da moldura, uma linha de controle para quem instala saber qual cartaz é qual, e o cartaz pequeno em A5 continua disponível.
+- No cartaz de ala de internação o aviso manda falar com a enfermagem do posto da ala, e nos outros com a equipe do setor.
+- Os cartazes antigos continuam funcionando, porque o QR antigo leva ao mesmo endereço curto do cartaz novo, que hoje abre o formulário com a origem do ponto, ou sem origem se o ponto foi desativado.
 - Ponto de escuta se desativa e nunca se apaga, porque os casos antigos apontam para ele.
 - O manifestante recebe dois e-mails, o acuse na abertura e o aviso no encerramento, e só quando deixou um e-mail utilizável.
 - A caixa de e-mail da ouvidoria vai passar por uma triagem dentro do aplicativo antes de virar caso, e essa triagem ainda não foi construída.

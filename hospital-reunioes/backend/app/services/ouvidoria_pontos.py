@@ -10,6 +10,7 @@ decisão 2).
 from __future__ import annotations
 
 import logging
+import os
 import secrets
 
 from app.services.pdf_url_fetcher import criar_pdf_url_fetcher
@@ -42,33 +43,60 @@ def gerar_codigo() -> str:
 
 # As colunas que a tela lê. `criado_por` fica de fora: quem cadastrou o cartaz
 # não é informação da tela de cartazes, e a trilha de quem fez vive no banco.
-CAMPOS_PONTO_TUPLA = ("id", "codigo", "setor", "ponto", "ativo", "criado_em")
+CAMPOS_PONTO_TUPLA = (
+    "id",
+    "codigo",
+    "setor",
+    "ponto",
+    "ativo",
+    "criado_em",
+    # Os campos do cartaz A4 (migration 135, ADR 0086 decisão 10).
+    "nome_publico",
+    "descricao_local",
+    "titulo_cartaz",
+    "codigo_controle",
+    "ala_internacao",
+)
 CAMPOS_PONTO = ", ".join(CAMPOS_PONTO_TUPLA)
 
 TABELA = "ouvidoria_pontos"
+
+# Os dois modelos do cartaz A4, com o título em duas linhas e o subtítulo
+# (seção 4.13 da especificação da Diretoria). A chave é o que o banco grava, e
+# o CHECK da migration 135 tem a mesma lista. O texto fica em maiúscula e
+# minúscula: a caixa alta é do CSS do cartaz (ADR 0080).
+TITULOS_DO_CARTAZ = {
+    "atendimento_hoje": (("Como foi seu", "atendimento hoje?"), "Leva menos de um minuto"),
+    "um_minuto": (("Um minuto para", "nos contar"), "Como está sendo sua estadia?"),
+}
 
 # Colisão do índice único do `codigo` (migration 085).
 _CODIGO_DUPLICADO = "23505"
 
 
-# O caminho que o cartaz carrega. Sem o prefixo `/api` de propósito: o
-# `next.config.ts` tem um rewrite dedicado a ele, e o comentário de lá explica
-# por quê ("é a única coisa impressa e colada na parede, então ela mora no
-# domínio do app"). Passar pelo proxy genérico da API funcionaria hoje e
-# amarraria todo cartaz impresso à forma daquele proxy.
-CAMINHO_DO_QR = "/ouvidoria/qr"
+# O caminho que o cartaz carrega desde a ADR 0086 (decisão 5): curto, no
+# domínio do app e sem o prefixo `/api`. É uma página do app, e é ela que
+# decide o que a pessoa vê (hoje o formulário; com a tela de nota, a nota): o
+# cartaz que está na parede continua valendo quando o destino muda. O caminho
+# antigo, `/ouvidoria/qr?p=`, redireciona para cá.
+CAMINHO_CURTO = "/a"
+
+
+def caminho_curto(codigo: str) -> str:
+    return f"{CAMINHO_CURTO}/{codigo}"
 
 
 def url_do_cartaz(codigo: str) -> str:
     """O que o QR carrega. Curta de propósito: QR com menos dados tem módulos
-    maiores e a câmera lê melhor de longe (ADR 0036, decisão 2).
+    maiores e a câmera lê melhor de longe (ADR 0036, decisão 2; ADR 0086,
+    decisão 5).
 
-    O caminho é o que RESOLVE o código, e não o do formulário: é o servidor que
-    decide para onde mandar. É isso que deixa o destino mudar (a Ana no
+    O caminho é o do cartaz, e não o do formulário: é o app que decide o que a
+    pessoa vê. É isso que deixa o destino mudar (a tela de nota, a Ana no
     WhatsApp oficial) sem reimprimir nenhum cartaz."""
     from app.config import settings
 
-    return f"{settings.frontend_url.rstrip('/')}{CAMINHO_DO_QR}?p={codigo}"
+    return f"{settings.frontend_url.rstrip('/')}{caminho_curto(codigo)}"
 
 
 def endereco_impresso(codigo: str) -> str:
@@ -83,7 +111,7 @@ def endereco_impresso(codigo: str) -> str:
     from app.config import settings
 
     host = settings.frontend_url.replace("https://", "").replace("http://", "").rstrip("/")
-    return f"{host}{CAMINHO_DO_QR}?p={codigo}"
+    return f"{host}{caminho_curto(codigo)}"
 
 
 def png_do_qr(codigo: str, escala: int = 8) -> bytes:
@@ -124,16 +152,33 @@ def listar(supabase) -> list[dict]:
     return [{campo: linha.get(campo) for campo in CAMPOS_PONTO_TUPLA} for linha in (result.data or [])]
 
 
+def normalizar_codigo(codigo: str | None) -> str | None:
+    """O código como o cartaz o imprime (maiúsculo, sem espaço), ou None quando
+    o texto não tem forma de código: tamanho e alfabeto exatos.
+
+    É a régua que deixa um parâmetro público virar caminho do app ou consulta
+    ao banco. O que não passa é ruído, não código."""
+    limpo = (codigo or "").strip().upper()
+    if len(limpo) != TAMANHO_DO_CODIGO or set(limpo) - set(ALFABETO_DO_CODIGO):
+        return None
+    return limpo
+
+
+def nome_exibido(ponto: dict) -> str:
+    """O nome do local que o paciente vê: o nome público, ou o rótulo do ponto
+    quando ele está vazio. Nunca o nome interno do setor (ADR 0086, decisão
+    10)."""
+    return ponto.get("nome_publico") or ponto["ponto"]
+
+
 def por_codigo(supabase, codigo: str | None) -> dict | None:
     """O Ponto de escuta ATIVO de um código, ou None.
 
     None cobre os três casos que a decisão 6 trata igual: código ausente,
     código que ninguém cadastrou e cartaz aposentado. Nos três, quem leu o QR
     cai no formulário normal, sem origem e nunca numa página de erro."""
-    if not codigo:
-        return None
-    limpo = (codigo or "").strip().upper()
-    if not limpo or len(limpo) != TAMANHO_DO_CODIGO or set(limpo) - set(ALFABETO_DO_CODIGO):
+    limpo = normalizar_codigo(codigo)
+    if not limpo:
         # Fora do alfabeto nem chega ao banco: é ruído, não consulta.
         return None
     try:
@@ -144,7 +189,7 @@ def por_codigo(supabase, codigo: str | None) -> dict | None:
     return dict(result.data[0]) if result.data else None
 
 
-def criar(supabase, setor: str, ponto: str, criado_por: str | None) -> dict | None:
+def criar(supabase, campos: dict, criado_por: str | None) -> dict | None:
     """Cadastra o cartaz e devolve a linha, ou None se o código não fechou.
 
     Quem decide a colisão é o índice único do banco, e não uma consulta antes do
@@ -154,12 +199,9 @@ def criar(supabase, setor: str, ponto: str, criado_por: str | None) -> dict | No
     from postgrest.exceptions import APIError
 
     for _ in range(TENTATIVAS_DE_CODIGO):
-        linha = {
-            "codigo": gerar_codigo(),
-            "setor": setor,
-            "ponto": ponto,
-            "criado_por": criado_por,
-        }
+        # `campos` é o que o ouvidor informou (setor já canônico, rótulo e os
+        # campos do cartaz). O código e o autor saem daqui, nunca do pedido.
+        linha = {**campos, "codigo": gerar_codigo(), "criado_por": criado_por}
         try:
             result = supabase.table(TABELA).insert(linha).execute()
         except APIError as exc:
@@ -178,12 +220,99 @@ def criar(supabase, setor: str, ponto: str, criado_por: str | None) -> dict | No
     return None
 
 
-def html_do_cartaz(ponto: dict) -> str:
-    """O cartaz A5, como HTML, antes de virar PDF.
+# O A4 é o cartaz da parede (ADR 0086, decisão 10); o A5 da issue #378 segue
+# disponível, só não é mais o padrão.
+FORMATOS_DO_CARTAZ = ("a4", "a5")
+
+# A linha de controle tem 7 pt e uma linha só: a descrição do local entra
+# resumida.
+_TAMANHO_DO_LOCAL_RESUMIDO = 60
+
+_STATIC = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "static"))
+
+
+def _uri_da_fonte() -> str | None:
+    """A HP Simplified que vai embutida no PDF. A mesma expressão alimenta o
+    template e a allowlist do fetcher: a guarda compara a URI por casamento
+    exato (ver `pdf_url_fetcher`)."""
+    fonte = os.path.join(_STATIC, "fonts", "HPSimplified_Rg.ttf")
+    return f"file://{fonte}" if os.path.exists(fonte) else None
+
+
+def _assets_do_cartaz_a4() -> frozenset[str]:
+    """Os únicos `file://` que o cartaz A4 pode buscar: a fonte. Logo e QR vão
+    embutidos como `data:`."""
+    fonte = _uri_da_fonte()
+    return frozenset({fonte}) if fonte else frozenset()
+
+
+def _logo_branco_data_uri() -> str:
+    """O logo do hospital em branco, para o rodapé azul do cartaz A4."""
+    import base64
+
+    with open(os.path.join(_STATIC, "images", "logo_hospital_branco.png"), "rb") as arquivo:
+        return "data:image/png;base64," + base64.b64encode(arquivo.read()).decode("ascii")
+
+
+def svg_do_qr(codigo: str) -> str:
+    """O QR do cartaz A4, vetorial, como `data:` SVG.
+
+    Correção de erro M, sem o reforço automático do `segno`, e zona livre de 4
+    módulos, como pede o layout 4.13: com M o símbolo tem menos módulos, e cada
+    módulo sai maior nos mesmos 9 cm. Módulos em `#282760` sobre branco."""
+    import segno
+
+    qr = segno.make(url_do_cartaz(codigo), error="m", boost_error=False)
+    return qr.svg_data_uri(border=4, dark="#282760", light="#ffffff", omitsize=True)
+
+
+def _resumir(texto: str, limite: int = _TAMANHO_DO_LOCAL_RESUMIDO) -> str:
+    """O começo do texto, sem cortar palavra no meio."""
+    if len(texto) <= limite:
+        return texto
+    corte = texto[:limite]
+    if texto[limite] not in " ,.;:":
+        corte = corte.rsplit(" ", 1)[0]
+    return corte.rstrip(" ,.;:") + "…"
+
+
+def linha_de_controle(ponto: dict) -> str:
+    """O que vai fora da moldura, para quem instala o cartaz saber qual é qual.
+    Sem código de controle, vale o código do QR."""
+    codigo = ponto.get("codigo_controle") or ponto["codigo"]
+    return f"Ponto {codigo} · {nome_exibido(ponto)} · {_resumir(ponto['descricao_local'])}"
+
+
+def _html_a4(ponto: dict) -> str:
+    from app.services.email_service import jinja_env
+
+    titulo, subtitulo = TITULOS_DO_CARTAZ[ponto.get("titulo_cartaz") or "atendimento_hoje"]
+    ajuda_agora = (
+        "Fale com a enfermagem do posto desta ala." if ponto.get("ala_internacao") else "Fale com a equipe deste setor."
+    )
+    return jinja_env.get_template("ouvidoria_cartaz_a4.html").render(
+        codigo=ponto["codigo"],
+        nome_publico=nome_exibido(ponto),
+        titulo=titulo,
+        subtitulo=subtitulo,
+        qr_svg=svg_do_qr(ponto["codigo"]),
+        endereco=endereco_impresso(ponto["codigo"]),
+        ajuda_agora=ajuda_agora,
+        controle=linha_de_controle(ponto),
+        logo_branco=_logo_branco_data_uri(),
+        font_path=_uri_da_fonte(),
+    )
+
+
+def html_do_cartaz(ponto: dict, formato: str = "a4") -> str:
+    """O cartaz, como HTML, antes de virar PDF.
 
     Separado da geração do PDF de propósito: é o conteúdo que precisa ser
-    testado (o convite, o setor, o código por extenso), e o weasyprint é lento
+    testado (o título, o endereço, a linha de controle), e o weasyprint é lento
     demais para rodar em cada asserção."""
+    if formato == "a4":
+        return _html_a4(ponto)
+
     from app.services.email_constants import get_logo_data_uri
     from app.services.email_service import jinja_env
 
@@ -198,13 +327,13 @@ def html_do_cartaz(ponto: dict) -> str:
     )
 
 
-def pdf_do_cartaz(ponto: dict) -> bytes:
+def pdf_do_cartaz(ponto: dict, formato: str = "a4") -> bytes:
     """O cartaz pronto para a gráfica. Weasyprint, o mesmo que já serve Ata,
     POP e o relatório da Ouvidoria.
 
-    A allowlist de `file://` é VAZIA de propósito: o `ouvidoria_cartaz.html` não
-    usa asset de arquivo nenhum, porque logo e QR entram embutidos como `data:`
-    (o `get_logo_data_uri` e o `qr_data_uri`). Aqui todo `file://` é recusado.
+    A allowlist de `file://` do A5 é VAZIA de propósito: logo e QR entram
+    embutidos como `data:`. A do A4 tem só a fonte HP Simplified, que vai
+    embutida no PDF.
 
     O fetcher (issue #633) vai no construtor do `HTML`, que é quem busca os
     recursos: o `write_pdf` descarta opção que não conhece, então passá-lo ali
@@ -212,7 +341,8 @@ def pdf_do_cartaz(ponto: dict) -> bytes:
     """
     from weasyprint import HTML
 
-    return HTML(string=html_do_cartaz(ponto), url_fetcher=criar_pdf_url_fetcher()).write_pdf()
+    assets = _assets_do_cartaz_a4() if formato == "a4" else frozenset()
+    return HTML(string=html_do_cartaz(ponto, formato), url_fetcher=criar_pdf_url_fetcher(assets)).write_pdf()
 
 
 def por_id(supabase, ponto_id: str) -> dict | None:

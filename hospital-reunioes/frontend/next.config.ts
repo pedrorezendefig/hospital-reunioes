@@ -91,6 +91,17 @@ const nextConfig: NextConfig = {
     return [
       { source: "/signup", destination: "/login", permanent: false },
       { source: "/signup/:path*", destination: "/login", permanent: false },
+      // O formulário com o código do cartaz, o formato de antes da ADR 0086,
+      // vai ao endereço curto `/a/{código}` (decisão 5). Só o que tem forma de
+      // código vira caminho: o resto fica no formulário do site, sem origem.
+      // Temporário porque o destino ainda muda (a tela de nota). O Next repassa
+      // a query ao destino, e a página do endereço curto a ignora.
+      {
+        source: "/manifestacao",
+        has: [{ type: "query", key: "p", value: "(?<p>[A-Za-z0-9]{6})" }],
+        destination: "/a/:p",
+        permanent: false,
+      },
     ];
   },
 };

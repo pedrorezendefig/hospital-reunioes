@@ -74,15 +74,19 @@ describe("a lista de cartazes", () => {
 });
 
 describe("o formulário de cartaz novo", () => {
-  it("exige setor e rótulo", () => {
-    // O rótulo é o que faz alguém achar o cartaz na parede depois.
-    expect(pontoEstaCompleto({ setor: "Recepção", ponto: "Poltrona 12" })).toBe(true);
-    expect(pontoEstaCompleto({ setor: "", ponto: "Poltrona 12" })).toBe(false);
-    expect(pontoEstaCompleto({ setor: "Recepção", ponto: "" })).toBe(false);
+  const LOCAL = "Ao lado do balcão";
+
+  it("exige setor, rótulo e descrição do local", () => {
+    // O rótulo e o local são o que faz alguém achar o cartaz na parede depois
+    // (a descrição é obrigatória desde a issue #1617).
+    expect(pontoEstaCompleto({ setor: "Recepção", ponto: "Poltrona 12", descricao_local: LOCAL })).toBe(true);
+    expect(pontoEstaCompleto({ setor: "", ponto: "Poltrona 12", descricao_local: LOCAL })).toBe(false);
+    expect(pontoEstaCompleto({ setor: "Recepção", ponto: "", descricao_local: LOCAL })).toBe(false);
+    expect(pontoEstaCompleto({ setor: "Recepção", ponto: "Poltrona 12", descricao_local: "" })).toBe(false);
   });
 
   it("espaço em branco não conta como preenchido", () => {
-    expect(pontoEstaCompleto({ setor: "  ", ponto: "  " })).toBe(false);
+    expect(pontoEstaCompleto({ setor: "  ", ponto: "  ", descricao_local: "  " })).toBe(false);
   });
 });
 
