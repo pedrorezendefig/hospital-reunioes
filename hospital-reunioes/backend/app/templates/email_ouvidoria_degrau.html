@@ -73,10 +73,19 @@
   <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:16px;">
     <tr>
       <td align="center">
-        <a href="{{ link }}"
-           style="display:inline-block;background:linear-gradient(135deg,#2B2E7E,#2558A0);color:#ffffff;font-size:14px;font-weight:700;text-decoration:none;padding:13px 36px;border-radius:10px;">
-          {{ rotulo_botao }}
-        </a>
+        {# Cor sólida na célula (bgcolor, Outlook) e no link (background-color,
+           Gmail): os dois descartam o gradiente, que fica só como enfeite
+           por cima (issue #1583). #}
+        <table cellpadding="0" cellspacing="0" role="presentation">
+          <tr>
+            <td align="center" bgcolor="#2B2E7E" style="background-color:#2B2E7E;border-radius:10px;">
+              <a href="{{ link }}"
+                 style="display:inline-block;background-color:#2B2E7E;background-image:linear-gradient(135deg,#2B2E7E,#2558A0);color:#ffffff;font-size:14px;font-weight:700;text-decoration:none;padding:13px 36px;border-radius:10px;">
+                {{ rotulo_botao }}
+              </a>
+            </td>
+          </tr>
+        </table>
       </td>
     </tr>
   </table>
