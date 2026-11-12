@@ -243,10 +243,14 @@ CAMPOS_NOTIFICACAO = ", ".join(CAMPOS_NOTIFICACAO_TUPLA)
 # `paciente_nome` e `paciente_referencia` entraram pelo ADR 0052 (issue #664):
 # a área acha o atendimento sem devolver o caso. Quem decide se viajam é
 # `ouvidoria_blocos.paciente_do_caso`, que segura os dois no sigilo reforçado.
+#
+# `tipo_manifestacao` entrou pelo aviso de elogio entregue (issue #1618): é ele
+# que decide se o encerramento diz "no que deu" ou "seu elogio foi entregue". É
+# a classificação do caso, e não dado de quem manifestou.
 _CAMPOS_DO_EMAIL = (
     "id, protocolo, setor, categoria, resumo, relato_integral, extrato_para_o_setor, "
     "gravidade, prazo_area_em, sigilo_reforcado, anonimo, manifestante_nome, status, "
-    "paciente_nome, paciente_referencia"
+    "paciente_nome, paciente_referencia, tipo_manifestacao"
 )
 
 # O que o setor lê quando, por algum caminho, o caso chegou ao email sem
@@ -1125,6 +1129,34 @@ def montar_encerramento_manifestante(protocolo: str, desfecho: str) -> tuple[str
     return (f"Ouvidoria {protocolo}: sua manifestacao foi concluida", html, texto)
 
 
+ELOGIO_ENTREGUE = "Seu elogio foi entregue à equipe."
+
+
+def montar_elogio_entregue(protocolo: str) -> tuple[str, str, str]:
+    """O aviso de encerramento quando o caso é um elogio (issue #1618, ADR
+    0088, decisão 2).
+
+    O elogio não foi apurado: ele foi entregue. Por isso a frase é fixa e o
+    desfecho que o ouvidor escreveu não entra. A assinatura é a do aviso de
+    encerramento, sem o desfecho, pela mesma razão de lá: só o protocolo, e
+    nenhum texto vindo de quem manifestou."""
+    from app.services.email_constants import get_logo_data_uri
+
+    protocolo = protocolo or ""
+    html = jinja_env.get_template("email_ouvidoria_elogio_entregue.html").render(
+        protocolo=protocolo,
+        mensagem=ELOGIO_ENTREGUE,
+        logo_base64=get_logo_data_uri(),
+    )
+    texto = (
+        "Ola!\n\n"
+        "Seu elogio foi entregue a equipe.\n\n"
+        f"Protocolo: {protocolo}\n\n"
+        "Obrigado por reconhecer o trabalho de quem cuida de voce no Hospital Sao Matheus.\n"
+    )
+    return (f"Ouvidoria {protocolo}: seu elogio foi entregue", html, texto)
+
+
 def registrar(
     supabase,
     *,
@@ -1437,6 +1469,11 @@ def _montar(
         # o reenvio manual de um aviso antigo passaria a mandar o desfecho da
         # tramitação seguinte, ou um email mudo. A linha guarda o que foi dito
         # naquele ato, como a trilha imutável guarda (RN-64).
+        #
+        # O elogio fecha com a frase dele, e não com o que foi apurado (issue
+        # #1618): quem elogiou quer saber que a equipe recebeu.
+        if manifestacao.get("tipo_manifestacao") == "elogio":
+            return montar_elogio_entregue(manifestacao.get("protocolo") or "")
         return montar_encerramento_manifestante(manifestacao.get("protocolo") or "", notificacao.get("detalhe") or "")
     if notificacao["gatilho"] == GATILHO_REDIRECIONAMENTO_AREA:
         # Nem a manifestação, nem `agora`, nem os feriados: o aviso à área

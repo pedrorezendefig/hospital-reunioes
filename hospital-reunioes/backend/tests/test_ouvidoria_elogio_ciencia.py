@@ -13,13 +13,15 @@ próprias deixaria os dois caminhos divergirem sem ninguém notar.
 
 from __future__ import annotations
 
+import asyncio
 import datetime as dt
 import os
 import re
 import sys
+from pathlib import Path
 
 import pytest
-from fastapi import FastAPI
+from fastapi import BackgroundTasks, FastAPI
 from fastapi.testclient import TestClient
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
@@ -38,7 +40,7 @@ from app.limiter import limiter  # noqa: E402
 from app.middleware.request_context import RequestContextMiddleware  # noqa: E402
 from app.routers import ouvidoria as ouvidoria_router  # noqa: E402
 from app.routers import ouvidoria_setor as ouvidoria_setor_router  # noqa: E402
-from app.services import ouvidoria_acionamentos, ouvidoria_notificacoes  # noqa: E402
+from app.services import ouvidoria_acionamentos, ouvidoria_encerramento, ouvidoria_notificacoes  # noqa: E402
 
 NOTA_DO_OUVIDOR = "A familia agradece a equipe da Recepcao pelo acolhimento no plantao de domingo."
 
@@ -360,3 +362,103 @@ class TestReenvioUnico:
             assert cron.scheduler.get_job("reenvio_elogios_ouvidoria") is not None
         finally:
             cron.stop_scheduler()
+
+
+# =====================================================================
+# 6. O encerramento de um elogio identificado manda o aviso de elogio entregue
+# =====================================================================
+
+ENCERRADO_EM = dt.datetime(2026, 9, 2, 13, 0, tzinfo=dt.UTC)
+DESFECHO = "Elogio repassado a equipe da Recepcao."
+
+
+def _encerrar(supabase, caso: dict) -> str:
+    """Chama o aviso do encerramento como a transição o chama, e roda o que
+    ele agendou para depois da resposta."""
+    tarefas = BackgroundTasks()
+    resultado = ouvidoria_encerramento.avisar_encerramento(supabase, caso, DESFECHO, ENCERRADO_EM, tarefas)
+    asyncio.run(tarefas())
+    return resultado
+
+
+def _caso_encerrado(**overrides) -> dict:
+    return _manifestacao(
+        status="encerrado",
+        setor="Recepcao",
+        manifestante_contato="joana@exemplo.com",
+        **overrides,
+    )
+
+
+class TestElogioEntregue:
+    def test_o_encerramento_do_elogio_identificado_manda_o_aviso_de_elogio_entregue(self, emails):
+        caso = _caso_encerrado(tipo_manifestacao="elogio")
+        supabase = _SupabaseFake([caso])
+
+        _encerrar(supabase, caso)
+
+        assert [e["destinatario"] for e in emails] == ["joana@exemplo.com"]
+        email = emails[0]
+        assert "Seu elogio foi entregue à equipe." in email["html"]
+        assert "Seu elogio foi entregue a equipe." in email["texto"]
+        assert "elogio" in email["assunto"]
+        assert "2026-0007" in email["assunto"]
+
+    def test_a_reclamacao_continua_com_o_desfecho_apurado(self, emails):
+        caso = _caso_encerrado(tipo_manifestacao="reclamacao")
+        supabase = _SupabaseFake([caso])
+
+        _encerrar(supabase, caso)
+
+        assert "Seu elogio foi entregue" not in emails[0]["html"]
+        assert DESFECHO in emails[0]["html"]
+
+    def test_o_elogio_anonimo_encerra_sem_aviso(self, emails):
+        caso = _caso_encerrado(tipo_manifestacao="elogio", anonimo=True)
+        supabase = _SupabaseFake([caso])
+
+        assert _encerrar(supabase, caso) == ouvidoria_encerramento.SEM_CONTATO
+        assert emails == []
+
+
+# =====================================================================
+# A migration: o registro de acionamento e o gatilho novo no banco
+# =====================================================================
+
+MIGRATIONS_DIR = Path(__file__).parent.parent.parent / "supabase" / "migrations"
+MIGRATION = MIGRATIONS_DIR / "136_ouvidoria_acionamento_de_ciencia.sql"
+
+
+def _sem_comentarios(sql: str) -> str:
+    return re.sub(r"--[^\n]*", "", sql)
+
+
+class TestAMigration:
+    """O fake do PostgREST não aplica CHECK nem RLS, então é a leitura do
+    arquivo que segura as regras do banco."""
+
+    def test_o_registro_de_acionamento_nasce_com_rls_que_nega_por_padrao(self):
+        ddl = _sem_comentarios(MIGRATION.read_text(encoding="utf-8"))
+
+        assert "CREATE TABLE IF NOT EXISTS ouvidoria_acionamentos" in ddl
+        assert "ALTER TABLE ouvidoria_acionamentos ENABLE ROW LEVEL SECURITY;" in ddl
+        assert "CREATE POLICY" not in ddl.upper(), "só o backend lê o registro, pela service role"
+
+    def test_o_tipo_e_o_motivo_sao_listas_fechadas(self):
+        ddl = _sem_comentarios(MIGRATION.read_text(encoding="utf-8"))
+
+        assert "CHECK (tipo IN ('resposta', 'ciencia'))" in ddl
+        assert "CHECK (motivo_ciencia IN ('elogio', 'nsp'))" in ddl
+        assert "'pendente', 'respondido', 'ciente', 'devolvido', 'sem_resposta'" in ddl
+
+    def test_o_gatilho_do_elogio_entra_no_check_numa_transacao(self):
+        ddl = _sem_comentarios(MIGRATION.read_text(encoding="utf-8"))
+
+        for gatilho in ouvidoria_notificacoes.GATILHOS:
+            assert f"'{gatilho}'" in ddl, f"o CHECK novo perdeu o gatilho {gatilho}"
+        assert "BEGIN;" in ddl and "COMMIT;" in ddl
+
+    def test_a_migration_termina_gravando_o_proprio_numero(self):
+        ddl = _sem_comentarios(MIGRATION.read_text(encoding="utf-8")).strip()
+
+        assert ddl.endswith("INSERT INTO migracoes_aplicadas (numero) VALUES (136) ON CONFLICT (numero) DO NOTHING;")

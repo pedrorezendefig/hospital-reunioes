@@ -33,6 +33,8 @@ TEMPLATES_COM_BOTAO = [
     "email_ouvidoria_prorrogacao_solicitada.html",
     "email_ouvidoria_prorrogacao_decidida.html",
     "email_ouvidoria_sem_titular.html",
+    # O botão Elogio recebido (issue #1618).
+    "email_ouvidoria_ciencia_elogio.html",
 ]
 
 _COR = r"#[0-9A-Fa-f]{6}"
