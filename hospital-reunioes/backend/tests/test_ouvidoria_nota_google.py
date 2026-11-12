@@ -161,6 +161,42 @@ class TestJobSemanal:
         assert supabase.notas == []
 
 
+class TestJobNoScheduler:
+    def test_o_job_esta_agendado_todo_dia_no_fuso_de_sao_paulo(self):
+        from apscheduler.triggers.cron import CronTrigger
+
+        from app.cron import scheduler as cron
+
+        try:
+            cron.start_scheduler()
+            job = cron.scheduler.get_job("nota_do_google")
+            assert job is not None
+            assert job.func is cron.buscar_nota_do_google
+            assert isinstance(job.trigger, CronTrigger)
+            assert str(job.trigger.timezone) == "America/Sao_Paulo"
+        finally:
+            cron.stop_scheduler()
+
+    def test_sem_a_chave_no_ambiente_o_job_nao_chama_o_google(self, monkeypatch):
+        from app.config import settings
+        from app.cron import scheduler as cron
+
+        supabase = SupabaseFalso()
+        monkeypatch.setattr(cron, "_supabase", lambda: supabase)
+        monkeypatch.setattr(settings, "google_places_api_key", "")
+
+        # Conta, em vez de levantar: o job engole exceção no log, e um dublê que
+        # levantasse deixaria este teste verde com o Google chamado.
+        google = GoogleFalso()
+        cliente = google.cliente()
+        monkeypatch.setattr(httpx, "Client", lambda *_a, **_kw: cliente)
+
+        cron.buscar_nota_do_google()
+
+        assert google.pedidos == []
+        assert supabase.notas == []
+
+
 def _leitura(quando: str, nota: float, total: int | None, origem: str = "automatica") -> dict:
     return {
         "fonte": "google",

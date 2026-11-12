@@ -33,9 +33,7 @@ CAMPOS_DA_PLACES_API = "rating,userRatingCount"
 INTERVALO_ENTRE_LEITURAS = dt.timedelta(days=7)
 
 
-def buscar_e_gravar(
-    supabase, agora: dt.datetime, *, chave: str, cliente: httpx.Client | None = None
-) -> dict | None:
+def buscar_e_gravar(supabase, agora: dt.datetime, *, chave: str, cliente: httpx.Client | None = None) -> dict | None:
     """Lê a nota do Google e grava uma linha nova no diário. Devolve a linha
     gravada, ou `None` quando não buscou (sem chave, leitura recente, sem Place
     ID ou o Google falhou). Nunca levanta pela falha do Google: o job registra

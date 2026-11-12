@@ -158,32 +158,53 @@ def _client(monkeypatch, supabase: _SupabaseFake, participante: dict = OUVIDOR) 
 
 
 class TestRegistro:
-    def test_ouvidor_registra_a_nota_do_google_e_a_do_reclame_aqui(self, monkeypatch):
-        """CA: o ouvidor registra a nota das duas fontes pela interface."""
-        client = _client(monkeypatch, _SupabaseFake())
+    def test_ouvidor_registra_a_nota_do_reclame_aqui(self, monkeypatch):
+        """CA: o Reclame Aqui continua digitado pelo ouvidor (ADR 0089)."""
+        banco = _SupabaseFake()
+        client = _client(monkeypatch, banco)
 
-        google = client.post("/api/ouvidoria/nota-externa", json={"fonte": "google", "nota": 4.3})
         reclame = client.post("/api/ouvidoria/nota-externa", json={"fonte": "reclame_aqui", "nota": 7.8})
 
-        assert google.status_code == 201, google.text
         assert reclame.status_code == 201, reclame.text
-        assert google.json()["fonte"] == "google"
-        assert google.json()["nota"] == 4.3
         assert reclame.json()["nota"] == 7.8
+        assert banco.tabelas["ouvidoria_nota_externa"][0]["origem"] == "manual"
+
+    def test_a_nota_do_google_nao_se_digita_mais(self, monkeypatch):
+        """CA: a nota do Google é buscada sozinha toda semana (issue #1619, ADR
+        0089, decisão 2). O registro manual do Google é recusado, e nada grava."""
+        banco = _SupabaseFake()
+        client = _client(monkeypatch, banco)
+
+        google = client.post("/api/ouvidoria/nota-externa", json={"fonte": "google", "nota": 4.3})
+
+        assert google.status_code == 422
+        assert "Google" in google.text
+        assert banco.tabelas["ouvidoria_nota_externa"] == []
 
     def test_nota_fora_da_escala_da_fonte_e_recusada(self, monkeypatch):
-        """8 é nota boa no Reclame Aqui e é impossível no Google. Um teto único
-        de 10 aceitaria "Google 8", e o PDF imprimiria "8,0 de 5"."""
+        """8 é nota boa no Reclame Aqui; acima de 10, ou abaixo de 0, não existe."""
         client = _client(monkeypatch, _SupabaseFake())
 
-        assert client.post("/api/ouvidoria/nota-externa", json={"fonte": "google", "nota": 8}).status_code == 422
+        assert client.post("/api/ouvidoria/nota-externa", json={"fonte": "reclame_aqui", "nota": 11}).status_code == 422
         assert client.post("/api/ouvidoria/nota-externa", json={"fonte": "reclame_aqui", "nota": 8}).status_code == 201
-        assert client.post("/api/ouvidoria/nota-externa", json={"fonte": "google", "nota": -1}).status_code == 422
+        assert client.post("/api/ouvidoria/nota-externa", json={"fonte": "reclame_aqui", "nota": -1}).status_code == 422
 
 
 # ═══════════════════════════════════════════════════════════════════════════
 # A leitura: a última de cada fonte
 # ═══════════════════════════════════════════════════════════════════════════
+
+
+def _do_google(quando: str, nota: float, total: int | None = None, origem: str = "automatica") -> dict:
+    """Uma linha do Google no diário, como o job semanal (ou a mão de antes) gravou."""
+    return {
+        "fonte": "google",
+        "nota": nota,
+        "total_avaliacoes": total,
+        "origem": origem,
+        "registrada_em": quando,
+        "registrada_por_nome": "",
+    }
 
 
 class TestLeitura:
@@ -192,23 +213,38 @@ class TestLeitura:
 
         Atualizar é registrar de novo: a tabela é um diário, e a leitura é que
         escolhe a linha mais recente."""
-        client = _client(monkeypatch, _SupabaseFake())
-        client.post("/api/ouvidoria/nota-externa", json={"fonte": "google", "nota": 4.1})
+        banco = _SupabaseFake(
+            ouvidoria_nota_externa=[
+                _do_google("2026-08-01T10:00:00+00:00", 4.1, origem="manual"),
+                _do_google("2026-08-09T09:45:00+00:00", 4.6, 1629),
+            ]
+        )
+        client = _client(monkeypatch, banco)
         client.post("/api/ouvidoria/nota-externa", json={"fonte": "reclame_aqui", "nota": 7.0})
-        client.post("/api/ouvidoria/nota-externa", json={"fonte": "google", "nota": 4.6})
+        client.post("/api/ouvidoria/nota-externa", json={"fonte": "reclame_aqui", "nota": 7.4})
 
         resposta = client.get("/api/ouvidoria/nota-externa")
 
         assert resposta.status_code == 200, resposta.text
         notas = {linha["fonte"]: linha for linha in resposta.json()["notas"]}
         assert notas["google"]["nota"] == 4.6
-        assert notas["reclame_aqui"]["nota"] == 7.0
+        assert notas["reclame_aqui"]["nota"] == 7.4
+
+    def test_a_leitura_do_google_diz_que_e_automatica_e_traz_o_total(self, monkeypatch):
+        """A tela mostra o Google só para leitura, com o total de avaliações."""
+        banco = _SupabaseFake(ouvidoria_nota_externa=[_do_google("2026-08-09T09:45:00+00:00", 2.5, 1629)])
+        client = _client(monkeypatch, banco)
+
+        notas = {linha["fonte"]: linha for linha in client.get("/api/ouvidoria/nota-externa").json()["notas"]}
+
+        assert notas["google"]["origem"] == "automatica"
+        assert notas["google"]["total_avaliacoes"] == 1629
 
     def test_leitura_leva_a_escala_junto_do_numero(self, monkeypatch):
         """4,3 do Google é de 5 e 7,8 do Reclame Aqui é de 10. Quem mostra o
         número precisa receber a régua dele na mesma resposta."""
-        client = _client(monkeypatch, _SupabaseFake())
-        client.post("/api/ouvidoria/nota-externa", json={"fonte": "google", "nota": 4.3})
+        banco = _SupabaseFake(ouvidoria_nota_externa=[_do_google("2026-08-09T09:45:00+00:00", 4.3, 1629)])
+        client = _client(monkeypatch, banco)
         client.post("/api/ouvidoria/nota-externa", json={"fonte": "reclame_aqui", "nota": 7.8})
 
         notas = {linha["fonte"]: linha for linha in client.get("/api/ouvidoria/nota-externa").json()["notas"]}
@@ -219,8 +255,8 @@ class TestLeitura:
     def test_fonte_nunca_registrada_nao_vira_nota_zero(self, monkeypatch):
         """Ausência de registro é ausência, e não nota zero: a fonte sai da
         leitura com `nota` nula, para a tela e o PDF dizerem que não há."""
-        client = _client(monkeypatch, _SupabaseFake())
-        client.post("/api/ouvidoria/nota-externa", json={"fonte": "google", "nota": 4.3})
+        banco = _SupabaseFake(ouvidoria_nota_externa=[_do_google("2026-08-09T09:45:00+00:00", 4.3, 1629)])
+        client = _client(monkeypatch, banco)
 
         notas = {linha["fonte"]: linha for linha in client.get("/api/ouvidoria/nota-externa").json()["notas"]}
 
@@ -247,7 +283,7 @@ class TestPermissao:
         banco = _SupabaseFake()
         client = _client(monkeypatch, banco, participante)
 
-        gravacao = client.post("/api/ouvidoria/nota-externa", json={"fonte": "google", "nota": 4.3})
+        gravacao = client.post("/api/ouvidoria/nota-externa", json={"fonte": "reclame_aqui", "nota": 7.8})
         leitura = client.get("/api/ouvidoria/nota-externa")
 
         assert gravacao.status_code == 403
@@ -262,7 +298,7 @@ class TestPermissao:
         acima verde."""
         client = _client(monkeypatch, _SupabaseFake(), participante)
 
-        gravacao = client.post("/api/ouvidoria/nota-externa", json={"fonte": "google", "nota": 4.3})
+        gravacao = client.post("/api/ouvidoria/nota-externa", json={"fonte": "reclame_aqui", "nota": 7.8})
         leitura = client.get("/api/ouvidoria/nota-externa")
 
         assert gravacao.status_code == 201, gravacao.text
