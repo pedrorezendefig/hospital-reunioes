@@ -45,6 +45,7 @@ from app.limiter import limiter
 from app.routers.ana import _CAMPOS_PROTOCOLO_TUPLA
 from app.services import (
     audit,
+    ouvidoria_acionamentos,
     ouvidoria_acuse,
     ouvidoria_encerramento,
     ouvidoria_escalonamento,
@@ -3663,7 +3664,7 @@ async def validar_e_acionar(
     # caso parado em `em_classificacao`. Redirecionar confere primeiro, e por
     # isso "nada acontece" quando a área nova não tem responsável (ADR 0055).
     area = conferir_o_acionamento(supabase, caso, pedido, agora.astimezone(FUSO_HOSPITAL).date())
-    return acionar_a_area(
+    return acionador_do_tipo(pedido)(
         supabase,
         me,
         caso,
@@ -4186,6 +4187,141 @@ def acionar_a_area(
     return {campo: row.get(campo) for campo in _CAMPOS_DOSSIE_TUPLA} | _projetar_prazo(row, agora, feriados)
 
 
+def acionador_do_tipo(pedido: PedidoValidacao):
+    """Qual despacho o tipo pede (issue #1618, ADR 0088, decisão 1).
+
+    O tipo decide, nunca o ouvidor: o elogio vira acionamento de ciência e o
+    resto segue no acionamento de resposta. A validação e o redirecionamento
+    perguntam aqui, para o elogio mandado a outro setor continuar sendo ciência
+    em vez de chegar à área nova com prazo e cobrança."""
+    if pedido.tipo_manifestacao == ouvidoria_acionamentos.MOTIVO_ELOGIO:
+        return acionar_a_ciencia_do_elogio
+    return acionar_a_area
+
+
+def acionar_a_ciencia_do_elogio(
+    supabase,
+    me: dict,
+    caso: dict,
+    pedido: PedidoValidacao,
+    area: AreaAcionavel,
+    agora: dt.datetime,
+    acao_no_log: str,
+    andamento: AndamentoDoAcionamento,
+) -> dict:
+    """O elogio mandado ao setor só para ele confirmar que recebeu (ADR 0088,
+    decisão 2).
+
+    Mesma assinatura e mesma ordem do `acionar_a_area`, menos o que o elogio
+    não tem: prazo da área (a coluna fica vazia, então nem a escada de cobrança
+    nem os vencidos o enxergam), link do portal de resposta, alerta à Diretoria
+    e aviso de caso crítico. Em troca nasce a ciência no registro de
+    acionamento, e o email leva o botão "Elogio recebido"."""
+    manifestacao_id = caso["id"]
+    setor = area.setor
+    destinatario = area.destinatario
+
+    classificacao = {
+        "tipo_manifestacao": pedido.tipo_manifestacao,
+        "sigilo_reforcado": area.sigiloso,
+        "gravidade": pedido.gravidade,
+        "extrato_para_o_setor": area.extrato,
+    }
+    if pedido.categoria:
+        classificacao["categoria"] = pedido.categoria
+    supabase.table("ouvidoria_protocolos").update(classificacao).eq("id", manifestacao_id).execute()
+
+    observacao = f"Validado e enviado ao setor {setor} para ciência do elogio, sem prazo de resposta"
+    if pedido.observacao:
+        observacao = f"{observacao}. {pedido.observacao}"
+    try:
+        resultado = supabase.rpc(
+            "ouvidoria_transicionar",
+            {
+                "p_manifestacao_id": manifestacao_id,
+                "p_estado_novo": "aguardando_area",
+                "p_autor_id": me["id"],
+                "p_autor_nome": me.get("nome_completo") or me["id"],
+                "p_observacao": observacao,
+                "p_desfecho": None,
+                "p_desfecho_descricao": None,
+            },
+        ).execute()
+    except APIError as exc:
+        if exc.code == "23514":
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Transição recusada") from exc
+        logger.error("Erro na RPC ouvidoria_transicionar no envio do elogio (código %s)", exc.code)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Erro ao enviar o elogio"
+        ) from exc
+    except HTTPError as exc:
+        # Sem resposta do servidor a transição pode ter commitado: a mesma
+        # regra do `acionar_a_area`.
+        andamento.o_caso_continua_em_classificacao = False
+        logger.error("Falha de rede na RPC ouvidoria_transicionar no envio do elogio %s", manifestacao_id)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Erro ao enviar o elogio"
+        ) from exc
+    andamento.o_caso_continua_em_classificacao = False
+
+    # `prazo_area_em` vai VAZIO de propósito, inclusive no caso que já teve um
+    # (o reacionamento de um caso devolvido): é a ausência dele que deixa o
+    # elogio fora da cobrança e dos vencidos.
+    marcos = {
+        "setor": setor,
+        "prazo_area_em": None,
+        "validada_em": agora.isoformat(),
+        "validada_por": me["id"],
+        "minutos_pausados": 0,
+    } | ouvidoria_prorrogacao.carimbos_a_zerar()
+    if setor != caso.get("setor"):
+        marcos["area_estourou_em"] = None
+    falha_depois_da_transicao = (
+        "O caso mudou de estado, mas o elogio não foi enviado ao setor. Confira a manifestação no painel."
+    )
+    try:
+        supabase.table("ouvidoria_protocolos").update(marcos).eq("id", manifestacao_id).execute()
+        ouvidoria_setor_tokens.revogar_os_vivos(supabase, manifestacao_id, agora)
+        ciencia = ouvidoria_acionamentos.criar_ciencia_do_elogio(
+            supabase,
+            manifestacao_id=manifestacao_id,
+            setor=setor,
+            responsavel_nome=destinatario.nome,
+            responsavel_email=destinatario.email,
+            agora=agora,
+        )
+    except (APIError, HTTPError) as exc:
+        logger.error("Falha ao gravar a ciência do elogio %s (código %s)", manifestacao_id, getattr(exc, "code", None))
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=falha_depois_da_transicao
+        ) from exc
+    if ciencia is None:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=falha_depois_da_transicao)
+
+    notificacao = ouvidoria_notificacoes.registrar(
+        supabase,
+        manifestacao_id=manifestacao_id,
+        gatilho=ouvidoria_notificacoes.GATILHO_CIENCIA_ELOGIO,
+        destinatario_nome=destinatario.nome,
+        destinatario_email=destinatario.email,
+        papel_destinatario=destinatario.papel,
+        # Elogio não é urgente em gravidade nenhuma: espera o expediente.
+        enviar_a_partir_de=ouvidoria_notificacoes.quando_enviar(agora, None, area.feriados),
+    )
+    if notificacao is None:
+        logger.error("Falha ao registrar o email do elogio da manifestação %s", manifestacao_id)
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=falha_depois_da_transicao)
+    ouvidoria_notificacoes.despachar_agora_se_puder(supabase, notificacao, agora, area.feriados)
+
+    carimbar_visto_da_acao(supabase, manifestacao_id)
+    registrar_acesso(supabase, me, manifestacao_id, acao_no_log)
+    row = resultado.data[0] if isinstance(resultado.data, list) else resultado.data
+    completo = supabase.table("ouvidoria_protocolos").select(_CAMPOS_DOSSIE).eq("id", manifestacao_id).execute()
+    if completo.data:
+        row = completo.data[0]
+    return {campo: row.get(campo) for campo in _CAMPOS_DOSSIE_TUPLA} | _projetar_prazo(row, agora, area.feriados)
+
+
 # =====================================================================
 # Redirecionamento pelo ouvidor (issue #708, PRD #706, ADR 0055)
 # =====================================================================
@@ -4536,7 +4672,7 @@ def redirecionar_o_caso(supabase, me: dict, caso: dict, pedido: PedidoRedirecion
     # (achado da rodada 2 de review do PR #714).
     andamento = AndamentoDoAcionamento()
     try:
-        dossie = acionar_a_area(
+        dossie = acionador_do_tipo(pedido)(
             supabase, me, caso, pedido, area, agora, acao_no_log="redirecionamento", andamento=andamento
         )
     except HTTPException as exc:
