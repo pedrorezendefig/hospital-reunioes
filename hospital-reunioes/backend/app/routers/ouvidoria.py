@@ -2674,12 +2674,43 @@ async def devolver_por_insuficiencia(
 # =====================================================================
 
 
-class PontoDeEscuta(BaseModel):
+TituloDoCartaz = Literal["atendimento_hoje", "um_minuto"]
+
+
+def _descricao_do_local(valor: str | None) -> str:
+    """O local descrito é obrigatório no cadastro e na edição: é o que o painel
+    mostra, e sem ele ninguém sabe em que parede está o cartaz."""
+    valor = sanitizar_travessao(valor or "").strip()
+    if not re.search(r"\w", valor):
+        raise ValueError("descreva o local onde o cartaz vai ficar")
+    return valor
+
+
+class _CamposDoCartaz(BaseModel):
+    """O que o cartaz A4 imprime além do QR (ADR 0086, decisão 10).
+
+    `nome_publico` e `codigo_controle` são opcionais, e em branco valem
+    ausência: sem nome público o paciente vê o rótulo do ponto, nunca o nome
+    interno do setor."""
+
+    nome_publico: str | None = Field(default=None, max_length=80)
+    codigo_controle: str | None = Field(default=None, max_length=20)
+
+    @field_validator("nome_publico", "codigo_controle")
+    @classmethod
+    def _opcional(cls, valor: str | None) -> str | None:
+        return texto_ou_nulo(valor)
+
+
+class PontoDeEscuta(_CamposDoCartaz):
     """Um cartaz novo. O código NÃO entra aqui: quem sorteia é o sistema, e o
     que está impresso na parede não se edita (ADR 0036, decisão 3)."""
 
     setor: str = Field(max_length=200)
     ponto: str = Field(max_length=80)
+    descricao_local: str = Field(max_length=300)
+    titulo_cartaz: TituloDoCartaz = "atendimento_hoje"
+    ala_internacao: bool = False
 
     @field_validator("ponto", "setor")
     @classmethod
@@ -2689,9 +2720,19 @@ class PontoDeEscuta(BaseModel):
             raise ValueError("informe o setor e onde o cartaz vai ficar")
         return valor
 
+    @field_validator("descricao_local")
+    @classmethod
+    def _local_descrito(cls, valor: str) -> str:
+        return _descricao_do_local(valor)
 
-class EdicaoDoPonto(BaseModel):
-    """O que muda depois de impresso: o rótulo e o estado.
+
+# Os campos que a edição pode limpar. O resto não aceita nulo: mandar
+# `"ativo": null` não pode virar um UPDATE que o banco recusa.
+_ANULAVEIS_DO_PONTO = frozenset({"nome_publico", "codigo_controle"})
+
+
+class EdicaoDoPonto(_CamposDoCartaz):
+    """O que muda depois de impresso: o rótulo, os campos do cartaz e o estado.
 
     `codigo` e `setor` ficam de fora de propósito. O código está no papel, e o
     setor é a identidade do cartaz: trocar qualquer um dos dois é cartaz novo,
@@ -2699,6 +2740,9 @@ class EdicaoDoPonto(BaseModel):
 
     ponto: str | None = Field(default=None, max_length=80)
     ativo: bool | None = None
+    descricao_local: str | None = Field(default=None, max_length=300)
+    titulo_cartaz: TituloDoCartaz | None = None
+    ala_internacao: bool | None = None
 
     @field_validator("ponto")
     @classmethod
@@ -2709,6 +2753,18 @@ class EdicaoDoPonto(BaseModel):
         if not re.search(r"\w", valor):
             raise ValueError("o rótulo do ponto não pode ficar em branco")
         return valor
+
+    @field_validator("descricao_local")
+    @classmethod
+    def _local_descrito(cls, valor: str | None) -> str:
+        # Só roda quando o campo veio no pedido: mandar a descrição em branco
+        # (ou nula) é tentar apagá-la, e ela é obrigatória.
+        return _descricao_do_local(valor)
+
+    def mudanca(self) -> dict:
+        """O UPDATE: só o que veio no pedido, e nulo só onde limpar é permitido."""
+        enviado = self.model_dump(exclude_unset=True)
+        return {campo: valor for campo, valor in enviado.items() if valor is not None or campo in _ANULAVEIS_DO_PONTO}
 
 
 @router.get("/pontos")
@@ -2765,7 +2821,7 @@ async def cadastrar_ponto(
             detail=f"O setor {pedido.setor} não existe na lista de setores ativos do hospital",
         )
     try:
-        criado = ouvidoria_pontos.criar(supabase, canonico, pedido.ponto, me.get("id"))
+        criado = ouvidoria_pontos.criar(supabase, {**pedido.model_dump(), "setor": canonico}, me.get("id"))
     except APIError as exc:
         logger.error("Falha ao cadastrar o ponto de escuta (código %s)", exc.code)
         raise HTTPException(
@@ -2794,7 +2850,7 @@ async def editar_ponto(
     Não existe DELETE (ADR 0036, decisão 6): o histórico de casos aponta para
     este ponto, e o QR de um cartaz aposentado continua abrindo o formulário,
     só que sem origem."""
-    mudanca = pedido.model_dump(exclude_none=True)
+    mudanca = pedido.mudanca()
     if not mudanca:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Nenhum campo para atualizar")
     try:

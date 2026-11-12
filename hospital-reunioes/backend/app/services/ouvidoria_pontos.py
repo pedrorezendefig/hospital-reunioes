@@ -42,10 +42,32 @@ def gerar_codigo() -> str:
 
 # As colunas que a tela lê. `criado_por` fica de fora: quem cadastrou o cartaz
 # não é informação da tela de cartazes, e a trilha de quem fez vive no banco.
-CAMPOS_PONTO_TUPLA = ("id", "codigo", "setor", "ponto", "ativo", "criado_em")
+CAMPOS_PONTO_TUPLA = (
+    "id",
+    "codigo",
+    "setor",
+    "ponto",
+    "ativo",
+    "criado_em",
+    # Os campos do cartaz A4 (migration 135, ADR 0086 decisão 10).
+    "nome_publico",
+    "descricao_local",
+    "titulo_cartaz",
+    "codigo_controle",
+    "ala_internacao",
+)
 CAMPOS_PONTO = ", ".join(CAMPOS_PONTO_TUPLA)
 
 TABELA = "ouvidoria_pontos"
+
+# Os dois modelos do cartaz A4, com o título em duas linhas e o subtítulo
+# (seção 4.13 da especificação da Diretoria). A chave é o que o banco grava, e
+# o CHECK da migration 135 tem a mesma lista. O texto fica em maiúscula e
+# minúscula: a caixa alta é do CSS do cartaz (ADR 0080).
+TITULOS_DO_CARTAZ = {
+    "atendimento_hoje": (("Como foi seu", "atendimento hoje?"), "Leva menos de um minuto"),
+    "um_minuto": (("Um minuto para", "nos contar"), "Como está sendo sua estadia?"),
+}
 
 # Colisão do índice único do `codigo` (migration 085).
 _CODIGO_DUPLICADO = "23505"
@@ -144,7 +166,7 @@ def por_codigo(supabase, codigo: str | None) -> dict | None:
     return dict(result.data[0]) if result.data else None
 
 
-def criar(supabase, setor: str, ponto: str, criado_por: str | None) -> dict | None:
+def criar(supabase, campos: dict, criado_por: str | None) -> dict | None:
     """Cadastra o cartaz e devolve a linha, ou None se o código não fechou.
 
     Quem decide a colisão é o índice único do banco, e não uma consulta antes do
@@ -154,12 +176,9 @@ def criar(supabase, setor: str, ponto: str, criado_por: str | None) -> dict | No
     from postgrest.exceptions import APIError
 
     for _ in range(TENTATIVAS_DE_CODIGO):
-        linha = {
-            "codigo": gerar_codigo(),
-            "setor": setor,
-            "ponto": ponto,
-            "criado_por": criado_por,
-        }
+        # `campos` é o que o ouvidor informou (setor já canônico, rótulo e os
+        # campos do cartaz). O código e o autor saem daqui, nunca do pedido.
+        linha = {**campos, "codigo": gerar_codigo(), "criado_por": criado_por}
         try:
             result = supabase.table(TABELA).insert(linha).execute()
         except APIError as exc:

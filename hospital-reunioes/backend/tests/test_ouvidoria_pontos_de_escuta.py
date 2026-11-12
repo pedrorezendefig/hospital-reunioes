@@ -216,6 +216,11 @@ def _ponto(codigo: str = "AB2CD3", **overrides) -> dict:
         "ativo": True,
         "criado_em": "2026-08-27T12:00:00+00:00",
         "criado_por": "P10",
+        "nome_publico": None,
+        "descricao_local": "Parede ao lado da poltrona 12",
+        "titulo_cartaz": "atendimento_hoje",
+        "codigo_controle": None,
+        "ala_internacao": False,
     }
     linha.update(overrides)
     return linha
@@ -239,7 +244,170 @@ def _client(monkeypatch, participante: dict | None, supabase: _SupabaseFake | No
     return TestClient(app), supabase
 
 
-NOVO_PONTO = {"setor": "Recepção", "ponto": "Poltrona 12"}
+NOVO_PONTO = {"setor": "Recepção", "ponto": "Poltrona 12", "descricao_local": "Parede ao lado da poltrona 12"}
+
+# O cartaz da Emergência adulta, como o anexo da especificação da Diretoria
+# (seção 11) o descreve.
+PONTO_COMPLETO = {
+    "setor": "Recepção",
+    "ponto": "Hall da Emergência",
+    "nome_publico": "Emergência adulta",
+    "descricao_local": "Hall da Emergência, parede ao lado da passagem para a espera",
+    "titulo_cartaz": "atendimento_hoje",
+    "codigo_controle": "PSA-01",
+    "ala_internacao": False,
+}
+
+
+class TestOsCamposDoCartaz:
+    """CA: cadastrar e editar um ponto com nome público, descrição do local,
+    título, código de controle e ala de internação; descrição vazia é recusada
+    (ADR 0086, decisão 10)."""
+
+    def test_o_ouvidor_cadastra_o_ponto_com_os_campos_do_cartaz(self, monkeypatch):
+        client, supabase = _client(monkeypatch, OUVIDOR)
+
+        r = client.post("/api/ouvidoria/pontos", json=PONTO_COMPLETO)
+
+        assert r.status_code == 201, r.text
+        corpo = r.json()
+        gravado = supabase.tabelas["ouvidoria_pontos"][0]
+        for campo, valor in {
+            "nome_publico": "Emergência adulta",
+            "descricao_local": "Hall da Emergência, parede ao lado da passagem para a espera",
+            "titulo_cartaz": "atendimento_hoje",
+            "codigo_controle": "PSA-01",
+            "ala_internacao": False,
+        }.items():
+            assert gravado[campo] == valor, campo
+            assert corpo[campo] == valor, campo
+
+    def test_a_ala_de_internacao_e_o_outro_titulo_sao_gravados(self, monkeypatch):
+        client, supabase = _client(monkeypatch, OUVIDOR)
+
+        r = client.post(
+            "/api/ouvidoria/pontos",
+            json={**PONTO_COMPLETO, "titulo_cartaz": "um_minuto", "ala_internacao": True},
+        )
+
+        assert r.status_code == 201, r.text
+        gravado = supabase.tabelas["ouvidoria_pontos"][0]
+        assert gravado["titulo_cartaz"] == "um_minuto"
+        assert gravado["ala_internacao"] is True
+
+    @pytest.mark.parametrize("descricao", ["", "   ", "..."])
+    def test_descricao_do_local_vazia_e_recusada_no_cadastro(self, monkeypatch, descricao):
+        """O local descrito é o que o painel vai mostrar: sem ele, ninguém sabe
+        em que parede está o cartaz."""
+        client, supabase = _client(monkeypatch, OUVIDOR)
+
+        r = client.post("/api/ouvidoria/pontos", json={**PONTO_COMPLETO, "descricao_local": descricao})
+
+        assert r.status_code == 422
+        assert supabase.tabelas["ouvidoria_pontos"] == []
+
+    def test_cadastro_sem_descricao_do_local_e_recusado(self, monkeypatch):
+        client, supabase = _client(monkeypatch, OUVIDOR)
+        sem_descricao = {k: v for k, v in PONTO_COMPLETO.items() if k != "descricao_local"}
+
+        r = client.post("/api/ouvidoria/pontos", json=sem_descricao)
+
+        assert r.status_code == 422
+        assert supabase.tabelas["ouvidoria_pontos"] == []
+
+    def test_titulo_fora_dos_dois_modelos_e_recusado(self, monkeypatch):
+        client, supabase = _client(monkeypatch, OUVIDOR)
+
+        r = client.post("/api/ouvidoria/pontos", json={**PONTO_COMPLETO, "titulo_cartaz": "outro"})
+
+        assert r.status_code == 422
+        assert supabase.tabelas["ouvidoria_pontos"] == []
+
+    def test_o_ouvidor_edita_os_campos_do_cartaz(self, monkeypatch):
+        supabase = _SupabaseFake(pontos=[_ponto()])
+        client, _ = _client(monkeypatch, OUVIDOR, supabase)
+
+        r = client.patch(
+            "/api/ouvidoria/pontos/ponto-AB2CD3",
+            json={
+                "nome_publico": "Internação · Ala 2A",
+                "descricao_local": "2º pavimento, corredor a 3 m do hall do elevador",
+                "titulo_cartaz": "um_minuto",
+                "codigo_controle": "INT-2A",
+                "ala_internacao": True,
+            },
+        )
+
+        assert r.status_code == 200, r.text
+        gravado = supabase.tabelas["ouvidoria_pontos"][0]
+        assert gravado["nome_publico"] == "Internação · Ala 2A"
+        assert gravado["descricao_local"] == "2º pavimento, corredor a 3 m do hall do elevador"
+        assert gravado["titulo_cartaz"] == "um_minuto"
+        assert gravado["codigo_controle"] == "INT-2A"
+        assert gravado["ala_internacao"] is True
+        assert r.json()["nome_publico"] == "Internação · Ala 2A"
+        # O que está impresso não muda com a edição.
+        assert gravado["codigo"] == "AB2CD3"
+        assert gravado["setor"] == "Recepção"
+
+    def test_apagar_o_nome_publico_volta_a_valer_o_rotulo(self, monkeypatch):
+        """Nome público em branco é ausência, não conteúdo: a edição limpa o
+        campo, e o rótulo volta a ser o que o paciente vê."""
+        supabase = _SupabaseFake(pontos=[_ponto(nome_publico="Emergência adulta", codigo_controle="PSA-01")])
+        client, _ = _client(monkeypatch, OUVIDOR, supabase)
+
+        r = client.patch("/api/ouvidoria/pontos/ponto-AB2CD3", json={"nome_publico": "  ", "codigo_controle": ""})
+
+        assert r.status_code == 200, r.text
+        gravado = supabase.tabelas["ouvidoria_pontos"][0]
+        assert gravado["nome_publico"] is None
+        assert gravado["codigo_controle"] is None
+
+    @pytest.mark.parametrize("descricao", ["", "   ", None])
+    def test_a_edicao_nao_esvazia_a_descricao_do_local(self, monkeypatch, descricao):
+        supabase = _SupabaseFake(pontos=[_ponto()])
+        client, _ = _client(monkeypatch, OUVIDOR, supabase)
+
+        r = client.patch("/api/ouvidoria/pontos/ponto-AB2CD3", json={"descricao_local": descricao})
+
+        assert r.status_code == 422
+        assert supabase.tabelas["ouvidoria_pontos"][0]["descricao_local"] == "Parede ao lado da poltrona 12"
+
+    def test_a_lista_traz_os_campos_do_cartaz(self, monkeypatch):
+        client, _ = _client(
+            monkeypatch,
+            OUVIDOR,
+            _SupabaseFake(pontos=[_ponto(nome_publico="Emergência adulta", codigo_controle="PSA-01")]),
+        )
+
+        linha = client.get("/api/ouvidoria/pontos").json()["pontos"][0]
+
+        assert linha["nome_publico"] == "Emergência adulta"
+        assert linha["descricao_local"] == "Parede ao lado da poltrona 12"
+        assert linha["titulo_cartaz"] == "atendimento_hoje"
+        assert linha["codigo_controle"] == "PSA-01"
+        assert linha["ala_internacao"] is False
+
+    def test_os_titulos_batem_com_o_check_da_migration(self):
+        """A lista fechada vive nos dois lados: contornar a API não pode gravar
+        um título que o cartaz não sabe desenhar."""
+        from app.services.ouvidoria_pontos import TITULOS_DO_CARTAZ
+
+        migration = "135_ouvidoria_ponto_nome_publico_cartaz_a4.sql"
+        caminho = os.path.join(os.path.dirname(__file__), "..", "..", "supabase", "migrations", migration)
+        with open(caminho, encoding="utf-8") as f:
+            ddl = f.read()
+
+        check = re.search(r"titulo_cartaz IN \(([^)]*)\)", ddl)
+        assert check, "a migration precisa travar os títulos do cartaz"
+        assert (
+            set(re.findall(r"'([a-z_]+)'", check.group(1)))
+            == set(TITULOS_DO_CARTAZ)
+            == {
+                "atendimento_hoje",
+                "um_minuto",
+            }
+        )
 
 
 class TestCadastroDoPonto:
