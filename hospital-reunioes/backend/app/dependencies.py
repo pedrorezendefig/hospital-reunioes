@@ -271,6 +271,12 @@ async def get_allowed_reuniao_ids(current_user: dict, supabase) -> list[str] | N
     - regular: reuniões em que aparece em reuniao_participantes.
     """
     me = await get_participante_for_user(current_user, supabase)
+    return reunioes_visiveis(supabase, me)
+
+
+def reunioes_visiveis(supabase, me: dict[str, Any] | None) -> list[str] | None:
+    """A regra do `get_allowed_reuniao_ids` para quem já tem o participante na
+    mão (o Conector, que não tem sessão do app, issue #1609)."""
     if not me:
         return []
     if is_super_admin(me) or is_secretaria(me):

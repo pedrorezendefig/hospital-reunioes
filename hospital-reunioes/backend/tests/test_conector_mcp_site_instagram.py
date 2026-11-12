@@ -33,7 +33,7 @@ import pytest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from central_de_comando_apoio import erro_da_ga4, erro_do_instagram  # noqa: E402
+from central_de_comando_apoio import SUPER_ADMIN, erro_da_ga4, erro_do_instagram  # noqa: E402
 
 from app.config import settings  # noqa: E402
 from app.services.central_de_comando import conector_mcp, provedor_instagram, telas, visao_geral  # noqa: E402
@@ -263,7 +263,7 @@ class TestSerializarInstagram:
 
 class TestFerramentasListadas:
     def test_traz_as_tres_ferramentas_com_os_periodos_de_cada_uma(self):
-        por_nome = {f["name"]: f for f in conector_mcp.ferramentas()}
+        por_nome = {f["name"]: f for f in conector_mcp.ferramentas_de(SUPER_ADMIN)}
 
         assert set(por_nome) == {"get_active_now", "get_site_analytics", "get_instagram_analytics"}
         assert por_nome["get_site_analytics"]["inputSchema"]["properties"]["period"]["enum"] == ["7d", "28d", "90d"]
@@ -497,7 +497,9 @@ class TestFerramentaInstagram:
 @pytest.mark.usefixtures("central_configurada", "lote_da_ga4")
 class TestToolsCallPeloResponderMcp:
     async def test_tools_list_traz_as_tres_ferramentas(self):
-        resposta = await conector_mcp.responder_mcp({"jsonrpc": "2.0", "id": 1, "method": "tools/list"})
+        resposta = await conector_mcp.responder_mcp(
+            {"jsonrpc": "2.0", "id": 1, "method": "tools/list"}, participante=SUPER_ADMIN
+        )
 
         nomes = {f["name"] for f in resposta["result"]["tools"]}
         assert nomes == {"get_active_now", "get_site_analytics", "get_instagram_analytics"}
@@ -510,7 +512,7 @@ class TestToolsCallPeloResponderMcp:
             "params": {"name": "get_site_analytics", "arguments": {"period": "28d"}},
         }
 
-        resposta = await conector_mcp.responder_mcp(pedido)
+        resposta = await conector_mcp.responder_mcp(pedido, participante=SUPER_ADMIN)
 
         resultado = resposta["result"]
         assert resultado["isError"] is False

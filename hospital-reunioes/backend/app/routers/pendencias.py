@@ -19,6 +19,7 @@ from app.models.admin_schemas import ForceEditPendenciaRequest, ReasonRequest
 from app.models.schemas import PendenciaResponse, PendenciaStats, PendenciaUpdate
 from app.services import audit
 from app.services.notificacao_service import criar_notificacao_responsavel
+from app.services.pendencias_consulta import consultar_pendencias
 from app.utils.query_params import parse_csv_param
 
 router = APIRouter(
@@ -252,89 +253,22 @@ async def list_pendencias(
     allowed_reuniao_ids = await get_allowed_reuniao_ids(current_user, supabase)
     my_participante_id = await get_participante_id_for_user(current_user, supabase)
 
-    query = supabase.table("pendencias").select("*", count="exact").is_("deleted_at", "null")
-
-    # Resolve filtro de facilitador cedo (afeta a aplicação de visibilidade)
-    facilitadores = parse_csv_param(facilitador_id)
-    facilitator_meeting_ids: list[str] | None = None
-    if facilitadores:
-        rq = supabase.table("reunioes").select("id_reuniao").is_("deleted_at", "null")
-        rq = (
-            rq.in_("facilitador_id", facilitadores)
-            if len(facilitadores) > 1
-            else rq.eq("facilitador_id", facilitadores[0])
-        )
-        rq_res = rq.execute()
-        facilitator_meeting_ids = [r["id_reuniao"] for r in (rq_res.data or [])]
-        if not facilitator_meeting_ids:
-            response.headers["X-Total-Count"] = "0"
-            return []
-
-    # Visibilidade binária + filtro facilitador.
-    # Quando facilitador está presente, é mais restritivo: ignoramos o OR de co-responsável
-    # para que "filtrar pelo facilitador X" signifique exatamente "pendências das reuniões dele".
-    if facilitator_meeting_ids is not None:
-        if allowed_reuniao_ids is not None:
-            allowed_set = set(allowed_reuniao_ids)
-            facilitator_meeting_ids = [m for m in facilitator_meeting_ids if m in allowed_set]
-            if not facilitator_meeting_ids:
-                response.headers["X-Total-Count"] = "0"
-                return []
-        query = query.in_("id_reuniao", facilitator_meeting_ids)
-    elif allowed_reuniao_ids is not None:
-        if not allowed_reuniao_ids and not my_participante_id:
-            return []
-        elif my_participante_id:
-            # Visível: reuniões permitidas OU co-responsável.
-            condicoes = [f"co_responsavel_id.eq.{my_participante_id}"]
-            if allowed_reuniao_ids:
-                condicoes.insert(0, f"id_reuniao.in.({','.join(allowed_reuniao_ids)})")
-            query = query.or_(",".join(condicoes))
-        else:
-            query = query.in_("id_reuniao", allowed_reuniao_ids)
-
-    # Filtro por setor (super user only)
-    setores = parse_csv_param(setor)
-    if setores and allowed_reuniao_ids is None:
-        has_sem_setor = "Sem Setor" in setores
-        setores_real = [s for s in setores if s != "Sem Setor"]
-        pq = supabase.table("participantes").select("id")
-        if has_sem_setor and setores_real:
-            in_list = ",".join(setores_real)
-            pq = pq.or_(f"setor.is.null,setor.in.({in_list})")
-        elif has_sem_setor:
-            pq = pq.is_("setor", "null")
-        elif len(setores_real) == 1:
-            pq = pq.eq("setor", setores_real[0])
-        else:
-            pq = pq.in_("setor", setores_real)
-        p_res = pq.execute()
-        sector_ids = [p["id"] for p in (p_res.data or [])]
-        if sector_ids:
-            query = query.in_("responsavel_id", sector_ids)
-        else:
-            return []
-
-    # Filtro por responsável específico
-    responsaveis = parse_csv_param(responsavel_id)
-    if responsaveis:
-        if len(responsaveis) == 1:
-            query = query.eq("responsavel_id", responsaveis[0])
-        else:
-            query = query.in_("responsavel_id", responsaveis)
-
-    if status:
-        query = query.eq("status", status)
-    if id_reuniao:
-        query = query.eq("id_reuniao", id_reuniao)
-    if prazo_de:
-        query = query.gte("prazo", str(prazo_de))
-    if prazo_ate:
-        query = query.lte("prazo", str(prazo_ate))
-
-    result = query.order("prazo", desc=False, nullsfirst=False).range(offset, offset + limit - 1).execute()
-    response.headers["X-Total-Count"] = str(result.count or 0)
-    enriched = _enrich_externo_flag(supabase, result.data or [])
+    rows, total = consultar_pendencias(
+        supabase,
+        allowed_reuniao_ids=allowed_reuniao_ids,
+        my_participante_id=my_participante_id,
+        status=status,
+        responsaveis=parse_csv_param(responsavel_id),
+        id_reuniao=id_reuniao,
+        prazo_de=prazo_de,
+        prazo_ate=prazo_ate,
+        setores=parse_csv_param(setor),
+        facilitadores=parse_csv_param(facilitador_id),
+        limit=limit,
+        offset=offset,
+    )
+    response.headers["X-Total-Count"] = str(total)
+    enriched = _enrich_externo_flag(supabase, rows)
     return _enrich_comentarios_count(supabase, enriched)
 
 

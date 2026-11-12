@@ -4,7 +4,8 @@ As duas portas HTTP do conector, montadas na raiz (o metadata) e em `/api/mcp`
 (o transporte). **Nenhuma passa pelo gate de sessão do app** (`get_current_user`
 / `require_*`): são endpoints do conector MCP e do OAuth, com o seu próprio gate,
 a verificação do token do WorkOS AuthKit (`services/central_de_comando/
-conector_mcp.py`). O cliente é o claude.ai de quem é Super admin, não o front.
+conector_mcp.py`). O cliente é o claude.ai de quem é Super admin ou
+tem `diretoria_executiva` (ADR 0085), não o front.
 
 A lógica toda mora no service; aqui fica só a tradução para HTTP: o 503 de
 configuração ausente, o 401 com o cabeçalho que aponta o metadata, o CORS do
@@ -82,11 +83,10 @@ async def transporte_mcp(request: Request, supabase=Depends(get_supabase_client)
     try:
         # O `autorizar` faz I/O síncrono (JWKS e banco); roda em thread para não
         # travar o event loop, no mesmo molde da leitura do Google no Ao vivo.
-        # O participante que ele devolve é descartado de propósito: as
-        # ferramentas de hoje são globais (os mesmos números para todo Super
-        # admin). Ferramenta futura com recorte por usuário precisa guardar
-        # esse retorno e passá-lo adiante, nunca ler quem é do corpo do pedido.
-        await anyio.to_thread.run_sync(conector_mcp.autorizar, token, supabase, cfg)
+        # O participante que ele devolve vai adiante (ADR 0085, decisão 2): é
+        # ele que decide o `tools/list` e o gate de cada ferramenta. Quem é
+        # nunca vem do corpo do pedido.
+        participante = await anyio.to_thread.run_sync(conector_mcp.autorizar, token, supabase, cfg)
     except conector_mcp.AcessoNegadoMCPError as exc:
         logger.info("[ConectorMCP] acesso negado: %s", exc)
         return JSONResponse(
@@ -118,7 +118,7 @@ async def transporte_mcp(request: Request, supabase=Depends(get_supabase_client)
     except Exception:  # noqa: BLE001 - JSON malformado é erro de protocolo, não do servidor
         return JSONResponse(conector_mcp._erro(None, -32700, "JSON inválido"))
 
-    resposta = await conector_mcp.responder_mcp(corpo)
+    resposta = await conector_mcp.responder_mcp(corpo, participante, supabase)
     if resposta is None:
         return Response(status_code=202)
     return JSONResponse(resposta)
