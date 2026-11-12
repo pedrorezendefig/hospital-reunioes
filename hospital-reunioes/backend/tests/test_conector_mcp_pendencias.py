@@ -347,3 +347,156 @@ def pendencia(
         "id_reuniao": id_reuniao,
         "deleted_at": deleted_at,
     }
+
+
+ANA = pessoa("resp-ana", "regular") | {"nome_completo": "Ana Souza"}
+BRUNO = pessoa("resp-bruno", "regular") | {"nome_completo": "Bruno Lima"}
+
+
+def banco_do_hospital(*quem: dict) -> BancoFalso:
+    """Três reuniões; a diretora participa de R1 e R2, não de R3."""
+    return banco_com(
+        *quem,
+        ANA,
+        BRUNO,
+        pendencias=[
+            pendencia("A1", "ATRASADO", prazo="2026-10-01"),
+            pendencia("A2", "PENDENTE", prazo="2026-12-01"),
+            pendencia(
+                "A3",
+                "ATRASADO",
+                prazo="2026-09-15",
+                responsavel_id="resp-bruno",
+                responsavel_nome="Bruno Lima",
+                id_reuniao="R2",
+            ),
+            pendencia("A4", "ATRASADO", prazo="2026-09-01", deleted_at="2026-10-02T10:00:00Z"),
+            pendencia("A5", "CONCLUIDO", prazo="2026-08-01", id_reuniao="R2"),
+            pendencia("A6", "ATRASADO", prazo="2026-10-20", id_reuniao="R3"),
+        ],
+        reuniao_participantes=[
+            {"id_reuniao": "R1", "participante_id": "diretora"},
+            {"id_reuniao": "R2", "participante_id": "diretora"},
+        ],
+        comentarios_pendencias=[],
+    )
+
+
+def tela_de_pendencias(banco: BancoFalso, quem: dict) -> list[dict]:
+    """O que a tela de Pendências recebe: o `GET /api/pendencias` de verdade,
+    sem o status, como o front pede (ele filtra o status na tela)."""
+    from app.dependencies import _participante_ctx, get_current_user, get_supabase_client
+    from app.routers import pendencias as router_pendencias
+
+    _participante_ctx.set(None)
+    app = FastAPI()
+    app.include_router(router_pendencias.router, prefix="/api")
+    app.dependency_overrides[get_supabase_client] = lambda: banco
+
+    async def _usuario() -> dict[str, Any]:
+        return {"id": quem["auth_user_id"], "email": quem["email"], "metadata": {}}
+
+    app.dependency_overrides[get_current_user] = _usuario
+    resposta = TestClient(app).get("/api/pendencias", params={"limit": 500})
+    assert resposta.status_code == 200, resposta.text
+    _participante_ctx.set(None)
+    return resposta.json()
+
+
+def pendencias_do_claude(banco: BancoFalso, chave, quem: dict, **argumentos) -> dict:
+    resposta = chamar_pendencias(cliente_mcp(banco), chave, quem, **argumentos)
+    assert resposta.status_code == 200, resposta.text
+    resultado = resposta.json()["result"]
+    assert resultado["isError"] is False, resultado
+    return resultado["structuredContent"]
+
+
+# ─── 2. A ferramenta de pendências ───────────────────────────────────────────
+
+
+class TestPendenciasAtrasadas:
+    def test_devolve_as_atrasadas_com_responsavel_e_prazo(self, chave_do_emissor):
+        payload = pendencias_do_claude(
+            banco_do_hospital(DIRETOR_SUPER), chave_do_emissor, DIRETOR_SUPER, situacao="atrasada"
+        )
+
+        assert [p["id"] for p in payload["pendencias"]] == ["A3", "A1", "A6"]
+        a1 = next(p for p in payload["pendencias"] if p["id"] == "A1")
+        assert a1["responsavel"] == "Ana Souza"
+        assert a1["prazo"] == "2026-10-01"
+        assert a1["atrasada"] is True
+        assert a1["situacao"] == "atrasada"
+        assert payload["total"] == 3
+        assert payload["haMais"] is False
+
+    @pytest.mark.parametrize("quem", [DIRETOR_SUPER, DIRETORA], ids=["diretor-super-admin", "diretora-regular"])
+    def test_a_atrasada_do_claude_e_a_atrasada_da_tela(self, chave_do_emissor, quem):
+        """A regra da tela: o front marca atrasada a pendência de status
+        ATRASADO, sobre a lista que a rota dá a esta pessoa."""
+        banco = banco_do_hospital(DIRETOR_SUPER, DIRETORA)
+
+        na_tela = [p["id_acao"] for p in tela_de_pendencias(banco, quem) if p["status"] == "ATRASADO"]
+        no_claude = [
+            p["id"] for p in pendencias_do_claude(banco, chave_do_emissor, quem, situacao="atrasada")["pendencias"]
+        ]
+
+        assert no_claude == na_tela
+        # A diretora regular não está na R3: nem a tela nem o Claude mostram a A6.
+        assert no_claude == (["A3", "A1", "A6"] if quem is DIRETOR_SUPER else ["A3", "A1"])
+
+    def test_filtra_por_responsavel_e_por_prazo(self, chave_do_emissor):
+        banco = banco_do_hospital(DIRETOR_SUPER)
+
+        do_bruno = pendencias_do_claude(banco, chave_do_emissor, DIRETOR_SUPER, responsavel="bruno")
+        de_setembro_a_outubro = pendencias_do_claude(
+            banco, chave_do_emissor, DIRETOR_SUPER, prazoDe="2026-09-20", prazoAte="2026-10-31"
+        )
+        ninguem = pendencias_do_claude(banco, chave_do_emissor, DIRETOR_SUPER, responsavel="Zé Ninguém")
+
+        assert [p["id"] for p in do_bruno["pendencias"]] == ["A3"]
+        assert [p["id"] for p in de_setembro_a_outubro["pendencias"]] == ["A1", "A6"]
+        assert ninguem["total"] == 0
+
+    def test_diretoria_que_nao_abre_a_tela_de_pendencias_nao_recebe_pelo_claude(self, chave_do_emissor):
+        """ADR 0085, decisão 1: sem papel nas Reuniões, a tela de Pendências
+        não abre, e o Claude também não entrega."""
+        sem_reunioes = diretoria("so-ouvidoria", None)
+        resposta = chamar_pendencias(cliente_mcp(banco_do_hospital(sem_reunioes)), chave_do_emissor, sem_reunioes)
+
+        resultado = resposta.json()["result"]
+        assert resultado["isError"] is True
+        assert "A1" not in resposta.text
+
+    def test_argumento_invalido_e_erro_de_ferramenta(self, chave_do_emissor):
+        cliente = cliente_mcp(banco_do_hospital(DIRETOR_SUPER))
+
+        for argumentos in ({"situacao": "vencida"}, {"prazoDe": "01/10/2026"}):
+            resultado = chamar_pendencias(cliente, chave_do_emissor, DIRETOR_SUPER, **argumentos).json()["result"]
+            assert resultado["isError"] is True
+
+
+class TestListaLongaCortadaNoTeto:
+    def test_volta_o_teto_com_o_total_e_o_aviso(self, chave_do_emissor):
+        muitas = [pendencia(f"B{i:03d}", "ATRASADO", prazo=f"2026-0{1 + i % 9}-1{i % 10}") for i in range(60)]
+        banco = banco_com(DIRETOR_SUPER, pendencias=muitas)
+
+        payload = pendencias_do_claude(banco, chave_do_emissor, DIRETOR_SUPER, situacao="atrasada")
+
+        assert payload["total"] == 60
+        assert payload["mostradas"] == 50
+        assert len(payload["pendencias"]) == 50
+        assert payload["haMais"] is True
+        assert "60" in payload["aviso"]
+
+
+class TestSoLeitura:
+    def test_a_ferramenta_nao_escreve_em_pendencia_nem_em_reuniao(self, chave_do_emissor):
+        banco = banco_do_hospital(DIRETOR_SUPER, DIRETORA)
+        cliente = cliente_mcp(banco)
+
+        for quem in (DIRETOR_SUPER, DIRETORA):
+            for argumentos in ({}, {"situacao": "atrasada"}, {"responsavel": "Ana", "prazoAte": "2026-12-31"}):
+                resultado = chamar_pendencias(cliente, chave_do_emissor, quem, **argumentos).json()["result"]
+                assert resultado["isError"] is False
+
+        assert banco.escritas == []

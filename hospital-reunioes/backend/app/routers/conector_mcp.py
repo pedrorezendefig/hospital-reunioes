@@ -4,7 +4,8 @@ As duas portas HTTP do conector, montadas na raiz (o metadata) e em `/api/mcp`
 (o transporte). **Nenhuma passa pelo gate de sessão do app** (`get_current_user`
 / `require_*`): são endpoints do conector MCP e do OAuth, com o seu próprio gate,
 a verificação do token do WorkOS AuthKit (`services/central_de_comando/
-conector_mcp.py`). O cliente é o claude.ai de quem é Super admin, não o front.
+conector_mcp.py`). O cliente é o claude.ai de quem é Super admin ou
+tem `diretoria_executiva` (ADR 0085), não o front.
 
 A lógica toda mora no service; aqui fica só a tradução para HTTP: o 503 de
 configuração ausente, o 401 com o cabeçalho que aponta o metadata, o CORS do

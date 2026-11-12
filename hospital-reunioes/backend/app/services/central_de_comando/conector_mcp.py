@@ -22,9 +22,12 @@ resource, cujo `aud` é o client id do ambiente), mas NÃO barra outro cliente
 DCR/CIMD que peça este mesmo resource: o resource é o cliente quem pede. Quem
 barra esse caso é o `client_id` (#1448): só o do claude.ai passa, salvo o que
 `MCP_CLIENTES_PERMITIDOS` acrescentar. Depois o participante: o e-mail
-verificado do token acha a pessoa no cadastro, e ela precisa estar ativa e ser
-Super admin. Rebaixou ou desligou, o conector para na hora, sem editar lista
-nenhuma. A lista de e-mails em variável de ambiente do conector antigo NÃO foi
+verificado do token acha a pessoa no cadastro, e ela precisa estar ativa e ter
+acesso a ao menos uma ferramenta: Super admin (a Central) ou `diretoria_executiva`
+no Perfil da Ouvidoria (Reuniões e Ouvidoria, ADR 0085). Cada ferramenta tem o
+próprio gate, e o `tools/list` mostra só o que a pessoa pode chamar. Rebaixou,
+perdeu o perfil ou desligou, o conector para na chamada seguinte, sem editar
+lista nenhuma. A lista de e-mails em variável de ambiente do conector antigo NÃO foi
 portada (ADR 0058, decisão 4).
 
 **Fail-closed.** Qualquer falha de autorização é `AcessoNegadoMCPError`, que a rota
@@ -43,7 +46,8 @@ tela do Instagram. O contrato é o do conector antigo (ADR 0006 de lá), com uma
 diferença de nome no payload do Site: as áreas do hospital com página são as
 Áreas do site (o nome da casa, ADR 0058, decisão 7), no lugar do nome antigo, de
 marca. O protocolo não expõe escrita nenhuma; método desconhecido é erro
-JSON-RPC "método não encontrado".
+JSON-RPC "método não encontrado". A ferramenta de Pendências (#1609) mora em
+`ferramenta_pendencias.py`, sobre a mesma consulta da tela de Pendências.
 """
 
 from __future__ import annotations
@@ -325,7 +329,7 @@ def jwks_do_emissor(cfg: ConfiguracaoMCP) -> dict:
     return jwks
 
 
-# ─── O gate de Super admin, pelo participante ────────────────────────────────
+# ─── O gate pelo participante, por ferramenta ────────────────────────────────
 
 # Só os campos que o gate e as ferramentas leem. O `perfil_ouvidoria` é coluna
 # opcional (`_COLUNAS_OPCIONAIS`): num banco sem ela, o `selecionar_participantes`
