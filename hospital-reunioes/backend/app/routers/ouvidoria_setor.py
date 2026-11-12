@@ -23,6 +23,7 @@ from app.config import settings
 from app.dependencies import get_supabase_client
 from app.limiter import limiter
 from app.services import (
+    ouvidoria_acionamentos,
     ouvidoria_blocos,
     ouvidoria_devolucao_a_ouvidoria,
     ouvidoria_notificacoes,
@@ -848,3 +849,107 @@ async def pedir_prorrogacao(
         "protocolo": caso.get("protocolo"),
         "prorrogacao": {campo: linha.get(campo) for campo in ouvidoria_prorrogacao.CAMPOS_PRORROGACAO_TUPLA},
     }
+
+
+# =====================================================================
+# O botão "Elogio recebido" (issue #1618, ADR 0088, decisão 2)
+# =====================================================================
+
+ELOGIO_JA_CONFIRMADO = "Este elogio já foi confirmado. Obrigado por compartilhar com a equipe."
+ELOGIO_MOVIMENTADO = "A Ouvidoria já movimentou este caso e este link não vale mais."
+
+
+@router.post("/elogio/{token}/recebido")
+@limiter.limit("10/minute")
+async def confirmar_elogio(
+    request: Request,
+    token: str,
+    supabase=Depends(get_supabase_client),
+):
+    """O responsável do setor confirma que o elogio chegou à equipe, sem senha.
+
+    O link vale uma vez: quem decide é a ciência, que só passa de `pendente`
+    para `ciente` uma vez. Confirmado, o caso volta ao ouvidor em `respondido`,
+    com a marca Pronto para encerrar escrita na trilha.
+
+    É POST, e não o GET do próprio link: leitor de email que abre link sozinho
+    para conferir se é seguro gastaria o uso único antes de a pessoa clicar. O
+    link do email abre a tela, e é o botão da tela que chama esta rota."""
+    from app.routers.ouvidoria import barrar_caso_apagado
+
+    agora = agora_utc()
+    try:
+        ciencia = ouvidoria_acionamentos.carregar_pelo_token(supabase, token)
+    except ouvidoria_acionamentos.LinkInvalidoError:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Link inválido") from None
+    except ouvidoria_acionamentos.JaConfirmadoError:
+        raise HTTPException(status_code=status.HTTP_410_GONE, detail=ELOGIO_JA_CONFIRMADO) from None
+    except ouvidoria_acionamentos.ForaDeUsoError:
+        raise HTTPException(status_code=status.HTTP_410_GONE, detail=ELOGIO_MOVIMENTADO) from None
+    except FALHAS_DO_POSTGREST as exc:
+        logger.error("Falha ao ler o link do elogio")
+        raise _indisponivel() from exc
+
+    try:
+        result = (
+            supabase.table("ouvidoria_protocolos")
+            .select("id, protocolo, setor, status, anonimizada_em, apagamento_pedido_em")
+            .eq("id", ciencia["manifestacao_id"])
+            .limit(1)
+            .execute()
+        )
+    except FALHAS_DO_POSTGREST as exc:
+        logger.error("Falha ao ler a manifestação %s pelo link do elogio", ciencia["manifestacao_id"])
+        raise _indisponivel() from exc
+    if not result.data:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Link inválido")
+    caso = result.data[0]
+    barrar_caso_apagado(caso, "confirmado pelo setor", canal_publico=True)
+    if caso.get("status") != "aguardando_area" or caso.get("setor") != ciencia.get("setor"):
+        raise HTTPException(status_code=status.HTTP_410_GONE, detail=ELOGIO_MOVIMENTADO)
+
+    try:
+        confirmou = ouvidoria_acionamentos.confirmar(supabase, ciencia, agora)
+    except FALHAS_DO_POSTGREST as exc:
+        logger.error("Falha ao confirmar o elogio da manifestação %s", ciencia["manifestacao_id"])
+        raise _indisponivel() from exc
+    if not confirmou:
+        raise HTTPException(status_code=status.HTTP_410_GONE, detail=ELOGIO_JA_CONFIRMADO)
+
+    nome = ciencia.get("responsavel_nome") or "Responsável do setor"
+    try:
+        supabase.rpc(
+            "ouvidoria_transicionar",
+            {
+                "p_manifestacao_id": ciencia["manifestacao_id"],
+                "p_estado_novo": "respondido",
+                "p_autor_id": None,
+                "p_autor_nome": nome,
+                "p_observacao": (
+                    f"Elogio recebido por {nome}, do setor {ciencia.get('setor')}. "
+                    f"{ouvidoria_acionamentos.PRONTO_PARA_ENCERRAR}."
+                ),
+            },
+        ).execute()
+    except APIError as exc:
+        # O servidor respondeu: o caso não andou, e o clique volta a valer.
+        ouvidoria_acionamentos.desfazer_confirmacao(supabase, ciencia, agora.isoformat())
+        if exc.code == "23514":
+            raise HTTPException(status_code=status.HTTP_410_GONE, detail=ELOGIO_MOVIMENTADO) from exc
+        logger.error("Erro na RPC ouvidoria_transicionar pelo link do elogio (código %s)", exc.code)
+        raise _indisponivel() from exc
+    except HTTPError as exc:
+        # Sem resposta, o caso pode ter andado: a confirmação fica, e a frase
+        # não promete que o link continua valendo.
+        logger.error("Falha de rede na transição do elogio da manifestação %s", ciencia["manifestacao_id"])
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="O sistema está instável agora. A confirmação pode já ter sido registrada.",
+        ) from exc
+
+    _registrar_acesso(
+        supabase,
+        {"manifestacao_id": ciencia["manifestacao_id"], "destinatario_nome": nome},
+        "elogio_recebido",
+    )
+    return {"protocolo": caso.get("protocolo"), "setor": ciencia.get("setor"), "confirmado_em": agora.isoformat()}

@@ -172,3 +172,116 @@ class TestValidarOElogio:
         assert supabase.tabelas["ouvidoria_protocolos"][0]["prazo_area_em"]
         gatilhos = [n["gatilho"] for n in supabase.tabelas["ouvidoria_notificacoes"]]
         assert gatilhos == [ouvidoria_notificacoes.GATILHO_NOVA_DEMANDA]
+
+
+def _token_do_email(email: dict) -> str:
+    achado = re.search(r"/ouvidoria-setor/elogio/([A-Za-z0-9_-]+)", email["html"])
+    assert achado, "o email do elogio perdeu o link do botão"
+    return achado.group(1)
+
+
+def _clicar(client, token: str):
+    return client.post(f"/api/ouvidoria-setor/elogio/{token}/recebido")
+
+
+# =====================================================================
+# 2. O link Elogio recebido funciona sem login e só uma vez
+# =====================================================================
+
+
+class TestOLinkElogioRecebido:
+    def test_o_link_funciona_sem_login(self, monkeypatch, emails):
+        """O app de teste não tem sessão nenhuma para a rota do link: quem
+        clica é o responsável do setor, que não tem login no aplicativo."""
+        client, supabase = _validar_o_elogio(monkeypatch)
+        client.app.dependency_overrides.pop(get_current_user)
+
+        r = _clicar(client, _token_do_email(emails[0]))
+
+        assert r.status_code == 200, r.text
+        assert r.json()["protocolo"] == "2026-0007"
+        ciencia = supabase.tabelas["ouvidoria_acionamentos"][0]
+        assert ciencia["status"] == "ciente"
+        assert ciencia["respondido_em"] == DENTRO_DO_EXPEDIENTE.isoformat()
+
+    def test_o_link_vale_uma_vez_so(self, monkeypatch, emails):
+        client, supabase = _validar_o_elogio(monkeypatch)
+        token = _token_do_email(emails[0])
+
+        primeiro = _clicar(client, token)
+        segundo = _clicar(client, token)
+
+        assert primeiro.status_code == 200, primeiro.text
+        assert segundo.status_code == 410
+        assert "já foi confirmado" in segundo.json()["detail"]
+        confirmacoes = [
+            m
+            for m in supabase.tabelas["ouvidoria_movimentos"]
+            if (m.get("observacao") or "").startswith("Elogio recebido")
+        ]
+        assert len(confirmacoes) == 1, "o segundo clique não pode mover o caso de novo"
+
+    def test_link_que_nao_existe_e_recusado(self, monkeypatch):
+        client, supabase = _validar_o_elogio(monkeypatch)
+
+        r = _clicar(client, "token-que-nunca-foi-emitido")
+
+        assert r.status_code == 404
+        assert supabase.tabelas["ouvidoria_acionamentos"][0]["status"] == "pendente"
+
+    def test_o_banco_guarda_so_o_hash_do_token(self, monkeypatch, emails):
+        """Vazar a tabela não pode vazar o link do email."""
+        _client_, supabase = _validar_o_elogio(monkeypatch)
+        token = _token_do_email(emails[0])
+
+        assert supabase.tabelas["ouvidoria_acionamentos"][0]["token_hash"]
+        assert token not in str(supabase.tabelas["ouvidoria_acionamentos"])
+
+
+# =====================================================================
+# 3. Depois do clique o caso fica respondido com a marca Pronto para encerrar
+# =====================================================================
+
+
+class TestDepoisDoClique:
+    def test_o_caso_fica_respondido_com_a_marca_pronto_para_encerrar(self, monkeypatch, emails):
+        client, supabase = _validar_o_elogio(monkeypatch)
+
+        _clicar(client, _token_do_email(emails[0]))
+
+        caso = supabase.tabelas["ouvidoria_protocolos"][0]
+        assert caso["status"] == "respondido"
+        ultimo = supabase.tabelas["ouvidoria_movimentos"][-1]
+        assert ultimo["estado_novo"] == "respondido"
+        assert ultimo["autor_nome"] == "Carlos Titular"
+        assert "Pronto para encerrar" in ultimo["observacao"]
+
+    def test_o_link_do_setor_antigo_nao_confirma_o_caso_mandado_a_outro(self, monkeypatch, emails):
+        """O ouvidor mandou o elogio de novo a outro setor: o clique no email
+        antigo não pode devolver ao ouvidor um caso que o setor novo ainda nem
+        viu."""
+        client, supabase = _validar_o_elogio(monkeypatch)
+        token_antigo = _token_do_email(emails[0])
+        caso = supabase.tabelas["ouvidoria_protocolos"][0]
+        caso["status"] = "em_classificacao"
+        supabase.tabelas["ouvidoria_setor_responsaveis"].append(
+            {
+                "id": "resp-cti",
+                "setor": "CTI",
+                "papel": "titular",
+                "nome": "Bia do CTI",
+                "email": "bia@hsm.br",
+                "vigencia_inicio": "2026-01-01",
+                "vigencia_fim": None,
+            }
+        )
+        supabase.tabelas["setores"].append({"id": "s2", "nome": "CTI", "ativo": True})
+        r = client.post("/api/ouvidoria/manifestacoes/uuid-7/validar", json={**ELOGIO, "setor": "CTI"})
+        assert r.status_code == 200, r.text
+
+        recusa = _clicar(client, token_antigo)
+
+        assert recusa.status_code == 410
+        assert "não vale mais" in recusa.json()["detail"]
+        assert caso["status"] == "aguardando_area"
+        assert [a["status"] for a in supabase.tabelas["ouvidoria_acionamentos"]] == ["devolvido", "pendente"]

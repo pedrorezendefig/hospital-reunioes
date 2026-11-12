@@ -64,6 +64,10 @@ class JaConfirmadoError(Exception):
     """O setor já confirmou o elogio: o link não vale de novo."""
 
 
+class ForaDeUsoError(Exception):
+    """A ciência perdeu a vez: o caso foi mandado de novo depois deste email."""
+
+
 def _hash(token: str) -> str:
     return hashlib.sha256(token.encode("utf-8")).hexdigest()
 
@@ -140,13 +144,16 @@ def emitir_link(supabase, acionamento: dict) -> str:
 
 def carregar_pelo_token(supabase, token: str) -> dict:
     """Acha o acionamento do link. Levanta `LinkInvalidoError` quando não há
-    nenhum e `JaConfirmadoError` quando ele já não espera o clique."""
+    nenhum, `JaConfirmadoError` quando o setor já confirmou e `ForaDeUsoError`
+    quando a ciência perdeu a vez para um envio mais novo."""
     result = supabase.table(TABELA).select(_CAMPOS).eq("token_hash", _hash(token)).limit(1).execute()
     if not result.data:
         raise LinkInvalidoError()
     acionamento = result.data[0]
-    if acionamento.get("status") != PENDENTE:
+    if acionamento.get("status") == CIENTE:
         raise JaConfirmadoError()
+    if acionamento.get("status") != PENDENTE:
+        raise ForaDeUsoError()
     return acionamento
 
 
