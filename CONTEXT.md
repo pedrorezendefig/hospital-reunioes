@@ -283,10 +283,10 @@ _Evitar_: paginação; cortar a lista para caber; supor que a mesma chamada devo
 
 ## Tecnologia (o chat do diretor com o agente)
 
-Desde 02/11/2026 (ADR 0077) a aba Tecnologia é uma tela só: o chat do [Assistente de Tecnologia], em que o diretor relata um bug ou pede uma melhoria e o card nasce no GitHub. Só o Super admin vê (ADR 0050). Desde 10/11/2026 (ADR 0083) o [Desenvolvedor] vê as Demandas de todos, o diretor escolhe o [Responsável] e cada Demanda tem a [Conversa da Demanda]. Desde 11/11/2026 (ADR 0084) a aba tem duas abas, Conversas e [Entregas], mostra também o que a Vitta abre pelo terminal ([Origem]) e cada card abre como [Documento do card]. Os pedidos da Vitta ao hospital que não nascem de uma Demanda continuam no WhatsApp.
+Desde 02/11/2026 (ADR 0077) a aba Tecnologia é uma tela só: o chat do [Assistente de Tecnologia], em que o diretor relata um bug ou pede uma melhoria e o card nasce no GitHub. Só o Super admin vê (ADR 0050). Desde 10/11/2026 (ADR 0083) o [Desenvolvedor] vê as Demandas de todos, o diretor escolhe o [Responsável] e cada Demanda tem a [Conversa da Demanda]. Desde 11/11/2026 (ADR 0084) a aba tem duas abas, Conversas e [Entregas], mostra também o que a Vitta abre pelo terminal ([Origem]) e cada card abre como [Documento do card]. Desde 12/11/2026 (ADR 0090) a aba Conversas virou o [Quadro]. Os pedidos da Vitta ao hospital que não nascem de uma Demanda continuam no WhatsApp.
 
 **Demanda**:
-Um bug ou uma melhoria que o diretor relatou ao [Assistente de Tecnologia] ou que a Vitta abriu pelo terminal (ver [Origem]). Na origem do diretor, é o registro de uma conversa: o que foi dito, os [Anexos da Demanda] e, depois do clique "Criar o card", o [Vínculo com o desenvolvimento]. Na tela aparece só como uma linha na lista lateral, com o título que o agente dá desde a primeira resposta, o selo Bug ou Melhoria e a [Etapa] (ADR 0079). Fica **totalmente apartada** das Pendências de Ata: Demanda é assunto de tecnologia entre o hospital e a Vitta, Pendência é compromisso operacional do hospital.
+Um bug ou uma melhoria que o diretor relatou ao [Assistente de Tecnologia] ou que a Vitta abriu pelo terminal (ver [Origem]). Na origem do diretor, é o registro de uma conversa: o que foi dito, os [Anexos da Demanda] e, depois do clique "Criar o card", o [Vínculo com o desenvolvimento]. Na tela aparece como um card no [Quadro] (no celular, uma linha da lista), com o título que o agente dá desde a primeira resposta, o selo Bug ou Melhoria e a [Etapa] (ADR 0079). Fica **totalmente apartada** das Pendências de Ata: Demanda é assunto de tecnologia entre o hospital e a Vitta, Pendência é compromisso operacional do hospital.
 _Evitar_: chamar de Pendência, tarefa ou ticket; tipo além de bug ou melhoria; Prioridade, Prazo ou raia (aposentados em 02/11/2026); "Demandas TI" (TI é o analista de TI do hospital, um terceiro).
 
 **Número da Demanda**:
@@ -356,9 +356,13 @@ _Evitar_: conversa nova com issue nova; escopo cortado em silêncio porque "já 
 Tirar uma Demanda do app, com conversa e anexos (ADR 0084). Vale até Planejada. A conversa Registrada o autor apaga; card criado, só o [Desenvolvedor]. No GitHub a issue-raiz e as partes **fecham** como "não planejada", com comentário de motivo; a issue nunca é apagada de verdade.
 _Evitar_: apagar a issue no GitHub; apagar card com PR aberto; confundir com Não será feita, que fica na lista.
 
+**Quadro**:
+A tela principal da aba Tecnologia (ADR 0090): os cards das Demandas em cinco colunas pela [Etapa], Registrada, Em análise, Planejada, Em desenvolvimento e Entregue (que junta Entregue e Em produção dos últimos 30 dias e leva às [Entregas]), com a barra de filtros em cima. Só leitura: a coluna é a Etapa que vem do GitHub, e ninguém arrasta card. O card abre num painel à direita com o [Documento do card] e a [Conversa da Demanda]; o "Novo pedido" abre o [Assistente de Tecnologia] na largura toda. No celular continua a lista.
+_Evitar_: arrastar card entre colunas; coluna de Estado, Prioridade ou Prazo (o Quadro aposentado em 02/11/2026); raia por pessoa; confundir com as [Entregas], o retrato do que já foi entregue.
+
 **Entregas**:
 A segunda aba da Tecnologia (ADR 0084): o retrato do que foi entregue, contado por card, com as partes no detalhe. Entregues por semana e por mês, data de entrega (fechamento), data em produção ([Subida]) e [Responsável], com histórico desde o primeiro registro do `history.json`. Ninguém move nada ali.
-_Evitar_: chamar de Painel ou Quadro (aposentados em 02/11/2026); contar por parte; mover card pela aba.
+_Evitar_: chamar de Painel (aposentado em 02/11/2026) ou de [Quadro]; contar por parte; mover card pela aba.
 
 **Demonstração**:
 O vídeo do que um card entregue mudou, com a página na Vercel, feito pelo `/divulgar` (ADR 0045) numa sessão aberta pelo botão "Gerar demonstração" do PedroOS, sempre por clique do Pedro (ADR 0084). A sessão grava na issue-raiz o marcador `<!-- demonstracao: <url> -->`, o webhook leva o link ao card e o card ganha o selo "Tem demonstração". Nem todo card tem. Quando fica pronta, o diretor recebe aviso por sino e e-mail, como recebe quando o card entra Em produção, com o resumo montado do [Documento do card], sem IA.
@@ -372,7 +376,7 @@ _Evitar_: imagem ou trecho do documento no corpo ou no comentário da issue; lin
 O conjunto de textos que o [Assistente de Tecnologia] recebe inteiro a cada conversa: um arquivo por módulo (Ana, Integração Ana x MV, Reuniões, Ouvidoria, POPs, Contas médicas, Central de Comando, Site, Infra) mais um sobre a própria aba Tecnologia, cada um com a seção **"O que já foi decidido"**. Escrito para o leitor diretor, em linguagem de uso, sem número de issue, label, nome de tabela ou vocabulário interno. Vive no código do backend e viaja no deploy; é **curado por gente**: mudou o comportamento de um módulo, o arquivo dele muda no mesmo PR. É a língua em que o agente fala; o código e as ADRs, que ele lê pelas ferramentas, são o que ele consulta por trás.
 _Evitar_: gerar o kit por script a partir do glossário; busca vetorial; kit desatualizado (vira agente mentindo).
 
-**Aposentados em 02/11/2026** (ADR 0077): Tipo da Demanda (os sete), Produto com dono, Estado da Demanda, Prioridade, Prazo, Quadro, Painel, a Conversa espelhada com a issue, o formulário à mão, o Roteiro por Tipo e o botão "Planejar com a IA". Quem ler esses nomes em ADR antiga (0050, 0054, 0056, 0069, 0075) está lendo histórico.
+**Aposentados em 02/11/2026** (ADR 0077): Tipo da Demanda (os sete), Produto com dono, Estado da Demanda, Prioridade, Prazo, o Quadro de Estado manual (voltou com outro sentido na ADR 0090), Painel, a Conversa espelhada com a issue, o formulário à mão, o Roteiro por Tipo e o botão "Planejar com a IA". Quem ler esses nomes em ADR antiga (0050, 0054, 0056, 0069, 0075) está lendo histórico.
 
 ## Central de Comando (números do ecossistema digital)
 
