@@ -38,7 +38,7 @@ from app.limiter import limiter  # noqa: E402
 from app.middleware.request_context import RequestContextMiddleware  # noqa: E402
 from app.routers import ouvidoria as ouvidoria_router  # noqa: E402
 from app.routers import ouvidoria_setor as ouvidoria_setor_router  # noqa: E402
-from app.services import ouvidoria_notificacoes  # noqa: E402
+from app.services import ouvidoria_acionamentos, ouvidoria_notificacoes  # noqa: E402
 
 NOTA_DO_OUVIDOR = "A familia agradece a equipe da Recepcao pelo acolhimento no plantao de domingo."
 
@@ -285,3 +285,78 @@ class TestDepoisDoClique:
         assert "não vale mais" in recusa.json()["detail"]
         assert caso["status"] == "aguardando_area"
         assert [a["status"] for a in supabase.tabelas["ouvidoria_acionamentos"]] == ["devolvido", "pendente"]
+
+
+# =====================================================================
+# 4. Sem clique em 5 dias úteis o email sai de novo, uma vez só
+# =====================================================================
+
+# O elogio foi validado na terça, 25/08/2026, às 14h de Brasília. Os 5 dias
+# úteis são 26, 27, 28 e 31/08 e 01/09, e vencem no fechamento do quinto: terça,
+# 01/09, às 17h de Brasília (20h UTC). Literais de propósito: recalcular aqui com
+# o motor de prazos deixaria passar a contagem errada. O "depois" é a manhã de
+# quarta, dentro do expediente: o reenvio respeita a janela comercial, e às 17h30
+# de terça ele ficaria na fila até a abertura seguinte.
+ANTES_DOS_CINCO_DIAS = dt.datetime(2026, 9, 1, 19, 0, tzinfo=dt.UTC)
+DEPOIS_DOS_CINCO_DIAS = dt.datetime(2026, 9, 2, 12, 0, tzinfo=dt.UTC)
+DIAS_DEPOIS = dt.datetime(2026, 9, 10, 15, 0, tzinfo=dt.UTC)
+FERIADOS = frozenset({dt.date(2026, 9, 7)})
+
+
+def _reenviar(supabase, agora: dt.datetime) -> int:
+    return ouvidoria_acionamentos.reenviar_os_esquecidos(supabase, agora, FERIADOS)
+
+
+def _emails_do_elogio(emails: list[dict]) -> list[dict]:
+    return [e for e in emails if "/ouvidoria-setor/elogio/" in e["html"]]
+
+
+class TestReenvioUnico:
+    def test_antes_dos_cinco_dias_uteis_nada_sai(self, monkeypatch, emails):
+        _client_, supabase = _validar_o_elogio(monkeypatch)
+
+        assert _reenviar(supabase, ANTES_DOS_CINCO_DIAS) == 0
+        assert len(_emails_do_elogio(emails)) == 1
+
+    def test_sem_clique_em_cinco_dias_uteis_o_email_sai_de_novo(self, monkeypatch, emails):
+        _client_, supabase = _validar_o_elogio(monkeypatch)
+
+        assert _reenviar(supabase, DEPOIS_DOS_CINCO_DIAS) == 1
+
+        enviados = _emails_do_elogio(emails)
+        assert [e["destinatario"] for e in enviados] == ["carlos@hsm.br", "carlos@hsm.br"]
+        assert supabase.tabelas["ouvidoria_acionamentos"][0]["reenviado_em"] == DEPOIS_DOS_CINCO_DIAS.isoformat()
+
+    def test_o_reenvio_sai_uma_vez_so(self, monkeypatch, emails):
+        _client_, supabase = _validar_o_elogio(monkeypatch)
+
+        _reenviar(supabase, DEPOIS_DOS_CINCO_DIAS)
+        assert _reenviar(supabase, DEPOIS_DOS_CINCO_DIAS) == 0
+        assert _reenviar(supabase, DIAS_DEPOIS) == 0
+
+        assert len(_emails_do_elogio(emails)) == 2
+
+    def test_o_link_do_reenvio_confirma_o_elogio(self, monkeypatch, emails):
+        client, supabase = _validar_o_elogio(monkeypatch)
+        _reenviar(supabase, DEPOIS_DOS_CINCO_DIAS)
+
+        r = _clicar(client, _token_do_email(_emails_do_elogio(emails)[-1]))
+
+        assert r.status_code == 200, r.text
+        assert supabase.tabelas["ouvidoria_protocolos"][0]["status"] == "respondido"
+
+    def test_elogio_ja_confirmado_nao_e_reenviado(self, monkeypatch, emails):
+        client, supabase = _validar_o_elogio(monkeypatch)
+        _clicar(client, _token_do_email(emails[0]))
+
+        assert _reenviar(supabase, DIAS_DEPOIS) == 0
+        assert len(_emails_do_elogio(emails)) == 1
+
+    def test_o_reenvio_roda_sozinho_no_scheduler(self):
+        from app.cron import scheduler as cron
+
+        try:
+            cron.start_scheduler()
+            assert cron.scheduler.get_job("reenvio_elogios_ouvidoria") is not None
+        finally:
+            cron.stop_scheduler()

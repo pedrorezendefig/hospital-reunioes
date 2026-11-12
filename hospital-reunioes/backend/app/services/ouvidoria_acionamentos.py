@@ -193,3 +193,52 @@ def esqueceu_de_confirmar(acionamento: dict, agora: dt.datetime, feriados: froze
         return False
     limite = calcular_vencimento(dt.datetime.fromisoformat(str(enviado)), ESPERA_DO_REENVIO, feriados)
     return esta_vencido(limite, agora)
+
+
+def reenviar_os_esquecidos(supabase, agora: dt.datetime, feriados: frozenset[dt.date]) -> int:
+    """O reenvio único do elogio sem clique em 5 dias úteis. Devolve quantos
+    saíram para a fila.
+
+    Idempotente: o carimbo `reenviado_em` entra ANTES do email, por update
+    condicional, e só quem o grava registra o reenvio. A segunda passada do
+    job, ou uma passada concorrente, não acha linha para carimbar. Sem degraus
+    depois disso: o elogio não sobe a gestor nem à Diretoria."""
+    from app.services import ouvidoria_notificacoes
+
+    result = (
+        supabase.table(TABELA)
+        .select(_CAMPOS)
+        .eq("tipo", CIENCIA)
+        .eq("motivo_ciencia", MOTIVO_ELOGIO)
+        .eq("status", PENDENTE)
+        .is_("reenviado_em", "null")
+        .execute()
+    )
+    reenviados = 0
+    for ciencia in result.data or []:
+        if not esqueceu_de_confirmar(ciencia, agora, feriados):
+            continue
+        carimbado = (
+            supabase.table(TABELA)
+            .update({"reenviado_em": agora.isoformat()})
+            .eq("id", ciencia["id"])
+            .is_("reenviado_em", "null")
+            .execute()
+        )
+        if not carimbado.data:
+            continue
+        notificacao = ouvidoria_notificacoes.registrar(
+            supabase,
+            manifestacao_id=ciencia["manifestacao_id"],
+            gatilho=ouvidoria_notificacoes.GATILHO_CIENCIA_ELOGIO,
+            destinatario_nome=ciencia["responsavel_nome"],
+            destinatario_email=ciencia["responsavel_email"],
+            papel_destinatario=None,
+            enviar_a_partir_de=ouvidoria_notificacoes.quando_enviar(agora, None, feriados),
+        )
+        if notificacao is None:
+            logger.error("[Ouvidoria] Falha ao registrar o reenvio do elogio %s", ciencia["manifestacao_id"])
+            continue
+        ouvidoria_notificacoes.despachar_agora_se_puder(supabase, notificacao, agora, feriados)
+        reenviados += 1
+    return reenviados
