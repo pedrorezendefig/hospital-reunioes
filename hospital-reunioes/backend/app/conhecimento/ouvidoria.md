@@ -46,11 +46,15 @@ O relato de um caso encerrado é apagado depois de cinco anos, sozinho, de madru
 
 Arquivar é outra coisa: só tira da lista o caso que já foi encerrado, para organizar a vista, e tem volta. Caso em andamento não arquiva, porque esconder um prazo correndo é esconder atraso.
 
+## A nota do hospital no Google e no Reclame Aqui
+
+A nota do Google é buscada sozinha uma vez por semana, junto com o total de avaliações, e aparece na tela de Nota externa só para leitura. Ninguém digita mais a nota do Google, e as notas digitadas antes continuam no histórico. A do Reclame Aqui continua digitada pelo ouvidor, que abre a página e escreve o que leu. O relatório da diretoria usa a última nota de cada uma. Enquanto a busca do Google não estiver ligada, a nota não é medida, e a Central de Comando avisa isso.
+
 ## O que ele não faz
 
 - Não deixa o manifestante escolher área, tipo, gravidade nem sigilo.
 - Não apaga linha de trilha: erro se conserta com registro novo, nunca apagando o anterior.
-- Não mede sozinho a nota do hospital no Google nem no Reclame Aqui: alguém abre as duas páginas e digita o que leu.
+- Não mede sozinho a nota do hospital no Reclame Aqui: alguém abre a página e digita o que leu.
 
 ## O que já foi decidido
 
@@ -81,7 +85,7 @@ Arquivar é outra coisa: só tira da lista o caso que já foi encerrado, para or
 - Um agente de inteligência artificial vai ler toda manifestação e toda nota com comentário assim que chegam, inclusive as sigilosas, só para sugerir o assunto, o envio ao Núcleo de Segurança do Paciente e a revisão de comentários graves, e se ele falhar o caso entra normal na fila.
 - O Núcleo de Segurança do Paciente vai receber o relato integral e o paciente atendido mesmo no caso sigiloso, só depois de o ouvidor confirmar, e o nome de quem manifestou só vai quando o caso não é sigiloso, como única exceção à regra do sigilo.
 - O elogio vai ao setor só para ele confirmar que recebeu, sem prazo de resposta, com uma nota curta do ouvidor.
-- A nota do Google vai ser buscada sozinha toda semana e deixa de ser digitada, e o convite para avaliar no Google aparece só para as notas 4 e 5, com o risco aceito pela diretoria.
+- A nota do Google é buscada sozinha toda semana e não se digita mais, e o convite para avaliar no Google vai aparecer só para as notas 4 e 5, com o risco aceito pela diretoria.
 
 ## O que costuma virar Demanda
 
