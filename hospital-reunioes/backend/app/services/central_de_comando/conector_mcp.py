@@ -60,7 +60,14 @@ import httpx
 import jwt
 
 from app.config import settings
-from app.services.central_de_comando import cache, provedor_google, provedor_instagram, telas, visao_geral
+from app.services.central_de_comando import (
+    cache,
+    ferramenta_pendencias,
+    provedor_google,
+    provedor_instagram,
+    telas,
+    visao_geral,
+)
 from app.services.central_de_comando.variacao import variacao_relativa
 
 logger = logging.getLogger(__name__)
@@ -96,6 +103,8 @@ _SERVIDOR = {"name": "central-de-comando-hsm", "version": settings.app_version}
 FERRAMENTA_AO_VIVO = "get_active_now"
 FERRAMENTA_SITE = "get_site_analytics"
 FERRAMENTA_INSTAGRAM = "get_instagram_analytics"
+# As de Reuniões e Ouvidoria, para a diretoria executiva (ADR 0085).
+FERRAMENTA_PENDENCIAS = ferramenta_pendencias.NOME
 
 # Os períodos que cada ferramenta de tendência aceita: o Site tem 7, 28 e 90
 # dias; o Instagram só 7 e 28 (a Graph API entrega no máximo 30 dias por
@@ -133,7 +142,7 @@ class ConectorNaoConfiguradoError(RuntimeError):
 class AcessoNegadoMCPError(Exception):
     """Qualquer falha de autorização do conector: token ausente, inválido,
     e-mail não verificado, e-mail sem participante, participante inativo
-    ou que não é Super admin. Sempre 401 (nunca 403): o cliente MCP responde ao
+    ou sem acesso a ferramenta nenhuma. Sempre 401 (nunca 403): o cliente MCP responde ao
     401 refazendo o login. O motivo fica no log, não no corpo ao cliente."""
 
 
@@ -318,17 +327,44 @@ def jwks_do_emissor(cfg: ConfiguracaoMCP) -> dict:
 
 # ─── O gate de Super admin, pelo participante ────────────────────────────────
 
-# Só os campos que o gate lê: nenhum dos opcionais da migration (que o fallback
-# de coluna trataria), então o select é o mesmo em qualquer ambiente.
-_CAMPOS_DO_GATE = "id, email, ativo, is_super_admin, access_profile"
+# Só os campos que o gate e as ferramentas leem. O `perfil_ouvidoria` é coluna
+# opcional (`_COLUNAS_OPCIONAIS`): num banco sem ela, o `selecionar_participantes`
+# a tira do select, ninguém tem `diretoria_executiva` e só a Central abre.
+_CAMPOS_DO_GATE = "id, email, ativo, is_super_admin, access_profile, perfil_ouvidoria"
 
 
-def resolver_super_admin(supabase, email: str) -> dict:
-    """Acha o participante pelo e-mail verificado e exige ativo e Super admin,
-    ou levanta `AcessoNegadoMCPError`. Reusa os mesmos predicados do gate de sessão
+def tem_diretoria_executiva(participante: dict | None) -> bool:
+    """O gate das ferramentas de Reuniões e Ouvidoria (ADR 0085, decisão 2):
+    `diretoria_executiva` no Perfil da Ouvidoria, Super admin ou não."""
+    return bool(participante) and participante.get("perfil_ouvidoria") == "diretoria_executiva"
+
+
+def _gates() -> dict:
+    """O gate de cada ferramenta, pelo nome. As da Central seguem só para Super
+    admin; as de Reuniões e Ouvidoria, só para a diretoria executiva."""
+    from app.dependencies import is_super_admin
+
+    return {
+        FERRAMENTA_AO_VIVO: is_super_admin,
+        FERRAMENTA_SITE: is_super_admin,
+        FERRAMENTA_INSTAGRAM: is_super_admin,
+        FERRAMENTA_PENDENCIAS: tem_diretoria_executiva,
+    }
+
+
+def pode_chamar(participante: dict | None, nome: object) -> bool:
+    """A pessoa passa no gate da ferramenta. Sem participante, nenhuma."""
+    gate = _gates().get(nome)
+    return participante is not None and gate is not None and gate(participante)
+
+
+def resolver_participante(supabase, email: str) -> dict:
+    """Acha o participante pelo e-mail verificado e exige ativo e acesso a ao
+    menos uma ferramenta (Super admin ou `diretoria_executiva`), ou levanta
+    `AcessoNegadoMCPError`. Reusa os mesmos predicados do gate de sessão
     (`is_super_admin`, `foi_desligado`), mas nega com 401, não com o 403 do
     `require_super_admin`: aqui a resposta a "não pode" é refazer o login."""
-    from app.dependencies import foi_desligado, is_super_admin, selecionar_participantes
+    from app.dependencies import foi_desligado, selecionar_participantes
 
     resultado = selecionar_participantes(supabase, _CAMPOS_DO_GATE, lambda q: q.eq("email", email))
     linhas = resultado.data or []
@@ -337,8 +373,8 @@ def resolver_super_admin(supabase, email: str) -> dict:
     participante = linhas[0]
     if foi_desligado(participante):
         raise AcessoNegadoMCPError("participante desativado")
-    if not is_super_admin(participante):
-        raise AcessoNegadoMCPError("participante não é Super admin")
+    if not any(pode_chamar(participante, nome) for nome in _gates()):
+        raise AcessoNegadoMCPError("participante sem acesso a ferramenta nenhuma")
     return participante
 
 
@@ -357,7 +393,7 @@ def _token_bem_formado(token: str) -> bool:
 
 def autorizar(token: str | None, supabase, cfg: ConfiguracaoMCP) -> dict:
     """As duas etapas do gate, na ordem: o token do AuthKit, depois o
-    participante Super admin. Devolve o participante, ou levanta
+    participante com acesso a ao menos uma ferramenta. Devolve o participante, ou levanta
     `AcessoNegadoMCPError` (sempre 401).
 
     Fail-closed ponta a ponta: token ausente ou malformado nega ANTES de tocar a
@@ -374,7 +410,7 @@ def autorizar(token: str | None, supabase, cfg: ConfiguracaoMCP) -> dict:
         raise AcessoNegadoMCPError(f"JWKS indisponível ({type(exc).__name__})") from exc
     email = verificar_acesso(token, jwks, cfg)
     try:
-        return resolver_super_admin(supabase, email)
+        return resolver_participante(supabase, email)
     except AcessoNegadoMCPError:
         raise
     except Exception as exc:  # noqa: BLE001 - falha inesperada do gate (I/O ao banco): fail-closed, 401
@@ -434,9 +470,10 @@ GLOSSARIO_INSTAGRAM = (
 
 
 def ferramentas() -> list[dict]:
-    """A lista de ferramentas do `tools/list`: o Ao vivo, os números do Site e os
-    do Instagram. As descrições carregam o glossário da seção "Central de
-    Comando" do CONTEXT.md, para o Claude falar a língua da casa."""
+    """O catálogo inteiro do Conector: o Ao vivo, os números do Site e os do
+    Instagram, depois as Pendências. O `tools/list` de cada pessoa é o recorte
+    de `ferramentas_de`. As descrições da Central carregam o glossário da seção
+    "Central de Comando" do CONTEXT.md, para o Claude falar a língua da casa."""
     return [
         {
             "name": FERRAMENTA_AO_VIVO,
@@ -461,7 +498,13 @@ def ferramentas() -> list[dict]:
             ),
             "inputSchema": _schema_de_periodo(_PERIODOS_INSTAGRAM, "7d ou 28d"),
         },
+        ferramenta_pendencias.definicao(),
     ]
+
+
+def ferramentas_de(participante: dict | None) -> list[dict]:
+    """O `tools/list` da pessoa: só o que ela pode chamar (ADR 0085, decisão 2)."""
+    return [f for f in ferramentas() if pode_chamar(participante, f["name"])]
 
 
 def _schema_de_periodo(permitidos: tuple[str, ...], texto: str) -> dict:
@@ -477,12 +520,21 @@ def _schema_de_periodo(permitidos: tuple[str, ...], texto: str) -> dict:
     }
 
 
-async def _executar_ferramenta(nome: str, argumentos: dict) -> dict:
+async def _executar_ferramenta(nome: str, argumentos: dict, participante: dict | None, supabase) -> dict:
     """Roda a ferramenta pedida e devolve o resultado do `tools/call`. Falha da
     fonte vira resultado com `isError`, o jeito do MCP de dizer "a ferramenta
     respondeu que não deu", nunca um número inventado. As duas ferramentas de
     período fazem I/O (o cache das telas, que pode ir à GA4 ou à Graph API), então
-    rodam em thread, no mesmo molde do Ao vivo, para não travar o event loop."""
+    rodam em thread, no mesmo molde do Ao vivo, para não travar o event loop.
+
+    O gate da ferramenta vem antes de tudo: fora dele, erro de ferramenta sem
+    dado, e a ferramenta nem roda."""
+    if nome not in _gates():
+        return _resultado_de_erro(f"Ferramenta desconhecida: {nome}")
+    if not pode_chamar(participante, nome):
+        return _resultado_de_erro(f"A ferramenta {nome} não está liberada para o seu acesso.")
+    if nome == FERRAMENTA_PENDENCIAS:
+        return await anyio.to_thread.run_sync(_ferramenta_pendencias, argumentos, participante, supabase)
     if nome == FERRAMENTA_AO_VIVO:
         return await _ferramenta_ao_vivo()
     if nome == FERRAMENTA_SITE:
@@ -490,6 +542,14 @@ async def _executar_ferramenta(nome: str, argumentos: dict) -> dict:
     if nome == FERRAMENTA_INSTAGRAM:
         return await anyio.to_thread.run_sync(_ferramenta_instagram, argumentos)
     return _resultado_de_erro(f"Ferramenta desconhecida: {nome}")
+
+
+def _ferramenta_pendencias(argumentos: dict, participante: dict, supabase) -> dict:
+    try:
+        payload = ferramenta_pendencias.executar(argumentos, participante, supabase)
+    except ferramenta_pendencias.PedidoRecusadoError as exc:
+        return _resultado_de_erro(str(exc))
+    return _resultado_estruturado(payload)
 
 
 async def _ferramenta_ao_vivo() -> dict:
@@ -725,9 +785,13 @@ def _resultado_de_erro(mensagem: str) -> dict:
     return {"content": [{"type": "text", "text": mensagem}], "isError": True}
 
 
-async def responder_mcp(mensagem: object) -> dict | None:
+async def responder_mcp(mensagem: object, participante: dict | None = None, supabase=None) -> dict | None:
     """Responde uma mensagem JSON-RPC do MCP (objeto único). Devolve o objeto de
     resposta, ou `None` para notificação (sem resposta).
+
+    `participante` é quem o `autorizar` devolveu, nunca o que vem no corpo do
+    pedido; sem ele, nenhuma ferramenta aparece nem roda (fail-closed).
+    `supabase` é o banco das ferramentas que leem do app.
 
     Sem batching: o JSON-RPC batching foi removido no protocolo 2025-06-18. Uma
     lista, ou qualquer coisa que não seja um objeto JSON-RPC 2.0, cai em -32600
@@ -750,7 +814,7 @@ async def responder_mcp(mensagem: object) -> dict | None:
             },
         )
     if metodo == "tools/list":
-        return _ok(id_, {"tools": ferramentas()})
+        return _ok(id_, {"tools": ferramentas_de(participante)})
     if metodo == "tools/call":
         params = mensagem.get("params")
         if params is not None and not isinstance(params, dict):
@@ -764,7 +828,7 @@ async def responder_mcp(mensagem: object) -> dict | None:
             # mesmo molde do `params`, nunca um 500 quando a ferramenta for
             # desreferenciar o que não é dict.
             return _erro(id_, -32602, "Argumentos inválidos")
-        resultado = await _executar_ferramenta(params.get("name"), argumentos or {})
+        resultado = await _executar_ferramenta(params.get("name"), argumentos or {}, participante, supabase)
         return _ok(id_, resultado)
     if metodo == "ping":
         return _ok(id_, {})

@@ -11,7 +11,7 @@ Os seams testados:
   RSA geradas no próprio teste (a trava de rede da suíte continua de pé e nada
   sai da máquina). Cobre a recusa de cada claim: assinatura, emissor, audiência,
   expiração, escopo e `email_verified`.
-- `resolver_super_admin`: o gate pelo participante (e-mail sem cadastro, inativo,
+- `resolver_participante`: o gate pelo participante (e-mail sem cadastro, inativo,
   não Super admin).
 - As duas ROTAS HTTP, o seam das outras fatias da Central: o metadata com CORS e
   o transporte, com o gate de pé e as ferramentas de verdade (o Ao vivo pela
@@ -369,7 +369,7 @@ class TestVerificarAcesso:
             conector_mcp.verificar_acesso(tok, jwks_de(chave_do_emissor), cfg)
 
 
-# ─── 3. resolver_super_admin: o gate pelo participante ───────────────────────
+# ─── 3. resolver_participante: o gate pelo participante ──────────────────────
 
 
 class TestClientesPermitidos:
@@ -465,24 +465,24 @@ class TestClientesPermitidos:
 class TestResolverSuperAdmin:
     def test_super_admin_ativo_passa(self):
         supabase = SupabaseDosParticipantes([SUPER_ADMIN])
-        assert conector_mcp.resolver_super_admin(supabase, "super@hsm.com")["id"] == "super"
+        assert conector_mcp.resolver_participante(supabase, "super@hsm.com")["id"] == "super"
 
     def test_email_sem_participante_nega(self):
         supabase = SupabaseDosParticipantes([SUPER_ADMIN])
         with pytest.raises(conector_mcp.AcessoNegadoMCPError):
-            conector_mcp.resolver_super_admin(supabase, "ninguem@hsm.com")
+            conector_mcp.resolver_participante(supabase, "ninguem@hsm.com")
 
     def test_participante_inativo_nega(self):
         desligado = pessoa("super", "super_admin", ativo=False)
         supabase = SupabaseDosParticipantes([desligado])
         with pytest.raises(conector_mcp.AcessoNegadoMCPError):
-            conector_mcp.resolver_super_admin(supabase, "super@hsm.com")
+            conector_mcp.resolver_participante(supabase, "super@hsm.com")
 
     @pytest.mark.parametrize("quem", [SECRETARIA, FACILITADOR], ids=["secretaria", "facilitador"])
     def test_participante_que_nao_e_super_admin_nega(self, quem):
         supabase = SupabaseDosParticipantes([quem])
         with pytest.raises(conector_mcp.AcessoNegadoMCPError):
-            conector_mcp.resolver_super_admin(supabase, quem["email"])
+            conector_mcp.resolver_participante(supabase, quem["email"])
 
 
 # ─── 4. A rota do metadata: RFC 9728, com CORS ───────────────────────────────
