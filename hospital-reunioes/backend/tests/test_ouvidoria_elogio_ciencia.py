@@ -422,6 +422,47 @@ class TestElogioEntregue:
 
 
 # =====================================================================
+# 7. O kit de conhecimento diz o comportamento novo
+# =====================================================================
+
+
+class TestOKitDeConhecimento:
+    """O Assistente de Tecnologia responde sobre a Ouvidoria pelo kit: se o
+    texto não disser como o elogio anda agora, ele responde pelo jeito antigo."""
+
+    @pytest.fixture
+    def texto(self) -> str:
+        from app.services.conhecimento import CONHECIMENTO_DIR
+
+        return (CONHECIMENTO_DIR / "ouvidoria.md").read_text(encoding="utf-8")
+
+    @pytest.fixture
+    def paragrafo(self, texto) -> str:
+        """O parágrafo que conta o caminho do elogio. Lido sozinho porque
+        "sem senha" e "sem prazo" já aparecem no texto, em outras frases, e o
+        teste passaria sobre o texto antigo."""
+        achados = [p for p in texto.split("\n\n") if "Elogio recebido" in p]
+        assert len(achados) == 1, "o kit precisa de um parágrafo que conte o caminho do elogio"
+        return achados[0]
+
+    def test_diz_o_botao_sem_senha_e_de_uso_unico(self, paragrafo):
+        assert "sem senha" in paragrafo
+        assert "vale uma vez" in paragrafo
+
+    def test_diz_que_o_elogio_nao_tem_prazo_nem_entra_nos_vencidos(self, paragrafo):
+        assert "não há prazo de resposta" in paragrafo
+        assert "não entra nos vencidos" in paragrafo
+
+    def test_diz_o_reenvio_unico_em_cinco_dias_uteis(self, paragrafo):
+        assert "5 dias úteis" in paragrafo
+        assert "uma única vez" in paragrafo
+
+    def test_diz_a_marca_e_o_aviso_ao_manifestante(self, paragrafo, texto):
+        assert "Pronto para encerrar" in paragrafo
+        assert "Seu elogio foi entregue à equipe." in texto
+
+
+# =====================================================================
 # A migration: o registro de acionamento e o gatilho novo no banco
 # =====================================================================
 
