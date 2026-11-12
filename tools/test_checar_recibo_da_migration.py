@@ -195,8 +195,7 @@ def test_ci_roda_a_guarda_no_job_do_backend_em_pull_request():
     passo = re.search(
         r"- name: Migration com recibo\n(?:\s+#[^\n]*\n)*"
         r"\s+if: github\.event_name == 'pull_request'\n"
-        r"\s+run: uv run --no-project --python 3\.12 python \.\./\.\./tools/checar_recibo_da_migration\.py"
-        r" --base origin/main\n",
+        r"\s+run: python \.\./\.\./tools/checar_recibo_da_migration\.py --base origin/main\n",
         ci,
     )
     assert passo, "o passo da guarda do recibo sumiu do ci.yml"
