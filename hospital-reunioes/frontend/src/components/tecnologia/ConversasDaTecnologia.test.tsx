@@ -30,6 +30,7 @@ beforeEach(() => {
 
 afterEach(() => {
   cleanup();
+  window.history.replaceState(null, "", "/");
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
 });
@@ -1340,5 +1341,40 @@ describe("Revisar com o código de hoje (issue #1557, ADR 0084, decisão 3)", ()
     expect(chamadas.filter((c) => c.url === REVISAO && c.metodo === "POST").map((c) => c.corpo)).toEqual([
       { confirmado: true },
     ]);
+  });
+});
+
+describe("O endereço acompanha o card aberto (issue #1586)", () => {
+  const OUTRO = demanda("d-3", "Relatório de leitos atrasa");
+
+  function comDuas(demandaInicial: string | null = null) {
+    return montar((url) => {
+      if (url === LISTA) return { status: 200, corpo: [SEM_CARD, OUTRO] };
+      if (url === `${LISTA}/d-1`) return { status: 200, corpo: conversa("d-1") };
+      if (url === `${LISTA}/d-3`) return { status: 200, corpo: conversa("d-3", { mensagens: [ABERTURA_GUARDADA] }) };
+      return { status: 404, corpo: {} };
+    }, demandaInicial);
+  }
+
+  const demandaDaUrl = () => new URLSearchParams(window.location.search).get("demanda");
+
+  it("abrir um card põe a Demanda no endereço sem nova entrada no histórico, e voltar no celular tira", async () => {
+    window.history.replaceState(null, "", "/admin/tecnologia");
+    const entradas = window.history.length;
+    comDuas();
+    await within(lista()).findByText("Botão de responder some na Ouvidoria");
+
+    fireEvent.click(within(lista()).getByRole("button", { name: /Botão de responder some/ }));
+    await screen.findByText("Onde isso aconteceu?");
+
+    expect(window.location.pathname).toBe("/admin/tecnologia");
+    expect(demandaDaUrl()).toBe("d-1");
+    expect(window.history.length).toBe(entradas);
+
+    fireEvent.click(screen.getByRole("button", { name: VOLTAR_PARA_A_LISTA }));
+
+    await waitFor(() => expect(demandaDaUrl()).toBeNull());
+    expect(window.location.pathname).toBe("/admin/tecnologia");
+    expect(window.history.length).toBe(entradas);
   });
 });

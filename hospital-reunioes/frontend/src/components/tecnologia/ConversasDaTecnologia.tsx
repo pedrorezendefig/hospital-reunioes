@@ -192,6 +192,18 @@ function urlDaLista(filtros: FiltrosDaLista): string {
   return texto ? `${URL_DO_CHAT_DA_ABA}?${texto}` : URL_DO_CHAT_DA_ABA;
 }
 
+/**
+ * Põe a Demanda aberta no endereço (`?demanda=<id>`), ou a tira com `null`,
+ * trocando a entrada do histórico em vez de empilhar uma a cada clique (issue
+ * #1586). O resto do endereço fica como está.
+ */
+function demandaNoEndereco(demandaId: string | null) {
+  const url = new URL(window.location.href);
+  if (demandaId) url.searchParams.set("demanda", demandaId);
+  else url.searchParams.delete("demanda");
+  window.history.replaceState(null, "", `${url.pathname}${url.search}${url.hash}`);
+}
+
 /** Um chip de filtro. Nada de `flex-1` nem `nowrap`: a linha quebra dentro da coluna. */
 export function Chip({ ativo, onClick, children }: { ativo: boolean; onClick: () => void; children: string }) {
   return (
@@ -919,6 +931,7 @@ export function ConversasDaTecnologia({
   );
 
   const abrir = useCallback((demanda: Demanda | null, conversar = false, ampliar = false) => {
+    demandaNoEndereco(demanda?.id ?? null);
     setAberta(demanda);
     setDestacada(demanda?.id ?? null);
     setFocarConversa(conversar);
@@ -1099,7 +1112,11 @@ export function ConversasDaTecnologia({
         >
           <button
             type="button"
-            onClick={() => setNaTela("lista")}
+            onClick={() => {
+              // Ampliado (só na tela larga), o Voltar traz a lista e o pedido segue aberto ao lado.
+              if (!recolhida) demandaNoEndereco(null);
+              setNaTela("lista");
+            }}
             className={`${recolhida ? "" : "md:hidden"} inline-flex items-center gap-1.5 text-sm font-semibold text-primary`}
           >
             <ArrowLeft className="w-4 h-4" />
