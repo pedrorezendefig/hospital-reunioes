@@ -69,6 +69,8 @@ ALTER TABLE tecnologia_demandas ADD CONSTRAINT tecnologia_demandas_numero_key UN
 COMMENT ON COLUMN tecnologia_demandas.numero IS
   'O Numero da Demanda ("Demanda 42"), gerado pela sequence no insert. Para todo mundo que ve a Demanda; nao e o numero da issue.';
 
-INSERT INTO migracoes_aplicadas (numero) VALUES (134) ON CONFLICT (numero) DO NOTHING;
-
 COMMIT;
+
+-- O recibo vem depois do COMMIT: e a ultima instrucao (issue #969) e so roda
+-- se a transacao entrou (no Studio, um erro para o resto do script).
+INSERT INTO migracoes_aplicadas (numero) VALUES (134) ON CONFLICT (numero) DO NOTHING;

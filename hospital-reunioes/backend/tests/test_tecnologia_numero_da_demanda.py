@@ -51,10 +51,13 @@ class TestMigracao:
         assert re.search(r"ALTER COLUMN numero SET NOT NULL", sql)
         assert re.search(r"ADD CONSTRAINT tecnologia_demandas_numero_key UNIQUE \(numero\)", sql)
 
-    def test_a_migration_grava_o_recibo_134_dentro_da_transacao(self, sql):
+    def test_a_migration_grava_o_recibo_134_depois_do_commit(self, sql):
+        """A guarda do CI (tools/checar_recibo_da_migration.py) exige o recibo
+        como ultima instrucao; depois do COMMIT ele so e gravado se a
+        transacao entrou."""
         recibo = _posicao(sql, r"INSERT INTO migracoes_aplicadas \(numero\) VALUES \(134\) ON CONFLICT")
 
-        assert _posicao(sql, r"BEGIN;") < recibo < _posicao(sql, r"COMMIT;")
+        assert _posicao(sql, r"BEGIN;") < _posicao(sql, r"COMMIT;") < recibo
 
 
 class TestKit:
