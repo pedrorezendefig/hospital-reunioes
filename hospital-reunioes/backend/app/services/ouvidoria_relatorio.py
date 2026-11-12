@@ -333,7 +333,7 @@ def _retrato_externo(notas) -> dict | None:
         return {"frase": EFEITO_DA_DEGRADACAO["nota_externa"], "itens": []}
     return {
         "frase": (
-            "Nota lida pelo ouvidor nas páginas do Google e do Reclame Aqui, e digitada no sistema. "
+            "A nota do Google é lida sozinha toda semana, e a do Reclame Aqui é digitada pelo ouvidor. "
             "As duas escalas são diferentes, e por isso cada nota sai com a sua."
         ),
         "itens": [_item_de_nota(linha) for linha in notas],
@@ -638,14 +638,14 @@ def _apresentar_evolucao(dados: dict) -> dict:
     if not serie:
         return {
             "frase": (
-                "Nenhuma nota do Google ou do Reclame Aqui foi digitada nos meses deste relatório. "
-                "A nota não é medida pelo sistema, ela é lida nas páginas e digitada pelo ouvidor."
+                "Nenhuma nota do Google ou do Reclame Aqui foi registrada nos meses deste relatório. "
+                "A do Google é lida sozinha toda semana, e a do Reclame Aqui é digitada pelo ouvidor."
             ),
             "itens": [],
         }
     return {
         "frase": (
-            "As notas digitadas pelo ouvidor no período, da mais antiga para a mais recente. "
+            "As notas registradas no período, da mais antiga para a mais recente. "
             "As duas escalas são diferentes, e por isso cada nota sai com a sua."
         ),
         "itens": [_item_de_nota(linha) for linha in serie],

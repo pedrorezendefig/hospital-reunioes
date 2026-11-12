@@ -122,3 +122,141 @@ class TestJobSemanal:
         assert pedido.url.path == f"/v1/places/{PLACE_ID}"
         assert pedido.headers["X-Goog-Api-Key"] == "chave-de-teste"
         assert set(pedido.headers["X-Goog-FieldMask"].split(",")) == {"rating", "userRatingCount"}
+
+    def test_sem_a_chave_nao_chama_nada_e_nao_grava(self):
+        supabase = SupabaseFalso()
+        google = GoogleFalso()
+
+        ouvidoria_nota_google.buscar_e_gravar(supabase, AGORA, chave="", cliente=google.cliente())
+
+        assert google.pedidos == []
+        assert supabase.notas == []
+
+    def test_com_leitura_automatica_na_semana_nao_busca_de_novo(self):
+        """O job roda todo dia e busca uma vez por semana."""
+        ontem = (AGORA - dt.timedelta(days=1)).isoformat()
+        supabase = SupabaseFalso([_leitura(ontem, 2.5, 1629)])
+        google = GoogleFalso()
+
+        ouvidoria_nota_google.buscar_e_gravar(supabase, AGORA, chave="chave-de-teste", cliente=google.cliente())
+
+        assert google.pedidos == []
+        assert len(supabase.notas) == 1
+
+    def test_uma_semana_depois_da_ultima_leitura_busca_de_novo(self):
+        semana_passada = (AGORA - dt.timedelta(days=7)).isoformat()
+        supabase = SupabaseFalso([_leitura(semana_passada, 2.5, 1629)])
+        google = GoogleFalso(rating=2.6, total=1640)
+
+        ouvidoria_nota_google.buscar_e_gravar(supabase, AGORA, chave="chave-de-teste", cliente=google.cliente())
+
+        assert len(google.pedidos) == 1
+        assert supabase.notas[-1]["total_avaliacoes"] == 1640
+
+    def test_o_google_fora_do_ar_nao_grava_nem_levanta(self):
+        supabase = SupabaseFalso()
+        cliente = httpx.Client(transport=httpx.MockTransport(lambda _p: httpx.Response(503)))
+
+        assert ouvidoria_nota_google.buscar_e_gravar(supabase, AGORA, chave="chave-de-teste", cliente=cliente) is None
+        assert supabase.notas == []
+
+
+def _leitura(quando: str, nota: float, total: int | None, origem: str = "automatica") -> dict:
+    return {
+        "fonte": "google",
+        "nota": nota,
+        "total_avaliacoes": total,
+        "origem": origem,
+        "registrada_em": quando,
+        "registrada_por_nome": "",
+    }
+
+
+HOJE = dt.date(2026, 11, 16)
+
+
+class TestResumoDoMes:
+    def test_sem_a_chave_a_nota_nao_e_medida(self):
+        supabase = SupabaseFalso([_leitura("2026-11-09T09:45:00+00:00", 2.5, 1629)])
+
+        resumo = ouvidoria_nota_google.resumo_do_mes(supabase, HOJE, medida=False)
+
+        assert resumo["medida"] is False
+        assert resumo["nota"] is None
+
+    def test_nota_avaliacoes_novas_do_mes_e_tendencia(self):
+        supabase = SupabaseFalso(
+            [
+                _leitura("2026-10-05T09:45:00+00:00", 2.3, 1590),
+                _leitura("2026-10-26T09:45:00+00:00", 2.4, 1620),
+                _leitura("2026-11-02T09:45:00+00:00", 2.5, 1629),
+                _leitura("2026-11-09T09:45:00+00:00", 2.5, 1635),
+                _leitura("2026-11-16T09:45:00+00:00", 2.6, 1641),
+            ]
+        )
+
+        resumo = ouvidoria_nota_google.resumo_do_mes(supabase, HOJE, medida=True)
+
+        assert resumo["medida"] is True
+        assert resumo["nota"] == 2.6
+        assert resumo["escala"] == 5
+        assert resumo["total"] == 1641
+        assert resumo["avaliacoes_do_mes"] == 12
+        assert resumo["nota_mes_anterior"] == 2.4
+        assert resumo["tendencia"] == "melhorou"
+
+    def test_nota_abaixo_da_do_fim_do_mes_anterior_piorou(self):
+        supabase = SupabaseFalso(
+            [
+                _leitura("2026-10-26T09:45:00+00:00", 2.6, 1620),
+                _leitura("2026-11-09T09:45:00+00:00", 2.5, 1635),
+            ]
+        )
+
+        assert ouvidoria_nota_google.resumo_do_mes(supabase, HOJE, medida=True)["tendencia"] == "piorou"
+
+    def test_uma_leitura_so_no_mes_nao_inventa_avaliacoes_novas(self):
+        """Com uma leitura, a diferença do total seria zero e leria como "ninguém
+        avaliou": sem duas leituras no mês, não há número."""
+        supabase = SupabaseFalso([_leitura("2026-11-02T09:45:00+00:00", 2.5, 1629)])
+
+        resumo = ouvidoria_nota_google.resumo_do_mes(supabase, HOJE, medida=True)
+
+        assert resumo["nota"] == 2.5
+        assert resumo["avaliacoes_do_mes"] is None
+        assert resumo["tendencia"] is None
+
+    def test_a_nota_digitada_antes_conta_na_tendencia_mas_nao_no_total(self):
+        """O histórico digitado fica (ADR 0089, decisão 2): a nota de outubro
+        digitada pelo ouvidor é a base da tendência de novembro."""
+        supabase = SupabaseFalso(
+            [
+                _leitura("2026-10-20T12:00:00+00:00", 2.5, None, origem="manual"),
+                _leitura("2026-11-09T09:45:00+00:00", 2.5, 1635),
+            ]
+        )
+
+        resumo = ouvidoria_nota_google.resumo_do_mes(supabase, HOJE, medida=True)
+
+        assert resumo["tendencia"] == "igual"
+        assert resumo["total"] == 1635
+
+
+class TestRelatorioDaDiretoria:
+    def test_o_relatorio_continua_lendo_a_ultima_nota_de_cada_fonte(self):
+        """A leitura automática entra no mesmo diário, e o relatório pega a
+        última de cada fonte, venha ela do job ou da mão do ouvidor."""
+        reclame_aqui = {"fonte": "reclame_aqui", "nota": 7.8, "registrada_em": "2026-11-03T12:00:00+00:00"}
+        supabase = SupabaseFalso(
+            [
+                _leitura("2026-11-01T12:00:00+00:00", 2.4, None, origem="manual"),
+                _leitura("2026-11-09T09:45:00+00:00", 2.6, 1635),
+                reclame_aqui,
+            ]
+        )
+
+        notas = {n["fonte"]: n for n in ouvidoria_nota_externa.ultimas(supabase)}
+
+        assert notas["google"]["nota"] == 2.6
+        assert notas["google"]["escala"] == 5
+        assert notas["reclame_aqui"]["nota"] == 7.8

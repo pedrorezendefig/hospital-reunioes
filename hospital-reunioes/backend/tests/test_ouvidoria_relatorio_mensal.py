@@ -735,7 +735,7 @@ class TestEvolucaoDaNotaExterna:
         # aparece no bloco "Retrato externo" que o quinzenal imprime, e a
         # asserção passaria com esta seção muda.
         secao = html.split("Evolução da nota externa")[1].split("<h2")[0]
-        assert "Nenhuma nota do Google ou do Reclame Aqui foi digitada" in secao
+        assert "Nenhuma nota do Google ou do Reclame Aqui foi registrada" in secao
 
     def test_falha_ao_ler_a_nota_nao_vira_ninguem_digitou(self, ia, correio, impressos):
         """A distinção que o módulo já exigia do bloco irmão: leitura que FALHOU
@@ -766,7 +766,7 @@ class TestEvolucaoDaNotaExterna:
         secao = html.split("Evolução da nota externa")[1].split("<h2")[0]
         assert "não pôde ser lida" in secao
         assert "NÃO significa que ninguém digitou" in secao
-        assert "Nenhuma nota do Google ou do Reclame Aqui foi digitada" not in secao
+        assert "Nenhuma nota do Google ou do Reclame Aqui foi registrada" not in secao
         # E o buraco aparece no aviso do topo, que é de onde o email tira o dele.
         assert "evolucao_externa" in impressos[0]["dados"]["degradado"]
 
