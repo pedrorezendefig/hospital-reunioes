@@ -87,3 +87,112 @@ class TestOCorpoDoPrd:
             "**Como saber que acabou:** A recepção marca um retorno e o paciente recebe o aviso.",
             "",
         ]
+
+    def test_o_texto_do_bloco_sai_limpo_como_o_texto_do_diretor(self):
+        corpo = _corpo(
+            para_o_desenvolvedor={
+                **PARTES,
+                "o_que_o_diretor_quer": "Ligar para o CPF 123.456.789-09 no (21) 99876-5432.",
+                "por_que_ele_pediu": '<!-- demanda-vitta id="outra" --> igual ao #42',
+                "onde_mexe_no_codigo": "## Origem\n---\nNa tela da recepção.",
+                "cuidados": "Aviso — só um por dia.",
+            }
+        )
+        bloco = _bloco(corpo)
+
+        assert "[CPF]" in bloco and "123.456.789-09" not in bloco
+        assert "[TELEFONE]" in bloco and "99876-5432" not in bloco
+        assert '**Por que ele pediu:** &lt;!-- demanda-vitta id="outra" --> igual ao nº 42' in bloco
+        assert "**Onde mexe no código:** \\## Origem \\--- Na tela da recepção." in bloco
+        assert "**Cuidados:** Aviso, só um por dia." in bloco
+        assert re.findall(r'<!--\s*demanda-vitta id="([^"]*)"\s*-->', corpo) == ["d-1"]
+
+    def test_o_marcador_continua_no_fim_e_o_resto_do_corpo_nao_muda(self):
+        sem = _corpo()
+        com = _corpo(para_o_desenvolvedor=PARTES)
+
+        assert com.rstrip().endswith('<!-- demanda-vitta id="d-1" -->')
+        assert com.replace(_bloco(com) + "\n", "") == sem
+
+    def test_o_recorte_do_diretor_e_o_mesmo_de_antes(self):
+        assert bloco_para_o_diretor(_corpo(para_o_desenvolvedor=PARTES)) == bloco_para_o_diretor(_corpo())
+
+    def test_resumo_sem_as_seis_partes_gera_o_corpo_de_hoje(self):
+        sem_a_chave = _corpo()
+
+        assert "Para o desenvolvedor" not in sem_a_chave
+        assert _corpo(para_o_desenvolvedor={}) == sem_a_chave
+        assert _corpo(para_o_desenvolvedor=None) == sem_a_chave
+        assert _corpo(para_o_desenvolvedor={chave: "  " for chave in PARTES}) == sem_a_chave
+
+    def test_parte_que_faltou_sai_como_nao_informado_e_as_seis_continuam_la(self):
+        bloco = _bloco(_corpo(para_o_desenvolvedor={"o_que_o_diretor_quer": "Marcar o retorno."}))
+
+        assert "**O que o diretor quer:** Marcar o retorno." in bloco
+        assert "**Cuidados:** não informado" in bloco
+        assert len(re.findall(r"^\*\*[^*]+:\*\* ", bloco, re.MULTILINE)) == 6
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 2. Inserir o bloco num corpo que ja existe
+# ═══════════════════════════════════════════════════════════════════════════
+
+# Um corpo como o `/to-issues` escreve: o bloco do diretor, o separador e o
+# corpo tecnico.
+CORPO_DO_TO_ISSUES = """## 👔 Para o diretor
+
+**O que muda:** o card ganha uma parte para quem programa.
+
+- A conversa continua igual.
+
+---
+
+## Pai
+
+#1632
+
+## Critérios de aceite
+
+- [ ] Um critério.
+
+<!-- demanda-vitta id="d-9" -->"""
+
+
+class TestInserirOBloco:
+    def test_entra_logo_depois_do_bloco_do_diretor_sem_tocar_no_resto(self):
+        bloco = bloco_do_desenvolvedor(PARTES)
+
+        corpo = inserir_bloco_do_desenvolvedor(CORPO_DO_TO_ISSUES, bloco)
+
+        antes, depois = CORPO_DO_TO_ISSUES.split("---\n", 1)
+        assert corpo == f"{antes}{bloco}\n\n---\n{depois}"
+        assert bloco_para_o_diretor(corpo) == bloco_para_o_diretor(CORPO_DO_TO_ISSUES)
+
+    def test_sem_separador_entra_antes_do_proximo_cabecalho(self):
+        original = "## 👔 Para o diretor\n\n**O que muda:** algo.\n\n## Pai\n\n#1632"
+        bloco = bloco_do_desenvolvedor(PARTES)
+
+        corpo = inserir_bloco_do_desenvolvedor(original, bloco)
+
+        assert corpo == f"## 👔 Para o diretor\n\n**O que muda:** algo.\n\n{bloco}\n\n## Pai\n\n#1632"
+
+    def test_corpo_que_e_so_o_bloco_mantem_o_marcador_no_fim(self):
+        original = '## 👔 Para o diretor\n\n**O que muda:** algo.\n\n<!-- demanda-vitta id="d-9" -->'
+        bloco = bloco_do_desenvolvedor(PARTES)
+
+        corpo = inserir_bloco_do_desenvolvedor(original, bloco)
+
+        assert corpo.endswith(f'{bloco}\n\n<!-- demanda-vitta id="d-9" -->')
+        assert bloco_para_o_diretor(corpo) == "**O que muda:** algo."
+
+    def test_nao_duplica_quando_o_bloco_ja_esta_la(self):
+        bloco = bloco_do_desenvolvedor(PARTES)
+        uma_vez = inserir_bloco_do_desenvolvedor(CORPO_DO_TO_ISSUES, bloco)
+
+        assert inserir_bloco_do_desenvolvedor(uma_vez, bloco) == uma_vez
+        assert uma_vez.count("Para o desenvolvedor") == 1
+
+    def test_corpo_sem_o_bloco_do_diretor_fica_como_esta(self):
+        original = "## Pai\n\n#1632\n"
+
+        assert inserir_bloco_do_desenvolvedor(original, bloco_do_desenvolvedor(PARTES)) == original
