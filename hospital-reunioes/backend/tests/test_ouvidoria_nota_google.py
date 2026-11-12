@@ -13,8 +13,16 @@ import os
 import sys
 
 import httpx
+import pytest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+
+from central_de_comando_apoio import (  # noqa: E402
+    PREFIXO_DA_CENTRAL,
+    SUPER_ADMIN,
+    SupabaseDosParticipantes,
+    cliente_da_central,
+)
 
 from app.services import ouvidoria_nota_externa, ouvidoria_nota_google  # noqa: E402
 
@@ -276,6 +284,75 @@ class TestResumoDoMes:
 
         assert resumo["tendencia"] == "igual"
         assert resumo["total"] == 1635
+
+
+class _SupabaseDaCentral(SupabaseFalso):
+    """O gate da Central lê `participantes`; a nota, o diário."""
+
+    def __init__(self, notas: list[dict] | None = None):
+        from central_de_comando_apoio import FACILITADOR, SECRETARIA, SUPER_ADMIN
+
+        super().__init__(notas)
+        self._gate = SupabaseDosParticipantes([SUPER_ADMIN, SECRETARIA, FACILITADOR])
+
+    def table(self, nome: str):
+        return self._gate.table(nome) if nome == "participantes" else super().table(nome)
+
+
+def _nota_na_central(supabase, logado=None) -> httpx.Response:
+    from app.dependencies import get_supabase_client
+
+    cliente = cliente_da_central(logado or SUPER_ADMIN)
+    cliente.app.dependency_overrides[get_supabase_client] = lambda: supabase
+    return cliente.get(f"{PREFIXO_DA_CENTRAL}/objetivos/google-reputacao")
+
+
+@pytest.mark.usefixtures("gate_e_limitador_zerados")
+class TestObjetivoNaCentral:
+    def test_mostra_nota_avaliacoes_novas_do_mes_e_tendencia(self, monkeypatch):
+        from app.config import settings
+        from app.services.central_de_comando import periodo
+
+        monkeypatch.setattr(settings, "google_places_api_key", "chave-de-teste")
+        monkeypatch.setattr(periodo, "hoje_utc", lambda: HOJE)
+        supabase = _SupabaseDaCentral(
+            [
+                _leitura("2026-10-26T09:45:00+00:00", 2.4, 1620),
+                _leitura("2026-11-02T09:45:00+00:00", 2.5, 1629),
+                _leitura("2026-11-16T09:45:00+00:00", 2.6, 1641),
+            ]
+        )
+
+        resposta = _nota_na_central(supabase)
+
+        assert resposta.status_code == 200, resposta.text
+        corpo = resposta.json()
+        assert corpo["objetivo"]["id"] == "google-reputacao"
+        assert corpo["reputacao"]["medida"] is True
+        assert corpo["reputacao"]["nota"] == 2.6
+        assert corpo["reputacao"]["avaliacoes_do_mes"] == 12
+        assert corpo["reputacao"]["tendencia"] == "melhorou"
+
+    def test_sem_a_chave_a_central_diz_que_a_nota_nao_e_medida(self, monkeypatch):
+        from app.config import settings
+
+        monkeypatch.setattr(settings, "google_places_api_key", "")
+        supabase = _SupabaseDaCentral([_leitura("2026-11-16T09:45:00+00:00", 2.6, 1641)])
+
+        corpo = _nota_na_central(supabase).json()
+
+        assert corpo["reputacao"]["medida"] is False
+        assert corpo["reputacao"]["nota"] is None
+
+    def test_so_super_admin_ve(self, monkeypatch):
+        from central_de_comando_apoio import SECRETARIA
+
+        assert _nota_na_central(_SupabaseDaCentral(), SECRETARIA).status_code == 403
+
+    def test_o_objetivo_do_google_nao_esta_mais_em_construcao(self):
+        from app.services.central_de_comando.objetivos.catalogo import objetivo_por_id
+
+        assert objetivo_por_id("google-reputacao").em_construcao is False
 
 
 class TestRelatorioDaDiretoria:

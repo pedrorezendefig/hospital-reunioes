@@ -50,10 +50,11 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from fastapi.responses import JSONResponse, Response
 from fastapi.routing import APIRoute
 
-from app.dependencies import require_super_admin
+from app.dependencies import get_supabase_client, require_super_admin
 from app.limiter import limiter
 from app.services.central_de_comando import objetivos, provedor_google, provedor_instagram, telas
 from app.services.central_de_comando import visao_geral as visao_geral_service
+from app.services.central_de_comando.objetivos import nota_no_google
 from app.services.central_de_comando.periodo import PERIODO_PADRAO, Periodo
 
 # As telas compostas de vários blocos, cada bloco com a sua chave de cache e a
@@ -231,6 +232,21 @@ async def objetivos_galeria(request: Request):
     guardado é 502 (ou 503, sem credencial) para a galeria inteira.
     """
     return await _do_fonte(objetivos.ler_galeria)
+
+
+@router.get(f"/objetivos/{nota_no_google.IDENTIFICADOR}")
+@limiter.limit("30/minute")
+async def objetivo_nota_no_google(request: Request, supabase=Depends(get_supabase_client)):
+    """A lente de "Melhorar a nota no Google" (issue #1619, ADR 0089): a nota,
+    as avaliações novas do mês e a tendência, lidas do diário de Nota externa
+    da Ouvidoria, que o job semanal da Places API alimenta.
+
+    É a exceção ao "stateless" deste router: lê uma tabela, sem cache e sem
+    período (o Objetivo é mensal). Declarada antes da lente genérica, que não
+    tem montador para ela e responderia 404. Sem a chave da Places API, 200 com
+    `medida: false`: a tela diz que a nota não está sendo medida.
+    """
+    return await anyio.to_thread.run_sync(nota_no_google.ler, supabase)
 
 
 @router.get("/objetivos/{identificador}")

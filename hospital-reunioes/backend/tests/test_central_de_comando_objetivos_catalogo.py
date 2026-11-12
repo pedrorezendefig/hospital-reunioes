@@ -29,14 +29,15 @@ class TestCatalogo:
             assert o.nome.strip(), o.id
             assert o.descricao.strip(), o.id
 
-    def test_os_dois_em_construcao_sao_a_area_do_site_e_a_nota_no_google(self):
+    def test_so_a_area_do_site_esta_em_construcao(self):
+        """A nota no Google saiu de construção na issue #1619 (ADR 0089)."""
         em_construcao = [o.id for o in OBJETIVOS if o.em_construcao]
-        assert em_construcao == ["site-area", "google-reputacao"]
+        assert em_construcao == ["site-area"]
 
-    def test_quatro_objetivos_tem_dado_e_dois_estao_em_construcao(self):
+    def test_cinco_objetivos_tem_dado_e_um_esta_em_construcao(self):
         com_dado = [o.id for o in OBJETIVOS if not o.em_construcao]
-        assert len(com_dado) == 4
-        assert len([o for o in OBJETIVOS if o.em_construcao]) == 2
+        assert len(com_dado) == 5
+        assert len([o for o in OBJETIVOS if o.em_construcao]) == 1
 
     def test_objetivo_por_id_acha_e_devolve_none_para_id_desconhecido(self):
         achado = objetivo_por_id("contatos")
