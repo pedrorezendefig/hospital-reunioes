@@ -2,6 +2,49 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-11-11T23:36:37-03:00",
+      "sha": "ad96d2147de5e4f13fff91f4a6b15b3e1d54d907",
+      "app_version": "0.259.3",
+      "subject": "PR #1615, sem issue: ADRs 0086 a 0089 e glossário do QR com avaliação, agente de triagem, Núcleo e Google",
+      "raw_subject": "chore(deploy): registro do PR avulso (#1615)",
+      "scope": [
+        "backend"
+      ],
+      "prds": [],
+      "result": "healthy",
+      "duration_seconds": 44,
+      "services_touched": [
+        "backend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        },
+        {
+          "service": "frontend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "PR avulso: PR #1615, sem issue. Merge pela API do GitHub, um build. Registro pela Action pos-merge depois do health.",
+      "etapas": {
+        "merge_s": 3,
+        "build_s": {
+          "backend": 16
+        },
+        "health_s": 10
+      },
+      "responsavel": "pedrorezendefig"
+    },
+    {
       "at": "2026-11-11T23:26:56-03:00",
       "sha": "0193535ecc71bbf7bdd5229c2949cd5cda4b4438",
       "app_version": "0.259.2",
