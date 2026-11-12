@@ -23,8 +23,13 @@
  *
  * Toda Demanda aberta tem, embaixo, a Conversa da Demanda, numa área própria
  * (issue #1537, ADR 0083, decisão 8). O aviso do sino chega com a Demanda em
- * `demandaInicial` e a abre: o Desenvolvedor a procura em "Todas", porque a
- * menção pode ser numa Demanda de que ele não é o Responsável.
+ * `demandaInicial` e a abre.
+ *
+ * O endereço acompanha o card aberto, em `?demanda=<id>`, sem empilhar o
+ * histórico (issue #1586): recarregar abre o mesmo card. A Demanda do endereço
+ * que o filtro esconde (o "Para mim" do Desenvolvedor, por exemplo) troca a
+ * barra para o recorte mais largo, sem filtros, e abre; a que não está nem
+ * nele vira o aviso "Você não tem acesso a esta Demanda", sem título nem número.
  *
  * O card que não chegou ao GitHub fica com o selo "Envio falhou" na lista, e a
  * conversa aberta traz o "Reenviar", para o autor e para o Desenvolvedor. Só o
@@ -117,6 +122,8 @@ import {
 export const NOVA_CONVERSA = "Nova conversa";
 export const VOLTAR_PARA_A_LISTA = "Voltar às conversas";
 export const AMPLIAR = "Ampliar";
+/** O link de uma Demanda que quem abriu não pode ver (issue #1586): sem título nem número. */
+export const SEM_ACESSO = "Você não tem acesso a esta Demanda";
 const AMPLIAR_EXPLICADO = "Abrir este pedido em tela cheia";
 export const ENVIO_FALHOU = "Envio falhou";
 export const REENVIAR = "Reenviar";
@@ -837,8 +844,10 @@ export function ConversasDaTecnologia({
   const [desenvolvedores, setDesenvolvedores] = useState<Desenvolvedor[]>([]);
   /** O último pedido da lista: a resposta de um pedido mais velho não sobrescreve a do novo. */
   const ultimoPedido = useRef(0);
-  /** A Demanda do sino que já foi aberta: abre uma vez, e não a cada recarga da lista. */
-  const abertaPeloSino = useRef<string | null>(null);
+  /** A Demanda que a tela pôs no endereço, ou já tratou dele: o mesmo id não abre de novo. */
+  const noEndereco = useRef<string | null>(null);
+  /** O endereço trouxe uma Demanda fora da lista de quem abriu (issue #1586). */
+  const [semAcesso, setSemAcesso] = useState(false);
 
   // Sem resposta, a tela fica como a do diretor: o filtro só aparece com o
   // sim do servidor.
@@ -858,12 +867,12 @@ export function ConversasDaTecnologia({
       }
       if (!viva) return;
       setDesenvolvedor(sim);
-      setFiltro(sim ? (demandaInicial ? "todas" : "para_mim") : "minhas");
+      setFiltro(sim ? "para_mim" : "minhas");
     })();
     return () => {
       viva = false;
     };
-  }, [token, demandaInicial]);
+  }, [token]);
 
   // Os nomes do chip Responsável, só para o Desenvolvedor.
   useEffect(() => {
@@ -930,15 +939,22 @@ export function ConversasDaTecnologia({
     [carregar],
   );
 
+  /** Escreve no endereço e lembra o que escreveu, para o eco do endereço não reabrir o card. */
+  const escreverNoEndereco = useCallback((demandaId: string | null) => {
+    noEndereco.current = demandaId;
+    demandaNoEndereco(demandaId);
+  }, []);
+
   const abrir = useCallback((demanda: Demanda | null, conversar = false, ampliar = false) => {
-    demandaNoEndereco(demanda?.id ?? null);
+    escreverNoEndereco(demanda?.id ?? null);
+    setSemAcesso(false);
     setAberta(demanda);
     setDestacada(demanda?.id ?? null);
     setFocarConversa(conversar);
     setAmpliada(ampliar);
     setChave((atual) => atual + 1);
     setNaTela("conversa");
-  }, []);
+  }, [escreverNoEndereco]);
 
   const filtroAtivo = Boolean(textoDaBusca.trim() || tipo || etapa || origem || responsavel || envioFalhou);
 
@@ -962,6 +978,7 @@ export function ConversasDaTecnologia({
 
   /** A Demanda foi apagada: some da lista, e a tela volta à lista com a conversa nova pronta. */
   function aoApagar() {
+    escreverNoEndereco(null);
     setAberta(null);
     setDestacada(null);
     setChave((atual) => atual + 1);
@@ -983,13 +1000,36 @@ export function ConversasDaTecnologia({
     abrir(atual ?? (aberta ? { ...aberta, designacao_falhou: false, envio_motivo: null } : null));
   }
 
+  // A Demanda do endereço (o sino, o e-mail, o recarregar): abre se está na
+  // lista; se o filtro a esconde, a barra vai ao recorte mais largo e a lista
+  // relê; se nem lá ela está, o aviso de sem acesso.
   useEffect(() => {
-    if (!demandaInicial || abertaPeloSino.current === demandaInicial || !demandas) return;
+    if (!demandaInicial || demandaInicial === noEndereco.current || demandas === null || filtro === null) return;
     const pedida = demandas.find((d) => d.id === demandaInicial);
-    if (!pedida) return;
-    abertaPeloSino.current = demandaInicial;
-    abrir(pedida);
-  }, [demandaInicial, demandas, abrir]);
+    if (pedida) {
+      abrir(pedida);
+      return;
+    }
+    const maisLargo: Filtro = desenvolvedor ? "todas" : "minhas";
+    if (filtro !== maisLargo || filtroAtivo) {
+      setTextoDaBusca("");
+      setBusca("");
+      setTipo(null);
+      setEtapa(null);
+      setOrigem(null);
+      setResponsavel(null);
+      setEnvioFalhou(false);
+      setFiltro(maisLargo);
+      setDemandas(null);
+      return;
+    }
+    noEndereco.current = demandaInicial;
+    setSemAcesso(true);
+    setAberta(null);
+    setDestacada(null);
+    setAmpliada(false);
+    setNaTela("conversa");
+  }, [demandaInicial, demandas, filtro, desenvolvedor, filtroAtivo, abrir]);
 
   /** A lista recolhe na tela larga só com o pedido ampliado (issue #1593, que reverteu a #1551). */
   const recolhida = naTela === "conversa" && aberta !== null && ampliada;
@@ -1114,10 +1154,11 @@ export function ConversasDaTecnologia({
             type="button"
             onClick={() => {
               // Ampliado (só na tela larga), o Voltar traz a lista e o pedido segue aberto ao lado.
-              if (!recolhida) demandaNoEndereco(null);
+              if (!recolhida) escreverNoEndereco(null);
+              setSemAcesso(false);
               setNaTela("lista");
             }}
-            className={`${recolhida ? "" : "md:hidden"} inline-flex items-center gap-1.5 text-sm font-semibold text-primary`}
+            className={`${recolhida || semAcesso ? "" : "md:hidden"} inline-flex items-center gap-1.5 text-sm font-semibold text-primary`}
           >
             <ArrowLeft className="w-4 h-4" />
             {VOLTAR_PARA_A_LISTA}
@@ -1165,7 +1206,11 @@ export function ConversasDaTecnologia({
             }
           >
             <div className="min-w-0">
-              {(aberta?.tem_vinculo || aberta?.minha === false) && !aberta?.em_revisao ? (
+              {semAcesso ? (
+                <p role="alert" className="px-4 py-3 rounded-2xl border border-border bg-white text-sm text-text">
+                  {SEM_ACESSO}
+                </p>
+              ) : (aberta?.tem_vinculo || aberta?.minha === false) && !aberta?.em_revisao ? (
                 <Acompanhamento key={chave} demanda={aberta} token={token} />
               ) : (
                 <ChatDaTecnologia key={chave} token={token} demandaId={aberta?.id ?? null} onMudou={aoMudar} />

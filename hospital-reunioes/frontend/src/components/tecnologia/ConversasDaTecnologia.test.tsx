@@ -96,12 +96,24 @@ function montar(servidor: Servidor, demandaInicial: string | null = null) {
       } as unknown as Response;
     }),
   );
-  render(
+  const arvore = (demanda: string | null) => (
     <ToastProvider>
-      <ConversasDaTecnologia token="token-de-teste" demandaInicial={demandaInicial} />
-    </ToastProvider>,
+      <ConversasDaTecnologia token="token-de-teste" demandaInicial={demanda} />
+    </ToastProvider>
   );
+  const { rerender } = render(arvore(demandaInicial));
+  trocarDemandaInicial = (demanda) => rerender(arvore(demanda));
   return chamadas;
+}
+
+/** Remonta a aba montada com outra `demandaInicial`, como a página faz quando o endereço muda. */
+let trocarDemandaInicial: (demanda: string | null) => void = () => {};
+
+const demandaDaUrl = () => new URLSearchParams(window.location.search).get("demanda");
+
+/** A página lê o `?demanda=` do endereço: depois de a tela escrever nele, a prop muda também. */
+function aPaginaLeOEndereco() {
+  trocarDemandaInicial(demandaDaUrl());
 }
 
 function lista() {
@@ -527,7 +539,7 @@ describe("A Conversa da Demanda e o aviso do sino (issue #1537, ADR 0083)", () =
     );
   });
 
-  it("o aviso do sino abre a Demanda de outro autor para o Desenvolvedor, pela lista de Todas", async () => {
+  it("com a Demanda escondida pelo Para mim, o filtro muda para Todas e o card abre (issue #1586)", async () => {
     const chamadas = montar(
       (url) => {
         if (url === EU) return { status: 200, corpo: { desenvolvedor: true } };
@@ -543,7 +555,7 @@ describe("A Conversa da Demanda e o aviso do sino (issue #1537, ADR 0083)", () =
     expect(await screen.findByText("Onde isso aconteceu?")).toBeTruthy();
     expect(await screen.findByRole("region", { name: "Conversa da Demanda" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "Todas" }).getAttribute("aria-pressed")).toBe("true");
-    expect(chamadas.filter((c) => c.url.startsWith(`${LISTA}?`)).map((c) => c.url)).toEqual([TODAS]);
+    expect(chamadas.filter((c) => c.url.startsWith(`${LISTA}?`)).map((c) => c.url)).toEqual([PARA_MIM, TODAS]);
   });
 });
 
@@ -1356,8 +1368,6 @@ describe("O endereço acompanha o card aberto (issue #1586)", () => {
     }, demandaInicial);
   }
 
-  const demandaDaUrl = () => new URLSearchParams(window.location.search).get("demanda");
-
   it("abrir um card põe a Demanda no endereço sem nova entrada no histórico, e voltar no celular tira", async () => {
     window.history.replaceState(null, "", "/admin/tecnologia");
     const entradas = window.history.length;
@@ -1376,5 +1386,43 @@ describe("O endereço acompanha o card aberto (issue #1586)", () => {
     await waitFor(() => expect(demandaDaUrl()).toBeNull());
     expect(window.location.pathname).toBe("/admin/tecnologia");
     expect(window.history.length).toBe(entradas);
+  });
+
+  it("abrir um card, clicar noutro e recarregar abre o segundo", async () => {
+    comDuas();
+    await within(lista()).findByText("Botão de responder some na Ouvidoria");
+    fireEvent.click(within(lista()).getByRole("button", { name: /Botão de responder some/ }));
+    await screen.findByText("Onde isso aconteceu?");
+    aPaginaLeOEndereco();
+    fireEvent.click(within(lista()).getByRole("button", { name: /Relatório de leitos atrasa/ }));
+    aPaginaLeOEndereco();
+    await waitFor(() => expect(screen.queryByText("Onde isso aconteceu?")).toBeNull());
+
+    // Recarregar: a tela nasce de novo, só com o que está no endereço.
+    cleanup();
+    comDuas(demandaDaUrl());
+
+    await waitFor(() =>
+      expect(
+        within(lista()).getByRole("button", { name: /Relatório de leitos atrasa/ }).getAttribute("aria-current"),
+      ).toBe("true"),
+    );
+    expect(within(lista()).getByRole("button", { name: /Botão de responder some/ }).getAttribute("aria-current")).not.toBe(
+      "true",
+    );
+  });
+
+  it("o endereço que a própria tela escreveu não reabre o card nem desfaz o Ampliar", async () => {
+    comDuas();
+    await within(lista()).findByText("Botão de responder some na Ouvidoria");
+    const card = within(lista())
+      .getAllByRole("listitem")
+      .find((item) => within(item).queryByRole("button", { name: /Botão de responder some/ })) as HTMLElement;
+
+    fireEvent.click(within(card).getByRole("button", { name: AMPLIAR }));
+    await screen.findByText("Onde isso aconteceu?");
+    aPaginaLeOEndereco();
+
+    expect((lista().parentElement as HTMLElement).className).toMatch(/(^|\s)md:hidden(\s|$)/);
   });
 });
