@@ -25,6 +25,7 @@ Só `status: accepted` vale como decisão; `superseded` é histórico (CLAUDE.md
 | [0087](0087-agente-de-triagem-da-ouvidoria.md) | accepted | O agente de triagem da Ouvidoria lê toda manifestação e toda avaliação na chegada (emenda 0082 e 0039) |
 | [0088](0088-acionamento-de-ciencia-elogio-e-nucleo-de-seguranca-do-paciente.md) | accepted | Acionamento de ciência: o elogio e o Núcleo de Segurança do Paciente, com exceção de sigilo para o Núcleo (emenda 0041 e 0052) |
 | [0089](0089-nota-do-google-automatica-e-convite-so-para-notas-4-e-5.md) | accepted | Nota do Google buscada toda semana e convite ao Google só para as notas 4 e 5 |
+| [0090](0090-quadro-da-tecnologia-por-etapa.md) | accepted | Quadro da Tecnologia por Etapa, só leitura, com o card num painel (emenda 0077, 0083 e 0084) |
 
 ## Contas médicas
 
