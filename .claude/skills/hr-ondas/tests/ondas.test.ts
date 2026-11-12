@@ -257,6 +257,43 @@ for (const surface of ['terminal', 'desktop'] as const) {
   })
 }
 
+test('copiar SQL põe o arquivo inteiro no clipboard, confere e nunca aponta para o VS Code', async ($, on) => {
+  const SQL = '-- 117\nCREATE TABLE x (\n  id int\n);\n\nSELECT 1;\n'
+  const lidos: string[] = []
+  const copiados: string[] = []
+  const avisos: string[] = []
+  mock.clock(on, { now: AGORA })
+  on('process.run', (_$: any, e: any) => ({
+    value: e.argv[0] === '/usr/bin/pbpaste'
+      ? { exitCode: 0, stdout: copiados.at(-1) ?? '', stderr: '' }
+      : { exitCode: 0, stdout: JSON.stringify(COLETA), stderr: '' },
+  }))
+  on('fs.read', (_$: any, e: any) => {
+    lidos.push(e.path)
+    return { value: SQL }
+  })
+  on('ui.copy', (_$: any, e: any) => {
+    copiados.push(e.text)
+    return { value: { isCopied: true } }
+  })
+  on('ui.toast', (_$: any, e: any) => {
+    avisos.push(e.text)
+    return { value: undefined }
+  })
+  on('command.register', () => ({ value: undefined }))
+  on('ui.open', () => ({ value: { isPlaced: true } }))
+  on('ui.status', () => ({ value: undefined }))
+  on('command.run', () => ({ text: '' }))
+  on('ui.render', () => null)
+  await $.command.run({ command: 'ondas', args: '', origin: 'user', presentation: 'text' })
+  const pane = await $.ui.mount({ plugin: 'hr-ondas', surface: 'terminal', component: 'Pane', requestId: 'ondas', props: {} as any })
+  expect(await pane.find({ text: /VS Code/ })).toBeUndefined()
+  await pane.press({ key: 'copiar-117' })
+  expect(lidos).toEqual(['/tmp/fechar_onda/onda-ia-onda1/117_contas_medicas_ia.sql'])
+  expect(copiados).toEqual([SQL])
+  expect(avisos.some(a => /Migration 117 copiada inteira \(210 linhas\)/.test(a))).toBe(true)
+})
+
 const iniciar = async ($: any, on: any, isInteractive: boolean) => {
   const abertos: string[] = []
   const relogio = mock.clock(on, { now: AGORA })

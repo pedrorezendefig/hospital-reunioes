@@ -1,5 +1,5 @@
 import { atom, read, update } from 'claude-code'
-import type { EngineInterface, Register } from 'claude-code'
+import type { EngineInterface, Register, RenderSurface } from 'claude-code'
 
 import type { Agente, Ci, Coleta, EsperaCi, Fase, Issue, Migration, Prd, SubAgente, Subida } from '../types'
 
@@ -388,6 +388,33 @@ async function registrarAplicadas($: EngineInterface, numeros: number[]) {
   await coletar($, true)
 }
 
+/**
+ * Copia o .sql inteiro, byte a byte como está no arquivo, para colar no SQL Editor do Studio.
+ * Nunca abre editor (o VS Code pesava na memória). No terminal do Mac confere o clipboard
+ * contra o arquivo antes de dizer que copiou.
+ */
+async function copiarSql($: EngineInterface, m: Migration, surface: RenderSurface) {
+  const reserva = `rode: ! pbcopy < '${m.caminho}'`
+  try {
+    const texto = await $.fs.read(m.caminho)
+    const r = await $.ui.copy({ text: texto, surface })
+    if (!r.isCopied) {
+      $.ui.toast(`Não copiei a migration ${m.numero} (${r.reason}); ${reserva}`)
+      return
+    }
+    if (surface === 'terminal') {
+      const colado = await $.process.run(['/usr/bin/pbpaste'], { timeoutMs: 5_000 })
+      if (colado.exitCode === 0 && colado.stdout !== texto) {
+        $.ui.toast(`O clipboard não bate com a migration ${m.numero}; ${reserva}`)
+        return
+      }
+    }
+    $.ui.toast(`Migration ${m.numero} copiada inteira (${m.linhas} linhas): cole no Studio`)
+  } catch (falha) {
+    $.ui.toast(`Não copiei a migration ${m.numero}: ${String(falha).slice(0, 120)}; ${reserva}`)
+  }
+}
+
 async function coletar($: EngineInterface, fresco = false) {
   if (rodando) {
     frescoPendente ||= fresco
@@ -522,16 +549,20 @@ export const register: Register = on => {
     const ci = await read($, esperaCi)
     const p = c ? pendentes(c) : []
     if (!p.length && !ci) return next(e)
-    const { Box, Text, Link } = $.ui.resolve(e)
+    const { Box, Text, Link, Button } = $.ui.resolve(e)
 
     return (
       <Box flexDirection="column">
         {p.map(m => (
-          <Text key={`m${m.numero}`} color="warning">
-            ⏳ migration {m.numero} esperando o Studio ({m.linhas} linhas, {m.sessao}, há{' '}
-            {minutos(c!.em - m.mtime)}) · <Link href={`vscode://file${m.caminho}:1`} label="abrir no VS Code" /> ·{' '}
+          <Box key={`m${m.numero}`} flexDirection="row">
+            <Text color="warning">
+              ⏳ migration {m.numero} esperando o Studio ({m.linhas} linhas, {m.sessao}, há{' '}
+              {minutos(c!.em - m.mtime)}){' '}
+            </Text>
+            <Button key={`copiar-faixa-${m.numero}`} label="copiar SQL" onPress={press => void copiarSql($, m, press.surface)} />
+            <Text color="warning"> · </Text>
             <Link href={STUDIO} label="Studio SQL" />
-          </Text>
+          </Box>
         ))}
         {ci && (
           <Text key="ci" color="suggestion">
@@ -543,7 +574,7 @@ export const register: Register = on => {
   })
 
   on('ui.render', { component: 'Pane', requestId: PANE }, async ($, e) => {
-    const { Box, Text, Link } = $.ui.resolve(e)
+    const { Box, Text, Link, Button } = $.ui.resolve(e)
     const c = await read($, coleta)
     const falha = await read($, erro)
     const mostrarTodos = await read($, todos)
@@ -628,11 +659,16 @@ export const register: Register = on => {
           <Box flexDirection="column" marginTop={1}>
             <Text bold>Migrations · no ar: {c.aplicada ?? '?'}</Text>
             {p.map((m, k) => (
-              <Text key={`p${m.numero}`} color="warning" wrap="truncate-end">
-                {'  '}⏳ {m.numero} {k === 0 ? 'cole no Studio' : `depois da ${p[k - 1]?.numero}`} ·{' '}
-                <Link href={`vscode://file${m.caminho}:1`} label="VS Code" /> · <Link href={STUDIO} label="Studio" /> ·{' '}
-                {m.linhas} linhas · {m.sessao} · há {minutos(c.em - m.mtime)}
-              </Text>
+              <Box key={`p${m.numero}`} flexDirection="row">
+                <Text color="warning">
+                  {'  '}⏳ {m.numero} {k === 0 ? 'cole no Studio' : `depois da ${p[k - 1]?.numero}`}{' '}
+                </Text>
+                <Button key={`copiar-${m.numero}`} label="copiar SQL" onPress={press => void copiarSql($, m, press.surface)} />
+                <Text color="warning" wrap="truncate-end">
+                  {' '}
+                  · <Link href={STUDIO} label="Studio" /> · {m.linhas} linhas · {m.sessao} · há {minutos(c.em - m.mtime)}
+                </Text>
+              </Box>
             ))}
             {recentes.map(m => (
               <Text key={`a${m.numero}${m.sessao}`} color="success">

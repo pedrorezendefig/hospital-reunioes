@@ -6,7 +6,7 @@ Vocabulário do domínio: Reunião, Ata, Pendência, Facilitador, Colaborador, E
 
 ## onda-enxuta
 
-**Migration:** a linha da subida é `migration: cole no Studio <arquivo>:1`. Repasse pelo evento `pronto-para-voce` assim que aparecer.
+**Migration:** a linha da subida é `migration: cole no Studio <arquivo> (...); copie com: pbcopy < <caminho>`. O botão `[ copiar SQL ]` do painel das ondas copia o mesmo arquivo; nada abre no VS Code. Repasse pelo evento `pronto-para-voce` assim que aparecer.
 
 **PRD entregue:** quando a subida desta onda fecha a última sub-issue aberta de um PRD (health ok e nenhuma filha aberta em `gh api repos/{owner}/{repo}/issues/<PRD>/sub_issues`), chame a Skill tool com `mensagem-prd` e o número do PRD antes do relatório do passo 6. Cole a mensagem no relatório e grave o evento `pronto-para-voce` com "PRD #<PRD> em produção, mensagem para o diretor pronta no comentário do PRD". Vale também quando o prompt pede auditoria do PRD: a mensagem sai depois dela.
 
@@ -116,7 +116,7 @@ Pare no draft e me mostre os frames antes do render final. Depois da página pub
 - *decisão de domínio*: o insumo externo costuma ser organograma, número ou resposta do diretor.
 - O PRD do leitor aqui é o **PRD do diretor** (o "sim" do Planejamento da Demanda, ADR 0075), reconhecido pelo marcador da Demanda (`prd_do_leitor` no `fluxo.json`).
 - *divulgação* (`type:divulgacao`): a pessoa aprova vídeo e página; o resto é `/divulgar`.
-- *as três paradas*: migration pelo caminho clicável no Studio, segredo só na tela do Coolify.
+- *as três paradas*: migration copiada pelo botão do painel (ou `pbcopy`) e colada no Studio, segredo só na tela do Coolify.
 
 ## grill-with-docs
 

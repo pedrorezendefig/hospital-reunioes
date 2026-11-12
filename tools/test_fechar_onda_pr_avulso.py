@@ -1924,9 +1924,11 @@ def test_subida_espera_a_migration_aparecer_no_health_e_so_entao_pega_o_semaforo
     assert {url for _, url in health.leituras} == {"https://exemplo.invalid/api/health"}
     assert relogio.inicio + 3 * HORA <= pegou_em[0] <= relogio.inicio + 3 * HORA + fo.MIGRACAO_POLL_S
     saida = capsys.readouterr().out
-    # o humano recebe o caminho clicável do arquivo, com o SQL do head do PR
+    # o humano recebe o comando que copia o arquivo, com o SQL do head do PR, e
+    # nenhum caminho `:1` (o terminal o transformaria em link que abre o VS Code)
     [cole] = linhas_com(saida, "migration: cole no Studio")
-    caminho = re.search(r"(\S+112_triagem\.sql):1\b", cole)
+    assert ".sql:1" not in cole, cole
+    caminho = re.search(r"pbcopy < (\S+112_triagem\.sql)", cole)
     assert caminho, cole
     assert Path(caminho.group(1)).read_text(encoding="utf-8") == SQL_COM_RECIBO
     assert SHA_COM_RECIBO[:12] in cole and "3 linhas" in cole, cole

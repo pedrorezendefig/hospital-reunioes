@@ -68,7 +68,7 @@ python3 .claude/skills/onda-enxuta/scripts/fechar_onda.py --prs "$PR"
 Em segundo plano (builds levam minutos); leia só a saída. O que fazer em cada código de saída está na docstring do script. Os dois que pedem ação de quem rodou:
 - **Saída 2 com `conflito no merge de #N em: <arquivos>`:** `onda-corretor` motivo `conflito` com os arquivos, CI de novo, subida de novo. Conta tentativa.
 - **Saídas 6, 7 e 8:** `PushNotification` com a linha que o script imprimiu. A 6 conta tentativa.
-- **`migration: <como aplicar> <arquivo>:1`:** a subida espera o `/api/health` devolver o número dela (até 24 h). Repasse a linha por `PushNotification`. Quem aplica é o humano, do jeito que `migrations.aplicar` do `fluxo.py` diz; o `/ship` nunca aplica migration.
+- **`migration: <como aplicar> <arquivo> (...); copie com: pbcopy < <caminho>`:** a subida espera o `/api/health` devolver o número dela (até 24 h). Repasse a linha por `PushNotification`. Nunca mostre o caminho com `:1` nem abra o `.sql` num editor: o humano copia o arquivo inteiro pelo `pbcopy` (ou pelo botão do painel, quando o Projeto tem um). Quem aplica é o humano, do jeito que `migrations.aplicar` do `fluxo.py` diz; o `/ship` nunca aplica migration.
 
 **Sem plataforma:** enquanto o `services` do `docs/spec/deploy/project.json` estiver vazio (`/deploy status` diz), a subida trata todo PR como ferramenta e termina no merge: sem versão, tag, build, health, registro nem espera de migration. A saída 0 já é o PR mergeado com o CI verde.
 

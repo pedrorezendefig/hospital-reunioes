@@ -108,7 +108,7 @@ Com todos os PRs verdes ou baixados, registre a hora dos PRs verdes, grave o eve
 
 `python3 .claude/skills/onda-enxuta/scripts/fechar_onda.py --prs <a> <b> --sessao <nome>-onda<N>` em segundo plano, com os PRs verdes na ordem da tabela. A chave é a da onda, não a da sessão (a onda seguinte já roda). Leia só a saída; o que cada código significa está na docstring do script. Sem serviço no `docs/spec/deploy/project.json` (`/deploy status`), a subida termina no merge: sem versão, build, health nem espera de migration, e as saídas 3, 4, 6 e 7 não acontecem. Cabe a você:
 
-- **`migration: <como aplicar> <arquivo>:1`:** evento `pronto-para-voce` com "migration <número> para aplicar: <arquivo>" assim que aparecer.
+- **`migration: <como aplicar> <arquivo> (...); copie com: pbcopy < <caminho>`:** evento `pronto-para-voce` com "migration <número> para aplicar: <arquivo>" assim que aparecer.
 - **2 com `conflito no merge de #N em: <arquivos>`:** `onda-corretor` motivo `conflito` com os arquivos, `--watch` de novo e a subida só com os de fora. Outra `de fora:` (CI vermelho, merge recusado): passo 3 ou subida de novo. Ambas contam tentativa. `de fora: #<PR> bloqueada por #<X>`: issue em `blocked`, sem tentativa.
 - **3 ou 4:** pare; evento `erro` com a linha do script; imprima a chave e a linha. Rollback pelo `/deploy rollback`.
 - **6:** uma tentativa por fatia e evento `erro` "rollback disparado no PR #N, versão vX.Y.Z voltou".
