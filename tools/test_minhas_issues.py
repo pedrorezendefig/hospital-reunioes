@@ -529,3 +529,10 @@ def test_visao_traz_caixas_prds_tecnologia_e_plano():
     assert v["tecnologia"]["bug"][0]["fase"] == "entregue 04/10"
     assert v["plano"][0].startswith("1. ")
     assert v["semaforo"]["cor"] == "verde"
+
+
+def test_skill_cita_a_label_de_origem_do_diretor():
+    """A aba Tecnologia aplica a label `origem:diretor` (ADR 0083, issue #1616)."""
+    texto = (SKILL / "SKILL.md").read_text(encoding="utf-8")
+    assert "`origem:diretor`" in texto
+    assert "Não existe label para isso" not in texto
