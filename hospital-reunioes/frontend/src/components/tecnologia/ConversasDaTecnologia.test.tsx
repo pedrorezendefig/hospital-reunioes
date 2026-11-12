@@ -18,7 +18,13 @@ import { ToastProvider } from "@/components/ui/Toast";
 import { caixaDoDado } from "@/lib/testes/caixaDoDado";
 
 import { ABERTURA, SEM_CONVERSA_GUARDADA } from "./ChatDaTecnologia";
-import { AMPLIAR, ConversasDaTecnologia, NOVA_CONVERSA, VOLTAR_PARA_A_LISTA } from "./ConversasDaTecnologia";
+import {
+  AMPLIAR,
+  ConversasDaTecnologia,
+  NOVA_CONVERSA,
+  SEM_ACESSO,
+  VOLTAR_PARA_A_LISTA,
+} from "./ConversasDaTecnologia";
 import { ConversaDoChat, FalaDoChat } from "./chat";
 import { Demanda } from "./demandas";
 
@@ -1424,5 +1430,48 @@ describe("O endereço acompanha o card aberto (issue #1586)", () => {
     aPaginaLeOEndereco();
 
     expect((lista().parentElement as HTMLElement).className).toMatch(/(^|\s)md:hidden(\s|$)/);
+  });
+
+  it("com uma Demanda fora da lista, avisa que não há acesso, sem título nem número, e volta à lista", async () => {
+    const DE_OUTRO_DIRETOR = "Escala da enfermagem some";
+    const chamadas = comDuas("d-99");
+    await within(lista()).findByText("Botão de responder some na Ouvidoria");
+
+    const aberto = screen.getByRole("region", { name: "Conversa aberta" });
+    expect(await within(aberto).findByText(SEM_ACESSO)).toBeTruthy();
+    expect(aberto.className).not.toMatch(/(^|\s)hidden(\s|$)/);
+    expect(within(aberto).queryByText(DE_OUTRO_DIRETOR)).toBeNull();
+    expect(within(aberto).queryByText(/#\d+/)).toBeNull();
+    expect(within(aberto).queryByText(ABERTURA)).toBeNull();
+    expect(chamadas.some((c) => c.url.startsWith(`${LISTA}/d-99`))).toBe(false);
+
+    const voltar = screen.getByRole("button", { name: VOLTAR_PARA_A_LISTA });
+    expect(voltar.className).not.toMatch(/(^|\s)md:hidden(\s|$)/);
+    fireEvent.click(voltar);
+
+    await waitFor(() => expect(screen.queryByText(SEM_ACESSO)).toBeNull());
+    expect((lista().parentElement as HTMLElement).className).not.toMatch(/(^|\s)hidden(\s|$)/);
+    expect(demandaDaUrl()).toBeNull();
+  });
+
+  it("o sino com a tela já aberta abre o card que ele aponta, e no celular mostra o card", async () => {
+    comDuas();
+    await within(lista()).findByText("Botão de responder some na Ouvidoria");
+    fireEvent.click(within(lista()).getByRole("button", { name: /Botão de responder some/ }));
+    await screen.findByText("Onde isso aconteceu?");
+    aPaginaLeOEndereco();
+    fireEvent.click(screen.getByRole("button", { name: VOLTAR_PARA_A_LISTA }));
+    aPaginaLeOEndereco();
+
+    // O sino leva ao mesmo endereço com outra Demanda, e a página repassa.
+    window.history.pushState(null, "", "/admin/tecnologia?demanda=d-3");
+    aPaginaLeOEndereco();
+
+    await waitFor(() =>
+      expect(
+        within(lista()).getByRole("button", { name: /Relatório de leitos atrasa/ }).getAttribute("aria-current"),
+      ).toBe("true"),
+    );
+    expect(screen.getByRole("region", { name: "Conversa aberta" }).className).not.toMatch(/(^|\s)hidden(\s|$)/);
   });
 });
