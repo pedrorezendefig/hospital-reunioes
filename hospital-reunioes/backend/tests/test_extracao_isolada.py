@@ -412,6 +412,32 @@ def _memoria_do_worker(pid: int) -> int | None:
     return info.ri_phys_footprint
 
 
+_FILHO_DE_VERDADE = extrator._CAMINHO_DO_FILHO
+
+
+def _aquecer_o_worker(client: TestClient) -> None:
+    """Uma extração honesta e pequena pela mesma rota, logo antes de medir (#1645).
+
+    Com o Mac do runner cheio, a memória do worker sai da medida inicial
+    (comprimida e depois para o disco) e volta quando a rota toca de novo nas
+    mesmas páginas: o multipart, o filho, o canal, a resposta. O worker
+    "cresceu" 13 a 29 MB que sempre foram dele (run 43139727715). Passar pelo
+    caminho antes traz essas páginas de volta, e o que a medida vê depois é o
+    que o documento atacado custa.
+
+    O aquecimento usa sempre o filho de verdade e um `.docx` de poucos KB: um
+    aquecimento pelo ataque, ou pelo filho trocado do teste, deixaria a memória
+    do mutante já alocada antes da medida, e o pico não subiria.
+    """
+    trocado = extrator._CAMINHO_DO_FILHO
+    extrator._CAMINHO_DO_FILHO = _FILHO_DE_VERDADE
+    try:
+        r = _enviar(client, "aquecimento.docx", _docx_honesto(200))
+    finally:
+        extrator._CAMINHO_DO_FILHO = trocado
+    assert r.status_code == 200, r.text
+
+
 def _pico_do_worker_durante(chamada):
     """Roda `chamada` amostrando a memória deste processo (`_memoria_do_worker`), e devolve (resultado, pico).
 
@@ -457,7 +483,8 @@ class TestOsDoisAtaquesMedidos:
     # workers na mesma máquina) a medida acusou 20 a 23 MB que não vêm do
     # documento, em dois deles, e os dois passaram em série na mesma ordem de
     # testes do worker que falhou. Os outros quatro usam a mesma medida e o
-    # mesmo teto, então vão juntos.
+    # mesmo teto, então vão juntos. Sozinho não bastou com outro job no mesmo
+    # Mac (#1645): cada um passa por `_aquecer_o_worker` antes de medir.
     @pytest.mark.rodar_sozinho
     def test_pdf_ascii85_em_cima_do_flate_e_recusado_sem_tocar_o_worker(self, client, pdf_ataque):
         """Sem isolamento este arquivo custa 29 s e 1.584 MB DENTRO do worker.
@@ -468,6 +495,7 @@ class TestOsDoisAtaquesMedidos:
         """
         assert len(pdf_ataque) < 100 * 1024, "o ataque cabe folgado no limite de upload"
 
+        _aquecer_o_worker(client)
         t0 = time.monotonic()
         r, crescimento = _pico_do_worker_durante(lambda: _enviar(client, "orcamento.pdf", pdf_ataque))
         decorrido = time.monotonic() - t0
@@ -485,6 +513,7 @@ class TestOsDoisAtaquesMedidos:
         de zip para desarmar, o orçamento é do processo inteiro."""
         assert len(docx_ataque) < 1024 * 1024, "a bomba de XML cabe em menos de 1 MB no disco"
 
+        _aquecer_o_worker(client)
         r, crescimento = _pico_do_worker_durante(lambda: _enviar(client, "proposta.docx", docx_ataque))
 
         assert r.status_code == 422
@@ -544,6 +573,7 @@ class TestOsDoisAtaquesMedidos:
         gordo = _docx_de_muito_texto(20)
         assert len(gordo) < 200 * 1024, "o arquivo em si e pequeno, o texto e que e enorme"
 
+        _aquecer_o_worker(client)
         r, crescimento = _pico_do_worker_durante(lambda: _enviar(client, "ata-gorda.docx", gordo))
 
         assert r.status_code == 422
@@ -565,6 +595,7 @@ class TestOsDoisAtaquesMedidos:
         barulhento = _pdf_que_faz_barulho()
         assert len(barulhento) < extrator.MAX_BYTES_BINARY, "o ataque passa pelo limite de upload"
 
+        _aquecer_o_worker(client)
         t0 = time.monotonic()
         r, crescimento = _pico_do_worker_durante(lambda: _enviar(client, "ruidoso.pdf", barulhento))
         decorrido = time.monotonic() - t0
@@ -599,6 +630,7 @@ class TestOsDoisAtaquesMedidos:
         )
         monkeypatch.setattr(extrator, "_CAMINHO_DO_FILHO", str(tagarela))
 
+        _aquecer_o_worker(client)
         t0 = time.monotonic()
         r, crescimento = _pico_do_worker_durante(lambda: _enviar(client, "ata.docx", b"tanto faz"))
         decorrido = time.monotonic() - t0
@@ -633,6 +665,7 @@ class TestOsDoisAtaquesMedidos:
         )
         monkeypatch.setattr(extrator, "_CAMINHO_DO_FILHO", str(apressado))
 
+        _aquecer_o_worker(client)
         r, crescimento = _pico_do_worker_durante(lambda: _enviar(client, "ata.docx", b"tanto faz"))
 
         assert r.status_code == 422

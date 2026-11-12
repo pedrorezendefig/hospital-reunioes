@@ -1891,12 +1891,17 @@ def _melhor_tempo(trabalho) -> float:
     escalonador tanto quanto mede o código, e um gate que reprova por isso
     ensina o time a ignorar o gate. O menor de três é a medida mais honesta da
     capacidade real, e continua reprovando código lento, que é lento nas
-    três."""
+    três.
+
+    E o tempo é o de CPU desta thread, não o do relógio (#1645): com o Mac do
+    runner cheio, o melhor de três pelo relógio chegou a 0,241 s num desenho
+    que gasta 0,05 s, só esperando a vez na CPU. O retrocesso catastrófico que
+    o teto pega queima CPU, e queima igual com a máquina livre ou cheia."""
     tempos = []
     for _ in range(REPETICOES_DA_MEDICAO):
-        comeco = time.monotonic()
+        comeco = time.thread_time()
         trabalho()
-        tempos.append(time.monotonic() - comeco)
+        tempos.append(time.thread_time() - comeco)
     return min(tempos)
 
 
