@@ -636,6 +636,12 @@ class _ParaODesenvolvedor(BaseModel):
     cuidados: str = ""
     como_saber_que_acabou: str = ""
 
+    @field_validator("*", mode="before")
+    @classmethod
+    def _nulo_e_vazio(cls, valor):
+        """`null` e o vazio mais comum de um modelo: vira texto vazio."""
+        return "" if valor is None else valor
+
 
 class _SaidaDoResumo(BaseModel):
     """O esquema do resumo. O modelo diz QUAIS perguntas fecharam decisao e o
@@ -662,6 +668,15 @@ class _SaidaDoResumo(BaseModel):
     # O bloco "Para o desenvolvedor" do card (issue #1633). Opcional, para o
     # resumo de antes continuar valendo.
     para_o_desenvolvedor: _ParaODesenvolvedor | None = None
+
+    @field_validator("para_o_desenvolvedor", mode="wrap")
+    @classmethod
+    def _bloco_invalido_cai_sozinho(cls, valor, handler):
+        """Bloco malformado nao derruba o resumo: cai so ele, e o card nasce sem o bloco."""
+        try:
+            return handler(valor)
+        except ValidationError:
+            return None
 
 
 @dataclass(frozen=True)

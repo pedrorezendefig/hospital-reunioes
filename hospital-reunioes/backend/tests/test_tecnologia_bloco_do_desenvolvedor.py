@@ -245,6 +245,28 @@ class TestPelaRota:
         assert conversa["resumo"]["decisoes"]
         assert "para_o_desenvolvedor" not in conversa["resumo"]
 
+    def test_parte_nula_nao_derruba_o_resumo_e_as_outras_partes_ficam(self, monkeypatch):
+        # O prompt manda deixar vazio o que nao leu do codigo; `null` e o vazio
+        # mais comum de um modelo.
+        partes = {**PARTES, "cuidados": None, "onde_mexe_no_codigo": None}
+        _, sb, _, _, resposta, _ = _melhoria_resumida(monkeypatch, _resumo_da_melhoria(para_o_desenvolvedor=partes))
+
+        assert resposta.json()["estado"] == "resumido"
+        [conversa] = _conversas(sb)
+        assert conversa["resumo"]["decisoes"][0]["porque"] == "A recepção responde."
+        assert conversa["resumo"]["para_o_desenvolvedor"] == {**PARTES, "cuidados": "", "onde_mexe_no_codigo": ""}
+
+    def test_bloco_malformado_cai_sozinho_e_o_resumo_sai_com_as_decisoes(self, monkeypatch):
+        for malformado in ({**PARTES, "cuidados": ["uma", "lista"]}, "um texto solto"):
+            _, sb, _, _, resposta, _ = _melhoria_resumida(
+                monkeypatch, _resumo_da_melhoria(para_o_desenvolvedor=malformado)
+            )
+
+            assert resposta.json()["estado"] == "resumido", malformado
+            [conversa] = _conversas(sb)
+            assert conversa["resumo"]["decisoes"][0]["porque"] == "A recepção responde."
+            assert "para_o_desenvolvedor" not in conversa["resumo"]
+
     def test_a_tela_do_resumo_nao_recebe_as_seis_partes(self, monkeypatch):
         _, _, _, _, resposta, _ = _melhoria_resumida(monkeypatch, _resumo_da_melhoria(para_o_desenvolvedor=PARTES))
 
