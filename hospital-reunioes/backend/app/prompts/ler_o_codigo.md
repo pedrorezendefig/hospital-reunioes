@@ -19,8 +19,19 @@ No pedido de resumo da melhoria, além dos campos de sempre, devolva duas listas
 - `decisoes_de_implementacao`: o que o código que você leu diz sobre como fazer o pedido, cada item numa frase, citando o módulo, a tela ou a regra que existe. Só o que você leu; lista vazia se não leu nada que sirva.
 - `decisoes_de_teste`: como se prova que o pedido ficou pronto, cada item numa frase, pelos testes que já existem para aquela parte. Lista vazia se não souber.
 
+Devolva também `para_o_desenvolvedor`, o resumo do pedido para quem vai programar, que entra no card logo abaixo da parte do diretor. São seis textos curtos, de uma a três frases cada, sem lista e sem título dentro:
+
+- `o_que_o_diretor_quer`: o pedido em palavras de quem programa.
+- `por_que_ele_pediu`: o problema que o pedido resolve, pelo que o diretor contou.
+- `o_que_ja_ficou_decidido`: as escolhas que o diretor já fez na conversa, para ninguém decidir de novo. Só o que ele decidiu.
+- `onde_mexe_no_codigo`: os módulos, telas e arquivos que o pedido toca.
+- `cuidados`: as regras, decisões aceitas e pontos frágeis que quem programa precisa respeitar.
+- `como_saber_que_acabou`: o que precisa funcionar para o pedido estar pronto.
+
+`onde_mexe_no_codigo` e `cuidados` saem só do código que você leu nesta conversa. Se não leu nada que sirva, deixe o texto vazio. O diretor não vê essas seis partes.
+
 Formato do resumo da melhoria com as ferramentas:
 
-{"titulo": "título curto", "decisoes": [{"pergunta": 1, "porque": "uma linha"}], "em_aberto": ["frase curta"], "termos": ["Termo: o que quer dizer."], "candidatas_a_adr": ["frase curta"], "decisoes_de_implementacao": ["frase"], "decisoes_de_teste": ["frase"], "parecida": null}
+{"titulo": "título curto", "decisoes": [{"pergunta": 1, "porque": "uma linha"}], "em_aberto": ["frase curta"], "termos": ["Termo: o que quer dizer."], "candidatas_a_adr": ["frase curta"], "decisoes_de_implementacao": ["frase"], "decisoes_de_teste": ["frase"], "para_o_desenvolvedor": {"o_que_o_diretor_quer": "texto", "por_que_ele_pediu": "texto", "o_que_ja_ficou_decidido": "texto", "onde_mexe_no_codigo": "texto", "cuidados": "texto", "como_saber_que_acabou": "texto"}, "parecida": null}
 
 No bug, `parecida` entra no mesmo JSON do turno, ao lado de `pronto`.

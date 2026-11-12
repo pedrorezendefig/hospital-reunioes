@@ -12,11 +12,22 @@ o que o card leva).
 
 from __future__ import annotations
 
+import json
 import os
 import re
 import sys
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+
+from test_planejamento_demanda import _ia, _pergunta  # noqa: E402
+from test_tecnologia_chat import (  # noqa: E402
+    _cenario,
+    _conversas,
+    _integracao_configurada,  # noqa: F401
+    _llm_em_mock,  # noqa: F401
+    _reset_rate_limiter,  # noqa: F401
+)
+from test_tecnologia_chat_le_o_codigo import CHAT, _modelo, _repositorio, _resumo_da_melhoria  # noqa: E402
 
 from app.services.tecnologia_vinculo import (  # noqa: E402
     CABECALHO_DO_BLOCO,
@@ -196,3 +207,69 @@ class TestInserirOBloco:
         original = "## Pai\n\n#1632\n"
 
         assert inserir_bloco_do_desenvolvedor(original, bloco_do_desenvolvedor(PARTES)) == original
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 3. Pela rota: o resumo da melhoria e o Criar o card
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+def _melhoria_resumida(monkeypatch, resumo_do_modelo: str):
+    """Uma melhoria com uma pergunta respondida e o resumo pedido. Devolve o
+    cliente, o banco falso, o GitHub falso, o id e a resposta do resumo."""
+    client, sb, gh = _cenario(monkeypatch)
+    _repositorio(monkeypatch)
+    _ia(monkeypatch, _pergunta())
+    demanda_id = client.post(CHAT, json={"escolha": "melhoria"}).json()["demanda_id"]
+    _ia(monkeypatch, _pergunta(contexto="E quem confirma?"))
+    client.post(f"{CHAT}/{demanda_id}", json={"opcao": "A"})
+    modelo = _modelo(monkeypatch, [], resumo_do_modelo)
+    resposta = client.post(f"{CHAT}/{demanda_id}/resumo")
+    assert resposta.status_code == 200, resposta.text
+    return client, sb, gh, demanda_id, resposta, modelo
+
+
+class TestPelaRota:
+    def test_o_resumo_guarda_as_seis_partes_que_o_modelo_devolve(self, monkeypatch):
+        _, sb, _, _, _, _ = _melhoria_resumida(monkeypatch, _resumo_da_melhoria(para_o_desenvolvedor=PARTES))
+
+        [conversa] = _conversas(sb)
+        assert conversa["resumo"]["para_o_desenvolvedor"] == PARTES
+
+    def test_resumo_antigo_sem_as_partes_continua_valido(self, monkeypatch):
+        _, sb, _, _, resposta, _ = _melhoria_resumida(monkeypatch, _resumo_da_melhoria())
+
+        assert resposta.json()["estado"] == "resumido"
+        [conversa] = _conversas(sb)
+        assert conversa["resumo"]["decisoes"]
+        assert "para_o_desenvolvedor" not in conversa["resumo"]
+
+    def test_a_tela_do_resumo_nao_recebe_as_seis_partes(self, monkeypatch):
+        _, _, _, _, resposta, _ = _melhoria_resumida(monkeypatch, _resumo_da_melhoria(para_o_desenvolvedor=PARTES))
+
+        tela = resposta.json()
+        assert tela["resumo_da_melhoria"]["decisoes"]
+        assert "para_o_desenvolvedor" not in tela["resumo_da_melhoria"]
+        for texto in PARTES.values():
+            assert texto not in json.dumps(tela, ensure_ascii=False)
+
+    def test_o_criar_o_card_leva_o_bloco_do_desenvolvedor(self, monkeypatch):
+        client, _, gh, demanda_id, _, _ = _melhoria_resumida(
+            monkeypatch, _resumo_da_melhoria(para_o_desenvolvedor=PARTES)
+        )
+
+        assert client.post(f"{CHAT}/{demanda_id}/criar-card").status_code == 200
+
+        corpo = gh.criadas[0]["corpo"]
+        assert f"**Onde mexe no código:** {PARTES['onde_mexe_no_codigo']}" in _bloco(corpo)
+        assert "Onde mexe" not in bloco_para_o_diretor(corpo)
+
+    def test_o_pedido_do_resumo_manda_escrever_as_seis_partes_pelo_codigo_lido(self, monkeypatch):
+        _, _, _, _, _, modelo = _melhoria_resumida(monkeypatch, _resumo_da_melhoria())
+
+        instrucao = "\n".join(b["text"] for b in modelo.chamadas[0]["system"][:-1])
+        secao = instrucao.split("## O resumo da melhoria", 1)[1].split("\n## ", 1)[0]
+        assert "para_o_desenvolvedor" in secao
+        for chave in PARTES:
+            assert f'"{chave}"' in secao, chave
+        assert re.search(r"`onde_mexe_no_codigo` e `cuidados`[^\n]*código que você leu", secao)

@@ -622,6 +622,21 @@ class _DecisaoDoModelo(BaseModel):
     porque: str
 
 
+class _ParaODesenvolvedor(BaseModel):
+    """As seis partes do bloco "Para o desenvolvedor" (issue #1633), escritas
+    pelo modelo para quem programa. Todas opcionais: a parte que faltar sai
+    como "não informado" no card."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    o_que_o_diretor_quer: str = ""
+    por_que_ele_pediu: str = ""
+    o_que_ja_ficou_decidido: str = ""
+    onde_mexe_no_codigo: str = ""
+    cuidados: str = ""
+    como_saber_que_acabou: str = ""
+
+
 class _SaidaDoResumo(BaseModel):
     """O esquema do resumo. O modelo diz QUAIS perguntas fecharam decisao e o
     porque de cada uma; a pergunta e a escolha vem da conversa, nunca dele."""
@@ -644,6 +659,9 @@ class _SaidaDoResumo(BaseModel):
     # A frase de resumo do card (issue #1532, ADR 0083, decisao 9): a primeira
     # linha da issue, por onde o Hospital OS conta do que o card trata.
     frase: str | None = None
+    # O bloco "Para o desenvolvedor" do card (issue #1633). Opcional, para o
+    # resumo de antes continuar valendo.
+    para_o_desenvolvedor: _ParaODesenvolvedor | None = None
 
 
 @dataclass(frozen=True)
@@ -746,6 +764,12 @@ def _resumo_da_conversa(saida: _SaidaDoResumo, mensagens: list[dict]) -> dict:
     # Uma linha so, sem travessao e no teto do titulo, como o titulo.
     if frase := titulo_limpo(saida.frase):
         resumo["frase"] = frase
+    # As seis partes de quem programa (issue #1633) so entram quando o modelo
+    # escreveu alguma: sem elas, o card nasce sem o bloco, como antes.
+    if saida.para_o_desenvolvedor is not None:
+        partes = {chave: sanitizar_travessao(texto.strip()) for chave, texto in saida.para_o_desenvolvedor}
+        if any(partes.values()):
+            resumo["para_o_desenvolvedor"] = partes
     return resumo
 
 
