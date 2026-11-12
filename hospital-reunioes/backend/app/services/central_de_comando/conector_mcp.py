@@ -533,7 +533,7 @@ async def _executar_ferramenta(nome: str, argumentos: dict, participante: dict |
 
     O gate da ferramenta vem antes de tudo: fora dele, erro de ferramenta sem
     dado, e a ferramenta nem roda."""
-    if nome not in _gates():
+    if not isinstance(nome, str) or nome not in _gates():
         return _resultado_de_erro(f"Ferramenta desconhecida: {nome}")
     if not pode_chamar(participante, nome):
         return _resultado_de_erro(f"A ferramenta {nome} não está liberada para o seu acesso.")

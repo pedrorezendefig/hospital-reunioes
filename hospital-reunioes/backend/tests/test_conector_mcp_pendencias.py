@@ -474,6 +474,36 @@ class TestPendenciasAtrasadas:
             resultado = chamar_pendencias(cliente, chave_do_emissor, DIRETOR_SUPER, **argumentos).json()["result"]
             assert resultado["isError"] is True
 
+    @pytest.mark.parametrize("situacao", [["atrasada"], {}], ids=["lista", "objeto"])
+    def test_situacao_que_nao_e_texto_e_erro_de_ferramenta_nao_500(self, chave_do_emissor, situacao):
+        """`situacao` lista ou objeto não chega ao `in` da tupla (TypeError de
+        unhashable): volta o mesmo erro de ferramenta do tipo errado em `prazoDe`."""
+        resposta = chamar_pendencias(
+            cliente_mcp(banco_do_hospital(DIRETOR_SUPER)), chave_do_emissor, DIRETOR_SUPER, situacao=situacao
+        )
+
+        assert resposta.status_code == 200, resposta.text
+        resultado = resposta.json()["result"]
+        assert resultado["isError"] is True
+        assert "Situação desconhecida" in resultado["content"][0]["text"]
+
+    @pytest.mark.parametrize("nome", [[], {}], ids=["lista", "objeto"])
+    def test_nome_de_ferramenta_que_nao_e_texto_e_ferramenta_desconhecida(self, chave_do_emissor, nome):
+        """`params.name` lista ou objeto não chega ao `in` do dict dos gates:
+        volta "Ferramenta desconhecida" como erro de ferramenta, nunca 500."""
+        resposta = rpc(
+            cliente_mcp(banco_do_hospital(DIRETOR_SUPER)),
+            chave_do_emissor,
+            DIRETOR_SUPER,
+            "tools/call",
+            {"name": nome, "arguments": {}},
+        )
+
+        assert resposta.status_code == 200, resposta.text
+        resultado = resposta.json()["result"]
+        assert resultado["isError"] is True
+        assert "Ferramenta desconhecida" in resultado["content"][0]["text"]
+
 
 class TestListaLongaCortadaNoTeto:
     def test_volta_o_teto_com_o_total_e_o_aviso(self, chave_do_emissor):

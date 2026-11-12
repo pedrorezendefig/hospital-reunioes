@@ -83,7 +83,7 @@ def executar(argumentos: dict, participante: dict, supabase) -> dict:
         raise PedidoRecusadoError("A tela de Pendências não está aberta para o seu acesso.")
 
     situacao = argumentos.get("situacao")
-    if situacao is not None and situacao not in SITUACOES:
+    if situacao is not None and (not isinstance(situacao, str) or situacao not in SITUACOES):
         raise PedidoRecusadoError(f"Situação desconhecida: {situacao}. Use uma de: {', '.join(SITUACOES)}.")
     prazo_de = _data(argumentos.get("prazoDe"), "prazoDe")
     prazo_ate = _data(argumentos.get("prazoAte"), "prazoAte")
