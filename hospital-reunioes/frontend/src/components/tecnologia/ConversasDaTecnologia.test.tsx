@@ -153,6 +153,17 @@ describe("A lista", () => {
     expect(within(itens[1]).queryByText("Tem demonstração")).toBeNull();
   });
 
+  it("mostra o Número da Demanda em cada linha, até na conversa ainda sem card (issue #1585)", async () => {
+    const semCard = demanda("d-8", "Conversa nova", { numero: 43 });
+    const comCard = demanda("d-9", "Card antigo", { numero: 7, etapa: "em_desenvolvimento", tem_vinculo: true });
+    montar((url) => (url === LISTA ? { status: 200, corpo: [semCard, comCard] } : { status: 404, corpo: {} }));
+
+    await within(lista()).findByText("Conversa nova");
+    const itens = within(lista()).getAllByRole("listitem");
+    expect(within(itens[0]).getByText("Demanda 43")).toBeTruthy();
+    expect(within(itens[1]).getByText("Demanda 7")).toBeTruthy();
+  });
+
   it("sem conversa nenhuma, diz que ainda não há", async () => {
     montar(() => ({ status: 200, corpo: [] }));
 

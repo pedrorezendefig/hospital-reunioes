@@ -37,6 +37,11 @@ export async function motivoDaRecusa(resposta: Response): Promise<string> {
  */
 export type Demanda = {
   id: string;
+  /**
+   * O Número da Demanda (issue #1585): o "Demanda 42" da tela, gerado pelo
+   * banco, para todo mundo que vê a Demanda. Não é o número da issue.
+   */
+  numero?: number | null;
   titulo: string;
   criado_em?: string | null;
   /**
@@ -120,6 +125,14 @@ export type Demanda = {
   demonstracao_url?: string | null;
   demonstracao_em?: string | null;
 };
+
+/**
+ * O Número da Demanda como a tela o escreve (issue #1585): "Demanda 42", sem
+ * cerquilha, que é só do número da issue. Nulo no backend uma versão atrás.
+ */
+export function nomeDoNumero(demanda: Demanda): string | null {
+  return demanda.numero ? `Demanda ${demanda.numero}` : null;
+}
 
 /** O selo da lista e a guarda da seção do Documento do card (issue #1559). */
 export const TEM_DEMONSTRACAO = "Tem demonstração";

@@ -12,6 +12,7 @@
  * Nada aqui é técnico para o diretor: título de fatia, número, link e nome de
  * label não aparecem (ADR 0054, decisão 9). O número e o link da issue
  * aparecem só para o Desenvolvedor, porque só para ele o servidor os manda.
+ * O Número da Demanda ("Demanda 42", issue #1585) é de todos e abre o topo.
  *
  * O texto é desenhado como TEXTO, com um Markdown simples de negrito e lista.
  * Nada vira HTML nem link: ele vem de fora do app, e um `dangerouslySetInnerHTML`
@@ -34,6 +35,7 @@ import {
   ETAPA_ROTULO,
   EtapaDemanda,
   linkDaDemonstracao,
+  nomeDoNumero,
   ParteDaEntrega,
   PedacoForte,
   temSelo,
@@ -154,6 +156,22 @@ function LinkDaIssue({ demanda }: { demanda: Demanda }) {
   );
 }
 
+/**
+ * O topo do Documento (issue #1585): o Número da Demanda para todos e, ao
+ * lado, o `#<issue>` que só o Desenvolvedor recebe.
+ */
+function Topo({ demanda }: { demanda: Demanda }) {
+  const nome = nomeDoNumero(demanda);
+  const issue = <LinkDaIssue demanda={demanda} />;
+  if (!nome) return issue;
+  return (
+    <div className="flex items-center gap-2">
+      <span className="text-xs font-semibold text-text">{nome}</span>
+      {issue}
+    </div>
+  );
+}
+
 function Topicos({ topicos }: { topicos: PedacoForte[][] }) {
   const [tudo, setTudo] = useState(false);
   const visiveis = tudo ? topicos : topicos.slice(0, TOPICOS_VISIVEIS);
@@ -247,7 +265,7 @@ export function DocumentoDoCard({ demanda }: { demanda: Demanda }) {
       aria-label={TITULO_DOCUMENTO}
       className="md:col-span-2 px-4 py-3 rounded-xl bg-slate-50 border border-slate-200 space-y-2"
     >
-      <LinkDaIssue demanda={demanda} />
+      <Topo demanda={demanda} />
 
       <FraseEOQueMuda texto={demanda.o_que_muda} chave={demanda.id} />
 
