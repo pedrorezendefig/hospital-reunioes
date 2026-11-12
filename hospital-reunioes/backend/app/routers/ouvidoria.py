@@ -2907,13 +2907,15 @@ async def baixar_qr_do_ponto(
 async def baixar_cartaz_do_ponto(
     request: Request,
     ponto_id: str,
+    formato: Literal["a4", "a5"] = "a4",
     me: dict = Depends(require_perfil_ouvidoria),
     supabase=Depends(get_supabase_client),
 ):
-    """O cartaz A5 pronto para a gráfica."""
+    """O cartaz pronto para a gráfica: A4 por padrão, no modelo aprovado pela
+    Diretoria (ADR 0086, decisão 10); o A5 continua disponível."""
     ponto = _carregar_ponto(supabase, ponto_id)
     return Response(
-        content=ouvidoria_pontos.pdf_do_cartaz(ponto),
+        content=ouvidoria_pontos.pdf_do_cartaz(ponto, formato),
         media_type="application/pdf",
         headers={"Content-Disposition": f'attachment; filename="cartaz-ouvidoria-{ponto["codigo"]}.pdf"'},
     )

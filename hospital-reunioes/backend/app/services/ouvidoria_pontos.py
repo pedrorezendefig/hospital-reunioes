@@ -10,6 +10,7 @@ decisão 2).
 from __future__ import annotations
 
 import logging
+import os
 import secrets
 
 from app.services.pdf_url_fetcher import criar_pdf_url_fetcher
@@ -219,12 +220,99 @@ def criar(supabase, campos: dict, criado_por: str | None) -> dict | None:
     return None
 
 
-def html_do_cartaz(ponto: dict) -> str:
-    """O cartaz A5, como HTML, antes de virar PDF.
+# O A4 é o cartaz da parede (ADR 0086, decisão 10); o A5 da issue #378 segue
+# disponível, só não é mais o padrão.
+FORMATOS_DO_CARTAZ = ("a4", "a5")
+
+# A linha de controle tem 7 pt e uma linha só: a descrição do local entra
+# resumida.
+_TAMANHO_DO_LOCAL_RESUMIDO = 60
+
+_STATIC = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "static"))
+
+
+def _uri_da_fonte() -> str | None:
+    """A HP Simplified que vai embutida no PDF. A mesma expressão alimenta o
+    template e a allowlist do fetcher: a guarda compara a URI por casamento
+    exato (ver `pdf_url_fetcher`)."""
+    fonte = os.path.join(_STATIC, "fonts", "HPSimplified_Rg.ttf")
+    return f"file://{fonte}" if os.path.exists(fonte) else None
+
+
+def _assets_do_cartaz_a4() -> frozenset[str]:
+    """Os únicos `file://` que o cartaz A4 pode buscar: a fonte. Logo e QR vão
+    embutidos como `data:`."""
+    fonte = _uri_da_fonte()
+    return frozenset({fonte}) if fonte else frozenset()
+
+
+def _logo_branco_data_uri() -> str:
+    """O logo do hospital em branco, para o rodapé azul do cartaz A4."""
+    import base64
+
+    with open(os.path.join(_STATIC, "images", "logo_hospital_branco.png"), "rb") as arquivo:
+        return "data:image/png;base64," + base64.b64encode(arquivo.read()).decode("ascii")
+
+
+def svg_do_qr(codigo: str) -> str:
+    """O QR do cartaz A4, vetorial, como `data:` SVG.
+
+    Correção de erro M, sem o reforço automático do `segno`, e zona livre de 4
+    módulos, como pede o layout 4.13: com M o símbolo tem menos módulos, e cada
+    módulo sai maior nos mesmos 9 cm. Módulos em `#282760` sobre branco."""
+    import segno
+
+    qr = segno.make(url_do_cartaz(codigo), error="m", boost_error=False)
+    return qr.svg_data_uri(border=4, dark="#282760", light="#ffffff", omitsize=True)
+
+
+def _resumir(texto: str, limite: int = _TAMANHO_DO_LOCAL_RESUMIDO) -> str:
+    """O começo do texto, sem cortar palavra no meio."""
+    if len(texto) <= limite:
+        return texto
+    corte = texto[:limite]
+    if texto[limite] not in " ,.;:":
+        corte = corte.rsplit(" ", 1)[0]
+    return corte.rstrip(" ,.;:") + "…"
+
+
+def linha_de_controle(ponto: dict) -> str:
+    """O que vai fora da moldura, para quem instala o cartaz saber qual é qual.
+    Sem código de controle, vale o código do QR."""
+    codigo = ponto.get("codigo_controle") or ponto["codigo"]
+    return f"Ponto {codigo} · {nome_exibido(ponto)} · {_resumir(ponto['descricao_local'])}"
+
+
+def _html_a4(ponto: dict) -> str:
+    from app.services.email_service import jinja_env
+
+    titulo, subtitulo = TITULOS_DO_CARTAZ[ponto.get("titulo_cartaz") or "atendimento_hoje"]
+    ajuda_agora = (
+        "Fale com a enfermagem do posto desta ala." if ponto.get("ala_internacao") else "Fale com a equipe deste setor."
+    )
+    return jinja_env.get_template("ouvidoria_cartaz_a4.html").render(
+        codigo=ponto["codigo"],
+        nome_publico=nome_exibido(ponto),
+        titulo=titulo,
+        subtitulo=subtitulo,
+        qr_svg=svg_do_qr(ponto["codigo"]),
+        endereco=endereco_impresso(ponto["codigo"]),
+        ajuda_agora=ajuda_agora,
+        controle=linha_de_controle(ponto),
+        logo_branco=_logo_branco_data_uri(),
+        font_path=_uri_da_fonte(),
+    )
+
+
+def html_do_cartaz(ponto: dict, formato: str = "a4") -> str:
+    """O cartaz, como HTML, antes de virar PDF.
 
     Separado da geração do PDF de propósito: é o conteúdo que precisa ser
-    testado (o convite, o setor, o código por extenso), e o weasyprint é lento
+    testado (o título, o endereço, a linha de controle), e o weasyprint é lento
     demais para rodar em cada asserção."""
+    if formato == "a4":
+        return _html_a4(ponto)
+
     from app.services.email_constants import get_logo_data_uri
     from app.services.email_service import jinja_env
 
@@ -239,13 +327,13 @@ def html_do_cartaz(ponto: dict) -> str:
     )
 
 
-def pdf_do_cartaz(ponto: dict) -> bytes:
+def pdf_do_cartaz(ponto: dict, formato: str = "a4") -> bytes:
     """O cartaz pronto para a gráfica. Weasyprint, o mesmo que já serve Ata,
     POP e o relatório da Ouvidoria.
 
-    A allowlist de `file://` é VAZIA de propósito: o `ouvidoria_cartaz.html` não
-    usa asset de arquivo nenhum, porque logo e QR entram embutidos como `data:`
-    (o `get_logo_data_uri` e o `qr_data_uri`). Aqui todo `file://` é recusado.
+    A allowlist de `file://` do A5 é VAZIA de propósito: logo e QR entram
+    embutidos como `data:`. A do A4 tem só a fonte HP Simplified, que vai
+    embutida no PDF.
 
     O fetcher (issue #633) vai no construtor do `HTML`, que é quem busca os
     recursos: o `write_pdf` descarta opção que não conhece, então passá-lo ali
@@ -253,7 +341,8 @@ def pdf_do_cartaz(ponto: dict) -> bytes:
     """
     from weasyprint import HTML
 
-    return HTML(string=html_do_cartaz(ponto), url_fetcher=criar_pdf_url_fetcher()).write_pdf()
+    assets = _assets_do_cartaz_a4() if formato == "a4" else frozenset()
+    return HTML(string=html_do_cartaz(ponto, formato), url_fetcher=criar_pdf_url_fetcher(assets)).write_pdf()
 
 
 def por_id(supabase, ponto_id: str) -> dict | None:

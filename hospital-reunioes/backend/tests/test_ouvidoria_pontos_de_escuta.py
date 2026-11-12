@@ -619,12 +619,13 @@ class TestArtefatosParaImprimir:
 
 
 class TestOQueVaiNoCartaz:
-    """O cartaz é o produto desta fatia: é ele que vai para a gráfica."""
+    """O cartaz A5 da issue #378. Continua disponível depois do A4 (seção 4.13
+    da especificação da Diretoria), só não é mais o padrão."""
 
     def _html(self) -> str:
         from app.services.ouvidoria_pontos import html_do_cartaz
 
-        return html_do_cartaz(_ponto())
+        return html_do_cartaz(_ponto(), formato="a5")
 
     def test_o_cartaz_convida_em_vez_de_dizer_so_ouvidoria(self):
         """A spec da Diretoria (RN-14) observa que o cartaz converte muito mais
@@ -869,3 +870,231 @@ class TestManifestacaoQueNasceDoCartaz:
         assert gravado["canal_ponto"] is None
         assert gravado["canal_setor"] == "Recepção"
         assert gravado["canal"] == "qr"
+
+
+# O cartaz da Emergência adulta e o da Ala 2A, como o anexo da especificação da
+# Diretoria (seção 11) os descreve.
+EMERGENCIA_ADULTA = {
+    "nome_publico": "Emergência adulta",
+    "descricao_local": "Hall da Emergência, parede ao lado da passagem para a espera, voltada para a sala verde",
+    "titulo_cartaz": "atendimento_hoje",
+    "codigo_controle": "PSA-01",
+}
+ALA_2A = {
+    "nome_publico": "Internação · Ala 2A",
+    "descricao_local": "2º pavimento, ala longa, parede do corredor a 3 m do hall do elevador",
+    "titulo_cartaz": "um_minuto",
+    "codigo_controle": "INT-2A",
+    "ala_internacao": True,
+}
+
+# A4 e A5 retrato, em pontos de PDF (1/72 de polegada), como o `/MediaBox` os
+# escreve.
+A4_EM_PONTOS = (595.28, 841.89)
+A5_EM_PONTOS = (419.53, 595.28)
+MM = 96 / 25.4  # milímetro em pixel CSS, a unidade do layout do WeasyPrint
+
+
+def _pdf_legivel(pdf: bytes) -> bytes:
+    """O PDF com os streams comprimidos abertos: o WeasyPrint guarda o
+    dicionário da página e o da fonte dentro de object streams."""
+    import zlib
+
+    abertos = []
+    for stream in re.findall(rb"stream\r?\n(.*?)\r?\nendstream", pdf, re.S):
+        try:
+            abertos.append(zlib.decompress(stream))
+        except zlib.error:
+            continue
+    return pdf + b"".join(abertos)
+
+
+def _tamanho_da_pagina(pdf: bytes) -> tuple[float, float]:
+    caixa = re.search(rb"/MediaBox\s*\[\s*0\s+0\s+([\d.]+)\s+([\d.]+)\s*\]", _pdf_legivel(pdf))
+    assert caixa, "o PDF não declara o tamanho da página"
+    return round(float(caixa.group(1)), 2), round(float(caixa.group(2)), 2)
+
+
+def _caixas(caixa):
+    """Todas as caixas do layout. O `descendants()` do WeasyPrint para no
+    marcador de caixa posicionada (`position: absolute`), e o cartaz tem três:
+    a moldura, o rodapé e a linha de controle."""
+    caixa = getattr(caixa, "_box", caixa)
+    yield caixa
+    for filha in getattr(caixa, "children", None) or []:
+        yield from _caixas(filha)
+
+
+def _caixa(folha, tag: str, classe: str):
+    [achada] = [
+        c
+        for c in _caixas(folha._page_box)
+        if getattr(c, "element_tag", None) == tag
+        and c.element.get("class") == classe
+        and type(c).__name__ in ("BlockBox", "BlockReplacedBox")
+    ]
+    return achada
+
+
+class TestOCartazA4:
+    """CA: o PDF A4 sai com o título do ponto, o QR de 9 cm, o endereço
+    `/a/{código}` e a linha de controle, no layout 4.13 da especificação da
+    Diretoria (ADR 0086, decisão 10)."""
+
+    @staticmethod
+    def _html(**campos) -> str:
+        from app.services.ouvidoria_pontos import html_do_cartaz
+
+        return html_do_cartaz(_ponto(**campos))
+
+    @staticmethod
+    def _texto(**campos) -> str:
+        """O texto do cartaz como a pessoa lê, sem as tags e com os espaços
+        juntos: a asserção é sobre o que vai no papel, não sobre a marcação."""
+        sem_tags = re.sub(r"<[^>]+>", " ", TestOCartazA4._html(**campos).split("</style>", 1)[1])
+        return re.sub(r"\s+", " ", sem_tags)
+
+    def test_o_cartaz_padrao_sai_em_a4_e_o_a5_continua_disponivel(self, monkeypatch):
+        client, _ = _client(monkeypatch, OUVIDOR, _SupabaseFake(pontos=[_ponto(**EMERGENCIA_ADULTA)]))
+
+        a4 = client.get("/api/ouvidoria/pontos/ponto-AB2CD3/cartaz.pdf")
+        a5 = client.get("/api/ouvidoria/pontos/ponto-AB2CD3/cartaz.pdf", params={"formato": "a5"})
+
+        assert a4.status_code == 200, a4.text
+        assert a5.status_code == 200, a5.text
+        assert _tamanho_da_pagina(a4.content) == A4_EM_PONTOS
+        assert _tamanho_da_pagina(a5.content) == A5_EM_PONTOS
+
+    def test_formato_que_nao_existe_e_recusado(self, monkeypatch):
+        client, _ = _client(monkeypatch, OUVIDOR, _SupabaseFake(pontos=[_ponto()]))
+
+        r = client.get("/api/ouvidoria/pontos/ponto-AB2CD3/cartaz.pdf", params={"formato": "a3"})
+
+        assert r.status_code == 422
+
+    def test_o_cartaz_cabe_numa_folha_a4_com_o_qr_de_9_cm(self):
+        """Medido no layout que o WeasyPrint monta, e não lido do CSS: o QR de
+        9 cm é o que a especificação garante ler a 50 cm e a 1 m, e o cartaz
+        que transborda para uma segunda folha não vai inteiro para a parede."""
+        from weasyprint import HTML
+
+        from app.services.ouvidoria_pontos import _assets_do_cartaz_a4, html_do_cartaz
+        from app.services.pdf_url_fetcher import criar_pdf_url_fetcher
+
+        for campos in (EMERGENCIA_ADULTA, ALA_2A):
+            documento = HTML(
+                string=html_do_cartaz(_ponto(**campos)), url_fetcher=criar_pdf_url_fetcher(_assets_do_cartaz_a4())
+            ).render()
+
+            assert len(documento.pages) == 1, campos["codigo_controle"]
+            folha = documento.pages[0]
+            assert (round(folha.width / MM), round(folha.height / MM)) == (210, 297)
+            qr = _caixa(folha, "img", "qr")
+            assert (round(qr.width / MM, 1), round(qr.height / MM, 1)) == (90.0, 90.0)
+            # O rodapé é posicionado no pé da moldura: o texto de cima não
+            # pode correr por trás dele.
+            lgpd = _caixa(folha, "p", "lgpd")
+            rodape = _caixa(folha, "div", "rodape")
+            assert lgpd.position_y + lgpd.margin_height() <= rodape.position_y, campos["codigo_controle"]
+            # A linha de controle fica fora da moldura, ainda dentro da folha.
+            moldura = _caixa(folha, "div", "moldura")
+            controle = _caixa(folha, "p", "controle")
+            assert controle.position_y >= moldura.position_y + moldura.margin_height()
+            assert controle.position_y + controle.margin_height() <= folha.height
+
+    def test_o_titulo_atendimento_hoje_sai_com_o_subtitulo_dele(self):
+        texto = self._texto(**EMERGENCIA_ADULTA)
+
+        assert "Como foi seu atendimento hoje?" in texto
+        assert "Leva menos de um minuto" in texto
+        assert "Um minuto para nos contar" not in texto
+
+    def test_o_titulo_um_minuto_sai_com_o_subtitulo_dele(self):
+        texto = self._texto(**ALA_2A)
+
+        assert "Um minuto para nos contar" in texto
+        assert "Como está sendo sua estadia?" in texto
+        assert "Como foi seu atendimento hoje?" not in texto
+
+    def test_titulo_e_subtitulo_saem_em_caixa_alta_so_na_exibicao(self):
+        """ADR 0080: o texto fica em maiúscula e minúscula e o CSS sobe a caixa."""
+        html = self._html(**EMERGENCIA_ADULTA)
+
+        for classe in ("titulo", "subtitulo"):
+            regra = re.search(rf"\.{classe}\s*\{{([^}}]*)\}}", html)
+            assert regra, classe
+            assert "text-transform: uppercase" in regra.group(1), classe
+
+    def test_o_endereco_impresso_e_o_curto(self, monkeypatch):
+        from app.config import settings
+
+        monkeypatch.setattr(settings, "frontend_url", "https://app.hospitalsaomatheus.cloud")
+
+        texto = self._texto(**EMERGENCIA_ADULTA)
+
+        assert "ou acesse app.hospitalsaomatheus.cloud/a/AB2CD3" in texto
+        assert "ouvidoria/qr" not in self._html(**EMERGENCIA_ADULTA)
+
+    def test_o_qr_e_vetorial_na_cor_da_marca(self):
+        """PDF vetorial: o QR vai como SVG, que a gráfica amplia sem serrilhar,
+        com os módulos em `#282760`."""
+        html = self._html(**EMERGENCIA_ADULTA)
+
+        qr = re.search(r'<img class="qr" src="([^"]+)"', html)
+        assert qr, "o cartaz A4 precisa do QR"
+        assert qr.group(1).startswith("data:image/svg+xml")
+        assert "282760" in qr.group(1)
+
+    def test_a_linha_de_controle_traz_o_codigo_o_nome_e_o_local_resumido(self):
+        texto = self._texto(**EMERGENCIA_ADULTA)
+
+        assert "Ponto PSA-01 · Emergência adulta · Hall da Emergência, parede ao lado da passagem" in texto
+        # Resumida: a descrição inteira não cabe numa linha de 7 pt.
+        assert "voltada para a sala verde" not in texto
+
+    def test_sem_codigo_de_controle_a_linha_leva_o_codigo_do_qr(self):
+        texto = self._texto(**{**EMERGENCIA_ADULTA, "codigo_controle": None})
+
+        assert "Ponto AB2CD3 · Emergência adulta" in texto
+
+    def test_a_ala_de_internacao_manda_falar_com_a_enfermagem_do_posto(self):
+        assert "Fale com a enfermagem do posto desta ala." in self._texto(**ALA_2A)
+        assert "Fale com a equipe deste setor." not in self._texto(**ALA_2A)
+
+    def test_fora_da_internacao_manda_falar_com_a_equipe_do_setor(self):
+        assert "Fale com a equipe deste setor." in self._texto(**EMERGENCIA_ADULTA)
+        assert "enfermagem do posto" not in self._texto(**EMERGENCIA_ADULTA)
+
+    def test_o_cartaz_traz_os_avisos_a_lgpd_e_o_rodape_da_ouvidoria(self):
+        texto = self._texto(**EMERGENCIA_ADULTA)
+
+        for trecho in (
+            "Aponte a câmera do celular",
+            "Quer um retorno?",
+            "Deixe seu contato ao final ou registre de forma anônima.",
+            "Precisa de ajuda agora?",
+            "Seus dados são usados apenas para tratar sua avaliação, conforme a LGPD.",
+            "Ouvidoria",
+            "ouvidoria@hospitalsaomatheus.com.br",
+        ):
+            assert trecho in texto, trecho
+
+    def test_o_cartaz_nao_mostra_o_nome_interno_do_setor(self):
+        """O paciente vê o nome público, nunca o nome interno do setor."""
+        assert "Recepção" not in self._html(**EMERGENCIA_ADULTA)
+        assert "Recepção" not in self._html(**{**EMERGENCIA_ADULTA, "nome_publico": None})
+
+    def test_a_fonte_hp_simplified_vai_embutida_no_pdf(self):
+        from app.services.ouvidoria_pontos import pdf_do_cartaz
+
+        pdf = _pdf_legivel(pdf_do_cartaz(_ponto(**EMERGENCIA_ADULTA)))
+
+        # Subconjunto embutido: o nome da fonte vem depois do prefixo de seis
+        # letras que o PDF dá a toda fonte recortada.
+        assert re.search(rb"/BaseFont\s*/[A-Z]{6}\+HP-Simplified", pdf)
+
+    def test_o_cartaz_a4_nao_tem_travessao(self):
+        html = self._html(**ALA_2A)
+
+        assert "\u2014" not in html
+        assert "\u2013" not in html

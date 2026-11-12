@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <title>Ouvidoria {{ nome_publico }} - {{ codigo }}</title>
+  <style>
+    /* Layout 4.13 da especificacao da Diretoria (modelo aprovado do cartaz A4).
+       As medidas da tabela vao como estao: margem de 8 mm, contorno de 0,8 mm,
+       respiro de 7 mm, QR de 9 cm. */
+    {% if font_path %}
+    @font-face {
+      font-family: "HP Simplified";
+      src: url("{{ font_path }}") format("truetype");
+      font-weight: 400;
+      font-style: normal;
+    }
+    {% endif %}
+    @page { size: A4 portrait; margin: 0; }
+    html, body { margin: 0; padding: 0; }
+    body {
+      font-family: "HP Simplified", sans-serif;
+      font-weight: 400;
+      color: #151728;
+      background: #ffffff;
+      text-align: center;
+    }
+    .folha { position: relative; width: 210mm; height: 297mm; }
+    .moldura {
+      position: absolute;
+      top: 8mm; left: 8mm; right: 8mm; bottom: 8mm;
+      border: 0.8mm solid #282760;
+      border-radius: 6mm;
+      padding: 7mm;
+    }
+    /* So o titulo, sem sobretitulo, em duas linhas. Caixa alta so na exibicao
+       (ADR 0080): o texto do template fica em maiuscula e minuscula. */
+    .titulo {
+      background: #282760;
+      color: #ffffff;
+      border-radius: 8mm;
+      margin: 0;
+      padding: 6mm 4mm;
+      font-size: 39pt;
+      font-weight: 400;
+      line-height: 1.12;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+    .subtitulo {
+      margin: 6mm 0 5mm;
+      font-size: 21pt;
+      color: #282760;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+    /* O QR e o cartao branco em volta. A zona livre de 4 modulos ja vem dentro
+       da imagem, entao os 9 cm sao do QR com a zona livre. */
+    .cartao-qr {
+      margin: 0 auto;
+      width: 90mm;
+      padding: 3mm;
+      background: #ffffff;
+      border: 0.3mm solid #E6E8EC;
+      border-radius: 4mm;
+    }
+    .qr { display: block; width: 90mm; height: 90mm; }
+    .aponte {
+      margin: 5mm 0 1mm;
+      font-size: 16pt;
+      color: #1E4394;
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+    }
+    .endereco { margin: 0; font-size: 14pt; color: #3A3F48; }
+    .avisos { margin: 6mm 6mm 0; text-align: left; }
+    .aviso { margin: 0 0 4mm; }
+    .aviso-rotulo {
+      margin: 0;
+      font-size: 14pt;
+      color: #1E4394;
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+    }
+    .aviso-texto { margin: 1mm 0 0; font-size: 16.5pt; color: #151728; }
+    .lgpd { margin: 2mm 6mm 0; font-size: 10.5pt; color: #6B7280; text-align: left; }
+    .rodape {
+      position: absolute;
+      left: 7mm; right: 7mm; bottom: 7mm;
+      background: #1E4394;
+      color: #ffffff;
+      border-radius: 8mm;
+      padding: 4mm 8mm;
+    }
+    .rodape table { width: 100%; border-collapse: collapse; }
+    .rodape td { padding: 0; vertical-align: middle; }
+    .rodape-ouvidoria {
+      margin: 0;
+      font-size: 16.5pt;
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+      text-align: left;
+    }
+    .rodape-email { margin: 1mm 0 0; font-size: 13.5pt; text-align: left; }
+    .rodape-logo { text-align: right; }
+    .logo { height: 17mm; }
+    /* A linha de controle e para quem instala o cartaz, nao para o paciente:
+       fora da moldura, em corpo pequeno. */
+    .controle {
+      position: absolute;
+      left: 8mm; right: 8mm; bottom: 2.5mm;
+      margin: 0;
+      font-size: 7pt;
+      color: #6B7280;
+      text-align: left;
+    }
+  </style>
+</head>
+<body>
+  <div class="folha">
+    <div class="moldura">
+      <h1 class="titulo">{{ titulo[0] }}<br />{{ titulo[1] }}</h1>
+      <p class="subtitulo">{{ subtitulo }}</p>
+
+      <div class="cartao-qr">
+        <img class="qr" src="{{ qr_svg }}" alt="QR code da Ouvidoria" />
+      </div>
+
+      <p class="aponte">Aponte a câmera do celular</p>
+      <p class="endereco">ou acesse {{ endereco }}</p>
+
+      <div class="avisos">
+        <div class="aviso">
+          <p class="aviso-rotulo">Quer um retorno?</p>
+          <p class="aviso-texto">Deixe seu contato ao final ou registre de forma anônima.</p>
+        </div>
+        <div class="aviso">
+          <p class="aviso-rotulo">Precisa de ajuda agora?</p>
+          <p class="aviso-texto">{{ ajuda_agora }}</p>
+        </div>
+      </div>
+
+      <p class="lgpd">Seus dados são usados apenas para tratar sua avaliação, conforme a LGPD.</p>
+
+      <div class="rodape">
+        <table>
+          <tr>
+            <td>
+              <p class="rodape-ouvidoria">Ouvidoria</p>
+              <p class="rodape-email">ouvidoria@hospitalsaomatheus.com.br</p>
+            </td>
+            <td class="rodape-logo">
+              <img class="logo" src="{{ logo_branco }}" alt="Hospital São Matheus" />
+            </td>
+          </tr>
+        </table>
+      </div>
+    </div>
+
+    <p class="controle">{{ controle }}</p>
+  </div>
+</body>
+</html>
