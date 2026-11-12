@@ -85,6 +85,12 @@ describe("o que o middleware NÃO pode interceptar", () => {
     expect(interceptado("/manifestacao")).toBe(false);
   });
 
+  it("não alcança o endereço curto impresso no cartaz A4", () => {
+    // Issue #1617: `/a/{código}` é o que o QR carrega. Interceptá-lo mandaria
+    // quem escaneia para a tela de login do staff.
+    expect(interceptado("/a/AB2CD3")).toBe(false);
+  });
+
   it("deixa a área logada da Ouvidoria para os layouts de servidor", () => {
     // Não é esquecimento: `app/ouvidoria/layout.tsx` já exige sessão e
     // `app/ouvidoria/painel/layout.tsx` exige o perfil. Trazer a área para cá

@@ -183,3 +183,51 @@ describe("cabeçalhos de segurança", () => {
     expect(nextConfig.poweredByHeader).toBe(false);
   });
 });
+
+/**
+ * O endereço curto do cartaz (issue #1617, ADR 0086 decisão 5).
+ *
+ * O cartaz imprime `/a/{código}`, e quem chega pelo formato de antes,
+ * `/manifestacao?p={código}`, é redirecionado no servidor, antes de a página
+ * abrir. O redirecionamento é temporário: o destino ainda vai mudar (a tela de
+ * nota) e o navegador não pode guardá-lo.
+ */
+async function redirecionamentoDoFormularioComCodigo() {
+  const regras = (await nextConfig.redirects?.()) ?? [];
+  const [regra] = regras.filter(
+    (r) => r.source === "/manifestacao" && r.has?.some((h) => h.type === "query" && h.key === "p")
+  );
+  if (!regra) throw new Error("o redirecionamento de /manifestacao?p= sumiu do next.config");
+  return regra;
+}
+
+/** O destino que a regra monta para um `?p=`, ou null se ela não casa. A
+ *  regra do Next: o `value` do `has` casa o valor inteiro, e o grupo nomeado
+ *  vira o parâmetro do destino. */
+async function destinoDe(valor: string): Promise<string | null> {
+  const regra = await redirecionamentoDoFormularioComCodigo();
+  const condicao = regra.has!.find((h) => h.type === "query" && h.key === "p")!;
+  const casou = new RegExp(`^(?:${condicao.value})$`).exec(valor);
+  if (!casou) return null;
+  return regra.destination.replace(/:(\w+)/g, (_, nome: string) => casou.groups?.[nome] ?? "");
+}
+
+describe("o formulário com o código do cartaz vai ao endereço curto", () => {
+  it("/manifestacao?p=AB2CD3 vai a /a/AB2CD3, com redirecionamento temporário", async () => {
+    const regra = await redirecionamentoDoFormularioComCodigo();
+
+    expect(await destinoDe("AB2CD3")).toBe("/a/AB2CD3");
+    expect(regra.permanent).toBe(false);
+  });
+
+  it("o código digitado em minúscula também vai", async () => {
+    expect(await destinoDe("ab2cd3")).toBe("/a/ab2cd3");
+  });
+
+  it("o que não tem forma de código não vira caminho do app", async () => {
+    // Fica no formulário do site, sem origem: nunca uma página de erro.
+    for (const lixo of ["../x", "https://phishing.exemplo/x", "AB2CD3/../x", ""]) {
+      expect(await destinoDe(lixo)).toBeNull();
+    }
+  });
+});
