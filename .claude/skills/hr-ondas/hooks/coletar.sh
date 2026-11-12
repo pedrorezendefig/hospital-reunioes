@@ -207,8 +207,18 @@ declarada=$(awk '/^[0-9]+ /{ if ($1+0 > m) m = $1+0 } END { print (m ? m : "null
 [ -n "$declarada" ] || declarada=null
 remoto=$(echo "$remoto" | jq -c --argjson d "$declarada" '.aplicada = ([.aplicada, $d] | map(select(. != null)) | max)')
 
+# Ondas que quebraram ou esperam o humano: o Estado da Onda que a sessão grava
+# (docs/estado-da-onda.md do PedroOS), com o texto do último evento daquele estado
+ESTADOS="${HR_ONDAS_ESTADOS:-$HOME/.pedroos/ondas/hospital}"
+ondas_estado=$(cat "$ESTADOS"/*.json 2>/dev/null | jq -s -c '
+  [ .[] | select(.contrato == 1 and (.estado == "erro" or .estado == "pronto-para-voce")) | . as $o
+    | {id: $o.id, estado: $o.estado, prd: $o.prd,
+       texto: ([$o.eventos[]? | select(.tipo == $o.estado)] | last | .texto // null)} ]' 2>/dev/null)
+[ -n "$ondas_estado" ] || ondas_estado='[]'
+
 jq -n -c --argjson r "$remoto" --argjson agentes "$agentes" --argjson prdSessoes "$prd_sessoes" \
   --argjson subAgentes "$sub_agentes" --argjson subidas "$subidas" --argjson migs "$migs" \
-  --argjson passagens "$passagens" \
+  --argjson passagens "$passagens" --argjson ondasEstado "$ondas_estado" \
   '{os: $r.os, osEm: $r.osEm, remotoEm: $r.em, ci: $r.ci, aplicada: $r.aplicada, agentes: $agentes,
-    prdSessoes: $prdSessoes, subAgentes: $subAgentes, subidas: $subidas, migrations: $migs, passagens: $passagens}'
+    prdSessoes: $prdSessoes, subAgentes: $subAgentes, subidas: $subidas, migrations: $migs, passagens: $passagens,
+    ondasEstado: $ondasEstado}'

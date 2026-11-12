@@ -8,9 +8,21 @@ import type { Agente, Ci, Coleta, EsperaCi, Fase, Issue, Migration, Prd, SubAgen
 // O relógio só olha o que é local (sessões, agentes, subidas, migrations); o GitHub e o OS
 // são buscados quando um evento do workflow acontece: agente que começa ou termina, sessão
 // que nasce ou para, subida que fecha, migration nova, ou um gh/fechar_onda nesta sessão.
+// É um painel de monitoramento: nenhum link vai ao GitHub; PRD, Fatia e Onda abrem no PedroOS.
 
 const PANE = 'ondas'
+const COLUNAS = 100
 const STUDIO = 'https://studio.hospitalsaomatheus.cloud/project/default/sql/new'
+// localhost, não 127.0.0.1: o Claude Code só faz link de https: ou de http://localhost
+const PEDROOS = 'http://localhost:4400/'
+const REPO = 'pedrorezendefig/hospital-reunioes'
+
+/** O PRD ou a Fatia na aba Issues do Projeto, no PedroOS. */
+export const noOs = (repo: string, n: number) => `${PEDROOS}#/ala/projetos/${encodeURIComponent(repo)}/issues/${n}`
+/** A Trilha de Ondas: a aba Ondas da Página do Projeto, no PedroOS. */
+export const trilhaNoOs = (repo: string) => `${PEDROOS}#/ala/projetos/${encodeURIComponent(repo)}/ondas`
+/** A Ala "Ondas de todos", onde fica o botão Fechar a Onda. */
+export const ONDAS_DE_TODOS = `${PEDROOS}#/ala/ondas`
 const PERIODO_MS = 10_000
 /** Comando desta sessão que muda o GitHub ou a produção: ao terminar, recoleta. */
 const EVENTO_NO_SHELL = /fechar_onda\.py\s+--prs|gh\s+pr\s+(create|merge|ready|close)|gh\s+issue\s+(create|close|edit)|gh\s+run\s+watch|gh\s+pr\s+checks\b[^|;&]*--watch/
@@ -20,6 +32,7 @@ const coleta = atom({ plugin: 'hr-ondas', key: 'coleta' } as const, null)
 const erro = atom({ plugin: 'hr-ondas', key: 'erro' } as const, null)
 const todos = atom({ plugin: 'hr-ondas', key: 'todos' } as const, false)
 const esperaCi = atom({ plugin: 'hr-ondas', key: 'esperaCi' } as const, null)
+const verDetalhe = atom({ plugin: 'hr-ondas', key: 'verDetalhe' } as const, false)
 
 const COR: Record<Fase, string> = {
   triagem: 'inactive',
@@ -117,7 +130,8 @@ export const prdsVisiveis = (c: Coleta, mostrarTodos: boolean): Prd[] => {
     .sort((a, b) => Number(comSessao(b)) - Number(comSessao(a)) || b.n - a.n)
 }
 
-export const detalhe = (i: Issue): string => {
+/** A Etapa da Fatia em texto; sem `comEspera`, sem as bloqueadoras (a linha da Onda já as diz). */
+export const detalhe = (i: Issue, comEspera = true): string => {
   const partes: string[] = [NOME[i.fase]]
   if (i.fase === 'pr_aberto') {
     if (i.ci) partes.push(`CI ${i.ci.replace('_', ' ')}`)
@@ -125,8 +139,44 @@ export const detalhe = (i: Issue): string => {
     if (i.conflito) partes.push('conflito')
   }
   if (i.versao) partes.push(i.versao)
-  if (i.por.length) partes.push(`espera ${i.por.map(n => `#${n}`).join(' ')}`)
+  if (comEspera && i.por.length) partes.push(`espera ${i.por.map(n => `#${n}`).join(' ')}`)
   return partes.join(' · ')
+}
+
+/** Uma linha do bloco "Precisa de você": o link leva aonde você age. */
+export type Pendencia = { chave: string; cor: 'error' | 'warning'; marca: string; href: string; rotulo: string; texto: string }
+
+/**
+ * O que espera você, fora as migrations (que têm botão próprio): Onda que quebrou ou espera você,
+ * Fatia humana aberta e PR com CI vermelho. A Onda vai à Ala "Ondas de todos"; a Fatia, ao PedroOS.
+ */
+export const precisaDeVoce = (c: Coleta): Pendencia[] => {
+  const repo = c.os?.repo ?? REPO
+  const ondas = [...(c.ondasEstado ?? [])]
+    .sort((a, b) => Number(b.estado === 'erro') - Number(a.estado === 'erro'))
+    .map(o => ({
+      chave: `o${o.id}`,
+      cor: o.estado === 'erro' ? ('error' as const) : ('warning' as const),
+      marca: o.estado === 'erro' ? '✗' : '!',
+      href: ONDAS_DE_TODOS,
+      rotulo: `Onda ${o.id}`,
+      texto: `${o.estado === 'erro' ? 'quebrou' : 'espera você'}${o.texto ? `: ${o.texto}` : ''}`,
+    }))
+  const fatias = new Map<number, Pendencia>()
+  for (const i of (c.os?.prds ?? []).flatMap(p => p.issues)) {
+    if (i.estado !== 'OPEN' || fatias.has(i.n)) continue
+    const humana = i.fase === 'humana'
+    if (!humana && !(i.fase === 'pr_aberto' && i.ci === 'vermelho')) continue
+    fatias.set(i.n, {
+      chave: `i${i.n}`,
+      cor: humana ? 'warning' : 'error',
+      marca: humana ? '!' : '✗',
+      href: noOs(repo, i.n),
+      rotulo: `#${i.n}`,
+      texto: `${humana ? 'é sua' : 'CI vermelho'} · ${i.titulo}`,
+    })
+  }
+  return [...ondas, ...fatias.values()]
 }
 
 const corDaIssue = (i: Issue) =>
@@ -321,14 +371,15 @@ export const situacaoDaOnda = (issues: Issue[], ags: SubAgente[], prd: Prd, agor
   return issues.some(i => i.fase === 'fila') ? 'fila' : 'parada'
 }
 
-/** Onda que não anda cabe em uma ou duas linhas: as fatias e o que ela espera de fora (quem está na mão do humano, dito). */
-export const resumoDaOnda = (issues: Issue[], onda: number[], porN?: Map<number, Issue>) => {
-  const linhas = [{ texto: issues.map(i => `${MARCA[i.fase]} #${i.n}`).join('  '), cor: 'inactive' }]
+/** O que a Onda espera de fora dela (quem está na mão do humano, dito), ou null. */
+export const esperaDeFora = (issues: Issue[], onda: number[], porN?: Map<number, Issue>): string | null => {
   const fora = [...new Set(issues.flatMap(i => i.por))].filter(n => !onda.includes(n)).sort((a, b) => a - b)
   const nome = (n: number) => (porN?.get(n)?.fase === 'humana' ? `#${n} (humana)` : `#${n}`)
-  if (fora.length) linhas.push({ texto: `espera ${fora.map(nome).join(' ')}`, cor: 'subtle' })
-  return linhas
+  return fora.length ? `espera ${fora.map(nome).join(' ')}` : null
 }
+
+/** Fatia no ar: em produção ou fechada (o passo humano fecha sem PR). */
+export const noAr = (i: Issue) => i.fase === 'em_producao' || i.estado === 'CLOSED'
 
 /** Linhagem da sessão: "onda-gestao-onda4" é a onda 4 da linhagem "onda-gestao". */
 export const linhagem = (nome: string) => nome.replace(/-onda\d+$/, '')
@@ -453,7 +504,7 @@ async function coletar($: EngineInterface, fresco = false) {
     }
     // a primeira coleta só abre se já houver onda rodando; depois, a cada novidade
     if (novasSessoes.length > 0 || novasMigrations.length > 0) {
-      void $.ui.open({ id: PANE, title: 'Ondas', columns: 78 })
+      void $.ui.open({ id: PANE, title: 'Ondas', columns: COLUNAS })
     }
 
     const p = pendentes(c)
@@ -480,10 +531,10 @@ export const register: Register = on => {
   on('session.start', async ($, e, next) => {
     await $.command.register({
       name: 'ondas',
-      description: 'Torre das ondas: PRD, onda, fase de cada issue e migrations (`/ondas todos` mostra todos os PRDs)',
+      description: 'Torre das ondas: o que precisa de você, PRD, Onda e Etapa de cada Fatia (`/ondas todos` mostra todos os PRDs; `/ondas detalhe` liga e desliga o detalhe dos agentes)',
     })
     // a torre é o painel que nasce com a sessão interativa do Hospital
-    if (e.isInteractive) void $.ui.open({ id: PANE, title: 'Ondas', columns: 78 })
+    if (e.isInteractive) void $.ui.open({ id: PANE, title: 'Ondas', columns: COLUNAS })
     void coletar($)
     $.clock.every(PERIODO_MS, () => coletar($))
     return next(e)
@@ -499,8 +550,10 @@ export const register: Register = on => {
       return { text: `Migration ${numeros.join(', ')} registrada como aplicada.` }
     }
     if (arg === 'todos' || arg === 'ativos') await update($, todos, () => arg === 'todos')
-    await $.ui.open({ id: PANE, title: 'Ondas', columns: 78 })
+    const detalheAgora = arg === 'detalhe' ? await update($, verDetalhe, v => !v) : null
+    await $.ui.open({ id: PANE, title: 'Ondas', columns: COLUNAS })
     await coletar($, true)
+    if (detalheAgora !== null) return { text: `Detalhe dos agentes ${detalheAgora ? 'ligado' : 'desligado'} no painel das ondas.` }
     return { text: `Painel das ondas atualizado${arg === 'todos' ? ', com todos os PRDs' : ''}.` }
   })
 
@@ -532,9 +585,7 @@ export const register: Register = on => {
       }
     }
     const pr = Number(/gh\s+pr\s+checks\s+(\d+)/.exec(cmd)?.[1]) || null
-    const repo = (await read($, coleta))?.os?.repo ?? 'pedrorezendefig/hospital-reunioes'
-    const url = pr ? `https://github.com/${repo}/pull/${pr}/checks` : `https://github.com/${repo}/actions`
-    await update($, esperaCi, () => ({ pr, url }) satisfies EsperaCi)
+    await update($, esperaCi, () => ({ pr }) satisfies EsperaCi)
     try {
       return await next(e)
     } finally {
@@ -566,7 +617,7 @@ export const register: Register = on => {
         ))}
         {ci && (
           <Text key="ci" color="suggestion">
-            ◷ esperando o CI{ci.pr ? ` do PR #${ci.pr}` : ''} · <Link href={ci.url} label="ver checks" />
+            ◷ esperando o CI{ci.pr ? ` do PR #${ci.pr}` : ''}
           </Text>
         )}
       </Box>
@@ -578,6 +629,7 @@ export const register: Register = on => {
     const c = await read($, coleta)
     const falha = await read($, erro)
     const mostrarTodos = await read($, todos)
+    const comDetalhe = await read($, verDetalhe)
     const largura = Math.max(30, (e.props.bodyColumns ?? (e.viewport?.columns ?? 100) - 4) - 4)
 
     if (!c) {
@@ -590,9 +642,11 @@ export const register: Register = on => {
 
     const p = pendentes(c)
     const recentes = aplicadasRecentes(c)
+    const pendencias = precisaDeVoce(c)
     const prds = prdsVisiveis(c, mostrarTodos)
-    const repo = c.os?.repo ?? 'pedrorezendefig/hospital-reunioes'
-    const linkIssue = (n: number) => <Link href={`https://github.com/${repo}/issues/${n}`} label={`#${n}`} />
+    const repo = c.os?.repo ?? REPO
+    const linkIssue = (n: number) => <Link href={noOs(repo, n)} label={`#${n}`} />
+    const tituloDa = (i: Issue) => i.titulo.replace(/^Contas médicas: /, '')
 
     const linhaAgente = (a: SubAgente, alvoDele?: string) => {
       const estado = estadoDoAgente(a, c.em)
@@ -644,64 +698,90 @@ export const register: Register = on => {
       )
     }
 
+    /** Uma linha por Fatia: a Etapa, o número com link para o PedroOS e o título. */
+    const linhaFatia = (i: Issue, comEspera: boolean, recuo: string) => (
+      <Text key={`f${i.n}`} wrap="truncate-end">
+        {recuo}
+        <Text color={corDaIssue(i)}>{MARCA[i.fase]} </Text>
+        {linkIssue(i.n)}
+        <Text color={corDaIssue(i)}> {detalhe(i, comEspera)}</Text>
+        <Text dimColor> · {tituloDa(i)}</Text>
+      </Text>
+    )
+
     return (
       <Box flexDirection="column">
-        <Text dimColor>
-          GitHub há {minutos((await $.clock.now()) - (c.remotoEm ?? c.em))} ·{' '}
-          {mostrarTodos ? 'todos os PRDs (/ondas ativos)' : 'PRDs ativos (/ondas todos)'}
+        <Text dimColor wrap="truncate-end">
+          atualizado há {minutos((await $.clock.now()) - (c.remotoEm ?? c.em))} ·{' '}
+          {mostrarTodos ? 'todos os PRDs (/ondas ativos)' : 'PRDs ativos (/ondas todos)'} ·{' '}
+          <Link href={trilhaNoOs(repo)} label="Trilha de Ondas" />
           {c.osEm != null && c.osEm < (c.remotoEm ?? c.em) ? (
             <Text color="warning"> · Hospital OS sem resposta, PRDs de há {minutos(c.em - c.osEm)}</Text>
           ) : null}
         </Text>
         {falha && <Text color="error">{falha}</Text>}
 
-        {(p.length > 0 || recentes.length > 0) && (
-          <Box flexDirection="column" marginTop={1}>
-            <Text bold>Migrations · no ar: {c.aplicada ?? '?'}</Text>
-            {p.map((m, k) => (
-              <Box key={`p${m.numero}`} flexDirection="row">
-                <Text color="warning">
-                  {'  '}⏳ {m.numero} {k === 0 ? 'cole no Studio' : `depois da ${p[k - 1]?.numero}`}{' '}
-                </Text>
-                <Button key={`copiar-${m.numero}`} label="copiar SQL" onPress={press => void copiarSql($, m, press.surface)} />
-                <Text color="warning" wrap="truncate-end">
-                  {' '}
-                  · <Link href={STUDIO} label="Studio" /> · {m.linhas} linhas · {m.sessao} · há {minutos(c.em - m.mtime)}
-                </Text>
-              </Box>
-            ))}
-            {recentes.map(m => (
-              <Text key={`a${m.numero}${m.sessao}`} color="success">
-                {'  '}✓ {m.numero} aplicada ({m.sessao})
+        <Box flexDirection="column" marginTop={1}>
+          <Text bold>
+            Precisa de você
+            {p.length > 0 ? <Text dimColor> · migration no ar: {c.aplicada ?? '?'}</Text> : null}
+          </Text>
+          {p.map((m, k) => (
+            <Box key={`p${m.numero}`} flexDirection="row">
+              <Text color="warning">
+                {'  '}⏳ migration {m.numero} {k === 0 ? 'cole no Studio' : `depois da ${p[k - 1]?.numero}`}{' '}
               </Text>
-            ))}
-          </Box>
-        )}
+              <Button key={`copiar-${m.numero}`} label="copiar SQL" onPress={press => void copiarSql($, m, press.surface)} />
+              <Text color="warning" wrap="truncate-end">
+                {' '}
+                · <Link href={STUDIO} label="Studio" /> · {m.linhas} linhas · {m.sessao} · há {minutos(c.em - m.mtime)}
+              </Text>
+            </Box>
+          ))}
+          {pendencias.map(x => (
+            <Text key={x.chave} wrap="truncate-end">
+              {'  '}
+              <Text color={x.cor}>{x.marca} </Text>
+              <Link href={x.href} label={x.rotulo} />
+              <Text color={x.cor}> {x.texto}</Text>
+            </Text>
+          ))}
+          {p.length === 0 && pendencias.length === 0 && <Text color="success">{'  '}✓ Nada espera você</Text>}
+          {recentes.length > 0 && (
+            <Text key="aplicadas" color="success" dimColor wrap="truncate-end">
+              {'  '}✓ aplicada na última hora: migration {[...new Set(recentes.map(m => m.numero))].join(', ')}
+            </Text>
+          )}
+        </Box>
 
         {prds.length === 0 && (
-          <Text dimColor>Nenhum PRD com onda rodando ou fatia andando. /ondas todos mostra tudo.</Text>
+          <Box marginTop={1}>
+            <Text dimColor>Nenhum PRD com onda rodando ou fatia andando. /ondas todos mostra tudo.</Text>
+          </Box>
         )}
 
         {prds.map(prd => {
           const sessoes = sessoesDoPrd(c, prd.n)
           const ags = agentesDoPrd(c, prd)
           const ondas = ondasDoPrd(c, prd)
-          const emOnda = new Set(ondas.flatMap(o => o.issues))
           const porN = new Map(prd.issues.map(i => [i.n, i]))
-          const fora = prd.issues.filter(i => !emOnda.has(i.n))
-          const entregues = fora.filter(i => i.fase === 'em_producao' || i.estado === 'CLOSED')
-          const soltas = fora.filter(i => !entregues.includes(i))
-          const feitas = prontasDoPrd(prd)
+          const desenhadas = ondas.map(o => {
+            const issues = o.issues.map(n => porN.get(n)).filter((i): i is Issue => !!i)
+            return { o, issues, situacao: situacaoDaOnda(issues, ags, prd, c.em), tempo: duracaoDaOnda(issues, ags, prd, c.em) }
+          })
+          // a Onda que roda mostra todas as Fatias dela; fora dela, a Fatia no ar vai para a linha "no ar"
+          const naCaixa = new Set(desenhadas.filter(d => d.situacao === 'andando').flatMap(d => d.o.issues))
+          const emOnda = new Set(ondas.flatMap(o => o.issues))
+          const entregues = prd.issues.filter(i => noAr(i) && !naCaixa.has(i.n))
+          const soltas = prd.issues.filter(i => !emOnda.has(i.n) && !noAr(i))
           const semAlvo = ags.filter(a => alvo(a, prd) === null)
 
           return (
             <Box key={`prd${prd.n}`} flexDirection="column" marginTop={1}>
               <Text wrap="truncate-end">
-                <Text bold>
-                  {prd.n === SEM_PRD ? 'Sem PRD' : <Link href={`https://github.com/${repo}/issues/${prd.n}`} label={`PRD #${prd.n}`} />}
-                </Text>{' '}
+                <Text bold>{prd.n === SEM_PRD ? 'Sem PRD' : <Link href={noOs(repo, prd.n)} label={`PRD #${prd.n}`} />}</Text>{' '}
                 <Text dimColor>
-                  {feitas}/{prd.issues.length} prontas
+                  {prontasDoPrd(prd)}/{prd.issues.length} prontas
                 </Text>
               </Text>
               <Text dimColor wrap="truncate-end">
@@ -734,94 +814,94 @@ export const register: Register = on => {
                         </Text>
                       </Text>
                     )}
-                    {s.fala && (
+                    {comDetalhe && s.fala && (
                       <Text dimColor wrap="truncate-end">
                         {'    '}💬 {curto(s.fala.texto.split('\n')[0] ?? '', largura - 22)} · há {minutos(c.em - s.fala.em)}
                       </Text>
                     )}
-                    {focoDaSessao(s.nome, ags, c.em).map(a =>
-                      estadoDoAgente(a, c.em) === 'trabalhando' ? (
-                        linhaAgente(a, rotuloDoAlvo(a, prd))
-                      ) : (
-                        <Text key={`u${a.id}`} dimColor wrap="truncate-end">
-                          {'    '}○ último: {a.tipo} {rotuloDoAlvo(a, prd)} · {estadoDoAgente(a, c.em) === 'terminou' ? 'terminou' : 'parado'} há{' '}
-                          {minutos(c.em - a.fim)}
-                        </Text>
-                      ),
-                    )}
+                    {comDetalhe &&
+                      focoDaSessao(s.nome, ags, c.em).map(a =>
+                        estadoDoAgente(a, c.em) === 'trabalhando' ? (
+                          linhaAgente(a, rotuloDoAlvo(a, prd))
+                        ) : (
+                          <Text key={`u${a.id}`} dimColor wrap="truncate-end">
+                            {'    '}○ último: {a.tipo} {rotuloDoAlvo(a, prd)} · {estadoDoAgente(a, c.em) === 'terminou' ? 'terminou' : 'parado'} há{' '}
+                            {minutos(c.em - a.fim)}
+                          </Text>
+                        ),
+                      )}
                   </Box>
                 )
               })}
 
-              {ondas.map((o, k) => {
-                const issues = o.issues.map(n => porN.get(n)).filter((i): i is Issue => !!i)
-                const situacao = situacaoDaOnda(issues, ags, prd, c.em)
-                const tempoDaOnda = duracaoDaOnda(issues, ags, prd, c.em)
+              {desenhadas.map(({ o, issues, situacao, tempo }) => {
                 const passagem =
                   situacao === 'feita' || o.sessao ? '' : o.passagem === 'nao' ? ' · passagem: ainda não' : o.passagem === 'escrita' ? ' · passagem escrita' : ''
-                return (
-                  <Box key={`o${o.numero}`} flexDirection="column">
-                    {k > 0 && <Text color={COR_ONDA[situacao]}>{'      ▼'}</Text>}
-                    <Box flexDirection="column" borderStyle="round" borderColor={COR_ONDA[situacao]} paddingX={1}>
-                      <Text bold color={COR_ONDA[situacao]} wrap="truncate-end">
-                        Onda {o.numero}{' '}
-                        {o.sessao ? <Text color="suggestion">· {o.sessao.nome} </Text> : null}
-                        <Text dimColor>
-                          · {NOME_ONDA[situacao]}
-                          {tempoDaOnda !== null ? ` · ${minutos(tempoDaOnda)}` : ''}
-                          {passagem}
+                const cabecalho = (
+                  <Text key="cab" bold color={COR_ONDA[situacao]} wrap="truncate-end">
+                    Onda {o.numero}{' '}
+                    {o.sessao ? <Text color="suggestion">· {o.sessao.nome} </Text> : null}
+                    <Text dimColor>
+                      · {NOME_ONDA[situacao]}
+                      {tempo !== null ? ` · ${minutos(tempo)}` : ''}
+                      {passagem}
+                    </Text>
+                  </Text>
+                )
+                // só a Onda que roda ganha a caixa; as outras são um título e as Fatias que faltam
+                if (situacao !== 'andando') {
+                  const espera = esperaDeFora(issues, o.issues, porN)
+                  return (
+                    <Box key={`o${o.numero}`} flexDirection="column">
+                      {cabecalho}
+                      {issues.filter(i => !noAr(i)).map(i => linhaFatia(i, false, '  '))}
+                      {espera && (
+                        <Text key="espera" color="subtle" wrap="truncate-end">
+                          {'  '}
+                          {espera}
                         </Text>
-                      </Text>
-                      {situacao === 'andando'
-                        ? issues.map(i => {
-                            const dela = ags.filter(a => alvo(a, prd) === i.n)
-                            return (
-                              <Box key={`i${i.n}`} flexDirection="column">
-                                <Text wrap="truncate-end">
-                                  <Text color={corDaIssue(i)}>{MARCA[i.fase]} </Text>
-                                  {linkIssue(i.n)}
-                                  {i.pr ? (
-                                    <Text>
-                                      {' '}
-                                      <Link href={`https://github.com/${repo}/pull/${i.pr}`} label={`PR #${i.pr}`} />
-                                    </Text>
-                                  ) : null}
-                                  <Text dimColor> {curto(i.titulo.replace(/^Contas médicas: /, ''), largura)}</Text>
-                                </Text>
-                                {i.fase === 'bloqueada' || i.fase === 'fila' ? (
-                                  <Text dimColor wrap="truncate-end">
-                                    {'    '}
-                                    {detalhe(i)}
-                                  </Text>
-                                ) : (
-                                  passos(i, dela, sessoes.find(s => dela.some(a => a.sessao === s.nome))?.nome)
-                                )}
-                                {dela.map(a => linhaAgente(a))}
-                              </Box>
-                            )
-                          })
-                        : resumoDaOnda(issues, o.issues, porN).map((r, j) => (
-                            <Text key={`r${j}`} color={r.cor} wrap="wrap">
-                              {r.texto}
-                            </Text>
-                          ))}
+                      )}
                     </Box>
+                  )
+                }
+                return (
+                  <Box key={`o${o.numero}`} flexDirection="column" borderStyle="round" borderColor={COR_ONDA[situacao]} paddingX={1}>
+                    {cabecalho}
+                    {issues.map(i => {
+                      const dela = ags.filter(a => alvo(a, prd) === i.n)
+                      return (
+                        <Box key={`i${i.n}`} flexDirection="column">
+                          <Text wrap="truncate-end">
+                            <Text color={corDaIssue(i)}>{MARCA[i.fase]} </Text>
+                            {linkIssue(i.n)}
+                            <Text dimColor> {curto(tituloDa(i), largura)}</Text>
+                          </Text>
+                          {i.fase === 'bloqueada' || i.fase === 'fila' || i.fase === 'humana' ? (
+                            <Text dimColor wrap="truncate-end">
+                              {'    '}
+                              {detalhe(i)}
+                            </Text>
+                          ) : (
+                            passos(i, dela, sessoes.find(s => dela.some(a => a.sessao === s.nome))?.nome)
+                          )}
+                          {comDetalhe && dela.map(a => linhaAgente(a))}
+                        </Box>
+                      )
+                    })}
                   </Box>
                 )
               })}
 
-              {soltas.map(i => (
-                <Text key={`l${i.n}`} wrap="truncate-end">
-                  <Text color={corDaIssue(i)}>{MARCA[i.fase]} </Text>
-                  {linkIssue(i.n)} <Text color={corDaIssue(i)}>{detalhe(i)}</Text>
-                </Text>
-              ))}
+              {soltas.map(i => linhaFatia(i, true, ''))}
               {entregues.length > 0 && (
                 <Text color="success" wrap="truncate-end">
-                  ✓ no ar: {entregues.map(i => `#${i.n}`).join(' ')}
+                  ✓ {entregues.length} no ar:
+                  {entregues.map(i => (
+                    <Text key={`n${i.n}`}> {linkIssue(i.n)}</Text>
+                  ))}
                 </Text>
               )}
-              {semAlvo.length > 0 && (
+              {comDetalhe && semAlvo.length > 0 && (
                 <Box flexDirection="column" marginTop={1}>
                   <Text dimColor>outros agentes</Text>
                   {semAlvo.map(a => linhaAgente(a))}
