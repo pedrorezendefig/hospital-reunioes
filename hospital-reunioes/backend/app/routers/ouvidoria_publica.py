@@ -4,10 +4,10 @@ Sem login. O manifestante registra a Manifestação e recebe o Protocolo na tela
 o caso entra em classificação, sem área definida, para o ouvidor validar
 (ADR 0034, decisões 3 e 9).
 
-O cartaz impresso aponta para `<app>/ouvidoria/qr` (que o Next reescreve para
-`GET /api/ouvidoria/qr`, aqui), e é o servidor que decide o destino: hoje ele
-abre este formulário; quando a Ana entrar no WhatsApp oficial, a mesma URL passa
-a oferecer a conversa, sem reimprimir cartaz nenhum.
+O cartaz impresso aponta para `<app>/a/{código}` desde a ADR 0086, uma página
+do app que decide o que a pessoa vê: hoje este formulário, com o ponto. O
+cartaz de antes aponta para `<app>/ouvidoria/qr?p=` (que o Next reescreve para
+`GET /api/ouvidoria/qr`, aqui), e este router o redireciona ao endereço curto.
 
 Endpoint público, sem credencial: rate limit por IP, honeypot, lista fechada de
 setores e nada de campo que decida classificação, estado ou sigilo. O caso nasce
@@ -16,7 +16,6 @@ sigiloso (fail-closed), e quem abaixa é o ouvidor ao classificar.
 
 import datetime as dt
 import logging
-from urllib.parse import urlencode
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, status
 from fastapi.responses import RedirectResponse
@@ -243,32 +242,30 @@ async def abrir_pelo_qr(
     request: Request,
     # Sem teto de tamanho aqui de propósito: um `?p=` comprido faria o FastAPI
     # responder 422, e a decisão 6 diz que este caminho NUNCA devolve página de
-    # erro. Quem filtra é `por_codigo`, pelo alfabeto e pelo tamanho exatos,
-    # antes de tocar o banco.
+    # erro. Quem filtra é `normalizar_codigo`, pelo alfabeto e pelo tamanho
+    # exatos.
     p: str | None = None,
-    supabase=Depends(get_supabase_client),
 ):
-    """Destino do QR do cartaz: manda ao formulário, com o código do Ponto de
-    escuta quando ele resolve um cartaz ativo.
+    """O QR dos cartazes de antes da ADR 0086: redireciona ao endereço curto
+    `/a/{código}` (decisão 5), que é o que o cartaz novo imprime.
 
     Só `?p=` desde o ADR 0036 (decisão 4). O formato antigo
     (`?setor=X&ponto=Y`) foi aposentado: manter as duas portas deixaria aberta a
-    brecha do texto arbitrário que o código curto veio fechar, e não há cartaz
-    impresso no formato velho para quebrar.
+    brecha do texto arbitrário que o código curto veio fechar.
 
-    Código ausente, desconhecido ou de cartaz aposentado cai no formulário
-    normal, sem origem, e NUNCA numa página de erro (decisão 6): ninguém parado
-    na frente de um cartaz pode ficar sem canal por causa de faxina no cadastro.
+    O redirecionamento não consulta o cadastro: quem decide se o ponto entra
+    com origem é o endereço curto, do mesmo jeito para o cartaz velho e o novo.
+    O que não tem forma de código cai no formulário normal, sem origem, e NUNCA
+    numa página de erro (decisão 6 da ADR 0036).
 
     O redirect é temporário de propósito: o navegador não guarda o destino, e o
-    dia em que ele mudar (a conversa da Ana no WhatsApp oficial) o cartaz que já
-    está na parede muda junto."""
-    destino = f"{settings.frontend_url.rstrip('/')}{CAMINHO_FORMULARIO}"
-    # O destino sai da configuração do servidor; o parâmetro só escolhe o
-    # pré-preenchimento. Não há caminho por onde o QR aponte para fora do app.
-    cartaz = ouvidoria_pontos.por_codigo(supabase, p)
-    if cartaz:
-        destino = f"{destino}?{urlencode({'p': cartaz['codigo']})}"
+    dia em que ele mudar o cartaz que já está na parede muda junto."""
+    base = settings.frontend_url.rstrip("/")
+    # O destino sai da configuração do servidor, e o parâmetro só entra depois
+    # de passar pela régua do código: não há caminho por onde o QR aponte para
+    # fora do app.
+    codigo = ouvidoria_pontos.normalizar_codigo(p)
+    destino = f"{base}{ouvidoria_pontos.caminho_curto(codigo)}" if codigo else f"{base}{CAMINHO_FORMULARIO}"
     return RedirectResponse(destino, status_code=status.HTTP_302_FOUND)
 
 
@@ -291,7 +288,9 @@ async def rotulo_do_cartaz(
     cartaz = ouvidoria_pontos.por_codigo(supabase, codigo)
     if not cartaz:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Cartaz não encontrado")
-    return {"setor": cartaz["setor"], "ponto": cartaz["ponto"]}
+    # Só o nome que o paciente vê. O setor é nome interno da casa e não sai por
+    # esta porta (ADR 0086, decisão 10).
+    return {"nome_publico": ouvidoria_pontos.nome_exibido(cartaz)}
 
 
 @router.post("/publico/manifestacoes", status_code=status.HTTP_201_CREATED)

@@ -73,24 +73,29 @@ TITULOS_DO_CARTAZ = {
 _CODIGO_DUPLICADO = "23505"
 
 
-# O caminho que o cartaz carrega. Sem o prefixo `/api` de propósito: o
-# `next.config.ts` tem um rewrite dedicado a ele, e o comentário de lá explica
-# por quê ("é a única coisa impressa e colada na parede, então ela mora no
-# domínio do app"). Passar pelo proxy genérico da API funcionaria hoje e
-# amarraria todo cartaz impresso à forma daquele proxy.
-CAMINHO_DO_QR = "/ouvidoria/qr"
+# O caminho que o cartaz carrega desde a ADR 0086 (decisão 5): curto, no
+# domínio do app e sem o prefixo `/api`. É uma página do app, e é ela que
+# decide o que a pessoa vê (hoje o formulário; com a tela de nota, a nota): o
+# cartaz que está na parede continua valendo quando o destino muda. O caminho
+# antigo, `/ouvidoria/qr?p=`, redireciona para cá.
+CAMINHO_CURTO = "/a"
+
+
+def caminho_curto(codigo: str) -> str:
+    return f"{CAMINHO_CURTO}/{codigo}"
 
 
 def url_do_cartaz(codigo: str) -> str:
     """O que o QR carrega. Curta de propósito: QR com menos dados tem módulos
-    maiores e a câmera lê melhor de longe (ADR 0036, decisão 2).
+    maiores e a câmera lê melhor de longe (ADR 0036, decisão 2; ADR 0086,
+    decisão 5).
 
-    O caminho é o que RESOLVE o código, e não o do formulário: é o servidor que
-    decide para onde mandar. É isso que deixa o destino mudar (a Ana no
+    O caminho é o do cartaz, e não o do formulário: é o app que decide o que a
+    pessoa vê. É isso que deixa o destino mudar (a tela de nota, a Ana no
     WhatsApp oficial) sem reimprimir nenhum cartaz."""
     from app.config import settings
 
-    return f"{settings.frontend_url.rstrip('/')}{CAMINHO_DO_QR}?p={codigo}"
+    return f"{settings.frontend_url.rstrip('/')}{caminho_curto(codigo)}"
 
 
 def endereco_impresso(codigo: str) -> str:
@@ -105,7 +110,7 @@ def endereco_impresso(codigo: str) -> str:
     from app.config import settings
 
     host = settings.frontend_url.replace("https://", "").replace("http://", "").rstrip("/")
-    return f"{host}{CAMINHO_DO_QR}?p={codigo}"
+    return f"{host}{caminho_curto(codigo)}"
 
 
 def png_do_qr(codigo: str, escala: int = 8) -> bytes:
@@ -146,16 +151,33 @@ def listar(supabase) -> list[dict]:
     return [{campo: linha.get(campo) for campo in CAMPOS_PONTO_TUPLA} for linha in (result.data or [])]
 
 
+def normalizar_codigo(codigo: str | None) -> str | None:
+    """O código como o cartaz o imprime (maiúsculo, sem espaço), ou None quando
+    o texto não tem forma de código: tamanho e alfabeto exatos.
+
+    É a régua que deixa um parâmetro público virar caminho do app ou consulta
+    ao banco. O que não passa é ruído, não código."""
+    limpo = (codigo or "").strip().upper()
+    if len(limpo) != TAMANHO_DO_CODIGO or set(limpo) - set(ALFABETO_DO_CODIGO):
+        return None
+    return limpo
+
+
+def nome_exibido(ponto: dict) -> str:
+    """O nome do local que o paciente vê: o nome público, ou o rótulo do ponto
+    quando ele está vazio. Nunca o nome interno do setor (ADR 0086, decisão
+    10)."""
+    return ponto.get("nome_publico") or ponto["ponto"]
+
+
 def por_codigo(supabase, codigo: str | None) -> dict | None:
     """O Ponto de escuta ATIVO de um código, ou None.
 
     None cobre os três casos que a decisão 6 trata igual: código ausente,
     código que ninguém cadastrou e cartaz aposentado. Nos três, quem leu o QR
     cai no formulário normal, sem origem e nunca numa página de erro."""
-    if not codigo:
-        return None
-    limpo = (codigo or "").strip().upper()
-    if not limpo or len(limpo) != TAMANHO_DO_CODIGO or set(limpo) - set(ALFABETO_DO_CODIGO):
+    limpo = normalizar_codigo(codigo)
+    if not limpo:
         # Fora do alfabeto nem chega ao banco: é ruído, não consulta.
         return None
     try:

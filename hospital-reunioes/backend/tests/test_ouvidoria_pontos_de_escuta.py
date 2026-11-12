@@ -50,34 +50,27 @@ def _reset_rate_limiter():
 class TestOQueOQrCarrega:
     """A URL impressa é imutável: ela vai para a parede e não volta."""
 
-    def test_o_qr_aponta_para_o_caminho_reservado_ao_cartaz(self):
-        """ADR 0036, decisão 2: `https://<app>/ouvidoria/qr?p=<codigo>`. O
-        `next.config.ts` tem um rewrite dedicado a este caminho, com o comentário
-        dizendo que ele mora no domínio do app e SEM o prefixo `/api`.
-
-        Passar pelo proxy genérico `/api/:path*` funciona hoje e é errado por
-        dois motivos: são bytes a mais num símbolo que a decisão 2 existe para
-        encolher, e amarra todo cartaz impresso à forma do proxy da API."""
+    def test_o_qr_carrega_o_endereco_curto(self, monkeypatch):
+        """ADR 0086, decisão 5: o QR leva `https://<app>/a/<codigo>`. QR com
+        menos dados tem módulos maiores e a câmera lê melhor de longe, e o
+        caminho é do domínio do app, sem o prefixo `/api`."""
+        from app.config import settings
         from app.services.ouvidoria_pontos import url_do_cartaz
 
-        url = url_do_cartaz("AB2CD3")
+        monkeypatch.setattr(settings, "frontend_url", "https://app.hospitalsaomatheus.cloud/")
 
-        assert url.endswith("/ouvidoria/qr?p=AB2CD3")
-        assert "/api/" not in url
+        assert url_do_cartaz("AB2CD3") == "https://app.hospitalsaomatheus.cloud/a/AB2CD3"
 
-    def test_o_endereco_impresso_resolve_sozinho(self):
-        """O endereço que vai no papel para quem não conseguiu ler o QR precisa
-        levar o código consigo: `/manifestacao` não tem campo de código, então
-        mandar a pessoa "informar o código" lá a deixaria numa tela sem onde
-        digitar, e o caso entraria como se tivesse vindo do site."""
+    def test_o_endereco_impresso_e_o_mesmo_endereco_curto_sem_o_esquema(self, monkeypatch):
+        """O endereço em letra, para quem não conseguiu ler o QR, é o que o
+        modelo da Diretoria imprime: "app.hospitalsaomatheus.cloud/a/{código}".
+        Sem esquema: quem digita não escreve "https://"."""
+        from app.config import settings
         from app.services.ouvidoria_pontos import endereco_impresso
 
-        endereco = endereco_impresso("AB2CD3")
+        monkeypatch.setattr(settings, "frontend_url", "https://app.hospitalsaomatheus.cloud")
 
-        assert "AB2CD3" in endereco
-        assert "ouvidoria/qr?p=" in endereco
-        # Sem esquema: quem digita não escreve "https://".
-        assert not endereco.startswith("http")
+        assert endereco_impresso("AB2CD3") == "app.hospitalsaomatheus.cloud/a/AB2CD3"
 
 
 class TestCodigoDoCartaz:
@@ -671,8 +664,9 @@ class TestOQueVaiNoCartaz:
 
 
 class TestOQrResolveOCodigo:
-    """CA: ler o QR de um ponto ativo abre o formulário e a página diz de qual
-    setor é o cartaz; o formato velho `?setor=&ponto=` não vale mais."""
+    """CA: o QR antigo leva ao endereço curto `/a/{código}`, a página pergunta
+    ao servidor o nome público do ponto, e o formato velho `?setor=&ponto=` não
+    vale mais."""
 
     @staticmethod
     def _client_publico(supabase: _SupabaseFake):
@@ -686,45 +680,47 @@ class TestOQrResolveOCodigo:
         app.dependency_overrides[get_supabase_client] = lambda: supabase
         return TestClient(app, follow_redirects=False)
 
-    def test_codigo_de_ponto_ativo_leva_o_codigo_ao_formulario(self):
+    def test_o_qr_antigo_de_ponto_ativo_redireciona_ao_endereco_curto(self):
+        """CA: `/ouvidoria/qr?p=` redireciona para `/a/{código}` (ADR 0086,
+        decisão 5). Os cartazes de teste já impressos continuam valendo."""
         client = self._client_publico(_SupabaseFake(pontos=[_ponto()]))
 
         r = client.get("/api/ouvidoria/qr", params={"p": "AB2CD3"})
 
         assert r.status_code == 302
-        assert r.headers["location"].endswith("/manifestacao?p=AB2CD3")
+        assert r.headers["location"].endswith("/a/AB2CD3")
 
-    def test_codigo_de_ponto_desativado_abre_o_formulario_sem_origem(self):
-        """CA e decisão 6: nunca uma página de erro. Ninguém parado na frente
-        de um cartaz pode ficar sem canal por causa de faxina no cadastro."""
+    def test_o_codigo_vai_em_maiuscula_ao_endereco_curto(self):
+        """O cartaz é lido em maiúscula, mas quem digita o endereço à mão pode
+        escrever em minúscula."""
+        client = self._client_publico(_SupabaseFake(pontos=[_ponto()]))
+
+        r = client.get("/api/ouvidoria/qr", params={"p": " ab2cd3 "})
+
+        assert r.status_code == 302
+        assert r.headers["location"].endswith("/a/AB2CD3")
+
+    def test_qr_antigo_de_ponto_desativado_tambem_vai_ao_endereco_curto(self):
+        """Decisão 6 da ADR 0036: nunca uma página de erro. Quem decide que o
+        ponto aposentado entra sem origem é o endereço curto, como para o
+        cartaz novo, e não o redirecionamento."""
         client = self._client_publico(_SupabaseFake(pontos=[_ponto(ativo=False)]))
 
         r = client.get("/api/ouvidoria/qr", params={"p": "AB2CD3"})
 
         assert r.status_code == 302
-        assert r.headers["location"].endswith("/manifestacao")
+        assert r.headers["location"].endswith("/a/AB2CD3")
 
-    def test_codigo_inventado_abre_o_formulario_sem_origem(self):
-        client = self._client_publico(_SupabaseFake())
-
-        r = client.get("/api/ouvidoria/qr", params={"p": "ZZ9YY8"})
-
-        assert r.status_code == 302
-        assert r.headers["location"].endswith("/manifestacao")
-
-    def test_lixo_no_parametro_tambem_cai_no_formulario_limpo(self):
-        """Decisão 6: NUNCA uma página de erro. O teto de tamanho no parâmetro
-        fazia o FastAPI responder 422 para um `?p=` comprido, e quem estivesse
-        parado na frente do cartaz veria erro em vez do formulário. A régua do
-        alfabeto já recusa antes de tocar o banco, então o teto não comprava
-        nada e cobrava isso."""
+    def test_lixo_no_parametro_cai_no_formulario_limpo(self):
+        """Decisão 6: NUNCA uma página de erro. O que não tem forma de código
+        não vira caminho do app: vai ao formulário, sem origem."""
         client = self._client_publico(_SupabaseFake(pontos=[_ponto()]))
 
-        for lixo in ["https://phishing.exemplo/caminho/muito/longo", "a" * 200, "AB2CD3ZZZZ", "%%%"]:
+        for lixo in ["https://phishing.exemplo/caminho/muito/longo", "a" * 200, "AB2CD3ZZZZ", "%%%", "../x"]:
             r = client.get("/api/ouvidoria/qr", params={"p": lixo})
 
             assert r.status_code == 302, f"{lixo} devolveu {r.status_code}"
-            assert r.headers["location"].endswith("/manifestacao")
+            assert r.headers["location"].endswith("/manifestacao"), lixo
 
     def test_o_formato_velho_nao_vale_mais(self):
         """CA: `?setor=Recepção&ponto=Poltrona 12` não grava origem nenhuma.
@@ -738,15 +734,25 @@ class TestOQrResolveOCodigo:
         assert r.headers["location"].endswith("/manifestacao")
         assert "setor" not in r.headers["location"]
 
-    def test_a_pagina_pergunta_o_rotulo_do_cartaz_ao_servidor(self):
-        """CA: nenhum texto que a página exibe vem da query string. Ela manda o
-        código e o servidor devolve o rótulo."""
-        client = self._client_publico(_SupabaseFake(pontos=[_ponto()]))
+    def test_a_rota_publica_devolve_o_nome_publico_e_nunca_o_setor(self):
+        """CA: a pessoa na frente do cartaz vê o nome público do ponto, nunca o
+        nome interno do setor (ADR 0086, decisão 10)."""
+        client = self._client_publico(_SupabaseFake(pontos=[_ponto(nome_publico="Emergência adulta")]))
 
         r = client.get("/api/ouvidoria/publico/pontos/AB2CD3")
 
         assert r.status_code == 200
-        assert r.json() == {"setor": "Recepção", "ponto": "Poltrona 12"}
+        assert r.json() == {"nome_publico": "Emergência adulta"}
+        assert "Recepção" not in r.text
+
+    def test_sem_nome_publico_a_rota_devolve_o_rotulo_do_ponto(self):
+        client = self._client_publico(_SupabaseFake(pontos=[_ponto(nome_publico=None)]))
+
+        r = client.get("/api/ouvidoria/publico/pontos/AB2CD3")
+
+        assert r.status_code == 200
+        assert r.json() == {"nome_publico": "Poltrona 12"}
+        assert "Recepção" not in r.text
 
     def test_ponto_desativado_nao_devolve_rotulo(self):
         client = self._client_publico(_SupabaseFake(pontos=[_ponto(ativo=False)]))
