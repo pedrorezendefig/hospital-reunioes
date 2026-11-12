@@ -38,8 +38,9 @@ cabe em 10 linhas mais uma por PR, fora as da migration):
   1. pre-condicoes (gh, coolify, PRs abertos e verdes, origin/main buscado,
      nenhuma migration nova com numero que a main ja usa, e o corpo do PR
      declarando o sha256 de cada migration nova igual ao do arquivo).
-     Migration nova no lote (issue #969): imprime o caminho clicavel
-     `<arquivo>:1` de cada uma (copia do head do PR, fora do repositorio) e
+     Migration nova no lote (issue #969): imprime o comando
+     `pbcopy < <arquivo>` de cada uma (copia do head do PR, fora do repositorio;
+     sem `:1`, que viraria link do VS Code) e
      consulta o /api/health do backend ate ele devolver o numero da maior, com
      teto de 24 h: toda migration termina gravando o proprio numero em
      `migracoes_aplicadas`, e o health devolve o maior. A espera vem ANTES do
@@ -178,6 +179,7 @@ import json
 import os
 import platform
 import re
+import shlex
 import shutil
 import subprocess
 import sys
@@ -459,7 +461,7 @@ def esperar_migracao(url: str, numero: int) -> tuple[str, int | None]:
 
 def esperar_migrations_do_lote(raiz: Path, backend: dict, novas: list[tuple[str, str]], numero: int,
                                sessao: str, prs_txt: str) -> bool:
-    """Pede ao humano cada migration nova pelo caminho clicavel e espera a maior
+    """Pede ao humano cada migration nova pelo comando de copiar e espera a maior
     aparecer no /api/health (issue #969). False se venceu o teto."""
     pasta = Path(tempfile.gettempdir()) / "fechar_onda" / sessao
     pasta.mkdir(parents=True, exist_ok=True)
@@ -470,8 +472,10 @@ def esperar_migrations_do_lote(raiz: Path, backend: dict, novas: list[tuple[str,
         arquivo = pasta / Path(caminho).name
         arquivo.write_bytes(conteudo)
         linhas = conteudo.count(b"\n")
-        print(f"migration: {APLICAR_MIGRACAO} {arquivo}:1 ({linhas} linhas, sha256 "
-              f"{hashlib.sha256(conteudo).hexdigest()[:12]}); a subida espera o {numero} no /api/health",
+        # sem `:1` no caminho: o terminal transformaria em link que abre o VS Code
+        print(f"migration: {APLICAR_MIGRACAO} {arquivo.name} ({linhas} linhas, sha256 "
+              f"{hashlib.sha256(conteudo).hexdigest()[:12]}); copie com: pbcopy < {shlex.quote(str(arquivo))}; "
+              f"a subida espera o {numero} no /api/health",
               flush=True)
     t = time.time()
     status, ultimo = esperar_migracao(url_do_health(backend), numero)

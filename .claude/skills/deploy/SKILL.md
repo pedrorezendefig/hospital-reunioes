@@ -409,7 +409,7 @@ Para cada migration nova, classificar **SAFE** | **DESTRUCTIVE** via a regex de 
 
 Apresentar ao humano e **não prosseguir** até ele confirmar que aplicou:
 
-- **Sempre o caminho clicável primeiro.** Antes de qualquer bloco de SQL, extrair cada migration nova para o scratchpad da sessão e apresentar o **caminho absoluto terminado em `:1`**, que o terminal do Claude Code transforma em link e abre numa aba do VS Code:
+- **Sempre o comando de copiar primeiro.** Antes de qualquer bloco de SQL, extrair cada migration nova para o scratchpad da sessão e entregar o comando que copia o arquivo inteiro, byte a byte, para o clipboard:
 
   ```bash
   git show origin/<branch>:<dir>/<arquivo>.sql > "$SCRATCHPAD/<arquivo>_para_colar.sql"
@@ -417,13 +417,13 @@ Apresentar ao humano e **não prosseguir** até ele confirmar que aplicou:
   ```
 
   Apresentar assim, nesta ordem:
-  1. `<caminho absoluto>/<arquivo>_para_colar.sql:1` (link clicável, abre em aba do VS Code)
-  2. O mesmo para a query de verificação, `<arquivo>_verificacao.sql:1`
-  3. Só depois, alternativas: `! pbcopy < <caminho>` (copia direto), o link `raw.githubusercontent.com` e o corpo do PR
+  1. `! pbcopy < '<caminho absoluto>/<arquivo>_para_colar.sql'` (o humano cola no prompt; o `!` roda na sessão e o SQL vai inteiro para o clipboard)
+  2. O mesmo para a query de verificação, `<arquivo>_verificacao.sql`
+  3. Quando a migration está no painel das ondas (`hr-ondas`), o botão `[ copiar SQL ]` faz o mesmo e confere o clipboard contra o arquivo
 
-  Nunca dependa só do bloco ` ```sql ` no chat nem de `SendUserFile`: o humano trabalha no VS Code e copiar do chat falha com script longo. **O arquivo pode não existir na árvore principal** (ela costuma estar atrás de `origin/main` ou em branch antiga), por isso a extração é sempre por `git show` de `origin/<branch>`, nunca por caminho do repo local.
+  **Nunca** mostre o caminho terminado em `:1`, link `vscode://` nem mande abrir o `.sql` num editor: o terminal transforma o `:1` em link que abre o VS Code, e o VS Code pesa na memória do Mac. Nunca dependa só do bloco ` ```sql ` no chat nem de `SendUserFile`: copiar do chat quebra script longo. **O arquivo pode não existir na árvore principal** (ela costuma estar atrás de `origin/main` ou em branch antiga), por isso a extração é sempre por `git show` de `origin/<branch>`, nunca por caminho do repo local.
 - O conteúdo **completo** de cada migration nova, num bloco ` ```sql ` copiável (um bloco por arquivo, em ordem cronológica), como reforço, não como caminho principal. Migrations **DESTRUCTIVE** marcadas com ⚠ e os statements destrutivos apontados por linha.
-- Uma **query de verificação** pronta, também como arquivo clicável, que confirme cada objeto criado (colunas em `information_schema.columns`, índices em `pg_indexes`, constraints em `pg_constraint`), dizendo **quantas linhas** o resultado correto tem.
+- Uma **query de verificação** pronta, também como arquivo com o comando de copiar, que confirme cada objeto criado (colunas em `information_schema.columns`, índices em `pg_indexes`, constraints em `pg_constraint`), dizendo **quantas linhas** o resultado correto tem.
 - O passo a passo:
   1. Abrir o **Supabase Studio de produção** (`project.integrations[].supabase_studio_url`, senão a URL `studio.<domínio>`, por exemplo `https://studio.hospitalsaomatheus.cloud`). Se o SQL Editor crashar com erro de `includes`, abrir em janela anônima.
   2. **SQL Editor → New query**.
