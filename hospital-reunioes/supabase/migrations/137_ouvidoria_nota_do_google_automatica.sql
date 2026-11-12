@@ -52,3 +52,5 @@ COMMENT ON TABLE ouvidoria_config IS
 -- RLS default-deny (padrao da casa). Backend usa service_role; a anon_key do
 -- bundle do frontend fica de fora.
 ALTER TABLE ouvidoria_config ENABLE ROW LEVEL SECURITY;
+
+INSERT INTO migracoes_aplicadas (numero) VALUES (137) ON CONFLICT (numero) DO NOTHING;
