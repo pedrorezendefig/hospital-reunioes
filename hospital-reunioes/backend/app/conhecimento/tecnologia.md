@@ -38,6 +38,8 @@ A conversa fica guardada. Ao lado dela fica a lista de tudo o que você já pedi
 
 Uma Demanda é um pedido sobre um dos sistemas: um bug ou uma melhoria. Ela nasce na primeira resposta da conversa com o Assistente e guarda o que você disse, os prints e os documentos que você mandou e, depois do clique em Criar o card, a ligação com o trabalho de desenvolvimento.
 
+Cada Demanda tem um número, que aparece como "Demanda 42", sem cerquilha. Ele nasce junto com a conversa, antes do Criar o card, e não muda. Aparece no topo do documento do pedido aberto e, menor, em cada pedido na lista ao lado da conversa. É o jeito curto de combinar com a Vitta de qual pedido se está falando: basta dizer "a Demanda 42". Os pedidos que já existiam ganharam número pela ordem em que foram abertos, e o número de um pedido apagado não passa para outro.
+
 Quase sempre quem abre um pedido é você. A exceção são os cards que a Vitta abre pelo desenvolvimento, sem passar pela conversa: uma melhoria ou um bug do aplicativo que ela mesma decidiu fazer. Eles também viram Demanda e aparecem na sua lista, marcados como **Vitta**, com a Etapa, o documento e a Conversa da Demanda, sem conversa com a IA. Os ajustes internos da Vitta, que não mudam nada no aplicativo que você usa (as ferramentas e a documentação dela), não aparecem. Dentro de cada pedido, a Vitta responde e pergunta pela Conversa da Demanda. Quando a Vitta precisa de uma decisão, de um dado ou de um acesso do hospital que não nasce de um pedido seu, ela pede pelo WhatsApp.
 
 Não chame de pendência, tarefa nem chamado. Pendência é outra coisa no aplicativo: é o compromisso operacional que sai de uma reunião do hospital, e mora em outro lugar.

@@ -12,6 +12,8 @@ from pathlib import Path
 
 import pytest
 
+from app.services.conhecimento import CONHECIMENTO_DIR
+
 MIGRATION = Path(__file__).resolve().parents[2] / "supabase" / "migrations" / "134_tecnologia_numero_da_demanda.sql"
 
 
@@ -53,3 +55,14 @@ class TestMigracao:
         recibo = _posicao(sql, r"INSERT INTO migracoes_aplicadas \(numero\) VALUES \(134\) ON CONFLICT")
 
         assert _posicao(sql, r"BEGIN;") < recibo < _posicao(sql, r"COMMIT;")
+
+
+class TestKit:
+    def test_o_kit_diz_que_cada_demanda_tem_numero_e_onde_ele_aparece(self):
+        """O Assistente fala com o diretor pela lingua do Kit: sem a regra
+        escrita, ele nao saberia o que e "a Demanda 42"."""
+        texto = (CONHECIMENTO_DIR / "tecnologia.md").read_text(encoding="utf-8")
+
+        secao = texto.split("## O que é uma Demanda", 1)[1].split("\n## ", 1)[0]
+        for trecho in ("Demanda 42", "no topo do documento", "na lista", "antes do Criar o card"):
+            assert trecho in secao, trecho
