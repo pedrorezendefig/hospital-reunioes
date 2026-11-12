@@ -56,10 +56,15 @@ def _integracao_configurada(monkeypatch):
 
 def _demandas_de_dois_autores() -> list[dict]:
     return [
-        _demanda("d-diretor", titulo="O relatório some", autor_id=DIRETOR["id"], criado_em="2026-11-01T10:00:00Z"),
-        _demanda("d-pedro", titulo="Pedido da Vitta", autor_id=PEDRO["id"], criado_em="2026-11-02T10:00:00Z"),
+        _demanda(
+            "d-diretor", titulo="O relatório some", autor_id=DIRETOR["id"], criado_em="2026-11-01T10:00:00Z", numero=41
+        ),
+        _demanda(
+            "d-pedro", titulo="Pedido da Vitta", autor_id=PEDRO["id"], criado_em="2026-11-02T10:00:00Z", numero=42
+        ),
         _demanda(
             "d-outro",
+            numero=7,
             titulo="O botão sumiu",
             autor_id=OUTRO_DIRETOR["id"],
             criado_em="2026-10-15T10:00:00Z",
@@ -160,6 +165,27 @@ class TestListaDoDesenvolvedor:
         assert "github.com" not in json.dumps(item)
         assert "912" not in json.dumps(item)
 
+    def test_o_diretor_ve_o_numero_da_demanda_na_lista_sem_o_numero_da_issue(self, monkeypatch):
+        """O Número da Demanda (issue #1585) é de todo mundo que vê a Demanda;
+        o da issue continua só do Desenvolvedor (ADR 0054, decisão 9)."""
+        client, _, _ = _cenario(
+            monkeypatch, logado=OUTRO_DIRETOR, participantes=_participantes(), demandas=_demandas_de_dois_autores()
+        )
+
+        [item] = client.get(TODAS).json()
+
+        assert item["numero"] == 7
+        assert item["issue_numero"] is None
+
+    def test_o_desenvolvedor_ve_o_numero_da_demanda_e_o_da_issue_lado_a_lado(self, monkeypatch):
+        client, _, _ = _cenario(
+            monkeypatch, logado=PEDRO, participantes=_participantes(), demandas=_demandas_de_dois_autores()
+        )
+
+        por_id = {d["id"]: (d["numero"], d["issue_numero"]) for d in client.get(TODAS).json()}
+
+        assert por_id == {"d-pedro": (42, None), "d-diretor": (41, None), "d-outro": (7, 912)}
+
 
 # ═══════════════════════════════════════════════════════════════════════════
 # 2. Quem sou na aba
@@ -218,6 +244,18 @@ class TestLeituraDaConversa:
         assert conversa["anexos"] == 1
         assert conversa["anexos_da_demanda"] == []
         assert "storage.local" not in resposta.text
+
+    @pytest.mark.parametrize("logado", [DIRETOR, PEDRO], ids=["autor", "desenvolvedor"])
+    def test_o_detalhe_da_demanda_traz_o_numero_da_demanda(self, monkeypatch, logado):
+        """O número vem do banco no insert (issue #1585); aqui o banco falso
+        não tem a sequence, e o teste o grava como o default gravaria."""
+        sb, demanda_id = _conversa_do_diretor_com_print(monkeypatch)
+        next(d for d in sb.tabelas["tecnologia_demandas"] if d["id"] == demanda_id)["numero"] = 42
+
+        resposta = _como(logado, sb, monkeypatch).get(f"{CHAT}/{demanda_id}")
+
+        assert resposta.status_code == 200, resposta.text
+        assert resposta.json()["numero"] == 42
 
 
 # ═══════════════════════════════════════════════════════════════════════════

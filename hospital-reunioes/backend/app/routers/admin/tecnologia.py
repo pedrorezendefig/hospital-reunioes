@@ -435,6 +435,7 @@ def _chat_para_a_tela(
     aviso_dos_anexos: str | None = None,
     anexos_da_demanda: list[dict] | None = None,
     responsavel: str | None = None,
+    numero: int | None = None,
 ) -> dict:
     """A conversa para a tela. `planejamento` diz que a conversa esta no
     planejamento da melhoria (issue #1383): o resumo dela tem outra forma, e
@@ -444,6 +445,7 @@ def _chat_para_a_tela(
     planejamento = chat_tecnologia.em_planejamento(mensagens)
     return {
         "demanda_id": str(demanda_id),
+        "numero": numero,
         "estado": linha.get("estado"),
         "mensagens": chat_tecnologia.para_a_tela(
             mensagens, _nomes(supabase, chat_tecnologia.quem_respondeu(mensagens))
@@ -1070,7 +1072,9 @@ async def ler_o_chat(
     anexos = tecnologia_anexos.para_quem_desenvolve(supabase, demanda_id) if e_desenvolvedor(ator) else None
     # O Responsavel de agora, derivado do GitHub (issue #1534): so leitura.
     responsavel = _nome_do_responsavel(demanda, _nomes(supabase, {responsavel_da_demanda(demanda)}))
-    return _chat_para_a_tela(supabase, demanda_id, linha, anexos_da_demanda=anexos, responsavel=responsavel)
+    return _chat_para_a_tela(
+        supabase, demanda_id, linha, anexos_da_demanda=anexos, responsavel=responsavel, numero=demanda.get("numero")
+    )
 
 
 # ─── A Conversa da Demanda (issue #1537, ADR 0083, decisao 8) ──────────────

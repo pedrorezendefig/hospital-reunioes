@@ -200,6 +200,28 @@ describe("O Documento do card", () => {
     expect(link.getAttribute("href")).toBe("https://github.com/pedrorezendefig/hospital-reunioes/issues/912");
   });
 
+  it("o diretor vê o Número da Demanda no topo, sem cerquilha (issue #1585)", () => {
+    montar({ ...VINCULADA, numero: 42 });
+
+    const topo = documento().firstElementChild;
+    expect(topo?.textContent).toBe("Demanda 42");
+    expect(documento().textContent).not.toContain("#");
+  });
+
+  it("o Desenvolvedor vê o Número da Demanda e o #<issue> lado a lado, e só a issue leva cerquilha (issue #1585)", () => {
+    montar({
+      ...VINCULADA,
+      numero: 42,
+      issue_numero: 912,
+      issue_url: "https://github.com/pedrorezendefig/hospital-reunioes/issues/912",
+    });
+
+    const topo = documento().firstElementChild as HTMLElement;
+    expect(within(topo).getByText("Demanda 42")).toBeTruthy();
+    expect(within(topo).getByRole("link", { name: "#912" })).toBeTruthy();
+    expect(documento().textContent).not.toContain("#42");
+  });
+
   it("com o link, a Demonstração vem num cartão próprio com o link para assistir (issue #1559)", () => {
     montar({ ...VINCULADA, demonstracao_url: "https://youtu.be/demo", demonstracao_em: "2026-11-08T13:00:00Z" });
 

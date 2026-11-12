@@ -104,6 +104,7 @@ import {
   iniciais,
   linkDaDemonstracao,
   motivoDaRecusa,
+  nomeDoNumero,
   Origem,
   ORIGEM_CLASSE,
   ORIGEM_ROTULO,
@@ -329,6 +330,7 @@ function CardDaConversa({
   onAmpliar: () => void;
 }) {
   const abertura = textoDaAbertura(demanda.criado_em);
+  const numero = nomeDoNumero(demanda);
   return (
     <div
       className={`group relative rounded-2xl border bg-white transition duration-150 ease-out motion-reduce:transition-none ${
@@ -347,7 +349,12 @@ function CardDaConversa({
           <span className="normal-case text-[15px] font-semibold leading-snug text-text-primary line-clamp-2">
             {demanda.titulo}
           </span>
-          {abertura && <span className="normal-case text-xs text-text-secondary">{abertura}</span>}
+          {(numero || abertura) && (
+            <span className="flex flex-wrap items-center gap-x-3 normal-case text-xs text-text-secondary">
+              {numero && <span className="font-medium">{numero}</span>}
+              {abertura && <span>{abertura}</span>}
+            </span>
+          )}
         </span>
         {(demanda.autor || demanda.responsavel) && (
           <span className="flex flex-wrap items-center gap-x-5 gap-y-2">
