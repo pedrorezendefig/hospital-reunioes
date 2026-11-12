@@ -701,7 +701,9 @@ PARTES_DO_DESENVOLVEDOR: dict[str, str] = {
 # com as seis, para quem le saber que ela nao veio, e nao que sumiu.
 PARTE_NAO_INFORMADA = "não informado"
 
-_CABECALHO_DO_DESENVOLVEDOR_NO_CORPO = re.compile(r"^#{1,6}[^\n]*?para o desenvolvedor[^\n]*$", re.IGNORECASE | re.MULTILINE)
+_CABECALHO_DO_DESENVOLVEDOR_NO_CORPO = re.compile(
+    r"^#{1,6}[^\n]*?para o desenvolvedor[^\n]*$", re.IGNORECASE | re.MULTILINE
+)
 
 
 def bloco_do_desenvolvedor(partes: dict[str, Any] | None) -> str | None:

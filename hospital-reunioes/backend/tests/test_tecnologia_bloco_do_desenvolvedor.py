@@ -29,6 +29,7 @@ from test_tecnologia_chat import (  # noqa: E402
 )
 from test_tecnologia_chat_le_o_codigo import CHAT, _modelo, _repositorio, _resumo_da_melhoria  # noqa: E402
 
+from app.services.conhecimento import CONHECIMENTO_DIR  # noqa: E402
 from app.services.tecnologia_vinculo import (  # noqa: E402
     CABECALHO_DO_BLOCO,
     CABECALHO_DO_DESENVOLVEDOR,
@@ -273,3 +274,17 @@ class TestPelaRota:
         for chave in PARTES:
             assert f'"{chave}"' in secao, chave
         assert re.search(r"`onde_mexe_no_codigo` e `cuidados`[^\n]*código que você leu", secao)
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 4. O Kit de conhecimento diz o comportamento novo
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+def test_o_kit_diz_que_o_card_da_melhoria_leva_uma_parte_para_quem_programa():
+    texto = (CONHECIMENTO_DIR / "tecnologia.md").read_text(encoding="utf-8")
+
+    planejamento = texto.split("## O Planejamento da Demanda", 1)[1].split("\n## ", 1)[0]
+    assert re.search(
+        r"Criar o card[^\n]*parte escrita para quem programa, abaixo da (sua parte|parte do diretor)", planejamento
+    )
