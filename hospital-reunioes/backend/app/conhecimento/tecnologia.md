@@ -115,7 +115,7 @@ A aba é só para acompanhar: nada se move por ali. Ninguém muda a Etapa nem o 
 
 Um pedido que não vale mais pode sair da lista pelo botão **Apagar**, no alto do pedido aberto. O aplicativo pede confirmação antes de apagar, e depois não dá para desfazer.
 
-Só dá para apagar enquanto ninguém começou a fazer o pedido. A conversa que ainda não virou card, a Registrada, quem apaga é quem escreveu. Depois do Criar o card, com o pedido Em análise ou Planejada, só o Desenvolvedor apaga: se quiser tirar um pedido seu nessa fase, peça na Conversa da Demanda. De Em desenvolvimento em diante, o aplicativo não deixa apagar. O botão só aparece para quem pode usar.
+Só dá para apagar enquanto ninguém começou a fazer o pedido, ou quando ele não vai mais ser feito. A conversa que ainda não virou card, a Registrada, quem apaga é quem escreveu ou o Desenvolvedor. Depois do Criar o card, com o pedido Em análise, Planejada ou Não será feita, só o Desenvolvedor apaga: se quiser tirar um pedido seu nessa fase, peça na Conversa da Demanda. De Em desenvolvimento em diante, até a entrega, o aplicativo não deixa apagar. O botão só aparece para quem pode usar.
 
 O pedido apagado some da lista junto com a conversa com a IA, a Conversa da Demanda e os anexos. No desenvolvimento da Vitta o card não some: ele fecha como não planejado, com um comentário dizendo que foi apagado no aplicativo, e o histórico das decisões fica guardado lá. Se o desenvolvimento não responder na hora, nada é apagado e a tela pede para tentar de novo.
 
@@ -174,7 +174,7 @@ No fim, o resumo traz o botão **Atualizar o card** no lugar do Criar o card. El
 - Um pedido de melhoria Em análise ou Planejada se revisa com o código de hoje, pelo autor ou pelo Desenvolvedor, com o custo mostrado antes e a confirmação, e o que já existe só sai do pedido com o sim de quem pediu; no fim, o Atualizar o card troca o pedido no mesmo card e o devolve a Em análise.
 - O vídeo de demonstração de uma entrega vem do desenvolvimento da Vitta, só por link seguro (https), e aparece no pedido com o selo Tem demonstração e a seção Demonstração.
 - Quando o pedido entra em produção ou o vídeo de demonstração fica pronto, chega um aviso no sino e por e-mail, uma vez só: para quem pediu, no pedido do diretor, e para a diretoria, no pedido da Vitta.
-- Um pedido se apaga só até Planejada, com confirmação, pela mão de quem escreveu a conversa que não virou card ou do Desenvolvedor no card criado, e no desenvolvimento o card fecha como não planejado e nunca é apagado.
+- Um pedido se apaga até Planejada, ou em Não será feita, com confirmação, pela mão de quem escreveu ou do Desenvolvedor a conversa que não virou card e só do Desenvolvedor o card criado, e no desenvolvimento o card fecha como não planejado e nunca é apagado.
 - O texto que sai da Demanda para o material público do desenvolvimento passa por uma peneira que esconde CPF, telefone, nome e outros dados pessoais.
 - Os prints e os documentos ficam só dentro do aplicativo e são apagados 30 dias depois de Em produção, ou logo quando a entrega fica Não será feita.
 - Um documento anexado é um pedido só, mesmo com várias melhorias dentro, e a IA lê o texto inteiro, sem resumir antes.
