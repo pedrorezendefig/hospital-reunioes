@@ -238,9 +238,10 @@ class TestGuardaLigadaNoRelatorio:
 
 class TestGuardaLigadaNoCartaz:
     def test_render_recusa_file_uri_e_loopback_e_carrega_o_logo_embutido(self, monkeypatch):
-        """A allowlist de `file://` do cartaz é VAZIA: o template não usa asset
-        `file://` nenhum (logo e QR entram como `data:`). O contraste positivo
-        aqui é o `data:`, que a guarda deixa passar."""
+        """A allowlist de `file://` do cartaz A4 (o padrão desde a issue #1617)
+        tem só a fonte HP Simplified, e a do A5 é vazia: logo e QR entram como
+        `data:`. O contraste positivo aqui é o `data:`, que a guarda deixa
+        passar."""
         from app.services import ouvidoria_pontos
 
         espiao = _EspiaoDaGuarda()
@@ -248,7 +249,7 @@ class TestGuardaLigadaNoCartaz:
 
         data_uri = _logo_data_uri()
         html = _html_de_ataque(f'<img src="{data_uri}" alt="logo">')
-        monkeypatch.setattr(ouvidoria_pontos, "html_do_cartaz", lambda _ponto: html)
+        monkeypatch.setattr(ouvidoria_pontos, "html_do_cartaz", lambda _ponto, _formato="a4": html)
 
         pdf = ouvidoria_pontos.pdf_do_cartaz({"codigo": "AB2345"})
 

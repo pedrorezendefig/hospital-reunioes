@@ -13,9 +13,69 @@ export interface PontoDeEscuta {
   ponto: string;
   ativo: boolean;
   criado_em: string;
+  /** Os campos do cartaz A4 (issue #1617, ADR 0086 decisão 10). Opcionais no
+   * tipo porque a lista de antes da migration 135 não os traz. */
+  nome_publico?: string | null;
+  descricao_local?: string | null;
+  titulo_cartaz?: TituloDoCartaz | null;
+  codigo_controle?: string | null;
+  ala_internacao?: boolean | null;
   /** O PNG do QR embutido: o front autentica por header, e `<img src>` não
    * manda header, então a imagem viaja dentro do JSON. */
   qr_data_uri: string;
+}
+
+/** Os dois modelos do cartaz A4 (seção 4.13 da especificação da Diretoria). O
+ * valor é o que o banco grava; o rótulo é o título que sai impresso. */
+export type TituloDoCartaz = "atendimento_hoje" | "um_minuto";
+
+export const TITULOS_DO_CARTAZ: { valor: TituloDoCartaz; rotulo: string }[] = [
+  { valor: "atendimento_hoje", rotulo: "Como foi seu atendimento hoje?" },
+  { valor: "um_minuto", rotulo: "Um minuto para nos contar" },
+];
+
+/** O que o ouvidor edita num cartaz, como a tela guarda: texto cru dos campos. */
+export interface FormDoCartaz {
+  ponto: string;
+  nome_publico: string;
+  descricao_local: string;
+  titulo_cartaz: TituloDoCartaz;
+  codigo_controle: string;
+  ala_internacao: boolean;
+}
+
+export const CARTAZ_VAZIO: FormDoCartaz = {
+  ponto: "",
+  nome_publico: "",
+  descricao_local: "",
+  titulo_cartaz: "atendimento_hoje",
+  codigo_controle: "",
+  ala_internacao: false,
+};
+
+/** O formulário de edição começa com o que o cartaz já tem. */
+export function formDoPonto(ponto: PontoDeEscuta): FormDoCartaz {
+  return {
+    ponto: ponto.ponto,
+    nome_publico: ponto.nome_publico ?? "",
+    descricao_local: ponto.descricao_local ?? "",
+    titulo_cartaz: ponto.titulo_cartaz ?? "atendimento_hoje",
+    codigo_controle: ponto.codigo_controle ?? "",
+    ala_internacao: Boolean(ponto.ala_internacao),
+  };
+}
+
+/** O corpo que vai ao servidor: texto aparado, e o opcional em branco vira
+ * nulo (sem nome público, o paciente vê o rótulo do ponto). */
+export function camposDoCartaz(form: FormDoCartaz) {
+  return {
+    ponto: form.ponto.trim(),
+    nome_publico: form.nome_publico.trim() || null,
+    descricao_local: form.descricao_local.trim(),
+    titulo_cartaz: form.titulo_cartaz,
+    codigo_controle: form.codigo_controle.trim() || null,
+    ala_internacao: form.ala_internacao,
+  };
 }
 
 export interface GrupoDeCartazes {
@@ -53,10 +113,15 @@ export function agruparPorSetor(pontos: PontoDeEscuta[]): GrupoDeCartazes[] {
     }));
 }
 
-/** O botão só liga com os dois campos preenchidos: o rótulo é o que faz alguém
- * achar o cartaz na parede depois. */
-export function pontoEstaCompleto(form: { setor: string; ponto: string }): boolean {
-  return Boolean(form.setor.trim() && form.ponto.trim());
+/** O botão só liga com o rótulo e a descrição do local preenchidos: é o que
+ * faz alguém achar o cartaz na parede depois. */
+export function cartazEstaCompleto(form: { ponto: string; descricao_local: string }): boolean {
+  return Boolean(form.ponto.trim() && form.descricao_local.trim());
+}
+
+/** O cartaz novo pede também o setor, que depois não muda. */
+export function pontoEstaCompleto(form: { setor: string; ponto: string; descricao_local: string }): boolean {
+  return Boolean(form.setor.trim()) && cartazEstaCompleto(form);
 }
 
 /** O nome do arquivo baixado leva o código, senão a pasta de downloads vira uma
