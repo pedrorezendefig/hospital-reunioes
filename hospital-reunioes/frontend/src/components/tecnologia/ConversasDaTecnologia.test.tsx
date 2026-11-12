@@ -18,7 +18,13 @@ import { ToastProvider } from "@/components/ui/Toast";
 import { caixaDoDado } from "@/lib/testes/caixaDoDado";
 
 import { ABERTURA, SEM_CONVERSA_GUARDADA } from "./ChatDaTecnologia";
-import { AMPLIAR, ConversasDaTecnologia, NOVA_CONVERSA, VOLTAR_PARA_A_LISTA } from "./ConversasDaTecnologia";
+import {
+  AMPLIAR,
+  ConversasDaTecnologia,
+  NOVA_CONVERSA,
+  SEM_ACESSO,
+  VOLTAR_PARA_A_LISTA,
+} from "./ConversasDaTecnologia";
 import { ConversaDoChat, FalaDoChat } from "./chat";
 import { Demanda } from "./demandas";
 
@@ -30,6 +36,7 @@ beforeEach(() => {
 
 afterEach(() => {
   cleanup();
+  window.history.replaceState(null, "", "/");
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
 });
@@ -95,12 +102,24 @@ function montar(servidor: Servidor, demandaInicial: string | null = null) {
       } as unknown as Response;
     }),
   );
-  render(
+  const arvore = (demanda: string | null) => (
     <ToastProvider>
-      <ConversasDaTecnologia token="token-de-teste" demandaInicial={demandaInicial} />
-    </ToastProvider>,
+      <ConversasDaTecnologia token="token-de-teste" demandaInicial={demanda} />
+    </ToastProvider>
   );
+  const { rerender } = render(arvore(demandaInicial));
+  trocarDemandaInicial = (demanda) => rerender(arvore(demanda));
   return chamadas;
+}
+
+/** Remonta a aba montada com outra `demandaInicial`, como a página faz quando o endereço muda. */
+let trocarDemandaInicial: (demanda: string | null) => void = () => {};
+
+const demandaDaUrl = () => new URLSearchParams(window.location.search).get("demanda");
+
+/** A página lê o `?demanda=` do endereço: depois de a tela escrever nele, a prop muda também. */
+function aPaginaLeOEndereco() {
+  trocarDemandaInicial(demandaDaUrl());
 }
 
 function lista() {
@@ -537,7 +556,7 @@ describe("A Conversa da Demanda e o aviso do sino (issue #1537, ADR 0083)", () =
     );
   });
 
-  it("o aviso do sino abre a Demanda de outro autor para o Desenvolvedor, pela lista de Todas", async () => {
+  it("com a Demanda escondida pelo Para mim, o filtro muda para Todas e o card abre (issue #1586)", async () => {
     const chamadas = montar(
       (url) => {
         if (url === EU) return { status: 200, corpo: { desenvolvedor: true } };
@@ -550,10 +569,11 @@ describe("A Conversa da Demanda e o aviso do sino (issue #1537, ADR 0083)", () =
       "d-7",
     );
 
-    expect(await screen.findByText("Onde isso aconteceu?")).toBeTruthy();
+    // Duas voltas de lista (Para mim, depois Todas) antes de o card abrir: folga no tempo.
+    expect(await screen.findByText("Onde isso aconteceu?", {}, { timeout: 3000 })).toBeTruthy();
     expect(await screen.findByRole("region", { name: "Conversa da Demanda" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "Todas" }).getAttribute("aria-pressed")).toBe("true");
-    expect(chamadas.filter((c) => c.url.startsWith(`${LISTA}?`)).map((c) => c.url)).toEqual([TODAS]);
+    expect(chamadas.filter((c) => c.url.startsWith(`${LISTA}?`)).map((c) => c.url)).toEqual([PARA_MIM, TODAS]);
   });
 });
 
@@ -1351,5 +1371,119 @@ describe("Revisar com o código de hoje (issue #1557, ADR 0084, decisão 3)", ()
     expect(chamadas.filter((c) => c.url === REVISAO && c.metodo === "POST").map((c) => c.corpo)).toEqual([
       { confirmado: true },
     ]);
+  });
+});
+
+describe("O endereço acompanha o card aberto (issue #1586)", () => {
+  const OUTRO = demanda("d-3", "Relatório de leitos atrasa");
+
+  function comDuas(demandaInicial: string | null = null) {
+    return montar((url) => {
+      if (url === LISTA) return { status: 200, corpo: [SEM_CARD, OUTRO] };
+      if (url === `${LISTA}/d-1`) return { status: 200, corpo: conversa("d-1") };
+      if (url === `${LISTA}/d-3`) return { status: 200, corpo: conversa("d-3", { mensagens: [ABERTURA_GUARDADA] }) };
+      return { status: 404, corpo: {} };
+    }, demandaInicial);
+  }
+
+  it("abrir um card põe a Demanda no endereço sem nova entrada no histórico, e voltar no celular tira", async () => {
+    window.history.replaceState(null, "", "/admin/tecnologia");
+    const entradas = window.history.length;
+    comDuas();
+    await within(lista()).findByText("Botão de responder some na Ouvidoria");
+
+    fireEvent.click(within(lista()).getByRole("button", { name: /Botão de responder some/ }));
+    await screen.findByText("Onde isso aconteceu?");
+
+    expect(window.location.pathname).toBe("/admin/tecnologia");
+    expect(demandaDaUrl()).toBe("d-1");
+    expect(window.history.length).toBe(entradas);
+
+    fireEvent.click(screen.getByRole("button", { name: VOLTAR_PARA_A_LISTA }));
+
+    await waitFor(() => expect(demandaDaUrl()).toBeNull());
+    expect(window.location.pathname).toBe("/admin/tecnologia");
+    expect(window.history.length).toBe(entradas);
+  });
+
+  it("abrir um card, clicar noutro e recarregar abre o segundo", async () => {
+    comDuas();
+    await within(lista()).findByText("Botão de responder some na Ouvidoria");
+    fireEvent.click(within(lista()).getByRole("button", { name: /Botão de responder some/ }));
+    await screen.findByText("Onde isso aconteceu?");
+    aPaginaLeOEndereco();
+    fireEvent.click(within(lista()).getByRole("button", { name: /Relatório de leitos atrasa/ }));
+    aPaginaLeOEndereco();
+    await waitFor(() => expect(screen.queryByText("Onde isso aconteceu?")).toBeNull());
+
+    // Recarregar: a tela nasce de novo, só com o que está no endereço.
+    cleanup();
+    comDuas(demandaDaUrl());
+
+    await waitFor(() =>
+      expect(
+        within(lista()).getByRole("button", { name: /Relatório de leitos atrasa/ }).getAttribute("aria-current"),
+      ).toBe("true"),
+    );
+    expect(within(lista()).getByRole("button", { name: /Botão de responder some/ }).getAttribute("aria-current")).not.toBe(
+      "true",
+    );
+  });
+
+  it("o endereço que a própria tela escreveu não reabre o card nem desfaz o Ampliar", async () => {
+    comDuas();
+    await within(lista()).findByText("Botão de responder some na Ouvidoria");
+    const card = within(lista())
+      .getAllByRole("listitem")
+      .find((item) => within(item).queryByRole("button", { name: /Botão de responder some/ })) as HTMLElement;
+
+    fireEvent.click(within(card).getByRole("button", { name: AMPLIAR }));
+    await screen.findByText("Onde isso aconteceu?");
+    aPaginaLeOEndereco();
+
+    expect((lista().parentElement as HTMLElement).className).toMatch(/(^|\s)md:hidden(\s|$)/);
+  });
+
+  it("com uma Demanda fora da lista, avisa que não há acesso, sem título nem número, e volta à lista", async () => {
+    const DE_OUTRO_DIRETOR = "Escala da enfermagem some";
+    const chamadas = comDuas("d-99");
+    await within(lista()).findByText("Botão de responder some na Ouvidoria");
+
+    const aberto = screen.getByRole("region", { name: "Conversa aberta" });
+    expect(await within(aberto).findByText(SEM_ACESSO)).toBeTruthy();
+    expect(aberto.className).not.toMatch(/(^|\s)hidden(\s|$)/);
+    expect(within(aberto).queryByText(DE_OUTRO_DIRETOR)).toBeNull();
+    expect(within(aberto).queryByText(/#\d+/)).toBeNull();
+    expect(within(aberto).queryByText(ABERTURA)).toBeNull();
+    expect(chamadas.some((c) => c.url.startsWith(`${LISTA}/d-99`))).toBe(false);
+
+    const voltar = screen.getByRole("button", { name: VOLTAR_PARA_A_LISTA });
+    expect(voltar.className).not.toMatch(/(^|\s)md:hidden(\s|$)/);
+    fireEvent.click(voltar);
+
+    await waitFor(() => expect(screen.queryByText(SEM_ACESSO)).toBeNull());
+    expect((lista().parentElement as HTMLElement).className).not.toMatch(/(^|\s)hidden(\s|$)/);
+    expect(demandaDaUrl()).toBeNull();
+  });
+
+  it("o sino com a tela já aberta abre o card que ele aponta, e no celular mostra o card", async () => {
+    comDuas();
+    await within(lista()).findByText("Botão de responder some na Ouvidoria");
+    fireEvent.click(within(lista()).getByRole("button", { name: /Botão de responder some/ }));
+    await screen.findByText("Onde isso aconteceu?");
+    aPaginaLeOEndereco();
+    fireEvent.click(screen.getByRole("button", { name: VOLTAR_PARA_A_LISTA }));
+    aPaginaLeOEndereco();
+
+    // O sino leva ao mesmo endereço com outra Demanda, e a página repassa.
+    window.history.pushState(null, "", "/admin/tecnologia?demanda=d-3");
+    aPaginaLeOEndereco();
+
+    await waitFor(() =>
+      expect(
+        within(lista()).getByRole("button", { name: /Relatório de leitos atrasa/ }).getAttribute("aria-current"),
+      ).toBe("true"),
+    );
+    expect(screen.getByRole("region", { name: "Conversa aberta" }).className).not.toMatch(/(^|\s)hidden(\s|$)/);
   });
 });

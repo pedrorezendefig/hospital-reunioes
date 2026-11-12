@@ -76,6 +76,8 @@ Na lista ao lado da conversa, cada diretor vê as próprias conversas e todos os
 
 Quem desenvolve na Vitta é o **Desenvolvedor**: um administrador do aplicativo que tem o login do GitHub no cadastro. Ele vê as Demandas de todos. A lista dele abre em **Para mim**, os pedidos de que ele é o Responsável, e tem também **Minhas**, os pedidos que ele mesmo fez, e **Todas**, com o nome de quem pediu em cada linha. Ao abrir o pedido de outra pessoa, ele lê a conversa inteira com a IA (as perguntas e as respostas) e abre os prints e os documentos, sem poder responder no lugar de quem pediu. Ele vê também o número e o link do card no desenvolvimento, que para você não aparecem. Num pedido em **Envio falhou**, ele vê o motivo da falha, que para você não aparece, e tem o filtro **Envio falhou**, com só os pedidos nesse estado. Ele tem também o filtro **Responsável**, com um botão para cada pessoa da Vitta. Os filtros dele combinam com os de todo mundo e com Para mim, Minhas e Todas, por exemplo os bugs Em análise de que ele cuida. **Para mim**, Minhas, Todas, Responsável e Envio falhou só aparecem para o Desenvolvedor: a lista do diretor tem a busca, Bug ou Melhoria e a Etapa.
 
+O endereço da página acompanha o pedido aberto: ao recarregar a página, o mesmo pedido volta aberto. O link do sino e o do e-mail também abrem o pedido. Se o filtro que você estava usando esconde o pedido do link (o Para mim do Desenvolvedor, por exemplo), os filtros voltam a mostrar tudo e o pedido abre. Se o link é de um pedido que você não vê, de outra pessoa da diretoria, já apagado ou com o endereço errado, aparece "Você não tem acesso a esta Demanda", sem o título nem o número do pedido, e o Voltar às conversas leva de volta à lista.
+
 ## A Etapa
 
 Quando o pedido vira trabalho de desenvolvimento, ele ganha uma **Etapa**, que conta em que pé está a entrega, em palavras de quem pediu:
@@ -171,6 +173,7 @@ No fim, o resumo traz o botão **Atualizar o card** no lugar do Criar o card. El
 - O modelo de IA e o custo da conversa em dólar aparecem só no alto da conversa aberta, nunca na lista, e quando o custo não dá para calcular a tela diz "custo não medido".
 - A lista ao lado da conversa mostra os pedidos de quem está olhando, e a Etapa de cada um vem do desenvolvimento, sem ninguém escrever à mão.
 - A lista tem busca pelo título e filtros que combinam (Bug ou Melhoria, Etapa, Origem, e para o Desenvolvedor também Responsável, Envio falhou e Para mim), e o pedido abre ao lado dela, com o Ampliar para a tela cheia.
+- O endereço da página aponta para o pedido aberto, e o link de um pedido que a pessoa não vê mostra "Você não tem acesso a esta Demanda", sem título nem número.
 - O Desenvolvedor, administrador com login do GitHub no cadastro, vê as Demandas de todos, com a conversa inteira e os anexos; o diretor vê as suas e os cards da Vitta, sem número nem link do card.
 - Uma Demanda se liga a um trabalho de desenvolvimento só, e a Etapa é lida de lá, nunca digitada.
 - Um pedido de melhoria Em análise ou Planejada se revisa com o código de hoje, pelo autor ou pelo Desenvolvedor, com o custo mostrado antes e a confirmação, e o que já existe só sai do pedido com o sim de quem pediu; no fim, o Atualizar o card troca o pedido no mesmo card e o devolve a Em análise.
