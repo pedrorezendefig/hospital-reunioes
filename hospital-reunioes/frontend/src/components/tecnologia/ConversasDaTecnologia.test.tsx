@@ -558,7 +558,8 @@ describe("A Conversa da Demanda e o aviso do sino (issue #1537, ADR 0083)", () =
       "d-7",
     );
 
-    expect(await screen.findByText("Onde isso aconteceu?")).toBeTruthy();
+    // Duas voltas de lista (Para mim, depois Todas) antes de o card abrir: folga no tempo.
+    expect(await screen.findByText("Onde isso aconteceu?", {}, { timeout: 3000 })).toBeTruthy();
     expect(await screen.findByRole("region", { name: "Conversa da Demanda" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "Todas" }).getAttribute("aria-pressed")).toBe("true");
     expect(chamadas.filter((c) => c.url.startsWith(`${LISTA}?`)).map((c) => c.url)).toEqual([PARA_MIM, TODAS]);
