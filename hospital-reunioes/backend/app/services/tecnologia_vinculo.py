@@ -679,6 +679,80 @@ def _linha_do_prd(bruto: str | None) -> str:
     return _NUMERO_DE_ISSUE.sub(r"nº \1", texto)
 
 
+# ─── 2c. O bloco "Para o desenvolvedor" (issue #1633, PRD #1632) ─────────────
+
+# O titulo e CONTRATO: o coletor do PedroOS e a pagina do Vitta OS acham o bloco
+# por ele. Mudar o texto (o emoji inclusive) quebra os dois.
+CABECALHO_DO_DESENVOLVEDOR = "## 🛠️ Para o desenvolvedor"
+
+# As seis partes, na ordem fixa em que o bloco as escreve: a chave que o resumo
+# guarda e o rotulo em negrito que a issue mostra. O chat do bug, o email e a
+# passada unica leem a mesma lista.
+PARTES_DO_DESENVOLVEDOR: dict[str, str] = {
+    "o_que_o_diretor_quer": "O que o diretor quer",
+    "por_que_ele_pediu": "Por que ele pediu",
+    "o_que_ja_ficou_decidido": "O que já ficou decidido com ele",
+    "onde_mexe_no_codigo": "Onde mexe no código",
+    "cuidados": "Cuidados",
+    "como_saber_que_acabou": "Como saber que acabou",
+}
+
+# A parte que o modelo deixou em branco quando escreveu as outras: o bloco sai
+# com as seis, para quem le saber que ela nao veio, e nao que sumiu.
+PARTE_NAO_INFORMADA = "não informado"
+
+_CABECALHO_DO_DESENVOLVEDOR_NO_CORPO = re.compile(r"^#{1,6}[^\n]*?para o desenvolvedor[^\n]*$", re.IGNORECASE | re.MULTILINE)
+
+
+def bloco_do_desenvolvedor(partes: dict[str, Any] | None) -> str | None:
+    """O bloco "Para o desenvolvedor", pronto para o corpo da issue, ou `None`.
+
+    Nulo quando o resumo nao tem nenhuma das seis partes (resumo de antes do
+    bloco, ou o modelo que nao as escreveu): o corpo sai como era.
+
+    Cada texto passa pelo `_linha_do_prd`, a limpeza do texto do diretor
+    (peneira de dado pessoal, `<` escapado, estrutura de Markdown desligada,
+    numero de issue sem cerquilha, sem travessao), numa linha so.
+    """
+    textos = {chave: _linha_do_prd((partes or {}).get(chave)) for chave in PARTES_DO_DESENVOLVEDOR}
+    if not any(textos.values()):
+        return None
+    linhas = [CABECALHO_DO_DESENVOLVEDOR, ""]
+    for chave, rotulo in PARTES_DO_DESENVOLVEDOR.items():
+        linhas += [f"**{rotulo}:** {textos[chave] or PARTE_NAO_INFORMADA}", ""]
+    return "\n".join(linhas).rstrip("\n")
+
+
+def inserir_bloco_do_desenvolvedor(corpo: str, bloco: str) -> str:
+    """O corpo com o `bloco` logo depois do bloco "Para o diretor".
+
+    O lugar e onde o recorte do diretor (`bloco_para_o_diretor`) para: o
+    separador `---` ou o proximo cabecalho de nivel 1 ou 2. O bloco novo abre
+    com um `##`, entao o recorte do diretor continua devolvendo o mesmo texto.
+
+    O resto do corpo nao muda: o texto antes e depois do ponto de insercao sai
+    byte a byte. Corpo que ja tem o bloco volta como esta (nao duplica), e
+    corpo sem o bloco do diretor tambem: sem ele nao ha "logo depois".
+
+    Sem fim do bloco do diretor (o corpo e so o bloco, com o marcador no fim),
+    o bloco entra antes do primeiro comentario HTML, para o marcador continuar
+    fechando o corpo.
+    """
+    if _CABECALHO_DO_DESENVOLVEDOR_NO_CORPO.search(corpo):
+        return corpo
+    achado = _CABECALHO_DO_DIRETOR.search(corpo)
+    if not achado:
+        return corpo
+    fim = _FIM_DO_BLOCO.search(corpo, achado.end())
+    if fim:
+        posicao = fim.start()
+    else:
+        comentario = corpo.find("<!--", achado.end())
+        posicao = comentario if comentario >= 0 else len(corpo)
+    antes, depois = corpo[:posicao].rstrip("\n"), corpo[posicao:]
+    return f"{antes}\n\n{bloco}\n\n{depois}" if depois else f"{antes}\n\n{bloco}\n"
+
+
 def corpo_do_prd_do_diretor(
     *,
     demanda_id: str,
@@ -757,7 +831,7 @@ def corpo_do_prd_do_diretor(
     for n, (pergunta, escolha, porque) in enumerate(decisoes, start=1):
         linhas_das_decisoes += [f"{n}. **{pergunta}**", f"   Escolha: {escolha}", f"   Por quê: {porque}", ""]
 
-    return "\n".join(
+    corpo = "\n".join(
         [
             frase,
             "",
@@ -817,6 +891,11 @@ def corpo_do_prd_do_diretor(
             marcador_da_demanda(demanda_id),
         ]
     )
+    # O bloco de quem programa (issue #1633) entra pela mesma funcao que o
+    # insere num corpo que ja existe: o PRD novo e o corpo antigo ganham o
+    # bloco no mesmo lugar e no mesmo formato.
+    bloco = bloco_do_desenvolvedor(resumo.get("para_o_desenvolvedor"))
+    return inserir_bloco_do_desenvolvedor(corpo, bloco) if bloco else corpo
 
 
 # ─── 2b. A issue do bug (issue #1381, ADR 0077) ──────────────────────────────
