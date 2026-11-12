@@ -18,6 +18,7 @@ from app.services.tecnologia_vinculo import (
     ETAPA_EM_DESENVOLVIMENTO,
     ETAPA_EM_PRODUCAO,
     ETAPA_ENTREGUE,
+    ETAPA_NAO_SERA_FEITA,
     ETAPA_PLANEJADA,
     ETAPA_REGISTRADA,
 )
@@ -170,8 +171,10 @@ def pode_ver(pessoa: dict[str, Any], demanda: dict[str, Any]) -> bool:
 
 
 # Ate onde a Demanda se apaga (ADR 0084, decisao 2): ate Planejada. Em
-# desenvolvimento ja existe PR aberto, e dali em diante o app recusa.
-ETAPAS_QUE_SE_APAGAM: tuple[str, ...] = (ETAPA_REGISTRADA, ETAPA_EM_ANALISE, ETAPA_PLANEJADA)
+# desenvolvimento ja existe PR aberto, e dali em diante o app recusa. Nao sera
+# feita tambem se apaga (issue #1637): ninguem vai fazer o pedido, e sem isto o
+# card fechado pelo GitHub ficava na lista para sempre.
+ETAPAS_QUE_SE_APAGAM: tuple[str, ...] = (ETAPA_REGISTRADA, ETAPA_EM_ANALISE, ETAPA_PLANEJADA, ETAPA_NAO_SERA_FEITA)
 
 MOTIVO_APAGAR_SO_O_AUTOR = "Só quem começou esta conversa pode apagá-la."
 MOTIVO_APAGAR_SO_O_DESENVOLVEDOR = "Pedido que já virou card, só a Vitta apaga. Peça na Conversa da Demanda."
@@ -182,12 +185,14 @@ def recusa_de_apagar(pessoa: dict[str, Any], demanda: dict[str, Any]) -> tuple[i
     """Por que esta pessoa nao apaga esta Demanda, ou `None` se apaga (ADR 0084,
     decisao 2). A recusa vem com o status HTTP e a frase da tela.
 
-    A conversa que nao virou card, quem apaga e o autor. O card criado, so o
-    Desenvolvedor, e so ate Planejada. Quem nao pode apagar e 403 antes de a
-    Etapa ser olhada. A lista le daqui para mostrar o botao so a quem pode.
+    A conversa que nao virou card, quem apaga e o autor ou o Desenvolvedor
+    (issue #1637: a conversa velha de outra pessoa nao fica na lista para
+    sempre). O card criado, so o Desenvolvedor, ate Planejada ou em Nao sera
+    feita. Quem nao pode apagar e 403 antes de a Etapa ser olhada. A lista le
+    daqui para mostrar o botao so a quem pode.
     """
     if not demanda.get("github_issue_numero"):
-        if demanda.get("autor_id") != pessoa.get("id"):
+        if demanda.get("autor_id") != pessoa.get("id") and not e_desenvolvedor(pessoa):
             return 403, MOTIVO_APAGAR_SO_O_AUTOR
         return None
     if not e_desenvolvedor(pessoa):

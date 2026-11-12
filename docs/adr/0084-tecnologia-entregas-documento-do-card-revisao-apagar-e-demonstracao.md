@@ -45,3 +45,12 @@ Com os chips no ar, a lista continuou apertada. Eram dezesseis chips sem rótulo
 3. **Conversar sem procurar.** O card tem o botão "Conversar", que abre a Demanda com a caixa da Conversa da Demanda em foco. Na tela larga, a Demanda aberta mostra a Conversa da Demanda numa coluna à direita, fixa na rolagem. Rejeitado: abrir a Demanda num modal, que esconde a lista e quebra o link direto do aviso do sino.
 
 A aba Entregas segue com os chips. A contagem de mensagens não lidas no card fica de fora, porque pede backend.
+
+## Emenda de 12/11/2026: o Desenvolvedor tira da lista o que não vale mais (issue #1637)
+
+Na limpeza da aba, dois tipos de pedido não saíam da lista. A conversa Registrada antiga do diretor só o autor apagava. O card fechado como não planejado pelo GitHub antes de alguém apagar no app vai para Não será feita, e ali o Apagar recusava com 409. A decisão 2 muda em dois pontos:
+
+1. **O Desenvolvedor também apaga a conversa Registrada de outra pessoa.** O autor continua apagando a própria, e quem não é Desenvolvedor segue sem apagar a conversa de outro.
+2. **O card em Não será feita também se apaga, só pelo Desenvolvedor.** A issue-raiz já fechada não fecha de novo nem ganha um segundo comentário, e as partes ainda abertas fecham como não planejadas. O estado da raiz vem da issue, e não da Etapa, porque a label `wontfix` leva a Não será feita com a issue aberta.
+
+Em desenvolvimento, Entregue e Em produção continuam recusados.

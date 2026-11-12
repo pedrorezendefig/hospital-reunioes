@@ -40,7 +40,11 @@ COMENTARIO_DO_APAGAR = (
 def _fechar_no_github(numero: int) -> None:
     """As partes abertas e depois a raiz. A raiz por ultimo: fechada antes, o
     webhook dela levaria a Etapa a Nao sera feita, e um Apagar repetido depois
-    de uma falha no meio daria 409."""
+    de uma falha no meio daria 409.
+
+    A raiz que ja esta fechada (o card em Nao sera feita, issue #1637) nao fecha
+    de novo nem ganha um segundo comentario. O estado e lido da issue, e nao da
+    Etapa, porque a label `wontfix` leva a Nao sera feita com a issue aberta."""
     abertas = [
         parte["number"]
         for parte in github_client.ler_sub_issues(numero)
@@ -48,7 +52,8 @@ def _fechar_no_github(numero: int) -> None:
     ]
     for parte in abertas:
         github_client.fechar_como_nao_planejada(parte, comentario=COMENTARIO_DO_APAGAR)
-    github_client.fechar_como_nao_planejada(numero, comentario=COMENTARIO_DO_APAGAR)
+    if github_client.ler_issue(numero).get("state") == "open":
+        github_client.fechar_como_nao_planejada(numero, comentario=COMENTARIO_DO_APAGAR)
 
 
 def apagar(supabase, demanda: dict[str, Any], *, ator: dict[str, Any]) -> None:

@@ -1508,8 +1508,9 @@ async def apagar_a_demanda(
 ):
     """O "Apagar" da Demanda (issue #1549, ADR 0084, decisao 2).
 
-    Quem pode e ate onde e a `recusa_de_apagar`: o autor apaga a conversa
-    Registrada; o card criado, so o Desenvolvedor, ate Planejada. A recusa
+    Quem pode e ate onde e a `recusa_de_apagar`: o autor ou o Desenvolvedor
+    apaga a conversa Registrada; o card criado, so o Desenvolvedor, ate
+    Planejada ou em Nao sera feita (issue #1637). A recusa
     sai com o status dela (403 ou 409). O card fecha antes no GitHub, e a
     falha de la sai como 503 (falta configuracao) ou 502, sem nada apagado no
     app.

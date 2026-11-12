@@ -247,6 +247,17 @@ class TestAConversaRegistrada:
         assert client.delete(APAGAR).status_code == 204
         assert gh.fechadas == []
 
+    def test_o_desenvolvedor_apaga_a_conversa_registrada_de_outro_autor(self, monkeypatch):
+        """Issue #1637: a conversa velha do diretor que nunca virou card sai da
+        lista pela mão do Desenvolvedor, sem esperar o autor."""
+        client, sb, gh = _cenario(monkeypatch, logado=PEDRO, demanda=_conversa_registrada())
+
+        resposta = client.delete(APAGAR)
+
+        assert resposta.status_code == 204, resposta.text
+        assert _a_demanda(sb)["apagada_por"] == PEDRO["id"]
+        assert gh.fechadas == []
+
 
 # ═══════════════════════════════════════════════════════════════════════════
 # 3. Quem apaga o card criado, e até onde
@@ -263,15 +274,46 @@ class TestOCardCriado:
         assert resposta.status_code == 204, resposta.text
         assert _a_demanda(sb)["apagada_por"] == PEDRO["id"]
 
-    @pytest.mark.parametrize(
-        "etapa", [ETAPA_EM_DESENVOLVIMENTO, ETAPA_ENTREGUE, ETAPA_EM_PRODUCAO, ETAPA_NAO_SERA_FEITA]
-    )
+    @pytest.mark.parametrize("etapa", [ETAPA_EM_DESENVOLVIMENTO, ETAPA_ENTREGUE, ETAPA_EM_PRODUCAO])
     def test_de_em_desenvolvimento_em_diante_o_app_recusa_com_409(self, monkeypatch, etapa):
         client, sb, gh = _cenario(monkeypatch, logado=PEDRO, demanda=_card(etapa))
 
         resposta = client.delete(APAGAR)
 
         assert resposta.status_code == 409
+        assert gh.fechadas == []
+        _nada_foi_apagado(sb)
+
+    def test_o_desenvolvedor_apaga_o_card_que_nao_sera_feito(self, monkeypatch):
+        """Issue #1637: a issue fechada como não planejada pelo GitHub leva o
+        card a Não será feita, e ele continua podendo sair da lista. A raiz já
+        fechada não fecha de novo nem ganha um segundo comentário; a parte
+        ainda aberta fecha."""
+        github = _GithubQueFecha(
+            {900: _issue(900, estado="closed", motivo="not_planned")},
+            sub_issues={900: [_parte(901), _parte(903, estado="closed")]},
+        )
+        client, sb, gh = _cenario(monkeypatch, logado=PEDRO, demanda=_card(ETAPA_NAO_SERA_FEITA), github=github)
+
+        resposta = client.delete(APAGAR)
+
+        assert resposta.status_code == 204, resposta.text
+        assert _a_demanda(sb)["apagada_por"] == PEDRO["id"]
+        assert [numero for numero, _, _ in gh.fechadas] == [901]
+
+    def test_o_card_que_nao_sera_feito_com_a_raiz_aberta_fecha_a_raiz(self, monkeypatch):
+        """A label `wontfix` leva a Não será feita com a issue ainda aberta: o
+        Apagar fecha a raiz como em qualquer card."""
+        github = _GithubQueFecha({900: _issue(900, labels=("wontfix",))}, sub_issues={900: []})
+        client, _, gh = _cenario(monkeypatch, logado=PEDRO, demanda=_card(ETAPA_NAO_SERA_FEITA), github=github)
+
+        assert client.delete(APAGAR).status_code == 204
+        assert [numero for numero, _, _ in gh.fechadas] == [900]
+
+    def test_o_super_admin_sem_login_do_github_nao_apaga_o_card_que_nao_sera_feito(self, monkeypatch):
+        client, sb, gh = _cenario(monkeypatch, logado=DIRETOR, demanda=_card(ETAPA_NAO_SERA_FEITA))
+
+        assert client.delete(APAGAR).status_code == 403
         assert gh.fechadas == []
         _nada_foi_apagado(sb)
 
@@ -433,11 +475,12 @@ class TestQuemVeOBotao:
         ("logado", "demanda", "filtro", "pode"),
         [
             (DIRETOR, _conversa_registrada(), "", True),
-            (PEDRO, _conversa_registrada(), "?filtro=todas", False),
+            (PEDRO, _conversa_registrada(), "?filtro=todas", True),
             (DIRETOR, _card(ETAPA_EM_ANALISE), "", False),
             (PEDRO, _card(ETAPA_EM_ANALISE), "?filtro=todas", True),
             (PEDRO, _card(ETAPA_PLANEJADA), "?filtro=todas", True),
             (PEDRO, _card(ETAPA_EM_DESENVOLVIMENTO), "?filtro=todas", False),
+            (PEDRO, _card(ETAPA_NAO_SERA_FEITA), "?filtro=todas", True),
         ],
         ids=[
             "autor-registrada",
@@ -446,6 +489,7 @@ class TestQuemVeOBotao:
             "desenvolvedor-em-analise",
             "desenvolvedor-planejada",
             "desenvolvedor-em-desenvolvimento",
+            "desenvolvedor-nao-sera-feita",
         ],
     )
     def test_a_lista_diz_se_quem_esta_logado_pode_apagar(self, monkeypatch, logado, demanda, filtro, pode):
@@ -481,7 +525,8 @@ class TestKit:
             "confirmação",
             "Registrada",
             "quem escreveu",
-            "Em análise ou Planejada",
+            "ou o Desenvolvedor",
+            "Em análise, Planejada ou Não será feita",
             "só o Desenvolvedor",
             "De Em desenvolvimento em diante",
             "fecha como não planejado",
@@ -492,4 +537,4 @@ class TestKit:
     def test_a_decisao_entra_no_que_ja_foi_decidido(self):
         decidido = _secao("O que já foi decidido")
 
-        assert "se apaga só até Planejada" in decidido
+        assert "se apaga até Planejada, ou em Não será feita" in decidido
