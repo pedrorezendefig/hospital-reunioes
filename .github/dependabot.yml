@@ -1,8 +1,5 @@
 # Atualização de versão semanal, um PR por ecossistema (issue #1287).
-# Desde a issue #1599 o CI roda no Mac do Pedro, e o PR do Dependabot não roda
-# nele: pacote novo que ninguém leu rodaria com o acesso da conta do Pedro. O PR
-# fica vermelho (job `fora-do-mac`) até alguém conferir a mudança e trazê-la num
-# PR de uma branch deste repositório, que passa pelo CI e pela subida.
+# O PR do Dependabot passa pelo mesmo CI e pela mesma subida de qualquer PR.
 version: 2
 updates:
   - package-ecosystem: npm
