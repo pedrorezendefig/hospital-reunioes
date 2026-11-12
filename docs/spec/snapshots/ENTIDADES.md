@@ -1,6 +1,6 @@
 # ENTIDADES.md
 <!-- gerado automaticamente por /snapshot — não editar -->
-<!-- last_update: 2026-11-12T23:22+0000 -->
+<!-- last_update: 2026-11-12T23:42+0000 -->
 
 Modelo de dados do Hospital Reuniões. Tabelas no Postgres (via Supabase).
 
@@ -788,7 +788,7 @@ Modelo de dados do Hospital Reuniões. Tabelas no Postgres (via Supabase).
 
 ## ouvidoria_pontos
 
-> Origem: `085_ouvidoria_pontos_de_escuta.sql`
+> Origem: `085_ouvidoria_pontos_de_escuta.sql` (alterada em: 135_ouvidoria_ponto_nome_publico_cartaz_a4.sql)
 
 | Campo | Tipo | Constraints | Default | FK |
 |-------|------|-------------|---------|-----|
@@ -800,6 +800,11 @@ Modelo de dados do Hospital Reuniões. Tabelas no Postgres (via Supabase).
 | `criado_por` | `VARCHAR(10)` | — | — | `participantes.id` |
 | `e` | `nao` | — | — | — |
 | `e` | `o` | — | — | — |
+| `nome_publico` | `TEXT` | — | — | — |
+| `descricao_local` | `TEXT` | — | — | — |
+| `titulo_cartaz` | `TEXT` | NOT NULL | `'atendimento_hoje'` | — |
+| `codigo_controle` | `TEXT` | — | — | — |
+| `ala_internacao` | `BOOLEAN` | NOT NULL | `FALSE` | — |
 
 **Indexes:**
 - `idx_ouvidoria_pontos_codigo` em `(codigo)` (de `085_ouvidoria_pontos_de_escuta.sql`)

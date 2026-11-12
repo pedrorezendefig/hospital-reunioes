@@ -1,6 +1,6 @@
 # ROTAS.md
 <!-- gerado automaticamente por /snapshot — não editar -->
-<!-- last_update: 2026-11-11T17:50+0000 -->
+<!-- last_update: 2026-11-12T23:42+0000 -->
 
 Endpoints HTTP expostos pelo backend FastAPI do Hospital Reuniões.
 
@@ -302,7 +302,7 @@ Endpoints HTTP expostos pelo backend FastAPI do Hospital Reuniões.
 | GET | `/ouvidoria/pontos` | Os cartazes, com o QR já embutido. | ✅ |
 | POST | `/ouvidoria/pontos` | Cria o cartaz e devolve o código sorteado. | ✅ |
 | PATCH | `/ouvidoria/pontos/{ponto_id}` | Renomeia o cartaz, aposenta ou traz de volta. | ✅ |
-| GET | `/ouvidoria/pontos/{ponto_id}/cartaz.pdf` | O cartaz A5 pronto para a gráfica. | ✅ |
+| GET | `/ouvidoria/pontos/{ponto_id}/cartaz.pdf` | O cartaz pronto para a gráfica: A4 por padrão, no modelo aprovado pela | ✅ |
 | GET | `/ouvidoria/pontos/{ponto_id}/qr.png` | O PNG do QR, para quem quer montar o próprio material. | ✅ |
 | GET | `/ouvidoria/prazos` | A tabela de prazos por gravidade que alimenta o motor. Leitura para | ✅ |
 | GET | `/ouvidoria/prazos/historico` | Quem mudou qual prazo, quando, de quanto para quanto. | ✅ |
@@ -321,7 +321,7 @@ Endpoints HTTP expostos pelo backend FastAPI do Hospital Reuniões.
 |--------|------|-----------|------|
 | POST | `/ouvidoria/publico/manifestacoes` | Registra a manifestação do canal aberto e devolve o protocolo ANO-NNNN. | ❌ |
 | GET | `/ouvidoria/publico/pontos/{codigo}` | De qual cartaz veio quem está com o formulário aberto. | ❌ |
-| GET | `/ouvidoria/qr` | Destino do QR do cartaz: manda ao formulário, com o código do Ponto de | ❌ |
+| GET | `/ouvidoria/qr` | O QR dos cartazes de antes da ADR 0086: redireciona ao endereço curto | ❌ |
 
 ## ouvidoria-setor (`app/routers/ouvidoria_setor.py`)
 

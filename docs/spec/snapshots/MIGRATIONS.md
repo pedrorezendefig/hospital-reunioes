@@ -1,6 +1,6 @@
 # MIGRATIONS.md
 <!-- gerado automaticamente por /snapshot — não editar -->
-<!-- last_update: 2026-11-12T23:22+0000 -->
+<!-- last_update: 2026-11-12T23:42+0000 -->
 
 Ordem cronológica das migrations do Postgres do Hospital Reuniões.
 
@@ -134,6 +134,7 @@ Ordem cronológica das migrations do Postgres do Hospital Reuniões.
 | 130 | `130_tecnologia_adr_0084.sql` | as colunas da ADR 0084 (issue #1549, PRD #1548) | 0 | 10 | 0 | 0 |
 | 133 | `133_tecnologia_demonstracao.sql` | a Demonstracao no card | 0 | 2 | 0 | 0 |
 | 134 | `134_tecnologia_numero_da_demanda.sql` | o Numero da Demanda | 0 | 1 | 0 | 0 |
+| 135 | `135_ouvidoria_ponto_nome_publico_cartaz_a4.sql` | o Ponto de escuta ganha os campos do cartaz A4 | 0 | 5 | 0 | 0 |
 
 **Legenda:** C = CREATE TABLE · A = ALTER TABLE · I = CREATE INDEX · D = DROP.
-**Total:** 128 migrations.
+**Total:** 129 migrations.
