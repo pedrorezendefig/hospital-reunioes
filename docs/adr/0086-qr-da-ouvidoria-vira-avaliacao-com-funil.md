@@ -11,7 +11,7 @@ Decisão do diretor no Planejamento da Demanda (PRD #1527, 27 decisões de negó
 
 1. **O QR abre a Avaliação, que não gera protocolo.** A pessoa dá uma nota de 1 a 5, escolhe se quiser os motivos (lista fechada de oito: atenção da equipe, tempo de espera, informação recebida, limpeza, conforto, atendimento médico, atendimento de enfermagem, recepção) e deixa um comentário opcional de até 500 caracteres. A avaliação é gravada no envio, antes de qualquer escolha seguinte, e vira dado de gestão, não caso.
 
-2. **A avaliação não guarda nada de quem avaliou.** Sem IP, sem identificador do aparelho, sem contato. O abuso é contido por limite de envios (3 a cada 10 minutos por endereço e cartaz), contado só na memória do limitador e nunca gravado.
+2. **A avaliação não guarda nada de quem avaliou.** Sem IP, sem identificador do aparelho, sem contato. O abuso é contido por limite de envios (3 a cada 10 minutos por endereço e cartaz; decisão técnica do Pedro no grill, a diretoria pode rever na Conversa da Demanda), contado só na memória do limitador e nunca gravado.
 
 3. **O funil depois da nota.** Notas 1, 2 e 3 perguntam se a pessoa quer retorno; o "sim" leva à manifestação guiada. Notas 4 e 5 agradecem e oferecem deixar um elogio (e o convite ao Google, ADR 0089). Quem segue para a manifestação a partir da nota fica com o caso ligado à avaliação e ao cartaz, **exceto quando escolhe o anonimato**: aí o caso guarda o local que a pessoa confirmou e não guarda o código do cartaz nem a ligação com a nota, como já é hoje.
 

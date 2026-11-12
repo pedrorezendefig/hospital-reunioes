@@ -1,6 +1,6 @@
 ---
 status: accepted
-amends: 0041, 0052
+amends: 0034, 0041, 0052
 ---
 
 # Acionamento de ciência: o elogio e o Núcleo de Segurança do Paciente, com exceção de sigilo para o Núcleo
@@ -17,7 +17,7 @@ Decisão do diretor no Planejamento da Demanda (PRD #1527, decisões 1, 9, 10, 2
 
 4. **A decisão sobre o Núcleo é do ouvidor.** Quando o agente aponta o caso (ADR 0087), "Validar e acionar" não conclui sem o ouvidor **confirmar** ou **descartar**, e o descarte pede motivo de uma linha. Sem alerta, o ouvidor pode mandar ao Núcleo por conta própria, a qualquer momento. Confirmado, o caso ganha o selo **Em análise pelo NSP**.
 
-5. **O Núcleo recebe o relato integral, mesmo no caso sigiloso (emenda a decisão 3 da ADR 0041 e a decisão 4 da ADR 0052, só para o Núcleo).** A tela que o link abre mostra o relato integral, a justificativa técnica do agente, o paciente atendido com a data de nascimento, os profissionais citados e o quarto. O nome de quem manifestou só vai quando o caso não é sigiloso nem anônimo. Os demais setores seguem a regra de sempre: no sigilo reforçado, só a nota do ouvidor.
+5. **O Núcleo recebe o relato integral, mesmo no caso sigiloso (emenda a decisão 8 da ADR 0034, a decisão 3 da ADR 0041 e a decisão 4 da ADR 0052, só para o Núcleo).** A decisão 8 da ADR 0034 deixa o sigilo reforçado só com o ouvidor e a diretoria executiva e manda ao setor só o extrato; a exceção vale apenas para o Núcleo, e para nenhum outro setor. A tela que o link abre mostra o relato integral, a justificativa técnica do agente, o paciente atendido com a data de nascimento, os profissionais citados e o quarto. O nome de quem manifestou só vai quando o caso não é sigiloso nem anônimo. Os demais setores seguem a regra de sempre: no sigilo reforçado, só a nota do ouvidor.
 
 6. **O e-mail ao Núcleo só avisa e traz o link.** O relato e a justificativa ficam só na tela, porque o e-mail passa por um processador fora do Brasil (ADR 0039, decisão 2, que segue valendo).
 
@@ -33,5 +33,5 @@ Decisão do diretor no Planejamento da Demanda (PRD #1527, decisões 1, 9, 10, 2
 
 ## Consequências
 
-- O caso sigiloso passa a ter um leitor fora da Ouvidoria: a presidência do NSP. Isso entra no aviso de privacidade do hospital.
+- O caso sigiloso passa a ter um leitor fora da Ouvidoria e da diretoria executiva: a presidência do NSP, por exceção à decisão 8 da ADR 0034 que vale só para o Núcleo. Isso entra no aviso de privacidade do hospital.
 - A fase 2 traz a migração dos acionamentos de resposta que já existem para o registro novo.

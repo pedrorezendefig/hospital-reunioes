@@ -12,9 +12,9 @@ Decisão do diretor no Planejamento da Demanda (PRD #1527, decisões 2, 3, 4, 17
 
 2. **A digitação à mão da nota do Google sai.** O histórico digitado fica. O Reclame Aqui continua digitado à mão, e o relatório da Diretoria continua usando o último valor de cada fonte.
 
-3. **A Central de Comando mostra a nota.** O Objetivo "melhorar a nota no Google" deixa de estar em construção. A tela mostra a nota, o número de avaliações novas do mês e se a nota melhorou ou piorou frente ao mês anterior. Como a API não entrega a avaliação de cada mês, "avaliações do mês" é a diferença do total entre a primeira e a última leitura do mês, e a tela diz isso. A tendência compara a nota geral no fim do mês com a do fim do mês anterior.
+3. **A Central de Comando mostra a nota.** O Objetivo "melhorar a nota no Google" deixa de estar em construção (decisão técnica do Pedro no grill; a diretoria pode rever na Conversa da Demanda). A tela mostra a nota, o número de avaliações novas do mês e se a nota melhorou ou piorou frente ao mês anterior. Como a API não entrega a avaliação de cada mês, "avaliações do mês" é a diferença do total entre a primeira e a última leitura do mês, e a tela diz isso. A tendência compara a nota geral no fim do mês com a do fim do mês anterior.
 
-4. **A Ouvidoria repete a nota, só para leitura.** O ouvidor não vê a Central, então a tela de Nota externa mostra a nota do Google e os números do teste do convite, sem edição.
+4. **A Ouvidoria repete a nota, só para leitura.** O ouvidor não vê a Central, então a tela de Nota externa mostra a nota do Google, sem edição. **Pendente da diretoria:** repetir ali também os números do teste do convite, para quem não é Super admin, é sugestão ainda sem resposta da diretoria, não decisão. Até ela responder na Conversa da Demanda, os números do teste ficam só na Central.
 
 5. **O convite ao Google aparece só para as notas 4 e 5.** A política do Google para empresas proíbe pedir avaliação só a quem ficou satisfeito, e quem desobedece pode ter avaliações removidas ou o perfil punido. **A diretoria aceita esse risco.** O convite aparece só no QR, só quando a chave geral e a chave do ponto estão ligadas, e as duas nascem desligadas.
 
