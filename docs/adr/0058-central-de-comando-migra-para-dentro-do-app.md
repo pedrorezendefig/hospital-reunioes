@@ -1,7 +1,7 @@
 ---
 status: accepted
 amends: 0057
-amended_by: 0059
+amended_by: 0059, 0085
 ---
 
 # Central de Comando migra para dentro do app do hospital, só para Super admin, com o servidor portado para o FastAPI
