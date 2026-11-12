@@ -2,6 +2,52 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-11-12T20:39:19-03:00",
+      "sha": "5fd6b7c5d312024436932bcf37992e996aa76a19",
+      "app_version": "0.262.0",
+      "subject": "Onda hsm-con-onda2: Folga nos três testes de tempo e memória que caem por carga do runner; Gate por ferramenta e pendências atrasadas para a diretoria executiva",
+      "raw_subject": "chore(deploy): registro da onda hsm-con-onda2 (#1656 #1648)",
+      "scope": [
+        "backend"
+      ],
+      "prds": [
+        524,
+        1571
+      ],
+      "result": "healthy",
+      "duration_seconds": 136,
+      "services_touched": [
+        "backend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        },
+        {
+          "service": "frontend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "onda-enxuta hsm-con-onda2: PR #1656 (issue #1645), PR #1648 (issue #1609), mergeados PR a PR. Merge pela API do GitHub, um build. Registro pela Action pos-merge depois do health.",
+      "etapas": {
+        "merge_s": 5,
+        "build_s": {
+          "backend": 15
+        },
+        "health_s": 0
+      },
+      "responsavel": "pedrorezendefig"
+    },
+    {
       "at": "2026-11-12T20:28:57-03:00",
       "sha": "2d9936402d40adbc142b7b993be6e2c03f088a6f",
       "app_version": "0.261.0",
