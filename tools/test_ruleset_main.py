@@ -9,9 +9,7 @@ travaria do mesmo jeito. Estes testes amarram as
 duas pontas: o nome de cada check e o CI que sempre reporta.
 
 Desde a issue #966 o detector responde por pasta (backend, frontend,
-ferramenta) e cada job pesado roda só com a parte dele. Desde a issue #1599 o
-`build` (Docker, o único job que gasta minuto do GitHub) responde à saída
-`imagem`: só o contexto dos dois Dockerfiles o acorda. Os testes rodam o
+ferramenta) e cada job pesado roda só com a parte dele. Os testes rodam o
 script do detector num repo git de verdade e avaliam o `if:` de cada job com as
 saídas dele, como o GitHub avalia: a pergunta é quais jobs rodam.
 """
@@ -179,12 +177,10 @@ def rodar_detector(tmp_path: Path, mudados: list[str], evento: str = "pull_reque
         "github.event_name": evento,
         "github.event.pull_request.base.sha": base if base is not None else sha_base,
         "github.event.pull_request.head.sha": sha_head,
-        "github.event.before": base if base is not None else sha_base,
     }
     saida = tmp_path / "github_output"
     saida.write_text("", encoding="utf-8")
-    env = {**ENV_GIT, "GITHUB_OUTPUT": str(saida), "GITHUB_SHA": sha_head,
-           **{k: valores[v] for k, v in env_yaml.items()}}
+    env = {**ENV_GIT, "GITHUB_OUTPUT": str(saida), **{k: valores[v] for k, v in env_yaml.items()}}
     (tmp_path / "passo.sh").write_text(script, encoding="utf-8")
     # o shell padrão do GitHub Actions no Linux: bash -e {0}
     proc = subprocess.run(["bash", "-e", str(tmp_path / "passo.sh")], cwd=repo, env=env,
@@ -204,15 +200,10 @@ def repasse_do_job_mudancas() -> dict[str, str]:
     return dict(re.findall(r"^      (\w+): \$\{\{ steps\.diff\.outputs\.(\w+) \}\}$", trecho, re.M))
 
 
-REPO = "dono/repo"
-
-
-def avaliar_if(expr: str, resultado: str, saidas_job: dict[str, str], cancelado: bool = False,
-               evento: str = "pull_request", fork: bool = False, autor: str = "pedro") -> bool:
+def avaliar_if(expr: str, resultado: str, saidas_job: dict[str, str], cancelado: bool = False) -> bool:
     """Avalia o `if:` de um job como o GitHub Actions avalia, no vocabulário
-    que este CI usa: `!`, `&&`, `||`, `==`, `!=`, `cancelled()`, o evento, o
-    repositório de onde vem o PR e o resultado e as saídas do job `mudancas`.
-    Saída que não existe vale '' no GitHub. Sem
+    que este CI usa: `!`, `&&`, `||`, `==`, `!=`, `cancelled()` e o resultado e
+    as saídas do job `mudancas`. Saída que não existe vale '' no GitHub. Sem
     função de status no `if`, o GitHub soma um `success() &&` implícito, que
     pula o job quando o detector falha: é isso que o `!cancelled()` desliga."""
     corpo = re.fullmatch(r"\$\{\{ (.+) \}\}", expr.strip()).group(1)
@@ -222,35 +213,27 @@ def avaliar_if(expr: str, resultado: str, saidas_job: dict[str, str], cancelado:
     corpo = corpo.replace("cancelled()", repr(cancelado))
     corpo = corpo.replace("needs.mudancas.result", repr(resultado))
     corpo = re.sub(r"needs\.mudancas\.outputs\.(\w+)", lambda m: repr(saidas_job.get(m.group(1), "")), corpo)
-    corpo = corpo.replace("github.event.pull_request.head.repo.full_name", repr("fora/repo" if fork else REPO))
-    corpo = corpo.replace("github.event.pull_request.user.login", repr(autor))
-    corpo = corpo.replace("github.event_name", repr(evento))
-    corpo = corpo.replace("github.repository", repr(REPO))
     corpo = corpo.replace("&&", " and ").replace("||", " or ")
     corpo = re.sub(r"!(?!=)", " not ", corpo)
-    corpo = corpo.replace("(", " ( ").replace(")", " ) ")
     sobra = set(re.findall(r"[A-Za-z_.]+", re.sub(r"'[^']*'", "", corpo)))
     assert sobra <= {"True", "False", "and", "or", "not"}, f"if fora do vocabulário: {expr}"
     return eval(corpo, {"__builtins__": {}})
 
 
-def jobs_que_rodam(resultado: str, saidas_passo: dict[str, str], cancelado: bool = False,
-                   evento: str = "pull_request", fork: bool = False, autor: str = "pedro") -> set[str]:
+def jobs_que_rodam(resultado: str, saidas_passo: dict[str, str], cancelado: bool = False) -> set[str]:
     repasse = repasse_do_job_mudancas()
     saidas_job = {saida: saidas_passo.get(passo, "") for saida, passo in repasse.items()}
     rodam = set()
     for job, bloco in jobs_obrigatorios().items():
         se = re.search(r"^    if: (.+)$", bloco, re.M)
         assert se, f"{job} sem if: sem ele o job roda sempre e o detector não serve"
-        if avaliar_if(se.group(1), resultado, saidas_job, cancelado, evento, fork, autor):
+        if avaliar_if(se.group(1), resultado, saidas_job, cancelado):
             rodam.add(job)
     return rodam
 
 
 TUDO = {"backend", "backend-sozinho", "frontend-lint", "build"}
-TESTES = {"backend", "backend-sozinho", "frontend-lint"}
 BACKEND = {"backend", "backend-sozinho", "build"}
-SO_BANCO = {"backend", "backend-sozinho"}
 FRONTEND = {"frontend-lint", "build"}
 
 
@@ -264,29 +247,24 @@ FRONTEND = {"frontend-lint", "build"}
     (["hospital-reunioes/README.md"], set(), "false"),
     (["hospital-reunioes/frontend/package.json"], FRONTEND, "false"),
     (["hospital-reunioes/backend/app/main.py"], BACKEND, "false"),
-    # A migration testa o backend, mas não entra na imagem: sem Docker.
-    (["hospital-reunioes/supabase/migrations/114_x.sql"], SO_BANCO, "false"),
+    (["hospital-reunioes/supabase/migrations/114_x.sql"], BACKEND, "false"),
     # Acento: com core.quotePath ligado (o padrão) o git devolve o caminho
     # entre aspas, e nenhum ^hospital-reunioes/ casaria.
     (["hospital-reunioes/backend/app/serviço.py"], BACKEND, "false"),
-    (["hospital-reunioes/supabase/migrations/115_manifestação.sql"], SO_BANCO, "false"),
+    (["hospital-reunioes/supabase/migrations/115_manifestação.sql"], BACKEND, "false"),
     (["hospital-reunioes/frontend/src/app/reunião/page.tsx"], FRONTEND, "false"),
     # Aspa no nome continua entre aspas mesmo sem quotePath: roda tudo.
     (['hospital-reunioes/backend/app/a"b.py'], TUDO, "true"),
     (["hospital-reunioes/backend/README.md", "hospital-reunioes/frontend/src/app/page.tsx"], TUDO, "false"),
     (["tools/x.py", "hospital-reunioes/frontend/package.json"], FRONTEND, "true"),
-    # Os casos dos cacoetes testam o front, mas ficam fora da imagem.
-    (["tools/tells_casos.json"], {"frontend-lint"}, "true"),
-    # Mudar o CI roda os testes no Mac, e o Docker não: a imagem não mudou.
-    ([".github/workflows/ci.yml"], TESTES, "true"),
-    ([".github/workflows/ferramentas.yml"], TESTES, "true"),
+    ([".github/workflows/ci.yml"], TUDO, "true"),
+    ([".github/workflows/ferramentas.yml"], TUDO, "true"),
     ([], TUDO, "true"),
 ])
 def test_cada_pasta_liga_so_os_jobs_dela(tmp_path, mudados, rodam, ferramenta):
     """A tabela do PRD #963 (decisão 4): backend roda com `backend/` ou
-    `supabase/`, frontend com `frontend/`, `.github/workflows/` roda os
-    testes. O docker build só com o contexto de um dos Dockerfiles
-    (`hospital-reunioes/backend/` ou `frontend/`, issue #1599). Ferramenta (fora de
+    `supabase/`, frontend com `frontend/`, docker build com qualquer um dos
+    dois, `.github/workflows/` roda tudo. Ferramenta (fora de
     `hospital-reunioes/`, a mesma fronteira da subida) não liga job nenhum daqui:
     os testes de `tools/` rodam no `ferramentas.yml`."""
     proc = rodar_detector(tmp_path, mudados)
@@ -309,49 +287,10 @@ def test_detector_ve_o_caminho_antigo_de_um_rename(tmp_path, origem, destino, ro
     assert jobs_que_rodam("success", saidas_do_passo(proc)) == rodam
 
 
-def test_detector_no_push_da_main_roda_os_testes_e_o_docker_so_com_a_imagem(tmp_path):
-    """No push da main os testes rodam inteiros (no Mac, sem custo). O Docker,
-    que gasta minuto do GitHub, só quando o push muda o contexto da imagem."""
+def test_detector_no_push_da_main_sempre_roda_tudo(tmp_path):
     proc = rodar_detector(tmp_path, ["docs/x.md"], evento="push")
     assert proc.returncode == 0, proc.stderr
-    assert jobs_que_rodam("success", saidas_do_passo(proc), evento="push") == TESTES
-
-
-def test_detector_no_push_da_main_com_codigo_roda_tudo(tmp_path):
-    proc = rodar_detector(tmp_path, ["hospital-reunioes/frontend/src/app/page.tsx"], evento="push")
-    assert proc.returncode == 0, proc.stderr
-    assert jobs_que_rodam("success", saidas_do_passo(proc), evento="push") == TUDO
-
-
-def test_detector_no_push_sem_o_commit_anterior_roda_tudo(tmp_path):
-    """O primeiro push de uma branch traz `before` zerado: o diff falha e o
-    Docker roda, do lado seguro."""
-    proc = rodar_detector(tmp_path, ["docs/x.md"], evento="push", base="0" * 40)
-    assert proc.returncode == 0, proc.stderr
-    assert jobs_que_rodam("success", saidas_do_passo(proc), evento="push") == TUDO
-
-
-DEPENDABOT = "dependabot[bot]"
-
-
-@pytest.mark.parametrize("fork, autor", [(True, "alguem"), (False, DEPENDABOT)], ids=["fork", "dependabot"])
-def test_pr_de_fora_nao_roda_no_mac_e_fica_vermelho(fork, autor):
-    """PR de fork e PR do Dependabot não entram no runner do Mac (issue #1599):
-    o código de um e os pacotes novos do outro rodariam com a conta do Pedro.
-    Os jobs exigidos, pulados por `if`, contariam como verdes: o `fora-do-mac`
-    reprova o PR, e a subida só mergeia com todo check verde."""
-    jobs = jobs_do_ci()
-    for job in ("mudancas", "gitleaks", "arquivo-sensivel"):
-        se = "${{ " + re.search(r"^    if: (.+)$", jobs[job], re.M).group(1) + " }}"
-        assert not avaliar_if(se, "success", {}, fork=fork, autor=autor), job
-        assert avaliar_if(se, "success", {}), job
-    assert jobs_que_rodam("skipped", {}, fork=fork, autor=autor) - {"build"} == set()
-    assert jobs_que_rodam("failure", {}) == TUDO
-    recusa = "${{ " + re.search(r"^    if: (.+)$", jobs["fora-do-mac"], re.M).group(1) + " }}"
-    assert avaliar_if(recusa, "success", {}, fork=fork, autor=autor)
-    assert not avaliar_if(recusa, "success", {})
-    assert not avaliar_if(recusa, "success", {}, evento="push")
-    assert "exit 1" in jobs["fora-do-mac"]
+    assert jobs_que_rodam("success", saidas_do_passo(proc)) == TUDO
 
 
 def test_detector_que_nao_acha_a_base_falha_e_roda_tudo(tmp_path):
