@@ -27,6 +27,7 @@ import {
   ConversasDaTecnologia,
   DESIGNAR_DE_NOVO,
   FECHAR_O_PAINEL,
+  MOSTRAR_AS_QUE_NAO_SERAO_FEITAS,
   NOVA_CONVERSA,
   NOVO_PEDIDO,
   REENVIAR,
@@ -1679,6 +1680,75 @@ describe("O Quadro na tela larga (issue #1642, ADR 0090)", () => {
     expect(screen.getByText("Etapa")).toBeTruthy();
     expect(screen.getByRole("button", { name: NOVA_CONVERSA })).toBeTruthy();
     expect(screen.queryByRole("button", { name: NOVO_PEDIDO })).toBeNull();
+  });
+
+  describe("a barra do Quadro (issue #1644, ADR 0090, decisões 2 e 8)", () => {
+    const EU = "/api/admin/tecnologia/eu";
+    const filtros = () => screen.getByRole("region", { name: "Filtros da lista" });
+    const interruptor = () => within(filtros()).getByRole("switch", { name: MOSTRAR_AS_QUE_NAO_SERAO_FEITAS });
+    const comNaoSeraFeita = [
+      ...NO_QUADRO,
+      demanda("q-6", "Relatório que ninguém usa", { etapa: "nao_sera_feita", tem_vinculo: true, numero: 36 }),
+    ];
+
+    it("na tela larga a barra não tem o campo de Etapa", async () => {
+      telaLarga();
+      montar((url) => (url === LISTA ? { status: 200, corpo: NO_QUADRO } : { status: 404, corpo: {} }));
+      await screen.findByRole("region", { name: "Quadro" });
+
+      expect(within(filtros()).getByRole("combobox", { name: "Tipo" })).toBeTruthy();
+      expect(within(filtros()).queryByRole("combobox", { name: "Etapa" })).toBeNull();
+    });
+
+    it("o interruptor Mostrar as que não serão feitas põe a coluna Não será feita no fim, e a tira", async () => {
+      telaLarga();
+      montar((url) => (url === LISTA ? { status: 200, corpo: comNaoSeraFeita } : { status: 404, corpo: {} }));
+      await screen.findByRole("region", { name: "Quadro" });
+      const colunas = () =>
+        within(quadro())
+          .getAllByRole("heading", { level: 3 })
+          .map((h) => h.firstChild?.textContent);
+
+      expect(interruptor().getAttribute("aria-checked")).toBe("false");
+      expect(colunas()).not.toContain("Não será feita");
+      expect(within(quadro()).queryByText("Relatório que ninguém usa")).toBeNull();
+
+      fireEvent.click(interruptor());
+
+      expect(interruptor().getAttribute("aria-checked")).toBe("true");
+      expect(colunas().at(-1)).toBe("Não será feita");
+      expect(within(colunaDe("Não será feita")).getByText("Relatório que ninguém usa")).toBeTruthy();
+
+      fireEvent.click(interruptor());
+
+      expect(colunas()).not.toContain("Não será feita");
+    });
+
+    it("Limpar filtros aparece com o interruptor ligado e o desliga, sem mexer no recorte", async () => {
+      telaLarga();
+      montar((url) => {
+        if (url === EU) return { status: 200, corpo: { desenvolvedor: true } };
+        if (url.startsWith(LISTA)) return { status: 200, corpo: comNaoSeraFeita };
+        return { status: 404, corpo: {} };
+      });
+      const recorte = await within(await screen.findByRole("region", { name: "Filtros da lista" })).findByRole(
+        "group",
+        { name: "Recorte" },
+      );
+      fireEvent.click(within(recorte).getByRole("button", { name: "Todas" }));
+      await screen.findByRole("region", { name: "Quadro" });
+      expect(within(filtros()).queryByRole("button", { name: "Limpar filtros" })).toBeNull();
+
+      fireEvent.click(interruptor());
+      expect(colunaDe("Não será feita")).toBeTruthy();
+
+      fireEvent.click(within(filtros()).getByRole("button", { name: "Limpar filtros" }));
+
+      expect(interruptor().getAttribute("aria-checked")).toBe("false");
+      expect(within(quadro()).queryByRole("region", { name: "Não será feita" })).toBeNull();
+      expect(within(recorte).getByRole("button", { name: "Todas" }).getAttribute("aria-pressed")).toBe("true");
+      expect(within(filtros()).queryByRole("button", { name: "Limpar filtros" })).toBeNull();
+    });
   });
 
   it("o link do sino abre o Quadro com o painel da Demanda certa (issue #1643)", async () => {
