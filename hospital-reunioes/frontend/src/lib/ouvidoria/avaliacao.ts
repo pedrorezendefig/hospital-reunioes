@@ -27,6 +27,12 @@ export function perguntaRetorno(nota: number): boolean {
   return nota <= 3;
 }
 
+/** O botão "Avaliar no Google" (issue #1625): a rota do app que conta o
+ * clique e então redireciona ao link de avaliação da configuração. */
+export function caminhoDoConviteGoogle(avaliacaoId: string): string {
+  return `/api/ouvidoria/publico/avaliacoes/${encodeURIComponent(avaliacaoId)}/convite-google`;
+}
+
 /** O título da tela N1: o mesmo do cartaz daquele ponto. */
 export function tituloDaNota(titulo: TituloDoCartaz | null | undefined): string {
   const achado = TITULOS_DO_CARTAZ.find((t) => t.valor === titulo);

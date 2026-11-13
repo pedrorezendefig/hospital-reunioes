@@ -8,7 +8,7 @@
  * motivos e o comentário, opcionais; a avaliação é gravada no "Enviar
  * avaliação" ou no "Pular", antes de qualquer escolha seguinte. N3 agradece:
  * a nota de 1 a 3 pergunta se a pessoa quer retorno, e a 4 ou 5 oferece o
- * elogio. Quem segue vai para a Manifestação guiada com o id da avaliação, que
+ * elogio e, com o teste ligado, o convite ao Google (issue #1625). Quem segue vai para a Manifestação guiada com o id da avaliação, que
  * só viaja quando a pessoa se identifica (decisão 3).
  *
  * Cartaz aposentado, código desconhecido ou servidor fora do ar abrem a
@@ -23,6 +23,7 @@ import { ManifestacaoPublica } from "@/components/ouvidoria/ManifestacaoPublica"
 import {
   MOTIVOS_DA_AVALIACAO,
   TAMANHO_DO_COMENTARIO,
+  caminhoDoConviteGoogle,
   montarAvaliacao,
   perguntaRetorno,
   tituloDaNota,
@@ -39,7 +40,7 @@ type Tela =
   | { qual: "carregando" }
   | { qual: "nota" }
   | { qual: "motivos"; nota: number }
-  | { qual: "depois"; nota: number; avaliacaoId: string }
+  | { qual: "depois"; nota: number; avaliacaoId: string; conviteGoogle: boolean }
   | { qual: "encerrada" }
   | { qual: "manifestacao"; avaliacaoId: string | null; natureza: NaturezaInformada | null };
 
@@ -128,8 +129,8 @@ export function AvaliacaoPublica({ codigoDoCartaz }: { codigoDoCartaz: string })
         setErro("Não foi possível enviar sua nota agora. Tente de novo em instantes.");
         return;
       }
-      const recibo = (await res.json()) as { id: string };
-      setTela({ qual: "depois", nota, avaliacaoId: recibo.id });
+      const recibo = (await res.json()) as { id: string; convite_google?: boolean };
+      setTela({ qual: "depois", nota, avaliacaoId: recibo.id, conviteGoogle: recibo.convite_google === true });
     } catch {
       setErro("Não foi possível falar com o hospital agora. Verifique sua conexão e tente de novo.");
     } finally {
@@ -243,7 +244,7 @@ export function AvaliacaoPublica({ codigoDoCartaz }: { codigoDoCartaz: string })
       </div>
     );
   } else if (tela.qual === "depois") {
-    const { nota, avaliacaoId } = tela;
+    const { nota, avaliacaoId, conviteGoogle } = tela;
     conteudo = (
       <div className="space-y-5 text-center">
         <CheckCircle2 className="w-10 h-10 text-emerald-500 mx-auto" />
@@ -264,9 +265,30 @@ export function AvaliacaoPublica({ codigoDoCartaz }: { codigoDoCartaz: string })
             </button>
           </div>
         ) : (
-          <button type="button" onClick={() => irParaManifestacao(avaliacaoId, "elogio")} className={LINK}>
-            Quer deixar um elogio para a equipe?
-          </button>
+          <div className="space-y-3">
+            {/* O convite ao Google (issue #1625, ADR 0089): só a nota 4 ou 5, e
+                só quando o servidor diz que as duas chaves do teste estão
+                ligadas. O link passa pela rota que conta o clique antes de
+                levar ao Google; o destino nunca sai da página. */}
+            {conviteGoogle && (
+              <div className="space-y-3">
+                <p className="text-sm text-slate-600">
+                  Se quiser, conte também no Google. Isso ajuda outras pessoas a nos conhecer.
+                </p>
+                <a
+                  href={caminhoDoConviteGoogle(avaliacaoId)}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className={PRINCIPAL}
+                >
+                  Avaliar no Google
+                </a>
+              </div>
+            )}
+            <button type="button" onClick={() => irParaManifestacao(avaliacaoId, "elogio")} className={LINK}>
+              Quer deixar um elogio para a equipe?
+            </button>
+          </div>
         )}
       </div>
     );
