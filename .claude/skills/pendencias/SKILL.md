@@ -21,7 +21,7 @@ Mostra o que está parado em cada repositório de `~/PedroDev`, diz o que é cad
 python3 ~/.claude/skills/pendencias/scripts/pendencias.py [Pasta ...] [--sem-fetch]
 ```
 
-O script faz `git fetch` e mostra, por repositório: branch, mudanças pendentes (com a idade do arquivo mais novo), commits que não subiram, commits da branch fora da main, PR aberto da branch, branches locais velhas e a linha `velha?`. Velha quer dizer: a mudança mais antiga tem mais de 7 dias, ou a main recebeu commits depois dela. Não mostre a saída crua para o Pedro; ela é a sua matéria-prima.
+O script faz `git fetch` e mostra, por repositório: branch, mudanças pendentes (com a idade do arquivo mais novo), commits que não subiram, commits da branch fora da main, PR aberto da branch, branches locais velhas e as linhas `velha?` e `conflito?`. Velha quer dizer: a mudança mais antiga tem mais de 7 dias, ou a main recebeu commits depois dela. Conflito quer dizer: juntar o que está ali (commits e arquivos mexidos) com a main dá conflito nos arquivos listados. O script simula o merge sem mexer em arquivo, índice ou branch; "não deu para simular" aparece com git anterior ao 2.38. Não mostre a saída crua para o Pedro; ela é a sua matéria-prima.
 
 ## Passo 2: entender cada pendência
 
@@ -34,12 +34,26 @@ Para cada repositório com algo, descubra **o que é** a mudança. Leia o mínim
 
 Com 4 ou mais repositórios com diff grande, dispare um agente `Explore` por repositório, em paralelo, e peça de volta 2 linhas: o que é e se parece completo.
 
+### Um assunto, vários repositórios
+
+A mesma mudança aparece em mais de um repositório quando vem de uma fonte comum. Junte numa linha só: mesmo assunto e mesma lista de arquivos (ou quase) é uma linha da tabela, com os repositórios dentro dela. O Pedro lê uma vez e responde uma vez.
+
+O caso mais comum é o **Pacote do fluxo**: arquivos em `.claude/skills/` e `.claude/agents/` de um Projeto que tem `.claude/fluxo.json`. Eles vêm do PedroOS pelo instalador (ADR 0007 do PedroOS) e ninguém escreve neles à mão. Para saber se a cópia de um repositório é a versão atual:
+
+```bash
+git -C ~/PedroDev/OS pull --ff-only     # a fonte em dia; pule se o OS tem mudança pendente
+~/PedroDev/OS/scripts/instalar-skills.sh --conferir --projeto <nome>
+```
+
+O `<nome>` é o de `~/PedroDev/OS/projetos/<nome>.json`. Nada impresso: a cópia é a versão atual, e a mudança vai para a caixa Pronta. Linha impressa: a cópia já está atrás da fonte. Diga quais skills, e a sugestão é rodar o instalador sem `--conferir` para aquele Projeto e depois subir.
+
 Classifique cada pendência numa destas caixas:
 
 | Caixa | Sinal | Sugestão |
 |---|---|---|
 | **Em uso** | arquivo mexido há menos de 15 min (o script marca "ATENÇÃO") ou é a pasta desta sessão com trabalho dela | Não mexer. Esperar. |
-| **Pronta** | mudança coerente e completa, de um assunto só | Subir: branch, commit, PR, merge. |
+| **Pronta** | mudança coerente e completa, de um assunto só, com `conflito? não` | Subir: branch, commit, PR, merge. |
+| **Com conflito** | `conflito? sim` | Esperar. Dizer os arquivos. A `/resolver-conflitos` só com o Pedro pedindo. |
 | **PR pronto** | PR aberto, `mergeable=MERGEABLE`, estado `CLEAN` | Mergear o PR. |
 | **Meio feita** | `wip`, código pela metade, teste quebrado, mistura de assuntos | Esperar. Dizer o que falta. |
 | **Lixo** | build (`dist/`, `.astro/`, `.vercel/`), prints do `.playwright-cli/`, `.bak`, planilha solta na raiz | Pôr no `.gitignore` ou apagar. Nunca commitar. |
@@ -71,15 +85,18 @@ X é o PR (`#123`) ou o commit (`abc1234`) que você achou. Sem evidência, a re
 
 ## Passo 3: mostrar o plano
 
-Uma tabela, um repositório por linha, na ordem: o que dá para mergear agora primeiro, depois o que espera, depois o lixo.
+Uma tabela, um assunto por linha (vários repositórios na mesma linha quando é o mesmo assunto), na ordem: o que sobe agora primeiro, depois o que espera, depois o lixo.
+
+A coluna **Sobe agora?** diz "sim" só quando as três coisas valem: caixa Pronta ou PR pronto, `conflito? não` e relação "nada parecido" ou "completa X". Nos outros casos diz "não" e a Sugestão diz o motivo.
 
 ```
-| Repositório | O que é | Velha? | Relação | Sugestão |
-|---|---|---|---|---|
-| OS | botões "abrir todos" nas Alas (7 arquivos, mexido há 37 min) | não | nada parecido | Esperar: em uso |
-| Diduccio | PR #29 glossário, verde e sem conflito | não | nada parecido | Mergear o PR #29 |
-| Hospital | branch da ADR 0073 de contas médicas, 1 commit | sim, 10 dias e main andou 217 | superada por #1290 | Comparar antes: a ADR tem a regra de quem analisa |
-| Pedro | carimbo de dados + nota de finanças + planilha IBMS solta | sim, 11 dias | já subiu em 147fa6c (carimbo) | Descartar o carimbo; nota fica; planilha fora |
+| Assunto | Onde | Velha? | Conflito? | Relação | Sobe agora? | Sugestão |
+|---|---|---|---|---|---|---|
+| Pacote do fluxo (lentes da revisão, painel de voz) | Ana, Diduccio, IAE | não | não | nada parecido | sim | Subir um PR em cada |
+| PR #29 glossário, verde | Diduccio | não | não | nada parecido | sim | Mergear o PR #29 |
+| botões "abrir todos" nas Alas (7 arquivos, mexido há 37 min) | OS | não | não | nada parecido | não | Esperar: em uso |
+| ADR 0073 de contas médicas, 1 commit | Hospital | sim, 10 dias e main andou 217 | sim, 3 arquivos | superada por #1290 | não | Comparar antes: a ADR tem a regra de quem analisa |
+| carimbo de dados + nota de finanças + planilha IBMS solta | Pedro | sim, 11 dias | não | já subiu em 147fa6c (carimbo) | não | Descartar o carimbo; nota fica; planilha fora |
 ```
 
 Depois da tabela, no máximo 3 linhas: os riscos que mudam a decisão (por exemplo, branch 127 commits atrás da main, que vai dar conflito). Repositório limpo: uma linha só com os nomes.

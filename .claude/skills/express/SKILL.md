@@ -1,6 +1,6 @@
 ---
 name: express
-description: 'Fecha um grill em andamento em lote, com painel de aprovação. No meio de um `/grill-with-docs`, a pessoa diz "/express" e o agente responde todas as perguntas que faltam com a própria recomendação, entrega a tabela decisão por decisão (escolha, por quê, a outra opção) no terminal e num painel interativo publicado como Artifact (Concordo ou Discordo por linha, nota, botão de aprovar), e espera a aprovação antes de classificar a porta e chamar `/to-prd`. Com `--voz`, o painel agrupa as decisões em Pacotes de perguntas, cada um com uma Fala de até 30 segundos na voz B e um Sim ou Não que a pessoa responde pelo celular. Use quando o usuário disser "/express", "/express --voz", "fecha o grill com as suas recomendações", "responde o resto você e me mostra a tabela", "segue com todas as recomendações e me pede aprovação". Não implementa nada e não chama `/ship`: o grill de uma rodada que implementava a ponte mínima morreu em 01/11/2026 (ideia pequena vai para `/grill-with-docs --lote`).'
+description: 'Fecha um grill em andamento em lote, com painel de aprovação. No meio de um `/grill-with-docs`, a pessoa diz "/express" e o agente responde todas as perguntas que faltam com a própria recomendação, entrega a tabela decisão por decisão (escolha, por quê, a outra opção) no terminal e num painel interativo publicado como Artifact (Concordo ou Discordo por linha, nota, botão de aprovar), e espera a aprovação antes de classificar a porta e chamar `/to-prd`. Com `--voz`, o painel agrupa as decisões em Pacotes de perguntas, cada um com uma Fala de até 30 segundos na voz oficial e um Sim ou Não que a pessoa responde pelo celular. Use quando o usuário disser "/express", "/express --voz", "fecha o grill com as suas recomendações", "responde o resto você e me mostra a tabela", "segue com todas as recomendações e me pede aprovação". Não implementa nada e não chama `/ship`: o grill de uma rodada que implementava a ponte mínima morreu em 01/11/2026 (ideia pequena vai para `/grill-with-docs --lote`).'
 ---
 
 # Express: fechar o grill em lote, com painel
@@ -76,7 +76,7 @@ Gatilho: `--voz`, "com voz" ou "fala para mim". Sem o gatilho nada desta seção
 O lote é o mesmo das Fases 1 e 2. Mudam o agrupamento, o painel e a aprovação. A pessoa ouve e responde pelo celular, longe do Mac.
 
 1. **Pacote de perguntas.** Agrupe as decisões por tema em 3 a 5 Pacotes de perguntas, com até 7 decisões cada. A porta entra no último.
-2. **Fala do pacote.** Para cada Pacote, um texto para o ouvido com teto de 30 segundos (uns 70 palavras; a voz B fala perto de 3 palavras por segundo). O alvo é sempre o menor texto que explica, não o teto. A Fala:
+2. **Fala do pacote.** Para cada Pacote, um texto para o ouvido com teto de 30 segundos (uns 70 palavras; a voz oficial fala perto de 3 palavras por segundo). O alvo é sempre o menor texto que explica, não o teto. A Fala:
    - abre com "Pacote N." e fecha com "Segue com as recomendações?";
    - diz a escolha de cada decisão, e junta as óbvias numa frase só;
    - dá o motivo só onde houve troca de verdade, e cita a opção descartada só quando ela muda a decisão;

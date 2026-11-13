@@ -2,7 +2,7 @@
 name: onda-revisor
 description: Revisor independente da /onda-enxuta. Lê o diff de um PR pelo GitHub, olhando spec, código e segurança de primeiro nível, mais as Lentes que o lentes.py escolhe para o PR (segurança, banco, design), e comenta o veredito no PR. Só leitura; nunca aprova, nunca edita.
 model: claude-opus-5-5
-effort: high
+effort: xhigh
 tools: Bash, Read, Grep, Glob
 maxTurns: 60
 ---

@@ -39,11 +39,13 @@ SUBIDA = "python3 .claude/skills/onda-enxuta/scripts/fechar_onda.py"
 TRIAGEM = ("ready-for-agent", "ready-for-human", "needs-triage", "needs-info")
 
 # O PRD do leitor (`prd_do_leitor` no .claude/fluxo.json):
-# uma needs-triage criada fora do repo com a metade de negócio do PRD, sem label própria.
-# O que a distingue é o marcador do Projeto mais a seção "Ficou em aberto"; com
-# "Decisões de implementação" no corpo, o /to-prd já passou. Sem a chave, nada muda.
+# a needs-triage que o diretor criou na aba Tecnologia, sem label própria.
+# O que a distingue é o marcador do Projeto mais a seção "Ficou em aberto". O card
+# novo já nasce com "Decisões de implementação" (ADR 0077 do Hospital), então o que
+# diz que o Refino passou é a marca de Refino que o prd_do_diretor.py grava (PRD #240
+# do PedroOS). Sem a chave, nada muda.
 FICOU_EM_ABERTO = re.compile(r"^## Ficou em aberto\s*$", re.M)
-DECISOES_TECNICAS = re.compile(r"^## Decisões de implementação\s*$", re.M)
+MARCA_DE_REFINO = re.compile(r"<!-- refino(?:: \S+)? -->")
 
 
 def _marcador_do_prd_do_leitor() -> re.Pattern | None:
@@ -80,14 +82,14 @@ def minhas(issues: list[dict], login: str) -> list[dict]:
 
 
 def grill_tecnico_pendente(i: dict) -> bool:
-    """needs-triage com PRD do leitor que ainda não ganhou as seções técnicas."""
+    """needs-triage com PRD do leitor que ainda não passou pelo Refino."""
     corpo = i.get("body") or ""
     return (
         MARCADOR_DO_PRD_DO_LEITOR is not None
         and "needs-triage" in i["labels"]
         and bool(MARCADOR_DO_PRD_DO_LEITOR.search(corpo))
         and bool(FICOU_EM_ABERTO.search(corpo))
-        and not DECISOES_TECNICAS.search(corpo)
+        and not MARCA_DE_REFINO.search(corpo)
     )
 
 

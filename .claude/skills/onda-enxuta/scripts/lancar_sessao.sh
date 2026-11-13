@@ -2,7 +2,7 @@
 # Lança uma sessão de onda em segundo plano, com ambiente limpo e MCP zero.
 #
 # Uso:
-#   lancar_sessao.sh <nome> <arquivo-com-o-prompt> [--dry-run] [--effort high] [--model opus] [--cwd <raiz do repo>]
+#   lancar_sessao.sh <nome> <arquivo-com-o-prompt> [--dry-run] [--effort xhigh] [--model opus] [--cwd <raiz do repo>]
 #
 # Por que o ambiente precisa ser limpo: dentro do Bash de uma sessão existem
 # ANTHROPIC_API_KEY (chave de sessão), CLAUDE_EFFORT e outras variáveis da
@@ -21,7 +21,7 @@
 set -u
 
 NOME="${1:-}"; PROMPT_ARQ="${2:-}"; shift 2 || true
-DRY=0; EFFORT="high"; MODEL="opus"; CWD=""
+DRY=0; EFFORT="xhigh"; MODEL="opus"; CWD=""
 while [ $# -gt 0 ]; do
   case "$1" in
     --dry-run) DRY=1 ;;
@@ -34,7 +34,7 @@ while [ $# -gt 0 ]; do
 done
 
 if [ -z "$NOME" ] || [ -z "$PROMPT_ARQ" ] || [ ! -f "$PROMPT_ARQ" ]; then
-  echo "uso: lancar_sessao.sh <nome> <arquivo-com-o-prompt> [--dry-run] [--effort high] [--model opus] [--cwd <repo>]" >&2
+  echo "uso: lancar_sessao.sh <nome> <arquivo-com-o-prompt> [--dry-run] [--effort xhigh] [--model opus] [--cwd <repo>]" >&2
   exit 1
 fi
 

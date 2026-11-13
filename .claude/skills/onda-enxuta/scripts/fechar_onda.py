@@ -133,7 +133,8 @@ cabe em 10 linhas mais uma por PR, fora as da migration):
      main de antes do lote e cada squash, na ordem, e o primeiro vermelho sai por um PR
      `revert/<chave>-pr<N>` (testado aqui, CI verde, squash pela API); a issue dele volta para
      `ready-for-agent` com a falha e o Estado da Onda ganha o evento `revert` (saida 9).
-     Revert que nao entra: nada e mergeado e a onda quebra (saida 10). Detalhe no
+     Revert que nao entra: nada e mergeado e a onda quebra (saida 10). A ponta que falha e
+     depois passa e o Teste instavel: evento `instavel` com o nome do teste e saida normal. Detalhe no
      teste_da_main.py. O lote de app com deploy nao roda o passo: o revert pediria outro
      build, e o health e o rollback ja guardam producao
 
@@ -1610,8 +1611,8 @@ class GitHubDaSubida:
 
 def testar_a_main(raiz: Path, chave: str, avulso: bool, mergeados: list[tuple[dict, str, float]]) -> int | None:
     """O passo depois do merge da onda (issue #327), com o `teste_da_main` do fluxo.json. Devolve
-    EXIT_REVERT, EXIT_QUEBRADA, ou None: main verde, Projeto sem o comando, PR avulso, ou o passo que nao
-    rodou (a linha `aviso:` diz por que)."""
+    EXIT_REVERT, EXIT_QUEBRADA, ou None: main verde, Teste instavel (so o evento `instavel`), Projeto sem o
+    comando, PR avulso, ou o passo que nao rodou (a linha `aviso:` diz por que)."""
     comando = _CFG.get("teste_da_main")
     if avulso or not comando:
         return None

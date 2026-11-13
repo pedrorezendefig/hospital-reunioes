@@ -2,7 +2,7 @@
 name: onda-implementador
 description: "Implementa uma fatia (issue) da /onda-enxuta em worktree próprio: claim, TDD, PR aberto sem revisão interna, e termina. Não espera CI, não corrige revisão, não define versão; a versão é da subida (`APP_VERSION` + tag, sem commit)."
 model: claude-opus-5-5
-effort: high
+effort: xhigh
 tools: Bash, Read, Edit, Write, Grep, Glob, Skill
 isolation: worktree
 maxTurns: 200

@@ -1,6 +1,6 @@
 ---
 name: retro-onda
-description: Retrospectiva de uma onda da /onda-enxuta. Lê o que a onda deixou (medição, baixas, correções, subida, JSONL) e propõe mudanças no ambiente dos agentes, não no código. Grava a Retro com as Candidatas aceitas e imprime a linha `Candidata:` de cada uma. Sintaxe `/retro-onda [<nome>-onda<N> | <id de sessão>]`.
+description: 'Retrospectiva de uma onda da /onda-enxuta. Lê o que a onda deixou (medição, baixas, correções, subida, JSONL) e propõe mudanças no ambiente dos agentes, não no código. Grava a Retro com as Candidatas aceitas e imprime a linha `Candidata:` de cada uma. Com `--todas`, a Análise das Retros: todas as Retros pendentes de uma vez, uma Candidata comum por causa. Sintaxe `/retro-onda [<nome>-onda<N> | <id de sessão> | --todas]`.'
 disable-model-invocation: true
 ---
 
@@ -13,10 +13,10 @@ Fork do `/retro` do Matt Pocock (Skills v1.3), com as fontes e as casas do pacot
 ## Sintaxe
 
 ```
-/retro-onda [<nome>-onda<N> | <id de sessão>]
+/retro-onda [<nome>-onda<N> | <id de sessão> | --todas]
 ```
 
-Sem argumento: a medição mais recente em `~/.claude/onda-enxuta/medicoes/`.
+Sem argumento: a medição mais recente em `~/.claude/onda-enxuta/medicoes/`. Com `--todas`: a Análise das Retros (seção própria abaixo), no lugar das Fontes e dos Passos.
 
 ## Fontes, nesta ordem
 
@@ -56,6 +56,37 @@ Sem argumento: a medição mais recente em `~/.claude/onda-enxuta/medicoes/`.
    ```
 
    `<slug>` é o `slug` do `fluxo.py`, `<sessao>-onda<N>` é a onda desta Retro e `<n>` é o número da Candidata. A linha vai como está no pedido do `/ship` da correção, e o PR que entra na main com ela dá a Candidata por corrigida. Termine com a linha "só a Retro foi gravada; cada Candidata aceita vira `/ship` próprio, com a linha `Candidata:` no pedido".
+
+## Modo --todas: a Análise das Retros
+
+Todas as Retros pendentes, de todos os Projetos, de uma vez. O humano aceita as Candidatas uma vez só, e cada Onda fica com a Retro gravada com as Candidatas da causa dela. A tabela de casas, o "momento concreto" e o check antes do check novo valem como nos Passos.
+
+1. **Liste as Retros pendentes** (linha `retro:` "recomendada" e nada gravado), de todos os Projetos, nos Estados da Onda em `~/.pedroos/ondas/`:
+
+   ```bash
+   jq -r 'select(.contrato == 1 and .registro_retro == null and ((.retro // "") | test("^(retro:\\s*)?recomendada"; "i"))) | [.slug, .id, .sessao, .onda, .repo, .prd, .pasta, .retro] | @tsv' "${PEDROOS_ONDAS:-$HOME/.pedroos/ondas}"/*/*.json
+   ```
+
+   Sem nenhuma, diga que não há Retro pendente e pare.
+2. **Leia o atrito de cada uma**: a linha `retro:` (o motivo entre parênteses) e o comentário `## Onda <sessao> <N>` no PRD da Onda (`gh issue view <prd> --repo <repo> --comments`: subida, baixas, erros). A medição e o JSONL só onde a causa não fecha com isso.
+3. **Agrupe por causa no ambiente**, não por sintoma: o mesmo Teste instável em três Projetos é uma causa só. Onda sem atrito que ensine (a pendência acabou fora da Onda, erro de rede, nada a mudar no ambiente) não entra em causa nenhuma.
+4. **Delegue a investigação de cada causa grande** (a que pega 3 Ondas ou mais) a um subagente, um por causa e em paralelo: ele recebe as Ondas da causa e devolve o momento concreto, a casa e a mudança, em até 10 linhas. Causa pequena você mesmo investiga.
+5. **Apresente uma Candidata por causa**, numeradas de 1 em diante, da que pega mais Ondas para a que pega menos: **causa**, quantas Ondas ela pegou e quais (`<slug>/<sessao>-onda<N>`), **mudança** (arquivo e uma linha) e **tipo**. No fim, as Ondas sem Candidata, com o porquê numa linha. Dê o id da Análise: `analise-<AAAA-MM-DD>` com a data de hoje (se o id já aparece em algum Estado da Onda, acrescente `-2`, `-3`).
+6. **Pergunte quais Candidatas o humano aceita, pelos números.** Só grave depois da resposta.
+7. **Grave a Retro de toda Onda da lista**, na raiz do clone do Projeto dela (a `pasta` sem o trecho `/.claude/worktrees/...`), com as Candidatas aceitas da causa dela, cada uma com o número da lista:
+
+   ```bash
+   python3 .claude/skills/onda-enxuta/scripts/estado_onda.py retro --sessao <sessao> --onda <N> --analise <id> --candidata <n> "<título>"
+   ```
+
+   Onda sem Candidata aceita (a causa dela foi recusada, ou ela não tinha atrito que ensine) também tem a Retro gravada: rode sem `--candidata`. Se o script do Projeto não conhece o `--analise`, o pacote do fluxo daquele Projeto está velho: sincronize (`scripts/instalar-skills.sh` do PedroOS) e rode de novo.
+8. Para cada aceita, imprima a linha da Candidata comum, uma só para todas as Ondas que ela cobre:
+
+   ```
+   Candidata: <id> #<n>
+   ```
+
+   `<id>` é o id da Análise e `<n>`, o número da Candidata. O PR que entra na main com essa linha dá a Candidata por corrigida em todas as Ondas que a têm. Termine com a linha "só as Retros foram gravadas; cada Candidata aceita vira `/ship` próprio, com a linha `Candidata:` no pedido".
 
 ## O que esta skill não faz
 
