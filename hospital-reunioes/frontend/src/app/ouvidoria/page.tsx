@@ -28,7 +28,7 @@ import {
   type ManifestacaoIndice,
 } from "@/lib/ouvidoria/fila";
 import { avisosDeDegradacao, hojeNoHospital } from "@/lib/ouvidoria/painel";
-import { type ResultadoDaCobranca } from "@/lib/ouvidoria/cobranca";
+import { cobrarOSetor, type ResultadoDaCobranca } from "@/lib/ouvidoria/cobranca";
 import { classificarPrazoDaManifestacao, EM_ANDAMENTO } from "@/lib/ouvidoria/prazo";
 import { podeVerTriagemDeEmail } from "@/lib/ouvidoria/triagem-email";
 import { ALTURA_DE_TOQUE } from "@/lib/toque";
@@ -232,38 +232,9 @@ export default function OuvidoriaPage() {
     // O aviso do redirecionamento não sobrevive ao ato seguinte (issue #710).
     setAvisoDoRedirecionamento(null);
     anotar({ fase: "enviando" });
-    try {
-      const res = await fetch(`/api/ouvidoria/manifestacoes/${m.id}/cobrar-setor`, {
-        method: "POST",
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      const corpo = await res.json().catch(() => null);
-      if (!res.ok) {
-        // Só os dois status com que ESTA rota explica uma recusa (setor sem
-        // responsável vigente, cadastro que não pôde ser lido) chegam ao
-        // ouvidor com a frase do servidor. Repassar qualquer `detail` poria um
-        // "Internal Server Error" na linha da fila.
-        const explicada = res.status === 409 || res.status === 503;
-        anotar(
-          explicada && typeof corpo?.detail === "string"
-            ? { fase: "recusada", explicacao: corpo.detail }
-            : { fase: "falha" }
-        );
-        return;
-      }
-      // `entregue` é o que a rota afirma sobre o provedor. Sem ele, um email
-      // recusado na hora sairia da tela como cobrança feita. O `destinatario` é
-      // quem o servidor escolheu, e não o nome que a linha desenhou: prometer
-      // pelo nome da tela seria prometer sobre um email que não conferimos.
-      anotar({
-        fase: "reenviada",
-        destinatario: corpo?.destinatario || "quem responde pelo setor",
-        entregue: Boolean(corpo?.entregue),
-      });
-    } catch (e) {
-      console.error("Erro ao cobrar o setor:", e);
-      anotar({ fase: "falha" });
-    }
+    // A chamada e a leitura da resposta moram em `lib/ouvidoria/cobranca`: o
+    // card do Painel cobra pela mesma porta (issue #1628).
+    anotar(await cobrarOSetor(m.id, token));
   }
 
   /**

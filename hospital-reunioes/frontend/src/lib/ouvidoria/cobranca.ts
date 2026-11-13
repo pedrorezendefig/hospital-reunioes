@@ -56,6 +56,44 @@ export function textoDaCobranca(resultado: ResultadoDaCobranca): string {
   }
 }
 
+/**
+ * Cobra o setor de um caso e devolve o que a tela pode afirmar. É a mesma
+ * chamada na fila e no card do Painel (issue #1628): a rota resolve o
+ * destinatário, manda o acionamento de novo e grava a cobrança na trilha do
+ * caso.
+ *
+ * Só os dois status com que ESTA rota explica uma recusa (setor sem
+ * responsável vigente, cadastro que não pôde ser lido) chegam ao ouvidor com a
+ * frase do servidor. Repassar qualquer `detail` poria um "Internal Server
+ * Error" na linha.
+ */
+export async function cobrarOSetor(manifestacaoId: string, token: string): Promise<ResultadoDaCobranca> {
+  try {
+    const res = await fetch(`/api/ouvidoria/manifestacoes/${manifestacaoId}/cobrar-setor`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    const corpo = await res.json().catch(() => null);
+    if (!res.ok) {
+      const explicada = res.status === 409 || res.status === 503;
+      return explicada && typeof corpo?.detail === "string"
+        ? { fase: "recusada", explicacao: corpo.detail }
+        : { fase: "falha" };
+    }
+    // `entregue` é o que a rota afirma sobre o provedor. Sem ele, um email
+    // recusado na hora sairia da tela como cobrança feita. O `destinatario` é
+    // quem o servidor escolheu, e não o nome que a linha desenhou.
+    return {
+      fase: "reenviada",
+      destinatario: corpo?.destinatario || "quem responde pelo setor",
+      entregue: Boolean(corpo?.entregue),
+    };
+  } catch (e) {
+    console.error("Erro ao cobrar o setor:", e);
+    return { fase: "falha" };
+  }
+}
+
 /** Verde só para o que chegou; o resto pede atenção. */
 export function tomDaCobranca(resultado: ResultadoDaCobranca): "ok" | "alerta" | "neutro" {
   if (resultado.fase === "reenviada") return resultado.entregue ? "ok" : "alerta";
