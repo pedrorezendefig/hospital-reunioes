@@ -416,8 +416,12 @@ async def rotulo_do_cartaz(
     if not cartaz:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Cartaz não encontrado")
     # Só o nome que o paciente vê. O setor é nome interno da casa e não sai por
-    # esta porta (ADR 0086, decisão 10).
-    return {"nome_publico": ouvidoria_pontos.nome_exibido(cartaz)}
+    # esta porta (ADR 0086, decisão 10). O título é o do cartaz, que a tela de
+    # nota repete (issue #1622).
+    return {
+        "nome_publico": ouvidoria_pontos.nome_exibido(cartaz),
+        "titulo_cartaz": cartaz.get("titulo_cartaz") or "atendimento_hoje",
+    }
 
 
 class AvaliacaoPublica(BaseModel):
@@ -477,7 +481,9 @@ async def avaliar_pelo_cartaz(
     # Só a grafia do cartaz. O limitador conta pelo caminho da URL, e aceitar
     # `ab2cd3` daria a cada grafia do mesmo código um balde novo. A página
     # manda o código em maiúscula.
-    cartaz = ouvidoria_pontos.por_codigo(supabase, codigo) if codigo == ouvidoria_pontos.normalizar_codigo(codigo) else None
+    cartaz = (
+        ouvidoria_pontos.por_codigo(supabase, codigo) if codigo == ouvidoria_pontos.normalizar_codigo(codigo) else None
+    )
     if not cartaz:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Cartaz não encontrado")
     try:

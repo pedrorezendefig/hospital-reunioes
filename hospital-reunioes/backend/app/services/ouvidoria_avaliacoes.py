@@ -65,9 +65,7 @@ def para_ligar(supabase, avaliacao_id: str | None, cartaz: dict | None) -> dict 
         achadas = supabase.table(TABELA).select("id, ponto_id, nota").eq("id", avaliacao_id).execute().data or []
         if not achadas or achadas[0].get("ponto_id") != cartaz.get("id"):
             return None
-        ja_ligada = (
-            supabase.table("ouvidoria_protocolos").select("id").eq("avaliacao_id", avaliacao_id).execute().data
-        )
+        ja_ligada = supabase.table("ouvidoria_protocolos").select("id").eq("avaliacao_id", avaliacao_id).execute().data
     except Exception:
         logger.warning("[Ouvidoria] Falha ao conferir a avaliação do caso; o caso entra sem a ligação")
         return None

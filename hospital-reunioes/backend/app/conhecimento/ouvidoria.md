@@ -6,6 +6,7 @@ Quem trabalha nele é o ouvidor e a diretoria executiva, cada um com o seu acess
 
 ## Por onde um caso chega
 
+- **Nota do QR.** O QR do cartaz abre primeiro uma nota de 1 a 5, com o nome do lugar e o título do cartaz. Depois de tocar na nota, a pessoa pode marcar o que mais marcou o atendimento e deixar um comentário de até 500 caracteres, ou pular. A nota é gravada nesse momento e não vira protocolo nem caso: é número para a gestão, e não guarda nada de quem avaliou. Do mesmo endereço de internet entram no máximo três notas a cada 10 minutos no mesmo cartaz. A nota de 1 a 3 pergunta se a pessoa quer retorno da Ouvidoria, e a nota 4 ou 5 oferece deixar um elogio. Nos dois casos ela segue para o formulário de cinco passos, e o caso fica ligado à nota, menos quando a pessoa escolhe ficar anônima. No rodapé da nota há um link para ir direto ao formulário, e o cartaz desativado abre o formulário sem origem.
 - **Formulário público e QR.** A pessoa registra sem entrar no aplicativo, num passo a passo de cinco passos, e recebe o número do protocolo na tela. O formulário começa pela escolha entre se identificar ou ficar anônima. Depois pergunta sobre o que é o relato, quando foi (dia e período, com a hora se ela lembrar), onde foi, o que aconteceu, os profissionais envolvidos e a data de nascimento do paciente, se ela souber, e o que espera da Ouvidoria: uma resposta, uma providência ou só registrar. O lugar sai de uma lista com os nomes que o paciente entende, e o quarto só é pedido em ala de internação. Para quem chega pelo QR, o local já vem escolhido com o nome do cartaz, e dá para trocar. Quem se identifica deixa o nome e um telefone ou e-mail, ao menos um; quem deixa só o telefone é avisado de que as respostas saem por e-mail. O QR fica em cartaz pelos setores; o setor do cartaz é só a origem do relato, nunca a área responsável, e o local que a pessoa escolhe também não decide a área.
 - **Ana.** A agente de atendimento registra o caso e informa o protocolo ao paciente na conversa.
 - **E-mail.** A caixa da ouvidoria **não está ligada ao aplicativo**. O que chega ali o ouvidor lê e digita como caso, do mesmo jeito que faz com o telefonema. Já está decidido que essa caixa vai passar por uma triagem dentro do aplicativo, onde ele decidirá se o e-mail vira manifestação, se junta a um caso que já existe ou se é descartado, mas isso ainda não foi construído.
@@ -46,7 +47,7 @@ Caso anônimo, ou caso cujo contato não traz um e-mail utilizável, é encerrad
 
 ## Encerramento e apagamento
 
-O relato de um caso encerrado é apagado depois de cinco anos, sozinho, de madrugada. A diretoria executiva pode apagar antes, um caso por vez, com motivo escrito. Apagar some com o relato, o nome, o contato e o telefone, os anexos e o que o passo a passo perguntou: o dia, o período e a hora, o lugar e o quarto, os profissionais, o nome e a data de nascimento do paciente e o que a pessoa esperava. O protocolo, a trilha e os números ficam, e é a trilha que explica o buraco. Não tem volta, e o caso apagado não reabre.
+O relato de um caso encerrado é apagado depois de cinco anos, sozinho, de madrugada. A diretoria executiva pode apagar antes, um caso por vez, com motivo escrito. Apagar some com o relato, o nome, o contato e o telefone, os anexos e o que o passo a passo perguntou: o dia, o período e a hora, o lugar e o quarto, os profissionais, o nome e a data de nascimento do paciente e o que a pessoa esperava. O protocolo, a trilha e os números ficam, e é a trilha que explica o buraco. Não tem volta, e o caso apagado não reabre. O comentário da nota do QR também é apagado sozinho, cinco anos depois de escrito, e a nota e os motivos ficam para os números.
 
 Arquivar é outra coisa: só tira da lista o caso que já foi encerrado, para organizar a vista, e tem volta. Caso em andamento não arquiva, porque esconder um prazo correndo é esconder atraso.
 
@@ -80,7 +81,7 @@ A nota do Google é buscada sozinha uma vez por semana, junto com o total de ava
 - O paciente nunca vê o nome interno do setor, e sem nome público aparece o rótulo do ponto.
 - O cartaz sai em PDF no tamanho A4, no modelo aprovado pela diretoria, com o QR de 9 centímetros, um endereço curto impresso para quem prefere digitar e, fora da moldura, uma linha de controle para quem instala saber qual cartaz é qual, e o cartaz pequeno em A5 continua disponível.
 - No cartaz de ala de internação o aviso manda falar com a enfermagem do posto da ala, e nos outros com a equipe do setor.
-- Os cartazes antigos continuam funcionando, porque o QR antigo leva ao mesmo endereço curto do cartaz novo, que hoje abre o formulário com a origem do ponto, ou sem origem se o ponto foi desativado.
+- Os cartazes antigos continuam funcionando, porque o QR antigo leva ao mesmo endereço curto do cartaz novo, que abre a nota do ponto, ou o formulário sem origem se o ponto foi desativado.
 - O formulário público é um passo a passo de cinco passos que começa pela escolha entre se identificar ou ficar anônimo, e pede quando e onde foi e o que a pessoa espera; paciente, profissionais, hora e quarto são opcionais.
 - Quem se identifica deixa o nome e um telefone ou e-mail, e quem deixa só o telefone é avisado de que as respostas saem por e-mail.
 - No caso anônimo que vem de um cartaz, fica o local que a pessoa confirmou, e não o código do cartaz.
@@ -91,7 +92,7 @@ A nota do Google é buscada sozinha uma vez por semana, junto com o total de ava
 - Caso apagado não tem volta e não reabre, e arquivar só organiza a lista e vale apenas para caso encerrado.
 - Linha da trilha nunca é apagada, e erro se conserta com um registro novo.
 - Os títulos do PDF do relatório e do cartaz da Ouvidoria saem em caixa alta, inclusive o título das sugestões escritas pela inteligência artificial, e o resto do texto continua com maiúscula e minúscula.
-- O QR dos cartazes vai abrir primeiro uma nota de 1 a 5, que não vira protocolo, e só quem pede retorno ou quer registrar segue para a manifestação, em cinco passos.
+- O QR dos cartazes abre primeiro uma nota de 1 a 5, que não vira protocolo, e só quem pede retorno ou quer registrar segue para a manifestação, em cinco passos.
 - A nota do QR não guarda nada de quem avaliou, tem limite de envios em pouco tempo, e só o ouvidor e a diretoria executiva veem as avaliações e os comentários.
 - Quem se manifesta de forma anônima vai receber um código para acompanhar o caso numa página pública, que mostra só o estado e a resposta.
 - Um agente de inteligência artificial vai ler toda manifestação e toda nota com comentário assim que chegam, inclusive as sigilosas, só para sugerir o assunto, o envio ao Núcleo de Segurança do Paciente e a revisão de comentários graves, e se ele falhar o caso entra normal na fila.

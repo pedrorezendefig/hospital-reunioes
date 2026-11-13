@@ -353,9 +353,19 @@ def anonimizar_manifestacoes_antigas() -> None:
         concluidos = ouvidoria_retencao.concluir_apagamentos_pendentes(supabase, agora)
     except Exception as e:
         logger.error(f"[Cron] Erro ao concluir apagamentos pendentes da Ouvidoria: {e}", exc_info=True)
-        return
+        concluidos = 0
     if concluidos:
         logger.info(f"[Cron] {concluidos} apagamento(s) pendente(s) da Ouvidoria concluído(s).")
+
+    # O comentário da Avaliação do QR (issue #1622, ADR 0086 decisão 9), pelo
+    # relógio da própria nota. Independente das duas de cima, como elas entre si.
+    try:
+        comentarios = ouvidoria_retencao.apagar_comentarios_de_avaliacao(supabase, agora)
+    except Exception as e:
+        logger.error(f"[Cron] Erro ao apagar comentários antigos de avaliação: {e}", exc_info=True)
+        return
+    if comentarios:
+        logger.info(f"[Cron] {comentarios} comentário(s) de avaliação apagado(s) por retenção.")
 
 
 def expurgar_arquivos_contas_medicas() -> None:

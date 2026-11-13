@@ -30,7 +30,6 @@ from test_ouvidoria_formulario_publico import (  # noqa: E402
 )
 
 from app.limiter import limiter  # noqa: E402
-from app.routers import ouvidoria_publica  # noqa: E402
 
 CODIGO = "AB2CD3"
 OUTRO_CODIGO = "XY7ZW8"
@@ -118,6 +117,20 @@ def _app(banco: _BancoComAvaliacoes | None = None, **kwargs):
 
     app.dependency_overrides[get_supabase_client] = _Supabase
     return client, banco
+
+
+class TestATelaDeNota:
+    """A tela N1 abre com o nome público e o título do cartaz daquele ponto
+    (seção 4.1 da especificação)."""
+
+    def test_o_cartaz_diz_o_nome_publico_e_o_titulo(self):
+        client, _banco = _app(_BancoComAvaliacoes(pontos=[_ponto(CODIGO, titulo="um_minuto")]))
+
+        r = client.get(f"/api/ouvidoria/publico/pontos/{CODIGO}")
+
+        assert r.status_code == 200
+        assert r.json() == {"nome_publico": "Emergência adulta", "titulo_cartaz": "um_minuto"}
+        assert "Pronto Socorro" not in r.text
 
 
 class TestANotaNaoViraProtocolo:
@@ -303,9 +316,7 @@ class TestQuemPedeRetorno:
         client, banco = _app()
         avaliacao_id = _avaliar(client, 5)
 
-        r = client.post(
-            ROTA_MANIFESTACAO, json=_manifestacao(avaliacao_id=avaliacao_id, natureza_informada="elogio")
-        )
+        r = client.post(ROTA_MANIFESTACAO, json=_manifestacao(avaliacao_id=avaliacao_id, natureza_informada="elogio"))
 
         assert r.status_code == 201, r.text
         assert banco.inserts[0]["avaliacao_id"] == avaliacao_id
@@ -373,3 +384,201 @@ class TestQuemSegueAnonimo:
         # Nem a avaliação fica sabendo: marcar o retorno nela seria a ligação
         # escrita do outro lado.
         assert banco.avaliacoes[0]["pediu_retorno"] is False
+
+
+class TestOKitDeConhecimento:
+    """Critério 7: o Assistente de Tecnologia responde sobre a Ouvidoria pelo
+    kit. Se o texto não disser que o QR abre a nota, ele responde que o cartaz
+    abre o formulário."""
+
+    @pytest.fixture
+    def texto(self) -> str:
+        from app.services.conhecimento import CONHECIMENTO_DIR
+
+        return (CONHECIMENTO_DIR / "ouvidoria.md").read_text(encoding="utf-8")
+
+    @pytest.fixture
+    def entrada(self, texto) -> str:
+        achados = [linha for linha in texto.splitlines() if linha.startswith("- **Nota do QR.**")]
+        assert len(achados) == 1
+        return achados[0]
+
+    def test_diz_que_o_qr_abre_a_nota_que_nao_vira_protocolo(self, entrada):
+        assert "nota de 1 a 5" in entrada
+        assert "não vira protocolo" in entrada
+        assert "três notas a cada 10 minutos" in entrada
+
+    def test_diz_o_funil_depois_da_nota(self, entrada):
+        assert "de 1 a 3 pergunta se a pessoa quer retorno" in entrada
+        assert "4 ou 5 oferece deixar um elogio" in entrada
+        assert "fica ligado à nota, menos quando a pessoa escolhe ficar anônima" in entrada
+
+    def test_o_apagamento_diz_o_comentario_da_nota(self, texto):
+        paragrafo = next(p for p in texto.split("\n\n") if p.startswith("O relato de um caso encerrado"))
+        assert "comentário da nota do QR" in paragrafo
+        assert "a nota e os motivos ficam" in paragrafo
+
+    def test_nao_diz_mais_que_a_nota_ainda_vai_chegar(self, texto):
+        assert "vai abrir primeiro uma nota" not in texto
+        assert "que hoje abre o formulário" not in texto
+
+
+MIGRATION = Path(__file__).parent.parent.parent / "supabase" / "migrations" / "140_ouvidoria_avaliacao_do_qr.sql"
+
+
+def _ddl() -> str:
+    return re.sub(r"--[^\n]*", "", MIGRATION.read_text(encoding="utf-8"))
+
+
+class TestAMigration:
+    """O fake do PostgREST não aplica CHECK nem RLS, então é a leitura do
+    arquivo que segura as regras do banco."""
+
+    def test_a_tabela_nasce_com_rls_que_nega_por_padrao(self):
+        ddl = _ddl()
+
+        assert "CREATE TABLE IF NOT EXISTS ouvidoria_avaliacoes" in ddl
+        assert "ALTER TABLE ouvidoria_avaliacoes ENABLE ROW LEVEL SECURITY" in ddl
+        assert "CREATE POLICY" not in ddl.upper()
+
+    def test_a_tabela_nao_tem_coluna_que_identifique_quem_avaliou(self):
+        corpo = re.search(r"CREATE TABLE IF NOT EXISTS ouvidoria_avaliacoes \((.*?)\n\);", _ddl(), re.S).group(1)
+        colunas = {
+            m.group(1) for m in re.finditer(r"^\s+([a-z_]+)\s+[A-Z]", corpo, re.M) if m.group(1) not in {"CONSTRAINT"}
+        }
+
+        assert {"nota", "motivos", "comentario", "ponto_id"} <= colunas
+        for proibida in ("ip", "endereco", "user_agent", "aparelho", "nome", "contato", "telefone"):
+            assert not any(proibida in coluna for coluna in colunas), proibida
+
+    def test_os_motivos_do_banco_batem_com_os_da_rota(self):
+        from app.services import ouvidoria_avaliacoes
+
+        lista = ", ".join(f"'{m}'" for m in ouvidoria_avaliacoes.MOTIVOS)
+
+        assert f"motivos <@ ARRAY[{lista}]::TEXT[]" in _ddl()
+
+    def test_o_caso_ganha_a_ligacao_com_a_avaliacao(self):
+        ddl = _ddl()
+
+        assert "ALTER TABLE ouvidoria_protocolos ADD COLUMN IF NOT EXISTS avaliacao_id UUID" in ddl
+        assert "CREATE UNIQUE INDEX IF NOT EXISTS idx_ouvidoria_protocolos_avaliacao" in ddl
+        assert "VALUES (140)" in ddl
+
+
+# Relógio congelado: 12 de novembro de 2026. O corte dos cinco anos é
+# 12/11/2021, 12h.
+AGORA = dt.datetime(2026, 11, 12, 12, 0, tzinfo=dt.UTC)
+
+
+class _AvaliacoesDaRetencao:
+    """O PostgREST da tabela da avaliação, com os filtros que a retenção usa."""
+
+    def __init__(self, linhas: list[dict]):
+        self.linhas = linhas
+        self.falhar = False
+
+    def table(self, nome: str):
+        assert nome == "ouvidoria_avaliacoes", nome
+        return _ConsultaDaRetencao(self)
+
+
+class _ConsultaDaRetencao:
+    def __init__(self, banco: _AvaliacoesDaRetencao):
+        self._banco = banco
+        self._update: dict | None = None
+        self._condicoes: list = []
+        self._negar = False
+
+    def update(self, payload: dict):
+        self._update = payload
+        return self
+
+    def lte(self, coluna, valor):
+        self._condicoes.append(lambda linha: linha[coluna] <= valor)
+        return self
+
+    @property
+    def not_(self):
+        self._negar = True
+        return self
+
+    def is_(self, coluna, valor):
+        assert valor == "null"
+        negar, self._negar = self._negar, False
+        self._condicoes.append(lambda linha: (linha[coluna] is None) != negar)
+        return self
+
+    def execute(self):
+        if self._banco.falhar:
+            raise RuntimeError("banco fora do ar")
+        alvo = [linha for linha in self._banco.linhas if all(c(linha) for c in self._condicoes)]
+        for linha in alvo:
+            linha.update(self._update or {})
+        return type("R", (), {"data": [dict(linha) for linha in alvo]})()
+
+
+def _avaliacao_antiga(criada_em: str, comentario: str | None) -> dict:
+    return {
+        "id": f"avaliacao-{criada_em}",
+        "nota": 2,
+        "motivos": ["tempo_espera", "recepcao"],
+        "comentario": comentario,
+        "criada_em": criada_em,
+    }
+
+
+class TestARetencaoDoComentario:
+    """Critério 5: a Retenção apaga o comentário de avaliação com mais de cinco
+    anos e mantém nota e motivos (ADR 0086, decisão 9)."""
+
+    def test_o_comentario_de_mais_de_cinco_anos_sai_e_a_nota_e_os_motivos_ficam(self):
+        from app.services import ouvidoria_retencao
+
+        velha = _avaliacao_antiga("2021-11-11T09:00:00+00:00", "A moça da recepção, Joana, foi grossa.")
+        recente = _avaliacao_antiga("2021-11-13T09:00:00+00:00", "Demorou muito.")
+        banco = _AvaliacoesDaRetencao([velha, recente])
+
+        apagados = ouvidoria_retencao.apagar_comentarios_de_avaliacao(banco, AGORA)
+
+        assert apagados == 1
+        assert velha["comentario"] is None
+        assert velha["nota"] == 2
+        assert velha["motivos"] == ["tempo_espera", "recepcao"]
+        assert recente["comentario"] == "Demorou muito."
+
+    def test_com_o_freio_puxado_nada_sai(self, monkeypatch):
+        from app.config import settings
+        from app.services import ouvidoria_retencao
+
+        monkeypatch.setattr(settings, "ouvidoria_retencao_ativa", False)
+        velha = _avaliacao_antiga("2020-01-01T09:00:00+00:00", "Comentário antigo.")
+
+        apagados = ouvidoria_retencao.apagar_comentarios_de_avaliacao(_AvaliacoesDaRetencao([velha]), AGORA)
+
+        assert apagados == 0
+        assert velha["comentario"] == "Comentário antigo."
+
+    def test_o_job_da_retencao_varre_os_comentarios_mesmo_com_os_casos_fora_do_ar(self, monkeypatch):
+        """As varreduras do job são independentes: a falha de uma não deixa a
+        outra sem rodar."""
+        from app.cron import scheduler as cron
+        from app.services import ouvidoria_retencao
+
+        chamadas: list[str] = []
+
+        def _falha(*_args):
+            raise RuntimeError("casos fora do ar")
+
+        monkeypatch.setattr(cron, "_supabase", lambda: object())
+        monkeypatch.setattr(ouvidoria_retencao, "anonimizar_encerradas_antigas", _falha)
+        monkeypatch.setattr(ouvidoria_retencao, "concluir_apagamentos_pendentes", _falha)
+        monkeypatch.setattr(
+            ouvidoria_retencao,
+            "apagar_comentarios_de_avaliacao",
+            lambda _supabase, _agora: chamadas.append("comentarios") or 0,
+        )
+
+        cron.anonimizar_manifestacoes_antigas()
+
+        assert chamadas == ["comentarios"]
