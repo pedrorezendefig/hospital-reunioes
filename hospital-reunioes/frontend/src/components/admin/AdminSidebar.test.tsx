@@ -263,20 +263,26 @@ describe.each([
 });
 
 /**
- * O menu do Admin sem o item Ajuda: o Manual do usuário saiu da plataforma em
- * 05/11/2026. A lista inteira de links prova que nenhum link para o site
- * apagado sobrou no fim, nas duas montagens do menu.
+ * O item Manual no menu do Admin (issue #1718, ADR 0094, decisão 1). Ele mora
+ * no rodapé, acima do botão de recolher, e não na lista de links do menu. A
+ * lista inteira de links prova que o menu continua o mesmo (e que nenhum link
+ * para o site antigo do manual voltou), nas duas montagens do menu, e o
+ * rodapé prova que o Manual está lá, levando a /manual.
  */
 describe.each([
   ["desktop", "desktop" as const],
   ["gaveta do celular", "drawer" as const],
-])("Menu do Admin sem a Ajuda na %s", (_rotulo, variant) => {
-  it("quem não é super admin vê só o próprio módulo", () => {
+])("Menu do Admin com o Manual na %s", (_rotulo, variant) => {
+  it("quem não é super admin vê só o próprio módulo, e o Manual no rodapé", () => {
     sessao.participante = pessoa("secretaria");
 
-    render(<AdminSidebar variant={variant} />);
+    const { container } = render(<AdminSidebar variant={variant} />);
 
     expect(linksDoMenu()).toEqual(["Dados do Atendimento"]);
+    const manual = screen.getByRole("link", { name: "Manual" });
+    expect(manual.getAttribute("href")).toBe("/manual");
+    expect(screen.getByRole("navigation").contains(manual)).toBe(false);
+    expect(container.querySelector("[data-rodape-do-menu]")?.contains(manual)).toBe(true);
   });
 
   it("no menu do super admin a Tecnologia é o último item", () => {
@@ -297,4 +303,14 @@ describe.each([
       "Tecnologia",
     ]);
   });
+});
+
+it("no computador, o Manual do Admin fica logo acima do botão de recolher", () => {
+  sessao.participante = pessoa("super_admin");
+
+  render(<AdminSidebar />);
+
+  const manual = screen.getByRole("link", { name: "Manual" });
+  const recolher = screen.getByRole("button", { name: "Recolher menu" });
+  expect(manual.nextElementSibling).toBe(recolher);
 });
