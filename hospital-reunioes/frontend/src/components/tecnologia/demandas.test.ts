@@ -7,7 +7,155 @@
 
 import { describe, expect, it } from "vitest";
 
-import { blocosDoTextoSimples, iniciais, rotuloDaEtapa, textoDaAbertura } from "./demandas";
+import { blocosDoTextoSimples, colunasDoQuadro, Demanda, iniciais, rotuloDaEtapa, textoDaAbertura } from "./demandas";
+
+describe("As colunas do Quadro (issue #1642, ADR 0090)", () => {
+  // Meio-dia de 12/11 em Brasília.
+  const HOJE = new Date("2026-11-12T15:00:00Z");
+
+  function d(id: string, extra: Partial<Demanda> = {}): Demanda {
+    return { id, titulo: `Pedido ${id}`, criado_em: "2026-11-01T13:00:00Z", ...extra };
+  }
+
+  const ids = (demandas: Demanda[]) => demandas.map((x) => x.id);
+  const coluna = (colunas: ReturnType<typeof colunasDoQuadro>, etapa: string) => {
+    const achada = colunas.find((c) => c.etapa === etapa);
+    if (!achada) throw new Error(`sem a coluna ${etapa}`);
+    return achada;
+  };
+
+  it("são cinco, na ordem do fluxo, com o nome da Etapa, e cada Etapa cai na sua", () => {
+    const colunas = colunasDoQuadro(
+      [
+        d("reg", { etapa: "registrada" }),
+        d("ana", { etapa: "em_analise" }),
+        d("pla", { etapa: "planejada" }),
+        d("dev", { etapa: "em_desenvolvimento" }),
+        d("ent", { etapa: "entregue", fechada_em: "2026-11-10T12:00:00Z" }),
+      ],
+      false,
+      HOJE,
+    );
+
+    expect(colunas.map((c) => [c.etapa, c.rotulo])).toEqual([
+      ["registrada", "Registrada"],
+      ["em_analise", "Em análise"],
+      ["planejada", "Planejada"],
+      ["em_desenvolvimento", "Em desenvolvimento"],
+      ["entregue", "Entregue"],
+    ]);
+    expect(colunas.map((c) => ids(c.cards))).toEqual([["reg"], ["ana"], ["pla"], ["dev"], ["ent"]]);
+    expect(colunas.map((c) => c.contagem)).toEqual([1, 1, 1, 1, 1]);
+  });
+
+  it("a Demanda sem Etapa fica em Registrada", () => {
+    const colunas = colunasDoQuadro([d("sem"), d("reg", { etapa: "registrada" })], false, HOJE);
+
+    expect(ids(coluna(colunas, "registrada").cards)).toEqual(["sem", "reg"]);
+  });
+
+  it("Entregue junta Entregue e Em produção", () => {
+    const colunas = colunasDoQuadro(
+      [
+        d("ent", { etapa: "entregue", fechada_em: "2026-11-10T12:00:00Z" }),
+        d("prod", { etapa: "em_producao", versao: "v0.260.0", em_producao_em: "2026-11-11T12:00:00Z" }),
+      ],
+      false,
+      HOJE,
+    );
+
+    expect(ids(coluna(colunas, "entregue").cards)).toEqual(["ent", "prod"]);
+    expect(coluna(colunas, "entregue").contagem).toBe(2);
+    expect(colunas.map((c) => c.etapa)).not.toContain("em_producao");
+  });
+
+  it("corta pelos 30 dias do calendário do hospital, pela entrada Em produção", () => {
+    const colunas = colunasDoQuadro(
+      [
+        // 13/10 é há 30 dias: fica.
+        d("trinta", { etapa: "em_producao", em_producao_em: "2026-10-13T12:00:00Z" }),
+        // 02h de 13/10 em Greenwich ainda é 12/10 em Brasília, há 31 dias: sai.
+        d("virada", { etapa: "em_producao", em_producao_em: "2026-10-13T02:00:00Z" }),
+        // A entrada Em produção manda, mesmo com a entrega recente.
+        d("velha", {
+          etapa: "em_producao",
+          fechada_em: "2026-11-10T12:00:00Z",
+          em_producao_em: "2026-09-01T12:00:00Z",
+        }),
+      ],
+      false,
+      HOJE,
+    );
+
+    expect(ids(coluna(colunas, "entregue").cards)).toEqual(["trinta"]);
+    expect(coluna(colunas, "entregue").contagem).toBe(1);
+  });
+
+  it("sem a entrada Em produção, corta pela entrega; sem data nenhuma, fica", () => {
+    const colunas = colunasDoQuadro(
+      [
+        d("recente", { etapa: "entregue", fechada_em: "2026-11-01T12:00:00Z" }),
+        d("antiga", { etapa: "entregue", fechada_em: "2026-10-01T12:00:00Z" }),
+        d("sem-data", { etapa: "entregue" }),
+      ],
+      false,
+      HOJE,
+    );
+
+    expect(ids(coluna(colunas, "entregue").cards)).toEqual(["recente", "sem-data"]);
+  });
+
+  it("Entregue mostra no máximo 8, os mais novos, e conta o total", () => {
+    const entregues = Array.from({ length: 10 }, (_, i) =>
+      d(`e${i + 1}`, {
+        etapa: "entregue",
+        fechada_em: "2026-11-10T12:00:00Z",
+        criado_em: `2026-11-${String(i + 1).padStart(2, "0")}T12:00:00Z`,
+      }),
+    );
+
+    const entregue = coluna(colunasDoQuadro(entregues, false, HOJE), "entregue");
+
+    expect(ids(entregue.cards)).toEqual(["e10", "e9", "e8", "e7", "e6", "e5", "e4", "e3"]);
+    expect(entregue.contagem).toBe(10);
+    expect(entregue.deFora).toBe(2);
+  });
+
+  it("cada coluna vem com a mais nova primeiro pela abertura", () => {
+    const colunas = colunasDoQuadro(
+      [
+        d("antiga", { etapa: "planejada", criado_em: "2026-10-01T12:00:00Z" }),
+        d("nova", { etapa: "planejada", criado_em: "2026-11-11T12:00:00Z" }),
+        d("meio", { etapa: "planejada", criado_em: "2026-10-20T12:00:00Z" }),
+      ],
+      false,
+      HOJE,
+    );
+
+    expect(ids(coluna(colunas, "planejada").cards)).toEqual(["nova", "meio", "antiga"]);
+    expect(coluna(colunas, "planejada").deFora).toBe(0);
+  });
+
+  it("Não será feita fica fora sem o interruptor, e vira a sexta coluna, no fim, com ele", () => {
+    const demandas = [d("nao", { etapa: "nao_sera_feita" }), d("reg", { etapa: "registrada" })];
+
+    const sem = colunasDoQuadro(demandas, false, HOJE);
+    expect(sem.map((c) => c.etapa)).not.toContain("nao_sera_feita");
+    expect(sem.flatMap((c) => ids(c.cards))).toEqual(["reg"]);
+
+    const com = colunasDoQuadro(demandas, true, HOJE);
+    expect(com.map((c) => c.etapa)).toEqual([
+      "registrada",
+      "em_analise",
+      "planejada",
+      "em_desenvolvimento",
+      "entregue",
+      "nao_sera_feita",
+    ]);
+    expect(com[5].rotulo).toBe("Não será feita");
+    expect(ids(com[5].cards)).toEqual(["nao"]);
+  });
+});
 
 describe("A data de abertura do card (issues #1578 e #1580)", () => {
   const AGORA = new Date("2026-11-11T15:00:00Z");

@@ -22,7 +22,9 @@ import {
   AMPLIAR,
   ConversasDaTecnologia,
   NOVA_CONVERSA,
+  NOVO_PEDIDO,
   SEM_ACESSO,
+  VOLTAR_AO_QUADRO,
   VOLTAR_PARA_A_LISTA,
 } from "./ConversasDaTecnologia";
 import { ConversaDoChat, FalaDoChat } from "./chat";
@@ -1485,5 +1487,203 @@ describe("O endereço acompanha o card aberto (issue #1586)", () => {
       ).toBe("true"),
     );
     expect(screen.getByRole("region", { name: "Conversa aberta" }).className).not.toMatch(/(^|\s)hidden(\s|$)/);
+  });
+});
+
+describe("O Quadro na tela larga (issue #1642, ADR 0090)", () => {
+  /** A tela a partir de 1280px: o `matchMedia` que o jsdom não tem, dublado. */
+  function telaLarga(larga = true) {
+    vi.stubGlobal(
+      "matchMedia",
+      vi.fn((consulta: string) => ({
+        matches: larga && consulta === "(min-width: 1280px)",
+        media: consulta,
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+      })),
+    );
+  }
+
+  const quadro = () => screen.getByRole("region", { name: "Quadro" });
+  const colunaDe = (etapa: string) => within(quadro()).getByRole("region", { name: etapa });
+
+  const NO_QUADRO = [
+    demanda("q-1", "Conversa que ficou no meio", { numero: 41 }),
+    demanda("q-2", "Escala some no domingo", { numero: 40 }),
+    demanda("q-3", "Aviso da ata por e-mail", { etapa: "em_analise", tem_vinculo: true, numero: 39 }),
+    demanda("q-4", "Relatório de leitos", { etapa: "em_desenvolvimento", tem_vinculo: true, numero: 38 }),
+    demanda("q-5", "Ouvidoria no celular", { etapa: "em_producao", versao: "v0.207.0", tem_vinculo: true, numero: 37 }),
+  ];
+
+  it("mostra as cinco colunas com o nome da Etapa e a contagem, no lugar da lista", async () => {
+    telaLarga();
+    montar((url) => (url === LISTA ? { status: 200, corpo: NO_QUADRO } : { status: 404, corpo: {} }));
+
+    await within(await screen.findByRole("region", { name: "Quadro" })).findByText("Conversa que ficou no meio");
+    const titulos = within(quadro())
+      .getAllByRole("heading", { level: 3 })
+      .map((h) => h.textContent);
+    expect(titulos).toEqual(["Registrada2", "Em análise1", "Planejada0", "Em desenvolvimento1", "Entregue1"]);
+    expect(within(colunaDe("Registrada")).getByText("Escala some no domingo")).toBeTruthy();
+    expect(within(colunaDe("Entregue")).getByText("Ouvidoria no celular")).toBeTruthy();
+    expect(screen.queryByRole("navigation", { name: "Suas conversas" })).toBeNull();
+    // O Assistente saiu da tela inicial (ADR 0090, decisão 6).
+    expect(screen.queryByText(ABERTURA)).toBeNull();
+  });
+
+  it("as colunas não têm rolagem própria e o cabeçalho de cada uma fica fixo no topo", async () => {
+    telaLarga();
+    montar((url) => (url === LISTA ? { status: 200, corpo: NO_QUADRO } : { status: 404, corpo: {} }));
+    const oQuadro = await screen.findByRole("region", { name: "Quadro" });
+    const rolagemPropria = /(^|\s)(overflow-(y-)?(auto|scroll)|max-h-)/;
+
+    // Do Quadro para cima até a aba, ninguém rola sozinho: quem rola é a página.
+    for (let caixa: HTMLElement | null = oQuadro; caixa; caixa = caixa.parentElement) {
+      expect(caixa.className).not.toMatch(rolagemPropria);
+    }
+    for (const etapa of ["Registrada", "Em análise", "Planejada", "Em desenvolvimento", "Entregue"]) {
+      const coluna = colunaDe(etapa);
+      expect(coluna.className).not.toMatch(rolagemPropria);
+      const classes = within(coluna).getByRole("heading", { level: 3 }).className.split(/\s+/);
+      expect(classes).toEqual(expect.arrayContaining(["sticky", "top-0"]));
+    }
+    // A marca que o `globals.css` procura para o `<main>` deixar o `sticky` valer.
+    expect(oQuadro.hasAttribute("data-quadro")).toBe(true);
+  });
+
+  it("o card compacto mostra Número, título, Bug ou Melhoria, as iniciais de quem cuida, partes, versão e selos", async () => {
+    telaLarga();
+    const completo = demanda("q-9", "Ata de reunião longa para com erro", {
+      numero: 42,
+      etapa: "em_producao",
+      versao: "v0.207.0",
+      tem_vinculo: true,
+      classificacao: "bug",
+      responsavel: "Pedro Rezende",
+      autor: "Felipe Malafaia",
+      partes_entregues: 2,
+      partes_total: 5,
+      demonstracao_url: "https://youtu.be/demo",
+      envio_falhou: true,
+    });
+    const simples = demanda("q-8", "Pedido sem nada", { etapa: "planejada", tem_vinculo: true });
+    montar((url) => (url === LISTA ? { status: 200, corpo: [completo, simples] } : { status: 404, corpo: {} }));
+    await screen.findByRole("region", { name: "Quadro" });
+
+    const card = within(colunaDe("Entregue")).getByRole("button", { name: /Ata de reunião longa/ });
+    expect(card.getAttribute("aria-label")).toBe("Demanda 42: Ata de reunião longa para com erro");
+    expect(within(card).getByText("Demanda 42")).toBeTruthy();
+    expect(within(card).getByText("Ata de reunião longa para com erro")).toBeTruthy();
+    expect(within(card).getByText("Bug")).toBeTruthy();
+    expect(within(card).getByText("PR")).toBeTruthy();
+    expect(within(card).getByRole("progressbar", { name: "Partes entregues" }).getAttribute("aria-valuenow")).toBe("2");
+    expect(within(card).getByText("2 de 5 partes")).toBeTruthy();
+    expect(within(card).getByText("v0.207.0")).toBeTruthy();
+    expect(within(card).getByText("Tem demonstração")).toBeTruthy();
+    expect(within(card).getByText("Envio falhou")).toBeTruthy();
+    // Data, quem pediu e o Conversar ficam na Demanda aberta (ADR 0090, decisão 4).
+    expect(within(card).queryByText(/Aberto/)).toBeNull();
+    expect(within(card).queryByText("Felipe Malafaia")).toBeNull();
+    expect(within(colunaDe("Entregue")).queryByRole("button", { name: "Conversar" })).toBeNull();
+
+    const semNada = within(colunaDe("Planejada")).getByRole("button", { name: "Pedido sem nada" });
+    expect(within(semNada).queryByRole("progressbar")).toBeNull();
+    expect(within(semNada).queryByText(/^(Bug|Melhoria|Tem demonstração|Envio falhou)$/)).toBeNull();
+    expect(within(semNada).queryByText(/^v\d/)).toBeNull();
+  });
+
+  it("o clique no card abre a Demanda na largura toda, e Voltar ao quadro volta", async () => {
+    telaLarga();
+    montar((url) => {
+      if (url === LISTA) return { status: 200, corpo: NO_QUADRO };
+      if (url === `${LISTA}/q-3`) return { status: 200, corpo: conversa("q-3", { estado: "enviado" }) };
+      return { status: 404, corpo: {} };
+    });
+    await screen.findByRole("region", { name: "Quadro" });
+
+    const card = within(colunaDe("Em análise")).getByRole("button", { name: /Aviso da ata por e-mail/ });
+    // Botão de verdade: o navegador transforma o Enter (e o Espaço) em clique.
+    expect(card.tagName).toBe("BUTTON");
+    fireEvent.click(card);
+
+    const aberto = await screen.findByRole("region", { name: "Conversa aberta" });
+    expect(await within(aberto).findByRole("heading", { level: 2, name: "Aviso da ata por e-mail" })).toBeTruthy();
+    expect(screen.queryByRole("region", { name: "Quadro" })).toBeNull();
+    expect(screen.getByRole("region", { name: "Filtros da lista" }).className).toMatch(/(^|\s)hidden(\s|$)/);
+    // Na largura toda, como o Ampliar: a Conversa da Demanda na coluna da direita, sem Ampliar de novo.
+    expect(within(aberto).queryByRole("button", { name: AMPLIAR })).toBeNull();
+    expect(demandaDaUrl()).toBe("q-3");
+
+    const voltar = screen.getByRole("button", { name: VOLTAR_AO_QUADRO });
+    expect(voltar.className).not.toMatch(/(^|\s)md:hidden(\s|$)/);
+    fireEvent.click(voltar);
+
+    expect(await screen.findByRole("region", { name: "Quadro" })).toBeTruthy();
+    expect(screen.queryByRole("region", { name: "Conversa aberta" })).toBeNull();
+    expect(screen.getByRole("region", { name: "Filtros da lista" }).className).not.toMatch(/(^|\s)hidden(\s|$)/);
+    expect(demandaDaUrl()).toBeNull();
+  });
+
+  it("Novo pedido, no topo da aba, abre o Assistente na largura toda", async () => {
+    telaLarga();
+    montar((url) => (url === LISTA ? { status: 200, corpo: NO_QUADRO } : { status: 404, corpo: {} }));
+    await screen.findByRole("region", { name: "Quadro" });
+    // O Nova conversa da barra é o da lista do celular.
+    expect(screen.queryByRole("button", { name: NOVA_CONVERSA })).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: NOVO_PEDIDO }));
+
+    const aberto = await screen.findByRole("region", { name: "Conversa aberta" });
+    expect(within(aberto).getByText(ABERTURA)).toBeTruthy();
+    expect(screen.queryByRole("region", { name: "Quadro" })).toBeNull();
+    expect(aberto.className).not.toMatch(/(^|\s)hidden(\s|$)/);
+    expect(screen.getByRole("button", { name: VOLTAR_AO_QUADRO }).className).not.toMatch(/(^|\s)md:hidden(\s|$)/);
+  });
+
+  it("o card Registrada do autor reabre a conversa com o agente na largura toda", async () => {
+    telaLarga();
+    montar((url) => {
+      if (url === LISTA) return { status: 200, corpo: NO_QUADRO };
+      if (url === `${LISTA}/q-2`) return { status: 200, corpo: conversa("q-2") };
+      return { status: 404, corpo: {} };
+    });
+    await screen.findByRole("region", { name: "Quadro" });
+
+    fireEvent.click(within(colunaDe("Registrada")).getByRole("button", { name: /Escala some no domingo/ }));
+
+    const aberto = await screen.findByRole("region", { name: "Conversa aberta" });
+    expect(await within(aberto).findByText("Onde isso aconteceu?")).toBeTruthy();
+    expect(screen.queryByRole("region", { name: "Quadro" })).toBeNull();
+    expect(screen.getByRole("button", { name: VOLTAR_AO_QUADRO }).className).not.toMatch(/(^|\s)md:hidden(\s|$)/);
+    expect(demandaDaUrl()).toBe("q-2");
+  });
+
+  it("abaixo de 1280px a lista de antes aparece, com o filtro de Etapa", async () => {
+    telaLarga(false);
+    montar((url) => (url === LISTA ? { status: 200, corpo: NO_QUADRO } : { status: 404, corpo: {} }));
+
+    expect(await within(lista()).findByText("Conversa que ficou no meio")).toBeTruthy();
+    expect(within(lista()).getAllByRole("listitem")).toHaveLength(NO_QUADRO.length);
+    expect(screen.queryByRole("region", { name: "Quadro" })).toBeNull();
+    expect(screen.getByText("Etapa")).toBeTruthy();
+    expect(screen.getByRole("button", { name: NOVA_CONVERSA })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: NOVO_PEDIDO })).toBeNull();
+  });
+
+  it("o link do sino abre a Demanda certa na largura toda", async () => {
+    telaLarga();
+    montar(
+      (url) => {
+        if (url === LISTA) return { status: 200, corpo: [SEM_CARD, COM_VINCULO] };
+        if (url === `${LISTA}/d-2`) return { status: 200, corpo: conversa("d-2", { estado: "enviado" }) };
+        return { status: 404, corpo: {} };
+      },
+      "d-2",
+    );
+
+    expect(await screen.findByText("Agora o aviso da ata chega por e-mail.")).toBeTruthy();
+    expect(screen.getByRole("heading", { level: 2, name: "Aviso quando a ata sair" })).toBeTruthy();
+    expect(screen.queryByRole("region", { name: "Quadro" })).toBeNull();
+    expect(screen.getByRole("button", { name: VOLTAR_AO_QUADRO })).toBeTruthy();
   });
 });

@@ -137,6 +137,9 @@ export function nomeDoNumero(demanda: Demanda): string | null {
 /** O selo da lista e a guarda da seção do Documento do card (issue #1559). */
 export const TEM_DEMONSTRACAO = "Tem demonstração";
 
+/** O selo do card que não chegou ao GitHub, na lista e no Quadro (issue #1535). */
+export const ENVIO_FALHOU = "Envio falhou";
+
 /** O link da Demonstração que a tela aceita desenhar: só `https`. */
 export function linkDaDemonstracao(demanda: Demanda): string | null {
   const url = demanda.demonstracao_url;
@@ -309,6 +312,84 @@ export function textoDaAbertura(criadoEm: string | null | undefined, agora: Date
   if (dias <= 0) return `Aberto hoje às ${hora}`;
   if (dias === 1) return `Aberto ontem às ${hora}`;
   return `Aberto em ${DIA_E_MES.format(data)} às ${hora}, há ${dias} dias`;
+}
+
+/**
+ * As colunas do Quadro (ADR 0090, decisão 2): cinco Etapas, e Não será feita
+ * só com o interruptor, no fim. Em produção não tem coluna: entra em Entregue.
+ */
+export type EtapaDoQuadro = Exclude<EtapaDemanda, "em_producao">;
+
+export type ColunaDoQuadro = {
+  etapa: EtapaDoQuadro;
+  rotulo: string;
+  /** Quantas Demandas a coluna tem, contando as que o teto deixou de fora. */
+  contagem: number;
+  /** As que aparecem, a mais nova primeiro pela abertura. */
+  cards: Demanda[];
+  /** Quantas o teto deixou de fora (só Entregue tem teto). */
+  deFora: number;
+};
+
+const COLUNAS_DO_QUADRO: EtapaDoQuadro[] = ["registrada", "em_analise", "planejada", "em_desenvolvimento", "entregue"];
+/** Entregue mostra só o que chegou nos últimos 30 dias, no máximo 8 (ADR 0090, decisão 2). */
+const DIAS_DE_ENTREGUE = 30;
+const TETO_DE_ENTREGUE = 8;
+
+/** Quantos dias do calendário do hospital separam o instante de hoje; nulo sem data legível. */
+function diasAte(iso: string, hoje: Date): number | null {
+  const data = new Date(iso);
+  if (Number.isNaN(data.getTime())) return null;
+  return Math.round(
+    (Date.parse(DATA_ISO_NO_HOSPITAL.format(hoje)) - Date.parse(DATA_ISO_NO_HOSPITAL.format(data))) / UM_DIA_MS,
+  );
+}
+
+/** A Demanda entregue ainda conta como recente? A entrada Em produção manda; sem data, fica. */
+function entregueRecente(demanda: Demanda, hoje: Date): boolean {
+  const quando = demanda.em_producao_em || demanda.fechada_em;
+  if (!quando) return true;
+  const dias = diasAte(quando, hoje);
+  return dias === null || dias <= DIAS_DE_ENTREGUE;
+}
+
+/** A coluna da Demanda; nula quando ela não entra no Quadro. */
+function colunaDaDemanda(demanda: Demanda, comNaoSeraFeita: boolean, hoje: Date): EtapaDoQuadro | null {
+  const etapa = demanda.etapa;
+  if (etapa === "nao_sera_feita") return comNaoSeraFeita ? etapa : null;
+  if (etapa === "entregue" || etapa === "em_producao") return entregueRecente(demanda, hoje) ? "entregue" : null;
+  if (etapa && (COLUNAS_DO_QUADRO as string[]).includes(etapa)) return etapa as EtapaDoQuadro;
+  // Sem Etapa (o backend uma versão atrás) é a conversa sem card.
+  return "registrada";
+}
+
+/** O instante da abertura para ordenar; sem data, a Demanda vai para o fim. */
+function aberturaEmMs(demanda: Demanda): number {
+  const ms = demanda.criado_em ? Date.parse(demanda.criado_em) : Number.NaN;
+  return Number.isNaN(ms) ? Number.NEGATIVE_INFINITY : ms;
+}
+
+/**
+ * As Demandas em colunas pela Etapa (issue #1642, ADR 0090, decisões 2 e 3).
+ *
+ * Registrada recebe também a Demanda sem Etapa. Entregue junta Entregue e Em
+ * produção dos últimos 30 dias pelo calendário do hospital (a data da entrada
+ * Em produção, ou a da entrega sem ela; sem nenhuma, fica dentro), mostra no
+ * máximo 8 e conta o total. Cada coluna vem com a mais nova primeiro pela
+ * abertura. Não será feita só aparece com o interruptor, numa sexta coluna.
+ */
+export function colunasDoQuadro(demandas: Demanda[], comNaoSeraFeita: boolean, hoje: Date): ColunaDoQuadro[] {
+  const etapas: EtapaDoQuadro[] = comNaoSeraFeita ? [...COLUNAS_DO_QUADRO, "nao_sera_feita"] : COLUNAS_DO_QUADRO;
+  const porColuna = new Map<EtapaDoQuadro, Demanda[]>(etapas.map((etapa) => [etapa, []]));
+  for (const demanda of demandas) {
+    const etapa = colunaDaDemanda(demanda, comNaoSeraFeita, hoje);
+    if (etapa) porColuna.get(etapa)?.push(demanda);
+  }
+  return etapas.map((etapa) => {
+    const todas = [...(porColuna.get(etapa) ?? [])].sort((a, b) => aberturaEmMs(b) - aberturaEmMs(a));
+    const cards = etapa === "entregue" ? todas.slice(0, TETO_DE_ENTREGUE) : todas;
+    return { etapa, rotulo: ETAPA_ROTULO[etapa], contagem: todas.length, cards, deFora: todas.length - cards.length };
+  });
 }
 
 /** As iniciais do círculo do card: a primeira letra do primeiro e do último nome. */

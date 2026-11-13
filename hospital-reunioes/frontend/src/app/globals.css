@@ -136,6 +136,16 @@ h1, h2, h3, h4, h5, h6 {
   animation: fade-in-up 0.4s ease-out both;
 }
 
+/* O Quadro da Tecnologia (issue #1642, ADR 0090): o cabeçalho de cada coluna
+   fica fixo no topo enquanto a página rola. O `overflow-auto` do <main> do
+   AppShell prenderia o `sticky` a uma caixa que não rola; com o Quadro na
+   tela, o <main> corta a sobra na horizontal sem virar caixa de rolagem.
+   O teste desta regra é `app/rolagem-do-quadro.test.ts`. */
+main:has([data-quadro]) {
+  overflow-x: clip;
+  overflow-y: visible;
+}
+
 @keyframes fade-in-right {
   from {
     opacity: 0;

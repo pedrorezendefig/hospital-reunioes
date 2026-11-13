@@ -107,6 +107,24 @@ describe("A aba abre no chat, com Conversas e Entregas (issues #1386 e #1556)", 
     expect([...pedidos].sort()).toEqual(["/api/admin/tecnologia/chat", "/api/admin/tecnologia/eu"]);
   });
 
+  it("na tela larga a aba Conversas se chama Quadro e abre nas colunas (issue #1642, ADR 0090)", async () => {
+    vi.stubGlobal(
+      "matchMedia",
+      vi.fn((consulta: string) => ({
+        matches: consulta === "(min-width: 1280px)",
+        media: consulta,
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+      })),
+    );
+    montar();
+
+    expect(await screen.findByRole("region", { name: "Quadro" })).toBeTruthy();
+    expect(screen.getAllByRole("tab").map((aba) => aba.textContent)).toEqual(["Quadro", "Entregas"]);
+    expect(screen.getByRole("tab", { name: "Quadro" }).getAttribute("aria-selected")).toBe("true");
+    expect(screen.getByRole("tabpanel", { name: "Quadro" })).toBeTruthy();
+  });
+
   it("a área da Tecnologia só tem a página da aba", () => {
     const paginas = paginasDaAba();
 
