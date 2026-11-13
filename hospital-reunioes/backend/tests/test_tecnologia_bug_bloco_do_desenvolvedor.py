@@ -139,3 +139,80 @@ class TestOCorpoDoBug:
         assert "Para o desenvolvedor" not in sem_a_chave
         assert _corpo(para_o_desenvolvedor={}) == sem_a_chave
         assert _corpo(para_o_desenvolvedor=None) == sem_a_chave
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 2. Pela rota: o turno que fecha o Roteiro e o Criar o card
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+def _bug_resumido(monkeypatch, **campos_do_modelo):
+    """Um bug com o turno que fecha o Roteiro (`pronto: true`). Devolve o
+    cliente, o banco falso, o GitHub falso, o id e a resposta do turno."""
+    client, sb, gh = _cenario(monkeypatch)
+    demanda_id = _comecar(client, monkeypatch)
+    _ia(
+        monkeypatch,
+        _turno(
+            pronto=True,
+            mensagem="Montei o resumo. Confere?",
+            campos=CAMPOS_RESPONDIDOS,
+            criterios=CRITERIOS,
+            **campos_do_modelo,
+        ),
+    )
+    resposta = client.post(f"{CHAT}/{demanda_id}", json={"texto": "Na Ouvidoria, o botão Responder sumiu"})
+    assert resposta.status_code == 200, resposta.text
+    assert resposta.json()["estado"] == "resumido"
+    return client, sb, gh, demanda_id, resposta
+
+
+class TestPelaRota:
+    def test_o_resumo_do_bug_guarda_as_seis_partes_do_pronto(self, monkeypatch):
+        _, sb, _, _, _ = _bug_resumido(monkeypatch, para_o_desenvolvedor=PARTES)
+
+        [conversa] = _conversas(sb)
+        assert conversa["resumo"]["para_o_desenvolvedor"] == PARTES
+        assert conversa["resumo"]["criterios"] == CRITERIOS
+
+    def test_turno_sem_as_partes_continua_valido_e_o_card_nasce_sem_o_bloco(self, monkeypatch):
+        client, sb, gh, demanda_id, _ = _bug_resumido(monkeypatch)
+
+        [conversa] = _conversas(sb)
+        assert "para_o_desenvolvedor" not in conversa["resumo"]
+        assert client.post(f"{CHAT}/{demanda_id}/criar-card").status_code == 200
+        assert "Para o desenvolvedor" not in gh.criadas[0]["corpo"]
+
+    def test_parte_nula_vira_vazio_e_as_outras_ficam(self, monkeypatch):
+        partes = {**PARTES, "cuidados": None, "onde_mexe_no_codigo": None}
+        _, sb, _, _, _ = _bug_resumido(monkeypatch, para_o_desenvolvedor=partes)
+
+        [conversa] = _conversas(sb)
+        assert conversa["resumo"]["para_o_desenvolvedor"] == {**PARTES, "cuidados": "", "onde_mexe_no_codigo": ""}
+
+    def test_bloco_malformado_cai_sozinho_e_o_resumo_sai(self, monkeypatch):
+        for malformado in ({**PARTES, "cuidados": ["uma", "lista"]}, "um texto solto"):
+            _, sb, _, _, _ = _bug_resumido(monkeypatch, para_o_desenvolvedor=malformado)
+
+            [conversa] = _conversas(sb)
+            assert conversa["resumo"]["onde"] == "Ouvidoria, no caso aberto", malformado
+            assert "para_o_desenvolvedor" not in conversa["resumo"]
+
+    def test_a_tela_do_resumo_do_bug_nao_mostra_as_seis_partes(self, monkeypatch):
+        client, _, _, demanda_id, resposta = _bug_resumido(monkeypatch, para_o_desenvolvedor=PARTES)
+
+        for tela in (resposta.json(), client.get(f"{CHAT}/{demanda_id}").json()):
+            assert tela["resumo"]["criterios"] == CRITERIOS
+            assert "para_o_desenvolvedor" not in tela["resumo"]
+            for texto in PARTES.values():
+                assert texto not in json.dumps(tela, ensure_ascii=False)
+
+    def test_o_criar_o_card_do_bug_leva_o_bloco_do_desenvolvedor(self, monkeypatch):
+        client, _, gh, demanda_id, _ = _bug_resumido(monkeypatch, para_o_desenvolvedor=PARTES)
+
+        assert client.post(f"{CHAT}/{demanda_id}/criar-card").status_code == 200
+
+        corpo = gh.criadas[0]["corpo"]
+        assert f"**Onde mexe no código:** {PARTES['onde_mexe_no_codigo']}" in _bloco(corpo)
+        assert "Onde mexe" not in bloco_para_o_diretor(corpo)
+        assert corpo.rstrip().endswith(f'<!-- demanda-vitta id="{demanda_id}" -->')
