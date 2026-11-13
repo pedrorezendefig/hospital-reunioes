@@ -314,7 +314,9 @@ def listar(
     if so_para_revisar:
         query = query.eq("revisar", True).is_("revisao_desfecho", "null")
     primeira = (pagina - 1) * POR_PAGINA
-    result = query.order("criada_em", desc=True).order("id", desc=True).range(primeira, primeira + POR_PAGINA - 1).execute()
+    result = (
+        query.order("criada_em", desc=True).order("id", desc=True).range(primeira, primeira + POR_PAGINA - 1).execute()
+    )
     linhas = result.data or []
 
     nome_do_ponto = {ponto["id"]: ouvidoria_pontos.nome_exibido(ponto) for ponto in ouvidoria_pontos.listar(supabase)}

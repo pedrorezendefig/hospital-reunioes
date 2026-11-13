@@ -3172,7 +3172,7 @@ async def arquivar_revisao_da_avaliacao(
         raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=_FALHA_NA_AVALIACAO) from exc
 
 
-_CAMPOS_RESPONSAVEL_TUPLA =("id", "setor", "papel", "nome", "email", "vigencia_inicio", "vigencia_fim")
+_CAMPOS_RESPONSAVEL_TUPLA = ("id", "setor", "papel", "nome", "email", "vigencia_inicio", "vigencia_fim")
 _CAMPOS_RESPONSAVEL = ", ".join(_CAMPOS_RESPONSAVEL_TUPLA)
 
 

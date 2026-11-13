@@ -193,9 +193,7 @@ class _Tabela:
         if self._insert is not None:
             linha = {"id": f"{self.nome}-{len(linhas) + 1}", **self._insert}
             if self.nome == "ouvidoria_protocolos":
-                if linha.get("avaliacao_id") and any(
-                    r.get("avaliacao_id") == linha["avaliacao_id"] for r in linhas
-                ):
+                if linha.get("avaliacao_id") and any(r.get("avaliacao_id") == linha["avaliacao_id"] for r in linhas):
                     from postgrest.exceptions import APIError
 
                     raise APIError({"code": "23505", "message": "duplicate key", "details": "", "hint": ""})
@@ -277,7 +275,9 @@ ROTAS = [
 class TestSoOPerfilDaOuvidoria:
     """CA: Super admin sem perfil da Ouvidoria e equipe de Reuniões recebem 403."""
 
-    @pytest.mark.parametrize("quem", [SUPER_ADMIN, SECRETARIA, FACILITADOR], ids=["super_admin", "secretaria", "facilitador"])
+    @pytest.mark.parametrize(
+        "quem", [SUPER_ADMIN, SECRETARIA, FACILITADOR], ids=["super_admin", "secretaria", "facilitador"]
+    )
     @pytest.mark.parametrize(("metodo", "rota", "corpo"), ROTAS, ids=["numeros", "lista", "conversao", "arquivamento"])
     def test_quem_esta_fora_da_ouvidoria_recebe_403_e_nada_muda(self, monkeypatch, quem, metodo, rota, corpo):
         banco = _Banco([_avaliacao("av-1", "2026-11-12T13:00:00+00:00", 1, comentario="Me trataram mal", revisar=True)])
@@ -412,3 +412,238 @@ class TestOsNumerosBatemComOPeriodo:
         client = _cliente(monkeypatch, OUVIDOR, _Banco([]))
 
         assert client.get("/api/ouvidoria/avaliacoes/numeros", params={"periodo": "2d"}).status_code == 422
+
+
+COMENTARIO_GRAVE = "A recepcionista gritou comigo e me empurrou na frente de todo mundo."
+
+
+def _uma_marcada() -> _Banco:
+    # Quarta 11/11, 22h40 em Brasília (01h40 de quinta em UTC).
+    return _Banco(
+        [
+            _avaliacao(
+                "av-1",
+                "2026-11-12T01:40:00+00:00",
+                1,
+                comentario=COMENTARIO_GRAVE,
+                revisar=True,
+                motivos=["recepcao"],
+            )
+        ]
+    )
+
+
+class TestConverterEmManifestacao:
+    """CA: converter cria o caso com canal qr, o ponto, a ligação, tipo vazio
+    e T0 da avaliação, e marca o desfecho convertida."""
+
+    def test_o_caso_nasce_do_cartaz_com_a_ligacao_e_o_t0_da_avaliacao(self, monkeypatch, _sem_agente):
+        banco = _uma_marcada()
+        client = _cliente(monkeypatch, OUVIDOR, banco)
+
+        r = client.post("/api/ouvidoria/avaliacoes/av-1/conversao")
+
+        assert r.status_code == 201, r.text
+        assert len(banco.casos) == 1
+        caso = banco.casos[0]
+        assert r.json() == {"id": caso["id"], "protocolo": caso["protocolo"]}
+        assert caso["canal"] == "qr"
+        assert caso["canal_setor"] == "Pronto Socorro"
+        assert caso["canal_ponto"] == "Hall da emergência"
+        assert caso["avaliacao_id"] == "av-1"
+        assert caso["relato_integral"] == COMENTARIO_GRAVE
+        # Tipo vazio: sigiloso até o ouvidor classificar.
+        assert caso.get("tipo_manifestacao") is None
+        assert caso["sigilo_reforcado"] is True
+        assert caso["setor"] == "A definir"
+        # T0 é a hora da avaliação, não a do clique; e o dia de abertura é o
+        # do hospital (quarta), não o de UTC (quinta).
+        assert caso["contato_em"] == "2026-11-12T01:40:00+00:00"
+        assert caso["data_abertura"] == "2026-11-11"
+        assert caso["anonimo"] is False
+        assert caso.get("manifestante_nome") is None
+        assert caso.get("manifestante_contato") is None
+        assert caso["registrado_por"] == OUVIDOR["id"]
+
+    def test_a_avaliacao_fica_com_o_desfecho_convertida_e_sai_de_para_revisar(self, monkeypatch):
+        banco = _uma_marcada()
+        client = _cliente(monkeypatch, OUVIDOR, banco)
+
+        client.post("/api/ouvidoria/avaliacoes/av-1/conversao")
+
+        avaliacao = banco.avaliacoes[0]
+        assert avaliacao["revisao_desfecho"] == "convertida"
+        assert avaliacao["revisada_por"] == OUVIDOR["id"]
+        assert avaliacao["revisada_em"] == AGORA.isoformat()
+        lista = client.get("/api/ouvidoria/avaliacoes", params={"para_revisar": True}).json()
+        assert lista["itens"] == []
+        assert lista["para_revisar_total"] == 0
+        item = client.get("/api/ouvidoria/avaliacoes").json()["itens"][0]
+        assert item["para_revisar"] is False
+        assert item["caso"] == {"id": banco.casos[0]["id"], "protocolo": banco.casos[0]["protocolo"]}
+
+    def test_sem_contato_o_caso_nasce_com_a_anotacao_na_trilha(self, monkeypatch):
+        banco = _uma_marcada()
+        client = _cliente(monkeypatch, OUVIDOR, banco)
+
+        client.post("/api/ouvidoria/avaliacoes/av-1/conversao")
+
+        assert len(banco.movimentos) == 1
+        abertura = banco.movimentos[0]
+        assert abertura["manifestacao_id"] == banco.casos[0]["id"]
+        assert abertura["autor_id"] == OUVIDOR["id"]
+        assert "não tem manifestante para retorno" in abertura["observacao"]
+        assert "nota 1 de 5" in abertura["observacao"]
+
+    def test_o_agente_de_triagem_le_o_caso_novo(self, monkeypatch, _sem_agente):
+        banco = _uma_marcada()
+        client = _cliente(monkeypatch, OUVIDOR, banco)
+
+        client.post("/api/ouvidoria/avaliacoes/av-1/conversao")
+
+        assert [caso["id"] for caso in _sem_agente] == [banco.casos[0]["id"]]
+
+    def test_converter_duas_vezes_nao_abre_dois_casos(self, monkeypatch):
+        banco = _uma_marcada()
+        client = _cliente(monkeypatch, OUVIDOR, banco)
+
+        client.post("/api/ouvidoria/avaliacoes/av-1/conversao")
+        r = client.post("/api/ouvidoria/avaliacoes/av-1/conversao")
+
+        assert r.status_code == 409
+        assert r.json()["detail"] == "Esta avaliação já virou caso."
+        assert len(banco.casos) == 1
+
+    def test_a_nota_que_ja_pediu_retorno_nao_vira_segundo_caso(self, monkeypatch):
+        banco = _Banco([_avaliacao("av-1", "2026-11-12T13:00:00+00:00", 2, comentario="Demora", pediu_retorno=True)])
+        banco.casos.append({"id": "caso-0", "protocolo": "2026-0001", "avaliacao_id": "av-1"})
+        client = _cliente(monkeypatch, OUVIDOR, banco)
+
+        r = client.post("/api/ouvidoria/avaliacoes/av-1/conversao")
+
+        assert r.status_code == 409
+        assert len(banco.casos) == 1
+
+    def test_avaliacao_sem_comentario_nao_vira_caso(self, monkeypatch):
+        banco = _Banco([_avaliacao("av-1", "2026-11-12T13:00:00+00:00", 1)])
+        client = _cliente(monkeypatch, OUVIDOR, banco)
+
+        r = client.post("/api/ouvidoria/avaliacoes/av-1/conversao")
+
+        assert r.status_code == 409
+        assert banco.casos == []
+
+    def test_avaliacao_que_nao_existe_e_404(self, monkeypatch):
+        client = _cliente(monkeypatch, OUVIDOR, _Banco([]))
+
+        assert client.post("/api/ouvidoria/avaliacoes/nao-existe/conversao").status_code == 404
+
+
+class TestArquivarRevisao:
+    """CA: arquivar revisão exige motivo e tira a marca Para revisar."""
+
+    @pytest.mark.parametrize("corpo", [{}, {"motivo": ""}, {"motivo": "   "}, {"motivo": "x" * 201}])
+    def test_sem_motivo_e_recusado_e_a_marca_fica(self, monkeypatch, corpo):
+        banco = _uma_marcada()
+        client = _cliente(monkeypatch, OUVIDOR, banco)
+
+        r = client.post("/api/ouvidoria/avaliacoes/av-1/arquivamento", json=corpo)
+
+        assert r.status_code == 422
+        assert banco.avaliacoes[0]["revisao_desfecho"] is None
+        assert client.get("/api/ouvidoria/avaliacoes", params={"para_revisar": True}).json()["para_revisar_total"] == 1
+
+    def test_com_motivo_tira_a_marca_e_guarda_quem_e_por_que(self, monkeypatch):
+        banco = _uma_marcada()
+        client = _cliente(monkeypatch, OUVIDOR, banco)
+
+        r = client.post("/api/ouvidoria/avaliacoes/av-1/arquivamento", json={"motivo": "  Já tratado por telefone  "})
+
+        assert r.status_code == 200, r.text
+        avaliacao = banco.avaliacoes[0]
+        assert avaliacao["revisao_desfecho"] == "arquivada"
+        assert avaliacao["revisao_motivo"] == "Já tratado por telefone"
+        assert avaliacao["revisada_por"] == OUVIDOR["id"]
+        assert avaliacao["revisada_em"] == AGORA.isoformat()
+        assert banco.casos == []
+        lista = client.get("/api/ouvidoria/avaliacoes", params={"para_revisar": True}).json()
+        assert lista["itens"] == []
+        assert lista["para_revisar_total"] == 0
+
+    def test_avaliacao_sem_a_marca_nao_tem_revisao_para_arquivar(self, monkeypatch):
+        banco = _Banco([_avaliacao("av-1", "2026-11-12T13:00:00+00:00", 5, comentario="Ótimo")])
+        client = _cliente(monkeypatch, OUVIDOR, banco)
+
+        r = client.post("/api/ouvidoria/avaliacoes/av-1/arquivamento", json={"motivo": "Sem gravidade"})
+
+        assert r.status_code == 409
+        assert banco.avaliacoes[0]["revisao_desfecho"] is None
+
+    def test_arquivar_de_novo_nao_reescreve_o_motivo(self, monkeypatch):
+        banco = _uma_marcada()
+        client = _cliente(monkeypatch, OUVIDOR, banco)
+
+        client.post("/api/ouvidoria/avaliacoes/av-1/arquivamento", json={"motivo": "Primeiro"})
+        r = client.post("/api/ouvidoria/avaliacoes/av-1/arquivamento", json={"motivo": "Segundo"})
+
+        assert r.status_code == 409
+        assert banco.avaliacoes[0]["revisao_motivo"] == "Primeiro"
+
+
+class TestAListaComOsFiltros:
+    """A lista da aba (seção 4.5): ponto, nota, período, só com comentário e
+    Para revisar, a mais nova primeiro."""
+
+    def _banco(self) -> _Banco:
+        return _Banco(
+            [
+                _avaliacao("av-1", "2026-11-12T13:00:00+00:00", 5, comentario="Equipe atenciosa"),
+                _avaliacao(
+                    "av-2",
+                    "2026-11-11T13:00:00+00:00",
+                    1,
+                    ponto=PONTO_CENTRO,
+                    comentario=COMENTARIO_GRAVE,
+                    revisar=True,
+                ),
+                _avaliacao("av-3", "2026-11-10T13:00:00+00:00", 1),
+                _avaliacao("av-4", "2026-09-01T13:00:00+00:00", 2, comentario="Antiga", revisar=True),
+            ]
+        )
+
+    def _ids(self, client, **params) -> list[str]:
+        r = client.get("/api/ouvidoria/avaliacoes", params=params)
+        assert r.status_code == 200, r.text
+        return [item["id"] for item in r.json()["itens"]]
+
+    def test_a_mais_nova_primeiro_dentro_do_periodo(self, monkeypatch):
+        client = _cliente(monkeypatch, OUVIDOR, self._banco())
+
+        assert self._ids(client) == ["av-1", "av-2", "av-3"]
+        assert self._ids(client, periodo="tudo") == ["av-1", "av-2", "av-3", "av-4"]
+
+    def test_cada_filtro_recorta_a_lista(self, monkeypatch):
+        client = _cliente(monkeypatch, OUVIDOR, self._banco())
+
+        assert self._ids(client, ponto_id=PONTO_CENTRO["id"]) == ["av-2"]
+        assert self._ids(client, nota=1) == ["av-2", "av-3"]
+        assert self._ids(client, com_comentario=True) == ["av-1", "av-2"]
+        assert self._ids(client, para_revisar=True) == ["av-2"]
+        assert self._ids(client, para_revisar=True, periodo="tudo") == ["av-2", "av-4"]
+
+    def test_o_card_traz_nota_motivos_comentario_ponto_e_data(self, monkeypatch):
+        client = _cliente(monkeypatch, OUVIDOR, self._banco())
+
+        corpo = client.get("/api/ouvidoria/avaliacoes").json()
+        item = corpo["itens"][1]
+
+        assert item["nota"] == 1
+        assert item["comentario"] == COMENTARIO_GRAVE
+        assert item["ponto_nome"] == "Centro médico"
+        assert item["criada_em"] == "2026-11-11T13:00:00+00:00"
+        assert item["para_revisar"] is True
+        assert item["revisar_motivo"] == "Relata agressão"
+        assert item["caso"] is None
+        # O contador é de todas as datas: a marca antiga também espera.
+        assert corpo["para_revisar_total"] == 2
+        assert corpo["total"] == 3
