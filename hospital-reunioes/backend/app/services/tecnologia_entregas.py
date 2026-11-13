@@ -166,3 +166,30 @@ def ritmo(demandas: list[dict[str, Any]], *, agora: datetime, filtros: Filtros |
             for inicio in inicios
         ],
     }
+
+
+def lista_por_semana(
+    demandas: list[dict[str, Any]], *, agora: datetime, filtros: Filtros | None = None
+) -> list[tuple[date, list[dict[str, Any]]]]:
+    """A lista "O que foi entregue" por semana (issue #1703, ADR 0092, decisao 5).
+
+    As mesmas semanas do grafico (as 12 ate a corrente, comecando na segunda
+    pelo fuso do hospital) e os mesmos `filtros` do topo. So as semanas com
+    entrega, a mais nova em cima, e dentro de cada uma a entrega mais nova
+    primeiro. Nao sera feita fica de fora, como no ritmo.
+    """
+    filtros = filtros or Filtros()
+    corrente = inicio_da_semana(agora.astimezone(FUSO_DO_HOSPITAL).date())
+    primeira = corrente - timedelta(weeks=SEMANAS_DO_GRAFICO - 1)
+    por_semana: dict[date, list[tuple[datetime, dict[str, Any]]]] = {}
+    for demanda in demandas:
+        entregue = instante_do_banco(entregue_na_data(demanda))
+        if entregue is None or not filtros.deixa(demanda):
+            continue
+        inicio = inicio_da_semana(entregue.astimezone(FUSO_DO_HOSPITAL).date())
+        if primeira <= inicio <= corrente:
+            por_semana.setdefault(inicio, []).append((entregue, demanda))
+    return [
+        (inicio, [d for _, d in sorted(por_semana[inicio], key=lambda par: par[0], reverse=True)])
+        for inicio in sorted(por_semana, reverse=True)
+    ]

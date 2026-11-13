@@ -44,7 +44,7 @@ function montar({ desenvolvedor = false }: { desenvolvedor?: boolean } = {}) {
                 entregas: { total: 0, anteriores: 0, g: 0, m: 0, p: 0 },
               },
               semanas: [],
-              entregas: [],
+              grupos: [],
               responsaveis: [],
             }
           : [];
