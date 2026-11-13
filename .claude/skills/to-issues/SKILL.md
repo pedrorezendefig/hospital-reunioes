@@ -73,6 +73,16 @@ Pergunte ao usuário: a granularidade está boa (grossa/fina demais)? As depend�
 
 Antes de publicar, determine o **número da issue-PRD pai** (`$PRD`): a issue criada pelo `/to-prd` nesta conversa, ou a issue passada como argumento no passo 1. Se realmente não houver pai (fatia avulsa), pule o vínculo de sub-issue abaixo.
 
+**Fatia avulsa é raiz e nasce com `type:` e `area:`**, a mesma regra do PRD do `/to-prd` (`docs/agents/triage-labels.md`): `type:feature` para funcionalidade nova, `type:fix` para defeito, e um `--label "area:<área>"` por área que a fatia toca.
+- App: `area:backend`, `area:frontend`, `area:supabase`.
+- Ferramenta: `area:skills`, `area:docs`, `area:infra`.
+
+```bash
+URL=$(gh issue create --title "<título pt-BR>" --body "<corpo>" --label ready-for-agent --label "fatia:<P|M|G>" --label "type:<feature|fix>" --label "area:<área>" --assignee @me)  # fatia avulsa, sem PRD pai
+```
+
+O espelho que transforma a raiz do app em card (no Hospital, a Demanda da aba Tecnologia, ADR 0084, decisão 4) lê essas labels no `issues.opened`; rotular depois não cria o card. A fatia com PRD pai é parte, não raiz, e não precisa delas: o card é o do PRD.
+
 Para cada fatia aprovada, publique uma issue com `gh issue create`, usando o template de corpo abaixo (**em pt-BR**), com a label `ready-for-agent` salvo instrução em contrário. Publique em ordem de dependência (bloqueadores primeiro) pra poder criar as **dependências nativas** com números reais.
 
 **Classifique o tamanho de cada fatia** e aplique o label `fatia:P`, `fatia:M` ou `fatia:G` junto com `ready-for-agent` (uma por fatia; nunca no PRD pai). Critério: **P** = poucas horas, escopo contido, 1 camada dominante; **M** = fatia vertical completa de escopo conhecido (meio período); **G** = dia cheio ou mais (muitas camadas, UI nova ou integração externa). Labels e critério vivem em `docs/agents/triage-labels.md`; o PedroOS filtra por eles (chips `fatia:` da aba Issues), e a `/onda-enxuta` escolhe por eles o esforço do implementador (`xhigh` na G, `high` na P e na M): classifique pelo escopo, não pela pressa.

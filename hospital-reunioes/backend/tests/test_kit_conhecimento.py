@@ -552,7 +552,22 @@ class TestOTextoDaAbaContaATelaDeHoje:
         """ADR 0078. O Manual do usuario saiu da plataforma: o assistente nao
         pode mandar o diretor para um endereco que nao existe mais."""
         assert "vercel.app" not in texto
-        assert "Manual" not in texto
+        assert "Manual do usuário" not in texto
+
+    def test_o_texto_diz_que_o_manual_existe_onde_fica_e_o_que_tem(self, texto):
+        """Issue #1718, ADR 0094. O manual voltou, dentro do aplicativo: o
+        assistente sabe que ele existe, onde se abre e o que tem em cada aba.
+
+        Mutante: apagar a secao, ou trocar o lugar do item."""
+        manual = _secao(texto, "O manual")
+        assert "**Manual**" in manual
+        assert "canto inferior esquerdo" in manual
+        assert "**Aplicativo do Hospital**" in manual
+        assert "**Ana**" in manual
+        assert "só as páginas das partes do aplicativo que ela já usa" in manual
+        assert "Super admin" in manual
+        decidido = [d for d in _secao(texto, "O que já foi decidido").splitlines() if "manual" in d]
+        assert len(decidido) == 1, decidido
 
     @pytest.mark.parametrize("aposentado", ["Minha vez", "cinco colunas"])
     def test_sem_o_nome_da_tela_de_antes(self, texto, aposentado):

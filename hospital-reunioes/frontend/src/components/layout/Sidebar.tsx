@@ -19,7 +19,10 @@ import {
   ReceiptText,
   type LucideIcon,
 } from "lucide-react";
-import { useCurrentParticipante } from "@/hooks/useCurrentParticipante";
+import {
+  useCurrentParticipante,
+  type CurrentParticipante,
+} from "@/hooks/useCurrentParticipante";
 import {
   isSecretaria,
   temAcessoContasMedicas,
@@ -29,6 +32,7 @@ import {
 import { Home, CalendarPlus } from "lucide-react";
 import { DistintivoDeNovidades } from "@/components/layout/DistintivoDeNovidades";
 import { BotaoRecolherMenu } from "@/components/layout/BotaoRecolherMenu";
+import { ItemManual } from "@/components/layout/ItemManual";
 import { useMenuRecolhido } from "@/hooks/useMenuRecolhido";
 import type { ContagemDeNovidades } from "@/lib/ouvidoria/novidades";
 
@@ -40,7 +44,9 @@ interface SidebarProps {
   novidadesOuvidoria?: ContagemDeNovidades;
 }
 
-type NavItem = {
+const HREF_DA_OUVIDORIA = "/ouvidoria";
+
+export type NavItem = {
   href: string;
   label: string;
   icon: LucideIcon;
@@ -62,16 +68,9 @@ export function Sidebar({
   // ignora a preferência e segue sempre aberta.
   const [preferenciaRecolhido, alternarRecolhido] = useMenuRecolhido();
   const recolhido = variant === "desktop" && preferenciaRecolhido;
-  // Todo papel de Reuniões entra no /admin: super admin vê tudo, secretária
-  // edita e facilitador lê o Dados do Atendimento (ADR 0031). A raiz /admin
-  // redireciona por papel; a sidebar de lá esconde o que não é do papel.
-  const showAdmin =
-    participante != null && temAcessoReunioes(participante);
   const isSec = isSecretaria(participante);
-  // Contextos ortogonais (ADR 0007): quem só tem perfil POP não vê
-  // Reuniões/Pendências; quem não tem perfil POP não vê /pops.
-  const showPops = temPerfilPop(participante);
-  const popsOnly = showPops && participante != null && !temAcessoReunioes(participante);
+  const popsOnly =
+    temPerfilPop(participante) && participante != null && !temAcessoReunioes(participante);
   const [expandedItems, setExpandedItems] = useState<Record<string, boolean>>({
     "/reunioes-metas": true,
     "/pendencias": pathname.startsWith("/pendencias"),
@@ -81,62 +80,7 @@ export function Sidebar({
     setExpandedItems((prev) => ({ ...prev, [href]: !prev[href] }));
   };
 
-  const popsItem: NavItem = { href: "/pops", label: "POPs", icon: BookOpenCheck };
-  const ouvidoriaItem: NavItem = {
-    href: "/ouvidoria",
-    label: "Ouvidoria",
-    icon: Megaphone,
-  };
-  // Contas médicas (ADR 0070): eixo próprio, entra em toda montagem do menu
-  // para quem tem perfil no módulo ou é super admin.
-  const contasMedicasItens: NavItem[] = temAcessoContasMedicas(participante)
-    ? [{ href: "/contas-medicas", label: "Contas médicas", icon: ReceiptText }]
-    : [];
-
-  // Grupo colapsável que reúne todo o tema Reuniões (Dashboard, Calendário,
-  // Pendências). "Metas" é só o rótulo, não há feature nova.
-  const reunioesMetasGroup: NavItem = {
-    href: "/reunioes-metas",
-    label: "Reuniões e metas",
-    icon: Target,
-    subItems: [
-      { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
-      { href: "/reunioes/calendario", label: "Calendário", icon: CalendarDays },
-      {
-        href: "/pendencias",
-        label: "Pendências",
-        icon: Clock,
-        subItems: [
-          { href: "/pendencias", label: "Lista", icon: ListTodo },
-          { href: "/pendencias/kanban", label: "Kanban", icon: KanbanSquare },
-        ],
-      },
-    ],
-  };
-
-  const navItems: NavItem[] = popsOnly
-    ? [popsItem, ...contasMedicasItens]
-    : isSec
-    ? [
-        { href: "/secretaria", label: "Início", icon: Home },
-        { href: "/secretaria/nova", label: "Nova reunião", icon: CalendarPlus },
-        { href: "/reunioes/calendario", label: "Calendário", icon: CalendarDays },
-        ouvidoriaItem,
-        ...(showPops ? [popsItem] : []),
-        ...contasMedicasItens,
-        ...(showAdmin
-          ? [{ href: "/admin", label: "Admin", icon: ShieldCheck }]
-          : []),
-      ]
-    : [
-        reunioesMetasGroup,
-        ouvidoriaItem,
-        ...(showPops ? [popsItem] : []),
-        ...contasMedicasItens,
-        ...(showAdmin
-          ? [{ href: "/admin", label: "Admin", icon: ShieldCheck }]
-          : []),
-      ];
+  const navItems = itensDoMenu(participante);
 
   // Renderiza um nó de navegação. `depth` controla o estilo do submenu:
   // 0 = topo, >= 1 = submenu aninhado (reaproveita a indentação e o border-left
@@ -212,7 +156,7 @@ export function Sidebar({
               strokeWidth={isLeafActive ? 2 : 1.5}
             />
             {item.label}
-            {item.href === ouvidoriaItem.href && (
+            {item.href === HREF_DA_OUVIDORIA && (
               <DistintivoDeNovidades
                 contagem={novidadesOuvidoria}
                 className="ml-auto"
@@ -261,7 +205,7 @@ export function Sidebar({
       >
         <Icon className="w-[18px] h-[18px]" strokeWidth={ativo ? 2 : 1.5} />
         <span className="sr-only">{item.label}</span>
-        {item.href === ouvidoriaItem.href && (
+        {item.href === HREF_DA_OUVIDORIA && (
           <DistintivoDeNovidades
             contagem={novidadesOuvidoria}
             className="absolute -top-1 -right-1"
@@ -301,7 +245,11 @@ export function Sidebar({
         className={`hidden md:flex ${recolhido ? "w-16" : "w-64"} min-h-screen bg-gradient-to-b from-surface to-bg border-r border-border flex-col`}
       >
         {content}
-        <div className={`border-t border-border ${recolhido ? "p-2" : "p-4"}`}>
+        <div
+          data-rodape-do-menu
+          className={`border-t border-border space-y-1 ${recolhido ? "p-2" : "p-4"}`}
+        >
+          <ItemManual recolhido={recolhido} />
           <BotaoRecolherMenu
             recolhido={recolhido}
             onAlternar={alternarRecolhido}
@@ -314,8 +262,86 @@ export function Sidebar({
   return (
     <div className="flex flex-col h-full bg-gradient-to-b from-surface to-bg">
       {content}
+      <div data-rodape-do-menu className="border-t border-border p-4">
+        <ItemManual recolhido={false} onNavigate={onNavigate} />
+      </div>
     </div>
   );
+}
+
+/**
+ * Os itens do menu de cada pessoa: o corte de acesso que o menu faz. O manual
+ * (issue #1718, ADR 0094, decisão 2) mostra a página de um módulo só a quem
+ * tem o módulo aqui, e por isso lê esta mesma lista em vez de refazer a conta.
+ */
+export function itensDoMenu(participante: CurrentParticipante | null): NavItem[] {
+  // Todo papel de Reuniões entra no /admin: super admin vê tudo, secretária
+  // edita e facilitador lê o Dados do Atendimento (ADR 0031). A raiz /admin
+  // redireciona por papel; a sidebar de lá esconde o que não é do papel.
+  const showAdmin =
+    participante != null && temAcessoReunioes(participante);
+  const isSec = isSecretaria(participante);
+  // Contextos ortogonais (ADR 0007): quem só tem perfil POP não vê
+  // Reuniões/Pendências; quem não tem perfil POP não vê /pops.
+  const showPops = temPerfilPop(participante);
+  const popsOnly = showPops && participante != null && !temAcessoReunioes(participante);
+
+  const popsItem: NavItem = { href: "/pops", label: "POPs", icon: BookOpenCheck };
+  const ouvidoriaItem: NavItem = {
+    href: HREF_DA_OUVIDORIA,
+    label: "Ouvidoria",
+    icon: Megaphone,
+  };
+  // Contas médicas (ADR 0070): eixo próprio, entra em toda montagem do menu
+  // para quem tem perfil no módulo ou é super admin.
+  const contasMedicasItens: NavItem[] = temAcessoContasMedicas(participante)
+    ? [{ href: "/contas-medicas", label: "Contas médicas", icon: ReceiptText }]
+    : [];
+
+  // Grupo colapsável que reúne todo o tema Reuniões (Dashboard, Calendário,
+  // Pendências). "Metas" é só o rótulo, não há feature nova.
+  const reunioesMetasGroup: NavItem = {
+    href: "/reunioes-metas",
+    label: "Reuniões e metas",
+    icon: Target,
+    subItems: [
+      { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
+      { href: "/reunioes/calendario", label: "Calendário", icon: CalendarDays },
+      {
+        href: "/pendencias",
+        label: "Pendências",
+        icon: Clock,
+        subItems: [
+          { href: "/pendencias", label: "Lista", icon: ListTodo },
+          { href: "/pendencias/kanban", label: "Kanban", icon: KanbanSquare },
+        ],
+      },
+    ],
+  };
+
+  return popsOnly
+    ? [popsItem, ...contasMedicasItens]
+    : isSec
+    ? [
+        { href: "/secretaria", label: "Início", icon: Home },
+        { href: "/secretaria/nova", label: "Nova reunião", icon: CalendarPlus },
+        { href: "/reunioes/calendario", label: "Calendário", icon: CalendarDays },
+        ouvidoriaItem,
+        ...(showPops ? [popsItem] : []),
+        ...contasMedicasItens,
+        ...(showAdmin
+          ? [{ href: "/admin", label: "Admin", icon: ShieldCheck }]
+          : []),
+      ]
+    : [
+        reunioesMetasGroup,
+        ouvidoriaItem,
+        ...(showPops ? [popsItem] : []),
+        ...contasMedicasItens,
+        ...(showAdmin
+          ? [{ href: "/admin", label: "Admin", icon: ShieldCheck }]
+          : []),
+      ];
 }
 
 // O critério de "ativo" de um link folha: match exato para Dashboard e para
