@@ -56,6 +56,8 @@ CAMPOS_PONTO_TUPLA = (
     "titulo_cartaz",
     "codigo_controle",
     "ala_internacao",
+    # A chave do ponto no teste do convite ao Google (migration 142, ADR 0089).
+    "google_teste_ativo",
 )
 CAMPOS_PONTO = ", ".join(CAMPOS_PONTO_TUPLA)
 

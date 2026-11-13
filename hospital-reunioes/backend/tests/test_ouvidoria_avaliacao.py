@@ -155,7 +155,7 @@ class TestANotaNaoViraProtocolo:
         assert gravada["motivos"] == ["tempo_espera", "limpeza"]
         assert gravada["comentario"] == "Demorou muito."
         # O recibo diz só o que a tela precisa para seguir, e nunca protocolo.
-        assert r.json() == {"id": gravada["id"], "nota": 2}
+        assert r.json() == {"id": gravada["id"], "nota": 2, "convite_google": False}
 
     def test_pular_grava_so_a_nota(self):
         """O Pular da tela N2 também grava: a nota já foi dada."""
@@ -214,6 +214,9 @@ class TestANotaNaoViraProtocolo:
             "nota",
             "motivos",
             "comentario",
+            # Se o convite ao Google foi mostrado (issue #1625): diz da tela,
+            # não de quem avaliou.
+            "convite_google_exibido",
         }
         valores = " ".join(str(v) for v in gravada.values())
         for rastro in (CLIENTE_DIRETO[0], "Maria", "Celular"):

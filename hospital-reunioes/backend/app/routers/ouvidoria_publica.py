@@ -30,7 +30,7 @@ from slowapi.util import get_remote_address
 from app.config import settings
 from app.dependencies import get_supabase_client
 from app.limiter import limiter
-from app.services import ouvidoria_acuse, ouvidoria_avaliacoes, ouvidoria_pontos
+from app.services import ouvidoria_acuse, ouvidoria_avaliacoes, ouvidoria_convite_google, ouvidoria_pontos
 from app.services.ouvidoria_contato import email_utilizavel
 from app.services.ouvidoria_taxonomia import (
     CATEGORIA_PENDENTE,
@@ -486,8 +486,14 @@ async def avaliar_pelo_cartaz(
     )
     if not cartaz:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Cartaz não encontrado")
+    # O convite ao Google (issue #1625, ADR 0089): só a nota 4 ou 5, só com a
+    # chave geral e a do cartaz ligadas. Decidido antes de gravar, para a linha
+    # já nascer dizendo que o convite foi mostrado.
+    convite = ouvidoria_convite_google.deve_convidar(supabase, cartaz, avaliacao.nota)
     try:
-        linha = ouvidoria_avaliacoes.gravar(supabase, cartaz, avaliacao.nota, avaliacao.motivos, avaliacao.comentario)
+        linha = ouvidoria_avaliacoes.gravar(
+            supabase, cartaz, avaliacao.nota, avaliacao.motivos, avaliacao.comentario, convite_google=convite
+        )
     except APIError as exc:
         logger.error("Falha ao gravar a avaliação do cartaz (código %s)", exc.code)
         linha = None
@@ -496,7 +502,7 @@ async def avaliar_pelo_cartaz(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Não foi possível registrar sua avaliação agora. Tente novamente em instantes.",
         )
-    return {"id": linha["id"], "nota": linha["nota"]}
+    return {"id": linha["id"], "nota": linha["nota"], "convite_google": bool(linha.get("convite_google_exibido"))}
 
 
 @router.get("/publico/locais")

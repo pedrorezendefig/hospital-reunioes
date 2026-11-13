@@ -36,16 +36,26 @@ TAMANHO_DO_COMENTARIO = 500
 NOTA_QUE_PERGUNTA_RETORNO = 3
 
 
-def gravar(supabase, ponto: dict, nota: int, motivos: list[str], comentario: str | None) -> dict | None:
+def gravar(
+    supabase,
+    ponto: dict,
+    nota: int,
+    motivos: list[str],
+    comentario: str | None,
+    *,
+    convite_google: bool = False,
+) -> dict | None:
     """Grava a avaliação de um cartaz ativo e devolve a linha, ou None se o
-    banco recusou. Só o ponto, a nota, os motivos e o comentário: nada que
-    identifique quem avaliou entra aqui, nem por engano de quem chama."""
+    banco recusou. Só o ponto, a nota, os motivos, o comentário e se o convite
+    ao Google foi mostrado (issue #1625): nada que identifique quem avaliou
+    entra aqui, nem por engano de quem chama."""
     linha = {
         "ponto_id": ponto["id"],
         "canal": "qr",
         "nota": nota,
         "motivos": motivos,
         "comentario": comentario,
+        "convite_google_exibido": convite_google,
     }
     result = supabase.table(TABELA).insert(linha).execute()
     return result.data[0] if result.data else None
