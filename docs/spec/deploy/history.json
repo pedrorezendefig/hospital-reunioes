@@ -2,6 +2,49 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-11-13T04:06:20-03:00",
+      "sha": "de14e6da40a0c764ffa76aa05a7cc5e4cc435911",
+      "app_version": "0.277.1",
+      "subject": "Onda tecnologia-1669-onda1: Número e Copiar link no topo da conversa Registrada e do card em revisão",
+      "raw_subject": "chore(deploy): registro da onda tecnologia-1669-onda1 (#1684)",
+      "scope": [
+        "frontend"
+      ],
+      "prds": [],
+      "result": "healthy",
+      "duration_seconds": 205,
+      "services_touched": [
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        },
+        {
+          "service": "frontend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "onda-enxuta tecnologia-1669-onda1: PR #1684 (issue #1669), mergeados PR a PR. Merge pela API do GitHub, um build. Registro pela Action pos-merge depois do health.",
+      "etapas": {
+        "merge_s": 2,
+        "build_s": {
+          "frontend": 181
+        },
+        "health_s": 0
+      },
+      "responsavel": "pedrorezendefig"
+    },
+    {
       "at": "2026-11-13T03:19:30-03:00",
       "sha": "1cb78b3280032c15e72fbb3c558dd93eacded782",
       "app_version": "0.277.0",
