@@ -1408,14 +1408,16 @@ export function ConversasDaTecnologia({
       </div>
 
       {/* Portal no body: o wrapper .animate-fade-in-up do módulo deixa um transform
-          aplicado, e ele prenderia o `fixed` à caixa do módulo em vez da janela. */}
+          aplicado, e ele prenderia o `fixed` à caixa do módulo em vez da janela.
+          O `top-16` é a altura da barra do topo (Header, `h-16`, camada 100): o painel
+          começa embaixo dela, senão a barra cobre o Ampliar e o Fechar (#1686). */}
       {painelAberto &&
         aberta &&
         createPortal(
         <aside
           ref={painelRef}
           aria-label="Pedido aberto"
-          className="fixed inset-y-0 right-0 z-40 w-[min(40rem,100vw)] overflow-y-auto border-l border-border bg-bg shadow-premium-strong p-5 space-y-3 animate-fade-in-right"
+          className="fixed top-16 bottom-0 right-0 z-40 w-[min(40rem,100vw)] overflow-y-auto border-l border-border bg-bg shadow-premium-strong p-5 space-y-3 animate-fade-in-right"
         >
           <div className="flex items-center gap-2">
             <span className="normal-case mr-auto text-xs text-text-secondary">{textoDaAbertura(aberta.criado_em)}</span>
