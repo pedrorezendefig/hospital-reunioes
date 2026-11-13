@@ -10,7 +10,8 @@ import { lerPeriodo } from "@/lib/central-de-comando/periodo";
  * `LenteDoObjetivo`, também sem tela de erro.
  *
  * A nota no Google tem lente própria (issue #1619): os números vêm do diário
- * da Ouvidoria, uma vez por semana, sem período nem cache.
+ * da Ouvidoria, uma vez por semana, sem cache. O período vale só para o teste
+ * do convite ao Google (issue #1625); a nota continua mensal.
  */
 export default async function LenteDoObjetivoPage({
   params,
@@ -20,7 +21,7 @@ export default async function LenteDoObjetivoPage({
   searchParams: Promise<{ periodo?: string | string[] }>;
 }) {
   const { identificador } = await params;
-  if (identificador === OBJETIVO_NOTA_NO_GOOGLE) return <NotaNoGoogle />;
   const { periodo } = await searchParams;
+  if (identificador === OBJETIVO_NOTA_NO_GOOGLE) return <NotaNoGoogle periodo={lerPeriodo(periodo)} />;
   return <LenteDoObjetivo identificador={identificador} periodo={lerPeriodo(periodo)} />;
 }

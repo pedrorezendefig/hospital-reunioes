@@ -48,6 +48,7 @@ let consultas: string[] = [];
 let avaliacoes: { url: string; corpo: Record<string, unknown> }[] = [];
 let enviados: Record<string, unknown>[] = [];
 let respostaDaAvaliacao = 201;
+let conviteGoogle = false;
 
 /** O servidor: a rota pública do ponto responde `cartaz` (ou 404, quando o
  *  ponto está aposentado), a da avaliação grava a nota, a de locais devolve a
@@ -62,7 +63,7 @@ function servidor(cartaz: Record<string, unknown> | null) {
         return {
           ok: respostaDaAvaliacao < 300,
           status: respostaDaAvaliacao,
-          json: async () => ({ id: "avaliacao-7", nota: corpo.nota }),
+          json: async () => ({ id: "avaliacao-7", nota: corpo.nota, convite_google: conviteGoogle }),
         } as Response;
       }
       if (url.includes("/publico/pontos/")) {
@@ -86,6 +87,7 @@ beforeEach(() => {
   avaliacoes = [];
   enviados = [];
   respostaDaAvaliacao = 201;
+  conviteGoogle = false;
 });
 
 afterEach(() => {
@@ -262,6 +264,46 @@ describe("depois de enviar (N3)", () => {
     fireEvent.click(botao("Continuar"));
     await terminarEEnviar(true);
     expect(enviados[0]).toMatchObject({ natureza_informada: "elogio", avaliacao_id: "avaliacao-7" });
+  });
+});
+
+describe("o convite ao Google (issue #1625)", () => {
+  const TEXTO_DO_CONVITE = "Se quiser, conte também no Google. Isso ajuda outras pessoas a nos conhecer.";
+
+  it("com o teste ligado, a nota 4 ou 5 mostra o convite, e o botão passa pela rota que conta o clique", async () => {
+    conviteGoogle = true;
+    servidor(CARTAZ);
+    render(<EnderecoCurtoDoCartaz />);
+    await avaliar(4);
+
+    expect(await screen.findByText(TEXTO_DO_CONVITE)).toBeTruthy();
+    const link = screen.getByRole("link", { name: "Avaliar no Google" }) as HTMLAnchorElement;
+    expect(link.getAttribute("href")).toBe("/api/ouvidoria/publico/avaliacoes/avaliacao-7/convite-google");
+    expect(link.getAttribute("target")).toBe("_blank");
+    expect(link.getAttribute("rel")).toContain("noopener");
+    // O elogio continua oferecido.
+    expect(botao("Quer deixar um elogio para a equipe?")).toBeTruthy();
+  });
+
+  it("com o teste desligado, a nota 5 não mostra o convite", async () => {
+    servidor(CARTAZ);
+    render(<EnderecoCurtoDoCartaz />);
+    await avaliar(5);
+
+    expect(await screen.findByText("Obrigado por nos contar.")).toBeTruthy();
+    expect(screen.queryByText(TEXTO_DO_CONVITE)).toBeNull();
+    expect(screen.queryByRole("link", { name: "Avaliar no Google" })).toBeNull();
+  });
+
+  it("nota de 1 a 3 nunca mostra o convite", async () => {
+    conviteGoogle = true;
+    servidor(CARTAZ);
+    render(<EnderecoCurtoDoCartaz />);
+    await avaliar(3);
+
+    expect(await screen.findByText("Quer que a Ouvidoria entre em contato?")).toBeTruthy();
+    expect(screen.queryByText(TEXTO_DO_CONVITE)).toBeNull();
+    expect(screen.queryByRole("link", { name: "Avaliar no Google" })).toBeNull();
   });
 });
 

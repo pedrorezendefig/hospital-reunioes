@@ -38,7 +38,9 @@ import {
   formDoPonto,
   nomeDoArquivo,
   podeGerirPontos,
+  podeLigarConviteGoogle,
   pontoEstaCompleto,
+  type ConviteGoogle,
   type FormDoCartaz,
   type PontoDeEscuta,
   type TituloDoCartaz,
@@ -54,6 +56,44 @@ const VAZIO = { setor: "", ...CARTAZ_VAZIO };
  * Os campos do cartaz, iguais no cadastro e na edição. `prefixo` separa os ids
  * dos dois formulários, que podem estar abertos juntos.
  */
+/** A chave de liga e desliga do convite ao Google: um botão com papel de
+ * switch, que diz o estado no `aria-checked`. */
+function ChaveDoConvite({
+  rotulo,
+  ligado,
+  ocupado,
+  aoMudar,
+}: {
+  rotulo: string;
+  ligado: boolean;
+  ocupado: boolean;
+  aoMudar: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={ligado}
+      aria-label={rotulo}
+      disabled={ocupado}
+      onClick={aoMudar}
+      className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors disabled:opacity-40 ${
+        ligado ? "bg-primary" : "bg-slate-300"
+      }`}
+    >
+      <span
+        className={`inline-block h-5 w-5 rounded-full bg-white shadow transition-transform ${
+          ligado ? "translate-x-5" : "translate-x-0.5"
+        }`}
+      />
+    </button>
+  );
+}
+
+function formatarDia(iso: string): string {
+  return new Date(iso).toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" });
+}
+
 function CamposDoCartaz({
   prefixo,
   form,
@@ -156,6 +196,7 @@ function CamposDoCartaz({
 export default function PontosDeEscutaPage() {
   const { participante, loading: carregandoPerfil } = useCurrentParticipante();
   const podeGerir = podeGerirPontos(participante?.perfil_ouvidoria);
+  const podeLigarConvite = podeLigarConviteGoogle(participante?.perfil_ouvidoria);
 
   const [token, setToken] = useState<string | null>(null);
   const [pontos, setPontos] = useState<PontoDeEscuta[]>([]);
@@ -167,6 +208,8 @@ export default function PontosDeEscutaPage() {
   const [mudando, setMudando] = useState<string | null>(null);
   const [editando, setEditando] = useState<string | null>(null);
   const [edicao, setEdicao] = useState<FormDoCartaz>(CARTAZ_VAZIO);
+  const [convite, setConvite] = useState<ConviteGoogle | null>(null);
+  const [mudandoConvite, setMudandoConvite] = useState<string | null>(null);
 
   useEffect(() => {
     async function init() {
@@ -193,7 +236,9 @@ export default function PontosDeEscutaPage() {
         if (!resPontos.ok) {
           setErro("Não foi possível carregar os pontos de escuta.");
         } else {
-          setPontos((await resPontos.json()).pontos);
+          const corpo = await resPontos.json();
+          setPontos(corpo.pontos);
+          setConvite(corpo.convite_google ?? null);
         }
       } catch (e) {
         console.error("Erro ao carregar pontos de escuta:", e);
@@ -209,7 +254,33 @@ export default function PontosDeEscutaPage() {
     const res = await fetch("/api/ouvidoria/pontos", {
       headers: { Authorization: `Bearer ${sessionToken}` },
     });
-    if (res.ok) setPontos((await res.json()).pontos);
+    if (res.ok) {
+      const corpo = await res.json();
+      setPontos(corpo.pontos);
+      setConvite(corpo.convite_google ?? null);
+    }
+  }
+
+  /** Liga ou desliga uma chave do convite ao Google: a geral (`ponto`
+   * ausente) ou a de um cartaz. */
+  async function mudarConvite(ligado: boolean, ponto?: PontoDeEscuta) {
+    if (!token) return;
+    setMudandoConvite(ponto?.id ?? "global");
+    setErro(null);
+    const caminho = ponto ? `/api/ouvidoria/pontos/${ponto.id}/convite-google` : "/api/ouvidoria/convite-google";
+    try {
+      const res = await fetch(caminho, {
+        method: "PUT",
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ ligado }),
+      });
+      if (res.ok) await recarregar(token);
+      else setErro("Não foi possível mudar o convite ao Google. Tente novamente.");
+    } catch {
+      setErro("Não foi possível mudar o convite ao Google. Tente novamente.");
+    } finally {
+      setMudandoConvite(null);
+    }
   }
 
   async function cadastrar() {
@@ -326,6 +397,40 @@ export default function PontosDeEscutaPage() {
         </div>
       )}
 
+      {convite && (
+        <section
+          aria-label="Teste do convite ao Google"
+          className="bg-white rounded-2xl border border-border shadow-premium p-5 mb-6"
+        >
+          <div className="flex items-start justify-between gap-4">
+            <div className="space-y-1">
+              <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-700">
+                Teste do convite ao Google
+              </h2>
+              <p className="text-sm text-slate-600">
+                {convite.global
+                  ? `O teste do convite ao Google está ligado${
+                      convite.ligado_em ? ` desde ${formatarDia(convite.ligado_em)}` : ""
+                    }.`
+                  : "O teste do convite ao Google está desligado."}
+              </p>
+              <p className="text-xs text-slate-500">
+                Quem dá nota 4 ou 5 no cartaz vê o convite para avaliar o hospital no Google, só com esta chave e a
+                do ponto ligadas. Só a diretoria executiva liga e desliga, e cada mudança fica registrada.
+              </p>
+            </div>
+            {podeLigarConvite && (
+              <ChaveDoConvite
+                rotulo="Convite ao Google em todo o QR"
+                ligado={convite.global}
+                ocupado={mudandoConvite === "global"}
+                aoMudar={() => mudarConvite(!convite.global)}
+              />
+            )}
+          </div>
+        </section>
+      )}
+
       <section className="bg-white rounded-2xl border border-border shadow-premium p-5 mb-6">
         <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-700 mb-3">Novo ponto de escuta</h2>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -407,6 +512,21 @@ export default function PontosDeEscutaPage() {
                       )}
                       {!ponto.ativo && <span className="ml-2 text-amber-600">Aposentado</span>}
                     </p>
+                    {podeLigarConvite ? (
+                      <div className="mt-2 flex items-center gap-2">
+                        <ChaveDoConvite
+                          rotulo={`Convite ao Google em ${ponto.ponto}`}
+                          ligado={ponto.google_teste_ativo === true}
+                          ocupado={mudandoConvite === ponto.id}
+                          aoMudar={() => mudarConvite(ponto.google_teste_ativo !== true, ponto)}
+                        />
+                        <span className="text-xs text-slate-500">Convite ao Google neste ponto</span>
+                      </div>
+                    ) : (
+                      ponto.google_teste_ativo && (
+                        <p className="text-xs text-slate-500 mt-1">Convite ao Google ligado neste ponto</p>
+                      )
+                    )}
                     {editando === ponto.id && (
                       <fieldset aria-label="Editar ponto" className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-3">
                         <CamposDoCartaz

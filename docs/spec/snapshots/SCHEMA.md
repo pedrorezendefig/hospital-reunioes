@@ -1,6 +1,6 @@
 # SCHEMA.md
 <!-- gerado automaticamente por /snapshot — não editar -->
-<!-- last_update: 2026-11-13T04:37+0000 -->
+<!-- last_update: 2026-11-13T05:28+0000 -->
 
 Diagrama relacional do Hospital Reuniões. Renderiza nativo no GitHub.
 
@@ -499,7 +499,7 @@ erDiagram
         VARCHAR criado_por FK
         nao e
         o e
-        _ mais_colunas "+5"
+        _ mais_colunas "+6"
     }
     tecnologia_produtos {
         UUID id PK
@@ -977,6 +977,8 @@ erDiagram
         TEXT google_review_url
         TIMESTAMPTZ atualizada_em
         TEXT nsp_setor
+        BOOLEAN google_teste_global
+        TIMESTAMPTZ google_teste_ligado_em
     }
     ouvidoria_avaliacoes {
         UUID id PK
@@ -988,6 +990,16 @@ erDiagram
         TIMESTAMPTZ criada_em
         BOOLEAN convite_google_exibido
         _ mais_colunas "+8"
+    }
+    ouvidoria_convite_google_auditoria {
+        UUID id PK
+        TEXT chave
+        a e
+        BOOLEAN valor_anterior
+        BOOLEAN valor_novo
+        VARCHAR alterado_por
+        TEXT alterado_por_nome
+        TIMESTAMPTZ alterado_em
     }
 ```
 
@@ -1146,6 +1158,8 @@ erDiagram
 | `ouvidoria_acionamentos` | `idx_ouvidoria_acionamentos_um_nucleo_por_caso` | `manifestacao_id` | `139_ouvidoria_envio_ao_nucleo.sql` |
 | `ouvidoria_avaliacoes` | `idx_ouvidoria_avaliacoes_ponto` | `ponto_id, criada_em` | `140_ouvidoria_avaliacao_do_qr.sql` |
 | `ouvidoria_avaliacoes` | `idx_ouvidoria_avaliacoes_comentario` | `criada_em` | `140_ouvidoria_avaliacao_do_qr.sql` |
+| `ouvidoria_avaliacoes` | `idx_ouvidoria_avaliacoes_convite_google` | `criada_em, ponto_id` | `142_ouvidoria_convite_google_no_qr.sql` |
+| `ouvidoria_convite_google_auditoria` | `idx_ouvidoria_convite_google_auditoria_em` | `alterado_em DESC` | `142_ouvidoria_convite_google_no_qr.sql` |
 
 ---
-**Resumo:** 90 tabelas · 132 relacionamentos FK detectados.
+**Resumo:** 91 tabelas · 132 relacionamentos FK detectados.

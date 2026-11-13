@@ -236,7 +236,11 @@ async def objetivos_galeria(request: Request):
 
 @router.get(f"/objetivos/{nota_no_google.IDENTIFICADOR}")
 @limiter.limit("30/minute")
-async def objetivo_nota_no_google(request: Request, supabase=Depends(get_supabase_client)):
+async def objetivo_nota_no_google(
+    request: Request,
+    periodo: Periodo = Query(PERIODO_PADRAO),
+    supabase=Depends(get_supabase_client),
+):
     """A lente de "Melhorar a nota no Google" (issue #1619, ADR 0089): a nota,
     as avaliações novas do mês e a tendência, lidas do diário de Nota externa
     da Ouvidoria, que o job semanal da Places API alimenta.
@@ -245,8 +249,11 @@ async def objetivo_nota_no_google(request: Request, supabase=Depends(get_supabas
     período (o Objetivo é mensal). Declarada antes da lente genérica, que não
     tem montador para ela e responderia 404. Sem a chave da Places API, 200 com
     `medida: false`: a tela diz que a nota não está sendo medida.
+
+    Desde a issue #1625 traz também o teste do convite ao Google no período
+    escolhido: convites, cliques e taxa por cartaz e o aviso dos 60 dias.
     """
-    return await anyio.to_thread.run_sync(nota_no_google.ler, supabase)
+    return await anyio.to_thread.run_sync(nota_no_google.ler, supabase, periodo)
 
 
 @router.get("/objetivos/{identificador}")

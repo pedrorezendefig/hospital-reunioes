@@ -10,7 +10,7 @@
  * API, a tela diz que a nota não está sendo medida, sem número.
  */
 
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, render, screen, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { NotaNoGoogle, type NotaNoGooglePayload } from "./NotaNoGoogle";
@@ -75,7 +75,7 @@ describe("a lente da nota no Google", () => {
     render(<NotaNoGoogle />);
 
     await screen.findByText("2,6 de 5");
-    expect(pedidos).toEqual(["/api/admin/central-de-comando/objetivos/google-reputacao"]);
+    expect(pedidos).toEqual(["/api/admin/central-de-comando/objetivos/google-reputacao?periodo=28d"]);
   });
 
   it("mostra a nota, as avaliações novas do mês e a tendência", async () => {
@@ -129,5 +129,68 @@ describe("a lente da nota no Google", () => {
 
     expect(await screen.findByText(/a nota do google não está sendo medida/i)).toBeTruthy();
     expect(screen.queryByText(/de 5/)).toBeNull();
+  });
+});
+
+describe("o teste do convite ao Google (issue #1625)", () => {
+  function comConvite(parcial: Partial<NonNullable<NotaNoGooglePayload["convite"]>> = {}): NotaNoGooglePayload {
+    return {
+      ...medida(),
+      convite: {
+        periodo: "28d",
+        ligado: true,
+        ligado_em: "2026-10-20T12:00:00+00:00",
+        dias_ligado: 24,
+        dias_do_teste: 60,
+        reavaliar: false,
+        intervalo: { inicio: "2026-10-16", fim: "2026-11-12" },
+        pontos: [
+          { ponto_id: "p1", nome: "Emergência adulta", ligado: true, convites: 4, cliques: 2, taxa: 0.5 },
+          { ponto_id: "p2", nome: "Centro médico", ligado: true, convites: 0, cliques: 0, taxa: null },
+        ],
+        total: { convites: 4, cliques: 2, taxa: 0.5 },
+        ...parcial,
+      },
+    };
+  }
+
+  it("pede os números do convite no período escolhido", async () => {
+    servidor(comConvite());
+
+    render(<NotaNoGoogle periodo="90d" />);
+
+    await screen.findByText("2,6 de 5");
+    expect(pedidos).toEqual(["/api/admin/central-de-comando/objetivos/google-reputacao?periodo=90d"]);
+  });
+
+  it("mostra convites, cliques e taxa de cada ponto ao lado da nota", async () => {
+    servidor(comConvite());
+
+    render(<NotaNoGoogle />);
+
+    const tabela = await screen.findByRole("table", { name: "Convites ao Google por ponto" });
+    const linhas = within(tabela).getAllByRole("row").map((linha) => linha.textContent);
+    expect(linhas).toContain("Emergência adulta4250%");
+    expect(linhas).toContain("Centro médico00Sem convite");
+    expect(linhas).toContain("Total4250%");
+    expect(screen.queryByText(/Hora de reavaliar/)).toBeNull();
+  });
+
+  it("depois de 60 dias avisa para reavaliar e diz que o convite continua", async () => {
+    servidor(comConvite({ dias_ligado: 73, reavaliar: true }));
+
+    render(<NotaNoGoogle />);
+
+    const aviso = await screen.findByRole("alert");
+    expect(aviso.textContent).toMatch(/Hora de reavaliar/);
+    expect(aviso.textContent).toMatch(/continua aparecendo até a diretoria executiva desligar/);
+  });
+
+  it("com o teste desligado diz que o convite não aparece", async () => {
+    servidor(comConvite({ ligado: false, ligado_em: null, dias_ligado: null, pontos: [], total: { convites: 0, cliques: 0, taxa: null } }));
+
+    render(<NotaNoGoogle />);
+
+    expect(await screen.findByText(/O convite ao Google está desligado/)).toBeTruthy();
   });
 });

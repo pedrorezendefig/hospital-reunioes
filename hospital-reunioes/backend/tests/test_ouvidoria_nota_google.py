@@ -40,6 +40,7 @@ class _Tabela:
         self._insert: dict | None = None
         self._ordem: tuple[str, bool] | None = None
         self._limite: int | None = None
+        self._recorte: tuple[int, int] | None = None
 
     def select(self, *_a, **_kw):
         return self
@@ -64,6 +65,11 @@ class _Tabela:
         self._limite = quantos
         return self
 
+    def range(self, inicio, fim):
+        # A lente lê os convites ao Google em páginas (issue #1625).
+        self._recorte = (inicio, fim)
+        return self
+
     def execute(self):
         if self._insert is not None:
             self.rows.append(dict(self._insert))
@@ -79,6 +85,8 @@ class _Tabela:
             linhas = sorted(linhas, key=lambda r: str(r.get(col) or ""), reverse=desc)
         if self._limite is not None:
             linhas = linhas[: self._limite]
+        if self._recorte is not None:
+            linhas = linhas[self._recorte[0] : self._recorte[1] + 1]
         return type("R", (), {"data": [dict(r) for r in linhas]})()
 
 
