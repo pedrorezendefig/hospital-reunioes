@@ -1,6 +1,6 @@
 # ROTAS.md
 <!-- gerado automaticamente por /snapshot — não editar -->
-<!-- last_update: 2026-11-13T07:12+0000 -->
+<!-- last_update: 2026-11-13T08:14+0000 -->
 
 Endpoints HTTP expostos pelo backend FastAPI do Hospital Reuniões.
 
@@ -270,6 +270,7 @@ Endpoints HTTP expostos pelo backend FastAPI do Hospital Reuniões.
 |--------|------|-----------|------|
 | GET | `/ouvidoria/avaliacoes` | A lista da aba, a mais nova primeiro, com os filtros de ponto, nota, | ✅ |
 | GET | `/ouvidoria/avaliacoes/numeros` | Os indicadores e os gráficos da aba sobre o período (padrão: últimos 30 | ✅ |
+| GET | `/ouvidoria/avaliacoes/para-revisar` | O contador Para revisar do Painel (issue #1628, seção 4.6 do anexo): | ✅ |
 | POST | `/ouvidoria/avaliacoes/{avaliacao_id}/arquivamento` | Arquiva a revisão: tira a marca Para revisar com o motivo, sem abrir | ✅ |
 | POST | `/ouvidoria/avaliacoes/{avaliacao_id}/conversao` | Converte a avaliação em caso (ADR 0086, decisão 4): canal `qr`, o | ✅ |
 | PUT | `/ouvidoria/convite-google` | A chave geral do teste do convite ao Google (issue #1625, ADR 0089 | ✅ |
@@ -553,4 +554,4 @@ Endpoints HTTP expostos pelo backend FastAPI do Hospital Reuniões.
 
 ---
 
-**Totais:** 322 endpoints em 45 routers · 92% exigem auth.
+**Totais:** 323 endpoints em 45 routers · 92% exigem auth.
