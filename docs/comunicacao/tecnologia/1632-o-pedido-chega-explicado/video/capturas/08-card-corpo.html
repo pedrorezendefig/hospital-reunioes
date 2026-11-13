@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="pt-BR"><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Filtrar a fila da Ouvidoria por setor #1702</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/github-markdown-css/5.5.1/github-markdown-light.min.css">
+<style>
+  html, body { margin: 0; background: #ffffff; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans", Helvetica, Arial, sans-serif; color: #1f2328; }
+  .coluna { max-width: 1012px; margin: 0 auto; padding: 40px 24px 64px; }
+  .titulo { font-size: 32px; font-weight: 400; line-height: 1.25; margin: 0 0 8px; }
+  .titulo .numero { color: #59636e; font-weight: 300; }
+  .linha { display: flex; align-items: center; gap: 8px; font-size: 14px; color: #59636e; padding-bottom: 16px; margin-bottom: 24px; border-bottom: 1px solid #d1d9e0; }
+  .estado { display: inline-flex; align-items: center; gap: 4px; background: #1f883d; color: #fff; border-radius: 2em; padding: 5px 12px; font-weight: 500; font-size: 14px; }
+  .rotulo { border-radius: 2em; padding: 0 8px; font-size: 12px; font-weight: 500; line-height: 20px; border: 1px solid #d1d9e0; color: #1f2328; background: #f6f8fa; }
+  .caixa { border: 1px solid #d1d9e0; border-radius: 6px; }
+  .caixa .markdown-body { padding: 24px 32px; font-size: 16px; }
+  .markdown-body li:has(> input[type=checkbox]) { list-style-type: none; }
+  .markdown-body li > input[type=checkbox] { margin: 0 .2em .25em -1.4em; vertical-align: middle; }
+</style>
+</head>
+<body>
+  <div class="coluna">
+    <h1 class="titulo">Filtrar a fila da Ouvidoria por setor <span class="numero">#1702</span></h1>
+    <div class="linha"><span class="estado">Open</span><span class="rotulo">needs-triage</span><span class="rotulo">type:feature</span><span class="rotulo">origem:diretor</span></div>
+    <div class="caixa"><article class="markdown-body" id="corpo"><p>Filtro por setor na fila da Ouvidoria, que guarda a escolha de quem filtra.</p>
+<h2>👔 Para o diretor</h2>
+<p><strong>O que muda:</strong> A fila da Ouvidoria ganha um filtro por setor, para você ver só os casos das áreas que acompanha.</p>
+<p><strong>O que você precisa saber:</strong></p>
+<ul>
+<li>Você escolhe o setor, como Farmácia ou UTI, e a fila mostra só os casos dele.</li>
+<li>Vale porque você deixa de rolar a fila inteira para achar os casos das suas áreas.</li>
+<li>A escolha fica guardada até você trocar.</li>
+<li>Na primeira visita, a fila abre com todos os setores.</li>
+</ul>
+<h2>🛠️ Para o desenvolvedor</h2>
+<p><strong>O que o diretor quer:</strong> Filtrar a fila da Ouvidoria por setor, para ver só os casos de uma área.</p>
+<p><strong>Por que ele pediu:</strong> A diretora acompanha a Farmácia e a UTI e hoje rola a fila inteira para achar os casos dessas áreas.</p>
+<p><strong>O que já ficou decidido com ele:</strong> O filtro guarda a escolha até ela trocar. Na primeira visita, a fila abre com todos os setores.</p>
+<p><strong>Onde mexe no código:</strong> A tela da fila da Ouvidoria e a busca que lista os casos, que hoje já filtra por situação.</p>
+<p><strong>Cuidados:</strong> O setor do caso pode mudar depois da triagem. O filtro usa o setor de agora, não o da abertura.</p>
+<p><strong>Como saber que acabou:</strong> Escolher Farmácia mostra só os casos da Farmácia, e a escolha continua quando ela volta para a fila.</p>
+<hr>
+<h2>Problema</h2>
+<p>Quero filtrar a fila da Ouvidoria pelo setor, pra ver só os casos da Farmácia e da UTI.</p>
+<h2>Solução</h2>
+<p>Filtrar a fila da Ouvidoria por setor, do jeito que o diretor decidiu no planejamento com a IA, na aba Tecnologia. As decisões dele estão em Decisões de negócio; as de implementação e de teste vêm do que a IA leu do código, e o planejamento da Vitta completa o resto.</p>
+<h2>Histórias de usuário</h2>
+<ol>
+<li>Como quem pediu a Demanda, quero Filtrar a fila da Ouvidoria por setor, para resolver o problema acima.</li>
+<li>Como quem pediu a Demanda, quero que valha o que decidi: Guarda até você trocar</li>
+<li>Como quem pediu a Demanda, quero que valha o que decidi: Todos os setores</li>
+</ol>
+<h2>Decisões de negócio</h2>
+<ol>
+<li><p><strong>Hoje a fila mostra todos os setores. Quando você escolhe um, ela guarda a escolha?</strong><br>Escolha: Guarda até você trocar<br>Por quê: A diretora acompanha sempre a Farmácia e a UTI, e não quer escolher o setor de novo a cada visita.</p>
+</li>
+<li><p><strong>Antes de você escolher qualquer setor, a fila abre mostrando quais casos?</strong><br>Escolha: Todos os setores<br>Por quê: Assim ninguém deixa de ver um caso novo antes de escolher um filtro.</p>
+</li>
+</ol>
+<h2>Decisões de implementação</h2>
+<ul>
+<li>A busca da fila já filtra por situação; o setor entra como mais um filtro na mesma busca.</li>
+<li>A escolha do setor fica guardada por pessoa, e não para a fila inteira.</li>
+</ul>
+<h2>Decisões de teste</h2>
+<ul>
+<li>Escolher Farmácia e conferir que só aparecem casos da Farmácia.</li>
+<li>Sair da fila, voltar e conferir que a Farmácia continua escolhida.</li>
+</ul>
+<h2>Ficou em aberto</h2>
+<p>Nada ficou em aberto.</p>
+<h2>Para o glossário</h2>
+<p>Termos:</p>
+<ul>
+<li>Setor do caso: a área do hospital a que a manifestação da Ouvidoria pertence agora.</li>
+</ul>
+<p>Decisões candidatas a ADR:</p>
+<ul>
+<li>Nenhuma decisão candidata a ADR.</li>
+</ul>
+<h2>Origem</h2>
+<p>Planejado com a IA na aba Tecnologia do aplicativo do hospital e mandado para o desenvolvimento por quem planejou, depois de conferir o resumo.<br>Abrir a Demanda: <a href="https://app.hospitalsaomatheus.cloud/admin/tecnologia?demanda=00000000-0000-4000-a000-000001632001">https://app.hospitalsaomatheus.cloud/admin/tecnologia?demanda=00000000-0000-4000-a000-000001632001</a></p>
+</article></div>
+  </div>
+  
+  
+
+
+</body></html>

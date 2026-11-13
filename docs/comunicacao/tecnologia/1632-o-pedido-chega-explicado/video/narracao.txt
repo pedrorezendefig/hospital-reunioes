@@ -1,0 +1,25 @@
+[animada] Card criado. Quem vai programar já sabe.
+
+Até agora, o card nascia em silêncio.
+
+A conversa com o assistente continua igual. Você não escreve uma linha a mais.
+
+No resumo, escolhe quem cuida disto e clica em Criar o card.
+
+Sua parte segue no topo, como sempre.
+
+Logo abaixo, entra uma parte nova, só pra quem vai programar.
+
+Ela conta o que você quer e por que pediu.
+
+Depois vem o que ficou decidido, onde mexer, os cuidados e quando está pronto.
+
+Na hora, a pessoa escolhida recebe um email com tudo isso e o link.
+
+Se o email falhar, o card nasce assim mesmo.
+
+No bug, as perguntas não mudam, e o card ganha a mesma parte.
+
+Os pedidos que já estão na fila também vão ganhar essa explicação. Você não faz nada, e ninguém recebe email por isso.
+
+[confiante] Você explica uma vez. Quem programa começa já sabendo.
