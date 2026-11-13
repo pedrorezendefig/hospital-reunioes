@@ -8,7 +8,8 @@ import { enderecoDaImagem } from "@/lib/manual/paginas";
 /**
  * O Markdown de uma página do manual no visual do app (issue #1718, ADR 0094):
  * a fonte da casa e os tokens de cor do `globals.css`. Os títulos curtos saem
- * em `h3`/`h4`, que a regra base da Caixa alta já alcança (ADR 0080); o texto
+ * em Caixa alta (ADR 0080): o `h3` pela regra base, o `h4` pela classe
+ * `uppercase`, porque a regra base só alcança `h1`, `h2` e `h3`. O texto
  * corrido fica como foi escrito.
  *
  * O bloco `fluxograma` é o lugar do componente do Fluxograma (emenda da ADR
@@ -19,7 +20,7 @@ function componentes(pasta: string): Components {
   return {
     h1: ({ children }) => <h3 className="text-lg font-bold text-primary mt-8 mb-3">{children}</h3>,
     h2: ({ children }) => <h3 className="text-lg font-bold text-primary mt-8 mb-3">{children}</h3>,
-    h3: ({ children }) => <h4 className="text-base font-semibold text-primary mt-6 mb-2">{children}</h4>,
+    h3: ({ children }) => <h4 className="text-base font-semibold text-primary mt-6 mb-2 uppercase tracking-[0.02em]">{children}</h4>,
     p: ({ children }) => <p className="text-[15px] text-text leading-relaxed mb-3">{children}</p>,
     strong: ({ children }) => <strong className="font-semibold text-text">{children}</strong>,
     ul: ({ children }) => <ul className="list-disc pl-6 mb-3 space-y-1.5 text-[15px] text-text">{children}</ul>,
