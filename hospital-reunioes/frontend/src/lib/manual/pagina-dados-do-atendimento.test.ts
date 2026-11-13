@@ -9,8 +9,13 @@
  * imagem existente) moram em `paginas.test.ts`.
  */
 
+import { spawnSync } from "node:child_process";
+import { mkdtempSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
+import { lerFluxograma, type Fluxo } from "@/components/manual/fluxograma/fluxo";
 import type { CurrentParticipante } from "@/hooks/useCurrentParticipante";
 import { carregarPaginasDoManual } from "./carregar";
 import { imagensCitadas, paginasVisiveis } from "./paginas";
@@ -88,5 +93,176 @@ describe("as tarefas da página de Dados do Atendimento", () => {
       "![A tabela](tabela.png)",
     ].join("\n\n");
     expect(tarefasIncompletas(corpo)).toEqual(["Sem print", "Sem passo"]);
+  });
+});
+
+/** O texto de cada bloco ```fluxograma do Markdown, na ordem da página. */
+function blocosDeFluxograma(corpo: string): string[] {
+  return Array.from(corpo.matchAll(/^```fluxograma[^\n]*\n([\s\S]*?)^```/gm), (m) => m[1]);
+}
+
+/** Os passos que se alcançam a partir de `de`, seguindo as ligações. */
+function alcancaveis(fluxo: Fluxo, de: string): Set<string> {
+  const vistos = new Set([de]);
+  const fila = [de];
+  while (fila.length) {
+    const atual = fila.shift()!;
+    for (const l of fluxo.ligacoes) {
+      if (l.de === atual && !vistos.has(l.para)) {
+        vistos.add(l.para);
+        fila.push(l.para);
+      }
+    }
+  }
+  return vistos;
+}
+
+describe("o fluxograma da página de Dados do Atendimento", () => {
+  const blocos = blocosDeFluxograma(PAGINA?.corpo ?? "");
+
+  it("desenha da edição na tabela até a próxima resposta da Ana, sem erro de bloco", () => {
+    expect(blocos).toHaveLength(1);
+    const leitura = lerFluxograma(blocos[0]);
+    if (!leitura.ok) throw new Error(leitura.erros.join("\n"));
+
+    const inicio = leitura.fluxo.passos.filter((p) => p.forma === "inicio");
+    const fim = leitura.fluxo.passos.filter((p) => p.forma === "fim");
+    expect(inicio).toHaveLength(1);
+    expect(fim).toHaveLength(1);
+    expect(inicio[0].rotulo).toMatch(/editar na tabela/i);
+    expect(fim[0].rotulo).toMatch(/ana responde/i);
+    expect(alcancaveis(leitura.fluxo, inicio[0].id).has(fim[0].id)).toBe(true);
+  });
+
+  it("o registro desativado não chega à resposta da Ana", () => {
+    const leitura = lerFluxograma(blocos[0]);
+    if (!leitura.ok) throw new Error(leitura.erros.join("\n"));
+    const [decisao] = leitura.fluxo.passos.filter((p) => p.forma === "decisao");
+    const nao = leitura.fluxo.ligacoes.find((l) => l.de === decisao?.id && l.rotulo === "não");
+    const fim = leitura.fluxo.passos.find((p) => p.forma === "fim")!;
+
+    expect(decisao?.rotulo).toMatch(/ativo/i);
+    expect(nao).toBeTruthy();
+    expect(alcancaveis(leitura.fluxo, nao!.para).has(fim.id)).toBe(false);
+  });
+
+  it("o detector separa o bloco fluxograma de outro bloco de código", () => {
+    const corpo = ["```fluxograma", "inicio a 1,1: A", "```", "```bash", "echo oi", "```"].join("\n");
+    expect(blocosDeFluxograma(corpo)).toEqual(["inicio a 1,1: A\n"]);
+  });
+});
+
+const ROTEIRO = join(process.cwd(), "scripts", "manual", "dados-do-atendimento");
+const lerDoRoteiro = (arquivo: string) => readFileSync(join(ROTEIRO, arquivo), "utf8");
+
+/** Os PNGs que o roteiro grava: cada `foto("<arquivo>.png")` do prints.js. */
+function printsDoRoteiro(codigo: string): string[] {
+  return Array.from(codigo.matchAll(/\bfoto\(\s*"([^"]+\.png)"/g), (m) => m[1]);
+}
+
+describe("o roteiro dos prints da página de Dados do Atendimento", () => {
+  it("refaz todas as imagens da página, e só elas", () => {
+    const daPagina = [...new Set(imagensCitadas(PAGINA!.corpo))].sort();
+    const doRoteiro = printsDoRoteiro(lerDoRoteiro("prints.js")).sort();
+
+    expect(daPagina.length).toBeGreaterThan(0);
+    expect(doRoteiro).toEqual(daPagina);
+  });
+
+  it("a pasta da página não guarda PNG que nenhum passo cita", () => {
+    const pasta = join(process.cwd(), "public", "manual", "dados-do-atendimento");
+    const pngs = readdirSync(pasta).filter((arquivo) => arquivo.endsWith(".png")).sort();
+    expect(pngs).toEqual([...new Set(imagensCitadas(PAGINA!.corpo))].sort());
+  });
+
+  it("o detector lê o nome de cada print do roteiro", () => {
+    const codigo = 'await foto("lista.png");\nawait foto( "ficha.png", { fullPage: true });\nfoto(arquivo);';
+    expect(printsDoRoteiro(codigo)).toEqual(["lista.png", "ficha.png"]);
+  });
+
+  it("recusa rodar contra um banco que não é o da máquina", () => {
+    const pasta = mkdtempSync(join(tmpdir(), "roteiro-dados-atendimento-"));
+    const env = join(pasta, ".env");
+    writeFileSync(env, "SUPABASE_URL=https://banco.de-producao.exemplo\nSUPABASE_SERVICE_ROLE_KEY=x\n");
+
+    const rodada = spawnSync("bash", [join(ROTEIRO, "roteiro.sh")], {
+      env: { ...process.env, ENV_LOCAL: env },
+      encoding: "utf8",
+    });
+
+    expect(rodada.status).toBe(1);
+    expect(rodada.stderr).toContain("recusado");
+  });
+});
+
+/**
+ * Os nomes que as migrations 061 e 062 trazem para as tabelas da Ana: são os
+ * preços de verdade do hospital, importados da planilha antiga. Nenhum deles
+ * pode aparecer num print.
+ */
+function nomesReais(): string[] {
+  const migrations = join(process.cwd(), "..", "supabase", "migrations");
+  const sql = ["061_consultas_particulares_ana.sql", "062_exames_cirurgias_convenios_ana.sql"]
+    .map((arquivo) => readFileSync(join(migrations, arquivo), "utf8"))
+    .join("\n");
+  return Array.from(sql.matchAll(/^\s*\('([^']+)'/gm), (m) => m[1]);
+}
+
+/** Os nomes que o seed põe nas três tabelas: a primeira coluna de cada linha. */
+function nomesDoSeed(seed: string): string[] {
+  return Array.from(seed.matchAll(/^\s*\('([^']+)',/gm), (m) => m[1]).filter(
+    (nome) => !/^P\d+$/.test(nome)
+  );
+}
+
+/** Os nomes do seed que repetem um nome real, sem ligar para maiúscula. */
+function nomesReaisNoSeed(seed: string, reais: string[]): string[] {
+  const proibidos = new Set(reais.map((nome) => nome.trim().toLocaleLowerCase("pt-BR")));
+  return nomesDoSeed(seed).filter((nome) => proibidos.has(nome.trim().toLocaleLowerCase("pt-BR")));
+}
+
+describe("os dados de exemplo dos prints", () => {
+  const roteiro = lerDoRoteiro("roteiro.sh");
+  // O SQL vive dentro do roteiro.sh (heredoc 'SQL'): .sql fora das pastas
+  // liberadas trava o CI, porque o repositório é público.
+  const seed = roteiro.match(/<<'SQL'\n([\s\S]*?)\nSQL\n/)?.[1] ?? "";
+
+  it("o SQL de exemplo está dentro do roteiro e semeia as três tabelas", () => {
+    expect(seed).toContain("insert into participantes");
+    expect(seed).toContain("insert into consultas_particulares");
+    expect(seed).toContain("insert into exames");
+    expect(seed).toContain("insert into cirurgias_estimativas");
+  });
+
+  it("nenhum nome do seed repete o nome de um preço real do hospital", () => {
+    const reais = nomesReais();
+    expect(reais).toContain("Cardiologia");
+    expect(nomesDoSeed(seed).length).toBeGreaterThanOrEqual(6);
+    expect(nomesReaisNoSeed(seed, reais)).toEqual([]);
+  });
+
+  it("o detector pega o nome real mesmo com outra caixa", () => {
+    const falso = "  ('CARDIOLOGIA', 300.00, 'x'),\n  ('Endocrinologia', 310.00, 'y'),";
+    expect(nomesReaisNoSeed(falso, ["Cardiologia"])).toEqual(["CARDIOLOGIA"]);
+  });
+
+  it("os prints mostram só as linhas do seed", () => {
+    const prints = lerDoRoteiro("prints.js");
+    const doFiltro = prints.match(/const EXEMPLOS = (\[[\s\S]*?\]);/)?.[1] ?? "[]";
+    expect((JSON.parse(doFiltro) as string[]).sort()).toEqual(nomesDoSeed(seed).sort());
+  });
+
+  it("só usam e-mails do domínio de exemplo, inclusive o de quem entra nos prints", () => {
+    const emails = [...`${seed}\n${roteiro}`.matchAll(/[\w.+-]+@[\w-]+(?:\.[\w-]+)+/g)].map((m) => m[0]);
+
+    expect(emails.length).toBeGreaterThan(0);
+    expect(emails.filter((email) => !email.endsWith("@exemplo.local"))).toEqual([]);
+  });
+
+  it("só criam pessoas na faixa própria do módulo, P17260 a P17269", () => {
+    const ids = [...new Set([...seed.matchAll(/'(P\d{3,})'/g)].map((m) => m[1]))];
+
+    expect(ids.length).toBeGreaterThan(0);
+    expect(ids.filter((id) => !/^P1726\d$/.test(id))).toEqual([]);
   });
 });

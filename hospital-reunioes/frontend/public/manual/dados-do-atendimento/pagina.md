@@ -60,7 +60,10 @@ Para tirar uma especialidade da resposta da Ana sem apagar nada, clique na caixa
 
 3. Ajuste **Honorários da equipe (R$)** e **Valor da internação (R$)**.
 4. Escreva em **Estimativa total (R$)** a soma dos dois. A tela não faz a conta sozinha.
-5. Confira o **Aviso obrigatório da Ana**. Ela repete esse texto sempre que fala da estimativa, para lembrar que o valor final só sai depois da avaliação médica. O campo não pode ficar em branco.
+
+![A janela Editar estimativa de cirurgia com a Estimativa total marcada](editar-cirurgia.png)
+
+5. Desça a janela e confira o **Aviso obrigatório da Ana**. Ela repete esse texto sempre que fala da estimativa, para lembrar que o valor final só sai depois da avaliação médica. O campo não pode ficar em branco.
 6. Clique em **Salvar**.
 
-![A janela Editar estimativa de cirurgia com a estimativa total e o aviso marcados](editar-cirurgia.png)
+![O Aviso obrigatório da Ana marcado, mais abaixo na mesma janela](aviso-da-ana.png)
