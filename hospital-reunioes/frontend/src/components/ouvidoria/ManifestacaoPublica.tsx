@@ -15,7 +15,18 @@
  */
 
 import { useEffect, useRef, useState } from "react";
-import { AlertCircle, ArrowLeft, ArrowRight, CheckCircle2, Info, Loader2, Send } from "lucide-react";
+import Link from "next/link";
+import {
+  AlertCircle,
+  ArrowLeft,
+  ArrowRight,
+  Check,
+  CheckCircle2,
+  Copy,
+  Info,
+  Loader2,
+  Send,
+} from "lucide-react";
 import { Logo } from "@/components/ui/Logo";
 import {
   ENVIO_RECUSADO_PELA_PAGINA,
@@ -43,6 +54,51 @@ interface Recibo {
   data_abertura: string;
   prazo_resposta: string;
   status: string;
+  /** Só no anônimo, e só nesta resposta: o banco guarda o hash (issue #1623). */
+  codigo_acompanhamento?: string;
+}
+
+/** O código do anônimo, mostrado uma vez, com o Copiar e o caminho da página. */
+function CodigoDeAcompanhamento({ codigo }: { codigo: string }) {
+  const [copiado, setCopiado] = useState(false);
+
+  async function copiar() {
+    try {
+      await navigator.clipboard.writeText(codigo);
+      setCopiado(true);
+      setTimeout(() => setCopiado(false), 2000);
+    } catch {
+      // Sem permissão de área de transferência: o código continua na tela.
+    }
+  }
+
+  return (
+    <div className="space-y-3 rounded-xl border border-border bg-slate-50 px-4 py-4">
+      <div className="space-y-1">
+        <p className="text-slate-600 text-sm">Seu código de acompanhamento:</p>
+        <p className="text-2xl font-bold tracking-wider text-slate-900 font-mono">{codigo}</p>
+      </div>
+      <p className="text-sm text-slate-500">
+        Anote ou copie agora: o código aparece só agora e não pode ser recuperado depois.
+      </p>
+      <div className="flex flex-col sm:flex-row gap-2">
+        <button
+          type="button"
+          onClick={copiar}
+          className="flex flex-1 min-h-[44px] items-center justify-center gap-2 rounded-xl bg-primary px-4 py-3 text-base font-semibold text-white shadow-premium transition-colors hover:bg-primary/90"
+        >
+          {copiado ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
+          {copiado ? "Copiado" : "Copiar código"}
+        </button>
+        <Link
+          href="/acompanhar"
+          className="flex flex-1 min-h-[44px] items-center justify-center rounded-xl border border-border bg-white px-4 py-3 text-base font-semibold text-slate-600 hover:border-primary/40"
+        >
+          Acompanhar o caso
+        </Link>
+      </div>
+    </div>
+  );
 }
 
 const LIMITE_RELATO = 10000;
@@ -327,6 +383,9 @@ function FormularioPublico({ codigoDoCartaz, avaliacaoId = null, naturezaInicial
           Registrada em {formatarData(recibo.data_abertura)}. A Ouvidoria vai
           analisar e encaminhar ao setor responsável.
         </p>
+        {recibo.codigo_acompanhamento && (
+          <CodigoDeAcompanhamento codigo={recibo.codigo_acompanhamento} />
+        )}
       </div>
     );
   }
@@ -337,7 +396,7 @@ function FormularioPublico({ codigoDoCartaz, avaliacaoId = null, naturezaInicial
     3: "Ajude a Ouvidoria a localizar o atendimento.",
     4: "Quanto mais detalhes, mais rápido conseguimos apurar.",
     5: anonimo
-      ? "Guarde o número do protocolo que vai aparecer na próxima tela."
+      ? "Guarde o número do protocolo e o código que aparecerão na próxima tela."
       : "É por aqui que a Ouvidoria fala com você sobre este caso.",
   };
 

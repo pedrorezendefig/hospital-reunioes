@@ -48,8 +48,11 @@ function servidor({ status = 201 }: { status?: number } = {}) {
       if (url.includes("/publico/locais")) {
         return { ok: true, status: 200, json: async () => ({ locais: LOCAIS }) } as Response;
       }
-      enviados.push(JSON.parse(String(init?.body ?? "{}")));
-      return { ok: status < 300, status, json: async () => (status < 300 ? RECIBO : {}) } as Response;
+      const envio = JSON.parse(String(init?.body ?? "{}"));
+      enviados.push(envio);
+      // O código de acompanhamento só vem no recibo do anônimo (issue #1623).
+      const recibo = envio.anonimo ? { ...RECIBO, codigo_acompanhamento: "K7M2P-Q9RX4" } : RECIBO;
+      return { ok: status < 300, status, json: async () => (status < 300 ? recibo : {}) } as Response;
     })
   );
 }
@@ -283,7 +286,9 @@ describe("o contato de quem se identifica (critério 3)", () => {
     await ateOContato({ identificacao: "Anônimo" });
 
     expect(screen.queryByLabelText("Seu nome")).toBeNull();
-    expect(screen.getByText("Guarde o número do protocolo que vai aparecer na próxima tela.")).toBeTruthy();
+    expect(
+      screen.getByText("Guarde o número do protocolo e o código que aparecerão na próxima tela.")
+    ).toBeTruthy();
     fireEvent.click(botao(/Enviar manifestação/));
     await waitFor(() => expect(enviados).toHaveLength(1));
     expect(enviados[0]).toMatchObject({ anonimo: true });
@@ -446,5 +451,34 @@ describe("as recusas do servidor continuam sem culpar o relato (issue #666)", ()
         "Não foi possível registrar sua manifestação. Recarregue a página e tente de novo."
       )
     ).toBeTruthy();
+  });
+});
+
+describe("a confirmação do anônimo traz o código de acompanhamento (issue #1623)", () => {
+  it("mostra o protocolo, o código, o Copiar e o link para a página de acompanhamento", async () => {
+    const copiar = vi.fn(async () => undefined);
+    vi.stubGlobal("navigator", { ...navigator, clipboard: { writeText: copiar } });
+    await ateOContato({ identificacao: "Anônimo" });
+
+    fireEvent.click(botao(/Enviar manifestação/));
+
+    expect(await screen.findByText("2026-0042")).toBeTruthy();
+    expect(screen.getByText("K7M2P-Q9RX4")).toBeTruthy();
+    expect(screen.getByText(/aparece só agora/)).toBeTruthy();
+    fireEvent.click(botao(/Copiar/));
+    await waitFor(() => expect(copiar).toHaveBeenCalledWith("K7M2P-Q9RX4"));
+    expect(screen.getByRole("link", { name: /Acompanhar/ }).getAttribute("href")).toBe("/acompanhar");
+  });
+
+  it("quem se identifica vê só o protocolo, sem código", async () => {
+    await ateOContato();
+    escrever("Seu nome", "Maria Souza");
+    escrever("E-mail", "maria@exemplo.com");
+
+    fireEvent.click(botao(/Enviar manifestação/));
+
+    expect(await screen.findByText("2026-0042")).toBeTruthy();
+    expect(screen.queryByText("K7M2P-Q9RX4")).toBeNull();
+    expect(screen.queryByRole("button", { name: /Copiar/ })).toBeNull();
   });
 });
