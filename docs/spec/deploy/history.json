@@ -2,6 +2,56 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-11-13T13:52:53-03:00",
+      "sha": "8c0b9cba0c711adfe47b856656a2baa60802d50d",
+      "app_version": "0.283.0",
+      "subject": "Onda projeto-onda1: O Projeto na Demanda, com chave projeto mais número e o repositório da Ana; Painel do Quadro começa abaixo da barra do topo; Gráfico do mês na lente da nota do Google",
+      "raw_subject": "chore(deploy): registro da onda projeto-onda1 (#1737 #1730 #1734)",
+      "scope": [
+        "backend",
+        "frontend"
+      ],
+      "prds": [
+        1710
+      ],
+      "result": "healthy",
+      "duration_seconds": 364,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        },
+        {
+          "service": "frontend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [
+        "145_tecnologia_projeto_da_demanda.sql"
+      ],
+      "rollback_target_sha": null,
+      "notes": "onda-enxuta projeto-onda1: PR #1737 (issue #1713), PR #1730 (issue #1686), PR #1734 (issue #1699), mergeados PR a PR. Merge pela API do GitHub, um build. Registro pela Action pos-merge depois do health.",
+      "etapas": {
+        "merge_s": 10,
+        "build_s": {
+          "backend": 121,
+          "frontend": 291
+        },
+        "health_s": 0
+      },
+      "responsavel": "pedrorezendefig"
+    },
+    {
       "at": "2026-11-13T13:20:20-03:00",
       "sha": "c602ea4f836a8ee4574b6588f145ae90f2107cab",
       "app_version": "0.282.0",
