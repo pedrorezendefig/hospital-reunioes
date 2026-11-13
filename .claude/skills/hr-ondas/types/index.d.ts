@@ -89,7 +89,54 @@ export type Coleta = {
 /** Uma Onda em `erro` ou `pronto-para-voce`, com o texto do último evento daquele estado. */
 export type EstadoOnda = { id: string; estado: 'erro' | 'pronto-para-voce'; prd: number | null; texto: string | null }
 
-export type EsperaCi = { pr: number | null }
+/** Algo que a sessão disparou e segue rodando: shell em primeiro ou segundo plano, Monitor, agente. */
+export type Tarefa = {
+  /** id do tool_use que a disparou; a task-notification o cita em <tool-use-id> */
+  id: string
+  tipo: 'shell' | 'shell-bg' | 'monitor' | 'agente'
+  descricao: string
+  comando: string | null
+  /** subagent_type do agente */
+  agente: string | null
+  issue: number | null
+  pr: number | null
+  inicio: number
+  /** texto do tool_result, onde a TaskStop acha o task-id */
+  recibo: string | null
+}
+
+/** Uma Fatia que a sessão de onda está levando. */
+export type FatiaDaFaixa = {
+  issue: number
+  pr: number | null
+  /** status do estado_onda.py: fila, implementando, revisao, correcao, verde, baixa, mergeado */
+  status: string | null
+  /** correções que contam tentativa (conflito com PR irmão não conta) */
+  tentativas: number
+  veredito: 'LIMPO' | 'MUST-FIX' | null
+}
+
+/** A checagem da linha "Sessão: pode encerrar", feita no fim de cada turno. */
+export type Encerrar = { abertos: number[]; mergeados: number[]; semCommit: number; worktree: string | null }
+
+/** A fase desta sessão na esteira, inferida do que ela chama e escreve. */
+export type Faixa = {
+  /** a última skill da esteira que a sessão chamou */
+  skill: string | null
+  rodada: number | null
+  /** primeira e última pergunta (P) da rodada */
+  perguntas: [number, number] | null
+  porta: string | null
+  tarefas: Tarefa[]
+  fatias: FatiaDaFaixa[]
+  /** "espera você" que a onda gravou no estado_onda.py e ainda não resolveu */
+  paradas: string[]
+  /** PRs que a sessão abriu (gh pr create) ou subiu (fechar_onda.py --prs) */
+  prs: number[]
+  /** fim do último turno, enquanto nenhum outro começou */
+  ociosaDesde: number | null
+  encerrar: Encerrar | null
+}
 
 declare module 'claude-code' {
   interface PluginState {
@@ -97,9 +144,12 @@ declare module 'claude-code' {
       coleta: Coleta | null
       erro: string | null
       todos: boolean
-      esperaCi: EsperaCi | null
       /** `/ondas detalhe`: mostra modelo, contexto e fala dos agentes. */
       verDetalhe: boolean
+      /** a faixa acima do prompt: a fase desta sessão */
+      faixa: Faixa | null
+      /** a hora que redesenha os cronômetros da faixa */
+      relogio: number
     }
   }
 }
