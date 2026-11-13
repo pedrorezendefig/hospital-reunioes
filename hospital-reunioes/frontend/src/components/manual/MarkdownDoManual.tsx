@@ -5,6 +5,8 @@ import ReactMarkdown, { type Components } from "react-markdown";
 
 import { enderecoDaImagem } from "@/lib/manual/paginas";
 
+import { Fluxograma } from "./fluxograma/Fluxograma";
+
 /**
  * O Markdown de uma página do manual no visual do app (issue #1718, ADR 0094):
  * a fonte da casa e os tokens de cor do `globals.css`. Os títulos curtos saem
@@ -12,9 +14,8 @@ import { enderecoDaImagem } from "@/lib/manual/paginas";
  * `uppercase`, porque a regra base só alcança `h1`, `h2` e `h3`. O texto
  * corrido fica como foi escrito.
  *
- * O bloco `fluxograma` é o lugar do componente do Fluxograma (emenda da ADR
- * 0094, fatia irmã). Até ele entrar, o bloco aparece cru, marcado com
- * `data-bloco="fluxograma"` para a troca ser num ponto só.
+ * O bloco `fluxograma` vira o desenho do Fluxograma (emenda da ADR 0094,
+ * issue #1719); qualquer outro bloco de código continua código.
  */
 function componentes(pasta: string): Components {
   return {
@@ -50,12 +51,12 @@ function componentes(pasta: string): Components {
         ? children.props
         : null;
       const fluxograma = bloco?.className === "language-fluxograma";
+      if (fluxograma) return <Fluxograma fonte={String(bloco?.children ?? "")} />;
       return (
         <pre
-          data-bloco={fluxograma ? "fluxograma" : undefined}
           className="my-4 overflow-x-auto rounded-xl border border-border bg-bg px-4 py-3 text-[13px] font-mono text-text-secondary"
         >
-          {fluxograma ? bloco?.children : children}
+          {children}
         </pre>
       );
     },
