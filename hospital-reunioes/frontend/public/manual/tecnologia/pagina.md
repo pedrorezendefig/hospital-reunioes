@@ -33,7 +33,7 @@ Se a conversa parar no meio, ela fica guardada como Registrada. Clique no pedido
 ## Acompanhar o pedido no Quadro
 
 1. Abra a aba **Tecnologia**. Ela abre no **Quadro**.
-2. Veja os seus pedidos em colunas, pela Etapa: **Registrada**, **Em análise**, **Planejada**, **Em desenvolvimento** e **Entregue**. A Etapa muda sozinha conforme a Vitta trabalha, e ninguém arrasta card. No alto de cada coluna fica quantos pedidos ela tem.
+2. Veja os seus pedidos em colunas, uma para cada Etapa: Registrada, Em análise, Planejada, Em desenvolvimento e Entregue. A Etapa muda sozinha conforme a Vitta trabalha; não dá para arrastar o card de uma coluna para outra. No alto de cada coluna aparece quantos pedidos ela tem.
 
    ![O Quadro com os pedidos em colunas](quadro.png)
 
@@ -49,7 +49,7 @@ A coluna Entregue mostra o que foi entregue nos últimos 30 dias. Os pedidos que
 
 ## Filtrar por Projeto
 
-A aba junta os pedidos de dois Projetos: o **Aplicativo do Hospital** e a **Ana**, a agente de atendimento. Cada card traz um selo com o nome do Projeto.
+A aba junta os pedidos de dois Projetos: o Aplicativo do Hospital e a Ana, a agente de atendimento. Cada card traz um selo com o nome do Projeto.
 
 1. No Quadro, na barra de filtros, clique no campo **Projeto**.
 2. Escolha **Aplicativo do Hospital** ou **Ana**. O Quadro passa a mostrar só os pedidos daquele Projeto.
