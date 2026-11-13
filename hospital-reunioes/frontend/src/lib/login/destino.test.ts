@@ -19,6 +19,7 @@ import {
   caminhoInternoOuNulo,
   destinoAposLogin,
   urlDeLoginCom,
+  urlDeLoginPara,
 } from "./destino";
 
 describe("destino interno é aceito", () => {
@@ -137,5 +138,43 @@ describe("a URL de login que carrega o destino", () => {
     expect(urlDeLoginCom("https://evil.com")).toBe("/login");
     expect(urlDeLoginCom("//evil.com")).toBe("/login");
     expect(urlDeLoginCom(null)).toBe("/login");
+  });
+});
+
+/**
+ * Quais áreas voltam ao endereço pedido depois do login (issue #1587, PRD #1584).
+ *
+ * O retorno não vale para tudo: só para as áreas cujo link chega de fora do
+ * app, pelo sino, pelo e-mail ou pelo WhatsApp, e precisa abrir onde apontava.
+ * O resto do staff vai para o login limpo, como sempre foi.
+ */
+describe("a URL de login de quem pediu uma área sem sessão", () => {
+  it("leva o link do pedido da aba Tecnologia de volta para ele", () => {
+    expect(urlDeLoginPara("/admin/tecnologia?demanda=8f2c")).toBe(
+      "/login?redirect=%2Fadmin%2Ftecnologia%3Fdemanda%3D8f2c"
+    );
+    expect(urlDeLoginPara("/admin/tecnologia")).toBe("/login?redirect=%2Fadmin%2Ftecnologia");
+  });
+
+  it("segue levando o caso da Ouvidoria de volta, como já levava", () => {
+    expect(urlDeLoginPara("/ouvidoria/m/2026-0012")).toBe(
+      "/login?redirect=%2Fouvidoria%2Fm%2F2026-0012"
+    );
+  });
+
+  it("manda o resto do admin para o login sem retorno", () => {
+    expect(urlDeLoginPara("/admin")).toBe("/login");
+    expect(urlDeLoginPara("/admin/usuarios?p=2")).toBe("/login");
+    expect(urlDeLoginPara("/dashboard")).toBe("/login");
+  });
+
+  it("não confunde área vizinha que só começa com o nome da aba", () => {
+    expect(urlDeLoginPara("/admin/tecnologia-x")).toBe("/login");
+  });
+
+  it("não carrega destino de fora do site, nem fingindo ser a aba", () => {
+    expect(urlDeLoginPara("//evil.com/admin/tecnologia")).toBe("/login");
+    expect(urlDeLoginPara("https://evil.com/admin/tecnologia")).toBe("/login");
+    expect(urlDeLoginPara("/..//evil.com/admin/tecnologia")).toBe("/login");
   });
 });
