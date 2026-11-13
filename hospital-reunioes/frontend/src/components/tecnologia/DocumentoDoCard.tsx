@@ -190,8 +190,9 @@ function textoDoLink(demanda: Demanda): string {
 /**
  * O Copiar link (issue #1588), no padrão de copiar de Contas médicas: o aviso
  * quando copia e, se o navegador recusa, o texto numa caixa já selecionada.
+ * A linha aberta das Entregas usa o mesmo (issue #1703).
  */
-function CopiarLink({ demanda }: { demanda: Demanda }) {
+export function CopiarLink({ demanda }: { demanda: Demanda }) {
   const [copiou, setCopiou] = useState(false);
   const [paraPegarAMao, setParaPegarAMao] = useState<string | null>(null);
   const caixa = useRef<HTMLTextAreaElement | null>(null);

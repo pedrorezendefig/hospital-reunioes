@@ -2,32 +2,48 @@
 
 /**
  * A aba Entregas da Tecnologia (issue #1556, PRD #1548; ritmo semanal na issue
- * #1701, PRD #1689, ADR 0092).
+ * #1701 e lista por semana na #1703, PRD #1689, ADR 0092).
  *
  * No topo, o ritmo: pedidos e entregas das últimas 4 semanas e o gráfico das
- * últimas 12 (`RitmoDasEntregas`). Embaixo, a lista do que já foi entregue,
- * com a data de entrega, a data em produção e o Responsável. Os filtros de
- * Tipo, Origem e Responsável valem para tudo. Quem conta, filtra e decide o
- * que entra é o servidor; a tela só desenha e monta a consulta. Nada se move
- * por aqui: não há botão que mude Etapa ou Responsável.
+ * últimas 12 (`RitmoDasEntregas`). Embaixo, "O que foi entregue", agrupado por
+ * semana, a mais nova em cima. A linha recolhida diz o Tamanho da entrega, o
+ * título, o tipo, a versão e a data, com o ícone do vídeo quando há
+ * Demonstração. Pela intenção de hover (150 ms para abrir, 180 ms para fechar,
+ * o clique fixa, o toque alterna), uma linha por vez abre com o O que muda e
+ * os botões Demonstração, Abrir o card e Copiar link. Os filtros de Tipo,
+ * Origem e Responsável valem para tudo. Quem conta, filtra e agrupa é o
+ * servidor; a tela só desenha e monta a consulta. Nada se move por aqui.
  *
- * O clique num card abre o mesmo Documento do card da conversa: a entrega vem
- * do servidor no formato da lista do chat, e o documento não pede outra coisa.
+ * Abrir o card mostra o mesmo Documento do card da conversa num painel à
+ * direita, como no Quadro: a entrega vem do servidor no formato da lista do
+ * chat, e o documento não pede outra coisa.
  */
 
-import { useCallback, useEffect, useRef, useState } from "react";
-import { Loader2 } from "lucide-react";
+import { useCallback, useEffect, useId, useRef, useState } from "react";
+import { createPortal } from "react-dom";
+import { Loader2, Play, X } from "lucide-react";
 
-import { Chip, GrupoDeChips } from "./ConversasDaTecnologia";
-import { DocumentoDoCard } from "./DocumentoDoCard";
-import { RitmoDasEntregas, type SemanaDasEntregas, type TopoDasEntregas } from "./RitmoDasEntregas";
+import { useIntencaoDeHoverDeUmaVez } from "@/hooks/useIntencaoDeHover";
+import { useMovimentoReduzido } from "@/hooks/useMovimentoReduzido";
+
+import { Chip, FECHAR_O_PAINEL, GrupoDeChips } from "./ConversasDaTecnologia";
+import {
+  ASSISTIR_A_DEMONSTRACAO,
+  CopiarLink,
+  DocumentoDoCard,
+  FraseEOQueMuda,
+  TITULO_DEMONSTRACAO,
+} from "./DocumentoDoCard";
+import { RitmoDasEntregas, type SemanaDasEntregas, type Tamanho, type TopoDasEntregas } from "./RitmoDasEntregas";
 import {
   BASE_TECNOLOGIA,
+  CLASSIFICACAO_CLASSE,
   CLASSIFICACAO_ROTULO,
   Classificacao,
   Demanda,
   diaDoHospital,
   FALHA_DE_CONEXAO,
+  linkDaDemonstracao,
   Origem,
   ORIGEM_ROTULO,
 } from "./demandas";
@@ -36,12 +52,25 @@ const URL_DAS_ENTREGAS = `${BASE_TECNOLOGIA}/entregas`;
 const ENTREGAS_FALHOU = "Não foi possível carregar as entregas. Tente recarregar a página.";
 const NENHUMA_ENTREGA = "Nenhuma entrega com esses filtros.";
 
+export const ABRIR_O_CARD = "Abrir o card";
+
 type ResponsavelDasEntregas = { valor: string; nome: string };
+/** Uma linha de "O que foi entregue": a Demanda da lista do chat e o Tamanho da entrega. */
+type Entrega = Demanda & { tamanho: Tamanho };
+/** Uma semana da lista: a segunda-feira (AAAA-MM-DD, dia do hospital) e o que saiu nela. */
+type GrupoDasEntregas = { inicio: string; entregas: Entrega[] };
 type Entregas = {
   topo: TopoDasEntregas;
   semanas: SemanaDasEntregas[];
-  entregas: Demanda[];
+  grupos: GrupoDasEntregas[];
   responsaveis: ResponsavelDasEntregas[];
+};
+
+const TAMANHOS: Tamanho[] = ["G", "M", "P"];
+const PARTES_DO_TAMANHO: Record<Tamanho, string> = {
+  G: "6 partes ou mais",
+  M: "de 2 a 5 partes",
+  P: "até 1 parte",
 };
 
 const CLASSIFICACOES = Object.keys(CLASSIFICACAO_ROTULO) as Classificacao[];
@@ -65,15 +94,167 @@ function urlDasEntregas(filtros: Filtros): string {
 function entregasValidas(corpo: unknown): Entregas | null {
   if (typeof corpo !== "object" || corpo === null) return null;
   const c = corpo as Partial<Entregas>;
-  if (typeof c.topo !== "object" || c.topo === null || !Array.isArray(c.semanas) || !Array.isArray(c.entregas)) {
+  if (typeof c.topo !== "object" || c.topo === null || !Array.isArray(c.semanas) || !Array.isArray(c.grupos)) {
     return null;
   }
   return {
     topo: c.topo,
     semanas: c.semanas,
-    entregas: c.entregas.filter((d) => typeof d?.id === "string" && typeof d?.titulo === "string"),
+    grupos: c.grupos
+      .filter((g) => typeof g?.inicio === "string" && Array.isArray(g?.entregas))
+      .map((g) => ({
+        inicio: g.inicio,
+        entregas: g.entregas.filter((d) => typeof d?.id === "string" && typeof d?.titulo === "string"),
+      }))
+      .filter((g) => g.entregas.length > 0),
     responsaveis: Array.isArray(c.responsaveis) ? c.responsaveis : [],
   };
+}
+
+/** "Semana de 09/11: 3 entregas (1 G, 2 P)": o início lido como texto, sem fuso. */
+function cabecalhoDaSemana(grupo: GrupoDasEntregas): string {
+  const [, mes, dia] = grupo.inicio.split("-");
+  const total = grupo.entregas.length;
+  const tamanhos = TAMANHOS.map((t) => [t, grupo.entregas.filter((e) => e.tamanho === t).length] as const)
+    .filter(([, n]) => n > 0)
+    .map(([t, n]) => `${n} ${t}`);
+  return `Semana de ${dia}/${mes}: ${total} ${total === 1 ? "entrega" : "entregas"} (${tamanhos.join(", ")})`;
+}
+
+const BOTAO_DA_LINHA =
+  "inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold text-primary border border-primary/30 hover:bg-primary/5";
+
+type EventosDaLinha = { onMouseEnter: () => void; onMouseLeave: () => void; onClick: () => void };
+
+/**
+ * Uma entrega da lista. O mouse entra e sai pelo item inteiro, para o caminho
+ * até os botões não fechar a linha; o clique (e o toque) é só no botão da
+ * linha, para o clique num botão de dentro não a soltar. O vídeo fica fora
+ * do botão: link dentro de botão não é HTML válido.
+ */
+function LinhaDaEntrega({
+  entrega,
+  aberta,
+  eventos,
+  parado,
+  onAbrirOCard,
+}: {
+  entrega: Entrega;
+  aberta: boolean;
+  eventos: EventosDaLinha;
+  parado: boolean;
+  onAbrirOCard: () => void;
+}) {
+  const id = useId();
+  const demonstracao = linkDaDemonstracao(entrega);
+  const classificacao = entrega.classificacao;
+  const dia = diaDoHospital(entrega.fechada_em);
+  return (
+    <li onMouseEnter={eventos.onMouseEnter} onMouseLeave={eventos.onMouseLeave}>
+      <div className="flex items-center gap-2">
+        <button
+          type="button"
+          onClick={eventos.onClick}
+          aria-expanded={aberta}
+          aria-controls={id}
+          className={`min-w-0 flex-1 flex flex-wrap items-center gap-2 px-3 py-2 rounded-xl border text-left text-sm transition-colors ${
+            aberta ? "border-primary/40 bg-primary/5" : "border-transparent hover:border-border hover:bg-slate-50"
+          }`}
+        >
+          <span
+            title={PARTES_DO_TAMANHO[entrega.tamanho]}
+            className="w-6 h-6 shrink-0 rounded-md bg-primary/10 text-primary text-xs font-bold flex items-center justify-center"
+          >
+            {entrega.tamanho}
+          </span>
+          <span className="normal-case min-w-0 flex-1 font-medium text-text-primary line-clamp-2">{entrega.titulo}</span>
+          {classificacao && (
+            <span className={`px-1.5 py-0.5 rounded text-[11px] font-medium ${CLASSIFICACAO_CLASSE[classificacao]}`}>
+              {CLASSIFICACAO_ROTULO[classificacao]}
+            </span>
+          )}
+          {entrega.versao && (
+            <span className="normal-case px-1.5 py-0.5 rounded text-[11px] font-medium bg-emerald-100 text-emerald-800">
+              {entrega.versao}
+            </span>
+          )}
+          {dia && <span className="normal-case text-xs text-text-secondary tabular-nums">{dia}</span>}
+        </button>
+        {demonstracao && (
+          <a
+            href={demonstracao}
+            target="_blank"
+            rel="noopener noreferrer"
+            aria-label={ASSISTIR_A_DEMONSTRACAO}
+            title={ASSISTIR_A_DEMONSTRACAO}
+            className="w-8 h-8 shrink-0 rounded-full flex items-center justify-center bg-gradient-to-br from-violet-500 to-fuchsia-500 text-white shadow-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+          >
+            <Play aria-hidden="true" className="w-3.5 h-3.5 ml-0.5" fill="currentColor" />
+          </a>
+        )}
+      </div>
+      {aberta && (
+        <div
+          id={id}
+          role="region"
+          aria-label={`O que mudou: ${entrega.titulo}`}
+          className={`mx-3 mt-1 mb-2 px-3 py-2 rounded-lg bg-slate-50 border border-slate-200 space-y-2 ${
+            parado ? "" : "animate-fade-in-up"
+          }`}
+        >
+          <FraseEOQueMuda texto={entrega.o_que_muda} chave={entrega.id} />
+          <div className="flex flex-wrap items-center gap-2">
+            {demonstracao && (
+              <a href={demonstracao} target="_blank" rel="noopener noreferrer" className={BOTAO_DA_LINHA}>
+                <Play aria-hidden="true" className="w-3 h-3" fill="currentColor" />
+                {TITULO_DEMONSTRACAO}
+              </a>
+            )}
+            <button type="button" onClick={onAbrirOCard} className={BOTAO_DA_LINHA}>
+              {ABRIR_O_CARD}
+            </button>
+            <CopiarLink demanda={entrega} />
+          </div>
+        </div>
+      )}
+    </li>
+  );
+}
+
+/**
+ * O Documento do card num painel à direita, como no Quadro (issue #1643): por
+ * cima da aba, fecha pelo X ou pelo Esc. Portal no body, porque o wrapper
+ * animado do módulo prenderia o `fixed` à caixa dele.
+ */
+function PainelDoCard({ demanda, onFechar }: { demanda: Demanda; onFechar: () => void }) {
+  useEffect(() => {
+    function aoTeclar(e: KeyboardEvent) {
+      if (e.key === "Escape") onFechar();
+    }
+    document.addEventListener("keydown", aoTeclar);
+    return () => document.removeEventListener("keydown", aoTeclar);
+  }, [onFechar]);
+
+  return createPortal(
+    <aside
+      aria-label="Pedido aberto"
+      className="fixed top-16 bottom-0 right-0 z-40 w-[min(40rem,100vw)] overflow-y-auto border-l border-border bg-bg shadow-premium-strong p-5 space-y-3 animate-fade-in-right"
+    >
+      <div className="flex justify-end">
+        <button
+          type="button"
+          onClick={onFechar}
+          aria-label={FECHAR_O_PAINEL}
+          title={FECHAR_O_PAINEL}
+          className="w-9 h-9 inline-flex items-center justify-center rounded-xl text-text-secondary hover:bg-slate-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+        >
+          <X className="w-4 h-4" />
+        </button>
+      </div>
+      <DocumentoDoCard key={demanda.id} demanda={demanda} />
+    </aside>,
+    document.body,
+  );
 }
 
 export function EntregasDaTecnologia({ token }: { token: string | null }) {
@@ -82,7 +263,10 @@ export function EntregasDaTecnologia({ token }: { token: string | null }) {
   const [responsavel, setResponsavel] = useState<string | null>(null);
   const [dados, setDados] = useState<Entregas | null>(null);
   const [erro, setErro] = useState<string | null>(null);
-  const [aberta, setAberta] = useState<Demanda | null>(null);
+  const [noPainel, setNoPainel] = useState<Demanda | null>(null);
+  const { aberta, alvo } = useIntencaoDeHoverDeUmaVez<string>();
+  const parado = useMovimentoReduzido();
+  const fecharPainel = useCallback(() => setNoPainel(null), []);
   /** A resposta de um pedido mais velho não sobrescreve a do novo. */
   const ultimoPedido = useRef(0);
 
@@ -142,61 +326,41 @@ export function EntregasDaTecnologia({ token }: { token: string | null }) {
 
       {dados !== null && <RitmoDasEntregas topo={dados.topo} semanas={dados.semanas} />}
 
-      <div className="md:grid md:grid-cols-[22rem_minmax(0,1fr)] md:gap-4 md:items-start">
-        <div className="space-y-3">
-          {erro && (
-            <p role="alert" className="px-3 py-2 rounded-xl bg-red-50 border border-red-200 text-red-700 text-sm">
-              {erro}
-            </p>
-          )}
-          {dados === null && !erro && (
-            <p role="status" className="flex items-center gap-2 px-1 text-xs text-text-secondary">
-              <Loader2 className="w-3.5 h-3.5 animate-spin" />
-              Carregando as entregas...
-            </p>
-          )}
-          {dados !== null && dados.entregas.length === 0 && (
-            <p className="px-1 text-sm text-text-secondary">{NENHUMA_ENTREGA}</p>
-          )}
-          {dados !== null && dados.entregas.length > 0 && (
-            <ul aria-label="Cards entregues" className="space-y-1 md:max-h-[calc(100vh-24rem)] md:overflow-y-auto">
-              {dados.entregas.map((entrega) => {
-                const entregueEm = diaDoHospital(entrega.fechada_em);
-                const emProducaoEm = diaDoHospital(entrega.em_producao_em);
-                return (
-                  <li key={entrega.id}>
-                    <button
-                      type="button"
-                      onClick={() => setAberta(entrega)}
-                      aria-current={aberta?.id === entrega.id ? "true" : undefined}
-                      className={`w-full flex flex-col gap-0.5 px-3 py-2 rounded-xl border text-left text-sm transition-colors ${
-                        aberta?.id === entrega.id
-                          ? "border-primary bg-primary/5"
-                          : "border-transparent hover:border-border hover:bg-slate-50"
-                      }`}
-                    >
-                      <span className="normal-case font-medium text-text-primary line-clamp-2">{entrega.titulo}</span>
-                      {entregueEm && (
-                        <span className="normal-case text-xs text-text-secondary">Entregue em {entregueEm}</span>
-                      )}
-                      {emProducaoEm && (
-                        <span className="normal-case text-xs text-text-secondary">Em produção em {emProducaoEm}</span>
-                      )}
-                      {entrega.responsavel && (
-                        <span className="normal-case text-xs text-text-secondary">
-                          Responsável: {entrega.responsavel}
-                        </span>
-                      )}
-                    </button>
-                  </li>
-                );
-              })}
+      <section role="region" aria-label="O que foi entregue" className="space-y-3">
+        {erro && (
+          <p role="alert" className="px-3 py-2 rounded-xl bg-red-50 border border-red-200 text-red-700 text-sm">
+            {erro}
+          </p>
+        )}
+        {dados === null && !erro && (
+          <p role="status" className="flex items-center gap-2 px-1 text-xs text-text-secondary">
+            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+            Carregando as entregas...
+          </p>
+        )}
+        {dados !== null && dados.grupos.length === 0 && (
+          <p className="px-1 text-sm text-text-secondary">{NENHUMA_ENTREGA}</p>
+        )}
+        {dados?.grupos.map((grupo) => (
+          <div key={grupo.inicio} className="space-y-1">
+            <h3 className="px-1 text-xs font-medium text-text-secondary">{cabecalhoDaSemana(grupo)}</h3>
+            <ul className="space-y-1">
+              {grupo.entregas.map((entrega) => (
+                <LinhaDaEntrega
+                  key={entrega.id}
+                  entrega={entrega}
+                  aberta={aberta === entrega.id}
+                  eventos={alvo(entrega.id)}
+                  parado={parado}
+                  onAbrirOCard={() => setNoPainel(entrega)}
+                />
+              ))}
             </ul>
-          )}
-        </div>
+          </div>
+        ))}
+      </section>
 
-        <div className="min-w-0 mt-4 md:mt-0">{aberta && <DocumentoDoCard key={aberta.id} demanda={aberta} />}</div>
-      </div>
+      {noPainel && <PainelDoCard demanda={noPainel} onFechar={fecharPainel} />}
     </div>
   );
 }
