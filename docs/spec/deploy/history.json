@@ -2,6 +2,49 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-11-12T21:14:54-03:00",
+      "sha": "4772f343b5e7fc98ab13fcc076cc448999f3949d",
+      "app_version": "0.263.1",
+      "subject": "Onda hsm-local-onda1: Tabelas de preço e POPs reais saem do repositório público para local/",
+      "raw_subject": "chore(deploy): registro da onda hsm-local-onda1 (#1658)",
+      "scope": [
+        "backend"
+      ],
+      "prds": [],
+      "result": "healthy",
+      "duration_seconds": 210,
+      "services_touched": [
+        "backend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        },
+        {
+          "service": "frontend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "onda-enxuta hsm-local-onda1: PR #1658 (issue #1653), mergeados PR a PR. Merge pela API do GitHub, um build. Registro pela Action pos-merge depois do health.",
+      "etapas": {
+        "merge_s": 2,
+        "build_s": {
+          "backend": 80
+        },
+        "health_s": 10
+      },
+      "responsavel": "pedrorezendefig"
+    },
+    {
       "at": "2026-11-12T20:46:03-03:00",
       "sha": "0147c46141838b9417b160514adb5d7faffc2c43",
       "app_version": "0.263.0",
