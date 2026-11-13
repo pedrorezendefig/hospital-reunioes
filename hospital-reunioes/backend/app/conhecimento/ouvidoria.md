@@ -45,9 +45,13 @@ São dois avisos, os dois por e-mail, e os dois só saem quando dá para reconhe
 
 Caso anônimo, ou caso cujo contato não traz um e-mail utilizável, é encerrado **sem aviso nenhum**, e fica marcado como tal: não é o hospital que deixou de avisar, é que não havia para onde avisar. Como o canal aberto produz muito caso anônimo, boa parte dos manifestantes não recebe retorno por e-mail em momento nenhum.
 
+Fora do e-mail, quem manifestou acompanha o caso por conta própria:
+
+- **Acompanhamento pela internet.** Quem se manifesta de forma anônima recebe na tela, junto com o protocolo, um código de acompanhamento, com um botão para copiar e o link da página de acompanhamento. O código aparece uma vez só, e o hospital guarda só uma versão embaralhada dele, que não serve para recuperá-lo: quem perde o código não tem como recebê-lo de novo. Na página /acompanhar, a pessoa digita o protocolo e o código, ou, se se identificou, o protocolo e o telefone ou o e-mail que deixou. A página mostra só o estado em palavras simples (Recebida, Em análise, Respondida ou Encerrada), a data da última movimentação e, depois do encerramento, a resposta que o hospital deu. Nunca mostra a área, o nome de quem cuida do caso nem as anotações internas. Dado errado recebe sempre a mesma mensagem, sem dizer se o protocolo existe, e quem erra muitas vezes seguidas precisa esperar para tentar de novo.
+
 ## Encerramento e apagamento
 
-O relato de um caso encerrado é apagado depois de cinco anos, sozinho, de madrugada. A diretoria executiva pode apagar antes, um caso por vez, com motivo escrito. Apagar some com o relato, o nome, o contato e o telefone, os anexos e o que o passo a passo perguntou: o dia, o período e a hora, o lugar e o quarto, os profissionais, o nome e a data de nascimento do paciente e o que a pessoa esperava. O protocolo, a trilha e os números ficam, e é a trilha que explica o buraco. Não tem volta, e o caso apagado não reabre. O comentário da nota do QR também é apagado sozinho, cinco anos depois de escrito, e a nota e os motivos ficam para os números.
+O relato de um caso encerrado é apagado depois de cinco anos, sozinho, de madrugada. A diretoria executiva pode apagar antes, um caso por vez, com motivo escrito. Apagar some com o relato, o nome, o contato e o telefone, os anexos e o que o passo a passo perguntou: o dia, o período e a hora, o lugar e o quarto, os profissionais, o nome e a data de nascimento do paciente e o que a pessoa esperava. Some também o código de acompanhamento, e a página de acompanhamento deixa de abrir aquele caso. O protocolo, a trilha e os números ficam, e é a trilha que explica o buraco. Não tem volta, e o caso apagado não reabre. O comentário da nota do QR também é apagado sozinho, cinco anos depois de escrito, e a nota e os motivos ficam para os números.
 
 Arquivar é outra coisa: só tira da lista o caso que já foi encerrado, para organizar a vista, e tem volta. Caso em andamento não arquiva, porque esconder um prazo correndo é esconder atraso.
 
@@ -94,7 +98,7 @@ A nota do Google é buscada sozinha uma vez por semana, junto com o total de ava
 - Os títulos do PDF do relatório e do cartaz da Ouvidoria saem em caixa alta, inclusive o título das sugestões escritas pela inteligência artificial, e o resto do texto continua com maiúscula e minúscula.
 - O QR dos cartazes abre primeiro uma nota de 1 a 5, que não vira protocolo, e só quem pede retorno ou quer registrar segue para a manifestação, em cinco passos.
 - A nota do QR não guarda nada de quem avaliou, tem limite de envios em pouco tempo, e só o ouvidor e a diretoria executiva veem as avaliações e os comentários.
-- Quem se manifesta de forma anônima vai receber um código para acompanhar o caso numa página pública, que mostra só o estado e a resposta.
+- Quem se manifesta de forma anônima recebe um código, mostrado uma vez só, para acompanhar o caso numa página pública, e quem se identificou entra nela com o telefone ou o e-mail que deixou; a página mostra só o estado, a data da última movimentação e a resposta, nunca a área nem quem cuida do caso.
 - Um agente de inteligência artificial vai ler toda manifestação e toda nota com comentário assim que chegam, inclusive as sigilosas, só para sugerir o assunto, o envio ao Núcleo de Segurança do Paciente e a revisão de comentários graves, e se ele falhar o caso entra normal na fila.
 - O Núcleo de Segurança do Paciente recebe o relato integral e o paciente atendido mesmo no caso sigiloso, só depois de o ouvidor confirmar, e o nome de quem manifestou só vai quando o caso não é sigiloso nem anônimo, como única exceção à regra do sigilo.
 - O elogio vai ao setor só para ele confirmar que recebeu, sem prazo de resposta, com uma nota curta do ouvidor.
