@@ -80,6 +80,7 @@ Para cada fatia aprovada, publique uma issue com `gh issue create`, usando o tem
 **Toda issue abre com o bloco "<bloco>"** (decisão do fluxo): um resumo em linguagem simples, no topo do corpo, antes da parte técnica. É a porta de entrada de quem lê as issues direto no GitHub sem abrir o código; sem ele, a parte técnica é só ruído pra essa pessoa. Formato fixo, mínimo de palavras, zero jargão:
 
 - **O que muda:** uma frase de valor, não-técnica: o que o sistema passa a fazer por <leitor>.
+- **Por que vale:** uma frase só: para que a mudança serve para <leitor>. É a Descrição de valor da Fatia, que o PedroOS mostra no hover dela.
 - **O que você precisa saber:** de 2 a 3 regras simples que deixem o leitor reconhecer a feature funcionando.
 
 **Humanizer antes de cada `gh issue create`** (ADR 0071 da origem do fluxo): passe o corpo da fatia pela Skill tool com `humanizer` em modo embutido, com atenção ao bloco "<bloco>". A amostra de voz é o bloco "<bloco>" do próprio PRD pai: ele manda no tom, o humanizer só tira os cacoetes. O resto do corpo fica neutro e direto; critérios de aceite continuam verificáveis e termos do `CONTEXT.md` não mudam.
@@ -107,6 +108,8 @@ Se o endpoint de sub-issues falhar (feature indisponível ou permissão), **não
 ## <bloco>
 
 **O que muda:** uma frase de valor, não-técnica.
+
+**Por que vale:** uma frase: para que a mudança serve para o leitor do Projeto.
 
 **O que você precisa saber:**
 - De 2 a 3 regras simples, sem jargão, que deixem o leitor reconhecer a feature.

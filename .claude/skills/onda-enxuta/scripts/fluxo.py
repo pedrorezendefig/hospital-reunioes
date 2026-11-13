@@ -42,10 +42,13 @@ PADRAO: dict = {
     "dado_sensivel": "dado pessoal",
     "migrations": None,
     "testes": None,
+    "teste_da_main": None,
     "varredura": None,
     "decisoes": {},
     "prd_do_leitor": None,
+    "design": None,
     "aviso_celular": True,
+    "protegidos": [],
 }
 OBRIGATORIAS = ("nome", "app")
 
