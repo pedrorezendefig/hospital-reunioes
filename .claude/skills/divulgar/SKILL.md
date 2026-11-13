@@ -1,13 +1,13 @@
 ---
 name: divulgar
-description: Vídeo de percepção de valor (MP4 narrado, feito no Motion studio pela skill motion-studio) e página de divulgação na Vercel de um PRD entregue. Sintaxe `/divulgar <PRD> [--so-video | --so-pagina]`. Fonte em docs/comunicacao/<contexto>/, MP4 em ~/Videos/Hospital/.
+description: Vídeo de percepção de valor (MP4 feito no Motion studio; no modo rápido, o padrão, sai do modelo de Demonstração com música e sem paradas; no completo, narrado e feito à mão) e página de divulgação na Vercel de um PRD entregue. Sintaxe `/divulgar <PRD> [--rapido | --voz | --completo] [--so-video | --so-pagina]`. Fonte em docs/comunicacao/<contexto>/, MP4 em ~/Videos/Hospital/.
 ---
 
 # Divulgar
 
 Fecha uma entrega para o diretor e para o usuário funcional em **dois passos, um comando**:
 
-1. **Vídeo de Percepção de Valor** (MP4 narrado): o diretor assiste e **vê o sistema funcionando**, sem jargão. Um exemplo único, com dados de exemplo, seguido de ponta a ponta nas telas reais do app.
+1. **Vídeo de Percepção de Valor** (MP4 com música e legenda, ou narrado): o diretor assiste e **vê o sistema funcionando**, sem jargão. Um exemplo único, com dados de exemplo, seguido de ponta a ponta nas telas reais do app.
 2. **Página de divulgação** (HTML na Vercel): uma explicada leve no que mudou, com o vídeo embutido. Um link compartilhável.
 
 **Divisão de trabalho fixa:** o vídeo demonstra, a página explica. A página não tem passo a passo, stepper, réplica de tela nem simulação. Se a explicação precisar "mostrar", ela aponta para a aba do vídeo.
@@ -16,9 +16,17 @@ Fecha uma entrega para o diretor e para o usuário funcional em **dois passos, u
 
 ## Entrada
 
-`/divulgar <N> [--so-video | --so-pagina]`. N é uma issue entregue sem PRD (um bug, por exemplo) ou um PRD (issue mãe). PRD agrega as fatias filhas numa demonstração só: o caso de uso completo, não uma demonstração por fatia.
+`/divulgar <N> [--rapido | --voz | --completo] [--so-video | --so-pagina]`. N é uma issue entregue sem PRD (um bug, por exemplo) ou um PRD (issue mãe). PRD agrega as fatias filhas numa demonstração só: o caso de uso completo, não uma demonstração por fatia.
 
-- Sem flag: os dois passos, com as duas paradas do Pedro no vídeo (lista de tomadas e folha de quadros).
+**O modo do vídeo.** Sem flag de modo (o caso do botão "Gerar demonstração" do PedroOS), a primeira coisa da sessão é uma pergunta só (AskUserQuestion), com três opções:
+
+- **Rápido (Recomendado):** o modelo de Demonstração do Motion studio, com música e legenda, sem voz e sem parada do Pedro. Seção "Modo rápido".
+- **Rápido com voz:** o mesmo, com a narração na voz B.
+- **Completo:** o filme feito à mão no Motion studio, narrado, com as duas paradas do Pedro (lista de tomadas e folha de quadros). Seção "Passo 1: o vídeo".
+
+`--rapido`, `--voz` e `--completo` respondem a pergunta e ela não aparece. O rápido existe para o volume: várias demonstrações em paralelo, cada uma em poucos minutos de render.
+
+- Sem `--so-video` nem `--so-pagina`: os dois passos.
 - `--so-video`: só o passo 1 (para WhatsApp, e-mail, TV).
 - `--so-pagina`: só o passo 2, quando o MP4 já está em `~/Videos/Hospital/`.
 
@@ -56,7 +64,68 @@ Regras da pasta mãe: uma subpasta por contexto de domínio (`reunioes/`, `pops/
 3. **`docs/spec/snapshots/`** (ROTAS.md, FLUXOGRAMAS.md): o caminho de navegação real até a tela.
 4. **`CONTEXT.md` e o CONTEXT do contexto** (ex.: `docs/pops/CONTEXT.md`): vocabulário canônico. Sempre o termo do glossário, nunca sinônimo inventado, na tela e na fala.
 
+## Modo rápido: o vídeo pelo modelo
+
+O padrão. O vídeo sai do modelo de Demonstração do Motion studio (`~/PedroDev/Videos/motion-studio/modelos/demonstracao/`): o filme já está escrito, e a sessão só preenche o `cenas.json`. São de 25 a 45 s em quatro atos (Dor, Jornada, Resultado, Assinatura), com a tela real num painel 3D, cursor e clique, música com o corte na batida e legenda palavra a palavra. Não há voz (só no `--voz`) nem **parada do Pedro**: uma rodada de crítica e o portão automático. As fontes da verdade, o gate anti-técnica, a página e o checklist são os mesmos do modo completo.
+
+Antes de tudo, leia o `LEIA.md` do modelo e as skills `copy` e `marca-hsm` (com voz, também a `narracao`). Não precisa da entrevista nem do fluxo de filme da `motion-studio`: esta receita já responde o pedido.
+
+### 1. A stack da main, sem rebuild
+
+Todas as sessões de demonstração capturam da mesma stack local, que roda a main. **Não rode o `apply.sh`**: rebuildar troca a stack embaixo das outras sessões. Confira a versão no rodapé do app contra a da entrega: o `app_version` do deploy que cita a issue ou o PRD (em `prds` ou no `raw_subject`) no `docs/spec/deploy/history.json` da origin/main. Se a stack estiver atrás da entrega, **pare e avise o Pedro** numa linha, sem capturar: atualizar a stack é um passo só, fora das demonstrações.
+
+### 2. O cenário do módulo
+
+Os dados de exemplo de cada contexto ficam em `docs/comunicacao/<contexto>/cenario.md`: o roteiro fixo e idempotente (login, pessoas, registros, a faixa de id do módulo, comandos exatos) que deixa o banco local pronto para a captura. Se o arquivo existe, rode o roteiro e capture. Se não existe, monte os dados como no modo completo (fictícios e verossímeis, nunca reais) e grave o `cenario.md` com o que você fez, para a próxima sessão do módulo já começar capturando. Cada módulo usa uma faixa de id só dele: dois cenários na mesma faixa trocam as pessoas um do outro.
+
+### 3. Copy curta
+
+Pela skill `copy`: um gancho só (a Dor, até 8 palavras, com o trecho de destaque entre asteriscos), a fala de cada passo (até 70 caracteres, uma ação do usuário por passo, na ordem do caso real, com todos os critérios de aceite cobertos), um selo de até 3 palavras por passo que muda algo, e a frase e até 3 ganhos do Resultado. O gate anti-técnica do modo completo vale aqui.
+
+**Humanizer (ADR 0071):** a Dor, as falas, os selos, a frase e os ganhos passam pela Skill tool com `humanizer` em modo embutido, depois da `copy`. A amostra de voz é o `video/roteiro.md` da entrega mais recente em `docs/comunicacao/` (na falta, a página de referência do Passo 2): ela manda no tom, e o humanizer só tira os cacoetes. Nome de botão e de tela fica igual ao do app.
+
+Grave a copy final em `video/roteiro.md`.
+
+### 4. Capturas, trilha e `cenas.json`
+
+```bash
+M=~/PedroDev/Videos/motion-studio; F=films/$(date +%F)-<PRD>-<slug>
+mkdir -p $M/$F/assets && cp $M/modelos/demonstracao/index.html $M/$F/
+cp docs/comunicacao/_assets/logo-hsm.png docs/comunicacao/_assets/fonts/HPSimplified_Rg.ttf $M/$F/assets/
+T=$(python3 .claude/skills/divulgar/scripts/escolher_trilha.py)   # a faixa menos usada nas demonstrações
+ffmpeg -y -ss <início> -t 60 -i "$T" -ac 2 -ar 48000 $M/$F/assets/musica.wav
+cd $M && .venv/bin/python beats.py $F --audio $F/assets/musica.wav
+```
+
+O `escolher_trilha.py` imprime o caminho da faixa e, no stderr, o valor do campo `musica` do `meta.json`. O `<início>` é onde a faixa já tem energia: nada de introdução calma embaixo da Dor.
+
+As capturas seguem o passo 1 do `LEIA.md` do modelo: em 2x, pela config do modelo, com o alvo de cada clique lido pelo `eval`. Para cada passo, capture a tela de antes do clique e, se a tela muda, a de depois. Monte o `cenas.json` na pasta do filme pela tabela do `LEIA.md`.
+
+Com `--voz`: grave a narração pela skill `narracao`, com um parágrafo para a Dor, um por passo e um para o Resultado, nesta ordem. Faça o `tempos.json` como no passo 4 do modo completo, em `$F/assets/`, e marque `"voz": true` no `cenas.json`. O VoiceStudio atende uma sessão por vez: com outra sessão narrando, a sua espera. Se ele falhar, pare e avise; nunca use outra voz.
+
+### 5. Montar, uma crítica, render
+
+```bash
+node modelos/demonstracao/montar.mjs $F    # confere o cenas.json; imprime a duração e a parada da assinatura
+node render.mjs $F --sheet --every 0.5
+node regua.mjs $F
+```
+
+Uma rodada de crítica, sem meta de nota. Olhe a folha e o `phone.png` e corrija os 3 piores pontos (tela errada, alvo fora do lugar, legenda que não cabe, fala que não bate com a tela) mexendo só no `cenas.json`, e monte de novo. Confira também que todo critério de aceite tem passo e que não sobrou jargão nem travessão.
+
+```bash
+node render.mjs $F --final --sub 2 --jpeg  # 60 fps, 2 subquadros, quadros em JPEG: poucos minutos
+```
+
+### 6. Som e entrega
+
+Rode a skill `som`, passo 4, com o `out/cues.json`, o `out/film-16x9.mp4` mudo e a trilha no `base_audio`. Antes, corte a `musica.wav` no tamanho do filme, com 2 s de fade, e normalize a -14 LUFS (`loudnorm=I=-14:TP=-1.5`): faixa baixa de origem deixa o mix abaixo do alvo. Com voz, a narração entra também, com `--duck-music --voice-safe`.
+
+Depois, o portão (`gate-video.sh` com `--parada` na janela que o `montar.mjs` imprimiu) e a entrega em `~/Videos/Hospital/`, como no passo 9 do modo completo. No `video/` do repositório ficam `roteiro.md`, `cenas.json`, `capturas/` e o `meta.json`, com `"modo": "rapido"` (ou `"rapido-voz"`) e `"musica"` com o valor que o `escolher_trilha.py` imprimiu. Não há `cena/`: o modelo mora no estúdio, e o `cenas.json` refaz o filme. Junto com o vídeo, diga ao Pedro o que você melhoraria na próxima versão.
+
 ## Passo 1: o vídeo
+
+Este é o **modo completo** (`--completo`): o filme feito à mão, narrado, com as duas paradas do Pedro. No modo rápido, siga a seção acima e pule para o Passo 2.
 
 **Antes de tudo, carregue a skill `motion-studio`** (Skill tool) e leia o que ela manda: o `CLAUDE.md` do estúdio inteiro, `prompts/produto.md` e `prompts/critica.md`. Leia também as skills globais `narracao`, `copy`, `som` e `marca-hsm`. As rules do estúdio (contrato de render, molas, look, som, crítica) são o padrão; esta receita só diz o que muda no Hospital. O filme é o `index.html` do estúdio, renderizado pelo `render.mjs` dele, sem outro framework de vídeo.
 
@@ -184,7 +253,7 @@ Confira que o arquivo chegou e sumiu da origem antes de dizer que entregou. Junt
 2. **Hero:** uma frase de título com o valor da entrega + um parágrafo de resumo.
 3. **Abas em barra flutuante no rodapé (liquid glass):** `Funcionalidade` e `Demonstração por Vídeo` numa barra pill fixa na parte de baixo da viewport, centralizada (`position: fixed; bottom: ~22px; left: 50%`). Receita do `.glass-card` do app: `background: rgba(255,255,255,.8)`, `backdrop-filter: blur(12px) saturate(160%)`, borda `rgba(255,255,255,.5)`, `--shadow-premium-strong`. Aba ativa = pill navy com texto branco. `padding-bottom` no body; aba ativa no hash da URL (`#funcionalidade` / `#video`). **Nunca** como linha de tabs no topo.
 4. **Aba Funcionalidade** (a explicação leve, nada além): *O problema* em um parágrafo; *O que mudou* em cards compactos (título + 1 a 2 frases), um por mudança; *Na prática*, checklist de até 5 itens; CTA para a aba do vídeo.
-5. **Aba Demonstração por Vídeo:** um parágrafo de contexto (o exemplo seguido; o vídeo tem narração e legenda na tela, então funciona com ou sem som) + `<video controls>` com `<PRD>-<slug>.mp4` + linha de carimbo (`duração · PRD #N · retrata o app em vX.Y.Z · gerado em DD/MM/AAAA`, dados do `video/meta.json`).
+5. **Aba Demonstração por Vídeo:** um parágrafo de contexto (o exemplo seguido; o vídeo tem legenda na tela, e narração quando foi feito com voz, então funciona com ou sem som) + `<video controls>` com `<PRD>-<slug>.mp4` + linha de carimbo (`duração · PRD #N · retrata o app em vX.Y.Z · gerado em DD/MM/AAAA`, dados do `video/meta.json`).
 6. **Rodapé:** contexto, mês/ano e versão do app.
 
 **Regras de conteúdo:** linguagem de negócio, vocabulário do `CONTEXT.md`, mesmo gate anti-técnica do vídeo. Enxuto de verdade: seção da aba Funcionalidade que passa de uma tela de leitura, cortar. pt-BR, sem travessão nem meia-risca (`grep -Pn "\x{2013}|\x{2014}" index.html`). Verificar com o `playwright-cli` (screenshot das duas abas) antes de publicar.
@@ -213,7 +282,7 @@ O script põe `<!-- demonstracao: <url> -->` no fim do corpo, troca o marcador s
 
 1. Todos os critérios de aceite têm passo na demonstração; as telas são capturas do app real.
 2. Roteiro pela `copy` e pelo `humanizer`; abre no gancho, sem tela de metadado; vocabulário do glossário, zero jargão, zero travessão, tudo em HP Simplified.
-3. Narração na voz B; a fala aparece na tela quando é dita; uma transição diferente em cada corte; nada parado mais de 0,5 s fora da assinatura.
-4. Filme feito no Motion studio; "pode" do Pedro na lista de tomadas e na folha de quadros; `gate-video.sh` passou no MP4 final (60 fps).
-5. MP4 final em `~/Videos/Hospital/AAAA-MM-DD-<PRD>-<slug>.mp4`, nenhum MP4 no repositório nem no `out/` do filme; `video/` (roteiro, narração, tempos, capturas, cena, `meta.json`) e `index.html` commitados.
+3. Voz, quando houver, só a voz B; a fala aparece na tela quando é dita; uma transição diferente em cada corte; nada parado mais de 0,5 s fora da assinatura. No modo rápido, a trilha é a que o `escolher_trilha.py` deu e está no `meta.json`.
+4. Filme feito no Motion studio (no rápido, pelo modelo de Demonstração, com a Régua passando); no completo, "pode" do Pedro na lista de tomadas e na folha de quadros; `gate-video.sh` passou no MP4 final (60 fps).
+5. MP4 final em `~/Videos/Hospital/AAAA-MM-DD-<PRD>-<slug>.mp4`, nenhum MP4 no repositório nem no `out/` do filme; `video/` (no completo: roteiro, narração, tempos, capturas, cena, `meta.json`; no rápido: roteiro, `cenas.json`, capturas, `meta.json`) e `index.html` commitados.
 6. Página publicada e marcador da demonstração gravado na issue N. Se existe página de módulo do contexto, ela foi republicada com o MP4 novo.
