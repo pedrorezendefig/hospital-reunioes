@@ -3,9 +3,9 @@ modulo: central-de-comando
 titulo: Central de Comando
 ---
 
-A Central de Comando junta num lugar só os números do site do hospital, do Instagram e da nota no Google. Tudo ali é só leitura: você acompanha os números, mas não muda nada no site nem no Instagram por ela.
+A Central de Comando junta num lugar só os números do site do hospital, do Instagram e da nota no Google. Por ela você acompanha os números; o site e o Instagram continuam sendo mexidos fora do app.
 
-Ela fica na área de Administração, e só o Super admin vê. Quando a fonte de um número não está ligada, a tela diz que ele não é medido. Nunca aparece zero no lugar de um número que falta.
+Ela fica na área de Administração, e só o Super admin vê. Quando a fonte de um número não está ligada, a tela diz que ele não é medido, em vez de mostrar zero.
 
 ## Ver o panorama na Visão Geral
 
@@ -29,7 +29,7 @@ A barra branca acima dos números diz de quando eles são. Os números do site e
 
 ![O gráfico do Movimento do site](movimento-do-site.png)
 
-4. Em **Áreas do site**, veja as cinco partes do site que mais recebem Visitas, como Maternidade e Emergência 24h. A seta mostra se cada uma subiu ou caiu. O número fala do site, não da procura real pelo serviço.
+4. Em **Áreas do site**, veja as cinco partes do site que mais recebem Visitas, como Maternidade e Emergência 24h. A seta mostra se cada uma subiu ou caiu. O número conta Visitas às páginas do site e não mede quanto o serviço é procurado no hospital.
 
 ![O ranking das Áreas do site](areas-do-site.png)
 
@@ -71,7 +71,7 @@ A nota é lida no Google uma vez por semana, e a data da última leitura aparece
 
 ## Seguir um Objetivo
 
-Cada Objetivo é uma direção que a diretoria quer para o site e o Instagram, como crescer no Instagram ou gerar mais contatos. Ele não tem meta em número: mostra os números que importam para aquela direção e dá sugestões.
+Cada Objetivo é uma direção que a diretoria quer para o site e o Instagram, como crescer no Instagram ou gerar mais contatos. Ele mostra os números que importam para aquela direção e dá sugestões, sem uma meta em número para bater.
 
 1. Na seção **Central de Comando** do menu, clique em **Objetivos**.
 2. Clique no cartão do Objetivo. Os cartões apagados ainda estão em construção e não abrem.

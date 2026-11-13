@@ -124,7 +124,8 @@ def visao_geral() -> dict:
     dispositivos = percentuais(site()["dispositivos"])
     area = max(site()["areas_do_site"], key=lambda a: a["visitas"])
     em_foco = [
-        {k: o[k] for k in ("id", "nome", "descricao")} | {"numero": {"rotulo": o["numero"]["rotulo"], "valor": o["numero"]["valor"]}}
+        {k: o[k] for k in ("id", "nome", "descricao")}
+        | {"numero": {"rotulo": o["numero"]["rotulo"], "valor": o["numero"]["valor"]}}
         for o in SEED["objetivos"][:3]
     ]
     return {
@@ -199,8 +200,20 @@ def lente() -> dict:
         "periodo": {"chave": "28d", "dias": DIAS},
         "periodos": ["7d", "28d"],
         "numeros": [
-            {"chave": "interactions", "rotulo": "Interações", "valor": ig["interacoes"]["atual"], "anterior": ig["interacoes"]["anterior"], "variacao": variacao(ig["interacoes"]["atual"], ig["interacoes"]["anterior"])},
-            {"chave": "accountsEngaged", "rotulo": "Contas que engajaram", "valor": ig["contas_engajadas"]["atual"], "anterior": ig["contas_engajadas"]["anterior"], "variacao": variacao(ig["contas_engajadas"]["atual"], ig["contas_engajadas"]["anterior"])},
+            {
+                "chave": "interactions",
+                "rotulo": "Interações",
+                "valor": ig["interacoes"]["atual"],
+                "anterior": ig["interacoes"]["anterior"],
+                "variacao": variacao(ig["interacoes"]["atual"], ig["interacoes"]["anterior"]),
+            },
+            {
+                "chave": "accountsEngaged",
+                "rotulo": "Contas que engajaram",
+                "valor": ig["contas_engajadas"]["atual"],
+                "anterior": ig["contas_engajadas"]["anterior"],
+                "variacao": variacao(ig["contas_engajadas"]["atual"], ig["contas_engajadas"]["anterior"]),
+            },
         ],
         "sugestoes": SEED["lente"]["sugestoes"],
         "frescor": frescor(),
@@ -209,7 +222,11 @@ def lente() -> dict:
 
 def leituras(lista: list[dict], mes: dt.date) -> list[dict]:
     return [
-        {"lida_em": dt.datetime(mes.year, mes.month, item["dia"], 12, tzinfo=dt.timezone.utc).isoformat(), "nota": item["nota"], "total": item["total"]}
+        {
+            "lida_em": dt.datetime(mes.year, mes.month, item["dia"], 12, tzinfo=dt.timezone.utc).isoformat(),
+            "nota": item["nota"],
+            "total": item["total"],
+        }
         for item in lista
     ]
 
