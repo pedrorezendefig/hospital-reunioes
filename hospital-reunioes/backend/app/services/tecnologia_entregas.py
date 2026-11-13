@@ -24,6 +24,18 @@ from app.services.tecnologia import (
 FUSO_DO_HOSPITAL = ZoneInfo("America/Sao_Paulo")
 
 Agrupamento = Literal["semana", "mes"]
+Tamanho = Literal["P", "M", "G"]
+
+
+def tamanho_da_entrega(partes: int | None) -> Tamanho:
+    """O Tamanho da entrega pelo numero de partes (ADR 0092, decisao 3): ate 1
+    parte e P, de 2 a 5 e M, 6 ou mais e G. Nunca estimado nem digitado; o bug
+    sem sub-issue (partes nulas) e P."""
+    if (partes or 0) <= 1:
+        return "P"
+    if partes <= 5:
+        return "M"
+    return "G"
 
 
 def dia_da_entrega(demanda: dict[str, Any]) -> date | None:

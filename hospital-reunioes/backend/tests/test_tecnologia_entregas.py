@@ -22,6 +22,7 @@ from test_tecnologia_vinculo import BASE, DIRETOR, PEDRO, _demanda, _pessoa  # n
 
 from app.limiter import limiter  # noqa: E402
 from app.services.conhecimento import CONHECIMENTO_DIR  # noqa: E402
+from app.services.tecnologia_entregas import tamanho_da_entrega  # noqa: E402
 
 ENTREGAS = f"{BASE}/entregas"
 
@@ -152,6 +153,22 @@ def _periodos(resposta) -> list[tuple[str, int]]:
 
 def _ids(resposta) -> list[str]:
     return [d["id"] for d in _corpo(resposta)["entregas"]]
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 0. O Tamanho da entrega (ADR 0092, decisao 3)
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+class TestTamanhoDaEntrega:
+    @pytest.mark.parametrize(
+        ("partes", "tamanho"),
+        [(None, "P"), (0, "P"), (1, "P"), (2, "M"), (5, "M"), (6, "G"), (9, "G")],
+    )
+    def test_o_tamanho_sai_do_numero_de_partes(self, partes, tamanho):
+        """Ate 1 parte e P, de 2 a 5 e M, 6 ou mais e G. O bug sem sub-issue
+        (partes nulas na sincronizacao) e P."""
+        assert tamanho_da_entrega(partes) == tamanho
 
 
 # ═══════════════════════════════════════════════════════════════════════════
