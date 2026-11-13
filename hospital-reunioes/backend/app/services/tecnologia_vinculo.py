@@ -263,7 +263,12 @@ def partes_da_foto(foto: dict[str, Any] | None) -> tuple[int | None, int | None]
 # decisao 7), e o `/to-issues` costuma por um emoji no meio: "## 👔 Para o
 # diretor". O emoji e enfeite, e nao pode decidir se o diretor ve o texto ou
 # nao, entao o casamento e pela FRASE, em qualquer nivel de cabecalho.
-_CABECALHO_DO_DIRETOR = re.compile(r"^#{1,6}[^\n]*?para o diretor[^\n]*$", re.IGNORECASE | re.MULTILINE)
+#
+# Na Ana o mesmo bloco se chama "Para quem decide" (issue #1714, ADR 0093,
+# decisao 9), e as duas frases valem.
+_CABECALHO_DO_DIRETOR = re.compile(
+    r"^#{1,6}[^\n]*?(?:para o diretor|para quem decide)[^\n]*$", re.IGNORECASE | re.MULTILINE
+)
 
 # Onde o bloco acaba: o primeiro separador `---` ou o proximo cabecalho de
 # nivel 1 ou 2, o que vier antes.

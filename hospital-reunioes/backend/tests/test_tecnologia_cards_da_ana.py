@@ -244,3 +244,26 @@ def test_o_job_de_hora_em_hora_confere_a_ana_antes_de_reler_as_demandas(monkeypa
     scheduler_mod.reconciliar_vinculos_tecnologia()
 
     assert ordem[:3] == ["ana", "vinculos", "producao"]
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 3. O bloco para leigo da Ana
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+class TestOBlocoParaQuemDecide:
+    def test_o_bloco_para_quem_decide_vira_o_o_que_muda_e_a_parte_sem_bloco_fica_sem_texto(self):
+        """ADR 0093, decisao 9. A parte sem bloco entra com texto nulo, e a tela
+        diz "Descrição em preparação" no lugar dele (`SEM_O_QUE_MUDA`)."""
+        from app.services.tecnologia_sincronizacao import mudanca_da_foto
+
+        raiz = _issue_da_ana(
+            12, corpo="## 🧭 Para quem decide\n\n**O que muda:** a Ana responde o preparo.\n\n---\n\n## Problema\n\nX."
+        )
+        com_bloco = _issue_da_ana(13, corpo="## Para quem decide\n\nO preparo do jejum.\n\n## Pai\n\n#12")
+        sem_bloco = _issue_da_ana(14, corpo="## Pai\n\n#12\n\n## O que construir\n\nY.")
+
+        mudanca = mudanca_da_foto(github_client.montar_foto(raiz, [com_bloco, sem_bloco]))
+
+        assert mudanca["o_que_muda"] == "**O que muda:** a Ana responde o preparo."
+        assert [p["o_que_muda"] for p in mudanca["partes"]] == ["O preparo do jejum.", None]
