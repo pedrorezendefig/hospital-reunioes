@@ -2,6 +2,56 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-11-13T03:19:30-03:00",
+      "sha": "1cb78b3280032c15e72fbb3c558dd93eacded782",
+      "app_version": "0.277.0",
+      "subject": "Onda hsm-qr-onda3: Agente de triagem da Ouvidoria escreve assunto, alerta do Núcleo e Para revisar",
+      "raw_subject": "chore(deploy): registro da onda hsm-qr-onda3 (#1680)",
+      "scope": [
+        "backend",
+        "frontend"
+      ],
+      "prds": [
+        1527
+      ],
+      "result": "healthy",
+      "duration_seconds": 1,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        },
+        {
+          "service": "frontend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [
+        "143_ouvidoria_agente_de_triagem.sql"
+      ],
+      "rollback_target_sha": null,
+      "notes": "onda-enxuta hsm-qr-onda3: PR #1680 (issue #1624), mergeados PR a PR. Merge pela API do GitHub, um build. Registro pela Action pos-merge depois do health. Build do backend caiu no Coolify (BuildKit EOF); redeploy manual do mesmo commit, health 0.277.0 ok; registro disparado a mao.",
+      "etapas": {
+        "merge_s": 0,
+        "build_s": {
+          "backend": null,
+          "frontend": 180
+        },
+        "health_s": 0
+      },
+      "responsavel": "pedrorezendefig"
+    },
+    {
       "at": "2026-11-13T02:31:46-03:00",
       "sha": "4c288f5b6aff0ca9568350cd214a748d639635ad",
       "app_version": "0.276.0",
