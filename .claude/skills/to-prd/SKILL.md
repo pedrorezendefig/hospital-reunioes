@@ -21,11 +21,17 @@ Issue tracker = **GitHub Issues** via `gh` (veja `docs/agents/issue-tracker.md`)
 
    Check with the user that these modules and seams match their expectations before writing the PRD.
 
-3. Write the PRD using the template below (**in pt-BR**), then publish it with `gh issue create`. Apply the `ready-for-agent` label; no need for additional triage.
+3. Write the PRD using the template below (**in pt-BR**), then publish it with `gh issue create`. Apply the `ready-for-agent` label, one `type:` and the `area:` labels the PRD touches; no need for additional triage.
 
    ```bash
-   URL=$(gh issue create --title "<título pt-BR>" --body "<corpo>" --label ready-for-agent --assignee @me)
+   URL=$(gh issue create --title "<título pt-BR>" --body "<corpo>" --label ready-for-agent --label "type:<feature|fix>" --label "area:<área>" --assignee @me)
    ```
+
+   **`type:` e `area:` na criação** (`docs/agents/triage-labels.md`): `type:feature` para funcionalidade nova, `type:fix` para defeito, e um `--label "area:<área>"` por área que o PRD toca.
+   - App: `area:backend`, `area:frontend`, `area:supabase`.
+   - Ferramenta: `area:skills`, `area:docs`, `area:infra`.
+
+   O PRD é issue-raiz, e o espelho que transforma a raiz do app em card (no Hospital, a Demanda da aba Tecnologia, ADR 0084, decisão 4) lê essas labels no `issues.opened`. Sem elas o PRD nunca vira card, e rotular depois não cria o card: o `labeled` não passa pelo espelho.
 
    O `--assignee @me` faz o PRD nascer com dono: quem rodou o `/to-prd` (decisão do fluxo). Não é claim: o assignee é o dono do card, e as fatias que o `/to-issues` cria nascem com o mesmo dono do PRD. O `/pegar-issue` avisa quem pega card de outro dono.
 
