@@ -449,6 +449,54 @@ def _prazo(
     return {"trechos": linhas}
 
 
+def _prazo_por_area(
+    casos: list[dict],
+    prazos: dict[tuple[str, str], Prazo],
+    feriados: frozenset[dt.date],
+    agora: dt.datetime,
+    prorrogacoes: dict[str, dict],
+    responsaveis: list[dict],
+) -> list[dict]:
+    """O trecho da área (T1 a T2) contado setor a setor, no universo do
+    período (issue #1628, faixa 6 do Painel: "% no prazo no mês").
+
+    É a MESMA régua do `_prazo` (vencimento vigente, prorrogação, estouro
+    consumado), recortada por setor, para a coluna da tabela e o número do
+    relatório nunca divergirem. Setor sem caso medido não entra: 0% ali
+    acusaria a área que nunca foi acionada.
+
+    Não é `pendencias_por_area`, e não se mistura com ele: aquele é a fila de
+    AGORA, este é o que entrou no período. A tela põe os dois lado a lado e não
+    soma um com o outro."""
+    trecho = next(t for t in TRECHOS if t["marco"] == "area_resposta")
+    hoje = agora.astimezone(FUSO).date()
+    por_setor: dict[str, Counter] = {}
+    for caso in casos:
+        vencimento = _vencimento_do_trecho(caso, trecho, prazos, feriados, prorrogacoes.get(str(caso.get("id"))))
+        resultado = _cumprimento_do_trecho(
+            vencimento,
+            _marco_que_fecha(caso, trecho),
+            _medido_em(caso, agora),
+            _instante(caso.get("area_estourou_em")),
+        )
+        if resultado in (CUMPRIDO, ESTOURADO):
+            por_setor.setdefault(str(caso.get("setor") or SETOR_NAO_INFORMADO), Counter())[resultado] += 1
+
+    linhas = []
+    for setor, contagem in por_setor.items():
+        medidos = contagem[CUMPRIDO] + contagem[ESTOURADO]
+        linhas.append(
+            {
+                "setor": setor,
+                "responsavel": nome_de_quem_responde([r for r in responsaveis if r.get("setor") == setor], hoje),
+                "medidos": medidos,
+                "cumpridos": contagem[CUMPRIDO],
+                "percentual_cumprido": round(contagem[CUMPRIDO] * 100 / medidos, 1),
+            }
+        )
+    return sorted(linhas, key=lambda linha: linha["setor"])
+
+
 def _dias_uteis(minutos: float) -> float:
     """Minutos de expediente traduzidos para dias úteis, com uma casa. O dia
     útil tem 9 horas (RN-22), e é essa a régua que a Diretoria lê."""
@@ -797,6 +845,7 @@ def agregar(
         "degradado": sorted(degradado or []),
         "volume": _volume(casos, anteriores),
         "prazo": _prazo(casos, prazos or {}, feriados, agora, por_caso),
+        "prazo_por_area": _prazo_por_area(casos, prazos or {}, feriados, agora, por_caso, responsaveis or []),
         "pendencias_por_area": _pendencias_por_area(
             casos if fila_viva is None else fila_viva, responsaveis or [], feriados, agora
         ),
