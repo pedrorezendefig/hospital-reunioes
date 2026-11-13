@@ -779,13 +779,19 @@ def _resumo_da_conversa(saida: _SaidaDoResumo, mensagens: list[dict]) -> dict:
     # Uma linha so, sem travessao e no teto do titulo, como o titulo.
     if frase := titulo_limpo(saida.frase):
         resumo["frase"] = frase
-    # As seis partes de quem programa (issue #1633) so entram quando o modelo
-    # escreveu alguma: sem elas, o card nasce sem o bloco, como antes.
-    if saida.para_o_desenvolvedor is not None:
-        partes = {chave: sanitizar_travessao(texto.strip()) for chave, texto in saida.para_o_desenvolvedor}
-        if any(partes.values()):
-            resumo["para_o_desenvolvedor"] = partes
+    if partes := partes_do_desenvolvedor(saida.para_o_desenvolvedor):
+        resumo["para_o_desenvolvedor"] = partes
     return resumo
+
+
+def partes_do_desenvolvedor(bloco: _ParaODesenvolvedor | None) -> dict[str, str] | None:
+    """As seis partes de quem programa (issues #1633 e #1634), limpas, ou
+    `None` quando o modelo nao escreveu nenhuma: sem elas, o card nasce sem o
+    bloco, como antes. O resumo da melhoria e o do bug leem por aqui."""
+    if bloco is None:
+        return None
+    partes = {chave: sanitizar_travessao(texto.strip()) for chave, texto in bloco}
+    return partes if any(partes.values()) else None
 
 
 def _itens(lista: list[str]) -> list[str]:
