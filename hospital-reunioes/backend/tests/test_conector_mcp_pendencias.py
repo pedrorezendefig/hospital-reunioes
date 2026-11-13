@@ -48,8 +48,9 @@ KID = "chave-de-teste-pendencias"
 CAMINHO_MCP = f"{settings.api_prefix}/mcp"
 FERRAMENTAS_DA_CENTRAL = {"get_active_now", "get_site_analytics", "get_instagram_analytics"}
 FERRAMENTA_PENDENCIAS = "get_pendencias"
-# As de Reuniões e Ouvidoria, todas no gate da diretoria executiva (ADR 0085).
-FERRAMENTAS_DA_DIRETORIA = {FERRAMENTA_PENDENCIAS, "get_reunioes"}
+# As de Reuniões e Ouvidoria, todas no gate da diretoria executiva (ADR 0085):
+# Pendências, Reuniões (#1610) e a fila da Ouvidoria (#1611).
+FERRAMENTAS_DA_DIRETORIA = {FERRAMENTA_PENDENCIAS, "get_reunioes", "get_ouvidoria_prazo_estourado"}
 
 
 def diretoria(pid: str, access_profile: str | None) -> dict:

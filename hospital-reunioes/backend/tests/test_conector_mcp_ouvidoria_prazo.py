@@ -406,3 +406,132 @@ class TestPrazoEstouradoComoNaFila:
         assert no_claude == {"2026-0001", "2026-0006", "2026-0010"}
         assert payload["total"] == 3
         assert payload["haMais"] is False
+
+    @pytest.mark.parametrize("quem", [DIRETOR_SUPER, DIRETORA], ids=["diretor-super-admin", "diretora"])
+    def test_sem_filtro_de_setor_os_estourados_e_os_em_dia_batem_com_a_fila(self, chave_do_emissor, quem):
+        banco = banco_da_ouvidoria(quem)
+        fila = fila_da_ouvidoria(banco, quem)
+
+        for estourado in (True, False):
+            na_fila = {m["protocolo"] for m in fila if estourado_na_tela(m, HOJE) is estourado}
+            payload = casos_do_claude(banco, chave_do_emissor, quem, prazoEstourado=estourado)
+            assert {c["protocolo"] for c in payload["casos"]} == na_fila
+            assert all(c["prazoEstourado"] is estourado for c in payload["casos"])
+
+        estourados = casos_do_claude(banco, chave_do_emissor, quem, prazoEstourado=True)
+        assert {c["protocolo"] for c in estourados["casos"]} == {"2026-0001", "2026-0002", "2026-0006", "2026-0010"}
+
+    def test_cada_caso_traz_protocolo_setor_situacao_gravidade_e_prazo(self, chave_do_emissor):
+        payload = casos_do_claude(banco_da_ouvidoria(DIRETORA), chave_do_emissor, DIRETORA, setor="materni")
+
+        rotulo = payload["casos"][0]["rotuloPrazo"]
+        assert rotulo.startswith("vencido há")
+        assert payload["casos"] == [
+            {
+                "protocolo": "2026-0002",
+                "setor": MATERNIDADE,
+                "situacao": "aguardando_area",
+                "gravidade": "medio",
+                "tipo": "reclamacao",
+                "vencimento": "20/08/2026 às 17h00",
+                "rotuloPrazo": rotulo,
+                "prazoDeReferencia": "2026-08-21",
+                "prazoEstourado": True,
+            }
+        ]
+
+    def test_filtra_por_situacao(self, chave_do_emissor):
+        payload = casos_do_claude(banco_da_ouvidoria(DIRETORA), chave_do_emissor, DIRETORA, situacao="novo")
+
+        assert [c["protocolo"] for c in payload["casos"]] == ["2026-0006", "2026-0007"]
+
+    @pytest.mark.parametrize(
+        "argumentos",
+        [{"prazoEstourado": "sim"}, {"situacao": "vencido"}, {"situacao": ["novo"]}, {"setor": ""}, {"setor": 3}],
+        ids=["estourado-texto", "situacao-desconhecida", "situacao-lista", "setor-vazio", "setor-numero"],
+    )
+    def test_argumento_invalido_e_erro_de_ferramenta_sem_dado(self, chave_do_emissor, argumentos):
+        resposta = chamar(cliente_mcp(banco_da_ouvidoria(DIRETORA)), chave_do_emissor, DIRETORA, **argumentos)
+
+        assert resposta.status_code == 200, resposta.text
+        resultado = resposta.json()["result"]
+        assert resultado["isError"] is True
+        assert "2026-0001" not in resposta.text
+
+
+# ─── 2. O gate: só a diretoria executiva ─────────────────────────────────────
+
+
+class TestGate:
+    def test_super_admin_sem_diretoria_nao_ve_a_ferramenta_e_chamar_e_erro_sem_dado(self, chave_do_emissor):
+        cliente = cliente_mcp(banco_da_ouvidoria(SUPER_ADMIN))
+
+        lista = rpc(cliente, chave_do_emissor, SUPER_ADMIN, "tools/list")
+        assert lista.status_code == 200, lista.text
+        nomes = {f["name"] for f in lista.json()["result"]["tools"]}
+        assert "get_active_now" in nomes
+        assert FERRAMENTA not in nomes
+
+        resposta = chamar(cliente, chave_do_emissor, SUPER_ADMIN, prazoEstourado=True)
+        assert resposta.status_code == 200, resposta.text
+        resultado = resposta.json()["result"]
+        assert resultado["isError"] is True
+        assert "structuredContent" not in resultado
+        assert "2026-0001" not in resposta.text
+
+    def test_diretoria_ve_a_ferramenta_no_tools_list(self, chave_do_emissor):
+        lista = rpc(cliente_mcp(banco_da_ouvidoria(DIRETORA)), chave_do_emissor, DIRETORA, "tools/list")
+
+        assert FERRAMENTA in {f["name"] for f in lista.json()["result"]["tools"]}
+
+
+# ─── 3. Lista não grava acesso; 4. só leitura ────────────────────────────────
+
+_PEDIDOS = ({}, {"prazoEstourado": True}, {"prazoEstourado": True, "setor": RECEPCAO}, {"situacao": "respondido"})
+
+
+class TestSoLeitura:
+    def test_chamar_a_ferramenta_nao_grava_linha_em_ouvidoria_acessos(self, chave_do_emissor):
+        banco = banco_da_ouvidoria(DIRETORA)
+        cliente = cliente_mcp(banco)
+
+        for argumentos in _PEDIDOS:
+            assert chamar(cliente, chave_do_emissor, DIRETORA, **argumentos).json()["result"]["isError"] is False
+
+        assert banco.tabelas["ouvidoria_acessos"] == []
+        assert [e for e in banco.escritas if e[0] == "ouvidoria_acessos"] == []
+
+    def test_a_ferramenta_nao_escreve_em_caso_nem_em_trilha(self, chave_do_emissor):
+        banco = banco_da_ouvidoria(DIRETOR_SUPER, DIRETORA)
+        cliente = cliente_mcp(banco)
+
+        for quem in (DIRETOR_SUPER, DIRETORA):
+            for argumentos in _PEDIDOS:
+                assert chamar(cliente, chave_do_emissor, quem, **argumentos).json()["result"]["isError"] is False
+
+        assert banco.escritas == []
+        assert banco.tabelas["ouvidoria_protocolos"] == CASOS
+        assert banco.tabelas["ouvidoria_movimentos"] == []
+
+
+# ─── Lista longa ─────────────────────────────────────────────────────────────
+
+
+class TestListaLongaCortadaNoTeto:
+    def test_volta_o_teto_com_o_total_e_o_aviso_o_mais_antigo_primeiro(self, chave_do_emissor):
+        muitos = [
+            caso(100 + i, "aguardando_area", RECEPCAO, prazo_area_em=f"2026-08-{1 + i % 20:02d}T20:00:00+00:00")
+            for i in range(60)
+        ]
+        banco = banco_da_ouvidoria(DIRETORA, casos=muitos)
+
+        payload = casos_do_claude(banco, chave_do_emissor, DIRETORA, prazoEstourado=True)
+
+        assert payload["total"] == 60
+        assert payload["mostrados"] == 50
+        assert len(payload["casos"]) == 50
+        assert payload["haMais"] is True
+        assert "60" in payload["aviso"]
+        dias = [c["vencimento"][:2] for c in payload["casos"]]
+        assert dias == sorted(dias)
+        assert dias[0] == "01"

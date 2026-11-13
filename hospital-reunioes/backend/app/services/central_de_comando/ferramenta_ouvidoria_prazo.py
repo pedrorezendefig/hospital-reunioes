@@ -56,15 +56,15 @@ def definicao() -> dict:
         "title": "Casos da Ouvidoria e prazos",
         "description": (
             "A fila da Ouvidoria do hospital, somente leitura: os casos em trabalho (sem os arquivados), "
-            "cada um com protocolo, setor, situação, gravidade e prazo. Filtre por \"prazoEstourado\" "
+            'cada um com protocolo, setor, situação, gravidade e prazo. Filtre por "prazoEstourado" '
             '(verdadeiro traz só os estourados), por "setor" (parte do nome) e por "situacao" (novo, '
             "em_classificacao, aguardando_area, aguardando_manifestante, respondido, encerrado). Sem filtro, "
             "vem a fila inteira. Prazo estourado é a mesma marca vermelha da fila na tela: conta em dias úteis "
             "pela Tabela de prazos e pelo Calendário útil; caso já respondido, parado aguardando o "
-            "manifestante, ou elogio nunca está estourado. \"vencimento\" é o prazo da área; caso ainda sem "
+            'manifestante, ou elogio nunca está estourado. "vencimento" é o prazo da área; caso ainda sem '
             'gravidade não tem prazo da área e é medido pelo "prazoDeReferencia". A lista vem pelo prazo, '
             f'o mais antigo primeiro; "total" é quantos atendem ao filtro e "haMais" verdadeiro quer dizer que '
-            f"só os {TETO} primeiros vieram: refine o filtro para ver o resto. \"degradado\" não vazio quer "
+            f'só os {TETO} primeiros vieram: refine o filtro para ver o resto. "degradado" não vazio quer '
             "dizer que parte da leitura falhou e o prazo pode não estar confirmado. Não invente casos que não "
             "estejam no payload."
         ),
