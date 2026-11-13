@@ -12,11 +12,30 @@
 
 import { cleanup, render } from "@testing-library/react";
 import ReactMarkdown from "react-markdown";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { PreDoManual } from "./PreDoManual";
 
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  vi.unstubAllGlobals();
+});
+
+/** O `matchMedia` que o jsdom não tem, dublado: casa só as consultas pedidas. */
+function simularTela(...consultasQueCasam: string[]) {
+  vi.stubGlobal("matchMedia", (consulta: string) => ({
+    matches: consultasQueCasam.includes(consulta),
+    media: consulta,
+    addEventListener: () => {},
+    removeEventListener: () => {},
+  }));
+}
+
+/** O atraso e a duração, em ms, de uma `animation` escrita no style. */
+function tempoDa(animacao: string): number {
+  const [duracao, atraso] = [...animacao.matchAll(/(\d+)ms/g)].map((m) => Number(m[1]));
+  return duracao + (atraso ?? 0);
+}
 
 const REUNIAO = [
   "inicio abrir 1,1: Abrir a reunião",
@@ -90,5 +109,51 @@ describe("o bloco fluxograma da página", () => {
     );
     expect(container.querySelector("svg")).toBeNull();
     expect(container.querySelector("pre code")!.textContent).toContain("ls -la");
+  });
+});
+
+describe("a entrada do fluxograma", () => {
+  it("os passos aparecem em sequência pela ordem do fluxo, e tudo acaba em menos de 1,5 s", () => {
+    simularTela();
+    const { container } = desenhar(REUNIAO);
+    expect(container.querySelector("[data-fluxograma]")!.getAttribute("data-movimento")).toBe("normal");
+
+    const atrasoDe = (id: string) => {
+      const animacao = (container.querySelector(`[data-passo="${id}"]`) as SVGElement).style.animation;
+      expect(animacao).toContain("fluxograma-passo");
+      return Number(/ (\d+)ms both/.exec(animacao)![1]);
+    };
+    const ordem = ["abrir", "pauta", "quorum", "ata", "remarcar"];
+    const atrasos = ordem.map(atrasoDe);
+    for (let i = 1; i < atrasos.length; i++) expect(atrasos[i]).toBeGreaterThan(atrasos[i - 1]);
+
+    // A ligação se desenha depois que a origem dela apareceu.
+    const traco = container.querySelector('[data-ligacao="quorum->remarcar"] path:not([data-seta])') as SVGElement;
+    expect(traco.style.animation).toContain("fluxograma-ligacao");
+    expect(Number(/ (\d+)ms both/.exec(traco.style.animation)![1])).toBeGreaterThan(atrasoDe("quorum"));
+
+    const animados = [...container.querySelectorAll<SVGElement>("svg *")].filter((el) => el.style.animation);
+    expect(Math.max(...animados.map((el) => tempoDa(el.style.animation)))).toBeLessThan(1500);
+  });
+
+  it("com movimento reduzido, o fluxograma aparece pronto", () => {
+    simularTela("(prefers-reduced-motion: reduce)");
+    const { container } = desenhar(REUNIAO);
+
+    expect(container.querySelector("[data-fluxograma]")!.getAttribute("data-movimento")).toBe("reduzido");
+    const elementos = [...container.querySelectorAll<SVGElement>("svg *")];
+    expect(elementos.filter((el) => el.style.animation)).toEqual([]);
+    expect(elementos.filter((el) => el.getAttribute("stroke-dasharray"))).toEqual([]);
+    for (const passo of container.querySelectorAll<SVGElement>("[data-passo]")) expect(passo.style.opacity).toBe("1");
+  });
+
+  it("no celular, a grade desce para uma coluna na ordem do fluxo", () => {
+    simularTela("(max-width: 767px)");
+    const { container } = desenhar(REUNIAO);
+    const xs = new Set([...container.querySelectorAll("[data-passo]")].map((p) => p.getAttribute("data-x")));
+    expect(xs.size).toBe(1);
+    const y = (id: string) => Number(container.querySelector(`[data-passo="${id}"]`)!.getAttribute("data-y"));
+    expect(y("ata")).toBeGreaterThan(y("quorum"));
+    expect(y("remarcar")).toBeGreaterThan(y("ata"));
   });
 });
