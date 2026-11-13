@@ -1,6 +1,7 @@
 ---
-status: accepted
+status: superseded
 amends: 0054, 0083, 0084, 0090
+superseded_by: 0092
 ---
 
 # Entregas com números por Responsável, Tempo na Etapa e o PRD que não volta para Planejada

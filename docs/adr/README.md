@@ -26,7 +26,8 @@ Só `status: accepted` vale como decisão; `superseded` é histórico (CLAUDE.md
 | [0088](0088-acionamento-de-ciencia-elogio-e-nucleo-de-seguranca-do-paciente.md) | accepted | Acionamento de ciência: o elogio e o Núcleo de Segurança do Paciente, com exceção de sigilo para o Núcleo (emenda 0041 e 0052) |
 | [0089](0089-nota-do-google-automatica-e-convite-so-para-notas-4-e-5.md) | accepted | Nota do Google buscada toda semana e convite ao Google só para as notas 4 e 5 |
 | [0090](0090-quadro-da-tecnologia-por-etapa.md) | accepted | Quadro da Tecnologia por Etapa, só leitura, com o card num painel (emenda 0077, 0083 e 0084) |
-| [0091](0091-entregas-com-numeros-por-responsavel-e-tempo-na-etapa.md) | accepted | Entregas com números por Responsável, Tempo na Etapa e o PRD que não volta para Planejada (emenda 0054, 0083, 0084 e 0090) |
+| [0091](0091-entregas-com-numeros-por-responsavel-e-tempo-na-etapa.md) | superseded | Entregas com números por Responsável, Tempo na Etapa e o PRD que não volta para Planejada (emenda 0054, 0083, 0084 e 0090) |
+| [0092](0092-entregas-como-ritmo-semanal-com-tamanho-da-entrega.md) | accepted | Entregas como ritmo semanal, com Tamanho da entrega e o que cada entrega fez (substitui 0091; emenda 0054, 0084 e 0090) |
 
 ## Contas médicas
 
