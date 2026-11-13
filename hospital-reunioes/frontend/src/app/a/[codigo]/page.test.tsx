@@ -5,14 +5,14 @@
 /**
  * O endereço curto do cartaz, `/a/{código}` (issue #1617, ADR 0086 decisão 5).
  *
- * É o que o cartaz A4 imprime e o que o QR carrega. Nesta fatia ele abre o
- * formulário público com o ponto; a fatia da tela de nota troca o destino. O
- * que só existe aqui, e que a suíte do backend não vê:
+ * É o que o cartaz A4 imprime e o que o QR carrega. Hoje ele abre a
+ * Manifestação guiada com o ponto (issue #1620); a fatia da tela de nota troca
+ * o destino. O que só existe aqui, e que a suíte do backend não vê:
  *
  * * o código da URL é o que vai no envio, e é com ele que o servidor grava a
  *   origem do caso (ponto ativo) ou o deixa sem origem (ponto aposentado);
- * * a página mostra o nome público do ponto, que o servidor devolve, e nunca o
- *   nome interno do setor.
+ * * o lugar do passo "Quando e onde" chega preenchido com o nome público do
+ *   ponto, que o servidor devolve, e nunca com o nome interno do setor.
  */
 
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
@@ -32,11 +32,17 @@ const RECIBO = {
   status: "em_classificacao",
 };
 
+const LOCAIS = [
+  { nome: "Centro Médico", ala_internacao: false },
+  { nome: "Emergência adulta", ala_internacao: false },
+];
+
 let consultas: string[] = [];
 let enviados: Record<string, unknown>[] = [];
 
 /** O servidor: a rota pública do ponto responde `cartaz` (ou 404, quando o
- *  ponto está aposentado), e a de manifestações devolve o recibo. */
+ *  ponto está aposentado), a de locais devolve a lista, e a de manifestações
+ *  devolve o recibo. */
 function servidor(cartaz: Record<string, unknown> | null) {
   vi.stubGlobal(
     "fetch",
@@ -46,6 +52,9 @@ function servidor(cartaz: Record<string, unknown> | null) {
         return (cartaz
           ? { ok: true, status: 200, json: async () => cartaz }
           : { ok: false, status: 404, json: async () => ({}) }) as Response;
+      }
+      if (url.includes("/publico/locais")) {
+        return { ok: true, status: 200, json: async () => ({ locais: LOCAIS }) } as Response;
       }
       enviados.push(JSON.parse(String(init?.body ?? "{}")));
       return { ok: true, status: 201, json: async () => RECIBO } as Response;
@@ -63,50 +72,75 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-async function enviarUmRelato() {
-  fireEvent.change(screen.getByLabelText("O que aconteceu?"), {
-    target: { value: "Esperei duas horas na recepção." },
-  });
-  fireEvent.click(screen.getByRole("button", { name: "Sobre mim" }));
-  fireEvent.click(screen.getByRole("button", { name: /enviar manifestação/i }));
-  await waitFor(() => expect(enviados).toHaveLength(1));
+function botao(nome: string | RegExp) {
+  return screen.getByRole("button", { name: nome }) as HTMLButtonElement;
 }
 
-describe("o endereço curto do cartaz", () => {
-  it("de ponto ativo, abre o formulário com o nome público do ponto e leva o código no envio", async () => {
+/** Do passo 1 até o "Quando e onde", de quem pediu anonimato. */
+function ateOQuandoEOnde() {
+  fireEvent.click(botao(/Anônimo/));
+  fireEvent.click(botao("Continuar"));
+  fireEvent.click(botao("Sobre mim"));
+  fireEvent.click(botao("Continuar"));
+}
+
+function onde() {
+  return screen.getByLabelText("Onde foi?") as HTMLSelectElement;
+}
+
+describe("o endereço curto do cartaz (critério 4)", () => {
+  it("de ponto ativo, o lugar chega preenchido com o nome público e o código vai no envio", async () => {
     servidor({ nome_publico: "Emergência adulta" });
-
     render(<EnderecoCurtoDoCartaz />);
+    await waitFor(() => expect(consultas).toEqual(["/api/ouvidoria/publico/pontos/AB2CD3"]));
 
-    expect(await screen.findByText("Emergência adulta")).toBeTruthy();
-    expect(consultas).toEqual(["/api/ouvidoria/publico/pontos/AB2CD3"]);
+    ateOQuandoEOnde();
 
-    await enviarUmRelato();
-    expect(enviados[0]).toMatchObject({ p: "AB2CD3" });
+    await waitFor(() => expect(onde().value).toBe("Emergência adulta"));
+    fireEvent.click(botao("Tarde"));
+    fireEvent.click(botao("Continuar"));
+    fireEvent.change(screen.getByLabelText("Seu relato"), {
+      target: { value: "Esperei duas horas." },
+    });
+    fireEvent.click(botao("Uma resposta"));
+    fireEvent.click(botao("Continuar"));
+    fireEvent.click(botao(/Enviar manifestação/));
+
+    await waitFor(() => expect(enviados).toHaveLength(1));
+    expect(enviados[0]).toMatchObject({ p: "AB2CD3", local_informado: "Emergência adulta" });
   });
 
-  it("de ponto aposentado, abre o formulário sem origem nenhuma na tela", async () => {
+  it("o lugar preenchido pelo cartaz pode ser trocado", async () => {
+    servidor({ nome_publico: "Emergência adulta" });
+    render(<EnderecoCurtoDoCartaz />);
+    ateOQuandoEOnde();
+    await waitFor(() => expect(onde().value).toBe("Emergência adulta"));
+
+    fireEvent.change(onde(), { target: { value: "Centro Médico" } });
+
+    expect(onde().value).toBe("Centro Médico");
+  });
+
+  it("de ponto aposentado, o lugar chega em branco e o formulário segue", async () => {
     servidor(null);
-
     render(<EnderecoCurtoDoCartaz />);
-
     await waitFor(() => expect(consultas).toHaveLength(1));
-    expect(screen.queryByText(/Você leu o QR/)).toBeNull();
-    // O formulário continua de pé: ninguém parado na frente de um cartaz fica
-    // sem canal (ADR 0036, decisão 6).
-    await enviarUmRelato();
-    expect(screen.queryByText(/Você leu o QR/)).toBeNull();
+
+    ateOQuandoEOnde();
+
+    expect(onde().value).toBe("");
   });
 
-  it("mostra o nome que o servidor devolve, e não o nome do setor", async () => {
+  it("nunca preenche com o nome do setor", async () => {
     // Um servidor antigo devolvia o setor. A página só lê o nome público:
-    // sem ele, não mostra origem nenhuma.
+    // sem ele, o lugar fica para a pessoa escolher.
     servidor({ setor: "Recepção", ponto: "Poltrona 12" });
-
     render(<EnderecoCurtoDoCartaz />);
-
     await waitFor(() => expect(consultas).toHaveLength(1));
+
+    ateOQuandoEOnde();
+
+    expect(onde().value).toBe("");
     expect(screen.queryByText("Recepção")).toBeNull();
-    expect(screen.queryByText(/Você leu o QR/)).toBeNull();
   });
 });

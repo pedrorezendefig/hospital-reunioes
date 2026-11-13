@@ -39,12 +39,6 @@ export const SOBRE_QUEM: { valor: SobreQuem; rotulo: string }[] = [
 ];
 
 /**
- * O que a tela diz quando falta a única resposta obrigatória do formulário.
- * Mora aqui porque é a régua do botão desabilitado, e não decoração da página.
- */
-export const FALTA_DIZER_SOBRE_QUEM = 'Responda "Este relato é sobre quem?" para enviar.';
-
-/**
  * O aviso abaixo do nome do paciente. A segunda frase só aparece para quem
  * pediu anonimato: "Acompanhante da Maria, leito 12" às vezes entrega quem
  * falou, e a pessoa decide isso sabendo (ADR 0052, consequências).

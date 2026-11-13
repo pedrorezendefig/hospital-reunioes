@@ -3,7 +3,6 @@ import {
   AVISO_PACIENTE_PODE_IDENTIFICAR,
   AVISO_SEM_NOME_DO_PACIENTE,
   ENVIO_RECUSADO_PELA_PAGINA,
-  FALTA_DIZER_SOBRE_QUEM,
   NATUREZAS_INFORMADAS,
   RECUSA_DO_ENVIO,
   SOBRE_QUEM,
@@ -360,7 +359,6 @@ describe("o Paciente do caso no envio (issue #666, ADR 0052)", () => {
     expect(AVISO_PACIENTE_PODE_IDENTIFICAR).toBe(
       "O nome do paciente e a referência do atendimento podem indicar quem manifestou."
     );
-    expect(FALTA_DIZER_SOBRE_QUEM).toBe('Responda "Este relato é sobre quem?" para enviar.');
   });
 
   it("a recusa do envio nunca manda reescrever o relato", () => {

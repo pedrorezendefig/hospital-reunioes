@@ -3,28 +3,23 @@
  */
 
 /**
- * O formulário público da Ouvidoria, na tela (issue #473, PRD #467).
+ * A Manifestação guiada, na tela (issue #1620, PRD #1527, ADR 0086 decisão 6).
  *
- * O que o cartaz do ponto de escuta promete só existe se estiver DESENHADO
- * aqui: as quatro naturezas, o elogio na frente e a escolha que não prende
- * ninguém (RN-88). A régua do envio já tem teste próprio em
- * `lib/ouvidoria/publico.ts`; o que só existe nesta página, e que hoje só um
- * humano olhando a tela pegaria se sumisse, é:
+ * O formulário público virou os cinco passos da seção 4.2 da especificação da
+ * Diretoria: identificação, sobre o quê, quando e onde, o que aconteceu e
+ * contato. A régua de cada passo tem teste próprio em
+ * `lib/ouvidoria/manifestacao-guiada.test.ts`; o que só existe nesta página é:
  *
- * * a ordem dos quatro botões, que é a promessa do papel;
- * * a escolha ser opcional E desmarcável, para quem clicou por engano não ficar
- *   preso a uma natureza que não é a dele;
- * * o protocolo continuar aparecendo na tela depois do envio, que é o recibo de
- *   quem manifestou.
+ * * a ordem dos passos, com a identificação primeiro;
+ * * o Continuar que só libera com o obrigatório, e o Voltar que não perde nada;
+ * * o aviso de quem deixa só o telefone;
+ * * o recibo e as recusas do servidor, que continuam como eram;
+ * * o desenho de celular (375 px): cards empilhados e alvos de 44 px.
  */
 
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-// A constante entra só na asserção de AUSÊNCIA (procurar um literal que não
-// está na tela não prova que a frase certa sumiu, prova que aquele literal não
-// está lá). Toda asserção de PRESENÇA usa o texto exato que a pessoa lê.
-import { FALTA_DIZER_SOBRE_QUEM } from "@/lib/ouvidoria/publico";
 import { apareceComoFoiEscrito } from "@/lib/caixa-alta";
 import ManifestacaoPage from "./page";
 
@@ -39,17 +34,29 @@ const RECIBO = {
   status: "em_classificacao",
 };
 
-let enviados: unknown[] = [];
+const LOCAIS = [
+  { nome: "Emergência adulta", ala_internacao: false },
+  { nome: "Internação · Ala 2A", ala_internacao: true },
+];
+
+let enviados: Record<string, unknown>[] = [];
+
+function servidor({ status = 201 }: { status?: number } = {}) {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async (url: string, init?: RequestInit) => {
+      if (url.includes("/publico/locais")) {
+        return { ok: true, status: 200, json: async () => ({ locais: LOCAIS }) } as Response;
+      }
+      enviados.push(JSON.parse(String(init?.body ?? "{}")));
+      return { ok: status < 300, status, json: async () => (status < 300 ? RECIBO : {}) } as Response;
+    })
+  );
+}
 
 beforeEach(() => {
   enviados = [];
-  vi.stubGlobal(
-    "fetch",
-    vi.fn(async (_url: string, init?: RequestInit) => {
-      enviados.push(JSON.parse(String(init?.body ?? "{}")));
-      return { ok: true, status: 201, json: async () => RECIBO } as Response;
-    })
-  );
+  servidor();
 });
 
 afterEach(() => {
@@ -57,303 +64,364 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-function escrever(texto: string) {
-  fireEvent.change(screen.getByLabelText("O que aconteceu?"), { target: { value: texto } });
+function botao(nome: string | RegExp) {
+  return screen.getByRole("button", { name: nome }) as HTMLButtonElement;
 }
 
-/** Os botões de natureza, e só eles: o grupo da pergunta "sobre quem" também
- *  é alternável, e filtrar por `aria-pressed` na página inteira passaria a
- *  pegar os dois. */
-function botoesDeNatureza() {
-  return within(screen.getByRole("group", { name: /O que você quer registrar/ })).getAllByRole(
-    "button"
-  );
+function continuar() {
+  fireEvent.click(botao("Continuar"));
 }
 
-/** A resposta obrigatória de quem é o relato (issue #666). */
-function responderSobreQuem(rotulo: string) {
-  fireEvent.click(screen.getByRole("button", { name: rotulo }));
+function voltar() {
+  fireEvent.click(botao("Voltar"));
 }
 
-function botaoDeEnviar() {
-  return screen.getByRole("button", { name: /enviar manifestação/i }) as HTMLButtonElement;
+function escrever(rotulo: string | RegExp, valor: string) {
+  fireEvent.change(screen.getByLabelText(rotulo), { target: { value: valor } });
 }
 
-describe("o seletor de natureza do formulário público", () => {
-  it("mostra as quatro naturezas do cartaz, com o elogio primeiro", () => {
+async function escolherLocal(nome: string) {
+  const onde = (await screen.findByLabelText("Onde foi?")) as HTMLSelectElement;
+  await waitFor(() => expect(within(onde).getByRole("option", { name: nome })).toBeTruthy());
+  fireEvent.change(onde, { target: { value: nome } });
+}
+
+/** Passos 1 a 4 respondidos com o mínimo, parando no passo 5. */
+async function ateOContato({
+  identificacao = "Com identificação",
+  sobre = "Sobre mim",
+  local = "Emergência adulta",
+}: { identificacao?: string; sobre?: string; local?: string } = {}) {
+  render(<ManifestacaoPage />);
+  fireEvent.click(botao(new RegExp(identificacao)));
+  continuar();
+  fireEvent.click(botao(sobre));
+  continuar();
+  fireEvent.click(botao("Tarde"));
+  await escolherLocal(local);
+  continuar();
+  escrever("Seu relato", "Esperei duas horas na emergência.");
+  fireEvent.click(botao("Uma resposta"));
+  continuar();
+}
+
+describe("o passo a passo começa pela identificação (critério 1)", () => {
+  it("o primeiro passo é a escolha entre identificado e anônimo, e nada mais", () => {
     render(<ManifestacaoPage />);
 
-    expect(botoesDeNatureza().map((b) => b.textContent)).toEqual([
+    expect(screen.getByText("Passo 1 de 5")).toBeTruthy();
+    expect(botao(/Com identificação/)).toBeTruthy();
+    expect(botao(/Anônimo/)).toBeTruthy();
+    expect(screen.queryByLabelText("Seu relato")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Voltar" })).toBeNull();
+  });
+
+  it("os dois cards dizem o que cada escolha significa, como foi escrito", () => {
+    render(<ManifestacaoPage />);
+
+    const identificado = screen.getByText("A Ouvidoria responde diretamente a você.");
+    const anonimo = screen.getByText(
+      "Você recebe um número de protocolo, sem se identificar. Não conseguimos responder diretamente a você."
+    );
+    // O card é botão, e a regra de caixa alta (ADR 0080) pegaria a frase.
+    expect(apareceComoFoiEscrito(identificado)).toBe(true);
+    expect(apareceComoFoiEscrito(anonimo)).toBe(true);
+  });
+
+  it("sem escolher, não segue", () => {
+    render(<ManifestacaoPage />);
+
+    expect(botao("Continuar").disabled).toBe(true);
+    fireEvent.click(botao(/Anônimo/));
+    expect(botao(/Anônimo/).getAttribute("aria-pressed")).toBe("true");
+    expect(botao("Continuar").disabled).toBe(false);
+  });
+});
+
+describe("os obrigatórios do anexo seguram o passo, e os opcionais não (critério 2)", () => {
+  it("passo 2 só segue com a resposta de quem é o relato, sem precisar da natureza", () => {
+    render(<ManifestacaoPage />);
+    fireEvent.click(botao(/Com identificação/));
+    continuar();
+
+    expect(screen.getByText("Passo 2 de 5")).toBeTruthy();
+    expect(botao("Continuar").disabled).toBe(true);
+    fireEvent.click(botao("Sobre mim"));
+    expect(botao("Continuar").disabled).toBe(false);
+  });
+
+  it("as quatro naturezas seguem com o elogio na frente, e desmarcam com um toque", () => {
+    render(<ManifestacaoPage />);
+    fireEvent.click(botao(/Com identificação/));
+    continuar();
+
+    const grupo = screen.getByRole("group", { name: /O que você quer registrar/ });
+    expect(within(grupo).getAllByRole("button").map((b) => b.textContent)).toEqual([
       "Elogio",
       "Reclamação",
       "Sugestão",
       "Informação",
     ]);
+    fireEvent.click(botao("Reclamação"));
+    fireEvent.click(botao("Reclamação"));
+    expect(botao("Reclamação").getAttribute("aria-pressed")).toBe("false");
+    expect(screen.getByText("Não precisa escolher. A Ouvidoria confirma ao ler seu relato.")).toBeTruthy();
   });
 
-  it("deixa enviar sem escolher natureza nenhuma", async () => {
+  it("passo 3 vem com a data de hoje e pede o período e o lugar", async () => {
     render(<ManifestacaoPage />);
-    escrever("Esperei duas horas na recepção.");
-    responderSobreQuem("Sobre mim");
+    fireEvent.click(botao(/Com identificação/));
+    continuar();
+    fireEvent.click(botao("Sobre mim"));
+    continuar();
 
-    const enviar = botaoDeEnviar();
-    expect(enviar.disabled).toBe(false);
+    const data = screen.getByLabelText("Em que dia foi?") as HTMLInputElement;
+    expect(data.value).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    expect(botao("Continuar").disabled).toBe(true);
+    fireEvent.click(botao("Noite"));
+    expect(botao("Continuar").disabled).toBe(true);
+    await escolherLocal("Emergência adulta");
+    expect(botao("Continuar").disabled).toBe(false);
+  });
 
-    fireEvent.click(enviar);
+  it("o quarto só aparece quando o lugar é ala de internação", async () => {
+    render(<ManifestacaoPage />);
+    fireEvent.click(botao(/Com identificação/));
+    continuar();
+    fireEvent.click(botao("Sobre mim"));
+    continuar();
+
+    await escolherLocal("Emergência adulta");
+    expect(screen.queryByLabelText(/Quarto ou leito/)).toBeNull();
+    await escolherLocal("Internação · Ala 2A");
+    expect(screen.getByLabelText(/Quarto ou leito/)).toBeTruthy();
+  });
+
+  it("quem não acha o lugar na lista escolhe Outro lugar do hospital", async () => {
+    render(<ManifestacaoPage />);
+    fireEvent.click(botao(/Com identificação/));
+    continuar();
+    fireEvent.click(botao("Sobre mim"));
+    continuar();
+    fireEvent.click(botao("Manhã"));
+
+    await escolherLocal("Outro lugar do hospital");
+
+    expect(botao("Continuar").disabled).toBe(false);
+  });
+
+  it("passo 4 pede o relato e o que a pessoa espera", async () => {
+    render(<ManifestacaoPage />);
+    fireEvent.click(botao(/Com identificação/));
+    continuar();
+    fireEvent.click(botao("Sobre mim"));
+    continuar();
+    fireEvent.click(botao("Tarde"));
+    await escolherLocal("Emergência adulta");
+    continuar();
+
+    expect(screen.getByText("Quanto mais detalhes, mais rápido conseguimos apurar.")).toBeTruthy();
+    expect(botao("Continuar").disabled).toBe(true);
+    escrever("Seu relato", "Esperei duas horas.");
+    expect(botao("Continuar").disabled).toBe(true);
+    fireEvent.click(botao("Só registrar"));
+    expect(botao("Continuar").disabled).toBe(false);
+  });
+
+  it("envia sem nenhum opcional preenchido", async () => {
+    await ateOContato();
+    escrever("Seu nome", "Maria Souza");
+    escrever("E-mail", "maria@exemplo.com");
+
+    fireEvent.click(botao(/Enviar manifestação/));
 
     await waitFor(() => expect(enviados).toHaveLength(1));
-    expect(enviados[0]).not.toHaveProperty("natureza_informada");
-  });
-
-  it("leva a natureza escolhida no envio", async () => {
-    render(<ManifestacaoPage />);
-    escrever("Fui muito bem atendida na recepção.");
-    responderSobreQuem("Sobre mim");
-
-    fireEvent.click(screen.getByRole("button", { name: "Elogio" }));
-    expect(screen.getByRole("button", { name: "Elogio" }).getAttribute("aria-pressed")).toBe("true");
-
-    fireEvent.click(botaoDeEnviar());
-
-    await waitFor(() => expect(enviados).toHaveLength(1));
-    expect(enviados[0]).toMatchObject({ natureza_informada: "elogio" });
-  });
-
-  it("desmarca a natureza quando a pessoa clica de novo na mesma", async () => {
-    render(<ManifestacaoPage />);
-    escrever("Esperei duas horas na recepção.");
-    responderSobreQuem("Sobre mim");
-
-    fireEvent.click(screen.getByRole("button", { name: "Reclamação" }));
-    fireEvent.click(screen.getByRole("button", { name: "Reclamação" }));
-
-    expect(screen.getByRole("button", { name: "Reclamação" }).getAttribute("aria-pressed")).toBe("false");
-
-    fireEvent.click(botaoDeEnviar());
-
-    await waitFor(() => expect(enviados).toHaveLength(1));
-    expect(enviados[0]).not.toHaveProperty("natureza_informada");
-  });
-
-  it("troca a escolha quando a pessoa clica em outra natureza", async () => {
-    render(<ManifestacaoPage />);
-    escrever("Sugiro senhas por ordem de chegada.");
-    responderSobreQuem("Sobre mim");
-
-    fireEvent.click(screen.getByRole("button", { name: "Reclamação" }));
-    fireEvent.click(screen.getByRole("button", { name: "Sugestão" }));
-
-    expect(screen.getByRole("button", { name: "Reclamação" }).getAttribute("aria-pressed")).toBe("false");
-
-    fireEvent.click(botaoDeEnviar());
-
-    await waitFor(() => expect(enviados).toHaveLength(1));
-    expect(enviados[0]).toMatchObject({ natureza_informada: "sugestao" });
-  });
-
-  it("continua mostrando o protocolo na tela depois do envio", async () => {
-    render(<ManifestacaoPage />);
-    escrever("Fui muito bem atendida na recepção.");
-    responderSobreQuem("Sobre mim");
-
-    fireEvent.click(screen.getByRole("button", { name: "Elogio" }));
-    fireEvent.click(botaoDeEnviar());
-
+    expect(enviados[0]).toMatchObject({
+      anonimo: false,
+      sobre: "mim",
+      periodo: "tarde",
+      local_informado: "Emergência adulta",
+      expectativa: "resposta",
+      nome: "Maria Souza",
+      contato: "maria@exemplo.com",
+    });
+    for (const opcional of ["hora_aprox", "quarto", "profissionais", "paciente_nascimento", "natureza_informada"]) {
+      expect(enviados[0]).not.toHaveProperty(opcional);
+    }
     expect(await screen.findByText("2026-0042")).toBeTruthy();
   });
 });
 
-/**
- * A pergunta de quem é o relato, na tela (issue #666, PRD #659, ADR 0052).
- *
- * A régua do envio tem teste próprio em `lib/ouvidoria/publico.ts`. O que só
- * existe nesta página é a fiação de três estados que um humano olhando a tela
- * pegaria e a suíte não: sem resposta o envio nem sai; "Sobre mim" não pede
- * paciente nenhum; "Sobre outra pessoa" abre os dois campos, e eles CONTINUAM
- * abertos com "anônimo" marcado, que é a decisão 3 do ADR desenhada.
- */
-describe("a pergunta de quem é o relato (issue #666)", () => {
-  function campoDoPaciente() {
-    return screen.queryByLabelText(/Nome do paciente/);
-  }
+describe("o contato de quem se identifica (critério 3)", () => {
+  it("sem telefone nem e-mail, o envio não sai", async () => {
+    await ateOContato();
+    escrever("Seu nome", "Maria Souza");
 
-  function campoDaReferencia() {
-    return screen.queryByLabelText(/Quando ou onde foi o atendimento/);
-  }
-
-  it("oferece as duas respostas, com Sobre mim primeiro", () => {
-    render(<ManifestacaoPage />);
-
-    const botoes = within(
-      screen.getByRole("group", { name: /Este relato é sobre quem/ })
-    ).getAllByRole("button");
-
-    expect(botoes.map((b) => b.textContent)).toEqual(["Sobre mim", "Sobre outra pessoa"]);
+    expect(botao(/Enviar manifestação/).disabled).toBe(true);
+    expect(screen.getByText("Para enviar, deixe seu nome e um telefone ou e-mail.")).toBeTruthy();
   });
 
-  it("sem resposta, o envio fica desabilitado e a tela diz o que falta", () => {
-    render(<ManifestacaoPage />);
-    escrever("Minha mãe esperou duas horas na recepção.");
+  it("só com telefone passa e mostra o aviso de que as respostas saem por e-mail", async () => {
+    await ateOContato();
+    escrever("Seu nome", "Maria Souza");
+    expect(screen.queryByText(/As respostas da Ouvidoria saem por e-mail/)).toBeNull();
 
-    expect(botaoDeEnviar().disabled).toBe(true);
-    // O literal que a pessoa lê, e não a constante: procurar pela constante é
-    // procurar exatamente o que a página acabou de renderizar, e qualquer
-    // reescrita da frase passaria batido.
-    expect(screen.getByText('Responda "Este relato é sobre quem?" para enviar.')).toBeTruthy();
-  });
+    escrever("Telefone", "(21) 99999-0000");
 
-  it("respondida a pergunta, o aviso some e o envio libera", () => {
-    render(<ManifestacaoPage />);
-    escrever("Minha mãe esperou duas horas na recepção.");
-
-    responderSobreQuem("Sobre mim");
-
-    expect(botaoDeEnviar().disabled).toBe(false);
-    expect(screen.queryByText(FALTA_DIZER_SOBRE_QUEM)).toBeNull();
-  });
-
-  it("Sobre mim não mostra campo de paciente nenhum", () => {
-    render(<ManifestacaoPage />);
-    escrever("Esperei duas horas na recepção.");
-
-    responderSobreQuem("Sobre mim");
-
-    expect(campoDoPaciente()).toBeNull();
-    expect(campoDaReferencia()).toBeNull();
-  });
-
-  it("Sobre outra pessoa mostra os dois campos e o aviso de por que preencher", () => {
-    render(<ManifestacaoPage />);
-    escrever("Minha mãe esperou duas horas na recepção.");
-
-    responderSobreQuem("Sobre outra pessoa");
-
-    expect(campoDoPaciente()).toBeTruthy();
-    expect(campoDaReferencia()).toBeTruthy();
     expect(
-      screen.getByText("Sem o nome do paciente, o hospital não consegue achar o atendimento.")
+      screen.getByText(
+        "As respostas da Ouvidoria saem por e-mail. Só com o telefone, você não recebe o aviso de que a manifestação chegou nem a resposta final."
+      )
+    ).toBeTruthy();
+    fireEvent.click(botao(/Enviar manifestação/));
+    await waitFor(() => expect(enviados).toHaveLength(1));
+    expect(enviados[0]).toMatchObject({ telefone: "(21) 99999-0000" });
+    expect(enviados[0]).not.toHaveProperty("contato");
+  });
+
+  it("o anônimo envia sem contato, sabendo que o protocolo é o que fica", async () => {
+    await ateOContato({ identificacao: "Anônimo" });
+
+    expect(screen.queryByLabelText("Seu nome")).toBeNull();
+    expect(screen.getByText("Guarde o número do protocolo que vai aparecer na próxima tela.")).toBeTruthy();
+    fireEvent.click(botao(/Enviar manifestação/));
+    await waitFor(() => expect(enviados).toHaveLength(1));
+    expect(enviados[0]).toMatchObject({ anonimo: true });
+    expect(enviados[0]).not.toHaveProperty("nome");
+  });
+
+  it("o último passo diz para que servem os dados", async () => {
+    await ateOContato();
+
+    expect(
+      screen.getByText("Seus dados são usados apenas para tratar sua manifestação, conforme a LGPD.")
     ).toBeTruthy();
   });
+});
 
-  it("os campos do paciente continuam na tela com anônimo marcado, e o aviso cresce", () => {
-    // O anonimato protege quem fala; o paciente é outra pessoa (decisão 3). E
-    // quem se protege lê que o nome do paciente pode entregá-lo.
+describe("o paciente atendido no passo 4", () => {
+  async function ateOPasso4(identificacao: string, sobre: string) {
     render(<ManifestacaoPage />);
-    escrever("Minha mãe esperou duas horas na recepção.");
-    responderSobreQuem("Sobre outra pessoa");
+    fireEvent.click(botao(new RegExp(identificacao)));
+    continuar();
+    fireEvent.click(botao(sobre));
+    continuar();
+    fireEvent.click(botao("Tarde"));
+    await escolherLocal("Emergência adulta");
+    continuar();
+  }
 
-    fireEvent.click(screen.getByRole("checkbox"));
+  it("sobre outra pessoa pede nome e nascimento do paciente, também no anônimo", async () => {
+    await ateOPasso4("Anônimo", "Sobre outra pessoa");
 
-    expect(campoDoPaciente()).toBeTruthy();
-    expect(campoDaReferencia()).toBeTruthy();
+    expect(screen.getByLabelText(/Nome do paciente/)).toBeTruthy();
+    expect(screen.getByLabelText(/Data de nascimento do paciente/)).toBeTruthy();
     expect(
       screen.getByText(
         "Sem o nome do paciente, o hospital não consegue achar o atendimento. " +
           "O nome do paciente e a referência do atendimento podem indicar quem manifestou."
       )
     ).toBeTruthy();
-    // A identificação de quem fala, essa some: são duas pessoas diferentes.
-    expect(screen.queryByLabelText(/Seu nome/)).toBeNull();
   });
 
-  it("leva a resposta e os dois campos do paciente no envio", async () => {
-    render(<ManifestacaoPage />);
-    escrever("Minha mãe esperou duas horas na recepção.");
-    responderSobreQuem("Sobre outra pessoa");
+  it("quem se identifica e fala de si informa só a própria data de nascimento", async () => {
+    await ateOPasso4("Com identificação", "Sobre mim");
 
-    fireEvent.change(screen.getByLabelText(/Nome do paciente/), {
-      target: { value: "Maria Souza" },
-    });
-    fireEvent.change(screen.getByLabelText(/Quando ou onde foi o atendimento/), {
-      target: { value: "Leito 12, dia 9" },
-    });
-    fireEvent.click(botaoDeEnviar());
-
-    await waitFor(() => expect(enviados).toHaveLength(1));
-    expect(enviados[0]).toMatchObject({
-      sobre: "outra_pessoa",
-      paciente_nome: "Maria Souza",
-      paciente_referencia: "Leito 12, dia 9",
-    });
+    expect(screen.queryByLabelText(/Nome do paciente/)).toBeNull();
+    expect(screen.getByLabelText(/Sua data de nascimento/)).toBeTruthy();
   });
 
-  it("o envio anônimo leva o paciente e não leva quem falou", async () => {
-    render(<ManifestacaoPage />);
-    escrever("Minha mãe esperou duas horas na recepção.");
-    responderSobreQuem("Sobre outra pessoa");
-    fireEvent.change(screen.getByLabelText(/Nome do paciente/), {
-      target: { value: "Maria Souza" },
-    });
-    fireEvent.click(screen.getByRole("checkbox"));
+  it("o anônimo que fala de si não vê campo de paciente nenhum", async () => {
+    await ateOPasso4("Anônimo", "Sobre mim");
 
-    fireEvent.click(botaoDeEnviar());
-
-    await waitFor(() => expect(enviados).toHaveLength(1));
-    expect(enviados[0]).toMatchObject({ anonimo: true, paciente_nome: "Maria Souza" });
-    expect(enviados[0]).not.toHaveProperty("nome");
+    expect(screen.queryByLabelText(/Nome do paciente/)).toBeNull();
+    expect(screen.queryByLabelText(/data de nascimento/i)).toBeNull();
   });
 
-  it("trocar a resposta para Sobre mim não leva o paciente que já tinha sido digitado", async () => {
-    render(<ManifestacaoPage />);
-    escrever("Esperei duas horas na recepção.");
-    responderSobreQuem("Sobre outra pessoa");
-    fireEvent.change(screen.getByLabelText(/Nome do paciente/), {
-      target: { value: "Maria Souza" },
-    });
+  it("Não sei apaga e trava o campo dos profissionais", async () => {
+    await ateOPasso4("Com identificação", "Sobre mim");
+    escrever(/Profissionais envolvidos/, "Doutor Fulano");
 
-    responderSobreQuem("Sobre mim");
-    fireEvent.click(botaoDeEnviar());
+    fireEvent.click(screen.getByRole("checkbox", { name: "Não sei" }));
 
-    await waitFor(() => expect(enviados).toHaveLength(1));
-    expect(enviados[0]).toMatchObject({ sobre: "mim" });
-    expect(enviados[0]).not.toHaveProperty("paciente_nome");
-  });
-
-  it("clicar de novo na resposta já marcada não desfaz a escolha", () => {
-    // Ao contrário da natureza, que é opcional e desmarcável: esta resposta é
-    // obrigatória, e voltar ao nada só travaria o envio sem a pessoa entender.
-    render(<ManifestacaoPage />);
-    escrever("Esperei duas horas na recepção.");
-
-    responderSobreQuem("Sobre mim");
-    responderSobreQuem("Sobre mim");
-
-    expect(screen.getByRole("button", { name: "Sobre mim" }).getAttribute("aria-pressed")).toBe(
-      "true"
-    );
-    expect(botaoDeEnviar().disabled).toBe(false);
+    const campo = screen.getByLabelText(/Profissionais envolvidos/) as HTMLInputElement;
+    expect(campo.disabled).toBe(true);
+    expect(campo.value).toBe("");
   });
 });
 
-/**
- * O que a tela diz quando o servidor recusa o envio (issue #666).
- *
- * `sobre` é obrigatório no backend, então uma aba aberta antes do deploy manda
- * um payload que o servidor novo recusa com 422. O bundle do Next é hasheado e
- * a aba segue no código velho até recarregar, e o caso de uso desta página é
- * alguém parado na frente do cartaz escrevendo devagar. A mensagem não pode
- * culpar o relato: num canal sem login e sem segunda porta, mandar reescrever é
- * mandar repetir o que nunca vai passar.
- */
-describe("a recusa do envio na tela do formulário (issue #666)", () => {
-  function responderCom(status: number) {
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(async () => ({ ok: false, status, json: async () => ({}) }) as Response)
-    );
-  }
-
-  async function enviar() {
+describe("Voltar não perde o que foi preenchido", () => {
+  it("volta ao passo anterior com as respostas no lugar", async () => {
     render(<ManifestacaoPage />);
-    escrever("Minha mãe esperou duas horas na recepção.");
-    responderSobreQuem("Sobre mim");
-    fireEvent.click(botaoDeEnviar());
-  }
+    fireEvent.click(botao(/Com identificação/));
+    continuar();
+    fireEvent.click(botao("Sobre outra pessoa"));
+    fireEvent.click(botao("Elogio"));
+    continuar();
+    fireEvent.click(botao("Noite"));
 
-  it("o 422 pede para recarregar, e nunca para reescrever o relato", async () => {
-    responderCom(422);
+    voltar();
 
-    await enviar();
+    expect(screen.getByText("Passo 2 de 5")).toBeTruthy();
+    expect(botao("Sobre outra pessoa").getAttribute("aria-pressed")).toBe("true");
+    expect(botao("Elogio").getAttribute("aria-pressed")).toBe("true");
+    continuar();
+    expect(botao("Noite").getAttribute("aria-pressed")).toBe("true");
+  });
+
+  it("a barra de progresso acompanha o passo", () => {
+    render(<ManifestacaoPage />);
+    expect(screen.getByRole("progressbar").getAttribute("aria-valuenow")).toBe("1");
+
+    fireEvent.click(botao(/Anônimo/));
+    continuar();
+
+    expect(screen.getByRole("progressbar").getAttribute("aria-valuenow")).toBe("2");
+  });
+});
+
+describe("funciona a 375 px (critério 7, regra T4)", () => {
+  it("os dois cards ficam um embaixo do outro no celular e lado a lado da tela pequena para cima", () => {
+    render(<ManifestacaoPage />);
+
+    const grade = botao(/Com identificação/).parentElement!;
+    expect(grade.className).toContain("grid-cols-1");
+    expect(grade.className).toContain("sm:grid-cols-2");
+    expect(grade.contains(botao(/Anônimo/))).toBe(true);
+  });
+
+  it("todo botão do passo a passo tem alvo de toque de 44 px", async () => {
+    await ateOContato();
+
+    for (const nome of ["Voltar", /Enviar manifestação/]) {
+      expect(botao(nome).className).toContain("min-h-[44px]");
+    }
+    voltar();
+    for (const nome of ["Uma resposta", "Uma providência", "Só registrar"]) {
+      expect(botao(nome).className).toContain("min-h-[44px]");
+    }
+  });
+
+  it("nada abre corredor lateral nem fixa largura maior que a tela", () => {
+    const { container } = render(<ManifestacaoPage />);
+
+    for (const no of container.querySelectorAll("*")) {
+      const classe = no.className.toString();
+      expect(classe).not.toContain("overflow-x-auto");
+      expect(classe).not.toMatch(/\bw-\[\d+px\]/);
+      expect(classe).not.toMatch(/\bmin-w-\[\d+px\]/);
+    }
+  });
+});
+
+describe("as recusas do servidor continuam sem culpar o relato (issue #666)", () => {
+  it("o 422 pede para recarregar, e o relato continua no passo 4 para copiar", async () => {
+    servidor({ status: 422 });
+    await ateOContato();
+    escrever("Seu nome", "Maria Souza");
+    escrever("E-mail", "maria@exemplo.com");
+
+    fireEvent.click(botao(/Enviar manifestação/));
 
     expect(
       await screen.findByText(
@@ -361,42 +429,22 @@ describe("a recusa do envio na tela do formulário (issue #666)", () => {
           "Copie o que você escreveu, recarregue a página e envie de novo."
       )
     ).toBeTruthy();
-    expect(screen.queryByText(/Reescreva o relato/)).toBeNull();
+    voltar();
+    expect((screen.getByLabelText("Seu relato") as HTMLTextAreaElement).value).toBe(
+      "Esperei duas horas na emergência."
+    );
   });
 
-  it("o 400 tem mensagem própria, e também não culpa o relato", async () => {
-    responderCom(400);
+  it("o 400 tem mensagem própria", async () => {
+    servidor({ status: 400 });
+    await ateOContato({ identificacao: "Anônimo" });
 
-    await enviar();
+    fireEvent.click(botao(/Enviar manifestação/));
 
     expect(
       await screen.findByText(
         "Não foi possível registrar sua manifestação. Recarregue a página e tente de novo."
       )
     ).toBeTruthy();
-    expect(screen.queryByText(/Reescreva o relato/)).toBeNull();
-  });
-
-  it("o texto do relato continua na tela depois da recusa", async () => {
-    // A pessoa precisa conseguir copiar o que escreveu antes de recarregar, que
-    // é o que a mensagem manda fazer.
-    responderCom(422);
-
-    await enviar();
-
-    await screen.findByText(/Copie o que você escreveu/);
-    expect((screen.getByLabelText("O que aconteceu?") as HTMLTextAreaElement).value).toBe(
-      "Minha mãe esperou duas horas na recepção."
-    );
-  });
-});
-
-describe("caixa alta no formulário público (ADR 0080)", () => {
-  it("a frase do anonimato, dentro do rótulo, fica com maiúscula e minúscula", () => {
-    render(<ManifestacaoPage />);
-
-    const frase = screen.getByText("Quero registrar de forma anônima.");
-    expect(frase.closest("label")).not.toBeNull();
-    expect(apareceComoFoiEscrito(frase)).toBe(true);
   });
 });
