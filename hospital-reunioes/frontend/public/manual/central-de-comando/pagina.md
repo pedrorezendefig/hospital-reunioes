@@ -27,15 +27,15 @@ A barra branca acima dos números diz de quando eles são. Os números do site e
 2. Escolha o período no alto, à direita.
 3. Em **Movimento do site**, a linha azul mostra os Visitantes de cada dia do período escolhido. A linha cinza tracejada, atrás, é o período anterior, para comparar. Passe o mouse sobre um dia para ver o número exato e a diferença para o dia correspondente do período anterior.
 
-![O gráfico do Movimento do site](movimento-do-site.png)
+   ![O gráfico do Movimento do site](movimento-do-site.png)
 
 4. Em **Áreas do site**, veja as cinco partes do site que mais recebem Visitas, como Maternidade e Emergência 24h. A seta mostra se cada uma subiu ou caiu. O número conta Visitas às páginas do site e não mede quanto o serviço é procurado no hospital.
 
-![O ranking das Áreas do site](areas-do-site.png)
+   ![O ranking das Áreas do site](areas-do-site.png)
 
 5. Em **Origem do público**, cada barra mostra de onde veio quem chegou ao site: pela busca do Google, digitando o endereço, pelas redes sociais ou por outro site. O que o Google não sabe dizer aparece como **Não identificado**.
 
-![As barras da Origem do público](origem-do-publico.png)
+   ![As barras da Origem do público](origem-do-publico.png)
 
 6. Em **Por dispositivo**, veja quanto do público usa celular, computador ou tablet.
 7. Em **Contatos gerados**, veja quantas vezes alguém clicou no site para falar com o hospital, canal por canal. Cada canal diz se é **medido**, se está **em construção** (o site ainda não avisa quando o clique acontece) ou se **não é medido**.
@@ -48,7 +48,7 @@ A barra branca acima dos números diz de quando eles são. Os números do site e
 2. Escolha **7 dias** ou **28 dias**. O Instagram não entrega mais de 30 dias por consulta, por isso não há 90 dias aqui.
 3. Leia os três cartões do alto. **Seguidores** é o total de hoje, com quantos chegaram menos quantos saíram no período. **Alcance** é quantas pessoas diferentes viram o conteúdo. **Visualizações** é quantas vezes o conteúdo foi visto, contando a mesma pessoa mais de uma vez.
 
-![Os números do Instagram](instagram-numeros.png)
+   ![Os números do Instagram](instagram-numeros.png)
 
 4. No bloco de engajamento, **Interações** soma curtidas, comentários, salvamentos e compartilhamentos. Ao lado, as contas que engajaram dizem quantas pessoas fizeram isso.
 5. Em **Principais publicações**, veja as publicações do período com mais Interações. Clique numa delas para abrir no Instagram.
@@ -60,7 +60,7 @@ A barra branca acima dos números diz de quando eles são. Os números do site e
 1. Na seção **Central de Comando** do menu, clique em **Objetivos**.
 2. Clique no cartão **Melhorar a nota no Google**.
 
-![A galeria dos Objetivos](objetivos.png)
+   ![A galeria dos Objetivos](objetivos.png)
 
 3. Leia os três cartões. **Nota no Google** é a nota de hoje, com o total de avaliações. **Avaliações novas no mês** é quantas chegaram desde a primeira leitura do mês. **Tendência** diz se a nota melhorou, piorou ou ficou igual frente ao fim do mês anterior.
 4. Abaixo, os dois gráficos do mês mostram cada leitura da nota e do total de avaliações. A linha cinza tracejada é o mês anterior, dia a dia.

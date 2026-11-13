@@ -8,8 +8,10 @@
  * onde vem cada número.
  */
 
+import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 
+import { MarkdownDoManual } from "@/components/manual/MarkdownDoManual";
 import type { CurrentParticipante } from "@/hooks/useCurrentParticipante";
 import { lerFluxograma, type Fluxo } from "@/components/manual/fluxograma/fluxo";
 import { carregarPaginasDoManual } from "./carregar";
@@ -97,6 +99,23 @@ describe("a página de Central de Comando do manual", () => {
     const passos = secao!.texto.match(/^\d+\. /gm) ?? [];
     expect(passos.slice(0, 2)).toEqual(["1. ", "2. "]);
     expect(imagensCitadas(secao!.texto).length).toBeGreaterThan(0);
+  });
+
+  it.each([
+    ["Ver o panorama na Visão Geral"],
+    ["Ler os números do site"],
+    ["Ler os números do Instagram"],
+    ["Acompanhar a nota no Google"],
+    ["Seguir um Objetivo"],
+  ])("a tarefa %s sai na tela como uma lista só, numerada em sequência", (tarefa) => {
+    const secao = secoes(CENTRAL!.corpo).find((s) => s.titulo === tarefa)!;
+    const numeros = (secao.texto.match(/^\d+(?=\. )/gm) ?? []).map(Number);
+    expect(numeros).toEqual(numeros.map((_, i) => i + 1));
+    // O `ol` do manual não repassa o `start`: um print fora do item fecha a
+    // lista e a próxima recomeça em 1 na tela. Uma lista só, com todos os passos.
+    const html = renderToStaticMarkup(MarkdownDoManual({ pasta: "central-de-comando", children: secao.texto }));
+    expect(html.match(/<ol[ >]/g) ?? []).toHaveLength(1);
+    expect(html.match(/<li[ >]/g) ?? []).toHaveLength(numeros.length);
   });
 });
 
