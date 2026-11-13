@@ -49,6 +49,7 @@ from app.routers import (
 from app.routers.admin import central_de_comando as admin_central_de_comando
 from app.routers.admin import dados_atendimento as admin_dados_atendimento
 from app.routers.admin import espelho_global_health as admin_espelho_global_health
+from app.routers.admin import manual as admin_manual
 from app.routers.admin import super_admins as admin_super_admins
 from app.routers.admin import taxonomia as admin_taxonomia
 from app.routers.admin import tecnologia as admin_tecnologia
@@ -158,6 +159,8 @@ app.include_router(admin_taxonomia.router, prefix=settings.api_prefix)
 app.include_router(admin_tecnologia.router, prefix=settings.api_prefix)
 app.include_router(admin_dados_atendimento.router, prefix=settings.api_prefix)
 app.include_router(admin_espelho_global_health.router, prefix=settings.api_prefix)
+# A aba Ana do manual (ADR 0094, decisão 3): só Super admin, gate na rota.
+app.include_router(admin_manual.router, prefix=settings.api_prefix)
 # Central de Comando (ADR 0058): só Super admin, gate no próprio router.
 app.include_router(admin_central_de_comando.router, prefix=settings.api_prefix)
 # Conector MCP da Central (ADR 0058, decisões 3 e 4): FORA do gate de sessão do

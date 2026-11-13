@@ -337,6 +337,24 @@ def ler_do_repositorio(caminho: str) -> str | list[str]:
         raise GithubIndisponivelError("O arquivo nao e texto") from exc
 
 
+def ler_arquivo(caminho: str, *, projeto: str) -> bytes:
+    """Os bytes de um arquivo da branch principal do repositorio do Projeto.
+
+    So GET, pela API de conteudo sem `ref` (a branch padrao do repositorio).
+    Serve o Retrato da Ana ao manual (issue #1720, ADR 0094, decisao 3): quem
+    chama ja escolheu o caminho, e o guarda dele mora na rota. Binario (fonte,
+    imagem) volta como esta. Arquivo acima de 1 MB vem sem conteudo pela API,
+    e isso e indisponibilidade, nao arquivo vazio.
+    """
+    dados = _chamar("GET", f"/contents/{quote(caminho)}", projeto=projeto)
+    if not isinstance(dados, dict) or dados.get("encoding") != "base64" or not isinstance(dados.get("content"), str):
+        raise GithubIndisponivelError("GitHub respondeu o arquivo fora do formato")
+    try:
+        return base64.b64decode(dados["content"])
+    except (ValueError, binascii.Error) as exc:
+        raise GithubIndisponivelError("O conteudo do arquivo nao e base64") from exc
+
+
 # A primeira pagina da busca basta para o agente escolher o que abrir.
 _RESULTADOS_DA_BUSCA = 20
 
