@@ -2,6 +2,99 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-11-13T14:09:38-03:00",
+      "sha": "40e0f8a1fc33d3512c97beb8cefafab497f84a4d",
+      "app_version": "0.285.0",
+      "subject": "Onda entregas-onda1: PRD fica Em desenvolvimento até a última parte; Data de criação da issue-raiz na foto e na carga do histórico; Entregas com pedidos e entregas das últimas 4 semanas e gráfico de 1",
+      "raw_subject": "chore(deploy): registro da onda entregas-onda1 (#1731 #1733 #1738)",
+      "scope": [
+        "backend",
+        "frontend"
+      ],
+      "prds": [
+        1689
+      ],
+      "result": "healthy",
+      "duration_seconds": 1355,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        },
+        {
+          "service": "frontend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "onda-enxuta entregas-onda1: PR #1731 (issue #1700), PR #1733 (issue #1702), PR #1738 (issue #1701), mergeados PR a PR. Merge pela API do GitHub, um build. Registro pela Action pos-merge depois do health.",
+      "etapas": {
+        "merge_s": 9,
+        "build_s": {
+          "backend": 17,
+          "frontend": 192
+        },
+        "health_s": 0
+      },
+      "responsavel": "pedrorezendefig"
+    },
+    {
+      "at": "2026-11-13T14:00:06-03:00",
+      "sha": "24d8d177c681abfb240a22f803372c253d21c3aa",
+      "app_version": "0.284.0",
+      "subject": "Onda manual-onda2: A página de Reuniões e Pendências; A página de POPs; A página de Ouvidoria",
+      "raw_subject": "chore(deploy): registro da onda manual-onda2 (#1742 #1740 #1741)",
+      "scope": [
+        "frontend"
+      ],
+      "prds": [
+        1711
+      ],
+      "result": "healthy",
+      "duration_seconds": 570,
+      "services_touched": [
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        },
+        {
+          "service": "frontend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "onda-enxuta manual-onda2: PR #1742 (issue #1721), PR #1740 (issue #1722), PR #1741 (issue #1723), mergeados PR a PR. Merge pela API do GitHub, um build. Registro pela Action pos-merge depois do health.",
+      "etapas": {
+        "merge_s": 9,
+        "build_s": {
+          "frontend": 155
+        },
+        "health_s": 1
+      },
+      "responsavel": "pedrorezendefig"
+    },
+    {
       "at": "2026-11-13T13:52:53-03:00",
       "sha": "8c0b9cba0c711adfe47b856656a2baa60802d50d",
       "app_version": "0.283.0",

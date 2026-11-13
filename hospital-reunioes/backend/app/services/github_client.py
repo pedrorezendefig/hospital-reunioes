@@ -587,6 +587,10 @@ def _primeiro_assignee(dados: dict[str, Any]) -> str | None:
 # A chave do link da Demonstracao na foto (issue #1559).
 FATO_DEMONSTRACAO = "demonstracao"
 
+# A chave da data de criacao da issue-raiz na foto (issue #1702, PRD #1689):
+# o pedido da Origem Vitta conta na semana em que a issue nasceu.
+FATO_CRIADA_EM = "criada_em"
+
 # O marcador da Demonstracao no corpo da issue-raiz (issue #1559):
 # `<!-- demonstracao: https://... -->`. O link e um token so, sem espaco.
 _MARCADOR_DA_DEMONSTRACAO = re.compile(r"<!--\s*demonstracao:\s*(\S+)\s*-->", re.IGNORECASE)
@@ -646,6 +650,11 @@ def montar_foto(dados: dict[str, Any], partes: list[dict[str, Any]]) -> dict[str
     demonstracao = demonstracao_do_corpo(dados.get("body"))
     if demonstracao is not None:
         foto[FATO_DEMONSTRACAO] = demonstracao
+
+    # A data de criacao da raiz (issue #1702), gravada em toda leitura. So da
+    # raiz: o pedido e o card, e a parte nao conta como pedido.
+    if dados.get("created_at"):
+        foto[FATO_CRIADA_EM] = dados["created_at"]
 
     resumo = dados.get("sub_issues_summary")
     if isinstance(resumo, dict) and isinstance(resumo.get("total"), int):

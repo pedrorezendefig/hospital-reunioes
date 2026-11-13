@@ -9,24 +9,35 @@ O formato está em `docs/estado-da-onda.md` do PedroOS. Um arquivo por onda:
 
 Uso (sempre da raiz do repositório do Projeto, que tem o `.claude/fluxo.json`):
     estado_onda.py iniciar --sessao onda-a --onda 1 [--prd 12] [--issues 40 41] [--attach <id>]
+                           [--descricao-valor "o que a Onda entrega, numa frase"]
     estado_onda.py issue   --sessao onda-a --onda 1 --numero 40 [--pr 77] [--status verde]
     estado_onda.py evento  --sessao onda-a --onda 1 --tipo erro --texto "..." [--pr 77]
     estado_onda.py fim     --sessao onda-a --onda 1 [--proxima 2 | --ultima] [--retro "dispensável"]
     estado_onda.py resolvido --sessao onda-a --onda 1 --texto "migration 124 aplicada"
     estado_onda.py mergeadas --issues 40 41 [--texto "subida onda-a-onda2b"]
+    estado_onda.py retro   --sessao onda-a --onda 1 [--candidata 1 "check do semáforo" ...]
+    estado_onda.py retro-dispensada --sessao onda-a --onda 1
     estado_onda.py ler     --sessao onda-a --onda 1
 
-`evento` de tipo `erro` ou `pronto-para-voce`, novo e com `aviso_celular` ligado no
+`evento` de tipo `erro`, `pronto-para-voce` ou `revert`, novo e com `aviso_celular` ligado no
 fluxo.json, imprime uma linha `push: <mensagem>`. A sessão manda essa linha, literal,
 pelo `PushNotification`. A mensagem termina com o comando para entrar na sessão
 (`claude attach <nome>`). Evento repetido (mesmo tipo, texto e PR) não entra de novo
-nem gera `push:`.
+nem gera `push:`. O `revert` (a subida desfez o merge que quebrou o teste da main, issue
+#327) não muda o estado da onda: a main voltou ao verde.
 
 `resolvido` tira o "espera você" (e o "quebrou") quando a pendência acabou: a onda volta
 para `terminada` (já teve `fim`) ou `rodando`, com o evento `resolvido`. Enquanto alguma
 issue da onda segue em `baixa`, o estado continua `pronto-para-voce`. Sem nada pendente,
 não muda nada. `mergeadas` é o que o `fechar_onda.py` chama depois do merge: em todas as
 ondas do Projeto, a issue do lote que estava em `baixa` vira `mergeado` e a onda é resolvida.
+
+`--descricao-valor` grava a Descrição de valor da Onda no campo `descricao_valor` (no `iniciar` novo
+ou na retomada); sem ela, o arquivo não ganha o campo.
+
+`retro` grava a Retro feita, com as Candidatas aceitas (número na Retro e título curto; nenhuma
+também vale), e `retro-dispensada` grava a dispensa. Os dois escrevem o `registro_retro` e, rodados
+de novo, substituem o que estava lá.
 
 Saída 0, ou 2 com o motivo no stderr.
 """
@@ -49,8 +60,8 @@ import fluxo as config_do_fluxo  # noqa: E402
 
 CONTRATO = 1
 ESTADOS = ("rodando", "pronto-para-voce", "erro", "terminada")
-TIPOS = ("checkpoint", "pr-pronto", "erro", "pronto-para-voce", "terminada")
-NO_CELULAR = ("erro", "pronto-para-voce")
+TIPOS = ("checkpoint", "pr-pronto", "erro", "pronto-para-voce", "terminada", "revert")
+NO_CELULAR = ("erro", "pronto-para-voce", "revert")
 PENDENTES = ("pronto-para-voce", "erro")
 STATUS_DA_ISSUE = ("fila", "implementando", "revisao", "correcao", "verde", "baixa", "mergeado")
 NOME_VALIDO = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,80}$")
@@ -142,6 +153,7 @@ def novo_estado(cfg: dict, base: Path, sessao: str, onda: int, prd: int | None, 
         "issues": [{"numero": n, "pr": None, "status": "fila"} for n in issues],
         "eventos": [],
         "retro": None,
+        "registro_retro": None,
         "proxima": None,
     }
 
@@ -215,6 +227,7 @@ def main(argv: list[str]) -> int:
     p.add_argument("--prd", type=int)
     p.add_argument("--issues", type=int, nargs="*", default=[])
     p.add_argument("--attach", help="id ou nome que o `claude attach` usa (padrão: <sessao>-onda<N>)")
+    p.add_argument("--descricao-valor", help="a Descrição de valor da Onda: o que ela entrega, numa frase")
     p = sub.add_parser("issue", parents=[comuns])
     p.add_argument("--numero", type=int, required=True)
     p.add_argument("--pr", type=int)
@@ -229,6 +242,10 @@ def main(argv: list[str]) -> int:
     seguinte.add_argument("--proxima", type=int, help="número da onda seguinte, já lançada")
     seguinte.add_argument("--ultima", action="store_true", help="fila vazia: não há onda seguinte")
     sub.add_parser("ler", parents=[comuns])
+    p = sub.add_parser("retro", parents=[comuns])
+    p.add_argument("--candidata", nargs=2, action="append", default=[], metavar=("NUMERO", "TITULO"),
+                   help="Candidata aceita: o número dela na Retro e o título curto (repita para cada uma)")
+    sub.add_parser("retro-dispensada", parents=[comuns])
     p = sub.add_parser("resolvido", parents=[comuns])
     p.add_argument("--texto", required=True, help="o que resolveu, numa frase")
     p = sub.add_parser("mergeadas")
@@ -254,6 +271,8 @@ def main(argv: list[str]) -> int:
                     estado["attach"] = f"claude attach {args.attach}"
             else:
                 estado = novo_estado(cfg, base, args.sessao, args.onda, args.prd, args.issues, args.attach)
+            if args.descricao_valor:
+                estado["descricao_valor"] = args.descricao_valor
             gravar(arq, estado)
             print(arq)
             return 0
@@ -261,6 +280,16 @@ def main(argv: list[str]) -> int:
         if args.cmd == "resolvido":
             if resolver(estado, args.texto):
                 gravar(arq, estado)
+            return 0
+        if args.cmd in ("retro", "retro-dispensada"):
+            feita = args.cmd == "retro"
+            try:
+                candidatas = [{"numero": int(n), "titulo": t} for n, t in (args.candidata if feita else [])]
+            except ValueError:
+                raise config_do_fluxo.Erro("o número da Candidata precisa ser inteiro")
+            estado["registro_retro"] = {"tipo": "feita" if feita else "dispensada", "em": agora(),
+                                        "candidatas": candidatas}
+            gravar(arq, estado)
             return 0
         if args.cmd == "ler":
             print(json.dumps(estado, ensure_ascii=False, indent=2))

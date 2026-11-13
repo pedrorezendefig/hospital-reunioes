@@ -113,12 +113,53 @@ class DesenvolvedorResponse(BaseModel):
 # ─── As Entregas (issue #1556, ADR 0084, decisao 8) ────────────────────────
 
 
-class PeriodoDasEntregasResponse(BaseModel):
-    """Quantos cards foram entregues num periodo: a semana pela segunda-feira,
-    ou o mes pelo dia 1, no formato AAAA-MM-DD."""
+class PedidosDoTopoResponse(BaseModel):
+    """Os pedidos das ultimas 4 semanas, contando a corrente (`total`), os das
+    4 anteriores e a composicao do `total` (issue #1701, ADR 0092)."""
+
+    total: int
+    anteriores: int
+    bugs: int
+    melhorias: int
+
+
+class EntregasDoTopoResponse(BaseModel):
+    """As entregas das ultimas 4 semanas (`total`), as das 4 anteriores e o
+    `total` pelo Tamanho da entrega (issue #1701, ADR 0092, decisao 3)."""
+
+    total: int
+    anteriores: int
+    g: int
+    m: int
+    p: int
+
+
+class TopoDasEntregasResponse(BaseModel):
+    """Os dois numeros do alto da aba Entregas."""
+
+    pedidos: PedidosDoTopoResponse
+    entregas: EntregasDoTopoResponse
+
+
+class EntregaDaSemanaResponse(BaseModel):
+    """O que saiu numa semana, como a previa do grafico mostra: o titulo e o
+    Tamanho da entrega. Sem numero de issue."""
+
+    titulo: str
+    tamanho: Literal["P", "M", "G"]
+
+
+class SemanaDasEntregasResponse(BaseModel):
+    """Uma das 12 semanas do grafico: a segunda-feira (AAAA-MM-DD, fuso do
+    hospital), os pedidos que nasceram nela e as entregas por tamanho, com o
+    que saiu, o mais novo primeiro."""
 
     inicio: str
-    total: int
+    pedidos: int
+    g: int
+    m: int
+    p: int
+    entregas: list[EntregaDaSemanaResponse]
 
 
 class ResponsavelDasEntregasResponse(BaseModel):
@@ -130,12 +171,12 @@ class ResponsavelDasEntregasResponse(BaseModel):
 
 
 class EntregasResponse(BaseModel):
-    """A aba Entregas: a contagem por periodo e os cards entregues, do mais
-    recente para o mais antigo, no mesmo formato da lista do chat, para o clique
-    abrir o Documento do card."""
+    """A aba Entregas: o ritmo (o topo e as 12 semanas, issue #1701) e os cards
+    entregues, do mais recente para o mais antigo, no mesmo formato da lista do
+    chat, para o clique abrir o Documento do card."""
 
-    agrupar: Literal["semana", "mes"]
-    periodos: list[PeriodoDasEntregasResponse]
+    topo: TopoDasEntregasResponse
+    semanas: list[SemanaDasEntregasResponse]
     entregas: list[DemandaResponse]
     responsaveis: list[ResponsavelDasEntregasResponse]
 

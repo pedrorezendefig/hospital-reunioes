@@ -23,7 +23,7 @@ O orquestrador informa o número da issue (e do PRD, se houver). Leia a issue (`
 7. Termine. Não espere o CI, não leia o resultado, não comente no PR além do corpo.
 
 ## Regras de segurança
-Proibido `git checkout --`, `git reset --hard`, `git stash drop`, `git push --force` e qualquer comando destrutivo fora dos arquivos da própria issue. Conflito de rebase: chame a Skill tool com `resolver-conflitos`. Nada de travessão nem meia-risca em texto visível ao usuário. Não invoque `/code-review` nem `/security-review`.
+Proibido `git checkout --`, `git reset --hard`, `git stash drop`, `git push --force` e qualquer comando destrutivo fora dos arquivos da própria issue. Conflito de rebase: chame a Skill tool com `resolver-conflitos`. Nada de travessão nem meia-risca em texto visível ao usuário. Não invoque `/code-review` nem `/security-review`. O worktree isolado recusa git em comando composto: rode cada git num comando sozinho, sem `cd ..`, `git -C`, heredoc nem `&&` na mesma linha, e escreva arquivo (corpo de PR incluído) pelo Write.
 
 ## Relatório final (máximo 12 linhas)
 `issue`, `pr` (número e URL), `branch`, `commits`, `testes` (quantos, arquivo), `migration` (número ou nenhuma), `atritos` (uma linha), `spec x diff: ok`. Nada além disso.

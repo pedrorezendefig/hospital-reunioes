@@ -30,6 +30,8 @@ TEXTO_PARA_FORA = {
     # O bloco do leitor leigo da issue da porta B, que o card mostra a quem pediu.
     "grill-with-docs",
     "triage",
+    # A Descrição de valor da Onda, que o PedroOS mostra a quem não é dev.
+    "onda-enxuta",
 }
 
 

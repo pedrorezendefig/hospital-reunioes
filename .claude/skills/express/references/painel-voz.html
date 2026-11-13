@@ -1,0 +1,378 @@
+<title>Painel do grill com voz</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Newsreader:opsz,wght@6..72,500;6..72,600&family=Public+Sans:wght@400;500;600&display=swap">
+<style>
+/* Layout: uma coluna para o celular. Cabeçalho fixo com o placar; um cartão por Pacote de perguntas (play da Fala, Sim ou Não, perguntas recolhidas); rodapé com o botão final. */
+:root {
+  --bg: #f7f6f2;
+  --surface: #ffffff;
+  --fg: #1d1f1b;
+  --muted: #5f635a;
+  --line: #d9d8cf;
+  --accent: #1f5f4a;
+  --accent-soft: #e3efe8;
+  --on-accent: #ffffff;
+  --warn: #8a5a0b;
+  --warn-soft: #f6ead2;
+  --no: #8f2f2a;
+  --no-soft: #f4dedb;
+  --display: "Newsreader", Georgia, "Times New Roman", serif;
+  --body: "Public Sans", "Helvetica Neue", Arial, sans-serif;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #15171a; --surface: #1e2125; --fg: #e8e7e1; --muted: #a3a79d; --line: #343840;
+    --accent: #7fc3a6; --accent-soft: #1f3a30; --on-accent: #10201a; --warn: #e0b35a; --warn-soft: #3a2f16;
+    --no: #e08a84; --no-soft: #3d2220; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #15171a; --surface: #1e2125; --fg: #e8e7e1; --muted: #a3a79d; --line: #343840;
+  --accent: #7fc3a6; --accent-soft: #1f3a30; --on-accent: #10201a; --warn: #e0b35a; --warn-soft: #3a2f16;
+  --no: #e08a84; --no-soft: #3d2220; color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--fg); font-family: var(--body); font-size: 1rem; line-height: 1.45; }
+body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 10; background: var(--bg); }
+.wrap { max-width: 640px; margin: 0 auto; padding-block: 0 56px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); display: grid; gap: 16px; }
+header.top { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5; background: var(--bg); border-bottom: 1px solid var(--line); padding-block: 12px; display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; }
+header.top h1 { font-family: var(--display); font-weight: 500; font-size: 1.35rem; margin: 0; line-height: 1.15; flex: 1 1 200px; min-width: 0; text-wrap: balance; }
+.placar { display: flex; align-items: center; gap: 10px; font-variant-numeric: tabular-nums; font-size: 0.86rem; color: var(--muted); }
+.barra { width: 90px; height: 6px; background: var(--line); border-radius: 3px; overflow: hidden; }
+.barra i { display: block; height: 100%; width: 0; background: var(--accent); transition: width .25s; }
+.intro { margin: 0; color: var(--muted); font-size: 0.92rem; }
+.aviso { margin: 0; font-size: 0.85rem; padding: 8px 12px; border: 1px dashed var(--line); border-radius: 6px; color: var(--muted); }
+
+button { font: inherit; font-size: 0.95rem; font-weight: 500; min-height: 44px; padding: 8px 14px; border-radius: 8px; border: 1px solid var(--line); background: var(--surface); color: var(--fg); cursor: pointer; }
+button:disabled { opacity: .5; cursor: default; }
+button.principal { background: var(--accent); border-color: var(--accent); color: var(--on-accent); font-weight: 600; }
+button.ativo-ok { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); }
+button.ativo-nao { background: var(--no-soft); border-color: var(--no); color: var(--no); }
+button:focus-visible, textarea:focus-visible, summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+.pacote { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 16px; display: grid; gap: 12px; }
+.pacote.ok { border-color: var(--accent); }
+.pacote.nao { border-color: var(--no); }
+.pacote .cab { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+.pacote h2 { font-family: var(--display); font-weight: 600; font-size: 1.2rem; margin: 0; flex: 1 1 180px; min-width: 0; text-wrap: balance; }
+.pacote .cont { font-size: 0.8rem; color: var(--muted); font-variant-numeric: tabular-nums; }
+.fala { display: grid; gap: 6px; }
+.fala audio { width: 100%; }
+.fala .sem { font-size: 0.85rem; color: var(--muted); margin: 0; }
+.botoes { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.estado { font-size: 0.85rem; color: var(--muted); margin: 0; }
+.pacote.ok .estado { color: var(--accent); }
+.pacote.nao .estado { color: var(--no); }
+details > summary { cursor: pointer; font-size: 0.88rem; color: var(--muted); padding-block: 4px; }
+.texto-fala { margin: 6px 0 0; font-size: 0.9rem; color: var(--muted); }
+.itens { display: grid; gap: 10px; margin-top: 8px; }
+.item { border-left: 3px solid var(--line); padding: 2px 0 2px 12px; display: grid; gap: 4px; min-width: 0; }
+.item.ok { border-left-color: var(--accent); }
+.item.nao { border-left-color: var(--no); }
+.item .lin { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; font-size: 0.74rem; color: var(--muted); }
+.item .lin b { font-weight: 600; }
+.item .risco { font-size: 0.64rem; font-weight: 600; letter-spacing: .05em; text-transform: uppercase; color: var(--warn); background: var(--warn-soft); padding: 1px 6px; border-radius: 4px; }
+.item .marca { margin-left: auto; font-weight: 600; }
+.item.ok .marca { color: var(--accent); }
+.item.nao .marca { color: var(--no); }
+.item .t { font-weight: 600; font-size: 0.95rem; line-height: 1.25; }
+.item .e { font-size: 0.9rem; }
+.item .mais p { margin: 4px 0 0; font-size: 0.86rem; color: var(--muted); }
+.item .mudar { display: grid; gap: 6px; margin-top: 4px; }
+.item textarea { width: 100%; min-height: 64px; font: inherit; font-size: 0.9rem; padding: 8px 10px; border: 1px solid var(--line); border-radius: 6px; background: var(--bg); color: var(--fg); resize: vertical; }
+.pronto { margin-top: 4px; }
+.suas { display: grid; gap: 12px; }
+.suas:empty { display: none; }
+.sua { border: 1px solid var(--warn); background: var(--warn-soft); border-radius: 8px; padding: 12px; display: grid; gap: 8px; min-width: 0; }
+.sua.ok { border-color: var(--accent); background: var(--accent-soft); }
+.sua .lin { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; font-size: 0.74rem; color: var(--muted); }
+.sua .risco { font-size: 0.64rem; font-weight: 600; letter-spacing: .05em; text-transform: uppercase; color: var(--warn); }
+.sua .marca { margin-left: auto; font-weight: 600; color: var(--accent); }
+.sua .t { font-weight: 600; font-size: 0.98rem; line-height: 1.25; }
+.sua .e { font-size: 0.9rem; }
+.sua .opcoes { display: grid; gap: 6px; }
+.sua .opcoes button { text-align: left; }
+.sua textarea { width: 100%; min-height: 56px; font: inherit; font-size: 0.9rem; padding: 8px 10px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); color: var(--fg); resize: vertical; }
+
+footer.fim { padding: 16px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); display: grid; gap: 10px; }
+footer.fim h2 { font-family: var(--display); font-weight: 600; font-size: 1.2rem; margin: 0; }
+footer.fim p { margin: 0; color: var(--muted); font-size: 0.92rem; }
+.final-estado { font-weight: 500; font-size: 0.92rem; color: var(--fg); }
+.final-estado.aprovado { color: var(--accent); }
+.final-estado.revisar { color: var(--no); }
+@media (prefers-reduced-motion: reduce) { .barra i { transition: none; } }
+</style>
+
+<div class="wrap">
+  <header class="top">
+    <h1>&lt;nome do plano&gt;</h1>
+    <div class="placar"><span id="placar-txt">0 pacotes</span><div class="barra"><i id="placar-barra"></i></div></div>
+  </header>
+
+  <p class="intro">Grill de &lt;data&gt;, &lt;N&gt; decisões em &lt;M&gt; pacotes. Toque no play, ouça a fala e responda Sim ou Não. O Não abre as perguntas, e você muda só as que quiser.</p>
+  <p class="aviso" id="aviso-sem-db" hidden>Este navegador não está gravando as respostas. Pode marcar mesmo assim e responder "ok" na sessão.</p>
+
+  <div id="pacotes" style="display:grid;gap:16px"></div>
+
+  <footer class="fim">
+    <h2>Fechar o grill</h2>
+    <p>Porta <b>&lt;A, B ou C&gt;</b>: &lt;o motivo&gt;. Ao aprovar, a sessão segue com &lt;o próximo comando&gt;.</p>
+    <button class="principal" id="btn-final" disabled>Responda os pacotes</button>
+    <span class="final-estado" id="final-estado"></span>
+  </footer>
+</div>
+
+<script>
+const PACOTES = [
+  { id: "k1", nome: "<tema do pacote>", audio: "falas/k1.mp3",
+    fala: "<o texto da Fala do pacote, igual ao que a voz diz>",
+    itens: [
+      { id: "p1", t: "<título curto da decisão>", e: "<a escolha inteira>", p: "<o porquê, em uma ou duas frases>", o: "<a outra opção e o que ela custaria>", you: true },
+      { id: "p2", t: "<título>", e: "<escolha>", p: "<porquê>", o: "<outra opção>", risco: "<onde eu posso estar errado>" },
+      { id: "p3", tipo: "escolha", t: "<pergunta que só a pessoa decide>", c: "<o contexto mínimo para decidir>", opcoes: ["<opção 1>", "<opção 2>", "<opção 3>"], sugestao: "<rascunho do agente, se houver>" }
+    ]},
+  { id: "k2", nome: "Governança", audio: "falas/k2.mp3",
+    fala: "<texto da Fala>",
+    itens: [
+      { id: "p4", t: "Qual porta", e: "A: PRD + fatias.", p: "<o motivo da porta>", o: "B, issue única. <por que não>" }
+    ]}
+];
+const TODAS = PACOTES.flatMap(k => k.itens);
+let respostas = {};
+let final = null;
+let db = null;
+let podeEscrever = true;
+const abertos = {};
+
+function el(tag, attrs, ...kids) {
+  const n = document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs || {})) {
+    if (k === "class") n.className = v; else if (k.startsWith("on")) n.addEventListener(k.slice(2), v); else n.setAttribute(k, v);
+  }
+  for (const c of kids) if (c != null) n.append(c);
+  return n;
+}
+const $ = id => document.getElementById(id);
+
+function montar() {
+  const host = $("pacotes");
+  PACOTES.forEach((k, i) => {
+    const audio = el("audio", { id: "audio-" + k.id, controls: "", preload: "metadata" });
+    const sem = el("p", { class: "sem", id: "sem-" + k.id, hidden: "" }, "O áudio deste pacote ainda não chegou. O texto da fala está logo abaixo.");
+    if (k.audio) { ligarAudio(k, audio, sem); audio.src = k.audio; } else { audio.hidden = true; sem.hidden = false; }
+    const comuns = k.itens.filter(d => d.tipo !== "escolha");
+    const suas = el("div", { class: "suas" });
+    for (const d of k.itens) if (d.tipo === "escolha") suas.append(montarEscolha(d));
+    const itens = el("div", { class: "itens" });
+    for (const d of comuns) itens.append(montarItem(d));
+    const pronto = el("button", { class: "pronto", id: "pronto-" + k.id, hidden: "", onclick: () => aceitarResto(k) }, "Pronto: aceito as outras");
+    host.append(el("section", { class: "pacote", id: "pac-" + k.id },
+      el("div", { class: "cab" }, el("h2", {}, "Pacote " + (i + 1) + ": " + k.nome), el("span", { class: "cont", id: "cont-" + k.id }, "")),
+      el("div", { class: "fala" }, audio, sem, el("details", {}, el("summary", {}, "Ler a fala"), el("p", { class: "texto-fala" }, k.fala))),
+      el("div", { class: "botoes" },
+        el("button", { id: "sim-" + k.id, onclick: () => sim(k) }, "Sim, sigo"),
+        el("button", { id: "nao-" + k.id, onclick: () => nao(k) }, "Não, quero mudar")),
+      el("p", { class: "estado", id: "estado-" + k.id }, ""),
+      suas,
+      el("details", { id: "det-" + k.id }, el("summary", {}, "Ver as " + comuns.length + " perguntas"), itens, pronto)));
+  });
+}
+
+/* Pergunta que só a pessoa decide (dinheiro, negócio, texto com a voz dela): fica fora do Sim ou Não, com opções e resposta livre. */
+function montarEscolha(d) {
+  const ops = el("div", { class: "opcoes" });
+  (d.opcoes || []).forEach((o, i) => ops.append(el("button", { id: "op-" + d.id + "-" + i, onclick: () => escolher(d.id, o, "") }, o)));
+  const ta = el("textarea", { id: "ta-" + d.id, placeholder: "Outra resposta, com as suas palavras." });
+  return el("div", { class: "sua", id: "item-" + d.id },
+    el("div", { class: "lin" }, el("b", {}, d.id.toUpperCase()), el("span", { class: "risco" }, "só você decide"), el("span", { class: "marca", id: "marca-" + d.id }, "")),
+    el("div", { class: "t" }, d.t),
+    d.c ? el("div", { class: "e" }, d.c) : null,
+    d.sugestao ? el("p", { class: "estado" }, "Rascunho do agente: " + d.sugestao) : null,
+    ops, ta,
+    el("button", { onclick: () => escolher(d.id, "", ta.value) }, "Guardar a minha resposta"));
+}
+function escolher(id, opcao, texto) {
+  const nota = (texto || "").trim();
+  if (!opcao && !nota) return;
+  return gravar(id, { resposta: "escolha", opcao, nota, at: new Date().toISOString() });
+}
+
+function montarItem(d) {
+  const mais = el("details", { class: "mais" }, el("summary", {}, "Por quê e a outra opção"),
+    el("p", {}, "Por quê: " + d.p), el("p", {}, "A outra opção: " + d.o), d.risco ? el("p", {}, "Onde posso estar errado: " + d.risco) : null);
+  const ta = el("textarea", { id: "ta-" + d.id, placeholder: "O que você quer no lugar? Uma frase basta." });
+  const st = el("span", { class: "estado", id: "st-" + d.id }, "");
+  const mudar = el("div", { class: "mudar", id: "mudar-" + d.id, hidden: "" },
+    el("div", { class: "botoes" },
+      el("button", { id: "ok-" + d.id, onclick: () => responder(d.id, "ok") }, "Concordo"),
+      el("button", { id: "no-" + d.id, onclick: () => responder(d.id, "nao") }, "Quero mudar")),
+    el("div", { id: "nota-" + d.id, hidden: "", style: "display:grid;gap:6px" }, ta, el("button", { onclick: () => salvarNota(d.id) }, "Guardar nota"), st));
+  const lin = el("div", { class: "lin" }, el("b", {}, d.id.toUpperCase()));
+  if (d.you) lin.append(el("span", {}, "você escolheu"));
+  if (d.risco) lin.append(el("span", { class: "risco" }, "risco"));
+  lin.append(el("span", { class: "marca", id: "marca-" + d.id }, ""));
+  return el("div", { class: "item", id: "item-" + d.id }, lin, el("div", { class: "t" }, d.t), el("div", { class: "e" }, d.e), mais, mudar);
+}
+
+/* O áudio é um arquivo publicado junto da página. Se o player não carregar direto, tenta buscar e tocar como blob. O que funcionou vai para o db, para a sessão saber. */
+function ligarAudio(k, audio, sem) {
+  let fonte = "arquivo";
+  let tentouBlob = false;
+  audio.addEventListener("error", async () => {
+    if (tentouBlob) { audio.hidden = true; sem.hidden = false; sinal(k.id, { fonte: "nenhuma" }); return; }
+    tentouBlob = true;
+    try {
+      const r = await fetch(k.audio);
+      if (!r.ok) throw new Error("sem arquivo");
+      fonte = "blob";
+      audio.src = URL.createObjectURL(await r.blob());
+    } catch (e) { audio.hidden = true; sem.hidden = false; sinal(k.id, { fonte: "nenhuma" }); }
+  });
+  audio.addEventListener("play", () => sinal(k.id, { fonte, tocou: true }));
+  audio.addEventListener("ended", () => sinal(k.id, { fonte, tocou: true, terminou: true }));
+}
+async function sinal(id, dados) {
+  if (!db) return;
+  try { await db.doc("sinais/" + id).set({ ...dados, at: new Date().toISOString(), ua: navigator.userAgent.slice(0, 160) }); } catch (e) { console.error(e); }
+}
+
+function estadoPacote(k) {
+  const rs = k.itens.map(d => respostas[d.id]?.resposta);
+  if (rs.some(r => !r)) return "";
+  return rs.some(r => r === "nao") ? "nao" : "ok";
+}
+
+function atualizar() {
+  let feitos = 0, temNao = false;
+  for (const k of PACOTES) {
+    const e = estadoPacote(k);
+    if (e) feitos++;
+    if (k.itens.some(d => respostas[d.id]?.resposta === "nao")) temNao = true;
+    $("pac-" + k.id).className = "pacote " + e;
+    const n = k.itens.filter(d => respostas[d.id]?.resposta).length;
+    $("cont-" + k.id).textContent = n + " de " + k.itens.length;
+    const mudam = k.itens.filter(d => respostas[d.id]?.resposta === "nao").length;
+    const comuns = k.itens.filter(d => d.tipo !== "escolha");
+    const faltamSuas = k.itens.filter(d => d.tipo === "escolha" && !respostas[d.id]?.resposta).length;
+    const comunsFeitas = comuns.every(d => respostas[d.id]?.resposta);
+    $("estado-" + k.id).textContent = e === "ok" ? "Pacote aceito." : e === "nao" ? "Pacote respondido, com " + mudam + (mudam === 1 ? " mudança." : " mudanças.") : comunsFeitas && faltamSuas ? "Falta a sua resposta em " + faltamSuas + (faltamSuas === 1 ? " pergunta." : " perguntas.") : abertos[k.id] ? "Marque o que quer mudar e toque em Pronto." : "";
+    const simDado = comuns.length > 0 && comuns.every(d => respostas[d.id]?.resposta === "ok");
+    $("sim-" + k.id).className = simDado ? "ativo-ok" : "";
+    $("nao-" + k.id).className = e === "nao" || (abertos[k.id] && !e) ? "ativo-nao" : "";
+    $("sim-" + k.id).disabled = !podeEscrever || comuns.length === 0;
+    $("nao-" + k.id).disabled = !podeEscrever || comuns.length === 0;
+    $("pronto-" + k.id).hidden = !abertos[k.id] || comunsFeitas;
+    for (const d of k.itens) {
+      const r = respostas[d.id] || {};
+      if (d.tipo === "escolha") {
+        $("item-" + d.id).className = "sua " + (r.resposta ? "ok" : "");
+        $("marca-" + d.id).textContent = r.resposta ? "respondida" : "";
+        (d.opcoes || []).forEach((o, i) => { $("op-" + d.id + "-" + i).className = r.opcao === o ? "ativo-ok" : ""; });
+        const ta = $("ta-" + d.id);
+        if (document.activeElement !== ta && !ta.value && r.nota) ta.value = r.nota;
+        continue;
+      }
+      $("item-" + d.id).className = "item " + (r.resposta || "");
+      $("marca-" + d.id).textContent = r.resposta === "ok" ? "aceita" : r.resposta === "nao" ? "mudar" : "";
+      $("mudar-" + d.id).hidden = !abertos[k.id];
+      $("ok-" + d.id).className = r.resposta === "ok" ? "ativo-ok" : "";
+      $("no-" + d.id).className = r.resposta === "nao" ? "ativo-nao" : "";
+      $("nota-" + d.id).hidden = r.resposta !== "nao";
+      const ta = $("ta-" + d.id);
+      if (document.activeElement !== ta && !ta.value && r.nota) ta.value = r.nota;
+    }
+  }
+  $("placar-txt").textContent = feitos + " de " + PACOTES.length + " pacotes";
+  $("placar-barra").style.width = Math.round(100 * feitos / PACOTES.length) + "%";
+  const b = $("btn-final");
+  b.disabled = !podeEscrever || feitos < PACOTES.length;
+  b.textContent = feitos < PACOTES.length ? "Responda os " + PACOTES.length + " pacotes" : temNao ? "Mandar as mudanças para a sessão" : "Aprovar e seguir";
+  const s = $("final-estado");
+  s.className = "final-estado " + (final?.status || "");
+  if (final?.status && !s.dataset.fixo) s.textContent = final.status === "aprovado" ? "Aprovado." : "Mudanças enviadas.";
+}
+
+async function gravar(id, novo) {
+  respostas = { ...respostas, [id]: novo };
+  atualizar();
+  if (!db) return;
+  try { await db.doc("respostas/" + id).set(novo); }
+  catch (e) { somenteLeitura(e); }
+}
+function responder(id, resposta) {
+  const atual = respostas[id] || {};
+  return gravar(id, { resposta, nota: atual.nota || "", at: new Date().toISOString() });
+}
+async function sim(k) {
+  abertos[k.id] = false;
+  for (const d of k.itens) if (d.tipo !== "escolha" && respostas[d.id]?.resposta !== "ok") await responder(d.id, "ok");
+  atualizar();
+}
+function nao(k) {
+  abertos[k.id] = true;
+  $("det-" + k.id).open = true;
+  atualizar();
+}
+async function aceitarResto(k) {
+  for (const d of k.itens) if (d.tipo !== "escolha" && !respostas[d.id]?.resposta) await responder(d.id, "ok");
+  atualizar();
+}
+async function salvarNota(id) {
+  const atual = respostas[id] || {};
+  await gravar(id, { ...atual, resposta: "nao", nota: $("ta-" + id).value, at: new Date().toISOString() });
+  $("st-" + id).textContent = db && podeEscrever ? "Nota guardada." : "Só nesta tela.";
+}
+
+/* O toque final grava a aprovação no db e manda um comentário para o Claude. Esse comentário é o que acorda a sessão. */
+async function fechar() {
+  const temNao = TODAS.some(d => respostas[d.id]?.resposta === "nao");
+  final = { status: temNao ? "revisar" : "aprovado", at: new Date().toISOString(), avaliadas: TODAS.filter(d => respostas[d.id]?.resposta).length };
+  const s = $("final-estado");
+  s.dataset.fixo = "1";
+  s.className = "final-estado " + final.status;
+  s.textContent = "Enviando para a sessão...";
+  $("btn-final").disabled = true;
+  if (db) { try { await db.doc("aprovacao/final").set(final); } catch (e) { somenteLeitura(e); } }
+  let acordou = false, codigo = "";
+  try {
+    const com = await window.claude?.use?.("comments");
+    if (!com) throw { code: "sem_capacidade" };
+    const mudam = TODAS.filter(d => respostas[d.id]?.resposta === "nao");
+    const texto = final.status === "aprovado"
+      ? "Grill aprovado no painel: " + final.avaliadas + " de " + TODAS.length + " decisões aceitas. Pode seguir."
+      : "Grill com mudanças no painel: " + mudam.map(d => d.id.toUpperCase()).join(", ") + ". Leia as notas no painel.";
+    const anchor = await com.anchorFor($("btn-final"));
+    await com.sendToClaude({ anchor, text: texto });
+    acordou = true;
+  } catch (e) { codigo = e?.code || String(e); }
+  if (db) { try { await db.doc("sinais/acordar").set({ ok: acordou, codigo, at: new Date().toISOString() }); } catch (e) { console.error(e); } }
+  const feito = final.status === "aprovado" ? "Aprovado." : "Mudanças enviadas.";
+  s.textContent = acordou ? feito + " A sessão foi avisada e segue sozinha." : feito + " A resposta ficou gravada, mas o aviso não saiu. Diga \"lê o painel\" na sessão.";
+  $("btn-final").disabled = false;
+}
+
+function somenteLeitura(e) {
+  if (e && e.code === "invalid_argument") { podeEscrever = false; atualizar(); }
+  console.error(e);
+}
+
+montar();
+atualizar();
+$("btn-final").addEventListener("click", fechar);
+
+(async () => {
+  db = await window.claude?.use?.("db");
+  const aviso = $("aviso-sem-db");
+  if (!db) { aviso.hidden = false; return; }
+  const timer = setTimeout(() => { aviso.textContent = "Ainda carregando o que já foi respondido."; aviso.hidden = false; }, 10000);
+  db.collection("respostas").onSnapshot(snap => {
+    if (!snap.metadata.fromCache) { clearTimeout(timer); aviso.hidden = true; }
+    const novo = {};
+    for (const doc of snap.docs) novo[doc.id] = doc.data();
+    respostas = novo;
+    atualizar();
+  }, e => { clearTimeout(timer); somenteLeitura(e); });
+  db.doc("aprovacao/final").onSnapshot(snap => { final = snap.exists ? snap.data() : null; atualizar(); }, e => console.error(e));
+})();
+</script>
