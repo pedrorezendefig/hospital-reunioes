@@ -126,3 +126,85 @@ def enviar_aviso_da_entrega(supabase, *, destinatario_id: str, aviso: str, deman
     except Exception as e:  # noqa: BLE001 (e-mail nunca desfaz a Etapa nem o sino)
         logger.warning(f"[tecnologia_entrega] Falha no e-mail para {destinatario_id}: {e}")
         return False
+
+
+# ─── O email do card novo (issue #1635, PRD #1632) ──────────────────────────
+
+ASSUNTO_DO_CARD_NOVO = "Card novo do diretor"
+
+# A pagina da sessao no Vitta OS, que roda no computador de quem programa. O
+# formato `#/sessao/<dono>/<repositorio>/<numero>` e o combinado com o PRD do
+# Vitta OS: mudar aqui quebra o link do lado de la.
+VITTA_OS_LOCAL = "http://127.0.0.1:4500"
+AVISO_DO_VITTA_OS = "Este link abre o Vitta OS do seu próprio computador e só funciona com ele rodando."
+
+# Uma parte do bloco "Para o desenvolvedor": "**Rotulo:** texto".
+_PARTE_DO_BLOCO = re.compile(r"^\*\*([^*]+):\*\*\s*(.*)$")
+
+
+def link_do_vitta_os(numero: int) -> str:
+    """A sessao da issue `numero` no Vitta OS, com o dono e o repositorio da integracao."""
+    dono, _, repositorio = settings.github_integracao_repo.partition("/")
+    return f"{VITTA_OS_LOCAL}/#/sessao/{quote(dono, safe='')}/{quote(repositorio, safe='')}/{numero}"
+
+
+def link_da_issue(numero: int) -> str:
+    return f"https://github.com/{settings.github_integracao_repo}/issues/{numero}"
+
+
+def enviar_card_novo(supabase, *, demanda: dict, resumo: dict | None) -> bool:
+    """O email ao Responsavel da Demanda quando o card nasce (issue #1635): o
+    bloco "Para o desenvolvedor" que entrou na issue e os tres links (Vitta OS,
+    issue, Demanda). `False` quando nao saiu, inclusive sem Responsavel ou sem
+    email no cadastro."""
+    demanda_id = demanda.get("id")
+    try:
+        from app.services.email_constants import get_logo_data_uri
+        from app.services.tecnologia_vinculo import bloco_do_desenvolvedor
+
+        responsavel_id = demanda.get("responsavel_id")
+        if not responsavel_id:
+            logger.warning(f"[tecnologia_card_novo] Demanda {demanda_id} sem Responsável: email do card pulado")
+            return False
+        linhas = (
+            supabase.table("participantes").select("id, nome_completo, email").eq("id", responsavel_id).execute().data
+        )
+        destinatario = linhas[0] if linhas else None
+        if not destinatario or not destinatario.get("email"):
+            logger.warning(f"[tecnologia_card_novo] {responsavel_id} sem e-mail: email do card {demanda_id} pulado")
+            return False
+
+        numero = int(demanda["github_issue_numero"])
+        titulo = str(demanda.get("titulo") or "Demanda sem título")
+        bloco = bloco_do_desenvolvedor((resumo or {}).get("para_o_desenvolvedor"))
+        partes = [m.groups() for m in (_PARTE_DO_BLOCO.match(linha) for linha in (bloco or "").splitlines()) if m]
+        links = {
+            "vitta_os": link_do_vitta_os(numero),
+            "issue": link_da_issue(numero),
+            "demanda": link_da_demanda(demanda["id"]),
+        }
+        html = jinja_env.get_template("email_tecnologia_card_novo.html").render(
+            destinatario_nome=destinatario.get("nome_completo") or "",
+            titulo=titulo,
+            partes=partes,
+            aviso_do_vitta_os=AVISO_DO_VITTA_OS,
+            logo_base64=get_logo_data_uri(),
+            **links,
+        )
+        texto = "\n".join(
+            [
+                f"{ASSUNTO_DO_CARD_NOVO}: {titulo}",
+                "",
+                *([bloco, ""] if bloco else []),
+                f"Abrir a sessão no Vitta OS: {links['vitta_os']}",
+                AVISO_DO_VITTA_OS,
+                "",
+                f"Issue no GitHub: {links['issue']}",
+                f"Demanda no app: {links['demanda']}",
+                "",
+            ]
+        )
+        return _enviar_email(destinatario["email"], f"{ASSUNTO_DO_CARD_NOVO}: {titulo}", html, texto)
+    except Exception as e:  # noqa: BLE001 (email nunca desfaz o card)
+        logger.warning(f"[tecnologia_card_novo] Falha no email do card da Demanda {demanda_id}: {e}")
+        return False
