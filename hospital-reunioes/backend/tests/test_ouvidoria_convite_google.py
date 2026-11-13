@@ -544,3 +544,29 @@ class TestACentralMedeOTeste:
 
         assert convite["intervalo"] == {"inicio": "2026-11-06", "fim": "2026-11-12"}
         assert convite["total"] == {"convites": 0, "cliques": 0, "taxa": None}
+
+
+class TestOKitDeConhecimento:
+    """CA: o texto do Produto Ouvidoria no kit de conhecimento diz o
+    comportamento novo."""
+
+    @pytest.fixture
+    def entrada(self) -> str:
+        from app.services.conhecimento import CONHECIMENTO_DIR
+
+        texto = (CONHECIMENTO_DIR / "ouvidoria.md").read_text(encoding="utf-8")
+        achados = [linha for linha in texto.splitlines() if linha.startswith("- **Convite ao Google.**")]
+        assert len(achados) == 1
+        return achados[0]
+
+    def test_diz_quando_o_convite_aparece_e_quem_liga(self, entrada):
+        assert "nota 4 ou 5" in entrada
+        assert "chave geral" in entrada
+        assert "chave do ponto" in entrada
+        assert "nascem desligadas" in entrada
+        assert "Só a diretoria executiva liga e desliga" in entrada
+
+    def test_diz_o_que_a_central_mostra_e_que_nao_desliga_sozinho(self, entrada):
+        assert "convites, cliques e a taxa de clique" in entrada
+        assert "60 dias" in entrada
+        assert "não se desliga sozinho" in entrada
