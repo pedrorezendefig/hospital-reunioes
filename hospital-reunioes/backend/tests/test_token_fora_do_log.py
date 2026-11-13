@@ -88,6 +88,10 @@ ROTAS_TOKENIZADAS = [
 PARAMS_DE_SEGREDO = {"token"}
 PARAMS_SEM_SEGREDO = {
     "anexo_id",
+    # UUID da Avaliação do QR no botão "Avaliar no Google" (issue #1625). Não é
+    # credencial: a rota pública só marca o clique da nota que viu o convite e
+    # redireciona ao link da configuração, e o id não abre nada da avaliação.
+    "avaliacao_id",
     # UUID do Cenário da Conferência da coordenação (issue #1143). Nao e
     # credencial: a rota exige "conferencia da coordenacao" e "incluir regra
     # operacional", e o id sozinho nao abre porta nenhuma.

@@ -658,14 +658,35 @@ class _ConsultaDeParticipantes:
         return _Resultado([dict(li) for li in self._linhas if all(li.get(c) == v for c, v in self._filtros)])
 
 
+class _ConsultaVazia:
+    """Uma tabela sem linha nenhuma, para qualquer filtro e página."""
+
+    def __getattr__(self, _nome):
+        return lambda *_a, **_kw: self
+
+    def execute(self):
+        return _Resultado([])
+
+
+# A exceção do "a Central não lê tabela": a lente da nota no Google lê as
+# tabelas da Ouvidoria (issues #1619 e #1625). Aqui elas respondem vazias, que
+# é o banco de quem ainda não tem leitura nem convite.
+TABELAS_DA_LENTE_DO_GOOGLE = frozenset(
+    {"ouvidoria_nota_externa", "ouvidoria_config", "ouvidoria_avaliacoes", "ouvidoria_pontos"}
+)
+
+
 class SupabaseDosParticipantes:
     """O cliente Supabase que o gate usa: só a tabela `participantes`. A Central
-    não lê tabela nenhuma além dessa, e o dublê grita se alguém tentar."""
+    não lê tabela nenhuma além dessa, fora as da lente da nota no Google, e o
+    dublê grita se alguém tentar."""
 
     def __init__(self, participantes: list[dict]):
         self._participantes = participantes
 
     def table(self, nome: str):
+        if nome in TABELAS_DA_LENTE_DO_GOOGLE:
+            return _ConsultaVazia()
         assert nome == "participantes", f"a Central não lê tabela nenhuma além do gate: {nome}"
         return _ConsultaDeParticipantes(self._participantes)
 
