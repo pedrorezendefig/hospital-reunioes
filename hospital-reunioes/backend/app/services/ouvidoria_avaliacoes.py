@@ -49,3 +49,38 @@ def gravar(supabase, ponto: dict, nota: int, motivos: list[str], comentario: str
     }
     result = supabase.table(TABELA).insert(linha).execute()
     return result.data[0] if result.data else None
+
+
+def para_ligar(supabase, avaliacao_id: str | None, cartaz: dict | None) -> dict | None:
+    """A avaliação que o caso novo pode carregar, ou None.
+
+    Só a nota do mesmo cartaz, e só enquanto nenhum caso a carrega: o id solto
+    vindo da página não pendura o caso na avaliação de outro lugar, nem liga
+    dois casos à mesma nota. Quem chama já descartou o anônimo (ADR 0086,
+    decisão 3). Falha de leitura vira None: perder a ligação é ruim, perder a
+    manifestação é pior."""
+    if not avaliacao_id or not cartaz:
+        return None
+    try:
+        achadas = supabase.table(TABELA).select("id, ponto_id, nota").eq("id", avaliacao_id).execute().data or []
+        if not achadas or achadas[0].get("ponto_id") != cartaz.get("id"):
+            return None
+        ja_ligada = (
+            supabase.table("ouvidoria_protocolos").select("id").eq("avaliacao_id", avaliacao_id).execute().data
+        )
+    except Exception:
+        logger.warning("[Ouvidoria] Falha ao conferir a avaliação do caso; o caso entra sem a ligação")
+        return None
+    return None if ja_ligada else achadas[0]
+
+
+def marcar_retorno(supabase, avaliacao: dict) -> None:
+    """Marca o pedido de retorno na nota de 1 a 3 que virou caso. A 4 e a 5
+    seguem para o elogio, que não é pedido de retorno. Falha aqui não desfaz o
+    caso, que já tem protocolo."""
+    if avaliacao.get("nota", 0) > NOTA_QUE_PERGUNTA_RETORNO:
+        return
+    try:
+        supabase.table(TABELA).update({"pediu_retorno": True}).eq("id", avaliacao["id"]).execute()
+    except Exception:
+        logger.warning("[Ouvidoria] Falha ao marcar o pedido de retorno da avaliação")

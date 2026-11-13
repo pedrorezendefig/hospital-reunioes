@@ -229,6 +229,10 @@ class ManifestacaoPublica(BaseModel):
     # O telefone ganha campo próprio; o e-mail continua em `contato`, que é o
     # que o acuse e o aviso de encerramento leem.
     telefone: str | None = Field(default=None, max_length=30)
+    # A nota que a pessoa acabou de dar no cartaz, quando ela seguiu da tela de
+    # nota para cá (issue #1622, ADR 0086 decisão 3). O caso só a carrega se
+    # ela for do mesmo cartaz e a pessoa não pediu anonimato.
+    avaliacao_id: str | None = Field(default=None, max_length=40)
     # Honeypot: campo escondido no formulário, que pessoa nenhuma preenche.
     assunto_alternativo: str | None = Field(default=None, max_length=200)
 
@@ -572,6 +576,12 @@ async def registrar_manifestacao_publica(
         and local_informado.strip().casefold() == cartaz["ponto"].strip().casefold()
     ):
         local_informado = None
+    # A ligação com a nota (issue #1622). O anônimo não a carrega, nem é
+    # consultado: a ligação reidentificaria o caso pela hora da nota, como o
+    # ponto acima (ADR 0086, decisão 3).
+    avaliacao = (
+        None if manifestacao.anonimo else ouvidoria_avaliacoes.para_ligar(supabase, manifestacao.avaliacao_id, cartaz)
+    )
 
     linha = {
         "categoria": CATEGORIA_PENDENTE,
@@ -619,6 +629,7 @@ async def registrar_manifestacao_publica(
         "canal": "qr" if origem else "site",
         "canal_setor": origem,
         "canal_ponto": ponto,
+        "avaliacao_id": avaliacao["id"] if avaliacao else None,
     }
     try:
         result = supabase.table("ouvidoria_protocolos").insert(linha).execute()
@@ -631,6 +642,8 @@ async def registrar_manifestacao_publica(
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=_DETALHE_FALHA)
     row = result.data[0]
     _abrir_a_trilha(supabase, row, linha["canal"])
+    if avaliacao:
+        ouvidoria_avaliacoes.marcar_retorno(supabase, avaliacao)
     # O aviso de que a manifestação chegou, com o protocolo (issue #493, ADR
     # 0042). Depois do insert e depois da trilha, e sem `try`: `acusar_recebimento`
     # não levanta, justamente porque o protocolo abaixo já é devido a quem está

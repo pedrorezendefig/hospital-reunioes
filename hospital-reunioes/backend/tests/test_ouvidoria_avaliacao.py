@@ -255,3 +255,121 @@ class TestOLimiteDeNotas:
         assert respostas[-1].status_code == 429
         assert any("exceeded" in registro.getMessage() for registro in caplog.records)
         assert CLIENTE_DIRETO[0] not in caplog.text
+
+
+def _manifestacao(**overrides) -> dict:
+    """O envio da Manifestação guiada de quem veio da nota, identificado."""
+    payload = {
+        "anonimo": False,
+        "sobre": "mim",
+        "data_ocorrencia": "2026-11-10",
+        "periodo": "tarde",
+        "local_informado": "Emergência adulta",
+        "relato": "Esperei duas horas na emergência sem nenhuma informação.",
+        "expectativa": "resposta",
+        "nome": "Maria Souza",
+        "contato": "maria@exemplo.com",
+        "p": CODIGO,
+    }
+    payload.update(overrides)
+    return {chave: valor for chave, valor in payload.items() if valor is not None}
+
+
+def _avaliar(client, nota: int, codigo: str = CODIGO) -> str:
+    r = client.post(f"/api/ouvidoria/publico/pontos/{codigo}/avaliacoes", json={"nota": nota})
+    assert r.status_code == 201, r.text
+    return r.json()["id"]
+
+
+class TestQuemPedeRetorno:
+    """Critério 3: nota 1 a 3 com "Sim, quero retorno" leva à manifestação, e o
+    caso fica ligado à avaliação (e ao cartaz, ADR 0086 decisão 3)."""
+
+    def test_o_caso_de_quem_pediu_retorno_fica_ligado_a_avaliacao_e_ao_cartaz(self):
+        client, banco = _app()
+        avaliacao_id = _avaliar(client, 2)
+
+        r = client.post(ROTA_MANIFESTACAO, json=_manifestacao(avaliacao_id=avaliacao_id))
+
+        assert r.status_code == 201, r.text
+        caso = banco.inserts[0]
+        assert caso["avaliacao_id"] == avaliacao_id
+        assert caso["canal"] == "qr"
+        assert caso["canal_ponto"] == "Hall da emergência"
+        assert banco.avaliacoes[0]["pediu_retorno"] is True
+
+    def test_o_elogio_da_nota_alta_tambem_fica_ligado_sem_contar_como_retorno(self):
+        """Nota 4 ou 5 oferece o elogio, que não é pedido de retorno."""
+        client, banco = _app()
+        avaliacao_id = _avaliar(client, 5)
+
+        r = client.post(
+            ROTA_MANIFESTACAO, json=_manifestacao(avaliacao_id=avaliacao_id, natureza_informada="elogio")
+        )
+
+        assert r.status_code == 201, r.text
+        assert banco.inserts[0]["avaliacao_id"] == avaliacao_id
+        assert banco.avaliacoes[0]["pediu_retorno"] is False
+
+    def test_quem_vem_direto_do_cartaz_entra_sem_ligacao(self):
+        client, banco = _app()
+
+        r = client.post(ROTA_MANIFESTACAO, json=_manifestacao())
+
+        assert r.status_code == 201, r.text
+        assert banco.inserts[0]["avaliacao_id"] is None
+
+    def test_avaliacao_de_outro_cartaz_nao_e_ligada(self):
+        """A ligação é com a nota do mesmo cartaz: um id solto não pendura o
+        caso na avaliação de outro lugar."""
+        client, banco = _app()
+        avaliacao_id = _avaliar(client, 1, codigo=OUTRO_CODIGO)
+
+        r = client.post(ROTA_MANIFESTACAO, json=_manifestacao(avaliacao_id=avaliacao_id))
+
+        assert r.status_code == 201, r.text
+        assert banco.inserts[0]["avaliacao_id"] is None
+        assert banco.avaliacoes[0]["pediu_retorno"] is False
+
+    def test_a_avaliacao_liga_um_caso_so(self):
+        client, banco = _app()
+        avaliacao_id = _avaliar(client, 2)
+        client.post(ROTA_MANIFESTACAO, json=_manifestacao(avaliacao_id=avaliacao_id))
+
+        r = client.post(ROTA_MANIFESTACAO, json=_manifestacao(avaliacao_id=avaliacao_id))
+
+        assert r.status_code == 201, r.text
+        assert banco.inserts[1]["avaliacao_id"] is None
+
+    def test_avaliacao_que_nao_existe_nao_custa_a_manifestacao(self):
+        client, banco = _app()
+
+        r = client.post(ROTA_MANIFESTACAO, json=_manifestacao(avaliacao_id="avaliacao-999"))
+
+        assert r.status_code == 201, r.text
+        assert banco.inserts[0]["avaliacao_id"] is None
+
+
+class TestQuemSegueAnonimo:
+    """Critério 4: seguindo anônimo, o caso não guarda o cartaz nem a ligação
+    com a avaliação (ADR 0086, decisão 3)."""
+
+    def test_o_anonimo_que_veio_da_nota_nao_guarda_o_cartaz_nem_a_ligacao(self):
+        client, banco = _app()
+        avaliacao_id = _avaliar(client, 1)
+
+        r = client.post(
+            ROTA_MANIFESTACAO,
+            json=_manifestacao(anonimo=True, nome=None, contato=None, avaliacao_id=avaliacao_id),
+        )
+
+        assert r.status_code == 201, r.text
+        caso = banco.inserts[0]
+        assert caso["avaliacao_id"] is None
+        assert caso["canal_ponto"] is None
+        valores = " ".join(str(v) for v in caso.values())
+        for rastro in (avaliacao_id, CODIGO, "Hall da emergência"):
+            assert rastro not in valores
+        # Nem a avaliação fica sabendo: marcar o retorno nela seria a ligação
+        # escrita do outro lado.
+        assert banco.avaliacoes[0]["pediu_retorno"] is False
