@@ -44,6 +44,7 @@ from app.dependencies import get_current_user, get_supabase_client  # noqa: E402
 from app.limiter import limiter  # noqa: E402
 from app.routers.admin import tecnologia as tecnologia_router  # noqa: E402
 from app.services import email_service, github_client  # noqa: E402
+from app.services.conhecimento import CONHECIMENTO_DIR  # noqa: E402
 from app.services.tecnologia_vinculo import (  # noqa: E402
     ETAPA_EM_ANALISE,
     ETAPA_EM_DESENVOLVIMENTO,
@@ -445,17 +446,36 @@ class TestPrecedenciaEntreAsRegras:
         )
         assert etapa_da_foto(foto) == ETAPA_EM_DESENVOLVIMENTO
 
-    def test_partes_todas_entregues_com_a_raiz_aberta_ainda_e_planejada(self):
+    def test_partes_todas_entregues_com_a_raiz_aberta_e_em_desenvolvimento(self):
         """A raiz aberta nao e entrega: Entregue e o fechamento DELA (ADR 0054,
         decisao 3). Sem isto, o app prometeria entrega antes do merge do ultimo
-        PR."""
+        PR. E a parte entregue diz que o trabalho comecou, entao o PRD nao
+        volta para Planejada (ADR 0092, decisao 6)."""
         foto = _foto(partes=(_parte(674, estado="closed", motivo="completed"),))
+        assert etapa_da_foto(foto) == ETAPA_EM_DESENVOLVIMENTO
+
+    def test_parte_entregue_com_outras_abertas_e_nenhuma_em_andamento_e_em_desenvolvimento(self):
+        """Issue #1700 (ADR 0092, decisao 6): entre uma onda e outra nenhuma
+        parte tem `in-progress`, e o PRD ja comecado nao pode voltar para
+        Planejada no Quadro. Vale mesmo com a label da fila na raiz."""
+        partes = (
+            _parte(674, estado="closed", motivo="completed"),
+            _parte(675, labels=("ready-for-agent",)),
+            _parte(676),
+        )
+        assert etapa_da_foto(_foto(partes=partes)) == ETAPA_EM_DESENVOLVIMENTO
+        assert etapa_da_foto(_foto(labels=("ready-for-agent",), partes=partes)) == ETAPA_EM_DESENVOLVIMENTO
+
+    def test_so_partes_abertas_sem_in_progress_continua_planejada(self):
+        """O outro lado da #1700: o PRD que ainda nao comecou segue Planejada."""
+        foto = _foto(partes=(_parte(674, labels=("ready-for-agent",)), _parte(675)))
         assert etapa_da_foto(foto) == ETAPA_PLANEJADA
 
     def test_partes_recusadas_sem_nenhuma_aberta_voltam_a_em_analise(self):
         """O "Atualizar o card" da revisão (issue #1558): as partes não
         começadas fecham como não planejadas, e o card volta à triagem até o
-        novo `/to-issues`, mesmo com uma parte já entregue."""
+        novo `/to-issues`, mesmo com uma parte já entregue. O plano desfeito
+        vem antes da parte entregue (issue #1700)."""
         foto = _foto(
             labels=("needs-triage",),
             partes=(
@@ -474,6 +494,17 @@ class TestPrecedenciaEntreAsRegras:
 
     def test_a_label_e_lida_sem_distinguir_maiusculas(self):
         assert etapa_da_foto(_foto(labels=("In-Progress",))) == ETAPA_EM_DESENVOLVIMENTO
+
+
+class TestOKitDizQueOPrdNaoVoltaParaPlanejada:
+    def test_o_kit_da_tecnologia_diz_que_o_pedido_em_partes_fica_em_desenvolvimento(self):
+        """Issue #1700: o kit e a lingua em que o Assistente fala com o diretor.
+        Sem a regra escrita, ele explicaria a volta para Planejada que nao
+        acontece mais."""
+        texto = (CONHECIMENTO_DIR / "tecnologia.md").read_text(encoding="utf-8")
+        secao = texto.split("## A Etapa", 1)[1].split("\n## ", 1)[0]
+
+        assert "o pedido fica Em desenvolvimento desde o começo da primeira parte até a entrega da última" in secao
 
 
 class TestResumoDasPartes:

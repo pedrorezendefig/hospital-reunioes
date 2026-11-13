@@ -193,13 +193,20 @@ def etapa_da_foto(
     #    plano desfeito: e o que o "Atualizar o card" da revisao deixa (issue
     #    #1558, ADR 0084, decisao 3), com as partes nao comecadas fechadas como
     #    nao planejadas e a raiz de volta na triagem. O card volta a Em analise
-    #    ate o novo `/to-issues`. Com todas as partes entregues e a raiz aberta,
-    #    segue Planejada: a raiz ainda nao fechou.
-    if labels_raiz & set(LABELS_PLANEJADA):
-        return ETAPA_PLANEJADA
+    #    ate o novo `/to-issues`.
+    #
+    #    Fora do plano desfeito, uma parte ENTREGUE com a raiz aberta e trabalho
+    #    comecado: o PRD fica Em desenvolvimento ate a raiz fechar, mesmo entre
+    #    uma onda e outra, sem `in-progress` em parte nenhuma (ADR 0092,
+    #    decisao 6, issue #1700). Vem antes da label da fila porque a raiz do
+    #    PRD costuma seguir com ela enquanto as partes andam.
     plano_desfeito = not any(not _fechada(parte) for parte in partes) and any(
         _fechada(parte) and not _entregue(parte) for parte in partes
     )
+    if not plano_desfeito and any(_entregue(parte) for parte in partes):
+        return ETAPA_EM_DESENVOLVIMENTO
+    if labels_raiz & set(LABELS_PLANEJADA):
+        return ETAPA_PLANEJADA
     if partes and not plano_desfeito:
         return ETAPA_PLANEJADA
 
