@@ -48,6 +48,8 @@ KID = "chave-de-teste-pendencias"
 CAMINHO_MCP = f"{settings.api_prefix}/mcp"
 FERRAMENTAS_DA_CENTRAL = {"get_active_now", "get_site_analytics", "get_instagram_analytics"}
 FERRAMENTA_PENDENCIAS = "get_pendencias"
+# As de Reuniões e Ouvidoria, todas no gate da diretoria executiva (ADR 0085).
+FERRAMENTAS_DA_DIRETORIA = {FERRAMENTA_PENDENCIAS, "get_reunioes"}
 
 
 def diretoria(pid: str, access_profile: str | None) -> dict:
@@ -275,17 +277,18 @@ class TestGatePorFerramenta:
     def test_diretoria_sem_super_admin_ve_pendencias_e_nao_a_central(self, chave_do_emissor):
         cliente = cliente_mcp(banco_com(DIRETORA))
 
-        assert nomes_no_tools_list(cliente, chave_do_emissor, DIRETORA) == {FERRAMENTA_PENDENCIAS}
+        assert nomes_no_tools_list(cliente, chave_do_emissor, DIRETORA) == FERRAMENTAS_DA_DIRETORIA
 
         chamada = rpc(cliente, chave_do_emissor, DIRETORA, "tools/call", {"name": "get_active_now", "arguments": {}})
         assert chamada.json()["result"]["isError"] is True
 
-    def test_diretor_que_e_super_admin_ve_as_quatro(self, chave_do_emissor):
+    def test_diretor_que_e_super_admin_ve_as_da_central_e_as_da_diretoria(self, chave_do_emissor):
         cliente = cliente_mcp(banco_com(DIRETOR_SUPER))
 
-        assert nomes_no_tools_list(cliente, chave_do_emissor, DIRETOR_SUPER) == FERRAMENTAS_DA_CENTRAL | {
-            FERRAMENTA_PENDENCIAS
-        }
+        assert (
+            nomes_no_tools_list(cliente, chave_do_emissor, DIRETOR_SUPER)
+            == FERRAMENTAS_DA_CENTRAL | FERRAMENTAS_DA_DIRETORIA
+        )
 
     def test_participante_sem_nenhum_dos_dois_recebe_401(self, chave_do_emissor):
         resposta = rpc(cliente_mcp(banco_com(FACILITADOR)), chave_do_emissor, FACILITADOR, "tools/list")

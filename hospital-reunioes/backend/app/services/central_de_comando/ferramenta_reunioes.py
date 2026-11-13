@@ -113,8 +113,7 @@ def executar(argumentos: dict, participante: dict, supabase) -> dict:
         ),
         "pendenciasCortadas": total_de_pendencias > len(pendencias),
         "reunioes": [
-            _reuniao(r, participantes.get(r["id_reuniao"], []), por_reuniao.get(r["id_reuniao"], []))
-            for r in reunioes
+            _reuniao(r, participantes.get(r["id_reuniao"], []), por_reuniao.get(r["id_reuniao"], [])) for r in reunioes
         ],
     }
 

@@ -296,7 +296,7 @@ def reuniao(
         "data": data,
         "hora_inicio": "09:00:00",
         "hora_fim": "10:00:00",
-        "tipo": "ORDINARIA",
+        "tipo": "Gerencial",
         "titulo": titulo,
         "objetivo": objetivo,
         "status_ata": status_ata,
@@ -411,3 +411,191 @@ class TestBuscaDeReunioes:
         ]
         assert payload["total"] == 2
         assert payload["haMais"] is False
+
+    def test_busca_por_termo_acha_no_titulo_no_objetivo_e_no_resumo_da_ata(self, chave_do_emissor):
+        banco = banco_do_hospital(DIRETOR_SUPER)
+
+        def ids(termo: str) -> list[str]:
+            payload = reunioes_do_claude(banco, chave_do_emissor, DIRETOR_SUPER, termo=termo)
+            return [r["id"] for r in payload["reunioes"]]
+
+        assert ids("qualidade") == ["R1"]
+        assert ids("obstétrico") == ["R2"]
+        assert ids("oxigênio") == ["R3"]
+        assert ids("Comitê") == ["R1", "R3"]
+        assert ids("ressonância") == []
+
+    def test_diretora_regular_so_recebe_as_reunioes_que_a_tela_mostra_a_ela(self, chave_do_emissor):
+        """ADR 0085, decisão 1: a diretora regular não está na R3, e a lista de
+        Reuniões da tela não a mostra; o Claude também não."""
+        payload = reunioes_do_claude(banco_do_hospital(DIRETORA), chave_do_emissor, DIRETORA)
+
+        assert [r["id"] for r in payload["reunioes"]] == ["R2", "R1"]
+        assert "R3" not in json.dumps(payload)
+        assert "A5" not in json.dumps(payload)
+
+    @pytest.mark.parametrize(
+        "argumentos",
+        [{"dataDe": "05/10/2026"}, {"dataAte": 20261031}, {"termo": ["a"]}, {"termo": ",.()*"}],
+        ids=["data-br", "data-numero", "termo-lista", "termo-so-sintaxe"],
+    )
+    def test_argumento_invalido_e_erro_de_ferramenta(self, chave_do_emissor, argumentos):
+        resposta = chamar_reunioes(
+            cliente_mcp(banco_do_hospital(DIRETOR_SUPER)), chave_do_emissor, DIRETOR_SUPER, **argumentos
+        )
+
+        assert resposta.status_code == 200, resposta.text
+        resultado = resposta.json()["result"]
+        assert resultado["isError"] is True
+        assert "structuredContent" not in resultado
+
+    def test_secretaria_com_diretoria_nao_recebe_a_ata_pelo_claude(self, chave_do_emissor):
+        """Na tela, a Secretária vê a Reunião sem a Ata e sem as Pendências."""
+        secretaria = diretoria("secretaria-diretora", "secretaria")
+        resposta = chamar_reunioes(cliente_mcp(banco_do_hospital(secretaria)), chave_do_emissor, secretaria)
+
+        resultado = resposta.json()["result"]
+        assert resultado["isError"] is True
+        assert "Revisão dos indicadores" not in resposta.text
+
+
+# ─── 2. O gate da ferramenta ─────────────────────────────────────────────────
+
+
+class TestGateDaFerramenta:
+    def test_super_admin_sem_diretoria_nao_ve_nem_chama_reunioes(self, chave_do_emissor):
+        cliente = cliente_mcp(banco_do_hospital(SUPER_ADMIN))
+
+        assert FERRAMENTA_REUNIOES not in nomes_no_tools_list(cliente, chave_do_emissor, SUPER_ADMIN)
+
+        resposta = chamar_reunioes(cliente, chave_do_emissor, SUPER_ADMIN)
+        assert resposta.status_code == 200, resposta.text
+        resultado = resposta.json()["result"]
+        assert resultado["isError"] is True
+        assert "structuredContent" not in resultado
+        assert "Comitê" not in resposta.text
+        assert "R1" not in resposta.text
+
+    def test_diretoria_ve_a_ferramenta_no_tools_list(self, chave_do_emissor):
+        cliente = cliente_mcp(banco_do_hospital(DIRETORA))
+
+        assert FERRAMENTA_REUNIOES in nomes_no_tools_list(cliente, chave_do_emissor, DIRETORA)
+
+
+# ─── As telas de verdade ─────────────────────────────────────────────────────
+
+
+def na_tela(banco: BancoFalso, quem: dict, caminho: str, params: dict) -> list[dict]:
+    """O que a tela recebe: as rotas de Reuniões e de Pendências de verdade,
+    com quem está logado e o mesmo banco."""
+    from app.dependencies import _participante_ctx, get_current_user, get_supabase_client
+    from app.routers import pendencias as router_pendencias
+    from app.routers import reunioes as router_reunioes
+
+    _participante_ctx.set(None)
+    app = FastAPI()
+    app.include_router(router_pendencias.router, prefix="/api")
+    app.include_router(router_reunioes.router, prefix="/api")
+    app.dependency_overrides[get_supabase_client] = lambda: banco
+
+    async def _usuario() -> dict[str, Any]:
+        return {"id": quem["auth_user_id"], "email": quem["email"], "metadata": {}}
+
+    app.dependency_overrides[get_current_user] = _usuario
+    resposta = TestClient(app).get(caminho, params=params)
+    assert resposta.status_code == 200, resposta.text
+    _participante_ctx.set(None)
+    return resposta.json()
+
+
+class TestMesmasReunioesDaTela:
+    @pytest.mark.parametrize("quem", [DIRETOR_SUPER, DIRETORA], ids=["diretor-super-admin", "diretora-regular"])
+    def test_o_claude_recebe_as_reunioes_da_lista_da_tela(self, chave_do_emissor, quem):
+        banco = banco_do_hospital(DIRETOR_SUPER, DIRETORA)
+        periodo = {"data_inicio": "2026-09-01", "data_fim": "2026-10-31"}
+
+        da_tela = [r["id_reuniao"] for r in na_tela(banco, quem, "/api/reunioes", periodo)]
+        do_claude = [
+            r["id"]
+            for r in reunioes_do_claude(banco, chave_do_emissor, quem, dataDe="2026-09-01", dataAte="2026-10-31")[
+                "reunioes"
+            ]
+        ]
+
+        assert do_claude == da_tela
+        assert do_claude == (["R2", "R1", "R3"] if quem is DIRETOR_SUPER else ["R2", "R1"])
+
+
+# ─── 3. A situação da pendência é a da tela ──────────────────────────────────
+
+# O que a tela de Pendências mostra para cada status, na palavra que a
+# ferramenta devolve. Escrito aqui, e não importado do app.
+SITUACAO_NA_TELA = {
+    "ATRASADO": "atrasada",
+    "PENDENTE": "pendente",
+    "EM_PROGRESSO": "em_progresso",
+    "CONCLUIDO": "concluida",
+    "CANCELADO": "cancelada",
+    "REPACTUADA": "repactuada",
+}
+
+
+def tela_de_pendencias_da_reuniao(banco: BancoFalso, quem: dict, id_reuniao: str) -> list[dict]:
+    """O que a tela de Pendências recebe filtrada pela Reunião."""
+    return na_tela(banco, quem, "/api/pendencias", {"id_reuniao": id_reuniao, "limit": 500})
+
+
+class TestSituacaoDaPendencia:
+    @pytest.mark.parametrize("quem", [DIRETOR_SUPER, DIRETORA], ids=["diretor-super-admin", "diretora-regular"])
+    def test_a_situacao_de_cada_pendencia_e_a_da_tela(self, chave_do_emissor, quem):
+        banco = banco_do_hospital(DIRETOR_SUPER, DIRETORA)
+        payload = reunioes_do_claude(banco, chave_do_emissor, quem)
+
+        comparadas = 0
+        for r in payload["reunioes"]:
+            na_tela = {
+                p["id_acao"]: SITUACAO_NA_TELA[p["status"]] for p in tela_de_pendencias_da_reuniao(banco, quem, r["id"])
+            }
+            no_claude = {p["id"]: p["situacao"] for p in r["pendencias"]}
+            assert no_claude == na_tela, r["id"]
+            comparadas += len(no_claude)
+
+        assert comparadas == (5 if quem is DIRETOR_SUPER else 4)
+        r1 = next(r for r in payload["reunioes"] if r["id"] == "R1")
+        assert {p["id"]: p["situacao"] for p in r1["pendencias"]} == {
+            "A1": "atrasada",
+            "A2": "pendente",
+            "A3": "concluida",
+        }
+
+
+# ─── 4. Lista longa e só leitura ─────────────────────────────────────────────
+
+
+class TestListaLongaCortadaNoTeto:
+    def test_volta_o_teto_com_o_total_e_o_aviso(self, chave_do_emissor):
+        muitas = [reuniao(f"M{i:02d}", f"2026-08-{1 + i:02d}", f"Reunião {i}") for i in range(25)]
+        banco = BancoFalso(participantes=[DIRETOR_SUPER], reunioes=muitas, reuniao_participantes=[], pendencias=[])
+
+        payload = reunioes_do_claude(banco, chave_do_emissor, DIRETOR_SUPER)
+
+        assert payload["total"] == 25
+        assert payload["mostradas"] == 20
+        assert len(payload["reunioes"]) == 20
+        assert payload["reunioes"][0]["id"] == "M24"
+        assert payload["haMais"] is True
+        assert "25" in payload["aviso"]
+
+
+class TestSoLeitura:
+    def test_a_ferramenta_nao_escreve_em_reuniao_ata_nem_pendencia(self, chave_do_emissor):
+        banco = banco_do_hospital(DIRETOR_SUPER, DIRETORA)
+        cliente = cliente_mcp(banco)
+
+        for quem in (DIRETOR_SUPER, DIRETORA):
+            for argumentos in ({}, {"termo": "Comitê"}, {"dataDe": "2026-10-01", "dataAte": "2026-10-31"}):
+                resultado = chamar_reunioes(cliente, chave_do_emissor, quem, **argumentos).json()["result"]
+                assert resultado["isError"] is False
+                assert resultado["structuredContent"]["reunioes"]
+
+        assert banco.escritas == []
