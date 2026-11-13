@@ -1608,6 +1608,51 @@ describe("O Quadro na tela larga (issue #1642, ADR 0090)", () => {
     expect(within(colunaDe("Planejada")).queryByRole("link", { name: "Assistir à demonstração" })).toBeNull();
   });
 
+  it("o card não abre link da Demonstração que não é https", async () => {
+    telaLarga();
+    const comScript = demanda("q-10", "Vídeo com script", {
+      etapa: "em_producao",
+      tem_vinculo: true,
+      demonstracao_url: "javascript:alert(1)",
+    });
+    const semTls = demanda("q-11", "Vídeo sem https", {
+      etapa: "em_producao",
+      tem_vinculo: true,
+      demonstracao_url: "http://youtu.be/demo",
+    });
+    montar((url) => (url === LISTA ? { status: 200, corpo: [comScript, semTls] } : { status: 404, corpo: {} }));
+    await screen.findByRole("region", { name: "Quadro" });
+
+    const entregue = colunaDe("Entregue");
+    expect(within(entregue).getByRole("button", { name: /Vídeo com script/ })).toBeTruthy();
+    expect(within(entregue).getByRole("button", { name: /Vídeo sem https/ })).toBeTruthy();
+    expect(within(entregue).queryByRole("link", { name: "Assistir à demonstração" })).toBeNull();
+  });
+
+  it("o botão do vídeo tem o brilho, e com prefers-reduced-motion o brilho some", async () => {
+    telaLarga();
+    const comVideo = demanda("q-12", "Vídeo no card", {
+      etapa: "em_producao",
+      tem_vinculo: true,
+      demonstracao_url: "https://youtu.be/demo",
+    });
+    montar((url) => (url === LISTA ? { status: 200, corpo: [comVideo] } : { status: 404, corpo: {} }));
+    await screen.findByRole("region", { name: "Quadro" });
+
+    const video = within(colunaDe("Entregue")).getByRole("link", { name: "Assistir à demonstração" });
+    expect(video.className.split(/\s+/)).toContain("brilho-da-demonstracao");
+
+    const css = readFileSync(resolve(process.cwd(), "src/app/globals.css"), "utf8");
+    // Fora do pedido de menos movimento, a faixa de luz anda.
+    const brilho = css.match(/(?:^|\n)\.brilho-da-demonstracao::after\s*\{([^}]*)\}/)?.[1] ?? "";
+    expect(brilho).toMatch(/animation:\s*brilho-da-demonstracao\b/);
+    // Com movimento reduzido, a faixa nem aparece.
+    const reduzido = css.match(/@media \(prefers-reduced-motion: reduce\) \{([\s\S]*?)\n\}/)?.[1] ?? "";
+    const regras = [...reduzido.matchAll(/([^{}]*)\{([^}]*)\}/g)];
+    const desliga = regras.find((r) => r[1].split(",").map((s) => s.trim()).includes(".brilho-da-demonstracao::after"));
+    expect(desliga?.[2]).toMatch(/display:\s*none/);
+  });
+
   it("o Ampliar do painel leva a Demanda à largura toda, e Voltar ao quadro volta (issue #1643)", async () => {
     telaLarga();
     montar((url) => {
