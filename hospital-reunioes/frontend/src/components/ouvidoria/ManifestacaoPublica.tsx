@@ -106,7 +106,9 @@ function Escolhas<T extends string>({
 }) {
   return (
     <div className="space-y-1.5">
-      <p id={id} className={ROTULO}>
+      {/* `etiqueta`: o rótulo do grupo é Texto curto como o `<label>` dos
+          campos ao lado (ADR 0080), e fica em caixa alta igual a eles. */}
+      <p id={id} className={`etiqueta ${ROTULO}`}>
         {rotulo}
       </p>
       <div role="group" aria-labelledby={id} className={`grid ${colunas} gap-2`}>
