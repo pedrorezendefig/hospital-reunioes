@@ -27,6 +27,7 @@ from app.services import (
     ouvidoria_blocos,
     ouvidoria_devolucao_a_ouvidoria,
     ouvidoria_notificacoes,
+    ouvidoria_nucleo,
     ouvidoria_prorrogacao,
     ouvidoria_relogio_da_area,
     ouvidoria_respostas,
@@ -991,3 +992,103 @@ async def confirmar_elogio(
         "elogio_recebido",
     )
     return {"protocolo": caso.get("protocolo"), "setor": ciencia.get("setor"), "confirmado_em": agora.isoformat()}
+
+
+# =====================================================================
+# O link do Núcleo de Segurança do Paciente (issue #1621, ADR 0088)
+# =====================================================================
+
+NUCLEO_JA_RECEBEU = "O Núcleo já confirmou o recebimento deste caso."
+NUCLEO_FORA_DE_USO = "Este link não vale mais. Procure a Ouvidoria pelo protocolo."
+
+
+def _ciencia_do_link_do_nucleo(supabase, token: str) -> dict:
+    """A ciência do Núcleo do link, com as recusas do portal: 404 seco para o
+    token que não existe (ou que é de outra ciência), 410 para o que perdeu a
+    vez, 503 quando o banco não respondeu."""
+    try:
+        return ouvidoria_nucleo.carregar_pelo_token(supabase, token)
+    except ouvidoria_acionamentos.LinkInvalidoError:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Link inválido") from None
+    except ouvidoria_acionamentos.ForaDeUsoError:
+        raise HTTPException(status_code=status.HTTP_410_GONE, detail=NUCLEO_FORA_DE_USO) from None
+    except FALHAS_DO_POSTGREST as exc:
+        logger.error("Falha ao ler o link do Núcleo")
+        raise _indisponivel() from exc
+
+
+def _caso_do_nucleo(supabase, ciencia: dict, acao: str) -> dict:
+    """O caso da ciência, barrado quando foi apagado."""
+    from app.routers.ouvidoria import barrar_caso_apagado
+
+    try:
+        result = (
+            supabase.table("ouvidoria_protocolos")
+            .select(ouvidoria_nucleo.CAMPOS_DA_TELA)
+            .eq("id", ciencia["manifestacao_id"])
+            .limit(1)
+            .execute()
+        )
+    except FALHAS_DO_POSTGREST as exc:
+        logger.error("Falha ao ler a manifestação %s pelo link do Núcleo", ciencia["manifestacao_id"])
+        raise _indisponivel() from exc
+    if not result.data:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Link inválido")
+    caso = result.data[0]
+    barrar_caso_apagado(caso, acao, canal_publico=True)
+    return caso
+
+
+def _acesso_do_nucleo(ciencia: dict) -> dict:
+    return {
+        "manifestacao_id": ciencia["manifestacao_id"],
+        "destinatario_nome": f"{ciencia.get('responsavel_nome') or 'Responsável'}, Núcleo de Segurança do Paciente",
+    }
+
+
+@router.get("/nsp/{token}")
+@limiter.limit("30/minute")
+async def abrir_o_caso_no_nucleo(
+    request: Request,
+    token: str,
+    supabase=Depends(get_supabase_client),
+):
+    """A tela que o link do email do Núcleo abre, sem senha (ADR 0088,
+    decisões 5 e 7): o relato integral, a justificativa técnica, o paciente com
+    a data de nascimento, os profissionais e o quarto, mesmo no caso sigiloso.
+
+    Abrir não confirma nada: o Recebido é o botão da tela, pelo mesmo motivo do
+    elogio (leitor de email que abre link sozinho gastaria o uso único)."""
+    ciencia = _ciencia_do_link_do_nucleo(supabase, token)
+    caso = _caso_do_nucleo(supabase, ciencia, "aberto pelo Núcleo")
+    _registrar_acesso(supabase, _acesso_do_nucleo(ciencia), "nucleo_abrir")
+    return ouvidoria_nucleo.tela_do_nucleo(caso, ciencia)
+
+
+@router.post("/nsp/{token}/recebido")
+@limiter.limit("10/minute")
+async def confirmar_recebido_pelo_nucleo(
+    request: Request,
+    token: str,
+    supabase=Depends(get_supabase_client),
+):
+    """O botão Recebido pelo NSP, sem senha e uma vez só (ADR 0088, decisão 4).
+
+    Não mexe no estado do caso: a ciência do Núcleo corre em paralelo, e a
+    resposta e o encerramento seguem o caminho de sempre. O uso único é da
+    ciência, que só passa de `pendente` para `ciente` uma vez."""
+    agora = agora_utc()
+    ciencia = _ciencia_do_link_do_nucleo(supabase, token)
+    if ciencia.get("status") == ouvidoria_acionamentos.CIENTE:
+        raise HTTPException(status_code=status.HTTP_410_GONE, detail=NUCLEO_JA_RECEBEU)
+    caso = _caso_do_nucleo(supabase, ciencia, "confirmado pelo Núcleo")
+    try:
+        confirmou = ouvidoria_acionamentos.confirmar(supabase, ciencia, agora)
+    except FALHAS_DO_POSTGREST as exc:
+        logger.error("Falha ao confirmar o recebido do Núcleo no caso %s", ciencia["manifestacao_id"])
+        raise _indisponivel() from exc
+    if not confirmou:
+        raise HTTPException(status_code=status.HTTP_410_GONE, detail=NUCLEO_JA_RECEBEU)
+    ouvidoria_nucleo.registrar_o_recebido(supabase, caso, ciencia)
+    _registrar_acesso(supabase, _acesso_do_nucleo(ciencia), "nucleo_recebido")
+    return {"protocolo": caso.get("protocolo"), "recebido_em": agora.isoformat()}

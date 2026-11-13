@@ -54,6 +54,7 @@ from app.services import (
     ouvidoria_nota_externa,
     ouvidoria_notificacoes,
     ouvidoria_novidade,
+    ouvidoria_nucleo,
     ouvidoria_pontos,
     ouvidoria_prorrogacao,
     ouvidoria_redirecionamento,
@@ -208,13 +209,20 @@ _CAMPOS_INDICE_TUPLA = _CAMPOS_PROTOCOLO_TUPLA + (
     # anônimo, o nome de quem manifestou não vai. Sem a marca aqui, a tela
     # aberta pela fila descreveria o anônimo como caso comum.
     "anonimo",
+    # O apontamento do agente ao Núcleo de Segurança do Paciente e a decisão
+    # (issue #1621), pelo mesmo motivo: com o apontamento e sem a decisão, a
+    # validação é recusada, e a tela aberta pela fila precisa fazer a pergunta.
+    # Só as marcas: as justificativas descrevem o caso e ficam no Dossiê.
+    "nsp_sugerido",
+    "nsp_decisao",
 )
 _CAMPOS_INDICE = ", ".join(_CAMPOS_INDICE_TUPLA)
 # O índice de quem está fora da Ouvidoria: o mesmo, menos o resumo (issue
-# #753) e a marca de anônimo (issue #769). O resumo é recorte literal do
-# relato, a marca só serve a quem valida, e protocolo, setor, situação e prazo
-# bastam para quem só acompanha a fila.
-_SO_DA_OUVIDORIA_NO_INDICE = frozenset({"resumo", "anonimo"})
+# #753), a marca de anônimo (issue #769) e o apontamento ao Núcleo (issue
+# #1621). O resumo é recorte literal do relato, as marcas só servem a quem
+# valida, e protocolo, setor, situação e prazo bastam para quem só acompanha a
+# fila.
+_SO_DA_OUVIDORIA_NO_INDICE = frozenset({"resumo", "anonimo", "nsp_sugerido", "nsp_decisao"})
 _CAMPOS_INDICE_FORA_DA_OUVIDORIA = tuple(
     campo for campo in _CAMPOS_INDICE_TUPLA if campo not in _SO_DA_OUVIDORIA_NO_INDICE
 )
@@ -628,6 +636,17 @@ _CAMPOS_DOSSIE_TUPLA = _CAMPOS_PROTOCOLO_TUPLA + (
     "apagamento_pedido_em",
     "apagamento_pedido_por",
     "apagamento_motivo",
+    # O apontamento do agente ao Núcleo de Segurança do Paciente e a decisão
+    # do ouvidor (issue #1621, migration 139). A justificativa simples é o
+    # texto do alerta "Possível evento de segurança do paciente"; a técnica é
+    # a que o Núcleo lê pelo link. A decisão confirmada é o selo "Em análise
+    # pelo NSP". Dossiê, e não índice: as duas justificativas descrevem o caso.
+    "nsp_sugerido",
+    "nsp_justificativa_simples",
+    "nsp_justificativa_tecnica",
+    "nsp_decisao",
+    "nsp_decisao_motivo",
+    "nsp_decidido_em",
 )
 _CAMPOS_DOSSIE = ", ".join(_CAMPOS_DOSSIE_TUPLA)
 
@@ -2988,6 +3007,12 @@ class PedidoValidacao(BaseModel):
     gravidade: Literal["critico", "alto", "medio", "baixo"]
     observacao: str | None = None
     extrato_para_o_setor: str | None = None
+    # A decisão sobre o Núcleo de Segurança do Paciente (issue #1621, ADR 0088,
+    # decisão 4). Obrigatória só quando o agente apontou o caso, e o motivo só
+    # quando o ouvidor descarta; os dois são opcionais no schema para a rota
+    # recusar com a frase que explica o porquê.
+    nsp_decisao: Literal["confirmado", "descartado"] | None = None
+    nsp_motivo: str | None = Field(default=None, max_length=300)
 
     @field_validator("setor")
     @classmethod
@@ -3001,7 +3026,7 @@ class PedidoValidacao(BaseModel):
             return None
         return sanitizar_travessao(valor).strip() or None
 
-    @field_validator("observacao", "extrato_para_o_setor")
+    @field_validator("observacao", "extrato_para_o_setor", "nsp_motivo")
     @classmethod
     def _observacao_limpa(cls, valor: str | None) -> str | None:
         if valor is None:
@@ -3723,9 +3748,13 @@ async def validar_e_acionar(
             # Este `select` é recortado à mão, e sem eles aqui a guarda logo
             # abaixo leria `None` para sempre: nasceria morta, com a chamada no
             # lugar certo e a suíte verde.
+            #
+            # O apontamento do agente e a decisão sobre o Núcleo entram pela
+            # trava da issue #1621: com apontamento e sem decisão, validar é
+            # recusado antes de qualquer efeito.
             .select(
                 "id, status, sigilo_reforcado, tipo_manifestacao, contato_em, data_abertura, "
-                "prazo_conclusivo_em, setor, anonimizada_em, apagamento_pedido_em"
+                "prazo_conclusivo_em, setor, anonimizada_em, apagamento_pedido_em, nsp_sugerido, nsp_decisao"
             )
             .eq("id", manifestacao_id)
             .execute()
@@ -3766,7 +3795,27 @@ async def validar_e_acionar(
     # o caso já ter saído da área antiga, e uma recusa naquele ponto deixaria o
     # caso parado em `em_classificacao`. Redirecionar confere primeiro, e por
     # isso "nada acontece" quando a área nova não tem responsável (ADR 0055).
-    area = conferir_o_acionamento(supabase, caso, pedido, agora.astimezone(FUSO_HOSPITAL).date())
+    hoje = agora.astimezone(FUSO_HOSPITAL).date()
+    # A decisão sobre o Núcleo é conferida junto, ANTES de qualquer efeito
+    # (issue #1621): com o apontamento do agente, validar sem decidir é
+    # recusado, e descartar pede o motivo.
+    decisao = conferir_a_decisao_do_nucleo(caso, pedido)
+    nucleo = conferir_o_nucleo(supabase, hoje) if decisao == ouvidoria_nucleo.CONFIRMADO else None
+    area = conferir_o_acionamento(supabase, caso, pedido, hoje)
+    # A decisão é aplicada antes do acionamento da área: se o acionamento
+    # falhar depois, a nova tentativa já não pede a decisão de novo, e o Núcleo
+    # não recebe o caso duas vezes.
+    if nucleo is not None:
+        mandar_ao_nucleo(supabase, me, caso, nucleo, pedido.gravidade, agora)
+    elif decisao == ouvidoria_nucleo.DESCARTADO:
+        try:
+            ouvidoria_nucleo.descartar(supabase, caso=caso, motivo=pedido.nsp_motivo or "", autor=me, agora=agora)
+        except (APIError, HTTPError) as exc:
+            logger.error("Falha ao gravar o descarte do Núcleo no caso %s", manifestacao_id)
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Não foi possível gravar a decisão sobre o Núcleo agora. Tente de novo em instantes.",
+            ) from exc
     return acionador_do_tipo(pedido)(
         supabase,
         me,
@@ -4428,6 +4477,203 @@ def acionar_a_ciencia_do_elogio(
     if completo.data:
         row = completo.data[0]
     return {campo: row.get(campo) for campo in _CAMPOS_DOSSIE_TUPLA} | _projetar_prazo(row, agora, area.feriados)
+
+
+# =====================================================================
+# O envio ao Núcleo de Segurança do Paciente (issue #1621, ADR 0088)
+# =====================================================================
+
+NUCLEO_SEM_SETOR = (
+    "O setor do Núcleo de Segurança do Paciente não está configurado. Escolha o setor em Responsáveis "
+    "por setor antes de enviar."
+)
+NUCLEO_JA_ENVIADO = "Este caso já foi enviado ao Núcleo de Segurança do Paciente."
+
+
+@dataclass(frozen=True)
+class NucleoAcionavel:
+    """O Núcleo pronto para receber o caso, conferido sem escrever nada."""
+
+    setor: str
+    destinatario: Destinatario
+    feriados: frozenset[dt.date]
+
+
+def conferir_o_nucleo(supabase, hoje: dt.date) -> NucleoAcionavel:
+    """Tudo o que pode recusar o envio ao Núcleo, sem escrever nada: o setor
+    configurado e alguém vigente para receber. Mesmas recusas do acionamento
+    da área, porque o Núcleo é um setor como os outros (ADR 0088, decisão 3)."""
+    try:
+        setor = ouvidoria_nucleo.setor_configurado(supabase)
+    except (APIError, HTTPError) as exc:
+        logger.error("Falha ao ler o setor do Núcleo na configuração da Ouvidoria")
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Não foi possível ler a configuração da Ouvidoria agora. Tente de novo em instantes.",
+        ) from exc
+    if not setor:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=NUCLEO_SEM_SETOR)
+    destinatario = escolher_destinatario(carregar_responsaveis(supabase, setor), hoje)
+    if destinatario is None:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=recusa_de_setor_sem_responsavel(setor))
+    return NucleoAcionavel(setor=setor, destinatario=destinatario, feriados=carregar_feriados(supabase))
+
+
+NUCLEO_SEM_DECISAO = (
+    "O agente apontou este caso ao Núcleo de Segurança do Paciente. Antes de validar, confirme o envio ao "
+    "Núcleo ou descarte com o motivo."
+)
+NUCLEO_DESCARTE_SEM_MOTIVO = "Para descartar o envio ao Núcleo de Segurança do Paciente, escreva o motivo em uma linha."
+
+
+def conferir_a_decisao_do_nucleo(caso: dict, pedido: PedidoValidacao) -> str | None:
+    """A decisão sobre o Núcleo que a validação vai aplicar, ou None quando não
+    há nada a aplicar (ADR 0088, decisão 4). Não escreve nada.
+
+    Caso já enviado ao Núcleo não recebe outra decisão: a ciência existe e a
+    investigação corre por fora. Caso já decidido (o devolvido à Ouvidoria que
+    volta à validação) não pede a decisão de novo."""
+    if caso.get("nsp_decisao") == ouvidoria_nucleo.CONFIRMADO:
+        return None
+    if pedido.nsp_decisao == ouvidoria_nucleo.DESCARTADO and not pedido.nsp_motivo:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=NUCLEO_DESCARTE_SEM_MOTIVO)
+    if pedido.nsp_decisao is None and caso.get("nsp_sugerido") and caso.get("nsp_decisao") is None:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=NUCLEO_SEM_DECISAO)
+    return pedido.nsp_decisao
+
+
+def mandar_ao_nucleo(supabase, me: dict, caso: dict, nucleo: NucleoAcionavel, gravidade, agora) -> dict:
+    """O envio em si, com a recusa que o banco dá quando o caso já tem a
+    ciência do Núcleo (índice único da migration 139)."""
+    falha = "Não foi possível enviar o caso ao Núcleo agora. Tente de novo em instantes."
+    try:
+        ciencia = ouvidoria_nucleo.enviar(
+            supabase,
+            caso=caso,
+            setor=nucleo.setor,
+            destinatario=nucleo.destinatario,
+            gravidade=gravidade,
+            autor=me,
+            agora=agora,
+            feriados=nucleo.feriados,
+        )
+    except APIError as exc:
+        if exc.code == "23505":
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=NUCLEO_JA_ENVIADO) from exc
+        logger.error("Falha ao enviar o caso %s ao Núcleo (código %s)", caso["id"], exc.code)
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=falha) from exc
+    except HTTPError as exc:
+        logger.error("Falha de rede ao enviar o caso %s ao Núcleo", caso["id"])
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=falha) from exc
+    if ciencia is None:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=falha)
+    return ciencia
+
+
+class PedidoSetorDoNucleo(BaseModel):
+    """Qual setor da taxonomia é o Núcleo de Segurança do Paciente."""
+
+    setor: str = Field(max_length=LIMITE_SETOR)
+
+    @field_validator("setor")
+    @classmethod
+    def _setor_limpo(cls, valor: str) -> str:
+        return limpar_setor(valor)
+
+
+@router.get("/nucleo")
+@limiter.limit("60/minute")
+async def ler_o_setor_do_nucleo(
+    request: Request,
+    me: dict = Depends(require_perfil_ouvidoria),
+    supabase=Depends(get_supabase_client),
+):
+    """O setor do Núcleo na configuração da Ouvidoria, "" quando ninguém o
+    escolheu ainda."""
+    try:
+        return {"setor": ouvidoria_nucleo.setor_configurado(supabase)}
+    except (APIError, HTTPError) as exc:
+        logger.error("Falha ao ler o setor do Núcleo na configuração da Ouvidoria")
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Não foi possível ler a configuração da Ouvidoria agora. Tente de novo em instantes.",
+        ) from exc
+
+
+@router.put("/nucleo")
+@limiter.limit("30/minute")
+async def escolher_o_setor_do_nucleo(
+    request: Request,
+    pedido: PedidoSetorDoNucleo,
+    me: dict = Depends(require_perfil_ouvidoria),
+    supabase=Depends(get_supabase_client),
+):
+    """O ouvidor escolhe qual setor é o Núcleo (ADR 0088, decisão 3). O setor
+    tem de existir na taxonomia, e o que fica gravado é a grafia dela: é ela
+    que casa com o cadastro de responsáveis. A troca fica no audit."""
+    setor = exigir_setor_da_taxonomia(supabase, pedido.setor)
+    try:
+        anterior = ouvidoria_nucleo.setor_configurado(supabase)
+        supabase.table("ouvidoria_config").update({"nsp_setor": setor, "atualizada_em": agora_utc().isoformat()}).eq(
+            "id", True
+        ).execute()
+    except (APIError, HTTPError) as exc:
+        logger.error("Falha ao gravar o setor do Núcleo na configuração da Ouvidoria")
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Não foi possível gravar o setor do Núcleo agora. Tente de novo em instantes.",
+        ) from exc
+    audit.log_action(
+        supabase,
+        actor=me,
+        action="OUVIDORIA_SETOR_DO_NUCLEO",
+        target_type="ouvidoria_config",
+        target_id="nsp_setor",
+        metadata={"anterior": anterior, "novo": setor},
+        request=request,
+    )
+    return {"setor": setor}
+
+
+@router.post("/manifestacoes/{manifestacao_id}/nsp")
+@limiter.limit("30/minute")
+async def enviar_ao_nucleo(
+    request: Request,
+    manifestacao_id: str,
+    me: dict = Depends(require_perfil_ouvidoria),
+    supabase=Depends(get_supabase_client),
+):
+    """O botão Enviar ao NSP do Dossiê, sempre disponível (ADR 0088, decisão 4).
+
+    Com ou sem o apontamento do agente, e em qualquer estado do caso: a ciência
+    do Núcleo corre em paralelo e não mexe no estado. O prazo do Recebido sai
+    da gravidade gravada no caso (crítico na hora, os demais em 1 dia útil)."""
+    try:
+        atual = (
+            supabase.table("ouvidoria_protocolos")
+            .select("id, protocolo, status, gravidade, nsp_decisao, anonimizada_em, apagamento_pedido_em")
+            .eq("id", manifestacao_id)
+            .execute()
+        )
+    except APIError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Manifestação não encontrada") from exc
+    if not atual.data:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Manifestação não encontrada")
+    caso = atual.data[0]
+    barrar_caso_apagado(caso, "enviado ao Núcleo de Segurança do Paciente")
+    if caso.get("nsp_decisao") == ouvidoria_nucleo.CONFIRMADO:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=NUCLEO_JA_ENVIADO)
+
+    agora = agora_utc()
+    nucleo = conferir_o_nucleo(supabase, agora.astimezone(FUSO_HOSPITAL).date())
+    ciencia = mandar_ao_nucleo(supabase, me, caso, nucleo, caso.get("gravidade"), agora)
+    registrar_acesso(supabase, me, manifestacao_id, "enviar_ao_nucleo")
+    return {
+        "nsp_decisao": ouvidoria_nucleo.CONFIRMADO,
+        "selo": ouvidoria_nucleo.SELO,
+        "setor": nucleo.setor,
+        "prazo": ciencia.get("prazo"),
+    }
 
 
 # =====================================================================

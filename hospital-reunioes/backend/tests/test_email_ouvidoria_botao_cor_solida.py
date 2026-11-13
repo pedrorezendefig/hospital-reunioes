@@ -35,6 +35,8 @@ TEMPLATES_COM_BOTAO = [
     "email_ouvidoria_sem_titular.html",
     # O botão Elogio recebido (issue #1618).
     "email_ouvidoria_ciencia_elogio.html",
+    # O botão Abrir o caso do email ao Núcleo de Segurança do Paciente (issue #1621).
+    "email_ouvidoria_ciencia_nsp.html",
 ]
 
 _COR = r"#[0-9A-Fa-f]{6}"

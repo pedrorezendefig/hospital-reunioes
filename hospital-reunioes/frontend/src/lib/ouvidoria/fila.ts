@@ -38,6 +38,11 @@ export interface ManifestacaoIndice {
   // Só a Ouvidoria recebe (issue #769): a tela de validação aberta pela fila
   // lê a marca para dizer, no texto de ajuda do extrato, o que vai à área.
   anonimo?: boolean;
+  // Só a Ouvidoria recebe (issue #1621): com o apontamento do agente e sem a
+  // decisão, a tela de validação aberta pela fila pergunta sobre o Núcleo de
+  // Segurança do Paciente. As justificativas ficam no Dossiê.
+  nsp_sugerido?: boolean;
+  nsp_decisao?: string | null;
   conversa_id: string;
   // Motor de prazos (issue #322): o vencimento e o rótulo vêm calculados do
   // servidor, em calendário útil.

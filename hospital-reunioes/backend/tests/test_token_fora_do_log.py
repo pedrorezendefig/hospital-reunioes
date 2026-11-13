@@ -74,6 +74,10 @@ ROTAS_TOKENIZADAS = [
     ("POST", f"/api/ouvidoria-setor/{TOKEN}/prorrogacao", "/api/ouvidoria-setor/{token}/prorrogacao"),
     # O botão Elogio recebido (issue #1618): o token do elogio também é o path.
     ("POST", f"/api/ouvidoria-setor/elogio/{TOKEN}/recebido", "/api/ouvidoria-setor/elogio/{token}/recebido"),
+    # O link do Núcleo de Segurança do Paciente (issue #1621): a tela e o botão
+    # Recebido pelo NSP levam o token no path, e a tela mostra o relato inteiro.
+    ("GET", f"/api/ouvidoria-setor/nsp/{TOKEN}", "/api/ouvidoria-setor/nsp/{token}"),
+    ("POST", f"/api/ouvidoria-setor/nsp/{TOKEN}/recebido", "/api/ouvidoria-setor/nsp/{token}/recebido"),
     ("GET", f"/api/aceite/{TOKEN}", "/api/aceite/{token}"),
     ("POST", f"/api/aceite/{TOKEN}/aceitar", "/api/aceite/{token}/aceitar"),
 ]
@@ -169,6 +173,8 @@ ROTAS_COM_SEGREDO_NO_PATH = {
     "/api/ouvidoria-setor/{token}/prorrogacao",
     "/api/ouvidoria-setor/{token}/responder",
     "/api/ouvidoria-setor/elogio/{token}/recebido",
+    "/api/ouvidoria-setor/nsp/{token}",
+    "/api/ouvidoria-setor/nsp/{token}/recebido",
 }
 
 

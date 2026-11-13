@@ -35,6 +35,9 @@ TABELA = "ouvidoria_acionamentos"
 RESPOSTA = "resposta"
 CIENCIA = "ciencia"
 MOTIVO_ELOGIO = "elogio"
+# O caso enviado ao Núcleo de Segurança do Paciente (issue #1621). A regra dele
+# mora em `ouvidoria_nucleo`; aqui só o que o registro precisa saber.
+MOTIVO_NSP = "nsp"
 
 PENDENTE = "pendente"
 CIENTE = "ciente"
@@ -70,6 +73,11 @@ class ForaDeUsoError(Exception):
 
 def _hash(token: str) -> str:
     return hashlib.sha256(token.encode("utf-8")).hexdigest()
+
+
+def hash_do_token(token: str) -> str:
+    """O hash que o registro guarda no lugar do token do link."""
+    return _hash(token)
 
 
 def criar_ciencia_do_elogio(
@@ -112,17 +120,22 @@ def criar_ciencia_do_elogio(
 
 
 def devolver_as_pendentes(supabase, manifestacao_id: str) -> None:
-    """A ciência do caso que ainda esperava o clique perde a vez (`devolvido`).
+    """A ciência do elogio que ainda esperava o clique perde a vez (`devolvido`).
 
     Chamada em todo acionamento novo do caso, de ciência ou de resposta: o
     elogio redirecionado como reclamação não pode deixar a ciência do setor
     antigo viva, senão o reenvio leva a ele o extrato escrito para o setor
-    novo, e o link antigo confirma um caso que não é mais elogio."""
+    novo, e o link antigo confirma um caso que não é mais elogio.
+
+    Só a do elogio: a ciência do Núcleo de Segurança do Paciente corre em
+    paralelo ao caso e não perde a vez quando a área é acionada (issue #1621,
+    ADR 0088, decisão 8)."""
     (
         supabase.table(TABELA)
         .update({"status": DEVOLVIDO})
         .eq("manifestacao_id", manifestacao_id)
         .eq("tipo", CIENCIA)
+        .eq("motivo_ciencia", MOTIVO_ELOGIO)
         .eq("status", PENDENTE)
         .execute()
     )
@@ -144,12 +157,16 @@ def ciencia_pendente(supabase, manifestacao_id: str) -> dict | None:
 
 
 def emitir_link(supabase, acionamento: dict) -> str:
-    """O link do botão "Elogio recebido", com token novo, e o hash dele gravado
-    no acionamento. Chamado na hora do envio do email: o reenvio emite outro, e
-    o link anterior deixa de abrir."""
+    """O link da ciência, com token novo, e o hash dele gravado no acionamento.
+    Chamado na hora do envio do email: o reenvio emite outro, e o link anterior
+    deixa de abrir.
+
+    O caminho é o do motivo: o elogio abre o botão "Elogio recebido" e o Núcleo
+    abre a tela do caso com o botão "Recebido pelo NSP" (issue #1621)."""
     token = secrets.token_urlsafe(32)
     supabase.table(TABELA).update({"token_hash": _hash(token)}).eq("id", acionamento["id"]).execute()
-    return f"{settings.frontend_url}/ouvidoria-setor/elogio/{token}"
+    caminho = "nsp" if acionamento.get("motivo_ciencia") == MOTIVO_NSP else "elogio"
+    return f"{settings.frontend_url}/ouvidoria-setor/{caminho}/{token}"
 
 
 def carregar_pelo_token(supabase, token: str) -> dict:
@@ -157,7 +174,10 @@ def carregar_pelo_token(supabase, token: str) -> dict:
     nenhum, `JaConfirmadoError` quando o setor já confirmou e `ForaDeUsoError`
     quando a ciência perdeu a vez para um envio mais novo."""
     result = supabase.table(TABELA).select(_CAMPOS).eq("token_hash", _hash(token)).limit(1).execute()
-    if not result.data:
+    # O link do Núcleo de Segurança do Paciente mora no mesmo registro (issue
+    # #1621), e não confirma elogio nenhum: confirmado aqui, ele devolveria o
+    # caso ao ouvidor como "Pronto para encerrar".
+    if not result.data or result.data[0].get("motivo_ciencia") != MOTIVO_ELOGIO:
         raise LinkInvalidoError()
     acionamento = result.data[0]
     if acionamento.get("status") == CIENTE:

@@ -27,6 +27,8 @@ import { useCurrentParticipante } from "@/hooks/useCurrentParticipante";
 import { ReasonModal } from "@/components/admin/ReasonModal";
 import { EncerrarModal } from "@/components/ouvidoria/EncerrarModal";
 import { ValidarModal } from "@/components/ouvidoria/ValidarModal";
+import { BlocoDoNucleo } from "@/components/ouvidoria/BlocoDoNucleo";
+import type { CamposDoNucleo } from "@/lib/ouvidoria/nucleo";
 import {
   ehSigilosoPorNatureza,
   LABEL_TIPO,
@@ -92,7 +94,10 @@ interface Anexo {
 // Os campos da Manifestação guiada (issue #1620) entram por `CamposDoPassoAPasso`,
 // opcionais pelo mesmo motivo dos marcos: um frontend servido enquanto o
 // backend ainda é o da versão anterior apenas não desenha o bloco.
-export interface Dossie extends CamposDoPassoAPasso {
+// O apontamento ao Núcleo de Segurança do Paciente e a decisão (issue #1621)
+// entram por `CamposDoNucleo`, opcionais pelo mesmo motivo: sem eles o bloco
+// do Núcleo só mostra o botão Enviar ao NSP.
+export interface Dossie extends CamposDoPassoAPasso, CamposDoNucleo {
   id: string;
   protocolo: string;
   data_abertura: string;
@@ -1063,6 +1068,12 @@ export function Dossie({ protocolo, token }: DossieProps) {
               </span>
             </div>
           )}
+
+          {/* O Núcleo de Segurança do Paciente (issue #1621): o alerta do
+              agente, o selo e o botão Enviar ao NSP, sempre disponível
+              enquanto o caso não foi ao Núcleo. O caso apagado não vai a
+              lugar nenhum. */}
+          {!apagado && <BlocoDoNucleo caso={dossie} token={token} onEnviado={recarregarCaso} />}
 
           {dossie.dados_incompletos && (
             <div className="flex items-start gap-2 px-4 py-3 rounded-xl bg-sky-50 border border-sky-200 text-sky-800 text-sm">

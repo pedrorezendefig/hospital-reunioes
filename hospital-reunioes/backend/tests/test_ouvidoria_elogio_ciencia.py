@@ -644,8 +644,10 @@ class TestAMigration:
     def test_o_gatilho_do_elogio_entra_no_check_numa_transacao(self):
         ddl = _sem_comentarios(MIGRATION.read_text(encoding="utf-8"))
 
-        for gatilho in ouvidoria_notificacoes.GATILHOS:
-            assert f"'{gatilho}'" in ddl, f"o CHECK novo perdeu o gatilho {gatilho}"
+        # O catálogo cresce depois da 136 (a 139 traz os gatilhos do Núcleo):
+        # quem cobra a lista inteira é o teste da migration VIGENTE do CHECK.
+        # Aqui, só o gatilho que esta migration criou.
+        assert f"'{ouvidoria_notificacoes.GATILHO_CIENCIA_ELOGIO}'" in ddl
         assert "BEGIN;" in ddl and "COMMIT;" in ddl
 
     def test_a_migration_termina_gravando_o_proprio_numero(self):
