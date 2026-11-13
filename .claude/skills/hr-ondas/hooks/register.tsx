@@ -1,7 +1,7 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register, RenderSurface } from 'claude-code'
 
-import type { Agente, Ci, Coleta, EsperaCi, Fase, Issue, Migration, Prd, SubAgente, Subida } from '../types'
+import type { Agente, Ci, Coleta, Encerrar, Faixa, FatiaDaFaixa, Fase, Issue, Migration, Prd, SubAgente, Subida, Tarefa } from '../types'
 
 // Torre das ondas: só leitura. A coleta (hooks/coletar.sh) junta o Hospital OS,
 // o `claude agents`, as migrations que a subida pediu e o /api/health.
@@ -31,7 +31,8 @@ const APLICADA_VISIVEL_MS = 60 * 60 * 1000
 const coleta = atom({ plugin: 'hr-ondas', key: 'coleta' } as const, null)
 const erro = atom({ plugin: 'hr-ondas', key: 'erro' } as const, null)
 const todos = atom({ plugin: 'hr-ondas', key: 'todos' } as const, false)
-const esperaCi = atom({ plugin: 'hr-ondas', key: 'esperaCi' } as const, null)
+const faixa = atom({ plugin: 'hr-ondas', key: 'faixa' } as const, null)
+const relogio = atom({ plugin: 'hr-ondas', key: 'relogio' } as const, 0)
 const verDetalhe = atom({ plugin: 'hr-ondas', key: 'verDetalhe' } as const, false)
 
 const COR: Record<Fase, string> = {
@@ -422,6 +423,327 @@ export const assinatura = (c: Pick<Coleta, 'agentes' | 'subAgentes' | 'subidas' 
     c.migrations.map(m => `${m.sessao}/${m.arquivo}`),
   ])
 
+// ---------------------------------------------------------------------------
+// Faixa da sessão: a fase desta sessão na esteira, acima do prompt. Só inferência:
+// o que a sessão chama (Skill, Agent, Bash, Monitor) e escreve (Rodada, P, Porta),
+// mais as linhas que a /onda-enxuta já grava pelo estado_onda.py. Nenhuma skill muda.
+
+/** As skills da esteira e o nome da fase de cada uma na faixa. */
+export const FASE_DA_SKILL: Record<string, string> = {
+  'grill-with-docs': 'grill',
+  'grill-me': 'grill',
+  express: 'express',
+  'to-prd': 'PRD',
+  'to-issues': 'fatias',
+  triage: 'triagem',
+  'pegar-issue': 'pegar issue',
+  tdd: 'TDD',
+  ship: 'ship',
+  'onda-enxuta': 'onda',
+  'montar-ondas-enxutas': 'montar ondas',
+  'retro-onda': 'retro',
+  'resolver-conflitos': 'conflitos',
+  diagnose: 'diagnóstico',
+  deploy: 'deploy',
+}
+const GRILL = new Set(['grill-with-docs', 'grill-me', 'express'])
+export const MAX_TENTATIVAS = 3
+/** Minutos a partir dos quais o cronômetro fica amarelo. */
+export const LIMITE_DA_FASE: Record<string, number> = {
+  TDD: 30,
+  'revisão': 10,
+  'correção': 10,
+  CI: 15,
+  subida: 25,
+  shell: 5,
+}
+
+export const faixaVazia = (): Faixa => ({
+  skill: null, rodada: null, perguntas: null, porta: null,
+  tarefas: [], fatias: [], paradas: [], prs: [], ociosaDesde: null, encerrar: null,
+})
+
+const papelDoAgente = (tipo: string | null) =>
+  /^(?:onda|hr)-(implementador|revisor|corretor)$/.exec(tipo ?? '')?.[1] ?? null
+const numeroPr = (t: string) => Number(/\bPR\s*#?(\d+)/i.exec(t)?.[1]) || null
+const numeroIssue = (t: string) => Number(/\bissue\s*#?(\d+)/i.exec(t)?.[1]) || null
+const prDoCi = (cmd: string) => Number(/gh\s+pr\s+checks\s+(\d+)/.exec(cmd)?.[1]) || null
+const prsDaSubida = (cmd: string) =>
+  /fechar_onda\.py\b/.test(cmd) && !/--dry-run/.test(cmd)
+    ? (/--prs\s+([\d\s]+)/.exec(cmd)?.[1]?.match(/\d+/g) ?? []).map(Number)
+    : []
+const opcao = (cmd: string, nome: string) => {
+  const m = new RegExp(`--${nome}\\s+(?:"([^"]*)"|'([^']*)'|(\\S+))`).exec(cmd)
+  return m ? (m[1] ?? m[2] ?? m[3] ?? null) : null
+}
+
+const comFatia = (f: Faixa, issue: number, muda: (x: FatiaDaFaixa) => FatiaDaFaixa): Faixa => {
+  const existe = f.fatias.some(x => x.issue === issue)
+  const base: FatiaDaFaixa = { issue, pr: null, status: null, tentativas: 0, veredito: null }
+  return { ...f, fatias: existe ? f.fatias.map(x => (x.issue === issue ? muda(x) : x)) : [...f.fatias, muda(base)] }
+}
+const comPrs = (f: Faixa, prs: number[]): Faixa => ({ ...f, prs: [...new Set([...f.prs, ...prs])] })
+
+/** A sessão chamou uma skill (pela ferramenta Skill ou pelo comando digitado). */
+export const aoChamarSkill = (f: Faixa, nome: string): Faixa => {
+  const skill = nome.replace(/^\//, '').split(':').pop()!
+  if (!(skill in FASE_DA_SKILL)) return f
+  if (skill === f.skill) return f
+  // grill novo começa sem rodada; o express continua o grill em lote
+  const continuaGrill = skill === 'express' && GRILL.has(f.skill ?? '')
+  return continuaGrill ? { ...f, skill } : { ...f, skill, rodada: null, perguntas: null, porta: null }
+}
+
+/** Um tool_use da sessão principal. */
+export const aoUsar = (f: Faixa, id: string, ferramenta: string, input: Record<string, unknown>, em: number): Faixa => {
+  const txt = (k: string) => (typeof input[k] === 'string' ? (input[k] as string) : '')
+  if (ferramenta === 'Skill') return aoChamarSkill(f, txt('skill'))
+  if (ferramenta === 'TaskStop' || ferramenta === 'KillShell') {
+    const alvo = txt('task_id') || txt('shell_id')
+    return alvo ? { ...f, tarefas: f.tarefas.filter(t => !t.recibo?.includes(alvo)) } : f
+  }
+  const nova = (x: Partial<Tarefa>): Tarefa => ({
+    id, tipo: 'shell', descricao: '', comando: null, agente: null, issue: null, pr: null, inicio: em, recibo: null, ...x,
+  })
+
+  if (ferramenta === 'Agent') {
+    const tipo = txt('subagent_type') || 'general-purpose'
+    const papel = papelDoAgente(tipo)
+    const texto = `${txt('description')}\n${txt('prompt').slice(0, 600)}`
+    const pr = numeroPr(texto)
+    let issue = numeroIssue(texto) ?? (papel === 'implementador' ? Number(/#(\d+)/.exec(txt('description'))?.[1]) || null : null)
+    if (!issue && pr) issue = f.fatias.find(x => x.pr === pr)?.issue ?? null
+    let g: Faixa = { ...f, tarefas: [...f.tarefas, nova({ tipo: 'agente', descricao: txt('description'), agente: tipo, issue, pr })] }
+    if (papel && issue) {
+      const motivo = /Motivo:\s*(\w+)/i.exec(txt('prompt'))?.[1]?.toLowerCase()
+      g = comFatia(g, issue, x => ({
+        ...x,
+        pr: pr ?? x.pr,
+        veredito: papel === 'revisor' ? null : x.veredito,
+        tentativas: papel === 'corretor' && motivo !== 'conflito' ? x.tentativas + 1 : x.tentativas,
+      }))
+    }
+    return g
+  }
+
+  if (ferramenta === 'Monitor') {
+    const cmd = txt('command')
+    return { ...f, tarefas: [...f.tarefas, nova({ tipo: 'monitor', descricao: txt('description'), comando: cmd, pr: prDoCi(cmd) })] }
+  }
+
+  if (ferramenta !== 'Bash') return f
+  const cmd = txt('command')
+  let g = f
+  if (/estado_onda\.py\s+issue\b/.test(cmd)) {
+    const n = Number(opcao(cmd, 'numero'))
+    const pr = Number(opcao(cmd, 'pr')) || null
+    const status = opcao(cmd, 'status')
+    if (n) g = comFatia(g, n, x => ({ ...x, pr: pr ?? x.pr, status: status ?? x.status }))
+  }
+  if (/estado_onda\.py\s+evento\b/.test(cmd) && /--tipo\s+(erro|pronto-para-voce)\b/.test(cmd)) {
+    const texto = opcao(cmd, 'texto')
+    if (texto && !g.paradas.includes(texto)) g = { ...g, paradas: [...g.paradas, texto] }
+  }
+  if (/estado_onda\.py\s+resolvido\b/.test(cmd)) g = { ...g, paradas: [] }
+  const subida = prsDaSubida(cmd)
+  if (subida.length) g = comPrs(g, subida)
+  const bg = input.run_in_background === true
+  const descricao = subida.length
+    ? `subida dos PRs ${subida.map(n => `#${n}`).join(' ')}`
+    : txt('description') || curto(cmd.split('\n')[0]!, 60)
+  return { ...g, tarefas: [...g.tarefas, nova({ tipo: bg ? 'shell-bg' : 'shell', descricao, comando: cmd, pr: prDoCi(cmd) })] }
+}
+
+const ACK_DE_FUNDO = /launched|running in the background|async agent|agentId:/i
+
+/** O veredito do revisor e o fim de um agente da onda. */
+const aoTerminarAgente = (f: Faixa, t: Tarefa, resultado: string): Faixa => {
+  const papel = papelDoAgente(t.agente)
+  if (papel !== 'revisor' || !t.issue) return f
+  const v = /veredito:?\**\s*(LIMPO|MUST-FIX)/i.exec(resultado)?.[1]?.toUpperCase() as FatiaDaFaixa['veredito'] | undefined
+  return v ? comFatia(f, t.issue, x => ({ ...x, veredito: v })) : f
+}
+
+/** O tool_result de um tool_use da sessão principal. */
+export const aoResultado = (f: Faixa, id: string, texto: string): Faixa => {
+  const t = f.tarefas.find(x => x.id === id)
+  if (!t) return f
+  const sem = { ...f, tarefas: f.tarefas.filter(x => x.id !== id) }
+  if (t.tipo === 'shell') {
+    const abertos = /gh\s+pr\s+create\b/.test(t.comando ?? '')
+      ? (texto.match(/\/pull\/(\d+)/g) ?? []).map(s => Number(s.slice(6)))
+      : []
+    return comPrs(sem, abertos)
+  }
+  if (t.tipo === 'agente' && !ACK_DE_FUNDO.test(texto)) return aoTerminarAgente(sem, t, texto)
+  return { ...f, tarefas: f.tarefas.map(x => (x.id === id ? { ...x, recibo: texto.slice(0, 2000) } : x)) }
+}
+
+/** O texto de uma linha que chegou para a sessão: task-notification ou comando digitado. */
+export const aoReceber = (f: Faixa, texto: string): Faixa => {
+  let g = f
+  const comando = /<command-name>\/?([\w:-]+)<\/command-name>/.exec(texto)?.[1]
+  if (comando) g = aoChamarSkill(g, comando)
+  for (const [, bloco] of texto.matchAll(/<task-notification>([\s\S]*?)<\/task-notification>/g)) {
+    const id = /<tool-use-id>([^<]+)<\/tool-use-id>/.exec(bloco!)?.[1]
+    const status = /<status>([^<]+)<\/status>/.exec(bloco!)?.[1]
+    if (!id || !status || status === 'running') continue
+    const t = g.tarefas.find(x => x.id === id)
+    if (!t) continue
+    g = { ...g, tarefas: g.tarefas.filter(x => x.id !== id) }
+    if (t.tipo === 'agente') g = aoTerminarAgente(g, t, /<result>([\s\S]*?)<\/result>/.exec(bloco!)?.[1] ?? '')
+  }
+  return g
+}
+
+/** O texto que o modelo escreveu: Rodada, as perguntas P e a Porta do grill. */
+export const aoEscrever = (f: Faixa, texto: string): Faixa => {
+  if (!GRILL.has(f.skill ?? '')) return f
+  let g = f
+  const rodadas = [...texto.matchAll(/\*\*Rodada\s+(\d+)\*\*/g)].map(m => Number(m[1]))
+  if (rodadas.length) g = { ...g, rodada: rodadas[rodadas.length - 1]! }
+  const ps = [...texto.matchAll(/\*\*P(\d+)\./g)].map(m => Number(m[1]))
+  if (ps.length) g = { ...g, perguntas: [Math.min(...ps), Math.max(...ps)] }
+  const porta = /\*\*Porta:?\*?\*?:?\s*([ABC])\b/.exec(texto)?.[1]
+  if (porta) g = { ...g, porta }
+  return g
+}
+
+export const faixaAtiva = (f: Faixa | null): f is Faixa =>
+  !!f && (!!f.skill || f.fatias.length > 0 || f.paradas.length > 0 || f.prs.length > 0)
+
+export type LinhaDaFaixa = { chave: string; partes: { texto: string; cor?: string; dim?: boolean; bold?: boolean }[] }
+
+/** A fase de uma Fatia e a tarefa que a cronometra. */
+export const faseDaFatia = (f: Faixa, x: FatiaDaFaixa): { fase: string; desde: Tarefa | null } => {
+  const daFatia = (t: Tarefa) => t.issue === x.issue || (x.pr !== null && t.pr === x.pr)
+  const agente = f.tarefas.find(t => t.tipo === 'agente' && papelDoAgente(t.agente) && daFatia(t))
+  if (agente) {
+    const papel = papelDoAgente(agente.agente)
+    return { fase: papel === 'implementador' ? 'TDD' : papel === 'revisor' ? 'revisão' : 'correção', desde: agente }
+  }
+  if (x.pr !== null) {
+    const ci = f.tarefas.find(t => t.tipo !== 'agente' && t.pr === x.pr)
+    if (ci) return { fase: 'CI', desde: ci }
+    const subida = f.tarefas.find(t => prsDaSubida(t.comando ?? '').includes(x.pr!))
+    if (subida) return { fase: 'subida', desde: subida }
+  }
+  const porStatus: Record<string, string> = {
+    fila: 'na fila', implementando: 'TDD', revisao: 'revisão', correcao: 'correção',
+    verde: 'verde, esperando a subida', baixa: 'baixa', mergeado: 'mergeada',
+  }
+  if (x.status && porStatus[x.status]) return { fase: porStatus[x.status]!, desde: null }
+  if (x.veredito === 'MUST-FIX') return { fase: 'must-fix', desde: null }
+  return { fase: x.pr ? 'PR aberto' : 'na fila', desde: null }
+}
+
+const corDoCronometro = (fase: string, ms: number) =>
+  LIMITE_DA_FASE[fase] !== undefined && ms >= LIMITE_DA_FASE[fase]! * 60_000 ? 'warning' : undefined
+
+/** As linhas da faixa, de cima para baixo. Vazia quando a sessão não está na esteira. */
+export const linhasDaFaixa = (f: Faixa | null, agora: number): LinhaDaFaixa[] => {
+  if (!faixaAtiva(f)) return []
+  const linhas: LinhaDaFaixa[] = []
+
+  const fase = f.skill ? FASE_DA_SKILL[f.skill]! : 'onda'
+  const cab: LinhaDaFaixa['partes'] = [{ texto: '▸ fase: ', dim: true }, { texto: fase, bold: true, cor: 'suggestion' }]
+  if (f.rodada !== null) cab.push({ texto: ` · rodada ${f.rodada}` })
+  if (f.perguntas) cab.push({ texto: ` · ${f.perguntas[0] === f.perguntas[1] ? `P${f.perguntas[0]}` : `P${f.perguntas[0]} a P${f.perguntas[1]}`}` })
+  if (f.porta) cab.push({ texto: ` · porta ${f.porta}`, cor: 'success' })
+  if (f.ociosaDesde !== null && f.tarefas.length === 0) {
+    cab.push({ texto: ` · esperando você há ${minutos(agora - f.ociosaDesde)}`, cor: 'warning' })
+  }
+  linhas.push({ chave: 'fase', partes: cab })
+
+  const usadas = new Set<string>()
+  for (const x of f.fatias) {
+    if (x.status === 'mergeado') continue
+    const { fase: fx, desde } = faseDaFatia(f, x)
+    if (desde) usadas.add(desde.id)
+    const baixa = x.status === 'baixa'
+    const p: LinhaDaFaixa['partes'] = [
+      { texto: `  ${baixa ? '✗' : '•'} #${x.issue}`, bold: true, cor: baixa ? 'error' : undefined },
+      { texto: ` · ${fx}`, cor: baixa ? 'error' : fx.startsWith('verde') ? 'success' : undefined },
+    ]
+    if (x.pr) p.push({ texto: ` · PR #${x.pr}`, dim: true })
+    if (x.veredito && fx !== 'revisão') p.push({ texto: ` · ${x.veredito}`, cor: x.veredito === 'LIMPO' ? 'success' : 'warning' })
+    if (x.tentativas > 0) {
+      p.push({
+        texto: ` · tentativa ${x.tentativas}/${MAX_TENTATIVAS}`,
+        cor: x.tentativas >= MAX_TENTATIVAS ? 'error' : x.tentativas === MAX_TENTATIVAS - 1 ? 'warning' : undefined,
+      })
+    }
+    if (desde) p.push({ texto: ` · ${duracao(agora - desde.inicio)}`, cor: corDoCronometro(fx, agora - desde.inicio), dim: !corDoCronometro(fx, agora - desde.inicio) })
+    linhas.push({ chave: `fatia${x.issue}`, partes: p })
+  }
+
+  for (const t of f.tarefas) {
+    if (usadas.has(t.id)) continue
+    const ms = agora - t.inicio
+    const subida = prsDaSubida(t.comando ?? '').length > 0
+    const [rotulo, chaveLimite] =
+      t.pr && t.tipo !== 'agente'
+        ? [`CI do PR #${t.pr}`, 'CI']
+        : subida
+          ? [t.descricao, 'subida']
+          : t.tipo === 'shell'
+            ? [`shell: ${t.descricao}`, 'shell']
+            : t.tipo === 'shell-bg'
+              ? [`em segundo plano: ${t.descricao}`, '']
+              : t.tipo === 'monitor'
+                ? [`monitor: ${t.descricao}`, '']
+                : [`agente ${t.agente}: ${t.descricao}`, '']
+    const cor = corDoCronometro(chaveLimite, ms)
+    linhas.push({
+      chave: `t${t.id}`,
+      partes: [{ texto: `  ◷ ${rotulo}` }, { texto: ` · ${duracao(ms)}`, cor, dim: !cor }],
+    })
+  }
+
+  f.paradas.forEach((texto, i) =>
+    linhas.push({ chave: `parada${i}`, partes: [{ texto: `  ! espera você: ${texto}`, cor: 'warning', bold: true }] }),
+  )
+
+  const e = f.encerrar
+  if (e && f.ociosaDesde !== null && f.tarefas.length === 0) {
+    const falta = [
+      ...e.abertos.map(n => `PR #${n} aberto`),
+      ...(e.semCommit ? [`${e.semCommit} arquivo(s) sem commit`] : []),
+      ...(e.worktree ? [`worktree ${e.worktree}`] : []),
+    ]
+    if (falta.length) linhas.push({ chave: 'encerrar', partes: [{ texto: '  encerrar: falta ', dim: true }, { texto: falta.join(' · '), cor: 'warning' }] })
+    else if (e.mergeados.length) {
+      linhas.push({
+        chave: 'encerrar',
+        partes: [{ texto: '  encerrar: ', dim: true }, { texto: `pode (${e.mergeados.map(n => `PR #${n}`).join(', ')} mergeado)`, cor: 'success' }],
+      })
+    }
+  }
+  return linhas
+}
+
+/** O texto de um bloco de conteúdo, seja string ou lista de blocos. */
+const textoDe = (c: unknown): string =>
+  typeof c === 'string'
+    ? c
+    : Array.isArray(c)
+      ? c.map(b => (b && typeof b === 'object' && 'text' in b && typeof b.text === 'string' ? b.text : '')).join('\n')
+      : ''
+
+/** Aplica uma linha da conversa principal à faixa. */
+export const aoAnexar = (f: Faixa, mensagem: { type: string; content?: unknown }, em: number): Faixa => {
+  const c = mensagem.content
+  if (typeof c === 'string') return mensagem.type === 'assistant' ? aoEscrever(f, c) : aoReceber(f, c)
+  if (!Array.isArray(c)) return f
+  let g = f
+  for (const b of c as { type?: string; [k: string]: unknown }[]) {
+    if (b?.type === 'tool_use') g = aoUsar(g, String(b.id), String(b.name), (b.input ?? {}) as Record<string, unknown>, em)
+    else if (b?.type === 'tool_result') g = aoResultado(g, String(b.tool_use_id), textoDe(b.content))
+    else if (b?.type === 'text' && typeof b.text === 'string') g = mensagem.type === 'assistant' ? aoEscrever(g, b.text) : aoReceber(g, b.text)
+  }
+  return g
+}
+
 let rodando = false
 let frescoPendente = false
 let ultimaAssinatura: string | null = null
@@ -527,6 +849,39 @@ async function coletar($: EngineInterface, fresco = false) {
   }
 }
 
+const RELOGIO_MS = 5_000
+
+async function mudarFaixa($: EngineInterface, muda: (f: Faixa) => Faixa): Promise<Faixa> {
+  return update($, faixa, f => muda(f ?? faixaVazia())) as Promise<Faixa>
+}
+
+/** A checagem da linha "Sessão: pode encerrar": PRs desta sessão, worktree e o que sobrou sem commit. */
+async function checarEncerrar($: EngineInterface, f: Faixa) {
+  try {
+    const cwd = await $.session.cwd()
+    const worktree = /\.claude\/worktrees\/([^/]+)/.exec(cwd)?.[1] ?? null
+    let semCommit = 0
+    if (worktree) {
+      const st = await $.process.run(['git', 'status', '--short'], { timeoutMs: 10_000 })
+      semCommit = st.exitCode === 0 ? st.stdout.split('\n').filter(Boolean).length : 0
+    }
+    const abertos: number[] = []
+    const mergeados: number[] = []
+    // REST, não GraphQL: as ondas em paralelo zeram a cota do GraphQL
+    for (const n of f.prs) {
+      const r = await $.process.run(['gh', 'api', `repos/${REPO}/pulls/${n}`, '--jq', '"\\(.state) \\(.merged)"'], { timeoutMs: 15_000 })
+      if (r.exitCode !== 0) continue
+      const [estado, merged] = r.stdout.trim().split(' ')
+      if (merged === 'true') mergeados.push(n)
+      else if (estado === 'open') abertos.push(n)
+    }
+    const encerrar: Encerrar = { abertos, mergeados, semCommit, worktree }
+    await mudarFaixa($, x => ({ ...x, encerrar }))
+  } catch {
+    // sem gh ou sem git: a faixa fica sem a linha de encerrar
+  }
+}
+
 export const register: Register = on => {
   on('session.start', async ($, e, next) => {
     await $.command.register({
@@ -537,6 +892,13 @@ export const register: Register = on => {
     if (e.isInteractive) void $.ui.open({ id: PANE, title: 'Ondas', columns: COLUNAS })
     void coletar($)
     $.clock.every(PERIODO_MS, () => coletar($))
+    // os cronômetros da faixa andam enquanto há tarefa rodando ou a sessão espera você
+    $.clock.every(RELOGIO_MS, async () => {
+      const f = await read($, faixa)
+      if (!faixaAtiva(f) || (!f.tarefas.length && f.ociosaDesde === null)) return
+      const agora = await $.clock.now()
+      await update($, relogio, () => agora)
+    })
     return next(e)
   })
 
@@ -571,39 +933,53 @@ export const register: Register = on => {
     return next({ ...e, context: [...(e.context ?? []), nota] })
   })
 
-  // CI em espera na própria sessão: o --watch segura a chamada até o fim.
-  // Todo comando que muda o GitHub ou a produção recoleta ao terminar.
+  // Todo comando que muda o GitHub ou a produção recoleta ao terminar (o --watch do CI também).
   on('tool.call', { tool: 'Bash' }, async ($, e, next) => {
-    const cmd = e.command
-    const assistindo = /gh\s+run\s+watch|gh\s+pr\s+checks\b[^|;&]*--watch/.test(cmd)
-    if (!assistindo) {
-      if (!EVENTO_NO_SHELL.test(cmd)) return next(e)
-      try {
-        return await next(e)
-      } finally {
-        void coletar($, true)
-      }
-    }
-    const pr = Number(/gh\s+pr\s+checks\s+(\d+)/.exec(cmd)?.[1]) || null
-    await update($, esperaCi, () => ({ pr }) satisfies EsperaCi)
+    if (!EVENTO_NO_SHELL.test(e.command)) return next(e)
     try {
       return await next(e)
     } finally {
-      await update($, esperaCi, () => null)
       void coletar($, true)
     }
   })
 
+  // A faixa lê cada linha da conversa principal depois de guardada; a dos sub-agentes não.
+  on('session.append', async ($, e, next) => {
+    const r = await next(e)
+    if (!e.agentId && e.door !== 'queue') {
+      const em = await $.clock.now()
+      await mudarFaixa($, f => aoAnexar(f, e.message, em))
+    }
+    return r
+  })
+
+  on('turn.start', async ($, e, next) => {
+    if (!e.agentId) await mudarFaixa($, f => (f.ociosaDesde === null ? f : { ...f, ociosaDesde: null }))
+    return next(e)
+  })
+
+  on('turn.complete', async ($, e, next) => {
+    const r = await next(e)
+    if (!e.agentId) {
+      const em = await $.clock.now()
+      const f = await mudarFaixa($, x => ({ ...x, ociosaDesde: em }))
+      if (faixaAtiva(f)) void checarEncerrar($, f)
+    }
+    return r
+  })
+
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
-    if (e.props.hasSurvey) return next(e)
+    const rest = await next(e)
+    if (e.props.hasSurvey) return rest
     const c = await read($, coleta)
-    const ci = await read($, esperaCi)
     const p = c ? pendentes(c) : []
-    if (!p.length && !ci) return next(e)
+    const linhas = linhasDaFaixa(await read($, faixa), (await read($, relogio)) || (await $.clock.now()))
+    if (!p.length && !linhas.length) return rest
     const { Box, Text, Link, Button } = $.ui.resolve(e)
 
     return (
       <Box flexDirection="column">
+        {rest}
         {p.map(m => (
           <Box key={`m${m.numero}`} flexDirection="row">
             <Text color="warning">
@@ -615,11 +991,15 @@ export const register: Register = on => {
             <Link href={STUDIO} label="Studio SQL" />
           </Box>
         ))}
-        {ci && (
-          <Text key="ci" color="suggestion">
-            ◷ esperando o CI{ci.pr ? ` do PR #${ci.pr}` : ''}
+        {linhas.map(l => (
+          <Text key={l.chave} wrap="truncate-end">
+            {l.partes.map(x => (
+              <Text color={x.cor} dimColor={x.dim} bold={x.bold}>
+                {x.texto}
+              </Text>
+            ))}
           </Text>
-        )}
+        ))}
       </Box>
     )
   })
