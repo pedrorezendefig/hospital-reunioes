@@ -706,6 +706,12 @@ _CABECALHO_DO_DESENVOLVEDOR_NO_CORPO = re.compile(
 )
 
 
+def tem_bloco_do_desenvolvedor(corpo: str | None) -> bool:
+    """Se o corpo ja tem o bloco "Para o desenvolvedor", em qualquer nivel de
+    cabecalho. E o que tira a issue da passada unica (issue #1636)."""
+    return bool(_CABECALHO_DO_DESENVOLVEDOR_NO_CORPO.search(corpo or ""))
+
+
 def bloco_do_desenvolvedor(partes: dict[str, Any] | None) -> str | None:
     """O bloco "Para o desenvolvedor", pronto para o corpo da issue, ou `None`.
 
@@ -740,7 +746,7 @@ def inserir_bloco_do_desenvolvedor(corpo: str, bloco: str) -> str:
     o bloco entra antes do primeiro comentario HTML, para o marcador continuar
     fechando o corpo.
     """
-    if _CABECALHO_DO_DESENVOLVEDOR_NO_CORPO.search(corpo):
+    if tem_bloco_do_desenvolvedor(corpo):
         return corpo
     achado = _CABECALHO_DO_DIRETOR.search(corpo)
     if not achado:
