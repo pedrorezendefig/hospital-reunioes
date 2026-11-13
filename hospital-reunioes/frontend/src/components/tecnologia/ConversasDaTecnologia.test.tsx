@@ -1614,7 +1614,9 @@ describe("O Quadro na tela larga (issue #1642, ADR 0090)", () => {
     expect(within(aberto).queryByRole("button", { name: AMPLIAR })).toBeNull();
     expect(demandaDaUrl()).toBe("q-3");
 
-    fireEvent.click(screen.getByRole("button", { name: VOLTAR_AO_QUADRO }));
+    const voltar = screen.getByRole("button", { name: VOLTAR_AO_QUADRO });
+    expect(voltar.className).not.toMatch(/(^|\s)md:hidden(\s|$)/);
+    fireEvent.click(voltar);
 
     expect(await screen.findByRole("region", { name: "Quadro" })).toBeTruthy();
     expect(screen.queryByRole("region", { name: "Conversa aberta" })).toBeNull();
@@ -1634,7 +1636,8 @@ describe("O Quadro na tela larga (issue #1642, ADR 0090)", () => {
     const aberto = await screen.findByRole("region", { name: "Conversa aberta" });
     expect(within(aberto).getByText(ABERTURA)).toBeTruthy();
     expect(screen.queryByRole("region", { name: "Quadro" })).toBeNull();
-    expect(screen.getByRole("button", { name: VOLTAR_AO_QUADRO })).toBeTruthy();
+    expect(aberto.className).not.toMatch(/(^|\s)hidden(\s|$)/);
+    expect(screen.getByRole("button", { name: VOLTAR_AO_QUADRO }).className).not.toMatch(/(^|\s)md:hidden(\s|$)/);
   });
 
   it("o card Registrada do autor reabre a conversa com o agente na largura toda", async () => {
@@ -1651,6 +1654,7 @@ describe("O Quadro na tela larga (issue #1642, ADR 0090)", () => {
     const aberto = await screen.findByRole("region", { name: "Conversa aberta" });
     expect(await within(aberto).findByText("Onde isso aconteceu?")).toBeTruthy();
     expect(screen.queryByRole("region", { name: "Quadro" })).toBeNull();
+    expect(screen.getByRole("button", { name: VOLTAR_AO_QUADRO }).className).not.toMatch(/(^|\s)md:hidden(\s|$)/);
     expect(demandaDaUrl()).toBe("q-2");
   });
 

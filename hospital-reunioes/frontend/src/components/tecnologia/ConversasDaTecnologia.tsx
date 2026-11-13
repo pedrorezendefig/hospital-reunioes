@@ -69,6 +69,12 @@
  * clique mostra antes quanto o Retrato de hoje deve custar, e a revisão só
  * começa com a confirmação (ADR 0082). Em revisão, o card abre a conversa para
  * responder. Quem pode é o servidor que diz.
+ *
+ * A partir de 1280px a lista dá lugar ao Quadro, as Demandas em colunas pela
+ * Etapa (issue #1642, ADR 0090), e o Assistente sai da tela inicial: o "Novo
+ * pedido", no topo da aba, e o clique num card abrem na largura toda, como o
+ * Ampliar, com o "Voltar ao quadro". O que fica embaixo de 1280px é a lista de
+ * antes, com o card completo e o filtro de Etapa.
  */
 
 import { ReactNode, useCallback, useEffect, useRef, useState } from "react";
@@ -1171,115 +1177,115 @@ export function ConversasDaTecnologia({
               </div>
             )
           ) : (
-          <nav aria-label="Suas conversas" className="md:max-h-[calc(100vh-18rem)] md:overflow-y-auto p-1 -m-1">
-            {estadoDaLista}
-            {demandas !== null && demandas.length === 0 && (
-              <p className="px-1 text-sm text-text-secondary">{LISTA_VAZIA}</p>
-            )}
-            {demandas !== null && demandas.length > 0 && (
-              <ul className="space-y-3">
-                {demandas.map((demanda) => (
-                  <li key={demanda.id}>
-                    <CardDaConversa
-                      demanda={demanda}
-                      destacada={destacada === demanda.id}
-                      onAbrir={() => abrir(demanda)}
-                      onConversar={() => abrir(demanda, true)}
-                      onAmpliar={() => abrir(demanda, false, true)}
-                    />
-                  </li>
-                ))}
-              </ul>
-            )}
-          </nav>
+            <nav aria-label="Suas conversas" className="md:max-h-[calc(100vh-18rem)] md:overflow-y-auto p-1 -m-1">
+              {estadoDaLista}
+              {demandas !== null && demandas.length === 0 && (
+                <p className="px-1 text-sm text-text-secondary">{LISTA_VAZIA}</p>
+              )}
+              {demandas !== null && demandas.length > 0 && (
+                <ul className="space-y-3">
+                  {demandas.map((demanda) => (
+                    <li key={demanda.id}>
+                      <CardDaConversa
+                        demanda={demanda}
+                        destacada={destacada === demanda.id}
+                        onAbrir={() => abrir(demanda)}
+                        onConversar={() => abrir(demanda, true)}
+                        onAmpliar={() => abrir(demanda, false, true)}
+                      />
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </nav>
           )}
         </div>
 
         {!quadroAVista && (
-        <div
-          role="region"
-          aria-label="Conversa aberta"
-          className={`${naTela === "conversa" ? "" : "hidden"} md:block min-w-0 space-y-3`}
-        >
-          <button
-            type="button"
-            onClick={() => {
-              // Ampliado na tela média, o Voltar traz a lista e o pedido segue aberto
-              // ao lado. Na tela larga, o Quadro volta e a Demanda sai do endereço.
-              if (largo || !recolhida) escreverNoEndereco(null);
-              setSemAcesso(false);
-              setNaTela("lista");
-            }}
-            className={`${recolhida || semAcesso ? "" : "md:hidden"} inline-flex items-center gap-1.5 text-sm font-semibold text-primary`}
+          <div
+            role="region"
+            aria-label="Conversa aberta"
+            className={`${naTela === "conversa" ? "" : "hidden"} md:block min-w-0 space-y-3`}
           >
-            <ArrowLeft className="w-4 h-4" />
-            {largo ? VOLTAR_AO_QUADRO : VOLTAR_PARA_A_LISTA}
-          </button>
-          {aberta && !recolhida && (
             <button
               type="button"
               onClick={() => {
-                setAmpliada(true);
-                setNaTela("conversa");
+                // Ampliado na tela média, o Voltar traz a lista e o pedido segue aberto
+                // ao lado. Na tela larga, o Quadro volta e a Demanda sai do endereço.
+                if (largo || !recolhida) escreverNoEndereco(null);
+                setSemAcesso(false);
+                setNaTela("lista");
               }}
-              title={AMPLIAR_EXPLICADO}
-              className="hidden md:inline-flex items-center gap-1.5 text-sm font-semibold text-primary"
+              className={`${recolhida || semAcesso ? "" : "md:hidden"} inline-flex items-center gap-1.5 text-sm font-semibold text-primary`}
             >
-              <Maximize2 className="w-4 h-4" />
-              {AMPLIAR}
+              <ArrowLeft className="w-4 h-4" />
+              {largo ? VOLTAR_AO_QUADRO : VOLTAR_PARA_A_LISTA}
             </button>
-          )}
-          {aberta?.pode_apagar && (
-            <ApagarADemanda key={`apagar-${chave}`} demanda={aberta} token={token} onApagada={aoApagar} />
-          )}
-          {aberta?.pode_revisar && (
-            <RevisarComOCodigoDeHoje key={`revisar-${chave}`} demanda={aberta} token={token} onRevisada={aoRevisar} />
-          )}
-          {aberta?.envio_falhou && (
-            <AvisoDoEnvioFalhou key={`envio-${chave}`} demanda={aberta} token={token} onReenviado={aoReenviar} />
-          )}
-          {desenvolvedor && aberta?.designacao_falhou && (
-            <AvisoDaDesignacaoFalhou
-              key={`designacao-${chave}`}
-              demanda={aberta}
-              token={token}
-              onDesignado={aoDesignar}
-            />
-          )}
-          {/* Ao lado da lista, a Conversa da Demanda desce para baixo do documento;
-              ampliado, ela ganha a coluna à direita (issue #1593). */}
-          <div
-            className={
-              !aberta
-                ? ""
-                : recolhida
-                  ? "space-y-3 xl:space-y-0 xl:grid xl:grid-cols-[minmax(0,1fr)_24rem] xl:gap-6 xl:items-start"
-                  : "space-y-3"
-            }
-          >
-            <div className="min-w-0">
-              {semAcesso ? (
-                <p role="alert" className="px-4 py-3 rounded-2xl border border-border bg-white text-sm text-text">
-                  {SEM_ACESSO}
-                </p>
-              ) : (aberta?.tem_vinculo || aberta?.minha === false) && !aberta?.em_revisao ? (
-                <Acompanhamento key={chave} demanda={aberta} token={token} />
-              ) : (
-                <ChatDaTecnologia key={chave} token={token} demandaId={aberta?.id ?? null} onMudou={aoMudar} />
+            {aberta && !recolhida && (
+              <button
+                type="button"
+                onClick={() => {
+                  setAmpliada(true);
+                  setNaTela("conversa");
+                }}
+                title={AMPLIAR_EXPLICADO}
+                className="hidden md:inline-flex items-center gap-1.5 text-sm font-semibold text-primary"
+              >
+                <Maximize2 className="w-4 h-4" />
+                {AMPLIAR}
+              </button>
+            )}
+            {aberta?.pode_apagar && (
+              <ApagarADemanda key={`apagar-${chave}`} demanda={aberta} token={token} onApagada={aoApagar} />
+            )}
+            {aberta?.pode_revisar && (
+              <RevisarComOCodigoDeHoje key={`revisar-${chave}`} demanda={aberta} token={token} onRevisada={aoRevisar} />
+            )}
+            {aberta?.envio_falhou && (
+              <AvisoDoEnvioFalhou key={`envio-${chave}`} demanda={aberta} token={token} onReenviado={aoReenviar} />
+            )}
+            {desenvolvedor && aberta?.designacao_falhou && (
+              <AvisoDaDesignacaoFalhou
+                key={`designacao-${chave}`}
+                demanda={aberta}
+                token={token}
+                onDesignado={aoDesignar}
+              />
+            )}
+            {/* Ao lado da lista, a Conversa da Demanda desce para baixo do documento;
+                ampliado, ela ganha a coluna à direita (issue #1593). */}
+            <div
+              className={
+                !aberta
+                  ? ""
+                  : recolhida
+                    ? "space-y-3 xl:space-y-0 xl:grid xl:grid-cols-[minmax(0,1fr)_24rem] xl:gap-6 xl:items-start"
+                    : "space-y-3"
+              }
+            >
+              <div className="min-w-0">
+                {semAcesso ? (
+                  <p role="alert" className="px-4 py-3 rounded-2xl border border-border bg-white text-sm text-text">
+                    {SEM_ACESSO}
+                  </p>
+                ) : (aberta?.tem_vinculo || aberta?.minha === false) && !aberta?.em_revisao ? (
+                  <Acompanhamento key={chave} demanda={aberta} token={token} />
+                ) : (
+                  <ChatDaTecnologia key={chave} token={token} demandaId={aberta?.id ?? null} onMudou={aoMudar} />
+                )}
+              </div>
+              {aberta && (
+                <div className={recolhida ? "xl:sticky xl:top-4 xl:max-h-[calc(100vh-2rem)] xl:overflow-y-auto" : ""}>
+                  <ConversaDaDemanda
+                    key={`conversa-${chave}`}
+                    demandaId={aberta.id}
+                    token={token}
+                    focar={focarConversa}
+                  />
+                </div>
               )}
             </div>
-            {aberta && (
-              <div className={recolhida ? "xl:sticky xl:top-4 xl:max-h-[calc(100vh-2rem)] xl:overflow-y-auto" : ""}>
-                <ConversaDaDemanda
-                  key={`conversa-${chave}`}
-                  demandaId={aberta.id}
-                  token={token}
-                  focar={focarConversa}
-                />
-              </div>
-            )}
           </div>
-        </div>
         )}
       </div>
     </div>
