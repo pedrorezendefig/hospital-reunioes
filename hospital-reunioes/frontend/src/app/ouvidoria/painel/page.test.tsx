@@ -171,6 +171,14 @@ async function abrirOPainel() {
   await screen.findByText("Painel em tempo real");
 }
 
+describe("a orientação embutida do painel (issue #1629, regra T1)", () => {
+  it("abre com a frase do topo da seção 4.14", async () => {
+    await abrirOPainel();
+
+    expect(screen.getByText("O que precisa de atenção agora, do mais urgente ao menos urgente.")).toBeTruthy();
+  });
+});
+
 describe("o painel conta o hospital inteiro, arquivados inclusive (issue #592, ADR 0047)", () => {
   it("pede a listagem com o recorte que inclui o arquivo", async () => {
     await abrirOPainel();

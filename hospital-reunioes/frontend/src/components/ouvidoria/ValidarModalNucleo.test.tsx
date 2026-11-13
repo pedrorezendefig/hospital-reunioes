@@ -51,7 +51,7 @@ function montar(manifestacao: Record<string, unknown>) {
 }
 
 function botaoDeValidar() {
-  return screen.getByRole("button", { name: /Validar e acionar a área/ }) as HTMLButtonElement;
+  return screen.getByRole("button", { name: "Enviar à área" }) as HTMLButtonElement;
 }
 
 function corpoDaValidacao(): Record<string, unknown> {

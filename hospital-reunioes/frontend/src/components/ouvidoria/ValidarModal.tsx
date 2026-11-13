@@ -3,6 +3,8 @@
 import { useEffect, useState } from "react";
 import { AlertCircle, CheckCircle2, Loader2, Send, ShieldAlert } from "lucide-react";
 import { AdminModal } from "@/components/admin/AdminModal";
+import { RotuloComAjuda } from "@/components/ouvidoria/Ajuda";
+import { FRASE_DO_TOPO } from "@/lib/ouvidoria/orientacao";
 import {
   confirmacaoDoRedirecionamento,
   lerAFalhaDoRedirecionamento,
@@ -90,6 +92,8 @@ interface ValidarModalProps {
 const CAMPO =
   "w-full px-3 py-2 rounded-lg border border-slate-200 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary/40";
 const ROTULO = "block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1";
+/** O rótulo que divide a linha com o "?": a margem de baixo é da linha. */
+const ROTULO_DA_LINHA = "text-xs font-semibold text-slate-500 uppercase tracking-wide";
 
 /**
  * A gravidade gravada no caso, quando ela é uma das quatro que a tela oferece.
@@ -364,7 +368,7 @@ export function ValidarModal({
       description={
         redirecionando
           ? "A área nova recebe o email de acionamento com o prazo inteiro, e a anterior recebe um aviso curto de que não precisa mais responder."
-          : "O setor recebe o email de acionamento com o prazo assim que você confirmar."
+          : FRASE_DO_TOPO.validar
       }
       icon={<Send className="w-5 h-5" />}
       size="lg"
@@ -484,9 +488,12 @@ export function ValidarModal({
         </div>
 
         <div>
-          <label className={ROTULO} htmlFor="validar-setor">
-            Área responsável
-          </label>
+          <RotuloComAjuda
+            htmlFor="validar-setor"
+            rotulo="Área responsável"
+            explicacao="Quem vai apurar e responder. O lugar de onde o relato veio não decide a área."
+            className={ROTULO_DA_LINHA}
+          />
           <select
             id="validar-setor"
             className={CAMPO}
@@ -563,7 +570,11 @@ export function ValidarModal({
         ) : null}
 
         <div>
-          <span className={ROTULO}>Gravidade</span>
+          <RotuloComAjuda
+            rotulo="Gravidade"
+            explicacao="A gravidade decide o prazo que a área recebe."
+            className={ROTULO_DA_LINHA}
+          />
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
             {GRAVIDADES.map((nivel) => (
               <button
@@ -642,7 +653,9 @@ export function ValidarModal({
             ) : (
               <CheckCircle2 className="w-4 h-4" />
             )}
-            {redirecionando ? "Redirecionar para a área nova" : "Validar e acionar a área"}
+            {/* "Enviar à área", e não "acionar" (regra T1, issue #1629): o
+                nome da ação em português comum. */}
+            {redirecionando ? "Redirecionar para a área nova" : "Enviar à área"}
           </button>
         </div>
       </div>

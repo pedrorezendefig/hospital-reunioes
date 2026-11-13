@@ -560,7 +560,7 @@ describe("o modo acionamento não mudou (issue #325, #601)", () => {
     });
     expect(screen.queryByLabelText(/Motivo do redirecionamento/)).toBeNull();
 
-    fireEvent.click(screen.getByRole("button", { name: /Validar e acionar a área/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Enviar à área" }));
     await waitFor(() => expect(envios.length).toBe(1));
     expect(envios[0].url).toBe("/api/ouvidoria/manifestacoes/uuid-12/validar");
     // O corpo da validação não ganhou o motivo: a rota dela não o conhece.

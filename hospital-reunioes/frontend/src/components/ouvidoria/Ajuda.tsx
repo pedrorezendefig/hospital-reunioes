@@ -18,14 +18,17 @@ export function Ajuda({ assunto, explicacao }: { assunto: string; explicacao: st
   const [aberta, setAberta] = useState(false);
   return (
     <>
+      {/* O nome vai num texto escondido, e não em `aria-label`: a busca por
+          rótulo do campo ("Área responsável") também casa `aria-label`, e o
+          "?" ao lado viraria um segundo dono do mesmo nome. */}
       <button
         type="button"
         aria-expanded={aberta}
-        aria-label={`O que é: ${assunto}`}
         onClick={() => setAberta((antes) => !antes)}
         className={`inline-flex items-center justify-center shrink-0 rounded-full text-slate-400 hover:text-slate-600 ${ALVO_DE_TOQUE} md:w-6 md:h-6`}
       >
-        <CircleHelp className="w-4 h-4" />
+        <CircleHelp aria-hidden="true" className="w-4 h-4" />
+        <span className="sr-only">{`O que é: ${assunto}`}</span>
       </button>
       {aberta && <p className="basis-full text-xs text-slate-500 mt-1 normal-case tracking-normal">{explicacao}</p>}
     </>

@@ -30,6 +30,7 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import { AlertCircle, AlertTriangle, ArrowLeft, Loader2, RefreshCw, Send } from "lucide-react";
 import { useCurrentParticipante } from "@/hooks/useCurrentParticipante";
+import { FRASE_DO_TOPO } from "@/lib/ouvidoria/orientacao";
 import { usePolling } from "@/hooks/usePolling";
 import { Ajuda } from "@/components/ouvidoria/Ajuda";
 import { CardDeCaso, GravidadeDoCaso, type CasoDoCard } from "@/components/ouvidoria/CardDeCaso";
@@ -607,7 +608,7 @@ export default function PainelEmTempoRealPage() {
         <div className="min-w-0">
           <h1 className="text-2xl font-bold text-slate-900">Painel em tempo real</h1>
           <p className="text-slate-500 text-sm mt-0.5">
-            O que precisa de atenção agora, do mais urgente ao menos urgente.
+            {FRASE_DO_TOPO.painel}
           </p>
         </div>
         {atualizadoEm && (
