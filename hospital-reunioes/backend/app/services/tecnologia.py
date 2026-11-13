@@ -186,6 +186,7 @@ ETAPAS_QUE_SE_APAGAM: tuple[str, ...] = (ETAPA_REGISTRADA, ETAPA_EM_ANALISE, ETA
 MOTIVO_APAGAR_SO_O_AUTOR = "Só quem começou esta conversa pode apagá-la."
 MOTIVO_APAGAR_SO_O_DESENVOLVEDOR = "Pedido que já virou card, só a Vitta apaga. Peça na Conversa da Demanda."
 MOTIVO_APAGAR_JA_COMECOU = "Este pedido já começou a ser feito e não pode mais ser apagado."
+MOTIVO_APAGAR_DA_ANA = "Os pedidos da Ana aparecem aqui só para acompanhar e não se apagam pelo aplicativo."
 
 
 def recusa_de_apagar(pessoa: dict[str, Any], demanda: dict[str, Any]) -> tuple[int, str] | None:
@@ -197,7 +198,12 @@ def recusa_de_apagar(pessoa: dict[str, Any], demanda: dict[str, Any]) -> tuple[i
     sempre). O card criado, so o Desenvolvedor, ate Planejada ou em Nao sera
     feita. Quem nao pode apagar e 403 antes de a Etapa ser olhada. A lista le
     daqui para mostrar o botao so a quem pode.
+
+    O card da Ana e so leitura (issue #1714, ADR 0093, decisao 5): ninguem o
+    apaga pelo app, e o Apagar fecharia a issue no repositorio do Hospital.
     """
+    if projeto_da_demanda(demanda) == PROJETO_ANA:
+        return 409, MOTIVO_APAGAR_DA_ANA
     if not demanda.get("github_issue_numero"):
         if demanda.get("autor_id") != pessoa.get("id") and not e_desenvolvedor(pessoa):
             return 403, MOTIVO_APAGAR_SO_O_AUTOR

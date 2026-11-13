@@ -2013,6 +2013,36 @@ describe("O card do Quadro abre num painel à direita (issue #1643, ADR 0090, de
     for (const nome of BOTOES) expect(within(painel).queryByRole("button", { name: nome })).toBeNull();
   });
 
+  it("o card da Ana, como a lista o serve, abre sem Apagar nem Revisar e com o link no repositório da Ana (issue #1714)", async () => {
+    const DA_ANA = demanda("a-12", "Ana: responder o preparo do exame", {
+      etapa: "planejada",
+      origem: "vitta",
+      tem_vinculo: true,
+      pode_apagar: false,
+      pode_revisar: false,
+      issue_numero: 12,
+      issue_url: "https://github.com/pedrorezendefig/programa-ana/issues/12",
+    });
+    telaLarga();
+    montar((url) => {
+      if (url === "/api/admin/tecnologia/eu") return { status: 200, corpo: { desenvolvedor: true } };
+      if (url === `${LISTA}?filtro=para_mim`) return { status: 200, corpo: [DA_ANA] };
+      if (url.endsWith("/conversa")) return { status: 200, corpo: { mensagens: [], mencionaveis: [] } };
+      return { status: 404, corpo: {} };
+    });
+    await within(await screen.findByRole("region", { name: "Quadro" })).findByText("Ana: responder o preparo do exame");
+
+    fireEvent.click(cardDe(/Ana: responder o preparo/));
+    const painel = await screen.findByRole("complementary", { name: "Pedido aberto" });
+    await within(painel).findByRole("heading", { level: 2, name: "Ana: responder o preparo do exame" });
+
+    for (const nome of [APAGAR, REVISAR_COM_O_CODIGO_DE_HOJE]) {
+      expect(within(painel).queryByRole("button", { name: nome })).toBeNull();
+    }
+    const link = within(painel).getByRole("link", { name: "#12" });
+    expect(link.getAttribute("href")).toBe("https://github.com/pedrorezendefig/programa-ana/issues/12");
+  });
+
   it("Conversar, no painel, põe a caixa da Conversa da Demanda em foco", async () => {
     comOQuadro();
     await screen.findByRole("region", { name: "Quadro" });

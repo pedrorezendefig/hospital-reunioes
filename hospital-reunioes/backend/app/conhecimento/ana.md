@@ -40,6 +40,16 @@ A Ana pede nome completo e CPF, numa mensagem só, e apenas nos momentos em que 
 
 O relato e os dados pessoais ficam na conversa, com a equipe. O que vai para o aplicativo é o índice do caso, não o dossiê.
 
+## Os pedidos da Ana na aba Tecnologia
+
+O que a Vitta está fazendo na Ana aparece na aba Tecnologia do aplicativo, ao lado dos pedidos do próprio aplicativo. Cada pedido mostra a etapa em que está, as partes e o que muda, escrito para quem decide.
+
+Esses pedidos estão ali só para acompanhar. Não dá para apagar nem revisar um pedido da Ana pela aba, e pedido novo para a Ana ainda não se abre pelo assistente da aba: quem cria é a Vitta. A conversa do card funciona como nos outros.
+
+Na Ana, a última etapa é **Entregue**. Ela não tem a etapa Em produção, porque a mudança na Ana é aplicada à mão na plataforma dela, e não por uma atualização do aplicativo.
+
+Os pedidos que já estavam concluídos antes de a Ana entrar na aba não aparecem. Daqui para frente, o que for concluído continua lá.
+
 ## O que já foi decidido
 
 - Os valores de consulta, exame e cirurgia que a Ana responde moram no aplicativo, e o que se edita lá vale na conversa seguinte, sem espera.

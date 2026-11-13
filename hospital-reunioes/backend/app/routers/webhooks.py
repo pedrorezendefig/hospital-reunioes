@@ -557,7 +557,7 @@ async def webhook_github(
 
     demanda = tecnologia_sincronizacao.demanda_vinculada(supabase, projeto, numero)
     if demanda is None:
-        if _espelho_aceita(payload):
+        if _espelho_aceita(payload, projeto):
             return await _espelhar(supabase, projeto, numero)
         return {"ignorado": "sem_vinculo"}
 
@@ -568,17 +568,18 @@ async def webhook_github(
     )
 
 
-def _espelho_aceita(payload: dict) -> bool:
+def _espelho_aceita(payload: dict, projeto: str) -> bool:
     """O filtro barato do espelho (issue #1554), pelo corpo do evento e sem
     gastar cota: a esmagadora maioria das issues sem Demanda (a parte, a
-    ferramenta, o card do chat que ainda nao gravou o numero) para aqui."""
+    ferramenta, o card do chat que ainda nao gravou o numero) para aqui. A
+    regra e a do Projeto da entrega (issue #1714)."""
     from app.services import tecnologia_espelho
 
     issue = payload.get("issue")
     return (
         payload.get("action") in tecnologia_espelho.ACOES_DO_ESPELHO
         and isinstance(issue, dict)
-        and tecnologia_espelho.decidir(issue, None) == tecnologia_espelho.CRIA
+        and tecnologia_espelho.decidir(issue, None, projeto=projeto) == tecnologia_espelho.CRIA
     )
 
 
