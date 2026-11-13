@@ -2,6 +2,54 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-11-13T14:49:51-03:00",
+      "sha": "29edca41b7e882def11b684eb3bb0aae5080b182",
+      "app_version": "0.288.0",
+      "subject": "Onda entregas-onda2: Entregas em lista por semana que abre no hover com o que cada entrega fez",
+      "raw_subject": "chore(deploy): registro da onda entregas-onda2 (#1750)",
+      "scope": [
+        "backend",
+        "frontend"
+      ],
+      "prds": [
+        1689
+      ],
+      "result": "healthy",
+      "duration_seconds": 282,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        },
+        {
+          "service": "frontend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "onda-enxuta entregas-onda2: PR #1750 (issue #1703), mergeados PR a PR. Merge pela API do GitHub, um build. Registro pela Action pos-merge depois do health.",
+      "etapas": {
+        "merge_s": 3,
+        "build_s": {
+          "backend": 18,
+          "frontend": 199
+        },
+        "health_s": 0
+      },
+      "responsavel": "pedrorezendefig"
+    },
+    {
       "at": "2026-11-13T14:43:05-03:00",
       "sha": "4eafe153c67b9b5c199c3ee0372a6eaa037053b6",
       "app_version": "0.287.0",
