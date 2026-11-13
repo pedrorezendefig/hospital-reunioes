@@ -1,0 +1,173 @@
+{
+  "admin": {
+    "id": "P17280",
+    "nome": "Henrique Bastos",
+    "email": "henrique.bastos.tecnologia@exemplo.local",
+    "senha": "ManualTecnologia1727!",
+    "cargo": "Diretor de exemplo"
+  },
+  "desenvolvedores": [
+    { "id": "P17281", "nome": "Rafael Moura", "padrao": true },
+    { "id": "P17282", "nome": "Clara Nogueira", "padrao": false }
+  ],
+  "abrir": {
+    "melhoria": "exemplo-58",
+    "bug": "exemplo-59",
+    "painel": "exemplo-47"
+  },
+  "demandas": [
+    {
+      "id": "exemplo-58", "numero": 58, "dias": 0, "hora": "09:10",
+      "titulo": "Avisar a Secretária quando a ata ficar pronta para assinar",
+      "classificacao": "melhoria", "etapa": "registrada", "projeto": "hospital", "origem": "diretor"
+    },
+    {
+      "id": "exemplo-59", "numero": 59, "dias": 0, "hora": "10:40",
+      "titulo": "O botão Exportar da Ouvidoria não baixa a planilha",
+      "classificacao": "bug", "etapa": "registrada", "projeto": "hospital", "origem": "diretor"
+    },
+    {
+      "id": "exemplo-54", "numero": 54, "dias": 3, "hora": "14:20",
+      "titulo": "Mostrar no painel quantas guias voltaram glosadas",
+      "classificacao": "melhoria", "etapa": "em_analise", "projeto": "hospital", "origem": "diretor",
+      "responsavel": "Rafael Moura"
+    },
+    {
+      "id": "exemplo-55", "numero": 55, "dias": 2, "hora": "11:05",
+      "titulo": "Ana confirmar o horário do exame por mensagem",
+      "classificacao": "melhoria", "etapa": "em_analise", "projeto": "ana", "origem": "vitta",
+      "responsavel": "Clara Nogueira"
+    },
+    {
+      "id": "exemplo-51", "numero": 51, "dias": 6, "hora": "08:45",
+      "titulo": "Lembrete por e-mail do POP perto de vencer",
+      "classificacao": "melhoria", "etapa": "planejada", "projeto": "hospital", "origem": "diretor",
+      "responsavel": "Rafael Moura", "partes": [0, 3]
+    },
+    {
+      "id": "exemplo-53", "numero": 53, "dias": 4, "hora": "16:30",
+      "titulo": "A data da reunião aparece um dia antes no celular",
+      "classificacao": "bug", "etapa": "planejada", "projeto": "hospital", "origem": "diretor",
+      "responsavel": "Clara Nogueira"
+    },
+    {
+      "id": "exemplo-47", "numero": 47, "dias": 12, "hora": "10:00",
+      "titulo": "Painel de Contas médicas por convênio",
+      "classificacao": "melhoria", "etapa": "em_desenvolvimento", "projeto": "hospital", "origem": "diretor",
+      "responsavel": "Clara Nogueira", "partes": [2, 5],
+      "partes_texto": [
+        "O painel separa as guias por convênio.",
+        "Cada convênio mostra as guias enviadas, pagas e glosadas.",
+        "O filtro de período vale para todos os convênios.",
+        "Os convênios sem guia no mês aparecem com zero.",
+        "As guias antigas entram na conta."
+      ],
+      "o_que_muda": "**O que muda:** O painel de Contas médicas passa a separar as guias por convênio, para você ver onde a cobrança emperra.\n\n**O que você precisa saber:**\n- Cada convênio ganha uma linha com as guias enviadas, pagas e glosadas.\n- O filtro de período vale para todos os convênios de uma vez.\n- As guias antigas entram na conta desde o primeiro dia."
+    },
+    {
+      "id": "exemplo-49", "numero": 49, "dias": 9, "hora": "15:15",
+      "titulo": "Ana responder sobre o preparo dos exames",
+      "classificacao": "melhoria", "etapa": "em_desenvolvimento", "projeto": "ana", "origem": "vitta",
+      "responsavel": "Rafael Moura", "partes": [1, 3]
+    },
+    {
+      "id": "exemplo-44", "numero": 44, "dias": 15, "hora": "09:30",
+      "titulo": "Filtro de Projeto no Quadro da Tecnologia",
+      "classificacao": "melhoria", "etapa": "em_producao", "projeto": "hospital", "origem": "diretor",
+      "responsavel": "Rafael Moura", "partes": [3, 3], "versao": "v0.288.0", "entregue_ha": 2, "tamanho": "M",
+      "o_que_muda": "**O que muda:** O Quadro ganha o campo Projeto, para ver só os pedidos do aplicativo ou só os da Ana."
+    },
+    {
+      "id": "exemplo-45", "numero": 45, "dias": 11, "hora": "13:50",
+      "titulo": "Ana passar a conversa para a recepção no horário de pico",
+      "classificacao": "bug", "etapa": "entregue", "projeto": "ana", "origem": "vitta",
+      "responsavel": "Clara Nogueira", "entregue_ha": 4, "tamanho": "P",
+      "o_que_muda": "**O que muda:** No horário de pico, a Ana passa a conversa para a recepção em vez de deixar o paciente esperando."
+    },
+    {
+      "id": "exemplo-41", "numero": 41, "dias": 20, "hora": "10:20",
+      "titulo": "Selo de bug ou melhoria em cada pedido",
+      "classificacao": "melhoria", "etapa": "em_producao", "projeto": "hospital", "origem": "diretor",
+      "responsavel": "Clara Nogueira", "versao": "v0.284.0", "entregue_ha": 8, "tamanho": "P",
+      "demonstracao": "https://demonstracao.exemplo.local/selo-do-pedido",
+      "o_que_muda": "**O que muda:** Cada pedido mostra se é bug ou melhoria, no Quadro e nas Entregas."
+    }
+  ],
+  "entregas_anteriores": [
+    { "titulo": "Copiar o link de um pedido para mandar no WhatsApp", "classificacao": "melhoria", "projeto": "hospital", "tamanho": "P", "versao": "v0.279.0", "entregue_ha": 16 },
+    { "titulo": "Quadro com as colunas pela Etapa", "classificacao": "melhoria", "projeto": "hospital", "tamanho": "G", "versao": "v0.271.0", "entregue_ha": 23 },
+    { "titulo": "Ana entender a pergunta sobre convênio aceito", "classificacao": "melhoria", "projeto": "ana", "tamanho": "M", "entregue_ha": 25 }
+  ],
+  "ritmo": [
+    { "pedidos": 3, "g": 0, "m": 1, "p": 1 },
+    { "pedidos": 4, "g": 0, "m": 0, "p": 2 },
+    { "pedidos": 2, "g": 1, "m": 0, "p": 1 },
+    { "pedidos": 5, "g": 0, "m": 1, "p": 2 },
+    { "pedidos": 3, "g": 0, "m": 2, "p": 1 },
+    { "pedidos": 6, "g": 1, "m": 1, "p": 0 },
+    { "pedidos": 4, "g": 0, "m": 1, "p": 3 },
+    { "pedidos": 2, "g": 0, "m": 0, "p": 2 },
+    { "pedidos": 5, "g": 1, "m": 1, "p": 1 },
+    { "pedidos": 3, "g": 0, "m": 1, "p": 2 },
+    { "pedidos": 4, "g": 0, "m": 1, "p": 2 },
+    { "pedidos": 2, "g": 0, "m": 0, "p": 1 }
+  ],
+  "conversa_da_demanda": [
+    { "autor": "Clara Nogueira", "texto": "Henrique, as duas primeiras partes já estão no ar. A próxima traz o filtro de período.", "dias": 1, "minha": false },
+    { "autor": "Henrique Bastos", "texto": "Ótimo. Dá para incluir os convênios sem guia no mês, com zero?", "dias": 1, "minha": true },
+    { "autor": "Clara Nogueira", "texto": "Dá, sim. Entra na mesma parte.", "dias": 0, "minha": false }
+  ],
+  "melhoria": {
+    "falas": [
+      { "autor": "ia", "texto": "Isso é um bug, algo que não funciona como deveria, ou uma melhoria?", "opcoes": ["Bug", "Melhoria"] },
+      { "autor": "diretor", "texto": "Melhoria. Quero que a Secretária saiba na hora que a ata ficou pronta para assinar." },
+      {
+        "autor": "ia", "texto": "Por onde a Secretária deve receber o aviso?",
+        "opcoes": ["Pelo sino do aplicativo", "Pelo sino e por e-mail"], "recomendada": "B",
+        "cartao": {
+          "titulo": "Por onde vai o aviso?",
+          "na_pratica_a": "Ela só vê o aviso quando abrir o aplicativo.",
+          "na_pratica_b": "Ela recebe o e-mail mesmo longe do computador, e o sino guarda o aviso.",
+          "porque": "A Secretária passa boa parte do dia fora da mesa, e o e-mail chega no celular."
+        }
+      },
+      { "autor": "diretor", "texto": "Pelo sino e por e-mail" },
+      {
+        "autor": "ia", "texto": "O aviso vai só para a Secretária da reunião ou também para quem assina?",
+        "opcoes": ["Só para a Secretária", "Para a Secretária e para quem assina"], "recomendada": "A",
+        "cartao": {
+          "titulo": "Quem recebe o aviso?",
+          "na_pratica_a": "A Secretária confere a ata e depois manda para assinar, como hoje.",
+          "na_pratica_b": "Quem assina recebe o aviso antes de a Secretária conferir a ata.",
+          "porque": "Hoje a Secretária confere a ata antes de ela seguir para assinatura, e o aviso não deve pular essa conferência."
+        }
+      }
+    ],
+    "documento": {
+      "frase": "A Secretária recebe um aviso, no sino e por e-mail, quando a ata fica pronta para assinar.",
+      "topicos": ["O aviso chega na hora em que a ata fica pronta.", "O e-mail traz o nome da reunião e o link da ata."]
+    },
+    "custo": { "modelo": "Opus 5.5", "custo_usd": 0.42 }
+  },
+  "bug": {
+    "falas": [
+      { "autor": "ia", "texto": "Isso é um bug, algo que não funciona como deveria, ou uma melhoria?", "opcoes": ["Bug", "Melhoria"] },
+      { "autor": "diretor", "texto": "Bug. Clico em Exportar na Ouvidoria e a planilha não baixa." },
+      { "autor": "ia", "texto": "Aparece alguma mensagem quando você clica, ou nada acontece?" },
+      { "autor": "diretor", "texto": "Nada acontece. O botão fica girando e para." },
+      { "autor": "ia", "texto": "Obrigado. Montei o resumo abaixo. Confira antes de criar o card." }
+    ],
+    "resumo": {
+      "titulo": "O botão Exportar da Ouvidoria não baixa a planilha",
+      "onde": "Ouvidoria, na lista das manifestações, botão Exportar.",
+      "o_que_aconteceu": "O botão gira por alguns segundos e para, sem baixar nada e sem mensagem.",
+      "o_que_esperava": "Baixar a planilha com as manifestações do filtro escolhido.",
+      "como_repetir": "Abrir a Ouvidoria, escolher o mês passado no filtro e clicar em Exportar.",
+      "criterios": [
+        "Clicar em Exportar baixa a planilha com as manifestações do filtro.",
+        "Se a planilha não puder ser gerada, a tela diz o motivo."
+      ]
+    },
+    "custo": { "modelo": "Opus 5.5", "custo_usd": 0.18 }
+  }
+}
