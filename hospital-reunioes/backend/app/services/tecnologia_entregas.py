@@ -14,6 +14,7 @@ from datetime import date, datetime, timedelta
 from typing import Any, Literal
 from zoneinfo import ZoneInfo
 
+from app.services.chat_tecnologia import CLASSIFICACAO_DO_TIPO
 from app.services.tecnologia import (
     ORIGEM_DIRETOR,
     entregue_na_data,
@@ -50,6 +51,11 @@ def chave_do_responsavel(demanda: dict[str, Any]) -> str | None:
     """O valor do filtro Responsavel: o id do usuario, ou o login do dono no
     GitHub quando ele nao e usuario do app (issue #1534)."""
     return responsavel_da_demanda(demanda) or login_do_responsavel(demanda)
+
+
+def inicio_da_semana(dia: date) -> date:
+    """A segunda-feira da semana do dia."""
+    return dia - timedelta(days=dia.weekday())
 
 
 def inicio_do_periodo(dia: date, agrupar: Agrupamento) -> date:
@@ -93,16 +99,25 @@ def dia_do_pedido(demanda: dict[str, Any]) -> date | None:
 
 
 def ritmo(demandas: list[dict[str, Any]], *, agora: datetime) -> dict[str, Any]:
-    corrente = inicio_do_periodo(agora.astimezone(FUSO_DO_HOSPITAL).date(), "semana")
+    """O ritmo da aba Entregas (ADR 0092, decisao 1): o topo e as 12 semanas.
+
+    `demandas` ja vem recortada (quem ve e os filtros). O topo conta pedidos e
+    entregas das ultimas 4 semanas, contando a corrente, e das 4 anteriores,
+    com a composicao so das 4 do topo: bugs e melhorias nos pedidos, G, M e P
+    nas entregas. As semanas vem da mais antiga para a corrente, comecando na
+    segunda pelo fuso do hospital, cada uma com os pedidos, as entregas por
+    tamanho e o que saiu nela, o mais novo primeiro.
+    """
+    corrente = inicio_da_semana(agora.astimezone(FUSO_DO_HOSPITAL).date())
     do_topo = corrente - timedelta(weeks=SEMANAS_DO_TOPO - 1)
     das_anteriores = do_topo - timedelta(weeks=SEMANAS_DO_TOPO)
     inicios = [corrente - timedelta(weeks=atras) for atras in range(SEMANAS_DO_GRAFICO - 1, -1, -1)]
-    semanas = {inicio: {"inicio": inicio.isoformat(), "pedidos": 0, "entregas": []} for inicio in inicios}
-    pedidos = {"total": 0, "anteriores": 0}
-    entregas = {"total": 0, "anteriores": 0}
+    semanas = {inicio: {"inicio": inicio.isoformat(), "pedidos": 0, "g": 0, "m": 0, "p": 0} for inicio in inicios}
+    saidas: dict[date, list[tuple[datetime, dict[str, str]]]] = {inicio: [] for inicio in inicios}
+    pedidos = {"total": 0, "anteriores": 0, "bugs": 0, "melhorias": 0}
+    entregas = {"total": 0, "anteriores": 0, "g": 0, "m": 0, "p": 0}
 
-    def janela(dia: date) -> str | None:
-        inicio = inicio_do_periodo(dia, "semana")
+    def janela(inicio: date) -> str | None:
         if do_topo <= inicio <= corrente:
             return "total"
         if das_anteriores <= inicio < do_topo:
@@ -111,15 +126,28 @@ def ritmo(demandas: list[dict[str, Any]], *, agora: datetime) -> dict[str, Any]:
 
     for demanda in demandas:
         if (dia := dia_do_pedido(demanda)) is not None:
-            if (onde := janela(dia)) is not None:
+            inicio = inicio_da_semana(dia)
+            if (onde := janela(inicio)) is not None:
                 pedidos[onde] += 1
-            if (semana := semanas.get(inicio_do_periodo(dia, "semana"))) is not None:
-                semana["pedidos"] += 1
+                if onde == "total" and (classificacao := CLASSIFICACAO_DO_TIPO.get(str(demanda.get("tipo") or ""))):
+                    pedidos["bugs" if classificacao == "bug" else "melhorias"] += 1
+            if inicio in semanas:
+                semanas[inicio]["pedidos"] += 1
         if (dia := dia_da_entrega(demanda)) is not None:
-            if (onde := janela(dia)) is not None:
+            inicio = inicio_da_semana(dia)
+            tamanho = tamanho_da_entrega(demanda.get("partes_total"))
+            if (onde := janela(inicio)) is not None:
                 entregas[onde] += 1
-            if (semana := semanas.get(inicio_do_periodo(dia, "semana"))) is not None:
-                semana["entregas"].append(
-                    {"titulo": demanda.get("titulo") or "", "tamanho": tamanho_da_entrega(demanda.get("partes_total"))}
-                )
-    return {"topo": {"pedidos": pedidos, "entregas": entregas}, "semanas": list(semanas.values())}
+                if onde == "total":
+                    entregas[tamanho.lower()] += 1
+            if inicio in semanas:
+                semanas[inicio][tamanho.lower()] += 1
+                instante = instante_do_banco(entregue_na_data(demanda))
+                saidas[inicio].append((instante, {"titulo": str(demanda.get("titulo") or ""), "tamanho": tamanho}))
+    return {
+        "topo": {"pedidos": pedidos, "entregas": entregas},
+        "semanas": [
+            {**semanas[inicio], "entregas": [e for _, e in sorted(saidas[inicio], key=lambda par: par[0], reverse=True)]}
+            for inicio in inicios
+        ],
+    }

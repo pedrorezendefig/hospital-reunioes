@@ -250,6 +250,52 @@ class TestRitmo:
         assert resultado["topo"]["pedidos"]["total"] == 2
         assert resultado["topo"]["pedidos"]["anteriores"] == 1
 
+    def test_a_composicao_dos_numeros_e_das_semanas(self):
+        """Os pedidos se abrem em bugs e melhorias; as entregas, em G, M e P,
+        no topo e em cada semana. A semana lista o que saiu, o mais novo
+        primeiro, com o titulo e o tamanho."""
+        resultado = ritmo(
+            [
+                _fechado("g", "2026-11-10T12:00:00Z", titulo="Painel novo", partes_total=7, envio_em=None),
+                _fechado("m", "2026-11-12T12:00:00Z", titulo="Aviso da ata", partes_total=3),
+                _fechado("p", "2026-11-03T12:00:00Z", titulo="Botao sumiu", tipo="defeito"),
+                _card("bug-novo", tipo="defeito", envio_em="2026-11-11T12:00:00Z"),
+                _card("melhoria-nova", tipo="novo", envio_em="2026-10-20T12:00:00Z"),
+                _card("bug-antigo", tipo="defeito", envio_em="2026-10-01T12:00:00Z"),
+            ],
+            agora=AGORA,
+        )
+
+        assert resultado["topo"]["pedidos"] == {"total": 2, "anteriores": 1, "bugs": 1, "melhorias": 1}
+        assert resultado["topo"]["entregas"] == {"total": 3, "anteriores": 0, "g": 1, "m": 1, "p": 1}
+        corrente = _semana(resultado, "2026-11-09")
+        assert (corrente["g"], corrente["m"], corrente["p"]) == (1, 1, 0)
+        assert corrente["entregas"] == [
+            {"titulo": "Aviso da ata", "tamanho": "M"},
+            {"titulo": "Painel novo", "tamanho": "G"},
+        ]
+        assert (_semana(resultado, "2026-11-02")["p"], _semana(resultado, "2026-11-02")["pedidos"]) == (1, 0)
+
+    def test_as_12_semanas_vem_da_mais_antiga_para_a_corrente(self):
+        semanas = ritmo([], agora=AGORA)["semanas"]
+
+        assert len(semanas) == 12
+        assert semanas[0]["inicio"] == "2026-08-24"
+        assert semanas[-1]["inicio"] == "2026-11-09"
+        assert semanas[-1] == {"inicio": "2026-11-09", "pedidos": 0, "g": 0, "m": 0, "p": 0, "entregas": []}
+
+    def test_nao_sera_feita_nao_conta_como_entrega(self):
+        """Fechada na semana corrente como Nao sera feita: o pedido conta, a
+        entrega nao."""
+        resultado = ritmo(
+            [_fechado("recusado", "2026-11-12T12:00:00Z", etapa="nao_sera_feita", envio_em="2026-11-10T12:00:00Z")],
+            agora=AGORA,
+        )
+
+        assert resultado["topo"]["entregas"]["total"] == 0
+        assert _semana(resultado, "2026-11-09")["entregas"] == []
+        assert _semana(resultado, "2026-11-09")["pedidos"] == 1
+
 
 # ═══════════════════════════════════════════════════════════════════════════
 # 1. A contagem por semana e por mes
