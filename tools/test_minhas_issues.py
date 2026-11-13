@@ -350,11 +350,18 @@ def test_needs_triage_com_prd_do_diretor_sai_como_grill_tecnico_pendente():
 
 
 def test_prd_do_diretor_ja_completado_volta_a_ser_triagem_comum():
-    completo = PRD_DO_DIRETOR.replace("## Origem", "## Decisões de implementação\n\n- x\n\n## Origem")
-    d = dados(issues=[issue(1400, "Prazo", ["needs-triage"], [EU], corpo=completo)])
-    texto = mi.montar(d)
-    assert "grill técnico pendente" not in texto
-    assert "needs-triage: #1400" in texto
+    # O sinal de Demanda refinada é a marca de Refino que o `prd_do_diretor.py completar`
+    # grava (PRD #240 do PedroOS). O card novo já nasce com "Decisões de implementação"
+    # (ADR 0077) e, sem a marca, continua pendente.
+    card_novo = PRD_DO_DIRETOR.replace("## Origem", "## Decisões de implementação\n\n- x\n\n## Origem")
+    d = dados(issues=[
+        issue(1400, "Prazo", ["needs-triage"], [EU], corpo=card_novo + "\n<!-- refino -->"),
+        issue(1401, "Prazo com painel", ["needs-triage"], [EU], corpo=card_novo + "\n<!-- refino: https://claude.ai/artifacts/abc -->"),
+        issue(1403, "Card novo", ["needs-triage"], [EU], corpo=card_novo),
+    ])
+    fila = mi.montar(d).split("**2. Na fila**")[1].split("**3. Plano**")[0]
+    assert "grill técnico pendente: #1403 (`/grill-with-docs #1403`)" in fila
+    assert "needs-triage: #1401, #1400 (`/triage`)" in fila
 
 
 def test_plano_poe_um_comando_por_linha():
