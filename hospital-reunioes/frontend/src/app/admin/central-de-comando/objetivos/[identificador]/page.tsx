@@ -1,5 +1,6 @@
 import { LenteDoObjetivo } from "@/components/central-de-comando/LenteDoObjetivo";
-import { NotaNoGoogle, OBJETIVO_NOTA_NO_GOOGLE } from "@/components/central-de-comando/NotaNoGoogle";
+import { NotaNoGoogle } from "@/components/central-de-comando/NotaNoGoogle";
+import { OBJETIVO_NOTA_NO_GOOGLE } from "@/lib/central-de-comando/api";
 import { lerPeriodo } from "@/lib/central-de-comando/periodo";
 
 /**

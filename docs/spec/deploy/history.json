@@ -2,6 +2,51 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-11-13T14:22:36-03:00",
+      "sha": "5fa129a17093a62eba8d95f884974ac7232da677",
+      "app_version": "0.286.0",
+      "subject": "Onda manual-onda3: A página de Dados do Atendimento; A página de Contas médicas; A página de Central de Comando",
+      "raw_subject": "chore(deploy): registro da onda manual-onda3 (#1743 #1744 #1747)",
+      "scope": [
+        "frontend"
+      ],
+      "prds": [
+        1711
+      ],
+      "result": "healthy",
+      "duration_seconds": 264,
+      "services_touched": [
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        },
+        {
+          "service": "frontend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "onda-enxuta manual-onda3: PR #1743 (issue #1726), PR #1744 (issue #1724), PR #1747 (issue #1725), mergeados PR a PR. Merge pela API do GitHub, um build. Registro pela Action pos-merge depois do health.",
+      "etapas": {
+        "merge_s": 10,
+        "build_s": {
+          "frontend": 149
+        },
+        "health_s": 0
+      },
+      "responsavel": "pedrorezendefig"
+    },
+    {
       "at": "2026-11-13T14:09:38-03:00",
       "sha": "40e0f8a1fc33d3512c97beb8cefafab497f84a4d",
       "app_version": "0.285.0",

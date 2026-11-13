@@ -386,6 +386,25 @@ def listar_issues_fechadas() -> list[dict[str, Any]]:
         pagina += 1
 
 
+def ler_issues_abertas(*, projeto: str) -> list[dict[str, Any]]:
+    """Todas as issues abertas do repositorio do Projeto (sem os PRs), cruas,
+    pagina a pagina ate vir uma pagina curta. Quem le e a conferencia de hora
+    em hora da Ana (issue #1714), que cria a Demanda da raiz que o webhook
+    perdeu."""
+    issues: list[dict[str, Any]] = []
+    pagina = 1
+    while True:
+        dados = _chamar("GET", f"/issues?state=open&per_page={_POR_PAGINA}&page={pagina}", projeto=projeto)
+        if not isinstance(dados, list):
+            raise GithubIndisponivelError("GitHub respondeu a lista de issues fora do formato")
+        issues.extend(
+            i for i in dados if isinstance(i, dict) and isinstance(i.get("number"), int) and not e_pull_request(i)
+        )
+        if len(dados) < _POR_PAGINA:
+            return issues
+        pagina += 1
+
+
 def e_pull_request(dados: dict[str, Any]) -> bool:
     """A API de issues tambem responde por PR, e o `pull_request` e o que os
     separa (o Vinculo e com a issue-raiz, ADR 0054, decisao 1)."""
