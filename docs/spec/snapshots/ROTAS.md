@@ -1,6 +1,6 @@
 # ROTAS.md
 <!-- gerado automaticamente por /snapshot — não editar -->
-<!-- last_update: 2026-11-13T07:11+0000 -->
+<!-- last_update: 2026-11-13T07:12+0000 -->
 
 Endpoints HTTP expostos pelo backend FastAPI do Hospital Reuniões.
 
@@ -298,6 +298,7 @@ Endpoints HTTP expostos pelo backend FastAPI do Hospital Reuniões.
 | POST | `/ouvidoria/manifestacoes/{manifestacao_id}/reaberturas` | Devolve à área um caso encerrado que o manifestante voltou a cobrar. | ✅ |
 | POST | `/ouvidoria/manifestacoes/{manifestacao_id}/redirecionamentos` | O Redirecionamento: o caso sai da área antiga e entra na nova, numa | ✅ |
 | GET | `/ouvidoria/manifestacoes/{manifestacao_id}/respostas` | O histórico de respostas do caso, um ciclo por resposta da área. | ✅ |
+| POST | `/ouvidoria/manifestacoes/{manifestacao_id}/salvaguarda-da-resposta` | A salvaguarda da resposta no caso com o selo do Núcleo (issue #1627, | ✅ |
 | GET | `/ouvidoria/manifestacoes/{manifestacao_id}/tentativas-contato` | O que já se tentou NESTE ciclo do caso, em ordem cronológica. | ✅ |
 | POST | `/ouvidoria/manifestacoes/{manifestacao_id}/tentativas-contato` | Grava que a Ouvidoria tentou falar com o manifestante. | ✅ |
 | POST | `/ouvidoria/manifestacoes/{manifestacao_id}/transicoes` | Porta de entrada única da máquina de estados: valida a regra e grava o | ✅ |
@@ -552,4 +553,4 @@ Endpoints HTTP expostos pelo backend FastAPI do Hospital Reuniões.
 
 ---
 
-**Totais:** 321 endpoints em 45 routers · 92% exigem auth.
+**Totais:** 322 endpoints em 45 routers · 92% exigem auth.
