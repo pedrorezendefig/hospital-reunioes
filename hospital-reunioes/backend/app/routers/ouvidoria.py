@@ -4607,9 +4607,9 @@ async def escolher_o_setor_do_nucleo(
     setor = exigir_setor_da_taxonomia(supabase, pedido.setor)
     try:
         anterior = ouvidoria_nucleo.setor_configurado(supabase)
-        supabase.table("ouvidoria_config").update(
-            {"nsp_setor": setor, "atualizada_em": agora_utc().isoformat()}
-        ).eq("id", True).execute()
+        supabase.table("ouvidoria_config").update({"nsp_setor": setor, "atualizada_em": agora_utc().isoformat()}).eq(
+            "id", True
+        ).execute()
     except (APIError, HTTPError) as exc:
         logger.error("Falha ao gravar o setor do Núcleo na configuração da Ouvidoria")
         raise HTTPException(

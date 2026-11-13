@@ -262,6 +262,14 @@ CAMPOS_DO_DOSSIE: dict[str, str | None] = {
     "paciente_nascimento": None,
     "expectativa": None,
     "manifestante_telefone": None,
+    # O apontamento ao Núcleo de Segurança do Paciente (issue #1621, migration
+    # 139). As duas justificativas descrevem o incidente com dado clínico
+    # (tipo, setor, data, dano), e o motivo do descarte é texto livre do
+    # ouvidor sobre o mesmo incidente: saem com o relato. A decisão e o
+    # apontamento ficam, porque são classificação e não dado de ninguém.
+    "nsp_justificativa_simples": None,
+    "nsp_justificativa_tecnica": None,
+    "nsp_decisao_motivo": None,
 }
 
 # `resumo` é NOT NULL com CHECK anti-vazio desde a migration 063: não pode ir a
@@ -393,6 +401,14 @@ CAMPOS_PRESERVADOS_SEM_METRICA: tuple[str, ...] = (
     "acuse_sem_contato_em",
     "encerramento_avisado_em",
     "encerramento_sem_contato_em",
+    # O apontamento ao Núcleo de Segurança do Paciente e a decisão do ouvidor
+    # (issue #1621, migration 139): uma marca, uma lista fechada, o id de quem
+    # decidiu (gente da Ouvidoria, como `validada_por`) e o instante. Nenhuma
+    # carrega texto do caso; as justificativas e o motivo saem com o Dossiê.
+    "nsp_sugerido",
+    "nsp_decisao",
+    "nsp_decidido_por",
+    "nsp_decidido_em",
 )
 
 # As três colunas que não entram na escolha entre sair e ficar, por natureza:

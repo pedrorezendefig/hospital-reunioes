@@ -18,6 +18,7 @@ import datetime as dt
 import os
 import re
 import sys
+from pathlib import Path
 
 import pytest
 from fastapi import FastAPI
@@ -660,3 +661,116 @@ class TestODossieEAConfiguracao:
 
         assert r.status_code == 422
         assert supabase.tabelas["ouvidoria_config"][0]["nsp_setor"] == NUCLEO
+
+
+# =====================================================================
+# 8. O kit de conhecimento diz o comportamento novo
+# =====================================================================
+
+
+class TestOKitDeConhecimento:
+    """O Assistente de Tecnologia responde sobre a Ouvidoria pelo kit: se o
+    texto não disser como o Núcleo recebe o caso agora, ele responde pelo
+    jeito antigo, em que isso ainda "vai" acontecer."""
+
+    @pytest.fixture
+    def texto(self) -> str:
+        from app.services.conhecimento import CONHECIMENTO_DIR
+
+        return (CONHECIMENTO_DIR / "ouvidoria.md").read_text(encoding="utf-8")
+
+    @pytest.fixture
+    def paragrafo(self, texto) -> str:
+        """O parágrafo que conta o envio ao Núcleo, lido sozinho: "sem senha" e
+        "prazo" já aparecem em outras frases do texto."""
+        achados = [p for p in texto.split("\n\n") if "Recebido pelo NSP" in p]
+        assert len(achados) == 1, "o kit precisa de um parágrafo que conte o envio ao Núcleo"
+        return achados[0]
+
+    def test_diz_a_decisao_do_ouvidor_quando_o_agente_aponta(self, paragrafo):
+        assert "Possível evento de segurança do paciente" in paragrafo
+        assert "Confirmar envio ao NSP" in paragrafo
+        assert "Descartar" in paragrafo and "motivo" in paragrafo
+        assert "Enviar ao NSP" in paragrafo
+
+    def test_diz_o_que_o_link_mostra_e_o_que_o_email_nao_leva(self, paragrafo):
+        assert "relato integral" in paragrafo
+        assert "mesmo no caso sigiloso" in paragrafo
+        assert "só o aviso e o link" in paragrafo
+
+    def test_diz_o_prazo_a_cobranca_e_que_nao_bloqueia(self, paragrafo):
+        assert "1 dia útil" in paragrafo
+        assert "gestor" in paragrafo and "diretoria executiva" in paragrafo
+        assert "não bloqueia a resposta nem o encerramento" in paragrafo
+        assert "Em análise pelo NSP" in paragrafo
+
+    def test_a_lista_de_decisoes_fala_do_nucleo_no_presente(self, texto):
+        assert "O Núcleo de Segurança do Paciente vai receber" not in texto
+        assert "O Núcleo de Segurança do Paciente recebe o relato integral" in texto
+
+
+# =====================================================================
+# A migration: os campos, o índice e os gatilhos no banco
+# =====================================================================
+
+MIGRATIONS_DIR = Path(__file__).parent.parent.parent / "supabase" / "migrations"
+MIGRATION = MIGRATIONS_DIR / "139_ouvidoria_envio_ao_nucleo.sql"
+
+
+def _sem_comentarios(sql: str) -> str:
+    return re.sub(r"--[^\n]*", "", sql)
+
+
+class TestAMigration:
+    """O fake do PostgREST não aplica CHECK nem índice, então é a leitura do
+    arquivo que segura as regras do banco."""
+
+    @pytest.fixture
+    def ddl(self) -> str:
+        return _sem_comentarios(MIGRATION.read_text(encoding="utf-8"))
+
+    def test_os_campos_do_caso_e_da_configuracao_sao_reaplicaveis(self, ddl):
+        assert "ADD COLUMN IF NOT EXISTS nsp_setor TEXT NOT NULL DEFAULT ''" in ddl
+        for coluna in (
+            "nsp_sugerido BOOLEAN NOT NULL DEFAULT FALSE",
+            "nsp_justificativa_simples TEXT",
+            "nsp_justificativa_tecnica TEXT",
+            "nsp_decisao TEXT",
+            "nsp_decisao_motivo TEXT",
+            "nsp_decidido_por VARCHAR(10) REFERENCES participantes(id)",
+            "nsp_decidido_em TIMESTAMPTZ",
+            "escalonado_gestor_em TIMESTAMPTZ",
+            "escalonado_diretoria_em TIMESTAMPTZ",
+        ):
+            assert f"ADD COLUMN IF NOT EXISTS {coluna}" in ddl, coluna
+
+    def test_a_decisao_e_lista_fechada_e_o_descarte_exige_motivo(self, ddl):
+        assert "nsp_decisao IN ('confirmado', 'descartado')" in ddl
+        assert "nsp_decisao IS DISTINCT FROM 'descartado' OR length(btrim(coalesce(nsp_decisao_motivo, ''))) > 0" in ddl
+
+    def test_um_caso_tem_uma_ciencia_do_nucleo_so(self, ddl):
+        assert re.search(
+            r"CREATE UNIQUE INDEX IF NOT EXISTS \w+\s+ON ouvidoria_acionamentos\(manifestacao_id\)\s+"
+            r"WHERE motivo_ciencia = 'nsp'",
+            ddl,
+        )
+
+    def test_o_check_de_gatilhos_cobre_o_catalogo_inteiro_numa_transacao(self, ddl):
+        for gatilho in ouvidoria_notificacoes.GATILHOS:
+            assert f"'{gatilho}'" in ddl, f"o CHECK novo perdeu o gatilho {gatilho}"
+        assert "BEGIN;" in ddl and "COMMIT;" in ddl
+
+    def test_sem_tabela_nova_nem_policy(self, ddl):
+        assert "CREATE TABLE" not in ddl.upper()
+        assert "CREATE POLICY" not in ddl.upper()
+
+    def test_a_migration_termina_gravando_o_proprio_numero(self, ddl):
+        assert ddl.strip().endswith(
+            "INSERT INTO migracoes_aplicadas (numero) VALUES (139) ON CONFLICT (numero) DO NOTHING;"
+        )
+
+    def test_a_retencao_apaga_as_justificativas_e_o_motivo(self):
+        from app.services.ouvidoria_retencao import CAMPOS_DO_DOSSIE
+
+        for campo in ("nsp_justificativa_simples", "nsp_justificativa_tecnica", "nsp_decisao_motivo"):
+            assert campo in CAMPOS_DO_DOSSIE, f"a Retenção não apaga {campo}"

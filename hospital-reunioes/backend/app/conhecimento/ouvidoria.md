@@ -33,6 +33,8 @@ Se o caso não é da área, ela devolve para a ouvidoria com o motivo escrito. A
 
 O elogio segue outro caminho. Ao validar um elogio, o ouvidor confere o setor e escreve uma nota curta, e o setor recebe o elogio só para confirmar que ele chegou: não há prazo de resposta, a área não é cobrada e o caso não entra nos vencidos da fila nem do Painel. O e-mail traz a nota do ouvidor e o botão Elogio recebido, que abre sem senha e vale uma vez. Se ninguém clicar em 5 dias úteis, o e-mail sai de novo, uma única vez. Quando o responsável clica, o caso volta ao ouvidor como respondido, com a marca Pronto para encerrar.
 
+O caso que fala de incidente com o paciente (uma queda, um erro de medicação, uma piora inesperada) vai também ao Núcleo de Segurança do Paciente. Quando o agente aponta o caso, o Dossiê mostra o alerta Possível evento de segurança do paciente, com o porquê, e o ouvidor só conclui Validar e acionar depois de escolher Confirmar envio ao NSP ou Descartar, e descartar pede o motivo em uma linha. Sem o alerta, o botão Enviar ao NSP fica sempre no Dossiê. Confirmado o envio, o caso ganha o selo Em análise pelo NSP, e o Núcleo recebe um e-mail com só o aviso e o link. O link abre sem senha e mostra o relato integral, o que o agente apurou, o paciente com a data de nascimento, os profissionais e o quarto, mesmo no caso sigiloso; o nome de quem manifestou só aparece quando o caso não é sigiloso nem anônimo. O Núcleo confirma no botão Recebido pelo NSP, que vale uma vez. O prazo é na hora no caso crítico e de 1 dia útil nos demais, e sem a confirmação a cobrança sobe ao gestor do setor do Núcleo e depois à diretoria executiva. O envio ao Núcleo não bloqueia a resposta nem o encerramento: a área responde, o ouvidor encerra como sempre, e a investigação do Núcleo segue por fora. Qual setor é o Núcleo o ouvidor escolhe na tela de Responsáveis por setor.
+
 ## O que o manifestante ouve do hospital
 
 São dois avisos, os dois por e-mail, e os dois só saem quando dá para reconhecer um e-mail no contato que a pessoa deixou:
@@ -93,7 +95,7 @@ A nota do Google é buscada sozinha uma vez por semana, junto com o total de ava
 - A nota do QR não guarda nada de quem avaliou, tem limite de envios em pouco tempo, e só o ouvidor e a diretoria executiva veem as avaliações e os comentários.
 - Quem se manifesta de forma anônima vai receber um código para acompanhar o caso numa página pública, que mostra só o estado e a resposta.
 - Um agente de inteligência artificial vai ler toda manifestação e toda nota com comentário assim que chegam, inclusive as sigilosas, só para sugerir o assunto, o envio ao Núcleo de Segurança do Paciente e a revisão de comentários graves, e se ele falhar o caso entra normal na fila.
-- O Núcleo de Segurança do Paciente vai receber o relato integral e o paciente atendido mesmo no caso sigiloso, só depois de o ouvidor confirmar, e o nome de quem manifestou só vai quando o caso não é sigiloso, como única exceção à regra do sigilo.
+- O Núcleo de Segurança do Paciente recebe o relato integral e o paciente atendido mesmo no caso sigiloso, só depois de o ouvidor confirmar, e o nome de quem manifestou só vai quando o caso não é sigiloso nem anônimo, como única exceção à regra do sigilo.
 - O elogio vai ao setor só para ele confirmar que recebeu, sem prazo de resposta, com uma nota curta do ouvidor.
 - A nota do Google é buscada sozinha toda semana e não se digita mais, e o convite para avaliar no Google vai aparecer só para as notas 4 e 5, com o risco aceito pela diretoria.
 

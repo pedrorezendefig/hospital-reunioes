@@ -123,6 +123,16 @@ def _manifestacao(numero: int = 7, **overrides) -> dict:
         "acuse_sem_contato_em": "2020-08-01T10:31:00+00:00",
         "encerramento_avisado_em": "2020-08-26T12:30:00+00:00",
         "encerramento_sem_contato_em": "2020-08-26T12:31:00+00:00",
+        # O apontamento ao Núcleo de Segurança do Paciente e a decisão (issue
+        # #1621, migration 139): marca, lista fechada, quem decidiu e quando.
+        "nsp_sugerido": True,
+        "nsp_decisao": "descartado",
+        "nsp_decidido_por": "P10",
+        "nsp_decidido_em": "2020-08-02T10:00:00+00:00",
+        # As justificativas e o motivo descrevem o incidente: saem com o Dossiê.
+        "nsp_justificativa_simples": "Relato de queda da paciente Maria Aparecida no leito 12.",
+        "nsp_justificativa_tecnica": "Queda do leito, Clinica Medica, 30/07/2020, escoriacao no braco.",
+        "nsp_decisao_motivo": "Queda sem dano, ja notificada pela enfermagem do leito 12.",
         # O Arquivo (issue #592, ADR 0047): quem guardou o caso e quando. Gente
         # do hospital e relógio do hospital, como `validada_por` logo acima, e
         # por isso preservados. Preenchidos aqui pela mesma regra do bloco: com
