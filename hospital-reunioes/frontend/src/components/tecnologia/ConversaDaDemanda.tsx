@@ -199,7 +199,11 @@ export function ConversaDaDemanda({
           value={texto}
           onChange={(e) => aoDigitar(e.target.value, e.target.selectionStart ?? e.target.value.length)}
           onKeyDown={(e) => {
-            if (e.key === "Escape") setBusca(null);
+            // Com a lista de nomes aberta, o Esc só a fecha: o painel do Quadro não fecha junto.
+            if (e.key === "Escape" && busca !== null) {
+              e.preventDefault();
+              setBusca(null);
+            }
             if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
               e.preventDefault();
               enviar();

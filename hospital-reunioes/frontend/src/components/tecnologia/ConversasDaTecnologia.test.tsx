@@ -11,6 +11,9 @@
  * "Nova conversa"; e a lista como tela própria no celular.
  */
 
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
+
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -20,9 +23,14 @@ import { caixaDoDado } from "@/lib/testes/caixaDoDado";
 import { ABERTURA, SEM_CONVERSA_GUARDADA } from "./ChatDaTecnologia";
 import {
   AMPLIAR,
+  APAGAR,
   ConversasDaTecnologia,
+  DESIGNAR_DE_NOVO,
+  FECHAR_O_PAINEL,
   NOVA_CONVERSA,
   NOVO_PEDIDO,
+  REENVIAR,
+  REVISAR_COM_O_CODIGO_DE_HOJE,
   SEM_ACESSO,
   VOLTAR_AO_QUADRO,
   VOLTAR_PARA_A_LISTA,
@@ -1592,7 +1600,7 @@ describe("O Quadro na tela larga (issue #1642, ADR 0090)", () => {
     expect(within(semNada).queryByText(/^v\d/)).toBeNull();
   });
 
-  it("o clique no card abre a Demanda na largura toda, e Voltar ao quadro volta", async () => {
+  it("o Ampliar do painel leva a Demanda à largura toda, e Voltar ao quadro volta (issue #1643)", async () => {
     telaLarga();
     montar((url) => {
       if (url === LISTA) return { status: 200, corpo: NO_QUADRO };
@@ -1605,8 +1613,11 @@ describe("O Quadro na tela larga (issue #1642, ADR 0090)", () => {
     // Botão de verdade: o navegador transforma o Enter (e o Espaço) em clique.
     expect(card.tagName).toBe("BUTTON");
     fireEvent.click(card);
+    const painel = await screen.findByRole("complementary", { name: "Pedido aberto" });
+    fireEvent.click(within(painel).getByRole("button", { name: AMPLIAR }));
 
     const aberto = await screen.findByRole("region", { name: "Conversa aberta" });
+    expect(screen.queryByRole("complementary", { name: "Pedido aberto" })).toBeNull();
     expect(await within(aberto).findByRole("heading", { level: 2, name: "Aviso da ata por e-mail" })).toBeTruthy();
     expect(screen.queryByRole("region", { name: "Quadro" })).toBeNull();
     expect(screen.getByRole("region", { name: "Filtros da lista" }).className).toMatch(/(^|\s)hidden(\s|$)/);
@@ -1670,7 +1681,7 @@ describe("O Quadro na tela larga (issue #1642, ADR 0090)", () => {
     expect(screen.queryByRole("button", { name: NOVO_PEDIDO })).toBeNull();
   });
 
-  it("o link do sino abre a Demanda certa na largura toda", async () => {
+  it("o link do sino abre o Quadro com o painel da Demanda certa (issue #1643)", async () => {
     telaLarga();
     montar(
       (url) => {
@@ -1681,9 +1692,205 @@ describe("O Quadro na tela larga (issue #1642, ADR 0090)", () => {
       "d-2",
     );
 
-    expect(await screen.findByText("Agora o aviso da ata chega por e-mail.")).toBeTruthy();
-    expect(screen.getByRole("heading", { level: 2, name: "Aviso quando a ata sair" })).toBeTruthy();
-    expect(screen.queryByRole("region", { name: "Quadro" })).toBeNull();
-    expect(screen.getByRole("button", { name: VOLTAR_AO_QUADRO })).toBeTruthy();
+    const painel = await screen.findByRole("complementary", { name: "Pedido aberto" });
+    expect(await within(painel).findByText("Agora o aviso da ata chega por e-mail.")).toBeTruthy();
+    expect(within(painel).getByRole("heading", { level: 2, name: "Aviso quando a ata sair" })).toBeTruthy();
+    expect(screen.getByRole("region", { name: "Quadro" })).toBeTruthy();
+  });
+});
+
+describe("O card do Quadro abre num painel à direita (issue #1643, ADR 0090, decisão 5)", () => {
+  /** A tela a partir de 1280px: o `matchMedia` que o jsdom não tem, dublado. */
+  function telaLarga() {
+    vi.stubGlobal(
+      "matchMedia",
+      vi.fn((consulta: string) => ({
+        matches: consulta === "(min-width: 1280px)",
+        media: consulta,
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+      })),
+    );
+  }
+
+  const ACOMPANHADA = demanda("p-1", "Aviso da ata por e-mail", {
+    etapa: "em_analise",
+    tem_vinculo: true,
+    numero: 39,
+    autor: "Felipe Malafaia",
+    o_que_muda: "O aviso da ata chega por e-mail.",
+  });
+  const REGISTRADA = demanda("p-2", "Escala some no domingo", { numero: 40 });
+
+  function comOQuadro(lidas: Demanda[] = [ACOMPANHADA, REGISTRADA], demandaInicial: string | null = null) {
+    telaLarga();
+    return montar((url) => {
+      if (url === LISTA) return { status: 200, corpo: lidas };
+      if (url === `${LISTA}/p-1`) return { status: 200, corpo: conversa("p-1", { estado: "enviado" }) };
+      if (url === `${LISTA}/p-2`) return { status: 200, corpo: conversa("p-2") };
+      if (url.endsWith("/conversa")) return { status: 200, corpo: { mensagens: [], mencionaveis: [] } };
+      return { status: 404, corpo: {} };
+    }, demandaInicial);
+  }
+
+  const quadro = () => screen.getByRole("region", { name: "Quadro" });
+  const cardDe = (titulo: RegExp) => within(quadro()).getByRole("button", { name: titulo });
+
+  it("o clique num card que não é Registrada do autor abre o painel com o Documento e a Conversa da Demanda, com o Quadro à vista", async () => {
+    comOQuadro();
+    await screen.findByRole("region", { name: "Quadro" });
+
+    fireEvent.click(cardDe(/Aviso da ata por e-mail/));
+
+    const aberto = await screen.findByRole("complementary", { name: "Pedido aberto" });
+    expect(await within(aberto).findByRole("heading", { level: 2, name: "Aviso da ata por e-mail" })).toBeTruthy();
+    expect(within(aberto).getByText("O aviso da ata chega por e-mail.")).toBeTruthy();
+    expect(await within(aberto).findByRole("region", { name: "Conversa da Demanda" })).toBeTruthy();
+    // O painel não é modal: o Quadro segue na página, atrás dele.
+    expect(quadro()).toBeTruthy();
+    expect(aberto.getAttribute("aria-modal")).toBeNull();
+    expect(screen.getByRole("region", { name: "Filtros da lista" }).className).not.toMatch(/(^|\s)hidden(\s|$)/);
+  });
+
+  it("a URL muda ao abrir o painel, e abrir a aba com essa URL mostra o Quadro com o painel do card", async () => {
+    comOQuadro();
+    await screen.findByRole("region", { name: "Quadro" });
+    expect(demandaDaUrl()).toBeNull();
+
+    fireEvent.click(cardDe(/Aviso da ata por e-mail/));
+    await screen.findByRole("complementary", { name: "Pedido aberto" });
+    expect(demandaDaUrl()).toBe("p-1");
+
+    // Outra aba com o mesmo endereço: a tela nasce só com o que está nele.
+    cleanup();
+    comOQuadro(undefined, demandaDaUrl());
+
+    const painel = await screen.findByRole("complementary", { name: "Pedido aberto" });
+    expect(await within(painel).findByRole("heading", { level: 2, name: "Aviso da ata por e-mail" })).toBeTruthy();
+    expect(screen.getByRole("region", { name: "Quadro" })).toBeTruthy();
+  });
+
+  it("o painel nasce no body, fora do módulo, para se prender à janela mesmo sob o fade-in-up", async () => {
+    comOQuadro();
+    const quadroNaTela = await screen.findByRole("region", { name: "Quadro" });
+    fireEvent.click(cardDe(/Aviso da ata por e-mail/));
+    const painel = await screen.findByRole("complementary", { name: "Pedido aberto" });
+
+    // O wrapper .animate-fade-in-up do módulo deixa um transform aplicado, e um ancestral
+    // com transform vira o bloco de contenção do `fixed`; o jsdom não calcula layout,
+    // então a prova é o painel ser filho direto do body.
+    expect(painel.parentElement).toBe(document.body);
+    expect(quadroNaTela.contains(painel)).toBe(false);
+  });
+
+  it("o botão de fechar fecha o painel e devolve o foco ao card", async () => {
+    comOQuadro();
+    await screen.findByRole("region", { name: "Quadro" });
+    fireEvent.click(cardDe(/Aviso da ata por e-mail/));
+    const painel = await screen.findByRole("complementary", { name: "Pedido aberto" });
+
+    fireEvent.click(within(painel).getByRole("button", { name: FECHAR_O_PAINEL }));
+
+    expect(screen.queryByRole("complementary", { name: "Pedido aberto" })).toBeNull();
+    expect(document.activeElement).toBe(cardDe(/Aviso da ata por e-mail/));
+    expect(demandaDaUrl()).toBeNull();
+  });
+
+  it("Esc fecha o painel e devolve o foco ao card", async () => {
+    comOQuadro();
+    await screen.findByRole("region", { name: "Quadro" });
+    fireEvent.click(cardDe(/Aviso da ata por e-mail/));
+    const painel = await screen.findByRole("complementary", { name: "Pedido aberto" });
+    await within(painel).findByRole("textbox", { name: "Mensagem para a Conversa" });
+
+    fireEvent.keyDown(document.activeElement ?? document.body, { key: "Escape" });
+
+    expect(screen.queryByRole("complementary", { name: "Pedido aberto" })).toBeNull();
+    expect(document.activeElement).toBe(cardDe(/Aviso da ata por e-mail/));
+  });
+
+  it("com a lista de nomes da Conversa aberta, o Esc fecha só a lista, e o painel fica", async () => {
+    telaLarga();
+    montar((url) => {
+      if (url === LISTA) return { status: 200, corpo: [ACOMPANHADA] };
+      if (url === `${LISTA}/p-1`) return { status: 200, corpo: conversa("p-1", { estado: "enviado" }) };
+      if (url === `${LISTA}/p-1/conversa`)
+        return { status: 200, corpo: { mensagens: [], mencionaveis: [{ id: "u-1", nome: "Pedro Rezende" }] } };
+      return { status: 404, corpo: {} };
+    });
+    await screen.findByRole("region", { name: "Quadro" });
+    fireEvent.click(cardDe(/Aviso da ata por e-mail/));
+    const painel = await screen.findByRole("complementary", { name: "Pedido aberto" });
+    const caixa = await within(painel).findByRole("textbox", { name: "Mensagem para a Conversa" });
+    fireEvent.change(caixa, { target: { value: "@ped", selectionStart: 4 } });
+    expect(await within(painel).findByRole("listbox", { name: "Quem vê este pedido" })).toBeTruthy();
+
+    fireEvent.keyDown(caixa, { key: "Escape" });
+
+    expect(within(painel).queryByRole("listbox", { name: "Quem vê este pedido" })).toBeNull();
+    expect(screen.getByRole("complementary", { name: "Pedido aberto" })).toBeTruthy();
+  });
+
+  it("Apagar, Reenviar, Designar de novo e Revisar com o código de hoje aparecem no painel nas mesmas condições de hoje", async () => {
+    const COM_TUDO = demanda("p-3", "Pedido com tudo", {
+      etapa: "em_analise",
+      tem_vinculo: true,
+      pode_apagar: true,
+      pode_revisar: true,
+      envio_falhou: true,
+      designacao_falhou: true,
+    });
+    const SEM_NADA = demanda("p-4", "Pedido sem botão", { etapa: "planejada", tem_vinculo: true });
+    telaLarga();
+    montar((url) => {
+      if (url === "/api/admin/tecnologia/eu") return { status: 200, corpo: { desenvolvedor: true } };
+      if (url === `${LISTA}?filtro=para_mim`) return { status: 200, corpo: [COM_TUDO, SEM_NADA] };
+      if (url.endsWith("/conversa")) return { status: 200, corpo: { mensagens: [], mencionaveis: [] } };
+      if (url.startsWith(`${LISTA}/`)) return { status: 200, corpo: conversa("p-3", { estado: "enviado" }) };
+      return { status: 404, corpo: {} };
+    });
+    await within(await screen.findByRole("region", { name: "Quadro" })).findByText("Pedido com tudo");
+    const BOTOES = [APAGAR, REENVIAR, DESIGNAR_DE_NOVO, REVISAR_COM_O_CODIGO_DE_HOJE];
+
+    fireEvent.click(cardDe(/Pedido com tudo/));
+    let painel = await screen.findByRole("complementary", { name: "Pedido aberto" });
+    for (const nome of BOTOES) expect(within(painel).getByRole("button", { name: nome })).toBeTruthy();
+
+    fireEvent.click(within(painel).getByRole("button", { name: FECHAR_O_PAINEL }));
+    fireEvent.click(cardDe(/Pedido sem botão/));
+    painel = await screen.findByRole("complementary", { name: "Pedido aberto" });
+    await within(painel).findByRole("heading", { level: 2, name: "Pedido sem botão" });
+    for (const nome of BOTOES) expect(within(painel).queryByRole("button", { name: nome })).toBeNull();
+  });
+
+  it("Conversar, no painel, põe a caixa da Conversa da Demanda em foco", async () => {
+    comOQuadro();
+    await screen.findByRole("region", { name: "Quadro" });
+    fireEvent.click(cardDe(/Aviso da ata por e-mail/));
+    const painel = await screen.findByRole("complementary", { name: "Pedido aberto" });
+    const caixa = await within(painel).findByRole("textbox", { name: "Mensagem para a Conversa" });
+    // O clique no card abre o painel sem roubar o foco para a Conversa.
+    expect(document.activeElement).not.toBe(caixa);
+
+    fireEvent.click(within(painel).getByRole("button", { name: "Conversar" }));
+
+    expect(document.activeElement).toBe(caixa);
+  });
+
+  it("com prefers-reduced-motion, o painel abre sem animação", async () => {
+    comOQuadro();
+    await screen.findByRole("region", { name: "Quadro" });
+    fireEvent.click(cardDe(/Aviso da ata por e-mail/));
+    const painel = await screen.findByRole("complementary", { name: "Pedido aberto" });
+
+    // O painel entra deslizando só pelas animações que o globals.css desliga com
+    // o pedido de menos movimento.
+    const animacoes = painel.className.split(/\s+/).filter((c) => /(^|:)animate-/.test(c));
+    expect(animacoes).toEqual(["animate-fade-in-right"]);
+    const css = readFileSync(resolve(process.cwd(), "src/app/globals.css"), "utf8");
+    const reduzido = css.match(/@media \(prefers-reduced-motion: reduce\) \{([\s\S]*?)\n\}/)?.[1] ?? "";
+    const regra = reduzido.match(/([^{}]*)\{([^}]*)\}/)!;
+    expect(regra[1].split(",").map((s) => s.trim())).toContain(".animate-fade-in-right");
+    expect(regra[2]).toMatch(/animation:\s*none/);
   });
 });
