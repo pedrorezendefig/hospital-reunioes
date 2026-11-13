@@ -67,3 +67,166 @@ class TestOCasoGuardaQuandoEOnde:
         assert gravado["hora_aprox"] == "14:30:00"
         assert gravado["local_informado"] == "Emergência adulta"
         assert gravado["expectativa"] == "resposta"
+
+
+class TestObrigatoriosDoAnexo:
+    """Seção 4.2 da especificação: o que é obrigatório barra o envio, o que é
+    opcional nunca barra. A página de antes, que não conhece nenhum campo do
+    passo a passo, continua passando (ver `TestAPaginaDeAntes`)."""
+
+    @pytest.mark.parametrize("faltando", ["sobre", "data_ocorrencia", "periodo", "local_informado", "expectativa"])
+    def test_sem_um_obrigatorio_o_envio_guiado_e_recusado(self, faltando):
+        client, banco = _make_app()
+
+        r = client.post(ROTA, json={k: v for k, v in _guiada().items() if k != faltando})
+
+        assert r.status_code == 422, faltando
+        assert banco.rows == []
+
+    @pytest.mark.parametrize(
+        "campo,valor",
+        [("periodo", "almoco"), ("expectativa", "indenizacao"), ("local_informado", "   ")],
+    )
+    def test_obrigatorio_com_valor_fora_da_regra_e_recusado(self, campo, valor):
+        client, banco = _make_app()
+
+        r = client.post(ROTA, json=_guiada(**{campo: valor}))
+
+        assert r.status_code == 422
+        assert banco.rows == []
+
+    def test_data_da_ocorrencia_no_futuro_e_recusada(self):
+        client, banco = _make_app()
+
+        r = client.post(ROTA, json=_guiada(data_ocorrencia="2999-01-01"))
+
+        assert r.status_code == 422
+        assert banco.rows == []
+
+    def test_os_opcionais_em_branco_nao_barram_o_envio(self):
+        """Hora, quarto, profissionais e o paciente servem para localizar o
+        atendimento, e o CONTEXT.md pede para nunca torná-los obrigatórios."""
+        client, banco = _make_app()
+
+        r = client.post(
+            ROTA,
+            json=_guiada(hora_aprox=None, quarto="", profissionais="  ", paciente_nascimento=None, natureza_informada=""),
+        )
+
+        assert r.status_code == 201, r.text
+        gravado = banco.inserts[0]
+        for campo in ("hora_aprox", "quarto", "profissionais", "paciente_nascimento", "natureza_informada"):
+            assert gravado[campo] is None, campo
+
+    def test_os_opcionais_preenchidos_chegam_ao_caso(self):
+        client, banco = _make_app()
+
+        r = client.post(
+            ROTA,
+            json=_guiada(
+                sobre="outra_pessoa",
+                local_informado="Internação · Ala 2A",
+                quarto="Apto 204",
+                profissionais="Enfermeira do plantão da noite",
+                paciente_nome="José Souza",
+                paciente_nascimento="1948-03-02",
+            ),
+        )
+
+        assert r.status_code == 201, r.text
+        gravado = banco.inserts[0]
+        assert gravado["quarto"] == "Apto 204"
+        assert gravado["profissionais"] == "Enfermeira do plantão da noite"
+        assert gravado["paciente_nome"] == "José Souza"
+        assert gravado["paciente_nascimento"] == "1948-03-02"
+
+
+class TestContatoDeQuemSeIdentifica:
+    """M5: quem se identifica deixa o nome e ao menos um jeito de a Ouvidoria
+    falar com ele. Só telefone vale (decisão 8 do diretor no PRD #1527), e a
+    tela avisa que as respostas saem por e-mail."""
+
+    def test_identificado_sem_telefone_nem_email_e_recusado(self):
+        client, banco = _make_app()
+
+        r = client.post(ROTA, json=_guiada(contato=None))
+
+        assert r.status_code == 422
+        assert banco.rows == []
+
+    def test_identificado_sem_nome_e_recusado(self):
+        client, banco = _make_app()
+
+        r = client.post(ROTA, json=_guiada(nome=" "))
+
+        assert r.status_code == 422
+        assert banco.rows == []
+
+    def test_so_com_telefone_passa_e_o_telefone_tem_coluna_propria(self):
+        client, banco = _make_app()
+
+        r = client.post(ROTA, json=_guiada(contato=None, telefone="(21) 99999-0000"))
+
+        assert r.status_code == 201, r.text
+        gravado = banco.inserts[0]
+        assert gravado["manifestante_telefone"] == "(21) 99999-0000"
+        assert gravado["manifestante_contato"] is None
+        # Nome e telefone fecham a identificação: nada a completar.
+        assert gravado["dados_incompletos"] is False
+
+    def test_o_email_continua_no_contato_que_o_acuse_le(self):
+        client, banco = _make_app()
+
+        r = client.post(ROTA, json=_guiada(telefone="21999990000"))
+
+        assert r.status_code == 201, r.text
+        gravado = banco.inserts[0]
+        assert gravado["manifestante_contato"] == "maria@exemplo.com"
+        assert gravado["manifestante_telefone"] == "21999990000"
+
+    @pytest.mark.parametrize("telefone", ["não tenho", "123"])
+    def test_telefone_sem_numero_de_telefone_nao_conta_como_contato(self, telefone):
+        client, banco = _make_app()
+
+        r = client.post(ROTA, json=_guiada(contato=None, telefone=telefone))
+
+        assert r.status_code == 422
+        assert banco.rows == []
+
+    def test_email_que_nao_e_email_e_recusado(self):
+        """O e-mail mora no contato que o acuse lê; um telefone digitado ali
+        faria o caso parecer ter e-mail e a pessoa não receberia nada."""
+        client, banco = _make_app()
+
+        r = client.post(ROTA, json=_guiada(contato="21 99999-0000"))
+
+        assert r.status_code == 422
+        assert banco.rows == []
+
+    def test_anonimo_passa_sem_contato_e_descarta_o_telefone_que_venha(self):
+        client, banco = _make_app()
+
+        r = client.post(ROTA, json=_guiada(anonimo=True, nome=None, contato=None, telefone="21999990000"))
+
+        assert r.status_code == 201, r.text
+        gravado = banco.inserts[0]
+        assert gravado["manifestante_nome"] is None
+        assert gravado["manifestante_telefone"] is None
+
+
+class TestAPaginaDeAntes:
+    """Quem abriu o formulário antes do deploy continua com a página velha na
+    aba até recarregar, e ela não manda nenhum campo do passo a passo. A rota
+    aceita esse envio como aceitava, pelo mesmo motivo que tolera a falta do
+    `sobre` (issue #666): recusar fecharia o canal justamente para quem está
+    parado na frente do cartaz escrevendo devagar."""
+
+    def test_o_envio_da_pagina_de_antes_continua_registrando(self):
+        client, banco = _make_app()
+
+        r = client.post(ROTA, json={"relato": "Esperei duas horas.", "sobre": "mim", "nome": "Maria"})
+
+        assert r.status_code == 201, r.text
+        gravado = banco.inserts[0]
+        for campo in ("data_ocorrencia", "periodo", "local_informado", "expectativa", "manifestante_telefone"):
+            assert gravado[campo] is None, campo

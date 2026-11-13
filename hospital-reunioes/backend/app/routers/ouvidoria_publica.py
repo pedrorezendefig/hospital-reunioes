@@ -16,16 +16,18 @@ sigiloso (fail-closed), e quem abaixa é o ouvidor ao classificar.
 
 import datetime as dt
 import logging
+from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, status
 from fastapi.responses import RedirectResponse
 from postgrest.exceptions import APIError
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 from app.config import settings
 from app.dependencies import get_supabase_client
 from app.limiter import limiter
 from app.services import ouvidoria_acuse, ouvidoria_pontos
+from app.services.ouvidoria_contato import email_utilizavel
 from app.services.ouvidoria_taxonomia import (
     CATEGORIA_PENDENTE,
     NATUREZAS_INFORMADAS,
@@ -76,6 +78,9 @@ EXPECTATIVAS: tuple[str, ...] = ("resposta", "providencia", "registro")
 # Os campos que só o passo a passo manda. A página de antes não conhece nenhum
 # deles, e é pela presença de um deles que a rota sabe de qual página o envio
 # veio (ver `ManifestacaoPublica.exigencias_do_passo_a_passo`).
+FUSO_DO_HOSPITAL = ZoneInfo("America/Sao_Paulo")
+_DIGITOS_DO_MENOR_TELEFONE = 8
+
 _CAMPOS_DO_PASSO_A_PASSO = frozenset(
     {
         "data_ocorrencia",
@@ -300,6 +305,54 @@ class ManifestacaoPublica(BaseModel):
             raise ValueError("escolha uma das naturezas oferecidas no formulário")
         return valor
 
+    @field_validator("data_ocorrencia", "paciente_nascimento")
+    @classmethod
+    def data_que_ja_passou(cls, valor: dt.date | None) -> dt.date | None:
+        if valor is not None and valor > dt.datetime.now(tz=FUSO_DO_HOSPITAL).date():
+            raise ValueError("a data não pode ser depois de hoje")
+        return valor
+
+    @model_validator(mode="after")
+    def exigencias_do_passo_a_passo(self):
+        """O que os cinco passos exigem (seção 4.2 da especificação, ADR 0086
+        decisão 6), e só quando o envio veio deles.
+
+        A página de antes não manda nenhum campo do passo a passo, e passa como
+        passava, pela mesma razão que a falta do `sobre` é tolerada acima: quem
+        abriu o formulário antes do deploy fica com a página velha na aba até
+        recarregar. O envio que traz qualquer campo novo veio do passo a passo,
+        e ali o obrigatório é obrigatório."""
+        if not (self.model_fields_set & _CAMPOS_DO_PASSO_A_PASSO):
+            return self
+        faltando = [
+            campo
+            for campo in ("sobre", "data_ocorrencia", "periodo", "local_informado", "expectativa")
+            if getattr(self, campo) is None
+        ]
+        if faltando:
+            raise ValueError(f"faltou responder: {', '.join(faltando)}")
+        if self.anonimo:
+            return self
+        # M5: nome e ao menos um contato. O e-mail tem que ser e-mail, porque é
+        # dele que o acuse e o aviso de encerramento leem o endereço; um
+        # telefone digitado ali faria o caso parecer ter para onde escrever.
+        if self.nome is None:
+            raise ValueError("diga seu nome para a Ouvidoria falar com você")
+        if self.contato is not None and email_utilizavel(self.contato) is None:
+            raise ValueError("confira o e-mail")
+        if self.contato is None and self.telefone is None:
+            raise ValueError("deixe um telefone ou um e-mail para a Ouvidoria falar com você")
+        return self
+
+    @field_validator("telefone")
+    @classmethod
+    def telefone_com_numero(cls, valor: str | None) -> str | None:
+        """Oito dígitos é o menor telefone que se disca (o fixo sem DDD). Menos
+        que isso é texto no campo errado, e contaria como contato sem ser."""
+        if valor is not None and sum(c.isdigit() for c in valor) < _DIGITOS_DO_MENOR_TELEFONE:
+            raise ValueError("confira o telefone")
+        return valor
+
 
 @router.get("/qr")
 @limiter.limit("60/minute")
@@ -378,6 +431,7 @@ async def registrar_manifestacao_publica(
     # formulário ou de quem monte a requisição na mão.
     nome = None if manifestacao.anonimo else manifestacao.nome
     contato = None if manifestacao.anonimo else manifestacao.contato
+    telefone = None if manifestacao.anonimo else manifestacao.telefone
 
     # De quem é o relato (ADR 0052). Duas leituras que andam juntas e que é
     # fácil confundir:
@@ -394,6 +448,14 @@ async def registrar_manifestacao_publica(
     e_sobre_outra_pessoa = vinculo == VINCULO_POR_SOBRE["outra_pessoa"]
     paciente_nome = manifestacao.paciente_nome if e_sobre_outra_pessoa else None
     paciente_referencia = manifestacao.paciente_referencia if e_sobre_outra_pessoa else None
+    # A data de nascimento do paciente (issue #1620) segue a mesma régua, com
+    # um caminho a mais: quem se identifica e fala de si É o paciente, e a data
+    # dele ajuda a área a achar o atendimento. No anônimo que fala de si ela
+    # sai, porque ali o paciente é quem pediu para não ser identificado.
+    e_sobre_si_identificado = vinculo == VINCULO_POR_SOBRE["mim"] and not manifestacao.anonimo
+    paciente_nascimento = (
+        manifestacao.paciente_nascimento if (e_sobre_outra_pessoa or e_sobre_si_identificado) else None
+    )
 
     # Canal QR só quando o código resolve um Ponto de escuta ATIVO. Setor e
     # ponto saem do CADASTRO, e é isso que fecha a porta do texto arbitrário: o
@@ -426,6 +488,7 @@ async def registrar_manifestacao_publica(
         "natureza_informada": manifestacao.natureza_informada,
         "manifestante_nome": nome,
         "manifestante_contato": contato,
+        "manifestante_telefone": telefone,
         # O vínculo derivado da resposta obrigatória: o canal QR deixa de entrar
         # com "Vínculo: Não informado" no Dossiê (issue #666).
         "manifestante_vinculo": vinculo,
@@ -439,11 +502,13 @@ async def registrar_manifestacao_publica(
         "local_informado": manifestacao.local_informado,
         "quarto": manifestacao.quarto,
         "profissionais": manifestacao.profissionais,
+        "paciente_nascimento": _iso(paciente_nascimento),
         "expectativa": manifestacao.expectativa,
         "anonimo": manifestacao.anonimo,
         # Anônimo não é caso incompleto: não há o que completar, é escolha de
-        # quem manifestou. Identificação pela metade, sim.
-        "dados_incompletos": not (manifestacao.anonimo or (nome and contato)),
+        # quem manifestou. Identificação pela metade, sim. O telefone fecha a
+        # identificação como o e-mail fecha (issue #1620).
+        "dados_incompletos": not (manifestacao.anonimo or (nome and (contato or telefone))),
         # Fail-closed (ADR 0034, decisão 1). O canal aberto entra SEM TIPO, e o
         # índice de quem está fora da Ouvidoria mostra o `resumo`, que é o
         # começo do relato: uma denúncia escrita no QR viraria texto visível na
