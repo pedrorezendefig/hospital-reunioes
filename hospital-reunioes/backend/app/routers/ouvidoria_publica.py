@@ -68,6 +68,28 @@ AUTOR_CANAL_ABERTO = "Canal aberto"
 # lista de cinco do registro manual. O canal aberto alcança dois dos cinco.
 VINCULO_POR_SOBRE: dict[str, str] = {"mim": "paciente", "outra_pessoa": "acompanhante"}
 
+# As listas fechadas da Manifestação guiada (issue #1620, ADR 0086 decisão 6).
+# Vivem aqui e no CHECK da migration 138, e um teste confere que as duas batem.
+PERIODOS: tuple[str, ...] = ("manha", "tarde", "noite", "madrugada")
+EXPECTATIVAS: tuple[str, ...] = ("resposta", "providencia", "registro")
+
+# Os campos que só o passo a passo manda. A página de antes não conhece nenhum
+# deles, e é pela presença de um deles que a rota sabe de qual página o envio
+# veio (ver `ManifestacaoPublica.exigencias_do_passo_a_passo`).
+_CAMPOS_DO_PASSO_A_PASSO = frozenset(
+    {
+        "data_ocorrencia",
+        "periodo",
+        "hora_aprox",
+        "local_informado",
+        "quarto",
+        "profissionais",
+        "paciente_nascimento",
+        "expectativa",
+        "telefone",
+    }
+)
+
 
 # Vazio é ausência, não conteúdo: espaço em branco (ou travessão sozinho, que a
 # sanitização deixa em pontuação) entra como NULL, em vez de fazer o Dossiê
@@ -91,6 +113,11 @@ def _resumir(relato: str) -> str:
     if espaco > 0:
         corte = corte[:espaco]
     return f"{corte}..."
+
+
+def _iso(valor: dt.date | dt.time | None) -> str | None:
+    """Data e hora viajam ao PostgREST como texto ISO."""
+    return valor.isoformat() if valor is not None else None
 
 
 def _setor_da_taxonomia(supabase, setor: str | None) -> str | None:
@@ -177,6 +204,21 @@ class ManifestacaoPublica(BaseModel):
     # segunda via do relato.
     paciente_nome: str | None = Field(default=None, max_length=200)
     paciente_referencia: str | None = Field(default=None, max_length=200)
+    # A Manifestação guiada (issue #1620, ADR 0086 decisão 6): quando e onde
+    # foi, quem estava envolvido e o que a pessoa espera. O local é o que ela
+    # escolheu na lista de nomes públicos, e não a área responsável, que
+    # continua sendo do ouvidor. Os tetos são os do CHECK da migration 138.
+    data_ocorrencia: dt.date | None = None
+    periodo: str | None = Field(default=None, max_length=20)
+    hora_aprox: dt.time | None = None
+    local_informado: str | None = Field(default=None, max_length=80)
+    quarto: str | None = Field(default=None, max_length=40)
+    profissionais: str | None = Field(default=None, max_length=300)
+    paciente_nascimento: dt.date | None = None
+    expectativa: str | None = Field(default=None, max_length=20)
+    # O telefone ganha campo próprio; o e-mail continua em `contato`, que é o
+    # que o acuse e o aviso de encerramento leem.
+    telefone: str | None = Field(default=None, max_length=30)
     # Honeypot: campo escondido no formulário, que pessoa nenhuma preenche.
     assunto_alternativo: str | None = Field(default=None, max_length=200)
 
@@ -192,10 +234,33 @@ class ManifestacaoPublica(BaseModel):
             raise ValueError("conte o que aconteceu para registrarmos sua manifestação")
         return valor.strip()
 
-    @field_validator("nome", "contato", "paciente_nome", "paciente_referencia")
+    @field_validator(
+        "nome",
+        "contato",
+        "paciente_nome",
+        "paciente_referencia",
+        "local_informado",
+        "quarto",
+        "profissionais",
+        "telefone",
+    )
     @classmethod
     def opcional_vazio_e_ausencia(cls, valor: str | None) -> str | None:
         return _limpar(valor)
+
+    @field_validator("periodo")
+    @classmethod
+    def periodo_da_lista_fechada(cls, valor: str | None) -> str | None:
+        if valor is not None and valor not in PERIODOS:
+            raise ValueError("escolha manhã, tarde, noite ou madrugada")
+        return valor
+
+    @field_validator("expectativa")
+    @classmethod
+    def expectativa_da_lista_fechada(cls, valor: str | None) -> str | None:
+        if valor is not None and valor not in EXPECTATIVAS:
+            raise ValueError("diga o que você espera da Ouvidoria")
+        return valor
 
     @field_validator("sobre")
     @classmethod
@@ -366,6 +431,15 @@ async def registrar_manifestacao_publica(
         "manifestante_vinculo": vinculo,
         "paciente_nome": paciente_nome,
         "paciente_referencia": paciente_referencia,
+        # Quando e onde, da Manifestação guiada (issue #1620). Nulos no envio
+        # da página de antes, que não os conhece.
+        "data_ocorrencia": _iso(manifestacao.data_ocorrencia),
+        "periodo": manifestacao.periodo,
+        "hora_aprox": _iso(manifestacao.hora_aprox),
+        "local_informado": manifestacao.local_informado,
+        "quarto": manifestacao.quarto,
+        "profissionais": manifestacao.profissionais,
+        "expectativa": manifestacao.expectativa,
         "anonimo": manifestacao.anonimo,
         # Anônimo não é caso incompleto: não há o que completar, é escolha de
         # quem manifestou. Identificação pela metade, sim.
