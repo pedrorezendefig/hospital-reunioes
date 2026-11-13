@@ -369,7 +369,8 @@ def _secao(texto: str, titulo: str) -> str:
 # antes: e com elas que o diretor pergunta, e um kit que ainda as cita faz o
 # Assistente descrever uma tela que nao existe mais.
 APOSENTADOS_DA_ABA = (
-    "Quadro",
+    # "Quadro" voltou com a ADR 0090 (issue #1642), redefinido: colunas pela
+    # Etapa, lida do GitHub, sem arrastar card nem Prioridade.
     "Painel",
     "engrenagem",
     "formulário",
@@ -411,10 +412,9 @@ class TestOTextoDaAbaContaATelaDeHoje:
 
     def test_o_detector_morde_a_tela_de_antes(self):
         """O detector tambem e codigo: o texto de antes desta fatia, com o
-        Quadro e o Painel, tem que reprovar nele."""
+        Painel, tem que reprovar nele."""
         antes = "A aba tem o **Quadro**, o **Painel** e a Conversa do card aberto, por arroba."
         assert [termo for termo in APOSENTADOS_DA_ABA if termo in antes] == [
-            "Quadro",
             "Painel",
             "arroba",
             "card aberto",
