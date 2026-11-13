@@ -26,3 +26,14 @@ Decisão do Pedro (13/11/2026, grill no terminal, rodadas 4 e 6, todas as recome
 - Continua valendo da 0078: o site antigo, as skills `/manual` e `/montar-manual`, a pasta `docs/manual/` e os vídeos do manual não voltam.
 - As páginas nascem numa onda só, uma fatia por módulo, depois da fatia que monta o manual. A da Tecnologia espera as fatias das Entregas novas (ADR 0092).
 - O Kit de conhecimento continua sendo o que o Assistente de Tecnologia lê; o manual é para a pessoa.
+
+## Emenda a este ADR (13/11/2026, antes de qualquer fatia)
+
+**Decisão 4, o fluxograma.** O Pedro trocou o Mermaid por um componente próprio do app, no design system e com animação, para o manual ter acabamento profissional. O fluxograma é desenhado em SVG pelo próprio app, com a fonte da casa, os tokens de cor, os cantos e as sombras do app. O autor da página declara num bloco `fluxograma` do Markdown os passos, as decisões, as ligações e a posição de cada passo numa grade (linha e coluna); as ligações saem em ângulo reto, com seta.
+
+A animação é discreta. Quando o fluxograma entra na tela, os passos aparecem em sequência e cada ligação se desenha do passo de origem ao de destino. Passar o mouse num passo destaca o caminho dele e mostra o detalhe. O botão "Percorrer" anda um passo de cada vez, no molde do "percorrer a jornada" do Retrato da Ana. Com movimento reduzido, tudo aparece pronto, e o leitor de tela recebe o mesmo fluxo como lista numerada.
+
+Rejeitado: Mermaid (o visual dele não é o do app, e animar o que ele desenha é remendo); biblioteca de diagrama com layout automático (dependência nova para fluxos que cabem numa grade).
+
+As demais decisões ficam intactas.
+
