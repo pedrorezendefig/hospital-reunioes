@@ -198,6 +198,19 @@ main:has([data-quadro]) {
   pointer-events: none;
 }
 
+/* As barras do gráfico das Entregas (issue #1701, ADR 0092, decisão 7):
+   crescem do chão, uma semana depois da outra (o atraso vem no `style` de cada
+   barra). Paradas com movimento reduzido; a tela nem põe a classe nesse caso. */
+@keyframes crescer-a-barra {
+  from { transform: scaleY(0); }
+  to   { transform: scaleY(1); }
+}
+.barra-do-ritmo {
+  transform-box: fill-box;
+  transform-origin: bottom;
+  animation: crescer-a-barra 0.5s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
 /* Staggered animation delays */
 .delay-1 { animation-delay: 0.05s; }
 .delay-2 { animation-delay: 0.1s; }
@@ -216,6 +229,9 @@ main:has([data-quadro]) {
   }
   .brilho-da-demonstracao::after {
     display: none;
+  }
+  .barra-do-ritmo {
+    animation: none !important;
   }
   * {
     transition-duration: 0.01ms !important;
