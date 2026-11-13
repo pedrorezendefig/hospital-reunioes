@@ -411,6 +411,15 @@ async def rotulo_do_cartaz(
     return {"nome_publico": ouvidoria_pontos.nome_exibido(cartaz)}
 
 
+@router.get("/publico/locais")
+@limiter.limit("30/minute")
+async def locais_da_manifestacao(request: Request, supabase=Depends(get_supabase_client)):
+    """A lista de "Onde" da Manifestação guiada (issue #1620): o nome público
+    de cada cartaz ativo e se ele é de ala de internação. Nada do cadastro além
+    disso: nem setor, nem código, nem a descrição do local."""
+    return {"locais": ouvidoria_pontos.locais_publicos(supabase)}
+
+
 @router.post("/publico/manifestacoes", status_code=status.HTTP_201_CREATED)
 @limiter.limit("5/minute")
 async def registrar_manifestacao_publica(

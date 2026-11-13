@@ -214,6 +214,89 @@ class TestContatoDeQuemSeIdentifica:
         assert gravado["manifestante_telefone"] is None
 
 
+def _ponto(codigo: str, ponto: str, nome_publico: str | None, *, ativo: bool = True, ala: bool = False) -> dict:
+    return {
+        "id": f"ponto-{codigo}",
+        "codigo": codigo,
+        "setor": "Auditoria",
+        "ponto": ponto,
+        "ativo": ativo,
+        "criado_em": "2026-11-01T12:00:00+00:00",
+        "nome_publico": nome_publico,
+        "descricao_local": "Hall, parede ao lado da passagem",
+        "titulo_cartaz": "atendimento_hoje",
+        "codigo_controle": None,
+        "ala_internacao": ala,
+    }
+
+
+class TestAListaDeLocais:
+    """M3, "Onde": a lista de nomes que o paciente entende, que são os nomes
+    públicos dos cartazes ativos (ADR 0086, decisão 10)."""
+
+    def test_lista_os_nomes_publicos_dos_cartazes_ativos_com_a_marca_de_ala(self):
+        pontos = [
+            _ponto("AAAAA2", "Hall", "Emergência adulta"),
+            _ponto("AAAAA3", "Corredor", "Internação · Ala 2A", ala=True),
+            # Dois cartazes no mesmo lugar público viram uma opção só.
+            _ponto("AAAAA4", "Hall dos fundos", "Emergência adulta"),
+            # Cartaz aposentado não é lugar para escolher.
+            _ponto("AAAAA5", "Saguão", "Centro Médico", ativo=False),
+        ]
+        client, _banco = _make_app(_BancoFake(pontos=pontos))
+
+        r = client.get("/api/ouvidoria/publico/locais")
+
+        assert r.status_code == 200
+        assert r.json() == {
+            "locais": [
+                {"nome": "Emergência adulta", "ala_internacao": False},
+                {"nome": "Internação · Ala 2A", "ala_internacao": True},
+            ]
+        }
+
+    def test_nunca_mostra_o_nome_interno_do_setor(self):
+        """Sem nome público vale o rótulo do ponto, nunca o setor da taxonomia
+        ("Você leu o QR de Auditoria" era o defeito da especificação)."""
+        client, _banco = _make_app(_BancoFake(pontos=[_ponto("AAAAA2", "Recepção principal", None)]))
+
+        r = client.get("/api/ouvidoria/publico/locais")
+
+        assert r.json() == {"locais": [{"nome": "Recepção principal", "ala_internacao": False}]}
+        assert "Auditoria" not in r.text
+
+
+class TestOAnonimoNaoGravaOCartaz:
+    """ADR 0086, decisão 3: o anônimo que vem de um cartaz guarda o local que
+    confirmou, e não o código do cartaz nem o ponto."""
+
+    def test_anonimo_vindo_do_cartaz_guarda_o_local_e_nao_o_codigo(self):
+        client, banco = _make_app(_BancoFake(pontos=[dict(CARTAZ)]))
+
+        r = client.post(
+            ROTA,
+            json=_guiada(anonimo=True, nome=None, contato=None, p="AB2CD3", local_informado="Recepção"),
+        )
+
+        assert r.status_code == 201, r.text
+        gravado = banco.inserts[0]
+        assert gravado["local_informado"] == "Recepção"
+        assert gravado["canal_ponto"] is None
+        valores = " ".join(str(v) for v in gravado.values())
+        assert "AB2CD3" not in valores
+        assert "Poltrona 12" not in valores
+
+    def test_identificado_vindo_do_cartaz_continua_guardando_o_ponto(self):
+        """O par do teste de cima: sem ele, um cartaz que nunca resolvesse
+        passaria pelo anônimo como se a regra existisse."""
+        client, banco = _make_app(_BancoFake(pontos=[dict(CARTAZ)]))
+
+        r = client.post(ROTA, json=_guiada(p="AB2CD3", local_informado="Recepção"))
+
+        assert r.status_code == 201, r.text
+        assert banco.inserts[0]["canal_ponto"] == "Poltrona 12"
+
+
 class TestAPaginaDeAntes:
     """Quem abriu o formulário antes do deploy continua com a página velha na
     aba até recarregar, e ela não manda nenhum campo do passo a passo. A rota
