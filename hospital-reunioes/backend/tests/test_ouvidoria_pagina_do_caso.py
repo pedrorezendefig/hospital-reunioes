@@ -514,6 +514,29 @@ class TestPacienteDoCasoNoDossie:
         assert corpo["paciente_nome"] == "Maria Souza"
         assert corpo["paciente_referencia"] == "Leito 12, dia 9"
 
+    def test_o_dossie_devolve_o_que_a_manifestacao_guiada_perguntou(self, monkeypatch):
+        """Issue #1620: quando, onde, quem atendeu, o nascimento do paciente, o
+        que a pessoa espera e o telefone chegam à tela do ouvidor."""
+        guiada = {
+            "data_ocorrencia": "2026-11-10",
+            "periodo": "noite",
+            "hora_aprox": "22:15:00",
+            "local_informado": "Internação · Ala 2A",
+            "quarto": "Apto 204",
+            "profissionais": "Enfermeira do plantão",
+            "paciente_nascimento": "1948-03-02",
+            "expectativa": "providencia",
+            "manifestante_telefone": "(21) 98888-7777",
+        }
+        client, _ = _client(monkeypatch, OUVIDOR, _SupabaseFake([_manifestacao(**guiada)]))
+
+        r = _abrir(client, "2026-0007")
+
+        assert r.status_code == 200, r.text
+        corpo = r.json()
+        for campo, valor in guiada.items():
+            assert corpo[campo] == valor, campo
+
     def test_o_caso_sem_paciente_devolve_os_campos_nulos(self, monkeypatch):
         """Nulo é a resposta certa, e não campo ausente: a tela desenha as duas
         linhas sempre, com "Não informado" no vazio."""

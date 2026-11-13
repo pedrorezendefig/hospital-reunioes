@@ -530,6 +530,19 @@ _CAMPOS_DOSSIE_TUPLA = _CAMPOS_PROTOCOLO_TUPLA + (
     # índice: é dado pessoal de terceiro, atrás do mesmo gate do relato.
     "paciente_nome",
     "paciente_referencia",
+    # O que a Manifestação guiada perguntou (issue #1620, migration 138):
+    # quando, onde, quem atendeu, o nascimento do paciente, o que a pessoa
+    # espera e o telefone. Dossiê, e não índice: é dado do caso e de gente,
+    # atrás do mesmo gate do relato.
+    "data_ocorrencia",
+    "periodo",
+    "hora_aprox",
+    "local_informado",
+    "quarto",
+    "profissionais",
+    "paciente_nascimento",
+    "expectativa",
+    "manifestante_telefone",
     "anonimo",
     "sigilo_reforcado",
     "dados_incompletos",

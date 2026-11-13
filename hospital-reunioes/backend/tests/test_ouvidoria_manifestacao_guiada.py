@@ -25,9 +25,10 @@ import pytest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
+from test_ouvidoria_formulario_publico import CARTAZ, _BancoFake, _make_app  # noqa: E402
+
 from app.limiter import limiter  # noqa: E402
 from app.routers import ouvidoria_publica  # noqa: E402
-from test_ouvidoria_formulario_publico import CARTAZ, _BancoFake, _make_app  # noqa: E402
 
 ROTA = "/api/ouvidoria/publico/manifestacoes"
 
@@ -113,7 +114,9 @@ class TestObrigatoriosDoAnexo:
 
         r = client.post(
             ROTA,
-            json=_guiada(hora_aprox=None, quarto="", profissionais="  ", paciente_nascimento=None, natureza_informada=""),
+            json=_guiada(
+                hora_aprox=None, quarto="", profissionais="  ", paciente_nascimento=None, natureza_informada=""
+            ),
         )
 
         assert r.status_code == 201, r.text
@@ -341,6 +344,49 @@ class TestAMigration:
 
         assert "CREATE TABLE" not in ddl
         assert "CREATE POLICY" not in ddl
+
+
+class TestOKitDeConhecimento:
+    """O Assistente de Tecnologia responde sobre a Ouvidoria pelo kit: se o
+    texto não disser como o formulário anda agora, ele responde pela tela
+    única de antes."""
+
+    @pytest.fixture
+    def texto(self) -> str:
+        from app.services.conhecimento import CONHECIMENTO_DIR
+
+        return (CONHECIMENTO_DIR / "ouvidoria.md").read_text(encoding="utf-8")
+
+    @pytest.fixture
+    def entrada(self, texto) -> str:
+        """O item de "Por onde um caso chega" que conta o formulário público.
+        Lido sozinho porque "cinco passos" já aparece no texto, numa decisão
+        sobre o QR, e o teste passaria sobre o texto antigo."""
+        achados = [linha for linha in texto.splitlines() if linha.startswith("- **Formulário público e QR.**")]
+        assert len(achados) == 1
+        return achados[0]
+
+    def test_diz_os_cinco_passos_com_a_identificacao_primeiro(self, entrada):
+        assert "cinco passos" in entrada
+        assert "começa pela escolha entre se identificar ou ficar anônima" in entrada
+
+    def test_diz_o_que_o_caso_passa_a_guardar(self, entrada):
+        for trecho in ("quando foi", "onde foi", "profissionais", "data de nascimento", "o que espera"):
+            assert trecho in entrada, trecho
+
+    def test_diz_o_contato_e_o_aviso_de_quem_deixa_so_telefone(self, entrada):
+        assert "telefone ou e-mail" in entrada
+        assert "só o telefone" in entrada
+        assert "as respostas saem por e-mail" in entrada
+
+    def test_diz_que_o_local_vem_do_cartaz(self, entrada):
+        assert "o local já vem escolhido com o nome do cartaz" in entrada
+
+    def test_o_apagamento_diz_os_dados_novos(self, texto):
+        paragrafo = next(p for p in texto.split("\n\n") if p.startswith("O relato de um caso encerrado"))
+        assert "telefone" in paragrafo
+        assert "data de nascimento do paciente" in paragrafo
+        assert "quarto" in paragrafo
 
 
 class TestAPaginaDeAntes:
