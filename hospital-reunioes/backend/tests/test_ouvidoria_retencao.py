@@ -43,6 +43,20 @@ RESPOSTA_DA_AREA = "Falamos com a paciente Joana da Silva no telefone 11 99999-0
 PACIENTE = "Maria Aparecida de Souza"
 PACIENTE_REFERENCIA = "Leito 12 da Clinica Medica, 01/08/2020"
 
+# O que a Manifestação guiada acrescentou ao caso (issue #1620, migration 138).
+# Tudo com valor: nulo antes e depois ficaria igual sendo apagado ou não.
+DADOS_DA_MANIFESTACAO_GUIADA = {
+    "data_ocorrencia": "2020-07-30",
+    "periodo": "noite",
+    "hora_aprox": "22:15:00",
+    "local_informado": "Internação · Ala 2A",
+    "quarto": "Apto 204",
+    "profissionais": "Enfermeira Clarice do plantao",
+    "paciente_nascimento": "1948-03-02",
+    "expectativa": "providencia",
+    "manifestante_telefone": "(21) 98888-7777",
+}
+
 
 def _manifestacao(numero: int = 7, **overrides) -> dict:
     """Caso encerrado há seis anos, com o Dossiê inteiro preenchido."""
@@ -142,6 +156,7 @@ def _manifestacao(numero: int = 7, **overrides) -> dict:
         # anonimato de quem manifesta não o zera. Quem o apaga é a retenção.
         "paciente_nome": PACIENTE,
         "paciente_referencia": PACIENTE_REFERENCIA,
+        **DADOS_DA_MANIFESTACAO_GUIADA,
         "anonimizada_em": None,
     }
     row.update(overrides)
@@ -558,6 +573,23 @@ class TestDossieApagado:
         # então a referência não pode sobrar em canto nenhum da linha.
         assert "Maria" not in _todo_o_texto(caso)
         assert "Leito 12" not in _todo_o_texto(caso)
+
+    def test_o_que_a_manifestacao_guiada_acrescentou_sai_junto_com_o_dossie(self):
+        """ADR 0086, decisão 9 (issue #1620): quando, onde, quem atendeu, o
+        nascimento do paciente e o telefone saem junto com o relato. Data,
+        hora, local e quarto reidentificam pelo mesmo mecanismo do
+        `canal_ponto`; nascimento e telefone são dado pessoal."""
+        supabase = _SupabaseFake()
+
+        ouvidoria_retencao.anonimizar_encerradas_antigas(supabase, AGORA)
+
+        caso = supabase.caso()
+        for campo in DADOS_DA_MANIFESTACAO_GUIADA:
+            assert caso[campo] is None, f"a Retenção não apagou {campo}"
+        texto = _todo_o_texto(caso)
+        assert "Clarice" not in texto
+        assert "98888-7777" not in texto
+        assert "Apto 204" not in texto
 
     def test_o_paciente_nao_entra_na_lista_do_que_os_relatorios_preservam(self):
         """As duas colunas estão do lado certo do contrato: o paciente nunca

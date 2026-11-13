@@ -17,13 +17,16 @@ Os testes sobem a rota real com o mesmo banco falso do formulário público.
 from __future__ import annotations
 
 import os
+import re
 import sys
+from pathlib import Path
 
 import pytest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from app.limiter import limiter  # noqa: E402
+from app.routers import ouvidoria_publica  # noqa: E402
 from test_ouvidoria_formulario_publico import CARTAZ, _BancoFake, _make_app  # noqa: E402
 
 ROTA = "/api/ouvidoria/publico/manifestacoes"
@@ -295,6 +298,49 @@ class TestOAnonimoNaoGravaOCartaz:
 
         assert r.status_code == 201, r.text
         assert banco.inserts[0]["canal_ponto"] == "Poltrona 12"
+
+
+MIGRATION = Path(__file__).parent.parent.parent / "supabase" / "migrations" / "138_ouvidoria_manifestacao_guiada.sql"
+
+
+def _ddl() -> str:
+    return re.sub(r"--[^\n]*", "", MIGRATION.read_text(encoding="utf-8"))
+
+
+class TestAMigration:
+    """O fake do PostgREST não aplica CHECK, então é a leitura do arquivo que
+    segura as regras do banco."""
+
+    def test_as_colunas_novas_nascem_no_caso(self):
+        ddl = _ddl()
+        for coluna in (
+            "data_ocorrencia DATE",
+            "periodo TEXT",
+            "hora_aprox TIME",
+            "local_informado TEXT",
+            "quarto TEXT",
+            "profissionais TEXT",
+            "paciente_nascimento DATE",
+            "expectativa TEXT",
+            "manifestante_telefone TEXT",
+        ):
+            assert f"ADD COLUMN IF NOT EXISTS {coluna}" in ddl, coluna
+
+    def test_as_listas_fechadas_do_banco_batem_com_as_da_rota(self):
+        ddl = _ddl()
+        periodos = ", ".join(f"'{p}'" for p in ouvidoria_publica.PERIODOS)
+        expectativas = ", ".join(f"'{e}'" for e in ouvidoria_publica.EXPECTATIVAS)
+
+        assert f"periodo IS NULL OR periodo IN ({periodos})" in ddl
+        assert f"expectativa IS NULL OR expectativa IN ({expectativas})" in ddl
+
+    def test_nenhuma_tabela_nova_nem_policy(self):
+        """Só colunas: a linha do caso continua com a RLS que nega por padrão
+        e o backend escreve com a service role."""
+        ddl = _ddl().upper()
+
+        assert "CREATE TABLE" not in ddl
+        assert "CREATE POLICY" not in ddl
 
 
 class TestAPaginaDeAntes:
