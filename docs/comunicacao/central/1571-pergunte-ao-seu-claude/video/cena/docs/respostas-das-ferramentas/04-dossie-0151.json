@@ -1,0 +1,250 @@
+{
+ "jsonrpc": "2.0",
+ "id": 4,
+ "result": {
+  "content": [
+   {
+    "type": "text",
+    "text": "{\"dossie\": {\"id\": \"6e44487b-3dc6-48f2-8e6f-d8c6a0432d46\", \"numero\": 151, \"protocolo\": \"2026-0151\", \"data_abertura\": \"2026-11-03\", \"prazo_resposta\": \"2026-11-10\", \"status\": \"aguardando_area\", \"categoria\": \"comunicação com a família\", \"setor\": \"UTI Adulto\", \"resumo\": \"Familiar sem boletim médico da UTI por dois dias e sem conseguir falar com o setor por telefone.\", \"conversa_id\": \"\", \"tipo_manifestacao\": \"reclamacao\", \"relato_integral\": \"Meu pai está internado na UTI desde sábado. Segunda e terça eu liguei no horário do boletim e ninguém atendeu o telefone do setor. Fui até o hospital na terça à tarde e me disseram que o médico já tinha passado. Estou sem notícia nenhuma e preciso saber como ele está.\", \"manifestante_nome\": \"Fernanda Souto\", \"manifestante_contato\": \"(21) 99000-0151\", \"manifestante_vinculo\": \"acompanhante\", \"paciente_nome\": \"Jorge Souto\", \"paciente_referencia\": null, \"data_ocorrencia\": null, \"periodo\": null, \"hora_aprox\": null, \"local_informado\": null, \"quarto\": null, \"profissionais\": null, \"paciente_nascimento\": null, \"expectativa\": null, \"manifestante_telefone\": null, \"anonimo\": false, \"sigilo_reforcado\": false, \"dados_incompletos\": false, \"classificacao_ia\": null, \"natureza_informada\": \"reclamacao\", \"desfecho\": null, \"desfecho_descricao\": null, \"canal\": \"site\", \"canal_setor\": null, \"canal_ponto\": null, \"contato_em\": \"2026-11-03T13:12:00+00:00\", \"gravidade\": \"alto\", \"extrato_para_o_setor\": \"Familiar sem boletim médico há dois dias e sem atendimento no telefone do setor. Confirmar o horário e o responsável pelo boletim diário e explicar o que houve nos dias 2 e 3.\", \"prazo_area_em\": \"2026-11-11T20:00:00+00:00\", \"prazo_rompido_em\": \"2026-11-11T20:04:00+00:00\", \"validada_em\": \"2026-11-03T16:40:00+00:00\", \"validada_por\": \"P940\", \"respondida_em\": null, \"resposta_da_area\": \"O boletim foi retomado no horário das 14h e o médico plantonista recebeu a família na quinta.\", \"respondida_por_nome\": null, \"encerrada_em\": null, \"pausada_em\": null, \"minutos_pausados\": 0, \"reincidencia\": false, \"reaberta_em\": null, \"area_estourou_em\": null, \"prazo_conclusivo_em\": null, \"acuse_recebimento_em\": \"2026-11-03T13:12:01+00:00\", \"acuse_sem_contato_em\": null, \"encerramento_avisado_em\": null, \"encerramento_sem_contato_em\": null, \"anonimizada_em\": null, \"apagamento_pedido_em\": null, \"apagamento_pedido_por\": null, \"apagamento_motivo\": null, \"nsp_sugerido\": false, \"nsp_justificativa_simples\": null, \"nsp_justificativa_tecnica\": null, \"nsp_decisao\": null, \"nsp_decisao_motivo\": null, \"nsp_decidido_em\": null, \"marcos\": [{\"chave\": \"T0\", \"rotulo\": \"Entrada\", \"em\": \"2026-11-03T13:12:00+00:00\", \"pendente\": false, \"trecho\": null, \"minutos_uteis\": null, \"em_curso\": false, \"tramitacao_anterior_em\": null}, {\"chave\": \"T1\", \"rotulo\": \"Validação\", \"em\": \"2026-11-03T16:40:00+00:00\", \"pendente\": false, \"trecho\": \"Triagem da Ouvidoria\", \"minutos_uteis\": 208, \"em_curso\": false, \"tramitacao_anterior_em\": null}, {\"chave\": \"T2\", \"rotulo\": \"Resposta da área\", \"em\": null, \"pendente\": true, \"trecho\": \"Resposta da área\", \"minutos_uteis\": 3980, \"em_curso\": true, \"tramitacao_anterior_em\": null}, {\"chave\": \"T3\", \"rotulo\": \"Conclusão\", \"em\": null, \"pendente\": true, \"trecho\": \"Desfecho pela Ouvidoria\", \"minutos_uteis\": null, \"em_curso\": false, \"tramitacao_anterior_em\": null}], \"prazos\": [{\"chave\": \"area\", \"rotulo\": \"Prazo da área\", \"em\": \"2026-11-11T20:00:00+00:00\", \"situacao\": \"definido\", \"rotulo_prazo\": \"vencido há 1 dia útil\", \"estourado\": true, \"nota\": null}, {\"chave\": \"conclusivo\", \"rotulo\": \"Prazo conclusivo\", \"em\": null, \"situacao\": \"sem_prazo\", \"rotulo_prazo\": null, \"estourado\": false, \"nota\": null}], \"acuse\": {\"rotulo\": \"Acuse de recebimento\", \"em\": \"2026-11-03T13:12:01+00:00\", \"situacao\": \"em_envio\", \"nota\": null}, \"aviso_encerramento\": {\"rotulo\": \"Aviso de encerramento\", \"em\": null, \"situacao\": \"pendente\", \"nota\": \"O caso ainda não foi encerrado, ou foi encerrado antes de o aviso automático existir.\"}, \"degradado\": [], \"conta_no_indicador_de_resposta_conclusiva\": true}, \"trilha\": {\"movimentos\": [{\"ocorrido_em\": \"2026-11-12T20:04:00+00:00\", \"autor\": \"Sistema (escalonamento)\", \"sistema\": true, \"apagamento\": false, \"marco\": null, \"marco_rotulo\": null, \"descricao\": \"Escalonamento: 24 horas úteis sem resposta, cobrança enviada ao gestor da área.\", \"texto\": null, \"desde_marco\": null, \"desde_marco_rotulo\": null, \"minutos_uteis\": null}, {\"ocorrido_em\": \"2026-11-11T20:04:00+00:00\", \"autor\": \"Sistema (cobrança de prazos)\", \"sistema\": true, \"apagamento\": false, \"marco\": null, \"marco_rotulo\": null, \"descricao\": \"Prazo de resposta da área rompido; cobrança registrada para o titular e o substituto do setor.\", \"texto\": null, \"desde_marco\": null, \"desde_marco_rotulo\": null, \"minutos_uteis\": null}, {\"ocorrido_em\": \"2026-11-09T13:05:00+00:00\", \"autor\": \"Cláudia Bastos\", \"sistema\": false, \"apagamento\": false, \"marco\": null, \"marco_rotulo\": null, \"descricao\": \"Resposta devolvida à área por insuficiência\", \"texto\": \"A resposta não explica por que o boletim não foi passado nos dias 2 e 3, nem quem atende o telefone do setor.\", \"desde_marco\": null, \"desde_marco_rotulo\": null, \"minutos_uteis\": null}, {\"ocorrido_em\": \"2026-11-05T19:20:00+00:00\", \"autor\": \"Luciana Braga\", \"sistema\": true, \"apagamento\": false, \"marco\": \"T2\", \"marco_rotulo\": \"Resposta da área\", \"descricao\": \"Resposta da área recebida\", \"texto\": \"O boletim foi retomado no horário das 14h e o médico plantonista recebeu a família na quinta.\", \"desde_marco\": \"T1\", \"desde_marco_rotulo\": \"Validação\", \"minutos_uteis\": 1240}, {\"ocorrido_em\": \"2026-11-03T16:40:00+00:00\", \"autor\": \"Cláudia Bastos\", \"sistema\": false, \"apagamento\": false, \"marco\": \"T1\", \"marco_rotulo\": \"Validação\", \"descricao\": \"Caso validado e área acionada\", \"texto\": \"Validada e acionada: setor UTI Adulto, gravidade alto\", \"desde_marco\": \"T0\", \"desde_marco_rotulo\": \"Entrada\", \"minutos_uteis\": 208}, {\"ocorrido_em\": \"2026-11-03T13:12:00+00:00\", \"autor\": \"Canal aberto\", \"sistema\": true, \"apagamento\": false, \"marco\": \"T0\", \"marco_rotulo\": \"Entrada\", \"descricao\": \"Manifestação registrada\", \"texto\": \"Registro pelo canal aberto (canal: site)\", \"desde_marco\": null, \"desde_marco_rotulo\": null, \"minutos_uteis\": null}], \"degradado\": []}, \"respostas\": [{\"respondida_em\": \"2026-11-05T19:20:00+00:00\", \"respondida_por_nome\": \"Luciana Braga\", \"resposta\": \"O boletim foi retomado no horário das 14h e o médico plantonista recebeu a família na quinta.\"}]}"
+   }
+  ],
+  "structuredContent": {
+   "dossie": {
+    "id": "6e44487b-3dc6-48f2-8e6f-d8c6a0432d46",
+    "numero": 151,
+    "protocolo": "2026-0151",
+    "data_abertura": "2026-11-03",
+    "prazo_resposta": "2026-11-10",
+    "status": "aguardando_area",
+    "categoria": "comunicação com a família",
+    "setor": "UTI Adulto",
+    "resumo": "Familiar sem boletim médico da UTI por dois dias e sem conseguir falar com o setor por telefone.",
+    "conversa_id": "",
+    "tipo_manifestacao": "reclamacao",
+    "relato_integral": "Meu pai está internado na UTI desde sábado. Segunda e terça eu liguei no horário do boletim e ninguém atendeu o telefone do setor. Fui até o hospital na terça à tarde e me disseram que o médico já tinha passado. Estou sem notícia nenhuma e preciso saber como ele está.",
+    "manifestante_nome": "Fernanda Souto",
+    "manifestante_contato": "(21) 99000-0151",
+    "manifestante_vinculo": "acompanhante",
+    "paciente_nome": "Jorge Souto",
+    "paciente_referencia": null,
+    "data_ocorrencia": null,
+    "periodo": null,
+    "hora_aprox": null,
+    "local_informado": null,
+    "quarto": null,
+    "profissionais": null,
+    "paciente_nascimento": null,
+    "expectativa": null,
+    "manifestante_telefone": null,
+    "anonimo": false,
+    "sigilo_reforcado": false,
+    "dados_incompletos": false,
+    "classificacao_ia": null,
+    "natureza_informada": "reclamacao",
+    "desfecho": null,
+    "desfecho_descricao": null,
+    "canal": "site",
+    "canal_setor": null,
+    "canal_ponto": null,
+    "contato_em": "2026-11-03T13:12:00+00:00",
+    "gravidade": "alto",
+    "extrato_para_o_setor": "Familiar sem boletim médico há dois dias e sem atendimento no telefone do setor. Confirmar o horário e o responsável pelo boletim diário e explicar o que houve nos dias 2 e 3.",
+    "prazo_area_em": "2026-11-11T20:00:00+00:00",
+    "prazo_rompido_em": "2026-11-11T20:04:00+00:00",
+    "validada_em": "2026-11-03T16:40:00+00:00",
+    "validada_por": "P940",
+    "respondida_em": null,
+    "resposta_da_area": "O boletim foi retomado no horário das 14h e o médico plantonista recebeu a família na quinta.",
+    "respondida_por_nome": null,
+    "encerrada_em": null,
+    "pausada_em": null,
+    "minutos_pausados": 0,
+    "reincidencia": false,
+    "reaberta_em": null,
+    "area_estourou_em": null,
+    "prazo_conclusivo_em": null,
+    "acuse_recebimento_em": "2026-11-03T13:12:01+00:00",
+    "acuse_sem_contato_em": null,
+    "encerramento_avisado_em": null,
+    "encerramento_sem_contato_em": null,
+    "anonimizada_em": null,
+    "apagamento_pedido_em": null,
+    "apagamento_pedido_por": null,
+    "apagamento_motivo": null,
+    "nsp_sugerido": false,
+    "nsp_justificativa_simples": null,
+    "nsp_justificativa_tecnica": null,
+    "nsp_decisao": null,
+    "nsp_decisao_motivo": null,
+    "nsp_decidido_em": null,
+    "marcos": [
+     {
+      "chave": "T0",
+      "rotulo": "Entrada",
+      "em": "2026-11-03T13:12:00+00:00",
+      "pendente": false,
+      "trecho": null,
+      "minutos_uteis": null,
+      "em_curso": false,
+      "tramitacao_anterior_em": null
+     },
+     {
+      "chave": "T1",
+      "rotulo": "Validação",
+      "em": "2026-11-03T16:40:00+00:00",
+      "pendente": false,
+      "trecho": "Triagem da Ouvidoria",
+      "minutos_uteis": 208,
+      "em_curso": false,
+      "tramitacao_anterior_em": null
+     },
+     {
+      "chave": "T2",
+      "rotulo": "Resposta da área",
+      "em": null,
+      "pendente": true,
+      "trecho": "Resposta da área",
+      "minutos_uteis": 3980,
+      "em_curso": true,
+      "tramitacao_anterior_em": null
+     },
+     {
+      "chave": "T3",
+      "rotulo": "Conclusão",
+      "em": null,
+      "pendente": true,
+      "trecho": "Desfecho pela Ouvidoria",
+      "minutos_uteis": null,
+      "em_curso": false,
+      "tramitacao_anterior_em": null
+     }
+    ],
+    "prazos": [
+     {
+      "chave": "area",
+      "rotulo": "Prazo da área",
+      "em": "2026-11-11T20:00:00+00:00",
+      "situacao": "definido",
+      "rotulo_prazo": "vencido há 1 dia útil",
+      "estourado": true,
+      "nota": null
+     },
+     {
+      "chave": "conclusivo",
+      "rotulo": "Prazo conclusivo",
+      "em": null,
+      "situacao": "sem_prazo",
+      "rotulo_prazo": null,
+      "estourado": false,
+      "nota": null
+     }
+    ],
+    "acuse": {
+     "rotulo": "Acuse de recebimento",
+     "em": "2026-11-03T13:12:01+00:00",
+     "situacao": "em_envio",
+     "nota": null
+    },
+    "aviso_encerramento": {
+     "rotulo": "Aviso de encerramento",
+     "em": null,
+     "situacao": "pendente",
+     "nota": "O caso ainda não foi encerrado, ou foi encerrado antes de o aviso automático existir."
+    },
+    "degradado": [],
+    "conta_no_indicador_de_resposta_conclusiva": true
+   },
+   "trilha": {
+    "movimentos": [
+     {
+      "ocorrido_em": "2026-11-12T20:04:00+00:00",
+      "autor": "Sistema (escalonamento)",
+      "sistema": true,
+      "apagamento": false,
+      "marco": null,
+      "marco_rotulo": null,
+      "descricao": "Escalonamento: 24 horas úteis sem resposta, cobrança enviada ao gestor da área.",
+      "texto": null,
+      "desde_marco": null,
+      "desde_marco_rotulo": null,
+      "minutos_uteis": null
+     },
+     {
+      "ocorrido_em": "2026-11-11T20:04:00+00:00",
+      "autor": "Sistema (cobrança de prazos)",
+      "sistema": true,
+      "apagamento": false,
+      "marco": null,
+      "marco_rotulo": null,
+      "descricao": "Prazo de resposta da área rompido; cobrança registrada para o titular e o substituto do setor.",
+      "texto": null,
+      "desde_marco": null,
+      "desde_marco_rotulo": null,
+      "minutos_uteis": null
+     },
+     {
+      "ocorrido_em": "2026-11-09T13:05:00+00:00",
+      "autor": "Cláudia Bastos",
+      "sistema": false,
+      "apagamento": false,
+      "marco": null,
+      "marco_rotulo": null,
+      "descricao": "Resposta devolvida à área por insuficiência",
+      "texto": "A resposta não explica por que o boletim não foi passado nos dias 2 e 3, nem quem atende o telefone do setor.",
+      "desde_marco": null,
+      "desde_marco_rotulo": null,
+      "minutos_uteis": null
+     },
+     {
+      "ocorrido_em": "2026-11-05T19:20:00+00:00",
+      "autor": "Luciana Braga",
+      "sistema": true,
+      "apagamento": false,
+      "marco": "T2",
+      "marco_rotulo": "Resposta da área",
+      "descricao": "Resposta da área recebida",
+      "texto": "O boletim foi retomado no horário das 14h e o médico plantonista recebeu a família na quinta.",
+      "desde_marco": "T1",
+      "desde_marco_rotulo": "Validação",
+      "minutos_uteis": 1240
+     },
+     {
+      "ocorrido_em": "2026-11-03T16:40:00+00:00",
+      "autor": "Cláudia Bastos",
+      "sistema": false,
+      "apagamento": false,
+      "marco": "T1",
+      "marco_rotulo": "Validação",
+      "descricao": "Caso validado e área acionada",
+      "texto": "Validada e acionada: setor UTI Adulto, gravidade alto",
+      "desde_marco": "T0",
+      "desde_marco_rotulo": "Entrada",
+      "minutos_uteis": 208
+     },
+     {
+      "ocorrido_em": "2026-11-03T13:12:00+00:00",
+      "autor": "Canal aberto",
+      "sistema": true,
+      "apagamento": false,
+      "marco": "T0",
+      "marco_rotulo": "Entrada",
+      "descricao": "Manifestação registrada",
+      "texto": "Registro pelo canal aberto (canal: site)",
+      "desde_marco": null,
+      "desde_marco_rotulo": null,
+      "minutos_uteis": null
+     }
+    ],
+    "degradado": []
+   },
+   "respostas": [
+    {
+     "respondida_em": "2026-11-05T19:20:00+00:00",
+     "respondida_por_nome": "Luciana Braga",
+     "resposta": "O boletim foi retomado no horário das 14h e o médico plantonista recebeu a família na quinta."
+    }
+   ]
+  },
+  "isError": false
+ }
+}

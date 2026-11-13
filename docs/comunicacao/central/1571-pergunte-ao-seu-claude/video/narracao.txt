@@ -1,0 +1,21 @@
+Quais pendências estão atrasadas, e de quem? Agora você pergunta isso ao seu Claude.
+
+Ele busca a resposta direto no aplicativo do hospital, sem precisar ler a tela no navegador. São três atrasadas: duas do Otávio Serra e uma da Renata Fontes.
+
+É a mesma lista que aparece na tela de Pendências.
+
+Quer saber o que saiu da reunião da CME? Vem a Ata, quem participou e o que ficou com cada um.
+
+Na Ouvidoria, três casos estão com prazo estourado: Farmácia, UTI Adulto e Recepção.
+
+São os mesmos que a fila mostra como vencidos.
+
+Peça um caso pelo protocolo e chega o Dossiê inteiro, com o relato, a trilha e a resposta da área.
+
+Cada consulta dessas fica no histórico de acesso do caso, com o seu nome.
+
+O Claude só lê. Nada muda nas reuniões nem nos casos. E só a diretoria executiva usa: se perder o acesso, ele para na hora.
+
+O guia do Conector traz exemplos de pergunta e a opção de privacidade que vale desligar na sua conta.
+
+[animada] No celular ou no computador, você pergunta e o hospital responde.
