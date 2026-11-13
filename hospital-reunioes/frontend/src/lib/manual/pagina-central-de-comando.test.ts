@@ -84,4 +84,59 @@ describe("a página de Central de Comando do manual", () => {
   ])("não aparece para %s", (_quem, participante) => {
     expect(paginasVisiveis(PAGINAS, participante).map((p) => p.modulo)).not.toContain("central-de-comando");
   });
+
+  it.each([
+    ["Ver o panorama na Visão Geral"],
+    ["Ler os números do site"],
+    ["Ler os números do Instagram"],
+    ["Acompanhar a nota no Google"],
+    ["Seguir um Objetivo"],
+  ])("a tarefa %s tem passos numerados e pelo menos um print", (tarefa) => {
+    const secao = secoes(CENTRAL!.corpo).find((s) => s.titulo === tarefa);
+    expect(secao, `a página não tem a tarefa "${tarefa}"`).toBeDefined();
+    const passos = secao!.texto.match(/^\d+\. /gm) ?? [];
+    expect(passos.slice(0, 2)).toEqual(["1. ", "2. "]);
+    expect(imagensCitadas(secao!.texto).length).toBeGreaterThan(0);
+  });
+});
+
+describe("o fluxograma de onde vem cada número", () => {
+  function fluxo(): Fluxo {
+    const leitura = lerFluxograma(blocoDoFluxograma(CENTRAL!.corpo));
+    if (!leitura.ok) throw new Error(leitura.erros.join("\n"));
+    return leitura.fluxo;
+  }
+
+  it("lê sem erro de bloco e começa nas três fontes", () => {
+    const inicios = fluxo().passos.filter((p) => p.forma === "inicio").map((p) => p.rotulo);
+    expect(inicios.some((r) => /Google Analytics/.test(r))).toBe(true);
+    expect(inicios.some((r) => /^Instagram/.test(r))).toBe(true);
+    expect(inicios.some((r) => /Google Meu Negócio/.test(r))).toBe(true);
+  });
+
+  it.each([
+    ["Visão Geral", [/Google Analytics/, /^Instagram/]],
+    ["Dados do Google", [/Google Analytics/]],
+    ["Tela do Instagram", [/^Instagram/]],
+    ["Melhorar a nota no Google", [/Google Meu Negócio/]],
+  ])("a tela %s recebe os números da fonte certa", (tela, fontes) => {
+    const f = fluxo();
+    const destino = passoPorRotulo(f, new RegExp(`^${tela}$`));
+    expect(destino.forma).toBe("fim");
+    const chegam = origens(f, destino.id);
+    for (const fonte of fontes) {
+      expect(chegam.has(passoPorRotulo(f, fonte).id), `${tela} não recebe de ${fonte}`).toBe(true);
+    }
+  });
+
+  it("a nota no Google não passa pela guarda de hora em hora, e o site e o Instagram passam", () => {
+    const f = fluxo();
+    const guarda = passoPorRotulo(f, /hora em hora/);
+    const nota = passoPorRotulo(f, /^Melhorar a nota no Google$/);
+    const dadosDoGoogle = passoPorRotulo(f, /^Dados do Google$/);
+    const instagram = passoPorRotulo(f, /^Tela do Instagram$/);
+    expect(origens(f, nota.id).has(guarda.id)).toBe(false);
+    expect(origens(f, dadosDoGoogle.id).has(guarda.id)).toBe(true);
+    expect(origens(f, instagram.id).has(guarda.id)).toBe(true);
+  });
 });

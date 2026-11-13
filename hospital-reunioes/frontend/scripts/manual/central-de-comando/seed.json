@@ -1,0 +1,107 @@
+{
+  "admin": {
+    "id": "P17250",
+    "nome": "Vera Albuquerque",
+    "email": "vera.albuquerque.central@exemplo.local",
+    "senha": "ManualCentral1725!",
+    "cargo": "Diretora de exemplo"
+  },
+  "site": {
+    "visitantes": { "atual": 9840, "anterior": 8710 },
+    "ao_vivo": 14,
+    "visitantes_por_dia": [
+      410, 432, 455, 380, 298, 312, 470, 488, 501, 463, 441, 305, 290, 476,
+      512, 530, 498, 472, 330, 318, 505, 541, 560, 520, 489, 344, 326, 548
+    ],
+    "visitantes_por_dia_anterior": [
+      372, 390, 401, 366, 270, 284, 420, 431, 447, 418, 402, 280, 266, 425,
+      452, 461, 440, 428, 296, 288, 449, 470, 482, 455, 433, 301, 290, 468
+    ],
+    "areas_do_site": [
+      { "chave": "maternidade", "nome": "Maternidade", "descricao": "Estrutura, preparativos, amamentação", "visitas": 3120, "visitas_anterior": 2840 },
+      { "chave": "emergencia", "nome": "Emergência 24h", "descricao": "Adulto, pediátrica, obstétrica, ortopédica", "visitas": 2480, "visitas_anterior": 2610 },
+      { "chave": "centro-de-imagem", "nome": "Centro de Imagem", "descricao": "Diagnóstico por imagem", "visitas": 1390, "visitas_anterior": 1220 },
+      { "chave": "centro-medico", "nome": "Centro Médico", "descricao": "Especialidades e consultas", "visitas": 1160, "visitas_anterior": 1050 },
+      { "chave": "laboratorio", "nome": "Laboratório", "descricao": "Exames e resultados", "visitas": 740, "visitas_anterior": 780 }
+    ],
+    "origem_do_publico": [
+      { "chave": "busca", "rotulo": "Busca no Google", "visitas": 7340 },
+      { "chave": "direto", "rotulo": "Direto", "visitas": 2210 },
+      { "chave": "redes", "rotulo": "Redes sociais", "visitas": 1480 },
+      { "chave": "indicacao", "rotulo": "Indicação", "visitas": 420 },
+      { "chave": "outros", "rotulo": "Outros", "visitas": 150 },
+      { "chave": "nao-identificado", "rotulo": "Não identificado", "visitas": 300 }
+    ],
+    "dispositivos": [
+      { "chave": "celular", "rotulo": "Celular", "visitas": 8620 },
+      { "chave": "computador", "rotulo": "Computador", "visitas": 2950 },
+      { "chave": "tablet", "rotulo": "Tablet", "visitas": 330 }
+    ],
+    "contatos_gerados": [
+      { "chave": "agendar", "rotulo": "Cliques para agendar", "estado": "em-construcao" },
+      { "chave": "whatsapp", "rotulo": "WhatsApp", "estado": "medido", "cliques": 386 },
+      { "chave": "fale-conosco", "rotulo": "Fale Conosco", "estado": "medido", "cliques": 42 },
+      { "chave": "telefone", "rotulo": "Telefone", "estado": "nao-medido" }
+    ]
+  },
+  "instagram": {
+    "seguidores": { "total": 12480, "crescimento": 214, "crescimento_anterior": 171, "ganhos": 236, "perdidos": 22 },
+    "alcance": { "atual": 28640, "anterior": 25910 },
+    "visualizacoes": { "atual": 71250, "anterior": 64380 },
+    "interacoes": { "atual": 5130, "anterior": 4620 },
+    "partes": [
+      { "chave": "curtidas", "rotulo": "Curtidas", "valor": 3920 },
+      { "chave": "comentarios", "rotulo": "Comentários", "valor": 310 },
+      { "chave": "salvamentos", "rotulo": "Salvamentos", "valor": 560 },
+      { "chave": "compartilhamentos", "rotulo": "Compartilhamentos", "valor": 340 }
+    ],
+    "contas_engajadas": { "atual": 3380, "anterior": 3050 },
+    "principais_publicacoes": [
+      { "id": "exemplo-1", "legenda": "Um dia na Maternidade, dos bastidores ao primeiro colo", "tipo": "reel", "rotulo_tipo": "Reel", "cor": "#2a62a8", "interacoes": 1240 },
+      { "id": "exemplo-2", "legenda": "Campanha de vacinação da gripe: datas e horários", "tipo": "carrossel", "rotulo_tipo": "Carrossel", "cor": "#3f9d8a", "interacoes": 960 },
+      { "id": "exemplo-3", "legenda": "Como funciona a classificação de risco na Emergência", "tipo": "reel", "rotulo_tipo": "Reel", "cor": "#c47a2c", "interacoes": 780 }
+    ]
+  },
+  "objetivos": [
+    { "id": "site-visitantes", "nome": "Atrair mais visitantes pro site", "descricao": "Mais gente conhecendo o hospital pelo site.", "em_construcao": false, "numero": { "chave": "visitors", "rotulo": "Visitantes", "valor": 9840 } },
+    { "id": "instagram-seguidores", "nome": "Crescer no Instagram", "descricao": "Aumentar o número de seguidores da conta.", "em_construcao": false, "numero": { "chave": "followers", "rotulo": "Seguidores", "valor": 12480 } },
+    { "id": "instagram-engajamento", "nome": "Aumentar o engajamento no Instagram", "descricao": "Mais gente curtindo, comentando e salvando.", "em_construcao": false, "numero": { "chave": "interactions", "rotulo": "Interações", "valor": 5130 } },
+    { "id": "site-area", "nome": "Levar mais gente para uma Área do site", "descricao": "Aumentar as visitas de uma área específica do site.", "em_construcao": true, "numero": null },
+    { "id": "contatos", "nome": "Gerar mais contatos", "descricao": "Mais pessoas agendando e entrando em contato.", "em_construcao": false, "numero": { "chave": "contatos", "rotulo": "Contatos medidos", "valor": 428 } },
+    { "id": "google-reputacao", "nome": "Melhorar a nota no Google", "descricao": "Melhorar a reputação e as avaliações no Google Meu Negócio.", "em_construcao": false, "numero": null }
+  ],
+  "lente": {
+    "id": "instagram-engajamento",
+    "sugestoes": [
+      {
+        "id": "reels-rendem-mais",
+        "titulo": "Reels estão rendendo mais",
+        "detalhe": "Seus Reels lideram as publicações de maior interação. Priorize esse formato nas próximas semanas.",
+        "porque": "2 das 3 publicações de maior interação foram Reels.",
+        "tom": "positivo"
+      }
+    ]
+  },
+  "nota": {
+    "escala": 5,
+    "nota_mes_anterior": 4.5,
+    "tendencia": "melhorou",
+    "leituras_do_mes": [
+      { "dia": 3, "nota": 4.5, "total": 642 },
+      { "dia": 10, "nota": 4.6, "total": 656 }
+    ],
+    "leituras_mes_anterior": [
+      { "dia": 6, "nota": 4.4, "total": 591 },
+      { "dia": 13, "nota": 4.5, "total": 602 },
+      { "dia": 20, "nota": 4.5, "total": 615 },
+      { "dia": 27, "nota": 4.5, "total": 629 }
+    ],
+    "convite": {
+      "pontos": [
+        { "ponto_id": "exemplo-recepcao", "nome": "Recepção da Emergência", "ligado": true, "convites": 84, "cliques": 23 },
+        { "ponto_id": "exemplo-maternidade", "nome": "Alojamento da Maternidade", "ligado": true, "convites": 46, "cliques": 15 }
+      ],
+      "ligado_ha_dias": 21
+    }
+  }
+}
