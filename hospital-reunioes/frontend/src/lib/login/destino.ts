@@ -92,3 +92,24 @@ export function urlDeLoginCom(destino: unknown): string {
   if (!seguro) return "/login";
   return `/login?${PARAM_DESTINO}=${encodeURIComponent(seguro)}`;
 }
+
+/**
+ * As áreas cujo link chega de fora do app (sino, e-mail, WhatsApp) e precisa
+ * abrir onde apontava depois do login (issues #477 e #1587). O resto do staff
+ * vai para o login limpo e, depois dele, para o padrão.
+ */
+const AREAS_COM_RETORNO = ["/ouvidoria", "/admin/tecnologia"] as const;
+
+/**
+ * A URL do login para quem pediu `caminho` sem sessão: com o retorno quando o
+ * caminho é interno e cai numa área com retorno, e limpa em qualquer outro caso.
+ */
+export function urlDeLoginPara(caminho: unknown): string {
+  const seguro = caminhoInternoOuNulo(caminho);
+  if (!seguro) return "/login";
+  const { pathname } = new URL(seguro, ORIGEM_DE_MEDICAO);
+  const temRetorno = AREAS_COM_RETORNO.some(
+    (area) => pathname === area || pathname.startsWith(`${area}/`)
+  );
+  return temRetorno ? urlDeLoginCom(seguro) : "/login";
+}

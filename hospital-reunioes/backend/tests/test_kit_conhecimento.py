@@ -476,6 +476,12 @@ class TestOTextoDaAbaContaATelaDeHoje:
             assert termo in conversa, termo
         assert "no sino e por e-mail" in _secao(texto, "O que já foi decidido")
 
+    def test_o_link_do_pedido_volta_a_ele_depois_do_login(self, texto):
+        """Issue #1587: o link do pedido aberto num celular sem sessao passa
+        pelo login e cai no pedido, e o diretor pergunta isso ao Assistente."""
+        assert "depois do login, a tela abre no pedido do link" in _secao(texto, "Quem vê")
+        assert "volta para ele depois do login" in _secao(texto, "O que já foi decidido")
+
     def test_os_pedidos_ao_hospital_voltaram_para_o_whatsapp(self, texto):
         """ADR 0077, decisao 3: a aba e so de um sentido, o diretor relata."""
         assert "WhatsApp" in _secao(texto, "O que é uma Demanda")

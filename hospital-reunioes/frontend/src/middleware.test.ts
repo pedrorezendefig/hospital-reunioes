@@ -188,6 +188,19 @@ describe("o middleware montado", () => {
     expect(paraOndeFoi(await pedir("/dashboard"))).toBe("http://app.test/login");
   });
 
+  it("leva o link do pedido da aba Tecnologia ao login com o retorno", async () => {
+    // Issue #1587: o link do sino, do e-mail ou do WhatsApp aberto num celular
+    // sem sessão precisa voltar ao pedido depois do login.
+    getUser.mockResolvedValue({ data: { user: null } });
+
+    expect(paraOndeFoi(await pedir("/admin/tecnologia?demanda=8f2c"))).toBe(
+      "http://app.test/login?redirect=%2Fadmin%2Ftecnologia%3Fdemanda%3D8f2c"
+    );
+    expect(paraOndeFoi(await pedir("/admin/tecnologia"))).toBe(
+      "http://app.test/login?redirect=%2Fadmin%2Ftecnologia"
+    );
+  });
+
   it("deixa passar quem tem sessão", async () => {
     getUser.mockResolvedValue({ data: { user: { id: "u1" } } });
 

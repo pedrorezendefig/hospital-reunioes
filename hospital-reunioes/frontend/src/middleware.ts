@@ -1,6 +1,8 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createServerClient, type CookieOptions } from "@supabase/ssr";
 
+import { urlDeLoginPara } from "@/lib/login/destino";
+
 /**
  * A régua do arquivo: casa ÁREA, não prefixo de texto (issue #439).
  *
@@ -86,11 +88,14 @@ export async function middleware(request: NextRequest) {
     return supabaseResponse;
   }
 
-  // Redireciona para /login se tentar acessar rotas protegidas sem autenticação
+  // Redireciona para /login se tentar acessar rotas protegidas sem autenticação.
+  // O link de um pedido da aba Tecnologia leva o retorno junto (issue #1587);
+  // o resto do staff vai para o login limpo, e quem decide é `urlDeLoginPara`.
   const isProtected = isProtectedPath(pathname);
 
   if (isProtected && !user) {
-    return NextResponse.redirect(new URL("/login", request.url));
+    const login = urlDeLoginPara(pathname + request.nextUrl.search);
+    return NextResponse.redirect(new URL(login, request.url));
   }
 
   // Redireciona para /dashboard se já autenticado tentar acessar /login ou /signup
