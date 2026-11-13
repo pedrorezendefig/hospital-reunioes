@@ -128,3 +128,22 @@ describe("a fila vazia diz por que está vazia (issue #1629, regra T7)", () => {
     ).toBeTruthy();
   });
 });
+
+describe("a fila tem a legenda das cores e dos estados (issue #1629, regra T8)", () => {
+  beforeEach(() => {
+    sessao.perfilOuvidoria = "ouvidor";
+  });
+
+  afterEach(() => {
+    cleanup();
+    vi.unstubAllGlobals();
+  });
+
+  it("o botão Legenda abre o que cada estado quer dizer", async () => {
+    montar();
+    await screen.findByText("2026-0007");
+
+    fireEvent.click(screen.getByRole("button", { name: "Legenda" }));
+    expect(screen.getByRole("region", { name: "Legenda das cores e dos estados" })).toBeTruthy();
+  });
+});

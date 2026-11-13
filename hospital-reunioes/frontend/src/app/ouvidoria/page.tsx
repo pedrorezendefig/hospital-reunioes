@@ -18,6 +18,7 @@ import { useCurrentParticipante } from "@/hooks/useCurrentParticipante";
 import { AtalhosDaOuvidoria } from "@/components/ouvidoria/AtalhosDaOuvidoria";
 import { NovaManifestacaoModal } from "@/components/ouvidoria/NovaManifestacaoModal";
 import { ValidarModal } from "@/components/ouvidoria/ValidarModal";
+import { Legenda } from "@/components/ouvidoria/Legenda";
 import { ListaDaFila } from "@/components/ouvidoria/ListaDaFila";
 import {
   aguardandoSeuEncerramento,
@@ -484,6 +485,14 @@ export default function OuvidoriaPage() {
           </div>
         )}
       </div>
+
+      {/* A legenda das cores e dos estados (regra T8, issue #1629): a fila
+          pinta o grupo pelo estado e o card pela gravidade. */}
+      {!loading && !semAcesso && !erroCarga && (
+        <div className="mb-4">
+          <Legenda />
+        </div>
+      )}
 
       {/* O que esta carga não pôde afirmar (issue #449, e agora a trilha do
           marcador de novidade, issue #484). Sinal ausente e sinal desligado

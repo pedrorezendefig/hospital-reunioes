@@ -33,6 +33,7 @@ import { useCurrentParticipante } from "@/hooks/useCurrentParticipante";
 import { FRASE_DO_TOPO } from "@/lib/ouvidoria/orientacao";
 import { usePolling } from "@/hooks/usePolling";
 import { Ajuda } from "@/components/ouvidoria/Ajuda";
+import { Legenda } from "@/components/ouvidoria/Legenda";
 import { CardDeCaso, GravidadeDoCaso, type CasoDoCard } from "@/components/ouvidoria/CardDeCaso";
 import {
   cobrarOSetor,
@@ -617,6 +618,11 @@ export default function PainelEmTempoRealPage() {
             Atualizado às {atualizadoEm}
           </span>
         )}
+      </div>
+
+      {/* A legenda das cores e dos estados (regra T8, issue #1629). */}
+      <div className="mb-4">
+        <Legenda />
       </div>
 
       {falha === "instavel" && (

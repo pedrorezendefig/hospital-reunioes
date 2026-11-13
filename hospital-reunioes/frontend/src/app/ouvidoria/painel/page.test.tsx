@@ -178,6 +178,13 @@ describe("a orientação embutida do painel (issue #1629, regra T1)", () => {
     expect(screen.getByText("O que precisa de atenção agora, do mais urgente ao menos urgente.")).toBeTruthy();
   });
 
+  it("tem a legenda das cores e dos estados (regra T8)", async () => {
+    await abrirOPainel();
+
+    fireEvent.click(screen.getByRole("button", { name: "Legenda" }));
+    expect(screen.getByRole("region", { name: "Legenda das cores e dos estados" })).toBeTruthy();
+  });
+
   it("sem caso a vencer, a faixa diz por que está vazia (regra T7)", async () => {
     await abrirOPainel();
 

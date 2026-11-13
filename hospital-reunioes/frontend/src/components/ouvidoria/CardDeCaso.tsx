@@ -50,7 +50,7 @@ export interface CasoDoCard {
  * `hsm-danger`, Alto `hsm-warning`, Médio `hsm-azul-claro`, Baixo
  * `hsm-gray-40`. O caso ainda sem gravidade fica com o ponto vazado.
  */
-const COR_DA_GRAVIDADE: Record<string, string> = {
+export const COR_DA_GRAVIDADE: Record<string, string> = {
   critico: "bg-[#B3352B]",
   alto: "bg-[#C78A1A]",
   medio: "bg-[#1E4394]",
