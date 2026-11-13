@@ -89,6 +89,9 @@ class DemandaResponse(BaseModel):
     # Quem abriu o card (issue #1554, ADR 0084, decisao 4): o diretor, pelo
     # chat, ou a Vitta, pela issue aberta no terminal. O selo da lista.
     origem: Literal["diretor", "vitta"] = "diretor"
+    # O Projeto da Demanda (issue #1715, ADR 0093, decisao 8): o Aplicativo do
+    # Hospital ou a Ana. O selo do card no Quadro e na lista do celular.
+    projeto: Literal["hospital", "ana"] = "hospital"
     # A Revisao com o codigo de hoje (issue #1557, ADR 0084, decisao 3):
     # `pode_revisar` mostra o botao, pela regra da rota; `em_revisao` abre a
     # conversa para responder em vez de so ler.
