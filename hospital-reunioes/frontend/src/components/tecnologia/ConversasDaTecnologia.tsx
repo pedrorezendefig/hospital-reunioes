@@ -247,6 +247,16 @@ export function GrupoDeChips({ rotulo, children }: { rotulo: string; children: R
   );
 }
 
+/**
+ * A Demanda abre no Acompanhamento (o Documento do card, só para ler) e não na
+ * conversa com o agente: a que já virou card ou é de outro autor, fora da
+ * revisão. O resto é a conversa Registrada do autor, ou a revisão, que fica
+ * na largura toda (ADR 0090, decisão 6).
+ */
+function abreNoAcompanhamento(demanda: Demanda): boolean {
+  return Boolean((demanda.tem_vinculo || demanda.minha === false) && !demanda.em_revisao);
+}
+
 /** O item serve para a lista? O resto da Demanda é opcional para ela. */
 function itemValido(item: unknown): item is Demanda {
   if (typeof item !== "object" || item === null) return false;
@@ -851,6 +861,8 @@ export function ConversasDaTecnologia({
   const [focarConversa, setFocarConversa] = useState(false);
   /** O pedido aberto na largura toda, com a lista recolhida: só o Ampliar liga (issue #1593). */
   const [ampliada, setAmpliada] = useState(false);
+  /** Na tela larga, a Demanda aberta no painel à direita, com o Quadro atrás (issue #1643). */
+  const [noPainel, setNoPainel] = useState(false);
   const [desenvolvedor, setDesenvolvedor] = useState(false);
   /** Nulo até o servidor dizer quem está logado: o Desenvolvedor abre em Para mim. */
   const [filtro, setFiltro] = useState<Filtro | null>(null);
@@ -965,16 +977,23 @@ export function ConversasDaTecnologia({
     demandaNoEndereco(demandaId);
   }, []);
 
-  const abrir = useCallback((demanda: Demanda | null, conversar = false, ampliar = false) => {
-    escreverNoEndereco(demanda?.id ?? null);
-    setSemAcesso(false);
-    setAberta(demanda);
-    setDestacada(demanda?.id ?? null);
-    setFocarConversa(conversar);
-    setAmpliada(ampliar);
-    setChave((atual) => atual + 1);
-    setNaTela("conversa");
-  }, [escreverNoEndereco]);
+  const abrir = useCallback(
+    (demanda: Demanda | null, conversar = false, ampliar = false) => {
+      // Na tela larga, o Documento do card abre no painel, por cima do Quadro;
+      // a conversa com o agente e o Ampliar seguem na largura toda (issue #1643).
+      const painel = largo && !ampliar && demanda !== null && abreNoAcompanhamento(demanda);
+      escreverNoEndereco(demanda?.id ?? null);
+      setSemAcesso(false);
+      setAberta(demanda);
+      setDestacada(demanda?.id ?? null);
+      setFocarConversa(conversar);
+      setAmpliada(ampliar);
+      setNoPainel(painel);
+      setChave((atual) => atual + 1);
+      setNaTela(painel ? "lista" : "conversa");
+    },
+    [escreverNoEndereco, largo],
+  );
 
   const filtroAtivo = Boolean(textoDaBusca.trim() || tipo || etapa || origem || responsavel || envioFalhou);
 
@@ -1073,6 +1092,24 @@ export function ConversasDaTecnologia({
           <Loader2 className="w-3.5 h-3.5 animate-spin" />
           Carregando as conversas...
         </p>
+      )}
+    </>
+  );
+
+  /** Apagar, Revisar, Reenviar e Designar de novo, nas mesmas condições na largura toda e no painel. */
+  const acoesDaDemanda = (
+    <>
+      {aberta?.pode_apagar && (
+        <ApagarADemanda key={`apagar-${chave}`} demanda={aberta} token={token} onApagada={aoApagar} />
+      )}
+      {aberta?.pode_revisar && (
+        <RevisarComOCodigoDeHoje key={`revisar-${chave}`} demanda={aberta} token={token} onRevisada={aoRevisar} />
+      )}
+      {aberta?.envio_falhou && (
+        <AvisoDoEnvioFalhou key={`envio-${chave}`} demanda={aberta} token={token} onReenviado={aoReenviar} />
+      )}
+      {desenvolvedor && aberta?.designacao_falhou && (
+        <AvisoDaDesignacaoFalhou key={`designacao-${chave}`} demanda={aberta} token={token} onDesignado={aoDesignar} />
       )}
     </>
   );
@@ -1235,23 +1272,7 @@ export function ConversasDaTecnologia({
                 {AMPLIAR}
               </button>
             )}
-            {aberta?.pode_apagar && (
-              <ApagarADemanda key={`apagar-${chave}`} demanda={aberta} token={token} onApagada={aoApagar} />
-            )}
-            {aberta?.pode_revisar && (
-              <RevisarComOCodigoDeHoje key={`revisar-${chave}`} demanda={aberta} token={token} onRevisada={aoRevisar} />
-            )}
-            {aberta?.envio_falhou && (
-              <AvisoDoEnvioFalhou key={`envio-${chave}`} demanda={aberta} token={token} onReenviado={aoReenviar} />
-            )}
-            {desenvolvedor && aberta?.designacao_falhou && (
-              <AvisoDaDesignacaoFalhou
-                key={`designacao-${chave}`}
-                demanda={aberta}
-                token={token}
-                onDesignado={aoDesignar}
-              />
-            )}
+            {acoesDaDemanda}
             {/* Ao lado da lista, a Conversa da Demanda desce para baixo do documento;
                 ampliado, ela ganha a coluna à direita (issue #1593). */}
             <div
@@ -1268,7 +1289,7 @@ export function ConversasDaTecnologia({
                   <p role="alert" className="px-4 py-3 rounded-2xl border border-border bg-white text-sm text-text">
                     {SEM_ACESSO}
                   </p>
-                ) : (aberta?.tem_vinculo || aberta?.minha === false) && !aberta?.em_revisao ? (
+                ) : aberta && abreNoAcompanhamento(aberta) ? (
                   <Acompanhamento key={chave} demanda={aberta} token={token} />
                 ) : (
                   <ChatDaTecnologia key={chave} token={token} demandaId={aberta?.id ?? null} onMudou={aoMudar} />
@@ -1288,6 +1309,33 @@ export function ConversasDaTecnologia({
           </div>
         )}
       </div>
+
+      {quadroAVista && noPainel && aberta && (
+        <aside
+          aria-label="Pedido aberto"
+          className="fixed inset-y-0 right-0 z-40 w-[min(40rem,100vw)] overflow-y-auto border-l border-border bg-bg shadow-premium-strong p-5 space-y-3"
+        >
+          <div className="flex items-center gap-2">
+            <span className="normal-case mr-auto text-xs text-text-secondary">{textoDaAbertura(aberta.criado_em)}</span>
+            <button
+              type="button"
+              onClick={() => {
+                setNoPainel(false);
+                setAmpliada(true);
+                setNaTela("conversa");
+              }}
+              title={AMPLIAR_EXPLICADO}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-sm font-semibold text-primary hover:bg-primary/5"
+            >
+              <Maximize2 className="w-4 h-4" />
+              {AMPLIAR}
+            </button>
+          </div>
+          {acoesDaDemanda}
+          <Acompanhamento key={chave} demanda={aberta} token={token} />
+          <ConversaDaDemanda key={`conversa-${chave}`} demandaId={aberta.id} token={token} focar={focarConversa} />
+        </aside>
+      )}
     </div>
   );
 }

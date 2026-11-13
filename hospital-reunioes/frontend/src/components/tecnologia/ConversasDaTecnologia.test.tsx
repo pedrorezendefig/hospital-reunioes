@@ -1592,7 +1592,7 @@ describe("O Quadro na tela larga (issue #1642, ADR 0090)", () => {
     expect(within(semNada).queryByText(/^v\d/)).toBeNull();
   });
 
-  it("o clique no card abre a Demanda na largura toda, e Voltar ao quadro volta", async () => {
+  it("o Ampliar do painel leva a Demanda à largura toda, e Voltar ao quadro volta (issue #1643)", async () => {
     telaLarga();
     montar((url) => {
       if (url === LISTA) return { status: 200, corpo: NO_QUADRO };
@@ -1605,8 +1605,11 @@ describe("O Quadro na tela larga (issue #1642, ADR 0090)", () => {
     // Botão de verdade: o navegador transforma o Enter (e o Espaço) em clique.
     expect(card.tagName).toBe("BUTTON");
     fireEvent.click(card);
+    const painel = await screen.findByRole("complementary", { name: "Pedido aberto" });
+    fireEvent.click(within(painel).getByRole("button", { name: AMPLIAR }));
 
     const aberto = await screen.findByRole("region", { name: "Conversa aberta" });
+    expect(screen.queryByRole("complementary", { name: "Pedido aberto" })).toBeNull();
     expect(await within(aberto).findByRole("heading", { level: 2, name: "Aviso da ata por e-mail" })).toBeTruthy();
     expect(screen.queryByRole("region", { name: "Quadro" })).toBeNull();
     expect(screen.getByRole("region", { name: "Filtros da lista" }).className).toMatch(/(^|\s)hidden(\s|$)/);
@@ -1670,7 +1673,7 @@ describe("O Quadro na tela larga (issue #1642, ADR 0090)", () => {
     expect(screen.queryByRole("button", { name: NOVO_PEDIDO })).toBeNull();
   });
 
-  it("o link do sino abre a Demanda certa na largura toda", async () => {
+  it("o link do sino abre o Quadro com o painel da Demanda certa (issue #1643)", async () => {
     telaLarga();
     montar(
       (url) => {
@@ -1681,9 +1684,81 @@ describe("O Quadro na tela larga (issue #1642, ADR 0090)", () => {
       "d-2",
     );
 
-    expect(await screen.findByText("Agora o aviso da ata chega por e-mail.")).toBeTruthy();
-    expect(screen.getByRole("heading", { level: 2, name: "Aviso quando a ata sair" })).toBeTruthy();
-    expect(screen.queryByRole("region", { name: "Quadro" })).toBeNull();
-    expect(screen.getByRole("button", { name: VOLTAR_AO_QUADRO })).toBeTruthy();
+    const painel = await screen.findByRole("complementary", { name: "Pedido aberto" });
+    expect(await within(painel).findByText("Agora o aviso da ata chega por e-mail.")).toBeTruthy();
+    expect(within(painel).getByRole("heading", { level: 2, name: "Aviso quando a ata sair" })).toBeTruthy();
+    expect(screen.getByRole("region", { name: "Quadro" })).toBeTruthy();
+  });
+});
+
+describe("O card do Quadro abre num painel à direita (issue #1643, ADR 0090, decisão 5)", () => {
+  /** A tela a partir de 1280px: o `matchMedia` que o jsdom não tem, dublado. */
+  function telaLarga() {
+    vi.stubGlobal(
+      "matchMedia",
+      vi.fn((consulta: string) => ({
+        matches: consulta === "(min-width: 1280px)",
+        media: consulta,
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+      })),
+    );
+  }
+
+  const ACOMPANHADA = demanda("p-1", "Aviso da ata por e-mail", {
+    etapa: "em_analise",
+    tem_vinculo: true,
+    numero: 39,
+    autor: "Felipe Malafaia",
+    o_que_muda: "O aviso da ata chega por e-mail.",
+  });
+  const REGISTRADA = demanda("p-2", "Escala some no domingo", { numero: 40 });
+
+  function comOQuadro(lidas: Demanda[] = [ACOMPANHADA, REGISTRADA], demandaInicial: string | null = null) {
+    telaLarga();
+    return montar((url) => {
+      if (url === LISTA) return { status: 200, corpo: lidas };
+      if (url === `${LISTA}/p-1`) return { status: 200, corpo: conversa("p-1", { estado: "enviado" }) };
+      if (url === `${LISTA}/p-2`) return { status: 200, corpo: conversa("p-2") };
+      if (url.endsWith("/conversa")) return { status: 200, corpo: { mensagens: [], mencionaveis: [] } };
+      return { status: 404, corpo: {} };
+    }, demandaInicial);
+  }
+
+  const quadro = () => screen.getByRole("region", { name: "Quadro" });
+  const cardDe = (titulo: RegExp) => within(quadro()).getByRole("button", { name: titulo });
+
+  it("o clique num card que não é Registrada do autor abre o painel com o Documento e a Conversa da Demanda, com o Quadro à vista", async () => {
+    comOQuadro();
+    await screen.findByRole("region", { name: "Quadro" });
+
+    fireEvent.click(cardDe(/Aviso da ata por e-mail/));
+
+    const aberto = await screen.findByRole("complementary", { name: "Pedido aberto" });
+    expect(await within(aberto).findByRole("heading", { level: 2, name: "Aviso da ata por e-mail" })).toBeTruthy();
+    expect(within(aberto).getByText("O aviso da ata chega por e-mail.")).toBeTruthy();
+    expect(await within(aberto).findByRole("region", { name: "Conversa da Demanda" })).toBeTruthy();
+    // O painel não é modal: o Quadro segue na página, atrás dele.
+    expect(quadro()).toBeTruthy();
+    expect(aberto.getAttribute("aria-modal")).toBeNull();
+    expect(screen.getByRole("region", { name: "Filtros da lista" }).className).not.toMatch(/(^|\s)hidden(\s|$)/);
+  });
+
+  it("a URL muda ao abrir o painel, e abrir a aba com essa URL mostra o Quadro com o painel do card", async () => {
+    comOQuadro();
+    await screen.findByRole("region", { name: "Quadro" });
+    expect(demandaDaUrl()).toBeNull();
+
+    fireEvent.click(cardDe(/Aviso da ata por e-mail/));
+    await screen.findByRole("complementary", { name: "Pedido aberto" });
+    expect(demandaDaUrl()).toBe("p-1");
+
+    // Outra aba com o mesmo endereço: a tela nasce só com o que está nele.
+    cleanup();
+    comOQuadro(undefined, demandaDaUrl());
+
+    const painel = await screen.findByRole("complementary", { name: "Pedido aberto" });
+    expect(await within(painel).findByRole("heading", { level: 2, name: "Aviso da ata por e-mail" })).toBeTruthy();
+    expect(screen.getByRole("region", { name: "Quadro" })).toBeTruthy();
   });
 });
