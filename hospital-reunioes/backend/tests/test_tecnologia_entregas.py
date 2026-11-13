@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import os
 import sys
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 
 import pytest
 
@@ -25,7 +25,13 @@ from app.limiter import limiter  # noqa: E402
 from app.routers.admin import tecnologia as tecnologia_router  # noqa: E402
 from app.services import tecnologia_envio  # noqa: E402
 from app.services.conhecimento import CONHECIMENTO_DIR  # noqa: E402
-from app.services.tecnologia_entregas import Filtros, lista_por_semana, ritmo, tamanho_da_entrega  # noqa: E402
+from app.services.tecnologia_entregas import (  # noqa: E402
+    Filtros,
+    lista_por_semana,
+    proximo_corte,
+    ritmo,
+    tamanho_da_entrega,
+)
 
 ENTREGAS = f"{BASE}/entregas"
 
@@ -362,6 +368,42 @@ class TestListaPorSemana:
 
         assert _semanas_da_lista(grupos) == [("2026-11-09", ["melhoria"]), ("2026-09-28", ["melhoria-antiga"])]
 
+    def test_com_a_semana_de_corte_vem_as_12_semanas_anteriores_a_ela(self):
+        """Ver semanas anteriores (issue #1704): o corte e a semana mais antiga
+        que a tela ja mostra. A semana dele fica fora, e o bloco vai das 12
+        anteriores, de 10/08 a 26/10. O corte no meio da semana vale pela
+        segunda dela."""
+        demandas = [
+            _fechado("na-semana-do-corte", "2026-11-03T12:00:00Z"),
+            _fechado("ultima-do-bloco", "2026-10-27T12:00:00Z"),
+            _fechado("primeira-do-bloco", "2026-08-10T12:00:00Z"),
+            # Domingo 09/08: semana de 03/08, a 13a antes do corte.
+            _fechado("antes-do-bloco", "2026-08-09T12:00:00Z"),
+        ]
+
+        for corte in (date(2026, 11, 2), date(2026, 11, 4)):
+            grupos = lista_por_semana(demandas, agora=AGORA, corte=corte)
+
+            assert _semanas_da_lista(grupos) == [
+                ("2026-10-26", ["ultima-do-bloco"]),
+                ("2026-08-10", ["primeira-do-bloco"]),
+            ]
+
+    def test_o_proximo_corte_so_existe_quando_ha_entrega_mais_antiga(self):
+        """O botao "Ver semanas anteriores" some quando nao ha entrega antes do
+        bloco. O proximo corte e a primeira semana do bloco; sem corte, o bloco
+        sao as 12 semanas do grafico, de 24/08 a 09/11."""
+        antiga = _fechado("antiga", "2026-08-09T12:00:00Z", tipo="defeito")
+        do_bloco = _fechado("do-bloco", "2026-10-01T12:00:00Z", tipo="novo")
+        recusada = _fechado("recusada", "2026-08-09T12:00:00Z", etapa="nao_sera_feita")
+
+        assert proximo_corte([antiga, do_bloco], agora=AGORA) == date(2026, 8, 24)
+        assert proximo_corte([antiga], agora=AGORA, corte=date(2026, 11, 2)) == date(2026, 8, 10)
+        assert proximo_corte([do_bloco], agora=AGORA) is None
+        assert proximo_corte([antiga], agora=AGORA, corte=date(2026, 8, 10)) is None
+        assert proximo_corte([recusada, do_bloco], agora=AGORA) is None
+        assert proximo_corte([antiga, do_bloco], agora=AGORA, filtros=Filtros(tipo="melhoria")) is None
+
 
 # ═══════════════════════════════════════════════════════════════════════════
 # 1. O ritmo pela rota: o topo e as 12 semanas
@@ -413,6 +455,28 @@ class TestRitmoPelaRota:
             ("2026-10-12", ["e-outra-diretora"]),
         ]
         assert "entregas" not in _corpo(entregas(PEDRO))
+
+    def test_a_semana_de_corte_traz_o_bloco_anterior_com_os_filtros(self, entregas):
+        """Ver semanas anteriores (issue #1704): com `corte`, os `grupos` sao as
+        12 semanas antes dele, com os mesmos filtros, e o `proximo_corte` diz se
+        ainda ha entrega mais antiga."""
+
+        def grupos(consulta: str) -> list[tuple[str, list[str]]]:
+            return [
+                (g["inicio"], [e["id"] for e in g["entregas"]]) for g in _corpo(entregas(PEDRO, consulta))["grupos"]
+            ]
+
+        assert grupos("corte=2026-11-02") == [
+            ("2026-10-26", ["e-domingo", "e-vitta-terceiro"]),
+            ("2026-10-12", ["e-outra-diretora"]),
+        ]
+        assert grupos("corte=2026-11-02&tipo=bug") == [("2026-10-26", ["e-vitta-terceiro"])]
+        assert _corpo(entregas(PEDRO))["proximo_corte"] is None
+        assert _corpo(entregas(PEDRO, "corte=2026-11-02"))["proximo_corte"] is None
+        # Um bloco inteiro depois de tudo: ha entrega mais antiga.
+        depois = _corpo(entregas(PEDRO, "corte=2027-02-01"))
+        assert depois["grupos"] == []
+        assert depois["proximo_corte"] == "2026-11-09"
 
     def test_a_entrega_da_lista_traz_o_que_a_linha_mostra(self, entregas):
         """Numero da Demanda, titulo, tipo, Tamanho da entrega, versao, dia da
@@ -688,5 +752,22 @@ class TestKit:
             "**Abrir o card**",
             "**Copiar link**",
             "O clique deixa a entrega aberta",
+        ):
+            assert trecho in secao, trecho
+
+    def test_o_kit_diz_como_ver_uma_semana_so_e_as_semanas_antigas(self):
+        """O clique na barra filtra a lista para a semana, o botao desfaz, e
+        Ver semanas anteriores traz as mais antigas (issue #1704, ADR 0092,
+        decisoes 1 e 4)."""
+        secao = _secao("As Entregas")
+        for trecho in (
+            "Clicar numa semana do gráfico",
+            "só as entregas daquela semana",
+            "mostrar todas",
+            "Clicar de novo na barra",
+            "Nenhuma entrega nesta semana.",
+            "**Ver semanas anteriores**",
+            "12 semanas mais antigas",
+            "some quando não há entrega mais antiga",
         ):
             assert trecho in secao, trecho

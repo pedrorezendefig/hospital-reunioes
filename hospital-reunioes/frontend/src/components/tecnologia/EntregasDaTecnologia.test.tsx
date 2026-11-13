@@ -133,13 +133,14 @@ function resposta() {
 
 let pedidos: string[] = [];
 
-function montar() {
+/** O servidor de mentira: por padrão, a mesma resposta para toda consulta. */
+function montar(responder: (url: string) => object = () => resposta()) {
   pedidos = [];
   vi.stubGlobal(
     "fetch",
     vi.fn(async (url: string) => {
       pedidos.push(url);
-      return { ok: true, status: 200, json: async () => resposta() } as unknown as Response;
+      return { ok: true, status: 200, json: async () => responder(url) } as unknown as Response;
     }),
   );
   return render(<EntregasDaTecnologia token="token-de-teste" />);
@@ -495,5 +496,177 @@ describe("Os filtros combinam", () => {
     fireEvent.click(origem);
 
     await waitFor(() => expect(ultimaConsulta()).toEqual({}));
+  });
+});
+
+/**
+ * O clique numa semana do gráfico (issue #1704, ADR 0092, decisão 4). 600 px:
+ * o eixo dos números ocupa os primeiros 32 e a margem os últimos 8, e cada uma
+ * das 12 semanas tem uns 47 px. A última (09/11) fica perto de 565, a de 26/10
+ * (sem entrega na lista) perto de 475.
+ */
+const X_DA_SEMANA = { "2026-11-09": 565, "2026-10-26": 475 } as const;
+
+function clicarNaSemana(container: HTMLElement, inicio: keyof typeof X_DA_SEMANA) {
+  const grafico = container.querySelector(".recharts-wrapper")!;
+  fireEvent.mouseMove(grafico, { clientX: X_DA_SEMANA[inicio], clientY: 100 });
+  fireEvent.click(grafico, { clientX: X_DA_SEMANA[inicio], clientY: 100 });
+}
+
+const cabecalhos = async () => within(await lista()).queryAllByRole("heading").map((h) => h.textContent);
+
+const marcadas = (container: HTMLElement) =>
+  [...container.querySelectorAll<SVGRectElement>('rect[data-marcada="true"]')].map((barra) => barra.dataset.serie);
+
+describe("O clique numa semana do gráfico", () => {
+  it("filtra a lista para a semana, marca a barra e mostra o botão de desfazer", async () => {
+    comMovimentoReduzido();
+    const rolar = vi.fn();
+    Element.prototype.scrollIntoView = rolar;
+    const { container } = montar();
+    await lista();
+
+    clicarNaSemana(container, "2026-11-09");
+
+    expect(await cabecalhos()).toEqual(["Semana de 09/11: 3 entregas (1 G, 2 P)"]);
+    expect(within(await lista()).getByRole("button", { name: "Semana de 09/11, mostrar todas" })).toBeTruthy();
+    expect(marcadas(container).sort()).toEqual(["g", "m", "p", "pedidos"]);
+    expect(rolar).toHaveBeenCalled();
+  });
+
+  it("clicar de novo na barra volta à lista inteira", async () => {
+    comMovimentoReduzido();
+    Element.prototype.scrollIntoView = vi.fn();
+    const { container } = montar();
+    await lista();
+
+    clicarNaSemana(container, "2026-11-09");
+    clicarNaSemana(container, "2026-11-09");
+
+    expect(await cabecalhos()).toEqual(["Semana de 09/11: 3 entregas (1 G, 2 P)", "Semana de 02/11: 1 entrega (1 M)"]);
+    expect(screen.queryByRole("button", { name: /mostrar todas/ })).toBeNull();
+    expect(marcadas(container)).toEqual([]);
+  });
+
+  it("o botão de desfazer volta à lista inteira", async () => {
+    comMovimentoReduzido();
+    Element.prototype.scrollIntoView = vi.fn();
+    const { container } = montar();
+    await lista();
+    clicarNaSemana(container, "2026-11-09");
+
+    fireEvent.click(within(await lista()).getByRole("button", { name: "Semana de 09/11, mostrar todas" }));
+
+    expect(await cabecalhos()).toEqual(["Semana de 09/11: 3 entregas (1 G, 2 P)", "Semana de 02/11: 1 entrega (1 M)"]);
+    expect(marcadas(container)).toEqual([]);
+  });
+
+  it("a semana sem entrega diz que nada saiu nela", async () => {
+    comMovimentoReduzido();
+    Element.prototype.scrollIntoView = vi.fn();
+    const { container } = montar();
+    await lista();
+
+    clicarNaSemana(container, "2026-10-26");
+
+    expect(await cabecalhos()).toEqual([]);
+    expect(within(await lista()).getByText("Nenhuma entrega nesta semana.")).toBeTruthy();
+    expect(within(await lista()).getByRole("button", { name: "Semana de 26/10, mostrar todas" })).toBeTruthy();
+  });
+
+  it("os filtros continuam valendo com a semana filtrada", async () => {
+    comMovimentoReduzido();
+    Element.prototype.scrollIntoView = vi.fn();
+    const { container } = montar((url) => {
+      const corpo = resposta();
+      if (!url.includes("tipo=bug")) return corpo;
+      return {
+        ...corpo,
+        grupos: [{ ...corpo.grupos[0], entregas: corpo.grupos[0].entregas.filter((e) => e.classificacao === "bug") }],
+      };
+    });
+    await lista();
+    clicarNaSemana(container, "2026-11-09");
+
+    fireEvent.click(within(screen.getByRole("group", { name: "Tipo" })).getByRole("button", { name: "Bug" }));
+
+    await waitFor(async () => expect(await cabecalhos()).toEqual(["Semana de 09/11: 1 entrega (1 P)"]));
+    expect(ultimaConsulta()).toEqual({ tipo: "bug" });
+    expect(within(await lista()).getByRole("button", { name: "Semana de 09/11, mostrar todas" })).toBeTruthy();
+  });
+});
+
+/** O bloco das 12 semanas antes de 24/08, e o corte do bloco seguinte. */
+function blocoAnterior(proximoCorte: string | null) {
+  return {
+    ...resposta(),
+    grupos: [
+      {
+        inicio: "2026-08-10",
+        entregas: [{ ...entrega("e-9", "Escala de agosto"), tamanho: "P", fechada_em: "2026-08-11T12:00:00Z" }],
+      },
+    ],
+    proximo_corte: proximoCorte,
+  };
+}
+
+describe("Ver semanas anteriores", () => {
+  const verAnteriores = async () => within(await lista()).findByRole("button", { name: "Ver semanas anteriores" });
+
+  it("carrega o bloco seguinte embaixo do que já está na tela, e some quando não há mais", async () => {
+    comMovimentoReduzido();
+    montar((url) => {
+      const corte = new URL(url, "http://x").searchParams.get("corte");
+      if (corte === "2026-08-24") return blocoAnterior("2026-06-01");
+      if (corte === "2026-06-01") return { ...blocoAnterior(null), grupos: [] };
+      return { ...resposta(), proximo_corte: "2026-08-24" };
+    });
+
+    fireEvent.click(await verAnteriores());
+
+    await waitFor(async () =>
+      expect(await cabecalhos()).toEqual([
+        "Semana de 09/11: 3 entregas (1 G, 2 P)",
+        "Semana de 02/11: 1 entrega (1 M)",
+        "Semana de 10/08: 1 entrega (1 P)",
+      ]),
+    );
+    expect(ultimaConsulta()).toEqual({ corte: "2026-08-24" });
+
+    fireEvent.click(await verAnteriores());
+
+    await waitFor(() => expect(ultimaConsulta()).toEqual({ corte: "2026-06-01" }));
+    await waitFor(() => expect(screen.queryByRole("button", { name: "Ver semanas anteriores" })).toBeNull());
+    expect(await cabecalhos()).toHaveLength(3);
+  });
+
+  it("o botão não aparece quando não há entrega mais antiga", async () => {
+    comMovimentoReduzido();
+    montar(() => ({ ...resposta(), proximo_corte: null }));
+    await lista();
+
+    expect(screen.queryByRole("button", { name: "Ver semanas anteriores" })).toBeNull();
+  });
+
+  it("os filtros valem nos blocos carregados, e trocar o filtro recomeça das 12 semanas", async () => {
+    comMovimentoReduzido();
+    montar((url) =>
+      new URL(url, "http://x").searchParams.get("corte")
+        ? blocoAnterior(null)
+        : { ...resposta(), proximo_corte: "2026-08-24" },
+    );
+    await lista();
+    fireEvent.click(within(screen.getByRole("group", { name: "Origem" })).getByRole("button", { name: "Vitta" }));
+    await waitFor(() => expect(ultimaConsulta()).toEqual({ origem: "vitta" }));
+
+    fireEvent.click(await verAnteriores());
+
+    await waitFor(() => expect(ultimaConsulta()).toEqual({ origem: "vitta", corte: "2026-08-24" }));
+    await waitFor(async () => expect(await cabecalhos()).toHaveLength(3));
+
+    fireEvent.click(within(screen.getByRole("group", { name: "Tipo" })).getByRole("button", { name: "Melhoria" }));
+
+    await waitFor(() => expect(ultimaConsulta()).toEqual({ origem: "vitta", tipo: "melhoria" }));
+    await waitFor(async () => expect(await cabecalhos()).toHaveLength(2));
   });
 });

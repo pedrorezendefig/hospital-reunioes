@@ -9,8 +9,9 @@
  * o servidor; a tela só desenha.
  *
  * O mouse num número abre a composição (bugs e melhorias; G, M e P) pela
- * intenção de hover; o mouse numa semana abre a prévia do que saiu nela. Os
- * números sobem contando e as barras crescem escalonadas; para quem pede menos
+ * intenção de hover; o mouse numa semana abre a prévia do que saiu nela, e o
+ * clique (no celular, o toque) marca a semana para a lista filtrar (issue
+ * #1704); as outras semanas ficam apagadas até desmarcar. Os números sobem contando e as barras crescem escalonadas; para quem pede menos
  * movimento, tudo aparece pronto. Abaixo de 720px, tudo vira uma coluna.
  */
 
@@ -71,7 +72,7 @@ export function variacaoEmTexto(total: number, anteriores: number): string {
 }
 
 /** O início da semana (AAAA-MM-DD, dia do hospital) como a tela o diz: "09/11", lido como texto. */
-function diaEMes(inicio: string): string {
+export function diaEMes(inicio: string): string {
   const [, mes, dia] = inicio.split("-");
   return `${dia}/${mes}`;
 }
@@ -131,12 +132,27 @@ function NumeroDoRitmo({
   );
 }
 
-type PropsDaBarra = { x?: number; y?: number; width?: number; height?: number; index?: number };
+type PropsDaBarra = {
+  x?: number;
+  y?: number;
+  width?: number;
+  height?: number;
+  index?: number;
+  payload?: { inicio?: string };
+};
 
-/** A barra de uma série. Cresce do chão em CSS, uma semana depois da outra, quando há movimento. */
-function barra(serie: Serie, crescer: boolean) {
+/** A barra das outras semanas quando uma está marcada. */
+const OPACIDADE_DESMARCADA = 0.35;
+
+/**
+ * A barra de uma série. Cresce do chão em CSS, uma semana depois da outra,
+ * quando há movimento. Com uma semana marcada, a dela fica cheia e as outras
+ * apagadas.
+ */
+function barra(serie: Serie, crescer: boolean, marcada: string | null) {
   function Barra(props: unknown) {
-    const { x = 0, y = 0, width = 0, height = 0, index = 0 } = props as PropsDaBarra;
+    const { x = 0, y = 0, width = 0, height = 0, index = 0, payload } = props as PropsDaBarra;
+    const desta = marcada !== null && payload?.inicio === marcada;
     return (
       <rect
         x={x}
@@ -144,7 +160,9 @@ function barra(serie: Serie, crescer: boolean) {
         width={width}
         height={Math.max(0, height)}
         fill={COR_DA_SERIE[serie]}
+        fillOpacity={marcada !== null && !desta ? OPACIDADE_DESMARCADA : undefined}
         data-serie={serie}
+        data-marcada={desta ? "true" : undefined}
         className={crescer ? "barra-do-ritmo" : undefined}
         style={crescer ? { animationDelay: `${index * ESCALONAMENTO_MS}ms` } : undefined}
       />
@@ -177,7 +195,18 @@ export function PreviaDaSemana({ active, payload }: TooltipProps<number, string>
   );
 }
 
-function GraficoDoRitmo({ semanas, parado }: { semanas: SemanaDasEntregas[]; parado: boolean }) {
+type CliqueNaSemana = {
+  /** O início da semana marcada, que a lista filtra; `null` sem filtro. */
+  semanaMarcada?: string | null;
+  onClicarNaSemana?: (inicio: string) => void;
+};
+
+function GraficoDoRitmo({
+  semanas,
+  parado,
+  semanaMarcada = null,
+  onClicarNaSemana,
+}: { semanas: SemanaDasEntregas[]; parado: boolean } & CliqueNaSemana) {
   const crescer = !parado;
   return (
     <figure aria-label="Pedidos e entregas das últimas 12 semanas" className="m-0 space-y-2">
@@ -201,7 +230,16 @@ function GraficoDoRitmo({ semanas, parado }: { semanas: SemanaDasEntregas[]; par
         ))}
       </ul>
       <ResponsiveContainer width="100%" height={ALTURA_DO_GRAFICO}>
-        <BarChart data={semanas} margin={{ top: 8, right: 8, bottom: 0, left: 0 }} barGap={2}>
+        <BarChart
+          data={semanas}
+          margin={{ top: 8, right: 8, bottom: 0, left: 0 }}
+          barGap={2}
+          className={onClicarNaSemana ? "cursor-pointer" : undefined}
+          onClick={(estado) => {
+            const inicio = estado?.activeLabel;
+            if (onClicarNaSemana && typeof inicio === "string") onClicarNaSemana(inicio);
+          }}
+        >
           <CartesianGrid vertical={false} stroke={COR_DA_GRADE} />
           <XAxis
             dataKey="inicio"
@@ -223,17 +261,22 @@ function GraficoDoRitmo({ semanas, parado }: { semanas: SemanaDasEntregas[]; par
             cursor={{ fill: COR_DA_GRADE, opacity: 0.4 }}
             isAnimationActive={false}
           />
-          <Bar dataKey="pedidos" name="Pedidos" shape={barra("pedidos", crescer)} isAnimationActive={false} />
-          <Bar dataKey="g" name="G" stackId="entregas" shape={barra("g", crescer)} isAnimationActive={false} />
-          <Bar dataKey="m" name="M" stackId="entregas" shape={barra("m", crescer)} isAnimationActive={false} />
-          <Bar dataKey="p" name="P" stackId="entregas" shape={barra("p", crescer)} isAnimationActive={false} />
+          <Bar dataKey="pedidos" name="Pedidos" shape={barra("pedidos", crescer, semanaMarcada)} isAnimationActive={false} />
+          <Bar dataKey="g" name="G" stackId="entregas" shape={barra("g", crescer, semanaMarcada)} isAnimationActive={false} />
+          <Bar dataKey="m" name="M" stackId="entregas" shape={barra("m", crescer, semanaMarcada)} isAnimationActive={false} />
+          <Bar dataKey="p" name="P" stackId="entregas" shape={barra("p", crescer, semanaMarcada)} isAnimationActive={false} />
         </BarChart>
       </ResponsiveContainer>
     </figure>
   );
 }
 
-export function RitmoDasEntregas({ topo, semanas }: { topo: TopoDasEntregas; semanas: SemanaDasEntregas[] }) {
+export function RitmoDasEntregas({
+  topo,
+  semanas,
+  semanaMarcada,
+  onClicarNaSemana,
+}: { topo: TopoDasEntregas; semanas: SemanaDasEntregas[] } & CliqueNaSemana) {
   const parado = useMovimentoReduzido();
   return (
     <section
@@ -268,7 +311,12 @@ export function RitmoDasEntregas({ topo, semanas }: { topo: TopoDasEntregas; sem
       </div>
       {semanas.length > 0 && (
         <div className="min-w-0 rounded-xl border border-border bg-white px-3 py-3">
-          <GraficoDoRitmo semanas={semanas} parado={parado} />
+          <GraficoDoRitmo
+            semanas={semanas}
+            parado={parado}
+            semanaMarcada={semanaMarcada}
+            onClicarNaSemana={onClicarNaSemana}
+          />
         </div>
       )}
     </section>

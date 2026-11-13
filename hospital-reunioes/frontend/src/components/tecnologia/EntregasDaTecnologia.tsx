@@ -14,6 +14,13 @@
  * Origem e Responsável valem para tudo. Quem conta, filtra e agrupa é o
  * servidor; a tela só desenha e monta a consulta. Nada se move por aqui.
  *
+ * O clique numa semana do gráfico mostra na lista só aquela semana e rola até
+ * ela, com o botão de desfazer no alto; o segundo clique na barra também
+ * desfaz. "Ver semanas anteriores", no fim, pede ao servidor o bloco de 12
+ * semanas antes do corte e o põe embaixo; some quando o servidor diz que não
+ * há entrega mais antiga. Trocar um filtro recomeça das 12 semanas (issue
+ * #1704).
+ *
  * Abrir o card mostra o mesmo Documento do card da conversa num painel à
  * direita, como no Quadro: a entrega vem do servidor no formato da lista do
  * chat, e o documento não pede outra coisa.
@@ -34,7 +41,13 @@ import {
   FraseEOQueMuda,
   TITULO_DEMONSTRACAO,
 } from "./DocumentoDoCard";
-import { RitmoDasEntregas, type SemanaDasEntregas, type Tamanho, type TopoDasEntregas } from "./RitmoDasEntregas";
+import {
+  diaEMes,
+  RitmoDasEntregas,
+  type SemanaDasEntregas,
+  type Tamanho,
+  type TopoDasEntregas,
+} from "./RitmoDasEntregas";
 import {
   BASE_TECNOLOGIA,
   CLASSIFICACAO_CLASSE,
@@ -51,6 +64,8 @@ import {
 const URL_DAS_ENTREGAS = `${BASE_TECNOLOGIA}/entregas`;
 const ENTREGAS_FALHOU = "Não foi possível carregar as entregas. Tente recarregar a página.";
 const NENHUMA_ENTREGA = "Nenhuma entrega com esses filtros.";
+const NENHUMA_ENTREGA_NA_SEMANA = "Nenhuma entrega nesta semana.";
+const VER_SEMANAS_ANTERIORES = "Ver semanas anteriores";
 
 export const ABRIR_O_CARD = "Abrir o card";
 
@@ -63,6 +78,8 @@ type Entregas = {
   topo: TopoDasEntregas;
   semanas: SemanaDasEntregas[];
   grupos: GrupoDasEntregas[];
+  /** O corte do bloco seguinte da lista, `null` quando não há entrega mais antiga. */
+  proximo_corte: string | null;
   responsaveis: ResponsavelDasEntregas[];
 };
 
@@ -82,11 +99,12 @@ type Filtros = {
   responsavel: string | null;
 };
 
-function urlDasEntregas(filtros: Filtros): string {
+function urlDasEntregas(filtros: Filtros, corte: string | null = null): string {
   const consulta = new URLSearchParams();
   if (filtros.tipo) consulta.set("tipo", filtros.tipo);
   if (filtros.origem) consulta.set("origem", filtros.origem);
   if (filtros.responsavel) consulta.set("responsavel", filtros.responsavel);
+  if (corte) consulta.set("corte", corte);
   const texto = consulta.toString();
   return texto ? `${URL_DAS_ENTREGAS}?${texto}` : URL_DAS_ENTREGAS;
 }
@@ -107,18 +125,18 @@ function entregasValidas(corpo: unknown): Entregas | null {
         entregas: g.entregas.filter((d) => typeof d?.id === "string" && typeof d?.titulo === "string"),
       }))
       .filter((g) => g.entregas.length > 0),
+    proximo_corte: typeof c.proximo_corte === "string" ? c.proximo_corte : null,
     responsaveis: Array.isArray(c.responsaveis) ? c.responsaveis : [],
   };
 }
 
 /** "Semana de 09/11: 3 entregas (1 G, 2 P)": o início lido como texto, sem fuso. */
 function cabecalhoDaSemana(grupo: GrupoDasEntregas): string {
-  const [, mes, dia] = grupo.inicio.split("-");
   const total = grupo.entregas.length;
   const tamanhos = TAMANHOS.map((t) => [t, grupo.entregas.filter((e) => e.tamanho === t).length] as const)
     .filter(([, n]) => n > 0)
     .map(([t, n]) => `${n} ${t}`);
-  return `Semana de ${dia}/${mes}: ${total} ${total === 1 ? "entrega" : "entregas"} (${tamanhos.join(", ")})`;
+  return `Semana de ${diaEMes(grupo.inicio)}: ${total} ${total === 1 ? "entrega" : "entregas"} (${tamanhos.join(", ")})`;
 }
 
 const BOTAO_DA_LINHA =
@@ -262,6 +280,13 @@ export function EntregasDaTecnologia({ token }: { token: string | null }) {
   const [origem, setOrigem] = useState<Origem | null>(null);
   const [responsavel, setResponsavel] = useState<string | null>(null);
   const [dados, setDados] = useState<Entregas | null>(null);
+  /** Os blocos de "Ver semanas anteriores", embaixo das 12 semanas, e o corte do próximo. */
+  const [anteriores, setAnteriores] = useState<GrupoDasEntregas[]>([]);
+  const [corte, setCorte] = useState<string | null>(null);
+  const [carregandoAnteriores, setCarregandoAnteriores] = useState(false);
+  /** A semana que o clique no gráfico marcou; a lista mostra só ela. */
+  const [semana, setSemana] = useState<string | null>(null);
+  const listaRef = useRef<HTMLElement>(null);
   const [erro, setErro] = useState<string | null>(null);
   const [noPainel, setNoPainel] = useState<Demanda | null>(null);
   const { aberta, alvo } = useIntencaoDeHoverDeUmaVez<string>();
@@ -281,6 +306,8 @@ export function EntregasDaTecnologia({ token }: { token: string | null }) {
       const lidas = resposta.ok ? entregasValidas(await resposta.json()) : null;
       if (pedido !== ultimoPedido.current) return;
       setDados(lidas);
+      setAnteriores([]);
+      setCorte(lidas?.proximo_corte ?? null);
       setErro(lidas ? null : ENTREGAS_FALHOU);
     } catch (e) {
       console.error("[admin/tecnologia] falha ao carregar as entregas", e);
@@ -291,6 +318,42 @@ export function EntregasDaTecnologia({ token }: { token: string | null }) {
   useEffect(() => {
     carregar();
   }, [carregar]);
+
+  /** O bloco seguinte, com os mesmos filtros; descartado se um filtro mudou no meio. */
+  async function carregarAnteriores() {
+    if (!token || !corte || carregandoAnteriores) return;
+    const pedido = ultimoPedido.current;
+    setCarregandoAnteriores(true);
+    try {
+      const resposta = await fetch(urlDasEntregas({ tipo, origem, responsavel }, corte), {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const lidas = resposta.ok ? entregasValidas(await resposta.json()) : null;
+      if (pedido !== ultimoPedido.current) return;
+      if (!lidas) {
+        setErro(ENTREGAS_FALHOU);
+        return;
+      }
+      setAnteriores((atuais) => [...atuais, ...lidas.grupos]);
+      setCorte(lidas.proximo_corte);
+    } catch (e) {
+      console.error("[admin/tecnologia] falha ao carregar as semanas anteriores", e);
+      if (pedido === ultimoPedido.current) setErro(FALHA_DE_CONEXAO);
+    } finally {
+      setCarregandoAnteriores(false);
+    }
+  }
+
+  const clicarNaSemana = useCallback((inicio: string) => {
+    setSemana((atual) => (atual === inicio ? null : inicio));
+  }, []);
+
+  useEffect(() => {
+    if (semana) listaRef.current?.scrollIntoView?.({ behavior: parado ? "auto" : "smooth", block: "start" });
+  }, [semana, parado]);
+
+  const todos = dados ? [...dados.grupos, ...anteriores] : [];
+  const grupos = semana ? todos.filter((g) => g.inicio === semana) : todos;
 
   return (
     <div className="space-y-4">
@@ -324,9 +387,25 @@ export function EntregasDaTecnologia({ token }: { token: string | null }) {
         )}
       </section>
 
-      {dados !== null && <RitmoDasEntregas topo={dados.topo} semanas={dados.semanas} />}
+      {dados !== null && (
+        <RitmoDasEntregas
+          topo={dados.topo}
+          semanas={dados.semanas}
+          semanaMarcada={semana}
+          onClicarNaSemana={clicarNaSemana}
+        />
+      )}
 
-      <section role="region" aria-label="O que foi entregue" className="space-y-3">
+      <section ref={listaRef} role="region" aria-label="O que foi entregue" className="space-y-3 scroll-mt-20">
+        {semana && (
+          <button
+            type="button"
+            onClick={() => setSemana(null)}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold text-primary border border-primary/30 bg-primary/5 hover:bg-primary/10"
+          >
+            Semana de {diaEMes(semana)}, mostrar todas
+          </button>
+        )}
         {erro && (
           <p role="alert" className="px-3 py-2 rounded-xl bg-red-50 border border-red-200 text-red-700 text-sm">
             {erro}
@@ -338,10 +417,10 @@ export function EntregasDaTecnologia({ token }: { token: string | null }) {
             Carregando as entregas...
           </p>
         )}
-        {dados !== null && dados.grupos.length === 0 && (
-          <p className="px-1 text-sm text-text-secondary">{NENHUMA_ENTREGA}</p>
+        {dados !== null && grupos.length === 0 && (
+          <p className="px-1 text-sm text-text-secondary">{semana ? NENHUMA_ENTREGA_NA_SEMANA : NENHUMA_ENTREGA}</p>
         )}
-        {dados?.grupos.map((grupo) => (
+        {grupos.map((grupo) => (
           <div key={grupo.inicio} className="space-y-1">
             <h3 className="px-1 text-xs font-medium text-text-secondary">{cabecalhoDaSemana(grupo)}</h3>
             <ul className="space-y-1">
@@ -358,6 +437,17 @@ export function EntregasDaTecnologia({ token }: { token: string | null }) {
             </ul>
           </div>
         ))}
+        {dados !== null && !semana && corte && (
+          <button
+            type="button"
+            onClick={carregarAnteriores}
+            disabled={carregandoAnteriores}
+            className={`${BOTAO_DA_LINHA} disabled:opacity-60`}
+          >
+            {carregandoAnteriores && <Loader2 aria-hidden="true" className="w-3 h-3 animate-spin" />}
+            {VER_SEMANAS_ANTERIORES}
+          </button>
+        )}
       </section>
 
       {noPainel && <PainelDoCard demanda={noPainel} onFechar={fecharPainel} />}

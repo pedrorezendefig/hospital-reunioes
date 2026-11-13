@@ -168,28 +168,64 @@ def ritmo(demandas: list[dict[str, Any]], *, agora: datetime, filtros: Filtros |
     }
 
 
+def _bloco_da_lista(agora: datetime, corte: date | None) -> tuple[date, date]:
+    """A primeira e a ultima semana de um bloco da lista: as 12 do grafico, ou,
+    com a semana de corte, as 12 antes dela (issue #1704)."""
+    if corte is None:
+        ultima = inicio_da_semana(agora.astimezone(FUSO_DO_HOSPITAL).date())
+    else:
+        ultima = inicio_da_semana(corte) - timedelta(weeks=1)
+    return ultima - timedelta(weeks=SEMANAS_DO_GRAFICO - 1), ultima
+
+
+def _entregues(demandas: list[dict[str, Any]], filtros: Filtros) -> list[tuple[date, datetime, dict[str, Any]]]:
+    """A semana, o instante e a Demanda de cada entrega que os filtros deixam."""
+    saida = []
+    for demanda in demandas:
+        entregue = instante_do_banco(entregue_na_data(demanda))
+        if entregue is not None and filtros.deixa(demanda):
+            saida.append((inicio_da_semana(entregue.astimezone(FUSO_DO_HOSPITAL).date()), entregue, demanda))
+    return saida
+
+
 def lista_por_semana(
-    demandas: list[dict[str, Any]], *, agora: datetime, filtros: Filtros | None = None
+    demandas: list[dict[str, Any]],
+    *,
+    agora: datetime,
+    filtros: Filtros | None = None,
+    corte: date | None = None,
 ) -> list[tuple[date, list[dict[str, Any]]]]:
     """A lista "O que foi entregue" por semana (issue #1703, ADR 0092, decisao 5).
 
     As mesmas semanas do grafico (as 12 ate a corrente, comecando na segunda
-    pelo fuso do hospital) e os mesmos `filtros` do topo. So as semanas com
-    entrega, a mais nova em cima, e dentro de cada uma a entrega mais nova
-    primeiro. Nao sera feita fica de fora, como no ritmo.
+    pelo fuso do hospital) e os mesmos `filtros` do topo. Com a semana de
+    `corte` (Ver semanas anteriores, issue #1704), as 12 semanas antes dela, e
+    a dela fica fora. So as semanas com entrega, a mais nova em cima, e dentro
+    de cada uma a entrega mais nova primeiro. Nao sera feita fica de fora, como
+    no ritmo.
     """
-    filtros = filtros or Filtros()
-    corrente = inicio_da_semana(agora.astimezone(FUSO_DO_HOSPITAL).date())
-    primeira = corrente - timedelta(weeks=SEMANAS_DO_GRAFICO - 1)
+    primeira, ultima = _bloco_da_lista(agora, corte)
     por_semana: dict[date, list[tuple[datetime, dict[str, Any]]]] = {}
-    for demanda in demandas:
-        entregue = instante_do_banco(entregue_na_data(demanda))
-        if entregue is None or not filtros.deixa(demanda):
-            continue
-        inicio = inicio_da_semana(entregue.astimezone(FUSO_DO_HOSPITAL).date())
-        if primeira <= inicio <= corrente:
+    for inicio, entregue, demanda in _entregues(demandas, filtros or Filtros()):
+        if primeira <= inicio <= ultima:
             por_semana.setdefault(inicio, []).append((entregue, demanda))
     return [
         (inicio, [d for _, d in sorted(por_semana[inicio], key=lambda par: par[0], reverse=True)])
         for inicio in sorted(por_semana, reverse=True)
     ]
+
+
+def proximo_corte(
+    demandas: list[dict[str, Any]],
+    *,
+    agora: datetime,
+    filtros: Filtros | None = None,
+    corte: date | None = None,
+) -> date | None:
+    """A semana de corte do bloco seguinte da lista (issue #1704): a primeira
+    semana do bloco, se os `filtros` deixam alguma entrega mais antiga que ela.
+    `None` quando nao ha, e o "Ver semanas anteriores" some."""
+    primeira, _ = _bloco_da_lista(agora, corte)
+    if any(inicio < primeira for inicio, _, _ in _entregues(demandas, filtros or Filtros())):
+        return primeira
+    return None
