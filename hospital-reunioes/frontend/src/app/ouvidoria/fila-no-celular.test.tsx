@@ -79,6 +79,12 @@ const RESUMO_LONGO =
   "Paciente relata espera de mais de três horas na recepção do ambulatório, sem nenhuma " +
   "informação sobre a fila e sem lugar para sentar durante todo o período de espera.";
 
+// A linha mostra o assunto que o agente de triagem escreveu, e não o começo do
+// relato (issue #1624, ADR 0087). Longo de propósito, para o corte valer.
+const ASSUNTO_LONGO =
+  "Espera de mais de três horas na recepção do ambulatório, sem informação sobre a fila " +
+  "e sem cadeira para quem aguarda durante todo o período.";
+
 const BASE = {
   data_abertura: "2026-08-14",
   prazo_resposta: "2026-12-31",
@@ -87,6 +93,7 @@ const BASE = {
   categoria: "Atendimento",
   setor: "Recepção",
   resumo: RESUMO_LONGO,
+  assunto: ASSUNTO_LONGO,
   conversa_id: "",
   gravidade: "alto",
   prazo_area_em: null,
@@ -165,29 +172,29 @@ describe("a linha empilha em três alturas abaixo de 768px (RN-75, D-02)", () =>
     expect(linha.className).toContain("md:flex-row");
   });
 
-  it("o resumo ganha altura própria no celular, abaixo do protocolo", async () => {
-    // No desktop protocolo, gravidade e resumo dividem o nível 1. Num corredor
-    // de 360px isso sobra um punhado de pixels para o resumo, que é justamente
+  it("o assunto ganha altura própria no celular, abaixo do protocolo", async () => {
+    // No desktop protocolo, gravidade e assunto dividem o nível 1. Num corredor
+    // de 360px isso sobra um punhado de pixels para o assunto, que é justamente
     // o que o ouvidor lê para decidir se abre o caso.
     montar([caso(7, "aguardando_area")]);
     const linha = await linhaDe("2026-0007");
 
-    const resumo = within(linha).getByText(RESUMO_LONGO);
-    const nivel1 = resumo.parentElement!;
+    const assunto = within(linha).getByText(ASSUNTO_LONGO);
+    const nivel1 = assunto.parentElement!;
     expect(nivel1.className).toContain("flex-col");
     expect(nivel1.className).toContain("md:flex-row");
-    // A altura de cima é o grupo do protocolo, irmão do resumo e não pai dele.
+    // A altura de cima é o grupo do protocolo, irmão do assunto e não pai dele.
     expect(nivel1.firstElementChild!.textContent).toContain("2026-0007");
-    expect(nivel1.firstElementChild!.textContent).not.toContain(RESUMO_LONGO);
+    expect(nivel1.firstElementChild!.textContent).not.toContain(ASSUNTO_LONGO);
   });
 
-  it("o resumo continua cortado em uma linha mesmo empilhado", async () => {
+  it("o assunto continua cortado em uma linha mesmo empilhado", async () => {
     // Empilhar não pode virar desculpa para o texto inteiro voltar: uma linha
-    // de resumo com cinco alturas afunda a fila do mesmo jeito que a tabela.
+    // de assunto com cinco alturas afunda a fila do mesmo jeito que a tabela.
     montar([caso(7, "aguardando_area")]);
     const linha = await linhaDe("2026-0007");
 
-    expect(within(linha).getByText(RESUMO_LONGO).className).toContain("truncate");
+    expect(within(linha).getByText(ASSUNTO_LONGO).className).toContain("truncate");
   });
 
   it("nada dentro da linha oferece corredor lateral (RN-73)", async () => {
