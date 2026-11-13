@@ -1,0 +1,31 @@
+Em que pé está cada pedido seu? Agora dá pra ver tudo de uma vez.
+
+A aba Tecnologia virou um quadro: cada um na coluna da sua etapa, de Registrada a Entregue.
+
+Em cima, a contagem de cada coluna. Ninguém arrasta nada: a etapa muda sozinha.
+
+O card é curto: número, título, bug ou melhoria, e as iniciais de quem cuida.
+
+A barra verde conta as partes prontas. E, se o envio falhou, você fica sabendo ali mesmo.
+
+Você rola a página, e o cabeçalho de cada coluna fica preso no alto.
+
+Entregue guarda o último mês, com a versão de cada entrega e um selo quando já tem vídeo do que mudou.
+
+O histórico inteiro está nas Entregas, a um clique.
+
+Abra um card: o documento e a conversa com o responsável aparecem num painel à direita.
+
+O quadro segue ali atrás. O Esc fecha, e o Ampliar leva pra tela inteira.
+
+O aviso do sino também abre direto nesse painel.
+
+Pra começar algo novo, tem o botão Novo pedido: o assistente ganha a largura toda.
+
+Ficou pela metade? Clique no card registrado e a conversa volta de onde estava, com o documento se montando ao lado.
+
+O que não será feito sai de vista. Um interruptor traz de volta quando você quiser.
+
+No celular, a lista continua igual.
+
+[animada] Uma olhada, e você sabe onde está cada pedido.
