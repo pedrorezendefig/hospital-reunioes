@@ -18,7 +18,8 @@ Tres invariantes que o resto do app herda:
   (decisao 2) o "Apagar" tambem: o comentario de motivo e o PATCH que fecha a
   issue como nao planejada. E o "Atualizar o card" da revisao (decisao 3,
   issue #1558): o comentario do que mudou e o PATCH que regrava o corpo e as
-  labels. Issue nunca se apaga. Nenhum verbo de LEITURA de
+  labels. E a passada unica do bloco "Para o desenvolvedor" (issue #1636),
+  rodada a mao, que regrava so o corpo. Issue nunca se apaga. Nenhum verbo de LEITURA de
   comentario: nada do GitHub volta para o app alem da foto da issue (ADR 0054,
   decisao 5). O token fine-grained do Pedro tem Issues: write neste
   repositorio e mais nada (ADR 0054, decisao 8).
@@ -482,6 +483,19 @@ def regravar(numero: int, *, corpo: str, labels: list[str]) -> dict[str, Any]:
     nenhum dos dois. Devolve a issue como o GitHub a devolve."""
     try:
         dados = _chamar("PATCH", f"/issues/{numero}", json={"body": corpo, "labels": labels})
+    except IssueNaoEncontradaError as exc:
+        raise GithubIndisponivelError(f"A issue #{numero} nao foi encontrada para regravar") from exc
+    if not isinstance(dados, dict):
+        raise GithubIndisponivelError(f"GitHub respondeu a issue #{numero} fora do formato")
+    return dados
+
+
+def regravar_corpo(numero: int, *, corpo: str) -> dict[str, Any]:
+    """Regrava so o corpo da issue, sem tocar nas labels (issue #1636): a
+    passada unica que poe o bloco "Para o desenvolvedor" nas Demandas abertas.
+    Devolve a issue como o GitHub a devolve."""
+    try:
+        dados = _chamar("PATCH", f"/issues/{numero}", json={"body": corpo})
     except IssueNaoEncontradaError as exc:
         raise GithubIndisponivelError(f"A issue #{numero} nao foi encontrada para regravar") from exc
     if not isinstance(dados, dict):
