@@ -170,14 +170,29 @@ class ResponsavelDasEntregasResponse(BaseModel):
     nome: str
 
 
+class EntregaDaListaResponse(DemandaResponse):
+    """Uma linha de "O que foi entregue" (issue #1703, ADR 0092, decisao 5): a
+    Demanda no formato da lista do chat, para Abrir o card mostrar o Documento
+    do card sem outro pedido, mais o Tamanho da entrega."""
+
+    tamanho: Literal["P", "M", "G"]
+
+
+class GrupoDasEntregasResponse(BaseModel):
+    """Uma semana da lista: a segunda-feira (AAAA-MM-DD, fuso do hospital) e o
+    que saiu nela, o mais novo primeiro."""
+
+    inicio: str
+    entregas: list[EntregaDaListaResponse]
+
+
 class EntregasResponse(BaseModel):
-    """A aba Entregas: o ritmo (o topo e as 12 semanas, issue #1701) e os cards
-    entregues, do mais recente para o mais antigo, no mesmo formato da lista do
-    chat, para o clique abrir o Documento do card."""
+    """A aba Entregas: o ritmo (o topo e as 12 semanas, issue #1701) e a lista
+    "O que foi entregue" por semana, a mais nova em cima (issue #1703)."""
 
     topo: TopoDasEntregasResponse
     semanas: list[SemanaDasEntregasResponse]
-    entregas: list[DemandaResponse]
+    grupos: list[GrupoDasEntregasResponse]
     responsaveis: list[ResponsavelDasEntregasResponse]
 
 

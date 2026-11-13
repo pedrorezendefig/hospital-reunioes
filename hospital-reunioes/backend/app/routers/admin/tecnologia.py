@@ -821,8 +821,10 @@ async def listar_as_entregas(
 
     Entra o que quem pede ve (`pode_ver`, a regra da lista do chat), fora a
     lapide do Apagar. O `topo` traz pedidos e entregas das ultimas 4 semanas e
-    das 4 anteriores; as `semanas`, as ultimas 12. Embaixo, a lista dos cards
-    entregues (Nao sera feita fica de fora), como antes. Os filtros `tipo`,
+    das 4 anteriores; as `semanas`, as ultimas 12. Os `grupos` sao a lista
+    "O que foi entregue" nas mesmas 12 semanas, so as que tem entrega, a mais
+    nova em cima, cada entrega com o Tamanho da entrega (issue #1703; Nao sera
+    feita fica de fora). Os filtros `tipo`,
     `origem` e `responsavel` (o id do usuario, ou o login do dono no GitHub
     quando ele nao e usuario do app) combinam e valem para os tres. As opcoes
     do Responsavel nao seguem o filtro, para o filtro ligado poder trocar.
@@ -837,18 +839,31 @@ async def listar_as_entregas(
     result = supabase.table(TABELA_DEMANDAS).select("*").is_("apagada_em", "null").execute()
     visiveis = [d for d in (result.data or []) if pode_ver(ator, d)]
     filtros = tecnologia_entregas.Filtros(tipo=tipo, origem=origem, responsavel=responsavel)
-    entregues = [(dia, d) for d in visiveis if (dia := tecnologia_entregas.dia_da_entrega(d)) is not None]
-    entregues.sort(key=lambda par: par[0], reverse=True)
-    nomes = _nomes(supabase, {responsavel_da_demanda(d) for _, d in entregues})
+    entregues = [d for d in visiveis if tecnologia_entregas.dia_da_entrega(d) is not None]
+    nomes = _nomes(supabase, {responsavel_da_demanda(d) for d in entregues})
     opcoes = {
         chave: _nome_do_responsavel(d, nomes) or chave
-        for _, d in entregues
+        for d in entregues
         if (chave := tecnologia_entregas.chave_do_responsavel(d))
     }
-    lista = _para_a_lista(supabase, [d for _, d in entregues if filtros.deixa(d)], ator=ator)
+    agora = agora_utc()
+    grupos = tecnologia_entregas.lista_por_semana(visiveis, agora=agora, filtros=filtros)
+    na_lista = {
+        entrega["id"]: {**entrega, **_SO_DO_DESENVOLVEDOR_NAS_ENTREGAS}
+        for entrega in _para_a_lista(supabase, [d for _, demandas in grupos for d in demandas], ator=ator)
+    }
     return {
-        **tecnologia_entregas.ritmo(visiveis, agora=agora_utc(), filtros=filtros),
-        "entregas": [{**entrega, **_SO_DO_DESENVOLVEDOR_NAS_ENTREGAS} for entrega in lista],
+        **tecnologia_entregas.ritmo(visiveis, agora=agora, filtros=filtros),
+        "grupos": [
+            {
+                "inicio": inicio.isoformat(),
+                "entregas": [
+                    {**na_lista[d["id"]], "tamanho": tecnologia_entregas.tamanho_da_entrega(d.get("partes_total"))}
+                    for d in demandas
+                ],
+            }
+            for inicio, demandas in grupos
+        ],
         "responsaveis": [
             {"valor": valor, "nome": nome} for valor, nome in sorted(opcoes.items(), key=lambda par: par[1].casefold())
         ],

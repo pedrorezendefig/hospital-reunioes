@@ -42,10 +42,10 @@ def _reset_rate_limiter():
     limiter._storage.reset()
 
 
-def _entregue(did: str, numero: int, fechada_em: str, **campos) -> dict:
+def _entregue(did: str, issue: int, fechada_em: str, **campos) -> dict:
     campos.setdefault("etapa", "em_producao")
     foto = {"fechada_em": fechada_em, **campos.pop("foto", {})}
-    return _demanda(did, github_issue_numero=numero, github_foto=foto, **campos)
+    return _demanda(did, github_issue_numero=issue, github_foto=foto, **campos)
 
 
 def _demandas() -> list[dict]:
@@ -62,6 +62,14 @@ def _demandas() -> list[dict]:
             autor_id=DIRETOR["id"],
             responsavel_id=PEDRO["id"],
             em_producao_em="2026-11-04T15:00:00Z",
+            # O que a linha da lista mostra (issue #1703): o Numero da Demanda,
+            # o Tamanho da entrega (3 partes, M), a versao, O que muda e a
+            # Demonstracao.
+            numero=42,
+            partes_total=3,
+            versao_em_producao="v0.280.0",
+            o_que_muda="**O que muda:** o botao de responder volta.",
+            demonstracao_url="https://manual-hsm.vercel.app/demonstracao/botao",
         ),
         _entregue(
             "e-vitta-rib",
@@ -156,8 +164,13 @@ def _corpo(resposta) -> dict:
     return resposta.json()
 
 
+def _lista(resposta) -> list[dict]:
+    """As entregas da lista, semana a semana, na ordem da tela."""
+    return [entrega for grupo in _corpo(resposta)["grupos"] for entrega in grupo["entregas"]]
+
+
 def _ids(resposta) -> list[str]:
-    return [d["id"] for d in _corpo(resposta)["entregas"]]
+    return [d["id"] for d in _lista(resposta)]
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -373,7 +386,7 @@ class TestRitmoPelaRota:
         painel da outra diretora na de 12/10, que ja e das 4 anteriores."""
         corpo = _corpo(entregas(PEDRO))
 
-        assert corpo["topo"]["entregas"] == {"total": 4, "anteriores": 1, "g": 0, "m": 0, "p": 4}
+        assert corpo["topo"]["entregas"] == {"total": 4, "anteriores": 1, "g": 0, "m": 1, "p": 3}
         assert [s["inicio"] for s in corpo["semanas"]][::11] == ["2026-08-24", "2026-11-09"]
         assert len(corpo["semanas"]) == 12
         assert _titulos_da_semana(entregas(PEDRO), "2026-11-02") == [
@@ -389,6 +402,45 @@ class TestRitmoPelaRota:
 
         assert _topo(resposta) == (4, 0)
         assert "e-outra-diretora" not in _ids(resposta)
+
+    def test_a_lista_vem_agrupada_por_semana_a_mais_nova_em_cima(self, entregas):
+        """As semanas do grafico, so as que tem entrega (issue #1703)."""
+        grupos = _corpo(entregas(PEDRO))["grupos"]
+
+        assert [(g["inicio"], [e["id"] for e in g["entregas"]]) for g in grupos] == [
+            ("2026-11-02", ["e-vitta-rib", "e-bug-diretor"]),
+            ("2026-10-26", ["e-domingo", "e-vitta-terceiro"]),
+            ("2026-10-12", ["e-outra-diretora"]),
+        ]
+        assert "entregas" not in _corpo(entregas(PEDRO))
+
+    def test_a_entrega_da_lista_traz_o_que_a_linha_mostra(self, entregas):
+        """Numero da Demanda, titulo, tipo, Tamanho da entrega, versao, dia da
+        entrega, O que muda e a Demonstracao (issue #1703)."""
+        [entrega] = _lista(entregas(DIRETOR, "tipo=bug&origem=diretor"))
+
+        assert {
+            campo: entrega[campo]
+            for campo in (
+                "numero",
+                "titulo",
+                "classificacao",
+                "tamanho",
+                "versao",
+                "fechada_em",
+                "o_que_muda",
+                "demonstracao_url",
+            )
+        } == {
+            "numero": 42,
+            "titulo": "Botao de responder sumiu",
+            "classificacao": "bug",
+            "tamanho": "M",
+            "versao": "v0.280.0",
+            "fechada_em": "2026-11-03T12:00:00Z",
+            "o_que_muda": "**O que muda:** o botao de responder volta.",
+            "demonstracao_url": "https://manual-hsm.vercel.app/demonstracao/botao",
+        }
 
     def test_a_lista_vem_da_entrega_mais_recente_para_a_mais_antiga(self, entregas):
         assert _ids(entregas(PEDRO)) == [
@@ -496,7 +548,7 @@ NUMEROS_DAS_ISSUES = set(range(901, 909))
 
 class TestLista:
     def test_a_entrega_traz_data_de_entrega_data_em_producao_e_responsavel(self, entregas):
-        [entrega] = _corpo(entregas(DIRETOR, "tipo=bug&origem=diretor"))["entregas"]
+        [entrega] = _lista(entregas(DIRETOR, "tipo=bug&origem=diretor"))
 
         assert entrega["id"] == "e-bug-diretor"
         assert entrega["fechada_em"] == "2026-11-03T12:00:00Z"
@@ -505,13 +557,13 @@ class TestLista:
         assert entrega["etapa"] == "em_producao"
 
     def test_a_entrega_que_nao_subiu_vem_sem_data_em_producao(self, entregas):
-        [entrega] = _corpo(entregas(DIRETOR, "responsavel=P4"))["entregas"]
+        [entrega] = _lista(entregas(DIRETOR, "responsavel=P4"))
 
         assert entrega["fechada_em"] == "2026-11-05T20:00:00Z"
         assert entrega["em_producao_em"] is None
 
     def test_o_responsavel_de_fora_do_app_aparece_pelo_login(self, entregas):
-        [entrega] = _corpo(entregas(DIRETOR, "responsavel=terceiro-gh"))["entregas"]
+        [entrega] = _lista(entregas(DIRETOR, "responsavel=terceiro-gh"))
 
         assert entrega["responsavel"] == "terceiro-gh"
 
@@ -532,7 +584,7 @@ class TestLista:
         para o Desenvolvedor, e o card sai igual para diretor e Desenvolvedor."""
 
         def _card(logado):
-            [card] = [d for d in _corpo(entregas(logado))["entregas"] if d["id"] == "e-domingo"]
+            [card] = [d for d in _lista(entregas(logado)) if d["id"] == "e-domingo"]
             return card
 
         dev, diretor = _card(PEDRO), _card(DIRETOR)
