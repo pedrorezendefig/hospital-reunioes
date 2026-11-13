@@ -44,3 +44,20 @@ describe("os títulos do Markdown do manual", () => {
     expect(apareceComoFoiEscrito(screen.getByText("Abra o calendário e escolha o mês."))).toBe(true);
   });
 });
+
+describe("o bloco fluxograma da página", () => {
+  it("vira o desenho do Fluxograma, e não o texto cru do bloco", () => {
+    const pagina = [
+      "O caminho:",
+      "```fluxograma",
+      "inicio criar 1,1: Criar o POP",
+      "fim publicada 2,1: Versão publicada",
+      "criar -> publicada",
+      "```",
+    ].join("\n");
+    const { container } = render(<MarkdownDoManual pasta="pops">{pagina}</MarkdownDoManual>);
+
+    expect(container.querySelector("[data-fluxograma] [data-passo=\"publicada\"]")).not.toBeNull();
+    expect(container.querySelector("pre")).toBeNull();
+  });
+});
