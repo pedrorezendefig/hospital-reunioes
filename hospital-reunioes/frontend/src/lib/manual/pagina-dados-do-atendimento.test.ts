@@ -18,7 +18,7 @@ import { describe, expect, it } from "vitest";
 import { lerFluxograma, type Fluxo } from "@/components/manual/fluxograma/fluxo";
 import type { CurrentParticipante } from "@/hooks/useCurrentParticipante";
 import { carregarPaginasDoManual } from "./carregar";
-import { imagensCitadas, paginasVisiveis } from "./paginas";
+import { fluxogramasCitados, imagensCitadas, paginasVisiveis } from "./paginas";
 
 function pessoa(campos: Partial<CurrentParticipante>): CurrentParticipante {
   return {
@@ -96,11 +96,6 @@ describe("as tarefas da página de Dados do Atendimento", () => {
   });
 });
 
-/** O texto de cada bloco ```fluxograma do Markdown, na ordem da página. */
-function blocosDeFluxograma(corpo: string): string[] {
-  return Array.from(corpo.matchAll(/^```fluxograma[^\n]*\n([\s\S]*?)^```/gm), (m) => m[1]);
-}
-
 /** Os passos que se alcançam a partir de `de`, seguindo as ligações. */
 function alcancaveis(fluxo: Fluxo, de: string): Set<string> {
   const vistos = new Set([de]);
@@ -118,7 +113,7 @@ function alcancaveis(fluxo: Fluxo, de: string): Set<string> {
 }
 
 describe("o fluxograma da página de Dados do Atendimento", () => {
-  const blocos = blocosDeFluxograma(PAGINA?.corpo ?? "");
+  const blocos = fluxogramasCitados(PAGINA?.corpo ?? "");
 
   it("desenha da edição na tabela até a próxima resposta da Ana, sem erro de bloco", () => {
     expect(blocos).toHaveLength(1);
@@ -144,11 +139,6 @@ describe("o fluxograma da página de Dados do Atendimento", () => {
     expect(decisao?.rotulo).toMatch(/ativo/i);
     expect(nao).toBeTruthy();
     expect(alcancaveis(leitura.fluxo, nao!.para).has(fim.id)).toBe(false);
-  });
-
-  it("o detector separa o bloco fluxograma de outro bloco de código", () => {
-    const corpo = ["```fluxograma", "inicio a 1,1: A", "```", "```bash", "echo oi", "```"].join("\n");
-    expect(blocosDeFluxograma(corpo)).toEqual(["inicio a 1,1: A\n"]);
   });
 });
 
