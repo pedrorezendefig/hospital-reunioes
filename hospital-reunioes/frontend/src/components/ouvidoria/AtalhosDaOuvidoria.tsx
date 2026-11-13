@@ -16,6 +16,7 @@
 import { useRef, useState } from "react";
 import Link from "next/link";
 import {
+  BookOpen,
   LayoutDashboard,
   MapPin,
   Menu,
@@ -55,6 +56,7 @@ const ICONE_DO_ATALHO: Record<ChaveDeAtalho, typeof MapPin> = {
   pontos: MapPin,
   responsaveis: UsersRound,
   prazos: SlidersHorizontal,
+  como_funciona: BookOpen,
 };
 
 export function AtalhosDaOuvidoria({ perfil }: { perfil: string | null | undefined }) {

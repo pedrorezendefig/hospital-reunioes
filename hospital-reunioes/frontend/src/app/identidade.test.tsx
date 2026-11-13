@@ -29,7 +29,7 @@ import { resolve } from "node:path";
 import { render } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 
-import { metadata } from "./layout";
+import { metadata, viewport } from "./layout";
 import Home from "./page";
 
 const IDENTIDADE_VELHA = /Gestão de Atas|gestão de reuniões|Hospital Reuniões/i;
@@ -40,6 +40,7 @@ const manifesto = JSON.parse(
   name: string;
   short_name: string;
   description: string;
+  theme_color: string;
 };
 
 describe("a identidade da aplicação", () => {
@@ -58,6 +59,13 @@ describe("a identidade da aplicação", () => {
     const atalhoDoIOS = metadata.appleWebApp as { title?: string };
     expect(manifesto.short_name).toBe(atalhoDoIOS.title);
     expect(manifesto.description).toBe(metadata.description);
+  });
+
+  it("a cor do tema é o azul-escuro oficial do hospital (issue #1629, regra T6)", () => {
+    // A barra do navegador no celular e a do app instalado. Era #2B2E7E, um
+    // azul parecido que não é o do design system.
+    expect(viewport.themeColor).toBe("#282760");
+    expect(manifesto.theme_color).toBe("#282760");
   });
 
   it("não sobra menção à identidade velha em lugar nenhum", () => {

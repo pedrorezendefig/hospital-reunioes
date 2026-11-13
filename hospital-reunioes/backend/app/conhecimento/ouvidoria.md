@@ -66,6 +66,26 @@ O Painel em tempo real fica nos atalhos da Ouvidoria e só o ouvidor e a diretor
 
 Cada card mostra o protocolo, a gravidade (o único elemento colorido), o setor, o assunto que o agente escreveu, o prazo ou o atraso, quem responde e os selos. O Painel não mostra nenhum nome de paciente nem o começo do relato: o caso sem assunto aparece como Assunto não gerado. O elogio não entra em nenhuma faixa de atraso, porque não tem prazo de resposta. O contador Encerrada, que somava os casos encerrados desde sempre, saiu do Painel.
 
+## A orientação nas telas
+
+A Ouvidoria foi feita para uma pessoa nova tratar um caso do começo ao fim sem abrir manual. Toda tela tem uma frase no topo dizendo para que serve: a aba Avaliações lembra que as notas do QR não geram protocolo, a menos que a pessoa peça retorno ou a Ouvidoria converta; o Painel mostra o que precisa de atenção agora, do mais urgente ao menos urgente; Pontos de escuta diz que cada ponto é um cartaz e que o local descrito ali é o que aparece no Painel.
+
+Os campos que pedem explicação têm um ponto de interrogação ao lado: tocar nele abre uma linha dizendo o que o campo quer. Na descrição do local do cartaz, por exemplo, ele avisa que cartaz que mudou de lugar pede um ponto novo, porque mover o cartaz sem trocar o ponto faz o Painel mostrar o lugar errado.
+
+Na validação, a frase do topo pede para conferir o tipo, o setor e, se houver alerta, a decisão sobre o Núcleo, e depois enviar à área. O botão que conclui se chama Enviar à área.
+
+Toda lista vazia diz por que está vazia e o que esperar: a fila diz por onde as manifestações chegam, a lista de feriados diz que, sem feriado cadastrado, todo dia de segunda a sexta conta como útil, e a Nota externa diz que a nota do Google é buscada sozinha toda semana. A fila e o Painel têm o botão Legenda, que mostra a cor e o significado de cada gravidade e o que cada estado do caso quer dizer.
+
+A tela Como funciona a Ouvidoria fica nos atalhos, para o ouvidor e a diretoria executiva. Ela mostra o caminho de um caso em cinco passos, cada um com uma frase de onde ele acontece, e cabe no celular:
+
+1. a manifestação chega;
+2. você confere tipo, setor e gravidade;
+3. se o sistema alertar, decide sobre o NSP;
+4. envia à área e acompanha o prazo;
+5. revisa a resposta e envia ao manifestante.
+
+A cor do aplicativo na barra do navegador do celular é o azul-escuro oficial do hospital.
+
 ## O que o manifestante ouve do hospital
 
 São dois avisos, os dois por e-mail, e os dois só saem quando dá para reconhecer um e-mail no contato que a pessoa deixou:
@@ -134,6 +154,7 @@ A nota do Google é buscada sozinha uma vez por semana, junto com o total de ava
 - O Núcleo de Segurança do Paciente recebe o relato integral e o paciente atendido mesmo no caso sigiloso, só depois de o ouvidor confirmar, e o nome de quem manifestou só vai quando o caso não é sigiloso nem anônimo, como única exceção à regra do sigilo.
 - O elogio vai ao setor só para ele confirmar que recebeu, sem prazo de resposta, com uma nota curta do ouvidor.
 - A nota do Google é buscada sozinha toda semana e não se digita mais, e o convite para avaliar no Google aparece só para as notas 4 e 5, só no QR e só com a chave geral e a do ponto ligadas pela diretoria executiva, com o risco aceito pela diretoria.
+- Toda tela da Ouvidoria abre com uma frase dizendo para que serve, toda lista vazia diz por que está vazia, e a tela Como funciona a Ouvidoria, nos atalhos, mostra o caso do começo ao fim em cinco passos.
 
 ## O que costuma virar Demanda
 

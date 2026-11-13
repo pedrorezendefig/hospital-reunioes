@@ -25,6 +25,7 @@ import { AlertCircle, ArrowLeft, Flag, Loader2, MessageSquareText } from "lucide
 
 import { CardPadrao } from "@/components/ouvidoria/CardDeCaso";
 import { useCurrentParticipante } from "@/hooks/useCurrentParticipante";
+import { FRASE_DO_TOPO } from "@/lib/ouvidoria/orientacao";
 import { createClient } from "@/lib/supabase/client";
 import {
   PERIODOS_DA_ABA,
@@ -186,7 +187,7 @@ function AbaAvaliacoes() {
         </Link>
         <h1 className="text-2xl font-bold text-slate-900">Avaliações</h1>
         <p className="text-sm text-slate-500 mt-1">
-          Notas deixadas pelo QR. Não geram protocolo, a menos que a pessoa peça retorno ou a Ouvidoria converta.
+          {FRASE_DO_TOPO.avaliacoes}
         </p>
       </div>
 

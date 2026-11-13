@@ -143,6 +143,18 @@ async function abrir() {
   await screen.findByText("A recepcionista gritou comigo.");
 }
 
+describe("a orientação embutida da aba (issue #1629, regra T1)", () => {
+  it("abre com a frase do topo da seção 4.14", async () => {
+    await abrir();
+
+    expect(
+      screen.getByText(
+        "Notas deixadas pelo QR. Não geram protocolo, a menos que a pessoa peça retorno ou a Ouvidoria converta."
+      )
+    ).toBeTruthy();
+  });
+});
+
 describe("os números do período", () => {
   it("mostra a nota média, a % de 4 e 5, o volume e a % que pediu retorno", async () => {
     await abrir();

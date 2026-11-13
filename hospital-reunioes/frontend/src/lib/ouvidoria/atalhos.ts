@@ -20,7 +20,14 @@ import { podeGerirPontos } from "./pontos";
 import { podeEditarPrazos } from "./prazo";
 import { podeGerirResponsaveis } from "./validacao";
 
-export type ChaveDeAtalho = "painel" | "avaliacoes" | "nota_externa" | "pontos" | "responsaveis" | "prazos";
+export type ChaveDeAtalho =
+  | "painel"
+  | "avaliacoes"
+  | "nota_externa"
+  | "pontos"
+  | "responsaveis"
+  | "prazos"
+  | "como_funciona";
 
 export interface Atalho {
   chave: ChaveDeAtalho;
@@ -33,7 +40,7 @@ export interface Atalho {
 
 /**
  * Na ordem do trabalho: o retrato de agora, o que entra de fora, os lugares de
- * escuta e, por último, os dois cadastros. O de responsáveis é do Perfil da
+ * escuta, os dois cadastros e, por último, o passo a passo de quem chega. O de responsáveis é do Perfil da
  * Ouvidoria inteiro desde a issue #711; a tabela de prazos continua da
  * Diretoria.
  */
@@ -87,6 +94,17 @@ const ATALHOS: (Atalho & { permitido: (perfil: string | null | undefined) => boo
     rotulo: "Prazos",
     nome: "Tabela de prazos",
     permitido: podeEditarPrazos,
+  },
+  {
+    // O primeiro acesso (issue #1629, regra T9 da especificação): o caso do
+    // começo ao fim em cinco passos. Por último, porque é a porta de quem
+    // ainda está aprendendo, e não do trabalho do dia. Os dois perfis da
+    // Ouvidoria, que são quem trata caso.
+    chave: "como_funciona",
+    href: "/ouvidoria/como-funciona",
+    rotulo: "Como funciona",
+    nome: "Como funciona a Ouvidoria",
+    permitido: podeVerPainel,
   },
 ];
 
@@ -211,7 +229,8 @@ const PADDING_ATE_A_BARRA =
  *
  * Com a sexta porta, a das Avaliações (issue #1626), a conta deixou de fechar
  * no `lg`: os 640px que sobram a 1024px não comportam 711px de barra. Ela
- * subiu para o `xl`, onde sobram 896px.
+ * subiu para o `xl`, onde sobram 896px. A sétima, Como funciona (issue
+ * #1629), leva a barra a cerca de 864px, ainda dentro dos 896px.
  */
 export const BREAKPOINT_DA_BARRA = "xl";
 

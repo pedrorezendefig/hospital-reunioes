@@ -320,9 +320,16 @@ export function TriagemDeEmail({ token }: { token: string }) {
           ))}
         </div>
         {visiveis.length === 0 ? (
-          <p className="px-4 py-8 rounded-xl bg-white border border-border text-center text-sm text-slate-500">
-            {filtro === "pendentes" ? "Nenhum e-mail recebido para triar." : "Nenhum e-mail decidido ainda."}
-          </p>
+          // Lista vazia diz por que está vazia e o que esperar (regra T7, issue
+          // #1629).
+          <div className="px-4 py-8 rounded-xl bg-white border border-border text-center text-sm text-slate-500">
+            <p>{filtro === "pendentes" ? "Nenhum e-mail recebido para triar." : "Nenhum e-mail decidido ainda."}</p>
+            <p className="mt-1 text-xs text-slate-400">
+              {filtro === "pendentes"
+                ? "O que chegar em ouvidoria@ aparece aqui, para você decidir se vira caso."
+                : "O e-mail que você transformar em caso, juntar a um caso ou descartar passa a ficar aqui."}
+            </p>
+          </div>
         ) : (
           <ul className="space-y-2">
             {visiveis.map((email) => (

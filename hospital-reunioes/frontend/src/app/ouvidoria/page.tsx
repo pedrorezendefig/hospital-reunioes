@@ -18,6 +18,7 @@ import { useCurrentParticipante } from "@/hooks/useCurrentParticipante";
 import { AtalhosDaOuvidoria } from "@/components/ouvidoria/AtalhosDaOuvidoria";
 import { NovaManifestacaoModal } from "@/components/ouvidoria/NovaManifestacaoModal";
 import { ValidarModal } from "@/components/ouvidoria/ValidarModal";
+import { Legenda } from "@/components/ouvidoria/Legenda";
 import { ListaDaFila } from "@/components/ouvidoria/ListaDaFila";
 import {
   aguardandoSeuEncerramento,
@@ -485,6 +486,14 @@ export default function OuvidoriaPage() {
         )}
       </div>
 
+      {/* A legenda das cores e dos estados (regra T8, issue #1629): a fila
+          pinta o grupo pelo estado e o card pela gravidade. */}
+      {!loading && !semAcesso && !erroCarga && (
+        <div className="mb-4">
+          <Legenda />
+        </div>
+      )}
+
       {/* O que esta carga não pôde afirmar (issue #449, e agora a trilha do
           marcador de novidade, issue #484). Sinal ausente e sinal desligado
           desenham a mesma lista, então a falha precisa estar escrita. */}
@@ -632,7 +641,8 @@ export default function OuvidoriaPage() {
               <>
                 <p className="text-slate-500 font-medium">Nenhuma manifestação registrada</p>
                 <p className="text-slate-400 text-sm mt-1">
-                  As manifestações chegam pelo atendimento da Ana e pelo registro da ouvidoria.
+                  As manifestações chegam pelo QR, pelo formulário do site, pela Ana e pelo registro da
+                  Ouvidoria. A primeira aparece aqui assim que chegar.
                 </p>
               </>
             )}

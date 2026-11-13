@@ -103,3 +103,47 @@ describe("a fila da Ouvidoria leva ao caso por endereço (issue #476)", () => {
     expect(screen.queryByRole("link", { name: /Abrir manifestação/ })).toBeNull();
   });
 });
+
+describe("a fila vazia diz por que está vazia (issue #1629, regra T7)", () => {
+  afterEach(() => {
+    cleanup();
+    vi.unstubAllGlobals();
+  });
+
+  it("sem manifestação, diz por onde elas chegam e o que esperar", async () => {
+    sessao.perfilOuvidoria = "ouvidor";
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => ({ ok: true, status: 200, json: async () => ({ protocolos: [] }) }) as Response)
+    );
+    render(<OuvidoriaPage />);
+
+    expect(await screen.findByText("Nenhuma manifestação registrada")).toBeTruthy();
+    // O QR e o formulário público vieram depois do texto antigo, que só citava
+    // a Ana e o registro da Ouvidoria.
+    expect(
+      screen.getByText(
+        "As manifestações chegam pelo QR, pelo formulário do site, pela Ana e pelo registro da Ouvidoria. A primeira aparece aqui assim que chegar."
+      )
+    ).toBeTruthy();
+  });
+});
+
+describe("a fila tem a legenda das cores e dos estados (issue #1629, regra T8)", () => {
+  beforeEach(() => {
+    sessao.perfilOuvidoria = "ouvidor";
+  });
+
+  afterEach(() => {
+    cleanup();
+    vi.unstubAllGlobals();
+  });
+
+  it("o botão Legenda abre o que cada estado quer dizer", async () => {
+    montar();
+    await screen.findByText("2026-0007");
+
+    fireEvent.click(screen.getByRole("button", { name: "Legenda" }));
+    expect(screen.getByRole("region", { name: "Legenda das cores e dos estados" })).toBeTruthy();
+  });
+});

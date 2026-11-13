@@ -28,9 +28,12 @@
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
-import { AlertCircle, AlertTriangle, ArrowLeft, CircleHelp, Loader2, RefreshCw, Send } from "lucide-react";
+import { AlertCircle, AlertTriangle, ArrowLeft, Loader2, RefreshCw, Send } from "lucide-react";
 import { useCurrentParticipante } from "@/hooks/useCurrentParticipante";
+import { FRASE_DO_TOPO } from "@/lib/ouvidoria/orientacao";
 import { usePolling } from "@/hooks/usePolling";
+import { Ajuda } from "@/components/ouvidoria/Ajuda";
+import { Legenda } from "@/components/ouvidoria/Legenda";
 import { CardDeCaso, GravidadeDoCaso, type CasoDoCard } from "@/components/ouvidoria/CardDeCaso";
 import {
   cobrarOSetor,
@@ -39,7 +42,7 @@ import {
   type ResultadoDaCobranca,
 } from "@/lib/ouvidoria/cobranca";
 import { ASSUNTO_NAO_GERADO } from "@/lib/ouvidoria/fila";
-import { ALTURA_DE_TOQUE, ALVO_DE_TOQUE } from "@/lib/toque";
+import { ALTURA_DE_TOQUE } from "@/lib/toque";
 import {
   atrasosDaOuvidoria,
   atrasosDasAreas,
@@ -169,29 +172,6 @@ function NaoCarregou() {
 /** Vazio de verdade, que explica por quê (regra T7). */
 function Vazio({ texto }: { texto: string }) {
   return <p className="px-4 md:px-5 py-4 text-sm text-slate-400">{texto}</p>;
-}
-
-/**
- * O "?" com a explicação completa (seção 4.11: "uma linha visível + ícone '?'
- * com a explicação completa"). Botão de verdade, e não `title`: no celular não
- * há passar o mouse por cima.
- */
-function Ajuda({ assunto, explicacao }: { assunto: string; explicacao: string }) {
-  const [aberta, setAberta] = useState(false);
-  return (
-    <>
-      <button
-        type="button"
-        aria-expanded={aberta}
-        aria-label={`O que é: ${assunto}`}
-        onClick={() => setAberta((antes) => !antes)}
-        className={`inline-flex items-center justify-center shrink-0 rounded-full text-slate-400 hover:text-slate-600 ${ALVO_DE_TOQUE} md:w-6 md:h-6`}
-      >
-        <CircleHelp className="w-4 h-4" />
-      </button>
-      {aberta && <p className="basis-full text-xs text-slate-500 mt-1">{explicacao}</p>}
-    </>
-  );
 }
 
 /** Uma faixa do Painel: o título, uma linha que diz o que ela é e o "?". */
@@ -629,7 +609,7 @@ export default function PainelEmTempoRealPage() {
         <div className="min-w-0">
           <h1 className="text-2xl font-bold text-slate-900">Painel em tempo real</h1>
           <p className="text-slate-500 text-sm mt-0.5">
-            O que precisa de atenção agora, do mais urgente ao menos urgente.
+            {FRASE_DO_TOPO.painel}
           </p>
         </div>
         {atualizadoEm && (
@@ -638,6 +618,11 @@ export default function PainelEmTempoRealPage() {
             Atualizado às {atualizadoEm}
           </span>
         )}
+      </div>
+
+      {/* A legenda das cores e dos estados (regra T8, issue #1629). */}
+      <div className="mb-4">
+        <Legenda />
       </div>
 
       {falha === "instavel" && (
@@ -766,7 +751,7 @@ export default function PainelEmTempoRealPage() {
           {proximos === null ? (
             <NaoCarregou />
           ) : proximos.casos.length === 0 ? (
-            <Vazio texto="Nada a vencer agora." />
+            <Vazio texto="Nenhum caso aberto com prazo correndo agora." />
           ) : (
             <ul className="divide-y divide-slate-100">
               {proximos.casos.map((caso) => (

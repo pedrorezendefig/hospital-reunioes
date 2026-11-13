@@ -252,3 +252,35 @@ describe("o teste do convite ao Google (issue #1625)", () => {
     expect(screen.queryAllByRole("switch")).toEqual([]);
   });
 });
+
+describe("a orientação embutida da tela (issue #1629, regra T1)", () => {
+  it("abre com a frase do topo da seção 4.14", async () => {
+    render(<PontosDeEscutaPage />);
+    await screen.findByText("Recepção do PSA");
+
+    expect(
+      screen.getByText("Cada ponto é um cartaz. O local descrito aqui é o que aparece no painel.")
+    ).toBeTruthy();
+  });
+
+  it("a descrição do local tem o ? com o aviso de cartaz que mudou de lugar (seção 4.13)", async () => {
+    render(<PontosDeEscutaPage />);
+    await screen.findByText("Recepção do PSA");
+    const aviso =
+      "Cartaz mudou de lugar? Aposente o ponto antigo e crie um novo. Mover o cartaz sem trocar o ponto faz o painel mostrar dados do lugar errado.";
+
+    // A explicação nasce fechada: aberta, ela empurraria o formulário inteiro.
+    expect(screen.queryByText(aviso)).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "O que é: Descrição do local" }));
+    expect(screen.getByText(aviso)).toBeTruthy();
+  });
+
+  it("os campos do cartaz têm o ? com uma linha de explicação", async () => {
+    render(<PontosDeEscutaPage />);
+    await screen.findByText("Recepção do PSA");
+
+    for (const campo of ["Setor", "Rótulo do ponto", "Título do cartaz", "Código de controle"]) {
+      expect(screen.getByRole("button", { name: `O que é: ${campo}` })).toBeTruthy();
+    }
+  });
+});

@@ -171,6 +171,29 @@ async function abrirOPainel() {
   await screen.findByText("Painel em tempo real");
 }
 
+describe("a orientação embutida do painel (issue #1629, regra T1)", () => {
+  it("abre com a frase do topo da seção 4.14", async () => {
+    await abrirOPainel();
+
+    expect(screen.getByText("O que precisa de atenção agora, do mais urgente ao menos urgente.")).toBeTruthy();
+  });
+
+  it("tem a legenda das cores e dos estados (regra T8)", async () => {
+    await abrirOPainel();
+
+    fireEvent.click(screen.getByRole("button", { name: "Legenda" }));
+    expect(screen.getByRole("region", { name: "Legenda das cores e dos estados" })).toBeTruthy();
+  });
+
+  it("sem caso a vencer, a faixa diz por que está vazia (regra T7)", async () => {
+    await abrirOPainel();
+
+    expect(
+      within(faixa("Próximos vencimentos")).getByText("Nenhum caso aberto com prazo correndo agora.")
+    ).toBeTruthy();
+  });
+});
+
 describe("o painel conta o hospital inteiro, arquivados inclusive (issue #592, ADR 0047)", () => {
   it("pede a listagem com o recorte que inclui o arquivo", async () => {
     await abrirOPainel();

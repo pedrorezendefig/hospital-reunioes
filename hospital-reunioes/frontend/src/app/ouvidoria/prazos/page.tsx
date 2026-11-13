@@ -415,7 +415,9 @@ export default function PrazosDaOuvidoriaPage() {
         </div>
 
         {feriados.length === 0 ? (
-          <p className="text-center py-10 text-slate-400 text-sm">Nenhum feriado cadastrado.</p>
+          <p className="text-center px-5 py-10 text-slate-400 text-sm">
+            Nenhum feriado cadastrado. Enquanto a lista estiver vazia, todo dia de segunda a sexta conta como útil no prazo.
+          </p>
         ) : (
           <table className="w-full text-sm">
             <tbody className="divide-y divide-slate-50">
