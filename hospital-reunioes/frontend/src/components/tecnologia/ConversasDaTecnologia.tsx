@@ -1164,10 +1164,12 @@ export function ConversasDaTecnologia({
       >
         <div className={`${naTela === "lista" ? "" : "hidden"} ${recolhida ? "md:hidden" : "md:block"}`}>
           {largo ? (
-            <div className="space-y-3">
-              {estadoDaLista}
-              {demandas !== null && <QuadroDaTecnologia demandas={demandas} onAbrir={(demanda) => abrir(demanda)} />}
-            </div>
+            quadroAVista && (
+              <div className="space-y-3">
+                {estadoDaLista}
+                {demandas !== null && <QuadroDaTecnologia demandas={demandas} onAbrir={(demanda) => abrir(demanda)} />}
+              </div>
+            )
           ) : (
           <nav aria-label="Suas conversas" className="md:max-h-[calc(100vh-18rem)] md:overflow-y-auto p-1 -m-1">
             {estadoDaLista}
