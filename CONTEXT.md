@@ -336,6 +336,10 @@ _Evitar_: Etapa digitada; Entregue como "deploy confirmado" (é o fechamento; o 
 **Subida**:
 O passo que leva PRs verdes até produção (`fechar_onda.py`): merge pela API, versão, build, health, registro. Antes chamado de rabo.
 
+**Portão do push**:
+As conferências rápidas do CI que rodam no Mac antes de todo push de branch: número e recibo da migration, travessão nos templates, `uv.lock`, `ruff` e o teste do `encoding="utf-8"`. Reprovou, o push para e o PR nem chega ao CI. A suíte inteira do pytest fica só com o CI.
+_Evitar_: pré-CI; hook (é o mecanismo, não o nome); suíte inteira no portão.
+
 **O que muda**:
 O que a entrega acrescenta para quem pediu, em linguagem de leigo, vindo do bloco "Para o diretor" da issue e **nunca digitado no app** (ADR 0054, decisão 7). Aparece como uma seção do [Documento do card]; sem o bloco, "Descrição em preparação". Até cinco tópicos (ADR 0084).
 _Evitar_: título de parte, número de issue, link ou label na tela do diretor; texto corrido com a fala do diretor transcrita.
