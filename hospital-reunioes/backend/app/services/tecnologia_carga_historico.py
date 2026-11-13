@@ -198,7 +198,7 @@ def _preencher_criada_em(supabase, demandas: dict[int, dict[str, Any]], relatori
         if demanda.get("apagada_em") or str(demanda.get("estado") or "") in ESTADOS_FECHADOS:
             continue
         try:
-            criada_em = github_client.ler_issue(numero).get("created_at")
+            criada_em = github_client.ler_issue(numero, projeto=PROJETO_HOSPITAL).get("created_at")
             if not criada_em:
                 continue
             if not dry_run:
