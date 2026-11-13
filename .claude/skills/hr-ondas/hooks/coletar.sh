@@ -213,7 +213,8 @@ ESTADOS="${HR_ONDAS_ESTADOS:-$HOME/.pedroos/ondas/hospital}"
 ondas_estado=$(cat "$ESTADOS"/*.json 2>/dev/null | jq -s -c '
   [ .[] | select(.contrato == 1 and (.estado == "erro" or .estado == "pronto-para-voce")) | . as $o
     | {id: $o.id, estado: $o.estado, prd: $o.prd,
-       texto: ([$o.eventos[]? | select(.tipo == $o.estado)] | last | .texto // null)} ]' 2>/dev/null)
+       texto: ([$o.eventos[]? | select(.tipo == $o.estado)] | last | .texto // null),
+       baixas: [$o.issues[]? | select(.status == "baixa") | .numero]} ]' 2>/dev/null)
 [ -n "$ondas_estado" ] || ondas_estado='[]'
 
 jq -n -c --argjson r "$remoto" --argjson agentes "$agentes" --argjson prdSessoes "$prd_sessoes" \

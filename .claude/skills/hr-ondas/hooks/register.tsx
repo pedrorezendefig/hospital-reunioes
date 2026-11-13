@@ -1,7 +1,7 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register, RenderSurface } from 'claude-code'
 
-import type { Agente, Ci, Coleta, Encerrar, Faixa, FatiaDaFaixa, Fase, Issue, Migration, Prd, SubAgente, Subida, Tarefa } from '../types'
+import type { Agente, CardCitado, Ci, Coleta, Encerrar, EstadoOnda, Faixa, FatiaDaFaixa, Fase, Issue, Migration, Prd, SubAgente, Subida, Tarefa } from '../types'
 
 // Torre das ondas: só leitura. A coleta (hooks/coletar.sh) junta o Hospital OS,
 // o `claude agents`, as migrations que a subida pediu e o /api/health.
@@ -33,6 +33,7 @@ const erro = atom({ plugin: 'hr-ondas', key: 'erro' } as const, null)
 const todos = atom({ plugin: 'hr-ondas', key: 'todos' } as const, false)
 const faixa = atom({ plugin: 'hr-ondas', key: 'faixa' } as const, null)
 const relogio = atom({ plugin: 'hr-ondas', key: 'relogio' } as const, 0)
+const cards = atom({ plugin: 'hr-ondas', key: 'cards' } as const, {})
 const verDetalhe = atom({ plugin: 'hr-ondas', key: 'verDetalhe' } as const, false)
 
 const COR: Record<Fase, string> = {
@@ -144,15 +145,50 @@ export const detalhe = (i: Issue, comEspera = true): string => {
   return partes.join(' · ')
 }
 
+/** Um card que a pendência manda olhar, com o link dele no PedroOS; `feito` quando já fechou. */
+export type CardPendente = { n: number; texto: string; href: string; feito: boolean }
+
 /** Uma linha do bloco "Precisa de você": o link leva aonde você age. */
-export type Pendencia = { chave: string; cor: 'error' | 'warning'; marca: string; href: string; rotulo: string; texto: string }
+export type Pendencia = {
+  chave: string
+  cor: 'error' | 'warning'
+  marca: string
+  href: string
+  rotulo: string
+  texto: string
+  /** o motivo por extenso, como a Onda gravou */
+  detalhe?: string | null
+  cards?: CardPendente[]
+}
+
+/** Os cards que uma Onda cita no motivo (#N, fora o PRD dela) mais as issues dela em baixa. */
+export const cardsDaOnda = (o: EstadoOnda): number[] => {
+  const citados = [...(o.texto ?? '').matchAll(/#(\d+)/g)].map(m => Number(m[1])).filter(n => n !== o.prd)
+  return [...new Set([...(o.baixas ?? []), ...citados])]
+}
+
+/** Os números que as Ondas citam e que o OS não traz: o mod busca o título deles no GitHub. */
+export const cardsSemTitulo = (c: Coleta): number[] => {
+  const doOs = new Set([...(c.os?.prds ?? []).flatMap(p => [p.n, ...p.issues.map(i => i.n)]), ...(c.os?.soltas ?? []).map(i => i.n)])
+  const todos = (c.ondasEstado ?? []).flatMap(o => [...(o.prd ? [o.prd] : []), ...cardsDaOnda(o)])
+  return [...new Set(todos)].filter(n => !doOs.has(n))
+}
 
 /**
  * O que espera você, fora as migrations (que têm botão próprio): Onda que quebrou ou espera você,
- * Fatia humana aberta e PR com CI vermelho. A Onda vai à Ala "Ondas de todos"; a Fatia, ao PedroOS.
+ * Fatia humana aberta e PR com CI vermelho. A Onda traz o motivo por extenso e os cards que ele
+ * cita (o PRD e as issues), cada um com o link no PedroOS; a Fatia citada por uma Onda não se repete.
  */
-export const precisaDeVoce = (c: Coleta): Pendencia[] => {
+export const precisaDeVoce = (c: Coleta, citados: Record<string, CardCitado> = {}): Pendencia[] => {
   const repo = c.os?.repo ?? REPO
+  const issues = new Map([...(c.os?.prds ?? []).flatMap(p => p.issues), ...(c.os?.soltas ?? [])].map(i => [i.n, i]))
+  const prds = new Map((c.os?.prds ?? []).map(p => [p.n, p]))
+  const card = (n: number): CardPendente => {
+    const i = issues.get(n)
+    const titulo = i?.titulo ?? prds.get(n)?.titulo ?? (citados[n]?.titulo || null)
+    const aberto = i ? i.estado === 'OPEN' : (citados[n]?.aberto ?? true)
+    return { n, texto: `#${n}${i?.fase === 'humana' ? ' é sua' : ''}${titulo ? ` · ${titulo}` : ''}`, href: noOs(repo, n), feito: !aberto }
+  }
   const ondas = [...(c.ondasEstado ?? [])]
     .sort((a, b) => Number(b.estado === 'erro') - Number(a.estado === 'erro'))
     .map(o => ({
@@ -161,11 +197,14 @@ export const precisaDeVoce = (c: Coleta): Pendencia[] => {
       marca: o.estado === 'erro' ? '✗' : '!',
       href: ONDAS_DE_TODOS,
       rotulo: `Onda ${o.id}`,
-      texto: `${o.estado === 'erro' ? 'quebrou' : 'espera você'}${o.texto ? `: ${o.texto}` : ''}`,
+      texto: o.estado === 'erro' ? 'quebrou' : 'espera você',
+      detalhe: o.texto,
+      cards: [...(o.prd ? [{ ...card(o.prd), texto: card(o.prd).texto.replace(/^#/, 'PRD #') }] : []), ...cardsDaOnda(o).map(card)],
     }))
+  const naOnda = new Set(ondas.flatMap(o => o.cards.map(k => k.n)))
   const fatias = new Map<number, Pendencia>()
   for (const i of (c.os?.prds ?? []).flatMap(p => p.issues)) {
-    if (i.estado !== 'OPEN' || fatias.has(i.n)) continue
+    if (i.estado !== 'OPEN' || fatias.has(i.n) || naOnda.has(i.n)) continue
     const humana = i.fase === 'humana'
     if (!humana && !(i.fase === 'pr_aberto' && i.ci === 'vermelho')) continue
     fatias.set(i.n, {
@@ -788,6 +827,24 @@ async function copiarSql($: EngineInterface, m: Migration, surface: RenderSurfac
   }
 }
 
+const CARD_VALE_MS = 10 * 60_000
+
+/** Título e estado dos cards que as Ondas citam e o OS não traz (REST, até 10 por coleta, vale 10 min). */
+async function buscarCards($: EngineInterface, c: Coleta) {
+  const agora = await $.clock.now()
+  const ja = await read($, cards)
+  const faltam = cardsSemTitulo(c).filter(n => !ja[n] || agora - ja[n]!.em > CARD_VALE_MS).slice(0, 10)
+  if (!faltam.length) return
+  const novos: Record<string, CardCitado> = {}
+  for (const n of faltam) {
+    const r = await $.process.run(['gh', 'api', `repos/${REPO}/issues/${n}`, '--jq', '[.state, .title] | @tsv'], { timeoutMs: 15_000 })
+    const [estado, ...titulo] = r.exitCode === 0 ? r.stdout.trim().split('\t') : []
+    // falhou: guarda o que tinha, para não bater no GitHub a cada 10 s
+    novos[n] = estado ? { titulo: titulo.join(' '), aberto: estado === 'open', em: agora } : { ...(ja[n] ?? { titulo: '', aberto: true }), em: agora }
+  }
+  await update($, cards, v => ({ ...v, ...novos }))
+}
+
 async function coletar($: EngineInterface, fresco = false) {
   if (rodando) {
     frescoPendente ||= fresco
@@ -815,6 +872,7 @@ async function coletar($: EngineInterface, fresco = false) {
     ultimaAssinatura = a
     await update($, coleta, () => c)
     await update($, erro, () => (c.os ? null : 'Coletor do PedroOS sem resposta'))
+    await buscarCards($, c).catch(() => {})
 
     const novasSessoes = c.agentes.filter(a => !sessoesVistas.has(a.nome))
     novasSessoes.forEach(a => sessoesVistas.add(a.nome))
@@ -1022,7 +1080,7 @@ export const register: Register = on => {
 
     const p = pendentes(c)
     const recentes = aplicadasRecentes(c)
-    const pendencias = precisaDeVoce(c)
+    const pendencias = precisaDeVoce(c, await read($, cards))
     const prds = prdsVisiveis(c, mostrarTodos)
     const repo = c.os?.repo ?? REPO
     const linkIssue = (n: number) => <Link href={noOs(repo, n)} label={`#${n}`} />
@@ -1118,14 +1176,44 @@ export const register: Register = on => {
               </Text>
             </Box>
           ))}
+          {/* O link vai sozinho na linha de baixo: o terminal sem link clicável escreve a URL
+              inteira, e no meio da linha ela cortava o motivo. */}
           {pendencias.map(x => (
-            <Text key={x.chave} wrap="truncate-end">
-              {'  '}
-              <Text color={x.cor}>{x.marca} </Text>
-              <Link href={x.href} label={x.rotulo} />
-              <Text color={x.cor}> {x.texto}</Text>
-            </Text>
+            <Box key={x.chave} flexDirection="column">
+              <Text wrap="truncate-end">
+                {'  '}
+                <Text color={x.cor}>{x.marca} </Text>
+                <Text bold>{x.rotulo}</Text>
+                <Text color={x.cor}> {x.texto}</Text>
+              </Text>
+              {x.detalhe ? (
+                <Box paddingLeft={4}>
+                  <Text wrap="wrap">{x.detalhe}</Text>
+                </Box>
+              ) : null}
+              {(x.cards ?? [{ n: 0, texto: '', href: x.href, feito: false }]).map(k => (
+                <Box key={`${x.chave}-${k.n}`} flexDirection="column" paddingLeft={4}>
+                  {k.texto ? (
+                    <Text wrap="truncate-end" dimColor={k.feito}>
+                      → {k.feito ? '✓ fechado · ' : ''}
+                      {k.texto}
+                    </Text>
+                  ) : null}
+                  {!k.feito && (
+                    <Text wrap="truncate-end" dimColor>
+                      {k.texto ? '  ' : ''}
+                      <Link href={k.href} />
+                    </Text>
+                  )}
+                </Box>
+              ))}
+            </Box>
           ))}
+          {pendencias.some(x => x.cards) && (
+            <Text key="fechar" dimColor wrap="truncate-end">
+              {'  '}Feito o que a Onda pede, feche ela na <Link href={ONDAS_DE_TODOS} label="Ala Ondas" />
+            </Text>
+          )}
           {p.length === 0 && pendencias.length === 0 && <Text color="success">{'  '}✓ Nada espera você</Text>}
           {recentes.length > 0 && (
             <Text key="aplicadas" color="success" dimColor wrap="truncate-end">
