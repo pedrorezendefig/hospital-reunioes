@@ -2,6 +2,51 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-11-12T23:50:22-03:00",
+      "sha": "93d1854b9e510437488ecddad78178ecbc4727af",
+      "app_version": "0.268.0",
+      "subject": "Onda hsm-conector-onda1: Dossiê do caso da Ouvidoria, com registro de acesso",
+      "raw_subject": "chore(deploy): registro da onda hsm-conector-onda1 (#1664)",
+      "scope": [
+        "backend"
+      ],
+      "prds": [
+        1571
+      ],
+      "result": "healthy",
+      "duration_seconds": 286,
+      "services_touched": [
+        "backend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        },
+        {
+          "service": "frontend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "onda-enxuta hsm-conector-onda1: PR #1664 (issue #1612), mergeados PR a PR. Merge pela API do GitHub, um build. Registro pela Action pos-merge depois do health.",
+      "etapas": {
+        "merge_s": 2,
+        "build_s": {
+          "backend": 16
+        },
+        "health_s": 10
+      },
+      "responsavel": "pedrorezendefig"
+    },
+    {
       "at": "2026-11-12T23:46:52-03:00",
       "sha": "d04e6b3c96a56ec3a473ace6ec827aaa3dffa32c",
       "app_version": "0.267.0",
