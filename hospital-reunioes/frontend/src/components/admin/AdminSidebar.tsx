@@ -6,6 +6,7 @@ import { Logo } from "@/components/ui/Logo";
 import { useCurrentParticipante } from "@/hooks/useCurrentParticipante";
 import { isSuperAdmin } from "@/lib/auth";
 import { BotaoRecolherMenu } from "@/components/layout/BotaoRecolherMenu";
+import { ItemManual } from "@/components/layout/ItemManual";
 import { useMenuRecolhido } from "@/hooks/useMenuRecolhido";
 import {
   Users,
@@ -184,6 +185,7 @@ export function AdminSidebar({
       </nav>
 
       <div
+        data-rodape-do-menu
         className={`border-t border-border space-y-1 ${recolhido ? "p-2" : "p-4"}`}
       >
         <Link
@@ -199,6 +201,7 @@ export function AdminSidebar({
             Voltar ao app
           </span>
         </Link>
+        <ItemManual recolhido={recolhido} onNavigate={onNavigate} />
         {variant === "desktop" && (
           <BotaoRecolherMenu
             recolhido={recolhido}

@@ -29,6 +29,7 @@ import {
 import { Home, CalendarPlus } from "lucide-react";
 import { DistintivoDeNovidades } from "@/components/layout/DistintivoDeNovidades";
 import { BotaoRecolherMenu } from "@/components/layout/BotaoRecolherMenu";
+import { ItemManual } from "@/components/layout/ItemManual";
 import { useMenuRecolhido } from "@/hooks/useMenuRecolhido";
 import type { ContagemDeNovidades } from "@/lib/ouvidoria/novidades";
 
@@ -301,7 +302,11 @@ export function Sidebar({
         className={`hidden md:flex ${recolhido ? "w-16" : "w-64"} min-h-screen bg-gradient-to-b from-surface to-bg border-r border-border flex-col`}
       >
         {content}
-        <div className={`border-t border-border ${recolhido ? "p-2" : "p-4"}`}>
+        <div
+          data-rodape-do-menu
+          className={`border-t border-border space-y-1 ${recolhido ? "p-2" : "p-4"}`}
+        >
+          <ItemManual recolhido={recolhido} />
           <BotaoRecolherMenu
             recolhido={recolhido}
             onAlternar={alternarRecolhido}
@@ -314,6 +319,9 @@ export function Sidebar({
   return (
     <div className="flex flex-col h-full bg-gradient-to-b from-surface to-bg">
       {content}
+      <div data-rodape-do-menu className="border-t border-border p-4">
+        <ItemManual recolhido={false} onNavigate={onNavigate} />
+      </div>
     </div>
   );
 }

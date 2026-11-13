@@ -184,12 +184,16 @@ describe("a largura do sidebar é a que o orçamento da Ouvidoria supõe", () =>
 });
 
 /**
- * O menu sem o item Ajuda: o Manual do usuário saiu da plataforma em
- * 05/11/2026 e o site dele saiu do ar. Cada caso confere a lista inteira de
- * links do menu, porque é a lista que prova que a montagem esperada foi a que
- * rodou e que nenhum link para o site apagado sobrou no fim.
+ * O item Manual (issue #1718, ADR 0094, decisão 1). Ele mora no rodapé da
+ * barra, acima do botão de recolher, e não na lista de links do menu: por isso
+ * cada caso confere as duas coisas. A lista inteira de links prova que o menu
+ * de cada variante continua o mesmo (e que nenhum link para o site antigo do
+ * manual voltou), e o rodapé prova que o Manual está lá, levando a /manual.
  */
-describe("Sidebar sem o item Ajuda", () => {
+describe.each([
+  ["computador", "desktop" as const],
+  ["gaveta do celular", "drawer" as const],
+])("Sidebar com o item Manual no %s", (_rotulo, variant) => {
   it.each([
     [
       "padrão",
@@ -207,7 +211,7 @@ describe("Sidebar sem o item Ajuda", () => {
       ["POPs"],
     ],
   ] as const)(
-    "no menu %s não há item Ajuda, e o resto do menu é o da variante",
+    "no menu %s o Manual fica no rodapé, e o resto do menu é o da variante",
     (_nome, papeis, linksEsperados) => {
       sessao.participante = {
         id: "p1",
@@ -216,7 +220,7 @@ describe("Sidebar sem o item Ajuda", () => {
         ...papeis,
       } as CurrentParticipante;
 
-      render(<Sidebar />);
+      const { container } = render(<Sidebar variant={variant} />);
 
       const menu = screen.getByRole("navigation");
       expect(
@@ -224,8 +228,28 @@ describe("Sidebar sem o item Ajuda", () => {
           .getAllByRole("link")
           .map((link) => link.textContent?.trim())
       ).toEqual([...linksEsperados]);
+
+      const manual = screen.getByRole("link", { name: "Manual" });
+      expect(manual.getAttribute("href")).toBe("/manual");
+      expect(menu.contains(manual)).toBe(false);
+      expect(container.querySelector("[data-rodape-do-menu]")?.contains(manual)).toBe(true);
     }
   );
+});
+
+it("no computador, o Manual fica logo acima do botão de recolher", () => {
+  sessao.participante = {
+    id: "p1",
+    nome_completo: "Fulana de Tal",
+    email: "fulana@hsm",
+    access_profile: "regular",
+  };
+
+  render(<Sidebar />);
+
+  const manual = screen.getByRole("link", { name: "Manual" });
+  const recolher = screen.getByRole("button", { name: "Recolher menu" });
+  expect(manual.nextElementSibling).toBe(recolher);
 });
 
 /**
