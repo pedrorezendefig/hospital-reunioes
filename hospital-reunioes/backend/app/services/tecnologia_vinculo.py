@@ -951,13 +951,16 @@ def corpo_da_issue_do_bug(
 
     A primeira linha e a frase de resumo do modelo (issue #1532, ADR 0083,
     decisao 9), ou o titulo quando o resumo nao a tem.
+
+    Com as seis partes de quem programa no resumo (issue #1634), o bloco "Para
+    o desenvolvedor" entra logo depois do bloco do diretor, como no PRD.
     """
     rotulos = [(rotulo, _linha_do_prd(resumo.get(campo))) for campo, rotulo in ROTULOS_DO_BUG.items()]
     esperado = dict(rotulos)["O que esperava"]
     o_que_muda = esperado if esperado and esperado != NAO_INFORMADO else _linha_do_prd(resumo.get("titulo"))
     criterios = [item for item in (_linha_do_prd(c) for c in resumo.get("criterios") or []) if item]
     frase = _linha_do_prd(resumo.get("frase")) or _linha_do_prd(resumo.get("titulo"))
-    return "\n".join(
+    corpo = "\n".join(
         [
             frase,
             "",
@@ -988,6 +991,8 @@ def corpo_da_issue_do_bug(
             marcador_da_demanda(demanda_id),
         ]
     )
+    bloco = bloco_do_desenvolvedor(resumo.get("para_o_desenvolvedor"))
+    return inserir_bloco_do_desenvolvedor(corpo, bloco) if bloco else corpo
 
 
 # ─── 2c. A mencao do GitHub no texto do diretor (issues #680 e #772) ─────────
