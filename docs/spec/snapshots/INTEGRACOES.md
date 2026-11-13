@@ -1,12 +1,12 @@
 # INTEGRACOES.md
 <!-- gerado automaticamente por /snapshot — não editar -->
-<!-- last_update: 2026-11-13T14:18+0000 -->
+<!-- last_update: 2026-11-13T14:23+0000 -->
 
 Serviços externos usados pelo Hospital Reuniões. Secrets configurados no Coolify (não no git).
 
 ## Anthropic
 **Pra que serve:** IA de texto do app inteiro desde a issue #1302 (Atas, POP, Ouvidoria, Assistente de Tecnologia, Contas médicas), pelo LLM_MODEL e pelos CM_IA_MODELO_PASSO_A/B (default claude-sonnet-5-5 no código; em produção estão em claude-opus-5-5 no Coolify, conferido em 09/11/2026), a recomendação da Validação pelo CM_IA_MODELO_VALIDACAO (claude-sonnet-5-5, ADR 0082), e o Planejamento da Demanda pelo LLM_MODEL_PLANEJAMENTO, claude-opus-5-5 (ADR 0075). Retenção padrão da API (até 30 dias, sem treino), sem ZDR (ADR 0074)
-**Onde aparece no código:** `app/services/contas_medicas/ia.py`, `app/services/ai_processor.py`
+**Onde aparece no código:** `app/services/ai_processor.py`, `app/services/contas_medicas/ia.py`
 **Secret/env primária:** `ANTHROPIC_API_KEY`
 
 ## OpenRouter
@@ -16,13 +16,13 @@ Serviços externos usados pelo Hospital Reuniões. Secrets configurados no Cooli
 
 ## ClickSign
 **Pra que serve:** Assinatura digital de atas (sandbox em dev, app em prod)
-**Onde aparece no código:** `app/config.py`, `app/cron/scheduler.py`, `app/services/reconciliacao_service.py`
+**Onde aparece no código:** `app/services/reuniao_email_service.py`, `app/services/aceite_service.py`, `app/services/pops_clicksign_service.py`
 **Secret/env primária:** `CLICKSIGN_API_KEY`
 **Variáveis relacionadas:** `CLICKSIGN_BASE_URL`, `CLICKSIGN_WEBHOOK_SECRET`
 
 ## Resend
 **Pra que serve:** Emails transacionais e SMTP do Supabase Auth
-**Onde aparece no código:** `app/config.py`, `app/services/email_service.py`
+**Onde aparece no código:** `app/services/email_service.py`, `app/config.py`
 **Secret/env primária:** `RESEND_API_KEY`
 **Variáveis relacionadas:** `RESEND_FROM_EMAIL`, `RESEND_INBOUND_API_KEY`, `RESEND_INBOUND_BASE_URL`, `RESEND_WEBHOOK_SECRET`
 

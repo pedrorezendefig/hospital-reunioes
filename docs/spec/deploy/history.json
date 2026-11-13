@@ -2,6 +2,52 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-11-13T11:22:49-03:00",
+      "sha": "ff4f333ade6ee77f8f0857842fa5a5dc2b04937c",
+      "app_version": "0.281.1",
+      "subject": "Onda pendencias-1113: Fable 5.2 em esforço high, inclusive no planejamento; Bump docker/login-action from 4.7.0 to 4.8.0 in the actions group across 1 directory; Bump the backend group across 1 direct",
+      "raw_subject": "chore(deploy): registro da onda pendencias-1113 (#1708 #1603 #1605 #1651)",
+      "scope": [
+        "backend",
+        "frontend"
+      ],
+      "prds": [],
+      "result": "healthy",
+      "duration_seconds": 380,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        },
+        {
+          "service": "frontend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "onda-enxuta pendencias-1113: PR #1708 (sem issue), PR #1603 (sem issue), PR #1605 (sem issue), PR #1651 (sem issue), mergeados PR a PR. Merge pela API do GitHub, um build. Registro pela Action pos-merge depois do health.",
+      "etapas": {
+        "merge_s": 12,
+        "build_s": {
+          "backend": 46,
+          "frontend": 265
+        },
+        "health_s": 0
+      },
+      "responsavel": "pedrorezendefig"
+    },
+    {
       "at": "2026-11-13T05:42:52-03:00",
       "sha": "887762adef125c34846b0ffb3750225e72df7068",
       "app_version": "0.281.0",
