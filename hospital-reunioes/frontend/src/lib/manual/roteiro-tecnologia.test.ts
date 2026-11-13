@@ -27,9 +27,9 @@ const ROTEIRO = join(PASTA, "roteiro.sh");
 const SEED_CRU = readFileSync(join(PASTA, "seed.json"), "utf8");
 const SEED = JSON.parse(SEED_CRU);
 
-/** Os PNGs que o roteiro grava: o último argumento de cada `print` e `print_tela`. */
+/** Os PNGs que o roteiro grava: o último argumento de cada `print`, `print_tela` e `print_pagina`. */
 function imagensDoRoteiro(texto: string): string[] {
-  return Array.from(texto.matchAll(/^\s*print(?:_tela)?\s.*"([^"/]+\.png)"\s*$/gm), (m) => m[1]);
+  return Array.from(texto.matchAll(/^\s*print(?:_tela|_pagina)?\s.*"([^"/]+\.png)"\s*$/gm), (m) => m[1]);
 }
 
 /** A tabela que o roteiro serve no lugar do backend: a rota (depois de `/api/admin/tecnologia/`) e o corpo. */
@@ -117,16 +117,14 @@ describe("a tabela de respostas da aba Tecnologia", () => {
     expect(daAna.map((d) => d.id).sort()).toEqual(lista.filter((d) => d.projeto === "ana").map((d) => d.id).sort());
   });
 
-  it("cada pedido do diretor abre com uma conversa que a tela aceita, e cada card com a Conversa da Demanda", () => {
+  it("cada pedido do diretor abre com uma conversa que a tela aceita, e todo pedido com a Conversa da Demanda", () => {
     for (const demanda of lista) {
       if (demanda.origem !== "vitta") {
         expect(conversaValida(T[`chat/${demanda.id}`]), `a conversa de ${demanda.id} não serve`).toBe(true);
       }
-      if (demanda.tem_vinculo) {
-        expect(T[`chat/${demanda.id}/conversa`], `falta a Conversa da Demanda de ${demanda.id}`).toMatchObject({
-          mensagens: expect.any(Array),
-        });
-      }
+      expect(T[`chat/${demanda.id}/conversa`], `falta a Conversa da Demanda de ${demanda.id}`).toMatchObject({
+        mensagens: expect.any(Array),
+      });
     }
   });
 
@@ -159,9 +157,9 @@ describe("o seed e as respostas da página de Tecnologia", () => {
 });
 
 describe("os detectores do roteiro e do dado real", () => {
-  it("o print de um pedaço e o da tela inteira contam como imagem do roteiro", () => {
-    const texto = 'print "$(bloco x)" "bloco.png"\nprint_tela "tela.png"\n# print "velho.png"';
-    expect(imagensDoRoteiro(texto)).toEqual(["bloco.png", "tela.png"]);
+  it("o print de um pedaço, o da tela e o da página inteira contam como imagem do roteiro", () => {
+    const texto = 'print "$(bloco x)" "bloco.png"\nprint_tela "tela.png"\nprint_pagina "inteira.png"\n# print "velho.png"';
+    expect(imagensDoRoteiro(texto)).toEqual(["bloco.png", "tela.png", "inteira.png"]);
   });
 
   it("e-mail de verdade, telefone, endereço de fora e nome real são pegos, em maiúscula ou minúscula", () => {

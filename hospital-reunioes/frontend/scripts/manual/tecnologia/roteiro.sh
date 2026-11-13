@@ -41,11 +41,12 @@ pw() {
 # Espera um texto aparecer e a tela assentar. O selo do Next, que só existe
 # com o app rodando em modo de desenvolvimento, sai do print.
 esperar() {
-  pw run-code "async page => { await page.getByText('$1', { exact: true }).first().waitFor(); await page.addStyleTag({ content: 'nextjs-portal { display: none !important }' }); await page.waitForTimeout(1200) }"
+  pw run-code "async page => { await page.getByText('$1', { exact: true }).first().waitFor(); await page.addStyleTag({ content: 'nextjs-portal { display: none !important }' }); await page.evaluate(() => window.scrollTo(0, 0)); await page.waitForTimeout(1200) }"
 }
 
 # Fotografa a tela inteira ou um pedaço dela, e salva o PNG ao lado do Markdown.
 print_tela() { pw screenshot --filename="$SAIDA/$1"; echo "  $1"; }
+print_pagina() { pw screenshot --full-page --filename="$SAIDA/$1"; echo "  $1"; }
 print() { pw screenshot "$1" --filename="$SAIDA/$2"; echo "  $2"; }
 bloco() { echo "getByRole('region', { name: '$1', exact: true })"; }
 
@@ -84,7 +85,7 @@ print_tela "quadro.png"
 pw run-code "async page => { await page.getByRole('button', { name: /Painel de Contas médicas por convênio/ }).click() }"
 esperar "Henrique, as duas primeiras partes já estão no ar. A próxima traz o filtro de período."
 print_tela "pedido-no-painel.png"
-pw press Escape
+pw run-code "async page => { await page.getByRole('button', { name: 'Fechar o pedido' }).click() }"
 
 # Filtrar por Projeto: o campo Projeto em Ana.
 pw run-code "async page => { await page.getByRole('combobox', { name: 'Projeto' }).click(); await page.getByRole('option', { name: 'Ana', exact: true }).click() }"
@@ -98,13 +99,18 @@ pw run-code "async page => { await page.getByRole('button', { name: 'Novo pedido
 esperar "Isso é um bug, algo que não funciona como deveria, ou uma melhoria?"
 print_tela "novo-pedido.png"
 
+# Na tela de 1440 a conversa, o Documento do pedido e a Conversa da Demanda
+# dividem a largura, e o cartão da pergunta fica estreito: este print sai mais largo.
+pw resize 1920 1080
 pw goto "$TECNOLOGIA?demanda=$(seed "['abrir']['melhoria']")"
 esperar "Quem recebe o aviso?"
+pw run-code "async page => { await page.getByText('Quem recebe o aviso?', { exact: true }).evaluate(e => e.scrollIntoView({ block: 'start' })); await page.evaluate(() => window.scrollTo(0, 0)); await page.waitForTimeout(400) }"
 print_tela "pergunta-da-melhoria.png"
+pw resize 1440 900
 
 pw goto "$TECNOLOGIA?demanda=$(seed "['abrir']['bug']")"
 esperar "Resumo do bug"
-print_tela "resumo-do-bug.png"
+print_pagina "resumo-do-bug.png"
 
 # Ver as Entregas: o ritmo das 12 semanas e a lista com uma entrega aberta.
 pw goto "$TECNOLOGIA"
@@ -112,7 +118,7 @@ esperar "Novo pedido"
 pw run-code "async page => { await page.getByRole('tab', { name: 'Entregas' }).click() }"
 esperar "Ver semanas anteriores"
 print "$(bloco "Ritmo das entregas")" "entregas-ritmo.png"
-pw run-code "async page => { await page.getByText('Filtro de Projeto no Quadro da Tecnologia').first().click(); await page.waitForTimeout(600) }"
+pw run-code "async page => { await page.getByRole('region', { name: 'O que foi entregue' }).getByText('Filtro de Projeto no Quadro da Tecnologia').click(); await page.waitForTimeout(600) }"
 print "$(bloco "O que foi entregue")" "entregas-lista.png"
 
 pw close

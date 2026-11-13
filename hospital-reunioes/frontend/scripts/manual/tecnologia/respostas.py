@@ -120,12 +120,11 @@ def conversas(lista: list[dict]) -> dict:
     tabela: dict[str, dict] = {}
     for d in lista:
         if d["origem"] != "vitta":
-            pedido = {"autor": "diretor", "texto": f"Quero {d['titulo'][0].lower()}{d['titulo'][1:]}."}
             tabela[f"chat/{d['id']}"] = conversa(
-                d["id"], "enviado" if d["tem_vinculo"] else "em_andamento", [pedido], responsavel=d["responsavel"]
+                d["id"], "enviado" if d["tem_vinculo"] else "em_andamento", [], responsavel=d["responsavel"]
             )
-        if d["tem_vinculo"]:
-            tabela[f"chat/{d['id']}/conversa"] = {"mensagens": [], "mencionaveis": []}
+        # A Conversa da Demanda aparece em todo pedido aberto, com card ou sem.
+        tabela[f"chat/{d['id']}/conversa"] = {"mensagens": [], "mencionaveis": []}
 
     melhoria = SEED["melhoria"]
     tabela[f"chat/{abrir['melhoria']}"] = conversa(
