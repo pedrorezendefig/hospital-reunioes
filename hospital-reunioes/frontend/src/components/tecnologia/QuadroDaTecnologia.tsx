@@ -67,7 +67,10 @@ function PartesNoCardCompacto({ demanda }: { demanda: Demanda }) {
   );
 }
 
-/** Um card do Quadro: um botão só, que abre a Demanda. */
+/**
+ * Um card do Quadro: um botão só, que abre a Demanda. O `data-demanda` é por
+ * onde o painel devolve o foco ao card quando fecha (issue #1643).
+ */
 function CardDoQuadro({ demanda, onAbrir }: { demanda: Demanda; onAbrir: () => void }) {
   const idDosDetalhes = useId();
   const numero = nomeDoNumero(demanda);
@@ -77,6 +80,7 @@ function CardDoQuadro({ demanda, onAbrir }: { demanda: Demanda; onAbrir: () => v
     <button
       type="button"
       onClick={onAbrir}
+      data-demanda={demanda.id}
       aria-label={nomeDoCard(demanda)}
       aria-describedby={idDosDetalhes}
       className="w-full flex flex-col gap-2 p-3 rounded-xl border border-border bg-white text-left shadow-sm transition duration-150 ease-out motion-reduce:transition-none hover:border-primary/40 hover:shadow-md focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"

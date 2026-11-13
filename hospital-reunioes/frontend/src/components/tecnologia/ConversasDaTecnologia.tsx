@@ -135,6 +135,8 @@ export const VOLTAR_PARA_A_LISTA = "Voltar às conversas";
 export const NOVO_PEDIDO = "Novo pedido";
 export const VOLTAR_AO_QUADRO = "Voltar ao quadro";
 export const AMPLIAR = "Ampliar";
+/** O fechar do painel à direita do Quadro (issue #1643). */
+export const FECHAR_O_PAINEL = "Fechar o pedido";
 /** O link de uma Demanda que quem abriu não pode ver (issue #1586): sem título nem número. */
 export const SEM_ACESSO = "Você não tem acesso a esta Demanda";
 const AMPLIAR_EXPLICADO = "Abrir este pedido em tela cheia";
@@ -863,6 +865,8 @@ export function ConversasDaTecnologia({
   const [ampliada, setAmpliada] = useState(false);
   /** Na tela larga, a Demanda aberta no painel à direita, com o Quadro atrás (issue #1643). */
   const [noPainel, setNoPainel] = useState(false);
+  /** O Quadro, onde o painel procura o card para devolver o foco quando fecha. */
+  const quadroRef = useRef<HTMLDivElement>(null);
   const [desenvolvedor, setDesenvolvedor] = useState(false);
   /** Nulo até o servidor dizer quem está logado: o Desenvolvedor abre em Para mim. */
   const [filtro, setFiltro] = useState<Filtro | null>(null);
@@ -995,6 +999,34 @@ export function ConversasDaTecnologia({
     [escreverNoEndereco, largo],
   );
 
+  /** Fecha o painel, tira a Demanda do endereço e devolve o foco ao card que o abriu. */
+  const fecharPainel = useCallback(() => {
+    const id = aberta?.id;
+    escreverNoEndereco(null);
+    setNoPainel(false);
+    setAberta(null);
+    setDestacada(null);
+    const cards = quadroRef.current?.querySelectorAll<HTMLElement>("[data-demanda]") ?? [];
+    Array.from(cards)
+      .find((card) => card.dataset.demanda === id)
+      ?.focus();
+  }, [aberta, escreverNoEndereco]);
+
+  const painelAberto = largo && naTela === "lista" && noPainel && aberta !== null;
+
+  // Esc fecha o painel. Fica de fora o Esc que outra peça já tratou (a lista de
+  // nomes da Conversa) e o de um diálogo por cima, como a confirmação do Apagar.
+  useEffect(() => {
+    if (!painelAberto) return;
+    function aoTeclar(evento: KeyboardEvent) {
+      if (evento.key !== "Escape" || evento.defaultPrevented) return;
+      if (document.querySelector('[role="dialog"][aria-modal="true"]')) return;
+      fecharPainel();
+    }
+    document.addEventListener("keydown", aoTeclar);
+    return () => document.removeEventListener("keydown", aoTeclar);
+  }, [painelAberto, fecharPainel]);
+
   const filtroAtivo = Boolean(textoDaBusca.trim() || tipo || etapa || origem || responsavel || envioFalhou);
 
   /** Volta a barra ao padrão. O recorte fica: ele é a vista do Desenvolvedor, não um filtro. */
@@ -1020,6 +1052,7 @@ export function ConversasDaTecnologia({
     escreverNoEndereco(null);
     setAberta(null);
     setDestacada(null);
+    setNoPainel(false);
     setChave((atual) => atual + 1);
     setNaTela("lista");
     carregar();
@@ -1067,6 +1100,7 @@ export function ConversasDaTecnologia({
     setAberta(null);
     setDestacada(null);
     setAmpliada(false);
+    setNoPainel(false);
     setNaTela("conversa");
   }, [demandaInicial, demandas, filtro, desenvolvedor, filtroAtivo, abrir]);
 
@@ -1208,7 +1242,7 @@ export function ConversasDaTecnologia({
         <div className={`${naTela === "lista" ? "" : "hidden"} ${recolhida ? "md:hidden" : "md:block"}`}>
           {largo ? (
             quadroAVista && (
-              <div className="space-y-3">
+              <div ref={quadroRef} className="space-y-3">
                 {estadoDaLista}
                 {demandas !== null && <QuadroDaTecnologia demandas={demandas} onAbrir={(demanda) => abrir(demanda)} />}
               </div>
@@ -1310,7 +1344,7 @@ export function ConversasDaTecnologia({
         )}
       </div>
 
-      {quadroAVista && noPainel && aberta && (
+      {painelAberto && aberta && (
         <aside
           aria-label="Pedido aberto"
           className="fixed inset-y-0 right-0 z-40 w-[min(40rem,100vw)] overflow-y-auto border-l border-border bg-bg shadow-premium-strong p-5 space-y-3"
@@ -1329,6 +1363,15 @@ export function ConversasDaTecnologia({
             >
               <Maximize2 className="w-4 h-4" />
               {AMPLIAR}
+            </button>
+            <button
+              type="button"
+              onClick={fecharPainel}
+              aria-label={FECHAR_O_PAINEL}
+              title={FECHAR_O_PAINEL}
+              className="w-9 h-9 inline-flex items-center justify-center rounded-xl text-text-secondary hover:bg-slate-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+            >
+              <X className="w-4 h-4" />
             </button>
           </div>
           {acoesDaDemanda}

@@ -21,6 +21,7 @@ import { ABERTURA, SEM_CONVERSA_GUARDADA } from "./ChatDaTecnologia";
 import {
   AMPLIAR,
   ConversasDaTecnologia,
+  FECHAR_O_PAINEL,
   NOVA_CONVERSA,
   NOVO_PEDIDO,
   SEM_ACESSO,
@@ -1760,5 +1761,53 @@ describe("O card do Quadro abre num painel à direita (issue #1643, ADR 0090, de
     const painel = await screen.findByRole("complementary", { name: "Pedido aberto" });
     expect(await within(painel).findByRole("heading", { level: 2, name: "Aviso da ata por e-mail" })).toBeTruthy();
     expect(screen.getByRole("region", { name: "Quadro" })).toBeTruthy();
+  });
+
+  it("o botão de fechar fecha o painel e devolve o foco ao card", async () => {
+    comOQuadro();
+    await screen.findByRole("region", { name: "Quadro" });
+    fireEvent.click(cardDe(/Aviso da ata por e-mail/));
+    const painel = await screen.findByRole("complementary", { name: "Pedido aberto" });
+
+    fireEvent.click(within(painel).getByRole("button", { name: FECHAR_O_PAINEL }));
+
+    expect(screen.queryByRole("complementary", { name: "Pedido aberto" })).toBeNull();
+    expect(document.activeElement).toBe(cardDe(/Aviso da ata por e-mail/));
+    expect(demandaDaUrl()).toBeNull();
+  });
+
+  it("Esc fecha o painel e devolve o foco ao card", async () => {
+    comOQuadro();
+    await screen.findByRole("region", { name: "Quadro" });
+    fireEvent.click(cardDe(/Aviso da ata por e-mail/));
+    const painel = await screen.findByRole("complementary", { name: "Pedido aberto" });
+    await within(painel).findByRole("textbox", { name: "Mensagem para a Conversa" });
+
+    fireEvent.keyDown(document.activeElement ?? document.body, { key: "Escape" });
+
+    expect(screen.queryByRole("complementary", { name: "Pedido aberto" })).toBeNull();
+    expect(document.activeElement).toBe(cardDe(/Aviso da ata por e-mail/));
+  });
+
+  it("com a lista de nomes da Conversa aberta, o Esc fecha só a lista, e o painel fica", async () => {
+    telaLarga();
+    montar((url) => {
+      if (url === LISTA) return { status: 200, corpo: [ACOMPANHADA] };
+      if (url === `${LISTA}/p-1`) return { status: 200, corpo: conversa("p-1", { estado: "enviado" }) };
+      if (url === `${LISTA}/p-1/conversa`)
+        return { status: 200, corpo: { mensagens: [], mencionaveis: [{ id: "u-1", nome: "Pedro Rezende" }] } };
+      return { status: 404, corpo: {} };
+    });
+    await screen.findByRole("region", { name: "Quadro" });
+    fireEvent.click(cardDe(/Aviso da ata por e-mail/));
+    const painel = await screen.findByRole("complementary", { name: "Pedido aberto" });
+    const caixa = await within(painel).findByRole("textbox", { name: "Mensagem para a Conversa" });
+    fireEvent.change(caixa, { target: { value: "@ped", selectionStart: 4 } });
+    expect(await within(painel).findByRole("listbox", { name: "Quem vê este pedido" })).toBeTruthy();
+
+    fireEvent.keyDown(caixa, { key: "Escape" });
+
+    expect(within(painel).queryByRole("listbox", { name: "Quem vê este pedido" })).toBeNull();
+    expect(screen.getByRole("complementary", { name: "Pedido aberto" })).toBeTruthy();
   });
 });
