@@ -147,7 +147,7 @@ function Desenho({ fluxo }: { fluxo: Fluxo }) {
               escondido={escondido}
               aoEntrar={() => setRealce(p.id)}
               aoSair={() => setRealce((r) => (r === p.id ? null : r))}
-              aoTocar={() => setRealce((r) => (r === p.id ? null : p.id))}
+              aoTocar={() => setRealce(p.id)}
             />
           ))}
         </svg>
@@ -258,7 +258,7 @@ function DesenhoDoPasso({
         transition: "opacity 200ms ease-out",
         opacity: escondido ? 0 : apagado ? 0.3 : 1,
         animation:
-          atraso !== null && !escondido ? `fluxograma-passo ${DURACAO_DO_PASSO}ms ease-out ${atraso}ms both` : undefined,
+          atraso !== null && !escondido ? `fluxograma-passo ${DURACAO_DO_PASSO}ms ease-out ${atraso}ms backwards` : undefined,
       }}
     >
       {forma === "decisao" ? (

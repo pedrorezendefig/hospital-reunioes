@@ -121,7 +121,7 @@ describe("a entrada do fluxograma", () => {
     const atrasoDe = (id: string) => {
       const animacao = (container.querySelector(`[data-passo="${id}"]`) as SVGElement).style.animation;
       expect(animacao).toContain("fluxograma-passo");
-      return Number(/ (\d+)ms both/.exec(animacao)![1]);
+      return Number(/ (\d+)ms backwards/.exec(animacao)![1]);
     };
     const ordem = ["abrir", "pauta", "quorum", "ata", "remarcar"];
     const atrasos = ordem.map(atrasoDe);
@@ -145,6 +145,20 @@ describe("a entrada do fluxograma", () => {
     expect(elementos.filter((el) => el.style.animation)).toEqual([]);
     expect(elementos.filter((el) => el.getAttribute("stroke-dasharray"))).toEqual([]);
     for (const passo of container.querySelectorAll<SVGElement>("[data-passo]")) expect(passo.style.opacity).toBe("1");
+  });
+
+  it("com a entrada animada, o passo fora do caminho fica apagado depois que a animação acaba", () => {
+    simularTela();
+    const { container } = desenhar(REUNIAO);
+    fireEvent.mouseEnter(container.querySelector('[data-passo="ata"]')!);
+
+    const remarcar = container.querySelector<SVGElement>('[data-passo="remarcar"]')!;
+    expect(remarcar.style.opacity).toBe("0.3");
+    // Animação CSS ganha do style inline: o quadro final (opacity 1) não pode ficar valendo
+    // depois da entrada, senão o 0.3 nunca aparece. `backwards` só segura o quadro inicial no atraso.
+    expect(remarcar.style.animation).toContain("fluxograma-passo");
+    expect(remarcar.style.animation.split(" ")).toContain("backwards");
+    expect(remarcar.style.animation).not.toMatch(/\b(both|forwards)\b/);
   });
 
   it("no celular, a grade desce para uma coluna na ordem do fluxo", () => {
@@ -196,6 +210,23 @@ describe("o hover e o Percorrer", () => {
       "O Secretário escolhe os itens da semana.",
     );
     expect(estado(container, "data-passo").remarcar).toBe("sim");
+  });
+
+  it("tocar no passo mostra o detalhe mesmo com o mouseenter que o navegador dispara antes do clique", () => {
+    const { container } = desenhar(REUNIAO);
+    const pauta = container.querySelector('[data-passo="pauta"]')!;
+
+    // No toque do Android, e no clique do computador com o mouse em cima, o mouseenter vem antes do click.
+    fireEvent.mouseEnter(pauta);
+    fireEvent.click(pauta);
+    expect(container.querySelector("[data-detalhe]")!.textContent).toContain(
+      "O Secretário escolhe os itens da semana.",
+    );
+    expect(pauta.getAttribute("data-realcado")).toBe("sim");
+
+    // Tocar de novo no mesmo passo não apaga o detalhe.
+    fireEvent.click(pauta);
+    expect(container.querySelector("[data-detalhe]")!.textContent).toContain("Montar a pauta");
   });
 
   it("Percorrer acende um passo de cada vez, com Anterior e Próximo", () => {
