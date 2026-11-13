@@ -277,10 +277,13 @@ describe("a barra de atalhos numa linha só (RN-77, D-16)", () => {
 
     const nav = screen.getByRole("navigation", { name: /atalhos da ouvidoria/i });
     expect(nav.className).toContain("hidden");
-    // `lg`, e não `md`: o sidebar do AppShell entra no `md` e come 256px da
-    // linha, e a barra não cabia nos 384px que sobravam (issue #489). A conta
-    // e o teto vivem em `lib/ouvidoria/atalhos`.
-    expect(nav.className).toContain("lg:flex");
+    // Nem `md` nem `lg`: o sidebar do AppShell entra no `md` e come 256px da
+    // linha, e a barra não cabia nos 384px que sobravam (issue #489); com a
+    // sexta porta, a das Avaliações, ela também não cabe a 1024px e subiu
+    // para o `xl` (issue #1626). A conta e o teto vivem em
+    // `lib/ouvidoria/atalhos`.
+    expect(nav.className).toContain(`${BREAKPOINT_DA_BARRA}:flex`);
+    expect(BREAKPOINT_DA_BARRA).toBe("xl");
     // Uma linha só: o contêiner não pode ter permissão para quebrar.
     expect(nav.className).not.toContain("flex-wrap");
   });
@@ -292,7 +295,7 @@ describe("a barra de atalhos numa linha só (RN-77, D-16)", () => {
 
     const nav = screen.getByRole("navigation", { name: /atalhos da ouvidoria/i });
     const pilulas = within(nav).getAllByRole("link");
-    expect(pilulas).toHaveLength(5);
+    expect(pilulas).toHaveLength(6);
     for (const pilula of pilulas) {
       expect(pilula.className).toContain("whitespace-nowrap");
     }
@@ -342,7 +345,7 @@ describe("no celular os atalhos colapsam em menu (RN-77)", () => {
     const gatilho = gatilhoDosAtalhos();
     // Ele é o par exato da `nav`: some onde ela aparece, e não um degrau antes
     // (issue #489).
-    expect(gatilho.parentElement!.className).toContain("lg:hidden");
+    expect(gatilho.parentElement!.className).toContain(`${BREAKPOINT_DA_BARRA}:hidden`);
     // E o piso de 44px tem que durar o mesmo tanto. Procurar a substring
     // `min-h-[44px]` não prova nada: ela continua escrita enquanto um
     // `md:min-h-0` ao lado a cancela, e foi assim que este teste ficou verde
@@ -364,7 +367,7 @@ describe("no celular os atalhos colapsam em menu (RN-77)", () => {
     fireEvent.click(gatilho);
     expect(gatilho.getAttribute("aria-expanded")).toBe("true");
     const itens = within(flutuante).getAllByRole("link");
-    expect(itens).toHaveLength(5);
+    expect(itens).toHaveLength(6);
     // No menu há largura: o nome inteiro é o texto, e não só o rótulo curto.
     expect(itens[0].textContent).toBe("Painel em tempo real");
     for (const item of itens) {

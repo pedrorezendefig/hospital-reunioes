@@ -9,7 +9,13 @@
 
 import { describe, expect, it } from "vitest";
 
-import { LARGURA_DA_LINHA_DA_BARRA, atalhosDoPerfil, larguraDaBarra } from "./atalhos";
+import {
+  BREAKPOINT_DA_BARRA,
+  LARGURA_DA_LINHA_DA_BARRA,
+  LARGURA_MINIMA_COM_BARRA,
+  atalhosDoPerfil,
+  larguraDaBarra,
+} from "./atalhos";
 
 function chaves(perfil: string | null | undefined) {
   return atalhosDoPerfil(perfil).map((a) => a.chave);
@@ -17,7 +23,16 @@ function chaves(perfil: string | null | undefined) {
 
 describe("quem vê cada atalho", () => {
   it("o ouvidor vê também a porta dos responsáveis por setor (issue #711)", () => {
-    expect(chaves("ouvidor")).toEqual(["painel", "nota_externa", "pontos", "responsaveis"]);
+    expect(chaves("ouvidor")).toEqual(["painel", "avaliacoes", "nota_externa", "pontos", "responsaveis"]);
+  });
+
+  it("a aba Avaliações é dos dois perfis da Ouvidoria e de mais ninguém (issue #1626)", () => {
+    // ADR 0086, decisão 8: o comentário não é classificado, e o super admin
+    // fica de fora como no Dossiê.
+    expect(chaves("ouvidor")).toContain("avaliacoes");
+    expect(chaves("diretoria_executiva")).toContain("avaliacoes");
+    expect(chaves("secretaria")).not.toContain("avaliacoes");
+    expect(chaves(null)).not.toContain("avaliacoes");
   });
 
   it("a tabela de prazos continua sendo a porta que só a diretoria vê", () => {
@@ -26,9 +41,10 @@ describe("quem vê cada atalho", () => {
     expect(chaves("ouvidor")).not.toContain("prazos");
   });
 
-  it("a diretoria executiva vê os cinco, na ordem do trabalho", () => {
+  it("a diretoria executiva vê os seis, na ordem do trabalho", () => {
     expect(chaves("diretoria_executiva")).toEqual([
       "painel",
+      "avaliacoes",
       "nota_externa",
       "pontos",
       "responsaveis",
@@ -49,7 +65,7 @@ describe("o rótulo curto e o nome inteiro são coisas diferentes (RN-77)", () =
   it("a pílula do desktop leva o rótulo curto", () => {
     const rotulos = atalhosDoPerfil("diretoria_executiva").map((a) => a.rotulo);
 
-    expect(rotulos).toEqual(["Painel", "Nota externa", "Pontos", "Responsáveis", "Prazos"]);
+    expect(rotulos).toEqual(["Painel", "Avaliações", "Nota externa", "Pontos", "Responsáveis", "Prazos"]);
   });
 
   it("o nome inteiro continua existindo, para o leitor de tela e para o menu", () => {
@@ -57,6 +73,7 @@ describe("o rótulo curto e o nome inteiro são coisas diferentes (RN-77)", () =
 
     expect(nomes).toEqual([
       "Painel em tempo real",
+      "Avaliações do QR",
       "Nota externa",
       "Pontos de escuta",
       "Responsáveis por setor",
@@ -65,7 +82,7 @@ describe("o rótulo curto e o nome inteiro são coisas diferentes (RN-77)", () =
   });
 
   it("a barra inteira cabe na linha da tela mais estreita em que ela aparece", () => {
-    // O perfil que vê as cinco portas é o pior caso da barra. Ela é uma linha
+    // O perfil que vê as seis portas é o pior caso da barra. Ela é uma linha
     // só, `whitespace-nowrap` e sem `flex-wrap`: o que não couber transborda,
     // e nenhum teste de contagem de palavras enxerga isso.
     const barra = larguraDaBarra(atalhosDoPerfil("diretoria_executiva"));
@@ -85,6 +102,16 @@ describe("o rótulo curto e o nome inteiro são coisas diferentes (RN-77)", () =
     expect(larguraDaBarra(porExtenso)).toBeGreaterThan(LARGURA_DA_LINHA_DA_BARRA);
   });
 
+  it("a sexta pílula não caberia a 1024px, e a barra subiu para o xl (issue #1626)", () => {
+    // A 1024px sobram 640px de linha, e as cinco pílulas de antes já ocupavam
+    // 581px: nenhuma sexta porta cabia ali. A barra passou a aparecer do `xl`
+    // (1280px) para cima, e abaixo dele quem atende é o menu.
+    expect(BREAKPOINT_DA_BARRA).toBe("xl");
+    expect(LARGURA_MINIMA_COM_BARRA).toBe(1280);
+    const seis = atalhosDoPerfil("diretoria_executiva");
+    expect(seis).toHaveLength(6);
+    expect(larguraDaBarra(seis)).toBeGreaterThan(1024 - 256 - 4 * 32);
+  });
 
   it("cada atalho aponta para a tela dele", () => {
     const destinos = Object.fromEntries(
@@ -93,6 +120,7 @@ describe("o rótulo curto e o nome inteiro são coisas diferentes (RN-77)", () =
 
     expect(destinos).toEqual({
       painel: "/ouvidoria/painel",
+      avaliacoes: "/ouvidoria/avaliacoes",
       nota_externa: "/ouvidoria/nota-externa",
       pontos: "/ouvidoria/pontos",
       responsaveis: "/ouvidoria/responsaveis",

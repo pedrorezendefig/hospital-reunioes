@@ -15,6 +15,18 @@ Quem trabalha nele é o ouvidor e a diretoria executiva, cada um com o seu acess
 
 Todo caso ganha um protocolo no formato ano mais número, gerado pelo aplicativo e informado a quem manifestou sempre que há canal para isso: na tela do formulário público, na conversa com a Ana, e por e-mail quando o contato traz um e-mail utilizável.
 
+## A aba Avaliações
+
+As notas do QR ficam na aba Avaliações, nos atalhos da Ouvidoria. Só o ouvidor e a diretoria executiva abrem a aba, porque o comentário não passa por classificação e pode trazer coisa séria; quem administra o aplicativo e a equipe de Reuniões não entram. A aba não tem fila nem prazo.
+
+No topo ficam os números do período escolhido, que começa nos últimos 30 dias e pode ir para 7 dias, 90 dias, 12 meses ou todo o histórico: a nota média, a porcentagem de notas 4 e 5, quantas notas chegaram e a porcentagem de quem pediu retorno. Embaixo, a nota média por ponto, por turno, por dia da semana e por semana. Os turnos seguem a hora da nota no relógio do hospital: madrugada da meia-noite às 6h, manhã das 6h ao meio-dia, tarde do meio-dia às 18h e noite das 18h à meia-noite.
+
+A lista mostra cada nota com os motivos, o comentário, o lugar do cartaz e a data, a mais nova primeiro. Dá para filtrar por ponto, por nota, por período, só as que têm comentário e só as marcadas Para revisar. O filtro Para revisar mostra quantas esperam revisão, de qualquer data.
+
+Em cada nota com comentário há o botão Converter em manifestação. Ele abre um caso na hora: canal QR, o setor e o lugar do cartaz, o comentário como relato, sem tipo (e por isso sigiloso até o ouvidor classificar) e com a data e a hora da avaliação no lugar da hora do clique, que é a hora que conta para o prazo. A nota não guarda contato, então o caso não tem para quem responder, e a trilha do caso abre dizendo isso. A nota fica ligada ao caso, mostra o protocolo dele e não vira outro caso. Nota que já virou caso pelo pedido de retorno também não converte de novo.
+
+Na nota marcada Para revisar há também o botão Arquivar revisão, que pede um motivo curto, de até 200 caracteres, e tira a marca sem abrir caso. Converter também tira a marca. A marca que o agente pôs e o motivo dele continuam visíveis na nota, junto com o que o ouvidor decidiu.
+
 ## Classificação e sigilo
 
 O caso nasce em classificação, sem área definida, ou, quando vem pela Ana, com a área que ela escreveu, que vale como sugestão e é conferida pelo ouvidor na validação. Quem classifica é o ouvidor, e só ele: nenhum processo automático despacha um caso para ninguém.
@@ -101,6 +113,7 @@ A nota do Google é buscada sozinha uma vez por semana, junto com o total de ava
 - Os títulos do PDF do relatório e do cartaz da Ouvidoria saem em caixa alta, inclusive o título das sugestões escritas pela inteligência artificial, e o resto do texto continua com maiúscula e minúscula.
 - O QR dos cartazes abre primeiro uma nota de 1 a 5, que não vira protocolo, e só quem pede retorno ou quer registrar segue para a manifestação, em cinco passos.
 - A nota do QR não guarda nada de quem avaliou, tem limite de envios em pouco tempo, e só o ouvidor e a diretoria executiva veem as avaliações e os comentários.
+- Na aba Avaliações, o ouvidor converte uma nota com comentário em caso, com o cartaz, a ligação com a nota, sem tipo e com a hora da avaliação, ou arquiva a revisão de uma nota marcada Para revisar com um motivo curto.
 - Quem se manifesta de forma anônima recebe um código, mostrado uma vez só, para acompanhar o caso numa página pública, e quem se identificou entra nela com o telefone ou o e-mail que deixou; a página mostra só o estado, a data da última movimentação e a resposta, nunca a área nem quem cuida do caso.
 - Um agente de inteligência artificial lê toda manifestação e toda nota com comentário assim que chegam, inclusive as sigilosas, só para sugerir o assunto, o envio ao Núcleo de Segurança do Paciente e a revisão de comentários graves, e se ele falhar o caso entra normal na fila.
 - O Núcleo de Segurança do Paciente recebe o relato integral e o paciente atendido mesmo no caso sigiloso, só depois de o ouvidor confirmar, e o nome de quem manifestou só vai quando o caso não é sigiloso nem anônimo, como única exceção à regra do sigilo.

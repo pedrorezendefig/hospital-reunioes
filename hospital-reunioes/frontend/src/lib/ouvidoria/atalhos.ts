@@ -13,13 +13,14 @@
  * ninguém encurta um sem responder pelo outro.
  */
 
+import { podeVerAvaliacoes } from "./avaliacoes";
 import { podeRegistrarNotaExterna } from "./nota-externa";
 import { podeVerPainel } from "./painel";
 import { podeGerirPontos } from "./pontos";
 import { podeEditarPrazos } from "./prazo";
 import { podeGerirResponsaveis } from "./validacao";
 
-export type ChaveDeAtalho = "painel" | "nota_externa" | "pontos" | "responsaveis" | "prazos";
+export type ChaveDeAtalho = "painel" | "avaliacoes" | "nota_externa" | "pontos" | "responsaveis" | "prazos";
 
 export interface Atalho {
   chave: ChaveDeAtalho;
@@ -45,6 +46,15 @@ const ATALHOS: (Atalho & { permitido: (perfil: string | null | undefined) => boo
     rotulo: "Painel",
     nome: "Painel em tempo real",
     permitido: podeVerPainel,
+  },
+  {
+    // As notas do QR (issue #1626, ADR 0086 decisão 8): os mesmos dois
+    // perfis, porque o comentário não é classificado.
+    chave: "avaliacoes",
+    href: "/ouvidoria/avaliacoes",
+    rotulo: "Avaliações",
+    nome: "Avaliações do QR",
+    permitido: podeVerAvaliacoes,
   },
   {
     // A nota de fora entra pela mão do ouvidor, e é a Ouvidoria inteira que
@@ -198,11 +208,15 @@ const PADDING_ATE_A_BARRA =
  * 768px sobram 384px de linha para uma barra de 581px. A barra fica no `lg`
  * porque é onde a conta fecha; abaixo dele quem atende é o menu que a issue
  * #496 já construiu, que é a saída projetada para quando a linha não cabe.
+ *
+ * Com a sexta porta, a das Avaliações (issue #1626), a conta deixou de fechar
+ * no `lg`: os 640px que sobram a 1024px não comportam 711px de barra. Ela
+ * subiu para o `xl`, onde sobram 896px.
  */
-export const BREAKPOINT_DA_BARRA = "lg";
+export const BREAKPOINT_DA_BARRA = "xl";
 
 /** Os pontos do Tailwind que o módulo usa, em pixels. */
-const LARGURA_DO_BREAKPOINT: Record<string, number> = { md: 768, lg: 1024 };
+const LARGURA_DO_BREAKPOINT: Record<string, number> = { md: 768, lg: 1024, xl: 1280 };
 
 export const LARGURA_MINIMA_COM_BARRA = LARGURA_DO_BREAKPOINT[BREAKPOINT_DA_BARRA];
 
