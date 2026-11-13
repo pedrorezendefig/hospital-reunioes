@@ -343,7 +343,8 @@ describe("A lista por semana", () => {
   it("o ícone de vídeo só aparece quando há Demonstração, e abre em outra aba", async () => {
     montar();
 
-    const videos = within(await lista()).getAllByRole("link", { name: "Assistir à demonstração" });
+    // Pelo rótulo, e não pelo papel: um <a> sem endereço perde o papel de link e sumiria da contagem.
+    const videos = within(await lista()).getAllByLabelText("Assistir à demonstração");
     expect(videos).toHaveLength(1);
     expect(videos[0].getAttribute("href")).toBe("https://manual-hsm.vercel.app/demonstracao/aviso");
     expect(videos[0].getAttribute("target")).toBe("_blank");
@@ -412,7 +413,7 @@ describe("A lista por semana", () => {
     expect(demonstracao.getAttribute("target")).toBe("_blank");
 
     fireEvent.click(await linha("Botão de responder sumiu"));
-    expect(within(aberta("Botão de responder sumiu")!).queryByRole("link", { name: "Demonstração" })).toBeNull();
+    expect(within(aberta("Botão de responder sumiu")!).queryByText("Demonstração")).toBeNull();
   });
 
   it("Abrir o card abre o Documento do card no painel, e o X fecha", async () => {
