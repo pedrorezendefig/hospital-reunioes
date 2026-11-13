@@ -47,6 +47,7 @@ from app.services import (
     audit,
     ouvidoria_acionamentos,
     ouvidoria_acuse,
+    ouvidoria_agente_triagem,
     ouvidoria_convite_google,
     ouvidoria_encerramento,
     ouvidoria_escalonamento,
@@ -216,6 +217,11 @@ _CAMPOS_INDICE_TUPLA = _CAMPOS_PROTOCOLO_TUPLA + (
     # Só as marcas: as justificativas descrevem o caso e ficam no Dossiê.
     "nsp_sugerido",
     "nsp_decisao",
+    # O assunto de uma linha que o agente de triagem escreveu (issue #1624,
+    # ADR 0087). É ele que a fila mostra no lugar do começo do relato, e nulo
+    # quando o agente não o gerou. Sem nome de pessoa, mas descreve o caso:
+    # fica com a Ouvidoria, como o resumo.
+    "assunto",
 )
 _CAMPOS_INDICE = ", ".join(_CAMPOS_INDICE_TUPLA)
 # O índice de quem está fora da Ouvidoria: o mesmo, menos o resumo (issue
@@ -223,7 +229,7 @@ _CAMPOS_INDICE = ", ".join(_CAMPOS_INDICE_TUPLA)
 # #1621). O resumo é recorte literal do relato, as marcas só servem a quem
 # valida, e protocolo, setor, situação e prazo bastam para quem só acompanha a
 # fila.
-_SO_DA_OUVIDORIA_NO_INDICE = frozenset({"resumo", "anonimo", "nsp_sugerido", "nsp_decisao"})
+_SO_DA_OUVIDORIA_NO_INDICE = frozenset({"resumo", "anonimo", "nsp_sugerido", "nsp_decisao", "assunto"})
 _CAMPOS_INDICE_FORA_DA_OUVIDORIA = tuple(
     campo for campo in _CAMPOS_INDICE_TUPLA if campo not in _SO_DA_OUVIDORIA_NO_INDICE
 )
@@ -1050,6 +1056,9 @@ async def registrar_manifestacao(
     # e quem ditou o email no telefone tem o mesmo direito de saber que a
     # manifestação entrou. `acusar_recebimento` não levanta.
     ouvidoria_acuse.acusar_recebimento(supabase, row, agora_utc(), tarefas)
+    # O agente de triagem lê o caso do balcão também (issue #1624, ADR 0087,
+    # decisão 1: qualquer canal), depois da resposta.
+    ouvidoria_agente_triagem.agendar_caso(tarefas, supabase, row)
     return {campo: row.get(campo) for campo in _CAMPOS_DOSSIE_TUPLA}
 
 

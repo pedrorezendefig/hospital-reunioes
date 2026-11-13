@@ -7,7 +7,7 @@
  *
  * O ouvidor abria caso a caso para descobrir o que tinha mexido. A linha passa
  * a dizer isso sozinha: ponto sólido na cor de acento à esquerda do protocolo,
- * e resumo em peso médio. Nada pisca, o sinal fica até o caso ser aberto.
+ * e assunto em peso médio. Nada pisca, o sinal fica até o caso ser aberto.
  *
  * O ponto é desenho, e desenho some do teste. Por isso ele anda com um rótulo
  * em `sr-only`: é o que o leitor de tela anuncia e o que esta suíte pega. Sem
@@ -45,10 +45,12 @@ vi.mock("@/hooks/useCurrentParticipante", () => ({
   }),
 }));
 
-const RESUMO_SETE = "Paciente relata espera acima de duas horas na recepção.";
-const RESUMO_OITO = "Acompanhante relata falta de cadeiras na sala de espera.";
+// A linha mostra o assunto do agente de triagem, e não o começo do relato
+// (issue #1624, ADR 0087).
+const ASSUNTO_SETE = "Espera acima de duas horas na recepção.";
+const ASSUNTO_OITO = "Falta de cadeiras na sala de espera.";
 
-function linha(numero: number, resumo: string, temNovidade: boolean) {
+function linha(numero: number, assunto: string, temNovidade: boolean) {
   return {
     id: `uuid-${numero}`,
     numero,
@@ -60,7 +62,8 @@ function linha(numero: number, resumo: string, temNovidade: boolean) {
     sigilo_reforcado: false,
     categoria: "Demora",
     setor: "Recepcao",
-    resumo,
+    resumo: `Relato do caso ${numero}.`,
+    assunto,
     conversa_id: "",
     gravidade: null,
     prazo_area_em: null,
@@ -94,37 +97,37 @@ describe("o ponto de novidade na fila (issue #484)", () => {
   });
 
   it("a linha com novidade anuncia a movimentação nova", async () => {
-    montar([linha(7, RESUMO_SETE, true)]);
+    montar([linha(7, ASSUNTO_SETE, true)]);
 
     expect(await screen.findByText("Movimentação nova")).toBeTruthy();
   });
 
   it("a linha sem novidade não anuncia nada", async () => {
-    montar([linha(7, RESUMO_SETE, false)]);
+    montar([linha(7, ASSUNTO_SETE, false)]);
 
     expect(await screen.findByText("2026-0007")).toBeTruthy();
     expect(screen.queryByText("Movimentação nova")).toBeNull();
   });
 
   it("o ponto é da linha que tem novidade, e não da lista inteira", async () => {
-    montar([linha(7, RESUMO_SETE, false), linha(8, RESUMO_OITO, true)]);
+    montar([linha(7, ASSUNTO_SETE, false), linha(8, ASSUNTO_OITO, true)]);
 
     expect(await screen.findByText("2026-0007")).toBeTruthy();
     expect(screen.getAllByText("Movimentação nova")).toHaveLength(1);
   });
 
-  it("o resumo do caso com novidade vem em peso médio, e o dos outros não", async () => {
-    montar([linha(7, RESUMO_SETE, false), linha(8, RESUMO_OITO, true)]);
+  it("o assunto do caso com novidade vem em peso médio, e o dos outros não", async () => {
+    montar([linha(7, ASSUNTO_SETE, false), linha(8, ASSUNTO_OITO, true)]);
 
-    const comNovidade = await screen.findByText(RESUMO_OITO);
-    const semNovidade = screen.getByText(RESUMO_SETE);
+    const comNovidade = await screen.findByText(ASSUNTO_OITO);
+    const semNovidade = screen.getByText(ASSUNTO_SETE);
 
     expect(comNovidade.className).toContain("font-medium");
     expect(semNovidade.className).not.toContain("font-medium");
   });
 
   it("o ponto sai na cor de acento, e não numa cor solta", async () => {
-    montar([linha(7, RESUMO_SETE, true)]);
+    montar([linha(7, ASSUNTO_SETE, true)]);
 
     const rotulo = await screen.findByText("Movimentação nova");
     const ponto = rotulo.parentElement?.querySelector("[aria-hidden='true']");
@@ -135,13 +138,13 @@ describe("o ponto de novidade na fila (issue #484)", () => {
   it("a trilha fora do ar é dita na tela, e não vira fila sem novidade", async () => {
     // Sem esta frase o ouvidor olha uma lista sem ponto nenhum e conclui que
     // nada mexeu, quando a verdade é que o servidor não conseguiu olhar.
-    montar([linha(7, RESUMO_SETE, false)], ["movimentos"]);
+    montar([linha(7, ASSUNTO_SETE, false)], ["movimentos"]);
 
     expect(await screen.findByText(/trilha de movimentos não pôde ser lida/i)).toBeTruthy();
   });
 
   it("carga sem degradação não mostra aviso nenhum", async () => {
-    montar([linha(7, RESUMO_SETE, false)]);
+    montar([linha(7, ASSUNTO_SETE, false)]);
 
     expect(await screen.findByText("2026-0007")).toBeTruthy();
     expect(screen.queryByText(/não pôde ser lid/i)).toBeNull();
@@ -151,7 +154,7 @@ describe("o ponto de novidade na fila (issue #484)", () => {
     // O backend já desliga a flag para esse público (issue #484). A tela não
     // pode inventar o ponto a partir de outra coisa.
     sessao.perfilOuvidoria = null;
-    montar([linha(7, RESUMO_SETE, false)]);
+    montar([linha(7, ASSUNTO_SETE, false)]);
 
     expect(await screen.findByText("2026-0007")).toBeTruthy();
     expect(screen.queryByText("Movimentação nova")).toBeNull();

@@ -44,6 +44,12 @@ const RESUMO_LONGO =
   "Paciente relata espera de mais de três horas na recepção do ambulatório, sem nenhuma " +
   "informação sobre a fila e sem lugar para sentar durante todo o período de espera.";
 
+// A linha mostra o assunto que o agente de triagem escreveu, e não o começo do
+// relato (issue #1624, ADR 0087). Longo de propósito, para o corte valer.
+const ASSUNTO_LONGO =
+  "Espera de mais de três horas na recepção do ambulatório, sem informação sobre a fila " +
+  "e sem cadeira para quem aguarda durante todo o período.";
+
 const BASE = {
   data_abertura: "2026-08-14",
   prazo_resposta: "2026-12-31",
@@ -52,6 +58,7 @@ const BASE = {
   categoria: "Atendimento",
   setor: "Recepção",
   resumo: RESUMO_LONGO,
+  assunto: ASSUNTO_LONGO,
   conversa_id: "",
   gravidade: "alto",
   prazo_area_em: null,
@@ -213,15 +220,16 @@ describe("a linha de dois níveis substitui a tabela (RN-72, RN-73)", () => {
     }
   });
 
-  it("o resumo é cortado em uma linha, e nenhum tooltip o repete", async () => {
+  it("o assunto é cortado em uma linha, e nenhum tooltip o repete", async () => {
     montar([caso(7, "aguardando_area")]);
     const linha = await linhaDe("2026-0007");
 
-    const resumo = within(linha).getByText(RESUMO_LONGO);
-    expect(resumo.className).toContain("truncate");
-    // O resumo é recorte literal do relato (issue #753): o texto inteiro mora
-    // no Dossiê, e não no `title` de elemento nenhum da linha.
+    const assunto = within(linha).getByText(ASSUNTO_LONGO);
+    expect(assunto.className).toContain("truncate");
+    // O texto inteiro mora no Dossiê, e não no `title` de elemento nenhum da
+    // linha (issue #753); nem o assunto, nem o relato que ele substituiu.
     const titulos = Array.from(linha.querySelectorAll("[title]")).map((el) => el.getAttribute("title") ?? "");
+    expect(titulos.filter((t) => t.includes(ASSUNTO_LONGO.slice(0, 20)))).toEqual([]);
     expect(titulos.filter((t) => t.includes(RESUMO_LONGO.slice(0, 20)))).toEqual([]);
   });
 

@@ -266,6 +266,11 @@ CAMPOS_DO_INDICE = {
     # fechado, sem dado pessoal: as justificativas ficam no Dossiê.
     "nsp_sugerido",
     "nsp_decisao",
+    # O assunto que o agente de triagem escreveu (issue #1624, ADR 0087): a
+    # fila o mostra no lugar do começo do relato. Só a Ouvidoria o recebe na
+    # resposta (test_ouvidoria_agente_triagem.py). Uma linha sem nome de
+    # pessoa, mas descreve o caso.
+    "assunto",
 }
 
 
