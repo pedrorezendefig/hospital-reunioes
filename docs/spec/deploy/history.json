@@ -2,6 +2,54 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-11-13T14:43:05-03:00",
+      "sha": "4eafe153c67b9b5c199c3ee0372a6eaa037053b6",
+      "app_version": "0.287.0",
+      "subject": "Onda projeto-onda2: Os cards da Ana aparecem, só para acompanhar; Filtro Projeto e selo no Quadro",
+      "raw_subject": "chore(deploy): registro da onda projeto-onda2 (#1746 #1745)",
+      "scope": [
+        "backend",
+        "frontend"
+      ],
+      "prds": [
+        1710
+      ],
+      "result": "healthy",
+      "duration_seconds": 261,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        },
+        {
+          "service": "frontend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "onda-enxuta projeto-onda2: PR #1746 (issue #1714), PR #1745 (issue #1715), mergeados PR a PR. Merge pela API do GitHub, um build. Registro pela Action pos-merge depois do health.",
+      "etapas": {
+        "merge_s": 6,
+        "build_s": {
+          "backend": 20,
+          "frontend": 211
+        },
+        "health_s": 0
+      },
+      "responsavel": "pedrorezendefig"
+    },
+    {
       "at": "2026-11-13T14:22:36-03:00",
       "sha": "5fa129a17093a62eba8d95f884974ac7232da677",
       "app_version": "0.286.0",
