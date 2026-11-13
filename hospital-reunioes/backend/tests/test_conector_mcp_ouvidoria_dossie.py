@@ -394,3 +394,115 @@ class TestDossieDaTela:
         assert no_claude["dossie"]["paciente_referencia"] == caso_["paciente_referencia"]
         assert no_claude["respostas"][0]["resposta"] == "Reforçamos a escala de triagem."
         assert len(no_claude["trilha"]["movimentos"]) == 3
+
+    def test_o_sigiloso_chega_marcado_e_com_a_identificacao(self, chave_do_emissor):
+        no_claude = dossie_do_claude(banco_do_hospital(DIRETOR), chave_do_emissor, DIRETOR, SIGILOSO["protocolo"])
+
+        assert no_claude["dossie"]["sigilo_reforcado"] is True
+        assert no_claude["dossie"]["manifestante_contato"] == "maria@exemplo.com"
+
+    def test_caso_apagado_chega_com_o_aviso_no_lugar_do_relato(self, chave_do_emissor):
+        no_claude = dossie_do_claude(banco_do_hospital(DIRETOR), chave_do_emissor, DIRETOR, APAGADO["protocolo"])
+
+        dossie = no_claude["dossie"]
+        assert "relato_integral" not in dossie
+        assert "resumo" not in dossie
+        assert "[anonimizado pela retenção]" not in json.dumps(no_claude, ensure_ascii=False)
+        # 12:00 UTC é 09:00 no horário do hospital.
+        assert dossie["aviso_caso_apagado"].startswith("Este caso foi apagado em 11/11/2026 às 09:00.")
+        assert "Motivo: Pedido do titular." in dossie["aviso_caso_apagado"]
+        # A ficha e a trilha continuam, como na tela.
+        assert dossie["protocolo"] == APAGADO["protocolo"]
+        assert len(no_claude["trilha"]["movimentos"]) == 3
+
+    def test_caso_comum_nao_traz_aviso_de_apagado(self, chave_do_emissor):
+        no_claude = dossie_do_claude(banco_do_hospital(DIRETOR), chave_do_emissor, DIRETOR, COMUM["protocolo"])
+
+        assert "aviso_caso_apagado" not in no_claude["dossie"]
+
+    @pytest.mark.parametrize(
+        "protocolo", ["2026-9999", "nao-e-protocolo", ""], ids=["inexistente", "malformado", "vazio"]
+    )
+    def test_protocolo_sem_caso_e_erro_de_ferramenta_claro(self, chave_do_emissor, protocolo):
+        banco = banco_do_hospital(DIRETOR)
+
+        resultado = chamar(cliente_mcp(banco), chave_do_emissor, DIRETOR, protocolo=protocolo).json()["result"]
+
+        assert resultado["isError"] is True
+        assert "structuredContent" not in resultado
+        assert "protocolo" in resultado["content"][0]["text"]
+        assert banco.escritas == []
+
+
+# ─── 2. O registro de acesso ─────────────────────────────────────────────────
+
+
+def acessos(banco: BancoFalso) -> list[dict]:
+    return [dados for tabela, metodo, dados in banco.escritas if tabela == "ouvidoria_acessos" and metodo == "insert"]
+
+
+class TestRegistroDeAcesso:
+    def test_cada_chamada_grava_uma_consulta_conector_com_o_ator_certo(self, chave_do_emissor):
+        banco = banco_do_hospital(DIRETOR)
+        cliente = cliente_mcp(banco)
+
+        for _ in range(2):
+            resultado = chamar(cliente, chave_do_emissor, DIRETOR, protocolo=COMUM["protocolo"]).json()["result"]
+            assert resultado["isError"] is False
+
+        linha = {
+            "manifestacao_id": "c-comum",
+            "ator_id": "diretor",
+            "ator_nome": "Diretor",
+            "acao": "consulta_conector",
+        }
+        assert acessos(banco) == [linha, linha]
+
+    def test_falha_no_registro_nao_impede_a_resposta(self, chave_do_emissor):
+        banco = banco_do_hospital(DIRETOR)
+        banco.falha_no_insert.add("ouvidoria_acessos")
+
+        no_claude = dossie_do_claude(banco, chave_do_emissor, DIRETOR, COMUM["protocolo"])
+
+        assert no_claude["dossie"]["relato_integral"] == COMUM["relato_integral"]
+
+
+# ─── 3. O gate ───────────────────────────────────────────────────────────────
+
+
+class TestGate:
+    def test_super_admin_sem_diretoria_nao_ve_nem_chama_a_ferramenta(self, chave_do_emissor):
+        banco = banco_do_hospital(SUPER_ADMIN)
+        cliente = cliente_mcp(banco)
+
+        lista = rpc(cliente, chave_do_emissor, SUPER_ADMIN, "tools/list").json()["result"]["tools"]
+        assert FERRAMENTA not in {f["name"] for f in lista}
+
+        resposta = chamar(cliente, chave_do_emissor, SUPER_ADMIN, protocolo=COMUM["protocolo"])
+        assert resposta.status_code == 200, resposta.text
+        resultado = resposta.json()["result"]
+        assert resultado["isError"] is True
+        assert "structuredContent" not in resultado
+        assert "esperei quatro horas" not in resposta.text
+        assert "Maria" not in resposta.text
+        assert banco.escritas == []
+
+    def test_diretoria_ve_a_ferramenta_na_lista(self, chave_do_emissor):
+        lista = rpc(cliente_mcp(banco_do_hospital(DIRETOR)), chave_do_emissor, DIRETOR, "tools/list").json()
+        assert FERRAMENTA in {f["name"] for f in lista["result"]["tools"]}
+
+
+# ─── 4. Só leitura ───────────────────────────────────────────────────────────
+
+
+class TestSoLeitura:
+    def test_a_ferramenta_nao_escreve_em_caso_nem_em_trilha(self, chave_do_emissor):
+        banco = banco_do_hospital(DIRETOR)
+        cliente = cliente_mcp(banco)
+
+        for caso_ in CASOS:
+            resultado = chamar(cliente, chave_do_emissor, DIRETOR, protocolo=caso_["protocolo"]).json()["result"]
+            assert resultado["isError"] is False
+
+        assert banco.escritas
+        assert {(tabela, metodo) for tabela, metodo, _ in banco.escritas} == {("ouvidoria_acessos", "insert")}
