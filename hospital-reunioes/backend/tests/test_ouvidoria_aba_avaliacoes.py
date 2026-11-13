@@ -269,6 +269,8 @@ ROTAS = [
     ("get", "/api/ouvidoria/avaliacoes", None),
     ("post", "/api/ouvidoria/avaliacoes/av-1/conversao", None),
     ("post", "/api/ouvidoria/avaliacoes/av-1/arquivamento", {"motivo": "Já tratado por telefone"}),
+    # O contador Para revisar do Painel (issue #1628).
+    ("get", "/api/ouvidoria/avaliacoes/para-revisar", None),
 ]
 
 
@@ -278,7 +280,9 @@ class TestSoOPerfilDaOuvidoria:
     @pytest.mark.parametrize(
         "quem", [SUPER_ADMIN, SECRETARIA, FACILITADOR], ids=["super_admin", "secretaria", "facilitador"]
     )
-    @pytest.mark.parametrize(("metodo", "rota", "corpo"), ROTAS, ids=["numeros", "lista", "conversao", "arquivamento"])
+    @pytest.mark.parametrize(
+        ("metodo", "rota", "corpo"), ROTAS, ids=["numeros", "lista", "conversao", "arquivamento", "contador"]
+    )
     def test_quem_esta_fora_da_ouvidoria_recebe_403_e_nada_muda(self, monkeypatch, quem, metodo, rota, corpo):
         banco = _Banco([_avaliacao("av-1", "2026-11-12T13:00:00+00:00", 1, comentario="Me trataram mal", revisar=True)])
         client = _cliente(monkeypatch, quem, banco)
@@ -703,3 +707,58 @@ class TestAMigrationDaAba:
             "create index if not exists idx_ouvidoria_avaliacoes_criada_em on ouvidoria_avaliacoes(criada_em, id);"
             in self._ddl()
         )
+
+
+class TestOContadorParaRevisarDoPainel:
+    """Issue #1628, faixa 2 do Painel: o contador Para revisar é só o número,
+    de qualquer data, sem trazer comentário nenhum para a tela que o mostra."""
+
+    def test_conta_so_as_marcas_ainda_sem_desfecho_de_qualquer_data(self, monkeypatch):
+        antiga = _avaliacao("av-antiga", "2025-01-10T13:00:00+00:00", 1, comentario="Me agrediram", revisar=True)
+        recente = _avaliacao("av-recente", "2026-11-12T13:00:00+00:00", 2, comentario="Risco", revisar=True)
+        ja_revista = _avaliacao("av-revista", "2026-11-11T13:00:00+00:00", 1, comentario="Processo", revisar=True)
+        ja_revista["revisao_desfecho"] = "arquivada"
+        sem_marca = _avaliacao("av-sem", "2026-11-12T14:00:00+00:00", 5, comentario="Ótimo")
+        client = _cliente(monkeypatch, OUVIDOR, _Banco([antiga, recente, ja_revista, sem_marca]))
+
+        r = client.get("/api/ouvidoria/avaliacoes/para-revisar")
+
+        assert r.status_code == 200, r.text
+        assert r.json() == {"total": 2}
+
+
+class TestOKitDizOPainelNovo:
+    """CA da issue #1628: o texto do Produto Ouvidoria no kit de conhecimento
+    diz o comportamento novo do Painel."""
+
+    @pytest.fixture
+    def secao(self) -> str:
+        from app.services.conhecimento import CONHECIMENTO_DIR
+
+        texto = (CONHECIMENTO_DIR / "ouvidoria.md").read_text(encoding="utf-8")
+        achadas = [parte for parte in texto.split("\n## ") if parte.startswith("O Painel\n")]
+        assert len(achadas) == 1
+        return achadas[0]
+
+    def test_diz_as_seis_faixas_na_ordem(self, secao):
+        faixas = [
+            "Críticos",
+            "Números do agora",
+            "Atrasos das áreas",
+            "Atrasos da Ouvidoria",
+            "Próximos vencimentos",
+            "Por área",
+        ]
+        posicoes = [secao.index(f"**{faixa}**") for faixa in faixas]
+        assert posicoes == sorted(posicoes)
+
+    def test_diz_o_que_cada_faixa_promete(self, secao):
+        assert "Nenhum caso crítico aberto" in secao
+        assert "Para revisar" in secao
+        assert "Cobrar" in secao
+        assert "histórico do caso" in secao
+        assert "pela gravidade e depois pelo atraso" in secao
+        assert "% no prazo do mês" in secao
+        assert "nenhum nome de paciente" in secao
+        assert "O elogio não entra" in secao
+        assert "Encerrada" in secao

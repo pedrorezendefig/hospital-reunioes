@@ -53,6 +53,19 @@ No caso com o selo Em análise pelo NSP, quando o ouvidor clica para encerrar e 
 
 Quem lê cada caso assim que ele chega, de qualquer canal, é um agente de inteligência artificial, uma vez só. Antes de sair do aplicativo, o relato tem o nome, o CPF, o telefone e os outros dados pessoais trocados por marcadores. O agente escreve o assunto do caso em uma linha, sem nome de ninguém, e é esse assunto que a fila do ouvidor mostra no lugar do começo do relato. Quando o relato fala de incidente com o paciente, ele também aponta o caso ao Núcleo, com o porquê para o ouvidor e um resumo técnico para o Núcleo. Na nota do QR com comentário, ele marca Para revisar, com o motivo, quando o comentário fala de algo grave, como agressão, risco à vida, maus-tratos ou ameaça de processo. O agente só sugere: não muda tipo, gravidade, sigilo nem área, e nada do que ele escreve sai para o paciente ou para um setor sem uma pessoa confirmar. Ele lê no máximo 300 casos e notas por dia. Se falhar, ou se o limite do dia acabar, o caso entra normal, sem assunto e sem alerta, a fila mostra Assunto não gerado, a trilha do caso registra o motivo e o ouvidor decide sozinho sobre o Núcleo.
 
+## O Painel
+
+O Painel em tempo real fica nos atalhos da Ouvidoria e só o ouvidor e a diretoria executiva o abrem. Ele se atualiza sozinho a cada minuto e mostra o que precisa de atenção agora, do mais urgente ao menos urgente, em seis faixas, na mesma ordem no computador e no celular:
+
+1. **Críticos**: os casos de gravidade crítica ainda não encerrados, inclusive os que foram ao Núcleo de Segurança do Paciente, que levam o selo Em análise pelo NSP. A faixa só fica vermelha quando há algum; sem nenhum, aparece uma linha discreta, Nenhum caso crítico aberto.
+2. **Números do agora**: quantos casos estão atrasados, quantos vencem em até 2 dias úteis, quantos aguardam a triagem da Ouvidoria (com a idade do mais antigo) e a porcentagem que a área respondeu no prazo no mês. Tocar num desses números mostra a lista daqueles casos logo abaixo. Ao lado fica o contador Para revisar, com as notas do QR que o agente marcou e ainda esperam revisão, de qualquer data, e ele leva à aba Avaliações já filtrada.
+3. **Atrasos das áreas**: os casos com a área que já passaram do prazo, ordenados pela gravidade e depois pelo atraso. Cada card tem o botão Cobrar, que manda a cobrança de novo a quem responde pelo setor hoje e grava no histórico do caso quem foi cobrado.
+4. **Atrasos da Ouvidoria**: os casos ainda na triagem que passaram do prazo de referência, na mesma ordem. Ficam separados dos atrasos das áreas porque quem deve a resposta é a própria Ouvidoria.
+5. **Próximos vencimentos**: os próximos casos a vencer, uma linha por caso, inclusive o que vence hoje e ainda não venceu.
+6. **Por área**: para cada setor, quem responde por ele, quantos casos estão pendentes, quantos venceram, o atraso do pior caso e a % no prazo do mês, que é a parte dos casos que entraram no mês e que a área respondeu dentro do prazo.
+
+Cada card mostra o protocolo, a gravidade (o único elemento colorido), o setor, o assunto que o agente escreveu, o prazo ou o atraso, quem responde e os selos. O Painel não mostra nenhum nome de paciente nem o começo do relato: o caso sem assunto aparece como Assunto não gerado. O elogio não entra em nenhuma faixa de atraso, porque não tem prazo de resposta. O contador Encerrada, que somava os casos encerrados desde sempre, saiu do Painel.
+
 ## O que o manifestante ouve do hospital
 
 São dois avisos, os dois por e-mail, e os dois só saem quando dá para reconhecer um e-mail no contato que a pessoa deixou:
