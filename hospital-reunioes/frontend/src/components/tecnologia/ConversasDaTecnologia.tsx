@@ -43,8 +43,8 @@
  *
  * Os filtros ficam numa barra em cima, na largura toda, um campo com rótulo
  * por categoria (issue #1578, emenda da ADR 0084, que trocou os chips da
- * #1551): Tipo, Etapa e Origem para todos; o recorte (Para mim, Minhas,
- * Todas, controle segmentado), o Responsável e o "Só envio falhou" só para o
+ * #1551): Tipo, Etapa, Origem e Projeto (issue #1715) para todos; o recorte
+ * (Para mim, Minhas, Todas, controle segmentado), o Responsável e o "Só envio falhou" só para o
  * Desenvolvedor. Tudo combina, e quem filtra é o servidor.
  *
  * Na tela larga o clique no card abre a Demanda ao lado da lista (issue #1593,
@@ -131,6 +131,9 @@ import {
   ORIGEM_CLASSE,
   ORIGEM_ROTULO,
   partesDoCard,
+  Projeto,
+  PROJETO_CLASSE,
+  PROJETO_ROTULO,
   rotuloDaEtapa,
   TEM_DEMONSTRACAO,
   temSelo,
@@ -177,6 +180,7 @@ const FILTROS: { valor: Filtro; rotulo: string }[] = [
 const CLASSIFICACOES = Object.keys(CLASSIFICACAO_ROTULO) as Classificacao[];
 const ETAPAS = Object.keys(ETAPA_ROTULO) as EtapaDemanda[];
 const ORIGENS = Object.keys(ORIGEM_ROTULO) as Origem[];
+const PROJETOS = Object.keys(PROJETO_ROTULO) as Projeto[];
 /** As opções de cada campo da barra; o valor vazio é "sem filtro" (issue #1578). */
 const OPCOES_DE_TIPO = [
   { value: "", label: "Todos" },
@@ -189,6 +193,11 @@ const OPCOES_DE_ETAPA = [
 const OPCOES_DE_ORIGEM = [
   { value: "", label: "Todas" },
   ...ORIGENS.map((valor) => ({ value: valor, label: ORIGEM_ROTULO[valor] })),
+];
+/** O filtro Projeto (issue #1715, ADR 0093, decisão 8): abre em Todos. */
+const OPCOES_DE_PROJETO = [
+  { value: "", label: "Todos" },
+  ...PROJETOS.map((valor) => ({ value: valor, label: PROJETO_ROTULO[valor] })),
 ];
 const LIMPAR_FILTROS = "Limpar filtros";
 const SO_ENVIO_FALHOU = "Só envio falhou";
@@ -205,6 +214,7 @@ type FiltrosDaLista = {
   tipo: Classificacao | null;
   etapa: EtapaDemanda | null;
   origem: Origem | null;
+  projeto: Projeto | null;
   responsavel: string | null;
   envioFalhou: boolean;
 };
@@ -217,6 +227,7 @@ function urlDaLista(filtros: FiltrosDaLista): string {
   if (filtros.tipo) consulta.set("tipo", filtros.tipo);
   if (filtros.etapa) consulta.set("etapa", filtros.etapa);
   if (filtros.origem) consulta.set("origem", filtros.origem);
+  if (filtros.projeto) consulta.set("projeto", filtros.projeto);
   if (filtros.responsavel) consulta.set("responsavel", filtros.responsavel);
   if (filtros.envioFalhou) consulta.set("envio_falhou", "true");
   const texto = consulta.toString();
@@ -302,6 +313,16 @@ function OrigemNaLista({ demanda }: { demanda: Demanda }) {
   return (
     <span className={`px-2 py-0.5 rounded text-xs font-medium ${ORIGEM_CLASSE[demanda.origem]}`}>
       {ORIGEM_ROTULO[demanda.origem]}
+    </span>
+  );
+}
+
+/** Aplicativo do Hospital ou Ana (issue #1715). Sem o campo, sem selo. */
+function ProjetoNaLista({ demanda }: { demanda: Demanda }) {
+  if (!demanda.projeto) return null;
+  return (
+    <span className={`px-2 py-0.5 rounded text-xs font-medium ${PROJETO_CLASSE[demanda.projeto]}`}>
+      {PROJETO_ROTULO[demanda.projeto]}
     </span>
   );
 }
@@ -419,6 +440,7 @@ function CardDaConversa({
           <EtapaNaLista demanda={demanda} />
           <ClassificacaoNaLista demanda={demanda} />
           <OrigemNaLista demanda={demanda} />
+          <ProjetoNaLista demanda={demanda} />
           <SeloDaDemonstracao demanda={demanda} />
           <SeloDoEnvioFalhou demanda={demanda} />
         </span>
@@ -901,6 +923,7 @@ export function ConversasDaTecnologia({
   const [tipo, setTipo] = useState<Classificacao | null>(null);
   const [etapa, setEtapa] = useState<EtapaDemanda | null>(null);
   const [origem, setOrigem] = useState<Origem | null>(null);
+  const [projeto, setProjeto] = useState<Projeto | null>(null);
   const [responsavel, setResponsavel] = useState<string | null>(null);
   const [envioFalhou, setEnvioFalhou] = useState(false);
   /** A coluna Não será feita no Quadro: só a tela decide, o servidor já manda todas. */
@@ -966,7 +989,7 @@ export function ConversasDaTecnologia({
   const carregar = useCallback(async (): Promise<Demanda[] | null> => {
     if (!token || filtro === null) return null;
     // Na tela larga a Etapa é a coluna, e a barra não tem o campo (ADR 0090, decisão 8).
-    const url = urlDaLista({ recorte: filtro, busca, tipo, etapa: largo ? null : etapa, origem, responsavel, envioFalhou });
+    const url = urlDaLista({ recorte: filtro, busca, tipo, etapa: largo ? null : etapa, origem, projeto, responsavel, envioFalhou });
     const pedido = ++ultimoPedido.current;
     try {
       const resposta = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
@@ -990,7 +1013,7 @@ export function ConversasDaTecnologia({
       setErroDaLista(FALHA_DE_CONEXAO);
       return null;
     }
-  }, [token, filtro, busca, tipo, etapa, largo, origem, responsavel, envioFalhou]);
+  }, [token, filtro, busca, tipo, etapa, largo, origem, projeto, responsavel, envioFalhou]);
 
   useEffect(() => {
     carregar();
@@ -1061,6 +1084,7 @@ export function ConversasDaTecnologia({
       tipo ||
       (!largo && etapa) ||
       origem ||
+      projeto ||
       responsavel ||
       envioFalhou ||
       (largo && naoSeraFeita),
@@ -1073,6 +1097,7 @@ export function ConversasDaTecnologia({
     setTipo(null);
     setEtapa(null);
     setOrigem(null);
+    setProjeto(null);
     setResponsavel(null);
     setEnvioFalhou(false);
     setNaoSeraFeita(false);
@@ -1127,6 +1152,7 @@ export function ConversasDaTecnologia({
       setTipo(null);
       setEtapa(null);
       setOrigem(null);
+      setProjeto(null);
       setResponsavel(null);
       setEnvioFalhou(false);
       setNaoSeraFeita(false);
@@ -1250,6 +1276,12 @@ export function ConversasDaTecnologia({
             value={origem ?? ""}
             options={OPCOES_DE_ORIGEM}
             onChange={(valor) => setOrigem((valor || null) as Origem | null)}
+          />
+          <Select
+            label="Projeto"
+            value={projeto ?? ""}
+            options={OPCOES_DE_PROJETO}
+            onChange={(valor) => setProjeto((valor || null) as Projeto | null)}
           />
           {desenvolvedor && desenvolvedores.length > 0 && (
             <Select
