@@ -2,6 +2,54 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-11-13T05:42:52-03:00",
+      "sha": "887762adef125c34846b0ffb3750225e72df7068",
+      "app_version": "0.281.0",
+      "subject": "Onda hsm-qr-onda6: Orientação embutida e a tela Como funciona",
+      "raw_subject": "chore(deploy): registro da onda hsm-qr-onda6 (#1698)",
+      "scope": [
+        "backend",
+        "frontend"
+      ],
+      "prds": [
+        1527
+      ],
+      "result": "healthy",
+      "duration_seconds": 193,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        },
+        {
+          "service": "frontend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "onda-enxuta hsm-qr-onda6: PR #1698 (issue #1629), mergeados PR a PR. Merge pela API do GitHub, um build. Registro pela Action pos-merge depois do health.",
+      "etapas": {
+        "merge_s": 3,
+        "build_s": {
+          "backend": 20,
+          "frontend": 170
+        },
+        "health_s": 0
+      },
+      "responsavel": "pedrorezendefig"
+    },
+    {
       "at": "2026-11-13T05:17:33-03:00",
       "sha": "039eac625e70fc12a1ca062d91025900ec72616c",
       "app_version": "0.280.0",
