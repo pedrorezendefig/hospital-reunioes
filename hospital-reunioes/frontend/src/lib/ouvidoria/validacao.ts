@@ -325,6 +325,11 @@ export const LABEL_GATILHO: Record<string, string> = {
   // ao lado do botão Redirecionar, que é o que o `?? n.gatilho` faz com todo
   // gatilho que a tela não conhece.
   redirecionamento_area: "Aviso de redirecionamento à área anterior",
+  // O envio ao Núcleo de Segurança do Paciente e os dois degraus da cobrança
+  // do Recebido (issue #1621, ADR 0088).
+  ciencia_nsp: "Envio ao Núcleo de Segurança do Paciente",
+  cobranca_nsp_gestor: "Cobrança do Recebido ao gestor do Núcleo",
+  cobranca_nsp_diretoria: "Cobrança do Recebido à Diretoria Executiva",
 };
 
 export interface Notificacao {

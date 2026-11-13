@@ -9,6 +9,13 @@ import {
 } from "@/lib/ouvidoria/redirecionamento";
 import { AJUDA_DO_EXTRATO, varianteDoQueViaja } from "@/lib/ouvidoria/o-que-viaja";
 import {
+  ALERTA_DO_NUCLEO,
+  decisaoCompleta,
+  pedeDecisaoDoNucleo,
+  type CamposDoNucleo,
+  type DecisaoDoNucleo,
+} from "@/lib/ouvidoria/nucleo";
+import {
   ehSigilosoPorNatureza,
   LABEL_TIPO,
   TIPOS_MANIFESTACAO,
@@ -26,7 +33,10 @@ import {
 } from "@/lib/ouvidoria/validacao";
 
 interface ValidarModalProps {
-  manifestacao: {
+  // O apontamento do agente ao Núcleo e a decisão já tomada (issue #1621)
+  // entram por `CamposDoNucleo`, opcionais: a linha da fila abre esta mesma
+  // tela sem eles, e aí a validação segue como sempre.
+  manifestacao: (CamposDoNucleo & {
     id: string;
     protocolo: string;
     tipo_manifestacao: TipoManifestacao | null;
@@ -46,7 +56,7 @@ interface ValidarModalProps {
     // campo simplesmente nasce em branco, como sempre nasceu.
     gravidade?: string | null;
     extrato_para_o_setor?: string | null;
-  } | null;
+  }) | null;
   token: string | null;
   /**
    * A área que devolveu o caso à Ouvidoria, quando foi isso que aconteceu
@@ -127,6 +137,11 @@ export function ValidarModal({
   // no redirecionamento: ele é o que a trilha guarda para contar, meses depois,
   // por que o caso saiu de onde estava.
   const [motivo, setMotivo] = useState("");
+  // A decisão sobre o Núcleo de Segurança do Paciente (issue #1621, ADR 0088,
+  // decisão 4). Só existe quando o agente apontou o caso e ninguém decidiu: aí
+  // a validação não conclui sem ela, e o descarte pede o motivo.
+  const [decisaoNucleo, setDecisaoNucleo] = useState<DecisaoDoNucleo | "">("");
+  const [motivoNucleo, setMotivoNucleo] = useState("");
   const [setores, setSetores] = useState<string[]>([]);
   const [responsaveis, setResponsaveis] = useState<Responsavel[]>([]);
   const [salvando, setSalvando] = useState(false);
@@ -168,6 +183,8 @@ export function ValidarModal({
     setExtrato(manifestacao.extrato_para_o_setor || "");
     setObservacao("");
     setMotivo("");
+    setDecisaoNucleo("");
+    setMotivoNucleo("");
     setErro(null);
     setConferirDepois(false);
     setAtoConsumido(false);
@@ -217,8 +234,12 @@ export function ValidarModal({
   // O motivo entra na régua do botão só no redirecionamento, e é a única
   // diferença de exigência entre os dois atos: ele é obrigatório lá (ADR 0055)
   // e não existe aqui.
+  // O redirecionamento parte de um caso já validado, e a decisão sobre o
+  // Núcleo já foi tomada ali: ela só é pedida na validação.
+  const perguntaDoNucleo = !redirecionando && pedeDecisaoDoNucleo(manifestacao);
   const pronto =
     Boolean(tipo && setor.trim() && gravidade && extrato.trim() && (!redirecionando || motivo.trim())) &&
+    (!perguntaDoNucleo || decisaoCompleta(decisaoNucleo, motivoNucleo)) &&
     !salvando;
   // A tela se apresenta pelo ato que o ouvidor clicou (issue #601): quem veio
   // do botão "Encaminhar para outra área" precisa reconhecer onde chegou.
@@ -287,6 +308,13 @@ export function ValidarModal({
           // (`PedidoRedirecionamento` herda de `PedidoValidacao`). O campo só
           // viaja no ato que o exige: a rota de validar não o conhece.
           ...(redirecionando ? { motivo } : {}),
+          // A decisão sobre o Núcleo só viaja quando a tela a pediu.
+          ...(perguntaDoNucleo
+            ? {
+                nsp_decisao: decisaoNucleo,
+                nsp_motivo: decisaoNucleo === "descartado" ? motivoNucleo.trim() : null,
+              }
+            : {}),
         }),
       });
       if (res.ok) {
@@ -342,6 +370,62 @@ export function ValidarModal({
       scrollable
     >
       <div className="space-y-5">
+        {/* O apontamento do agente ao Núcleo (issue #1621) abre a tela, porque
+            é a decisão que trava o botão: sem ela, a validação não conclui. */}
+        {perguntaDoNucleo && manifestacao && (
+          <div className="px-4 py-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-900 text-sm space-y-3">
+            <div className="flex items-start gap-2">
+              <ShieldAlert className="w-4 h-4 shrink-0 mt-0.5" />
+              <div className="min-w-0">
+                <p className="font-semibold">{ALERTA_DO_NUCLEO}</p>
+                {manifestacao.nsp_justificativa_simples && (
+                  <p className="mt-0.5 whitespace-pre-wrap break-words">
+                    {manifestacao.nsp_justificativa_simples}
+                  </p>
+                )}
+                <p className="mt-1 text-xs text-rose-800">
+                  Antes de validar, decida se o caso vai ao Núcleo de Segurança do Paciente.
+                </p>
+              </div>
+            </div>
+            <div className="flex flex-col sm:flex-row gap-2 sm:gap-5">
+              <label className="flex items-center gap-2">
+                <input
+                  type="radio"
+                  name="decisao-do-nucleo"
+                  checked={decisaoNucleo === "confirmado"}
+                  onChange={() => setDecisaoNucleo("confirmado")}
+                />
+                <span>Confirmar envio ao NSP</span>
+              </label>
+              <label className="flex items-center gap-2">
+                <input
+                  type="radio"
+                  name="decisao-do-nucleo"
+                  checked={decisaoNucleo === "descartado"}
+                  onChange={() => setDecisaoNucleo("descartado")}
+                />
+                <span>Descartar</span>
+              </label>
+            </div>
+            {decisaoNucleo === "descartado" && (
+              <div>
+                <label className={ROTULO} htmlFor="validar-motivo-nucleo">
+                  Motivo do descarte <span className="normal-case">(uma linha)</span>
+                </label>
+                <input
+                  id="validar-motivo-nucleo"
+                  className={CAMPO}
+                  maxLength={300}
+                  value={motivoNucleo}
+                  onChange={(e) => setMotivoNucleo(e.target.value)}
+                  placeholder="Ex.: queda sem dano, já notificada pela enfermagem."
+                />
+              </div>
+            )}
+          </div>
+        )}
+
         <div>
           <label className={ROTULO} htmlFor="validar-tipo">
             Tipo da manifestação
