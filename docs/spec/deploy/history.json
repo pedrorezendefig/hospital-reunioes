@@ -2,6 +2,56 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-11-12T23:55:51-03:00",
+      "sha": "4e358df2f6553be90d89b95354ef499b183a5579",
+      "app_version": "0.269.0",
+      "subject": "Onda hsm-qr-onda1: Manifestação guiada em cinco passos",
+      "raw_subject": "chore(deploy): registro da onda hsm-qr-onda1 (#1666)",
+      "scope": [
+        "backend",
+        "frontend"
+      ],
+      "prds": [
+        1527
+      ],
+      "result": "healthy",
+      "duration_seconds": 981,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        },
+        {
+          "service": "frontend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [
+        "138_ouvidoria_manifestacao_guiada.sql"
+      ],
+      "rollback_target_sha": null,
+      "notes": "onda-enxuta hsm-qr-onda1: PR #1666 (issue #1620), mergeados PR a PR. Merge pela API do GitHub, um build. Registro pela Action pos-merge depois do health.",
+      "etapas": {
+        "merge_s": 2,
+        "build_s": {
+          "backend": 16,
+          "frontend": 168
+        },
+        "health_s": 0
+      },
+      "responsavel": "pedrorezendefig"
+    },
+    {
       "at": "2026-11-12T23:50:22-03:00",
       "sha": "93d1854b9e510437488ecddad78178ecbc4727af",
       "app_version": "0.268.0",
