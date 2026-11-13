@@ -1,0 +1,92 @@
+{
+  "marca": "manual-app-ouvidoria",
+  "ouvidora": {
+    "id": "P1300",
+    "nome": "Lívia Prado",
+    "email": "livia.prado@exemplo.local",
+    "senha": "ManualOuvidoria1723!",
+    "cargo": "Ouvidora"
+  },
+  "responsavel": {
+    "setor": "Nutrição",
+    "papel": "titular",
+    "nome": "Caio Mendes",
+    "email": "caio.mendes@exemplo.local"
+  },
+  "nova_manifestacao": {
+    "tipo": "Reclamação",
+    "setor": "Nutrição",
+    "assunto": "Lanche da tarde chegou sem a fruta da dieta",
+    "relato": "Meu pai está internado e a dieta dele pede fruta no lanche da tarde. Ontem e hoje o lanche veio sem a fruta, e ninguém da copa soube explicar.",
+    "nome": "Rosa Teixeira",
+    "contato": "rosa.teixeira@exemplo.local"
+  },
+  "validacao": {
+    "tipo": "Reclamação",
+    "setor": "Nutrição",
+    "gravidade": "Médio",
+    "extrato": "Verificar a temperatura do jantar do quarto 405 na quinta e na sexta e o que a copa fez depois do aviso."
+  },
+  "encerramento": {
+    "desfecho": "Procedente",
+    "texto": "A Nutrição confirmou o atraso do café da manhã na ala B. A copa ganhou mais uma pessoa de manhã, e o café sai às 7h30 desde segunda. Obrigado por avisar a Ouvidoria."
+  },
+  "casos": {
+    "para_validar": {
+      "status": "em_classificacao",
+      "setor": "A definir",
+      "categoria": "A classificar",
+      "canal": "telefone",
+      "tipo_manifestacao": null,
+      "gravidade": null,
+      "sigilo_reforcado": true,
+      "resumo": "Jantar servido frio no quarto 405 na quinta e na sexta",
+      "assunto": "Jantar servido frio no quarto 405",
+      "relato_integral": "O jantar chegou frio no quarto 405 na quinta e na sexta. Avisei a copa nos dois dias e não houve troca da refeição.",
+      "manifestante_nome": "Hugo Fontana",
+      "manifestante_contato": "hugo.fontana@exemplo.local",
+      "manifestante_vinculo": "acompanhante",
+      "paciente_nome": "Ivone Fontana",
+      "paciente_referencia": "quarto 405"
+    },
+    "com_a_area": {
+      "status": "aguardando_area",
+      "setor": "Nutrição",
+      "categoria": "Dieta",
+      "canal": "site",
+      "tipo_manifestacao": "reclamacao",
+      "gravidade": "medio",
+      "sigilo_reforcado": false,
+      "resumo": "Dieta sem sal trocada pela dieta comum no quarto 212",
+      "assunto": "Dieta trocada no quarto 212",
+      "relato_integral": "Minha mãe tem pressão alta e a dieta dela é sem sal. Duas vezes nesta semana o almoço veio com a dieta comum.",
+      "extrato_para_o_setor": "Verificar como a dieta do quarto 212 foi montada nesta semana e o que a Nutrição fez depois do primeiro aviso.",
+      "manifestante_nome": "Wilma Arruda",
+      "manifestante_contato": "wilma.arruda@exemplo.local",
+      "manifestante_vinculo": "acompanhante",
+      "prazo_area_em": "-1 dia",
+      "validada_em": "-6 dias"
+    },
+    "respondido": {
+      "status": "respondido",
+      "setor": "Nutrição",
+      "categoria": "Dieta",
+      "canal": "presencial",
+      "tipo_manifestacao": "reclamacao",
+      "gravidade": "medio",
+      "sigilo_reforcado": false,
+      "resumo": "Café da manhã entregue depois das 9h na ala B",
+      "assunto": "Café da manhã atrasado na ala B",
+      "relato_integral": "O café da manhã da ala B chegou depois das 9h em três dias seguidos. Meu pai toma remédio em jejum e precisa comer logo depois.",
+      "extrato_para_o_setor": "Apurar o horário de saída do café da manhã da ala B e o que muda para chegar antes das 8h.",
+      "resposta_da_area": "A copa da ala B ganhou mais uma pessoa no turno da manhã, e o café sai às 7h30 desde segunda.",
+      "respondida_por_nome": "Caio Mendes",
+      "respondida_em": "-1 dia",
+      "manifestante_nome": "Ênio Barcelos",
+      "manifestante_contato": "enio.barcelos@exemplo.local",
+      "manifestante_vinculo": "acompanhante",
+      "prazo_area_em": "+2 dias",
+      "validada_em": "-4 dias"
+    }
+  }
+}
