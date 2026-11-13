@@ -165,6 +165,69 @@ class TestEnviarAoNucleoSemSugestao:
         assert r.json()["selo"] == "Em análise pelo NSP"
 
 
+class _BancoComAFalhaNaDecisao(_SupabaseFake):
+    """O banco de verdade no que o envio pela metade precisa: o índice único da
+    migration 139 recusa a segunda ciência do Núcleo do caso (23505), e o
+    update que grava a decisão estoura uma vez, como o PostgREST em timeout."""
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.falhas_da_decisao = 1
+
+    def table(self, nome: str):
+        from postgrest.exceptions import APIError
+
+        tabela = super().table(nome)
+        if nome == "ouvidoria_acionamentos":
+            insert_original = tabela.insert
+
+            def _insert(payload):
+                ja_tem = any(
+                    a.get("motivo_ciencia") == "nsp" and a.get("manifestacao_id") == payload.get("manifestacao_id")
+                    for a in tabela.rows
+                )
+                if payload.get("motivo_ciencia") == "nsp" and ja_tem:
+                    raise APIError({"code": "23505", "message": "duplicate key value violates unique constraint"})
+                return insert_original(payload)
+
+            tabela.insert = _insert
+        if nome == "ouvidoria_protocolos":
+            update_original = tabela.update
+
+            def _update(payload: dict):
+                if "nsp_decisao" in payload and self.falhas_da_decisao:
+                    self.falhas_da_decisao -= 1
+                    raise APIError({"code": "57014", "message": "canceling statement due to statement timeout"})
+                return update_original(payload)
+
+            tabela.update = _update
+        return tabela
+
+
+class TestOEnvioQueFicouPelaMetade:
+    def test_a_nova_tentativa_completa_o_envio_que_falhou_na_decisao(self, monkeypatch, emails):
+        """A ciência gravou e a decisão não: o ouvidor tenta de novo e o envio
+        termina, com a decisão, a trilha e o email ao Núcleo. Sem isso o caso
+        respondia "já foi enviado" para sempre e o Núcleo nunca recebia o link."""
+        supabase = _BancoComAFalhaNaDecisao([_caso()], responsaveis=_banco().tabelas["ouvidoria_setor_responsaveis"])
+        supabase.tabelas["setores"].append({"id": "s2", "nome": NUCLEO, "ativo": True})
+        supabase.tabelas["ouvidoria_config"] = [{"id": True, "nsp_setor": NUCLEO}]
+        client, supabase = _client(monkeypatch, supabase)
+
+        primeira = _enviar_ao_nucleo(client)
+        assert primeira.status_code == 500
+        assert emails == []
+
+        segunda = _enviar_ao_nucleo(client)
+
+        assert segunda.status_code == 200, segunda.text
+        assert len(_ciencias_do_nucleo(supabase)) == 1
+        assert supabase.tabelas["ouvidoria_protocolos"][0]["nsp_decisao"] == "confirmado"
+        assert [e["destinatario"] for e in emails] == ["nsp@hsm.br"]
+        trilha = [m["observacao"] for m in supabase.tabelas["ouvidoria_movimentos"]]
+        assert sum("Enviado ao Núcleo" in (o or "") for o in trilha) == 1
+
+
 # =====================================================================
 # 2. Com sugestão, a validação só conclui depois da decisão sobre o Núcleo
 # =====================================================================
@@ -550,14 +613,26 @@ class TestCobrancaDoRecebido:
 
         assert _destinatarios(emails) == ["diretor@hsm.br"]
 
-    def test_a_cobranca_do_nucleo_roda_sozinha_no_scheduler(self):
+    def test_a_cobranca_do_nucleo_roda_mesmo_quando_a_escada_da_area_falha(self, monkeypatch):
         """O degrau não depende de alguém lembrar: o job do escalonamento da
-        Ouvidoria chama a cobrança do Núcleo."""
-        import inspect
-
+        Ouvidoria chama a cobrança do Núcleo, e a falha da escada da área
+        naquela rodada não pula a cobrança do Núcleo."""
         from app.cron import scheduler
+        from app.services import ouvidoria_escalonamento, ouvidoria_nucleo
 
-        assert "ouvidoria_nucleo.cobrar_o_recebido" in inspect.getsource(scheduler.escalonar_prazos_ouvidoria)
+        def _escada_quebrada(*_a, **_kw):
+            raise RuntimeError("PostgREST fora do ar")
+
+        cobrancas: list[object] = []
+        banco = object()
+        monkeypatch.setattr(scheduler, "_supabase", lambda: banco)
+        monkeypatch.setattr(ouvidoria_router, "carregar_feriados", lambda _sb: frozenset())
+        monkeypatch.setattr(ouvidoria_escalonamento, "escalar_prazos", _escada_quebrada)
+        monkeypatch.setattr(ouvidoria_nucleo, "cobrar_o_recebido", lambda sb, *_a: cobrancas.append(sb) or 0)
+
+        scheduler.escalonar_prazos_ouvidoria()
+
+        assert cobrancas == [banco]
 
 
 # =====================================================================

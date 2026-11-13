@@ -177,31 +177,52 @@ def enviar(
 ) -> dict | None:
     """Manda o caso ao Núcleo: grava a ciência, a decisão e o selo, deixa o
     fato na trilha e põe o email na fila. Devolve a ciência, ou None quando ela
-    não gravou."""
+    não gravou.
+
+    O envio que ficou pela metade (a ciência gravou e a decisão não) termina
+    na nova tentativa: o índice único recusa a segunda ciência (23505) e o
+    envio segue com a que ficou, em vez de responder "já enviado" para um caso
+    cujo Núcleo nunca recebeu o link. A decisão é gravada só se ainda estiver
+    como o caso foi lido: quem chega depois, numa corrida, não manda o email
+    de novo."""
+    from postgrest.exceptions import APIError
+
     from app.services import ouvidoria_notificacoes
 
-    prazo = prazo_do_recebido(agora, gravidade, feriados)
-    result = (
-        supabase.table(ouvidoria_acionamentos.TABELA)
-        .insert(
-            {
-                "manifestacao_id": caso["id"],
-                "setor": setor,
-                "responsavel_nome": destinatario.nome,
-                "responsavel_email": destinatario.email,
-                "tipo": ouvidoria_acionamentos.CIENCIA,
-                "motivo_ciencia": MOTIVO_NSP,
-                "status": ouvidoria_acionamentos.PENDENTE,
-                "prazo": prazo.isoformat(),
-                "enviado_em": agora.isoformat(),
-            }
+    try:
+        result = (
+            supabase.table(ouvidoria_acionamentos.TABELA)
+            .insert(
+                {
+                    "manifestacao_id": caso["id"],
+                    "setor": setor,
+                    "responsavel_nome": destinatario.nome,
+                    "responsavel_email": destinatario.email,
+                    "tipo": ouvidoria_acionamentos.CIENCIA,
+                    "motivo_ciencia": MOTIVO_NSP,
+                    "status": ouvidoria_acionamentos.PENDENTE,
+                    "prazo": prazo_do_recebido(agora, gravidade, feriados).isoformat(),
+                    "enviado_em": agora.isoformat(),
+                }
+            )
+            .execute()
         )
-        .execute()
-    )
-    if not result.data:
-        return None
-    ciencia = result.data[0]
-    _gravar_decisao(supabase, caso["id"], CONFIRMADO, None, autor, agora)
+    except APIError as exc:
+        if exc.code != "23505":
+            raise
+        ciencia = ciencia_do_caso(supabase, caso["id"])
+        if ciencia is None or ciencia.get("status") != ouvidoria_acionamentos.PENDENTE:
+            raise
+        if not _confirmar(supabase, caso, autor, agora):
+            raise
+        logger.warning("[Ouvidoria] Envio ao Núcleo do caso %s completado na nova tentativa", caso["id"])
+    else:
+        if not result.data:
+            return None
+        ciencia = result.data[0]
+        if not _confirmar(supabase, caso, autor, agora):
+            return ciencia
+    setor = ciencia.get("setor") or setor
     _registrar_na_trilha(
         supabase,
         caso,
@@ -213,13 +234,14 @@ def enviar(
         supabase,
         manifestacao_id=caso["id"],
         gatilho=ouvidoria_notificacoes.GATILHO_CIENCIA_NSP,
-        destinatario_nome=destinatario.nome,
-        destinatario_email=destinatario.email,
+        # Quem a ciência nomeia: na nova tentativa, o da primeira.
+        destinatario_nome=ciencia.get("responsavel_nome") or destinatario.nome,
+        destinatario_email=ciencia.get("responsavel_email") or destinatario.email,
         papel_destinatario=destinatario.papel,
         # Crítico sai na hora, a qualquer hora; o resto espera o expediente.
         enviar_a_partir_de=ouvidoria_notificacoes.quando_enviar(agora, gravidade, feriados),
         # O prazo do Recebido, que o email diz: é da ciência, e não do caso.
-        detalhe=prazo.isoformat(),
+        detalhe=ciencia.get("prazo"),
     )
     if notificacao is None:
         logger.error("[Ouvidoria] Falha ao registrar o email do Núcleo do caso %s", caso["id"])
@@ -426,6 +448,26 @@ def _destinatarios_do_degrau(supabase, ciencia: dict, degrau: DegrauDoNucleo, ag
         )
         for d in diretores
     ]
+
+
+def _confirmar(supabase, caso: dict, autor: dict, agora) -> bool:
+    """Grava a decisão de envio só se ela ainda estiver como o caso foi lido.
+    Devolve se gravou: falso quando outra tentativa já confirmou o envio."""
+    consulta = (
+        supabase.table("ouvidoria_protocolos")
+        .update(
+            {
+                "nsp_decisao": CONFIRMADO,
+                "nsp_decisao_motivo": None,
+                "nsp_decidido_por": autor["id"],
+                "nsp_decidido_em": agora.isoformat(),
+            }
+        )
+        .eq("id", caso["id"])
+    )
+    anterior = caso.get("nsp_decisao")
+    consulta = consulta.is_("nsp_decisao", "null") if anterior is None else consulta.eq("nsp_decisao", anterior)
+    return bool(consulta.execute().data)
 
 
 def _gravar_decisao(supabase, manifestacao_id: str, decisao: str, motivo: str | None, autor: dict, agora) -> None:

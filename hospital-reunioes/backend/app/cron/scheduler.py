@@ -278,13 +278,14 @@ def escalonar_prazos_ouvidoria() -> None:
         )
     except Exception as e:
         logger.error(f"[Cron] Erro em escalonar_prazos_ouvidoria: {e}", exc_info=True)
-        return
-    if subidos:
-        logger.info(f"[Cron] {subidos} degrau(s) de escalonamento da Ouvidoria.")
+    else:
+        if subidos:
+            logger.info(f"[Cron] {subidos} degrau(s) de escalonamento da Ouvidoria.")
 
     # A cobrança do Recebido do Núcleo de Segurança do Paciente (issue #1621,
     # ADR 0088, decisão 8): a mesma escada, sobre a ciência do Núcleo, que
-    # corre em paralelo ao caso.
+    # corre em paralelo ao caso. Try próprio: a falha da escada da área naquela
+    # rodada não pula a cobrança do Núcleo.
     from app.services import ouvidoria_nucleo
 
     try:
