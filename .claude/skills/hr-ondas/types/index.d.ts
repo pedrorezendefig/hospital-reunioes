@@ -86,8 +86,20 @@ export type Coleta = {
   ondasEstado?: EstadoOnda[]
 }
 
-/** Uma Onda em `erro` ou `pronto-para-voce`, com o texto do último evento daquele estado. */
-export type EstadoOnda = { id: string; estado: 'erro' | 'pronto-para-voce'; prd: number | null; texto: string | null }
+/**
+ * Uma Onda em `erro` ou `pronto-para-voce`, com o texto do último evento daquele estado
+ * e as issues dela que ficaram em `baixa`.
+ */
+export type EstadoOnda = {
+  id: string
+  estado: 'erro' | 'pronto-para-voce'
+  prd: number | null
+  texto: string | null
+  baixas?: number[]
+}
+
+/** Título e estado de um card que uma Onda cita e o OS não traz (PRD fechado, issue solta). */
+export type CardCitado = { titulo: string; aberto: boolean; em: number }
 
 /** Algo que a sessão disparou e segue rodando: shell em primeiro ou segundo plano, Monitor, agente. */
 export type Tarefa = {
@@ -150,6 +162,8 @@ declare module 'claude-code' {
       faixa: Faixa | null
       /** a hora que redesenha os cronômetros da faixa */
       relogio: number
+      /** cards citados pelas Ondas que esperam você, buscados no GitHub (chave: número) */
+      cards: Record<string, CardCitado>
     }
   }
 }

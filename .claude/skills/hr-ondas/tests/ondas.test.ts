@@ -254,7 +254,9 @@ for (const surface of ['terminal', 'desktop'] as const) {
     const pane = await $.ui.mount({ plugin: 'hr-ondas', surface, component: 'Pane', requestId: 'ondas', props: {} as any })
     expect(await pane.find({ text: /^Precisa de você/ })).toBeTruthy()
     expect(await pane.find({ text: /migration 117 cole no Studio/ })).toBeTruthy()
-    expect(await pane.find({ text: /quebrou: health falhou/ })).toBeTruthy()
+    // o motivo vai inteiro na linha de baixo, sem a URL no meio
+    expect(await pane.find({ text: / quebrou$/ })).toBeTruthy()
+    expect(await pane.find({ text: /^health falhou$/ })).toBeTruthy()
     expect(await pane.find({ text: /CI vermelho · / })).toBeTruthy()
     expect(await pane.find({ text: /Nada espera você/ })).toBeUndefined()
   })
@@ -494,7 +496,8 @@ test('precisa de você: Onda em erro primeiro, depois a que espera, a Fatia huma
     ],
   })
   const textos = lista.map(x => `${x.rotulo} ${x.texto}`)
-  expect(textos.slice(0, 2)).toEqual(['Onda b-onda2 quebrou: rollback', 'Onda a-onda1 espera você'])
+  expect(textos.slice(0, 2)).toEqual(['Onda b-onda2 quebrou', 'Onda a-onda1 espera você'])
+  expect(lista[0]!.detalhe).toBe('rollback')
   expect(textos.slice(2).sort()).toEqual([
     `#1132 CI vermelho · ${prd.issues.find(i => i.n === 1132)!.titulo}`,
     `#1137 é sua · ${humana.titulo}`,
