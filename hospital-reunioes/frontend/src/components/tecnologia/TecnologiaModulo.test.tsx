@@ -15,7 +15,7 @@
 import { readdirSync } from "node:fs";
 import { join, relative, resolve } from "node:path";
 
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { ToastProvider } from "@/components/ui/Toast";
@@ -123,6 +123,29 @@ describe("A aba abre no chat, com Conversas e Entregas (issues #1386 e #1556)", 
     expect(screen.getAllByRole("tab").map((aba) => aba.textContent)).toEqual(["Quadro", "Entregas"]);
     expect(screen.getByRole("tab", { name: "Quadro" }).getAttribute("aria-selected")).toBe("true");
     expect(screen.getByRole("tabpanel", { name: "Quadro" })).toBeTruthy();
+  });
+
+  it("Ver todos nas Entregas, no pé da coluna Entregue, abre a aba Entregas (issue #1644)", async () => {
+    vi.stubGlobal(
+      "matchMedia",
+      vi.fn((consulta: string) => ({
+        matches: consulta === "(min-width: 1280px)",
+        media: consulta,
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+      })),
+    );
+    montar();
+    const quadro = await screen.findByRole("region", { name: "Quadro" });
+
+    // Sempre à vista, mesmo com a coluna vazia: as Entregas guardam o que passou dos 30 dias.
+    const entregue = within(quadro).getByRole("region", { name: "Entregue" });
+    fireEvent.click(within(entregue).getByRole("button", { name: "Ver todos nas Entregas" }));
+
+    expect(screen.getByRole("tab", { name: "Entregas" }).getAttribute("aria-selected")).toBe("true");
+    expect(await screen.findByText("Nenhuma entrega com esses filtros.")).toBeTruthy();
+    // O Quadro fica montado atrás da aba, escondido.
+    expect(quadro.closest("[hidden]")).not.toBeNull();
   });
 
   it("a área da Tecnologia só tem a página da aba", () => {
