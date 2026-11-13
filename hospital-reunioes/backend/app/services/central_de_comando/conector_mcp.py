@@ -47,7 +47,9 @@ diferença de nome no payload do Site: as áreas do hospital com página são as
 Áreas do site (o nome da casa, ADR 0058, decisão 7), no lugar do nome antigo, de
 marca. O protocolo não expõe escrita nenhuma; método desconhecido é erro
 JSON-RPC "método não encontrado". A ferramenta de Pendências (#1609) mora em
-`ferramenta_pendencias.py`, sobre a mesma consulta da tela de Pendências.
+`ferramenta_pendencias.py`, sobre a mesma consulta da tela de Pendências; a de
+Reuniões (#1610), em `ferramenta_reunioes.py`, sobre as consultas das telas de
+Reuniões.
 """
 
 from __future__ import annotations
@@ -67,6 +69,7 @@ from app.config import settings
 from app.services.central_de_comando import (
     cache,
     ferramenta_pendencias,
+    ferramenta_reunioes,
     provedor_google,
     provedor_instagram,
     telas,
@@ -109,6 +112,7 @@ FERRAMENTA_SITE = "get_site_analytics"
 FERRAMENTA_INSTAGRAM = "get_instagram_analytics"
 # As de Reuniões e Ouvidoria, para a diretoria executiva (ADR 0085).
 FERRAMENTA_PENDENCIAS = ferramenta_pendencias.NOME
+FERRAMENTA_REUNIOES = ferramenta_reunioes.NOME
 
 # Os períodos que cada ferramenta de tendência aceita: o Site tem 7, 28 e 90
 # dias; o Instagram só 7 e 28 (a Graph API entrega no máximo 30 dias por
@@ -353,6 +357,7 @@ def _gates() -> dict:
         FERRAMENTA_SITE: is_super_admin,
         FERRAMENTA_INSTAGRAM: is_super_admin,
         FERRAMENTA_PENDENCIAS: tem_diretoria_executiva,
+        FERRAMENTA_REUNIOES: tem_diretoria_executiva,
     }
 
 
@@ -475,7 +480,7 @@ GLOSSARIO_INSTAGRAM = (
 
 def ferramentas() -> list[dict]:
     """O catálogo inteiro do Conector: o Ao vivo, os números do Site e os do
-    Instagram, depois as Pendências. O `tools/list` de cada pessoa é o recorte
+    Instagram, depois as Pendências e as Reuniões. O `tools/list` de cada pessoa é o recorte
     de `ferramentas_de`. As descrições da Central carregam o glossário da seção
     "Central de Comando" do CONTEXT.md, para o Claude falar a língua da casa."""
     return [
@@ -503,6 +508,7 @@ def ferramentas() -> list[dict]:
             "inputSchema": _schema_de_periodo(_PERIODOS_INSTAGRAM, "7d ou 28d"),
         },
         ferramenta_pendencias.definicao(),
+        ferramenta_reunioes.definicao(),
     ]
 
 
@@ -539,6 +545,8 @@ async def _executar_ferramenta(nome: str, argumentos: dict, participante: dict |
         return _resultado_de_erro(f"A ferramenta {nome} não está liberada para o seu acesso.")
     if nome == FERRAMENTA_PENDENCIAS:
         return await anyio.to_thread.run_sync(_ferramenta_pendencias, argumentos, participante, supabase)
+    if nome == FERRAMENTA_REUNIOES:
+        return await anyio.to_thread.run_sync(_ferramenta_reunioes, argumentos, participante, supabase)
     if nome == FERRAMENTA_AO_VIVO:
         return await _ferramenta_ao_vivo()
     if nome == FERRAMENTA_SITE:
@@ -552,6 +560,14 @@ def _ferramenta_pendencias(argumentos: dict, participante: dict, supabase) -> di
     try:
         payload = ferramenta_pendencias.executar(argumentos, participante, supabase)
     except ferramenta_pendencias.PedidoRecusadoError as exc:
+        return _resultado_de_erro(str(exc))
+    return _resultado_estruturado(payload)
+
+
+def _ferramenta_reunioes(argumentos: dict, participante: dict, supabase) -> dict:
+    try:
+        payload = ferramenta_reunioes.executar(argumentos, participante, supabase)
+    except ferramenta_reunioes.PedidoRecusadoError as exc:
         return _resultado_de_erro(str(exc))
     return _resultado_estruturado(payload)
 
