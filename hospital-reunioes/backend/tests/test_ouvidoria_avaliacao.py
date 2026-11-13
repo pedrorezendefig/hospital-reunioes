@@ -323,12 +323,14 @@ class TestQuemPedeRetorno:
         assert banco.avaliacoes[0]["pediu_retorno"] is False
 
     def test_quem_vem_direto_do_cartaz_entra_sem_ligacao(self):
+        """Sem ligação, a coluna nem vai no insert: o canal aberto não depende
+        da migration 140 para quem não veio da nota."""
         client, banco = _app()
 
         r = client.post(ROTA_MANIFESTACAO, json=_manifestacao())
 
         assert r.status_code == 201, r.text
-        assert banco.inserts[0]["avaliacao_id"] is None
+        assert "avaliacao_id" not in banco.inserts[0]
 
     def test_avaliacao_de_outro_cartaz_nao_e_ligada(self):
         """A ligação é com a nota do mesmo cartaz: um id solto não pendura o
@@ -339,7 +341,7 @@ class TestQuemPedeRetorno:
         r = client.post(ROTA_MANIFESTACAO, json=_manifestacao(avaliacao_id=avaliacao_id))
 
         assert r.status_code == 201, r.text
-        assert banco.inserts[0]["avaliacao_id"] is None
+        assert banco.inserts[0].get("avaliacao_id") is None
         assert banco.avaliacoes[0]["pediu_retorno"] is False
 
     def test_a_avaliacao_liga_um_caso_so(self):
@@ -350,7 +352,7 @@ class TestQuemPedeRetorno:
         r = client.post(ROTA_MANIFESTACAO, json=_manifestacao(avaliacao_id=avaliacao_id))
 
         assert r.status_code == 201, r.text
-        assert banco.inserts[1]["avaliacao_id"] is None
+        assert banco.inserts[1].get("avaliacao_id") is None
 
     def test_avaliacao_que_nao_existe_nao_custa_a_manifestacao(self):
         client, banco = _app()
@@ -358,7 +360,7 @@ class TestQuemPedeRetorno:
         r = client.post(ROTA_MANIFESTACAO, json=_manifestacao(avaliacao_id="avaliacao-999"))
 
         assert r.status_code == 201, r.text
-        assert banco.inserts[0]["avaliacao_id"] is None
+        assert banco.inserts[0].get("avaliacao_id") is None
 
 
 class TestQuemSegueAnonimo:
@@ -376,7 +378,7 @@ class TestQuemSegueAnonimo:
 
         assert r.status_code == 201, r.text
         caso = banco.inserts[0]
-        assert caso["avaliacao_id"] is None
+        assert caso.get("avaliacao_id") is None
         assert caso["canal_ponto"] is None
         valores = " ".join(str(v) for v in caso.values())
         for rastro in (avaliacao_id, CODIGO, "Hall da emergência"):

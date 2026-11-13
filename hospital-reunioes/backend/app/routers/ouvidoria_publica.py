@@ -635,8 +635,12 @@ async def registrar_manifestacao_publica(
         "canal": "qr" if origem else "site",
         "canal_setor": origem,
         "canal_ponto": ponto,
-        "avaliacao_id": avaliacao["id"] if avaliacao else None,
     }
+    # A coluna só entra quando há ligação: o caso que veio direto (quase todos)
+    # não depende da migration 140, e o canal aberto não cai se o deploy
+    # chegar antes do SQL no Studio.
+    if avaliacao:
+        linha["avaliacao_id"] = avaliacao["id"]
     try:
         result = supabase.table("ouvidoria_protocolos").insert(linha).execute()
     except APIError as exc:
