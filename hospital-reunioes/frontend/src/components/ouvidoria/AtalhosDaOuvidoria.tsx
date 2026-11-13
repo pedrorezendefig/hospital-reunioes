@@ -19,6 +19,7 @@ import {
   LayoutDashboard,
   MapPin,
   Menu,
+  MessageSquareText,
   SlidersHorizontal,
   Star,
   UsersRound,
@@ -27,7 +28,8 @@ import {
 import { useFecharFlutuante } from "@/hooks/useFecharFlutuante";
 import { atalhosDoPerfil, type ChaveDeAtalho } from "@/lib/ouvidoria/atalhos";
 /**
- * O piso de toque desta barra, que vale até o `lg` e não até o `md` do
+ * O piso de toque desta barra, que vale até o `xl` (era o `lg` até a issue
+ * #1626, quando a sexta porta empurrou a barra para cima) e não até o `md` do
  * `lib/toque`.
  *
  * O gatilho não tem `py` nenhum: toda a altura dele vem deste piso. Com o
@@ -44,10 +46,11 @@ import { atalhosDoPerfil, type ChaveDeAtalho } from "@/lib/ouvidoria/atalhos";
  * `md` de propósito e vale para controles que já têm altura própria. O que
  * muda aqui é só o alcance do piso desta barra, que acompanha a barra.
  */
-const ALTURA_DE_TOQUE_DA_BARRA = "min-h-[44px] lg:min-h-0";
+const ALTURA_DE_TOQUE_DA_BARRA = "min-h-[44px] xl:min-h-0";
 
 const ICONE_DO_ATALHO: Record<ChaveDeAtalho, typeof MapPin> = {
   painel: LayoutDashboard,
+  avaliacoes: MessageSquareText,
   nota_externa: Star,
   pontos: MapPin,
   responsaveis: UsersRound,
@@ -80,8 +83,10 @@ export function AtalhosDaOuvidoria({ perfil }: { perfil: string | null | undefin
           transformava isso na rolagem horizontal que a RN-73 proíbe. A conta
           está em `lib/ouvidoria/atalhos`, com teste. Entre 768px e 1024px quem
           atende é o menu logo abaixo, que existe exatamente para quando a
-          linha não cabe (issue #489). */}
-      <nav aria-label="Atalhos da Ouvidoria" className="hidden lg:flex items-center gap-2">
+          linha não cabe (issue #489). Desde a issue #1626 são seis portas, que
+          não cabem nos 640px de linha a 1024px: a barra aparece do `xl` para
+          cima, e o menu atende até 1279px. */}
+      <nav aria-label="Atalhos da Ouvidoria" className="hidden xl:flex items-center gap-2">
         {atalhos.map((atalho) => {
           const Icone = ICONE_DO_ATALHO[atalho.chave];
           return (
@@ -100,7 +105,7 @@ export function AtalhosDaOuvidoria({ perfil }: { perfil: string | null | undefin
         })}
       </nav>
 
-      <div className="relative lg:hidden" ref={caixa}>
+      <div className="relative xl:hidden" ref={caixa}>
         <button
           type="button"
           aria-haspopup="true"
