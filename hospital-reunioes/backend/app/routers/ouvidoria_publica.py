@@ -75,12 +75,13 @@ VINCULO_POR_SOBRE: dict[str, str] = {"mim": "paciente", "outra_pessoa": "acompan
 PERIODOS: tuple[str, ...] = ("manha", "tarde", "noite", "madrugada")
 EXPECTATIVAS: tuple[str, ...] = ("resposta", "providencia", "registro")
 
-# Os campos que só o passo a passo manda. A página de antes não conhece nenhum
-# deles, e é pela presença de um deles que a rota sabe de qual página o envio
-# veio (ver `ManifestacaoPublica.exigencias_do_passo_a_passo`).
+# "Hoje" para a data da ocorrência é o dia no hospital, e não no servidor.
 FUSO_DO_HOSPITAL = ZoneInfo("America/Sao_Paulo")
 _DIGITOS_DO_MENOR_TELEFONE = 8
 
+# Os campos que só o passo a passo manda. A página de antes não conhece nenhum
+# deles, e é pela presença de um deles que a rota sabe de qual página o envio
+# veio (ver `ManifestacaoPublica.exigencias_do_passo_a_passo`).
 _CAMPOS_DO_PASSO_A_PASSO = frozenset(
     {
         "data_ocorrencia",
