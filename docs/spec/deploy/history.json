@@ -2,6 +2,54 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-11-13T13:20:20-03:00",
+      "sha": "c602ea4f836a8ee4574b6588f145ae90f2107cab",
+      "app_version": "0.282.0",
+      "subject": "Onda manual-onda1: A casca dentro do app, com as abas Aplicativo do Hospital e Ana; O Fluxograma animado no design system do app; To-prd e to-issues publicam a raiz com type: e area:",
+      "raw_subject": "chore(deploy): registro da onda manual-onda1 (#1736 #1735 #1732)",
+      "scope": [
+        "backend",
+        "frontend"
+      ],
+      "prds": [
+        1711
+      ],
+      "result": "healthy",
+      "duration_seconds": 410,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        },
+        {
+          "service": "frontend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "onda-enxuta manual-onda1: PR #1736 (issue #1718), PR #1735 (issue #1719), PR #1732 (issue #1706), mergeados PR a PR. Merge pela API do GitHub, um build. Registro pela Action pos-merge depois do health. Subida retomada a mao: o fechar_onda.py morreu por falta de memoria do Mac depois dos 3 merges; build, health e registro rodaram por um script de retomada com as mesmas funcoes.",
+      "etapas": {
+        "merge_s": 55,
+        "build_s": {
+          "backend": 65,
+          "frontend": 194
+        },
+        "health_s": 0
+      },
+      "responsavel": "pedrorezendefig"
+    },
+    {
       "at": "2026-11-13T11:22:49-03:00",
       "sha": "ff4f333ade6ee77f8f0857842fa5a5dc2b04937c",
       "app_version": "0.281.1",
