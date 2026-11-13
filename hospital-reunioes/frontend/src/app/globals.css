@@ -178,6 +178,26 @@ main:has([data-quadro]) {
   animation: scale-in 0.22s cubic-bezier(0.16, 1, 0.3, 1) both;
 }
 
+/* O botão do vídeo da Demonstração no card do Quadro: uma faixa de luz que
+   atravessa o botão a cada 3 s. Brilho que passa, não pisca; parado com
+   movimento reduzido. */
+@keyframes brilho-da-demonstracao {
+  0%, 60% { transform: translateX(-120%) skewX(-20deg); }
+  100%    { transform: translateX(220%) skewX(-20deg); }
+}
+.brilho-da-demonstracao {
+  overflow: hidden;
+}
+.brilho-da-demonstracao::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  width: 50%;
+  background: linear-gradient(90deg, transparent, rgb(255 255 255 / 0.55), transparent);
+  animation: brilho-da-demonstracao 3s ease-in-out infinite;
+  pointer-events: none;
+}
+
 /* Staggered animation delays */
 .delay-1 { animation-delay: 0.05s; }
 .delay-2 { animation-delay: 0.1s; }
@@ -193,6 +213,9 @@ main:has([data-quadro]) {
     animation: none !important;
     opacity: 1;
     transform: none;
+  }
+  .brilho-da-demonstracao::after {
+    display: none;
   }
   * {
     transition-duration: 0.01ms !important;
