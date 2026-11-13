@@ -11,7 +11,9 @@ interface Props {
 
 /**
  * O item Manual do rodapé das duas barras laterais, a do app e a do Admin,
- * acima do botão de recolher (issue #1718, ADR 0094, decisão 1).
+ * acima do botão de recolher (issue #1718, ADR 0094, decisão 1). Fora do
+ * `<nav>`, o link não pega a Caixa alta do menu sozinho: a `etiqueta` põe o
+ * rótulo na mesma caixa do Recolher menu logo abaixo (ADR 0080).
  */
 export function ItemManual({ recolhido, onNavigate }: Props) {
   const ativo = usePathname() === "/manual";
@@ -21,7 +23,7 @@ export function ItemManual({ recolhido, onNavigate }: Props) {
       onClick={onNavigate}
       title={recolhido ? "Manual" : undefined}
       aria-current={ativo ? "page" : undefined}
-      className={`flex items-center gap-3 w-full px-3 py-2 rounded-lg text-sm transition-colors cursor-pointer ${
+      className={`etiqueta flex items-center gap-3 w-full px-3 py-2 rounded-lg text-sm transition-colors cursor-pointer ${
         recolhido ? "justify-center" : ""
       } ${
         ativo
