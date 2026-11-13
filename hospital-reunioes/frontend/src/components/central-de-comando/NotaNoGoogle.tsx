@@ -11,6 +11,11 @@
  *
  * Sem a chave da Places API, o backend diz `medida: false`, e a tela avisa
  * que a nota não está sendo medida, sem número.
+ *
+ * Abaixo da nota, o teste do convite ao Google no QR (issue #1625, ADR 0089
+ * decisão 7): por ponto e período, os convites exibidos, os cliques e a taxa
+ * de clique, e o aviso de reavaliar depois de 60 dias. O seletor de período
+ * vale só para o convite; a nota continua mensal.
  */
 
 import { useEffect, useState } from "react";
@@ -20,9 +25,11 @@ import { AlertTriangle, ArrowLeft, Loader2, PlugZap } from "lucide-react";
 import { getAuthToken } from "@/hooks/useAuth";
 import { BASE_CENTRAL, FALHA_DE_CONEXAO, lerRecusa, SEM_SESSAO } from "@/lib/central-de-comando/api";
 import { formatarInteiro } from "@/lib/central-de-comando/formato";
+import { PERIODO_PADRAO, type Periodo } from "@/lib/central-de-comando/periodo";
 import { formatarNota } from "@/lib/ouvidoria/nota-externa";
 
 import { CAMINHO_OBJETIVOS } from "./Objetivos";
+import { SeletorDePeriodo } from "./SeletorDePeriodo";
 
 export const OBJETIVO_NOTA_NO_GOOGLE = "google-reputacao";
 
@@ -38,6 +45,18 @@ export type NotaNoGooglePayload = {
     avaliacoes_do_mes: number | null;
     nota_mes_anterior: number | null;
     tendencia: "melhorou" | "piorou" | "igual" | null;
+  };
+  /** O teste do convite ao Google no período (issue #1625). */
+  convite?: {
+    periodo: Periodo;
+    ligado: boolean;
+    ligado_em: string | null;
+    dias_ligado: number | null;
+    dias_do_teste: number;
+    reavaliar: boolean;
+    intervalo: { inicio: string; fim: string };
+    pontos: { ponto_id: string; nome: string; ligado: boolean; convites: number; cliques: number; taxa: number | null }[];
+    total: { convites: number; cliques: number; taxa: number | null };
   };
 };
 
@@ -56,7 +75,17 @@ function formatarDia(iso: string): string {
   return new Date(iso).toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" });
 }
 
-export function NotaNoGoogle() {
+function formatarTaxa(taxa: number | null): string {
+  if (taxa === null) return "Sem convite";
+  return `${(taxa * 100).toLocaleString("pt-BR", { maximumFractionDigits: 1 })}%`;
+}
+
+function formatarData(iso: string): string {
+  const [ano, mes, dia] = iso.split("-");
+  return `${dia}/${mes}/${ano}`;
+}
+
+export function NotaNoGoogle({ periodo = PERIODO_PADRAO }: { periodo?: Periodo }) {
   const [estado, setEstado] = useState<Estado>({ tipo: "carregando" });
 
   useEffect(() => {
@@ -74,7 +103,7 @@ export function NotaNoGoogle() {
         return;
       }
       try {
-        const resposta = await fetch(`${BASE_CENTRAL}/objetivos/${OBJETIVO_NOTA_NO_GOOGLE}`, {
+        const resposta = await fetch(`${BASE_CENTRAL}/objetivos/${OBJETIVO_NOTA_NO_GOOGLE}?periodo=${periodo}`, {
           headers: { Authorization: `Bearer ${token}` },
         });
         if (!resposta.ok) {
@@ -93,7 +122,7 @@ export function NotaNoGoogle() {
     return () => {
       vivo = false;
     };
-  }, []);
+  }, [periodo]);
 
   return (
     <div className="animate-fade-in-up space-y-6">
@@ -116,6 +145,7 @@ export function NotaNoGoogle() {
       )}
 
       {estado.tipo === "pronto" && <Lente dados={estado.dados} />}
+      {estado.tipo === "pronto" && estado.dados.convite && <TesteDoConvite convite={estado.dados.convite} />}
 
       {estado.tipo === "falhou" && (
         <div role="alert" className="flex gap-3 rounded-2xl border border-red-200 bg-red-50 p-6 text-red-900">
@@ -199,5 +229,70 @@ function Lente({ dados }: { dados: NotaNoGooglePayload }) {
         </>
       )}
     </div>
+  );
+}
+
+function TesteDoConvite({ convite }: { convite: NonNullable<NotaNoGooglePayload["convite"]> }) {
+  return (
+    <section aria-labelledby="titulo-do-convite" className="space-y-4">
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div className="space-y-1">
+          <h2 id="titulo-do-convite" className="text-lg font-semibold text-text">
+            Teste do convite ao Google no QR
+          </h2>
+          <p className="text-sm text-text-secondary">
+            {convite.ligado
+              ? `O convite está ligado${
+                  convite.ligado_em ? ` desde ${formatarDia(convite.ligado_em)}` : ""
+                }${convite.dias_ligado !== null ? `, há ${convite.dias_ligado} dias` : ""}. Aparece para as notas 4 e 5, nos pontos com a chave ligada.`
+              : "O convite ao Google está desligado. Só a diretoria executiva liga, na tela Pontos de escuta da Ouvidoria."}
+          </p>
+        </div>
+        <SeletorDePeriodo ativo={convite.periodo} caminho={`${CAMINHO_OBJETIVOS}/${OBJETIVO_NOTA_NO_GOOGLE}`} />
+      </div>
+
+      {convite.reavaliar && (
+        <div role="alert" className="flex gap-3 rounded-2xl border border-amber-200 bg-amber-50 p-5 text-amber-900">
+          <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0" />
+          <p className="text-sm">
+            O teste passou de {convite.dias_do_teste} dias. Hora de reavaliar: compare a taxa de clique com a nota do
+            Google. O convite não se desliga sozinho e continua aparecendo até a diretoria executiva desligar.
+          </p>
+        </div>
+      )}
+
+      <div className="overflow-x-auto rounded-2xl border border-border bg-white shadow-premium">
+        <table aria-label="Convites ao Google por ponto" className="w-full text-sm">
+          <caption className="px-5 pt-4 text-left text-xs text-text-secondary">
+            De {formatarData(convite.intervalo.inicio)} a {formatarData(convite.intervalo.fim)}. A taxa de clique é
+            quantos dos convites exibidos viraram clique no Avaliar no Google.
+          </caption>
+          <thead>
+            <tr className="text-left text-xs text-text-secondary">
+              <th scope="col" className="px-5 py-3 font-medium">Ponto</th>
+              <th scope="col" className="px-5 py-3 text-right font-medium">Convites</th>
+              <th scope="col" className="px-5 py-3 text-right font-medium">Cliques</th>
+              <th scope="col" className="px-5 py-3 text-right font-medium">Taxa de clique</th>
+            </tr>
+          </thead>
+          <tbody>
+            {convite.pontos.map((ponto) => (
+              <tr key={ponto.ponto_id} className="border-t border-border">
+                <td className="px-5 py-3 text-text">{ponto.nome}</td>
+                <td className="px-5 py-3 text-right tabular-nums">{formatarInteiro(ponto.convites)}</td>
+                <td className="px-5 py-3 text-right tabular-nums">{formatarInteiro(ponto.cliques)}</td>
+                <td className="px-5 py-3 text-right tabular-nums">{formatarTaxa(ponto.taxa)}</td>
+              </tr>
+            ))}
+            <tr className="border-t border-border font-semibold">
+              <td className="px-5 py-3 text-text">Total</td>
+              <td className="px-5 py-3 text-right tabular-nums">{formatarInteiro(convite.total.convites)}</td>
+              <td className="px-5 py-3 text-right tabular-nums">{formatarInteiro(convite.total.cliques)}</td>
+              <td className="px-5 py-3 text-right tabular-nums">{formatarTaxa(convite.total.taxa)}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
   );
 }

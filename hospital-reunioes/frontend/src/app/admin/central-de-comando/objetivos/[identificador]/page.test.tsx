@@ -72,12 +72,14 @@ describe("a página da lente de um Objetivo", () => {
     );
   });
 
-  it("a nota no Google tem lente própria, sem período (issue #1619)", async () => {
+  it("a nota no Google tem lente própria, e o período vale para o teste do convite (issues #1619 e #1625)", async () => {
     servidor();
 
     render(await LenteDoObjetivoPage({ params: params("google-reputacao"), searchParams: sp("90d") }));
 
-    await waitFor(() => expect(pedidos).toEqual(["/api/admin/central-de-comando/objetivos/google-reputacao"]));
+    await waitFor(() =>
+      expect(pedidos).toEqual(["/api/admin/central-de-comando/objetivos/google-reputacao?periodo=90d"]),
+    );
   });
 
   it("período que não existe no endereço vira o padrão de 28", async () => {
